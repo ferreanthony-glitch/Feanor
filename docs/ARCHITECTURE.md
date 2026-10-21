@@ -179,7 +179,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   `undo` / `redo` ; le nom vient de `History::context`, que `run_action` (nom de la commande) et
   `pane_ui` (outil sur le dessin, sinon nom du panneau) posent le temps de leur travail, puis
   rendent. Les ~60 endroits qui appellent `push` n'en savent rien.
-- Fond sous le trait (`fond.rs`, `fondui.rs`) : réglages par calque (`Layer::fond`), strate Fond
+- Aplat sous le trait (`fond.rs`, `fondui.rs`) : réglages par calque (`Layer::fond`), strate Fond
   par dessin (`Cel::fond` : `Strate { peinture, coupe }`). Le rendu ne suit pas en direct un
   dessin dérivé (effets) pendant un trait : le fond est donc un élément à part, juste sous
   le trait (`render::fond_item`, `FondPart::Forme`, dérivé et gardé dans le cache de `fx`,
@@ -641,7 +641,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   - **Dans le plan** : un élément de plus **sous** la peinture libre (`render::griffon_item`, avant `fond_item`) :
     `PlanItem { cel: griffonnage, ctg: Some(GriffonInput { sources, gap }), … }`, avec les effets, la transformation et
     la fusion du calque. La peinture libre reste un élément ordinaire : zéro latence quand on peint, même sur un
-    calque qui remplit. Ordre, de bas en haut : remplissage, fond sous le trait, peinture libre.
+    calque qui remplit. Ordre, de bas en haut : remplissage, aplat sous le trait, peinture libre.
   - **Calcul** : `fx::shown` en fait un dessin dérivé (le remplissage, puis les effets), gardé dans le même
     cache sous `shown_id`, de version `fx::griffon_version` (les versions du dessin de griffonnages et de ses sources).
     **À l'écran** (`fx::differe`, ou le GPU par `fx::display`), il passe par le fil de fond des effets
@@ -670,7 +670,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     sinon **libre** (sources supplémentaires = sources du calque CTG, ou tous les autres calques de dessin s'il n'en
     avait pas choisi). Le dessin de graffitis devient le dessin de griffonnages (même fichier, rien de réécrit), des
     dessins de peinture vides sont créés sous un numéro dérivé (`numero_peinture`, bit 60 : stable d'une ouverture à
-    l'autre, sans heurt dans un plan partagé), Griffonner est allumé, un fond sous le trait éventuel est retiré. La
+    l'autre, sans heurt dans un plan partagé), Griffonner est allumé, un aplat sous le trait éventuel est retiré. La
     même image au pixel près est un essai (`GOLDEN_CTG` : empreintes prises avant la fusion).
 - Calque vidéo (`video.rs`, `videoui.rs`, 13k) : `Layer::video` (`VideoClip` : id, nom,
   nombre d'images, cadence, début, extension) ; pas de dessins. `video::cel_at` donne, à une
@@ -1545,7 +1545,7 @@ export, enregistrement) change pour les projets d'avant.
   pas tout le contenu : c'est le choix de SHOT, simple et prévisible ; le choix de Storyboard Pro est **à
   vérifier**.
 - **Reste borné à la feuille** : pot de peinture (`fill.rs` : image de la taille de la feuille), zones bitmap
-  (`PixelMask` : taille de la feuille), effets de calque et calques d'ajustement, fond sous le trait, calque de
+  (`PixelMask` : taille de la feuille), effets de calque et calques d'ajustement, aplat sous le trait, calque de
   couleur, enveloppe / perspective, import et export Storyboard Pro, propagation (`synthese/`, intact).
 - **Essais** : `toile_tests.rs` (numéros de tuiles, mémoire, annuler / rétablir, enregistrer / relire, fichier
   abîmé, vecteur hors feuille, caméra, texture du monde pixel pour pixel contre `composite_area`, mise à jour
@@ -1872,8 +1872,8 @@ Aucun appel existant ne change : `self.doc` est toujours le projet affiché.
 
 `doc_epoch` (le numéro du projet que les tâches de fond recopient pour savoir à qui elles répondent) vient d'un compteur
 global : deux onglets n'ont jamais la même époque, et une époque ne revient pas (0 est celle du premier projet au démarrage,
-que les états remis à zéro d'un projet à l'autre — références, crayonnés, envois — ont déjà). Le contrôle existant
-(`epoch != self.doc_epoch` dans l'enregistrement, les références, les crayonnés, les envois, la comparaison) devient
+que les états remis à zéro d'un projet à l'autre — références, envois — ont déjà). Le contrôle existant
+(`epoch != self.doc_epoch` dans l'enregistrement, les références, les envois, la comparaison) devient
 donc aussi un contrôle d'onglet.
 
 Un onglet **vierge** (`welcome` et rien d'ouvert, de dessiné ni d'annulable) montre l'accueil ; un projet qu'on ouvre ou
@@ -1999,12 +1999,12 @@ centre le cadre sur la feuille, donc centre de feuille = centre de cadre). Sans 
 | Pose du calque, clés de position | `adapte_calque` | `x`, `y` × `s` (le pivot est le centre de la feuille, qui se retrouve) ; échelle, étirement, rotation inchangés |
 | Clés de caméra | `adapte_camera` | position par la similitude ; avancée × rapport des largeurs de cadre (c'est lui qui règle `camera::ref_distance`) ; zoom, angles inchangés |
 | Effets | `adapte_valeurs` | les paramètres dont l'unité commence par `px` (`" px"`, `" px/img"`), valeurs et clés, × `s` et rabotés aux bornes ; entiers arrondis ; le trait sec : trous pour 100 px de trait ÷ `s`. Un essai passe en revue tous les effets : un paramètre en pixels dont l'unité ne le dit pas ferait échouer la suite |
-| Fond sous le trait, calque de couleur (peinture et remplissage au griffonnage) | `adapte_calque` | débord / fermeture des trous en pixels entiers × `s`, au moins 1 |
+| Aplat sous le trait, calque de couleur (peinture et remplissage au griffonnage) | `adapte_calque` | débord / fermeture des trous en pixels entiers × `s`, au moins 1 |
 | Cadence | `retemps_*` | `f' = tween::rescale_frame(f, de, vers)` ; les images d'un calque par `tween::resample` sans interpolation (dessins tenus) ; `retemps_reglages_calque` / `_plan` (rôles, clés d'effets / de position / de caméra, vidéo, marques, repères, notes) sont **aussi** ceux de « Changer la cadence » (`tweenui.rs`), qui ignorait les clés de position |
 
 **Fichier > Réglages du projet > Résolution** (« mettre les dessins à l'échelle ») utilise la même règle : `Document::scale_stage` est maintenant
 une similitude de pivot l'origine de la feuille (`t = 0`) passée à `adapte_dessins`, `adapte_calque` et `adapte_cle_camera`. Il n'y a donc qu'un code
-de mise à l'échelle ; changer la résolution met désormais aussi à l'échelle les effets en pixels, le fond sous le trait, ce qui est
+de mise à l'échelle ; changer la résolution met désormais aussi à l'échelle les effets en pixels, l'aplat sous le trait, ce qui est
 dessiné hors de la feuille, et fait suivre l'avancée de la caméra au rapport des largeurs de cadre (essai
 `resize_tests::scaling_uses_the_rule_of_pasting_…`).
 
@@ -2122,7 +2122,7 @@ maillage de `warp.rs` (64 × 64 cases ; `Warp::partial` cache les cases derrièr
 (`gpu.rs`, `gpu_items`) et le processeur (`render.rs`, trois chemins : écran par tuiles, toile infinie, vignettes via `Resolved::laid`)
 dessinent déjà pour les feuilles déformées ; `calqueffet::Low::warp` pose la carte avant un calque d'ajustement. Les effets du calque
 sont ceux de son dessin à plat (`fx::shown`) : ils passent avant la déformation. `render::PlanItem::fond` ne porte plus que `Forme`
-(fond sous le trait) et `Reglage` (calque d'ajustement) : `FondPart::Objets` a disparu.
+(aplat sous le trait) et `Reglage` (calque d'ajustement) : `FondPart::Objets` a disparu.
 
 **La vue d'édition** : tout est dessiné par egui (cartes en maillages de 16 × 16 cases, texture ≤ 1024 px refaite quand le dessin change ;
 quadrillage du sol en segments) — plus de passe wgpu ni de tampon de profondeur : les cartes se tracent dans l'ordre de la pile, comme

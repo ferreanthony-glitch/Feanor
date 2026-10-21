@@ -141,6 +141,8 @@ pub mod fond;
 #[cfg(test)]
 mod fond_tests;
 #[cfg(test)]
+mod aplat_tests;
+#[cfg(test)]
 mod perte_tests;
 #[cfg(test)]
 mod rejeu_tests;
@@ -168,6 +170,8 @@ mod board;
 #[cfg(test)]
 mod board_tests;
 mod boardui;
+#[cfg(test)]
+mod vignettes_tests;
 mod bottomtabs;
 mod brush;
 mod brushtex;
@@ -236,10 +240,7 @@ mod zoombande;
 mod zoombande_tests;
 mod camtools;
 mod canvas;
-mod crayonnes;
-#[cfg(test)]
-mod crayonnes_tests;
-mod crayonnesui;
+mod crayonnesheritage;
 #[cfg(test)]
 mod color_tests;
 mod commentaires;
@@ -288,7 +289,10 @@ mod messages_tests;
 mod palette;
 #[cfg(test)]
 mod palette_tests;
+mod prefsonglets;
 mod prefsui;
+#[cfg(test)]
+mod prefsui_tests;
 mod recents;
 #[cfg(test)]
 mod recents_tests;
@@ -394,6 +398,8 @@ mod fxkeys;
 mod fxkeys_tests;
 mod fxcopie;
 #[cfg(test)]
+mod fxclavier_tests;
+#[cfg(test)]
 mod fxcopie_tests;
 #[cfg(test)]
 mod folders_tests;
@@ -479,6 +485,8 @@ mod montagerows_tests;
 mod montagehead;
 #[cfg(test)]
 mod montagehead_tests;
+#[cfg(test)]
+mod montageonglet_tests;
 mod pistes;
 #[cfg(test)]
 mod pistes_tests;
@@ -519,6 +527,11 @@ mod panels;
 mod pdf;
 #[cfg(test)]
 mod pdf_tests;
+mod persofond;
+mod personnages;
+#[cfg(test)]
+mod personnages_tests;
+mod personnagesui;
 mod persp;
 #[cfg(test)]
 mod persp_tests;

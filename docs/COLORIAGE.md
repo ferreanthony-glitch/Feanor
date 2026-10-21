@@ -37,7 +37,7 @@ y sont réécrites aussi (les clés bitmap deviennent des formes pleines vectori
 ### 1. Les zones (`zones.rs`)
 
 Le trait est le dessin du calque de trait (pour un calque vectoriel, son rendu) : un pixel est du trait
-si son opacité est au moins 96/255, comme pour le fond sous le trait et le pot de peinture. Un dessin
+si son opacité est au moins 96/255, comme pour l'aplat sous le trait et le pot de peinture. Un dessin
 est découpé en zones fermées avec la même fermeture des trous que `fond.rs` (trous jusqu'à
 `2 × trous` pixels, `trous` = 6 d'office) :
 

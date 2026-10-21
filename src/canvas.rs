@@ -18,6 +18,14 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar).id_salt("barre_vue"));
             self.view_bar(&mut child);
             rect.min.y = bar.max.y;
+            // Dessous, la barre des personnages (une pastille par personnage et les couleurs neutres), si cet
+            // espace de travail la montre ; pas en Espace 3D, où l'on ne dessine pas.
+            if self.barre_perso_visible() && !(self.espace3d.on && !self.camera_view) {
+                let bar = Rect::from_min_size(rect.min, vec2(rect.width(), crate::personnagesui::BARRE_H));
+                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar).id_salt("barre_personnages"));
+                self.personnages_barre(&mut child);
+                rect.min.y = bar.max.y;
+            }
             // Dessous, les commandes de la vue (en 3D : seulement les vues, pour en sortir).
             let tools = Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - crate::viewbar::TOOLS_BAR_H), rect.max);
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tools).id_salt("outils_vue"));
@@ -59,6 +67,9 @@ impl App {
         // vignette de la planche, qui a son propre menu.
         if !self.in_card && !self.modal_open() {
             response.context_menu(|ui| self.canvas_menu(ui));
+        } else if self.in_card && !self.modal_open() {
+            // Dans la vue Vignettes, le clic droit sur l'image courante ouvre le menu de la vignette (`boardui.rs`).
+            response.context_menu(|ui| self.card_context_menu(ui));
         }
         self.update_text_preview(ui.ctx());
         self.check_persp();
@@ -381,6 +392,12 @@ impl App {
                 } => {
                     let pen = std::mem::take(&mut self.pen_touch);
                     if modal || panning || shifting || !on_canvas(*pos) {
+                        continue;
+                    }
+                    // Dans une vignette de la planche (`boardui.rs`), seul l'appui que la planche a donné au dessin dessine :
+                    // Ctrl ou Maj + appui choisit des plans, un appui sur une barre, une note ou hors d'une image ne trace rien (la mise en page
+                    // a pu changer sous la souris pendant cette même image).
+                    if self.in_card && (modifiers.command || modifiers.ctrl || modifiers.shift || !matches!(self.vignettes.press, crate::boardui::Press::Card | crate::boardui::Press::None)) {
                         continue;
                     }
                     // `stage` : point de la feuille (guides, caméra, pipette) ; `p` : point du dessin

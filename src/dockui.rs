@@ -96,8 +96,9 @@ impl App {
         match pane {
             Pane::Montage | Pane::Timeline if self.mode == Mode::Animation => "Timeline",
             Pane::Montage | Pane::Timeline => "Montage",
-            Pane::Canvas if self.crayonnes_shown() => "Crayonnés",
             Pane::Canvas if self.mode == Mode::Storyboard && self.board_view == BoardView::Panels => "Vignettes",
+            // Dans l'espace Montage, le dessin est le lecteur du film.
+            Pane::Canvas if self.espace == crate::workspace::Espace::Montage => "Lecteur",
             p => p.tab_name(),
         }
     }
@@ -129,9 +130,7 @@ impl App {
         match pane {
             Pane::Canvas => {
                 ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::fond());
-                if self.crayonnes_shown() {
-                    self.crayonnes_panel(ui);
-                } else if self.mode == Mode::Storyboard && self.board_view == BoardView::Panels {
+                if self.mode == Mode::Storyboard && self.board_view == BoardView::Panels {
                     self.board_view(ui);
                 } else {
                     self.canvas_panel(ui);
@@ -147,7 +146,11 @@ impl App {
             Pane::View => self.view_panel(ui),
             Pane::Guides => self.guides_ui(ui),
             Pane::Sheet => self.panel_inspector(ui),
-            Pane::Layers => self.layers_panel(ui),
+            Pane::Layers => {
+                self.layers_panel(ui);
+                // Des effets viennent d'être copiés et ce panneau a la main : Ctrl+V les colle sur le calque cliqué.
+                self.focus_mark(ui, self.layers_pane_focus && self.fx_pile_recent && self.fx_stack_clipboard.is_some(), false);
+            }
             // Une seule bande : le montage en storyboard, la timeline en animation. Quand elle a la
             // main (copier, coller, supprimer visent ses plans, ses clés ou ses images), un cadre de
             // la couleur d'accent.
@@ -172,6 +175,7 @@ impl App {
             Pane::Bruitages => self.bruitages_panel(ui),
             Pane::SuggestionsSonores => self.suggestions_panel(ui),
             Pane::References => self.references_panel(ui),
+            Pane::Personnages => self.personnages_panel(ui),
         }
     }
 

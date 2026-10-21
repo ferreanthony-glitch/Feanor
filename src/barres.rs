@@ -16,6 +16,8 @@
 //! Les barres sont des tableaux de `Cmd` (une ligne par commande, dans l'ordre d'affichage) ; ce
 //! qu'une commande fait vient de `executer_commande`, ce qu'elle montre de `vue_de`.
 
+use std::sync::OnceLock;
+
 use eframe::egui::{self, vec2, RichText, Ui};
 use egui_phosphor::regular as ph;
 use serde::{Deserialize, Serialize};
@@ -24,25 +26,29 @@ use crate::app::{App, BoardView, Mode};
 use crate::bulles::{self, bulle, TAILLE};
 use crate::dock::Pane;
 
-/// Les trois barres qui ont un « Plus… ». (La barre des panneaux, à droite, n'en a pas.)
+/// Les quatre barres qui ont un « Plus… ». (La barre des panneaux, à droite, n'en a pas.)
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Barre {
     /// Sous les menus.
     Commandes,
-    /// En tête de la bande du montage.
+    /// En tête de la bande du montage (espaces Storyboard).
     Montage,
+    /// En tête de la bande du montage dans l'espace Montage : les commandes du travail de montage
+    /// (coupes, rognage, transitions, son, relecture, exports) y sont montrées d'office.
+    MontageEdition,
     /// En tête de la timeline.
     Timeline,
 }
 
 impl Barre {
     #[cfg(test)]
-    pub const TOUTES: [Barre; 3] = [Barre::Commandes, Barre::Montage, Barre::Timeline];
+    pub const TOUTES: [Barre; 4] = [Barre::Commandes, Barre::Montage, Barre::MontageEdition, Barre::Timeline];
 
     pub fn nom(self) -> &'static str {
         match self {
             Barre::Commandes => "Barre de commandes",
             Barre::Montage => "Barre du montage",
+            Barre::MontageEdition => "Barre de l'espace Montage",
             Barre::Timeline => "Barre de la timeline",
         }
     }
@@ -52,12 +58,28 @@ impl Barre {
         match self {
             Barre::Commandes => COMMANDES,
             Barre::Montage => MONTAGE,
+            Barre::MontageEdition => montage_edition(),
             Barre::Timeline => TIMELINE,
         }
     }
 
     pub fn cherche(self, id: &str) -> Option<&'static Cmd> {
         self.commandes().iter().find(|c| c.id == id)
+    }
+
+    /// Une des deux barres de la bande du montage (celle des espaces Storyboard ou celle de l'espace
+    /// Montage) : leurs commandes de plans agissent de la même façon.
+    pub fn est_du_montage(self) -> bool {
+        matches!(self, Barre::Montage | Barre::MontageEdition)
+    }
+
+    /// La barre qui coiffe la bande du montage dans cet espace de travail.
+    pub fn du_montage_dans(espace: crate::workspace::Espace) -> Barre {
+        if espace == crate::workspace::Espace::Montage {
+            Barre::MontageEdition
+        } else {
+            Barre::Montage
+        }
     }
 }
 
@@ -77,6 +99,7 @@ pub enum Genre {
 }
 
 /// Une commande d'une barre.
+#[derive(Clone, Copy)]
 pub struct Cmd {
     /// Son identifiant dans la barre (l'action quand elle n'a qu'une icône) : celui des réglages.
     pub id: &'static str,
@@ -287,15 +310,6 @@ pub(crate) const MONTAGE: &[Cmd] = &[
         true,
         5,
     ),
-    // Crayonnés rapides : une page de petites cases à dessiner d'un trait, qui deviennent des plans.
-    etat(
-        "storyboard.crayonnes",
-        ph::NOTE_PENCIL,
-        "Planche de crayonnés",
-        "Une page de petites cases où enchaîner des croquis très vite ; chaque case devient un plan.",
-        true,
-        5,
-    ),
 ];
 
 /// Barre de la timeline : le plan, le transport, les dessins, la caméra et la pelure ; les dessins
@@ -371,6 +385,69 @@ pub(crate) const TIMELINE: &[Cmd] = &[
     etat("fx.panneau", ph::MAGIC_WAND, "Effets", "Le panneau des effets du calque courant (non destructifs, animables par clés).", false, 6),
 ];
 
+/// Barre de l'espace Montage (troisième onglet) : celle du montage, remise pour le travail de montage.
+/// Les commandes d'édition sont montrées d'office, dans l'ordre d'un geste de monteur : lire, couper
+/// et rogner, transitions et son, pistes, relecture et exports. Les autres commandes de la barre du
+/// montage (verrouillages, envois, versions, vues) sont toutes là, sous « Plus… ». Elle a ses propres
+/// épingles (`ReglageBarres::montage_edition`) : celles de la barre du storyboard n'y changent rien.
+fn montage_edition() -> &'static [Cmd] {
+    static BARRE: OnceLock<Vec<Cmd>> = OnceLock::new();
+    BARRE.get_or_init(|| {
+        let source = |id: &str| -> Cmd {
+            *MONTAGE.iter().chain(COMMANDES).chain(TIMELINE).find(|c| c.id == id).unwrap_or_else(|| panic!("barre de l'espace Montage : « {id} » inconnue"))
+        };
+        let mut v: Vec<Cmd> = Vec::new();
+        // La commande de la barre du montage (ou d'une autre), avec sa place ici.
+        let reprend = |v: &mut Vec<Cmd>, id: &str, d_office: bool, groupe: u8| v.push(Cmd { d_office, groupe, ..source(id) });
+        // 0. Lire.
+        reprend(&mut v, "montage.debut", true, 0);
+        reprend(&mut v, "lecture.basculer", true, 0);
+        reprend(&mut v, "lecture.boucle", true, 0);
+        reprend(&mut v, "son.lecture", true, 0);
+        reprend(&mut v, "position", true, 0);
+        // 1. Plans.
+        reprend(&mut v, "panneau.nouveau", true, 1);
+        reprend(&mut v, "sequence.nouvelle", true, 1);
+        // 2. Couper, rogner, déplacer.
+        v.push(bouton("panneau.couper", ph::SCISSORS, "Couper le plan", "En deux plans, à la tête de lecture.", true, 2));
+        v.push(bouton("panneau.fusionner_suivant", ph::ARROWS_MERGE, "Réunir avec le suivant", "Le plan courant et le suivant ne font plus qu'un.", true, 2));
+        v.push(bouton("montage.debut_a_tete", ph::ARROW_LINE_RIGHT, "Rogner le début", "Raccourcir le début du plan jusqu'à la tête de lecture.", true, 2));
+        v.push(bouton("montage.fin_a_tete", ph::ARROW_LINE_LEFT, "Rogner la fin", "Raccourcir la fin du plan jusqu'à la tête de lecture.", true, 2));
+        v.push(bouton("montage.duree", ph::TIMER, "Durée du plan", "Taper la durée exacte du plan, en images ou en secondes.", true, 2));
+        reprend(&mut v, "plan.avancer", true, 2);
+        reprend(&mut v, "plan.reculer", true, 2);
+        reprend(&mut v, "montage.aimanter", true, 2);
+        reprend(&mut v, "plans", true, 2);
+        // 3. Transitions et son.
+        reprend(&mut v, "transition.ajouter", true, 3);
+        reprend(&mut v, "son.importer", true, 3);
+        v.push(bouton("son.nouvelle_piste", ph::LIST_PLUS, "Nouvelle piste son", "Une piste de plus sous les autres, pour poser des sons.", true, 3));
+        v.push(bouton("son.couper", ph::SPLIT_HORIZONTAL, "Couper le son", "Couper l'extrait de son à la tête de lecture.", true, 3));
+        reprend(&mut v, "son", true, 3);
+        v.push(etat("vue.bruitages", ph::WAVEFORM, "Bruitages", "Ta bibliothèque de bruitages : les chercher, les écouter et les poser dans le montage.", true, 3));
+        // 4. Pistes.
+        reprend(&mut v, "piste.replier_tout", true, 4);
+        reprend(&mut v, "piste.deplier_tout", true, 4);
+        reprend(&mut v, "piste.auto_deplier", false, 4);
+        reprend(&mut v, "piste.replis_par_plan", false, 4);
+        // 5. Relecture et exports.
+        reprend(&mut v, "commentaire.ajouter", true, 5);
+        reprend(&mut v, "fichier.exporter_relecture", true, 5);
+        reprend(&mut v, "fichier.importer_notes", true, 5);
+        reprend(&mut v, "fichier.exporter_montage", true, 5);
+        reprend(&mut v, "fichier.exporter_fiche", true, 5);
+        // 6. Entrer dans le plan.
+        reprend(&mut v, "mode.basculer", true, 6);
+        // 7. Le reste de la barre du montage, sous « Plus… ».
+        for c in MONTAGE {
+            if !v.iter().any(|x| x.id == c.id) {
+                v.push(Cmd { d_office: false, groupe: 7, ..*c });
+            }
+        }
+        v
+    })
+}
+
 /// Ce que choisit l'utilisateur pour une barre, en écart avec ses commandes d'origine : les
 /// commandes épinglées en plus, et celles d'origine qu'il a retirées. (Vide : la barre d'origine.)
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -438,18 +515,21 @@ pub struct ReglageBarres {
     #[serde(default, skip_serializing_if = "ReglageBarre::est_vide")]
     pub montage: ReglageBarre,
     #[serde(default, skip_serializing_if = "ReglageBarre::est_vide")]
+    pub montage_edition: ReglageBarre,
+    #[serde(default, skip_serializing_if = "ReglageBarre::est_vide")]
     pub timeline: ReglageBarre,
 }
 
 impl ReglageBarres {
     pub fn est_vide(&self) -> bool {
-        self.commandes.est_vide() && self.montage.est_vide() && self.timeline.est_vide()
+        self.commandes.est_vide() && self.montage.est_vide() && self.montage_edition.est_vide() && self.timeline.est_vide()
     }
 
     pub fn de(&self, barre: Barre) -> &ReglageBarre {
         match barre {
             Barre::Commandes => &self.commandes,
             Barre::Montage => &self.montage,
+            Barre::MontageEdition => &self.montage_edition,
             Barre::Timeline => &self.timeline,
         }
     }
@@ -458,6 +538,7 @@ impl ReglageBarres {
         match barre {
             Barre::Commandes => &mut self.commandes,
             Barre::Montage => &mut self.montage,
+            Barre::MontageEdition => &mut self.montage_edition,
             Barre::Timeline => &mut self.timeline,
         }
     }
@@ -466,6 +547,7 @@ impl ReglageBarres {
         ReglageBarres {
             commandes: self.commandes.nettoye(Barre::Commandes),
             montage: self.montage.nettoye(Barre::Montage),
+            montage_edition: self.montage_edition.nettoye(Barre::MontageEdition),
             timeline: self.timeline.nettoye(Barre::Timeline),
         }
     }
@@ -641,7 +723,8 @@ impl App {
                 v.etat = Some(self.sound_on);
                 v.icone = (if self.sound_on { ph::SPEAKER_HIGH } else { ph::SPEAKER_SLASH }).to_string();
             }
-            "edition.copier" | "edition.supprimer" | "edition.coller" if barre == Barre::Montage => {
+            "vue.bruitages" => v.etat = Some(self.pane_shown(Pane::Bruitages)),
+            "edition.copier" | "edition.supprimer" | "edition.coller" if barre.est_du_montage() => {
                 let n = self.board_selection().len();
                 let chosen = if n > 1 { format!("Les {n} plans choisis.") } else { "Le plan courant ; Ctrl ou Maj + clic pour en choisir plusieurs.".to_string() };
                 match c.id {
@@ -682,7 +765,6 @@ impl App {
             }
             "vue.dessin" => v.etat = Some(self.board_view == BoardView::Scene),
             "vue.vignettes" => v.etat = Some(self.board_view == BoardView::Panels),
-            "storyboard.crayonnes" => v.etat = Some(self.crayonnes_shown()),
             "marque.basculer" => v.etat = Some(self.panel().marks.iter().any(|m| m.frame == self.cur_frame)),
             "camera.cle_debut" => v.icone = format!("|{}", ph::DIAMOND),
             "camera.cle_fin" => v.icone = format!("{}|", ph::DIAMOND),
@@ -715,7 +797,7 @@ impl App {
     pub(crate) fn executer_commande(&mut self, barre: Barre, c: &Cmd) {
         match (barre, c.id) {
             // Le montage lit tout le film, la timeline le plan ; ailleurs, la zone active décide.
-            (Barre::Montage, "lecture.basculer") => self.toggle_play_scope(true),
+            (b, "lecture.basculer") if b.est_du_montage() => self.toggle_play_scope(true),
             (Barre::Timeline, "lecture.basculer") => self.toggle_play_scope(false),
             // La timeline va d'une image à l'autre du plan, même quand le montage a la main.
             (Barre::Timeline, "image.premiere") => self.goto_frame(0),
@@ -723,9 +805,9 @@ impl App {
             (Barre::Timeline, "image.suivante") => self.goto_frame(self.cur_frame + 1),
             (Barre::Timeline, "image.derniere") => self.goto_frame(self.frame_count().saturating_sub(1)),
             // Dans la barre du montage, copier, coller et supprimer sont ceux des plans choisis.
-            (Barre::Montage, "edition.copier") => self.copy_panels(),
-            (Barre::Montage, "edition.coller") => self.paste_panels(),
-            (Barre::Montage, "edition.supprimer") => self.delete_chosen_panels(),
+            (b, "edition.copier") if b.est_du_montage() => self.copy_panels(),
+            (b, "edition.coller") if b.est_du_montage() => self.paste_panels(),
+            (b, "edition.supprimer") if b.est_du_montage() => self.delete_chosen_panels(),
             (_, "mode.basculer") => match self.mode {
                 Mode::Storyboard => self.enter_animation(self.cur_panel),
                 Mode::Animation => self.set_mode(Mode::Storyboard),

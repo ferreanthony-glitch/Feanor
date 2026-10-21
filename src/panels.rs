@@ -170,7 +170,6 @@ impl App {
                 self.action_item(ui, "Nouveau plan", "panneau.nouveau");
                 self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
                 ui.separator();
-                self.action_item(ui, "Planche de crayonnés…", "storyboard.crayonnes");
                 ui.separator();
                 self.action_item(ui, "Aller à un plan…", "scene.aller_a");
                 self.action_item(ui, "Propriétés du plan", "panneau.proprietes");
@@ -253,6 +252,8 @@ impl App {
                     self.action_item(ui, "Lignes de référence", "guide.lignes_reference");
                 });
                 ui.separator();
+                let barre = if self.barre_perso_visible() { "Cacher la barre des personnages" } else { "Montrer la barre des personnages" };
+                self.action_item(ui, barre, "perso.barre");
                 self.workspace_menu(ui);
                 self.action_item(ui, "Plein écran", "vue.plein_ecran");
                 self.action_item(ui, "Performance (temps de l'interface)", "vue.performance");
@@ -278,24 +279,28 @@ impl App {
             });
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                // Les deux niveaux restent écrits en toutes lettres : on voit d'un coup d'œil où
-                // l'on est.
-                let on = self.mode == Mode::Animation;
+                // Les trois espaces de travail restent écrits en toutes lettres, dans l'ordre du
+                // travail (de gauche à droite : Storyboard, Animation, Montage) : on voit d'un coup
+                // d'œil où l'on est. Passer de l'un à l'autre est instantané : le plan, l'image, la
+                // sélection et le projet ne changent pas, seule la disposition change.
+                use crate::workspace::Espace;
+                let on = self.espace == Espace::Montage;
+                let montage = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Montage ").strong(), on));
+                let montage = self.aide(montage, "Montage", "Le film en grand, avec toutes ses pistes : couper, rogner, transitions, son, relecture.", "espace.montage");
+                if montage.clicked() && !on {
+                    self.set_espace(Espace::Montage);
+                }
+                let on = self.espace == Espace::Animation;
                 let animation = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Animation ").strong(), on));
                 let animation = self.aide(animation, "Animation", "Animer le plan courant, image par image.", "mode.basculer");
-                if animation.clicked() && self.mode != Mode::Animation {
-                    self.set_mode(Mode::Animation);
+                if animation.clicked() && !on {
+                    self.set_espace(Espace::Animation);
                 }
-                let on = self.mode == Mode::Storyboard;
+                let on = self.espace == Espace::Storyboard;
                 let board = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Storyboard ").strong(), on));
                 let board = self.aide(board, "Storyboard", "Monter les plans et les séquences.", "mode.basculer");
-                if board.clicked() {
-                    if self.mode != Mode::Storyboard {
-                        self.set_mode(Mode::Storyboard);
-                    } else if self.espace == crate::workspace::Espace::Montage {
-                        // Dans l'espace Montage, le bouton ramène à la disposition du storyboard.
-                        self.set_espace(crate::workspace::Espace::Storyboard);
-                    }
+                if board.clicked() && !on {
+                    self.set_espace(Espace::Storyboard);
                 }
             });
         });
@@ -315,7 +320,7 @@ impl App {
         });
     }
     /// Sous les réglages de la brosse du pinceau et du crayon : peint derrière, remplir la forme
-    /// (`brushfill`), le fond sous le trait (`fondui.rs`) et ses options.
+    /// (`brushfill`).
     fn brush_extras_ui(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         ui.separator();
@@ -340,9 +345,8 @@ impl App {
                 "pinceau.remplir",
             );
         });
-        // (Le fond sous le trait n'est plus un réglage du pinceau : son bouton est sur la ligne du calque, dans
-        // le panneau Calques, et dans ses commandes. Ses réglages, eux, se montrent ici quand le calque en a un.)
-        self.fond_options_ui(ui);
+        // (L'aplat sous le trait n'est plus un réglage du pinceau : il s'active depuis le calque, et ses réglages sont
+        // en haut de ce panneau quand sa sous-ligne est choisie, `aplat_section_ui`.)
         // Calque de couleur : le mode « Griffonner » (`calquecouleurui.rs`).
         self.griffonner_options_ui(ui);
     }
@@ -363,12 +367,11 @@ impl App {
                     .weak(),
             );
         });
+        // Sous-ligne d'aplat choisie : « Aplat de <calque> » et ses réglages (couleur, débord, trous) d'abord ; l'outil et
+        // sa brosse suivent, ce sont eux qui travaillent l'aplat.
+        self.aplat_section_ui(ui);
         // Pinceau, crayon, gomme : la taille en premier, les réglages de la brosse, puis en bas
-        // peint derrière, remplir la forme et le fond sous le trait (Anthony, 2026-10-18). Pour
-        // le pot et le cutter, les options du fond restent en haut : ce sont leurs réglages.
-        if matches!(self.tool, Tool::Fill | Tool::Cutter) {
-            self.fond_options_ui(ui);
-        }
+        // peint derrière et remplir la forme (Anthony, 2026-10-18).
         match self.tool {
             Tool::Brush => {
                 self.brush_summary_ui(ui);
@@ -410,7 +413,6 @@ impl App {
                 }
                 self.brush_settings_ui(ui);
                 ui.separator();
-                self.fond_options_ui(ui);
                 self.griffonner_options_ui(ui);
             }
             Tool::Fill => {
@@ -647,10 +649,7 @@ impl App {
     }
     pub(crate) fn status_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            let where_ = match self.mode {
-                Mode::Storyboard => format!("Storyboard · {}", crate::planversui::titre_long_avec_version(&self.doc, self.cur_panel)),
-                Mode::Animation => format!("Animation · {}", crate::planversui::titre_long_avec_version(&self.doc, self.cur_panel)),
-            };
+            let where_ = format!("{} · {}", self.espace.nom(), crate::planversui::titre_long_avec_version(&self.doc, self.cur_panel));
             ui.label(RichText::new(where_).strong());
             // Le panneau qui a la main : copier, coller, supprimer et les raccourcis le visent.
             let hand = if self.key_focus {

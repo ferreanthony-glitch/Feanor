@@ -293,6 +293,8 @@ impl App {
         if in_montage {
             self.duplicate_lock_delete_items(ui, li);
         }
+        // Aplat sous le trait (`fondui.rs`) : « Ajouter un aplat » / « Retirer l'aplat », partout où le menu s'ouvre.
+        self.aplat_item(ui, li);
         // Plusieurs calques choisis (Ctrl ou Maj + clic) : les fusionner (Anthony, 2026-10-17). Dans
         // le panneau Calques, c'est son bouton Fusionner.
         let chosen = self.chosen_layers().len();

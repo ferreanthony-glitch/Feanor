@@ -62,10 +62,6 @@ fn the_fixture_really_holds_everything_the_project_can_store() {
         d.references.len() >= 2 && d.references.iter().any(|r| r.is_video()) && d.references.iter().any(|r| !r.plans.is_empty() && !r.tags.is_empty()),
         "références visuelles : une image étiquetée et liée, une vidéo"
     );
-    assert!(
-        d.crayonnes.cases.len() >= 24 && d.crayonnes.cases.iter().any(|c| c.has_ink()) && d.crayonnes.cases.iter().any(|c| c.has_paint() && c.used) && d.crayonnes.cases.iter().any(|c| !c.caption.is_empty() && !c.has_drawing()),
-        "planche de crayonnés : traits, case peinte et cochée, légende seule"
-    );
     assert!(!d.guides.is_empty() && !d.board.strokes.is_empty() && !d.board.texts.is_empty(), "guides et notes de la planche");
     assert!(d.storyboard_locked && d.start_frame != 1 && d.master_volume != 1.0, "réglages du projet");
     let _ = std::fs::remove_dir_all(&travail);
@@ -97,8 +93,6 @@ fn the_comparison_notices_a_difference() {
         ("référence", Box::new(|d| d.references[0].rotation += 1.0)),
         ("lecture d'une vidéo de référence", Box::new(|d| d.references[1].video.as_mut().expect("vidéo").speed += 0.25)),
         ("son proposé", Box::new(|d| d.sons_proposes.indications[0].description.push('!'))),
-        ("légende d'une case de crayonné", Box::new(|d| d.crayonnes.cases[0].caption.push('!'))),
-        ("coche d'une case de crayonné", Box::new(|d| d.crayonnes.cases[13].used = true)),
     ];
     let mut f = projet_complet(&travail);
     let sans = f.sans_pixels.clone();

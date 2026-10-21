@@ -151,8 +151,10 @@ et les calques » (c'est la colonne des calques).
 - **« Arrière-plan »** désigne à la fois la couleur de la feuille (onglet Arrière-plan, `fond.*`) ET la
   deuxième couleur du couple de couleurs (avant-plan / arrière-plan). Proposition : la feuille devient
   « Fond de la feuille ».
-- **« Fond »** : fond sous le trait (fonction du calque), fond de la feuille,
-  fond du thème. Trois sens produits par l'application (le « calque de fond » du panneau Calques a disparu le 2026-10-21 : un calque bitmap ordinaire fait la même chose) ; garder « Fond sous le trait » en entier.
+- **« Fond »** : fond de la feuille, fond du thème (le « calque de fond » du panneau Calques a disparu le 2026-10-21 : un calque bitmap
+  ordinaire fait la même chose). L'aplat sous le trait (fonction du calque) ne s'appelle plus « fond » : c'est l'**« Aplat sous le trait »**
+  (« Aplat » sur sa sous-ligne), depuis le 2026-10-21. Ne jamais écrire « Fond sous le trait » ni « Remplissage » dans un texte de l'interface
+  pour cette fonction.
 - **« Propriétés du plan »** (action, Alt+Entrée, nom de Storyboard Pro) ouvre le panneau « Fiche du plan »
   (onglet « Fiche »). Trois noms pour une chose. Proposition : « Fiche du plan » partout.
 - « Image clé » reste dans les textes de la propagation (EbSynth : les images peintes à la main) ;
@@ -580,9 +582,10 @@ de sons et solo.
   « Supprimer les rejetées » ; la proposition choisie et ses boutons (Générer / Régénérer, Écouter, Accepter, Rejeter,
   Reprendre, Modifier, Supprimer) ; la liste (icône de la sorte, plan et moment, titre, état), même menu au clic droit.
 - **Fenêtres** : « Envoyer vers un service en ligne ? » (une fois par projet), « Modifier la proposition », « Clé de … ».
-- **Préférences** : section « Génération sonore » repliée (les trois rôles ; le serveur local : dossier des modèles,
-  Python, case « Démarrer le serveur tout seul… », port, « Démarrer le serveur local », « Arrêter », « Tester » ; les
-  clés, « Tester la connexion », une note de licences). La fenêtre Préférences défile quand elle dépasse l'écran.
+- **Préférences** : onglet « Génération » (depuis le § 30 ; avant, une section repliée) : les trois rôles ; le serveur
+  local : dossier des modèles, Python, case « Démarrer le serveur tout seul… », port, « Démarrer le serveur local »,
+  « Arrêter », « Tester » ; les clés, « Tester la connexion », une note de licences. Le contenu de l'onglet défile quand
+  il dépasse la fenêtre.
 - **Barre des panneaux** : une icône de plus (étincelle), même groupe que les bruitages ; menu Son > Suggestions
   sonores… ; commandes `vue.suggestions_sonores` et `suggestion.lire` (sans touche par défaut).
 - **Historique** : « Accepter un son proposé ».
@@ -597,7 +600,7 @@ de sons et solo.
 3. **Double-clic** sur une ligne : écoute si le son existe, sinon génère ; clic droit : menu complet.
 4. **Fenêtres** : confirmation en ligne (texte long, bouton), « Modifier » (champs selon la sorte), saisie de la clé
    (champ masqué).
-5. **Préférences** : la section repliée ouverte avec les trois rôles en ligne (hauteur, défilement de la fenêtre sur un
+5. **Préférences** : l'onglet Génération avec les trois rôles en ligne (hauteur, défilement de l'onglet sur un
    écran de 1080 points) ; « Démarrer le serveur local » (le message d'attente, puis la phrase de « Tester ») ;
    « Arrêter » ; « Tester » quand le serveur ne tourne pas (« Le serveur local ne tourne pas… »).
 6. **Piste « Sons proposés »** dans la bande de montage et dans la timeline : nom, couleur, extraits posés à la bonne image.
@@ -633,39 +636,96 @@ les choix (découpage en plans, rythme, destination).
 
 ---------------------------------------------------------------------------------------------------
 
-## 11. Crayonnés rapides (la planche, 2026-10-19, branche `crayonnes`)
+## 11. Vignettes simples (la vue Vignettes, 2026-10-21, branche `vignettes-simples`)
 
-Une page de petites cases où l'on enchaîne des croquis, puis chaque case devient un plan
-(`crayonnes.rs`, `crayonnesui.rs`). Elle prend la place du dessin en storyboard ; elle se ferme par la croix
-de sa barre ou la même commande. Vocabulaire : **case** (un croquis de la planche), **planche** (toutes les
-cases), **page** (une grille de cases), **plan** pour ce qu'on en tire.
+Demande d'Anthony, tranchée sur des maquettes interactives : la « Planche de crayonnés » (2026-10-19) et la vue
+Vignettes faisaient deux fois le même travail. **La planche de crayonnés est supprimée** ; ce qu'elle avait d'utile
+est passé dans les Vignettes (`board.rs` pour la mise en page, `boardui.rs` pour l'écran). Vocabulaire : **image**
+(une vignette : le début d'un plan, ou l'une de ses marques d'image), **plan**, **case vide** (après la dernière
+image), **barre** (entre deux images), **bande de note** (sous une image).
 
-- **Ouvrir** : Storyboard > Planche de crayonnés…, le bouton de la barre du montage (à côté de Vue dessin /
-  Vue vignettes), Ctrl+K > « Planche de crayonnés rapides » (`storyboard.crayonnes`). Ouvrir prend l'outil
-  Crayon (sauf si la Gomme est l'outil).
-- **Commandes** (palette Ctrl+K, clic droit sur une icône > assigner une touche, sans touche par défaut) :
-  `crayonnes.case_suivante`, `case_precedente`, `page_suivante`, `page_precedente`, `ajouter_page`,
-  `inserer_case`, `supprimer_case`, `vider_case`, `tout_choisir`, `creer_plans`, `case_auto`.
-- **Touches qui ne passent pas par le fichier** (comme les flèches du dessin) : quand la planche a la main (le
-  dernier appui y était), Tab / Maj+Tab et les flèches changent de case, Page préc. / suiv. de page ; Ctrl+Z /
-  Ctrl+Y, Ctrl+A et Suppr y sont l'annulation de la planche, « choisir toutes les cases dessinées » et « vider
-  les cases choisies » (Tab redevient « passer en animation » dès qu'une bande reprend la main).
-- **Gestes** : appui dans une case = tracer (le trait appartient à cette case) ; Maj ou Ctrl + appui dans une
-  case, ou clic sur son numéro = choisir ; glisser le numéro = changer l'ordre ; clic droit = menu de la case.
-- **Annulation** : la planche a sa propre pile ; « Créer les plans » est une seule étape de l'historique du
-  projet (nommée « Créer les plans des crayonnés »), que Ctrl+Z dans la planche défait aussi si elle est
-  toujours la dernière.
+### Ce que l'on voit
 
-À regarder à l'écran : les cases et leurs numéros dans les trois thèmes (la coche verte, l'anneau de la case
-choisie et de la case courante), le trait qui reste collé à la pointe pendant le geste, le glisser d'un numéro
-(barre d'insertion devant la case visée), la fenêtre « Créer les plans », la grille 6 × 4 sur un petit écran,
-le pinceau et la gomme à la tablette (pression), la barre sur une fenêtre étroite (elle défile).
+- **Rien autour des images** : un filet gris d'un point, plus foncé pour l'image courante ; pas de bande de titre, pas
+  de durée, pas de « Plan ». Seul le **numéro du plan**, au-dessus de sa première image, en gris discret. Principe d'Anthony : « la partie Vignettes
+  doit être la plus épurée possible, rien de distraction, que du dessin » : **ni pastille d'envoi ni pastille du film partagé ni
+  étiquette de version sur la planche** (elles restent au montage), ni compteur de plans choisis. Les réglages (taille, colonnes,
+  lignes par page, zoom) sont en haut, petits et à 30 % d'opacité, pleins seulement sous la souris ; « Attacher les notes » est au
+  clic droit sur le fond. Plusieurs plans choisis : leurs images (sauf l'image courante) ont un liseré
+  d'accent.
+- **Écart** : 10 points entre deux images d'un même plan, 30 à une coupe. Les lignes ont un nombre fixe d'images
+  (« colonnes », 6 au plus) ; une ligne ne se casse jamais à un changement de plan. Ordre de lecture : de gauche à
+  droite, puis ligne par ligne.
+- **Barre** entre deux images qui se suivent : courte (un tiers de la hauteur de l'image), 1,5 point, **grise = même
+  plan, noire = coupe**. Une barre est aussi après la dernière image de chaque ligne (la transition vers la première
+  image de la ligne suivante). Sous la souris elle prend l'accent, avec une bulle.
+- **Bande de note** sous chaque image, dans l'espace entre les lignes : vide, juste un filet très pâle (aucun mot). Le
+  texte passe à la ligne ; il rapetisse un peu avec sa longueur (11 → 10 → 9,5 points) ; **trois lignes au plus**, puis
+  « … ». La ligne d'images suivante descend juste de ce qu'il faut pour garder sa marge quand une note prend deux ou
+  trois lignes.
+- **Cases vides** après la dernière image (une au moins ; la page est complétée) : un filet très pâle.
+
+### Ce que l'on fait
+
+- **Dessiner** : un trait qui commence dans une image (pleine ou vide) la rend courante **à l'appui** et dessine dedans,
+  sans clic de choix avant. C'est le dessin lui-même qui est dans l'image courante : même moteur, même rendu progressif, le
+  point reçu est dans l'image d'écran où il arrive. **Un trait qui commence ailleurs ne dessine rien** (ni note libre : on ne
+  trace plus de notes au pinceau sur la planche ; textes, gomme et sélection des notes restent). Ce qui déborde de l'image
+  est **coupé à l'affichage** ; le dessin garde tout le tracé (toile infinie) et l'export cadre comme avant.
+- **Case vide** : dessiner dedans **fait le plan** à l'appui même (les cases vides sautées avant elle deviennent des plans
+  vides, pour garder sa place). Si la barre qui précède la première case vide est **grise** (un clic la bascule), la case
+  fait **une image de plus du dernier plan** (il s'allonge de la durée de sa dernière image, une marque d'image est posée).
+  La création et le trait ne font **qu'une étape d'annulation** (« Nouveau plan dessiné » / « Nouvelle image dessinée ») ;
+  un simple clic qui ne trace rien ne laisse aucune trace. Outils qui font un plan : Pinceau, Crayon, Ligne, Rectangle,
+  Ellipse (les autres ne font rien dans une case vide).
+- **Barre** : un clic sur une barre **grise** coupe le plan à cette image (la vignette de droite commence un plan neuf :
+  `split_plan`) ; sur une barre **noire** il réunit les deux plans (le début du plan de droite devient une marque d'image du plan
+  de gauche : `join_next_plan`, les deux plans doivent être de la même séquence). Une étape d'annulation, nommée (« Couper le
+  plan entre deux vignettes », « Réunir deux vignettes en un plan »).
+- **Note** : un clic sur la bande l'ouvre ; Entrée (ou un clic ailleurs) la pose, Maj + Entrée passe à la ligne, Échap
+  abandonne. Elle va dans les notes du plan (première image) ou de la marque d'image ; le texte entier est gardé, visible
+  pendant la saisie et dans la fiche du plan. Une étape d'annulation, « Note de vignette ».
+- **Choisir des plans** : Ctrl ou Maj + clic sur une image (Ctrl ajoute ou retire, Maj prend l'intervalle) ; ou le lasso
+  depuis le fond de la page. Clic droit sur une image : le menu de la vignette (animer, nouveau plan, dupliquer, couleur, versions,
+  copier / coller…) ; sur le fond : le menu de la planche. Molette : défiler ; Ctrl + molette : zoom ; Espace, bouton du milieu
+  ou outil Main : déplacer la planche.
+- **Ce qui n'existe plus** : glisser une vignette pour réordonner (le geste est celui du trait ; réordonner se fait dans le
+  montage, ou par couper / coller), le double-clic pour animer (un clic dessine : « Animer cette image » est au clic droit, Tab),
+  les réglages « Écart » et « Plan à la ligne », la durée et « Plan N » dans l'en-tête, l'étiquette de version « · V2 » (le
+  menu du clic droit garde les versions).
+
+### Anciens projets (`crayonnes.json`)
+
+SHOT ne lit plus ce fichier et ne l'écrit plus, mais **ne l'efface jamais** (octet pour octet, après ouverture et
+enregistrements) ; « Enregistrer sous » ne le recopie pas (l'original reste dans son dossier). À l'ouverture, **un seul
+avertissement** dit combien de cases dessinées n'avaient jamais servi à faire des plans et que le fichier reste en place ;
+rien n'est converti tout seul. Pour retrouver ces croquis : les redessiner dans une case vide, ou rouvrir le projet avec la
+version d'avant (`crayonnesheritage.rs`).
+
+### À regarder à l'écran
+
+1. Les filets (clair / foncé pour l'image courante) et le numéro du plan dans les trois thèmes : lisibles sur la page blanche, rien
+   d'autre autour des images.
+2. Les barres : grise très discrète, noire nette, d'un tiers de l'image, centrées dans l'écart ; une barre au bout de chaque ligne ;
+   la bulle sous la souris.
+3. L'écart : serré (10) dans un plan, large (30) à une coupe ; six colonnes sur un petit écran.
+4. Dessiner dans une image qui n'est pas courante, sans clic avant : le premier point est déjà là, aucun saut ; le trait qui
+   sort de l'image est coupé à son bord ; un trait qui part du fond ne trace rien.
+5. Dessiner dans la première case vide : le plan apparaît à sa place ; avec la barre grise, une image de plus ; Ctrl+Z défait
+   les deux d'un coup.
+6. Cliquer une barre : coupe ou réunion, puis Ctrl+Z.
+7. Les bandes de note : une, deux, trois lignes et « … » ; la ligne suivante descend sans toucher la note ; la saisie montre tout le
+   texte ; le filet pâle sous une bande vide ; la taille du texte à 100 %, 50 % et 200 % de zoom.
+8. À la tablette : la pression et le retard du trait dans une vignette, comparés à la vue Dessin.
 
 ### Essais ajoutés
 
-`crayonnes_tests` (38 : appartenance, coupe, navigation, ordre, création des plans, fichier, annulation, écran).
-Le projet d'essai de fiabilité contient une planche de crayonnés (trois cases, dont une peinte au pinceau).
-
+`vignettes_tests` (23 : la planche de crayonnés n'a plus de commande, un ancien `crayonnes.json` s'ouvre et reste intact,
+dessin direct dans une image pleine, dans une marque et dans une case vide, trait hors des images, plans sautés, clic sans
+trait, barre grise → image, coupe / réunion nommées et annulables, barre de bout de ligne, notes du plan et de la marque,
+trois lignes et « … », numéros seuls, Ctrl / Maj, clic droit, storyboard verrouillé, fusion d'étapes d'annulation, coût du
+trait, repos) et `board_tests` (mise en page : écarts, barres, hauteur des lignes, zones touchées). La planche de crayonnés
+(38 essais) et sa part du projet d'essai de fiabilité sont partis avec elle.
 ---------------------------------------------------------------------------------------------------
 
 ## 12. Calques d'effets et préréglages d'effets (2026-10-19, branche `calques-effets`)
@@ -792,22 +852,22 @@ lancement de SHOT) : voir « À vérifier » plus bas.
 
 ### Espaces de travail (6.1)
 
-- **Trois espaces, chacun sa disposition** : Storyboard, Animation, Montage (`workspace::Espace`). Changer de mode
-  (boutons « Storyboard » / « Animation », Tab, « Animer ce plan ») pose la disposition de l'espace d'arrivée ;
+- **Trois espaces, chacun sa disposition** : Storyboard, Animation, Montage (`workspace::Espace`). Changer d'espace
+  (les trois onglets en haut à droite, Tab, « Animer ce plan ») pose la disposition de l'espace d'arrivée ;
   ce qu'on change dans un espace se retient pour lui seul (réglages `disposition`, `disposition_animation`,
   `disposition_montage`, `espace_storyboard`, toutes avec une valeur d'origine : un fichier ancien se lit tel quel).
 - **Montage est une disposition du mode Storyboard, pas un troisième mode** (choix expliqué) : mêmes outils,
   mêmes raccourcis (les touches du montage), même dessin, et le bouton « Animer ce plan » entre en animation depuis lui.
   Un troisième mode aurait doublé les contextes de raccourcis, les menus qui changent selon le mode et les essais qui
-  les suivent, pour une différence qui n'est qu'une disposition. On y va par Affichage > Espaces de travail ou
-  Ctrl+K ; le bouton « Storyboard » (ou l'entrée Storyboard du même sous-menu) en revient. Quitter l'animation
-  ramène à celui des deux espaces du côté storyboard où l'on était (`espace_storyboard`).
+  les suivent, pour une différence qui n'est qu'une disposition. On y va par son onglet (depuis le 2026-10-21, voir
+  « Le troisième onglet Montage » plus bas), Alt+M, Affichage > Espaces de travail ou Ctrl+K ; l'onglet Storyboard
+  (ou Tab) en revient. Quitter l'animation ramène à celui des deux espaces du côté storyboard où l'on était
+  (`espace_storyboard`).
 - **Dispositions d'origine** : Storyboard = la disposition standard ; Animation = la bande (la timeline) plus haute
-  (340 au lieu de 290) et les calques plus larges (250 au lieu de 230) ; Montage = la bande à 420, ni calques, ni
-  effets, ni réglages de l'outil, ni couleur, la fiche du plan, **Bruitages et Suggestions sonores** à droite (on pose
-  les sons dans la bande). Références, Historique, Commentaires restent à la demande partout ; la feuille d'exposition
-  n'existe qu'en animation. Les valeurs sont modestes à dessein : l'essai de fumée déplace une sélection au pointeur
-  dans une fenêtre de 1280 × 720, et une bande à 400 laissait trop peu de dessin.
+  (340 au lieu de 290) et les calques plus larges (250 au lieu de 230) ; Montage = voir « Le troisième onglet
+  Montage » (le film en haut, la bande à 440 avec toutes les pistes, la fiche du plan et les panneaux de montage à
+  droite). Références et feuille d'exposition restent à la demande ; la feuille d'exposition n'existe qu'en
+  animation.
 - **Migration** : l'unique disposition d'un ancien `reglages.toml` devient celle du Storyboard sans conversion
   (le champ garde son nom) ; les deux autres commencent par leur disposition d'origine.
 - **« Rétablir la disposition »** (Affichage > Espaces de travail, Ctrl+K `espace.retablir`) : l'espace en cours
@@ -822,8 +882,8 @@ lancement de SHOT) : voir « À vérifier » plus bas.
 - **Correction au passage** : la colonne de droite ne savait recevoir que les calques, l'exposition et les effets ;
   sans calques (c'est le cas de l'espace Montage), Historique, Commentaires, Bruitages, Suggestions sonores et
   Références ne s'ouvraient pas. Ils forment maintenant leurs onglets (`dock.rs`, `right_column`).
-- **Actions** (`keymap.toml`, un bloc chacune, sans touche) : `espace.storyboard`, `espace.animation`,
-  `espace.montage`, `espace.retablir`.
+- **Actions** (`keymap.toml`, un bloc chacune, sans touche sauf `espace.montage` : Alt+M) : `espace.storyboard`,
+  `espace.animation`, `espace.montage`, `espace.retablir`.
 
 ### Barres minces (6.3) et « Plus… »
 
@@ -833,7 +893,7 @@ entre deux groupes), si la commande est dans la barre d'office, son icône, son 
 | Barre | Dans la barre | Sous « Plus… » |
 |---|---|---|
 | Commandes du haut (19 → 9) | Nouveau, Ouvrir, Enregistrer, Exporter ; Annuler, Rétablir ; Couper, Copier, Coller | Nouveau plan, Dupliquer le plan, Supprimer les plans ; le transport (première image, précédente, lecture, suivante, dernière) ; boucle ; son pendant la lecture |
-| Montage (21 → 12) | début, lecture, boucle, position ; nouveau plan, nouvelle séquence, menu Plans ; importer un son, menu Son ; animer ce plan ; vue dessin, vue vignettes, planche de crayonnés | calque vectoriel, copier / coller / supprimer les plans, avancer / reculer le plan, verrou, aimant, **ajouter une transition**, importer une vidéo, nouveau commentaire |
+| Montage (21 → 12) | début, lecture, boucle, position ; nouveau plan, nouvelle séquence, menu Plans ; importer un son, menu Son ; animer ce plan ; vue dessin, vue vignettes | calque vectoriel, copier / coller / supprimer les plans, avancer / reculer le plan, verrou, aimant, **ajouter une transition**, importer une vidéo, nouveau commentaire |
 | Timeline (ne défile plus) | animer / retour, titre et durée du plan ; transport, boucle, image courante, menus Repères et Affichage ; nouveau dessin, allonger / raccourcir l'exposition, « en N », menu Images ; clés de caméra début / ici / fin ; pelure (bouton, avant, après, réglages) | cadence, dupliquer / supprimer / vider le dessin, supprimer la clé de caméra, adoucir, marque d'image, nouveau commentaire, flips, effets |
 
 - **Le bouton « Plus… »** (`DOTS_THREE`) est au bout de chaque barre ; une ligne par commande avec son icône, son
@@ -875,11 +935,96 @@ panneau détaché, chaque panneau de la barre s'ouvre dans chaque espace, change
    Repères, Affichage, Images) ouverts depuis une ligne qui porte une épingle, clic sur l'épingle (le menu reste ouvert).
 2. Une barre de la timeline dans un panneau étroit : où passe la coupure, le bouton « Plus… » toujours visible à droite.
 3. Les trois thèmes : icônes enfoncées lisibles dans la barre et dans « Plus… ».
-4. Les trois dispositions d'origine sur ton écran (la bande à 340 en animation, à 420 en Montage) ; ajuste si elles
+4. Les trois dispositions d'origine sur ton écran (la bande à 340 en animation, à 440 en Montage) ; ajuste si elles
    mangent trop le dessin.
 5. Passer de Storyboard à Animation et retour : le dessin ne saute pas, les panneaux ajustés se recalent en une ou
-   deux images ; l'espace Montage depuis Ctrl+K ; le bouton « Storyboard » qui en revient.
+   deux images ; l'espace Montage depuis son onglet, Alt+M ou Ctrl+K ; l'onglet « Storyboard » (ou Tab) qui en revient.
 6. Un panneau détaché (Références) reste sur son écran en changeant d'espace.
+
+### Le troisième onglet Montage (2026-10-21, branche `espace-montage`)
+
+Demande d'Anthony : « en haut à droite, à côté de Storyboard et Animation, un troisième onglet Montage, avec une
+organisation des panneaux propre au travail de montage ».
+
+- **Les trois onglets**, en haut à droite, dans l'ordre du travail : **Storyboard · Animation · Montage** (même style,
+  l'onglet de l'espace en cours est allumé avec l'encre faite pour l'accent, `bulles::encre_etat`). Un clic, la bulle
+  à 1 s (nom, raccourci, description) et le clic droit « Assigner un raccourci » comme pour toute commande. Passer de
+  l'un à l'autre est instantané et ne change rien au projet : le plan courant, l'image, la tête de lecture, les plans
+  choisis et les calques restent ; seule la disposition (et la barre du montage) change. La lecture s'arrête.
+- **Choix : une disposition du mode Storyboard, pas un troisième mode** (`Espace::Montage.mode() == Mode::Storyboard`).
+  Le montage garde les outils, les raccourcis et le dessin du storyboard : c'est le même travail sur les plans, vu
+  autrement. Un troisième `Mode` aurait doublé les contextes de raccourcis, les menus qui dépendent du mode et leurs
+  essais, pour une différence qui est une disposition et une barre. Ce qui s'adapte à l'espace : la disposition
+  (`DockLayout::pour_le_montage`), la barre de la bande (`Barre::MontageEdition`), le titre « Lecteur » du dessin, la
+  barre d'état (« Montage · plan 3 »), la vue caméra du lecteur.
+- **Raccourcis** : **Alt+M** (`espace.montage`, libre : « M » seul reste le miroir ; Alt+lettre est le même geste que
+  les outils) ; Ctrl+K « Espace de travail : Montage ». **Tab** : du Storyboard à l'Animation et retour, comme avant ;
+  **depuis le Montage, Tab revient au Storyboard** (le Montage n'est pas un côté de la bascule : « Animer ce plan », dans
+  sa barre, ou le double-clic sur un plan, entre en animation, et Tab ramène alors au Montage, d'où l'on venait).
+- **La disposition d'origine du Montage** (pensée pour monter, pas pour dessiner) :
+  - en haut à gauche, le **Lecteur** (le dessin) en grand, en **vue caméra** : on voit le film tel que la caméra le filme
+    (à l'entrée, la vue caméra s'allume si elle ne l'était pas ; à la sortie elle s'éteint si c'est l'entrée qui l'avait
+    allumée) ;
+  - en bas, sur toute la largeur, la **bande du montage** avec toutes ses pistes (plans, pistes de calques, pistes de son,
+    transitions), à 440 au lieu de 290 (storyboard) et 340 (animation) ;
+  - à droite, la **Fiche du plan** (durée, textes) en haut, et dessous, en onglets : **Bruitages**, **Suggestions sonores**,
+    **Commentaires**, **Historique** ;
+  - ni Outils, ni Couleur, ni Pinceaux, ni Réglages de l'outil, ni Guides, ni Calques, ni Effets, et la **barre d'outils
+    verticale est repliée** ; tous restent à la demande (barre des panneaux, Affichage > Espaces de travail > Panneaux).
+  - Les panneaux « Son » et « Transitions » n'existent pas comme panneaux : les pistes son (volumes, fondus, clés,
+    solo), leurs effets et les transitions se règlent dans la bande, par la barre et par les menus du clic droit.
+    La relecture est faite de fenêtres (exporter / importer les notes), lancées depuis la barre.
+- **Mémoire** : comme les autres espaces, la disposition qu'on y fait se retient (`disposition_montage` dans
+  `reglages.toml`), se restitue à l'entrée et à l'ouverture suivante (on démarre dans le Montage si on l'a quitté
+  ainsi), s'enregistre comme espace de travail nommé (Affichage > Espaces de travail > Enregistrer la disposition…) et
+  « Rétablir la disposition » (Ctrl+K `espace.retablir`) la remet à son origine sans toucher aux deux autres.
+  L'ancienne disposition d'origine du Montage, restée intacte dans les réglages, est remplacée par la nouvelle à la
+  lecture ; une disposition retouchée à la main reste la sienne.
+- **La barre du Montage** (`Barre::MontageEdition`, `barres.rs`) montre d'office les commandes d'édition, qui sont sous
+  « Plus… » dans la barre du montage du storyboard :
+  1. lire : début, lecture, boucle, son pendant la lecture, position ;
+  2. plans : nouveau plan, nouvelle séquence ;
+  3. couper et rogner : couper le plan, réunir avec le suivant, rogner le début, rogner la fin, durée du plan, avancer,
+     reculer, aimantation des bords, menu Plans ;
+  4. transitions et son : ajouter une transition, importer un son, nouvelle piste son, couper le son, menu Son,
+     panneau Bruitages (interrupteur) ;
+  5. pistes : replier toutes, déplier toutes ;
+  6. relecture et exports : nouveau commentaire, exporter pour relecture, importer les notes, exporter pour le montage,
+     exporter la fiche technique ;
+  7. « Animer ce plan ».
+  Sous « Plus… » : toutes les autres commandes de la barre du montage (verrous, numérotation, envois, versions,
+  comparer, vidéo, vues dessin / vignettes, copier / coller / supprimer les plans, replis des pistes) ; la place
+  qui manque les y envoie d'elle-même, comme pour toute barre. Elle a **ses propres épingles** (`[barres.montage_edition]`
+  dans `reglages.toml`) : celles de la barre du storyboard n'y changent rien.
+- **Limites** : pas de panneaux Son ou Transitions à part ; le lecteur est le dessin (il lit le film entier avec la
+  lecture du montage, mais il garde les outils de dessin à portée d'Alt+lettre) ; la hauteur de la bande est modeste
+  dans une petite fenêtre (1280 × 720 : le lecteur garde environ la moitié de la hauteur, tire le bord au besoin).
+
+#### Essais ajoutés (`montageonglet_tests.rs`)
+
+Les trois onglets se dessinent dans l'ordre et passent d'un espace à l'autre au clic ; rien ne change dans le projet
+en changeant (plan, image, plans choisis, historique) ; seul l'onglet de l'espace est allumé ; Alt+M (aucun conflit) et
+Tab depuis le Montage au clavier ; « Animer ce plan » puis Tab ramènent au Montage ; contenu de la disposition du Montage ;
+vue caméra à l'entrée et à la sortie ; chaque panneau de la barre des panneaux s'ouvre dans le Montage ; disposition
+retenue, restituée, rétablie, enregistrée comme espace, démarrage dans le Montage ; l'ancienne disposition cède la place
+et une disposition retouchée reste ; contenu de la barre du Montage et des commandes qui font leur travail ; épingles
+propres à la barre ; changement instantané ; repos (aucun réveil à moins d'une seconde) et image du Montage rapide.
+
+#### À vérifier à l'écran (par Anthony, troisième onglet)
+
+1. Les trois onglets en haut à droite : Storyboard, Animation, Montage, lisibles dans les trois thèmes, le bon allumé ;
+   les bulles à 1 s (Montage : Alt+M).
+2. Un clic sur Montage : le dessin devient « Lecteur », en vue caméra, grand ; la bande en bas, haute, avec toutes les
+   pistes ; la Fiche du plan et les onglets Bruitages, Suggestions, Commentaires, Historique à droite ; plus de barre
+   d'outils à gauche.
+3. Le plan courant, l'image, la tête de lecture et les plans choisis sont les mêmes qu'avant le clic ; pareil dans
+   l'autre sens (Storyboard, Animation).
+4. La barre en tête de la bande : couper, rogner, durée, avancer/reculer, aimant, transition, sons, bruitages, pistes,
+   relecture, exports se voient sans « Plus… » (sur une grande fenêtre ; sur une petite, le bouton « Plus… » prend la suite).
+5. Tab depuis le Montage : retour au Storyboard ; « Animer ce plan », puis Tab : retour au Montage.
+6. Ferme l'Historique dans le Montage, passe en Storyboard puis reviens : il est toujours fermé. Affichage > Espaces de
+   travail > Rétablir la disposition : il revient. Ferme SHOT dans le Montage : il s'ouvre dans le Montage.
+7. Au repos, dans le Montage : rien ne bouge, le processeur dort (comme ailleurs).
 
 ## 15. Envois, plans modifiés, versions de plans et comparaison (2026-10-20, branche `versions`)
 
@@ -925,8 +1070,7 @@ thème (`theme::avertissement`) ; les états allumés (Envois, Comparer) prennen
 - **Fenêtre « Marquer un envoi »** : un nom (« v2 au réal », le numéro suivant est proposé), une date (JJ/MM/AAAA, celle du
   jour ; rouge si elle n'est pas lisible), « Marquer l'envoi » / Annuler, Entrée valide. Un projet pas encore enregistré le
   dit (l'envoi est gardé au premier enregistrement).
-- **Pastille** : 14 points en haut à droite du bloc du plan dans la bande et dans le coin de la première vignette du plan dans la
-  vue Vignettes ; un crayon pour un plan modifié, un plus pour un plan ajouté ; bulle « Modifié depuis l'envoi « v2 au réal » ».
+- **Pastille** : 14 points en haut à droite du bloc du plan dans la bande (pas dans la vue Vignettes, épurée) ; un crayon pour un plan modifié, un plus pour un plan ajouté ; bulle « Modifié depuis l'envoi « v2 au réal » ».
   Sur un bloc de moins de 44 points de large (la bande zoomée très loin : la pastille cacherait la poignée du bord) ou de
   moins de 40 de haut, une **bande ambre de 5 points le long du bord haut** la remplace, avec la même bulle. Le « dernier
   envoi » est le dernier marqué (pas le plus tardif par sa date : la date se tape).
@@ -1010,8 +1154,8 @@ l'EDL reste celle du plan (« PL012A », 8 caractères au plus), le titre long d
 donne `…_V1`.
 
 **Limites connues** : une version rangée ne se lit pas image par image dans la pile (première image seulement) ; l'étiquette
-est peinte sur la première vignette du bloc (pas dans la vue Vignettes / planche, qui garde « Plan 3 · V2 » dans son titre et
-le clic droit) ; sur un bloc très étroit seul le point ou le clic droit donnent accès aux versions.
+est peinte sur la première vignette du bloc (pas dans la vue Vignettes, qui ne montre que le numéro du plan : les versions y sont
+au clic droit) ; sur un bloc très étroit seul le point ou le clic droit donnent accès aux versions.
 
 ### À vérifier à l'écran (versions dans le montage)
 
@@ -1182,9 +1326,9 @@ vérifié : **à vérifier**, rien n'est copié). Code : `src/calquecouleur.rs` 
   `remplissage`, `griffonner`, `sources`, et un calque libre (sans `trait`).
 - **Export, PDF, vignettes, montage, GPU** : la couleur est un calque bitmap ordinaire pour eux (rien n'a changé). Export
   Storyboard Pro : calque bitmap sous le trait, avec une note dans la fenêtre d'export (le lien n'y existe pas : à vérifier).
-- **Avec « Fond sous le trait »** (`fond.rs`) : les deux coexistent, rien n'a changé dans l'un pour l'autre. Le fond est
+- **Avec l'« Aplat sous le trait »** (`fond.rs`) : les deux coexistent, rien n'a changé dans l'un pour l'autre. L'aplat est
   une strate du même calque, déduite du trait (une forme, une couleur) ; le calque de couleur est un calque à part,
-  colorié zone par zone, avec ses propres images. Ordre de composition : fond du trait, couleur, trait.
+  colorié zone par zone, avec ses propres images. Ordre de composition : aplat du trait, couleur, trait.
 - **Limites connues** : couper / coller une clé du trait (même calque) ne remet pas sa couleur (elle reste dans le
   dessin d'origine : glisser la clé la garde) ; un effet du trait (tremblement) ne bouge pas la couleur ; le trait
   doit exister à l'image pour colorier (sinon, un pinceau en pose un vide) ; un calque de toute la scène, un dossier,
@@ -1217,7 +1361,7 @@ griffonnage ; le calque CTG est retiré (commande « Nouveau calque CTG », menu
 | Gomme | Efface les griffonnages ; une zone sans plus aucun griffonnage n'est plus remplie | Efface la peinture libre, jamais le remplissage |
 | Sélection, déplacement, transformation | Agissent sur la **peinture libre**, pas sur les griffonnages (limite connue) | idem |
 
-- **Ordre de composition** (de bas en haut) : remplissage au griffonnage, fond sous le trait (s'il y en a un), **peinture libre**,
+- **Ordre de composition** (de bas en haut) : remplissage au griffonnage, aplat sous le trait (s'il y en a un), **peinture libre**,
   puis le calque de trait. La peinture libre est donc **au-dessus** du remplissage ; pour retirer du remplissage à un
   endroit, gomme le griffonnage (ou retouche le trait pour que la zone change).
 - **Où sont les griffonnages** : un dessin à part par dessin de peinture (`CalqueCouleur::griffonnages`), un vrai dessin
@@ -1243,8 +1387,8 @@ griffonnage ; le calque CTG est retiré (commande « Nouveau calque CTG », menu
   autres cas, ses sources devenant des sources supplémentaires. Un message le dit à l'ouverture. « Charger la structure
   à partir des sources » n'existe plus : un calque lié suit déjà les images de son trait.
 - **Trois façons de colorier sous le trait, devenues deux** : le **calque de couleur** (peinture à la main et
-  griffonnage, qui se mêlent) et le **fond sous le trait** (`fond.rs` : une forme déduite du trait). La **brosse par
-  personnage** (un trait + une couleur de remplissage par personnage, branche `pistes-par-plan`) s'appuie sur le fond
+  griffonnage, qui se mêlent) et l'**aplat sous le trait** (`fond.rs` : une forme déduite du trait). La **brosse par
+  personnage** (un trait + une couleur d'aplat par personnage, partie 32) s'appuie sur l'aplat
   sous le trait : elle n'a pas changé et ne dépend pas du calque de couleur.
 - **Limites** : les images guides de la propagation (`Propager`, `propager.rs`) ne montrent pas les remplissages au
   griffonnage (le trait et la peinture libre, si) ; les effets du calque (flou…) s'appliquent au remplissage et à la peinture
@@ -1307,7 +1451,7 @@ sans bord, pas son détail.
   dessiné, sinon du papier. Rien n'est exporté hors du cadre.
 - **Limites** : les zones bitmap sélectionnées (lasso, baguette de couleur) et leur déplacement prennent les
   pixels de la feuille (on peut déplacer ce qu'on a pris vers l'extérieur) ; les effets de calque, les calques
-  d'ajustement, le fond sous le trait, les calques de couleur, l'enveloppe et la perspective, la propagation,
+  d'ajustement, l'aplat sous le trait, les calques de couleur, l'enveloppe et la perspective, la propagation,
   l'import / export Storyboard Pro restent à la feuille. Le zoom arrière extrême (plus de 4 096 px de monde
   dessiné à l'écran) montre ce qui est hors de la feuille un peu plus flou (la texture est réduite).
   Au-delà de 32 768 px de la feuille, rien ne se pose.
@@ -1495,7 +1639,7 @@ Demande d'Anthony : « ouvrir plusieurs fichiers dans la même fenêtre avec un 
 - **Raccourcis** : Ctrl+T nouvel onglet, Ctrl+W fermer l'onglet, Ctrl+Tab / Ctrl+Maj+Tab onglet suivant / précédent (en boucle).
   `Tab` et `Maj+Tab` restent le mode et la planche. Tous dans Ctrl+K et assignables (clic droit sur une entrée de menu).
 - **Menu Fichier** : Nouvel onglet, Fermer l'onglet, Fermer les autres onglets.
-- **Ouvrir, Nouveau, Projets récents, imports** : dans un nouvel onglet (réglable : Fichier > Préférences > Projets > « Ouvrir
+- **Ouvrir, Nouveau, Projets récents, imports** : dans un nouvel onglet (réglable : Fichier > Préférences > Général > « Ouvrir
   dans un nouvel onglet »). Si l'onglet affiché est l'accueil, le projet y prend la place. Un projet déjà ouvert : son onglet
   passe à l'écran (« … est déjà ouvert »). Un fichier `.pelure` lâché sur la fenêtre s'ouvre de même.
 - **Fermer un onglet modifié** : la boîte « Modifications non enregistrées » (elle nomme le projet) ; un onglet caché passe d'abord
@@ -1538,10 +1682,10 @@ de feuille.
 
 **Ce qui est mis à l'échelle** : dessins bitmap (feuille **et** hors-feuille, rééchantillonnés : triangle en réduction, Catmull-Rom
 en agrandissement, sur des pixels prémultipliés : pas de frange de couleur), dessins vectoriels (points, épaisseurs, taille du
-pinceau et du texte, puis rendu exact), fond sous le trait (peinture et coupe), pose des calques et clés de position, clés de
+pinceau et du texte, puis rendu exact), aplat sous le trait (peinture et coupe), pose des calques et clés de position, clés de
 caméra (position ; l'avancée suit la largeur du cadre ; zoom et angles inchangés), paramètres d'effets en pixels (rayon des flous,
 décalage de l'ombre, liseré, grain, tremblement… clés comprises, dans les bornes de l'effet ; la densité de trous du trait sec,
-par 100 px de trait, est divisée), débord du fond sous le trait, fermeture des trous des calques de couleur (peinture et remplissage au griffonnage), zones bitmap et
+par 100 px de trait, est divisée), débord de l'aplat sous le trait, fermeture des trous des calques de couleur (peinture et remplissage au griffonnage), zones bitmap et
 éléments vectoriels collés sur le dessin (ils gardent leur place dans le cadre). **Ne change pas** : les paramètres en pour cent,
 les incrustations (en pour cent de la hauteur du cadre), les marques d'image, les textes, et — comme pour un collage de plans dans
 le même projet — les références liées, les commentaires, les transitions et les sons des plans.
@@ -1549,7 +1693,7 @@ le même projet — les références liées, les commentaires, les transitions e
 **La question** (petite fenêtre « Coller depuis un autre projet ») : seulement pour un plan, un calque, des images ou des clés, et
 seulement si les **proportions** ou les **cadences** diffèrent. Elle montre d'où vient la copie et ce qui va se passer ; « Ne plus
 demander » applique ensuite les derniers choix sans question. Les choix sont retenus dans les réglages et se changent dans Fichier
-> Préférences… > Projets > « Coller depuis un autre projet ». Les clés de caméra et d'effets, les effets, les éléments, les zones
+> Préférences… > Général > « Coller depuis un autre projet ». Les clés de caméra et d'effets, les effets, les éléments, les zones
 et la sélection sur plusieurs calques appliquent ces choix retenus sans poser la question.
 
 **Pendant le calcul** : les dessins sont rééchantillonnés sur des fils de fond (tous les cœurs sauf un) : « Collage en cours… 12/72
@@ -1593,7 +1737,7 @@ sur le premier calque choisi de même sorte (vectoriel pour des éléments, bitm
    aussi après plusieurs allers-retours ; les vignettes du montage aussi.
 9. Fermer SHOT avec trois onglets, le rouvrir : les trois reviennent, le même est affiché. Désactiver « Rouvrir le dernier projet
    au lancement » : SHOT s'ouvre sur l'accueil.
-10. Fichier > Préférences > « Ouvrir dans un nouvel onglet » décoché : Ouvrir remplace le projet affiché (après la question).
+10. Fichier > Préférences > Général > « Ouvrir dans un nouvel onglet » décoché : Ouvrir remplace le projet affiché (après la question).
 
 ### À vérifier à l'écran : coller depuis un projet d'une autre taille (par Anthony)
 
@@ -1607,7 +1751,7 @@ sur le premier calque choisi de même sorte (vectoriel pour des éléments, bitm
 13. Un projet carré 1080 × 1080 et un projet 16:9 : la fenêtre « Coller depuis un autre projet » apparaît, avec « Contenir » et
     « Remplir ». Contenir : le plan entier tient dans le carré. Remplir : le carré est rempli, les côtés du plan dépassent du cadre
     (ils sont toujours sur la feuille : élargir la vue pour les voir). Annuler : rien n'est collé. Cocher « Ne plus demander » : le
-    collage suivant se fait sans fenêtre avec le même choix ; Fichier > Préférences… > Projets le change.
+    collage suivant se fait sans fenêtre avec le même choix ; Fichier > Préférences… > Général le change.
 14. Un projet à 24 i/s et un à 25 i/s, même taille : la fenêtre propose « Garder les images » ou « Garder la durée en secondes ».
     Le second choix : un plan de 24 images dure 25 images, ses clés de caméra et d'effets suivent.
 15. Un calque (W puis X), des images, des clés du montage, des clés de caméra, des effets : même règle, dans un projet d'une autre
@@ -1731,7 +1875,7 @@ SHOT) : voir « À vérifier à l'écran ».
 | **Trait ▾**, **Matière ▾** | les deux boutons déroulants du panneau Effets (famille Trait, famille Matière) | « rangée d'icônes » (c'était avant) |
 | **Dossier** | un calque sans dessin qui range des calques (un seul niveau) ; son triangle l'ouvre ou le ferme | groupe (le « groupe de couleur » est autre chose) |
 | **fx** | le petit bouton de la ligne d'un calque qui allume ou éteint toute sa pile d'effets | |
-| **Fond sous le trait** | un réglage **du calque**, avec son bouton sur sa ligne | option du pinceau (c'était avant) |
+| **Aplat sous le trait** (« Aplat ») | un réglage **du calque**, avec son bouton sur sa ligne et sa sous-ligne dans le panneau Calques (partie 33) | « fond » ou « remplissage » dans un texte de l'interface ; option du pinceau (c'était avant) |
 | **Passe-partout** | le voile autour du cadre de la caméra de « Estomper le hors-champ » | masque |
 | **GIF animé** | l'export `.gif`, sans son | |
 
@@ -1743,7 +1887,7 @@ SHOT) : voir « À vérifier à l'écran ».
 | Nouveau dossier (`dossier.nouveau`) | panneau Calques : icône dossier + de ses commandes, clic droit dans le vide de la liste ; en-tête de la timeline (déjà là) ; menu Calques > Dossiers (déjà là) | aucun |
 | Ranger les calques choisis dans un dossier (`dossier.ranger`) | panneau Calques : icône (quand plusieurs calques sont choisis) ; menu Calques > Dossiers | aucun |
 | Ouvrir / fermer un dossier | triangle de sa ligne dans le panneau Calques et dans la timeline (le même réglage) | aucun |
-| Fond sous le trait du calque (`pinceau.fond`) | bouton carré-utilisateur sur la ligne de chaque calque de dessin du panneau Calques, et dans ses commandes (calque courant) ; menu Calques > Fond sous le trait | aucun |
+| Aplat sous le trait du calque (`pinceau.fond`) | bouton carré-utilisateur (« Aplat sous le trait ») sur la ligne de chaque calque de dessin du panneau Calques, et dans ses commandes (calque courant) ; clic droit d'un calque > « Ajouter un aplat » / « Retirer l'aplat » ; menu Calques > Aplat sous le trait (partie 33) | aucun |
 | Effets du calque allumés / éteints (`calque.effets`) | bouton « fx » de la ligne du calque (panneau Calques, timeline), seulement s'il a des effets ; « Effets du calque allumés » dans les menus de calque ; Ctrl+K | aucun |
 | Exporter un GIF animé (`fichier.exporter_gif`) | Fichier > Exporter… > « Un GIF animé » ; fenêtre d'export (choix « GIF animé ») ; Ctrl+K | aucun |
 | Opacité du passe-partout | Fichier > Préférences… > Dessin (curseur 0 à 100 %, « Rétablir ») | |
@@ -1753,14 +1897,14 @@ Les icônes ont leur bulle d'une seconde (nom, raccourci, description : `bulles.
 
 ### Ce que voit l'utilisateur
 
-- **Panneau Effets** : sous « Ajouter un effet / Préréglages / Copier-coller », deux boutons « Trait ▾ » et « Matière ▾ ». Un effet allumé sur
+- **Panneau Effets** : sous « Ajouter un effet / Préréglages » (le bouton « Copier / coller » a disparu le 2026-10-21, partie 31), deux boutons « Trait ▾ » et « Matière ▾ ». Un effet allumé sur
   le calque est enfoncé dans la liste ; le titre compte les effets allumés (« Trait (2) ▾ »). Sur un calque bitmap, les entrées qu'il
   refuse sont grisées et la bulle dit pourquoi. Les préréglages sont sous un petit titre « Préréglages ». Si les effets du calque sont
   éteints (bouton fx), une ligne le dit, avec « Rallumer ».
 - **Panneau Calques** : dans les commandes, après « Nouveau calque bitmap » : « Nouveau dossier » (et, avec plusieurs calques choisis,
-  « Ranger les calques choisis dans un dossier »), puis le bouton de fond et, s'il y a des effets, « fx » pour le calque courant. Chaque
+  « Ranger les calques choisis dans un dossier »), puis le bouton d'aplat et, s'il y a des effets, « fx » pour le calque courant. Chaque
   ligne : [triangle si dossier] œil, cadenas, [fx], vignette (l'icône d'un dossier pour un dossier), nom, puis « vectoriel » (ou « dossier ·
-  3 calques ») et le bouton de fond. Un calque rangé est décalé vers la droite ; un dossier fermé n'a plus les lignes de ses calques (sauf le
+  3 calques ») et le bouton d'aplat ; un calque qui a un aplat a en plus sa sous-ligne fine (partie 33). Un calque rangé est décalé vers la droite ; un dossier fermé n'a plus les lignes de ses calques (sauf le
   calque courant).
 - **Timeline** : « fx » sur la deuxième rangée de réglages (après le groupe), ou à côté du cadenas sur une ligne réduite.
 - **Pile des versions** : chaque carte porte la durée de sa version à côté du nom (« V2 3s 00 ») ; la bulle d'une carte dit de combien la
@@ -1778,7 +1922,7 @@ Les icônes ont leur bulle d'une seconde (nom, raccourci, description : `bulles.
 - « fx » n'a pas de bouton dans la colonne du montage (pas de place) : son entrée de menu y est.
 - Un GIF de plans choisis qui ne se suivent pas est fait de leurs images bout à bout, dans l'ordre du film.
 - Le contenu rogné (réserve) reste attaché au plan et non à la version : passer à une version de durée différente ne le change pas.
-- Les réglages du fond (couleur, débord, trous) restent sous le pinceau (visibles quand le calque courant a un fond), pas sur la ligne du calque.
+- ~~Les réglages du fond restent sous le pinceau~~ : depuis le 2026-10-21 (partie 33), ils sont dans Réglages quand la sous-ligne de l'aplat est choisie, et au clic droit de la sous-ligne.
 
 ### Essais ajoutés
 
@@ -1801,9 +1945,9 @@ caméra (opacité du passe-partout, réglage enregistré, curseur des Préféren
    disparaissent aussi de la timeline) puis le rouvre ; le calque courant dans un dossier fermé reste visible ; choisir le dossier,
    baisser son opacité, cacher son œil, verrouiller son cadenas : ses calques suivent ; monter le dossier avec la flèche : ses calques
    aussi. Plusieurs calques choisis (Ctrl + clic) : l'icône « Ranger les calques choisis dans un dossier ».
-3. Fond sous le trait : plus de bouton dans les réglages du pinceau ni du crayon ; sur la ligne d'un calque de dessin, le bouton carré-
-   utilisateur (éteint) ; un clic le donne au calque (même un autre que le courant), les réglages du fond apparaissent sous le pinceau
-   quand ce calque est courant ; Ctrl+Z. Dans le thème Gris clair, l'icône allumée se lit.
+3. Aplat sous le trait : plus de bouton dans les réglages du pinceau ni du crayon ; sur la ligne d'un calque de dessin, le bouton carré-
+   utilisateur (éteint) ; un clic le donne au calque (même un autre que le courant) et une sous-ligne « Aplat » apparaît dessous ;
+   Ctrl+Z. Dans le thème Gris clair, l'icône allumée se lit. (La suite : partie 33.)
 4. « fx » : absent sur un calque sans effet ; poser un flou : « fx » apparaît à côté de l'œil et du cadenas (panneau Calques, timeline) ;
    un clic éteint l'effet à l'écran (barré), le panneau Effets le dit ; un clic le rallume ; Ctrl+Z / Ctrl+Maj+Z ; enregistrer, fermer,
    rouvrir : l'état est gardé.
@@ -2415,3 +2559,404 @@ hauteur à chaque plan.
    seulement celles du plan courant.
 7. En animation, la timeline du plan courant montre les mêmes lignes réduites que le montage en mode par plan. Enregistrer, quitter, rouvrir : mêmes replis par plan, même mode (c'est une préférence).
 8. Au repos, l'application ne repeint pas, dans les deux modes.
+
+
+## 30. Préférences en onglets (2026-10-21, branche `preferences-onglets`)
+
+Demande d'Anthony : « La fenêtre Préférences est très mal organisée et trop verticale. J'aimerais que tu l'organises par
+onglets pour la rendre plus ergonomique et compréhensible. » Code : `src/prefsonglets.rs` (la table des réglages),
+`src/prefsui.rs` (la fenêtre), essais dans `src/prefsui_tests.rs`. Rien dans les réglages eux-mêmes n'a changé : leurs
+clés de `reglages.toml`, leurs effets et leur moment d'application (tout de suite) sont ceux d'avant ; seule la mise en
+page est neuve, plus la clé `onglet_preferences` (l'onglet ouvert).
+
+### 30.1 La mise en page
+
+- **Une liste d'onglets verticale à gauche** (icône Phosphor et nom, 156 points), **le contenu à droite**, **un champ de
+  recherche en haut**. Choisie plutôt qu'une rangée d'onglets en haut : neuf noms ne tiennent pas côte à côte dans une
+  fenêtre de 800 points sans deuxième ligne ni défilement, et la liste laisse toute la hauteur au contenu (c'est aussi la
+  façon de nombreux logiciels de création, Blender par exemple).
+- **La fenêtre** : 800 × 540 au départ (plus large que haute), redimensionnable (minimum 560 × 320), ramenée à la taille
+  de l'écran si celui-ci est petit, ouverte en haut au centre ; le contenu de l'onglet défile (une barre par onglet, la
+  position de chacune est retenue) quand il dépasse. La croix de la barre de titre la ferme ; plus d'ancrage : on la déplace.
+- **Un onglet** : son icône et son nom en grand, une phrase, puis des groupes. **Un groupe** : un titre court, un trait, les
+  réglages (étiquette à gauche, contrôle à droite quand le réglage a une valeur : couleurs du thème, performance,
+  programmes).
+- **L'onglet ouvert est retenu** (réglages : `onglet_preferences`, absent pour Général) : la fenêtre rouvre là où on l'a
+  laissée, d'une séance à l'autre. Le petit engrenage du panneau Suggestions sonores l'ouvre sur Génération.
+- **Les bulles** : une seconde sur un onglet (nom et phrase), sur le champ de recherche, sur chaque réglage (le survol
+  d'egui est réglé à 1 s pour toute l'application).
+
+### 30.2 Qui est où
+
+| Onglet (icône) | Groupe | Réglages (étiquette lue à l'écran) |
+|---|---|---|
+| **Général** (engrenage) | Au lancement et à l'ouverture | Rouvrir le dernier projet au lancement ; Ouvrir dans un nouvel onglet |
+| | En cas de plantage | Copie de secours toutes les N min |
+| | Coller depuis un autre projet | Proportions différentes (Contenir / Remplir) ; Cadence différente (images / secondes) ; Demander à chaque collage |
+| **Apparence** (palette) | Thème et couleurs | Thème + Rétablir ; neuf couleurs (fond des panneaux, barres, fenêtres et menus, boutons et curseurs, texte, accent et sélection, autour du dessin, timeline et montage, bordures) |
+| | Panneaux | Ajuster les panneaux à leur contenu ; Réajuster les panneaux |
+| **Dessin** (crayon) | Stylet et pinceau | Croix du système sur le pinceau |
+| | Caméra | Opacité du passe-partout + Rétablir |
+| **Montage** (bobine) | Pistes du montage | Repliage des pistes (commun / par plan) ; Déplier le calque courant tout seul |
+| **Raccourcis** (clavier) | Raccourcis clavier | Jeu de raccourcis ; Voir et changer les raccourcis… ; Modifier le fichier à la main… ; Recharger |
+| **Export** (export) | Programmes et modèles | ffmpeg (Choisir…, Automatique) ; Modèle Storyboard Pro (Choisir…) ; Ouvrir la fenêtre Exporter… |
+| **Équipe** (trois personnes) | Commentaires | Signer mes commentaires |
+| | Travail à plusieurs | Mon nom et ma couleur ; Une prise périme après N min ; Prendre le plan libre que je commence à modifier ; Dire dans la barre d'état ce que font les autres |
+| **Génération** (étincelle) | Génération sonore | Les trois rôles (lecture, bruitages et ambiances, voix) et leur fournisseur, les clés (inchangées), Dossier des modèles, Python du serveur, Démarrer le serveur tout seul, port, Démarrer / Arrêter / Tester |
+| **Performance** (jauge) | Réglages de performance | Les onze réglages du diagnostic (effets en aperçu réduit, traits texturés, tremblement, pelure, trois caches, fils, vignettes, animations, effets sur la carte graphique) ; Diagnostic des performances… ; Revenir comme avant ; Valeurs d'origine |
+| | Affichage | Le moteur de rendu et la carte graphique |
+
+« Export » est le seul onglet qui montre des réglages qu'on ne trouvait pas dans les Préférences : le chemin de ffmpeg et le
+projet modèle de Storyboard Pro existaient déjà (`ffmpeg`, `modele_storyboard_pro` dans `reglages.toml`) mais ne se
+choisissaient que dans les fenêtres d'export, qui gardent leurs boutons. Le dossier du dernier export, la fiche technique
+(colonnes, format) et les options propres à chaque export restent dans leur fenêtre.
+
+### 30.3 La recherche
+
+Un ou plusieurs mots (tous doivent répondre), sans tenir compte des majuscules ni des accents, dans l'étiquette du réglage,
+quelques mots ajoutés (« voile » pour le passe-partout, « mo » pour les caches…), le titre du groupe et le nom de l'onglet.
+Quand le champ n'est pas vide, **les groupes qui répondent, de tous les onglets, remplacent le contenu** : au-dessus de
+chacun, un lien « Onglet › » (ouvre l'onglet et vide la recherche) et « trouvé : … » en couleur d'accent (les étiquettes
+qui répondent) ; dans la liste, les onglets qui répondent portent le nombre de réponses (les autres sont grisés).
+Les groupes de la recherche sont dessinés par le même code que dans leur onglet (même réglage, mêmes bulles). La croix du
+champ efface la recherche ; choisir un onglet aussi.
+
+### 30.4 La table des réglages
+
+`REGLAGES` (`prefsonglets.rs`) : une ligne par réglage, `(onglet, groupe, identifiant, étiquette, mots)`. Un groupe n'a qu'un
+onglet. `prefsui.rs` dessine un onglet en parcourant les groupes de la table ; la recherche lit la même table. Pour ajouter
+un réglage : l'ajouter à la table (et à son dessin dans `groupe_ui` ou dans la fonction que le groupe appelle) ; pour en
+retirer un, le retirer des deux. Les essais (`prefsui_tests.rs`) échouent si une étiquette de l'ancienne fenêtre manque dans
+la table, si une étiquette est dans deux onglets, si un onglet ne montre pas toutes les siennes (la molette fait défiler
+l'onglet jusqu'en bas), ou montre une étiquette d'un autre onglet.
+
+### 30.5 Limites
+
+- Les réglages gardent leur dessin d'avant (étiquette à côté du contrôle sur une ligne) sauf ceux de l'apparence, de la
+  performance et des programmes, déjà en deux colonnes : les grouper tous dans une grille demanderait de réécrire les
+  fonctions des autres sections.
+- Pas de bouton « Rétablir » par groupe là où il n'y en avait pas (thème, passe-partout et performance ont le leur).
+- La fenêtre n'a pas de boutons OK / Annuler : comme avant, chaque réglage joue et s'enregistre tout de suite.
+- La recherche ne surligne pas le mot dans le réglage : elle montre les groupes et dit « trouvé : … ».
+- L'ouverture de la fenêtre n'a pas de raccourci propre (menu Fichier, Ctrl+K : « Préférences »).
+
+### 30.6 À regarder à l'écran (liste pour Anthony)
+
+1. Fichier > Préférences… : une fenêtre plus large que haute, neuf onglets à gauche (icône + nom), champ de recherche en
+   haut ; on la tire par un bord (elle grandit), par sa barre de titre (elle se déplace).
+2. Les neuf onglets, un à un : titre, phrase, groupes ; chaque groupe a un titre court et un trait ; rien n'est coupé ;
+   l'ascenseur n'apparaît que sur Génération (sur un écran de 1080 points, il peut apparaître ailleurs si on rétrécit la
+   fenêtre).
+3. L'onglet choisi garde son fond d'accent et son texte lisible dans les trois thèmes (Gris sombre, Gris clair, Sombre).
+4. Fermer, rouvrir : même onglet. Quitter SHOT, relancer, rouvrir : même onglet. Le petit engrenage de Suggestions sonores :
+   l'onglet Génération.
+5. Apparence : le thème, une couleur (« Personnalisé »), « Rétablir ». Dessin : le curseur du passe-partout et « Rétablir ».
+   Montage : les deux icônes de repliage. Raccourcis : le jeu, les trois boutons. Performance : une case, une valeur.
+   Équipe : le nom, la couleur, la durée d'une prise. Général : les deux cases, la copie de secours, les choix du collage.
+6. Export : « Choisir… » ffmpeg ouvre le choix de fichier ; une fois choisi, le nom du fichier remplace « cherché tout
+   seul » et « Automatique » apparaît ; « Ouvrir la fenêtre Exporter… » ouvre Exporter.
+7. Chercher « couleur » (le thème et l'équipe), « cache » (trois caches), « cle » ou « clé » (Génération), « voile »
+   (Caméra), « zzz » (rien ne répond) ; cliquer « Dessin › » ; effacer par la croix.
+8. Une seconde sur un onglet, le champ de recherche, un réglage : la bulle.
+9. Écran de 1366 × 768 ou fenêtre de SHOT réduite : la fenêtre se ramène à l'écran et son contenu défile.
+10. Fenêtre ouverte, application au repos : aucun repeint (le processeur reste à zéro).
+
+## 31. Effets au clavier et tremblement dans « Trait » (2026-10-21, branche `effets-clavier`)
+
+Deux demandes d'Anthony : le bouton « Copier / coller » du panneau Effets ne sert à rien (on choisit un effet, Ctrl+C, on clique un
+autre calque, Ctrl+V) ; le tremblement du trait est de la famille Trait et doit être avec les autres.
+
+### Mots
+
+| Mot | Sens | À éviter |
+|---|---|---|
+| **Effet choisi** | l'effet dont le nom est encadré dans le panneau Effets (ses clés se voient dans la timeline et le montage) ; Ctrl / Maj + clic en choisit plusieurs | sélectionné (pour les clés, c'est autre chose) |
+| **Coller en fin de pile** | l'effet est ajouté après ceux du calque (il s'applique après eux), comme « Ajouter un effet » ; jamais à la place d'un autre | écraser |
+
+### Où et quels gestes
+
+| Geste | Où | Effet |
+|---|---|---|
+| Clic sur le nom d'un effet | panneau Effets | le choisit ; le panneau a la main (cadre discret) ; un second clic le lâche |
+| Ctrl + clic / Maj + clic sur un nom | panneau Effets | ajoute ou retire un effet du choix / prend la plage jusqu'à l'effet choisi |
+| Ctrl+C | panneau Effets a la main, un effet choisi (ou un seul effet sur le calque) | copie les effets choisis : réglages et clés |
+| Clic sur un calque | panneau Calques | le calque devient courant ; le panneau a la main (cadre discret s'il y a des effets copiés) |
+| Ctrl+V | panneau Effets a la main, ou panneau Calques a la main après une copie d'effets | colle à la fin de la pile du calque courant (ou des calques choisis) : une étape « Coller l'effet » / « Coller 2 effets » |
+| « Copier tous les effets du calque », « Coller », « Remplacer les effets » | clic droit sur un calque > Effets ; clic droit sur le nom d'un effet ; Ctrl+K (`fx.copier_tout`, `fx.coller`, `fx.remplacer`) | comme avant |
+| Tremblement du trait | bouton « Trait ▾ » du panneau Effets, premier de la liste (icône vague) ; aussi menus de calque, en-tête de la timeline, outils vectoriels, Ctrl+K (`fx.tremblement`) | coche / décoche, grisé avec la raison sur un calque bitmap |
+
+### Ce que voit l'utilisateur
+
+- **Panneau Effets** : « Ajouter un effet » et « Préréglages » ; plus de bouton « Copier / coller ». Chaque effet a toujours son icône « Copier l'effet »
+  (elle copie tout le choix si l'effet en fait partie). Les effets choisis ont le cadre de la couleur de sélection.
+- **Menu « Trait ▾ »** : « Tremblement du trait », puis écriture, crayonné, respiration, ondulation, pointillés, désagrégation ; le titre compte
+  les effets allumés (le tremblement compte), la section « Préréglages » est inchangée (le tremblement n'a pas de préréglage ; ceux de « Tremblement
+  de l'image » restent dans « Préréglages » du panneau).
+- **« Ajouter un effet »** : plus d'entrée « Tremblement du trait » en tête ; il est dans la famille « Trait » de ce menu, avec les autres.
+- **Panneau Calques** : un cadre discret quand Ctrl+V va y coller des effets.
+- **Barre d'état** : « 2 effets copiés : Flou gaussien, Lueur. Ctrl+V sur un autre calque… », puis « 2 effets collés sur le calque « B ». ».
+
+### Limites
+
+- Ctrl+V depuis la timeline ou le montage garde son sens d'avant (images, clés, plans) : pour coller des effets, cliquer le calque dans le panneau
+  Calques (ou travailler dans le panneau Effets).
+- Les effets du trait et de matière, ainsi que le tremblement, ne sont qu'une fois par calque : sur un calque qui l'a déjà, la copie n'est pas ajoutée (la barre d'état le dit).
+- Seul le premier effet choisi (le dernier cliqué) montre ses clés dans la timeline.
+- Ni Ctrl+X sur les effets, ni glisser-déposer d'un effet sur un calque.
+- Le tremblement ne change que de menu : son rendu (processeur et carte graphique) et l'enregistrement des projets sont ceux d'avant (la famille n'est pas enregistrée).
+
+### Essais ajoutés
+
+`fxclavier_tests.rs` (16 essais) : clic sur un nom (choix, main au panneau, second clic), Ctrl / Maj + clic, choix perdu en changeant de calque, Ctrl+C /
+Ctrl+V vers un autre calque (réglages et clés identiques, une étape nommée, annulation), plusieurs effets d'un coup, effet de même sorte ajouté et non
+remplacé, `fx.remplacer` et `fx.coller` toujours là, Ctrl+V depuis le panneau Calques seulement après une copie d'effets, rien sans la main, un appui ailleurs
+rend la main, collage d'une feuille 320×180 dans une 640×360 (pixels doublés), bouton disparu, tremblement premier du menu « Trait » et absent en tête
+de « Ajouter un effet », grisé sur un bitmap, projet avec tremblement enregistré et relu à l'identique.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Panneau Effets : plus de bouton « Copier / coller » à côté de « Préréglages ».
+2. Sur un calque avec trois effets, cliquer le nom du premier : cadre ; Ctrl + clic sur le troisième : deux cadres ; Maj + clic : la plage ; un clic simple :
+   un seul ; re-cliquer l'unique : plus aucun.
+3. Choisir deux effets, Ctrl+C ; cliquer un autre calque dans le panneau Calques (un cadre discret apparaît) ; Ctrl+V : les deux effets arrivent
+   en bas de sa pile, avec leurs réglages et leurs clés ; Historique : « Coller 2 effets » ; Ctrl+Z les retire d'un coup.
+4. Coller deux fois le même flou : deux flous (aucun n'en remplace un autre). Ctrl+K « remplacer les effets » : la pile est remplacée.
+5. Copier un effet, puis copier un dessin (outil de sélection, Ctrl+C), cliquer un calque : Ctrl+V colle le dessin, plus l'effet.
+6. Copier un effet dans un projet, ouvrir un autre onglet d'une autre taille de feuille, cliquer un calque, Ctrl+V : l'effet arrive, ses pixels adaptés.
+7. Menu « Trait ▾ » : « Tremblement du trait » est le premier ; grisé (bulle) sur un calque bitmap ; « Ajouter un effet » : pas d'entrée à part
+   en tête, mais « Trait > Tremblement du trait ». Rouvrir un projet d'avant avec un tremblement : il tremble comme avant.
+
+## 32. Brosses par personnage (2026-10-21, branche `brosses-personnages`)
+
+Demande d'Anthony : « On ajoute un personnage et on lui attribue une couleur de trait et une couleur de fond. Quand on sélectionne ce
+personnage, on dessine avec la couleur de trait et de fond immédiatement. Ça permet, même avec un dessin très rough, d'identifier le
+personnage. J'imagine une barre horizontale au-dessus du canevas avec juste des pastilles de couleurs qu'on sélectionne. Une pastille par
+personnage plus des couleurs neutres. Paramétrables. » Précisions : la barre est visible d'office en Storyboard et dans l'espace Vignettes
+(à venir), cachée d'office en Animation et en Montage mais allumable ; le panneau « Personnages » est dans la disposition par défaut si elle
+le permet, sinon à un clic de la barre. Vocabulaire (décidé ensuite par Anthony) : la couleur sous le trait s'appelle l'**aplat** ; un
+personnage a donc un **trait** et un **aplat**. Les textes nouveaux disent « aplat » ; ce qui existait déjà (« Aplat sous le trait » du calque,
+`Layer::fond`, la strate Fond) a été renommé **« Aplat sous le trait »** le 2026-10-21 (partie 33) dans tous les textes de l'interface ; le code et
+le format gardent `fond`.
+
+### Mots
+
+| Mot | Sens | À éviter |
+|---|---|---|
+| **Personnage** | un nom, une couleur de trait, une couleur d'aplat (ou aucune), dans un ordre ; il est **du projet** (`personnages.json`) | acteur, rôle |
+| **Couleur neutre** | un trait avec ou sans aplat qui n'est pas un personnage (noir, gris, rouge de correction…) ; elle est **de l'application**, commune à tous les projets | couleur par défaut |
+| **Pastille** | le rond de la barre : anneau = couleur du trait, dedans = couleur de l'aplat (rayé quand il n'y en a pas) | puce, bouton couleur |
+| **Choisir** | cliquer une pastille : le trait prend sa couleur, et l'aplat sous le trait s'allume avec la sienne ; recliquer la pastille choisie la lâche | sélectionner (pour les dessins, c'est autre chose) |
+| **Lâcher** | revenir à une couleur libre : la couleur reste, mais n'est plus celle d'un personnage | désélectionner |
+
+### Où et quels gestes
+
+| Geste | Où | Effet |
+|---|---|---|
+| Clic sur une pastille | barre des personnages, panneau Personnages | choisit le personnage (ou la couleur neutre) ; un outil qui ne dessine pas (Sélection, Pipette…, la gomme) cède la place au pinceau ; un clic sur la pastille choisie la lâche |
+| « + » | barre, panneau | nouveau personnage (couleurs de la place suivante), choisi, et la fenêtre « Modifier » s'ouvre : une étape « Nouveau personnage » |
+| Clic droit sur une pastille | barre | Modifier… (nom, trait, aplat), Dupliquer, Déplacer à gauche / à droite, Supprimer |
+| Glisser la poignée d'une ligne | panneau Personnages | change la place du personnage (une étape « Ranger les personnages ») |
+| Icône « personnages » à droite de la barre | barre | ouvre ou ferme le panneau Personnages (un clic) |
+| Affichage > « Montrer / Cacher la barre des personnages » ; Ctrl+K `perso.barre` | menu, palette | la barre de cet espace de travail (chaque espace retient son choix) |
+| `perso.suivant`, `perso.precedent`, `perso.aucun`, `perso.ajouter` | Ctrl+K, raccourcis à poser | personnage suivant / précédent (les personnages, puis les neutres, en tournant), lâcher, ajouter |
+| Une couleur prise à la main | panneau Couleur, nuancier, pipette (Alt + clic), échange des deux couleurs, code hexadécimal | lâche le personnage (la barre n'en montre plus aucun de choisi) |
+| Pot de peinture sur l'aplat | clic sur la sous-ligne « Aplat » du calque (partie 33), pot de peinture | remplit la zone fermée avec la couleur d'**aplat** du personnage choisi (sinon la couleur courante) |
+| Choisir un personnage pendant que la sous-ligne d'un aplat est la cible | barre, panneau | **revient au trait** : le personnage dessine son trait et son aplat ; recliquer la sous-ligne reprend l'aplat seul (partie 33) |
+
+### Où vivent les choses (et pourquoi)
+
+- **Les personnages sont du projet.** Ils sont dans `Structure` (avec les commentaires, les transitions…) : ajouter, modifier, ranger, supprimer
+  s'annulent (Ctrl+Z). Fichier `personnages.json` à côté du manifeste, écrit par `write_sidecar` : jamais effacé s'il est illisible ou d'une
+  version plus récente (mis de côté sous `.illisible` si un fichier neuf doit le remplacer), absent s'il n'y a aucun personnage. **Le format du
+  projet ne change pas** (`VERSION` reste 35 ; projets partagés inclus) : un projet d'avant s'ouvre tel quel ; une version qui ne connaît pas
+  les personnages ignore le fichier et montre les aplats tels qu'ils ont été peints. Dans un film partagé, les personnages s'écrivent avec le
+  montage (celui qui tient le jeton, comme les transitions) ; les équipiers reçoivent la même liste.
+- **Les couleurs neutres sont un réglage de l'application** (`reglages.toml`, clé `couleurs_neutres`), parce qu'elles ne sont à aucun film :
+  le noir, le gris, le rouge de correction servent partout. D'origine : **Noir** (trait noir, sans aplat), **Gris** (trait gris, aplat gris clair),
+  **Rouge de correction** (trait rouge, sans aplat). Huit au plus ; on peut les retirer toutes. Les modifier ne touche pas à l'historique du
+  projet (un réglage de l'application ne s'annule pas).
+- **La barre se montre par espace de travail** (`Layout::character_bar`, clé `barre_personnages` de la disposition) : rien d'écrit tant qu'on
+  n'a pas choisi, et l'espace décide (`Espace::barre_personnages_par_defaut` : Storyboard oui, Animation et Montage non ; l'espace
+  Vignettes, quand il viendra, oui : c'est une ligne à ajouter dans ce `match`). La barre est dessinée par `personnages_barre`, qu'un autre
+  écran (la planche des vignettes) peut appeler.
+
+### L'aplat d'un trait de personnage (où vit la couleur d'aplat)
+
+L'« Aplat sous le trait » du calque (`Layer::fond`) est **une seule forme par dessin, d'une couleur par calque**. Changer la couleur du calque au choix d'un
+personnage recolorierait l'aplat de tous les personnages du calque. On garde donc plusieurs personnages sur un même calque ainsi :
+
+- au début d'un trait de pinceau ou de crayon avec un personnage qui a un aplat, le calque prend un « Aplat sous le trait » s'il n'en avait pas
+  (une étape « Aplat du personnage » à part) ; **ce qui était déjà dessiné sur ce calque reste sans aplat** (coupé, comme le ferait un personnage
+  sans aplat) ;
+- à la fin du trait, un fil de fond (`persofond.rs`, jamais le fil de l'interface) calcule la forme avant et après le trait ; **les pixels que le
+  trait a fait gagner à la forme sont peints dans la peinture de la strate de l'aplat (`Cel::fond`) de la couleur d'aplat du personnage** (ou coupés, s'il n'en a pas).
+  La peinture reste dans la forme et passe sous le trait, comme tout ce qu'on peint sur l'aplat : un autre personnage dessine ensuite sur le même
+  calque et colore son propre aplat sans toucher à celui des autres ;
+- le résultat est posé à l'image d'écran où il arrive (un dixième de seconde après le trait, comme la forme elle-même) ; s'il arrive avant toute
+  autre action, il rejoint l'étape d'annulation du trait : **un trait de personnage = une étape, aplat compris** ; sinon il est posé sans étape à
+  lui (la peinture est rognée par la forme : défaire le trait cache aussi son aplat, et le rétablir le rend) ;
+- rien ne change dans les dessins (l'aplat existe depuis le format 23) et rien ne se calcule en plus quand on n'utilise pas de personnage.
+
+La gomme et la peinture déjà posée dans l'aplat ne sont pas touchées. Pinceau et crayon, bitmap et vectoriel. **Même strate** que l'aplat peint à la
+main depuis la sous-ligne du calque (partie 33) : un personnage et la sous-ligne travaillent la même peinture, la même coupe.
+
+### Ce que voit l'utilisateur
+
+- **Barre** (26 px, sous la barre de la vue) : une pastille par personnage, un « + », un trait de séparation, les pastilles neutres ; à droite l'icône du
+  panneau (enfoncée quand il est ouvert). La pastille choisie a un halo de la couleur d'accent ; la bulle (une seconde) donne le nom, les codes des
+  couleurs et le clic droit. Sans personnage : « Aucun personnage ».
+- **Panneau Personnages** (en onglet avec Couleur et Pinceaux ; icône dans la barre des panneaux) : « + », « Couleur libre » (lâcher), le nombre de
+  personnages ; une ligne par personnage (poignée, pastille, nom, couleur du trait, interrupteur « Avec un aplat », couleur de l'aplat, corbeille) ;
+  puis « Couleurs neutres » (mêmes lignes), « + » et « Couleurs neutres d'origine ».
+- **Fenêtre « Modifier le personnage »** (clic droit > Modifier…) : la même ligne ; chaque champ ou sélecteur de couleur est une étape nommée « Modifier
+  le personnage » par geste. Le pinceau suit la couleur d'un personnage choisi qu'on modifie (ou qu'on annule).
+- **Barre d'état** : « « Lou » : le trait et l'aplat de ce personnage. » / « Couleur libre : plus de personnage choisi. ».
+
+### Limites
+
+- Les pixels que la forme d'un autre personnage couvrait déjà gardent la couleur d'avant : un personnage dessiné *dans* l'aplat d'un autre, sur le même
+  calque, n'a pas son aplat (on le recolorie avec le pot de peinture sur la sous-ligne de l'aplat, qui prend l'aplat du personnage choisi, ou on dessine sur un autre
+  calque). Un trait qui complète un personnage déjà fermé n'ajoute d'aplat que là où la forme grandit.
+- Un trait ne se souvient pas de son personnage : supprimer un personnage ne change aucun dessin ; déplacer ou transformer un dessin ne déplace pas
+  la peinture de l'aplat qui le colorait (comme toute peinture de l'aplat).
+- Seuls les traits de pinceau et de crayon portent un aplat de personnage ; le pot de peinture sur le trait, les formes et le texte prennent la couleur
+  de trait du personnage seulement.
+- L'aplat du dessin courant est coupé sous ce qui était déjà dessiné quand le calque prend son fond ; les autres dessins du calque (autres images) gardent
+  le fond blanc du calque tant qu'on n'y dessine pas avec un personnage.
+- Enregistrer dans la fraction de seconde qui suit un trait écrit le projet sans l'aplat de ce trait ; il est posé juste après et le projet est de nouveau
+  « modifié ».
+- Dans un film partagé, deux équipiers qui modifient la liste en même temps : le dernier à écrire gagne (comme les transitions).
+
+### Essais ajoutés
+
+`personnages_tests.rs` : ajouter, modifier, supprimer, dupliquer et ranger des personnages avec annulation ; noms nets ; choisir règle la couleur du trait
+et le trait gagne son aplat (bitmap et vectoriel) ; deux personnages sur un même calque gardent chacun leur aplat ; sans aplat (coupé) et neutre sans aplat ;
+un trait et son aplat = une étape ; des traits plus rapides que le fil de fond ; la gomme ne touche à rien ; le pot de peinture sur l'aplat ; une
+couleur prise à la main lâche le personnage ; le choix suit la couleur modifiée et part avec le personnage supprimé ; suivant / précédent ; les neutres
+(réglages d'origine, aller-retour TOML, ajout, déplacement, borne) ; la barre par espace de travail ; barre et panneau dessinés, application au repos
+(avant et après un trait) ; fichier : aller-retour, absent sans personnage, illisible ou plus récent jamais détruit, lecture défensive, fil d'écriture,
+aplats enregistrés et relus. Les essais de la barre des panneaux, de la disposition (onglets Couleur, Pinceaux, Personnages) et du fichier de raccourcis
+tiennent compte du nouveau panneau et des six commandes.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Espace Storyboard : sous la barre de la vue, la barre des personnages (« Aucun personnage », « + », trois pastilles neutres : noir, gris, rouge).
+   Animation et Montage : pas de barre ; Affichage > « Montrer la barre des personnages » l'allume dans cet espace seulement ; revenir en Storyboard : elle y est.
+2. « + » : une pastille de couleur apparaît, choisie (halo), la fenêtre « Modifier le personnage » s'ouvre ; taper « Lou », changer le trait (rouge) et
+   l'aplat (rose) : la pastille suit. Ctrl+Z annule chaque geste ; le panneau Historique les nomme.
+3. Dessiner une silhouette fermée au pinceau avec Lou : le trait est rouge et, une fraction de seconde après, le dedans se remplit de rose ; le calque a
+   maintenant le bouton « Aplat sous le trait » allumé et sa sous-ligne « Aplat ». Ctrl+Z : le trait et son aplat partent ensemble (l'aplat du calque, lui, est une étape à part).
+4. Créer Max (bleu, aplat bleu ciel) ; sur le même calque, dessiner à côté : aplat bleu ciel, celui de Lou n'a pas changé. Chercher une silhouette qui chevauche
+   l'autre (limite connue : la partie commune garde l'aplat de Lou).
+5. Pastille « Noir » (sans aplat) : le trait est noir et n'a pas d'aplat, même sur un calque qui en a déjà un ; pastille « Gris » : trait gris, aplat gris clair.
+6. Prendre une autre couleur (panneau Couleur, pipette Alt + clic, échange des deux couleurs) : le halo disparaît de la barre. Recliquer la pastille : la couleur revient.
+7. Cliquer la pastille choisie : elle est lâchée (« Couleur libre »). L'outil Sélection actif, cliquer une pastille : le pinceau est pris.
+8. Clic droit sur une pastille : Modifier…, Dupliquer (« Lou (copie) »), Déplacer à gauche / à droite, Supprimer. Les pastilles se rangent ; Ctrl+Z remet l'ordre.
+9. Icône « personnages » à droite de la barre, ou barre des panneaux : le panneau s'ouvre (onglet avec Couleur et Pinceaux). Glisser la poignée d'une ligne
+   change l'ordre de la barre ; la corbeille supprime ; les couleurs neutres se modifient là aussi, et « Couleurs neutres d'origine » les remet.
+10. Fermer et rouvrir SHOT : les couleurs neutres modifiées sont là ; enregistrer le projet, le rouvrir : mêmes personnages, mêmes aplats (la silhouette de Lou garde
+    son rose). Ouvrir un autre projet : ses personnages à lui, les mêmes couleurs neutres.
+11. Gomme sur un personnage choisi : elle gomme, le personnage reste choisi. Pot de peinture sur la sous-ligne « Aplat » avec Max choisi : la zone prend le bleu ciel. Choisir une pastille pendant que la sous-ligne est choisie : on revient au trait.
+12. Au repos : barre et panneau ouverts, rien ne bouge, le processeur reste à zéro ; un trait de personnage ne laisse rien tourner après lui.
+
+## 33. L'aplat sous le trait, depuis le calque (2026-10-21, branche `aplat-souscalque`)
+
+Demande d'Anthony : « Le fond derrière le trait s'active depuis le calque, plus depuis les réglages du pinceau. Une fois activé, un
+sous-calque apparaît dans le panneau de calques (uniquement, pas sur la timeline), en petit (plus fin qu'un calque normal). Quand on clique
+sur ce calque on peut gommer ou dessiner sur le fond uniquement. Plus simple de cette manière, les outils ou icônes liés à cela avant
+disparaissent. Plus simple, plus intuitif. » Et le nom : **« Aplat »**. (Le calque d'avant : partie 25 ; les personnages : partie 32.)
+
+### Mots
+
+| Mot | Sens | À éviter |
+|---|---|---|
+| **Aplat sous le trait** | la forme déduite du trait, d'une couleur, sous le trait ; un réglage **du calque** (bouton de sa ligne, clic droit) | fond sous le trait, remplissage |
+| **Aplat** (sous-ligne) | la ligne fine sous le calque, dans le panneau Calques : pastille de la couleur + « Aplat » ; la **cible** du dessin quand elle est choisie | sous-calque (dans les textes de l'interface), calque d'aplat |
+| **Cible** | où dessinent le pinceau, le crayon, la gomme, le pot de peinture et le cutter : le **trait** (d'office) ou l'**aplat** du calque courant | strate (c'est le mot du code) |
+
+### Où et quels gestes
+
+| Geste | Où | Effet |
+|---|---|---|
+| Ajouter / retirer l'aplat | bouton carré-utilisateur de la ligne du calque (« Aplat sous le trait ») et des commandes du panneau ; clic droit d'un calque > « Ajouter un aplat » / « Retirer l'aplat » ; menu Calques > Aplat sous le trait ; actions `pinceau.fond`, `fond.calques_choisis`, `fond.tout_le_plan`, `fond.retirer_choisis`, `fond.couleur_partout` (Ctrl+K, raccourcis d'avant) | une étape « Aplat : ajouter » / « Aplat : retirer » ; la sous-ligne apparaît ou part ; ni dossier, ni calque CTG ou vidéo |
+| Clic sur la sous-ligne | panneau Calques | l'aplat devient la cible (le calque aussi devient courant) ; un outil qui ne dessine pas cède la place au pinceau ; pas d'étape d'annulation |
+| Clic sur le calque (ligne, vignette, nom) | panneau Calques, timeline | la cible revient au trait ; changer de calque, retirer l'aplat, annuler : aussi |
+| Peindre, gommer, remplir, couper | canevas, la cible étant l'aplat | pinceau, crayon : dans l'aplat, sous le trait, dans sa forme ; gomme : coupe l'aplat ; pot de peinture : remplit la zone fermée par le trait ; cutter : retire la zone ; le trait n'est jamais touché ; « Aplat : peinture », « Aplat : gomme », « Aplat : remplir », « Aplat : retirer la zone » |
+| Régler l'aplat | Réglages (tout en haut, « Aplat de <calque> »), clic droit de la sous-ligne | couleur, débord, fermer les trous, le bord de l'image ferme la forme ; « Cet aplat aussi sur » les calques choisis / tout le plan (Réglages) ; une étape « Aplat : réglages » par geste |
+| Retirer l'aplat | clic droit de la sous-ligne ; bouton ou clic droit du calque | « Aplat : retirer » |
+
+### Ce qui a disparu
+
+- Dans les réglages du pinceau, du crayon, de la gomme et du pot de peinture : la bascule « Peindre dans : Le trait | Le fond », la couleur du fond,
+  le débord, fermer les trous, la case du bord, « Ce fond aussi sur », et la phrase d'aide. Plus rien de l'aplat ne s'y trouve.
+- Sur la ligne du calque courant : la petite bascule « Trait | Fond ».
+- L'action `pinceau.strate_fond` (et son bloc de `keymap.toml`) : la cible se choisit en cliquant (un raccourci posé dessus par un utilisateur est
+  ignoré avec l'avertissement habituel des actions inconnues).
+
+### Règles de cible
+
+- La cible est `App::aplat_cible` : le **numéro du calque** dont l'aplat est visé (`None` : le trait). Elle est **propre au projet** (rangée avec
+  l'onglet, `onglets.rs`) et **n'est jamais enregistrée** : un projet rouvert dessine le trait. `App::aplat_en_cible()` dit si l'aplat du calque
+  courant est la cible (le calque en a toujours un, et c'est bien lui).
+- Elle ne vaut que pour le calque dont on a cliqué la sous-ligne. Elle retombe sur le trait : au clic sur un calque (`click_layer_head`), à tout
+  changement de calque (`select_layer`), quand l'aplat est retiré, annulé ou perdu (`tick_aplat`, à chaque image d'écran, sans rien demander au repos).
+- **Un personnage** (partie 32) : le choisir (pastille, `perso.suivant`…) **revient au trait**, parce qu'un personnage dessine son trait *et* son aplat,
+  comme prévu ; son aplat va dans la **même strate** que l'aplat peint à la main. Cliquer ensuite la sous-ligne reprend l'aplat seul, le personnage
+  restant choisi : pinceau et pot de peinture y prennent alors sa couleur d'**aplat**.
+- Les outils qui ne travaillent pas l'aplat (sélection, formes, texte, déformation, caméra…) travaillent le trait, quelle que soit la cible ; la
+  cible reste en attente et se retrouve au retour d'un outil de dessin. La ligne du bas de la vue ne dit « Aplat de <calque> » que pour les cinq
+  outils qui l'utilisent.
+
+### La sous-ligne
+
+- Une ligne de 16 px (un rang de calque en fait 36 + marges, soit moins de la moitié), en retrait, sous le rang de son calque : une pastille de la couleur
+  de l'aplat et « Aplat » en petit. Choisie, elle est surlignée comme un calque courant (la couleur de la sorte du calque) et le rang du calque est
+  alors surligné plus doucement. Survol : bulle d'une seconde. Clic : cible ; clic droit : réglages et « Retirer l'aplat ».
+- **Panneau Calques seulement.** Ni la timeline (`layerheads.rs`, `timeline.rs`) ni les pistes du montage (`montagerows.rs`) n'en ont : leurs rangées ne
+  changent pas. Un dossier fermé cache ses calques et donc leurs sous-lignes (le calque courant reste listé, avec la sienne).
+- Elle n'entre pas dans le glisser des calques (seuls les rangs des calques sont des places) ni dans le choix de plusieurs calques.
+
+### Vocabulaire
+
+Tous les textes de l'interface (menus, bulles, barre d'état, palette Ctrl+K, Réglages du projet et du nouveau projet, panneau Historique) disent
+« aplat » : « Aplat sous le trait », « Ajouter un aplat », « Retirer l'aplat », « Aplat de <calque> », « Aplat : peinture ». Le code et le format gardent
+`fond` (`Layer::fond`, `Cel::fond`, `FondReglages`, `fond.rs`, `fondui.rs`, `fondfil.rs`, les actions `pinceau.fond` et `fond.*`) : **le format des projets ne
+change pas**, un projet d'avant s'ouvre tel quel (les aplats déjà posés ont leur sous-ligne). Les calques « de fond » du décor (scène entière, « Fond 3D »)
+sont autre chose et gardent leur nom.
+
+### Limites
+
+- La sous-ligne n'est pas dans la timeline ni dans le montage : pour peindre l'aplat on passe par le panneau Calques (voulu).
+- « Cet aplat aussi sur » n'est que dans Réglages (il part de l'aplat du calque courant), pas dans le clic droit d'une sous-ligne d'un autre calque.
+- Ctrl ou Maj + clic sur une sous-ligne n'ajoute rien au choix de calques (c'est un clic simple).
+- Les formes (ligne, rectangle…) et le texte ne se posent pas dans l'aplat.
+
+### Essais ajoutés
+
+`aplat_tests.rs` (16 essais) : activation depuis le calque seulement (aucun réglage d'aplat dans les cinq outils, plus d'action de bascule, bouton sur chaque
+ligne) ; clic droit du calque (ajouter / retirer, une étape nommée, autre calque que le courant) ; alias `pinceau.fond` et `fond.*` ; sous-ligne fine (moins de la
+moitié d'un rang), seulement dans le panneau Calques (pas la timeline ni le montage), une par aplat, suivant les dossiers fermés ; clic sur la sous-ligne = cible
+(outil, barre d'état, pas d'étape), clic sur le calque ou autre calque = trait, retrait et annulation ; indication « Aplat de <calque> » dans la ligne de la vue ;
+pinceau, gomme et pot de peinture sur l'aplat seul (trait intact, étapes « Aplat : … », tout s'annule) ; le trait de nouveau après un clic sur le calque ; personnage
+(retour au trait, aplat dans la même strate, pot de peinture avec son aplat) ; réglages dans Réglages et dans le menu de la sous-ligne (une étape « Aplat :
+réglages » par geste, bon calque) ; projet enregistré et relu inchangé, cible non enregistrée et propre à l'onglet ; application au repos avec la sous-ligne choisie.
+Les essais des notes de calques (bouton de la ligne, rien sous le pinceau), des personnages, du fichier de raccourcis et de l'état par onglet suivent le nouveau
+vocabulaire.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Panneau Calques : sur un calque de dessin, cliquer le bouton carré-utilisateur (bulle « Aplat sous le trait ») : une sous-ligne fine « Aplat » avec une pastille
+   blanche apparaît juste sous le calque. Rien de nouveau dans la timeline ni dans les pistes du montage. Réglages du pinceau : plus de bascule, plus de couleur
+   de fond.
+2. Dessiner un personnage fermé sur ce calque. Cliquer la sous-ligne : elle se surligne, le calque s'adoucit, la ligne du bas de la vue dit « Aplat de … ». Pinceau
+   avec une autre couleur : la peinture reste dans la forme, sous le trait, le trait ne bouge pas. Gomme : l'aplat est coupé (on voit à travers), le trait reste. Pot
+   de peinture : un clic dans une zone fermée la remplit sous le trait. Ctrl+Z annule chaque geste (panneau Historique : « Aplat : … »).
+3. Cliquer le nom du calque : le pinceau redessine le trait ; la gomme efface du trait.
+4. Réglages (outil pinceau, sous-ligne choisie) : « Aplat de … » avec couleur, débord, fermer les trous, bord, « Cet aplat aussi sur ». Clic droit sur la sous-ligne : les
+   mêmes réglages et « Retirer l'aplat ». Changer la couleur : l'aplat suit, la pastille aussi ; Ctrl+Z.
+5. Clic droit sur un calque (même pas courant) : « Ajouter un aplat » / « Retirer l'aplat ». Retirer : la sous-ligne part ; Ctrl+Z la rend, avec ce qu'on y avait peint.
+6. Fermer un dossier qui contient un calque avec aplat : sa sous-ligne part avec lui ; le rouvrir : elle revient.
+7. Choisir une pastille de personnage pendant que la sous-ligne est choisie : on revient au trait (la sous-ligne n'est plus surlignée) ; dessiner : trait et aplat du
+   personnage. Recliquer la sous-ligne : le pot de peinture prend la couleur d'aplat du personnage.
+8. Enregistrer, fermer, rouvrir : l'aplat et sa peinture sont là, la sous-ligne aussi, et c'est le trait qu'on dessine. Ouvrir un projet d'avant : ses aplats ont leur sous-ligne.
+9. Au repos, sous-ligne choisie : rien ne bouge, le processeur reste à zéro.

@@ -456,7 +456,7 @@ impl EffectKind {
             EffectKind::Noise => "Bruit",
             EffectKind::Mosaic => "Pixéliser",
             EffectKind::DropShadow | EffectKind::Glow => "Styliser",
-            EffectKind::Wave | EffectKind::Ripple | EffectKind::Twirl | EffectKind::Pinch | EffectKind::Boil => "Déformation",
+            EffectKind::Wave | EffectKind::Ripple | EffectKind::Twirl | EffectKind::Pinch => "Déformation",
             EffectKind::Clouds | EffectKind::Lighting | EffectKind::Gradient => "Rendu",
             EffectKind::Flash
             | EffectKind::Impact
@@ -465,7 +465,9 @@ impl EffectKind {
             | EffectKind::Vignette
             | EffectKind::Grain
             | EffectKind::Aberration => "Cinéma",
-            EffectKind::Write | EffectKind::Sketch | EffectKind::Breath | EffectKind::StrokeWave | EffectKind::Dashes | EffectKind::Dust => "Trait",
+            // (Le tremblement du trait est de la famille Trait depuis 2026-10-21 : seul le regroupement des
+            // menus change, il s'enregistre par son nom de sorte, pas par sa famille.)
+            EffectKind::Boil | EffectKind::Write | EffectKind::Sketch | EffectKind::Breath | EffectKind::StrokeWave | EffectKind::Dashes | EffectKind::Dust => "Trait",
             EffectKind::Outline | EffectKind::Dry | EffectKind::Bleed | EffectKind::StrokeGradient | EffectKind::Nib => "Matière",
         }
     }

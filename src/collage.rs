@@ -423,18 +423,18 @@ impl App {
     pub(crate) fn collage_prefs_ui(&mut self, ui: &mut egui::Ui) {
         let reg = &mut self.settings.collage;
         let avant = *reg;
-        ui.label(RichText::new("Coller depuis un autre projet").strong());
         ui.horizontal(|ui| {
             ui.label("Proportions différentes :");
-            ui.radio_value(&mut reg.ajustement, Ajustement::Contenir, "Contenir");
-            ui.radio_value(&mut reg.ajustement, Ajustement::Remplir, "Remplir");
+            ui.radio_value(&mut reg.ajustement, Ajustement::Contenir, "Contenir").on_hover_text("Tout le dessin collé reste visible ; des bandes vides peuvent rester autour.");
+            ui.radio_value(&mut reg.ajustement, Ajustement::Remplir, "Remplir").on_hover_text("Le dessin collé remplit tout le cadre ; ses bords peuvent être coupés.");
         });
         ui.horizontal(|ui| {
             ui.label("Cadence différente :");
-            ui.radio_value(&mut reg.duree, Duree::Images, "Garder les images");
-            ui.radio_value(&mut reg.duree, Duree::Secondes, "Garder la durée en secondes");
+            ui.radio_value(&mut reg.duree, Duree::Images, "Garder les images").on_hover_text("Chaque image collée reste une image : le plan change de durée.");
+            ui.radio_value(&mut reg.duree, Duree::Secondes, "Garder la durée en secondes").on_hover_text("Le plan collé dure autant de secondes qu'avant : le nombre d'images change.");
         });
-        ui.checkbox(&mut reg.demander, "Demander à chaque collage dont les proportions ou la cadence diffèrent");
+        ui.checkbox(&mut reg.demander, "Demander à chaque collage dont les proportions ou la cadence diffèrent")
+            .on_hover_text("Décoché, le collage suivant se fait sans fenêtre, avec les choix ci-dessus.");
         if *reg != avant {
             if let Err(e) = self.settings.save() {
                 self.status = format!("Réglages non enregistrés : {e}");

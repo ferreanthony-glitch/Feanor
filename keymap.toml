@@ -1424,69 +1424,6 @@ action = "storyboard.verrouiller"
 touches = []
 source = "TVPaint 12 sans touche"
 
-# Crayonnés rapides. Dans la planche, Tab / Maj+Tab et les flèches changent de case (codés en dur,
-# comme les flèches du dessin : Tab sert aussi à passer en animation) ; ces commandes n'ont pas de
-# touche par défaut, mais restent dans la palette (Ctrl+K), les menus et « Assigner un raccourci… ».
-[[raccourci]]
-action = "storyboard.crayonnes"
-touches = []
-source = "proposition (sans touche : Ctrl+K)"
-
-[[raccourci]]
-action = "crayonnes.case_suivante"
-touches = []
-source = "proposition (sans touche : Tab dans la planche)"
-
-[[raccourci]]
-action = "crayonnes.case_precedente"
-touches = []
-source = "proposition (sans touche : Maj+Tab dans la planche)"
-
-[[raccourci]]
-action = "crayonnes.page_suivante"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.page_precedente"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.ajouter_page"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.inserer_case"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.supprimer_case"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.vider_case"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.tout_choisir"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.creer_plans"
-touches = []
-source = "proposition (sans touche)"
-
-[[raccourci]]
-action = "crayonnes.case_auto"
-touches = []
-source = "proposition (sans touche)"
-
 [[raccourci]]
 action = "projet.proprietes"
 touches = []
@@ -2009,8 +1946,9 @@ action = "espace.enregistrer"
 touches = []
 source = "SHOT (Storyboard Pro 27 passe par WORKSPACE_MANAGER, sans touche)"
 
-# Les espaces liés aux modes (INTERFACE.md, 6.1) : Storyboard, Animation et Montage retiennent
-# chacun leur disposition ; pas de touche (Tab passe déjà du storyboard à l'animation et retour).
+# Les trois espaces de travail (INTERFACE.md, 6.1 et 14), un onglet chacun en haut à droite :
+# Storyboard, Animation et Montage retiennent chacun leur disposition. Tab passe déjà du storyboard
+# à l'animation et retour (du Montage, il revient au storyboard) ; le Montage a Alt+M.
 [[raccourci]]
 action = "espace.storyboard"
 touches = []
@@ -2023,8 +1961,8 @@ source = "SHOT (espace de travail lié au mode Animation)"
 
 [[raccourci]]
 action = "espace.montage"
-touches = []
-source = "SHOT (disposition du mode Storyboard : la bande du montage en grand)"
+touches = ["Alt+M"]
+source = "proposition (M comme Montage ; troisième onglet en haut à droite)"
 
 [[raccourci]]
 action = "espace.retablir"
@@ -2232,11 +2170,6 @@ source = "SHOT (sans touche)"
 
 [[raccourci]]
 action = "pinceau.fond"
-touches = []
-source = "SHOT (sans touche)"
-
-[[raccourci]]
-action = "pinceau.strate_fond"
 touches = []
 source = "SHOT (sans touche)"
 
@@ -2639,6 +2572,37 @@ source = "SHOT (sans touche)"
 
 [[raccourci]]
 action = "references.tout_voir"
+touches = []
+source = "SHOT (sans touche)"
+
+# Brosse par personnage (sans touche : à choisir).
+[[raccourci]]
+action = "vue.personnages"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.barre"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.ajouter"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.suivant"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.precedent"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.aucun"
 touches = []
 source = "SHOT (sans touche)"
 

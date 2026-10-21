@@ -16,10 +16,10 @@
 //! couleur d'un plan ; des commentaires (dont un rangé hors du plan rogné) ; un plan rogné au début
 //! et à la fin, avec sa réserve ; un son (WAV fabriqué) sur deux pistes ; les guides de
 //! perspective, les notes de la planche, les groupes de couleur, l'arrière-plan en damier, les
-//! propriétés du projet, le volume général, l'image de départ ; des transitions du montage ; les
+//! propriétés du projet, le volume général, l'image de départ ; des transitions du montage ; des
+//! personnages (brosse par personnage) ; les
 //! effets des extraits de son et le solo d'une piste ; des sons proposés (suggestions sonores) ; des
-//! références visuelles (une image, une vidéo de trois images) ; la planche de crayonnés (deux pages,
-//! des traits lisses, une case peinte et cochée, une légende seule).
+//! références visuelles (une image, une vidéo de trois images).
 //!
 //! Il ne contient pas : de texte vectoriel dont l'image soit comparée (son rendu dépend des
 //! polices du poste, voir `Fixture::sans_pixels`) et de calques « toute la scène » (un projet d'avant
@@ -552,6 +552,11 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     doc.set_transition(0, crate::transitions::Kind::White).expect("début du film");
     let n = doc.panels.len();
     doc.set_transition(n, crate::transitions::Kind::Black).expect("fin du film");
+    // Personnages de la brosse par personnage (`personnages.json`) : un avec aplat, un sans.
+    for (nom, trait_, aplat) in [("Lou", [200, 30, 30], Some([250, 200, 200])), ("Fantôme", [30, 40, 200], None)] {
+        let id = doc.alloc();
+        doc.personnages.push(crate::personnages::Personnage { id, name: nom.into(), line: trait_, fill: aplat });
+    }
     // Sons proposés par la lecture du storyboard (`sons_proposes.json`) : un bruitage à générer, une
     // voix rejetée et modifiée à la main, une ambiance acceptée (son posé), et la confirmation d'envoi
     // en ligne du projet.
@@ -599,43 +604,6 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
         course.home = Some(origine);
         doc.add_reference(course);
     }
-    // La planche de crayonnés (`crayonnes.json`) : deux pages de la grille 4 × 3 ; une case au crayon (deux
-    // traits lisses), une case peinte au pinceau, légendée et déjà servie (cochée), une case avec une
-    // légende seule dans la deuxième page.
-    {
-        let planche = &mut doc.crayonnes;
-        planche.ensure(doc.frame);
-        planche.add_page();
-        let [cw, ch] = planche.size;
-        let trait_lisse = |x: f32, y: f32, couleur: [u8; 3]| Element::Stroke {
-            points: (0..9).map(|k| VPoint { x: x + k as f32 * 30.0, y: y + (k as f32 * 0.8).sin() * 25.0, r: 2.0 + k as f32 * 0.3 }).collect(),
-            color: couleur,
-            opacity: 0.9,
-            hardness: 0.8,
-            brush: None,
-            trace: Trace::default(),
-        };
-        {
-            let c = &mut planche.cases[0];
-            c.caption = "Léa sort de la cour".into();
-            c.ink.vector = Some(VectorDrawing { elements: vec![trait_lisse(60.0, 120.0, [20, 20, 20]), trait_lisse(80.0, 250.0, [90, 90, 90])] });
-        }
-        {
-            let mut peinture = Raster::new(cw, ch);
-            for y in 40..140 {
-                for x in 200..380 {
-                    let i = peinture.tile_index_of(x, y);
-                    peinture.tile_mut(i)[(y % TILE) * TILE + x % TILE] = premultiply(30, 30, 30, 255);
-                }
-            }
-            let c = &mut planche.cases[1];
-            c.caption = "Gros plan : la clé".into();
-            c.used = true;
-            c.paint = Cel::bitmap(peinture);
-        }
-        planche.cases[13].caption = "Plan large, la voiture arrive".into();
-    }
-
     Fixture { doc, sans_pixels }
 }
 
@@ -674,6 +642,7 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
     let mut transitions = doc.transitions.clone();
     transitions.sort_by_key(|t| t.id);
     let _ = writeln!(s, "transitions {:?}", transitions);
+    let _ = writeln!(s, "personnages {:?}", doc.personnages);
     // (Le fichier des sons proposés les range dans l'ordre du film : leurs numéros sont gardés.)
     let mut proposes = doc.sons_proposes.clone();
     proposes.indications.sort_by_key(|i| i.id);
@@ -684,14 +653,6 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
         r.home = None;
     }
     let _ = writeln!(s, "references {:?}", references);
-    // La planche de crayonnés : sa grille, sa taille de case, puis chaque case (légende, coche, traits
-    // dans leur forme enregistrée, empreinte de la peinture).
-    let p = &doc.crayonnes;
-    let _ = writeln!(s, "crayonnes grille {:?} taille {:?} cases {}", p.grid, p.size, p.cases.len());
-    for c in &p.cases {
-        let traits = c.ink.vector.as_ref().map(|v| serde_json::to_string(&v.elements).expect("écriture des traits"));
-        let _ = writeln!(s, "  case {} {:?} utilisee {} traits {traits:?} peinture {:016x}", c.id, c.caption, c.used, empreinte(&c.paint.raster.to_rgba()));
-    }
     let mut sons: Vec<_> = doc.sounds.values().collect();
     sons.sort_by_key(|k| k.id);
     for k in sons {

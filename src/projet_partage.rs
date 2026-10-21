@@ -408,7 +408,6 @@ impl Document {
         s.comments = std::mem::take(&mut self.comments).into_iter().filter(|c| existe.contains(&c.panel)).collect();
         let _ = self.replace_structure(s);
         self.sons_proposes = stub.sons_proposes;
-        self.crayonnes = stub.crayonnes;
         self.envois = stub.envois;
         for (k, v) in stub.sounds {
             self.sounds.entry(k).or_insert(v);
@@ -501,10 +500,10 @@ pub(crate) fn structure_octets(m: &mut Manifest, revision: u64, signature: Optio
 }
 
 /// L'empreinte de la structure : le manifeste sans plans et sans révision, plus les annexes du montage dont le document
-/// répond (transitions, effets des sons). Ce qui changerait sans le jeton.
+/// répond (transitions, effets des sons, personnages). Ce qui changerait sans le jeton.
 pub(crate) fn empreinte_structure(doc: &Document, projet: &str) -> Result<u64, String> {
     let mut octets = serde_json::to_vec(&structure_manifest(doc, projet)).map_err(|e| e.to_string())?;
-    for annexe in [crate::transitions::to_bytes(doc)?, crate::audiofx::to_bytes(doc)?] {
+    for annexe in [crate::transitions::to_bytes(doc)?, crate::audiofx::to_bytes(doc)?, crate::personnages::to_bytes(doc)?] {
         octets.extend(annexe.unwrap_or_default());
     }
     Ok(empreinte::de_octets(&octets))
@@ -756,9 +755,9 @@ pub(crate) fn preparer(doc: &Document, manifest_path: &Path, written: &mut HashM
         job.used_sounds = used_sounds;
         job.transitions = crate::transitions::to_bytes(doc)?;
         job.sound_fx = crate::audiofx::to_bytes(doc)?;
+        job.personnages = crate::personnages::to_bytes(doc)?;
         job.sons_proposes = crate::indications::to_bytes(doc)?;
         job.references = crate::references::plan_save(doc, dir)?;
-        job.crayonnes = (!doc.crayonnes.is_blank()).then(|| doc.crayonnes.clone());
         job.envois = crate::envois::to_bytes(doc)?;
         job.snapshots = doc.envois.pending.clone();
         job.snapshot_reuse = crate::envois::dessins_reutilisables(&job.snapshots, written, &|id| Some(drawing_path(dir, id, false)));
@@ -788,9 +787,9 @@ impl SaveJob {
             reserves: None,
             transitions: None,
             sound_fx: None,
+            personnages: None,
             sons_proposes: None,
             references: Default::default(),
-            crayonnes: None,
             envois: None,
             plans_versions: None,
             keep_drawings: false,
@@ -897,13 +896,9 @@ impl SaveJob {
             };
             ecrire(dir.join(crate::transitions::FILE), self.transitions.as_deref(), &|t| crate::transitions::parse(t).is_ok())?;
             ecrire(dir.join(crate::audiofx::FILE), self.sound_fx.as_deref(), &|t| crate::audiofx::parse(t).is_ok())?;
+            ecrire(dir.join(crate::personnages::FILE), self.personnages.as_deref(), &|t| crate::personnages::parse(t).is_ok())?;
             ecrire(dir.join(crate::indications::FILE), self.sons_proposes.as_deref(), &|t| crate::indications::parse(t).is_ok())?;
             ecrire(dir.join(crate::envois::FILE), self.envois.as_deref(), &|t| crate::envois::parse(t).is_ok())?;
-            let crayonnes = match &self.crayonnes {
-                Some(p) => crate::crayonnes::bytes_of(p)?,
-                None => None,
-            };
-            ecrire(dir.join(crate::crayonnes::FILE), crayonnes.as_deref(), &|t| crate::crayonnes::parse(t).is_ok())?;
             count += self.references.write(&dir)?;
             count += crate::envois::ecrire(&dir, &self.snapshots, &self.snapshot_reuse, None)?;
             // La structure : ré-écrite si ses octets ont changé, ou si une annexe a changé (les autres postes ne surveillent que

@@ -138,8 +138,8 @@ impl App {
     /// Sous-menu « Espaces de travail » (menu Affichage).
     pub(crate) fn workspace_menu(&mut self, ui: &mut egui::Ui) {
         ui.menu_button("Espaces de travail", |ui| {
-            // Les trois espaces liés aux modes : chacun retient sa disposition (les boutons
-            // Storyboard et Animation, en haut à droite, y mènent aussi).
+            // Les trois espaces de travail : chacun retient sa disposition (les onglets Storyboard,
+            // Animation et Montage, en haut à droite, y mènent aussi).
             for espace in Espace::TOUS {
                 let name = if espace == self.espace { format!("{} (en cours)", espace.nom()) } else { espace.nom().to_string() };
                 self.action_item(ui, &name, espace.action());
@@ -280,5 +280,6 @@ fn same_layout(a: &Layout, b: &Layout) -> bool {
         && a.top_view == b.top_view
         && a.command_bar == b.command_bar
         && a.tool_bar == b.tool_bar
+        && a.character_bar == b.character_bar
         && a.dock_layout().close_to(&b.dock_layout())
 }

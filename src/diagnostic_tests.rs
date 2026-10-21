@@ -443,6 +443,7 @@ fn the_preferences_show_every_switch() {
     b.garder_textes = true;
     // (Une fenêtre haute : le texte hors de l'écran n'est pas peint.)
     b.taille = eframe::egui::vec2(1920.0, 3200.0);
+    b.app.settings.prefs_onglet = crate::prefsonglets::Onglet::Performance;
     b.app.run_action("fichier.preferences");
     b.chauffer(8);
     b.image(Vec::new(), 1.0 / 60.0);

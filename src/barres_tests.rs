@@ -58,7 +58,7 @@ fn the_bars_are_slim_by_default() {
 #[test]
 fn what_the_montage_bar_keeps_and_moves() {
     let montage = d_office(Barre::Montage);
-    for reste in ["montage.debut", "lecture.basculer", "lecture.boucle", "panneau.nouveau", "sequence.nouvelle", "plans", "son.importer", "son", "mode.basculer", "vue.dessin", "vue.vignettes", "storyboard.crayonnes"] {
+    for reste in ["montage.debut", "lecture.basculer", "lecture.boucle", "panneau.nouveau", "sequence.nouvelle", "plans", "son.importer", "son", "mode.basculer", "vue.dessin", "vue.vignettes"] {
         assert!(montage.contains(&reste), "{reste} reste dans la barre du montage");
     }
     // Les commandes que INTERFACE.md range sous « Plus… », et la transition (arrivée depuis).

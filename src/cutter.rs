@@ -172,9 +172,9 @@ impl App {
         if !self.layer_editable() {
             return;
         }
-        // Strate Fond (`fondui.rs`) : un clic retire du fond la zone fermée par le trait, sur un
+        // Aplat (`fondui.rs`) : un clic retire de l'aplat la zone fermée par le trait, sur un
         // calque bitmap comme vectoriel.
-        if self.paint_fond && self.layer().fond.is_some() {
+        if self.aplat_en_cible() {
             self.fond_zone_at(p, true);
             return;
         }

@@ -153,7 +153,7 @@ fn kind_name(edit: &Edit) -> &'static str {
     match edit {
         Edit::Tiles { .. } => "Dessin",
         Edit::Vector { .. } => "Dessin vectoriel",
-        Edit::FondTiles { .. } => "Fond",
+        Edit::FondTiles { .. } => "Aplat",
         Edit::Structure { .. } => "Modification",
         Edit::Group(edits) => edits.iter().map(kind_name).find(|n| *n != "Modification").unwrap_or("Modification"),
     }
@@ -190,6 +190,36 @@ impl History {
         self.redo.clear();
         self.redo_names.clear();
         self.serial += 1;
+    }
+
+    /// Le nombre d'étapes à annuler.
+    pub fn undo_len(&self) -> usize {
+        self.undo.len()
+    }
+
+    /// Regroupe les `n` dernières étapes à annuler (deux au moins) en une seule, qui garde le nom de la plus
+    /// ancienne : un plan fait en dessinant dans une case vide s'annule d'un coup.
+    pub fn merge_last(&mut self, n: usize) {
+        let len = self.undo.len();
+        if n < 2 || n > len {
+            return;
+        }
+        let name = self.undo_names[len - n].clone();
+        let tail = self.undo.split_off(len - n);
+        self.undo_names.truncate(len - n);
+        self.undo.push(Edit::Group(tail));
+        self.undo_names.push(name);
+        self.serial += 1;
+    }
+
+    /// Défait la dernière étape et l'oublie : elle ne se rétablit pas (un geste qui n'a rien fait).
+    pub fn undo_and_forget(&mut self, doc: &mut Document, nav: &mut Nav) -> bool {
+        if !self.undo(doc, nav) {
+            return false;
+        }
+        self.redo.pop();
+        self.redo_names.pop();
+        true
     }
 
     pub fn undo(&mut self, doc: &mut Document, nav: &mut Nav) -> bool {

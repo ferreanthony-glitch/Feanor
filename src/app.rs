@@ -291,9 +291,11 @@ pub struct App {
     pub(crate) doc: Document,
     pub(crate) mode: Mode,
     pub(crate) board_view: BoardView,
-    /// Planche de crayonnés rapides (`crayonnesui.rs`) : ouverte, elle prend la place du dessin en
-    /// storyboard ; la planche elle-même est dans le projet (`Document::crayonnes`).
-    pub(crate) crayonnes: crate::crayonnesui::Etat,
+    /// État de la vue Vignettes (`boardui.rs`) : appuis, bande de note en cours d'écriture, case vide…
+    pub(crate) vignettes: crate::boardui::Vignettes,
+    /// Brosse par personnage (`personnagesui.rs`) : le personnage qui dessine, la fenêtre « Modifier » et le fil
+    /// des fonds de trait ; les personnages eux-mêmes sont dans le projet (`Document::personnages`).
+    pub(crate) perso: crate::personnagesui::Etat,
     pub(crate) cur_panel: usize,
     pub(crate) cur_layer: usize,
     pub(crate) cur_frame: usize,
@@ -360,6 +362,9 @@ pub struct App {
     pub(crate) fx_auto_key: bool,
     pub(crate) fx_keys_shown: bool,
     pub(crate) fx_choice: Option<crate::fxkeys::FxSel>,
+    /// Les autres effets choisis avec lui, sur le même calque (Ctrl / Maj + clic sur leur nom) : leurs
+    /// rangs dans la pile. Seul `fx_choice` montre ses clés ; tous se copient d'un coup (`fxcopie.rs`).
+    pub(crate) fx_multi: Vec<usize>,
     /// Clés d'effets choisies dans le montage ou la timeline (`fxkeys.rs`) et la dernière cliquée
     /// (départ des Maj + clic), clés copiées (`fx_clip_recent` : la dernière copie est la leur,
     /// Ctrl+V les vise), clés prises à la souris.
@@ -372,6 +377,10 @@ pub struct App {
     /// était dedans : Ctrl+C et Ctrl+V visent ses effets).
     pub(crate) fx_stack_clipboard: Option<crate::fxcopie::FxStackClip>,
     pub(crate) fx_pane_focus: bool,
+    /// La dernière chose copiée est un ou des effets (`fx_pile_recent`), et le panneau Calques a la main
+    /// (`layers_pane_focus`, le dernier clic était dedans) : Ctrl+V y colle ces effets sur le calque cliqué.
+    pub(crate) fx_pile_recent: bool,
+    pub(crate) layers_pane_focus: bool,
     /// Import vidéo en cours (13k, `videoui.rs`).
     pub(crate) video_import: Option<crate::videoui::VideoImport>,
     /// Propagation d'une peinture sur la vidéo, façon EbSynth (`propagerui.rs`).
@@ -545,6 +554,8 @@ pub struct App {
     /// que `remember_layout` retient. Storyboard et Montage sont deux dispositions du mode
     /// storyboard (`workspace::Espace`).
     pub(crate) espace: crate::workspace::Espace,
+    /// La vue caméra a été mise par l'entrée dans l'espace Montage (elle s'éteint à la sortie).
+    pub(crate) vue_camera_du_montage: bool,
     /// Des réglages (la disposition d'un espace qu'on vient de quitter, l'espace du côté storyboard)
     /// attendent d'être écrits : `remember_layout` s'en charge à l'image d'écran suivante.
     pub(crate) settings_a_ecrire: bool,
@@ -721,9 +732,11 @@ pub struct App {
     pub(crate) theme_unsaved: bool,
     /// Écran d'accueil à montrer tant qu'aucun projet n'est ouvert (`accueil.rs`).
     pub(crate) welcome: bool,
-    /// Fond sous le trait (`fond.rs`) : le pinceau peint dans la strate Fond (sinon dans le
-    /// trait), et le dessin dont on peint le fond en ce moment (affiché en direct).
-    pub(crate) paint_fond: bool,
+    /// Aplat sous le trait (`fond.rs`, `fondui.rs`) : le calque (son numéro) dont l'aplat est la cible du dessin, quand on a
+    /// cliqué sur sa sous-ligne du panneau Calques ; le pinceau, la gomme et le pot de peinture travaillent alors l'aplat
+    /// seul, sinon le trait. Propre à un projet (`onglets.rs`). Le dessin dont on peint l'aplat en ce moment (affiché en
+    /// direct) vient juste après.
+    pub(crate) aplat_cible: Option<u64>,
     pub(crate) fond_stroke: Option<CelId>,
     /// Le trait qui suit le même geste sur la coupe du fond (la gomme coupe, le pinceau recoud).
     pub(crate) fond_cut: Option<StrokeState>,
@@ -932,7 +945,8 @@ impl App {
             doc: Document::with_frame(1920, 1080, 24).created_now(),
             mode: Mode::Storyboard,
             board_view: BoardView::Scene,
-            crayonnes: Default::default(),
+            vignettes: Default::default(),
+            perso: Default::default(),
             cur_panel: 0,
             cur_layer: 0,
             cur_frame: 0,
@@ -985,6 +999,7 @@ impl App {
             fx_auto_key: false,
             fx_keys_shown: true,
             fx_choice: None,
+            fx_multi: Vec::new(),
             fx_key_sel: Vec::new(),
             fx_key_anchor: None,
             fx_key_clipboard: None,
@@ -992,6 +1007,8 @@ impl App {
             fx_keys_drag: None,
             fx_stack_clipboard: None,
             fx_pane_focus: false,
+            fx_pile_recent: false,
+            layers_pane_focus: false,
             video_import: None,
             propagation: crate::propagerui::Propagation::new(wgpu_render_state),
             coloriage: crate::coloriageui::Coloriage::new(),
@@ -1084,6 +1101,7 @@ impl App {
             detach_request: None,
             exposition_masquee: None,
             espace: crate::workspace::Espace::Storyboard,
+            vue_camera_du_montage: false,
             settings_a_ecrire: false,
             workspace_name: None,
             settings,
@@ -1183,7 +1201,7 @@ impl App {
             theme_applied,
             theme_unsaved: false,
             welcome: true,
-            paint_fond: false,
+            aplat_cible: None,
             fond_stroke: None,
             fond_cut: None,
             pane_heights: Default::default(),
@@ -1294,6 +1312,11 @@ impl App {
             app.layout.safe_frames = layout.safe_frames;
             app.layout.frame_format = layout.frame_format;
             app.apply_layout(layout);
+        }
+        // (Le lecteur de l'espace Montage montre la vue caméra, comme quand on y entre.)
+        if app.espace == crate::workspace::Espace::Montage {
+            app.set_camera_view(true);
+            app.vue_camera_du_montage = true;
         }
         crate::demarrage::marque("disposition des panneaux");
         app
@@ -1634,10 +1657,19 @@ impl App {
     /// disposition qu'on y avait (`aller_a_l_espace`).
     pub(crate) fn set_espace(&mut self, espace: crate::workspace::Espace) {
         use crate::workspace::Espace;
+        let avant = self.espace;
         self.cancel_montage_drag();
         self.end_stroke();
         self.playing = false;
         self.aller_a_l_espace(espace);
+        // Le lecteur de l'espace Montage montre le film tel que la caméra le filme ; en sortir remet
+        // la vue du plateau, si c'est lui qui l'avait changée (un réglage de vue : rien dans le projet).
+        if espace == Espace::Montage && avant != Espace::Montage && !self.camera_view {
+            self.set_camera_view(true);
+            self.vue_camera_du_montage = true;
+        } else if avant == Espace::Montage && espace != Espace::Montage && std::mem::take(&mut self.vue_camera_du_montage) {
+            self.set_camera_view(false);
+        }
         let mode = self.mode;
         // Le dessin change : c'est lui qui prend la main (les raccourcis suivent le nouveau mode).
         self.panel_focus = false;
@@ -1650,7 +1682,7 @@ impl App {
         self.follow_frame = true;
         self.status = match espace {
             Espace::Storyboard => "Storyboard : montage des plans.".into(),
-            Espace::Montage => "Montage : la bande des plans en grand (Affichage > Espaces de travail > Storyboard pour en revenir).".into(),
+            Espace::Montage => "Montage : le film en haut, toutes les pistes en bas (Tab ou l'onglet Storyboard pour en revenir).".into(),
             Espace::Animation => format!("Animation de {} (Tab : retour au storyboard).", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
         };
         // La feuille d'exposition n'existe qu'en animation.
@@ -1661,6 +1693,8 @@ impl App {
         if layer < self.layers().len() && layer != self.cur_layer {
             self.end_stroke();
             self.cur_layer = layer;
+            // Changer de calque, c'est revenir au trait (la cible aplat suit la sous-ligne choisie).
+            self.aplat_cible = None;
             self.vsel = None;
         }
     }
@@ -1856,6 +1890,8 @@ impl App {
         }
         let erase = self.tool == Tool::Eraser;
         if !erase {
+            // Un personnage qui a un fond le donne au calque (`personnagesui.rs`).
+            self.perso_avant_trait();
             // Elle rejoint les couleurs récentes (passe couleur).
             self.color_used(self.color);
         }
@@ -1863,8 +1899,8 @@ impl App {
             self.guides.stroke = None;
             return;
         }
-        // Strate Fond (`fond.rs`) : pinceau et gomme peignent dans le fond, en bitmap.
-        if self.paint_fond && self.layer().fond.is_some() {
+        // Aplat (`fond.rs`) : si sa sous-ligne est choisie, pinceau et gomme peignent dans l'aplat, en bitmap.
+        if self.aplat_en_cible() {
             self.begin_fond_stroke(p, pressure, pen);
             return;
         }
@@ -1926,7 +1962,7 @@ impl App {
         let (w, h) = (self.doc.width, self.doc.height);
         let Some(cover) = self.doc.cels.get(&cel).map(|c| crate::fond::silhouette(&c.raster, &r)) else { return };
         if cover.iter().all(|&c| c == 0) {
-            self.status = "Strate Fond : dessine d'abord le trait, le fond se déduit de lui (bascule sur Trait).".into();
+            self.status = "Aplat : dessine d'abord le trait, l'aplat se déduit de lui (clique sur le calque pour revenir au trait).".into();
             if let Some(p) = prefix {
                 self.history.push(p);
             }
@@ -2027,6 +2063,8 @@ impl App {
     pub(crate) fn end_stroke(&mut self) {
         // Un segment droit en attente (Maj tenue) est posé avant de finir le trait.
         self.droit_flush();
+        // Le trait d'un personnage (`personnagesui.rs`) : son dessin et les tuiles d'avant, pour le fond qu'il gagne.
+        let mut trait_de_personnage: Option<(CelId, Vec<(usize, Option<crate::raster::Tile>)>)> = None;
         if let Some(mut stroke) = self.stroke.take() {
             // Banc de traits : le trait tel que reçu, avec son réglage.
             if let Some(n) = self.record_strokes.as_mut() {
@@ -2059,18 +2097,24 @@ impl App {
                     c.version += 1;
                 }
                 self.renderer.invalidate_tiles(&dirty);
-                // Peinture et coupe : une seule étape d'annulation.
+                // Peinture et coupe : une seule étape d'annulation, nommée « Aplat : … ».
+                let nom = if self.tool == Tool::Eraser { "Aplat : gomme" } else { "Aplat : peinture" };
+                let avant = self.history.context.replace(nom.to_string());
                 match edits.len() {
                     0 => {}
                     1 => self.history.push(edits.pop().unwrap_or(Edit::Group(Vec::new()))),
                     _ => self.history.push(Edit::Group(edits)),
                 }
+                self.history.context = avant;
             } else {
                 let edit = match self.doc.cels.get_mut(&cel) {
                     Some(c) => stroke.finish(&mut c.raster, &mut dirty),
                     None => None,
                 };
                 self.renderer.invalidate_tiles(&dirty);
+                if self.perso.actif.is_some() {
+                    trait_de_personnage = crate::personnagesui::tuiles_de(edit.as_ref()).map(|t| (cel, t));
+                }
                 match self.vstroke.take() {
                     Some(vs) => {
                         // Les pixels d'avant l'aperçu servent à poser le trait définitif sans tout redessiner.
@@ -2090,6 +2134,10 @@ impl App {
                     }
                 }
             }
+        }
+        // Le fond que le trait d'un personnage vient de gagner se calcule sur le fil de fond.
+        if let Some((cel, tiles)) = trait_de_personnage {
+            self.perso_apres_trait(cel, tiles);
         }
         self.finish_vector_erase();
         self.finish_cut();
@@ -2137,8 +2185,8 @@ impl App {
             self.status = "Le pot de peinture remplit dans la feuille : clique sur une zone fermée de la feuille.".into();
             return;
         }
-        // Strate Fond (`fondui.rs`) : la zone fermée par le trait se remplit dans le fond.
-        if self.paint_fond && self.layer().fond.is_some() {
+        // Aplat (`fondui.rs`) : si sa sous-ligne est choisie, la zone fermée par le trait se remplit dans l'aplat.
+        if self.aplat_en_cible() {
             self.fond_zone_at(p, false);
             return;
         }
@@ -3053,6 +3101,7 @@ impl App {
         crate::fx::forget_all();
         // (Un autre projet : l'effet choisi et les clés choisies étaient ceux de l'ancien.)
         self.fx_choice = None;
+        self.fx_multi.clear();
         self.fx_key_sel.clear();
         self.fx_key_anchor = None;
         self.clear_cam_keys();
@@ -3340,10 +3389,6 @@ impl App {
             self.keep_gesture(crate::nudge::GESTURE);
         }
         for (key, physical, m, repeat) in keys {
-            // La planche de crayonnés rapides a la main : Tab et les flèches changent de case.
-            if self.crayonnes_key(key, m) {
-                continue;
-            }
             // Entrée, Échap, Retour arrière servent d'abord à l'outil en cours (forme à finir…).
             if !m.any() && self.tool_key(key) {
                 continue;
@@ -3385,6 +3430,11 @@ impl App {
     fn run_action_now(&mut self, action: &str) {
         // Un texte en cours de saisie est posé avant toute commande (annuler, changer d'image…).
         self.finish_text_edit();
+        // Une autre copie (dessin, plans, images, clés…) prend la place des effets copiés pour Ctrl+V
+        // depuis le panneau Calques ; la copie d'effets, plus bas, la redonne (`fxcopie.rs`).
+        if matches!(action, "edition.copier" | "edition.couper") {
+            self.fx_pile_recent = false;
+        }
         // Le panneau Références a la main : Ctrl+V y colle l'image du presse-papiers.
         if self.refs.focus && matches!(action, "edition.coller" | "edition.coller_a_la_tete" | "edition.coller_sur_place") {
             self.refs_paste();
@@ -3409,13 +3459,12 @@ impl App {
         if self.workspace_action(action) {
             return;
         }
-        // Planche de crayonnés rapides (`crayonnesui.rs`) : ses commandes, et annuler, rétablir,
-        // tout choisir, supprimer quand elle a la main.
-        if self.crayonnes_action(action) {
-            return;
-        }
         // Fond sous le trait (`fondui.rs`).
         if self.fond_action(action) {
+            return;
+        }
+        // Brosse par personnage (`personnagesui.rs`).
+        if self.perso_action(action) {
             return;
         }
         // Préréglages d'effets et calques d'effets (`prereglagesui.rs`).
@@ -3536,9 +3585,9 @@ impl App {
             // choisi et Ctrl+V colle les effets copiés, avant tous les autres presse-papiers
             // (`fxcopie.rs`). Sans effet sur la pile, Ctrl+C suit les règles d'avant.
             "edition.copier" if self.fx_pane_has_focus() && !self.layer().fx.is_empty() => self.fx_copy_chosen(),
-            "edition.coller" if self.fx_pane_has_focus() && self.fx_stack_clipboard.is_some() => {
-                self.fx_paste(self.fx_paste_targets(self.cur_layer), false)
-            }
+            // Coller des effets : le panneau Effets a la main, ou le panneau Calques l'a et la dernière
+            // copie est celle d'effets (on a cliqué le calque où les coller).
+            "edition.coller" if self.fx_paste_has_hand() => self.fx_paste(self.fx_paste_targets(self.cur_layer), false),
             // Des clés de caméra choisies (un losange jaune de la piste Caméra) : copier, couper,
             // supprimer les visent, coller aussi tant que c'est la dernière chose copiée
             // (`camkeys.rs`).
@@ -3736,6 +3785,9 @@ impl App {
                     self.board_view = BoardView::Panels;
                 }
             }
+            // Tab : du storyboard à l'animation et retour. Du Montage, il revient au storyboard (le
+            // montage n'est pas un côté de la bascule : « Animer ce plan », dans sa barre, entre dans le plan).
+            "mode.basculer" if self.espace == crate::workspace::Espace::Montage => self.set_espace(crate::workspace::Espace::Storyboard),
             "mode.basculer" => self.set_mode(if board_shown { Mode::Animation } else { Mode::Storyboard }),
             "aide.raccourcis" => self.show_help = !self.show_help,
             "outil.pinceau" => self.set_tool(Tool::Brush),
@@ -4449,6 +4501,8 @@ impl App {
             // De même pour le panneau Effets : s'il est sous le clic, il reprend la main pendant
             // cette image (`fxcopie.rs`).
             self.fx_pane_focus = false;
+            // Et le panneau Calques (`layersui.rs`) : Ctrl+V y colle des effets copiés.
+            self.layers_pane_focus = false;
             // Et pour le panneau Références (`referencesui.rs`).
             self.refs.focus = false;
         }
@@ -4464,6 +4518,8 @@ impl App {
         self.tick_flip(ctx);
         self.tick_video_import(ctx);
         self.tick_references(ctx);
+        self.tick_personnages();
+        self.tick_aplat();
         self.propagation_ui(ctx);
         self.coloriage_ui(ctx);
         if self.playing {
@@ -4573,6 +4629,7 @@ impl App {
         self.export_windows(ctx);
         self.recovery_window(ctx);
         self.workspace_name_window(ctx);
+        self.personnages_fenetre(ctx);
         self.scrub_audio();
         self.drop_stale_drags(ctx.input(|i| i.pointer.any_down()));
         self.suivre_sorte_pinceau();

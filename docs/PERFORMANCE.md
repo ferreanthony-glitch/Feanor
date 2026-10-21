@@ -590,7 +590,7 @@ un mode de fusion, une tuile signalée, une version, un dessin de plus, une autr
   ferme. Un disque plein ou un dossier en lecture seule : « Enregistrement impossible », rien de perdu.
 - **Dessin et défilement** : un trait qui sort loin de son contenu (de haut en bas de la feuille) est
   entier, sans bord rogné ; un calque transformé (échelle, rotation) a les mêmes bords qu'avant ; une
-  feuille flottante déformée (Enveloppe, Perspective) aussi ; un fond sous le trait qui se peint ; des
+  feuille flottante déformée (Enveloppe, Perspective) aussi ; un aplat sous le trait qui se peint ; des
   pelures d'oignon teintées ; un aperçu réduit d'effet qui revient en pleine résolution ; un tremblement
   du trait animé à l'arrêt. Aller et venir très vite dans la timeline sans reste des dessins précédents.
 - La **lecture** d'un plan chargé reste régulière (superposition « Performance » : « Dessin » et
@@ -653,7 +653,7 @@ en défilant un montage de 600 plans ou en sautant de plan en plan, chaque image
   une demande, la composent avec **le code d'avant**, `render::thumbnail_until` (`thumbnail` plus un test
   d'abandon entre deux lignes), dans le mode « doux » d'avant (`fx::differe` + `fxcache::soft_scope`) : les
   effets de calque pas encore calculés sont demandés au fil des effets et remplacés par leur dernier résultat ou
-  le dessin sans effet, les calques d'effets (`calqueffet`) se résolvent de même, le fond sous le trait montre
+  le dessin sans effet, les calques d'effets (`calqueffet`) se résolvent de même, l'aplat sous le trait montre
   celui d'avant jusqu'à l'arrivée du nouveau (alors seules les vignettes des plans qui montrent un fond se
   refont : le compte des fonds arrivés, `fx::fond_epoch`, n'est dans la clé que pour eux), les images de calque vidéo se lisent sur le fil de fond (elles se
   lisaient sur l'interface). Une vignette incomplète se refait quand un calcul de fond finit
@@ -674,7 +674,7 @@ en défilant un montage de 600 plans ou en sautant de plan en plan, chaque image
   identiques d'un projet à l'autre en auraient montré de fausses.)
 - **Ce qui ne change pas** : les vignettes de l'export, de l'API locale (`noyau.rs`) et de la lecture du
   storyboard par un modèle (`lecturesb.rs`, déjà bornée par `BUDGET_VIGNETTES`) restent des appels bloquants ;
-  la planche de crayonnés ne compose rien (elle envoie des tuiles) ; les références visuelles se décodent déjà
+  les références visuelles se décodent déjà
   sur un autre fil ; le calque « Fond 3D » est un calque bitmap ordinaire, rendu en arrière-plan depuis
   toujours. Les vignettes ne contiennent ni incrustations ni transitions (elles se posent à l'export), avant
   comme après. Le format du projet n'a pas changé.
@@ -712,7 +712,7 @@ qui réveillent l'écran à la fin de chaque vignette (egui regroupe les réveil
 ### Garde-fous
 
 - **Mêmes pixels** (`thumbs_tests.rs`) : sur le projet d'essai complet de la fiabilité (effets de calque à clés,
-  tremblement du trait, fond sous le trait, calque de couleur qui griffonne, calque vidéo, dossier, mode de fusion, transformation,
+  tremblement du trait, aplat sous le trait, calque de couleur qui griffonne, calque vidéo, dossier, mode de fusion, transformation,
   caméra à clés, calque d'effet d'ajustement, incrustation ; quatre images par plan), chaque vignette faite par
   les fils est identique, pixel pour pixel, à celle de l'ancien chemin ; idem pour les miniatures de dessins
   (l'ancien calcul est recopié dans l'essai) ; un cliché se compose comme le projet, et ne bouge pas quand on
@@ -758,7 +758,7 @@ qui réveillent l'écran à la fin de chaque vignette (egui regroupe les réveil
 - **Planche, vue Plans** : ouverture, zoom, défilement ; les marques d'image (une vignette par marque).
 - **Changements** : dessiner un plan et regarder sa vignette dans le montage (elle se met à jour à la fin du
   trait) ; changer l'opacité, la visibilité, le mode de fusion, une transformation, un effet, un calque d'effet
-  (impact, lueur), le fond sous le trait, une clé de caméra, la durée du plan d'avant : la vignette suit.
+  (impact, lueur), l'aplat sous le trait, une clé de caméra, la durée du plan d'avant : la vignette suit.
 - **Timeline zoomée** et **panneau Calques** : les miniatures des dessins arrivent en défilant, le dessin
   modifié refait la sienne.
 - **Autre projet** : ouvrir un projet puis un autre : aucune vignette ni miniature de l'ancien.
@@ -849,7 +849,7 @@ processeur, aux demi-niveaux exacts.
   et ils agissent toujours les premiers, sur le dessin vectoriel : la pile est alors **coupée en deux**
   (`fx::hybrid_split`) — le fil de fond calcule le dessin dérivé par les effets du trait seuls, la carte passe tous les
   autres effets dessus, à pleine résolution. Plus aucune pile d'effets « ordinaires » n'est entièrement sur le processeur.
-- Le remplissage au griffonnage d'un calque de couleur, un fond sous le trait, une image de vidéo, une feuille flottante en cours de geste :
+- Le remplissage au griffonnage d'un calque de couleur, un aplat sous le trait, une image de vidéo, une feuille flottante en cours de geste :
   chemin d'avant (la carte n'a que leur dessin dérivé).
 - **Un calque d'ajustement dans un dossier** (il ne couvre que les calques de son dossier), ou à côté d'un
   calque d'ajustement qui ne passe pas : tous les repères du plan sont résolus sur le processeur
@@ -1013,7 +1013,7 @@ Les effets du trait sont les seuls effets sans passe sur la carte. Une pile qui 
 comme n'importe quel dessin dérivé, `playback` le demande d'avance), puis la carte passe les autres effets dessus à pleine
 résolution, à chaque image. Essai `a_mixed_stack_gives_the_cpu_pixels_with_the_card_drawing_the_card_effects` : écriture
 + flou + tremblement, aucun pixel à plus de 2 niveaux de la référence sur processeur. Une pile sans autre effet que
-ceux du trait reste un dessin dérivé (comme avant). Le remplissage au griffonnage d'un calque de couleur, un fond sous le trait, une vidéo, une feuille
+ceux du trait reste un dessin dérivé (comme avant). Le remplissage au griffonnage d'un calque de couleur, un aplat sous le trait, une vidéo, une feuille
 flottante : chemin d'avant. L'export, les vignettes et le repli sans carte : calcul exact sur processeur.
 
 ### 13.4 Le tremblement du trait sur la carte graphique
@@ -1280,7 +1280,7 @@ retiennent jamais l'interface plus de 9 ms d'un coup.
 
 ### Garde-fous (`exportrender_tests.rs`, 46 essais et 6 mesures ignorées ; la suite complète : 2 072 essais, deux fois de suite, aucun intermittent)
 
-- **Mêmes pixels** : sur le projet d'essai complet de la fiabilité (effets de calque à clés, tremblement du trait, fond sous le trait,
+- **Mêmes pixels** : sur le projet d'essai complet de la fiabilité (effets de calque à clés, tremblement du trait, aplat sous le trait,
   calque de couleur qui griffonne, vidéo, dossier, fusion, transformation, caméra à clés, calques d'effets d'ajustement, incrustation, damier), chaque image du
   nouvel export est celle de l'ancien chemin, pixel pour pixel, pour les trois papiers, à plusieurs images de chaque plan ; la toile
   infinie et les clés de position, les incrustations gravées, les transitions (un plan seul et tout le montage) aussi.
@@ -1437,3 +1437,34 @@ latence » (aucun calcul de dessin dérivé pendant qu'on se sert de l'applicati
 - **Export, enregistrement, essais** : calcul exact et bloquant, comme avant (`shown_with`).
 - **Au repos** : rien de plus. Un calque de couleur qui n'a pas de griffonnage (`remplissage` faux) n'ajoute aucun
   élément au plan ; un qui en a fait une demande par version, puis `lookup` (une lecture du cache) à chaque image.
+
+## 23. Vignettes simples : dessiner dans une vignette (2026-10-21, branche `vignettes-simples`)
+
+Règle « sans latence » : dessiner dans la vue Vignettes doit être aussi fluide que dans la vue Dessin. Ce qui est fait :
+
+- **Le dessin lui-même est dans l'image courante** (`card_canvas` : la même fonction `canvas_panel`, le même `StrokeState`,
+  la même composition) : aucun moteur de plus, aucun rejeu sur le fil de l'interface. Ce qui change, c'est **qui devient courante** :
+  l'appui est vu dans l'image d'écran où il arrive (`boardui.rs`, `board_press`, avant de peindre les vignettes), l'image visée
+  prend la main dans cette même image et son dessin reçoit l'appui (même liste d'événements). Un appui dans une case vide fait
+  le plan dans cette image aussi (une étape de structure, comme « Nouveau plan »).
+- **Sans pénalité au repos** : la mise en page (`board.rs`) est calculée à chaque image sans rien allouer de grand ; la
+  mesure des notes (un galley par note non vide, mis en cache par egui) ne tourne que pour les images qui en ont ; la
+  vignette de l'image courante se tient à jour en arrière-plan (comme les autres, sur les fils de `thumbs.rs`) pour que
+  l'image d'avant ne montre pas un dessin périmé quand une autre prend la main.
+- **Au repos**, la vue ne demande aucune image (essai `the_vignettes_view_is_idle_when_nothing_happens`).
+
+Mesures (`vignettes_tests`, un trait à la souris, temps de construction de l'interface par image d'écran) :
+
+| | Vignette de la planche | Vue Dessin |
+|---|---|---|
+| Sans carte graphique, trait de 60 points, 4 événements par image (essai tous les passages) | moyenne 0,9 ms, pire 1,3 ms | moyenne 1,1 ms, pire 3,0 ms |
+| Avec la carte graphique (total interface + découpage + carte), trait de 120 points, 8 événements par image (`perf_vignettes_drawing`, `--ignored`) | moyenne 1,27 ms, 95e centile 1,85 ms, pire 2,08 ms | moyenne 1,15 ms, 95e centile 1,30 ms, pire 1,40 ms |
+| Planche de 100 plans, souris qui bouge / molette (`perf_long_project`, `--ignored`) | 2,5 ms / 2,4 ms par image | |
+
+La vignette coûte un peu plus que la vue Dessin à la carte (le dessin est dans un clip de la page, la page et les
+vignettes autour sont peintes aussi), de l'ordre de 0,1 ms.
+
+**Ce qui n'est pas mesuré** : à la tablette (pression, retard ressenti) ; une planche de plusieurs centaines de plans en
+dessinant ; la création d'un plan dans une case vide sur un très gros film (une étape de structure : copie des plans,
+comme « Nouveau plan »).
+

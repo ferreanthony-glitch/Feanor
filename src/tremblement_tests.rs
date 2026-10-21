@@ -306,7 +306,7 @@ fn the_effect_only_applies_to_vector_layers() {
     let on_bitmap = fx::layer_steps(&bitmap, 0, None);
     assert_eq!(on_bitmap.iter().map(|s| s.kind).collect::<Vec<_>>(), vec![EffectKind::GaussianBlur], "le flou reste, pas le tremblement");
     assert!(EffectKind::Boil.vector_only() && !EffectKind::GaussianBlur.vector_only());
-    assert_eq!(EffectKind::Boil.family(), "Déformation");
+    assert_eq!(EffectKind::Boil.family(), "Trait", "le tremblement est de la famille du trait (menu « Trait »)");
     assert_eq!(fx::without_boil(on_vector).len(), 0);
 }
 

@@ -131,6 +131,7 @@ impl App {
         self.ctx.copy_text(format!("{}plans copiés", crate::pasteimage::MARK));
         self.panel_clipboard = Some(clip);
         self.fx_clip_recent = false;
+        self.fx_pile_recent = false;
         self.cam_clip_recent = false;
     }
 
@@ -366,7 +367,9 @@ impl App {
         ui.add_space(2.0);
         // Une seule ligne, comme la barre de la timeline (12c), qui ne défile pas : les commandes de
         // `barres.rs`, le reste sous « Plus… ».
-        ui.horizontal(|ui| self.barre_ui(ui, crate::barres::Barre::Montage));
+        // (Dans l'espace Montage, la barre du travail de montage : coupes, rognage, transitions, son…)
+        let barre = crate::barres::Barre::du_montage_dans(self.espace);
+        ui.horizontal(|ui| self.barre_ui(ui, barre));
         ui.separator();
         // Le zoom, petit, tout en bas de la bande.
         egui::TopBottomPanel::bottom("zoom_montage")

@@ -447,6 +447,8 @@ pub fn icon(kind: EffectKind) -> &'static str {
         EffectKind::StrokeWave => ph::WAVE_SAWTOOTH,
         EffectKind::Dashes => ph::DOTS_THREE,
         EffectKind::Dust => ph::GRAINS,
+        // Le tremblement du trait (`tremblement.rs`), en tête du menu « Trait ».
+        EffectKind::Boil => ph::WAVE_SINE,
         _ => crate::fxmatiere::icon(kind),
     }
 }
@@ -460,8 +462,16 @@ pub fn action(kind: EffectKind) -> &'static str {
         EffectKind::StrokeWave => "fx.ondulation_trait",
         EffectKind::Dashes => "fx.pointilles",
         EffectKind::Dust => "fx.desagregation",
+        EffectKind::Boil => "fx.tremblement",
         _ => "",
     }
+}
+
+/// Les entrées du menu déroulant « Trait » : le tremblement du trait d'abord (il est de la même famille),
+/// puis les effets du trait (`KINDS`). `KINDS` ne change pas : les enregistrements et les essais le suivent.
+pub fn menu_kinds() -> [EffectKind; 7] {
+    let [a, b, c, d, e, f] = KINDS;
+    [EffectKind::Boil, a, b, c, d, e, f]
 }
 
 /// L'effet d'une action de `action`.

@@ -168,6 +168,13 @@ pub struct Settings {
     /// prise sans nouvelles, la prise automatique, les notifications.
     #[serde(default, rename = "equipe")]
     pub equipe: crate::equipe::ReglageEquipe,
+    /// Les couleurs neutres de la barre des personnages (`personnages.rs`, `personnagesui.rs`) : un réglage de
+    /// l'application, commun à tous les projets (les personnages, eux, sont ceux du projet).
+    #[serde(default = "crate::personnages::neutres_par_defaut", rename = "couleurs_neutres")]
+    pub neutral_colors: Vec<crate::personnages::Neutre>,
+    /// L'onglet ouvert de la fenêtre Préférences… (`prefsui.rs`), retenu d'une séance à l'autre.
+    #[serde(default, rename = "onglet_preferences", skip_serializing_if = "crate::prefsonglets::Onglet::est_defaut")]
+    pub prefs_onglet: crate::prefsonglets::Onglet,
 }
 
 fn default_passe_partout() -> u8 {
@@ -237,6 +244,8 @@ impl Default for Settings {
             passe_partout: default_passe_partout(),
             collage: Default::default(),
             equipe: Default::default(),
+            neutral_colors: crate::personnages::neutres_par_defaut(),
+            prefs_onglet: Default::default(),
         }
     }
 }
@@ -274,6 +283,11 @@ impl Settings {
         s.framing = s.framing.sanitized();
         s.perf = s.perf.sanitized();
         s.bars = s.bars.nettoyees();
+        // L'espace Montage a maintenant son propre agencement : l'ancienne disposition d'origine,
+        // retenue sans que l'utilisateur y ait touché, cède la place à la nouvelle.
+        if s.montage_layout.as_ref().is_some_and(crate::workspace::est_le_montage_d_avant) {
+            s.montage_layout = None;
+        }
         // (Le côté storyboard n'est jamais l'animation.)
         if s.storyboard_space == Espace::Animation {
             s.storyboard_space = Espace::Storyboard;
@@ -281,6 +295,7 @@ impl Settings {
         s.generation_son = std::mem::take(&mut s.generation_son).sanitized();
         s.passe_partout = s.passe_partout.min(100);
         s.equipe = std::mem::take(&mut s.equipe).nettoye();
+        s.neutral_colors = crate::personnages::neutres_nettoyees(std::mem::take(&mut s.neutral_colors));
         s
     }
 

@@ -29,9 +29,11 @@
 //!   sons_proposes.json    sons proposés par la lecture du storyboard (`indications.rs`), de même sans
 //!                         changer `VERSION` ; les sons générés, eux, restent dans le cache de SHOT
 //!                         jusqu'à leur acceptation (copiés alors dans sons/)
-//!   crayonnes.json        la planche de crayonnés rapides (`crayonnes.rs`), de même sans changer
-//!                         `VERSION` : absent, il n'y a pas de planche ; une version qui ne le connaît
-//!                         pas le laisse en place
+//!   crayonnes.json        (ancien) la planche de crayonnés, supprimée en 2026-10-21 : SHOT ne le lit plus
+//!                         et ne l'écrit plus, mais ne l'efface jamais (`crayonnesheritage.rs`)
+//!   personnages.json      les personnages de la brosse par personnage (`personnages.rs`) : nom, couleur de
+//!                         trait, couleur d'aplat ; de même sans changer `VERSION` (absent : aucun personnage ;
+//!                         une version qui ne le connaît pas le laisse en place)
 //!   envois.json           les envois (`envois.rs`) : nom, date et empreinte de chaque plan, de même sans
 //!                         changer `VERSION` ; absent, il n'y a pas d'envoi
 //!   versions/             les instantanés des envois et leurs dessins, rangés par contenu
@@ -1050,15 +1052,13 @@ pub struct SaveJob {
     transitions: Option<Vec<u8>>,
     /// Le fichier des effets des sons (`effets_son.json`) ; rien : il n'y en a plus, le fichier part.
     sound_fx: Option<Vec<u8>>,
+    /// Le fichier des personnages (`personnages.json`) ; rien : il n'y en a plus, le fichier part.
+    personnages: Option<Vec<u8>>,
     /// Le fichier des sons proposés (`sons_proposes.json`) ; rien : il n'y en a plus, le fichier part.
     sons_proposes: Option<Vec<u8>>,
     /// Les références visuelles : fichiers à recopier dans `references/`, `references.json`, et ce
     /// qui peut s'effacer (`references.rs`).
     references: crate::references::SavePlan,
-    /// La planche de crayonnés (`crayonnes.json`) : une copie, mise en fichier par le fil
-    /// d'écriture (l'encodage des peintures ne se fait pas sur le fil de l'interface) ; rien :
-    /// la planche est vide, le fichier part (s'il est lisible).
-    crayonnes: Option<crate::crayonnes::Planche>,
     /// Le fichier des envois (`envois.json`) ; rien : il n'y en a pas (un fichier illisible reste là).
     envois: Option<Vec<u8>>,
     /// Le fichier des autres versions des plans (`plans_versions.json`) ; rien : il n'y en a pas.
@@ -1219,9 +1219,9 @@ pub fn prepare_save(
         reserves: crate::rognage::to_bytes(doc)?,
         transitions: crate::transitions::to_bytes(doc)?,
         sound_fx: crate::audiofx::to_bytes(doc)?,
+        personnages: crate::personnages::to_bytes(doc)?,
         sons_proposes: crate::indications::to_bytes(doc)?,
         references: crate::references::plan_save(doc, dir)?,
-        crayonnes: (!doc.crayonnes.is_blank()).then(|| doc.crayonnes.clone()),
         envois: crate::envois::to_bytes(doc)?,
         plans_versions: crate::planvers::to_bytes(doc)?,
         keep_drawings,
@@ -1256,20 +1256,20 @@ fn load_sons_proposes(dir: &Path, warnings: &mut Vec<String>) -> crate::indicati
     }
 }
 
-/// La planche de crayonnés du projet, lue dans `crayonnes.json` (absent : une planche neuve). Un
-/// fichier illisible n'empêche pas d'ouvrir le projet : on le dit, sans planche ; il reste en place
-/// (`write_sidecar`).
-fn load_crayonnes(dir: &Path, warnings: &mut Vec<String>) -> crate::crayonnes::Planche {
-    let path = dir.join(crate::crayonnes::FILE);
+/// Les personnages du projet, lus dans `personnages.json` (absent : aucun). Un fichier illisible ou d'une
+/// version plus récente n'empêche pas d'ouvrir le projet : on le dit, sans personnages, et il reste en
+/// place (`write_sidecar`).
+fn load_personnages(dir: &Path, warnings: &mut Vec<String>) -> Vec<crate::personnages::Personnage> {
+    let path = dir.join(crate::personnages::FILE);
     match fs::read_to_string(&path) {
-        Ok(text) => crate::crayonnes::parse(&text).unwrap_or_else(|e| {
-            warnings.push(format!("{} : {e} ; la planche de crayonnés n'est pas chargée.", crate::crayonnes::FILE));
-            Default::default()
+        Ok(text) => crate::personnages::parse(&text).unwrap_or_else(|e| {
+            warnings.push(format!("{} : {e} ; les personnages ne sont pas chargés.", crate::personnages::FILE));
+            Vec::new()
         }),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Default::default(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
         Err(e) => {
-            warnings.push(format!("{} : {e} ; la planche de crayonnés n'est pas chargée.", path.display()));
-            Default::default()
+            warnings.push(format!("{} : {e} ; les personnages ne sont pas chargés.", path.display()));
+            Vec::new()
         }
     }
 }
@@ -1456,16 +1456,12 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::transitions::FILE), self.transitions.as_deref(), |t| crate::transitions::parse(t).is_ok())?;
         // Et les effets des sons.
         write_sidecar(&dir.join(crate::audiofx::FILE), self.sound_fx.as_deref(), |t| crate::audiofx::parse(t).is_ok())?;
+        // Les personnages de la brosse par personnage, de même.
+        write_sidecar(&dir.join(crate::personnages::FILE), self.personnages.as_deref(), |t| crate::personnages::parse(t).is_ok())?;
         // Et les sons proposés par la lecture du storyboard.
         write_sidecar(&dir.join(crate::indications::FILE), self.sons_proposes.as_deref(), |t| crate::indications::parse(t).is_ok())?;
         // Les références visuelles : leurs fichiers dans `references/`, puis `references.json`.
         count += self.references.write(dir)?;
-        // La planche de crayonnés rapides : de même (mise en fichier ici, sur le fil d'écriture).
-        let crayonnes = match &self.crayonnes {
-            Some(p) => crate::crayonnes::bytes_of(p)?,
-            None => None,
-        };
-        write_sidecar(&dir.join(crate::crayonnes::FILE), crayonnes.as_deref(), |t| crate::crayonnes::parse(t).is_ok())?;
         // Les envois : les instantanés d'abord (dessins puis fichier), puis la liste qui les cite.
         count += crate::envois::ecrire(dir, &self.snapshots, &self.snapshot_reuse, self.versions_from.as_deref())?;
         write_sidecar(&dir.join(crate::envois::FILE), self.envois.as_deref(), |t| crate::envois::parse(t).is_ok())?;
@@ -2268,6 +2264,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         transitions: Vec::new(),
         // Les références visuelles aussi (`references.json`, `references::load`).
         references: Vec::new(),
+        // Les personnages : `personnages.json`, `load_personnages`.
+        personnages: Vec::new(),
         // Les versions des plans : `plans_versions.json`, `planvers::installer`.
         versions: Default::default(),
     };
@@ -2487,6 +2485,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         structure.transitions = load_transitions(dir, &mut warnings);
         // Les références visuelles : `references.json` et le dossier `references/` (absents : aucune).
         structure.references = crate::references::load(dir, &mut warnings);
+        // Les personnages de la brosse par personnage (`personnages.json`, absent : aucun).
+        structure.personnages = load_personnages(dir, &mut warnings);
     }
     let frame = manifest.cadre;
     let mut written: HashMap<CelId, u64> = cels.keys().map(|&id| (id, 0)).collect();
@@ -2503,8 +2503,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         r.install(&mut doc, &missing);
     }
     if !annexes.plans_seuls {
-        // La planche de crayonnés rapides, dans son fichier (absent : aucune).
-        doc.crayonnes = load_crayonnes(dir, &mut warnings);
+        // L'ancienne planche de crayonnés (supprimée) : si elle gardait des croquis, on le dit ; le fichier reste en place.
+        crate::crayonnesheritage::signaler(dir, &mut warnings);
         // Les envois (`envois.json`, absent : aucun) ; leurs instantanés ne se lisent qu'à la demande.
         doc.envois = crate::envois::load(dir, &mut warnings);
     }
