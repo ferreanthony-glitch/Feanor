@@ -8,8 +8,8 @@
 //! - **On dessine tout de suite** : un trait qui commence dans une image (pleine ou vide) la rend courante
 //!   à l'appui et dessine dedans, sans clic de choix avant. Un trait qui commence ailleurs ne dessine rien.
 //!   C'est le dessin lui-même qui est dans l'image courante (`card_canvas`), donc le même moteur, le même
-//!   rendu progressif : aucune latence de plus. Ce qui déborde du cadre est coupé à l'affichage ; la toile
-//!   infinie garde tout le tracé, et l'export cadre comme avant.
+//!   rendu progressif : aucune latence de plus. Pendant le geste, le trait **déborde** à l'écran (`debord.rs`) ; au
+//!   lâcher, l'image ne montre plus que son cadre. La toile infinie garde tout le tracé, et l'export cadre comme avant.
 //! - **Cases vides** après la dernière image : dessiner dans l'une d'elles fait le plan (ou, si la barre qui la
 //!   précède est grise, une image de plus du dernier plan) ; la création et le trait ne font qu'une étape
 //!   d'annulation.
@@ -20,7 +20,8 @@
 //!   d'image ; Entrée valide, Maj + Entrée passe à la ligne, Échap abandonne. Trois lignes au plus à l'écran,
 //!   puis « … » ; le texte entier est gardé, visible pendant la saisie et dans la fiche du plan.
 //! - Molette : défiler ; Ctrl + molette : zoom ; Espace, bouton du milieu ou outil Main : déplacer la planche.
-//!   Ctrl ou Maj + clic sur une image : choisir des plans (au lieu de dessiner). Clic droit : menus. Les
+//!   Ctrl ou Maj + clic sur une image : choisir des plans (au lieu de dessiner). Maj + appui sur le **cadre** d'une
+//!   image, puis glisser : déplacer son plan entier, entre deux plans (`boardmove.rs`). Clic droit : menus. Les
 //!   notes libres de la planche (texte, gomme, sélection) restent ; on ne les trace plus au pinceau.
 
 use std::collections::HashMap;
@@ -97,7 +98,31 @@ pub(crate) enum Press {
     Note,
     /// Un appui qui ne fait rien (dehors de toute image avec un outil de dessin, case vide refusée…).
     Dead,
+    /// Maj + appui sur le cadre d'une vignette : le plan se déplace (`PlanMove`).
+    Move,
 }
+
+/// Un plan (ou plusieurs plans choisis) pris par le cadre d'une de ses vignettes (Maj + appui), qu'on glisse ailleurs.
+/// Tout le plan bouge d'un bloc : ses vignettes, ses marques d'image, ses dessins, ses clés de caméra, ses notes…
+/// (l'opération du montage, `Document::move_plans`). Le repère de pose n'est jamais qu'entre deux plans.
+pub(crate) struct PlanMove {
+    /// Les plans pris, dans l'ordre du film.
+    pub ids: Vec<u64>,
+    /// Le pointeur à l'appui et maintenant (écran).
+    pub grab: Pos2,
+    pub now: Pos2,
+    /// Le pointeur a quitté le seuil : le geste est un déplacement (sinon, un simple clic sur le cadre ne fait rien).
+    pub active: bool,
+    /// Échap : le geste est abandonné, le lâcher ne fait rien.
+    pub cancelled: bool,
+    /// Où le plan se poserait si l'on lâchait ici.
+    pub target: Option<board::DropSlot>,
+}
+
+/// Distance (points d'écran) dont il faut glisser un cadre avant que ce soit un déplacement.
+pub(crate) const MOVE_THRESHOLD: f32 = 5.0;
+/// Tolérance (points d'écran) de part et d'autre du filet d'une vignette pour la prendre par son cadre.
+const FRAME_TOUCH: f32 = 5.0;
 
 /// La bande de note en cours d'écriture : celle de l'image `id` (le plan, ou sa marque d'image).
 pub(crate) struct NoteEdit {
@@ -153,11 +178,29 @@ pub(crate) struct Vignettes {
     /// La planche telle qu'elle est à l'écran à la dernière image : le passage planche ↔ écran et la zone de la vue.
     pub xf: Xf,
     pub view: Rect,
+    /// Un plan pris par le cadre d'une de ses vignettes (Maj + appui) et glissé.
+    pub moving: Option<PlanMove>,
+    /// Maj tenue, le pointeur est sur le cadre d'une vignette : on peut la prendre (curseur « main »).
+    pub frame_hot: bool,
+    /// Le trait qui déborde de la vignette courante, tant que le geste dure (`debord.rs`).
+    pub debord: Option<crate::debord::Debord>,
 }
 
 impl Default for Vignettes {
     fn default() -> Self {
-        Vignettes { press: Press::None, note: None, lines: HashMap::new(), empty_joins: false, created: None, menu: None, xf: Xf::default(), view: Rect::NOTHING }
+        Vignettes {
+            press: Press::None,
+            note: None,
+            lines: HashMap::new(),
+            empty_joins: false,
+            created: None,
+            menu: None,
+            xf: Xf::default(),
+            view: Rect::NOTHING,
+            moving: None,
+            frame_hot: false,
+            debord: None,
+        }
     }
 }
 
@@ -451,6 +494,15 @@ impl App {
         if !matches!(hit, Hit::Note(k) if self.vignettes.note.as_ref().is_some_and(|e| e.id == layout.cards[k].id)) {
             self.commit_card_note();
         }
+        // Maj + appui sur le CADRE d'une vignette (son filet, à quelques points près) : on prend son plan pour le
+        // déplacer. Maj + appui dedans garde son sens : choisir des plans.
+        if m.shift && !m.ctrl && !m.command {
+            if let Some(k) = board::frame_hit(layout, p, FRAME_TOUCH / xf.zoom.max(1e-3)) {
+                self.commit_note_text(layout);
+                self.start_plan_move(layout, k, pos);
+                return false;
+            }
+        }
         let selecting = m.command || m.ctrl || m.shift;
         match hit {
             Hit::Bar(after) => {
@@ -709,6 +761,12 @@ impl App {
         }
         let xf = Xf { origin: view.min + self.board_pan, zoom: self.board_zoom };
         self.vignettes.xf = xf;
+        // Le trait qui déborde est recalculé par la vignette courante, à chaque image où un geste dure.
+        self.vignettes.debord = None;
+        // Maj tenue sur le cadre d'une vignette : elle se prend (curseur « main », pas de cercle de pinceau).
+        let tol_frame = FRAME_TOUCH / xf.zoom.max(1e-3);
+        self.vignettes.frame_hot = self.vignettes.moving.is_some()
+            || (!pan_mode && !self.modal_open() && mods.shift && !mods.ctrl && !mods.command && over.is_some_and(|p| board::frame_hit(&layout, xf.to_board(p), tol_frame).is_some()));
 
         let texts = self.text_rects(&painter, &layout);
         let tol = 5.0 / xf.zoom;
@@ -746,14 +804,16 @@ impl App {
                 }
             }
         }
-        if escape && !writing {
+        if escape && !writing && self.vignettes.moving.is_none() {
             match self.board_drag {
                 Some(BoardDrag::Rubber { .. }) => self.board_drag = None,
                 _ => self.board_notes.clear(),
             }
         }
-        let pointer = ui.input(|i| i.pointer.latest_pos()).map(|p| xf.to_board(p));
+        let latest = ui.input(|i| i.pointer.latest_pos());
+        let pointer = latest.map(|p| xf.to_board(p));
         self.update_board_drag(&layout, pointer, xf.zoom);
+        self.update_plan_move(&layout, xf, latest, escape);
 
         // Pages, barres, cases vides, vignettes.
         for page in &layout.pages {
@@ -820,6 +880,11 @@ impl App {
                 }
             }
         }
+        // Le trait en cours qui sort de sa case, par-dessus tout ; puis le plan qu'on déplace (fantôme et repère).
+        if let Some(d) = self.vignettes.debord.take() {
+            crate::debord::paint(&painter, view, &d);
+        }
+        self.paint_plan_move(ui.ctx(), &painter, view, xf, &layout);
         self.paint_board_drag(&painter, xf);
         if let (Some(p), Tool::Eraser, false) = (over, self.tool, pan_mode) {
             if matches!(hovered, Some(Hit::Nothing)) || matches!(self.board_drag, Some(BoardDrag::Erase { .. })) {
@@ -833,10 +898,15 @@ impl App {
         });
         self.note_text_editor(ui, xf, &layout);
         self.card_note_editor(ui, xf, &layout);
+        // Le curseur d'un cadre pris ou à prendre passe avant celui du dessin de la vignette courante (peint plus tôt).
+        if self.vignettes.frame_hot {
+            ui.ctx().set_cursor_icon(if self.vignettes.moving.as_ref().is_some_and(|m| m.active) { CursorIcon::Grabbing } else { CursorIcon::Grab });
+        }
         if !any_down {
             self.finish_board_drag(&layout, &texts);
         }
         self.finish_creation(any_down);
+        self.finish_plan_move(any_down);
         // Choisir des plans (Ctrl ou Maj + clic) donne la main aux plans : copier, coller, supprimer (12e).
         if self.vignettes.press == Press::Select {
             self.panel_focus = true;
@@ -1157,7 +1227,7 @@ impl App {
             let area = if self.tool == Tool::Camera { thumb } else { Rect::from_center_size(thumb.center(), thumb.size() / 0.96) };
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area).id_salt("planche_vive"));
             child.set_clip_rect(thumb.intersect(view));
-            self.card_canvas(&mut child);
+            self.card_canvas(&mut child, thumb);
             // Sa vignette se tient à jour en arrière-plan : quand une autre image prend la main, elle montre déjà le dernier trait.
             let width = crate::thumbs::width_for(thumb.width() * ui.ctx().pixels_per_point());
             let _ = self.thumbs.texture_at(ui.ctx(), &self.doc, i, place.frame, place.id, width, deadline);
@@ -1202,7 +1272,7 @@ impl App {
     /// Le dessin dans la vignette du panneau courant : vue à travers la caméra, cadrée sur la
     /// vignette ; avec l'outil Caméra, toute la feuille et le cadre, pour recadrer. La vue du
     /// dessin en grand est remise telle quelle ensuite.
-    fn card_canvas(&mut self, ui: &mut egui::Ui) {
+    fn card_canvas(&mut self, ui: &mut egui::Ui, thumb: Rect) {
         let (view, camera_view, canvas_rect) = (self.view, self.camera_view, self.canvas_rect);
         let reframe = self.tool == Tool::Camera;
         self.camera_view = !reframe;
@@ -1212,6 +1282,10 @@ impl App {
         self.in_card = true;
         self.canvas_panel(ui);
         self.in_card = false;
+        // Le trait qui déborde de la case, tant que la main est en bas : calculé ici, pendant que la vue du dessin est
+        // celle de la vignette ; peint en dernier par la planche (`debord.rs`). Rien si le geste reste dans la case.
+        let shift = ui.input(|i| i.modifiers.shift);
+        self.vignettes.debord = if self.stroke.is_some() || self.shape_drag.is_some() || self.shape_edit.is_some() { self.debord_collect(thumb, shift) } else { None };
         (self.view, self.camera_view, self.canvas_rect) = (view, camera_view, canvas_rect);
     }
 

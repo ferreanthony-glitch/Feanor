@@ -236,6 +236,23 @@ impl App {
         }
     }
 
+    /// Les lignes de l'aperçu de la forme en cours (forme tirée, courbe, polyligne posée), en pixels d'écran avec leur
+    /// trait : de quoi les montrer hors de la vignette pendant le geste (`debord.rs`).
+    pub(crate) fn shape_preview_lines(&self, shift: bool) -> Vec<(Vec<Pos2>, Stroke)> {
+        let to_s = |p: Pos2| self.layer_to_screen(p);
+        let stroke = Stroke::new((self.shape.width * self.layer_zoom()).clamp(1.0, 40.0), self.preview_color());
+        let mut lines = Vec::new();
+        if let (Some((a, b)), Some(kind)) = (self.shape_drag, self.tool.shape_kind()) {
+            lines.push((self.drag_shape_points(kind, a, b, shift).into_iter().map(to_s).collect(), stroke));
+        }
+        match &self.shape_edit {
+            Some(e @ ShapeEdit::Curve { .. }) => lines.push((e.points().into_iter().map(to_s).collect(), stroke)),
+            Some(ShapeEdit::Polyline { points, .. }) if points.len() >= 2 => lines.push((points.iter().map(|p| to_s(*p)).collect(), stroke)),
+            _ => {}
+        }
+        lines
+    }
+
     /// Réglages des outils de forme (panneau Réglages).
     pub(crate) fn shape_options_ui(&mut self, ui: &mut egui::Ui) {
         let note = |ui: &mut egui::Ui, text: &str| {

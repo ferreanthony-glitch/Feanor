@@ -1762,8 +1762,15 @@ Vignettes (`board.rs`, `boardui.rs`). Mode d'emploi complet et liste à vérifie
 
 - **Dessiner tout de suite** : un trait qui commence dans une image (pleine ou vide) la rend courante à l'appui et
   dessine dedans, avec le même moteur que la vue Dessin (le point reçu est déjà dans l'image d'écran où il arrive). Un
-  trait qui commence hors des images ne trace rien. Ce qui déborde de l'image est coupé à l'affichage ; le dessin garde
-  tout (toile infinie), l'export cadre comme avant.
+  trait qui commence hors des images ne trace rien. **Pendant le geste, le trait déborde** de l'image (on le voit en
+  entier, même par-dessus l'écart, les barres, les notes et les images voisines) ; au lâcher, l'image ne montre plus que
+  son cadre ; le dessin garde tout (toile infinie), l'export cadre comme avant (`debord.rs`).
+- **Déplacer un plan** : **Maj + appui sur le cadre** d'une image (son filet, cinq points de tolérance), puis glisser.
+  N'importe quelle image d'un plan déplace **tout le plan** d'un bloc (images, marques, dessins, clés de caméra, notes,
+  versions…, l'opération du montage). Le repère de pose (trait d'accent) n'est **jamais qu'entre deux plans** ; pour sortir
+  une image d'un plan, on coupe d'abord sa barre. Main au survol (Maj tenue), fantôme du plan qui suit le pointeur, Échap
+  abandonne, une étape d'annulation « Déplacer le plan », d'une séquence à l'autre comme au montage. Maj + clic dedans
+  garde son sens (choisir des plans) (`boardmove.rs`).
 - **Cases vides** après la dernière image : dessiner dans l'une d'elles fait le plan (ou, si la barre devant est grise,
   une image de plus du dernier plan). La création et le trait sont une seule étape d'annulation.
 - **Barres** entre les images (grise : même plan ; noire : coupe) : un clic sur une grise coupe le plan là, un clic sur
@@ -1773,9 +1780,14 @@ Vignettes (`board.rs`, `boardui.rs`). Mode d'emploi complet et liste à vérifie
   est gardé et visible à la saisie et dans la fiche.
 - **Anciens projets** : un `crayonnes.json` n'est plus lu ni écrit, mais jamais effacé ; un avertissement dit, une
   fois à l'ouverture, combien de croquis n'avaient pas servi (`crayonnesheritage.rs`).
-- Limites : glisser une vignette pour réordonner n'existe plus (le geste est celui du trait ; réordonner se fait dans le
-  montage) ; un clic de pinceau dans une image y laisse un point (comme partout) ; le trait n'est pas visible au-delà du
-  bord de l'image pendant qu'on le trace ; Ctrl ou Maj + appui choisit des plans au lieu de dessiner.
+- Limites : glisser une image *sans Maj* ne réordonne pas (le geste est celui du trait) : c'est Maj + cadre, ou le
+  montage ; un clic de pinceau dans une image y laisse un point (comme partout) ; hors de l'image, pendant le geste, le
+  trait est une approximation (couleur, rayon, opacité ; pas la texture du pinceau) et la gomme ne déborde pas ; Ctrl ou
+  Maj + appui dedans choisit des plans au lieu de dessiner.
+- Liste à vérifier à l'écran (retouche du 2026-10-21) : `docs/INTERFACE.md`, § 11, points 9 à 12 (le débord à la souris et à
+  la tablette, la main sur le cadre, le déplacement d'un plan de trois images, la sortie d'un plan par sa barre).
+
+
 ## Palette de commandes
 
 Ctrl+K (ou Aide > Palette de commandes) : tape quelques lettres du nom d'une commande (« persp »,
@@ -2350,7 +2362,9 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `history.rs` | Annuler / rétablir |
 | `project.rs` | Projet en dossier (format 11), enregistrement préparé puis écrit |
 | `blend.rs` | Modes de fusion des calques (formules, composition d'un pixel) |
-| `board.rs`, `boardui.rs` | Planche de la vue Vignettes : disposition (écarts, barres, bandes de note, cases vides), zones touchées ; dessin direct, barres, notes sous les images, cases vides, notes libres, menus |
+| `board.rs`, `boardui.rs` | Planche de la vue Vignettes : disposition (écarts, barres, bandes de note, cases vides), zones touchées, cadre d'une image et repères de pose entre deux plans ; dessin direct, barres, notes sous les images, cases vides, notes libres, menus |
+| `debord.rs` | Le trait (et l'aperçu d'une forme) qui déborde de la vignette courante pendant le geste : seules les parties du dehors sont repeintes, d'après le tracé du moteur, par-dessus toute la planche |
+| `boardmove.rs` | Déplacer un plan dans la vue Vignettes (Maj + cadre, puis glisser) : plan entier d'un bloc, repère entre deux plans, fantôme, Échap, une étape « Déplacer le plan » (`Document::move_plans`) |
 | `recovery.rs`, `recoveryui.rs` | Copie de secours, récupération après plantage |
 | `workspace.rs`, `workspaceui.rs` | Espaces de travail (Storyboard, Animation, Montage : `Espace`, une disposition retenue chacun), disposition retenue |
 | `barres.rs`, `barres_tests.rs` | Barres de commandes minces et « Plus… » : une table de commandes par barre (commandes, montage, timeline), épingles retenues dans les réglages, passage automatique sous « Plus… » quand la barre est étroite |

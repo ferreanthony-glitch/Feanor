@@ -604,6 +604,10 @@ impl App {
         if self.modal_open() {
             return;
         }
+        // Vignettes : Maj tenue sur le cadre de la case, c'est la planche qui donne le curseur (la main), pas le pinceau.
+        if self.in_card && self.vignettes.frame_hot {
+            return;
+        }
         let (space, alt) = ctx.input(|i| (self.keymap.held(i, "vue.pan_libre"), i.modifiers.alt));
         if self.guides.drag.is_some() || self.guide_point_at(p).is_some() {
             ctx.set_cursor_icon(if self.guides.drag.is_some() {

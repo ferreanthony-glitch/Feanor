@@ -669,8 +669,16 @@ image), **barre** (entre deux images), **bande de note** (sous une image).
 - **Dessiner** : un trait qui commence dans une image (pleine ou vide) la rend courante **à l'appui** et dessine dedans,
   sans clic de choix avant. C'est le dessin lui-même qui est dans l'image courante : même moteur, même rendu progressif, le
   point reçu est dans l'image d'écran où il arrive. **Un trait qui commence ailleurs ne dessine rien** (ni note libre : on ne
-  trace plus de notes au pinceau sur la planche ; textes, gomme et sélection des notes restent). Ce qui déborde de l'image
-  est **coupé à l'affichage** ; le dessin garde tout le tracé (toile infinie) et l'export cadre comme avant.
+  trace plus de notes au pinceau sur la planche ; textes, gomme et sélection des notes restent). **Pendant le geste, le
+  trait déborde à l'écran** (retouche du 2026-10-21, branche `vignettes-retouches`) : on le voit en entier, même par-dessus
+  l'écart, les barres, les bandes de note et les images voisines ; il en va de même de l'aperçu d'une ligne, d'un rectangle,
+  d'une ellipse, d'une courbe ou d'une polyligne. **Au lâcher**, l'image ne montre plus que son cadre (et sa petite marge,
+  comme avant) ; le dessin garde tout le tracé (toile infinie) et l'export cadre comme avant. Comment : `debord.rs` ne
+  repeint que **le dehors**, d'après le tracé que le moteur garde de toute façon (ligne médiane lissée et rayon de chaque
+  point, plus la pointe jusqu'à la croix) : un trait qui reste dans l'image ne produit aucune forme, un trait qui sort ne
+  produit que ses tronçons du dehors (quelques lignes épaisses, quatre fenêtres de coupe autour de l'image) ; le dedans reste
+  le rendu exact du moteur. Aucun retard ajouté (calculé dans l'image d'écran où le point arrive) ; pas de débord pour la
+  gomme (rien à montrer). Au dehors, le trait est une approximation (couleur, rayon, opacité ; pas la texture du pinceau).
 - **Case vide** : dessiner dedans **fait le plan** à l'appui même (les cases vides sautées avant elle deviennent des plans
   vides, pour garder sa place). Si la barre qui précède la première case vide est **grise** (un clic la bascule), la case
   fait **une image de plus du dernier plan** (il s'allonge de la durée de sa dernière image, une marque d'image est posée).
@@ -688,8 +696,26 @@ image), **barre** (entre deux images), **bande de note** (sous une image).
   depuis le fond de la page. Clic droit sur une image : le menu de la vignette (animer, nouveau plan, dupliquer, couleur, versions,
   copier / coller…) ; sur le fond : le menu de la planche. Molette : défiler ; Ctrl + molette : zoom ; Espace, bouton du milieu
   ou outil Main : déplacer la planche.
-- **Ce qui n'existe plus** : glisser une vignette pour réordonner (le geste est celui du trait ; réordonner se fait dans le
-  montage, ou par couper / coller), le double-clic pour animer (un clic dessine : « Animer cette image » est au clic droit, Tab),
+- **Déplacer un plan** (retouche du 2026-10-21) : **Maj + appui sur le CADRE d'une image** (son filet, à cinq points près de
+  chaque côté), puis glisser. Maj + appui **dedans** garde son sens (choisir des plans) ; un simple clic sur le cadre ne fait
+  rien. Règles validées par Anthony :
+  - tirer **n'importe quelle** image d'un plan déplace **tout le plan d'un bloc** (ses images et marques d'image, ses
+    dessins, ses clés de caméra, son décor, ses notes, ses versions, ses commentaires…) : c'est l'opération du montage,
+    `Document::move_plans` (`App::move_plans_before`). Si le plan pris fait partie des plans choisis, tous les plans choisis
+    partent ensemble ;
+  - le **repère de pose n'est jamais qu'entre deux plans**, jamais dans un plan (on ne coupe pas un plan par mégarde ; une
+    future image de mouvement de caméra, plus large, passera à la ligne d'un bloc). Pour sortir une image d'un plan : on
+    **coupe d'abord sa barre**, puis on la déplace ;
+  - retours : le curseur devient une **main** sur le cadre quand Maj est tenue (même sur l'image courante, dont le dessin
+    demande sinon le pinceau), une **main fermée** pendant le geste ; les images d'origine s'effacent un peu, un **fantôme**
+    des images du plan suit le pointeur (leurs places relatives gardées), un **trait d'accent** marque la pose, entre deux
+    plans ; près de sa place, aucun repère (lâcher là = ne rien faire) ; **Échap abandonne** ;
+  - une seule étape d'annulation, « **Déplacer le plan** » (« Déplacer les plans » pour plusieurs) ; le plan déplacé devient
+    courant ;
+  - **d'une séquence à l'autre**, comme au montage : le plan rejoint la séquence du plan devant lequel on le pose, la barre
+    d'état le dit. Un storyboard verrouillé, ou un plan tenu par un autre dans un film partagé, refuse avec un message
+    (`boardmove.rs`).
+- **Ce qui n'existe plus** : glisser une image *sans Maj* pour réordonner (le geste est celui du trait), le double-clic pour animer (un clic dessine : « Animer cette image » est au clic droit, Tab),
   les réglages « Écart » et « Plan à la ligne », la durée et « Plan N » dans l'en-tête, l'étiquette de version « · V2 » (le
   menu du clic droit garde les versions).
 
@@ -709,13 +735,25 @@ version d'avant (`crayonnesheritage.rs`).
    la bulle sous la souris.
 3. L'écart : serré (10) dans un plan, large (30) à une coupe ; six colonnes sur un petit écran.
 4. Dessiner dans une image qui n'est pas courante, sans clic avant : le premier point est déjà là, aucun saut ; le trait qui
-   sort de l'image est coupé à son bord ; un trait qui part du fond ne trace rien.
+   sort de l'image **se voit en entier pendant le geste** (par-dessus l'écart, la barre, la note, l'image voisine) ; **au lâcher il
+   disparaît du dehors** (l'image est coupée à son cadre) ; un trait qui part du fond ne trace rien.
 5. Dessiner dans la première case vide : le plan apparaît à sa place ; avec la barre grise, une image de plus ; Ctrl+Z défait
    les deux d'un coup.
 6. Cliquer une barre : coupe ou réunion, puis Ctrl+Z.
 7. Les bandes de note : une, deux, trois lignes et « … » ; la ligne suivante descend sans toucher la note ; la saisie montre tout le
    texte ; le filet pâle sous une bande vide ; la taille du texte à 100 %, 50 % et 200 % de zoom.
 8. À la tablette : la pression et le retard du trait dans une vignette, comparés à la vue Dessin.
+9. Le débord : un long trait qui part d'une image, traverse l'écart et finit dans la voisine (et au-delà du bord de la page) :
+   il reste attaché à la croix, sans saut au bord de l'image, avec les mêmes couleur et épaisseur dehors que dedans ; à la
+   tablette, la pression se voit dehors ; une ligne, un rectangle, une ellipse tirés jusque dans l'image voisine ; au lâcher, plus
+   rien dehors. Rouvrir le plan en Dessin : le trait entier y est.
+10. Maj tenue au-dessus du cadre d'une image (image courante comprise) : la main, pas le cercle du pinceau ; au-dessus du dedans :
+   le curseur ordinaire.
+11. Maj + glisser le cadre d'une image d'un plan de **trois** images : tout le plan suit (fantôme de ses trois images), le trait
+    d'accent n'apparaît qu'entre deux plans (jamais entre deux images d'un même plan), lâcher : le plan est là, ses trois
+    images ensemble, Ctrl+Z puis Ctrl+Y ; Échap en plein geste : rien ne bouge ; lâcher près de sa place : rien ne bouge.
+12. Sortir une image d'un plan : cliquer sa barre (elle devient noire), puis Maj + glisser son cadre. Un plan déposé dans une
+    autre séquence : la barre d'état le dit. Les trois thèmes : le trait d'accent et le fantôme restent lisibles.
 
 ### Essais ajoutés
 
@@ -725,6 +763,16 @@ trait, barre grise → image, coupe / réunion nommées et annulables, barre de 
 trois lignes et « … », numéros seuls, Ctrl / Maj, clic droit, storyboard verrouillé, fusion d'étapes d'annulation, coût du
 trait, repos) et `board_tests` (mise en page : écarts, barres, hauteur des lignes, zones touchées). La planche de crayonnés
 (38 essais) et sa part du projet d'essai de fiabilité sont partis avec elle.
+
+`vignettes_retouches_tests` (15, retouche du 2026-10-21) : le trait se voit dehors pendant le geste (par-dessus l'écart, la
+barre et l'image voisine, jusqu'à la pointe), rien dehors au lâcher et le dessin garde tout (hors de la feuille compris) ; l'aperçu
+d'une forme déborde aussi ; coût par image d'un trait qui sort comparé à un trait qui reste dedans (affiché), et calcul du
+débord seul ; le cadre est le filet à cinq points près (et pas le centre) ; Maj + clic dedans choisit toujours, sur le cadre il
+prend le plan ; la main sur le cadre, image courante comprise ; le repère n'est jamais dans un plan (3, 4 et 6 colonnes, tous
+les points de la planche) ; tirer une image d'un plan de trois déplace tout le plan, intact (marques, notes, clés de caméra),
+une seule étape « Déplacer le plan » annulable et rétablissable ; plan d'une image, sortie d'un plan par sa barre coupée ;
+Échap ; lâcher en place ; autre séquence et storyboard verrouillé ; plans choisis ensemble ; fantôme, repère et curseur ;
+repos après un trait qui déborde et un déplacement.
 ---------------------------------------------------------------------------------------------------
 
 ## 12. Calques d'effets et préréglages d'effets (2026-10-19, branche `calques-effets`)

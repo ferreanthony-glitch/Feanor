@@ -98,7 +98,7 @@ fn an_unreadable_or_empty_crayonnes_file_is_silent_and_untouched() {
 
 /// Quatre plans, six vignettes : le plan 1 et ses deux marques d'image (cartes 0, 1, 2), les plans 2, 3 (cartes 3, 4)
 /// dans la première séquence, le plan 4 (carte 5) dans une deuxième.
-fn quatre_plans() -> Document {
+pub(crate) fn quatre_plans() -> Document {
     let mut doc = Document::with_frame(160, 90, 24);
     doc.add_panel_after(0);
     doc.add_panel_after(1);
@@ -111,7 +111,7 @@ fn quatre_plans() -> Document {
 }
 
 /// La vue Vignettes ouverte sur `doc`, `colonnes` vignettes par ligne, une seule page, assez petites pour tenir à l'écran.
-fn ouvert(doc: Document, colonnes: usize) -> Banc {
+pub(crate) fn ouvert(doc: Document, colonnes: usize) -> Banc {
     let mut b = banc_taille(doc, false, 1600, 900);
     b.app.board_view = BoardView::Panels;
     b.app.layout.board_columns = colonnes;
@@ -123,7 +123,7 @@ fn ouvert(doc: Document, colonnes: usize) -> Banc {
 }
 
 /// L'image `k` de la planche, à l'écran.
-fn vignette(b: &Banc, k: usize) -> Rect {
+pub(crate) fn vignette(b: &Banc, k: usize) -> Rect {
     b.app.vignettes.xf.rect(b.app.board_layout().cards[k].thumb)
 }
 
@@ -132,12 +132,12 @@ fn bande(b: &Banc, k: usize) -> Rect {
 }
 
 /// La case vide `e`, à l'écran.
-fn case_vide(b: &Banc, e: usize) -> Rect {
+pub(crate) fn case_vide(b: &Banc, e: usize) -> Rect {
     b.app.vignettes.xf.rect(b.app.board_layout().empty[e])
 }
 
 /// La zone de la barre après l'image `k`, à l'écran.
-fn barre(b: &Banc, k: usize) -> Rect {
+pub(crate) fn barre(b: &Banc, k: usize) -> Rect {
     b.app.vignettes.xf.rect(b.app.board_layout().bars[k].zone)
 }
 
@@ -145,7 +145,7 @@ fn visible(b: &Banc, r: Rect) -> bool {
     b.app.vignettes.view.contains_rect(r)
 }
 
-fn appui(pos: Pos2, down: bool, modifiers: Modifiers) -> Event {
+pub(crate) fn appui(pos: Pos2, down: bool, modifiers: Modifiers) -> Event {
     Event::PointerButton { pos, button: PointerButton::Primary, pressed: down, modifiers }
 }
 
@@ -154,7 +154,7 @@ fn clic(b: &mut Banc, pos: Pos2) {
     clic_avec(b, pos, Modifiers::NONE);
 }
 
-fn clic_avec(b: &mut Banc, pos: Pos2, m: Modifiers) {
+pub(crate) fn clic_avec(b: &mut Banc, pos: Pos2, m: Modifiers) {
     b.image(vec![Event::PointerMoved(pos)], 1.0 / 60.0);
     b.image(vec![appui(pos, true, m)], 1.0 / 60.0);
     b.image(vec![appui(pos, false, m)], 1.0 / 60.0);
@@ -185,17 +185,17 @@ fn vague(from: Pos2, to: Pos2, n: usize) -> Vec<Pos2> {
 }
 
 /// Le plan `i` a de l'encre : un pixel peint ou un trait vectoriel dans l'un de ses dessins.
-fn encre(doc: &Document, i: usize) -> bool {
+pub(crate) fn encre(doc: &Document, i: usize) -> bool {
     doc.panels[i].layers.iter().flat_map(|l| l.frames.iter().flatten()).any(|id| {
         doc.cels.get(id).is_some_and(|c| c.raster.tiles.iter().flatten().any(|t| t.iter().any(|px| px.a() != 0)) || c.vector.as_ref().is_some_and(|v| !v.elements.is_empty()))
     })
 }
 
-fn pas_d_annulation(b: &Banc) -> usize {
+pub(crate) fn pas_d_annulation(b: &Banc) -> usize {
     b.app.history.undo_len()
 }
 
-fn dernier_nom(b: &Banc) -> String {
+pub(crate) fn dernier_nom(b: &Banc) -> String {
     b.app.history.names().0.last().map(|s| s.to_string()).unwrap_or_default()
 }
 
