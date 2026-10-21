@@ -72,7 +72,7 @@ fn dessins_du_plan(p: &Panel, out: &mut Vec<CelId>, seen: &mut HashSet<CelId>) {
 
 /// Un plan que l'export ne montre pas, mais dont la structure compte : sa durée et sa caméra (la caméra d'un plan
 /// sans clé suit celle de ses voisins), son nom, sa place. Sans calques ni dessins.
-fn plan_leger(p: &Panel) -> Panel {
+pub(crate) fn plan_leger(p: &Panel) -> Panel {
     Panel {
         id: p.id,
         scene: p.scene,

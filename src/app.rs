@@ -3586,6 +3586,8 @@ impl App {
             "vignettes.annotations_afficher" => self.annot_basculer_visibles(),
             "vignettes.annotations_effacer" => self.annot_demander_effacement(),
             "vignettes.marie_louise" => self.marie_basculer(),
+            "fichier.exporter_planche" => self.open_planche(),
+            "fichier.exporter_colorscript" => self.open_colorscript(),
             "edition.annuler" => self.undo(),
             "edition.retablir" => self.redo(),
             // Le panneau Effets a la main (le dernier clic était dedans) : Ctrl+C copie l'effet

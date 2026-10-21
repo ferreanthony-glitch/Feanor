@@ -270,3 +270,37 @@ fn the_pen_costs_about_a_line_per_point_and_no_replay() {
     println!("stylo d'annotation : image la plus longue {pire:.1} ms");
     assert!(pire < 250.0, "le trait ne ralentit pas l'écran ({pire:.1} ms)");
 }
+
+#[test]
+fn the_marie_louise_display_hides_everything_but_the_insides_of_the_cases() {
+    use eframe::egui::epaint::Shape;
+    let mut b = ouvert(quatre_plans(), 3);
+    let noirs = |b: &crate::perf_tests::Banc| -> Vec<eframe::egui::Rect> {
+        b.formes.iter().filter_map(|s| if let Shape::Rect(r) = &s.shape { (r.fill == Color32::BLACK).then_some(r.rect) } else { None }).collect()
+    };
+    b.garder_formes = true;
+    b.chauffer(2);
+    let avant = noirs(&b).len();
+    b.app.run_action("vignettes.marie_louise");
+    assert!(b.app.vignettes.annot.marie);
+    b.chauffer(2);
+    let mat = noirs(&b);
+    assert!(mat.len() > avant, "le passe-partout est peint");
+    let vue = b.app.vignettes.view;
+    let cases: Vec<_> = (0..6).map(|k| vignette(&b, k)).collect();
+    for r in &mat {
+        for c in &cases {
+            let o = r.intersect(c.shrink(1.0));
+            assert!(!(o.width() > 0.5 && o.height() > 0.5), "le passe-partout ne recouvre pas l'intérieur d'une case");
+        }
+    }
+    // Il couvre tout le reste de la vue : l'aire du passe-partout = la vue moins les cases.
+    let aire: f32 = mat.iter().filter(|r| vue.contains_rect(**r) || r.intersects(vue)).map(|r| { let i = r.intersect(vue); i.width() * i.height() }).sum();
+    let cases_aire: f32 = cases.iter().map(|c| { let i = c.intersect(vue); i.width() * i.height() }).sum();
+    assert!((aire - (vue.width() * vue.height() - cases_aire)).abs() < vue.width() * vue.height() * 0.01, "aire {aire}");
+    // Un trait d'annotation qui déborde est masqué avec le reste ; on retire la marie-louise d'un second appel.
+    b.app.run_action("vignettes.marie_louise");
+    assert!(!b.app.vignettes.annot.marie);
+    b.chauffer(2);
+    assert_eq!(noirs(&b).len(), avant);
+}

@@ -181,6 +181,10 @@ mod vignettes_retouches_tests;
 mod annotations;
 mod annotationsui;
 mod deposer;
+mod planche;
+mod colorscript;
+mod colorscriptui;
+mod plancheui;
 mod marie;
 #[cfg(test)]
 mod annotationsui_tests;

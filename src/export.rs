@@ -1191,6 +1191,14 @@ impl ExportJob {
         job
     }
 
+    /// Les images d'une planche (vignettes, color script) : le papier du projet, sans incrustation (timecode…) gravée, et le message de
+    /// réussite donné d'avance.
+    pub fn pour_planche(mut self, message: String) -> ExportJob {
+        self.papier = Papier::Feuille;
+        self.graver = false;
+        self.done_text = Some(message);
+        self
+    }
     fn new(title: String, target: PathBuf, frames: Vec<(usize, usize)>, paper: bool, sink: Sink, tx: Tx, fail: Fail) -> ExportJob {
         ExportJob {
             unit: "Image",

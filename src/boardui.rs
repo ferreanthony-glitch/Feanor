@@ -190,6 +190,9 @@ pub(crate) struct Vignettes {
     pub annot: crate::annotationsui::Etat,
     /// Les images déposées sur la planche, en préparation sur un fil de fond (`deposer.rs`).
     pub depots: Vec<crate::deposer::Travail>,
+    /// Les fenêtres d'export de la planche et du color script (`plancheui.rs`, `colorscriptui.rs`).
+    pub planche: crate::plancheui::Etat,
+    pub colorscript: crate::colorscriptui::Etat,
 }
 
 impl Default for Vignettes {
@@ -208,6 +211,8 @@ impl Default for Vignettes {
             debord: None,
             annot: Default::default(),
             depots: Vec::new(),
+            planche: Default::default(),
+            colorscript: Default::default(),
         }
     }
 }

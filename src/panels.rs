@@ -746,6 +746,9 @@ impl App {
         self.annot_fenetre(ctx);
         // Vignettes : les images déposées sur la planche (`deposer.rs`).
         self.depot_tick(ctx);
+        // Exporter la planche des vignettes et le color script (`plancheui.rs`, `colorscriptui.rs`).
+        self.planche_fenetre(ctx);
+        self.colorscript_fenetre(ctx);
         // Relecture par le réalisateur : exporter la page, importer ses notes (`relectureui.rs`).
         self.relecture_windows(ctx);
         // Suggestions sonores : confirmation d'envoi en ligne, « Modifier », saisie d'une clé.
