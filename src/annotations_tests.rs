@@ -86,19 +86,19 @@ fn a_stroke_in_an_empty_case_stays_in_the_same_case_when_it_fills() {
     let mut doc = quatre_plans();
     let s = reglages(200.0, 4, 0);
     let layout = board::layout(&doc, &s);
-    let vide = layout.empty[1];
+    let vide = layout.empty[0];
     let mut a = Annotations::default();
     assert!(a.ajouter(&layout, &trait_en(vide.center(), 2.0), COULEUR_PAR_DEFAUT));
     let t = &a.traces[0];
     assert_eq!(t.anchor.card, layout.cards.last().unwrap().id, "attachée à la dernière vignette");
-    assert_eq!(t.anchor.after, 2, "la deuxième case vide après elle");
-    assert!(layout.empty[1].contains(centre_du_trait(&a, &layout, 0)));
+    assert_eq!(t.anchor.after, 1, "la case vide qui suit la dernière vignette");
+    assert!(layout.empty[0].contains(centre_du_trait(&a, &layout, 0)));
     let last = doc.panels.len() - 1;
     doc.add_scene_after(last);
     let l2 = board::layout(&doc, &s);
     assert_eq!(l2.cards.len(), layout.cards.len() + 1);
     let after = centre_du_trait(&a, &l2, 0);
-    let visee = cases(&l2)[layout.cards.len() + 1];
+    let visee = cases(&l2)[layout.cards.len()];
     assert!(visee.contains(after), "le trait est resté dans la même case");
 }
 

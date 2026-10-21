@@ -30,6 +30,9 @@ pub(crate) struct Debord {
     pub shapes: Vec<(Rect, Shape)>,
 }
 
+/// Le trait qui déborde se voit pâle tant que la main est en bas (la maquette) ; au lâcher, la marge de la case en garde un peu,
+/// en plein (`thumbs::texture_case`).
+const GHOST_ALPHA: f32 = 0.38;
 /// Épaisseur (points d'écran) en deçà de laquelle deux tronçons voisins gardent le même trait.
 const SAME_WIDTH: f32 = 0.3;
 /// Deux points d'écran plus proches que cela ne font qu'un.
@@ -43,7 +46,7 @@ impl App {
         if let Some(s) = &self.stroke {
             if let Some((rgb, alpha)) = s.tip_paint() {
                 let zoom = self.layer_zoom();
-                let color = Color32::from_rgba_unmultiplied(rgb[0], rgb[1], rgb[2], (alpha.max(0.35) * 255.0).round() as u8);
+                let color = Color32::from_rgba_unmultiplied(rgb[0], rgb[1], rgb[2], (GHOST_ALPHA.max(alpha * 0.5) * 255.0).round() as u8);
                 let mut points: Vec<(Pos2, f32)> = Vec::with_capacity(s.path.len() + 2);
                 points.extend(s.path.iter().map(|p| (self.layer_to_screen(p.pos()), (p.r * zoom).max(0.5))));
                 if let Some((last, raw, r)) = s.tip() {
@@ -57,7 +60,7 @@ impl App {
         for (pts, stroke) in self.shape_preview_lines(shift) {
             if pts.len() >= 2 && !pts.iter().all(|p| thumb.contains(*p)) {
                 let bounds = bounds_of(&pts).expand(stroke.width);
-                shapes.push((bounds, Shape::line(pts, stroke)));
+                shapes.push((bounds, Shape::line(pts, Stroke::new(stroke.width, stroke.color.gamma_multiply(GHOST_ALPHA)))));
             }
         }
         (!shapes.is_empty()).then_some(Debord { thumb, shapes })

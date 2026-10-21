@@ -181,6 +181,8 @@ mod debord;
 mod vignettes_tests;
 #[cfg(test)]
 mod vignettes_retouches_tests;
+#[cfg(test)]
+mod vignettes_maquette_tests;
 // Annotations de la vue Vignettes (stylo et gomme, par-dessus la planche, sans effet sur le storyboard) : le modèle
 // et le fichier (`annotations`), l'interface (`annotationsui`).
 mod annotations;

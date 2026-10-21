@@ -4,7 +4,7 @@
 
 use eframe::egui::{pos2, vec2, Rect};
 
-use crate::board::{self, Board, BoardSettings, Hit, NoteRef, BAR_W, GAP_CUT, GAP_SAME, LABEL_H, MARGIN, MAX_COLUMNS, NOTE_GAP, NOTE_LINE_H, NOTE_MAX_LINES, PAGE_PAD, ROW_GAP};
+use crate::board::{self, gap_cut, gap_same, Board, BoardSettings, Hit, NoteRef, BAR_CUT_W, BAR_W, GAP_CUT, GAP_SAME, LABEL_H, MARGIN, MAX_COLUMNS, NOTE_GAP, NOTE_LINE_H, NOTE_MAX_LINES, PAGE_PAD, ROW_GAP};
 use crate::document::Document;
 use crate::history::{Edit, History, Nav};
 use crate::project;
@@ -58,14 +58,16 @@ fn cards_follow_each_other_in_pages() {
     assert_eq!(c[3].card.top(), c[0].card.top(), "les plans se suivent sur la même ligne : une ligne ne se casse pas à une coupe");
     assert!(c[4].card.top() > c[0].card.top() && c[4].card.left() == c[0].card.left(), "quatre colonnes : la cinquième image est au début de la ligne suivante");
     assert!(l.pages[1].contains(c[5].card.center()), "deuxième page");
-    assert_eq!(l.empty.len(), 2, "cases vides au bout de la dernière page");
+    assert_eq!(l.empty.len(), 1, "une seule case vide, juste après la dernière vignette");
+    assert!(l.pages[1].contains(l.empty[0].center()), "elle est sur la dernière page, qui s'arrête après sa rangée");
     assert!(l.size.y >= l.pages[1].bottom());
     // « toutes » : une seule page, une ligne neuve quand la ligne est pleine.
     let l = board::layout(&doc, &settings(6, 0));
     assert_eq!(l.pages.len(), 1);
     assert_eq!(l.cards[5].card.top(), l.cards[0].card.top(), "six images tiennent sur six colonnes");
-    assert_eq!(l.empty.len(), 6, "la ligne pleine appelle une ligne de cases vides : on peut toujours continuer");
+    assert_eq!(l.empty.len(), 1, "la ligne pleine appelle une rangée neuve, avec sa seule case vide : on peut toujours continuer");
     assert!(l.empty[0].top() > l.cards[0].thumb.top());
+    assert_eq!(l.pages[0].bottom(), l.empty[0].bottom() + board::NOTE_GAP + NOTE_LINE_H + PAGE_PAD, "la planche s'arrête après la rangée de la case vide");
     // Jamais plus de six colonnes.
     let l = board::layout(&doc, &settings(10, 0));
     assert_eq!(l.cards[5].card.top(), l.cards[0].card.top());
@@ -79,17 +81,22 @@ fn spacing_is_tight_inside_a_plan_and_wide_at_a_cut() {
     let doc = doc();
     let l = board::layout(&doc, &settings(6, 0));
     let c = &l.cards;
-    assert_eq!(c[1].card.left(), c[0].card.right() + GAP_SAME, "deux images d'un même plan : 10");
-    assert_eq!(c[2].card.left(), c[1].card.right() + GAP_SAME);
-    assert_eq!(c[3].card.left(), c[2].card.right() + GAP_CUT, "à une coupe : 30");
-    assert_eq!(c[4].card.left(), c[3].card.right() + GAP_CUT);
-    assert_eq!((GAP_SAME, GAP_CUT), (10.0, 30.0));
+    let near = |a: f32, b: f32| (a - b).abs() < 1e-3;
+    let (same, cut) = (gap_same(200.0), gap_cut(200.0));
+    assert!(near(c[1].card.left(), c[0].card.right() + same), "deux images d'un même plan : 10 pour 136, soit {same} pour 200");
+    assert!(near(c[2].card.left(), c[1].card.right() + same));
+    assert!(near(c[3].card.left(), c[2].card.right() + cut), "à une coupe : 30 pour 136, soit {cut} pour 200");
+    assert!(near(c[4].card.left(), c[3].card.right() + cut));
+    // Les proportions de la maquette (136 de large, 10 et 30 d'écart), à la largeur de référence.
+    assert_eq!((GAP_SAME, GAP_CUT), (18.0, 53.0));
+    assert!((gap_same(136.0) - 10.0).abs() < 0.5 && (gap_cut(136.0) - 30.0).abs() < 1.0, "pour la vignette de 136 de la maquette : 10 et 30");
+    assert!(gap_same(300.0) > gap_same(200.0) && gap_cut(300.0) > gap_cut(200.0), "les écarts suivent la largeur des vignettes");
     // Les lignes ont un nombre fixe d'images (les colonnes) : la ligne suivante commence au bord gauche.
     let l = board::layout(&doc, &settings(4, 0));
     assert_eq!(l.cards[4].card.left(), l.cards[0].card.left());
     assert!(l.cards[4].card.top() > l.cards[0].card.top());
     // Les pages sont assez larges pour la ligne la plus large (quatre coupes).
-    assert!(l.pages[0].width() >= PAGE_PAD * 2.0 + 4.0 * 200.0 + 3.0 * GAP_CUT - 1e-3);
+    assert!(l.pages[0].width() >= PAGE_PAD * 2.0 + 4.0 * 200.0 + 3.0 * gap_cut(200.0) - 1e-3);
 }
 
 #[test]
@@ -100,18 +107,18 @@ fn bars_are_grey_in_a_plan_black_at_a_cut_and_the_last_leads_to_the_empty_box() 
     assert_eq!(l.bars.iter().map(|b| b.cut).collect::<Vec<_>>(), vec![false, false, true, true, true, true]);
     for (k, b) in l.bars.iter().enumerate() {
         assert_eq!(b.after, k);
-        let gap = if b.cut { GAP_CUT } else { GAP_SAME };
-        assert_eq!(b.bar.width(), BAR_W);
+        let gap = if b.cut { gap_cut(200.0) } else { gap_same(200.0) };
+        assert_eq!(b.bar.width(), if b.cut { BAR_CUT_W } else { BAR_W }, "la coupe est un peu plus épaisse que la barre grise");
         assert!((b.bar.height() - l.cards[k].thumb.height() / 3.0).abs() < 1e-3, "un tiers de la hauteur de la vignette");
-        assert_eq!(b.bar.center(), pos2(l.cards[k].card.right() + gap * 0.5, l.cards[k].thumb.center().y));
+        assert!((b.bar.center() - pos2(l.cards[k].card.right() + gap * 0.5, l.cards[k].thumb.center().y)).length() < 1e-3);
         assert_eq!(b.zone.left(), l.cards[k].card.right());
-        assert_eq!(b.zone.width(), gap);
+        assert!((b.zone.width() - gap).abs() < 1e-3);
     }
     // La dernière barre, grise : la première case vide est une image de plus du dernier plan (écart serré).
     let (joined, apart) = (board::layout_with(&doc, &settings(4, 0), &Default::default(), true), board::layout(&doc, &settings(4, 0)));
     assert!(!joined.bars[5].cut && apart.bars[5].cut);
-    assert_eq!(joined.empty[0].left(), joined.cards[5].card.right() + GAP_SAME);
-    assert_eq!(apart.empty[0].left(), apart.cards[5].card.right() + GAP_CUT);
+    assert!((joined.empty[0].left() - (joined.cards[5].card.right() + gap_same(200.0))).abs() < 1e-3);
+    assert!((apart.empty[0].left() - (apart.cards[5].card.right() + gap_cut(200.0))).abs() < 1e-3);
     // Au bout d'une ligne (trois colonnes), la barre est après la dernière image de la ligne.
     let three = board::layout(&doc, &settings(3, 0));
     assert_eq!(three.cards[3].row, 1);
@@ -160,13 +167,16 @@ fn hit_testing_tells_images_notes_bars_and_empty_boxes_apart() {
     assert_eq!(board::hit(&l, c[3].note.center(), 0.0), Hit::Note(3));
     assert_eq!(board::hit(&l, c[0].label().center(), 0.0), Hit::Nothing, "le numéro du plan ne prend aucun geste");
     assert_eq!(board::hit(&l, l.empty[0].center(), 0.0), Hit::Empty(0));
-    assert_eq!(board::hit(&l, l.empty[1].center(), 0.0), Hit::Empty(1));
+    // Une seule case vide : à côté d'elle, plus rien (pas de grille de cases vides).
+    assert_eq!(l.empty.len(), 1);
+    let apres = l.empty[0].translate(vec2(l.empty[0].width() + gap_cut(200.0), 0.0)).center();
+    assert_eq!(board::hit(&l, apres, 0.0), Hit::Nothing, "pas de case vide au-delà de la première");
     let zone = l.bars[1].zone;
     assert_eq!(board::hit(&l, zone.center(), 0.0), Hit::Bar(1));
-    // L'écart d'un même plan est étroit (10) : à l'écran réduit, la zone est élargie pour qu'on la touche.
+    // L'écart d'un même plan est étroit : à l'écran réduit, la zone est élargie pour qu'on la touche.
     let near = pos2(zone.left() - 2.0, zone.center().y);
     assert_eq!(board::hit(&l, near, 0.0), Hit::Thumb(1));
-    assert_eq!(board::hit(&l, near, 16.0), Hit::Bar(1));
+    assert_eq!(board::hit(&l, near, 24.0), Hit::Bar(1));
     // Hors de tout : le fond de la page.
     assert_eq!(board::hit(&l, pos2(2.0, 2.0), 0.0), Hit::Nothing);
     // Lasso : les plans touchés, une fois chacun.

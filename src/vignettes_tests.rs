@@ -292,18 +292,6 @@ fn drawing_in_the_first_empty_box_makes_the_next_plan_in_one_undo_step() {
 }
 
 #[test]
-fn drawing_in_a_later_empty_box_keeps_its_place_with_blank_plans_before_it() {
-    let mut b = ouvert(quatre_plans(), 4);
-    let e = case_vide(&b, 1);
-    glisser(&mut b, &vague(e.center() - vec2(20.0, 0.0), e.center() + vec2(20.0, 0.0), 8));
-    assert_eq!(b.app.doc.panels.len(), 6, "la case 2 fait deux plans : un vide, un dessiné");
-    assert!(!encre(&b.app.doc, 4) && encre(&b.app.doc, 5));
-    assert_eq!(dernier_nom(&b), "Nouveau plan dessiné");
-    b.app.run_action("edition.annuler");
-    assert_eq!(b.app.doc.panels.len(), 4, "d'un coup");
-}
-
-#[test]
 fn a_click_that_draws_nothing_in_an_empty_box_leaves_no_trace() {
     let mut b = ouvert(quatre_plans(), 4);
     b.app.tool = Tool::Line;
@@ -512,6 +500,7 @@ fn only_the_plan_number_is_written_above_the_first_image_of_each_plan() {
         .filter_map(|s| if let egui::epaint::Shape::Text(t) = &s.shape { Some((t.pos, t.galley.job.text.clone())) } else { None })
         .filter(|(pos, _)| view.contains(*pos))
         .map(|(_, t)| t)
+        .filter(|t| t != egui_phosphor::regular::PLUS) // (le « + » discret de la case vide)
         .collect();
     textes.sort();
     textes.dedup();
