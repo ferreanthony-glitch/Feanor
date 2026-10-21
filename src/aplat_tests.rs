@@ -182,10 +182,11 @@ fn the_aplat_is_activated_from_the_layer_only() {
     }
     // L'action de bascule du trait / fond n'existe plus.
     assert!(crate::keymap::ACTIONS.iter().all(|a| a.id != "pinceau.strate_fond"));
-    // Le bouton de la ligne du calque : 1 dans les commandes + un par calque de dessin.
+    // Le bouton de la ligne du calque : un par calque de dessin (plus de bouton dans les commandes : l'aplat du calque
+    // courant est dans le menu « … », `panneaux_tests.rs`).
     let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    assert_eq!(textes.iter().filter(|(t, _)| t.contains(ph_aplat)).count(), 1 + 3, "{textes:?}");
+    assert_eq!(textes.iter().filter(|(t, _)| t.contains(ph_aplat)).count(), 3, "{textes:?}");
 }
 
 #[test]

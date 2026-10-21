@@ -8,7 +8,7 @@ use eframe::egui::{self, vec2, Color32, RichText, Sense, Stroke, StrokeKind, Tex
 
 use crate::app::App;
 use crate::blend::BlendMode;
-use crate::document::{CelId, LayerKind};
+use crate::document::CelId;
 
 /// Taille des vignettes de calque.
 const THUMB: [usize; 2] = [64, 36];
@@ -205,7 +205,12 @@ impl App {
         if ui.input(|i| i.pointer.any_pressed()) && ui.rect_contains_pointer(ui.clip_rect()) {
             self.take_layers_pane_focus();
         }
-        // Opacité du calque courant (comme en haut d'une liste de calques).
+        // Les commandes, en haut et toujours visibles (Anthony, 2026-10-17 : « la zone [des
+        // boutons] doit rester en haut ») ; seule la liste défile.
+        self.layer_commands(ui);
+        ui.add_space(2.0);
+        // Mode de fusion et opacité : ceux du seul calque courant (comme en haut d'une liste de calques),
+        // pas un par ligne.
         let li = self.cur_layer;
         let mut opacity = self.layers()[li].opacity * 100.0;
         let mut mode = self.layers()[li].blend;
@@ -240,10 +245,6 @@ impl App {
             self.renderer.invalidate_all();
         }
         ui.add_space(2.0);
-        // Les commandes, en haut et toujours visibles (Anthony, 2026-10-17 : « la zone [des
-        // boutons] doit rester en haut ») ; seule la liste défile.
-        self.layer_commands(ui);
-        ui.add_space(2.0);
         ui.separator();
         egui::ScrollArea::vertical()
             .id_salt("liste_calques")
@@ -251,62 +252,15 @@ impl App {
             .show(ui, |ui| self.layer_list(ui));
     }
 
-    /// Les commandes des calques en icônes (nouveau, dupliquer, supprimer, monter, copier…).
+    /// Les commandes des calques : cinq icônes (le « + » des nouveaux calques, dupliquer, supprimer, monter,
+    /// descendre) et « … » pour tout le reste (passe de simplicité, 2026-10-21). Copier, coller, fusionner, l'aplat,
+    /// l'interrupteur des effets, les dossiers, les groupes… y sont, et dans le clic droit d'un calque ; toutes ces
+    /// commandes restent aussi dans la palette de commandes (Ctrl+K).
     fn layer_commands(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
-        ui.horizontal_wrapped(|ui| {
+        ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
-            if self.bouton(ui, ph::BEZIER_CURVE, "Nouveau calque vectoriel", "Des traits qui restent modifiables.", "calque.nouveau_vectoriel").clicked() {
-                self.add_layer(LayerKind::Vector);
-            }
-            if self.bouton(ui, ph::PAINT_BRUSH_BROAD, "Nouveau calque bitmap", "De la peinture en pixels, pinceaux texturés.", "calque.nouveau_bitmap").clicked() {
-                self.add_layer(LayerKind::Bitmap);
-            }
-            // Dossiers de calques (`folders.rs`) : un dossier vide au-dessus du calque courant ; avec
-            // plusieurs calques choisis, un deuxième bouton les range dans un nouveau dossier.
-            if self
-                .bouton(ui, ph::FOLDER_PLUS, "Nouveau dossier", "Un dossier de calques vide, au-dessus du calque courant. Glisser des calques dedans pour les ranger ; le triangle du dossier l'ouvre et le ferme. Son œil, son verrou et son opacité agissent sur tous ses calques.", "dossier.nouveau")
-                .clicked()
-            {
-                self.new_folder();
-            }
-            // Les réglages du calque courant qui se coupent d'un bouton : son fond sous le trait (`fondui.rs`)
-            // et la pile de ses effets (`fxui.rs`, seulement s'il en a).
-            let current = self.cur_layer;
-            if let Some(resp) = self.fond_layer_button(ui, current, false) {
-                if resp.clicked() {
-                    self.toggle_fond(current);
-                }
-            }
-            let ink = ui.visuals().text_color();
-            if let Some(resp) = self.fx_switch(ui, current, None, ink) {
-                if resp.clicked() {
-                    self.toggle_layer_fx(current);
-                }
-            }
-            if self.chosen_layers().len() > 1
-                && self
-                    .bouton(ui, ph::FOLDER_NOTCH_PLUS, "Ranger les calques choisis dans un dossier", "Un nouveau dossier prend les calques choisis (Ctrl ou Maj + clic).", "dossier.ranger")
-                    .clicked()
-            {
-                self.folder_from_chosen();
-            }
-            if self
-                .bouton(
-                    ui,
-                    ph::PALETTE,
-                    "Nouveau calque de couleur",
-                    "Un calque de couleur sous le trait du calque courant : on colorie dessous sans abîmer le trait, et il suit les images du trait. Le pot de peinture remplit la zone fermée par le trait.",
-                    "calque.nouveau_couleur",
-                )
-                .clicked()
-            {
-                self.new_colour_layer();
-            }
-            // Calque d'effet (`prereglagesui.rs`) : un menu de préréglages (impact frame, lueur, flash,
-            // tremblement, timecode…) ou un calque d'effet vide.
-            let resp = ui.menu_button(egui::RichText::new(ph::SPARKLE), |ui| self.effect_preset_menu(ui)).response;
-            crate::bulles::bulle(resp, "Ajouter un calque d'effet", "Un calque d'effet agit sur tout ce qui est dessous : choisir un préréglage (impact frame, lueur, flash, tremblement de l'image, vignettage, grain, timecode…).", "");
+            self.layer_plus_button(ui);
             if self
                 .bouton(ui, ph::COPY_SIMPLE, "Dupliquer les calques choisis", "Une copie de chaque calque choisi et de ses dessins, juste au-dessus de lui.", "calque.dupliquer")
                 .clicked()
@@ -322,38 +276,31 @@ impl App {
             if self.bouton(ui, ph::ARROW_DOWN, "Descendre le calque", "D'un rang vers le bas.", "calque.descendre").clicked() {
                 self.move_layer(false);
             }
-            if self.bouton(ui, ph::COPY, "Copier le calque", "", "calque.copier").clicked() {
-                self.copy_layer();
-            }
-            let can_paste = self.layer_clipboard.is_some();
-            if self.bouton_si(ui, can_paste, ph::CLIPBOARD, "Coller le calque", "Le calque copié, au-dessus du calque courant.", "calque.coller").clicked() {
-                self.paste_layer();
-            }
-            // Plusieurs calques choisis (Ctrl ou Maj + clic) : ils fusionnent ; sinon, avec celui
-            // du dessous.
-            let n = self.chosen_layers().len();
-            if n > 1 {
-                let what = format!("Fusionner les {n} calques choisis");
-                if self.bouton(ui, ph::ARROWS_IN_SIMPLE, &what, "Ils n'en font plus qu'un (Ctrl ou Maj + clic pour en choisir plusieurs).", "calque.fusionner_choisis").clicked() {
-                    self.merge_chosen_layers();
-                }
-            } else {
-                let can_merge = self.cur_layer > 0;
-                if self
-                    .bouton_si(
-                        ui,
-                        can_merge,
-                        ph::ARROWS_IN_SIMPLE,
-                        "Fusionner avec le calque du dessous",
-                        "Les deux calques n'en font plus qu'un. Ctrl ou Maj + clic sur des calques pour en fusionner plusieurs.",
-                        "calque.fusionner_dessous",
-                    )
-                    .clicked()
-                {
-                    self.merge_layer_down();
-                }
-            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.layer_more_button(ui));
         });
+    }
+
+    /// Le bouton « … » : ce qui n'a plus son icône (copier, coller, fusionner, aplat, effets, dossiers…).
+    fn layer_more_button(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        let button = egui::Button::new(RichText::new(ph::DOTS_THREE).size(crate::bulles::TAILLE)).min_size(vec2(24.0, 0.0));
+        let resp = egui::menu::menu_custom_button(ui, button, |ui| self.layer_more_menu(ui)).response;
+        crate::bulles::bulle(
+            resp,
+            "Plus de commandes",
+            "Copier, coller, fusionner, aplat sous le trait, effets du calque, dossiers, groupes… Le clic droit sur un calque donne les mêmes.",
+            "",
+        );
+    }
+
+    /// Le menu « … » : d'abord ce qui touche au calque courant (son aplat, ses effets), puis toutes les commandes des
+    /// calques que le panneau ne montre pas déjà par une icône.
+    pub(crate) fn layer_more_menu(&mut self, ui: &mut egui::Ui) {
+        let li = self.cur_layer;
+        self.aplat_item(ui, li);
+        self.fx_switch_item(ui, li);
+        ui.separator();
+        self.layer_ops_menu_from(ui, crate::layerops::OpsFrom::LayersPanel);
     }
 
     /// La liste : un rang par calque, le plus haut en premier. Clic sur le rang : il devient
@@ -510,20 +457,19 @@ impl App {
                                 }
                                 resp.on_hover_text("Double-clic : renommer ; clic droit : tout ce qui touche au calque").context_menu(|ui| self.layer_full_menu(ui, li, false));
                             }
-                            let kind = match kind {
-                                _ if folder => "dossier",
-                                _ if cfx => "effet",
-                                _ if couleur => "couleur",
-                                LayerKind::Vector => "vectoriel",
-                                LayerKind::Bitmap => "bitmap",
-                            };
-                            let kind = if folder { format!("dossier · {kids} calque{}", if kids > 1 { "s" } else { "" }) } else { kind.to_string() };
-                            let label = RichText::new(kind).small();
+                            // La sorte du calque : une petite icône (vectoriel, bitmap, couleur, effet, vidéo, dossier)
+                            // avec sa bulle, plus le mot.
+                            let sorte = crate::calquemenu::Sorte::of(&self.layers()[li]);
+                            let label = RichText::new(sorte.icone_ligne()).size(13.0);
                             ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing.x = 4.0;
                                 let about = ui.label(if folder || current { label.weak() } else { label.color(hue) });
                                 if folder {
-                                    about.on_hover_text("Dossier de calques. Choisis-le pour régler son opacité (en haut) : elle s'ajoute à celle de chacun de ses calques. Son œil et son verrou agissent sur tous ses calques. Monter ou descendre le dossier emmène ses calques.");
+                                    crate::bulles::bulle(about, "Dossier", "Dossier de calques. Choisis-le pour régler son opacité (en haut) : elle s'ajoute à celle de chacun de ses calques. Son œil et son verrou agissent sur tous ses calques. Monter ou descendre le dossier emmène ses calques.", "");
+                                    ui.label(RichText::new(kids.to_string()).small().weak())
+                                        .on_hover_text(format!("{kids} calque{} dans ce dossier.", if kids > 1 { "s" } else { "" }));
+                                } else {
+                                    crate::bulles::bulle(about, sorte.nom(), sorte.phrase(), "");
                                 }
                                 if let Some(line) = &colour_of {
                                     ui.label(RichText::new(format!("{} sous {line}", ph::LINK_SIMPLE)).small().weak())
@@ -625,10 +571,7 @@ impl App {
         if rest.height() > 4.0 {
             let resp = ui.interact(rest, ui.id().with("vide_calques"), Sense::click());
             resp.context_menu(|ui| {
-                self.action_item(ui, "Nouveau calque vectoriel", "calque.nouveau_vectoriel");
-                self.action_item(ui, "Nouveau calque bitmap", "calque.nouveau_bitmap");
-                self.action_item(ui, "Nouveau calque de couleur (sous le calque courant)", "calque.nouveau_couleur");
-                self.action_item(ui, "Nouveau dossier", "dossier.nouveau");
+                self.layer_new_menu(ui);
                 ui.separator();
                 self.action_item(ui, "Coller le calque", "calque.coller");
             });

@@ -156,9 +156,9 @@ pub(crate) enum OpsFrom {
     Everywhere,
     /// Sous-menu du menu d'un calque, qui a déjà dupliquer, supprimer, verrouiller, pelure.
     LayerMenu,
-    /// Sous-menu du clic droit dans le panneau Calques : sans non plus ce que font ses boutons
-    /// (nouveaux calques, dupliquer, supprimer, monter, descendre, copier, coller, fusionner
-    /// avec le dessous) et son verrou.
+    /// Menu « … » du panneau Calques et sous-menu de son clic droit : sans non plus ce que font ses cinq
+    /// icônes (le « + » des nouveaux calques, dupliquer, supprimer, monter, descendre) et son verrou ;
+    /// copier, coller et fusionner n'ont plus d'icône : ils sont ici.
     LayersPanel,
 }
 
@@ -175,16 +175,10 @@ impl App {
         // icône sur chaque ligne de calque (et Alt+L, Ctrl+L).
         let n = self.chosen_layers().len();
         let (all, panel) = (from == OpsFrom::Everywhere, from == OpsFrom::LayersPanel);
-        ui.menu_button("Nouveau calque", |ui| {
-            if !panel {
-                self.action_item(ui, "Vectoriel", "calque.nouveau_vectoriel");
-                self.action_item(ui, "Bitmap", "calque.nouveau_bitmap");
-            }
-            self.action_item(ui, "De couleur (sous le trait du calque courant)", "calque.nouveau_couleur");
-            ui.menu_button("Calque d'effet", |ui| self.effect_preset_menu(ui));
-            ui.separator();
-            self.action_item(ui, "Choisir la sorte et le nom…", "calque.nouveau");
-        });
+        // Les nouveaux calques : le menu du « + » (`calquemenu.rs`). Le panneau Calques a son « + » : pas de doublon.
+        if !panel {
+            ui.menu_button("Nouveau calque", |ui| self.layer_new_menu(ui));
+        }
         let many = |one: &str, several: &str| if n > 1 { format!("{several} ({n})") } else { one.to_string() };
         if all {
             self.action_item(ui, &many("Dupliquer le calque", "Dupliquer les calques choisis"), "calque.dupliquer");
@@ -192,10 +186,8 @@ impl App {
         }
         ui.menu_button("Presse-papiers", |ui| {
             self.action_item(ui, "Couper le calque", "calque.couper");
-            if !panel {
-                self.action_item(ui, "Copier le calque", "calque.copier");
-                self.action_item(ui, "Coller le calque", "calque.coller");
-            }
+            self.action_item(ui, "Copier le calque", "calque.copier");
+            self.action_item(ui, "Coller le calque", "calque.coller");
             self.action_item(ui, "Coller à la place du calque courant", "calque.coller_remplacer");
         });
         ui.menu_button("Retourner le calque", |ui| {
@@ -203,11 +195,8 @@ impl App {
             self.action_item(ui, "De haut en bas", "calque.miroir_v");
         });
         ui.menu_button("Fusionner", |ui| {
-            if !panel {
-                // (Le bouton Fusionner du panneau fait l'un ou l'autre.)
-                self.action_item(ui, "Avec le calque du dessous", "calque.fusionner_dessous");
-                self.action_item(ui, &format!("Les calques choisis ({n})"), "calque.fusionner_choisis");
-            }
+            self.action_item(ui, "Avec le calque du dessous", "calque.fusionner_dessous");
+            self.action_item(ui, &format!("Les calques choisis ({n})"), "calque.fusionner_choisis");
             self.action_item(ui, "Les calques visibles", "calque.fusionner_visibles");
             self.action_item(ui, "Tous les calques", "calque.fusionner_tout");
         });

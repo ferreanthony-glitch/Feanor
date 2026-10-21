@@ -148,18 +148,23 @@ fn a_dropdown_entry_toggles_the_effect_in_one_undo_step_and_the_title_counts_the
 }
 
 #[test]
-fn on_a_bitmap_layer_the_greyed_entries_stay_listed_and_do_nothing() {
+fn on_a_bitmap_layer_the_vector_only_entries_are_hidden_not_greyed() {
+    // Passe de simplicité du 2026-10-21 : un effet que le calque ne prend pas ne se montre pas (le menu d'un calque,
+    // lui, garde la raison en grisé : `fxui::offer`).
     let mut app = app_one_layer("bitmap", LayerKind::Bitmap);
     let mut ecran = Ecran::new();
     let mut ui_fx = |a: &mut App, ui: &mut egui::Ui| a.fx_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_fx);
-    let (_, r) = trouver(&textes, "Trait").unwrap();
-    let textes = ecran.cliquer(&mut app, r.center(), &mut ui_fx);
-    let nom = format!("{}  {}", crate::fxtrait::icon(EffectKind::Write), EffectKind::Write.label());
-    let (_, entree) = trouver(&textes, &nom).expect("l'entrée grisée est listée").clone();
-    // (La raison est dans la bulle de l'entrée : `fxui::offer`, déjà essayée.)
+    assert!(textes.iter().all(|(t, _)| !t.trim_start().starts_with("Trait")), "plus de menu Trait : {textes:?}");
     assert!(matches!(app.fx_offer(0, EffectKind::Write), crate::fxui::Offer::Disabled(why) if why.contains("vectoriel")));
-    ecran.cliquer(&mut app, entree.center(), &mut ui_fx);
+    // Le menu « Matière » ne liste que ce qui va sur un bitmap.
+    let (_, r) = trouver(&textes, "Matière").unwrap();
+    let textes = ecran.cliquer(&mut app, r.center(), &mut ui_fx);
+    for kind in crate::fxmatiere::KINDS {
+        let listed = contient(&textes, &format!("{}  {}", crate::fxmatiere::icon(kind), kind.label()));
+        assert_eq!(listed, crate::fxui::offer(kind, LayerKind::Bitmap, false) == crate::fxui::Offer::Enabled, "{} : {textes:?}", kind.label());
+    }
+    app.toggle_fx(0, EffectKind::Write);
     assert!(app.layers()[0].fx.is_empty(), "un effet du trait ne se pose pas sur un bitmap");
 }
 
@@ -222,8 +227,16 @@ fn the_layers_panel_shows_the_folder_its_layers_indented_and_a_new_folder_button
     for nom in ["Décors", "C1", "C2", "Hors dossier"] {
         assert!(trouver(&textes, nom).is_some(), "{nom} : {textes:?}");
     }
-    assert!(contient(&textes, "dossier · 2 calques"), "{textes:?}");
-    assert!(contient(&textes, egui_phosphor::regular::FOLDER_PLUS), "le bouton Nouveau dossier est dans les commandes du panneau");
+    // La ligne du dossier porte l'icône de sa sorte et le nombre de ses calques (plus le mot « dossier »).
+    assert!(contient(&textes, egui_phosphor::regular::FOLDER) && textes.iter().any(|(t, _)| t.trim() == "2"), "{textes:?}");
+    assert!(!contient(&textes, "dossier ·"), "{textes:?}");
+    // Le nouveau dossier se crée par le « + » du panneau (plus de bouton à part).
+    assert!(!contient(&textes, egui_phosphor::regular::FOLDER_PLUS));
+    let (_, plus) = trouver(&textes, egui_phosphor::regular::PLUS).unwrap().clone();
+    let menu = ecran.cliquer(&mut app, plus.center(), &mut ui_calques);
+    assert!(contient(&menu, egui_phosphor::regular::FOLDER_PLUS) && contient(&menu, "Pour ranger des calques ensemble"), "{menu:?}");
+    let textes = ecran.cliquer(&mut app, egui::pos2(300.0, 600.0), &mut ui_calques);
+    let _ = textes;
     // Un calque rangé dans le dossier est décalé vers la droite.
     let x = |nom: &str| trouver(&textes, nom).unwrap().1.left();
     assert!(x("C1") > x("Hors dossier") + 10.0, "C1 {} contre {}", x("C1"), x("Hors dossier"));
@@ -271,7 +284,10 @@ fn the_new_folder_button_creates_one_folder_in_one_undo_step() {
     let mut ecran = Ecran::new();
     let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    let (_, bouton) = textes.iter().find(|(t, _)| t.contains(egui_phosphor::regular::FOLDER_PLUS)).expect("le bouton").clone();
+    // Le « + » du panneau ouvre le menu des sortes de calques ; l'entrée « Dossier » crée le dossier.
+    let (_, plus) = textes.iter().find(|(t, _)| t.contains(egui_phosphor::regular::PLUS)).expect("le bouton +").clone();
+    let menu = ecran.cliquer(&mut app, plus.center(), &mut ui_calques);
+    let (_, bouton) = menu.iter().find(|(t, _)| t.contains("Pour ranger des calques ensemble")).expect("l'entrée Dossier").clone();
     let n0 = app.history.names().0.len();
     ecran.cliquer(&mut app, bouton.center(), &mut ui_calques);
     assert_eq!(app.layers().iter().filter(|l| l.folder).count(), 1, "{}", app.status);
@@ -352,10 +368,10 @@ fn the_layer_row_and_the_layer_commands_carry_the_background_button_and_the_brus
     let mut ecran = Ecran::new();
     let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_calques);
-    // Un bouton dans la barre de commandes et un sur chaque ligne de calque de dessin (pas sur le dossier) :
-    // 1 + 3 calques.
+    // Un bouton sur chaque ligne de calque de dessin (pas sur le dossier) : 3 calques ; plus de bouton dans la barre
+    // de commandes (l'aplat du calque courant est dans le menu « … », `panneaux_tests.rs`).
     let n = textes.iter().filter(|(t, _)| t.contains(ph_fond)).count();
-    assert_eq!(n, 1 + 3, "{textes:?}");
+    assert_eq!(n, 3, "{textes:?}");
     // Un clic sur celui de la ligne « C1 » lui donne un fond.
     let (_, ligne) = trouver(&textes, "C1").unwrap().clone();
     let (_, bouton) = textes
@@ -369,6 +385,8 @@ fn the_layer_row_and_the_layer_commands_carry_the_background_button_and_the_brus
     // Les réglages du pinceau n'ont plus de bouton « Fond sous le trait » (seulement « Peint derrière » et « Remplir la forme »).
     app.set_tool(crate::app::Tool::Brush);
     app.cur_layer = 3;
+    // (« Peint derrière » est dans « Plus de réglages » : déplié ici.)
+    app.pinceaux.reglages_ouverts = true;
     let mut ui_outil = |a: &mut App, ui: &mut egui::Ui| a.tool_options_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_outil);
     assert!(!contient(&textes, ph_fond), "plus de bouton de fond dans les réglages du pinceau : {textes:?}");
