@@ -54,6 +54,9 @@ pub struct Layout {
     pub board_columns: usize,
     #[serde(rename = "lignes_vignettes")]
     pub board_rows: usize,
+    /// Vignettes sur papier infini (2026-10-21) : au moins ce nombre de rangées de cases pâles, toujours visibles (Préférences).
+    #[serde(rename = "rangees_pales")]
+    pub board_min_rows: usize,
     #[serde(rename = "ecart_vignettes")]
     pub board_spacing: f32,
     #[serde(rename = "scene_a_la_ligne")]
@@ -87,8 +90,9 @@ impl Default for Layout {
             command_bar: true,
             tool_bar: true,
             card_size: 240.0,
-            board_columns: 4,
+            board_columns: crate::board::MAX_COLUMNS,
             board_rows: 4,
+            board_min_rows: crate::board::MIN_ROWS_DEFAULT,
             board_spacing: 18.0,
             board_scene_breaks: false,
             board_attach: false,
@@ -112,6 +116,7 @@ impl Layout {
         };
         self.board_columns = self.board_columns.clamp(1, crate::board::MAX_COLUMNS);
         self.board_rows = self.board_rows.min(crate::board::MAX_ROWS);
+        self.board_min_rows = self.board_min_rows.clamp(1, crate::board::MIN_ROWS_MAX);
         self.board_spacing =
             if self.board_spacing.is_finite() { self.board_spacing.clamp(0.0, crate::board::MAX_SPACING) } else { 18.0 };
         self.panneaux = self.panneaux.map(DockLayout::sanitized);
@@ -152,6 +157,7 @@ impl Layout {
             card_size: vue.card_size,
             board_columns: vue.board_columns,
             board_rows: vue.board_rows,
+            board_min_rows: vue.board_min_rows,
             board_spacing: vue.board_spacing,
             board_scene_breaks: vue.board_scene_breaks,
             board_attach: vue.board_attach,

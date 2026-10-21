@@ -1,29 +1,34 @@
 //! Les mouvements de caméra dessinés dans les Vignettes (Anthony, 2026-10-21), sans interface.
 //!
-//! **Ctrl + glisser le cadre d'une case** : le cadre d'origine reste **A** (le début du mouvement) ; un nouveau cadre
-//! **B** apparaît là où on le dépose. Les clés de caméra du plan sont posées (A à la première image, B à la dernière ;
-//! le modèle est celui de la timeline et du montage, vitesse constante) ; en recommençant depuis le dernier cadre, on
-//! ajoute **C**, **D**… Les clés se répartissent régulièrement sur la durée du plan quand elles l'étaient déjà
-//! (`est_repartie`) ; des clés posées à la main ailleurs (montage, timeline) sont respectées : la nouvelle va à la
-//! dernière image, et la dernière clé, si elle y était déjà, recule à mi-chemin de la précédente et de la fin.
+//! **Ctrl + glisser dans une case** : le cadre d'origine reste **A** (le début du mouvement) ; un nouveau cadre **B** apparaît
+//! là où on le dépose. Les clés de caméra du plan sont posées (A à la première image, B à la dernière ; le modèle est celui de
+//! la timeline et du montage, vitesse constante). Les clés se répartissent régulièrement sur la durée du plan quand elles
+//! l'étaient déjà (`est_repartie`) ; des clés posées à la main ailleurs (montage, timeline) sont respectées : la nouvelle va à
+//! la dernière image, et la dernière clé, si elle y était déjà, recule à mi-chemin de la précédente et de la fin.
 //!
-//! **La case grandit** pour montrer toute la zone que couvrent les cadres : on part du cadre A (une case) et de
-//! l'englobant de tous les cadres sur la feuille, et la case prend le nombre entier de cases qui le contient
-//! (`span` : 2 × 1 pour un panoramique horizontal d'une largeur de cadre, 1 × 2 pour un vertical, 2 × 2…), au plus
-//! les colonnes de la planche en largeur et `SPAN_MAX_H` en hauteur. Rien n'est enregistré dans le projet pour cela :
-//! la taille se déduit des clés (en supprimer au montage fait rétrécir la case).
+//! **Règles du geste** (Anthony, 2026-10-21, « une fois la caméra bougée, je ne peux plus la rebouger ») :
+//! - sur une case sans mouvement, le glissé crée B (déplacé, ou zoomé quand il part d'un coin) ;
+//! - sur une case avec des cadres, le glissé **ne crée jamais rien** : dedans un cadre il le déplace (le plus petit qui contient
+//!   le point l'emporte : B dans A, dedans B on déplace B, dans A hors de B on déplace A), à un coin il change son zoom ;
+//! - un cadre de plus (C, D…) se demande : Ctrl + Alt + glisser (il part du dernier cadre) ou « Ajouter un cadre » au clic droit ;
+//!   « Retirer ce cadre » au clic droit sur un cadre.
 //!
-//! Dans la grande case, la feuille se voit à l'échelle du cadre A (un cadre A = une case), centrée sur l'englobant
-//! (`Zone`) : le décor se dessine n'importe où dans cette zone, hors de la feuille aussi (toile infinie).
+//! **L'empreinte** (`empreinte`) : une case qui a un mouvement montre ses cadres à **la même échelle** que les autres cases, sans
+//! jamais rapetisser son contenu. Elle prend de la place là où le mouvement va, juste ce qu'il faut :
+//! - un travelling (horizontal) élargit la case dans le sens du mouvement ;
+//! - un zoom arrière entoure la case d'un cadre B plus grand, dont la hauteur est **limitée** à celle d'une rangée (la case et sa
+//!   bande de note) ; un zoom avant dessine B dedans ;
+//! - un mouvement vers le bas (diagonale, panoramique vertical) met B dans la rangée suivante ; vers le haut, dans la précédente.
+//!
+//! Les cadres d'une même rangée partagent une **tuile** (une vignette composée sur un fil de fond, le dessin de la feuille à
+//! l'échelle des cases) ; une rangée de plus, une tuile de plus. Rien n'est enregistré dans le projet pour cela : tout se
+//! déduit des clés (en supprimer au montage fait rétrécir l'empreinte).
 
-use eframe::egui::{vec2, Pos2, Rect, Vec2};
+use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
 
 use crate::camera::{Camera, CameraKey};
 use crate::document::Document;
 use crate::view::View;
-
-/// Hauteur d'une case de mouvement, en cases, au plus (sa largeur est bornée par les colonnes de la planche).
-pub const SPAN_MAX_H: usize = 3;
 
 /// Un cadre du mouvement : une clé de caméra du plan, vue sur la feuille.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -65,41 +70,175 @@ pub fn taille_cadre(doc: &Document, cam: &Camera) -> Vec2 {
     vec2(doc.frame[0] as f32 / m, doc.frame[1] as f32 / m)
 }
 
-/// Le plus petit rectangle de la feuille qui contient tous les cadres (rien de fini : `Rect::NOTHING`).
-pub fn englobant(cadres: &[Cadre]) -> Rect {
+/// Le rectangle de la feuille que couvre un cadre (ses quatre coins), s'ils sont finis.
+fn rect_feuille(c: &Cadre) -> Option<Rect> {
     let mut r = Rect::NOTHING;
-    for c in cadres {
-        for p in c.coins {
-            if p.x.is_finite() && p.y.is_finite() {
-                r.extend_with(p);
+    for p in c.coins {
+        if !(p.x.is_finite() && p.y.is_finite()) {
+            return None;
+        }
+        r.extend_with(p);
+    }
+    (r.width() > 1e-3 && r.height() > 1e-3).then_some(r)
+}
+
+// ------------------------------------------------------------------ l'empreinte
+
+/// La place dont dispose une empreinte, en points de la planche.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Place {
+    /// La largeur d'une case, et sa hauteur.
+    pub card_w: f32,
+    pub thumb_h: f32,
+    /// La largeur d'une rangée de la planche : une empreinte n'est jamais plus large.
+    pub row_w: f32,
+    /// Ce dont une tuile peut dépasser la hauteur de la case : la bande de note (l'espace et ses lignes). Un cadre est limité à
+    /// la hauteur d'une rangée : la case et sa bande de note.
+    pub total: f32,
+    /// Ce qui peut dépasser en haut de la case (la ligne du numéro de plan, moins un filet).
+    pub haut: f32,
+}
+
+/// Un cadre du mouvement, tel qu'il se dessine sur la planche, **relatif à la case A** : x depuis le bord gauche de A, y depuis
+/// le haut de l'image de sa rangée.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CadreAff {
+    pub rang: usize,
+    pub rect: Rect,
+    /// La rangée par rapport à celle de A : 0 la même, 1 la suivante, -1 la précédente.
+    pub bande: i32,
+    /// Le cadre est plus grand que la limite : il est dessiné réduit (« limite de taille »).
+    pub reduit: bool,
+}
+
+/// Une tuile : le rectangle d'une rangée de l'empreinte (relatif comme `CadreAff`) et la part de la feuille qu'il montre.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Tuile {
+    pub bande: i32,
+    pub rect: Rect,
+    pub zone: Zone,
+}
+
+/// L'empreinte d'une case qui a un mouvement de caméra.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Empreinte {
+    pub cadres: Vec<CadreAff>,
+    /// Une tuile par rangée occupée, de la plus haute à la plus basse.
+    pub tuiles: Vec<Tuile>,
+    pub bande_min: i32,
+    pub bande_max: i32,
+    /// L'étendue en x, relative au bord gauche de A (x_min ≤ 0, x_max ≥ largeur de la case).
+    pub x_min: f32,
+    pub x_max: f32,
+}
+
+/// La rangée d'un cadre dont le centre est décalé de `dy` (points de la planche) par rapport à A : la même rangée tant que
+/// le décalage tient dans la place laissée par la bande de note, sinon la précédente ou la suivante.
+fn bande_de(dy: f32, p: &Place) -> i32 {
+    if dy.abs() <= p.total {
+        0
+    } else {
+        dy.signum() as i32
+    }
+}
+
+/// L'empreinte du plan `panel` (rien s'il n'a pas de mouvement). Les cadres sont à l'échelle de la case : un cadre A fait une
+/// largeur de case.
+pub fn empreinte(doc: &Document, panel: usize, p: &Place) -> Option<Empreinte> {
+    let cads = cadres(doc, panel);
+    let a = cads.first()?;
+    let ra = rect_feuille(a)?;
+    let echelle = p.card_w / taille_cadre(doc, &a.cam).x.max(1e-3);
+    let (cw, ch) = (p.card_w, p.thumb_h);
+    let mut cadres_aff = vec![CadreAff { rang: 0, rect: Rect::from_min_size(Pos2::ZERO, vec2(cw, ch)), bande: 0, reduit: false }];
+    let mut sources = vec![ra.center()];
+    for c in cads.iter().skip(1) {
+        // (Un cadre sans coins finis, une caméra qui ne voit plus la feuille : A, à l'identique.)
+        let r = rect_feuille(c).unwrap_or(ra);
+        let d = (r.center() - ra.center()) * echelle;
+        let mut taille = r.size() * echelle;
+        let f = ((ch + p.total) / taille.y.max(1e-3)).min(p.row_w / taille.x.max(1e-3)).min(1.0);
+        let reduit = f < 1.0;
+        taille = (taille * f).max(vec2(6.0, 6.0));
+        let bande = bande_de(d.y, p);
+        let cx = (cw * 0.5 + d.x).clamp(cw - p.row_w + taille.x * 0.5, p.row_w - taille.x * 0.5);
+        let cy = if bande == 0 {
+            (ch * 0.5 + d.y).clamp(-p.haut + taille.y * 0.5, ch + p.total - taille.y * 0.5)
+        } else {
+            ch * 0.5
+        };
+        cadres_aff.push(CadreAff { rang: c.rang, rect: Rect::from_center_size(pos2(cx, cy), taille), bande, reduit });
+        sources.push(r.center());
+    }
+    // Pas plus large qu'une rangée : on resserre les décalages, au pire tous les cadres sont centrés sur A.
+    let largeur = |v: &[CadreAff]| {
+        let (a, b) = v.iter().fold((0.0_f32, cw), |(lo, hi), c| (lo.min(c.rect.left()), hi.max(c.rect.right())));
+        b - a
+    };
+    if largeur(&cadres_aff) > p.row_w + 1e-3 {
+        let w = largeur(&cadres_aff);
+        for facteur in [((p.row_w - cw) / (w - cw).max(1e-3)).clamp(0.0, 1.0), 0.0] {
+            for c in cadres_aff.iter_mut().skip(1) {
+                let cx = cw * 0.5 + (c.rect.center().x - cw * 0.5) * facteur;
+                c.rect = Rect::from_center_size(pos2(cx, c.rect.center().y), c.rect.size());
+            }
+            if largeur(&cadres_aff) <= p.row_w + 1e-3 {
+                break;
             }
         }
     }
-    r
-}
-
-/// La taille de la case du plan `panel` en cases entières (largeur, hauteur), s'il a un mouvement de caméra (deux clés
-/// au moins) : [1, 1] quand tous les cadres tiennent dans le cadre A.
-pub fn span_du_mouvement(doc: &Document, panel: usize, max_cols: usize) -> Option<[usize; 2]> {
-    let cads = cadres(doc, panel);
-    let a = cads.first()?;
-    let u = englobant(&cads);
-    if !u.is_finite() {
-        return None;
+    let bande_min = cadres_aff.iter().map(|c| c.bande).min().unwrap_or(0);
+    let bande_max = cadres_aff.iter().map(|c| c.bande).max().unwrap_or(0);
+    let mut tuiles = Vec::new();
+    for bande in bande_min..=bande_max {
+        let membres: Vec<usize> = (0..cadres_aff.len()).filter(|&i| cadres_aff[i].bande == bande).collect();
+        let Some(&premier) = membres.first() else { continue };
+        let rect = membres.iter().fold(Rect::NOTHING, |r, &i| r.union(cadres_aff[i].rect));
+        // La tuile s'ancre sur son premier cadre : son centre sur la planche est celui de son centre sur la feuille.
+        let centre = sources[premier] + (rect.center() - cadres_aff[premier].rect.center()) / echelle;
+        tuiles.push(Tuile { bande, rect, zone: Zone { centre, taille: rect.size() / echelle, echelle } });
     }
-    let r = taille_cadre(doc, &a.cam);
-    // (Un millième de cadre de tolérance : deux cadres côte à côte qui se touchent tiennent en deux cases, pas trois.)
-    let cases = |len: f32, unit: f32| (((len / unit.max(1e-3)) - 1e-3).ceil().max(1.0)) as usize;
-    Some([cases(u.width(), r.x).min(max_cols.max(1)), cases(u.height(), r.y).min(SPAN_MAX_H)])
+    let x_min = tuiles.iter().map(|t| t.rect.left()).fold(0.0, f32::min);
+    let x_max = tuiles.iter().map(|t| t.rect.right()).fold(cw, f32::max);
+    Some(Empreinte { cadres: cadres_aff, tuiles, bande_min, bande_max, x_min, x_max })
 }
 
-/// La taille de la case du plan `panel` en cases entières : [1, 1] sans mouvement.
-#[cfg(test)]
-pub fn span(doc: &Document, panel: usize, max_cols: usize) -> [usize; 2] {
-    span_du_mouvement(doc, panel, max_cols).unwrap_or([1, 1])
+/// Comment relier deux cadres qui se suivent (en bleu, fin).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Lien {
+    /// Une flèche au-dessus de la rangée, de gauche à droite ou l'inverse (un travelling).
+    FlecheDessus { de: Pos2, vers: Pos2 },
+    /// Une flèche vers le bas ou vers le haut, d'un cadre à celui d'une autre rangée (un panoramique vertical).
+    FlecheVerticale { de: Pos2, vers: Pos2 },
+    /// Les coins d'un cadre reliés à ceux du suivant (un zoom, une diagonale : une boîte en perspective).
+    Coins([(Pos2, Pos2); 4]),
 }
 
-/// La part de la feuille que montre une grande case : centrée sur l'englobant des cadres, à l'échelle du cadre A.
+/// Les liens entre les cadres qui se suivent. `rects` : leur rectangle et leur rangée sur la planche (tous dans le même repère).
+pub fn liens(rects: &[(Rect, i32)], largeur_case: f32) -> Vec<Lien> {
+    let mut out = Vec::new();
+    for w in rects.windows(2) {
+        let ((a, ba), (b, bb)) = (w[0], w[1]);
+        let zoome = (b.width() / a.width().max(1e-3) - 1.0).abs() > 0.06;
+        let coins = |a: Rect, b: Rect| Lien::Coins([(a.left_top(), b.left_top()), (a.right_top(), b.right_top()), (a.right_bottom(), b.right_bottom()), (a.left_bottom(), b.left_bottom())]);
+        if ba == bb {
+            if zoome {
+                out.push(coins(a, b));
+            } else if (a.center() - b.center()).length() > 4.0 {
+                let y = a.top().min(b.top()) - 5.0;
+                out.push(Lien::FlecheDessus { de: pos2(a.center().x, y), vers: pos2(b.center().x, y) });
+            }
+        } else if (a.center().x - b.center().x).abs() < 0.15 * largeur_case && !zoome {
+            let (de, vers) = if bb > ba { (pos2(a.center().x, a.bottom()), pos2(b.center().x, b.top())) } else { (pos2(a.center().x, a.top()), pos2(b.center().x, b.bottom())) };
+            out.push(Lien::FlecheVerticale { de, vers });
+        } else {
+            out.push(coins(a, b));
+        }
+    }
+    out
+}
+
+/// La part de la feuille que montre une tuile : centrée sur `centre`, à l'échelle des cases.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Zone {
     /// Le centre, sur la feuille.
@@ -110,32 +249,8 @@ pub struct Zone {
     pub echelle: f32,
 }
 
-/// La zone de la case du plan `panel`, dont l'image mesure `case` sur la planche (`card_w` : la largeur d'une case).
-/// Rien si le plan n'a pas de mouvement.
-pub fn zone(doc: &Document, panel: usize, case: Vec2, card_w: f32) -> Option<Zone> {
-    let cads = cadres(doc, panel);
-    let a = cads.first()?;
-    let u = englobant(&cads);
-    if !u.is_finite() {
-        return None;
-    }
-    let echelle = card_w / taille_cadre(doc, &a.cam).x.max(1e-3);
-    Some(Zone { centre: u.center(), taille: case / echelle, echelle })
-}
-
 impl Zone {
-    /// Un point de la feuille sur la planche, `case` étant l'image de la case.
-    pub fn vers_planche(&self, case: Rect, p: Pos2) -> Pos2 {
-        case.center() + (p - self.centre) * self.echelle
-    }
-
-    /// Le point de la feuille sous un point de la planche.
-    #[cfg(test)]
-    pub fn vers_feuille(&self, case: Rect, p: Pos2) -> Pos2 {
-        self.centre + (p - case.center()) / self.echelle
-    }
-
-    /// La vue du dessin qui montre exactement cette zone dans `rect` (la grande case, à l'écran).
+    /// La vue du dessin qui montre exactement cette zone dans `rect` (la tuile, à l'écran).
     pub fn vue(&self, rect: Rect, stage: Vec2) -> View {
         let zoom = rect.width() / self.taille.x.max(1e-3);
         View { zoom, rotation: 0.0, flip: false, pan: -(self.centre.to_vec2() - stage * 0.5) * zoom, persp: None }
@@ -196,6 +311,35 @@ pub fn avec_nouveau_cadre(keys: &[CameraKey], a: Camera, nouveau: Camera, len: u
     Some(out)
 }
 
+/// Les clés du plan une fois le cadre `rang` retiré. Retirer B d'un mouvement à deux cadres enlève le mouvement : il ne reste
+/// qu'une clé. Des clés réparties régulièrement le restent. Rien si le cadre n'existe pas.
+pub fn sans_le_cadre(keys: &[CameraKey], rang: usize, len: usize) -> Option<Vec<CameraKey>> {
+    if rang >= keys.len() {
+        return None;
+    }
+    let repartie = est_repartie(keys, len);
+    let mut out = keys.to_vec();
+    out.remove(rang);
+    if repartie && out.len() >= 2 {
+        let frames = repartition(out.len(), len);
+        for (k, f) in out.iter_mut().zip(frames) {
+            k.frame = f;
+        }
+    }
+    Some(out)
+}
+
+/// Le cadre qu'ajoute « Ajouter un cadre » : celui de `base` décalé d'une demi-largeur de cadre vers la droite (vers la gauche
+/// s'il n'y a plus de place), qu'on prend ensuite pour le glisser où l'on veut.
+pub fn cadre_suivant(frame: [usize; 2], base: Camera, taille: Vec2) -> Camera {
+    let droite = base.shifted(taille.x * 0.5, 0.0).limited(frame);
+    if droite != base.limited(frame) {
+        droite
+    } else {
+        base.shifted(-taille.x * 0.5, 0.0).limited(frame)
+    }
+}
+
 // ------------------------------------------------------------------ le geste
 
 /// Ce que le geste fait au moment de l'appui.
@@ -236,6 +380,20 @@ fn dans_quad(q: &[Pos2; 4], p: Pos2) -> bool {
     true
 }
 
+/// L'aire d'un quadrilatère (formule des lacets).
+fn aire(q: &[Pos2; 4]) -> f32 {
+    (0..4).map(|i| q[i].x * q[(i + 1) % 4].y - q[(i + 1) % 4].x * q[i].y).sum::<f32>().abs() * 0.5
+}
+
+/// La distance d'un point à un quadrilatère : zéro dedans.
+fn distance_quad(q: &[Pos2; 4], p: Pos2) -> f32 {
+    if dans_quad(q, p) {
+        0.0
+    } else {
+        (0..4).map(|i| distance_segment(q[i], q[(i + 1) % 4], p)).fold(f32::MAX, f32::min)
+    }
+}
+
 fn distance_segment(a: Pos2, b: Pos2, p: Pos2) -> f32 {
     let ab = b - a;
     let t = if ab.length_sq() > 0.0 { ((p - a).dot(ab) / ab.length_sq()).clamp(0.0, 1.0) } else { 0.0 };
@@ -244,13 +402,15 @@ fn distance_segment(a: Pos2, b: Pos2, p: Pos2) -> f32 {
 
 /// Ce que saisit un appui en `p`. `cadres` : les quatre coins de chaque cadre dans le repère de `p` (la planche) ;
 /// `simple` : la case n'a pas encore de mouvement, son seul cadre (A) est celle de la vignette entière. `tol` : la
-/// distance (même repère) à laquelle un coin ou un bord se saisit.
+/// distance (même repère) à laquelle un coin se saisit. `ajoute` : Alt est tenue, on veut un cadre de plus.
 ///
-/// - case sans mouvement : un coin tiré fait un nouveau cadre de la taille changée, ailleurs dedans un nouveau cadre
-///   déplacé ; A reste ;
-/// - case avec mouvement : un coin tiré change la taille de **ce** cadre, son bord le déplace, et dedans le dernier
-///   cadre un nouveau cadre naît (déplacé depuis lui) ; ailleurs, rien.
-pub fn choisit(cadres: &[[Pos2; 4]], simple: bool, p: Pos2, tol: f32) -> Option<Choix> {
+/// Un appui saisit **toujours** quelque chose : le glissé d'une case, de son empreinte ou de sa marge est un geste de caméra,
+/// jamais un déplacement de plan.
+/// - case sans mouvement : un coin tiré fait un nouveau cadre de la taille changée, ailleurs un nouveau cadre déplacé ; A reste ;
+/// - case avec mouvement : un coin tiré change la taille de **ce** cadre, dedans un cadre on le déplace (le plus petit qui contient
+///   le point), hors de tous on déplace le plus proche. Rien ne naît : avec `ajoute`, un nouveau cadre part du dernier
+///   (déplacé, ou zoomé quand l'appui est à un de ses coins).
+pub fn choisit(cadres: &[[Pos2; 4]], simple: bool, p: Pos2, tol: f32, ajoute: bool) -> Option<Choix> {
     if cadres.is_empty() {
         return None;
     }
@@ -260,32 +420,49 @@ pub fn choisit(cadres: &[[Pos2; 4]], simple: bool, p: Pos2, tol: f32) -> Option<
         if let Some((c, _)) = coin_proche(q) {
             return Some(Choix { prise: Prise::NouveauZoom, rang: 0, coin: c });
         }
-        return dans_quad(q, p).then_some(Choix { prise: Prise::Nouveau, rang: 0, coin: 0 });
+        return Some(Choix { prise: Prise::Nouveau, rang: 0, coin: 0 });
     }
-    // Les coins d'abord (le plus proche ; à égalité, le dernier cadre), puis les bords.
-    let mut best: Option<(f32, usize, usize)> = None;
+    let last = cadres.len() - 1;
+    if ajoute {
+        return Some(match coin_proche(&cadres[last]) {
+            Some((c, _)) => Choix { prise: Prise::NouveauZoom, rang: last, coin: c },
+            None => Choix { prise: Prise::Nouveau, rang: last, coin: 0 },
+        });
+    }
+    // Les coins d'abord : le plus proche ; à égalité, le cadre le plus petit.
+    let mut best: Option<(f32, f32, usize, usize)> = None;
     for (r, q) in cadres.iter().enumerate() {
         if let Some((c, d)) = coin_proche(q) {
-            if best.is_none_or(|(bd, _, _)| d <= bd) {
-                best = Some((d, r, c));
+            let a = aire(q);
+            if best.is_none_or(|(bd, ba, _, _)| d < bd - 1e-3 || ((d - bd).abs() <= 1e-3 && a < ba)) {
+                best = Some((d, a, r, c));
             }
         }
     }
-    if let Some((_, r, c)) = best {
+    if let Some((_, _, r, c)) = best {
         return Some(Choix { prise: Prise::Zoom(r), rang: r, coin: c });
     }
-    let mut edge: Option<(f32, usize)> = None;
+    // Dedans : le plus petit cadre qui contient le point (à aire égale, le dernier).
+    let mut dedans: Option<(f32, usize)> = None;
     for (r, q) in cadres.iter().enumerate() {
-        let d = (0..4).map(|i| distance_segment(q[i], q[(i + 1) % 4], p)).fold(f32::MAX, f32::min);
-        if d <= tol && edge.is_none_or(|(bd, _)| d <= bd) {
-            edge = Some((d, r));
+        if dans_quad(q, p) {
+            let a = aire(q);
+            if dedans.is_none_or(|(ba, _)| a <= ba) {
+                dedans = Some((a, r));
+            }
         }
     }
-    if let Some((_, r)) = edge {
+    if let Some((_, r)) = dedans {
         return Some(Choix { prise: Prise::Deplace(r), rang: r, coin: 0 });
     }
-    let last = cadres.len() - 1;
-    dans_quad(&cadres[last], p).then_some(Choix { prise: Prise::Nouveau, rang: last, coin: 0 })
+    // Hors de tous (l'empreinte entre les cadres, la marge) : le plus proche.
+    let (r, _) = cadres.iter().enumerate().map(|(r, q)| (r, distance_quad(q, p))).min_by(|a, b| a.1.total_cmp(&b.1))?;
+    Some(Choix { prise: Prise::Deplace(r), rang: r, coin: 0 })
+}
+
+/// Le cadre qu'un appui en `p` vise, pour le menu du clic droit : celui qui contient le point (le plus petit), sinon rien.
+pub fn cadre_sous(cadres: &[[Pos2; 4]], p: Pos2) -> Option<usize> {
+    cadres.iter().enumerate().filter(|(_, q)| dans_quad(q, p)).min_by(|a, b| aire(a.1).total_cmp(&aire(b.1)).then(b.0.cmp(&a.0))).map(|(r, _)| r)
 }
 
 /// La caméra d'un cadre après le geste : déplacé de `delta` (feuille), ou de taille changée en tirant le coin `coin` (la

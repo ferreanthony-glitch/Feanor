@@ -151,6 +151,10 @@ const ZONE_BIT: u64 = 1 << 62;
 /// Celles d'une case de la planche, avec leur marge autour du cadre (`texture_case`), se rangent sous l'identifiant marqué de ce bit.
 const CASE_BIT: u64 = 1 << 61;
 
+/// Les tuiles de l'empreinte d'un mouvement de caméra (`vignettecam::Empreinte`) se rangent sous le numéro de leur rangée, ici (5 bits).
+const TUILE_SHIFT: u32 = 55;
+const TUILE_MASK: u64 = 0b11111 << TUILE_SHIFT;
+
 /// Largeur de vignette pour `pixels` points physiques à l'écran : par paliers de 128 (on ne la
 /// refait pas à chaque cran de zoom), entre 128 et 1024.
 pub fn width_for(pixels: f32) -> usize {
@@ -274,15 +278,15 @@ impl Thumbs {
         frame: usize,
         id: u64,
         width: usize,
-        zone: Option<&crate::vignettecam::Zone>,
+        zone: Option<(usize, &crate::vignettecam::Zone)>,
         deadline: Instant,
     ) -> Option<CaseTex> {
         let plan = render::panel_plan_at(doc, panel, frame, Some(doc.paper));
         match zone {
-            Some(zone) => {
+            Some((tuile, zone)) => {
                 let cadre = [zone.taille.x.round().clamp(1.0, 16384.0) as usize, zone.taille.y.round().clamp(1.0, 16384.0) as usize];
                 let cam = Camera { x: zone.centre.x, y: zone.centre.y, zoom: 1.0, angle: 0.0, dolly: 0.0, tilt: 0.0, pan: 0.0 };
-                self.texture_of_marge(ctx, doc, id | ZONE_BIT | CASE_BIT, plan, cam, width, cadre, true, deadline)
+                self.texture_of_marge(ctx, doc, id | ZONE_BIT | CASE_BIT | ((tuile as u64 + 1).min(31) << TUILE_SHIFT), plan, cam, width, cadre, true, deadline)
             }
             None => {
                 let cam = doc.panel_camera(panel, frame);
@@ -345,7 +349,7 @@ impl Thumbs {
         // (Et les plans rangés des versions : les cartes de la pile les demandent.)
         let ids: std::collections::HashSet<u64> =
             doc.panels.iter().flat_map(|p| std::iter::once(p.id).chain(p.marks.iter().map(|m| m.id))).chain(doc.plans_ranges().map(|p| p.id)).collect();
-        self.entries.retain(|(id, _), _| ids.contains(&(id & !(ZONE_BIT | CASE_BIT))));
+        self.entries.retain(|(id, _), _| ids.contains(&(id & !(ZONE_BIT | CASE_BIT | TUILE_MASK))));
     }
 
     /// Oublie tout (autre projet, autre résolution) : les vignettes gardées, les demandes en file,

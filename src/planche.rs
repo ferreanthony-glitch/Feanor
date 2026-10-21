@@ -11,8 +11,8 @@
 //!   rien.
 //! - **Étendue** : tout le film, la séquence courante ou les plans choisis. Les vignettes se rangent alors comme sur la planche
 //!   qui n'aurait que ces plans (mêmes colonnes).
-//! - **Options** : numéros de plan, notes (bandes sous les images, trois lignes au plus), barres de coupe, cadres de caméra A et B
-//!   (là où la caméra bouge : A le cadre de la vignette, B le cadre de la caméra à la fin de la vignette, vu depuis A),
+//! - **Options** : numéros de plan, notes (bandes sous les images, trois lignes au plus), barres de coupe, cadres de caméra
+//!   (là où la caméra bouge : l'empreinte de la case, A, B, C… en bleu fin avec leurs lettres, reliés comme à l'écran),
 //!   annotations (décochées d'office), marie-louise (le passe-partout couvre tout ce qui est hors de l'intérieur des vignettes,
 //!   traits qui débordent compris).
 //! - **Résolution** : 150 ou 300 points par pouce (une unité de la planche = 1/96 de pouce), ou une largeur en pixels. Une image
@@ -113,8 +113,8 @@ const BARRE_GRISE: [u8; 3] = [188, 188, 188];
 const BARRE_NOIRE: [u8; 3] = [22, 22, 22];
 const ENCRE_NUMERO: [u8; 3] = [96, 96, 96];
 const ENCRE_NOTE: [u8; 3] = [70, 70, 70];
-const CAMERA_A: [u8; 3] = [40, 110, 220];
-const CAMERA_B: [u8; 3] = [230, 120, 20];
+/// Le bleu fin des cadres de caméra (le même qu'à l'écran, `vignettecamui::BLEU`).
+const CAMERA: [u8; 3] = [0x37, 0x8A, 0xDD];
 
 /// Une vignette à exporter.
 #[derive(Clone, Debug)]
@@ -127,8 +127,8 @@ pub struct Carte {
     /// Les lignes de la note (trois au plus, « … » au bout).
     pub note: Vec<String>,
     pub note_taille: f32,
-    /// Le cadre de la caméra à la fin de la vignette, en proportions de l'image de la vignette (A), si la caméra bouge.
-    pub cadre_b: Option<[[f32; 2]; 4]>,
+    /// L'empreinte du mouvement de caméra (cadres A, B, C…, à l'échelle des cases), si la caméra bouge et que les cadres sont demandés.
+    pub mouvement: Option<board::MoveBoard>,
 }
 
 /// Tout ce qu'il faut pour dessiner la planche, sans pixel.
@@ -215,16 +215,18 @@ pub fn construire(doc: &Document, plans: &[usize], s: &BoardSettings, opt: &Opti
             }
         }
     }
-    let layout = board::layout_with(&sub, s, &lignes, false);
+    // (Même rangement qu'à l'écran, sans les cases pâles : elles ne sont pas exportées.)
+    let layout = board::layout_with(&sub, s, &lignes, false, &board::Options::default());
     let cartes: Vec<Carte> = layout
         .cards
         .iter()
-        .map(|c| {
+        .enumerate()
+        .map(|(k, c)| {
             let plan_reel = plans[c.panel];
             let (note, note_taille) = notes.get(&c.id).cloned().unwrap_or_default();
             let etiquette = (c.starts_plan() && opt.numeros).then(|| doc.scene_label(c.scene));
-            let cadre_b = if opt.cadres { cadre_b(doc, plan_reel, c) } else { None };
-            Carte { place: *c, plan_reel, etiquette, note, note_taille, cadre_b }
+            let mouvement = if opt.cadres { layout.move_of(k).cloned() } else { None };
+            Carte { place: *c, plan_reel, etiquette, note, note_taille, mouvement }
         })
         .collect();
     let mut cadre = layout.pages.iter().fold(Rect::NOTHING, |r, p| r.union(*p));
@@ -236,27 +238,6 @@ pub fn construire(doc: &Document, plans: &[usize], s: &BoardSettings, opt: &Opti
         }
     }
     Planche { layout, cartes, annotations, cadre }
-}
-
-/// Le cadre de la caméra à la fin de la vignette, vu depuis le cadre du début (proportions de l'image), si la caméra bouge.
-fn cadre_b(doc: &Document, plan: usize, c: &CardPlace) -> Option<[[f32; 2]; 4]> {
-    let frame = doc.frame;
-    let a = doc.panel_camera(plan, c.frame);
-    let b = doc.panel_camera(plan, c.end.saturating_sub(1).max(c.frame));
-    if a == b {
-        return None;
-    }
-    let h = a.homography_inverse(frame);
-    let mut out = [[0.0; 2]; 4];
-    for (k, p) in b.corners(frame).iter().enumerate() {
-        let w = h[6] * p.x + h[7] * p.y + h[8];
-        if w <= 1e-9 {
-            return None;
-        }
-        let (u, v) = ((h[0] * p.x + h[1] * p.y + h[2]) / w, (h[3] * p.x + h[4] * p.y + h[5]) / w);
-        out[k] = [u / frame[0].max(1) as f32, v / frame[1].max(1) as f32];
-    }
-    out.iter().all(|p| p[0].is_finite() && p[1].is_finite()).then_some(out)
 }
 
 /// L'échelle (pixels par unité de la planche), la taille de l'image, et ce qui a été réduit pour rester dans les bornes.
@@ -404,30 +385,46 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
         } else {
             remplir(&mut pix, r, [255, 255, 255]);
         }
-        // Les cadres de caméra, dans la vignette seulement.
-        if let Some(b) = c.cadre_b.as_ref().filter(|_| opt.cadres) {
-            if let Some(mut cell) = Pixmap::new(tw, th) {
-                let (fw, fh) = (tw as f32, th as f32);
+        contour(&mut pix, [r[0] - 1, r[1] - 1, r[2] + 1, r[3] + 1], FILET, 1.0);
+        // Les cadres de caméra, comme à l'écran : fins, bleus, avec leur lettre, reliés par la flèche ou les coins. (L'image de la case
+        // est celle de A ; le reste de l'empreinte est le papier : seuls les cadres s'y dessinent.)
+        if let Some(mv) = c.mouvement.as_ref().filter(|_| opt.cadres) {
+            let trait_ = (epais * 1.2).max(1.0);
+            let fin = |pix: &mut Pixmap, a: Pos2, b: Pos2| {
                 let mut pb = PathBuilder::new();
-                pb.move_to(b[0][0] * fw, b[0][1] * fh);
-                for q in &b[1..] {
-                    pb.line_to(q[0] * fw, q[1] * fh);
-                }
-                pb.close();
+                pb.move_to((a.x - p.cadre.left()) * s, (a.y - p.cadre.top()) * s);
+                pb.line_to((b.x - p.cadre.left()) * s, (b.y - p.cadre.top()) * s);
                 if let Some(path) = pb.finish() {
-                    cell.stroke_path(&path, &peinture(CAMERA_B, 255), &Stroke { width: (epais * 1.5).max(2.0), ..Default::default() }, Transform::identity(), None);
+                    pix.stroke_path(&path, &peinture(CAMERA, 255), &Stroke { width: trait_, line_cap: LineCap::Round, ..Default::default() }, Transform::identity(), None);
                 }
-                pix.draw_pixmap(r[0], r[1], cell.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
-                // A : le cadre de la vignette, en bleu ; les lettres.
-                contour(&mut pix, [r[0] + 1, r[1] + 1, r[2] - 1, r[3] - 1], CAMERA_A, (epais * 1.5).max(2.0));
-                let t = (11.0 * s).max(8.0);
-                ecrire(&mut pix, "A", r[0] as f32 + 4.0 * s.max(1.0), r[1] as f32 + 2.0 * s.max(1.0), t, CAMERA_A);
-                let bx = (b[0][0] * fw).clamp(2.0, fw - t);
-                let by = (b[0][1] * fh).clamp(2.0, fh - t);
-                ecrire(&mut pix, "B", r[0] as f32 + bx + 3.0, r[1] as f32 + by + 2.0, t, CAMERA_B);
+            };
+            for t in &mv.tuiles {
+                if t.rect != c.place.thumb {
+                    contour(&mut pix, rect_px(t.rect, p.cadre, s), [205, 205, 205], 1.0);
+                }
+            }
+            for cadre in &mv.cadres {
+                let q = rect_px(cadre.rect, p.cadre, s);
+                contour(&mut pix, q, CAMERA, trait_);
+                ecrire(&mut pix, &crate::vignettecam::lettre(cadre.rang).to_string(), q[0] as f32 + 3.0 * s.max(1.0), q[1] as f32 + 1.0 * s.max(1.0), (11.0 * s).max(8.0), CAMERA);
+            }
+            let rects: Vec<(Rect, i32)> = mv.cadres.iter().map(|c| (c.rect, c.bande)).collect();
+            for lien in crate::vignettecam::liens(&rects, c.place.thumb.width()) {
+                match lien {
+                    crate::vignettecam::Lien::Coins(coins) => coins.iter().for_each(|&(a, b)| fin(&mut pix, a, b)),
+                    crate::vignettecam::Lien::FlecheDessus { de, vers } | crate::vignettecam::Lien::FlecheVerticale { de, vers } => {
+                        fin(&mut pix, de, vers);
+                        let d = vers - de;
+                        if d.length() > 1.0 {
+                            let u = d.normalized();
+                            let perp = vec2(-u.y, u.x);
+                            fin(&mut pix, vers, vers - u * 7.0 + perp * 3.5);
+                            fin(&mut pix, vers, vers - u * 7.0 - perp * 3.5);
+                        }
+                    }
+                }
             }
         }
-        contour(&mut pix, [r[0] - 1, r[1] - 1, r[2] + 1, r[3] + 1], FILET, 1.0);
         // Le numéro du plan, au-dessus de sa première vignette.
         if let Some(e) = c.etiquette.as_ref().filter(|_| opt.numeros) {
             let l = c.place.label();
@@ -452,7 +449,12 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
     }
     // La marie-louise : tout ce qui est hors de l'intérieur des vignettes, traits qui débordent compris.
     if opt.marie {
-        let trous: Vec<Rect> = p.cartes.iter().map(|c| Rect::from_min_max(pos2(rect_px(c.place.thumb, p.cadre, s)[0] as f32, rect_px(c.place.thumb, p.cadre, s)[1] as f32), pos2(rect_px(c.place.thumb, p.cadre, s)[2] as f32, rect_px(c.place.thumb, p.cadre, s)[3] as f32))).collect();
+        // (L'image de chaque case, et les tuiles de l'empreinte d'un mouvement de caméra : on y voit les cadres.)
+        let en_pixels = |r: Rect| {
+            let q = rect_px(r, p.cadre, s);
+            Rect::from_min_max(pos2(q[0] as f32, q[1] as f32), pos2(q[2] as f32, q[3] as f32))
+        };
+        let trous: Vec<Rect> = p.cartes.iter().flat_map(|c| std::iter::once(en_pixels(c.place.thumb)).chain(c.mouvement.iter().flat_map(|m| m.tuiles.iter().map(|t| en_pixels(t.rect))).collect::<Vec<_>>())).collect();
         for r in crate::marie::hors_des_cases(Rect::from_min_size(Pos2::ZERO, vec2(w as f32, h as f32)), &trous) {
             remplir(&mut pix, [r.left().round() as i32, r.top().round() as i32, r.right().round() as i32, r.bottom().round() as i32], opt.marie_couleur);
         }

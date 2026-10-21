@@ -158,6 +158,26 @@ impl App {
 
     /// « Opacité du passe-partout » : le voile autour du cadre de la caméra quand « Estomper le hors-champ » est
     /// allumé (`camtools.rs`). De 0 % (rien) à 100 % (le hors-champ noir) ; retenu dans les réglages.
+    /// Montage > Planche des Vignettes : le nombre de rangées de cases pâles qu'on voit toujours, pour montrer où dessiner. Une
+    /// rangée de plus apparaît dès qu'on dessine dans la dernière.
+    pub(crate) fn vignettes_prefs_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Rangées de cases pâles");
+            let mut n = self.layout.board_min_rows;
+            let resp = ui.add(egui::DragValue::new(&mut n).range(1..=crate::board::MIN_ROWS_MAX).speed(0.05));
+            let resp = crate::bulles::bulle(
+                resp,
+                "Rangées de cases pâles",
+                "Les cases pâles de la planche des Vignettes montrent où dessiner : au moins ce nombre de rangées en tout (trois d'origine). Dès qu'on dessine dans la dernière rangée, une rangée pâle de plus apparaît.",
+                "",
+            );
+            if resp.changed() {
+                self.layout.board_min_rows = n.clamp(1, crate::board::MIN_ROWS_MAX);
+            }
+        });
+        ui.label(RichText::new("Une rangée pâle de plus apparaît dès qu'on dessine dans la dernière.").small().weak());
+    }
+
     pub(crate) fn passe_partout_pref_ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Opacité du passe-partout");
@@ -352,6 +372,7 @@ impl App {
             }
             Groupe::Camera => self.passe_partout_pref_ui(ui),
             Groupe::Pistes => self.montage_prefs_ui(ui),
+            Groupe::Vignettes => self.vignettes_prefs_ui(ui),
             Groupe::Raccourcis => {
                 sortie.jeu = crate::raccourcisui::preset_combo(ui, "jeu_raccourcis_prefs", self.settings.keymap_preset);
                 ui.label(RichText::new(crate::raccourcisui::MERGE_RULE).small().weak());

@@ -310,6 +310,14 @@ action = "aide.aide_memoire"
 touches = ["R"]
 source = "proposition (R comme raccourcis : la carte reste tant que la touche est tenue)"
 
+# Tenir T dans les Vignettes (comme Espace pour la main) : tout glissé sur une case tire les cadres de la caméra, jamais un plan.
+# T comme travelling. T était libre dans ce fichier, dans le jeu « Façon Storyboard Pro », dans les raccourcis en dur (Alt+T est le
+# cutter, Ctrl+T un nouvel onglet : d'autres modificateurs) et dans le fichier personnel d'Anthony (B, E, L, Maj+1, Maj+2).
+[[raccourci]]
+action = "vignettes.camera"
+touches = ["T"]
+source = "proposition (T comme travelling : tenue, tout glissé sur une case tire les cadres de la caméra ; avec Alt, un cadre de plus)"
+
 [[raccourci]]
 action = "aide.conseils"
 touches = []

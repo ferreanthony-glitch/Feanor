@@ -796,6 +796,88 @@ dessous était plus discret et mieux intégré ; le geste de mouvement de camér
 - **Exports** : la planche exportée (PNG, JPEG, PDF) et le color script se servent de la même mise en page : mêmes cases, mais les
   écarts suivent la largeur des vignettes, le numéro de plan a plus de place et la dernière page s'arrête après la dernière rangée.
 
+### Papier infini, cases pâles, empreintes de caméra et geste qui ne crée plus rien (2026-10-22, branche `vignettes-mouvements`)
+
+Demandes d'Anthony (validées avec un croquis et un schéma), après les deux sections ci-dessus : **la marge autour des cases est
+bonne** (3 %, inchangée). Code : `board.rs` (mise en page), `vignettecam.rs` (empreinte, liens, règles du geste),
+`vignettecamui.rs` (geste, curseur, menu, dessin des cadres), `boardui.rs` (écran), `thumbs.rs` (une vignette par tuile), `planche.rs`
+(export), `keymap.toml` (la touche), `workspace.rs` + `prefsui.rs` (le réglage). **Ce qui suit remplace** : la carte blanche, la case vide
+unique en « + », la case de mouvement qui prend un bloc de cases entières, les cadres couleur du thème et la flèche de centre à centre,
+« le dedans du dernier cadre fait naître le suivant » (« Mouvements de caméra dessinés dans les cases » plus haut).
+
+- **Papier blanc infini** : plus de carte, plus de fond de table ; le papier remplit toute la vue. On le **déplace dans tous les sens**
+  (molette, Espace, bouton du milieu, outil Main : plus de butée proche, seulement une borne très large) et on zoome comme avant. Les
+  réglages de la planche restent la taille des vignettes, les **colonnes** (six d'origine) et le zoom ; **« Lignes par page » a disparu**
+  (plus de pages à l'écran : une seule, sans fin ; l'export garde la valeur enregistrée).
+- **Cases pâles, toujours visibles** (`BoardLayout::empty`, dans l'ordre de lecture) : un filet très léger, sans « + », un peu plus marqué sous
+  la souris. **Au moins trois rangées de six cases en tout** (colonnes de la planche) et **toujours une rangée pâle après la dernière
+  rangée occupée** : dessiner dans la dernière fait apparaître la suivante. Le minimum est un réglage : **Préférences > Montage > Planche
+  des Vignettes > « Rangées de cases pâles »** (trois d'origine, de 1 à 12 ; `Layout::board_min_rows`, `rangees_pales` dans les réglages).
+  Dessiner (ou déposer des images) dans **n'importe quelle case pâle** fait le plan là ; **celles qui la précèdent deviennent des plans
+  vides**, pour garder l'ordre de lecture ; une seule étape d'annulation (`Cible::Vide(e)`, déjà là, retrouvé).
+- **Empreinte d'un mouvement de caméra** (`vignettecam::empreinte`) : la case garde sa taille (**jamais dézoomée**, jamais arrondie à un
+  bloc de cases) ; ses cadres se montrent **à la même échelle** que les autres cases (un cadre A = une case). Quatre cas :
+  - **travelling** : la case s'élargit **juste ce qu'il faut** dans le sens du mouvement, A et B côte à côte, une **fine flèche bleue au-dessus**
+    de A vers B ;
+  - **zoom arrière** : B entoure la case ; sa **hauteur est limitée à celle d'une rangée** (la case et sa bande de note, `Place::total`) :
+    plus grand, B est dessiné **réduit** (« limite de taille », mêmes proportions, centre gardé) ; des **fines lignes bleues relient les coins**
+    de A à ceux de B. Un zoom avant : B est dessiné dedans ;
+  - **diagonale** : B passe dans la **rangée suivante** (la précédente si le mouvement monte), les coins reliés comme une boîte en perspective ;
+  - **panoramique vertical** : B sous A, dans la rangée suivante, une **fine flèche vers le bas**.
+  Une rangée de plus (au plus trois) fait une **tuile** de plus ; chaque tuile est une vignette composée sur un fil de fond
+  (`Thumbs::texture_case` avec le numéro de rangée), le dessin de la feuille à l'échelle des cases, **hors de A voilé** (blanc translucide) ;
+  la tuile courante est le dessin lui-même (on dessine dans celle où l'on appuie). Cadres : **traits fins bleus (#378ADD)**, lettres A, B, C…
+  bleues, plus de boîtes jaunes. Un petit décalage vertical (moins que la bande de note) reste dans la rangée.
+- **Les autres plans se rangent** : l'ordre de lecture est gardé (gauche à droite, rangée par rangée) ; chaque case prend la première place libre
+  après la précédente, **à côté et dessous** d'une empreinte de deux rangées (les rangées sont des intervalles libres, pas des colonnes
+  alignées) ; une empreinte qui ne tient pas dans la fin de la rangée passe tout entière à la suivante. La rangée d'une case à mouvement garde une
+  place de plus sous elle (la bande de note descend d'autant), constante : rien ne bouge quand le cadre grandit.
+  **Pas de tremblement pendant le geste** : la mise en page se refait en direct, mais (1) la **largeur réservée est arrondie au huitième de case** (un cadre qui dépasse à peine ne coûte rien) et
+  (2) elle **ne rétrécit jamais tant que dure le geste** (`board::Reserve`, retenue dans le geste, `CamGeste::hold`) : un cadre qui va et vient
+  autour d'un seuil ne fait pas sauter les voisines ; au lâcher tout se range d'après les cadres. (Choix expliqué : geler les voisines jusqu'au
+  lâcher les aurait recouvertes par l'empreinte qui grandit ; ne rien retenir les aurait fait osciller.) Mesuré : 200 plans dont 20 mouvements, une
+  mise en page prend environ 0,13 ms (essai `the_layout_of_two_hundred_plans_is_cheap`, borne 5 ms) : aucune allocation notable par image.
+- **Le geste** (Ctrl + glisser, ou **T tenue**) :
+  - **Ctrl + glisser est toujours un geste de caméra** dès que l'appui est sur une case, son empreinte ou sa marge (3 %) : il ne déplace
+    jamais un plan et ne choisit jamais. La cause du « souvent ça déplace le plan » : un appui qui ratait la zone d'un cadre retombait sur le choix
+    de plans. Maintenant l'appui qui rate prend le cadre le plus proche. Un **Ctrl + clic sans mouvement** choisit des plans comme avant ; **Maj +
+    glisser le cadre de la case** déplace le plan, comme avant ;
+  - **case sans mouvement** : le glissé crée B (déplacé ; ou zoomé s'il part près d'un coin de la case) ;
+  - **case avec des cadres** : le glissé **ne crée jamais rien** : dedans un cadre il le déplace (le **plus petit qui contient le point** :
+    B dans A, dedans B on déplace B, dans A hors de B on déplace A), à un coin il change son zoom, hors de tous il déplace le plus proche ;
+  - **un cadre de plus** : **Ctrl + Alt + glisser** (ou T + Alt) en crée un qui part du dernier (déplacé, ou zoomé près de son coin), ou
+    **« Ajouter un cadre »** au clic droit de la case (il se pose à côté du dernier, on le tire ensuite) ;
+  - **retirer** : clic droit sur un cadre, **« Retirer ce cadre »** ; retirer B d'un mouvement à deux cadres enlève le mouvement ; les clés restantes
+    se répartissent si elles l'étaient. Une étape d'annulation nommée chaque fois (« Mouvement de caméra », « Cadre C », « Cadre B »,
+    « Zoom du cadre B », « Retirer le cadre C »).
+- **T tenue** (`vignettes.camera`, comme Espace pour la main) : tant qu'elle est tenue, tout glissé sur une case est le geste de caméra, rien ne dessine,
+  l'outil n'a pas changé (il est donc « de retour » au relâché). Pourquoi T : **T comme travelling** ; libre dans `keymap.toml`, dans le jeu « Façon
+  Storyboard Pro », dans les touches écrites en dur (`Key::T` n'apparaît nulle part ; Alt+T est le cutter, Ctrl+T un nouvel onglet : d'autres
+  modificateurs) et dans le fichier personnel d'Anthony (B, E, L, Maj+1, Maj+2) ; C (rotation de la vue), Z (concentration) et R (aide-mémoire) sont pris.
+  Le mécanisme de `springtools.rs` change d'outil au relâché ; ici l'outil ne change pas, on lit la touche à chaque image (`Keymap::held_any`,
+  qui ignore les modificateurs, pour que T + Alt reste tenue). **Aucun bouton de plus.**
+- **Curseur** : Ctrl (ou T) tenue sur une case : une petite **caméra** bleue suit le pointeur, et le curseur est « déplacer » dans un cadre,
+  « redimensionner » à un coin. Messages de la barre d'état courts.
+- **Exports** (planche PNG / JPEG / PDF) : la même mise en page (sans les cases pâles, qui ne sont pas exportées) ; l'image de la case est celle de A,
+  les **cadres bleus, leurs lettres et leurs liens** sont tracés sur le papier de l'empreinte (le dessin de la feuille hors de A n'y est pas :
+  limite connue) ; marie-louise : les fenêtres sont l'image de A et les tuiles de l'empreinte. Le color script ne se sert pas de cette mise en page.
+- **Limites** : la tuile d'une rangée de plus montre B à sa place sur la feuille mais alignée sur la rangée (le décalage vertical n'est pas
+  conservé) ; trois rangées de haut au plus ; un cadre incliné compte par son rectangle englobant.
+
+### À regarder à l'écran (papier infini et caméra)
+
+Captures de l'essai : `vignettes\m-trav.png` (travelling : A, B, flèche au-dessus, les autres cases décalées), `m-zoom.png` (zoom arrière limité à la
+hauteur de la rangée, coins reliés), `m-diag.png` (diagonale : B dans la rangée suivante, boîte en perspective, les cases suivantes se rangent à côté et
+dessous), `m-tilt.png` (panoramique vertical : B sous A, flèche vers le bas), `m-vide.png` (projet neuf : trois rangées de six cases pâles).
+1. Papier : blanc sans bord, déplaçable partout ; zoom comme avant ; plus de « Lignes par page » dans la petite barre.
+2. Dessiner dans une case pâle lointaine : les plans vides avant elle, une étape d'annulation ; dessiner dans la dernière rangée : une rangée pâle de plus.
+3. Ctrl + glisser n'importe où sur une case, y compris sur sa marge ou à côté d'un cadre : jamais un plan qui bouge. T tenue : même chose, sans Ctrl, avec
+   n'importe quel outil ; relâchée, le pinceau dessine de nouveau. Alt en plus : un cadre de plus.
+4. Une fois B posé : Ctrl + glisser dedans B le déplace (sans créer C), dans A hors de B déplace A, un coin change le zoom ; clic droit : « Ajouter un
+   cadre », et sur un cadre « Retirer ce cadre ».
+5. La petite caméra bleue près du pointeur (Ctrl ou T tenue), le curseur « déplacer » dans un cadre et « redimensionner » à un coin.
+6. Exporter la planche avec une case à mouvement : cadres bleus, lettres et liens sur le papier de l'empreinte.
+
 ### Anciens projets (`crayonnes.json`)
 
 SHOT ne lit plus ce fichier et ne l'écrit plus, mais **ne l'efface jamais** (octet pour octet, après ouverture et
@@ -869,6 +951,11 @@ bornes du plan (une étape, « Mouvement de caméra », annulable), C et D répa
 ordinaire = B zoomé, Ctrl + clic qui ne bouge pas, Échap, storyboard verrouillé, plan d'une image ; mise en page (largeur, retour à
 la ligne entier, voisines, aucun chevauchement en 1 × 2 et 2 × 2, pages, repères de pose, case qui rétrécit) ; dessin hors de la
 feuille dans la grande case ; vignette de zone ; le montage voit les clés ; Maj + cadre déplace toujours le plan ; repos.
+
+`vignettecam_tests` (21 : empreintes des quatre mouvements, limite de hauteur, liens, clés, prise des cadres : le plus petit l'emporte, Alt ajoute, retrait),
+`vignettes_camera_tests` (écran : le geste crée B, déplace B sans rien créer, déplace A hors de B, coin = zoom, Ctrl + Alt = C, menu, appui qui rate = caméra
+jamais plan, T tenue, curseur, mise en page des quatre mouvements et reflux, largeur retenue pendant le geste), `vignettes_maquette_tests` (papier, trois
+rangées de six, une rangée pâle après la dernière occupée, dessiner dans la dernière, 200 plans), `vignettes_tests` (case pâle lointaine = plans vides avant).
 
 ### Annotations, images déposées, marie-louise et exports de la planche (2026-10-21, branche `vignettes-annot-exports`)
 
