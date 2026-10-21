@@ -298,6 +298,8 @@ pub struct App {
     pub(crate) doc: Document,
     pub(crate) mode: Mode,
     pub(crate) board_view: BoardView,
+    /// État de la vue Vignettes (`boardui.rs`) : appuis, bande de note en cours d'écriture, case vide…
+    pub(crate) vignettes: crate::boardui::Vignettes,
     pub(crate) cur_panel: usize,
     pub(crate) cur_layer: usize,
     pub(crate) cur_frame: usize,
@@ -938,6 +940,7 @@ impl App {
             doc: Document::with_frame(1920, 1080, 24).created_now(),
             mode: Mode::Storyboard,
             board_view: BoardView::Scene,
+            vignettes: Default::default(),
             cur_panel: 0,
             cur_layer: 0,
             cur_frame: 0,

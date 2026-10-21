@@ -1,44 +1,68 @@
-//! Planche de la vue Vignettes (phases 7 et 8) : interface. Géométrie et notes dans `board.rs`.
+//! Vue Vignettes : l'écran de la planche (la mise en page est dans `board.rs`).
 //!
-//! Des pages blanches sur un fond gris, où les vignettes se suivent de gauche à droite (colonnes,
-//! lignes par page, écart réglables), et où l'on note librement : pinceau, crayon ou formes, un
-//! trait de note ; Texte, un texte ; gomme, efface les traits touchés ; Sélection, choisir et
-//! déplacer des notes (ou des panneaux, au lasso). Une note peut être attachée à une vignette :
-//! elle la suit. La vignette du panneau courant est le dessin lui-même (l'outil Caméra y
-//! recadre). Molette : défiler ; Ctrl + molette : zoom ; Espace, bouton du milieu ou outil Main :
-//! déplacer la planche. Panneaux : clic, Ctrl + clic, Maj + clic ; on les glisse (le panneau
-//! courant par son titre) pour les déplacer ; clic droit : menus.
+//! Vignettes simples (Anthony, 2026-10-21). Des pages blanches sur un fond gris, où les images de
+//! storyboard se suivent de gauche à droite, rangée par rangée. Rien autour des images que ce qui sert :
+//! un filet gris d'un point (plus foncé pour l'image courante), le numéro du plan au-dessus de sa première
+//! image, une courte barre entre deux images (grise : même plan ; noire : coupe), une bande de note dessous.
+//!
+//! - **On dessine tout de suite** : un trait qui commence dans une image (pleine ou vide) la rend courante
+//!   à l'appui et dessine dedans, sans clic de choix avant. Un trait qui commence ailleurs ne dessine rien.
+//!   C'est le dessin lui-même qui est dans l'image courante (`card_canvas`), donc le même moteur, le même
+//!   rendu progressif : aucune latence de plus. Ce qui déborde du cadre est coupé à l'affichage ; la toile
+//!   infinie garde tout le tracé, et l'export cadre comme avant.
+//! - **Cases vides** après la dernière image : dessiner dans l'une d'elles fait le plan (ou, si la barre qui la
+//!   précède est grise, une image de plus du dernier plan) ; la création et le trait ne font qu'une étape
+//!   d'annulation.
+//! - **Barres** : un clic sur une barre grise coupe le plan à cet endroit (la vignette de droite commence un
+//!   nouveau plan) ; sur une barre noire, il réunit les deux plans (la vignette de droite devient une image du
+//!   plan de gauche). Une seule étape d'annulation, nommée.
+//! - **Notes** : un clic sur la bande sous une image écrit la note du plan (première image) ou de la marque
+//!   d'image ; Entrée valide, Maj + Entrée passe à la ligne, Échap abandonne. Trois lignes au plus à l'écran,
+//!   puis « … » ; le texte entier est gardé, visible pendant la saisie et dans la fiche du plan.
+//! - Molette : défiler ; Ctrl + molette : zoom ; Espace, bouton du milieu ou outil Main : déplacer la planche.
+//!   Ctrl ou Maj + clic sur une image : choisir des plans (au lieu de dessiner). Clic droit : menus. Les
+//!   notes libres de la planche (texte, gomme, sélection) restent ; on ne les trace plus au pinceau.
 
+use std::collections::HashMap;
 use std::time::Instant;
 
 use eframe::egui::{
-    self, pos2, vec2, Align2, Color32, CursorIcon, Event, FontId, Key, Modifiers, PointerButton, Pos2, Rect, RichText,
-    Sense, Stroke, StrokeKind, Vec2,
+    self, pos2, text::LayoutJob, vec2, Align2, Color32, CursorIcon, Event, FontId, Key, KeyboardShortcut, Modifiers, PointerButton, Pos2, Rect,
+    RichText, Sense, Stroke, StrokeKind, Vec2,
 };
 
 use crate::app::{App, BoardView, Mode, Tool};
-use crate::board::{self, BoardLayout, CardPlace, NoteRef, CARD_MAX, CARD_MIN, MAX_COLUMNS, MAX_ROWS, MAX_SPACING, NOTE_TEXT_SIZE};
-use crate::storyboard::{duration_label, panel_title};
+use crate::board::{self, BoardLayout, BoardSettings, CardPlace, Hit, NoteRef, CARD_MAX, CARD_MIN, MAX_COLUMNS, MAX_ROWS, NOTE_MAX_LINES, NOTE_TEXT_SIZE};
+use crate::history::Nav;
 use crate::vector::VPoint;
 
-/// Fond de la planche, pages, encre des textes.
 /// Le fond de la table, autour des planches : le fond du thème (les pages restent blanches).
 fn board_bg() -> Color32 {
     crate::theme::fond()
 }
 const PAGE_BG: Color32 = Color32::WHITE;
 const INK: Color32 = Color32::from_gray(30);
-/// Épaisseur des notes : la taille du pinceau, réduite (les notes sont à l'échelle de la planche).
+/// Filet d'une image, de l'image courante, d'une case vide.
+const BORDER: Color32 = Color32::from_gray(178);
+const BORDER_CURRENT: Color32 = Color32::from_gray(92);
+const BORDER_EMPTY: Color32 = Color32::from_gray(224);
+/// Barre de continuité (même plan) et de coupe.
+const BAR_JOINED: Color32 = Color32::from_gray(188);
+const BAR_CUT: Color32 = Color32::from_gray(22);
+/// Texte d'une note, et le filet très pâle d'une bande vide.
+const NOTE_INK: Color32 = Color32::from_gray(70);
+const HAIRLINE: Color32 = Color32::from_gray(230);
+/// Largeur (en points d'écran) sous laquelle une barre est élargie pour rester facile à toucher.
+const BAR_TOUCH: f32 = 14.0;
+/// Marge du texte dans une bande de note, en points de la planche.
+const NOTE_PAD: f32 = 1.0;
+/// Rayon de la gomme des notes libres : la taille de la gomme, réduite (les notes sont à l'échelle de la planche).
 const NOTE_SCALE: f32 = 0.5;
 const ZOOM_MIN: f32 = 0.2;
 const ZOOM_MAX: f32 = 6.0;
 
-/// Geste en cours sur la planche.
+/// Geste en cours sur le fond de la planche.
 pub(crate) enum BoardDrag {
-    /// Panneaux glissés ; `at` : le pointeur, sur la planche.
-    Move { ids: Vec<u64>, at: Pos2 },
-    /// Trait de note ; `pen` : tracé au stylet (la pression compte).
-    Note { points: Vec<VPoint>, pen: bool },
     /// Gomme sur les notes ; `recorded` : l'étape d'annulation est prise.
     Erase { recorded: bool },
     /// Rectangle de choix ; `add` : ajouter à ce qui est déjà choisi.
@@ -47,8 +71,8 @@ pub(crate) enum BoardDrag {
     MoveNotes { last: Pos2, recorded: bool },
 }
 
-/// Texte de note en cours d'écriture : nouveau (`index` : aucun) ou existant ; coin haut gauche
-/// et taille sur la planche.
+/// Texte de note de la planche (outil Texte) en cours d'écriture : nouveau (`index` : aucun) ou existant ;
+/// coin haut gauche et taille sur la planche.
 pub(crate) struct NoteTextEdit {
     index: Option<usize>,
     pos: Pos2,
@@ -57,23 +81,92 @@ pub(crate) struct NoteTextEdit {
     focused: bool,
 }
 
+/// Qui tient l'appui en cours : les gestes de la planche et le dessin ne se mélangent pas.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum Press {
+    /// Aucun appui pris : le fond de la planche reçoit le geste (choix au lasso, gomme, notes).
+    #[default]
+    None,
+    /// Le dessin de l'image : le trait va dans la vignette courante.
+    Card,
+    /// Choix de plans (Ctrl ou Maj + clic).
+    Select,
+    /// Une barre vient d'être basculée.
+    Bar,
+    /// Une bande de note vient de s'ouvrir.
+    Note,
+    /// Un appui qui ne fait rien (dehors de toute image avec un outil de dessin, case vide refusée…).
+    Dead,
+}
+
+/// La bande de note en cours d'écriture : celle de l'image `id` (le plan, ou sa marque d'image).
+pub(crate) struct NoteEdit {
+    pub id: u64,
+    pub buffer: String,
+    focused: bool,
+    had_focus: bool,
+}
+
+/// Un plan (ou une image) fait en dessinant dans une case vide : `base_len` étapes d'annulation juste après
+/// la création ; ce qui s'y ajoute avant le lâcher (le trait) se joint à elle.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Created {
+    pub base_len: usize,
+}
+
+/// Sur quoi le menu du clic droit a été ouvert.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum MenuTarget {
+    Card { panel: usize, frame: usize },
+    Background,
+}
+
 /// Passage planche ↔ écran.
-#[derive(Clone, Copy)]
-struct Xf {
-    origin: Pos2,
-    zoom: f32,
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct Xf {
+    pub origin: Pos2,
+    pub zoom: f32,
 }
 
 impl Xf {
-    fn to_screen(self, p: Pos2) -> Pos2 {
+    pub(crate) fn to_screen(self, p: Pos2) -> Pos2 {
         self.origin + p.to_vec2() * self.zoom
     }
-    fn rect(self, r: Rect) -> Rect {
+    pub(crate) fn rect(self, r: Rect) -> Rect {
         Rect::from_min_max(self.to_screen(r.min), self.to_screen(r.max))
     }
-    fn to_board(self, s: Pos2) -> Pos2 {
+    pub(crate) fn to_board(self, s: Pos2) -> Pos2 {
         ((s - self.origin) / self.zoom).to_pos2()
     }
+}
+
+/// L'état de la vue Vignettes qui n'est pas dans le projet.
+pub(crate) struct Vignettes {
+    pub press: Press,
+    pub note: Option<NoteEdit>,
+    /// Lignes de note affichées de chaque image qui a une note (mesurées à chaque image d'écran).
+    pub lines: HashMap<u64, usize>,
+    /// Une case vide, une fois remplie, fait une image de plus du dernier plan (barre grise devant elle).
+    pub empty_joins: bool,
+    pub created: Option<Created>,
+    pub menu: Option<MenuTarget>,
+    /// La planche telle qu'elle est à l'écran à la dernière image : le passage planche ↔ écran et la zone de la vue.
+    pub xf: Xf,
+    pub view: Rect,
+}
+
+impl Default for Vignettes {
+    fn default() -> Self {
+        Vignettes { press: Press::None, note: None, lines: HashMap::new(), empty_joins: false, created: None, menu: None, xf: Xf::default(), view: Rect::NOTHING }
+    }
+}
+
+/// Le texte d'une note, mis en page : `size` points, `width` de large, trois lignes au plus et « … ».
+fn note_job(text: &str, size: f32, width: f32, color: Color32) -> LayoutJob {
+    let mut job = LayoutJob::simple(text.to_string(), FontId::proportional(size.max(1.0)), color, width.max(1.0));
+    job.wrap.max_rows = NOTE_MAX_LINES;
+    job.wrap.overflow_character = Some('…');
+    job
 }
 
 impl App {
@@ -82,9 +175,9 @@ impl App {
         self.mode == Mode::Storyboard && self.board_view == BoardView::Panels
     }
 
-    /// La disposition de la planche, avec ses réglages.
+    /// La disposition de la planche, avec ses réglages et les lignes de note mesurées.
     pub(crate) fn board_layout(&self) -> BoardLayout {
-        board::layout(&self.doc, &self.layout.board_settings())
+        board::layout_with(&self.doc, &self.layout.board_settings(), &self.vignettes.lines, self.vignettes.empty_joins)
     }
 
     /// Après une opération qui a retiré des panneaux : les notes qui leur étaient attachées
@@ -128,7 +221,7 @@ impl App {
     }
 
     /// Rend courante l'image de storyboard qui commence à l'image `frame` du plan `i`.
-    fn select_board(&mut self, i: usize, frame: usize) {
+    pub(crate) fn select_board(&mut self, i: usize, frame: usize) {
         self.select_panel(i);
         self.cur_frame = frame;
         self.follow_frame = true;
@@ -199,9 +292,336 @@ impl App {
         }
     }
 
+    // ------------------------------------------------------------------ notes sous les images
+
+    /// Le texte de la bande de note de l'image `place` : les notes du plan (première image) ou de sa marque.
+    pub(crate) fn card_notes(&self, place: &CardPlace) -> &str {
+        let p = &self.doc.panels[place.panel];
+        if place.frame == 0 {
+            &p.notes
+        } else {
+            p.marks.iter().find(|m| m.id == place.id).map_or("", |m| m.notes.as_str())
+        }
+    }
+
+    /// Mesure le nombre de lignes (1 à 3) de chaque note, à la largeur des vignettes : la mise en page
+    /// s'en sert pour descendre la rangée suivante juste ce qu'il faut.
+    fn measure_notes(&mut self, ctx: &egui::Context, settings: &BoardSettings) {
+        let width = (settings.card_w.clamp(CARD_MIN, CARD_MAX) - NOTE_PAD * 2.0).max(10.0);
+        let mut lines = HashMap::new();
+        for p in &self.doc.panels {
+            let marks = p.marks.iter().map(|m| (m.id, m.notes.as_str()));
+            for (id, text) in std::iter::once((p.id, p.notes.as_str())).chain(marks) {
+                if text.trim().is_empty() {
+                    continue;
+                }
+                let size = board::note_font_size(text.chars().count());
+                let galley = ctx.fonts(|f| f.layout_job(note_job(text, size, width, NOTE_INK)));
+                lines.insert(id, galley.rows.len().clamp(1, NOTE_MAX_LINES));
+            }
+        }
+        self.vignettes.lines = lines;
+    }
+
+    /// Ouvre la bande de note de l'image `place` pour l'écrire.
+    fn open_card_note(&mut self, place: &CardPlace) {
+        if self.content_refuses() {
+            return;
+        }
+        let buffer = self.card_notes(place).to_string();
+        self.vignettes.note = Some(NoteEdit { id: place.id, buffer, focused: false, had_focus: false });
+    }
+
+    /// Pose la note en cours d'écriture dans le plan (ou la marque d'image). Une étape d'annulation, nommée,
+    /// seulement si le texte a changé.
+    pub(crate) fn commit_card_note(&mut self) {
+        let Some(ed) = self.vignettes.note.take() else { return };
+        let text = ed.buffer.trim_end().to_string();
+        let Some(pi) = self.doc.panels.iter().position(|p| p.id == ed.id || p.marks.iter().any(|m| m.id == ed.id)) else { return };
+        let on_plan = self.doc.panels[pi].id == ed.id;
+        let now = if on_plan { self.doc.panels[pi].notes.as_str() } else { self.doc.panels[pi].marks.iter().find(|m| m.id == ed.id).map_or("", |m| m.notes.as_str()) };
+        if now == text || (now.trim().is_empty() && text.trim().is_empty()) {
+            return;
+        }
+        if self.content_refuses() {
+            return;
+        }
+        self.avec_etape("Note de vignette", |a| a.record_step());
+        if on_plan {
+            self.doc.panels[pi].notes = text;
+        } else if let Some(m) = self.doc.panels[pi].marks.iter_mut().find(|m| m.id == ed.id) {
+            m.notes = text;
+        }
+        self.status = "Note de la vignette enregistrée.".into();
+    }
+
+    /// Exécute `f` en nommant les étapes d'annulation qu'elle enregistre.
+    pub(crate) fn avec_etape<R>(&mut self, nom: &str, f: impl FnOnce(&mut Self) -> R) -> R {
+        let avant = self.history.context.replace(nom.to_string());
+        let r = f(self);
+        self.history.context = avant;
+        r
+    }
+
+    /// La bande de note en cours d'écriture, au-dessus de la planche, à la place de la bande.
+    fn card_note_editor(&mut self, ui: &mut egui::Ui, xf: Xf, layout: &BoardLayout) {
+        let Some(id) = self.vignettes.note.as_ref().map(|e| e.id) else { return };
+        let Some(place) = layout.card_of(id).copied() else {
+            self.vignettes.note = None;
+            return;
+        };
+        let strip = xf.rect(place.note);
+        let Some(ed) = self.vignettes.note.as_mut() else { return };
+        let font = FontId::proportional((board::note_font_size(ed.buffer.chars().count()) * xf.zoom).clamp(9.0, 40.0));
+        let accent = crate::theme::accent_texte();
+        let mut outcome = None;
+        egui::Area::new(egui::Id::new("vignette_note")).order(egui::Order::Foreground).fixed_pos(strip.min - vec2(2.0, 1.0)).show(ui.ctx(), |ui| {
+            egui::Frame::new().fill(Color32::WHITE).stroke(Stroke::new(1.0_f32, accent)).inner_margin(egui::Margin::symmetric(2, 1)).show(ui, |ui| {
+                let resp = ui.add(
+                    egui::TextEdit::multiline(&mut ed.buffer)
+                        .font(font)
+                        .text_color(NOTE_INK)
+                        .frame(false)
+                        .desired_rows(1)
+                        .desired_width((strip.width() - 4.0).max(60.0))
+                        .return_key(Some(KeyboardShortcut::new(Modifiers::SHIFT, Key::Enter))),
+                );
+                if !ed.focused {
+                    resp.request_focus();
+                    ed.focused = true;
+                }
+                if resp.has_focus() {
+                    ed.had_focus = true;
+                }
+                let (enter, esc) = ui.input(|i| (i.key_pressed(Key::Enter) && !i.modifiers.shift, i.key_pressed(Key::Escape)));
+                if esc {
+                    outcome = Some(false);
+                } else if enter || (ed.had_focus && resp.lost_focus()) {
+                    outcome = Some(true);
+                }
+            });
+        });
+        match outcome {
+            Some(true) => self.commit_card_note(),
+            Some(false) => self.vignettes.note = None,
+            None => {}
+        }
+    }
+
+    // ------------------------------------------------------------------ appuis sur la planche
+
+    /// Les outils qui font un plan quand on dessine dans une case vide.
+    fn tool_draws_in_empty(&self) -> bool {
+        matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Line | Tool::Rect | Tool::Ellipse)
+    }
+
+    /// Un appui du bouton gauche (ou droit) en `pos` (écran) sur la planche. Rend vrai si le document a
+    /// changé de forme (plans, images) : la mise en page est à refaire.
+    fn board_press(&mut self, layout: &BoardLayout, xf: Xf, pos: Pos2, m: Modifiers, button: PointerButton) -> bool {
+        let p = xf.to_board(pos);
+        let hit = board::hit(layout, p, BAR_TOUCH / xf.zoom.max(1e-3));
+        if button == PointerButton::Secondary {
+            self.vignettes.menu = Some(match hit {
+                Hit::Thumb(k) => {
+                    let c = layout.cards[k];
+                    let chosen = c.panel == self.cur_panel || self.board_sel.contains(&c.plan);
+                    if !chosen {
+                        self.board_sel = vec![c.plan];
+                        self.select_board(c.panel, c.frame);
+                    }
+                    MenuTarget::Card { panel: c.panel, frame: c.frame }
+                }
+                _ => MenuTarget::Background,
+            });
+            return false;
+        }
+        if button != PointerButton::Primary {
+            return false;
+        }
+        // Tout appui ailleurs que dans la bande en cours d'écriture la pose.
+        if !matches!(hit, Hit::Note(k) if self.vignettes.note.as_ref().is_some_and(|e| e.id == layout.cards[k].id)) {
+            self.commit_card_note();
+        }
+        let selecting = m.command || m.ctrl || m.shift;
+        match hit {
+            Hit::Bar(after) => {
+                self.commit_note_text(layout);
+                self.vignettes.press = Press::Bar;
+                self.board_toggle_cut(layout, after)
+            }
+            Hit::Thumb(k) => {
+                self.commit_note_text(layout);
+                let c = layout.cards[k];
+                if selecting {
+                    // Choisir des plans (comme sur l'ancien titre) : Ctrl ajoute ou retire, Maj prend l'intervalle.
+                    let current = c.panel == self.cur_panel;
+                    if m.command || m.ctrl {
+                        if let Some(at) = self.board_sel.iter().position(|s| *s == c.plan) {
+                            self.board_sel.remove(at);
+                        } else if !current {
+                            self.board_sel.push(c.plan);
+                        }
+                    } else {
+                        let (a, b) = (self.cur_panel.min(c.panel), self.cur_panel.max(c.panel));
+                        self.board_sel = self.doc.panels[a..=b].iter().map(|p| p.id).collect();
+                    }
+                    self.vignettes.press = Press::Select;
+                } else {
+                    self.board_sel = vec![c.plan];
+                    self.board_notes.clear();
+                    let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
+                    if !(c.panel == self.cur_panel && (c.frame..c.end).contains(&f)) {
+                        self.select_board(c.panel, c.frame);
+                    }
+                    self.vignettes.press = Press::Card;
+                }
+                false
+            }
+            Hit::Note(k) => {
+                self.commit_note_text(layout);
+                let c = layout.cards[k];
+                self.board_sel = vec![c.plan];
+                self.select_board(c.panel, c.frame);
+                if self.vignettes.note.as_ref().is_none_or(|e| e.id != c.id) {
+                    self.open_card_note(&c);
+                }
+                self.vignettes.press = Press::Note;
+                false
+            }
+            Hit::Empty(e) => {
+                self.commit_note_text(layout);
+                if self.tool_draws_in_empty() && self.board_create_from_empty(e) {
+                    self.vignettes.press = Press::Card;
+                    true
+                } else {
+                    self.vignettes.press = Press::Dead;
+                    false
+                }
+            }
+            Hit::Nothing => {
+                // Dehors de toute image : les outils de dessin ne tracent rien ; le fond reçoit le reste.
+                if matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline | Tool::Fill | Tool::Cutter) {
+                    self.vignettes.press = Press::Dead;
+                }
+                false
+            }
+        }
+    }
+
+    /// Bascule la barre après l'image `after` : grise → noire coupe le plan là (l'image de droite commence un
+    /// plan neuf), noire → grise réunit les deux plans (l'image de droite devient une image du plan de gauche).
+    /// La dernière barre, devant la première case vide, dit ce que fera cette case : un plan ou une image.
+    /// Une seule étape d'annulation, nommée. Vrai si le document a changé.
+    pub(crate) fn board_toggle_cut(&mut self, layout: &BoardLayout, after: usize) -> bool {
+        let Some(a) = layout.cards.get(after).copied() else { return false };
+        let Some(b) = layout.cards.get(after + 1).copied() else {
+            self.vignettes.empty_joins = !self.vignettes.empty_joins;
+            self.status = if self.vignettes.empty_joins {
+                "La prochaine case vide fera une image de plus de ce plan (barre grise).".into()
+            } else {
+                "La prochaine case vide fera un nouveau plan (barre noire).".into()
+            };
+            return false;
+        };
+        if b.plan == a.plan {
+            // Couper : la marque de la vignette de droite devient le début d'un plan neuf.
+            if self.storyboard_refuses() || !self.partage_peut_toucher(&[a.plan]) {
+                return false;
+            }
+            let ok = self.avec_etape("Couper le plan entre deux vignettes", |s| s.structure_op(|d, _| d.split_plan(a.panel, b.frame)));
+            if ok {
+                self.cur_frame = 0;
+                self.board_sel = vec![self.doc.panels[self.cur_panel].id];
+                self.status = format!("Plan coupé : la vignette de droite commence le {}.", crate::storyboard::panel_title(&self.doc, self.cur_panel).to_lowercase());
+            }
+            ok
+        } else {
+            // Réunir : le début du plan de droite devient une marque d'image du plan de gauche.
+            if self.storyboard_refuses() || !self.partage_peut_toucher(&[a.plan, b.plan]) {
+                return false;
+            }
+            let ok = self.avec_etape("Réunir deux vignettes en un plan", |s| s.structure_op(|d, _| d.join_next_plan(a.panel)));
+            if ok {
+                self.cur_frame = a.end;
+                self.board_sel = vec![self.doc.panels[self.cur_panel].id];
+                self.status = format!("Plans réunis : la vignette de droite est une image du {}.", crate::storyboard::panel_title(&self.doc, self.cur_panel).to_lowercase());
+            } else {
+                self.status = "Ces deux plans ne sont pas dans la même séquence : impossible de les réunir.".into();
+            }
+            ok
+        }
+    }
+
+    /// Dessiner dans la case vide `e` (0 : la première) fait un plan neuf, avec ceux qui la précèdent (des plans
+    /// vides, pour garder sa place) ; ou, si la barre devant la première case vide est grise, une image de plus
+    /// du dernier plan. Le plan fait est courant, prêt à recevoir le trait de l'appui en cours. Vrai si fait.
+    pub(crate) fn board_create_from_empty(&mut self, e: usize) -> bool {
+        if self.storyboard_refuses() {
+            return false;
+        }
+        let joins = self.vignettes.empty_joins;
+        let made = e + 1;
+        let mut frame_of_image = 0;
+        let ok = self.avec_etape(if joins && e == 0 { "Nouvelle image dessinée" } else { "Nouveau plan dessiné" }, |s| {
+            s.structure_op(|d, _| {
+                let mut last = d.panels.len() - 1;
+                let mut first_plan = 0;
+                if joins {
+                    // Une image de plus au dernier plan : il s'allonge de la durée de sa dernière image.
+                    let old = d.panels[last].frame_count();
+                    let image = board::plan_boards(d, last).last().map_or(1, |b| b.2 - b.1).max(1);
+                    d.set_duration(last, old + image);
+                    d.toggle_mark(last, old)?;
+                    frame_of_image = old;
+                    first_plan = 1;
+                }
+                for _ in first_plan..made {
+                    last = d.add_scene_after(last);
+                }
+                Some(last)
+            })
+        });
+        if !ok {
+            return false;
+        }
+        self.cur_frame = if joins && e == 0 { frame_of_image } else { 0 };
+        self.follow_frame = true;
+        self.board_sel = vec![self.doc.panels[self.cur_panel].id];
+        self.vignettes.created = Some(Created { base_len: self.history.undo_len() });
+        self.status = if joins && e == 0 { "Nouvelle image du plan : dessine-la.".into() } else { "Nouveau plan : dessine-le.".into() };
+        true
+    }
+
+    /// Au lâcher : la création d'une case vide et le trait ne font qu'une étape d'annulation ; si rien n'a été
+    /// tracé (un simple clic), le plan fait est défait sans laisser de trace.
+    fn finish_creation(&mut self, any_down: bool) {
+        let Some(c) = self.vignettes.created else { return };
+        if any_down || self.stroke.is_some() || self.shape_drag.is_some() {
+            return;
+        }
+        self.vignettes.created = None;
+        let n = self.history.undo_len().saturating_sub(c.base_len);
+        if n >= 1 {
+            self.history.merge_last(n + 1);
+        } else {
+            let mut nav = Nav { panel: self.cur_panel, layer: self.cur_layer };
+            if self.history.undo_and_forget(&mut self.doc, &mut nav) {
+                self.cur_panel = nav.panel.min(self.doc.panels.len() - 1);
+                self.cur_layer = nav.layer;
+                self.cur_frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
+                self.board_sel.clear();
+                self.renderer.invalidate_all();
+                self.thumbs.prune(&self.doc);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ la vue
+
     pub(crate) fn board_view(&mut self, ui: &mut egui::Ui) {
         self.board_toolbar(ui);
         let view = ui.available_rect_before_wrap();
+        self.vignettes.view = view;
         let bg = ui.allocate_rect(view, Sense::click_and_drag());
         let painter = ui.painter_at(view);
         painter.rect_filled(view, 0.0, board_bg());
@@ -212,7 +632,8 @@ impl App {
             NoteRef::Text(i) => i < nt,
         });
         let settings = self.layout.board_settings();
-        let layout = board::layout(&self.doc, &settings);
+        self.measure_notes(ui.ctx(), &settings);
+        let mut layout = self.board_layout();
         if self.board_zoom <= 0.0 {
             self.board_zoom = (view.width() / layout.size.x.max(1.0)).clamp(ZOOM_MIN, 1.5);
             self.board_pan = Vec2::ZERO;
@@ -230,7 +651,7 @@ impl App {
                 i.key_pressed(Key::Escape),
             )
         });
-        let writing = self.board_text.is_some();
+        let writing = self.board_text.is_some() || self.vignettes.note.is_some();
         let pan_mode = self.tool == Tool::Pan || (space && !writing);
         let over = hover.filter(|p| view.contains(*p) && ui.ctx().layer_id_at(*p) == Some(bg.layer_id));
         // Pression du stylet (Windows Ink : événements « tactiles »).
@@ -255,11 +676,31 @@ impl App {
         }
         self.clamp_board_pan(view, layout.size);
         let xf = Xf { origin: view.min + self.board_pan, zoom: self.board_zoom };
+        self.vignettes.xf = xf;
+
+        // Les appuis de cette image, avant de dessiner : une image devient courante, une case vide devient un
+        // plan, et le trait qui commence dans l'appui est dessiné dans la même image d'écran (aucun retard).
+        if !pan_mode && !self.modal_open() {
+            for e in &events {
+                let Event::PointerButton { pos, button, pressed: true, modifiers } = e else { continue };
+                if !view.contains(*pos) || ui.ctx().layer_id_at(*pos) != Some(bg.layer_id) {
+                    continue;
+                }
+                if self.board_press(&layout, xf, *pos, *modifiers, *button) {
+                    layout = self.board_layout();
+                    self.clamp_board_pan(view, layout.size);
+                }
+            }
+        }
+        let xf = Xf { origin: view.min + self.board_pan, zoom: self.board_zoom };
+        self.vignettes.xf = xf;
+
         let texts = self.text_rects(&painter, &layout);
         let tol = 5.0 / xf.zoom;
+        let free = self.vignettes.press == Press::None;
 
-        // Gestes commencés sur le fond.
-        if bg.drag_started_by(PointerButton::Primary) && !pan_mode {
+        // Gestes commencés sur le fond (hors de toute image, de barre et de note).
+        if bg.drag_started_by(PointerButton::Primary) && !pan_mode && free {
             self.commit_note_text(&layout);
             let start = xf.to_board(ui.input(|i| i.pointer.press_origin()).unwrap_or(view.center()));
             let add = mods.ctrl || mods.shift;
@@ -277,57 +718,49 @@ impl App {
                     }
                     None => BoardDrag::Rubber { start, now: start, add },
                 },
-                Tool::Camera | Tool::Transform | Tool::Picker | Tool::Perspective | Tool::Ref3d | Tool::Text => {
-                    BoardDrag::Rubber { start, now: start, add }
-                }
-                _ => BoardDrag::Note { points: vec![self.note_point(start, touch.is_some())], pen: touch.is_some() },
+                _ => BoardDrag::Rubber { start, now: start, add },
             });
         }
-        if let Some(p) = bg.interact_pointer_pos().filter(|_| bg.clicked()).map(|p| xf.to_board(p)) {
-            self.board_click(&layout, &texts, p, mods);
-        }
-        if let Some(p) = bg.interact_pointer_pos().filter(|_| bg.double_clicked()).map(|p| xf.to_board(p)) {
-            if let Some(NoteRef::Text(i)) = self.note_at(&layout, &texts, p, tol) {
-                self.edit_note_text(&layout, i);
+        if free {
+            if let Some(p) = bg.interact_pointer_pos().filter(|_| bg.clicked()).map(|p| xf.to_board(p)) {
+                self.board_click(&layout, &texts, p, mods);
+            }
+            if let Some(p) = bg.interact_pointer_pos().filter(|_| bg.double_clicked()).map(|p| xf.to_board(p)) {
+                if let Some(NoteRef::Text(i)) = self.note_at(&layout, &texts, p, tol) {
+                    self.edit_note_text(&layout, i);
+                }
             }
         }
         if escape && !writing {
             match self.board_drag {
-                Some(BoardDrag::Move { .. } | BoardDrag::Rubber { .. }) => self.board_drag = None,
+                Some(BoardDrag::Rubber { .. }) => self.board_drag = None,
                 _ => self.board_notes.clear(),
             }
         }
         let pointer = ui.input(|i| i.pointer.latest_pos()).map(|p| xf.to_board(p));
-        self.update_board_drag(&layout, pointer, touch.is_some(), xf.zoom);
+        self.update_board_drag(&layout, pointer, xf.zoom);
 
-        // Pages, cases vides, vignettes.
+        // Pages, barres, cases vides, vignettes.
         for page in &layout.pages {
             let r = xf.rect(*page);
             painter.rect_filled(r.translate(vec2(3.0, 4.0)), 0.0, Color32::from_black_alpha(50));
             painter.rect_filled(r, 0.0, PAGE_BG);
         }
-        let font = (11.0 * xf.zoom).clamp(6.0, 26.0);
-        for (k, slot) in layout.empty.iter().enumerate() {
+        let hovered = over.map(|p| board::hit(&layout, xf.to_board(p), BAR_TOUCH / xf.zoom.max(1e-3)));
+        self.paint_bars(ui, &painter, view, xf, &layout, hovered);
+        let faint = Stroke::new(1.0_f32, BORDER_EMPTY);
+        for slot in &layout.empty {
             let r = xf.rect(*slot);
-            if !r.intersects(view) {
-                continue;
+            if r.intersects(view) {
+                painter.rect_stroke(r, 0.0, faint, StrokeKind::Outside);
             }
-            let thumb = Rect::from_min_max(pos2(r.left(), r.top() + board::HEADER_H * xf.zoom), r.max);
-            painter.rect_stroke(thumb, 0.0, Stroke::new(1.0_f32, Color32::from_gray(190)), StrokeKind::Inside);
-            painter.text(
-                pos2(r.left() + 2.0, thumb.top() - 2.0),
-                Align2::LEFT_BOTTOM,
-                (layout.cards.len() + k + 1).to_string(),
-                FontId::proportional(font),
-                Color32::from_gray(170),
-            );
         }
         let deadline = Instant::now() + crate::thumbs::THUMB_TIME;
-        for (k, place) in layout.cards.iter().enumerate() {
-            self.board_card(ui, &painter, view, xf, k + 1, place, pan_mode, mods, deadline);
+        for place in layout.cards.iter() {
+            self.board_card(ui, &painter, view, xf, place, pan_mode, deadline);
         }
 
-        // Notes par-dessus, puis ce qui est choisi, puis les repères du geste.
+        // Notes libres par-dessus, puis ce qui est choisi, puis les repères du geste.
         for i in 0..self.doc.board.strokes.len() {
             if let Some(points) = self.doc.board.stroke_points(&layout, i) {
                 paint_note(&painter, view, xf, &points, self.doc.board.strokes[i].color);
@@ -357,29 +790,91 @@ impl App {
                 }
             }
         }
-        self.paint_board_drag(&painter, view, xf, &layout, settings.spacing);
+        self.paint_board_drag(&painter, xf);
         if let (Some(p), Tool::Eraser, false) = (over, self.tool, pan_mode) {
-            if bg.hovered() || matches!(self.board_drag, Some(BoardDrag::Erase { .. })) {
+            if matches!(hovered, Some(Hit::Nothing)) || matches!(self.board_drag, Some(BoardDrag::Erase { .. })) {
                 let r = self.note_eraser_radius(xf.zoom) * xf.zoom;
                 painter.circle_stroke(p, r, Stroke::new(1.0_f32, INK));
             }
         }
-        if bg.hovered() {
-            let icon = if pan_mode {
-                CursorIcon::Grab
-            } else if self.tool == Tool::Text {
-                CursorIcon::Text
-            } else if matches!(self.tool, Tool::Eraser | Tool::Brush | Tool::Pencil) || self.tool.is_shape() {
-                CursorIcon::Crosshair
-            } else {
-                CursorIcon::Default
+        if bg.hovered() || hovered.is_some() {
+            let drawing = matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline);
+            let icon = match hovered {
+                _ if pan_mode => CursorIcon::Grab,
+                Some(Hit::Bar(_)) => CursorIcon::PointingHand,
+                Some(Hit::Note(_)) => CursorIcon::Text,
+                Some(Hit::Empty(_)) if drawing => CursorIcon::Crosshair,
+                Some(Hit::Thumb(_)) if drawing || self.tool == Tool::Eraser => CursorIcon::Crosshair,
+                _ if self.tool == Tool::Text => CursorIcon::Text,
+                _ if self.tool == Tool::Eraser => CursorIcon::Crosshair,
+                _ => CursorIcon::Default,
             };
-            ui.ctx().set_cursor_icon(icon);
+            // (La vignette courante règle son curseur elle-même : celui du pinceau.)
+            if !matches!(hovered, Some(Hit::Thumb(k)) if !pan_mode && self.cur_card(&layout, k)) {
+                ui.ctx().set_cursor_icon(icon);
+            }
         }
-        bg.context_menu(|ui| self.board_menu(ui, &layout, &texts));
+        bg.context_menu(|ui| match self.vignettes.menu {
+            Some(MenuTarget::Card { panel, frame }) => self.card_menu(ui, panel, frame),
+            _ => self.board_menu(ui, &layout, &texts),
+        });
         self.note_text_editor(ui, xf, &layout);
+        self.card_note_editor(ui, xf, &layout);
         if !any_down {
-            self.finish_board_drag(&layout, &texts, settings.spacing);
+            self.finish_board_drag(&layout, &texts);
+        }
+        self.finish_creation(any_down);
+        // Choisir des plans (Ctrl ou Maj + clic) donne la main aux plans : copier, coller, supprimer (12e).
+        if self.vignettes.press == Press::Select {
+            self.panel_focus = true;
+            self.images_focus = false;
+            self.key_focus = false;
+        }
+        if !any_down {
+            self.vignettes.press = Press::None;
+        }
+    }
+
+    /// L'image `k` de la planche est-elle celle du dessin (courante, où est la tête de lecture) ?
+    fn cur_card(&self, layout: &BoardLayout, k: usize) -> bool {
+        let c = &layout.cards[k];
+        let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
+        c.panel == self.cur_panel && (c.frame..c.end).contains(&f)
+    }
+
+    /// Les barres entre les images : un trait court, gris ou noir ; sous la souris, l'accent et une bulle.
+    fn paint_bars(&self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, hovered: Option<Hit>) {
+        let width = (board::BAR_W * xf.zoom).clamp(1.0, 3.0);
+        for b in &layout.bars {
+            let zone = xf.rect(b.zone);
+            if !zone.intersects(view) {
+                continue;
+            }
+            let hot = hovered == Some(Hit::Bar(b.after));
+            let color = if hot {
+                crate::theme::accent()
+            } else if b.cut {
+                BAR_CUT
+            } else {
+                BAR_JOINED
+            };
+            let r = xf.rect(b.bar);
+            painter.line_segment([pos2(r.center().x, r.top()), pos2(r.center().x, r.bottom())], Stroke::new(if hot { width + 1.0 } else { width }, color));
+            if hot {
+                let resp = ui.interact(zone.expand2(vec2(((BAR_TOUCH - zone.width()) * 0.5).max(0.0), 0.0)), ui.id().with(("planche_barre", b.after)), Sense::hover());
+                let (nom, texte) = if b.after + 1 >= layout.cards.len() {
+                    if self.vignettes.empty_joins {
+                        ("Prochaine case : image du plan", "Grise : la prochaine case vide fera une image de plus du dernier plan. Clic : en faire un nouveau plan.")
+                    } else {
+                        ("Prochaine case : nouveau plan", "Noire : la prochaine case vide fera un plan. Clic : en faire une image de plus du dernier plan.")
+                    }
+                } else if b.cut {
+                    ("Coupe", "Noire : les deux vignettes sont deux plans. Clic : les réunir en un seul plan.")
+                } else {
+                    ("Même plan", "Grise : la vignette de droite est une image du même plan. Clic : couper le plan ici.")
+                };
+                crate::bulles::bulle(resp, nom, texte, "");
+            }
         }
     }
 
@@ -522,18 +1017,7 @@ impl App {
                     .custom_formatter(|v, _| if v < 0.5 { "toutes".into() } else { format!("{v:.0}") }),
             );
             bulle(resp, "Lignes par page", "« toutes » : une seule page.", "");
-            etiquette(ui, ph::ARROWS_OUT_LINE_HORIZONTAL, "Écart", "Entre les vignettes.");
-            let resp = ui.add(egui::DragValue::new(&mut self.layout.board_spacing).range(0.0..=MAX_SPACING).speed(0.5).max_decimals(0));
-            bulle(resp, "Écart", "Entre les vignettes.", "");
             ui.separator();
-            interrupteur(
-                ui,
-                &mut self.layout.board_scene_breaks,
-                ph::KEY_RETURN,
-                "Plan à la ligne",
-                "Chaque plan commence une nouvelle ligne (sinon ses images suivent celles du plan d'avant).",
-                "",
-            );
             interrupteur(
                 ui,
                 &mut self.layout.board_attach,
@@ -555,6 +1039,7 @@ impl App {
             }
         });
     }
+
     /// Garde un bout de la planche dans la vue.
     fn clamp_board_pan(&mut self, view: Rect, size: Vec2) {
         let s = size * self.board_zoom;
@@ -563,31 +1048,15 @@ impl App {
         self.board_pan.y = self.board_pan.y.clamp((keep - s.y).min(0.0), (view.height() - keep).max(0.0));
     }
 
-    /// Point d'une note au point `p` de la planche, avec l'épaisseur du pinceau de l'outil.
-    fn note_point(&self, p: Pos2, pen: bool) -> VPoint {
-        let b = self.current_brush().copied().unwrap_or(self.brush);
-        let pressure = if pen { self.pen_pressure } else { 1.0 };
-        let factor = if b.pressure_size { b.min_size + (1.0 - b.min_size) * pressure } else { 1.0 };
-        VPoint { x: p.x, y: p.y, r: (b.size * 0.5 * NOTE_SCALE * factor).clamp(0.3, 60.0) }
-    }
-
     fn note_eraser_radius(&self, zoom: f32) -> f32 {
         (self.eraser.size * 0.5 * NOTE_SCALE).max(4.0 / zoom)
     }
 
-    fn update_board_drag(&mut self, layout: &BoardLayout, pointer: Option<Pos2>, touch: bool, zoom: f32) {
+    fn update_board_drag(&mut self, layout: &BoardLayout, pointer: Option<Pos2>, zoom: f32) {
         let Some(p) = pointer else { return };
-        let pen = matches!(self.board_drag, Some(BoardDrag::Note { pen: true, .. })) || touch;
-        let point = self.note_point(p, pen);
         let radius = self.note_eraser_radius(zoom);
-        match &mut self.board_drag {
-            Some(BoardDrag::Note { points, pen: was }) => {
-                *was |= touch;
-                board::push_note_point(points, point, 1.0 / zoom);
-            }
-            Some(BoardDrag::Move { at, .. }) => *at = p,
-            Some(BoardDrag::Rubber { now, .. }) => *now = p,
-            _ => {}
+        if let Some(BoardDrag::Rubber { now, .. }) = &mut self.board_drag {
+            *now = p;
         }
         // Gomme et déplacement de notes : l'étape d'annulation au premier changement du geste.
         if let Some(BoardDrag::Erase { recorded }) = self.board_drag {
@@ -613,126 +1082,92 @@ impl App {
         }
     }
 
-    fn finish_board_drag(&mut self, layout: &BoardLayout, texts: &[Option<Rect>], gap: f32) {
-        match self.board_drag.take() {
-            Some(BoardDrag::Note { points, .. }) if !points.is_empty() => {
-                self.record_step();
-                let anchor = self.layout.board_attach.then(|| board::nearest_card(layout, board::points_bounds(&points))).flatten();
-                self.doc.board.add_stroke(layout, points, self.color, anchor);
-            }
-            Some(BoardDrag::Move { ids, at }) => {
-                if self.storyboard_refuses() {
-                    return;
-                }
-                let Some(t) = board::drop_target(layout, at, gap) else { return };
-                let before = t.before.map(|i| self.doc.panels[i].id);
-                let cur = self.doc.panels[self.cur_panel].id;
-                let snap = self.snapshot();
-                if self.doc.move_plans(&ids, before).is_some() {
-                    self.commit_structure(snap);
-                    self.cur_panel = self.doc.panels.iter().position(|p| p.id == cur).unwrap_or(0);
-                    self.clamp_nav();
-                    self.status = match ids.len() {
-                        1 => "Plan déplacé.".into(),
-                        n => format!("{n} plans déplacés."),
-                    };
-                }
-            }
-            Some(BoardDrag::Rubber { start, now, add }) => {
-                let r = Rect::from_two_pos(start, now);
-                let found: Vec<u64> = board::cards_in(layout, r).into_iter().map(|i| self.doc.panels[i].id).collect();
-                let mut notes = self.doc.board.strokes_in(layout, r);
-                notes.extend((0..texts.len()).filter(|&i| texts[i].is_some_and(|t| t.intersects(r))).map(NoteRef::Text));
-                if add {
-                    for id in found {
-                        if !self.board_sel.contains(&id) {
-                            self.board_sel.push(id);
-                        }
+    fn finish_board_drag(&mut self, layout: &BoardLayout, texts: &[Option<Rect>]) {
+        if let Some(BoardDrag::Rubber { start, now, add }) = self.board_drag.take() {
+            let r = Rect::from_two_pos(start, now);
+            let found: Vec<u64> = board::cards_in(layout, r).into_iter().map(|i| self.doc.panels[i].id).collect();
+            let mut notes = self.doc.board.strokes_in(layout, r);
+            notes.extend((0..texts.len()).filter(|&i| texts[i].is_some_and(|t| t.intersects(r))).map(NoteRef::Text));
+            if add {
+                for id in found {
+                    if !self.board_sel.contains(&id) {
+                        self.board_sel.push(id);
                     }
-                    for n in notes {
-                        if !self.board_notes.contains(&n) {
-                            self.board_notes.push(n);
-                        }
-                    }
-                } else {
-                    if let Some(&first) = found.first() {
-                        if let Some(i) = self.doc.panels.iter().position(|p| p.id == first) {
-                            self.select_panel(i);
-                        }
-                    }
-                    self.board_sel = found;
-                    self.board_notes = notes;
                 }
+                for n in notes {
+                    if !self.board_notes.contains(&n) {
+                        self.board_notes.push(n);
+                    }
+                }
+            } else {
+                if let Some(&first) = found.first() {
+                    if let Some(i) = self.doc.panels.iter().position(|p| p.id == first) {
+                        self.select_panel(i);
+                    }
+                }
+                self.board_sel = found;
+                self.board_notes = notes;
             }
-            _ => {}
+        } else {
+            self.board_drag = None;
         }
     }
 
-    /// Une vignette (une image de storyboard, 13a) : numéro et titre, image (ou le dessin lui-même
-    /// pour l'image courante), cadre, gestes. Choisir, glisser, supprimer : le plan entier.
+    /// Une vignette (une image de storyboard) : son numéro de plan s'il commence, l'image (le dessin lui-même
+    /// pour l'image courante), son filet, sa bande de note. Les gestes sont pris plus haut (`board_press`).
     #[allow(clippy::too_many_arguments)]
-    fn board_card(
-        &mut self,
-        ui: &mut egui::Ui,
-        painter: &egui::Painter,
-        view: Rect,
-        xf: Xf,
-        number: usize,
-        place: &CardPlace,
-        pan_mode: bool,
-        mods: Modifiers,
-        deadline: Instant,
-    ) {
+    fn board_card(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, place: &CardPlace, pan_mode: bool, deadline: Instant) {
         let card = xf.rect(place.card);
-        if !card.intersects(view) {
+        let thumb = xf.rect(place.thumb);
+        let note = xf.rect(place.note);
+        if !card.intersects(view) && !note.intersects(view) {
             return;
         }
-        let thumb = xf.rect(place.thumb);
-        let header = Rect::from_min_max(card.min, pos2(card.right(), thumb.top()));
         let i = place.panel;
-        let id = place.plan;
         let plan_current = i == self.cur_panel;
         // L'image courante : celle du plan courant où est la tête de lecture.
         let current = plan_current && {
             let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
             (place.frame..place.end).contains(&f)
         };
-        let chosen = plan_current || self.board_sel.contains(&id);
-        let accent = ui.visuals().selection.bg_fill;
+        // Plusieurs plans choisis (Ctrl, Maj, lasso) : toutes leurs images, sauf l'image courante, ont un liseré d'accent.
+        let cur_id = self.doc.panels[self.cur_panel].id;
+        let chosen_more = !current && self.board_sel.iter().any(|id| *id != cur_id) && (plan_current || self.board_sel.contains(&place.plan));
+        let accent = crate::theme::accent();
 
-        let head_ink = if chosen {
-            painter.rect_filled(header, 0.0, if current { accent } else { accent.gamma_multiply(0.6) });
-            ui.visuals().selection.stroke.color
-        } else {
-            INK
-        };
-        let font = (11.0 * xf.zoom).clamp(6.0, 26.0);
-        if header.height() >= 8.0 {
-            let clip = painter.with_clip_rect(header.intersect(view));
-            let number = clip.layout_no_wrap(number.to_string(), FontId::proportional(font), head_ink);
-            let w = number.size().x;
-            let left = header.left() + 3.0 * xf.zoom.min(1.5);
-            clip.galley(pos2(left, header.center().y - number.size().y * 0.5), number, head_ink);
-            // Début de plan : son titre en gras (tracé deux fois, un demi-point à côté) ; les
-            // images suivantes du plan : « Plan 3 · 2 ».
-            let first = place.starts_plan();
-            let title = match self.doc.panels[i].marks.iter().position(|m| m.id == place.id) {
-                Some(k) => format!("{} · {}", panel_title(&self.doc, i), k + 2),
-                None => crate::planversui::titre_avec_version(&self.doc, i),
-            };
-            let galley = clip.layout_no_wrap(title, FontId::proportional(font), head_ink);
-            let at = pos2(left + w + 6.0 * xf.zoom.min(1.5), header.center().y - galley.size().y * 0.5);
-            if first {
-                clip.galley(at + vec2(0.6, 0.0), galley.clone(), head_ink);
+        // Le numéro du plan, au-dessus de sa première image (et ses repères : envoi, film partagé).
+        if place.starts_plan() && card.height() > thumb.height() + 6.0 {
+            let label = Rect::from_min_max(card.min, pos2(card.right(), thumb.top()));
+            let font = (12.0 * xf.zoom).clamp(7.0, 22.0);
+            let ink = self.doc.panels[i].color.map_or(Color32::from_gray(50), crate::marks::color);
+            let clip = painter.with_clip_rect(label.intersect(view));
+            let galley = clip.layout_no_wrap(self.doc.scene_label(place.scene), FontId::proportional(font), ink);
+            let at = pos2(label.left() + 1.0, label.center().y - galley.size().y * 0.5);
+            let width = galley.size().x;
+            clip.galley(at + vec2(0.5, 0.0), galley.clone(), ink);
+            clip.galley(at, galley, ink);
+            // Modifié (ou ajouté) depuis le dernier envoi (`envoisui.rs`), à droite de la ligne du numéro.
+            let plan_id = self.doc.panels[i].id;
+            if label.width() >= 40.0 {
+                if let Some(etat) = self.envois_ui.etat(plan_id) {
+                    let r = (crate::envoisui::REPERE * xf.zoom).clamp(4.0, 8.0);
+                    let centre = pos2(label.right() - r - 2.0, label.center().y);
+                    crate::envoisui::peindre_repere(&clip, centre, etat, r);
+                    let zone = Rect::from_center_size(centre, vec2(r * 2.0 + 2.0, r * 2.0 + 2.0));
+                    if let Some((_, phrase)) = self.envoi_repere(plan_id) {
+                        let resp = ui.interact(zone, ui.id().with(("planche_envoi", plan_id)), Sense::hover());
+                        resp.on_hover_text_at_pointer(phrase);
+                    }
+                }
+                // Film partagé : qui tient le plan, et qui le regarde, à côté du numéro.
+                let bloc = Rect::from_min_size(pos2(label.left() + width + 4.0, label.top() - 3.0), vec2(40.0, label.height()));
+                if let Some(zone) = self.peindre_pastille(&clip, bloc, plan_id, xf.zoom) {
+                    if let Some(phrase) = self.pastille_phrase(plan_id) {
+                        let resp = ui.interact(zone, ui.id().with(("planche_prise", plan_id)), Sense::hover());
+                        resp.on_hover_text_at_pointer(phrase);
+                    }
+                }
             }
-            clip.galley(at, galley, head_ink);
-            clip.text(
-                pos2(header.right() - 3.0 * xf.zoom.min(1.5), header.center().y),
-                Align2::RIGHT_CENTER,
-                duration_label(place.end - place.frame, self.doc.fps),
-                FontId::monospace(font * 0.85),
-                head_ink,
-            );
         }
 
         // Le panneau courant : le dessin lui-même ; les autres : leur vignette.
@@ -744,6 +1179,9 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area).id_salt("planche_vive"));
             child.set_clip_rect(thumb.intersect(view));
             self.card_canvas(&mut child);
+            // Sa vignette se tient à jour en arrière-plan : quand une autre image prend la main, elle montre déjà le dernier trait.
+            let width = crate::thumbs::width_for(thumb.width() * ui.ctx().pixels_per_point());
+            let _ = self.thumbs.texture_at(ui.ctx(), &self.doc, i, place.frame, place.id, width, deadline);
         } else {
             painter.rect_filled(thumb, 0.0, Color32::WHITE);
             let px = thumb.width() * ui.ctx().pixels_per_point();
@@ -752,92 +1190,34 @@ impl App {
                 painter.image(tex, thumb, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
             }
         }
-        painter.rect_stroke(thumb, 0.0, Stroke::new(1.0_f32, Color32::from_gray(40)), StrokeKind::Outside);
-        // Modifié (ou ajouté) depuis le dernier envoi : une pastille dans le coin de la première vignette
-        // du plan (`envoisui.rs`).
-        let repere = if place.starts_plan() {
-            self.envois_ui.etat(self.doc.panels[i].id).filter(|_| thumb.width() >= 24.0).map(|etat| {
-                let r = (crate::envoisui::REPERE * xf.zoom).clamp(5.0, 10.0);
-                let centre = pos2(thumb.right() - r - 3.0, thumb.top() + r + 3.0);
-                crate::envoisui::peindre_repere(&painter.with_clip_rect(view), centre, etat, r);
-                Rect::from_center_size(centre, vec2(r * 2.0 + 2.0, r * 2.0 + 2.0))
-            })
-        } else {
-            None
-        };
-        // Film partagé : qui tient le plan (pastille à sa couleur) et qui le regarde, sur la première vignette du plan.
-        let prise = if place.starts_plan() && thumb.width() >= 24.0 { self.peindre_pastille(&painter.with_clip_rect(view), thumb, self.doc.panels[i].id, xf.zoom) } else { None };
-        // Couleur de repère du plan : un liseré dans la vignette et une bande sous l'en-tête.
-        if let Some(tag) = self.doc.panels[i].color {
-            let c = crate::marks::color(tag);
-            let w = (3.0 * xf.zoom).clamp(2.0, 6.0);
-            painter.rect_stroke(thumb, 0.0, Stroke::new(w, c), StrokeKind::Inside);
-            painter.rect_filled(Rect::from_min_max(pos2(header.left(), header.bottom() - w), header.right_bottom()), 0.0, c);
+        // Le filet d'un point autour de l'image ; plus foncé pour l'image courante. Rien d'autre autour.
+        let clip = painter.with_clip_rect(view);
+        clip.rect_stroke(thumb, 0.0, Stroke::new(1.0_f32, if current { BORDER_CURRENT } else { BORDER }), StrokeKind::Outside);
+        if chosen_more {
+            clip.rect_stroke(thumb.expand(1.5), 0.0, Stroke::new(1.5_f32, accent), StrokeKind::Outside);
         }
-        if chosen {
-            let w: f32 = if current { 3.0 } else { 2.0 };
-            painter.rect_stroke(card.expand(1.0), 2.0, Stroke::new(w, accent), StrokeKind::Outside);
-        }
+        self.paint_card_note(&clip, xf, place, note);
+    }
 
-        // Gestes : le titre seulement sur le panneau courant (son image sert à dessiner).
-        let hit = if live { header } else { card }.intersect(view);
-        let resp = ui.interact(hit, ui.id().with(("planche_carte", id)), Sense::click_and_drag());
-        // Un clic sur une vignette donne la main aux panneaux : copier, coller, supprimer (12e).
-        if resp.is_pointer_button_down_on() {
-            self.panel_focus = true;
-            self.images_focus = false;
-            self.key_focus = false;
+    /// La bande de note sous l'image : le texte (trois lignes au plus, « … » au bout), ou un filet très pâle
+    /// quand elle est vide. Pendant la saisie, l'éditeur la remplace (`card_note_editor`).
+    fn paint_card_note(&self, painter: &egui::Painter, xf: Xf, place: &CardPlace, strip: Rect) {
+        let text = self.card_notes(place);
+        if self.vignettes.note.as_ref().is_some_and(|e| e.id == place.id) {
+            return;
         }
-        if pan_mode || resp.dragged_by(PointerButton::Middle) {
-            if resp.dragged() {
-                self.board_pan += resp.drag_delta();
-            }
-        } else if resp.drag_started_by(PointerButton::Primary) {
-            if !chosen {
-                self.board_sel = vec![id];
-                self.select_board(i, place.frame);
-            }
-            let ids = self.board_selection();
-            let at = xf.to_board(resp.interact_pointer_pos().unwrap_or(card.center()));
-            self.board_drag = Some(BoardDrag::Move { ids, at });
+        if text.trim().is_empty() {
+            let y = strip.top() + board::NOTE_LINE_H * xf.zoom - 1.0;
+            painter.line_segment([pos2(strip.left(), y), pos2(strip.right(), y)], Stroke::new(1.0_f32, HAIRLINE));
+            return;
         }
-        if resp.hovered() && !pan_mode {
-            ui.ctx().set_cursor_icon(if live { CursorIcon::Grab } else { CursorIcon::PointingHand });
+        let size = board::note_font_size(text.chars().count()) * xf.zoom;
+        if size < 4.0 {
+            return;
         }
-        if resp.clicked() {
-            if mods.ctrl {
-                if let Some(k) = self.board_sel.iter().position(|s| *s == id) {
-                    self.board_sel.remove(k);
-                } else if !current {
-                    self.board_sel.push(id);
-                }
-            } else if mods.shift {
-                let (a, b) = (self.cur_panel.min(i), self.cur_panel.max(i));
-                self.board_sel = self.doc.panels[a..=b].iter().map(|p| p.id).collect();
-            } else {
-                self.board_sel = vec![id];
-                self.select_board(i, place.frame);
-            }
-        }
-        if resp.double_clicked() {
-            self.enter_animation(i);
-            self.cur_frame = place.frame;
-        }
-        if resp.secondary_clicked() && !chosen {
-            self.board_sel = vec![id];
-            self.select_board(i, place.frame);
-        }
-        if let Some(zone) = repere {
-            if let (true, Some((_, phrase))) = (resp.hover_pos().is_some_and(|p| zone.contains(p)), self.envoi_repere(self.doc.panels[i].id)) {
-                resp.clone().on_hover_text_at_pointer(phrase);
-            }
-        }
-        if let Some(zone) = prise {
-            if let (true, Some(phrase)) = (resp.hover_pos().is_some_and(|p| zone.contains(p)), self.pastille_phrase(self.doc.panels[i].id)) {
-                resp.clone().on_hover_text_at_pointer(phrase);
-            }
-        }
-        resp.context_menu(|ui| self.card_menu(ui, i, place.frame));
+        let job = note_job(text, size, (place.note.width() - NOTE_PAD * 2.0) * xf.zoom, NOTE_INK);
+        let galley = painter.layout_job(job);
+        painter.galley(strip.min + vec2(NOTE_PAD * xf.zoom, 0.0), galley, NOTE_INK);
     }
 
     /// Le dessin dans la vignette du panneau courant : vue à travers la caméra, cadrée sur la
@@ -858,7 +1238,7 @@ impl App {
 
     /// Menu d'une vignette (clic droit) : sur son plan (l'image qui commence à `frame`), ou sur
     /// tous les plans choisis.
-    fn card_menu(&mut self, ui: &mut egui::Ui, i: usize, frame: usize) {
+    pub(crate) fn card_menu(&mut self, ui: &mut egui::Ui, i: usize, frame: usize) {
         let item = |app: &mut App, ui: &mut egui::Ui, text: &str, f: &dyn Fn(&mut App)| {
             if ui.button(text).clicked() {
                 ui.close_menu();
@@ -886,6 +1266,17 @@ impl App {
         }
         item(self, ui, "Recadrer (outil Caméra)", &|a| a.set_tool(Tool::Camera));
         item(self, ui, "Réinitialiser le cadrage", &|a| a.run_action("camera.reinitialiser"));
+    }
+
+    /// Menu du clic droit sur le dessin d'une vignette (la vignette courante reçoit le clic avant le fond).
+    pub(crate) fn card_context_menu(&mut self, ui: &mut egui::Ui) {
+        match self.vignettes.menu {
+            Some(MenuTarget::Card { panel, frame }) if panel < self.doc.panels.len() => self.card_menu(ui, panel, frame),
+            _ => {
+                let (panel, frame) = (self.cur_panel, self.cur_frame);
+                self.card_menu(ui, panel, frame);
+            }
+        }
     }
 
     /// Menu du fond de la planche (clic droit) : les notes choisies, puis la planche.
@@ -954,30 +1345,13 @@ impl App {
         }
     }
 
-    /// Repères du geste en cours : note, lasso, place où tomberont les panneaux.
-    fn paint_board_drag(&self, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, gap: f32) {
+    /// Repères du geste en cours : lasso de choix.
+    fn paint_board_drag(&self, painter: &egui::Painter, xf: Xf) {
         let accent = crate::theme::accent_texte();
-        match &self.board_drag {
-            Some(BoardDrag::Note { points, .. }) => paint_note(painter, view, xf, points, self.color),
-            Some(BoardDrag::Rubber { start, now, .. }) => {
-                let r = Rect::from_two_pos(xf.to_screen(*start), xf.to_screen(*now));
-                painter.rect_filled(r, 0.0, accent.gamma_multiply(0.15));
-                painter.rect_stroke(r, 0.0, Stroke::new(1.0_f32, accent), StrokeKind::Inside);
-            }
-            Some(BoardDrag::Move { ids, at }) => {
-                if let Some(t) = board::drop_target(layout, *at, gap) {
-                    painter.line_segment([xf.to_screen(t.line.0), xf.to_screen(t.line.1)], Stroke::new(4.0_f32, accent));
-                }
-                let label = match ids.len() {
-                    1 => "1 plan".to_string(),
-                    n => format!("{n} plans"),
-                };
-                let p = xf.to_screen(*at) + vec2(14.0, 10.0);
-                let galley = painter.layout_no_wrap(label, FontId::proportional(13.0), crate::theme::sur_accent());
-                painter.rect_filled(Rect::from_min_size(p, galley.size()).expand(4.0), 4.0, crate::theme::accent());
-                painter.galley(p, galley, crate::theme::sur_accent());
-            }
-            _ => {}
+        if let Some(BoardDrag::Rubber { start, now, .. }) = &self.board_drag {
+            let r = Rect::from_two_pos(xf.to_screen(*start), xf.to_screen(*now));
+            painter.rect_filled(r, 0.0, accent.gamma_multiply(0.15));
+            painter.rect_stroke(r, 0.0, Stroke::new(1.0_f32, accent), StrokeKind::Inside);
         }
     }
 }

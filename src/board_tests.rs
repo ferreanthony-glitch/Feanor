@@ -4,7 +4,7 @@
 
 use eframe::egui::{pos2, vec2, Rect};
 
-use crate::board::{self, Board, BoardSettings, NoteRef, MARGIN, MAX_COLUMNS, PAGE_PAD};
+use crate::board::{self, Board, BoardSettings, Hit, NoteRef, BAR_W, GAP_CUT, GAP_SAME, LABEL_H, MARGIN, MAX_COLUMNS, NOTE_GAP, NOTE_LINE_H, NOTE_MAX_LINES, PAGE_PAD, ROW_GAP};
 use crate::document::Document;
 use crate::history::{Edit, History, Nav};
 use crate::project;
@@ -30,15 +30,20 @@ fn ids(doc: &Document) -> Vec<u64> {
     doc.panels.iter().map(|p| p.id).collect()
 }
 
-fn settings(columns: usize, rows: usize, plan_breaks: bool) -> BoardSettings {
-    BoardSettings { card_w: 200.0, columns, rows, spacing: 18.0, scene_breaks: plan_breaks }
+fn settings(columns: usize, rows: usize) -> BoardSettings {
+    BoardSettings { card_w: 200.0, columns, rows }
+}
+
+/// La hauteur d'une ligne dont les notes les plus hautes ont `lines` lignes (cadre 16:9, vignettes de 200 de large).
+fn row_height(lines: usize) -> f32 {
+    LABEL_H + 200.0 * 90.0 / 160.0 + NOTE_GAP + lines as f32 * NOTE_LINE_H + ROW_GAP
 }
 
 #[test]
 fn cards_follow_each_other_in_pages() {
     let doc = doc();
     // Quatre colonnes, une ligne par page : deux pages.
-    let l = board::layout(&doc, &settings(4, 1, false));
+    let l = board::layout(&doc, &settings(4, 1));
     let c = &l.cards;
     assert_eq!(c.len(), 6, "une vignette par image de storyboard");
     assert_eq!((c[0].id, c[1].id, c[2].id), (doc.panels[0].id, doc.panels[0].marks[0].id, doc.panels[0].marks[1].id));
@@ -47,49 +52,129 @@ fn cards_follow_each_other_in_pages() {
     assert!(c[0].starts_plan() && !c[1].starts_plan() && c[3].starts_plan());
     assert_eq!(l.pages.len(), 2);
     assert_eq!(c[0].card.min, pos2(MARGIN + PAGE_PAD, MARGIN + PAGE_PAD));
+    assert_eq!(c[0].thumb.min, c[0].card.min + vec2(0.0, LABEL_H), "le numéro du plan est dans la ligne au-dessus de l'image");
     assert_eq!(c[0].thumb.height(), 200.0 * 90.0 / 160.0);
-    assert_eq!(c[1].card.left(), c[0].card.right() + 18.0);
-    assert_eq!(c[3].card.top(), c[0].card.top(), "les plans se suivent");
-    assert_eq!(c[4].card.left(), c[0].card.left());
-    assert!(l.pages[1].contains(c[4].card.center()), "deuxième page");
+    assert_eq!(c[0].thumb.width(), 200.0);
+    assert_eq!(c[3].card.top(), c[0].card.top(), "les plans se suivent sur la même ligne : une ligne ne se casse pas à une coupe");
+    assert!(c[4].card.top() > c[0].card.top() && c[4].card.left() == c[0].card.left(), "quatre colonnes : la cinquième image est au début de la ligne suivante");
+    assert!(l.pages[1].contains(c[5].card.center()), "deuxième page");
     assert_eq!(l.empty.len(), 2, "cases vides au bout de la dernière page");
     assert!(l.size.y >= l.pages[1].bottom());
-    // Plan à la ligne : chaque plan commence une ligne, ses images restent ensemble.
-    let l = board::layout(&doc, &settings(6, 0, true));
-    assert_eq!(l.pages.len(), 1, "« toutes » : une seule page");
-    assert_eq!(l.cards[2].card.top(), l.cards[0].card.top());
-    assert_eq!(l.cards[3].card.left(), l.cards[0].card.left());
-    assert!(l.cards[3].card.top() > l.cards[2].card.top());
+    // « toutes » : une seule page, une ligne neuve quand la ligne est pleine.
+    let l = board::layout(&doc, &settings(6, 0));
+    assert_eq!(l.pages.len(), 1);
+    assert_eq!(l.cards[5].card.top(), l.cards[0].card.top(), "six images tiennent sur six colonnes");
+    assert_eq!(l.empty.len(), 6, "la ligne pleine appelle une ligne de cases vides : on peut toujours continuer");
+    assert!(l.empty[0].top() > l.cards[0].thumb.top());
     // Jamais plus de six colonnes.
-    let l = board::layout(&doc, &settings(10, 0, false));
+    let l = board::layout(&doc, &settings(10, 0));
     assert_eq!(l.cards[5].card.top(), l.cards[0].card.top());
     assert_eq!(MAX_COLUMNS, 6);
     // Ne dépend pas de la taille de la vue : rien à donner d'autre que les réglages.
-    assert_eq!(board::layout(&doc, &settings(4, 2, false)), board::layout(&doc, &settings(4, 2, false)));
+    assert_eq!(board::layout(&doc, &settings(4, 2)), board::layout(&doc, &settings(4, 2)));
 }
 
 #[test]
-fn drop_targets_between_plans() {
+fn spacing_is_tight_inside_a_plan_and_wide_at_a_cut() {
     let doc = doc();
-    let l = board::layout(&doc, &settings(4, 0, false));
+    let l = board::layout(&doc, &settings(6, 0));
     let c = &l.cards;
-    let at = |k: usize, right: bool| pos2(if right { c[k].card.right() - 5.0 } else { c[k].card.left() + 5.0 }, c[k].card.center().y);
-    // Devant un plan : la moitié gauche de sa première vignette.
-    assert_eq!(board::drop_target(&l, at(0, false), 18.0).unwrap().before, Some(0));
-    assert_eq!(board::drop_target(&l, at(3, false), 18.0).unwrap().before, Some(1));
-    // Ailleurs sur un plan : après lui (jamais entre ses images).
-    let t = board::drop_target(&l, at(1, false), 18.0).unwrap();
-    assert_eq!(t.before, Some(1));
-    assert!((t.line.0.x - (c[2].card.right() + 9.0)).abs() < 1e-3, "repère après la dernière image du plan");
-    assert_eq!(board::drop_target(&l, at(2, true), 18.0).unwrap().before, Some(1));
-    assert_eq!(board::drop_target(&l, at(5, true), 18.0).unwrap().before, None, "après le dernier : à la fin");
+    assert_eq!(c[1].card.left(), c[0].card.right() + GAP_SAME, "deux images d'un même plan : 10");
+    assert_eq!(c[2].card.left(), c[1].card.right() + GAP_SAME);
+    assert_eq!(c[3].card.left(), c[2].card.right() + GAP_CUT, "à une coupe : 30");
+    assert_eq!(c[4].card.left(), c[3].card.right() + GAP_CUT);
+    assert_eq!((GAP_SAME, GAP_CUT), (10.0, 30.0));
+    // Les lignes ont un nombre fixe d'images (les colonnes) : la ligne suivante commence au bord gauche.
+    let l = board::layout(&doc, &settings(4, 0));
+    assert_eq!(l.cards[4].card.left(), l.cards[0].card.left());
+    assert!(l.cards[4].card.top() > l.cards[0].card.top());
+    // Les pages sont assez larges pour la ligne la plus large (quatre coupes).
+    assert!(l.pages[0].width() >= PAGE_PAD * 2.0 + 4.0 * 200.0 + 3.0 * GAP_CUT - 1e-3);
+}
+
+#[test]
+fn bars_are_grey_in_a_plan_black_at_a_cut_and_the_last_leads_to_the_empty_box() {
+    let doc = doc();
+    let l = board::layout(&doc, &settings(6, 0));
+    assert_eq!(l.bars.len(), 6, "une barre après chaque image, la dernière avant la première case vide");
+    assert_eq!(l.bars.iter().map(|b| b.cut).collect::<Vec<_>>(), vec![false, false, true, true, true, true]);
+    for (k, b) in l.bars.iter().enumerate() {
+        assert_eq!(b.after, k);
+        let gap = if b.cut { GAP_CUT } else { GAP_SAME };
+        assert_eq!(b.bar.width(), BAR_W);
+        assert!((b.bar.height() - l.cards[k].thumb.height() / 3.0).abs() < 1e-3, "un tiers de la hauteur de la vignette");
+        assert_eq!(b.bar.center(), pos2(l.cards[k].card.right() + gap * 0.5, l.cards[k].thumb.center().y));
+        assert_eq!(b.zone.left(), l.cards[k].card.right());
+        assert_eq!(b.zone.width(), gap);
+    }
+    // La dernière barre, grise : la première case vide est une image de plus du dernier plan (écart serré).
+    let (joined, apart) = (board::layout_with(&doc, &settings(4, 0), &Default::default(), true), board::layout(&doc, &settings(4, 0)));
+    assert!(!joined.bars[5].cut && apart.bars[5].cut);
+    assert_eq!(joined.empty[0].left(), joined.cards[5].card.right() + GAP_SAME);
+    assert_eq!(apart.empty[0].left(), apart.cards[5].card.right() + GAP_CUT);
+    // Au bout d'une ligne (trois colonnes), la barre est après la dernière image de la ligne.
+    let three = board::layout(&doc, &settings(3, 0));
+    assert_eq!(three.cards[3].row, 1);
+    assert_eq!(three.bars[2].after, 2);
+    assert!(three.bars[2].bar.center().y < three.cards[3].thumb.top(), "sur la ligne de l'image 3, pas sur la suivante");
+    assert!(three.bars[2].bar.center().x > three.cards[2].card.right());
+    assert!(three.bars[2].cut);
+}
+
+#[test]
+fn a_row_goes_down_just_enough_for_a_note_of_two_or_three_lines() {
+    let doc = doc();
+    let s = settings(4, 0);
+    let plain = board::layout(&doc, &s);
+    assert_eq!(plain.cards[4].card.top() - plain.cards[0].card.top(), row_height(1));
+    assert_eq!(plain.cards[0].note.height(), NOTE_LINE_H, "une bande vide garde une ligne");
+    assert_eq!(plain.cards[0].note.top(), plain.cards[0].thumb.bottom() + NOTE_GAP);
+    for lines in [2usize, 3] {
+        let mut notes = std::collections::HashMap::new();
+        notes.insert(doc.panels[0].marks[0].id, lines);
+        let l = board::layout_with(&doc, &s, &notes, false);
+        assert_eq!(l.cards[1].note.height(), lines as f32 * NOTE_LINE_H);
+        assert_eq!(l.cards[4].card.top() - l.cards[0].card.top(), row_height(lines), "la rangée suivante descend d'autant ({lines} lignes)");
+        assert_eq!(l.cards[0].note.height(), NOTE_LINE_H, "les autres bandes gardent leur ligne");
+        assert!(l.cards[4].card.top() >= l.cards[1].note.bottom() + ROW_GAP - 1e-3, "la marge sous la note est gardée");
+    }
+    // Quatre lignes ne sont jamais affichées : au plus trois.
+    let mut notes = std::collections::HashMap::new();
+    notes.insert(doc.panels[0].id, 9);
+    let l = board::layout_with(&doc, &s, &notes, false);
+    assert_eq!(l.cards[0].note.height(), NOTE_MAX_LINES as f32 * NOTE_LINE_H);
+    // Une note sur la dernière ligne de la planche descend la page, pas ce qui est avant.
+    let mut notes = std::collections::HashMap::new();
+    notes.insert(doc.panels[3].id, 2);
+    let l = board::layout_with(&doc, &s, &notes, false);
+    assert_eq!(l.cards[4].card.top(), plain.cards[4].card.top());
+    assert!(l.pages[0].height() > plain.pages[0].height());
+}
+
+#[test]
+fn hit_testing_tells_images_notes_bars_and_empty_boxes_apart() {
+    let doc = doc();
+    let l = board::layout(&doc, &settings(4, 0));
+    let c = &l.cards;
+    assert_eq!(board::hit(&l, c[0].thumb.center(), 0.0), Hit::Thumb(0));
+    assert_eq!(board::hit(&l, c[3].note.center(), 0.0), Hit::Note(3));
+    assert_eq!(board::hit(&l, c[0].label().center(), 0.0), Hit::Nothing, "le numéro du plan ne prend aucun geste");
+    assert_eq!(board::hit(&l, l.empty[0].center(), 0.0), Hit::Empty(0));
+    assert_eq!(board::hit(&l, l.empty[1].center(), 0.0), Hit::Empty(1));
+    let zone = l.bars[1].zone;
+    assert_eq!(board::hit(&l, zone.center(), 0.0), Hit::Bar(1));
+    // L'écart d'un même plan est étroit (10) : à l'écran réduit, la zone est élargie pour qu'on la touche.
+    let near = pos2(zone.left() - 2.0, zone.center().y);
+    assert_eq!(board::hit(&l, near, 0.0), Hit::Thumb(1));
+    assert_eq!(board::hit(&l, near, 16.0), Hit::Bar(1));
+    // Hors de tout : le fond de la page.
+    assert_eq!(board::hit(&l, pos2(2.0, 2.0), 0.0), Hit::Nothing);
     // Lasso : les plans touchés, une fois chacun.
     let r = Rect::from_two_pos(c[0].card.center(), c[1].card.center());
     assert_eq!(board::cards_in(&l, r), vec![0]);
     let r = Rect::from_two_pos(c[2].card.center(), c[3].card.center());
     assert_eq!(board::cards_in(&l, r), vec![0, 1]);
 }
-
 #[test]
 fn moving_several_plans() {
     let mut doc = doc();
@@ -125,7 +210,7 @@ fn close(a: VPoint, x: f32, y: f32) -> bool {
 #[test]
 fn notes_erase_and_points() {
     let doc = doc();
-    let l = board::layout(&doc, &settings(4, 0, false));
+    let l = board::layout(&doc, &settings(4, 0));
     let mut b = Board::default();
     b.add_stroke(&l, pts(&[(0.0, 0.0), (100.0, 0.0)]), [0; 3], None);
     b.add_stroke(&l, pts(&[(0.0, 50.0), (100.0, 50.0)]), [0; 3], None);
@@ -133,19 +218,13 @@ fn notes_erase_and_points() {
     assert!(b.erase_at(&l, pos2(50.0, 4.0), 5.0), "touche le premier (rayon du trait compris)");
     assert_eq!(b.strokes.len(), 1);
     assert_eq!(b.stroke_at(&l, pos2(50.0, 50.0), 2.0), Some(0));
-    let mut points = Vec::new();
-    board::push_note_point(&mut points, VPoint { x: 0.0, y: 0.0, r: 1.0 }, 2.0);
-    board::push_note_point(&mut points, VPoint { x: 1.0, y: 0.0, r: 3.0 }, 2.0);
-    board::push_note_point(&mut points, VPoint { x: 5.0, y: 0.0, r: 1.0 }, 2.0);
-    assert_eq!(points.len(), 2);
-    assert_eq!(points[0].r, 3.0);
 }
 
 #[test]
 fn anchored_notes_follow_their_card() {
     let mut doc = doc();
     let all = ids(&doc);
-    let s = settings(4, 0, false);
+    let s = settings(4, 0);
     let l = board::layout(&doc, &s);
     let card1 = l.card_of(all[1]).unwrap().card;
     let mut b = Board::default();
@@ -195,7 +274,7 @@ fn anchored_notes_follow_their_card() {
 fn notes_are_undone_and_saved() {
     let mut doc = doc();
     let all = ids(&doc);
-    let l = board::layout(&doc, &settings(4, 0, false));
+    let l = board::layout(&doc, &settings(4, 0));
     let snap = Edit::Structure { structure: doc.structure(), nav: Nav { panel: 0, layer: 0 } };
     doc.board.add_stroke(&l, pts(&[(10.0, 10.0), (60.0, 30.0)]), [10, 20, 30], None);
     doc.board.add_text(&l, pos2(300.0, 40.0), "Contre-champ\nplus serré".into(), 18.0, [200, 0, 0], Some(all[2]));
