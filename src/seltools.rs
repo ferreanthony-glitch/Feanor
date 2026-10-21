@@ -18,7 +18,7 @@ use crate::selbox::{self, BoxParams, Handle, Mods, SelFrame};
 use crate::vector::{Affine, Element, VectorDrawing};
 use crate::vtools::VDrag;
 
-const ACCENT: Color32 = crate::theme::POIGNEE_SELECTION;
+const ACCENT: Color32 = crate::theme::SELECTION_BOITE;
 /// À moins de tant de pixels d'écran du centre, le pivot tiré s'y remet.
 const PIVOT_SNAP: f32 = 6.0;
 
@@ -430,7 +430,14 @@ impl App {
     pub(crate) fn paint_selection_box(&self, painter: &Painter) {
         let Some(frame) = self.sel_frame() else { return };
         let (quad, pivot) = self.frame_on_screen(&frame);
-        painter.add(Shape::closed_line(quad.to_vec(), Stroke::new(1.0_f32, ACCENT)));
+        if !quad.iter().chain([&pivot]).all(|p| p.is_finite()) {
+            return;
+        }
+        // Un cadre d'1 px, plein : quatre segments (sans jonction : un cadre écrasé ne fait pas de pointe).
+        let edge = Stroke::new(1.0_f32, ACCENT);
+        for k in 0..4 {
+            painter.line_segment([quad[k], quad[(k + 1) % 4]], edge);
+        }
         if !self.box_active() {
             return;
         }
@@ -441,21 +448,29 @@ impl App {
             .and_then(|p| self.active_handle().or_else(|| self.box_hit(p)));
         let lit = |h: Handle| hover == Some(h);
         let mids = [0, 1, 2, 3].map(|k| quad[k] + (quad[(k + 1) % 4] - quad[k]) * 0.5);
+        // Huit poignées carrées de la même taille à l'écran à tout zoom : fond blanc, bord orange
+        // d'1 px ; celle sous la souris prend le fond orange.
+        let ppp = painter.ctx().pixels_per_point();
+        let handle = |painter: &Painter, c: Pos2, on: bool| {
+            let c = selbox::snap_handle_center(c, ppp);
+            let fill = if on { ACCENT } else { crate::theme::SELECTION_POIGNEE_FOND };
+            painter.rect(selbox::handle_rect(c, selbox::HANDLE_SIDE), 0.0, fill, Stroke::new(1.0_f32, ACCENT), StrokeKind::Middle);
+        };
         for (k, c) in quad.iter().enumerate() {
-            let fill = if lit(Handle::Corner(k)) { ACCENT } else { Color32::WHITE };
-            painter.rect(selbox::handle_rect(*c, 8.0), 1.0, fill, Stroke::new(1.5_f32, ACCENT), StrokeKind::Middle);
+            handle(painter, *c, lit(Handle::Corner(k)));
         }
         for (k, c) in mids.iter().enumerate() {
-            let fill = if lit(Handle::Edge(k)) { ACCENT } else { Color32::WHITE };
-            painter.rect(selbox::handle_rect(*c, 7.0), 1.0, fill, Stroke::new(1.5_f32, ACCENT), StrokeKind::Middle);
+            handle(painter, *c, lit(Handle::Edge(k)));
         }
         // Le bord survolé (incliner) s'épaissit.
         if let Some(Handle::Skew(k)) = hover {
             painter.line_segment([quad[k], quad[(k + 1) % 4]], Stroke::new(2.5_f32, ACCENT));
         }
-        let fill = if lit(Handle::Pivot) { ACCENT } else { Color32::WHITE };
-        painter.circle(pivot, 4.5, fill, Stroke::new(1.5_f32, ACCENT));
-        painter.circle_filled(pivot, 1.5, if lit(Handle::Pivot) { Color32::WHITE } else { ACCENT });
+        // Le pivot : un petit cercle fin, sans remplissage (un voile orange quand on le tient).
+        if lit(Handle::Pivot) {
+            painter.circle_filled(pivot, selbox::PIVOT_RADIUS, ACCENT.gamma_multiply(0.3));
+        }
+        painter.circle_stroke(pivot, selbox::PIVOT_RADIUS, Stroke::new(1.0_f32, ACCENT));
     }
 
     /// Le curseur au-dessus de la boîte ; faux si la souris n'est sur aucune de ses parties.

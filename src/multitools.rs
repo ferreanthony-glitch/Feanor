@@ -23,7 +23,7 @@ use crate::multisel::{self, MDrag, MultiSel, PartKind, Targets};
 use crate::selbox::{self, BoxParams, Handle, SelFrame};
 use crate::vector::Affine;
 
-const ACCENT: Color32 = crate::theme::POIGNEE_SELECTION;
+const ACCENT: Color32 = crate::theme::SELECTION_BOITE;
 /// À moins de tant de pixels d'écran du centre, le pivot tiré s'y remet.
 const PIVOT_SNAP: f32 = 6.0;
 /// Geste d'annulation des flèches : une flèche tenue = une étape.
@@ -608,14 +608,16 @@ impl App {
     pub(crate) fn paint_multi_overlay(&self, painter: &Painter) -> bool {
         let to_s = |p: Pos2| self.stage_to_screen(p);
         let lasso: Option<Vec<Pos2>> = match &self.multi.drag {
-            Some(MDrag::Lasso { points, .. }) => Some(points.clone()),
-            Some(MDrag::Rect { from, to, .. }) => Some(crate::pixsel::rect_polygon(Rect::from_two_pos(*from, *to))),
+            Some(MDrag::Lasso { points, .. }) => Some(points.iter().map(|p| to_s(*p)).collect()),
+            Some(MDrag::Rect { from, to, .. }) => {
+                let mut pts: Vec<Pos2> = crate::pixsel::rect_polygon(Rect::from_two_pos(*from, *to)).into_iter().map(to_s).collect();
+                pts.extend(pts.first().copied());
+                Some(pts)
+            }
             _ => None,
         };
-        if let Some(points) = lasso.filter(|p| p.len() >= 2) {
-            let pts: Vec<Pos2> = points.iter().map(|p| to_s(*p)).collect();
-            painter.add(Shape::closed_line(pts.clone(), Stroke::new(2.5_f32, Color32::from_black_alpha(120))));
-            painter.add(Shape::closed_line(pts, Stroke::new(1.0_f32, ACCENT)));
+        if let Some(shape) = lasso.and_then(|pts| contours::lasso_shape(&pts)) {
+            painter.add(shape);
         }
         let Some(sel) = &self.multi.sel else { return false };
         if self.multi_live_frame().is_none() {
@@ -638,8 +640,7 @@ impl App {
                     if let Some(&first) = pts.first() {
                         pts.push(first);
                     }
-                    painter.add(Shape::line(pts.clone(), Stroke::new(1.0_f32, Color32::WHITE)));
-                    painter.extend(Shape::dashed_line(&pts, Stroke::new(1.0_f32, Color32::BLACK), 5.0, 5.0));
+                    painter.add(Shape::line(pts, Stroke::new(1.0_f32, ACCENT)));
                 }
             }
         }
@@ -673,15 +674,17 @@ impl App {
         if let (Some(t), Some(k)) = (reuse, slot.as_ref()) {
             return Some(k.shape(&t));
         }
-        let mut lines: Vec<Vec<Pos2>> = Vec::new();
+        let mut lines: Vec<contours::RadiusLine> = Vec::new();
         for p in &sel.parts {
             if let PartKind::Vector { items } = &p.kind {
                 if let Some(d) = self.doc.cels.get(&p.cel).and_then(|c| c.vector.as_ref()) {
-                    lines.extend(contours::lines_of(d, items).into_iter().map(|l| l.into_iter().map(|q| p.to_stage.apply(q)).collect()));
+                    // Les rayons suivent l'échelle du calque sur la feuille.
+                    let k = p.to_stage.a.hypot(p.to_stage.c);
+                    lines.extend(contours::radius_lines_of(d, items).into_iter().map(|l| contours::RadiusLine { points: l.points.into_iter().map(|q| p.to_stage.apply(q)).collect(), radii: l.radii.into_iter().map(|r| r * k).collect() }));
                 }
             }
         }
-        let built = Contours::build(key, &lines, to_s, now, ACCENT.gamma_multiply(0.85));
+        let built = Contours::build_halo(key, &lines, to_s, self.view.zoom, now, ACCENT);
         let shape = built.shape(&Affine::IDENTITY);
         *slot = Some(built);
         Some(shape)

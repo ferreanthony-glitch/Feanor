@@ -7,7 +7,7 @@ use crate::app::{App, Tool};
 use crate::pixtools::BDrag;
 use crate::vtools::VDrag;
 
-const ACCENT: Color32 = crate::theme::POIGNEE_SELECTION;
+const ACCENT: Color32 = crate::theme::SELECTION_BOITE;
 
 impl App {
     pub(crate) fn canvas_panel(&mut self, ui: &mut egui::Ui) {
@@ -553,15 +553,19 @@ impl App {
         self.paint_shape_overlay(painter, shift);
 
         // Lasso ou rectangle en cours de tracé (vectoriel ou bitmap).
+        // Une ligne fine ouverte et des points ambrés (`contours::lasso_shape`) ; un rectangle se
+        // referme sur son premier coin.
         let drawing_lasso: Option<Vec<Pos2>> = match (&self.vdrag, &self.bdrag) {
-            (Some(VDrag::Lasso(points)), _) | (_, Some(BDrag::Lasso { points, .. })) => Some(points.clone()),
-            (_, Some(BDrag::Rect { from, to, .. })) => Some(crate::pixsel::rect_polygon(Rect::from_two_pos(*from, *to))),
+            (Some(VDrag::Lasso(points)), _) | (_, Some(BDrag::Lasso { points, .. })) => Some(points.iter().map(|p| to_s(*p)).collect()),
+            (_, Some(BDrag::Rect { from, to, .. })) => {
+                let mut pts: Vec<Pos2> = crate::pixsel::rect_polygon(Rect::from_two_pos(*from, *to)).into_iter().map(to_s).collect();
+                pts.extend(pts.first().copied());
+                Some(pts)
+            }
             _ => None,
         };
-        if let Some(points) = drawing_lasso.filter(|p| p.len() >= 2) {
-            let pts: Vec<Pos2> = points.iter().map(|p| to_s(*p)).collect();
-            painter.add(Shape::closed_line(pts.clone(), Stroke::new(2.5_f32, Color32::from_black_alpha(120))));
-            painter.add(Shape::closed_line(pts, Stroke::new(1.0_f32, ACCENT)));
+        if let Some(shape) = drawing_lasso.and_then(|pts| crate::contours::lasso_shape(&pts)) {
+            painter.add(shape);
         }
 
         // Geste du cutter en cours.
@@ -571,14 +575,9 @@ impl App {
             painter.add(Shape::line(pts, Stroke::new(1.5_f32, Color32::from_rgb(240, 70, 60))));
         }
 
-        // Contour de la zone bitmap sélectionnée : pointillés noirs et blancs.
-        for poly in self.bitmap_selection_outline() {
-            let mut pts: Vec<Pos2> = poly.into_iter().map(to_s).collect();
-            if let Some(&first) = pts.first() {
-                pts.push(first);
-            }
-            painter.add(Shape::line(pts.clone(), Stroke::new(1.0_f32, Color32::WHITE)));
-            painter.extend(Shape::dashed_line(&pts, Stroke::new(1.0_f32, Color32::BLACK), 5.0, 5.0));
+        // Contour de la zone bitmap sélectionnée : un trait orange d'1 px (gardé, `contours.rs`).
+        if let Some(shape) = self.bitmap_selection_shape() {
+            painter.add(shape);
         }
 
         // Sélection sur plusieurs calques : lasso, contours de chaque calque et boîte commune.
@@ -593,7 +592,7 @@ impl App {
             // (Contours gardés d'une image à l'autre, simplifiés à l'écran : `contours.rs`.)
             let gesture = self.flottante.as_ref().is_some_and(|f| f.pending.is_none());
             let moved = self.flottante.as_ref().filter(|f| f.pending.is_none()).map(|f| f.aff).unwrap_or_default();
-            if let Some(shape) = self.selection_contours(sel.cel, &sel.items, moved, gesture, ACCENT.gamma_multiply(0.85)) {
+            if let Some(shape) = self.selection_contours(sel.cel, &sel.items, moved, gesture, ACCENT) {
                 painter.add(shape);
             }
         }
