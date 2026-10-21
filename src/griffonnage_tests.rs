@@ -171,6 +171,8 @@ fn app(name: &str) -> App {
 fn app_griffonne(name: &str, gap: f32, base: u64) -> (App, CelId) {
     let mut app = app(name);
     let mut doc = Document::new(400, 300, 24);
+    // (Des numéros de dessins à cet essai : le cache des dessins dérivés, lui, est commun à tous les essais.)
+    doc.reserve_id(base);
     let a = doc.add_cel(Cel::bitmap(ring(400, 300, (200.0, 150.0), 60.0, gap)));
     doc.cels.get_mut(&a).expect("trait").version = base;
     let mut line = Layer::new("Trait", LayerKind::Bitmap);
@@ -399,6 +401,7 @@ fn arc_of(doc: &Document, item: &PlanItem) -> Arc<Cel> {
 /// Un document 64×64 : le carré de traits, des griffonnages rouges au centre ; l'élément du plan de leur remplissage.
 fn doc_fill(base: u64) -> (Document, CelId, CelId, PlanItem) {
     let mut doc = Document::new(64, 64, 24);
+    doc.reserve_id(base);
     let (lines, g) = (doc.new_cel(LayerKind::Bitmap), doc.new_cel(LayerKind::Bitmap));
     doc.cels.get_mut(&lines).expect("trait").raster = square();
     dot(&mut doc.cels.get_mut(&g).expect("griffonnage").raster, 25, 25, Color32::RED);
@@ -505,6 +508,38 @@ fn editing_the_line_layer_recomputes_the_fill_of_a_colour_layer() {
     assert_eq!(newer.raster.get(230, 180).a(), 0, "l'autre côté n'a plus de couleur");
 }
 
+/// Au repos, un calque de couleur qui remplit ne coûte rien : le remplissage arrive, puis SHOT ne demande plus d'image
+/// (règle « sans latence » : pas de calcul qui se redemande à chaque image, pas de repeinture inutile).
+#[test]
+fn an_application_with_a_filling_colour_layer_goes_back_to_rest() {
+    use crate::perf_tests::{banc, se_reposer};
+    // (Le moindre calcul d'effet d'un autre essai réveille cette application : état commun pour elle seule.)
+    monde::ecrire();
+    let mut doc = Document::new(400, 300, 24);
+    doc.reserve_id(8_400_000);
+    let a = doc.add_cel(Cel::bitmap(ring(400, 300, (200.0, 150.0), 60.0, 0.0)));
+    doc.cels.get_mut(&a).expect("trait").version = 8_400_000;
+    let mut line = Layer::new("Trait", LayerKind::Bitmap);
+    line.frames = vec![Some(a); 12];
+    doc.panels[0].layers = vec![line, Layer::new("Autre", LayerKind::Vector)];
+    doc.panels[0].length = 12;
+    let mut b = banc(doc, false);
+    (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
+    b.app.run_action("calque.nouveau_couleur");
+    b.app.run_action("calque.griffonner");
+    b.app.tool = Tool::Brush;
+    b.app.color = [255, 0, 0];
+    trace(&mut b.app, pos2(180.0, 150.0), pos2(220.0, 150.0));
+    assert!(se_reposer(&mut b, 3000) < 3000, "SHOT finit par se reposer avec un calque qui remplit");
+    // Le remplissage est arrivé, et il ne se redemande pas.
+    let plan = b.app.build_plan(0, false, false);
+    assert!(plan.items[0].ctg.is_some());
+    assert!(fx::ready(&b.app.doc, &plan.items[0], 0).is_some(), "le remplissage calculé en arrière-plan est là");
+    let repos: Vec<_> = (0..8).map(|_| b.image(Vec::new(), 0.5)).collect();
+    let pire = repos.iter().map(|m| m.reveil).min().unwrap_or(Duration::MAX);
+    assert!(pire >= Duration::from_secs(1), "au repos, SHOT demande à être repeint dans {pire:?}");
+    assert_eq!(crate::fxcache::pending(), 0, "plus aucun calcul de fond demandé");
+}
 // ------------------------------------------------------------------ copies, enregistrement
 
 #[test]
@@ -534,6 +569,32 @@ fn duplicating_a_colour_layer_copies_its_scribbles_instead_of_sharing_them() {
     assert_eq!(ids.len(), 2, "deux dessins de griffonnages distincts");
 }
 
+#[test]
+fn copying_and_pasting_a_line_layer_brings_the_scribbles_of_its_colour_layer() {
+    let (mut app, _) = app_griffonne("coller", 0.0, 8_300_300);
+    trace(&mut app, pos2(180.0, 150.0), pos2(220.0, 150.0));
+    app.cur_layer = 1;
+    app.run_action("calque.copier");
+    app.run_action("calque.coller");
+    let fills: Vec<&CalqueCouleur> = app.layers().iter().filter_map(|l| l.couleur.as_ref()).filter(|c| c.remplissage).collect();
+    assert_eq!(fills.len(), 2, "le calque de couleur est revenu avec le trait collé");
+    let ids: std::collections::BTreeSet<CelId> = fills.iter().flat_map(|c| c.griffonnages.values().copied()).collect();
+    assert_eq!(ids.len(), 2, "des griffonnages à lui, pas ceux de l'original");
+    assert!(ids.iter().all(|g| app.doc.cels.get(g).is_some_and(|c| !c.is_empty())), "avec leur contenu");
+}
+#[test]
+fn a_copied_line_drawing_takes_a_copy_of_the_scribbles_of_its_colour_drawing() {
+    let (mut app, a) = app_griffonne("copie-dessin", 0.0, 8_300_400);
+    trace(&mut app, pos2(180.0, 150.0), pos2(220.0, 150.0));
+    let copy = app.doc.duplicate_cel(a);
+    crate::calquecouleur::noter_copie(&mut app.doc, 0, 1, a, copy);
+    let c = app.layers()[0].couleur.clone().expect("couleur");
+    let (paint, fresh) = (c.dessins[&a], c.dessins[&copy]);
+    assert_ne!(paint, fresh, "la copie a sa peinture");
+    let (g, g2) = (c.griffonnages[&paint], c.griffonnages[&fresh]);
+    assert_ne!(g, g2, "et ses griffonnages, pas ceux de l'original");
+    assert_eq!(app.doc.cels[&g].raster.to_flat(), app.doc.cels[&g2].raster.to_flat(), "le même contenu au départ");
+}
 #[test]
 fn scribbles_are_saved_with_the_project_and_come_back_the_same() {
     let (mut app, _) = app_griffonne("enregistre", 0.0, 8_300_100);
@@ -640,6 +701,7 @@ fn a_ctg_layer_right_under_its_source_with_matching_images_becomes_a_linked_colo
     // Un projet « d'avant » : un calque de traits (trois dessins) et, juste dessous, un calque CTG aux images qui se
     // recouvrent exactement.
     let mut doc = Document::new(64, 64, 24);
+    doc.reserve_id(8_500_000);
     let (l1, l2, g1, g2) = (doc.new_cel(LayerKind::Bitmap), doc.new_cel(LayerKind::Bitmap), doc.new_cel(LayerKind::Bitmap), doc.new_cel(LayerKind::Bitmap));
     doc.cels.get_mut(&l1).expect("trait").raster = square();
     let mut moved = Raster::new(64, 64);

@@ -286,14 +286,19 @@ pub struct AncienCtg {
     pub trou: u8,
 }
 
+/// Bit qui marque les dessins de peinture créés pour un ancien calque CTG. Rien d'autre ne l'utilise (les bits 62 et 63 sont
+/// des étiquettes : images de vidéo, cartes de l'Espace 3D, feuille flottante, repères des calques d'effets, dessins
+/// dérivés ; le préfixe d'un équipier occupe les bits 32 à 51).
+const PEINTURE_BIT: CelId = 1 << 60;
+
 /// Le numéro du dessin de peinture (vide) que reçoit le dessin `base` quand un ancien calque CTG devient un calque de
 /// couleur. Dérivé du numéro de `base` plutôt que tiré du compteur du projet : deux ouvertures du même vieux projet
 /// (ou deux équipiers qui relisent le même plan partagé) donnent les mêmes numéros, et rien ne peut heurter un dessin
 /// d'un autre plan. Si un dessin porte déjà ce numéro (jamais en pratique), on cherche le suivant.
 fn numero_peinture(cels: &HashMap<CelId, Cel>, base: CelId) -> CelId {
-    let mut id = base | (1 << 62);
+    let mut id = base | PEINTURE_BIT;
     while cels.contains_key(&id) {
-        id = id.wrapping_add(1) | (1 << 62);
+        id = id.wrapping_add(1) | PEINTURE_BIT;
     }
     id
 }
