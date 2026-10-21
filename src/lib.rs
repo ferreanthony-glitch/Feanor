@@ -457,6 +457,8 @@ mod layerheads;
 mod layerops;
 #[cfg(test)]
 mod layerops_tests;
+#[cfg(test)]
+mod panneaux_tests;
 mod layersui;
 mod layertools;
 mod marks;

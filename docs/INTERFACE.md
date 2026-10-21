@@ -932,13 +932,13 @@ glows, tremblements de caméra effectifs, timecode ». Détail : README (section
 
 ### Où et quels gestes
 
-- **Ajouter** : bouton étincelle du panneau Calques ; Calques > Nouveau calque > Calque d'effet (et clic droit d'un
-  calque) ; « Préréglages » du panneau Effets ; Ctrl+K (`effet.*`, sans touche par défaut, « Assigner un
+- **Ajouter** : le « + » du panneau Calques > Calque d'effet (passe du 2026-10-21, partie 15 : plus de bouton étincelle) ;
+  Calques > Nouveau calque > Calque d'effet (et clic droit dans le vide du panneau) ; « Préréglages » du panneau Effets ; Ctrl+K (`effet.*`, sans touche par défaut, « Assigner un
   raccourci… » au clic droit d'une entrée de menu).
 - **Fenêtre du préréglage** (à droite de l'écran, ne cache pas le dessin) : l'effet se voit en direct sur le dessin
   pendant les réglages ; Appliquer (une étape d'annulation « Préréglage d'effet : … »), Annuler ou Échap (rien n'est posé).
 - **Distinguer** : un calque d'effet a une étincelle à la place de la lettre B / V, la teinte cyan (`theme::dessin_cfx`,
-  `calque_cfx`) dans le panneau Calques, la timeline et le montage, et le mot « effet » sous son nom.
+  `calque_cfx`) dans le panneau Calques, la timeline et le montage, et une étincelle à la place du mot « effet » sous son nom.
 - **Régler après coup** : choisir le calque, panneau Effets (pile, clés en losanges violets, comme tout calque) ;
   une incrustation a son éditeur en tête du panneau. Étirer / couper / déplacer l'exposition dans la timeline change
   les images où l'effet agit.
@@ -3281,3 +3281,68 @@ l'enregistrement ne nettoie pas `dessins/`. Une version de SHOT qui ne connaît 
 9. Enregistrer, fermer, rouvrir : les deux variantes, leurs noms et la choisie sont là ; l'exemple d'avant (sans variante) s'ouvre sans fichier de plus.
 10. Film partagé : sans le jeton du montage, créer ou passer à une variante est refusé avec la raison ; avec le jeton, ça marche, et un plan tenu par un autre empêche le passage.
 11. Au repos, avec des variantes : rien ne bouge, le processeur reste à zéro.
+
+## 15. Les quatre panneaux plus simples (2026-10-21, branche `simpl-panneaux`)
+
+Demande d'Anthony : « toujours rendre l'interface la plus simple possible ». Quatre panneaux (Calques, Couleur, Effets,
+Réglages) et la création d'un calque ; rien n'a disparu : ce qui a quitté l'écran est dans un menu, le clic droit ou
+la palette de commandes (Ctrl+K).
+
+### Calques
+
+- **Cinq icônes** en haut : « + » (nouveau calque), dupliquer, supprimer, monter, descendre ; et « … » à droite.
+- **« + »** : un petit menu, une icône et une phrase par sorte : dessin vectoriel, dessin bitmap, calque de couleur, calque d'effet
+  (ses préréglages, dont « Calque d'effet vide »), vidéo (choisit le fichier), dossier ; en bas « Nom, groupe, place… »
+  (la fenêtre `calque.nouveau`). Les mêmes entrées sont dans Calques > Nouveau calque et le clic droit dans le vide du
+  panneau. Les raccourcis existants (`calque.nouveau_vectoriel`, `calque.nouveau_bitmap`, `calque.nouveau_couleur`,
+  `dossier.nouveau`, `effet.vide`, `fichier.importer_video`) lancent les mêmes actions qu'avant (`calquemenu.rs`).
+- **« … »** : l'aplat du calque courant (ajouter ou retirer), « Effets du calque allumés » (s'il en a), puis toutes les
+  commandes des calques que le panneau ne montre pas déjà : presse-papiers (couper, copier, coller), retourner, fusionner
+  (avec le dessous, les choisis, les visibles, tous), aplat sous le trait (calques choisis, tout le plan), ordre, groupes,
+  dossiers (dont « Placer les calques choisis dans un dossier »), choisir, afficher, pochoirs, nettoyer, calque de couleur.
+  Le clic droit sur un calque donne les mêmes (sous-menu « Autres commandes des calques »).
+- **Une ligne = une icône de sorte** (vectoriel, bitmap, couleur, effet, vidéo, dossier) avec sa bulle, à la place des mots
+  « vectoriel » et « bitmap » ; un dossier porte le nombre de ses calques. Le mode de fusion et l'opacité sont ceux du
+  calque courant, montrés une seule fois, sous les icônes.
+
+### Couleur
+
+De haut en bas : les deux couleurs (avant-plan, arrière-plan : le mélange de deux couleurs de certains pinceaux le prend) ;
+les neutres (noir, cinq gris, blanc : clic = avant-plan, clic droit = arrière-plan) ; les couleurs du nuancier montré ;
+puis « Plus de couleurs », **replié d'office** et retenu dans les réglages de l'application (jamais dans le projet) : la roue
+chromatique **ou** les curseurs TSV / RVB / TSL (un seul à la fois, retenu aussi), le code hexadécimal, les couleurs
+récentes, et la gestion des nuanciers. Ctrl+Z ne défait pas le nuancier. Le nuancier de départ n'a plus de blanc ni de gris
+(la rangée des neutres les porte) ; les nuanciers déjà enregistrés ne changent pas.
+
+### Effets
+
+Chaque effet de la pile se plie et se déplie (flèche à gauche de son nom) : en-tête = flèche, case « actif », nom, poubelle ;
+corps = réglages, clés, monter et descendre. Un nouvel effet s'ouvre et les autres se replient ; la première fois qu'on voit un
+calque, ses un ou deux effets sont ouverts (au-delà : repliés, sauf l'effet choisi). L'état est celui de la séance. Ctrl+C
+et Ctrl+V copient et collent les effets choisis (il n'y a pas de bouton Copier : le clic droit sur le nom, aussi).
+Ce qui ne peut pas servir se cache : « Tout réinitialiser » et « Tout supprimer » sans effet, les effets du trait sur un
+calque bitmap (le menu « Trait » fait place à une ligne qui dit où est le tremblement), « Supprimer la clé » sans clé ici.
+
+### Réglages
+
+Pinceau, crayon, gomme : taille, appui, opacité et nom en haut ; sous l'aperçu du trait, « Plus de réglages » (replié d'office,
+retenu) : les catégories de la brosse, « Peint derrière », « Remplir la forme » et le mode d'emploi. Le pot de peinture :
+tolérance et contours en haut, débord dans « Plus de réglages ». Sélection : tout sélectionner, copier, coller, supprimer (et
+couper, remplir sur un bitmap) en haut, cachés tant qu'ils ne peuvent pas servir ; miroirs, devant / derrière, champs de la
+boîte et mode d'emploi dans « Plus de réglages ». L'état de chaque outil est dans `[panneau_pinceaux] plus_outils`.
+
+### À regarder à l'écran
+
+1. Calques : cinq icônes et « … » ; le « + » ouvre six entrées avec leur phrase ; « … » > Presse-papiers > Copier ; clic droit
+   sur une ligne : « Autres commandes des calques » ; les lignes montrent une icône, pas un mot.
+2. Couleur : noir, cinq gris, blanc sous les deux carrés, puis les couleurs ; « Plus de couleurs » se déplie, la roue et les
+   curseurs ne sont jamais ensemble ; fermer et rouvrir SHOT : l'état est retenu.
+3. Effets : ajouter trois effets ; seul le dernier est ouvert ; la flèche plie et déplie ; sur un calque bitmap, pas de menu « Trait ».
+4. Réglages : pinceau, pot, sélection : peu de choses, « Plus de réglages » replié ; l'ouvrir, changer d'outil, revenir.
+
+### Essais ajoutés (`panneaux_tests.rs`)
+
+Cinq icônes et « … » ; une icône de sorte par ligne ; le menu « + » (sortes, phrases, effet vide) ; chaque commande retirée de la
+barre reste atteignable (« … », « + », palette) ; neutres dans l'ordre ; ordre du panneau Couleur ; roue ou curseurs, jamais
+les deux ; état replié et choisi retenu dans les réglages, pas dans le projet ; Ctrl+Z laisse le nuancier ; effets repliés,
+nouvel effet ouvert (`fxui::plis_apres`) ; boutons cachés plutôt que grisés ; « Plus de réglages » replié et retenu par outil.
