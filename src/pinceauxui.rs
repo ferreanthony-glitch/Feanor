@@ -341,17 +341,17 @@ impl App {
         let wide = ui.available_width() >= NARROW;
         ui.add_space(4.0);
         self.current_preview(ui);
-        // Tout ce qui est sous l'aperçu du trait est replié derrière une petite flèche (retenu).
-        let open = self.pinceaux.reglages_ouverts;
-        ui.horizontal(|ui| {
-            let (symbole, nom) = if open { (ph::CARET_DOWN, "Replier les réglages du pinceau") } else { (ph::CARET_RIGHT, "Déplier les réglages du pinceau") };
-            if icone(ui, symbole, nom, "Les catégories de réglages (pointe, taille et appui, dispersion, grain, couleur, lissage, toucher) sous l'aperçu du trait.", "").clicked() {
-                self.pinceaux.reglages_ouverts = !open;
-            }
-            if !open {
-                ui.label(RichText::new("Tous les réglages").small().weak());
-            }
-        });
+        // Tout ce qui est sous l'aperçu du trait est replié derrière une petite flèche (retenu) : « Plus de
+        // réglages », comme pour les autres outils (`repli.rs`). Le panneau Réglages y range aussi peint derrière,
+        // remplir la forme et le mode d'emploi.
+        let mut open = self.pinceaux.reglages_ouverts;
+        crate::repli::entete(
+            ui,
+            &mut open,
+            "Plus de réglages",
+            "Les catégories de réglages (pointe, taille et appui, dispersion, grain, couleur, lissage, toucher) sous l'aperçu du trait, peint derrière et remplir la forme.",
+        );
+        self.pinceaux.reglages_ouverts = open;
         if !open {
             return;
         }

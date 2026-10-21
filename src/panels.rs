@@ -334,8 +334,23 @@ impl App {
             });
         }
     }
-    /// Sous les réglages de la brosse du pinceau et du crayon : peint derrière, remplir la forme
-    /// (`brushfill`).
+    /// « Plus de réglages » de l'outil courant : une section repliée (retenue outil par outil dans les réglages de
+    /// l'application, `Panneau::plus_outils`) sous les deux ou trois réglages qui servent le plus (passe de
+    /// simplicité, 2026-10-21). Le pinceau, le crayon et la gomme ont la leur, sous l'aperçu du trait
+    /// (`brush_settings_ui`).
+    pub(crate) fn plus_de_reglages(&mut self, ui: &mut egui::Ui, contenu: impl FnOnce(&mut App, &mut egui::Ui)) {
+        let outil = self.tool.action();
+        let mut ouvert = self.pinceaux.plus_ouvert(outil);
+        if crate::repli::entete(ui, &mut ouvert, "Plus de réglages", "Les réglages qui servent moins souvent, et le mode d'emploi de l'outil.") {
+            self.pinceaux.regler_plus(outil, ouvert);
+        }
+        if ouvert {
+            contenu(self, ui);
+        }
+    }
+
+    /// Sous les réglages de la brosse du pinceau et du crayon, dans « Plus de réglages » : peint derrière, remplir
+    /// la forme (`brushfill`).
     fn brush_extras_ui(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         ui.separator();
@@ -362,8 +377,6 @@ impl App {
         });
         // (L'aplat sous le trait n'est plus un réglage du pinceau : il s'active depuis le calque, et ses réglages sont
         // en haut de ce panneau quand sa sous-ligne est choisie, `aplat_section_ui`.)
-        // Calque de couleur : le mode « Griffonner » (`calquecouleurui.rs`).
-        self.griffonner_options_ui(ui);
     }
 
     /// Panneau des réglages de l'outil courant.
@@ -393,24 +406,40 @@ impl App {
         // Pinceau, crayon, gomme : la taille en premier, les réglages de la brosse, puis en bas
         // peint derrière et remplir la forme (Anthony, 2026-10-18).
         match self.tool {
+            // Pinceau, crayon, gomme : la taille, l'opacité et le nom de la brosse en haut ; sous l'aperçu du trait,
+            // « Plus de réglages » (replié d'office) : les catégories de la brosse, peint derrière, remplir la forme
+            // et le mode d'emploi. Le mode « Griffonner » d'un calque de couleur reste à portée.
             Tool::Brush => {
                 self.brush_summary_ui(ui);
                 self.brush_settings_ui(ui);
-                self.brush_extras_ui(ui);
+                let plus = self.pinceaux.reglages_ouverts;
+                if plus {
+                    self.brush_extras_ui(ui);
+                }
+                // Calque de couleur : le mode « Griffonner » (`calquecouleurui.rs`).
+                self.griffonner_options_ui(ui);
                 if vector {
-                    let key = between_parens(&self.raccourci("outil.selection"));
-                    note(ui, &format!("Le trait reste modifiable avec l'outil Sélection{key}, même texturé (pointe en \
+                    if plus {
+                        let key = between_parens(&self.raccourci("outil.selection"));
+                        note(ui, &format!("Le trait reste modifiable avec l'outil Sélection{key}, même texturé (pointe en \
                               image, grain du papier)."));
+                    }
                     self.boil_tool_toggle(ui);
                 }
             }
             Tool::Pencil => {
                 self.brush_summary_ui(ui);
                 self.brush_settings_ui(ui);
-                self.brush_extras_ui(ui);
+                let plus = self.pinceaux.reglages_ouverts;
+                if plus {
+                    self.brush_extras_ui(ui);
+                }
+                self.griffonner_options_ui(ui);
                 if vector {
-                    let key = between_parens(&self.raccourci("outil.selection"));
-                    note(ui, &format!("Le trait reste modifiable avec l'outil Sélection{key}."));
+                    if plus {
+                        let key = between_parens(&self.raccourci("outil.selection"));
+                        note(ui, &format!("Le trait reste modifiable avec l'outil Sélection{key}."));
+                    }
                     self.boil_tool_toggle(ui);
                 }
             }
@@ -425,20 +454,22 @@ impl App {
                         "La gomme retire chaque trait touché en entier au lieu de le couper.",
                         "",
                     );
-                    note(
-                        ui,
-                        "Sur un calque vectoriel, la gomme coupe les traits. Les zones remplies \
-                         s'effacent en mode « traits entiers » ou par la sélection.",
-                    );
+                    if self.pinceaux.reglages_ouverts {
+                        note(
+                            ui,
+                            "Sur un calque vectoriel, la gomme coupe les traits. Les zones remplies \
+                             s'effacent en mode « traits entiers » ou par la sélection.",
+                        );
+                    }
                 }
                 self.brush_settings_ui(ui);
-                ui.separator();
                 self.griffonner_options_ui(ui);
             }
+            // Le pot de peinture : la tolérance et d'où viennent les contours en haut ; le débord et le
+            // mode d'emploi dans « Plus de réglages ».
             Tool::Fill => {
                 self.griffonner_options_ui(ui);
                 ui.add(egui::Slider::new(&mut self.fill.tolerance, 0.0..=1.0).text("Tolérance"));
-                ui.add(egui::Slider::new(&mut self.fill.expand, 0..=4).text("Débord (px)"));
                 ui.horizontal(|ui| {
                     use egui_phosphor::regular as ph;
                     ui.label("Contours pris sur");
@@ -446,15 +477,18 @@ impl App {
                     crate::bulles::choix(ui, sample, false, ph::STACK_SIMPLE, "Le calque courant", "Les contours du seul calque où l'on remplit.", "");
                     crate::bulles::choix(ui, sample, true, ph::STACK, "Tous les calques visibles", "Trait sur un calque, couleurs sur un autre.", "");
                 });
-                if vector {
-                    note(ui, "Sur un trait ou une zone déjà peinte : change sa couleur.");
-                } else {
-                    note(
-                        ui,
-                        "Astuce : trait sur un calque, couleurs sur un calque en dessous, \
-                         contours pris sur tous les calques.",
-                    );
-                }
+                self.plus_de_reglages(ui, |app, ui| {
+                    ui.add(egui::Slider::new(&mut app.fill.expand, 0..=4).text("Débord (px)"));
+                    if vector {
+                        note(ui, "Sur un trait ou une zone déjà peinte : change sa couleur.");
+                    } else {
+                        note(
+                            ui,
+                            "Astuce : trait sur un calque, couleurs sur un calque en dessous, \
+                             contours pris sur tous les calques.",
+                        );
+                    }
+                });
             }
             Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_options_ui(ui),
             Tool::Text => self.text_options_ui(ui),
@@ -561,47 +595,51 @@ impl App {
             Some(false) => "Zone sélectionnée.",
             Some(true) => "Zone soulevée : elle sera posée en quittant la sélection.",
         });
+        // En haut : ce qui sert le plus. Une commande qui ne peut pas servir (rien de sélectionné, rien de copié) se
+        // cache au lieu de se griser (2026-10-21).
         ui.horizontal_wrapped(|ui| {
-            if self.bouton_si(ui, has, ph::FLIP_HORIZONTAL, "Miroir horizontal", "Retourner la zone de gauche à droite.", "selection.miroir_h").clicked() {
-                self.bitmap_flip(true);
-            }
-            if self.bouton_si(ui, has, ph::FLIP_VERTICAL, "Miroir vertical", "Retourner la zone de haut en bas.", "selection.miroir_v").clicked() {
-                self.bitmap_flip(false);
-            }
-            if self.bouton_si(ui, has, ph::COPY, "Copier", "Copier la zone.", "edition.copier").clicked() {
-                self.bitmap_copy();
-            }
-            if self.bouton_si(ui, has, ph::SCISSORS, "Couper", "Copier la zone et l'effacer.", "edition.couper").clicked() {
-                self.bitmap_cut();
-            }
-            if self.bouton_si(ui, has, ph::ERASER, "Effacer dedans", "Effacer ce qui est dans la zone.", "").clicked() {
-                self.bitmap_erase(true);
-            }
-            if self.bouton_si(ui, has, ph::SELECTION_INVERSE, "Effacer autour", "Effacer tout ce qui est hors de la zone.", "").clicked() {
-                self.bitmap_erase(false);
-            }
-            if self.bouton_si(ui, has, ph::PAINT_BUCKET, "Remplir", "Remplir la zone de la couleur courante (le calque verrouillé refuse ; « préserver la transparence » ne change que la couleur de ce qui est dessiné).", "selection.remplir").clicked() {
-                self.bitmap_fill_selection();
-            }
-            if self.bouton_si(ui, has, ph::CHECK, "Poser", "Reposer la zone et quitter la sélection (Échap).", "").clicked() {
-                self.drop_bitmap_selection();
-            }
-            ui.separator();
             if self.bouton(ui, ph::SELECTION_ALL, "Tout sélectionner", "Tout le dessin.", "edition.tout_selectionner").clicked() {
                 self.bitmap_select_all();
             }
-            let can_paste = self.pixel_clipboard.is_some();
-            if self.bouton_si(ui, can_paste, ph::CLIPBOARD, "Coller", "Coller la zone copiée.", "edition.coller").clicked() {
+            if has && self.bouton(ui, ph::COPY, "Copier", "Copier la zone.", "edition.copier").clicked() {
+                self.bitmap_copy();
+            }
+            if has && self.bouton(ui, ph::SCISSORS, "Couper", "Copier la zone et l'effacer.", "edition.couper").clicked() {
+                self.bitmap_cut();
+            }
+            if self.pixel_clipboard.is_some() && self.bouton(ui, ph::CLIPBOARD, "Coller", "Coller la zone copiée.", "edition.coller").clicked() {
                 self.bitmap_paste();
             }
+            if has && self.bouton(ui, ph::PAINT_BUCKET, "Remplir", "Remplir la zone de la couleur courante (le calque verrouillé refuse ; « préserver la transparence » ne change que la couleur de ce qui est dessiné).", "selection.remplir").clicked() {
+                self.bitmap_fill_selection();
+            }
         });
-        if has {
-            self.box_fields_ui(ui);
-        }
-        if lasso {
-            note(ui, BOX_NOTE);
-            note(ui, "Glisser dans le vide : lasso ou rectangle (Maj : ajouter). Un clic sur un dessin choisit sa forme (Ctrl+Maj + clic : en ajouter une autre, sur tous les calques). Échap ou autre outil : poser la zone.");
-        }
+        self.plus_de_reglages(ui, |app, ui| {
+            if has {
+                ui.horizontal_wrapped(|ui| {
+                    if app.bouton(ui, ph::FLIP_HORIZONTAL, "Miroir horizontal", "Retourner la zone de gauche à droite.", "selection.miroir_h").clicked() {
+                        app.bitmap_flip(true);
+                    }
+                    if app.bouton(ui, ph::FLIP_VERTICAL, "Miroir vertical", "Retourner la zone de haut en bas.", "selection.miroir_v").clicked() {
+                        app.bitmap_flip(false);
+                    }
+                    if app.bouton(ui, ph::ERASER, "Effacer dedans", "Effacer ce qui est dans la zone.", "").clicked() {
+                        app.bitmap_erase(true);
+                    }
+                    if app.bouton(ui, ph::SELECTION_INVERSE, "Effacer autour", "Effacer tout ce qui est hors de la zone.", "").clicked() {
+                        app.bitmap_erase(false);
+                    }
+                    if app.bouton(ui, ph::CHECK, "Poser", "Reposer la zone et quitter la sélection (Échap).", "").clicked() {
+                        app.drop_bitmap_selection();
+                    }
+                });
+                app.box_fields_ui(ui);
+            }
+            if lasso {
+                note(ui, BOX_NOTE);
+                note(ui, "Glisser dans le vide : lasso ou rectangle (Maj : ajouter). Un clic sur un dessin choisit sa forme (Ctrl+Maj + clic : en ajouter une autre, sur tous les calques). Échap ou autre outil : poser la zone.");
+            }
+        });
     }
 
     pub(crate) fn selection_ui(&mut self, ui: &mut egui::Ui, lasso: bool) {
@@ -622,50 +660,54 @@ impl App {
             format!("{n} élément(s) sélectionné(s).")
         });
         let has = n > 0;
+        // En haut : ce qui sert le plus. Une commande qui ne peut pas servir (rien de sélectionné, rien de copié) se
+        // cache au lieu de se griser (2026-10-21).
         ui.horizontal_wrapped(|ui| {
-            if self.bouton_si(ui, has, ph::DROP, "Couleur courante", "Donner la couleur courante aux éléments choisis.", "").clicked() {
-                self.recolor_selection();
-            }
-            if self.bouton_si(ui, has, ph::PLUS_CIRCLE, "Trait plus épais", "", "").clicked() {
-                self.scale_selection_width(1.25);
-            }
-            if self.bouton_si(ui, has, ph::MINUS_CIRCLE, "Trait plus fin", "", "").clicked() {
-                self.scale_selection_width(0.8);
-            }
-            if self.bouton_si(ui, has, ph::FLIP_HORIZONTAL, "Miroir horizontal", "Retourner de gauche à droite.", "selection.miroir_h").clicked() {
-                self.flip_selection(true);
-            }
-            if self.bouton_si(ui, has, ph::FLIP_VERTICAL, "Miroir vertical", "Retourner de haut en bas.", "selection.miroir_v").clicked() {
-                self.flip_selection(false);
-            }
-            if self.bouton_si(ui, has, ph::ARROW_LINE_UP, "Devant", "Passer devant les autres éléments du dessin.", "").clicked() {
-                self.order_selection(true);
-            }
-            if self.bouton_si(ui, has, ph::ARROW_LINE_DOWN, "Derrière", "Passer derrière les autres éléments du dessin.", "").clicked() {
-                self.order_selection(false);
-            }
-            if self.bouton_si(ui, has, ph::COPY, "Copier", "", "edition.copier").clicked() {
-                self.copy_selection();
-            }
-            if self.bouton_si(ui, has, ph::TRASH, "Supprimer", "", "edition.supprimer").clicked() {
-                self.delete_selection();
-            }
-            ui.separator();
             if self.bouton(ui, ph::SELECTION_ALL, "Tout sélectionner", "Tous les éléments du dessin.", "edition.tout_selectionner").clicked() {
                 self.select_all();
             }
-            let can_paste = !self.clipboard.is_empty();
-            if self.bouton_si(ui, can_paste, ph::CLIPBOARD, "Coller", "", "edition.coller").clicked() {
+            if has && self.bouton(ui, ph::COPY, "Copier", "", "edition.copier").clicked() {
+                self.copy_selection();
+            }
+            if !self.clipboard.is_empty() && self.bouton(ui, ph::CLIPBOARD, "Coller", "", "edition.coller").clicked() {
                 self.paste();
             }
+            if has && self.bouton(ui, ph::TRASH, "Supprimer", "", "edition.supprimer").clicked() {
+                self.delete_selection();
+            }
         });
-        if has {
-            self.box_fields_ui(ui);
-        }
-        if lasso {
-            note(ui, BOX_NOTE);
-            note(ui, "Clic : un élément. Glisser dans le vide : lasso. Maj : ajouter / retirer. Ctrl+Maj : prendre sur tous les calques du plan (pas seulement les calques choisis).");
-        }
+        self.plus_de_reglages(ui, |app, ui| {
+            if has {
+                ui.horizontal_wrapped(|ui| {
+                    if app.bouton(ui, ph::DROP, "Couleur courante", "Donner la couleur courante aux éléments choisis.", "").clicked() {
+                        app.recolor_selection();
+                    }
+                    if app.bouton(ui, ph::PLUS_CIRCLE, "Trait plus épais", "", "").clicked() {
+                        app.scale_selection_width(1.25);
+                    }
+                    if app.bouton(ui, ph::MINUS_CIRCLE, "Trait plus fin", "", "").clicked() {
+                        app.scale_selection_width(0.8);
+                    }
+                    if app.bouton(ui, ph::FLIP_HORIZONTAL, "Miroir horizontal", "Retourner de gauche à droite.", "selection.miroir_h").clicked() {
+                        app.flip_selection(true);
+                    }
+                    if app.bouton(ui, ph::FLIP_VERTICAL, "Miroir vertical", "Retourner de haut en bas.", "selection.miroir_v").clicked() {
+                        app.flip_selection(false);
+                    }
+                    if app.bouton(ui, ph::ARROW_LINE_UP, "Devant", "Passer devant les autres éléments du dessin.", "").clicked() {
+                        app.order_selection(true);
+                    }
+                    if app.bouton(ui, ph::ARROW_LINE_DOWN, "Derrière", "Passer derrière les autres éléments du dessin.", "").clicked() {
+                        app.order_selection(false);
+                    }
+                });
+                app.box_fields_ui(ui);
+            }
+            if lasso {
+                note(ui, BOX_NOTE);
+                note(ui, "Clic : un élément. Glisser dans le vide : lasso. Maj : ajouter / retirer. Ctrl+Maj : prendre sur tous les calques du plan (pas seulement les calques choisis).");
+            }
+        });
     }
     pub(crate) fn status_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {

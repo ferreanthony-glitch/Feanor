@@ -8,7 +8,7 @@
 //!
 //! L'affichage est dans `pinceauxui.rs`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -148,6 +148,10 @@ pub struct Panneau {
     /// Les réglages détaillés (catégories et leurs réglages), sous l'aperçu du trait, sont dépliés
     /// (Anthony, 2026-10-20 : repliés par défaut, une petite flèche les déplie).
     pub reglages_ouverts: bool,
+    /// « Plus de réglages » des autres outils (remplir, sélection, transformer…) : ceux dont la section est dépliée,
+    /// par l'action de l'outil. Repliée d'office : les deux ou trois réglages qui servent le plus sont en haut.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub plus_outils: BTreeSet<String>,
     /// Le dernier pinceau utilisé sur un calque vectoriel, et sur un calque bitmap : changer de sorte
     /// de calque rend le pinceau qu'on avait sur cette sorte (Anthony, 2026-10-20). Absent : pas
     /// encore utilisé, le pinceau du moment reste.
@@ -166,6 +170,7 @@ impl Default for Panneau {
             categorie: Categorie::Pointe,
             dossiers: BTreeMap::new(),
             reglages_ouverts: false,
+            plus_outils: BTreeSet::new(),
             pinceau_vecto: None,
             pinceau_bitmap: None,
             sorte_vue: None,
@@ -202,6 +207,20 @@ impl Panneau {
                 *slot = Some(*pinceau);
                 None
             }
+        }
+    }
+
+    /// « Plus de réglages » de l'outil `outil` (son action) est-il déplié ?
+    pub fn plus_ouvert(&self, outil: &str) -> bool {
+        self.plus_outils.contains(outil)
+    }
+
+    /// Déplie ou replie « Plus de réglages » de l'outil `outil`.
+    pub fn regler_plus(&mut self, outil: &str, ouvert: bool) {
+        if ouvert {
+            self.plus_outils.insert(outil.to_string());
+        } else {
+            self.plus_outils.remove(outil);
         }
     }
 
