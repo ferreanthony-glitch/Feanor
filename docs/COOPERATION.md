@@ -298,6 +298,7 @@ Tout le reste (lire, jouer, naviguer, commenter, comparer, exporter la copie loc
 | **Onglets** | un onglet peut être un projet partagé ; chaque onglet a sa session (`EtatProjet`) ; un onglet caché garde son fil (le battement continue) mais n'applique rien tant qu'il n'est pas affiché |
 | **Envois** | « Marquer un envoi » demande le jeton ; l'état des plans est celui que je vois (le message dit combien de plans sont « en attente » ou périmés) |
 | **Versions de plans** | font partie du plan (son porteur) ; c'est aussi par là que les brouillons et copies en conflit deviennent des versions |
+| **Variantes de séquence** (`variantes.rs`) | créer, passer, supprimer ou renommer une variante demande **le jeton du montage** et que les plans qui sortent du film soient à moi ou libres ; les variantes rangées sont une **annexe du montage** (`variantes.json` à côté de la structure, avec leurs dessins dans `dessins/`), écrite par le porteur du jeton — un fichier par projet, pas par plan, parce qu'une variante rangée n'est le plan de personne. Les autres postes les relisent avec la structure. Si des dessins de variantes manquaient à la lecture, le fichier n'est jamais réécrit et les gestes sont refusés. Les plans qui reviennent dans le film sont à moi dès leur arrivée (comme après un « annuler » de suppression) |
 | **Relecture** (import de notes) | devient des commentaires de l'équipier qui importe |
 | **Export pour le montage, fiche, relecture exportée** | travaillent sur la copie locale ; la fenêtre Équipe dit si des plans sont encore en synchronisation. (Un autre chantier déplace ces exports hors de l'interface ; ils lisent un cliché du projet et n'ont rien à changer ici.) |
 | **Copie de secours** | locale, projet classique complet ; rouverte après un plantage elle est un projet **à part** |
@@ -394,6 +395,8 @@ et `the_thread_never_asks_for_a_repaint_when_nothing_changes`).
 - Les copies en conflit « ignorées » reviennent au prochain lancement (la liste n'est pas retenue).
 - Importer un son, marquer un envoi, nommer une séquence, ajouter un personnage… demandent le jeton
   (c'est du montage).
+- Variantes de séquence : chaque changement de structure fait relire (sur un fil de fond) les dessins de toutes les variantes rangées ; un plan rangé puis
+  revenu garde son ancien fichier de plan (révision repartie de zéro, comme un plan ramené par « annuler »).
 - Pas d'enregistrement automatique dans le dossier partagé : les autres ne voient votre travail qu'à Ctrl+S (ou « Rendre »).
 - Les exports (montage, fiche, relecture) travaillent sur la copie locale : un plan encore « en attente » y est vide. La fenêtre
   Équipe le dit.

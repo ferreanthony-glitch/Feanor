@@ -3513,3 +3513,22 @@ et **Préférences en onglets, onglet Montage, effets au clavier, Vignettes simp
 - ✅ Vocabulaire : le remplissage sous le trait s'appelle toujours « Aplat » ; le calque de couleur a « Griffonner » (plus de CTG).
 - ✅ Ordre de composition d'un calque : remplissage au griffonnage, puis aplat (la strate Fond, où les personnages posent leur aplat), puis peinture libre, puis trait.
 - ✅ Retouches des Vignettes (`vignettes-retouches` : débord du trait hors de l'image, Maj + cadre pour déplacer un plan, `src/debord.rs`, `src/boardmove.rs`) et isolation de l'essai des personnages, fusionnées par-dessus.
+
+## Variantes de séquence (2026-10-21, branche `variantes-sequence`)
+
+Anthony : essayer un autre découpage d'une séquence (A plus serrée, B avec un plan de plus) sans perdre le premier.
+
+- ✅ `src/variantes.rs` : une séquence a une variante **choisie** (ses plans dans le film : montage, lecture, exports, numérotation, export pour le montage, relecture
+  et fiche la suivent) et des variantes **rangées** (scènes, plans, versions de plan, contenu rogné, commentaires, transitions internes) dans `Document::variantes`
+  (`Arc`, dans `Structure` : une étape d'annulation nommée par geste, sans rien recopier).
+- ✅ Nouvelle variante en dupliquant (copie profonde rangée, le film ne bouge pas) ou en partant d'un plan vide ; passer à, supprimer (jamais la dernière), renommer
+  (A, B, C, nom court) ; les transitions de bord suivent la coupe ; numérotation verrouillée sans doublon.
+- ✅ Fichier : `variantes.json` à côté du manifeste, **format 36 inchangé** ; plans relus par la lecture ordinaire (séquence cachée, comme `plans_versions.json`) ;
+  fichier illisible ou plus récent jamais effacé.
+- ✅ Interface (`src/variantesui.rs`) : sélecteur discret en haut de la vue Vignettes, Storyboard > Variantes de la séquence, clic droit sur la barre de séquence du
+  montage (« Séquence 2 · B »), Ctrl+K (7 commandes sans touche), confirmation de suppression, renommage.
+- ✅ Comparer : côté « Variante B » (plan de même rang) dans la fenêtre Comparer. Envois : la variante choisie est notée, un plan copié se compare au plan dont il vient.
+- ✅ Film partagé : jeton du montage, plans sortants à moi ou libres, annexe du montage `variantes.json`, jamais réécrite si des dessins manquent.
+- ✅ 29 essais (`src/variantes_tests.rs`) : création, échange, annulation, enregistrement octet pour octet, fichier illisible, envois, comparaison, jeton, plan tenu par un
+  autre, repos.
+- À faire plus tard : comparer deux jeux de plans côte à côte ; dupliquer aussi le contenu rogné ; fusionner deux variantes ; liste des variantes dans la fiche technique.
