@@ -2874,6 +2874,7 @@ liste à vérifier à l'écran : `docs/INTERFACE.md`, partie 11.
 - ✅ **Cases vides** après la dernière image : dessiner dans l'une fait un plan à l'appui (les cases sautées deviennent des plans
   vides), ou une image de plus du dernier plan si la barre devant est grise ; création et trait = une étape d'annulation ;
   un clic sans trait ne laisse rien.
+- ✅ **Épuré** (consigne d'Anthony : « rien de distraction, que du dessin ») : réglages petits et pâles (30 %) jusqu'à la souris, plus de pastilles d'envoi ni de film partagé, plus de compteurs ; « Attacher les notes » au clic droit sur le fond.
 - ✅ **Look simple** : filet d'un point (plus foncé pour la courante), plus de bande de titre, de durée ni de « Plan » : seul le
   numéro du plan au-dessus de sa première image.
 - ✅ **Barres** grise (même plan) / noire (coupe), un tiers de la hauteur, 1,5 point, aussi au bout de chaque ligne ; un clic

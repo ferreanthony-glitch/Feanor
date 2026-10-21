@@ -84,7 +84,7 @@ dans `...\Pelure` y est copié (jamais déplacé ni supprimé) s'il n'y a pas en
   - La lecture du montage (▶ de sa barre) enchaîne tout (animatique), en boucle si on veut, avec le son.
   - Vue « Vignettes » (Maj+Tab) : une **planche** de pages blanches où les images de storyboard
     se suivent de gauche à droite, rangée par rangée. En haut : taille des vignettes, colonnes (6 au
-    plus), lignes par page (« toutes » : une seule page), « Attacher les notes ». Détail, gestes et
+    plus), lignes par page (« toutes » : une seule page), zoom : petits et pâles, pleins sous la souris. Détail, gestes et
     liste à vérifier à l'écran : section « Vignettes simples » plus bas.
     - **On dessine directement** dans n'importe quelle vignette, sans clic avant : un trait qui commence dans
       une image la rend courante à l'appui et dessine dedans ; un trait qui commence ailleurs ne trace rien.
@@ -1410,7 +1410,7 @@ deux envois n'est écrit qu'une fois. La fenêtre « Envois » (icône `GIT_DIFF
 envois, combien de plans diffèrent de chacun, et permet de retirer un envoi de la liste (ses fichiers restent).
 
 **Plans modifiés depuis l'envoi** : un plan qui n'est plus comme au dernier envoi porte une **pastille ambre** en haut
-à droite de son bloc dans le montage et de sa première vignette dans la vue Vignettes : un crayon (modifié) ou un
+à droite de son bloc dans le montage (pas dans la vue Vignettes, épurée) : un crayon (modifié) ou un
 plus (ajouté depuis). La bulle dit depuis quel envoi (« Modifié depuis l'envoi « v2 au réal » »). Un plan qu'on remet
 dans l'état de l'envoi (annuler) perd sa pastille. Sur la bande zoomée très loin (blocs de moins de 44 points), une bande ambre le long du
 bord haut du bloc remplace la pastille. Le « dernier envoi » est le dernier marqué (pas le plus tardif par sa date).

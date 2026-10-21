@@ -644,9 +644,11 @@ image), **barre** (entre deux images), **bande de note** (sous une image).
 ### Ce que l'on voit
 
 - **Rien autour des images** : un filet gris d'un point, plus foncé pour l'image courante ; pas de bande de titre, pas
-  de durée, pas de « Plan ». Seul le **numéro du plan**, au-dessus de sa première image (teinté de la couleur du plan s'il
-  en a une). Les repères d'état restent, petits, sur cette même ligne et seulement quand ils servent : la pastille
-  d'un envoi (§ 17) et celle du film partagé. Plusieurs plans choisis : leurs images (sauf l'image courante) ont un liseré
+  de durée, pas de « Plan ». Seul le **numéro du plan**, au-dessus de sa première image, en gris discret. Principe d'Anthony : « la partie Vignettes
+  doit être la plus épurée possible, rien de distraction, que du dessin » : **ni pastille d'envoi ni pastille du film partagé ni
+  étiquette de version sur la planche** (elles restent au montage), ni compteur de plans choisis. Les réglages (taille, colonnes,
+  lignes par page, zoom) sont en haut, petits et à 30 % d'opacité, pleins seulement sous la souris ; « Attacher les notes » est au
+  clic droit sur le fond. Plusieurs plans choisis : leurs images (sauf l'image courante) ont un liseré
   d'accent.
 - **Écart** : 10 points entre deux images d'un même plan, 30 à une coupe. Les lignes ont un nombre fixe d'images
   (« colonnes », 6 au plus) ; une ligne ne se casse jamais à un changement de plan. Ordre de lecture : de gauche à
@@ -979,8 +981,7 @@ thème (`theme::avertissement`) ; les états allumés (Envois, Comparer) prennen
 - **Fenêtre « Marquer un envoi »** : un nom (« v2 au réal », le numéro suivant est proposé), une date (JJ/MM/AAAA, celle du
   jour ; rouge si elle n'est pas lisible), « Marquer l'envoi » / Annuler, Entrée valide. Un projet pas encore enregistré le
   dit (l'envoi est gardé au premier enregistrement).
-- **Pastille** : 14 points en haut à droite du bloc du plan dans la bande et sur la ligne du numéro de la première vignette du plan dans la
-  vue Vignettes ; un crayon pour un plan modifié, un plus pour un plan ajouté ; bulle « Modifié depuis l'envoi « v2 au réal » ».
+- **Pastille** : 14 points en haut à droite du bloc du plan dans la bande (pas dans la vue Vignettes, épurée) ; un crayon pour un plan modifié, un plus pour un plan ajouté ; bulle « Modifié depuis l'envoi « v2 au réal » ».
   Sur un bloc de moins de 44 points de large (la bande zoomée très loin : la pastille cacherait la poignée du bord) ou de
   moins de 40 de haut, une **bande ambre de 5 points le long du bord haut** la remplace, avec la même bulle. Le « dernier
   envoi » est le dernier marqué (pas le plus tardif par sa date : la date se tape).

@@ -1001,51 +1001,48 @@ impl App {
         }
     }
 
+    /// Les réglages de la planche, petits et pâles : ils ne se montrent qu'à la souris (« la partie Vignettes doit être la
+    /// plus épurée possible, rien de distraction »). Taille des vignettes, colonnes, lignes par page, zoom ; « attacher les
+    /// notes » est au clic droit sur le fond.
     fn board_toolbar(&mut self, ui: &mut egui::Ui) {
-        use crate::bulles::{bulle, etiquette, interrupteur};
+        use crate::bulles::{bulle, etiquette};
         use egui_phosphor::regular as ph;
-        ui.horizontal_wrapped(|ui| {
-            ui.add_space(6.0);
-            etiquette(ui, ph::ARROWS_OUT_SIMPLE, "Taille des vignettes", "");
-            let mut size = self.layout.card_size;
-            let resp = ui.add(egui::Slider::new(&mut size, CARD_MIN..=CARD_MAX).show_value(false));
-            if bulle(resp, "Taille des vignettes", "", "").changed() {
-                self.layout.card_size = size;
-            }
-            etiquette(ui, ph::COLUMNS, "Colonnes", "Vignettes par ligne (6 au plus).");
-            let resp = ui.add(egui::DragValue::new(&mut self.layout.board_columns).range(1..=MAX_COLUMNS).speed(0.05));
-            bulle(resp, "Colonnes", "Vignettes par ligne (6 au plus).", "");
-            etiquette(ui, ph::ROWS, "Lignes par page", "« toutes » : une seule page.");
-            let resp = ui.add(
-                egui::DragValue::new(&mut self.layout.board_rows)
-                    .range(0..=MAX_ROWS)
-                    .speed(0.05)
-                    .custom_formatter(|v, _| if v < 0.5 { "toutes".into() } else { format!("{v:.0}") }),
-            );
-            bulle(resp, "Lignes par page", "« toutes » : une seule page.", "");
-            ui.separator();
-            interrupteur(
-                ui,
-                &mut self.layout.board_attach,
-                ph::PAPERCLIP,
-                "Attacher les notes",
-                "Les nouvelles notes suivent la vignette la plus proche quand on la déplace ou la redimensionne.",
-                "",
-            );
-            let resp = ui.button(format!("{:.0} %", self.board_zoom * 100.0));
-            if bulle(resp, "Zoom de la planche", "Ctrl + molette. Clic : la page à la largeur de la vue.", "").clicked() {
-                self.board_fit();
-            }
-            let n = self.board_selection().len();
-            if n > 1 {
-                ui.label(RichText::new(format!("{n} plans choisis")).strong());
-            }
-            if !self.board_notes.is_empty() {
-                ui.label(RichText::new(format!("{} note(s) choisie(s)", self.board_notes.len())).strong());
-            }
-        });
+        let memo = egui::Id::new("vignettes_reglages");
+        let avant: Option<Rect> = ui.data(|d| d.get_temp(memo));
+        let touche = avant.is_some_and(|r| ui.ctx().pointer_hover_pos().is_some_and(|p| r.contains(p)));
+        let zone = ui
+            .scope(|ui| {
+                ui.set_opacity(if touche { 1.0 } else { 0.3 });
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    ui.add_space(6.0);
+                    etiquette(ui, ph::ARROWS_OUT_SIMPLE, "Taille des vignettes", "");
+                    let mut size = self.layout.card_size;
+                    let resp = ui.add(egui::Slider::new(&mut size, CARD_MIN..=CARD_MAX).show_value(false));
+                    if bulle(resp, "Taille des vignettes", "", "").changed() {
+                        self.layout.card_size = size;
+                    }
+                    etiquette(ui, ph::COLUMNS, "Colonnes", "Vignettes par ligne (6 au plus).");
+                    let resp = ui.add(egui::DragValue::new(&mut self.layout.board_columns).range(1..=MAX_COLUMNS).speed(0.05));
+                    bulle(resp, "Colonnes", "Vignettes par ligne (6 au plus).", "");
+                    etiquette(ui, ph::ROWS, "Lignes par page", "« toutes » : une seule page.");
+                    let resp = ui.add(
+                        egui::DragValue::new(&mut self.layout.board_rows)
+                            .range(0..=MAX_ROWS)
+                            .speed(0.05)
+                            .custom_formatter(|v, _| if v < 0.5 { "toutes".into() } else { format!("{v:.0}") }),
+                    );
+                    bulle(resp, "Lignes par page", "« toutes » : une seule page.", "");
+                    let resp = ui.button(format!("{:.0} %", self.board_zoom * 100.0));
+                    if bulle(resp, "Zoom de la planche", "Ctrl + molette. Clic : la page à la largeur de la vue.", "").clicked() {
+                        self.board_fit();
+                    }
+                });
+            })
+            .response
+            .rect;
+        ui.data_mut(|d| d.insert_temp(memo, zone));
     }
-
     /// Garde un bout de la planche dans la vue.
     fn clamp_board_pan(&mut self, view: Rect, size: Vec2) {
         let s = size * self.board_zoom;
@@ -1141,39 +1138,15 @@ impl App {
         let chosen_more = !current && self.board_sel.iter().any(|id| *id != cur_id) && (plan_current || self.board_sel.contains(&place.plan));
         let accent = crate::theme::accent();
 
-        // Le numéro du plan, au-dessus de sa première image (et ses repères : envoi, film partagé).
+        // Le numéro du plan, au-dessus de sa première image : rien d'autre (pas de pastille d'envoi ni de version : elles sont au montage).
         if place.starts_plan() && card.height() > thumb.height() + 6.0 {
             let label = Rect::from_min_max(card.min, pos2(card.right(), thumb.top()));
             let font = (12.0 * xf.zoom).clamp(7.0, 22.0);
-            let ink = self.doc.panels[i].color.map_or(Color32::from_gray(50), crate::marks::color);
+            let ink = Color32::from_gray(96);
             let clip = painter.with_clip_rect(label.intersect(view));
             let galley = clip.layout_no_wrap(self.doc.scene_label(place.scene), FontId::proportional(font), ink);
             let at = pos2(label.left() + 1.0, label.center().y - galley.size().y * 0.5);
-            let width = galley.size().x;
-            clip.galley(at + vec2(0.5, 0.0), galley.clone(), ink);
             clip.galley(at, galley, ink);
-            // Modifié (ou ajouté) depuis le dernier envoi (`envoisui.rs`), à droite de la ligne du numéro.
-            let plan_id = self.doc.panels[i].id;
-            if label.width() >= 40.0 {
-                if let Some(etat) = self.envois_ui.etat(plan_id) {
-                    let r = (crate::envoisui::REPERE * xf.zoom).clamp(4.0, 8.0);
-                    let centre = pos2(label.right() - r - 2.0, label.center().y);
-                    crate::envoisui::peindre_repere(&clip, centre, etat, r);
-                    let zone = Rect::from_center_size(centre, vec2(r * 2.0 + 2.0, r * 2.0 + 2.0));
-                    if let Some((_, phrase)) = self.envoi_repere(plan_id) {
-                        let resp = ui.interact(zone, ui.id().with(("planche_envoi", plan_id)), Sense::hover());
-                        resp.on_hover_text_at_pointer(phrase);
-                    }
-                }
-                // Film partagé : qui tient le plan, et qui le regarde, à côté du numéro.
-                let bloc = Rect::from_min_size(pos2(label.left() + width + 4.0, label.top() - 3.0), vec2(40.0, label.height()));
-                if let Some(zone) = self.peindre_pastille(&clip, bloc, plan_id, xf.zoom) {
-                    if let Some(phrase) = self.pastille_phrase(plan_id) {
-                        let resp = ui.interact(zone, ui.id().with(("planche_prise", plan_id)), Sense::hover());
-                        resp.on_hover_text_at_pointer(phrase);
-                    }
-                }
-            }
         }
 
         // Le panneau courant : le dessin lui-même ; les autres : leur vignette.
@@ -1332,6 +1305,7 @@ impl App {
             ui.close_menu();
             self.new_panel();
         }
+        ui.checkbox(&mut self.layout.board_attach, "Attacher les nouvelles notes à la vignette la plus proche");
         ui.separator();
         if ui.button("Tout choisir (plans)").clicked() {
             ui.close_menu();
