@@ -82,6 +82,8 @@ impl App {
                         self.tool_slot(ui, g, s, slot);
                     }
                 }
+                // Sur la planche des Vignettes : le stylo et la gomme d'annotation (`annotationsui.rs`).
+                self.annot_outils_ui(ui, [34.0, 30.0], 19.0);
                 // Les couleurs d'avant-plan et d'arrière-plan, au pied de la barre (passe couleur).
                 ui.add_space(8.0);
                 self.tool_bar_colors(ui);

@@ -958,6 +958,8 @@ pub struct Structure {
     /// Versions des plans (`planvers.rs`), par numéro de plan : créer, passer, restaurer, supprimer une
     /// version s'annulent avec le reste.
     pub versions: std::collections::BTreeMap<u64, crate::planvers::VersionsDuPlan>,
+    /// Annotations de la vue Vignettes (`annotations.rs`) : tracer, effacer, tout effacer s'annulent avec le reste.
+    pub annotations: crate::annotations::Annotations,
 }
 
 pub struct Document {
@@ -1025,6 +1027,9 @@ pub struct Document {
     /// du manifeste, dans `plans_versions.json`, leurs dessins dans `dessins/`. Le plan lui-même
     /// (`panels`) est toujours la version active.
     pub versions: std::collections::BTreeMap<u64, crate::planvers::VersionsDuPlan>,
+    /// Les annotations de la vue Vignettes (`annotations.rs`) ; enregistrées à côté du manifeste, dans
+    /// nnotations.json. Dans Structure : l'annulation les rétablit avec le reste. Aucun export ne les lit.
+    pub annotations: crate::annotations::Annotations,
     next_id: u64,
     /// Préfixe des numéros neufs d'un projet partagé (`préfixe << 32`, `cooperation.rs`) : deux équipiers ne
     /// donnent jamais le même numéro. 0 pour un projet classique, dont les numéros ne changent pas.
@@ -1080,6 +1085,7 @@ impl Document {
             personnages: Vec::new(),
             envois: Default::default(),
             versions: Default::default(),
+            annotations: Default::default(),
             next_id: 1,
             id_prefix: 0,
         };
@@ -1144,6 +1150,7 @@ impl Document {
             personnages: structure.personnages,
             envois: Default::default(),
             versions: structure.versions,
+            annotations: structure.annotations,
             next_id: max_id + 1,
             id_prefix: 0,
         };
@@ -1330,6 +1337,7 @@ impl Document {
             references: self.references.clone(),
             personnages: self.personnages.clone(),
             versions: self.versions.clone(),
+            annotations: self.annotations.clone(),
         }
     }
 
@@ -1363,6 +1371,7 @@ impl Document {
             references: std::mem::replace(&mut self.references, s.references),
             personnages: std::mem::replace(&mut self.personnages, s.personnages),
             versions: std::mem::replace(&mut self.versions, s.versions),
+            annotations: std::mem::replace(&mut self.annotations, s.annotations),
         }
     }
 

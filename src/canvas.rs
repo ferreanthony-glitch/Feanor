@@ -598,7 +598,7 @@ impl App {
             return;
         }
         // Vignettes : Maj tenue sur le cadre de la case, c'est la planche qui donne le curseur (la main), pas le pinceau.
-        if self.in_card && self.vignettes.frame_hot {
+        if self.in_card && (self.vignettes.frame_hot || self.annot_actif()) {
             return;
         }
         let (space, alt) = ctx.input(|i| (self.keymap.held(i, "vue.pan_libre"), i.modifiers.alt));

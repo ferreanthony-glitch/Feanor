@@ -100,6 +100,8 @@ pub(crate) enum Press {
     Dead,
     /// Maj + appui sur le cadre d'une vignette : le plan se déplace (`PlanMove`).
     Move,
+    /// Le stylo ou la gomme d'annotation tient l'appui (`annotationsui.rs`) : le dessin de la vignette ne reçoit rien.
+    Annot,
 }
 
 /// Un plan (ou plusieurs plans choisis) pris par le cadre d'une de ses vignettes (Maj + appui), qu'on glisse ailleurs.
@@ -184,6 +186,8 @@ pub(crate) struct Vignettes {
     pub frame_hot: bool,
     /// Le trait qui déborde de la vignette courante, tant que le geste dure (`debord.rs`).
     pub debord: Option<crate::debord::Debord>,
+    /// Les annotations : outil, couleur, affichage, marie-louise (`annotationsui.rs`).
+    pub annot: crate::annotationsui::Etat,
 }
 
 impl Default for Vignettes {
@@ -200,6 +204,7 @@ impl Default for Vignettes {
             moving: None,
             frame_hot: false,
             debord: None,
+            annot: Default::default(),
         }
     }
 }
@@ -231,6 +236,8 @@ impl App {
         if !gone.is_empty() {
             self.doc.board.release(before, &gone);
         }
+        // Les annotations d'une vignette qui n'est plus là passent à sa voisine (`annotations.rs`).
+        self.annot_rattacher_apres(before);
     }
 
     /// La page à la largeur de la vue, en haut de la planche (fait à l'image suivante, quand la
@@ -701,6 +708,8 @@ impl App {
             self.board_zoom = (view.width() / layout.size.x.max(1.0)).clamp(ZOOM_MIN, 1.5);
             self.board_pan = Vec2::ZERO;
         }
+        // Les annotations d'une vignette qui a disparu passent à sa voisine (`annotationsui.rs`).
+        self.annot_suivre(&layout);
 
         let (events, hover, scroll, zoom_delta, mods, space, any_down, escape) = ui.input(|i| {
             (
@@ -752,6 +761,14 @@ impl App {
                 // (Chaque appui repart de rien : un appui d'avant, resté là parce que la vue n'était pas à l'écran au lâcher, ne compte plus.)
                 if *button == PointerButton::Primary {
                     self.vignettes.press = Press::None;
+                    // Le stylo ou la gomme d'annotation prend l'appui avant tout : cases, barres, notes, fond (`annotationsui.rs`).
+                    if self.annot_actif() {
+                        self.commit_note_text(&layout);
+                        self.commit_card_note();
+                        self.vignettes.press = Press::Annot;
+                        self.annot_appui(*pos);
+                        continue;
+                    }
                 }
                 if self.board_press(&layout, xf, *pos, *modifiers, *button) {
                     layout = self.board_layout();
@@ -814,6 +831,8 @@ impl App {
         let pointer = latest.map(|p| xf.to_board(p));
         self.update_board_drag(&layout, pointer, xf.zoom);
         self.update_plan_move(&layout, xf, latest, escape);
+        // Le geste du stylo ou de la gomme d'annotation, point après point (`annotationsui.rs`).
+        self.annot_geste(&layout, xf, &events, latest, any_down, touch.is_some(), escape);
 
         // Pages, barres, cases vides, vignettes.
         for page in &layout.pages {
@@ -884,6 +903,9 @@ impl App {
         if let Some(d) = self.vignettes.debord.take() {
             crate::debord::paint(&painter, view, &d);
         }
+        // Les annotations, par-dessus tout ; puis la marie-louise, si elle est allumée, qui masque ce qui déborde (`annotationsui.rs`).
+        self.annot_peindre(&painter, view, xf, &layout, over);
+        self.marie_peindre(&painter, view, xf, &layout);
         self.paint_plan_move(ui.ctx(), &painter, view, xf, &layout);
         self.paint_board_drag(&painter, xf);
         if let (Some(p), Tool::Eraser, false) = (over, self.tool, pan_mode) {
@@ -901,6 +923,10 @@ impl App {
         // Le curseur d'un cadre pris ou à prendre passe avant celui du dessin de la vignette courante (peint plus tôt).
         if self.vignettes.frame_hot {
             ui.ctx().set_cursor_icon(if self.vignettes.moving.as_ref().is_some_and(|m| m.active) { CursorIcon::Grabbing } else { CursorIcon::Grab });
+        }
+        // Le stylo ou la gomme d'annotation : curseur en croix (le cercle de l'outil est peint avec les annotations).
+        if self.annot_actif() && over.is_some() && !pan_mode {
+            ui.ctx().set_cursor_icon(CursorIcon::Crosshair);
         }
         if !any_down {
             self.finish_board_drag(&layout, &texts);
@@ -1004,7 +1030,7 @@ impl App {
     }
 
     /// Pose le texte en cours (vide : rien, ou le texte existant est retiré). Une étape d'annulation.
-    fn commit_note_text(&mut self, layout: &BoardLayout) {
+    pub(crate) fn commit_note_text(&mut self, layout: &BoardLayout) {
         let Some(ed) = self.board_text.take() else { return };
         let text = ed.buffer.trim_end().to_string();
         match ed.index {
@@ -1381,6 +1407,9 @@ impl App {
         }
         ui.checkbox(&mut self.layout.board_attach, "Attacher les nouvelles notes à la vignette la plus proche");
         ui.separator();
+        // Annotations, marie-louise et export de la planche (`annotationsui.rs`).
+        self.annot_menu(ui);
+        ui.separator();
         if ui.button("Tout choisir (plans)").clicked() {
             ui.close_menu();
             self.board_sel = self.doc.panels.iter().map(|p| p.id).collect();
@@ -1412,7 +1441,7 @@ impl App {
 
 /// Un trait de note à l'écran : des lignes continues par tronçons d'épaisseur presque égale
 /// (la pression fait varier l'épaisseur), bouts arrondis.
-fn paint_note(painter: &egui::Painter, view: Rect, xf: Xf, points: &[VPoint], color: [u8; 3]) {
+pub(crate) fn paint_note(painter: &egui::Painter, view: Rect, xf: Xf, points: &[VPoint], color: [u8; 3]) {
     if points.is_empty() || !xf.rect(board::points_bounds(points)).intersects(view) {
         return;
     }
