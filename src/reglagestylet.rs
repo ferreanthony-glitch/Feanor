@@ -303,7 +303,7 @@ impl App {
                         p.text(rep.rect.min + vec2(82.0, 4.0), Align2::LEFT_TOP, "Courbe de pression : l'appui du stylet (en bas)\ndevient la réponse du trait (en haut).", egui::FontId::proportional(12.0), theme::texte_doux());
                         // La légende des deux courbes, avec leurs couleurs.
                         for (k, (couleur, nom)) in [(theme::texte_doux(), "aujourd'hui"), (theme::accent_texte(), "proposée")].into_iter().enumerate() {
-                            let y = rep.rect.min.y + 44.0 + k as f32 * 14.0;
+                            let y = rep.rect.min.y + 36.0 + k as f32 * 15.0;
                             p.line_segment([pos2(rep.rect.min.x + 82.0, y + 6.0), pos2(rep.rect.min.x + 106.0, y + 6.0)], Stroke::new(2.0_f32, couleur));
                             p.text(pos2(rep.rect.min.x + 112.0, y), Align2::LEFT_TOP, nom, egui::FontId::proportional(12.0), theme::texte_doux());
                         }
