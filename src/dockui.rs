@@ -224,7 +224,7 @@ impl App {
     }
 
     /// Chaque panneau détaché dans sa fenêtre Windows. La fermer remet le panneau à sa place.
-    fn show_detached(&mut self, ctx: &egui::Context) {
+    pub(crate) fn show_detached(&mut self, ctx: &egui::Context) {
         let mut back = Vec::new();
         for i in 0..self.detached.len() {
             let d = self.detached[i].clone();

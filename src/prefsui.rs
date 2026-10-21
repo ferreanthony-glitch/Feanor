@@ -389,6 +389,14 @@ impl App {
             Groupe::Affichage => {
                 ui.label(RichText::new(format!("Affichage : {}", self.display_info)).small().weak());
             }
+            Groupe::Echelle => self.echelle_prefs_ui(ui),
+            Groupe::Conseils => self.conseils_prefs_ui(ui),
+            Groupe::StyletMain => {
+                let b = ui.button("Régler le stylet à ma main…");
+                if crate::bulles::bulle(b, "Régler le stylet à ma main", "Trace trois traits (léger, moyen, appuyé) : SHOT règle la courbe de pression du stylet sur ta main, après un aperçu et ta confirmation. Avec la souris, l'appui est toujours de 100 %.", &self.raccourci("aide.regler_stylet")).clicked() {
+                    sortie.action = Some("aide.regler_stylet");
+                }
+            }
         }
     }
 

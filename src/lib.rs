@@ -6,6 +6,24 @@
 mod accueil;
 #[cfg(test)]
 mod accueil_tests;
+// Accueil et confort (passe « simplicité » du 2026-10-21) : mode concentration, conseils d'un seul passage, taille de
+// l'interface, aide-mémoire des raccourcis, réglage du stylet à la main.
+mod aidetouches;
+#[cfg(test)]
+mod aidetouches_tests;
+mod concentration;
+#[cfg(test)]
+mod concentration_tests;
+mod confort;
+mod conseils;
+#[cfg(test)]
+mod conseils_tests;
+mod echelle;
+#[cfg(test)]
+mod echelle_tests;
+mod reglagestylet;
+#[cfg(test)]
+mod reglagestylet_tests;
 mod aproposui;
 #[cfg(test)]
 mod aproposui_tests;

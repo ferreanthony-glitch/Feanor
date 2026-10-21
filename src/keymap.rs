@@ -199,6 +199,11 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("aide.a_propos", "À propos de SHOT (version, logo)", true, false),
     act("aide.diagnostic", "Diagnostic des performances de SHOT : détecter la machine, mesurer, proposer des réglages", true, false),
     act("aide.palette","Palette de commandes : chercher une commande par son nom", true, false),
+    // Accueil et confort (passe « simplicité » du 2026-10-21, `confort.rs`).
+    act("vue.concentration", "Mode concentration : ne garder que le dessin (la même touche remet tout)", true, false),
+    act("aide.aide_memoire", "Aide-mémoire des raccourcis (maintenir)", true, false),
+    act("aide.conseils", "Revoir les conseils", true, false),
+    act("aide.regler_stylet", "Régler le stylet à ma main", true, false),
     act("outil.pinceau", "Outil pinceau", true, false),
     act("outil.crayon", "Outil crayon", true, false),
     act("outil.gomme", "Outil gomme", true, false),

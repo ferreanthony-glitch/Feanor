@@ -271,7 +271,10 @@ fn azerty_letters_follow_the_printed_letter() {
     // avant, panneau précédent).
     assert_eq!(press(&map, Key::A, Key::Q, NONE, Mode::Animation).as_deref(), Some("cle.precedente"));
     // W et X, comme dans tes réglages (W et X sont aux mêmes places en AZERTY et QWERTY, ou presque).
-    assert_eq!(press(&map, Key::Z, Key::W, NONE, Mode::Animation), None, "Z AZERTY n'est pas W");
+    // (La touche marquée Z en AZERTY est à la place du W d'un QWERTY : c'est la lettre Z qui compte, donc le mode concentration (Z,
+    // passe « simplicité » du 2026-10-21), et pas la copie des calques, qui est sur la lettre W.)
+    assert_eq!(press(&map, Key::Z, Key::W, NONE, Mode::Animation).as_deref(), Some("vue.concentration"), "Z AZERTY n'est pas W");
+    assert_eq!(press(&map, Key::W, Key::Z, NONE, Mode::Animation).as_deref(), Some("calque.copier"), "W AZERTY est à la place du Z QWERTY");
 }
 
 #[test]

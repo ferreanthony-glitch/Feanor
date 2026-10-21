@@ -256,6 +256,7 @@ impl App {
                 let barre = if self.barre_perso_visible() { "Cacher la barre des personnages" } else { "Montrer la barre des personnages" };
                 self.action_item(ui, barre, "perso.barre");
                 self.workspace_menu(ui);
+                self.action_item(ui, "Mode concentration (le dessin seul)", "vue.concentration");
                 self.action_item(ui, "Plein écran", "vue.plein_ecran");
                 self.action_item(ui, "Performance (temps de l'interface)", "vue.performance");
             });
@@ -274,6 +275,8 @@ impl App {
             ui.menu_button("Aide", |ui| {
                 self.action_item(ui, "Palette de commandes…", "aide.palette");
                 self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
+                self.action_item(ui, "Régler le stylet à ma main…", "aide.regler_stylet");
+                self.action_item(ui, "Revoir les conseils", "aide.conseils");
                 ui.separator();
                 self.action_item(ui, "À propos de SHOT…", "aide.a_propos");
                 self.action_item(ui, "Diagnostic des performances…", "aide.diagnostic");

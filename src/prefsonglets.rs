@@ -75,9 +75,9 @@ impl Onglet {
     /// Une phrase sous le titre de l'onglet, et dans la bulle de son entrée.
     pub fn resume(self) -> &'static str {
         match self {
-            Onglet::General => "Ouvrir et rouvrir les projets, copies de secours, collage entre projets.",
-            Onglet::Apparence => "Le thème et ses couleurs, la hauteur des panneaux.",
-            Onglet::Dessin => "Le curseur du stylet et le voile autour de la caméra.",
+            Onglet::General => "Ouvrir et rouvrir les projets, copies de secours, collage entre projets, conseils.",
+            Onglet::Apparence => "Le thème et ses couleurs, la taille de l'interface, la hauteur des panneaux.",
+            Onglet::Dessin => "Le curseur du stylet, sa pression et le voile autour de la caméra.",
             Onglet::Montage => "Les pistes du montage et leur repliage.",
             Onglet::Raccourcis => "Le jeu de raccourcis du clavier et ses fichiers.",
             Onglet::Export => "Les programmes et les modèles dont les exports ont besoin.",
@@ -107,6 +107,12 @@ pub enum Groupe {
     Generation,
     Performance,
     Affichage,
+    /// Taille de l'interface (`echelle.rs`).
+    Echelle,
+    /// Conseils d'un seul passage (`conseils.rs`).
+    Conseils,
+    /// Régler le stylet à sa main (`reglagestylet.rs`).
+    StyletMain,
 }
 
 impl Groupe {
@@ -127,6 +133,9 @@ impl Groupe {
             Groupe::Generation => "Génération sonore",
             Groupe::Performance => "Réglages de performance",
             Groupe::Affichage => "Affichage",
+            Groupe::Echelle => "Taille de l'interface",
+            Groupe::Conseils => "Conseils",
+            Groupe::StyletMain => "Stylet à ma main",
         }
     }
 }
@@ -161,6 +170,7 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::General, G::Collage, "collage.proportions", "Proportions différentes", "contenir remplir taille"),
     r(O::General, G::Collage, "collage.cadence", "Cadence différente", "images secondes durée fps"),
     r(O::General, G::Collage, "collage.demander", "Demander à chaque collage", "question fenêtre"),
+    r(O::General, G::Conseils, "general.conseils", "Revoir les conseils", "bulles aide premiers pas astuces"),
     // ---- Apparence
     r(O::Apparence, G::Theme, "theme.choix", "Thème", "gris sombre clair personnalisé rétablir"),
     r(O::Apparence, G::Theme, "theme.panneau", "Fond des panneaux", "couleur"),
@@ -172,10 +182,12 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Apparence, G::Theme, "theme.autour", "Autour du dessin", "couleur fond feuille"),
     r(O::Apparence, G::Theme, "theme.timeline", "Timeline et montage", "couleur rangées"),
     r(O::Apparence, G::Theme, "theme.bordures", "Bordures", "couleur traits quadrillage"),
+    r(O::Apparence, G::Echelle, "apparence.echelle", "Échelle", "taille interface zoom agrandir réduire texte boutons 90 100 125 150 pour cent"),
     r(O::Apparence, G::Panneaux, "panneaux.ajuster", "Ajuster les panneaux à leur contenu", "hauteur fiche guides effets réglages"),
     r(O::Apparence, G::Panneaux, "panneaux.reajuster", "Réajuster les panneaux", "hauteur"),
     // ---- Dessin
     r(O::Dessin, G::Stylet, "dessin.croix", "Croix du système sur le pinceau", "curseur stylet retard pointe"),
+    r(O::Dessin, G::StyletMain, "dessin.regler_stylet", "Régler le stylet à ma main", "pression courbe appui tablette léger moyen fort toucher"),
     r(O::Dessin, G::Camera, "dessin.passe_partout", "Opacité du passe-partout", "voile hors-champ estomper cadre caméra rétablir"),
     // ---- Montage
     r(O::Montage, G::Pistes, "montage.repliage", "Repliage des pistes", "replier commun plan calques"),
