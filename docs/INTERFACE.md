@@ -3281,3 +3281,74 @@ l'enregistrement ne nettoie pas `dessins/`. Une version de SHOT qui ne connaît 
 9. Enregistrer, fermer, rouvrir : les deux variantes, leurs noms et la choisie sont là ; l'exemple d'avant (sans variante) s'ouvre sans fichier de plus.
 10. Film partagé : sans le jeton du montage, créer ou passer à une variante est refusé avec la raison ; avec le jeton, ça marche, et un plan tenu par un autre empêche le passage.
 11. Au repos, avec des variantes : rien ne bouge, le processeur reste à zéro.
+
+
+## 17. Accueil, concentration, conseils, taille de l'interface, aide-mémoire et réglage du stylet (2026-10-21, branche `simpl-accueil`)
+
+Passe « simplicité » : *zéro latence* d'abord, puis *toujours rendre l'interface la plus simple possible*. Six choses, un fichier chacune (`accueil.rs`,
+`concentration.rs`, `conseils.rs`, `echelle.rs`, `aidetouches.rs`, `reglagestylet.rs`), l'état partagé dans `confort.rs` (un seul champ d'`App`, `confort`,
+rangé dans `PARTAGES` : rien de tout cela n'est dans le projet).
+
+### Vocabulaire
+Plan, Case, Vignettes, Piste, Papier, Aplat : les mots de ce chantier sont ceux du glossaire (partie 2). Aucun mot n'a été renommé ailleurs.
+
+### Les touches choisies
+
+| Touche | Commande | Pourquoi elle est libre |
+|---|---|---|
+| **Z** | `vue.concentration` — mode concentration (la même touche remet tout) | Aucune commande de `keymap.toml`, du jeu « Façon Storyboard Pro » ni du fichier personnel d'Anthony (B, E, L, Maj+1, Maj+2) ne porte Z seule. `Maj+Z` (Zoom 100 %) et `Ctrl+Z` (Annuler) gardent leur sens. Tab (mode) et X (coller les calques) sont pris. Z comme « zen ». |
+| **R** (tenue) | `aide.aide_memoire` — l'aide-mémoire des raccourcis, tant que la touche est tenue | Idem : R seule est libre ; `Ctrl+R`, `Alt+R` (outil formes) et `Ctrl+Maj+R` sont d'autres combinaisons. R comme « raccourcis ». |
+
+Garde-fous : `keymap_tests::no_two_default_bindings_share_a_key_in_the_same_context` (déjà là) échouerait si l'une des deux touches était prise, et
+`concentration_tests::z_and_r_are_free_keys_with_no_conflict_in_either_key_set` vérifie, dans SHOT et dans le jeu Storyboard Pro, que Z et R vont bien à ces deux
+commandes, en storyboard comme en animation, et que `Maj+Z` / `Ctrl+Z` n'ont pas bougé. Les touches se changent comme les autres (Préférences > Raccourcis, F1, clic droit >
+« Assigner un raccourci… », fichier personnel) ; la carte et les conseils lisent la touche du moment. `aide.conseils` et `aide.regler_stylet` n'ont pas de touche.
+
+### 1. L'accueil
+Trois grandes entrées, et rien d'autre de grand : **Dessiner des vignettes** (un projet vide, tout de suite, dans l'onglet Vignettes ; c'est l'ancien « Commencer sans
+projet »), **Importer un scénario** (la fenêtre d'import existe, `scenarioui.rs` : depuis l'accueil elle part d'un nouveau projet) et **Ouvrir un projet** (SHOT ou Storyboard Pro :
+la fenêtre d'ouverture accepte les deux). Dessous, un petit « Nouveau projet… » (le choix du format), les projets récents, et « Rouvrir le dernier projet au lancement ». Les anciens
+boutons « Importer un projet Storyboard Pro » et « Commencer sans projet » ont disparu de la carte (ils sont dans Fichier > Importer et dans Ouvrir). L'accueil s'efface pendant
+que la fenêtre d'import d'un scénario ou d'un projet Storyboard Pro est ouverte, et revient si on la ferme sans rien importer.
+**Déposer des images** (`deposer.rs`) marche dès la première entrée : l'onglet Vignettes montre la planche, qui prend les fichiers lâchés (essai
+`accueil_tests::images_dropped_on_the_board_work_right_after_the_welcome_entry`). Lâcher des images sur la carte d'accueil elle-même ne fait rien (il faut d'abord « Dessiner des vignettes »).
+
+### 2. Le mode concentration (Z)
+Cache les menus, les onglets de projets, toutes les barres, la barre d'état, la barre des panneaux et **tous les panneaux** ; le dessin prend la fenêtre, sous une barre
+minimale (l'outil et la couleur, le plan, annuler, rétablir, et le bouton de sortie). C'est une **couche posée par-dessus** : `App::frame` ne dessine plus les barres ni le dock, mais le dock,
+les dispositions des quatre espaces et les panneaux tirés à la main ne sont **ni lus ni écrits** autrement qu'à l'ordinaire : l'éteindre rend exactement ce qu'on avait (essai
+`focus_restores_the_exact_layout_even_after_the_user_arranged_panels`). Les ensembles de panneaux par onglet (autre chantier) ne sont donc pas concernés. **Sans latence** : un booléen ; la
+touche agit dans l'image d'écran où elle arrive. Les panneaux posés dans leur propre fenêtre (autre écran) restent. Jamais sur l'accueil. Aussi dans Affichage, dans Ctrl+K.
+
+### 3. Les conseils d'un seul passage
+Une bulle discrète, en bas à droite (là où se pose « Régler SHOT pour cette machine ? »), une phrase, un bouton **Compris**. Elle vient la première fois seulement, est notée vue dès qu'elle
+apparaît (`reglages.toml`, clé `[conseils]`), s'en va avec son endroit, et **n'est jamais là en même temps qu'une autre** ni avant la réponse à la proposition du premier lancement, ni sur l'accueil, ni
+pendant une boîte de dialogue. Cinq conseils : Vignettes, Montage, Animation (la première entrée dans l'onglet), Espace 3D (la première entrée) et « Z / R » (la première modification d'un projet dans
+l'onglet Storyboard). Préférences > Général > **Revoir les conseils** (et Aide > Revoir les conseils) les rend tous. Les essais n'en voient jamais (`conseils_actifs` n'est vrai que dans l'application lancée par l'utilisateur).
+
+### 4. La taille de l'interface
+Préférences > Apparence > Échelle : 90, 100, 125 ou 150 %, tout de suite, retenue (`echelle_interface`, absente à 100 %). C'est le facteur de zoom d'egui. Les positions de la souris et du stylet sont en points,
+divisées par ce même facteur par egui-winit : un point de l'écran reste un point du dessin ; `pixels_per_point` (zoom % de la barre d'état, « 1 pixel = 1 pixel », vignettes, logo) contient déjà le facteur.
+Deux corrections au passage : le dépôt de fichiers lisait le curseur avec les pixels par point *de l'écran* au lieu de ceux de l'interface (`deposer::curseur_en_points`), et les raccourcis d'egui
+(Ctrl +, Ctrl -, Ctrl 0, qui changeaient la taille sans rien retenir, Ctrl 0 compris) sont coupés. Essais : `echelle_tests` (le trait arrive où la vue le place à 90, 100, 125 et 150 %).
+
+### 5. L'aide-mémoire des raccourcis (R tenue)
+Une carte légère au milieu du dessin : trois colonnes — l'outil courant, l'onglet courant, ce qui vaut partout — lues dans le fichier de raccourcis en vigueur (une touche changée se lit changée ; une commande sans touche n'a
+pas de ligne ; les gestes de souris, comme Alt + clic, sont écrits tels quels). Relâchée, elle part. La liste complète, avec recherche, reste sous F1.
+
+### 6. Régler le stylet à ma main
+Aide > Régler le stylet à ma main… (et Préférences > Dessin) : trois traits (léger, moyen, appuyé), la courbe de pression (`Toucher::pressure_curve`, la même que « Toucher du stylet » dans les
+réglages du pinceau) passe par (léger, 0,2), (moyen, 0,55) et (appuyé, 1). L'aperçu redessine les trois traits avec le réglage d'aujourd'hui et avec le réglage proposé, et trace les deux courbes ;
+**rien n'est changé avant « Appliquer »**, « Rétablir » rend la courbe d'avant. Trois traits trop semblables : la fenêtre le dit et ne propose rien. **La souris appuie toujours à 100 %** : ses traits ne sont pas
+mesurés et la fenêtre le dit.
+
+### À vérifier à l'écran (par Anthony)
+1. Lancer SHOT sans projet : trois grandes entrées. « Dessiner des vignettes » ouvre l'onglet Vignettes, vide ; déposer une image de l'Explorateur sur une Case.
+2. Z : tout disparaît sauf le dessin et la barre mince ; Z (ou le bouton) remet tout comme avant, dans chaque onglet. Dessiner pendant le mode : rien ne saute.
+3. Premier passage dans Montage, Vignettes, Animation, Espace 3D : une bulle, une seule ; « Compris » la ferme ; elle ne revient pas. Préférences > Général > Revoir les conseils.
+4. Préférences > Apparence > Échelle : 125 %, 150 %, 90 % tout de suite ; dessiner à la souris et au stylet : le trait part de la pointe. Relancer : la taille est gardée.
+5. Tenir R : la carte des raccourcis ; la relâcher : elle part. Changer la touche du pinceau « plus gros » dans F1 : la carte la montre.
+6. Aide > Régler le stylet : trois traits, aperçu, Appliquer ; ouvrir « Toucher du stylet » dans les réglages du pinceau : la courbe a changé ; Rétablir.
+
+### Essais ajoutés
+`accueil_tests`, `concentration_tests`, `conseils_tests`, `echelle_tests`, `aidetouches_tests`, `reglagestylet_tests`.
