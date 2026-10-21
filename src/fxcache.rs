@@ -730,7 +730,10 @@ pub(crate) mod monde {
         }
         // Page blanche : ce que les essais d'avant ont laissé (résultats gardés, demandes, calculs en
         // cours, 250 ms d'aperçu devant une application qui défilait) n'est pas à cet essai.
-        super::forget_all();
+        // (Les formes de fond gardées par `fx.rs` (`COVERS`, rangées par numéro de dessin et par version) et les fonds en
+        // calcul sont à oublier aussi : deux essais ont les mêmes numéros et les mêmes versions, et un essai retrouvait la
+        // forme de fond du dessin d'un autre, un fond manquant sur trois ou quatre exécutions sous charge.)
+        crate::fx::fond_cancel_all();
         crate::fx::reset_draft();
         super::settle();
     }

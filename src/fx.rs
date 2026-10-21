@@ -1480,6 +1480,18 @@ type Cover = (u64, Arc<Vec<u8>>, u64);
 static COVERS: Mutex<BTreeMap<CelId, Cover>> = Mutex::new(BTreeMap::new());
 const COVERS_MAX: usize = 16;
 
+/// Essais : pose une forme de fond gardée, comme celle qu'un dessin laisse après avoir été vu.
+#[cfg(test)]
+pub(crate) fn garder_une_forme_pour_essai(id: CelId, version: u64) {
+    COVERS.lock().unwrap_or_else(|e| e.into_inner()).insert(id, (version, Arc::new(vec![255; 16]), 0));
+}
+
+/// Essais : combien de formes de fond sont gardées.
+#[cfg(test)]
+pub(crate) fn formes_de_fond_gardees() -> usize {
+    COVERS.lock().unwrap_or_else(|e| e.into_inner()).len()
+}
+
 /// La forme du fond `id` du dessin `src` (calculée une fois par version du dessin).
 fn cover_of(id: CelId, src: &Cel, r: &crate::fond::FondReglages, tick: u64) -> Arc<Vec<u8>> {
     let mut covers = COVERS.lock().unwrap_or_else(|e| e.into_inner());
