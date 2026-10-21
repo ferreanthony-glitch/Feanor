@@ -403,6 +403,18 @@ pub fn resize_cursor_axis(dir: eframe::egui::Vec2) -> usize {
     }
 }
 
+/// Côté des poignées carrées (coins et milieux de côtés) et rayon du cercle du pivot, en points
+/// d'écran : les mêmes à tout zoom (Storyboard Pro : carrés d'environ 7 px, pivot de 5 px de rayon).
+pub const HANDLE_SIDE: f32 = 7.0;
+pub const PIVOT_RADIUS: f32 = 5.0;
+
+/// Le centre d'une poignée posé sur le milieu d'un pixel de l'écran : un carré de 7 px a alors des
+/// bords nets au lieu d'un contour flou.
+pub fn snap_handle_center(c: Pos2, pixels_per_point: f32) -> Pos2 {
+    let snap = |v: f32| if v.is_finite() { ((v * pixels_per_point - 0.5).round() + 0.5) / pixels_per_point } else { v };
+    pos2(snap(c.x), snap(c.y))
+}
+
 /// Un carré de côté `side` centré en `c` (poignée).
 pub fn handle_rect(c: Pos2, side: f32) -> Rect {
     Rect::from_center_size(c, vec2(side, side))

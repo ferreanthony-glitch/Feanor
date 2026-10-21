@@ -4255,7 +4255,7 @@ impl App {
 
     /// Touche pour l'outil en cours (voir `handle_shortcuts`) ; vrai si elle a servi.
     fn tool_key(&mut self, key: Key) -> bool {
-        self.shape_key(key) || self.persp_key(key) || self.envelope_key(key)
+        self.shape_key(key) || self.persp_key(key) || self.envelope_key(key) || self.keys_escape(key)
     }
 
     /// Change d'outil : la forme en cours (courbe, polyligne) est posée avant.

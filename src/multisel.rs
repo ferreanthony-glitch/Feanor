@@ -46,6 +46,12 @@ pub(crate) struct Target {
     pub elements: usize,
     /// Du dessin du calque vers la feuille, tel qu'on le voit à cette image.
     pub to_stage: Affine,
+    /// L'image où ce dessin se prend (celle de sa clé : plusieurs clés d'un même calque, `by_keys`).
+    pub frame: usize,
+    /// Ce dessin est celui qu'on voit à l'image courante : seuls ceux-là ont une feuille flottante et
+    /// des pixels reposés à chaque image d'un geste ; les autres suivent à la fin, sans rien coûter
+    /// pendant le geste.
+    pub live: bool,
 }
 
 /// Les calques utilisables, et ceux qu'on laisse de côté (nom, raison).
@@ -79,33 +85,60 @@ pub(crate) fn layer_to_stage(doc: &Document, panel: usize, frame: usize, li: usi
 /// calques comptent seulement s'ils sont choisis eux-mêmes.
 pub(crate) fn targets(doc: &Document, panel: usize, frame: usize, chosen: &[usize]) -> Targets {
     let mut out = Targets::default();
-    let Some(p) = doc.panels.get(panel) else { return out };
-    let layers = &p.layers;
     for &li in chosen {
-        let Some(l) = layers.get(li) else { continue };
-        if l.folder {
+        push_target(doc, panel, frame, li, true, &mut out);
+    }
+    out
+}
+
+/// Le dessin du calque `li` du plan `panel` à l'image `frame` : une cible, ou la raison de l'écarter.
+fn push_target(doc: &Document, panel: usize, frame: usize, li: usize, live: bool, out: &mut Targets) {
+    let Some(p) = doc.panels.get(panel) else { return };
+    let layers = &p.layers;
+    let Some(l) = layers.get(li) else { return };
+    if l.folder {
+        return;
+    }
+    let mut skip = |why: &'static str| out.skipped.push((l.name.clone(), why));
+    if l.video.is_some() {
+        skip("vidéo");
+    } else if crate::folders::effect(layers, li).is_none() {
+        skip("masqué");
+    } else if l.locked || crate::folders::locked_by_folder(layers, li) || l.position_locked {
+        skip("verrouillé");
+    } else {
+        let Some(cel) = l.cel_at(frame).filter(|c| doc.cels.contains_key(c)) else {
+            skip("sans dessin à cette image");
+            return;
+        };
+        let Some(to_stage) = layer_to_stage(doc, panel, frame, li) else {
+            skip("derrière la caméra");
+            return;
+        };
+        let vector = l.kind == LayerKind::Vector && doc.cels[&cel].vector.is_some();
+        let elements = doc.cels[&cel].vector.as_ref().map_or(0, |d| d.elements.len());
+        out.list.push(Target { id: l.id, name: l.name.clone(), cel, vector, elements, to_stage, frame, live });
+    }
+}
+
+/// Les dessins des clés `keys` (calque par son id, image où commence la clé) du plan `panel`, à
+/// l'image courante `cur_frame` : chaque dessin une seule fois, même si plusieurs clés ou plusieurs
+/// images le montrent (une clé tenue sur plusieurs images est UN dessin). Les clés d'un autre plan
+/// sont ignorées ; ce qui ne peut pas être pris (masqué, verrouillé…) est dit dans `skipped`.
+pub(crate) fn targets_for_keys(doc: &Document, panel: usize, cur_frame: usize, keys: &[(u64, usize)]) -> Targets {
+    let mut out = Targets::default();
+    let Some(p) = doc.panels.get(panel) else { return out };
+    for &(layer, start) in keys {
+        let Some(li) = p.layers.iter().position(|l| l.id == layer) else { continue };
+        let Some(cel) = p.layers[li].cel_at(start) else {
+            push_target(doc, panel, start, li, false, &mut out);
+            continue;
+        };
+        if out.list.iter().any(|t| t.cel == cel) {
             continue;
         }
-        let mut skip = |why: &'static str| out.skipped.push((l.name.clone(), why));
-        if l.video.is_some() {
-            skip("vidéo");
-        } else if crate::folders::effect(layers, li).is_none() {
-            skip("masqué");
-        } else if l.locked || crate::folders::locked_by_folder(layers, li) || l.position_locked {
-            skip("verrouillé");
-        } else {
-            let Some(cel) = l.cel_at(frame).filter(|c| doc.cels.contains_key(c)) else {
-                skip("sans dessin à cette image");
-                continue;
-            };
-            let Some(to_stage) = layer_to_stage(doc, panel, frame, li) else {
-                skip("derrière la caméra");
-                continue;
-            };
-            let vector = l.kind == LayerKind::Vector && doc.cels[&cel].vector.is_some();
-            let elements = doc.cels[&cel].vector.as_ref().map_or(0, |d| d.elements.len());
-            out.list.push(Target { id: l.id, name: l.name.clone(), cel, vector, elements, to_stage });
-        }
+        let live = p.layers[li].cel_at(cur_frame) == Some(cel);
+        push_target(doc, panel, if live { cur_frame } else { start }, li, live, &mut out);
     }
     out
 }
@@ -137,6 +170,9 @@ pub(crate) struct Part {
     /// trait dessiné, une gomme), les rangs choisis ne valent plus et la sélection s'en va.
     pub elements: usize,
     pub to_stage: Affine,
+    /// L'image de ce dessin (celle de sa clé) et s'il est celui qu'on voit (Target).
+    pub frame: usize,
+    pub live: bool,
     pub kind: PartKind,
 }
 
@@ -189,6 +225,9 @@ pub(crate) struct MultiSel {
     pub frame: usize,
     pub parts: Vec<Part>,
     pub boxed: Option<BoxState>,
+    /// Prise sur plusieurs clés choisies (les dessins de ce calque à des images différentes), pas sur
+    /// plusieurs calques à l'image courante.
+    pub by_keys: bool,
 }
 
 fn plural(n: usize, one: &str, many: &str) -> String {
@@ -197,11 +236,24 @@ fn plural(n: usize, one: &str, many: &str) -> String {
 
 impl MultiSel {
     pub fn new(panel: usize, frame: usize, parts: Vec<Part>) -> MultiSel {
-        MultiSel { panel, frame, parts, boxed: None }
+        MultiSel { panel, frame, parts, boxed: None, by_keys: false }
     }
 
     /// « 3 calques, 42 éléments » (et « 2 zones » pour les calques bitmap).
     pub fn summary(&self) -> String {
+        // Prise sur des clés : on parle de dessins (« 3 dessins, 42 éléments »).
+        if self.by_keys {
+            let elements: usize = self.parts.iter().filter(|p| matches!(p.kind, PartKind::Vector { .. })).map(Part::count).sum();
+            let zones = self.parts.iter().filter(|p| matches!(p.kind, PartKind::Bitmap { .. })).count();
+            let mut s = plural(self.parts.len(), "dessin", "dessins");
+            if elements > 0 || zones == 0 {
+                s += &format!(", {}", plural(elements, "élément", "éléments"));
+            }
+            if zones > 0 {
+                s += &format!("{} {}", if elements > 0 { " et" } else { "," }, plural(zones, "zone", "zones"));
+            }
+            return s;
+        }
         let elements: usize = self.parts.iter().filter(|p| matches!(p.kind, PartKind::Vector { .. })).map(Part::count).sum();
         let zones = self.parts.iter().filter(|p| matches!(p.kind, PartKind::Bitmap { .. })).count();
         let mut s = plural(self.parts.len(), "calque", "calques");
@@ -255,7 +307,7 @@ impl MultiSel {
     pub fn refresh_maps(&mut self, doc: &Document) {
         for p in &mut self.parts {
             let li = doc.panels.get(self.panel).and_then(|pn| pn.layers.iter().position(|l| l.id == p.layer));
-            if let Some(m) = li.and_then(|li| layer_to_stage(doc, self.panel, self.frame, li)) {
+            if let Some(m) = li.and_then(|li| layer_to_stage(doc, self.panel, p.frame, li)) {
                 p.to_stage = m;
             }
         }
@@ -316,7 +368,7 @@ impl MultiSel {
         let Some(p) = doc.panels.get(panel) else { return false };
         self.parts.iter().all(|part| {
             let Some(layer) = p.layers.iter().find(|l| l.id == part.layer) else { return false };
-            if layer.cel_at(frame) != Some(part.cel) {
+            if layer.cel_at(part.frame) != Some(part.cel) {
                 return false;
             }
             match (&part.kind, doc.cels.get(&part.cel)) {
@@ -332,12 +384,12 @@ impl MultiSel {
 }
 
 pub(crate) fn vector_part(t: &Target, items: Vec<usize>) -> Part {
-    Part { layer: t.id, name: t.name.clone(), cel: t.cel, elements: t.elements, to_stage: t.to_stage, kind: PartKind::Vector { items } }
+    Part { layer: t.id, name: t.name.clone(), cel: t.cel, elements: t.elements, to_stage: t.to_stage, frame: t.frame, live: t.live, kind: PartKind::Vector { items } }
 }
 
 /// La part bitmap d'un calque : sa zone (`outline`, `mask`), pixels pas encore soulevés.
 pub(crate) fn bitmap_part(t: &Target, mask: PixelMask, outline: Vec<Vec<Pos2>>, lift: Option<Lift>) -> Part {
-    Part { layer: t.id, name: t.name.clone(), cel: t.cel, elements: 0, to_stage: t.to_stage, kind: PartKind::Bitmap { mask, outline, lift } }
+    Part { layer: t.id, name: t.name.clone(), cel: t.cel, elements: 0, to_stage: t.to_stage, frame: t.frame, live: t.live, kind: PartKind::Bitmap { mask, outline, lift } }
 }
 
 /// Ce que fait un geste de la boîte sur un calque : la transformation `a` (sur la feuille) vue
@@ -433,7 +485,8 @@ pub(crate) fn select_everything(doc: &Document, targets: &Targets) -> Vec<Part> 
 /// Le trait du calque le plus haut sous le point `p` de la feuille (tolérance `tol` en pixels de la
 /// feuille) : le calque et le rang de l'élément.
 pub(crate) fn hit_item<'a>(doc: &Document, targets: &'a Targets, p: Pos2, tol: f32) -> Option<(&'a Target, usize)> {
-    for t in targets.list.iter().rev().filter(|t| t.vector) {
+    // (Un trait ne se prend en cliquant que sur un dessin qu'on voit : pas sur celui d'une autre clé.)
+    for t in targets.list.iter().rev().filter(|t| t.vector && t.live) {
         let Some(inv) = t.to_stage.inverse() else { continue };
         let local_tol = tol * inv.width_factor();
         let hit = doc.cels.get(&t.cel).and_then(|c| c.vector.as_ref()).and_then(|d| d.hit_test(inv.apply(p), local_tol));
@@ -476,8 +529,11 @@ pub(crate) fn begin_gesture(doc: &mut Document, sel: &mut MultiSel, floats: &mut
                 let Some(d) = doc.cels.get(&part.cel).and_then(|c| c.vector.as_ref()) else { continue };
                 let before = d.clone();
                 let originals: Vec<Element> = items.iter().filter_map(|&i| d.elements.get(i).cloned()).collect();
-                if let Some(f) = Flottante::lift_slot(doc, part.cel, items, slot_of(k)) {
-                    floats.push(f);
+                // Un dessin qu'on ne voit pas (une autre clé) n'a pas de feuille : rien à montrer.
+                if part.live {
+                    if let Some(f) = Flottante::lift_slot(doc, part.cel, items, slot_of(k)) {
+                        floats.push(f);
+                    }
                 }
                 snaps.push(Snap { part: k, before: Some(before), originals, before_raster: None, aff0: Affine::IDENTITY });
             }
@@ -528,6 +584,8 @@ pub(crate) fn set_gesture(doc: &mut Document, sel: &mut MultiSel, floats: &mut [
                     f.aff = delta;
                 }
             }
+            // Un dessin qu'on ne voit pas : ses pixels sont posés une fois, au lâcher.
+            PartKind::Bitmap { lift: Some(_), .. } if !part.live => {}
             PartKind::Bitmap { lift: Some(l), .. } => {
                 if snap {
                     delta.tx = delta.tx.round();
@@ -546,11 +604,22 @@ pub(crate) fn set_gesture(doc: &mut Document, sel: &mut MultiSel, floats: &mut [
 /// Le geste est lâché : la géométrie des traits reçoit la transformation (leur feuille reste
 /// affichée jusqu'au rendu exact), les zones bitmap gardent leur place. Rend les étapes
 /// d'annulation, qui forment ensemble une seule étape.
-pub(crate) fn commit_gesture(doc: &mut Document, sel: &MultiSel, floats: &mut [Flottante], snaps: Vec<Snap>, a: &Affine) -> Vec<Edit> {
+pub(crate) fn commit_gesture(doc: &mut Document, sel: &mut MultiSel, floats: &mut [Flottante], snaps: Vec<Snap>, a: &Affine) -> Vec<Edit> {
     let mut edits = Vec::new();
     for s in snaps {
+        let part = &mut sel.parts[s.part];
+        let Some(mut delta) = layer_delta(&part.to_stage, a) else { continue };
+        // Un dessin bitmap qu'on ne voit pas reçoit ses pixels maintenant (une fois pour tout le geste).
+        if let (PartKind::Bitmap { lift: Some(l), .. }, false) = (&mut part.kind, part.live) {
+            if a.is_translation() {
+                delta.tx = delta.tx.round();
+                delta.ty = delta.ty.round();
+            }
+            if let Some(c) = doc.cels.get_mut(&part.cel) {
+                place_lift(c, l, s.aff0.then(&delta), &mut Vec::new());
+            }
+        }
         let part = &sel.parts[s.part];
-        let Some(delta) = layer_delta(&part.to_stage, a) else { continue };
         match &part.kind {
             PartKind::Vector { items } => {
                 Flottante::apply_geometry(doc, part.cel, items, &s.originals, &delta);
@@ -750,6 +819,8 @@ pub(crate) struct Multi {
     pub floats: Vec<Flottante>,
     /// Les contours des traits choisis, gardés d'une image à l'autre (`contours.rs`).
     pub contours: std::cell::RefCell<Option<crate::contours::Contours>>,
+    /// Les halos des dessins des autres clés (Part::live faux), plus pâles.
+    pub ghosts: std::cell::RefCell<Option<crate::contours::Contours>>,
     /// Ctrl+Maj tenus au début du geste (comme dans Storyboard Pro) : le lasso, le rectangle ou le
     /// clic prennent sur TOUS les calques du plan à l'image courante, pas seulement les calques
     /// choisis. Une fois le geste fini, les calques touchés deviennent les calques choisis.

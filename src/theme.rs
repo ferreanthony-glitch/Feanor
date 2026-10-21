@@ -635,6 +635,18 @@ pub fn barre(sequence: bool, impaire: bool) -> Color32 {
 
 /// Poignées, contours et lasso de la sélection, de la boîte de transformation et de la 3D.
 pub const POIGNEE_SELECTION: Color32 = Color32::from_rgb(70, 165, 255);
+// Sélection, comme Storyboard Pro la montre (captures d'Anthony, 2026-10-22). Tout le style de la
+// sélection est ici : pour le changer, on ne touche qu'à ces constantes (couleurs) et à
+// `selbox::HANDLE_SIDE` (taille des poignées).
+/// La boîte (1 px, pleine), le bord des poignées, le pivot, le halo des traits choisis.
+pub const SELECTION_BOITE: Color32 = Color32::from_rgb(232, 120, 16);
+/// Le fond des poignées carrées.
+pub const SELECTION_POIGNEE_FOND: Color32 = Color32::WHITE;
+/// Le lasso en cours : une ligne beige très fine…
+pub const LASSO_TRAIT: Color32 = Color32::from_rgb(224, 200, 176);
+/// … semée de petits points ambrés.
+pub const LASSO_POINTS: Color32 = Color32::from_rgb(192, 128, 0);
+
 /// Poignées de l'outil Déformer (enveloppe de Bézier).
 pub const POIGNEE_DEFORMER: Color32 = Color32::from_rgb(255, 150, 60);
 /// Boîte de l'outil Transformer le calque.

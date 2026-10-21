@@ -637,7 +637,7 @@ fn three_layers_thirty_strokes_move_at_one_ms_per_frame() {
     // Le lâcher : la géométrie des 90 traits, sans rien refaire.
     let t0 = Instant::now();
     let a = Affine::translate(vec2(100.0, 40.0));
-    let edits = multisel::commit_gesture(&mut doc, &sel, &mut floats, snaps, &a);
+    let edits = multisel::commit_gesture(&mut doc, &mut sel, &mut floats, snaps, &a);
     let commit = ms(t0);
     assert_eq!(edits.len(), 3);
     assert_eq!(crate::vector::replay_count(), replays, "ni au lâcher");
