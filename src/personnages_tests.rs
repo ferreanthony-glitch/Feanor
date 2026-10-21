@@ -24,6 +24,26 @@ fn banc_dessin() -> Banc {
     b
 }
 
+/// L'état commun remis à zéro pour un essai (`monde::ecrire`) oublie aussi les formes de fond gardées : deux essais ont les mêmes
+/// numéros de dessin et les mêmes versions, et l'un retrouvait la forme de fond du dessin de l'autre (« Max a le sien » sans fond,
+/// une exécution sur quelques-unes sous charge).
+#[test]
+fn the_shared_state_reset_forgets_the_kept_fond_shapes_of_the_essais_before() {
+    std::thread::spawn(|| {
+        crate::fxcache::monde::ecrire();
+        crate::fx::garder_une_forme_pour_essai(7, 3);
+        assert_eq!(crate::fx::formes_de_fond_gardees(), 1);
+    })
+    .join()
+    .expect("le premier essai");
+    std::thread::spawn(|| {
+        crate::fxcache::monde::ecrire();
+        assert_eq!(crate::fx::formes_de_fond_gardees(), 0, "page blanche : plus de forme d'un essai d'avant");
+    })
+    .join()
+    .expect("le second essai");
+}
+
 /// Un anneau carré de `x0, y0` à `x1, y1`, tracé au pinceau comme une main : un seul trait fermé.
 fn anneau(app: &mut App, x0: f32, y0: f32, x1: f32, y1: f32) {
     let mut pts = Vec::new();
