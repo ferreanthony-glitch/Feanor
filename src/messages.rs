@@ -37,6 +37,30 @@ pub fn record(history: &mut Vec<(f64, String)>, now: f64, msg: &str) {
     }
 }
 
+/// Longueur au-delà de laquelle la barre d'état ne montre plus qu'un début de phrase.
+const COURT: usize = 70;
+
+/// Ce que la barre d'état montre d'un message : lui-même s'il est court ; sinon son début, coupé avant la première
+/// parenthèse, le premier point ou le premier point-virgule qui vient après quelques mots, suivi de « … ». Le détail
+/// n'est pas perdu : le message entier est dans la bulle de la barre et dans l'historique (simplification des barres,
+/// 2026-10-21 : une seule astuce courte, le reste dans les bulles).
+pub fn resume(msg: &str) -> String {
+    let msg = msg.trim();
+    if msg.chars().count() <= COURT {
+        return msg.to_string();
+    }
+    // Les coupures qu'on cherche, la plus tôt gagne, pourvu qu'il reste assez de texte avant elle.
+    let minimum = 12;
+    let coupure = [" (", ". ", " ; ", " — "]
+        .iter()
+        .filter_map(|c| msg.char_indices().find(|(i, _)| msg[*i..].starts_with(c) && msg[..*i].chars().count() >= minimum).map(|(i, _)| i))
+        .min();
+    match coupure {
+        Some(i) => format!("{}…", msg[..i].trim_end_matches([' ', ',', ';', ':'])),
+        None => msg.to_string(),
+    }
+}
+
 /// « il y a 3 min » pour un message d'il y a `secs` secondes.
 pub fn ago(secs: f64) -> String {
     match secs as u64 {
@@ -67,9 +91,10 @@ impl App {
         }
     }
 
-    /// Le message de la barre d'état : son texte entier au survol, l'historique au clic.
+    /// Le message de la barre d'état : une ligne courte (`resume`), son texte entier au survol, l'historique au clic.
     pub(crate) fn status_message(&mut self, ui: &mut egui::Ui) {
-        let resp = ui.add(egui::Label::new(&self.status).truncate().sense(egui::Sense::click()));
+        let court = resume(&self.status);
+        let resp = ui.add(egui::Label::new(court).truncate().sense(egui::Sense::click()));
         if resp.on_hover_text(format!("{}\n\nClic : les messages précédents.", self.status)).clicked() {
             self.messages_window = !self.messages_window;
         }
