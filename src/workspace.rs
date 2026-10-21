@@ -65,6 +65,10 @@ pub struct Layout {
     pub safe_frames: bool,
     #[serde(rename = "cadre_format", skip_serializing_if = "Option::is_none")]
     pub frame_format: Option<[f32; 2]>,
+    /// La barre des personnages au-dessus du dessin (`personnagesui.rs`) dans cet espace de travail : rien, c'est
+    /// le choix de l'espace (`Espace::barre_personnages_par_defaut`) ; sinon ce que l'utilisateur y a réglé.
+    #[serde(rename = "barre_personnages", skip_serializing_if = "Option::is_none")]
+    pub character_bar: Option<bool>,
 }
 
 impl Default for Layout {
@@ -89,6 +93,7 @@ impl Default for Layout {
             board_attach: false,
             safe_frames: false,
             frame_format: None,
+            character_bar: None,
         }
     }
 }
@@ -208,6 +213,16 @@ impl Espace {
             Espace::Storyboard => "Storyboard",
             Espace::Animation => "Animation",
             Espace::Montage => "Montage",
+        }
+    }
+
+    /// La barre des personnages (`personnagesui.rs`) est-elle montrée d'office dans cet espace ? Oui en Storyboard
+    /// (et dans l'espace Vignettes, quand il viendra : le croquis rapide est son travail) ; non en Animation et en
+    /// Montage, où l'on peut l'allumer (Affichage > Barre des personnages) ; l'espace retient son choix.
+    pub fn barre_personnages_par_defaut(self) -> bool {
+        match self {
+            Espace::Storyboard => true,
+            Espace::Animation | Espace::Montage => false,
         }
     }
 

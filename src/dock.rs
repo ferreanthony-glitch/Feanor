@@ -83,6 +83,10 @@ pub enum Pane {
     /// il s'ouvre dans la colonne de droite, et se détache dans sa fenêtre pour un deuxième écran.
     #[serde(rename = "references")]
     References,
+    /// Les personnages du projet et les couleurs neutres (`personnagesui.rs`) : leurs couleurs de trait et de
+    /// fond, leur ordre. En onglet avec la couleur et les pinceaux dans la disposition par défaut.
+    #[serde(rename = "personnages")]
+    Personnages,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -98,7 +102,7 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 16] = [
+    pub const ALL: [Pane; 17] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
@@ -115,6 +119,7 @@ impl Pane {
         Pane::Bruitages,
         Pane::SuggestionsSonores,
         Pane::References,
+        Pane::Personnages,
     ];
 
     /// Les panneaux fermés dans la disposition par défaut, qui ne s'ouvrent qu'à la demande.
@@ -152,6 +157,7 @@ impl Pane {
             Pane::Bruitages => "Bruitages",
             Pane::SuggestionsSonores => "Suggestions sonores",
             Pane::References => "Références",
+            Pane::Personnages => "Personnages",
         }
     }
 
@@ -187,13 +193,14 @@ impl Pane {
             Pane::Bruitages => ph::WAVEFORM,
             Pane::SuggestionsSonores => ph::SPARKLE,
             Pane::References => ph::IMAGES,
+            Pane::Personnages => ph::USERS_THREE,
         }
     }
 
     pub fn group(self) -> Group {
         match self {
             Pane::Canvas => Group::Center,
-            Pane::Tools | Pane::Color | Pane::Brushes | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
+            Pane::Tools | Pane::Color | Pane::Brushes | Pane::Personnages | Pane::ToolOptions | Pane::View | Pane::Guides | Pane::Sheet => Group::Left,
             Pane::Layers
             | Pane::XSheet
             | Pane::Effects
@@ -308,8 +315,27 @@ fn left_column(only: &[Pane]) -> Option<DockNode> {
 /// sous le dessin depuis le 2026-10-17.
 const SETTINGS_TABS: [Pane; 3] = [Pane::ToolOptions, Pane::Guides, Pane::Sheet];
 
-/// Les onglets du bas de la colonne : couleur et pinceaux (11c).
-const COLOR_TABS: [Pane; 2] = [Pane::Color, Pane::Brushes];
+/// Les onglets du bas de la colonne : couleur et pinceaux (11c), et les personnages (brosse par personnage).
+const COLOR_TABS: [Pane; 3] = [Pane::Color, Pane::Brushes, Pane::Personnages];
+
+/// Remet `pane` parmi les onglets `tabs` de sa famille : à la fin pour les réglages ; pour la couleur, les pinceaux et les
+/// personnages, à leur rang (couleur, pinceaux, personnages), quels que soient ceux qui sont restés.
+fn place_in_family(tabs: &mut Vec<Pane>, pane: Pane, family: &[Pane]) {
+    if family != COLOR_TABS {
+        tabs.push(pane);
+        return;
+    }
+    let rank = |p: Pane| family.iter().position(|f| *f == p);
+    let mine = rank(pane);
+    let before = tabs.iter().rposition(|p| matches!((rank(*p), mine), (Some(a), Some(b)) if a < b));
+    let after = tabs.iter().position(|p| matches!((rank(*p), mine), (Some(a), Some(b)) if a > b));
+    let at = match (before, after) {
+        (Some(i), _) => i + 1,
+        (None, Some(j)) => j,
+        (None, None) => tabs.len(),
+    };
+    tabs.insert(at, pane);
+}
 
 /// Version de la disposition : 1 depuis 6a (outils dans la barre verticale, calques à côté du
 /// dessin, réglages et couleur à droite) ; 2 depuis 9b (la fiche avec les réglages) ; 3 depuis 11c
@@ -497,7 +523,7 @@ impl DockLayout {
         // À droite du dessin : les calques, puis les réglages (avec la fiche) et la couleur.
         let mut settings = Vec::new();
         if l.tools {
-            settings.extend([Pane::ToolOptions, Pane::Guides, Pane::Color, Pane::Brushes]);
+            settings.extend([Pane::ToolOptions, Pane::Guides, Pane::Color, Pane::Brushes, Pane::Personnages]);
             if l.sheet {
                 settings.push(Pane::Sheet);
             }
@@ -752,11 +778,11 @@ impl DockLayout {
                 continue;
             }
             if let Some(t) = self.principal.tabs_with(family) {
-                t.push(pane);
+                place_in_family(t, pane, family);
                 return;
             }
             if let Some(t) = self.fenetres.iter_mut().find_map(|w| w.panneaux.tabs_with(family)) {
-                t.push(pane);
+                place_in_family(t, pane, family);
                 return;
             }
         }

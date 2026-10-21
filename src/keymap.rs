@@ -480,6 +480,13 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("references.lier_plan", "Lier les références choisies au plan courant (ou délier)", true, false),
     act("references.filtre_plan", "Références : montrer seulement celles du plan courant (oui / non)", true, false),
     act("references.tout_voir", "Références : tout voir sur le tableau", true, false),
+    // Brosse par personnage (`personnagesui.rs`).
+    act("vue.personnages", "Panneau Personnages (ouvrir / fermer)", true, false),
+    act("perso.barre", "Barre des personnages au-dessus du dessin (montrer / cacher, dans cet espace de travail)", true, false),
+    act("perso.ajouter", "Nouveau personnage", true, false),
+    act("perso.suivant", "Personnage suivant (trait et aplat)", true, false),
+    act("perso.precedent", "Personnage précédent (trait et aplat)", true, false),
+    act("perso.aucun", "Ne plus dessiner en personnage (couleur libre)", true, false),
     // Barre des panneaux (`barrepanneaux.rs`) : ouvrir, mettre devant ou fermer un panneau de côté.
     act("vue.reglages", "Panneau Réglages de l'outil (ouvrir / fermer)", true, false),
     act("vue.pinceaux", "Panneau Pinceaux (ouvrir / fermer)", true, false),

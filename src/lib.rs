@@ -523,6 +523,11 @@ mod panels;
 mod pdf;
 #[cfg(test)]
 mod pdf_tests;
+mod persofond;
+mod personnages;
+#[cfg(test)]
+mod personnages_tests;
+mod personnagesui;
 mod persp;
 #[cfg(test)]
 mod persp_tests;

@@ -301,6 +301,9 @@ pub struct App {
     /// Planche de crayonnés rapides (`crayonnesui.rs`) : ouverte, elle prend la place du dessin en
     /// storyboard ; la planche elle-même est dans le projet (`Document::crayonnes`).
     pub(crate) crayonnes: crate::crayonnesui::Etat,
+    /// Brosse par personnage (`personnagesui.rs`) : le personnage qui dessine, la fenêtre « Modifier » et le fil
+    /// des fonds de trait ; les personnages eux-mêmes sont dans le projet (`Document::personnages`).
+    pub(crate) perso: crate::personnagesui::Etat,
     pub(crate) cur_panel: usize,
     pub(crate) cur_layer: usize,
     pub(crate) cur_frame: usize,
@@ -951,6 +954,7 @@ impl App {
             mode: Mode::Storyboard,
             board_view: BoardView::Scene,
             crayonnes: Default::default(),
+            perso: Default::default(),
             cur_panel: 0,
             cur_layer: 0,
             cur_frame: 0,
@@ -1889,6 +1893,8 @@ impl App {
         }
         let erase = self.tool == Tool::Eraser;
         if !erase {
+            // Un personnage qui a un fond le donne au calque (`personnagesui.rs`).
+            self.perso_avant_trait();
             // Elle rejoint les couleurs récentes (passe couleur).
             self.color_used(self.color);
         }
@@ -2059,6 +2065,8 @@ impl App {
     pub(crate) fn end_stroke(&mut self) {
         // Un segment droit en attente (Maj tenue) est posé avant de finir le trait.
         self.droit_flush();
+        // Le trait d'un personnage (`personnagesui.rs`) : son dessin et les tuiles d'avant, pour le fond qu'il gagne.
+        let mut trait_de_personnage: Option<(CelId, Vec<(usize, Option<crate::raster::Tile>)>)> = None;
         if let Some(mut stroke) = self.stroke.take() {
             // Banc de traits : le trait tel que reçu, avec son réglage.
             if let Some(n) = self.record_strokes.as_mut() {
@@ -2103,6 +2111,9 @@ impl App {
                     None => None,
                 };
                 self.renderer.invalidate_tiles(&dirty);
+                if self.perso.actif.is_some() {
+                    trait_de_personnage = crate::personnagesui::tuiles_de(edit.as_ref()).map(|t| (cel, t));
+                }
                 match self.vstroke.take() {
                     Some(vs) => {
                         // Les pixels d'avant l'aperçu servent à poser le trait définitif sans tout redessiner.
@@ -2122,6 +2133,10 @@ impl App {
                     }
                 }
             }
+        }
+        // Le fond que le trait d'un personnage vient de gagner se calcule sur le fil de fond.
+        if let Some((cel, tiles)) = trait_de_personnage {
+            self.perso_apres_trait(cel, tiles);
         }
         self.finish_vector_erase();
         self.finish_cut();
@@ -3463,6 +3478,10 @@ impl App {
         if self.fond_action(action) {
             return;
         }
+        // Brosse par personnage (`personnagesui.rs`).
+        if self.perso_action(action) {
+            return;
+        }
         // Préréglages d'effets et calques d'effets (`prereglagesui.rs`).
         if self.effet_action(action) {
             return;
@@ -4521,6 +4540,7 @@ impl App {
         self.tick_flip(ctx);
         self.tick_video_import(ctx);
         self.tick_references(ctx);
+        self.tick_personnages();
         self.propagation_ui(ctx);
         self.coloriage_ui(ctx);
         if self.playing {
@@ -4630,6 +4650,7 @@ impl App {
         self.export_windows(ctx);
         self.recovery_window(ctx);
         self.workspace_name_window(ctx);
+        self.personnages_fenetre(ctx);
         self.scrub_audio();
         self.drop_stale_drags(ctx.input(|i| i.pointer.any_down()));
         self.suivre_sorte_pinceau();

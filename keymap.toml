@@ -2712,6 +2712,37 @@ action = "references.tout_voir"
 touches = []
 source = "SHOT (sans touche)"
 
+# Brosse par personnage (sans touche : à choisir).
+[[raccourci]]
+action = "vue.personnages"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.barre"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.ajouter"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.suivant"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.precedent"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.aucun"
+touches = []
+source = "SHOT (sans touche)"
+
 # Effets, propagation, caméra, aides au cadrage.
 [[raccourci]]
 action = "fx.choisir_aucun"

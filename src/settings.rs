@@ -168,6 +168,10 @@ pub struct Settings {
     /// prise sans nouvelles, la prise automatique, les notifications.
     #[serde(default, rename = "equipe")]
     pub equipe: crate::equipe::ReglageEquipe,
+    /// Les couleurs neutres de la barre des personnages (`personnages.rs`, `personnagesui.rs`) : un réglage de
+    /// l'application, commun à tous les projets (les personnages, eux, sont ceux du projet).
+    #[serde(default = "crate::personnages::neutres_par_defaut", rename = "couleurs_neutres")]
+    pub neutral_colors: Vec<crate::personnages::Neutre>,
     /// L'onglet ouvert de la fenêtre Préférences… (`prefsui.rs`), retenu d'une séance à l'autre.
     #[serde(default, rename = "onglet_preferences", skip_serializing_if = "crate::prefsonglets::Onglet::est_defaut")]
     pub prefs_onglet: crate::prefsonglets::Onglet,
@@ -240,6 +244,7 @@ impl Default for Settings {
             passe_partout: default_passe_partout(),
             collage: Default::default(),
             equipe: Default::default(),
+            neutral_colors: crate::personnages::neutres_par_defaut(),
             prefs_onglet: Default::default(),
         }
     }
@@ -290,6 +295,7 @@ impl Settings {
         s.generation_son = std::mem::take(&mut s.generation_son).sanitized();
         s.passe_partout = s.passe_partout.min(100);
         s.equipe = std::mem::take(&mut s.equipe).nettoye();
+        s.neutral_colors = crate::personnages::neutres_nettoyees(std::mem::take(&mut s.neutral_colors));
         s
     }
 

@@ -254,6 +254,8 @@ impl App {
                     self.action_item(ui, "Lignes de référence", "guide.lignes_reference");
                 });
                 ui.separator();
+                let barre = if self.barre_perso_visible() { "Cacher la barre des personnages" } else { "Montrer la barre des personnages" };
+                self.action_item(ui, barre, "perso.barre");
                 self.workspace_menu(ui);
                 self.action_item(ui, "Plein écran", "vue.plein_ecran");
                 self.action_item(ui, "Performance (temps de l'interface)", "vue.performance");

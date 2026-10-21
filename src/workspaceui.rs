@@ -280,5 +280,6 @@ fn same_layout(a: &Layout, b: &Layout) -> bool {
         && a.top_view == b.top_view
         && a.command_bar == b.command_bar
         && a.tool_bar == b.tool_bar
+        && a.character_bar == b.character_bar
         && a.dock_layout().close_to(&b.dock_layout())
 }

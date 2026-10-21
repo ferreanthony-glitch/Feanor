@@ -178,6 +178,7 @@ impl App {
             Pane::Bruitages => self.bruitages_panel(ui),
             Pane::SuggestionsSonores => self.suggestions_panel(ui),
             Pane::References => self.references_panel(ui),
+            Pane::Personnages => self.personnages_panel(ui),
         }
     }
 

@@ -247,7 +247,9 @@ impl App {
             self.status = "Strate Fond : clique dans une zone fermée par le trait (pas sur le trait).".into();
             return;
         };
-        let color = egui::Color32::from_rgb(self.color[0], self.color[1], self.color[2]);
+        // Un personnage choisi (`personnagesui.rs`) : le pot de peinture de la strate Fond prend sa couleur de fond.
+        let fill = self.perso_fond_ou(self.color);
+        let color = egui::Color32::from_rgb(fill[0], fill[1], fill[2]);
         let (w, h) = (self.doc.width, self.doc.height);
         let Some(c) = self.doc.cels.get_mut(&cel) else { return };
         let s = c.fond.get_or_insert_with(|| Box::new(crate::document::Strate::new(w, h)));
@@ -269,7 +271,7 @@ impl App {
         self.modified = true;
         self.renderer.invalidate_all();
         if !cut {
-            self.color_used(self.color);
+            self.color_used(fill);
         }
         self.status = if cut {
             "Strate Fond : zone retirée du fond (le pot de peinture ou le pinceau la remet).".into()
