@@ -626,7 +626,7 @@ impl App {
 
     pub(crate) fn select_all(&mut self) {
         // Plusieurs calques choisis : tout ce que contient leur dessin de l'image courante.
-        if self.chosen_layers().len() >= 2 {
+        if self.chosen_layers().len() >= 2 || self.keys_mode() {
             self.multi_select_all();
             return;
         }

@@ -121,7 +121,7 @@ fn the_halo_hugs_the_stroke_edge_and_fades_outward() {
     assert_eq!(lines.len(), 1);
     let id = |p: Pos2| p;
     let anchors = ANCHORS.map(id);
-    let halo = Contours::build_halo(1, &lines, id, 1.0, anchors, crate::theme::SELECTION_BOITE);
+    let halo = Contours::build_halo(1, &lines, id, 1.0, anchors, crate::theme::SELECTION_BOITE, false);
     let shape = halo.shape(&Affine::IDENTITY);
     let Shape::Mesh(m) = &shape else { panic!() };
     assert!(m.vertices.iter().all(|v| v.pos.is_finite()));
@@ -153,7 +153,7 @@ fn a_halo_hairpin_does_not_spike() {
         }],
     };
     let id = |p: Pos2| p;
-    let halo = Contours::build_halo(2, &radius_lines_of(&d, &[0]), id, 1.0, ANCHORS.map(id), crate::theme::SELECTION_BOITE);
+    let halo = Contours::build_halo(2, &radius_lines_of(&d, &[0]), id, 1.0, ANCHORS.map(id), crate::theme::SELECTION_BOITE, false);
     let got = mesh_bounds(&halo.shape(&Affine::IDENTITY));
     // (Le coin s'allonge au plus de deux fois la largeur : 160 + 2 × (3 + 2,8) au bout.)
     assert!(Rect::from_min_max(pos2(90.0, 90.0), pos2(110.0, 175.0)).contains_rect(got), "{got:?}");

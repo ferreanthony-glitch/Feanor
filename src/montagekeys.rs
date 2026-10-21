@@ -353,7 +353,7 @@ impl App {
         self.key_anchor = anchor;
         if self.key_sel.len() > 1 {
             self.status = format!(
-                "{} choisies : glisser pour décaler (Maj : seules celles-ci), Ctrl+C, Ctrl+V (insérer), Maj+Ctrl+V (sur la tête), Suppr, Ctrl+D (dupliquer) ; clic droit pour le reste.",
+                "{} choisies : l'outil Sélection les transforme ensemble (Échap : le dessin courant seul) ; glisser pour décaler (Maj : seules celles-ci), Ctrl+C, Ctrl+V (insérer), Maj+Ctrl+V (sur la tête), Suppr, Ctrl+D (dupliquer) ; clic droit pour le reste.",
                 key_counts_text(&self.key_sel)
             );
         }

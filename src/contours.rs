@@ -315,7 +315,7 @@ fn corner_offset(before: Option<Vec2>, after: Option<Vec2>) -> Vec2 {
 
 /// Ajoute au maillage le halo de `line` (points d'écran, `radii` : rayons d'écran) : deux rubans,
 /// un de chaque côté du trait, orange net contre le bord et transparent à `HALO_WIDTH` de lui.
-fn halo_ribbon(mesh: &mut Mesh, line: &[Pos2], radii: &[f32], color: Color32) -> usize {
+fn halo_ribbon(mesh: &mut Mesh, line: &[Pos2], radii: &[f32], color: Color32, fill: bool) -> usize {
     let mut pts: Vec<(Pos2, f32)> = Vec::with_capacity(line.len());
     for (&p, &r) in line.iter().zip(radii) {
         if p.is_finite() && r.is_finite() && pts.last().is_none_or(|q| q.0.distance_sq(p) > 1e-6) {
@@ -336,7 +336,8 @@ fn halo_ribbon(mesh: &mut Mesh, line: &[Pos2], radii: &[f32], color: Color32) ->
         let after = (i + 1 < n).then(|| normal(pts[i].0, pts[i + 1].0));
         let off = corner_offset(before, after);
         let (p, r) = pts[i];
-        let inner = (r - HALO_OVERLAP).max(0.0);
+        // ill : le trait entier est teinté (le dessin d'une autre clé, qu'on ne voit pas : un fantôme).
+        let inner = if fill { 0.0 } else { (r - HALO_OVERLAP).max(0.0) };
         // Par côté : contre le bord du trait (plein), aux deux tiers (plein), au large (transparent).
         let mid = r + HALO_WIDTH * 0.65;
         let far = r + HALO_WIDTH;
@@ -368,7 +369,7 @@ impl Contours {
     /// Le halo des traits `lines` (points du dessin, rayons en pixels du dessin), vu par `to_s` ;
     /// `scale` : pixels d'écran par pixel du dessin. Comme `build`, simplifié à la résolution de
     /// l'écran et gardé d'une image à l'autre.
-    pub fn build_halo(key: u64, lines: &[RadiusLine], to_s: impl Fn(Pos2) -> Pos2, scale: f32, anchor: [Pos2; 4], color: Color32) -> Contours {
+    pub fn build_halo(key: u64, lines: &[RadiusLine], to_s: impl Fn(Pos2) -> Pos2, scale: f32, anchor: [Pos2; 4], color: Color32, fill: bool) -> Contours {
         let mut screen: Vec<(Vec<Pos2>, Vec<f32>)> = lines
             .iter()
             .filter(|l| l.points.len() >= 2)
@@ -396,7 +397,7 @@ impl Contours {
             if points_out >= HARD_MAX_POINTS {
                 break;
             }
-            let n = halo_ribbon(&mut mesh, p, r, color);
+            let n = halo_ribbon(&mut mesh, p, r, color, fill);
             if n > 0 {
                 points_out += n;
                 lines_out += 1;
@@ -507,7 +508,7 @@ impl crate::app::App {
         if let (Some(t), Some(k)) = (reuse, slot.as_ref()) {
             return Some(k.shape(&t));
         }
-        let built = Contours::build_halo(key, &radius_lines_of(d, items), to_s, self.layer_zoom(), now, color);
+        let built = Contours::build_halo(key, &radius_lines_of(d, items), to_s, self.layer_zoom(), now, color, false);
         let shape = built.shape(&Affine::IDENTITY);
         *slot = Some(built);
         Some(shape)

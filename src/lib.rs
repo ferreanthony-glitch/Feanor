@@ -188,6 +188,8 @@ mod contours_tests;
 #[cfg(test)]
 mod selection_affichage_tests;
 #[cfg(test)]
+mod clesselection_tests;
+#[cfg(test)]
 mod gpu_tests;
 #[cfg(test)]
 mod affichage_tests;

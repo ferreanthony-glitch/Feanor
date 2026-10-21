@@ -24,6 +24,8 @@ use crate::selbox::{self, BoxParams, Handle, SelFrame};
 use crate::vector::Affine;
 
 const ACCENT: Color32 = crate::theme::SELECTION_BOITE;
+/// Opacité (sur 1) du halo des dessins d'autres clés, qu'on ne voit pas : plus pâle que celui du dessin courant.
+const GHOST_ALPHA: f32 = 0.4;
 /// À moins de tant de pixels d'écran du centre, le pivot tiré s'y remet.
 const PIVOT_SNAP: f32 = 6.0;
 /// Geste d'annulation des flèches : une flèche tenue = une étape.
@@ -41,7 +43,46 @@ impl App {
 
     /// Le lasso prend-il sur plusieurs calques ? L'outil Sélection, et plusieurs calques choisis.
     pub(crate) fn multi_wanted(&self) -> bool {
-        self.tool == Tool::Select && (self.chosen_layers().len() >= 2 || self.multi.sel.is_some())
+        self.tool == Tool::Select && (self.chosen_layers().len() >= 2 || self.multi.sel.is_some() || self.keys_mode())
+    }
+
+    /// Les clés choisies du plan courant, calque (id) et image de début : de quoi prendre leurs
+    /// dessins ensemble.
+    fn chosen_key_drawings(&self) -> Vec<(u64, usize)> {
+        let Some(panel) = self.doc.panels.get(self.cur_panel).map(|p| p.id) else { return Vec::new() };
+        self.key_sel.iter().filter(|k| k.panel == panel).map(|k| (k.layer, k.start)).collect()
+    }
+
+    /// Plusieurs clés sont choisies (dans le montage ou la timeline) : l'outil Sélection agit sur leurs
+    /// dessins à tous, sans rien tenir. Un seul dessin, ou le geste Ctrl+Maj « tous les calques » :
+    /// non.
+    pub(crate) fn keys_mode(&self) -> bool {
+        !self.multi.all_layers && self.chosen_key_drawings().len() >= 2
+    }
+
+    /// Les dessins des clés choisies, à prendre ensemble (`keys_mode`).
+    fn key_targets(&self) -> Targets {
+        multisel::targets_for_keys(&self.doc, self.cur_panel, self.cur_frame, &self.chosen_key_drawings())
+    }
+
+    /// Une sélection neuve sur les cibles de ce moment : sur des clés ou sur des calques.
+    fn new_multi_sel(&self, parts: Vec<multisel::Part>) -> MultiSel {
+        let mut sel = MultiSel::new(self.cur_panel, self.cur_frame, parts);
+        sel.by_keys = self.keys_mode();
+        sel
+    }
+
+    /// Échap avec plusieurs clés choisies et l'outil Sélection : on revient au dessin courant seul
+    /// (les clés sont lâchées, la sélection sur plusieurs dessins s'en va).
+    pub(crate) fn keys_escape(&mut self, key: egui::Key) -> bool {
+        if key != egui::Key::Escape || self.tool != Tool::Select || !self.keys_mode() || self.multi.drag.is_some() {
+            return false;
+        }
+        self.drop_multi();
+        self.key_sel.clear();
+        self.key_anchor = None;
+        self.status = "Clés lâchées : la sélection agit sur le dessin courant.".into();
+        true
     }
 
     /// Les rangs de tous les calques du plan courant qui ont un dessin (les dossiers n'en ont pas :
@@ -54,6 +95,9 @@ impl App {
     /// Les calques que la sélection peut toucher à l'image courante, et ceux qu'elle laisse : les
     /// calques choisis, ou tous ceux du plan pendant un geste Ctrl+Maj (`Multi::all_layers`).
     pub(crate) fn multi_targets(&self) -> Targets {
+        if self.keys_mode() {
+            return self.key_targets();
+        }
         let ranks = if self.multi.all_layers { self.all_layer_ranks() } else { self.chosen_layers() };
         multisel::targets(&self.doc, self.cur_panel, self.cur_frame, &ranks)
     }
@@ -144,7 +188,12 @@ impl App {
             let t = t.clone();
             let (panel, frame) = (self.cur_panel, self.cur_frame);
             if shift {
-                let sel = self.multi.sel.get_or_insert_with(|| MultiSel::new(panel, frame, Vec::new()));
+                let by_keys = self.keys_mode();
+                let sel = self.multi.sel.get_or_insert_with(|| {
+                    let mut s = MultiSel::new(panel, frame, Vec::new());
+                    s.by_keys = by_keys;
+                    s
+                });
                 sel.toggle_item(&t, item);
                 if sel.parts.is_empty() {
                     self.multi.sel = None;
@@ -162,7 +211,7 @@ impl App {
                 .as_ref()
                 .is_some_and(|s| s.parts.iter().any(|p| p.layer == t.id && matches!(&p.kind, PartKind::Vector { items } if items.contains(&item))));
             if !already {
-                self.multi.sel = Some(MultiSel::new(panel, frame, vec![multisel::vector_part(&t, vec![item])]));
+                self.multi.sel = Some(self.new_multi_sel(vec![multisel::vector_part(&t, vec![item])]));
             }
             // Ctrl+Maj + clic sur un trait : son calque devient un calque choisi.
             self.multi_adopt_layers();
@@ -277,7 +326,6 @@ impl App {
         let targets = self.multi_targets();
         let parts = multisel::select_polygon(&self.doc, &targets, poly);
         let left = targets.skipped_text();
-        let (panel, frame) = (self.cur_panel, self.cur_frame);
         if parts.is_empty() {
             if !add {
                 self.multi.sel = None;
@@ -291,7 +339,7 @@ impl App {
         }
         match self.multi.sel.as_mut().filter(|_| add) {
             Some(sel) => sel.merge(parts),
-            None => self.multi.sel = Some(MultiSel::new(panel, frame, parts)),
+            None => self.multi.sel = Some(self.new_multi_sel(parts)),
         }
         let all = self.multi.all_layers;
         self.multi_adopt_layers();
@@ -325,7 +373,7 @@ impl App {
             };
             return;
         }
-        self.multi.sel = Some(MultiSel::new(self.cur_panel, self.cur_frame, parts));
+        self.multi.sel = Some(self.new_multi_sel(parts));
         self.tool = Tool::Select;
         let summary = self.multi_summary().unwrap_or_default();
         self.status = match left {
@@ -485,7 +533,7 @@ impl App {
             return;
         }
         self.renderer.invalidate_all();
-        self.multi.sel = Some(MultiSel::new(self.cur_panel, self.cur_frame, parts));
+        self.multi.sel = Some(self.new_multi_sel(parts));
         self.tool = Tool::Select;
         self.named_step("Coller", |app| app.history.push(crate::history::Edit::Group(edits)));
         self.modified = true;
@@ -537,6 +585,7 @@ impl App {
             Flottante::release_slot(&mut self.doc, f.slot);
         }
         *self.multi.contours.borrow_mut() = None;
+        *self.multi.ghosts.borrow_mut() = None;
     }
 
     /// Termine tout de suite les gestes lâchés dont la feuille attend le rendu exact : les
@@ -580,7 +629,11 @@ impl App {
             return;
         }
         let chosen: Vec<u64> = self.chosen_layers().iter().filter_map(|&li| self.layers().get(li).map(|l| l.id)).collect();
-        let valid = sel.still_valid(&self.doc, self.cur_panel, self.cur_frame) && sel.parts.iter().all(|p| chosen.contains(&p.layer));
+        // Sur des clés : leurs calques comptent comme choisis ; une seule clé (ou Échap) : fini.
+        let keyed: Vec<u64> = if self.keys_mode() { self.chosen_key_drawings().iter().map(|k| k.0).collect() } else { Vec::new() };
+        let valid = sel.still_valid(&self.doc, self.cur_panel, self.cur_frame)
+            && sel.parts.iter().all(|p| chosen.contains(&p.layer) || keyed.contains(&p.layer))
+            && !(sel.by_keys && !self.keys_mode());
         if !valid {
             self.multi.sel = None;
             return;
@@ -628,33 +681,39 @@ impl App {
             Some(MDrag::Transform { aff, snaps: Some(_), .. }) => (*aff, true),
             _ => (Affine::IDENTITY, false),
         };
-        if let Some(shape) = self.multi_contours(sel, moved, gesture) {
-            painter.add(shape);
+        // Les dessins qu'on voit : le halo plein ; ceux des autres clés (qu'on ne voit pas) : des
+        // fantômes plus pâles, qui suivent le geste.
+        for ghost in [false, true] {
+            if let Some(shape) = self.multi_contours(sel, moved, gesture, ghost) {
+                painter.add(shape);
+            }
         }
-        // Contour des zones bitmap : pointillés noirs et blancs.
+        // Contour des zones bitmap : un trait orange d'1 px (plus pâle pour un autre dessin).
         for part in &sel.parts {
             if let PartKind::Bitmap { outline, lift, .. } = &part.kind {
                 let aff = lift.as_ref().map_or(Affine::IDENTITY, |l| l.aff);
+                // (Les pixels d'un autre dessin ne sont posés qu'au lâcher : son contour suit le geste d'ici là.)
+                let extra = if part.live { Affine::IDENTITY } else { moved };
+                let color = if part.live { ACCENT } else { ACCENT.gamma_multiply(GHOST_ALPHA) };
                 for poly in outline {
-                    let mut pts: Vec<Pos2> = poly.iter().map(|q| to_s(part.to_stage.apply(aff.apply(*q)))).collect();
+                    let mut pts: Vec<Pos2> = poly.iter().map(|q| to_s(extra.apply(part.to_stage.apply(aff.apply(*q))))).collect();
                     if let Some(&first) = pts.first() {
                         pts.push(first);
                     }
-                    painter.add(Shape::line(pts, Stroke::new(1.0_f32, ACCENT)));
+                    painter.add(Shape::line(pts, Stroke::new(1.0_f32, color)));
                 }
             }
-        }
-        self.paint_selection_box(painter);
+        }        self.paint_selection_box(painter);
         true
     }
 
     /// Les contours des traits choisis de tous les calques, sur la feuille, gardés d'une image à
     /// l'autre (`contours.rs`) : refaits seulement si la sélection ou un dessin change, jamais
     /// pendant un geste (seulement déplacés).
-    fn multi_contours(&self, sel: &MultiSel, moved: Affine, gesture: bool) -> Option<Shape> {
-        let mut key: u64 = 0xcbf2_9ce4_8422_2325;
+    fn multi_contours(&self, sel: &MultiSel, moved: Affine, gesture: bool, ghost: bool) -> Option<Shape> {
+        let mut key: u64 = if ghost { 0x9e37_79b9_7f4a_7c15 } else { 0xcbf2_9ce4_8422_2325 };
         let mut any = false;
-        for p in &sel.parts {
+        for p in sel.parts.iter().filter(|p| p.live != ghost) {
             let PartKind::Vector { items } = &p.kind else { continue };
             let c = self.doc.cels.get(&p.cel)?;
             let d = c.vector.as_ref()?;
@@ -669,13 +728,13 @@ impl App {
         }
         let to_s = |p: Pos2| self.stage_to_screen(moved.apply(p));
         let now = contours::ANCHORS.map(to_s);
-        let mut slot = self.multi.contours.borrow_mut();
+        let mut slot = if ghost { self.multi.ghosts.borrow_mut() } else { self.multi.contours.borrow_mut() };
         let reuse = slot.as_ref().filter(|k| k.key() == key).and_then(|k| k.transform_to(&now)).filter(|t| gesture || !Contours::too_scaled(t));
         if let (Some(t), Some(k)) = (reuse, slot.as_ref()) {
             return Some(k.shape(&t));
         }
         let mut lines: Vec<contours::RadiusLine> = Vec::new();
-        for p in &sel.parts {
+        for p in sel.parts.iter().filter(|p| p.live != ghost) {
             if let PartKind::Vector { items } = &p.kind {
                 if let Some(d) = self.doc.cels.get(&p.cel).and_then(|c| c.vector.as_ref()) {
                     // Les rayons suivent l'échelle du calque sur la feuille.
@@ -684,7 +743,8 @@ impl App {
                 }
             }
         }
-        let built = Contours::build_halo(key, &lines, to_s, self.view.zoom, now, ACCENT);
+        let color = if ghost { ACCENT.gamma_multiply(GHOST_ALPHA) } else { ACCENT };
+        let built = Contours::build_halo(key, &lines, to_s, self.view.zoom, now, color, ghost);
         let shape = built.shape(&Affine::IDENTITY);
         *slot = Some(built);
         Some(shape)
@@ -704,8 +764,14 @@ impl App {
         use egui_phosphor::regular as ph;
         let targets = self.multi_targets();
         let chosen = self.chosen_layers().len();
-        let plural = if chosen > 1 { "calques choisis : le lasso prend sur tous" } else { "calque choisi" };
-        ui.label(egui::RichText::new(format!("{chosen} {plural}.")).strong());
+        if self.keys_mode() {
+            let (n, m) = (self.chosen_key_drawings().len(), targets.list.len());
+            ui.label(egui::RichText::new(format!("{n} clés : le geste s'applique aux {m} dessins.")).strong());
+            ui.label(egui::RichText::new("Échap : revenir au dessin courant seul.").small().weak());
+        } else {
+            let plural = if chosen > 1 { "calques choisis : le lasso prend sur tous" } else { "calque choisi" };
+            ui.label(egui::RichText::new(format!("{chosen} {plural}.")).strong());
+        }
         if let Some(left) = targets.skipped_text() {
             ui.label(egui::RichText::new(left).small().weak());
         }
