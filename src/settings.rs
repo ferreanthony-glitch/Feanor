@@ -181,6 +181,12 @@ pub struct Settings {
     /// L'onglet ouvert de la fenêtre Préférences… (`prefsui.rs`), retenu d'une séance à l'autre.
     #[serde(default, rename = "onglet_preferences", skip_serializing_if = "crate::prefsonglets::Onglet::est_defaut")]
     pub prefs_onglet: crate::prefsonglets::Onglet,
+    /// Les conseils d'un seul passage déjà vus (`conseils.rs`) ; Préférences > Général > « Revoir les conseils » les oublie.
+    #[serde(default, rename = "conseils", skip_serializing_if = "crate::conseils::ReglageConseils::est_vide")]
+    pub conseils: crate::conseils::ReglageConseils,
+    /// La taille de l'interface, en pour cent : 90, 100, 125 ou 150 (`echelle.rs`, Préférences > Apparence).
+    #[serde(default = "crate::echelle::defaut", rename = "echelle_interface", skip_serializing_if = "crate::echelle::est_defaut")]
+    pub echelle: u16,
 }
 
 fn default_passe_partout() -> u8 {
@@ -254,6 +260,8 @@ impl Default for Settings {
             equipe: Default::default(),
             neutral_colors: crate::personnages::neutres_par_defaut(),
             prefs_onglet: Default::default(),
+            conseils: Default::default(),
+            echelle: crate::echelle::ECHELLE_DEFAUT,
         }
     }
 }
@@ -306,6 +314,7 @@ impl Settings {
         s.passe_partout = s.passe_partout.min(100);
         s.equipe = std::mem::take(&mut s.equipe).nettoye();
         s.neutral_colors = crate::personnages::neutres_nettoyees(std::mem::take(&mut s.neutral_colors));
+        s.echelle = crate::echelle::echelle_valide(s.echelle);
         s
     }
 

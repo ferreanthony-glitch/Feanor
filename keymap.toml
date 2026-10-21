@@ -298,6 +298,28 @@ action = "aide.palette"
 touches = ["Ctrl+K"]
 source = "proposition (palette de commandes)"
 
+# Accueil et confort (passe « simplicité » du 2026-10-21). Z et R étaient libres dans ce fichier, dans le jeu « Façon
+# Storyboard Pro » et dans le fichier personnel d'Anthony (B, E, L, Maj+1, Maj+2).
+[[raccourci]]
+action = "vue.concentration"
+touches = ["Z"]
+source = "proposition (Z comme zen : seuls le dessin et une barre minimale restent ; la même touche remet tout)"
+
+[[raccourci]]
+action = "aide.aide_memoire"
+touches = ["R"]
+source = "proposition (R comme raccourcis : la carte reste tant que la touche est tenue)"
+
+[[raccourci]]
+action = "aide.conseils"
+touches = []
+source = "SHOT (sans touche ; aussi Préférences > Général)"
+
+[[raccourci]]
+action = "aide.regler_stylet"
+touches = []
+source = "SHOT (sans touche ; aussi Préférences > Dessin)"
+
 [[raccourci]]
 action = "aide.raccourcis"
 touches = ["F1"]

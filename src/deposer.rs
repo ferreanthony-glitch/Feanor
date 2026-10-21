@@ -415,14 +415,22 @@ pub(crate) fn curseur_fenetre(ctx: &egui::Context) -> Option<Pos2> {
         let mut p = Point { x: 0, y: 0 };
         // SAFETY: `GetCursorPos` remplit le `POINT` qu'on lui donne ; rien d'autre n'est touché.
         let ok = unsafe { GetCursorPos(&mut p) } != 0;
-        let (inner, ppp) = ctx.input(|i| (i.viewport().inner_rect, i.viewport().native_pixels_per_point.unwrap_or(i.pixels_per_point)));
+        // (Les pixels par point **de l'interface**, taille choisie comprise : `inner_rect` est en points de cette taille, c'est
+        // `egui-winit::pixels_per_point`. Avec ceux de l'écran seuls, un dépôt tombait à côté dès que la taille n'était plus 100 %.)
+        let (inner, ppp) = ctx.input(|i| (i.viewport().inner_rect, i.pixels_per_point));
         if ok {
             if let Some(inner) = inner {
-                return Some(pos2(p.x as f32 / ppp, p.y as f32 / ppp) - inner.min.to_vec2());
+                return Some(curseur_en_points((p.x, p.y), inner.min.to_vec2(), ppp));
             }
         }
     }
     ctx.input(|i| i.pointer.latest_pos())
+}
+
+/// Un point de l'écran (pixels) en points de la fenêtre : le coin du dessin de la fenêtre (`inner_min`, en points) est retiré,
+/// `ppp` sont les pixels par point de l'interface.
+pub(crate) fn curseur_en_points(ecran_px: (i32, i32), inner_min: egui::Vec2, ppp: f32) -> Pos2 {
+    pos2(ecran_px.0 as f32 / ppp, ecran_px.1 as f32 / ppp) - inner_min
 }
 
 #[cfg(test)]

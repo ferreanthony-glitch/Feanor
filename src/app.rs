@@ -638,6 +638,8 @@ pub struct App {
     pub(crate) perf_applied: crate::diagnostic::PerfReglages,
     /// Fenêtre « Diagnostic des performances » (`diagnosticui.rs`).
     pub(crate) diag: crate::diagnosticui::DiagnosticUi,
+    /// Mode concentration, conseils d'un seul passage, aide-mémoire des raccourcis, réglage du stylet (`confort.rs`).
+    pub(crate) confort: crate::confort::Confort,
     /// Sélection dans un dessin bitmap, et geste en cours avec l'outil Sélection.
     pub(crate) bsel: Option<BSelection>,
     pub(crate) bdrag: Option<BDrag>,
@@ -915,6 +917,10 @@ impl App {
         let theme_applied = settings.theme;
         crate::theme::installer(&theme_applied);
         crate::theme::appliquer(egui_ctx);
+        // La taille de l'interface (`echelle.rs`) : celle des réglages, dès la première image. Le raccourci d'egui qui la change
+        // (Ctrl +, Ctrl -, Ctrl 0) est coupé : Ctrl+0 est « Ajuster à la fenêtre », et la taille se choisit dans Préférences.
+        egui_ctx.options_mut(|o| o.zoom_with_keyboard = false);
+        egui_ctx.set_zoom_factor(crate::echelle::facteur(settings.echelle));
         crate::demarrage::marque("thème");
         let montage_head_w = crate::montagehead::clamp_head_w(settings.montage_head_w);
         let (paint_behind, fill_shapes) = (settings.paint_behind, settings.fill_shapes);
@@ -1150,6 +1156,7 @@ impl App {
             activity: 0.0,
             perf_applied: Default::default(),
             diag: crate::diagnosticui::DiagnosticUi::new(diag_offer, wgpu_render_state),
+            confort: crate::confort::Confort::new(reel),
             bsel: None,
             bdrag: None,
             sel_box: None,
@@ -3465,6 +3472,10 @@ impl App {
         if self.workspace_action(action) {
             return;
         }
+        // Mode concentration, aide-mémoire, conseils, réglage du stylet (`confort.rs`).
+        if self.confort_action(action) {
+            return;
+        }
         // Fond sous le trait (`fondui.rs`).
         if self.fond_action(action) {
             return;
@@ -4491,6 +4502,8 @@ impl App {
             ctx.request_repaint();
         }
         self.ppp = ctx.pixels_per_point();
+        // Taille de l'interface choisie dans les préférences (`echelle.rs`).
+        self.appliquer_echelle(ctx);
         // Thème changé dans les préférences : les couleurs sont reposées une fois, et tout
         // l'écran suit dès cette image.
         if self.settings.theme != self.theme_applied {
@@ -4575,24 +4588,27 @@ impl App {
             self.layer_thumbs.begin_frame(ctx);
         }
 
-        {
+        // Mode concentration (`concentration.rs`) : ni menus, ni barres, ni panneaux ; le dessin seul, sous une barre
+        // minimale. Une couche par-dessus : le dock et les dispositions ne sont pas touchés.
+        let concentre = self.concentration_active();
+        if !concentre {
             let _t = crate::perf::section("barre de menus");
             egui::TopBottomPanel::top("menu").show(ctx, |ui| self.menu_bar(ui));
         }
-        {
+        if !concentre {
             // La bande des onglets de projets (`ongletsui.rs`), sous les menus.
             let _t = crate::perf::section("onglets");
             egui::TopBottomPanel::top("onglets").show(ctx, |ui| self.onglets_bar(ui));
         }
-        if self.layout.command_bar {
+        if self.layout.command_bar && !concentre {
             let _t = crate::perf::section("barre de commandes");
             egui::TopBottomPanel::top("commandes").show(ctx, |ui| self.command_bar(ui));
         }
-        {
+        if !concentre {
             let _t = crate::perf::section("barre d'état");
             egui::TopBottomPanel::bottom("statut").show(ctx, |ui| self.status_bar(ui));
         }
-        if self.layout.tool_bar {
+        if self.layout.tool_bar && !concentre {
             let _t = crate::perf::section("barre d'outils");
             egui::SidePanel::left("barre_outils")
                 .exact_width(40.0)
@@ -4600,7 +4616,7 @@ impl App {
                 .show(ctx, |ui| self.vertical_tool_bar(ui));
         }
         // La barre des panneaux, sur le bord droit : avant les panneaux, qui prennent le reste.
-        if self.settings.panel_bar {
+        if self.settings.panel_bar && !concentre {
             let _t = crate::perf::section("barre des panneaux");
             let frame = egui::Frame::side_top_panel(&ctx.style()).inner_margin(egui::Margin::symmetric(2, 4));
             egui::SidePanel::right("barre_panneaux")
@@ -4610,7 +4626,10 @@ impl App {
                 .show(ctx, |ui| self.panel_bar(ui));
         }
         // Les panneaux : onglets que l'on glisse, aimante ou fait flotter (5b).
-        {
+        if concentre {
+            let _t = crate::perf::section("mode concentration");
+            self.concentration_ui(ctx);
+        } else {
             let _t = crate::perf::section("panneaux (dock, total)");
             self.show_dock(ctx);
         }
@@ -4618,6 +4637,10 @@ impl App {
         {
             let _t = crate::perf::section("fenêtres et dialogues");
             self.dialogs(ctx);
+            // Conseils d'un seul passage, aide-mémoire des raccourcis (tenu), réglage du stylet (`confort.rs`).
+            self.conseils_ui(ctx);
+            self.aide_touches_tick(ctx);
+            self.reglage_stylet_ui(ctx);
             self.top_view_window(ctx);
             self.tick_open(ctx);
             self.tick_reopen();
