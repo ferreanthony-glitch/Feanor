@@ -15,6 +15,10 @@ use crate::workspace::{Espace, Layout};
 // ------------------------------------------------------------------------------------ outils d'essai
 
 fn banc_dessin() -> Banc {
+    // Le fond sous le trait se garde dans des caches communs à tous les essais, rangés par numéro de dessin et par version :
+    // deux essais de personnages qui tournent ensemble ont les mêmes numéros et les mêmes versions, et se prêtaient
+    // alors le fond l'un de l'autre (un fond manquant, un essai sur deux sous charge). L'état commun pour cet essai seul.
+    crate::fxcache::monde::ecrire();
     let mut b = banc(Document::new(400, 300, 24), false);
     b.app.tool = Tool::Brush;
     b
@@ -302,6 +306,7 @@ fn the_eraser_and_the_fond_stratum_are_not_touched_by_a_character() {
 fn a_vector_layer_gets_the_fill_too() {
     let mut doc = Document::new(400, 300, 24);
     doc.panels[0].layers[0] = Layer::new("Encre", LayerKind::Vector);
+    crate::fxcache::monde::ecrire();
     let mut b = banc(doc, false);
     b.app.tool = Tool::Brush;
     let app = &mut b.app;
