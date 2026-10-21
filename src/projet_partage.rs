@@ -198,6 +198,7 @@ pub(crate) fn remapper_dessins(panel: &mut Panel, map: &HashMap<CelId, CelId>) {
         l.color_marks = l.color_marks.iter().map(|(k, v)| (nouveau(k), *v)).collect();
         if let Some(c) = l.couleur.as_mut() {
             c.dessins = c.dessins.iter().map(|(t, k)| (nouveau(t), nouveau(k))).collect();
+            c.griffonnages = c.griffonnages.iter().map(|(p, g)| (nouveau(p), nouveau(g))).collect();
         }
     }
 }

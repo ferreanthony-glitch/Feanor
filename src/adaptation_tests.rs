@@ -272,7 +272,7 @@ fn calque_complet() -> Layer {
     vignette.values[1] = 70.0;
     l.fx = vec![flou, ombre, vignette];
     l.fond = Some(crate::fond::FondReglages { debord: 4, trous: 6, ..Default::default() });
-    l.ctg = Some(crate::ctg::Ctg { sources: Vec::new(), gap: 4 });
+    l.couleur = Some(crate::calquecouleur::CalqueCouleur { trous: 4, ..crate::calquecouleur::CalqueCouleur::new(0) });
     l
 }
 
@@ -296,7 +296,7 @@ fn layer_poses_position_keys_and_pixel_effect_parameters_follow_the_rule() {
     // Fond sous le trait et fermeture des trous : en pixels, entiers, jamais nuls s'ils ne l'étaient pas.
     let f = l.fond.expect("fond");
     assert_eq!((f.debord, f.trous), (2, 3));
-    assert_eq!(l.ctg.as_ref().expect("ctg").gap, 2);
+    assert_eq!(l.couleur.as_ref().expect("calque de couleur").trous, 2, "la fermeture des trous du calque de couleur (peinture et remplissage au griffonnage)");
     let mut petit = calque_complet();
     adapte_calque(&mut petit, &Adaptation::new(orig(3840, 2160, 24), orig(384, 216, 24), Ajustement::Contenir, Duree::Images));
     assert_eq!(petit.fond.expect("fond").debord, 1, "au moins 1 pixel");

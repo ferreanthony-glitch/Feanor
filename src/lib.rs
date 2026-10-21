@@ -262,10 +262,14 @@ mod dock;
 #[cfg(test)]
 mod dock_tests;
 mod dockui;
-pub mod ctg;
+// Remplissage au griffonnage d'un calque de couleur (ce qu'était le calque CTG, fondu dans le calque de couleur).
+pub mod griffonnage;
 #[cfg(test)]
-mod ctg_tests;
-mod ctgui;
+mod griffonnage_tests;
+/// Ancien nom du remplissage au griffonnage : `propager.rs` (qu'on ne touche pas ici) écrit encore `crate::ctg::input`.
+pub mod ctg {
+    pub use crate::griffonnage::input;
+}
 // Calque de couleur : la couleur sous le trait d'un calque, qui suit ses images.
 pub mod calquecouleur;
 #[cfg(test)]

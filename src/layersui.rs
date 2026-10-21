@@ -381,9 +381,9 @@ impl App {
         let closed: Vec<u64> = self.layers().iter().filter(|l| l.folder && l.collapsed).map(|l| l.id).collect();
         let mut fold: Option<usize> = None;
         for li in (0..self.layers().len()).rev() {
-            let (id, visible, locked, kind, name, cel, folder, ctg, has_fond) = {
+            let (id, visible, locked, kind, name, cel, folder, couleur, has_fond) = {
                 let l = &self.layers()[li];
-                (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.folder, l.ctg.is_some(), l.fond.is_some())
+                (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.folder, l.couleur.is_some(), l.fond.is_some())
             };
             let (in_folder, shut, kids) = {
                 let l = &self.layers()[li];
@@ -396,14 +396,14 @@ impl App {
             // couleurs qu'il porte (`calquecouleur.rs`).
             let colour_of = crate::calquecouleur::trait_de(self.layers(), li).map(|ti| self.layers()[ti].name.clone());
             let colours = crate::calquecouleur::couleurs_de(self.layers(), li).len();
-            // Code couleur de sa sorte (bitmap vert, vectoriel bleu, CTG rose ; Anthony, 2026-10-17).
+            // Code couleur de sa sorte (bitmap vert, vectoriel bleu, calque de couleur rose ; Anthony, 2026-10-17).
             let cfx = self.layers()[li].effet.is_some();
             let hue = if folder {
                 accent
             } else if cfx {
                 crate::theme::palette().dessin_cfx
             } else {
-                crate::theme::couleur_calque(kind, ctg)
+                crate::theme::couleur_calque(kind, couleur)
             };
             let current = li == self.cur_layer;
             let chosen = !current && self.is_chosen_layer(li);
@@ -505,8 +505,7 @@ impl App {
                             let kind = match kind {
                                 _ if folder => "dossier",
                                 _ if cfx => "effet",
-                                _ if ctg => "CTG",
-                                _ if colour_of.is_some() => "couleur",
+                                _ if couleur => "couleur",
                                 LayerKind::Vector => "vectoriel",
                                 LayerKind::Bitmap => "bitmap",
                             };

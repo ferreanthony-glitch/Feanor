@@ -155,7 +155,16 @@ pub const FORMAT: &str = "pelure-projet";
 /// version 34 ou moins s'ouvre tel quel, à l'identique (cartes à plat, aucun écart). Le numéro 34 est celui des projets
 /// partagés (ci-dessous) : comme leur numéro est celui du format classique quand celui-ci le dépasse, un projet partagé écrit
 /// désormais 35 (`version_partage_ecrite`).
-pub const VERSION: u32 = 35;
+/// 36 (2026-10-21, « On fusionne », `docs/INTERFACE.md`) : **le calque CTG est fondu dans le calque de couleur** — un calque
+/// de couleur (`calque_couleur`) peut remplir des zones d'un coup de griffonnage : `griffonnages` (couples dessin de peinture /
+/// dessin de griffonnages, dont les fichiers sont des dessins ordinaires de `dessins/`), `remplissage` (le calque a des
+/// griffonnages), `griffonner` (le mode), `sources` (rangs des calques dont les traits ferment aussi les zones) ; un calque de
+/// couleur « libre » n'a pas de `trait` (ses images sont à lui). Le champ `ctg` d'un calque n'est plus écrit : un projet d'avant
+/// qui en a un est lu comme avant, et son calque CTG devient un calque de couleur qui montre la même image
+/// (`griffonnage::migrer_ctg`) ; ses fichiers de graffitis servent tels quels de dessins de griffonnages. Une version
+/// précédente refuse le projet : elle montrerait les calques de couleur sans leur remplissage, le film changerait sans
+/// prévenir. Un projet de version 35 ou moins s'ouvre tel quel, à l'identique.
+pub const VERSION: u32 = 36;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -604,8 +613,9 @@ struct LayerEntry {
     /// vidée. Absent : allumée.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     effets_eteints: bool,
-    /// Calque CTG (format 20) : rangs de ses calques sources dans le plan (aucun : tous les
-    /// autres calques de dessin) ; absent : calque ordinaire.
+    /// Calque CTG (format 20 à 35, **lu seulement** : le format 36 ne l'écrit plus) : rangs de ses calques sources dans le
+    /// plan (aucun : tous les autres calques de dessin) ; absent : calque ordinaire. Un calque qui en a un devient un
+    /// calque de couleur à la lecture (`griffonnage::migrer_ctg`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ctg: Option<CtgEntry>,
     /// Calque vidéo (format 21) ; absent : calque ordinaire.
@@ -640,12 +650,12 @@ struct VideoEntry {
     ext: String,
 }
 
-/// Le lien d'un calque de couleur avec son calque de trait (format 30).
+/// Le lien d'un calque de couleur avec son calque de trait (format 30), et ses réglages.
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 struct CouleurEntry {
-    /// Rang, dans le plan, du calque de trait.
-    #[serde(rename = "trait")]
-    ligne: usize,
+    /// Rang, dans le plan, du calque de trait ; absent (format 36) : calque de couleur libre, sans calque de trait propre.
+    #[serde(rename = "trait", default, skip_serializing_if = "Option::is_none")]
+    ligne: Option<usize>,
     /// Les couples (dessin du trait, dessin de couleur qui lui répond).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     dessins: Vec<[u64; 2]>,
@@ -655,6 +665,18 @@ struct CouleurEntry {
     /// Un trait de pinceau reste dans la zone fermée où il commence.
     #[serde(default = "yes")]
     zone: bool,
+    /// Mode « Griffonner » (format 36).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    griffonner: bool,
+    /// Le calque a des griffonnages, donc un remplissage (format 36).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    remplissage: bool,
+    /// Les couples (dessin de peinture, dessin de griffonnages) (format 36) : ce sont des dessins ordinaires de `dessins/`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    griffonnages: Vec<[u64; 2]>,
+    /// Rangs des calques qui ferment aussi les zones du remplissage (format 36).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    sources: Vec<usize>,
 }
 
 fn default_couleur_trous() -> u8 {
@@ -665,13 +687,9 @@ fn default_couleur_trous() -> u8 {
 struct CtgEntry {
     #[serde(default)]
     sources: Vec<usize>,
-    /// Fermeture automatique des trous, en pixels (absente : celle d'un calque CTG neuf).
-    #[serde(default = "default_ctg_gap")]
+    /// Fermeture automatique des trous, en pixels (absente : celle d'un calque de couleur neuf).
+    #[serde(default = "default_couleur_trous")]
     trou: u8,
-}
-
-fn default_ctg_gap() -> u8 {
-    crate::ctg::DEFAULT_GAP
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
@@ -1576,19 +1594,26 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 roles: l.roles.clone(),
                 effets: l.fx.clone(),
                 effets_eteints: !l.fx_enabled,
-                ctg: l.ctg.as_ref().map(|c| CtgEntry {
-                    sources: c.sources.iter().filter_map(|id| panel.layers.iter().position(|s| s.id == *id)).collect(),
-                    trou: c.gap,
-                }),
+                // (Le calque CTG n'existe plus : il n'est pas écrit.)
+                ctg: None,
                 video: l.video.as_ref().map(|v| VideoEntry { id: v.id, nom: v.name.clone(), images: v.frames, ips: v.fps, debut: v.start, ext: v.ext.clone() }),
                 fond: l.fond,
                 calque_effet: l.effet.as_ref().map(crate::calqueffet::Entree::from),
                 calque_couleur: l.couleur.as_ref().and_then(|c| {
+                    // (Libre : pas de trait. Un trait qui manque, sans griffonnages à garder : plus de lien.)
+                    let ligne = if c.trait_id == 0 { None } else { panel.layers.iter().position(|s| s.id == c.trait_id) };
+                    if c.trait_id != 0 && ligne.is_none() && !c.remplissage {
+                        return None;
+                    }
                     Some(CouleurEntry {
-                        ligne: panel.layers.iter().position(|s| s.id == c.trait_id)?,
+                        ligne,
                         dessins: c.dessins.iter().filter(|(t, k)| garde(**t) && garde(**k)).map(|(t, k)| [key(*t), key(*k)]).collect(),
                         trous: c.trous,
                         zone: c.zone,
+                        griffonner: c.griffonner,
+                        remplissage: c.remplissage,
+                        griffonnages: c.griffonnages.iter().filter(|(p, g)| garde(**p) && garde(**g)).map(|(p, g)| [key(*p), key(*g)]).collect(),
+                        sources: c.sources.iter().filter_map(|id| panel.layers.iter().position(|s| s.id == *id)).collect(),
                     })
                 }),
                 expositions: to_exposures(&l.frames.iter().map(|f| f.map(key)).collect::<Vec<_>>()),
@@ -1673,7 +1698,8 @@ pub(crate) fn snapshot_value(panel: &Panel, key: &dyn Fn(CelId) -> CelId) -> Res
 /// Un instantané ne garde des couples trait / couleur (`calque_couleur`) que ceux dont les deux dessins
 /// sont dans une timeline du plan : ce sont les seuls dessins qu'il emporte.
 fn dans_le_plan(panel: &Panel, cel: CelId) -> bool {
-    panel.layers.iter().any(|l| l.frames.contains(&Some(cel)))
+    // (Les griffonnages d'un calque de couleur sont des dessins du plan, même s'ils ne sont dans aucune timeline.)
+    panel.layers.iter().any(|l| l.frames.contains(&Some(cel)) || l.couleur.as_ref().is_some_and(|c| c.dessins_griffonnages().any(|g| g == cel)))
 }
 
 /// En-tête d'un instantané : la feuille, le cadre, la cadence et le papier du projet au moment où il a été
@@ -2083,7 +2109,11 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         .flat_map(|s| &s.scenes)
         .flat_map(|s| &s.panneaux)
         .flat_map(|p| &p.calques)
-        .flat_map(|l| l.expositions.iter().filter_map(|r| r.dessin))
+        .flat_map(|l| {
+            // (Les griffonnages d'un calque de couleur sont des dessins du plan qu'aucune timeline ne cite.)
+            let griffonnages = l.calque_couleur.iter().flat_map(|c| c.griffonnages.iter().map(|g| g[1]));
+            l.expositions.iter().filter_map(|r| r.dessin).chain(griffonnages)
+        })
         .collect();
     if let Some(r) = &reserves {
         referenced.extend(r.cels());
@@ -2241,6 +2271,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         // Les versions des plans : `plans_versions.json`, `planvers::installer`.
         versions: Default::default(),
     };
+    // Les calques CTG des projets d'avant : convertis en calques de couleur quand le document existe (`migrer_ctg`).
+    let mut anciens_ctg: Vec<crate::griffonnage::AncienCtg> = Vec::new();
     for seq in manifest.sequences {
         structure.sequences.push(Sequence {
             id: seq.id,
@@ -2323,7 +2355,6 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         roles: l.roles,
                         fx: l.effets,
                         fx_enabled: !l.effets_eteints,
-                        ctg: None,
                         // Calque vidéo (format 21) : ses images dans `videos/<id>/`.
                         video: l.video.filter(|v| v.images > 0 && v.ips > 0.0 && matches!(v.ext.as_str(), "jpg" | "png")).map(|v| {
                             crate::video::register_dir(v.id, dir.join(VIDEOS).join(v.id.to_string()));
@@ -2343,22 +2374,36 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         layers[i].parent = Some(id);
                     }
                 }
-                // Calques CTG (format 20) : les rangs des sources deviennent leurs id.
+                // Calques CTG (formats 20 à 35, plus écrits) : les rangs des sources deviennent leurs id ; le calque
+                // devient un calque de couleur une fois les dessins chargés (`griffonnage::migrer_ctg`).
                 for (i, entry) in ctg_sources.into_iter().enumerate() {
                     if let Some((sources, gap)) = entry {
                         let ids = sources.into_iter().filter(|&k| k != i).filter_map(|k| layers.get(k).map(|l| l.id)).collect();
-                        layers[i].ctg = Some(crate::ctg::Ctg { sources: ids, gap: gap.min(50) });
+                        anciens_ctg.push(crate::griffonnage::AncienCtg { calque: layers[i].id, sources: ids, trou: gap });
                     }
                 }
                 // Calques de couleur (format 30) : le rang du calque de trait devient son id, les
-                // couples de dessins sont gardés si leurs deux dessins sont là.
+                // couples de dessins sont gardés si leurs deux dessins sont là. Format 36 : libre (sans trait), griffonnages,
+                // sources supplémentaires, mode.
                 for (i, entry) in couleurs.into_iter().enumerate() {
                     let Some(e) = entry else { continue };
-                    let Some(line) = layers.get(e.ligne).filter(|_| e.ligne != i).map(|l| l.id) else { continue };
+                    let line = match e.ligne {
+                        None => 0,
+                        Some(rang) => match layers.get(rang).filter(|_| rang != i) {
+                            Some(l) => l.id,
+                            // (Le trait est introuvable : un calque qui n'a pas de griffonnages redevient ordinaire.)
+                            None if e.remplissage => 0,
+                            None => continue,
+                        },
+                    };
                     let mut c = crate::calquecouleur::CalqueCouleur::new(line);
                     c.dessins = e.dessins.into_iter().filter(|[t, k]| cels.contains_key(t) && cels.contains_key(k)).map(|[t, k]| (t, k)).collect();
                     c.trous = e.trous.min(50);
                     c.zone = e.zone;
+                    c.griffonner = e.griffonner;
+                    c.remplissage = e.remplissage;
+                    c.griffonnages = e.griffonnages.into_iter().filter(|[p, g]| cels.contains_key(p) && cels.contains_key(g)).map(|[p, g]| (p, g)).collect();
+                    c.sources = e.sources.into_iter().filter(|&k| k != i).filter_map(|k| layers.get(k).map(|l| l.id)).collect();
                     layers[i].couleur = Some(c);
                 }
                 crate::calquecouleur::reparer(&mut layers);
@@ -2466,6 +2511,16 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
     // Les autres versions des plans.
     if let (Some(f), Some((_, _, cles))) = (versions, a_ranger) {
         crate::planvers::installer(&mut doc, f, cles, rangees, &mut warnings);
+    }
+    // Les calques CTG d'un projet d'avant deviennent des calques de couleur qui montrent la même image (plans et autres
+    // versions des plans).
+    let convertis = crate::griffonnage::migrer_ctg_document(&mut doc, &anciens_ctg);
+    if convertis > 0 {
+        warnings.push(format!(
+            "{convertis} calque{} CTG converti{} en calque de couleur : même image, griffonnages gardés (le remplissage se refait tout seul quand les traits changent).",
+            if convertis > 1 { "s" } else { "" },
+            if convertis > 1 { "s" } else { "" }
+        ));
     }
     // Projet d'avant les plans (13a) : chaque scène devient un plan, ses panneaux bout à bout.
     if !doc.is_plans() {

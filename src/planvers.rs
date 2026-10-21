@@ -154,6 +154,7 @@ impl Document {
                 };
             }
         }
+        self.copier_griffonnages(&source.layers, &mut copies);
         relink_copies(&mut panel.layers, &old_ids, &copies);
         panel
     }

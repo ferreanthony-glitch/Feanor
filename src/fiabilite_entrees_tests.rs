@@ -30,7 +30,8 @@ fn the_fixture_really_holds_everything_the_project_can_store() {
     assert!(d.sequences.len() >= 2 && d.panels.len() >= 5);
     assert!(calques.iter().any(|l| l.kind == LayerKind::Bitmap) && calques.iter().any(|l| l.kind == LayerKind::Vector));
     assert!(calques.iter().any(|l| l.video.is_some()), "calque vidéo");
-    assert!(calques.iter().any(|l| l.ctg.is_some()), "calque CTG");
+    assert!(calques.iter().any(|l| l.couleur.as_ref().is_some_and(|c| !c.est_lie() && c.remplissage && c.griffonner && !c.griffonnages.is_empty() && !c.sources.is_empty())), "calque de couleur libre qui griffonne (ex-CTG)");
+    assert!(calques.iter().any(|l| l.couleur.as_ref().is_some_and(|c| c.est_lie() && c.remplissage && !c.griffonner && !c.griffonnages.is_empty())), "calque de couleur lié qui a des griffonnages");
     assert!(calques.iter().any(|l| l.couleur.as_ref().is_some_and(|c| !c.dessins.is_empty() && c.trous != crate::calquecouleur::TROUS && !c.zone)), "calque de couleur");
     assert!(calques.iter().any(|l| l.folder) && calques.iter().any(|l| l.parent.is_some()), "dossier et calque rangé");
     assert!(calques.iter().any(|l| l.fond.is_some()), "fond sous le trait (calque)");

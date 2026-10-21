@@ -132,12 +132,12 @@ struct Head {
     id: u64,
     name: String,
     kind: LayerKind,
-    /// Calque CTG (13j) : son code couleur est rose.
-    ctg: bool,
     /// Calque d'effet (`calqueffet.rs`) : une étincelle cyan à la place de la lettre.
     cfx: bool,
-    /// Calque de couleur (`calquecouleur.rs`) : la lettre C, la ligne décalée sous son trait.
+    /// Calque de couleur (`calquecouleur.rs`) : la lettre C, rose.
     couleur: bool,
+    /// Calque de couleur lié à un calque de trait : la ligne est décalée sous son trait (un calque libre garde sa place).
+    sous_trait: bool,
     visible: bool,
     locked: bool,
     onion: bool,
@@ -285,9 +285,9 @@ impl App {
                 id: l.id,
                 name: l.name.clone(),
                 kind: l.kind,
-                ctg: l.ctg.is_some(),
                 cfx: l.effet.is_some(),
                 couleur: l.couleur.is_some(),
+                sous_trait: l.keys_follow_line(),
                 visible: l.visible,
                 locked: l.locked,
                 onion: l.onion,
@@ -308,7 +308,7 @@ impl App {
         let current = li == self.cur_layer;
         let visuals = ui.visuals().clone();
         // Calque rangé dans un dossier : la ligne est décalée, un trait la relie à son dossier.
-        let rect = if h.in_folder || h.couleur {
+        let rect = if h.in_folder || h.sous_trait {
             let gap = Rect::from_min_size(rect.min, vec2(INDENT, rect.height()));
             ui.painter().rect_filled(gap.shrink2(vec2(5.0, 0.0)), 0.0, theme::texte_doux().gamma_multiply(0.6));
             Rect::from_min_max(pos2(rect.left() + INDENT, rect.top()), rect.max)
@@ -381,7 +381,7 @@ impl App {
 
         // Nom (ou son champ quand on le renomme), sorte du calque, menu d'options.
         let line1 = r.top() + 11.0;
-        let badge = if current { fg } else if h.cfx { theme::palette().dessin_cfx } else { theme::couleur_calque(h.kind, h.ctg) };
+        let badge = if current { fg } else if h.cfx { theme::palette().dessin_cfx } else { theme::couleur_calque(h.kind, h.couleur) };
         if h.collapsed && !h.folder {
             let eye = Rect::from_min_size(pos2(r.left() + 20.0, r.top() + 2.0), vec2(ICON_W, 18.0));
             self.eye_button(ui, eye, li, h.visible, fg);
@@ -648,10 +648,6 @@ impl App {
             self.modified = true;
         }
         ui.menu_button("Groupe", |ui| self.group_menu(ui, li));
-        // Calque CTG (13j) : ses sources et sa structure.
-        if self.layers().get(li).is_some_and(|l| l.ctg.is_some()) {
-            ui.menu_button("Calque CTG", |ui| self.ctg_menu(ui, li));
-        }
         // Calque vidéo (13k) : son début, et le transformer en calque d'animation.
         if self.layers().get(li).is_some_and(|l| l.video.is_some()) {
             ui.menu_button("Calque vidéo", |ui| self.video_menu(ui, li));
@@ -719,7 +715,7 @@ impl App {
         if from >= n || to >= n || from == to {
             return;
         }
-        if self.layers()[from].couleur.is_some() {
+        if self.layers()[from].keys_follow_line() {
             self.status = "Un calque de couleur reste sous son calque de trait : déplace le trait, la couleur le suit.".into();
             return;
         }

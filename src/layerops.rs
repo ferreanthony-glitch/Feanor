@@ -26,6 +26,8 @@ pub(crate) enum Choose {
 /// Le calque n'a aucun dessin, ou seulement des dessins vides.
 pub(crate) fn is_empty_layer(doc: &Document, layer: &Layer) -> bool {
     layer.frames.iter().flatten().all(|id| doc.cels.get(id).is_none_or(|c| c.is_empty()))
+        // (Les griffonnages d'un calque de couleur comptent : ils remplissent des zones.)
+        && layer.couleur.as_ref().is_none_or(|c| c.dessins_griffonnages().all(|g| doc.cels.get(&g).is_none_or(|c| c.is_empty())))
 }
 
 /// Calques choisis par `how` (ids), pour un plan dont le calque courant est `cur`.
@@ -66,7 +68,8 @@ fn layer_copy(doc: &mut Document, source: &Layer, copies: &mut HashMap<CelId, Ce
     let names = source.names.iter().map(|(c, n)| (copies.get(c).copied().unwrap_or(*c), n.clone())).collect();
     let color_marks = source.color_marks.iter().map(|(c, k)| (copies.get(c).copied().unwrap_or(*c), *k)).collect();
     let mut copy = Layer { id: fresh_layer_id(), frames, scene_wide: None, names, color_marks, ..source.clone() };
-    // Un calque de couleur copié seul garde son trait, avec les copies de ses dessins de couleur.
+    // Un calque de couleur copié seul garde son trait, avec les copies de ses dessins de couleur et de ses griffonnages.
+    doc.copier_griffonnages(std::slice::from_ref(source), copies);
     if let Some(c) = copy.couleur.as_mut() {
         c.relink(&HashMap::new(), copies);
     }
@@ -178,7 +181,6 @@ impl App {
                 self.action_item(ui, "Bitmap", "calque.nouveau_bitmap");
             }
             self.action_item(ui, "De couleur (sous le trait du calque courant)", "calque.nouveau_couleur");
-            self.action_item(ui, "CTG (sous le calque courant)", "calque.nouveau_ctg");
             ui.menu_button("Calque d'effet", |ui| self.effect_preset_menu(ui));
             ui.separator();
             self.action_item(ui, "Choisir la sorte et le nom…", "calque.nouveau");
@@ -260,15 +262,9 @@ impl App {
                 self.action_item(ui, "Supprimer les calques vides", "calque.supprimer_vides");
                 self.action_item(ui, "Supprimer les calques cachés", "calque.supprimer_caches");
             });
-            // Calque CTG (13j).
-            ui.menu_button("Calque CTG", |ui| {
-                self.action_item(ui, "Transformer le calque courant en calque CTG", "calque.transformer_ctg");
-                self.action_item(ui, "Désactiver le calque CTG", "calque.desactiver_ctg");
-                ui.separator();
-                self.action_item(ui, "Charger la structure à partir des sources", "ctg.charger_structure");
-                self.action_item(ui, "Charger la structure à partir des sources (effacer)", "ctg.charger_structure_effacer");
-                ui.label(egui::RichText::new("Sur le calque CTG, griffonner une couleur remplit la zone des traits des sources.").weak().small());
-            });
+            // Calque de couleur : ses réglages (griffonner, fermeture des trous, sources).
+            let cur = self.cur_layer;
+            ui.menu_button("Calque de couleur", |ui| self.couleur_menu(ui, cur));
         });
     }
 

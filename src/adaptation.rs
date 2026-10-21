@@ -30,7 +30,7 @@
 //! | pose d'un calque, clés de position | décalage × `s` ; échelle, étirement et rotation inchangés (pivot : centre de la feuille) |
 //! | clés de caméra | position par la similitude ; avancée × rapport des largeurs de cadre ; zoom et angles inchangés |
 //! | effets : paramètres en pixels (`px`, `px/img`), clés comprises | × `s` (bornes de l'effet respectées) ; « trous pour 100 px de trait » ÷ `s` |
-//! | fond sous le trait, calque de couleur, calque CTG | débord et fermeture des trous (pixels) × `s` |
+//! | fond sous le trait, calque de couleur (dont son remplissage au griffonnage) | débord et fermeture des trous (pixels) × `s` |
 //! | zone bitmap, éléments vectoriels collés sur le dessin | même similitude : ils gardent leur place dans le cadre |
 //!
 //! Ne change pas : les paramètres en pour cent (relatifs à l'image), les incrustations (en pour cent de la hauteur
@@ -563,7 +563,7 @@ fn pixels_u8(v: u8, s: f32) -> u8 {
 }
 
 /// Ce qui est en pixels sur un calque (hors dessins et hors images) : pose, clés de position, effets, fond sous le
-/// trait, fermeture des trous des calques de couleur et CTG.
+/// trait, fermeture des trous des calques de couleur (peinture et remplissage au griffonnage).
 pub fn adapte_calque(l: &mut Layer, ad: &Adaptation) {
     if !ad.spatiale() {
         return;
@@ -584,9 +584,6 @@ pub fn adapte_calque(l: &mut Layer, ad: &Adaptation) {
     }
     if let Some(c) = &mut l.couleur {
         c.trous = pixels_u8(c.trous, s);
-    }
-    if let Some(c) = &mut l.ctg {
-        c.gap = pixels_u8(c.gap, s);
     }
 }
 

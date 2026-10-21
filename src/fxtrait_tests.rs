@@ -957,8 +957,8 @@ fn the_stroke_effects_stay_on_the_background_thread_and_the_boil_goes_to_the_gra
     // Pas mêlée : rien à séparer.
     assert!(fx::hybrid_split(&PlanItem { fx: vec![blur, boil], ..item.clone() }).is_none());
     assert!(fx::hybrid_split(&PlanItem { fx: write_steps(50.0, &[]), ..item.clone() }).is_none());
-    // Un remplissage CTG ou une feuille flottante : tout sur le processeur.
-    assert!(fx::hybrid_split(&PlanItem { ctg: Some(crate::ctg::CtgInput { sources: vec![id], gap: 4 }), ..item }).is_none());
+    // Un remplissage au griffonnage ou une feuille flottante : tout sur le processeur.
+    assert!(fx::hybrid_split(&PlanItem { ctg: Some(crate::griffonnage::GriffonInput { sources: vec![id], gap: 4 }), ..item }).is_none());
 }
 
 #[test]

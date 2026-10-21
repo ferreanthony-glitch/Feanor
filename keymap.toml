@@ -1683,11 +1683,6 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 [[raccourci]]
-action = "calque.nouveau_ctg"
-touches = []
-source = "TVPaint 12 sans touche"
-
-[[raccourci]]
 action = "calque.nouveau_couleur"
 touches = []
 source = "SHOT (calque de couleur sous le trait, choix d'Anthony 2026-10-20 ; la façon de faire de Storyboard Pro ou de Harmony n'est pas vérifiée : à vérifier)"
@@ -1698,24 +1693,9 @@ touches = []
 source = "SHOT (calque de couleur sous le trait)"
 
 [[raccourci]]
-action = "calque.transformer_ctg"
+action = "calque.griffonner"
 touches = []
-source = "TVPaint 12 sans touche"
-
-[[raccourci]]
-action = "calque.desactiver_ctg"
-touches = []
-source = "TVPaint 12 sans touche"
-
-[[raccourci]]
-action = "ctg.charger_structure"
-touches = []
-source = "TVPaint 12 sans touche"
-
-[[raccourci]]
-action = "ctg.charger_structure_effacer"
-touches = []
-source = "TVPaint 12 sans touche"
+source = "SHOT (calque de couleur : griffonner, choix d'Anthony 2026-10-21 « On fusionne » ; sans touche par défaut)"
 
 [[raccourci]]
 action = "fichier.importer_video"

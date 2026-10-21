@@ -472,7 +472,9 @@ impl App {
                         pos2(r.left() + start as f32 * cell + 1.0, y + 3.0),
                         pos2(r.left() + end as f32 * cell - 1.0, body_bottom(y, row.h)),
                     );
-                    let empty = self.doc.cels.get(&id).is_none_or(|c| c.is_empty());
+                    // (Un dessin de couleur sans peinture mais avec des griffonnages n'est pas vide : il remplit des zones.)
+                    let empty = self.doc.cels.get(&id).is_none_or(|c| c.is_empty())
+                        && layer.couleur.as_ref().and_then(|c| c.griffonnages.get(&id)).and_then(|g| self.doc.cels.get(g)).is_none_or(|c| c.is_empty());
                     // (Un calque d'effet n'a que des dessins vides : ses images sont cyan.)
                     let mut fill = if empty && layer.effet.is_none() { theme::dessin_vide() } else { theme::couleur_du_calque(layer) };
                     if !layer.visible {

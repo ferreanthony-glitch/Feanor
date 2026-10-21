@@ -66,7 +66,7 @@ fn pause(thumbs: &Thumbs, on: bool) {
 // ------------------------------------------------------------------ mêmes pixels que l'ancien chemin
 
 /// Le projet d'essai de la fiabilité (effets de calque à clés, tremblement, fond sous le trait, calque
-/// CTG, calque vidéo, dossier, mode de fusion, transformation, caméra à clés, calque d'effet
+/// de couleur qui griffonne, calque vidéo, dossier, mode de fusion, transformation, caméra à clés, calque d'effet
 /// d'ajustement, incrustation) : chaque vignette faite par les fils de fond est celle de l'ancien chemin,
 /// pixel pour pixel. Les incrustations (texte du timecode…) ne sont pas dans les vignettes, avant comme
 /// après.
@@ -75,7 +75,7 @@ fn background_thumbnails_are_the_old_ones_pixel_for_pixel() {
     monde::ecrire();
     let travail = dossier("vignettes-fil");
     let mut doc = projet_complet(&travail).doc;
-    // Le calque CTG est caché dans le projet d'essai : on le montre, pour qu'il soit dans les vignettes.
+    // Le calque de couleur qui griffonne est caché dans le projet d'essai : on le montre, pour qu'il soit dans les vignettes.
     for l in doc.panels[0].layers.iter_mut() {
         l.visible = true;
     }
@@ -102,7 +102,7 @@ fn background_thumbnails_are_the_old_ones_pixel_for_pixel() {
             wants.push((p, frame, ((p as u64) << 20) | frame as u64));
         }
     }
-    for (what, n) in [("effets de calque", fx), ("calques d'effet", markers), ("fonds sous le trait", fonds), ("CTG", ctgs), ("vidéo", videos), ("transformations", moved), ("modes de fusion", blended)] {
+    for (what, n) in [("effets de calque", fx), ("calques d'effet", markers), ("fonds sous le trait", fonds), ("remplissages au griffonnage", ctgs), ("vidéo", videos), ("transformations", moved), ("modes de fusion", blended)] {
         assert!(n > 0, "le projet d'essai doit avoir des {what} dans ses vignettes");
     }
     let mut thumbs = Thumbs::default();

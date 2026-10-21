@@ -286,7 +286,7 @@ impl App {
         };
         let (name, visible, onion, keep_alpha, stencil, negative, fixed, opacity, blend, folder) =
             (l.name.clone(), l.visible, l.onion, l.keep_alpha, l.stencil, l.stencil_negative, l.position_locked, l.opacity, l.blend, l.folder);
-        let (ctg, video) = (l.ctg.is_some(), l.video.is_some());
+        let video = l.video.is_some();
         ui.label(RichText::new(format!("Calque « {name} »")).weak().small());
         // Fonctions simples.
         self.rename_item(ui, li, false, in_montage);
@@ -383,14 +383,11 @@ impl App {
         if !folder {
             ui.menu_button("Animation (avant, après, automatismes)", |ui| self.behaviour_items(ui, li));
         }
-        if ctg {
-            ui.menu_button("Calque CTG", |ui| self.ctg_menu(ui, li));
-        }
         if video {
             ui.menu_button("Calque vidéo", |ui| self.video_menu(ui, li));
         }
-        // Calque de couleur sous le trait (`calquecouleurui.rs`) : en ajouter un, ou ses réglages.
-        if !folder && !video && !ctg {
+        // Calque de couleur sous le trait (`calquecouleurui.rs`) : en ajouter un, ou ses réglages (griffonner, sources).
+        if !folder && !video {
             ui.menu_button("Calque de couleur", |ui| self.couleur_menu(ui, li));
         }
         let (label, from) = if in_montage {

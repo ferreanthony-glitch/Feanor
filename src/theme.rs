@@ -281,8 +281,9 @@ pub struct Palette {
     pub dessin_vide: Color32,
     pub calque_vectoriel: Color32,
     pub calque_bitmap: Color32,
-    pub dessin_ctg: Color32,
-    pub calque_ctg: Color32,
+    /// Calque de couleur (calquecouleur.rs) : rose (c'était celui du calque CTG, fondu dans le calque de couleur).
+    pub dessin_couleur: Color32,
+    pub calque_couleur: Color32,
     /// Calque d'effet (`calqueffet.rs`) : cyan, vif et sourd.
     pub dessin_cfx: Color32,
     pub calque_cfx: Color32,
@@ -373,8 +374,8 @@ impl Palette {
             dessin_vide,
             calque_vectoriel: if claire { Color32::from_rgb(110, 150, 230) } else { Color32::from_rgb(52, 91, 248) },
             calque_bitmap: if claire { Color32::from_rgb(90, 175, 150) } else { Color32::from_rgb(6, 122, 103) },
-            dessin_ctg: jeu([229, 91, 182], [180, 30, 130]),
-            calque_ctg: if claire { Color32::from_rgb(210, 120, 185) } else { Color32::from_rgb(176, 52, 136) },
+            dessin_couleur: jeu([229, 91, 182], [180, 30, 130]),
+            calque_couleur: if claire { Color32::from_rgb(210, 120, 185) } else { Color32::from_rgb(176, 52, 136) },
             dessin_cfx: jeu([48, 208, 236], [0, 128, 168]),
             calque_cfx: if claire { Color32::from_rgb(120, 200, 224) } else { Color32::from_rgb(14, 130, 160) },
             decor: jeu([214, 170, 92], [140, 92, 10]),
@@ -534,9 +535,9 @@ couleurs_courantes! {
     /// Les mêmes, plus sourds, sous les panneaux du montage.
     calque_vectoriel,
     calque_bitmap,
-    /// Calque CTG (13j) : rose, vif et sourd.
-    dessin_ctg,
-    calque_ctg,
+    /// Calque de couleur : rose, vif et sourd.
+    dessin_couleur,
+    calque_couleur,
     /// Calque d'effet : cyan, vif et sourd.
     dessin_cfx,
     calque_cfx,
@@ -560,11 +561,11 @@ couleurs_courantes! {
 }
 
 /// Couleur vive d'une sorte de calque (repères, barres, étiquettes) : bitmap vert, vectoriel
-/// bleu, CTG rose (`ctg` : le calque est un calque CTG).
-pub fn couleur_calque(kind: LayerKind, ctg: bool) -> Color32 {
+/// bleu, calque de couleur rose (`couleur` : le calque est un calque de couleur).
+pub fn couleur_calque(kind: LayerKind, couleur: bool) -> Color32 {
     let p = palette();
-    match (ctg, kind) {
-        (true, _) => p.dessin_ctg,
+    match (couleur, kind) {
+        (true, _) => p.dessin_couleur,
         (false, LayerKind::Vector) => p.dessin_vectoriel,
         (false, LayerKind::Bitmap) => p.dessin_bitmap,
     }
@@ -575,7 +576,7 @@ pub fn couleur_du_calque(l: &crate::document::Layer) -> Color32 {
     if l.effet.is_some() {
         palette().dessin_cfx
     } else {
-        couleur_calque(l.kind, l.ctg.is_some())
+        couleur_calque(l.kind, l.couleur.is_some())
     }
 }
 
@@ -584,15 +585,15 @@ pub fn fond_du_calque(l: &crate::document::Layer) -> Color32 {
     if l.effet.is_some() {
         palette().calque_cfx
     } else {
-        fond_calque(l.kind, l.ctg.is_some())
+        fond_calque(l.kind, l.couleur.is_some())
     }
 }
 
 /// La même, sourde : fond des dessins sous les panneaux du montage, où un nom s'écrit dessus.
-pub fn fond_calque(kind: LayerKind, ctg: bool) -> Color32 {
+pub fn fond_calque(kind: LayerKind, couleur: bool) -> Color32 {
     let p = palette();
-    match (ctg, kind) {
-        (true, _) => p.calque_ctg,
+    match (couleur, kind) {
+        (true, _) => p.calque_couleur,
         (false, LayerKind::Vector) => p.calque_vectoriel,
         (false, LayerKind::Bitmap) => p.calque_bitmap,
     }

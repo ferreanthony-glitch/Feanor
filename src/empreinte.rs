@@ -171,11 +171,11 @@ impl Donnees {
     }
 }
 
-/// Les dessins que montrent les calques de `panel`, sans doublon.
+/// Les dessins que montrent les calques de `panel` (et les griffonnages de ses calques de couleur), sans doublon.
 pub fn dessins_du_plan(panel: &Panel) -> Vec<CelId> {
     let mut seen = std::collections::BTreeSet::new();
     for l in &panel.layers {
-        seen.extend(l.frames.iter().flatten().copied());
+        seen.extend(crate::calquecouleur::dessins_du_calque(l));
     }
     seen.into_iter().collect()
 }

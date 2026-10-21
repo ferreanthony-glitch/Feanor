@@ -30,7 +30,7 @@
 //! la carte graphique), **sauf** quand les effets sans passe sont ceux du trait : ils agissent toujours les
 //! premiers, sur le dessin vectoriel, et la pile est alors coupée en deux (`fx::hybrid_split`) — le fil de fond
 //! calcule le dessin dérivé par les effets du trait seuls, la carte passe tous les autres dessus, à pleine
-//! résolution. Même règle « tout sur le processeur » pour un calque rempli par CTG, un fond sous le trait, une
+//! résolution. Même règle « tout sur le processeur » pour le remplissage d'un calque de couleur (griffonnage), un fond sous le trait, une
 //! image de vidéo ou une feuille flottante en cours de geste. Un calque d'ajustement dans un dossier, ou à côté
 //! d'un qui ne passe pas, est de même résolu sur le processeur.
 //!

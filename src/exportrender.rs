@@ -47,7 +47,7 @@ thread_local! {
 // ------------------------------------------------------------------------------------------ cliché
 
 /// Les dessins qu'un plan montre : ceux de ses calques, et ceux que ses calques de couleur y ajoutent (les sources
-/// d'un calque CTG sont d'autres calques du même plan).
+/// d'un remplissage au griffonnage sont d'autres calques du même plan ; ses griffonnages sont rangés avec eux).
 fn dessins_du_plan(p: &Panel, out: &mut Vec<CelId>, seen: &mut HashSet<CelId>) {
     let mut add = |id: CelId| {
         if seen.insert(id) {
@@ -62,6 +62,9 @@ fn dessins_du_plan(p: &Panel, out: &mut Vec<CelId>, seen: &mut HashSet<CelId>) {
             for (a, b) in &c.dessins {
                 add(*a);
                 add(*b);
+            }
+            for g in c.dessins_griffonnages() {
+                add(g);
             }
         }
     }

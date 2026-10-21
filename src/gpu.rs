@@ -1696,7 +1696,7 @@ fn content_of(raster: &Raster, tiles: &[usize]) -> Option<[usize; 4]> {
 /// Les effets de cet élément du plan se dessinent-ils sur la carte graphique ? Oui si toute sa pile y
 /// passe (`gpufx::steps_supported`), ou si elle mêle des effets du trait (calcul de fond) à des effets de
 /// la carte (`fx::hybrid_split` : la carte passe ceux-là sur le dessin dérivé par ceux-ci), et s'il
-/// s'agit d'un dessin ordinaire du projet, à la taille de la feuille (ni remplissage CTG, ni fond sous
+/// s'agit d'un dessin ordinaire du projet, à la taille de la feuille (ni remplissage au griffonnage, ni fond sous
 /// le trait, ni feuille flottante, ni image de vidéo).
 pub(crate) fn gpu_fx_item(doc: &Document, item: &crate::render::PlanItem) -> bool {
     item.ctg.is_none()

@@ -1,6 +1,7 @@
 //! Calque de couleur dans l'application (`calquecouleur.rs`) : créer, détacher, accorder les images
 //! de la couleur à celles du trait, pot de peinture et pinceau dans la zone fermée par le trait,
-//! menu du calque.
+//! mode « Griffonner » (`griffonnage.rs` : les couleurs posées remplissent les zones fermées par le trait), menu du
+//! calque.
 
 use eframe::egui::{self, Color32, Pos2};
 
@@ -48,7 +49,7 @@ impl App {
         self.end_stroke();
         let line = cc::trait_de(self.layers(), self.cur_layer).unwrap_or(self.cur_layer);
         if !self.layers().get(line).is_some_and(cc::peut_porter) {
-            self.status = "Un calque de couleur se pose sous un calque de dessin (ni dossier, ni calque d'effet, ni vidéo, ni CTG).".into();
+            self.status = "Un calque de couleur se pose sous un calque de dessin (ni dossier, ni calque d'effet, ni vidéo).".into();
             return;
         }
         let snap = self.snapshot();
@@ -65,10 +66,16 @@ impl App {
         self.status = format!("Calque de couleur sous « {base} » : colorie dessous, le trait reste intact (Ctrl+Z annule).");
     }
 
-    /// Le calque de couleur courant redevient un calque bitmap ordinaire, aux images indépendantes.
+    /// Le calque de couleur courant redevient un calque bitmap ordinaire, aux images indépendantes. S'il a des griffonnages,
+    /// il reste un calque de couleur, **libre** : ses images sont à lui, et son ancien calque de trait devient une de ses
+    /// sources (le remplissage garde ses murs).
     pub(crate) fn detach_colour_layer(&mut self) {
-        if self.layer().couleur.is_none() {
+        let Some(link) = self.layer().couleur.clone() else {
             self.status = "Ce calque n'est pas un calque de couleur.".into();
+            return;
+        };
+        if !link.est_lie() {
+            self.status = "Ce calque de couleur est déjà libre : ses images sont à lui.".into();
             return;
         }
         if self.content_refuses() {
@@ -77,8 +84,77 @@ impl App {
         self.end_stroke();
         self.record_step();
         let li = self.cur_layer;
-        self.layers_mut()[li].couleur = None;
-        self.status = "Calque détaché de son trait : il garde ses dessins, ses images sont à lui.".into();
+        if link.remplissage || !link.griffonnages.is_empty() {
+            if let Some(c) = self.layers_mut()[li].couleur.as_mut() {
+                if !c.sources.contains(&c.trait_id) {
+                    c.sources.push(c.trait_id);
+                }
+                c.trait_id = 0;
+                c.dessins.clear();
+            }
+            self.status = "Calque libéré de son trait : ses images sont à lui, ses griffonnages restent et le trait devient une de ses sources.".into();
+        } else {
+            self.layers_mut()[li].couleur = None;
+            self.status = "Calque détaché de son trait : il garde ses dessins, ses images sont à lui.".into();
+        }
+    }
+
+    /// Allume ou éteint le mode « Griffonner » du calque de couleur courant (une étape d'annulation) : le pinceau, le
+    /// crayon, la gomme et le pot posent alors des griffonnages, qui remplissent les zones fermées par le trait.
+    pub(crate) fn toggle_griffonner(&mut self) {
+        let Some(on) = self.layer().couleur.as_ref().map(|c| c.griffonner) else {
+            self.status = "Griffonner se fait sur un calque de couleur (Calque > Nouveau calque > De couleur).".into();
+            return;
+        };
+        if self.content_refuses() {
+            return;
+        }
+        self.end_stroke();
+        self.record_step();
+        let li = self.cur_layer;
+        if let Some(c) = self.layers_mut()[li].couleur.as_mut() {
+            c.griffonner = !on;
+        }
+        self.status = if on {
+            "Griffonner éteint : le pinceau peint à la main, dans la zone fermée par le trait.".into()
+        } else {
+            "Griffonner : les couleurs que tu poses remplissent d'un coup la zone fermée par le trait (elles se refont si le trait change).".into()
+        };
+    }
+
+    /// Le dessin de griffonnages de l'image courante du calque de couleur courant, créé au besoin (avec l'état d'avant,
+    /// pour l'annulation) : il répond au dessin de peinture de l'image, qui existe d'abord (`ensure_colour_cel`).
+    pub(crate) fn ensure_scribble_cel(&mut self) -> (CelId, Option<Edit>) {
+        let (paint, prefix) = self.ensure_colour_cel();
+        let li = self.cur_layer;
+        let existing = self.layers()[li].couleur.as_ref().and_then(|c| c.griffonnages.get(&paint).copied()).filter(|g| self.doc.cels.contains_key(g));
+        if let Some(g) = existing {
+            return (g, prefix);
+        }
+        let snap = prefix.unwrap_or_else(|| self.snapshot());
+        let g = self.doc.new_cel(crate::document::LayerKind::Bitmap);
+        if let Some(c) = self.layers_mut()[li].couleur.as_mut() {
+            c.griffonnages.insert(paint, g);
+            c.remplissage = true;
+        }
+        (g, Some(snap))
+    }
+
+    /// Pot de peinture en mode « Griffonner » : un tampon de la couleur courante, un petit disque de griffonnage, au point
+    /// `p` — la zone fermée qu'il touche se remplit, et se refait si le trait change. Une étape d'annulation.
+    fn griffon_tampon(&mut self, p: Pos2) {
+        self.end_stroke();
+        self.playing = false;
+        if !self.layer_editable() {
+            return;
+        }
+        self.color_used(self.color);
+        let color = Color32::from_rgb(self.color[0], self.color[1], self.color[2]);
+        let (cel, prefix) = self.ensure_scribble_cel();
+        let Some(c) = self.doc.cels.get_mut(&cel) else { return };
+        let tiles = crate::griffonnage::tampon(&mut c.raster, p.x, p.y, crate::griffonnage::RAYON_TAMPON, color);
+        self.push_pixels(cel, prefix, tiles);
+        self.status = "Griffonnage posé : la zone fermée par le trait où il tombe se remplit (le pinceau en mode Griffonner fait pareil, d'un trait).".into();
     }
 
     /// Montre ou cache le calque `li` ; un calque de trait emmène ses calques de couleur (la couleur
@@ -101,6 +177,10 @@ impl App {
     /// Le dessin de couleur de l'image courante, créé au besoin : à une image où le trait n'a rien,
     /// un dessin de trait vide est posé (la couleur y suit). Avec l'état d'avant pour l'annulation.
     pub(crate) fn ensure_colour_cel(&mut self) -> (CelId, Option<Edit>) {
+        // Un calque de couleur libre n'a pas de trait dont suivre les images : des dessins à lui, comme un calque ordinaire.
+        if self.layer().couleur.as_ref().is_some_and(|c| !c.est_lie()) {
+            return self.ensure_plain_cel();
+        }
         cc::refleter(&mut self.doc, self.cur_panel);
         if let Some(id) = self.cel_here() {
             return (id, None);
@@ -133,8 +213,15 @@ impl App {
         if p.x < 0.0 || p.y < 0.0 || p.x >= self.doc.width as f32 || p.y >= self.doc.height as f32 {
             return Err("Hors de la feuille.".into());
         }
-        let Some(link) = self.layer().couleur.as_ref().map(|c| c.trous) else { return Err("Ce n'est pas un calque de couleur.".into()) };
-        let Some(li) = cc::trait_de(self.layers(), self.cur_layer) else { return Err("Le calque de trait de cette couleur a disparu.".into()) };
+        let Some(link) = self.layer().couleur.as_ref().map(|c| (c.trous, c.est_lie())) else { return Err("Ce n'est pas un calque de couleur.".into()) };
+        let (link, lie) = link;
+        let Some(li) = cc::trait_de(self.layers(), self.cur_layer) else {
+            return Err(if lie {
+                "Le calque de trait de cette couleur a disparu.".into()
+            } else {
+                "Ce calque de couleur est libre, sans calque de trait : passe en mode Griffonner pour remplir des zones.".into()
+            });
+        };
         let line_name = self.layers()[li].name.clone();
         let Some(cel) = self.layers()[li].cel_at(self.cur_frame) else {
             return Err(format!("« {line_name} » n'a pas de dessin à cette image : pas de trait pour fermer la zone."));
@@ -151,6 +238,11 @@ impl App {
     /// Pot de peinture sur un calque de couleur : la zone fermée par le trait où l'on clique prend la
     /// couleur courante, sous le trait. Une étape d'annulation.
     pub(crate) fn fill_couleur(&mut self, p: Pos2) {
+        // En mode « Griffonner » : un tampon de griffonnage, la zone se remplit toute seule.
+        if self.layer().couleur.as_ref().is_some_and(|c| c.griffonner) {
+            self.griffon_tampon(p);
+            return;
+        }
         self.end_stroke();
         self.playing = false;
         if !self.layer_editable() {
@@ -165,7 +257,8 @@ impl App {
         };
         self.color_used(self.color);
         let color = Color32::from_rgb(self.color[0], self.color[1], self.color[2]);
-        let (cel, prefix) = self.ensure_cel();
+        // (La peinture libre : le mode « Griffonner » est éteint ici.)
+        let (cel, prefix) = self.ensure_colour_cel();
         let Some(c) = self.doc.cels.get_mut(&cel) else { return };
         let tiles = zone.peindre(&mut c.raster, Some(color));
         self.push_pixels(cel, prefix, tiles);
@@ -180,7 +273,8 @@ impl App {
     /// zone fermée par le trait où il commence (`stencil` : les pochoirs déjà là). Le trait peint
     /// partout si le calque ne limite pas à la zone, si le point est sur le trait, ou pour la gomme.
     pub(crate) fn couleur_pochoir(&mut self, stencil: Option<crate::stencil::Stencil>, p: Pos2) -> Option<crate::stencil::Stencil> {
-        if self.tool == Tool::Eraser || !self.layer().couleur.as_ref().is_some_and(|c| c.zone) {
+        // (Un griffonnage n'est pas gardé dans une zone : il remplit celles qu'il touche.)
+        if self.tool == Tool::Eraser || !self.layer().couleur.as_ref().is_some_and(|c| c.zone && !c.griffonner) {
             return stencil;
         }
         let Ok(zone) = self.zone_couleur(p) else { return stencil };
@@ -197,7 +291,11 @@ impl App {
         if self.playing || !matches!(self.tool, Tool::Fill | Tool::Brush | Tool::Pencil) {
             return;
         }
-        let Some(link) = self.layer().couleur.as_ref().map(|c| (c.trous, c.zone)) else { return };
+        let Some(link) = self.layer().couleur.as_ref().map(|c| (c.trous, c.zone && !c.griffonner)) else { return };
+        if self.layer().couleur.as_ref().is_some_and(|c| c.griffonner) {
+            // (En mode « Griffonner », ni le pot ni le pinceau n'ont besoin des murs du trait : le remplissage se calcule à part.)
+            return;
+        }
         if self.tool != Tool::Fill && !link.1 {
             return;
         }
@@ -223,8 +321,21 @@ impl App {
                 ui.label(egui::RichText::new("Un calque de couleur se pose sous un calque de dessin ordinaire.").weak().small());
             }
             Some(link) => {
+                // Griffonner : les couleurs posées remplissent les zones (mode, `calque.griffonner`).
+                let mut griffonne = link.griffonner;
+                let key = self.raccourci("calque.griffonner");
+                let resp = ui.checkbox(&mut griffonne, "Griffonner (remplir les zones d'un coup)").on_hover_text(format!(
+                    "Les couleurs que tu poses (pinceau, crayon, gomme, pot) remplissent d'un coup la zone fermée par le trait où elles tombent, sous le trait ; le remplissage se refait tout seul quand le trait change. La gomme efface alors les griffonnages.{}",
+                    if key.is_empty() { String::new() } else { format!(" ({key})") }
+                ));
+                if resp.changed() {
+                    self.record_step();
+                    if let Some(c) = self.layers_mut()[li].couleur.as_mut() {
+                        c.griffonner = griffonne;
+                    }
+                }
                 let mut zone = link.zone;
-                if ui.checkbox(&mut zone, "Pinceau dans la zone fermée").on_hover_text("Un trait de pinceau ou de crayon reste dans la zone fermée par le trait où il commence (et passe sous lui).").changed() {
+                if ui.checkbox(&mut zone, "Pinceau dans la zone fermée").on_hover_text("En peinture à la main (pas en mode Griffonner) : un trait de pinceau ou de crayon reste dans la zone fermée par le trait où il commence (et passe sous lui).").changed() {
                     self.record_step();
                     if let Some(c) = self.layers_mut()[li].couleur.as_mut() {
                         c.zone = zone;
@@ -241,10 +352,75 @@ impl App {
                     }
                 });
                 ui.separator();
-                self.action_item(ui, "Ajouter un autre calque de couleur sous ce trait", "calque.nouveau_couleur");
-                self.action_item(ui, "Détacher du calque de trait", "calque.detacher_couleur");
-                ui.label(egui::RichText::new("Les images suivent celles du calque de trait ; la visibilité du trait emmène celle de la couleur.").weak().small());
+                ui.menu_button("Sources supplémentaires", |ui| self.couleur_sources_menu(ui, li));
+                ui.separator();
+                if link.est_lie() {
+                    self.action_item(ui, "Ajouter un autre calque de couleur sous ce trait", "calque.nouveau_couleur");
+                    self.action_item(ui, "Détacher du calque de trait", "calque.detacher_couleur");
+                    ui.label(egui::RichText::new("Les images suivent celles du calque de trait ; la visibilité du trait emmène celle de la couleur.").weak().small());
+                } else {
+                    ui.label(egui::RichText::new("Calque libre : ses images sont à lui, et ses zones sont fermées par ses sources.").weak().small());
+                }
             }
         }
+    }
+
+    /// Les sources supplémentaires du calque de couleur `li` : d'autres calques de dessin dont les traits ferment aussi
+    /// les zones du remplissage au griffonnage (son calque de trait, lui, ferme toujours les siennes). Une étape
+    /// d'annulation par case cochée.
+    fn couleur_sources_menu(&mut self, ui: &mut egui::Ui, li: usize) {
+        let Some(link) = self.layers().get(li).and_then(|l| l.couleur.clone()) else { return };
+        if let Some(t) = cc::trait_de(self.layers(), li) {
+            let name = self.layers()[t].name.clone();
+            ui.label(egui::RichText::new(format!("« {name} » (son trait) ferme toujours les zones.")).weak().small());
+        } else {
+            ui.label(egui::RichText::new("Les traits des calques cochés ferment les zones.").weak().small());
+        }
+        let candidates: Vec<(u64, String)> = self
+            .layers()
+            .iter()
+            .enumerate()
+            .rev()
+            .filter(|(k, l)| *k != li && !l.folder && l.effet.is_none() && l.video.is_none() && l.id != link.trait_id)
+            .map(|(_, l)| (l.id, l.name.clone()))
+            .collect();
+        if candidates.is_empty() {
+            ui.label(egui::RichText::new("Pas d'autre calque de dessin.").weak().small());
+        }
+        for (id, name) in candidates {
+            let mut on = link.sources.contains(&id);
+            if ui.checkbox(&mut on, name).changed() {
+                self.record_step();
+                if let Some(c) = self.layers_mut()[li].couleur.as_mut() {
+                    if on {
+                        c.sources.push(id);
+                    } else {
+                        c.sources.retain(|s| *s != id);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Le bouton « Griffonner » des réglages d'outil (pinceau, crayon, gomme, pot) quand le calque courant est un calque de
+    /// couleur : il allume ou éteint le mode du calque, avec une phrase qui dit ce qui se passe.
+    pub(crate) fn griffonner_options_ui(&mut self, ui: &mut egui::Ui) {
+        let Some(on) = self.layer().couleur.as_ref().map(|c| c.griffonner) else { return };
+        use egui_phosphor::regular as ph;
+        ui.separator();
+        ui.horizontal(|ui| {
+            let resp = self.bouton_etat(
+                ui,
+                on,
+                ph::SCRIBBLE_LOOP,
+                "Griffonner",
+                "Les couleurs que tu poses remplissent d'un coup la zone fermée par le trait où elles tombent, sous le trait ; elles se refont si le trait change. La gomme efface les griffonnages.",
+                "calque.griffonner",
+            );
+            if resp.clicked() {
+                self.toggle_griffonner();
+            }
+            ui.label(egui::RichText::new(if on { "Griffonner : la couleur remplit la zone." } else { "Peinture à la main." }).weak().small());
+        });
     }
 }

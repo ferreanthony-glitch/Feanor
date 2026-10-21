@@ -390,7 +390,7 @@ fn tilt_depth_gap_and_keys_survive_a_save_and_a_reload() {
     doc.panels[0].layers[1].pos_keys = vec![PosKey::new(0, LayerTransform::default()), PosKey { smooth: true, ..PosKey::new(8, moved) }];
     project::save(&doc, &manifest, &mut Default::default()).expect("enregistré");
     let text = std::fs::read_to_string(&manifest).expect("manifeste");
-    assert!(text.contains(&format!("\"version\": {}", project::VERSION)) && project::VERSION == 35);
+    assert!(text.contains(&format!("\"version\": {}", project::VERSION)) && project::VERSION >= 35);
     assert!(text.contains("\"inclinaison_x\": 12.5") && text.contains("\"ecart_profondeur\": 1.25"), "les nouveaux champs sont écrits");
     let back = project::load(&manifest).expect("relu").doc;
     assert_eq!(back.panels[0].layers[0].transform, doc.panels[0].layers[0].transform);
@@ -422,14 +422,14 @@ fn a_project_without_tilt_writes_no_new_field_and_an_older_one_opens_with_the_sa
 
 #[test]
 fn a_project_from_a_newer_format_is_refused_and_the_shared_number_follows_the_classic_one() {
-    assert_eq!(project::VERSION, 35);
-    assert_eq!(project::version_partage_ecrite(), 35, "un projet partagé écrit le plus grand des deux numéros");
+    assert!(project::VERSION >= 35);
+    assert_eq!(project::version_partage_ecrite(), project::VERSION, "un projet partagé écrit le plus grand des deux numéros");
     let dir = dir_for("recent");
     let manifest = dir.join("P.pelure");
     let doc = doc_with_cards(&[(RED, [10, 10, 80, 60], 0.0)]);
     project::save(&doc, &manifest, &mut Default::default()).expect("enregistré");
     let text = std::fs::read_to_string(&manifest).expect("manifeste");
-    std::fs::write(&manifest, text.replace(&format!("\"version\": {}", project::VERSION), "\"version\": 36")).expect("écrit");
+    std::fs::write(&manifest, text.replace(&format!("\"version\": {}", project::VERSION), &format!("\"version\": {}", project::VERSION + 1))).expect("écrit");
     let err = project::load(&manifest).err().expect("refusé");
     assert!(err.contains("plus récente"), "{err}");
     std::fs::remove_dir_all(&dir).ok();

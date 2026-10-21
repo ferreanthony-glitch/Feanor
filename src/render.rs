@@ -20,9 +20,11 @@ pub struct PlanItem {
     pub blend: BlendMode,
     /// Effets de la pile du calque à cette image (13i) ; vide : le dessin tel quel.
     pub fx: Vec<crate::fx::FxStep>,
-    /// Calque CTG (13j) : les dessins de ses sources à cette image (le dessin est rempli d'après
-    /// leurs traits) ; rien pour un calque ordinaire.
-    pub ctg: Option<crate::ctg::CtgInput>,
+    /// Remplissage au griffonnage d'un calque de couleur (`griffonnage.rs`) : cet élément montre le remplissage des
+    /// griffonnages `cel` d'après les traits de ces sources (les dessins des sources à cette image). Rien pour un
+    /// dessin ordinaire. (Le nom `ctg` est celui du calque CTG que ce remplissage a remplacé : `propager.rs` l'écrit
+    /// encore.)
+    pub ctg: Option<crate::griffonnage::GriffonInput>,
     /// Fond sous le trait (`fond.rs`) : cet élément montre le fond du dessin `cel`, pas son trait.
     pub fond: Option<FondPart>,
     /// Feuille flottante (`flottante.rs`) : transformation du geste en cours (déplacer, tourner,
@@ -84,8 +86,17 @@ pub enum FondPart {
 /// L'élément du fond sous le trait du calque `layer` (s'il en a un), à placer juste sous `line`,
 /// l'élément de son dessin.
 pub fn fond_item(layer: &crate::document::Layer, line: &PlanItem) -> Option<PlanItem> {
-    let r = layer.fond.filter(|_| !layer.folder && layer.ctg.is_none() && layer.video.is_none())?;
+    let r = layer.fond.filter(|_| !layer.folder && layer.video.is_none())?;
     Some(PlanItem { fx: Vec::new(), ctg: None, fond: Some(FondPart::Forme(r)), ..line.clone() })
+}
+
+/// L'élément du remplissage au griffonnage du calque de couleur `li` de `layers` à l'image `frame` (s'il en a un), à placer
+/// juste sous `line`, l'élément de sa peinture libre : un dessin dérivé des griffonnages et des traits de ses sources
+/// (`griffonnage.rs`), calculé en arrière-plan à l'écran. Il a les effets, la transformation et le mode de fusion du calque,
+/// comme la peinture libre qu'il accompagne.
+pub fn griffon_item(layers: &[crate::document::Layer], li: usize, frame: usize, line: &PlanItem) -> Option<PlanItem> {
+    let (griffonnage, input) = crate::griffonnage::entree(layers, li, frame)?;
+    Some(PlanItem { cel: griffonnage, ctg: Some(input), fond: None, ..line.clone() })
 }
 
 /// Couleur du dessin au point (`x`, `y`) de ses pixels (interpolation bilinéaire, prémultipliée).
@@ -726,12 +737,12 @@ pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> O
         transform: (!t.is_identity()).then_some(t),
         blend: BlendMode::Normal,
         fx: crate::fx::layer_steps(l, frame, None),
-        ctg: crate::ctg::input(&panel.layers, li, frame),
+        ctg: None,
         fond: None,
         pre: None,
     };
-    // Le fond sous le trait fait partie de l'image du calque.
-    Some(Plan { paper: None, items: fond_item(l, &line).into_iter().chain([line]).collect() })
+    // Le remplissage au griffonnage (calque de couleur) et le fond sous le trait font partie de l'image du calque.
+    Some(Plan { paper: None, items: griffon_item(&panel.layers, li, frame, &line).into_iter().chain(fond_item(l, &line)).chain([line]).collect() })
 }
 
 fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32) -> Plan {
@@ -760,11 +771,13 @@ fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize,
             transform: placed.transform,
             blend: l.blend,
             fx: crate::fx::layer_steps(l, frame, None),
-            ctg: crate::ctg::input(&panel.layers, li, frame),
+            ctg: None,
             fond: None,
             pre: placed.pre,
         };
-        // Le fond sous le trait (`fond.rs`), juste sous le dessin de son calque.
+        // Le remplissage au griffonnage (calque de couleur, `griffonnage.rs`) puis le fond sous le trait (`fond.rs`),
+        // juste sous le dessin de son calque.
+        items.extend(griffon_item(&panel.layers, li, frame, &line));
         items.extend(fond_item(l, &line));
         items.push(line);
     }

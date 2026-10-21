@@ -754,7 +754,7 @@ pub fn layer_steps(layer: &crate::document::Layer, frame: usize, rest: Option<us
 /// (`gpufx.rs`) : l'élément réduit aux effets du trait — dont le dessin dérivé devient le dessin d'origine
 /// de la carte —, et les effets que la carte passe dessus, dans leur ordre. Rien pour une pile sans effet du
 /// trait, sans autre effet, ou dont un autre effet n'a pas de passe ; rien non plus pour un remplissage
-/// CTG, un fond sous le trait ou une feuille flottante.
+/// au griffonnage, un fond sous le trait ou une feuille flottante.
 pub fn hybrid_split(item: &crate::render::PlanItem) -> Option<(crate::render::PlanItem, Vec<FxStep>)> {
     if item.ctg.is_some() || item.fond.is_some() || item.pre.is_some() {
         return None;
@@ -1129,7 +1129,7 @@ impl std::ops::Deref for Shown<'_> {
 }
 
 /// Numéro du dessin dérivé d'un élément du plan : le dessin lui-même sans effet ni remplissage
-/// CTG, sinon un numéro propre à ce dessin, ces effets et ces sources.
+/// au griffonnage, sinon un numéro propre à ce dessin, ces effets et ces sources.
 pub fn shown_id(item: &crate::render::PlanItem) -> CelId {
     // Fond sous le trait (`fond.rs`) : un numéro propre au fond de ce dessin.
     if let Some(crate::render::FondPart::Forme(r)) = &item.fond {
@@ -1152,12 +1152,14 @@ pub fn shown_id(item: &crate::render::PlanItem) -> CelId {
     }
 }
 
-/// Le dessin d'un élément du plan tel qu'il s'affiche : effets (13i) et remplissage CTG (13j)
-/// compris.
+/// Le dessin d'un élément du plan tel qu'il s'affiche : effets (13i) et remplissage au griffonnage
+/// (`griffonnage.rs`) compris.
 ///
 /// Calcul bloquant et exact (export, vignettes enregistrées, tests), sauf en mode doux
 /// (`fxcache::soft_scope`, vignettes de l'écran) : les effets non encore calculés sont alors
-/// demandés au fil de fond et remplacés par leur dernier résultat.
+/// demandés au fil de fond et remplacés par leur dernier résultat. À l'écran (`differe`), un remplissage au
+/// griffonnage qui n'est plus à jour est lui aussi demandé au fil de fond : le remplissage d'avant reste affiché, ou
+/// rien tant qu'il n'y en a pas (jamais les griffonnages eux-mêmes, ni un calcul sur le fil de l'interface).
 pub fn shown<'a>(doc: &'a Document, item: &crate::render::PlanItem) -> Option<Shown<'a>> {
     if crate::fxcache::soft_active() {
         // (Une vignette passe après l'image affichée.)
@@ -1171,6 +1173,10 @@ pub fn shown<'a>(doc: &'a Document, item: &crate::render::PlanItem) -> Option<Sh
 }
 
 fn shown_blocking<'a>(doc: &'a Document, item: &crate::render::PlanItem) -> Option<Shown<'a>> {
+    // Remplissage au griffonnage affiché à l'écran : jamais calculé sur le fil de l'interface.
+    if item.ctg.is_some() && item.fond.is_none() && DIFFERE.with(std::cell::Cell::get) && doc.cels.contains_key(&item.cel) {
+        return display_with(doc, item, 0, 0).map(|d| d.cel);
+    }
     match &item.fond {
         None => shown_with(doc, item.cel, &item.fx, item.ctg.as_ref()),
         Some(crate::render::FondPart::Forme(r)) => fond_shown(doc, item, r),
@@ -1203,10 +1209,17 @@ fn display_id(item: &crate::render::PlanItem, level: u8) -> CelId {
 
 /// Ce que l'affichage demande pour `item` au niveau `level` : le dessin d'origine, et le niveau
 /// réellement servi (l'aperçu n'est admis que sans transformation, pour des effets qui le suivent).
-/// Rien si l'élément n'est pas un dessin passé par des effets seuls (CTG, fond, vidéo : calcul
+/// Un remplissage au griffonnage (`item.ctg`) se demande aussi, toujours en pleine résolution : son dessin d'origine est
+/// le dessin de griffonnages. Rien si l'élément n'est pas un dessin passé par des effets seuls (fond, vidéo : calcul
 /// bloquant d'avant).
 fn wanted<'a>(doc: &'a Document, item: &crate::render::PlanItem, level: u8) -> Option<(&'a Cel, u8)> {
-    if item.fx.is_empty() || item.ctg.is_some() || item.fond.is_some() {
+    if item.fond.is_some() {
+        return None;
+    }
+    if item.ctg.is_some() {
+        return doc.cels.get(&item.cel).map(|src| (src, 0));
+    }
+    if item.fx.is_empty() {
         return None;
     }
     let src = doc.cels.get(&item.cel)?;
@@ -1229,13 +1242,21 @@ pub(crate) fn display_with<'a>(doc: &'a Document, item: &crate::render::PlanItem
     let Some((src, level)) = wanted(doc, item, level) else {
         return Some(Display { cel: shown_blocking(doc, item)?, id: shown_id(item), ready: true });
     };
-    if let Some((id, cel)) = lookup(item, src, level) {
+    if let Some((id, cel)) = lookup(doc, item, src, level) {
         return Some(Display { cel: Shown::Fx(cel), id, ready: true });
     }
     // (Pendant un geste ou la lecture, les vignettes attendent : le calcul de fond sert l'image
     // affichée ; elles se refont à la fin du geste, `draft_level`.)
     if prio < THUMB_PRIO || !draft_active() {
-        crate::fxcache::request(job_for(item, src, display_id(item, level), level, prio));
+        let (id, version) = (display_id(item, level), version_of(doc, item, src));
+        // (Un remplissage déjà demandé n'est pas redemandé — ses sources ne sont pas recopiées à chaque image d'écran —,
+        // mais sa demande est renouvelée : sans cela elle vieillirait et serait abandonnée.)
+        if !(item.ctg.is_some() && crate::fxcache::renew(id, version, prio)) {
+            crate::fxcache::request(job_for(doc, item, src, id, level, prio));
+        }
+    }
+    if item.ctg.is_some() {
+        GRIFFON_ATTENDU.store(true, std::sync::atomic::Ordering::Relaxed);
     }
     // (Un tremblement n'a rien à gagner d'un résultat d'avant la dernière retouche du dessin : il
     // ferait disparaître le trait qu'on vient de poser ; il montre alors le dessin tel quel.
@@ -1243,25 +1264,80 @@ pub(crate) fn display_with<'a>(doc: &'a Document, item: &crate::render::PlanItem
     let boil = item.fx.iter().any(|s| s.kind.vector_only() || s.kind.vector_stage());
     Some(match crate::fxcache::fallback(item.cel) {
         Some((last, cel)) if !boil || cel.version == src.version => Display { cel: Shown::Fx(cel), id: last, ready: false },
+        // Un remplissage qui n'a jamais été calculé ne montre rien (surtout pas ses griffonnages, des taches de couleur).
+        _ if item.ctg.is_some() => Display { cel: Shown::Fx(cel_vide(src.raster.width, src.raster.height)), id: display_id(item, level), ready: false },
         _ => Display { cel: Shown::Plain(src), id: item.cel, ready: false },
     })
 }
 
+/// Un dessin vide de `w` × `h` pixels, gardé : ce que montre un remplissage au griffonnage en attendant son premier calcul.
+fn cel_vide(w: usize, h: usize) -> Arc<Cel> {
+    static VIDE: Mutex<Option<Arc<Cel>>> = Mutex::new(None);
+    let mut v = VIDE.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(c) = v.as_ref().filter(|c| c.raster.width == w && c.raster.height == h) {
+        return c.clone();
+    }
+    let c = Arc::new(Cel { raster: Raster::new(w, h), vector: None, version: 0, fond: None });
+    *v = Some(c.clone());
+    c
+}
+
+/// Un remplissage au griffonnage affiché attendait le fil de fond.
+static GRIFFON_ATTENDU: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+/// Le nombre de calculs de fond finis la dernière fois qu'on a regardé (`griffon_poll`).
+static GRIFFON_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// À chaque image d'écran : un remplissage au griffonnage attendait le fil de fond, qui a fini un calcul depuis — l'image
+/// composée par le processeur est à refaire (la carte graphique relit les dessins dérivés à chaque image). Vrai alors.
+pub fn griffon_poll() -> bool {
+    let generation = crate::fxcache::generation();
+    if GRIFFON_GEN.swap(generation, std::sync::atomic::Ordering::Relaxed) == generation {
+        return false;
+    }
+    GRIFFON_ATTENDU.swap(false, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// La version d'un remplissage au griffonnage : celles du dessin de griffonnages (`version`) et des dessins de ses sources.
+fn griffon_version(doc: &Document, version: u64, input: &crate::griffonnage::GriffonInput) -> u64 {
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    version.hash(&mut h);
+    for s in &input.sources {
+        doc.cels.get(s).map_or(0, |c| c.version).hash(&mut h);
+    }
+    h.finish()
+}
+
+/// La version du dessin dérivé de `item` : celle de son dessin d'origine `src`, ou, pour un remplissage au griffonnage,
+/// celle qui compte aussi ses sources.
+fn version_of(doc: &Document, item: &crate::render::PlanItem, src: &Cel) -> u64 {
+    match &item.ctg {
+        None => src.version,
+        Some(input) => griffon_version(doc, src.version, input),
+    }
+}
+
 /// Le dessin dérivé de `item` s'il est gardé au niveau `level`, sinon en pleine résolution (déjà
 /// calculée au repos : plus nette, autant la montrer), avec son numéro.
-fn lookup(item: &crate::render::PlanItem, src: &Cel, level: u8) -> Option<(CelId, Arc<Cel>)> {
+fn lookup(doc: &Document, item: &crate::render::PlanItem, src: &Cel, level: u8) -> Option<(CelId, Arc<Cel>)> {
     let both = [level, 0];
     let levels = if level == 0 { &both[..1] } else { &both[..] };
+    let version = version_of(doc, item, src);
     levels.iter().find_map(|&l| {
         let id = display_id(item, l);
-        crate::fxcache::get(id, src.version).map(|c| (id, c))
+        crate::fxcache::get(id, version).map(|c| (id, c))
     })
 }
 
-fn job_for(item: &crate::render::PlanItem, src: &Cel, id: CelId, level: u8, prio: u32) -> crate::fxcache::Job {
+fn job_for(doc: &Document, item: &crate::render::PlanItem, src: &Cel, id: CelId, level: u8, prio: u32) -> crate::fxcache::Job {
+    // Un remplissage au griffonnage : les traits de ses sources partent avec la demande.
+    let griffon = item.ctg.as_ref().map(|input| {
+        let lines = input.sources.iter().filter_map(|s| doc.cels.get(s)).map(|c| Arc::new(c.raster.clone())).collect();
+        (lines, input.gap)
+    });
     crate::fxcache::Job {
         id,
-        version: src.version,
+        version: version_of(doc, item, src),
+        griffon,
         src: crate::fxcache::source(item.cel, src),
         vector: if item.fx.iter().any(|s| s.kind.vector_stage()) { crate::fxcache::vector_source(item.cel, src) } else { None },
         steps: item.fx.clone(),
@@ -1287,10 +1363,10 @@ pub fn forget_all() {
 pub fn prefetch(doc: &Document, items: &[crate::render::PlanItem], prio: u32, level: u8) {
     for item in items {
         let Some((src, level)) = wanted(doc, item, level) else { continue };
-        if lookup(item, src, level).is_some() {
+        if lookup(doc, item, src, level).is_some() {
             continue;
         }
-        crate::fxcache::request(job_for(item, src, display_id(item, level), level, prio));
+        crate::fxcache::request(job_for(doc, item, src, display_id(item, level), level, prio));
     }
 }
 
@@ -1298,7 +1374,7 @@ pub fn prefetch(doc: &Document, items: &[crate::render::PlanItem], prio: u32, le
 /// graphique), avec le numéro sous lequel il est gardé.
 pub fn ready(doc: &Document, item: &crate::render::PlanItem, level: u8) -> Option<(CelId, Arc<Cel>)> {
     let (src, level) = wanted(doc, item, level)?;
-    lookup(item, src, level)
+    lookup(doc, item, src, level)
 }
 
 /// Début d'une image d'écran : l'horloge des demandes avance, et le fil de fond sait quel écran
@@ -1606,9 +1682,10 @@ pub fn fond_patch(doc: &Document, cel: CelId, r: &crate::fond::FondReglages, til
     });
 }
 
-/// Le dessin `cel`, rempli d'après `ctg` (dessins des sources, trous) s'il est d'un calque CTG, puis passé par
-/// les effets `steps` (calculé une fois, puis gardé tant qu'aucun de ces dessins ne change).
-pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Option<&crate::ctg::CtgInput>) -> Option<Shown<'a>> {
+/// Le dessin `cel`, rempli d'après `ctg` (dessins des sources, trous) s'il est un dessin de griffonnages
+/// (`griffonnage.rs`), puis passé par les effets `steps` (calculé une fois, puis gardé tant qu'aucun de ces dessins ne
+/// change). Calcul bloquant : à l'écran, `display_with` passe par le fil de fond.
+pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Option<&crate::griffonnage::GriffonInput>) -> Option<Shown<'a>> {
     // Pas un dessin du projet : le dessin dérivé d'un calque d'effet (`calqueffet.rs`), ou une image
     // de calque vidéo (13k), lue à la demande.
     let Some(src) = doc.cels.get(&cel) else {
@@ -1632,22 +1709,15 @@ pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Opti
     // Version : celle du dessin, et celles des sources du remplissage.
     let version = match ctg {
         None => src.version,
-        Some(input) => {
-            let mut h = std::collections::hash_map::DefaultHasher::new();
-            src.version.hash(&mut h);
-            for s in &input.sources {
-                doc.cels.get(s).map_or(0, |c| c.version).hash(&mut h);
-            }
-            h.finish()
-        }
+        Some(input) => griffon_version(doc, src.version, input),
     };
     let derived = crate::fxcache::get_or_compute(id, version, ctg.is_none().then_some(cel), || {
         let raster = match ctg {
-            // (Sans CTG, `apply` lit le dessin lui-même : pas de copie.)
+            // (Sans remplissage, `apply` lit le dessin lui-même : pas de copie.)
             None => apply_with(&src.raster, src.vector.as_ref(), steps, 0),
             Some(input) => {
                 let rasters: Vec<&Raster> = input.sources.iter().filter_map(|s| doc.cels.get(s)).map(|c| &c.raster).collect();
-                apply(&crate::ctg::fill(&rasters, &src.raster, input.gap as usize), steps)
+                apply(&crate::griffonnage::fill(&rasters, &src.raster, input.gap as usize), steps)
             }
         };
         Cel { raster, vector: None, version, fond: None }

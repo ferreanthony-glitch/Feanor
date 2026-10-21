@@ -100,6 +100,10 @@ pub(crate) struct Job {
     /// Calque d'effet d'ajustement (`calqueffet.rs`) : ce qui est dessous, à composer puis passer par
     /// les effets (`steps` reste vide, `src` est vide). Rien : le dessin `src` passé par `steps`.
     pub base: Option<Arc<crate::calqueffet::Snapshot>>,
+    /// Remplissage au griffonnage (`griffonnage.rs`) : les dessins des sources (les traits qui ferment les zones) et la
+    /// fermeture des trous. `src` est alors le dessin de griffonnages, et le dessin dérivé est son remplissage, passé par
+    /// `steps`. Jamais en aperçu réduit (`level` 0).
+    pub griffon: Option<(Vec<Arc<Raster>>, u8)>,
 }
 
 struct Last {
@@ -561,6 +565,27 @@ pub(crate) fn fallback(origin: CelId) -> Option<(CelId, Arc<Cel>)> {
     Some((l.id, l.cel.clone()))
 }
 
+/// Le dessin dérivé `id` de la version `version` est-il déjà demandé (en file ou en cours) ? Si oui, la demande est
+/// renouvelée (elle ne vieillit pas) et vrai est rendu : on évite de refaire la demande, et la copie de ses dessins
+/// d'origine, à chaque image d'écran qui attend le résultat.
+pub(crate) fn renew(id: CelId, version: u64, prio: u32) -> bool {
+    if privee_active() || monde_perime() {
+        return false;
+    }
+    let mut st = lock();
+    if st.inflight.get(&id) == Some(&version) {
+        return true;
+    }
+    match st.queue.iter_mut().find(|q| q.id == id && q.version == version) {
+        Some(q) => {
+            q.prio = q.prio.min(prio);
+            q.epoch = epoch();
+            true
+        }
+        None => false,
+    }
+}
+
 /// Demande le calcul de `job` au fil de fond (sans attendre). Rien si le dessin est déjà gardé ou
 /// en cours de calcul ; une demande déjà en file voit sa priorité remontée.
 pub(crate) fn request(job: Job) {
@@ -808,12 +833,19 @@ fn worker_loop() {
         // le dessin sans effet.
         let raster = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match &job.base {
             Some(base) => base.render(job.level),
+            None if job.griffon.is_some() => {
+                let (sources, gap) = job.griffon.as_ref().expect("testé juste avant");
+                let lines: Vec<&Raster> = sources.iter().map(|s| &**s).collect();
+                crate::fx::apply(&crate::griffonnage::fill(&lines, &job.src, *gap as usize), &job.steps)
+            }
             None if job.level == 0 => crate::fx::apply_with(&job.src, job.vector.as_deref(), &job.steps, 0),
             None => crate::fx::apply_scaled(&reduced_source(&job), &job.steps, job.level),
         }))
         .unwrap_or_else(|_| match &job.base {
             // (Un effet qui plante : ce qui est dessous, sans lui.)
             Some(base) => std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| base.compose(job.level))).unwrap_or_else(|_| Raster::new(0, 0)),
+            // (Un remplissage qui plante : rien. Surtout pas les griffonnages eux-mêmes, qui sont des taches de couleur.)
+            None if job.griffon.is_some() => Raster::new(job.src.width, job.src.height),
             None => crate::fxproxy::downscale(&job.src, job.level),
         });
         let cel = Arc::new(Cel { raster, vector: None, version: job.version, fond: None });

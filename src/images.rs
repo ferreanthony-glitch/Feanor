@@ -886,6 +886,20 @@ impl App {
             }
             let layer = &mut self.layers_mut()[li];
             drop_frames(&mut layer.frames, a, b, to, mode, &row);
+            // Un calque de couleur libre : une copie de dessin emporte une copie de ses griffonnages.
+            if mode == DropMode::Copy {
+                let pairs: Vec<(CelId, CelId)> = copies.iter().map(|(o, n)| (*o, *n)).collect();
+                for (old, new) in pairs {
+                    let scribble = self.layers()[li].couleur.as_ref().filter(|c| !c.griffonnages.contains_key(&new)).and_then(|c| c.griffonnages.get(&old).copied());
+                    if let Some(g) = scribble {
+                        let d = self.doc.duplicate_cel(g);
+                        if let Some(c) = self.layers_mut()[li].couleur.as_mut() {
+                            c.griffonnages.insert(new, d);
+                        }
+                    }
+                }
+            }
+            let layer = &mut self.layers_mut()[li];
             // Les rôles des images posées vont avec elles.
             let moved = roles::take(&layer.roles, a, b);
             let n = b - a;
@@ -1022,6 +1036,14 @@ impl App {
             for f in a..end {
                 let Some(old) = self.layers()[li].frames[f] else { continue };
                 let new = *flipped.entry(old).or_insert_with(|| self.doc.flipped_cel(old, h, v));
+                // Un calque de couleur libre : ses griffonnages se retournent avec son dessin de peinture.
+                let scribble = self.layers()[li].couleur.as_ref().filter(|c| !c.griffonnages.contains_key(&new)).and_then(|c| c.griffonnages.get(&old).copied());
+                if let Some(g) = scribble {
+                    let flipped_scribble = self.doc.flipped_cel(g, h, v);
+                    if let Some(c) = self.layers_mut()[li].couleur.as_mut() {
+                        c.griffonnages.insert(new, flipped_scribble);
+                    }
+                }
                 self.layers_mut()[li].frames[f] = Some(new);
             }
         }

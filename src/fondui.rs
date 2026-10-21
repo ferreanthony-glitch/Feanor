@@ -107,7 +107,7 @@ impl App {
             return;
         }
         if !self.layers().get(li).is_some_and(takes_fond) {
-            self.status = "Fond sous le trait : ce calque n'en prend pas (ni dossier, ni CTG, ni vidéo).".into();
+            self.status = "Fond sous le trait : ce calque n'en prend pas (ni dossier, ni vidéo).".into();
             return;
         }
         self.end_stroke();
@@ -127,7 +127,7 @@ impl App {
     }
 
     /// Le bouton « Fond sous le trait » d'un calque : allumé quand le calque en a un. Il est sur la ligne du
-    /// calque (panneau Calques) et dans les commandes du panneau ; rien pour un dossier, un calque CTG ou vidéo
+    /// calque (panneau Calques) et dans les commandes du panneau ; rien pour un dossier ou un calque vidéo
     /// (ils n'en prennent pas).
     pub(crate) fn fond_layer_button(&mut self, ui: &mut egui::Ui, li: usize, small: bool) -> Option<egui::Response> {
         let l = self.layers().get(li)?;
@@ -183,7 +183,7 @@ impl App {
                 };
                 let targets: Vec<usize> = targets.into_iter().filter(|&li| takes_fond(&self.layers()[li])).collect();
                 if targets.is_empty() {
-                    self.status = "Fond sous le trait : aucun calque de dessin visé (ni dossier, ni CTG, ni vidéo).".into();
+                    self.status = "Fond sous le trait : aucun calque de dessin visé (ni dossier, ni vidéo).".into();
                     return true;
                 }
                 let fresh = self.layer().fond.unwrap_or_else(|| self.new_fond());
@@ -285,8 +285,8 @@ impl App {
     }
 }
 
-/// Le calque peut avoir un fond sous son trait : un calque de dessin (ni dossier, ni CTG, ni
+/// Le calque peut avoir un fond sous son trait : un calque de dessin (ni dossier, ni
 /// vidéo).
 fn takes_fond(l: &crate::document::Layer) -> bool {
-    !l.folder && l.ctg.is_none() && l.video.is_none()
+    !l.folder && l.video.is_none()
 }

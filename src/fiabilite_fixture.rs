@@ -7,7 +7,8 @@
 //! toucher) ; le « fond sous le trait » (réglages du calque, strate peinte et coupe d'un dessin) ;
 //! des effets de calque avec clés (flou, bruit, teinte-saturation, tremblement du trait), dont un
 //! éteint ; un mode de fusion, de l'opacité, une transformation, de la profondeur ; un dossier de
-//! calques et un de ses calques ; un calque CTG ; des calques d'effets (un ajustement à clés et une
+//! calques et un de ses calques ; des calques de couleur qui griffonnent (un libre, avec des sources, ce qu'était le
+//! calque CTG, et un lié à son trait, format 36) ; des calques d'effets (un ajustement à clés et une
 //! incrustation, format 27) ; un calque vidéo (dix images PNG minuscules
 //! fabriquées sur disque) ; des rôles d'images, des noms d'instance, des marques de couleur ; une
 //! caméra à clés avec adoucis, un effet de caméra posé (explosion) et un repère 3D (un cube) ;
@@ -274,9 +275,20 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     }];
     // Bouton « fx » du calque éteint (format 33, `effets_eteints`) : la pile est gardée, elle ne joue plus.
     nuage.fx_enabled = false;
+    // Calque de couleur libre qui griffonne (format 36, `griffonnage.rs`, ce qu'était le calque CTG) : sans calque de trait, ses
+    // zones sont fermées par les traits de `perso` (source supplémentaire) ; `aplats` est son dessin de griffonnages, et
+    // il a aussi un peu de peinture libre.
+    let peinture_aplats = dessin_bitmap(&mut doc, 5);
     let mut ctg = Layer::new("Aplats", LayerKind::Bitmap);
-    ctg.frames = vec![Some(aplats); 24];
-    ctg.ctg = Some(crate::ctg::Ctg { sources: vec![perso.id], gap: 6 });
+    ctg.frames = vec![Some(peinture_aplats); 24];
+    let mut lien = crate::calquecouleur::CalqueCouleur::new(0);
+    lien.trous = 6;
+    lien.zone = false;
+    lien.griffonner = true;
+    lien.remplissage = true;
+    lien.sources = vec![perso.id];
+    lien.griffonnages.insert(peinture_aplats, aplats);
+    ctg.couleur = Some(lien);
     ctg.locked = true;
     ctg.visible = false;
     // Calques d'effets (format 27, `calqueffet.rs`) : un ajustement à clés (image d'impact, secousse,
@@ -319,12 +331,16 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     // Calque de couleur (format 30, `calquecouleur.rs`) : sous les nuages, dans leur dossier ; son dessin
     // répond à celui des nuages, ses réglages ne sont pas ceux d'un calque neuf.
     let aplat_nuages = dessin_bitmap(&mut doc, 4);
+    let griffonnage_nuages = dessin_bitmap(&mut doc, 6);
     let mut couleur = crate::calquecouleur::nouveau(&nuage, "Nuages couleur".into());
     couleur.frames = nuage.frames.iter().map(|f| f.map(|_| aplat_nuages)).collect();
     if let Some(c) = couleur.couleur.as_mut() {
         c.dessins.insert(nuages, aplat_nuages);
         c.trous = 7;
         c.zone = false;
+        // Il remplit aussi des zones d'un coup de griffonnage (format 36), sans être en mode « Griffonner ».
+        c.remplissage = true;
+        c.griffonnages.insert(aplat_nuages, griffonnage_nuages);
     }
     let mut calques = vec![calque_fond, calque_video, perso, couleur, nuage, dossier, ctg, ajustement, timecode];
     crate::folders::normalize(&mut calques);
@@ -692,13 +708,14 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
             let mut l = l.clone();
             l.id = k as u64;
             l.parent = l.parent.map(|id| rang.get(&id).copied().unwrap_or(usize::MAX) as u64);
-            if let Some(c) = l.ctg.as_mut() {
+            if let Some(c) = l.couleur.as_mut() {
+                // (Un calque de couleur libre n'a pas de trait : 0.)
+                if c.trait_id != 0 {
+                    c.trait_id = rang.get(&c.trait_id).copied().unwrap_or(usize::MAX) as u64;
+                }
                 for src in &mut c.sources {
                     *src = rang.get(src).copied().unwrap_or(usize::MAX) as u64;
                 }
-            }
-            if let Some(c) = l.couleur.as_mut() {
-                c.trait_id = rang.get(&c.trait_id).copied().unwrap_or(usize::MAX) as u64;
             }
             let _ = writeln!(s, "  calque {k} {l:?}");
         }
@@ -838,6 +855,34 @@ pub(crate) fn ajouter_heritage_3d(manifeste: &Path) -> [String; 2] {
     ecrire_json(manifeste, &m);
     ["scenes3d.json".into(), modele]
 }
+
+/// Les empreintes de l'image du calque « Aplats » du projet d'essai, aux images 0, 3, 7, 12, 18 et 23, **telles que
+/// l'ancien calque CTG les montrait** (calculées avec SHOT d'avant la fusion, le 2026-10-21, sur `layer_plan_at` puis
+/// `composite_full` : octets RGBA prémultipliés, `empreinte`). Un projet d'avant qui s'ouvre aujourd'hui doit donner les
+/// mêmes (`griffonnage_tests.rs`).
+pub(crate) const GOLDEN_CTG: [&str; 6] = ["61519f3e04173c41", "61519f3e04173c41", "61519f3e04173c41", "a644fe596c85e1c9", "17336f214ce486a5", "4aa0191ae657fa41"];
+
+/// Fait du projet enregistré à `manifeste` un projet « d'avant » la fusion du calque CTG dans le calque de couleur (format
+/// 35) : le calque « Aplats » (un calque de couleur libre qui griffonne) redevient un calque CTG — le champ `ctg` du
+/// manifeste (rangs des sources, fermeture des trous), sans `calque_couleur`, et ses images montrent directement le
+/// dessin de graffitis. Le dessin de peinture qu'il avait n'est plus cité (son fichier reste là, comme celui d'un dessin
+/// qu'on n'a pas encore effacé).
+pub(crate) fn ajouter_heritage_ctg(manifeste: &Path) {
+    let mut m = lire_json(manifeste);
+    m["version"] = 35.into();
+    let calques = m["sequences"][0]["scenes"][0]["panneaux"][0]["calques"].as_array_mut().expect("calques du premier plan");
+    let aplats = calques.iter_mut().find(|c| c["nom"] == "Aplats").expect("le calque Aplats");
+    let couleur = aplats.as_object_mut().expect("calque").remove("calque_couleur").expect("le calque de couleur");
+    let (peinture, graffiti) = (couleur["griffonnages"][0][0].clone(), couleur["griffonnages"][0][1].clone());
+    aplats["ctg"] = serde_json::json!({"sources": couleur["sources"].clone(), "trou": couleur["trous"].clone()});
+    for e in aplats["expositions"].as_array_mut().expect("expositions") {
+        if e["dessin"] == peinture {
+            e["dessin"] = graffiti.clone();
+        }
+    }
+    ecrire_json(manifeste, &m);
+}
+
 /// Le dossier du projet dont `manifeste` est le manifeste.
 pub(crate) fn racine(manifeste: &Path) -> &Path {
     manifeste.parent().expect("dossier du projet")

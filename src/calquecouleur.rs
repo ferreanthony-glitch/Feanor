@@ -21,7 +21,16 @@
 //!   (`zone`), un trait de pinceau reste dans la zone fermée par le trait où il commence (et passe
 //!   un peu sous lui). Le pot de peinture remplit la zone fermée par le trait où l'on clique : les
 //!   trous du trait jusqu'à `2 × trous` pixels sont fermés (`Murs`, même idée que le fond sous le
-//!   trait, `fond::zone`, et que le calque CTG, `ctg::fill`).
+//!   trait, `fond::zone`, et que le remplissage au griffonnage, `griffonnage::fill`).
+//! - **Griffonner** (`griffonnage.rs`, « On fusionne », Anthony, 2026-10-21 : ce qu'était le calque CTG) : en mode
+//!   « Griffonner » (`griffonner`), le pinceau, le crayon et la gomme travaillent sur un dessin de griffonnages
+//!   (`griffonnages` : dessin de peinture → dessin de griffonnage, à part du dessin de peinture) ; chaque zone fermée par
+//!   le trait (et les `sources` supplémentaires) que touche un griffonnage est remplie de sa couleur, sous le trait,
+//!   et le remplissage se refait tout seul, en arrière-plan, quand le trait ou un griffonnage change. Il se pose **sous**
+//!   la peinture libre (qui reste un dessin ordinaire, sans latence). Une même couche mêle donc peinture libre et
+//!   zones griffonnées.
+//! - **Calque libre** (`trait_id == 0`) : un calque de couleur sans calque de trait propre, aux images à lui, dont les zones
+//!   sont fermées par ses `sources`. C'est ce que devient un ancien calque CTG que son trait ne suit pas (`migrer_ctg`).
 //! - **Fond sous le trait** (`fond.rs`) : l'autre moyen d'avoir de la couleur sous un trait, dans le
 //!   même calque (une strate sous le trait, déduite de lui). Les deux se complètent et se cumulent
 //!   (la strate du calque de trait est sous le calque de couleur, qui est sous le trait).
@@ -39,40 +48,87 @@ use crate::raster::{Raster, Tile, TILE};
 /// Fermeture des trous du pot de peinture d'un calque de couleur neuf (pixels de chaque côté du trou).
 pub const TROUS: u8 = 4;
 
-/// Le lien d'un calque de couleur avec son calque de trait.
+/// Le lien d'un calque de couleur avec son calque de trait, et ses réglages.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CalqueCouleur {
-    /// Numéro (de séance) du calque de trait que ce calque colore.
+    /// Numéro (de séance) du calque de trait que ce calque colore ; 0 : calque libre, sans calque de trait propre (ses
+    /// images sont à lui).
     pub trait_id: u64,
     /// À chaque dessin du trait, le dessin de couleur qui lui répond.
     pub dessins: BTreeMap<CelId, CelId>,
-    /// Les trous du trait jusqu'à `2 × trous` pixels sont fermés (pot de peinture, pinceau dans la zone).
+    /// Les trous du trait jusqu'à `2 × trous` pixels sont fermés (pot de peinture, pinceau dans la zone, remplissage
+    /// au griffonnage).
     pub trous: u8,
     /// Un trait de pinceau ou de crayon reste dans la zone fermée où il commence.
     pub zone: bool,
+    /// Mode « Griffonner » : le pinceau, le crayon, la gomme et le pot (un tampon) posent des griffonnages, qui
+    /// remplissent les zones fermées par le trait (`griffonnage.rs`).
+    pub griffonner: bool,
+    /// Le calque a des griffonnages : son remplissage est calculé et montré (posé la première fois qu'on griffonne).
+    pub remplissage: bool,
+    /// À chaque dessin de peinture du calque, son dessin de griffonnages (un dessin du projet, à part).
+    pub griffonnages: BTreeMap<CelId, CelId>,
+    /// Sources supplémentaires : d'autres calques de dessin dont les traits ferment aussi les zones du remplissage.
+    pub sources: Vec<u64>,
 }
 
 impl CalqueCouleur {
     pub fn new(trait_id: u64) -> Self {
-        CalqueCouleur { trait_id, dessins: BTreeMap::new(), trous: TROUS, zone: true }
+        CalqueCouleur {
+            trait_id,
+            dessins: BTreeMap::new(),
+            trous: TROUS,
+            zone: true,
+            griffonner: false,
+            remplissage: false,
+            griffonnages: BTreeMap::new(),
+            sources: Vec::new(),
+        }
     }
 
-    /// Après une copie du calque (et de son trait) : le trait copié, les dessins copiés.
+    /// Après une copie du calque (et de son trait) : le trait copié, les dessins copiés (de peinture et de griffonnages),
+    /// les sources copiées avec lui.
     pub fn relink(&mut self, ids: &HashMap<u64, u64>, cels: &HashMap<CelId, CelId>) {
         self.trait_id = ids.get(&self.trait_id).copied().unwrap_or(self.trait_id);
         let map = |c: &CelId| cels.get(c).copied().unwrap_or(*c);
         self.dessins = self.dessins.iter().map(|(t, c)| (map(t), map(c))).collect();
+        self.griffonnages = self.griffonnages.iter().map(|(p, g)| (map(p), map(g))).collect();
+        for s in &mut self.sources {
+            *s = ids.get(s).copied().unwrap_or(*s);
+        }
+    }
+
+    /// Le calque suit les images d'un calque de trait (sinon il est libre).
+    pub fn est_lie(&self) -> bool {
+        self.trait_id != 0
+    }
+
+    /// Les dessins de griffonnages de ce calque, pour les enregistrer, les copier, les emporter.
+    pub fn dessins_griffonnages(&self) -> impl Iterator<Item = CelId> + '_ {
+        self.griffonnages.values().copied()
     }
 }
 
 /// Le calque peut recevoir un calque de couleur : un calque de dessin ordinaire (ni dossier, ni
-/// calque d'effet, ni vidéo, ni CTG, ni lui-même un calque de couleur, ni calque de toute la scène).
+/// calque d'effet, ni vidéo, ni lui-même un calque de couleur, ni calque de toute la scène).
 pub fn peut_porter(l: &Layer) -> bool {
-    !l.folder && l.effet.is_none() && l.video.is_none() && l.ctg.is_none() && l.couleur.is_none() && l.scene_wide.is_none()
+    !l.folder && l.effet.is_none() && l.video.is_none() && l.couleur.is_none() && l.scene_wide.is_none()
 }
 
 fn peut_etre_couleur(l: &Layer) -> bool {
-    !l.folder && l.effet.is_none() && l.video.is_none() && l.ctg.is_none() && l.scene_wide.is_none()
+    !l.folder && l.effet.is_none() && l.video.is_none() && l.scene_wide.is_none()
+}
+
+/// Tous les dessins d'un calque : ceux de ses images, et les griffonnages (s'il est un calque de couleur). Ce qu'il faut
+/// emporter quand on copie le calque ou son plan.
+pub fn dessins_du_calque(l: &Layer) -> impl Iterator<Item = CelId> + '_ {
+    l.frames.iter().flatten().copied().chain(l.couleur.iter().flat_map(|c| c.griffonnages.values().copied()))
+}
+
+/// Les dessins de griffonnages que portent les calques de couleur de `layers` (à enregistrer et à emporter avec les
+/// dessins de peinture qui leur répondent).
+pub fn griffonnages_de<'a>(layers: &'a [Layer]) -> impl Iterator<Item = (CelId, CelId)> + 'a {
+    layers.iter().filter_map(|l| l.couleur.as_ref()).flat_map(|c| c.griffonnages.iter().map(|(p, g)| (*p, *g)))
 }
 
 /// Rangs des calques de couleur du calque de trait `li`, du plus bas au plus haut.
@@ -81,9 +137,12 @@ pub fn couleurs_de(layers: &[Layer], li: usize) -> Vec<usize> {
     (0..layers.len()).filter(|&k| layers[k].couleur.as_ref().is_some_and(|c| c.trait_id == id)).collect()
 }
 
-/// Rang du calque de trait du calque de couleur `ci`.
+/// Rang du calque de trait du calque de couleur `ci` (rien pour un calque libre).
 pub fn trait_de(layers: &[Layer], ci: usize) -> Option<usize> {
     let id = layers.get(ci)?.couleur.as_ref()?.trait_id;
+    if id == 0 {
+        return None;
+    }
     layers.iter().position(|l| l.id == id)
 }
 
@@ -113,8 +172,9 @@ pub fn nouveau(line: &Layer, name: String) -> Layer {
 }
 
 /// Remet de l'ordre dans la pile : un lien dont le trait n'existe plus (ou n'est plus un calque de
-/// dessin ordinaire) est oublié, et chaque calque de couleur est posé juste sous son trait, dans le
-/// même dossier. Vrai si quelque chose a changé.
+/// dessin ordinaire) est oublié — le calque devient un calque bitmap ordinaire, ou, s'il a des griffonnages, un calque de
+/// couleur libre, qui les garde —, et chaque calque de couleur lié est posé juste sous son trait, dans le même
+/// dossier. Vrai si quelque chose a changé.
 pub fn reparer(layers: &mut Vec<Layer>) -> bool {
     if !layers.iter().any(|l| l.couleur.is_some()) {
         return false;
@@ -122,9 +182,23 @@ pub fn reparer(layers: &mut Vec<Layer>) -> bool {
     let mut changed = false;
     let lines: HashSet<u64> = layers.iter().filter(|l| peut_porter(l)).map(|l| l.id).collect();
     for l in layers.iter_mut() {
-        let Some(c) = &l.couleur else { continue };
-        if !peut_etre_couleur(l) || c.trait_id == l.id || !lines.contains(&c.trait_id) {
+        if l.couleur.is_none() {
+            continue;
+        }
+        let (id, possible) = (l.id, peut_etre_couleur(l));
+        let Some(c) = &mut l.couleur else { continue };
+        let garde = c.remplissage || !c.griffonnages.is_empty();
+        if !possible {
             l.couleur = None;
+            changed = true;
+        } else if c.trait_id != 0 && (c.trait_id == id || !lines.contains(&c.trait_id)) {
+            if garde {
+                // Le trait a disparu : le calque garde ses griffonnages et leurs sources, ses images deviennent les siennes.
+                c.trait_id = 0;
+                c.dessins.clear();
+            } else {
+                l.couleur = None;
+            }
             changed = true;
         } else if l.kind != LayerKind::Bitmap {
             l.kind = LayerKind::Bitmap;
@@ -135,7 +209,8 @@ pub fn reparer(layers: &mut Vec<Layer>) -> bool {
     let mut by_line: HashMap<u64, Vec<Layer>> = HashMap::new();
     let mut rest: Vec<Layer> = Vec::with_capacity(layers.len());
     for l in layers.drain(..) {
-        match l.couleur.as_ref().map(|c| c.trait_id) {
+        // (Un calque libre garde sa place.)
+        match l.couleur.as_ref().map(|c| c.trait_id).filter(|&t| t != 0) {
             Some(t) => by_line.entry(t).or_default().push(l),
             None => rest.push(l),
         }
@@ -224,12 +299,26 @@ pub fn refleter(doc: &mut Document, pi: usize) -> bool {
 /// couleur copient aussi la couleur du dessin d'origine, pour que la copie garde sa couleur.
 pub fn noter_copie(doc: &mut Document, pi: usize, li: usize, source: CelId, copie: CelId) {
     let Some(panel) = doc.panels.get(pi) else { return };
-    let colours = couleurs_de(&panel.layers, li);
+    // Le calque est lui-même un calque de couleur (libre, aux dessins à lui) : la copie de son dessin garde ses griffonnages.
+    let own = panel.layers.get(li).and_then(|l| l.couleur.as_ref()).and_then(|c| c.griffonnages.get(&source).copied());
+    if let Some(g) = own {
+        let d = doc.duplicate_cel(g);
+        if let Some(c) = doc.panels[pi].layers[li].couleur.as_mut() {
+            c.griffonnages.insert(copie, d);
+        }
+    }
+    let colours = couleurs_de(&doc.panels[pi].layers, li);
     for ci in colours {
         let Some(&old) = doc.panels[pi].layers[ci].couleur.as_ref().and_then(|c| c.dessins.get(&source)) else { continue };
         let fresh = doc.duplicate_cel(old);
+        // Ses griffonnages aussi : la copie du dessin garde son remplissage.
+        let scribbles = doc.panels[pi].layers[ci].couleur.as_ref().and_then(|c| c.griffonnages.get(&old).copied());
+        let scribbles = scribbles.map(|g| doc.duplicate_cel(g));
         if let Some(c) = doc.panels[pi].layers[ci].couleur.as_mut() {
             c.dessins.insert(copie, fresh);
+            if let Some(g) = scribbles {
+                c.griffonnages.insert(fresh, g);
+            }
         }
     }
 }

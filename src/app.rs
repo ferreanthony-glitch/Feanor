@@ -1529,12 +1529,13 @@ impl App {
                         steps if editing && (li == cur || self.multi.sel.as_ref().is_some_and(|s| s.has_layer(layer.id))) => crate::fx::without_boil(steps),
                         steps => steps,
                     },
-                    // Calque CTG (13j) : rempli d'après les traits de ses sources.
-                    ctg: crate::ctg::input(layers, li, frame),
+                    ctg: None,
                     fond: None,
                     pre: card_pre.clone(),
                 };
-                // Fond sous le trait (`fond.rs`), le trait par-dessus.
+                // Remplissage au griffonnage d'un calque de couleur (`griffonnage.rs`), puis fond sous le trait
+                // (`fond.rs`), la peinture libre ou le trait par-dessus.
+                items.extend(crate::render::griffon_item(layers, li, frame, &line));
                 items.extend(crate::render::fond_item(layer, &line));
                 match self.flottante.as_ref().filter(|f| f.src == cel).or_else(|| self.multi.float_for(cel)) {
                     // Sélection vectorielle en cours de transformation : le dessin sans elle, et sa
@@ -1543,9 +1544,12 @@ impl App {
                     Some(f) => items.extend(f.items(&line)),
                     None => items.push(line),
                 }
-                // Calque CTG courant, à l'écran seulement : ses graffitis, pâles, par-dessus.
-                if onion && layer.ctg.is_some() && li == cur && !self.playing {
-                    items.push(PlanItem { cel, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: card_pre.clone() });
+                // Calque de couleur courant en mode « Griffonner », à l'écran seulement : ses griffonnages, pâles, par-dessus
+                // (c'est ce qu'on pose avec le pinceau ; le remplissage est dessous).
+                if onion && li == cur && !self.playing {
+                    if let Some(g) = layer.couleur.as_ref().filter(|c| c.griffonner).and_then(|c| c.griffonnages.get(&cel).copied()) {
+                        items.push(PlanItem { cel: g, transform, opacity: 90, tint: None, blend: Default::default(), fx: Vec::new(), ctg: None, fond: None, pre: card_pre.clone() });
+                    }
                 }
             }
             items.append(&mut onion_items);
@@ -1746,10 +1750,17 @@ impl App {
     /// tenu jusqu'au prochain dessin ou à la fin du plan ; en animation, sur le nombre d'images
     /// choisi (« sur 1 », « sur 2 »…) : `images::new_drawing_span`.
     pub(crate) fn ensure_cel(&mut self) -> (CelId, Option<Edit>) {
-        // Calque de couleur : son dessin est celui que le miroir du trait lui donne.
-        if self.layer().couleur.is_some() {
-            return self.ensure_colour_cel();
+        // Calque de couleur : son dessin est celui que le miroir du trait lui donne ; en mode « Griffonner », c'est le
+        // dessin de griffonnages qui s'y rattache (`calquecouleurui.rs`).
+        if let Some(c) = self.layer().couleur.as_ref() {
+            return if c.griffonner { self.ensure_scribble_cel() } else { self.ensure_colour_cel() };
         }
+        self.ensure_plain_cel()
+    }
+
+    /// `ensure_cel` d'un calque ordinaire — ou d'un calque de couleur libre, qui n'a pas de trait dont suivre les
+    /// images : ses dessins se créent comme ceux d'un calque ordinaire.
+    pub(crate) fn ensure_plain_cel(&mut self) -> (CelId, Option<Edit>) {
         if let Some(id) = self.cel_here() {
             // Cassure automatique (13c) : sur une image tenue, ailleurs qu'au début de son
             // exposition, on dessine sur une copie, jusqu'à la fin de l'exposition.
@@ -1888,8 +1899,9 @@ impl App {
             .on_layer(self.layer().keep_alpha, stencil)
             .with_options(behind, fill, tol);
         // Toile infinie : on peint aussi hors de la feuille (tuiles gardées à part, `Raster::outer`) ;
-        // sauf dans la zone fermée d'un calque de couleur (son pochoir est celui de la feuille).
-        if !(painting && self.layer().couleur.as_ref().is_some_and(|c| c.zone)) {
+        // sauf dans la zone fermée d'un calque de couleur (son pochoir est celui de la feuille), et pour des griffonnages
+        // (ils remplissent des zones de la feuille).
+        if !self.layer().couleur.as_ref().is_some_and(|c| c.griffonner || (painting && c.zone)) {
             stroke = stroke.on_infinite_canvas();
         }
         let mut dirty = Vec::new();
@@ -2370,7 +2382,9 @@ impl App {
             ctx.request_repaint_after(std::time::Duration::from_millis(16));
         }
         // Fonds sous le trait calculés en arrière-plan (`fondfil.rs`).
-        if crate::fx::fond_poll() {
+        // Remplissages au griffonnage (calques de couleur) arrivés de l'arrière-plan : l'image composée par le
+        // processeur est à refaire (`fxcache.rs`, `griffonnage.rs`).
+        if crate::fx::fond_poll() | crate::fx::griffon_poll() {
             self.renderer.invalidate_composed();
             ctx.request_repaint();
         }
@@ -2670,7 +2684,7 @@ impl App {
     /// bord de son dossier en sort (13b-5).
     pub(crate) fn move_layer(&mut self, up: bool) {
         self.end_stroke();
-        if self.layer().couleur.is_some() {
+        if self.layer().keys_follow_line() {
             self.status = "Un calque de couleur reste sous son calque de trait : déplace le trait, la couleur le suit.".into();
             return;
         }
@@ -2715,8 +2729,8 @@ impl App {
             .iter()
             .chain(colours.iter())
             .chain(std::iter::once(&layer))
-            .flat_map(|l| l.frames.iter().flatten())
-            .filter_map(|id| self.doc.cels.get(id).map(|c| (*id, c.clone())))
+            .flat_map(|l| crate::calquecouleur::dessins_du_calque(l))
+            .filter_map(|id| self.doc.cels.get(&id).map(|c| (id, c.clone())))
             .collect();
         let what = if layer.folder { "Dossier" } else { "Calque" };
         self.status = format!("{what} « {} » copié : X pour le coller dans un autre plan.", layer.name);
@@ -2748,7 +2762,8 @@ impl App {
         }
         layer.names = source.names.iter().filter_map(|(c, n)| copies.get(c).map(|d| (*d, n.clone()))).collect();
         layer.color_marks = source.color_marks.iter().filter_map(|(c, k)| copies.get(c).map(|d| (*d, *k))).collect();
-        // Un calque de couleur collé : les copies de ses dessins de couleur.
+        // Un calque de couleur collé : les copies de ses dessins de couleur et de ses griffonnages.
+        self.doc.copier_griffonnages_avec(std::slice::from_ref(source), copies, |d, g| clip.cels.get(&g).map(|c| d.add_cel(c.clone())));
         if let Some(c) = layer.couleur.as_mut() {
             c.relink(&HashMap::new(), copies);
         }
@@ -4044,14 +4059,10 @@ impl App {
                 self.deselect_fx();
                 self.status = "Aucun effet choisi : plus de clé d'effet dans la timeline ni le montage.".into();
             }
-            // Calque CTG (13j, `ctgui.rs`).
-            "calque.nouveau_ctg" => self.new_ctg_layer(),
+            // Calque de couleur (`calquecouleurui.rs`) : en ajouter un, le détacher, griffonner.
             "calque.nouveau_couleur" => self.new_colour_layer(),
             "calque.detacher_couleur" => self.detach_colour_layer(),
-            "calque.transformer_ctg" => self.convert_to_ctg(),
-            "calque.desactiver_ctg" => self.disable_ctg(),
-            "ctg.charger_structure" => self.load_ctg_structure(false),
-            "ctg.charger_structure_effacer" => self.load_ctg_structure(true),
+            "calque.griffonner" => self.toggle_griffonner(),
             // Calque vidéo (13k, `videoui.rs`).
             "fichier.importer_video" => self.import_video(),
             "fichier.importer_sboard" => self.open_sb_window(),

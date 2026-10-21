@@ -83,7 +83,7 @@ pub fn upcoming_cels_with(doc: &Document, at: Position, shown: &Plan, cap: usize
             let Some(id) = layer.shown_at(f) else { continue };
             // Un calque à effets montre son dessin dérivé (`upcoming_derived`), pas le dessin même.
             let steps = crate::fx::layer_steps(layer, f, None);
-            if !steps.is_empty() && !(gpu_fx && layer.ctg.is_none() && layer.video.is_none() && crate::gpufx::steps_supported(&steps)) {
+            if !steps.is_empty() && !(gpu_fx && layer.video.is_none() && crate::gpufx::steps_supported(&steps)) {
                 continue;
             }
             if out.contains(&id) || shown.items.iter().any(|i| i.cel == id) {

@@ -14,7 +14,7 @@
 //! En attendant, l'ancienne vignette (ou celle d'une autre taille du même plan) reste à l'écran.
 //! Les fils composent avec `render::thumbnail_until`, le code d'avant, sur le cliché : les pixels sont
 //! ceux d'avant, y compris les effets de calque, les calques d'effets, les fonds sous le trait, les
-//! calques vidéo et CTG, qui passent par le même mode « doux » (`fxcache::soft_scope`).
+//! calques vidéo et remplissages au griffonnage, qui passent par le même mode « doux » (`fxcache::soft_scope`).
 //!
 //! File d'attente (`Pool`, aussi celle des miniatures de dessins, `layersui.rs`) : une demande par
 //! vignette ; une nouvelle demande pour la même vignette remplace la précédente (et arrête son calcul
@@ -324,7 +324,7 @@ impl Drop for Thumbs {
 // ---------------------------------------------------------------------- le cliché
 
 /// Un projet minuscule qui ne porte que ce dont `render::thumbnail` a besoin pour `plan` : la taille
-/// de la feuille et du cadre, et les dessins du plan (bitmap, strate Fond, sources d'un calque CTG).
+/// de la feuille et du cadre, et les dessins du plan (bitmap, strate Fond, griffonnages et traits d'un remplissage).
 /// Les tuiles sont partagées (`Arc`) : prendre le cliché ne copie aucun pixel, et si l'utilisateur
 /// dessine pendant que la vignette se compose, seule la tuile touchée est copiée (copie à la
 /// première écriture). Le dessin vectoriel n'est pas copié : la composition ne lit que ses pixels.

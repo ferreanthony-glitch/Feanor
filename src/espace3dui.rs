@@ -220,14 +220,14 @@ impl App {
     }
 
     /// Met les cartes dans l'ordre de la profondeur : du plus loin (en bas de la pile) au plus près. Une étape
-    /// d'annulation. Refusé si la pile a des dossiers, des calques d'effet, de couleur, CTG ou de toute la scène : leur
+    /// d'annulation. Refusé si la pile a des dossiers, des calques d'effet, de couleur ou de toute la scène : leur
     /// ordre a un sens que la profondeur ne connaît pas.
     pub(crate) fn espace3d_order_by_depth(&mut self) {
         let frame = self.cur_frame;
         let layers = self.layers();
-        let plain = layers.iter().all(|l| espace3d::is_card(l) && l.parent.is_none() && l.ctg.is_none() && l.couleur.is_none() && l.scene_wide.is_none());
+        let plain = layers.iter().all(|l| espace3d::is_card(l) && l.parent.is_none() && l.couleur.is_none() && l.scene_wide.is_none());
         if !plain {
-            self.status = "Ordre par profondeur refusé : la pile a des dossiers ou des calques liés (effet, couleur, CTG, toute la scène). Range-les à la main.".into();
+            self.status = "Ordre par profondeur refusé : la pile a des dossiers ou des calques liés (effet, couleur, toute la scène). Range-les à la main.".into();
             return;
         }
         let mut order: Vec<usize> = (0..layers.len()).collect();

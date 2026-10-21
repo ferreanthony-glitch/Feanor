@@ -163,7 +163,7 @@ impl App {
             // Le fond de la rangée (choisir, glisser, menu), puis le nom et les réglages qui tiennent
             // dans la largeur de la colonne, au-dessus (`montagehead.rs`).
             painter.rect_filled(r, 3.0, theme::etiquette());
-            // La bande de sa sorte (bitmap vert, vectoriel bleu, CTG rose), au bord gauche.
+            // La bande de sa sorte (bitmap vert, vectoriel bleu, calque de couleur rose), au bord gauche.
             let l = &self.doc.panels[self.cur_panel].layers[k];
             if !l.folder {
                 let band = Rect::from_min_size(r.left_top() + vec2(0.0, 3.0), vec2(3.0, r.height() - 6.0));

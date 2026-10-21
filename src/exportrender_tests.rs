@@ -147,7 +147,7 @@ fn the_snapshot_is_built_in_slices_and_matches_the_all_at_once_one() {
 
 // ------------------------------------------------------------------------------------ les mêmes pixels
 
-/// Sur le projet d'essai complet de la fiabilité (effets de calque à clés, tremblement du trait, fond sous le trait, CTG,
+/// Sur le projet d'essai complet de la fiabilité (effets de calque à clés, tremblement du trait, fond sous le trait, calque de couleur qui griffonne,
 /// vidéo, dossier, fusion, transformation, caméra à clés, calques d'effets d'ajustement, incrustation, damier, plans rognés,
 /// transitions), chaque image du nouvel export est celle de l'ancien chemin, pixel pour pixel, à plusieurs images de chaque plan.
 #[test]

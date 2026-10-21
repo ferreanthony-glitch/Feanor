@@ -349,9 +349,6 @@ pub struct Layer {
     /// cadenas) : éteint, aucun effet du calque ne s'applique, mais la pile reste telle quelle (réglages,
     /// clés, effets cochés) et revient en rallumant. Allumé d'office.
     pub fx_enabled: bool,
-    /// Calque CTG (13j) : ses dessins sont des graffitis de couleur, qui remplissent les zones
-    /// fermées par les traits de ses sources.
-    pub ctg: Option<crate::ctg::Ctg>,
     /// Calque vidéo (13k) : il montre les images de cette vidéo, pas de dessins.
     pub video: Option<crate::video::VideoClip>,
     /// Fond sous le trait (`fond.rs`) : chaque dessin du calque a un fond déduit de son trait,
@@ -428,7 +425,6 @@ impl Layer {
             roles: Default::default(),
             fx: Vec::new(),
             fx_enabled: true,
-            ctg: None,
             video: None,
             fond: None,
             effet: None,
@@ -439,7 +435,7 @@ impl Layer {
     /// Les images de ce calque suivent celles d'un autre (calque de couleur) : on n'y pose, déplace
     /// ni supprime de clé soi-même.
     pub fn keys_follow_line(&self) -> bool {
-        self.couleur.is_some()
+        self.couleur.as_ref().is_some_and(|c| c.est_lie())
     }
 
     /// Nouveau dossier de calques (13b-5), vide.
@@ -711,12 +707,6 @@ pub fn relink_copies(layers: &mut [Layer], old_ids: &[u64], cels: &HashMap<CelId
         l.parent = l.parent.map(|p| ids.get(&p).copied().unwrap_or(p));
         l.names = l.names.iter().map(|(c, n)| (cels.get(c).copied().unwrap_or(*c), n.clone())).collect();
         l.color_marks = l.color_marks.iter().map(|(c, k)| (cels.get(c).copied().unwrap_or(*c), *k)).collect();
-        // Sources d'un calque CTG copié avec elles : les copies (13j).
-        if let Some(ctg) = &mut l.ctg {
-            for s in &mut ctg.sources {
-                *s = ids.get(s).copied().unwrap_or(*s);
-            }
-        }
         // Calque de couleur copié avec son trait : il colore la copie, avec les copies des dessins.
         if let Some(c) = &mut l.couleur {
             c.relink(&ids, cels);
@@ -1675,9 +1665,9 @@ impl Document {
             .panels
             .iter()
             .flat_map(|p| &p.layers)
-            .flat_map(|l| l.frames.iter().flatten())
-            .chain(rogne.iter())
-            .filter_map(|id| self.cels.get(id).map(|c| (*id, c.clone())))
+            .flat_map(crate::calquecouleur::dessins_du_calque)
+            .chain(rogne.iter().copied())
+            .filter_map(|id| self.cels.get(&id).map(|c| (id, c.clone())))
             .collect();
         let mut doc = Document::from_parts(self.width, self.height, s, cels, HashMap::new());
         doc.frame = self.frame;
@@ -1850,6 +1840,7 @@ impl Document {
             layers.push(l);
         }
         let old_ids: Vec<u64> = source.layers.iter().map(|l| l.id).collect();
+        self.copier_griffonnages(&source.layers, &mut copies);
         relink_copies(&mut layers, &old_ids, &copies);
         let (keys_before, keys_after) = camera::split_keys(&source.camera, at, self.default_camera());
         let second = Panel {
@@ -1915,6 +1906,8 @@ impl Document {
                 // Deux calques de couleur qui se suivent : les couleurs du second gardent leur trait.
                 if let (Some(ca), Some(cb)) = (la.couleur.as_mut(), lb.couleur.as_ref()) {
                     ca.dessins.extend(cb.dessins.iter().map(|(t, c)| (*t, *c)));
+                    ca.griffonnages.extend(cb.griffonnages.iter().map(|(p, g)| (*p, *g)));
+                    ca.remplissage |= cb.remplissage;
                 }
                 la.append_at(a_len, lb.frames, &lb.roles);
                 la.join_pos_keys(a_len, &lb.pos_keys, lb.transform, next_len);
@@ -1989,6 +1982,12 @@ impl Document {
         let (above, below) = (panel.layers[layer].clone(), panel.layers[layer - 1].clone());
         if above.folder || below.folder {
             return Err("Un dossier ne se fusionne pas : fusionne ses calques.".into());
+        }
+        // Le remplissage au griffonnage d'un calque de couleur se calcule d'après les traits (`griffonnage.rs`) : il ne se
+        // fige pas dans un dessin de la fusion.
+        let griffonne = |l: &Layer| l.couleur.as_ref().is_some_and(|c| c.dessins_griffonnages().any(|g| self.cels.get(&g).is_some_and(|c| !c.is_empty())));
+        if griffonne(&above) || griffonne(&below) {
+            return Err("Un calque de couleur qui a des griffonnages ne se fusionne pas : son remplissage suit les traits. Gomme ses griffonnages d'abord, ou garde le calque.".into());
         }
         if above.effet.is_some() || below.effet.is_some() {
             return Err("Un calque d'effet ne se fusionne pas : il agit sur tout ce qui est dessous.".into());
@@ -2184,8 +2183,34 @@ impl Document {
                 };
             }
         }
+        self.copier_griffonnages(&self.panels[index].layers.clone(), &mut copies);
         relink_copies(&mut panel.layers, &old_ids, &copies);
         panel
+    }
+
+    /// Avant `relink_copies` : les calques de couleur de `layers` (les calques d'origine) dont un dessin de peinture a été
+    /// copié (`copies`) reçoivent aussi une copie de ses griffonnages — jamais un dessin partagé entre l'original et sa
+    /// copie, qu'on retoucherait ensemble.
+    pub(crate) fn copier_griffonnages(&mut self, layers: &[Layer], copies: &mut HashMap<CelId, CelId>) {
+        self.copier_griffonnages_avec(layers, copies, |d, g| Some(d.duplicate_cel(g)));
+    }
+
+    /// `copier_griffonnages`, la copie d'un dessin de griffonnages étant faite par `make` (rien : le dessin manque, la copie
+    /// n'en a pas).
+    pub(crate) fn copier_griffonnages_avec(
+        &mut self,
+        layers: &[Layer],
+        copies: &mut HashMap<CelId, CelId>,
+        mut make: impl FnMut(&mut Document, CelId) -> Option<CelId>,
+    ) {
+        let pairs: Vec<(CelId, CelId)> = crate::calquecouleur::griffonnages_de(layers).collect();
+        for (peinture, g) in pairs {
+            if copies.contains_key(&peinture) && !copies.contains_key(&g) {
+                if let Some(d) = make(self, g) {
+                    copies.insert(g, d);
+                }
+            }
+        }
     }
 
     // ---------------------------------------------------------------- copier, coller des panneaux (12e)
@@ -2201,8 +2226,8 @@ impl Document {
             .iter()
             .flat_map(|p| &p.layers)
             .filter(|l| l.scene_wide.is_none())
-            .flat_map(|l| l.frames.iter().flatten())
-            .filter_map(|id| self.cels.get(id).map(|c| (*id, c.clone())))
+            .flat_map(crate::calquecouleur::dessins_du_calque)
+            .filter_map(|id| self.cels.get(&id).map(|c| (id, c.clone())))
             .collect();
         Some(PanelClip { panels, cels, origine: crate::adaptation::Origine::de(self) })
     }
@@ -2245,6 +2270,7 @@ impl Document {
                     });
                 }
             }
+            self.copier_griffonnages_avec(&panel.layers.clone(), &mut copies, |d, g| clip.cels.get(&g).map(|c| d.add_cel(c.clone())));
             relink_copies(&mut panel.layers, &old_ids, &copies);
             pasted.push(panel);
         }
@@ -2821,6 +2847,17 @@ impl Document {
         for p in self.plans_ranges() {
             used.extend(p.layers.iter().flat_map(|l| l.frames.iter().flatten().copied()));
         }
+        // Les griffonnages des calques de couleur (`griffonnage.rs`) : des dessins du projet, enregistrés avec le dessin
+        // de peinture auquel ils répondent.
+        let griffonnages: Vec<CelId> = self
+            .panels
+            .iter()
+            .chain(self.plans_ranges())
+            .flat_map(|p| crate::calquecouleur::griffonnages_de(&p.layers))
+            .filter(|(peinture, g)| used.contains(peinture) && self.cels.contains_key(g))
+            .map(|(_, g)| g)
+            .collect();
+        used.extend(griffonnages);
         used
     }
 

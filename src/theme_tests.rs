@@ -76,7 +76,7 @@ fn selections_stay_visible_in_every_theme() {
     for (choix, p) in livres() {
         // Le contour des éléments choisis (clés, séquences, calque courant) se voit sur les rangées
         // comme sur les blocs sourds, et l'accent se distingue des rangées.
-        for fond in [p.rangee, p.rangee_sombre, p.panneau, p.calque_vectoriel, p.calque_bitmap, p.calque_ctg] {
+        for fond in [p.rangee, p.rangee_sombre, p.panneau, p.calque_vectoriel, p.calque_bitmap, p.calque_couleur] {
             assert!(contraste(p.contour, fond) >= 3.0, "{choix:?} : contour sur {fond:?} : {}", contraste(p.contour, fond));
         }
         assert!(contraste(p.accent, p.rangee) >= 1.4 || contraste(p.accent_texte, p.rangee) >= 3.0, "{choix:?} : accent sur la timeline");
@@ -91,7 +91,7 @@ fn selections_stay_visible_in_every_theme() {
 fn timeline_and_montage_stay_readable_in_every_theme() {
     for (choix, p) in livres() {
         // Noms écrits sur les extraits son et les calques sous les panneaux : 4,5:1.
-        for fond in [p.son_extrait, p.son_choisi, p.calque_vectoriel, p.calque_bitmap, p.calque_ctg] {
+        for fond in [p.son_extrait, p.son_choisi, p.calque_vectoriel, p.calque_bitmap, p.calque_couleur] {
             assert!(contraste(p.sur_calque, fond) >= 4.5, "{choix:?} : nom sur {fond:?} : {}", contraste(p.sur_calque, fond));
         }
         // Piste muette : le « M » blanc.
@@ -105,12 +105,12 @@ fn timeline_and_montage_stay_readable_in_every_theme() {
         // Repères dessinés sur les rangées (dessins exposés, image courante, clés de caméra, clés
         // d'effets, marques) : au moins 3:1, le minimum pour un élément graphique.
         for fond in [p.rangee, p.rangee_sombre] {
-            for marque in [p.dessin_vectoriel, p.dessin_bitmap, p.dessin_ctg, p.dessin_vide, p.image_courante, p.camera, p.marque, p.effet] {
+            for marque in [p.dessin_vectoriel, p.dessin_bitmap, p.dessin_couleur, p.dessin_vide, p.image_courante, p.camera, p.marque, p.effet] {
                 assert!(contraste(marque, fond) >= 3.0, "{choix:?} : {marque:?} sur {fond:?} : {}", contraste(marque, fond));
             }
         }
         // Les noms écrits sur les dessins vifs et le chiffre sur l'image courante.
-        for fond in [p.dessin_vectoriel, p.dessin_bitmap, p.dessin_ctg, p.dessin_vide, p.image_courante] {
+        for fond in [p.dessin_vectoriel, p.dessin_bitmap, p.dessin_couleur, p.dessin_vide, p.image_courante] {
             assert!(contraste(p.encre, fond) >= 3.0, "{choix:?} : encre sur {fond:?} : {}", contraste(p.encre, fond));
         }
         // Forme d'onde sur l'extrait son.
@@ -126,12 +126,12 @@ fn each_kind_of_layer_has_its_colour() {
     use crate::document::LayerKind;
     for (choix, p) in livres() {
         theme::installer(&ReglageTheme { choix, perso: Couleurs::default() });
-        // Anthony : bitmap vert, vectoriel bleu, CTG rose ; trois couleurs distinctes.
+        // Anthony : bitmap vert, vectoriel bleu, calque de couleur rose (ex-CTG) ; trois couleurs distinctes.
         let (b, v, c) = (theme::couleur_calque(LayerKind::Bitmap, false), theme::couleur_calque(LayerKind::Vector, false), theme::couleur_calque(LayerKind::Bitmap, true));
         assert!(b.g() > b.r() && b.g() > b.b() / 2, "{choix:?} : bitmap vert");
         assert!(v.b() > v.r() && v.b() > v.g(), "{choix:?} : vectoriel bleu");
-        assert!(c.r() > c.g() && c.b() > c.g(), "{choix:?} : CTG rose");
-        assert_eq!(theme::couleur_calque(LayerKind::Vector, true), c, "un CTG reste rose, quelle que soit sa sorte");
+        assert!(c.r() > c.g() && c.b() > c.g(), "{choix:?} : calque de couleur rose");
+        assert_eq!(theme::couleur_calque(LayerKind::Vector, true), c, "un calque de couleur reste rose, quelle que soit sa sorte");
         assert_eq!(theme::fond_calque(LayerKind::Vector, false), p.calque_vectoriel);
     }
     theme::installer(&ReglageTheme::default());

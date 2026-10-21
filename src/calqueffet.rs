@@ -744,6 +744,7 @@ fn bake(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Option<[u8; 3]>,
                     seq: 0,
                     world: crate::fxcache::world(),
                     base: Some(snapshot()),
+                    griffon: None,
                 });
             }
             // En attendant : le dernier résultat de ce calque s'il montre la même chose (une autre taille

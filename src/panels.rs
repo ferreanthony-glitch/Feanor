@@ -343,6 +343,8 @@ impl App {
         // (Le fond sous le trait n'est plus un réglage du pinceau : son bouton est sur la ligne du calque, dans
         // le panneau Calques, et dans ses commandes. Ses réglages, eux, se montrent ici quand le calque en a un.)
         self.fond_options_ui(ui);
+        // Calque de couleur : le mode « Griffonner » (`calquecouleurui.rs`).
+        self.griffonner_options_ui(ui);
     }
 
     /// Panneau des réglages de l'outil courant.
@@ -409,8 +411,10 @@ impl App {
                 self.brush_settings_ui(ui);
                 ui.separator();
                 self.fond_options_ui(ui);
+                self.griffonner_options_ui(ui);
             }
             Tool::Fill => {
+                self.griffonner_options_ui(ui);
                 ui.add(egui::Slider::new(&mut self.fill.tolerance, 0.0..=1.0).text("Tolérance"));
                 ui.add(egui::Slider::new(&mut self.fill.expand, 0..=4).text("Débord (px)"));
                 ui.horizontal(|ui| {
