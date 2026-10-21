@@ -64,6 +64,11 @@ mod planvers;
 #[cfg(test)]
 mod planvers_tests;
 mod planversui;
+// Variantes de séquence (A · B · C) : le modèle et le fichier (`variantes`), l'interface (`variantesui`).
+mod variantes;
+#[cfg(test)]
+mod variantes_tests;
+mod variantesui;
 // La pile des versions au survol de « V2 » sur le bloc d'un plan : la logique sans interface (`pilevers`) et son
 // dessin (`pileversui`).
 mod pilevers;

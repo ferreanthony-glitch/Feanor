@@ -595,6 +595,8 @@ pub struct App {
     /// Quand le projet change, le plan dont on propose de supprimer les versions non affichées : le
     /// plan seul (`Some`) ou tout le film (`None`) ; rien : pas de confirmation en cours.
     pub(crate) purge_versions: Option<Option<u64>>,
+    /// Les fenêtres des variantes de séquence : confirmation de suppression, renommage (`variantesui.rs`).
+    pub(crate) variantes_ui: crate::variantesui::VariantesUi,
     /// Effets des extraits de son : clé de volume choisie (`audiofxui.rs`).
     pub(crate) sfx: crate::audiofxui::SoundFxUi,
     /// La bibliothèque de bruitages : liste, recherche, écoute, sons en cours de pose (`bruitagesui.rs`).
@@ -1126,6 +1128,7 @@ impl App {
             comparaison: None,
             pile_versions: Default::default(),
             purge_versions: None,
+            variantes_ui: Default::default(),
             sfx: Default::default(),
             brt: Default::default(),
             sug: Default::default(),
@@ -3495,6 +3498,10 @@ impl App {
         if self.version_action(action) || self.comparer_action(action) {
             return;
         }
+        // Variantes d'une séquence (`variantesui.rs`).
+        if self.variante_action(action) {
+            return;
+        }
         // Effets des extraits de son (`audiofxui.rs`) ; Suppr retire la clé de volume choisie.
         if self.sound_fx_action(action) {
             return;
@@ -4613,6 +4620,7 @@ impl App {
             self.envois_windows(ctx);
             self.comparer_fenetre(ctx);
             self.purge_versions_fenetre(ctx);
+            self.variantes_fenetres(ctx);
         }
         // Export en cours : le projet se copie par tranches de quelques millisecondes au départ, puis l'export tourne sur
         // d'autres fils ; ici on ne fait que le regarder, à peu près dix fois par seconde (la barre d'avancement).

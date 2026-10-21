@@ -40,6 +40,10 @@
 //!                         (`versions/dessins/<empreinte>.png`) : jamais effacés
 //!   plans_versions.json   les autres versions de chaque plan (`planvers.rs`), de même sans changer
 //!                         `VERSION` ; leurs dessins sont dans dessins/ ; absent, aucun plan n'a de version
+//!   variantes.json        les variantes rangées des séquences (`variantes.rs`) : scènes, plans, versions de plan,
+//!                         contenu rogné, commentaires et transitions de chaque variante, de même sans changer
+//!                         `VERSION` ; leurs dessins sont dans dessins/ ; absent, aucune séquence n'a de variante
+//!                         (dans un projet partagé : annexe du montage, écrite par le porteur du jeton)
 //! ```
 //!
 //! Un enregistrement n'écrit que les dessins modifiés depuis le précédent, puis le manifeste.
@@ -1063,6 +1067,10 @@ pub struct SaveJob {
     envois: Option<Vec<u8>>,
     /// Le fichier des autres versions des plans (`plans_versions.json`) ; rien : il n'y en a pas.
     plans_versions: Option<Vec<u8>>,
+    /// Le fichier des variantes rangées des séquences (`variantes.json`) ; rien : il n'y en a pas.
+    variantes: Option<Vec<u8>>,
+    /// Projet partagé dont des dessins de variantes manquaient à la lecture : le fichier n'est pas réécrit.
+    variantes_gardees: bool,
     /// Un `plans_versions.json` que cette version ne sait pas lire est là : ses dessins sont dans `dessins/`
     /// et rien ne les cite, l'enregistrement n'en efface aucun.
     keep_drawings: bool,
@@ -1150,6 +1158,15 @@ fn dessins_a_ecrire(
     Ok((drawings, fonds, hors, reecrits))
 }
 
+/// Le contenu de `variantes.json` (`variantes.rs`) : les dessins qui ont quelque chose hors de la feuille y sont notés.
+pub(crate) fn variantes_octets(doc: &Document) -> Result<Option<Vec<u8>>, String> {
+    if doc.variantes.is_empty() {
+        return Ok(None);
+    }
+    let cels = doc.cels_des_variantes();
+    crate::variantes::to_bytes(doc, &hors_of(doc, &cels))
+}
+
 /// Prépare l'enregistrement de `doc` dans `manifest_path`. `written` est mis à jour comme si
 /// l'écriture allait réussir (à vider si elle échoue).
 pub fn prepare_save(
@@ -1190,7 +1207,7 @@ pub fn prepare_save(
     }
     let manifest = serde_json::to_vec_pretty(&manifest_of(doc)).map_err(|e| e.to_string())?;
     let unreadable = unreadable_in(dir);
-    let keep_drawings = crate::planvers::illisible(dir);
+    let keep_drawings = crate::planvers::illisible(dir) || crate::variantes::illisible(dir);
     // Les instantanés d'envois pas encore écrits (`envois.rs`) : un dessin du projet qui a déjà leur contenu
     // dans `dessins/` est recopié (les dessins s'écrivent avant eux), pas encodé de nouveau ; un autre
     // dossier que celui du projet (« Enregistrer sous ») reçoit aussi les instantanés déjà écrits.
@@ -1224,6 +1241,8 @@ pub fn prepare_save(
         references: crate::references::plan_save(doc, dir)?,
         envois: crate::envois::to_bytes(doc)?,
         plans_versions: crate::planvers::to_bytes(doc)?,
+        variantes: variantes_octets(doc)?,
+        variantes_gardees: false,
         keep_drawings,
         snapshots,
         snapshot_reuse,
@@ -1467,6 +1486,8 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::envois::FILE), self.envois.as_deref(), |t| crate::envois::parse(t).is_ok())?;
         // Les autres versions des plans (leurs dessins sont ceux de `dessins/`, déjà écrits).
         write_sidecar(&dir.join(crate::planvers::FILE), self.plans_versions.as_deref(), |t| crate::planvers::parse(t).is_ok())?;
+        // Les variantes rangées des séquences, de même (`variantes.rs`).
+        write_sidecar(&dir.join(crate::variantes::FILE), self.variantes.as_deref(), |t| crate::variantes::parse(t).is_ok())?;
         write_atomic_synced(&self.manifest_path, &self.manifest)?;
         let removed = if self.keep_drawings { 0 } else { remove_unused(dir, &self.used, &self.fonds, &self.hors) }
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
@@ -2095,6 +2116,27 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
             a_ranger = Some((top + 1, top + 2, cles));
         }
     }
+    // Les variantes rangées des séquences (`variantes.json`) : leurs plans, et ceux de leurs versions, passent aussi par
+    // la lecture ordinaire, dans une séquence cachée qu'on retire ensuite du film (`variantes.rs`). Un plan relu seul
+    // ne lit rien de tout cela.
+    let mut variantes = if annexes.plans_seuls { None } else { crate::variantes::lire(dir, &mut warnings) };
+    let mut rognages_variantes: HashMap<crate::variantes::Cle, crate::rognage::Loaded> = HashMap::new();
+    let cachees = variantes.as_mut().and_then(|f| cacher_variantes(&mut manifest, f, &mut warnings, &mut rognages_variantes));
+    // Les dessins que les variantes citent : s'il en manque, la lecture les retire des plans, et il faut s'en souvenir.
+    let cels_variantes: BTreeSet<CelId> = cachees
+        .as_ref()
+        .map(|c| {
+            manifest
+                .sequences
+                .iter()
+                .filter(|s| s.id == c.sequence)
+                .flat_map(|s| &s.scenes)
+                .flat_map(|s| &s.panneaux)
+                .flat_map(|p| &p.calques)
+                .flat_map(|l| l.expositions.iter().filter_map(|r| r.dessin).chain(l.calque_couleur.iter().flat_map(|c| c.griffonnages.iter().map(|g| g[1]))))
+                .collect()
+        })
+        .unwrap_or_default();
     let mut cels: HashMap<CelId, Cel> = HashMap::new();
     let mut missing: BTreeSet<CelId> = BTreeSet::new();
     // Le contenu rogné des plans (`rognages.json`) : ses dessins se chargent avec les autres.
@@ -2112,6 +2154,9 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         })
         .collect();
     if let Some(r) = &reserves {
+        referenced.extend(r.cels());
+    }
+    for r in rognages_variantes.values() {
         referenced.extend(r.cels());
     }
     let mut approx = Vec::new();
@@ -2268,6 +2313,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         personnages: Vec::new(),
         // Les versions des plans : `plans_versions.json`, `planvers::installer`.
         versions: Default::default(),
+        // Les variantes rangées des séquences : `variantes.json`, `variantes::installer`.
+        variantes: Default::default(),
     };
     // Les calques CTG des projets d'avant : convertis en calques de couleur quand le document existe (`migrer_ctg`).
     let mut anciens_ctg: Vec<crate::griffonnage::AncienCtg> = Vec::new();
@@ -2475,6 +2522,19 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         structure.scenes.retain(|s| s.id != *scene);
         structure.sequences.retain(|s| s.id != *sequence);
     }
+    // De même les plans des variantes rangées.
+    let mut panneaux_variantes: HashMap<crate::variantes::Cle, Panel> = HashMap::new();
+    if let Some(c) = &cachees {
+        let (gardes, extra): (Vec<Panel>, Vec<Panel>) = std::mem::take(&mut structure.panels).into_iter().partition(|p| !c.scenes.contains_key(&p.scene));
+        structure.panels = gardes;
+        for p in extra {
+            if let Some(cle) = c.scenes.get(&p.scene) {
+                panneaux_variantes.insert(*cle, p);
+            }
+        }
+        structure.scenes.retain(|s| !c.scenes.contains_key(&s.id));
+        structure.sequences.retain(|s| s.id != c.sequence);
+    }
     if structure.panels.is_empty() {
         return Err("le projet ne contient aucun plan".into());
     }
@@ -2511,6 +2571,11 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
     // Les autres versions des plans.
     if let (Some(f), Some((_, _, cles))) = (versions, a_ranger) {
         crate::planvers::installer(&mut doc, f, cles, rangees, &mut warnings);
+    }
+    // Les variantes rangées des séquences.
+    if let Some(f) = variantes {
+        let manquants: BTreeSet<CelId> = cels_variantes.intersection(&missing).copied().collect();
+        crate::variantes::installer(&mut doc, f, panneaux_variantes, rognages_variantes, &missing, !manquants.is_empty(), &mut warnings);
     }
     // Les calques CTG d'un projet d'avant deviennent des calques de couleur qui montrent la même image (plans et autres
     // versions des plans).
@@ -2566,6 +2631,69 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         session: None,
         erreur_equipe: None,
     })
+}
+
+/// Les plans des variantes rangées, cachés dans le manifeste le temps de la lecture (`cacher_variantes`).
+struct VariantesCachees {
+    /// La séquence cachée qui les porte.
+    sequence: u64,
+    /// Pour chaque scène cachée (un plan chacune), où ce plan est dans le fichier.
+    scenes: HashMap<u64, crate::variantes::Cle>,
+}
+
+/// Fait entrer les plans des variantes rangées de `f` (et ceux de leurs versions) dans `manifest`, un par scène d'une
+/// séquence cachée, pour que la lecture ordinaire charge leurs dessins ; garde pour chaque plan son contenu rogné lu
+/// (`rognages`). Rien si le fichier n'a aucun plan lisible.
+fn cacher_variantes(
+    manifest: &mut Manifest,
+    f: &mut crate::variantes::Fichier,
+    warnings: &mut Vec<String>,
+    rognages: &mut HashMap<crate::variantes::Cle, crate::rognage::Loaded>,
+) -> Option<VariantesCachees> {
+    use crate::variantes::Cle;
+    let top = top_id(manifest);
+    let sequence = top + 1;
+    let mut suivant = top + 2;
+    let mut scenes: Vec<SceneEntry> = Vec::new();
+    let mut cles: HashMap<u64, Cle> = HashMap::new();
+    let mut poser = |valeur: serde_json::Value, cle: Cle, scenes: &mut Vec<SceneEntry>| -> Result<(), String> {
+        let e = serde_json::from_value::<PanelEntry>(valeur).map_err(|e| e.to_string())?;
+        scenes.push(SceneEntry { id: suivant, nom: String::new(), numero: String::new(), panneaux: vec![e] });
+        cles.insert(suivant, cle);
+        suivant += 1;
+        Ok(())
+    };
+    for (si, s) in f.sequences.iter_mut().enumerate() {
+        for (vi, v) in s.autres.iter_mut().enumerate() {
+            for (pi, p) in v.plans.iter_mut().enumerate() {
+                if let Err(e) = poser(std::mem::take(&mut p.entree), Cle::Plan(si, vi, pi), &mut scenes) {
+                    warnings.push(format!("variante {} d'une séquence : un plan illisible ({e}), ignoré.", crate::variantes::lettre(v.numero)));
+                    continue;
+                }
+                if let Some(vf) = p.versions.as_mut() {
+                    for (ri, r) in vf.autres.iter_mut().enumerate() {
+                        if let Err(e) = poser(std::mem::take(&mut r.entree), Cle::Version(si, vi, pi, ri), &mut scenes) {
+                            warnings.push(format!("variante {} d'une séquence : une version de plan illisible ({e}), ignorée.", crate::variantes::lettre(v.numero)));
+                        }
+                    }
+                }
+                if let Some(val) = &p.rognage {
+                    match crate::rognage::parse(&val.to_string()) {
+                        Ok(l) => {
+                            rognages.insert(Cle::Plan(si, vi, pi), l);
+                        }
+                        Err(e) => warnings.push(format!("variante {} d'une séquence : contenu rogné illisible ({e}).", crate::variantes::lettre(v.numero))),
+                    }
+                }
+            }
+        }
+    }
+    manifest.dessins_hors.extend(f.hors.iter().copied());
+    if scenes.is_empty() {
+        return None;
+    }
+    manifest.sequences.push(SequenceEntry { id: sequence, nom: String::new(), numero: String::new(), scenes });
+    Some(VariantesCachees { sequence, scenes: cles })
 }
 
 /// Dessins dont le fichier n'a pas pu être lu à l'ouverture, par dossier de projet : le prochain

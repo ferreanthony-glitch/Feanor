@@ -116,8 +116,9 @@ fn exemple() -> Vec<Envoi> {
             note_le: 1_759_000_050,
             fichier: "envoi-1-0000abcd.json".into(),
             plans: vec![PlanEnvoye { plan: 4, titre: "Plan 1".into(), empreinte: u64::MAX - 5, version: 1, images: 24 }, PlanEnvoye { plan: 9, titre: "Plan 2".into(), empreinte: 0x1234_5678_9abc_def0, version: 3, images: 12 }],
+            variantes: vec![],
         },
-        Envoi { id: 2, nom: "v2 au réal".into(), date: 1_760_000_000, note_le: 0, fichier: String::new(), plans: vec![] },
+        Envoi { id: 2, nom: "v2 au réal".into(), date: 1_760_000_000, note_le: 0, fichier: String::new(), plans: vec![], variantes: vec![crate::envois::VarianteEnvoyee { sequence: 3, numero: 2, nom: "serré".into() }] },
     ]
 }
 

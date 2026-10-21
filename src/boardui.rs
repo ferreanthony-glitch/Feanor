@@ -683,6 +683,7 @@ impl App {
 
     pub(crate) fn board_view(&mut self, ui: &mut egui::Ui) {
         self.board_toolbar(ui);
+        self.variantes_barre(ui);
         let view = ui.available_rect_before_wrap();
         self.vignettes.view = view;
         let bg = ui.allocate_rect(view, Sense::click_and_drag());

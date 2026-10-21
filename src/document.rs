@@ -958,6 +958,9 @@ pub struct Structure {
     /// Versions des plans (`planvers.rs`), par numéro de plan : créer, passer, restaurer, supprimer une
     /// version s'annulent avec le reste.
     pub versions: std::collections::BTreeMap<u64, crate::planvers::VersionsDuPlan>,
+    /// Les variantes rangées des séquences (`variantes.rs`) : changer de variante, en créer ou en supprimer s'annulent
+    /// avec le reste. Partagées (`Arc`) : une étape d'annulation ne les recopie pas.
+    pub variantes: crate::variantes::Variantes,
 }
 
 pub struct Document {
@@ -1025,6 +1028,13 @@ pub struct Document {
     /// du manifeste, dans `plans_versions.json`, leurs dessins dans `dessins/`. Le plan lui-même
     /// (`panels`) est toujours la version active.
     pub versions: std::collections::BTreeMap<u64, crate::planvers::VersionsDuPlan>,
+    /// Les variantes rangées des séquences (`variantes.rs`), par numéro de séquence ; enregistrées à côté du
+    /// manifeste, dans `variantes.json`, leurs dessins dans `dessins/`. Le jeu de plans de la séquence
+    /// (`scenes`, `panels`) est toujours la variante choisie.
+    pub variantes: crate::variantes::Variantes,
+    /// Des dessins de variantes rangées manquaient à l'ouverture (projet partagé dont les fichiers n'étaient pas tous
+    /// arrivés) : le fichier des variantes n'est pas réécrit, et on n'en change pas. Hors de l'annulation.
+    pub variantes_partielles: bool,
     next_id: u64,
     /// Préfixe des numéros neufs d'un projet partagé (`préfixe << 32`, `cooperation.rs`) : deux équipiers ne
     /// donnent jamais le même numéro. 0 pour un projet classique, dont les numéros ne changent pas.
@@ -1080,6 +1090,8 @@ impl Document {
             personnages: Vec::new(),
             envois: Default::default(),
             versions: Default::default(),
+            variantes: Default::default(),
+            variantes_partielles: false,
             next_id: 1,
             id_prefix: 0,
         };
@@ -1144,6 +1156,8 @@ impl Document {
             personnages: structure.personnages,
             envois: Default::default(),
             versions: structure.versions,
+            variantes: structure.variantes,
+            variantes_partielles: false,
             next_id: max_id + 1,
             id_prefix: 0,
         };
@@ -1330,6 +1344,7 @@ impl Document {
             references: self.references.clone(),
             personnages: self.personnages.clone(),
             versions: self.versions.clone(),
+            variantes: self.variantes.clone(),
         }
     }
 
@@ -1363,6 +1378,7 @@ impl Document {
             references: std::mem::replace(&mut self.references, s.references),
             personnages: std::mem::replace(&mut self.personnages, s.personnages),
             versions: std::mem::replace(&mut self.versions, s.versions),
+            variantes: std::mem::replace(&mut self.variantes, s.variantes),
         }
     }
 
@@ -1413,6 +1429,7 @@ impl Document {
         }
         self.comments.iter().for_each(|c| see(c.id));
         self.transitions.iter().for_each(|t| see(t.id));
+        self.ids_des_variantes().into_iter().for_each(&mut see);
         self.references.iter().for_each(|r| see(r.id));
         self.personnages.iter().for_each(|p| see(p.id));
         self.cels.keys().for_each(|&c| see(c));
@@ -1604,6 +1621,8 @@ impl Document {
         self.prune_transitions();
         // Les références liées à un plan retiré ne le sont plus (elles restent sur le tableau).
         self.prune_references();
+        // Les variantes rangées d'une séquence qui n'existe plus partent avec elle (`variantes.rs`).
+        self.elaguer_variantes();
         // Numérotation verrouillée : un plan ou une séquence neuf reçoit son numéro entre ses voisins.
         self.assign_numbers();
     }
@@ -1652,6 +1671,8 @@ impl Document {
         let sequences: HashSet<u64> = s.scenes.iter().map(|x| x.sequence).collect();
         s.sequences.retain(|x| sequences.contains(&x.id));
         s.audio_tracks.clear();
+        // (Les variantes rangées des autres séquences restent dans le film d'origine.)
+        s.variantes = Default::default();
         let cards: HashSet<u64> = s.panels.iter().flat_map(|p| std::iter::once(p.id).chain(p.marks.iter().map(|m| m.id))).collect();
         let kept = |anchor: Option<u64>| anchor.is_some_and(|a| cards.contains(&a));
         s.board.strokes.retain(|n| kept(n.anchor));
@@ -2749,7 +2770,7 @@ impl Document {
     /// Les calques de toute la scène des panneaux `panels`, passés dans la scène `scene` (scène
     /// coupée ou copiée), deviennent les siens : nouvelle clé et leur propre copie du dessin
     /// (modifier le fond d'une scène ne touche pas l'autre).
-    fn adopt_scene_layers(&mut self, panels: &mut [Panel], scene: u64) {
+    pub(crate) fn adopt_scene_layers(&mut self, panels: &mut [Panel], scene: u64) {
         let mut keys: HashMap<u64, u64> = HashMap::new();
         let mut cels: HashMap<CelId, CelId> = HashMap::new();
         for p in panels.iter_mut() {
@@ -2840,6 +2861,10 @@ impl Document {
             .collect();
         // Le contenu rogné reste dans le projet (`rognage.rs`).
         for (_, r) in self.live_reserves() {
+            used.extend(r.cels());
+        }
+        // Et celui des variantes rangées (`variantes.rs`).
+        for r in self.variantes.values().flat_map(|v| v.autres.iter()).flat_map(|r| r.contenu.reserves.values()) {
             used.extend(r.cels());
         }
         // Les autres versions des plans aussi (`planvers.rs`).
