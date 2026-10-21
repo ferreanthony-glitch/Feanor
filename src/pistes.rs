@@ -459,7 +459,9 @@ impl App {
             }
         }
         let current_layer = self.layers().get(self.cur_layer).is_some_and(|l| l.id == layer.id);
-        for key in &layer.pos_keys {
+        // (Les positions cachées par le filtre de la légende, `legendecles.rs`, ne se dessinent pas.)
+        let positions: &[crate::poskeys::PosKey] = if self.cle_vue(crate::legendecles::Sorte::Position) { &layer.pos_keys } else { &[] };
+        for key in positions {
             let x = x_of(key.frame);
             if key.frame >= max || !on_screen(x) {
                 continue;

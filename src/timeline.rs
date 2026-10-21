@@ -95,7 +95,11 @@ impl App {
     /// transport, les dessins, la caméra et la pelure ; le reste sous « Plus… ». Les commandes en
     /// icônes ont leur nom, leur raccourci et une description dans une bulle (12d).
     fn timeline_toolbar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| self.barre_ui(ui, crate::barres::Barre::Timeline));
+        ui.horizontal(|ui| {
+            self.barre_ui(ui, crate::barres::Barre::Timeline);
+            // Au bout de la ligne : la légende des clés et son filtre (`legendecles.rs`).
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.legende_cles_ui(ui));
+        });
     }
 
     /// Le titre du plan que l'on anime et sa durée (affichage fixe de la barre).
@@ -238,7 +242,8 @@ impl App {
             let y = grid_top + rows_h;
             let row = Rect::from_min_size(pos2(r.left(), y), vec2(size.x, CAM_H)).shrink2(vec2(0.0, 1.0));
             painter.rect_filled(row, 0.0, theme::rangee_sombre());
-            let keys = &self.panel().camera;
+            // (Cachées par le filtre de la légende, `legendecles.rs` : la rangée reste, sans losanges.)
+            let keys: &[crate::camera::CameraKey] = if self.cle_vue(crate::legendecles::Sorte::Camera) { &self.panel().camera } else { &[] };
             let cx = |f: usize| r.left() + (f as f32 + 0.5) * cell;
             if keys.len() >= 2 {
                 painter.line_segment(
@@ -627,7 +632,7 @@ impl App {
         let cam_row = Rect::from_min_size(pos2(r.left(), grid_top + rows_h), vec2(size.x, CAM_H));
         let key_x = |f: usize| r.left() + (f as f32 + 0.5) * cell;
         let key_under = |app: &App, p: Pos2| {
-            cam_row.contains(p).then(|| crate::camtools::camera_key_at(&app.panel().camera, p.x, key_x, cell * 0.5 + 2.0)).flatten()
+            (cam_row.contains(p) && app.cle_vue(crate::legendecles::Sorte::Camera)).then(|| crate::camtools::camera_key_at(&app.panel().camera, p.x, key_x, cell * 0.5 + 2.0)).flatten()
         };
         let cam_frame_under = |app: &App, p: Pos2| key_under(app, p).and_then(|k| app.panel().camera.get(k).map(|k| k.frame));
 

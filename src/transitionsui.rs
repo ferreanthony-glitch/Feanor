@@ -438,7 +438,8 @@ impl App {
 
     /// Les formes des transitions de la bande de montage.
     pub(crate) fn trans_badges(&self, left: f32, ppf: f32, mid_y: f32) -> Vec<Badge> {
-        if self.doc.transitions.is_empty() {
+        // (Cachées par le filtre de la légende, `legendecles.rs` : ni dessinées ni saisies.)
+        if self.doc.transitions.is_empty() || !self.cle_vue(crate::legendecles::Sorte::Transition) {
             return Vec::new();
         }
         badges(&transitions::zones(&self.doc), left, ppf, mid_y)

@@ -433,6 +433,10 @@ impl App {
     /// choisi, si c'est sur ce calque, si la case du panneau Effets est cochée, et si le calque
     /// peut avoir des effets.
     pub(crate) fn fx_shown(&self, panel: u64, layer: &crate::document::Layer) -> Option<FxSel> {
+        // Cachées par le filtre de la légende (`legendecles.rs`) : ni dessinées ni saisies.
+        if !self.cle_vue(crate::legendecles::Sorte::Effet) {
+            return None;
+        }
         shown(self.fx_choice, self.fx_keys_shown, panel, layer)
     }
 

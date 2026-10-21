@@ -375,7 +375,11 @@ impl App {
         // `barres.rs`, le reste sous « Plus… ».
         // (Dans l'espace Montage, la barre du travail de montage : coupes, rognage, transitions, son…)
         let barre = crate::barres::Barre::du_montage_dans(self.espace);
-        ui.horizontal(|ui| self.barre_ui(ui, barre));
+        ui.horizontal(|ui| {
+            self.barre_ui(ui, barre);
+            // Au bout de la ligne : la légende des clés et son filtre (`legendecles.rs`).
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.legende_cles_ui(ui));
+        });
         ui.separator();
         // Le zoom, petit, tout en bas de la bande.
         egui::TopBottomPanel::bottom("zoom_montage")
