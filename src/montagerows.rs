@@ -305,8 +305,10 @@ impl App {
         // Caméra : une clé = un losange ; un mouvement = une barre de la première à la dernière.
         let cam = lane(rows.camera_top(), CAM_H);
         painter.rect_filled(cam, 0.0, theme::rangee_sombre());
+        let cam_vues = self.cle_vue(crate::legendecles::Sorte::Camera);
         for (i, b) in blocks.iter().enumerate() {
-            let keys = &self.doc.panels[i].camera;
+            // (Cachées par le filtre de la légende : la piste reste, sans losanges.)
+            let keys: &[crate::camera::CameraKey] = if cam_vues { &self.doc.panels[i].camera } else { &[] };
             let x0 = b.left() - 1.0;
             let y = cam.center().y;
             if let (Some(first), Some(last)) = (keys.first(), keys.last()) {
@@ -372,7 +374,8 @@ impl App {
     /// bande ; `blocks` : les panneaux à l'écran.
     pub(crate) fn montage_camera_key_at(&self, p: Pos2, top: f32, blocks: &[Rect], ppf: f32, rows: &Rows) -> Option<(usize, usize)> {
         let y = p.y - top;
-        if y < rows.camera_top() || y > rows.camera_top() + CAM_H {
+        // (Cachées par le filtre de la légende, `legendecles.rs` : ni dessinées ni saisies.)
+        if !self.cle_vue(crate::legendecles::Sorte::Camera) || y < rows.camera_top() || y > rows.camera_top() + CAM_H {
             return None;
         }
         let tol = (ppf * 0.5).max(5.0);
@@ -418,7 +421,7 @@ impl App {
     /// (`fxkeys::STRIP`), reste aux losanges violets.
     pub(crate) fn montage_pos_key_at(&self, p: Pos2, top: f32, blocks: &[Rect], ppf: f32, rows: &Rows) -> Option<(usize, usize, usize)> {
         let y = p.y - top;
-        if y < rows.layers_top() {
+        if y < rows.layers_top() || !self.cle_vue(crate::legendecles::Sorte::Position) {
             return None;
         }
         let lane = rows.lane_at(y - rows.layers_top())?;

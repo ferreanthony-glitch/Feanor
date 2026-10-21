@@ -69,6 +69,9 @@ pub struct Settings {
     /// en plus ou en moins de celles que chaque barre montre d'office (`barres.rs`).
     #[serde(default, rename = "barres", skip_serializing_if = "ReglageBarres::est_vide")]
     pub bars: ReglageBarres,
+    /// Quelles sortes de clés le montage et la timeline montrent (`legendecles.rs`) : un affichage, rien de plus.
+    #[serde(default, rename = "cles_vues", skip_serializing_if = "crate::legendecles::FiltreCles::est_complet")]
+    pub key_filter: crate::legendecles::FiltreCles,
     /// Espaces de travail enregistrés.
     #[serde(default, rename = "espaces")]
     pub workspaces: Vec<Workspace>,
@@ -220,6 +223,7 @@ impl Default for Settings {
             vignettes_layout: None,
             storyboard_space: Espace::Storyboard,
             bars: ReglageBarres::default(),
+            key_filter: Default::default(),
             workspaces: Vec::new(),
             montage_head_w: default_head_w(),
             montage_auto_open: true,

@@ -465,17 +465,20 @@ impl App {
 
     /// Le bas du menu du clic droit sur le fond de la planche.
     pub(crate) fn annot_menu(&mut self, ui: &mut egui::Ui) {
-        self.action_item(ui, "Stylo d'annotation", "vignettes.annotation_stylo");
-        self.action_item(ui, "Gomme d'annotation", "vignettes.annotation_gomme");
-        let visible = self.vignettes.annot.visible;
-        self.action_item(ui, if visible { "Cacher les annotations" } else { "Montrer les annotations" }, "vignettes.annotations_afficher");
-        if ui.add_enabled(!self.doc.annotations.is_empty(), egui::Button::new("Effacer les annotations…")).clicked() {
-            ui.close_menu();
-            self.annot_demander_effacement();
-        }
-        let marie = self.vignettes.annot.marie;
-        self.action_item(ui, if marie { "Retirer la marie-louise" } else { "Marie-louise (ne montrer que les vignettes)" }, "vignettes.marie_louise");
-        ui.separator();
+        // Les annotations dans un sous-menu : le menu du fond de la planche reste à une dizaine d'entrées
+        // (simplification des barres, 2026-10-21).
+        ui.menu_button("Annotations", |ui| {
+            self.action_item(ui, "Stylo d'annotation", "vignettes.annotation_stylo");
+            self.action_item(ui, "Gomme d'annotation", "vignettes.annotation_gomme");
+            let visible = self.vignettes.annot.visible;
+            self.action_item(ui, if visible { "Cacher les annotations" } else { "Montrer les annotations" }, "vignettes.annotations_afficher");
+            if ui.add_enabled(!self.doc.annotations.is_empty(), egui::Button::new("Effacer les annotations…")).clicked() {
+                ui.close_menu();
+                self.annot_demander_effacement();
+            }
+            let marie = self.vignettes.annot.marie;
+            self.action_item(ui, if marie { "Retirer la marie-louise" } else { "Marie-louise (ne montrer que les vignettes)" }, "vignettes.marie_louise");
+        });
         self.action_item(ui, "Exporter la planche des vignettes…", "fichier.exporter_planche");
     }
 

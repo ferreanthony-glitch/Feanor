@@ -638,33 +638,44 @@ impl App {
 
     /// Menu d'options d'une ligne (clic droit, ou ⋮) : celui du panneau Calques, plus les
     /// réglages de l'en-tête.
-    fn layer_head_menu(&mut self, ui: &mut Ui, li: usize) {
-        self.layer_menu(ui, li, true);
+    ///
+    /// Une dizaine d'entrées au premier niveau (simplification des barres, 2026-10-21) : renommer, dupliquer,
+    /// verrouiller, supprimer, les effets, l'animation, puis « Plus » (profondeur, taille de la ligne, groupe, vidéo,
+    /// propagation, coloriage). Rien n'est retiré.
+    pub(crate) fn layer_head_menu(&mut self, ui: &mut Ui, li: usize) {
+        if self.layers().get(li).is_none() {
+            ui.close_menu();
+            return;
+        }
+        self.rename_item(ui, li, true, false);
+        self.duplicate_lock_delete_items(ui, li);
         let Some(collapsed) = self.layers().get(li).map(|l| l.collapsed) else { return };
         ui.separator();
-        if ui.button(if collapsed { "Agrandir la ligne" } else { "Réduire la ligne" }).clicked() {
-            ui.close_menu();
-            self.layers_mut()[li].collapsed = !collapsed;
-            self.modified = true;
-        }
-        ui.menu_button("Groupe", |ui| self.group_menu(ui, li));
-        // Calque vidéo (13k) : son début, et le transformer en calque d'animation.
-        if self.layers().get(li).is_some_and(|l| l.video.is_some()) {
-            ui.menu_button("Calque vidéo", |ui| self.video_menu(ui, li));
-        }
         // Les effets, dont le tremblement du trait (calques vectoriels, grisé sur un bitmap), comme
         // dans le panneau Calques et le montage.
         self.layer_fx_items(ui, li);
-        // Propager la peinture sur la vidéo (façon EbSynth, `propagerui.rs`), grisé s'il ne se peut pas.
-        self.propagation_item(ui, li);
-        // Colorier par zones : les aplats des clés, reportés sur les autres images (`coloriageui.rs`).
-        self.coloriage_item(ui, li);
         // Avant / après ses images, automatismes : dans un sous-menu, comme au montage (menus
         // courts, 2026-10-18).
         if self.layers().get(li).is_some_and(|l| !l.folder) {
-            ui.separator();
             ui.menu_button("Animation (avant, après, automatismes)", |ui| self.behaviour_items(ui, li));
         }
+        ui.menu_button("Plus", |ui| {
+            self.depth_item(ui, li);
+            if ui.button(if collapsed { "Agrandir la ligne" } else { "Réduire la ligne" }).clicked() {
+                ui.close_menu();
+                self.layers_mut()[li].collapsed = !collapsed;
+                self.modified = true;
+            }
+            ui.menu_button("Groupe", |ui| self.group_menu(ui, li));
+            // Calque vidéo (13k) : son début, et le transformer en calque d'animation.
+            if self.layers().get(li).is_some_and(|l| l.video.is_some()) {
+                ui.menu_button("Calque vidéo", |ui| self.video_menu(ui, li));
+            }
+            // Propager la peinture sur la vidéo (façon EbSynth, `propagerui.rs`), grisé s'il ne se peut pas.
+            self.propagation_item(ui, li);
+            // Colorier par zones : les aplats des clés, reportés sur les autres images (`coloriageui.rs`).
+            self.coloriage_item(ui, li);
+        });
     }
 
     /// Pré / post-comportement du calque `li` (13c), et cassure et création automatiques : menus

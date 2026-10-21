@@ -623,31 +623,9 @@ impl App {
         }
     }
 
-    /// Menu d'un calque (clic droit) : renommer, profondeur, dupliquer,
-    /// verrouiller, supprimer. `in_timeline` : ouvert depuis l'en-tête de la timeline (13b),
-    /// où se fait alors le renommage.
-    pub(crate) fn layer_menu(&mut self, ui: &mut egui::Ui, li: usize, in_timeline: bool) {
-        self.layer_menu_where(ui, li, in_timeline, false);
-    }
-
-    /// `layer_menu`, ouvert depuis la colonne de gauche du montage si `in_montage` (le nom s'y
-    /// renomme). Ni timeline ni montage : le panneau Calques, où ses boutons et son verrou font
-    /// dupliquer, verrouiller et supprimer (seulement renommer et la profondeur).
-    pub(crate) fn layer_menu_where(&mut self, ui: &mut egui::Ui, li: usize, in_timeline: bool, in_montage: bool) {
-        if self.layers().get(li).is_none() {
-            ui.close_menu();
-            return;
-        }
-        self.rename_item(ui, li, in_timeline, in_montage);
-        self.depth_item(ui, li);
-        // Dans le panneau Calques, ses boutons et son verrou font le reste (pas de doublon).
-        if !in_timeline && !in_montage {
-            return;
-        }
-        ui.separator();
-        self.duplicate_lock_delete_items(ui, li);
-    }
-
+    /// (Le menu d'un calque du clic droit est `layer_head_menu` dans l'en-tête de la timeline, `montage_layer_menu` dans
+    /// le montage et `layer_full_menu` dans le panneau Calques ; ils partagent ces entrées.)
+    ///
     /// « Renommer… » (le champ vient dans la timeline, la colonne du montage ou le panneau).
     pub(crate) fn rename_item(&mut self, ui: &mut egui::Ui, li: usize, in_timeline: bool, in_montage: bool) {
         let Some((id, name)) = self.layers().get(li).map(|l| (l.id, l.name.clone())) else { return };

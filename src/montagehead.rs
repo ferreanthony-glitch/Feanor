@@ -232,8 +232,107 @@ impl App {
     /// Tout ce qui touche au calque `li` du plan courant (clic droit dans la colonne du montage,
     /// son ⋮, ou « Calque » au clic droit d'une piste) : ses réglages, avant / après ses images,
     /// son groupe, le renommer, le dupliquer, le supprimer, puis toutes les commandes des calques.
+    ///
+    /// Une dizaine d'entrées au premier niveau (simplification des barres, 2026-10-21) : les quatre gestes du calque,
+    /// l'aplat, les effets, puis « Réglages du calque » (afficher, opacité, mode de fusion, pelure d'oignon, pochoir,
+    /// profondeur, groupe), « Animation » et « Plus » (pistes, propagation, coloriage, vidéo, calque de couleur, toutes
+    /// les commandes des calques). Rien n'est retiré : tout y est, un sous-menu plus loin. (Le menu du panneau Calques,
+    /// lui, est `layer_full_menu` avec `in_montage` faux.)
     pub(crate) fn montage_layer_menu(&mut self, ui: &mut egui::Ui, li: usize) {
-        self.layer_full_menu(ui, li, true);
+        let Some(l) = self.layers().get(li) else {
+            ui.close_menu();
+            return;
+        };
+        let (folder, video) = (l.folder, l.video.is_some());
+        self.rename_item(ui, li, false, true);
+        self.duplicate_lock_delete_items(ui, li);
+        // Plusieurs calques choisis (Ctrl ou Maj + clic) : les fusionner.
+        let chosen = self.chosen_layers().len();
+        if chosen > 1 && ui.button(format!("Fusionner les {chosen} calques choisis")).clicked() {
+            ui.close_menu();
+            self.merge_chosen_layers();
+        }
+        ui.separator();
+        // Aplat sous le trait (`fondui.rs`) : « Ajouter un aplat » / « Retirer l'aplat ».
+        self.aplat_item(ui, li);
+        // Les effets par familles (un sous-menu) et le tremblement du trait.
+        self.layer_fx_items(ui, li);
+        ui.menu_button("Réglages du calque", |ui| self.montage_layer_settings(ui, li));
+        if !folder {
+            ui.menu_button("Animation (avant, après, automatismes)", |ui| self.behaviour_items(ui, li));
+        }
+        ui.menu_button("Plus", |ui| {
+            // Replier / déplier les pistes du montage (`pistes.rs`).
+            self.pistes_menu(ui, li);
+            self.propagation_item(ui, li);
+            self.coloriage_item(ui, li);
+            if video {
+                ui.menu_button("Calque vidéo", |ui| self.video_menu(ui, li));
+            }
+            // Calque de couleur sous le trait (`calquecouleurui.rs`) : en ajouter un, ou ses réglages (griffonner, sources).
+            if !folder && !video {
+                ui.menu_button("Calque de couleur", |ui| self.couleur_menu(ui, li));
+            }
+            ui.menu_button("Toutes les commandes des calques", |ui| self.layer_ops_menu_from(ui, crate::layerops::OpsFrom::LayerMenu));
+        });
+    }
+
+    /// « Réglages du calque » du menu du montage : afficher, opacité, mode de fusion, pelure d'oignon du calque, puis
+    /// préserver la transparence, pochoir, position verrouillée, profondeur et groupe.
+    fn montage_layer_settings(&mut self, ui: &mut egui::Ui, li: usize) {
+        let Some(l) = self.layers().get(li) else { return };
+        let (visible, onion, keep_alpha, stencil, negative, fixed, opacity, blend, folder) =
+            (l.visible, l.onion, l.keep_alpha, l.stencil, l.stencil_negative, l.position_locked, l.opacity, l.blend, l.folder);
+        if ui.checkbox(&mut visible.clone(), "Afficher").clicked() {
+            self.toggle_layer_visible(li);
+        }
+        if !folder && ui.checkbox(&mut onion.clone(), "Pelure d'oignon du calque").clicked() {
+            self.set_layer_flag(li, |l| l.onion = !onion);
+        }
+        let mut pct = opacity * 100.0;
+        let resp = ui.horizontal(|ui| {
+            ui.label("Opacité");
+            ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix(" %").fixed_decimals(0))
+        });
+        if self.edited(&resp.inner) {
+            self.layers_mut()[li].opacity = (pct / 100.0).clamp(0.0, 1.0);
+            self.renderer.invalidate_all();
+        }
+        if !folder {
+            ui.menu_button(format!("Mode de fusion : {}", blend.label()), |ui| {
+                for m in BlendMode::ALL {
+                    if BlendMode::FAMILY_STARTS.contains(&m) {
+                        ui.separator();
+                    }
+                    if ui.radio(m == blend, m.label()).on_hover_text(m.hint()).clicked() {
+                        ui.close_menu();
+                        self.set_layer_flag(li, |l| l.blend = m);
+                    }
+                }
+            });
+            if ui.checkbox(&mut keep_alpha.clone(), "Préserver la transparence").on_hover_text("Le pinceau ne colore que ce qui est déjà dessiné : le vide reste vide.").clicked() {
+                self.set_layer_flag(li, |l| l.keep_alpha = !keep_alpha);
+            }
+            if ui.checkbox(&mut stencil.clone(), "Pochoir").on_hover_text("Le dessin de ce calque limite où l'on peint sur les autres calques.").clicked() {
+                self.set_layer_flag(li, |l| l.stencil = !stencil);
+            }
+            if ui
+                .add_enabled(stencil, egui::Checkbox::new(&mut negative.clone(), "Pochoir négatif"))
+                .on_hover_text("Positif : on ne peint que dans la forme du pochoir. Négatif : seulement en dehors.")
+                .clicked()
+            {
+                self.set_layer_flag(li, |l| l.stencil_negative = !negative);
+            }
+            if ui
+                .checkbox(&mut fixed.clone(), "Verrouiller la position")
+                .on_hover_text("L'outil Transformer et le déplacement en 3D ne bougent plus le calque, et on ne peut plus dessiner dessus.")
+                .clicked()
+            {
+                self.set_layer_flag(li, |l| l.position_locked = !fixed);
+            }
+        }
+        self.depth_item(ui, li);
+        ui.menu_button("Groupe", |ui| self.group_menu(ui, li));
     }
 
     /// Le même menu, depuis le montage (`in_montage`) ou le panneau Calques. Dans le panneau, rien
@@ -284,10 +383,11 @@ impl App {
             ui.close_menu();
             return;
         };
-        let (name, visible, onion, keep_alpha, stencil, negative, fixed, opacity, blend, folder) =
-            (l.name.clone(), l.visible, l.onion, l.keep_alpha, l.stencil, l.stencil_negative, l.position_locked, l.opacity, l.blend, l.folder);
+        let (visible, onion, keep_alpha, stencil, negative, fixed, opacity, blend, folder) =
+            (l.visible, l.onion, l.keep_alpha, l.stencil, l.stencil_negative, l.position_locked, l.opacity, l.blend, l.folder);
         let video = l.video.is_some();
-        ui.label(RichText::new(format!("Calque « {name} »")).weak().small());
+        // (Pas de titre « Calque « nom » » : une ligne de moins, le menu s'ouvre sur le calque cliqué ; ses entrées sont
+        // la dizaine du clic droit, simplification des barres, 2026-10-21.)
         // Fonctions simples.
         self.rename_item(ui, li, false, in_montage);
         if in_montage {
@@ -347,8 +447,7 @@ impl App {
             // grisé avec la raison sur un calque bitmap (`fxui::offer`).
             self.layer_fx_items(ui, li);
         }
-        self.propagation_item(ui, li);
-        self.coloriage_item(ui, li);
+        // (Propager la peinture et Colorier par zones sont dans « Autres commandes des calques », en dernier.)
         // Fonctions d'état, puis d'animation (Anthony, 2026-10-17 : « en premier les fonctions
         // simples, puis les fonctions d'état, ensuite les fonctions d'animation »).
         ui.separator();
@@ -397,6 +496,11 @@ impl App {
         } else {
             ("Autres commandes des calques", crate::layerops::OpsFrom::LayersPanel)
         };
-        ui.menu_button(label, |ui| self.layer_ops_menu_from(ui, from));
+        ui.menu_button(label, |ui| {
+            self.propagation_item(ui, li);
+            self.coloriage_item(ui, li);
+            ui.separator();
+            self.layer_ops_menu_from(ui, from);
+        });
     }
 }

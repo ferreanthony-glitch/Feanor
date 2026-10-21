@@ -726,8 +726,9 @@ impl App {
             ui.close_menu();
             self.import_sound(Some(track), Some(frame));
         }
-        ui.separator();
-        self.track_menu(ui, track);
+        // Les réglages de la piste (nom, muette, solo, verrou, volume, nouvelle piste…) dans un sous-menu : le menu
+        // d'un extrait reste court.
+        ui.menu_button("La piste", |ui| self.track_menu(ui, track));
     }
 }
 

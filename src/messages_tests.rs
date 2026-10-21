@@ -29,6 +29,41 @@ fn a_gesture_updates_its_message_instead_of_piling_up() {
 }
 
 #[test]
+fn the_status_bar_shows_one_short_tip_and_the_bubble_keeps_the_detail() {
+    use crate::messages::resume;
+    // Un message court reste tel quel.
+    assert_eq!(resume("Enregistré."), "Enregistré.");
+    assert_eq!(resume("Vignettes : dessine dans les cases."), "Vignettes : dessine dans les cases.");
+    // Un long message est coupé avant sa première parenthèse, son premier point-virgule ou son premier point.
+    let long = "Vignettes : dessine dans les cases (Ctrl + glisser un cadre : mouvement de caméra ; Tab : retour au storyboard).";
+    assert_eq!(resume(long), "Vignettes : dessine dans les cases…");
+    let sans_parenthese = "Espace 3D : clic sur une carte (un calque) ou sur la caméra pour la choisir, glisser pour la déplacer, clic droit pour tourner la vue.";
+    assert_eq!(resume(sans_parenthese), "Espace 3D : clic sur une carte…");
+    assert_eq!(resume("Calque renommé en « Fond de ciel ». Annule avec Ctrl+Z si ce n'était pas voulu et que tu veux revenir."), "Calque renommé en « Fond de ciel »…");
+    // Un long message sans coupure naturelle n'est pas mutilé (l'étiquette de la barre le tronque à la largeur).
+    let plat = "Un très long message sans aucune ponctuation qui permette de le couper proprement ni nulle part ailleurs";
+    assert_eq!(resume(plat), plat);
+    // Une coupure trop tôt (moins de douze caractères) ne compte pas.
+    let tot = "Oui (vraiment) c'est une très longue phrase qui continue encore et encore sans fin visible ici.";
+    assert!(resume(tot).starts_with("Oui (vraiment)"), "{}", resume(tot));
+    // Chaque message d'espace de travail tient dans la barre sans coupure.
+    for e in crate::workspace::Espace::TOUS {
+        let (_ctx, app) = {
+            let ctx = eframe::egui::Context::default();
+            let dir = std::env::temp_dir().join(format!("shot-messages-{}-{:?}", std::process::id(), std::thread::current().id()));
+            let _ = std::fs::create_dir_all(&dir);
+            crate::donnees::bac_a_sable(&dir);
+            let app = crate::app::App::sans_fenetre(&ctx, None);
+            (ctx, app)
+        };
+        let mut app = app;
+        app.set_espace(e);
+        assert!(app.status.chars().count() <= 70, "{e:?} : « {} »", app.status);
+        assert_eq!(resume(&app.status), app.status.trim());
+    }
+}
+
+#[test]
 fn times_are_said_simply() {
     assert_eq!(ago(5.0), "à l'instant");
     assert_eq!(ago(190.0), "il y a 3 min");

@@ -29,7 +29,7 @@ use std::time::Instant;
 
 use eframe::egui::{
     self, pos2, text::LayoutJob, vec2, Align2, Color32, CursorIcon, Event, FontId, Key, KeyboardShortcut, Modifiers, PointerButton, Pos2, Rect,
-    RichText, Sense, Stroke, StrokeKind, Vec2,
+    Sense, Stroke, StrokeKind, Vec2,
 };
 
 use crate::app::{App, BoardView, Mode, Tool};
@@ -1392,13 +1392,12 @@ impl App {
         item(self, ui, "Animer cette image", &|a| {
             a.set_mode(crate::app::Mode::Animation);
         });
-        // Film partagé : prendre, rendre, reprendre (`cooperationui.rs`).
-        self.equipe_menu_items(ui, i);
+        // Film partagé : prendre, rendre, reprendre (`cooperationui.rs`), en une seule entrée.
+        if self.partage.is_some() {
+            ui.menu_button("Équipe", |ui| self.equipe_menu_items(ui, i));
+        }
         item(self, ui, "Nouveau plan après", &|a| a.new_panel());
         item(self, ui, "Dupliquer le plan", &|a| a.duplicate_panel());
-        self.plan_color_menu(ui);
-        self.nouvelle_version_menu(ui, i);
-        self.version_menu(ui, i, false);
         ui.separator();
         self.panel_clipboard_items(ui);
         ui.separator();
@@ -1407,8 +1406,14 @@ impl App {
         } else if i > 0 {
             item(self, ui, "Réunir avec le plan précédent", &|a| a.join_previous_scene());
         }
-        item(self, ui, "Recadrer (outil Caméra)", &|a| a.set_tool(Tool::Camera));
-        item(self, ui, "Réinitialiser le cadrage", &|a| a.run_action("camera.reinitialiser"));
+        // Les versions du plan, avec « Nouvelle version › » dedans ; le rare sous « Plus » (une dizaine d'entrées au
+        // premier niveau, simplification des barres, 2026-10-21).
+        self.version_menu(ui, i, true);
+        ui.menu_button("Plus", |ui| {
+            self.plan_color_menu(ui);
+            item(self, ui, "Recadrer (outil Caméra)", &|a| a.set_tool(Tool::Camera));
+            item(self, ui, "Réinitialiser le cadrage", &|a| a.run_action("camera.reinitialiser"));
+        });
     }
 
     /// Menu du clic droit sur le dessin d'une vignette (la vignette courante reçoit le clic avant le fond).
@@ -1426,7 +1431,17 @@ impl App {
     fn board_menu(&mut self, ui: &mut egui::Ui, layout: &BoardLayout, texts: &[Option<Rect>]) {
         if !self.board_notes.is_empty() {
             let sel = self.board_notes.clone();
-            ui.label(RichText::new(format!("{} note(s) choisie(s)", sel.len())).weak());
+            // Les notes choisies : un seul sous-menu (menu court, simplification des barres, 2026-10-21).
+            ui.menu_button(format!("{} note(s) choisie(s)", sel.len()), |ui| self.board_notes_menu(ui, layout, texts, &sel));
+            ui.separator();
+        }
+        self.board_background_menu(ui);
+    }
+
+    /// Ce qu'on fait des notes choisies de la planche : attacher, détacher, couleur, taille du texte, supprimer.
+    fn board_notes_menu(&mut self, ui: &mut egui::Ui, layout: &BoardLayout, texts: &[Option<Rect>], sel: &[NoteRef]) {
+        let sel = sel.to_vec();
+        {
             if ui.button(format!("{} Attacher à la vignette la plus proche", egui_phosphor::regular::PAPERCLIP)).clicked() {
                 ui.close_menu();
                 self.record_step();
@@ -1463,8 +1478,11 @@ impl App {
                 ui.close_menu();
                 self.delete_board_notes();
             }
-            ui.separator();
         }
+    }
+
+    /// Le reste du menu du fond de la planche : un plan, les notes, les annotations et l'export, la page.
+    pub(crate) fn board_background_menu(&mut self, ui: &mut egui::Ui) {
         if ui.button("Nouveau plan").clicked() {
             ui.close_menu();
             self.new_panel();

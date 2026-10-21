@@ -283,6 +283,10 @@ impl App {
     /// Les losanges d'un calque : verts, ronds quand la clé est adoucie, cerclés de blanc quand ils sont
     /// choisis. `x_of` : l'abscisse du milieu d'une image ; `y` : leur hauteur ; `visible` : la zone vue.
     pub(crate) fn paint_pos_markers(&self, painter: &Painter, layer: &crate::document::Layer, x_of: impl Fn(usize) -> f32, y: f32, max: usize, visible: (f32, f32)) {
+        // (Cachés par le filtre de la légende, `legendecles.rs` : ni dessinés ni saisis.)
+        if !self.cle_vue(crate::legendecles::Sorte::Position) {
+            return;
+        }
         for k in &layer.pos_keys {
             let x = x_of(k.frame);
             if k.frame >= max || x < visible.0 - 8.0 || x > visible.1 + 8.0 {
@@ -303,7 +307,7 @@ impl App {
     pub(crate) fn pos_marker_in_timeline(&self, p: Pos2, r: Rect, cell: f32, rows: &[crate::layerheads::Row], grid_top: f32) -> Option<(usize, usize)> {
         let row = crate::layerheads::row_at(rows, p.y - grid_top)?;
         let layer = self.layers().get(row.li)?;
-        if layer.pos_keys.is_empty() || (p.y - (grid_top + Self::pos_marker_y(row.top, row.h))).abs() > HIT_H {
+        if !self.cle_vue(crate::legendecles::Sorte::Position) || layer.pos_keys.is_empty() || (p.y - (grid_top + Self::pos_marker_y(row.top, row.h))).abs() > HIT_H {
             return None;
         }
         let tol = (cell * 0.5).max(5.0);

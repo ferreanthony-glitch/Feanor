@@ -1065,7 +1065,6 @@ impl App {
         self.action_item(ui, "Couper", "images.couper");
         self.action_item(ui, "Copier", "images.copier");
         self.action_item(ui, "Coller (insérer avant l'image courante)", "images.coller");
-        self.action_item(ui, "Coller (remplacer les images choisies)", "images.coller_remplacer");
         self.action_item(ui, "Dupliquer", "images.dupliquer");
         self.action_item(ui, "Supprimer", "images.supprimer");
         ui.separator();
@@ -1094,33 +1093,34 @@ impl App {
             self.action_item(ui, "Une exposition de plus à chaque instance choisie", "instance.exposition_plus");
             self.action_item(ui, "Une exposition de moins à chaque instance choisie", "instance.exposition_moins");
         });
-        ui.menu_button("Faux-fixe (rejouer les images choisies)", |ui| {
-            ui.horizontal(|ui| {
-                ui.label("Jouées en tout");
-                ui.add(egui::DragValue::new(&mut self.fake_hold_times).range(2..=50).suffix(" fois"));
-            });
-            self.action_item(ui, "À la suite, en boucle", "images.faux_fixe_boucle");
-            self.action_item(ui, "En va-et-vient", "images.faux_fixe_va_et_vient");
-            self.action_item(ui, "Au hasard", "images.faux_fixe_hasard");
-        });
-        ui.menu_button("Étirer le calque jusqu'à la fin du plan", |ui| {
-            self.action_item(ui, "En tenant sa dernière image", "calque.etirer_tenir");
-            self.action_item(ui, "En rejouant ses images en boucle", "calque.etirer_boucle");
-            self.action_item(ui, "En rejouant ses images en va-et-vient", "calque.etirer_va_et_vient");
-            ui.separator();
-            self.action_item(ui, "Couper le calque après l'image courante", "calque.couper_apres");
-        });
-        // Interpolation (13l) : vrais intervalles en vectoriel, fondus en bitmap.
-        ui.menu_button("Interpolation", |ui| {
-            self.action_item(ui, "Insérer une image intermédiaire", "images.intermediaire");
-            self.action_item(ui, "Insérer des images intermédiaires…", "images.intermediaires");
-            self.action_item(ui, "Remplir les vides par des intervalles", "images.intervalles");
-            self.action_item(ui, "Étirer en interpolant…", "images.etirer_interpoler");
-            ui.separator();
-            self.action_item(ui, "Changer la cadence du projet (durées gardées)…", "projet.changer_cadence");
-            ui.label(egui::RichText::new("Calque vectoriel : les traits passent d'une forme à l'autre ; calque bitmap : fondu.").weak().small());
-        });
         ui.menu_button("Plus", |ui| {
+            self.action_item(ui, "Coller (remplacer les images choisies)", "images.coller_remplacer");
+            ui.menu_button("Faux-fixe (rejouer les images choisies)", |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Jouées en tout");
+                    ui.add(egui::DragValue::new(&mut self.fake_hold_times).range(2..=50).suffix(" fois"));
+                });
+                self.action_item(ui, "À la suite, en boucle", "images.faux_fixe_boucle");
+                self.action_item(ui, "En va-et-vient", "images.faux_fixe_va_et_vient");
+                self.action_item(ui, "Au hasard", "images.faux_fixe_hasard");
+            });
+            ui.menu_button("Étirer le calque jusqu'à la fin du plan", |ui| {
+                self.action_item(ui, "En tenant sa dernière image", "calque.etirer_tenir");
+                self.action_item(ui, "En rejouant ses images en boucle", "calque.etirer_boucle");
+                self.action_item(ui, "En rejouant ses images en va-et-vient", "calque.etirer_va_et_vient");
+                ui.separator();
+                self.action_item(ui, "Couper le calque après l'image courante", "calque.couper_apres");
+            });
+            // Interpolation (13l) : vrais intervalles en vectoriel, fondus en bitmap.
+            ui.menu_button("Interpolation", |ui| {
+                self.action_item(ui, "Insérer une image intermédiaire", "images.intermediaire");
+                self.action_item(ui, "Insérer des images intermédiaires…", "images.intermediaires");
+                self.action_item(ui, "Remplir les vides par des intervalles", "images.intervalles");
+                self.action_item(ui, "Étirer en interpolant…", "images.etirer_interpoler");
+                ui.separator();
+                self.action_item(ui, "Changer la cadence du projet (durées gardées)…", "projet.changer_cadence");
+                ui.label(egui::RichText::new("Calque vectoriel : les traits passent d'une forme à l'autre ; calque bitmap : fondu.").weak().small());
+            });
             self.action_item(ui, "Choisir toutes les images", "images.tout_choisir");
             self.action_item(ui, "Inverser l'ordre", "images.inverser");
             ui.menu_button("Retourner", |ui| {

@@ -963,7 +963,7 @@ Décision d'Anthony : « On va rester simple et focus sur le dessin. Un espace 3
 l'environnement suffit. On peut supprimer les objets 3D comme les cubes, cylindres, personnages… ça alourdit le logiciel et
 l'interface pour pas grand-chose. » Le **repère 3D** (modèle glTF en fil de fer par-dessus le dessin) est retiré aussi.
 
-**Un seul espace, que des calques et la caméra** : l'icône cube de la barre sous le dessin (`espace3d.basculer`, aussi
+**Un seul espace, que des calques et la caméra** : l'icône cube de la barre au-dessus du dessin, avec les vues plateau et caméra (depuis la partie 40 ; `espace3d.basculer`, aussi
 Affichage > Plateau et Ctrl+K) ouvre une vue 3D à la place du dessin, avec ses réglages dans le panneau **Réglages** (qui montre
 l'Espace 3D tant qu'il est ouvert). Les identifiants d'avant (`vue.3d`, `scene3d.basculer`, `vue3d.recadrer`, `scene3d.cadrer`,
 `outil3d.*`, `scene3d.outil_*`, `scene3d.vue_camera`, `scene3d.aimanter`, `scene3d.grille`) sont des doubles
@@ -1004,7 +1004,7 @@ l'Espace 3D tant qu'il est ouvert). Les identifiants d'avant (`vue.3d`, `scene3d
 
 ### Liste de contrôle visuelle pour Anthony
 
-1. **Un seul bouton 3D** (cube) dans la barre sous le dessin ; dans Affichage > Plateau une seule entrée « Espace 3D » ; Ctrl+K
+1. **Un seul bouton 3D** (cube) dans la barre au-dessus du dessin (partie 40) ; dans Affichage > Plateau une seule entrée « Espace 3D » ; Ctrl+K
    « Espace 3D » ne se trouve qu'une fois ; **aucune** commande de cube, mannequin, modèle ni « repère 3D » dans Ctrl+K.
 2. **Une rangée d'outils** en ouvrant l'Espace 3D : Choisir, Déplacer, Tourner, Échelle, Caméra | Recadrer, Regarder par la
    caméra. Icônes distinctes de celles de la barre du haut (la « Vue caméra » du dessin garde sa caméra vidéo) ; bulles à 1 s ;
@@ -1143,7 +1143,7 @@ organisation des panneaux propre au travail de montage ».
   autrement. Un troisième `Mode` aurait doublé les contextes de raccourcis, les menus qui dépendent du mode et leurs
   essais, pour une différence qui est une disposition et une barre. Ce qui s'adapte à l'espace : la disposition
   (`DockLayout::pour_le_montage`), la barre de la bande (`Barre::MontageEdition`), le titre « Lecteur » du dessin, la
-  barre d'état (« Montage · plan 3 »), la vue caméra du lecteur.
+  barre d'état (« Montage · plan 3 » ; depuis la partie 40, elle ne montre plus l'espace de travail ni le plan), la vue caméra du lecteur.
 - **Raccourcis** : **Alt+M** (`espace.montage`, libre : « M » seul reste le miroir ; Alt+lettre est le même geste que
   les outils) ; Ctrl+K « Espace de travail : Montage ». **Tab** : du Storyboard à l'Animation et retour, comme avant ;
   **depuis le Montage, Tab revient au Storyboard** (le Montage n'est pas un côté de la bascule : « Animer ce plan », dans
@@ -1300,7 +1300,7 @@ thème (`theme::avertissement`) ; les états allumés (Envois, Comparer) prennen
 - **Fiche du plan, ligne « Version »** : « V2 » en gras (et « sur 3 » s'il y en a plusieurs), les icônes « Nouvelle version » (en dupliquant, en partant d'un plan vide) ; une
   ligne par autre version : son numéro et sa date, puis passer (flèches), comparer (colonnes), restaurer (flèche arrière),
   supprimer (corbeille).
-- **Titre** : « Plan 3 · V2 » dans la bande, sur la planche, dans la fiche, la timeline, la barre d'état et le titre de la
+- **Titre** : « Plan 3 · V2 » dans la bande, sur la planche, dans la fiche, la timeline, le titre du dessin (plus la barre d'état, partie 40) et le titre de la
   fenêtre « Comparer » pour un plan qui a plusieurs versions.
 - **Fenêtre « Envois »** : la ligne de commandes (marquer, plan modifié précédent / suivant, choisir les modifiés), le
   résumé (« Depuis « v2 au réal » : 7 plans modifiés, 1 ajouté »), la liste des plans modifiés (un clic y va), puis les
@@ -3348,3 +3348,52 @@ Cinq icônes et « … » ; une icône de sorte par ligne ; le menu « + » (sor
 barre reste atteignable (« … », « + », palette) ; neutres dans l'ordre ; ordre du panneau Couleur ; roue ou curseurs, jamais
 les deux ; état replié et choisi retenu dans les réglages, pas dans le projet ; Ctrl+Z laisse le nuancier ; effets repliés,
 nouvel effet ouvert (`fxui::plis_apres`) ; boutons cachés plutôt que grisés ; « Plus de réglages » replié et retenu par outil.
+
+---------------------------------------------------------------------------------------------------
+
+## 40. Barres simplifiées (2026-10-21, branche `simpl-barres`)
+
+« Toujours rendre l'interface la plus simple possible » : huit points, détaillés dans `docs/DOUBLONS.md` (l'inventaire des doublons, les choix « cacher plutôt que griser »,
+les questions pour Anthony).
+
+1. **Une commande, un endroit principal.** La barre de commandes ne garde que les neuf icônes du fichier et de l'édition (les plans et le transport n'y sont plus, même
+   sous « Plus… »). La pelure d'oignon se règle sous le dessin seulement ; le panneau Effets et les Bruitages ont leur icône dans la barre des panneaux, pas une seconde dans
+   les barres du montage ; « Animer ce plan » est l'onglet Animation. Les vues (plateau, caméra, Espace 3D) sont dans la barre AU-DESSUS du dessin, avec un seul menu
+   « Cadrage » (les zones de sécurité et le format n'ont plus de bouton ni de liste en plus). Les menus du haut restent le catalogue.
+2. **Les panneaux de la barre de droite, par espace.** `barrepanneaux::panneaux_d_office` : Vignettes 4 icônes (Réglages, Pinceaux, Couleur, Références), Storyboard 9,
+   Animation 9, Montage 4 (Fiche, Commentaires, Historique, Bruitages). Un panneau ouvert à la main a son icône tant qu'il est ouvert (chaque espace retient sa
+   disposition, la barre ne se bat pas contre l'utilisateur) ; les autres : Ctrl+K et Affichage > Espaces de travail > Panneaux.
+3. **Légende des clés et filtre** (`legendecles.rs`) : une icône « ? » au bout de l'en-tête du montage et de la timeline ; au survol, la légende (dessin bleu et vert,
+   caméra jaune, effet violet, position verte, transition) avec une case par sorte pour cacher caméra, effets, positions, transitions. **Un affichage seulement** : la sorte
+   cachée n'est ni dessinée ni saisie à la souris, le projet ne change pas, la lecture et l'export montrent tout. Retenu dans les réglages (`cles_vues`), pas dans le projet.
+   Les clés de dessin sont le contenu des pistes : elles ne se cachent pas. L'icône est allumée quand une sorte est cachée.
+4. **Barre d'état courte** : à gauche, le format et la cadence, le zoom, le panneau qui a la main (quand il y en a un), l'état d'enregistrement ; plus de titre du plan,
+   d'espace de travail, de rotation, de miroir ni de position du curseur. Le message est une astuce d'une ligne (`messages::resume` coupe avant la première parenthèse ou le
+   premier point-virgule au-delà de 70 caractères) ; le message entier est dans sa bulle et dans l'historique des messages.
+5. **Clic droit : une dizaine d'entrées au plus** (essai `menus_tests`) : plan, vignette, fond de la planche, calque (montage, en-tête de la timeline, panneau Calques), images,
+   ligne de la caméra, règle de la timeline, extrait de son, menus « Repères » et « Affichage ». Le rare est dans « Plus » ou un sous-menu, rien n'est retiré.
+6. **Cacher plutôt que griser** dans les barres : une commande qui ne s'applique pas disparaît (coller sans rien de copié, clé de caméra ici / supprimer / adoucir, plan
+   modifié sans envoi, renuméroter sans verrou) ; sous « Plus… » elle reste, grisée, avec la raison dans la bulle.
+7. **Mêmes icônes, mêmes écarts** : `barres::ICONE` (17), `barres::CASE` (28 × 26), `barres::ECART` (2) et `barres::MARGE_TRAIT` (3) pour la barre de commandes, la barre d'outils
+   (qui passe de 44 à 40 de large), la barre des panneaux (34), les deux barres de la vue, les en-têtes du montage et de la timeline (`toolbars::case_icone`).
+   Les traits entre groupes ont la même marge partout.
+8. **Barre sous le dessin réduite à des icônes** : Ajuster, loupe, rotation, miroir, pelure d'oignon, table lumineuse. Les réglages fins (pourcentage du zoom, angle, ± 15°,
+   avant et après de la pelure, force de la table lumineuse) sont dans de petits panneaux qui s'ouvrent au clic au-dessus de l'icône (`viewbar::panneau_de_case`) ; la pelure
+   et la table lumineuse ont une petite flèche à côté de leur icône. Échap ou un clic ailleurs les ferme.
+
+### Fichiers
+
+`barres.rs` (barres, constantes de taille), `barrepanneaux.rs` (icônes par espace), `legendecles.rs` (légende, filtre), `viewbar.rs` (barres de la vue), `toolbars.rs`
+(`case_icone`), `messages.rs` (`resume`), `panels.rs` (barre d'état), `montagehead.rs`, `layerheads.rs`, `storyboard.rs`, `boardui.rs`, `handles.rs`, `images.rs`, `cues.rs`,
+`soundtrack.rs`, `annotationsui.rs` (menus du clic droit). Essais : `barres_tests`, `barrepanneaux_tests`, `legendecles_tests`, `menus_tests`, `messages_tests`.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Vignettes : la barre de droite n'a que quatre icônes. Montage : quatre aussi (Fiche, Commentaires, Historique, Bruitages). Ouvrir un panneau par Ctrl+K : son icône apparaît ;
+   le refermer : elle repart. Quitter l'espace et y revenir : le panneau est où on l'a laissé.
+2. Survoler le « ? » au bout de la barre du montage : la légende s'affiche sous l'icône ; décocher « Clé de caméra » : les losanges jaunes disparaissent de la piste Caméra
+   (et ne se saisissent plus), le « ? » s'allume ; recocher : ils reviennent, rien n'a changé dans le projet. Même chose dans la timeline.
+3. Barre sous le dessin : cliquer la loupe (pourcentage, − , +, 100 %, Ajuster), l'icône de rotation (angle), la petite flèche de la pelure d'oignon (avant, après, tous les
+   réglages), celle de la table lumineuse. Toutes les cases ont la même taille que celles de la barre du haut.
+4. Clic droit sur un plan du montage : neuf lignes ; « Plus » contient la couleur, les transitions, le rognage et l'import d'un son.
+5. Barre d'état : « 1920×1080 · 24 i/s · 35 % » puis le message court ; le message long (par exemple en entrant dans l'Espace 3D) est entier dans la bulle.

@@ -2,8 +2,9 @@
 
 use egui_dock::{DockState, NodeIndex, TabIndex};
 
-use crate::barrepanneaux::{est_devant, pane_de_action, regle_clic, Clic, GROUPES};
+use crate::barrepanneaux::{est_devant, pane_de_action, panneaux_d_office, regle_clic, Clic, GROUPES};
 use crate::dock::Pane;
+use crate::workspace::Espace;
 
 fn panes() -> Vec<Pane> {
     GROUPES.iter().flat_map(|g| g.iter()).map(|e| e.pane).collect()
@@ -49,6 +50,64 @@ fn the_exposure_sheet_icon_is_only_there_in_animation() {
     assert_eq!(icones(false)[1].len(), 3);
     // L'action reste enregistrée (palette, raccourci) : elle répond d'un mot en storyboard.
     assert!(crate::keymap::action_info("vue.feuille_exposition").is_some_and(|a| a.implemented));
+}
+
+/// Les panneaux dont la barre montre l'icône dans `espace`, `ouverts` étant les panneaux ouverts.
+fn icones_de(espace: Espace, animation: bool, ouverts: &[Pane]) -> Vec<Pane> {
+    crate::barrepanneaux::icones_de(espace, animation, &|p| ouverts.contains(&p)).into_iter().flatten().map(|e| e.pane).collect()
+}
+
+#[test]
+fn each_workspace_shows_only_the_panels_useful_for_its_work() {
+    // Vignettes : « la plus épurée possible, rien de distraction, que du dessin et des références ».
+    assert_eq!(icones_de(Espace::Vignettes, false, &[]), vec![Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::References]);
+    // Montage : la fiche du plan et ce qui sert à la relecture et au son.
+    assert_eq!(icones_de(Espace::Montage, false, &[]), vec![Pane::Sheet, Pane::Comments, Pane::History, Pane::Bruitages]);
+    // Storyboard : le dessin, les calques, la fiche ; pas de feuille d'exposition, de commentaires ni d'historique.
+    let storyboard = icones_de(Espace::Storyboard, false, &[]);
+    assert_eq!(storyboard.len(), 9, "{storyboard:?}");
+    for absent in [Pane::XSheet, Pane::Comments, Pane::History, Pane::Bruitages] {
+        assert!(!storyboard.contains(&absent), "{absent:?} n'est pas dans la barre du storyboard");
+    }
+    // Animation : la feuille d'exposition en plus, sans les personnages.
+    let animation = icones_de(Espace::Animation, true, &[]);
+    assert!(animation.contains(&Pane::XSheet) && !animation.contains(&Pane::Personnages), "{animation:?}");
+    // Chaque espace a moins d'icônes que les treize du catalogue.
+    for e in Espace::TOUS {
+        assert!(icones_de(e, true, &[]).len() < 13, "{e:?}");
+    }
+    // Rien n'est perdu : chaque panneau de la barre est d'office dans au moins un espace, et garde son action
+    // (palette Ctrl+K) et sa case dans le menu Affichage.
+    for p in panes() {
+        assert!(Espace::TOUS.iter().any(|e| panneaux_d_office(*e).contains(&p)), "{p:?} n'est d'office dans aucun espace");
+    }
+}
+
+#[test]
+fn a_panel_opened_by_hand_keeps_its_icon_while_it_is_open() {
+    // Vignettes : l'historique ouvert à la main a son icône (la barre ne se bat pas contre l'utilisateur) ; refermé,
+    // elle part. Chaque espace retient sa disposition, donc le panneau ouvert revient avec l'espace.
+    let sans = icones_de(Espace::Vignettes, false, &[]);
+    let avec = icones_de(Espace::Vignettes, false, &[Pane::History]);
+    assert!(!sans.contains(&Pane::History) && avec.contains(&Pane::History));
+    assert_eq!(avec.len(), sans.len() + 1);
+    // Les panneaux d'office restent, ouverts ou non.
+    assert!(sans.contains(&Pane::Color));
+    // La feuille d'exposition, elle, n'existe qu'en animation, même ouverte.
+    assert!(!icones_de(Espace::Storyboard, false, &[Pane::XSheet]).contains(&Pane::XSheet));
+}
+
+#[test]
+fn the_panels_not_in_the_bar_stay_reachable_by_the_palette_and_the_display_menu() {
+    for e in Espace::TOUS {
+        let visibles = icones_de(e, true, &[]);
+        for p in panes().into_iter().filter(|p| !visibles.contains(p)) {
+            let entree = GROUPES.iter().flat_map(|g| g.iter()).find(|x| x.pane == p).unwrap();
+            // Palette : l'action existe ; menu Affichage : le panneau est dans `Pane::ALL` (une case chacun).
+            assert!(crate::keymap::action_info(entree.action).is_some_and(|a| a.implemented), "{p:?}");
+            assert!(Pane::ALL.contains(&p));
+        }
+    }
 }
 
 #[test]

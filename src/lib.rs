@@ -142,6 +142,13 @@ mod barrepanneaux_tests;
 mod barres;
 #[cfg(test)]
 mod barres_tests;
+mod legendecles;
+#[cfg(test)]
+mod legendecles_tests;
+#[cfg(test)]
+mod doublons_tests;
+#[cfg(test)]
+mod menus_tests;
 pub mod fond;
 #[cfg(test)]
 mod fond_tests;

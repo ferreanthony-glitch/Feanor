@@ -159,8 +159,9 @@ impl App {
     pub(crate) fn framing_aids_button(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         let on = self.framing_any_on();
-        let text = crate::bulles::encre_etat(RichText::new(format!("{} Cadrage", ph::RULER)).size(crate::bulles::TAILLE), on);
-        let resp = egui::menu::menu_custom_button(ui, egui::Button::new(text).selected(on), |ui| {
+        let [w, h] = crate::barres::CASE;
+        let text = crate::bulles::encre_etat(RichText::new(ph::RULER).size(crate::barres::ICONE), on);
+        let resp = egui::menu::menu_custom_button(ui, egui::Button::new(text).selected(on).frame(on).min_size(egui::vec2(w, h)), |ui| {
             ui.set_min_width(260.0);
             self.framing_aids_ui(ui);
         });

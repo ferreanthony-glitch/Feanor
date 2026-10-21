@@ -303,23 +303,22 @@ impl App {
 
     /// Outils de l'Espace 3D, dans la barre au-dessus du dessin : une seule rangée.
     pub(crate) fn espace3d_tools(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(6.0);
         for mode in GizmoMode::ALL {
-            if self.bouton_etat(ui, self.espace3d.mode == mode, mode_icon(mode), mode.label(), mode_description(mode), mode.action()).clicked() {
+            if self.case_icone(ui, mode_icon(mode), Some(self.espace3d.mode == mode), mode.label(), mode_description(mode), mode.action()).clicked() {
                 self.espace3d.mode = mode;
             }
         }
         let cam_chosen = self.espace3d.sel.contains(&CAMERA_ID);
-        if self.bouton_etat(ui, cam_chosen, ph::CAMERA, "Caméra", "Choisit la caméra du plan pour la déplacer ou la tourner dans la vue (sa clé de l'image courante si elle est animée).", "espace3d.outil_camera").clicked() {
+        if self.case_icone(ui, ph::CAMERA, Some(cam_chosen), "Caméra", "Choisit la caméra du plan pour la déplacer ou la tourner dans la vue (sa clé de l'image courante si elle est animée).", "espace3d.outil_camera").clicked() {
             self.espace3d_pick_camera();
         }
-        ui.add_space(4.0);
+        ui.add_space(crate::barres::MARGE_TRAIT);
         ui.separator();
-        ui.add_space(4.0);
-        if self.bouton(ui, ph::CORNERS_OUT, "Recadrer", "Tout l'espace dans la vue : les cartes et la caméra.", "espace3d.cadrer").clicked() {
+        ui.add_space(crate::barres::MARGE_TRAIT);
+        if self.case_icone(ui, ph::CORNERS_OUT, None, "Recadrer", "Tout l'espace dans la vue : les cartes et la caméra.", "espace3d.cadrer").clicked() {
             self.espace3d_fit();
         }
-        if self.bouton_etat(ui, self.espace3d.through_camera, ph::BINOCULARS, "Regarder par la caméra", "Ce que la caméra du plan filme, au format du cadre. Glisser ou tourner la vue déplace alors la caméra (sa clé de l'image courante si elle est animée).", "espace3d.vue_camera").clicked() {
+        if self.case_icone(ui, ph::BINOCULARS, Some(self.espace3d.through_camera), "Regarder par la caméra", "Ce que la caméra du plan filme, au format du cadre. Glisser ou tourner la vue déplace alors la caméra (sa clé de l'image courante si elle est animée).", "espace3d.vue_camera").clicked() {
             self.espace3d.through_camera = !self.espace3d.through_camera;
         }
     }

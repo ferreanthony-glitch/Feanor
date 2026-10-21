@@ -1685,10 +1685,11 @@ impl App {
         }
         self.follow_frame = true;
         self.status = match espace {
-            Espace::Vignettes => "Vignettes : dessine dans les cases (Ctrl + glisser un cadre : mouvement de caméra ; Tab : retour au storyboard).".into(),
-            Espace::Storyboard => "Storyboard : montage des plans.".into(),
-            Espace::Montage => "Montage : le film en haut, toutes les pistes en bas (Tab ou l'onglet Storyboard pour en revenir).".into(),
-            Espace::Animation => format!("Animation de {} (Tab : retour au storyboard).", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
+            // (Une seule astuce courte par espace ; le détail est dans la bulle de l'onglet.)
+            Espace::Vignettes => "Vignettes : dessine dans les cases.".into(),
+            Espace::Storyboard => "Storyboard : monte les plans.".into(),
+            Espace::Montage => "Montage : le film en haut, les pistes en bas.".into(),
+            Espace::Animation => format!("Animation de {}.", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
         };
         // La feuille d'exposition n'existe qu'en animation.
         self.masquer_exposition();
@@ -4594,7 +4595,7 @@ impl App {
         if self.layout.tool_bar {
             let _t = crate::perf::section("barre d'outils");
             egui::SidePanel::left("barre_outils")
-                .exact_width(44.0)
+                .exact_width(40.0)
                 .resizable(false)
                 .show(ctx, |ui| self.vertical_tool_bar(ui));
         }

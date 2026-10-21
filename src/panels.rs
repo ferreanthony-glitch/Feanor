@@ -288,13 +288,13 @@ impl App {
                 use crate::workspace::Espace;
                 let on = self.espace == Espace::Montage;
                 let montage = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Montage ").strong(), on));
-                let montage = self.aide(montage, "Montage", "Le film en grand, avec toutes ses pistes : couper, rogner, transitions, son, relecture.", "espace.montage");
+                let montage = self.aide(montage, "Montage", "Le film en grand, avec toutes ses pistes : couper, rogner, transitions, son, relecture. Tab : retour au storyboard.", "espace.montage");
                 if montage.clicked() && !on {
                     self.set_espace(Espace::Montage);
                 }
                 let on = self.espace == Espace::Animation;
                 let animation = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Animation ").strong(), on));
-                let animation = self.aide(animation, "Animation", "Animer le plan courant, image par image.", "mode.basculer");
+                let animation = self.aide(animation, "Animation", "Animer le plan courant, image par image. Tab : retour au storyboard.", "mode.basculer");
                 if animation.clicked() && !on {
                     self.set_espace(Espace::Animation);
                 }
@@ -317,10 +317,10 @@ impl App {
     /// Panneau Outils : une icône par outil ; nom, raccourci et description dans la bulle.
     pub(crate) fn tool_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
+            ui.spacing_mut().item_spacing = vec2(crate::barres::ECART, crate::barres::ECART);
             for tool in Tool::ALL {
-                let icon = RichText::new(tool.icon()).size(21.0);
-                let resp = ui.add_sized([38.0, 34.0], egui::SelectableLabel::new(self.tool == tool, icon));
+                let icon = RichText::new(tool.icon()).size(crate::barres::ICONE);
+                let resp = ui.add_sized(crate::barres::CASE, egui::SelectableLabel::new(self.tool == tool, icon));
                 if self.aide(resp, tool.label(), tool.description(), tool.action()).clicked() {
                     self.set_tool(tool);
                 }
@@ -329,8 +329,8 @@ impl App {
         // Sur la planche des Vignettes : le stylo et la gomme d'annotation (`annotationsui.rs`).
         if self.board_shown() {
             ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
-                self.annot_outils_ligne(ui, [38.0, 34.0], 21.0);
+                ui.spacing_mut().item_spacing = vec2(crate::barres::ECART, crate::barres::ECART);
+                self.annot_outils_ligne(ui, crate::barres::CASE, crate::barres::ICONE);
             });
         }
     }
@@ -717,8 +717,9 @@ impl App {
     }
     pub(crate) fn status_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            let where_ = format!("{} · {}", self.espace.nom(), crate::planversui::titre_long_avec_version(&self.doc, self.cur_panel));
-            ui.label(RichText::new(where_).strong());
+            // À gauche, seulement ce qui sert : le format du film et le zoom. L'espace de travail est l'onglet allumé,
+            // le plan est écrit sur le dessin et dans l'en-tête du montage ou de la timeline, la rotation et le
+            // miroir sont des icônes allumées sous le dessin, la position du curseur n'intéresse personne ici.
             // Le panneau qui a la main : copier, coller, supprimer et les raccourcis le visent.
             let hand = if self.key_focus {
                 Some("raccourcis des clés")
@@ -733,15 +734,11 @@ impl App {
                 ui.label(RichText::new(hand).color(ui.visuals().selection.stroke.color)).on_hover_text(
                     "Ce panneau a la main (encadré en bleu) : les raccourcis, copier, coller et supprimer le visent. Un clic dans le dessin la rend au dessin.",
                 );
+                ui.separator();
             }
-            ui.separator();
-            ui.label(format!(
-                "Cadre {}×{} · {} i/s",
-                self.doc.frame[0], self.doc.frame[1], self.doc.fps
-            ))
-            .on_hover_text(format!(
-                "Image finale {}×{} px ; feuille de dessin {}×{} px",
-                self.doc.frame[0], self.doc.frame[1], self.doc.width, self.doc.height
+            ui.label(format!("{}×{} · {} i/s", self.doc.frame[0], self.doc.frame[1], self.doc.fps)).on_hover_text(format!(
+                "Image finale {}×{} px à {} images par seconde ; feuille de dessin {}×{} px (Réglages du film).",
+                self.doc.frame[0], self.doc.frame[1], self.doc.fps, self.doc.width, self.doc.height
             ));
             // Sélection sur plusieurs calques : « 3 calques, 42 éléments ».
             if let Some(summary) = self.multi_summary() {
@@ -751,18 +748,7 @@ impl App {
                 );
             }
             ui.separator();
-            ui.label(format!("Zoom {:.0} %", self.view.zoom * self.ppp * 100.0));
-            let degrees = self.view.rotation.to_degrees();
-            if degrees.abs() > 0.05 {
-                ui.label(format!("Rotation {degrees:.0}°"));
-            }
-            if self.view.flip {
-                ui.label("Miroir");
-            }
-            if let Some(p) = self.hover_canvas {
-                ui.separator();
-                ui.label(format!("x {:.0}  y {:.0}", p.x, p.y));
-            }
+            ui.label(format!("{:.0} %", self.view.zoom * self.ppp * 100.0)).on_hover_text("Zoom de la vue (la loupe, sous le dessin, le règle).");
             self.save_status_ui(ui);
             self.recovery_status_ui(ui);
             self.cooperation_status_ui(ui);

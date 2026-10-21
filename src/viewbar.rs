@@ -8,7 +8,7 @@ use crate::app::App;
 use crate::frames;
 
 /// Hauteur de la barre.
-pub(crate) const VIEW_BAR_H: f32 = 26.0;
+pub(crate) const VIEW_BAR_H: f32 = 28.0;
 
 /// Ce que font les touches avec l'outil `tool`, en une ligne sous le dessin (Anthony,
 /// 2026-10-18 : les gestes à touche, comme l'enveloppe ou le lasso de Ctrl, ne se devinent pas).
@@ -32,7 +32,7 @@ pub(crate) fn tool_hint(tool: crate::app::Tool) -> &'static str {
     }
 }
 /// Hauteur de la barre des commandes de la vue, sous le dessin.
-pub(crate) const TOOLS_BAR_H: f32 = 30.0;
+pub(crate) const TOOLS_BAR_H: f32 = 28.0;
 /// Couleurs des zones de sécurité et du cadre de format.
 const SAFE: Color32 = crate::theme::CADRAGE_SECURITE;
 const FORMAT: Color32 = crate::theme::CADRAGE_FORMAT;
@@ -126,73 +126,33 @@ pub(crate) fn band(outer: [Pos2; 4], inner: [Pos2; 4], color: Color32) -> Shape 
 }
 
 impl App {
-    /// Barre sous le dessin : les commandes de la vue (Anthony, 2026-10-17 : « ajoute les outils
-    /// de la fenêtre Vue sous l'espace de travail » ; puis « change la disposition comme ceci » :
-    /// celles de la barre du haut y passent). Vues (planche, caméra, 3D) ; ajuster, 100 %, zoom ;
-    /// rotation ; miroir ; pelure d'oignon, table lumineuse. En 3D, seulement les vues. (Zones de
-    /// sécurité et format : barre au-dessus du dessin.)
+    /// Barre sous le dessin, réduite à des icônes (simplification des barres, 2026-10-21) : ajuster, zoom, rotation,
+    /// miroir, pelure d'oignon, table lumineuse. Les réglages fins (le pourcentage du zoom, l'angle, combien de dessins
+    /// avant et après, la force de la table lumineuse) sont dans de petits panneaux qui s'ouvrent au clic, au-dessus de
+    /// l'icône. Les vues (plateau, caméra, Espace 3D) et les aides au cadrage sont dans la barre au-dessus du dessin.
     pub(crate) fn view_tools_bar(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::entete());
+        // Dans l'Espace 3D, on ne dessine pas à plat : cette barre n'a rien à offrir.
         let in3d = self.espace3d.on && !self.camera_view;
-        // Étroit : curseurs plus courts, sans la force de la table lumineuse.
-        let narrow = ui.available_width() < 700.0;
         ui.horizontal_centered(|ui| {
-            ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
-            let sep = |ui: &mut egui::Ui| {
-                ui.add_space(3.0);
-                ui.separator();
-                ui.add_space(3.0);
-            };
+            ui.spacing_mut().item_spacing = vec2(crate::barres::ECART, 0.0);
             ui.add_space(4.0);
-            let thumbs = self.board_view == crate::app::BoardView::Panels && self.mode == crate::app::Mode::Storyboard;
-            self.command_button(ui, ph::SQUARES_FOUR, "vue.planches", "Vue dessin / vignettes", "Dessiner le plan, ou voir toutes ses images de storyboard en planche.", Some(thumbs));
-            self.command_button(ui, ph::FRAME_CORNERS, "camera.vue", "Vue à travers la caméra", "Voir ce que filme la caméra du plan.", Some(self.camera_view));
-            self.command_button(ui, ph::CUBE, "espace3d.basculer", "Espace 3D", "Les calques (cartes) et la caméra du plan dans un seul espace : les déplacer, les tourner, les mettre à l'échelle, pour la profondeur et la parallaxe.", Some(in3d));
             if in3d {
                 return;
             }
-            sep(ui);
+            let sep = |ui: &mut egui::Ui| {
+                ui.add_space(crate::barres::MARGE_TRAIT);
+                ui.separator();
+                ui.add_space(crate::barres::MARGE_TRAIT);
+            };
             self.command_button(ui, ph::ARROWS_OUT, "vue.ajuster", "Ajuster à la fenêtre", "Toute la feuille dans la vue.", None);
-            self.command_button(ui, ph::MAGNIFYING_GLASS, "vue.reinit_zoom", "Zoom 100 %", "Un pixel du dessin pour un pixel de l'écran.", None);
-            self.command_button(ui, ph::MAGNIFYING_GLASS_MINUS, "vue.zoom_arriere", "Zoom arrière", "", None);
-            self.command_button(ui, ph::MAGNIFYING_GLASS_PLUS, "vue.zoom_avant", "Zoom avant", "", None);
-            sep(ui);
-            self.command_button(ui, ph::ARROW_ARC_LEFT, "vue.rotation_antihoraire", "Tourner la vue", "Dans le sens antihoraire ; le dessin ne change pas.", None);
-            // Rotation de la vue : un curseur court et sa valeur.
-            ui.spacing_mut().slider_width = if narrow { 60.0 } else { 100.0 };
-            let mut degrees = self.view.rotation.to_degrees();
-            let resp = ui.add(egui::Slider::new(&mut degrees, -180.0..=180.0).suffix("°").fixed_decimals(0));
-            if crate::bulles::bulle(resp, "Rotation de la vue", "Tourner la vue ; le dessin ne change pas. Double-clic sur la valeur pour taper un angle.", "").changed() {
-                let delta = degrees.to_radians() - self.view.rotation;
-                let (rect, size) = (self.canvas_rect, self.canvas_size());
-                self.view.rotate_around(rect, size, rect.center(), delta);
-            }
-            self.command_button(ui, ph::ARROW_ARC_RIGHT, "vue.rotation_horaire", "Tourner la vue", "Dans le sens horaire ; le dessin ne change pas.", None);
-            sep(ui);
+            self.zoom_reglage(ui);
+            self.rotation_reglage(ui);
             self.command_button(ui, ph::FLIP_HORIZONTAL, "vue.miroir", "Miroir de la vue", "Voir le dessin retourné, pour vérifier ses proportions ; le dessin ne change pas.", Some(self.view.flip));
             sep(ui);
-            self.command_button(ui, ph::CIRCLES_THREE, "vue.pelure", "Pelure d'oignon", "Par défaut, les dessins d'avant en rouge, ceux d'après en vert.", Some(self.onion.enabled));
-            // Réglages de la pelure à côté de son icône (Anthony, 2026-10-18) : combien avant et
-            // après, et le panneau complet (comme dans la barre de la timeline).
-            if self.onion.enabled && !narrow {
-                let max = crate::onion::MAX_NEIGHBOURS;
-                let resp = ui.add(egui::DragValue::new(&mut self.onion.before).range(0..=max).prefix("‹ "));
-                crate::bulles::bulle(resp, "Avant", "Nombre de dessins (ou d'images) montrés avant.", "");
-                let resp = ui.add(egui::DragValue::new(&mut self.onion.after).range(0..=max).suffix(" ›"));
-                crate::bulles::bulle(resp, "Après", "Nombre de dessins (ou d'images) montrés après.", "");
-            }
-            let key = self.raccourci("pelure.panneau");
-            let resp = ui.add(egui::Button::new(crate::bulles::symbole_etat(ph::GEAR, self.onion_window)).selected(self.onion_window).frame(false));
-            if crate::bulles::bulle(resp, "Réglages de la pelure d'oignon", "Avant et après, mode, devant, couleurs, opacité de chaque image, réglages rangés, décalage.", &key).clicked() {
-                self.onion_window = !self.onion_window;
-            }
-            self.command_button(ui, ph::LIGHTBULB, "vue.table_lumineuse", "Table lumineuse", "Les autres calques du plan estompés ; le calque courant reste net.", Some(self.light_table));
-            if self.light_table && !narrow {
-                ui.spacing_mut().slider_width = 70.0;
-                let resp = ui.add(egui::Slider::new(&mut self.light_table_strength, 0.05..=0.8).custom_formatter(|v, _| format!("{:.0} %", v * 100.0)));
-                crate::bulles::bulle(resp, "Autres calques", "Combien ils restent visibles.", "");
-            }
+            self.pelure_reglage(ui);
+            self.table_lumineuse_reglage(ui);
             // Ce que font les touches avec l'outil courant (Anthony, 2026-10-18, axe d'ergonomie 4).
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(6.0);
@@ -213,6 +173,129 @@ impl App {
         });
     }
 
+    /// Un petit panneau de réglages posé au-dessus de la case `resp` de la barre du bas : il s'ouvre et se ferme à son
+    /// clic, se ferme aussi d'un clic ailleurs ou d'Échap. Le contenu reçoit l'application.
+    fn panneau_de_case(&mut self, ui: &mut egui::Ui, id: &str, resp: &egui::Response, largeur: f32, contenu: impl FnOnce(&mut App, &mut egui::Ui)) {
+        let pid = ui.id().with(("panneau_de_case", id));
+        if resp.clicked() {
+            ui.memory_mut(|m| m.toggle_popup(pid));
+        }
+        egui::popup::popup_above_or_below_widget(ui, pid, resp, egui::AboveOrBelow::Above, egui::popup::PopupCloseBehavior::CloseOnClickOutside, |ui| {
+            ui.set_min_width(largeur);
+            contenu(self, ui);
+        });
+    }
+
+    /// Le zoom : une icône, et au clic le pourcentage (qu'on glisse ou qu'on tape), « − » et « + », ajuster et 100 %.
+    fn zoom_reglage(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        let resp = self.case_icone(ui, ph::MAGNIFYING_GLASS, Some(false), "Zoom", "Le pourcentage de zoom, plus et moins, 100 %.", "");
+        self.panneau_de_case(ui, "zoom", &resp, 190.0, |app, ui| {
+            ui.horizontal(|ui| {
+                if app.bouton(ui, ph::MAGNIFYING_GLASS_MINUS, "Zoom arrière", "", "vue.zoom_arriere").clicked() {
+                    app.run_action("vue.zoom_arriere");
+                }
+                let mut pct = (app.view.zoom * app.ppp * 100.0).clamp(1.0, 6400.0);
+                let avant = pct;
+                let r = ui.add(egui::DragValue::new(&mut pct).range(1.0..=6400.0).speed(1.0).max_decimals(0).suffix(" %"));
+                if crate::bulles::bulle(r, "Zoom", "Glisser, ou double-clic pour taper un pourcentage.", "").changed() && avant > 0.0 {
+                    app.zoom_by(pct / avant);
+                }
+                if app.bouton(ui, ph::MAGNIFYING_GLASS_PLUS, "Zoom avant", "", "vue.zoom_avant").clicked() {
+                    app.run_action("vue.zoom_avant");
+                }
+            });
+            ui.horizontal(|ui| {
+                if ui.button("100 %").on_hover_text("Un pixel du dessin pour un pixel de l'écran.").clicked() {
+                    app.run_action("vue.reinit_zoom");
+                }
+                if ui.button("Ajuster").on_hover_text("Toute la feuille dans la vue.").clicked() {
+                    app.run_action("vue.ajuster");
+                }
+            });
+        });
+    }
+
+    /// La rotation de la vue : une icône (allumée quand la vue est tournée), et au clic l'angle, un quart de
+    /// tour de chaque côté et « Droite ».
+    fn rotation_reglage(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        let tournee = self.view.rotation.to_degrees().abs() > 0.05;
+        let resp = self.case_icone(ui, ph::ARROW_ARC_RIGHT, Some(tournee), "Rotation de la vue", "Tourner la vue pour dessiner plus à l'aise ; le dessin ne change pas.", "");
+        self.panneau_de_case(ui, "rotation", &resp, 190.0, |app, ui| {
+            ui.horizontal(|ui| {
+                if app.bouton(ui, ph::ARROW_ARC_LEFT, "Tourner la vue", "De 15° dans le sens antihoraire ; le dessin ne change pas.", "vue.rotation_antihoraire").clicked() {
+                    app.run_action("vue.rotation_antihoraire");
+                }
+                let mut degrees = app.view.rotation.to_degrees();
+                let r = ui.add(egui::DragValue::new(&mut degrees).range(-180.0..=180.0).speed(0.5).max_decimals(0).suffix("°"));
+                if crate::bulles::bulle(r, "Angle de la vue", "Glisser, ou double-clic pour taper un angle.", "").changed() {
+                    let delta = degrees.to_radians() - app.view.rotation;
+                    app.rotate_view(delta.to_degrees());
+                }
+                if app.bouton(ui, ph::ARROW_ARC_RIGHT, "Tourner la vue", "De 15° dans le sens horaire ; le dessin ne change pas.", "vue.rotation_horaire").clicked() {
+                    app.run_action("vue.rotation_horaire");
+                }
+            });
+            if ui.button("Remettre droite").on_hover_text("La vue retrouve l'angle zéro.").clicked() {
+                app.run_action("vue.reinit_rotation");
+            }
+        });
+    }
+
+    /// La pelure d'oignon : l'icône l'allume et l'éteint, la petite flèche à côté ouvre combien de dessins avant et
+    /// après, et la fenêtre de tous ses réglages.
+    fn pelure_reglage(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        self.command_button(ui, ph::CIRCLES_THREE, "vue.pelure", "Pelure d'oignon", "Par défaut, les dessins d'avant en rouge, ceux d'après en vert.", Some(self.onion.enabled));
+        let resp = self.petite_fleche(ui, "Réglages de la pelure d'oignon", "Combien de dessins avant et après, et tous ses réglages.");
+        self.panneau_de_case(ui, "pelure", &resp, 170.0, |app, ui| {
+            let max = crate::onion::MAX_NEIGHBOURS;
+            ui.horizontal(|ui| {
+                ui.label("Avant");
+                let r = ui.add(egui::DragValue::new(&mut app.onion.before).range(0..=max).prefix("‹ "));
+                crate::bulles::bulle(r, "Avant", "Nombre de dessins (ou d'images) montrés avant.", "");
+            });
+            ui.horizontal(|ui| {
+                ui.label("Après");
+                let r = ui.add(egui::DragValue::new(&mut app.onion.after).range(0..=max).suffix(" ›"));
+                crate::bulles::bulle(r, "Après", "Nombre de dessins (ou d'images) montrés après.", "");
+            });
+            let key = app.raccourci("pelure.panneau");
+            let r = ui.button(format!("{}  Tous les réglages…", ph::GEAR));
+            if crate::bulles::bulle(r, "Réglages de la pelure d'oignon", "Mode, devant, couleurs, opacité de chaque image, réglages rangés, décalage.", &key).clicked() {
+                app.onion_window = !app.onion_window;
+            }
+        });
+    }
+
+    /// La table lumineuse : l'icône l'allume et l'éteint, la petite flèche à côté règle la force des autres calques.
+    fn table_lumineuse_reglage(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        self.command_button(ui, ph::LIGHTBULB, "vue.table_lumineuse", "Table lumineuse", "Les autres calques du plan estompés ; le calque courant reste net.", Some(self.light_table));
+        let resp = self.petite_fleche(ui, "Réglage de la table lumineuse", "Combien les autres calques restent visibles.");
+        self.panneau_de_case(ui, "table_lumineuse", &resp, 190.0, |app, ui| {
+            ui.horizontal(|ui| {
+                ui.label("Autres calques");
+                let r = ui.add(egui::Slider::new(&mut app.light_table_strength, 0.05..=0.8).custom_formatter(|v, _| format!("{:.0} %", v * 100.0)));
+                crate::bulles::bulle(r, "Autres calques", "Combien ils restent visibles.", "");
+            });
+        });
+    }
+
+    /// Une petite flèche collée à une icône, qui ouvre ses réglages fins.
+    fn petite_fleche(&self, ui: &mut egui::Ui, nom: &str, description: &str) -> egui::Response {
+        let text = egui::RichText::new(egui_phosphor::regular::CARET_UP).size(10.0);
+        let resp = ui.add_sized([12.0, crate::barres::CASE[1]], egui::Button::new(text).frame(false));
+        crate::bulles::bulle(resp, nom, description, "")
+    }
+
+    /// Multiplie le zoom de la vue par `factor`, autour du centre du dessin.
+    pub(crate) fn zoom_by(&mut self, factor: f32) {
+        let (rect, size) = (self.canvas_rect, self.canvas_size());
+        self.view.zoom_around(rect, size, rect.center(), factor);
+    }
+
     /// Vue caméra (`on`) ou retour à la vue du plateau telle qu'on l'avait laissée.
     pub(crate) fn set_camera_view(&mut self, on: bool) {
         if on == self.camera_view {
@@ -230,41 +313,47 @@ impl App {
         self.status = format!("Vue {}.", if on { "caméra" } else { "du plateau" });
     }
 
-    /// La barre : onglets de vue à gauche, puis les cadres de composition.
+    /// La barre au-dessus du dessin : les trois vues (le plateau, ce que filme la caméra, l'Espace 3D) et un seul menu
+    /// d'aides au cadrage (tiers, spirale, zones de sécurité, cadre de format…). Avant, les zones de sécurité et le
+    /// format y avaient en plus leur propre bouton et leur propre liste : le même réglage deux fois. En Espace 3D,
+    /// ses outils.
     pub(crate) fn view_bar(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::entete());
         ui.horizontal_centered(|ui| {
-            ui.spacing_mut().item_spacing = vec2(2.0, 0.0);
+            ui.spacing_mut().item_spacing = vec2(crate::barres::ECART, 0.0);
             ui.add_space(4.0);
             let cam = self.camera_view;
-            if self.bouton_etat(ui, !cam, ph::BOUNDING_BOX, "Vue du plateau", "Toute la feuille, avec le cadre de la caméra.", "camera.vue").clicked() {
+            let in3d = self.espace3d.on && !cam;
+            if self.case_icone(ui, ph::BOUNDING_BOX, Some(!cam && !in3d), "Vue du plateau", "Toute la feuille, avec le cadre de la caméra.", "camera.vue").clicked() {
+                if self.espace3d.on {
+                    self.set_espace3d(false);
+                }
                 self.set_camera_view(false);
             }
-            if self.bouton_etat(ui, cam, ph::VIDEO_CAMERA, "Vue caméra", "Ce que filme la caméra du plan.", "camera.vue").clicked() {
+            if self.case_icone(ui, ph::VIDEO_CAMERA, Some(cam), "Vue caméra", "Ce que filme la caméra du plan.", "camera.vue").clicked() {
                 self.set_camera_view(true);
             }
-            ui.add_space(6.0);
+            if self
+                .case_icone(
+                    ui,
+                    ph::CUBE,
+                    Some(in3d),
+                    "Espace 3D",
+                    "Les calques (cartes) et la caméra du plan dans un seul espace : les déplacer, les tourner, les mettre à l'échelle, pour la profondeur et la parallaxe.",
+                    "espace3d.basculer",
+                )
+                .clicked()
+            {
+                self.run_action("espace3d.basculer");
+            }
+            ui.add_space(crate::barres::MARGE_TRAIT);
             ui.separator();
-            ui.add_space(6.0);
-            // Le bouton « Espace 3D » n'est que dans la barre du bas (`view_tools_bar`, Anthony 2026-10-20 : pas
-            // deux fois la même icône) ; ici, seulement ses outils quand il est actif.
-            let in_scene = self.espace3d.on && !cam;
-            if in_scene {
+            ui.add_space(crate::barres::MARGE_TRAIT);
+            if in3d {
                 self.espace3d_tools(ui);
                 return;
             }
-            ui.separator();
-            ui.add_space(6.0);
-            if self
-                .bouton_etat(ui, self.layout.safe_frames, ph::SELECTION, "Zones de sécurité", "Action 93 %, titres 90 %, tracées dans le cadre.", "vue.cadres_securite")
-                .clicked()
-            {
-                self.run_action("vue.cadres_securite");
-            }
-            ui.add_space(4.0);
-            self.frame_format_ui(ui);
-            ui.add_space(4.0);
             self.framing_aids_button(ui);
         });
     }
