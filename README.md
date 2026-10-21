@@ -2455,3 +2455,18 @@ Les contournements sont encore là, pour pouvoir y revenir en supprimant `rust-t
 
 Ils pourront être retirés quand on n'aura plus besoin de ce secours (les versions figées seront
 alors libérées lors d'une mise à jour des bibliothèques).
+
+## Vignettes : annotations, images déposées, exports de la planche (2026-10-21, branche `vignettes-annot-exports`)
+
+Détail et liste à vérifier à l'écran : `docs/INTERFACE.md`, partie 11.
+
+- **Stylo et gomme d'annotation** : deux icônes (rouges) dans la colonne d'outils, quand la planche est à l'écran. Le stylo (rouge d'origine, couleur et taille dans les Réglages) trace
+  **par-dessus tout**, déborde où l'on veut, et **n'a aucun effet sur le storyboard** : ni dans les plans, ni dans le film, ni dans les vignettes, ni dans les exports (sauf la planche, si
+  tu coches « Annotations »). Chaque trait s'attache à la case la plus proche et la suit quand la planche se range autrement ; si la case disparaît, il passe à sa voisine. La gomme n'efface que des
+  annotations. Cacher / montrer, « Effacer les annotations… » (avec confirmation, Ctrl+Z les rétablit) : clic droit sur le fond, ou Ctrl+K. Fichier `annotations.json` (partagé avec l'équipe dans un film partagé).
+- **Marie-louise** : un passe-partout noir (ou d'une couleur) couvre tout ce qui est hors des images : seules les vignettes se voient (clic droit sur le fond, ou Ctrl+K ; option de l'export de la planche).
+- **Déposer des images sur la planche** : depuis l'Explorateur de Windows ou en glissant une référence hors du panneau Références. Sur une case : un calque « Image » à part, sous le dessin, ajusté au cadre.
+  Sur les cases vides : un plan par image. Entre deux cases : insérées là. Plusieurs images : à la suite. Une seule étape d'annulation ; les grandes images sont préparées en tâche de fond.
+- **Fichier > Exporter > Planche des vignettes** : PNG, JPEG, ou PDF (une grande page, ou A4 / A3 paysage) ; tout le film, la séquence ou les plans choisis ; numéros, notes, barres, cadres de caméra A / B,
+  annotations (décochées d'office), marie-louise ; 150 / 300 dpi ou largeur en pixels. En tâche de fond, annulable.
+- **Fichier > Exporter > Color script** : une petite image par plan (ou par case), rangées par séquence sur un fond uni (noir d'office), titres, numéros, bande des couleurs dominantes facultative ; PNG ou PDF.

@@ -17,7 +17,7 @@
 //! et à la fin, avec sa réserve ; un son (WAV fabriqué) sur deux pistes ; les guides de
 //! perspective, les notes de la planche, les groupes de couleur, l'arrière-plan en damier, les
 //! propriétés du projet, le volume général, l'image de départ ; des transitions du montage ; des
-//! personnages (brosse par personnage) ; les
+//! personnages (brosse par personnage) ; annotations de la vue Vignettes ; les
 //! effets des extraits de son et le solo d'une piste ; des sons proposés (suggestions sonores) ; des
 //! références visuelles (une image, une vidéo de trois images).
 //!
@@ -557,6 +557,15 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
         let id = doc.alloc();
         doc.personnages.push(crate::personnages::Personnage { id, name: nom.into(), line: trait_, fill: aplat });
     }
+    // Annotations de la vue Vignettes (`annotations.json`) : un trait dans une case, un autre dans une case vide
+    // (trois cases après la première vignette). Des valeurs que le fichier garde exactement.
+    {
+        use crate::annotations::{Ancre, Trace};
+        use crate::vector::VPoint;
+        let carte = doc.panels[0].id;
+        doc.annotations.traces.push(Trace { anchor: Ancre { card: carte, after: 0, rank: 0 }, color: [220, 38, 38], points: vec![VPoint { x: 0.25, y: 0.125, r: 0.0625 }, VPoint { x: 0.5, y: 0.25, r: 0.0625 }] });
+        doc.annotations.traces.push(Trace { anchor: Ancre { card: carte, after: 3, rank: 3 }, color: [30, 90, 200], points: vec![VPoint { x: 0.5, y: 0.5, r: 0.0625 }] });
+    }
     // Sons proposés par la lecture du storyboard (`sons_proposes.json`) : un bruitage à générer, une
     // voix rejetée et modifiée à la main, une ambiance acceptée (son posé), et la confirmation d'envoi
     // en ligne du projet.
@@ -643,6 +652,7 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
     transitions.sort_by_key(|t| t.id);
     let _ = writeln!(s, "transitions {:?}", transitions);
     let _ = writeln!(s, "personnages {:?}", doc.personnages);
+    let _ = writeln!(s, "annotations {:?}", doc.annotations);
     // (Le fichier des sons proposés les range dans l'ordre du film : leurs numéros sont gardés.)
     let mut proposes = doc.sons_proposes.clone();
     proposes.indications.sort_by_key(|i| i.id);
