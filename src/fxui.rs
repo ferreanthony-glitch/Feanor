@@ -45,6 +45,23 @@ pub(crate) fn offer(kind: EffectKind, layer: crate::document::LayerKind, folder:
     }
 }
 
+/// Quels effets d'une pile de `n` effets sont dépliés dans le panneau Effets, d'après ce qui l'était (`avant`, un
+/// booléen par effet ; `None` : le calque n'a pas encore été vu dans la séance) et l'effet choisi `choisi` :
+/// - un nouvel effet (la pile a grandi : ajout, collage, préréglage) s'ouvre, tous les autres se replient ;
+/// - la pile a rétréci (suppression, annuler) : les autres gardent leur état ;
+/// - un calque vu pour la première fois : ses un ou deux effets sont ouverts ; au-delà, tout est replié sauf
+///   l'effet choisi.
+/// L'état n'est gardé que pour la séance : ni dans le projet, ni dans les réglages.
+pub(crate) fn plis_apres(avant: Option<&[bool]>, n: usize, choisi: Option<usize>) -> Vec<bool> {
+    match avant {
+        None if n <= 2 => vec![true; n],
+        None => (0..n).map(|i| choisi == Some(i)).collect(),
+        Some(v) if v.len() == n => v.to_vec(),
+        Some(v) if v.len() < n => (0..n).map(|i| i >= v.len()).collect(),
+        Some(v) => v[..n].to_vec(),
+    }
+}
+
 impl App {
     /// Ce que les menus montrent de l'effet `kind` pour le calque `li` (`offer`).
     pub(crate) fn fx_offer(&self, li: usize, kind: EffectKind) -> Offer {
@@ -231,15 +248,22 @@ impl App {
         }
         ui.menu_button("Effets", |ui| self.fx_menu_items(ui, li));
         // L'interrupteur « fx » de la ligne du calque, aussi ici (la colonne du montage n'a pas la place de son bouton).
-        if self.fx_switch_shown(li) {
-            let on = self.layers()[li].fx_enabled;
-            let resp = ui.checkbox(&mut on.clone(), "Effets du calque allumés").on_hover_text("Éteint, aucun effet de ce calque ne joue ; la pile est gardée. Bouton fx de la ligne du calque.");
-            if resp.clicked() {
-                ui.close_menu();
-                self.toggle_layer_fx(li);
-            }
-        }
+        self.fx_switch_item(ui, li);
         self.boil_menu_items(ui, li);
+    }
+
+    /// « Effets du calque allumés » : la case de l'interrupteur « fx » du calque `li`, dans un menu (rien si le calque
+    /// n'a pas d'effets, `fx_switch_shown`). Le menu « … » du panneau Calques et le clic droit d'un calque l'ont.
+    pub(crate) fn fx_switch_item(&mut self, ui: &mut egui::Ui, li: usize) {
+        if !self.fx_switch_shown(li) {
+            return;
+        }
+        let on = self.layers()[li].fx_enabled;
+        let resp = ui.checkbox(&mut on.clone(), "Effets du calque allumés").on_hover_text("Éteint, aucun effet de ce calque ne joue ; la pile est gardée. Bouton fx de la ligne du calque.");
+        if resp.clicked() {
+            ui.close_menu();
+            self.toggle_layer_fx(li);
+        }
     }
 
     /// « Tremblement du trait » et « Animer à l'arrêt » (`tremblement.rs`) dans un menu de calque.
@@ -322,19 +346,17 @@ impl App {
     /// Clic : coche ou décoche l'effet (l'action de l'effet : une étape d'annulation). Clic droit :
     /// lui assigner un raccourci.
     fn fx_menu_entry(&mut self, ui: &mut egui::Ui, li: usize, kind: EffectKind, icon: &str, action: &'static str) {
-        let offer = self.fx_offer(li, kind);
-        let enabled = offer == Offer::Enabled;
+        // Un effet que ce calque ne prend pas ne se montre pas (caché plutôt que grisé, 2026-10-21).
+        if self.fx_offer(li, kind) != Offer::Enabled {
+            return;
+        }
         let on = self.fx_on(li, kind);
         let key = self.raccourci(action);
-        let about = match offer {
-            Offer::Disabled(why) => why,
-            _ => kind.hint(),
-        };
         let label = crate::bulles::encre_etat(RichText::new(format!("{icon}  {}", kind.label())), on);
-        let resp = ui.add_enabled(enabled, egui::Button::new(label).selected(on).min_size(egui::vec2(ui.available_width(), 0.0)));
-        let resp = crate::bulles::bulle(resp, kind.label(), about, &key);
+        let resp = ui.add(egui::Button::new(label).selected(on).min_size(egui::vec2(ui.available_width(), 0.0)));
+        let resp = crate::bulles::bulle(resp, kind.label(), kind.hint(), &key);
         crate::raccourcisui::shortcut_menu(&resp, action, &key);
-        if enabled && resp.clicked() {
+        if resp.clicked() {
             ui.close_menu();
             self.run_action(action);
         }
@@ -412,10 +434,13 @@ impl App {
             let usable = self.fx_offer(li, EffectKind::Outline) == Offer::Enabled;
             for preset in crate::fxmatiere::Preset::ALL {
                 let key = self.raccourci(preset.action());
+                // Un préréglage qui demande un calque vectoriel ne se montre pas sur un bitmap.
                 let ok = usable && (!preset.vector_only() || self.fx_offer(li, EffectKind::Nib) == Offer::Enabled);
-                let note = if ok { preset.note() } else { crate::fxmatiere::bitmap_why(EffectKind::Nib) };
-                let resp = crate::bulles::bulle(ui.add_enabled(ok, egui::Button::new(preset.label())), preset.label(), note, &key);
-                if ok && resp.clicked() {
+                if !ok {
+                    continue;
+                }
+                let resp = crate::bulles::bulle(ui.add(egui::Button::new(preset.label())), preset.label(), preset.note(), &key);
+                if resp.clicked() {
                     ui.close_menu();
                     self.apply_matter_preset(preset);
                 }
@@ -598,27 +623,22 @@ impl App {
         ui.horizontal_wrapped(|ui| {
             ui.menu_button(format!("{}  Ajouter un effet", ph::PLUS), |ui| {
                 // Par familles, comme le menu Filtre de Photoshop. Les effets réservés au vectoriel
-                // (famille « Trait », où est aussi le tremblement du trait) sont grisés avec la raison
-                // sur un calque bitmap.
+                // (famille « Trait », où est aussi le tremblement du trait) ne se montrent pas sur un calque
+                // bitmap (on cache ce qui ne peut pas servir plutôt que de le griser, 2026-10-21) : une
+                // famille sans effet utilisable disparaît.
                 for family in FAMILIES {
+                    let kinds: Vec<EffectKind> = EffectKind::ALL.into_iter().filter(|k| k.family() == family && self.fx_offer(li, *k) == Offer::Enabled).collect();
+                    if kinds.is_empty() {
+                        continue;
+                    }
                     ui.menu_button(family, |ui| {
-                        let kinds: Vec<EffectKind> = EffectKind::ALL.into_iter().filter(|k| k.family() == family).collect();
                         for k in kinds {
-                            match self.fx_offer(li, k) {
-                                Offer::Absent => {}
-                                Offer::Disabled(why) => {
-                                    let label = if k.is_trait() || k == EffectKind::Boil { format!("{}  {}", crate::fxtrait::icon(k), k.label()) } else { k.label().to_string() };
-                                    ui.add_enabled(false, egui::Button::new(label)).on_disabled_hover_text(why);
-                                }
-                                Offer::Enabled => {
-                                    let label = if k.is_trait() || k == EffectKind::Boil { format!("{}  {}", crate::fxtrait::icon(k), k.label()) } else { k.label().to_string() };
-                                    let resp = ui.button(label);
-                                    let resp = if k.hint().is_empty() { resp } else { resp.on_hover_text(k.hint()) };
-                                    if resp.clicked() {
-                                        ui.close_menu();
-                                        self.add_effect_once(li, k);
-                                    }
-                                }
+                            let label = if k.is_trait() || k == EffectKind::Boil { format!("{}  {}", crate::fxtrait::icon(k), k.label()) } else { k.label().to_string() };
+                            let resp = ui.button(label);
+                            let resp = if k.hint().is_empty() { resp } else { resp.on_hover_text(k.hint()) };
+                            if resp.clicked() {
+                                ui.close_menu();
+                                self.add_effect_once(li, k);
                             }
                         }
                     });
@@ -629,15 +649,15 @@ impl App {
             ui.menu_button(format!("{}  Préréglages", ph::SPARKLE), |ui| self.effect_preset_menu(ui))
                 .response
                 .on_hover_text("Des effets tout réglés, avec leurs clés à partir de la tête de lecture : impact frame, lueur, flash, tremblement de l'image, vignettage, grain, timecode…");
+            // Rien à réinitialiser ni à supprimer sans effet : les deux boutons ne se montrent qu'alors.
             let any = !self.layers()[li].fx.is_empty();
-
-            if ui.add_enabled(any, egui::Button::new("Tout réinitialiser")).on_hover_text("Chaque effet reprend ses réglages par défaut, sans clé.").clicked() {
+            if any && ui.button("Tout réinitialiser").on_hover_text("Chaque effet reprend ses réglages par défaut, sans clé.").clicked() {
                 self.record_step();
                 for e in &mut self.layers_mut()[li].fx {
                     *e = Effect { enabled: e.enabled, ..Effect::new(e.kind) };
                 }
             }
-            if ui.add_enabled(any, egui::Button::new("Tout supprimer")).clicked() {
+            if any && ui.button("Tout supprimer").clicked() {
                 self.record_step();
                 self.deselect_fx();
                 self.fx_key_sel.clear();
@@ -645,8 +665,14 @@ impl App {
             }
         });
         // Les effets du trait et de matière : un menu déroulant chacun (icône et nom, préréglages en section).
+        // Ceux du trait ne vont que sur un calque vectoriel : sur un autre, le menu se cache et une ligne dit où les
+        // trouver (au lieu d'un menu grisé, ou de rien : on cherchait le tremblement, 2026-10-19).
         ui.horizontal_wrapped(|ui| {
-            self.trait_menu(ui, li);
+            if self.fx_offer(li, EffectKind::Boil) == Offer::Enabled {
+                self.trait_menu(ui, li);
+            } else {
+                ui.label(RichText::new("Effets du trait (tremblement…) : sur un calque vectoriel.").small().weak());
+            }
             self.matiere_menu(ui, li);
         });
         let key = self.raccourci("fx.cle_auto");
@@ -668,9 +694,17 @@ impl App {
         let mut remove = None;
         let mut swap = None;
         let mut bake = false;
+        // Les effets dépliés : un nouvel effet s'ouvre, les autres se replient (séance seulement).
+        let layer_id = self.layers()[li].id;
+        let flags = plis_apres(self.effets_ui.open.get(&layer_id).map(Vec::as_slice), n, self.fx_index());
+        if self.effets_ui.open.get(&layer_id) != Some(&flags) {
+            self.effets_ui.open.insert(layer_id, flags);
+        }
+        let mut toggle_open = None;
         for i in 0..n {
             let e = self.layers()[li].fx[i].clone();
             let chosen = picked.contains(&i);
+            let opened = self.effets_ui.open.get(&layer_id).and_then(|v| v.get(i)).copied().unwrap_or(true);
             // L'effet choisi se voit : cadre et fond de la couleur de sélection.
             let sel = ui.visuals().selection;
             let mut frame = egui::Frame::group(ui.style());
@@ -679,13 +713,19 @@ impl App {
             }
             frame.show(ui, |ui| {
                 ui.horizontal(|ui| {
+                    // La flèche : replie l'effet (seul son nom reste) ou le déplie (séance seulement).
+                    let (caret, caret_nom) = if opened { (ph::CARET_DOWN, "Replier l'effet") } else { (ph::CARET_RIGHT, "Déplier l'effet") };
+                    let resp = ui.add(egui::Button::new(RichText::new(caret).size(crate::bulles::TAILLE - 2.0)).frame(false));
+                    if crate::bulles::bulle(resp, caret_nom, "Ses réglages et ses clés se montrent ou se cachent ; l'effet joue toujours.", "").clicked() {
+                        toggle_open = Some(i);
+                    }
                     let mut on = e.enabled;
                     if crate::bulles::bulle(ui.checkbox(&mut on, ""), "Effet actif", "Éteint, l'effet ne s'applique plus ; il reste dans la pile.", "").changed() {
                         self.record_step();
                         self.layers_mut()[li].fx[i].enabled = on;
                     }
                     // Le nom prend toute la place libre : une grande cible à cliquer.
-                    let w = (ui.available_width() - 4.0 * 26.0).max(60.0);
+                    let w = (ui.available_width() - 26.0).max(60.0);
                     let hint = if chosen {
                         "Effet choisi : Ctrl+C le copie avec ses réglages et ses clés ; Ctrl+V sur un autre calque le colle. Cliquer de nouveau pour ne plus en choisir. Ctrl ou Maj + clic : choisir plusieurs effets."
                     } else {
@@ -701,27 +741,14 @@ impl App {
                         let m = ui.input(|inp| inp.modifiers);
                         self.fx_click_name(i, m.command || m.ctrl, m.shift);
                     }
-                    let key = self.raccourci("fx.copier");
-                    let resp = ui.add(egui::Button::new(ph::COPY).frame(false));
-                    if crate::bulles::bulle(resp, "Copier l'effet", "Réglages et clés. Parmi plusieurs effets choisis, copie tous les choisis. Ctrl+C fait de même ; Ctrl+V sur un autre calque (cliqué dans le panneau Calques) les colle.", &key).clicked() {
-                        if picked.len() > 1 && chosen {
-                            self.fx_copy_effects(li, &picked);
-                        } else {
-                            self.fx_copy_effect(li, i);
-                        }
-                    }
-                    let up = ui.add_enabled(i > 0, egui::Button::new(ph::ARROW_UP).frame(false));
-                    if crate::bulles::bulle(up, "Monter l'effet", "Le placer plus tôt dans la pile du calque.", "").clicked() {
-                        swap = Some((i, i - 1));
-                    }
-                    let down = ui.add_enabled(i + 1 < n, egui::Button::new(ph::ARROW_DOWN).frame(false));
-                    if crate::bulles::bulle(down, "Descendre l'effet", "Le placer plus tard dans la pile du calque.", "").clicked() {
-                        swap = Some((i, i + 1));
-                    }
+                    // (Pas de bouton Copier : Ctrl+C copie les effets choisis, Ctrl+V les colle ; le clic droit sur le nom
+                    // aussi, `fxcopie.rs`.)
                     if crate::bulles::bulle(ui.add(egui::Button::new(ph::TRASH).frame(false)), "Supprimer l'effet", "Le retire de la pile du calque, avec ses clés.", "").clicked() {
                         remove = Some(i);
                     }
                 });
+                // Replié : seul l'en-tête reste ; l'effet joue toujours.
+                if opened {
                 let values = e.values_at(f);
                 egui::Grid::new(("parametres_effet", i)).num_columns(2).show(ui, |ui| {
                     for (k, p) in e.kind.params().iter().enumerate() {
@@ -844,11 +871,14 @@ impl App {
                         self.select_fx(i);
                         self.fx_create_key();
                     }
-                    let key = self.raccourci("fx.cle_supprimer");
-                    let resp = ui.add_enabled(here, egui::Button::new("Supprimer la clé"));
-                    if crate::bulles::bulle(resp, "Supprimer la clé", "La clé de cet effet à l'image courante.", &key).clicked() {
-                        self.select_fx(i);
-                        self.fx_delete_key();
+                    // Pas de clé ici : rien à supprimer, le bouton se cache au lieu de se griser.
+                    if here {
+                        let key = self.raccourci("fx.cle_supprimer");
+                        let resp = ui.button("Supprimer la clé");
+                        if crate::bulles::bulle(resp, "Supprimer la clé", "La clé de cet effet à l'image courante.", &key).clicked() {
+                            self.select_fx(i);
+                            self.fx_delete_key();
+                        }
                     }
                     if !e.keys.is_empty() {
                         if crate::bulles::bulle(ui.button(ph::CARET_LEFT), "Clé précédente", "Aller à la clé d'effet d'avant.", "").clicked() {
@@ -862,10 +892,29 @@ impl App {
                         let s = if e.keys.len() > 1 { "s" } else { "" };
                         ui.label(RichText::new(format!("{} clé{s}", e.keys.len())).weak());
                     }
+                    // Sa place dans la pile : plus tôt ou plus tard (le haut ou le bas de la pile cache la flèche).
+                    if i > 0 && crate::bulles::bulle(ui.add(egui::Button::new(ph::ARROW_UP).frame(false)), "Monter l'effet", "Le placer plus tôt dans la pile du calque.", "").clicked() {
+                        swap = Some((i, i - 1));
+                    }
+                    if i + 1 < n && crate::bulles::bulle(ui.add(egui::Button::new(ph::ARROW_DOWN).frame(false)), "Descendre l'effet", "Le placer plus tard dans la pile du calque.", "").clicked() {
+                        swap = Some((i, i + 1));
+                    }
                 });
+                }
             });
         }
+        // Un effet replié ou déplié : l'état n'est que de la séance (`plis_apres`).
+        if let Some(i) = toggle_open {
+            if let Some(flag) = self.effets_ui.open.get_mut(&layer_id).and_then(|v| v.get_mut(i)) {
+                *flag = !*flag;
+            }
+        }
         if let Some((a, b)) = swap {
+            if let Some(v) = self.effets_ui.open.get_mut(&layer_id) {
+                if a < v.len() && b < v.len() {
+                    v.swap(a, b);
+                }
+            }
             self.record_step();
             // (Les clés choisies se repèrent par le rang de leur effet : le choix est lâché.)
             self.fx_key_sel.clear();
@@ -878,6 +927,11 @@ impl App {
             }
         }
         if let Some(i) = remove {
+            if let Some(v) = self.effets_ui.open.get_mut(&layer_id) {
+                if i < v.len() {
+                    v.remove(i);
+                }
+            }
             self.record_step();
             self.fx_key_sel.clear();
             self.fx_key_anchor = None;

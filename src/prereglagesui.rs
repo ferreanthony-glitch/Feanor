@@ -25,6 +25,9 @@ pub(crate) struct EffetsUi {
     pub last: Option<Reglages>,
     /// Textures des incrustations (contenu → texture), les plus récentes d'abord.
     textures: Vec<(u64, egui::TextureHandle)>,
+    /// Les effets dépliés du panneau Effets : un booléen par effet de la pile de chaque calque (par son numéro).
+    /// La séance seulement : ni le projet ni les réglages ne le gardent (`fxui::plis_apres`).
+    pub open: std::collections::HashMap<u64, Vec<bool>>,
 }
 
 pub(crate) struct EffetDialog {

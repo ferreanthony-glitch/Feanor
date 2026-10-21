@@ -385,16 +385,18 @@ fn the_boil_leads_the_trait_menu_and_is_not_a_general_entry_of_the_add_menu() {
 }
 
 #[test]
-fn on_a_bitmap_layer_the_boil_stays_listed_in_the_trait_menu_but_greyed() {
+fn on_a_bitmap_layer_the_trait_menu_is_hidden_and_a_line_says_where_the_boil_is() {
+    // Passe de simplicité du 2026-10-21 : ce qui ne peut pas servir se cache au lieu de se griser. Anthony avait pourtant
+    // cherché le tremblement le 2026-10-19 (il se cachait sans rien dire) : une ligne dit où il est.
     let mut app = app_one_layer("bitmap", LayerKind::Bitmap);
     let mut ecran = Ecran::new();
     let textes = ecran.chauffer(&mut app, 4);
-    let (_, r) = trouver(&textes, "Trait").cloned().unwrap();
-    let ouvert = ecran.cliquer(&mut app, r.center());
-    let boil = format!("{}  {}", crate::fxtrait::icon(EffectKind::Boil), EffectKind::Boil.label());
-    let (_, rb) = trouver(&ouvert, &boil).cloned().expect("l'entrée grisée est listée");
+    assert!(textes.iter().all(|(t, _)| !t.trim_start().starts_with("Trait")), "pas de menu Trait sur un bitmap : {textes:?}");
+    let (ligne, _) = trouver(&textes, "Effets du trait").cloned().expect("la ligne qui dit où est le tremblement");
+    assert!(ligne.contains("tremblement") && ligne.contains("vectoriel"), "{ligne}");
+    // La raison reste dans les menus d'un calque (grisée, avec sa bulle) et l'effet ne se pose pas sur un bitmap.
     assert!(matches!(app.fx_offer(0, EffectKind::Boil), crate::fxui::Offer::Disabled(why) if why.contains("vectoriel")));
-    ecran.cliquer(&mut app, rb.center());
+    app.toggle_fx(0, EffectKind::Boil);
     assert!(app.layers()[0].fx.is_empty(), "le tremblement ne se pose pas sur un bitmap");
 }
 
