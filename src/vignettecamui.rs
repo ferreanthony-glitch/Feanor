@@ -1,6 +1,7 @@
 //! Les mouvements de caméra dans la vue Vignettes, à l'écran (Anthony, 2026-10-21). La logique est dans `vignettecam.rs`.
 //!
-//! **Ctrl + glisser** dans une case :
+//! **Ctrl + glisser** dans une case, quel que soit l'outil (dans les Vignettes, Ctrl tenu ne prend pas l'outil Sélection :
+//! `springtools.rs`) ; sur la première case du plan, ou sur une autre case de ce plan tant qu'il n'a pas de mouvement :
 //! - case sans mouvement : le cadre d'origine reste **A** ; un nouveau cadre **B** suit le pointeur (le dedans le déplace,
 //!   un coin le resserre ou l'élargit) ; au lâcher, deux clés de caméra sont posées (A à la première image du plan, B à la
 //!   dernière) ;
@@ -28,6 +29,8 @@ const PRISE: f32 = 9.0;
 /// Un geste Ctrl + glisser sur un cadre, de l'appui au lâcher.
 pub(crate) struct CamGeste {
     pub plan: u64,
+    /// L'image du plan où commence la case prise (0 : la première case ; sinon une marque d'image).
+    pub image: usize,
     pub prise: Prise,
     /// Le pointeur à l'appui et maintenant (écran).
     pub depart: Pos2,
@@ -67,11 +70,21 @@ impl App {
         }
     }
 
+    /// Un mouvement de caméra peut-il se dessiner sur cette case ? Sa première : toujours ; une autre case du plan (une
+    /// marque d'image) : seulement si le plan ne bouge pas encore.
+    pub(crate) fn cam_possible(&self, place: &CardPlace) -> bool {
+        place.frame == 0 || self.doc.panels.get(place.panel).is_some_and(|p| p.camera.len() < 2)
+    }
+
     /// Ctrl + appui sur la vignette `k` : prend un cadre si l'appui en saisit un. Faux : l'appui garde son sens (choisir
     /// des plans). Le Ctrl + clic reste un choix de plans tant que le pointeur ne bouge pas (`finish_cam_geste`).
     pub(crate) fn cam_press(&mut self, layout: &BoardLayout, xf: Xf, k: usize, pos: Pos2, m: Modifiers) -> bool {
         let place = layout.cards[k];
-        if place.frame != 0 {
+        // Le mouvement d'un plan se dessine sur sa première case ; sur une autre case du plan (une marque d'image), le
+        // geste ne vaut que tant que le plan n'a pas de mouvement : la case entière est alors le cadre A (la caméra du
+        // plan), comme une case ordinaire. Un plan qui bouge déjà se règle sur sa première case, où ses cadres sont.
+        if !self.cam_possible(&place) {
+            self.status = "Le mouvement de caméra de ce plan se règle sur sa première case, où sont ses cadres.".into();
             return false;
         }
         let (cadres, simple) = self.cadres_sur_la_planche(&place);
@@ -85,6 +98,7 @@ impl App {
         let avant = if keys0.len() >= 2 { keys0.len() } else { 0 };
         self.vignettes.cam = Some(CamGeste {
             plan: place.plan,
+            image: place.frame,
             prise,
             depart: pos,
             maintenant: pos,
@@ -121,7 +135,7 @@ impl App {
                 } else {
                     // Le plan devient courant ; l'étape d'annulation part de l'état d'avant le premier mouvement.
                     self.board_sel = vec![g.plan];
-                    self.select_board(pi, 0);
+                    self.select_board(pi, g.image);
                     g.snap = Some(self.snapshot());
                     g.actif = true;
                     self.vignettes.press = Press::Dead;
@@ -185,7 +199,7 @@ impl App {
 
     /// Le curseur d'une case où Ctrl est tenue : un cadre à prendre (déplacer ou, à un coin, changer sa taille).
     pub(crate) fn cam_curseur(&self, ctx: &egui::Context, layout: &BoardLayout, xf: Xf, pointer: Pos2) {
-        let Some(place) = layout.cards.iter().find(|c| c.frame == 0 && c.thumb.contains(xf.to_board(pointer))) else { return };
+        let Some(place) = layout.cards.iter().find(|c| c.thumb.contains(xf.to_board(pointer)) && self.cam_possible(c)) else { return };
         let (cadres, simple) = self.cadres_sur_la_planche(place);
         let tol = (PRISE / xf.zoom.max(1e-3)).min(place.thumb.width().min(place.thumb.height()) * 0.3);
         let icon = match vignettecam::choisit(&cadres, simple, xf.to_board(pointer), tol) {

@@ -5,7 +5,8 @@
 //!   pendant qu'on la tient) : au relâché, l'outil d'avant revient. Une pression brève change
 //!   d'outil, comme avant (sinon on ne pourrait plus changer d'outil d'une touche).
 //! - Ctrl tenu sur le dessin (seul, ou avec Maj : Ctrl+Maj, « tous les calques » et le cumul de la
-//!   sélection, `selobjet.rs`) : l'outil Sélection (son lasso), le temps de le tenir. Une
+//!   sélection, `selobjet.rs`) : l'outil Sélection (son lasso), le temps de le tenir (pas dans les Vignettes, où Ctrl
+//!   choisit des plans et dessine un mouvement de caméra). Une
 //!   autre touche (Ctrl+Z…) ou la molette pendant qu'on le tient : ce n'était pas pour le lasso.
 //!   Une zone bitmap choisie pendant qu'on le tient garde l'outil Sélection au relâché (elle
 //!   n'existe qu'avec lui) ; des traits vectoriels choisis restent choisis avec l'outil d'avant.
@@ -121,7 +122,9 @@ impl App {
         let on_canvas = self.hover_canvas.is_some();
         // Pas au milieu d'un trait : seulement souris relâchée, ou un appui qui commence.
         let free = !down || pressed;
-        let ready = !taken && !spoiled && on_canvas && free && (pressed || now - since >= CTRL_DELAY);
+        // Dans les Vignettes, Ctrl sert à choisir des plans et à dessiner un mouvement de caméra (`vignettecamui.rs`) :
+        // l'outil ne change pas, le curseur et la barre d'outils restent ceux du dessin.
+        let ready = !taken && !spoiled && on_canvas && free && !self.board_shown() && (pressed || now - since >= CTRL_DELAY);
         // Avec l'outil Transformer, Ctrl sert à l'enveloppe de Bézier (`envelopetools.rs`).
         if ready && self.tool != Tool::Select && self.tool != Tool::Transform {
             let prev = self.tool;
