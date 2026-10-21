@@ -14,9 +14,10 @@ use egui_dock::{DockState, Node};
 
 use crate::app::{App, Mode};
 use crate::dock::Pane;
+use crate::workspace::Espace;
 
 /// Largeur de la barre, marges comprises, en points.
-pub(crate) const LARGEUR: f32 = 30.0;
+pub(crate) const LARGEUR: f32 = 34.0;
 
 /// Une icône de la barre.
 pub(crate) struct Entree {
@@ -66,6 +67,41 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
         entree(Pane::References, "vue.references", "Références", "Un tableau d'images et de vidéos à regarder en dessinant ; se détache dans sa fenêtre pour un deuxième écran. Un clic l'ouvre ou le met devant, un autre le ferme."),
     ],
 ];
+
+/// Les panneaux que la barre propose d'office dans un espace de travail : ceux qui servent à ce travail-là
+/// (simplification des barres, 2026-10-21). Les autres restent à la palette (Ctrl+K) et au menu Affichage >
+/// Espaces de travail > Panneaux ; un panneau ouvert à la main, lui, a son icône tant qu'il est ouvert, et comme
+/// chaque espace retient sa disposition, il la retrouve la fois suivante : la barre ne se bat jamais contre
+/// l'utilisateur.
+/// - Vignettes : « rien de distraction, que du dessin et des références » : les réglages, les pinceaux, la couleur,
+///   les références.
+/// - Storyboard : dessiner (réglages, pinceaux, couleur, personnages, guides), les calques et leurs effets, la fiche
+///   du plan, les références.
+/// - Animation : comme le storyboard, sans les personnages, avec la feuille d'exposition.
+/// - Montage : la fiche du plan, les bruitages, les commentaires et l'historique.
+pub(crate) fn panneaux_d_office(espace: Espace) -> &'static [Pane] {
+    match espace {
+        Espace::Vignettes => &[Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::References],
+        Espace::Storyboard => {
+            &[Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::Personnages, Pane::Guides, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::References]
+        }
+        Espace::Animation => {
+            &[Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::Guides, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::References]
+        }
+        Espace::Montage => &[Pane::Sheet, Pane::Bruitages, Pane::Comments, Pane::History],
+    }
+}
+
+/// Les icônes de la barre dans un espace de travail, en groupes (un groupe vide n'est pas rendu) : les panneaux
+/// d'office de l'espace et ceux qui sont ouverts (`ouvert`), sans la feuille d'exposition hors animation.
+pub(crate) fn icones_de(espace: Espace, animation: bool, ouvert: &dyn Fn(Pane) -> bool) -> Vec<Vec<&'static Entree>> {
+    let d_office = panneaux_d_office(espace);
+    GROUPES
+        .iter()
+        .map(|g| g.iter().filter(|e| e.visible(animation) && (d_office.contains(&e.pane) || ouvert(e.pane))).collect::<Vec<_>>())
+        .filter(|g| !g.is_empty())
+        .collect()
+}
 
 /// Les panneaux qui s'ouvrent et se ferment comme ceux de la barre, sans icône dans la barre : ceux
 /// des fonctions à l'essai, rangés dans le menu Labo (Anthony, 2026-10-20).
@@ -131,19 +167,20 @@ impl App {
     /// La barre à l'écran : une icône par panneau, enfoncée quand le panneau est dans l'espace de
     /// travail.
     pub(crate) fn panel_bar(&mut self, ui: &mut egui::Ui) {
+        let animation = self.mode == Mode::Animation;
+        let groupes = icones_de(self.espace, animation, &|p| self.pane_shown(p));
         ui.vertical_centered(|ui| {
-            ui.spacing_mut().item_spacing = vec2(0.0, 2.0);
-            for (g, groupe) in GROUPES.iter().enumerate() {
+            ui.spacing_mut().item_spacing = vec2(0.0, crate::barres::ECART);
+            for (g, groupe) in groupes.iter().enumerate() {
                 if g > 0 {
                     ui.add_space(3.0);
                     let (rect, _) = ui.allocate_exact_size(vec2(18.0, 1.0), egui::Sense::hover());
                     ui.painter().rect_filled(rect, 0.0, crate::theme::bord());
                     ui.add_space(3.0);
                 }
-                let animation = self.mode == Mode::Animation;
-                for e in groupe.iter().filter(|e| e.visible(animation)) {
+                for e in groupe {
                     let on = self.pane_shown(e.pane);
-                    let resp = ui.add_sized([24.0, 26.0], egui::SelectableLabel::new(on, RichText::new(e.pane.icon()).size(17.0)));
+                    let resp = ui.add_sized(crate::barres::CASE, egui::SelectableLabel::new(on, RichText::new(e.pane.icon()).size(crate::barres::ICONE)));
                     if self.aide(resp, e.nom, e.description, e.action).clicked() {
                         self.run_action(e.action);
                     }

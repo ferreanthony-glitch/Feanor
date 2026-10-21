@@ -50,14 +50,21 @@ impl App {
 
     /// Un bouton icône de la barre de commandes ; `on` : commande active (affichée enfoncée).
     pub(crate) fn command_button(&mut self, ui: &mut egui::Ui, icon: &str, action: &str, name: &str, description: &str, on: Option<bool>) {
-        let text = RichText::new(icon).size(17.0);
-        let resp = match on {
-            Some(on) => ui.add_sized([28.0, 26.0], egui::SelectableLabel::new(on, text)),
-            None => ui.add_sized([28.0, 26.0], egui::Button::new(text).frame(false)),
-        };
-        if self.aide(resp, name, description, action).clicked() {
+        if self.case_icone(ui, icon, on, name, description, action).clicked() {
             self.run_action(action);
         }
+    }
+
+    /// Une case d'icône des barres (même taille, même icône, mêmes écarts partout, `barres::CASE`) avec sa bulle
+    /// et son clic droit « Assigner un raccourci » ; `on` : enfoncée quand c'est vrai, plate sinon. Le clic est à
+    /// l'appelant.
+    pub(crate) fn case_icone(&self, ui: &mut egui::Ui, icon: &str, on: Option<bool>, name: &str, description: &str, action: &str) -> egui::Response {
+        let text = RichText::new(icon).size(crate::barres::ICONE);
+        let resp = match on {
+            Some(on) => ui.add_sized(crate::barres::CASE, egui::SelectableLabel::new(on, text)),
+            None => ui.add_sized(crate::barres::CASE, egui::Button::new(text).frame(false)),
+        };
+        self.aide(resp, name, description, action)
     }
 
     /// Barre de commandes, sous les menus : Nouveau / Ouvrir / Enregistrer / Exporter, Annuler /
@@ -74,22 +81,22 @@ impl App {
     pub(crate) fn vertical_tool_bar(&mut self, ui: &mut egui::Ui) {
         egui::ScrollArea::vertical().scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
             ui.vertical_centered(|ui| {
-                ui.spacing_mut().item_spacing = vec2(0.0, 2.0);
+                ui.spacing_mut().item_spacing = vec2(0.0, crate::barres::ECART);
                 ui.add_space(4.0);
                 let groups = if self.espace == crate::workspace::Espace::Vignettes { TOOL_GROUPS_VIGNETTES } else { TOOL_GROUPS };
                 for (g, group) in groups.iter().enumerate() {
                     if g > 0 {
-                        ui.add_space(3.0);
-                        let (rect, _) = ui.allocate_exact_size(vec2(26.0, 1.0), egui::Sense::hover());
+                        ui.add_space(crate::barres::MARGE_TRAIT);
+                        let (rect, _) = ui.allocate_exact_size(vec2(18.0, 1.0), egui::Sense::hover());
                         ui.painter().rect_filled(rect, 0.0, crate::theme::bord());
-                        ui.add_space(3.0);
+                        ui.add_space(crate::barres::MARGE_TRAIT);
                     }
                     for (s, slot) in group.iter().enumerate() {
                         self.tool_slot(ui, g, s, slot);
                     }
                 }
                 // Sur la planche des Vignettes : le stylo et la gomme d'annotation (`annotationsui.rs`).
-                self.annot_outils_ui(ui, [34.0, 30.0], 19.0);
+                self.annot_outils_ui(ui, crate::barres::CASE, crate::barres::ICONE);
                 // Les couleurs d'avant-plan et d'arrière-plan, au pied de la barre (passe couleur).
                 ui.add_space(8.0);
                 self.tool_bar_colors(ui);
@@ -102,8 +109,8 @@ impl App {
     /// au clic maintenu, la liste de ses outils.
     fn tool_slot(&mut self, ui: &mut egui::Ui, g: usize, s: usize, slot: &[Tool]) {
         let shown = slot_tool(slot, self.tool, &self.tool_recent);
-        let icon = RichText::new(self.tool_icon(shown)).size(19.0);
-        let resp = ui.add_sized([34.0, 30.0], egui::SelectableLabel::new(slot.contains(&self.tool), icon));
+        let icon = RichText::new(self.tool_icon(shown)).size(crate::barres::ICONE);
+        let resp = ui.add_sized(crate::barres::CASE, egui::SelectableLabel::new(slot.contains(&self.tool), icon));
         let mut description = shown.description().to_string();
         if slot.len() > 1 {
             let r = resp.rect;

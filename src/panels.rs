@@ -317,10 +317,10 @@ impl App {
     /// Panneau Outils : une icône par outil ; nom, raccourci et description dans la bulle.
     pub(crate) fn tool_bar(&mut self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
-            ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
+            ui.spacing_mut().item_spacing = vec2(crate::barres::ECART, crate::barres::ECART);
             for tool in Tool::ALL {
-                let icon = RichText::new(tool.icon()).size(21.0);
-                let resp = ui.add_sized([38.0, 34.0], egui::SelectableLabel::new(self.tool == tool, icon));
+                let icon = RichText::new(tool.icon()).size(crate::barres::ICONE);
+                let resp = ui.add_sized(crate::barres::CASE, egui::SelectableLabel::new(self.tool == tool, icon));
                 if self.aide(resp, tool.label(), tool.description(), tool.action()).clicked() {
                     self.set_tool(tool);
                 }
@@ -329,8 +329,8 @@ impl App {
         // Sur la planche des Vignettes : le stylo et la gomme d'annotation (`annotationsui.rs`).
         if self.board_shown() {
             ui.horizontal(|ui| {
-                ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
-                self.annot_outils_ligne(ui, [38.0, 34.0], 21.0);
+                ui.spacing_mut().item_spacing = vec2(crate::barres::ECART, crate::barres::ECART);
+                self.annot_outils_ligne(ui, crate::barres::CASE, crate::barres::ICONE);
             });
         }
     }

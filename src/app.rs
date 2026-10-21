@@ -4594,7 +4594,7 @@ impl App {
         if self.layout.tool_bar {
             let _t = crate::perf::section("barre d'outils");
             egui::SidePanel::left("barre_outils")
-                .exact_width(44.0)
+                .exact_width(40.0)
                 .resizable(false)
                 .show(ctx, |ui| self.vertical_tool_bar(ui));
         }

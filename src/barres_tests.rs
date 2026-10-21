@@ -40,17 +40,21 @@ fn the_bars_are_slim_by_default() {
             "edition.coller",
         ]
     );
-    assert_eq!(Barre::Commandes.commandes().len(), 19, "rien n'est perdu : les dix autres sont sous « Plus… »");
-    // Barre du montage : 21 icônes avant, une douzaine maintenant (la position et « Plus… » en plus).
+    // Les plans et le transport ne sont plus dans cette barre, même sous « Plus… » : ils sont dans celles du montage
+    // et de la timeline (une commande, un endroit principal ; `docs/DOUBLONS.md`).
+    assert_eq!(Barre::Commandes.commandes().len(), 9);
+    // Barre du montage : 21 icônes avant, une dizaine maintenant (la position et « Plus… » en plus).
     let montage = d_office(Barre::Montage);
-    assert!((11..=13).contains(&montage.len()), "montage : {montage:?}");
+    assert!((9..=12).contains(&montage.len()), "montage : {montage:?}");
     // Barre de la timeline : les dessins qu'on retire ou vide, la cadence, la marque, le commentaire,
-    // les flips et les effets sont sous « Plus… ».
+    // les flips et le son sont sous « Plus… » ; la pelure d'oignon aussi (elle se règle sous le dessin), et
+    // le panneau Effets n'y est plus (sa place est la barre des panneaux).
     let timeline = d_office(Barre::Timeline);
-    for sous_plus in ["cadence", "dessin.dupliquer", "dessin.supprimer", "dessin.vider", "marque.basculer", "commentaire.ajouter", "flip.panneau", "fx.panneau"] {
+    for sous_plus in ["cadence", "dessin.dupliquer", "dessin.supprimer", "dessin.vider", "marque.basculer", "commentaire.ajouter", "flip.panneau", "vue.pelure", "pelure.panneau", "pelure_avant", "pelure_apres", "mode.basculer"] {
         assert!(!timeline.contains(&sous_plus), "{sous_plus} est sous « Plus… »");
     }
-    for reste in ["lecture.basculer", "vue.pelure", "pelure.panneau", "dessin.nouveau", "camera.cle_ici"] {
+    assert!(Barre::Timeline.cherche("fx.panneau").is_none(), "Effets : la barre des panneaux, pas la timeline");
+    for reste in ["lecture.basculer", "dessin.nouveau", "camera.cle_ici", "camera.cle_supprimer"] {
         assert!(timeline.contains(&reste), "{reste} reste dans la barre");
     }
 }
@@ -58,11 +62,12 @@ fn the_bars_are_slim_by_default() {
 #[test]
 fn what_the_montage_bar_keeps_and_moves() {
     let montage = d_office(Barre::Montage);
-    for reste in ["montage.debut", "lecture.basculer", "lecture.boucle", "panneau.nouveau", "sequence.nouvelle", "plans", "son.importer", "son", "mode.basculer", "vue.dessin", "vue.vignettes"] {
+    for reste in ["montage.debut", "lecture.basculer", "lecture.boucle", "panneau.nouveau", "sequence.nouvelle", "plans", "son.importer", "son", "vue.dessin", "vue.vignettes"] {
         assert!(montage.contains(&reste), "{reste} reste dans la barre du montage");
     }
-    // Les commandes que INTERFACE.md range sous « Plus… », et la transition (arrivée depuis).
-    for sous_plus in ["plan.avancer", "plan.reculer", "storyboard.verrouiller", "montage.aimanter", "fichier.importer_video", "commentaire.ajouter", "transition.ajouter"] {
+    // Les commandes que INTERFACE.md range sous « Plus… », et la transition (arrivée depuis) ; « Animer ce plan »
+    // aussi : l'onglet Animation, en haut à droite, le fait.
+    for sous_plus in ["plan.avancer", "plan.reculer", "storyboard.verrouiller", "montage.aimanter", "fichier.importer_video", "commentaire.ajouter", "transition.ajouter", "mode.basculer", "son.lecture"] {
         assert!(!montage.contains(&sous_plus), "{sous_plus} est sous « Plus… »");
     }
 }
@@ -180,16 +185,19 @@ fn a_damaged_pin_list_is_cleaned_when_read() {
         commandes: ReglageBarre {
             // « fichier.nouveau » est d'origine dans la barre : il ne peut pas être « épinglé » ; un
             // inconnu et un doublon.
+            // (« panneau.nouveau » : une commande que cette barre avait avant la passe de simplification, 2026-10-21 ;
+            // un réglage d'avant la perd sans bruit.)
             epinglees: vec!["fichier.nouveau".into(), "panneau.nouveau".into(), "panneau.nouveau".into(), "nimporte.quoi".into()],
             retirees: vec!["fichier.ouvrir".into(), "panneau.dupliquer".into(), "fichier.ouvrir".into()],
         },
-        timeline: ReglageBarre { epinglees: vec!["plan".into()], retirees: vec![] },
+        timeline: ReglageBarre { epinglees: vec!["plan".into(), "pelure.panneau".into(), "pelure.panneau".into()], retirees: vec!["fx.panneau".into()] },
         ..Default::default()
     };
     let propre = sale.nettoyees();
-    assert_eq!(propre.commandes.epinglees, vec!["panneau.nouveau".to_string()]);
+    assert!(propre.commandes.epinglees.is_empty(), "{:?}", propre.commandes.epinglees);
     assert_eq!(propre.commandes.retirees, vec!["fichier.ouvrir".to_string()]);
-    assert!(propre.timeline.est_vide(), "un affichage fixe n'est pas une épingle");
+    assert_eq!(propre.timeline.epinglees, vec!["pelure.panneau".to_string()], "un affichage fixe n'est pas une épingle, un doublon une seule fois");
+    assert!(propre.timeline.retirees.is_empty(), "une commande qui n'existe plus est oubliée");
 }
 
 #[test]
@@ -249,16 +257,16 @@ fn a_bar_never_scrolls_what_does_not_fit_goes_under_plus() {
 fn the_bar_commands_do_what_their_old_buttons_did() {
     let (_ctx, mut app) = headless("actions");
     // La boucle : l'état de la barre est celui de l'application, et la commande le bascule.
-    let boucle = Barre::Commandes.cherche("lecture.boucle").unwrap();
-    assert_eq!(app.vue_de(Barre::Commandes, boucle).etat, Some(app.looping));
+    let boucle = Barre::Timeline.cherche("lecture.boucle").unwrap();
+    assert_eq!(app.vue_de(Barre::Timeline, boucle).etat, Some(app.looping));
     let avant = app.looping;
-    app.executer_commande(Barre::Commandes, boucle);
+    app.executer_commande(Barre::Timeline, boucle);
     assert_eq!(app.looping, !avant);
     // Le son pendant la lecture : l'icône suit l'état.
-    let son = Barre::Commandes.cherche("son.lecture").unwrap();
+    let son = Barre::Montage.cherche("son.lecture").unwrap();
     let on = app.sound_on;
-    assert_eq!(app.vue_de(Barre::Commandes, son).etat, Some(on));
-    app.executer_commande(Barre::Commandes, son);
+    assert_eq!(app.vue_de(Barre::Montage, son).etat, Some(on));
+    app.executer_commande(Barre::Montage, son);
     assert_eq!(app.sound_on, !on);
     // Les deux vues du montage sont un choix.
     let (dessin, vignettes) = (Barre::Montage.cherche("vue.dessin").unwrap(), Barre::Montage.cherche("vue.vignettes").unwrap());

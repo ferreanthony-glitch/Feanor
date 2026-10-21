@@ -366,7 +366,6 @@ fn the_montage_bar_shows_the_editing_commands_and_keeps_the_others_under_plus() 
         "son.nouvelle_piste",
         "son.couper",
         "son",
-        "vue.bruitages",
         "piste.replier_tout",
         "piste.deplier_tout",
         "commentaire.ajouter",
@@ -374,10 +373,13 @@ fn the_montage_bar_shows_the_editing_commands_and_keeps_the_others_under_plus() 
         "fichier.importer_notes",
         "fichier.exporter_montage",
         "fichier.exporter_fiche",
-        "mode.basculer",
     ] {
         assert!(montage.contains(&visible), "{visible} est dans la barre de l'espace Montage");
     }
+    // Les bruitages ont leur icône dans la barre des panneaux (pas une seconde ici), et « Animer ce plan » est sous
+    // « Plus… » : l'onglet Animation, en haut à droite, le fait (simplification des barres, 2026-10-21).
+    assert!(Barre::MontageEdition.cherche("vue.bruitages").is_none());
+    assert!(!montage.contains(&"mode.basculer") && Barre::MontageEdition.cherche("mode.basculer").is_some());
     // Ces commandes sont sous « Plus… » dans la barre du montage du storyboard : ici elles se voient.
     let storyboard = d_office(Barre::Montage);
     for vue_ici in ["plan.avancer", "plan.reculer", "montage.aimanter", "transition.ajouter", "commentaire.ajouter", "fichier.exporter_montage"] {
@@ -409,11 +411,10 @@ fn the_editing_commands_do_their_work() {
     let n = b.app.doc.panels.len();
     b.app.executer_commande(Barre::MontageEdition, Barre::MontageEdition.cherche("panneau.couper").unwrap());
     assert_eq!(b.app.doc.panels.len(), n + 1, "{}", b.app.status);
-    // « Bruitages » : un interrupteur qui suit le panneau.
-    let c = Barre::MontageEdition.cherche("vue.bruitages").unwrap();
-    assert_eq!(b.app.vue_de(Barre::MontageEdition, c).etat, Some(true), "le panneau Bruitages est ouvert dans cet espace");
-    b.app.executer_commande(Barre::MontageEdition, c);
-    assert_eq!(b.app.vue_de(Barre::MontageEdition, c).etat, Some(false));
+    // « Bruitages » : l'icône de la barre des panneaux (même règle de clic), ouvert dans cet espace puis fermé.
+    assert!(b.app.pane_shown(crate::dock::Pane::Bruitages), "le panneau Bruitages est ouvert dans cet espace");
+    b.app.run_action("vue.bruitages");
+    assert!(!b.app.pane_shown(crate::dock::Pane::Bruitages));
     // « Nouvelle piste son ».
     let pistes = b.app.doc.audio_tracks.len();
     b.app.executer_commande(Barre::MontageEdition, Barre::MontageEdition.cherche("son.nouvelle_piste").unwrap());
@@ -477,9 +478,11 @@ fn the_montage_space_is_idle_at_rest_and_drawing_it_stays_cheap() {
     b.app.set_espace(Espace::Montage);
     let repos = au_repos(&mut b);
     assert!(repos.iter().all(|r| *r >= std::time::Duration::from_secs(1)), "l'espace Montage ne fait pas repeindre au repos : {repos:?}");
-    // Le texte de la barre d'état dit où l'on est.
+    // Le texte de la barre d'état dit où l'on est : une astuce courte (le titre « Montage · … » à gauche n'y est plus,
+    // l'onglet allumé le dit déjà).
     b.chauffer(2);
-    assert!(b.textes.iter().any(|t| t.starts_with("Montage · ")), "{:?}", b.textes);
+    assert!(b.textes.iter().any(|t| t.starts_with("Montage : ")), "{:?}", b.textes);
+    assert!(!b.textes.iter().any(|t| t.starts_with("Montage · ")), "{:?}", b.textes);
     // Une image d'écran de l'espace Montage reste une affaire de quelques millisecondes (sans carte graphique).
     let ms: Vec<f64> = (0..5).map(|_| b.image(Vec::new(), 1.0 / 60.0).construction).collect();
     let mediane = {
