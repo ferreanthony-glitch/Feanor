@@ -633,39 +633,94 @@ les choix (découpage en plans, rythme, destination).
 
 ---------------------------------------------------------------------------------------------------
 
-## 11. Crayonnés rapides (la planche, 2026-10-19, branche `crayonnes`)
+## 11. Vignettes simples (la vue Vignettes, 2026-10-21, branche `vignettes-simples`)
 
-Une page de petites cases où l'on enchaîne des croquis, puis chaque case devient un plan
-(`crayonnes.rs`, `crayonnesui.rs`). Elle prend la place du dessin en storyboard ; elle se ferme par la croix
-de sa barre ou la même commande. Vocabulaire : **case** (un croquis de la planche), **planche** (toutes les
-cases), **page** (une grille de cases), **plan** pour ce qu'on en tire.
+Demande d'Anthony, tranchée sur des maquettes interactives : la « Planche de crayonnés » (2026-10-19) et la vue
+Vignettes faisaient deux fois le même travail. **La planche de crayonnés est supprimée** ; ce qu'elle avait d'utile
+est passé dans les Vignettes (`board.rs` pour la mise en page, `boardui.rs` pour l'écran). Vocabulaire : **image**
+(une vignette : le début d'un plan, ou l'une de ses marques d'image), **plan**, **case vide** (après la dernière
+image), **barre** (entre deux images), **bande de note** (sous une image).
 
-- **Ouvrir** : Storyboard > Planche de crayonnés…, le bouton de la barre du montage (à côté de Vue dessin /
-  Vue vignettes), Ctrl+K > « Planche de crayonnés rapides » (`storyboard.crayonnes`). Ouvrir prend l'outil
-  Crayon (sauf si la Gomme est l'outil).
-- **Commandes** (palette Ctrl+K, clic droit sur une icône > assigner une touche, sans touche par défaut) :
-  `crayonnes.case_suivante`, `case_precedente`, `page_suivante`, `page_precedente`, `ajouter_page`,
-  `inserer_case`, `supprimer_case`, `vider_case`, `tout_choisir`, `creer_plans`, `case_auto`.
-- **Touches qui ne passent pas par le fichier** (comme les flèches du dessin) : quand la planche a la main (le
-  dernier appui y était), Tab / Maj+Tab et les flèches changent de case, Page préc. / suiv. de page ; Ctrl+Z /
-  Ctrl+Y, Ctrl+A et Suppr y sont l'annulation de la planche, « choisir toutes les cases dessinées » et « vider
-  les cases choisies » (Tab redevient « passer en animation » dès qu'une bande reprend la main).
-- **Gestes** : appui dans une case = tracer (le trait appartient à cette case) ; Maj ou Ctrl + appui dans une
-  case, ou clic sur son numéro = choisir ; glisser le numéro = changer l'ordre ; clic droit = menu de la case.
-- **Annulation** : la planche a sa propre pile ; « Créer les plans » est une seule étape de l'historique du
-  projet (nommée « Créer les plans des crayonnés »), que Ctrl+Z dans la planche défait aussi si elle est
-  toujours la dernière.
+### Ce que l'on voit
 
-À regarder à l'écran : les cases et leurs numéros dans les trois thèmes (la coche verte, l'anneau de la case
-choisie et de la case courante), le trait qui reste collé à la pointe pendant le geste, le glisser d'un numéro
-(barre d'insertion devant la case visée), la fenêtre « Créer les plans », la grille 6 × 4 sur un petit écran,
-le pinceau et la gomme à la tablette (pression), la barre sur une fenêtre étroite (elle défile).
+- **Rien autour des images** : un filet gris d'un point, plus foncé pour l'image courante ; pas de bande de titre, pas
+  de durée, pas de « Plan ». Seul le **numéro du plan**, au-dessus de sa première image (teinté de la couleur du plan s'il
+  en a une). Les repères d'état restent, petits, sur cette même ligne et seulement quand ils servent : la pastille
+  d'un envoi (§ 17) et celle du film partagé. Plusieurs plans choisis : leurs images (sauf l'image courante) ont un liseré
+  d'accent.
+- **Écart** : 10 points entre deux images d'un même plan, 30 à une coupe. Les lignes ont un nombre fixe d'images
+  (« colonnes », 6 au plus) ; une ligne ne se casse jamais à un changement de plan. Ordre de lecture : de gauche à
+  droite, puis ligne par ligne.
+- **Barre** entre deux images qui se suivent : courte (un tiers de la hauteur de l'image), 1,5 point, **grise = même
+  plan, noire = coupe**. Une barre est aussi après la dernière image de chaque ligne (la transition vers la première
+  image de la ligne suivante). Sous la souris elle prend l'accent, avec une bulle.
+- **Bande de note** sous chaque image, dans l'espace entre les lignes : vide, juste un filet très pâle (aucun mot). Le
+  texte passe à la ligne ; il rapetisse un peu avec sa longueur (11 → 10 → 9,5 points) ; **trois lignes au plus**, puis
+  « … ». La ligne d'images suivante descend juste de ce qu'il faut pour garder sa marge quand une note prend deux ou
+  trois lignes.
+- **Cases vides** après la dernière image (une au moins ; la page est complétée) : un filet très pâle.
+
+### Ce que l'on fait
+
+- **Dessiner** : un trait qui commence dans une image (pleine ou vide) la rend courante **à l'appui** et dessine dedans,
+  sans clic de choix avant. C'est le dessin lui-même qui est dans l'image courante : même moteur, même rendu progressif, le
+  point reçu est dans l'image d'écran où il arrive. **Un trait qui commence ailleurs ne dessine rien** (ni note libre : on ne
+  trace plus de notes au pinceau sur la planche ; textes, gomme et sélection des notes restent). Ce qui déborde de l'image
+  est **coupé à l'affichage** ; le dessin garde tout le tracé (toile infinie) et l'export cadre comme avant.
+- **Case vide** : dessiner dedans **fait le plan** à l'appui même (les cases vides sautées avant elle deviennent des plans
+  vides, pour garder sa place). Si la barre qui précède la première case vide est **grise** (un clic la bascule), la case
+  fait **une image de plus du dernier plan** (il s'allonge de la durée de sa dernière image, une marque d'image est posée).
+  La création et le trait ne font **qu'une étape d'annulation** (« Nouveau plan dessiné » / « Nouvelle image dessinée ») ;
+  un simple clic qui ne trace rien ne laisse aucune trace. Outils qui font un plan : Pinceau, Crayon, Ligne, Rectangle,
+  Ellipse (les autres ne font rien dans une case vide).
+- **Barre** : un clic sur une barre **grise** coupe le plan à cette image (la vignette de droite commence un plan neuf :
+  `split_plan`) ; sur une barre **noire** il réunit les deux plans (le début du plan de droite devient une marque d'image du plan
+  de gauche : `join_next_plan`, les deux plans doivent être de la même séquence). Une étape d'annulation, nommée (« Couper le
+  plan entre deux vignettes », « Réunir deux vignettes en un plan »).
+- **Note** : un clic sur la bande l'ouvre ; Entrée (ou un clic ailleurs) la pose, Maj + Entrée passe à la ligne, Échap
+  abandonne. Elle va dans les notes du plan (première image) ou de la marque d'image ; le texte entier est gardé, visible
+  pendant la saisie et dans la fiche du plan. Une étape d'annulation, « Note de vignette ».
+- **Choisir des plans** : Ctrl ou Maj + clic sur une image (Ctrl ajoute ou retire, Maj prend l'intervalle) ; ou le lasso
+  depuis le fond de la page. Clic droit sur une image : le menu de la vignette (animer, nouveau plan, dupliquer, couleur, versions,
+  copier / coller…) ; sur le fond : le menu de la planche. Molette : défiler ; Ctrl + molette : zoom ; Espace, bouton du milieu
+  ou outil Main : déplacer la planche.
+- **Ce qui n'existe plus** : glisser une vignette pour réordonner (le geste est celui du trait ; réordonner se fait dans le
+  montage, ou par couper / coller), le double-clic pour animer (un clic dessine : « Animer cette image » est au clic droit, Tab),
+  les réglages « Écart » et « Plan à la ligne », la durée et « Plan N » dans l'en-tête, l'étiquette de version « · V2 » (le
+  menu du clic droit garde les versions).
+
+### Anciens projets (`crayonnes.json`)
+
+SHOT ne lit plus ce fichier et ne l'écrit plus, mais **ne l'efface jamais** (octet pour octet, après ouverture et
+enregistrements) ; « Enregistrer sous » ne le recopie pas (l'original reste dans son dossier). À l'ouverture, **un seul
+avertissement** dit combien de cases dessinées n'avaient jamais servi à faire des plans et que le fichier reste en place ;
+rien n'est converti tout seul. Pour retrouver ces croquis : les redessiner dans une case vide, ou rouvrir le projet avec la
+version d'avant (`crayonnesheritage.rs`).
+
+### À regarder à l'écran
+
+1. Les filets (clair / foncé pour l'image courante) et le numéro du plan dans les trois thèmes : lisibles sur la page blanche, rien
+   d'autre autour des images.
+2. Les barres : grise très discrète, noire nette, d'un tiers de l'image, centrées dans l'écart ; une barre au bout de chaque ligne ;
+   la bulle sous la souris.
+3. L'écart : serré (10) dans un plan, large (30) à une coupe ; six colonnes sur un petit écran.
+4. Dessiner dans une image qui n'est pas courante, sans clic avant : le premier point est déjà là, aucun saut ; le trait qui
+   sort de l'image est coupé à son bord ; un trait qui part du fond ne trace rien.
+5. Dessiner dans la première case vide : le plan apparaît à sa place ; avec la barre grise, une image de plus ; Ctrl+Z défait
+   les deux d'un coup.
+6. Cliquer une barre : coupe ou réunion, puis Ctrl+Z.
+7. Les bandes de note : une, deux, trois lignes et « … » ; la ligne suivante descend sans toucher la note ; la saisie montre tout le
+   texte ; le filet pâle sous une bande vide ; la taille du texte à 100 %, 50 % et 200 % de zoom.
+8. À la tablette : la pression et le retard du trait dans une vignette, comparés à la vue Dessin.
 
 ### Essais ajoutés
 
-`crayonnes_tests` (38 : appartenance, coupe, navigation, ordre, création des plans, fichier, annulation, écran).
-Le projet d'essai de fiabilité contient une planche de crayonnés (trois cases, dont une peinte au pinceau).
-
+`vignettes_tests` (23 : la planche de crayonnés n'a plus de commande, un ancien `crayonnes.json` s'ouvre et reste intact,
+dessin direct dans une image pleine, dans une marque et dans une case vide, trait hors des images, plans sautés, clic sans
+trait, barre grise → image, coupe / réunion nommées et annulables, barre de bout de ligne, notes du plan et de la marque,
+trois lignes et « … », numéros seuls, Ctrl / Maj, clic droit, storyboard verrouillé, fusion d'étapes d'annulation, coût du
+trait, repos) et `board_tests` (mise en page : écarts, barres, hauteur des lignes, zones touchées). La planche de crayonnés
+(38 essais) et sa part du projet d'essai de fiabilité sont partis avec elle.
 ---------------------------------------------------------------------------------------------------
 
 ## 12. Calques d'effets et préréglages d'effets (2026-10-19, branche `calques-effets`)
@@ -832,7 +887,7 @@ entre deux groupes), si la commande est dans la barre d'office, son icône, son 
 | Barre | Dans la barre | Sous « Plus… » |
 |---|---|---|
 | Commandes du haut (19 → 9) | Nouveau, Ouvrir, Enregistrer, Exporter ; Annuler, Rétablir ; Couper, Copier, Coller | Nouveau plan, Dupliquer le plan, Supprimer les plans ; le transport (première image, précédente, lecture, suivante, dernière) ; boucle ; son pendant la lecture |
-| Montage (21 → 12) | début, lecture, boucle, position ; nouveau plan, nouvelle séquence, menu Plans ; importer un son, menu Son ; animer ce plan ; vue dessin, vue vignettes, planche de crayonnés | calque vectoriel, copier / coller / supprimer les plans, avancer / reculer le plan, verrou, aimant, **ajouter une transition**, importer une vidéo, nouveau commentaire |
+| Montage (21 → 12) | début, lecture, boucle, position ; nouveau plan, nouvelle séquence, menu Plans ; importer un son, menu Son ; animer ce plan ; vue dessin, vue vignettes | calque vectoriel, copier / coller / supprimer les plans, avancer / reculer le plan, verrou, aimant, **ajouter une transition**, importer une vidéo, nouveau commentaire |
 | Timeline (ne défile plus) | animer / retour, titre et durée du plan ; transport, boucle, image courante, menus Repères et Affichage ; nouveau dessin, allonger / raccourcir l'exposition, « en N », menu Images ; clés de caméra début / ici / fin ; pelure (bouton, avant, après, réglages) | cadence, dupliquer / supprimer / vider le dessin, supprimer la clé de caméra, adoucir, marque d'image, nouveau commentaire, flips, effets |
 
 - **Le bouton « Plus… »** (`DOTS_THREE`) est au bout de chaque barre ; une ligne par commande avec son icône, son
@@ -924,7 +979,7 @@ thème (`theme::avertissement`) ; les états allumés (Envois, Comparer) prennen
 - **Fenêtre « Marquer un envoi »** : un nom (« v2 au réal », le numéro suivant est proposé), une date (JJ/MM/AAAA, celle du
   jour ; rouge si elle n'est pas lisible), « Marquer l'envoi » / Annuler, Entrée valide. Un projet pas encore enregistré le
   dit (l'envoi est gardé au premier enregistrement).
-- **Pastille** : 14 points en haut à droite du bloc du plan dans la bande et dans le coin de la première vignette du plan dans la
+- **Pastille** : 14 points en haut à droite du bloc du plan dans la bande et sur la ligne du numéro de la première vignette du plan dans la
   vue Vignettes ; un crayon pour un plan modifié, un plus pour un plan ajouté ; bulle « Modifié depuis l'envoi « v2 au réal » ».
   Sur un bloc de moins de 44 points de large (la bande zoomée très loin : la pastille cacherait la poignée du bord) ou de
   moins de 40 de haut, une **bande ambre de 5 points le long du bord haut** la remplace, avec la même bulle. Le « dernier
@@ -1009,8 +1064,8 @@ l'EDL reste celle du plan (« PL012A », 8 caractères au plus), le titre long d
 donne `…_V1`.
 
 **Limites connues** : une version rangée ne se lit pas image par image dans la pile (première image seulement) ; l'étiquette
-est peinte sur la première vignette du bloc (pas dans la vue Vignettes / planche, qui garde « Plan 3 · V2 » dans son titre et
-le clic droit) ; sur un bloc très étroit seul le point ou le clic droit donnent accès aux versions.
+est peinte sur la première vignette du bloc (pas dans la vue Vignettes, qui ne montre que le numéro du plan : les versions y sont
+au clic droit) ; sur un bloc très étroit seul le point ou le clic droit donnent accès aux versions.
 
 ### À vérifier à l'écran (versions dans le montage)
 

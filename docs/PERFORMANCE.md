@@ -674,7 +674,7 @@ en défilant un montage de 600 plans ou en sautant de plan en plan, chaque image
   identiques d'un projet à l'autre en auraient montré de fausses.)
 - **Ce qui ne change pas** : les vignettes de l'export, de l'API locale (`noyau.rs`) et de la lecture du
   storyboard par un modèle (`lecturesb.rs`, déjà bornée par `BUDGET_VIGNETTES`) restent des appels bloquants ;
-  la planche de crayonnés ne compose rien (elle envoie des tuiles) ; les références visuelles se décodent déjà
+  les références visuelles se décodent déjà
   sur un autre fil ; le calque « Fond 3D » est un calque bitmap ordinaire, rendu en arrière-plan depuis
   toujours. Les vignettes ne contiennent ni incrustations ni transitions (elles se posent à l'export), avant
   comme après. Le format du projet n'a pas changé.
@@ -1393,3 +1393,34 @@ l'image part sur un autre fil. Mesures de cette séance (processeur et carte gra
   travelling demande un rendu par image : à l'export, c'est calculé image par image (exact) ; en lecture, un rendu à la fois
   part en arrière-plan et les objets peuvent retarder de quelques images.
 - Aucun repaint au repos : ni la vue, ni le rendu des objets ne réveillent l'écran quand rien ne change.
+
+## 21. Vignettes simples : dessiner dans une vignette (2026-10-21, branche `vignettes-simples`)
+
+Règle « sans latence » : dessiner dans la vue Vignettes doit être aussi fluide que dans la vue Dessin. Ce qui est fait :
+
+- **Le dessin lui-même est dans l'image courante** (`card_canvas` : la même fonction `canvas_panel`, le même `StrokeState`,
+  la même composition) : aucun moteur de plus, aucun rejeu sur le fil de l'interface. Ce qui change, c'est **qui devient courante** :
+  l'appui est vu dans l'image d'écran où il arrive (`boardui.rs`, `board_press`, avant de peindre les vignettes), l'image visée
+  prend la main dans cette même image et son dessin reçoit l'appui (même liste d'événements). Un appui dans une case vide fait
+  le plan dans cette image aussi (une étape de structure, comme « Nouveau plan »).
+- **Sans pénalité au repos** : la mise en page (`board.rs`) est calculée à chaque image sans rien allouer de grand ; la
+  mesure des notes (un galley par note non vide, mis en cache par egui) ne tourne que pour les images qui en ont ; la
+  vignette de l'image courante se tient à jour en arrière-plan (comme les autres, sur les fils de `thumbs.rs`) pour que
+  l'image d'avant ne montre pas un dessin périmé quand une autre prend la main.
+- **Au repos**, la vue ne demande aucune image (essai `the_vignettes_view_is_idle_when_nothing_happens`).
+
+Mesures (`vignettes_tests`, un trait à la souris, temps de construction de l'interface par image d'écran) :
+
+| | Vignette de la planche | Vue Dessin |
+|---|---|---|
+| Sans carte graphique, trait de 60 points, 4 événements par image (essai tous les passages) | moyenne 0,9 ms, pire 1,3 ms | moyenne 1,1 ms, pire 3,0 ms |
+| Avec la carte graphique (total interface + découpage + carte), trait de 120 points, 8 événements par image (`perf_vignettes_drawing`, `--ignored`) | moyenne 1,27 ms, 95e centile 1,85 ms, pire 2,08 ms | moyenne 1,15 ms, 95e centile 1,30 ms, pire 1,40 ms |
+| Planche de 100 plans, souris qui bouge / molette (`perf_long_project`, `--ignored`) | 2,5 ms / 2,4 ms par image | |
+
+La vignette coûte un peu plus que la vue Dessin à la carte (le dessin est dans un clip de la page, la page et les
+vignettes autour sont peintes aussi), de l'ordre de 0,1 ms.
+
+**Ce qui n'est pas mesuré** : à la tablette (pression, retard ressenti) ; une planche de plusieurs centaines de plans en
+dessinant ; la création d'un plan dans une case vide sur un très gros film (une étape de structure : copie des plans,
+comme « Nouveau plan »).
+

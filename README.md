@@ -83,24 +83,25 @@ dans `...\Pelure` y est copié (jamais déplacé ni supprimé) s'il n'y a pas en
   - La fiche montre les textes de l'image de storyboard où est la tête de lecture.
   - La lecture du montage (▶ de sa barre) enchaîne tout (animatique), en boucle si on veut, avec le son.
   - Vue « Vignettes » (Maj+Tab) : une **planche** de pages blanches où les images de storyboard
-    se suivent, numérotées, de gauche à droite. En haut : taille des vignettes, colonnes (6 au
-    plus), lignes par page (« toutes » : une seule page), écart, « Plan à la ligne », « Attacher
-    les notes ».
-    - On dessine directement dans la vignette de l'image courante ; avec l'outil Caméra, elle
-      montre la feuille et le cadre pour recadrer.
-    - Notes, partout sur la planche : pinceau ou crayon, un trait ; outil Texte, un texte (Ctrl +
-      Entrée pour le poser, double-clic pour le modifier) ; gomme, efface les traits touchés ;
-      outil Sélection, choisir des notes (clic, Ctrl + clic, lasso) et les glisser. Une note libre
-      reste où on l'a posée ; une note attachée suit sa vignette et grandit avec elle (clic droit
-      sur des notes : attacher, détacher, couleur courante, taille du texte, supprimer ; Suppr).
+    se suivent de gauche à droite, rangée par rangée. En haut : taille des vignettes, colonnes (6 au
+    plus), lignes par page (« toutes » : une seule page), « Attacher les notes ». Détail, gestes et
+    liste à vérifier à l'écran : section « Vignettes simples » plus bas.
+    - **On dessine directement** dans n'importe quelle vignette, sans clic avant : un trait qui commence dans
+      une image la rend courante à l'appui et dessine dedans ; un trait qui commence ailleurs ne trace rien.
+      Après la dernière image, des **cases vides** : dessiner dans l'une fait le plan.
+    - Rien autour des images (un filet d'un point, plus foncé pour la courante) ; seul le **numéro du plan**
+      au-dessus de sa première image. Entre deux images, une **barre** : grise (même plan) ou noire (coupe) ; un
+      clic la bascule (coupe ou réunit les plans). Sous chaque image, une **bande de note** (trois lignes au plus).
+    - Notes libres de la planche : outil Texte, un texte (Ctrl + Entrée pour le poser, double-clic pour le
+      modifier) ; gomme, efface les traits touchés ; outil Sélection, choisir des notes (clic, Ctrl + clic,
+      lasso) et les glisser. Une note libre reste où on l'a posée ; une note attachée suit sa vignette et
+      grandit avec elle (clic droit sur des notes : attacher, détacher, couleur courante, taille du texte,
+      supprimer ; Suppr).
     - Molette : défiler ; Ctrl + molette : zoom ; Espace, bouton du milieu ou outil Main :
       déplacer la planche ; le bouton du zoom met la page à la largeur de la vue.
-    - Clic : choisir une image (et son plan) ; Ctrl + clic : ajouter un plan ; Maj + clic : une
-      suite ; outil Sélection : lasso. Glisser des plans choisis (le courant par son titre) les
-      place avant ou après d'autres plans. Clic droit : animer, nouveau plan, dupliquer, copier,
-      coller, supprimer, faire d'une image un nouveau plan, réunir avec le plan précédent,
-      recadrer.
-  - Sous la bande : une piste par calque (le calque de chaque plan à ce rang, ses dessins
+    - Ctrl + clic sur une image : ajouter un plan aux plans choisis ; Maj + clic : une suite ; lasso depuis le fond de
+      la page. Clic droit : animer, nouveau plan, dupliquer, copier, coller, supprimer, faire d'une image un
+      nouveau plan, réunir avec le plan précédent, recadrer.  - Sous la bande : une piste par calque (le calque de chaque plan à ce rang, ses dessins
     exposés), et au-dessus des plans la piste Caméra (clés, mouvements). Un clic sur un calque,
     dans sa piste ou dans les noms à gauche, le rend courant.
   - On dessine directement sur le plan dans la vue « Dessin » : un nouveau dessin y est tenu
@@ -877,7 +878,7 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Barres minces et « Plus… »** : la barre de commandes du haut ne garde que 9 icônes (Nouveau,
   Ouvrir, Enregistrer, Exporter ; Annuler, Rétablir ; Couper, Copier, Coller) ; la barre du montage en
   garde une douzaine (lecture et boucle, nouveau plan, nouvelle séquence, menus Plans et Son,
-  importer un son, animer ce plan, vue dessin / vignettes, planche de crayonnés) ; la barre de la
+  importer un son, animer ce plan, vue dessin / vignettes) ; la barre de la
   timeline (plan, transport, repères, dessins, expositions, clés de caméra, pelure) ne défile plus.
   Le reste est sous le bouton « Plus… » (trois points) à droite de chaque barre : une ligne par
   commande avec son icône, son nom et son raccourci. L'**épingle** de chaque ligne (« Épingler dans
@@ -1649,50 +1650,28 @@ sans accord. Le détail, le contrat du serveur local, comment le lancer et ce qu
   illisible ou plus récent ne bloque pas l'ouverture et n'est jamais effacé). Les sons générés attendent dans
   `%LOCALAPPDATA%\SHOT\sons_generes\`.
 
-## Crayonnés rapides (la planche)
+## Vignettes simples (2026-10-21, branche `vignettes-simples`)
 
-Une page de petites cases, toutes au rapport du cadre du projet, où l'on enchaîne des croquis très
-vite (thumbnailing) ; chaque case devient ensuite un plan. Ce n'est pas une vue des plans existants :
-c'est une surface de dessin. S'ouvre par Storyboard > Planche de crayonnés…, le bouton à côté de
-« Vue vignettes » (barre du montage), ou Ctrl+K > « Planche de crayonnés » (`storyboard.crayonnes`) ; elle
-prend la place du dessin en storyboard.
+Demande d'Anthony : la « Planche de crayonnés » et la vue Vignettes faisaient deux fois le même travail ; **la planche
+de crayonnés est supprimée** (interface, commandes, fichier, essais) et ce qu'elle avait d'utile est dans les
+Vignettes (`board.rs`, `boardui.rs`). Mode d'emploi complet et liste à vérifier à l'écran : `docs/INTERFACE.md`, § 11.
 
-- **Dessiner** : directement sur la page, au crayon (trait vectoriel lisse, net à toute échelle),
-  au pinceau du logiciel (bitmap) ou à la gomme (coupe les traits, efface la peinture) ; les touches
-  des outils marchent. Sans latence, comme dans le dessin : l'aperçu du trait est dans l'image de la
-  case à chaque point reçu, jamais de rejeu du moteur. **Un trait appartient à la case où il
-  commence** et est coupé à elle (à l'écran comme dans le plan).
-- **Barre** : crayon, pinceau, gomme · trois tailles · noir et deux gris · annuler, rétablir · vider la
-  case, insérer une case, supprimer la case · page précédente / suivante, ajouter une page · grille
-  (2×2, 3×2, 4×3 par défaut, 4×4, 6×4) · case suivante automatique (éteinte : après une pause d'une
-  seconde, la case suivante) · toutes les cases dessinées · Créer les plans · fermer.
-- **Aller de case en case** : Tab / Maj+Tab et les flèches (Page préc. / suiv. : la page) quand la planche
-  a la main (le dernier clic y était). Chaque case a son numéro et, dessous, une ligne de légende (texte
-  court) qui deviendra le texte d'action du plan.
-- **Choisir** : clic sur le numéro d'une case (Maj : jusqu'à la dernière cliquée, Ctrl : ajouter ou
-  retirer) ; Maj ou Ctrl + appui dans la case marchent aussi (sans tracer) ; « Toutes les cases dessinées ».
-  **Changer l'ordre** : glisser le numéro d'une case sur une autre. Clic droit sur une case : choisir,
-  créer son plan, insérer avant / après, reculer, avancer, vider, supprimer, cocher.
-- **Créer les plans** : une fenêtre demande où (après le plan courant, ou dans une nouvelle séquence) et la
-  durée de chaque plan (2 s). Un plan par case choisie, dans l'ordre de la planche ; le dessin de la case
-  va sur un calque « Crayonné » (les traits restent vectoriels et sont mis à l'échelle du cadre ; la peinture
-  du pinceau va sur un calque bitmap « Crayonné (pinceau) », rééchantillonnée) sous un calque « Dessin »
-  vide ; la légende devient le texte d'action. **Une seule étape d'annulation** du projet. Les cases restent
-  sur la page, avec une petite coche verte.
-- **Annuler** : la planche a sa propre pile (traits, gomme, ordre, cases ajoutées ou retirées, vidées,
-  légendes, grille). Ctrl+Z dans la planche défait aussi la création des plans quand c'est la dernière
-  étape du projet. Suppr vide les cases choisies (ou la courante) ; Ctrl+A les choisit.
-- **Enregistrée** dans `crayonnes.json`, à côté du manifeste (le format du projet ne change pas ; absent,
-  il n'y a pas de planche ; une planche sans rien dedans n'écrit rien). Les protections de la
-  fiabilité s'appliquent : un fichier illisible ou d'une version plus récente n'est jamais effacé ni
-  réécrit (il est mis de côté sous `.illisible` si une planche neuve doit prendre sa place), et l'écriture se
-  fait atomiquement sur le fil d'enregistrement.
-- Limites : les traits d'une case sont lisses (pas de pinceau texturé dans les cases : leur rendu est exact et
-  immédiat) ; une case garde la taille et le rapport qu'avait le cadre à sa création (un cadre d'un autre
-  rapport : la case est mise à l'échelle sans déformation, centrée) ; le pinceau bitmap rééchantillonné d'une
-  case de 640 px sur un cadre de 1 920 px est flou ; « Créer » rééchantillonne la peinture sur le fil de
-  l'interface (une peinture de pleine page prend une fraction de seconde par case).
-
+- **Dessiner tout de suite** : un trait qui commence dans une image (pleine ou vide) la rend courante à l'appui et
+  dessine dedans, avec le même moteur que la vue Dessin (le point reçu est déjà dans l'image d'écran où il arrive). Un
+  trait qui commence hors des images ne trace rien. Ce qui déborde de l'image est coupé à l'affichage ; le dessin garde
+  tout (toile infinie), l'export cadre comme avant.
+- **Cases vides** après la dernière image : dessiner dans l'une d'elles fait le plan (ou, si la barre devant est grise,
+  une image de plus du dernier plan). La création et le trait sont une seule étape d'annulation.
+- **Barres** entre les images (grise : même plan ; noire : coupe) : un clic sur une grise coupe le plan là, un clic sur
+  une noire réunit les deux plans. Écart de 10 points dans un plan, de 30 à une coupe.
+- **Bandes de note** sous les images : un clic, on écrit (Entrée pose, Maj + Entrée : ligne, Échap : abandon) ; la note
+  est celle du plan (première image) ou de la marque d'image ; trois lignes au plus à l'écran puis « … », le texte entier
+  est gardé et visible à la saisie et dans la fiche.
+- **Anciens projets** : un `crayonnes.json` n'est plus lu ni écrit, mais jamais effacé ; un avertissement dit, une
+  fois à l'ouverture, combien de croquis n'avaient pas servi (`crayonnesheritage.rs`).
+- Limites : glisser une vignette pour réordonner n'existe plus (le geste est celui du trait ; réordonner se fait dans le
+  montage) ; un clic de pinceau dans une image y laisse un point (comme partout) ; le trait n'est pas visible au-delà du
+  bord de l'image pendant qu'on le trace ; Ctrl ou Maj + appui choisit des plans au lieu de dessiner.
 ## Palette de commandes
 
 Ctrl+K (ou Aide > Palette de commandes) : tape quelques lettres du nom d'une commande (« persp »,
@@ -2008,7 +1987,7 @@ Bus/
   rognages.json        le contenu rogné des plans (absent : rien de rogné)
   references.json      les références visuelles (absent : aucune)
   references/16.png    leurs images, copiées telles quelles (une vidéo : un dossier references/17/ d'images 000001.jpg…)
-  crayonnes.json       la planche de crayonnés rapides (absent : pas de planche)
+  crayonnes.json       (ancien) la planche de crayonnés, supprimée : plus lue ni écrite, jamais effacée
   scenes3d.json        les scènes 3D de blocage (absent : aucune scène)
   envois.json          les envois (« v2 au réal ») et l'empreinte de chaque plan à chacun (absent : aucun envoi)
   versions/            les instantanés des envois et leurs dessins, rangés par contenu (absent : aucun envoi)
@@ -2266,7 +2245,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `history.rs` | Annuler / rétablir |
 | `project.rs` | Projet en dossier (format 11), enregistrement préparé puis écrit |
 | `blend.rs` | Modes de fusion des calques (formules, composition d'un pixel) |
-| `board.rs`, `boardui.rs` | Planche de la vue Vignettes : disposition, notes, gestes, menus |
+| `board.rs`, `boardui.rs` | Planche de la vue Vignettes : disposition (écarts, barres, bandes de note, cases vides), zones touchées ; dessin direct, barres, notes sous les images, cases vides, notes libres, menus |
 | `recovery.rs`, `recoveryui.rs` | Copie de secours, récupération après plantage |
 | `workspace.rs`, `workspaceui.rs` | Espaces de travail (Storyboard, Animation, Montage : `Espace`, une disposition retenue chacun), disposition retenue |
 | `barres.rs`, `barres_tests.rs` | Barres de commandes minces et « Plus… » : une table de commandes par barre (commandes, montage, timeline), épingles retenues dans les réglages, passage automatique sous « Plus… » quand la barre est étroite |
@@ -2290,7 +2269,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `cadrage.rs`, `cadrageui.rs` | Aides au cadrage (tiers, grille d'or, spirale, diagonales, croix) : géométrie, réglages, tracé |
 | `commentaires.rs`, `commentairesui.rs` | Commentaires sur la timeline : modèle, fichier `commentaires.json`, positions ; fanions, bulle, menu, panneau |
 | `references.rs`, `referencesui.rs` | Références visuelles : modèle, fichier `references.json` et dossier `references/`, vue du tableau, filtre, image d'une vidéo selon la tête de lecture, import, cache des images ; panneau (tableau, grille, liste, pipette, lecture) |
-| `crayonnes.rs`, `crayonnesui.rs` | Crayonnés rapides : planche de cases (traits vectoriels, pinceau bitmap), appartenance et coupe des traits, ordre, pages, annulation, création des plans (mise à l'échelle), fichier `crayonnes.json` ; page, barre, gestes, numéros, légendes, fenêtre « Créer les plans » |
+| `crayonnesheritage.rs` | Reste de l'ancienne planche de crayonnés : compte les croquis d'un `crayonnes.json` jamais servis et le dit à l'ouverture (le fichier n'est jamais lu en entier, écrit ni effacé) |
 | `empreinte.rs`, `envois.rs`, `envoisui.rs` | Envois : empreintes de contenu stables d'une séance à l'autre (pixels tels que le PNG les garde) ; le modèle, `envois.json`, les instantanés de `versions/` écrits une fois par contenu, le calcul sur un fil ; marquer un envoi, le suivi des plans modifiés (relevé par image d'écran, copie par tranches, fil de fond), pastilles, navigation, fenêtres « Marquer un envoi » et « Envois » |
 | `planvers.rs`, `planversui.rs` | Versions d'un plan (v1, v2…) : le modèle (nouvelle, passer, restaurer, supprimer), `plans_versions.json`, annulation ; la ligne « Version » de la fiche, le sous-menu du clic droit |
 | `comparer.rs`, `comparerui.rs` | Comparer un plan avec lui-même (deux versions, ou aujourd'hui et un envoi) en lecture seule : composition sur un fil de fond, superposition colorée, différence ; la fenêtre (côte à côte, volet, fondu, superposition) |

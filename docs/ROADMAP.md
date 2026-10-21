@@ -2855,38 +2855,34 @@ téléchargement, aucun modèle, aucune requête réseau.
   choisit par proposition ou dans les Préférences) ; la lecture par règles ne connaît que le français.
 - **À vérifier** : les licences de chaque modèle et de chaque service (usage commercial des sons, données envoyées).
 
-## Crayonnés rapides : la planche (demandée par Anthony le 2026-10-19, branche `crayonnes`) ✅
+## Vignettes simples : la planche de crayonnés disparaît dans les Vignettes (Anthony, 2026-10-21, branche `vignettes-simples`) ✅
 
-« Crayonnés rapides » (thumbnailing) : une page de petites cases où il enchaîne des croquis très vite, puis
-chaque case devient un plan. Ce n'est pas une vue des plans existants. Mode d'emploi : README, « Crayonnés
-rapides (la planche) » ; boutons et gestes : `docs/INTERFACE.md`, partie 11.
+Remplace « Crayonnés rapides : la planche » (2026-10-19), supprimée : elle et la vue Vignettes faisaient deux fois le même
+travail. Décisions prises sur des maquettes interactives. Mode d'emploi : README, « Vignettes simples » ; gestes, mots et
+liste à vérifier à l'écran : `docs/INTERFACE.md`, partie 11.
 
-- ✅ **La page** (`crayonnesui.rs`) : prend la place du dessin en storyboard (Storyboard > Planche de
-  crayonnés…, bouton à côté de « Vue vignettes », Ctrl+K > `storyboard.crayonnes`). 4 × 3 cases par page, ou
-  2 × 2, 3 × 2, 4 × 4, 6 × 4 ; plusieurs pages ; toutes au rapport du cadre. Numéro (poignée) et légende sous
-  chaque case ; Tab, Maj+Tab et flèches changent de case ; « case suivante automatique » après une pause
-  (éteinte au départ).
-- ✅ **Dessin sans latence** : crayon (trait vectoriel lisse), pinceau du logiciel (bitmap), gomme (coupe les
-  traits, efface la peinture) ; même moteur (`StrokeState`) que le dessin, aperçu posé dans l'image de la case à
-  chaque point, textures de l'écran mises à jour par tuiles, aucun rejeu du moteur sur le fil de l'interface.
-  Un trait appartient à la case où il commence, coupé à elle. Mesuré sans fenêtre : une page de 24 cases pleines
-  de croquis, 0,7 ms par image d'écran en traçant.
-- ✅ **Choisir, ordonner** : clic sur le numéro (Maj, Ctrl), Maj / Ctrl + appui, « Toutes les cases
-  dessinées » ; glisser le numéro change l'ordre ; clic droit : insérer avant / après, vider, supprimer,
-  reculer, avancer, cocher. Barre : crayon, pinceau, gomme, trois tailles, noir et deux gris, annuler, vider,
-  insérer, supprimer, pages, grille.
-- ✅ **Créer les plans** : après le plan courant ou dans une nouvelle séquence, durée de chaque plan (2 s) ; le
-  dessin va sur un calque « Crayonné » (traits vectoriels mis à l'échelle et coupés à la case, peinture
-  bitmap rééchantillonnée sur un calque à part), la légende dans le texte d'action ; une seule étape
-  d'annulation du projet ; les cases restent sur la page, cochées.
-- ✅ **Fichier** : `crayonnes.json` à côté du manifeste (pas de nouvelle version du format), écrit par le fil
-  d'enregistrement avec les protections de la fiabilité (jamais effacé s'il est illisible ou plus récent,
-  `.illisible` si une planche neuve le remplace, écriture atomique) ; annulation propre à la planche, qui
-  renvoie au projet pour la création des plans.
-- Pas fait : pinceaux texturés dans les cases (leur rejeu en arrière-plan), choisir plusieurs cases au
-  rectangle, glisser des cases d'une page à l'autre (passer par « Reculer / Avancer »), changer le rapport des
-  cases d'une planche déjà dessinée quand le cadre change, vérification à la tablette.
-
+- ✅ **La planche de crayonnés est retirée** : panneau, menu Storyboard, bouton de la barre du montage, onze commandes
+  `crayonnes.*` et leurs blocs de `keymap.toml`, état dans les onglets, champ du document, écriture dans le projet (y
+  compris le projet partagé), 38 essais, part du projet d'essai de fiabilité, `Document::insert_plans`. **Anciens
+  projets** : `crayonnes.json` n'est plus lu ni écrit mais **jamais effacé** ; un avertissement, une fois à l'ouverture,
+  dit combien de cases dessinées n'avaient pas servi (`crayonnesheritage.rs`). Choix : ne rien convertir tout seul (un
+  croquis qui revient dans le film surprendrait) ; ce qu'on peut perdre : « Enregistrer sous » ne recopie pas le fichier.
+- ✅ **Dessin direct** : un trait qui commence dans une image (pleine ou vide) la rend courante à l'appui et dessine dedans,
+  sans clic avant, avec le même moteur que la vue Dessin (mesuré sans carte graphique : un trait de 60 points, image
+  d'écran moyenne 0,9 ms dans une vignette, 1,2 ms dans la vue Dessin) ; un trait qui commence ailleurs ne trace rien.
+  Ctrl / Maj + appui choisit des plans. Le trait coupé à l'affichage au bord de l'image, le dessin garde tout.
+- ✅ **Cases vides** après la dernière image : dessiner dans l'une fait un plan à l'appui (les cases sautées deviennent des plans
+  vides), ou une image de plus du dernier plan si la barre devant est grise ; création et trait = une étape d'annulation ;
+  un clic sans trait ne laisse rien.
+- ✅ **Look simple** : filet d'un point (plus foncé pour la courante), plus de bande de titre, de durée ni de « Plan » : seul le
+  numéro du plan au-dessus de sa première image.
+- ✅ **Barres** grise (même plan) / noire (coupe), un tiers de la hauteur, 1,5 point, aussi au bout de chaque ligne ; un clic
+  coupe (`split_plan`) ou réunit (`join_next_plan`), une étape nommée ; écart de 10 / 30 points ; lignes à nombre fixe d'images.
+- ✅ **Bandes de note** sous chaque image : notes du plan ou de la marque d'image, 11 → 10 → 9,5 points selon la longueur,
+  trois lignes puis « … », la ligne suivante descend juste de ce qu'il faut ; saisie Entrée / Maj + Entrée / Échap ; une étape.
+- Pas fait : réordonner en glissant une vignette (le glisser est celui du trait ; le montage et couper / coller restent) ;
+  le trait qui déborde visible hors de l'image pendant qu'on le trace (il faudrait la toile infinie dans la vignette) ;
+  l'étiquette de version « · V2 » dans les Vignettes (au clic droit) ; vérification à l'écran et à la tablette.
 ## Calques d'effets et préréglages d'effets (demandés par Anthony le 2026-10-19, branche `calques-effets`) ✅
 
 « Création de calques d'effets après des préréglages d'animation d'effet comme des impact frames, glows, tremblements
@@ -3027,7 +3023,7 @@ l'écran dans cette séance.
   par ligne, retenue par barre (`[barres.*]`) ; une barre trop étroite envoie d'elle-même ses dernières commandes
   sous « Plus… ». Rien n'est retiré (menus, Ctrl+K, raccourcis).
 - ✅ **Arrivées de main rangées** : « Ajouter une transition » et « Importer une vidéo » sous « Plus… » du montage, la
-  planche de crayonnés dans la barre à côté de « Vue vignettes » ; le cube de la scène 3D reste dans la barre de la vue.
+  planche de crayonnés (supprimée le 2026-10-21) dans la barre à côté de « Vue vignettes » ; le cube de la scène 3D reste dans la barre de la vue.
 - ✅ **Correction** : Historique, Commentaires, Bruitages, Suggestions sonores et Références s'ouvrent aussi quand les
   calques sont fermés (la colonne de droite se crée avec eux).
 - ✅ **Essais** : 23 nouveaux (`barres_tests.rs`, `workspace_tests.rs`), la suite complète passe (1511 essais,

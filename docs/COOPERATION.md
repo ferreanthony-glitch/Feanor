@@ -63,7 +63,7 @@ MonFilm/
                            Écrit par qui tient le plan.
   dessins/<n°>.png|json    un fichier par dessin (comme avant) ; écrits par qui tient le plan qui les cite
   sons/ modeles/ textures/ references/ videos/         comme avant ; ajoutés par qui tient le jeton
-  transitions.json effets_son.json sons_proposes.json references.json crayonnes.json envois.json versions/ scenes3d.json
+  transitions.json effets_son.json sons_proposes.json references.json envois.json versions/ scenes3d.json
                            (les décors de séquence)     comme avant, au nom d'avant ; écrits par qui tient le jeton
   commentaires/<équipier>.json     les commentaires de CET équipier (un fichier chacun, fusionnés à la lecture)
   partage/
@@ -98,7 +98,7 @@ quand ils sont plus récents, jamais effacés quand ils sont illisibles (`write_
 plan — calques, dessins, expositions, effets, caméra, marques d'image, textes d'action / dialogue / notes, signets, repère 3D,
 versions rangées, contenu rogné, scène 3D de blocage. Au montage (il faut tenir le jeton) : ordre, nombre, noms et numéros des
 plans et des séquences, **durée** d'un plan, rognage du montage, pistes et extraits de son, transitions, guides, groupes,
-planche (notes), fond, cadence, propriétés, envois, références, crayonnés, verrous du storyboard et de la numérotation.
+planche (notes), fond, cadence, propriétés, envois, références, verrous du storyboard et de la numérotation.
 **Les commentaires, eux, n'ont pas besoin de rien tenir** : on peut commenter n'importe quel plan.
 
 *Décision — durée d'un plan.* Changer la durée d'un plan (la fiche du plan, la poignée de la fin, rogner) décale tous les plans
@@ -390,7 +390,7 @@ et `the_thread_never_asks_for_a_repaint_when_nothing_changes`).
 - **Le montage perdu** (jeton pris avant nous) est mis de côté en brouillon mais ne s'importe pas encore : c'est un fichier à lire.
 - Importer un brouillon ou une copie en conflit lit les fichiers sur l'interface (un plan, une action de l'utilisateur).
 - Les copies en conflit « ignorées » reviennent au prochain lancement (la liste n'est pas retenue).
-- Importer un son ou un modèle 3D, créer une planche de crayonnés, marquer un envoi, nommer une séquence… demandent le jeton
+- Importer un son ou un modèle 3D, marquer un envoi, nommer une séquence… demandent le jeton
   (c'est du montage) ; un repère 3D dont le modèle vient d'être importé par quelqu'un d'autre perd son modèle chez qui ne l'a pas.
 - Pas d'enregistrement automatique dans le dossier partagé : les autres ne voient votre travail qu'à Ctrl+S (ou « Rendre »).
 - Les exports (montage, fiche, relecture) travaillent sur la copie locale : un plan encore « en attente » y est vide. La fenêtre
