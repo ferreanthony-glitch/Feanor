@@ -102,7 +102,7 @@ fn background_thumbnails_are_the_old_ones_pixel_for_pixel() {
             wants.push((p, frame, ((p as u64) << 20) | frame as u64));
         }
     }
-    for (what, n) in [("effets de calque", fx), ("calques d'effet", markers), ("fonds sous le trait", fonds), ("remplissages au griffonnage", ctgs), ("vidéo", videos), ("transformations", moved), ("modes de fusion", blended)] {
+    for (what, n) in [("effets de calque", fx), ("calques d'effet", markers), ("aplats sous le trait", fonds), ("remplissages au griffonnage", ctgs), ("vidéo", videos), ("transformations", moved), ("modes de fusion", blended)] {
         assert!(n > 0, "le projet d'essai doit avoir des {what} dans ses vignettes");
     }
     let mut thumbs = Thumbs::default();
