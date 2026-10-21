@@ -12,8 +12,9 @@ use crate::colorui::{swatch_cell, Rename, Renamed, Target};
 use crate::couleur;
 use crate::nuancier::{self, Palette};
 
-/// Côté d'une pastille du nuancier, en points.
-const SIDE: f32 = 18.0;
+/// Côté d'une pastille du nuancier, en points (le nuancier passe en premier dans le panneau Couleur : des
+/// pastilles qu'on vise sans y penser).
+const SIDE: f32 = 22.0;
 
 /// Champ d'un nom en cours de saisie ; tout le texte est choisi à l'ouverture. `Some(true)` :
 /// validé (Entrée, clic ailleurs) ; `Some(false)` : abandonné (Échap).
@@ -54,7 +55,7 @@ impl App {
     fn palette_target(&self) -> Option<usize> {
         match self.target() {
             Some(Target::Palette(i)) => Some(i),
-            Some(Target::Recent(_)) => None,
+            Some(Target::Recent(_) | Target::Neutre(_)) => None,
             None => self.shown_palette().position(self.color),
         }
     }
@@ -217,8 +218,9 @@ impl App {
         self.action_item(ui, "Retirer du nuancier", "pastille.retirer");
     }
 
-    /// Le nuancier : son nom (à choisir parmi les autres), ses commandes, ses pastilles.
-    pub(crate) fn palette_section(&mut self, ui: &mut egui::Ui) {
+    /// Les nuanciers : celui qui est montré (à choisir parmi les autres) et ses commandes (nouveau, renommer, dupliquer,
+    /// supprimer, importer, exporter, ajouter ou retirer une couleur). Sous « Plus de couleurs » dans le panneau.
+    pub(crate) fn palette_manager(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             crate::bulles::etiquette(ui, ph::SWATCHES, "Nuancier", "Tes nuanciers : choisis celui qui est montré ; clic droit sur son nom : ses commandes.");
             let renaming = matches!(self.couleurs.rename, Some(Rename { what: Renamed::Palette(_), .. }));
@@ -264,6 +266,11 @@ impl App {
             });
         });
         self.delete_confirmation(ui);
+    }
+
+    /// Les couleurs du nuancier montré, et le nom de la pastille qu'on est en train de taper (panneau Couleur : elles
+    /// sont toujours visibles, juste sous les neutres).
+    pub(crate) fn palette_swatches(&mut self, ui: &mut egui::Ui) {
         self.swatch_grid(ui);
         // Nom de la pastille en cours de saisie.
         if let Some(Rename { what: Renamed::Swatch(p, i), .. }) = self.couleurs.rename {
@@ -325,7 +332,7 @@ impl App {
                 self.target_cell(resp, Target::Palette(i), s.color, &s.name);
             }
             if swatches.is_empty() {
-                ui.label(RichText::new("vide : + y ajoute la couleur d'avant-plan").weak());
+                ui.label(RichText::new("vide : clic droit sur le carré de couleur, « Ajouter au nuancier »").weak());
             }
         });
         let Some(from) = self.couleurs.drag.filter(|(g, _)| *g == grid).map(|(_, i)| i) else { return };

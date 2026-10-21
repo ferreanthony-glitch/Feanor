@@ -46,19 +46,21 @@ impl Palette {
         Palette { name: name.to_string(), swatches: Vec::new() }
     }
 
-    /// Le nuancier d'un premier lancement : les couleurs de l'ancien nuancier de SHOT (6b). Il
-    /// s'appelait « Pelure » avant le changement de nom du logiciel (voir `NOM_ANCIEN`).
+    /// Le nuancier d'un premier lancement : les couleurs de l'ancien nuancier de SHOT (6b), sans le blanc et le gris
+    /// (depuis le 2026-10-21, la rangée des neutres du panneau Couleur les porte : noir, cinq gris, blanc), avec un
+    /// rose et un brun à la place. Il s'appelait « Pelure » avant le changement de nom du logiciel (voir
+    /// `NOM_ANCIEN`).
     pub fn pelure() -> Palette {
         let colors: [([u8; 3], &str); 10] = [
             ([24, 24, 28], "Encre"),
-            ([255, 255, 255], "Blanc"),
-            ([128, 128, 128], "Gris"),
             ([205, 45, 45], "Rouge"),
             ([240, 150, 40], "Orange"),
             ([245, 215, 60], "Jaune"),
             ([60, 160, 80], "Vert"),
             ([50, 110, 200], "Bleu"),
             ([130, 70, 170], "Violet"),
+            ([232, 120, 160], "Rose"),
+            ([125, 85, 55], "Brun"),
             ([235, 190, 160], "Peau"),
         ];
         Palette { name: NOM_DEFAUT.into(), swatches: colors.iter().map(|(c, n)| Swatch::new(*c, n)).collect() }

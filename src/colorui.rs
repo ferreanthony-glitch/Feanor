@@ -1,14 +1,15 @@
 //! Panneau Couleur (6b : curseurs teinte / saturation / valeur avec leur dégradé, code
 //! hexadécimal, nuancier avec + et −).
 //!
-//! Passe couleur (2026-10-16), de haut en bas :
+//! Passe couleur (2026-10-16), refaite le 2026-10-21 pour que le nuancier passe en premier. De haut en bas :
 //! - deux couleurs, avant-plan et arrière-plan, comme dans Photoshop (deux carrés qui se
 //!   chevauchent ; un clic sur celui de derrière les échange) ; les outils dessinent avec
-//!   l'avant-plan, `App::color` ;
-//! - la roue chromatique (`wheel_ui`, géométrie dans `roue.rs`) ;
-//! - les curseurs TSV, RVB ou TSL (l'opacité du pinceau est dans le panneau Réglages) ;
-//! - les couleurs récentes ;
-//! - le nuancier montré (`nuancierui.rs`).
+//!   l'avant-plan, `App::color`, et le mélange de deux couleurs de certains pinceaux prend l'arrière-plan ;
+//! - les neutres : noir, cinq gris, blanc (`couleur::NEUTRES`) ;
+//! - les couleurs du nuancier montré (`nuancierui.rs`) ;
+//! - « Plus de couleurs », replié d'office et retenu dans les réglages de l'application : la roue chromatique
+//!   (`wheel_ui`, géométrie dans `roue.rs`) ou les curseurs TSV, RVB, TSL (un seul à la fois, retenu ; l'opacité
+//!   du pinceau est dans le panneau Réglages), le code, les couleurs récentes et la gestion des nuanciers.
 //!
 //! Le même choix de couleur s'ouvre au pied de la barre d'outils. Conversions : `couleur.rs`.
 
@@ -26,6 +27,8 @@ use crate::roue::{Wheel, WheelShape, Zone};
 pub(crate) enum Target {
     Recent(usize),
     Palette(usize),
+    /// Une pastille de la rangée des neutres (noir, cinq gris, blanc : `couleur::NEUTRES`).
+    Neutre(usize),
 }
 
 /// Ce dont on tape le nom : un nuancier (rang), ou une pastille (rang du nuancier, rang).
@@ -269,6 +272,7 @@ impl App {
         match self.target()? {
             Target::Recent(i) => self.couleurs.prefs.recent.get(i).copied(),
             Target::Palette(i) => self.shown_palette().swatches.get(i).map(|s| s.color),
+            Target::Neutre(i) => couleur::NEUTRES.get(i).map(|n| n.0),
         }
     }
 
@@ -387,8 +391,10 @@ impl App {
         resp.context_menu(|ui| self.action_item(ui, "Copier le code de la couleur d'avant-plan", "couleur.copier_code"));
     }
 
-    /// Les deux carrés, leurs boutons et le code hexadécimal, sur une ligne.
-    fn front_back_row(&mut self, ui: &mut egui::Ui) {
+    /// Les deux carrés et leurs boutons ; `avec_code` : le code hexadécimal et sa copie dessous (la fenêtre de la
+    /// barre d'outils). Le panneau Couleur les range sous « Plus de couleurs » (`hex_row`) : il ne garde que les
+    /// deux carrés, intervertir et les couleurs par défaut.
+    fn front_back_row(&mut self, ui: &mut egui::Ui, avec_code: bool) {
         ui.horizontal(|ui| {
             self.front_back(ui, 30.0, "");
             ui.vertical(|ui| {
@@ -400,12 +406,38 @@ impl App {
                     if self.bouton(ui, ph::SQUARE_HALF, "Couleurs par défaut", "Noir à l'avant-plan, blanc à l'arrière-plan.", "couleur.defaut").clicked() {
                         self.default_colors();
                     }
-                    if self.bouton(ui, ph::COPY, "Copier le code", "Copier le code hexadécimal de la couleur d'avant-plan.", "couleur.copier_code").clicked() {
+                    if avec_code && self.bouton(ui, ph::COPY, "Copier le code", "Copier le code hexadécimal de la couleur d'avant-plan.", "couleur.copier_code").clicked() {
                         self.color_action("couleur.copier_code");
                     }
                 });
-                self.hex_field(ui);
+                if avec_code {
+                    self.hex_field(ui);
+                }
             });
+        });
+    }
+
+    /// Le code hexadécimal de la couleur d'avant-plan et sa copie, sur une ligne (sous « Plus de couleurs »).
+    fn hex_row(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            self.hex_field(ui);
+            if self.bouton(ui, ph::COPY, "Copier le code", "Copier le code hexadécimal de la couleur d'avant-plan.", "couleur.copier_code").clicked() {
+                self.color_action("couleur.copier_code");
+            }
+        });
+    }
+
+    /// La rangée des neutres : le noir, cinq gris, le blanc (`couleur::NEUTRES`). Clic : couleur d'avant-plan ;
+    /// clic droit : arrière-plan. Les carrés se partagent la largeur du panneau.
+    fn neutral_row(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing = vec2(2.0, 2.0);
+            let n = couleur::NEUTRES.len() as f32;
+            let side = ((ui.available_width() - 2.0 * (n - 1.0)) / n).clamp(16.0, 26.0);
+            for (i, (c, name)) in couleur::NEUTRES.iter().enumerate() {
+                let resp = swatch_cell(ui, *c, side, *c == self.color, Sense::click());
+                self.target_cell(resp, Target::Neutre(i), *c, name);
+            }
         });
     }
 
@@ -440,18 +472,23 @@ impl App {
         self.action_item(ui, "Carré saturation / valeur", "couleur.roue_carre");
         self.action_item(ui, "Triangle saturation / valeur", "couleur.roue_triangle");
         ui.separator();
-        let text = if self.couleurs.prefs.wheel_shown { "Cacher la roue" } else { "Montrer la roue" };
+        let text = if self.couleurs.prefs.wheel_shown { "Curseurs à la place de la roue" } else { "Roue à la place des curseurs" };
         self.action_item(ui, text, "couleur.roue");
     }
 
-    /// Réglages de la roue : la montrer, carré ou triangle.
-    fn wheel_options(&mut self, ui: &mut egui::Ui) {
-        let p = &mut self.couleurs.prefs;
+    /// Le choix entre la roue et les curseurs (un seul à la fois, retenu), puis, à côté, ce que chacun règle : le
+    /// carré ou le triangle de la roue, ou TSV, RVB, TSL.
+    fn picker_choice(&mut self, ui: &mut egui::Ui) {
         let (roue, carre, triangle) = (self.keymap.label("couleur.roue"), self.keymap.label("couleur.roue_carre"), self.keymap.label("couleur.roue_triangle"));
-        crate::bulles::interrupteur_a(ui, &mut p.wheel_shown, ph::CIRCLE_HALF, "Roue chromatique", "Montrer ou cacher la roue des teintes.", &roue, "couleur.roue");
+        let p = &mut self.couleurs.prefs;
+        crate::bulles::choix_a(ui, &mut p.wheel_shown, true, ph::CIRCLE_HALF, "Roue chromatique", "Choisir la couleur sur la roue des teintes.", &roue, "couleur.roue");
+        crate::bulles::choix(ui, &mut p.wheel_shown, false, ph::SLIDERS_HORIZONTAL, "Curseurs", "Choisir la couleur avec des curseurs : TSV, RVB ou TSL.", "");
+        ui.separator();
         if p.wheel_shown {
             crate::bulles::choix_a(ui, &mut p.wheel, WheelShape::Square, ph::SQUARE, "Carré", "Dans l'anneau, un carré : saturation de gauche à droite, valeur de bas en haut.", &carre, "couleur.roue_carre");
             crate::bulles::choix_a(ui, &mut p.wheel, WheelShape::Triangle, ph::TRIANGLE, "Triangle", "Dans l'anneau, un triangle : la teinte pure, le blanc et le noir à ses sommets.", &triangle, "couleur.roue_triangle");
+        } else {
+            self.slider_modes(ui, false);
         }
     }
 
@@ -477,23 +514,16 @@ impl App {
     /// points de large au plus), les curseurs. L'opacité du pinceau n'est plus ici (Anthony,
     /// 2026-10-18 : elle apparaissait deux fois) : elle est dans le panneau Réglages.
     fn color_picker(&mut self, ui: &mut egui::Ui, wheel: f32) {
-        // Étroit (panneau rétréci) : les réglages de la roue, puis le choix des curseurs dessous,
-        // au lieu de se chevaucher.
-        if ui.available_width() >= 240.0 {
-            ui.horizontal(|ui| {
-                self.wheel_options(ui);
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| self.slider_modes(ui, true));
-            });
-        } else {
-            ui.horizontal_wrapped(|ui| self.wheel_options(ui));
-            ui.horizontal_wrapped(|ui| self.slider_modes(ui, false));
-        }
+        // Un seul à la fois, la roue ou les curseurs (retenu d'une séance à l'autre) : le choix en une
+        // rangée (à la ligne si le panneau est étroit), puis celui des deux qu'on a choisi.
+        ui.horizontal_wrapped(|ui| self.picker_choice(ui));
         if self.couleurs.prefs.wheel_shown {
             let size = ui.available_width().clamp(60.0, wheel);
             ui.vertical_centered(|ui| self.color_wheel(ui, size));
             ui.add_space(4.0);
+        } else {
+            self.color_sliders(ui);
         }
-        self.color_sliders(ui);
     }
 
     /// Curseurs de la couleur d'avant-plan : TSV, RVB ou TSL, chacun avec son dégradé et ses
@@ -613,7 +643,7 @@ impl App {
     pub(crate) fn target_cell(&mut self, resp: Response, target: Target, c: [u8; 3], name: &str) {
         let title = if name.is_empty() { couleur::hex(c) } else { format!("{name} · {}", couleur::hex(c)) };
         let help = match target {
-            Target::Recent(_) => "Clic : couleur d'avant-plan ; clic droit : menu.",
+            Target::Recent(_) | Target::Neutre(_) => "Clic : couleur d'avant-plan ; clic droit : menu.",
             Target::Palette(_) => "Clic : couleur d'avant-plan ; glisser : la ranger ailleurs ; clic droit : menu (nommer, retirer…).",
         };
         let resp = crate::bulles::bulle(resp, &title, help, "");
@@ -639,19 +669,43 @@ impl App {
                 self.action_item(ui, "Effacer les couleurs récentes", "couleur.recentes_effacer");
             }
             Target::Palette(_) => self.palette_swatch_menu(ui),
+            // (Les neutres sont fixes : avant-plan ou arrière-plan, rien d'autre.)
+            Target::Neutre(_) => {}
         }
     }
 
     /// Panneau Couleur.
+    /// Le nuancier d'abord (Anthony, 2026-10-21 : « c'est le nuancier qui est prioritaire et qui doit être visible
+    /// en premier »), de haut en bas : les deux couleurs, les neutres (noir, cinq gris, blanc), les couleurs du
+    /// nuancier montré ; puis, en dépliant « Plus de couleurs » (retenu dans les réglages de l'application) : la
+    /// roue ou les curseurs, le code, les couleurs récentes et la gestion des nuanciers.
     pub(crate) fn color_panel(&mut self, ui: &mut egui::Ui) {
-        self.front_back_row(ui);
+        self.front_back_row(ui, false);
         ui.add_space(4.0);
+        self.neutral_row(ui);
+        ui.add_space(4.0);
+        // Les couleurs du nuancier montré (ses commandes sont dessous, repliées).
+        self.palette_swatches(ui);
+        ui.add_space(4.0);
+        let mut open = self.couleurs.prefs.more_open;
+        crate::repli::entete(
+            ui,
+            &mut open,
+            "Plus de couleurs",
+            "La roue chromatique ou les curseurs (TSV, RVB, TSL), le code hexadécimal, les couleurs récentes et la gestion des nuanciers.",
+        );
+        self.couleurs.prefs.more_open = open;
+        if !open {
+            return;
+        }
+        ui.add_space(2.0);
         self.color_picker(ui, 240.0);
+        self.hex_row(ui);
         ui.add_space(2.0);
         self.recent_row(ui);
         ui.add_space(6.0);
         // Nuanciers personnels (`nuancierui.rs`).
-        self.palette_section(ui);
+        self.palette_manager(ui);
     }
 
     /// À chaque image : les réglages de la couleur sont enregistrés quand ils changent (pas
@@ -692,7 +746,7 @@ impl App {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     egui::ScrollArea::vertical().max_height(max_height).show(ui, |ui| {
                         ui.set_width(250.0);
-                        self.front_back_row(ui);
+                        self.front_back_row(ui, true);
                         ui.add_space(4.0);
                         self.color_picker(ui, 200.0);
                         ui.add_space(2.0);

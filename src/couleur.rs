@@ -13,6 +13,19 @@ pub const BLANC: [u8; 3] = [255, 255, 255];
 /// Couleur d'avant-plan au premier lancement : l'encre de Pelure depuis 6b.
 pub const ENCRE: [u8; 3] = [24, 24, 28];
 
+/// La rangée des neutres du panneau Couleur, juste sous les deux couleurs (passe de simplicité, 2026-10-21 :
+/// « un nuancier de cinq gris, plus noir et blanc ») : le noir, cinq gris régulièrement répartis, le blanc.
+/// Une rangée fixe, qui ne se modifie pas : les couleurs, elles, sont dans le nuancier d'en dessous.
+pub const NEUTRES: [([u8; 3], &str); 7] = [
+    ([0, 0, 0], "Noir"),
+    ([43, 43, 43], "Gris 1 sur 5"),
+    ([85, 85, 85], "Gris 2 sur 5"),
+    ([128, 128, 128], "Gris 3 sur 5"),
+    ([170, 170, 170], "Gris 4 sur 5"),
+    ([213, 213, 213], "Gris 5 sur 5"),
+    ([255, 255, 255], "Blanc"),
+];
+
 /// Teinte (0 à 360), saturation et valeur (0 à 1) d'une couleur.
 pub fn rgb_to_hsv(c: [u8; 3]) -> [f32; 3] {
     let [r, g, b] = c.map(|v| v as f32 / 255.0);
@@ -174,6 +187,11 @@ pub struct ColorSettings {
     /// Curseurs montrés : TSV, RVB ou TSL.
     #[serde(rename = "curseurs")]
     pub sliders: SliderMode,
+    /// « Plus de couleurs » (la roue ou les curseurs, le code, les couleurs récentes, les nuanciers) est
+    /// dépliée dans le panneau Couleur. Replié d'office : le nuancier passe en premier. Un réglage de
+    /// l'application, pas du projet.
+    #[serde(rename = "plus_ouvert")]
+    pub more_open: bool,
     /// Dernières couleurs avec lesquelles on a dessiné, la plus récente d'abord.
     #[serde(rename = "recentes")]
     pub recent: Vec<[u8; 3]>,
@@ -193,6 +211,7 @@ impl Default for ColorSettings {
             wheel_shown: true,
             wheel: WheelShape::Square,
             sliders: SliderMode::Hsv,
+            more_open: false,
             recent: Vec::new(),
             shown: 0,
             palettes: vec![Palette::pelure()],
