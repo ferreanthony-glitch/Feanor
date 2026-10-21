@@ -118,12 +118,12 @@ etat_projet! {
     stage_view: Option<View> = None,
     format_custom: bool = false,
     in_card: bool = false,
+    vignettes: crate::boardui::Vignettes = Default::default(),
     board_zoom: f32 = 0.0,
     board_pan: Vec2 = Vec2::ZERO,
     xsheet_seen_frame: Option<usize> = None,
     plan_len_seen: Option<(u64, usize)> = None,
     // --- sélections
-    crayonnes: crate::crayonnesui::Etat = Default::default(),
     layer_sel: Vec<u64> = Vec::new(),
     frame_sel: Option<(usize, usize)> = None,
     key_sel: Vec<crate::montagekeys::KeyRef> = Vec::new(),

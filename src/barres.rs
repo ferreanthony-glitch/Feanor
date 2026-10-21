@@ -310,15 +310,6 @@ pub(crate) const MONTAGE: &[Cmd] = &[
         true,
         5,
     ),
-    // Crayonnés rapides : une page de petites cases à dessiner d'un trait, qui deviennent des plans.
-    etat(
-        "storyboard.crayonnes",
-        ph::NOTE_PENCIL,
-        "Planche de crayonnés",
-        "Une page de petites cases où enchaîner des croquis très vite ; chaque case devient un plan.",
-        true,
-        5,
-    ),
 ];
 
 /// Barre de la timeline : le plan, le transport, les dessins, la caméra et la pelure ; les dessins
@@ -774,7 +765,6 @@ impl App {
             }
             "vue.dessin" => v.etat = Some(self.board_view == BoardView::Scene),
             "vue.vignettes" => v.etat = Some(self.board_view == BoardView::Panels),
-            "storyboard.crayonnes" => v.etat = Some(self.crayonnes_shown()),
             "marque.basculer" => v.etat = Some(self.panel().marks.iter().any(|m| m.frame == self.cur_frame)),
             "camera.cle_debut" => v.icone = format!("|{}", ph::DIAMOND),
             "camera.cle_fin" => v.icone = format!("{}|", ph::DIAMOND),

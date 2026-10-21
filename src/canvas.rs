@@ -61,6 +61,9 @@ impl App {
         // vignette de la planche, qui a son propre menu.
         if !self.in_card && !self.modal_open() {
             response.context_menu(|ui| self.canvas_menu(ui));
+        } else if self.in_card && !self.modal_open() {
+            // Dans la vue Vignettes, le clic droit sur l'image courante ouvre le menu de la vignette (`boardui.rs`).
+            response.context_menu(|ui| self.card_context_menu(ui));
         }
         self.update_ref3d(ui.ctx());
         self.update_text_preview(ui.ctx());
@@ -385,6 +388,12 @@ impl App {
                 } => {
                     let pen = std::mem::take(&mut self.pen_touch);
                     if modal || panning || shifting || !on_canvas(*pos) {
+                        continue;
+                    }
+                    // Dans une vignette de la planche (`boardui.rs`), seul l'appui que la planche a donné au dessin dessine :
+                    // Ctrl ou Maj + appui choisit des plans, un appui sur une barre, une note ou hors d'une image ne trace rien (la mise en page
+                    // a pu changer sous la souris pendant cette même image).
+                    if self.in_card && (modifiers.command || modifiers.ctrl || modifiers.shift || !matches!(self.vignettes.press, crate::boardui::Press::Card | crate::boardui::Press::None)) {
                         continue;
                     }
                     // `stage` : point de la feuille (guides, caméra, pipette) ; `p` : point du dessin

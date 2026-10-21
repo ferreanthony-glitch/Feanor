@@ -433,7 +433,6 @@ impl Document {
         s.scenes3d = scenes3d;
         let _ = self.replace_structure(s);
         self.sons_proposes = stub.sons_proposes;
-        self.crayonnes = stub.crayonnes;
         self.envois = stub.envois;
         for (k, v) in stub.sounds {
             self.sounds.entry(k).or_insert(v);
@@ -803,7 +802,6 @@ pub(crate) fn preparer(doc: &Document, manifest_path: &Path, written: &mut HashM
         job.sound_fx = crate::audiofx::to_bytes(doc)?;
         job.sons_proposes = crate::indications::to_bytes(doc)?;
         job.references = crate::references::plan_save(doc, dir)?;
-        job.crayonnes = (!doc.crayonnes.is_blank()).then(|| doc.crayonnes.clone());
         job.scenes3d = crate::scene3dstore::to_bytes_decors(doc)?;
         job.envois = crate::envois::to_bytes(doc)?;
         job.snapshots = doc.envois.pending.clone();
@@ -838,7 +836,6 @@ impl SaveJob {
             sound_fx: None,
             sons_proposes: None,
             references: Default::default(),
-            crayonnes: None,
             scenes3d: None,
             envois: None,
             plans_versions: None,
@@ -956,11 +953,6 @@ impl SaveJob {
             ecrire(dir.join(crate::indications::FILE), self.sons_proposes.as_deref(), &|t| crate::indications::parse(t).is_ok())?;
             ecrire(dir.join(crate::scene3dstore::FILE), self.scenes3d.as_deref(), &|t| crate::scene3dstore::parse(t).is_ok())?;
             ecrire(dir.join(crate::envois::FILE), self.envois.as_deref(), &|t| crate::envois::parse(t).is_ok())?;
-            let crayonnes = match &self.crayonnes {
-                Some(p) => crate::crayonnes::bytes_of(p)?,
-                None => None,
-            };
-            ecrire(dir.join(crate::crayonnes::FILE), crayonnes.as_deref(), &|t| crate::crayonnes::parse(t).is_ok())?;
             count += self.references.write(&dir)?;
             count += crate::envois::ecrire(&dir, &self.snapshots, &self.snapshot_reuse, None)?;
             // La structure : ré-écrite si ses octets ont changé, ou si une annexe a changé (les autres postes ne surveillent que

@@ -47,8 +47,9 @@ pub struct Layout {
     /// Vue Vignettes : largeur des vignettes sur la planche (7).
     #[serde(rename = "taille_vignettes")]
     pub card_size: f32,
-    /// Vue Vignettes (8) : colonnes (6 au plus), lignes par page (0 : une seule page), écart,
-    /// une ligne par scène, notes nouvelles attachées à la vignette la plus proche.
+    /// Vue Vignettes (8) : colonnes (6 au plus), lignes par page (0 : une seule page), notes nouvelles attachées à la
+    /// vignette la plus proche. (L'écart et « une ligne par scène » d'avant les Vignettes simples sont gardés dans
+    /// le fichier mais ne servent plus : l'écart est de 10 dans un plan, de 30 à une coupe.)
     #[serde(rename = "colonnes_vignettes")]
     pub board_columns: usize,
     #[serde(rename = "lignes_vignettes")]
@@ -119,8 +120,6 @@ impl Layout {
             card_w: self.card_size,
             columns: self.board_columns.clamp(1, crate::board::MAX_COLUMNS),
             rows: self.board_rows.min(crate::board::MAX_ROWS),
-            spacing: self.board_spacing,
-            scene_breaks: self.board_scene_breaks,
         }
     }
 

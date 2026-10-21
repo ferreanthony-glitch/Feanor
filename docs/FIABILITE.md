@@ -31,7 +31,6 @@ Un projet fabriqué par le code (pas un fichier d'Anthony), qui contient :
 | Transitions | fondu enchaîné centré, volet décalé, fondu depuis le blanc au début du film, fondu au noir à la fin (`transitions.json`) |
 | Sons proposés | un bruitage à générer, une voix rejetée et modifiée, une ambiance acceptée (son posé), confirmation d'envoi en ligne (`sons_proposes.json`) |
 | Références | une image étiquetée, tournée, en gris, liée à deux plans, et une vidéo de trois images aux réglages de lecture changés (`references.json` et `references/`) |
-| Crayonnés | la planche de crayonnés (`crayonnes.json`) : 2 pages de 4 × 3 cases, deux traits lisses dans une case, une case peinte au pinceau et cochée, une légende seule |
 | Planche, guides | notes dessinées et texte de la planche (une attachée à un plan), guide de perspective |
 | Scène 3D | `scenes3d.json` : toutes les formes, un mannequin à la pose libre, un groupe, un modèle importé, un décor de séquence, la caméra du plateau (aller-retour, fumée, fichier coupé et muté ; protections de `write_sidecar`) |
 

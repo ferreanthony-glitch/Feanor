@@ -1854,8 +1854,8 @@ Aucun appel existant ne change : `self.doc` est toujours le projet affiché.
 
 `doc_epoch` (le numéro du projet que les tâches de fond recopient pour savoir à qui elles répondent) vient d'un compteur
 global : deux onglets n'ont jamais la même époque, et une époque ne revient pas (0 est celle du premier projet au démarrage,
-que les états remis à zéro d'un projet à l'autre — références, crayonnés, envois — ont déjà). Le contrôle existant
-(`epoch != self.doc_epoch` dans l'enregistrement, les références, les crayonnés, les envois, la comparaison) devient
+que les états remis à zéro d'un projet à l'autre — références, envois — ont déjà). Le contrôle existant
+(`epoch != self.doc_epoch` dans l'enregistrement, les références, les envois, la comparaison) devient
 donc aussi un contrôle d'onglet.
 
 Un onglet **vierge** (`welcome` et rien d'ouvert, de dessiné ni d'annulable) montre l'accueil ; un projet qu'on ouvre ou
