@@ -744,6 +744,8 @@ impl App {
         self.fiche_window(ctx);
         // Vignettes : « Effacer les annotations ? » (`annotationsui.rs`).
         self.annot_fenetre(ctx);
+        // Vignettes : les images déposées sur la planche (`deposer.rs`).
+        self.depot_tick(ctx);
         // Relecture par le réalisateur : exporter la page, importer ses notes (`relectureui.rs`).
         self.relecture_windows(ctx);
         // Suggestions sonores : confirmation d'envoi en ligne, « Modifier », saisie d'une clé.

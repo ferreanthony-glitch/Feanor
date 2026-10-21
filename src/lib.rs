@@ -180,6 +180,7 @@ mod vignettes_retouches_tests;
 // et le fichier (`annotations`), l'interface (`annotationsui`).
 mod annotations;
 mod annotationsui;
+mod deposer;
 mod marie;
 #[cfg(test)]
 mod annotationsui_tests;

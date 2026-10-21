@@ -1052,6 +1052,14 @@ impl App {
             } else if down {
                 if let Some(cur) = latest {
                     self.refs_drag_to(&mut d, &mut view, rect, cur, mods.shift, ctx.input(|i| i.pointer.delta()));
+                    // Une référence qu'on sort du tableau se glisse vers la planche des Vignettes : rien ne bouge ici (`deposer.rs`).
+                    if let Grab::Move(starts, _) = &d.grab {
+                        if !rect.contains(cur) {
+                            self.doc.references = d.before.clone();
+                            let ids = starts.iter().map(|s| s.0).collect();
+                            egui::DragAndDrop::set_payload(ctx, crate::deposer::RefsDrag { ids });
+                        }
+                    }
                 }
                 self.refs.drag = Some(d);
             } else {
@@ -1356,6 +1364,15 @@ impl App {
 
     // ------------------------------------------------------------------ la grille et la liste
 
+    /// Une référence de la grille ou de la liste qu'on prend pour la glisser vers la planche des Vignettes (celles qui sont choisies
+    /// avec elle partent ensemble).
+    fn refs_glisser(&mut self, ctx: &egui::Context, resp: &egui::Response, id: u64) {
+        if resp.drag_started() {
+            let ids = if self.refs.sel.contains(&id) { self.refs_selected() } else { vec![id] };
+            egui::DragAndDrop::set_payload(ctx, crate::deposer::RefsDrag { ids });
+        }
+    }
+
     fn refs_choose(&mut self, id: u64, shift: bool) {
         self.refs.focus = true;
         if shift {
@@ -1389,7 +1406,8 @@ impl App {
                 if !rect.intersects(clip) {
                     continue;
                 }
-                let resp = ui.interact(rect, ui.id().with(("reference", r.id)), Sense::click());
+                let resp = ui.interact(rect, ui.id().with(("reference", r.id)), Sense::click_and_drag());
+                self.refs_glisser(ctx, &resp, r.id);
                 let painter = ui.painter_at(rect);
                 let on = self.refs.sel.contains(&r.id);
                 painter.rect_filled(rect, 4.0, if on { theme::eleve() } else { theme::champ() });
@@ -1441,7 +1459,8 @@ impl App {
         let mut open: Option<u64> = None;
         egui::ScrollArea::vertical().auto_shrink([false, false]).show_rows(ui, row_h, items.len(), |ui, range| {
             for r in &items[range] {
-                let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row_h - 2.0), Sense::click());
+                let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), row_h - 2.0), Sense::click_and_drag());
+                self.refs_glisser(ctx, &resp, r.id);
                 let painter = ui.painter_at(rect);
                 let on = self.refs.sel.contains(&r.id);
                 if on {

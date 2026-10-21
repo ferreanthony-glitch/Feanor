@@ -188,6 +188,8 @@ pub(crate) struct Vignettes {
     pub debord: Option<crate::debord::Debord>,
     /// Les annotations : outil, couleur, affichage, marie-louise (`annotationsui.rs`).
     pub annot: crate::annotationsui::Etat,
+    /// Les images déposées sur la planche, en préparation sur un fil de fond (`deposer.rs`).
+    pub depots: Vec<crate::deposer::Travail>,
 }
 
 impl Default for Vignettes {
@@ -205,6 +207,7 @@ impl Default for Vignettes {
             frame_hot: false,
             debord: None,
             annot: Default::default(),
+            depots: Vec::new(),
         }
     }
 }
@@ -906,6 +909,8 @@ impl App {
         // Les annotations, par-dessus tout ; puis la marie-louise, si elle est allumée, qui masque ce qui déborde (`annotationsui.rs`).
         self.annot_peindre(&painter, view, xf, &layout, over);
         self.marie_peindre(&painter, view, xf, &layout);
+        // Des images qu'on glisse vers la planche : la case visée, et le lâcher des références (`deposer.rs`).
+        self.depot_survol(ui.ctx(), &painter, xf, &layout, over);
         self.paint_plan_move(ui.ctx(), &painter, view, xf, &layout);
         self.paint_board_drag(&painter, xf);
         if let (Some(p), Tool::Eraser, false) = (over, self.tool, pan_mode) {

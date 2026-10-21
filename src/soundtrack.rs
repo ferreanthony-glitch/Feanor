@@ -292,6 +292,10 @@ impl App {
     /// (`.pelure`) s'ouvre dans un onglet.
     pub(crate) fn handle_dropped_files(&mut self, ctx: &egui::Context) {
         let paths: Vec<_> = ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
+        // Lâchés sur la planche des Vignettes : ce sont ses images (`deposer.rs`).
+        if !paths.is_empty() && self.board_take_drop(&paths, crate::deposer::curseur_fenetre(ctx)) {
+            return;
+        }
         // Lâchés sur le panneau Références : ce sont des références (`referencesui.rs`).
         if !paths.is_empty() && self.refs_take_drop(ctx, &paths) {
             return;
