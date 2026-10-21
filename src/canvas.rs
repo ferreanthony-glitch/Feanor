@@ -300,7 +300,7 @@ impl App {
     /// lui donne un raccourci.
     /// Menu court (2026-10-18) : la vue (zoom, rotation, miroir, pelure, table lumineuse,
     /// caméra) a ses boutons sous le dessin.
-    fn canvas_menu(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn canvas_menu(&mut self, ui: &mut egui::Ui) {
         self.action_item(ui, "Annuler", "edition.annuler");
         self.action_item(ui, "Rétablir", "edition.retablir");
         ui.separator();

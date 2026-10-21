@@ -267,51 +267,53 @@ impl App {
         });
         ui.label(egui::RichText::new("Ctrl + molette sur la grille : zoomer autour de la tête de lecture.").weak().small());
         ui.separator();
-        ui.label(egui::RichText::new("Adapter").strong());
-        self.action_item(ui, "Le plan", "timeline.adapter_plan");
-        self.action_item(ui, "Le calque courant", "timeline.adapter_calque");
-        self.action_item(ui, "Les images choisies", "timeline.adapter_choix");
-        self.action_item(ui, "L'image courante", "timeline.adapter_image");
-        self.action_item(ui, "Les clés de caméra", "timeline.adapter_cles");
-        self.action_item(ui, "Tout voir", "timeline.tout_voir");
-        ui.separator();
+        ui.menu_button("Adapter la vue à…", |ui| {
+            self.action_item(ui, "Le plan", "timeline.adapter_plan");
+            self.action_item(ui, "Le calque courant", "timeline.adapter_calque");
+            self.action_item(ui, "Les images choisies", "timeline.adapter_choix");
+            self.action_item(ui, "L'image courante", "timeline.adapter_image");
+            self.action_item(ui, "Les clés de caméra", "timeline.adapter_cles");
+            self.action_item(ui, "Tout voir", "timeline.tout_voir");
+        });
         ui.checkbox(&mut self.empty_x, "Croix sur les instances vides");
         ui.checkbox(&mut self.timeline_thumbs, "Miniatures des dessins (lignes complètes)");
     }
 
-    /// Menu « Repères » (barre de la timeline).
+    /// Menu « Repères » (barre de la timeline) : quatre sous-menus (simplification des barres, 2026-10-21 ; le menu
+    /// montrait vingt lignes d'un coup).
     pub(crate) fn cues_menu(&mut self, ui: &mut egui::Ui) {
-        ui.label(egui::RichText::new("Signets").strong());
-        self.action_item(ui, "Poser / retirer un signet", "signet.basculer");
-        self.action_item(ui, "Signet précédent", "signet.precedent");
-        self.action_item(ui, "Signet suivant", "signet.suivant");
-        self.action_item(ui, "Enlever les signets des images choisies", "signets.enlever_choisis");
-        self.action_item(ui, "Enlever tous les signets", "signets.tout_enlever");
+        ui.menu_button("Signets", |ui| {
+            self.action_item(ui, "Poser / retirer un signet", "signet.basculer");
+            self.action_item(ui, "Signet précédent", "signet.precedent");
+            self.action_item(ui, "Signet suivant", "signet.suivant");
+            self.action_item(ui, "Enlever les signets des images choisies", "signets.enlever_choisis");
+            self.action_item(ui, "Enlever tous les signets", "signets.tout_enlever");
+        });
         ui.menu_button("Marques de couleur (sur les dessins du calque)", |ui| self.color_marks_menu(ui));
-        ui.separator();
-        ui.label(egui::RichText::new("Entrée / sortie (lecture du plan)").strong());
-        self.action_item(ui, "Point d'entrée à l'image courante", "entree.poser");
-        self.action_item(ui, "Poser / retirer le point d'entrée", "entree.basculer");
-        self.action_item(ui, "Point de sortie à l'image courante", "sortie.poser");
-        self.action_item(ui, "Poser / retirer le point de sortie", "sortie.basculer");
-        self.action_item(ui, "Les images choisies deviennent les limites", "boucle.limites_choisies");
-        self.action_item(ui, "Boucle entre les images choisies (allumer / éteindre)", "boucle.images_choisies");
-        self.action_item(ui, "Enlever les points d'entrée et de sortie", "entree_sortie.enlever");
-        ui.separator();
-        ui.label(egui::RichText::new("Numéros").strong());
-        for t in TimeDisplay::ALL {
-            if ui.radio(self.time_display == t, t.label()).clicked() {
-                self.time_display = t;
-                ui.close_menu();
+        ui.menu_button("Entrée et sortie (lecture du plan)", |ui| {
+            self.action_item(ui, "Point d'entrée à l'image courante", "entree.poser");
+            self.action_item(ui, "Poser / retirer le point d'entrée", "entree.basculer");
+            self.action_item(ui, "Point de sortie à l'image courante", "sortie.poser");
+            self.action_item(ui, "Poser / retirer le point de sortie", "sortie.basculer");
+            self.action_item(ui, "Les images choisies deviennent les limites", "boucle.limites_choisies");
+            self.action_item(ui, "Boucle entre les images choisies (allumer / éteindre)", "boucle.images_choisies");
+            self.action_item(ui, "Enlever les points d'entrée et de sortie", "entree_sortie.enlever");
+        });
+        ui.menu_button("Numéros", |ui| {
+            for t in TimeDisplay::ALL {
+                if ui.radio(self.time_display == t, t.label()).clicked() {
+                    self.time_display = t;
+                    ui.close_menu();
+                }
             }
-        }
-        ui.horizontal(|ui| {
-            ui.label("Image de départ du projet");
-            let mut start = self.doc.start_frame;
-            let resp = ui.add(egui::DragValue::new(&mut start).range(0..=100_000));
-            if self.edited(&resp) {
-                self.doc.start_frame = start;
-            }
+            ui.horizontal(|ui| {
+                ui.label("Image de départ du projet");
+                let mut start = self.doc.start_frame;
+                let resp = ui.add(egui::DragValue::new(&mut start).range(0..=100_000));
+                if self.edited(&resp) {
+                    self.doc.start_frame = start;
+                }
+            });
         });
     }
 }

@@ -976,7 +976,7 @@ impl App {
                 ui.separator();
                 // Rogner le plan à la tête de lecture (le contenu rogné reste en réserve).
                 let cur = self.cur_panel;
-                self.trim_menu_items(ui, cur);
+                ui.menu_button("Rogner le plan", |ui| self.trim_menu_items(ui, cur));
                 ui.separator();
                 self.action_item(ui, "Adapter la timeline au plan", "timeline.adapter_plan");
                 self.action_item(ui, "Timeline : tout voir", "timeline.tout_voir");
@@ -984,20 +984,28 @@ impl App {
             GridMenu::Camera => {
                 // Même ordre que les menus des clés de dessins et d'effets : poser une clé, les
                 // cinq commandes communes sur les clés choisies (`clescommun.rs`), puis ce qui est
-                // propre à la caméra.
-                self.action_item(ui, "Clé de caméra ici", "camera.cle_ici");
+                // propre à la caméra. Ce qui ne s'applique pas à cette image disparaît : « ici » quand il y a
+                // déjà une clé, « adoucir » et « supprimer » quand il n'y en a pas.
+                let ici = self.camera_key_here().is_some();
+                if !ici {
+                    self.action_item(ui, "Clé de caméra ici", "camera.cle_ici");
+                }
                 self.action_item(ui, "Clé de caméra au début du plan", "camera.cle_debut");
                 self.action_item(ui, "Clé de caméra à la fin du plan", "camera.cle_fin");
-                self.action_item(ui, "Adoucir le mouvement à cette clé", "camera.cle_adoucir");
-                self.action_item(ui, "Supprimer la clé de caméra d'ici", "camera.cle_supprimer");
+                if ici {
+                    self.action_item(ui, "Adoucir le mouvement à cette clé", "camera.cle_adoucir");
+                    self.action_item(ui, "Supprimer la clé de caméra d'ici", "camera.cle_supprimer");
+                }
                 ui.separator();
                 // Les clés choisies (clic sur un losange jaune).
                 self.cam_key_menu_items(ui);
                 ui.separator();
-                self.action_item(ui, "Effets de caméra (réglages de l'outil Caméra)", "outil.camera");
-                self.action_item(ui, "Vue à travers la caméra", "camera.vue");
-                self.action_item(ui, "Réinitialiser la caméra", "camera.reinitialiser");
-                self.action_item(ui, "Adapter la timeline aux clés", "timeline.adapter_cles");
+                ui.menu_button("Plus", |ui| {
+                    self.action_item(ui, "Effets de caméra (réglages de l'outil Caméra)", "outil.camera");
+                    self.action_item(ui, "Vue à travers la caméra", "camera.vue");
+                    self.action_item(ui, "Réinitialiser la caméra", "camera.reinitialiser");
+                    self.action_item(ui, "Adapter la timeline aux clés", "timeline.adapter_cles");
+                });
             }
             GridMenu::FxKey => self.fx_key_menu(ui),
             GridMenu::PosKey => self.pos_key_menu(ui),

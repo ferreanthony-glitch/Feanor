@@ -579,7 +579,11 @@ impl App {
     }
 
     /// Menu du clic droit sur un plan de la bande de montage.
-    fn panel_menu(&mut self, ui: &mut egui::Ui, index: usize) {
+    ///
+    /// Une dizaine d'entrées au premier niveau (simplification des barres, 2026-10-21) : les gestes de tous les jours
+    /// (animer, nouveau, dupliquer, copier, coller, supprimer), puis « Couper et réunir », « Version du plan » et « Plus »
+    /// (la couleur, le rognage, les transitions, un son au début du plan). Rien n'est retiré.
+    pub(crate) fn panel_menu(&mut self, ui: &mut egui::Ui, index: usize) {
         if ui.button("Animer ce plan").clicked() {
             ui.close_menu();
             self.enter_animation(index);
@@ -594,41 +598,42 @@ impl App {
             ui.close_menu();
             self.duplicate_panel();
         }
-        self.plan_color_menu(ui);
-        // Les versions du plan (`planversui.rs`) : « Nouvelle version › » au premier niveau (en dupliquant la
-        // version en cours, ou en partant d'un plan vide), puis passer à, restaurer, supprimer, comparer.
-        self.nouvelle_version_menu(ui, index);
-        self.version_menu(ui, index, false);
-        // Les coupes de part et d'autre du plan (`transitionsui.rs`).
-        self.cut_menu_named(ui, index, "Transition au début du plan");
-        self.cut_menu_named(ui, index + 1, "Transition à la fin du plan");
         ui.separator();
         self.panel_clipboard_items(ui);
         ui.separator();
-        if ui.button("Couper le plan à l'image courante").clicked() {
-            ui.close_menu();
-            self.split_current_panel();
-        }
-        if ui.button("Réunir avec le plan suivant").clicked() {
-            ui.close_menu();
-            self.merge_next_panel();
-        }
-        // Plusieurs plans choisis (Ctrl ou Maj + clic) : les fusionner en un seul.
-        let n = self.board_selection().len();
-        if n > 1 && ui.button(format!("Fusionner les {n} plans choisis")).on_hover_text("Ils doivent se suivre, dans une même séquence. Pas de repère aux jointures : leurs textes rejoignent ceux du plan.").clicked() {
-            ui.close_menu();
-            self.merge_chosen_panels();
-        }
-        ui.separator();
-        // Rogner : la durée exacte et les coupes à la tête de lecture ; le contenu rogné reste en
-        // réserve et revient en rallongeant le plan (`rognage.rs`).
-        self.trim_menu_items(ui, index);
-        ui.separator();
-        if ui.button("Importer un son au début du plan…").clicked() {
-            ui.close_menu();
-            let at = self.doc.panel_start(index.min(self.doc.panels.len() - 1));
-            self.import_sound(None, Some(at));
-        }
+        ui.menu_button("Couper et réunir", |ui| {
+            if ui.button("Couper le plan à l'image courante").clicked() {
+                ui.close_menu();
+                self.split_current_panel();
+            }
+            if ui.button("Réunir avec le plan suivant").clicked() {
+                ui.close_menu();
+                self.merge_next_panel();
+            }
+            // Plusieurs plans choisis (Ctrl ou Maj + clic) : les fusionner en un seul.
+            let n = self.board_selection().len();
+            if n > 1 && ui.button(format!("Fusionner les {n} plans choisis")).on_hover_text("Ils doivent se suivre, dans une même séquence. Pas de repère aux jointures : leurs textes rejoignent ceux du plan.").clicked() {
+                ui.close_menu();
+                self.merge_chosen_panels();
+            }
+        });
+        // Les versions du plan (`planversui.rs`) : « Nouvelle version › » (en dupliquant la version en cours, ou en
+        // partant d'un plan vide), puis passer à, restaurer, supprimer, comparer.
+        self.version_menu(ui, index, true);
+        ui.menu_button("Plus", |ui| {
+            self.plan_color_menu(ui);
+            // Les coupes de part et d'autre du plan (`transitionsui.rs`).
+            self.cut_menu_named(ui, index, "Transition au début du plan");
+            self.cut_menu_named(ui, index + 1, "Transition à la fin du plan");
+            // Rogner : la durée exacte et les coupes à la tête de lecture ; le contenu rogné reste en
+            // réserve et revient en rallongeant le plan (`rognage.rs`).
+            ui.menu_button("Rogner le plan", |ui| self.trim_menu_items(ui, index));
+            if ui.button("Importer un son au début du plan…").clicked() {
+                ui.close_menu();
+                let at = self.doc.panel_start(index.min(self.doc.panels.len() - 1));
+                self.import_sound(None, Some(at));
+            }
+        });
     }
 
     fn montage_strip(&mut self, ui: &mut egui::Ui, rows: &crate::montagerows::Rows) {
