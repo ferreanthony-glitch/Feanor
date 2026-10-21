@@ -2387,11 +2387,6 @@ touches = []
 source = "SHOT (sans touche)"
 
 [[raccourci]]
-action = "vue.guides"
-touches = []
-source = "SHOT (sans touche)"
-
-[[raccourci]]
 action = "vue.calques"
 touches = []
 source = "SHOT (sans touche)"

@@ -34,7 +34,9 @@ pub enum Pane {
     /// pour lire les dispositions enregistrées ; `sanitized` l'enlève.
     #[serde(rename = "vue")]
     View,
-    /// Guides de perspective.
+    /// Ancien panneau Guides (perspective) : ses fonctions sont dans le menu de la règle, au-dessus du dessin
+    /// (Anthony, 2026-10-21 : la règle est le seul lieu des guides). Gardé pour lire les dispositions
+    /// enregistrées ; `sanitized` l'enlève.
     #[serde(rename = "guides")]
     Guides,
     /// Fiche du panneau (textes, durée, caméra).
@@ -102,13 +104,12 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 17] = [
+    pub const ALL: [Pane; 16] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
         Pane::Brushes,
         Pane::ToolOptions,
-        Pane::Guides,
         Pane::Sheet,
         Pane::Layers,
         Pane::Montage,
@@ -311,9 +312,9 @@ fn left_column(only: &[Pane]) -> Option<DockNode> {
     stack(&parts)
 }
 
-/// Les onglets des réglages : réglages de l'outil, guides, fiche du panneau (9b) ; la vue est
-/// sous le dessin depuis le 2026-10-17.
-const SETTINGS_TABS: [Pane; 3] = [Pane::ToolOptions, Pane::Guides, Pane::Sheet];
+/// Les onglets des réglages : réglages de l'outil, fiche du panneau (9b) ; la vue est sous le dessin depuis
+/// le 2026-10-17, et les guides dans le menu de la règle depuis le 2026-10-21.
+const SETTINGS_TABS: [Pane; 2] = [Pane::ToolOptions, Pane::Sheet];
 
 /// Les onglets du bas de la colonne : couleur et pinceaux (11c), et les personnages (brosse par personnage).
 const COLOR_TABS: [Pane; 3] = [Pane::Color, Pane::Brushes, Pane::Personnages];
@@ -523,7 +524,7 @@ impl DockLayout {
         // À droite du dessin : les calques, puis les réglages (avec la fiche) et la couleur.
         let mut settings = Vec::new();
         if l.tools {
-            settings.extend([Pane::ToolOptions, Pane::Guides, Pane::Color, Pane::Brushes, Pane::Personnages]);
+            settings.extend([Pane::ToolOptions, Pane::Color, Pane::Brushes, Pane::Personnages]);
             if l.sheet {
                 settings.push(Pane::Sheet);
             }
@@ -713,9 +714,9 @@ impl DockLayout {
     /// Chaque panneau une seule fois, le dessin toujours là (dans la fenêtre principale), parts
     /// bornées, panneaux flottants vides retirés.
     pub fn sanitized(self) -> DockLayout {
-        // L'ancienne timeline à part (versions 4 et 5) et l'ancien panneau Vue (ses outils sont
-        // sous le dessin) sont enlevés partout.
-        let mut seen = vec![Pane::Timeline, Pane::View];
+        // L'ancienne timeline à part (versions 4 et 5), l'ancien panneau Vue (ses outils sont sous le
+        // dessin) et l'ancien panneau Guides (dans le menu de la règle) sont enlevés partout.
+        let mut seen = vec![Pane::Timeline, Pane::View, Pane::Guides];
         let mut principal = self.principal.sanitized(&mut seen);
         let mut fenetres = Vec::new();
         for mut w in self.fenetres {

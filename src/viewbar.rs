@@ -126,10 +126,11 @@ pub(crate) fn band(outer: [Pos2; 4], inner: [Pos2; 4], color: Color32) -> Shape 
 }
 
 impl App {
-    /// Barre sous le dessin, réduite à des icônes (simplification des barres, 2026-10-21) : ajuster, zoom, rotation,
-    /// miroir, pelure d'oignon, table lumineuse. Les réglages fins (le pourcentage du zoom, l'angle, combien de dessins
-    /// avant et après, la force de la table lumineuse) sont dans de petits panneaux qui s'ouvrent au clic, au-dessus de
-    /// l'icône. Les vues (plateau, caméra, Espace 3D) et les aides au cadrage sont dans la barre au-dessus du dessin.
+    /// Barre sous le dessin, réduite à des icônes (simplification des barres, 2026-10-21) : le cadrage (format, zones de
+    /// sécurité, aspect des traits), puis ajuster, zoom, rotation, miroir, pelure d'oignon, table lumineuse. Les réglages
+    /// fins (le pourcentage du zoom, l'angle, combien de dessins avant et après, la force de la table lumineuse) sont dans
+    /// de petits panneaux qui s'ouvrent au clic, au-dessus de l'icône. Les vues (plateau, caméra, Espace 3D) et la règle
+    /// des guides sont dans la barre au-dessus du dessin.
     pub(crate) fn view_tools_bar(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::entete());
@@ -146,6 +147,8 @@ impl App {
                 ui.separator();
                 ui.add_space(crate::barres::MARGE_TRAIT);
             };
+            self.cadrage_reglage(ui);
+            sep(ui);
             self.command_button(ui, ph::ARROWS_OUT, "vue.ajuster", "Ajuster à la fenêtre", "Toute la feuille dans la vue.", None);
             self.zoom_reglage(ui);
             self.rotation_reglage(ui);
@@ -175,7 +178,7 @@ impl App {
 
     /// Un petit panneau de réglages posé au-dessus de la case `resp` de la barre du bas : il s'ouvre et se ferme à son
     /// clic, se ferme aussi d'un clic ailleurs ou d'Échap. Le contenu reçoit l'application.
-    fn panneau_de_case(&mut self, ui: &mut egui::Ui, id: &str, resp: &egui::Response, largeur: f32, contenu: impl FnOnce(&mut App, &mut egui::Ui)) {
+    pub(crate) fn panneau_de_case(&mut self, ui: &mut egui::Ui, id: &str, resp: &egui::Response, largeur: f32, contenu: impl FnOnce(&mut App, &mut egui::Ui)) {
         let pid = ui.id().with(("panneau_de_case", id));
         if resp.clicked() {
             ui.memory_mut(|m| m.toggle_popup(pid));
@@ -184,6 +187,23 @@ impl App {
             ui.set_min_width(largeur);
             contenu(self, ui);
         });
+    }
+
+    /// Le cadrage, tout à gauche : une icône (allumée quand un format ou les zones de sécurité sont tracés), et au clic
+    /// le format, les zones de sécurité et l'aspect des traits des repères (`cadrageui.rs`). Les repères eux-mêmes
+    /// (tiers, spirale…) et les guides sont dans la règle, au-dessus du dessin.
+    pub(crate) fn cadrage_reglage(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        let on = self.framing_any_on();
+        let resp = self.case_icone(
+            ui,
+            ph::CROP,
+            Some(on),
+            "Cadrage",
+            "Le format (16:9, 2,39:1…), les zones de sécurité, et la couleur, l'opacité et l'épaisseur des repères du cadrage.",
+            "",
+        );
+        self.panneau_de_case(ui, "cadrage", &resp, 250.0, |app, ui| app.cadrage_ui(ui));
     }
 
     /// Le zoom : une icône, et au clic le pourcentage (qu'on glisse ou qu'on tape), « − » et « + », ajuster et 100 %.
@@ -313,10 +333,9 @@ impl App {
         self.status = format!("Vue {}.", if on { "caméra" } else { "du plateau" });
     }
 
-    /// La barre au-dessus du dessin : les trois vues (le plateau, ce que filme la caméra, l'Espace 3D) et un seul menu
-    /// d'aides au cadrage (tiers, spirale, zones de sécurité, cadre de format…). Avant, les zones de sécurité et le
-    /// format y avaient en plus leur propre bouton et leur propre liste : le même réglage deux fois. En Espace 3D,
-    /// ses outils.
+    /// La barre au-dessus du dessin : les trois vues (le plateau, ce que filme la caméra, l'Espace 3D) et la règle, le
+    /// seul lieu des guides (repères de composition et guides de perspective). Le format et les zones de sécurité sont
+    /// dans le menu Cadrage, à gauche de la barre sous le dessin. En Espace 3D, ses outils.
     pub(crate) fn view_bar(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::entete());
@@ -354,7 +373,7 @@ impl App {
                 self.espace3d_tools(ui);
                 return;
             }
-            self.framing_aids_button(ui);
+            self.guides_button(ui);
         });
     }
 

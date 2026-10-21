@@ -253,7 +253,7 @@ impl App {
                     self.action_item(ui, "Lignes de référence", "guide.lignes_reference");
                 });
                 ui.separator();
-                let barre = if self.barre_perso_visible() { "Cacher la barre des personnages" } else { "Montrer la barre des personnages" };
+                let barre = if self.barre_perso_visible() { "Cacher les pastilles des personnages" } else { "Montrer les pastilles des personnages" };
                 self.action_item(ui, barre, "perso.barre");
                 self.workspace_menu(ui);
                 self.action_item(ui, "Mode concentration (le dessin seul)", "vue.concentration");

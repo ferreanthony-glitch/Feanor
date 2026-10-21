@@ -499,6 +499,8 @@ fn only_the_plan_number_is_written_above_the_first_image_of_each_plan() {
         .iter()
         .filter_map(|s| if let egui::epaint::Shape::Text(t) = &s.shape { Some((t.pos, t.galley.job.text.clone())) } else { None })
         .filter(|(pos, _)| view.contains(*pos))
+        // (La colonne des pastilles des personnages, au bord droit de la planche : ses icônes ne sont pas des numéros.)
+        .filter(|(pos, _)| !b.app.perso.cases.iter().any(|(r, _)| r.expand(8.0).contains(*pos)))
         .map(|(_, t)| t)
         .filter(|t| t != egui_phosphor::regular::PLUS) // (le « + » discret de la case vide)
         .collect();

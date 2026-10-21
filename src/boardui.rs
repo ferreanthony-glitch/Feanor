@@ -719,13 +719,8 @@ impl App {
     // ------------------------------------------------------------------ la vue
 
     pub(crate) fn board_view(&mut self, ui: &mut egui::Ui) {
-        // La barre des personnages (une pastille par personnage et les couleurs neutres) au-dessus de la planche, si
-        // cet espace de travail la montre (les Vignettes, d'origine) : on choisit sa couleur sans quitter les cases.
-        if self.barre_perso_visible() {
-            let (bar, _) = ui.allocate_exact_size(vec2(ui.available_width(), crate::personnagesui::BARRE_H), Sense::hover());
-            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar).id_salt("barre_personnages_planche"));
-            self.personnages_barre(&mut child);
-        }
+        // (Les pastilles des personnages : une colonne au bord droit de la planche, posée en fin d'image, plus de barre
+        // au-dessus : `pastilles_colonne`, `personnagesui.rs`.)
         self.board_toolbar(ui);
         self.variantes_barre(ui);
         let view = ui.available_rect_before_wrap();
@@ -995,6 +990,9 @@ impl App {
         if !any_down {
             self.vignettes.press = Press::None;
         }
+        // Les pastilles des personnages, en colonne au bord droit de la planche (au-dessus d'elle : ses clics ne vont
+        // pas à la planche).
+        self.pastilles_colonne(ui.ctx(), view, 8.0);
     }
 
     /// Les barres entre les images : un trait court, gris ou noir ; sous la souris, l'accent et une bulle.

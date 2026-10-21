@@ -265,6 +265,8 @@ mod cadrage;
 #[cfg(test)]
 mod cadrage_tests;
 mod cadrageui;
+#[cfg(test)]
+mod regle_cadrage_tests;
 mod camera;
 #[cfg(test)]
 mod camera_tests;

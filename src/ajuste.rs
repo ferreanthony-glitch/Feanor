@@ -1,6 +1,6 @@
 //! Panneaux qui s'ajustent à ce qu'ils montrent (Anthony, 2026-10-18, axe d'ergonomie 8 :
 //! « que les panneaux s'adaptent d'eux-mêmes en fonction de ce qu'ils affichent ») : quand deux
-//! panneaux sont l'un sur l'autre, celui qui montre des réglages (réglages de l'outil, guides,
+//! panneaux sont l'un sur l'autre, celui qui montre des réglages (réglages de l'outil,
 //! fiche, effets, icônes des outils) prend la hauteur de son contenu et se réduit tout seul ; la
 //! couleur, les pinceaux, les calques, le dessin et la bande, qui savent se servir de toute la
 //! place, prennent le reste. Un bord tiré à la main reste où on l'a mis, d'une séance à l'autre,
@@ -37,7 +37,7 @@ pub const MIN_FIT: f32 = 56.0;
 
 /// Les panneaux qui prennent la hauteur de leur contenu.
 pub fn fits(pane: Pane) -> bool {
-    matches!(pane, Pane::Tools | Pane::ToolOptions | Pane::Guides | Pane::Sheet | Pane::Effects)
+    matches!(pane, Pane::Tools | Pane::ToolOptions | Pane::Sheet | Pane::Effects)
 }
 
 /// Les panneaux dont on mesure le contenu : ceux qui s'ajustent, et la couleur (souple, mais dont

@@ -80,7 +80,7 @@ fn edges_dragged_by_hand_are_kept_in_the_settings() {
 
 #[test]
 fn which_panes_fit() {
-    for p in [Pane::ToolOptions, Pane::Guides, Pane::Sheet, Pane::Effects, Pane::Tools] {
+    for p in [Pane::ToolOptions, Pane::Sheet, Pane::Effects, Pane::Tools] {
         assert!(fits(p) && measured(p), "{p:?}");
     }
     for p in [Pane::Color, Pane::Brushes, Pane::Layers, Pane::Canvas, Pane::Montage, Pane::XSheet] {

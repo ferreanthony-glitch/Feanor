@@ -52,7 +52,6 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
         entree(Pane::Brushes, "vue.pinceaux", "Pinceaux", "Les pinceaux et leurs réglages, chacun avec l'aperçu de son trait. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Color, "vue.couleur", "Couleur", "Roue, curseurs, couleurs récentes et nuanciers. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Personnages, "vue.personnages", "Personnages", "Les personnages du projet, chacun avec sa couleur de trait et son aplat, et les couleurs neutres. Un clic l'ouvre ou le met devant, un autre le ferme."),
-        entree(Pane::Guides, "vue.guides", "Guides", "Les guides de perspective. Un clic l'ouvre ou le met devant, un autre le ferme."),
     ],
     &[
         entree(Pane::Layers, "vue.calques", "Calques", "Les calques du plan, leur mode et leur opacité. Un clic l'ouvre ou le met devant, un autre le ferme."),
@@ -75,19 +74,17 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
 /// l'utilisateur.
 /// - Vignettes : « rien de distraction, que du dessin et des références » : les réglages, les pinceaux, la couleur,
 ///   les références.
-/// - Storyboard : dessiner (réglages, pinceaux, couleur, personnages, guides), les calques et leurs effets, la fiche
+/// - Storyboard : dessiner (réglages, pinceaux, couleur, personnages), les calques et leurs effets, la fiche
 ///   du plan, les références.
 /// - Animation : comme le storyboard, sans les personnages, avec la feuille d'exposition.
 /// - Montage : la fiche du plan, les bruitages, les commentaires et l'historique.
+///
+/// Les guides n'y sont plus : ils sont dans le menu de la règle, au-dessus du dessin (`cadrageui.rs`).
 pub(crate) fn panneaux_d_office(espace: Espace) -> &'static [Pane] {
     match espace {
         Espace::Vignettes => &[Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::References],
-        Espace::Storyboard => {
-            &[Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::Personnages, Pane::Guides, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::References]
-        }
-        Espace::Animation => {
-            &[Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::Guides, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::References]
-        }
+        Espace::Storyboard => &[Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::Personnages, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::References],
+        Espace::Animation => &[Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::References],
         Espace::Montage => &[Pane::Sheet, Pane::Bruitages, Pane::Comments, Pane::History],
     }
 }

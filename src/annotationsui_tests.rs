@@ -49,8 +49,9 @@ fn the_pen_draws_anywhere_even_on_the_table_and_over_the_cut_bars() {
     let mut b = ouvert(quatre_plans(), 3);
     stylo(&mut b);
     let view = b.app.vignettes.view;
-    // Sur le fond gris, hors de toute page (à droite de la dernière page).
-    let loin = pos2(view.right() - 6.0, view.top() + 60.0);
+    // Sur le fond gris, hors de toute page (à droite de la dernière page), sous la colonne des pastilles des personnages
+    // (qui tient le haut du bord droit de la planche et ne laisse pas passer le stylo).
+    let loin = pos2(view.right() - 6.0, view.top() + 360.0);
     glisser(&mut b, &[loin, loin + vec2(-3.0, 20.0), loin + vec2(-6.0, 40.0)]);
     assert_eq!(b.app.doc.annotations.traces.len(), 1, "un trait sur le fond est gardé");
     // Sur une barre : la barre n'est pas basculée.

@@ -193,7 +193,9 @@ fn the_character_bar_is_shown_in_the_vignettes_and_hidden_in_the_montage() {
     b.app.set_espace(Espace::Vignettes);
     b.chauffer(4);
     assert!(b.app.barre_perso_visible());
-    assert!(b.textes.iter().any(|t| t.contains("Aucun personnage")), "la barre est peinte au-dessus de la planche : {:?}", b.textes);
+    // (Les pastilles sont une colonne au bord droit de la planche, sans texte : « Aucun personnage » est une bulle.)
+    assert!(b.app.perso.cases.iter().any(|(_, c)| *c == crate::personnagesui::Case::Plus), "la colonne des pastilles est peinte sur la planche : {:?}", b.app.perso.cases);
+    assert!(b.textes.iter().any(|t| t.contains(egui_phosphor::regular::PLUS)), "le « + » de la colonne est peint : {:?}", b.textes);
     b.app.set_espace(Espace::Montage);
     b.chauffer(4);
     assert!(!b.app.barre_perso_visible());

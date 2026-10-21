@@ -761,8 +761,9 @@ Demande d'Anthony (option 1 validée) : dessiner un mouvement de caméra directe
   chacun avec sa **lettre** dans une petite étiquette et une **flèche** de centre à centre entre deux cadres qui se suivent (la
   convention du storyboard). Ils apparaissent dès que le plan a deux clés, même si tout tient dans A.
 - **Le montage et la timeline** montrent les vraies clés sur la piste Caméra ; la lecture suit (A vers B à vitesse constante).
-- **Barre des personnages** : la planche montre aussi la barre des personnages au-dessus d'elle quand l'espace de travail la
-  montre (d'origine : Vignettes et Storyboard), au lieu de ne la montrer que dans la vue Dessin.
+- **Pastilles des personnages** : la planche montre aussi la colonne des pastilles, au bord droit, quand l'espace de travail la
+  montre (d'origine : Vignettes et Storyboard), au lieu de ne la montrer que dans la vue Dessin (depuis le 2026-10-21, une colonne et non plus
+  une barre au-dessus : partie 41).
 - **Limites** : les calques en profondeur (multiplan) d'une grande case gardent leur place vue du cadre A ; une caméra inclinée ou
   panoramiquée compte par son rectangle englobant (la zone n'est pas inclinée) ; seule la première image d'un plan est une case de
   mouvement (ses marques d'image restent des cases ordinaires, vues à travers la caméra).
@@ -1271,8 +1272,8 @@ références visuelles éventuellement ». Il y a maintenant **quatre onglets**,
 
 1. Les quatre onglets en haut à droite, dans l'ordre Vignettes, Storyboard, Animation, Montage, lisibles dans les trois thèmes, le
    bon allumé ; la bulle de Vignettes à 1 s (nom, Maj+Alt+V, description).
-2. Un clic sur Vignettes : la planche seule, grande ; à droite Réglages du pinceau, Couleur et Pinceaux ; la barre des personnages
-   au-dessus ; à gauche seulement pinceau, crayon, gomme ; rien en bas. Un clic sur Références dans la barre des panneaux l'ouvre.
+2. Un clic sur Vignettes : la planche seule, grande ; à droite Réglages du pinceau, Couleur et Pinceaux ; la colonne des pastilles
+   des personnages au bord droit de la planche ; à gauche seulement pinceau, crayon, gomme ; rien en bas. Un clic sur Références dans la barre des panneaux l'ouvre.
 3. Le plan courant, l'image et les plans choisis sont les mêmes qu'avant le clic, dans les deux sens.
 4. Tab depuis les Vignettes : le Storyboard. Clic droit sur une case > Animer cette image, puis Tab : retour aux Vignettes.
 5. Ferme les Réglages dans les Vignettes, passe en Storyboard puis reviens : toujours fermés. Rétablir la disposition : ils reviennent.
@@ -3004,12 +3005,13 @@ le format gardent `fond`.
 
 | Geste | Où | Effet |
 |---|---|---|
-| Clic sur une pastille | barre des personnages, panneau Personnages | choisit le personnage (ou la couleur neutre) ; un outil qui ne dessine pas (Sélection, Pipette…, la gomme) cède la place au pinceau ; un clic sur la pastille choisie la lâche |
-| « + » | barre, panneau | nouveau personnage (couleurs de la place suivante), choisi, et la fenêtre « Modifier » s'ouvre : une étape « Nouveau personnage » |
-| Clic droit sur une pastille | barre | Modifier… (nom, trait, aplat), Dupliquer, Déplacer à gauche / à droite, Supprimer |
+| Clic sur une pastille | colonne des pastilles (au bord droit du dessin et de la planche), panneau Personnages | choisit le personnage (ou la couleur neutre) ; un outil qui ne dessine pas (Sélection, Pipette…, la gomme) cède la place au pinceau ; un clic sur la pastille choisie la lâche ; le clic ne dessine rien |
+| Pastille « aucun personnage » (anneau barré, en haut de la colonne) | colonne | lâche le personnage : la couleur libre (plus de texte « Aucun personnage » : la bulle le dit) |
+| « + » | colonne (en bas), panneau | nouveau personnage (couleurs de la place suivante), choisi, et la fenêtre « Modifier » s'ouvre : une étape « Nouveau personnage » |
+| Clic droit sur une pastille | colonne | Modifier… (nom, trait, aplat), Dupliquer, Monter / Descendre, Supprimer |
 | Glisser la poignée d'une ligne | panneau Personnages | change la place du personnage (une étape « Ranger les personnages ») |
-| Icône « personnages » à droite de la barre | barre | ouvre ou ferme le panneau Personnages (un clic) |
-| Affichage > « Montrer / Cacher la barre des personnages » ; Ctrl+K `perso.barre` | menu, palette | la barre de cet espace de travail (chaque espace retient son choix) |
+| Icône « personnages » au pied de la colonne | colonne | ouvre ou ferme le panneau Personnages (un clic) |
+| Affichage > « Montrer / Cacher les pastilles des personnages » ; Ctrl+K `perso.barre` | menu, palette | la colonne de cet espace de travail (chaque espace retient son choix) |
 | `perso.suivant`, `perso.precedent`, `perso.aucun`, `perso.ajouter` | Ctrl+K, raccourcis à poser | personnage suivant / précédent (les personnages, puis les neutres, en tournant), lâcher, ajouter |
 | Une couleur prise à la main | panneau Couleur, nuancier, pipette (Alt + clic), échange des deux couleurs, code hexadécimal | lâche le personnage (la barre n'en montre plus aucun de choisi) |
 | Pot de peinture sur l'aplat | clic sur la sous-ligne « Aplat » du calque (partie 33), pot de peinture | remplit la zone fermée avec la couleur d'**aplat** du personnage choisi (sinon la couleur courante) |
@@ -3029,8 +3031,8 @@ le format gardent `fond`.
   projet (un réglage de l'application ne s'annule pas).
 - **La barre se montre par espace de travail** (`Layout::character_bar`, clé `barre_personnages` de la disposition) : rien d'écrit tant qu'on
   n'a pas choisi, et l'espace décide (`Espace::barre_personnages_par_defaut` : Storyboard oui, Animation et Montage non ; l'espace
-  Vignettes, quand il viendra, oui : c'est une ligne à ajouter dans ce `match`). La barre est dessinée par `personnages_barre`, qu'un autre
-  écran (la planche des vignettes) peut appeler.
+  Vignettes, quand il viendra, oui : c'est une ligne à ajouter dans ce `match`). La colonne est dessinée par `pastilles_colonne` (une `Area` posée en
+  fin d'image par le dessin et par la planche des vignettes ; partie 41).
 
 ### L'aplat d'un trait de personnage (où vit la couleur d'aplat)
 
@@ -3054,9 +3056,10 @@ main depuis la sous-ligne du calque (partie 33) : un personnage et la sous-ligne
 
 ### Ce que voit l'utilisateur
 
-- **Barre** (26 px, sous la barre de la vue) : une pastille par personnage, un « + », un trait de séparation, les pastilles neutres ; à droite l'icône du
-  panneau (enfoncée quand il est ouvert). La pastille choisie a un halo de la couleur d'accent ; la bulle (une seconde) donne le nom, les codes des
-  couleurs et le clic droit. Sans personnage : « Aucun personnage ».
+- **Colonne des pastilles** (depuis le 2026-10-21, partie 41 ; avant, une barre de 26 px sous la barre de la vue) : au bord droit du dessin, sous le titre du plan ;
+  de haut en bas « aucun personnage » (anneau barré), une pastille par personnage, un trait, les pastilles neutres, un « + » et l'icône du panneau (enfoncée quand
+  il est ouvert). La pastille choisie a un halo de la couleur d'accent ; la bulle (une seconde) donne le nom, les codes des couleurs et le clic droit. Sans
+  personnage, la bulle de la pastille « aucun personnage » le dit.
 - **Panneau Personnages** (en onglet avec Couleur et Pinceaux ; icône dans la barre des panneaux) : « + », « Couleur libre » (lâcher), le nombre de
   personnages ; une ligne par personnage (poignée, pastille, nom, couleur du trait, interrupteur « Avec un aplat », couleur de l'aplat, corbeille) ;
   puis « Couleurs neutres » (mêmes lignes), « + » et « Couleurs neutres d'origine ».
@@ -3092,8 +3095,8 @@ tiennent compte du nouveau panneau et des six commandes.
 
 ### À vérifier à l'écran (par Anthony)
 
-1. Espace Storyboard : sous la barre de la vue, la barre des personnages (« Aucun personnage », « + », trois pastilles neutres : noir, gris, rouge).
-   Animation et Montage : pas de barre ; Affichage > « Montrer la barre des personnages » l'allume dans cet espace seulement ; revenir en Storyboard : elle y est.
+1. Espace Storyboard : au bord droit du dessin, sous le titre du plan, la colonne des pastilles (« aucun personnage », trois pastilles neutres : noir, gris, rouge, « + »).
+   Animation et Montage : pas de colonne ; Affichage > « Montrer les pastilles des personnages » l'allume dans cet espace seulement ; revenir en Storyboard : elle y est.
 2. « + » : une pastille de couleur apparaît, choisie (halo), la fenêtre « Modifier le personnage » s'ouvre ; taper « Lou », changer le trait (rouge) et
    l'aplat (rose) : la pastille suit. Ctrl+Z annule chaque geste ; le panneau Historique les nomme.
 3. Dessiner une silhouette fermée au pinceau avec Lou : le trait est rouge et, une fraction de seconde après, le dedans se remplit de rose ; le calque a
@@ -3496,3 +3499,57 @@ mesurés et la fenêtre le dit.
 
 ### Essais ajoutés
 `accueil_tests`, `concentration_tests`, `conseils_tests`, `echelle_tests`, `aidetouches_tests`, `reglagestylet_tests`.
+
+
+---------------------------------------------------------------------------------------------------
+
+## 41. La règle des guides, le menu Cadrage et la colonne des pastilles (2026-10-21, branche `retouches-dessin`)
+
+Trois retouches demandées par Anthony sur une capture annotée de l'onglet Storyboard.
+
+1. **La règle est LE lieu des guides.** L'icône règle de la barre au-dessus du dessin (après le plateau, la caméra et l'Espace 3D) ouvre le menu des guides :
+   en haut les repères de composition (tiers, grille d'or, spirale d'or, son orientation, diagonales, croix centrale, et « Éteindre les repères »), dessous « Perspective »
+   (tout ce que faisait le panneau Guides : afficher et utiliser, aligner les traits, verrouiller, lignes de référence, aligner aussi la gomme, lignes du curseur jusqu'au bord ;
+   la liste des guides du projet ; un guide de plus à 1, 2 ou 3 points de fuite ; le nom du guide courant et le supprimer). L'icône s'allume dès qu'un repère ou le guide de
+   perspective est tracé (`guides_any_on`). **Le panneau Guides n'existe plus** : plus d'icône dans la barre des panneaux, plus d'action `vue.guides`, plus d'onglet dans les
+   dispositions d'origine ; `Pane::Guides` n'est gardé que pour lire les dispositions enregistrées, que `DockLayout::sanitized` en débarrasse (comme l'ancien panneau Vue).
+   Les actions `guide.*` (Ctrl+K, raccourcis) et le sous-menu Affichage > Guides restent.
+2. **Le menu Cadrage, tout à gauche de la barre sous le dessin** (icône « cadre », avant « Ajuster »). Un petit panneau au-dessus de l'icône : le **format** (Aucun, 16:9,
+   9:16, 4:5, 1:1, 4:3, 1,85:1, 2,39:1, Personnalisé avec sa largeur : sa hauteur), les **zones de sécurité** (l'interrupteur et les deux jeux de valeurs), et l'**aspect des
+   traits** (six couleurs, « Autre couleur » qui se déplie dans le panneau, opacité, épaisseur). Même taille d'icône que le reste de la barre (`barres::ICONE`, `CASE`).
+   L'icône s'allume avec un format ou les zones de sécurité (`framing_any_on`). Pas de sous-menu ni de liste déroulante dans ce panneau (il se ferme au clic hors de lui, et un
+   sous-menu est « hors de lui ») : des choix en ligne. **À confirmer avec Anthony** : l'aspect des traits (couleur, opacité, épaisseur) ne règle que les repères de la
+   règle (tiers, spirale…), pas les zones de sécurité (couleur du thème) : il est dans le menu Cadrage comme demandé, mais loin de ce qu'il règle.
+3. **La colonne des pastilles des personnages** (`pastilles_colonne`, `personnagesui.rs`). Plus de barre au-dessus du dessin : une colonne ronde et discrète au bord droit du
+   dessin (46 points sous le haut, donc sous le titre « Séquence 1 — plan 1 ») et de la planche des Vignettes (8 points sous le haut). De haut en bas : « aucun personnage »
+   (anneau barré, allumé quand la couleur est libre ; le texte « Aucun personnage » a disparu, la bulle le dit), les personnages, un trait, les couleurs neutres, « + », l'icône du
+   panneau Personnages. Mêmes gestes qu'avant (clic : choisir ou lâcher ; clic droit : Modifier, Dupliquer, Monter, Descendre, Supprimer ; bulle d'une seconde avec le nom et
+   les couleurs). Fond sombre à moitié transparent, 28 points de large ; la barre de 26 points a disparu, le dessin ne perd rien. C'est une `Area` (ordre « milieu ») posée
+   en fin d'image : la couche d'egui au-dessus du dessin reçoit les clics, `layer_id_at` ne rend plus la couche du dessin, donc **cliquer ou glisser sur la colonne ne
+   dessine rien** (ni stylo d'annotation sur la planche : la colonne tient le haut du bord droit). Elle défile (sans barre) si la fenêtre est trop basse. Rien de lourd par image :
+   une dizaine de cercles ; les cases (`Etat::cases`) sont gardées pour les essais.
+
+### Où est passé chaque réglage du panneau Guides
+
+| Avant (panneau Guides) | Maintenant (menu de la règle, barre au-dessus du dessin) |
+|---|---|
+| Afficher et utiliser le guide (G) | icône perspective, ligne « Perspective » |
+| Aligner les traits (Maj+A), Verrouiller (Maj+L), Lignes de référence (Maj+G), Aligner aussi la gomme, Lignes du curseur jusqu'au bord | les cinq icônes suivantes, même ligne |
+| Liste des guides du projet | la liste, sous les icônes |
+| Nouveau guide à 1, 2, 3 points de fuite | trois icônes « 1 », « 2 », « 3 » |
+| Nom du guide courant, Supprimer | le champ et la corbeille, à droite des trois icônes |
+
+### À vérifier à l'écran (par Anthony)
+
+1. Storyboard : la colonne des pastilles au bord droit du dessin, sous « Séquence 1 — plan 1 » ; plus de barre au-dessus du dessin ; survol 1 s : « Aucun personnage » ; clic sur une
+   pastille neutre : le trait prend sa couleur et rien ne se dessine ; « + » : un personnage, sa fenêtre s'ouvre ; clic droit : le menu.
+2. Vignettes : la même colonne au bord droit de la planche.
+3. La règle (barre du haut) : repères, perspective, guides ; la barre des panneaux n'a plus d'icône Guides ; plus d'onglet Guides à droite.
+4. Cadrage (tout à gauche de la barre du bas) : choisir 16:9, allumer les zones de sécurité, régler la couleur : les traits du cadre suivent.
+
+### Essais ajoutés
+
+`regle_cadrage_tests.rs` : chaque fonction de l'ancien panneau Guides est dans le menu de la règle et agit au clic ; la règle ne garde que les guides et les repères ; le menu Cadrage est
+la première icône de la barre du bas (même taille, format, zones de sécurité, aspect) ; la colonne des pastilles (au bord droit, mince, sous le titre ; choisir, ajouter, aucun personnage,
+neutres, clic droit ; cliquer ou glisser dessus ne dessine rien et ne crée aucune étape d'annulation ; la même sur la planche des Vignettes). `barrepanneaux_tests` : plus de panneau Guides
+dans la barre, les jeux d'origine ni les dispositions.

@@ -144,7 +144,8 @@ impl App {
             Pane::Brushes => self.brushes_panel(ui),
             Pane::ToolOptions => self.tool_options_panel(ui),
             Pane::View => self.view_panel(ui),
-            Pane::Guides => self.guides_ui(ui),
+            // Retiré : les guides sont dans le menu de la règle (`cadrageui.rs`), `sanitized` ôte ce panneau.
+            Pane::Guides => {}
             Pane::Sheet => self.panel_inspector(ui),
             Pane::Layers => {
                 self.layers_panel(ui);

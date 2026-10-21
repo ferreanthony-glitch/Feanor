@@ -478,7 +478,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("references.tout_voir", "Références : tout voir sur le tableau", true, false),
     // Brosse par personnage (`personnagesui.rs`).
     act("vue.personnages", "Panneau Personnages (ouvrir / fermer)", true, false),
-    act("perso.barre", "Barre des personnages au-dessus du dessin (montrer / cacher, dans cet espace de travail)", true, false),
+    act("perso.barre", "Pastilles des personnages le long du dessin (montrer / cacher, dans cet espace de travail)", true, false),
     act("perso.ajouter", "Nouveau personnage", true, false),
     act("perso.suivant", "Personnage suivant (trait et aplat)", true, false),
     act("perso.precedent", "Personnage précédent (trait et aplat)", true, false),
@@ -487,7 +487,6 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("vue.reglages", "Panneau Réglages de l'outil (ouvrir / fermer)", true, false),
     act("vue.pinceaux", "Panneau Pinceaux (ouvrir / fermer)", true, false),
     act("vue.couleur", "Panneau Couleur (ouvrir / fermer)", true, false),
-    act("vue.guides", "Panneau Guides (ouvrir / fermer)", true, false),
     act("vue.calques", "Panneau Calques (ouvrir / fermer)", true, false),
     act("vue.fiche", "Panneau Fiche du plan (ouvrir / fermer)", true, false),
     act("vue.barre_panneaux", "Barre des panneaux, sur le bord droit (montrer / cacher)", true, false),

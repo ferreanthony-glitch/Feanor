@@ -26,8 +26,10 @@ la raison quand elle ne s'applique pas). L'essai `barres_tests::every_action_mov
 | Vue du plateau / vue caméra | barre au-dessus du dessin **et** barre sous le dessin (même action) | **barre au-dessus du dessin** |
 | Espace 3D | barre sous le dessin | **barre au-dessus du dessin**, avec les deux autres vues |
 | Dessin ↔ vignettes (`vue.planches`) | barre du montage (deux boutons) **et** barre sous le dessin | **barre du montage** (la planche n'a pas de barre sous le dessin, c'est le seul endroit d'où l'on en revient) |
-| Zones de sécurité | bouton de la barre au-dessus du dessin, menu « Cadrage », Affichage > Caméra | **menu « Cadrage »** (une icône) ; Affichage > Caméra |
-| Format du cadre (16:9, 2,39…) | liste déroulante de la barre au-dessus du dessin **et** menu « Cadrage » | **menu « Cadrage »** |
+| Zones de sécurité | bouton de la barre au-dessus du dessin, menu « Cadrage », Affichage > Caméra | **menu « Cadrage »** : une icône, tout à gauche de la barre SOUS le dessin (2026-10-21) ; Affichage > Caméra |
+| Format du cadre (16:9, 2,39…) | liste déroulante de la barre au-dessus du dessin **et** menu « Cadrage » | **menu « Cadrage »** de la barre sous le dessin (avec les zones de sécurité et l'aspect des traits) |
+| Guides (perspective) et repères de composition (tiers, spirale…) | panneau Guides, menu « Cadrage » (repères) | **la règle**, barre au-dessus du dessin : un seul menu pour les deux (le panneau Guides n'existe plus) |
+| Pastilles des personnages | barre de 26 points au-dessus du dessin et de la planche | **colonne ronde au bord droit** du dessin et de la planche, sous le titre du plan (plus de texte « Aucun personnage » : la bulle) |
 | Zoom : ajuster, 100 %, plus, moins | quatre icônes sous le dessin, menu Affichage, texte « Zoom 35 % » de la barre d'état | **icône « Ajuster » + loupe** sous le dessin (la loupe ouvre : pourcentage, −, +, 100 %, Ajuster) ; menu Affichage ; « 35 % » en lecture dans la barre d'état |
 | Rotation de la vue | deux icônes + curseur sous le dessin, « Rotation 12° » dans la barre d'état | **une icône** (allumée quand la vue est tournée ; elle ouvre l'angle, ± 15°, « Remettre droite ») |
 | Miroir de la vue | icône sous le dessin, « Miroir » dans la barre d'état | **icône** (allumée) |
@@ -48,14 +50,14 @@ Ce qui reste volontairement à plusieurs endroits :
 
 ## 2. Les panneaux de la barre de droite, par espace de travail
 
-La barre ne montre plus les treize icônes partout : seulement les panneaux utiles au travail de l'espace. Les autres restent dans la palette (Ctrl+K) et dans Affichage >
+La barre ne montre plus les douze icônes partout (le panneau Guides est parti : ses réglages sont dans la règle, 2026-10-21) : seulement les panneaux utiles au travail de l'espace. Les autres restent dans la palette (Ctrl+K) et dans Affichage >
 Espaces de travail > Panneaux. Un panneau que tu ouvres à la main a son icône tant qu'il est ouvert, et chaque espace retient sa disposition : il revient avec l'espace.
 
 | Espace | Icônes d'office |
 |---|---|
 | Vignettes | Réglages, Pinceaux, Couleur, Références (4) |
-| Storyboard | Réglages, Pinceaux, Couleur, Personnages, Guides, Calques, Effets, Fiche du plan, Références (9) |
-| Animation | Réglages, Pinceaux, Couleur, Guides, Calques, Effets, Fiche du plan, Feuille d'exposition, Références (9) |
+| Storyboard | Réglages, Pinceaux, Couleur, Personnages, Calques, Effets, Fiche du plan, Références (8) |
+| Animation | Réglages, Pinceaux, Couleur, Calques, Effets, Fiche du plan, Feuille d'exposition, Références (8) |
 | Montage | Fiche du plan, Commentaires, Historique, Bruitages (4) |
 
 (`barrepanneaux::panneaux_d_office`, essais `barrepanneaux_tests`.)
@@ -106,8 +108,8 @@ sous-menu (« Plus », « Couper et réunir », « Version du plan »…), rien 
 3. **Annuler / Rétablir / Couper / Copier / Coller** : barre de commandes, menu Édition, clic droit du dessin. Retirer ceux du clic droit (ne garder que « Ajuster » et
    « Animer ») ?
 4. **« Animer ce plan »** n'a plus de bouton dans les bandes (l'onglet Animation et le double-clic le font). Le remettre dans la barre du montage ?
-5. **Guides** et **Personnages** sont d'office en Storyboard ; **Personnages** est retiré d'office en Animation (la barre des pastilles au-dessus du dessin n'y est pas non
-   plus). Bien ?
+5. **Personnages** est d'office en Storyboard et retiré d'office en Animation (la colonne des pastilles n'y est pas non
+   plus). Bien ? (Le panneau **Guides** n'existe plus : la règle les porte.)
 6. **Les clés de dessin ne se cachent pas** dans le filtre : ce sont les dessins mêmes des pistes. Un mode « seulement les débuts de dessin » (une fine barre au lieu des
    blocs) t'intéresse-t-il ?
 7. **Commentaire, marque d'image, signet** : trois commandes proches, trois mots (« Signet ici », « Marque d'image ici », « Commentaire ici »). Une seule icône « Repères »

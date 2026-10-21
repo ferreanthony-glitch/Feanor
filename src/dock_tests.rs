@@ -98,10 +98,10 @@ fn back_in_animation_the_exposure_sheet_returns_where_it_was() {
     assert_eq!(storyboard.retour_animation(&saved), saved);
     // Un panneau fermé entre-temps : la feuille se rouvre à sa place d'ordinaire, le reste est gardé.
     let mut changed = storyboard.clone();
-    changed.close(Pane::Guides);
+    changed.close(Pane::Sheet);
     let back = changed.retour_animation(&saved);
     assert_eq!(count(&back, Pane::XSheet), 1);
-    assert_eq!(count(&back, Pane::Guides), 0, "ce qu'on a fermé reste fermé");
+    assert_eq!(count(&back, Pane::Sheet), 0, "ce qu'on a fermé reste fermé");
     assert!(format!("{:?}", back.principal).contains("Tabs { panneaux: [Layers, XSheet]"), "{:?}", back.principal);
     // Une feuille qui n'était pas ouverte ne s'ouvre pas.
     let closed = DockLayout::from_legacy(&Layout::default());
@@ -129,11 +129,11 @@ fn default_layout_has_every_panel_once() {
     let DockNode::Row { gauche: layers, droite: tools, .. } = &**side else { panic!() };
     // Les calques, les effets dessous (disposition 8, choix d'Anthony).
     assert!(matches!(&**layers, DockNode::Column { haut, bas, .. } if **haut == tabs(&[Pane::Layers]) && **bas == tabs(&[Pane::Effects])), "{layers:?}");
-    for p in [Pane::ToolOptions, Pane::Guides, Pane::Color] {
+    for p in [Pane::ToolOptions, Pane::Sheet, Pane::Color] {
         assert!(format!("{tools:?}").contains(&format!("{p:?}")), "{p:?} à droite");
     }
     // La fiche est un onglet des réglages (9b).
-    assert!(format!("{tools:?}").contains("Tabs { panneaux: [ToolOptions, Guides, Sheet]"), "{tools:?}");
+    assert!(format!("{tools:?}").contains("Tabs { panneaux: [ToolOptions, Sheet]"), "{tools:?}");
 }
 
 #[test]
@@ -164,7 +164,7 @@ fn layouts_from_before_9b_put_the_sheet_with_the_settings() {
     let d = l.dock_layout();
     assert_eq!(d.version, dock::LAYOUT_VERSION);
     let s = format!("{:?}", d.principal);
-    assert!(s.contains("Tabs { panneaux: [ToolOptions, Guides, Sheet]"), "{s}");
+    assert!(s.contains("Tabs { panneaux: [ToolOptions, Sheet]"), "{s}");
     assert_eq!(count(&d, Pane::Sheet), 1);
 }
 
@@ -224,8 +224,8 @@ fn builtin_workspaces_keep_their_meaning() {
 #[test]
 fn layouts_survive_the_trip_through_egui_dock() {
     let mut l = DockLayout::from_legacy(&Layout::default());
-    l.close(Pane::Guides);
-    l.fenetres.push(FloatingPanel { panneaux: tabs(&[Pane::Guides]), x: 300.0, y: 200.0, largeur: 260.0, hauteur: 320.0 });
+    l.close(Pane::Sheet);
+    l.fenetres.push(FloatingPanel { panneaux: tabs(&[Pane::Sheet]), x: 300.0, y: 200.0, largeur: 260.0, hauteur: 320.0 });
     // Un groupe de plusieurs onglets dont le deuxième est ouvert.
     fn second_tab(n: &mut DockNode) -> bool {
         match n {
@@ -262,7 +262,7 @@ fn closing_and_reopening_a_panel_puts_it_back_with_its_group() {
     assert!(!l.contains(Pane::Sheet) && l.contains(Pane::Layers));
     l.open(Pane::Sheet);
     // Revenue avec les onglets des réglages (pas avec la couleur).
-    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, Guides, Sheet]"), "{:?}", l.principal);
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [ToolOptions, Sheet]"), "{:?}", l.principal);
     // Les calques rouverts : au-dessus des effets restés à leur place.
     l.close(Pane::Layers);
     l.open(Pane::Layers);
@@ -419,17 +419,17 @@ fn a_panel_can_have_its_own_window() {
     l.close(Pane::Layers);
     assert!(!l.contains(Pane::Layers) && l.detachees.is_empty());
     // Une fenêtre à part de taille absurde sera replacée.
-    l.close(Pane::Guides);
-    let bad = dock::DetachedPanel { panneau: Pane::Guides, x: 10.0, y: 10.0, largeur: 5.0, hauteur: f32::NAN };
+    l.close(Pane::Sheet);
+    let bad = dock::DetachedPanel { panneau: Pane::Sheet, x: 10.0, y: 10.0, largeur: 5.0, hauteur: f32::NAN };
     l.detachees.push(bad.clone());
     let l = l.sanitized();
-    assert_eq!(count(&l, Pane::Guides), 1);
+    assert_eq!(count(&l, Pane::Sheet), 1);
     assert_eq!((l.detachees[0].largeur, l.detachees[0].hauteur), (0.0, 0.0));
     // En double avec un onglet : l'onglet l'emporte.
     let mut twice = DockLayout::from_legacy(&Layout::default());
     twice.detachees.push(bad);
     let twice = twice.sanitized();
-    assert_eq!(count(&twice, Pane::Guides), 1);
+    assert_eq!(count(&twice, Pane::Sheet), 1);
     assert!(twice.detachees.is_empty());
 }
 
@@ -437,8 +437,8 @@ fn a_panel_can_have_its_own_window() {
 fn panel_layouts_are_kept_in_the_settings() {
     let mut s = Settings::default();
     let mut l = DockLayout::from_legacy(&Layout::default());
-    l.close(Pane::Guides);
-    l.fenetres.push(FloatingPanel { panneaux: tabs(&[Pane::Guides]), x: 40.0, y: 50.0, largeur: 300.0, hauteur: 200.0 });
+    l.close(Pane::Sheet);
+    l.fenetres.push(FloatingPanel { panneaux: tabs(&[Pane::Sheet]), x: 40.0, y: 50.0, largeur: 300.0, hauteur: 200.0 });
     s.layout = Some(Layout { panneaux: Some(l.clone()), ..Layout::default() });
     workspace::save_workspace(&mut s.workspaces, "Le mien", Layout { panneaux: Some(l.clone()), ..Layout::default() });
     let text = toml::to_string(&s).unwrap();

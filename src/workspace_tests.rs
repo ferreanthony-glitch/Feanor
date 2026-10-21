@@ -78,7 +78,7 @@ fn the_three_spaces_have_their_own_starting_layouts() {
     // Montage : la bande en grand, les panneaux de dessin repliés, la fiche du plan gardée.
     let dock = montage.dock_layout();
     assert!(dock.contains(Pane::Montage) && dock.contains(Pane::Sheet) && dock.contains(Pane::Canvas));
-    for gone in [Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::Guides, Pane::Layers, Pane::Effects] {
+    for gone in [Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::Layers, Pane::Effects] {
         assert!(!dock.contains(gone), "{gone:?} est replié dans l'espace Montage");
     }
     // Les panneaux de son (arrivés depuis) s'ouvrent dans le montage, pas dans les deux autres espaces.
@@ -116,28 +116,28 @@ fn every_space_has_a_registered_action() {
 fn switching_mode_restores_the_layout_of_that_mode() {
     let (_ctx, mut app) = headless("modes");
     assert_eq!((app.espace, app.mode), (Espace::Storyboard, Mode::Storyboard));
-    // Storyboard : on ferme les guides.
-    assert!(has(&app, Pane::Guides));
-    app.toggle_pane(Pane::Guides);
-    assert!(!has(&app, Pane::Guides));
-    // Animation : sa disposition à elle (les guides y sont), et on y ferme la couleur.
+    // Storyboard : on ferme la fiche.
+    assert!(has(&app, Pane::Sheet));
+    app.toggle_pane(Pane::Sheet);
+    assert!(!has(&app, Pane::Sheet));
+    // Animation : sa disposition à elle (la fiche y est), et on y ferme la couleur.
     app.set_mode(Mode::Animation);
     assert_eq!((app.espace, app.mode), (Espace::Animation, Mode::Animation));
-    assert!(has(&app, Pane::Guides) && has(&app, Pane::Color));
+    assert!(has(&app, Pane::Sheet) && has(&app, Pane::Color));
     app.toggle_pane(Pane::Color);
     assert!(!has(&app, Pane::Color));
-    // Retour en storyboard : les guides sont encore fermés, la couleur est là.
+    // Retour en storyboard : la fiche est encore fermée, la couleur est là.
     app.set_mode(Mode::Storyboard);
-    assert!(!has(&app, Pane::Guides) && has(&app, Pane::Color));
+    assert!(!has(&app, Pane::Sheet) && has(&app, Pane::Color));
     // Et l'animation retrouve ce qu'on y avait fait.
     app.set_mode(Mode::Animation);
-    assert!(has(&app, Pane::Guides) && !has(&app, Pane::Color));
+    assert!(has(&app, Pane::Sheet) && !has(&app, Pane::Color));
 }
 
 #[test]
 fn the_layouts_are_written_to_the_settings_per_space() {
     let (ctx, mut app) = headless("ecriture");
-    app.toggle_pane(Pane::Guides);
+    app.toggle_pane(Pane::Sheet);
     app.set_mode(Mode::Animation);
     app.toggle_pane(Pane::Color);
     // L'image d'écran suivante retient la disposition de l'animation et écrit les réglages.
@@ -145,16 +145,16 @@ fn the_layouts_are_written_to_the_settings_per_space() {
     let file = Settings::load();
     let story = file.layout_of(Espace::Storyboard).expect("la disposition du storyboard");
     let anim = file.layout_of(Espace::Animation).expect("la disposition de l'animation");
-    assert!(!story.dock_layout().contains(Pane::Guides) && story.dock_layout().contains(Pane::Color));
-    assert!(anim.dock_layout().contains(Pane::Guides) && !anim.dock_layout().contains(Pane::Color));
+    assert!(!story.dock_layout().contains(Pane::Sheet) && story.dock_layout().contains(Pane::Color));
+    assert!(anim.dock_layout().contains(Pane::Sheet) && !anim.dock_layout().contains(Pane::Color));
     assert!(file.layout_of(Espace::Montage).is_none(), "l'espace Montage n'a pas encore été visité");
     // Une autre séance démarre en storyboard avec sa disposition, et l'animation garde la sienne.
     let ctx2 = egui::Context::default();
     let mut app2 = App::sans_fenetre(&ctx2, None);
     assert_eq!(app2.espace, Espace::Storyboard);
-    assert!(!has(&app2, Pane::Guides) && has(&app2, Pane::Color));
+    assert!(!has(&app2, Pane::Sheet) && has(&app2, Pane::Color));
     app2.set_mode(Mode::Animation);
-    assert!(has(&app2, Pane::Guides) && !has(&app2, Pane::Color));
+    assert!(has(&app2, Pane::Sheet) && !has(&app2, Pane::Color));
 }
 
 #[test]
@@ -219,7 +219,7 @@ fn the_montage_space_is_a_storyboard_layout_and_the_mode_button_returns_to_it() 
 #[test]
 fn resetting_the_layout_resets_only_the_current_space() {
     let (_ctx, mut app) = headless("retablir");
-    app.toggle_pane(Pane::Guides);
+    app.toggle_pane(Pane::Sheet);
     app.set_mode(Mode::Animation);
     app.toggle_pane(Pane::Color);
     app.toggle_pane(Pane::Brushes);
@@ -228,11 +228,11 @@ fn resetting_the_layout_resets_only_the_current_space() {
     assert!(has(&app, Pane::Color) && has(&app, Pane::Brushes), "l'animation retrouve sa disposition d'origine");
     assert_eq!(app.layout.montage_height, Espace::Animation.defaut().montage_height);
     assert_eq!(app.mode, Mode::Animation, "le mode ne change pas");
-    // Le storyboard, lui, n'a pas bougé : ses guides sont toujours fermés.
+    // Le storyboard, lui, n'a pas bougé : sa fiche est toujours fermée.
     app.set_mode(Mode::Storyboard);
-    assert!(!has(&app, Pane::Guides));
+    assert!(!has(&app, Pane::Sheet));
     app.run_action("espace.retablir");
-    assert!(has(&app, Pane::Guides));
+    assert!(has(&app, Pane::Sheet));
 }
 
 #[test]

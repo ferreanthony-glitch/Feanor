@@ -300,7 +300,9 @@ impl App {
         }
     }
 
-    /// Réglages et liste des guides (panneau d'outils).
+    /// Réglages et liste des guides, dans le menu de la règle (`cadrageui.rs`, depuis le 2026-10-21 : le panneau Guides
+    /// n'existe plus) : afficher, aligner, verrouiller, lignes de référence, gomme, lignes du curseur ; la liste des
+    /// guides du projet ; un guide de plus à 1, 2 ou 3 points de fuite ; le nom du guide courant et le supprimer.
     pub(crate) fn guides_ui(&mut self, ui: &mut egui::Ui) {
         use crate::bulles::{icone, interrupteur_a};
         use egui_phosphor::regular as ph;

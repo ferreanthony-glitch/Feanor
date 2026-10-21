@@ -1,7 +1,10 @@
 //! Aides au cadrage sur l'écran : le tracé des repères sur le cadre de la caméra (avec son zoom,
-//! sa rotation, sa bascule) et le réglage de ceux qu'on veut, dans un seul menu « Cadrage » de la
-//! barre au-dessus du dessin (plus dans les réglages de la caméra). La géométrie est dans
-//! `cadrage.rs`.
+//! sa rotation, sa bascule) et leurs réglages, en deux endroits (Anthony, 2026-10-21) :
+//! - **la règle**, dans la barre au-dessus du dessin, est le seul lieu des guides : les repères de composition
+//!   (tiers, grille d'or, spirale, diagonales, croix) et les guides de perspective du projet (`guides.rs`) ;
+//! - **le menu Cadrage**, à gauche de la barre sous le dessin (`viewbar.rs`) : le format, les zones de sécurité et
+//!   l'aspect des traits (couleur, opacité, épaisseur).
+//! La géométrie est dans `cadrage.rs`.
 
 use eframe::egui::{self, Color32, Pos2, Rect, RichText, Shape, Stroke};
 
@@ -51,9 +54,12 @@ impl App {
         };
     }
 
-    /// Les aides au cadrage : un interrupteur par repère, la spirale et son orientation, les zones
-    /// de sécurité, le cadre de format, puis la couleur, l'opacité et l'épaisseur des traits.
-    pub(crate) fn framing_aids_ui(&mut self, ui: &mut egui::Ui) {
+    /// La règle, au-dessus du dessin : le seul endroit des guides. En haut les repères de composition (tiers, grille
+    /// d'or, spirale et son orientation, diagonales, croix), dessous les guides de perspective du projet (ce que
+    /// faisait le panneau Guides, retiré le 2026-10-21 : afficher, aligner, verrouiller, lignes de référence, gomme,
+    /// lignes du curseur, la liste, un guide de plus à 1, 2 ou 3 points de fuite, son nom, le supprimer).
+    /// Le format, les zones de sécurité et l'aspect des traits sont dans le menu Cadrage de la barre du bas.
+    pub(crate) fn guides_menu_ui(&mut self, ui: &mut egui::Ui) {
         use crate::bulles::interrupteur_a;
         use egui_phosphor::regular as ph;
         ui.horizontal_wrapped(|ui| {
@@ -98,28 +104,108 @@ impl App {
             );
             let key = self.raccourci("cadrage.croix");
             interrupteur_a(ui, &mut self.cadrage.cross, ph::CROSSHAIR_SIMPLE, "Croix centrale", "Une petite croix au centre du cadre.", &key, "cadrage.croix");
+            if self.bouton(ui, ph::X, "Éteindre les repères", "Tiers, grille d'or, spirale, diagonales et croix. Les guides de perspective, les zones de sécurité et le cadre de format restent.", "cadrage.aucune").clicked() {
+                self.run_action("cadrage.aucune");
+            }
+        });
+        ui.separator();
+        ui.label(RichText::new("Perspective").small().weak());
+        self.guides_ui(ui);
+        ui.separator();
+        ui.label(RichText::new("Aides d'écran : elles suivent le cadre de la caméra et ne sont jamais exportées.").small().weak());
+    }
+
+    /// Le bouton de la règle, dans la barre au-dessus du dessin : le menu des guides. Il s'allume dès qu'un repère ou
+    /// le guide de perspective est tracé.
+    pub(crate) fn guides_button(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        let on = self.guides_any_on();
+        let [w, h] = crate::barres::CASE;
+        let text = crate::bulles::encre_etat(RichText::new(ph::RULER).size(crate::barres::ICONE), on);
+        let resp = egui::menu::menu_custom_button(ui, egui::Button::new(text).selected(on).frame(on).min_size(egui::vec2(w, h)), |ui| {
+            ui.set_min_width(260.0);
+            self.guides_menu_ui(ui);
+        });
+        crate::bulles::bulle(
+            resp.response,
+            "Guides",
+            "Tiers, grille d'or, spirale d'or, diagonales, croix centrale, et les guides de perspective du projet (1, 2 ou 3 points de fuite, aligner les traits, verrouiller).",
+            "",
+        );
+    }
+
+    /// Un repère de composition ou le guide de perspective est tracé (la règle s'allume).
+    pub(crate) fn guides_any_on(&self) -> bool {
+        self.cadrage.any_on() || self.guides.enabled
+    }
+
+    /// Un cadre de format ou les zones de sécurité sont tracés (l'icône Cadrage de la barre du bas s'allume).
+    pub(crate) fn framing_any_on(&self) -> bool {
+        self.layout.safe_frames || self.layout.frame_format.and_then(frames::sanitized).is_some()
+    }
+
+    /// Le menu Cadrage, petit panneau de la barre du bas : le format (cadre d'un format de diffusion), les zones de
+    /// sécurité et l'aspect des traits des repères (couleur, opacité, épaisseur). Pas de sous-menu ni de liste
+    /// déroulante : le panneau se ferme dès qu'on clique hors de lui, et un sous-menu est « hors de lui ».
+    pub(crate) fn cadrage_ui(&mut self, ui: &mut egui::Ui) {
+        use crate::bulles::{bulle, interrupteur_a};
+        use egui_phosphor::regular as ph;
+        ui.label(RichText::new("Format").small().weak());
+        let current = self.layout.frame_format.and_then(frames::sanitized);
+        let custom = current.is_some_and(|r| self.format_custom || !frames::is_preset(r));
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing.x = 3.0;
+            let r = ui.selectable_label(current.is_none(), "Aucun");
+            if bulle(r, "Aucun format", "Pas de cadre de format : toute l'image de la caméra.", "").clicked() {
+                self.layout.frame_format = None;
+                self.format_custom = false;
+            }
+            for f in frames::PRESETS {
+                let r = ui.selectable_label(current == Some(f) && !custom, frames::label(f));
+                if bulle(r, &format!("Format {}", frames::label(f)), "Cadre d'un format de diffusion, tracé dans le cadre de la caméra (hors-format estompé).", "").clicked() {
+                    self.layout.frame_format = Some(f);
+                    self.format_custom = false;
+                }
+            }
+            let r = ui.selectable_label(custom, "Personnalisé");
+            if bulle(r, "Format personnalisé", "Largeur et hauteur relatives au choix, ci-dessous.", "").clicked() {
+                self.layout.frame_format = Some(current.unwrap_or([2.39, 1.0]));
+                self.format_custom = true;
+            }
+        });
+        if let (true, Some(mut r)) = (custom, current) {
+            ui.horizontal(|ui| {
+                let a = ui.add(egui::DragValue::new(&mut r[0]).range(0.01..=1000.0).speed(0.01).max_decimals(2));
+                bulle(a.clone(), "Largeur relative", "Glisser ou taper une valeur.", "");
+                ui.label(":");
+                let b = ui.add(egui::DragValue::new(&mut r[1]).range(0.01..=1000.0).speed(0.01).max_decimals(2));
+                bulle(b.clone(), "Hauteur relative", "Glisser ou taper une valeur.", "");
+                if a.changed() || b.changed() {
+                    self.layout.frame_format = frames::sanitized(r);
+                }
+            });
+        }
+        ui.separator();
+        ui.horizontal(|ui| {
             let key = self.raccourci("vue.cadres_securite");
             interrupteur_a(
                 ui,
                 &mut self.layout.safe_frames,
                 ph::SELECTION,
                 "Zones de sécurité",
-                "Action et titres, tracés dans le cadre (valeurs au choix ci-dessous ; à vérifier avant une livraison).",
+                "Action et titres, tracés dans le cadre (valeurs au choix à côté ; à vérifier avant une livraison).",
                 &key,
                 "vue.cadres_securite",
             );
+            ui.label(RichText::new("Zones de sécurité").small().weak());
         });
-        ui.separator();
-        // Le menu se ferme dès qu'on clique hors de lui, et les listes déroulantes et le sélecteur de
-        // couleur s'ouvrent hors de lui : ici, des sous-menus et des choix en ligne.
-        ui.menu_button(format!("{}  Format : {}", ph::CROP, self.frame_format_name()), |ui| self.frame_format_menu(ui));
-        ui.label(RichText::new("Zones de sécurité").small().weak());
         for z in SafeZones::ALL {
             ui.selectable_value(&mut self.cadrage.safe, z, z.label());
         }
         ui.separator();
-        ui.label(RichText::new("Aspect des traits").small().weak());
+        ui.label(RichText::new("Aspect des traits des repères").small().weak());
         ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
             const COULEURS: [[u8; 3]; 6] = [[90, 220, 255], [255, 255, 255], [255, 220, 60], [255, 90, 200], [110, 230, 120], [255, 90, 70]];
             for c in COULEURS {
                 let (rect, resp) = ui.allocate_exact_size(egui::vec2(16.0, 16.0), egui::Sense::click());
@@ -127,93 +213,28 @@ impl App {
                 if self.cadrage.color == c {
                     ui.painter().rect_stroke(rect.expand(1.5), 3.0, Stroke::new(1.5_f32, ui.visuals().text_color()), egui::StrokeKind::Outside);
                 }
-                if crate::bulles::bulle(resp, "Couleur des aides au cadrage", "Tiers, grille d'or, spirale, diagonales et croix.", "").clicked() {
+                if bulle(resp, "Couleur des repères", "Tiers, grille d'or, spirale, diagonales et croix.", "").clicked() {
                     self.cadrage.color = c;
                 }
             }
-            ui.menu_button("Autre…", |ui| {
-                let [r, g, b] = self.cadrage.color;
-                let mut c = Color32::from_rgb(r, g, b);
-                if egui::color_picker::color_picker_color32(ui, &mut c, egui::color_picker::Alpha::Opaque) {
-                    self.cadrage.color = [c.r(), c.g(), c.b()];
-                }
-            });
         });
         ui.horizontal(|ui| {
             let mut pct = self.cadrage.opacity * 100.0;
             let resp = ui.add(egui::DragValue::new(&mut pct).range(5.0..=100.0).speed(1.0).max_decimals(0).suffix(" %"));
-            if crate::bulles::bulle(resp, "Opacité des aides au cadrage", "Glisser ou taper une valeur.", "").changed() {
+            if bulle(resp, "Opacité des repères", "Glisser ou taper une valeur.", "").changed() {
                 self.cadrage.opacity = pct / 100.0;
             }
             let resp = ui.add(egui::DragValue::new(&mut self.cadrage.width).range(0.5..=6.0).speed(0.05).max_decimals(1).suffix(" px"));
-            crate::bulles::bulle(resp, "Épaisseur des traits", "Glisser ou taper une valeur.", "");
-            if self.bouton(ui, ph::X, "Éteindre les aides au cadrage", "Tiers, grille d'or, spirale, diagonales et croix. Les zones de sécurité et le cadre de format restent.", "cadrage.aucune").clicked() {
-                self.run_action("cadrage.aucune");
+            bulle(resp, "Épaisseur des traits", "Glisser ou taper une valeur.", "");
+        });
+        // Une couleur à soi : le sélecteur se déplie ici, dans le panneau (un sous-menu le fermerait).
+        egui::CollapsingHeader::new(RichText::new("Autre couleur").small().weak()).id_salt("cadrage_autre_couleur").show(ui, |ui| {
+            let [r, g, b] = self.cadrage.color;
+            let mut c = Color32::from_rgb(r, g, b);
+            if egui::color_picker::color_picker_color32(ui, &mut c, egui::color_picker::Alpha::Opaque) {
+                self.cadrage.color = [c.r(), c.g(), c.b()];
             }
         });
         ui.label(RichText::new("Aides d'écran : elles suivent le cadre de la caméra et ne sont jamais exportées.").small().weak());
-    }
-
-    /// Le bouton de la barre au-dessus du dessin : un menu avec toutes les aides au cadrage. Il
-    /// porte son nom et s'allume dès qu'une aide (repère, zones de sécurité, format) est tracée.
-    pub(crate) fn framing_aids_button(&mut self, ui: &mut egui::Ui) {
-        use egui_phosphor::regular as ph;
-        let on = self.framing_any_on();
-        let [w, h] = crate::barres::CASE;
-        let text = crate::bulles::encre_etat(RichText::new(ph::RULER).size(crate::barres::ICONE), on);
-        let resp = egui::menu::menu_custom_button(ui, egui::Button::new(text).selected(on).frame(on).min_size(egui::vec2(w, h)), |ui| {
-            ui.set_min_width(260.0);
-            self.framing_aids_ui(ui);
-        });
-        crate::bulles::bulle(
-            resp.response,
-            "Aides au cadrage",
-            "Tiers, grille d'or, spirale d'or, diagonales, croix centrale, zones de sécurité et cadre de format (2,39:1, 16:9…), tracés sur le cadre de la caméra.",
-            "",
-        );
-    }
-
-    /// Une aide au cadrage au moins est tracée : repère, zones de sécurité ou cadre de format.
-    pub(crate) fn framing_any_on(&self) -> bool {
-        self.cadrage.any_on() || self.layout.safe_frames || self.layout.frame_format.and_then(frames::sanitized).is_some()
-    }
-
-    /// Le nom du cadre de format courant : « Aucun », « 16:9 », « Personnalisé »…
-    fn frame_format_name(&self) -> String {
-        match self.layout.frame_format.and_then(frames::sanitized) {
-            None => "Aucun".to_string(),
-            Some(r) if self.format_custom || !frames::is_preset(r) => "Personnalisé".to_string(),
-            Some(r) => frames::label(r),
-        }
-    }
-
-    /// Le choix du cadre de format, en liste simple (pour un sous-menu).
-    fn frame_format_menu(&mut self, ui: &mut egui::Ui) {
-        let current = self.layout.frame_format.and_then(frames::sanitized);
-        let custom = current.is_some_and(|r| self.format_custom || !frames::is_preset(r));
-        if ui.selectable_label(current.is_none(), "Aucun").clicked() {
-            self.layout.frame_format = None;
-            self.format_custom = false;
-        }
-        for r in frames::PRESETS {
-            if ui.selectable_label(current == Some(r) && !custom, frames::label(r)).clicked() {
-                self.layout.frame_format = Some(r);
-                self.format_custom = false;
-            }
-        }
-        if ui.selectable_label(custom, "Personnalisé…").clicked() {
-            self.layout.frame_format = Some(current.unwrap_or([2.39, 1.0]));
-            self.format_custom = true;
-        }
-        if let (true, Some(mut r)) = (custom, current) {
-            ui.horizontal(|ui| {
-                let a = ui.add(egui::DragValue::new(&mut r[0]).range(0.01..=1000.0).speed(0.01).max_decimals(2)).on_hover_text("Largeur relative");
-                ui.label(":");
-                let b = ui.add(egui::DragValue::new(&mut r[1]).range(0.01..=1000.0).speed(0.01).max_decimals(2)).on_hover_text("Hauteur relative");
-                if a.changed() || b.changed() {
-                    self.layout.frame_format = frames::sanitized(r);
-                }
-            });
-        }
     }
 }
