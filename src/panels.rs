@@ -517,19 +517,25 @@ impl App {
                     ui.label(RichText::new(format!("{peers} calques choisis : ils se déplacent, tournent et grandissent ensemble.")).strong());
                     note(ui, "Un coin agrandit tous les calques en gardant les proportions ; l'étirement par un côté se fait sur un seul calque. Ctrl+R remet tous les calques choisis en place. Les calques cachés ou verrouillés restent où ils sont.");
                 }
+                // Position, taille et angle en haut ; les clés de position (animer le calque) et le mode d'emploi dans
+                // « Plus de réglages ».
                 self.transform_fields(ui);
-                note(
-                    ui,
-                    "Glisser dans la boîte : déplacer le calque (Maj : à l'horizontale ou à la \
-                     verticale). Coin : agrandir ou réduire (Maj : en gardant les proportions). Milieu \
-                     d'un côté : étirer dans un seul sens. Poignée ronde : tourner (Maj : par 15°). \
-                     Pour courber le dessin, l'outil Déformer a son mode Enveloppe. \
-                     Les dessins ne sont pas modifiés : on peut annuler la transformation à tout moment.",
-                );
+                self.plus_de_reglages(ui, |app, ui| {
+                    app.pos_keys_ui(ui);
+                    note(
+                        ui,
+                        "Glisser dans la boîte : déplacer le calque (Maj : à l'horizontale ou à la \
+                         verticale). Coin : agrandir ou réduire (Maj : en gardant les proportions). Milieu \
+                         d'un côté : étirer dans un seul sens. Poignée ronde : tourner (Maj : par 15°). \
+                         Pour courber le dessin, l'outil Déformer a son mode Enveloppe. \
+                         Les dessins ne sont pas modifiés : on peut annuler la transformation à tout moment.",
+                    );
+                });
             }
             Tool::Camera => self.camera_panel(ui),
         }
-        if self.current_brush().is_some_and(|b| b.pressure_size || b.pressure_opacity) {
+        // (Un mode d'emploi de plus : seulement quand « Plus de réglages » est déplié.)
+        if self.pinceaux.reglages_ouverts && self.current_brush().is_some_and(|b| b.pressure_size || b.pressure_opacity) {
             note(ui, "La pression vient du stylet (Windows Ink). À la souris, elle vaut 100 %.");
         }
     }

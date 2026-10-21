@@ -3329,7 +3329,9 @@ Pinceau, crayon, gomme : taille, appui, opacité et nom en haut ; sous l'aperçu
 retenu) : les catégories de la brosse, « Peint derrière », « Remplir la forme » et le mode d'emploi. Le pot de peinture :
 tolérance et contours en haut, débord dans « Plus de réglages ». Sélection : tout sélectionner, copier, coller, supprimer (et
 couper, remplir sur un bitmap) en haut, cachés tant qu'ils ne peuvent pas servir ; miroirs, devant / derrière, champs de la
-boîte et mode d'emploi dans « Plus de réglages ». L'état de chaque outil est dans `[panneau_pinceaux] plus_outils`.
+boîte et mode d'emploi dans « Plus de réglages ». Transformer : position, taille et angle en haut ; clés de position et mode
+d'emploi dans « Plus de réglages ». Inchangés (déjà deux ou trois réglages) : formes, texte, déformer, caméra, cutter, pipette.
+L'état de chaque outil est dans `[panneau_pinceaux] plus_outils`.
 
 ### À regarder à l'écran
 

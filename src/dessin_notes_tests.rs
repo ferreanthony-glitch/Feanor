@@ -942,6 +942,8 @@ fn the_timeline_and_the_tool_panel_draw_with_position_keys_without_trouble() {
     b.chauffer(10);
     b.app.layers_mut()[0].pos_keys = vec![PosKey::new(0, pose_x(0.0)), PosKey::new(3, pose_x(20.0))];
     b.app.tool = Tool::Transform;
+    // (Les clés de position sont dans « Plus de réglages » de l'outil, replié d'office : déplié ici.)
+    b.app.pinceaux.regler_plus(Tool::Transform.action(), true);
     b.garder_textes = true;
     b.chauffer(6);
     assert!(b.textes.iter().any(|t| t.contains("Clés de position")), "le groupe de réglages est là : {:?}", b.textes.iter().filter(|t| t.len() < 40).collect::<Vec<_>>());

@@ -561,7 +561,6 @@ impl App {
             let li = self.cur_layer;
             self.set_layer_pose(li, t);
         }
-        // Les clés de position : animer le calque (`poskeysui.rs`).
-        self.pos_keys_ui(ui);
+        // (Les clés de position, pour animer le calque, sont dans « Plus de réglages » : `pos_keys_ui`, `poskeysui.rs`.)
     }
 }
