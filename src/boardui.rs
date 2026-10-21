@@ -415,6 +415,15 @@ impl App {
         matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Line | Tool::Rect | Tool::Ellipse)
     }
 
+    /// Le dessin a la main (copier, coller, supprimer visent le dessin, pas les plans) et un outil pris par une touche
+    /// tenue sert : ce que fait `canvas_panel` quand l'appui lui vient de l'interface, ici l'appui est vu plus tôt.
+    fn draw_has_focus(&mut self) {
+        self.panel_focus = false;
+        self.images_focus = false;
+        self.key_focus = false;
+        self.spring_used();
+    }
+
     /// Un appui du bouton gauche (ou droit) en `pos` (écran) sur la planche. Rend vrai si le document a
     /// changé de forme (plans, images) : la mise en page est à refaire.
     fn board_press(&mut self, layout: &BoardLayout, xf: Xf, pos: Pos2, m: Modifiers, button: PointerButton) -> bool {
@@ -474,6 +483,7 @@ impl App {
                         self.select_board(c.panel, c.frame);
                     }
                     self.vignettes.press = Press::Card;
+                    self.draw_has_focus();
                 }
                 false
             }
@@ -492,6 +502,7 @@ impl App {
                 self.commit_note_text(layout);
                 if self.tool_draws_in_empty() && self.board_create_from_empty(e) {
                     self.vignettes.press = Press::Card;
+                    self.draw_has_focus();
                     true
                 } else {
                     self.vignettes.press = Press::Dead;
@@ -755,6 +766,21 @@ impl App {
                 painter.rect_stroke(r, 0.0, faint, StrokeKind::Outside);
             }
         }
+        if bg.hovered() || hovered.is_some() {
+            let drawing = matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline);
+            let icon = match hovered {
+                _ if pan_mode => CursorIcon::Grab,
+                Some(Hit::Bar(_)) => CursorIcon::PointingHand,
+                Some(Hit::Note(_)) => CursorIcon::Text,
+                Some(Hit::Empty(_)) if drawing => CursorIcon::Crosshair,
+                Some(Hit::Thumb(_)) if drawing || self.tool == Tool::Eraser => CursorIcon::Crosshair,
+                _ if self.tool == Tool::Text => CursorIcon::Text,
+                _ if self.tool == Tool::Eraser => CursorIcon::Crosshair,
+                _ => CursorIcon::Default,
+            };
+            // (La vignette courante, peinte après, remplace ce curseur par celui de son outil quand elle l'a sous la souris.)
+            ui.ctx().set_cursor_icon(icon);
+        }
         let deadline = Instant::now() + crate::thumbs::THUMB_TIME;
         for place in layout.cards.iter() {
             self.board_card(ui, &painter, view, xf, place, pan_mode, deadline);
@@ -797,23 +823,6 @@ impl App {
                 painter.circle_stroke(p, r, Stroke::new(1.0_f32, INK));
             }
         }
-        if bg.hovered() || hovered.is_some() {
-            let drawing = matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline);
-            let icon = match hovered {
-                _ if pan_mode => CursorIcon::Grab,
-                Some(Hit::Bar(_)) => CursorIcon::PointingHand,
-                Some(Hit::Note(_)) => CursorIcon::Text,
-                Some(Hit::Empty(_)) if drawing => CursorIcon::Crosshair,
-                Some(Hit::Thumb(_)) if drawing || self.tool == Tool::Eraser => CursorIcon::Crosshair,
-                _ if self.tool == Tool::Text => CursorIcon::Text,
-                _ if self.tool == Tool::Eraser => CursorIcon::Crosshair,
-                _ => CursorIcon::Default,
-            };
-            // (La vignette courante règle son curseur elle-même : celui du pinceau.)
-            if !matches!(hovered, Some(Hit::Thumb(k)) if !pan_mode && self.cur_card(&layout, k)) {
-                ui.ctx().set_cursor_icon(icon);
-            }
-        }
         bg.context_menu(|ui| match self.vignettes.menu {
             Some(MenuTarget::Card { panel, frame }) => self.card_menu(ui, panel, frame),
             _ => self.board_menu(ui, &layout, &texts),
@@ -833,13 +842,6 @@ impl App {
         if !any_down {
             self.vignettes.press = Press::None;
         }
-    }
-
-    /// L'image `k` de la planche est-elle celle du dessin (courante, où est la tête de lecture) ?
-    fn cur_card(&self, layout: &BoardLayout, k: usize) -> bool {
-        let c = &layout.cards[k];
-        let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
-        c.panel == self.cur_panel && (c.frame..c.end).contains(&f)
     }
 
     /// Les barres entre les images : un trait court, gris ou noir ; sous la souris, l'accent et une bulle.
