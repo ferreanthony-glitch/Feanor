@@ -653,7 +653,7 @@ image), **barre** (entre deux images), **bande de note** (sous une image).
   lignes par page, zoom) sont en haut, petits et à 30 % d'opacité, pleins seulement sous la souris ; « Attacher les notes » est au
   clic droit sur le fond. Plusieurs plans choisis : leurs images (sauf l'image courante) ont un liseré
   d'accent.
-- **Écart** : 10 points entre deux images d'un même plan, 30 à une coupe. Les lignes ont un nombre fixe d'images
+- **Écart** : proportionnel à la largeur des images (voir plus bas) : 18 points entre deux images d'un même plan, 53 à une coupe, pour des images de 240. Les lignes ont un nombre fixe d'images
   (« colonnes », 6 au plus) ; une ligne ne se casse jamais à un changement de plan. Ordre de lecture : de gauche à
   droite, puis ligne par ligne.
 - **Barre** entre deux images qui se suivent : courte (un tiers de la hauteur de l'image), 1,5 point, **grise = même
@@ -663,7 +663,7 @@ image), **barre** (entre deux images), **bande de note** (sous une image).
   texte passe à la ligne ; il rapetisse un peu avec sa longueur (11 → 10 → 9,5 points) ; **trois lignes au plus**, puis
   « … ». La ligne d'images suivante descend juste de ce qu'il faut pour garder sa marge quand une note prend deux ou
   trois lignes.
-- **Cases vides** après la dernière image (une au moins ; la page est complétée) : un filet très pâle.
+- **Case vide** après la dernière image (une seule, un « + » très pâle ; la planche s'arrête là).
 
 ### Ce que l'on fait
 
@@ -766,6 +766,35 @@ Demande d'Anthony (option 1 validée) : dessiner un mouvement de caméra directe
 - **Limites** : les calques en profondeur (multiplan) d'une grande case gardent leur place vue du cadre A ; une caméra inclinée ou
   panoramiquée compte par son rectangle englobant (la zone n'est pas inclinée) ; seule la première image d'un plan est une case de
   mouvement (ses marques d'image restent des cases ordinaires, vues à travers la caméra).
+
+### La planche comme la maquette 07 v6 (2026-10-21, branche `vignettes-maquette`)
+
+Retour d'Anthony : « la dernière maquette marchait mieux que le logiciel : le dessin pouvait sortir de la case, l'extérieur en
+dessous était plus discret et mieux intégré ; le geste de mouvement de caméra ne marche pas non plus ». Code : `board.rs`
+(mise en page), `boardui.rs` (écran), `thumbs.rs` + `render.rs` (la marge des vignettes), `debord.rs`, `vignettecamui.rs`,
+`springtools.rs`.
+
+- **Une carte blanche, pas une grille** : la planche est une **carte blanche au bord fin et doux, aux coins arrondis**, sur le
+  fond de l'espace de travail ; elle **s'arrête après la dernière rangée utile** (plus de pages complétées par des cases vides, plus
+  d'ombre portée). **Une seule case vide**, juste après la dernière image : un cadre très pâle avec un « + » discret, qui
+  s'assombrit sous la souris ; dessiner dedans fait le plan (inchangé). `board::BoardLayout::empty` n'a donc plus qu'une case.
+- **Proportions de la maquette** : filet d'image gris moyen (154), plus foncé pour l'image courante ; écarts **proportionnels à la
+  largeur des vignettes** (10 / 136 dans un plan, 30 / 136 à une coupe : 18 et 53 points pour une vignette de 240, `board::gap_same`
+  et `gap_cut`) ; barre dans un plan : **1,5 point, très pâle (230)**, un tiers de la hauteur ; barre de coupe : **2 points, noire** ;
+  numéro du plan petit (11 points) tout en haut de sa ligne ; bande de note **sans cadre, un filet très pâle dessous**, texte gris
+  petit (trois lignes puis « … », la taille baisse un peu avec la longueur).
+- **Le trait qui déborde** : pendant le geste, la partie dehors du trait se voit en entier mais **pâle** (`debord.rs`,
+  `GHOST_ALPHA`) ; **au lâcher, la case en garde un peu au-delà de son cadre** (`RING_FRACTION`, 3 % de sa largeur), comme la maquette
+  coupe à la case plus une petite marge. Comment : la vignette de chaque case (`Thumbs::texture_case`) est composée par le fil de
+  fond avec cette marge autour du cadre (`render::thumbnail_marge_until` : dans la marge, seul ce qui est dessiné est composé, pas le
+  papier) ; la case courante, qui est le dessin lui-même, peint seulement les quatre bandes de la marge de sa vignette. Rien de plus sur
+  le fil de l'interface. **Ce qui est dessiné hors du cadre se voit donc dans cette marge, aplats de fond compris.**
+- **Mouvement de caméra** : Ctrl **tenu avant l'appui** ne prend plus l'outil Sélection (le lasso à ressort) dans les Vignettes : le
+  geste marche avec n'importe quel outil ; et il marche aussi sur **une autre case du plan que la première** tant que le plan n'a pas
+  de mouvement (la case entière est alors le cadre A) ; sur un plan qui bouge déjà, la barre d'état dit que le mouvement se règle sur
+  la première case.
+- **Exports** : la planche exportée (PNG, JPEG, PDF) et le color script se servent de la même mise en page : mêmes cases, mais les
+  écarts suivent la largeur des vignettes, le numéro de plan a plus de place et la dernière page s'arrête après la dernière rangée.
 
 ### Anciens projets (`crayonnes.json`)
 

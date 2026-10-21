@@ -8,9 +8,9 @@
 //! - **On dessine tout de suite** : un trait qui commence dans une image (pleine ou vide) la rend courante
 //!   à l'appui et dessine dedans, sans clic de choix avant. Un trait qui commence ailleurs ne dessine rien.
 //!   C'est le dessin lui-même qui est dans l'image courante (`card_canvas`), donc le même moteur, le même
-//!   rendu progressif : aucune latence de plus. Pendant le geste, le trait **déborde** à l'écran (`debord.rs`) ; au
-//!   lâcher, l'image ne montre plus que son cadre. La toile infinie garde tout le tracé, et l'export cadre comme avant.
-//! - **Cases vides** après la dernière image : dessiner dans l'une d'elles fait le plan (ou, si la barre qui la
+//!   rendu progressif : aucune latence de plus. Pendant le geste, le trait **déborde** à l'écran, pâle (`debord.rs`) ; au
+//!   lâcher, l'image ne montre que son cadre et une petite marge de 3 % où le trait reste visible (`thumbs::texture_case`). La toile\n//!   infinie garde tout le tracé, et l'export cadre comme avant. La planche est une carte blanche qui s'arrête après sa dernière rangée\n//!   (maquette 07 v6).
+//! - **Case vide** (un « + » discret) après la dernière image : dessiner dedans fait le plan (ou, si la barre qui la
 //!   précède est grise, une image de plus du dernier plan) ; la création et le trait ne font qu'une étape
 //!   d'annulation.
 //! - **Barres** : un clic sur une barre grise coupe le plan à cet endroit (la vignette de droite commence un
@@ -42,17 +42,21 @@ fn board_bg() -> Color32 {
     crate::theme::fond()
 }
 const PAGE_BG: Color32 = Color32::WHITE;
+/// Le bord de la carte blanche (fin, doux), et son arrondi.
+const PAGE_EDGE: Color32 = Color32::from_gray(214);
+const PAGE_RADIUS: f32 = 10.0;
 const INK: Color32 = Color32::from_gray(30);
-/// Filet d'une image, de l'image courante, d'une case vide.
-const BORDER: Color32 = Color32::from_gray(178);
-const BORDER_CURRENT: Color32 = Color32::from_gray(92);
-const BORDER_EMPTY: Color32 = Color32::from_gray(224);
-/// Barre de continuité (même plan) et de coupe.
-const BAR_JOINED: Color32 = Color32::from_gray(188);
-const BAR_CUT: Color32 = Color32::from_gray(22);
-/// Texte d'une note, et le filet très pâle d'une bande vide.
-const NOTE_INK: Color32 = Color32::from_gray(70);
-const HAIRLINE: Color32 = Color32::from_gray(230);
+/// Filet d'une image (gris moyen, comme la maquette), de l'image courante, de la case vide du bout (le « + »).
+const BORDER: Color32 = Color32::from_gray(154);
+const BORDER_CURRENT: Color32 = Color32::from_gray(80);
+const GHOST: Color32 = Color32::from_gray(228);
+const GHOST_HOT: Color32 = Color32::from_gray(150);
+/// Barre de continuité (même plan : un trait très pâle) et de coupe (noire).
+const BAR_JOINED: Color32 = Color32::from_gray(230);
+const BAR_CUT: Color32 = Color32::from_gray(26);
+/// Texte d'une note (gris discret), et le filet très pâle sous chaque bande.
+const NOTE_INK: Color32 = Color32::from_gray(100);
+const HAIRLINE: Color32 = Color32::from_gray(236);
 /// Largeur (en points d'écran) sous laquelle une barre est élargie pour rester facile à toucher.
 const BAR_TOUCH: f32 = 14.0;
 /// Marge du texte dans une bande de note, en points de la planche.
@@ -869,19 +873,25 @@ impl App {
         // Le geste du stylo ou de la gomme d'annotation, point après point (`annotationsui.rs`).
         self.annot_geste(&layout, xf, &events, latest, any_down, touch.is_some(), escape);
 
-        // Pages, barres, cases vides, vignettes.
+        // La carte blanche (bord fin et doux, coins arrondis), les barres, la case vide du bout (un « + » discret), les vignettes.
         for page in &layout.pages {
             let r = xf.rect(*page);
-            painter.rect_filled(r.translate(vec2(3.0, 4.0)), 0.0, Color32::from_black_alpha(50));
-            painter.rect_filled(r, 0.0, PAGE_BG);
+            if r.intersects(view) {
+                let radius = (PAGE_RADIUS * xf.zoom).clamp(3.0, 16.0);
+                painter.rect_filled(r, radius, PAGE_BG);
+                painter.rect_stroke(r, radius, Stroke::new(1.0_f32, PAGE_EDGE), StrokeKind::Inside);
+            }
         }
         let hovered = over.map(|p| board::hit(&layout, xf.to_board(p), BAR_TOUCH / xf.zoom.max(1e-3)));
         self.paint_bars(ui, &painter, view, xf, &layout, hovered);
-        let faint = Stroke::new(1.0_f32, BORDER_EMPTY);
+        let ghost_hot = !pan_mode && matches!(hovered, Some(Hit::Empty(_)));
         for slot in &layout.empty {
             let r = xf.rect(*slot);
             if r.intersects(view) {
-                painter.rect_stroke(r, 0.0, faint, StrokeKind::Outside);
+                let color = if ghost_hot { GHOST_HOT } else { GHOST };
+                painter.rect_stroke(r, (3.0 * xf.zoom).clamp(1.0, 6.0), Stroke::new(1.0_f32, color), StrokeKind::Inside);
+                let size = (r.height() * 0.22).clamp(10.0, 44.0);
+                painter.text(r.center(), Align2::CENTER_CENTER, egui_phosphor::regular::PLUS, FontId::proportional(size), color);
             }
         }
         if bg.hovered() || hovered.is_some() {
@@ -989,12 +999,13 @@ impl App {
 
     /// Les barres entre les images : un trait court, gris ou noir ; sous la souris, l'accent et une bulle.
     fn paint_bars(&self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, hovered: Option<Hit>) {
-        let width = (board::BAR_W * xf.zoom).clamp(1.0, 3.0);
         for b in &layout.bars {
             let zone = xf.rect(b.zone);
             if !zone.intersects(view) {
                 continue;
             }
+            // (La barre de coupe est un peu plus épaisse que la grise : 2 contre 1,5.)
+            let width = (b.bar.width() * xf.zoom).clamp(1.0, 3.5);
             let hot = hovered == Some(Hit::Bar(b.after));
             let color = if hot {
                 crate::theme::accent()
@@ -1280,11 +1291,11 @@ impl App {
         // Le numéro du plan, au-dessus de sa première image : rien d'autre (pas de pastille d'envoi ni de version : elles sont au montage).
         if place.starts_plan() && card.height() > thumb.height() + 6.0 {
             let label = Rect::from_min_max(card.min, pos2(card.right(), thumb.top()));
-            let font = (12.0 * xf.zoom).clamp(7.0, 22.0);
-            let ink = Color32::from_gray(96);
+            let font = (11.0 * xf.zoom).clamp(7.0, 22.0);
+            let ink = Color32::from_gray(70);
             let clip = painter.with_clip_rect(label.intersect(view));
             let galley = clip.layout_no_wrap(self.doc.scene_label(place.scene), FontId::proportional(font), ink);
-            let at = pos2(label.left() + 1.0, label.center().y - galley.size().y * 0.5);
+            let at = pos2(label.left() + 1.0, label.top() + 1.0);
             clip.galley(at, galley, ink);
         }
 
@@ -1297,6 +1308,10 @@ impl App {
         };
         // Le panneau courant : le dessin lui-même ; les autres : leur vignette.
         let live = current && !pan_mode;
+        // La vignette de la case, avec sa petite marge autour du cadre où le trait qui déborde reste visible (comme la maquette) :
+        // l'image courante la tient à jour en arrière-plan ; sa marge est peinte par-dessus le dessin vivant.
+        let width = crate::thumbs::width_for(thumb.width() * ui.ctx().pixels_per_point());
+        let case = self.thumbs.texture_case(ui.ctx(), &self.doc, i, place.frame, place.id, width, zone.as_ref(), deadline);
         if live {
             // La vue caméra laisse une marge autour du cadre : on l'agrandit d'autant (et on coupe
             // à la vignette) pour que l'image remplisse la vignette. Pour recadrer, toute la feuille.
@@ -1306,22 +1321,14 @@ impl App {
             self.vignettes.zone = zone;
             self.card_canvas(&mut child, thumb);
             self.vignettes.zone = None;
-            // Sa vignette se tient à jour en arrière-plan : quand une autre image prend la main, elle montre déjà le dernier trait.
-            let width = crate::thumbs::width_for(thumb.width() * ui.ctx().pixels_per_point());
-            let _ = match &zone {
-                Some(z) => self.thumbs.texture_zone(ui.ctx(), &self.doc, i, place.frame, place.id, width, z, deadline),
-                None => self.thumbs.texture_at(ui.ctx(), &self.doc, i, place.frame, place.id, width, deadline),
-            };
+            // (Sa vignette se tient à jour en arrière-plan : quand une autre image prend la main, elle montre déjà le dernier trait.)
+            if let Some(c) = &case {
+                paint_ring(painter, thumb, c);
+            }
         } else {
             painter.rect_filled(thumb, 0.0, Color32::WHITE);
-            let px = thumb.width() * ui.ctx().pixels_per_point();
-            let width = crate::thumbs::width_for(px);
-            let tex = match &zone {
-                Some(z) => self.thumbs.texture_zone(ui.ctx(), &self.doc, i, place.frame, place.id, width, z, deadline),
-                None => self.thumbs.texture_at(ui.ctx(), &self.doc, i, place.frame, place.id, width, deadline),
-            };
-            if let Some(tex) = tex {
-                painter.image(tex, thumb, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+            if let Some(c) = &case {
+                painter.image(c.id, c.rect(thumb), Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
             }
         }
         // Le filet d'un point autour de l'image ; plus foncé pour l'image courante. Rien d'autre autour.
@@ -1344,9 +1351,10 @@ impl App {
         if self.vignettes.note.as_ref().is_some_and(|e| e.id == place.id) {
             return;
         }
+        // Sous chaque bande, un filet très pâle (sans cadre : la maquette) ; le texte, petit et gris, au-dessus.
+        let y = strip.bottom() - 1.0;
+        painter.line_segment([pos2(strip.left(), y), pos2(strip.right(), y)], Stroke::new(1.0_f32, HAIRLINE));
         if text.trim().is_empty() {
-            let y = strip.top() + board::NOTE_LINE_H * xf.zoom - 1.0;
-            painter.line_segment([pos2(strip.left(), y), pos2(strip.right(), y)], Stroke::new(1.0_f32, HAIRLINE));
             return;
         }
         let size = board::note_font_size(text.chars().count()) * xf.zoom;
@@ -1518,6 +1526,24 @@ impl App {
             painter.rect_filled(r, 0.0, accent.gamma_multiply(0.15));
             painter.rect_stroke(r, 0.0, Stroke::new(1.0_f32, accent), StrokeKind::Inside);
         }
+    }
+}
+
+/// La marge d'une vignette, autour de son cadre : le trait qui déborde un peu (le reste de la texture est le cadre, que la
+/// vignette courante ne peint pas : c'est le dessin vivant qui l'occupe).
+fn paint_ring(painter: &egui::Painter, thumb: Rect, c: &crate::thumbs::CaseTex) {
+    let full = c.rect(thumb);
+    let (w, h, m) = (c.taille[0].max(1) as f32, c.taille[1].max(1) as f32, c.marge as f32);
+    let (ux, uy) = (m / w, m / h);
+    let uv = |x0: f32, y0: f32, x1: f32, y1: f32| Rect::from_min_max(pos2(x0, y0), pos2(x1, y1));
+    let strips = [
+        (Rect::from_min_max(full.min, pos2(full.max.x, thumb.min.y)), uv(0.0, 0.0, 1.0, uy)),
+        (Rect::from_min_max(pos2(full.min.x, thumb.max.y), full.max), uv(0.0, 1.0 - uy, 1.0, 1.0)),
+        (Rect::from_min_max(pos2(full.min.x, thumb.min.y), pos2(thumb.min.x, thumb.max.y)), uv(0.0, uy, ux, 1.0 - uy)),
+        (Rect::from_min_max(pos2(thumb.max.x, thumb.min.y), pos2(full.max.x, thumb.max.y)), uv(1.0 - ux, uy, 1.0, 1.0 - uy)),
+    ];
+    for (r, uv) in strips {
+        painter.image(c.id, r, uv, Color32::WHITE);
     }
 }
 

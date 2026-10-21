@@ -457,6 +457,77 @@ fn a_one_frame_plan_cannot_carry_a_movement() {
     assert!(b.app.doc.panels[1].camera.is_empty());
 }
 
+/// Le geste comme la main le fait : Ctrl est tenu un bon moment AVANT l'appui (le pointeur survole déjà la case courante),
+/// puis appui, glissé, lâcher de la souris, et seulement ensuite Ctrl est relâché. Chaque événement porte les touches tenues,
+/// comme ceux d'egui-winit.
+fn ctrl_tenu_puis_glisser(b: &mut Banc, survol: Pos2, de: Pos2, delta: egui::Vec2) {
+    b.touches = CTRL;
+    b.image(vec![Event::PointerMoved(survol)], 1.0 / 60.0);
+    for _ in 0..30 {
+        b.image(Vec::new(), 1.0 / 60.0);
+    }
+    b.image(vec![Event::PointerMoved(de)], 1.0 / 60.0);
+    b.image(Vec::new(), 1.0 / 60.0);
+    b.image(vec![appui(de, true, CTRL)], 1.0 / 60.0);
+    for q in pas(de, delta, 10) {
+        b.image(vec![Event::PointerMoved(q)], 1.0 / 60.0);
+    }
+    b.image(vec![Event::PointerMoved(de + delta)], 1.0 / 60.0);
+    b.image(vec![appui(de + delta, false, CTRL)], 1.0 / 60.0);
+    b.image(Vec::new(), 1.0 / 60.0);
+    b.touches = Modifiers::NONE;
+    b.image(Vec::new(), 1.0 / 60.0);
+    b.chauffer(2);
+}
+
+#[test]
+fn holding_ctrl_before_the_press_draws_the_move_whatever_the_tool_and_never_takes_the_lasso() {
+    for tool in [Tool::Brush, Tool::Pencil, Tool::Eraser, Tool::Select, Tool::Line] {
+        let mut b = ouvert(plan_court(), 4);
+        b.app.set_tool(tool);
+        let w = largeur_cadre_ecran(&b);
+        let (courante, case) = (vignette(&b, 0), vignette(&b, K));
+        // (Ctrl tenu sur la case courante : c'est là que l'outil Sélection se prenait.)
+        b.touches = CTRL;
+        b.image(vec![Event::PointerMoved(courante.center())], 1.0 / 60.0);
+        for _ in 0..30 {
+            b.image(Vec::new(), 1.0 / 60.0);
+        }
+        assert_eq!(b.app.tool, tool, "{tool:?} : Ctrl tenu sur la case ne change pas d'outil dans les Vignettes");
+        b.touches = Modifiers::NONE;
+        b.image(Vec::new(), 1.0 / 60.0);
+        ctrl_tenu_puis_glisser(&mut b, courante.center(), case.center(), vec2(w, 0.0));
+        assert_eq!(b.app.doc.panels[1].camera.len(), 2, "{tool:?} : le mouvement est posé : {}", b.app.status);
+        assert_eq!(b.app.tool, tool, "{tool:?} : l'outil est resté");
+        assert_eq!(b.app.board_layout().cards[K].span, [2, 1], "{tool:?} : la case a grandi");
+        assert_eq!(dernier_nom(&b), "Mouvement de caméra");
+        assert!(!encre(&b.app.doc, 1), "{tool:?} : aucun trait n'a été dessiné");
+    }
+}
+
+#[test]
+fn ctrl_drag_works_on_a_later_case_of_a_plan_and_says_so_when_it_cannot() {
+    // Le plan 1 a trois cases (cartes 0, 1, 2) : le geste sur la deuxième case règle la caméra du plan.
+    let mut b = ouvert(plan_court(), 4);
+    let w = largeur_cadre_ecran(&b);
+    let seconde = vignette(&b, 1);
+    let nb = pas_d_annulation(&b);
+    assert!(b.app.doc.panels[0].camera.is_empty() && b.app.board_layout().cards[1].frame > 0);
+    ctrl_tenu_puis_glisser(&mut b, seconde.center(), seconde.center(), vec2(w * 0.8, 0.0));
+    assert_eq!(b.app.doc.panels[0].camera.len(), 2, "la caméra du plan 1 bouge : {}", b.app.status);
+    assert_eq!(pas_d_annulation(&b), nb + 1);
+    assert!(b.app.board_layout().cards[0].mouvement && !b.app.board_layout().cards[1].mouvement, "le mouvement est sur la première case, la deuxième reste ordinaire");
+    assert!(b.app.cur_frame > 0, "la case prise est la courante : {}", b.app.cur_frame);
+    // Le plan bouge déjà : sur sa deuxième case, le geste ne fait rien, mais dit où se règle le mouvement.
+    let nb = pas_d_annulation(&b);
+    let keys = b.app.doc.panels[0].camera.clone();
+    let seconde = vignette(&b, 1);
+    ctrl_tenu_puis_glisser(&mut b, seconde.center(), seconde.center(), vec2(w * 0.5, 0.0));
+    assert_eq!(b.app.doc.panels[0].camera, keys);
+    assert_eq!(pas_d_annulation(&b), nb);
+    assert!(b.app.status.contains("première case"), "{}", b.app.status);
+}
+
 // ------------------------------------------------------------------------------ la mise en page
 
 fn deux_cadres(doc: &mut Document, plan: usize, dx: f32, dy: f32) {
@@ -492,7 +563,7 @@ fn the_box_size_comes_from_the_union_of_the_frames_and_neighbours_reflow() {
     assert_eq!(l.cards[K].span, [2, 1]);
     assert!(l.cards[K].mouvement);
     assert_eq!((l.cards[K].row, l.cards[K].col), (1, 0), "elle ne se coupe pas : rangée suivante");
-    assert!((l.cards[K].thumb.width() - (2.0 * 170.0 + board::GAP_SAME)).abs() < 0.01);
+    assert!((l.cards[K].thumb.width() - (2.0 * 170.0 + board::gap_same(170.0))).abs() < 0.01);
     assert!((l.cards[K].thumb.height() - normal.cards[K].thumb.height()).abs() < 0.01);
     assert_eq!(l.cards.len(), normal.cards.len(), "aucune vignette perdue");
     assert_eq!((l.cards[K + 1].row, l.cards[K + 1].col), (1, 2), "les voisines suivent, dans l'ordre de lecture");

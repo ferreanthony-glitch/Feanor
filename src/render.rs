@@ -798,6 +798,13 @@ thread_local! {
 /// Comme `thumbnail`, mais `cancelled` est demandé entre deux lignes : vrai, le calcul s'arrête et
 /// rend `None` (une vignette que plus personne n'attend, `thumbs.rs`).
 pub fn thumbnail_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize, cancelled: &dyn Fn() -> bool) -> Option<ColorImage> {
+    thumbnail_marge_until(doc, plan, cam, tw, th, 0, cancelled)
+}
+
+/// Comme `thumbnail_until`, avec `marge` pixels de plus tout autour du cadre (l'image fait `tw + 2 marge` sur `th + 2 marge`) :
+/// là, seul le dessin est composé, sans le papier (transparent ailleurs). La planche des Vignettes s'en sert pour montrer un
+/// peu du trait qui déborde de la case.
+pub fn thumbnail_marge_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize, marge: usize, cancelled: &dyn Fn() -> bool) -> Option<ColorImage> {
     #[cfg(test)]
     THUMBNAILS_HERE.with(|n| n.set(n.get() + 1));
     let resolved = crate::calqueffet::resolve_auto(doc, plan);
@@ -805,19 +812,24 @@ pub fn thumbnail_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th:
     let [fw, fh] = doc.frame;
     let (sx, sy) = (fw as f32 / tw as f32, fh as f32 / th as f32);
     let map = cam.frame_map(doc.frame);
-    let mut pixels = Vec::with_capacity(tw * th);
+    let (ow, oh) = (tw + 2 * marge, th + 2 * marge);
+    let m = marge as f32;
+    let mut pixels = Vec::with_capacity(ow * oh);
     // (Les dessins affichés se cherchent une fois, pas à chaque échantillon : 80 000 par vignette.)
     let layers = resolve(doc, plan);
-    let base = paper_color(plan);
-    for y in 0..th {
+    let paper = paper_color(plan);
+    for y in 0..oh {
         if cancelled() {
             return None;
         }
-        for x in 0..tw {
+        for x in 0..ow {
             let mut acc = [0u32; 4];
             for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
+                // (Dans la marge, le papier ne se voit pas : seulement ce qui est dessiné.)
+                let (fx, fy) = ((x as f32 - m + ox) * sx, (y as f32 - m + oy) * sy);
+                let base = if fx >= 0.0 && fy >= 0.0 && fx < fw as f32 && fy < fh as f32 { paper } else { Color32::TRANSPARENT };
                 // (Toile infinie : le cadre peut filmer hors de la feuille.)
-                let c = match map.at((x as f32 + ox) * sx, (y as f32 + oy) * sy) {
+                let c = match map.at(fx, fy) {
                     Some(p) if p.x.abs() < WORLD as f32 && p.y.abs() < WORLD as f32 => pixel_of(&layers, base, p.x.floor() as i64, p.y.floor() as i64),
                     _ => Color32::TRANSPARENT,
                 };
@@ -834,7 +846,7 @@ pub fn thumbnail_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th:
         }
     }
     Some(ColorImage {
-        size: [tw, th],
+        size: [ow, oh],
         pixels,
     })
 }

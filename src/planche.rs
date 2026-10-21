@@ -384,7 +384,7 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
                 continue;
             }
             let r = rect_px(b.bar, p.cadre, s);
-            let largeur = (board::BAR_W * s).round().max(1.0) as i32;
+            let largeur = (b.bar.width() * s).round().max(1.0) as i32;
             let cx = (r[0] + r[2]) / 2;
             remplir(&mut pix, [cx - largeur / 2, r[1], cx - largeur / 2 + largeur, r[3]], if b.cut { BARRE_NOIRE } else { BARRE_GRISE });
         }

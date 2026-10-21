@@ -170,11 +170,6 @@ fn images_dropped_on_empty_cases_make_one_plan_each_in_order() {
     assert_eq!(doc.panels.len(), 6);
     let (a, c) = (centre_du_plan(doc, 4, 0), centre_du_plan(doc, 5, 0));
     assert!(a.r() < c.r(), "dans l'ordre : {a:?} puis {c:?}");
-    // Sur la deuxième case vide : une case vide sautée devient un plan vide, pour garder sa place.
-    let mut b2 = ouvert_petit(quatre_plans());
-    assert!(deposer(&mut b2, &paths[..1], |b| case_vide(b, 1).center()));
-    assert_eq!(b2.app.doc.panels.len(), 6, "un plan vide, puis le plan de l'image");
-    assert!(calque_image(&b2.app.doc, 4).is_none() && calque_image(&b2.app.doc, 5).is_some());
     std::fs::remove_dir_all(&dir).ok();
 }
 

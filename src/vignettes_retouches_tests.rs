@@ -24,8 +24,9 @@ fn lignes_magenta(b: &Banc) -> Vec<(Rect, Vec<Pos2>)> {
         .filter_map(|s| match &s.shape {
             Shape::Path(p) => match p.stroke.color {
                 ColorMode::Solid(c) => {
-                    let [r, g, bl, _] = c.to_srgba_unmultiplied();
-                    (r > 240 && g < 15 && bl > 240).then(|| (s.clip_rect, p.points.clone()))
+                    // (Le trait du dehors est pâle, translucide : la couleur est prémultipliée par son opacité.)
+                    let [r, g, bl, a] = c.to_array();
+                    (a > 0 && (g as u32) * 8 < a as u32 && (r as u32) * 10 >= a as u32 * 9 && (bl as u32) * 10 >= a as u32 * 9).then(|| (s.clip_rect, p.points.clone()))
                 }
                 _ => None,
             },

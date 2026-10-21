@@ -1,5 +1,5 @@
 //! Planche de la vue Vignettes, sans interface : où se placent les vignettes, les barres de coupe
-//! entre elles, les cases vides à dessiner, les bandes de notes, et les notes (traits et textes)
+//! entre elles, la case vide à dessiner, les bandes de notes, et les notes (traits et textes)
 //! posées sur la planche.
 //!
 //! La planche a ses propres coordonnées (des points d'écran au zoom 1). Les vignettes y sont
@@ -11,7 +11,7 @@
 //!
 //! Vignettes simples (Anthony, 2026-10-21) : aucune bande de titre ; seul le numéro du plan, au-dessus
 //! de sa première vignette ; sous chaque vignette, une bande de note (de 1 à 3 lignes ; la ligne
-//! suivante descend d'autant) ; après la dernière vignette, des cases vides où l'on dessine pour faire
+//! suivante descend d'autant) ; après la dernière vignette, une case vide (un « + ») où l'on dessine pour faire
 //! le plan suivant. Une note libre reste où on l'a posée ; une note attachée à une vignette la suit,
 //! à son échelle.
 
@@ -23,19 +23,36 @@ use crate::document::Document;
 use crate::vector::VPoint;
 
 /// Hauteur de la ligne du numéro de plan, au-dessus de chaque vignette (réservée sur toute la ligne).
-pub const LABEL_H: f32 = 16.0;
+pub const LABEL_H: f32 = 20.0;
 /// Espace entre une vignette et sa bande de note ; hauteur d'une ligne de note ; lignes affichées au plus.
-pub const NOTE_GAP: f32 = 3.0;
+pub const NOTE_GAP: f32 = 8.0;
 pub const NOTE_LINE_H: f32 = 13.0;
 pub const NOTE_MAX_LINES: usize = 3;
 /// Espace sous la dernière ligne de note, avant la ligne suivante.
 pub const ROW_GAP: f32 = 8.0;
-/// Écart entre deux vignettes d'un même plan, et à une coupe.
-pub const GAP_SAME: f32 = 10.0;
-pub const GAP_CUT: f32 = 30.0;
-/// Barre de coupe : épaisseur, et part de la hauteur de la vignette (un tiers).
+/// Écart entre deux vignettes d'un même plan, et à une coupe, **à la largeur de référence** `REF_W` : les proportions de la
+/// maquette validée (une vignette de 136, un écart de 10 dans un plan, de 30 à une coupe). Ils suivent la largeur des
+/// vignettes (`gap_same`, `gap_cut`).
+pub const REF_W: f32 = 240.0;
+pub const GAP_SAME: f32 = 18.0;
+pub const GAP_CUT: f32 = 53.0;
+/// Barre entre deux vignettes : épaisseur (très pâle, dans un plan), épaisseur d'une coupe (noire), et part de la hauteur de la
+/// vignette (un tiers).
 pub const BAR_W: f32 = 1.5;
+pub const BAR_CUT_W: f32 = 2.0;
 pub const BAR_FRACTION: f32 = 1.0 / 3.0;
+/// Le trait d'une vignette reste visible un peu au-delà de son cadre (la maquette : environ 3 % de la largeur).
+pub const RING_FRACTION: f32 = 0.03;
+
+/// L'écart entre deux vignettes d'un même plan, pour des vignettes de `card_w` de large.
+pub fn gap_same(card_w: f32) -> f32 {
+    GAP_SAME * card_w / REF_W
+}
+
+/// L'écart à une coupe, pour des vignettes de `card_w` de large.
+pub fn gap_cut(card_w: f32) -> f32 {
+    GAP_CUT * card_w / REF_W
+}
 /// Marge autour des pages, sur la planche ; marge intérieure d'une page ; écart entre deux pages.
 pub const MARGIN: f32 = 28.0;
 pub const PAGE_PAD: f32 = 22.0;
@@ -121,7 +138,7 @@ pub struct BoardLayout {
     pub cards: Vec<CardPlace>,
     /// Les barres de coupe : une après chaque vignette, la dernière avant la première case vide.
     pub bars: Vec<CutBar>,
-    /// Les pages (fond blanc), et les cases vides (leur image) qui suivent la dernière vignette.
+    /// Les pages (cartes blanches), et la case vide (son image) qui suit la dernière vignette (une seule).
     pub pages: Vec<Rect>,
     pub empty: Vec<Rect>,
     pub size: Vec2,
@@ -175,8 +192,9 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         Some(next) => next.2 > 0,
         None => last_joins,
     };
-    let gap_after = |k: usize| if !aligned && joined_after(k) { GAP_SAME } else { GAP_CUT };
-    let inner_gap = if aligned { GAP_CUT } else { GAP_SAME };
+    let (g_same, g_cut) = (gap_same(card_w), gap_cut(card_w));
+    let gap_after = |k: usize| if !aligned && joined_after(k) { g_same } else { g_cut };
+    let inner_gap = if aligned { g_cut } else { g_same };
 
     // Où chaque case se pose : la première place libre, dans l'ordre de lecture, après la case d'avant ; une case qui
     // ne tient pas dans le reste de la rangée (ou de la page) passe tout entière plus loin, jamais coupée.
@@ -211,17 +229,14 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         placed.push((r, c));
         cursor = (r, c + sp[0]);
     }
-    // Au moins une case vide après la dernière vignette ; la dernière page est complétée.
+    // Une seule case vide, juste après la dernière vignette (le « + » discret où l'on dessine pour faire le plan suivant) :
+    // la planche s'arrête après elle, plus de grille de cases vides ; la dernière page n'est pas complétée.
     let first_empty = find(&occ, cursor, 1, 1);
     let bottom = placed.iter().zip(&spans).map(|(p, sp)| p.0 + sp[1]).max().unwrap_or(0);
-    let mut rows_used = (first_empty.0 + 1).max(bottom);
+    let rows_used = (first_empty.0 + 1).max(bottom);
     let per_page = if page_cap == usize::MAX { rows_used } else { page_cap };
-    rows_used = rows_used.div_ceil(per_page) * per_page;
-    let pages = rows_used / per_page;
-    let empties: Vec<(usize, usize)> = (0..rows_used)
-        .flat_map(|r| (0..cols).map(move |c| (r, c)))
-        .filter(|&(r, c)| (r, c) >= cursor && is_free(&occ, r, c, 1, 1))
-        .collect();
+    let pages = rows_used.div_ceil(per_page);
+    let empties = [first_empty];
 
     // Hauteur de chaque ligne (ses notes les plus hautes : celles des cases qui s'y terminent), puis haut des lignes et
     // des pages.
@@ -231,8 +246,9 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         most[last] = most[last].max(note_lines(k));
     }
     let row_h: Vec<f32> = most.iter().map(|m| LABEL_H + thumb_h + NOTE_GAP + *m as f32 * NOTE_LINE_H + ROW_GAP).collect();
-    let page_h: Vec<f32> = (0..pages).map(|p| PAGE_PAD * 2.0 + row_h[p * per_page..(p + 1) * per_page].iter().sum::<f32>() - ROW_GAP).collect();
-    let page_w = PAGE_PAD * 2.0 + cols as f32 * card_w + (cols - 1) as f32 * GAP_CUT;
+    let rows_of = |p: usize| p * per_page..((p + 1) * per_page).min(rows_used);
+    let page_h: Vec<f32> = (0..pages).map(|p| PAGE_PAD * 2.0 + row_h[rows_of(p)].iter().sum::<f32>() - ROW_GAP).collect();
+    let page_w = PAGE_PAD * 2.0 + cols as f32 * card_w + (cols - 1) as f32 * g_cut;
     let mut page_top = Vec::with_capacity(pages);
     let mut y = MARGIN;
     for h in &page_h {
@@ -242,7 +258,7 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let mut row_top = Vec::with_capacity(rows_used);
     for p in 0..pages {
         let mut y = page_top[p] + PAGE_PAD;
-        for r in p * per_page..(p + 1) * per_page {
+        for r in rows_of(p) {
             row_top.push(y);
             y += row_h[r];
         }
@@ -254,7 +270,7 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     for (k, &(r, c)) in placed.iter().enumerate() {
         let sp = spans[k];
         if aligned {
-            x = left + c as f32 * (card_w + GAP_CUT);
+            x = left + c as f32 * (card_w + g_cut);
         } else if r != cur_row {
             (cur_row, x) = (r, left);
         }
@@ -269,19 +285,20 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         out.cards.push(CardPlace { panel: i, plan: p.id, id, frame, end, scene: p.scene, card, thumb, note, row: r, col: c, span: sp, mouvement: moves[k].is_some() });
         let gap = gap_after(k);
         let zone = Rect::from_min_max(pos2(thumb.right(), thumb.top()), pos2(thumb.right() + gap, thumb.bottom()));
-        let bar = Rect::from_center_size(pos2(thumb.right() + gap * 0.5, thumb.center().y), vec2(BAR_W, thumb_h * BAR_FRACTION));
-        out.bars.push(CutBar { after: k, cut: !joined_after(k), bar, zone });
+        let cut = !joined_after(k);
+        let bar = Rect::from_center_size(pos2(thumb.right() + gap * 0.5, thumb.center().y), vec2(if cut { BAR_CUT_W } else { BAR_W }, thumb_h * BAR_FRACTION));
+        out.bars.push(CutBar { after: k, cut, bar, zone });
         x += w + gap;
     }
     for &(r, c) in &empties {
         if aligned {
-            x = left + c as f32 * (card_w + GAP_CUT);
+            x = left + c as f32 * (card_w + g_cut);
         } else if r != cur_row {
             (cur_row, x) = (r, left);
         }
         let top = row_top[r] + LABEL_H;
         out.empty.push(Rect::from_min_size(pos2(x, top), vec2(card_w, thumb_h)));
-        x += card_w + GAP_CUT;
+        x += card_w + g_cut;
     }
     out.pages = (0..pages).map(|p| Rect::from_min_size(pos2(MARGIN, page_top[p]), vec2(page_w, page_h[p]))).collect();
     out.size = vec2(MARGIN * 2.0 + page_w, page_top[pages - 1] + page_h[pages - 1] + MARGIN);
@@ -369,7 +386,7 @@ pub fn drop_slots(layout: &BoardLayout) -> Vec<DropSlot> {
         }
         let x = match k.checked_sub(1).map(|j| &layout.cards[j]) {
             Some(prev) if prev.row == c.row => (prev.thumb.right() + c.thumb.left()) * 0.5,
-            _ => c.thumb.left() - GAP_CUT * 0.5,
+            _ => c.thumb.left() - PAGE_PAD * 0.5,
         };
         out.push(DropSlot { before: Some(c.plan), x, top: c.thumb.top(), bottom: c.thumb.bottom() });
     }
@@ -377,7 +394,7 @@ pub fn drop_slots(layout: &BoardLayout) -> Vec<DropSlot> {
         // Après la dernière vignette : dans l'écart avant la première case vide si elle est sur la même ligne.
         let x = match layout.empty.first() {
             Some(e) if (e.top() - last.thumb.top()).abs() < 1.0 => (last.thumb.right() + e.left()) * 0.5,
-            _ => last.thumb.right() + GAP_CUT * 0.5,
+            _ => last.thumb.right() + PAGE_PAD * 0.5,
         };
         out.push(DropSlot { before: None, x, top: last.thumb.top(), bottom: last.thumb.bottom() });
     }
