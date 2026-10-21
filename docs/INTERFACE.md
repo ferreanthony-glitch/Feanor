@@ -720,6 +720,53 @@ image), **barre** (entre deux images), **bande de note** (sous une image).
   les réglages « Écart » et « Plan à la ligne », la durée et « Plan N » dans l'en-tête, l'étiquette de version « · V2 » (le
   menu du clic droit garde les versions).
 
+### Mouvements de caméra dessinés dans les cases (2026-10-21, branche `vignettes-onglet-camera`)
+
+Demande d'Anthony (option 1 validée) : dessiner un mouvement de caméra directement sur la planche. Code : `vignettecam.rs`
+(logique sans interface), `vignettecamui.rs` (le geste et les cadres à l'écran), `board.rs` (mise en page), `thumbs.rs`
+(vignette d'une zone).
+
+- **Ctrl + glisser le cadre d'une case** (Ctrl seul : Maj + cadre déplace toujours le plan) :
+  - le cadre d'origine reste **A** ; un cadre **B** suit le pointeur et reste là où on le dépose. Au lâcher, **deux clés de
+    caméra** sont posées sur le plan : A à la première image, B à la dernière (le modèle de la timeline et du montage : vitesse
+    constante, aucun adouci, comme une clé posée au montage) ;
+  - en recommençant depuis l'**intérieur du dernier cadre**, on ajoute **C**, puis **D**… Les clés se **répartissent
+    régulièrement sur la durée du plan** (`repartition` : 0, mi-plan, fin pour trois ; 0, ⅓, ⅔, fin pour quatre) quand elles
+    l'étaient déjà. **Des clés posées à la main (montage, timeline) sont respectées** : la nouvelle va à la dernière image et, si
+    la dernière clé y était déjà, elle recule à mi-chemin entre sa voisine et la fin ;
+  - un **coin** tiré (d'une case sans mouvement : celui de la vignette) change la taille du cadre, donc le **zoom** de la clé
+    (tirer vers l'extérieur élargit) ; le **bord** d'un cadre existant (A, B, C…) déplace cette clé ; le dedans du dernier cadre
+    en fait naître un nouveau ; ailleurs, rien ;
+  - un plan d'une seule image ne peut pas porter de mouvement (message : allonge-le d'abord) ; un storyboard verrouillé ou un plan
+    tenu par un autre refuse ; **Échap** abandonne et remet les clés d'avant ; un **Ctrl + clic qui ne bouge pas** garde son sens
+    d'avant (choisir des plans, fait au lâcher) ; le curseur devient une croix fléchée sur le cadre à prendre (Ctrl tenue) ;
+  - **une seule étape d'annulation par geste, nommée** : « Mouvement de caméra » (B, de A vers B), « Cadre C », « Cadre D »,
+    « Cadre B » (déplacé), « Zoom du cadre B ». Le geste modifie les clés à chaque image (la case grandit en direct) et ne
+    prend son étape qu'au lâcher, depuis l'état d'avant.
+- **La case grandit** pour montrer toute la zone des cadres. On prend le cadre A comme unité, l'**englobant de tous les cadres**
+  sur la feuille, et la case a le nombre entier de cases qui le contient : 1 × 1 (tout tient dans A), 2 × 1 (un panoramique d'une
+  largeur de cadre), 1 × 2, 2 × 2, 3 × 1… Au plus les **colonnes** de la planche en largeur et **3 cases** en hauteur. Rien n'est
+  enregistré pour cela : la taille se **déduit des clés** (en supprimer au montage fait rétrécir la case, les annuler aussi).
+- **Mise en page** (`board::layout_with`) : l'ordre de lecture reste le même ; chaque case prend la première place libre après la
+  précédente ; une case qui ne tient pas dans la fin de la rangée (ou de la page) **passe tout entière à la suivante**, jamais
+  coupée ; les voisines suivent. Une case de plus d'une rangée de haut aligne les colonnes de la planche (écart de coupe partout,
+  barres incluses) pour que les rangées d'en dessous ne la chevauchent pas ; sinon chaque rangée garde ses écarts serrés dans un
+  plan. La barre qui suit une grande case est aussi haute qu'elle (zone de clic), le trait reste d'un tiers d'une case.
+- **Dans la grande case**, on voit la feuille à l'échelle du cadre A (un cadre A = une largeur de case), centrée sur l'englobant,
+  **hors de la feuille aussi** : le décor se dessine partout (toile infinie), en direct comme dans une case ordinaire (même
+  moteur, même débord du trait pendant le geste, au lâcher la case coupe à son cadre). Une case qui n'est pas courante est une
+  vignette de la zone (`Thumbs::texture_zone`, sur un fil de fond : une caméra droite centrée sur la zone, dont le cadre en a la
+  taille). L'outil Caméra, lui, recadre à l'ancienne.
+- **Les cadres** se dessinent fins, par-dessus, dans la couleur de la caméra du thème (`theme::camera()`, liseré clair dessous),
+  chacun avec sa **lettre** dans une petite étiquette et une **flèche** de centre à centre entre deux cadres qui se suivent (la
+  convention du storyboard). Ils apparaissent dès que le plan a deux clés, même si tout tient dans A.
+- **Le montage et la timeline** montrent les vraies clés sur la piste Caméra ; la lecture suit (A vers B à vitesse constante).
+- **Barre des personnages** : la planche montre aussi la barre des personnages au-dessus d'elle quand l'espace de travail la
+  montre (d'origine : Vignettes et Storyboard), au lieu de ne la montrer que dans la vue Dessin.
+- **Limites** : les calques en profondeur (multiplan) d'une grande case gardent leur place vue du cadre A ; une caméra inclinée ou
+  panoramiquée compte par son rectangle englobant (la zone n'est pas inclinée) ; seule la première image d'un plan est une case de
+  mouvement (ses marques d'image restent des cases ordinaires, vues à travers la caméra).
+
 ### Anciens projets (`crayonnes.json`)
 
 SHOT ne lit plus ce fichier et ne l'écrit plus, mais **ne l'efface jamais** (octet pour octet, après ouverture et
@@ -755,6 +802,17 @@ version d'avant (`crayonnesheritage.rs`).
     images ensemble, Ctrl+Z puis Ctrl+Y ; Échap en plein geste : rien ne bouge ; lâcher près de sa place : rien ne bouge.
 12. Sortir une image d'un plan : cliquer sa barre (elle devient noire), puis Maj + glisser son cadre. Un plan déposé dans une
     autre séquence : la barre d'état le dit. Les trois thèmes : le trait d'accent et le fantôme restent lisibles.
+13. Ctrl + glisser le cadre d'une case d'un plan de plusieurs images, vers la droite d'une largeur de case : B apparaît, la case
+    s'élargit en direct (2 × 1), les voisines se décalent, la lettre A et la lettre B sont lisibles, la flèche va de A à B ;
+    lâcher, Ctrl+Z (la case redevient ordinaire), Ctrl+Y.
+14. Recommencer depuis l'intérieur de B : C (3 × 1, ou retour à la ligne de la case entière si elle ne tient pas dans la rangée) ;
+    glisser vers le bas : D (rangées de plus). Ouvrir le montage : les clés A, B, C, D sont sur la piste Caméra, réparties ; supprimer
+    une clé : la case rétrécit.
+15. Tirer un coin d'une case ordinaire (Ctrl) : un cadre plus large ou plus serré, le curseur change aux coins ; tirer le bord d'un
+    cadre existant : il se déplace ; Échap en plein geste : tout revient.
+16. Dessiner dans la grande case, y compris dans la partie hors de la feuille ; changer de plan courant : la grande case garde son
+    dessin (vignette de zone) ; les trois thèmes (cadres et lettres lisibles sur papier blanc comme sur dessin).
+17. Maj + glisser le cadre d'une grande case : le plan entier se déplace, ses clés avec lui.
 
 ### Essais ajoutés
 
@@ -774,6 +832,14 @@ les points de la planche) ; tirer une image d'un plan de trois déplace tout le 
 une seule étape « Déplacer le plan » annulable et rétablissable ; plan d'une image, sortie d'un plan par sa barre coupée ;
 Échap ; lâcher en place ; autre séquence et storyboard verrouillé ; plans choisis ensemble ; fantôme, repère et curseur ;
 repos après un trait qui déborde et un déplacement.
+
+`vignettecam_tests` (10, logique) et `vignettes_camera_tests` (24, écran) : taille de la case déduite de l'union des cadres
+(2 × 1, 1 × 2, 2 × 2, 3 × 1, plafonds), zone centrée à l'échelle de A, répartition des clés (B à la fin, C au milieu, D), clés à la
+main respectées, prise des coins, bords et intérieur, geste qui ne s'accumule pas, noms des étapes ; Ctrl + glisser crée A et B aux
+bornes du plan (une étape, « Mouvement de caméra », annulable), C et D répartis, bord = déplacer, coin = zoom, coin d'une case
+ordinaire = B zoomé, Ctrl + clic qui ne bouge pas, Échap, storyboard verrouillé, plan d'une image ; mise en page (largeur, retour à
+la ligne entier, voisines, aucun chevauchement en 1 × 2 et 2 × 2, pages, repères de pose, case qui rétrécit) ; dessin hors de la
+feuille dans la grande case ; vignette de zone ; le montage voit les clés ; Maj + cadre déplace toujours le plan ; repos.
 ---------------------------------------------------------------------------------------------------
 
 ## 12. Calques d'effets et préréglages d'effets (2026-10-19, branche `calques-effets`)
@@ -1073,6 +1139,42 @@ propres à la barre ; changement instantané ; repos (aucun réveil à moins d'u
 6. Ferme l'Historique dans le Montage, passe en Storyboard puis reviens : il est toujours fermé. Affichage > Espaces de
    travail > Rétablir la disposition : il revient. Ferme SHOT dans le Montage : il s'ouvre dans le Montage.
 7. Au repos, dans le Montage : rien ne bouge, le processeur dort (comme ailleurs).
+
+### Le quatrième onglet Vignettes (2026-10-21, branche `vignettes-onglet-camera`)
+
+Principe d'Anthony : « la partie Vignettes doit être la plus épurée possible, rien de distraction, que du dessin et des
+références visuelles éventuellement ». Il y a maintenant **quatre onglets**, en haut à droite, dans l'ordre du travail :
+**Vignettes · Storyboard · Animation · Montage** (même style, `bulles::encre_etat` pour l'onglet allumé, bulle à 1 s, clic droit
+« Assigner un raccourci »). Le changement est instantané et ne touche pas au projet (plan, image, plans choisis, calque).
+
+- **Choix : une disposition du mode Storyboard, pas un mode** (comme le Montage) : `Espace::Vignettes.mode() == Mode::Storyboard`,
+  mêmes outils et raccourcis, même dessin ; la disposition pose la vue Vignettes (`Layout::vignettes`) comme zone principale.
+- **Raccourci : Alt+Maj+V** (`espace.vignettes`, libre ; Alt+V est le miroir vertical de la sélection, Alt+M le Montage ; affiché
+  « Maj+Alt+V » dans les bulles) ; Ctrl+K « Espace de travail : Vignettes » ; Affichage > Espaces de travail > Vignettes.
+- **Tab depuis les Vignettes : le Storyboard** (décision expliquée : comme le Montage, ce n'est pas un côté de la bascule
+  storyboard / animation). « Animer cette image » (clic droit d'une case) entre en animation ; Tab y ramène aux Vignettes (on revient à
+  l'espace du côté storyboard où l'on était, `Settings::storyboard_space`). SHOT rouvre dans les Vignettes si on l'a quitté ainsi.
+- **Disposition d'origine** (`DockLayout::pour_les_vignettes`) : la planche en grand ; à sa droite une seule colonne, les
+  **Réglages** de l'outil (le pinceau) au-dessus, la **Couleur** et les **Pinceaux** en onglets dessous ; la **barre des
+  personnages** au-dessus de la planche (`Espace::barre_personnages_par_defaut`, ligne « Vignettes » ajoutée ; la planche la peint
+  maintenant) ; une **colonne d'outils minimale** (`TOOL_GROUPS_VIGNETTES` : pinceau, crayon, gomme ; les autres outils restent
+  à leurs raccourcis et dans Ctrl+K ; la case du stylo d'annotation de la planche viendra s'y poser). **Ni bande (montage, timeline), ni
+  Calques, ni Effets, ni fiche du plan, ni guides** ; les **Références** sont dans la barre des panneaux, fermées, à un clic.
+- **Mémoire** : comme les autres espaces (`disposition_vignettes` dans `reglages.toml`, valeur d'origine absente ; un ancien
+  fichier se lit tel quel), enregistrable comme espace nommé, « Rétablir la disposition » (Ctrl+K `espace.retablir`) la remet à
+  son origine sans toucher aux autres.
+- **Mouvements de caméra** : voir la partie 11, « Mouvements de caméra dessinés dans les cases ».
+
+#### À vérifier à l'écran (par Anthony, quatrième onglet)
+
+1. Les quatre onglets en haut à droite, dans l'ordre Vignettes, Storyboard, Animation, Montage, lisibles dans les trois thèmes, le
+   bon allumé ; la bulle de Vignettes à 1 s (nom, Maj+Alt+V, description).
+2. Un clic sur Vignettes : la planche seule, grande ; à droite Réglages du pinceau, Couleur et Pinceaux ; la barre des personnages
+   au-dessus ; à gauche seulement pinceau, crayon, gomme ; rien en bas. Un clic sur Références dans la barre des panneaux l'ouvre.
+3. Le plan courant, l'image et les plans choisis sont les mêmes qu'avant le clic, dans les deux sens.
+4. Tab depuis les Vignettes : le Storyboard. Clic droit sur une case > Animer cette image, puis Tab : retour aux Vignettes.
+5. Ferme les Réglages dans les Vignettes, passe en Storyboard puis reviens : toujours fermés. Rétablir la disposition : ils reviennent.
+6. Au repos : rien ne bouge, le processeur dort.
 
 ## 15. Envois, plans modifiés, versions de plans et comparaison (2026-10-20, branche `versions`)
 

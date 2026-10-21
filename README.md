@@ -860,8 +860,22 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
 - **Annuler / rétablir** (Ctrl+Z / Ctrl+Maj+Z) : 200 étapes, sur tout le projet : traits, vectoriel,
   sélections, panneaux, scènes, séquences, calques, sons, textes, noms, réglages des calques et des
   pistes, guides, papier, cadence. Une saisie ou un glissé de curseur compte pour une seule étape.
-- **Espaces de travail liés aux modes** (Affichage > Espaces de travail) : **Storyboard**, **Animation**
-  et **Montage** retiennent chacun leur disposition des panneaux. Les trois onglets « Storyboard »,
+- **Vignettes : le quatrième onglet et les mouvements de caméra** (2026-10-21, branche `vignettes-onglet-camera`).
+  Un onglet **Vignettes** (en haut à droite, avant Storyboard ; **Alt+Maj+V**, Alt+V étant le miroir vertical) pose une
+  disposition épurée : la planche seule, avec les réglages du pinceau, la couleur et les pinceaux (en onglets), la barre des
+  personnages au-dessus de la planche et une colonne d'outils minimale (pinceau, crayon, gomme). Ni montage, ni timeline, ni
+  calques, ni effets ; les Références s'ouvrent d'un clic dans la barre des panneaux. Tab en revient au Storyboard (« Animer cette
+  image », au clic droit, entre en animation, et Tab ramène aux Vignettes). **Ctrl + glisser le cadre d'une case** crée un mouvement
+  de caméra : le cadre d'origine reste **A**, un cadre **B** apparaît là où on le dépose (clés de caméra : A à la première image du
+  plan, B à la dernière, vitesse constante comme au montage) ; recommencer depuis le dernier cadre ajoute **C**, **D**… (clés
+  réparties sur la durée du plan ; des clés posées à la main sont respectées). Un coin tiré change le zoom du cadre, le bord d'un
+  cadre existant le déplace. **La case grandit** pour montrer toute la zone des cadres (2 × 1, 1 × 2, 2 × 2, 3 × 1…, au plus les
+  colonnes de la planche ; une case qui ne tient pas dans la rangée passe tout entière à la suivante) et on y dessine partout, hors
+  de la feuille aussi. Les cadres sont fins, avec leur lettre et une flèche de l'un à l'autre. Une étape d'annulation par geste
+  (« Mouvement de caméra », « Cadre C »…), Échap abandonne ; le montage et la timeline montrent les vraies clés, et en supprimer
+  rétrécit la case. Maj + cadre déplace toujours le plan. Détail : `docs/INTERFACE.md`, parties 11 et 14.
+- **Espaces de travail liés aux modes** (Affichage > Espaces de travail) : **Vignettes**, **Storyboard**, **Animation**
+  et **Montage** retiennent chacun leur disposition des panneaux. Les quatre onglets « Vignettes », « Storyboard »,
   « Animation » et « Montage » (en haut à droite), Tab, Alt+M et « Animer ce plan » changent d'espace
   et posent tout de suite la disposition qu'on y avait, sans rien changer au projet (le plan, l'image
   et la sélection restent) ; ce qu'on change dans l'un (un panneau fermé, une colonne

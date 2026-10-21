@@ -3049,6 +3049,27 @@ Montage ». Pas vu à l'écran dans cette séance.
   sons, bruitages, pistes, relecture et exports visibles d'office ; le reste sous « Plus… » ; épingles à elle.
 - Pas fait : des panneaux Son et Transitions à part (ils se règlent dans la bande) ; un lecteur qui n'est pas le dessin.
 
+## Onglet Vignettes et mouvements de caméra dans les cases (demandés par Anthony le 2026-10-21, branche `vignettes-onglet-camera`) ✅
+
+« La partie Vignettes doit être la plus épurée possible, rien de distraction, que du dessin et des références visuelles
+éventuellement. » Détail et liste de contrôle : `docs/INTERFACE.md`, parties 11 (« Mouvements de caméra dessinés dans les
+cases ») et 14 (« Le quatrième onglet Vignettes »). Pas vu à l'écran dans cette séance.
+
+- ✅ **Quatrième onglet Vignettes**, avant Storyboard (Vignettes · Storyboard · Animation · Montage), Alt+Maj+V, bulle à 1 s,
+  clic droit « assigner un raccourci », changement instantané qui ne touche pas au projet. Une disposition du mode Storyboard
+  (comme le Montage) ; Tab en revient au Storyboard.
+- ✅ **Disposition épurée** (`DockLayout::pour_les_vignettes`) : la planche, réglages du pinceau, couleur + pinceaux en onglets,
+  barre des personnages au-dessus de la planche, colonne d'outils minimale (`TOOL_GROUPS_VIGNETTES`) ; retenue, rétablissable,
+  enregistrable (`disposition_vignettes` dans les réglages).
+- ✅ **Ctrl + glisser un cadre** : A reste, B naît (clés A au début, B à la fin du plan), C, D… réparties, coin = zoom, bord =
+  déplacer la clé ; une étape d'annulation nommée par geste ; Échap abandonne ; Ctrl + clic sans bouger choisit toujours des plans.
+- ✅ **La case grandit** (`vignettecam.rs`, `board.rs`) : taille déduite des clés (rien d'enregistré), cases entières, rangée
+  de cases mise en page par `layout_with` (passage tout entier à la rangée ou page suivante), dessin sur toute la zone y compris
+  hors de la feuille, vignette de zone sur un fil de fond (`Thumbs::texture_zone`).
+- Limites : au plus 3 cases de haut ; les calques en profondeur (multiplan) de la grande case gardent leur place vue de A ;
+  un plan d'une seule image ne peut pas porter de mouvement ; une caméra inclinée ou panoramiquée est comptée par son
+  rectangle englobant (la zone n'est pas inclinée).
+
 ## Envois, versions de plans et comparaison (demandés par Anthony le 2026-10-20, branche `versions`) ✅
 
 Le plus grand souci d'un storyboardeur : savoir ce qui a changé entre deux livraisons. Quatre morceaux, un commit chacun

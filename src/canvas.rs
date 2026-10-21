@@ -52,12 +52,18 @@ impl App {
         let size = self.canvas_size();
         // En vue caméra, la vue suit la caméra du plan (avant de lire la souris).
         self.apply_camera_view(rect);
-        if self.fit_pending && !self.camera_view {
+        // Une grande case de mouvement de caméra (Vignettes) : la vue montre la zone des cadres, la feuille et ce qui la
+        // déborde, à l'échelle du cadre A (`vignettecam::Zone`).
+        let zone = if self.in_card { self.vignettes.zone } else { None };
+        if self.fit_pending && !self.camera_view && zone.is_none() {
             // On cadre la caméra (centrée sur la feuille), avec un peu de hors-champ autour.
             let [fw, fh] = self.doc.frame;
             let margin = if [fw, fh] == [self.doc.width, self.doc.height] { 1.0 } else { 1.12 };
             self.view.fit(rect, vec2(fw as f32, fh as f32) * margin);
             self.fit_pending = false;
+        }
+        if let Some(z) = zone {
+            self.view = z.vue(rect, size);
         }
 
         // La boîte de la sélection est à jour avant d'agir (`seltools.rs`).
@@ -112,7 +118,7 @@ impl App {
         // Toile infinie : la feuille n'est plus une page cernée d'une ombre, le papier et l'arrière-plan
         // couvrent tout ce que la vue regarde, et ce qui est dessiné hors de la feuille s'y voit
         // (`monde.rs`). Une vignette ou une vue en perspective restent à la feuille.
-        let world = (!self.in_card && ws.is_none()).then(|| self.visible_world(rect, size));
+        let world = ((!self.in_card || zone.is_some()) && ws.is_none()).then(|| self.visible_world(rect, size));
         // Arrière-plan (13e) : aucun → noir ; damier → cases des couleurs A et B sous les calques.
         self.paint_background(ui.ctx(), &painter, rect, size, world, plan.paper);
         if let Some(view) = world {
@@ -208,9 +214,12 @@ impl App {
             painter.add(Shape::mesh(mesh));
         }
 
-        self.paint_camera(&painter, rect);
-        // Incrustations (timecode…) : sur l'image finale, dans le cadre (`prereglagesui.rs`).
-        self.paint_incrustations(ui.ctx(), &painter);
+        // (La grande case d'un mouvement de caméra a ses propres cadres, A, B, C… : `vignettecamui.rs`.)
+        if zone.is_none() {
+            self.paint_camera(&painter, rect);
+            // Incrustations (timecode…) : sur l'image finale, dans le cadre (`prereglagesui.rs`).
+            self.paint_incrustations(ui.ctx(), &painter);
+        }
         // Le dessin d'un relecteur, quand son commentaire est choisi (`relectureui.rs`).
         self.paint_review_drawing(ui.ctx(), &painter);
         // Notes dessinées par-dessus l'image pendant la lecture (13e).

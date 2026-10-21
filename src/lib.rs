@@ -491,6 +491,10 @@ mod montagehead;
 mod montagehead_tests;
 #[cfg(test)]
 mod montageonglet_tests;
+mod vignettecam;
+mod vignettecamui;
+#[cfg(test)]
+mod vignettes_camera_tests;
 mod pistes;
 #[cfg(test)]
 mod pistes_tests;

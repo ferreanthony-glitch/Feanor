@@ -184,6 +184,11 @@ pub(crate) struct Vignettes {
     pub frame_hot: bool,
     /// Le trait qui déborde de la vignette courante, tant que le geste dure (`debord.rs`).
     pub debord: Option<crate::debord::Debord>,
+    /// Ctrl + glisser un cadre : le mouvement de caméra en cours (`vignettecamui.rs`).
+    pub cam: Option<crate::vignettecamui::CamGeste>,
+    /// La zone de la feuille que montre la grande case en train d'être dessinée (`vignettecam::Zone`) : le dessin la prend
+    /// pour sa vue, au lieu de la vue à travers la caméra.
+    pub zone: Option<crate::vignettecam::Zone>,
 }
 
 impl Default for Vignettes {
@@ -200,6 +205,8 @@ impl Default for Vignettes {
             moving: None,
             frame_hot: false,
             debord: None,
+            cam: None,
+            zone: None,
         }
     }
 }
@@ -514,18 +521,13 @@ impl App {
                 self.commit_note_text(layout);
                 let c = layout.cards[k];
                 if selecting {
-                    // Choisir des plans (comme sur l'ancien titre) : Ctrl ajoute ou retire, Maj prend l'intervalle.
-                    let current = c.panel == self.cur_panel;
-                    if m.command || m.ctrl {
-                        if let Some(at) = self.board_sel.iter().position(|s| *s == c.plan) {
-                            self.board_sel.remove(at);
-                        } else if !current {
-                            self.board_sel.push(c.plan);
-                        }
-                    } else {
-                        let (a, b) = (self.cur_panel.min(c.panel), self.cur_panel.max(c.panel));
-                        self.board_sel = self.doc.panels[a..=b].iter().map(|p| p.id).collect();
+                    // Ctrl + appui sur un cadre : un mouvement de caméra (`vignettecamui.rs`) ; le pointeur ne bouge
+                    // pas, c'est le choix de plans d'avant, fait au lâcher.
+                    if (m.command || m.ctrl) && !m.shift && self.cam_press(layout, xf, k, pos, m) {
+                        self.vignettes.press = Press::Select;
+                        return false;
                     }
+                    self.board_select_click(layout, k, m);
                     self.vignettes.press = Press::Select;
                 } else {
                     self.board_sel = vec![c.plan];
@@ -568,6 +570,22 @@ impl App {
                 }
                 false
             }
+        }
+    }
+
+    /// Choisir des plans (comme sur l'ancien titre) : Ctrl ajoute ou retire celui de la vignette `k`, Maj prend l'intervalle.
+    pub(crate) fn board_select_click(&mut self, layout: &BoardLayout, k: usize, m: Modifiers) {
+        let c = layout.cards[k];
+        let current = c.panel == self.cur_panel;
+        if m.command || m.ctrl {
+            if let Some(at) = self.board_sel.iter().position(|s| *s == c.plan) {
+                self.board_sel.remove(at);
+            } else if !current {
+                self.board_sel.push(c.plan);
+            }
+        } else {
+            let (a, b) = (self.cur_panel.min(c.panel), self.cur_panel.max(c.panel));
+            self.board_sel = self.doc.panels[a..=b].iter().map(|p| p.id).collect();
         }
     }
 
@@ -682,6 +700,13 @@ impl App {
     // ------------------------------------------------------------------ la vue
 
     pub(crate) fn board_view(&mut self, ui: &mut egui::Ui) {
+        // La barre des personnages (une pastille par personnage et les couleurs neutres) au-dessus de la planche, si
+        // cet espace de travail la montre (les Vignettes, d'origine) : on choisit sa couleur sans quitter les cases.
+        if self.barre_perso_visible() {
+            let (bar, _) = ui.allocate_exact_size(vec2(ui.available_width(), crate::personnagesui::BARRE_H), Sense::hover());
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar).id_salt("barre_personnages_planche"));
+            self.personnages_barre(&mut child);
+        }
         self.board_toolbar(ui);
         let view = ui.available_rect_before_wrap();
         self.vignettes.view = view;
@@ -814,6 +839,7 @@ impl App {
         let pointer = latest.map(|p| xf.to_board(p));
         self.update_board_drag(&layout, pointer, xf.zoom);
         self.update_plan_move(&layout, xf, latest, escape);
+        self.update_cam_geste(latest, escape);
 
         // Pages, barres, cases vides, vignettes.
         for page in &layout.pages {
@@ -901,12 +927,18 @@ impl App {
         // Le curseur d'un cadre pris ou à prendre passe avant celui du dessin de la vignette courante (peint plus tôt).
         if self.vignettes.frame_hot {
             ui.ctx().set_cursor_icon(if self.vignettes.moving.as_ref().is_some_and(|m| m.active) { CursorIcon::Grabbing } else { CursorIcon::Grab });
+        } else if let (Some(p), true, false) = (over, mods.ctrl || mods.command, mods.shift) {
+            // Ctrl tenue sur une case : un cadre de caméra à prendre.
+            if !pan_mode && self.vignettes.cam.is_none() {
+                self.cam_curseur(ui.ctx(), &layout, xf, p);
+            }
         }
         if !any_down {
             self.finish_board_drag(&layout, &texts);
         }
         self.finish_creation(any_down);
         self.finish_plan_move(any_down);
+        self.finish_cam_geste(&layout, any_down);
         // Choisir des plans (Ctrl ou Maj + clic) donne la main aux plans : copier, coller, supprimer (12e).
         if self.vignettes.press == Press::Select {
             self.panel_focus = true;
@@ -1219,29 +1251,49 @@ impl App {
             clip.galley(at, galley, ink);
         }
 
+        // La case d'un plan dont la caméra bouge (deux clés au moins) montre la zone que couvrent les cadres (la feuille,
+        // hors d'elle aussi), pas la seule vue de la caméra (`vignettecam.rs`) ; l'outil Caméra, lui, recadre à l'ancienne.
+        let zone = if place.mouvement && place.frame == 0 && self.tool != Tool::Camera {
+            crate::vignettecam::zone(&self.doc, i, place.thumb.size(), self.layout.card_size.clamp(CARD_MIN, CARD_MAX))
+        } else {
+            None
+        };
         // Le panneau courant : le dessin lui-même ; les autres : leur vignette.
         let live = current && !pan_mode;
         if live {
             // La vue caméra laisse une marge autour du cadre : on l'agrandit d'autant (et on coupe
             // à la vignette) pour que l'image remplisse la vignette. Pour recadrer, toute la feuille.
-            let area = if self.tool == Tool::Camera { thumb } else { Rect::from_center_size(thumb.center(), thumb.size() / 0.96) };
+            let area = if self.tool == Tool::Camera || zone.is_some() { thumb } else { Rect::from_center_size(thumb.center(), thumb.size() / 0.96) };
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area).id_salt("planche_vive"));
             child.set_clip_rect(thumb.intersect(view));
+            self.vignettes.zone = zone;
             self.card_canvas(&mut child, thumb);
+            self.vignettes.zone = None;
             // Sa vignette se tient à jour en arrière-plan : quand une autre image prend la main, elle montre déjà le dernier trait.
             let width = crate::thumbs::width_for(thumb.width() * ui.ctx().pixels_per_point());
-            let _ = self.thumbs.texture_at(ui.ctx(), &self.doc, i, place.frame, place.id, width, deadline);
+            let _ = match &zone {
+                Some(z) => self.thumbs.texture_zone(ui.ctx(), &self.doc, i, place.frame, place.id, width, z, deadline),
+                None => self.thumbs.texture_at(ui.ctx(), &self.doc, i, place.frame, place.id, width, deadline),
+            };
         } else {
             painter.rect_filled(thumb, 0.0, Color32::WHITE);
             let px = thumb.width() * ui.ctx().pixels_per_point();
             let width = crate::thumbs::width_for(px);
-            if let Some(tex) = self.thumbs.texture_at(ui.ctx(), &self.doc, i, place.frame, place.id, width, deadline) {
+            let tex = match &zone {
+                Some(z) => self.thumbs.texture_zone(ui.ctx(), &self.doc, i, place.frame, place.id, width, z, deadline),
+                None => self.thumbs.texture_at(ui.ctx(), &self.doc, i, place.frame, place.id, width, deadline),
+            };
+            if let Some(tex) = tex {
                 painter.image(tex, thumb, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
             }
         }
         // Le filet d'un point autour de l'image ; plus foncé pour l'image courante. Rien d'autre autour.
         let clip = painter.with_clip_rect(view);
         clip.rect_stroke(thumb, 0.0, Stroke::new(1.0_f32, if current { BORDER_CURRENT } else { BORDER }), StrokeKind::Outside);
+        // Les cadres du mouvement de caméra (A, B, C…) et leurs flèches, fins, par-dessus.
+        if let Some(z) = &zone {
+            self.paint_cadres(painter, view, xf, place, z);
+        }
         if chosen_more {
             clip.rect_stroke(thumb.expand(1.5), 0.0, Stroke::new(1.5_f32, accent), StrokeKind::Outside);
         }
@@ -1275,7 +1327,8 @@ impl App {
     fn card_canvas(&mut self, ui: &mut egui::Ui, thumb: Rect) {
         let (view, camera_view, canvas_rect) = (self.view, self.camera_view, self.canvas_rect);
         let reframe = self.tool == Tool::Camera;
-        self.camera_view = !reframe;
+        // (Une grande case de mouvement de caméra montre la feuille, pas la vue à travers la caméra : `vignettes.zone`.)
+        self.camera_view = !reframe && self.vignettes.zone.is_none();
         if reframe {
             self.view.fit(ui.max_rect(), self.canvas_size());
         }

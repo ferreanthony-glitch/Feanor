@@ -81,8 +81,14 @@ pub struct CardPlace {
     pub thumb: Rect,
     /// La bande de note sous l'image, de la hauteur de ses lignes affichées.
     pub note: Rect,
+    /// La case de départ (ligne, colonne) et sa taille en cases : [1, 1] d'ordinaire, plus grande pour la case d'un plan
+    /// dont la caméra bouge (`vignettecam::span`) : elle montre toute la zone que couvrent les cadres.
     pub row: usize,
     pub col: usize,
+    pub span: [usize; 2],
+    /// La case d'un plan dont la caméra bouge (deux clés au moins) : elle montre la zone des cadres, pas la seule vue
+    /// de la caméra, même quand tous les cadres tiennent dans une case.
+    pub mouvement: bool,
 }
 
 impl CardPlace {
@@ -154,26 +160,77 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         boards.extend(plan_boards(doc, i).into_iter().map(|(id, frame, end)| (i, id, frame, end)));
     }
     let n = boards.len();
+    // Les cases de mouvement de caméra (la première image d'un plan dont la caméra bouge) sont plus grandes qu'une case :
+    // elles montrent toute la zone que couvrent les cadres (`vignettecam::span`). Au plus une page de haut.
+    let page_cap = if s.rows == 0 { usize::MAX } else { s.rows.min(MAX_ROWS).max(1) };
+    let moves: Vec<Option<[usize; 2]>> =
+        boards.iter().map(|b| if b.2 == 0 { crate::vignettecam::span_du_mouvement(doc, b.0, cols) } else { None }).collect();
+    let spans: Vec<[usize; 2]> = moves.iter().map(|m| m.map_or([1, 1], |sp| [sp[0].min(cols), sp[1].min(page_cap).max(1)])).collect();
+    // Une case plus haute qu'une rangée : les colonnes s'alignent d'une rangée à l'autre (écart de coupe partout), sinon
+    // les rangées d'en dessous se chevaucheraient ; sans elle, chaque rangée garde ses écarts serrés dans un plan.
+    let aligned = spans.iter().any(|sp| sp[1] > 1);
+    let note_lines = |k: usize| lines.get(&boards[k].1).copied().unwrap_or(1).clamp(1, NOTE_MAX_LINES);
+    // L'écart après la vignette `k` : serré dans un plan, large à une coupe ; après une case vide, large.
+    let joined_after = |k: usize| match boards.get(k + 1) {
+        Some(next) => next.2 > 0,
+        None => last_joins,
+    };
+    let gap_after = |k: usize| if !aligned && joined_after(k) { GAP_SAME } else { GAP_CUT };
+    let inner_gap = if aligned { GAP_CUT } else { GAP_SAME };
+
+    // Où chaque case se pose : la première place libre, dans l'ordre de lecture, après la case d'avant ; une case qui
+    // ne tient pas dans le reste de la rangée (ou de la page) passe tout entière plus loin, jamais coupée.
+    let mut occ: Vec<Vec<bool>> = Vec::new();
+    let is_free = |occ: &Vec<Vec<bool>>, r: usize, c: usize, sw: usize, sh: usize| (r..r + sh).all(|rr| (c..c + sw).all(|cc| !occ.get(rr).is_some_and(|row| row[cc])));
+    let find = |occ: &Vec<Vec<bool>>, from: (usize, usize), sw: usize, sh: usize| -> (usize, usize) {
+        let mut r = from.0;
+        loop {
+            let first = if r == from.0 { from.1 } else { 0 };
+            if sh == 1 || page_cap == usize::MAX || (r % page_cap) + sh <= page_cap {
+                for c in first..=(cols - sw) {
+                    if is_free(occ, r, c, sw, sh) {
+                        return (r, c);
+                    }
+                }
+            }
+            r += 1;
+        }
+    };
+    let mut placed: Vec<(usize, usize)> = Vec::with_capacity(n);
+    let mut cursor = (0usize, 0usize);
+    for sp in &spans {
+        let (r, c) = find(&occ, cursor, sp[0], sp[1]);
+        while occ.len() < r + sp[1] {
+            occ.push(vec![false; cols]);
+        }
+        for row in occ.iter_mut().skip(r).take(sp[1]) {
+            for cell in row.iter_mut().skip(c).take(sp[0]) {
+                *cell = true;
+            }
+        }
+        placed.push((r, c));
+        cursor = (r, c + sp[0]);
+    }
     // Au moins une case vide après la dernière vignette ; la dernière page est complétée.
-    let mut rows_used = (n + 1).div_ceil(cols);
-    let per_page = if s.rows == 0 { rows_used } else { s.rows.min(MAX_ROWS) };
+    let first_empty = find(&occ, cursor, 1, 1);
+    let bottom = placed.iter().zip(&spans).map(|(p, sp)| p.0 + sp[1]).max().unwrap_or(0);
+    let mut rows_used = (first_empty.0 + 1).max(bottom);
+    let per_page = if page_cap == usize::MAX { rows_used } else { page_cap };
     rows_used = rows_used.div_ceil(per_page) * per_page;
     let pages = rows_used / per_page;
-    let note_lines = |slot: usize| boards.get(slot).map_or(1, |b| lines.get(&b.1).copied().unwrap_or(1).clamp(1, NOTE_MAX_LINES));
-    // L'écart après la case `slot` : serré dans un plan, large à une coupe ; après une case vide, large.
-    let joined_after = |slot: usize| match boards.get(slot + 1) {
-        Some(next) => next.2 > 0,
-        None => slot + 1 == n && last_joins,
-    };
-    let gap_after = |slot: usize| if joined_after(slot) { GAP_SAME } else { GAP_CUT };
-
-    // Hauteur de chaque ligne (ses notes les plus hautes), puis haut des lignes et des pages.
-    let row_h: Vec<f32> = (0..rows_used)
-        .map(|r| {
-            let most = (r * cols..(r + 1) * cols).map(note_lines).max().unwrap_or(1);
-            LABEL_H + thumb_h + NOTE_GAP + most as f32 * NOTE_LINE_H + ROW_GAP
-        })
+    let empties: Vec<(usize, usize)> = (0..rows_used)
+        .flat_map(|r| (0..cols).map(move |c| (r, c)))
+        .filter(|&(r, c)| (r, c) >= cursor && is_free(&occ, r, c, 1, 1))
         .collect();
+
+    // Hauteur de chaque ligne (ses notes les plus hautes : celles des cases qui s'y terminent), puis haut des lignes et
+    // des pages.
+    let mut most = vec![1usize; rows_used];
+    for (k, p) in placed.iter().enumerate() {
+        let last = p.0 + spans[k][1] - 1;
+        most[last] = most[last].max(note_lines(k));
+    }
+    let row_h: Vec<f32> = most.iter().map(|m| LABEL_H + thumb_h + NOTE_GAP + *m as f32 * NOTE_LINE_H + ROW_GAP).collect();
     let page_h: Vec<f32> = (0..pages).map(|p| PAGE_PAD * 2.0 + row_h[p * per_page..(p + 1) * per_page].iter().sum::<f32>() - ROW_GAP).collect();
     let page_w = PAGE_PAD * 2.0 + cols as f32 * card_w + (cols - 1) as f32 * GAP_CUT;
     let mut page_top = Vec::with_capacity(pages);
@@ -191,29 +248,40 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         }
     }
 
+    let left = MARGIN + PAGE_PAD;
     let mut out = BoardLayout::default();
-    let mut x = MARGIN + PAGE_PAD;
-    for slot in 0..rows_used * cols {
-        let (r, c) = (slot / cols, slot % cols);
-        if c == 0 {
-            x = MARGIN + PAGE_PAD;
+    let (mut cur_row, mut x) = (usize::MAX, left);
+    for (k, &(r, c)) in placed.iter().enumerate() {
+        let sp = spans[k];
+        if aligned {
+            x = left + c as f32 * (card_w + GAP_CUT);
+        } else if r != cur_row {
+            (cur_row, x) = (r, left);
         }
-        let card = Rect::from_min_size(pos2(x, row_top[r]), vec2(card_w, LABEL_H + thumb_h));
-        let thumb = Rect::from_min_max(pos2(card.left(), card.top() + LABEL_H), card.max);
-        if let Some(&(i, id, frame, end)) = boards.get(slot) {
-            let note = Rect::from_min_size(pos2(card.left(), thumb.bottom() + NOTE_GAP), vec2(card_w, note_lines(slot) as f32 * NOTE_LINE_H));
-            let p = &doc.panels[i];
-            out.cards.push(CardPlace { panel: i, plan: p.id, id, frame, end, scene: p.scene, card, thumb, note, row: r, col: c });
-        } else {
-            out.empty.push(thumb);
+        let w = sp[0] as f32 * card_w + (sp[0] - 1) as f32 * inner_gap;
+        let last = r + sp[1] - 1;
+        let (top, bottom) = (row_top[r] + LABEL_H, row_top[last] + LABEL_H + thumb_h);
+        let card = Rect::from_min_max(pos2(x, row_top[r]), pos2(x + w, bottom));
+        let thumb = Rect::from_min_max(pos2(x, top), pos2(x + w, bottom));
+        let (i, id, frame, end) = boards[k];
+        let note = Rect::from_min_size(pos2(x, bottom + NOTE_GAP), vec2(w, note_lines(k) as f32 * NOTE_LINE_H));
+        let p = &doc.panels[i];
+        out.cards.push(CardPlace { panel: i, plan: p.id, id, frame, end, scene: p.scene, card, thumb, note, row: r, col: c, span: sp, mouvement: moves[k].is_some() });
+        let gap = gap_after(k);
+        let zone = Rect::from_min_max(pos2(thumb.right(), thumb.top()), pos2(thumb.right() + gap, thumb.bottom()));
+        let bar = Rect::from_center_size(pos2(thumb.right() + gap * 0.5, thumb.center().y), vec2(BAR_W, thumb_h * BAR_FRACTION));
+        out.bars.push(CutBar { after: k, cut: !joined_after(k), bar, zone });
+        x += w + gap;
+    }
+    for &(r, c) in &empties {
+        if aligned {
+            x = left + c as f32 * (card_w + GAP_CUT);
+        } else if r != cur_row {
+            (cur_row, x) = (r, left);
         }
-        if slot < n {
-            let gap = gap_after(slot);
-            let zone = Rect::from_min_max(pos2(card.right(), thumb.top()), pos2(card.right() + gap, thumb.bottom()));
-            let bar = Rect::from_center_size(pos2(card.right() + gap * 0.5, thumb.center().y), vec2(BAR_W, thumb_h * BAR_FRACTION));
-            out.bars.push(CutBar { after: slot, cut: !joined_after(slot), bar, zone });
-        }
-        x += card_w + gap_after(slot);
+        let top = row_top[r] + LABEL_H;
+        out.empty.push(Rect::from_min_size(pos2(x, top), vec2(card_w, thumb_h)));
+        x += card_w + GAP_CUT;
     }
     out.pages = (0..pages).map(|p| Rect::from_min_size(pos2(MARGIN, page_top[p]), vec2(page_w, page_h[p]))).collect();
     out.size = vec2(MARGIN * 2.0 + page_w, page_top[pages - 1] + page_h[pages - 1] + MARGIN);

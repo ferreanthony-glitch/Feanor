@@ -1681,6 +1681,7 @@ impl App {
         }
         self.follow_frame = true;
         self.status = match espace {
+            Espace::Vignettes => "Vignettes : dessine dans les cases (Ctrl + glisser un cadre : mouvement de caméra ; Tab : retour au storyboard).".into(),
             Espace::Storyboard => "Storyboard : montage des plans.".into(),
             Espace::Montage => "Montage : le film en haut, toutes les pistes en bas (Tab ou l'onglet Storyboard pour en revenir).".into(),
             Espace::Animation => format!("Animation de {} (Tab : retour au storyboard).", crate::storyboard::panel_long_title(&self.doc, self.cur_panel)),
@@ -3787,7 +3788,11 @@ impl App {
             }
             // Tab : du storyboard à l'animation et retour. Du Montage, il revient au storyboard (le
             // montage n'est pas un côté de la bascule : « Animer ce plan », dans sa barre, entre dans le plan).
-            "mode.basculer" if self.espace == crate::workspace::Espace::Montage => self.set_espace(crate::workspace::Espace::Storyboard),
+            // (Pareil depuis les Vignettes : une disposition du storyboard, pas un côté de la bascule. « Animer cette image »,
+            // au clic droit d'une case, entre en animation, et Tab ramène alors aux Vignettes.)
+            "mode.basculer" if matches!(self.espace, crate::workspace::Espace::Montage | crate::workspace::Espace::Vignettes) => {
+                self.set_espace(crate::workspace::Espace::Storyboard)
+            }
             "mode.basculer" => self.set_mode(if board_shown { Mode::Animation } else { Mode::Storyboard }),
             "aide.raccourcis" => self.show_help = !self.show_help,
             "outil.pinceau" => self.set_tool(Tool::Brush),

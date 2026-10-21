@@ -108,11 +108,20 @@ pub fn thumb_size(doc: &Document, width: usize) -> (usize, usize) {
 
 /// `thumb_size` à l'échelle `pct`.
 pub fn thumb_size_at(doc: &Document, width: usize, pct: u32) -> (usize, usize) {
+    thumb_size_of(doc.frame, width, pct)
+}
+
+/// La taille d'une vignette de `width` points de large pour un cadre de `frame` pixels.
+pub fn thumb_size_of(frame: [usize; 2], width: usize, pct: u32) -> (usize, usize) {
     let tw = scaled(width.clamp(32, 2048), pct, 32);
-    let [fw, fh] = doc.frame;
+    let [fw, fh] = frame;
     let th = ((tw as f32 * fh as f32 / fw.max(1) as f32).round() as usize).clamp(8, 2048);
     (tw, th)
 }
+
+/// Les vignettes d'une zone de la feuille (la grande case d'un mouvement de caméra, `vignettecam.rs`) se rangent sous
+/// l'identifiant du plan marqué de ce bit : elles ne se mêlent pas à la vignette ordinaire du même plan.
+const ZONE_BIT: u64 = 1 << 62;
 
 /// Largeur de vignette pour `pixels` points physiques à l'écran : par paliers de 128 (on ne la
 /// refait pas à chaque cran de zoom), entre 128 et 1024.
@@ -207,7 +216,30 @@ impl Thumbs {
     ) -> Option<TextureId> {
         let plan = render::panel_plan_at(doc, panel, frame, Some(doc.paper));
         let cam = doc.panel_camera(panel, frame);
-        self.texture_of(ctx, doc, id, plan, cam, width, deadline)
+        self.texture_of(ctx, doc, id, plan, cam, width, doc.frame, deadline)
+    }
+
+    /// Vignette d'une **zone** de la feuille (la grande case d'un mouvement de caméra) : le plan `panel` à l'image
+    /// `frame`, vu par une caméra droite, sans zoom, centrée sur la zone, dont le cadre en a la taille. Même chemin que
+    /// les autres vignettes : l'interface ne fait que la clé et le cliché, la composition est sur un fil de fond. La feuille
+    /// et ce qu'on a dessiné autour d'elle (toile infinie) s'y voient. (Les calques en profondeur gardent leur place vue
+    /// de la caméra A, au centre de la feuille.)
+    #[allow(clippy::too_many_arguments)]
+    pub fn texture_zone(
+        &mut self,
+        ctx: &egui::Context,
+        doc: &Document,
+        panel: usize,
+        frame: usize,
+        id: u64,
+        width: usize,
+        zone: &crate::vignettecam::Zone,
+        deadline: Instant,
+    ) -> Option<TextureId> {
+        let plan = render::panel_plan_at(doc, panel, frame, Some(doc.paper));
+        let cadre = [zone.taille.x.round().clamp(1.0, 16384.0) as usize, zone.taille.y.round().clamp(1.0, 16384.0) as usize];
+        let cam = Camera { x: zone.centre.x, y: zone.centre.y, zoom: 1.0, angle: 0.0, dolly: 0.0, tilt: 0.0, pan: 0.0 };
+        self.texture_of(ctx, doc, id | ZONE_BIT, plan, cam, width, cadre, deadline)
     }
 
     /// Vignette de la première image d'un plan **rangé** (une autre version du plan, `planvers.rs` ; la pile des
@@ -216,11 +248,12 @@ impl Thumbs {
     pub fn texture_rangee(&mut self, ctx: &egui::Context, doc: &Document, panel: &crate::document::Panel, width: usize, deadline: Instant) -> Option<TextureId> {
         let plan = render::stored_panel_plan(doc, panel, 0, Some(doc.paper));
         let cam = doc.camera_du_plan_range(panel, 0);
-        self.texture_of(ctx, doc, panel.id, plan, cam, width, deadline)
+        self.texture_of(ctx, doc, panel.id, plan, cam, width, doc.frame, deadline)
     }
 
+    /// `frame` : la taille du cadre filmé (celle du projet, ou celle d'une zone, `texture_zone`).
     #[allow(clippy::too_many_arguments)]
-    fn texture_of(&mut self, ctx: &egui::Context, doc: &Document, id: u64, plan: Plan, cam: Camera, width: usize, deadline: Instant) -> Option<TextureId> {
+    fn texture_of(&mut self, ctx: &egui::Context, doc: &Document, id: u64, plan: Plan, cam: Camera, width: usize, frame: [usize; 2], deadline: Instant) -> Option<TextureId> {
         let _t = crate::perf::section("vignettes : clés et demandes");
         let slot = (id, width);
         // (Plus le nombre de fonds sous le trait arrivés de l'arrière-plan, si le plan montre un fond : la
@@ -231,7 +264,7 @@ impl Thumbs {
             .items
             .iter()
             .map(|i| doc.cels.get(&i.cel).map_or(0, |c| c.version))
-            .chain([if fonds { crate::fx::fond_epoch() } else { 0 }, doc.frame[0] as u64, doc.frame[1] as u64])
+            .chain([if fonds { crate::fx::fond_epoch() } else { 0 }, frame[0] as u64, frame[1] as u64])
             .collect();
         let key = Key::Plan(plan, versions, [cam.x, cam.y, cam.zoom, cam.angle, cam.dolly, cam.tilt, cam.pan].map(f32::to_bits));
         let generation = crate::fxcache::generation();
@@ -241,7 +274,9 @@ impl Thumbs {
                 let pool = self.pool.get_or_insert_with(|| Pool::start(ctx, 4));
                 pool.request(slot, key, |key| {
                     let Key::Plan(plan, _, _) = key else { unreachable!("une clé de plan") };
-                    Work::Plan { doc: snapshot(doc, plan), cam, size: thumb_size(doc, width), generation }
+                    let mut mini = snapshot(doc, plan);
+                    mini.frame = frame;
+                    Work::Plan { doc: mini, cam, size: thumb_size_of(frame, width, scale_pct()), generation }
                 });
             } else {
                 self.pending = true;
@@ -260,7 +295,7 @@ impl Thumbs {
         // (Et les plans rangés des versions : les cartes de la pile les demandent.)
         let ids: std::collections::HashSet<u64> =
             doc.panels.iter().flat_map(|p| std::iter::once(p.id).chain(p.marks.iter().map(|m| m.id))).chain(doc.plans_ranges().map(|p| p.id)).collect();
-        self.entries.retain(|(id, _), _| ids.contains(id));
+        self.entries.retain(|(id, _), _| ids.contains(&(id & !ZONE_BIT)));
     }
 
     /// Oublie tout (autre projet, autre résolution) : les vignettes gardées, les demandes en file,
