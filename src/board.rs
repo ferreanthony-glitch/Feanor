@@ -253,6 +253,99 @@ pub fn hit(layout: &BoardLayout, p: Pos2, bar_min_w: f32) -> Hit {
     }
 }
 
+// ---------------------------------------------------------------- déplacer un plan (Maj + cadre)
+
+/// Distance d'un point au filet d'un rectangle : dedans, jusqu'au bord le plus proche ; dehors, jusqu'au rectangle.
+fn edge_distance(r: Rect, p: Pos2) -> f32 {
+    let (dx, dy) = ((r.left() - p.x).max(p.x - r.right()).max(0.0), (r.top() - p.y).max(p.y - r.bottom()).max(0.0));
+    if dx > 0.0 || dy > 0.0 {
+        (dx * dx + dy * dy).sqrt()
+    } else {
+        (p.x - r.left()).min(r.right() - p.x).min(p.y - r.top()).min(r.bottom() - p.y)
+    }
+}
+
+/// La vignette dont le **cadre** (le filet de l'image, à `tol` près de chaque côté) est sous le point `p`
+/// (planche), s'il y en a une : la plus proche si deux cadres voisins se touchent. Dedans, la bande ne mange
+/// jamais plus d'un quart de la plus petite côte : le centre reste à l'intérieur (la sélection).
+pub fn frame_hit(layout: &BoardLayout, p: Pos2, tol: f32) -> Option<usize> {
+    let mut best: Option<(usize, f32)> = None;
+    for (k, c) in layout.cards.iter().enumerate() {
+        let inner = tol.min(c.thumb.width().min(c.thumb.height()) * 0.25);
+        let d = edge_distance(c.thumb, p);
+        let limit = if c.thumb.contains(p) { inner } else { tol };
+        if d <= limit && best.is_none_or(|(_, bd)| d < bd) {
+            best = Some((k, d));
+        }
+    }
+    best.map(|(k, _)| k)
+}
+
+/// Où l'on peut poser des plans déplacés : devant un plan (`before`), ou tout à la fin (`None`). Le repère est un
+/// trait vertical (`x`, de `top` à `bottom`, en coordonnées de la planche) dans l'écart qui précède la première
+/// vignette de ce plan. Jamais à l'intérieur d'un plan : seules les premières vignettes ont un repère.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DropSlot {
+    pub before: Option<u64>,
+    pub x: f32,
+    pub top: f32,
+    pub bottom: f32,
+}
+
+/// Les endroits où poser un plan : devant chaque plan, et après le dernier.
+pub fn drop_slots(layout: &BoardLayout) -> Vec<DropSlot> {
+    let mut out = Vec::new();
+    for (k, c) in layout.cards.iter().enumerate() {
+        if !c.starts_plan() {
+            continue;
+        }
+        let x = match k.checked_sub(1).map(|j| &layout.cards[j]) {
+            Some(prev) if prev.row == c.row => (prev.thumb.right() + c.thumb.left()) * 0.5,
+            _ => c.thumb.left() - GAP_CUT * 0.5,
+        };
+        out.push(DropSlot { before: Some(c.plan), x, top: c.thumb.top(), bottom: c.thumb.bottom() });
+    }
+    if let Some(last) = layout.cards.last() {
+        // Après la dernière vignette : dans l'écart avant la première case vide si elle est sur la même ligne.
+        let x = match layout.empty.first() {
+            Some(e) if (e.top() - last.thumb.top()).abs() < 1.0 => (last.thumb.right() + e.left()) * 0.5,
+            _ => last.thumb.right() + GAP_CUT * 0.5,
+        };
+        out.push(DropSlot { before: None, x, top: last.thumb.top(), bottom: last.thumb.bottom() });
+    }
+    out
+}
+
+/// L'ordre des plans (`order`) change-t-il si l'on pose `moving` devant `before` ? (Le même calcul que
+/// `Document::move_plans`, sans le document.) Faux : poser là ne ferait rien.
+pub fn drop_changes_order(order: &[u64], moving: &[u64], before: Option<u64>) -> bool {
+    let anchor = before.and_then(|b| {
+        let i = order.iter().position(|id| *id == b)?;
+        order[i..].iter().find(|id| !moving.contains(id)).copied()
+    });
+    let kept: Vec<u64> = order.iter().copied().filter(|id| !moving.contains(id)).collect();
+    let moved: Vec<u64> = order.iter().copied().filter(|id| moving.contains(id)).collect();
+    let at = anchor.and_then(|a| kept.iter().position(|id| *id == a)).unwrap_or(kept.len());
+    let mut after = kept;
+    after.splice(at..at, moved);
+    after != order
+}
+
+/// L'endroit de pose le plus proche du point `p` (planche) pour les plans `moving`. Rien si cet endroit-là ne
+/// changerait rien (devant un plan qu'on déplace, ou devant celui qui le suit déjà) : lâcher près de sa place, c'est
+/// la garder, et aucun repère ne se montre.
+pub fn nearest_slot(slots: &[DropSlot], order: &[u64], moving: &[u64], p: Pos2) -> Option<DropSlot> {
+    let dist = |s: &DropSlot| {
+        let y = p.y.clamp(s.top, s.bottom);
+        ((p.x - s.x).powi(2) + (p.y - y).powi(2)).sqrt()
+    };
+    slots
+        .iter()
+        .min_by(|a, b| dist(a).total_cmp(&dist(b)))
+        .filter(|s| s.before.is_none_or(|b| !moving.contains(&b)) && drop_changes_order(order, moving, s.before))
+        .copied()
+}
+
 /// Plans dont une vignette touche le rectangle `r` (sélection au lasso rectangulaire), sans
 /// doublon, dans l'ordre du film.
 pub fn cards_in(layout: &BoardLayout, r: Rect) -> Vec<usize> {

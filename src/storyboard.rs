@@ -186,12 +186,18 @@ impl App {
     /// plan courant reste courant.
     fn move_chosen_panels(&mut self, ids: &[u64], slot: usize) {
         let before = self.doc.panels.get(slot).map(|p| p.id);
+        self.move_plans_before(ids, before);
+    }
+
+    /// Déplace les plans `ids` devant le plan `before` (aucun : à la fin) : l'opération du montage, que la vue Vignettes
+    /// reprend telle quelle. Le plan courant reste courant. Vrai si l'ordre a changé.
+    pub(crate) fn move_plans_before(&mut self, ids: &[u64], before: Option<u64>) -> bool {
         let current = self.panel().id;
         let ids = ids.to_vec();
         self.structure_op(|d, _| {
             d.move_plans(&ids, before)?;
             d.panels.iter().position(|p| p.id == current)
-        });
+        })
     }
 
     /// Déplace le plan `from` à la place `slot` (0 = au début, nombre de plans = à la fin).

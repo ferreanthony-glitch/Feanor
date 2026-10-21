@@ -169,9 +169,13 @@ mod blend_tests;
 mod board;
 #[cfg(test)]
 mod board_tests;
+mod boardmove;
 mod boardui;
+mod debord;
 #[cfg(test)]
 mod vignettes_tests;
+#[cfg(test)]
+mod vignettes_retouches_tests;
 mod bottomtabs;
 mod brush;
 mod brushtex;

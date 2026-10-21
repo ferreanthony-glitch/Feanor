@@ -3512,3 +3512,4 @@ et **Préférences en onglets, onglet Montage, effets au clavier, Vignettes simp
   seulement.
 - ✅ Vocabulaire : le remplissage sous le trait s'appelle toujours « Aplat » ; le calque de couleur a « Griffonner » (plus de CTG).
 - ✅ Ordre de composition d'un calque : remplissage au griffonnage, puis aplat (la strate Fond, où les personnages posent leur aplat), puis peinture libre, puis trait.
+- ✅ Retouches des Vignettes (`vignettes-retouches` : débord du trait hors de l'image, Maj + cadre pour déplacer un plan, `src/debord.rs`, `src/boardmove.rs`) et isolation de l'essai des personnages, fusionnées par-dessus.
