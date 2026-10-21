@@ -697,6 +697,10 @@ impl App {
                 if !view.contains(*pos) || ui.ctx().layer_id_at(*pos) != Some(bg.layer_id) {
                     continue;
                 }
+                // (Chaque appui repart de rien : un appui d'avant, resté là parce que la vue n'était pas à l'écran au lâcher, ne compte plus.)
+                if *button == PointerButton::Primary {
+                    self.vignettes.press = Press::None;
+                }
                 if self.board_press(&layout, xf, *pos, *modifiers, *button) {
                     layout = self.board_layout();
                     self.clamp_board_pan(view, layout.size);
