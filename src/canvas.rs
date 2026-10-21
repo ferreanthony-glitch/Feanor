@@ -20,6 +20,14 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar).id_salt("barre_vue"));
             self.view_bar(&mut child);
             rect.min.y = bar.max.y;
+            // Dessous, la barre des personnages (une pastille par personnage et les couleurs neutres), si cet
+            // espace de travail la montre ; pas en Espace 3D, où l'on ne dessine pas.
+            if self.barre_perso_visible() && !(self.scene3d.on && !self.camera_view) {
+                let bar = Rect::from_min_size(rect.min, vec2(rect.width(), crate::personnagesui::BARRE_H));
+                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar).id_salt("barre_personnages"));
+                self.personnages_barre(&mut child);
+                rect.min.y = bar.max.y;
+            }
             // Dessous, les commandes de la vue (en 3D : seulement les vues, pour en sortir).
             let tools = Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - crate::viewbar::TOOLS_BAR_H), rect.max);
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tools).id_salt("outils_vue"));

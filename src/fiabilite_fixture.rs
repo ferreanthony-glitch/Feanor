@@ -15,7 +15,8 @@
 //! couleur d'un plan ; des commentaires (dont un rangé hors du plan rogné) ; un plan rogné au début
 //! et à la fin, avec sa réserve ; un son (WAV fabriqué) sur deux pistes ; les guides de
 //! perspective, les notes de la planche, les groupes de couleur, l'arrière-plan en damier, les
-//! propriétés du projet, le volume général, l'image de départ ; des transitions du montage ; les
+//! propriétés du projet, le volume général, l'image de départ ; des transitions du montage ; des
+//! personnages (brosse par personnage) ; les
 //! effets des extraits de son et le solo d'une piste ; des sons proposés (suggestions sonores) ; des
 //! références visuelles (une image, une vidéo de trois images).
 //!
@@ -574,6 +575,11 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     doc.set_transition(0, crate::transitions::Kind::White).expect("début du film");
     let n = doc.panels.len();
     doc.set_transition(n, crate::transitions::Kind::Black).expect("fin du film");
+    // Personnages de la brosse par personnage (`personnages.json`) : un avec aplat, un sans.
+    for (nom, trait_, aplat) in [("Lou", [200, 30, 30], Some([250, 200, 200])), ("Fantôme", [30, 40, 200], None)] {
+        let id = doc.alloc();
+        doc.personnages.push(crate::personnages::Personnage { id, name: nom.into(), line: trait_, fill: aplat });
+    }
     // Sons proposés par la lecture du storyboard (`sons_proposes.json`) : un bruitage à générer, une
     // voix rejetée et modifiée à la main, une ambiance acceptée (son posé), et la confirmation d'envoi
     // en ligne du projet.
@@ -661,6 +667,7 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
     let mut transitions = doc.transitions.clone();
     transitions.sort_by_key(|t| t.id);
     let _ = writeln!(s, "transitions {:?}", transitions);
+    let _ = writeln!(s, "personnages {:?}", doc.personnages);
     // (Le fichier des sons proposés les range dans l'ordre du film : leurs numéros sont gardés.)
     let mut proposes = doc.sons_proposes.clone();
     proposes.indications.sort_by_key(|i| i.id);

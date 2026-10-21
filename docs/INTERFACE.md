@@ -151,8 +151,9 @@ et les calques » (c'est la colonne des calques).
 - **« Arrière-plan »** désigne à la fois la couleur de la feuille (onglet Arrière-plan, `fond.*`) ET la
   deuxième couleur du couple de couleurs (avant-plan / arrière-plan). Proposition : la feuille devient
   « Fond de la feuille ».
-- **« Fond »** : fond sous le trait (fonction du calque), calque de fond (décor commun), fond de la feuille,
-  fond du thème. Trois sens produits par l'application ; garder « Fond sous le trait » en entier.
+- **« Fond »** : calque de fond (décor commun), fond de la feuille, fond du thème. L'aplat sous le trait (fonction du calque)
+  ne s'appelle plus « fond » : c'est l'**« Aplat sous le trait »** (« Aplat » sur sa sous-ligne), depuis le 2026-10-21. Ne jamais
+  écrire « Fond sous le trait » ni « Remplissage » dans un texte de l'interface pour cette fonction.
 - **« Propriétés du plan »** (action, Alt+Entrée, nom de Storyboard Pro) ouvre le panneau « Fiche du plan »
   (onglet « Fiche »). Trois noms pour une chose. Proposition : « Fiche du plan » partout.
 - « Image clé » reste dans les textes de la propagation (EbSynth : les images peintes à la main) ;
@@ -1322,9 +1323,9 @@ vérifié : **à vérifier**, rien n'est copié). Code : `src/calquecouleur.rs` 
   28 et 29 sont ceux d'autres chantiers menés en parallèle.
 - **Export, PDF, vignettes, montage, GPU** : la couleur est un calque bitmap ordinaire pour eux (rien n'a changé). Export
   Storyboard Pro : calque bitmap sous le trait, avec une note dans la fenêtre d'export (le lien n'y existe pas : à vérifier).
-- **Avec « Fond sous le trait »** (`fond.rs`) : les deux coexistent, rien n'a changé dans l'un pour l'autre. Le fond est
+- **Avec l'« Aplat sous le trait »** (`fond.rs`) : les deux coexistent, rien n'a changé dans l'un pour l'autre. L'aplat est
   une strate du même calque, déduite du trait (une forme, une couleur) ; le calque de couleur est un calque à part,
-  colorié zone par zone, avec ses propres images. Ordre de composition : fond du trait, couleur, trait.
+  colorié zone par zone, avec ses propres images. Ordre de composition : aplat du trait, couleur, trait.
 - **Limites connues** : couper / coller une clé du trait (même calque) ne remet pas sa couleur (elle reste dans le
   dessin d'origine : glisser la clé la garde) ; un effet du trait (tremblement) ne bouge pas la couleur ; le trait
   doit exister à l'image pour colorier (sinon, un pinceau en pose un vide) ; un calque de toute la scène, un dossier,
@@ -1368,7 +1369,7 @@ sans bord, pas son détail.
   dessiné, sinon du papier. Rien n'est exporté hors du cadre.
 - **Limites** : les zones bitmap sélectionnées (lasso, baguette de couleur) et leur déplacement prennent les
   pixels de la feuille (on peut déplacer ce qu'on a pris vers l'extérieur) ; les effets de calque, les calques
-  d'ajustement, le fond sous le trait, les calques de couleur, l'enveloppe et la perspective, la propagation,
+  d'ajustement, l'aplat sous le trait, les calques de couleur, l'enveloppe et la perspective, la propagation,
   l'import / export Storyboard Pro restent à la feuille. Le zoom arrière extrême (plus de 4 096 px de monde
   dessiné à l'écran) montre ce qui est hors de la feuille un peu plus flou (la texture est réduite).
   Au-delà de 32 768 px de la feuille, rien ne se pose.
@@ -1599,10 +1600,10 @@ de feuille.
 
 **Ce qui est mis à l'échelle** : dessins bitmap (feuille **et** hors-feuille, rééchantillonnés : triangle en réduction, Catmull-Rom
 en agrandissement, sur des pixels prémultipliés : pas de frange de couleur), dessins vectoriels (points, épaisseurs, taille du
-pinceau et du texte, puis rendu exact), fond sous le trait (peinture et coupe), pose des calques et clés de position, clés de
+pinceau et du texte, puis rendu exact), aplat sous le trait (peinture et coupe), pose des calques et clés de position, clés de
 caméra (position ; l'avancée suit la largeur du cadre ; zoom et angles inchangés), paramètres d'effets en pixels (rayon des flous,
 décalage de l'ombre, liseré, grain, tremblement… clés comprises, dans les bornes de l'effet ; la densité de trous du trait sec,
-par 100 px de trait, est divisée), débord du fond sous le trait, fermeture des trous des calques de couleur et CTG, zones bitmap et
+par 100 px de trait, est divisée), débord de l'aplat sous le trait, fermeture des trous des calques de couleur et CTG, zones bitmap et
 éléments vectoriels collés sur le dessin (ils gardent leur place dans le cadre). **Ne change pas** : les paramètres en pour cent,
 les incrustations (en pour cent de la hauteur du cadre), les marques d'image, les textes, et — comme pour un collage de plans dans
 le même projet — la scène 3D de blocage, les références liées, les commentaires, les transitions et les sons des plans.
@@ -1792,7 +1793,7 @@ SHOT) : voir « À vérifier à l'écran ».
 | **Trait ▾**, **Matière ▾** | les deux boutons déroulants du panneau Effets (famille Trait, famille Matière) | « rangée d'icônes » (c'était avant) |
 | **Dossier** | un calque sans dessin qui range des calques (un seul niveau) ; son triangle l'ouvre ou le ferme | groupe (le « groupe de couleur » est autre chose) |
 | **fx** | le petit bouton de la ligne d'un calque qui allume ou éteint toute sa pile d'effets | |
-| **Fond sous le trait** | un réglage **du calque**, avec son bouton sur sa ligne | option du pinceau (c'était avant) |
+| **Aplat sous le trait** (« Aplat ») | un réglage **du calque**, avec son bouton sur sa ligne et sa sous-ligne dans le panneau Calques (partie 33) | « fond » ou « remplissage » dans un texte de l'interface ; option du pinceau (c'était avant) |
 | **Passe-partout** | le voile autour du cadre de la caméra de « Estomper le hors-champ » | masque |
 | **GIF animé** | l'export `.gif`, sans son | |
 
@@ -1804,7 +1805,7 @@ SHOT) : voir « À vérifier à l'écran ».
 | Nouveau dossier (`dossier.nouveau`) | panneau Calques : icône dossier + de ses commandes, clic droit dans le vide de la liste ; en-tête de la timeline (déjà là) ; menu Calques > Dossiers (déjà là) | aucun |
 | Ranger les calques choisis dans un dossier (`dossier.ranger`) | panneau Calques : icône (quand plusieurs calques sont choisis) ; menu Calques > Dossiers | aucun |
 | Ouvrir / fermer un dossier | triangle de sa ligne dans le panneau Calques et dans la timeline (le même réglage) | aucun |
-| Fond sous le trait du calque (`pinceau.fond`) | bouton carré-utilisateur sur la ligne de chaque calque de dessin du panneau Calques, et dans ses commandes (calque courant) ; menu Calques > Fond sous le trait | aucun |
+| Aplat sous le trait du calque (`pinceau.fond`) | bouton carré-utilisateur (« Aplat sous le trait ») sur la ligne de chaque calque de dessin du panneau Calques, et dans ses commandes (calque courant) ; clic droit d'un calque > « Ajouter un aplat » / « Retirer l'aplat » ; menu Calques > Aplat sous le trait (partie 33) | aucun |
 | Effets du calque allumés / éteints (`calque.effets`) | bouton « fx » de la ligne du calque (panneau Calques, timeline), seulement s'il a des effets ; « Effets du calque allumés » dans les menus de calque ; Ctrl+K | aucun |
 | Exporter un GIF animé (`fichier.exporter_gif`) | Fichier > Exporter… > « Un GIF animé » ; fenêtre d'export (choix « GIF animé ») ; Ctrl+K | aucun |
 | Opacité du passe-partout | Fichier > Préférences… > Dessin (curseur 0 à 100 %, « Rétablir ») | |
@@ -1819,9 +1820,9 @@ Les icônes ont leur bulle d'une seconde (nom, raccourci, description : `bulles.
   refuse sont grisées et la bulle dit pourquoi. Les préréglages sont sous un petit titre « Préréglages ». Si les effets du calque sont
   éteints (bouton fx), une ligne le dit, avec « Rallumer ».
 - **Panneau Calques** : dans les commandes, après « Nouveau calque de fond » : « Nouveau dossier » (et, avec plusieurs calques choisis,
-  « Ranger les calques choisis dans un dossier »), puis le bouton de fond et, s'il y a des effets, « fx » pour le calque courant. Chaque
+  « Ranger les calques choisis dans un dossier »), puis le bouton d'aplat et, s'il y a des effets, « fx » pour le calque courant. Chaque
   ligne : [triangle si dossier] œil, cadenas, [fx], vignette (l'icône d'un dossier pour un dossier), nom, puis « vectoriel » (ou « dossier ·
-  3 calques ») et le bouton de fond. Un calque rangé est décalé vers la droite ; un dossier fermé n'a plus les lignes de ses calques (sauf le
+  3 calques ») et le bouton d'aplat ; un calque qui a un aplat a en plus sa sous-ligne fine (partie 33). Un calque rangé est décalé vers la droite ; un dossier fermé n'a plus les lignes de ses calques (sauf le
   calque courant).
 - **Timeline** : « fx » sur la deuxième rangée de réglages (après le groupe), ou à côté du cadenas sur une ligne réduite.
 - **Pile des versions** : chaque carte porte la durée de sa version à côté du nom (« V2 3s 00 ») ; la bulle d'une carte dit de combien la
@@ -1839,7 +1840,7 @@ Les icônes ont leur bulle d'une seconde (nom, raccourci, description : `bulles.
 - « fx » n'a pas de bouton dans la colonne du montage (pas de place) : son entrée de menu y est.
 - Un GIF de plans choisis qui ne se suivent pas est fait de leurs images bout à bout, dans l'ordre du film.
 - Le contenu rogné (réserve) reste attaché au plan et non à la version : passer à une version de durée différente ne le change pas.
-- Les réglages du fond (couleur, débord, trous) restent sous le pinceau (visibles quand le calque courant a un fond), pas sur la ligne du calque.
+- ~~Les réglages du fond restent sous le pinceau~~ : depuis le 2026-10-21 (partie 33), ils sont dans Réglages quand la sous-ligne de l'aplat est choisie, et au clic droit de la sous-ligne.
 
 ### Essais ajoutés
 
@@ -1862,9 +1863,9 @@ caméra (opacité du passe-partout, réglage enregistré, curseur des Préféren
    disparaissent aussi de la timeline) puis le rouvre ; le calque courant dans un dossier fermé reste visible ; choisir le dossier,
    baisser son opacité, cacher son œil, verrouiller son cadenas : ses calques suivent ; monter le dossier avec la flèche : ses calques
    aussi. Plusieurs calques choisis (Ctrl + clic) : l'icône « Ranger les calques choisis dans un dossier ».
-3. Fond sous le trait : plus de bouton dans les réglages du pinceau ni du crayon ; sur la ligne d'un calque de dessin, le bouton carré-
-   utilisateur (éteint) ; un clic le donne au calque (même un autre que le courant), les réglages du fond apparaissent sous le pinceau
-   quand ce calque est courant ; Ctrl+Z. Dans le thème Gris clair, l'icône allumée se lit.
+3. Aplat sous le trait : plus de bouton dans les réglages du pinceau ni du crayon ; sur la ligne d'un calque de dessin, le bouton carré-
+   utilisateur (éteint) ; un clic le donne au calque (même un autre que le courant) et une sous-ligne « Aplat » apparaît dessous ;
+   Ctrl+Z. Dans le thème Gris clair, l'icône allumée se lit. (La suite : partie 33.)
 4. « fx » : absent sur un calque sans effet ; poser un flou : « fx » apparaît à côté de l'œil et du cadenas (panneau Calques, timeline) ;
    un clic éteint l'effet à l'écran (barré), le panneau Effets le dit ; un clic le rallume ; Ctrl+Z / Ctrl+Maj+Z ; enregistrer, fermer,
    rouvrir : l'état est gardé.
@@ -2642,3 +2643,238 @@ de « Ajouter un effet », grisé sur un bitmap, projet avec tremblement enregis
 6. Copier un effet dans un projet, ouvrir un autre onglet d'une autre taille de feuille, cliquer un calque, Ctrl+V : l'effet arrive, ses pixels adaptés.
 7. Menu « Trait ▾ » : « Tremblement du trait » est le premier ; grisé (bulle) sur un calque bitmap ; « Ajouter un effet » : pas d'entrée à part
    en tête, mais « Trait > Tremblement du trait ». Rouvrir un projet d'avant avec un tremblement : il tremble comme avant.
+
+## 32. Brosses par personnage (2026-10-21, branche `brosses-personnages`)
+
+Demande d'Anthony : « On ajoute un personnage et on lui attribue une couleur de trait et une couleur de fond. Quand on sélectionne ce
+personnage, on dessine avec la couleur de trait et de fond immédiatement. Ça permet, même avec un dessin très rough, d'identifier le
+personnage. J'imagine une barre horizontale au-dessus du canevas avec juste des pastilles de couleurs qu'on sélectionne. Une pastille par
+personnage plus des couleurs neutres. Paramétrables. » Précisions : la barre est visible d'office en Storyboard et dans l'espace Vignettes
+(à venir), cachée d'office en Animation et en Montage mais allumable ; le panneau « Personnages » est dans la disposition par défaut si elle
+le permet, sinon à un clic de la barre. Vocabulaire (décidé ensuite par Anthony) : la couleur sous le trait s'appelle l'**aplat** ; un
+personnage a donc un **trait** et un **aplat**. Les textes nouveaux disent « aplat » ; ce qui existait déjà (« Aplat sous le trait » du calque,
+`Layer::fond`, la strate Fond) a été renommé **« Aplat sous le trait »** le 2026-10-21 (partie 33) dans tous les textes de l'interface ; le code et
+le format gardent `fond`.
+
+### Mots
+
+| Mot | Sens | À éviter |
+|---|---|---|
+| **Personnage** | un nom, une couleur de trait, une couleur d'aplat (ou aucune), dans un ordre ; il est **du projet** (`personnages.json`) | acteur, rôle |
+| **Couleur neutre** | un trait avec ou sans aplat qui n'est pas un personnage (noir, gris, rouge de correction…) ; elle est **de l'application**, commune à tous les projets | couleur par défaut |
+| **Pastille** | le rond de la barre : anneau = couleur du trait, dedans = couleur de l'aplat (rayé quand il n'y en a pas) | puce, bouton couleur |
+| **Choisir** | cliquer une pastille : le trait prend sa couleur, et l'aplat sous le trait s'allume avec la sienne ; recliquer la pastille choisie la lâche | sélectionner (pour les dessins, c'est autre chose) |
+| **Lâcher** | revenir à une couleur libre : la couleur reste, mais n'est plus celle d'un personnage | désélectionner |
+
+### Où et quels gestes
+
+| Geste | Où | Effet |
+|---|---|---|
+| Clic sur une pastille | barre des personnages, panneau Personnages | choisit le personnage (ou la couleur neutre) ; un outil qui ne dessine pas (Sélection, Pipette…, la gomme) cède la place au pinceau ; un clic sur la pastille choisie la lâche |
+| « + » | barre, panneau | nouveau personnage (couleurs de la place suivante), choisi, et la fenêtre « Modifier » s'ouvre : une étape « Nouveau personnage » |
+| Clic droit sur une pastille | barre | Modifier… (nom, trait, aplat), Dupliquer, Déplacer à gauche / à droite, Supprimer |
+| Glisser la poignée d'une ligne | panneau Personnages | change la place du personnage (une étape « Ranger les personnages ») |
+| Icône « personnages » à droite de la barre | barre | ouvre ou ferme le panneau Personnages (un clic) |
+| Affichage > « Montrer / Cacher la barre des personnages » ; Ctrl+K `perso.barre` | menu, palette | la barre de cet espace de travail (chaque espace retient son choix) |
+| `perso.suivant`, `perso.precedent`, `perso.aucun`, `perso.ajouter` | Ctrl+K, raccourcis à poser | personnage suivant / précédent (les personnages, puis les neutres, en tournant), lâcher, ajouter |
+| Une couleur prise à la main | panneau Couleur, nuancier, pipette (Alt + clic), échange des deux couleurs, code hexadécimal | lâche le personnage (la barre n'en montre plus aucun de choisi) |
+| Pot de peinture sur l'aplat | clic sur la sous-ligne « Aplat » du calque (partie 33), pot de peinture | remplit la zone fermée avec la couleur d'**aplat** du personnage choisi (sinon la couleur courante) |
+| Choisir un personnage pendant que la sous-ligne d'un aplat est la cible | barre, panneau | **revient au trait** : le personnage dessine son trait et son aplat ; recliquer la sous-ligne reprend l'aplat seul (partie 33) |
+
+### Où vivent les choses (et pourquoi)
+
+- **Les personnages sont du projet.** Ils sont dans `Structure` (avec les commentaires, les transitions…) : ajouter, modifier, ranger, supprimer
+  s'annulent (Ctrl+Z). Fichier `personnages.json` à côté du manifeste, écrit par `write_sidecar` : jamais effacé s'il est illisible ou d'une
+  version plus récente (mis de côté sous `.illisible` si un fichier neuf doit le remplacer), absent s'il n'y a aucun personnage. **Le format du
+  projet ne change pas** (`VERSION` reste 35 ; projets partagés inclus) : un projet d'avant s'ouvre tel quel ; une version qui ne connaît pas
+  les personnages ignore le fichier et montre les aplats tels qu'ils ont été peints. Dans un film partagé, les personnages s'écrivent avec le
+  montage (celui qui tient le jeton, comme les transitions) ; les équipiers reçoivent la même liste.
+- **Les couleurs neutres sont un réglage de l'application** (`reglages.toml`, clé `couleurs_neutres`), parce qu'elles ne sont à aucun film :
+  le noir, le gris, le rouge de correction servent partout. D'origine : **Noir** (trait noir, sans aplat), **Gris** (trait gris, aplat gris clair),
+  **Rouge de correction** (trait rouge, sans aplat). Huit au plus ; on peut les retirer toutes. Les modifier ne touche pas à l'historique du
+  projet (un réglage de l'application ne s'annule pas).
+- **La barre se montre par espace de travail** (`Layout::character_bar`, clé `barre_personnages` de la disposition) : rien d'écrit tant qu'on
+  n'a pas choisi, et l'espace décide (`Espace::barre_personnages_par_defaut` : Storyboard oui, Animation et Montage non ; l'espace
+  Vignettes, quand il viendra, oui : c'est une ligne à ajouter dans ce `match`). La barre est dessinée par `personnages_barre`, qu'un autre
+  écran (la planche des vignettes) peut appeler.
+
+### L'aplat d'un trait de personnage (où vit la couleur d'aplat)
+
+L'« Aplat sous le trait » du calque (`Layer::fond`) est **une seule forme par dessin, d'une couleur par calque**. Changer la couleur du calque au choix d'un
+personnage recolorierait l'aplat de tous les personnages du calque. On garde donc plusieurs personnages sur un même calque ainsi :
+
+- au début d'un trait de pinceau ou de crayon avec un personnage qui a un aplat, le calque prend un « Aplat sous le trait » s'il n'en avait pas
+  (une étape « Aplat du personnage » à part) ; **ce qui était déjà dessiné sur ce calque reste sans aplat** (coupé, comme le ferait un personnage
+  sans aplat) ;
+- à la fin du trait, un fil de fond (`persofond.rs`, jamais le fil de l'interface) calcule la forme avant et après le trait ; **les pixels que le
+  trait a fait gagner à la forme sont peints dans la peinture de la strate de l'aplat (`Cel::fond`) de la couleur d'aplat du personnage** (ou coupés, s'il n'en a pas).
+  La peinture reste dans la forme et passe sous le trait, comme tout ce qu'on peint sur l'aplat : un autre personnage dessine ensuite sur le même
+  calque et colore son propre aplat sans toucher à celui des autres ;
+- le résultat est posé à l'image d'écran où il arrive (un dixième de seconde après le trait, comme la forme elle-même) ; s'il arrive avant toute
+  autre action, il rejoint l'étape d'annulation du trait : **un trait de personnage = une étape, aplat compris** ; sinon il est posé sans étape à
+  lui (la peinture est rognée par la forme : défaire le trait cache aussi son aplat, et le rétablir le rend) ;
+- rien ne change dans les dessins (l'aplat existe depuis le format 23) et rien ne se calcule en plus quand on n'utilise pas de personnage.
+
+La gomme et la peinture déjà posée dans l'aplat ne sont pas touchées. Pinceau et crayon, bitmap et vectoriel. **Même strate** que l'aplat peint à la
+main depuis la sous-ligne du calque (partie 33) : un personnage et la sous-ligne travaillent la même peinture, la même coupe.
+
+### Ce que voit l'utilisateur
+
+- **Barre** (26 px, sous la barre de la vue) : une pastille par personnage, un « + », un trait de séparation, les pastilles neutres ; à droite l'icône du
+  panneau (enfoncée quand il est ouvert). La pastille choisie a un halo de la couleur d'accent ; la bulle (une seconde) donne le nom, les codes des
+  couleurs et le clic droit. Sans personnage : « Aucun personnage ».
+- **Panneau Personnages** (en onglet avec Couleur et Pinceaux ; icône dans la barre des panneaux) : « + », « Couleur libre » (lâcher), le nombre de
+  personnages ; une ligne par personnage (poignée, pastille, nom, couleur du trait, interrupteur « Avec un aplat », couleur de l'aplat, corbeille) ;
+  puis « Couleurs neutres » (mêmes lignes), « + » et « Couleurs neutres d'origine ».
+- **Fenêtre « Modifier le personnage »** (clic droit > Modifier…) : la même ligne ; chaque champ ou sélecteur de couleur est une étape nommée « Modifier
+  le personnage » par geste. Le pinceau suit la couleur d'un personnage choisi qu'on modifie (ou qu'on annule).
+- **Barre d'état** : « « Lou » : le trait et l'aplat de ce personnage. » / « Couleur libre : plus de personnage choisi. ».
+
+### Limites
+
+- Les pixels que la forme d'un autre personnage couvrait déjà gardent la couleur d'avant : un personnage dessiné *dans* l'aplat d'un autre, sur le même
+  calque, n'a pas son aplat (on le recolorie avec le pot de peinture sur la sous-ligne de l'aplat, qui prend l'aplat du personnage choisi, ou on dessine sur un autre
+  calque). Un trait qui complète un personnage déjà fermé n'ajoute d'aplat que là où la forme grandit.
+- Un trait ne se souvient pas de son personnage : supprimer un personnage ne change aucun dessin ; déplacer ou transformer un dessin ne déplace pas
+  la peinture de l'aplat qui le colorait (comme toute peinture de l'aplat).
+- Seuls les traits de pinceau et de crayon portent un aplat de personnage ; le pot de peinture sur le trait, les formes et le texte prennent la couleur
+  de trait du personnage seulement.
+- L'aplat du dessin courant est coupé sous ce qui était déjà dessiné quand le calque prend son fond ; les autres dessins du calque (autres images) gardent
+  le fond blanc du calque tant qu'on n'y dessine pas avec un personnage.
+- Enregistrer dans la fraction de seconde qui suit un trait écrit le projet sans l'aplat de ce trait ; il est posé juste après et le projet est de nouveau
+  « modifié ».
+- Dans un film partagé, deux équipiers qui modifient la liste en même temps : le dernier à écrire gagne (comme les transitions).
+
+### Essais ajoutés
+
+`personnages_tests.rs` : ajouter, modifier, supprimer, dupliquer et ranger des personnages avec annulation ; noms nets ; choisir règle la couleur du trait
+et le trait gagne son aplat (bitmap et vectoriel) ; deux personnages sur un même calque gardent chacun leur aplat ; sans aplat (coupé) et neutre sans aplat ;
+un trait et son aplat = une étape ; des traits plus rapides que le fil de fond ; la gomme ne touche à rien ; le pot de peinture sur l'aplat ; une
+couleur prise à la main lâche le personnage ; le choix suit la couleur modifiée et part avec le personnage supprimé ; suivant / précédent ; les neutres
+(réglages d'origine, aller-retour TOML, ajout, déplacement, borne) ; la barre par espace de travail ; barre et panneau dessinés, application au repos
+(avant et après un trait) ; fichier : aller-retour, absent sans personnage, illisible ou plus récent jamais détruit, lecture défensive, fil d'écriture,
+aplats enregistrés et relus. Les essais de la barre des panneaux, de la disposition (onglets Couleur, Pinceaux, Personnages) et du fichier de raccourcis
+tiennent compte du nouveau panneau et des six commandes.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Espace Storyboard : sous la barre de la vue, la barre des personnages (« Aucun personnage », « + », trois pastilles neutres : noir, gris, rouge).
+   Animation et Montage : pas de barre ; Affichage > « Montrer la barre des personnages » l'allume dans cet espace seulement ; revenir en Storyboard : elle y est.
+2. « + » : une pastille de couleur apparaît, choisie (halo), la fenêtre « Modifier le personnage » s'ouvre ; taper « Lou », changer le trait (rouge) et
+   l'aplat (rose) : la pastille suit. Ctrl+Z annule chaque geste ; le panneau Historique les nomme.
+3. Dessiner une silhouette fermée au pinceau avec Lou : le trait est rouge et, une fraction de seconde après, le dedans se remplit de rose ; le calque a
+   maintenant le bouton « Aplat sous le trait » allumé et sa sous-ligne « Aplat ». Ctrl+Z : le trait et son aplat partent ensemble (l'aplat du calque, lui, est une étape à part).
+4. Créer Max (bleu, aplat bleu ciel) ; sur le même calque, dessiner à côté : aplat bleu ciel, celui de Lou n'a pas changé. Chercher une silhouette qui chevauche
+   l'autre (limite connue : la partie commune garde l'aplat de Lou).
+5. Pastille « Noir » (sans aplat) : le trait est noir et n'a pas d'aplat, même sur un calque qui en a déjà un ; pastille « Gris » : trait gris, aplat gris clair.
+6. Prendre une autre couleur (panneau Couleur, pipette Alt + clic, échange des deux couleurs) : le halo disparaît de la barre. Recliquer la pastille : la couleur revient.
+7. Cliquer la pastille choisie : elle est lâchée (« Couleur libre »). L'outil Sélection actif, cliquer une pastille : le pinceau est pris.
+8. Clic droit sur une pastille : Modifier…, Dupliquer (« Lou (copie) »), Déplacer à gauche / à droite, Supprimer. Les pastilles se rangent ; Ctrl+Z remet l'ordre.
+9. Icône « personnages » à droite de la barre, ou barre des panneaux : le panneau s'ouvre (onglet avec Couleur et Pinceaux). Glisser la poignée d'une ligne
+   change l'ordre de la barre ; la corbeille supprime ; les couleurs neutres se modifient là aussi, et « Couleurs neutres d'origine » les remet.
+10. Fermer et rouvrir SHOT : les couleurs neutres modifiées sont là ; enregistrer le projet, le rouvrir : mêmes personnages, mêmes aplats (la silhouette de Lou garde
+    son rose). Ouvrir un autre projet : ses personnages à lui, les mêmes couleurs neutres.
+11. Gomme sur un personnage choisi : elle gomme, le personnage reste choisi. Pot de peinture sur la sous-ligne « Aplat » avec Max choisi : la zone prend le bleu ciel. Choisir une pastille pendant que la sous-ligne est choisie : on revient au trait.
+12. Au repos : barre et panneau ouverts, rien ne bouge, le processeur reste à zéro ; un trait de personnage ne laisse rien tourner après lui.
+
+## 33. L'aplat sous le trait, depuis le calque (2026-10-21, branche `aplat-souscalque`)
+
+Demande d'Anthony : « Le fond derrière le trait s'active depuis le calque, plus depuis les réglages du pinceau. Une fois activé, un
+sous-calque apparaît dans le panneau de calques (uniquement, pas sur la timeline), en petit (plus fin qu'un calque normal). Quand on clique
+sur ce calque on peut gommer ou dessiner sur le fond uniquement. Plus simple de cette manière, les outils ou icônes liés à cela avant
+disparaissent. Plus simple, plus intuitif. » Et le nom : **« Aplat »**. (Le calque d'avant : partie 25 ; les personnages : partie 32.)
+
+### Mots
+
+| Mot | Sens | À éviter |
+|---|---|---|
+| **Aplat sous le trait** | la forme déduite du trait, d'une couleur, sous le trait ; un réglage **du calque** (bouton de sa ligne, clic droit) | fond sous le trait, remplissage |
+| **Aplat** (sous-ligne) | la ligne fine sous le calque, dans le panneau Calques : pastille de la couleur + « Aplat » ; la **cible** du dessin quand elle est choisie | sous-calque (dans les textes de l'interface), calque d'aplat |
+| **Cible** | où dessinent le pinceau, le crayon, la gomme, le pot de peinture et le cutter : le **trait** (d'office) ou l'**aplat** du calque courant | strate (c'est le mot du code) |
+
+### Où et quels gestes
+
+| Geste | Où | Effet |
+|---|---|---|
+| Ajouter / retirer l'aplat | bouton carré-utilisateur de la ligne du calque (« Aplat sous le trait ») et des commandes du panneau ; clic droit d'un calque > « Ajouter un aplat » / « Retirer l'aplat » ; menu Calques > Aplat sous le trait ; actions `pinceau.fond`, `fond.calques_choisis`, `fond.tout_le_plan`, `fond.retirer_choisis`, `fond.couleur_partout` (Ctrl+K, raccourcis d'avant) | une étape « Aplat : ajouter » / « Aplat : retirer » ; la sous-ligne apparaît ou part ; ni dossier, ni calque CTG ou vidéo |
+| Clic sur la sous-ligne | panneau Calques | l'aplat devient la cible (le calque aussi devient courant) ; un outil qui ne dessine pas cède la place au pinceau ; pas d'étape d'annulation |
+| Clic sur le calque (ligne, vignette, nom) | panneau Calques, timeline | la cible revient au trait ; changer de calque, retirer l'aplat, annuler : aussi |
+| Peindre, gommer, remplir, couper | canevas, la cible étant l'aplat | pinceau, crayon : dans l'aplat, sous le trait, dans sa forme ; gomme : coupe l'aplat ; pot de peinture : remplit la zone fermée par le trait ; cutter : retire la zone ; le trait n'est jamais touché ; « Aplat : peinture », « Aplat : gomme », « Aplat : remplir », « Aplat : retirer la zone » |
+| Régler l'aplat | Réglages (tout en haut, « Aplat de <calque> »), clic droit de la sous-ligne | couleur, débord, fermer les trous, le bord de l'image ferme la forme ; « Cet aplat aussi sur » les calques choisis / tout le plan (Réglages) ; une étape « Aplat : réglages » par geste |
+| Retirer l'aplat | clic droit de la sous-ligne ; bouton ou clic droit du calque | « Aplat : retirer » |
+
+### Ce qui a disparu
+
+- Dans les réglages du pinceau, du crayon, de la gomme et du pot de peinture : la bascule « Peindre dans : Le trait | Le fond », la couleur du fond,
+  le débord, fermer les trous, la case du bord, « Ce fond aussi sur », et la phrase d'aide. Plus rien de l'aplat ne s'y trouve.
+- Sur la ligne du calque courant : la petite bascule « Trait | Fond ».
+- L'action `pinceau.strate_fond` (et son bloc de `keymap.toml`) : la cible se choisit en cliquant (un raccourci posé dessus par un utilisateur est
+  ignoré avec l'avertissement habituel des actions inconnues).
+
+### Règles de cible
+
+- La cible est `App::aplat_cible` : le **numéro du calque** dont l'aplat est visé (`None` : le trait). Elle est **propre au projet** (rangée avec
+  l'onglet, `onglets.rs`) et **n'est jamais enregistrée** : un projet rouvert dessine le trait. `App::aplat_en_cible()` dit si l'aplat du calque
+  courant est la cible (le calque en a toujours un, et c'est bien lui).
+- Elle ne vaut que pour le calque dont on a cliqué la sous-ligne. Elle retombe sur le trait : au clic sur un calque (`click_layer_head`), à tout
+  changement de calque (`select_layer`), quand l'aplat est retiré, annulé ou perdu (`tick_aplat`, à chaque image d'écran, sans rien demander au repos).
+- **Un personnage** (partie 32) : le choisir (pastille, `perso.suivant`…) **revient au trait**, parce qu'un personnage dessine son trait *et* son aplat,
+  comme prévu ; son aplat va dans la **même strate** que l'aplat peint à la main. Cliquer ensuite la sous-ligne reprend l'aplat seul, le personnage
+  restant choisi : pinceau et pot de peinture y prennent alors sa couleur d'**aplat**.
+- Les outils qui ne travaillent pas l'aplat (sélection, formes, texte, déformation, caméra…) travaillent le trait, quelle que soit la cible ; la
+  cible reste en attente et se retrouve au retour d'un outil de dessin. La ligne du bas de la vue ne dit « Aplat de <calque> » que pour les cinq
+  outils qui l'utilisent.
+
+### La sous-ligne
+
+- Une ligne de 16 px (un rang de calque en fait 36 + marges, soit moins de la moitié), en retrait, sous le rang de son calque : une pastille de la couleur
+  de l'aplat et « Aplat » en petit. Choisie, elle est surlignée comme un calque courant (la couleur de la sorte du calque) et le rang du calque est
+  alors surligné plus doucement. Survol : bulle d'une seconde. Clic : cible ; clic droit : réglages et « Retirer l'aplat ».
+- **Panneau Calques seulement.** Ni la timeline (`layerheads.rs`, `timeline.rs`) ni les pistes du montage (`montagerows.rs`) n'en ont : leurs rangées ne
+  changent pas. Un dossier fermé cache ses calques et donc leurs sous-lignes (le calque courant reste listé, avec la sienne).
+- Elle n'entre pas dans le glisser des calques (seuls les rangs des calques sont des places) ni dans le choix de plusieurs calques.
+
+### Vocabulaire
+
+Tous les textes de l'interface (menus, bulles, barre d'état, palette Ctrl+K, Réglages du projet et du nouveau projet, panneau Historique) disent
+« aplat » : « Aplat sous le trait », « Ajouter un aplat », « Retirer l'aplat », « Aplat de <calque> », « Aplat : peinture ». Le code et le format gardent
+`fond` (`Layer::fond`, `Cel::fond`, `FondReglages`, `fond.rs`, `fondui.rs`, `fondfil.rs`, les actions `pinceau.fond` et `fond.*`) : **le format des projets ne
+change pas**, un projet d'avant s'ouvre tel quel (les aplats déjà posés ont leur sous-ligne). Les calques « de fond » du décor (scène entière, « Fond 3D »)
+sont autre chose et gardent leur nom.
+
+### Limites
+
+- La sous-ligne n'est pas dans la timeline ni dans le montage : pour peindre l'aplat on passe par le panneau Calques (voulu).
+- « Cet aplat aussi sur » n'est que dans Réglages (il part de l'aplat du calque courant), pas dans le clic droit d'une sous-ligne d'un autre calque.
+- Ctrl ou Maj + clic sur une sous-ligne n'ajoute rien au choix de calques (c'est un clic simple).
+- Les formes (ligne, rectangle…) et le texte ne se posent pas dans l'aplat.
+
+### Essais ajoutés
+
+`aplat_tests.rs` (16 essais) : activation depuis le calque seulement (aucun réglage d'aplat dans les cinq outils, plus d'action de bascule, bouton sur chaque
+ligne) ; clic droit du calque (ajouter / retirer, une étape nommée, autre calque que le courant) ; alias `pinceau.fond` et `fond.*` ; sous-ligne fine (moins de la
+moitié d'un rang), seulement dans le panneau Calques (pas la timeline ni le montage), une par aplat, suivant les dossiers fermés ; clic sur la sous-ligne = cible
+(outil, barre d'état, pas d'étape), clic sur le calque ou autre calque = trait, retrait et annulation ; indication « Aplat de <calque> » dans la ligne de la vue ;
+pinceau, gomme et pot de peinture sur l'aplat seul (trait intact, étapes « Aplat : … », tout s'annule) ; le trait de nouveau après un clic sur le calque ; personnage
+(retour au trait, aplat dans la même strate, pot de peinture avec son aplat) ; réglages dans Réglages et dans le menu de la sous-ligne (une étape « Aplat :
+réglages » par geste, bon calque) ; projet enregistré et relu inchangé, cible non enregistrée et propre à l'onglet ; application au repos avec la sous-ligne choisie.
+Les essais des notes de calques (bouton de la ligne, rien sous le pinceau), des personnages, du fichier de raccourcis et de l'état par onglet suivent le nouveau
+vocabulaire.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Panneau Calques : sur un calque de dessin, cliquer le bouton carré-utilisateur (bulle « Aplat sous le trait ») : une sous-ligne fine « Aplat » avec une pastille
+   blanche apparaît juste sous le calque. Rien de nouveau dans la timeline ni dans les pistes du montage. Réglages du pinceau : plus de bascule, plus de couleur
+   de fond.
+2. Dessiner un personnage fermé sur ce calque. Cliquer la sous-ligne : elle se surligne, le calque s'adoucit, la ligne du bas de la vue dit « Aplat de … ». Pinceau
+   avec une autre couleur : la peinture reste dans la forme, sous le trait, le trait ne bouge pas. Gomme : l'aplat est coupé (on voit à travers), le trait reste. Pot
+   de peinture : un clic dans une zone fermée la remplit sous le trait. Ctrl+Z annule chaque geste (panneau Historique : « Aplat : … »).
+3. Cliquer le nom du calque : le pinceau redessine le trait ; la gomme efface du trait.
+4. Réglages (outil pinceau, sous-ligne choisie) : « Aplat de … » avec couleur, débord, fermer les trous, bord, « Cet aplat aussi sur ». Clic droit sur la sous-ligne : les
+   mêmes réglages et « Retirer l'aplat ». Changer la couleur : l'aplat suit, la pastille aussi ; Ctrl+Z.
+5. Clic droit sur un calque (même pas courant) : « Ajouter un aplat » / « Retirer l'aplat ». Retirer : la sous-ligne part ; Ctrl+Z la rend, avec ce qu'on y avait peint.
+6. Fermer un dossier qui contient un calque avec aplat : sa sous-ligne part avec lui ; le rouvrir : elle revient.
+7. Choisir une pastille de personnage pendant que la sous-ligne est choisie : on revient au trait (la sous-ligne n'est plus surlignée) ; dessiner : trait et aplat du
+   personnage. Recliquer la sous-ligne : le pot de peinture prend la couleur d'aplat du personnage.
+8. Enregistrer, fermer, rouvrir : l'aplat et sa peinture sont là, la sous-ligne aussi, et c'est le trait qu'on dessine. Ouvrir un projet d'avant : ses aplats ont leur sous-ligne.
+9. Au repos, sous-ligne choisie : rien ne bouge, le processeur reste à zéro.

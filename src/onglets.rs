@@ -124,7 +124,9 @@ etat_projet! {
     xsheet_seen_frame: Option<usize> = None,
     plan_len_seen: Option<(u64, usize)> = None,
     // --- sélections
+    perso: crate::personnagesui::Etat = Default::default(),
     layer_sel: Vec<u64> = Vec::new(),
+    aplat_cible: Option<u64> = None,
     frame_sel: Option<(usize, usize)> = None,
     key_sel: Vec<crate::montagekeys::KeyRef> = Vec::new(),
     key_anchor: Option<crate::montagekeys::KeyRef> = None,

@@ -300,6 +300,9 @@ pub struct App {
     pub(crate) board_view: BoardView,
     /// État de la vue Vignettes (`boardui.rs`) : appuis, bande de note en cours d'écriture, case vide…
     pub(crate) vignettes: crate::boardui::Vignettes,
+    /// Brosse par personnage (`personnagesui.rs`) : le personnage qui dessine, la fenêtre « Modifier » et le fil
+    /// des fonds de trait ; les personnages eux-mêmes sont dans le projet (`Document::personnages`).
+    pub(crate) perso: crate::personnagesui::Etat,
     pub(crate) cur_panel: usize,
     pub(crate) cur_layer: usize,
     pub(crate) cur_frame: usize,
@@ -738,9 +741,11 @@ pub struct App {
     pub(crate) theme_unsaved: bool,
     /// Écran d'accueil à montrer tant qu'aucun projet n'est ouvert (`accueil.rs`).
     pub(crate) welcome: bool,
-    /// Fond sous le trait (`fond.rs`) : le pinceau peint dans la strate Fond (sinon dans le
-    /// trait), et le dessin dont on peint le fond en ce moment (affiché en direct).
-    pub(crate) paint_fond: bool,
+    /// Aplat sous le trait (`fond.rs`, `fondui.rs`) : le calque (son numéro) dont l'aplat est la cible du dessin, quand on a
+    /// cliqué sur sa sous-ligne du panneau Calques ; le pinceau, la gomme et le pot de peinture travaillent alors l'aplat
+    /// seul, sinon le trait. Propre à un projet (`onglets.rs`). Le dessin dont on peint l'aplat en ce moment (affiché en
+    /// direct) vient juste après.
+    pub(crate) aplat_cible: Option<u64>,
     pub(crate) fond_stroke: Option<CelId>,
     /// Le trait qui suit le même geste sur la coupe du fond (la gomme coupe, le pinceau recoud).
     pub(crate) fond_cut: Option<StrokeState>,
@@ -950,6 +955,7 @@ impl App {
             mode: Mode::Storyboard,
             board_view: BoardView::Scene,
             vignettes: Default::default(),
+            perso: Default::default(),
             cur_panel: 0,
             cur_layer: 0,
             cur_frame: 0,
@@ -1205,7 +1211,7 @@ impl App {
             theme_applied,
             theme_unsaved: false,
             welcome: true,
-            paint_fond: false,
+            aplat_cible: None,
             fond_stroke: None,
             fond_cut: None,
             pane_heights: Default::default(),
@@ -1700,6 +1706,8 @@ impl App {
         if layer < self.layers().len() && layer != self.cur_layer {
             self.end_stroke();
             self.cur_layer = layer;
+            // Changer de calque, c'est revenir au trait (la cible aplat suit la sous-ligne choisie).
+            self.aplat_cible = None;
             self.vsel = None;
         }
     }
@@ -1888,6 +1896,8 @@ impl App {
         }
         let erase = self.tool == Tool::Eraser;
         if !erase {
+            // Un personnage qui a un fond le donne au calque (`personnagesui.rs`).
+            self.perso_avant_trait();
             // Elle rejoint les couleurs récentes (passe couleur).
             self.color_used(self.color);
         }
@@ -1895,8 +1905,8 @@ impl App {
             self.guides.stroke = None;
             return;
         }
-        // Strate Fond (`fond.rs`) : pinceau et gomme peignent dans le fond, en bitmap.
-        if self.paint_fond && self.layer().fond.is_some() {
+        // Aplat (`fond.rs`) : si sa sous-ligne est choisie, pinceau et gomme peignent dans l'aplat, en bitmap.
+        if self.aplat_en_cible() {
             self.begin_fond_stroke(p, pressure, pen);
             return;
         }
@@ -1957,7 +1967,7 @@ impl App {
         let (w, h) = (self.doc.width, self.doc.height);
         let Some(cover) = self.doc.cels.get(&cel).map(|c| crate::fond::silhouette(&c.raster, &r)) else { return };
         if cover.iter().all(|&c| c == 0) {
-            self.status = "Strate Fond : dessine d'abord le trait, le fond se déduit de lui (bascule sur Trait).".into();
+            self.status = "Aplat : dessine d'abord le trait, l'aplat se déduit de lui (clique sur le calque pour revenir au trait).".into();
             if let Some(p) = prefix {
                 self.history.push(p);
             }
@@ -2058,6 +2068,8 @@ impl App {
     pub(crate) fn end_stroke(&mut self) {
         // Un segment droit en attente (Maj tenue) est posé avant de finir le trait.
         self.droit_flush();
+        // Le trait d'un personnage (`personnagesui.rs`) : son dessin et les tuiles d'avant, pour le fond qu'il gagne.
+        let mut trait_de_personnage: Option<(CelId, Vec<(usize, Option<crate::raster::Tile>)>)> = None;
         if let Some(mut stroke) = self.stroke.take() {
             // Banc de traits : le trait tel que reçu, avec son réglage.
             if let Some(n) = self.record_strokes.as_mut() {
@@ -2090,18 +2102,24 @@ impl App {
                     c.version += 1;
                 }
                 self.renderer.invalidate_tiles(&dirty);
-                // Peinture et coupe : une seule étape d'annulation.
+                // Peinture et coupe : une seule étape d'annulation, nommée « Aplat : … ».
+                let nom = if self.tool == Tool::Eraser { "Aplat : gomme" } else { "Aplat : peinture" };
+                let avant = self.history.context.replace(nom.to_string());
                 match edits.len() {
                     0 => {}
                     1 => self.history.push(edits.pop().unwrap_or(Edit::Group(Vec::new()))),
                     _ => self.history.push(Edit::Group(edits)),
                 }
+                self.history.context = avant;
             } else {
                 let edit = match self.doc.cels.get_mut(&cel) {
                     Some(c) => stroke.finish(&mut c.raster, &mut dirty),
                     None => None,
                 };
                 self.renderer.invalidate_tiles(&dirty);
+                if self.perso.actif.is_some() {
+                    trait_de_personnage = crate::personnagesui::tuiles_de(edit.as_ref()).map(|t| (cel, t));
+                }
                 match self.vstroke.take() {
                     Some(vs) => {
                         // Les pixels d'avant l'aperçu servent à poser le trait définitif sans tout redessiner.
@@ -2121,6 +2139,10 @@ impl App {
                     }
                 }
             }
+        }
+        // Le fond que le trait d'un personnage vient de gagner se calcule sur le fil de fond.
+        if let Some((cel, tiles)) = trait_de_personnage {
+            self.perso_apres_trait(cel, tiles);
         }
         self.finish_vector_erase();
         self.finish_cut();
@@ -2169,8 +2191,8 @@ impl App {
             self.status = "Le pot de peinture remplit dans la feuille : clique sur une zone fermée de la feuille.".into();
             return;
         }
-        // Strate Fond (`fondui.rs`) : la zone fermée par le trait se remplit dans le fond.
-        if self.paint_fond && self.layer().fond.is_some() {
+        // Aplat (`fondui.rs`) : si sa sous-ligne est choisie, la zone fermée par le trait se remplit dans l'aplat.
+        if self.aplat_en_cible() {
             self.fond_zone_at(p, false);
             return;
         }
@@ -3453,6 +3475,10 @@ impl App {
         if self.fond_action(action) {
             return;
         }
+        // Brosse par personnage (`personnagesui.rs`).
+        if self.perso_action(action) {
+            return;
+        }
         // Préréglages d'effets et calques d'effets (`prereglagesui.rs`).
         if self.effet_action(action) {
             return;
@@ -4511,6 +4537,8 @@ impl App {
         self.tick_flip(ctx);
         self.tick_video_import(ctx);
         self.tick_references(ctx);
+        self.tick_personnages();
+        self.tick_aplat();
         self.propagation_ui(ctx);
         self.coloriage_ui(ctx);
         if self.playing {
@@ -4620,6 +4648,7 @@ impl App {
         self.export_windows(ctx);
         self.recovery_window(ctx);
         self.workspace_name_window(ctx);
+        self.personnages_fenetre(ctx);
         self.scrub_audio();
         self.drop_stale_drags(ctx.input(|i| i.pointer.any_down()));
         self.suivre_sorte_pinceau();

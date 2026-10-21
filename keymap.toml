@@ -2243,11 +2243,6 @@ touches = []
 source = "SHOT (sans touche)"
 
 [[raccourci]]
-action = "pinceau.strate_fond"
-touches = []
-source = "SHOT (sans touche)"
-
-[[raccourci]]
 action = "pinceau.remplir"
 touches = []
 source = "SHOT (sans touche)"
@@ -2646,6 +2641,37 @@ source = "SHOT (sans touche)"
 
 [[raccourci]]
 action = "references.tout_voir"
+touches = []
+source = "SHOT (sans touche)"
+
+# Brosse par personnage (sans touche : à choisir).
+[[raccourci]]
+action = "vue.personnages"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.barre"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.ajouter"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.suivant"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.precedent"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.aucun"
 touches = []
 source = "SHOT (sans touche)"
 

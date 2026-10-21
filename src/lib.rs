@@ -141,6 +141,8 @@ pub mod fond;
 #[cfg(test)]
 mod fond_tests;
 #[cfg(test)]
+mod aplat_tests;
+#[cfg(test)]
 mod perte_tests;
 #[cfg(test)]
 mod rejeu_tests;
@@ -522,6 +524,11 @@ mod panels;
 mod pdf;
 #[cfg(test)]
 mod pdf_tests;
+mod persofond;
+mod personnages;
+#[cfg(test)]
+mod personnages_tests;
+mod personnagesui;
 mod persp;
 #[cfg(test)]
 mod persp_tests;

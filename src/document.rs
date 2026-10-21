@@ -988,6 +988,8 @@ pub struct Structure {
     pub transitions: Vec<crate::transitions::Transition>,
     /// Références visuelles (`references.rs`) : ajouter, retirer, déplacer s'annulent avec le reste.
     pub references: Vec<crate::references::Reference>,
+    /// Personnages du projet (`personnages.rs`) : ajouter, modifier, ranger s'annulent avec le reste.
+    pub personnages: Vec<crate::personnages::Personnage>,
     /// Versions des plans (`planvers.rs`), par numéro de plan : créer, passer, restaurer, supprimer une
     /// version s'annulent avec le reste.
     pub versions: std::collections::BTreeMap<u64, crate::planvers::VersionsDuPlan>,
@@ -1051,6 +1053,9 @@ pub struct Document {
     /// Références visuelles du projet (`references.rs`) ; enregistrées à côté du manifeste, dans
     /// `references.json`, leurs fichiers dans `references/`.
     pub references: Vec<crate::references::Reference>,
+    /// Personnages du projet (`personnages.rs`) ; enregistrés à côté du manifeste, dans
+    /// `personnages.json`. Dans `Structure` : l'annulation les rétablit avec le reste.
+    pub personnages: Vec<crate::personnages::Personnage>,
     /// Les envois (`envois.rs`) : l'état de chaque plan quand le film est parti ; enregistrés à côté du
     /// manifeste (`envois.json`, `versions/`). Hors de l'annulation : marquer un envoi est un
     /// fait, pas une retouche du film.
@@ -1113,6 +1118,7 @@ impl Document {
             transitions: Vec::new(),
             sons_proposes: Default::default(),
             references: Vec::new(),
+            personnages: Vec::new(),
             envois: Default::default(),
             versions: Default::default(),
             next_id: 1,
@@ -1144,6 +1150,7 @@ impl Document {
             .chain(structure.comments.iter().map(|c| c.id))
             .chain(structure.transitions.iter().map(|t| t.id))
             .chain(structure.references.iter().map(|r| r.id))
+            .chain(structure.personnages.iter().map(|p| p.id))
             .chain(cels.keys().copied())
             .chain(sounds.keys().copied())
             .max()
@@ -1177,6 +1184,7 @@ impl Document {
             transitions: structure.transitions,
             sons_proposes: Default::default(),
             references: structure.references,
+            personnages: structure.personnages,
             envois: Default::default(),
             versions: structure.versions,
             next_id: max_id + 1,
@@ -1364,6 +1372,7 @@ impl Document {
             reserves: self.reserves.clone(),
             transitions: self.transitions.clone(),
             references: self.references.clone(),
+            personnages: self.personnages.clone(),
             versions: self.versions.clone(),
         }
     }
@@ -1397,6 +1406,7 @@ impl Document {
             reserves: std::mem::replace(&mut self.reserves, s.reserves),
             transitions: std::mem::replace(&mut self.transitions, s.transitions),
             references: std::mem::replace(&mut self.references, s.references),
+            personnages: std::mem::replace(&mut self.personnages, s.personnages),
             versions: std::mem::replace(&mut self.versions, s.versions),
         }
     }
@@ -1449,6 +1459,7 @@ impl Document {
         self.comments.iter().for_each(|c| see(c.id));
         self.transitions.iter().for_each(|t| see(t.id));
         self.references.iter().for_each(|r| see(r.id));
+        self.personnages.iter().for_each(|p| see(p.id));
         self.cels.keys().for_each(|&c| see(c));
         self.sounds.keys().for_each(|&s| see(s));
         self.models.keys().for_each(|&m| see(m));

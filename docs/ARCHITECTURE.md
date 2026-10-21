@@ -179,7 +179,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   `undo` / `redo` ; le nom vient de `History::context`, que `run_action` (nom de la commande) et
   `pane_ui` (outil sur le dessin, sinon nom du panneau) posent le temps de leur travail, puis
   rendent. Les ~60 endroits qui appellent `push` n'en savent rien.
-- Fond sous le trait (`fond.rs`, `fondui.rs`) : réglages par calque (`Layer::fond`), strate Fond
+- Aplat sous le trait (`fond.rs`, `fondui.rs`) : réglages par calque (`Layer::fond`), strate Fond
   par dessin (`Cel::fond` : `Strate { peinture, coupe }`). Le rendu ne suit pas en direct un
   dessin dérivé (effets, CTG) pendant un trait : le fond est donc un élément à part, juste sous
   le trait (`render::fond_item`, `FondPart::Forme`, dérivé et gardé dans le cache de `fx`,
@@ -1508,7 +1508,7 @@ export, enregistrement) change pour les projets d'avant.
   pas tout le contenu : c'est le choix de SHOT, simple et prévisible ; le choix de Storyboard Pro est **à
   vérifier**.
 - **Reste borné à la feuille** : pot de peinture (`fill.rs` : image de la taille de la feuille), zones bitmap
-  (`PixelMask` : taille de la feuille), effets de calque et calques d'ajustement, fond sous le trait, calque de
+  (`PixelMask` : taille de la feuille), effets de calque et calques d'ajustement, aplat sous le trait, calque de
   couleur, enveloppe / perspective, import et export Storyboard Pro, propagation (`synthese/`, intact).
 - **Essais** : `toile_tests.rs` (numéros de tuiles, mémoire, annuler / rétablir, enregistrer / relire, fichier
   abîmé, vecteur hors feuille, caméra, texture du monde pixel pour pixel contre `composite_area`, mise à jour
@@ -1982,12 +1982,12 @@ centre le cadre sur la feuille, donc centre de feuille = centre de cadre). Sans 
 | Pose du calque, clés de position | `adapte_calque` | `x`, `y` × `s` (le pivot est le centre de la feuille, qui se retrouve) ; échelle, étirement, rotation inchangés |
 | Clés de caméra | `adapte_camera` | position par la similitude ; avancée × rapport des largeurs de cadre (c'est lui qui règle `camera::ref_distance`) ; zoom, angles inchangés |
 | Effets | `adapte_valeurs` | les paramètres dont l'unité commence par `px` (`" px"`, `" px/img"`), valeurs et clés, × `s` et rabotés aux bornes ; entiers arrondis ; le trait sec : trous pour 100 px de trait ÷ `s`. Un essai passe en revue tous les effets : un paramètre en pixels dont l'unité ne le dit pas ferait échouer la suite |
-| Fond sous le trait, calque de couleur, CTG | `adapte_calque` | débord / fermeture des trous en pixels entiers × `s`, au moins 1 |
+| Aplat sous le trait, calque de couleur, CTG | `adapte_calque` | débord / fermeture des trous en pixels entiers × `s`, au moins 1 |
 | Cadence | `retemps_*` | `f' = tween::rescale_frame(f, de, vers)` ; les images d'un calque par `tween::resample` sans interpolation (dessins tenus) ; `retemps_reglages_calque` / `_plan` (rôles, clés d'effets / de position / de caméra, vidéo, marques, repères, notes) sont **aussi** ceux de « Changer la cadence » (`tweenui.rs`), qui ignorait les clés de position |
 
 **Fichier > Réglages du projet > Résolution** (« mettre les dessins à l'échelle ») utilise la même règle : `Document::scale_stage` est maintenant
 une similitude de pivot l'origine de la feuille (`t = 0`) passée à `adapte_dessins`, `adapte_calque` et `adapte_cle_camera`. Il n'y a donc qu'un code
-de mise à l'échelle ; changer la résolution met désormais aussi à l'échelle les effets en pixels, le fond sous le trait, ce qui est
+de mise à l'échelle ; changer la résolution met désormais aussi à l'échelle les effets en pixels, l'aplat sous le trait, ce qui est
 dessiné hors de la feuille, et fait suivre l'avancée de la caméra au rapport des largeurs de cadre (essai
 `resize_tests::scaling_uses_the_rule_of_pasting_…`).
 

@@ -30,6 +30,9 @@
 //!                         jusqu'à leur acceptation (copiés alors dans sons/)
 //!   crayonnes.json        (ancien) la planche de crayonnés, supprimée en 2026-10-21 : SHOT ne le lit plus
 //!                         et ne l'écrit plus, mais ne l'efface jamais (`crayonnesheritage.rs`)
+//!   personnages.json      les personnages de la brosse par personnage (`personnages.rs`) : nom, couleur de
+//!                         trait, couleur d'aplat ; de même sans changer `VERSION` (absent : aucun personnage ;
+//!                         une version qui ne le connaît pas le laisse en place)
 //!   envois.json           les envois (`envois.rs`) : nom, date et empreinte de chaque plan, de même sans
 //!                         changer `VERSION` ; absent, il n'y a pas d'envoi
 //!   versions/             les instantanés des envois et leurs dessins, rangés par contenu
@@ -1070,6 +1073,8 @@ pub struct SaveJob {
     transitions: Option<Vec<u8>>,
     /// Le fichier des effets des sons (`effets_son.json`) ; rien : il n'y en a plus, le fichier part.
     sound_fx: Option<Vec<u8>>,
+    /// Le fichier des personnages (`personnages.json`) ; rien : il n'y en a plus, le fichier part.
+    personnages: Option<Vec<u8>>,
     /// Le fichier des sons proposés (`sons_proposes.json`) ; rien : il n'y en a plus, le fichier part.
     sons_proposes: Option<Vec<u8>>,
     /// Les références visuelles : fichiers à recopier dans `references/`, `references.json`, et ce
@@ -1246,6 +1251,7 @@ pub fn prepare_save(
         reserves: crate::rognage::to_bytes(doc)?,
         transitions: crate::transitions::to_bytes(doc)?,
         sound_fx: crate::audiofx::to_bytes(doc)?,
+        personnages: crate::personnages::to_bytes(doc)?,
         sons_proposes: crate::indications::to_bytes(doc)?,
         references: crate::references::plan_save(doc, dir)?,
         scenes3d: crate::scene3dstore::to_bytes(doc)?,
@@ -1279,6 +1285,24 @@ fn load_sons_proposes(dir: &Path, warnings: &mut Vec<String>) -> crate::indicati
         Err(e) => {
             warnings.push(format!("{} : {e} ; les sons proposés ne sont pas chargés.", path.display()));
             Default::default()
+        }
+    }
+}
+
+/// Les personnages du projet, lus dans `personnages.json` (absent : aucun). Un fichier illisible ou d'une
+/// version plus récente n'empêche pas d'ouvrir le projet : on le dit, sans personnages, et il reste en
+/// place (`write_sidecar`).
+fn load_personnages(dir: &Path, warnings: &mut Vec<String>) -> Vec<crate::personnages::Personnage> {
+    let path = dir.join(crate::personnages::FILE);
+    match fs::read_to_string(&path) {
+        Ok(text) => crate::personnages::parse(&text).unwrap_or_else(|e| {
+            warnings.push(format!("{} : {e} ; les personnages ne sont pas chargés.", crate::personnages::FILE));
+            Vec::new()
+        }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Vec::new(),
+        Err(e) => {
+            warnings.push(format!("{} : {e} ; les personnages ne sont pas chargés.", path.display()));
+            Vec::new()
         }
     }
 }
@@ -1493,6 +1517,8 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::transitions::FILE), self.transitions.as_deref(), |t| crate::transitions::parse(t).is_ok())?;
         // Et les effets des sons.
         write_sidecar(&dir.join(crate::audiofx::FILE), self.sound_fx.as_deref(), |t| crate::audiofx::parse(t).is_ok())?;
+        // Les personnages de la brosse par personnage, de même.
+        write_sidecar(&dir.join(crate::personnages::FILE), self.personnages.as_deref(), |t| crate::personnages::parse(t).is_ok())?;
         // Et les sons proposés par la lecture du storyboard.
         write_sidecar(&dir.join(crate::indications::FILE), self.sons_proposes.as_deref(), |t| crate::indications::parse(t).is_ok())?;
         // Les références visuelles : leurs fichiers dans `references/`, puis `references.json`.
@@ -2372,6 +2398,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         transitions: Vec::new(),
         // Les références visuelles aussi (`references.json`, `references::load`).
         references: Vec::new(),
+        // Les personnages : `personnages.json`, `load_personnages`.
+        personnages: Vec::new(),
         // Les versions des plans : `plans_versions.json`, `planvers::installer`.
         versions: Default::default(),
     };
@@ -2579,6 +2607,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         structure.transitions = load_transitions(dir, &mut warnings);
         // Les références visuelles : `references.json` et le dossier `references/` (absents : aucune).
         structure.references = crate::references::load(dir, &mut warnings);
+        // Les personnages de la brosse par personnage (`personnages.json`, absent : aucun).
+        structure.personnages = load_personnages(dir, &mut warnings);
     }
     let frame = manifest.cadre;
     let mut written: HashMap<CelId, u64> = cels.keys().map(|&id| (id, 0)).collect();

@@ -272,9 +272,9 @@ impl App {
                     crate::bulles::bulle(resp, "Couleur du papier", "La couleur de l'arrière-plan du projet.", "");
                 });
                 ui.add_space(18.0);
-                ui.label("Fond sous le trait");
+                ui.label("Aplat sous le trait");
                 let resp = ui.color_edit_button_srgb(&mut d.values.fond);
-                crate::bulles::bulle(resp, "Couleur des fonds", "La couleur d'un fond qu'on allume sous le trait (option « Fond sous le trait » du pinceau).", "");
+                crate::bulles::bulle(resp, "Couleur des aplats", "La couleur d'un aplat qu'on ajoute à un calque (bouton « Aplat sous le trait » de sa ligne).", "");
                 ui.add_space(18.0);
                 ui.label("Premier plan");
                 let resp = ui.add(egui::DragValue::new(&mut d.values.first_seconds).speed(0.1).range(0.1..=600.0).max_decimals(1).suffix(" s"));

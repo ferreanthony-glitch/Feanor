@@ -590,7 +590,7 @@ un mode de fusion, une tuile signalée, une version, un dessin de plus, une autr
   ferme. Un disque plein ou un dossier en lecture seule : « Enregistrement impossible », rien de perdu.
 - **Dessin et défilement** : un trait qui sort loin de son contenu (de haut en bas de la feuille) est
   entier, sans bord rogné ; un calque transformé (échelle, rotation) a les mêmes bords qu'avant ; une
-  feuille flottante déformée (Enveloppe, Perspective) aussi ; un fond sous le trait qui se peint ; des
+  feuille flottante déformée (Enveloppe, Perspective) aussi ; un aplat sous le trait qui se peint ; des
   pelures d'oignon teintées ; un aperçu réduit d'effet qui revient en pleine résolution ; un tremblement
   du trait animé à l'arrêt. Aller et venir très vite dans la timeline sans reste des dessins précédents.
 - La **lecture** d'un plan chargé reste régulière (superposition « Performance » : « Dessin » et
@@ -653,7 +653,7 @@ en défilant un montage de 600 plans ou en sautant de plan en plan, chaque image
   une demande, la composent avec **le code d'avant**, `render::thumbnail_until` (`thumbnail` plus un test
   d'abandon entre deux lignes), dans le mode « doux » d'avant (`fx::differe` + `fxcache::soft_scope`) : les
   effets de calque pas encore calculés sont demandés au fil des effets et remplacés par leur dernier résultat ou
-  le dessin sans effet, les calques d'effets (`calqueffet`) se résolvent de même, le fond sous le trait montre
+  le dessin sans effet, les calques d'effets (`calqueffet`) se résolvent de même, l'aplat sous le trait montre
   celui d'avant jusqu'à l'arrivée du nouveau (alors seules les vignettes des plans qui montrent un fond se
   refont : le compte des fonds arrivés, `fx::fond_epoch`, n'est dans la clé que pour eux), les images de calque vidéo se lisent sur le fil de fond (elles se
   lisaient sur l'interface). Une vignette incomplète se refait quand un calcul de fond finit
@@ -712,7 +712,7 @@ qui réveillent l'écran à la fin de chaque vignette (egui regroupe les réveil
 ### Garde-fous
 
 - **Mêmes pixels** (`thumbs_tests.rs`) : sur le projet d'essai complet de la fiabilité (effets de calque à clés,
-  tremblement du trait, fond sous le trait, calque CTG, calque vidéo, dossier, mode de fusion, transformation,
+  tremblement du trait, aplat sous le trait, calque CTG, calque vidéo, dossier, mode de fusion, transformation,
   caméra à clés, calque d'effet d'ajustement, incrustation ; quatre images par plan), chaque vignette faite par
   les fils est identique, pixel pour pixel, à celle de l'ancien chemin ; idem pour les miniatures de dessins
   (l'ancien calcul est recopié dans l'essai) ; un cliché se compose comme le projet, et ne bouge pas quand on
@@ -758,7 +758,7 @@ qui réveillent l'écran à la fin de chaque vignette (egui regroupe les réveil
 - **Planche, vue Plans** : ouverture, zoom, défilement ; les marques d'image (une vignette par marque).
 - **Changements** : dessiner un plan et regarder sa vignette dans le montage (elle se met à jour à la fin du
   trait) ; changer l'opacité, la visibilité, le mode de fusion, une transformation, un effet, un calque d'effet
-  (impact, lueur), le fond sous le trait, une clé de caméra, la durée du plan d'avant : la vignette suit.
+  (impact, lueur), l'aplat sous le trait, une clé de caméra, la durée du plan d'avant : la vignette suit.
 - **Timeline zoomée** et **panneau Calques** : les miniatures des dessins arrivent en défilant, le dessin
   modifié refait la sienne.
 - **Autre projet** : ouvrir un projet puis un autre : aucune vignette ni miniature de l'ancien.
@@ -849,7 +849,7 @@ processeur, aux demi-niveaux exacts.
   et ils agissent toujours les premiers, sur le dessin vectoriel : la pile est alors **coupée en deux**
   (`fx::hybrid_split`) — le fil de fond calcule le dessin dérivé par les effets du trait seuls, la carte passe tous les
   autres effets dessus, à pleine résolution. Plus aucune pile d'effets « ordinaires » n'est entièrement sur le processeur.
-- Un calque rempli par CTG, un fond sous le trait, une image de vidéo, une feuille flottante en cours de geste :
+- Un calque rempli par CTG, un aplat sous le trait, une image de vidéo, une feuille flottante en cours de geste :
   chemin d'avant (la carte n'a que leur dessin dérivé).
 - **Un calque d'ajustement dans un dossier** (il ne couvre que les calques de son dossier), ou à côté d'un
   calque d'ajustement qui ne passe pas : tous les repères du plan sont résolus sur le processeur
@@ -1013,7 +1013,7 @@ Les effets du trait sont les seuls effets sans passe sur la carte. Une pile qui 
 comme n'importe quel dessin dérivé, `playback` le demande d'avance), puis la carte passe les autres effets dessus à pleine
 résolution, à chaque image. Essai `a_mixed_stack_gives_the_cpu_pixels_with_the_card_drawing_the_card_effects` : écriture
 + flou + tremblement, aucun pixel à plus de 2 niveaux de la référence sur processeur. Une pile sans autre effet que
-ceux du trait reste un dessin dérivé (comme avant). Un calque CTG, un fond sous le trait, une vidéo, une feuille
+ceux du trait reste un dessin dérivé (comme avant). Un calque CTG, un aplat sous le trait, une vidéo, une feuille
 flottante : chemin d'avant. L'export, les vignettes et le repli sans carte : calcul exact sur processeur.
 
 ### 13.4 Le tremblement du trait sur la carte graphique
@@ -1280,7 +1280,7 @@ retiennent jamais l'interface plus de 9 ms d'un coup.
 
 ### Garde-fous (`exportrender_tests.rs`, 46 essais et 6 mesures ignorées ; la suite complète : 2 072 essais, deux fois de suite, aucun intermittent)
 
-- **Mêmes pixels** : sur le projet d'essai complet de la fiabilité (effets de calque à clés, tremblement du trait, fond sous le trait,
+- **Mêmes pixels** : sur le projet d'essai complet de la fiabilité (effets de calque à clés, tremblement du trait, aplat sous le trait,
   CTG, vidéo, dossier, fusion, transformation, caméra à clés, calques d'effets d'ajustement, incrustation, damier), chaque image du
   nouvel export est celle de l'ancien chemin, pixel pour pixel, pour les trois papiers, à plusieurs images de chaque plan ; la toile
   infinie et les clés de position, les incrustations gravées, les transitions (un plan seul et tout le montage) aussi.

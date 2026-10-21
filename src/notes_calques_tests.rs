@@ -373,11 +373,12 @@ fn the_layer_row_and_the_layer_commands_carry_the_background_button_and_the_brus
     let textes = ecran.chauffer(&mut app, 4, &mut ui_outil);
     assert!(!contient(&textes, ph_fond), "plus de bouton de fond dans les réglages du pinceau : {textes:?}");
     assert!(contient(&textes, egui_phosphor::regular::SELECTION_BACKGROUND), "« Peint derrière » y est toujours");
-    assert!(!contient(&textes, "Peindre dans"), "les réglages du fond ne se montrent que pour un calque qui en a un");
-    // Un calque qui en a un montre ses réglages sous le pinceau.
+    assert!(!contient(&textes, "Peindre dans"), "la bascule Trait / Fond a disparu");
+    // Un calque qui en a un ne montre rien non plus sous le pinceau : ses réglages sont dans Réglages quand sa
+    // sous-ligne est choisie (`aplat_tests.rs`).
     app.cur_layer = 0;
     let textes = ecran.chauffer(&mut app, 4, &mut ui_outil);
-    assert!(contient(&textes, "Peindre dans"), "{textes:?}");
+    assert!(!contient(&textes, "Peindre dans") && !contient(&textes, "Couleur de l'aplat"), "{textes:?}");
 }
 
 #[test]

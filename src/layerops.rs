@@ -210,8 +210,8 @@ impl App {
             self.action_item(ui, "Les calques visibles", "calque.fusionner_visibles");
             self.action_item(ui, "Tous les calques", "calque.fusionner_tout");
         });
-        // Fond sous le trait (`fondui.rs`) : un calque, les calques choisis, tout le plan.
-        ui.menu_button("Fond sous le trait", |ui| self.fond_menu(ui));
+        // Aplat sous le trait (`fondui.rs`) : un calque, les calques choisis, tout le plan.
+        ui.menu_button("Aplat sous le trait", |ui| self.fond_menu(ui, all));
         if all {
             // La propagation (façon EbSynth) du calque courant, aussi dans le menu Calques.
             self.propagation_item(ui, self.cur_layer);
@@ -311,6 +311,8 @@ impl App {
         } else {
             self.layer_sel.clear();
             self.select_layer(li);
+            // Un clic sur le calque (panneau Calques, timeline) : on dessine de nouveau le trait, pas l'aplat.
+            self.aplat_cible = None;
         }
     }
 

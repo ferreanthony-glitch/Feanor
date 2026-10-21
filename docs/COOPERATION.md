@@ -63,7 +63,7 @@ MonFilm/
                            Écrit par qui tient le plan.
   dessins/<n°>.png|json    un fichier par dessin (comme avant) ; écrits par qui tient le plan qui les cite
   sons/ modeles/ textures/ references/ videos/         comme avant ; ajoutés par qui tient le jeton
-  transitions.json effets_son.json sons_proposes.json references.json envois.json versions/ scenes3d.json
+  transitions.json effets_son.json personnages.json sons_proposes.json references.json envois.json versions/ scenes3d.json
                            (les décors de séquence)     comme avant, au nom d'avant ; écrits par qui tient le jeton
   commentaires/<équipier>.json     les commentaires de CET équipier (un fichier chacun, fusionnés à la lecture)
   partage/
