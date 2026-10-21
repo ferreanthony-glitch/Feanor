@@ -568,6 +568,16 @@ impl DockLayout {
         DockLayout { principal: column(1.0 - h / REF_HEIGHT, haut, tabs(vec![Pane::Montage])), ..DockLayout::empty() }.sanitized()
     }
 
+    /// La disposition d'origine de l'espace Vignettes (le premier onglet, en haut à droite) : la planche en grand,
+    /// et à sa droite une seule colonne, les réglages de l'outil (le pinceau) au-dessus, la couleur et les pinceaux
+    /// en onglets dessous. Ni bande (montage, timeline), ni calques, ni effets, ni fiche du plan, ni guides :
+    /// « la partie Vignettes doit être la plus épurée possible, rien de distraction ». Les Références restent à la
+    /// demande (un clic dans la barre des panneaux) ; les personnages sont dans leur barre au-dessus de la planche.
+    pub fn pour_les_vignettes() -> DockLayout {
+        let cote = column(0.5, tabs(vec![Pane::ToolOptions]), tabs(vec![Pane::Color, Pane::Brushes]));
+        DockLayout { principal: row(1.0 - TOOLS_WIDTH / REF_WIDTH, tabs(vec![Pane::Canvas]), cote), ..DockLayout::empty() }.sanitized()
+    }
+
     /// Une disposition enregistrée par une version précédente, mise à jour : avant 6a, le
     /// panneau Outils part (barre verticale) ; avant 9b, la fiche rejoint les onglets des réglages ;
     /// avant 11c, le panneau Pinceaux arrive à côté de la couleur ; avant le chantier 6, la timeline

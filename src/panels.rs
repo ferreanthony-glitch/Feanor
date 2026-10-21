@@ -279,10 +279,11 @@ impl App {
             });
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                // Les trois espaces de travail restent écrits en toutes lettres, dans l'ordre du
-                // travail (de gauche à droite : Storyboard, Animation, Montage) : on voit d'un coup
+                // Les quatre espaces de travail restent écrits en toutes lettres, dans l'ordre du
+                // travail (de gauche à droite : Vignettes, Storyboard, Animation, Montage) : on voit d'un coup
                 // d'œil où l'on est. Passer de l'un à l'autre est instantané : le plan, l'image, la
                 // sélection et le projet ne changent pas, seule la disposition change.
+                // (Ce panneau se remplit de droite à gauche : le dernier posé est le premier à gauche.)
                 use crate::workspace::Espace;
                 let on = self.espace == Espace::Montage;
                 let montage = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Montage ").strong(), on));
@@ -301,6 +302,12 @@ impl App {
                 let board = self.aide(board, "Storyboard", "Monter les plans et les séquences.", "mode.basculer");
                 if board.clicked() && !on {
                     self.set_espace(Espace::Storyboard);
+                }
+                let on = self.espace == Espace::Vignettes;
+                let vignettes = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Vignettes ").strong(), on));
+                let vignettes = self.aide(vignettes, "Vignettes", "La planche seule : dessiner dans les cases, avec le pinceau, la couleur et les personnages. Ctrl + glisser un cadre : mouvement de caméra.", "espace.vignettes");
+                if vignettes.clicked() && !on {
+                    self.set_espace(Espace::Vignettes);
                 }
             });
         });

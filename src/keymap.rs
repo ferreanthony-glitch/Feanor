@@ -639,6 +639,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("espace.storyboard", "Espace de travail : Storyboard (sa disposition retenue)", true, false),
     act("espace.animation", "Espace de travail : Animation (sa disposition retenue)", true, false),
     act("espace.montage", "Espace de travail : Montage (le film en haut, toutes les pistes en bas)", true, false),
+    act("espace.vignettes", "Espace de travail : Vignettes (la planche seule, pour dessiner dans les cases)", true, false),
     act("espace.retablir", "Rétablir la disposition de l'espace de travail en cours", true, false),
     act("vue.panneau_outils", "Colonne des réglages et fiche (montrer / cacher)", true, false),
     act("vue.panneau_fiche", "Colonne des calques (montrer / cacher)", true, false),

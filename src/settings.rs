@@ -60,6 +60,9 @@ pub struct Settings {
     pub animation_layout: Option<Layout>,
     #[serde(default, rename = "disposition_montage", skip_serializing_if = "Option::is_none")]
     pub montage_layout: Option<Layout>,
+    /// Disposition de l'espace Vignettes (le quatrième espace, `Espace::Vignettes`) ; absente : son origine.
+    #[serde(default, rename = "disposition_vignettes", skip_serializing_if = "Option::is_none")]
+    pub vignettes_layout: Option<Layout>,
     #[serde(default, rename = "espace_storyboard")]
     pub storyboard_space: Espace,
     /// Commandes épinglées dans la barre de commandes, la barre du montage et celle de la timeline,
@@ -214,6 +217,7 @@ impl Default for Settings {
             layout: None,
             animation_layout: None,
             montage_layout: None,
+            vignettes_layout: None,
             storyboard_space: Espace::Storyboard,
             bars: ReglageBarres::default(),
             workspaces: Vec::new(),
@@ -257,6 +261,7 @@ impl Settings {
             Espace::Storyboard => self.layout.as_ref(),
             Espace::Animation => self.animation_layout.as_ref(),
             Espace::Montage => self.montage_layout.as_ref(),
+            Espace::Vignettes => self.vignettes_layout.as_ref(),
         }
     }
 
@@ -266,6 +271,7 @@ impl Settings {
             Espace::Storyboard => self.layout = Some(layout),
             Espace::Animation => self.animation_layout = Some(layout),
             Espace::Montage => self.montage_layout = Some(layout),
+            Espace::Vignettes => self.vignettes_layout = Some(layout),
         }
     }
 

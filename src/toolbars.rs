@@ -20,6 +20,11 @@ pub(crate) const TOOL_GROUPS: &[&[&[Tool]]] = &[
     &[&[Tool::Pan], &[Tool::Camera]],
 ];
 
+/// La colonne d'outils de l'espace Vignettes (« rien de distraction, que du dessin ») : le pinceau, le crayon et la
+/// gomme. Les autres outils restent à leurs raccourcis (Alt + lettre) et dans la palette (Ctrl+K). Une case de plus
+/// (le stylo d'annotation de la planche) vient se poser ici.
+pub(crate) const TOOL_GROUPS_VIGNETTES: &[&[&[Tool]]] = &[&[&[Tool::Brush], &[Tool::Pencil], &[Tool::Eraser]]];
+
 /// Clic maintenu si longtemps (secondes) sur une case à plusieurs outils : ils s'affichent.
 pub const FLYOUT_HOLD: f64 = 0.35;
 
@@ -71,7 +76,8 @@ impl App {
             ui.vertical_centered(|ui| {
                 ui.spacing_mut().item_spacing = vec2(0.0, 2.0);
                 ui.add_space(4.0);
-                for (g, group) in TOOL_GROUPS.iter().enumerate() {
+                let groups = if self.espace == crate::workspace::Espace::Vignettes { TOOL_GROUPS_VIGNETTES } else { TOOL_GROUPS };
+                for (g, group) in groups.iter().enumerate() {
                     if g > 0 {
                         ui.add_space(3.0);
                         let (rect, _) = ui.allocate_exact_size(vec2(26.0, 1.0), egui::Sense::hover());
@@ -123,7 +129,8 @@ impl App {
     /// sur un outil le prend ; un appui ailleurs ou Échap la ferme.
     fn tool_flyout_ui(&mut self, ctx: &egui::Context) {
         let Some((g, s, rect)) = self.tool_flyout else { return };
-        let Some(slot) = TOOL_GROUPS.get(g).and_then(|group| group.get(s)) else {
+        let groups = if self.espace == crate::workspace::Espace::Vignettes { TOOL_GROUPS_VIGNETTES } else { TOOL_GROUPS };
+        let Some(slot) = groups.get(g).and_then(|group| group.get(s)) else {
             self.tool_flyout = None;
             return;
         };

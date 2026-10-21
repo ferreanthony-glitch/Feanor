@@ -183,18 +183,22 @@ impl Layout {
 /// du storyboard est de 290, celle de l'animation de 340.
 const MONTAGE_BANDE: f32 = 440.0;
 
-/// Les trois espaces de travail, un onglet chacun en haut à droite (INTERFACE.md, 6.1 et 14).
-/// Chacun retient sa propre disposition : passer en Animation ouvre la disposition d'animation,
-/// revenir en Storyboard remet celle du storyboard, et ce que l'utilisateur change dans l'une ne
-/// touche pas les autres.
+/// Les quatre espaces de travail, un onglet chacun en haut à droite (INTERFACE.md, 6.1, 14 et 11) :
+/// Vignettes, Storyboard, Animation, Montage. Chacun retient sa propre disposition : passer en
+/// Animation ouvre la disposition d'animation, revenir en Storyboard remet celle du storyboard, et ce
+/// que l'utilisateur change dans l'une ne touche pas les autres.
 ///
-/// « Montage » n'est pas un troisième mode : il garde les raccourcis, les outils et le dessin du
-/// storyboard (`Mode::Storyboard`) ; seules diffèrent sa disposition (le lecteur du film en haut, la
-/// bande avec toutes les pistes en grand en bas, les panneaux de dessin repliés) et sa barre de
-/// commandes (`Barre::MontageEdition`). On y va par son onglet, Alt+M, Affichage > Espaces de
-/// travail ou la palette (Ctrl+K) ; Tab en revient au storyboard.
+/// « Montage » et « Vignettes » ne sont pas des modes : ils gardent les raccourcis, les outils et le
+/// dessin du storyboard (`Mode::Storyboard`) ; seules diffèrent leur disposition et leur barre de
+/// commandes (`Barre::MontageEdition` pour le Montage). Le Montage a le lecteur du film en haut, la bande
+/// avec toutes les pistes en grand en bas, les panneaux de dessin repliés ; on y va par son onglet, Alt+M,
+/// Affichage > Espaces de travail ou la palette (Ctrl+K). Les Vignettes sont la planche seule, avec le
+/// pinceau, la couleur et les personnages (« rien de distraction, que du dessin ») ; Alt+Maj+V. Tab les
+/// quitte vers le storyboard, comme le Montage.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Espace {
+    #[serde(rename = "vignettes")]
+    Vignettes,
     #[default]
     #[serde(rename = "storyboard")]
     Storyboard,
@@ -205,22 +209,24 @@ pub enum Espace {
 }
 
 impl Espace {
-    pub const TOUS: [Espace; 3] = [Espace::Storyboard, Espace::Animation, Espace::Montage];
+    /// Dans l'ordre des onglets, de gauche à droite.
+    pub const TOUS: [Espace; 4] = [Espace::Vignettes, Espace::Storyboard, Espace::Animation, Espace::Montage];
 
     pub fn nom(self) -> &'static str {
         match self {
+            Espace::Vignettes => "Vignettes",
             Espace::Storyboard => "Storyboard",
             Espace::Animation => "Animation",
             Espace::Montage => "Montage",
         }
     }
 
-    /// La barre des personnages (`personnagesui.rs`) est-elle montrée d'office dans cet espace ? Oui en Storyboard
-    /// (et dans l'espace Vignettes, quand il viendra : le croquis rapide est son travail) ; non en Animation et en
-    /// Montage, où l'on peut l'allumer (Affichage > Barre des personnages) ; l'espace retient son choix.
+    /// La barre des personnages (`personnagesui.rs`) est-elle montrée d'office dans cet espace ? Oui en Storyboard et
+    /// dans l'espace Vignettes (le croquis rapide est son travail) ; non en Animation et en Montage, où l'on peut
+    /// l'allumer (Affichage > Barre des personnages) ; l'espace retient son choix.
     pub fn barre_personnages_par_defaut(self) -> bool {
         match self {
-            Espace::Storyboard => true,
+            Espace::Vignettes | Espace::Storyboard => true,
             Espace::Animation | Espace::Montage => false,
         }
     }
@@ -228,6 +234,7 @@ impl Espace {
     /// L'action qui y mène (`keymap::ACTIONS`).
     pub fn action(self) -> &'static str {
         match self {
+            Espace::Vignettes => "espace.vignettes",
             Espace::Storyboard => "espace.storyboard",
             Espace::Animation => "espace.animation",
             Espace::Montage => "espace.montage",
@@ -242,7 +249,7 @@ impl Espace {
     pub fn mode(self) -> Mode {
         match self {
             Espace::Animation => Mode::Animation,
-            Espace::Storyboard | Espace::Montage => Mode::Storyboard,
+            Espace::Vignettes | Espace::Storyboard | Espace::Montage => Mode::Storyboard,
         }
     }
 
@@ -256,11 +263,24 @@ impl Espace {
     ///   suggestions sonores, les commentaires et l'historique. Ni calques, ni effets, ni réglages
     ///   de l'outil, ni couleur, ni pinceaux, ni guides, ni barre d'outils verticale.
     ///
+    /// - Vignettes : la planche seule, épurée (`DockLayout::pour_les_vignettes`) : à droite les réglages du
+    ///   pinceau et, dessous, la couleur et les pinceaux ; la barre des personnages au-dessus de la planche ; une
+    ///   colonne d'outils minimale (pinceau, crayon, gomme). Ni montage, ni timeline, ni calques, ni effets, ni
+    ///   fiche du plan ; les Références s'ouvrent d'un clic (barre des panneaux).
+    ///
     /// Les Références et la feuille d'exposition restent à la demande partout (barre des panneaux) ;
     /// la feuille d'exposition n'existe qu'en animation.
     pub fn defaut(self) -> Layout {
         let standard = Layout::default();
         match self {
+            Espace::Vignettes => Layout {
+                tools: true,
+                sheet: false,
+                strip: false,
+                vignettes: true,
+                panneaux: Some(DockLayout::pour_les_vignettes()),
+                ..standard
+            },
             Espace::Storyboard => standard,
             Espace::Animation => Layout { montage_height: 340.0, sheet_width: 250.0, ..standard },
             Espace::Montage => Layout {
