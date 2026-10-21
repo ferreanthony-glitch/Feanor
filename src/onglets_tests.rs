@@ -179,7 +179,7 @@ const PARTAGES: &[&str] = &[
     "audio_tried", "audio_clock", "sound_on", "sound_scrub", "brt", "sug", "activity", "perf_applied", "diag", "keep_proportions", "field_edit_alive", "deform_mode", "select_rect",
     "pixel_clipboard", "layer_clipboard", "multi_clip", "panel_clipboard", "cam_key_clipboard", "cam_clip_recent", "cam_fx", "cadrage", "cadrage_cache", "text_font", "text_size",
     "text_fonts", "text_font_filter", "color_select", "tool_recent", "tool_flyout", "paste_event", "messages", "last_status", "toasts", "messages_window", "palette", "export_hub",
-    "prefs_window", "editorial", "fiche", "about_window", "theme_applied", "theme_unsaved", "paint_fond", "pane_heights", "fit_set", "fit_busy", "recent_to_open", "recent_presence",
+    "prefs_window", "editorial", "fiche", "about_window", "theme_applied", "theme_unsaved","pane_heights", "fit_set", "fit_busy", "recent_to_open", "recent_presence",
     "maximized_once", "clipboard", "montage_head_w", "snap_on", "length_field_active", "pen_pressure", "pen_touch", "input_time", "last_frame_time", "picking", "status", "new_dialog",
     "show_help", "allow_close", "export_transparent", "follow_frame", "following", "hover_canvas", "pending_keys", "assign", "keys_filter", "keymap", "title", "display_info", "gpu",
     "quitter_prevenu", "collage", "onglets", "actif", "prochain_onglet", "secours_actif", "session_a_ecrire", "session_prete", "session_file", "session_affichee", "groupe",

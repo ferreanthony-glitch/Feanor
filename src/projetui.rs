@@ -365,16 +365,16 @@ impl App {
                 self.doc.start_frame = first;
             }
             ui.end_row();
-            // Fond sous le trait (`fond.rs`) : la couleur que prend un fond qu'on allume.
-            ui.label("Couleur des fonds sous le trait");
+            // Aplat sous le trait (`fond.rs`) : la couleur que prend un aplat qu'on ajoute.
+            ui.label("Couleur des aplats sous le trait");
             ui.horizontal(|ui| {
                 let mut c = self.doc.properties.fond.unwrap_or(crate::fond::FondReglages::default().couleur);
                 let resp = ui.color_edit_button_srgb(&mut c);
-                let resp = crate::bulles::bulle(resp, "Couleur des fonds", "La couleur d'un fond qu'on allume (option « Fond sous le trait » du pinceau), par exemple un gris clair.", "");
+                let resp = crate::bulles::bulle(resp, "Couleur des aplats", "La couleur d'un aplat qu'on ajoute à un calque (bouton « Aplat sous le trait » de sa ligne), par exemple un gris clair.", "");
                 if self.edited(&resp) {
                     self.doc.properties.fond = Some(c);
                 }
-                let all = ui.button("Aux fonds déjà posés").on_hover_text("Donne aussi cette couleur à tous les fonds du projet.");
+                let all = ui.button("Aux aplats déjà posés").on_hover_text("Donne aussi cette couleur à tous les aplats du projet.");
                 if all.clicked() {
                     self.run_action("fond.couleur_partout");
                 }

@@ -2306,11 +2306,6 @@ touches = []
 source = "SHOT (sans touche)"
 
 [[raccourci]]
-action = "pinceau.strate_fond"
-touches = []
-source = "SHOT (sans touche)"
-
-[[raccourci]]
 action = "pinceau.remplir"
 touches = []
 source = "SHOT (sans touche)"

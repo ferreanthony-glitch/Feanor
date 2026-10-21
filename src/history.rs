@@ -153,7 +153,7 @@ fn kind_name(edit: &Edit) -> &'static str {
     match edit {
         Edit::Tiles { .. } => "Dessin",
         Edit::Vector { .. } => "Dessin vectoriel",
-        Edit::FondTiles { .. } => "Fond",
+        Edit::FondTiles { .. } => "Aplat",
         Edit::Structure { .. } => "Modification",
         Edit::Group(edits) => edits.iter().map(kind_name).find(|n| *n != "Modification").unwrap_or("Modification"),
     }

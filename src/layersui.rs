@@ -392,8 +392,8 @@ impl App {
         let mut toggle = None;
         let mut lock = None;
         let mut rename_done: Option<bool> = None;
-        // Bascule Trait / Fond cliquée sur la ligne du calque courant.
-        let mut strate = false;
+        // Sous-ligne d'aplat cliquée : sa cible du dessin.
+        let mut aplat_choisi: Option<usize> = None;
         let lock_key = self.raccourci("calque.verrouiller");
         let frame = self.cur_frame;
         let accent = ui.visuals().selection.bg_fill;
@@ -436,7 +436,8 @@ impl App {
             };
             let current = li == self.cur_layer;
             let chosen = !current && self.is_chosen_layer(li);
-            let thumb = cel.and_then(|c| self.layer_thumb(ui.ctx(), c));
+            let aplat_vise = current && self.aplat_en_cible();
+            let thumb =cel.and_then(|c| self.layer_thumb(ui.ctx(), c));
             // Le rang entier, posé avant ses boutons (à sa place de l'image d'écran d'avant) : les
             // boutons restent au-dessus et gardent leurs clics (posé après eux, ce fond qui se
             // glisse les rendait tous muets : œil, verrou, clic droit, 2026-10-17).
@@ -444,6 +445,8 @@ impl App {
             let grip = ui.ctx().data(|d| d.get_temp::<egui::Rect>(grip_id)).map(|r| ui.interact(r, grip_id, Sense::click_and_drag()));
             let shown = egui::Frame::new()
                 .fill(match (current, chosen) {
+                    // (Quand la sous-ligne de l'aplat est la cible du dessin, c'est elle qui est surlignée en plein.)
+                    (true, _) if aplat_vise => hue.gamma_multiply(0.25),
                     (true, _) => hue.gamma_multiply(0.55),
                     (false, true) => hue.gamma_multiply(0.25),
                     (false, false) => Color32::TRANSPARENT,
@@ -561,27 +564,14 @@ impl App {
                                 } else if several && chosen {
                                     ui.label(RichText::new(ph::CHECK_CIRCLE).small().color(hue)).on_hover_text("Calque choisi avec les autres (Ctrl ou Maj + clic) : les commandes sur plusieurs calques, la sélection et l'outil Transformer le prennent.");
                                 }
-                                // Fond sous le trait : un bouton par calque (allumé s'il en a un).
+                                // Aplat sous le trait : un bouton par calque (allumé s'il en a un) ; c'est ici qu'on
+                                // l'active (`fondui.rs`). Sa sous-ligne vient sous le rang.
                                 if let Some(resp) = self.fond_layer_button(ui, li, true) {
                                     if resp.clicked() {
                                         self.toggle_fond(li);
                                     }
                                 }
                             });
-                            // Fond sous le trait (`fondui.rs`) : le bouton du calque, sur sa ligne ; sur le calque
-                            // courant qui en a un, la bascule où peint le pinceau (le trait ou le fond).
-                            if has_fond && current {
-                                ui.horizontal(|ui| {
-                                    ui.spacing_mut().item_spacing.x = 2.0;
-                                    let on = self.paint_fond;
-                                    let t = ui.add(egui::SelectableLabel::new(!on, RichText::new("Trait").small()));
-                                    let f = ui.add(egui::SelectableLabel::new(on, RichText::new("Fond").small()));
-                                    let f = f.on_hover_text("Le pinceau, le crayon et la gomme peignent dans le fond, sous le trait.");
-                                    if (t.clicked() && on) || (f.clicked() && !on) {
-                                        strate = true;
-                                    }
-                                });
-                            }
                         });
                     });
                 });
@@ -601,6 +591,15 @@ impl App {
                     select = Some((li, grip.secondary_clicked()));
                 }
                 grip.context_menu(|ui| self.layer_full_menu(ui, li, false));
+            }
+            // La sous-ligne de l'aplat, fine, juste sous son calque (ce panneau seulement : ni la timeline ni le
+            // montage). Dossier fermé : elle suit son calque, qui n'a pas de rang non plus.
+            if has_fond {
+                let resp = self.aplat_subrow(ui, li, hue, (in_folder as u8 + colour_of.is_some() as u8) as f32 * 14.0);
+                if resp.clicked() {
+                    aplat_choisi = Some(li);
+                }
+                resp.context_menu(|ui| self.aplat_menu(ui, li));
             }
         }
         if let Some(from) = self.panel_layer_drag {
@@ -642,8 +641,8 @@ impl App {
             }
         }
         self.finish_layer_rename(rename_done);
-        if strate {
-            self.run_action("pinceau.strate_fond");
+        if let Some(li) = aplat_choisi {
+            self.select_aplat(li);
         }
 
         // Clic droit dans le vide sous la liste : de nouveaux calques.

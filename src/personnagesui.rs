@@ -144,6 +144,9 @@ impl App {
     pub(crate) fn perso_choisir(&mut self, c: Choix) {
         let Some((ligne, fond)) = self.perso_couleurs(c) else { return };
         self.end_stroke();
+        // Un personnage dessine le trait ET son aplat (comme prévu) : on revient donc au trait si la sous-ligne d'un aplat
+        // était choisie. (Cliquer ensuite sur l'aplat le reprend seul, avec la couleur d'aplat du personnage.)
+        self.aplat_cible = None;
         if !matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Fill | Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline | Tool::Text) {
             self.set_tool(Tool::Brush);
         }
@@ -427,7 +430,7 @@ impl App {
             return;
         }
         let Some((_, Some(_))) = self.perso_couleurs(c) else { return };
-        if self.paint_fond || self.layer().fond.is_some() {
+        if self.aplat_en_cible() || self.layer().fond.is_some() {
             return;
         }
         let li = self.cur_layer;
@@ -453,7 +456,7 @@ impl App {
     /// À la fin d'un trait de pinceau ou de crayon (`end_stroke`) : si un personnage dessinait et que le calque a un
     /// fond, le fil de fond calcule les pixels que le trait a gagnés. `tiles` : les tuiles du dessin d'avant le trait.
     pub(crate) fn perso_apres_trait(&mut self, cel: CelId, tiles: Vec<(usize, Option<Tile>)>) {
-        if self.tool == Tool::Eraser || self.paint_fond {
+        if self.tool == Tool::Eraser || self.aplat_en_cible() {
             return;
         }
         let Some((_, fond)) = self.perso_couleurs_actives() else { return };

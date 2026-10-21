@@ -322,7 +322,7 @@ impl App {
         });
     }
     /// Sous les réglages de la brosse du pinceau et du crayon : peint derrière, remplir la forme
-    /// (`brushfill`), le fond sous le trait (`fondui.rs`) et ses options.
+    /// (`brushfill`).
     fn brush_extras_ui(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         ui.separator();
@@ -347,9 +347,8 @@ impl App {
                 "pinceau.remplir",
             );
         });
-        // (Le fond sous le trait n'est plus un réglage du pinceau : son bouton est sur la ligne du calque, dans
-        // le panneau Calques, et dans ses commandes. Ses réglages, eux, se montrent ici quand le calque en a un.)
-        self.fond_options_ui(ui);
+        // (L'aplat sous le trait n'est plus un réglage du pinceau : il s'active depuis le calque, et ses réglages sont
+        // en haut de ce panneau quand sa sous-ligne est choisie, `aplat_section_ui`.)
     }
 
     /// Panneau des réglages de l'outil courant.
@@ -368,12 +367,11 @@ impl App {
                     .weak(),
             );
         });
+        // Sous-ligne d'aplat choisie : « Aplat de <calque> » et ses réglages (couleur, débord, trous) d'abord ; l'outil et
+        // sa brosse suivent, ce sont eux qui travaillent l'aplat.
+        self.aplat_section_ui(ui);
         // Pinceau, crayon, gomme : la taille en premier, les réglages de la brosse, puis en bas
-        // peint derrière, remplir la forme et le fond sous le trait (Anthony, 2026-10-18). Pour
-        // le pot et le cutter, les options du fond restent en haut : ce sont leurs réglages.
-        if matches!(self.tool, Tool::Fill | Tool::Cutter) {
-            self.fond_options_ui(ui);
-        }
+        // peint derrière et remplir la forme (Anthony, 2026-10-18).
         match self.tool {
             Tool::Brush => {
                 self.brush_summary_ui(ui);
@@ -414,8 +412,6 @@ impl App {
                     );
                 }
                 self.brush_settings_ui(ui);
-                ui.separator();
-                self.fond_options_ui(ui);
             }
             Tool::Fill => {
                 ui.add(egui::Slider::new(&mut self.fill.tolerance, 0.0..=1.0).text("Tolérance"));

@@ -428,7 +428,7 @@ on les coche et décoche, le dessin reste tel quel).
   Chaque trait est transformé **en pixels**, depuis les pixels exacts que son cache garde : la texture de la brosse suit la
   déformation, et le moteur de brosses n'est jamais rejoué à chaque image. Calcul de fond, sans latence ; le même
   dessin donne toujours les mêmes pixels (lecture, export, vignettes). Tant que tu dessines sur le calque, ses effets du
-  trait se taisent. Un fond sous le trait reste fixe. Mesures sur 2 000 traits : `docs/PERFORMANCE.md` (section 13) ;
+  trait se taisent. Un aplat sous le trait reste fixe. Mesures sur 2 000 traits : `docs/PERFORMANCE.md` (section 13) ;
   liste de ce qu'il faut regarder à l'écran : `docs/INTERFACE.md` (section 20).
 - **Effets de matière** (2026-10-20, famille **Matière**, `src/fxmatiere.rs`, branche `effets-matiere`). Cinq effets de
   plus, dans un **bouton déroulant « Matière ▾ »** juste à côté de « Trait ▾ » (depuis le 2026-10-20 ; avant, une deuxième
@@ -563,7 +563,7 @@ on les coche et décoche, le dessin reste tel quel).
   en 3840 × 2160 : 2,9 ms par image en lecture (avant : aperçu au quart), 3,5 ms par cran du curseur du flou. **Les
   effets du trait** (famille Trait ci-dessus) lisent la géométrie des traits : ils restent un calcul de fond, et une
   pile qui en mêle à des effets de la carte est **coupée en deux** (le fond calcule le dessin dérivé par les effets du
-  trait, la carte passe le reste dessus) ; un calque CTG, un fond sous le trait ou une vidéo restent sur le processeur,
+  trait, la carte passe le reste dessus) ; un calque CTG, un aplat sous le trait ou une vidéo restent sur le processeur,
   un calque d'ajustement dans un dossier aussi. **L'export, les vignettes et le repli
   sans carte graphique restent le calcul exact sur processeur.** Réglage : Fichier > Préférences… >
   Performance > « Effets sur la carte graphique » (allumé par défaut, grisé si la carte refuse le shader).
@@ -710,7 +710,7 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   Grain et papier, Couleur et mélange, Lissage, Toucher du stylet), dont quatre ont une case qui
   les allume ou les éteint sans perdre leurs valeurs, et à droite les réglages de la catégorie.
   Panneau étroit : les catégories passent au-dessus, en liste déroulante. En bas : peint
-  derrière, remplir la forme, le fond sous le trait et ses options.
+  derrière et remplir la forme (l'aplat sous le trait se règle depuis le calque, voir plus bas).
   Liste ou vignettes, la catégorie et les dossiers ouverts sont retenus (`reglages.toml`,
   clé `panneau_pinceaux`). Les aperçus montrent le trait dans la couleur courante, sur le papier.
   L'interface est dense (police Segoe UI), en gris neutres, avec trois thèmes et un quatrième à
@@ -1002,35 +1002,49 @@ Les messages de la barre d'état ne se perdent plus : survole-le pour le lire en
 pour voir les précédents. Les avis importants (enregistrement, ouverture, erreurs, fin de
 propagation, export) restent aussi quelques secondes en bas à droite ; un clic les ferme.
 
-## Fond sous le trait
+## Aplat sous le trait
 
-Pour détacher un personnage du décor sans le remplir à la main : allume « Fond sous le trait » **sur le
-calque** (depuis le 2026-10-20, un bouton de la ligne du calque dans le panneau Calques, de l'en-tête de la
-timeline et des commandes du panneau Calques ; ce n'est plus une option des réglages du pinceau et du crayon :
-c'est un réglage du calque, un bouton par calque de dessin). Chaque dessin du calque
-prend alors un fond sous son trait : tout ce que le trait enferme, plus un léger débord autour,
-en une seule forme qui se recalcule à chaque trait (en animation aussi). Réglages, juste dessous :
-- couleur du fond (blanc d'office) ;
-- débord (3 px) ;
-- fermer les trous (6 px : un trou du trait jusqu'à 12 px ne laisse pas fuir le fond) ;
-- le bord de l'image ferme la forme (un personnage coupé par le cadre a son fond jusqu'au bord).
+Pour détacher un personnage du décor sans le remplir à la main : donne un **aplat** au **calque**. Un bouton sur la
+ligne du calque (panneau Calques, icône carré-utilisateur, infobulle « Aplat sous le trait »), ou le clic droit du
+calque (« Ajouter un aplat » / « Retirer l'aplat »). Rien dans les réglages du pinceau, du crayon, de la gomme ni du pot
+de peinture : l'aplat est un réglage du calque, un bouton par calque de dessin. Chaque dessin du calque
+prend alors un aplat sous son trait : tout ce que le trait enferme, plus un léger débord autour,
+en une seule forme qui se recalcule à chaque trait (en animation aussi).
 
-« Peindre dans : Trait | Fond » (dans les réglages, et sur la ligne du calque) : en « Fond », le
-pinceau et le crayon peignent dans le fond, sous le trait, sans jamais le toucher, et la peinture
-reste dans la forme ; la gomme **coupe le fond** (une zone fermée qu'on veut laisser voir à travers),
-et repeindre au même endroit le recoud. Tout se voit pendant le geste ; Ctrl+Z annule chaque coup.
-Éteindre l'option retire le fond.
+Une fois l'aplat posé, une **sous-ligne** fine (moins de la moitié d'un calque) apparaît juste sous le calque, **dans le
+panneau Calques seulement** (ni la timeline ni les pistes du montage) : une pastille de la couleur de l'aplat et « Aplat ».
+Elle suit son calque (calque dans un dossier fermé : pas de sous-ligne non plus).
 
-Toujours en « Fond », le pot de peinture et le cutter travaillent par zones fermées par le trait :
-un clic du pot de peinture remplit la zone de la couleur courante, sous le trait (un t-shirt rouge,
-un visage qui reste blanc) ; un clic du cutter retire la zone du fond (le trou entre le bras et le
-corps). Les trous du trait sont fermés comme pour le fond.
+- **Clic sur la sous-ligne** : l'aplat devient la cible du dessin (elle est surlignée comme un calque choisi, le calque
+  est surligné plus doucement, et la ligne du bas de la vue dit « Aplat de <calque> · … »). Le pinceau et le crayon
+  peignent dans l'aplat, sous le trait, sans jamais le toucher, et la peinture reste dans la forme ; la gomme **coupe
+  l'aplat** (une zone fermée qu'on veut laisser voir à travers), et repeindre au même endroit le recoud ; le pot de peinture
+  remplit de la couleur courante la zone fermée par le trait, sous le trait ; le cutter retire la zone de l'aplat. Un outil
+  qui ne dessine pas (Sélection, Main…) cède la place au pinceau. Tout se voit pendant le geste ; Ctrl+Z annule chaque
+  coup (« Aplat : peinture », « Aplat : gomme », « Aplat : remplir »…).
+- **Clic sur le calque** (sa ligne, sa vignette, son nom, dans le panneau comme dans la timeline) : on dessine de
+  nouveau le trait. Changer de calque, retirer l'aplat, annuler : aussi. Les formes, le texte et la sélection
+  travaillent toujours le trait.
+- **Réglages de l'aplat** : dans le panneau **Réglages** (tout en haut, « Aplat de <calque> », tant que la sous-ligne est
+  choisie), et au **clic droit de la sous-ligne** (avec « Retirer l'aplat ») :
+  - couleur de l'aplat (blanc d'office) ;
+  - débord (3 px) ;
+  - fermer les trous (6 px : un trou du trait jusqu'à 12 px ne laisse pas fuir l'aplat) ;
+  - le bord de l'image ferme la forme (un personnage coupé par le cadre a son aplat jusqu'au bord) ;
+  - « Cet aplat aussi sur » les calques choisis ou tout le plan (Réglages seulement).
+  Chaque geste de réglage est une étape « Aplat : réglages ».
 
-Plusieurs calques d'un coup : Calques > Fond sous le trait (sur les calques choisis, sur tout le
-plan, retirer), ou « Ce fond aussi sur » dans les réglages. « Tout le plan » laisse les calques de
-fond du décor. La couleur d'un fond neuf se règle par projet (Fichier > Réglages du projet,
-« Couleur des fonds sous le trait », par exemple un gris clair) ; « Aux fonds déjà posés » la
-donne à tous les fonds du projet.
+Plusieurs calques d'un coup : Calques > Aplat sous le trait (sur les calques choisis, sur tout le
+plan, retirer). Les actions `pinceau.fond`, `fond.calques_choisis`, `fond.tout_le_plan`, `fond.retirer_choisis` et
+`fond.couleur_partout` (Ctrl+K, leurs raccourcis) restent : ce sont des alias qui ajoutent ou retirent l'aplat des calques
+visés. « Tout le plan » laisse les calques de fond du décor. La couleur d'un aplat neuf se règle par projet (Fichier >
+Réglages du projet, « Couleur des aplats sous le trait », par exemple un gris clair) ; « Aux aplats déjà posés » la
+donne à tous les aplats du projet. Le format des projets ne change pas (`Layer::fond` dans le code). Détail, règles de
+cible et liste de contrôle : `docs/INTERFACE.md` § 33.
+
+Pour vérifier d'un coup d'œil : (1) le bouton de la ligne d'un calque ajoute une sous-ligne « Aplat », rien dans la
+timeline ; (2) clic sur la sous-ligne, puis pinceau, gomme, pot de peinture : seul l'aplat bouge ; (3) clic sur le calque :
+le trait de nouveau ; (4) les réglages sont dans Réglages et au clic droit de la sous-ligne ; (5) Ctrl+Z annule chaque geste.
 
 ## Brosses par personnage
 
@@ -1039,7 +1053,7 @@ trait et un **aplat** (la couleur sous le trait, ou pas d'aplat), et on dessine 
 au-dessus du dessin (sous la barre de la vue) : une pastille ronde par personnage (l'anneau est la couleur du trait,
 le dedans celle de l'aplat), un « + », puis des **couleurs neutres** (noir sans aplat, gris sur gris clair, rouge de
 correction). Clic sur une pastille : le pinceau et le crayon prennent la couleur du trait, et le dedans de ce qu'on dessine
-se remplit tout de suite de l'aplat (le calque prend « Fond sous le trait » tout seul s'il n'en avait pas ;
+se remplit tout de suite de l'aplat (le calque prend un « Aplat sous le trait » tout seul s'il n'en avait pas ;
 ce qui était déjà dessiné sur lui reste sans aplat). Plusieurs personnages peuvent se partager un calque : chaque
 trait garde l'aplat de celui qui l'a dessiné. Clic sur la pastille choisie : on la lâche ; prendre une autre couleur à la
 main (panneau Couleur, pipette, nuancier) la lâche aussi.
@@ -1054,10 +1068,12 @@ main (panneau Couleur, pipette, nuancier) la lâche aussi.
   Ctrl+K `perso.barre`) : visible d'office en Storyboard (et dans l'espace Vignettes, quand il viendra), cachée d'office en
   Animation et en Montage.
 - Commandes à mettre sur des touches (Ctrl+K) : `perso.suivant`, `perso.precedent`, `perso.aucun`, `perso.ajouter`.
-- En « Peindre dans : Fond », le pot de peinture remplit avec l'aplat du personnage choisi.
+- Choisir un personnage pendant que la sous-ligne d'un aplat est la cible du dessin ramène au **trait** : un personnage dessine
+  son trait *et* son aplat. Cliquer ensuite sur la sous-ligne reprend l'aplat seul, et le pot de peinture y remplit avec
+  l'aplat du personnage choisi.
 
 Limite : un personnage dessiné *dans* l'aplat d'un autre, sur le même calque, garde l'aplat de l'autre là où ils se
-chevauchent (on recolorie avec le pot de peinture de la strate Fond). Détail du choix de conception, des gestes et liste de
+chevauchent (on recolorie avec le pot de peinture, sous-ligne de l'aplat choisie). Détail du choix de conception, des gestes et liste de
 contrôle : `docs/INTERFACE.md` § 32.
 
 ## Calque de couleur (la couleur sous le trait)
@@ -1091,7 +1107,7 @@ Toon Boom ; la façon exacte de Storyboard Pro ou de Harmony n'a pas été véri
   si c'est ce que tu veux.
 - **Détacher** (clic droit > Calque de couleur) : la couleur redevient un calque bitmap ordinaire, aux
   images à elle. Si le trait disparaît (fusion, suppression), le lien s'oublie tout seul et la couleur reste.
-- **Fond sous le trait** (juste au-dessus) : l'autre façon d'avoir de la couleur sous le trait, dans le
+- **Aplat sous le trait** (juste au-dessus) : l'autre façon d'avoir de la couleur sous le trait, dans le
   même calque. Les deux se cumulent (la strate du trait, puis la couleur, puis le trait) ; ce qui
   les distingue : le fond est déduit du trait (une seule forme, pas de choix de couleur par zone), la
   couleur se colorie zone par zone, avec ses propres images.
@@ -1124,7 +1140,7 @@ dans Storyboard Pro (le fonctionnement exact de Storyboard Pro est **à vérifie
   est à vérifier). Le zoom va de 2 % à 6 400 %, le défilement n'a pas de bord.
 - **Limites connues** (à la feuille seulement) : le pot de peinture (il cherche ses contours sur la feuille ;
   hors d'elle il le dit et ne fait rien) ; les zones bitmap sélectionnées (lasso, baguette) ; les effets de
-  calque, les calques d'ajustement, le fond sous le trait, les calques de couleur, les déformations
+  calque, les calques d'ajustement, l'aplat sous le trait, les calques de couleur, les déformations
   (enveloppe, perspective) ; l'import et l'export Storyboard Pro ; la propagation. Ce qui est dessiné hors de
   la feuille s'y voit, s'y exporte, mais ces fonctions ne le touchent pas.
 - **En dessous** : la feuille se compose comme avant (carte graphique) ; le reste du monde visible est une
@@ -1591,13 +1607,13 @@ faut regarder à l'écran : `docs/INTERFACE.md`, partie 25. **Format de projet 3
    calques d'un dossier fermé sans ligne (le calque courant reste toujours listé). Glisser une ligne entre les calques d'un
    dossier l'y range, au-dessus du dossier l'en sort (`move_layer_to`, déjà là) ; monter ou descendre un dossier emmène ses
    calques ; son opacité (le champ en haut, quand le dossier est choisi) multiplie celle de ses calques.
-3. **Fond sous le trait : un bouton du calque, plus une option du pinceau.** Le fond a toujours été un réglage du calque
-   (`Layer::fond`) : l'ancien bouton des réglages du pinceau et du crayon n'enregistrait rien dans les réglages de
-   pinceau. Il est **retiré** de ces réglages et devient un bouton (icône carré-utilisateur) sur **la ligne de chaque calque
-   de dessin** du panneau Calques, dans ses commandes (pour le calque courant) ; allumé = le calque a un fond. L'action
-   `pinceau.fond` (raccourci d'avant) fait la même chose pour le calque courant. Aucune conversion : un projet ou des
-   réglages d'avant se lisent tels quels. Les réglages du fond (couleur, débord, trous) et la bascule Trait / Fond restent
-   sous le pinceau, visibles quand le calque courant a un fond.
+3. **Aplat sous le trait : un bouton du calque, plus une option du pinceau.** L'aplat (dans le code, `Layer::fond`) a
+   toujours été un réglage du calque : l'ancien bouton des réglages du pinceau et du crayon n'enregistrait rien dans les
+   réglages de pinceau. Il est **retiré** de ces réglages et devient un bouton (icône carré-utilisateur) sur **la ligne de
+   chaque calque de dessin** du panneau Calques, dans ses commandes (pour le calque courant) ; allumé = le calque a un
+   aplat. L'action `pinceau.fond` (raccourci d'avant) fait la même chose pour le calque courant. Aucune conversion : un
+   projet ou des réglages d'avant se lisent tels quels. *(Depuis le 2026-10-21, les réglages de l'aplat et la bascule
+   Trait / Fond ne sont plus sous le pinceau non plus : voir la section « Aplat sous le trait », sous-ligne du calque.)*
 4. **Bouton « fx » du calque.** Un petit « fx » à côté de l'œil et du cadenas (ligne du panneau Calques, ligne de la
    timeline, et « Effets du calque allumés » dans les menus de calque, la colonne du montage n'ayant pas la place) éteint
    **toute la pile d'effets** du calque d'un coup, sans la toucher (réglages, clés et effets cochés restent). Il ne se montre
@@ -1954,7 +1970,7 @@ sélection sur plusieurs calques copiés dans un projet **d'une autre taille de 
 d'un même facteur en largeur et en hauteur, centre sur centre — ce que la caméra voyait reste ce que la caméra voit.
 
 - **Mis à l'échelle** : dessins bitmap (feuille et hors-feuille, rééchantillonnés en qualité), traits vectoriels (points,
-  épaisseurs), fond sous le trait, pose des calques et clés de position, clés de caméra, paramètres d'effets en pixels (flous,
+  épaisseurs), aplat sous le trait, pose des calques et clés de position, clés de caméra, paramètres d'effets en pixels (flous,
   ombre, liseré, grain…), fermeture des trous du fond, des calques de couleur et CTG.
 - **Autres proportions** (16:9 vers carré) : une petite fenêtre propose **Contenir** (tout le cadre copié reste visible, des bandes
   au besoin, d'office) ou **Remplir** (le cadre est rempli, ce qui dépasse sort du cadre). **Autre cadence** : **garder les images**
@@ -2062,7 +2078,7 @@ derniers choix sont gardés le temps de la séance.
 Un filet de sécurité contre « tous les essais passent mais SHOT ne s'ouvre plus » (`docs/FIABILITE.md`) :
 
 - un **projet d'essai complet** fabriqué par le code (séquences, plans, calques bitmap / vectoriel / vidéo / CTG /
-  dossier, traits texturés avec leur trace, fond sous le trait, effets à clés, caméra et effet de caméra, repère 3D,
+  dossier, traits texturés avec leur trace, aplat sous le trait, effets à clés, caméra et effet de caméra, repère 3D,
   marques, commentaires, plan rogné avec sa réserve, son…), enregistré et rouvert par trois chemins (une boucle,
   plusieurs fils, copie de secours) et par l'application elle-même : le projet relu est le projet enregistré ;
 - un **essai de fumée** : 195 images de l'interface sans fenêtre (accueil, tous les panneaux, les outils, lecture,

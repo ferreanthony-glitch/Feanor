@@ -141,6 +141,8 @@ pub mod fond;
 #[cfg(test)]
 mod fond_tests;
 #[cfg(test)]
+mod aplat_tests;
+#[cfg(test)]
 mod perte_tests;
 #[cfg(test)]
 mod rejeu_tests;

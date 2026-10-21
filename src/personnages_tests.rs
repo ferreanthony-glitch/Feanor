@@ -323,7 +323,7 @@ fn the_fill_tool_in_the_fond_stratum_uses_the_fill_colour_of_the_character() {
     app.perso_attendre();
     app.perso_choisir(Choix::Personnage(max));
     assert_eq!(app.perso_fond_ou([1, 2, 3]), CIEL);
-    app.paint_fond = true;
+    app.aplat_cible = Some(app.layer().id);
     app.tool = Tool::Fill;
     app.fond_zone_at(pos2(110.0, 110.0), false);
     assert_eq!(vu(app, 110, 110), rgb(CIEL), "le pot de peinture du fond prend le fond de Max");
