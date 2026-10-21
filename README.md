@@ -1032,6 +1032,34 @@ fond du décor. La couleur d'un fond neuf se règle par projet (Fichier > Régla
 « Couleur des fonds sous le trait », par exemple un gris clair) ; « Aux fonds déjà posés » la
 donne à tous les fonds du projet.
 
+## Brosses par personnage
+
+Pour reconnaître un personnage même dans un dessin très rough : on ajoute des **personnages**, chacun avec une couleur de
+trait et un **aplat** (la couleur sous le trait, ou pas d'aplat), et on dessine avec eux d'un clic. Une **barre de pastilles** est posée
+au-dessus du dessin (sous la barre de la vue) : une pastille ronde par personnage (l'anneau est la couleur du trait,
+le dedans celle de l'aplat), un « + », puis des **couleurs neutres** (noir sans aplat, gris sur gris clair, rouge de
+correction). Clic sur une pastille : le pinceau et le crayon prennent la couleur du trait, et le dedans de ce qu'on dessine
+se remplit tout de suite de l'aplat (le calque prend « Fond sous le trait » tout seul s'il n'en avait pas ;
+ce qui était déjà dessiné sur lui reste sans aplat). Plusieurs personnages peuvent se partager un calque : chaque
+trait garde l'aplat de celui qui l'a dessiné. Clic sur la pastille choisie : on la lâche ; prendre une autre couleur à la
+main (panneau Couleur, pipette, nuancier) la lâche aussi.
+
+- Clic droit sur une pastille : Modifier… (nom, trait, aplat), Dupliquer, Déplacer à gauche / à droite, Supprimer.
+- Le panneau **Personnages** (icône à droite de la barre, ou dans la barre des panneaux ; en onglet avec Couleur et
+  Pinceaux) liste les personnages et les couleurs neutres : nom, couleur du trait, aplat ou non, couleur de l'aplat ; on les range
+  en glissant la poignée.
+- Les personnages sont **du projet** (Ctrl+Z les annule ; fichier `personnages.json`, le format du projet ne change pas) ; les
+  couleurs neutres sont **de l'application** (communes à tous les projets, dans les réglages).
+- La barre se montre ou se cache **par espace de travail** (Affichage > « Montrer / Cacher la barre des personnages »,
+  Ctrl+K `perso.barre`) : visible d'office en Storyboard (et dans l'espace Vignettes, quand il viendra), cachée d'office en
+  Animation et en Montage.
+- Commandes à mettre sur des touches (Ctrl+K) : `perso.suivant`, `perso.precedent`, `perso.aucun`, `perso.ajouter`.
+- En « Peindre dans : Fond », le pot de peinture remplit avec l'aplat du personnage choisi.
+
+Limite : un personnage dessiné *dans* l'aplat d'un autre, sur le même calque, garde l'aplat de l'autre là où ils se
+chevauchent (on recolorie avec le pot de peinture de la strate Fond). Détail du choix de conception, des gestes et liste de
+contrôle : `docs/INTERFACE.md` § 32.
+
 ## Calque de couleur (la couleur sous le trait)
 
 Pour colorier sans abîmer le trait : un **calque de couleur** est lié à un calque de dessin (le
@@ -2069,6 +2097,7 @@ Bus/
   references.json      les références visuelles (absent : aucune)
   references/16.png    leurs images, copiées telles quelles (une vidéo : un dossier references/17/ d'images 000001.jpg…)
   crayonnes.json       la planche de crayonnés rapides (absent : pas de planche)
+  personnages.json     les personnages de la brosse par personnage : nom, trait, aplat (absent : aucun personnage)
   scenes3d.json        les scènes 3D de blocage (absent : aucune scène)
   envois.json          les envois (« v2 au réal ») et l'empreinte de chaque plan à chacun (absent : aucun envoi)
   versions/            les instantanés des envois et leurs dessins, rangés par contenu (absent : aucun envoi)
@@ -2342,6 +2371,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `propager.rs`, `propagerui.rs` | Propagation de la peinture sur une vidéo, façon EbSynth (voir `docs/PROPAGATION.md`) |
 | `zones.rs` | Découpe d'un dessin au trait en zones fermées (cœur, trous fermés, sous le trait, voisines, forme), cache par version du dessin |
 | `coloriage.rs`, `coloriageui.rs` | Colorier par zones : appariement des zones d'une image à l'autre, aplats vectoriels ou bitmap, fenêtre, tâche, liste à vérifier (voir `docs/COLORIAGE.md`) |
+| `personnages.rs`, `personnagesui.rs`, `persofond.rs` | Brosse par personnage : personnages du projet (fichier `personnages.json`) et couleurs neutres (réglages), barre de pastilles, panneau Personnages, fenêtre « Modifier », choix et lâcher ; fil de fond qui donne à un trait la aplat de son personnage |
 | `handles.rs` | Poignées de la timeline (marques, signets, entrée / sortie, expositions) et menus de la grille |
 | `fxkeys.rs` | Clés d'effets dans le montage et la timeline : losanges, choix, déplacement, copier-coller, suppression |
 | `fxcopie.rs` | Copier-coller des effets (pile) d'un calque à l'autre : presse-papiers, calques choisis, clés hors du plan, tremblement sur bitmap |

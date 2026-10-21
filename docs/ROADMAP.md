@@ -3406,3 +3406,23 @@ Anthony garde les deux comportements : **Préférences > Montage > « Repliage d
 **commun à tous les plans** (d'origine) et **propre à chaque plan** (chaque plan retient ses replis ; hauteurs du plan courant, prises au relâchement de la souris ; triangle et « tout replier » sur
 le plan courant seulement, « … de tous les plans » au clic droit). Réglage de l'application (`repliage_pistes`), rien de neuf dans le projet ; passage d'un mode à l'autre sans perte ; en mode par
 plan, aucune écriture dans les plans qu'on ne tient pas (film partagé). Détail : `docs/INTERFACE.md` § 29.8, liste de contrôle § 29.9 ; code : `src/pistes.rs`.
+
+## Brosses par personnage (demandées par Anthony le 2026-10-21, branche `brosses-personnages`) ✅
+
+« La brosse par personnage » : on ajoute un personnage et on lui donne une couleur de trait et un aplat (la couleur sous le trait) ; le choisir règle le trait et l'aplat
+tout de suite, pour reconnaître un personnage même dans un dessin très rough. Une barre fine de pastilles au-dessus du dessin (une par personnage, plus des couleurs
+neutres), paramétrable, et son panneau « Personnages ». Mode d'emploi : README, « Brosses par personnage » ; conception, gestes et liste de contrôle :
+`docs/INTERFACE.md` § 32 ; code : `src/personnages.rs`, `personnagesui.rs`, `persofond.rs`.
+
+- ✅ **Personnages du projet** (nom, trait, aplat ou non, ordre) : dans `Structure` (annulables), fichier `personnages.json` à côté du manifeste (`write_sidecar` : jamais détruit s'il est
+  illisible ou plus récent ; **`VERSION` inchangée**, projets partagés inclus). **Couleurs neutres** dans les réglages de l'application (noir sans aplat, gris sur gris clair, rouge de correction).
+- ✅ **Barre** au-dessus du dessin, par espace de travail (visible d'office en Storyboard, cachée en Animation et en Montage, allumable ; l'espace Vignettes à venir la montrera : une ligne dans
+  `Espace::barre_personnages_par_defaut`) ; clic = choisir (ou lâcher), clic droit = modifier, dupliquer, déplacer, supprimer. **Panneau Personnages** en onglet avec Couleur et Pinceaux,
+  glisser pour ranger.
+- ✅ **L'aplat de chaque trait** : le « Fond sous le trait » est une forme par dessin, d'une couleur par calque ; plutôt que de changer ce format, les pixels que la forme gagne grâce à un trait de
+  personnage sont peints dans la peinture de la strate Fond, de la couleur d'aplat du personnage (fil de fond, sans latence ; une étape d'annulation avec le trait). Plusieurs personnages, un seul calque.
+- ✅ Une couleur prise à la main (Couleur, pipette, nuancier, échange) lâche le personnage ; pinceau et crayon, bitmap et vectoriel ; la gomme et la strate Fond ne sont pas touchées ; le pot de peinture
+  de la strate Fond prend l'aplat du personnage.
+- Limites : un personnage dessiné dans l'aplat d'un autre garde cet aplat là où ils se chevauchent ; un trait ne se souvient pas de son personnage ; formes et texte ne portent que la couleur du trait.
+- À faire plus tard : les raccourcis `perso.suivant` / `perso.precedent` n'ont pas de touche par défaut ; l'espace Vignettes (autre branche) montre la même barre (`personnages_barre`) ; la passe de
+  vocabulaire « fond → aplat » renommera le « Fond sous le trait » existant.

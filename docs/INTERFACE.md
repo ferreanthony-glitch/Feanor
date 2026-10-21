@@ -2586,3 +2586,133 @@ de « Ajouter un effet », grisé sur un bitmap, projet avec tremblement enregis
 6. Copier un effet dans un projet, ouvrir un autre onglet d'une autre taille de feuille, cliquer un calque, Ctrl+V : l'effet arrive, ses pixels adaptés.
 7. Menu « Trait ▾ » : « Tremblement du trait » est le premier ; grisé (bulle) sur un calque bitmap ; « Ajouter un effet » : pas d'entrée à part
    en tête, mais « Trait > Tremblement du trait ». Rouvrir un projet d'avant avec un tremblement : il tremble comme avant.
+
+## 32. Brosses par personnage (2026-10-21, branche `brosses-personnages`)
+
+Demande d'Anthony : « On ajoute un personnage et on lui attribue une couleur de trait et une couleur de fond. Quand on sélectionne ce
+personnage, on dessine avec la couleur de trait et de fond immédiatement. Ça permet, même avec un dessin très rough, d'identifier le
+personnage. J'imagine une barre horizontale au-dessus du canevas avec juste des pastilles de couleurs qu'on sélectionne. Une pastille par
+personnage plus des couleurs neutres. Paramétrables. » Précisions : la barre est visible d'office en Storyboard et dans l'espace Vignettes
+(à venir), cachée d'office en Animation et en Montage mais allumable ; le panneau « Personnages » est dans la disposition par défaut si elle
+le permet, sinon à un clic de la barre. Vocabulaire (décidé ensuite par Anthony) : la couleur sous le trait s'appelle l'**aplat** ; un
+personnage a donc un **trait** et un **aplat**. Les textes nouveaux disent « aplat » ; ce qui existait déjà (« Fond sous le trait » du calque,
+`Layer::fond`, la strate Fond) garde son nom jusqu'à la passe de vocabulaire.
+
+### Mots
+
+| Mot | Sens | À éviter |
+|---|---|---|
+| **Personnage** | un nom, une couleur de trait, une couleur d'aplat (ou aucune), dans un ordre ; il est **du projet** (`personnages.json`) | acteur, rôle |
+| **Couleur neutre** | un trait avec ou sans aplat qui n'est pas un personnage (noir, gris, rouge de correction…) ; elle est **de l'application**, commune à tous les projets | couleur par défaut |
+| **Pastille** | le rond de la barre : anneau = couleur du trait, dedans = couleur de l'aplat (rayé quand il n'y en a pas) | puce, bouton couleur |
+| **Choisir** | cliquer une pastille : le trait prend sa couleur, et l'aplat sous le trait s'allume avec la sienne ; recliquer la pastille choisie la lâche | sélectionner (pour les dessins, c'est autre chose) |
+| **Lâcher** | revenir à une couleur libre : la couleur reste, mais n'est plus celle d'un personnage | désélectionner |
+
+### Où et quels gestes
+
+| Geste | Où | Effet |
+|---|---|---|
+| Clic sur une pastille | barre des personnages, panneau Personnages | choisit le personnage (ou la couleur neutre) ; un outil qui ne dessine pas (Sélection, Pipette…, la gomme) cède la place au pinceau ; un clic sur la pastille choisie la lâche |
+| « + » | barre, panneau | nouveau personnage (couleurs de la place suivante), choisi, et la fenêtre « Modifier » s'ouvre : une étape « Nouveau personnage » |
+| Clic droit sur une pastille | barre | Modifier… (nom, trait, aplat), Dupliquer, Déplacer à gauche / à droite, Supprimer |
+| Glisser la poignée d'une ligne | panneau Personnages | change la place du personnage (une étape « Ranger les personnages ») |
+| Icône « personnages » à droite de la barre | barre | ouvre ou ferme le panneau Personnages (un clic) |
+| Affichage > « Montrer / Cacher la barre des personnages » ; Ctrl+K `perso.barre` | menu, palette | la barre de cet espace de travail (chaque espace retient son choix) |
+| `perso.suivant`, `perso.precedent`, `perso.aucun`, `perso.ajouter` | Ctrl+K, raccourcis à poser | personnage suivant / précédent (les personnages, puis les neutres, en tournant), lâcher, ajouter |
+| Une couleur prise à la main | panneau Couleur, nuancier, pipette (Alt + clic), échange des deux couleurs, code hexadécimal | lâche le personnage (la barre n'en montre plus aucun de choisi) |
+| Pot de peinture en strate Fond | « Peindre dans : Fond » | remplit la zone fermée avec la couleur d'**aplat** du personnage choisi (sinon la couleur courante) |
+
+### Où vivent les choses (et pourquoi)
+
+- **Les personnages sont du projet.** Ils sont dans `Structure` (avec les commentaires, les transitions…) : ajouter, modifier, ranger, supprimer
+  s'annulent (Ctrl+Z). Fichier `personnages.json` à côté du manifeste, écrit par `write_sidecar` : jamais effacé s'il est illisible ou d'une
+  version plus récente (mis de côté sous `.illisible` si un fichier neuf doit le remplacer), absent s'il n'y a aucun personnage. **Le format du
+  projet ne change pas** (`VERSION` reste 35 ; projets partagés inclus) : un projet d'avant s'ouvre tel quel ; une version qui ne connaît pas
+  les personnages ignore le fichier et montre les aplats tels qu'ils ont été peints. Dans un film partagé, les personnages s'écrivent avec le
+  montage (celui qui tient le jeton, comme les transitions) ; les équipiers reçoivent la même liste.
+- **Les couleurs neutres sont un réglage de l'application** (`reglages.toml`, clé `couleurs_neutres`), parce qu'elles ne sont à aucun film :
+  le noir, le gris, le rouge de correction servent partout. D'origine : **Noir** (trait noir, sans aplat), **Gris** (trait gris, aplat gris clair),
+  **Rouge de correction** (trait rouge, sans aplat). Huit au plus ; on peut les retirer toutes. Les modifier ne touche pas à l'historique du
+  projet (un réglage de l'application ne s'annule pas).
+- **La barre se montre par espace de travail** (`Layout::character_bar`, clé `barre_personnages` de la disposition) : rien d'écrit tant qu'on
+  n'a pas choisi, et l'espace décide (`Espace::barre_personnages_par_defaut` : Storyboard oui, Animation et Montage non ; l'espace
+  Vignettes, quand il viendra, oui : c'est une ligne à ajouter dans ce `match`). La barre est dessinée par `personnages_barre`, qu'un autre
+  écran (la planche des vignettes) peut appeler.
+
+### L'aplat d'un trait de personnage (où vit la couleur d'aplat)
+
+Le « Fond sous le trait » existant est **une seule forme par dessin, d'une couleur par calque**. Changer la couleur du calque au choix d'un
+personnage recolorierait l'aplat de tous les personnages du calque. On garde donc plusieurs personnages sur un même calque ainsi :
+
+- au début d'un trait de pinceau ou de crayon avec un personnage qui a un aplat, le calque prend un « Fond sous le trait » s'il n'en avait pas
+  (une étape « Aplat du personnage » à part) ; **ce qui était déjà dessiné sur ce calque reste sans aplat** (coupé, comme le ferait un personnage
+  sans aplat) ;
+- à la fin du trait, un fil de fond (`persofond.rs`, jamais le fil de l'interface) calcule la forme avant et après le trait ; **les pixels que le
+  trait a fait gagner à la forme sont peints dans la peinture de la strate Fond de la couleur d'aplat du personnage** (ou coupés, s'il n'en a pas).
+  La peinture reste dans la forme et passe sous le trait, comme tout ce qu'on peint en strate Fond : un autre personnage dessine ensuite sur le même
+  calque et colore son propre aplat sans toucher à celui des autres ;
+- le résultat est posé à l'image d'écran où il arrive (un dixième de seconde après le trait, comme la forme elle-même) ; s'il arrive avant toute
+  autre action, il rejoint l'étape d'annulation du trait : **un trait de personnage = une étape, aplat compris** ; sinon il est posé sans étape à
+  lui (la peinture est rognée par la forme : défaire le trait cache aussi son aplat, et le rétablir le rend) ;
+- rien ne change dans les dessins (la strate Fond existe depuis le format 23) et rien ne se calcule en plus quand on n'utilise pas de personnage.
+
+La gomme et la strate Fond ne sont pas touchées. Pinceau et crayon, bitmap et vectoriel.
+
+### Ce que voit l'utilisateur
+
+- **Barre** (26 px, sous la barre de la vue) : une pastille par personnage, un « + », un trait de séparation, les pastilles neutres ; à droite l'icône du
+  panneau (enfoncée quand il est ouvert). La pastille choisie a un halo de la couleur d'accent ; la bulle (une seconde) donne le nom, les codes des
+  couleurs et le clic droit. Sans personnage : « Aucun personnage ».
+- **Panneau Personnages** (en onglet avec Couleur et Pinceaux ; icône dans la barre des panneaux) : « + », « Couleur libre » (lâcher), le nombre de
+  personnages ; une ligne par personnage (poignée, pastille, nom, couleur du trait, interrupteur « Avec un aplat », couleur de l'aplat, corbeille) ;
+  puis « Couleurs neutres » (mêmes lignes), « + » et « Couleurs neutres d'origine ».
+- **Fenêtre « Modifier le personnage »** (clic droit > Modifier…) : la même ligne ; chaque champ ou sélecteur de couleur est une étape nommée « Modifier
+  le personnage » par geste. Le pinceau suit la couleur d'un personnage choisi qu'on modifie (ou qu'on annule).
+- **Barre d'état** : « « Lou » : le trait et l'aplat de ce personnage. » / « Couleur libre : plus de personnage choisi. ».
+
+### Limites
+
+- Les pixels que la forme d'un autre personnage couvrait déjà gardent la couleur d'avant : un personnage dessiné *dans* l'aplat d'un autre, sur le même
+  calque, n'a pas son aplat (on le recolorie avec le pot de peinture en strate Fond, qui prend l'aplat du personnage choisi, ou on dessine sur un autre
+  calque). Un trait qui complète un personnage déjà fermé n'ajoute d'aplat que là où la forme grandit.
+- Un trait ne se souvient pas de son personnage : supprimer un personnage ne change aucun dessin ; déplacer ou transformer un dessin ne déplace pas
+  la peinture de l'aplat qui le colorait (comme toute peinture de la strate Fond).
+- Seuls les traits de pinceau et de crayon portent un aplat de personnage ; le pot de peinture hors strate Fond, les formes et le texte prennent la couleur
+  de trait du personnage seulement.
+- L'aplat du dessin courant est coupé sous ce qui était déjà dessiné quand le calque prend son fond ; les autres dessins du calque (autres images) gardent
+  le fond blanc du calque tant qu'on n'y dessine pas avec un personnage.
+- Enregistrer dans la fraction de seconde qui suit un trait écrit le projet sans l'aplat de ce trait ; il est posé juste après et le projet est de nouveau
+  « modifié ».
+- Dans un film partagé, deux équipiers qui modifient la liste en même temps : le dernier à écrire gagne (comme les transitions).
+
+### Essais ajoutés
+
+`personnages_tests.rs` : ajouter, modifier, supprimer, dupliquer et ranger des personnages avec annulation ; noms nets ; choisir règle la couleur du trait
+et le trait gagne son aplat (bitmap et vectoriel) ; deux personnages sur un même calque gardent chacun leur aplat ; sans aplat (coupé) et neutre sans aplat ;
+un trait et son aplat = une étape ; des traits plus rapides que le fil de fond ; la gomme ne touche à rien ; le pot de peinture de la strate Fond ; une
+couleur prise à la main lâche le personnage ; le choix suit la couleur modifiée et part avec le personnage supprimé ; suivant / précédent ; les neutres
+(réglages d'origine, aller-retour TOML, ajout, déplacement, borne) ; la barre par espace de travail ; barre et panneau dessinés, application au repos
+(avant et après un trait) ; fichier : aller-retour, absent sans personnage, illisible ou plus récent jamais détruit, lecture défensive, fil d'écriture,
+aplats enregistrés et relus. Les essais de la barre des panneaux, de la disposition (onglets Couleur, Pinceaux, Personnages) et du fichier de raccourcis
+tiennent compte du nouveau panneau et des six commandes.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Espace Storyboard : sous la barre de la vue, la barre des personnages (« Aucun personnage », « + », trois pastilles neutres : noir, gris, rouge).
+   Animation et Montage : pas de barre ; Affichage > « Montrer la barre des personnages » l'allume dans cet espace seulement ; revenir en Storyboard : elle y est.
+2. « + » : une pastille de couleur apparaît, choisie (halo), la fenêtre « Modifier le personnage » s'ouvre ; taper « Lou », changer le trait (rouge) et
+   l'aplat (rose) : la pastille suit. Ctrl+Z annule chaque geste ; le panneau Historique les nomme.
+3. Dessiner une silhouette fermée au pinceau avec Lou : le trait est rouge et, une fraction de seconde après, le dedans se remplit de rose ; le calque a
+   maintenant le bouton « Fond sous le trait » allumé. Ctrl+Z : le trait et son aplat partent ensemble (le fond du calque, lui, est une étape à part).
+4. Créer Max (bleu, aplat bleu ciel) ; sur le même calque, dessiner à côté : aplat bleu ciel, celui de Lou n'a pas changé. Chercher une silhouette qui chevauche
+   l'autre (limite connue : la partie commune garde l'aplat de Lou).
+5. Pastille « Noir » (sans aplat) : le trait est noir et n'a pas d'aplat, même sur un calque qui en a déjà un ; pastille « Gris » : trait gris, aplat gris clair.
+6. Prendre une autre couleur (panneau Couleur, pipette Alt + clic, échange des deux couleurs) : le halo disparaît de la barre. Recliquer la pastille : la couleur revient.
+7. Cliquer la pastille choisie : elle est lâchée (« Couleur libre »). L'outil Sélection actif, cliquer une pastille : le pinceau est pris.
+8. Clic droit sur une pastille : Modifier…, Dupliquer (« Lou (copie) »), Déplacer à gauche / à droite, Supprimer. Les pastilles se rangent ; Ctrl+Z remet l'ordre.
+9. Icône « personnages » à droite de la barre, ou barre des panneaux : le panneau s'ouvre (onglet avec Couleur et Pinceaux). Glisser la poignée d'une ligne
+   change l'ordre de la barre ; la corbeille supprime ; les couleurs neutres se modifient là aussi, et « Couleurs neutres d'origine » les remet.
+10. Fermer et rouvrir SHOT : les couleurs neutres modifiées sont là ; enregistrer le projet, le rouvrir : mêmes personnages, mêmes aplats (la silhouette de Lou garde
+    son rose). Ouvrir un autre projet : ses personnages à lui, les mêmes couleurs neutres.
+11. Gomme sur un personnage choisi : elle gomme, le personnage reste choisi. Pot de peinture en « Peindre dans : Fond » avec Max choisi : la zone prend le bleu ciel.
+12. Au repos : barre et panneau ouverts, rien ne bouge, le processeur reste à zéro ; un trait de personnage ne laisse rien tourner après lui.
