@@ -181,7 +181,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   rendent. Les ~60 endroits qui appellent `push` n'en savent rien.
 - Fond sous le trait (`fond.rs`, `fondui.rs`) : réglages par calque (`Layer::fond`), strate Fond
   par dessin (`Cel::fond` : `Strate { peinture, coupe }`). Le rendu ne suit pas en direct un
-  dessin dérivé (effets, CTG) pendant un trait : le fond est donc un élément à part, juste sous
+  dessin dérivé (effets) pendant un trait : le fond est donc un élément à part, juste sous
   le trait (`render::fond_item`, `FondPart::Forme`, dérivé et gardé dans le cache de `fx`,
   recalculé au lâcher). Pendant qu'on peint ou gomme dans le fond, `fx::fond_patch` refait ses
   seules tuiles touchées (forme gardée dans `COVERS`, même version), que `gpu::sync` envoie
@@ -573,7 +573,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     sans nouvel envoi). Le fil de fond redessine l'écran à chaque résultat.
   - **Effets sur la carte graphique** (`gpufx.rs`, `gpufx.wgsl`, `gpu.rs`, 2026-10-19) : si toute la pile d'un élément du
     plan a une version sur la carte (`gpufx::steps_supported`, `gpu::gpu_fx_item` : dessin du projet à la taille de la
-    feuille, ni CTG, ni fond, ni feuille flottante) et que le réglage est allumé, `gpu::sync` n'appelle pas `fx::display` :
+    feuille, ni remplissage au griffonnage, ni fond, ni feuille flottante) et que le réglage est allumé, `gpu::sync` n'appelle pas `fx::display` :
     il envoie le dessin d'origine et pose une texture résultat (`place_fx`, numéro `gpufx::out_id`, à la taille de ce que les
     effets touchent) avec sa chaîne de passes (`gpufx::plan_chain`) dans `CanvasResources::fx_jobs`. `CanvasPaint::prepare`
     dessine les chaînes dont la signature a changé (`gpufx::signature` : effets et réglages à cette image, génération et
@@ -616,24 +616,62 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   un trait le flou n'est refait qu'à la fin. Risque faible : les dessins ne changent jamais.
   Réversible : retirer l'effet suffit. Les clés suivent les images insérées / supprimées
   (`Layer::shift_frames`, avec les rôles).
-- Calque CTG (`ctg.rs`, `ctgui.rs`, 13j) : `Layer::ctg` (sources : id de calques). Le plan
-  porte, pour un calque CTG, les dessins de ses sources à cette image (`PlanItem::ctg`).
-  `fx::shown` en fait un dessin dérivé (le remplissage, puis les effets), gardé dans le même
-  cache sous `shown_id`, et refait quand la version du dessin de graffitis ou d'une source
-  change.
+- Calque de couleur (`calquecouleur.rs`, `calquecouleurui.rs`, format 30) : `Layer::couleur` (`CalqueCouleur`) sur un calque
+  bitmap ordinaire ; `trait_id` (le calque de trait, ou 0 : calque libre), `dessins` (dessin du trait → dessin de couleur,
+  refait à chaque image d'écran par `refleter` / `App::sync_couleurs`), `trous`, `zone`, et, depuis le 2026-10-21, le
+  mode Griffonner et ses griffonnages (ci-dessous). `reparer` remet la pile en ordre (un calque lié juste sous son trait ;
+  un calque libre garde sa place ; un trait disparu laisse un calque ordinaire, ou libre s'il a des griffonnages).
+  Peindre : pot de peinture et pinceau bornés par les murs du trait (`Murs`, `Cache`, précalculés sur un autre fil).
+- Remplissage au griffonnage (`griffonnage.rs`, `calquecouleurui.rs` ; c'était le calque CTG, 13j, fondu dans le
+  calque de couleur le 2026-10-21 : « On fusionne »). **Il n'y a plus de calque CTG** : `Layer::ctg`,
+  `ctg.rs` et `ctgui.rs` n'existent plus (seul `lib.rs` garde un `ctg::input` vide, que `propager.rs` appelle encore,
+  et `PlanItem::ctg` garde son nom pour la même raison).
+  - **Stockage** : `CalqueCouleur::griffonnages` (dessin de peinture → dessin de griffonnages), `remplissage` (le
+    remplissage est calculé), `griffonner` (le mode), `sources` (rangs, d'autres calques dont les traits ferment aussi
+    les zones), `trait_id == 0` pour un calque libre. Un dessin de griffonnages est **un vrai dessin du projet**
+    (`doc.cels`), qui n'est dans aucune timeline : `Document::used_cels`, `empreinte::dessins_du_plan`,
+    `calquecouleur::dessins_du_calque` et `griffonnages_de` l'énumèrent ; `Document::copier_griffonnages[_avec]`
+    en fait des copies à chaque duplication de calque ou de plan (jamais partagé), avant `relink_copies` qui remappe
+    les numéros (peinture, griffonnages, sources). Annuler un geste de griffonnage : l'annulation d'un dessin
+    ordinaire (`Edit::Tiles`) ; la première fois, le dessin et son entrée sont créés dans la même étape
+    (`App::ensure_scribble_cel`, comme `ensure_colour_cel`).
+  - **Dessiner** : `App::ensure_cel` redirige vers `ensure_scribble_cel` quand le mode est allumé : tout outil qui passe
+    par `ensure_cel` (pinceau, crayon, gomme, formes, pot : un tampon, `griffonnage::tampon`) travaille sur le dessin
+    de griffonnages. Pas de pochoir de zone en mode Griffonner (un griffonnage remplit les zones qu'il touche).
+  - **Dans le plan** : un élément de plus **sous** la peinture libre (`render::griffon_item`, avant `fond_item`) :
+    `PlanItem { cel: griffonnage, ctg: Some(GriffonInput { sources, gap }), … }`, avec les effets, la transformation et
+    la fusion du calque. La peinture libre reste un élément ordinaire : zéro latence quand on peint, même sur un
+    calque qui remplit. Ordre, de bas en haut : remplissage, fond sous le trait, peinture libre.
+  - **Calcul** : `fx::shown` en fait un dessin dérivé (le remplissage, puis les effets), gardé dans le même
+    cache sous `shown_id`, de version `fx::griffon_version` (les versions du dessin de griffonnages et de ses sources).
+    **À l'écran** (`fx::differe`, ou le GPU par `fx::display`), il passe par le fil de fond des effets
+    (`fxcache::Job::griffon`, `fx::display_with`) : la demande est faite une fois par version (`fxcache::renew` la
+    garde vivante sans refaire la copie des sources), le dessin d'avant (`fxcache::fallback`) reste affiché en
+    attendant, **rien** (jamais les griffonnages bruts) tant qu'il n'y en a pas eu, et `fx::griffon_poll` fait
+    refaire l'image composée par le processeur à l'arrivée. L'export, l'enregistrement et les essais le calculent
+    tout de suite, exactement (`shown_with`).
 
-  Le remplissage, `ctg::fill` :
+  Le remplissage, `griffonnage::fill` (inchangé depuis le calque CTG, pour que les anciens projets gardent leur image) :
   - un trait est un pixel des sources d'opacité au moins 128 ;
-  - fermeture des trous (`Ctg::gap`, 4 par défaut) : les traits sont épaissis de `gap`
+  - fermeture des trous (`CalqueCouleur::trous`, 4 par défaut) : les traits sont épaissis de `trous`
     pixels (deux balayages de distance par sens, carré) pour chercher les zones ;
   - depuis chaque graffiti, une zone est remplie de proche en proche (4 voisins) hors des
     traits épaissis, et prend la couleur la plus présente parmi ses graffitis ;
-  - la couleur regagne la bande d'épaississement (`gap` pas, sans traverser un vrai trait),
+  - la couleur regagne la bande d'épaississement (`trous` pas, sans traverser un vrai trait),
     puis 2 pixels sous les traits voisins.
 
   Seules les zones touchées sont parcourues. Sources enregistrées par leur rang dans le plan
-  (format 20), refaites en id au chargement, et suivies par `relink_copies` quand on copie un
+  (format 36), refaites en id au chargement, et suivies par `relink_copies` quand on copie un
   plan.
+  - **Anciens projets** : `project.rs` lit encore le champ `ctg` du manifeste (jamais écrit) ; une fois les dessins
+    chargés, `griffonnage::migrer_ctg_document` convertit chaque calque CTG (plans et autres versions des plans) :
+    **lié** à sa première source si elle est juste au-dessus (même dossier) et que `recouvre` trouve des images qui
+    se recouvrent exactement avec les mêmes pré / post-comportement, transformation, profondeur et clés de position ;
+    sinon **libre** (sources supplémentaires = sources du calque CTG, ou tous les autres calques de dessin s'il n'en
+    avait pas choisi). Le dessin de graffitis devient le dessin de griffonnages (même fichier, rien de réécrit), des
+    dessins de peinture vides sont créés sous un numéro dérivé (`numero_peinture`, bit 60 : stable d'une ouverture à
+    l'autre, sans heurt dans un plan partagé), Griffonner est allumé, un fond sous le trait éventuel est retiré. La
+    même image au pixel près est un essai (`GOLDEN_CTG` : empreintes prises avant la fusion).
 - Calque vidéo (`video.rs`, `videoui.rs`, 13k) : `Layer::video` (`VideoClip` : id, nom,
   nombre d'images, cadence, début, extension) ; pas de dessins. `video::cel_at` donne, à une
   image du plan, un numéro de dessin propre à cette image de la vidéo (`frame_id`, bit 62),
@@ -961,7 +999,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     un `egui::Id`), `eye_button`, `lock_button`, `icon_at`, `blend_combo` (sorti de `layer_head`).
   - Clic droit sur la rangée, ⋮, ou « Calque » au clic droit d'une piste : `montage_layer_menu`
     (réglages, opacité, mode, `behaviour_items` sorti de `layer_head_menu`, groupe,
-    `layer_menu_where(…, in_montage)`, CTG, vidéo, propagation, puis `layer_ops_menu`).
+    `layer_menu_where(…, in_montage)`, calque de couleur, vidéo, propagation, puis `layer_ops_menu`).
     `LayerRename::in_montage` : le renommage se fait dans la colonne (double-clic sur le nom).
   - `paint_layer_cell` montre le pré / post-comportement (boucle, va-et-vient, maintenir) en
     pâle avant le premier dessin et après le dernier, avec `behaviour_icon`.
@@ -1013,9 +1051,9 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     l'affichage : `on_uncaptured_error` / `set_device_lost_callback` (`App::new`) appellent
     `note_gpu_error` (un rapport par séance) au lieu du plantage par défaut de wgpu. Une erreur d'allocation (manque
     de mémoire) arrête le programme sans passer par là.
-  - Code couleur des calques : `theme::couleur_calque(kind, ctg)` (vif : repères, barres, bande et
+  - Code couleur des calques : `theme::couleur_calque(kind, couleur)` (vif : repères, barres, bande et
     étiquette du panneau Calques, lettre de l'en-tête de la timeline) et `fond_calque` (sourd :
-    dessins sous les panneaux du montage) ; `DESSIN_CTG` / `CALQUE_CTG` roses. Tous les endroits
+    dessins sous les panneaux du montage) ; `DESSIN_COULEUR` / `CALQUE_COULEUR` roses (le rose de l'ancien calque CTG, devenu celui du calque de couleur). Tous les endroits
     qui choisissaient la couleur d'après `layer.kind` passent par eux.
   - Image du presse-papiers (`pasteimage.rs`) : `run_action("edition.coller")` commence par
     `clipboard_image` (arboard : rien si le texte commence par `MARK`, « Pelure : », écrit par les
@@ -1163,7 +1201,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   `App::after_stage_change` vide l'historique et oublie ce qui pointait dans l'ancienne feuille.
   Risque : pas de Ctrl+Z ; la fenêtre le dit avant « Appliquer ». Restent à leur taille : les
   images d'un calque vidéo (lues à la taille de l'import), le rayon des flous et la fermeture des
-  trous du CTG (en pixels). Réversible : on peut revenir à l'ancienne taille, au prix d'un
+  trous des calques de couleur (en pixels). Réversible : on peut revenir à l'ancienne taille, au prix d'un
   rééchantillonnage.
 - Export vers Storyboard Pro (14b-1).
   - `sbexport::prepare` décrit ce qui part (`SbOut`) : plans → plans, images de storyboard
@@ -1597,7 +1635,11 @@ MonFilm/
 
 - Format 21 (13k) : `video` sur un calque, { `id`, `nom`, `images`, `ips`, `debut`, `ext` } ; ses
   images dans `videos/<id>/000001.<ext>`… ; absent : calque ordinaire.
-- Format 20 (13j) : `ctg` sur un calque, { `sources` : rangs des calques sources dans le plan
+- Format 36 (2026-10-21, « On fusionne ») : `calque_couleur` d'un calque, en plus de `trait` (rang du calque de trait ;
+  **absent : calque libre**), `dessins`, `trous`, `zone` : `griffonnages` [[dessin de peinture, dessin de griffonnages]],
+  `remplissage`, `griffonner`, `sources` (rangs). Les dessins de griffonnages sont des fichiers ordinaires de `dessins/`.
+  `ctg` n'est plus écrit (voir le format 20 ci-dessous, lu seulement : le calque devient un calque de couleur).
+- Format 20 (13j) : `ctg` sur un calque (**lu seulement depuis le format 36**), { `sources` : rangs des calques sources dans le plan
   (vide : tous les autres calques de dessin), `trou` : fermeture des trous en pixels (absent :
   4) } ; absent : calque ordinaire.
 - Format 19 (13i) : `effets` sur un calque, une liste de { `sorte` (`flou_gaussien`,
@@ -1957,7 +1999,7 @@ centre le cadre sur la feuille, donc centre de feuille = centre de cadre). Sans 
 | Pose du calque, clés de position | `adapte_calque` | `x`, `y` × `s` (le pivot est le centre de la feuille, qui se retrouve) ; échelle, étirement, rotation inchangés |
 | Clés de caméra | `adapte_camera` | position par la similitude ; avancée × rapport des largeurs de cadre (c'est lui qui règle `camera::ref_distance`) ; zoom, angles inchangés |
 | Effets | `adapte_valeurs` | les paramètres dont l'unité commence par `px` (`" px"`, `" px/img"`), valeurs et clés, × `s` et rabotés aux bornes ; entiers arrondis ; le trait sec : trous pour 100 px de trait ÷ `s`. Un essai passe en revue tous les effets : un paramètre en pixels dont l'unité ne le dit pas ferait échouer la suite |
-| Fond sous le trait, calque de couleur, CTG | `adapte_calque` | débord / fermeture des trous en pixels entiers × `s`, au moins 1 |
+| Fond sous le trait, calque de couleur (peinture et remplissage au griffonnage) | `adapte_calque` | débord / fermeture des trous en pixels entiers × `s`, au moins 1 |
 | Cadence | `retemps_*` | `f' = tween::rescale_frame(f, de, vers)` ; les images d'un calque par `tween::resample` sans interpolation (dessins tenus) ; `retemps_reglages_calque` / `_plan` (rôles, clés d'effets / de position / de caméra, vidéo, marques, repères, notes) sont **aussi** ceux de « Changer la cadence » (`tweenui.rs`), qui ignorait les clés de position |
 
 **Fichier > Réglages du projet > Résolution** (« mettre les dessins à l'échelle ») utilise la même règle : `Document::scale_stage` est maintenant
@@ -2094,8 +2136,8 @@ absents des structures de lecture : serde les passe) ; `scenes3d.json` n'est plu
 aucun fichier de `modeles/` n'est jamais effacé. Le calque « Fond 3D » est un calque bitmap ordinaire. Projets partagés : `DonneesPlan` /
 `ContenuPlan` n'ont plus de `scene3d` (ignoré à la lecture), `Annexes` plus de `scenes3d` ni de `modeles_connus`.
 
-**Format** : `project::VERSION` = 35 (inchangé par la simplification) ; `version_partage_ecrite()` = max(34, 35) pour les projets partagés
-(voir `docs/ESPACE3D.md`, 6).
+**Format** : `project::VERSION` = 35 au moment de la simplification (inchangé par elle ; 36 depuis « On fusionne », le 2026-10-21) ;
+`version_partage_ecrite()` = max(34, `VERSION`) pour les projets partagés (voir `docs/ESPACE3D.md`, 6).
 
 ### Décisions (coût / risque / réversibilité)
 

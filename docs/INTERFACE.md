@@ -1178,7 +1178,8 @@ vérifié : **à vérifier**, rien n'est copié). Code : `src/calquecouleur.rs` 
   `filling_a_big_sheet_is_fast_enough_to_click` (affiche les temps).
 - **Format** : `calque_couleur` (rang du trait, couples de dessins, trous, zone), **format 30**. Un projet d'avant s'ouvre
   tel quel ; un projet enregistré en 30 n'est pas lisible par une version d'avant (même règle que 25 à 27). Les numéros
-  28 et 29 sont ceux d'autres chantiers menés en parallèle.
+  28 et 29 sont ceux d'autres chantiers menés en parallèle. **Format 36** (« On fusionne », ci-dessous) : `griffonnages`,
+  `remplissage`, `griffonner`, `sources`, et un calque libre (sans `trait`).
 - **Export, PDF, vignettes, montage, GPU** : la couleur est un calque bitmap ordinaire pour eux (rien n'a changé). Export
   Storyboard Pro : calque bitmap sous le trait, avec une note dans la fenêtre d'export (le lien n'y existe pas : à vérifier).
 - **Avec « Fond sous le trait »** (`fond.rs`) : les deux coexistent, rien n'a changé dans l'un pour l'autre. Le fond est
@@ -1187,7 +1188,86 @@ vérifié : **à vérifier**, rien n'est copié). Code : `src/calquecouleur.rs` 
 - **Limites connues** : couper / coller une clé du trait (même calque) ne remet pas sa couleur (elle reste dans le
   dessin d'origine : glisser la clé la garde) ; un effet du trait (tremblement) ne bouge pas la couleur ; le trait
   doit exister à l'image pour colorier (sinon, un pinceau en pose un vide) ; un calque de toute la scène, un dossier,
-  un calque d'effet, vidéo ou CTG ne portent pas de couleur.
+  un calque d'effet ou vidéo ne portent pas de couleur.
+
+### Griffonner : le calque CTG est fondu dans le calque de couleur (« On fusionne », 2026-10-21, branche `couleur-unique`)
+
+Décision d'Anthony : **un seul calque de couleur**, qui se peint à la main **et** qui sait remplir des zones d'un coup de
+griffonnage ; le calque CTG est retiré (commande « Nouveau calque CTG », menus « Calque CTG », sorte de calque, bloc de
+`keymap.toml`, essais). Code : `src/griffonnage.rs` (algorithme, tampon, lecture des anciens projets), `src/calquecouleur.rs`
+(données), `src/calquecouleurui.rs` (mode, dessin de griffonnages, menu), `fx.rs` / `fxcache.rs` (calcul de fond).
+
+**Vocabulaire et commandes** : « Griffonner » (mode du calque de couleur), « griffonnage » (ce qu'on pose en ce mode),
+« Sources supplémentaires », « calque libre ».
+- `calque.griffonner` (« Calque de couleur : griffonner… ») : icône boucle dans les réglages du pinceau, du crayon, de la
+  gomme et du pot (allumée = enfoncée, bulle : nom, raccourci, description ; clic droit : assigner un raccourci), case
+  « Griffonner » du menu Calque de couleur de la ligne du calque (et de Calques > Plus > Calque de couleur). Aucune touche
+  par défaut. Une étape d'annulation par bascule ; sur un calque qui n'est pas de couleur : un message.
+- Menu Calque de couleur d'un calque de couleur : Griffonner, Pinceau dans la zone fermée (peinture à la main seulement),
+  Fermer les trous jusqu'à N px (peinture **et** remplissage), **Sources supplémentaires** (cases : d'autres calques de
+  dessin dont les traits ferment aussi les zones ; le trait du calque, lui, ferme toujours les siennes), Ajouter un autre
+  calque de couleur, Détacher du calque de trait.
+
+**Comportement**
+
+| Geste | En mode Griffonner | Mode éteint (peinture à la main) |
+|---|---|---|
+| Pinceau, crayon, formes | Un griffonnage : la couleur remplit **toute la zone fermée** qu'il touche (la couleur la plus présente dans la zone gagne), sous le trait | Peinture libre, dans la zone fermée où le trait commence (« Pinceau dans la zone ») |
+| Pot de peinture | Un tampon de griffonnage (disque de 5 px) au point cliqué | Remplit la zone fermée, à plat (ne se recalcule pas) |
+| Gomme | Efface les griffonnages ; une zone sans plus aucun griffonnage n'est plus remplie | Efface la peinture libre, jamais le remplissage |
+| Sélection, déplacement, transformation | Agissent sur la **peinture libre**, pas sur les griffonnages (limite connue) | idem |
+
+- **Ordre de composition** (de bas en haut) : remplissage au griffonnage, fond sous le trait (s'il y en a un), **peinture libre**,
+  puis le calque de trait. La peinture libre est donc **au-dessus** du remplissage ; pour retirer du remplissage à un
+  endroit, gomme le griffonnage (ou retouche le trait pour que la zone change).
+- **Où sont les griffonnages** : un dessin à part par dessin de peinture (`CalqueCouleur::griffonnages`), un vrai dessin
+  du projet (`dessins/<n°>.png`) qu'aucune timeline ne cite : il suit son dessin de peinture quand le trait bouge, se copie
+  avec le calque ou le plan (jamais partagé), s'enregistre avec le projet. Pendant qu'on griffonne en mode Griffonner, les
+  griffonnages restent visibles, **pâles**, par-dessus (à l'écran seulement).
+- **Le remplissage suit** : retouche le trait (ou une source), ou un griffonnage : il se **recalcule tout seul, en
+  arrière-plan** ; l'écran garde le remplissage d'avant jusqu'à l'arrivée du nouveau (rien ne se calcule sur le fil de
+  l'interface pendant un geste ; `fx::display_with`). L'export et l'enregistrement le calculent tout de suite, exactement.
+  Un trou du trait jusqu'à 2 × N px (N = 4 : 8 px) ne laisse pas fuir la couleur ; au-delà, la couleur remplit le dehors.
+- **Sources** : le calque de trait du calque de couleur, plus les sources supplémentaires. Un calque **libre** (sans calque
+  de trait, images à lui — c'est ce que devient un ancien calque CTG que son trait ne suit pas) n'a que ses sources. Détacher
+  un calque de couleur qui a des griffonnages donne un calque libre dont l'ancien trait devient une source (l'image ne
+  change pas) ; si le trait disparaît, même chose.
+- **Les clés ne changent pas** : un calque de couleur lié suit toujours les images de son trait (le miroir de `refleter`) ;
+  ses griffonnages suivent leur dessin de peinture. Un calque libre a ses propres images, comme un calque ordinaire.
+- **Anciens projets** (format 35 et avant) : un calque CTG s'ouvre converti en calque de couleur qui montre **la même image au
+  pixel près** (essai `an_old_project_with_a_ctg_layer_opens_with_the_same_image_and_stays_editable`, qui compare à des
+  empreintes prises avant la fusion), Griffonner allumé, griffonnages gardés (les mêmes fichiers : rien n'est réécrit ni
+  effacé, le champ `ctg` du manifeste est lu et jamais plus écrit). **Lié** à sa première source quand elle est juste
+  au-dessus, dans le même dossier, que leurs images se recouvrent exactement et que pré / post-comportement,
+  transformation, profondeur et clés de position sont identiques (sinon l'image changerait) ; **libre** dans tous les
+  autres cas, ses sources devenant des sources supplémentaires. Un message le dit à l'ouverture. « Charger la structure
+  à partir des sources » n'existe plus : un calque lié suit déjà les images de son trait.
+- **Trois façons de colorier sous le trait, devenues deux** : le **calque de couleur** (peinture à la main et
+  griffonnage, qui se mêlent) et le **fond sous le trait** (`fond.rs` : une forme déduite du trait). La **brosse par
+  personnage** (un trait + une couleur de remplissage par personnage, branche `pistes-par-plan`) s'appuie sur le fond
+  sous le trait : elle n'a pas changé et ne dépend pas du calque de couleur.
+- **Limites** : les images guides de la propagation (`Propager`, `propager.rs`) ne montrent pas les remplissages au
+  griffonnage (le trait et la peinture libre, si) ; les effets du calque (flou…) s'appliquent au remplissage et à la peinture
+  libre chacun de son côté (un effet qui crée de la matière dans le vide, comme un vignettage, s'y applique deux fois) ;
+  sélectionner ou déplacer des griffonnages n'est pas possible ; la zone d'un griffonnage n'est pas bornée (un trait qui
+  traverse un trait colorie les deux zones).
+
+### À vérifier à l'écran (Griffonner)
+
+1. Calque de couleur sous un trait fermé (un cercle), outil Pinceau : l'icône boucle apparaît dans ses réglages ; bulle au
+   bout d'une seconde ; clic : elle s'enfonce, la phrase dit « la couleur remplit la zone ».
+2. Griffonne une couleur au milieu du cercle : toute la zone se remplit (au lâcher, un instant plus tard), jusque sous le
+   trait, sans liseré clair ; le griffonnage reste visible en pâle.
+3. Retouche le trait (ferme-le en deux avec une cloison) : le remplissage d'avant reste, puis se met à jour tout seul ;
+   pendant que tu dessines la cloison, rien ne saccade.
+4. Éteins Griffonner et peins une tache d'une autre couleur : elle est **au-dessus** du remplissage ; la gomme l'enlève sans
+   toucher au remplissage. Rallume Griffonner : la gomme efface les griffonnages (le remplissage disparaît avec eux).
+5. Un petit trou dans le trait (jusqu'à 8 px) : la couleur ne fuit pas.
+6. Pot de peinture en mode Griffonner : un clic dans une zone la remplit.
+7. Ctrl+Z / Ctrl+Maj+Z après un griffonnage : un geste, une étape.
+8. Enregistre, rouvre : même image. Duplique le plan : les deux ne partagent pas leurs griffonnages (retouche l'un).
+9. Un projet d'avant qui avait un calque CTG : il s'ouvre avec la même image, un message le dit ; le calque est devenu un
+   calque de couleur (lettre C, rose) ; griffonne dessus, c'est modifiable. Plus de menu ni de commande « CTG ».
 
 ### À vérifier à l'écran (calque de couleur)
 
@@ -1461,7 +1541,7 @@ en agrandissement, sur des pixels prémultipliés : pas de frange de couleur), d
 pinceau et du texte, puis rendu exact), fond sous le trait (peinture et coupe), pose des calques et clés de position, clés de
 caméra (position ; l'avancée suit la largeur du cadre ; zoom et angles inchangés), paramètres d'effets en pixels (rayon des flous,
 décalage de l'ombre, liseré, grain, tremblement… clés comprises, dans les bornes de l'effet ; la densité de trous du trait sec,
-par 100 px de trait, est divisée), débord du fond sous le trait, fermeture des trous des calques de couleur et CTG, zones bitmap et
+par 100 px de trait, est divisée), débord du fond sous le trait, fermeture des trous des calques de couleur (peinture et remplissage au griffonnage), zones bitmap et
 éléments vectoriels collés sur le dessin (ils gardent leur place dans le cadre). **Ne change pas** : les paramètres en pour cent,
 les incrustations (en pour cent de la hauteur du cadre), les marques d'image, les textes, et — comme pour un collage de plans dans
 le même projet — les références liées, les commentaires, les transitions et les sons des plans.

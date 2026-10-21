@@ -292,7 +292,7 @@ cinq passages, deux à trois séries) :
   de dessin était de la taille de la **feuille** (33 Mo pour 3840 × 2160), le cache en gardait
   environ 30 (1 Go) : avec 15 calques animés à 2 images, la lecture renvoyait à la carte les dessins
   neufs de chaque image. Tenait : 8,2 ms en moyenne, 14,1 ms au pire pour un budget de 41,7 ms. Les
-  calques à effets (flou, ombre, CTG) se calculent sur le processeur (hors de cette passe, voir
+  calques à effets (flou, ombre, remplissage au griffonnage) se calculent sur le processeur (hors de cette passe, voir
   l'agent des effets).
 - **Dessin dans un plan lourd** (état de la première passe ; levier 3 fait depuis) : la pile de
   calques était recomposée entièrement à chaque image d'écran par la carte : 2,2 ms pour 15 calques,
@@ -644,7 +644,7 @@ en défilant un montage de 600 plans ou en sautant de plan en plan, chaque image
 - **Le fil de l'interface** (`Thumbs::texture_at`) calcule la clé de la vignette (composition du plan : dessins,
   opacités, teintes, transformations, modes, effets, calques d'effets ; version de chaque dessin ; caméra ;
   fonds arrivés ; taille du cadre) et la compare à celle de la vignette gardée. Elle a changé : un **cliché** (un
-  `Document` minuscule qui ne porte que les dessins du plan, ceux de ses sources CTG et leur strate Fond, sans
+  `Document` minuscule qui ne porte que les dessins du plan, les griffonnages et les sources de leur remplissage, et leur strate Fond, sans
   le vecteur, tuiles partagées) part dans la file. Il rend tout de suite l'image gardée, même ancienne, ou celle
   d'une autre taille du même plan ; rien si la vignette n'a jamais été faite (le bloc du montage reste vide un
   instant). `Thumbs::begin_frame` envoie les images finies à la carte graphique, 1 ms au plus par image d'écran
@@ -712,7 +712,7 @@ qui réveillent l'écran à la fin de chaque vignette (egui regroupe les réveil
 ### Garde-fous
 
 - **Mêmes pixels** (`thumbs_tests.rs`) : sur le projet d'essai complet de la fiabilité (effets de calque à clés,
-  tremblement du trait, fond sous le trait, calque CTG, calque vidéo, dossier, mode de fusion, transformation,
+  tremblement du trait, fond sous le trait, calque de couleur qui griffonne, calque vidéo, dossier, mode de fusion, transformation,
   caméra à clés, calque d'effet d'ajustement, incrustation ; quatre images par plan), chaque vignette faite par
   les fils est identique, pixel pour pixel, à celle de l'ancien chemin ; idem pour les miniatures de dessins
   (l'ancien calcul est recopié dans l'essai) ; un cliché se compose comme le projet, et ne bouge pas quand on
@@ -849,7 +849,7 @@ processeur, aux demi-niveaux exacts.
   et ils agissent toujours les premiers, sur le dessin vectoriel : la pile est alors **coupée en deux**
   (`fx::hybrid_split`) — le fil de fond calcule le dessin dérivé par les effets du trait seuls, la carte passe tous les
   autres effets dessus, à pleine résolution. Plus aucune pile d'effets « ordinaires » n'est entièrement sur le processeur.
-- Un calque rempli par CTG, un fond sous le trait, une image de vidéo, une feuille flottante en cours de geste :
+- Le remplissage au griffonnage d'un calque de couleur, un fond sous le trait, une image de vidéo, une feuille flottante en cours de geste :
   chemin d'avant (la carte n'a que leur dessin dérivé).
 - **Un calque d'ajustement dans un dossier** (il ne couvre que les calques de son dossier), ou à côté d'un
   calque d'ajustement qui ne passe pas : tous les repères du plan sont résolus sur le processeur
@@ -1013,7 +1013,7 @@ Les effets du trait sont les seuls effets sans passe sur la carte. Une pile qui 
 comme n'importe quel dessin dérivé, `playback` le demande d'avance), puis la carte passe les autres effets dessus à pleine
 résolution, à chaque image. Essai `a_mixed_stack_gives_the_cpu_pixels_with_the_card_drawing_the_card_effects` : écriture
 + flou + tremblement, aucun pixel à plus de 2 niveaux de la référence sur processeur. Une pile sans autre effet que
-ceux du trait reste un dessin dérivé (comme avant). Un calque CTG, un fond sous le trait, une vidéo, une feuille
+ceux du trait reste un dessin dérivé (comme avant). Le remplissage au griffonnage d'un calque de couleur, un fond sous le trait, une vidéo, une feuille
 flottante : chemin d'avant. L'export, les vignettes et le repli sans carte : calcul exact sur processeur.
 
 ### 13.4 Le tremblement du trait sur la carte graphique
@@ -1281,7 +1281,7 @@ retiennent jamais l'interface plus de 9 ms d'un coup.
 ### Garde-fous (`exportrender_tests.rs`, 46 essais et 6 mesures ignorées ; la suite complète : 2 072 essais, deux fois de suite, aucun intermittent)
 
 - **Mêmes pixels** : sur le projet d'essai complet de la fiabilité (effets de calque à clés, tremblement du trait, fond sous le trait,
-  CTG, vidéo, dossier, fusion, transformation, caméra à clés, calques d'effets d'ajustement, incrustation, damier), chaque image du
+  calque de couleur qui griffonne, vidéo, dossier, fusion, transformation, caméra à clés, calques d'effets d'ajustement, incrustation, damier), chaque image du
   nouvel export est celle de l'ancien chemin, pixel pour pixel, pour les trois papiers, à plusieurs images de chaque plan ; la toile
   infinie et les clés de position, les incrustations gravées, les transitions (un plan seul et tout le montage) aussi.
 - **Chaque sorte d'export** : suite de PNG (et PNG sans papier), image courante, film et GIF (un ffmpeg qui recopie ses images brutes :
@@ -1415,3 +1415,25 @@ Décision d'Anthony : plus d'objets 3D, plus de repère 3D. Le code et le travai
 - Le repère 3D n'a plus de fil de calcul (fil de fer, arêtes cachées) ni d'aperçu à tracer pendant qu'on tourne.
 - Mesures refaites avec `cargo test --release espace3d_tests::the_view_with_ten -- --nocapture` et
   `espace3d_tests::perf -- --ignored --nocapture`.
+
+## 22. Calque de couleur qui griffonne : le remplissage ne coûte rien à l'écran (2026-10-21, branche `couleur-unique`)
+
+Le calque CTG est fondu dans le calque de couleur (« On fusionne »). Son remplissage (`griffonnage::fill` : épaississement
+des traits, remplissage de proche en proche, regain de la bande) coûtait, avant, un **calcul bloquant sur le fil de
+l'interface** à chaque retouche d'un trait ou d'un griffonnage (`fx::shown_blocking`, mis en cache ensuite). La règle « sans
+latence » (aucun calcul de dessin dérivé pendant qu'on se sert de l'application) vaut maintenant aussi pour lui :
+
+- **À l'écran** (carte graphique, `fx::display`, ou processeur dans `fx::differe`) le remplissage est demandé au fil de
+  fond des effets (`fxcache::Job::griffon`) une fois par version, **renouvelé** sans refaire la copie des sources
+  (`fxcache::renew`), et l'écran garde le remplissage d'avant — ou rien, la première fois — jusqu'à l'arrivée du nouveau.
+  Jamais les griffonnages bruts, jamais un calcul sur le fil de l'interface (essai
+  `on_screen_the_fill_comes_from_the_background_and_the_previous_one_stays_meanwhile` : le dessin affiché pendant l'attente
+  est le même `Arc`, donc aucun calcul n'a eu lieu).
+- **Peindre sur un calque qui remplit** reste sans latence : le remplissage est un élément du plan **à part, sous** la
+  peinture libre, qui est un dessin ordinaire (mise à jour tuile par tuile pendant le trait, comme avant).
+- **Griffonner** : le trait de pinceau est dans un dessin ordinaire (`Edit::Tiles`, pelure pâle par-dessus) ; le
+  remplissage arrive après le lâcher (de l'ordre de la dizaine de millisecondes pour une feuille 480×270 ; plus pour une
+  4K : c'est un calcul de fond, il ne bloque rien).
+- **Export, enregistrement, essais** : calcul exact et bloquant, comme avant (`shown_with`).
+- **Au repos** : rien de plus. Un calque de couleur qui n'a pas de griffonnage (`remplissage` faux) n'ajoute aucun
+  élément au plan ; un qui en a fait une demande par version, puis `lookup` (une lecture du cache) à chaque image.

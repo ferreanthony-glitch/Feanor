@@ -218,7 +218,7 @@ deux calques vectoriels restent vectoriels, sinon le résultat est bitmap ; les 
 être visibles et non verrouillés.
 
 Le panneau Calques montre la vignette de chaque calque à l'image courante. Chaque sorte de calque a
-sa couleur, partout (panneau Calques, montage, timeline) : bitmap vert, vectoriel bleu, CTG rose. En haut, le **mode de
+sa couleur, partout (panneau Calques, montage, timeline) : bitmap vert, vectoriel bleu, calque de couleur rose. En haut, le **mode de
 fusion** du calque et son opacité : les 27 modes des logiciels de retouche (Fondu, Produit,
 Densité couleur +, Superposition, Lumière vive, Différence, Soustraction, Division, Teinte,
 Luminosité…), rangés par famille ; le calque se mélange à ce qui est dessous, à l'écran comme à
@@ -552,22 +552,18 @@ on les coche et décoche, le dessin reste tel quel).
   en 3840 × 2160 : 2,9 ms par image en lecture (avant : aperçu au quart), 3,5 ms par cran du curseur du flou. **Les
   effets du trait** (famille Trait ci-dessus) lisent la géométrie des traits : ils restent un calcul de fond, et une
   pile qui en mêle à des effets de la carte est **coupée en deux** (le fond calcule le dessin dérivé par les effets du
-  trait, la carte passe le reste dessus) ; un calque CTG, un fond sous le trait ou une vidéo restent sur le processeur,
+  trait, la carte passe le reste dessus) ; le remplissage au griffonnage d'un calque de couleur, un fond sous le trait ou
+  une vidéo restent sur le processeur,
   un calque d'ajustement dans un dossier aussi. **L'export, les vignettes et le repli
   sans carte graphique restent le calcul exact sur processeur.** Réglage : Fichier > Préférences… >
   Performance > « Effets sur la carte graphique » (allumé par défaut, grisé si la carte refuse le shader).
   Détails, écarts et mesures : `docs/PERFORMANCE.md` (section 12), à relancer par
   `cargo test --release --lib gpufxperf -- --ignored --nocapture --test-threads=1`.
 
-**Calque CTG** (Calques > Calque CTG > Nouveau calque CTG) : un calque de couleur sous les
-traits.
-- Griffonne une couleur dans une zone fermée par les traits de ses sources : toute la zone se
-  remplit, sous les traits.
-- Retouche les traits ou les graffitis : le remplissage suit.
-- Un petit trou dans les traits ne laisse pas fuir la couleur (jusqu'à 8 pixels, réglable).
-- Le menu de la ligne du calque CTG règle la fermeture des trous, choisit ses sources, et
-  offre « Charger la structure à partir des sources », qui donne un dessin de graffitis par
-  dessin des traits.
+**Calque CTG** : il n'existe plus (« On fusionne », Anthony, 2026-10-21). Griffonner une couleur dans une zone
+fermée par les traits, pour la remplir d'un coup, se fait maintenant sur un **calque de couleur** en mode
+**Griffonner** (section « Calque de couleur » plus bas). Un projet d'avant qui avait un calque CTG s'ouvre avec la
+même image : son calque est devenu un calque de couleur, griffonnages gardés.
 
 **Calque vidéo** (Fichier > Importer une vidéo, ou une séquence d'images ; une vidéo peut
 aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'animatique.
@@ -1039,6 +1035,31 @@ Toon Boom ; la façon exacte de Storyboard Pro ou de Harmony n'a pas été véri
   jusqu'à 8 px sont fermés, réglable dans le menu du calque). Un clic dehors colorie tout le dehors,
   et le message prévient quand la zone fuit par un trou. Le trait n'est jamais touché ; la gomme n'est
   pas limitée à la zone.
+- **Griffonner** (mode du calque de couleur ; ce qu'était le calque CTG) : allume **Griffonner** (l'icône
+  boucle dans les réglages du pinceau, du crayon, de la gomme et du pot de peinture ; clic droit sur le calque >
+  Calque de couleur > Griffonner ; commande `calque.griffonner`, sans touche par défaut). Tout ce que tu poses
+  alors avec le pinceau ou le crayon est un **griffonnage** : **chaque zone fermée par le trait** (et par les sources
+  supplémentaires) que touche un griffonnage se remplit d'un coup de sa couleur, **sous le trait**, et la
+  couleur la plus présente dans la zone gagne. Le pot de peinture pose alors un petit tampon de griffonnage.
+  - **Le remplissage suit** : retouche le trait, ou les griffonnages, et il se refait **tout seul, en arrière-plan**
+    (l'écran garde le remplissage d'avant jusqu'à l'arrivée du nouveau ; rien ne se calcule pendant que tu dessines).
+    Un trou du trait jusqu'à 8 px ne laisse pas fuir la couleur (« Fermer les trous jusqu'à », réglable).
+  - **Où sont les griffonnages** : dans un dessin à part (un par dessin de peinture du calque, enregistré comme les
+    autres dessins), jamais mêlés à la peinture libre. Le calque peut donc **mêler les deux** : le remplissage est
+    **dessous**, la peinture libre est **dessus**, puis le trait. Pour que le pinceau peigne à la main, éteins Griffonner.
+  - **Gomme** : en mode Griffonner, elle efface les griffonnages (une zone dont tous les griffonnages sont partis n'est
+    plus remplie) ; sinon elle efface la peinture libre, jamais le remplissage.
+  - **Sources supplémentaires** (clic droit > Calque de couleur > Sources supplémentaires) : d'autres calques de dessin dont
+    les traits ferment aussi les zones. **Calque libre** : sans calque de trait propre, aux images à lui, ses zones sont
+    fermées par ses sources (« Détacher » d'un calque qui a des griffonnages donne un calque libre dont le trait devient une
+    source, pour que l'image ne change pas).
+  - **Limites** : la sélection, le déplacement et la transformation agissent sur la peinture libre, pas sur les
+    griffonnages ; les images guides de la propagation (`Propager`) ne montrent pas les remplissages au griffonnage ; les
+    effets du calque (flou…) s'appliquent au remplissage et à la peinture libre chacun de son côté.
+  - **Anciens projets** : un calque CTG (format 35 et avant) s'ouvre converti en calque de couleur, **même image au
+    pixel près**, griffonnages gardés (mêmes fichiers) et Griffonner allumé : **lié** à sa première source si elle est
+    juste au-dessus et que leurs images se recouvrent, sinon **libre** avec ses sources en sources supplémentaires. Un
+    message le dit à l'ouverture.
 - **Trait vectoriel ou bitmap** : la couleur est toujours en pixels (un aplat n'a pas besoin d'être
   modifiable point par point) ; le pot de peinture lit les pixels rendus du trait, quel que soit le calque.
 - **Ensemble** : l'œil du trait cache aussi sa couleur (l'œil de la couleur la cache seule) ; supprimer
@@ -1048,15 +1069,21 @@ Toon Boom ; la façon exacte de Storyboard Pro ou de Harmony n'a pas été véri
   effets de chaque calque. Un effet du trait (tremblement…) ne bouge donc pas la couleur : à vérifier
   si c'est ce que tu veux.
 - **Détacher** (clic droit > Calque de couleur) : la couleur redevient un calque bitmap ordinaire, aux
-  images à elle. Si le trait disparaît (fusion, suppression), le lien s'oublie tout seul et la couleur reste.
+  images à elle (un calque qui a des griffonnages devient un calque libre). Si le trait disparaît (fusion,
+  suppression), le lien s'oublie tout seul et la couleur reste.
 - **Fond sous le trait** (juste au-dessus) : l'autre façon d'avoir de la couleur sous le trait, dans le
   même calque. Les deux se cumulent (la strate du trait, puis la couleur, puis le trait) ; ce qui
   les distingue : le fond est déduit du trait (une seule forme, pas de choix de couleur par zone), la
   couleur se colorie zone par zone, avec ses propres images.
+- **Deux façons de colorier sous le trait** (il y en avait trois avec le calque CTG) : le **calque de couleur**
+  (à la main, ou en griffonnant) et le **fond sous le trait** (une forme déduite du trait). La **brosse par
+  personnage** (trait + couleur de remplissage, branche `pistes-par-plan`) s'appuie sur le fond sous le trait et reste
+  telle quelle ; rien dans l'un ne dépend de l'autre.
 - Export, PDF, vignettes, montage, export Storyboard Pro : la couleur est un calque bitmap de plus
   (l'export Storyboard Pro le dit : le lien trait / couleur n'y existe pas, à vérifier).
-- Projets : format **30** (un projet enregistré ainsi n'est pas lisible par une version d'avant) ; un projet
-  d'avant s'ouvre tel quel. Détails : `src/calquecouleur.rs`, `docs/INTERFACE.md` partie 18.
+- Projets : format **36** depuis « On fusionne » (griffonnages, sources, calque libre ; un projet enregistré ainsi n'est
+  pas lisible par une version d'avant) ; un projet d'avant s'ouvre tel quel (le format **30** a introduit le calque
+  de couleur). Détails : `src/calquecouleur.rs`, `src/griffonnage.rs`, `docs/INTERFACE.md` partie 18.
 
 ## Toile infinie (dessiner hors de la feuille)
 
@@ -1866,7 +1893,7 @@ d'un même facteur en largeur et en hauteur, centre sur centre — ce que la cam
 
 - **Mis à l'échelle** : dessins bitmap (feuille et hors-feuille, rééchantillonnés en qualité), traits vectoriels (points,
   épaisseurs), fond sous le trait, pose des calques et clés de position, clés de caméra, paramètres d'effets en pixels (flous,
-  ombre, liseré, grain…), fermeture des trous du fond, des calques de couleur et CTG.
+  ombre, liseré, grain…), fermeture des trous du fond et des calques de couleur (peinture et remplissage au griffonnage).
 - **Autres proportions** (16:9 vers carré) : une petite fenêtre propose **Contenir** (tout le cadre copié reste visible, des bandes
   au besoin, d'office) ou **Remplir** (le cadre est rempli, ce qui dépasse sort du cadre). **Autre cadence** : **garder les images**
   (d'office, la durée change) ou **garder la durée en secondes** (images, clés, marques recalculées). Les choix sont retenus dans
@@ -1972,8 +1999,8 @@ derniers choix sont gardés le temps de la séance.
 
 Un filet de sécurité contre « tous les essais passent mais SHOT ne s'ouvre plus » (`docs/FIABILITE.md`) :
 
-- un **projet d'essai complet** fabriqué par le code (séquences, plans, calques bitmap / vectoriel / vidéo / CTG /
-  dossier, traits texturés avec leur trace, fond sous le trait, effets à clés, caméra et effet de caméra,
+- un **projet d'essai complet** fabriqué par le code (séquences, plans, calques bitmap / vectoriel / vidéo / couleur
+  avec griffonnages / dossier, traits texturés avec leur trace, fond sous le trait, effets à clés, caméra et effet de caméra,
   marques, commentaires, plan rogné avec sa réserve, son…), enregistré et rouvert par trois chemins (une boucle,
   plusieurs fils, copie de secours) et par l'application elle-même : le projet relu est le projet enregistré ;
 - un **essai de fumée** : 195 images de l'interface sans fenêtre (accueil, tous les panneaux, les outils, lecture,
@@ -2204,8 +2231,8 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `fxmatiere.rs` | Effets de matière (liseré, trait sec, encre qui bave, dégradé le long du trait, changer de plume) : distance exacte au bord, bruit par hachage, plumes publiées par la bibliothèque de pinceaux, préréglages, bulles |
 | `calqueffet.rs`, `fxcine.rs` | Calques d'effets (ajustement, incrustation) : repère du plan, dessin dérivé de ce qui est dessous, enregistrement ; effets « Cinéma » (flash, impact, lueur diffuse, secousse, vignettage, grain, aberration) |
 | `prereglages.rs`, `prereglagesui.rs`, `incrustation.rs` | Préréglages d'effets (clés posées à la tête de lecture), fenêtre à aperçu en direct et menus ; texte des incrustations (timecode…) et son tracé |
-| `ctg.rs`, `ctgui.rs` | Calque CTG : remplissage par graffitis, sources, structure (13j) |
-| `calquecouleur.rs`, `calquecouleurui.rs` | Calque de couleur sous le trait : lien, miroir des images du trait, murs et zones fermées (pot de peinture, pinceau dans la zone), commandes et menu |
+| `griffonnage.rs` | Remplissage au griffonnage d'un calque de couleur (ce qu'était le calque CTG) : algorithme de remplissage, sources, tampon, lecture des anciens calques CTG (`migrer_ctg`) |
+| `calquecouleur.rs`, `calquecouleurui.rs` | Calque de couleur sous le trait : lien, miroir des images du trait, murs et zones fermées (pot de peinture, pinceau dans la zone), mode Griffonner, commandes et menu |
 | `video.rs`, `videoui.rs` | Calque vidéo : import par ffmpeg, images lues à la demande (13k) |
 | `tween.rs`, `tweenui.rs` | Interpolation : intervalles vectoriels, fondus, étirement, cadence (13l) |
 | `xml.rs`, `sboard.rs` | Lecture d'un XML en arbre ; lecture d'un projet Storyboard Pro (14a) |

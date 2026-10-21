@@ -648,7 +648,8 @@ Décisions d'Anthony :
   - Pas de « appliquer la pile » (inscrire les effets dans les dessins), puisque les effets
     sont vivants.
 - ✅ 13j (`ctg.rs`, `ctgui.rs`, format 20). Calque CTG, principe confirmé par Anthony
-  (2026-10-16).
+  (2026-10-16). **Retiré le 2026-10-21 : fondu dans le calque de couleur** (« On fusionne », voir la fin de ce fichier) ;
+  le texte qui suit est l'historique.
   - On griffonne des couleurs (graffitis) sur le calque CTG. Chaque zone fermée par les traits
     de ses calques sources, touchée par un graffiti, se remplit de sa couleur (la plus
     présente), sous les traits.
@@ -3418,3 +3419,32 @@ Puis : le repère 3D (glTF) part aussi, et « les calques de fond qui ne servent
   (actions, palette, keymap) ; le repos de l'application avec l'Espace 3D ouvert.
 - Taille de `shot.exe` (release) et lignes : voir `docs/PERFORMANCE.md`.
 - **Pas fait / à voir à l'écran** : la liste de contrôle de `docs/INTERFACE.md`, partie 13.
+
+## Un seul calque de couleur : « On fusionne » (demandé par Anthony le 2026-10-21, branche `couleur-unique`) ✅
+
+Anthony : « On fusionne » — le calque de couleur (peint à la main, lié à un calque de trait) et le calque CTG (on griffonne une
+couleur, la zone se remplit) n'en font plus qu'un, puis le calque CTG disparaît.
+
+- ✅ **Le calque de couleur remplit au griffonnage** (`griffonnage.rs`, `calquecouleur.rs`, `calquecouleurui.rs`) : mode **Griffonner**
+  (icône boucle dans les réglages du pinceau, du crayon, de la gomme et du pot ; case du menu Calque de couleur ; commande
+  `calque.griffonner`, sans touche). Les griffonnages sont un dessin à part par dessin de peinture (un vrai dessin du projet) ;
+  chaque zone fermée par le trait (+ « sources supplémentaires ») qu'ils touchent se remplit, **sous** la peinture libre, avec la
+  fermeture des trous (jusqu'à 8 px) du calque CTG (même algorithme, même image). La gomme efface les griffonnages en ce mode, la
+  peinture libre sinon. Le pot pose un tampon.
+- ✅ **Recalcul sans latence** : le remplissage est un élément du plan à part (dessin dérivé) calculé **en arrière-plan** à l'écran
+  (`fxcache::Job::griffon`), l'écran garde le remplissage d'avant en attendant ; l'export et l'enregistrement le calculent tout de
+  suite. Avant, le remplissage du calque CTG se calculait sur le fil de l'interface.
+- ✅ **Calque libre** (sans calque de trait propre, images à lui) : pour les anciens calques CTG que leur trait ne suit pas, et pour
+  un calque de couleur « détaché » qui a des griffonnages.
+- ✅ **Calque CTG retiré** : commande « Nouveau calque CTG », menus « Calque CTG », « Transformer / Désactiver », « Charger la
+  structure à partir des sources », sorte de calque rose (le rose est maintenant celui du calque de couleur), blocs de `keymap.toml`,
+  `ctg.rs`, `ctgui.rs`, essais. (Reste : `crate::ctg::input`, vide, et le nom du champ `PlanItem::ctg`, que `propager.rs` écrit encore.)
+- ✅ **Anciens projets** : format **36** ; un calque CTG s'ouvre converti en calque de couleur, **même image au pixel près**
+  (empreintes prises avant la fusion), griffonnages gardés (mêmes fichiers), lié à sa source si elle est juste au-dessus et que les
+  images se recouvrent, libre sinon ; le champ `ctg` est lu, jamais plus écrit ni effacé.
+- ✅ **Trois façons de colorier sous le trait, devenues deux** : calque de couleur (peinture + griffonnage) et fond sous le trait ; la
+  brosse par personnage (branche `pistes-par-plan`) s'appuie sur le fond sous le trait et reste telle quelle.
+- **Pas fait / limites** : sélectionner, déplacer ou transformer des griffonnages (les outils agissent sur la peinture libre) ; le
+  remplissage n'est pas dans les images guides de la propagation (`propager.rs`, qu'on ne touche pas ici) ; un effet de calque qui crée
+  de la matière dans le vide s'applique au remplissage et à la peinture libre chacun de son côté.
+- **À voir à l'écran** : la liste de contrôle de `docs/INTERFACE.md`, partie 18 (« À vérifier à l'écran (Griffonner) »).
