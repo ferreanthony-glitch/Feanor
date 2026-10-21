@@ -1392,8 +1392,10 @@ impl App {
         item(self, ui, "Animer cette image", &|a| {
             a.set_mode(crate::app::Mode::Animation);
         });
-        // Film partagé : prendre, rendre, reprendre (`cooperationui.rs`).
-        self.equipe_menu_items(ui, i);
+        // Film partagé : prendre, rendre, reprendre (`cooperationui.rs`), en une seule entrée.
+        if self.partage.is_some() {
+            ui.menu_button("Équipe", |ui| self.equipe_menu_items(ui, i));
+        }
         item(self, ui, "Nouveau plan après", &|a| a.new_panel());
         item(self, ui, "Dupliquer le plan", &|a| a.duplicate_panel());
         ui.separator();

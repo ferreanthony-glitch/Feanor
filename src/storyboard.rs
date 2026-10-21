@@ -588,8 +588,10 @@ impl App {
             ui.close_menu();
             self.enter_animation(index);
         }
-        // Film partagé : prendre, rendre, reprendre (`cooperationui.rs`).
-        self.equipe_menu_items(ui, index);
+        // Film partagé : prendre, rendre, reprendre (`cooperationui.rs`), en une seule entrée.
+        if self.partage.is_some() {
+            ui.menu_button("Équipe", |ui| self.equipe_menu_items(ui, index));
+        }
         if ui.button("Nouveau plan après").clicked() {
             ui.close_menu();
             self.new_panel();
