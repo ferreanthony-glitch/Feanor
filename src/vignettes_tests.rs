@@ -162,7 +162,7 @@ pub(crate) fn clic_avec(b: &mut Banc, pos: Pos2, m: Modifiers) {
 }
 
 /// Un trait à la souris : un point par image d'écran. Rend le temps de construction de chaque image (ms).
-fn glisser(b: &mut Banc, path: &[Pos2]) -> Vec<f64> {
+pub(crate) fn glisser(b: &mut Banc, path: &[Pos2]) -> Vec<f64> {
     let mut times = Vec::new();
     b.image(vec![Event::PointerMoved(path[0])], 1.0 / 60.0);
     times.push(b.image(vec![appui(path[0], true, Modifiers::NONE)], 1.0 / 60.0).construction);
@@ -175,7 +175,7 @@ fn glisser(b: &mut Banc, path: &[Pos2]) -> Vec<f64> {
 }
 
 /// Un trait qui part de `from` et file vers `to`, en vagues.
-fn vague(from: Pos2, to: Pos2, n: usize) -> Vec<Pos2> {
+pub(crate) fn vague(from: Pos2, to: Pos2, n: usize) -> Vec<Pos2> {
     (0..=n)
         .map(|k| {
             let t = k as f32 / n as f32;

@@ -3553,3 +3553,14 @@ Anthony : essayer un autre découpage d'une séquence (A plus serrée, B avec un
 - ✅ 29 essais (`src/variantes_tests.rs`) : création, échange, annulation, enregistrement octet pour octet, fichier illisible, envois, comparaison, jeton, plan tenu par un
   autre, repos.
 - À faire plus tard : comparer deux jeux de plans côte à côte ; dupliquer aussi le contenu rogné ; fusionner deux variantes ; liste des variantes dans la fiche technique.
+
+## Vignettes : annotations, images déposées, marie-louise, exports de la planche et color script (demandés par Anthony le 2026-10-21, branche `vignettes-annot-exports`) ✅
+
+Fait (non fusionné) : stylo et gomme d'annotation par-dessus la planche, attachés à la case la plus proche et suivant la planche (`annotations.rs`, `annotationsui.rs`, `annotations.json`) ;
+marie-louise (`marie.rs`) ; images déposées depuis l'Explorateur et le panneau Références (`deposer.rs`) ; Fichier > Exporter > « Planche des vignettes » (`planche.rs`, `plancheui.rs`) et « Color script »
+(`colorscript.rs`, `colorscriptui.rs`) en tâches de fond annulables. Mode d'emploi : README ; gestes, choix et liste à vérifier : `docs/INTERFACE.md`, partie 11.
+
+Limites connues, à décider : la gomme d'annotation efface le trait entier (pas de coupe en morceaux) ; la marie-louise et la planche exportée ne gardent pas les cases vides ; un trait d'annotation
+d'une case vide dépendant de la dernière vignette suit cette dernière si le nombre de colonnes change beaucoup ; le dépôt d'un fichier depuis l'Explorateur lit le curseur de l'écran (Windows ne donne pas la
+place du lâcher à la fenêtre) ; l'export en pages A4 / A3 ne coupe qu'en hauteur ; la bande des couleurs dominantes est un histogramme (pas un partitionnement k-means) ; pas encore de réglages mémorisés d'une
+séance à l'autre pour les deux fenêtres d'export, ni d'annotations dans les envois de relecture.

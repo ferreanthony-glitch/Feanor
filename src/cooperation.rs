@@ -749,7 +749,7 @@ pub(crate) struct Session {
     ferme: bool,
     /// Ce que l'interface a dit regarder, pour n'envoyer la présence que quand elle change.
     presence_dite: Option<(Option<u64>, String)>,
-    /// Le numéro d'historique à la dernière vérification des plans neufs (pres_structure).
+    /// Le numéro d'historique à la dernière vérification des plans neufs (`apres_structure`).
     pub(crate) serial_vu: u64,
 }
 

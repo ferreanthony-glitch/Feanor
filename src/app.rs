@@ -1443,6 +1443,7 @@ impl App {
             || self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::rendering)
             || self.relecture.rendering()
             || self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::rendering)
+            || self.vignettes.annot.confirmer
             || self.collage_occupe()
     }
 
@@ -3587,6 +3588,14 @@ impl App {
             "numerotation.verrouiller" => self.toggle_numbering_lock(),
             "numerotation.renumeroter" => self.renumber_confirm = true,
             "fichier.exporter_image_courante" => self.export_frame(),
+            // Vignettes : annotations par-dessus la planche et marie-louise (`annotationsui.rs`).
+            "vignettes.annotation_stylo" => self.annot_choisir(crate::annotationsui::Outil::Stylo),
+            "vignettes.annotation_gomme" => self.annot_choisir(crate::annotationsui::Outil::Gomme),
+            "vignettes.annotations_afficher" => self.annot_basculer_visibles(),
+            "vignettes.annotations_effacer" => self.annot_demander_effacement(),
+            "vignettes.marie_louise" => self.marie_basculer(),
+            "fichier.exporter_planche" => self.open_planche(),
+            "fichier.exporter_colorscript" => self.open_colorscript(),
             "edition.annuler" => self.undo(),
             "edition.retablir" => self.redo(),
             // Le panneau Effets a la main (le dernier clic était dedans) : Ctrl+C copie l'effet
@@ -4239,6 +4248,8 @@ impl App {
 
     /// Change d'outil : la forme en cours (courbe, polyligne) est posée avant.
     pub(crate) fn set_tool(&mut self, tool: Tool) {
+        // Prendre un outil de dessin range le stylo et la gomme d'annotation (`annotationsui.rs`).
+        self.vignettes.annot.outil = None;
         if self.tool != tool {
             self.finish_field_edit();
             self.finish_shape_edit();

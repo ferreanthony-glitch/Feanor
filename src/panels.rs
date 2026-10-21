@@ -326,6 +326,13 @@ impl App {
                 }
             }
         });
+        // Sur la planche des Vignettes : le stylo et la gomme d'annotation (`annotationsui.rs`).
+        if self.board_shown() {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing = vec2(3.0, 3.0);
+                self.annot_outils_ligne(ui, [38.0, 34.0], 21.0);
+            });
+        }
     }
     /// Sous les réglages de la brosse du pinceau et du crayon : peint derrière, remplir la forme
     /// (`brushfill`).
@@ -364,6 +371,11 @@ impl App {
         // L'Espace 3D a ses propres réglages (`espace3dui.rs`).
         if self.espace3d.on && !self.camera_view {
             self.espace3d_options_panel(ui);
+            return;
+        }
+        // Le stylo ou la gomme d'annotation de la planche a ses propres réglages (`annotationsui.rs`).
+        if self.annot_actif() {
+            self.annot_reglages_ui(ui);
             return;
         }
         let vector = self.layer().kind == LayerKind::Vector;
@@ -738,6 +750,13 @@ impl App {
         self.editorial_window(ctx);
         // Fiche technique (tableur) : sa fenêtre (`ficheui.rs`).
         self.fiche_window(ctx);
+        // Vignettes : « Effacer les annotations ? » (`annotationsui.rs`).
+        self.annot_fenetre(ctx);
+        // Vignettes : les images déposées sur la planche (`deposer.rs`).
+        self.depot_tick(ctx);
+        // Exporter la planche des vignettes et le color script (`plancheui.rs`, `colorscriptui.rs`).
+        self.planche_fenetre(ctx);
+        self.colorscript_fenetre(ctx);
         // Relecture par le réalisateur : exporter la page, importer ses notes (`relectureui.rs`).
         self.relecture_windows(ctx);
         // Suggestions sonores : confirmation d'envoi en ligne, « Modifier », saisie d'une clé.

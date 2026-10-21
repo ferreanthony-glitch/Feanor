@@ -34,6 +34,9 @@
 //!   personnages.json      les personnages de la brosse par personnage (`personnages.rs`) : nom, couleur de
 //!                         trait, couleur d'aplat ; de même sans changer `VERSION` (absent : aucun personnage ;
 //!                         une version qui ne le connaît pas le laisse en place)
+//!   annotations.json      les annotations de la vue Vignettes (`annotations.rs`) : traits du stylo, attachés à
+//!                         une case, de même sans changer `VERSION` ; aucun export ne les lit (absent : aucune
+//!                         annotation ; une version qui ne le connaît pas le laisse en place)
 //!   envois.json           les envois (`envois.rs`) : nom, date et empreinte de chaque plan, de même sans
 //!                         changer `VERSION` ; absent, il n'y a pas d'envoi
 //!   versions/             les instantanés des envois et leurs dessins, rangés par contenu
@@ -1058,6 +1061,8 @@ pub struct SaveJob {
     sound_fx: Option<Vec<u8>>,
     /// Le fichier des personnages (`personnages.json`) ; rien : il n'y en a plus, le fichier part.
     personnages: Option<Vec<u8>>,
+    /// Le fichier des annotations de la vue Vignettes (`annotations.json`) ; rien : il n'y en a plus, le fichier part.
+    annotations: Option<Vec<u8>>,
     /// Le fichier des sons proposés (`sons_proposes.json`) ; rien : il n'y en a plus, le fichier part.
     sons_proposes: Option<Vec<u8>>,
     /// Les références visuelles : fichiers à recopier dans `references/`, `references.json`, et ce
@@ -1237,6 +1242,7 @@ pub fn prepare_save(
         transitions: crate::transitions::to_bytes(doc)?,
         sound_fx: crate::audiofx::to_bytes(doc)?,
         personnages: crate::personnages::to_bytes(doc)?,
+        annotations: crate::annotations::to_bytes(doc)?,
         sons_proposes: crate::indications::to_bytes(doc)?,
         references: crate::references::plan_save(doc, dir)?,
         envois: crate::envois::to_bytes(doc)?,
@@ -1289,6 +1295,24 @@ fn load_personnages(dir: &Path, warnings: &mut Vec<String>) -> Vec<crate::person
         Err(e) => {
             warnings.push(format!("{} : {e} ; les personnages ne sont pas chargés.", path.display()));
             Vec::new()
+        }
+    }
+}
+
+/// Les annotations de la vue Vignettes, lues dans `annotations.json` (absent : aucune). Un fichier illisible ou
+/// d'une version plus récente n'empêche pas d'ouvrir le projet : on le dit, sans annotations, et il reste en
+/// place (`write_sidecar`).
+fn load_annotations(dir: &Path, warnings: &mut Vec<String>) -> crate::annotations::Annotations {
+    let path = dir.join(crate::annotations::FILE);
+    match fs::read_to_string(&path) {
+        Ok(text) => crate::annotations::parse(&text).unwrap_or_else(|e| {
+            warnings.push(format!("{} : {e} ; les annotations ne sont pas chargées (le fichier reste en place).", crate::annotations::FILE));
+            Default::default()
+        }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Default::default(),
+        Err(e) => {
+            warnings.push(format!("{} : {e} ; les annotations ne sont pas chargées.", path.display()));
+            Default::default()
         }
     }
 }
@@ -1477,6 +1501,8 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::audiofx::FILE), self.sound_fx.as_deref(), |t| crate::audiofx::parse(t).is_ok())?;
         // Les personnages de la brosse par personnage, de même.
         write_sidecar(&dir.join(crate::personnages::FILE), self.personnages.as_deref(), |t| crate::personnages::parse(t).is_ok())?;
+        // Les annotations de la vue Vignettes, de même.
+        write_sidecar(&dir.join(crate::annotations::FILE), self.annotations.as_deref(), |t| crate::annotations::parse(t).is_ok())?;
         // Et les sons proposés par la lecture du storyboard.
         write_sidecar(&dir.join(crate::indications::FILE), self.sons_proposes.as_deref(), |t| crate::indications::parse(t).is_ok())?;
         // Les références visuelles : leurs fichiers dans `references/`, puis `references.json`.
@@ -2315,6 +2341,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         versions: Default::default(),
         // Les variantes rangées des séquences : `variantes.json`, `variantes::installer`.
         variantes: Default::default(),
+        // Les annotations de la vue Vignettes : `annotations.json`, `load_annotations`.
+        annotations: Default::default(),
     };
     // Les calques CTG des projets d'avant : convertis en calques de couleur quand le document existe (`migrer_ctg`).
     let mut anciens_ctg: Vec<crate::griffonnage::AncienCtg> = Vec::new();
@@ -2547,6 +2575,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         structure.references = crate::references::load(dir, &mut warnings);
         // Les personnages de la brosse par personnage (`personnages.json`, absent : aucun).
         structure.personnages = load_personnages(dir, &mut warnings);
+        // Les annotations de la vue Vignettes (`annotations.json`, absent : aucune).
+        structure.annotations = load_annotations(dir, &mut warnings);
     }
     let frame = manifest.cadre;
     let mut written: HashMap<CelId, u64> = cels.keys().map(|&id| (id, 0)).collect();

@@ -2132,6 +2132,44 @@ source = "SHOT (sans touche)"
 action = "fichier.exporter_relecture"
 touches = []
 source = "SHOT (sans touche)"
+# Vignettes : annotations (stylo et gomme par-dessus la planche, sans effet sur le storyboard), marie-louise, et les deux
+# exports de la planche (aucune touche par défaut : à toi de les régler dans Préférences > Raccourcis).
+
+[[raccourci]]
+action = "fichier.exporter_planche"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fichier.exporter_colorscript"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vignettes.annotation_stylo"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vignettes.annotation_gomme"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vignettes.annotations_afficher"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vignettes.annotations_effacer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vignettes.marie_louise"
+touches = []
+source = "SHOT (sans touche)"
+
 
 [[raccourci]]
 action = "fichier.importer_notes"

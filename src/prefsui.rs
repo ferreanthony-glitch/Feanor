@@ -60,7 +60,7 @@ fn titre_groupe(ui: &mut egui::Ui, groupe: Groupe, premier: bool) {
 }
 
 /// Les exports proposés : icône, nom, explication, action (ou `None` : la page HTML, sans action).
-const EXPORTS: [(&str, &str, &str, Option<&str>); 11] = [
+const EXPORTS: [(&str, &str, &str, Option<&str>); 13] = [
     (ph::FILM_STRIP, "Le film (vidéo)", "Le montage ou le plan en vidéo, avec le son.", Some("fichier.exporter_film")),
     (ph::GIF, "Un GIF animé", "Le film, le plan courant ou les plans choisis, en petit GIF à partager (sans le son).", Some("fichier.exporter_gif")),
     (ph::IMAGES, "Des images (PNG)", "Une image PNG par image du film.", Some("fichier.exporter_images")),
@@ -72,6 +72,8 @@ const EXPORTS: [(&str, &str, &str, Option<&str>); 11] = [
     (ph::FILM_REEL, "Pour le montage (EDL / XML / OTIO)", "Un fichier vidéo par plan et le montage pour Premiere, DaVinci Resolve ou Avid.", Some("fichier.exporter_montage")),
     (ph::TABLE, "Fiche technique (tableur)", "Un plan par ligne, en classeur XLSX ou en CSV : durées, time codes, cadrage, mouvement de caméra, textes, sons, vignettes.", Some("fichier.exporter_fiche")),
     (ph::EYEGLASSES, "Pour relecture (page HTML)", "Une page sans internet à envoyer au réalisateur : il écrit ses notes et dessine dessus, SHOT les relit ensuite.", Some("fichier.exporter_relecture")),
+    (ph::SQUARES_FOUR, "Planche des vignettes (PNG, JPEG, PDF)", "Toute la planche des Vignettes en une grande image ou en PDF : numéros, notes, barres, cadres de caméra, annotations, marie-louise.", Some("fichier.exporter_planche")),
+    (ph::PALETTE, "Color script (PNG, PDF)", "Une petite image par plan, rangées par séquence sur un fond uni : la couleur du film d'un coup d'œil.", Some("fichier.exporter_colorscript")),
 ];
 
 impl App {

@@ -961,6 +961,8 @@ pub struct Structure {
     /// Les variantes rangées des séquences (`variantes.rs`) : changer de variante, en créer ou en supprimer s'annulent
     /// avec le reste. Partagées (`Arc`) : une étape d'annulation ne les recopie pas.
     pub variantes: crate::variantes::Variantes,
+    /// Annotations de la vue Vignettes (`annotations.rs`) : tracer, effacer, tout effacer s'annulent avec le reste.
+    pub annotations: crate::annotations::Annotations,
 }
 
 pub struct Document {
@@ -1035,6 +1037,9 @@ pub struct Document {
     /// Des dessins de variantes rangées manquaient à l'ouverture (projet partagé dont les fichiers n'étaient pas tous
     /// arrivés) : le fichier des variantes n'est pas réécrit, et on n'en change pas. Hors de l'annulation.
     pub variantes_partielles: bool,
+    /// Les annotations de la vue Vignettes (`annotations.rs`) ; enregistrées à côté du manifeste, dans
+    /// `annotations.json`. Dans `Structure` : l'annulation les rétablit avec le reste. Aucun export ne les lit.
+    pub annotations: crate::annotations::Annotations,
     next_id: u64,
     /// Préfixe des numéros neufs d'un projet partagé (`préfixe << 32`, `cooperation.rs`) : deux équipiers ne
     /// donnent jamais le même numéro. 0 pour un projet classique, dont les numéros ne changent pas.
@@ -1092,6 +1097,7 @@ impl Document {
             versions: Default::default(),
             variantes: Default::default(),
             variantes_partielles: false,
+            annotations: Default::default(),
             next_id: 1,
             id_prefix: 0,
         };
@@ -1158,6 +1164,7 @@ impl Document {
             versions: structure.versions,
             variantes: structure.variantes,
             variantes_partielles: false,
+            annotations: structure.annotations,
             next_id: max_id + 1,
             id_prefix: 0,
         };
@@ -1345,6 +1352,7 @@ impl Document {
             personnages: self.personnages.clone(),
             versions: self.versions.clone(),
             variantes: self.variantes.clone(),
+            annotations: self.annotations.clone(),
         }
     }
 
@@ -1379,6 +1387,7 @@ impl Document {
             personnages: std::mem::replace(&mut self.personnages, s.personnages),
             versions: std::mem::replace(&mut self.versions, s.versions),
             variantes: std::mem::replace(&mut self.variantes, s.variantes),
+            annotations: std::mem::replace(&mut self.annotations, s.annotations),
         }
     }
 

@@ -226,10 +226,16 @@ impl PdfFile {
 
     /// Page A4 paysage dessinée par `content` (polices /F1 et /F2, images /Im<n>).
     pub fn add_page(&mut self, content: &[u8], images: &[usize]) {
+        self.add_page_sized(PAGE_W, PAGE_H, content, images);
+    }
+
+    /// Page de `w` × `h` points (A3, ou une seule grande page), dessinée par `content` (origine en bas à gauche, comme tout PDF ;
+    /// `op_image` et `op_text` retournent le haut pour une page de la hauteur donnée).
+    pub fn add_page_sized(&mut self, w: f32, h: f32, content: &[u8], images: &[usize]) {
         let contents = self.add_stream("", content);
         let xobjects: String = images.iter().map(|id| format!("/Im{id} {id} 0 R ")).collect();
         let page = format!(
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {PAGE_W} {PAGE_H}] /Resources << /Font << /F1 3 0 R \
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {w:.2} {h:.2}] /Resources << /Font << /F1 3 0 R \
              /F2 4 0 R >> /XObject << {xobjects}>> >> /Contents {contents} 0 R >>"
         );
         let id = self.add(page.into_bytes());
@@ -309,8 +315,18 @@ impl Canvas {
     }
 }
 
-// ------------------------------------------------------------------------------ mise en page
+/// Commande qui pose l'image `id` (de `add_jpeg`) à `x`, `top` (depuis le haut) sur une page de hauteur `page_h`.
+pub fn op_image(page_h: f32, id: usize, x: f32, top: f32, w: f32, h: f32) -> String {
+    format!("q {w:.2} 0 0 {h:.2} {x:.2} {:.2} cm /Im{id} Do Q\n", page_h - top - h)
+}
 
+/// Commande qui écrit `s` à `x`, `top` (depuis le haut) sur une page de hauteur `page_h`, en gris `gray` (0 noir, 1 blanc).
+pub fn op_text(page_h: f32, x: f32, top: f32, s: &str, size: f32, bold: bool, gray: f32) -> String {
+    let font = if bold { "F2" } else { "F1" };
+    format!("{gray:.2} g BT /{font} {size} Tf {x:.2} {:.2} Td {} Tj ET\n", page_h - top, pdf_string(&winansi(s)))
+}
+
+// ------------------------------------------------------------------------------ mise en page
 /// Ce qu'on écrit d'un panneau.
 #[derive(Clone, Debug)]
 pub struct Board {

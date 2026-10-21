@@ -201,6 +201,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         personnages: Vec::new(),
         versions: Default::default(),
         variantes: Default::default(),
+        annotations: Default::default(),
     };
     let mut shots = manifest.shots;
     if shots.is_empty() {

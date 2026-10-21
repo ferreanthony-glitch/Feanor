@@ -840,6 +840,79 @@ bornes du plan (une étape, « Mouvement de caméra », annulable), C et D répa
 ordinaire = B zoomé, Ctrl + clic qui ne bouge pas, Échap, storyboard verrouillé, plan d'une image ; mise en page (largeur, retour à
 la ligne entier, voisines, aucun chevauchement en 1 × 2 et 2 × 2, pages, repères de pose, case qui rétrécit) ; dessin hors de la
 feuille dans la grande case ; vignette de zone ; le montage voit les clés ; Maj + cadre déplace toujours le plan ; repos.
+
+### Annotations, images déposées, marie-louise et exports de la planche (2026-10-21, branche `vignettes-annot-exports`)
+
+Demandes d'Anthony, validées. Principe inchangé : « la partie Vignettes la plus épurée possible » ; rien de nouveau n'est visible
+sur la planche tant qu'on ne prend pas un de ces outils (deux icônes de plus dans la colonne d'outils, et des commandes dans le
+menu du clic droit sur le fond et la palette Ctrl+K). Vocabulaire : **annotation** (un trait du stylo), **case** (une vignette ou une
+case vide), **marie-louise** (le passe-partout), **Plan**, **Case**, **Vignettes**, **Aplat** (inchangés).
+
+- **Stylo et gomme d'annotation** (`annotations.rs`, `annotationsui.rs`). Deux icônes sous les outils de dessin, **seulement quand la
+  planche est à l'écran** : le stylo (icône rouge, rouge d'origine, sa couleur et sa taille dans les Réglages) et la gomme. Aucune touche par
+  défaut (`vignettes.annotation_stylo`, `vignettes.annotation_gomme`, réglables dans Préférences > Raccourcis). Prendre un autre outil les range ;
+  cliquer deux fois le même aussi.
+  - Le trait passe **par-dessus tout** (cases, barres, bandes de note, marges, fond), déborde où l'on veut ; l'appui est pris avant les cases :
+    **le dessin de la case courante ne reçoit rien**. Il n'est ni dans un plan, ni dans le film, ni dans les vignettes, ni dans les exports
+    vidéo / images / PDF / montage (le cliché d'export ne copie pas les annotations). Une étape d'annulation par trait (« Annotation »).
+  - **Attaché à la case la plus proche** du centre du trait ; ses points sont gardés *relativement à cette case* : le trait suit quand les colonnes
+    changent, quand les cases bougent ou grossissent (la taille du trait grossit avec la case). Un trait dans une case vide reste dans la même case quand
+    elle devient une vignette. **Si la case disparaît** (plan supprimé, plans réunis, marque retirée, annuler), le trait passe à sa **voisine la plus
+    proche** (parmi les vignettes qui restent) à la place exacte où il était à l'instant de la disparition ; sans l'ancienne planche (fichier d'une autre
+    séance), à la vignette de même rang. **Il n'est jamais perdu** : seules la gomme et « Effacer les annotations » l'enlèvent.
+  - **Gomme d'annotation** : le trait entier que touche le cercle ; une étape d'annulation par geste (« Effacer des annotations ») et aucune si rien n'est touché ;
+    elle ne touche ni aux dessins ni aux notes libres de la planche.
+  - **Cacher / montrer** (`vignettes.annotations_afficher`, clic droit sur le fond, Réglages du stylo) : un affichage, rien n'est effacé ; prendre le stylo les montre.
+    **Effacer les annotations…** (`vignettes.annotations_effacer`) demande une confirmation, s'annule d'un Ctrl+Z.
+  - **Fichier** : `annotations.json` à côté du manifeste, sans changer `VERSION` du projet (36) ; écrit par `write_sidecar` (jamais détruit s'il est illisible
+    ou plus récent : mis de côté en `.illisible` si un neuf doit le remplacer) ; un projet **partagé** l'écrit avec le montage, les équipiers voient les mêmes annotations.
+- **Marie-louise** (`marie.rs`, `vignettes.marie_louise`). Un passe-partout noir (ou la couleur choisie) couvre **tout ce qui est hors de l'intérieur des vignettes** :
+  pages, barres, numéros, notes, écarts, et les traits d'annotation qui débordent. À l'écran c'est une bascule (clic droit sur le fond, Réglages du stylo, palette) ; à l'export,
+  une option de la planche (avec sa couleur).
+- **Déposer des images sur la planche** (`deposer.rs`), depuis l'Explorateur de Windows ou en glissant une référence hors du panneau Références :
+  - **sur une case** : l'image va dans la case, sur un calque bitmap « Image » **à part, tout en bas (sous le dessin)**, ajustée au cadre de la caméra (tout le cadre, proportions
+    gardées). Calque ordinaire : opacité, œil, cadenas. Dans une case qui n'est qu'une marque d'image, elle n'occupe que les images de cette case. Déposer une autre image sur la même case
+    remplace celle du calque « Image » ;
+  - **plusieurs images** : à la suite, case après case (l'une après l'autre dans l'ordre du dépôt) ; au-delà de la dernière case, de nouveaux plans ;
+  - **sur les cases vides** : un plan neuf par image, dans l'ordre (les cases vides sautées avant celle qu'on vise deviennent des plans vides, comme quand on y dessine ; la barre grise devant la
+    première case vide fait de la première image une image de plus du dernier plan) ;
+  - **sur une barre** (entre deux cases) : un plan neuf par image, insérés là ; entre deux images d'un même plan (barre grise), le plan est d'abord coupé ;
+  - **une seule étape d'annulation** pour tout le dépôt (« Déposer des images ») ; storyboard verrouillé ou plan tenu par un autre : refusé avec un message ;
+  - lire, réduire et poser l'image se fait **sur un fil de fond** (aucune latence, même pour une grande photo) ; un repère (case encadrée, trait d'insertion, nombre d'images) suit le curseur
+    pendant le glisser. Windows ne donne pas la place d'un dépôt de fichiers à la fenêtre : SHOT lit le curseur de l'écran.
+- **Exporter la planche des vignettes** (Fichier > Exporter > « Planche des vignettes », `planche.rs`, `plancheui.rs`) : PNG ou JPEG (une grande image) ou PDF (une grande page,
+  ou pages A4 / A3 paysage : la planche mise à la largeur de la page et coupée en hauteur, de préférence entre deux pages de la planche, avec un pied de page numéroté).
+  Options : numéros de plan, notes, barres de coupe, cadres de caméra A et B (là où la caméra bouge), **annotations (décochées d'office)**, marie-louise (et sa couleur) ;
+  résolution : 150 ou 300 dpi (une unité de la planche = 1/96 de pouce) ou une largeur en pixels (réduite aux bornes, 16 000 pixels de côté ou 60 millions de pixels, avec un message) ;
+  étendue : tout le film, la séquence courante ou les plans choisis (rangés comme sur une planche qui n'aurait qu'eux). Par défaut : la planche comme à l'écran (pages blanches, mêmes
+  colonnes et mêmes réglages), sans les cases vides. **Tâche de fond** (la fenêtre « Export en cours », avec « Arrêter » qui efface ce qui était commencé) ; écriture atomique `.part`.
+- **Exporter un color script** (Fichier > Exporter > « Color script », `colorscript.rs`, `colorscriptui.rs`) : une petite image par **plan** (la première ou celle du milieu), ou une par
+  **case** (option), rangées **par séquence** en rangées serrées (écart réglable) sur un fond uni (**noir d'office**, ou la couleur choisie), avec le titre de chaque séquence, les numéros de plan
+  facultatifs, la largeur de l'image, l'écart, le nombre d'images par rangée ; une **bande des couleurs dominantes** sous chaque image (cinq couleurs au plus, **éteinte d'office**). PNG ou PDF
+  en une grande page. Tâche de fond annulable.
+
+#### À regarder à l'écran (annotations, dépôt, exports)
+
+1. Vignettes : deux icônes de plus dans la colonne d'outils (rouges). Rien ailleurs.
+2. Stylo : un trait rouge de la case 1 à la case 2, par-dessus l'écart et la barre ; la case courante ne reçoit aucun dessin ; Ctrl+Z défait le trait. Un trait sur le fond gris, hors des pages.
+3. Changer les colonnes et la taille des vignettes : les traits suivent leur case. Supprimer un plan : ses traits passent à la voisine. Annuler : ils reviennent.
+4. Gomme : n'efface que du rouge ; le dessin et les notes restent. Cacher / montrer ; « Effacer les annotations… » demande confirmation.
+5. Marie-louise : tout est noir hors des images ; un trait qui déborde est coupé au bord des images.
+6. Glisser une image de l'Explorateur : sur une case (repère encadré, l'image dans un calque « Image » sous le dessin), sur une case vide, sur une barre ; plusieurs images à la suite ; Ctrl+Z défait tout le dépôt ;
+   glisser une référence hors du panneau Références vers la planche (tableau, grille et liste). Une grande photo ne fige rien.
+7. Exporter la planche : PNG puis PDF A4 ; ouvrir le fichier ; sans annotations d'office, avec elles cochées ; avec marie-louise ; « Arrêter » en plein calcul : aucun fichier, aucun `.part`.
+8. Exporter un color script : une image par plan, rangées serrées par séquence sur fond noir ; l'option « une par case » ; la bande des couleurs ; un fond clair (titres sombres).
+9. Les trois thèmes : les icônes rouges et le repère de dépôt restent lisibles.
+
+#### Essais ajoutés (partie 11)
+
+`annotations` (14 : attache à la case la plus proche, relatif et suit les colonnes / tailles, case vide, gomme seule, case disparue → voisine, secours par le rang, rangs, fichier aller-retour,
+fichier abîmé / plus récent / hostile, projet enregistré et rouvert, fichier jamais détruit, annuler, cliché d'export sans annotations), `annotationsui_tests` (11 : le stylo ne change rien au storyboard,
+trait sur le fond et sur une barre, outils rangés, gomme, cacher, tout effacer avec confirmation, suivre les colonnes, plan supprimé, **images de film identiques avec et sans annotation**, marie-louise à l'écran, repos,
+coût), `marie` (4), `deposer` (8 : case, marque, suite, cases vides, barre grise, entre deux cases, références et fichiers ignorés, verrouillé et grande image), `planche` (15 : réglages d'origine, étendues, barres,
+numéros, notes, annotations décochées d'office, marie-louise, résolutions, coupures, fichiers PNG / JPEG / PDF, cadres A et B, tâche de fond, annuler, PDF, fenêtres), `colorscript` (10 : par plan / par case,
+milieu, rangées serrées et titres, numéros, bande éteinte d'office, couleurs dominantes, image composée, bornes, fichiers, tâche de fond).
+
 ---------------------------------------------------------------------------------------------------
 
 ## 12. Calques d'effets et préréglages d'effets (2026-10-19, branche `calques-effets`)
