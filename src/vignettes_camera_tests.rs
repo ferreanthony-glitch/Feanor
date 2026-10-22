@@ -1203,14 +1203,17 @@ fn the_layout_of_200_plans_with_mid_row_footprints_and_tall_notes_stays_fast_and
     let l = board::layout_with(&doc, &s, &lignes, false, &opt);
     assert_eq!(l.cards.len(), 200);
     assert!(l.cards.iter().filter(|c| c.mouvement).count() >= 40);
-    let mut pire = std::time::Duration::ZERO;
+    // (La médiane de vingt mesures, pas la pire : un fil d'essai que le système suspend une milliseconde, la suite entière tournant en parallèle, ne dit rien du coût d'une disposition, 0,4 ms.)
+    let mut mesures: Vec<std::time::Duration> = Vec::new();
     for _ in 0..20 {
         let t = std::time::Instant::now();
         let l = board::layout_with(&doc, &s, &lignes, false, &opt);
-        pire = pire.max(t.elapsed());
+        mesures.push(t.elapsed());
         assert_eq!(l.cards.len(), 200);
     }
-    eprintln!("mise en page de 200 plans (40 mouvements à mi-rangée, notes de 1 à 3 lignes) : au pire {pire:?}");
+    mesures.sort();
+    let pire = mesures[mesures.len() / 2];
+    eprintln!("mise en page de 200 plans (40 mouvements à mi-rangée, notes de 1 à 3 lignes) : médiane {pire:?}");
     assert!(pire < std::time::Duration::from_millis(5), "{pire:?} par disposition");
     // Aucun recouvrement, tout est dans l'ordre de lecture.
     use crate::vignettecam::{se_recouvrent, coins_de};

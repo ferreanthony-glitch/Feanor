@@ -265,3 +265,95 @@ fn fabrique_le_projet_du_travelling() {
     std::fs::create_dir_all(&dossier).unwrap();
     crate::project::save(&doc, &dossier.join("Travelling.pelure"), &mut Default::default()).expect("projet");
 }
+
+// ------------------------------------------------------------------------------ un mouvement créé sur une case qui a une continuité derrière elle
+
+fn deux_cases_a_dessins() -> Document {
+    let mut doc = crate::vignettes_camera_tests::plan_court();
+    doc.set_duration(1, 24);
+    doc.toggle_mark(1, 12);
+    let (x, y) = (doc.new_cel(LayerKind::Bitmap), doc.new_cel(LayerKind::Bitmap));
+    pixel(&mut doc, x, 30, 30, Color32::from_rgb(200, 30, 30));
+    pixel(&mut doc, y, 60, 50, Color32::from_rgb(30, 160, 60));
+    for f in 0..12 {
+        doc.panels[1].layers[0].set(f, Some(x));
+    }
+    for f in 12..24 {
+        doc.panels[1].layers[0].set(f, Some(y));
+    }
+    doc
+}
+
+#[test]
+fn a_camera_move_created_on_a_case_with_continuity_cases_splits_them_off_untouched_in_one_undo_step() {
+    use crate::vignettes_camera_tests::{ctrl_glisser, largeur_cadre_ecran, pas, K};
+    let mut b = ouvert(deux_cases_a_dessins(), 6);
+    let (case1, case2, w) = (vignette(&b, K), vignette(&b, K + 1), largeur_cadre_ecran(&b));
+    se_reposer(&mut b, 400);
+    let largeur = crate::thumbs::width_for(case2.width() * b.ctx.pixels_per_point());
+    let id2 = b.app.board_layout().cards[K + 1].id;
+    let avant = b.app.thumbs.case_image_of(id2, largeur).map(|(i, _)| i.pixels.clone()).expect("la vignette de la case 2");
+    let (camera_avant, plans, n) = (b.app.doc.panel_camera(1, 12), b.app.doc.panels.len(), pas_d_annulation(&b));
+    let cels_avant = b.app.doc.panels[1].layers[0].frames.clone();
+    assert!(b.app.doc.panels[1].camera.is_empty() && b.app.doc.panels[1].marks.len() == 1);
+    // Un mouvement sur la case 1.
+    ctrl_glisser(&mut b, case1.center(), &pas(case1.center(), vec2(w, 0.0), 6), case1.center() + vec2(w, 0.0), true);
+    b.chauffer(3);
+    assert_eq!(b.app.doc.panels.len(), plans + 1, "deux plans : la case 1 avec son mouvement, la case 2 à part");
+    assert_eq!(pas_d_annulation(&b), n + 1, "le mouvement et la coupe : une seule étape");
+    assert_eq!(dernier_nom(&b), "Mouvement de caméra");
+    let (premier, suite) = (&b.app.doc.panels[1], &b.app.doc.panels[2]);
+    assert_eq!((premier.camera.len(), premier.marks.len(), premier.frame_count()), (2, 0, 12), "le mouvement ne montre que la case 1");
+    assert_eq!((suite.camera.is_empty(), suite.marks.len(), suite.frame_count()), (true, 0, 12), "la case 2 est un plan sans mouvement");
+    assert_eq!(b.app.doc.panel_camera(2, 0), camera_avant, "sa caméra est celle qu'elle montrait");
+    assert_ne!(premier.id, suite.id);
+    // Son dessin : celui d'avant (une copie), sans le dessin de la case 1.
+    let y = suite.layers[0].cel_at(0).expect("son dessin");
+    assert_ne!(Some(y), cels_avant[12], "une copie, au plan neuf");
+    assert_eq!(b.app.doc.cels[&y].raster.get(60, 50), Color32::from_rgb(30, 160, 60));
+    assert_eq!(b.app.doc.cels[&y].raster.get(30, 30).a(), 0);
+    assert_eq!(premier.layers[0].cel_at(0), cels_avant[0], "la case 1 garde le sien");
+    // Ses pixels sont ceux de l'ancienne vignette.
+    se_reposer(&mut b, 400);
+    let id_suite = b.app.board_layout().cards[K + 1].id;
+    assert_eq!(id_suite, b.app.doc.panels[2].id);
+    let apres = b.app.thumbs.case_image_of(id_suite, largeur).map(|(i, _)| i.pixels.clone()).expect("la vignette du plan neuf");
+    assert_eq!(apres, avant, "la vignette de l'ancienne case 2 n'a pas changé d'un pixel");
+    // Déplacer B ensuite ne touche à aucun dessin : le plan d'à côté est resté tel quel.
+    let (suite_avant, tuiles_avant) = (b.app.doc.panels[2].clone(), b.app.doc.cels[&y].raster.tiles.clone());
+    let c = crate::vignettes_camera_tests::centre(crate::vignettes_camera_tests::cadre_ecran(&b, 1));
+    ctrl_glisser(&mut b, c, &pas(c, vec2(0.0, 0.3 * w), 6), c + vec2(0.0, 0.3 * w), true);
+    b.chauffer(2);
+    assert_eq!(b.app.doc.panels.len(), plans + 1, "déplacer B ne coupe rien de plus");
+    let suite = &b.app.doc.panels[2];
+    assert_eq!((suite.id, suite.layers[0].frames.clone(), suite.camera.clone()), (suite_avant.id, suite_avant.layers[0].frames.clone(), suite_avant.camera.clone()));
+    assert_eq!(b.app.doc.cels[&y].raster.tiles, tuiles_avant);
+    assert_eq!(b.app.doc.panels[1].layers[0].cel_at(0), cels_avant[0], "ni le dessin de la case 1");
+    // Annuler le déplacement de B, puis le mouvement : un seul plan de deux cases, sans mouvement.
+    b.app.run_action("edition.annuler");
+    b.app.run_action("edition.annuler");
+    b.chauffer(3);
+    assert_eq!(b.app.doc.panels.len(), plans, "un seul plan");
+    let p = &b.app.doc.panels[1];
+    assert!(p.camera.is_empty(), "plus de mouvement");
+    assert_eq!((p.marks.len(), p.frame_count(), p.layers[0].frames.clone()), (1, 24, cels_avant), "ses deux cases et leurs dessins");
+    assert_eq!(pas_d_annulation(&b), n);
+}
+
+#[test]
+fn a_continuity_case_made_after_the_move_still_shows_the_last_frame_and_a_move_on_a_plan_of_one_case_cuts_nothing() {
+    use crate::vignettes_camera_tests::{ctrl_glisser, largeur_cadre_ecran, pas, K};
+    // Une seule case : rien à couper, un seul plan de plus que les quatre d'origine n'apparaît pas.
+    let mut doc = crate::vignettes_camera_tests::plan_court();
+    doc.set_duration(1, 12);
+    let mut b = ouvert(doc, 6);
+    let (case1, w, plans) = (vignette(&b, K), largeur_cadre_ecran(&b), b.app.doc.panels.len());
+    ctrl_glisser(&mut b, case1.center(), &pas(case1.center(), vec2(w, 0.0), 6), case1.center() + vec2(w, 0.0), true);
+    assert_eq!((b.app.doc.panels.len(), b.app.doc.panels[1].camera.len()), (plans, 2));
+    // Une case de continuité faite après le mouvement : elle voit à travers le dernier cadre, et le plan ne se coupe pas.
+    b.app.doc.set_duration(1, 24);
+    b.app.doc.toggle_mark(1, 12);
+    let b_cam = b.app.doc.panels[1].camera.last().unwrap().cam;
+    assert_eq!(b.app.doc.panel_camera(1, 20).x, b_cam.x, "la case suivante voit à travers B");
+    assert_eq!(b.app.doc.panels.len(), plans);
+}

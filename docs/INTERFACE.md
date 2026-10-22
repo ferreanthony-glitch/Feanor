@@ -978,7 +978,7 @@ Demandes d'Anthony (captures `bug-cam-trait`, `demande-marge-serree`, `71`, `72`
 ### Le décor partagé entre les cases, ses brosses, et l'onglet Vignettes des Préférences (2026-10-22, branche `vignettes-decor`)
 
 Demandes d'Anthony. Code : `decor.rs` (le calque et le partage, sans interface), `decorui.rs` (les pastilles, le choix, l'acheminement des traits),
-`vignettesreglages.rs` (les réglages), `prefsui.rs` / `prefsonglets.rs` (l'onglet). Essais : `decor_tests.rs` (27). Vocabulaire : **Décor** (jamais « Fond » : le mot
+`vignettesreglages.rs` (les réglages), `prefsui.rs` / `prefsonglets.rs` (l'onglet). Essais : `decor_tests.rs` (33), `cases_tests.rs` et `notes_cases_tests.rs`. Vocabulaire : **Décor** (jamais « Fond » : le mot
 est pris par l'aplat sous le trait et par l'ancien calque de fond, retiré le 2026-10-21 ; en anglais ce sera « Background »).
 
 - **Le calque « Décor ».** Un par plan, **tout en bas** de ses calques (sous les personnages et les traits), créé par **le premier trait d'une brosse du décor** dans
@@ -1030,6 +1030,37 @@ est pris par l'aplat sous le trait et par l'ancien calque de fond, retiré le 20
   de la feuille (qui déborde d'une demi-largeur de cadre) : le dessin s'arrêtait net au bord de la feuille, le reste de la case restait blanc, alors que la vignette (composée par
   `thumbnail_marge_until`, qui lit tout) montrait tout. La case vivante compose maintenant le monde quand elle voit à travers la caméra (`camera_view`) : une seule case à la fois.
   Essai : `cases_tests::the_live_case_after_a_travelling_shows_what_lies_beyond_the_sheet_where_camera_b_looks` ; captures `travelling-avant-c.png` (cassé) et `travelling-apres-c.png`.
+
+### Les notes des cases ne s'écrivent qu'au bouton (2026-10-22, même branche)
+
+« Les notes ne doivent s'activer qu'en cliquant sur un bouton, sinon ça empêche parfois de dessiner. » Avant, un appui sur la bande de note sous une case l'ouvrait ; avec le débord
+de 12 %, un trait qui partait du bas d'une case tombait dans la bande et ouvrait la saisie au lieu de dessiner. Maintenant :
+- **Un appui sur la bande (ou sur son texte) dessine** dans sa case, comme n'importe où près d'elle (`Hit::Note` se comporte comme `Hit::Thumb`, `Vignettes::appui_bande` fait accepter
+  au dessin vivant un appui qui tombe sous le cadre) ; le curseur est celui de l'outil.
+- **Pour écrire : une petite icône `NOTE_PENCIL` au bout (à droite) de la bande** (`note_icone_rect`). Elle ne se montre que **pointeur sur la case ou sur sa bande** (pas pendant un
+  geste), **et toujours sur la case dont la note s'écrit** : la planche reste nette. Un appui dessus ouvre la note de cette case, texte compris, curseur au bout ; Échap ou un clic ailleurs
+  la ferme, comme avant. Bulle d'une seconde par `bulles.rs` : « Écrire la note ».
+- **Au clavier** : la commande `vignettes.note` (« Écrire la note de la case courante », sans touche d'origine, comme les autres commandes des Vignettes ; Ctrl+K ou l'assigner dans
+  Préférences > Raccourcis).
+- Le texte des notes reste visible comme avant (trois lignes, puis « … »). Essais : `notes_cases_tests.rs` (4) ; ceux de `vignettes_tests` qui ouvraient la bande par un clic
+  passent par l'icône (`icone_note`).
+
+### Un mouvement de caméra créé sur une case qui a de la continuité derrière elle (2026-10-22, même branche)
+
+Décision d'Anthony : un plan a deux cases (la case 1 et une case de continuité 2), chacune son dessin ; il crée un mouvement (Ctrl + Maj + glisser) sur la case 1. Avant, le dessin de la case 2
+disparaissait derrière le cadre B. Maintenant, **les cases qui suivent forment un plan à part** (`Document::scinder_apres_mouvement`, `cases.rs`) :
+- **une coupe juste après la case qui porte le mouvement** (le plan se coupe à la première marque d'image, `split_plan`) ; le mouvement ne montre que le dessin de la case 1 ;
+- **le plan neuf garde les dessins des autres cases tels quels** (des copies, comme toute coupe) **et la caméra qu'elles montraient avant** (les clés d'avant le mouvement : le plan d'origine
+  n'en avait aucune ou une seule) : leurs vignettes ne changent pas d'un pixel, avec une barre de coupe devant ; **le décor** a, dans le plan neuf, une copie indépendante (comme en recochant
+  une coupe) ;
+- **le mouvement et la coupe ne font qu'une étape d'annulation** (« Mouvement de caméra ») : un Ctrl+Z rend un seul plan de deux cases, sans mouvement ;
+- **aucune copie automatique** : si Anthony veut la case 2 dans la continuité du mouvement, il copie son dessin dans le cadre B lui-même ; **déplacer B ensuite ne déplace jamais un dessin** (il
+  change seulement ce que la caméra cadre), le plan voisin n'est pas touché ;
+- la règle « la case qui suit montre le dernier cadre » **reste** pour les cases de continuité faites **après** le mouvement (dessiner dans la case pâle qui suit l'empreinte, sans coupe) ;
+- ça vaut aussi pour « Ajouter un cadre » (clic droit) sur une case sans mouvement ; sur un film verrouillé ou sans le jeton du montage, le geste est refusé avec son message (une coupe change le
+  montage).
+Essais : `cases_tests` (le plan se coupe, dessin et caméra de la case 2 inchangés, vignette identique pixel pour pixel, une étape d'annulation, déplacer B ne touche pas le plan voisin ; la case
+faite après le mouvement voit toujours B). L'essai d'avant `the_case_after_a_camera_move_shows_the_last_frame_and_moving_b_updates_it` ajoute désormais la case de continuité après le mouvement.
 
 ### À regarder à l'écran (le décor, par Anthony)
 

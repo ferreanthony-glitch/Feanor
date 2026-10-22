@@ -15,9 +15,27 @@
 //!
 //! Toujours dans l'étape d'annulation de ce qui fait la case : une annulation défait la case et ses clés.
 
+use crate::camera::CameraKey;
 use crate::document::Document;
 
 impl Document {
+    /// Un mouvement de caméra vient d'être **créé** sur la première case du plan `index` (Anthony, 2026-10-22) : les cases qui la suivent dans
+    /// le plan (sa continuité) deviennent **un plan à part**, une coupe juste après la case qui porte le mouvement. Le mouvement ne montre que le
+    /// dessin de la première case ; le plan neuf garde les dessins des autres cases tels qu'ils étaient (`split_plan` en fait des copies,
+    /// décor compris : une copie indépendante, comme en recochant une coupe) et **la caméra qu'elles montraient avant** (`avant`, les clés
+    /// d'avant le mouvement : aucune ou une seule). `finale` : les clés du mouvement, que le premier plan garde. Rend le rang du plan neuf, ou
+    /// rien (le plan n'a pas de case de plus : rien n'est changé).
+    pub fn scinder_apres_mouvement(&mut self, index: usize, avant: &[CameraKey], finale: Vec<CameraKey>) -> Option<usize> {
+        let p = self.panels.get(index)?;
+        let (id, at) = (p.id, p.marks.first()?.frame);
+        self.panels[index].camera = avant.to_vec();
+        let suite = self.split_plan(index, at);
+        if let Some(premier) = self.panels.iter_mut().find(|p| p.id == id) {
+            premier.camera = finale;
+        }
+        suite
+    }
+
     /// Pose, à l'image `frame` du plan `index`, la clé de la case qui commence là sur chacun de ses calques de dessin (voir plus haut).
     /// Renvoie le nombre de clés posées.
     pub fn cles_de_case(&mut self, index: usize, frame: usize) -> usize {

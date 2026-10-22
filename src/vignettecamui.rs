@@ -200,7 +200,9 @@ impl App {
         if let Some(p) = pointer {
             g.maintenant = p;
             if !g.actif && !g.annule && g.depart.distance(p) > MOVE_THRESHOLD {
-                if self.content_refuses() || !self.partage_peut_toucher(&[g.plan]) {
+                // (Créer un mouvement sur une case qui en a d'autres derrière elle coupe le plan : il faut pouvoir changer le montage.)
+                let coupe = g.avant == 0 && !self.doc.panels[pi].marks.is_empty();
+                if self.content_refuses() || !self.partage_peut_toucher(&[g.plan]) || (coupe && self.storyboard_refuses()) {
                     g.annule = true;
                     self.vignettes.press = Press::Dead;
                 } else {
@@ -269,6 +271,8 @@ impl App {
             return;
         }
         let nom = vignettecam::nom_etape(g.prise, g.avant);
+        // Un mouvement créé sur une case qui a des cases de continuité derrière elle : elles deviennent un plan à part, dans la même étape.
+        let scinde = g.avant == 0 && self.scinder_derriere_le_mouvement(pi, &g.orig);
         self.etape_camera(snap, &nom);
         let n = self.doc.panels[pi].camera.len();
         let dernier = vignettecam::lettre(n.saturating_sub(1));
@@ -279,6 +283,28 @@ impl App {
             Prise::Deplace(i) => format!("Cadre {} déplacé.", vignettecam::lettre(i)),
             Prise::Zoom(i) => format!("Cadre {} : zoom changé.", vignettecam::lettre(i)),
         };
+        if scinde {
+            self.status += " Les cases qui suivaient forment un plan à part (une coupe après celle-ci).";
+        }
+    }
+
+    /// Le mouvement du plan `pi` vient d'être créé (ses clés sont posées ; `avant` : celles d'avant) : si le plan a d'autres cases derrière la
+    /// première, elles passent dans un plan neuf, juste après (`Document::scinder_apres_mouvement`). Vrai si le plan s'est coupé.
+    fn scinder_derriere_le_mouvement(&mut self, pi: usize, avant: &[CameraKey]) -> bool {
+        let p = &self.doc.panels[pi];
+        if p.camera.len() < 2 || p.marks.is_empty() {
+            return false;
+        }
+        let finale = p.camera.clone();
+        let n = self.doc.panels.len();
+        let fait = self.doc.scinder_apres_mouvement(pi, avant, finale).is_some() && self.doc.panels.len() == n + 1;
+        if fait {
+            self.board_sel = vec![self.doc.panels[pi].id];
+            // (Le geste a pu commencer sur une case qui est maintenant dans l'autre plan.)
+            self.cur_frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
+            self.follow_frame = true;
+        }
+        fait
     }
 
     /// Prend l'étape d'annulation `snap`, sous le nom `nom`.
@@ -305,13 +331,21 @@ impl App {
             self.status = "Ce plan est trop court pour un cadre de plus : allonge-le d'abord.".into();
             return;
         };
-        let snap = self.snapshot();
         let avant = if keys0.len() >= 2 { keys0.len() } else { 0 };
+        if avant == 0 && !self.doc.panels[pi].marks.is_empty() && self.storyboard_refuses() {
+            return;
+        }
+        let snap = self.snapshot();
+        let orig = self.doc.panels[pi].camera.clone();
         self.doc.panels[pi].camera = keys;
         let nom = vignettecam::nom_etape(Prise::Nouveau, avant);
+        let scinde = avant == 0 && self.scinder_derriere_le_mouvement(pi, &orig);
         self.etape_camera(snap, &nom);
         let n = self.doc.panels[pi].camera.len();
         self.status = format!("Cadre {} ajouté : tire-le avec Ctrl + Maj (ou T).", vignettecam::lettre(n - 1));
+        if scinde {
+            self.status += " Les cases qui suivaient forment un plan à part (une coupe après celle-ci).";
+        }
     }
 
     /// « Retirer ce cadre » : la clé `rang` du plan `pi` s'en va. Retirer B d'un mouvement à deux cadres enlève le mouvement.

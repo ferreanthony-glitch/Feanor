@@ -216,10 +216,16 @@ fn plan_a_deux_cases() -> Document {
 
 #[test]
 fn the_case_after_a_camera_move_shows_the_last_frame_and_moving_b_updates_it() {
-    let mut b = ouvert(plan_a_deux_cases(), 6);
+    // (Un mouvement créé sur une case qui en a derrière elle coupe le plan : voir _camera_move_created_on_a_case_with_continuity_cases_splits_them_off. La règle case qui suit = dernier cadre vaut pour les cases faites APRÈS le mouvement : ici, la case de continuité est ajoutée une fois le mouvement posé.)
+    let mut doc = plan_court();
+    doc.set_duration(1, 12);
+    let mut b = ouvert(doc, 6);
     let (case, w) = (vignette(&b, K), largeur_cadre_ecran(&b));
-    assert_eq!(b.app.board_layout().cards[K + 1].frame, 12);
     ctrl_glisser(&mut b, case.center(), &pas(case.center(), vec2(w, 0.0), 6), case.center() + vec2(w, 0.0), true);
+    b.app.doc.set_duration(1, 24);
+    b.app.doc.toggle_mark(1, 12);
+    b.chauffer(3);
+    assert_eq!(b.app.board_layout().cards[K + 1].frame, 12);
     let k = &b.app.doc.panels[1].camera;
     assert_eq!(k.len(), 2);
     // Le mouvement tient dans la première case : B est à sa dernière image (11), A à la première.
