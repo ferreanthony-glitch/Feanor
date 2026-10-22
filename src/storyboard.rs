@@ -71,6 +71,8 @@ impl App {
         }
         self.end_stroke();
         self.playing = false;
+        // « Report du décor » (Préférences > Vignettes) : lu par la jonction de deux plans (`decor.rs`).
+        self.doc.report_decor = self.settings.vignettes.report_decor;
         let snap = self.snapshot();
         let before = self.panel().id;
         let board_before = self.board_layout();
@@ -285,6 +287,10 @@ impl App {
         let mut placed = None;
         let done = self.structure_op_porte(false, |d, i| {
             placed = d.toggle_mark(i, frame);
+            // Une case de plus : une clé de dessin de plus sur chaque calque, à son image (`cases.rs`).
+            if placed == Some(true) {
+                d.cles_de_case(i, frame);
+            }
             placed.map(|_| i)
         });
         self.cur_frame = frame;

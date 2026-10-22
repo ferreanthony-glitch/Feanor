@@ -4,8 +4,9 @@
 //! mots pour la recherche. `prefsui.rs` dessine un onglet en parcourant cette table, la recherche la lit, et un
 //! essai (`prefsui_tests.rs`) vérifie que chaque réglage se trouve dans un seul onglet, étiquette lisible.
 //!
-//! Neuf onglets, dans une liste verticale à gauche (icône et nom) : une rangée de neuf noms ne tiendrait pas dans
-//! une fenêtre de largeur raisonnable, et une liste à gauche laisse toute la hauteur au contenu.
+//! Dix onglets, dans une liste verticale à gauche (icône et nom) : une rangée de dix noms ne tiendrait pas dans
+//! une fenêtre de largeur raisonnable, et une liste à gauche laisse toute la hauteur au contenu. (« Vignettes » : 2026-10-22,
+//! tout ce qui se règle de la planche, avec le décor.)
 
 use egui_phosphor::regular as ph;
 use serde::{Deserialize, Serialize};
@@ -19,6 +20,7 @@ pub enum Onglet {
     Apparence,
     Dessin,
     Montage,
+    Vignettes,
     Raccourcis,
     Export,
     Equipe,
@@ -28,11 +30,12 @@ pub enum Onglet {
 
 impl Onglet {
     /// Dans l'ordre de la liste.
-    pub const TOUS: [Onglet; 9] = [
+    pub const TOUS: [Onglet; 10] = [
         Onglet::General,
         Onglet::Apparence,
         Onglet::Dessin,
         Onglet::Montage,
+        Onglet::Vignettes,
         Onglet::Raccourcis,
         Onglet::Export,
         Onglet::Equipe,
@@ -50,6 +53,7 @@ impl Onglet {
             Onglet::Apparence => "Apparence",
             Onglet::Dessin => "Dessin",
             Onglet::Montage => "Montage",
+            Onglet::Vignettes => "Vignettes",
             Onglet::Raccourcis => "Raccourcis",
             Onglet::Export => "Export",
             Onglet::Equipe => "Équipe",
@@ -64,6 +68,7 @@ impl Onglet {
             Onglet::Apparence => ph::PALETTE,
             Onglet::Dessin => ph::PENCIL_SIMPLE,
             Onglet::Montage => ph::FILM_STRIP,
+            Onglet::Vignettes => ph::SQUARES_FOUR,
             Onglet::Raccourcis => ph::KEYBOARD,
             Onglet::Export => ph::EXPORT,
             Onglet::Equipe => ph::USERS_THREE,
@@ -78,7 +83,8 @@ impl Onglet {
             Onglet::General => "Ouvrir et rouvrir les projets, copies de secours, collage entre projets, conseils.",
             Onglet::Apparence => "Le thème et ses couleurs, la taille de l'interface, la hauteur des panneaux.",
             Onglet::Dessin => "Le curseur du stylet, sa pression et le voile autour de la caméra.",
-            Onglet::Montage => "Les pistes du montage et leur repliage, les cases pâles de la planche des Vignettes.",
+            Onglet::Montage => "Les pistes du montage et leur repliage.",
+            Onglet::Vignettes => "La planche : cases pâles, débord du trait, cadres de caméra, et le décor partagé entre les cases d'un plan.",
             Onglet::Raccourcis => "Le jeu de raccourcis du clavier et ses fichiers.",
             Onglet::Export => "Les programmes et les modèles dont les exports ont besoin.",
             Onglet::Equipe => "Ton nom, ta couleur et la façon de travailler à plusieurs.",
@@ -100,8 +106,12 @@ pub enum Groupe {
     Stylet,
     Camera,
     Pistes,
-    /// Les cases pâles de la planche des Vignettes (papier infini).
+    /// La planche des Vignettes : cases pâles, colonnes, débord du trait (papier infini).
     Vignettes,
+    /// Les cadres de caméra dessinés dans les cases : l'aimant et la couleur.
+    CadresCamera,
+    /// Le décor partagé entre les cases d'un plan (`decor.rs`) : le report, la couleur et la taille des brosses.
+    Decor,
     Raccourcis,
     Programmes,
     Commentaires,
@@ -129,6 +139,8 @@ impl Groupe {
             Groupe::Camera => "Caméra",
             Groupe::Pistes => "Pistes du montage",
             Groupe::Vignettes => "Planche des Vignettes",
+            Groupe::CadresCamera => "Cadres de caméra",
+            Groupe::Decor => "Décor",
             Groupe::Raccourcis => "Raccourcis clavier",
             Groupe::Programmes => "Programmes et modèles",
             Groupe::Commentaires => "Commentaires",
@@ -195,7 +207,15 @@ pub const REGLAGES: &[Reglage] = &[
     // ---- Montage
     r(O::Montage, G::Pistes, "montage.repliage", "Repliage des pistes", "replier commun plan calques"),
     r(O::Montage, G::Pistes, "montage.deplier", "Déplier le calque courant tout seul", "piste automatique"),
-    r(O::Montage, G::Vignettes, "montage.rangees_pales", "Rangées de cases pâles", "vignettes planche papier cases vides dessiner minimum lignes"),
+    // ---- Vignettes
+    r(O::Vignettes, G::Vignettes, "vignettes.rangees_pales", "Rangées de cases pâles", "vignettes planche papier cases vides dessiner minimum lignes"),
+    r(O::Vignettes, G::Vignettes, "vignettes.colonnes", "Cases par rangée", "vignettes planche colonnes largeur six"),
+    r(O::Vignettes, G::Vignettes, "vignettes.debord", "Débord du trait hors des cases", "marge anneau déborde dépasse cadre pour cent"),
+    r(O::Vignettes, G::CadresCamera, "vignettes.aimant", "Aimant des cadres de caméra", "alignement colonnes rangées points magnétique éteindre zéro"),
+    r(O::Vignettes, G::CadresCamera, "vignettes.couleur_cadre", "Couleur des cadres de caméra", "bleu lettres flèche empreinte export"),
+    r(O::Vignettes, G::Decor, "vignettes.report_decor", "Report du décor", "continuité coupe plan suivant case réunir décor partagé"),
+    r(O::Vignettes, G::Decor, "vignettes.couleur_decor", "Couleur du décor", "gris bleu brosses pastilles"),
+    r(O::Vignettes, G::Decor, "vignettes.brosses_decor", "Taille des brosses du décor", "crayon feutre aplat pixels"),
     // ---- Raccourcis
     r(O::Raccourcis, G::Raccourcis, "raccourcis.jeu", "Jeu de raccourcis", "clavier storyboard pro touches"),
     r(O::Raccourcis, G::Raccourcis, "raccourcis.liste", "Voir et changer les raccourcis", "assigner touche"),

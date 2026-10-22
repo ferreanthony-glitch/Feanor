@@ -1706,6 +1706,8 @@ impl App {
         if layer < self.layers().len() && layer != self.cur_layer {
             self.end_stroke();
             self.cur_layer = layer;
+            // Un calque choisi à la main lâche la brosse du décor : on dessine là où l'on a cliqué (`decorui.rs`).
+            self.decor_calque_choisi();
             // Changer de calque, c'est revenir au trait (la cible aplat suit la sous-ligne choisie).
             self.aplat_cible = None;
             self.vsel = None;
@@ -2809,7 +2811,7 @@ impl App {
     /// copier deux fois un même dessin), à la durée du plan ; un dessin tenu jusqu'à la fin du plan
     /// d'origine reste tenu jusqu'à la fin de celui-ci.
     fn pasted_layer(&mut self, source: &Layer, clip: &LayerClip, copies: &mut HashMap<CelId, CelId>) -> Layer {
-        let mut layer = Layer { id: fresh_layer_id(), scene_wide: None, ..source.clone() };
+        let mut layer = Layer { id: fresh_layer_id(), scene_wide: None, decor: false, ..source.clone() };
         for f in layer.frames.iter_mut() {
             *f = f.and_then(|old| {
                 if let Some(&c) = copies.get(&old) {

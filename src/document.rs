@@ -361,6 +361,9 @@ pub struct Layer {
     /// Calque de couleur (`calquecouleur.rs`) : la couleur sous le trait d'un autre calque. Ses
     /// images suivent celles de ce calque de trait ; on y colorie sans abîmer le trait.
     pub couleur: Option<crate::calquecouleur::CalqueCouleur>,
+    /// Le calque Décor du plan (`decor.rs`) : un par plan, fait par les brosses du décor des Vignettes, tout en bas du plan ; son
+    /// dessin est tenu sur toutes les images du plan, donc partagé par ses cases.
+    pub decor: bool,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -429,6 +432,7 @@ impl Layer {
             fond: None,
             effet: None,
             couleur: None,
+            decor: false,
         }
     }
 
@@ -1040,6 +1044,9 @@ pub struct Document {
     /// Les annotations de la vue Vignettes (`annotations.rs`) ; enregistrées à côté du manifeste, dans
     /// `annotations.json`. Dans `Structure` : l'annulation les rétablit avec le reste. Aucun export ne les lit.
     pub annotations: crate::annotations::Annotations,
+    /// « Report du décor » (Préférences > Vignettes) : en réunissant deux plans, le décor du premier se tient sur la suite
+    /// (`decor.rs`). Un réglage de l'application que `App::structure_op_porte` pose avant chaque opération : il n'est pas dans le projet.
+    pub report_decor: bool,
     next_id: u64,
     /// Préfixe des numéros neufs d'un projet partagé (`préfixe << 32`, `cooperation.rs`) : deux équipiers ne
     /// donnent jamais le même numéro. 0 pour un projet classique, dont les numéros ne changent pas.
@@ -1098,6 +1105,7 @@ impl Document {
             variantes: Default::default(),
             variantes_partielles: false,
             annotations: Default::default(),
+            report_decor: true,
             next_id: 1,
             id_prefix: 0,
         };
@@ -1165,6 +1173,7 @@ impl Document {
             variantes: structure.variantes,
             variantes_partielles: false,
             annotations: structure.annotations,
+            report_decor: true,
             next_id: max_id + 1,
             id_prefix: 0,
         };
@@ -2360,7 +2369,7 @@ impl Document {
     }
 
     /// Met le plan (ou panneau) `index + 1` au bout du plan `index` (voir `append_plan`).
-    fn append_next(&mut self, index: usize) -> Option<String> {
+    pub(crate) fn append_next(&mut self, index: usize) -> Option<String> {
         let last = |d: &Document, i: usize| d.panels[i].frame_count() - 1;
         let cams_a = (self.panel_camera(index, 0), self.panel_camera(index, last(self, index)));
         let cams_b = (self.panel_camera(index + 1, 0), self.panel_camera(index + 1, last(self, index + 1)));
@@ -2399,6 +2408,7 @@ impl Document {
         // Calques : par nom, puis par rang, s'ils sont réglés pareil.
         let same = |x: &Layer, y: &Layer| {
             x.kind == y.kind
+                && x.decor == y.decor
                 && x.visible == y.visible
                 && x.opacity == y.opacity
                 && x.blend == y.blend
@@ -2549,7 +2559,8 @@ impl Document {
         if index + 1 >= self.panels.len() || self.sequence_of(index) != self.sequence_of(index + 1) {
             return None;
         }
-        self.append_next(index);
+        // (Le décor du premier plan se tient sur la suite, ou la suite repart d'un décor vide : `decor.rs`.)
+        self.join_with_decor(index);
         let id = self.panels[index].id;
         Some(self.normalize_keeping(id))
     }

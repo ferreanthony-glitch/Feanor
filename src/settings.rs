@@ -187,6 +187,10 @@ pub struct Settings {
     /// La taille de l'interface, en pour cent : 90, 100, 125 ou 150 (`echelle.rs`, Préférences > Apparence).
     #[serde(default = "crate::echelle::defaut", rename = "echelle_interface", skip_serializing_if = "crate::echelle::est_defaut")]
     pub echelle: u16,
+    /// Les réglages des Vignettes (`vignettesreglages.rs`, Préférences > Vignettes) : débord du trait, aimant et couleur des
+    /// cadres de caméra, « Report du décor », couleur et tailles des brosses du décor. Absents des anciens réglages : ceux d'avant.
+    #[serde(default, rename = "vignettes", skip_serializing_if = "crate::vignettesreglages::ReglagesVignettes::est_defaut")]
+    pub vignettes: crate::vignettesreglages::ReglagesVignettes,
 }
 
 fn default_passe_partout() -> u8 {
@@ -262,6 +266,7 @@ impl Default for Settings {
             prefs_onglet: Default::default(),
             conseils: Default::default(),
             echelle: crate::echelle::ECHELLE_DEFAUT,
+            vignettes: Default::default(),
         }
     }
 }
@@ -315,6 +320,7 @@ impl Settings {
         s.equipe = std::mem::take(&mut s.equipe).nettoye();
         s.neutral_colors = crate::personnages::neutres_nettoyees(std::mem::take(&mut s.neutral_colors));
         s.echelle = crate::echelle::echelle_valide(s.echelle);
+        s.vignettes = std::mem::take(&mut s.vignettes).nettoyes();
         s
     }
 

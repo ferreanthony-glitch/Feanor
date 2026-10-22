@@ -208,6 +208,16 @@ mod board_tests;
 mod boardmove;
 mod boardui;
 mod debord;
+// Le décor des Vignettes : un calque par plan, partagé par les cases d'une continuité, fait par trois brosses de la colonne des pastilles ;
+// et les réglages des Vignettes (Préférences > Vignettes).
+mod cases;
+#[cfg(test)]
+mod cases_tests;
+mod decor;
+#[cfg(test)]
+mod decor_tests;
+mod decorui;
+mod vignettesreglages;
 #[cfg(test)]
 mod vignettes_tests;
 #[cfg(test)]

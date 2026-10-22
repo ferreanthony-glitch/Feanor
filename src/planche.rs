@@ -85,6 +85,8 @@ pub struct Options {
     pub annotations: bool,
     pub marie: bool,
     pub marie_couleur: [u8; 3],
+    /// La couleur des cadres de caméra : celle de l'écran (Préférences > Vignettes), posée par `App::planche_job`.
+    pub couleur_cadre: [u8; 3],
 }
 
 impl Default for Options {
@@ -99,6 +101,7 @@ impl Default for Options {
             annotations: false,
             marie: false,
             marie_couleur: crate::marie::COULEUR_PAR_DEFAUT,
+            couleur_cadre: crate::vignettesreglages::CADRE_DEFAUT,
         }
     }
 }
@@ -113,8 +116,6 @@ const BARRE_GRISE: [u8; 3] = [188, 188, 188];
 const BARRE_NOIRE: [u8; 3] = [22, 22, 22];
 const ENCRE_NUMERO: [u8; 3] = [96, 96, 96];
 const ENCRE_NOTE: [u8; 3] = [70, 70, 70];
-/// Le bleu fin des cadres de caméra (le même qu'à l'écran, `vignettecamui::BLEU`).
-const CAMERA: [u8; 3] = [0x37, 0x8A, 0xDD];
 
 /// Une vignette à exporter.
 #[derive(Clone, Debug)]
@@ -395,7 +396,7 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
                 pb.move_to((a.x - p.cadre.left()) * s, (a.y - p.cadre.top()) * s);
                 pb.line_to((b.x - p.cadre.left()) * s, (b.y - p.cadre.top()) * s);
                 if let Some(path) = pb.finish() {
-                    pix.stroke_path(&path, &peinture(CAMERA, 255), &Stroke { width: trait_, line_cap: LineCap::Round, ..Default::default() }, Transform::identity(), None);
+                    pix.stroke_path(&path, &peinture(opt.couleur_cadre, 255), &Stroke { width: trait_, line_cap: LineCap::Round, ..Default::default() }, Transform::identity(), None);
                 }
             };
             let distincts = crate::vignettecam::cadres_distincts(&mv.quads());
@@ -404,7 +405,7 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
                     fin(&mut pix, cadre.coins[j], cadre.coins[(j + 1) % 4]);
                 }
                 let q = rect_px(cadre.rect, p.cadre, s);
-                ecrire(&mut pix, &crate::vignettecam::lettre(cadre.rang).to_string(), q[0] as f32 + 3.0 * s.max(1.0), q[1] as f32 + 1.0 * s.max(1.0), (11.0 * s).max(8.0), CAMERA);
+                ecrire(&mut pix, &crate::vignettecam::lettre(cadre.rang).to_string(), q[0] as f32 + 3.0 * s.max(1.0), q[1] as f32 + 1.0 * s.max(1.0), (11.0 * s).max(8.0), opt.couleur_cadre);
             }
             for lien in crate::vignettecam::liens(&mv.quads(), c.place.thumb) {
                 match lien {

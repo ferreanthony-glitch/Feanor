@@ -21,6 +21,7 @@ use eframe::egui::{self, pos2, vec2, Color32, Id, Rect, Response, RichText, Sens
 use egui_phosphor::regular as ph;
 
 use crate::app::{App, Tool};
+use crate::decor::Genre;
 use crate::dock::Pane;
 use crate::document::{CelId, Strate};
 use crate::history::Edit;
@@ -29,7 +30,7 @@ use crate::persofond::{Fil, Fini, Travail};
 use crate::raster::Tile;
 
 /// Diamètre d'une pastille.
-const PASTILLE: f32 = 20.0;
+pub(crate) const PASTILLE: f32 = 20.0;
 /// Côté d'une case de la colonne (une pastille et son halo).
 const CASE_H: f32 = PASTILLE + 6.0;
 /// Largeur de la colonne des pastilles : une case, et un souffle de chaque côté.
@@ -48,6 +49,8 @@ pub(crate) enum Case {
     Plus,
     /// L'icône du panneau Personnages.
     Panneau,
+    /// Une brosse du décor (Vignettes seulement, `decorui.rs`).
+    Decor(Genre),
 }
 
 /// Un petit trait horizontal entre deux groupes de pastilles.
@@ -77,6 +80,13 @@ pub(crate) struct Etat {
     pub(crate) fil: Option<Fil>,
     /// Où sont les cases de la colonne des pastilles à l'écran, à la dernière image (les essais y cliquent).
     pub(crate) cases: Vec<(Rect, Case)>,
+    /// La brosse du décor qui dessine (Vignettes) : tant qu'elle est choisie, aucun personnage ne l'est, et les traits vont dans le
+    /// calque Décor du plan, quel que soit le calque courant (`decorui.rs`).
+    pub(crate) decor: Option<Genre>,
+    /// Ce que le choix du décor a pris à l'utilisateur et lui rendra quand il le lâche : outil, pinceau, crayon, couleur, calque.
+    pub(crate) decor_avant: Option<crate::decorui::Avant>,
+    /// La couleur et la taille posées par le dernier choix (ou suivi) du décor, pour voir quand les Préférences changent.
+    pub(crate) decor_posee: Option<([u8; 3], f32)>,
 }
 
 fn to_color(c: [u8; 3]) -> Color32 {
@@ -171,6 +181,8 @@ impl App {
     /// son fond. Un outil qui ne dessine pas cède la place au pinceau.
     pub(crate) fn perso_choisir(&mut self, c: Choix) {
         let Some((ligne, fond)) = self.perso_couleurs(c) else { return };
+        // Un personnage remplace la brosse du décor : l'outil, le pinceau, le calque d'avant reviennent d'abord.
+        self.decor_lacher(true);
         self.end_stroke();
         // Un personnage dessine le trait ET son aplat (comme prévu) : on revient donc au trait si la sous-ligne d'un aplat
         // était choisie. (Cliquer ensuite sur l'aplat le reprend seul, avec la couleur d'aplat du personnage.)
@@ -190,6 +202,12 @@ impl App {
 
     /// Lâche le personnage : la couleur reste, mais elle est libre.
     pub(crate) fn perso_lacher(&mut self) {
+        // (La brosse du décor se lâche de la même façon : « aucun personnage » est la couleur libre.)
+        if self.perso.decor.is_some() {
+            self.decor_lacher(true);
+            self.status = "Couleur libre : plus de brosse du décor.".into();
+            return;
+        }
         if self.perso.actif.take().is_some() {
             self.status = "Couleur libre : plus de personnage choisi.".into();
         }
@@ -429,6 +447,7 @@ impl App {
     /// À chaque image d'écran : les fonds de trait arrivés sont posés, et le personnage choisi suit sa couleur (ou
     /// est lâché si quelqu'un a pris une autre couleur à la main, ou si le personnage n'existe plus). Au repos, rien.
     pub(crate) fn tick_personnages(&mut self) {
+        self.decor_tick();
         if let Some(fil) = self.perso.fil.as_mut() {
             if fil.en_cours() > 0 {
                 for f in fil.recevoir() {
@@ -572,50 +591,74 @@ impl App {
         let place = pos2(zone.right() - COLONNE_L - COLONNE_BORD, zone.top() + haut);
         let hauteur_max = (zone.height() - haut - COLONNE_BORD).max(2.0 * CASE_H);
         let mut cases: Vec<(Rect, Case)> = Vec::new();
+        // La colonne défile seulement quand elle ne tient pas : un `ScrollArea` dans une `Area` ne grandit jamais au-delà de la taille
+        // que l'`Area` avait à l'image d'avant, si bien qu'une colonne qui s'allonge (un personnage de plus, les brosses du décor en
+        // arrivant dans les Vignettes) restait coupée à son ancienne hauteur, ses dernières pastilles hors de portée du pointeur.
+        let decor = self.board_shown();
+        let lignes = 3 + persos.len() + neutres.len() + if decor { Genre::ALL.len() } else { 0 };
+        let defile = lignes as f32 * (CASE_H + 1.0) + 16.0 > hauteur_max;
         egui::Area::new(Id::new("pastilles_colonne")).order(egui::Order::Middle).fixed_pos(place).constrain_to(zone).show(ctx, |ui| {
             ui.set_max_width(COLONNE_L);
             ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
             let fond = crate::theme::entete().gamma_multiply(0.62);
             egui::Frame::NONE.fill(fond).corner_radius(COLONNE_L / 2.0).inner_margin(egui::Margin::symmetric(1, 4)).show(ui, |ui| {
-                egui::ScrollArea::vertical().max_height(hauteur_max).scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
-                    let r = self.pastille_aucun(ui, persos.is_empty());
-                    cases.push((r.rect, Case::Aucun));
-                    trait_de_colonne(ui);
-                    for p in &persos {
-                        let r = self.pastille_de_colonne(ui, Choix::Personnage(p.id), &p.name, p.line, p.fill);
-                        cases.push((r.rect, Case::Choix(Choix::Personnage(p.id))));
-                    }
-                    if !persos.is_empty() && !neutres.is_empty() {
-                        trait_de_colonne(ui);
-                    }
-                    for (i, n) in neutres.iter().enumerate() {
-                        let r = self.pastille_de_colonne(ui, Choix::Neutre(i), &n.name, n.line, n.fill);
-                        cases.push((r.rect, Case::Choix(Choix::Neutre(i))));
-                    }
-                    trait_de_colonne(ui);
-                    let key = self.raccourci("perso.ajouter");
-                    let r = crate::bulles::icone(ui, ph::PLUS, "Nouveau personnage", "Ajouter un personnage : son nom, sa couleur de trait et sa couleur d'aplat.", &key);
-                    if r.clicked() {
-                        self.run_action("perso.ajouter");
-                    }
-                    cases.push((r.rect, Case::Plus));
-                    let ouvert = self.pane_shown(Pane::Personnages);
-                    let key = self.raccourci("vue.personnages");
-                    let r = ui.add(egui::Button::new(crate::bulles::symbole_etat(ph::USERS_THREE, ouvert)).selected(ouvert).frame(ouvert).min_size(vec2(COLONNE_L - 4.0, 0.0)));
-                    if crate::bulles::bulle(r.clone(), "Panneau Personnages", "Les noms, les couleurs de trait et d'aplat, l'ordre des personnages et les couleurs neutres. Un clic l'ouvre ou le ferme.", &key).clicked() {
-                        self.run_action("vue.personnages");
-                    }
-                    cases.push((r.rect, Case::Panneau));
-                });
+                if defile {
+                    egui::ScrollArea::vertical().max_height(hauteur_max).scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
+                        self.colonne_contenu(ui, &persos, &neutres, decor, &mut cases);
+                    });
+                } else {
+                    self.colonne_contenu(ui, &persos, &neutres, decor, &mut cases);
+                }
             });
         });
         self.perso.cases = cases;
     }
 
+    /// Les pastilles de la colonne, de haut en bas.
+    fn colonne_contenu(&mut self, ui: &mut egui::Ui, persos: &[Personnage], neutres: &[Neutre], decor: bool, cases: &mut Vec<(Rect, Case)>) {
+        let r = self.pastille_aucun(ui, persos.is_empty());
+        cases.push((r.rect, Case::Aucun));
+        trait_de_colonne(ui);
+        for p in persos {
+            let r = self.pastille_de_colonne(ui, Choix::Personnage(p.id), &p.name, p.line, p.fill);
+            cases.push((r.rect, Case::Choix(Choix::Personnage(p.id))));
+        }
+        if !persos.is_empty() && !neutres.is_empty() {
+            trait_de_colonne(ui);
+        }
+        for (i, n) in neutres.iter().enumerate() {
+            let r = self.pastille_de_colonne(ui, Choix::Neutre(i), &n.name, n.line, n.fill);
+            cases.push((r.rect, Case::Choix(Choix::Neutre(i))));
+        }
+        // Les brosses du décor (Vignettes seulement), après un petit trait : des carrés arrondis, pour ne pas les
+        // confondre avec les personnages (des ronds).
+        if decor {
+            trait_de_colonne(ui);
+            for g in Genre::ALL {
+                let r = self.pastille_decor(ui, g);
+                cases.push((r.rect, Case::Decor(g)));
+            }
+        }
+        trait_de_colonne(ui);
+        let key = self.raccourci("perso.ajouter");
+        let r = crate::bulles::icone(ui, ph::PLUS, "Nouveau personnage", "Ajouter un personnage : son nom, sa couleur de trait et sa couleur d'aplat.", &key);
+        if r.clicked() {
+            self.run_action("perso.ajouter");
+        }
+        cases.push((r.rect, Case::Plus));
+        let ouvert = self.pane_shown(Pane::Personnages);
+        let key = self.raccourci("vue.personnages");
+        let r = ui.add(egui::Button::new(crate::bulles::symbole_etat(ph::USERS_THREE, ouvert)).selected(ouvert).frame(ouvert).min_size(vec2(COLONNE_L - 4.0, 0.0)));
+        if crate::bulles::bulle(r.clone(), "Panneau Personnages", "Les noms, les couleurs de trait et d'aplat, l'ordre des personnages et les couleurs neutres. Un clic l'ouvre ou le ferme.", &key).clicked() {
+            self.run_action("vue.personnages");
+        }
+        cases.push((r.rect, Case::Panneau));
+    }
+
     /// « Aucun personnage » : la couleur libre. Une pastille vide (un anneau barré), allumée quand aucun personnage
     /// ne dessine ; un clic lâche le personnage choisi. Pas de texte : la bulle le dit.
     fn pastille_aucun(&mut self, ui: &mut egui::Ui, sans_personnage: bool) -> Response {
-        let libre = self.perso.actif.is_none();
+        let libre = self.perso.actif.is_none() && self.perso.decor.is_none();
         let (rect, resp) = ui.allocate_exact_size(vec2(PASTILLE + 6.0, PASTILLE + 6.0), Sense::click());
         if ui.is_rect_visible(rect) {
             let c = rect.center();

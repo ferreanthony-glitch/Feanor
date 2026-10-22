@@ -102,7 +102,8 @@ impl App {
         let tailles: Arc<Vec<[u32; 2]>> = Arc::new((0..n).map(|k| planche::taille_vignette(&p, k, s)).collect());
         let frames = p.images();
         let frame = self.doc.frame;
-        let (opt2, titre) = (opt.clone(), self.base_name_or("Planche"));
+        // (Les cadres de caméra ont la couleur choisie dans Préférences > Vignettes, comme à l'écran.)
+        let (opt2, titre) = (Options { couleur_cadre: self.settings.vignettes.couleur_cadre, ..opt.clone() }, self.base_name_or("Planche"));
         let (chemin, p2) = (out.to_path_buf(), Arc::new(p));
         let message = planche::message_de_fin(opt.sortie, n, dims, reduit.as_deref(), out);
         let job = ExportJob::collect_with(

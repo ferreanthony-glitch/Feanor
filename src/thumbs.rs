@@ -121,8 +121,14 @@ impl CaseTex {
 }
 
 /// La marge, en pixels, d'une vignette de `tw` pixels de large : `RING_FRACTION` de sa largeur, un pixel au moins.
+#[cfg(test)]
 pub fn marge_px(tw: usize) -> usize {
-    ((tw as f32 * crate::board::RING_FRACTION).round() as usize).max(1)
+    marge_px_de(tw, crate::board::RING_FRACTION)
+}
+
+/// La marge d'une vignette de `tw` pixels de large, pour un débord de `fraction` de sa largeur (Préférences > Vignettes).
+pub fn marge_px_de(tw: usize, fraction: f32) -> usize {
+    ((tw as f32 * fraction).round() as usize).max(1)
 }
 
 /// Temps accordé par image d'écran à la préparation des demandes de vignettes (cliché et mise en
@@ -146,6 +152,9 @@ pub struct Thumbs {
     /// vignette qui se fait sur un fil de fond ne le demande pas : le fil réveille l'écran à sa fin.)
     pub pending: bool,
     pool: Option<Pool>,
+    /// Le débord du trait hors de sa case, en part de la largeur d'une case (Préférences > Vignettes) ; rien : `RING_FRACTION`.
+    /// Il fait partie de la clé de la vignette (la marge en pixels) : le changer refait les cases, sur les fils de fond.
+    pub debord: Option<f32>,
 }
 
 /// Largeur des vignettes de la bande de montage.
@@ -356,7 +365,8 @@ impl Thumbs {
         let slot = (id, width);
         // (La marge : 12 % de la largeur d'une case. Une tuile est plus large qu'une case : `part_case` est la part de sa largeur que fait une case.)
         let size = thumb_size_of(frame, width, scale_pct());
-        let marge = if avec_marge { marge_px((size.0 as f32 * geom.map_or(1.0, |g| g.1.clamp(0.01, 1.0))).round() as usize) } else { 0 };
+        let fraction = self.debord.unwrap_or(crate::board::RING_FRACTION);
+        let marge = if avec_marge { marge_px_de((size.0 as f32 * geom.map_or(1.0, |g| g.1.clamp(0.01, 1.0))).round() as usize, fraction) } else { 0 };
         let geom = geom.map(|g| g.0);
         // (Plus le nombre de fonds sous le trait arrivés de l'arrière-plan, si le plan montre un fond : la
         // vignette montre le fond d'avant jusqu'à l'arrivée du nouveau. Un plan sans fond ne se refait pas

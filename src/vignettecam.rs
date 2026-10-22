@@ -433,9 +433,9 @@ impl Zone {
 
 // ------------------------------------------------------------------ l'aimant
 
-/// Distance (points d'écran) à laquelle l'aimant d'un alignement prend un cadre : très près seulement (Anthony, 2026-10-22 :
-/// « garde l'aimant, mais seulement quand c'est très proche d'un alignement avec les lignes et les colonnes »).
-pub const AIMANT: f32 = 6.0;
+/// (La distance, en points d'écran, à laquelle l'aimant d'un alignement prend un cadre : très près seulement, 6 d'origine
+/// (Anthony, 2026-10-22 : « garde l'aimant, mais seulement quand c'est très proche d'un alignement avec les lignes et les colonnes »).
+/// C'est un réglage, Préférences > Vignettes, 0 : pas d'aimant : `vignettesreglages::ReglagesVignettes::aimant`.)
 
 /// Les alignements qui attirent un cadre qu'on déplace, relatifs au coin haut-gauche de A, en points de la planche : des
 /// colonnes (x) et des rangées (y) de la planche, les bords et le centre de A et des autres cadres.

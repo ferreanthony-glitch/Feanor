@@ -158,8 +158,9 @@ impl App {
 
     /// « Opacité du passe-partout » : le voile autour du cadre de la caméra quand « Estomper le hors-champ » est
     /// allumé (`camtools.rs`). De 0 % (rien) à 100 % (le hors-champ noir) ; retenu dans les réglages.
-    /// Montage > Planche des Vignettes : le nombre de rangées de cases pâles qu'on voit toujours, pour montrer où dessiner. Une
-    /// rangée de plus apparaît dès qu'on dessine dans la dernière.
+    /// Vignettes > Planche des Vignettes : le nombre de rangées de cases pâles qu'on voit toujours (pour montrer où dessiner), le nombre de
+    /// cases par rangée, et le débord du trait hors des cases. Les rangées et les colonnes sont des réglages de la disposition
+    /// (`Layout`, retenus dans `reglages.toml` comme avant) ; le débord est `ReglagesVignettes::debord`.
     pub(crate) fn vignettes_prefs_ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label("Rangées de cases pâles");
@@ -176,6 +177,109 @@ impl App {
             }
         });
         ui.label(RichText::new("Une rangée pâle de plus apparaît dès qu'on dessine dans la dernière.").small().weak());
+        ui.horizontal(|ui| {
+            ui.label("Cases par rangée");
+            let mut n = self.layout.board_columns;
+            let resp = ui.add(egui::DragValue::new(&mut n).range(1..=crate::board::MAX_COLUMNS).speed(0.05));
+            let resp = crate::bulles::bulle(resp, "Cases par rangée", "Les cases d'une rangée de la planche (six au plus). C'est aussi le réglage « Colonnes » en haut de la planche.", "");
+            if resp.changed() {
+                self.layout.board_columns = n.clamp(1, crate::board::MAX_COLUMNS);
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label("Débord du trait hors des cases");
+            let mut v = self.settings.vignettes.debord;
+            let resp = ui.add(egui::Slider::new(&mut v, 0..=crate::vignettesreglages::DEBORD_MAX).suffix(" %"));
+            let resp = crate::bulles::bulle(
+                resp,
+                "Débord du trait hors des cases",
+                "Ce qu'on voit du trait au-delà du cadre d'une case, de chaque côté, en pour cent de sa largeur (12 % d'origine). Seule la case où l'on dessine laisse déborder tout son trait ; les autres sont coupées net, à quelques points près.",
+                "",
+            );
+            if resp.changed() {
+                self.settings.vignettes.debord = v;
+                self.settings_a_ecrire = true;
+            }
+        });
+    }
+
+    /// Vignettes > Cadres de caméra : l'aimant (points d'écran, 0 : éteint) et la couleur des cadres A, B, C… (à l'écran et dans l'export).
+    pub(crate) fn cadres_camera_prefs_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Aimant des cadres de caméra");
+            let mut v = self.settings.vignettes.aimant;
+            let resp = ui.add(egui::DragValue::new(&mut v).range(0..=crate::vignettesreglages::AIMANT_MAX).speed(0.1).suffix(" points"));
+            let resp = crate::bulles::bulle(
+                resp,
+                "Aimant des cadres de caméra",
+                "À quelle distance d'un alignement (colonnes et rangées de la planche, bords et centres des autres cadres) un cadre qu'on déplace se colle, en points d'écran. 6 d'origine ; 0 : pas d'aimant.",
+                "",
+            );
+            if resp.changed() {
+                self.settings.vignettes.aimant = v;
+                self.settings_a_ecrire = true;
+            }
+        });
+        ui.label(RichText::new("0 : pas d'aimant, le cadre suit le pointeur partout.").small().weak());
+        ui.horizontal(|ui| {
+            ui.label("Couleur des cadres de caméra");
+            let mut c = self.settings.vignettes.couleur_cadre;
+            let resp = ui.color_edit_button_srgb(&mut c);
+            let resp = crate::bulles::bulle(resp, "Couleur des cadres de caméra", "La couleur fine des cadres A, B, C…, de leurs lettres et de la flèche, sur la planche et dans l'export de la planche. Bleu #378ADD d'origine.", "");
+            if resp.changed() {
+                self.settings.vignettes.couleur_cadre = c;
+                self.settings_a_ecrire = true;
+            }
+        });
+    }
+
+    /// Vignettes > Décor : le report du décor à la jonction de deux plans, la couleur et la taille des trois brosses du décor, et de quoi
+    /// tout rétablir.
+    pub(crate) fn decor_prefs_ui(&mut self, ui: &mut egui::Ui) {
+        let mut report = self.settings.vignettes.report_decor;
+        let resp = ui.checkbox(&mut report, "Report du décor");
+        let resp = crate::bulles::bulle(
+            resp,
+            "Report du décor",
+            "Quand la barre entre deux cases est décochée (les cases sont un seul plan), la case suivante montre le même décor, et seulement lui. Éteint, la case suivante repart d'un décor vide. Ne joue qu'au moment où l'on décoche la barre.",
+            "",
+        );
+        if resp.changed() {
+            self.settings.vignettes.report_decor = report;
+            self.settings_a_ecrire = true;
+        }
+        ui.horizontal(|ui| {
+            ui.label("Couleur du décor");
+            let mut c = self.settings.vignettes.couleur_decor;
+            let resp = ui.color_edit_button_srgb(&mut c);
+            let resp = crate::bulles::bulle(resp, "Couleur du décor", "La couleur des trois brosses du décor, un gris-bleu clair d'origine (#8FA3B8) pour que le décor se lise à part des personnages.", "");
+            if resp.changed() {
+                self.settings.vignettes.couleur_decor = c;
+                self.settings_a_ecrire = true;
+            }
+        });
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Taille des brosses du décor");
+            for g in crate::decor::Genre::ALL {
+                let mut t = self.settings.vignettes.taille_decor(g);
+                let nom = match g {
+                    crate::decor::Genre::Crayon => "Crayon",
+                    crate::decor::Genre::Feutre => "Feutre",
+                    crate::decor::Genre::Aplat => "Aplat",
+                };
+                ui.label(RichText::new(nom).weak());
+                let resp = ui.add(egui::DragValue::new(&mut t).range(0.5..=400.0).speed(0.3).max_decimals(0).suffix(" px"));
+                let resp = crate::bulles::bulle(resp, g.nom(), "Sa taille, en pixels du dessin. Elle se pose en choisissant la brosse dans la colonne des pastilles.", "");
+                if resp.changed() {
+                    self.settings.vignettes.tailles_decor[g.rang()] = t;
+                    self.settings_a_ecrire = true;
+                }
+            }
+        });
+        if ui.small_button("Rétablir les réglages des Vignettes").on_hover_text("Remet le débord, l'aimant, les couleurs, le report et les tailles des brosses du décor à leurs valeurs d'origine (pas les rangées ni les cases par rangée).").clicked() {
+            self.settings.vignettes = Default::default();
+            self.settings_a_ecrire = true;
+        }
     }
 
     pub(crate) fn passe_partout_pref_ui(&mut self, ui: &mut egui::Ui) {
@@ -373,6 +477,8 @@ impl App {
             Groupe::Camera => self.passe_partout_pref_ui(ui),
             Groupe::Pistes => self.montage_prefs_ui(ui),
             Groupe::Vignettes => self.vignettes_prefs_ui(ui),
+            Groupe::CadresCamera => self.cadres_camera_prefs_ui(ui),
+            Groupe::Decor => self.decor_prefs_ui(ui),
             Groupe::Raccourcis => {
                 sortie.jeu = crate::raccourcisui::preset_combo(ui, "jeu_raccourcis_prefs", self.settings.keymap_preset);
                 ui.label(RichText::new(crate::raccourcisui::MERGE_RULE).small().weak());

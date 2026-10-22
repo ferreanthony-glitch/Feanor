@@ -642,6 +642,10 @@ struct LayerEntry {
     /// ordinaire.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     calque_couleur: Option<CouleurEntry>,
+    /// Calque Décor du plan (`decor.rs`) : un par plan, en bas, tenu sur toutes les images ; absent : calque ordinaire. Sans changer
+    /// `VERSION` (une version d'avant l'ouvre comme un calque ordinaire nommé « Décor »).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    decor: bool,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -1659,6 +1663,7 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                         sources: c.sources.iter().filter_map(|id| panel.layers.iter().position(|s| s.id == *id)).collect(),
                     })
                 }),
+                decor: l.decor,
                 expositions: to_exposures(&l.frames.iter().map(|f| f.map(key)).collect::<Vec<_>>()),
             })
             .collect(),
@@ -2439,6 +2444,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         effet: l.calque_effet.map(crate::calqueffet::Entree::into_model),
                         // Calque de couleur (format 30) : le lien vient après (rang du trait → son id).
                         couleur: None,
+                        decor: l.decor,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.

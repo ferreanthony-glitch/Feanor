@@ -602,6 +602,9 @@ impl App {
                     self.draw_has_focus();
                     if lasso {
                         self.prendre_le_lasso();
+                    } else if !cam_mode {
+                        // Une brosse du décor choisie : le trait part dans le calque Décor du plan (`decorui.rs`).
+                        self.decor_avant_trait();
                     }
                 }
                 false
@@ -622,6 +625,7 @@ impl App {
                 if !cam_mode && !lasso && self.tool_draws_in_empty() && self.board_create_from_empty(e) {
                     self.vignettes.press = Press::Card;
                     self.draw_has_focus();
+                    self.decor_avant_trait();
                     true
                 } else {
                     self.vignettes.press = Press::Dead;
@@ -686,7 +690,15 @@ impl App {
             if self.storyboard_refuses() || !self.partage_peut_toucher(&[a.plan, b.plan]) {
                 return false;
             }
-            let ok = self.avec_etape("Réunir deux vignettes en un plan", |s| s.structure_op(|d, _| d.join_next_plan(a.panel)));
+            let ok = self.avec_etape("Réunir deux vignettes en un plan", |s| {
+                s.structure_op(|d, _| {
+                    let debut = d.panels.get(a.panel)?.frame_count();
+                    let i = d.join_next_plan(a.panel)?;
+                    // La case de droite devient une clé de dessin de plus sur chaque calque du plan (`cases.rs`).
+                    d.cles_de_case(i, debut);
+                    Some(i)
+                })
+            });
             if ok {
                 self.cur_frame = a.end;
                 self.board_sel = vec![self.doc.panels[self.cur_panel].id];
@@ -718,6 +730,10 @@ impl App {
                     let image = board::plan_boards(d, last).last().map_or(1, |b| b.2 - b.1).max(1);
                     d.set_duration(last, old + image);
                     d.toggle_mark(last, old)?;
+                    // « Report du décor » éteint : la case de plus repart d'un décor vide (`decor.rs`).
+                    d.decor_case_ajoutee(last, old);
+                    // Et une clé de dessin de plus sur chaque calque, à l'image de la case (`cases.rs`).
+                    d.cles_de_case(last, old);
                     frame_of_image = old;
                     first_plan = 1;
                 }
@@ -767,6 +783,8 @@ impl App {
     pub(crate) fn board_view(&mut self, ui: &mut egui::Ui) {
         // (Les pastilles des personnages : une colonne au bord droit de la planche, posée en fin d'image, plus de barre
         // au-dessus : `pastilles_colonne`, `personnagesui.rs`.)
+        // Le débord du trait hors des cases suit les Préférences (il fait partie de la clé des vignettes : elles se refont en fond).
+        self.thumbs.debord = Some(self.settings.vignettes.debord_fraction());
         self.board_toolbar(ui);
         self.variantes_barre(ui);
         let view = ui.available_rect_before_wrap();

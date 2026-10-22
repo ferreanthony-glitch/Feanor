@@ -27,8 +27,7 @@ use crate::vignettecam::{self, Choix, Grille, Lien, Prise};
 /// Distance (points d'écran) à laquelle un coin de cadre se saisit.
 const PRISE: f32 = 9.0;
 
-/// Le bleu des cadres de caméra : fin, le même sur le papier et sur le dessin.
-pub const BLEU: Color32 = Color32::from_rgb(0x37, 0x8A, 0xDD);
+/// (Le bleu des cadres de caméra, fin, le même sur le papier et sur le dessin, est un réglage : `App::cadre_couleur`, Préférences > Vignettes.)
 
 /// Un geste Ctrl + Maj + glisser (ou T tenue) sur un cadre, de l'appui au lâcher.
 pub(crate) struct CamGeste {
@@ -142,7 +141,7 @@ impl App {
             Prise::Nouveau | Prise::NouveauZoom => cadres.len() - 1,
         };
         let rect0 = vignettecam::boite(&cadres[mobile]).translate(-au);
-        let aimante = matches!(prise, Prise::Nouveau | Prise::Deplace(1..));
+        let aimante = matches!(prise, Prise::Nouveau | Prise::Deplace(1..)) && self.settings.vignettes.aimant_points().is_some();
         let mut grille = Grille::default();
         for q in &cadres {
             let r = vignettecam::boite(q).translate(-au);
@@ -219,7 +218,8 @@ impl App {
                 // L'aimant : en points de la planche, à quelques points d'écran près d'un alignement, le cadre y colle (doucement :
                 // aucun saut en y entrant ni en en sortant) ; partout ailleurs il suit le pointeur exactement.
                 let libre = (g.maintenant - g.depart) / g.zoom.max(1e-6);
-                vignettecam::aimante(g.rect0, libre, &g.grille, vignettecam::AIMANT / g.zoom.max(1e-6)) / g.k.max(1e-6)
+                let seuil = self.settings.vignettes.aimant_points().unwrap_or(0.0);
+                vignettecam::aimante(g.rect0, libre, &g.grille, seuil / g.zoom.max(1e-6)) / g.k.max(1e-6)
             } else {
                 (g.maintenant - g.depart) / g.echelle.max(1e-6)
             };
@@ -353,7 +353,7 @@ impl App {
         let at = pointer + vec2(13.0, 11.0);
         let texte = if ajoute { format!("{}+", egui_phosphor::regular::VIDEO_CAMERA) } else { egui_phosphor::regular::VIDEO_CAMERA.to_string() };
         painter.text(at + vec2(1.0, 1.0), Align2::LEFT_TOP, &texte, FontId::proportional(15.0), Color32::from_white_alpha(200));
-        painter.text(at, Align2::LEFT_TOP, texte, FontId::proportional(15.0), BLEU);
+        painter.text(at, Align2::LEFT_TOP, texte, FontId::proportional(15.0), self.cadre_couleur());
     }
 
     /// Ce qui se dessine par-dessus la tuile d'une empreinte : les cadres fins en bleu avec leur lettre (tournés si la caméra l'est),
@@ -362,7 +362,8 @@ impl App {
     pub(crate) fn paint_empreinte(&self, painter: &Painter, view: Rect, xf: Xf, place: &CardPlace, mv: &MoveBoard) {
         let courant = self.cur_panel == place.panel;
         let clip = painter.with_clip_rect(xf.rect(place.foot).expand(40.0).intersect(view));
-        let alpha = |a: u8| Color32::from_rgba_unmultiplied(BLEU.r(), BLEU.g(), BLEU.b(), a);
+        let bleu = self.cadre_couleur();
+        let alpha = |a: u8| Color32::from_rgba_unmultiplied(bleu.r(), bleu.g(), bleu.b(), a);
         let (trait_, halo) = (if courant { 1.4_f32 } else { 1.1_f32 }, Stroke::new(3.0_f32, Color32::from_white_alpha(110)));
         let distincts = vignettecam::cadres_distincts(&mv.quads());
         for (c, _) in mv.cadres.iter().zip(&distincts).filter(|(_, d)| **d) {

@@ -816,8 +816,9 @@ unique en « + », la case de mouvement qui prend un bloc de cases entières, le
   (plus de pages à l'écran : une seule, sans fin ; l'export garde la valeur enregistrée).
 - **Cases pâles, toujours visibles** (`BoardLayout::empty`, dans l'ordre de lecture) : un filet très léger, sans « + », un peu plus marqué sous
   la souris. **Au moins trois rangées de six cases en tout** (colonnes de la planche) et **toujours une rangée pâle après la dernière
-  rangée occupée** : dessiner dans la dernière fait apparaître la suivante. Le minimum est un réglage : **Préférences > Montage > Planche
-  des Vignettes > « Rangées de cases pâles »** (trois d'origine, de 1 à 12 ; `Layout::board_min_rows`, `rangees_pales` dans les réglages).
+  rangée occupée** : dessiner dans la dernière fait apparaître la suivante. Le minimum est un réglage : **Préférences > Vignettes > Planche
+  des Vignettes > « Rangées de cases pâles »** (trois d'origine, de 1 à 12 ; `Layout::board_min_rows`, `rangees_pales` dans les réglages ; avant
+  le 2026-10-22 il était dans l'onglet Montage).
   Dessiner (ou déposer des images) dans **n'importe quelle case pâle** fait le plan là ; **celles qui la précèdent deviennent des plans
   vides**, pour garder l'ordre de lecture ; une seule étape d'annulation (`Cible::Vide(e)`, déjà là, retrouvé).
 - **Empreinte d'un mouvement de caméra** (`vignettecam::empreinte`) : la case garde sa taille (**jamais dézoomée**, jamais arrondie à un
@@ -973,6 +974,74 @@ Demandes d'Anthony (captures `bug-cam-trait`, `demande-marge-serree`, `71`, `72`
   dans la timeline du plan (Animation), où on la déplace ; le montage ne la prend plus.
 - **Les notes d'un plan réuni** restent à leur case, dans l'ordre du temps : les textes (action, dialogue, notes) de Q vont à la marque d'image qui commence là où Q commençait, ceux de P restent à P ;
   séparer à nouveau les rend à Q ; annuler redonne les originaux. Rien ne se perd, aucun saut de ligne en trop.
+
+### Le décor partagé entre les cases, ses brosses, et l'onglet Vignettes des Préférences (2026-10-22, branche `vignettes-decor`)
+
+Demandes d'Anthony. Code : `decor.rs` (le calque et le partage, sans interface), `decorui.rs` (les pastilles, le choix, l'acheminement des traits),
+`vignettesreglages.rs` (les réglages), `prefsui.rs` / `prefsonglets.rs` (l'onglet). Essais : `decor_tests.rs` (27). Vocabulaire : **Décor** (jamais « Fond » : le mot
+est pris par l'aplat sous le trait et par l'ancien calque de fond, retiré le 2026-10-21 ; en anglais ce sera « Background »).
+
+- **Le calque « Décor ».** Un par plan, **tout en bas** de ses calques (sous les personnages et les traits), créé par **le premier trait d'une brosse du décor** dans
+  ce plan, et nommé « Décor ». Ce n'est pas l'ancien « calque de fond » (retiré) : c'est un calque **bitmap ordinaire** qu'un drapeau distingue (`Layer::decor`). Il est tenu sur
+  toutes les images du plan par **un seul dessin** et porte le post-comportement « Maintenir » (il suit le plan s'il s'allonge).
+- **Le même décor dans toutes les cases d'une continuité.** Les cases d'un plan (la première image, puis ses marques d'image) montrent toutes ce dessin : un trait de décor
+  fait dans une case se voit dans toutes les autres (c'est le même dessin), et **seulement lui** : les calques des personnages gardent leurs dessins case par case. Les vignettes
+  des cases liées se refont en fond par la clé de leur cache (elle porte la version de chaque dessin). Avec un mouvement de caméra, les cases qui suivent voient le décor à
+  travers le dernier cadre (la caméra tient sa dernière clé, comme avant).
+- **Couper et réunir.** Cocher la coupe (le plan se coupe, `split_panel`) : **le plan d'après a sa propre copie du décor**, modifier l'un laisse l'autre. Décocher la coupe
+  (les deux plans se réunissent, `Document::join_next_plan`) : avec **« Report du décor »** allumé (d'origine), le décor du premier plan est tenu sur toute la suite, celui du
+  second (s'il en avait un) cède la place ; si le premier n'avait pas de décor, celui du second reste à sa place dans le temps. Éteint, la case suivante repart d'un décor
+  **vide** (ou de son propre décor). Le réglage n'est lu qu'à la jonction (rien ne change en le basculant) ; une étape d'annulation par coupe, comme avant.
+- **Les brosses : trois pastilles dans la colonne des pastilles de la planche**, après un petit trait, sous les couleurs neutres : **crayon**, **feutre gris**, **aplat**. Des carrés
+  arrondis (pour ne pas les prendre pour des personnages, qui sont ronds) de la couleur du décor, **gris-bleu clair #8FA3B8** d'origine, avec le signe de la brosse dedans (un trait
+  fin, un trait épais, un carré plein). Pourquoi là : la colonne est déjà le « avec quoi je dessine ? » de la planche (personnage, couleur neutre, couleur libre) ; le décor y est
+  un choix de plus, sans rien ajouter à la barre d'outils ni à la planche. Elles n'existent que dans les Vignettes. Clic : choisir (clic sur la choisie : la lâcher) ; clic droit :
+  « Régler les brosses du décor… » (ouvre Préférences > Vignettes) ; bulle d'une seconde avec le nom et ce que fait la brosse.
+- **Ce que fait le choix.** La brosse prend l'outil qu'il faut (Crayon pour le crayon, Pinceau pour le feutre et l'aplat), son réglage à la taille des Préférences (crayon graphite
+  de 5, feutre de 24, grande brosse pleine de 90) et la couleur du décor. L'outil, les deux pinceaux, la couleur et le calque d'avant sont mis de côté et **reviennent quand on lâche** le décor
+  (sa pastille, « aucun personnage », un personnage, un autre calque choisi à la main, une autre couleur prise à la main ; quitter les Vignettes). **À l'appui d'un trait dans une
+  case**, le calque Décor du plan est créé au besoin et devient courant : le trait va dedans **quel que soit le calque courant**. Le calque et son premier trait ne font qu'une étape
+  d'annulation (« Dessiner le décor »), puis une étape par trait ; un plan fait en dessinant dans une case vide avec une brosse du décor reste une seule étape.
+- **Fichier.** Aucun changement de `VERSION` (reste 36) : le calque s'écrit comme les autres, plus un champ `decor` (absent : calque ordinaire) dans l'entrée du calque, que lisent aussi
+  les fichiers de plan d'un film partagé. Un projet d'avant s'ouvre tel quel (aucun calque Décor) ; une version d'avant ouvre un projet à décor sans y voir de différence (un calque
+  « Décor » ordinaire, sans le drapeau : réenregistré par elle, il perdrait son rôle). Le décor d'une continuité est **un seul dessin dans les expositions du calque** (une exposition de
+  toute la durée du plan) : c'est ce qui le garde partagé à la réouverture.
+- **Préférences > Vignettes (nouvel onglet, 4 carrés)** : ce qui se règle de la planche, et rien d'autre. Rangées de cases pâles (venu de Montage), Cases par rangée, **Débord du trait hors
+  des cases** (12 % d'origine, de 0 à 40 %, `thumbs::Thumbs::debord` : il fait partie de la clé des vignettes, elles se refont en fond), **Aimant des cadres de caméra** (6 points d'origine,
+  0 : éteint), **Couleur des cadres de caméra** (#378ADD d'origine : à l'écran et dans l'export de la planche), **Report du décor**, **Couleur du décor**, **Taille des brosses du décor**
+  (trois valeurs), et « Rétablir les réglages des Vignettes ». Ce sont des **réglages de l'application** (`reglages.toml`, table `[vignettes]`, absente tant qu'on n'y touche pas ; les rangées et
+  les colonnes restent dans la disposition, comme avant), jamais du projet : seul « Report du décor » agit sur le projet, au moment de la jonction (`Document::report_decor`, posé par
+  `structure_op_porte`). Ils jouent tout de suite.
+- **Un défaut trouvé en chemin, corrigé** : la colonne des pastilles était un `ScrollArea` dans une `Area`, et egui ne laisse jamais grandir un `ScrollArea` au-delà de la taille que
+  son `Area` avait à l'image d'avant : une colonne qui s'allonge (un personnage de plus ; les brosses du décor en passant du Dessin aux Vignettes, l'`Area` étant la même) restait coupée à
+  son ancienne hauteur, ses dernières pastilles (et le « + ») hors de portée du pointeur. Elle ne défile plus que si elle ne tient pas (`pastilles_colonne`).
+
+### Une nouvelle case = une nouvelle clé de dessin ; la case vivante après un travelling (2026-10-22, même branche)
+
+- **Clé de case** (`cases.rs`, `Document::cles_de_case`). Les cases d'un plan sont ses **marques d'image** ; les clés de dessin sont les **expositions des calques**. Deux choses
+  séparées : poser une marque ne touchait pas aux calques, la nouvelle case montrait le dessin d'avant, **tenu**, et le retoucher retouchait aussi la case d'avant. Maintenant, quand une
+  case est faite — dessiner dans la case pâle qui suit le plan (barre grise), décocher une coupe (deux plans réunis), la commande « Marque d'image » —, **chaque calque de dessin
+  reçoit une clé à l'image de la case** : un calque dont le dessin est tenu en reçoit **une copie** (choisi parce que c'est ce que la case montrait déjà : rien ne saute à l'écran ; vide, la
+  case aurait perdu son dessin), un calque qui avait un dessin à la case d'avant mais rien ici (le plan réuni n'avait pas ce calque) reçoit un **dessin vide**. Rien pour un calque encore
+  vide, un dossier, un calque d'effet ou vidéo, un calque de couleur (il suit son calque de trait) — et **rien pour le calque Décor** (un seul dessin pour toute la continuité). Dans la
+  même étape d'annulation que la case : une annulation défait la case et ses clés (et le trait qu'on y a fait en la créant).
+- **La case vivante d'une continuité après un travelling** (`canvas.rs`). Cause : la case dont on est en train de dessiner l'image (la seule « vivante ») est un vrai dessin à l'écran, et
+  une case des Vignettes **ne composait pas le monde hors de la feuille** (`world`, toile infinie). Les cases qui suivent un mouvement voient à travers le dernier cadre B, qui peut sortir
+  de la feuille (qui déborde d'une demi-largeur de cadre) : le dessin s'arrêtait net au bord de la feuille, le reste de la case restait blanc, alors que la vignette (composée par
+  `thumbnail_marge_until`, qui lit tout) montrait tout. La case vivante compose maintenant le monde quand elle voit à travers la caméra (`camera_view`) : une seule case à la fois.
+  Essai : `cases_tests::the_live_case_after_a_travelling_shows_what_lies_beyond_the_sheet_where_camera_b_looks` ; captures `travelling-avant-c.png` (cassé) et `travelling-apres-c.png`.
+
+### À regarder à l'écran (le décor, par Anthony)
+
+1. Vignettes, colonne des pastilles : après les trois couleurs neutres et un petit trait, trois carrés arrondis gris-bleu (un trait fin, un trait épais, un carré plein), avant le « + ».
+2. Choisir le feutre : la pastille s'allume, le pinceau devient un feutre gris-bleu. Dessiner dans une case : un calque « Décor » apparaît tout en bas du plan (panneau Calques), le trait y est, quel que
+   soit le calque d'avant ; Ctrl+Z défait le calque et le trait d'un coup. Cliquer de nouveau sur la pastille : le pinceau, la couleur et le calque d'avant sont revenus.
+3. Un plan de plusieurs cases (barre grise entre elles) : un décor dessiné dans la deuxième case se voit aussi dans la première et la troisième, avec leurs vignettes ; les personnages dessinés
+   dans une case ne passent pas dans les autres.
+4. Cliquer une barre noire entre deux plans (décocher la coupe) : la case de droite montre le décor de la case de gauche. Recocher : la case de droite a sa copie, qu'on peut retoucher sans
+   changer l'autre. Préférences > Vignettes > Report du décor éteint, puis décocher : la case de droite repart sans décor.
+5. Préférences > Vignettes : changer le débord (les traits qui sortent des cases en montrent plus ou moins), l'aimant à 0 (un cadre de caméra tiré ne se colle plus), la couleur des cadres
+   (cadres, lettres et flèche de la planche et de son export), la taille et la couleur des brosses du décor.
 
 ### À regarder à l'écran (papier infini et caméra)
 
@@ -3047,6 +3116,9 @@ page est neuve, plus la clé `onglet_preferences` (l'onglet ouvert).
 | **Dessin** (crayon) | Stylet et pinceau | Croix du système sur le pinceau |
 | | Caméra | Opacité du passe-partout + Rétablir |
 | **Montage** (bobine) | Pistes du montage | Repliage des pistes (commun / par plan) ; Déplier le calque courant tout seul |
+| **Vignettes** (quatre carrés, 2026-10-22) | Planche des Vignettes | Rangées de cases pâles (venu de Montage) ; Cases par rangée ; Débord du trait hors des cases |
+| | Cadres de caméra | Aimant des cadres de caméra (0 : éteint) ; Couleur des cadres de caméra |
+| | Décor | Report du décor ; Couleur du décor ; Taille des brosses du décor ; Rétablir les réglages des Vignettes |
 | **Raccourcis** (clavier) | Raccourcis clavier | Jeu de raccourcis ; Voir et changer les raccourcis… ; Modifier le fichier à la main… ; Recharger |
 | **Export** (export) | Programmes et modèles | ffmpeg (Choisir…, Automatique) ; Modèle Storyboard Pro (Choisir…) ; Ouvrir la fenêtre Exporter… |
 | **Équipe** (trois personnes) | Commentaires | Signer mes commentaires |
