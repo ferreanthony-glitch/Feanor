@@ -110,6 +110,41 @@ fn a_binary_plist_and_its_keyed_archive_are_read() {
     assert!(read_bplist(b"pas une liste").is_err());
 }
 
+/// Une brosse abîmée ne plante pas la lecture (passe de débogage, 2026-10-22) : une table des positions annoncée
+/// tout au bout de l'espace des nombres (l'addition débordait, la vérification passait), un dictionnaire qui annonce
+/// des milliards d'entrées (la réserve demandée fermait SHOT), puis des octets changés au hasard.
+#[test]
+fn a_damaged_binary_plist_is_refused_without_panic() {
+    let bon = archive("Craie");
+    let n = bon.len();
+    let mut table_au_bout = bon.clone();
+    table_au_bout[n - 8..].copy_from_slice(&(u64::MAX - 3).to_be_bytes());
+    assert!(read_bplist(&table_au_bout).is_err());
+    // L'objet du haut devient un dictionnaire de 2^62 entrées (longueur sur 8 octets après 0xDF 0x13).
+    let mut immense = b"bplist00".to_vec();
+    immense.extend_from_slice(&[0xDF, 0x13]);
+    immense.extend_from_slice(&(1u64 << 62).to_be_bytes());
+    immense.extend_from_slice(&[0, 0]);
+    let table = immense.len() as u64;
+    immense.push(8);
+    immense.extend_from_slice(&[0, 0, 0, 0, 0, 0, 1, 1]);
+    immense.extend_from_slice(&1u64.to_be_bytes());
+    immense.extend_from_slice(&0u64.to_be_bytes());
+    immense.extend_from_slice(&table.to_be_bytes());
+    assert!(read_bplist(&immense).is_err());
+    let mut graine = 7u64;
+    for _ in 0..3000 {
+        let mut b = bon.clone();
+        for _ in 0..1 + graine % 4 {
+            graine = graine.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            let i = (graine >> 33) as usize % n;
+            b[i] = (graine >> 17) as u8;
+        }
+        let r = std::panic::catch_unwind(|| read_bplist(&b).map(|p| keyed_root(&p).is_some()));
+        assert!(r.is_ok(), "une liste abîmée a planté la lecture : {b:?}");
+    }
+}
+
 #[test]
 fn a_brushset_becomes_brushes_with_shape_and_grain() {
     let mut png = Vec::new();
