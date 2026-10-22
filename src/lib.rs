@@ -223,6 +223,8 @@ mod vignettesreglages;
 #[cfg(test)]
 mod vignettes_tests;
 #[cfg(test)]
+mod indices_tests;
+#[cfg(test)]
 mod vignettes_retouches_tests;
 #[cfg(test)]
 mod vignettes_retouches2_tests;

@@ -252,13 +252,26 @@ impl App {
         }
 
         let top = rect.top() + header_h;
+        // Le menu du clic droit d'une ligne se montre pendant qu'on peint les lignes : « Supprimer » un dossier emmène ses calques,
+        // et les lignes d'après lisaient des rangs qui n'existaient plus (Anthony, 2026-10-22, passe de débogage). Les lignes s'arrêtent
+        // dès que les calques ont changé ; l'image suivante les refait.
+        let avant = self.empreinte_calques();
+        let mut tient = true;
         for row in &rows {
+            if !self.calques_tiennent(&avant, row.li) {
+                tient = false;
+                break;
+            }
             let r = Rect::from_min_size(pos2(rect.left(), top + row.top), vec2(HEAD_W, row.h));
             self.layer_head(ui, r, row.li);
         }
+        tient &= self.calques_tiennent(&avant, 0);
+        if !tient {
+            ui.ctx().request_repaint();
+        }
 
         // Glisser une ligne : un trait montre où le calque va se poser.
-        if let Some(from) = self.head_drag {
+        if let Some(from) = self.head_drag.filter(|_| tient) {
             let pointer = ui.input(|i| i.pointer.interact_pos());
             if let Some(p) = pointer {
                 // Le trait est entre les deux lignes où le calque va se glisser.

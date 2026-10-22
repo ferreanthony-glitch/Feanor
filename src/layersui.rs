@@ -332,7 +332,16 @@ impl App {
         // sauf le calque courant, qu'on ne perd pas de vue.
         let closed: Vec<u64> = self.layers().iter().filter(|l| l.folder && l.collapsed).map(|l| l.id).collect();
         let mut fold: Option<usize> = None;
+        // Le menu du clic droit d'un rang se montre au milieu des rangs : s'il change les calques (en supprimer, en fusionner,
+        // en ajouter), les rangs d'après ne désignent plus les mêmes calques. La liste s'arrête là, les clics de cette image (qui
+        // visaient les rangs d'avant) sont lâchés ; l'image suivante refait la liste (passe de débogage, 2026-10-22).
+        let avant = self.empreinte_calques();
+        let mut tient = true;
         for li in (0..self.layers().len()).rev() {
+            if !self.calques_tiennent(&avant, li) {
+                tient = false;
+                break;
+            }
             let (id, visible, locked, kind, name, cel, folder, couleur, has_fond) = {
                 let l = &self.layers()[li];
                 (l.id, l.visible, l.locked, l.kind, l.name.clone(), l.cel_at(frame), l.folder, l.couleur.is_some(), l.fond.is_some())
@@ -522,6 +531,11 @@ impl App {
                 }
                 resp.context_menu(|ui| self.aplat_menu(ui, li));
             }
+        }
+        tient &= self.calques_tiennent(&avant, usize::MAX);
+        if !tient {
+            ui.ctx().request_repaint();
+            return;
         }
         if let Some(from) = self.panel_layer_drag {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);

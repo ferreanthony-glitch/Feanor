@@ -142,7 +142,17 @@ impl App {
         };
         let mut pick = None;
         let mut grid: Vec<crate::layerheads::Row> = Vec::new();
+        // Le menu du clic droit d'une rangée se montre au milieu des rangées : « Supprimer » un dossier emmène ses calques, et les
+        // rangées d'après lisaient des rangs qui n'existaient plus (passe de débogage, 2026-10-22). On s'arrête dès que les calques
+        // ont changé ; l'image suivante refait les rangées.
+        let avant = self.empreinte_calques();
+        let mut tient = true;
         for (track, name, item) in names {
+            if !self.calques_tiennent(&avant, item.unwrap_or(usize::MAX)) {
+                tient = false;
+                ui.ctx().request_repaint();
+                break;
+            }
             let row = track.row;
             let r = lane(rows.layers_top() + track.top, track.h);
             let Some(k) = item else {
@@ -202,6 +212,12 @@ impl App {
             } else {
                 self.montage_layer_head(ui, r, k, color);
             }
+        }
+        // (Les calques ont changé pendant les rangées : le glissé et le clic de cette image visaient les rangs d'avant.)
+        tient &= self.calques_tiennent(&avant, usize::MAX);
+        if !tient {
+            ui.ctx().request_repaint();
+            return;
         }
         if let Some(from) = self.montage_layer_drag {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
