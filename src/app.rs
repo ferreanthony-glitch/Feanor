@@ -3608,6 +3608,7 @@ impl App {
             "vignettes.annotations_afficher" => self.annot_basculer_visibles(),
             "vignettes.annotations_effacer" => self.annot_demander_effacement(),
             "vignettes.marie_louise" => self.marie_basculer(),
+            "vignettes.note" => self.note_ecrire_courante(),
             "fichier.exporter_planche" => self.open_planche(),
             "fichier.exporter_colorscript" => self.open_colorscript(),
             "edition.annuler" => self.undo(),

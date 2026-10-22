@@ -159,6 +159,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("vignettes.annotations_afficher", "Vignettes : cacher ou montrer les annotations", true, false),
     act("vignettes.annotations_effacer", "Vignettes : effacer les annotations", true, false),
     act("vignettes.marie_louise", "Vignettes : marie-louise (ne montrer que les vignettes)", true, false),
+    act("vignettes.note", "Vignettes : écrire la note de la case courante", true, false),
     act("fichier.importer_notes", "Importer les notes de relecture (fichier .json)", true, false),
     act("numerotation.verrouiller", "Verrouiller / déverrouiller la numérotation des plans", true, false),
     act("numerotation.renumeroter", "Renuméroter les plans (1, 2, 3… dans l'ordre du film)", true, false),

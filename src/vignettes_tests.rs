@@ -127,6 +127,11 @@ pub(crate) fn vignette(b: &Banc, k: usize) -> Rect {
     b.app.vignettes.xf.rect(b.app.board_layout().cards[k].thumb)
 }
 
+/// L'icône d'écriture de la case k, à l'écran (au bout de sa bande de note).
+pub(crate) fn icone_note(b: &Banc, k: usize) -> Rect {
+    b.app.note_icone_rect(&b.app.board_layout().cards[k])
+}
+
 fn bande(b: &Banc, k: usize) -> Rect {
     b.app.vignettes.xf.rect(b.app.board_layout().cards[k].note)
 }
@@ -422,7 +427,7 @@ fn the_notes_strip_writes_the_notes_of_the_plan_or_of_the_image_mark() {
     assert!(b.app.doc.panels[0].notes.is_empty());
     let strip = bande(&b, 1);
     assert!(visible(&b, strip));
-    clic(&mut b, strip.center());
+    { let p = icone_note(&b, 1).center(); clic(&mut b, p); }
     assert!(b.app.vignettes.note.as_ref().is_some_and(|e| e.id == mark), "la bande de la marque est ouverte");
     assert_eq!(b.app.cur_panel, 0);
     b.chauffer(3);
@@ -439,8 +444,7 @@ fn the_notes_strip_writes_the_notes_of_the_plan_or_of_the_image_mark() {
     assert_eq!(pas_d_annulation(&b), before + 1);
     assert_eq!(dernier_nom(&b), "Note de vignette");
     // La première image d'un plan : les notes du plan lui-même.
-    let strip = bande(&b, 3);
-    clic(&mut b, strip.center());
+    { let p = icone_note(&b, 3).center(); clic(&mut b, p); }
     b.chauffer(3);
     b.image(vec![Event::Text("Contre-champ".into())], 1.0 / 60.0);
     b.chauffer(2);
@@ -451,8 +455,7 @@ fn the_notes_strip_writes_the_notes_of_the_plan_or_of_the_image_mark() {
     assert!(b.app.vignettes.note.is_none());
     assert_eq!(b.app.doc.panels[1].notes, "Contre-champ", "dans le plan");
     // Échap abandonne ; annuler rend l'état d'avant.
-    let strip = bande(&b, 3);
-    clic(&mut b, strip.center());
+    { let p = icone_note(&b, 3).center(); clic(&mut b, p); }
     b.chauffer(3);
     b.image(vec![Event::Text(" et plus".into())], 1.0 / 60.0);
     b.chauffer(2);
@@ -490,7 +493,7 @@ fn a_long_note_shows_three_lines_and_an_ellipsis_but_is_stored_in_full() {
     assert_eq!(galley.rows.len(), 3);
     assert!(galley.rows.last().unwrap().text().ends_with('…'), "« … » au bout de la troisième ligne : {:?}", galley.rows.last().unwrap().text());
     // Pendant la saisie, tout est là : le tampon a le texte entier.
-    { let p = bande(&b, 3).center(); clic(&mut b, p); }
+    { let p = icone_note(&b, 3).center(); clic(&mut b, p); }
     assert_eq!(b.app.vignettes.note.as_ref().map(|e| e.buffer.as_str()), Some(long));
     b.chauffer(3);
     assert!(b.app.vignettes.note.is_some());

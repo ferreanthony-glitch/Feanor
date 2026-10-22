@@ -2200,6 +2200,11 @@ action = "vignettes.marie_louise"
 touches = []
 source = "SHOT (sans touche)"
 
+[[raccourci]]
+action = "vignettes.note"
+touches = []
+source = "SHOT (sans touche)"
+
 
 [[raccourci]]
 action = "fichier.importer_notes"

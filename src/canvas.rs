@@ -368,8 +368,11 @@ impl App {
         }
 
         // Partie visible seulement (une vignette de la planche peut dépasser de la vue).
+        // (Un appui sur la bande de note d'une case, que la planche a pris pour un trait de cette case, est aussi sur le dessin : le trait
+        // part de la marge sous la case, `Vignettes::appui_bande`.)
+        let appui_bande = if self.in_card { self.vignettes.appui_bande } else { None };
         let on_canvas = |pos: Pos2| {
-            rect.contains(pos) && response.interact_rect.contains(pos) && ctx.layer_id_at(pos) == Some(response.layer_id)
+            (rect.contains(pos) && response.interact_rect.contains(pos) && ctx.layer_id_at(pos) == Some(response.layer_id)) || appui_bande == Some(pos)
         };
 
         // Horodatage par événement (sensation des brosses, §2.5) : egui date tous les événements

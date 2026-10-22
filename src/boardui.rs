@@ -57,6 +57,8 @@ const NOTE_INK: Color32 = Color32::from_gray(100);
 const HAIRLINE: Color32 = Color32::from_gray(236);
 /// Largeur (en points d'écran) sous laquelle une barre est élargie pour rester facile à toucher.
 const BAR_TOUCH: f32 = 14.0;
+/// Côté (points d'écran) de l'icône d'écriture au bout d'une bande de note.
+const NOTE_ICONE: f32 = 16.0;
 /// Marge du texte dans une bande de note, en points de la planche.
 const NOTE_PAD: f32 = 1.0;
 /// Rayon de la gomme des notes libres : la taille de la gomme, réduite (les notes sont à l'échelle de la planche).
@@ -96,7 +98,7 @@ pub(crate) enum Press {
     Select,
     /// Une barre vient d'être basculée.
     Bar,
-    /// Une bande de note vient de s'ouvrir.
+    /// Une bande de note vient de s'ouvrir (un appui sur son icône d'écriture : rien à dessiner).
     Note,
     /// Un appui qui ne fait rien (dehors de toute image avec un outil de dessin, case vide refusée…).
     Dead,
@@ -203,6 +205,9 @@ pub(crate) struct Vignettes {
     pub decalage: Vec2,
     /// La touche `vignettes.camera` (T) est tenue : tout glissé sur une case tire la caméra (lu à chaque image).
     pub camera_tenue: bool,
+    /// L'appui (écran) qui vient de tomber sur la bande de note d'une case et qui dessine : le dessin de la case l'accepte, même hors de
+    /// son cadre. Effacé à la fin de l'image d'écran.
+    pub appui_bande: Option<Pos2>,
     /// Les annotations : outil, couleur, affichage, marie-louise (`annotationsui.rs`).
     pub annot: crate::annotationsui::Etat,
     /// Les images déposées sur la planche, en préparation sur un fil de fond (`deposer.rs`).
@@ -231,6 +236,7 @@ impl Default for Vignettes {
             enveloppe: Vec::new(),
             decalage: Vec2::ZERO,
             camera_tenue: false,
+            appui_bande: None,
             annot: Default::default(),
             depots: Vec::new(),
             planche: Default::default(),
@@ -419,6 +425,50 @@ impl App {
         self.vignettes.lines = lines;
     }
 
+    /// L'icône d'écriture de la case `place`, à l'écran : tout au bout (à droite) de sa bande de note. C'est le seul endroit de la bande qui
+    /// ouvre la note ; le reste de la bande dessine dans la case.
+    pub(crate) fn note_icone_rect(&self, place: &CardPlace) -> Rect {
+        let strip = self.vignettes.xf.rect(place.note);
+        Rect::from_min_size(pos2(strip.right() - NOTE_ICONE - 1.0, strip.top()), vec2(NOTE_ICONE, NOTE_ICONE))
+    }
+
+    /// L'icône d'écriture, discrète : seulement quand le pointeur est sur la case ou sa bande (pas pendant un geste), et toujours sur la case dont
+    /// la note s'écrit. Une bulle d'une seconde dit ce qu'elle fait.
+    fn paint_note_icone(&self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, place: &CardPlace) {
+        let icone = self.note_icone_rect(place);
+        if !icone.intersects(view) || self.vignettes.note.as_ref().is_some_and(|e| e.id == place.id) {
+            return;
+        }
+        let xf = self.vignettes.xf;
+        let zone = xf.rect(place.thumb).union(xf.rect(place.note)).expand(3.0).union(icone);
+        let (hover, down) = ui.input(|i| (i.pointer.hover_pos(), i.pointer.any_down()));
+        if down || !hover.is_some_and(|p| zone.contains(p) && view.contains(p)) {
+            return;
+        }
+        let dessus = hover.is_some_and(|p| icone.contains(p));
+        let accent = crate::theme::accent_texte();
+        let clip = painter.with_clip_rect(view);
+        if dessus {
+            clip.rect_filled(icone, 3.0, accent.gamma_multiply(0.18));
+        }
+        clip.text(icone.center(), Align2::CENTER_CENTER, egui_phosphor::regular::NOTE_PENCIL, FontId::proportional(13.0), if dessus { accent } else { NOTE_INK });
+        let r = ui.interact(icone, egui::Id::new(("icone_note", place.id)), Sense::hover());
+        crate::bulles::bulle(r, "Écrire la note", "Écrire la note de cette case. Échap, ou un clic ailleurs, la ferme.", &self.raccourci("vignettes.note"));
+    }
+
+    /// « Écrire la note » au clavier : ouvre la note de la case courante (la commande `vignettes.note`).
+    pub(crate) fn note_ecrire_courante(&mut self) {
+        if !self.board_shown() {
+            self.status = "Les notes de cases s'écrivent dans les Vignettes.".into();
+            return;
+        }
+        let layout = self.board_layout();
+        let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
+        let Some(c) = layout.cards.iter().find(|c| c.panel == self.cur_panel && (c.frame..c.end).contains(&f)).copied() else { return };
+        self.commit_card_note();
+        self.open_card_note(&c);
+    }
+
     /// Ouvre la bande de note de l'image `place` pour l'écrire.
     fn open_card_note(&mut self, place: &CardPlace) {
         if self.content_refuses() {
@@ -467,6 +517,7 @@ impl App {
             return;
         };
         let strip = xf.rect(place.note);
+        let icone = self.note_icone_rect(&place);
         let Some(ed) = self.vignettes.note.as_mut() else { return };
         let font = FontId::proportional((board::note_font_size(ed.buffer.chars().count()) * xf.zoom).clamp(9.0, 40.0));
         let accent = crate::theme::accent_texte();
@@ -486,6 +537,8 @@ impl App {
                     resp.request_focus();
                     ed.focused = true;
                 }
+                // L'icône reste sur la case dont la note s'écrit.
+                ui.painter().text(icone.center(), Align2::CENTER_CENTER, egui_phosphor::regular::NOTE_PENCIL, FontId::proportional(13.0), accent);
                 if resp.has_focus() {
                     ed.had_focus = true;
                 }
@@ -546,10 +599,21 @@ impl App {
         if button != PointerButton::Primary {
             return false;
         }
-        // Tout appui ailleurs que dans la bande en cours d'écriture la pose.
-        if !matches!(hit, Hit::Note(k) if self.vignettes.note.as_ref().is_some_and(|e| e.id == layout.cards[k].id)) {
+        // L'icône d'écriture, au bout de la bande de note d'une case : seul un appui dessus ouvre la note (Anthony, 2026-10-22 : « les notes ne
+        // doivent s'activer qu'en cliquant sur un bouton, sinon ça empêche parfois de dessiner »). Elle prime sur tout ce qu'il y a dessous.
+        if let Some(k) = layout.cards.iter().position(|c| self.note_icone_rect(c).contains(pos)) {
+            self.commit_note_text(layout);
             self.commit_card_note();
+            let c = layout.cards[k];
+            self.board_sel = vec![c.plan];
+            self.board_notes.clear();
+            self.select_board(c.panel, c.frame);
+            self.open_card_note(&c);
+            self.vignettes.press = Press::Note;
+            return false;
         }
+        // Tout appui ailleurs que dans la bande en cours d'écriture la pose (la bande n'est écrite que par son éditeur, au-dessus de la planche).
+        self.commit_card_note();
         // Maj + appui sur le CADRE d'une vignette (son filet, à quelques points près) : on prend son plan pour le
         // déplacer ; Maj + Alt : on prend sa copie (le plan se duplique, la copie se pose où l'on lâche). Maj + appui dedans garde son
         // sens : choisir des plans.
@@ -586,9 +650,14 @@ impl App {
                 self.vignettes.press = Press::Bar;
                 self.board_toggle_cut(layout, after)
             }
-            Hit::Thumb(k) => {
+            // Une bande de note n'est plus une zone d'écriture : un appui dessus dessine dans sa case, comme n'importe où près d'elle (le
+            // trait qui part de la marge sous la case n'ouvre rien, `note_icone_rect` écrit la note).
+            Hit::Thumb(k) | Hit::Note(k) => {
                 self.commit_note_text(layout);
                 let c = layout.cards[k];
+                if matches!(hit, Hit::Note(_)) && !selecting {
+                    self.vignettes.appui_bande = Some(pos);
+                }
                 if selecting {
                     // Maj + appui : choisir des plans. (Ctrl + Maj, ou T tenue : un geste de caméra, plus haut.)
                     self.board_select_click(layout, k, m);
@@ -609,17 +678,6 @@ impl App {
                         self.decor_avant_trait();
                     }
                 }
-                false
-            }
-            Hit::Note(k) => {
-                self.commit_note_text(layout);
-                let c = layout.cards[k];
-                self.board_sel = vec![c.plan];
-                self.select_board(c.panel, c.frame);
-                if self.vignettes.note.as_ref().is_none_or(|e| e.id != c.id) {
-                    self.open_card_note(&c);
-                }
-                self.vignettes.press = Press::Note;
                 false
             }
             Hit::Empty(e) => {
@@ -970,9 +1028,8 @@ impl App {
             let icon = match hovered {
                 _ if pan_mode => CursorIcon::Grab,
                 Some(Hit::Bar(_)) => CursorIcon::PointingHand,
-                Some(Hit::Note(_)) => CursorIcon::Text,
                 Some(Hit::Empty(_)) if drawing => CursorIcon::Crosshair,
-                Some(Hit::Thumb(_)) if drawing || self.tool == Tool::Eraser => CursorIcon::Crosshair,
+                Some(Hit::Thumb(_) | Hit::Note(_)) if drawing || self.tool == Tool::Eraser => CursorIcon::Crosshair,
                 _ if self.tool == Tool::Text => CursorIcon::Text,
                 _ if self.tool == Tool::Eraser => CursorIcon::Crosshair,
                 _ => CursorIcon::Default,
@@ -1058,6 +1115,7 @@ impl App {
         if !any_down {
             self.finish_board_drag(&layout, &texts);
         }
+        self.vignettes.appui_bande = None;
         self.finish_creation(any_down);
         self.finish_plan_move(any_down);
         self.finish_cam_geste(&layout, any_down);
@@ -1504,6 +1562,7 @@ impl App {
             clip.rect_stroke(thumb.expand(1.5), 0.0, Stroke::new(1.5_f32, accent), StrokeKind::Outside);
         }
         self.paint_card_note(&clip, xf, place, note);
+        self.paint_note_icone(ui, painter, view, place);
     }
     /// La bande de note sous l'image : le texte (trois lignes au plus, « … » au bout), ou un filet très pâle
     /// quand elle est vide. Pendant la saisie, l'éditeur la remplace (`card_note_editor`).
