@@ -70,7 +70,7 @@ fn one_card_per_image_of_the_scope_laid_out_like_the_board() {
     let deux = construire(&doc, &[2, 3], &reglages(), &opt(), &doc.annotations);
     assert_eq!(deux.cartes.len(), 2);
     assert_eq!(deux.images(), vec![(2, 0), (3, 0)]);
-    assert_eq!((deux.cartes[0].place.row, deux.cartes[0].place.col), (0, 0));
+    assert_eq!(deux.cartes[0].place.row, 0);
     assert!(deux.cadre.height() < film.cadre.height() + 1.0);
 }
 
@@ -265,31 +265,39 @@ fn every_output_is_a_valid_file() {
 }
 
 #[test]
-fn the_camera_frames_a_and_b_show_where_the_camera_moves() {
+fn the_camera_frames_show_where_the_camera_moves_in_blue_with_the_footprint_of_the_board() {
     use crate::camera::{Camera, CameraKey};
     let mut doc = quatre_plans();
     let [fw, _] = doc.frame;
     let (w, h) = (doc.width, doc.height);
     let n = doc.panels[2].frame_count();
     let depart = Camera::centered(w, h);
-    let arrivee = Camera { x: depart.x + fw as f32 * 0.25, zoom: 1.5, ..depart };
+    let arrivee = Camera { x: depart.x + fw as f32 * 0.5, ..depart };
     doc.panels[2].camera = vec![CameraKey::new(0, depart), CameraKey::new(n - 1, arrivee)];
     let o = opt();
     let p = construire(&doc, &tout(&doc), &reglages(), &o, &doc.annotations);
     let mobile = p.cartes.iter().find(|c| c.plan_reel == 2).unwrap();
-    assert!(mobile.cadre_b.is_some(), "la caméra bouge dans ce plan");
-    assert!(p.cartes.iter().filter(|c| c.plan_reel != 2).all(|c| c.cadre_b.is_none()), "les autres plans n'ont pas de cadre B");
+    let mv = mobile.mouvement.as_ref().expect("la caméra bouge dans ce plan");
+    assert_eq!(mv.cadres.len(), 2);
+    assert!(p.cartes.iter().filter(|c| c.plan_reel != 2).all(|c| c.mouvement.is_none()), "les autres plans n'ont pas d'empreinte");
+    // Le rangement est celui de l'écran (sans les cases pâles) : l'empreinte est dans la planche, jamais sur une autre vignette.
+    assert!(p.cadre.contains_rect(mobile.place.foot), "l'empreinte tient dans l'image exportée");
+    for (i, a) in p.cartes.iter().enumerate() {
+        for b in p.cartes.iter().skip(i + 1) {
+            assert!(!a.place.foot.shrink(0.5).intersects(b.place.foot.shrink(0.5)), "deux empreintes se chevauchent");
+        }
+    }
     let sans = construire(&doc, &tout(&doc), &reglages(), &Options { cadres: false, ..o.clone() }, &doc.annotations);
-    assert!(sans.cartes.iter().all(|c| c.cadre_b.is_none()));
+    assert!(sans.cartes.iter().all(|c| c.mouvement.is_none()));
     let s = 2.0;
     let a = composer(&p, &vignettes(&p, s), &o, s).unwrap();
     let b = composer(&sans, &vignettes(&sans, s), &Options { cadres: false, ..o.clone() }, s).unwrap();
-    let r = mobile.place.thumb;
+    let r = mobile.place.foot;
     let (x0, y0) = (((r.left() - p.cadre.left()) * s) as u32, ((r.top() - p.cadre.top()) * s) as u32);
     let (lw, lh) = ((r.width() * s) as u32, (r.height() * s) as u32);
     let trouve = |f: &dyn Fn([u8; 3]) -> bool| (0..lw).any(|dx| (0..lh).any(|dy| f(a.get_pixel(x0 + dx, y0 + dy).0)));
-    assert!(trouve(&|c| c[2] > 200 && c[0] < 80), "le cadre A (bleu) est dans la vignette");
-    assert!(trouve(&|c| c[0] > 200 && c[1] > 90 && c[1] < 150 && c[2] < 60), "le cadre B (orange) aussi");
+    assert!(trouve(&|c| c[2] > 200 && c[0] < 100 && c[1] > 100 && c[1] < 180), "les cadres sont tracés en bleu fin (#378ADD)");
+    assert!(!trouve(&|c| c[0] > 200 && c[1] > 90 && c[1] < 150 && c[2] < 60), "plus de cadre orange");
     assert_ne!(a, b);
 }
 

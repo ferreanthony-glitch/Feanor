@@ -58,16 +58,18 @@ fn cards_follow_each_other_in_pages() {
     assert_eq!(c[3].card.top(), c[0].card.top(), "les plans se suivent sur la même ligne : une ligne ne se casse pas à une coupe");
     assert!(c[4].card.top() > c[0].card.top() && c[4].card.left() == c[0].card.left(), "quatre colonnes : la cinquième image est au début de la ligne suivante");
     assert!(l.pages[1].contains(c[5].card.center()), "deuxième page");
-    assert_eq!(l.empty.len(), 1, "une seule case vide, juste après la dernière vignette");
-    assert!(l.pages[1].contains(l.empty[0].center()), "elle est sur la dernière page, qui s'arrête après sa rangée");
+    assert!(l.empty.is_empty(), "l'export n'a pas de case pâle");
     assert!(l.size.y >= l.pages[1].bottom());
-    // « toutes » : une seule page, une ligne neuve quand la ligne est pleine.
+    // « toutes » : une seule page.
     let l = board::layout(&doc, &settings(6, 0));
     assert_eq!(l.pages.len(), 1);
     assert_eq!(l.cards[5].card.top(), l.cards[0].card.top(), "six images tiennent sur six colonnes");
-    assert_eq!(l.empty.len(), 1, "la ligne pleine appelle une rangée neuve, avec sa seule case vide : on peut toujours continuer");
-    assert!(l.empty[0].top() > l.cards[0].thumb.top());
-    assert_eq!(l.pages[0].bottom(), l.empty[0].bottom() + board::NOTE_GAP + NOTE_LINE_H + PAGE_PAD, "la planche s'arrête après la rangée de la case vide");
+    // Sur l'écran (cases pâles) : la ligne pleine appelle des rangées pâles, la planche s'arrête après la dernière.
+    let p = board::layout_with(&doc, &settings(6, 0), &Default::default(), false, &board::Options::pale(3));
+    assert_eq!(p.pages.len(), 1);
+    assert_eq!(p.empty.len(), 12, "deux rangées pâles de six cases sous la rangée pleine");
+    assert!(p.empty[0].top() > p.cards[0].thumb.top());
+    assert_eq!(p.pages[0].bottom(), p.empty[11].bottom() + board::NOTE_GAP + NOTE_LINE_H + PAGE_PAD, "la planche s'arrête après la dernière rangée pâle");
     // Jamais plus de six colonnes.
     let l = board::layout(&doc, &settings(10, 0));
     assert_eq!(l.cards[5].card.top(), l.cards[0].card.top());
@@ -115,7 +117,8 @@ fn bars_are_grey_in_a_plan_black_at_a_cut_and_the_last_leads_to_the_empty_box() 
         assert!((b.zone.width() - gap).abs() < 1e-3);
     }
     // La dernière barre, grise : la première case vide est une image de plus du dernier plan (écart serré).
-    let (joined, apart) = (board::layout_with(&doc, &settings(4, 0), &Default::default(), true), board::layout(&doc, &settings(4, 0)));
+    let pale = board::Options::pale(3);
+    let (joined, apart) = (board::layout_with(&doc, &settings(4, 0), &Default::default(), true, &pale), board::layout_with(&doc, &settings(4, 0), &Default::default(), false, &pale));
     assert!(!joined.bars[5].cut && apart.bars[5].cut);
     assert!((joined.empty[0].left() - (joined.cards[5].card.right() + gap_same(200.0))).abs() < 1e-3);
     assert!((apart.empty[0].left() - (apart.cards[5].card.right() + gap_cut(200.0))).abs() < 1e-3);
@@ -139,7 +142,7 @@ fn a_row_goes_down_just_enough_for_a_note_of_two_or_three_lines() {
     for lines in [2usize, 3] {
         let mut notes = std::collections::HashMap::new();
         notes.insert(doc.panels[0].marks[0].id, lines);
-        let l = board::layout_with(&doc, &s, &notes, false);
+        let l = board::layout_with(&doc, &s, &notes, false, &Default::default());
         assert_eq!(l.cards[1].note.height(), lines as f32 * NOTE_LINE_H);
         assert_eq!(l.cards[4].card.top() - l.cards[0].card.top(), row_height(lines), "la rangée suivante descend d'autant ({lines} lignes)");
         assert_eq!(l.cards[0].note.height(), NOTE_LINE_H, "les autres bandes gardent leur ligne");
@@ -148,12 +151,12 @@ fn a_row_goes_down_just_enough_for_a_note_of_two_or_three_lines() {
     // Quatre lignes ne sont jamais affichées : au plus trois.
     let mut notes = std::collections::HashMap::new();
     notes.insert(doc.panels[0].id, 9);
-    let l = board::layout_with(&doc, &s, &notes, false);
+    let l = board::layout_with(&doc, &s, &notes, false, &Default::default());
     assert_eq!(l.cards[0].note.height(), NOTE_MAX_LINES as f32 * NOTE_LINE_H);
     // Une note sur la dernière ligne de la planche descend la page, pas ce qui est avant.
     let mut notes = std::collections::HashMap::new();
     notes.insert(doc.panels[3].id, 2);
-    let l = board::layout_with(&doc, &s, &notes, false);
+    let l = board::layout_with(&doc, &s, &notes, false, &Default::default());
     assert_eq!(l.cards[4].card.top(), plain.cards[4].card.top());
     assert!(l.pages[0].height() > plain.pages[0].height());
 }
@@ -161,16 +164,15 @@ fn a_row_goes_down_just_enough_for_a_note_of_two_or_three_lines() {
 #[test]
 fn hit_testing_tells_images_notes_bars_and_empty_boxes_apart() {
     let doc = doc();
-    let l = board::layout(&doc, &settings(4, 0));
+    let l = board::layout_with(&doc, &settings(4, 0), &Default::default(), false, &board::Options::pale(3));
     let c = &l.cards;
     assert_eq!(board::hit(&l, c[0].thumb.center(), 0.0), Hit::Thumb(0));
     assert_eq!(board::hit(&l, c[3].note.center(), 0.0), Hit::Note(3));
     assert_eq!(board::hit(&l, c[0].label().center(), 0.0), Hit::Nothing, "le numéro du plan ne prend aucun geste");
     assert_eq!(board::hit(&l, l.empty[0].center(), 0.0), Hit::Empty(0));
-    // Une seule case vide : à côté d'elle, plus rien (pas de grille de cases vides).
-    assert_eq!(l.empty.len(), 1);
-    let apres = l.empty[0].translate(vec2(l.empty[0].width() + gap_cut(200.0), 0.0)).center();
-    assert_eq!(board::hit(&l, apres, 0.0), Hit::Nothing, "pas de case vide au-delà de la première");
+    // Les cases pâles se suivent dans l'ordre de lecture : la deuxième est à côté de la première.
+    assert_eq!(board::hit(&l, l.empty[1].center(), 0.0), Hit::Empty(1));
+    assert!(l.empty.len() > 1 && l.empty[1].left() > l.empty[0].right());
     let zone = l.bars[1].zone;
     assert_eq!(board::hit(&l, zone.center(), 0.0), Hit::Bar(1));
     // L'écart d'un même plan est étroit : à l'écran réduit, la zone est élargie pour qu'on la touche.

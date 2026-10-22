@@ -223,7 +223,7 @@ impl App {
                 bulles::bulle(ui.checkbox(&mut o.numeros, "Numéros de plan"), "Numéros de plan", "Le numéro du plan, au-dessus de sa première vignette.", "");
                 bulles::bulle(ui.checkbox(&mut o.notes, "Notes"), "Notes", "Les bandes de note sous les images (trois lignes au plus).", "");
                 bulles::bulle(ui.checkbox(&mut o.barres, "Barres de coupe"), "Barres de coupe", "Les barres entre deux vignettes : grises dans un même plan, noires à une coupe.", "");
-                bulles::bulle(ui.checkbox(&mut o.cadres, "Cadres de caméra A et B"), "Cadres de caméra A et B", "Là où la caméra bouge : le cadre du début (A, bleu) et celui de la fin (B, orange).", "");
+                bulles::bulle(ui.checkbox(&mut o.cadres, "Cadres de caméra"), "Cadres de caméra", "Là où la caméra bouge : les cadres A, B, C… en bleu fin, avec leurs lettres, la flèche ou les coins qui les relient.", "");
                 ui.add_enabled_ui(annotations > 0, |ui| {
                     let t = if annotations > 0 { format!("Annotations ({annotations})") } else { "Annotations (aucune)".into() };
                     bulles::bulle(ui.checkbox(&mut o.annotations, t), "Annotations", "Les traits du stylo d'annotation, par-dessus la planche. Décochées d'office : elles ne font pas partie du storyboard.", "");

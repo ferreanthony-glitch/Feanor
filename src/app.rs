@@ -4249,6 +4249,8 @@ impl App {
             }
             // « vue.pan_libre » se maintient : il est lu en continu par le canevas.
             "vue.pan_libre" => {}
+            // « vignettes.camera » se maintient aussi : la planche des Vignettes le lit en continu (`boardui.rs`).
+            "vignettes.camera" => {}
             other => self.status = format!("« {other} » n'est pas encore disponible."),
         }
     }

@@ -292,6 +292,28 @@ fn drawing_in_the_first_empty_box_makes_the_next_plan_in_one_undo_step() {
 }
 
 #[test]
+fn drawing_in_a_later_empty_box_keeps_its_place_with_blank_plans_before_it() {
+    let mut b = ouvert(quatre_plans(), 4);
+    let e = case_vide(&b, 1);
+    glisser(&mut b, &vague(e.center() - vec2(20.0, 0.0), e.center() + vec2(20.0, 0.0), 8));
+    assert_eq!(b.app.doc.panels.len(), 6, "la case 2 fait deux plans : un vide, un dessiné");
+    assert!(!encre(&b.app.doc, 4) && encre(&b.app.doc, 5));
+    assert_eq!(dernier_nom(&b), "Nouveau plan dessiné");
+    b.app.run_action("edition.annuler");
+    assert_eq!(b.app.doc.panels.len(), 4, "d'un coup");
+    // Plus loin encore (la cinquième case pâle, dans la rangée du dessous : un peu plus petit pour qu'elle tienne dans la vue) :
+    // quatre plans vides avant elle, toujours en une étape.
+    b.app.board_zoom = 0.6;
+    b.chauffer(3);
+    let e = case_vide(&b, 4);
+    glisser(&mut b, &vague(e.center() - vec2(20.0, 0.0), e.center() + vec2(20.0, 0.0), 8));
+    assert_eq!(b.app.doc.panels.len(), 9);
+    assert!((4..8).all(|i| !encre(&b.app.doc, i)) && encre(&b.app.doc, 8), "l'ordre de lecture est gardé");
+    b.app.run_action("edition.annuler");
+    assert_eq!(b.app.doc.panels.len(), 4);
+}
+
+#[test]
 fn a_click_that_draws_nothing_in_an_empty_box_leaves_no_trace() {
     let mut b = ouvert(quatre_plans(), 4);
     b.app.tool = Tool::Line;
@@ -532,7 +554,7 @@ fn the_context_menu_of_an_image_targets_its_plan() {
     b.image(vec![Event::PointerMoved(v)], 1.0 / 60.0);
     b.image(vec![Event::PointerButton { pos: v, button: PointerButton::Secondary, pressed: true, modifiers: Modifiers::NONE }], 1.0 / 60.0);
     assert_eq!(b.app.cur_panel, 2, "le clic droit choisit la vignette");
-    assert_eq!(b.app.vignettes.menu, Some(crate::boardui::MenuTarget::Card { panel: 2, frame: 0 }));
+    assert_eq!(b.app.vignettes.menu, Some(crate::boardui::MenuTarget::Card { panel: 2, frame: 0, cadre: None }));
     b.image(vec![Event::PointerButton { pos: v, button: PointerButton::Secondary, pressed: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
 }
 

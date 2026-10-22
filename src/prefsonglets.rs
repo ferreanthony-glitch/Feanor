@@ -78,7 +78,7 @@ impl Onglet {
             Onglet::General => "Ouvrir et rouvrir les projets, copies de secours, collage entre projets, conseils.",
             Onglet::Apparence => "Le thème et ses couleurs, la taille de l'interface, la hauteur des panneaux.",
             Onglet::Dessin => "Le curseur du stylet, sa pression et le voile autour de la caméra.",
-            Onglet::Montage => "Les pistes du montage et leur repliage.",
+            Onglet::Montage => "Les pistes du montage et leur repliage, les cases pâles de la planche des Vignettes.",
             Onglet::Raccourcis => "Le jeu de raccourcis du clavier et ses fichiers.",
             Onglet::Export => "Les programmes et les modèles dont les exports ont besoin.",
             Onglet::Equipe => "Ton nom, ta couleur et la façon de travailler à plusieurs.",
@@ -100,6 +100,8 @@ pub enum Groupe {
     Stylet,
     Camera,
     Pistes,
+    /// Les cases pâles de la planche des Vignettes (papier infini).
+    Vignettes,
     Raccourcis,
     Programmes,
     Commentaires,
@@ -126,6 +128,7 @@ impl Groupe {
             Groupe::Stylet => "Stylet et pinceau",
             Groupe::Camera => "Caméra",
             Groupe::Pistes => "Pistes du montage",
+            Groupe::Vignettes => "Planche des Vignettes",
             Groupe::Raccourcis => "Raccourcis clavier",
             Groupe::Programmes => "Programmes et modèles",
             Groupe::Commentaires => "Commentaires",
@@ -192,6 +195,7 @@ pub const REGLAGES: &[Reglage] = &[
     // ---- Montage
     r(O::Montage, G::Pistes, "montage.repliage", "Repliage des pistes", "replier commun plan calques"),
     r(O::Montage, G::Pistes, "montage.deplier", "Déplier le calque courant tout seul", "piste automatique"),
+    r(O::Montage, G::Vignettes, "montage.rangees_pales", "Rangées de cases pâles", "vignettes planche papier cases vides dessiner minimum lignes"),
     // ---- Raccourcis
     r(O::Raccourcis, G::Raccourcis, "raccourcis.jeu", "Jeu de raccourcis", "clavier storyboard pro touches"),
     r(O::Raccourcis, G::Raccourcis, "raccourcis.liste", "Voir et changer les raccourcis", "assigner touche"),

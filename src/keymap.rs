@@ -153,6 +153,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fichier.exporter_fiche", "Exporter la fiche technique (tableur CSV ou XLSX, un plan par ligne)", true, false),
     act("fichier.exporter_relecture", "Exporter pour relecture (page HTML à envoyer au réalisateur)", true, false),    act("fichier.exporter_planche", "Exporter la planche des vignettes (PNG, JPEG ou PDF)", true, false),
     act("fichier.exporter_colorscript", "Exporter le color script (une petite image par plan, rangées par séquence)", true, false),
+    act("vignettes.camera", "Vignettes : tenir pour tirer les cadres de caméra (maintenir)", true, false),
     act("vignettes.annotation_stylo", "Vignettes : stylo d'annotation (par-dessus la planche)", true, false),
     act("vignettes.annotation_gomme", "Vignettes : gomme d'annotation", true, false),
     act("vignettes.annotations_afficher", "Vignettes : cacher ou montrer les annotations", true, false),
@@ -1477,6 +1478,16 @@ impl Keymap {
             changes.push((other, Some(rest)));
         }
         changes
+    }
+
+    /// La touche de l'action est tenue, **quels que soient les modificateurs** (Ctrl, Maj, Alt) : « tenir T » reste tenue quand
+    /// on ajoute Alt pour un cadre de plus (`vignettecamui.rs`).
+    pub fn held_any(&self, input: &eframe::egui::InputState, action: &str) -> bool {
+        self.bindings
+            .iter()
+            .filter(|b| b.active && b.action == action)
+            .flat_map(|b| b.combos.iter())
+            .any(|c| matches!(c.key, KeyMatch::Char(k) if input.key_down(k)))
     }
 
     /// Touche de l'action actuellement maintenue (gestes « maintenir », comme Espace pour la main).

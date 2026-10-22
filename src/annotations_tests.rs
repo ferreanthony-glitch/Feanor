@@ -12,6 +12,11 @@ fn reglages(card_w: f32, colonnes: usize, lignes: usize) -> BoardSettings {
     BoardSettings { card_w, columns: colonnes, rows: lignes }
 }
 
+/// La planche comme à l'écran : avec les cases pâles (où une annotation se pose aussi).
+fn pale(doc: &Document, s: &BoardSettings) -> BoardLayout {
+    board::layout_with(doc, s, &Default::default(), false, &board::Options::pale(3))
+}
+
 fn trait_en(c: Pos2, r: f32) -> Vec<VPoint> {
     vec![VPoint { x: c.x - 10.0, y: c.y - 3.0, r }, VPoint { x: c.x, y: c.y, r }, VPoint { x: c.x + 10.0, y: c.y + 4.0, r }]
 }
@@ -31,7 +36,7 @@ fn centre_du_trait(a: &Annotations, layout: &BoardLayout, i: usize) -> Pos2 {
 #[test]
 fn a_stroke_is_attached_to_the_nearest_case_and_kept_relative_to_it() {
     let doc = quatre_plans();
-    let layout = board::layout(&doc, &reglages(200.0, 3, 0));
+    let layout = pale(&doc, &reglages(200.0, 3, 0));
     let mut a = Annotations::default();
     let cible = layout.cards[4].thumb;
     assert!(a.ajouter(&layout, &trait_en(cible.center(), 2.0), COULEUR_PAR_DEFAUT));
@@ -50,7 +55,7 @@ fn a_stroke_is_attached_to_the_nearest_case_and_kept_relative_to_it() {
 #[test]
 fn the_nearest_case_wins_even_far_from_every_case() {
     let doc = quatre_plans();
-    let layout = board::layout(&doc, &reglages(200.0, 3, 0));
+    let layout = pale(&doc, &reglages(200.0, 3, 0));
     let mut a = Annotations::default();
     assert!(a.ajouter(&layout, &trait_en(layout.cards[0].thumb.left_top() - vec2(15.0, 24.0), 1.0), COULEUR_PAR_DEFAUT));
     assert_eq!(a.traces[0].anchor.card, layout.cards[0].id);
@@ -63,21 +68,21 @@ fn the_nearest_case_wins_even_far_from_every_case() {
 #[test]
 fn a_stroke_follows_its_case_when_the_board_reflows_and_when_cases_grow() {
     let doc = quatre_plans();
-    let l3 = board::layout(&doc, &reglages(200.0, 3, 0));
+    let l3 = pale(&doc, &reglages(200.0, 3, 0));
     let mut a = Annotations::default();
     let case = l3.cards[4].thumb;
     let c = case.left_top() + vec2(30.0, 20.0);
     assert!(a.ajouter(&l3, &trait_en(c, 2.0), COULEUR_PAR_DEFAUT));
     let rel_avant = (centre_du_trait(&a, &l3, 0) - case.left_top()) / case.width();
     for s in [reglages(200.0, 2, 0), reglages(200.0, 5, 0), reglages(400.0, 3, 0), reglages(120.0, 6, 2)] {
-        let l = board::layout(&doc, &s);
+        let l = pale(&doc, &s);
         let c4 = l.cards[4].thumb;
         let rel = (centre_du_trait(&a, &l, 0) - c4.left_top()) / c4.width();
         assert!((rel - rel_avant).length() < 1e-3, "réglages {s:?} : le trait a bougé dans sa case ({rel:?} contre {rel_avant:?})");
         let pts = a.points_planche(&l, 0).unwrap();
         assert!((pts[1].r / c4.width() - 2.0 / case.width()).abs() < 1e-4);
     }
-    let big = board::layout(&doc, &reglages(400.0, 3, 0));
+    let big = pale(&doc, &reglages(400.0, 3, 0));
     assert!((a.points_planche(&big, 0).unwrap()[1].r - 4.0).abs() < 1e-3);
 }
 
@@ -85,7 +90,7 @@ fn a_stroke_follows_its_case_when_the_board_reflows_and_when_cases_grow() {
 fn a_stroke_in_an_empty_case_stays_in_the_same_case_when_it_fills() {
     let mut doc = quatre_plans();
     let s = reglages(200.0, 4, 0);
-    let layout = board::layout(&doc, &s);
+    let layout = pale(&doc, &s);
     let vide = layout.empty[0];
     let mut a = Annotations::default();
     assert!(a.ajouter(&layout, &trait_en(vide.center(), 2.0), COULEUR_PAR_DEFAUT));
@@ -95,7 +100,7 @@ fn a_stroke_in_an_empty_case_stays_in_the_same_case_when_it_fills() {
     assert!(layout.empty[0].contains(centre_du_trait(&a, &layout, 0)));
     let last = doc.panels.len() - 1;
     doc.add_scene_after(last);
-    let l2 = board::layout(&doc, &s);
+    let l2 = pale(&doc, &s);
     assert_eq!(l2.cards.len(), layout.cards.len() + 1);
     let after = centre_du_trait(&a, &l2, 0);
     let visee = cases(&l2)[layout.cards.len()];
@@ -106,7 +111,7 @@ fn a_stroke_in_an_empty_case_stays_in_the_same_case_when_it_fills() {
 fn eraser_only_removes_the_strokes_it_touches_and_nothing_else() {
     let mut doc = quatre_plans();
     doc.board.strokes.push(board::NoteStroke { points: trait_en(pos2(50.0, 50.0), 2.0), color: [1, 2, 3], anchor: None });
-    let layout = board::layout(&doc, &reglages(200.0, 3, 0));
+    let layout = pale(&doc, &reglages(200.0, 3, 0));
     let mut a = Annotations::default();
     let (c0, c5) = (layout.cards[0].thumb.center(), layout.cards[5].thumb.center());
     a.ajouter(&layout, &trait_en(c0, 2.0), COULEUR_PAR_DEFAUT);
@@ -124,7 +129,7 @@ fn eraser_only_removes_the_strokes_it_touches_and_nothing_else() {
 fn when_a_case_disappears_its_strokes_go_to_the_nearest_neighbour_at_the_same_place() {
     let mut doc = quatre_plans();
     let s = reglages(200.0, 3, 0);
-    let avant = board::layout(&doc, &s);
+    let avant = pale(&doc, &s);
     let mut a = Annotations::default();
     let c = avant.cards[3].thumb.center() + vec2(60.0, 10.0);
     a.ajouter(&avant, &trait_en(c, 2.0), COULEUR_PAR_DEFAUT);
@@ -132,7 +137,7 @@ fn when_a_case_disappears_its_strokes_go_to_the_nearest_neighbour_at_the_same_pl
     let absolu_avant = a.points_planche(&avant, 0).unwrap();
     let id = avant.cards[3].plan;
     doc.remove_panels(&[id]).expect("plan retiré");
-    let apres = board::layout(&doc, &s);
+    let apres = pale(&doc, &s);
     assert!(apres.card_of(avant.cards[3].id).is_none());
     assert_eq!(a.rattacher_manquantes(Some(&avant), &apres), 1);
     let t = &a.traces[0];
@@ -149,7 +154,7 @@ fn when_a_case_disappears_its_strokes_go_to_the_nearest_neighbour_at_the_same_pl
 #[test]
 fn without_the_old_board_a_lost_stroke_falls_back_to_the_case_of_the_same_rank() {
     let doc = quatre_plans();
-    let layout = board::layout(&doc, &reglages(200.0, 3, 0));
+    let layout = pale(&doc, &reglages(200.0, 3, 0));
     let mut a = Annotations::default();
     a.traces.push(Trace { anchor: Ancre { card: 987_654, after: 0, rank: 2 }, color: COULEUR_PAR_DEFAUT, points: vec![VPoint { x: 0.1, y: 0.1, r: 0.01 }] });
     a.traces.push(Trace { anchor: Ancre { card: 987_655, after: 0, rank: 99 }, color: COULEUR_PAR_DEFAUT, points: vec![VPoint { x: 0.1, y: 0.1, r: 0.01 }] });
@@ -164,12 +169,12 @@ fn without_the_old_board_a_lost_stroke_falls_back_to_the_case_of_the_same_rank()
 fn ranks_follow_the_board() {
     let mut doc = quatre_plans();
     let s = reglages(200.0, 3, 0);
-    let layout = board::layout(&doc, &s);
+    let layout = pale(&doc, &s);
     let mut a = Annotations::default();
     a.ajouter(&layout, &trait_en(layout.cards[4].thumb.center(), 2.0), COULEUR_PAR_DEFAUT);
     assert_eq!(a.traces[0].anchor.rank, 4);
     doc.add_panel_after(0);
-    let l2 = board::layout(&doc, &s);
+    let l2 = pale(&doc, &s);
     assert!(a.noter_rangs(&l2));
     let k = l2.cards.iter().position(|c| c.id == a.traces[0].anchor.card).unwrap();
     assert_eq!(a.traces[0].anchor.rank as usize, k);
@@ -191,7 +196,7 @@ fn simplifying_keeps_the_ends_and_caps_the_length() {
 
 fn doc_avec_traits() -> Document {
     let mut doc = quatre_plans();
-    let layout = board::layout(&doc, &reglages(200.0, 3, 0));
+    let layout = pale(&doc, &reglages(200.0, 3, 0));
     doc.annotations.ajouter(&layout, &trait_en(layout.cards[1].thumb.center(), 2.5), [10, 20, 30]);
     doc.annotations.ajouter(&layout, &trait_en(layout.empty[0].center(), 3.5), COULEUR_PAR_DEFAUT);
     doc
@@ -276,7 +281,7 @@ fn an_unreadable_sidecar_never_stops_opening_and_is_never_destroyed() {
         project::save(&loaded.doc, &manifest, &mut loaded.written.clone()).unwrap();
         assert_eq!(std::fs::read_to_string(dir.join(FILE)).unwrap(), contenu, "{nom} : fichier intact");
         let mut doc = loaded.doc;
-        let layout = board::layout(&doc, &reglages(200.0, 3, 0));
+        let layout = pale(&doc, &reglages(200.0, 3, 0));
         doc.annotations.ajouter(&layout, &trait_en(layout.cards[0].thumb.center(), 2.0), COULEUR_PAR_DEFAUT);
         project::save(&doc, &manifest, &mut loaded.written.clone()).unwrap();
         assert_eq!(std::fs::read_to_string(dir.join(format!("{FILE}.illisible"))).unwrap(), contenu, "{nom} : l'ancien est gardé");

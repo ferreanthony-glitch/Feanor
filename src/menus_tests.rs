@@ -81,7 +81,7 @@ fn the_right_click_menus_have_about_ten_entries_at_most() {
         mesure("images (case de la timeline)", &mut |a, ui| a.images_menu(ui));
         mesure("plan (montage)", &mut |a, ui| a.panel_menu(ui, 0));
         mesure("plans (barre du montage)", &mut |a, ui| a.plans_barre_menu(ui));
-        mesure("vignette", &mut |a, ui| a.card_menu(ui, 0, 0));
+        mesure("vignette", &mut |a, ui| a.card_menu(ui, 0, 0, None));
         mesure("vignette (menu du dessin)", &mut |a, ui| a.card_context_menu(ui));
         mesure("coupe", &mut |a, ui| a.cut_menu(ui, 1));
         mesure("clé de caméra", &mut |a, ui| a.cam_key_menu_items(ui));
