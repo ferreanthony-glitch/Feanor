@@ -679,7 +679,16 @@ pub fn choisit(cadres: &[[Pos2; 4]], simple: bool, p: Pos2, tol: f32, ajoute: bo
             }
         }
     }
-    if let Some((_, r)) = pris {
+    if let Some((_, mut r)) = pris {
+        // A est la case : un coin de A tiré ne la rétrécit pas (Anthony, 2026-10-22 : « lors d'un zoom, c'est le cadre A qui rétrécit »). Quand le
+        // point est aussi dans un autre cadre (ou près de son coin) (B qui entoure A après un zoom arrière, dont le coin est tout près de celui
+        // de A), c'est ce cadre-là qu'on prend, le plus petit des autres. Le coin de A reste saisissable quand rien d'autre n'est là.
+        if r == 0 && coin_proche(&cadres[0]).is_some() {
+            let autre = (1..cadres.len()).filter(|&i| dans_quad(&cadres[i], p) || coin_proche(&cadres[i]).is_some()).min_by(|&i, &j| aire(&cadres[i]).total_cmp(&aire(&cadres[j])).then(j.cmp(&i)));
+            if let Some(o) = autre {
+                r = o;
+            }
+        }
         return Some(match coin_proche(&cadres[r]) {
             Some((c, _)) => Choix { prise: Prise::Zoom(r), rang: r, coin: c },
             None => Choix { prise: Prise::Deplace(r), rang: r, coin: 0 },

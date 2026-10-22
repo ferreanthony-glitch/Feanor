@@ -357,3 +357,99 @@ fn a_continuity_case_made_after_the_move_still_shows_the_last_frame_and_a_move_o
     assert_eq!(b.app.doc.panel_camera(1, 20).x, b_cam.x, "la case suivante voit à travers B");
     assert_eq!(b.app.doc.panels.len(), plans);
 }
+
+// ------------------------------------------------------------------------------ un zoom depuis un coin : A garde la taille de la case
+
+/// Deux bancs d'essai : une feuille deux fois plus grande que le cadre (l'ordinaire), et une feuille de la taille du cadre.
+fn plan_pour_zoom(feuille_egale_au_cadre: bool) -> Document {
+    if !feuille_egale_au_cadre {
+        return crate::vignettes_camera_tests::plan_court();
+    }
+    let mut doc = Document::new(160, 90, 24);
+    for _ in 0..3 {
+        let last = doc.panels.len() - 1;
+        doc.add_scene_after(last);
+    }
+    doc.into_plans();
+    doc.add_panel_after(0);
+    doc.set_duration(1, 25);
+    doc
+}
+
+#[test]
+fn a_corner_drag_on_a_case_without_a_move_makes_b_and_never_shrinks_a() {
+    use crate::vignettes_camera_tests::{ctrl_glisser, pas, K};
+    for egale in [false, true] {
+        for (nom, facteur) in [("zoom arrière", 1.0_f32), ("zoom arrière large", 3.0), ("zoom avant", -0.5)] {
+            let mut b = ouvert(plan_pour_zoom(egale), 6);
+            let case = vignette(&b, K);
+            let avant = b.app.vignettes.xf.rect(b.app.board_layout().cards[K].thumb);
+            let coin = case.right_bottom();
+            let delta = vec2(case.width() * 0.35, case.height() * 0.35) * facteur;
+            ctrl_glisser(&mut b, coin, &pas(coin, delta, 8), coin + delta, true);
+            b.chauffer(3);
+            let layout = b.app.board_layout();
+            let (quads, simple) = b.app.cadres_sur_la_planche(&layout, K);
+            assert!(!simple && quads.len() == 2, "{nom} (feuille égale : {egale}) : deux cadres, A et B ({} trouvés)", quads.len());
+            let xf = b.app.vignettes.xf;
+            let a_ecran = xf.rect(crate::vignettecam::boite(&quads[0]));
+            let b_ecran = xf.rect(crate::vignettecam::boite(&quads[1]));
+            let case_apres = vignette(&b, K);
+            eprintln!("ZOOM {nom} egale={egale} : case avant {avant:?} apres {case_apres:?} ; A {a_ecran:?} ; B {b_ecran:?}");
+            assert!((case_apres.min - avant.min).length() < 0.5 && (case_apres.size() - avant.size()).length() < 0.5, "{nom} : la case ne bouge ni ne change de taille");
+            assert!((a_ecran.min - avant.min).length() < 0.5 && (a_ecran.size() - avant.size()).length() < 0.5, "{nom} : A est exactement la case d'avant : {a_ecran:?} contre {avant:?}");
+            if facteur > 0.0 {
+                assert!(b_ecran.width() > a_ecran.width() + 0.5 || b_ecran.height() > a_ecran.height() + 0.5, "{nom} : B est plus grand que A : {b_ecran:?} contre {a_ecran:?}");
+            } else {
+                assert!(b_ecran.width() < a_ecran.width() - 0.5, "{nom} : B est plus petit que A");
+            }
+        }
+    }
+}
+
+#[test]
+fn a_second_corner_drag_zooms_b_not_a_even_when_b_surrounds_a_and_a_zoom_out_never_rescales_the_case() {
+    use crate::vignettes_camera_tests::{ctrl_glisser, pas, K};
+    for egale in [false, true] {
+        for (facteur, nom) in [(0.3_f32, "arrière"), (-0.3, "avant")] {
+            let mut b = ouvert(plan_pour_zoom(egale), 6);
+            let case = vignette(&b, K);
+            let coin = case.right_bottom();
+            // Premier geste : un zoom arrière depuis un coin d'une case sans mouvement : B plus grand que A.
+            let d = vec2(case.width() * 0.35, case.height() * 0.35);
+            ctrl_glisser(&mut b, coin, &pas(coin, d, 8), coin + d, true);
+            b.chauffer(3);
+            let rects = |b: &crate::perf_tests::Banc| {
+                let layout = b.app.board_layout();
+                let (quads, _) = b.app.cadres_sur_la_planche(&layout, K);
+                let xf = b.app.vignettes.xf;
+                quads.iter().map(|q| xf.rect(crate::vignettecam::boite(q))).collect::<Vec<_>>()
+            };
+            let (a1, b1) = {
+                let r = rects(&b);
+                (r[0], r[1])
+            };
+            assert!(b1.width() > a1.width() + 0.5, "B est plus grand que A : {b1:?} contre {a1:?}");
+            assert!(b1.contains_rect(a1.shrink(0.5)), "B entoure A : son coin est tout près de celui de A");
+            let pi = b.app.board_layout().cards[K].panel;
+            let cles_avant: Vec<_> = b.app.doc.panels[pi].camera.iter().map(|k| k.cam).collect();
+            assert_eq!(cles_avant.len(), 2);
+            // Deuxième geste, au même coin (celui de A, que B entoure de près) : c'est B qui zoome, jamais A.
+            let coin2 = a1.right_bottom();
+            let d = vec2(a1.width() * facteur, a1.height() * facteur);
+            ctrl_glisser(&mut b, coin2, &pas(coin2, d, 8), coin2 + d, true);
+            b.chauffer(3);
+            let r = rects(&b);
+            // (La planche peut se ranger autrement quand l'empreinte change : A est toujours exactement la case, de la même taille.)
+            let la_case = vignette(&b, K);
+            assert!((r[0].min - la_case.min).length() < 0.5 && (r[0].size() - la_case.size()).length() < 0.5 && (r[0].size() - a1.size()).length() < 0.5, "zoom {nom} (feuille égale : {egale}) : A reste la case : {:?} contre {la_case:?} ({a1:?} avant)", r[0]);
+            let cles: Vec<_> = b.app.doc.panels[pi].camera.iter().map(|k| k.cam).collect();
+            assert_eq!(cles.len(), 2, "toujours deux cadres");
+            assert_eq!(cles[0], cles_avant[0], "la caméra de A n'a pas bougé");
+            assert_ne!(cles[1], cles_avant[1], "celle de B a changé");
+            if facteur > 0.0 {
+                assert!(r[1].width() > b1.width() - 0.01, "zoom arrière : B grandit, jamais A ne rétrécit ({:?} contre {b1:?})", r[1]);
+            }
+        }
+    }
+}
