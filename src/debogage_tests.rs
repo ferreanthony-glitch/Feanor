@@ -17,8 +17,12 @@ fn message(e: &Box<dyn std::any::Any + Send>) -> String {
     e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_else(|| "plantage".into())
 }
 
-/// Un banc sans son ni carte graphique, qui ouvre les projets à la place du projet affiché.
+/// Un banc sans son ni carte graphique, qui ouvre les projets à la place du projet affiché. Ces essais ouvrent des
+/// centaines de projets (chaque ouverture vide les caches communs des effets, `fx::forget_all`) : ils prennent l'état
+/// commun pour eux seuls (`fxcache::monde::ecrire`), sans quoi les essais de fluidité qui tournent à côté voyaient des
+/// images d'écran de 450 ms (`exportrender`, essai de l'application pendant un export).
 fn banc_leger() -> Banc {
+    crate::fxcache::monde::ecrire();
     let mut b = banc_taille(Document::with_frame(160, 90, 24), false, 1280, 720);
     b.app.sound_on = false;
     b.app.sound_scrub = false;
