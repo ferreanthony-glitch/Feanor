@@ -341,13 +341,7 @@ impl App {
         // Toile infinie : le hors-champ est tout ce que la vue montre autour du cadre, pas seulement la
         // feuille (une vignette ou une vue en perspective restent à la feuille).
         let infinite = !self.in_card && self.view.persp.is_none() && !self.camera_view;
-        let around = |inner: &[Pos2]| -> [Pos2; 4] {
-            let mut r = rect.expand(16.0);
-            for p in inner {
-                r.extend_with(*p);
-            }
-            [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom()]
-        };
+        let around = |inner: &[Pos2]| -> [Pos2; 4] { crate::viewbar::around_screen(rect, inner) };
         if fills_stage && !self.camera_view && !infinite {
             return;
         }
@@ -400,23 +394,14 @@ impl App {
                 [stage.left_top(), stage.right_top(), stage.right_bottom(), stage.left_bottom()].map(to_s)
             };
             let inner = corners.map(to_s);
-            let mut mesh = egui::Mesh::default();
             // En vue caméra, rien ne doit transparaître hors du cadre : couleur du fond, opaque.
             let color = if self.camera_view {
                 crate::theme::fond()
             } else {
                 Color32::from_black_alpha(alpha)
             };
-            for p in outer.iter().chain(inner.iter()) {
-                mesh.colored_vertex(*p, color);
-            }
-            // Quatre bandes entre le bord extérieur (0..4) et le cadre (4..8).
-            for i in 0..4u32 {
-                let j = (i + 1) % 4;
-                mesh.add_triangle(i, j, 4 + j);
-                mesh.add_triangle(i, 4 + j, 4 + i);
-            }
-            painter.add(Shape::mesh(mesh));
+            // La bande entre le bord extérieur et le cadre (sans apparier les coins : voir `band`).
+            painter.add(crate::viewbar::band(outer, inner, color));
         }
         if self.camera_view {
             return;

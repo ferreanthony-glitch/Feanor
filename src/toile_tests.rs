@@ -659,3 +659,49 @@ fn the_canvas_shows_what_is_drawn_outside_the_sheet_in_every_view() {
     }
     assert!(app.monde.coverage().is_none() && app.monde.bytes() == 0, "plus rien hors de la feuille, plus de mémoire");
 }
+/// Un glissé au pointeur dans une image d'écran entière : le trait tombe sous le pointeur, quels que soient
+/// la rotation et le miroir de la vue (Anthony, 2026-10-22 : le miroir tournant montrait un voile de travers).
+#[test]
+fn a_stroke_drawn_in_a_mirrored_rotated_view_lands_under_the_pointer() {
+    use eframe::egui::{Event, Modifiers, PointerButton, RawInput, Rect};
+    let tau = std::f32::consts::PI;
+    for (k, (rotation, flip)) in [(0.0, true), (tau / 4.0, true), (tau / 2.0, true), (tau * 0.75, true), (tau, true), (tau / 6.0, true), (tau / 4.0, false)].into_iter().enumerate() {
+        let mut app = app_bitmap(&format!("pointeur-miroir-{k}"));
+        let ctx = egui::Context::default();
+        let mut time = 0.0;
+        let mut frame = |app: &mut App, events: Vec<Event>| {
+            time += 1.0 / 60.0;
+            let mut input = RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), egui::vec2(1280.0, 720.0))), time: Some(time), events, ..Default::default() };
+            input.viewports.entry(egui::ViewportId::ROOT).or_default().native_pixels_per_point = Some(1.0);
+            let _ = ctx.run(input, |ctx| app.frame(ctx));
+        };
+        frame(&mut app, Vec::new());
+        app.fit_pending = false;
+        app.view.zoom = 1.0;
+        app.view.pan = egui::vec2(0.0, 0.0);
+        app.view.rotation = rotation;
+        app.view.flip = flip;
+        for _ in 0..3 {
+            frame(&mut app, Vec::new());
+        }
+        let (rect, size) = (app.canvas_rect, app.canvas_size());
+        let (a, b) = (rect.center() + egui::vec2(-100.0, -50.0), rect.center() + egui::vec2(100.0, 50.0));
+        frame(&mut app, vec![Event::PointerMoved(a)]);
+        frame(&mut app, vec![Event::PointerButton { pos: a, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE }]);
+        for i in 1..=20 {
+            frame(&mut app, vec![Event::PointerMoved(a + (b - a) * (i as f32 / 20.0))]);
+        }
+        frame(&mut app, vec![Event::PointerButton { pos: b, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE }]);
+        for _ in 0..3 {
+            frame(&mut app, Vec::new());
+        }
+        let cel = app.cel_here().and_then(|c| app.doc.cels.get(&c)).expect("un dessin");
+        // Le trait est là où l'écran l'a vu : en des points du segment, à un pixel ou deux près.
+        for t in [0.15_f32, 0.5, 0.85] {
+            let p = app.view.to_canvas(rect, size, a + (b - a) * t);
+            let (x, y) = (p.x.round() as i64, p.y.round() as i64);
+            let hit = (-3..=3).any(|dy| (-3..=3).any(|dx| cel.raster.get((x + dx) as usize, (y + dy) as usize).a() > 0));
+            assert!(hit, "rotation {rotation}, miroir {flip} : pas de trait près de ({x}, {y}) pour t = {t}");
+        }
+    }
+}

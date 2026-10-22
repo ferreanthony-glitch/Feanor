@@ -69,60 +69,89 @@ pub(crate) fn clip_to_rect(poly: &[Pos2], r: Rect) -> Vec<Pos2> {
     pts
 }
 
-/// Bande entre deux polygones convexes, `inner` dans `outer`, d'une couleur : on fait le tour des
-/// deux ensemble autour d'un point intérieur, un triangle à chaque sommet rencontré.
+/// Bande entre deux polygones convexes, `inner` dans `outer`, d'une couleur : `outer` moins `inner`, en morceaux
+/// convexes qui ne se recouvrent pas (le voile est translucide). On coupe `outer` le long de chaque côté de `inner` :
+/// ce qui est au-delà du côté est un morceau, le reste est coupé par le côté suivant. Aucun appariement de sommets
+/// entre les deux polygones, dont l'ordre et la place changent avec la rotation et le miroir de la vue (un
+/// appariement coin à coin croisait la bande : de grands triangles de travers).
 pub(crate) fn nested_band(outer: &[Pos2], inner: &[Pos2], color: Color32) -> Shape {
     let mut mesh = egui::Mesh::default();
-    if inner.len() < 3 {
-        for p in outer {
+    let fan = |mesh: &mut egui::Mesh, piece: &[Pos2]| {
+        if piece.len() < 3 {
+            return;
+        }
+        let base = mesh.vertices.len() as u32;
+        for p in piece {
             mesh.colored_vertex(*p, color);
         }
-        for k in 1..outer.len().saturating_sub(1) {
-            mesh.add_triangle(0, k as u32, k as u32 + 1);
+        for k in 1..piece.len() as u32 - 1 {
+            mesh.add_triangle(base, base + k, base + k + 1);
         }
+    };
+    if inner.len() < 3 {
+        fan(&mut mesh, outer);
         return Shape::mesh(mesh);
     }
-    let c = inner.iter().fold(Vec2::ZERO, |s, p| s + p.to_vec2()) / inner.len() as f32;
-    let sorted = |pts: &[Pos2]| {
-        let mut v: Vec<(f32, Pos2)> = pts.iter().map(|p| ((p.y - c.y).atan2(p.x - c.x), *p)).collect();
-        v.sort_by(|a, b| a.0.total_cmp(&b.0));
-        v
-    };
-    let (o, n) = (sorted(outer), sorted(inner));
-    for (_, p) in o.iter().chain(n.iter()) {
-        mesh.colored_vertex(*p, color);
-    }
-    let (no, ni) = (o.len(), n.len());
-    // Angle du k-ième sommet en continuant après un tour.
-    let turn = |v: &[(f32, Pos2)], k: usize| v[k % v.len()].0 + if k >= v.len() { std::f32::consts::TAU } else { 0.0 };
-    let (oi, ii) = (|k: usize| (k % no) as u32, |k: usize| (no + k % ni) as u32);
-    let (mut i, mut j) = (0, 0);
-    while i < no || j < ni {
-        let next_o = if i < no { turn(&o, i + 1) } else { f32::INFINITY };
-        let next_i = if j < ni { turn(&n, j + 1) } else { f32::INFINITY };
-        if next_o <= next_i {
-            mesh.add_triangle(oi(i), oi(i + 1), ii(j));
-            i += 1;
-        } else {
-            mesh.add_triangle(oi(i), ii(j + 1), ii(j));
-            j += 1;
+    // Sens du polygone intérieur (le « dedans » d'un côté est à sa gauche ou à sa droite).
+    let turn: f32 = (0..inner.len()).map(|i| inner[i].x * inner[(i + 1) % inner.len()].y - inner[(i + 1) % inner.len()].x * inner[i].y).sum();
+    let sign = if turn >= 0.0 { 1.0 } else { -1.0 };
+    let mut rest = outer.to_vec();
+    for i in 0..inner.len() {
+        if rest.len() < 3 {
+            break;
         }
+        let (a, b) = (inner[i], inner[(i + 1) % inner.len()]);
+        if (b - a).length() < 1e-6 {
+            continue;
+        }
+        // Distance signée au côté : positive du côté du dedans.
+        let side = |p: Pos2| sign * ((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x));
+        let (beyond, inside) = split_convex(&rest, &side);
+        fan(&mut mesh, &beyond);
+        rest = inside;
     }
     Shape::mesh(mesh)
 }
 
-/// Bande entre deux quadrilatères (l'un dans l'autre), d'une couleur.
+/// Coupe un polygone convexe en deux le long de `side` = 0 : (le morceau où `side` ≤ 0, celui où `side` ≥ 0). Les
+/// points de coupe sont calculés de la même façon des deux côtés : les morceaux se joignent exactement.
+fn split_convex(poly: &[Pos2], side: &dyn Fn(Pos2) -> f32) -> (Vec<Pos2>, Vec<Pos2>) {
+    let (mut neg, mut pos) = (Vec::with_capacity(poly.len() + 2), Vec::with_capacity(poly.len() + 2));
+    for k in 0..poly.len() {
+        let (p, q) = (poly[k], poly[(k + 1) % poly.len()]);
+        let (dp, dq) = (side(p), side(q));
+        if dp <= 0.0 {
+            neg.push(p);
+        }
+        if dp >= 0.0 {
+            pos.push(p);
+        }
+        if (dp < 0.0 && dq > 0.0) || (dp > 0.0 && dq < 0.0) {
+            let cut = p + (q - p) * (dp / (dp - dq));
+            neg.push(cut);
+            pos.push(cut);
+        }
+    }
+    (neg, pos)
+}
+
+/// Bande entre deux quadrilatères (l'un dans l'autre), d'une couleur. Les sommets ne sont pas
+/// appariés un à un : une vue tournée ou en miroir met les coins de `inner` ailleurs que ceux d'un
+/// rectangle aligné sur l'écran (`outer`), et l'appariement croiserait la bande (grands triangles
+/// de travers). La bande est donc découpée côté par côté (`nested_band`).
 pub(crate) fn band(outer: [Pos2; 4], inner: [Pos2; 4], color: Color32) -> Shape {
-    let mut mesh = egui::Mesh::default();
-    for p in outer.iter().chain(inner.iter()) {
-        mesh.colored_vertex(*p, color);
+    nested_band(&outer, &inner, color)
+}
+
+/// Le rectangle de l'écran `rect` (marge de 16 points) élargi pour contenir les points `inner` : le
+/// bord extérieur du voile qui entoure un cadre, dans l'ordre haut-gauche, haut-droite, bas-droite,
+/// bas-gauche.
+pub(crate) fn around_screen(rect: Rect, inner: &[Pos2]) -> [Pos2; 4] {
+    let mut r = rect.expand(16.0);
+    for p in inner {
+        r.extend_with(*p);
     }
-    for i in 0..4u32 {
-        let j = (i + 1) % 4;
-        mesh.add_triangle(i, j, 4 + j);
-        mesh.add_triangle(i, 4 + j, 4 + i);
-    }
-    Shape::mesh(mesh)
+    [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom()]
 }
 
 impl App {

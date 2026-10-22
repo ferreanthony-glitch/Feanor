@@ -89,3 +89,30 @@ fn frames_are_kept_with_the_layout() {
     let bad = Layout { frame_format: Some([-1.0, 2.0]), ..Layout::default() }.sanitized();
     assert_eq!(bad.frame_format, None);
 }
+
+/// Le voile autour du cadre est un anneau entre le bord de l'écran et le cadre : quelle que soit la vue
+/// (rotation, miroir), ses triangles le pavent sans se croiser ni déborder (Anthony, 2026-10-22 : la vue en miroir
+/// tournée de plus d'un quart de tour montrait de grands triangles gris de travers).
+#[test]
+fn the_veil_ring_is_tiled_in_every_rotated_or_mirrored_view() {
+    use crate::view::View;
+    use crate::viewbar::{around_screen, band};
+    use eframe::egui::{Color32, Pos2, Shape};
+    let area = |p: &[Pos2]| 0.5 * (0..p.len()).map(|i| p[i].x * p[(i + 1) % p.len()].y - p[(i + 1) % p.len()].x * p[i].y).sum::<f32>().abs();
+    let rect = Rect::from_min_size(pos2(40.0, 30.0), vec2(800.0, 450.0));
+    let stage = vec2(1920.0, 1080.0);
+    let corners = [pos2(0.0, 0.0), pos2(stage.x, 0.0), pos2(stage.x, stage.y), pos2(0.0, stage.y)];
+    for flip in [false, true] {
+        for degrees in [0.0_f32, 15.0, 30.0, 45.0, 90.0, 135.0, 180.0, 210.0, 270.0, 300.0, 345.0] {
+            for zoom in [0.1_f32, 0.3] {
+                let view = View { zoom, rotation: degrees.to_radians(), flip, pan: vec2(25.0, -10.0), persp: None };
+                let inner = corners.map(|p| view.to_screen(rect, stage, p));
+                let outer = around_screen(rect, &inner);
+                let Shape::Mesh(mesh) = band(outer, inner, Color32::BLACK) else { panic!() };
+                let covered: f32 = mesh.indices.chunks(3).map(|t| area(&[mesh.vertices[t[0] as usize].pos, mesh.vertices[t[1] as usize].pos, mesh.vertices[t[2] as usize].pos])).sum();
+                let ring = area(&outer) - area(&inner);
+                assert!((covered - ring).abs() < 1.0 + ring * 1e-4, "miroir {flip}, {degrees}° : triangles {covered} ≠ anneau {ring}");
+            }
+        }
+    }
+}
