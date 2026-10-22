@@ -288,6 +288,23 @@ impl App {
         }
     }
 
+    /// Une commande pendant le glissé (un raccourci tapé, le bouton tenu : réunir, supprimer le plan, annuler…), un changement
+    /// d'espace de travail ou d'onglet : le mouvement de caméra en cours se pose d'abord, avec son étape d'annulation, et le
+    /// reste du glissé ne fait plus rien. Sans cela la commande prenait les clés du geste dans sa propre étape (annuler la
+    /// commande les laissait, sans étape pour les défaire), ou le geste restait ouvert, sa réserve de place gardée sur la
+    /// planche (passe de débogage au hasard, 2026-10-22).
+    pub(crate) fn poser_le_geste_de_camera(&mut self) {
+        if self.vignettes.cam.is_none() {
+            return;
+        }
+        let layout = self.board_layout();
+        self.finish_cam_geste(&layout, false);
+        self.vignettes.cam = None;
+        if self.vignettes.press != Press::None {
+            self.vignettes.press = Press::Dead;
+        }
+    }
+
     /// Le mouvement du plan `pi` vient d'être créé (ses clés sont posées ; `avant` : celles d'avant) : si le plan a d'autres cases derrière la
     /// première, elles passent dans un plan neuf, juste après (`Document::scinder_apres_mouvement`). Vrai si le plan s'est coupé.
     fn scinder_derriere_le_mouvement(&mut self, pi: usize, avant: &[CameraKey]) -> bool {

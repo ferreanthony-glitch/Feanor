@@ -1687,6 +1687,7 @@ impl App {
         use crate::workspace::Espace;
         let avant = self.espace;
         self.cancel_montage_drag();
+        self.poser_le_geste_de_camera();
         self.end_stroke();
         self.playing = false;
         self.aller_a_l_espace(espace);
@@ -3483,6 +3484,17 @@ impl App {
         // Un champ de la boîte de sélection (Réglages) en cours de saisie : son geste se termine
         // avant toute commande (annuler, changer d'image…).
         self.finish_field_edit();
+        // De même pour un mouvement de caméra en cours dans les Vignettes (`vignettecamui.rs`) ; pas pour les touches qui se
+        // tiennent pendant un geste (la touche de la caméra elle-même, la main, les vues temporaires, l'aide-mémoire).
+        if !matches!(action, "vignettes.camera" | "vue.pan_libre" | "vue.rotation_temporaire" | "vue.zoom_temporaire_avant" | "vue.zoom_temporaire_arriere" | "aide.aide_memoire") {
+            self.poser_le_geste_de_camera();
+            // Un déplacement de sélection lâché dont la feuille flottante attend encore le rendu exact se termine d'abord, comme à
+            // un clic ou une touche (`flush_flottante_on_input`) : la commande part d'un dessin juste. Sinon « Supprimer la
+            // sélection » lancée sans clic ni touche laissait la feuille en attente, qui reposait plus tard ses éléments d'avant
+            // aux rangs d'avant (l'élément supprimé revenait, un autre disparaissait, sans étape d'annulation).
+            self.flush_flottante();
+            self.multi_flush();
+        }
         // Annuler ou rétablir pendant une déformation : elle repartirait d'un dessin périmé.
         if matches!(action, "edition.annuler" | "edition.retablir") {
             self.persp = None;
