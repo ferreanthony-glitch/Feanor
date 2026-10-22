@@ -884,7 +884,16 @@ impl App {
             // Une erreur de la carte graphique : wgpu en fait par défaut un plantage de tout
             // SHOT ; elle est notée dans un rapport (`plantage.rs`) et l'on continue.
             rs.device.on_uncaptured_error(Box::new(|e| crate::plantage::note_gpu_error(&format!("erreur de la carte graphique : {e}"))));
-            rs.device.set_device_lost_callback(|reason, message| crate::plantage::note_gpu_error(&format!("carte graphique perdue ({reason:?}) : {message}")));
+            // Carte perdue : en plus du rapport, une copie de secours tout de suite (`recoveryui::secours_carte_perdue`).
+            // (« Destroyed » : la carte est rendue par SHOT lui-même, à la fermeture ; rien à sauver.)
+            rs.device.set_device_lost_callback(|reason, message| {
+                let what = format!("carte graphique perdue ({reason:?}) : {message}");
+                if matches!(reason, eframe::egui_wgpu::wgpu::DeviceLostReason::Destroyed) {
+                    crate::plantage::note_gpu_error(&what);
+                } else {
+                    crate::plantage::note_device_lost(&what);
+                }
+            });
         }
         Self::construire(&cc.egui_ctx, cc.wgpu_render_state.as_ref(), true)
     }
@@ -3109,6 +3118,8 @@ impl App {
         // (Les suggestions sonores de l'ancien projet s'arrêtent : rien n'est rendu au nouveau.)
         self.reset_suggestions();
         self.doc = doc;
+        // (Un plan a toujours un calque : `Document::un_calque_par_plan`.)
+        self.doc.un_calque_par_plan();
         // (Une époque que ni cet onglet ni un autre n'a eue : les tâches de fond de l'ancien projet ne lui répondent plus.)
         self.doc_epoch = crate::onglets::nouvelle_epoque();
         // (Ses dessins portent les numéros et les versions de ceux de l'ancien : les dessins
@@ -3433,6 +3444,8 @@ impl App {
     /// Exécute une action désignée par son identifiant stable (voir `keymap::ACTIONS`). Les étapes
     /// d'annulation qu'elle enregistre portent son nom (panneau Historique).
     pub(crate) fn run_action(&mut self, action: &str) {
+        // (Le rapport d'une erreur dit quelle commande venait d'être lancée, `plantage.rs`.)
+        crate::plantage::noter_action(action);
         let name = crate::keymap::ACTIONS.iter().find(|a| a.id == action).map(|a| crate::historyui::step_name(a.label));
         let before = self.history.context.clone();
         if name.is_some() {
@@ -4709,6 +4722,10 @@ impl App {
         }
         // Couleurs et nuanciers : enregistrés quand ils changent (passe couleur).
         self.color_tick(ctx);
+        // (Un seul atome lu par image : la carte graphique perdue fait partir la copie de secours tout de suite.)
+        if crate::plantage::carte_perdue_a_signaler() {
+            self.secours_carte_perdue();
+        }
         self.tick_recovery(ctx);
         self.tick_session();
         {

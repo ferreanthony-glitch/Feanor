@@ -5,10 +5,55 @@
 //! `%LOCALAPPDATA%\SHOT\plantages\plantage-<secondes>.txt`, et la séance suivante le signale
 //! dans la barre d'état. Le projet, lui, est rattrapé par la copie de secours (`recovery.rs`).
 
+use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Mutex;
 
 /// Fichier qui désigne le dernier rapport, tant que la séance suivante ne l'a pas signalé.
 const NEW: &str = "nouveau.txt";
+
+/// Les dernières commandes et étapes d'annulation de la séance, pour le rapport : ce qu'on faisait juste avant
+/// l'erreur (passe de débogage, 2026-10-22). Une écriture par commande ou par étape, jamais par image.
+static DERNIERES: Mutex<VecDeque<String>> = Mutex::new(VecDeque::new());
+const GARDEES: usize = 8;
+
+/// Note une commande lancée ou une étape d'annulation (son nom). Sans jamais attendre : si le rapport est en train
+/// de lire la liste, la note est perdue.
+pub fn noter_action(quoi: &str) {
+    if let Ok(mut d) = DERNIERES.try_lock() {
+        if d.len() >= GARDEES {
+            d.pop_front();
+        }
+        d.push_back(quoi.to_string());
+    }
+}
+
+/// Les dernières actions notées, de la plus ancienne à la plus récente.
+pub fn dernieres_actions() -> String {
+    match DERNIERES.try_lock() {
+        Ok(d) if !d.is_empty() => d.iter().map(String::as_str).collect::<Vec<_>>().join(" → "),
+        Ok(_) => "(aucune)".into(),
+        // (Une erreur pendant qu'on notait : la liste n'est pas lisible sans risque.)
+        Err(_) => "(illisible)".into(),
+    }
+}
+
+/// La carte graphique de l'affichage est perdue, et l'interface ne l'a pas encore dit (`carte_perdue_a_signaler`).
+static CARTE_PERDUE: AtomicBool = AtomicBool::new(false);
+
+/// La carte graphique de l'affichage est perdue (pilote réinitialisé, mise en veille…) : un rapport, et l'interface
+/// lance une copie de secours à l'image suivante. (Le 2026-10-22, SHOT a tourné deux minutes sur une carte perdue
+/// avant que l'affichage d'egui ne plante : le travail fait depuis la dernière copie de secours était perdu.)
+pub fn note_device_lost(what: &str) {
+    CARTE_PERDUE.store(true, Ordering::Relaxed);
+    note_gpu_error(what);
+}
+
+/// Vrai une seule fois après la perte de la carte graphique.
+pub fn carte_perdue_a_signaler() -> bool {
+    CARTE_PERDUE.load(Ordering::Relaxed) && CARTE_PERDUE.swap(false, Ordering::Relaxed)
+}
 
 /// Dossier des rapports.
 pub fn dir() -> Option<PathBuf> {
@@ -18,16 +63,24 @@ pub fn dir() -> Option<PathBuf> {
 /// Texte du rapport.
 pub fn report_text(message: &str, location: &str, thread: &str, backtrace: &str) -> String {
     format!(
-        "SHOT {} : une erreur de programme (une erreur rattrapée, par exemple dans la propagation, ne ferme pas SHOT).\n\nErreur : {message}\nEndroit : {location}\nFil : {thread}\nQuand : {} s (horloge Unix)\n\nPile :\n{backtrace}\n",
+        "SHOT {} : une erreur de programme (une erreur rattrapée, par exemple dans la propagation, ne ferme pas SHOT).\n\nErreur : {message}\nEndroit : {location}\nFil : {thread}\nQuand : {} s (horloge Unix)\nDernières actions : {}\n\nPile :\n{backtrace}\n",
         env!("CARGO_PKG_VERSION"),
         crate::recovery::now_secs(),
+        dernieres_actions(),
     )
 }
 
 /// Écrit le rapport dans `dir` et le désigne comme nouveau ; rend son chemin.
 pub fn write_report(dir: &Path, text: &str) -> std::io::Result<PathBuf> {
     std::fs::create_dir_all(dir)?;
-    let path = dir.join(format!("plantage-{}.txt", crate::recovery::now_secs()));
+    let secs = crate::recovery::now_secs();
+    // (Deux erreurs dans la même seconde — un fil de fond puis l'interface — gardent chacune leur rapport.)
+    let mut path = dir.join(format!("plantage-{secs}.txt"));
+    let mut k = 2;
+    while path.exists() && k < 100 {
+        path = dir.join(format!("plantage-{secs}-{k}.txt"));
+        k += 1;
+    }
     std::fs::write(&path, text)?;
     std::fs::write(dir.join(NEW), path.to_string_lossy().as_bytes())?;
     Ok(path)
