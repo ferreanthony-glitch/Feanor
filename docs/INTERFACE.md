@@ -887,15 +887,23 @@ huitième de case, les liens « coins reliés », la limite « la tuile d'une ra
   cadres, les colonnes de la planche (un pas de case et d'écart de coupe depuis A), le haut et le bas des vignettes de chaque rangée. L'attraction est
   progressive (l'écart devient écart × écart / 6) : le cadre **colle** tout près de l'alignement et rejoint le pointeur exactement au bord du seuil, donc
   **aucun saut** en entrant ni en sortant ; au-delà, le cadre suit le pointeur au point près. Chaque axe pour lui.
-- **La case A ne bouge jamais quand on retouche B, C…** (ni par l'aimant, ni par le rangement, ni par un changement d'origine de l'empreinte) :
-  sa place est celle qu'elle aurait **sans mouvement**, d'après les cases d'avant (`poser`, étape 1 : la case se pose d'après sa seule vignette, puis réserve
-  toute son enveloppe aux cases suivantes). Ce sont les **autres** cases qui s'écartent : celles d'après se rangent à côté et dessous de l'enveloppe, dans l'ordre
-  de lecture ; **celles d'avant que l'enveloppe recouvrirait** sont replacées à côté (étape 2) : elles peuvent alors passer après (limite à confirmer avec
-  Anthony : l'ordre de lecture n'est plus tenu pour elles). Une enveloppe qui dépasse la page à gauche ou en haut fait **glisser toute la planche d'autant**
-  (`BoardLayout::decalage`) et la vue **compense par le défilement** (`suivre_decalage`) : A reste au même point de l'écran. À droite et en bas, le papier est
-  infini : l'enveloppe déborde, la planche s'agrandit. Seul un recouvrement de **deux enveloppes** (deux plans qui bougent) fait encore passer la plus tardive à la
-  place suivante. Jouer sur A elle-même (Ctrl + glisser dedans A) déplace A : c'est le seul cas où le reste bouge autour d'elle.
-- **Les rangées d'une enveloppe** (`gabarit_de`) : pour chaque rangée de la planche que l'enveloppe touche, l'intervalle en x qu'elle y couvre ; la place
+- **La case A reste en place pendant le geste ; l'ordre de lecture ne se casse jamais** (règle d'Anthony : de gauche à droite, rangée par rangée, les
+  numéros de plan se lisent dans l'ordre ; elle passe avant « A ne bouge pas ») :
+  - **pendant un geste de caméra** (B, C… tirés), A reste **exactement** où elle était à l'écran (`board::Reserve::pose`, retenue dans `CamGeste::pose`,
+    `poser`) : l'enveloppe peut recouvrir un instant des cases d'avant, rien ne se range sous la main ; l'aimant ne la déplace jamais ;
+  - **au lâcher**, tout se range d'après les cadres, dans l'ordre de lecture. La case se pose d'abord d'après sa seule vignette (sa place sans mouvement) :
+    si l'enveloppe ne recouvre aucune case d'avant (elle grandit **vers la droite ou le bas**, même au-delà de la rangée : le papier est infini), **A ne
+    bouge pas du tout** ; si elle recouvrirait des cases d'avant (elle a besoin de place **vers le haut ou la gauche**), la case passe **une fois**, au
+    lâcher, à la première place où elle tient tout entière **après la précédente** : à droite sur la même rangée si elle y tient, sinon sur la suivante.
+    Les cases d'avant ne bougent jamais ; celles d'après se rangent à côté et dessous de l'enveloppe ;
+  - une enveloppe qui dépasse la page **en haut ou à gauche** fait glisser toute la planche d'autant (`BoardLayout::decalage`) et la vue **compense par
+    le défilement** (`suivre_decalage`) : rien ne saute à l'écran ; à droite et en bas, la planche s'agrandit ;
+  - deux enveloppes qui se recouvriraient : la plus tardive passe à la place suivante (comme une enveloppe qui recouvre une case d'avant) ;
+  - jouer sur A elle-même (Ctrl + glisser dedans A) déplace le cadre A : le reste de l'empreinte bouge autour d'elle.
+- **Prise des cadres qui se recouvrent** (`vignettecam::choisit`) : l'intérieur et les coins de B passent avant les coins de A. Les cadres en jeu sont
+  ceux qui contiennent le point ou dont un coin est à portée ; **le plus petit l'emporte** (à aire égale, à un millième près : le dernier), puis, dans ce
+  cadre, un coin à portée change son zoom, sinon on le déplace. Saisir près du coin de A en étant dans B déplace donc B (avant, le coin de A
+  prenait le zoom de A et changeait l'échelle de toute l'empreinte).- **Les rangées d'une enveloppe** (`gabarit_de`) : pour chaque rangée de la planche que l'enveloppe touche, l'intervalle en x qu'elle y couvre ; la place
   se réserve rangée par rangée, **sans arrondi** : une empreinte peut finir **au milieu d'une rangée** ; les autres cases vont à côté (là où il y a de la place)
   ou une rangée plus bas. La hauteur des rangées dépend des notes (1 à 3 lignes) : la place se déduit en quelques passes (une enveloppe, ses rangées, les notes
   de ces rangées…) qui s'arrêtent dès que rien ne change. Une enveloppe peut mordre sur l'**écart** d'une case voisine (il n'est là que pour séparer deux
@@ -917,15 +925,14 @@ huitième de case, les liens « coins reliés », la limite « la tuile d'une ra
   Le voile corrigé du dessin en grand (`viewbar::nested_band`) n'est plus nécessaire ici : plus de voile ; ses morceaux convexes (`difference_convexe`) servent à masquer les coins
   de la tuile hors de l'enveloppe.
 - **Export** (planche) : les cadres sont tracés comme quadrilatères, avec les côtés de l'enveloppe ; la page s'agrandit pour tenir l'empreinte.
-- **À confirmer avec Anthony** : (1) les cases **d'avant** qu'une enveloppe recouvre passent après (l'ordre de lecture se casse pour elles) ; (2) les silhouettes entre deux
-  cadres **non consécutifs** (A–C) se dessinent aussi quand ce sont des côtés de l'enveloppe ; (3) l'aimant à 6 points ; (4) A déplacée change l'échelle de l'ensemble
-  (l'échelle est celle de A : une case) ; (5) le tremblé de caméra (clés presque confondues) montre un seul cadre.
+- **À confirmer avec Anthony** : (1) A passe après la précédente au lâcher quand l'enveloppe recouvre des cases d'avant (décidé : l'ordre de lecture gagne) ; (2) les silhouettes entre deux
+  cadres **non consécutifs** (A–C) se dessinent aussi quand ce sont des côtés de l'enveloppe ; (3) l'aimant à 6 points ; (4) zoomer A change l'échelle de l'ensemble (l'échelle est celle de A : une case) ; (5) le tremblé de caméra (clés presque confondues) montre un seul cadre.
 
 Essais : `vignettecam_tests` (cadres à mi-rangée sans arrondi, caméra tournée, enveloppe, liens = côtés de l'enveloppe sans ligne intérieure, aimant : près / loin / sans saut),
 `vignettes_camera_tests` (la case A identique à l'écran avant, pendant et après un glissé de B, en haut à gauche aussi ; l'aimant à l'écran ; rangement autour d'une
 empreinte qui finit à mi-rangée ; 200 plans dont 40 mouvements à mi-rangée et des notes de 1 à 3 lignes : aucun recouvrement, moins de 5 ms ; une caméra à la main
 ne pose qu'une lettre et ne voile rien). Captures : `vignettes\b1.png` (B à mi-rangée), `b2.png` (traits dans A, entre A et B, dans B), `b3.png` (B déplacé : les traits n'ont
-pas bougé), `c1.png` (B vers le haut et la gauche : A reste en place).
+pas bougé), `c1.png` (B vers le haut et la gauche, au lâcher : A passe après la précédente, l'ordre de lecture tient), `c-pendant.png` (même geste, pendant : A n'a pas bougé).
 ### À regarder à l'écran (papier infini et caméra)
 
 Captures de l'essai : `vignettes\m-trav.png` (travelling : A, B, flèche au-dessus, les autres cases décalées), `m-zoom.png` (zoom arrière limité à la

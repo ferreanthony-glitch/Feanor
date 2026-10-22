@@ -633,33 +633,25 @@ pub fn choisit(cadres: &[[Pos2; 4]], simple: bool, p: Pos2, tol: f32, ajoute: bo
             None => Choix { prise: Prise::Nouveau, rang: last, coin: 0 },
         });
     }
-    // Les coins d'abord : le plus proche ; à égalité, le cadre le plus petit.
-    let mut best: Option<(f32, f32, usize, usize)> = None;
+    // Les cadres en jeu : ceux qui contiennent le point ou dont un coin est à portée. Le plus petit l'emporte, à aire égale le dernier :
+    // dans B, près d'un coin de A (B dans A, ou B recouvrant le coin de A), c'est B qu'on prend. Dans ce cadre, un coin à portée change
+    // sa taille, sinon on le déplace. (Les coins d'un cadre plus grand ne passent jamais devant l'intérieur d'un plus petit.)
+    let mut pris: Option<(f32, usize)> = None;
     for (r, q) in cadres.iter().enumerate() {
-        if let Some((c, d)) = coin_proche(q) {
+        if coin_proche(q).is_some() || dans_quad(q, p) {
             let a = aire(q);
-            if best.is_none_or(|(bd, ba, _, _)| d < bd - 1e-3 || ((d - bd).abs() <= 1e-3 && a < ba)) {
-                best = Some((d, a, r, c));
+            // (À un millième près, deux cadres de même taille ont la même aire : le dernier l'emporte.)
+            if pris.is_none_or(|(ba, _)| a <= ba * 1.001) {
+                pris = Some((a, r));
             }
         }
     }
-    if let Some((_, _, r, c)) = best {
-        return Some(Choix { prise: Prise::Zoom(r), rang: r, coin: c });
-    }
-    // Dedans : le plus petit cadre qui contient le point (à aire égale, le dernier).
-    let mut dedans: Option<(f32, usize)> = None;
-    for (r, q) in cadres.iter().enumerate() {
-        if dans_quad(q, p) {
-            let a = aire(q);
-            if dedans.is_none_or(|(ba, _)| a <= ba) {
-                dedans = Some((a, r));
-            }
-        }
-    }
-    if let Some((_, r)) = dedans {
-        return Some(Choix { prise: Prise::Deplace(r), rang: r, coin: 0 });
-    }
-    // Hors de tous (l'empreinte entre les cadres, la marge) : le plus proche.
+    if let Some((_, r)) = pris {
+        return Some(match coin_proche(&cadres[r]) {
+            Some((c, _)) => Choix { prise: Prise::Zoom(r), rang: r, coin: c },
+            None => Choix { prise: Prise::Deplace(r), rang: r, coin: 0 },
+        });
+    }    // Hors de tous (l'empreinte entre les cadres, la marge) : le plus proche.
     let (r, _) = cadres.iter().enumerate().map(|(r, q)| (r, distance_quad(q, p))).min_by(|a, b| a.1.total_cmp(&b.1))?;
     Some(Choix { prise: Prise::Deplace(r), rang: r, coin: 0 })
 }

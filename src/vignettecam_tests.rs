@@ -370,6 +370,24 @@ fn a_grab_inside_an_existing_frame_moves_that_frame_and_the_smallest_one_wins() 
 }
 
 #[test]
+fn inside_b_or_at_its_corners_b_wins_over_the_corners_of_a() {
+    // B recouvre le coin bas-droit de A (60..160 contre 0..100 : le coin (100, 60) de A est dans B, près du coin haut-gauche de B).
+    let deux = [carre(0.0, 0.0, 100.0, 60.0), carre(60.0, 20.0, 100.0, 60.0)];
+    // Le centre de B est le coin bas-droit de A (même taille de cadre) : on déplace B.
+    let centre_b = pos2(110.0, 50.0);
+    assert_eq!(choisit(&deux, false, centre_b, 6.0, false).map(|c| c.prise), Some(Prise::Deplace(1)));
+    // Pile sur le coin bas-droit de A, qui est dans B : B quand même.
+    assert_eq!(choisit(&deux, false, pos2(100.0, 60.0), 6.0, false).map(|c| c.prise), Some(Prise::Deplace(1)), "un coin de A dans B : B");
+    // Un coin de B à portée prend le zoom de B, même si un coin de A est tout près aussi.
+    assert_eq!(choisit(&deux, false, pos2(62.0, 22.0), 6.0, false), Some(Choix { prise: Prise::Zoom(1), rang: 1, coin: 0 }));
+    // Dans A hors de B, près d'un coin de A : A.
+    assert_eq!(choisit(&deux, false, pos2(2.0, 2.0), 6.0, false), Some(Choix { prise: Prise::Zoom(0), rang: 0, coin: 0 }));
+    // À égalité d'aire et de portée (le coin bas-droit de A au centre d'un B identique) : le dernier cadre.
+    let memes = [carre(0.0, 0.0, 100.0, 60.0), carre(50.0, 30.0, 100.0, 60.0)];
+    assert_eq!(choisit(&memes, false, pos2(100.0, 60.0), 6.0, false).map(|c| c.prise), Some(Prise::Deplace(1)));
+}
+
+#[test]
 fn alt_asks_for_the_next_frame_from_the_last_one() {
     let deux = [carre(0.0, 0.0, 100.0, 60.0), carre(60.0, 0.0, 100.0, 60.0)];
     // Où que l'appui tombe, avec Alt : un nouveau cadre déplacé depuis le dernier, ou zoomé à son coin.

@@ -67,6 +67,8 @@ pub(crate) struct CamGeste {
     pub clic: (usize, Modifiers),
     /// La place que l'empreinte a prise pendant le geste : les autres cases ne la regagnent qu'au lâcher.
     pub hold: Option<Reserve>,
+    /// Où était la case A à l'appui (sa rangée, son x) : elle y reste tant que le geste dure (`Reserve::pose`).
+    pub pose: Option<(usize, f32)>,
 }
 
 impl App {
@@ -170,6 +172,7 @@ impl App {
             snap: None,
             clic: (k, m),
             hold: None,
+            pose: layout.cards.iter().position(|c| c.plan == place.plan && c.frame == 0).and_then(|j| Reserve::depuis(layout, j)).and_then(|r| r.pose),
         });
         true
     }
@@ -231,6 +234,7 @@ impl App {
         let Some(g) = self.vignettes.cam.as_mut().filter(|g| g.actif && !g.annule) else { return };
         let Some(k) = layout.cards.iter().position(|c| c.plan == g.plan && c.frame == 0) else { return };
         if let Some(r) = Reserve::depuis(layout, k) {
+            let r = Reserve { pose: g.pose.or(r.pose), ..r };
             g.hold = Some(g.hold.map_or(r, |h| h.avec(r)));
         }
     }

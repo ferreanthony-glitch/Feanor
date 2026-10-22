@@ -455,32 +455,66 @@ fn a_move_down_sits_between_the_rows_and_the_cases_after_go_around_it_while_a_st
     assert_eq!(l.cards.len(), nl);
 }
 
+/// Les numéros de plan se lisent dans l'ordre : de gauche à droite, rangée par rangée.
+fn ordre_de_lecture(l: &board::BoardLayout) {
+    for k in 1..l.cards.len() {
+        let (a, b) = (l.cards[k - 1], l.cards[k]);
+        assert!(b.row > a.row || (b.row == a.row && b.thumb.left() > a.thumb.left()), "l'ordre de lecture est cassé entre {} et {k} : rangées {} {}, x {} {}", k - 1, a.row, b.row, a.thumb.left(), b.thumb.left());
+    }
+}
+
 #[test]
-fn an_upward_or_leftward_move_never_shifts_a_the_others_make_room() {
+fn a_stays_put_when_the_hull_grows_right_or_down_and_moves_once_after_the_previous_case_when_it_needs_room_up_or_left() {
     let s = board::BoardSettings { card_w: 170.0, columns: 4, rows: 0 };
     let ordinaire = board::layout(&plan_court(), &s);
-    for (dx, dy) in [(0.0, -90.0), (-160.0, 0.0), (-120.0, -60.0), (-40.0, -200.0), (-400.0, 30.0), (0.0, 55.0), (500.0, 0.0), (-17.3, -23.9)] {
+    // Vers la droite, vers le bas, en diagonale : rien ne gêne, A reste où elle est.
+    for (dx, dy) in [(160.0, 0.0), (0.0, 55.0), (0.0, 90.0), (500.0, 0.0), (160.0, 55.0), (17.3, 23.9)] {
         let mut doc = plan_court();
         deux_cadres(&mut doc, 1, dx, dy);
         let l = board::layout(&doc, &s);
-        // (Si la planche a glissé d'un pas, la vue compense : la case A est où elle était à l'écran.)
-        let a = l.cards[K].thumb.translate(-l.decalage);
-        assert_eq!(a, ordinaire.cards[K].thumb, "({dx}, {dy}) : A ne bouge pas : {a:?} contre {:?}", ordinaire.cards[K].thumb);
-        assert_eq!(l.cards.len(), ordinaire.cards.len(), "aucune vignette perdue");
+        assert_eq!(l.cards[K].thumb, ordinaire.cards[K].thumb, "({dx}, {dy}) : A ne bouge pas");
+        ordre_de_lecture(&l);
         sans_chevauchement(&l);
-        assert!(l.pages.iter().any(|p| p.contains_rect(l.cards[K].foot)), "l'empreinte tient dans la page ({dx}, {dy})");
+        assert_eq!(l.cards.len(), ordinaire.cards.len());
     }
-    // Tout au long d'un geste (le cadre va et vient), A reste au même endroit de la planche.
-    let mut doc = plan_court();
-    let mut vu = Vec::new();
-    for dx in [0.0, -30.0, -90.0, -200.0, -60.0, 20.0, 150.0] {
-        deux_cadres(&mut doc, 1, dx, -40.0);
+    // Vers le haut ou la gauche, sur des cases d'avant : l'enveloppe ne recouvre jamais une case d'avant, c'est la case A qui passe après la
+    // précédente (une fois, au lâcher), sur la même rangée si elle y tient, sinon sur la suivante. L'ordre de lecture tient toujours.
+    let mut a_bouge = 0;
+    for (dx, dy) in [(-160.0, 0.0), (-120.0, -60.0), (-400.0, 30.0), (-17.3, -23.9), (0.0, -90.0), (-40.0, -200.0)] {
+        let mut doc = plan_court();
+        deux_cadres(&mut doc, 1, dx, dy);
         let l = board::layout(&doc, &s);
-        vu.push(l.cards[K].thumb.translate(-l.decalage));
+        ordre_de_lecture(&l);
+        sans_chevauchement(&l);
+        assert_eq!(l.cards.len(), ordinaire.cards.len(), "aucune vignette perdue");
+        let (avant, apres) = (ordinaire.cards[K].thumb, l.cards[K].thumb.translate(-l.decalage));
+        let plus_tard = l.cards[K].row > ordinaire.cards[K].row || (l.cards[K].row == ordinaire.cards[K].row && apres.left() >= avant.left() - 1e-3);
+        assert!(plus_tard, "({dx}, {dy}) : A ne recule jamais avant sa place d'origine : {avant:?} → {apres:?}");
+        if apres != avant {
+            a_bouge += 1;
+        }
+        // Les cases d'avant n'ont pas bougé.
+        for j in 0..K {
+            assert_eq!(l.cards[j].thumb.translate(-l.decalage), ordinaire.cards[j].thumb, "la case {j}, d'avant, reste");
+        }
     }
-    assert!(vu.windows(2).all(|w| w[0] == w[1]), "{vu:?}");
+    assert!(a_bouge >= 3, "des enveloppes qui recouvrent des cases d'avant repoussent A : {a_bouge}");
 }
 
+#[test]
+fn during_a_gesture_the_hold_keeps_a_exactly_where_it_was_even_over_earlier_cases() {
+    let s = board::BoardSettings { card_w: 170.0, columns: 4, rows: 0 };
+    let ordinaire = board::layout(&plan_court(), &s);
+    let pose = board::Reserve::depuis(&ordinaire, K).unwrap();
+    for (dx, dy) in [(-160.0, 0.0), (-120.0, -60.0), (0.0, -90.0), (-400.0, 30.0), (200.0, 40.0)] {
+        let mut doc = plan_court();
+        deux_cadres(&mut doc, 1, dx, dy);
+        let l = board::layout_with(&doc, &s, &Default::default(), false, &board::Options { hold: Some(pose), ..Default::default() });
+        assert_eq!(l.cards[K].thumb.translate(-l.decalage), ordinaire.cards[K].thumb, "({dx}, {dy}) : A reste pendant le geste");
+        assert_eq!(l.cards.len(), ordinaire.cards.len());
+        assert!(l.pages.iter().any(|p| p.contains_rect(l.cards[K].foot)), "l'empreinte tient dans la page ({dx}, {dy})");
+    }
+}
 #[test]
 fn the_other_cases_reflow_around_a_wide_footprint_and_come_back_when_the_move_goes() {
     let s = board::BoardSettings { card_w: 170.0, columns: 4, rows: 0 };
@@ -505,13 +539,12 @@ fn the_other_cases_reflow_around_a_wide_footprint_and_come_back_when_the_move_go
     let l = board::layout(&doc, &petit);
     assert!(l.cards[K].foot.width() <= 2.0 * 170.0 + board::gap_cut(170.0) + 1.0);
     sans_chevauchement(&l);
-    // Une empreinte au milieu de la planche : les cases d'avant qu'elle recouvrirait s'écartent, pas A.
+    // Une empreinte au milieu de la planche, qui recouvrirait des cases d'avant : A passe après la précédente, l'ordre de lecture tient.
     let mut doc = plan_court();
     deux_cadres(&mut doc, 1, -200.0, -60.0);
     let milieu = board::BoardSettings { columns: 3, ..s };
-    let sans = board::layout(&plan_court(), &milieu);
     let l = board::layout(&doc, &milieu);
-    assert_eq!(l.cards[K].thumb.translate(-l.decalage), sans.cards[K].thumb);
+    ordre_de_lecture(&l);
     sans_chevauchement(&l);
 }
 
@@ -1069,9 +1102,11 @@ fn the_vignettes_rest_after_a_camera_drag() {
 // ------------------------------------------------------------------------------ la case A ne bouge pas, l'aimant est doux
 
 #[test]
-fn the_case_a_does_not_move_on_screen_before_during_or_after_a_b_drag_even_up_and_to_the_left() {
-    // (En largeurs de cadre : vers la droite, vers le haut, en haut à gauche, vers la gauche, en bas à droite.)
-    for (dx, dy) in [(1.0_f32, 0.0_f32), (0.0, -0.8), (-0.9, -0.5), (-1.2, 0.0), (0.4, 0.7)] {
+fn the_case_a_does_not_move_on_screen_during_a_b_drag_nor_after_when_b_goes_right_or_down_and_reading_order_always_holds() {
+    // (En largeurs de cadre : vers la droite, vers le bas, en bas à droite : A ne bouge jamais, ni pendant ni après. Vers le haut, en
+    // haut à gauche, vers la gauche : A ne bouge pas pendant le geste ; au lâcher, si l'enveloppe recouvre des cases d'avant, elle passe
+    // après la précédente, une fois.)
+    for (dx, dy, apres_identique) in [(1.0_f32, 0.0_f32, true), (0.0, 0.7, true), (0.4, 0.7, true), (0.0, -0.8, false), (-0.9, -0.5, false), (-1.2, 0.0, false)] {
         let mut b = ouvert(plan_court(), 6);
         let (case, w) = (vignette(&b, K), largeur_cadre_ecran(&b));
         let de = case.center();
@@ -1081,25 +1116,37 @@ fn the_case_a_does_not_move_on_screen_before_during_or_after_a_b_drag_even_up_an
         assert_eq!(b.app.doc.panels[1].camera.len(), 2, "({dx}, {dy}) : B est née");
         let pendant = vignette(&b, K);
         assert!((pendant.min - case.min).length() < 0.01 && (pendant.size() - case.size()).length() < 0.01, "({dx}, {dy}) : A a bougé pendant le geste : {case:?} → {pendant:?}");
+        // (Pendant le geste, rien ne se range sous la main : les cases d'avant peuvent être recouvertes, A ne bouge pas.)
         b.image(vec![appui(de + delta, false, CTRL)], 1.0 / 60.0);
         b.touches = Modifiers::NONE;
         b.image(Vec::new(), 1.0 / 60.0);
         b.chauffer(2);
         let apres = vignette(&b, K);
-        assert!((apres.min - case.min).length() < 0.01, "({dx}, {dy}) : A a bougé au lâcher : {case:?} → {apres:?}");
-        // Et quand on retouche B (le déplacer plus haut, à gauche) : A ne bouge toujours pas.
+        let l = b.app.board_layout();
+        ordre_de_lecture(&l);
+        sans_chevauchement(&l);
+        if apres_identique {
+            assert!((apres.min - case.min).length() < 0.01, "({dx}, {dy}) : A a bougé au lâcher alors que B va à droite ou en bas : {case:?} → {apres:?}");
+        } else {
+            let ordinaire = board::layout(&plan_court(), &board::BoardSettings { card_w: 170.0, columns: 6, rows: 0 });
+            let (r0, x0) = (ordinaire.cards[K].row, ordinaire.cards[K].thumb.left());
+            let c = l.cards[K];
+            assert!(c.row > r0 || (c.row == r0 && c.thumb.left() - l.decalage.x >= x0 - 1e-3), "({dx}, {dy}) : A ne recule jamais : rangée {} x {}", c.row, c.thumb.left());
+        }
+        // Et quand on retouche B (le déplacer plus haut, à gauche), A reste pendant le geste.
+        let avant = vignette(&b, K);
         let c = centre(cadre_ecran(&b, 1));
         let delta = vec2(-0.5 * w, -0.4 * w);
         ctrl_glisser(&mut b, c, &pas(c, delta, 8), c + delta, false);
         b.image(Vec::new(), 1.0 / 60.0);
         let encore = vignette(&b, K);
-        assert!((encore.min - case.min).length() < 0.01, "({dx}, {dy}) : A a bougé quand on a retouché B : {case:?} → {encore:?}");
+        assert!((encore.min - avant.min).length() < 0.01, "({dx}, {dy}) : A a bougé pendant qu'on retouche B : {avant:?} → {encore:?}");
         b.image(vec![appui(c + delta, false, CTRL)], 1.0 / 60.0);
         b.touches = Modifiers::NONE;
         b.image(Vec::new(), 1.0 / 60.0);
+        ordre_de_lecture(&b.app.board_layout());
     }
 }
-
 #[test]
 fn dragging_b_near_an_alignment_snaps_softly_within_the_threshold_and_follows_the_pointer_outside_it() {
     let mut b = avec_b_a_droite();
@@ -1221,4 +1268,103 @@ fn a_hand_held_camera_with_dozens_of_keys_stacks_no_letters_and_the_tile_is_not_
         })
         .count();
     assert_eq!(voiles, 0, "aucun voile sur le dessin");
+}
+// ------------------------------------------------------------------------------ dessiner entre A et B, saisir B près d'un coin de A
+
+/// Tout ce qui est peint dans les dessins du plan `i`, en points de la feuille : les pixels de ses bitmaps et les points de ses traits.
+fn encre_en_feuille(doc: &Document, i: usize) -> Vec<(i64, i64)> {
+    let mut out = Vec::new();
+    for id in doc.panels[i].layers.iter().flat_map(|l| l.frames.iter().flatten()) {
+        let Some(c) = doc.cels.get(id) else { continue };
+        for y in 0..c.raster.height {
+            for x in 0..c.raster.width {
+                if c.raster.get(x, y).a() != 0 {
+                    out.push((x as i64, y as i64));
+                }
+            }
+        }
+        if let Some(v) = &c.vector {
+            for e in &v.elements {
+                if let crate::vector::Element::Stroke { points, .. } = e {
+                    out.extend(points.iter().map(|p| (p.x.round() as i64, p.y.round() as i64)));
+                }
+            }
+        }
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+fn encre_pres(encre: &[(i64, i64)], p: Pos2, rayon: f32) -> bool {
+    encre.iter().any(|&(x, y)| (pos2(x as f32 + 0.5, y as f32 + 0.5) - p).length() <= rayon)
+}
+
+#[test]
+fn a_stroke_between_a_and_b_lands_at_the_right_sheet_position_and_moving_b_afterwards_leaves_it_there() {
+    let mut b = ouvert(plan_court(), 6);
+    b.app.set_tool(Tool::Brush);
+    let w = largeur_cadre_ecran(&b);
+    let case = vignette(&b, K);
+    // B : un cadre vers la droite de 120 points de la feuille et vers le bas de 70 (le cadre fait 160 × 90).
+    let delta = vec2(120.0, 70.0) * (w / 160.0);
+    ctrl_glisser(&mut b, case.center(), &pas(case.center(), delta, 8), case.center() + delta, true);
+    let k = clefs(&b);
+    assert_eq!(k.len(), 2);
+    assert!(((k[1].1 - k[0].1) - 120.0).abs() < 6.0 && ((k[1].2 - k[0].2) - 70.0).abs() < 6.0, "{k:?}");
+    let a0 = pos2(k[0].1, k[0].2);
+    // Deux points dans la zone entre A et B (ni dans A, ni dans B, mais dans l'enveloppe), en points de la feuille.
+    let (s0, s1) = (a0 + vec2(110.0, -10.0), a0 + vec2(140.0, 15.0));
+    let l = b.app.board_layout();
+    let m = l.move_of(K).unwrap();
+    for s in [s0, s1, s0.lerp(s1, 0.5)] {
+        let (dans_a, dans_b) = ((s.x - a0.x).abs() <= 80.0 && (s.y - a0.y).abs() <= 45.0, (s.x - k[1].1).abs() <= 80.0 && (s.y - k[1].2).abs() <= 45.0);
+        assert!(!dans_a && !dans_b, "{s:?} est entre A et B");
+    }
+    // La feuille → l'écran : la tuile montre la feuille à l'échelle des cases, centrée sur sa zone.
+    let ecran = |s: Pos2| b.app.vignettes.xf.to_screen(m.tuile.rect.center() + (s - m.tuile.zone.centre) * m.tuile.zone.echelle);
+    assert!(m.contient(b.app.vignettes.xf.to_board(ecran(s0))) && m.contient(b.app.vignettes.xf.to_board(ecran(s1))), "les deux points sont dans l'enveloppe");
+    let chemin: Vec<Pos2> = (0..=10).map(|j| ecran(s0.lerp(s1, j as f32 / 10.0))).collect();
+    assert!(!encre(&b.app.doc, 1));
+    glisser(&mut b, &chemin);
+    assert_eq!(b.app.cur_panel, 1);
+    assert!(encre(&b.app.doc, 1), "le trait est dans le dessin du plan");
+    let trait_ = encre_en_feuille(&b.app.doc, 1);
+    for (nom, s) in [("début", s0), ("milieu", s0.lerp(s1, 0.5)), ("fin", s1)] {
+        assert!(encre_pres(&trait_, s, 4.0), "le {nom} du trait est à sa place sur la feuille ({s:?})");
+    }
+    // Et rien de plus loin que le trait : la boîte de l'encre est celle du trait (au rayon du pinceau près).
+    let (x0, x1) = (trait_.iter().map(|p| p.0).min().unwrap() as f32, trait_.iter().map(|p| p.0).max().unwrap() as f32);
+    let (y0, y1) = (trait_.iter().map(|p| p.1).min().unwrap() as f32, trait_.iter().map(|p| p.1).max().unwrap() as f32);
+    assert!(x0 > s0.x - 8.0 && x1 < s1.x + 8.0 && y0 > s0.y - 8.0 && y1 < s1.y + 8.0, "({x0}, {y0})-({x1}, {y1}) pour {s0:?}-{s1:?}");
+    // Déplacer B ensuite : le dessin ne bouge pas, seule la fenêtre.
+    let avant = clefs(&b);
+    let c = centre(cadre_ecran(&b, 1)) + vec2(0.2 * w, 0.1 * w);
+    let d = vec2(-0.3 * w, 0.15 * w);
+    ctrl_glisser(&mut b, c, &pas(c, d, 8), c + d, true);
+    let apres = clefs(&b);
+    assert_ne!(apres[1], avant[1], "B a bougé : {avant:?} {apres:?}");
+    assert_eq!(apres[0], avant[0]);
+    assert_eq!(encre_en_feuille(&b.app.doc, 1), trait_, "le dessin est resté où il était sur la feuille");
+    assert_eq!(dernier_nom(&b), "Cadre B");
+}
+
+#[test]
+fn grabbing_near_a_corner_of_a_from_inside_b_moves_b() {
+    let mut b = ouvert(plan_court(), 6);
+    let (case, w) = (vignette(&b, K), largeur_cadre_ecran(&b));
+    // B décalé d'une demi-largeur et d'une demi-hauteur : le centre de B est le coin bas-droit de A.
+    let delta = vec2(0.5 * w, 0.5 * w * 9.0 / 16.0);
+    ctrl_glisser(&mut b, case.center(), &pas(case.center(), delta, 8), case.center() + delta, true);
+    let avant = clefs(&b);
+    assert_eq!(avant.len(), 2);
+    let coin_a = cadre_ecran(&b, 0)[2];
+    let centre_b = centre(cadre_ecran(&b, 1));
+    assert!((coin_a - centre_b).length() < 3.0, "le coin bas-droit de A est le centre de B : {coin_a:?} {centre_b:?}");
+    let d = vec2(0.1 * w, 0.08 * w);
+    ctrl_glisser(&mut b, coin_a, &pas(coin_a, d, 6), coin_a + d, true);
+    let apres = clefs(&b);
+    assert_eq!(dernier_nom(&b), "Cadre B", "dans B : B se déplace, le coin de A ne prend pas");
+    assert_eq!(apres[0], avant[0], "A ne bouge pas");
+    assert!(apres[1].1 > avant[1].1 + 10.0 && (apres[1].3 - avant[1].3).abs() < 1e-6, "B glisse sans changer de zoom : {avant:?} {apres:?}");
 }

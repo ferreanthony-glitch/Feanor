@@ -25,14 +25,17 @@
 //! rangée que l'enveloppe touche, l'intervalle en x qu'elle y couvre). Les cases qui suivent se rangent **dans l'ordre de
 //! lecture** dans les places libres, à côté et dessous de l'enveloppe, jamais dessus.
 //!
-//! **La case A ne bouge jamais quand on change ses autres cadres** (Anthony, 2026-10-22) : sa place est celle qu'elle aurait sans
-//! mouvement (la première place libre de l'ordre de lecture, d'après les cases d'avant ; `poser`, étape 1). Ce sont les **autres**
-//! cases qui s'écartent : celles d'après se rangent autour de l'enveloppe ; celles d'avant que l'enveloppe recouvrirait sont
-//! replacées à côté (étape 2). Si l'enveloppe dépasse la page à gauche ou en haut, tout glisse du même pas
-//! (`BoardLayout::decalage`) et l'écran compense par le défilement : A reste où elle est à l'écran. Seul un recouvrement de
-//! deux enveloppes (deux plans qui bougent, l'un empiétant sur l'autre) fait encore passer la case en cause à la place suivante.
-//!
-//! Les rangées d'une planche dépendent de la hauteur de leurs notes, qui dépend de la place des cases : la place des rangées se
+//! **La case A reste en place quand on retouche ses autres cadres, et l'ordre de lecture ne se casse jamais** (Anthony, 2026-10-22) :
+//! - **pendant un geste** de caméra, A reste exactement où elle était (`Reserve::pose`, `poser`) : l'enveloppe peut recouvrir un instant des
+//!   cases d'avant, rien ne se range sous la main ;
+//! - **au lâcher**, tout se range d'après les cadres, dans l'ordre de lecture (gauche à droite, rangée par rangée). La case se pose d'abord
+//!   d'après sa seule vignette, sa place sans mouvement : si l'enveloppe ne recouvre rien d'avant (elle grandit vers la droite ou le bas,
+//!   même au-delà de la rangée, sur le papier infini ; ou vers le haut ou la gauche sur du vide), **A ne bouge pas** ; si elle recouvrirait
+//!   des cases d'avant, la case passe, une fois, à la première place où elle tient tout entière **après la précédente** : à droite sur la même
+//!   rangée, sinon sur la suivante. Les cases d'avant ne bougent jamais ;
+//! - une enveloppe qui dépasse la page en haut ou à gauche fait glisser toute la planche d'autant (`BoardLayout::decalage`) : la vue compense par
+//!   le défilement, rien ne saute à l'écran.
+//!//! Les rangées d'une planche dépendent de la hauteur de leurs notes, qui dépend de la place des cases : la place des rangées se
 //! déduit par quelques passes (`layout_with`), qui s'arrêtent dès que rien ne change (une seule passe tant que toutes les notes
 //! font une ligne).
 //!
@@ -118,19 +121,25 @@ impl Default for BoardSettings {
 pub struct Reserve {
     pub plan: u64,
     pub rect: Rect,
+    /// Où est la case A (sa rangée, son x depuis le bord gauche des rangées) quand le geste commence : elle ne bouge pas tant qu'il
+    /// dure, quitte à recouvrir les cases d'avant ; au lâcher la planche se range à nouveau, dans l'ordre de lecture.
+    pub pose: Option<(usize, f32)>,
 }
 
 impl Reserve {
-    /// Cette réserve, élargie à `autre` (elle ne rétrécit jamais).
+    /// Cette réserve, élargie à `autre` (elle ne rétrécit jamais ; la case A reste là où le geste l'a trouvée).
     pub fn avec(self, autre: Reserve) -> Reserve {
-        Reserve { plan: self.plan, rect: self.rect.union(autre.rect) }
+        Reserve { plan: self.plan, rect: self.rect.union(autre.rect), pose: self.pose.or(autre.pose) }
     }
 
-    /// Ce que la case `k` de `layout` couvre, relativement à son image A (rien si sa caméra ne bouge pas).
+    /// Ce que la case `k` de `layout` couvre, relativement à son image A (la case seule si sa caméra ne bouge pas), et où elle est.
     pub fn depuis(layout: &BoardLayout, k: usize) -> Option<Reserve> {
         let c = layout.cards.get(k)?;
-        let m = layout.move_of(k)?;
-        Some(Reserve { plan: c.plan, rect: m.tuile.rect.translate(-c.thumb.min.to_vec2()) })
+        let rect = match layout.move_of(k) {
+            Some(m) => m.tuile.rect.translate(-c.thumb.min.to_vec2()),
+            None => Rect::from_min_size(Pos2::ZERO, c.thumb.size()),
+        };
+        Some(Reserve { plan: c.plan, rect, pose: Some((c.row, c.thumb.left() - layout.origine_x)) })
     }
 }
 
@@ -261,6 +270,8 @@ pub struct BoardLayout {
     /// De combien tout a glissé (vers la droite, vers le bas) parce qu'une enveloppe dépasse la page à gauche ou en haut : la
     /// vue compense (la case A ne bouge pas à l'écran).
     pub decalage: Vec2,
+    /// Le bord gauche des rangées (le x des cases est compté depuis lui, `Reserve::pose`).
+    pub origine_x: f32,
 }
 
 impl BoardLayout {
@@ -388,15 +399,6 @@ fn gene(occ: &[Vec<Occupe>], g: &Gabarit, gap: f32, r_a: usize, x_a: f32) -> boo
     g.bandes.iter().any(|&(b, lo, hi)| bloque(occ, r_a as i64 + b as i64, x_a + lo, x_a + hi + gap, lo < -1e-3).is_some())
 }
 
-/// Le plus tard des deux, dans l'ordre de lecture (la rangée, puis x).
-fn plus_tard(a: (usize, f32), b: (usize, f32)) -> (usize, f32) {
-    if (b.0, b.1) > (a.0, a.1) {
-        b
-    } else {
-        a
-    }
-}
-
 /// Ce que prend sur la planche une case dont l'enveloppe est `poly` (relative au coin haut-gauche de A) : pour chaque rangée
 /// qu'elle touche, l'intervalle en x qu'elle y couvre. `rh(r)` : la hauteur de la rangée `r` (estimée), `r0` la rangée de A. `note` :
 /// la bande de note de A quand elle descend sous l'enveloppe. Les rangées se suivent sans trou (l'écart sous une rangée est à elle).
@@ -463,67 +465,36 @@ struct Pose {
     cursor: (usize, f32),
 }
 
-fn poser(gabarits: &[Gabarit], unite: &Gabarit, prints: &[bool], gap_after: &dyn Fn(usize) -> f32, row_w: f32, page_cap: usize) -> Pose {
-    let n = gabarits.len();
-    // Étape 1 : la place naturelle de chaque case. Une case qui a une empreinte se pose d'après sa seule vignette (sa place ne
-    // dépend donc jamais de ses cadres), puis réserve toute son empreinte aux cases suivantes.
+fn poser(gabarits: &[Gabarit], unite: &Gabarit, prints: &[bool], forces: &[Option<(usize, f32)>], gap_after: &dyn Fn(usize) -> f32, row_w: f32, page_cap: usize) -> Pose {
     let mut occ: Vec<Vec<Occupe>> = Vec::new();
-    let mut occ_empreintes: Vec<Vec<Occupe>> = Vec::new();
-    let mut placed: Vec<(usize, f32)> = Vec::with_capacity(n);
-    let mut ancre = vec![true; n];
+    let mut placed: Vec<(usize, f32)> = Vec::with_capacity(gabarits.len());
     let mut cursor = (0usize, 0.0_f32);
-    let mut recouvre = false;
     for (k, g) in gabarits.iter().enumerate() {
         let gap = gap_after(k);
-        let (r, x) = if prints[k] {
+        let (r, x) = if let Some(pose) = forces[k] {
+            // Le geste de caméra de ce plan est en cours : sa case A reste exactement où elle était, quitte à recouvrir les cases
+            // d'avant jusqu'au lâcher.
+            pose
+        } else if prints[k] {
+            // Une case qui a une empreinte se pose d'abord d'après sa seule vignette (sa place ne dépend pas de ses cadres tant que
+            // l'enveloppe ne gêne rien : elle peut déborder à droite et en bas sur le papier infini, ou en haut et à gauche sur du
+            // vide) ; si l'enveloppe recouvrirait des cases d'avant, la case passe à la première place où elle tient tout entière,
+            // après la précédente : l'ordre de lecture ne se casse jamais (Anthony, 2026-10-22).
             let (r, x) = trouve(&occ, unite, gap, row_w, page_cap, cursor);
-            if gene(&occ_empreintes, g, gap, r, x) {
-                // Deux enveloppes qui se recouvrent : la plus tardive passe à la place suivante (sa case bouge).
-                ancre[k] = false;
+            if gene(&occ, g, gap, r, x) {
                 trouve(&occ, g, gap, row_w, page_cap, (cursor.0, cursor.1 - g.x_lo))
             } else {
-                recouvre |= gene(&occ, g, gap, r, x);
                 (r, x)
             }
         } else {
             trouve(&occ, g, gap, row_w, page_cap, (cursor.0, cursor.1 - g.x_lo))
         };
         occupe(&mut occ, g, gap, r, x);
-        if prints[k] {
-            occupe(&mut occ_empreintes, g, gap, r, x);
-        }
         placed.push((r, x));
         cursor = (r, x + g.x_hi + gap);
     }
-    if !recouvre {
-        return Pose { placed, occ, cursor };
-    }
-    // Étape 2 : une enveloppe recouvre des cases d'avant. Toutes les enveloppes sont d'abord réservées, puis les autres cases se
-    // rangent autour d'elles dans l'ordre de lecture ; les cases A restent où l'étape 1 les a mises.
-    let mut occ: Vec<Vec<Occupe>> = Vec::new();
-    for (k, g) in gabarits.iter().enumerate() {
-        if prints[k] && ancre[k] {
-            occupe(&mut occ, g, gap_after(k), placed[k].0, placed[k].1);
-        }
-    }
-    let mut finales: Vec<(usize, f32)> = Vec::with_capacity(n);
-    let mut cursor = (0usize, 0.0_f32);
-    for (k, g) in gabarits.iter().enumerate() {
-        let gap = gap_after(k);
-        if prints[k] && ancre[k] {
-            let (r, x) = placed[k];
-            finales.push((r, x));
-            cursor = plus_tard(cursor, (r, x + g.x_hi + gap));
-        } else {
-            let (r, x) = trouve(&occ, g, gap, row_w, page_cap, (cursor.0, cursor.1 - g.x_lo));
-            occupe(&mut occ, g, gap, r, x);
-            finales.push((r, x));
-            cursor = (r, x + g.x_hi + gap);
-        }
-    }
-    Pose { placed: finales, occ, cursor }
+    Pose { placed, occ, cursor }
 }
-
 /// Comme `layout`. `lines` : le nombre de lignes de note affichées (1 à 3) de chaque vignette, par son
 /// identifiant (absente : une ligne). `last_joins` : la première case pâle, si on la remplit, fait une
 /// image de plus du dernier plan (barre grise devant elle) et non un plan neuf (barre noire).
@@ -584,6 +555,8 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         })
         .collect();
     let a_print: Vec<bool> = prints.iter().map(Option::is_some).collect();
+    // Le geste de caméra en cours : la case A du plan reste où elle était (`Reserve::pose`).
+    let forces: Vec<Option<(usize, f32)>> = (0..n).map(|k| opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && boards[k].2 == 0).and_then(|h| h.pose)).collect();
     let unite = Gabarit::unite(card_w);
     let nominal = LABEL_H + thumb_h + NOTE_GAP + NOTE_LINE_H + ROW_GAP;
     let hauteur_rangee = |lignes: usize| LABEL_H + thumb_h + NOTE_GAP + lignes as f32 * NOTE_LINE_H + ROW_GAP;
@@ -598,7 +571,7 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     for passe in 0..5 {
         let hauteur_estimee = |r: i64| usize::try_from(r).ok().and_then(|r| estimees.get(r).copied()).unwrap_or(nominal);
         gabarits = (0..n).map(|k| polys[k].as_ref().map_or_else(|| unite.clone(), |poly| gabarit_de(poly, notes[k], &hauteur_estimee, rangs[k]))).collect();
-        pose = poser(&gabarits, &unite, &a_print, &gap_after, row_w, page_cap);
+        pose = poser(&gabarits, &unite, &a_print, &forces, &gap_after, row_w, page_cap);
         // Les notes les plus hautes de chaque rangée (celles des cases dont l'image est dans la rangée).
         let derniere = pose.placed.iter().zip(&gabarits).map(|(p, g)| p.0 + g.b_max as usize).max().unwrap_or(0);
         most = vec![1usize; derniere + 1];
@@ -681,7 +654,7 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         *t += decalage.y;
     }
 
-    let mut out = BoardLayout { decalage, ..Default::default() };
+    let mut out = BoardLayout { decalage, origine_x: left, ..Default::default() };
     for (k, &(r, x_a)) in placed.iter().enumerate() {
         let x = left + x_a;
         let top = row_top[r] + LABEL_H;
