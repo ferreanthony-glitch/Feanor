@@ -147,6 +147,32 @@ fn the_case_menu_keeps_its_plan_when_an_undo_shifts_the_plans() {
     }
 }
 
+/// Réunir le plan courant et le suivant (la barre noire entre leurs cases) quand le calque du bas du suivant ne ressemble à aucun
+/// des siens : ce calque se pose tout en bas du plan réuni, et le calque courant gardait son rang, devenu celui du calque du dessous
+/// (le trait suivant allait dans un autre calque que celui qu'on avait choisi).
+#[test]
+fn joining_the_next_plan_keeps_the_current_layer() {
+    let mut doc = Document::with_frame(160, 90, 24);
+    doc.add_scene_after(0);
+    doc.panels[0].layers = vec![Layer::new("Calque A0", LayerKind::Bitmap), Layer::new("Calque A1", LayerKind::Bitmap)];
+    let mut fond = Layer::new("Fond B", LayerKind::Bitmap);
+    fond.opacity = 0.5;
+    doc.panels[1].layers = vec![fond];
+    let mut b = ouvert(doc, 6);
+    b.app.select_panel(0);
+    b.app.cur_layer = 1;
+    b.chauffer(3);
+    let choisi = b.app.layer().id;
+    let layout = b.app.board_layout();
+    let k = layout.bars.iter().position(|r| r.after == 0 && r.cut).expect("la barre noire entre les deux plans");
+    let barre = b.app.vignettes.xf.rect(layout.bars[k].zone);
+    clic(&mut b, barre.center());
+    b.chauffer(3);
+    assert_eq!(b.app.doc.panels.len(), 1, "les deux plans sont réunis");
+    assert_eq!(b.app.layers().len(), 3, "le calque du second plan s'est ajouté");
+    assert_eq!(b.app.layer().id, choisi, "le calque courant est toujours celui qu'on avait choisi");
+}
+
 // ---------------------------------------------------------------------------------------------- calques
 
 /// Un plan de quatre calques : A et B rangés dans le dossier F, et D au-dessus.

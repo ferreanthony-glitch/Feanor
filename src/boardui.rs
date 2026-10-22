@@ -849,6 +849,7 @@ impl App {
             if self.history.undo_and_forget(&mut self.doc, &mut nav) {
                 self.cur_panel = nav.panel.min(self.doc.panels.len() - 1);
                 self.cur_layer = nav.layer;
+                self.revalider_rangs();
                 self.cur_frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
                 self.board_sel.clear();
                 self.renderer.invalidate_all();

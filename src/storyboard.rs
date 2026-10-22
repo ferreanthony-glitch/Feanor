@@ -17,8 +17,9 @@ pub(crate) enum MontageDrag {
     /// refait depuis l'original à chaque mouvement, rien n'est perdu tant qu'on n'a pas relâché
     /// (`rognageui.rs`).
     Edge(crate::rognageui::EdgeDrag),
-    /// Plan déplacé dans le montage ; `target` est la place où il sera inséré.
-    Move { panel: usize, target: usize },
+    /// Plan déplacé dans le montage (son identifiant : le montage d'un équipier peut arriver pendant le geste) ; `target` est la
+    /// place où il sera inséré.
+    Move { panel: u64, target: usize },
     Scrub,
     /// Extrait de son déplacé, ou raccourci par un bord.
     Clip(ClipDrag),
@@ -75,6 +76,7 @@ impl App {
         self.doc.report_decor = self.settings.vignettes.report_decor;
         let snap = self.snapshot();
         let before = self.panel().id;
+        let layer_before = self.layer().id;
         let board_before = self.board_layout();
         let Some(index) = op(&mut self.doc, self.cur_panel) else {
             return false;
@@ -85,7 +87,9 @@ impl App {
             self.cur_frame = 0;
         }
         self.cur_panel = index;
-        self.cur_layer = self.cur_layer.min(self.layers().len() - 1);
+        // Le calque courant, par son identifiant quand il est encore là : une opération qui pose un calque en bas du plan (l'image
+        // déposée, `deposer.rs`) décale les rangs, et le rang d'avant désignait le calque du dessous (le trait suivant y allait).
+        self.cur_layer = self.layers().iter().position(|l| l.id == layer_before).unwrap_or_else(|| self.cur_layer.min(self.layers().len() - 1));
         self.vsel = None;
         self.follow_frame = true;
         self.commit_structure(snap);
@@ -204,7 +208,7 @@ impl App {
 
     /// Déplace le plan `from` à la place `slot` (0 = au début, nombre de plans = à la fin).
     pub(crate) fn move_panel(&mut self, from: usize, slot: usize) {
-        let id = self.doc.panels[from].id;
+        let Some(id) = self.doc.panels.get(from).map(|p| p.id) else { return };
         self.move_chosen_panels(&[id], slot);
     }
 
@@ -1121,7 +1125,7 @@ impl App {
                             self.board_sel.clear();
                         }
                         self.set_panel(i);
-                        MontageDrag::Move { panel: i, target: i }
+                        MontageDrag::Move { panel: self.doc.panels[i].id, target: i }
                     }
                 } else {
                     MontageDrag::Scrub
@@ -1248,7 +1252,7 @@ impl App {
                     if ids.len() > 1 {
                         self.move_chosen_panels(&ids, target);
                     } else {
-                        self.move_panel(panel, target);
+                        self.move_chosen_panels(&[panel], target);
                     }
                 }
                 Some(MontageDrag::Clip(d)) => self.finish_clip_drag(d),
