@@ -125,15 +125,15 @@ fn the_halo_hugs_the_stroke_edge_and_fades_outward() {
     let shape = halo.shape(&Affine::IDENTITY);
     let Shape::Mesh(m) = &shape else { panic!() };
     assert!(m.vertices.iter().all(|v| v.pos.is_finite()));
-    // Les sommets pleins sont à moins de r (4) du trait ; les transparents à 4 + 2,8 de lui.
+    // Les sommets pleins sont à moins de r (4) du trait ; les transparents à 4 + 1,3 de lui (un liseré fin).
     let centre: Vec<Pos2> = d.elements[0].outline()[0].clone();
     let dist = |p: Pos2| centre.windows(2).map(|s| crate::selbox::segment_distance(p, s[0], s[1])).fold(f32::MAX, f32::min);
     for v in &m.vertices {
         let near = dist(v.pos);
         if v.color == Color32::TRANSPARENT {
-            assert!(near > 4.0 + 2.0 && near < 4.0 + 3.6, "bord transparent à {near}");
+            assert!(near > 4.0 + 0.9 && near < 4.0 + 1.8, "bord transparent à {near}");
         } else {
-            assert!(near > 3.0 && near < 4.0 + 2.2, "bord plein à {near}");
+            assert!(near > 3.0 && near < 4.0 + 1.2, "bord plein à {near}");
             assert_eq!(v.color, crate::theme::SELECTION_BOITE);
         }
     }

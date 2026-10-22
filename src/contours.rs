@@ -239,8 +239,9 @@ fn ribbon(mesh: &mut Mesh, line: &[Pos2], color: Color32) -> usize {
 
 /// Largeur du halo autour d'un trait choisi, en points d'écran (Storyboard Pro : 1 à 2 px de
 /// chaque côté), et jusqu'où il pénètre sous le bord du trait pour ne pas laisser de jour.
-const HALO_WIDTH: f32 = 2.8;
-const HALO_OVERLAP: f32 = 0.5;
+/// (Anthony, 2026-10-22 : 2,8 était trop épais ; un liseré fin suffit.)
+const HALO_WIDTH: f32 = 1.3;
+const HALO_OVERLAP: f32 = 0.3;
 
 /// Une ligne du dessin avec le rayon du trait en chaque point (en pixels du dessin ; 0 : une
 /// ligne sans épaisseur, comme le contour d'une zone).
