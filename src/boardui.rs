@@ -332,9 +332,11 @@ impl App {
         match self.doc.remove_panels(ids) {
             Some(i) => {
                 self.release_removed_notes(&before);
-                self.commit_structure(snap);
+                // Le plan courant d'abord : `commit_structure` lit ses calques, et l'ancien rang peut ne plus
+                // exister (supprimer le dernier plan plantait, Anthony 2026-10-22).
                 self.cur_panel = i;
                 self.clamp_nav();
+                self.commit_structure(snap);
                 self.board_sel.clear();
                 self.thumbs.prune(&self.doc);
                 self.status = match ids.len() {

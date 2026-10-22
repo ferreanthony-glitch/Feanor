@@ -739,3 +739,30 @@ fn perf_vignettes_drawing() {
     }
     resume("trait dans la vue Dessin", &mut dans_dessin);
 }
+
+/// Supprimer le plan courant quand c'est le dernier, ou plusieurs plans dont le courant, ne plante pas (Anthony,
+/// 2026-10-22 : « index out of bounds » dans `sync_couleurs`, appelé avant que le plan courant soit remis).
+#[test]
+fn deleting_the_current_last_plans_does_not_crash() {
+    let mut b = ouvert(quatre_plans(), 3);
+    let dernier = b.app.doc.panels.len() - 1;
+    b.app.select_panel(dernier);
+    let id = b.app.doc.panels[dernier].id;
+    b.app.delete_panels(&[id]);
+    b.chauffer(2);
+    assert_eq!(b.app.doc.panels.len(), 3);
+    assert!(b.app.cur_panel < b.app.doc.panels.len());
+    // Deux plans d'un coup, dont le courant, en fin de film.
+    let n = b.app.doc.panels.len();
+    b.app.select_panel(n - 1);
+    let ids = [b.app.doc.panels[n - 2].id, b.app.doc.panels[n - 1].id];
+    b.app.delete_panels(&ids);
+    b.chauffer(2);
+    assert_eq!(b.app.doc.panels.len(), 1);
+    assert_eq!(b.app.cur_panel, 0);
+    // Et l'annulation rend les plans.
+    b.app.run_action("edition.annuler");
+    b.chauffer(2);
+    assert_eq!(b.app.doc.panels.len(), 3);
+    assert!(b.app.cur_panel < b.app.doc.panels.len());
+}

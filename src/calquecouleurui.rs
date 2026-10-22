@@ -15,7 +15,8 @@ impl App {
     /// images suivent celles du trait. Rien à faire (un coup d'œil) quand il n'y en a pas. Le calque
     /// courant reste le même calque.
     pub(crate) fn sync_couleurs(&mut self) {
-        let current = self.layers().get(self.cur_layer).map(|l| l.id);
+        // (Sans paniquer si le plan courant vient de disparaître : l'appelant le remet juste après.)
+        let current = self.doc.panels.get(self.cur_panel).and_then(|p| p.layers.get(self.cur_layer)).map(|l| l.id);
         let (mut any, mut here) = (false, false);
         for pi in 0..self.doc.panels.len() {
             if !self.doc.panels[pi].layers.iter().any(|l| l.couleur.is_some()) {
@@ -30,7 +31,7 @@ impl App {
             here |= changed && pi == self.cur_panel;
         }
         if here {
-            if let Some(i) = current.and_then(|id| self.layers().iter().position(|l| l.id == id)) {
+            if let Some(i) = current.and_then(|id| self.doc.panels.get(self.cur_panel)?.layers.iter().position(|l| l.id == id)) {
                 self.cur_layer = i;
             }
         }
