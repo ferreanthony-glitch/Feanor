@@ -789,16 +789,8 @@ impl App {
             }
             let at = pos2(rect.left() + 5.0, rect.bottom() - 4.0 - title.size().y);
             clip.galley(at, title, visuals.text_color());
-            // Marques d'image (13a) : chacune, une image de storyboard de plus dans le plan.
-            for m in self.doc.panels[i].marks.iter().filter(|m| m.frame < len) {
-                let x = rect.left() - 1.0 + m.frame as f32 * ppf;
-                clip.line_segment([pos2(x, rect.top() + 2.0), pos2(x, rect.bottom() - 2.0)], Stroke::new(1.0_f32, theme::marque()));
-                clip.add(egui::Shape::convex_polygon(
-                    vec![pos2(x - 4.0, rect.top() + 2.0), pos2(x + 4.0, rect.top() + 2.0), pos2(x, rect.top() + 8.0)],
-                    theme::marque(),
-                    Stroke::NONE,
-                ));
-            }
+            // (Les marques d'image, les limites des cases du plan, ne se dessinent plus dans le montage : réunir deux plans en décochant une
+            // coupe y laissait un repère orange qui ne sert à rien. Elles restent dans les données, la planche et la timeline du plan.)
             // La version du plan (« V2 »), près du haut, au milieu, quand il en a plusieurs : la survoler ouvre
             // la pile des versions (`pileversui.rs`).
             let a_repere = self.envois_ui.etat(self.doc.panels[i].id).is_some() && crate::envoisui::repere_en_pastille(rect);
@@ -934,13 +926,6 @@ impl App {
             crate::rognageui::edge_hit(&blocks, p.x)
         };
         let frame_at = |x: f32| (((x - left) / ppf).floor().max(0.0) as usize).min(total - 1);
-        // Marque d'image sous le point (son triangle en haut du plan) : (plan, rang de la marque).
-        let mark_at = |app: &App, p: Pos2| {
-            let i = blocks.iter().position(|b| p.x >= b.left() - 5.0 && p.x <= b.right() + 5.0 && p.y >= b.top() && p.y <= b.top() + 12.0)?;
-            let b = blocks[i];
-            let m = app.doc.panels[i].marks.iter().position(|m| (p.x - (b.left() - 1.0 + m.frame as f32 * ppf)).abs() <= 5.0)?;
-            Some((i, m))
-        };
         // Sans limite à la fin des plans (on peut poser un son plus loin).
         let free_frame_at = |x: f32| ((x - left) / ppf).floor().max(0.0) as usize;
 
@@ -1062,10 +1047,6 @@ impl App {
                 self.begin_cam_rect(origin, mods.shift, mods.command && !mods.shift);
             } else if let Some((_, Some((id, edge)))) = self.lane_hit(origin, left, ppf, lanes_top) {
                 self.begin_clip_drag(id, edge, origin);
-            } else if let Some((i, m)) = mark_at(self, origin) {
-                // Une marque d'image se prend aussi dans le montage (passe interface).
-                self.set_panel(i);
-                self.begin_handle_drag(crate::handles::Handle::Mark(m));
             } else if let Some((i, k, f)) = fx_hit {
                 // Une clé d'effet : elle emmène toutes les clés d'effets choisies (`fxkeys.rs`).
                 self.sel_clip = None;
@@ -1181,8 +1162,6 @@ impl App {
             if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
                 self.end_handle_drag();
             }
-        } else if self.cam_keys_drag.is_none() && resp.hover_pos().is_some_and(|p| mark_at(self, p).is_some()) {
-            ui.ctx().set_cursor_icon(CursorIcon::Grab);
         }
 
         // Choix au rectangle : les pistes et les images couvertes ; le rectangle se dessine.
