@@ -10,7 +10,7 @@
 //!   à l'appui et dessine dedans, sans clic de choix avant. Un trait qui commence ailleurs ne dessine rien.
 //!   C'est le dessin lui-même qui est dans l'image courante (`card_canvas`), donc le même moteur, le même
 //!   rendu progressif : aucune latence de plus. Pendant le geste, le trait **déborde** à l'écran, pâle (`debord.rs`) ; au
-//!   lâcher, l'image ne montre que son cadre et une petite marge de 3 % où le trait reste visible (`thumbs::texture_case`). La toile
+//!   lâcher, l'image ne montre que son cadre et une marge de 12 % de sa largeur, de chaque côté, où le trait reste visible (`thumbs::texture_case`). La toile
 //!   infinie garde tout le tracé, et l'export cadre comme avant.
 //! - **Cases pâles** après la dernière image : dessiner dans l'une d'elles fait le plan (celles qui la précèdent deviennent des plans
 //!   vides, pour garder l'ordre ; si la barre qui précède la première est grise, une image de plus du dernier plan) ; la création et

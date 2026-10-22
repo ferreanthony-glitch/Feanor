@@ -66,9 +66,10 @@ impl App {
         self.layout.card_size.clamp(crate::board::CARD_MIN, crate::board::CARD_MAX)
     }
 
-    /// La marge autour d'une case où un appui de caméra la prend encore (le trait qui déborde, 3 %), en points de la planche.
+    /// La marge autour d'une case où un appui de caméra la prend encore (3 % de sa largeur, au moins 6 points : moins que la marge de
+    /// trait de 12 %, pour que deux cases voisines ne se disputent pas l'appui), en points de la planche.
     pub(crate) fn marge_camera(&self) -> f32 {
-        (self.largeur_case() * crate::board::RING_FRACTION).max(6.0)
+        (self.largeur_case() * 0.03).max(6.0)
     }
 
     /// Les quatre coins de chaque cadre de la case `k`, sur la planche, ou ceux de la vignette (la case sans mouvement). Vrai

@@ -53,8 +53,11 @@ pub const GAP_CUT: f32 = 53.0;
 pub const BAR_W: f32 = 1.5;
 pub const BAR_CUT_W: f32 = 2.0;
 pub const BAR_FRACTION: f32 = 1.0 / 3.0;
-/// Le trait d'une vignette reste visible un peu au-delà de son cadre (la maquette : environ 3 % de la largeur).
-pub const RING_FRACTION: f32 = 0.03;
+/// Le trait d'une vignette reste visible au-delà de son cadre, sur 12 % de sa largeur de chaque côté (la maquette 07 : une marge
+/// de 12 %, que le premier essai avait réduite à 3 %). Elle dépasse l'écart entre deux vignettes (10 / 136 dans un plan, 30 / 136 à une
+/// coupe) : la marge d'une case recouvre alors un peu la case voisine, et c'est le trait de la case peinte en dernier qui se voit
+/// (l'ordre de la planche : toujours le même, rien ne clignote).
+pub const RING_FRACTION: f32 = 0.12;
 
 /// L'écart entre deux vignettes d'un même plan, pour des vignettes de `card_w` de large.
 pub fn gap_same(card_w: f32) -> f32 {

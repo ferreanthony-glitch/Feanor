@@ -784,7 +784,7 @@ dessous était plus discret et mieux intégré ; le geste de mouvement de camér
   numéro du plan petit (11 points) tout en haut de sa ligne ; bande de note **sans cadre, un filet très pâle dessous**, texte gris
   petit (trois lignes puis « … », la taille baisse un peu avec la longueur).
 - **Le trait qui déborde** : pendant le geste, la partie dehors du trait se voit en entier mais **pâle** (`debord.rs`,
-  `GHOST_ALPHA`) ; **au lâcher, la case en garde un peu au-delà de son cadre** (`RING_FRACTION`, 3 % de sa largeur), comme la maquette
+  `GHOST_ALPHA`) ; **au lâcher, la case en garde un peu au-delà de son cadre** (`RING_FRACTION`, 3 % de sa largeur au premier essai, 12 % depuis le 2026-10-22), comme la maquette
   coupe à la case plus une petite marge. Comment : la vignette de chaque case (`Thumbs::texture_case`) est composée par le fil de
   fond avec cette marge autour du cadre (`render::thumbnail_marge_until` : dans la marge, seul ce qui est dessiné est composé, pas le
   papier) ; la case courante, qui est le dessin lui-même, peint seulement les quatre bandes de la marge de sa vignette. Rien de plus sur
@@ -799,7 +799,11 @@ dessous était plus discret et mieux intégré ; le geste de mouvement de camér
 ### Papier infini, cases pâles, empreintes de caméra et geste qui ne crée plus rien (2026-10-22, branche `vignettes-mouvements`)
 
 Demandes d'Anthony (validées avec un croquis et un schéma), après les deux sections ci-dessus : **la marge autour des cases est
-bonne** (3 %, inchangée). Code : `board.rs` (mise en page), `vignettecam.rs` (empreinte, liens, règles du geste),
+bonne**, mais c'était la maquette (12 % de la largeur de la case, de chaque côté) et non les 3 % du premier essai : `RING_FRACTION` vaut maintenant **0,12**.
+Les vignettes composées en fond gardent dans la marge le dessin seul, sans papier ; la case courante peint les quatre bandes de sa marge. La marge dépasse
+l'écart entre deux cases (10 / 136 dans un plan, 30 / 136 à une coupe) : elle recouvre un peu la voisine, et c'est la case peinte en dernier (ordre de la
+planche, toujours le même) dont le trait se voit : rien ne clignote. Ce qui est dessiné hors du cadre (aplats de fond compris) se voit donc plus loin.
+Le geste de caméra garde sa propre marge d'appui de 3 % (deux cases voisines ne se disputent pas l'appui). Code : `board.rs` (mise en page), `vignettecam.rs` (empreinte, liens, règles du geste),
 `vignettecamui.rs` (geste, curseur, menu, dessin des cadres), `boardui.rs` (écran), `thumbs.rs` (une vignette par tuile), `planche.rs`
 (export), `keymap.toml` (la touche), `workspace.rs` + `prefsui.rs` (le réglage). **Ce qui suit remplace** : la carte blanche, la case vide
 unique en « + », la case de mouvement qui prend un bloc de cases entières, les cadres couleur du thème et la flèche de centre à centre,
