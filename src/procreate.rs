@@ -55,7 +55,9 @@ pub fn read_bplist(b: &[u8]) -> Result<Plist, String> {
     let count = be(&t[8..16]) as usize;
     let top = be(&t[16..24]) as usize;
     let table = be(&t[24..32]) as usize;
-    if off_size == 0 || ref_size == 0 || count > 10_000_000 || table + count * off_size > b.len() {
+    // (Une table annoncée tout au bout de l'espace des nombres faisait déborder l'addition : la vérification
+    // passait, et la lecture sortait du fichier.)
+    if off_size == 0 || ref_size == 0 || count > 10_000_000 || table.checked_add(count * off_size).is_none_or(|end| end > b.len()) {
         return Err("liste de propriétés illisible".into());
     }
     let offsets: Vec<usize> = (0..count).map(|i| be(&b[table + i * off_size..table + (i + 1) * off_size]) as usize).collect();
@@ -122,7 +124,8 @@ fn object(b: &[u8], offsets: &[usize], ref_size: usize, i: usize, seen: &mut [bo
             let (n, s) = len_at(p)?;
             let refs = |k: usize| -> Result<usize, String> { Ok(be(b.get(s + k * ref_size..s + (k + 1) * ref_size).ok_or_else(bad)?) as usize) };
             let out = if kind == 0xD {
-                let mut items = Vec::with_capacity(n);
+                // (Le nombre d'entrées vient du fichier : une réserve à sa mesure pouvait demander des téraoctets.)
+                let mut items = Vec::with_capacity(n.min(4096));
                 for k in 0..n {
                     let key = object(b, offsets, ref_size, refs(k)?, seen, depth + 1)?;
                     let val = object(b, offsets, ref_size, refs(n + k)?, seen, depth + 1)?;

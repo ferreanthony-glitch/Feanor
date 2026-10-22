@@ -104,11 +104,15 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
     }
     let json_len = u64::from_le_bytes(data[12..20].try_into().unwrap()) as usize;
     let json = data
-        .get(HEADER..HEADER + json_len)
+        .get(HEADER..HEADER.saturating_add(json_len))
         .ok_or("fichier tronqué")?;
     let manifest: LegacyManifest = serde_json::from_slice(json).map_err(|e| e.to_string())?;
     let blob = &data[HEADER + json_len..];
     let (w, h) = (manifest.width, manifest.height);
+    // (Comme pour un manifeste d'aujourd'hui, `project.rs` : une feuille vide ou démesurée ne s'ouvre pas.)
+    if w == 0 || h == 0 || w > crate::vector::MAX_SIDE * 2 || h > crate::vector::MAX_SIDE * 2 {
+        return Err(format!("taille d'image invalide dans le fichier ({w} × {h})"));
+    }
 
     let mut cels = HashMap::new();
     for c in manifest.cels {
@@ -120,9 +124,8 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
                 fond: None,
             },
             None => {
-                let bytes = blob
-                    .get(c.offset as usize..(c.offset + c.length) as usize)
-                    .ok_or("fichier tronqué")?;
+                let end = c.offset.checked_add(c.length).ok_or("fichier tronqué")?;
+                let bytes = blob.get(c.offset as usize..end as usize).ok_or("fichier tronqué")?;
                 let img = image::load_from_memory(bytes)
                     .map_err(|e| e.to_string())?
                     .to_rgba8();

@@ -162,6 +162,8 @@ fn kind_name(edit: &Edit) -> &'static str {
 impl History {
     pub fn push(&mut self, edit: Edit) {
         let name = self.context.clone().unwrap_or_else(|| kind_name(&edit).to_string());
+        // (Le rapport d'une erreur dit ce qu'on venait de faire, `plantage.rs`.)
+        crate::plantage::noter_action(&name);
         self.undo.push(edit);
         self.undo_names.push(name);
         self.redo.clear();

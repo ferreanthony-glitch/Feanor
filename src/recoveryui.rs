@@ -61,6 +61,35 @@ impl App {
         }
     }
 
+    /// La carte graphique de l'affichage est perdue (`plantage::note_device_lost`) : SHOT tourne encore, mais son
+    /// affichage peut fermer SHOT à tout moment. Une copie de secours de chaque projet modifié part tout de suite,
+    /// sans attendre le délai, et la barre d'état dit quoi faire.
+    pub(crate) fn secours_carte_perdue(&mut self) {
+        if self.modified {
+            let title = self.base_name_or("Sans titre");
+            if let Some(rec) = &mut self.recovery {
+                let snap = Snapshot {
+                    doc: &self.doc,
+                    serial: self.history.serial(),
+                    modified: true,
+                    title,
+                    project: self.path.clone(),
+                    project_written: &self.written,
+                };
+                rec.start_copy(snap);
+            }
+        }
+        // Les onglets cachés : leur copie part aussi (délai nul).
+        for i in 0..self.onglets.len() {
+            if i != self.actif {
+                self.tick_secours_cache(i, Some(Duration::ZERO));
+            }
+        }
+        self.status = "La carte graphique ne répond plus (pilote réinitialisé ?) : SHOT risque de se fermer. Une copie de secours \
+                       part maintenant ; enregistre, puis relance SHOT."
+            .into();
+    }
+
     /// Réglage du délai (menu Fichier).
     pub(crate) fn autosave_menu_ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {

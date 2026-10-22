@@ -298,3 +298,37 @@ Le risque nouveau : deux personnes écrivent le même film par un dossier qui n'
 
 Le format du projet classique ne change pas (`VERSION` 33) ; la suite complète et `scripts\verifier.ps1` (nouvelle famille « travail à
 plusieurs ») passent.
+
+## 15. Passe de débogage (2026-10-22, branche `debug-plantages`)
+
+Les dix rapports de `%LOCALAPPDATA%\SHOT\plantages` relus un à un : huit étaient déjà corrigés (`raster.rs:57`, vignette d'un
+aperçu réduit d'effet, f3d94a1 ; supprimer le dernier plan, `sync_couleurs`, 4925b16 ; réunir un plan depuis le clic droit,
+`panel_plan_at`, 09d1b5c). Les deux autres, la carte graphique perdue puis l'affichage d'egui qui tombe deux minutes plus tard,
+ne viennent pas de SHOT ; mais SHOT lance maintenant une copie de secours dès la perte de la carte (`plantage::note_device_lost`,
+`recoveryui::secours_carte_perdue`). Le rapport dit aussi les dernières commandes et étapes d'annulation (« Dernières actions »).
+
+Les essais de `debogage_tests.rs` ouvrent dans l'application, et montrent partout (les quatre espaces, la vue Vignettes, le
+dernier plan, l'image après la fin, une lecture, une annulation), des projets que la lecture accepte mais qui sont abîmés :
+
+| Essai | Ce qu'il fait |
+|---|---|
+| `a_damaged_project_that_opens_never_crashes_the_interface` | 30 manifestes changés au hasard (`muter`), ceux qui s'ouvrent passent par toute l'interface |
+| `a_project_with_odd_values_never_crashes_the_interface` | 40 manifestes dont des valeurs des plans changent en gardant leur genre (un entier reste un entier : sinon la lecture refuse tout) |
+| `edge_case_projects_show_everywhere_without_crash` | un seul plan, plan de durée nulle, plan sans calque, clé de caméra et marque d'image après la fin, calque plus long que le plan, 0 image par seconde |
+| `every_command_on_an_edge_case_project_never_crashes` | chaque commande de SHOT (sauf fenêtres de fichiers, presse-papiers de Windows, réseau), en storyboard puis en animation, puis annulée |
+| `random_commands_in_a_row_never_crash` | 500 commandes au hasard à la suite, annulations et rétablissements compris ; plan et calque courants toujours dans le film |
+| `a_damaged_legacy_file_is_refused_without_panic` | un ancien `.pelure` d'un seul fichier : feuille de largeur nulle, 400 fichiers aux octets changés |
+
+`SHOT_DEBOGAGE_ESSAIS=300` en fait passer davantage (300 manifestes, 3 000 commandes) : 0 plantage sur 300 + 300 manifestes et
+2 × 2 000 commandes le 2026-10-22.
+
+Défauts trouvés et corrigés :
+
+1. **Un plan sans calque** fermait SHOT à la première image (`App::layers`, index 0 d'une liste vide). La lecture d'un projet
+   en donne déjà un à chaque plan ; la porte d'entrée de l'application (`App::load_doc`) le garantit maintenant pour tout
+   document (`Document::un_calque_par_plan`).
+2. **Brosse Procreate abîmée** (`procreate.rs`) : une table des positions annoncée tout au bout des nombres faisait déborder
+   l'addition de contrôle (la lecture sortait du fichier), et un dictionnaire annonçant 2⁶² entrées demandait une réserve
+   impossible. Essai : `procreate_tests::a_damaged_binary_plist_is_refused_without_panic`.
+3. **Ancien `.pelure` d'une feuille vide ou démesurée** : il s'ouvrait (`io::load_legacy`) ; refusé comme un manifeste
+   d'aujourd'hui.
