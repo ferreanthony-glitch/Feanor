@@ -1039,11 +1039,24 @@ impl App {
         }
         let deadline = Instant::now() + crate::thumbs::THUMB_TIME;
         // Les tuiles des empreintes d'abord (leur rectangle déborde de leur enveloppe : les cases qui s'y trouvent se peignent par-dessus).
+        // Le menu du clic droit de la case courante se montre pendant qu'on peint les cases : « Réunir avec le plan précédent »,
+        // « Supprimer »… y changent le film, et la mise en page de cette image ne vaut plus. On s'arrête là, l'image suivante
+        // la refait (Anthony, 2026-10-22 : réunir un plan à mouvement de caméra plantait sur un rang de plan disparu).
+        // (Le nombre de plans, pas l'historique : un trait fini dans la case courante pousse une étape, et les cases d'après
+        // doivent quand même se peindre.)
+        let plans = self.doc.panels.len();
         for k in 0..layout.cards.len() {
             self.board_tuile(ui, &painter, view, xf, &layout, k, pan_mode, deadline);
         }
         for k in 0..layout.cards.len() {
+            if self.doc.panels.len() != plans || layout.cards[k].panel >= self.doc.panels.len() {
+                ui.ctx().request_repaint();
+                break;
+            }
             self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, deadline);
+        }
+        if self.doc.panels.len() != plans {
+            return;
         }
 
         // Notes libres par-dessus, puis ce qui est choisi, puis les repères du geste.
