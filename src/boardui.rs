@@ -151,8 +151,11 @@ pub(crate) struct Created {
 /// Sur quoi le menu du clic droit a été ouvert.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum MenuTarget {
-    /// `cadre` : le cadre de caméra sous le clic droit, s'il y en a un (« Retirer ce cadre »).
-    Card { panel: usize, frame: usize, cadre: Option<usize> },
+    /// La case `case` (l'identifiant du plan pour sa première case, celui de sa marque d'image sinon) du plan `plan`. Des
+    /// identifiants, pas des rangs : le menu reste ouvert pendant un Ctrl+Z ou l'arrivée du montage d'un équipier, qui donnent
+    /// le rang du plan à un autre (« Animer cette image » animait le plan voisin, Anthony 2026-10-22). `cadre` : le cadre de
+    /// caméra sous le clic droit, s'il y en a un (« Retirer ce cadre »).
+    Card { plan: u64, case: u64, cadre: Option<usize> },
     Background,
 }
 
@@ -312,6 +315,22 @@ impl App {
         let z = (self.board_zoom * factor).clamp(ZOOM_MIN, ZOOM_MAX);
         self.board_pan = p - view.min - b * z;
         self.board_zoom = z;
+    }
+
+    /// La case `k` de `layout` (faite en début d'image, quand le film avait `plans` plans) désigne-t-elle toujours le même plan ?
+    /// Un menu peint au milieu des cases change parfois le film : les rangs d'avant ne désignent plus les mêmes plans (ou plus
+    /// aucun), et le reste de l'image ne doit pas les lire. (Un rang et un identifiant par case : rien de lourd par image.)
+    pub(crate) fn case_tient(&self, layout: &BoardLayout, plans: usize, k: usize) -> bool {
+        self.doc.panels.len() == plans && layout.cards.get(k).is_none_or(|c| self.doc.panels.get(c.panel).is_some_and(|p| p.id == c.plan))
+    }
+
+    /// Le rang du plan `plan` et l'image où commence sa case `case` (le plan lui-même pour sa première case, sa marque d'image
+    /// sinon), dans le film d'aujourd'hui ; rien si la case n'y est plus.
+    pub(crate) fn case_du_menu(&self, plan: u64, case: u64) -> Option<(usize, usize)> {
+        let i = self.doc.panels.iter().position(|p| p.id == plan)?;
+        let p = &self.doc.panels[i];
+        let frame = if case == plan { 0 } else { p.marks.iter().find(|m| m.id == case)?.frame };
+        Some((i, frame))
     }
 
     /// Les panneaux choisis, dans l'ordre du film (le panneau courant en fait toujours partie).
@@ -590,7 +609,7 @@ impl App {
                     // Le cadre de caméra sous le clic (« Retirer ce cadre »).
                     let (quads, simple) = self.cadres_sur_la_planche(layout, k);
                     let cadre = if simple { None } else { crate::vignettecam::cadre_sous(&quads, p) };
-                    MenuTarget::Card { panel: c.panel, frame: c.frame, cadre }
+                    MenuTarget::Card { plan: c.plan, case: c.id, cadre }
                 }
                 _ => MenuTarget::Background,
             });
@@ -1039,23 +1058,28 @@ impl App {
         }
         let deadline = Instant::now() + crate::thumbs::THUMB_TIME;
         // Les tuiles des empreintes d'abord (leur rectangle déborde de leur enveloppe : les cases qui s'y trouvent se peignent par-dessus).
-        // Le menu du clic droit de la case courante se montre pendant qu'on peint les cases : « Réunir avec le plan précédent »,
-        // « Supprimer »… y changent le film, et la mise en page de cette image ne vaut plus. On s'arrête là, l'image suivante
-        // la refait (Anthony, 2026-10-22 : réunir un plan à mouvement de caméra plantait sur un rang de plan disparu).
-        // (Le nombre de plans, pas l'historique : un trait fini dans la case courante pousse une étape, et les cases d'après
-        // doivent quand même se peindre.)
+        // Le menu du clic droit de la case courante se montre pendant qu'on peint les tuiles et les cases : « Réunir avec le plan
+        // précédent », « Supprimer »… y changent le film, et la mise en page de cette image ne vaut plus. On s'arrête là, l'image
+        // suivante la refait (Anthony, 2026-10-22 : réunir un plan à mouvement de caméra plantait sur un rang de plan disparu ; la
+        // tuile d'un plan à mouvement d'après lui plantait de même, `case_tient`).
         let plans = self.doc.panels.len();
+        let mut tient = true;
         for k in 0..layout.cards.len() {
+            if !self.case_tient(&layout, plans, k) {
+                tient = false;
+                break;
+            }
             self.board_tuile(ui, &painter, view, xf, &layout, k, pan_mode, deadline);
         }
-        for k in 0..layout.cards.len() {
-            if self.doc.panels.len() != plans || layout.cards[k].panel >= self.doc.panels.len() {
-                ui.ctx().request_repaint();
+        for k in (0..layout.cards.len()).take_while(|_| tient) {
+            if !self.case_tient(&layout, plans, k) {
+                tient = false;
                 break;
             }
             self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, deadline);
         }
-        if self.doc.panels.len() != plans {
+        if !tient || !self.case_tient(&layout, plans, layout.cards.len().saturating_sub(1)) {
+            ui.ctx().request_repaint();
             return;
         }
 
@@ -1107,7 +1131,14 @@ impl App {
             }
         }
         bg.context_menu(|ui| match self.vignettes.menu {
-            Some(MenuTarget::Card { panel, frame, cadre }) => self.card_menu(ui, panel, frame, cadre),
+            Some(MenuTarget::Card { plan, case, cadre }) => match self.case_du_menu(plan, case) {
+                Some((panel, frame)) => self.card_menu(ui, panel, frame, cadre),
+                // (La case n'est plus là : le menu se ferme plutôt que de viser une autre case.)
+                None => {
+                    self.vignettes.menu = None;
+                    ui.close_menu();
+                }
+            },
             _ => self.board_menu(ui, &layout, &texts),
         });
         self.note_text_editor(ui, xf, &layout);
@@ -1668,7 +1699,13 @@ impl App {
     /// Menu du clic droit sur le dessin d'une vignette (la vignette courante reçoit le clic avant le fond).
     pub(crate) fn card_context_menu(&mut self, ui: &mut egui::Ui) {
         match self.vignettes.menu {
-            Some(MenuTarget::Card { panel, frame, cadre }) if panel < self.doc.panels.len() => self.card_menu(ui, panel, frame, cadre),
+            Some(MenuTarget::Card { plan, case, cadre }) => match self.case_du_menu(plan, case) {
+                Some((panel, frame)) => self.card_menu(ui, panel, frame, cadre),
+                None => {
+                    self.vignettes.menu = None;
+                    ui.close_menu();
+                }
+            },
             _ => {
                 let (panel, frame) = (self.cur_panel, self.cur_frame);
                 self.card_menu(ui, panel, frame, None);

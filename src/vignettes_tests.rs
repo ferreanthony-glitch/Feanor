@@ -561,7 +561,8 @@ fn the_context_menu_of_an_image_targets_its_plan() {
     b.image(vec![Event::PointerMoved(v)], 1.0 / 60.0);
     b.image(vec![Event::PointerButton { pos: v, button: PointerButton::Secondary, pressed: true, modifiers: Modifiers::NONE }], 1.0 / 60.0);
     assert_eq!(b.app.cur_panel, 2, "le clic droit choisit la vignette");
-    assert_eq!(b.app.vignettes.menu, Some(crate::boardui::MenuTarget::Card { panel: 2, frame: 0, cadre: None }));
+    let plan = b.app.doc.panels[2].id;
+    assert_eq!(b.app.vignettes.menu, Some(crate::boardui::MenuTarget::Card { plan, case: plan, cadre: None }));
     b.image(vec![Event::PointerButton { pos: v, button: PointerButton::Secondary, pressed: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
 }
 

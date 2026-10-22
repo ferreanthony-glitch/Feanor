@@ -1396,8 +1396,8 @@ impl App {
                     if clip.is_some() {
                         self.sel_clip = clip;
                     }
-                    Some(MenuTarget::Lane {
-                        track,
+                    self.doc.audio_tracks.get(track).map(|t| MenuTarget::Lane {
+                        track: t.id,
                         clip,
                         frame: free_frame_at(p.x),
                     })
@@ -1410,7 +1410,7 @@ impl App {
                         // d'avant le clic (choisir le plan la ramène à son début).
                         self.trim_menu = Some((self.doc.panels[i].id, self.global_frame()));
                         self.select_panel(i);
-                        MenuTarget::Panel(i)
+                        MenuTarget::Panel(self.doc.panels[i].id)
                     })
                 } else if let Some((i, f)) = self.montage_camera_key_at(p, r.top(), &blocks, ppf, rows).and_then(|(i, k)| Some((i, self.doc.panels[i].camera.get(k)?.frame))) {
                     // Un losange de clé de caméra : le menu de la caméra, qui vise les clés choisies
@@ -1452,7 +1452,7 @@ impl App {
                     self.goto_global(frame_at(p.x));
                     (self.cur_panel == i).then(|| {
                         self.select_layer(k);
-                        MenuTarget::Layer(k)
+                        MenuTarget::Layer(self.layers()[k].id)
                     })
                 } else if let Some(&(_, start)) = runs.iter().find(|(rect, _)| rect.contains(p)) {
                     self.board_sel.clear();
@@ -1470,13 +1470,35 @@ impl App {
             }
         }
         if let Some(target) = self.menu_target {
+            // Le plan, la piste ou le calque visés, retrouvés par leur identifiant dans le film d'aujourd'hui ; s'ils n'y sont plus, le
+            // menu se ferme plutôt que de viser leur voisin.
+            let plan_of = |app: &App, id: u64| app.doc.panels.iter().position(|p| p.id == id);
+            let track_of = |app: &App, id: u64| app.doc.audio_tracks.iter().position(|t| t.id == id);
+            let layer_of = |app: &App, id: u64| app.layers().iter().position(|l| l.id == id);
             let menu_open = resp.context_menu(|ui| match target {
-                MenuTarget::Panel(i) => self.panel_menu(ui, i),
+                MenuTarget::Panel(id) => match plan_of(self, id) {
+                    Some(i) => self.panel_menu(ui, i),
+                    None => {
+                        self.menu_target = None;
+                        ui.close_menu();
+                    }
+                },
                 MenuTarget::Comment(id) => self.comment_menu(ui, id),
                 MenuTarget::Transition(id) => self.transition_menu(ui, id),
                 MenuTarget::Cut(cut) => self.cut_menu(ui, cut),
-                MenuTarget::Lane { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
-                MenuTarget::Layer(k) => {
+                MenuTarget::Lane { track, clip, frame } => match track_of(self, track) {
+                    Some(t) => self.lane_menu(ui, t, clip, frame),
+                    None => {
+                        self.menu_target = None;
+                        ui.close_menu();
+                    }
+                },
+                MenuTarget::Layer(id) => {
+                    let Some(k) = layer_of(self, id) else {
+                        self.menu_target = None;
+                        ui.close_menu();
+                        return;
+                    };
                     // La piste d'un calque : les clés à l'image du clic, puis le menu du calque.
                     let resp = ui.add(egui::Button::new("Nouvelle clé ici (copie du dessin)").shortcut_text(self.keymap.label("dessin.nouvelle_cle")));
                     if crate::bulles::bulle(resp, "Nouvelle clé ici", "Elle part du dessin montré ici (sinon du dernier d'avant). Ou double-clic sur la piste.", "").clicked() {

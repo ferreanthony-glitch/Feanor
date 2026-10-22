@@ -117,6 +117,9 @@ impl App {
         let Some(mut s) = self.partage.take() else { return };
         let plan = self.doc.panels.get(self.cur_panel).map(|p| p.id);
         s.regarde_si_change(plan, if self.mode == Mode::Animation { "Animation" } else { "Storyboard" });
+        // Le plan et le calque regardés, par leur identifiant : le montage d'un équipier peut donner leur rang à d'autres.
+        let calque = self.doc.panels.get(self.cur_panel).and_then(|p| p.layers.get(self.cur_layer)).map(|l| l.id);
+        let nav = (plan.unwrap_or(0), calque.unwrap_or(0));
         let fx = s.sonder(&mut self.doc);
         if self.history.serial() != s.serial_vu {
             s.serial_vu = self.history.serial();
@@ -127,7 +130,8 @@ impl App {
         self.partage = Some(s);
         if fx.documents_changes {
             self.renderer.invalidate_all();
-            self.clamp_nav();
+            // (Le plan qu'on regardait reste le plan courant, où que le montage reçu l'ait mis : Anthony 2026-10-22, passe de débogage.)
+            self.retrouver_nav(nav);
             self.validate_selection();
             for id in a_rejouer {
                 self.rejeu_apres_ouverture(id);
