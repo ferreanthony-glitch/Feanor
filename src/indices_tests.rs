@@ -309,3 +309,144 @@ fn the_current_plan_stays_the_same_plan_when_a_teammate_reorders_the_montage() {
     assert_eq!(b.app.doc.panels.last().map(|p| p.id), Some(premier), "la structure de Léa est arrivée");
     assert_eq!(b.app.doc.panels[b.app.cur_panel].id, vu, "le plan courant est toujours celui qu'Anthony regardait");
 }
+
+// ---------------------------------------------------------------------------------------------- toutes les vues, toutes les opérations
+
+/// Un film qui a de tout : quatre plans (le premier en trois cases, le deuxième et le dernier avec un mouvement de caméra), des
+/// calques rangés dans un dossier, deux pistes son, des effets.
+fn film_complet() -> Document {
+    let mut doc = deux_longs();
+    for i in [1, doc.panels.len() - 1] {
+        let a = doc.panel_camera(i, 0);
+        let n = doc.panels[i].frame_count();
+        doc.panels[i].camera = vec![crate::camera::CameraKey::new(0, a), crate::camera::CameraKey::new(n - 1, a.shifted(40.0, 0.0))];
+    }
+    let dossier = Layer::new_folder("Dossier F");
+    let f = dossier.id;
+    let mut a = Layer::new("Calque A", LayerKind::Bitmap);
+    a.parent = Some(f);
+    let mut bb = Layer::new("Calque B", LayerKind::Vector);
+    bb.parent = Some(f);
+    let mut d = Layer::new("Calque D", LayerKind::Bitmap);
+    d.fx = vec![Effect::new(EffectKind::Invert), Effect::new(EffectKind::Posterize)];
+    doc.panels[1].layers = vec![a, bb, dossier, d];
+    doc.audio_tracks.clear();
+    doc.add_audio_track();
+    doc.add_audio_track();
+    doc
+}
+
+/// Chaque opération qui change la structure (plans, calques, images, onglets, projet), dans chaque vue, depuis l'état le plus « au
+/// bord » (dernier plan, dernier calque, dernière image, tout choisi), puis Ctrl+Z et Ctrl+Y : aucune image d'écran ne plante, et le
+/// plan et le calque courants restent dans le film.
+#[test]
+fn every_structure_change_in_every_view_keeps_the_app_standing() {
+    type Op = (&'static str, fn(&mut crate::app::App));
+    let ops: &[Op] = &[
+        ("supprimer le dernier plan", |a| {
+            let id = a.doc.panels[a.cur_panel].id;
+            a.delete_panels(&[id]);
+        }),
+        ("supprimer tous les plans sauf le premier", |a| {
+            let ids: Vec<u64> = a.doc.panels.iter().skip(1).map(|p| p.id).collect();
+            a.delete_panels(&ids);
+        }),
+        ("réunir avec le plan précédent", |a| {
+            a.select_panel(2);
+            a.join_previous_scene();
+        }),
+        ("réunir avec le plan suivant", |a| {
+            a.select_panel(0);
+            a.merge_next_panel();
+        }),
+        ("fusionner les plans choisis", |a| a.merge_chosen_panels()),
+        ("couper le plan", |a| {
+            a.select_panel(1);
+            a.cur_frame = 7;
+            a.split_current_panel();
+        }),
+        ("dupliquer le plan", |a| a.duplicate_panel()),
+        ("nouveau plan, nouvelle séquence", |a| {
+            a.new_panel();
+            a.new_sequence();
+        }),
+        ("déplacer le dernier plan au début", |a| {
+            let n = a.doc.panels.len();
+            a.move_panel(n - 1, 0);
+        }),
+        ("copier, coller des plans", |a| {
+            a.copy_panels();
+            a.paste_panels();
+        }),
+        ("calques : ajouter, dupliquer, fusionner, déplacer", |a| {
+            a.select_panel(1);
+            a.add_layer(LayerKind::Bitmap);
+            a.duplicate_layer();
+            a.merge_layer_down();
+            a.move_layer(false);
+        }),
+        ("supprimer le dossier et ses calques", |a| {
+            a.select_panel(1);
+            a.select_layer(2);
+            a.layer_sel.clear();
+            a.delete_chosen_layers();
+        }),
+        ("supprimer tous les calques choisis", |a| {
+            a.select_panel(1);
+            a.layer_sel = a.layers().iter().map(|l| l.id).collect();
+            a.delete_chosen_layers();
+        }),
+        ("images : nouvelle, supprimer, marque", |a| {
+            a.new_image(false);
+            a.delete_image();
+            a.toggle_mark();
+        }),
+        ("un autre projet", |a| a.load_doc(quatre_plans())),
+        ("onglet neuf puis retour", |a| {
+            a.nouvel_onglet();
+            a.activer_onglet(0);
+        }),
+    ];
+    let vues: [(&str, Espace, crate::app::BoardView); 4] = [
+        ("Vignettes", Espace::Vignettes, crate::app::BoardView::Panels),
+        ("Storyboard", Espace::Storyboard, crate::app::BoardView::Scene),
+        ("Montage", Espace::Montage, crate::app::BoardView::Scene),
+        ("Animation", Espace::Animation, crate::app::BoardView::Scene),
+    ];
+    let mut echecs: Vec<String> = Vec::new();
+    for (nom_vue, espace, board_view) in vues {
+        for (nom, op) in ops {
+            let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let mut b = banc_taille(film_complet(), false, 1600, 900);
+                b.app.set_espace(espace);
+                b.app.board_view = board_view;
+                b.chauffer(3);
+                // Tout au bord : le dernier plan, son dernier calque, sa dernière image ; tout choisi.
+                let n = b.app.doc.panels.len();
+                b.app.select_panel(n - 1);
+                b.app.cur_layer = b.app.layers().len() - 1;
+                b.app.cur_frame = b.app.frame_count() - 1;
+                b.app.board_sel = b.app.doc.panels.iter().map(|p| p.id).collect();
+                b.app.frame_sel = Some((0, b.app.frame_count()));
+                b.chauffer(2);
+                op(&mut b.app);
+                b.chauffer(3);
+                for _ in 0..4 {
+                    touche(&mut b, Key::Z, Modifiers::COMMAND);
+                    b.chauffer(1);
+                }
+                for _ in 0..4 {
+                    touche(&mut b, Key::Y, Modifiers::COMMAND);
+                    b.chauffer(1);
+                }
+                b.chauffer(2);
+                assert!(b.app.cur_panel < b.app.doc.panels.len() && b.app.cur_layer < b.app.layers().len(), "plan et calque courants dans le film");
+            }));
+            if let Err(e) = r {
+                let m = e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default();
+                echecs.push(format!("{nom_vue} / {nom} : {m}"));
+            }
+        }
+    }
+    assert!(echecs.is_empty(), "{} plantage(s) :\n{}", echecs.len(), echecs.join("\n"));
+}
