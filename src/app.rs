@@ -1476,6 +1476,23 @@ impl App {
     pub(crate) fn clamp_nav(&mut self) {
         self.cur_panel = self.cur_panel.min(self.doc.panels.len() - 1);
         self.cur_layer = self.cur_layer.min(self.layers().len() - 1);
+        self.oublier_les_choix_disparus();
+    }
+
+    /// Les plans et les calques choisis qui n'existent plus (une annulation, deux plans réunis, une copie annulée) ne restent
+    /// pas choisis : `board_sel.len() > 1` disait « plusieurs plans choisis » au color script et à la planche quand l'un
+    /// d'eux avait disparu (passe de débogage au hasard, 2026-10-22, `hasard_tests.rs`). Les calques choisis d'un autre
+    /// plan restent : chaque usage ne prend que ceux du plan courant.
+    fn oublier_les_choix_disparus(&mut self) {
+        let doc = &self.doc;
+        if self.board_sel.len() > 8 {
+            let ids: std::collections::HashSet<u64> = doc.panels.iter().map(|p| p.id).collect();
+            self.board_sel.retain(|id| ids.contains(id));
+        } else {
+            self.board_sel.retain(|id| doc.panels.iter().any(|p| p.id == *id));
+        }
+        let cur = &doc.panels[self.cur_panel].layers;
+        self.layer_sel.retain(|id| cur.iter().any(|l| l.id == *id) || doc.panels.iter().any(|p| p.layers.iter().any(|l| l.id == *id)));
     }
 
     // ------------------------------------------------------------------ composition
