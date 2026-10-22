@@ -869,6 +869,63 @@ unique en « + », la case de mouvement qui prend un bloc de cases entières, le
 - **Limites** : la tuile d'une rangée de plus montre B à sa place sur la feuille mais alignée sur la rangée (le décalage vertical n'est pas
   conservé) ; trois rangées de haut au plus ; un cadre incliné compte par son rectangle englobant.
 
+### Caméra libre entre les rangées, silhouette seule, tout l'espace se dessine (2026-10-22, branche `vignettes-camera-libre`)
+
+Demandes d'Anthony (trois croquis annotés, puis ses retours sur la version précédente). **Ce qui suit remplace** de la section d'avant : les
+quatre cas d'empreinte (travelling, zoom, diagonale, panoramique) rangés par rangées, la tuile par rangée, le voile hors de A, la largeur arrondie au
+huitième de case, les liens « coins reliés », la limite « la tuile d'une rangée de plus est alignée sur la rangée ». Code : `vignettecam.rs`
+(empreinte, enveloppe, liens, aimant), `board.rs` (`gabarit_de`, `poser`, `layout_with`), `boardui.rs` (`board_tuile`, `suivre_decalage`),
+`vignettecamui.rs` (geste, aimant, cadres), `thumbs.rs` + `render.rs` (la tuile et son masque), `debord.rs`, `planche.rs` (export).
+
+- **La caméra se pose n'importe où** : B (C, D…) est à sa **vraie place** par rapport à A, au point près : à mi-rangée, à cheval sur deux rangées, à
+  n'importe quel décalage horizontal et vertical, dans tous les sens. Plus aucun arrondi à une rangée, une colonne ou un huitième de case
+  (`empreinte` : chaque cadre = ses quatre coins sur la feuille, à l'échelle des cases, centrés sur A). Seuls restent : un cadre plus grand qu'une
+  rangée (réduit, « limite de taille » comme avant) et un décalage plus grand que la planche (resserré : au plus une rangée de colonnes de large, trois
+  rangées de haut).
+- **Aimant, très doux** (`vignettecam::aimante`, `AIMANT` = **6 points d'écran** au zoom du moment) : le bord ou le centre du cadre qu'on déplace
+  (B, C… ; ni A, ni un zoom) est attiré par un alignement **seulement quand il en est à moins de 6 points** : les bords et le centre des autres
+  cadres, les colonnes de la planche (un pas de case et d'écart de coupe depuis A), le haut et le bas des vignettes de chaque rangée. L'attraction est
+  progressive (l'écart devient écart × écart / 6) : le cadre **colle** tout près de l'alignement et rejoint le pointeur exactement au bord du seuil, donc
+  **aucun saut** en entrant ni en sortant ; au-delà, le cadre suit le pointeur au point près. Chaque axe pour lui.
+- **La case A ne bouge jamais quand on retouche B, C…** (ni par l'aimant, ni par le rangement, ni par un changement d'origine de l'empreinte) :
+  sa place est celle qu'elle aurait **sans mouvement**, d'après les cases d'avant (`poser`, étape 1 : la case se pose d'après sa seule vignette, puis réserve
+  toute son enveloppe aux cases suivantes). Ce sont les **autres** cases qui s'écartent : celles d'après se rangent à côté et dessous de l'enveloppe, dans l'ordre
+  de lecture ; **celles d'avant que l'enveloppe recouvrirait** sont replacées à côté (étape 2) : elles peuvent alors passer après (limite à confirmer avec
+  Anthony : l'ordre de lecture n'est plus tenu pour elles). Une enveloppe qui dépasse la page à gauche ou en haut fait **glisser toute la planche d'autant**
+  (`BoardLayout::decalage`) et la vue **compense par le défilement** (`suivre_decalage`) : A reste au même point de l'écran. À droite et en bas, le papier est
+  infini : l'enveloppe déborde, la planche s'agrandit. Seul un recouvrement de **deux enveloppes** (deux plans qui bougent) fait encore passer la plus tardive à la
+  place suivante. Jouer sur A elle-même (Ctrl + glisser dedans A) déplace A : c'est le seul cas où le reste bouge autour d'elle.
+- **Les rangées d'une enveloppe** (`gabarit_de`) : pour chaque rangée de la planche que l'enveloppe touche, l'intervalle en x qu'elle y couvre ; la place
+  se réserve rangée par rangée, **sans arrondi** : une empreinte peut finir **au milieu d'une rangée** ; les autres cases vont à côté (là où il y a de la place)
+  ou une rangée plus bas. La hauteur des rangées dépend des notes (1 à 3 lignes) : la place se déduit en quelques passes (une enveloppe, ses rangées, les notes
+  de ces rangées…) qui s'arrêtent dès que rien ne change. Une enveloppe peut mordre sur l'**écart** d'une case voisine (il n'est là que pour séparer deux
+  vignettes), jamais sur la case. La note de A descend **sous** l'enveloppe quand elle passe sous la case.
+- **Pas de tremblement pendant le geste** : l'étendue de l'enveloppe ne rétrécit pas tant que le geste dure (`board::Reserve` : la boîte déjà couverte, relative à
+  A ; `CamGeste::hold`), au lâcher tout se range d'après les cadres.
+- **Lignes : la silhouette seule** (`vignettecam::liens`) : les cadres eux-mêmes (A, B, C… avec leurs lettres, fins, bleus) et, entre deux cadres, **seulement les
+  côtés de l'enveloppe convexe de tous leurs coins** ; jamais une ligne qui traverse l'intérieur (la diagonale de A à B qui coupe A ou B a disparu ; un zoom qui entoure
+  A n'a plus de lignes). Une **flèche** reste pour un travelling pur (même taille, de côté : au-dessus ; de haut en bas avec un espace entre les cadres). Les cadres
+  dont les coins se confondent (une caméra à la main : des dizaines de clés presque au même point) ne se redessinent pas : **leurs lettres s'empilaient en un petit carré bleu
+  dans le coin de la case** (`cadres_distincts`, seuil 2,5 points).
+- **Toute l'enveloppe est la zone de dessin** : A, B et l'espace entre eux se dessinent comme une case (`MoveBoard::contient`, `Hit::Thumb`). Le dessin **vit sur la
+  feuille du plan** (coordonnées de la feuille : les cadres ne sont que des fenêtres) : **déplacer un cadre ne déplace pas le dessin**. Une seule **tuile** couvre l'enveloppe
+  (`board_tuile`, une vignette composée sur un fil de fond à l'échelle des cases, le papier seulement dans l'enveloppe : `render::thumbnail_marge_until`, paramètre `masque`) ;
+  le plan courant y est le dessin lui-même (le trait tombe sous le stylet, sans recomposition sur le fil de l'interface), le trait qui sort de l'enveloppe se voit pâle pendant le
+  geste (`debord.rs`, zone polygonale) puis dans la marge de la tuile. **Aucun voile** : le dessin est net partout dans l'enveloppe (A, B et entre eux).
+- **Caméra qui tourne ou penche** : un cadre est le quadrilatère de ses quatre coins : une caméra tournée (`Camera::angle`) se voit **tournée** (même taille, 120 × 67,5 à 30° dans
+  l'essai), une caméra penchée un trapèze ; l'enveloppe, les liens, la prise des coins et le glisser les suivent. (Avant : le rectangle englobant, plus grand.)
+  Le voile corrigé du dessin en grand (`viewbar::nested_band`) n'est plus nécessaire ici : plus de voile ; ses morceaux convexes (`difference_convexe`) servent à masquer les coins
+  de la tuile hors de l'enveloppe.
+- **Export** (planche) : les cadres sont tracés comme quadrilatères, avec les côtés de l'enveloppe ; la page s'agrandit pour tenir l'empreinte.
+- **À confirmer avec Anthony** : (1) les cases **d'avant** qu'une enveloppe recouvre passent après (l'ordre de lecture se casse pour elles) ; (2) les silhouettes entre deux
+  cadres **non consécutifs** (A–C) se dessinent aussi quand ce sont des côtés de l'enveloppe ; (3) l'aimant à 6 points ; (4) A déplacée change l'échelle de l'ensemble
+  (l'échelle est celle de A : une case) ; (5) le tremblé de caméra (clés presque confondues) montre un seul cadre.
+
+Essais : `vignettecam_tests` (cadres à mi-rangée sans arrondi, caméra tournée, enveloppe, liens = côtés de l'enveloppe sans ligne intérieure, aimant : près / loin / sans saut),
+`vignettes_camera_tests` (la case A identique à l'écran avant, pendant et après un glissé de B, en haut à gauche aussi ; l'aimant à l'écran ; rangement autour d'une
+empreinte qui finit à mi-rangée ; 200 plans dont 40 mouvements à mi-rangée et des notes de 1 à 3 lignes : aucun recouvrement, moins de 5 ms ; une caméra à la main
+ne pose qu'une lettre et ne voile rien). Captures : `vignettes\b1.png` (B à mi-rangée), `b2.png` (traits dans A, entre A et B, dans B), `b3.png` (B déplacé : les traits n'ont
+pas bougé), `c1.png` (B vers le haut et la gauche : A reste en place).
 ### À regarder à l'écran (papier infini et caméra)
 
 Captures de l'essai : `vignettes\m-trav.png` (travelling : A, B, flèche au-dessus, les autres cases décalées), `m-zoom.png` (zoom arrière limité à la

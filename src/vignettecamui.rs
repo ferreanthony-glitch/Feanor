@@ -18,11 +18,11 @@
 use eframe::egui::{self, vec2, Align2, Color32, CursorIcon, FontId, Modifiers, Painter, Pos2, Rect, Shape, Stroke};
 
 use crate::app::App;
-use crate::board::{BoardLayout, CardPlace, MoveBoard, Reserve};
+use crate::board::{self, BoardLayout, CardPlace, MoveBoard, Reserve};
 use crate::boardui::{Press, Xf, MOVE_THRESHOLD};
 use crate::camera::{Camera, CameraKey};
 use crate::history::Edit;
-use crate::vignettecam::{self, Choix, Lien, Prise};
+use crate::vignettecam::{self, Choix, Grille, Lien, Prise};
 
 /// Distance (points d'écran) à laquelle un coin de cadre se saisit.
 const PRISE: f32 = 9.0;
@@ -51,6 +51,14 @@ pub(crate) struct CamGeste {
     pub centre: Pos2,
     /// Points d'écran par unité de la feuille, figés à l'appui (la case change de taille pendant le geste).
     pub echelle: f32,
+    /// Points d'écran par point de la planche à l'appui, et points de la planche par unité de la feuille.
+    pub zoom: f32,
+    pub k: f32,
+    /// L'aimant (`vignettecam::aimante`) : la boîte du cadre qu'on déplace, relative au coin haut-gauche de A (planche), et les
+    /// alignements qui l'attirent, très près seulement. Rien pour un zoom, ni quand on déplace A.
+    pub rect0: Rect,
+    pub grille: Grille,
+    pub aimante: bool,
     /// Le nombre de cadres avant le geste (zéro quand le plan n'a pas encore de mouvement).
     pub avant: usize,
     /// L'étape d'annulation, prise au premier mouvement.
@@ -77,7 +85,7 @@ impl App {
     pub(crate) fn cadres_sur_la_planche(&self, layout: &BoardLayout, k: usize) -> (Vec<[Pos2; 4]>, bool) {
         let place = &layout.cards[k];
         match layout.move_of(k) {
-            Some(m) if !m.cadres.is_empty() => (m.cadres.iter().map(|c| vignettecam::coins_de(c.rect)).collect(), false),
+            Some(m) if !m.cadres.is_empty() => (m.quads(), false),
             _ => (vec![vignettecam::coins_de(place.thumb)], true),
         }
     }
@@ -113,7 +121,32 @@ impl App {
         let a = keys0.first().map_or_else(|| self.doc.panel_camera(place.panel, 0), |k| k.cam);
         let cam = if simple { a } else { keys0.get(rang).map_or(a, |k| k.cam) };
         let frame = self.doc.frame;
-        let echelle = xf.zoom * self.largeur_case() / vignettecam::taille_cadre(&self.doc, &a).x.max(1e-3);
+        let k_feuille = self.largeur_case() / vignettecam::taille_cadre(&self.doc, &a).x.max(1e-3);
+        let echelle = xf.zoom * k_feuille;
+        // L'aimant : ce qui attire le cadre qu'on déplace (A : jamais ; un zoom : non). Tout est relatif au coin haut-gauche de A.
+        let au = place.thumb.min.to_vec2();
+        let mobile = match prise {
+            Prise::Deplace(i) | Prise::Zoom(i) => i.min(cadres.len() - 1),
+            Prise::Nouveau | Prise::NouveauZoom => cadres.len() - 1,
+        };
+        let rect0 = vignettecam::boite(&cadres[mobile]).translate(-au);
+        let aimante = matches!(prise, Prise::Nouveau | Prise::Deplace(1..));
+        let mut grille = Grille::default();
+        for q in &cadres {
+            let r = vignettecam::boite(q).translate(-au);
+            grille.xs.extend([r.left(), r.center().x, r.right()]);
+            grille.ys.extend([r.top(), r.center().y, r.bottom()]);
+        }
+        // Les colonnes de la planche (un pas de case et d'écart de coupe, depuis A) et ses rangées (le haut et le bas des vignettes).
+        let pas = place.thumb.width() + board::gap_cut(place.thumb.width());
+        for c in -6..=6 {
+            grille.xs.extend([c as f32 * pas, c as f32 * pas + place.thumb.width()]);
+        }
+        for c in &layout.cards {
+            grille.ys.extend([c.thumb.top() - au.y, c.thumb.bottom() - au.y]);
+        }
+        grille.ys.sort_by(f32::total_cmp);
+        grille.ys.dedup_by(|a, b| (*a - *b).abs() < 0.5);
         let avant = if keys0.len() >= 2 { keys0.len() } else { 0 };
         self.vignettes.cam = Some(CamGeste {
             plan: place.plan,
@@ -128,6 +161,11 @@ impl App {
             coin: vignettecam::coin_de(frame, &cam, coin),
             centre: vignettecam::centre_de(frame, &cam),
             echelle,
+            zoom: xf.zoom,
+            k: k_feuille,
+            rect0,
+            grille,
+            aimante,
             avant,
             snap: None,
             clic: (k, m),
@@ -164,7 +202,14 @@ impl App {
             }
         }
         if g.actif {
-            let delta = (g.maintenant - g.depart) / g.echelle.max(1e-6);
+            let delta = if g.aimante {
+                // L'aimant : en points de la planche, à quelques points d'écran près d'un alignement, le cadre y colle (doucement :
+                // aucun saut en y entrant ni en en sortant) ; partout ailleurs il suit le pointeur exactement.
+                let libre = (g.maintenant - g.depart) / g.zoom.max(1e-6);
+                vignettecam::aimante(g.rect0, libre, &g.grille, vignettecam::AIMANT / g.zoom.max(1e-6)) / g.k.max(1e-6)
+            } else {
+                (g.maintenant - g.depart) / g.echelle.max(1e-6)
+            };
             let len = self.doc.panels[pi].frame_count();
             match vignettecam::applique(self.doc.frame, &g.keys0, g.a, g.prise, delta, g.coin, g.centre, len) {
                 Some(keys) => {
@@ -299,58 +344,31 @@ impl App {
         painter.text(at, Align2::LEFT_TOP, texte, FontId::proportional(15.0), BLEU);
     }
 
-    /// Ce qui se dessine par-dessus les tuiles d'une empreinte : le voile hors de A, les cadres fins en bleu avec leur lettre, et ce
-    /// qui les relie (la flèche d'un travelling, les coins d'un zoom ou d'une diagonale).
+    /// Ce qui se dessine par-dessus la tuile d'une empreinte : les cadres fins en bleu avec leur lettre (tournés si la caméra l'est),
+    /// et ce qui les relie : les côtés de l'enveloppe entre deux cadres (la silhouette), jamais une ligne qui traverse l'intérieur, et la
+    /// flèche d'un travelling. Le dessin reste net partout dans l'enveloppe (Anthony, 2026-10-22 : plus de voile sur les traits).
     pub(crate) fn paint_empreinte(&self, painter: &Painter, view: Rect, xf: Xf, place: &CardPlace, mv: &MoveBoard) {
         let courant = self.cur_panel == place.panel;
-        let a_ecran = xf.rect(place.thumb);
-        // Hors de A, ce que montrent les tuiles est voilé : l'image de la case reste la seule nette.
-        for t in &mv.tuiles {
-            let r = xf.rect(t.rect);
-            if !r.intersects(view) {
-                continue;
-            }
-            let clip = painter.with_clip_rect(r.intersect(view));
-            let voile = Color32::from_white_alpha(if courant { 105 } else { 120 });
-            if t.rect.intersects(place.thumb) {
-                let a = a_ecran;
-                for bande in [
-                    Rect::from_min_max(r.min, egui::pos2(r.max.x, a.min.y)),
-                    Rect::from_min_max(egui::pos2(r.min.x, a.max.y), r.max),
-                    Rect::from_min_max(egui::pos2(r.min.x, a.min.y), egui::pos2(a.min.x, a.max.y)),
-                    Rect::from_min_max(egui::pos2(a.max.x, a.min.y), egui::pos2(r.max.x, a.max.y)),
-                ] {
-                    if bande.width() > 0.0 && bande.height() > 0.0 {
-                        clip.rect_filled(bande, 0.0, voile);
-                    }
-                }
-            } else {
-                clip.rect_filled(r, 0.0, voile);
-            }
-            clip.rect_stroke(r, 0.0, Stroke::new(1.0_f32, Color32::from_gray(205)), egui::StrokeKind::Outside);
-        }
         let clip = painter.with_clip_rect(xf.rect(place.foot).expand(40.0).intersect(view));
         let alpha = |a: u8| Color32::from_rgba_unmultiplied(BLEU.r(), BLEU.g(), BLEU.b(), a);
         let (trait_, halo) = (if courant { 1.4_f32 } else { 1.1_f32 }, Stroke::new(3.0_f32, Color32::from_white_alpha(110)));
-        for c in &mv.cadres {
-            let r = xf.rect(c.rect);
-            if !r.intersects(view) {
+        let distincts = vignettecam::cadres_distincts(&mv.quads());
+        for (c, _) in mv.cadres.iter().zip(&distincts).filter(|(_, d)| **d) {
+            let q: Vec<Pos2> = c.coins.iter().map(|p| xf.to_screen(*p)).collect();
+            if !vignettecam::boite(&q).intersects(view) {
                 continue;
             }
-            clip.rect_stroke(r, 0.0, halo, egui::StrokeKind::Middle);
-            clip.rect_stroke(r, 0.0, Stroke::new(trait_, alpha(if courant { 245 } else { 215 })), egui::StrokeKind::Middle);
+            clip.add(Shape::closed_line(q.clone(), halo));
+            clip.add(Shape::closed_line(q.clone(), Stroke::new(trait_, alpha(if courant { 245 } else { 215 }))));
             let lettre = vignettecam::lettre(c.rang).to_string();
-            clip.text(r.min + vec2(3.0, 1.0), Align2::LEFT_TOP, lettre, FontId::proportional(11.0), alpha(250));
+            clip.text(q[0] + vec2(3.0, 1.0), Align2::LEFT_TOP, lettre, FontId::proportional(11.0), alpha(250));
         }
-        let rects: Vec<(Rect, i32)> = mv.cadres.iter().map(|c| (c.rect, c.bande)).collect();
         let s = |p: Pos2| xf.to_screen(p);
         let fin = Stroke::new(1.0_f32, alpha(225));
-        for lien in vignettecam::liens(&rects, place.thumb.width()) {
+        for lien in vignettecam::liens(&mv.quads(), place.thumb) {
             match lien {
-                Lien::Coins(c) => {
-                    for (de, vers) in c {
-                        clip.line_segment([s(de), s(vers)], fin);
-                    }
+                Lien::Bord(de, vers) => {
+                    clip.line_segment([s(de), s(vers)], fin);
                 }
                 Lien::FlecheDessus { de, vers } | Lien::FlecheVerticale { de, vers } => {
                     let (a, b) = (s(de), s(vers));

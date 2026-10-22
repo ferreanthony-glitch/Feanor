@@ -300,7 +300,7 @@ fn fake_job(doc: &Document, slot: Slot, tint: u8) -> Job {
     plan.paper = Some([tint, 0, 0]);
     Job {
         slot,
-        work: Work::Plan { doc: snapshot(doc, &plan), cam: doc.panel_camera(0, 0), size: (96, 54), marge: 0, generation: 0 },
+        work: Work::Plan { doc: snapshot(doc, &plan), cam: doc.panel_camera(0, 0), size: (96, 54), marge: 0, masque: None, generation: 0 },
         key: Arc::new(Key::Plan(plan, vec![u64::from(tint)], [0; 7])),
         seq: 0,
         era: 0,

@@ -27,6 +27,9 @@ use crate::app::App;
 #[derive(Clone, Debug)]
 pub(crate) struct Debord {
     pub thumb: Rect,
+    /// Une zone de dessin qui n'est pas un rectangle (l'enveloppe d'un mouvement de caméra, à l'écran) : le trait en est dehors
+    /// là où il en sort, même à l'intérieur du rectangle `thumb` qui la borde.
+    pub zone: Option<Vec<Pos2>>,
     pub shapes: Vec<(Rect, Shape)>,
 }
 
@@ -41,7 +44,11 @@ const SAME_POINT: f32 = 1.0;
 impl App {
     /// Les formes du trait ou de l'aperçu en cours qui sortent de la case `thumb` (écran), ou rien si aucun geste ne
     /// déborde. À appeler pendant que la vue du dessin est celle de la vignette courante.
-    pub(crate) fn debord_collect(&self, thumb: Rect, shift: bool) -> Option<Debord> {
+    pub(crate) fn debord_collect(&self, thumb: Rect, zone: Option<&[Pos2]>, shift: bool) -> Option<Debord> {
+        let dedans = |p: Pos2| match zone {
+            Some(z) => crate::vignettecam::dans_polygone(z, p),
+            None => thumb.contains(p),
+        };
         let mut shapes: Vec<(Rect, Shape)> = Vec::new();
         if let Some(s) = &self.stroke {
             if let Some((rgb, alpha)) = s.tip_paint() {
@@ -54,16 +61,16 @@ impl App {
                     points.push((self.layer_to_screen(last), w));
                     points.push((self.layer_to_screen(raw), w));
                 }
-                outside_runs(&points, thumb, color, &mut shapes);
+                outside_runs(&points, &dedans, color, &mut shapes);
             }
         }
         for (pts, stroke) in self.shape_preview_lines(shift) {
-            if pts.len() >= 2 && !pts.iter().all(|p| thumb.contains(*p)) {
+            if pts.len() >= 2 && !pts.iter().all(|p| dedans(*p)) {
                 let bounds = bounds_of(&pts).expand(stroke.width);
                 shapes.push((bounds, Shape::line(pts, Stroke::new(stroke.width, stroke.color.gamma_multiply(GHOST_ALPHA)))));
             }
         }
-        (!shapes.is_empty()).then_some(Debord { thumb, shapes })
+        (!shapes.is_empty()).then_some(Debord { thumb, zone: zone.map(<[Pos2]>::to_vec), shapes })
     }
 }
 
@@ -74,7 +81,7 @@ fn bounds_of(points: &[Pos2]) -> Rect {
 /// Les tronçons de la ligne `points` (écran, avec le rayon de chaque point) qui ne sont pas entièrement dans
 /// `thumb`, en lignes d'épaisseur presque égale (la pression la fait varier) à bouts arrondis. Les tronçons
 /// dedans, déjà peints par la vignette, sont sautés.
-fn outside_runs(points: &[(Pos2, f32)], thumb: Rect, color: Color32, out: &mut Vec<(Rect, Shape)>) {
+fn outside_runs(points: &[(Pos2, f32)], dedans: &dyn Fn(Pos2) -> bool, color: Color32, out: &mut Vec<(Rect, Shape)>) {
     let mut run: Vec<Pos2> = Vec::new();
     let mut run_w = 0.0_f32;
     let flush = |run: &mut Vec<Pos2>, w: f32, out: &mut Vec<(Rect, Shape)>| {
@@ -98,7 +105,7 @@ fn outside_runs(points: &[(Pos2, f32)], thumb: Rect, color: Color32, out: &mut V
             continue;
         }
         prev = Some((p, w));
-        if thumb.contains(a) && thumb.contains(p) {
+        if dedans(a) && dedans(p) {
             flush(&mut run, run_w, out);
             continue;
         }
@@ -120,6 +127,17 @@ fn outside_runs(points: &[(Pos2, f32)], thumb: Rect, color: Color32, out: &mut V
 /// Peint le débord par-dessus tout : seulement hors de la case, dans les quatre fenêtres qui l'entourent (haut, bas,
 /// gauche, droite), et dans la vue `view`.
 pub(crate) fn paint(painter: &Painter, view: Rect, d: &Debord) {
+    // Une zone de dessin à plusieurs côtés : tout ce qui sort se peint dans la vue (le dedans est du même trait, plein : le trait pâle
+    // par-dessus ne s'y voit pas).
+    if d.zone.is_some() {
+        let clipped = painter.with_clip_rect(view);
+        for (bounds, shape) in &d.shapes {
+            if bounds.intersects(view) {
+                clipped.add(shape.clone());
+            }
+        }
+        return;
+    }
     let t = d.thumb;
     let regions = [
         Rect::from_min_max(view.min, egui::pos2(view.max.x, t.top())),

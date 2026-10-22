@@ -798,13 +798,15 @@ thread_local! {
 /// Comme `thumbnail`, mais `cancelled` est demandé entre deux lignes : vrai, le calcul s'arrête et
 /// rend `None` (une vignette que plus personne n'attend, `thumbs.rs`).
 pub fn thumbnail_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize, cancelled: &dyn Fn() -> bool) -> Option<ColorImage> {
-    thumbnail_marge_until(doc, plan, cam, tw, th, 0, cancelled)
+    thumbnail_marge_until(doc, plan, cam, tw, th, 0, None, cancelled)
 }
 
 /// Comme `thumbnail_until`, avec `marge` pixels de plus tout autour du cadre (l'image fait `tw + 2 marge` sur `th + 2 marge`) :
 /// là, seul le dessin est composé, sans le papier (transparent ailleurs). La planche des Vignettes s'en sert pour montrer un
-/// peu du trait qui déborde de la case.
-pub fn thumbnail_marge_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize, marge: usize, cancelled: &dyn Fn() -> bool) -> Option<ColorImage> {
+/// peu du trait qui déborde de la case. `masque` : un polygone convexe (en points du cadre filmé) hors duquel le papier ne se voit pas
+/// non plus, comme dans la marge : la tuile d'un mouvement de caméra ne montre le papier que dans son enveloppe.
+#[allow(clippy::too_many_arguments)]
+pub fn thumbnail_marge_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize, marge: usize, masque: Option<&[egui::Pos2]>, cancelled: &dyn Fn() -> bool) -> Option<ColorImage> {
     #[cfg(test)]
     THUMBNAILS_HERE.with(|n| n.set(n.get() + 1));
     let resolved = crate::calqueffet::resolve_auto(doc, plan);
@@ -822,12 +824,20 @@ pub fn thumbnail_marge_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usiz
         if cancelled() {
             return None;
         }
+        // (Le masque : à chacune des deux hauteurs d'échantillon, l'intervalle en x où le papier se voit.)
+        let bandes = |oy: f32| masque.map(|poly| crate::vignettecam::intervalle_a(poly, (y as f32 - m + oy) * sy));
+        let (bande_haut, bande_bas) = (bandes(0.25), bandes(0.75));
         for x in 0..ow {
             let mut acc = [0u32; 4];
             for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
                 // (Dans la marge, le papier ne se voit pas : seulement ce qui est dessiné.)
                 let (fx, fy) = ((x as f32 - m + ox) * sx, (y as f32 - m + oy) * sy);
-                let base = if fx >= 0.0 && fy >= 0.0 && fx < fw as f32 && fy < fh as f32 { paper } else { Color32::TRANSPARENT };
+                let dans_masque = match if oy < 0.5 { bande_haut } else { bande_bas } {
+                    None => true,
+                    Some(None) => false,
+                    Some(Some((lo, hi))) => fx >= lo && fx <= hi,
+                };
+                let base = if dans_masque && fx >= 0.0 && fy >= 0.0 && fx < fw as f32 && fy < fh as f32 { paper } else { Color32::TRANSPARENT };
                 // (Toile infinie : le cadre peut filmer hors de la feuille.)
                 let c = match map.at(fx, fy) {
                     Some(p) if p.x.abs() < WORLD as f32 && p.y.abs() < WORLD as f32 => pixel_of(&layers, base, p.x.floor() as i64, p.y.floor() as i64),

@@ -398,20 +398,17 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
                     pix.stroke_path(&path, &peinture(CAMERA, 255), &Stroke { width: trait_, line_cap: LineCap::Round, ..Default::default() }, Transform::identity(), None);
                 }
             };
-            for t in &mv.tuiles {
-                if t.rect != c.place.thumb {
-                    contour(&mut pix, rect_px(t.rect, p.cadre, s), [205, 205, 205], 1.0);
+            let distincts = crate::vignettecam::cadres_distincts(&mv.quads());
+            for (cadre, _) in mv.cadres.iter().zip(&distincts).filter(|(_, d)| **d) {
+                for j in 0..4 {
+                    fin(&mut pix, cadre.coins[j], cadre.coins[(j + 1) % 4]);
                 }
-            }
-            for cadre in &mv.cadres {
                 let q = rect_px(cadre.rect, p.cadre, s);
-                contour(&mut pix, q, CAMERA, trait_);
                 ecrire(&mut pix, &crate::vignettecam::lettre(cadre.rang).to_string(), q[0] as f32 + 3.0 * s.max(1.0), q[1] as f32 + 1.0 * s.max(1.0), (11.0 * s).max(8.0), CAMERA);
             }
-            let rects: Vec<(Rect, i32)> = mv.cadres.iter().map(|c| (c.rect, c.bande)).collect();
-            for lien in crate::vignettecam::liens(&rects, c.place.thumb.width()) {
+            for lien in crate::vignettecam::liens(&mv.quads(), c.place.thumb) {
                 match lien {
-                    crate::vignettecam::Lien::Coins(coins) => coins.iter().for_each(|&(a, b)| fin(&mut pix, a, b)),
+                    crate::vignettecam::Lien::Bord(a, b) => fin(&mut pix, a, b),
                     crate::vignettecam::Lien::FlecheDessus { de, vers } | crate::vignettecam::Lien::FlecheVerticale { de, vers } => {
                         fin(&mut pix, de, vers);
                         let d = vers - de;
@@ -454,7 +451,7 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
             let q = rect_px(r, p.cadre, s);
             Rect::from_min_max(pos2(q[0] as f32, q[1] as f32), pos2(q[2] as f32, q[3] as f32))
         };
-        let trous: Vec<Rect> = p.cartes.iter().flat_map(|c| std::iter::once(en_pixels(c.place.thumb)).chain(c.mouvement.iter().flat_map(|m| m.tuiles.iter().map(|t| en_pixels(t.rect))).collect::<Vec<_>>())).collect();
+        let trous: Vec<Rect> = p.cartes.iter().flat_map(|c| std::iter::once(en_pixels(c.place.thumb)).chain(c.mouvement.iter().flat_map(|m| std::iter::once(en_pixels(m.tuile.rect))).collect::<Vec<_>>())).collect();
         for r in crate::marie::hors_des_cases(Rect::from_min_size(Pos2::ZERO, vec2(w as f32, h as f32)), &trous) {
             remplir(&mut pix, [r.left().round() as i32, r.top().round() as i32, r.right().round() as i32, r.bottom().round() as i32], opt.marie_couleur);
         }

@@ -75,11 +75,13 @@ pub(crate) fn clip_to_rect(poly: &[Pos2], r: Rect) -> Vec<Pos2> {
 /// entre les deux polygones, dont l'ordre et la place changent avec la rotation et le miroir de la vue (un
 /// appariement coin à coin croisait la bande : de grands triangles de travers).
 pub(crate) fn nested_band(outer: &[Pos2], inner: &[Pos2], color: Color32) -> Shape {
+    mesh_of_pieces(&difference_convexe(outer, inner), color)
+}
+
+/// Des morceaux convexes d'une couleur, en un seul maillage (sans recouvrement ni bord adouci : pas de fine ligne entre eux).
+pub(crate) fn mesh_of_pieces(pieces: &[Vec<Pos2>], color: Color32) -> Shape {
     let mut mesh = egui::Mesh::default();
-    let fan = |mesh: &mut egui::Mesh, piece: &[Pos2]| {
-        if piece.len() < 3 {
-            return;
-        }
+    for piece in pieces.iter().filter(|p| p.len() >= 3) {
         let base = mesh.vertices.len() as u32;
         for p in piece {
             mesh.colored_vertex(*p, color);
@@ -87,11 +89,17 @@ pub(crate) fn nested_band(outer: &[Pos2], inner: &[Pos2], color: Color32) -> Sha
         for k in 1..piece.len() as u32 - 1 {
             mesh.add_triangle(base, base + k, base + k + 1);
         }
-    };
-    if inner.len() < 3 {
-        fan(&mut mesh, outer);
-        return Shape::mesh(mesh);
     }
+    Shape::mesh(mesh)
+}
+
+/// `outer` moins `inner` (deux polygones convexes), en morceaux convexes qui ne se recouvrent pas : `outer` coupé le long de
+/// chaque côté de `inner`, ce qui est au-delà du côté est un morceau. `inner` n'a pas à être dans `outer`.
+pub(crate) fn difference_convexe(outer: &[Pos2], inner: &[Pos2]) -> Vec<Vec<Pos2>> {
+    if inner.len() < 3 {
+        return vec![outer.to_vec()];
+    }
+    let mut pieces: Vec<Vec<Pos2>> = Vec::new();
     // Sens du polygone intérieur (le « dedans » d'un côté est à sa gauche ou à sa droite).
     let turn: f32 = (0..inner.len()).map(|i| inner[i].x * inner[(i + 1) % inner.len()].y - inner[(i + 1) % inner.len()].x * inner[i].y).sum();
     let sign = if turn >= 0.0 { 1.0 } else { -1.0 };
@@ -107,10 +115,12 @@ pub(crate) fn nested_band(outer: &[Pos2], inner: &[Pos2], color: Color32) -> Sha
         // Distance signée au côté : positive du côté du dedans.
         let side = |p: Pos2| sign * ((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x));
         let (beyond, inside) = split_convex(&rest, &side);
-        fan(&mut mesh, &beyond);
+        if beyond.len() >= 3 {
+            pieces.push(beyond);
+        }
         rest = inside;
     }
-    Shape::mesh(mesh)
+    pieces
 }
 
 /// Coupe un polygone convexe en deux le long de `side` = 0 : (le morceau où `side` ≤ 0, celui où `side` ≥ 0). Les

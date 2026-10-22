@@ -278,19 +278,22 @@ impl Thumbs {
         frame: usize,
         id: u64,
         width: usize,
-        zone: Option<(usize, &crate::vignettecam::Zone)>,
+        zone: Option<(&crate::vignettecam::Zone, &[eframe::egui::Pos2])>,
         deadline: Instant,
     ) -> Option<CaseTex> {
         let plan = render::panel_plan_at(doc, panel, frame, Some(doc.paper));
         match zone {
-            Some((tuile, zone)) => {
+            Some((zone, enveloppe)) => {
                 let cadre = [zone.taille.x.round().clamp(1.0, 16384.0) as usize, zone.taille.y.round().clamp(1.0, 16384.0) as usize];
                 let cam = Camera { x: zone.centre.x, y: zone.centre.y, zoom: 1.0, angle: 0.0, dolly: 0.0, tilt: 0.0, pan: 0.0 };
-                self.texture_of_marge(ctx, doc, id | ZONE_BIT | CASE_BIT | ((tuile as u64 + 1).min(31) << TUILE_SHIFT), plan, cam, width, cadre, true, deadline)
+                // L'enveloppe, en points du cadre filmé : la tuile ne montre le papier que dedans.
+                let moitie = eframe::egui::vec2(cadre[0] as f32, cadre[1] as f32) * 0.5;
+                let masque: Vec<eframe::egui::Pos2> = enveloppe.iter().map(|p| ((*p - zone.centre) + moitie).to_pos2()).collect();
+                self.texture_of_marge(ctx, doc, id | ZONE_BIT | CASE_BIT | (1 << TUILE_SHIFT), plan, cam, width, cadre, true, Some(masque), deadline)
             }
             None => {
                 let cam = doc.panel_camera(panel, frame);
-                self.texture_of_marge(ctx, doc, id | CASE_BIT, plan, cam, width, doc.frame, true, deadline)
+                self.texture_of_marge(ctx, doc, id | CASE_BIT, plan, cam, width, doc.frame, true, None, deadline)
             }
         }
     }
@@ -298,12 +301,12 @@ impl Thumbs {
     /// `frame` : la taille du cadre filmé (celle du projet, ou celle d'une zone, `texture_case`).
     #[allow(clippy::too_many_arguments)]
     fn texture_of(&mut self, ctx: &egui::Context, doc: &Document, id: u64, plan: Plan, cam: Camera, width: usize, frame: [usize; 2], deadline: Instant) -> Option<TextureId> {
-        self.texture_of_marge(ctx, doc, id, plan, cam, width, frame, false, deadline).map(|c| c.id)
+        self.texture_of_marge(ctx, doc, id, plan, cam, width, frame, false, None, deadline).map(|c| c.id)
     }
 
     /// Comme `texture_of` ; `avec_marge` : l'image porte une marge autour du cadre (`texture_case`).
     #[allow(clippy::too_many_arguments)]
-    fn texture_of_marge(&mut self, ctx: &egui::Context, doc: &Document, id: u64, plan: Plan, cam: Camera, width: usize, frame: [usize; 2], avec_marge: bool, deadline: Instant) -> Option<CaseTex> {
+    fn texture_of_marge(&mut self, ctx: &egui::Context, doc: &Document, id: u64, plan: Plan, cam: Camera, width: usize, frame: [usize; 2], avec_marge: bool, masque: Option<Vec<eframe::egui::Pos2>>, deadline: Instant) -> Option<CaseTex> {
         let _t = crate::perf::section("vignettes : clés et demandes");
         let slot = (id, width);
         // (Plus le nombre de fonds sous le trait arrivés de l'arrière-plan, si le plan montre un fond : la
@@ -315,6 +318,8 @@ impl Thumbs {
             .iter()
             .map(|i| doc.cels.get(&i.cel).map_or(0, |c| c.version))
             .chain([if fonds { crate::fx::fond_epoch() } else { 0 }, frame[0] as u64, frame[1] as u64])
+            // (Et l'enveloppe de la tuile : elle change la forme du papier.)
+            .chain(masque.iter().flatten().flat_map(|p| [p.x.to_bits() as u64, p.y.to_bits() as u64]))
             .collect();
         let key = Key::Plan(plan, versions, [cam.x, cam.y, cam.zoom, cam.angle, cam.dolly, cam.tilt, cam.pan].map(f32::to_bits));
         let generation = crate::fxcache::generation();
@@ -327,7 +332,7 @@ impl Thumbs {
                     let mut mini = snapshot(doc, plan);
                     mini.frame = frame;
                     let size = thumb_size_of(frame, width, scale_pct());
-                    Work::Plan { doc: mini, cam, size, marge: if avec_marge { marge_px(size.0) } else { 0 }, generation }
+                    Work::Plan { doc: mini, cam, size, marge: if avec_marge { marge_px(size.0) } else { 0 }, masque: masque.clone(), generation }
                 });
             } else {
                 self.pending = true;
@@ -480,7 +485,7 @@ pub(crate) enum Work {
     /// La vignette d'un plan sur son cliché (la clé porte le plan).
     /// `marge` : pixels autour de l'image où seul le dessin (pas le papier) est composé ; l'image entière fait donc
     /// `size` + deux marges.
-    Plan { doc: Document, cam: Camera, size: (usize, usize), marge: usize, generation: u64 },
+    Plan { doc: Document, cam: Camera, size: (usize, usize), marge: usize, masque: Option<Vec<eframe::egui::Pos2>>, generation: u64 },
     /// La miniature d'un dessin.
     Cel { raster: Raster, frame: egui::Rect, size: (usize, usize) },
 }
@@ -778,11 +783,11 @@ fn worker(shared: &Shared) {
 /// `None` : arrêtée, personne ne l'attend plus.
 fn render_job(job: &Job) -> Option<(ColorImage, Option<u64>)> {
     match (&job.work, &*job.key) {
-        (Work::Plan { doc, cam, size, marge, generation }, Key::Plan(plan, _, _)) => {
+        (Work::Plan { doc, cam, size, marge, masque, generation }, Key::Plan(plan, _, _)) => {
             // (Le fil de fond laisse deux cœurs à l'interface, comme celui des effets.)
             render::set_thread_cap(crate::parallele::coeurs().saturating_sub(2).max(1));
             let cancelled = || job.cancel.load(Ordering::Relaxed);
-            let compose = || crate::fx::differe(|| crate::fxcache::soft_scope(|| render::thumbnail_marge_until(doc, plan, cam, size.0, size.1, *marge, &cancelled)));
+            let compose = || crate::fx::differe(|| crate::fxcache::soft_scope(|| render::thumbnail_marge_until(doc, plan, cam, size.0, size.1, *marge, masque.as_deref(), &cancelled)));
             let (image, complete) = match job.world {
                 Some(w) => crate::fxcache::avec_monde(w, compose),
                 None => compose(),

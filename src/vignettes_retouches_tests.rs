@@ -210,7 +210,7 @@ fn the_overflow_costs_nothing_to_a_stroke_that_stays_in_its_box_and_little_to_on
     let t0 = std::time::Instant::now();
     let mut formes = 0;
     for _ in 0..100 {
-        formes += b.app.debord_collect(v, false).map_or(0, |d| d.shapes.len());
+        formes += b.app.debord_collect(v, None, false).map_or(0, |d| d.shapes.len());
     }
     let par_image = t0.elapsed().as_secs_f64() * 10.0;
     println!("DEBORD : calcul seul sur {n} points : {par_image:.3} ms par image ({} formes)", formes / 100);

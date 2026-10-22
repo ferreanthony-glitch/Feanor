@@ -20,11 +20,24 @@
 //! de lecture.
 //!
 //! **L'empreinte d'un mouvement de caméra** (`vignettecam::empreinte`) : la première case d'un plan dont la caméra bouge prend la
-//! place de ses cadres, à l'échelle des autres cases. Elle est large autant qu'il faut (au huitième de case près : voir ci-dessous) et
-//! haute de une à trois rangées. Les cases qui suivent se rangent **dans l'ordre de lecture** dans les places libres, y compris à
-//! côté et dessous d'une empreinte qui occupe deux rangées. La largeur réservée est arrondie **au huitième de case** (un cadre qui dépasse à peine ne coûte rien) et peut être
-//! **retenue** (`Reserve`) : pendant un geste de caméra, elle ne rétrécit jamais, si bien que les autres cases ne tremblent pas
-//! quand le cadre va et vient autour d'un seuil ; au lâcher tout se range d'après les cadres.
+//! place de ses cadres, à l'échelle des autres cases, **à leur vraie place** (Anthony, 2026-10-22 : un cadre peut tomber à
+//! mi-rangée, entre les lignes) : elle occupe l'enveloppe de ses cadres, rangée par rangée, sans arrondi (`gabarit_de` : pour chaque
+//! rangée que l'enveloppe touche, l'intervalle en x qu'elle y couvre). Les cases qui suivent se rangent **dans l'ordre de
+//! lecture** dans les places libres, à côté et dessous de l'enveloppe, jamais dessus.
+//!
+//! **La case A ne bouge jamais quand on change ses autres cadres** (Anthony, 2026-10-22) : sa place est celle qu'elle aurait sans
+//! mouvement (la première place libre de l'ordre de lecture, d'après les cases d'avant ; `poser`, étape 1). Ce sont les **autres**
+//! cases qui s'écartent : celles d'après se rangent autour de l'enveloppe ; celles d'avant que l'enveloppe recouvrirait sont
+//! replacées à côté (étape 2). Si l'enveloppe dépasse la page à gauche ou en haut, tout glisse du même pas
+//! (`BoardLayout::decalage`) et l'écran compense par le défilement : A reste où elle est à l'écran. Seul un recouvrement de
+//! deux enveloppes (deux plans qui bougent, l'un empiétant sur l'autre) fait encore passer la case en cause à la place suivante.
+//!
+//! Les rangées d'une planche dépendent de la hauteur de leurs notes, qui dépend de la place des cases : la place des rangées se
+//! déduit par quelques passes (`layout_with`), qui s'arrêtent dès que rien ne change (une seule passe tant que toutes les notes
+//! font une ligne).
+//!
+//! La place réservée peut être **retenue** (`Reserve`) : pendant un geste de caméra, l'étendue de l'enveloppe ne rétrécit
+//! jamais, si bien que les autres cases ne tremblent pas quand le cadre va et vient ; au lâcher tout se range d'après les cadres.
 
 use std::collections::HashMap;
 
@@ -99,35 +112,25 @@ impl Default for BoardSettings {
     }
 }
 
-/// Ce que le geste de caméra en cours retient de la disposition : l'étendue de l'empreinte du plan `plan` ne rétrécit pas
-/// tant qu'il dure (relative à sa case A : x depuis son bord gauche, rangées par rapport à la sienne).
+/// Ce que le geste de caméra en cours retient de la disposition : l'étendue de l'enveloppe du plan `plan` ne rétrécit pas
+/// tant qu'il dure (la boîte qu'elle a couverte, relative au coin haut-gauche de sa case A).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Reserve {
     pub plan: u64,
-    pub x_min: f32,
-    pub x_max: f32,
-    pub bande_min: i32,
-    pub bande_max: i32,
+    pub rect: Rect,
 }
 
 impl Reserve {
     /// Cette réserve, élargie à `autre` (elle ne rétrécit jamais).
     pub fn avec(self, autre: Reserve) -> Reserve {
-        Reserve { plan: self.plan, x_min: self.x_min.min(autre.x_min), x_max: self.x_max.max(autre.x_max), bande_min: self.bande_min.min(autre.bande_min), bande_max: self.bande_max.max(autre.bande_max) }
+        Reserve { plan: self.plan, rect: self.rect.union(autre.rect) }
     }
 
     /// Ce que la case `k` de `layout` couvre, relativement à son image A (rien si sa caméra ne bouge pas).
     pub fn depuis(layout: &BoardLayout, k: usize) -> Option<Reserve> {
         let c = layout.cards.get(k)?;
         let m = layout.move_of(k)?;
-        let x0 = c.thumb.left();
-        Some(Reserve {
-            plan: c.plan,
-            x_min: m.tuiles.iter().map(|t| t.rect.left() - x0).fold(0.0, f32::min),
-            x_max: m.tuiles.iter().map(|t| t.rect.right() - x0).fold(c.thumb.width(), f32::max),
-            bande_min: m.tuiles.iter().map(|t| t.bande).min().unwrap_or(0),
-            bande_max: m.tuiles.iter().map(|t| t.bande).max().unwrap_or(0),
-        })
+        Some(Reserve { plan: c.plan, rect: m.tuile.rect.translate(-c.thumb.min.to_vec2()) })
     }
 }
 
@@ -137,7 +140,7 @@ pub struct Options {
     /// Les cases pâles : au moins ce nombre de rangées en tout (plus une rangée après la dernière occupée). Rien : pas de case
     /// pâle (les exports).
     pub pale_rows: Option<usize>,
-    /// La largeur retenue pendant un geste de caméra.
+    /// La place retenue pendant un geste de caméra.
     pub hold: Option<Reserve>,
 }
 
@@ -163,13 +166,13 @@ pub struct CardPlace {
     pub card: Rect,
     /// L'image (le cadre A pour un plan dont la caméra bouge : toujours une case).
     pub thumb: Rect,
-    /// La bande de note sous l'image, de la hauteur de ses lignes affichées.
+    /// La bande de note sous l'image, de la hauteur de ses lignes affichées (sous l'enveloppe quand elle descend sous la case).
     pub note: Rect,
     /// La rangée de l'image (A).
     pub row: usize,
     /// La case d'un plan dont la caméra bouge (deux clés au moins) : son empreinte montre les cadres (`BoardLayout::moves`).
     pub mouvement: bool,
-    /// Tout ce que la case couvre : l'image, plus ses tuiles quand la caméra bouge.
+    /// Tout ce que la case couvre : l'image, plus sa tuile quand la caméra bouge.
     pub foot: Rect,
     /// Le bord droit de la place réservée à la case (la suivante commence un écart après).
     pub reach: f32,
@@ -193,30 +196,40 @@ impl CardPlace {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CadreBoard {
     pub rang: usize,
+    /// Sa boîte englobante.
     pub rect: Rect,
-    pub bande: i32,
+    /// Ses quatre coins (tournés si la caméra l'est).
+    pub coins: [Pos2; 4],
     pub reduit: bool,
 }
 
-/// Une tuile de l'empreinte sur la planche : sa place et la part de la feuille qu'elle montre.
+/// La tuile de l'empreinte sur la planche : sa place, la part de la feuille qu'elle montre, et l'enveloppe en coordonnées de la
+/// feuille (`vignettecam::Tuile`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct TuileBoard {
-    pub bande: i32,
     pub rect: Rect,
     pub zone: Zone,
+    pub masque: Vec<Pos2>,
 }
 
 /// L'empreinte d'un mouvement de caméra, à sa place sur la planche.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MoveBoard {
     pub cadres: Vec<CadreBoard>,
-    pub tuiles: Vec<TuileBoard>,
+    /// La zone de dessin : l'enveloppe convexe de la case A et de tous les cadres.
+    pub enveloppe: Vec<Pos2>,
+    pub tuile: TuileBoard,
 }
 
 impl MoveBoard {
-    /// La rangée de la tuile sous le point `p` (planche), sinon celle de A (0).
-    pub fn bande_sous(&self, p: Pos2) -> i32 {
-        self.tuiles.iter().find(|t| t.rect.contains(p)).map_or(0, |t| t.bande)
+    /// Le point `p` (planche) est-il dans la zone de dessin ?
+    pub fn contient(&self, p: Pos2) -> bool {
+        vignettecam::dans_polygone(&self.enveloppe, p)
+    }
+
+    /// Les quatre coins de chaque cadre.
+    pub fn quads(&self) -> Vec<[Pos2; 4]> {
+        self.cadres.iter().map(|c| c.coins).collect()
     }
 }
 
@@ -245,6 +258,9 @@ pub struct BoardLayout {
     /// Les empreintes des plans dont la caméra bouge (`CardPlace::mv`).
     pub moves: Vec<MoveBoard>,
     pub size: Vec2,
+    /// De combien tout a glissé (vers la droite, vers le bas) parce qu'une enveloppe dépasse la page à gauche ou en haut : la
+    /// vue compense (la case A ne bouge pas à l'écran).
+    pub decalage: Vec2,
 }
 
 impl BoardLayout {
@@ -252,12 +268,12 @@ impl BoardLayout {
         self.cards.iter().find(|c| c.id == id)
     }
 
-    /// Les rectangles de la case `k` qui montrent son dessin : l'image, ou toutes les tuiles de son empreinte.
-    pub fn rects_of(&self, k: usize) -> Vec<Rect> {
+    /// Les zones de la case `k` qui montrent son dessin : l'image, ou l'enveloppe de son empreinte (des polygones convexes).
+    pub fn zones_of(&self, k: usize) -> Vec<Vec<Pos2>> {
         match self.cards.get(k) {
             Some(c) => match c.mv.and_then(|m| self.moves.get(m)) {
-                Some(m) if !m.tuiles.is_empty() => m.tuiles.iter().map(|t| t.rect).collect(),
-                _ => vec![c.thumb],
+                Some(m) if !m.enveloppe.is_empty() => vec![m.enveloppe.clone()],
+                _ => vec![vignettecam::coins_de(c.thumb).to_vec()],
             },
             None => Vec::new(),
         }
@@ -268,9 +284,9 @@ impl BoardLayout {
         self.cards.get(k).and_then(|c| c.mv).and_then(|m| self.moves.get(m))
     }
 
-    /// La case dont l'image ou une tuile contient le point `p`.
+    /// La case dont l'image ou l'enveloppe contient le point `p`.
     pub fn card_at(&self, p: Pos2) -> Option<usize> {
-        (0..self.cards.len()).find(|&k| self.cards[k].thumb.contains(p) || self.cards[k].mv.is_some() && self.rects_of(k).iter().any(|r| r.contains(p)))
+        (0..self.cards.len()).find(|&k| self.cards[k].thumb.contains(p) || self.move_of(k).is_some_and(|m| m.contient(p)))
     }
 
     /// La case dont l'empreinte entière (tout ce qu'elle couvre) et une marge de `marge` contiennent le point `p`.
@@ -293,23 +309,36 @@ pub fn layout(doc: &Document, s: &BoardSettings) -> BoardLayout {
     layout_with(doc, s, &HashMap::new(), false, &Options::default())
 }
 
-/// Un intervalle occupé d'une rangée : de `a` à `b` (l'écart qui suit compris), en x depuis le bord gauche des rangées.
-type Occupe = (f32, f32);
+/// Un intervalle occupé d'une rangée : de `a` à `b`, puis l'écart qui suit, en x depuis le bord gauche des rangées.
+type Occupe = (f32, f32, f32);
 
-/// Ce qui empêche de poser quelque chose entre `a` et `b` dans la rangée `row` : la fin de l'intervalle occupé qui le gêne.
-fn bloque(occ: &[Vec<Occupe>], row: usize, a: f32, b: f32) -> Option<f32> {
-    let eps = 1e-3;
-    occ.get(row)?.iter().filter(|iv| a < iv.1 - eps && b > iv.0 + eps).map(|iv| iv.1).fold(None, |m, e| Some(m.map_or(e, |m: f32| m.max(e))))
+/// Ce qui empêche de poser quelque chose entre `a` et `b` (l'écart qui suit compris) dans la rangée `row` : la fin de l'intervalle
+/// occupé qui le gêne. `deborde` : `a` est le bord gauche d'une enveloppe qui dépasse à gauche de sa case : elle peut mordre sur
+/// l'écart de la case d'avant (il n'est là que pour séparer deux vignettes), pas sur la case elle-même.
+fn bloque(occ: &[Vec<Occupe>], row: i64, a: f32, b: f32, deborde: bool) -> Option<f32> {
+    let eps = 0.5;
+    let fin = |iv: &Occupe| if deborde { iv.1 } else { iv.1 + iv.2 };
+    occ.get(usize::try_from(row).ok()?)?.iter().filter(|iv| a < fin(iv) - eps && b > iv.0 + eps).map(fin).fold(None, |m, e| Some(m.map_or(e, |m: f32| m.max(e))))
 }
 
 /// Une case à poser : ses rangées (par rapport à celle de A) avec leur intervalle en x depuis le bord gauche de A.
+#[derive(Clone, Debug)]
 struct Gabarit {
     bandes: Vec<(i32, f32, f32)>,
     x_lo: f32,
     x_hi: f32,
-    /// Rangées au-dessus de A.
+    /// Rangées au-dessus de A (celles qui existent : une enveloppe qui dépasse le haut de la page n'en compte pas).
     au_dessus: usize,
     rangees: usize,
+    /// La rangée la plus basse que la case touche, par rapport à celle de A.
+    b_max: i32,
+}
+
+impl Gabarit {
+    /// Une vignette seule : une rangée, sa largeur.
+    fn unite(card_w: f32) -> Gabarit {
+        Gabarit { bandes: vec![(0, 0.0, card_w)], x_lo: 0.0, x_hi: card_w, au_dessus: 0, rangees: 1, b_max: 0 }
+    }
 }
 
 /// La première place libre, dans l'ordre de lecture, à partir de (`r_a`, `x_a`) : la rangée de A et le bord gauche de A. Une
@@ -318,7 +347,7 @@ fn trouve(occ: &[Vec<Occupe>], g: &Gabarit, gap: f32, row_w: f32, page_cap: usiz
     let (mut r_a, mut x_a) = depart;
     let paginee = page_cap != usize::MAX && g.rangees > 1 && g.rangees <= page_cap;
     loop {
-        if r_a < g.au_dessus {
+        if paginee && r_a < g.au_dessus {
             (r_a, x_a) = (g.au_dessus, -g.x_lo);
             continue;
         }
@@ -331,8 +360,7 @@ fn trouve(occ: &[Vec<Occupe>], g: &Gabarit, gap: f32, row_w: f32, page_cap: usiz
         }
         let mut pousse = None;
         for &(b, lo, hi) in &g.bandes {
-            let row = (r_a as i32 + b) as usize;
-            if let Some(fin) = bloque(occ, row, x_a + lo, x_a + hi + gap) {
+            if let Some(fin) = bloque(occ, r_a as i64 + b as i64, x_a + lo, x_a + hi + gap, lo < -1e-3) {
                 pousse = Some(fin - lo);
                 break;
             }
@@ -344,25 +372,156 @@ fn trouve(occ: &[Vec<Occupe>], g: &Gabarit, gap: f32, row_w: f32, page_cap: usiz
     }
 }
 
-/// Note l'occupation d'une case posée.
+/// Note l'occupation d'une case posée (les rangées qui n'existent pas, au-dessus de la page, ne comptent pas).
 fn occupe(occ: &mut Vec<Vec<Occupe>>, g: &Gabarit, gap: f32, r_a: usize, x_a: f32) {
     for &(b, lo, hi) in &g.bandes {
-        let row = (r_a as i32 + b) as usize;
+        let Ok(row) = usize::try_from(r_a as i64 + b as i64) else { continue };
         while occ.len() <= row {
             occ.push(Vec::new());
         }
-        occ[row].push((x_a + lo, x_a + hi + gap));
+        occ[row].push((x_a + lo, x_a + hi, gap));
     }
 }
 
-/// `x` arrondi vers le bas au pas `q`, à un petit seuil près (un cadre qui dépasse de moins d'un sixième de pas ne compte pas).
-fn plus_bas(x: f32, q: f32) -> f32 {
-    (x / q + 0.15).floor() * q
+/// La case `g`, posée en (`r_a`, `x_a`), gênerait-elle ce qui est déjà noté ?
+fn gene(occ: &[Vec<Occupe>], g: &Gabarit, gap: f32, r_a: usize, x_a: f32) -> bool {
+    g.bandes.iter().any(|&(b, lo, hi)| bloque(occ, r_a as i64 + b as i64, x_a + lo, x_a + hi + gap, lo < -1e-3).is_some())
 }
 
-/// `x` arrondi vers le haut au pas `q`, avec le même seuil.
-fn plus_haut(x: f32, q: f32) -> f32 {
-    (x / q - 0.15).ceil() * q
+/// Le plus tard des deux, dans l'ordre de lecture (la rangée, puis x).
+fn plus_tard(a: (usize, f32), b: (usize, f32)) -> (usize, f32) {
+    if (b.0, b.1) > (a.0, a.1) {
+        b
+    } else {
+        a
+    }
+}
+
+/// Ce que prend sur la planche une case dont l'enveloppe est `poly` (relative au coin haut-gauche de A) : pour chaque rangée
+/// qu'elle touche, l'intervalle en x qu'elle y couvre. `rh(r)` : la hauteur de la rangée `r` (estimée), `r0` la rangée de A. `note` :
+/// la bande de note de A quand elle descend sous l'enveloppe. Les rangées se suivent sans trou (l'écart sous une rangée est à elle).
+fn gabarit_de(poly: &[Pos2], note: Option<Rect>, rh: &dyn Fn(i64) -> f32, r0: usize) -> Gabarit {
+    let boite = vignettecam::boite(poly);
+    let (y_min, y_max) = (boite.top(), note.map_or(boite.bottom(), |n| boite.bottom().max(n.bottom())));
+    let etendue = |y0: f32, y1: f32| -> Option<(f32, f32)> {
+        let mut lo_hi: Option<(f32, f32)> = None;
+        let big = 1e6;
+        let morceau = crate::viewbar::clip_to_rect(poly, Rect::from_min_max(pos2(-big, y0), pos2(big, y1)));
+        if morceau.len() >= 3 {
+            let b = vignettecam::boite(&morceau);
+            if b.height() > 0.25 {
+                lo_hi = Some((b.left(), b.right()));
+            }
+        }
+        if let Some(n) = note.filter(|n| n.bottom().min(y1) - n.top().max(y0) > 0.25) {
+            lo_hi = Some(lo_hi.map_or((n.left(), n.right()), |(lo, hi)| (lo.min(n.left()), hi.max(n.right()))));
+        }
+        lo_hi
+    };
+    let mut bandes: Vec<(i32, f32, f32)> = Vec::new();
+    // Vers le bas : la rangée de A commence à -LABEL_H (sa ligne de numéro) au-dessus de l'image.
+    let (mut b, mut haut) = (0i32, -LABEL_H);
+    while b < 24 {
+        let bas = haut + rh(r0 as i64 + b as i64);
+        if b > 0 && haut >= y_max - 0.25 {
+            break;
+        }
+        if let Some((lo, hi)) = etendue(haut, bas).filter(|_| r0 as i64 + b as i64 >= 0) {
+            bandes.push((b, lo, hi));
+        }
+        haut = bas;
+        b += 1;
+    }
+    // Vers le haut.
+    let (mut b, mut bas) = (-1i32, -LABEL_H);
+    while b > -24 {
+        let haut = bas - rh(r0 as i64 + b as i64);
+        if bas <= y_min + 0.25 {
+            break;
+        }
+        if r0 as i64 + b as i64 >= 0 {
+            if let Some((lo, hi)) = etendue(haut, bas) {
+                bandes.push((b, lo, hi));
+            }
+        }
+        bas = haut;
+        b -= 1;
+    }
+    bandes.sort_by_key(|b| b.0);
+    let b_min = bandes.iter().map(|b| b.0).min().unwrap_or(0).min(0);
+    let b_max = bandes.iter().map(|b| b.0).max().unwrap_or(0).max(0);
+    let x_lo = bandes.iter().map(|b| b.1).fold(0.0, f32::min);
+    let x_hi = bandes.iter().map(|b| b.2).fold(0.0, f32::max);
+    Gabarit { bandes, x_lo, x_hi, au_dessus: (-b_min) as usize, rangees: (b_max - b_min + 1) as usize, b_max }
+}
+
+/// Où chaque case se pose (voir le début du fichier). `prints[k]` : la case `k` a une empreinte (son gabarit complet est dans
+/// `gabarits[k]`) ; `unite` : celui d'une vignette seule.
+struct Pose {
+    placed: Vec<(usize, f32)>,
+    occ: Vec<Vec<Occupe>>,
+    cursor: (usize, f32),
+}
+
+fn poser(gabarits: &[Gabarit], unite: &Gabarit, prints: &[bool], gap_after: &dyn Fn(usize) -> f32, row_w: f32, page_cap: usize) -> Pose {
+    let n = gabarits.len();
+    // Étape 1 : la place naturelle de chaque case. Une case qui a une empreinte se pose d'après sa seule vignette (sa place ne
+    // dépend donc jamais de ses cadres), puis réserve toute son empreinte aux cases suivantes.
+    let mut occ: Vec<Vec<Occupe>> = Vec::new();
+    let mut occ_empreintes: Vec<Vec<Occupe>> = Vec::new();
+    let mut placed: Vec<(usize, f32)> = Vec::with_capacity(n);
+    let mut ancre = vec![true; n];
+    let mut cursor = (0usize, 0.0_f32);
+    let mut recouvre = false;
+    for (k, g) in gabarits.iter().enumerate() {
+        let gap = gap_after(k);
+        let (r, x) = if prints[k] {
+            let (r, x) = trouve(&occ, unite, gap, row_w, page_cap, cursor);
+            if gene(&occ_empreintes, g, gap, r, x) {
+                // Deux enveloppes qui se recouvrent : la plus tardive passe à la place suivante (sa case bouge).
+                ancre[k] = false;
+                trouve(&occ, g, gap, row_w, page_cap, (cursor.0, cursor.1 - g.x_lo))
+            } else {
+                recouvre |= gene(&occ, g, gap, r, x);
+                (r, x)
+            }
+        } else {
+            trouve(&occ, g, gap, row_w, page_cap, (cursor.0, cursor.1 - g.x_lo))
+        };
+        occupe(&mut occ, g, gap, r, x);
+        if prints[k] {
+            occupe(&mut occ_empreintes, g, gap, r, x);
+        }
+        placed.push((r, x));
+        cursor = (r, x + g.x_hi + gap);
+    }
+    if !recouvre {
+        return Pose { placed, occ, cursor };
+    }
+    // Étape 2 : une enveloppe recouvre des cases d'avant. Toutes les enveloppes sont d'abord réservées, puis les autres cases se
+    // rangent autour d'elles dans l'ordre de lecture ; les cases A restent où l'étape 1 les a mises.
+    let mut occ: Vec<Vec<Occupe>> = Vec::new();
+    for (k, g) in gabarits.iter().enumerate() {
+        if prints[k] && ancre[k] {
+            occupe(&mut occ, g, gap_after(k), placed[k].0, placed[k].1);
+        }
+    }
+    let mut finales: Vec<(usize, f32)> = Vec::with_capacity(n);
+    let mut cursor = (0usize, 0.0_f32);
+    for (k, g) in gabarits.iter().enumerate() {
+        let gap = gap_after(k);
+        if prints[k] && ancre[k] {
+            let (r, x) = placed[k];
+            finales.push((r, x));
+            cursor = plus_tard(cursor, (r, x + g.x_hi + gap));
+        } else {
+            let (r, x) = trouve(&occ, g, gap, row_w, page_cap, (cursor.0, cursor.1 - g.x_lo));
+            occupe(&mut occ, g, gap, r, x);
+            finales.push((r, x));
+            cursor = (r, x + g.x_hi + gap);
+        }
+    }
+    Pose { placed: finales, occ, cursor }
 }
 
 /// Comme `layout`. `lines` : le nombre de lignes de note affichées (1 à 3) de chaque vignette, par son
@@ -388,68 +547,94 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let (g_same, g_cut) = (gap_same(card_w), gap_cut(card_w));
     let gap_after = |k: usize| if joined_after(k) { g_same } else { g_cut };
     let row_w = cols as f32 * card_w + (cols - 1) as f32 * g_cut;
-    let quart = card_w / 8.0;
 
-    // Les empreintes (la première image d'un plan dont la caméra bouge) et ce qu'elles réservent.
+    // Les empreintes (la première image d'un plan dont la caméra bouge).
     let mut prints: Vec<Option<Empreinte>> = Vec::with_capacity(n);
-    let mut gabarits: Vec<Gabarit> = Vec::with_capacity(n);
     for (k, b) in boards.iter().enumerate() {
-        let place = Place { card_w, thumb_h, row_w, total: NOTE_GAP + note_lines(k) as f32 * NOTE_LINE_H, haut: LABEL_H - 2.0 };
-        let print = if b.2 == 0 { vignettecam::empreinte(doc, b.0, &place) } else { None };
-        let g = match &print {
-            None => Gabarit { bandes: vec![(0, 0.0, card_w)], x_lo: 0.0, x_hi: card_w, au_dessus: 0, rangees: 1 },
-            Some(e) => {
-                let hold = opt.hold.filter(|h| h.plan == doc.panels[b.0].id);
-                let (mut x_min, mut x_max, mut b_min, mut b_max) = (e.x_min, e.x_max, e.bande_min, e.bande_max);
-                if let Some(h) = hold {
-                    (x_min, x_max, b_min, b_max) = (x_min.min(h.x_min), x_max.max(h.x_max), b_min.min(h.bande_min), b_max.max(h.bande_max));
-                }
-                // Au huitième de case près, jamais plus large qu'une rangée.
-                let hi0 = plus_haut(x_max, quart).min(row_w);
-                let lo0 = plus_bas(x_min, quart).max(card_w - row_w).max(hi0 - row_w);
-                let mut bandes = Vec::new();
-                for bande in b_min..=b_max {
-                    let (lo, hi) = match e.tuiles.iter().find(|t| t.bande == bande) {
-                        _ if bande == 0 => (lo0, hi0),
-                        Some(t) if hold.is_none() => (plus_bas(t.rect.left(), quart).max(lo0), plus_haut(t.rect.right(), quart).min(hi0)),
-                        _ => (lo0, hi0),
-                    };
-                    bandes.push((bande, lo, hi));
-                }
-                Gabarit { bandes, x_lo: lo0, x_hi: hi0, au_dessus: (-b_min).max(0) as usize, rangees: (b_max - b_min + 1).max(1) as usize }
-            }
-        };
-        prints.push(print);
-        gabarits.push(g);
+        let total = NOTE_GAP + note_lines(k) as f32 * NOTE_LINE_H;
+        let place = Place { card_w, thumb_h, row_w, total, max_h: 3.0 * (LABEL_H + thumb_h + total + ROW_GAP) };
+        prints.push(if b.2 == 0 { vignettecam::empreinte(doc, b.0, &place) } else { None });
     }
+    // Ce qu'elles réservent : l'enveloppe (élargie à ce que le geste en cours a déjà couvert), et la bande de note de A quand elle
+    // descend sous l'enveloppe.
+    let polys: Vec<Option<Vec<Pos2>>> = prints
+        .iter()
+        .enumerate()
+        .map(|(k, e)| {
+            let e = e.as_ref()?;
+            let hold = opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id);
+            Some(match hold {
+                None => e.enveloppe.clone(),
+                Some(h) => {
+                    let mut pts = e.enveloppe.clone();
+                    pts.extend(vignettecam::coins_de(h.rect));
+                    let tenue = vignettecam::enveloppe_convexe(&pts);
+                    // (Jamais plus large qu'une rangée : sinon la case ne tiendrait nulle part.)
+                    if vignettecam::boite(&tenue).width() > row_w { e.enveloppe.clone() } else { tenue }
+                }
+            })
+        })
+        .collect();
+    let notes: Vec<Option<Rect>> = prints
+        .iter()
+        .enumerate()
+        .map(|(k, e)| {
+            let e = e.as_ref()?;
+            (e.bas_a > thumb_h + 1e-3).then(|| Rect::from_min_size(pos2(0.0, e.bas_a + NOTE_GAP), vec2(card_w, note_lines(k) as f32 * NOTE_LINE_H)))
+        })
+        .collect();
+    let a_print: Vec<bool> = prints.iter().map(Option::is_some).collect();
+    let unite = Gabarit::unite(card_w);
+    let nominal = LABEL_H + thumb_h + NOTE_GAP + NOTE_LINE_H + ROW_GAP;
+    let hauteur_rangee = |lignes: usize| LABEL_H + thumb_h + NOTE_GAP + lignes as f32 * NOTE_LINE_H + ROW_GAP;
 
-    // Où chaque case se pose : la première place libre, dans l'ordre de lecture, après la case d'avant.
-    let mut occ: Vec<Vec<Occupe>> = Vec::new();
-    let mut placed: Vec<(usize, f32)> = Vec::with_capacity(n);
-    let mut cursor = (0usize, 0.0_f32);
-    for (k, g) in gabarits.iter().enumerate() {
-        let gap = gap_after(k);
-        let (r_a, x_a) = trouve(&occ, g, gap, row_w, page_cap, (cursor.0, cursor.1 - g.x_lo));
-        occupe(&mut occ, g, gap, r_a, x_a);
-        placed.push((r_a, x_a));
-        cursor = (r_a, x_a + g.x_hi + gap);
+    // Où chaque case se pose. Les rangées touchées par une enveloppe dépendent de la hauteur des rangées, qui dépend des notes des
+    // cases posées : on repart des hauteurs de la passe d'avant (nominales d'abord) jusqu'à ce que rien ne change.
+    let mut estimees: Vec<f32> = Vec::new();
+    let mut rangs: Vec<usize> = vec![0; n];
+    let mut pose = Pose { placed: Vec::new(), occ: Vec::new(), cursor: (0, 0.0) };
+    let mut gabarits: Vec<Gabarit> = Vec::new();
+    let mut most: Vec<usize> = Vec::new();
+    for passe in 0..5 {
+        let hauteur_estimee = |r: i64| usize::try_from(r).ok().and_then(|r| estimees.get(r).copied()).unwrap_or(nominal);
+        gabarits = (0..n).map(|k| polys[k].as_ref().map_or_else(|| unite.clone(), |poly| gabarit_de(poly, notes[k], &hauteur_estimee, rangs[k]))).collect();
+        pose = poser(&gabarits, &unite, &a_print, &gap_after, row_w, page_cap);
+        // Les notes les plus hautes de chaque rangée (celles des cases dont l'image est dans la rangée).
+        let derniere = pose.placed.iter().zip(&gabarits).map(|(p, g)| p.0 + g.b_max as usize).max().unwrap_or(0);
+        most = vec![1usize; derniere + 1];
+        for (k, p) in pose.placed.iter().enumerate() {
+            most[p.0] = most[p.0].max(note_lines(k));
+        }
+        if !a_print.iter().any(|p| *p) {
+            break;
+        }
+        let reelles: Vec<f32> = most.iter().map(|&l| hauteur_rangee(l)).collect();
+        let egal = |a: &[f32], b: &[f32]| (0..a.len().max(b.len())).all(|r| (a.get(r).copied().unwrap_or(nominal) - b.get(r).copied().unwrap_or(nominal)).abs() < 1e-3);
+        let stable = egal(&reelles, &estimees) && rangs == pose.placed.iter().map(|p| p.0).collect::<Vec<_>>();
+        estimees = reelles;
+        rangs = pose.placed.iter().map(|p| p.0).collect();
+        if stable {
+            break;
+        }
+        let _ = passe;
     }
-    let bottom = placed.iter().zip(&gabarits).map(|(p, g)| p.0 + g.rangees - g.au_dessus).max().unwrap_or(0);
+    let (placed, occ, cursor) = (pose.placed, pose.occ, pose.cursor);
+    let bottom = placed.iter().zip(&gabarits).map(|(p, g)| p.0 + g.b_max as usize + 1).max().unwrap_or(0);
 
     // Les cases pâles : ce qui reste de la rangée courante et les rangées suivantes, au moins `pale_rows` en tout et une rangée
     // après la dernière occupée.
-    let unit = Gabarit { bandes: vec![(0, 0.0, card_w)], x_lo: 0.0, x_hi: card_w, au_dessus: 0, rangees: 1 };
+    let mut occ = occ;
     let mut pale: Vec<(usize, f32)> = Vec::new();
     let rows_n = match opt.pale_rows {
         Some(min_rows) => {
             let total = min_rows.max(bottom + 1).max(cursor.0 + 1);
             let mut cur = cursor;
             loop {
-                let (r, x) = trouve(&occ, &unit, g_cut, row_w, usize::MAX, cur);
+                let (r, x) = trouve(&occ, &unite, g_cut, row_w, usize::MAX, cur);
                 if r >= total {
                     break;
                 }
-                occupe(&mut occ, &unit, g_cut, r, x);
+                occupe(&mut occ, &unite, g_cut, r, x);
                 pale.push((r, x));
                 cur = (r, x + card_w + g_cut);
             }
@@ -460,17 +645,9 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let per_page = if page_cap == usize::MAX { rows_n } else { page_cap };
     let pages = rows_n.div_ceil(per_page).max(1);
 
-    // Hauteur de chaque ligne (ses notes les plus hautes : celles des cases dont l'image est dans la ligne, plus la place que
-    // prend le débord d'une tuile sur la bande de note), puis haut des lignes et des pages.
-    let mut most = vec![1usize; rows_n];
-    let mut reserve = vec![0.0_f32; rows_n];
-    for (k, p) in placed.iter().enumerate() {
-        most[p.0] = most[p.0].max(note_lines(k));
-        if prints[k].is_some() {
-            reserve[p.0] = reserve[p.0].max(NOTE_GAP + note_lines(k) as f32 * NOTE_LINE_H);
-        }
-    }
-    let row_h: Vec<f32> = (0..rows_n).map(|r| LABEL_H + thumb_h + NOTE_GAP + most[r] as f32 * NOTE_LINE_H + ROW_GAP + reserve[r]).collect();
+    // Hauteur de chaque ligne (ses notes les plus hautes : celles des cases dont l'image est dans la ligne), puis haut des
+    // lignes et des pages.
+    let row_h: Vec<f32> = (0..rows_n).map(|r| hauteur_rangee(most.get(r).copied().unwrap_or(1))).collect();
     let rows_of = |p: usize| p * per_page..((p + 1) * per_page).min(rows_n);
     let page_h: Vec<f32> = (0..pages).map(|p| PAGE_PAD * 2.0 + row_h[rows_of(p)].iter().sum::<f32>() - ROW_GAP).collect();
     let page_w = PAGE_PAD * 2.0 + row_w;
@@ -489,8 +666,22 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         }
     }
 
-    let left = MARGIN + PAGE_PAD;
-    let mut out = BoardLayout::default();
+    // Une enveloppe qui dépasse la page à gauche ou en haut : tout glisse d'autant (la vue compense, la case A ne bouge pas à l'écran).
+    let mut left = MARGIN + PAGE_PAD;
+    let mut decalage = Vec2::ZERO;
+    for (k, &(r, x_a)) in placed.iter().enumerate() {
+        if let Some(e) = &prints[k] {
+            let (gauche, haut) = (left + x_a + e.x_min, row_top[r] + LABEL_H + e.y_min);
+            decalage.x = decalage.x.max(MARGIN - gauche);
+            decalage.y = decalage.y.max(MARGIN - haut);
+        }
+    }
+    left += decalage.x;
+    for t in row_top.iter_mut().chain(page_top.iter_mut()) {
+        *t += decalage.y;
+    }
+
+    let mut out = BoardLayout { decalage, ..Default::default() };
     for (k, &(r, x_a)) in placed.iter().enumerate() {
         let x = left + x_a;
         let top = row_top[r] + LABEL_H;
@@ -500,18 +691,18 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         let p = &doc.panels[i];
         let mut foot = thumb;
         let mut mv = None;
-        let mut down = 0.0_f32;
+        let mut note_top = bottom + NOTE_GAP;
         if let Some(e) = &prints[k] {
-            let rect_abs = |rel: Rect, bande: i32| rel.translate(vec2(x, row_top[(r as i32 + bande) as usize] + LABEL_H));
-            let tuiles: Vec<TuileBoard> = e.tuiles.iter().map(|t| TuileBoard { bande: t.bande, rect: rect_abs(t.rect, t.bande), zone: t.zone }).collect();
-            let cadres: Vec<CadreBoard> = e.cadres.iter().map(|c| CadreBoard { rang: c.rang, rect: rect_abs(c.rect, c.bande), bande: c.bande, reduit: c.reduit }).collect();
-            foot = tuiles.iter().fold(thumb, |f, t| f.union(t.rect));
-            down = tuiles.iter().find(|t| t.bande == 0).map_or(0.0, |t| (t.rect.bottom() - bottom).max(0.0));
+            let au = vec2(x, top);
+            let cadres: Vec<CadreBoard> = e.cadres.iter().map(|c| CadreBoard { rang: c.rang, rect: c.rect.translate(au), coins: c.coins.map(|q| q + au), reduit: c.reduit }).collect();
+            let tuile = TuileBoard { rect: e.tuile.rect.translate(au), zone: e.tuile.zone, masque: e.tuile.masque.clone() };
+            foot = foot.union(tuile.rect);
+            note_top = top + e.bas_a.max(thumb_h) + NOTE_GAP;
             mv = Some(out.moves.len());
-            out.moves.push(MoveBoard { cadres, tuiles });
+            out.moves.push(MoveBoard { cadres, enveloppe: e.enveloppe.iter().map(|q| *q + au).collect(), tuile });
         }
         let card = Rect::from_min_max(pos2(x, row_top[r]), pos2(x + card_w, bottom));
-        let note = Rect::from_min_size(pos2(x, bottom + down + NOTE_GAP), vec2(card_w, note_lines(k) as f32 * NOTE_LINE_H));
+        let note = Rect::from_min_size(pos2(x, note_top), vec2(card_w, note_lines(k) as f32 * NOTE_LINE_H));
         let reach = left + x_a + gabarits[k].x_hi;
         out.cards.push(CardPlace { panel: i, plan: p.id, id, frame, end, scene: p.scene, card, thumb, note, row: r, mouvement: mv.is_some(), foot, reach, mv });
         let gap = gap_after(k);
@@ -523,8 +714,16 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     for &(r, x_a) in &pale {
         out.empty.push(Rect::from_min_size(pos2(left + x_a, row_top[r] + LABEL_H), vec2(card_w, thumb_h)));
     }
-    out.pages = (0..pages).map(|p| Rect::from_min_size(pos2(MARGIN, page_top[p]), vec2(page_w, page_h[p]))).collect();
-    out.size = vec2(MARGIN * 2.0 + page_w, page_top[pages - 1] + page_h[pages - 1] + MARGIN);
+    out.pages = (0..pages).map(|p| Rect::from_min_size(pos2(MARGIN, page_top[p]), vec2(page_w + decalage.x, page_h[p]))).collect();
+    // (Une enveloppe qui dépasse à droite ou en bas : la page et la planche s'agrandissent.)
+    let mut size = vec2(MARGIN * 2.0 + page_w + decalage.x, page_top[pages - 1] + page_h[pages - 1] + MARGIN);
+    for c in out.cards.iter().filter(|c| c.mouvement) {
+        size = size.max(vec2(c.foot.right() + MARGIN, c.foot.bottom() + MARGIN));
+        for pg in out.pages.iter_mut().filter(|pg| pg.intersects(c.foot)) {
+            *pg = pg.union(c.foot.expand2(vec2(PAGE_PAD, PAGE_PAD)).intersect(Rect::from_min_max(pos2(MARGIN, MARGIN), pos2(f32::MAX, f32::MAX))));
+        }
+    }
+    out.size = size;
     out
 }
 
@@ -579,14 +778,18 @@ fn edge_distance(r: Rect, p: Pos2) -> f32 {
 pub fn frame_hit(layout: &BoardLayout, p: Pos2, tol: f32) -> Option<usize> {
     let mut best: Option<(usize, f32)> = None;
     for (k, c) in layout.cards.iter().enumerate() {
-        let rects = if c.mv.is_some() { layout.rects_of(k) } else { vec![c.thumb] };
-        for r in rects {
-            let inner = tol.min(r.width().min(r.height()) * 0.25);
-            let d = edge_distance(r, p);
-            let limit = if r.contains(p) { inner } else { tol };
+        let mut consider = |d: f32, inside: bool, small: f32| {
+            let limit = if inside { tol.min(small * 0.25) } else { tol };
             if d <= limit && best.is_none_or(|(_, bd)| d < bd) {
                 best = Some((k, d));
             }
+        };
+        match layout.move_of(k) {
+            Some(m) if !m.enveloppe.is_empty() => {
+                let b = vignettecam::boite(&m.enveloppe);
+                consider(vignettecam::distance_bord(&m.enveloppe, p), m.contient(p), b.width().min(b.height()));
+            }
+            _ => consider(edge_distance(c.thumb, p), c.thumb.contains(p), c.thumb.width().min(c.thumb.height())),
         }
     }
     best.map(|(k, _)| k)

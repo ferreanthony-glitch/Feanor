@@ -14,15 +14,23 @@
 //!   « Retirer ce cadre » au clic droit sur un cadre.
 //!
 //! **L'empreinte** (`empreinte`) : une case qui a un mouvement montre ses cadres à **la même échelle** que les autres cases, sans
-//! jamais rapetisser son contenu. Elle prend de la place là où le mouvement va, juste ce qu'il faut :
-//! - un travelling (horizontal) élargit la case dans le sens du mouvement ;
-//! - un zoom arrière entoure la case d'un cadre B plus grand, dont la hauteur est **limitée** à celle d'une rangée (la case et sa
-//!   bande de note) ; un zoom avant dessine B dedans ;
-//! - un mouvement vers le bas (diagonale, panoramique vertical) met B dans la rangée suivante ; vers le haut, dans la précédente.
+//! jamais rapetisser son contenu, et **à leur vraie place les uns par rapport aux autres** (Anthony, 2026-10-22 : « laisse la
+//! caméra entre les lignes » : un cadre peut tomber à mi-rangée, à cheval sur deux rangées, à n'importe quel décalage, sans
+//! arrondi à une rangée, une colonne ou un huitième de case ; seul un léger aimant, très près d'un alignement, aide le geste :
+//! `aimante`). Une caméra tournée ou penchée se voit tournée ou penchée : un cadre est le quadrilatère de ses quatre coins.
+//! - **l'enveloppe** est l'enveloppe convexe de tous les coins des cadres (et de la case A) : la zone de A, de B… et de l'espace
+//!   entre eux. C'est la **zone de dessin** : on y dessine comme dans une case, le dessin vit sur la feuille du plan (en
+//!   coordonnées de la feuille) et les cadres ne sont que des fenêtres dessus : déplacer un cadre ne déplace pas le dessin ;
+//! - **une seule tuile** (une vignette composée sur un fil de fond, le dessin de la feuille à l'échelle des cases) couvre
+//!   l'enveloppe ; hors de l'enveloppe, la tuile ne montre que le trait qui déborde (comme la marge d'une case) ;
+//! - ce que la planche réserve aux autres cases suit l'enveloppe, rangée par rangée (`board.rs`) ;
+//! - les cadres trop grands (plus qu'une rangée) sont dessinés réduits ; un décalage plus grand qu'une rangée de colonnes ou
+//!   que trois rangées est resserré (les cadres restent proches de A).
 //!
-//! Les cadres d'une même rangée partagent une **tuile** (une vignette composée sur un fil de fond, le dessin de la feuille à
-//! l'échelle des cases) ; une rangée de plus, une tuile de plus. Rien n'est enregistré dans le projet pour cela : tout se
-//! déduit des clés (en supprimer au montage fait rétrécir l'empreinte).
+//! **Les liens** (`liens`) : seulement les côtés de l'enveloppe qui relient deux cadres (la silhouette), jamais une ligne qui
+//! traverse l'intérieur ; une flèche pour un travelling pur.
+//!
+//! Rien n'est enregistré dans le projet pour cela : tout se déduit des clés (en supprimer au montage fait rétrécir l'empreinte).
 
 use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
 
@@ -70,16 +78,130 @@ pub fn taille_cadre(doc: &Document, cam: &Camera) -> Vec2 {
     vec2(doc.frame[0] as f32 / m, doc.frame[1] as f32 / m)
 }
 
+/// Les quatre coins sont-ils des points de la feuille ?
+fn coins_finis(q: &[Pos2; 4]) -> bool {
+    q.iter().all(|p| p.x.is_finite() && p.y.is_finite())
+}
+
 /// Le rectangle de la feuille que couvre un cadre (ses quatre coins), s'ils sont finis.
 fn rect_feuille(c: &Cadre) -> Option<Rect> {
-    let mut r = Rect::NOTHING;
-    for p in c.coins {
-        if !(p.x.is_finite() && p.y.is_finite()) {
-            return None;
-        }
-        r.extend_with(p);
+    if !coins_finis(&c.coins) {
+        return None;
     }
+    let r = boite(&c.coins);
     (r.width() > 1e-3 && r.height() > 1e-3).then_some(r)
+}
+
+/// La boîte englobante de points.
+pub fn boite(points: &[Pos2]) -> Rect {
+    points.iter().fold(Rect::NOTHING, |r, p| r.union(Rect::from_min_max(*p, *p)))
+}
+
+// ------------------------------------------------------------------ la géométrie des polygones convexes
+
+/// Le sens du polygone : positif ou négatif selon qu'il tourne dans un sens ou dans l'autre (aire signée, doublée).
+fn tour(poly: &[Pos2]) -> f32 {
+    (0..poly.len()).map(|i| poly[i].x * poly[(i + 1) % poly.len()].y - poly[(i + 1) % poly.len()].x * poly[i].y).sum()
+}
+
+/// Le point est-il dans le polygone convexe (bords compris), quel que soit son sens ?
+pub fn dans_polygone(poly: &[Pos2], p: Pos2) -> bool {
+    if poly.len() < 3 {
+        return false;
+    }
+    let sens = tour(poly).signum();
+    (0..poly.len()).all(|i| {
+        let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+        sens * ((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x)) >= -1e-4
+    })
+}
+
+/// La distance d'un point au bord d'un polygone (jamais négative, même dedans).
+pub fn distance_bord(poly: &[Pos2], p: Pos2) -> f32 {
+    (0..poly.len()).map(|i| distance_segment(poly[i], poly[(i + 1) % poly.len()], p)).fold(f32::MAX, f32::min)
+}
+
+/// Deux polygones convexes se recouvrent-ils (d'une épaisseur plus grande que `eps`) ? Théorème de l'axe séparateur.
+#[cfg(test)]
+pub fn se_recouvrent(a: &[Pos2], b: &[Pos2], eps: f32) -> bool {
+    for poly in [a, b] {
+        for i in 0..poly.len() {
+            let (p, q) = (poly[i], poly[(i + 1) % poly.len()]);
+            let axe = vec2(q.y - p.y, p.x - q.x);
+            let n = axe.length();
+            if n < 1e-9 {
+                continue;
+            }
+            let axe = axe / n;
+            let proj = |s: &[Pos2]| s.iter().fold((f32::MAX, f32::MIN), |(lo, hi), v| (lo.min(v.to_vec2().dot(axe)), hi.max(v.to_vec2().dot(axe))));
+            let ((a0, a1), (b0, b1)) = (proj(a), proj(b));
+            if a1 <= b0 + eps || b1 <= a0 + eps {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// L'intervalle en x du polygone convexe à la hauteur `y` (rien s'il n'y passe pas).
+pub fn intervalle_a(poly: &[Pos2], y: f32) -> Option<(f32, f32)> {
+    let (mut lo, mut hi) = (f32::MAX, f32::MIN);
+    for i in 0..poly.len() {
+        let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
+        if (a.y - y) * (b.y - y) > 0.0 {
+            continue;
+        }
+        if (b.y - a.y).abs() < 1e-9 {
+            lo = lo.min(a.x.min(b.x));
+            hi = hi.max(a.x.max(b.x));
+        } else {
+            let x = a.x + (b.x - a.x) * (y - a.y) / (b.y - a.y);
+            lo = lo.min(x);
+            hi = hi.max(x);
+        }
+    }
+    (lo <= hi).then_some((lo, hi))
+}
+
+/// L'enveloppe convexe de points marqués (chaîne monotone d'Andrew) : sans points alignés, les points confondus (à un millième
+/// près) n'en font qu'un dont le marque réunit les leurs. Les points alignés écartés perdent leur marque : un côté de l'enveloppe
+/// relie des sommets, pas tous les coins qu'il traverse.
+fn enveloppe_marquee(points: &[(Pos2, u64)]) -> Vec<(Pos2, u64)> {
+    let mut pts: Vec<(Pos2, u64)> = points.iter().copied().filter(|(p, _)| p.x.is_finite() && p.y.is_finite()).collect();
+    pts.sort_by(|a, b| a.0.x.total_cmp(&b.0.x).then(a.0.y.total_cmp(&b.0.y)));
+    let mut uniques: Vec<(Pos2, u64)> = Vec::with_capacity(pts.len());
+    for (p, m) in pts {
+        match uniques.last_mut() {
+            Some(l) if (l.0 - p).length() < 1e-3 => l.1 |= m,
+            _ => uniques.push((p, m)),
+        }
+    }
+    if uniques.len() < 3 {
+        return uniques;
+    }
+    let cross = |o: Pos2, a: Pos2, b: Pos2| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const EPS: f32 = 1e-2;
+    let mut hull: Vec<(Pos2, u64)> = Vec::with_capacity(uniques.len() * 2);
+    for &p in &uniques {
+        while hull.len() >= 2 && cross(hull[hull.len() - 2].0, hull[hull.len() - 1].0, p.0) <= EPS {
+            hull.pop();
+        }
+        hull.push(p);
+    }
+    let bas = hull.len() + 1;
+    for &p in uniques.iter().rev().skip(1) {
+        while hull.len() >= bas && cross(hull[hull.len() - 2].0, hull[hull.len() - 1].0, p.0) <= EPS {
+            hull.pop();
+        }
+        hull.push(p);
+    }
+    hull.pop();
+    hull
+}
+
+/// L'enveloppe convexe de points.
+pub fn enveloppe_convexe(points: &[Pos2]) -> Vec<Pos2> {
+    enveloppe_marquee(&points.iter().map(|p| (*p, 1)).collect::<Vec<_>>()).into_iter().map(|(p, _)| p).collect()
 }
 
 // ------------------------------------------------------------------ l'empreinte
@@ -95,112 +217,119 @@ pub struct Place {
     /// Ce dont une tuile peut dépasser la hauteur de la case : la bande de note (l'espace et ses lignes). Un cadre est limité à
     /// la hauteur d'une rangée : la case et sa bande de note.
     pub total: f32,
-    /// Ce qui peut dépasser en haut de la case (la ligne du numéro de plan, moins un filet).
-    pub haut: f32,
+    /// La hauteur la plus grande que prend toute l'empreinte (trois rangées).
+    pub max_h: f32,
 }
 
-/// Un cadre du mouvement, tel qu'il se dessine sur la planche, **relatif à la case A** : x depuis le bord gauche de A, y depuis
-/// le haut de l'image de sa rangée.
+/// Un cadre du mouvement, tel qu'il se dessine sur la planche, **relatif à la case A** : x et y depuis le coin haut-gauche de A.
 #[derive(Clone, Debug, PartialEq)]
 pub struct CadreAff {
     pub rang: usize,
+    /// Sa boîte englobante.
     pub rect: Rect,
-    /// La rangée par rapport à celle de A : 0 la même, 1 la suivante, -1 la précédente.
-    pub bande: i32,
+    /// Ses quatre coins : haut-gauche, haut-droite, bas-droite, bas-gauche (tournés si la caméra l'est).
+    pub coins: [Pos2; 4],
     /// Le cadre est plus grand que la limite : il est dessiné réduit (« limite de taille »).
     pub reduit: bool,
 }
 
-/// Une tuile : le rectangle d'une rangée de l'empreinte (relatif comme `CadreAff`) et la part de la feuille qu'il montre.
+/// La tuile : le rectangle qui couvre l'enveloppe (relatif comme `CadreAff`), la part de la feuille qu'il montre, et
+/// l'enveloppe en coordonnées de la feuille (hors d'elle, la tuile ne garde que le trait qui déborde).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Tuile {
-    pub bande: i32,
     pub rect: Rect,
     pub zone: Zone,
+    pub masque: Vec<Pos2>,
 }
 
 /// L'empreinte d'une case qui a un mouvement de caméra.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Empreinte {
     pub cadres: Vec<CadreAff>,
-    /// Une tuile par rangée occupée, de la plus haute à la plus basse.
-    pub tuiles: Vec<Tuile>,
-    pub bande_min: i32,
-    pub bande_max: i32,
-    /// L'étendue en x, relative au bord gauche de A (x_min ≤ 0, x_max ≥ largeur de la case).
+    /// L'enveloppe convexe de la case A et de tous les cadres : la zone de dessin.
+    pub enveloppe: Vec<Pos2>,
+    pub tuile: Tuile,
+    /// L'étendue, relative au coin haut-gauche de A : la boîte de l'enveloppe (x_min ≤ 0 ≤ largeur de la case ≤ x_max…).
     pub x_min: f32,
     pub x_max: f32,
-}
-
-/// La rangée d'un cadre dont le centre est décalé de `dy` (points de la planche) par rapport à A : la même rangée tant que
-/// le décalage tient dans la place laissée par la bande de note, sinon la précédente ou la suivante.
-fn bande_de(dy: f32, p: &Place) -> i32 {
-    if dy.abs() <= p.total {
-        0
-    } else {
-        dy.signum() as i32
-    }
+    pub y_min: f32,
+    pub y_max: f32,
+    /// Le point le plus bas de l'enveloppe sous la largeur de A : la note de la case se pose dessous.
+    pub bas_a: f32,
 }
 
 /// L'empreinte du plan `panel` (rien s'il n'a pas de mouvement). Les cadres sont à l'échelle de la case : un cadre A fait une
-/// largeur de case.
+/// largeur de case. Chaque cadre est à sa vraie place par rapport à A (même quand il tombe à mi-rangée) ; seuls un cadre
+/// plus grand qu'une rangée (réduit) et un décalage trop grand pour la planche (resserré) s'écartent de la feuille.
 pub fn empreinte(doc: &Document, panel: usize, p: &Place) -> Option<Empreinte> {
     let cads = cadres(doc, panel);
     let a = cads.first()?;
     let ra = rect_feuille(a)?;
     let echelle = p.card_w / taille_cadre(doc, &a.cam).x.max(1e-3);
     let (cw, ch) = (p.card_w, p.thumb_h);
-    let mut cadres_aff = vec![CadreAff { rang: 0, rect: Rect::from_min_size(Pos2::ZERO, vec2(cw, ch)), bande: 0, reduit: false }];
-    let mut sources = vec![ra.center()];
-    for c in cads.iter().skip(1) {
-        // (Un cadre sans coins finis, une caméra qui ne voit plus la feuille : A, à l'identique.)
-        let r = rect_feuille(c).unwrap_or(ra);
-        let d = (r.center() - ra.center()) * echelle;
-        let mut taille = r.size() * echelle;
-        let f = ((ch + p.total) / taille.y.max(1e-3)).min(p.row_w / taille.x.max(1e-3)).min(1.0);
-        let reduit = f < 1.0;
-        taille = (taille * f).max(vec2(6.0, 6.0));
-        let bande = bande_de(d.y, p);
-        let cx = (cw * 0.5 + d.x).clamp(cw - p.row_w + taille.x * 0.5, p.row_w - taille.x * 0.5);
-        let cy = if bande == 0 {
-            (ch * 0.5 + d.y).clamp(-p.haut + taille.y * 0.5, ch + p.total - taille.y * 0.5)
-        } else {
-            ch * 0.5
-        };
-        cadres_aff.push(CadreAff { rang: c.rang, rect: Rect::from_center_size(pos2(cx, cy), taille), bande, reduit });
-        sources.push(r.center());
+    let thumb = Rect::from_min_size(Pos2::ZERO, vec2(cw, ch));
+    let centre_thumb = thumb.center();
+    // Pour chaque cadre : ses coins sur la feuille (A à l'identique pour un cadre qui ne voit plus la feuille), son centre, et le
+    // facteur qui le réduit à la limite de taille.
+    struct Source {
+        rang: usize,
+        coins: [Pos2; 4],
+        centre: Pos2,
+        f: f32,
     }
-    // Pas plus large qu'une rangée : on resserre les décalages, au pire tous les cadres sont centrés sur A.
-    let largeur = |v: &[CadreAff]| {
-        let (a, b) = v.iter().fold((0.0_f32, cw), |(lo, hi), c| (lo.min(c.rect.left()), hi.max(c.rect.right())));
-        b - a
+    let sources: Vec<Source> = cads
+        .iter()
+        .map(|c| {
+            let (coins, cam) = if rect_feuille(c).is_some() { (c.coins, c.cam) } else { (a.coins, a.cam) };
+            let centre = boite(&coins).center();
+            // (La taille d'un cadre droit est celle du cadre, tourné ou non ; un cadre penché, sa boîte.)
+            let taille = if cam.is_level() { taille_cadre(doc, &cam) * echelle } else { boite(&coins).size() * echelle };
+            let f = ((p.thumb_h + p.total) / taille.y.max(1e-3)).min(p.row_w / taille.x.max(1e-3)).min(1.0);
+            Source { rang: c.rang, coins, centre, f }
+        })
+        .collect();
+    // (Un cadre d'une caméra droite qui ne tourne pas est exactement un rectangle : A est alors exactement la case.)
+    let droit = |c: &Cadre| c.cam.is_level() && c.cam.angle == 0.0;
+    let construit = |g: f32| -> Vec<[Pos2; 4]> {
+        sources
+            .iter()
+            .enumerate()
+            .map(|(i, s)| {
+                if i == 0 && droit(a) && s.f >= 1.0 {
+                    return coins_de(thumb);
+                }
+                let d = (s.centre - ra.center()) * echelle * g;
+                s.coins.map(|c| centre_thumb + d + (c - s.centre) * echelle * s.f)
+            })
+            .collect()
     };
-    if largeur(&cadres_aff) > p.row_w + 1e-3 {
-        let w = largeur(&cadres_aff);
-        for facteur in [((p.row_w - cw) / (w - cw).max(1e-3)).clamp(0.0, 1.0), 0.0] {
-            for c in cadres_aff.iter_mut().skip(1) {
-                let cx = cw * 0.5 + (c.rect.center().x - cw * 0.5) * facteur;
-                c.rect = Rect::from_center_size(pos2(cx, c.rect.center().y), c.rect.size());
-            }
-            if largeur(&cadres_aff) <= p.row_w + 1e-3 {
-                break;
-            }
-        }
-    }
-    let bande_min = cadres_aff.iter().map(|c| c.bande).min().unwrap_or(0);
-    let bande_max = cadres_aff.iter().map(|c| c.bande).max().unwrap_or(0);
-    let mut tuiles = Vec::new();
-    for bande in bande_min..=bande_max {
-        let membres: Vec<usize> = (0..cadres_aff.len()).filter(|&i| cadres_aff[i].bande == bande).collect();
-        let Some(&premier) = membres.first() else { continue };
-        let rect = membres.iter().fold(Rect::NOTHING, |r, &i| r.union(cadres_aff[i].rect));
-        // La tuile s'ancre sur son premier cadre : son centre sur la planche est celui de son centre sur la feuille.
-        let centre = sources[premier] + (rect.center() - cadres_aff[premier].rect.center()) / echelle;
-        tuiles.push(Tuile { bande, rect, zone: Zone { centre, taille: rect.size() / echelle, echelle } });
-    }
-    let x_min = tuiles.iter().map(|t| t.rect.left()).fold(0.0, f32::min);
-    let x_max = tuiles.iter().map(|t| t.rect.right()).fold(cw, f32::max);
-    Some(Empreinte { cadres: cadres_aff, tuiles, bande_min, bande_max, x_min, x_max })
+    let etendue = |q: &[[Pos2; 4]]| q.iter().flat_map(|q| q.iter().copied()).fold(thumb, |r, p| r.union(Rect::from_min_max(p, p)));
+    // Pas plus large qu'une rangée, pas plus haut que trois : les décalages se resserrent (la largeur est convexe en `g` : la corde
+    // de 0 à 1 la majore, une seule résolution suffit).
+    let (e0, e1) = (etendue(&construit(0.0)), etendue(&construit(1.0)));
+    let limite = |e0: f32, e1: f32, max: f32| if e1 <= max + 1e-3 { 1.0 } else if e1 - e0 > 1e-6 { ((max - e0) / (e1 - e0)).clamp(0.0, 1.0) } else { 0.0 };
+    let g = limite(e0.width(), e1.width(), p.row_w).min(limite(e0.height(), e1.height(), p.max_h));
+    let quads = construit(g);
+    let mut points: Vec<Pos2> = quads.iter().flat_map(|q| q.iter().copied()).collect();
+    points.extend(coins_de(thumb));
+    let enveloppe = enveloppe_convexe(&points);
+    let boite_e = boite(&enveloppe);
+    let cadres_aff: Vec<CadreAff> = quads.iter().zip(&sources).map(|(q, s)| CadreAff { rang: s.rang, rect: boite(q), coins: *q, reduit: s.f < 1.0 }).collect();
+    // La tuile : sa place sur la feuille. (Ancrée sur A : un point de la planche est le point de la feuille qui lui correspond.)
+    let sur_la_feuille = |q: Pos2| ra.center() + (q - centre_thumb) / echelle;
+    let zone = Zone { centre: sur_la_feuille(boite_e.center()), taille: boite_e.size() / echelle, echelle };
+    let masque: Vec<Pos2> = enveloppe.iter().map(|q| sur_la_feuille(*q)).collect();
+    let bas_a = crate::viewbar::clip_to_rect(&enveloppe, Rect::from_min_max(pos2(0.0, -1e6), pos2(cw, 1e6))).iter().map(|q| q.y).fold(ch, f32::max);
+    Some(Empreinte {
+        cadres: cadres_aff,
+        enveloppe,
+        tuile: Tuile { rect: boite_e, zone, masque },
+        x_min: boite_e.left(),
+        x_max: boite_e.right(),
+        y_min: boite_e.top(),
+        y_max: boite_e.bottom(),
+        bas_a,
+    })
 }
 
 /// Comment relier deux cadres qui se suivent (en bleu, fin).
@@ -210,33 +339,71 @@ pub enum Lien {
     FlecheDessus { de: Pos2, vers: Pos2 },
     /// Une flèche vers le bas ou vers le haut, d'un cadre à celui d'une autre rangée (un panoramique vertical).
     FlecheVerticale { de: Pos2, vers: Pos2 },
-    /// Les coins d'un cadre reliés à ceux du suivant (un zoom, une diagonale : une boîte en perspective).
-    Coins([(Pos2, Pos2); 4]),
+    /// Un côté de l'enveloppe qui relie deux cadres différents : un bout de la silhouette.
+    Bord(Pos2, Pos2),
 }
 
-/// Les liens entre les cadres qui se suivent. `rects` : leur rectangle et leur rangée sur la planche (tous dans le même repère).
-pub fn liens(rects: &[(Rect, i32)], largeur_case: f32) -> Vec<Lien> {
+/// Les liens entre les cadres (`quads` : leurs quatre coins, tous dans le même repère ; `thumb` : la case A, qui fait partie de
+/// l'enveloppe). Les côtés de l'enveloppe qui relient deux cadres différents (Anthony, 2026-10-22 : pas de ligne qui traverse
+/// l'intérieur : la silhouette seule), plus une flèche pour un travelling pur (même taille, de côté ou de haut en bas, sans
+/// recouvrement vertical).
+pub fn liens(quads: &[[Pos2; 4]], thumb: Rect) -> Vec<Lien> {
     let mut out = Vec::new();
+    let rects: Vec<Rect> = quads.iter().map(|q| boite(q)).collect();
     for w in rects.windows(2) {
-        let ((a, ba), (b, bb)) = (w[0], w[1]);
+        let (a, b) = (w[0], w[1]);
         let zoome = (b.width() / a.width().max(1e-3) - 1.0).abs() > 0.06;
-        let coins = |a: Rect, b: Rect| Lien::Coins([(a.left_top(), b.left_top()), (a.right_top(), b.right_top()), (a.right_bottom(), b.right_bottom()), (a.left_bottom(), b.left_bottom())]);
-        if ba == bb {
-            if zoome {
-                out.push(coins(a, b));
-            } else if (a.center() - b.center()).length() > 4.0 {
-                let y = a.top().min(b.top()) - 5.0;
-                out.push(Lien::FlecheDessus { de: pos2(a.center().x, y), vers: pos2(b.center().x, y) });
+        if zoome {
+            continue;
+        }
+        let d = b.center() - a.center();
+        if d.y.abs() < 4.0 && d.x.abs() > 4.0 {
+            let y = a.top().min(b.top()) - 5.0;
+            out.push(Lien::FlecheDessus { de: pos2(a.center().x, y), vers: pos2(b.center().x, y) });
+        } else if d.x.abs() < 0.15 * thumb.width() {
+            if b.top() >= a.bottom() {
+                out.push(Lien::FlecheVerticale { de: pos2(a.center().x, a.bottom()), vers: pos2(b.center().x, b.top()) });
+            } else if b.bottom() <= a.top() {
+                out.push(Lien::FlecheVerticale { de: pos2(a.center().x, a.top()), vers: pos2(b.center().x, b.bottom()) });
             }
-        } else if (a.center().x - b.center().x).abs() < 0.15 * largeur_case && !zoome {
-            let (de, vers) = if bb > ba { (pos2(a.center().x, a.bottom()), pos2(b.center().x, b.top())) } else { (pos2(a.center().x, a.top()), pos2(b.center().x, b.bottom())) };
-            out.push(Lien::FlecheVerticale { de, vers });
-        } else {
-            out.push(coins(a, b));
+        }
+    }
+    // L'enveloppe de tous les coins (la case A comprise, elle est le cadre A) : chaque côté dont les deux bouts n'appartiennent pas
+    // à un même cadre relie deux cadres.
+    let mut points: Vec<(Pos2, u64)> = coins_de(thumb).iter().map(|p| (*p, 1)).collect();
+    for (i, q) in quads.iter().enumerate() {
+        points.extend(q.iter().map(|p| (*p, 1_u64 << i.min(62))));
+    }
+    let h = enveloppe_marquee(&points);
+    for k in 0..h.len() {
+        let (p, q) = (h[k], h[(k + 1) % h.len()]);
+        if h.len() >= 3 && p.1 & q.1 == 0 {
+            out.push(Lien::Bord(p.0, q.0));
         }
     }
     out
 }
+
+/// Les cadres qu'on dessine : un cadre qui se confond avec un cadre déjà dessiné (ses quatre coins à moins de `SEUIL_CONFONDU` près : le
+/// tremblé d'une caméra à la main, des dizaines de clés presque au même endroit) ne se redessine pas, ni sa lettre : elles
+/// s'empilaient en un petit carré bleu (Anthony, 2026-10-22).
+pub fn cadres_distincts(quads: &[[Pos2; 4]]) -> Vec<bool> {
+    let mut montres: Vec<usize> = Vec::new();
+    quads
+        .iter()
+        .enumerate()
+        .map(|(i, q)| {
+            let confondu = montres.iter().any(|&j| (0..4).all(|c| quads[j][c].distance(q[c]) < SEUIL_CONFONDU));
+            if !confondu {
+                montres.push(i);
+            }
+            !confondu
+        })
+        .collect()
+}
+
+/// Deux cadres dont les coins sont à moins de ce nombre de points de la planche l'un de l'autre n'en font qu'un à l'écran.
+pub const SEUIL_CONFONDU: f32 = 2.5;
 
 /// La part de la feuille que montre une tuile : centrée sur `centre`, à l'échelle des cases.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -257,8 +424,45 @@ impl Zone {
     }
 }
 
-// ------------------------------------------------------------------ les clés
+// ------------------------------------------------------------------ l'aimant
 
+/// Distance (points d'écran) à laquelle l'aimant d'un alignement prend un cadre : très près seulement (Anthony, 2026-10-22 :
+/// « garde l'aimant, mais seulement quand c'est très proche d'un alignement avec les lignes et les colonnes »).
+pub const AIMANT: f32 = 6.0;
+
+/// Les alignements qui attirent un cadre qu'on déplace, relatifs au coin haut-gauche de A, en points de la planche : des
+/// colonnes (x) et des rangées (y) de la planche, les bords et le centre de A et des autres cadres.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Grille {
+    pub xs: Vec<f32>,
+    pub ys: Vec<f32>,
+}
+
+/// Le décalage qui rapproche la valeur la plus proche d'une cible de celle-ci, si elle est à `seuil` près ; sinon rien. L'aimant
+/// est **doux** : l'écart `d` à la cible devient `d × |d| / seuil` (la valeur colle à la cible tout près d'elle, et rejoint le
+/// pointeur au bord du seuil), si bien que le cadre ne saute jamais en entrant dans l'aimant ni en en sortant.
+fn rapproche(valeurs: [f32; 3], cibles: &[f32], seuil: f32) -> f32 {
+    let mut meilleur: Option<f32> = None;
+    for v in valeurs {
+        for c in cibles {
+            let d = c - v;
+            if d.abs() <= seuil && meilleur.is_none_or(|m| d.abs() < m.abs()) {
+                meilleur = Some(d);
+            }
+        }
+    }
+    meilleur.map_or(0.0, |d| d * (1.0 - d.abs() / seuil.max(1e-6)))
+}
+
+/// Le déplacement `delta` d'un cadre dont la boîte de départ est `rect` (points de la planche), corrigé pour que son bord ou son
+/// centre tombe sur un alignement de `grille` s'il en est à `seuil` près, chaque axe pour lui. Partout ailleurs, `delta` tel quel :
+/// aucun arrondi.
+pub fn aimante(rect: Rect, delta: Vec2, grille: &Grille, seuil: f32) -> Vec2 {
+    let r = rect.translate(delta);
+    vec2(delta.x + rapproche([r.left(), r.center().x, r.right()], &grille.xs, seuil), delta.y + rapproche([r.top(), r.center().y, r.bottom()], &grille.ys, seuil))
+}
+
+// ------------------------------------------------------------------ les clés
 /// Les images de `n` clés réparties régulièrement sur un plan de `len` images : la première au début, la dernière à
 /// la fin.
 pub fn repartition(n: usize, len: usize) -> Vec<usize> {

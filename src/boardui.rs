@@ -193,8 +193,10 @@ pub(crate) struct Vignettes {
     /// La zone de la feuille que montre la tuile en train d'être dessinée (`vignettecam::Zone`) : le dessin la prend
     /// pour sa vue, au lieu de la vue à travers la caméra.
     pub zone: Option<crate::vignettecam::Zone>,
-    /// La rangée de l'empreinte (par rapport à celle de A) où l'on dessine : celle du dernier appui (0 : l'image A).
-    pub bande: i32,
+    /// L'enveloppe de la tuile en train d'être dessinée, à l'écran (vide : le dessin est dans une case rectangulaire).
+    pub enveloppe: Vec<Pos2>,
+    /// De combien la planche a glissé (`BoardLayout::decalage`) à la dernière image : la vue compense, la case A reste où elle est.
+    pub decalage: Vec2,
     /// La touche `vignettes.camera` (T) est tenue : tout glissé sur une case tire la caméra (lu à chaque image).
     pub camera_tenue: bool,
     /// Les annotations : outil, couleur, affichage, marie-louise (`annotationsui.rs`).
@@ -222,7 +224,8 @@ impl Default for Vignettes {
             debord: None,
             cam: None,
             zone: None,
-            bande: 0,
+            enveloppe: Vec::new(),
+            decalage: Vec2::ZERO,
             camera_tenue: false,
             annot: Default::default(),
             depots: Vec::new(),
@@ -253,6 +256,16 @@ impl App {
         let hold = self.vignettes.cam.as_ref().filter(|g| g.actif && !g.annule).and_then(|g| g.hold);
         let opt = board::Options { hold, ..board::Options::pale(self.layout.board_min_rows) };
         board::layout_with(&self.doc, &s, &self.vignettes.lines, self.vignettes.empty_joins, &opt)
+    }
+
+    /// La planche a glissé (`BoardLayout::decalage` : une enveloppe de caméra dépasse la page à gauche ou en haut) : la vue défile
+    /// d'autant en sens inverse, et les cases, A comprise, restent où elles sont à l'écran.
+    pub(crate) fn suivre_decalage(&mut self, layout: &BoardLayout) {
+        let d = layout.decalage - self.vignettes.decalage;
+        self.vignettes.decalage = layout.decalage;
+        if d != Vec2::ZERO && self.board_zoom > 0.0 {
+            self.board_pan -= d * self.board_zoom;
+        }
     }
 
     /// Après une opération qui a retiré des panneaux : les notes qui leur étaient attachées
@@ -556,7 +569,6 @@ impl App {
                     }
                     self.vignettes.press = Press::Select;
                 }
-                self.vignettes.bande = layout.move_of(k).map_or(0, |mv| mv.bande_sous(p));
                 return false;
             }
         }
@@ -575,7 +587,6 @@ impl App {
                     self.board_select_click(layout, k, m);
                     self.vignettes.press = Press::Select;
                 } else {
-                    self.vignettes.bande = layout.move_of(k).map_or(0, |mv| mv.bande_sous(p));
                     self.board_sel = vec![c.plan];
                     self.board_notes.clear();
                     let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
@@ -764,6 +775,7 @@ impl App {
         let settings = self.layout.board_settings();
         self.measure_notes(ui.ctx(), &settings);
         let mut layout = self.board_layout();
+        self.suivre_decalage(&layout);
         if self.board_zoom <= 0.0 {
             self.board_zoom = (view.width() / layout.size.x.max(1.0)).clamp(ZOOM_MIN, 1.5);
             self.board_pan = Vec2::ZERO;
@@ -835,6 +847,7 @@ impl App {
                 }
                 if self.board_press(&layout, xf, *pos, *modifiers, *button) {
                     layout = self.board_layout();
+                    self.suivre_decalage(&layout);
                     self.clamp_board_pan(view, layout.size);
                 }
             }
@@ -927,6 +940,10 @@ impl App {
             ui.ctx().set_cursor_icon(icon);
         }
         let deadline = Instant::now() + crate::thumbs::THUMB_TIME;
+        // Les tuiles des empreintes d'abord (leur rectangle déborde de leur enveloppe : les cases qui s'y trouvent se peignent par-dessus).
+        for k in 0..layout.cards.len() {
+            self.board_tuile(ui, &painter, view, xf, &layout, k, pan_mode, deadline);
+        }
         for k in 0..layout.cards.len() {
             self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, deadline);
         }
@@ -1279,6 +1296,66 @@ impl App {
         }
     }
 
+    /// La tuile de l'empreinte d'un mouvement de caméra (Anthony, 2026-10-22 : tout l'espace entre A et B se dessine) : une seule
+    /// image qui couvre l'enveloppe des cadres. Le plan courant y est vivant (le dessin lui-même, vu par la zone de la feuille :
+    /// un trait y tombe sous le stylet, ailleurs que dans les cadres comme dedans) ; les autres plans montrent leur vignette de
+    /// tuile, composée sur un fil de fond. Hors de l'enveloppe, la tuile ne garde que le trait qui déborde. Peinte avant les cases :
+    /// son rectangle déborde de l'enveloppe, les cases qui s'y trouvent passent par-dessus.
+    #[allow(clippy::too_many_arguments)]
+    fn board_tuile(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant) {
+        let Some(mv) = layout.move_of(k).filter(|_| self.tool != Tool::Camera) else { return };
+        let place = &layout.cards[k];
+        let r = xf.rect(mv.tuile.rect);
+        if !r.intersects(view) {
+            return;
+        }
+        let i = place.panel;
+        let current = i == self.cur_panel && {
+            let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
+            (place.frame..place.end).contains(&f)
+        };
+        let live = current && !pan_mode;
+        let ppp = ui.ctx().pixels_per_point();
+        let hull: Vec<Pos2> = mv.enveloppe.iter().map(|p| xf.to_screen(*p)).collect();
+        let width = crate::thumbs::width_for(r.width() * ppp);
+        let case = self.thumbs.texture_case(ui.ctx(), &self.doc, i, place.frame, place.id, width, Some((&mv.tuile.zone, &mv.tuile.masque)), deadline);
+        let toute = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+        if live {
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt("planche_vive_tuile"));
+            child.set_clip_rect(r.intersect(view));
+            self.vignettes.zone = Some(mv.tuile.zone);
+            self.vignettes.enveloppe = hull.clone();
+            self.card_canvas(&mut child, r);
+            self.vignettes.zone = None;
+            self.vignettes.enveloppe.clear();
+            // Hors de l'enveloppe (les coins de la tuile) : le papier de la planche, et ce que la vignette garde du trait qui déborde.
+            let clip = painter.with_clip_rect(r.intersect(view));
+            let coins = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom()];
+            let dehors = crate::viewbar::difference_convexe(&coins, &hull);
+            clip.add(crate::viewbar::mesh_of_pieces(&dehors, PAPER));
+            if let Some(c) = &case {
+                let full = c.rect(r);
+                let mut mesh = egui::Mesh::with_texture(c.id);
+                for piece in dehors.iter().filter(|p| p.len() >= 3) {
+                    let base = mesh.vertices.len() as u32;
+                    for p in piece {
+                        mesh.vertices.push(egui::epaint::Vertex { pos: *p, uv: pos2((p.x - full.min.x) / full.width().max(1e-3), (p.y - full.min.y) / full.height().max(1e-3)), color: Color32::WHITE });
+                    }
+                    for j in 1..piece.len() as u32 - 1 {
+                        mesh.add_triangle(base, base + j, base + j + 1);
+                    }
+                }
+                clip.add(egui::Shape::mesh(mesh));
+                paint_ring(painter, r, c);
+            }
+        } else {
+            painter.add(egui::Shape::convex_polygon(hull, Color32::WHITE, Stroke::NONE));
+            if let Some(c) = &case {
+                painter.image(c.id, c.rect(r), toute, Color32::WHITE);
+            }
+        }
+    }
+
     /// Une vignette (une image de storyboard) : son numéro de plan s'il commence, l'image (le dessin lui-même
     /// pour l'image courante), son filet, sa bande de note. Les gestes sont pris plus haut (`board_press`).
     #[allow(clippy::too_many_arguments)]
@@ -1322,32 +1399,7 @@ impl App {
             // La case d'un plan dont la caméra bouge (deux clés au moins) montre ses cadres à l'échelle des autres cases : une tuile
             // par rangée de l'empreinte, qui montre la feuille et ce qu'on a dessiné autour d'elle (`vignettecam.rs`) ; l'outil Caméra,
             // lui, recadre à l'ancienne (une seule image).
-            Some(mv) => {
-                let vive = mv.tuiles.iter().position(|t| t.bande == self.vignettes.bande).or_else(|| mv.tuiles.iter().position(|t| t.bande == 0)).unwrap_or(0);
-                for (ti, t) in mv.tuiles.iter().enumerate() {
-                    let r = xf.rect(t.rect);
-                    if !r.intersects(view) {
-                        continue;
-                    }
-                    let width = crate::thumbs::width_for(r.width() * ppp);
-                    let case = self.thumbs.texture_case(ui.ctx(), &self.doc, i, place.frame, place.id, width, Some((ti, &t.zone)), deadline);
-                    if live && ti == vive {
-                        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt(("planche_vive", ti)));
-                        child.set_clip_rect(r.intersect(view));
-                        self.vignettes.zone = Some(t.zone);
-                        self.card_canvas(&mut child, r);
-                        self.vignettes.zone = None;
-                        if let Some(c) = &case {
-                            paint_ring(painter, r, c);
-                        }
-                    } else {
-                        painter.rect_filled(r, 0.0, Color32::WHITE);
-                        if let Some(c) = &case {
-                            painter.image(c.id, c.rect(r), Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
-                        }
-                    }
-                }
-            }
+            Some(_) => {}
             None => {
                 // La vignette de la case, avec sa petite marge autour du cadre où le trait qui déborde reste visible (comme la maquette) :
                 // l'image courante la tient à jour en arrière-plan ; sa marge est peinte par-dessus le dessin vivant.
@@ -1422,7 +1474,7 @@ impl App {
         // Le trait qui déborde de la case, tant que la main est en bas : calculé ici, pendant que la vue du dessin est
         // celle de la vignette ; peint en dernier par la planche (`debord.rs`). Rien si le geste reste dans la case.
         let shift = ui.input(|i| i.modifiers.shift);
-        self.vignettes.debord = if self.stroke.is_some() || self.shape_drag.is_some() || self.shape_edit.is_some() { self.debord_collect(thumb, shift) } else { None };
+        self.vignettes.debord = if self.stroke.is_some() || self.shape_drag.is_some() || self.shape_edit.is_some() { self.debord_collect(thumb, (!self.vignettes.enveloppe.is_empty()).then_some(self.vignettes.enveloppe.as_slice()), shift) } else { None };
         (self.view, self.camera_view, self.canvas_rect) = (view, camera_view, canvas_rect);
     }
 
