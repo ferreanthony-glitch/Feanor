@@ -404,9 +404,9 @@ impl App {
                         continue;
                     }
                     // Dans une vignette de la planche (`boardui.rs`), seul l'appui que la planche a donné au dessin dessine :
-                    // Ctrl ou Maj + appui choisit des plans, un appui sur une barre, une note ou hors d'une image ne trace rien (la mise en page
+                    // Maj (ou Ctrl + Maj : la caméra) + appui ne dessine pas, un appui sur une barre, une note ou hors d'une image ne trace rien (la mise en page
                     // a pu changer sous la souris pendant cette même image).
-                    if self.in_card && (modifiers.command || modifiers.ctrl || modifiers.shift || self.vignettes.camera_tenue || !matches!(self.vignettes.press, crate::boardui::Press::Card | crate::boardui::Press::None)) {
+                    if self.in_card && (modifiers.shift || self.vignettes.camera_tenue || !matches!(self.vignettes.press, crate::boardui::Press::Card | crate::boardui::Press::None)) {
                         continue;
                     }
                     // `stage` : point de la feuille (guides, caméra, pipette) ; `p` : point du dessin

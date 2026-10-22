@@ -865,7 +865,7 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   disposition épurée : la planche seule, avec les réglages du pinceau, la couleur et les pinceaux (en onglets), la barre des
   personnages au-dessus de la planche et une colonne d'outils minimale (pinceau, crayon, gomme). Ni montage, ni timeline, ni
   calques, ni effets ; les Références s'ouvrent d'un clic dans la barre des panneaux. Tab en revient au Storyboard (« Animer cette
-  image », au clic droit, entre en animation, et Tab ramène aux Vignettes). **Ctrl + glisser le cadre d'une case** crée un mouvement
+  image », au clic droit, entre en animation, et Tab ramène aux Vignettes). **Ctrl + Maj + glisser le cadre d'une case** (ou T tenue ; Ctrl seul est le lasso, Maj + Alt + glisser copie le plan) crée un mouvement
   de caméra : le cadre d'origine reste **A**, un cadre **B** apparaît là où on le dépose (clés de caméra : A à la première image du
   plan, B à la dernière, vitesse constante comme au montage) ; recommencer depuis le dernier cadre ajoute **C**, **D**… (clés
   réparties sur la durée du plan ; des clés posées à la main sont respectées). Un coin tiré change le zoom du cadre, le bord d'un

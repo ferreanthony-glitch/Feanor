@@ -1,13 +1,13 @@
 //! Les mouvements de caméra dans la vue Vignettes, à l'écran (Anthony, 2026-10-21). La logique est dans `vignettecam.rs`.
 //!
-//! **Ctrl + glisser** (ou **T tenue**, `vignettes.camera`, comme Espace tient la main) dans une case, de son image, de son empreinte
-//! ou de sa marge, quel que soit l'outil : c'est **toujours** un geste de caméra, jamais un plan qu'on déplace ni qu'on choisit
-//! (un Ctrl + clic qui ne bouge pas choisit des plans comme avant ; Maj + glisser le cadre d'une case déplace son plan) :
+//! **Ctrl + Maj + glisser** (ou **T tenue**, `vignettes.camera`, comme Espace tient la main) dans une case, de son image, de son empreinte
+//! ou de sa marge, quel que soit l'outil : c'est **toujours** un geste de caméra, jamais un plan qu'on déplace ni qu'on choisit, ni un
+//! lasso (Ctrl seul est le lasso ; un Ctrl + Maj + clic qui ne bouge pas ne fait rien ; Maj + glisser le cadre d'une case déplace son plan) :
 //! - case sans mouvement : le cadre d'origine reste **A** ; un nouveau cadre **B** suit le pointeur (le dedans le déplace, un coin
 //!   le resserre ou l'élargit) ; au lâcher, deux clés de caméra sont posées (A à la première image du plan, B à la dernière) ;
 //! - case avec des cadres : le dedans d'un cadre **le déplace** (le plus petit qui contient le point : B dans A, dedans B on déplace B),
 //!   un de ses coins change sa taille (le zoom de la clé). Rien ne naît d'un glissé simple ;
-//! - **Ctrl + Alt + glisser** (ou T + Alt) : un cadre de plus (C, D…), qui part du dernier ; **« Ajouter un cadre »** au clic droit
+//! - **Ctrl + Maj + Alt + glisser** (ou T + Alt) : un cadre de plus (C, D…), qui part du dernier ; **« Ajouter un cadre »** au clic droit
 //!   de la case en pose un à côté du dernier ; **« Retirer ce cadre »** au clic droit sur un cadre.
 //!
 //! L'empreinte de la case suit en direct (les cadres à l'échelle des cases, les autres cases se rangent : la largeur réservée ne
@@ -15,7 +15,7 @@
 //! d'annulation, nommée (« Mouvement de caméra », « Cadre C », « Zoom du cadre B »…), qu'au lâcher ; Échap remet les clés d'avant.
 //! Les cadres se dessinent fins, en bleu, avec leur lettre, et se relient (flèche d'un travelling, coins d'un zoom ou d'une diagonale).
 
-use eframe::egui::{self, vec2, Align2, Color32, CursorIcon, FontId, Modifiers, Painter, Pos2, Rect, Shape, Stroke};
+use eframe::egui::{self, vec2, Align2, Color32, CursorIcon, FontId, Painter, Pos2, Rect, Shape, Stroke};
 
 use crate::app::App;
 use crate::board::{self, BoardLayout, CardPlace, MoveBoard, Reserve};
@@ -30,7 +30,7 @@ const PRISE: f32 = 9.0;
 /// Le bleu des cadres de caméra : fin, le même sur le papier et sur le dessin.
 pub const BLEU: Color32 = Color32::from_rgb(0x37, 0x8A, 0xDD);
 
-/// Un geste Ctrl + glisser sur un cadre, de l'appui au lâcher.
+/// Un geste Ctrl + Maj + glisser (ou T tenue) sur un cadre, de l'appui au lâcher.
 pub(crate) struct CamGeste {
     pub plan: u64,
     /// L'image du plan où commence la case prise (0 : la première case ; sinon une marque d'image).
@@ -45,6 +45,8 @@ pub(crate) struct CamGeste {
     pub annule: bool,
     /// Les clés du plan à l'appui, et la caméra du début (A) quand il n'y a pas encore de mouvement.
     pub keys0: Vec<CameraKey>,
+    /// Les clés du plan telles qu'elles étaient à l'appui, avant `recale` (Échap les remet, le lâcher les compare).
+    pub orig: Vec<CameraKey>,
     pub a: Camera,
     /// Le coin saisi et le centre du cadre, sur la feuille (le zoom).
     pub coin: Pos2,
@@ -63,8 +65,6 @@ pub(crate) struct CamGeste {
     pub avant: usize,
     /// L'étape d'annulation, prise au premier mouvement.
     pub snap: Option<Edit>,
-    /// Le Ctrl + clic d'avant : la vignette (rang sur la planche) et les touches, si le geste ne bouge pas.
-    pub clic: (usize, Modifiers),
     /// La place que l'empreinte a prise pendant le geste : les autres cases ne la regagnent qu'au lâcher.
     pub hold: Option<Reserve>,
     /// Où était la case A à l'appui (sa rangée, son x) : elle y reste tant que le geste dure (`Reserve::pose`).
@@ -74,6 +74,14 @@ pub(crate) struct CamGeste {
 impl App {
     fn largeur_case(&self) -> f32 {
         self.layout.card_size.clamp(crate::board::CARD_MIN, crate::board::CARD_MAX)
+    }
+
+    /// Sur combien d'images se répartissent les cadres du plan `pi` (la durée de sa première case, `vignettecam::etendue_du_mouvement`), et sa
+    /// durée entière.
+    pub(crate) fn etendue_mouvement(&self, pi: usize) -> (usize, usize) {
+        let total = self.doc.panels[pi].frame_count();
+        let span = board::plan_boards(&self.doc, pi).first().map_or(total, |b| b.2);
+        (vignettecam::etendue_du_mouvement(span, total), total)
     }
 
     /// La marge autour d'une case où un appui de caméra la prend encore (3 % de sa largeur, au moins 6 points : moins que la marge de
@@ -107,7 +115,7 @@ impl App {
     /// porter de mouvement (une marque d'image d'un plan qui bouge déjà) : l'appui garde alors son sens (choisir des plans). Le
     /// Ctrl + clic reste un choix de plans tant que le pointeur ne bouge pas (`finish_cam_geste`). `ajoute` : Alt est tenue, un
     /// cadre de plus part du dernier.
-    pub(crate) fn cam_press(&mut self, layout: &BoardLayout, xf: Xf, k: usize, pos: Pos2, m: Modifiers, ajoute: bool) -> bool {
+    pub(crate) fn cam_press(&mut self, layout: &BoardLayout, xf: Xf, k: usize, pos: Pos2, ajoute: bool) -> bool {
         let place = layout.cards[k];
         // Le mouvement d'un plan se dessine sur sa première case ; sur une autre case du plan (une marque d'image), le
         // geste ne vaut que tant que le plan n'a pas de mouvement : la case entière est alors le cadre A (la caméra du
@@ -119,7 +127,9 @@ impl App {
         let (cadres, simple) = self.cadres_sur_la_planche(layout, k);
         let tol = self.tol_coin(xf, &place);
         let Some(Choix { prise, rang, coin }) = vignettecam::choisit(&cadres, simple, xf.to_board(pos), tol, ajoute) else { return false };
-        let keys0 = self.doc.panels[place.panel].camera.clone();
+        let orig = self.doc.panels[place.panel].camera.clone();
+        let (len_mvt, total) = self.etendue_mouvement(place.panel);
+        let keys0 = vignettecam::recale(&orig, len_mvt, total);
         let a = keys0.first().map_or_else(|| self.doc.panel_camera(place.panel, 0), |k| k.cam);
         let cam = if simple { a } else { keys0.get(rang).map_or(a, |k| k.cam) };
         let frame = self.doc.frame;
@@ -159,6 +169,7 @@ impl App {
             actif: false,
             annule: false,
             keys0,
+            orig,
             a,
             coin: vignettecam::coin_de(frame, &cam, coin),
             centre: vignettecam::centre_de(frame, &cam),
@@ -170,7 +181,6 @@ impl App {
             aimante,
             avant,
             snap: None,
-            clic: (k, m),
             hold: None,
             pose: layout.cards.iter().position(|c| c.plan == place.plan && c.frame == 0).and_then(|j| Reserve::depuis(layout, j)).and_then(|r| r.pose),
         });
@@ -183,7 +193,7 @@ impl App {
         let Some(mut g) = self.vignettes.cam.take() else { return };
         let Some(pi) = self.doc.panels.iter().position(|p| p.id == g.plan) else { return };
         if escape && g.actif && !g.annule {
-            self.doc.panels[pi].camera = g.keys0.clone();
+            self.doc.panels[pi].camera = g.orig.clone();
             (g.annule, g.actif, g.snap) = (true, false, None);
             g.hold = None;
             self.status = "Mouvement de caméra abandonné.".into();
@@ -213,14 +223,14 @@ impl App {
             } else {
                 (g.maintenant - g.depart) / g.echelle.max(1e-6)
             };
-            let len = self.doc.panels[pi].frame_count();
+            let (len, _) = self.etendue_mouvement(pi);
             match vignettecam::applique(self.doc.frame, &g.keys0, g.a, g.prise, delta, g.coin, g.centre, len) {
                 Some(keys) => {
                     self.doc.panels[pi].camera = keys;
                     self.modified = true;
                 }
                 None => {
-                    self.doc.panels[pi].camera = g.keys0.clone();
+                    self.doc.panels[pi].camera = g.orig.clone();
                     self.status = "Ce plan est trop court pour un cadre de plus : allonge-le d'abord.".into();
                 }
             }
@@ -240,7 +250,7 @@ impl App {
     }
 
     /// Au lâcher : le mouvement prend son étape d'annulation, nommée ; un Ctrl + clic qui n'a pas bougé choisit des plans.
-    pub(crate) fn finish_cam_geste(&mut self, layout: &BoardLayout, any_down: bool) {
+    pub(crate) fn finish_cam_geste(&mut self, _layout: &BoardLayout, any_down: bool) {
         if any_down {
             return;
         }
@@ -249,15 +259,12 @@ impl App {
             return;
         }
         if !g.actif {
-            let (k, m) = g.clic;
-            if k < layout.cards.len() && (m.ctrl || m.command) {
-                self.board_select_click(layout, k, m);
-            }
+            // (Un Ctrl + Maj + clic qui ne bouge pas ne fait rien : ni plan choisi, ni plan déplacé.)
             return;
         }
         let Some(pi) = self.doc.panels.iter().position(|p| p.id == g.plan) else { return };
         let Some(snap) = g.snap.take() else { return };
-        let changed = self.doc.panels[pi].camera != g.keys0;
+        let changed = self.doc.panels[pi].camera != g.orig;
         if !changed {
             return;
         }
@@ -289,8 +296,8 @@ impl App {
         if self.content_refuses() || !self.partage_peut_toucher(&[id]) {
             return;
         }
-        let keys0 = self.doc.panels[pi].camera.clone();
-        let len = self.doc.panels[pi].frame_count();
+        let (len, total) = self.etendue_mouvement(pi);
+        let keys0 = vignettecam::recale(&self.doc.panels[pi].camera, len, total);
         let a = keys0.first().map_or_else(|| self.doc.panel_camera(pi, 0), |k| k.cam);
         let base = if keys0.len() >= 2 { keys0[keys0.len() - 1].cam } else { a };
         let nouveau = vignettecam::cadre_suivant(self.doc.frame, base, vignettecam::taille_cadre(&self.doc, &base));
@@ -304,7 +311,7 @@ impl App {
         let nom = vignettecam::nom_etape(Prise::Nouveau, avant);
         self.etape_camera(snap, &nom);
         let n = self.doc.panels[pi].camera.len();
-        self.status = format!("Cadre {} ajouté : tire-le avec Ctrl.", vignettecam::lettre(n - 1));
+        self.status = format!("Cadre {} ajouté : tire-le avec Ctrl + Maj (ou T).", vignettecam::lettre(n - 1));
     }
 
     /// « Retirer ce cadre » : la clé `rang` du plan `pi` s'en va. Retirer B d'un mouvement à deux cadres enlève le mouvement.
@@ -313,7 +320,8 @@ impl App {
         if self.content_refuses() || !self.partage_peut_toucher(&[id]) {
             return;
         }
-        let Some(keys) = vignettecam::sans_le_cadre(&self.doc.panels[pi].camera, rang, self.doc.panels[pi].frame_count()) else { return };
+        let (len, total) = self.etendue_mouvement(pi);
+        let Some(keys) = vignettecam::sans_le_cadre(&vignettecam::recale(&self.doc.panels[pi].camera, len, total), rang, len) else { return };
         let snap = self.snapshot();
         let reste = keys.len();
         self.doc.panels[pi].camera = keys;

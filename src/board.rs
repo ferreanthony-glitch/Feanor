@@ -833,6 +833,16 @@ pub fn nearest_slot(slots: &[DropSlot], order: &[u64], moving: &[u64], p: Pos2) 
         .copied()
 }
 
+/// L'endroit de pose le plus proche du point `p` pour la **copie** d'un plan (Maj + Alt) : tous les repères valent, même devant
+/// l'original ou juste après lui (la copie est un plan de plus, elle n'enlève rien d'où elle vient).
+pub fn nearest_slot_copie(slots: &[DropSlot], p: Pos2) -> Option<DropSlot> {
+    let dist = |s: &DropSlot| {
+        let y = p.y.clamp(s.top, s.bottom);
+        ((p.x - s.x).powi(2) + (p.y - y).powi(2)).sqrt()
+    };
+    slots.iter().min_by(|a, b| dist(a).total_cmp(&dist(b))).copied()
+}
+
 /// Plans dont une vignette touche le rectangle `r` (sélection au lasso rectangulaire), sans
 /// doublon, dans l'ordre du film.
 pub fn cards_in(layout: &BoardLayout, r: Rect) -> Vec<usize> {

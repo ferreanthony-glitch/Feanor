@@ -52,6 +52,7 @@ pub fn commandes_de_l_onglet(espace: Espace) -> &'static [(&'static str, &'stati
             ("panneau.nouveau", "Nouveau Plan"),
             ("panneau.precedent", "Plan précédent"),
             ("panneau.suivant", "Plan suivant"),
+            ("vignettes.camera", "Caméra : tenir, puis glisser (Ctrl + Maj aussi)"),
             ("vignettes.annotation_stylo", "Stylo d'annotation"),
             ("vignettes.annotation_gomme", "Gomme d'annotation"),
             ("vignettes.annotations_afficher", "Montrer ou cacher les annotations"),

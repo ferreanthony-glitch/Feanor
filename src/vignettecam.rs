@@ -1,6 +1,6 @@
 //! Les mouvements de caméra dessinés dans les Vignettes (Anthony, 2026-10-21), sans interface.
 //!
-//! **Ctrl + glisser dans une case** : le cadre d'origine reste **A** (le début du mouvement) ; un nouveau cadre **B** apparaît
+//! **Ctrl + Maj + glisser dans une case** (ou T tenue) : le cadre d'origine reste **A** (le début du mouvement) ; un nouveau cadre **B** apparaît
 //! là où on le dépose. Les clés de caméra du plan sont posées (A à la première image, B à la dernière ; le modèle est celui de
 //! la timeline et du montage, vitesse constante). Les clés se répartissent régulièrement sur la durée du plan quand elles
 //! l'étaient déjà (`est_repartie`) ; des clés posées à la main ailleurs (montage, timeline) sont respectées : la nouvelle va à
@@ -10,7 +10,7 @@
 //! - sur une case sans mouvement, le glissé crée B (déplacé, ou zoomé quand il part d'un coin) ;
 //! - sur une case avec des cadres, le glissé **ne crée jamais rien** : dedans un cadre il le déplace (le plus petit qui contient
 //!   le point l'emporte : B dans A, dedans B on déplace B, dans A hors de B on déplace A), à un coin il change son zoom ;
-//! - un cadre de plus (C, D…) se demande : Ctrl + Alt + glisser (il part du dernier cadre) ou « Ajouter un cadre » au clic droit ;
+//! - un cadre de plus (C, D…) se demande : Ctrl + Maj + Alt + glisser (il part du dernier cadre) ou « Ajouter un cadre » au clic droit ;
 //!   « Retirer ce cadre » au clic droit sur un cadre.
 //!
 //! **L'empreinte** (`empreinte`) : une case qui a un mouvement montre ses cadres à **la même échelle** que les autres cases, sans
@@ -197,6 +197,13 @@ fn enveloppe_marquee(points: &[(Pos2, u64)]) -> Vec<(Pos2, u64)> {
     }
     hull.pop();
     hull
+}
+
+/// Le polygone convexe `poly` élargi de `marge` de chaque côté (la somme de Minkowski avec un carré : ses coins sont ceux des quatre
+/// copies décalées de chaque sommet). Le serré d'un plan qu'on ne dessine pas : l'enveloppe plus quelques points.
+pub fn elargi(poly: &[Pos2], marge: f32) -> Vec<Pos2> {
+    let pts: Vec<Pos2> = poly.iter().flat_map(|p| [vec2(-marge, -marge), vec2(marge, -marge), vec2(marge, marge), vec2(-marge, marge)].map(|d| *p + d)).collect();
+    enveloppe_convexe(&pts)
 }
 
 /// L'enveloppe convexe de points.
@@ -476,6 +483,32 @@ pub fn repartition(n: usize, len: usize) -> Vec<usize> {
 /// Les clés sont-elles réparties comme `repartition` le fait (celles que ce geste pose) ?
 pub fn est_repartie(keys: &[CameraKey], len: usize) -> bool {
     keys.len() >= 2 && repartition(keys.len(), len).iter().zip(keys).all(|(f, k)| *f == k.frame)
+}
+
+/// Sur combien d'images se répartissent les cadres d'un mouvement : la durée de la **première case** du plan (`span` : jusqu'à sa
+/// deuxième case, une marque d'image) quand elle peut porter deux clés, sinon tout le plan (`total`). Le dernier cadre tombe donc à la fin
+/// de la case qui porte le mouvement : les cases qui la suivent dans le plan, en continuité, montrent le dernier cadre (la caméra tient sa
+/// dernière clé), à l'écran des Vignettes comme à la lecture.
+pub fn etendue_du_mouvement(span: usize, total: usize) -> usize {
+    if span >= 2 {
+        span.min(total)
+    } else {
+        total
+    }
+}
+
+/// Les clés `keys`, posées d'ordinaire sur tout le plan (`total` images : les clés que ce geste posait avant que le mouvement ne tienne dans
+/// la première case), rangées sur les `len` images de la première case quand elles étaient réparties régulièrement sur tout le plan. Des clés
+/// posées à la main, ou déjà rangées, restent comme elles sont.
+pub fn recale(keys: &[CameraKey], len: usize, total: usize) -> Vec<CameraKey> {
+    if len >= total || len < keys.len() || !est_repartie(keys, total) || est_repartie(keys, len) {
+        return keys.to_vec();
+    }
+    let mut out = keys.to_vec();
+    for (k, f) in out.iter_mut().zip(repartition(keys.len(), len)) {
+        k.frame = f;
+    }
+    out
 }
 
 /// Les clés du plan une fois un nouveau cadre `nouveau` ajouté après le dernier. `a` : la caméra du début quand le plan

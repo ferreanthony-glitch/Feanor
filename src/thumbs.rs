@@ -55,6 +55,9 @@ struct Entry {
     seq: u64,
     /// Pixels de marge autour du cadre dans l'image (la planche : le trait qui déborde un peu, `texture_case`) ; zéro ailleurs.
     marge: usize,
+    /// La géométrie pour laquelle elle a été composée (la tuile d'un mouvement de caméra) : l'image montre ce qu'elle a montré, à la
+    /// place qu'elle avait, même si les cadres ont bougé depuis.
+    geom: Option<Geom>,
     /// L'image envoyée à la carte graphique (essais : la comparer à l'ancien calcul).
     #[cfg(test)]
     image: ColorImage,
@@ -68,6 +71,29 @@ pub struct CaseTex {
     pub marge: usize,
     /// La taille de la texture entière, marge comprise.
     pub taille: [usize; 2],
+    /// La géométrie de la tuile pour laquelle cette texture a été composée (rien pour une case ordinaire).
+    pub geom: Option<Geom>,
+}
+
+/// Ce qui fait la forme d'une tuile de mouvement de caméra : la part de la feuille qu'elle couvre et l'enveloppe qui borne son papier
+/// (`vignettecam::Zone`, un résumé de l'enveloppe). Une texture composée pour une autre géométrie que celle d'aujourd'hui n'est jamais
+/// posée comme si c'était la bonne : ses bords de coupe, ses marges et son papier seraient ceux d'avant le geste.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Geom {
+    pub zone: crate::vignettecam::Zone,
+    pub masque: u64,
+}
+
+impl Geom {
+    pub fn de(zone: &crate::vignettecam::Zone, masque: &[egui::Pos2]) -> Geom {
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for p in masque {
+            for v in [p.x.to_bits(), p.y.to_bits()] {
+                h = (h ^ v as u64).wrapping_mul(0x0100_0000_01b3);
+            }
+        }
+        Geom { zone: *zone, masque: h }
+    }
 }
 
 impl CaseTex {
@@ -75,6 +101,22 @@ impl CaseTex {
     pub fn rect(&self, thumb: egui::Rect) -> egui::Rect {
         let (tw, th) = (self.taille[0].saturating_sub(2 * self.marge).max(1) as f32, self.taille[1].saturating_sub(2 * self.marge).max(1) as f32);
         thumb.expand2(egui::vec2(self.marge as f32 * thumb.width() / tw, self.marge as f32 * thumb.height() / th))
+    }
+}
+
+impl CaseTex {
+    /// Où la texture (marge comprise) se pose sur l'écran quand la tuile d'aujourd'hui est `tuile` (écran) pour la zone `zone` : à la place
+    /// de la zone pour laquelle elle a été composée (`geom`), pas de celle d'aujourd'hui. Les cadres bougent, la feuille et le trait ne
+    /// bougent pas : une texture d'avant le geste reste juste là où elle couvre.
+    pub fn rect_tuile(&self, tuile: egui::Rect, zone: &crate::vignettecam::Zone, ppp_echelle: f32) -> egui::Rect {
+        let base = match &self.geom {
+            Some(g) if g.zone != *zone => {
+                let d = (g.zone.centre - zone.centre) * ppp_echelle;
+                egui::Rect::from_center_size(tuile.center() + d, g.zone.taille * ppp_echelle)
+            }
+            _ => tuile,
+        };
+        self.rect(base)
     }
 }
 
@@ -199,6 +241,7 @@ impl Thumbs {
                 e.waiting = d.waiting;
                 e.seq = d.seq;
                 e.marge = d.marge;
+                e.geom = d.geom;
             }
             None => {
                 #[cfg(test)]
@@ -212,6 +255,7 @@ impl Thumbs {
                         waiting: d.waiting,
                         seq: d.seq,
                         marge: d.marge,
+                        geom: d.geom,
                         #[cfg(test)]
                         image,
                     },
@@ -278,22 +322,23 @@ impl Thumbs {
         frame: usize,
         id: u64,
         width: usize,
-        zone: Option<(&crate::vignettecam::Zone, &[eframe::egui::Pos2])>,
+        zone: Option<(&crate::vignettecam::Zone, &[eframe::egui::Pos2], f32)>,
         deadline: Instant,
     ) -> Option<CaseTex> {
         let plan = render::panel_plan_at(doc, panel, frame, Some(doc.paper));
         match zone {
-            Some((zone, enveloppe)) => {
+            Some((zone, enveloppe, part_case)) => {
                 let cadre = [zone.taille.x.round().clamp(1.0, 16384.0) as usize, zone.taille.y.round().clamp(1.0, 16384.0) as usize];
                 let cam = Camera { x: zone.centre.x, y: zone.centre.y, zoom: 1.0, angle: 0.0, dolly: 0.0, tilt: 0.0, pan: 0.0 };
                 // L'enveloppe, en points du cadre filmé : la tuile ne montre le papier que dedans.
                 let moitie = eframe::egui::vec2(cadre[0] as f32, cadre[1] as f32) * 0.5;
                 let masque: Vec<eframe::egui::Pos2> = enveloppe.iter().map(|p| ((*p - zone.centre) + moitie).to_pos2()).collect();
-                self.texture_of_marge(ctx, doc, id | ZONE_BIT | CASE_BIT | (1 << TUILE_SHIFT), plan, cam, width, cadre, true, Some(masque), deadline)
+                let geom = Geom::de(zone, enveloppe);
+                self.texture_of_marge(ctx, doc, id | ZONE_BIT | CASE_BIT | (1 << TUILE_SHIFT), plan, cam, width, cadre, true, Some(masque), Some((geom, part_case)), deadline)
             }
             None => {
                 let cam = doc.panel_camera(panel, frame);
-                self.texture_of_marge(ctx, doc, id | CASE_BIT, plan, cam, width, doc.frame, true, None, deadline)
+                self.texture_of_marge(ctx, doc, id | CASE_BIT, plan, cam, width, doc.frame, true, None, None, deadline)
             }
         }
     }
@@ -301,14 +346,18 @@ impl Thumbs {
     /// `frame` : la taille du cadre filmé (celle du projet, ou celle d'une zone, `texture_case`).
     #[allow(clippy::too_many_arguments)]
     fn texture_of(&mut self, ctx: &egui::Context, doc: &Document, id: u64, plan: Plan, cam: Camera, width: usize, frame: [usize; 2], deadline: Instant) -> Option<TextureId> {
-        self.texture_of_marge(ctx, doc, id, plan, cam, width, frame, false, None, deadline).map(|c| c.id)
+        self.texture_of_marge(ctx, doc, id, plan, cam, width, frame, false, None, None, deadline).map(|c| c.id)
     }
 
     /// Comme `texture_of` ; `avec_marge` : l'image porte une marge autour du cadre (`texture_case`).
     #[allow(clippy::too_many_arguments)]
-    fn texture_of_marge(&mut self, ctx: &egui::Context, doc: &Document, id: u64, plan: Plan, cam: Camera, width: usize, frame: [usize; 2], avec_marge: bool, masque: Option<Vec<eframe::egui::Pos2>>, deadline: Instant) -> Option<CaseTex> {
+    fn texture_of_marge(&mut self, ctx: &egui::Context, doc: &Document, id: u64, plan: Plan, cam: Camera, width: usize, frame: [usize; 2], avec_marge: bool, masque: Option<Vec<eframe::egui::Pos2>>, geom: Option<(Geom, f32)>, deadline: Instant) -> Option<CaseTex> {
         let _t = crate::perf::section("vignettes : clés et demandes");
         let slot = (id, width);
+        // (La marge : 12 % de la largeur d'une case. Une tuile est plus large qu'une case : `part_case` est la part de sa largeur que fait une case.)
+        let size = thumb_size_of(frame, width, scale_pct());
+        let marge = if avec_marge { marge_px((size.0 as f32 * geom.map_or(1.0, |g| g.1.clamp(0.01, 1.0))).round() as usize) } else { 0 };
+        let geom = geom.map(|g| g.0);
         // (Plus le nombre de fonds sous le trait arrivés de l'arrière-plan, si le plan montre un fond : la
         // vignette montre le fond d'avant jusqu'à l'arrivée du nouveau. Un plan sans fond ne se refait pas
         // quand le fond d'un autre arrive. Et la taille du cadre, qui donne celle de la vignette.)
@@ -317,7 +366,7 @@ impl Thumbs {
             .items
             .iter()
             .map(|i| doc.cels.get(&i.cel).map_or(0, |c| c.version))
-            .chain([if fonds { crate::fx::fond_epoch() } else { 0 }, frame[0] as u64, frame[1] as u64])
+            .chain([if fonds { crate::fx::fond_epoch() } else { 0 }, frame[0] as u64, frame[1] as u64, marge as u64])
             // (Et l'enveloppe de la tuile : elle change la forme du papier.)
             .chain(masque.iter().flatten().flat_map(|p| [p.x.to_bits() as u64, p.y.to_bits() as u64]))
             .collect();
@@ -331,8 +380,7 @@ impl Thumbs {
                     let Key::Plan(plan, _, _) = key else { unreachable!("une clé de plan") };
                     let mut mini = snapshot(doc, plan);
                     mini.frame = frame;
-                    let size = thumb_size_of(frame, width, scale_pct());
-                    Work::Plan { doc: mini, cam, size, marge: if avec_marge { marge_px(size.0) } else { 0 }, masque: masque.clone(), generation }
+                    Work::Plan { doc: mini, cam, size, marge, masque: masque.clone(), generation, geom }
                 });
             } else {
                 self.pending = true;
@@ -342,7 +390,7 @@ impl Thumbs {
         self.entries
             .get(&slot)
             .or_else(|| self.entries.iter().find(|(k, _)| k.0 == id).map(|(_, e)| e))
-            .map(|e| CaseTex { id: e.texture.id(), marge: e.marge, taille: e.texture.size() })
+            .map(|e| CaseTex { id: e.texture.id(), marge: e.marge, taille: e.texture.size(), geom: e.geom })
     }
 
     pub fn prune(&mut self, doc: &Document) {
@@ -392,6 +440,13 @@ impl Thumbs {
     #[cfg(test)]
     pub(crate) fn case_image_of(&self, id: u64, width: usize) -> Option<(&ColorImage, usize)> {
         self.entries.get(&(id | CASE_BIT, width)).map(|e| (&e.image, e.marge))
+    }
+
+    /// La texture de la tuile (mouvement de caméra) de la case `id` de la planche, à n'importe quelle largeur (essais).
+    #[cfg(test)]
+    pub(crate) fn case_texs_of(&self, id: u64) -> Vec<CaseTex> {
+        let slot_id = id | ZONE_BIT | CASE_BIT | (1 << TUILE_SHIFT);
+        self.entries.iter().filter(|(k, _)| k.0 == slot_id).map(|(_, e)| CaseTex { id: e.texture.id(), marge: e.marge, taille: e.texture.size(), geom: e.geom }).collect()
     }
 
     /// L'image que la vignette `slot` montre (essais).
@@ -485,7 +540,7 @@ pub(crate) enum Work {
     /// La vignette d'un plan sur son cliché (la clé porte le plan).
     /// `marge` : pixels autour de l'image où seul le dessin (pas le papier) est composé ; l'image entière fait donc
     /// `size` + deux marges.
-    Plan { doc: Document, cam: Camera, size: (usize, usize), marge: usize, masque: Option<Vec<eframe::egui::Pos2>>, generation: u64 },
+    Plan { doc: Document, cam: Camera, size: (usize, usize), marge: usize, masque: Option<Vec<eframe::egui::Pos2>>, generation: u64, geom: Option<Geom> },
     /// La miniature d'un dessin.
     Cel { raster: Raster, frame: egui::Rect, size: (usize, usize) },
 }
@@ -528,6 +583,8 @@ pub(crate) struct Done {
     pub(crate) waiting: Option<u64>,
     /// La marge de l'image autour du cadre (`Work::Plan::marge`).
     pub(crate) marge: usize,
+    /// La géométrie de la tuile pour laquelle elle est composée (`Work::Plan::geom`).
+    pub(crate) geom: Option<Geom>,
 }
 
 #[derive(Default)]
@@ -764,11 +821,11 @@ fn worker(shared: &Shared) {
             q.running.retain(|r| r.seq != job.seq);
             if let Some((image, waiting)) = finished {
                 if job.era == q.era && !job.cancel.load(Ordering::Relaxed) {
-                    let marge = match &job.work {
-                        Work::Plan { marge, .. } => *marge,
-                        Work::Cel { .. } => 0,
+                    let (marge, geom) = match &job.work {
+                        Work::Plan { marge, geom, .. } => (*marge, *geom),
+                        Work::Cel { .. } => (0, None),
                     };
-                    q.done.push_back(Done { slot: job.slot, key: job.key.clone(), seq: job.seq, image, waiting, marge });
+                    q.done.push_back(Done { slot: job.slot, key: job.key.clone(), seq: job.seq, image, waiting, marge, geom });
                 }
             }
         }
@@ -783,7 +840,7 @@ fn worker(shared: &Shared) {
 /// `None` : arrêtée, personne ne l'attend plus.
 fn render_job(job: &Job) -> Option<(ColorImage, Option<u64>)> {
     match (&job.work, &*job.key) {
-        (Work::Plan { doc, cam, size, marge, masque, generation }, Key::Plan(plan, _, _)) => {
+        (Work::Plan { doc, cam, size, marge, masque, generation, .. }, Key::Plan(plan, _, _)) => {
             // (Le fil de fond laisse deux cœurs à l'interface, comme celui des effets.)
             render::set_thread_cap(crate::parallele::coeurs().saturating_sub(2).max(1));
             let cancelled = || job.cancel.load(Ordering::Relaxed);

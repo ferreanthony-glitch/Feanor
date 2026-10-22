@@ -726,7 +726,7 @@ Demande d'Anthony (option 1 validée) : dessiner un mouvement de caméra directe
 (logique sans interface), `vignettecamui.rs` (le geste et les cadres à l'écran), `board.rs` (mise en page), `thumbs.rs`
 (vignette d'une zone).
 
-- **Ctrl + glisser le cadre d'une case** (Ctrl seul : Maj + cadre déplace toujours le plan) :
+- **Ctrl + Maj + glisser le cadre d'une case** (ou **T tenue** ; depuis le 2026-10-22 : Ctrl seul est le lasso, voir plus bas) :
   - le cadre d'origine reste **A** ; un cadre **B** suit le pointeur et reste là où on le dépose. Au lâcher, **deux clés de
     caméra** sont posées sur le plan : A à la première image, B à la dernière (le modèle de la timeline et du montage : vitesse
     constante, aucun adouci, comme une clé posée au montage) ;
@@ -899,7 +899,7 @@ huitième de case, les liens « coins reliés », la limite « la tuile d'une ra
   - une enveloppe qui dépasse la page **en haut ou à gauche** fait glisser toute la planche d'autant (`BoardLayout::decalage`) et la vue **compense par
     le défilement** (`suivre_decalage`) : rien ne saute à l'écran ; à droite et en bas, la planche s'agrandit ;
   - deux enveloppes qui se recouvriraient : la plus tardive passe à la place suivante (comme une enveloppe qui recouvre une case d'avant) ;
-  - jouer sur A elle-même (Ctrl + glisser dedans A) déplace le cadre A : le reste de l'empreinte bouge autour d'elle.
+  - jouer sur A elle-même (Ctrl + Maj + glisser dedans A) déplace le cadre A : le reste de l'empreinte bouge autour d'elle.
 - **Prise des cadres qui se recouvrent** (`vignettecam::choisit`) : l'intérieur et les coins de B passent avant les coins de A. Les cadres en jeu sont
   ceux qui contiennent le point ou dont un coin est à portée ; **le plus petit l'emporte** (à aire égale, à un millième près : le dernier), puis, dans ce
   cadre, un coin à portée change son zoom, sinon on le déplace. Saisir près du coin de A en étant dans B déplace donc B (avant, le coin de A
@@ -933,6 +933,47 @@ Essais : `vignettecam_tests` (cadres à mi-rangée sans arrondi, caméra tourné
 empreinte qui finit à mi-rangée ; 200 plans dont 40 mouvements à mi-rangée et des notes de 1 à 3 lignes : aucun recouvrement, moins de 5 ms ; une caméra à la main
 ne pose qu'une lettre et ne voile rien). Captures : `vignettes\b1.png` (B à mi-rangée), `b2.png` (traits dans A, entre A et B, dans B), `b3.png` (B déplacé : les traits n'ont
 pas bougé), `c1.png` (B vers le haut et la gauche, au lâcher : A passe après la précédente, l'ordre de lecture tient), `c-pendant.png` (même geste, pendant : A n'a pas bougé).
+### Deuxième tour : affichage des tuiles, marges, copie d'un plan, lasso, caméra de continuité, coupes (2026-10-22, branche `vignettes-retouches2`)
+
+Demandes d'Anthony (captures `bug-cam-trait`, `demande-marge-serree`, `71`, `72`). Code : `thumbs.rs` (`Geom`), `boardui.rs` (`board_tuile`, `board_card`,
+`peint_texture_dans`, `marge_ouverte`), `vignettecam.rs` (`elargi`, `etendue_du_mouvement`, `recale`), `boardmove.rs` (copie), `springtools.rs`
+(`prendre_le_lasso`), `storyboard.rs` (le montage). Essais : `vignettes_retouches2_tests`.
+
+- **Les traits coupés à des lignes droites après un déplacement de B — cause et correction.** La tuile d'un mouvement de caméra est une image composée sur un
+  fil de fond pour **une géométrie précise** (la part de la feuille qu'elle couvre et l'enveloppe qui borne son papier). À chaque image du geste la géométrie
+  change : la tuile se recompose, et pendant ce temps l'écran continuait à poser **l'ancienne texture sur le nouveau rectangle** (`painter.image(c.rect(r))`),
+  avec ses bords de coupe, sa marge et son papier d'avant le geste. Maintenant chaque texture **porte sa géométrie** (`thumbs::Geom` : la zone et un
+  résumé de l'enveloppe, rangés avec l'image) :
+  - **pendant le geste et jusqu'à ce que la tuile soit refaite** : le plan courant est le dessin vivant, qui montre **tout le trait dans la tuile** (rien n'est coupé à une
+    ligne d'avant le geste) ; la texture d'avant n'est **pas posée comme si elle était la bonne** (ni le papier hors de l'enveloppe, ni la marge). Rien n'est recomposé
+    sur le fil de l'interface ; la marge réapparaît dès que la tuile d'après est prête (quelques images) ;
+  - **un plan qui n'est pas courant** : sa texture est posée **là où est la feuille qu'elle montre** (`CaseTex::rect_tuile`), jamais étirée sur la nouvelle tuile ;
+  - **au lâcher** : une seule recomposition en fond, et l'affichage est exactement celui de la nouvelle géométrie.
+  Le cache est aussi plus juste : la marge d'une tuile est **12 % de la largeur d'une case** (comme celle des autres cases), et non 12 % de la tuile entière (53 points au lieu de 17
+  sur une tuile de trois cases : les traits étaient coupés loin de l'enveloppe) ; elle fait partie de la clé de la vignette.
+- **La marge de 12 % ne s'ouvre que pour le plan où l'on dessine** (le plan courant). Les autres plans sont **coupés net à leurs cadres** (l'enveloppe, ou la case d'un plan sans mouvement)
+  **plus quelques points** (`MARGE_SERREE` = 4 points d'écran, comme le liséré rouge d'Anthony). Même vignette en cache, simplement peinte coupée (`peint_texture_dans` : un maillage dont les
+  coordonnées de texture suivent l'enveloppe élargie `vignettecam::elargi`, ou un rectangle de la même texture) : aucune recomposition, la bascule est instantanée quand on commence à dessiner
+  dans un plan (il devient courant) comme quand on le quitte.
+- **Maj + Alt + glisser le cadre d'une case duplique le plan** et glisse la copie ; l'original reste net et en place, la copie se pose à l'endroit du lâcher **dans l'ordre de lecture**
+  (n'importe quel repère entre deux plans, y compris devant l'original ; `board::nearest_slot_copie`), en **une étape d'annulation** (« Dupliquer le plan »), avec la copie de
+  « Dupliquer le plan » du menu (`duplicate_scene_after` : dessins, clés, notes). Plusieurs plans choisis : tous dupliqués. Maj + Alt était libre à cet endroit (Alt n'avait pas de sens avec Maj + cadre).
+- **Ctrl seul + glisser est le lasso** (comme partout, `springtools.rs`) : il se prend à l'**appui** sur une case (`prendre_le_lasso` : la case devient courante, l'outil Sélection est pris,
+  l'outil d'avant revient au relâché de Ctrl), jamais au simple survol, pour qu'un Ctrl tenu avant Maj n'arme jamais le ressort. La boîte de sélection, ses poignées et ses déplacements sont ceux du dessin
+  (le dessin de la case est le dessin lui-même, en orange comme ailleurs). Ctrl + clic ne choisit plus de plans : Maj + clic reste le choix.
+- **La caméra des Vignettes : Ctrl + Maj + glisser** (les deux ordres, `board_press` lit les touches de l'appui) **ou T tenue** (`vignettes.camera`, réaffectable) ; **Ctrl + Maj + Alt** (ou T + Alt) : un cadre de plus, comme
+  « Ajouter un cadre » du clic droit. Ctrl + Maj ne prend ni le lasso ni le geste « tous les calques » ; un Ctrl + Maj + clic qui ne bouge pas ne fait rien. Maj seul + cadre : déplacer le plan.
+- **Les cases qui suivent un mouvement montrent le dernier cadre** (« B, C… ») : le geste répartit les clés sur **la durée de la première case** du plan (jusqu'à sa marque d'image suivante,
+  `vignettecam::etendue_du_mouvement`) et non plus sur tout le plan ; la caméra tient sa dernière clé, donc les cases suivantes du plan (la vignette, le dessin vivant, la lecture) voient à
+  travers le dernier cadre. Des clés posées avant, sur tout le plan, se rangent sur la première case au prochain geste (`recale`) ; des clés à la main restent.
+- **Une coupe décochée ne change que celle-là.** Cause probable (non reproduite en logique, que les essais couvrent) : un stylet double l'événement de la souris (deux appuis dans la même image d'écran) ; le second,
+  rejoué sur une planche que le premier venait de réorganiser, tombait sur la barre d'à côté. Un seul appui du bouton principal par pression (`board_view`). Essais : coupes une à une avec une ou plusieurs
+  cases et un mouvement de caméra, recocher, annuler, appui doublé.
+- **Le montage ne dessine plus les limites des cases** (le repère orange avec un losange au bord de la fusion) : la marque d'image reste dans les données (les Vignettes en ont besoin), elle se voit toujours
+  dans la timeline du plan (Animation), où on la déplace ; le montage ne la prend plus.
+- **Les notes d'un plan réuni** restent à leur case, dans l'ordre du temps : les textes (action, dialogue, notes) de Q vont à la marque d'image qui commence là où Q commençait, ceux de P restent à P ;
+  séparer à nouveau les rend à Q ; annuler redonne les originaux. Rien ne se perd, aucun saut de ligne en trop.
+
 ### À regarder à l'écran (papier infini et caméra)
 
 Captures de l'essai : `vignettes\m-trav.png` (travelling : A, B, flèche au-dessus, les autres cases décalées), `m-zoom.png` (zoom arrière limité à la
@@ -940,11 +981,11 @@ hauteur de la rangée, coins reliés), `m-diag.png` (diagonale : B dans la rang�
 dessous), `m-tilt.png` (panoramique vertical : B sous A, flèche vers le bas), `m-vide.png` (projet neuf : trois rangées de six cases pâles).
 1. Papier : blanc sans bord, déplaçable partout ; zoom comme avant ; plus de « Lignes par page » dans la petite barre.
 2. Dessiner dans une case pâle lointaine : les plans vides avant elle, une étape d'annulation ; dessiner dans la dernière rangée : une rangée pâle de plus.
-3. Ctrl + glisser n'importe où sur une case, y compris sur sa marge ou à côté d'un cadre : jamais un plan qui bouge. T tenue : même chose, sans Ctrl, avec
-   n'importe quel outil ; relâchée, le pinceau dessine de nouveau. Alt en plus : un cadre de plus.
-4. Une fois B posé : Ctrl + glisser dedans B le déplace (sans créer C), dans A hors de B déplace A, un coin change le zoom ; clic droit : « Ajouter un
+3. Ctrl + Maj + glisser n'importe où sur une case, y compris sur sa marge ou à côté d'un cadre : jamais un plan qui bouge, jamais un lasso. T tenue : même chose, sans Ctrl ni Maj, avec
+   n'importe quel outil ; relâchée, le pinceau dessine de nouveau. Alt en plus : un cadre de plus. Ctrl seul : le lasso.
+4. Une fois B posé : Ctrl + Maj + glisser dedans B le déplace (sans créer C), dans A hors de B déplace A, un coin change le zoom ; clic droit : « Ajouter un
    cadre », et sur un cadre « Retirer ce cadre ».
-5. La petite caméra bleue près du pointeur (Ctrl ou T tenue), le curseur « déplacer » dans un cadre et « redimensionner » à un coin.
+5. La petite caméra bleue près du pointeur (Ctrl + Maj ou T tenue), le curseur « déplacer » dans un cadre et « redimensionner » à un coin.
 6. Exporter la planche avec une case à mouvement : cadres bleus, lettres et liens sur le papier de l'empreinte.
 
 ### Anciens projets (`crayonnes.json`)

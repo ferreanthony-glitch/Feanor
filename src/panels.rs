@@ -4,10 +4,13 @@ use crate::app::{App, Mode, Tool};
 use crate::document::LayerKind;
 
 /// Gestes à la souris et au stylet (hors fichier de raccourcis).
-pub(crate) const MOUSE_GESTURES: [(&str, &str); 24] = [
+pub(crate) const MOUSE_GESTURES: [(&str, &str); 27] = [
     ("Clic droit sur une commande", "lui assigner un raccourci"),
     ("Alt + clic", "prélever une couleur"),
     ("Ctrl tenu sur le dessin", "le lasso le temps de le tenir"),
+    ("Vignettes : Ctrl + glisser dans une case", "le lasso dans son dessin"),
+    ("Vignettes : Ctrl + Maj + glisser dans une case", "le mouvement de caméra : déplacer un cadre, tirer un coin pour le zoom (Alt : un cadre de plus ; T tenue : pareil)"),
+    ("Vignettes : Maj + glisser le cadre d'une case", "déplacer son plan (Alt en plus : en poser une copie)"),
     ("Touche d'un outil tenue", "l'outil le temps de la tenir, puis retour au précédent (brève : il reste)"),
     ("Molette", "zoom autour du curseur"),
     ("Maj + molette", "rotation de la vue"),
@@ -309,7 +312,7 @@ impl App {
                 }
                 let on = self.espace == Espace::Vignettes;
                 let vignettes = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Vignettes ").strong(), on));
-                let vignettes = self.aide(vignettes, "Vignettes", "La planche seule : dessiner dans les cases, avec le pinceau, la couleur et les personnages. Ctrl + glisser un cadre : mouvement de caméra.", "espace.vignettes");
+                let vignettes = self.aide(vignettes, "Vignettes", "La planche seule : dessiner dans les cases, avec le pinceau, la couleur et les personnages. Ctrl + Maj + glisser un cadre : mouvement de caméra ; Ctrl + glisser : lasso ; Maj + Alt + glisser le cadre d'une case : copie du plan.", "espace.vignettes");
                 if vignettes.clicked() && !on {
                     self.set_espace(Espace::Vignettes);
                 }

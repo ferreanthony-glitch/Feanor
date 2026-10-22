@@ -35,7 +35,7 @@ fn the_status_bar_shows_one_short_tip_and_the_bubble_keeps_the_detail() {
     assert_eq!(resume("Enregistré."), "Enregistré.");
     assert_eq!(resume("Vignettes : dessine dans les cases."), "Vignettes : dessine dans les cases.");
     // Un long message est coupé avant sa première parenthèse, son premier point-virgule ou son premier point.
-    let long = "Vignettes : dessine dans les cases (Ctrl + glisser un cadre : mouvement de caméra ; Tab : retour au storyboard).";
+    let long = "Vignettes : dessine dans les cases (Ctrl + Maj + glisser un cadre : mouvement de caméra ; Tab : retour au storyboard).";
     assert_eq!(resume(long), "Vignettes : dessine dans les cases…");
     let sans_parenthese = "Espace 3D : clic sur une carte (un calque) ou sur la caméra pour la choisir, glisser pour la déplacer, clic droit pour tourner la vue.";
     assert_eq!(resume(sans_parenthese), "Espace 3D : clic sur une carte…");

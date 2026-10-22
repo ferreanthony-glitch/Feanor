@@ -24,7 +24,7 @@ use crate::boardui::{Press, PlanMove, Xf, MOVE_THRESHOLD};
 
 impl App {
     /// Maj + appui sur le cadre de la vignette `k` : prend son plan (ou tous les plans choisis, si c'est l'un d'eux).
-    pub(crate) fn start_plan_move(&mut self, layout: &BoardLayout, k: usize, pos: Pos2) {
+    pub(crate) fn start_plan_move(&mut self, layout: &BoardLayout, k: usize, pos: Pos2, copie: bool) {
         if self.storyboard_refuses() {
             self.vignettes.press = Press::Dead;
             return;
@@ -32,7 +32,7 @@ impl App {
         let plan = layout.cards[k].plan;
         let chosen = self.board_sel.len() > 1 && self.board_sel.contains(&plan);
         let ids: Vec<u64> = if chosen { self.doc.panels.iter().map(|p| p.id).filter(|id| self.board_sel.contains(id)).collect() } else { vec![plan] };
-        self.vignettes.moving = Some(PlanMove { ids, grab: pos, now: pos, active: false, cancelled: false, target: None });
+        self.vignettes.moving = Some(PlanMove { ids, grab: pos, now: pos, active: false, cancelled: false, target: None, copie });
         self.vignettes.press = Press::Move;
     }
 
@@ -53,7 +53,11 @@ impl App {
         }
         if mv.active {
             let order: Vec<u64> = self.doc.panels.iter().map(|p| p.id).collect();
-            mv.target = board::nearest_slot(&board::drop_slots(layout), &order, &mv.ids, xf.to_board(mv.now));
+            mv.target = if mv.copie {
+                board::nearest_slot_copie(&board::drop_slots(layout), xf.to_board(mv.now))
+            } else {
+                board::nearest_slot(&board::drop_slots(layout), &order, &mv.ids, xf.to_board(mv.now))
+            };
         }
         if abandoned {
             self.status = "Déplacement du plan abandonné.".into();
@@ -70,6 +74,9 @@ impl App {
             return;
         }
         match mv.target {
+            Some(slot) if mv.copie => {
+                self.board_dupliquer_plans(&mv.ids, slot.before);
+            }
             Some(slot) => {
                 self.board_move_plans(&mv.ids, slot.before);
             }
@@ -104,6 +111,41 @@ impl App {
         true
     }
 
+    /// Maj + Alt, au lâcher : les plans `ids` sont dupliqués (la copie d'un plan est celle de « Dupliquer le plan » : `duplicate_scene_after`,
+    /// ses dessins, ses clés de caméra, ses notes) et les copies se posent devant le plan `before` (aucun : à la fin), dans l'ordre de
+    /// lecture. Une seule étape d'annulation, nommée. Vrai si fait.
+    pub(crate) fn board_dupliquer_plans(&mut self, ids: &[u64], before: Option<u64>) -> bool {
+        if self.storyboard_refuses() || !self.partage_peut_toucher(ids) {
+            return false;
+        }
+        let nom = if ids.len() == 1 { "Dupliquer le plan" } else { "Dupliquer les plans" };
+        let mut copies: Vec<u64> = Vec::new();
+        let ok = self.avec_etape(nom, |s| {
+            s.structure_op(|d, _| {
+                for id in ids {
+                    let i = d.panels.iter().position(|p| p.id == *id)?;
+                    let n = {
+                        let (a, b) = d.scene_run(i);
+                        b - a
+                    };
+                    let first = d.duplicate_scene_after(i);
+                    copies.extend(d.panels[first..first + n].iter().map(|p| p.id));
+                }
+                // (L'ordre ne change pas quand la copie tombe où elle est déjà : rien à déplacer, la copie est bien posée.)
+                d.move_plans(&copies, before);
+                d.panels.iter().position(|p| p.id == copies[0])
+            })
+        });
+        if !ok {
+            return false;
+        }
+        let Some(i) = self.doc.panels.iter().position(|p| p.id == copies[0]) else { return true };
+        self.board_sel = copies.clone();
+        self.select_board(i, 0);
+        self.status = if ids.len() > 1 { format!("{} plans dupliqués.", ids.len()) } else { format!("{} dupliqué.", crate::storyboard::panel_title(&self.doc, i)) };
+        true
+    }
+
     /// Le plan qu'on déplace : ses vignettes d'origine s'effacent un peu, un fantôme de ses vignettes suit le pointeur
     /// (leurs places relatives gardées), et un trait d'accent marque l'endroit de la pose, entre deux plans.
     pub(crate) fn paint_plan_move(&mut self, ctx: &egui::Context, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout) {
@@ -112,7 +154,8 @@ impl App {
         let clip = painter.with_clip_rect(view);
         let moved: Vec<_> = layout.cards.iter().filter(|c| mv.ids.contains(&c.plan)).copied().collect();
         // Les vignettes d'origine, effacées.
-        for c in &moved {
+        // (Une copie : l'original reste où il est, net.)
+        for c in moved.iter().filter(|_| !mv.copie) {
             clip.rect_filled(xf.rect(c.thumb), 0.0, Color32::from_white_alpha(165));
         }
         // Le repère de pose.

@@ -22,9 +22,10 @@
 //!   d'image ; Entrée valide, Maj + Entrée passe à la ligne, Échap abandonne. Trois lignes au plus à l'écran,
 //!   puis « … » ; le texte entier est gardé, visible pendant la saisie et dans la fiche du plan.
 //! - Molette : défiler ; Ctrl + molette : zoom ; Espace, bouton du milieu ou outil Main : déplacer la planche.
-//!   Ctrl ou Maj + clic sur une image : choisir des plans (au lieu de dessiner). **Ctrl + glisser**, ou **T tenue** (`vignettes.camera`),
-//!   dans une case : tirer les cadres de sa caméra (`vignettecamui.rs`), jamais un plan. Maj + appui sur le **cadre** d'une
-//!   image, puis glisser : déplacer son plan entier, entre deux plans (`boardmove.rs`). Clic droit : menus. Les
+//!   Maj + clic sur une image : choisir des plans (au lieu de dessiner). **Ctrl + Maj + glisser**, ou **T tenue** (`vignettes.camera`),
+//!   dans une case : tirer les cadres de sa caméra (`vignettecamui.rs`), jamais un plan. **Ctrl seul + glisser** : le lasso, dans le
+//!   dessin de la case, comme partout. Maj + appui sur le **cadre** d'une
+//!   image, puis glisser : déplacer son plan entier, entre deux plans (`boardmove.rs`) ; avec Alt, sa copie. Clic droit : menus. Les
 //!   notes libres de la planche (texte, gomme, sélection) restent ; on ne les trace plus au pinceau.
 
 use std::collections::HashMap;
@@ -120,6 +121,9 @@ pub(crate) struct PlanMove {
     pub cancelled: bool,
     /// Où le plan se poserait si l'on lâchait ici.
     pub target: Option<board::DropSlot>,
+    /// Maj + Alt : on glisse la copie du plan ; l'original reste où il est, la copie se pose à l'endroit du lâcher (n'importe où entre
+    /// deux plans, y compris juste devant ou juste après l'original).
+    pub copie: bool,
 }
 
 /// Distance (points d'écran) dont il faut glisser un cadre avant que ce soit un déplacement.
@@ -188,7 +192,7 @@ pub(crate) struct Vignettes {
     pub frame_hot: bool,
     /// Le trait qui déborde de la vignette courante, tant que le geste dure (`debord.rs`).
     pub debord: Option<crate::debord::Debord>,
-    /// Ctrl + glisser un cadre : le mouvement de caméra en cours (`vignettecamui.rs`).
+    /// Ctrl + Maj + glisser un cadre (ou T tenue) : le mouvement de caméra en cours (`vignettecamui.rs`).
     pub cam: Option<crate::vignettecamui::CamGeste>,
     /// La zone de la feuille que montre la tuile en train d'être dessinée (`vignettecam::Zone`) : le dessin la prend
     /// pour sa vue, au lieu de la vue à travers la caméra.
@@ -545,34 +549,35 @@ impl App {
             self.commit_card_note();
         }
         // Maj + appui sur le CADRE d'une vignette (son filet, à quelques points près) : on prend son plan pour le
-        // déplacer. Maj + appui dedans garde son sens : choisir des plans.
+        // déplacer ; Maj + Alt : on prend sa copie (le plan se duplique, la copie se pose où l'on lâche). Maj + appui dedans garde son
+        // sens : choisir des plans.
         if m.shift && !m.ctrl && !m.command {
             if let Some(k) = board::frame_hit(layout, p, FRAME_TOUCH / xf.zoom.max(1e-3)) {
                 self.commit_note_text(layout);
-                self.start_plan_move(layout, k, pos);
+                self.start_plan_move(layout, k, pos, m.alt);
                 return false;
             }
         }
-        // Ctrl (sans Maj) ou T tenue : un appui sur une case, son empreinte ou sa marge est TOUJOURS un geste de caméra (jamais un
-        // plan qu'on déplace, ni le dessin). Un appui qui rate un cadre en prend quand même un (`vignettecam::choisit`).
-        let cam_mode = ((m.command || m.ctrl) && !m.shift) || self.vignettes.camera_tenue;
+        // Ctrl + Maj, ou T tenue : un appui sur une case, son empreinte ou sa marge est TOUJOURS un geste de caméra (jamais un
+        // plan qu'on déplace, ni le dessin, ni le lasso). Un appui qui rate un cadre en prend quand même un (`vignettecam::choisit`).
+        // (Ctrl seul est le lasso, comme partout : plus bas.)
+        let cam_mode = ((m.command || m.ctrl) && m.shift) || self.vignettes.camera_tenue;
         if cam_mode {
             if let Some(k) = layout.card_near(p, self.marge_camera()) {
                 self.commit_note_text(layout);
                 let ajoute = m.alt;
-                if self.cam_press(layout, xf, k, pos, m, ajoute) {
+                if self.cam_press(layout, xf, k, pos, ajoute) {
                     self.vignettes.press = Press::Select;
                 } else {
-                    // Pas de mouvement possible ici : Ctrl + clic choisit des plans, et un glissé ne fait rien.
-                    if m.command || m.ctrl {
-                        self.board_select_click(layout, k, m);
-                    }
-                    self.vignettes.press = Press::Select;
+                    // Pas de mouvement possible ici : un glissé ne fait rien.
+                    self.vignettes.press = Press::Dead;
                 }
                 return false;
             }
         }
-        let selecting = m.command || m.ctrl || m.shift;
+        // Ctrl seul (Alt : la pipette) : le lasso, dans le dessin de la case, comme partout (`springtools.rs`).
+        let lasso = (m.command || m.ctrl) && !m.shift && !m.alt;
+        let selecting = m.shift;
         match hit {
             Hit::Bar(after) => {
                 self.commit_note_text(layout);
@@ -583,7 +588,7 @@ impl App {
                 self.commit_note_text(layout);
                 let c = layout.cards[k];
                 if selecting {
-                    // Maj + appui (ou Ctrl + Maj) : choisir des plans. (Ctrl seul, ou T tenue : un geste de caméra, plus haut.)
+                    // Maj + appui : choisir des plans. (Ctrl + Maj, ou T tenue : un geste de caméra, plus haut.)
                     self.board_select_click(layout, k, m);
                     self.vignettes.press = Press::Select;
                 } else {
@@ -595,6 +600,9 @@ impl App {
                     }
                     self.vignettes.press = Press::Card;
                     self.draw_has_focus();
+                    if lasso {
+                        self.prendre_le_lasso();
+                    }
                 }
                 false
             }
@@ -611,7 +619,7 @@ impl App {
             }
             Hit::Empty(e) => {
                 self.commit_note_text(layout);
-                if !cam_mode && self.tool_draws_in_empty() && self.board_create_from_empty(e) {
+                if !cam_mode && !lasso && self.tool_draws_in_empty() && self.board_create_from_empty(e) {
                     self.vignettes.press = Press::Card;
                     self.draw_has_focus();
                     true
@@ -828,10 +836,23 @@ impl App {
         // Les appuis de cette image, avant de dessiner : une image devient courante, une case vide devient un
         // plan, et le trait qui commence dans l'appui est dessiné dans la même image d'écran (aucun retard).
         if !pan_mode && !self.modal_open() {
+            // (Un seul appui du bouton principal par pression : un stylet ou un pavé tactile double parfois l'événement de la souris par le sien,
+            // deux appuis dans la même image d'écran sans lâcher entre eux. Le second, rejoué sur une planche que le premier vient de
+            // changer, tombait sur la barre d'à côté : « décocher une coupe décoche la suivante aussi ».)
+            let mut appui_pris = false;
             for e in &events {
+                if let Event::PointerButton { button: PointerButton::Primary, pressed: false, .. } = e {
+                    appui_pris = false;
+                }
                 let Event::PointerButton { pos, button, pressed: true, modifiers } = e else { continue };
                 if !view.contains(*pos) || ui.ctx().layer_id_at(*pos) != Some(bg.layer_id) {
                     continue;
+                }
+                if *button == PointerButton::Primary {
+                    if appui_pris {
+                        continue;
+                    }
+                    appui_pris = true;
                 }
                 // (Chaque appui repart de rien : un appui d'avant, resté là parce que la vue n'était pas à l'écran au lâcher, ne compte plus.)
                 if *button == PointerButton::Primary {
@@ -1004,8 +1025,8 @@ impl App {
         // Le curseur d'un cadre pris ou à prendre passe avant celui du dessin de la vignette courante (peint plus tôt).
         if self.vignettes.frame_hot {
             ui.ctx().set_cursor_icon(if self.vignettes.moving.as_ref().is_some_and(|m| m.active) { CursorIcon::Grabbing } else { CursorIcon::Grab });
-        } else if let (Some(p), true) = (over, ((mods.ctrl || mods.command) && !mods.shift) || self.vignettes.camera_tenue) {
-            // Ctrl (ou T) tenue sur une case : un cadre de caméra à prendre (une petite caméra suit le pointeur).
+        } else if let (Some(p), true) = (over, ((mods.ctrl || mods.command) && mods.shift) || self.vignettes.camera_tenue) {
+            // Ctrl + Maj (ou T) tenue sur une case : un cadre de caméra à prendre (une petite caméra suit le pointeur).
             if !pan_mode && self.vignettes.cam.is_none() {
                 self.cam_curseur(ui.ctx(), &layout, xf, p, mods.alt);
             }
@@ -1318,7 +1339,14 @@ impl App {
         let ppp = ui.ctx().pixels_per_point();
         let hull: Vec<Pos2> = mv.enveloppe.iter().map(|p| xf.to_screen(*p)).collect();
         let width = crate::thumbs::width_for(r.width() * ppp);
-        let case = self.thumbs.texture_case(ui.ctx(), &self.doc, i, place.frame, place.id, width, Some((&mv.tuile.zone, &mv.tuile.masque)), deadline);
+        // (La marge de la tuile est 12 % de la largeur d'une case, comme celle des autres cases, pas 12 % de la tuile entière.)
+        let part_case = place.thumb.width() / mv.tuile.rect.width().max(1e-3);
+        let case = self.thumbs.texture_case(ui.ctx(), &self.doc, i, place.frame, place.id, width, Some((&mv.tuile.zone, &mv.tuile.masque, part_case)), deadline);
+        // La texture est-elle celle de la géométrie d'aujourd'hui (même zone, même enveloppe) ? Pendant un geste de caméra et juste après,
+        // elle est celle d'avant (la tuile se recompose sur un fil de fond, jamais sur celui de l'interface) : posée telle quelle, ses
+        // bords de coupe et son papier seraient ceux d'avant le geste.
+        let a_jour = case.as_ref().is_some_and(|c| c.geom == Some(crate::thumbs::Geom::de(&mv.tuile.zone, &mv.tuile.masque)));
+        let pts_par_feuille = mv.tuile.zone.echelle * xf.zoom;
         let toute = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
         if live {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt("planche_vive_tuile"));
@@ -1329,11 +1357,13 @@ impl App {
             self.vignettes.zone = None;
             self.vignettes.enveloppe.clear();
             // Hors de l'enveloppe (les coins de la tuile) : le papier de la planche, et ce que la vignette garde du trait qui déborde.
-            let clip = painter.with_clip_rect(r.intersect(view));
-            let coins = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom()];
-            let dehors = crate::viewbar::difference_convexe(&coins, &hull);
-            clip.add(crate::viewbar::mesh_of_pieces(&dehors, PAPER));
-            if let Some(c) = &case {
+            // Tant que la tuile n'est pas refaite pour les nouveaux cadres, rien de tout cela : le dessin vivant montre tout le trait
+            // dans la tuile, rien n'est coupé à une ligne d'avant le geste ; la marge revient dès que la tuile est prête.
+            if let Some(c) = case.as_ref().filter(|_| a_jour) {
+                let clip = painter.with_clip_rect(r.intersect(view));
+                let coins = [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom()];
+                let dehors = crate::viewbar::difference_convexe(&coins, &hull);
+                clip.add(crate::viewbar::mesh_of_pieces(&dehors, PAPER));
                 let full = c.rect(r);
                 let mut mesh = egui::Mesh::with_texture(c.id);
                 for piece in dehors.iter().filter(|p| p.len() >= 3) {
@@ -1349,13 +1379,27 @@ impl App {
                 paint_ring(painter, r, c);
             }
         } else {
-            painter.add(egui::Shape::convex_polygon(hull, Color32::WHITE, Stroke::NONE));
+            painter.add(egui::Shape::convex_polygon(hull.clone(), Color32::WHITE, Stroke::NONE));
             if let Some(c) = &case {
-                painter.image(c.id, c.rect(r), toute, Color32::WHITE);
+                // Posée là où est la feuille qu'elle montre, même si les cadres ont bougé depuis qu'elle a été composée.
+                let full = c.rect_tuile(r, &mv.tuile.zone, pts_par_feuille);
+                if self.marge_ouverte(i) {
+                    painter.image(c.id, full, toute, Color32::WHITE);
+                } else {
+                    // Un plan qu'on ne dessine pas : l'enveloppe et quelques points, rien de plus (la marge de 12 % ne s'ouvre que
+                    // pour le plan où l'on dessine). La même texture, coupée : aucune recomposition.
+                    let serre = crate::vignettecam::elargi(&hull, MARGE_SERREE);
+                    peint_texture_dans(painter, c.id, full, &serre);
+                }
             }
         }
     }
 
+    /// La marge de 12 % autour d'une case (et d'une tuile) n'est ouverte que pour le plan où l'on dessine (le plan courant, ou un trait en
+    /// cours) ; les autres plans sont coupés net autour de leurs cadres, à quelques points près (`MARGE_SERREE`).
+    pub(crate) fn marge_ouverte(&self, panel: usize) -> bool {
+        panel == self.cur_panel
+    }
     /// Une vignette (une image de storyboard) : son numéro de plan s'il commence, l'image (le dessin lui-même
     /// pour l'image courante), son filet, sa bande de note. Les gestes sont pris plus haut (`board_press`).
     #[allow(clippy::too_many_arguments)]
@@ -1419,7 +1463,13 @@ impl App {
                 } else {
                     painter.rect_filled(thumb, 0.0, Color32::WHITE);
                     if let Some(c) = &case {
-                        painter.image(c.id, c.rect(thumb), Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+                        if self.marge_ouverte(i) {
+                            painter.image(c.id, c.rect(thumb), Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+                        } else {
+                            // Un plan qu'on ne dessine pas : la case et quelques points, pas la marge de 12 % (la même texture, coupée).
+                            let t = thumb.expand(MARGE_SERREE);
+                            peint_texture_dans(painter, c.id, c.rect(thumb), &[t.left_top(), t.right_top(), t.right_bottom(), t.left_bottom()]);
+                        }
                     }
                 }
             }
@@ -1626,6 +1676,26 @@ impl App {
             painter.rect_stroke(r, 0.0, Stroke::new(1.0_f32, accent), StrokeKind::Inside);
         }
     }
+}
+
+/// Ce qu'une case ou une tuile garde du trait qui déborde quand on n'y dessine pas : quelques points d'écran autour de ses cadres.
+pub(crate) const MARGE_SERREE: f32 = 4.0;
+
+/// La texture `id` (de rectangle `full` à l'écran) peinte seulement dans le polygone convexe `poly` : un maillage dont les coordonnées
+/// de texture suivent l'écran. Le même cliché, coupé net : aucune recomposition.
+fn peint_texture_dans(painter: &egui::Painter, id: egui::TextureId, full: Rect, poly: &[Pos2]) {
+    let morceau = crate::viewbar::clip_to_rect(poly, full);
+    if morceau.len() < 3 || full.width() < 1e-3 || full.height() < 1e-3 {
+        return;
+    }
+    let mut mesh = egui::Mesh::with_texture(id);
+    for p in &morceau {
+        mesh.vertices.push(egui::epaint::Vertex { pos: *p, uv: pos2((p.x - full.min.x) / full.width(), (p.y - full.min.y) / full.height()), color: Color32::WHITE });
+    }
+    for j in 1..morceau.len() as u32 - 1 {
+        mesh.add_triangle(0, j, j + 1);
+    }
+    painter.add(egui::Shape::mesh(mesh));
 }
 
 /// La marge d'une vignette, autour de son cadre : le trait qui déborde un peu (le reste de la texture est le cadre, que la

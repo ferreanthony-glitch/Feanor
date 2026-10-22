@@ -13,7 +13,10 @@ use crate::perf_tests::{banc_taille, se_reposer, Banc};
 use crate::vignettes_tests::{appui, dernier_nom, encre, glisser, ouvert, pas_d_annulation, quatre_plans, vague, vignette};
 use crate::workspace::{Espace, Layout};
 
-const CTRL: Modifiers = Modifiers::CTRL;
+/// Ctrl + Maj : le geste de caméra des Vignettes (Ctrl seul est le lasso).
+pub(crate) const CTRL: Modifiers = Modifiers { ctrl: true, shift: true, command: true, ..Modifiers::NONE };
+/// Ctrl seul : le lasso.
+pub(crate) const CTRL_SEUL: Modifiers = Modifiers::CTRL;
 
 fn film() -> Document {
     let mut doc = Document::with_frame(64, 48, 24);
@@ -237,7 +240,8 @@ fn the_layout_is_remembered_and_restored() {
 
 #[test]
 fn an_old_settings_file_reads_and_the_vignettes_have_their_own_key() {
-    let s: crate::settings::Settings = toml::from_str("espace_storyboard = \"vignettes\"\n").unwrap();
+    let s: crate::settings::Settings = toml::from_str("espace_storyboard = \"vignettes\"
+").unwrap();
     assert_eq!(s.storyboard_space, Espace::Vignettes);
     assert!(s.vignettes_layout.is_none());
     let mut s = crate::settings::Settings::default();
@@ -250,17 +254,17 @@ fn an_old_settings_file_reads_and_the_vignettes_have_their_own_key() {
 
 // ------------------------------------------------------------------------------ les mouvements de caméra
 
-fn plan_court() -> Document {
+pub(crate) fn plan_court() -> Document {
     let mut doc = quatre_plans();
     doc.set_duration(1, 25);
     doc
 }
 
-fn ctrl_glisser(b: &mut Banc, de: Pos2, chemin: &[Pos2], a: Pos2, lacher: bool) {
+pub(crate) fn ctrl_glisser(b: &mut Banc, de: Pos2, chemin: &[Pos2], a: Pos2, lacher: bool) {
     glisser_avec(b, CTRL, de, chemin, a, lacher);
 }
 
-fn glisser_avec(b: &mut Banc, m: Modifiers, de: Pos2, chemin: &[Pos2], a: Pos2, lacher: bool) {
+pub(crate) fn glisser_avec(b: &mut Banc, m: Modifiers, de: Pos2, chemin: &[Pos2], a: Pos2, lacher: bool) {
     b.touches = m;
     b.image(vec![Event::PointerMoved(de)], 1.0 / 60.0);
     b.image(vec![appui(de, true, m)], 1.0 / 60.0);
@@ -276,33 +280,33 @@ fn glisser_avec(b: &mut Banc, m: Modifiers, de: Pos2, chemin: &[Pos2], a: Pos2, 
 }
 
 /// Les points d'un glissé, un à un (le geste ne saute pas d'un coup).
-fn pas(de: Pos2, delta: egui::Vec2, n: usize) -> Vec<Pos2> {
+pub(crate) fn pas(de: Pos2, delta: egui::Vec2, n: usize) -> Vec<Pos2> {
     (1..n).map(|k| de + delta * (k as f32 / n as f32)).collect()
 }
 
-const K: usize = 3; // la première image du plan 2 (le plan 1 a deux marques)
+pub(crate) const K: usize = 3; // la première image du plan 2 (le plan 1 a deux marques)
 
-fn clefs(b: &Banc) -> Vec<(usize, f32, f32, f32)> {
+pub(crate) fn clefs(b: &Banc) -> Vec<(usize, f32, f32, f32)> {
     b.app.doc.panels[1].camera.iter().map(|k| (k.frame, k.cam.x, k.cam.y, k.cam.zoom)).collect()
 }
 
 /// Le pas de l'écran qui vaut une largeur de cadre sur la feuille.
-fn largeur_cadre_ecran(b: &Banc) -> f32 {
+pub(crate) fn largeur_cadre_ecran(b: &Banc) -> f32 {
     b.app.vignettes.xf.zoom * b.app.layout.card_size
 }
 
-fn cadre_ecran(b: &Banc, rang: usize) -> [Pos2; 4] {
+pub(crate) fn cadre_ecran(b: &Banc, rang: usize) -> [Pos2; 4] {
     let layout = b.app.board_layout();
     let (quads, _) = b.app.cadres_sur_la_planche(&layout, K);
     quads[rang].map(|p| b.app.vignettes.xf.to_screen(p))
 }
 
-fn centre(q: [Pos2; 4]) -> Pos2 {
+pub(crate) fn centre(q: [Pos2; 4]) -> Pos2 {
     pos2((q[0].x + q[2].x) * 0.5, (q[0].y + q[2].y) * 0.5)
 }
 
 /// Un mouvement posé d'un Ctrl + glisser d'une largeur de cadre vers la droite.
-fn avec_b_a_droite() -> Banc {
+pub(crate) fn avec_b_a_droite() -> Banc {
     let mut b = ouvert(plan_court(), 6);
     let w = largeur_cadre_ecran(&b);
     let case = vignette(&b, K);
@@ -572,7 +576,7 @@ fn the_footprints_hold_their_width_during_a_gesture_so_the_other_cases_do_not_ji
     assert_eq!(board::layout(&doc, &s).cards[K].thumb, avant);
 }
 
-fn deux_cadres(doc: &mut Document, plan: usize, dx: f32, dy: f32) {
+pub(crate) fn deux_cadres(doc: &mut Document, plan: usize, dx: f32, dy: f32) {
     let a = doc.default_camera();
     doc.panels[plan].camera.clear();
     crate::camera::set_key(&mut doc.panels[plan].camera, 0, a);
@@ -697,7 +701,7 @@ fn ctrl_alt_drag_adds_the_next_frame_from_the_last_one() {
     let mut b = avec_b_a_droite();
     let w = largeur_cadre_ecran(&b);
     let n = b.app.doc.panels[1].frame_count();
-    let m = Modifiers { ctrl: true, alt: true, command: true, ..Modifiers::NONE };
+    let m = Modifiers { ctrl: true, shift: true, alt: true, command: true, ..Modifiers::NONE };
     let c = centre(cadre_ecran(&b, 1));
     glisser_avec(&mut b, m, c, &pas(c, vec2(w, 0.0), 6), c + vec2(w, 0.0), true);
     let k = clefs(&b);
@@ -767,18 +771,19 @@ fn the_right_click_menu_lists_the_camera_entries_on_the_frames_that_can_carry_th
 }
 
 #[test]
-fn a_ctrl_click_that_does_not_move_still_chooses_plans_and_escape_abandons_a_drag() {
+fn a_ctrl_shift_click_that_does_not_move_does_nothing_and_escape_abandons_a_drag() {
     let mut b = ouvert(plan_court(), 6);
     let case = vignette(&b, K);
     let id = b.app.doc.panels[1].id;
-    // Ctrl + clic : le choix de plans d'avant, fait au lâcher.
+    // Ctrl + Maj + clic qui ne bouge pas : ni plan choisi, ni plan déplacé, ni clé posée.
     b.touches = CTRL;
     b.image(vec![Event::PointerMoved(case.center())], 1.0 / 60.0);
     b.image(vec![appui(case.center(), true, CTRL)], 1.0 / 60.0);
     b.image(vec![appui(case.center(), false, CTRL)], 1.0 / 60.0);
     b.touches = Modifiers::NONE;
     b.image(Vec::new(), 1.0 / 60.0);
-    assert!(b.app.board_sel.contains(&id), "Ctrl + clic choisit le plan");
+    assert!(!b.app.board_sel.contains(&id), "Ctrl + Maj + clic ne choisit pas le plan");
+    assert!(b.app.vignettes.moving.is_none());
     assert!(b.app.doc.panels[1].camera.is_empty());
     // Échap en plein geste : les clés d'avant reviennent, aucune étape.
     let nb = pas_d_annulation(&b);

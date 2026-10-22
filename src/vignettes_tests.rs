@@ -532,12 +532,16 @@ fn only_the_plan_number_is_written_above_the_first_image_of_each_plan() {
 }
 
 #[test]
-fn ctrl_and_shift_click_choose_plans_instead_of_drawing() {
+fn shift_click_chooses_plans_instead_of_drawing_and_ctrl_click_no_longer_does() {
     let mut b = ouvert(quatre_plans(), 4);
     let (ids, before) = (b.app.doc.panels.iter().map(|p| p.id).collect::<Vec<_>>(), pas_d_annulation(&b));
+    // (Ctrl seul est le lasso des Vignettes, comme partout : il ne choisit plus de plans.)
     { let p = vignette(&b, 4).center(); clic_avec(&mut b, p, Modifiers::COMMAND); }
-    assert!(b.app.board_sel.contains(&ids[2]), "Ctrl + clic ajoute le plan 3");
-    assert_eq!(b.app.cur_panel, 0, "le plan courant ne change pas");
+    assert_eq!((b.app.cur_panel, b.app.board_sel.clone()), (2, vec![ids[2]]), "Ctrl + clic prend la case comme un clic (le lasso), il n'ajoute rien au choix");
+    b.app.set_tool(crate::app::Tool::Brush);
+    b.app.select_panel(0);
+    b.app.board_sel = vec![ids[0]];
+    b.app.vignettes.press = crate::boardui::Press::None;
     { let p = vignette(&b, 3).center(); clic_avec(&mut b, p, Modifiers::SHIFT); }
     assert_eq!(b.app.board_selection(), vec![ids[0], ids[1]], "Maj + clic prend de la dernière vignette courante à celle-ci");
     for i in 0..4 {
