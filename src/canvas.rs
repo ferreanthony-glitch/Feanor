@@ -114,7 +114,10 @@ impl App {
         // Toile infinie : la feuille n'est plus une page cernée d'une ombre, le papier et l'arrière-plan
         // couvrent tout ce que la vue regarde, et ce qui est dessiné hors de la feuille s'y voit
         // (`monde.rs`). Une vignette ou une vue en perspective restent à la feuille.
-        let world = ((!self.in_card || zone.is_some()) && ws.is_none()).then(|| self.visible_world(rect, size));
+        // (Une case vivante des Vignettes voit à travers la caméra de son image : après un travelling, le cadre B peut sortir de la feuille, et
+        // ce qui est dessiné au-delà — ou le papier — doit s'y voir, comme dans la vignette. Sans cela, la case coupait net au bord de la feuille,
+        // sa moitié au-delà restait blanche. Seule la case vivante compose le monde : une seule à la fois, rien de plus par vignette.)
+        let world = ((!self.in_card || zone.is_some() || self.camera_view) && ws.is_none()).then(|| self.visible_world(rect, size));
         // Arrière-plan (13e) : aucun → noir ; damier → cases des couleurs A et B sous les calques.
         self.paint_background(ui.ctx(), &painter, rect, size, world, plan.paper);
         if let Some(view) = world {
