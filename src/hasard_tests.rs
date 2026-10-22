@@ -4,7 +4,9 @@
 //! duplique, réunit, coupe et déplace ; des barres de coupe des Vignettes ; des traits dans le dessin et dans les cases
 //! (marges qui débordent et bande de note comprises) ; le lasso ; des calques ; le Décor ; la caméra des Vignettes
 //! (Ctrl + Maj, Ctrl + Alt + Maj, « Retirer ce cadre ») ; les clés de la timeline ; annuler et rétablir ; les espaces
-//! de travail ; les onglets ; enregistrer et rouvrir.
+//! de travail ; les onglets ; enregistrer et rouvrir ; des touches (Suppr, flèches, Ctrl+Z…), la molette, les colonnes
+//! de la planche ; et des gestes interrompus : une commande, un espace, un onglet ou un enregistrement pendant que le
+//! bouton est tenu (`Geste::Interruption`).
 //!
 //! Après chaque geste, l'état est vérifié (`Essai::verifier`) : pas de plantage, plan et calque courants valables,
 //! sélections qui désignent des choses qui existent, planche sans chevauchement et dans l'ordre de lecture, chaque case
@@ -15,8 +17,11 @@
 //! Un échec affiche la graine, le pas et la suite des gestes (en Rust : elle se recopie telle quelle dans un essai de
 //! non-régression, `rejouer`), après l'avoir réduite au plus court qui échoue encore (`reduire`).
 //!
-//! Le passage court tourne avec la suite ; le long se lance à la demande :
-//! `cargo test --release --offline --target-dir target\msvc hasard -- --ignored --nocapture`.
+//! Le passage court tourne avec la suite (`GRAINES` × `PAS`) ; le long se lance à la demande (`GRAINES_LONGUES` ×
+//! `PAS_LONGS`, sur quatre fils) :
+//! `cargo test --release --offline --target-dir target\msvc hasard_long -- --ignored --nocapture`.
+//! `SHOT_HASARD_GRAINES=300..400`, `SHOT_HASARD_PAS=80`, `SHOT_HASARD_FILS=6` changent les graines, la longueur et les
+//! fils ; `SHOT_HASARD_ETAPES=1` affiche les étapes d'annulation faites par graine (ce que le hasard atteint).
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -31,8 +36,8 @@ use crate::perf_tests::{banc_taille, Banc};
 use crate::workspace::Espace;
 
 /// Passage court (dans la suite) : graines et gestes par graine.
-pub(crate) const GRAINES: u64 = 2;
-pub(crate) const PAS: usize = 12;
+pub(crate) const GRAINES: u64 = 3;
+pub(crate) const PAS: usize = 15;
 /// Passage long (`--ignored`) : graines et gestes par graine.
 pub(crate) const GRAINES_LONGUES: u64 = 150;
 pub(crate) const PAS_LONGS: usize = 120;
@@ -209,14 +214,76 @@ pub(crate) enum Geste {
     Onglet { nouveau: bool },
     /// Enregistrer dans un dossier neuf et relire ; `rouvrir` : rouvrir aussi la copie dans un onglet.
     Enregistrer { rouvrir: bool },
+    /// Une touche de `TOUCHES` (Suppr, flèches, Ctrl+Z…).
+    Touche(u8),
+    /// Un clic (outil Sélection) sur une case, Maj tenue ou non : choisir des plans.
+    ChoisirCase { case: u16, maj: bool },
+    /// La molette sur la planche (Ctrl : le zoom).
+    Molette { dy: f32, ctrl: bool },
+    /// Le nombre de colonnes de la planche (2 à 6).
+    Colonnes(u8),
+    /// Un geste interrompu : appui et début du glissé (`geste` : trait dans une case, caméra, plan déplacé, trait dans le
+    /// dessin, lasso, Décor), puis `INTERRUPTIONS[quoi]` pendant que le bouton est tenu, puis la fin du glissé et le lâcher.
+    Interruption { geste: u8, case: u16, quoi: u8, dx: f32, dy: f32 },
 }
+
+/// Ce qui arrive pendant un geste (une touche de raccourci tenue, un clic ailleurs…) : une commande, un espace de travail
+/// (`espace:`), l'onglet voisin (`onglet`), enregistrer (`enregistrer`).
+const INTERRUPTIONS: &[&str] = &[
+    "edition.annuler",
+    "edition.retablir",
+    "panneau.supprimer",
+    "panneau.nouveau",
+    "panneau.dupliquer",
+    "scene.joindre_precedente",
+    "panneau.couper",
+    "plan.avancer",
+    "plan.reculer",
+    "panneau.suivant",
+    "panneau.precedent",
+    "sequence.nouvelle",
+    "calque.supprimer",
+    "calque.nouveau_bitmap",
+    "calque.dessous",
+    "image.suivante",
+    "images.supprimer_plan",
+    "panneau.retirer_image",
+    "marque.basculer",
+    "lecture.basculer",
+    "storyboard.verrouiller",
+    "version.nouvelle",
+    "espace:0",
+    "espace:2",
+    "espace:3",
+    "onglet",
+    "enregistrer",
+];
+
+/// Les touches que le hasard presse : aucune n'ouvre de fenêtre de fichier (pas de Ctrl+S, Ctrl+O…).
+const TOUCHES: [(Key, Modifiers); 12] = [
+    (Key::Delete, Modifiers::NONE),
+    (Key::Backspace, Modifiers::NONE),
+    (Key::ArrowLeft, Modifiers::NONE),
+    (Key::ArrowRight, Modifiers::NONE),
+    (Key::ArrowUp, Modifiers::NONE),
+    (Key::ArrowDown, Modifiers::NONE),
+    (Key::Escape, Modifiers::NONE),
+    (Key::Enter, Modifiers::NONE),
+    (Key::Z, CTRL),
+    (Key::Y, CTRL),
+    (Key::Z, Modifiers { ctrl: true, shift: true, command: true, ..Modifiers::NONE }),
+    (Key::A, CTRL),
+];
+
+/// Ctrl sous Windows (egui pose aussi `command`).
+const CTRL: Modifiers = Modifiers { ctrl: true, command: true, ..Modifiers::NONE };
 
 use Geste::*;
 
 impl Geste {
     pub(crate) fn tirer(h: &mut Hasard) -> Geste {
         let case = h.sous(64) as u16;
-        match h.sous(100) {
+        match h.sous(124) {
             0..=21 => Commande(COMMANDES[h.sous(COMMANDES.len())]),
             22..=25 => Espace(h.sous(4) as u8),
             26..=33 => TraitDessin { outil: h.sous(OUTILS.len()) as u8, x0: h.entre(0.05, 0.95), y0: h.entre(0.05, 0.95), x1: h.entre(-0.2, 1.2), y1: h.entre(-0.2, 1.2) },
@@ -234,13 +301,23 @@ impl Geste {
             88..=91 => Retablir(1 + h.sous(2) as u8),
             92..=93 => Lecture(2 + h.sous(10) as u8),
             94..=95 => Onglet { nouveau: h.pile(2) },
-            _ => Enregistrer { rouvrir: h.pile(2) },
+            96..=97 => Enregistrer { rouvrir: h.pile(2) },
+            98..=103 => Touche(h.sous(TOUCHES.len()) as u8),
+            104..=108 => ChoisirCase { case, maj: h.pile(2) },
+            109..=110 => Molette { dy: h.entre(-240.0, 240.0), ctrl: h.pile(2) },
+            111 => Colonnes(h.sous(5) as u8),
+            _ => Interruption { geste: h.sous(6) as u8, case, quoi: h.sous(INTERRUPTIONS.len()) as u8, dx: h.entre(-1.0, 1.0), dy: h.entre(-0.7, 0.7) },
         }
     }
 
     /// Un geste dont l'étape d'annulation se vérifie (annuler, puis rétablir).
     fn verifie_l_annulation(&self) -> bool {
-        !matches!(self, Annuler(_) | Retablir(_) | Onglet { .. } | Enregistrer { .. } | Espace(_) | Lecture(_))
+        match self {
+            Annuler(_) | Retablir(_) | Onglet { .. } | Enregistrer { .. } | Espace(_) | Lecture(_) => false,
+            // (Enregistrer date le projet, `Properties::modified`, ce qu'aucune annulation ne défait.)
+            Interruption { quoi, .. } => !matches!(INTERRUPTIONS[*quoi as usize % INTERRUPTIONS.len()], "edition.annuler" | "edition.retablir" | "onglet" | "enregistrer"),
+            _ => true,
+        }
     }
 }
 
@@ -279,6 +356,9 @@ pub(crate) struct Essai {
     pub b: Banc,
     dossier: PathBuf,
     enregistrements: usize,
+    /// Les étapes d'annulation que les gestes ont faites, par nom (`SHOT_HASARD_ETAPES` les affiche) : ce que le hasard
+    /// atteint vraiment.
+    pub etapes: std::collections::BTreeMap<String, usize>,
 }
 
 const DT: f64 = 1.0 / 60.0;
@@ -322,6 +402,22 @@ fn photo(doc: &Document) -> String {
         .join("\n")
 }
 
+/// L'instantané de ce que l'enregistrement garde : la réserve d'un calque supprimé (le rognage, `rognage::to_bytes`) n'est pas
+/// écrite. Elle reste en mémoire le temps d'une annulation ; on la retire le temps de l'instantané.
+fn photo_enregistrable(doc: &mut Document) -> String {
+    let gardees = doc.reserves.clone();
+    for p in &doc.panels {
+        if let Some(r) = doc.reserves.get_mut(&p.id) {
+            for piece in [&mut r.head, &mut r.tail] {
+                piece.layers.retain(|lp| p.layers.iter().any(|l| l.id == lp.layer));
+            }
+        }
+    }
+    let s = photo(doc);
+    doc.reserves = gardees;
+    s
+}
+
 impl Essai {
     pub(crate) fn new(doc: Document, nom: &str) -> Essai {
         let mut b = banc_taille(doc, false, 1600, 900);
@@ -334,7 +430,7 @@ impl Essai {
         let dossier = std::env::temp_dir().join(format!("shot-hasard-{nom}-{}-{:?}", std::process::id(), std::thread::current().id()));
         let _ = std::fs::remove_dir_all(&dossier);
         std::fs::create_dir_all(&dossier).expect("dossier d'essai");
-        Essai { b, dossier, enregistrements: 0 }
+        Essai { b, dossier, enregistrements: 0, etapes: Default::default() }
     }
 
     fn img(&mut self, ev: Vec<Event>) {
@@ -510,7 +606,7 @@ impl Essai {
                 tour.extend(Self::trajet(coin, a, 3));
                 tour.extend(Self::trajet(a, pos2(de.x, a.y), 3));
                 tour.push(de);
-                self.glisser(Modifiers::CTRL, PointerButton::Primary, &tour);
+                self.glisser(CTRL, PointerButton::Primary, &tour);
                 if supprimer {
                     self.b.app.run_action("edition.supprimer");
                     self.b.chauffer(2);
@@ -614,38 +710,121 @@ impl Essai {
                 }
                 self.b.chauffer(3);
             }
-            Enregistrer { rouvrir } => {
-                self.enregistrements += 1;
-                let manifeste = self.dossier.join(format!("p{}", self.enregistrements)).join("Film.pelure");
-                // (Pas pendant un geste, ni une saisie : l'enregistrement se fait au repos.)
-                if !self.b.app.save_to_blocking(manifeste.clone()) {
-                    return;
-                }
-                self.b.chauffer(1);
-                let attendu = photo(&self.b.app.doc);
-                match crate::project::load(&manifeste) {
-                    Ok(l) => {
-                        if let Err(e) = meme_projet(&attendu, &photo(&l.doc)) {
-                            panic!("INVARIANT relecture : le projet relu n'est pas celui qu'on a enregistré.\n{e}");
+            Touche(n) => {
+                let (k, m) = TOUCHES[n as usize % TOUCHES.len()];
+                self.b.touches = m;
+                self.img(vec![touche(k, true, m)]);
+                self.img(vec![touche(k, false, m)]);
+                self.b.touches = Modifiers::NONE;
+                self.b.chauffer(2);
+            }
+            ChoisirCase { case, maj } => {
+                let Some((_, r)) = self.case(case) else { return };
+                self.b.app.set_tool(Tool::Select);
+                self.clic(r.center(), PointerButton::Primary, if maj { Modifiers::SHIFT } else { Modifiers::NONE });
+            }
+            Molette { dy, ctrl } => {
+                self.vers_vignettes();
+                let p = self.b.app.vignettes.view.center();
+                let m = if ctrl { CTRL } else { Modifiers::NONE };
+                self.b.touches = m;
+                self.img(vec![Event::PointerMoved(p)]);
+                let ev = self.b.molette(vec2(0.0, dy), m);
+                self.img(ev);
+                self.b.touches = Modifiers::NONE;
+                self.img(vec![Event::PointerGone]);
+                self.b.chauffer(2);
+            }
+            Colonnes(n) => {
+                self.b.app.layout.board_columns = 2 + n as usize % 5;
+                self.b.chauffer(2);
+            }
+            Interruption { geste, case, quoi, dx, dy } => {
+                // Le départ et ce qui est tenu.
+                let (de, m, largeur) = match geste % 6 {
+                    3 => {
+                        let Some(r) = self.toile() else { return };
+                        self.b.app.set_tool(Tool::Brush);
+                        (r.lerp_inside(vec2(0.4, 0.4)), Modifiers::NONE, r.width() * 0.3)
+                    }
+                    g => {
+                        let Some((_, r)) = self.case(case) else { return };
+                        match g {
+                            0 => {
+                                self.b.app.set_tool(Tool::Brush);
+                                (r.lerp_inside(vec2(0.3, 0.4)), Modifiers::NONE, r.width())
+                            }
+                            1 => (r.center(), Modifiers { ctrl: true, shift: true, command: true, ..Modifiers::NONE }, r.width()),
+                            2 => (pos2(r.left(), r.center().y), Modifiers::SHIFT, r.width()),
+                            4 => (r.lerp_inside(vec2(0.2, 0.2)), CTRL, r.width()),
+                            _ => {
+                                self.b.app.decor_choisir(crate::decor::Genre::Feutre);
+                                self.b.chauffer(1);
+                                (r.lerp_inside(vec2(0.5, 0.5)), Modifiers::NONE, r.width())
+                            }
                         }
                     }
-                    Err(e) => panic!("INVARIANT relecture : le projet enregistré ne se relit pas : {e}"),
+                };
+                let a = Rect::from_min_size(Pos2::ZERO, self.b.taille).shrink(4.0).clamp(de + vec2(dx, dy) * largeur);
+                let chemin = Self::trajet(de, a, 8);
+                self.b.touches = m;
+                self.img(vec![Event::PointerMoved(de)]);
+                self.img(vec![appui(de, PointerButton::Primary, true, m)]);
+                for q in &chemin[1..4] {
+                    self.img(vec![Event::PointerMoved(*q)]);
                 }
-                if rouvrir && self.b.app.onglets.len() < 3 {
-                    let copie = self.dossier.join(format!("c{}", self.enregistrements)).join("Film.pelure");
-                    crate::project::save(&self.b.app.doc, &copie, &mut Default::default()).expect("copie");
-                    if self.b.app.nouvel_onglet() {
-                        self.b.app.open_path(copie);
-                        let t = Instant::now();
-                        while self.b.app.open_job.is_some() && t.elapsed() < Duration::from_secs(30) {
-                            self.img(Vec::new());
-                            std::thread::sleep(Duration::from_millis(2));
-                        }
-                        self.b.chauffer(3);
-                        if let Err(e) = meme_projet(&attendu, &photo(&self.b.app.doc)) {
-                            panic!("INVARIANT réouverture : le projet rouvert dans un onglet n'est pas celui qu'on a enregistré.\n{e}");
-                        }
-                    }
+                match INTERRUPTIONS[quoi as usize % INTERRUPTIONS.len()] {
+                    "onglet" => self.b.app.onglet_voisin(1),
+                    "enregistrer" => self.enregistrer(false),
+                    e if e.starts_with("espace:") => self.b.app.set_espace(Espace::TOUS[e[7..].parse::<usize>().unwrap_or(0) % 4]),
+                    id => self.b.app.run_action(id),
+                }
+                for q in &chemin[4..] {
+                    self.img(vec![Event::PointerMoved(*q)]);
+                }
+                self.img(vec![appui(a, PointerButton::Primary, false, m)]);
+                self.b.touches = Modifiers::NONE;
+                self.img(vec![Event::PointerGone]);
+                if self.b.app.playing {
+                    self.b.app.run_action("lecture.basculer");
+                }
+                self.b.chauffer(2);
+            }
+            Enregistrer { rouvrir } => self.enregistrer(rouvrir),
+        }
+    }
+
+    /// Enregistre dans un dossier neuf et relit ; `rouvrir` : rouvre aussi une copie dans un onglet.
+    fn enregistrer(&mut self, rouvrir: bool) {
+        self.enregistrements += 1;
+        let manifeste = self.dossier.join(format!("p{}", self.enregistrements)).join("Film.pelure");
+        if !self.b.app.save_to_blocking(manifeste.clone()) {
+            return;
+        }
+        let attendu = photo_enregistrable(&mut self.b.app.doc);
+        match crate::project::load(&manifeste) {
+            Ok(l) => {
+                if let Err(e) = meme_projet(&attendu, &photo(&l.doc)) {
+                    panic!("INVARIANT relecture : le projet relu n'est pas celui qu'on a enregistré.\n{e}");
+                }
+            }
+            Err(e) => panic!("INVARIANT relecture : le projet enregistré ne se relit pas : {e}"),
+        }
+        self.b.chauffer(1);
+        if rouvrir && self.b.app.onglets.len() < 3 {
+            let attendu = photo_enregistrable(&mut self.b.app.doc);
+            let copie = self.dossier.join(format!("c{}", self.enregistrements)).join("Film.pelure");
+            crate::project::save(&self.b.app.doc, &copie, &mut Default::default()).expect("copie");
+            if self.b.app.nouvel_onglet() {
+                self.b.app.open_path(copie);
+                let t = Instant::now();
+                while self.b.app.open_job.is_some() && t.elapsed() < Duration::from_secs(30) {
+                    self.img(Vec::new());
+                    std::thread::sleep(Duration::from_millis(2));
+                }
+                self.b.chauffer(3);
+                if let Err(e) = meme_projet(&attendu, &photo(&self.b.app.doc)) {
+                    panic!("INVARIANT réouverture : le projet rouvert dans un onglet n'est pas celui qu'on a enregistré.\n{e}");
                 }
             }
         }
@@ -762,14 +941,28 @@ impl Essai {
     pub(crate) fn pas(&mut self, g: Geste) -> Result<(), Echec> {
         let onglet = self.b.app.actif;
         let (h0, s0) = (self.b.app.history.undo_len(), photo(&self.b.app.doc));
-        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| self.jouer(g)));
+        // (Une zone bitmap soulevée, déplacée par un geste d'avant, n'a son étape qu'en se reposant : l'annuler revient avant
+        // le soulèvement, plus loin que l'état d'avant ce geste-ci. De même pour une sélection sur plusieurs calques.)
+        let s0_net = self.b.app.bsel.as_ref().is_none_or(|s| s.lifted.is_none()) && self.b.app.multi.sel.is_none();
+        let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            self.jouer(g);
+            // Un déplacement de sélection lâché attend son rendu exact : la prochaine action de la main le termine (le dessin
+            // prend alors la géométrie de ses pixels, au pixel près, `flush_flottante_on_input`). On la devance, pour que l'état
+            // d'après soit celui que garde l'étape.
+            self.b.app.flush_flottante();
+            self.b.app.multi_flush();
+        }));
         if let Err(e) = r {
             let m = message(&*e);
             let espece = if m.starts_with("INVARIANT") { m.lines().next().unwrap_or("").to_string() } else { format!("plantage : {}", sans_chiffres(&m)) };
             return Err(echec(&espece, m));
         }
         self.verifier()?;
-        if g.verifie_l_annulation() && self.b.app.actif == onglet && self.b.app.history.undo_len() == h0 + 1 {
+        if self.b.app.actif == onglet && self.b.app.history.undo_len() > h0 {
+            let nom = self.b.app.history.names().0.last().map(|s| s.to_string()).unwrap_or_default();
+            *self.etapes.entry(nom).or_default() += 1;
+        }
+        if s0_net && g.verifie_l_annulation() && self.b.app.actif == onglet && self.b.app.history.undo_len() == h0 + 1 {
             let s1 = photo(&self.b.app.doc);
             let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 self.b.app.run_action("edition.annuler");
@@ -874,29 +1067,46 @@ pub(crate) fn passage(graine: u64, pas: usize) -> Result<(), String> {
             ));
         }
     }
+    if std::env::var_os("SHOT_HASARD_ETAPES").is_some() {
+        eprintln!("HASARD graine {graine} : étapes {:?}", e.etapes);
+    }
     Ok(())
 }
 
-fn passages(graines: std::ops::Range<u64>, pas: usize) {
+/// Les graines `graines`, réparties sur `fils` fils (chacun son application).
+fn passages(graines: std::ops::Range<u64>, pas: usize, fils: usize) {
     let t = Instant::now();
-    let mut echecs = Vec::new();
-    for g in graines.clone() {
-        if let Err(m) = passage(g, pas) {
-            eprintln!("{m}");
-            echecs.push(m);
+    let toutes: Vec<u64> = graines.clone().collect();
+    let echecs = std::sync::Mutex::new(Vec::new());
+    std::thread::scope(|s| {
+        for f in 0..fils.max(1) {
+            let (toutes, echecs) = (&toutes, &echecs);
+            std::thread::Builder::new()
+                .stack_size(16 << 20)
+                .spawn_scoped(s, move || {
+                    for g in toutes.iter().skip(f).step_by(fils.max(1)) {
+                        if let Err(m) = passage(*g, pas) {
+                            eprintln!("{m}");
+                            echecs.lock().unwrap_or_else(|e| e.into_inner()).push(m);
+                        }
+                    }
+                })
+                .expect("fil d'essai");
         }
-    }
-    println!("HASARD {} graines × {pas} gestes en {:.1} s : {} échec(s)", graines.end - graines.start, t.elapsed().as_secs_f64(), echecs.len());
+    });
+    let echecs = echecs.into_inner().unwrap_or_else(|e| e.into_inner());
+    println!("HASARD {} graines × {pas} gestes en {:.1} s : {} échec(s)", toutes.len(), t.elapsed().as_secs_f64(), echecs.len());
     assert!(echecs.is_empty(), "{}", echecs.join("\n"));
 }
 
 /// Le passage court, dans la suite.
 #[test]
 fn hasard_random_gestures_keep_the_application_consistent() {
-    passages(0..GRAINES, PAS);
+    passages(0..GRAINES, PAS, 1);
 }
 
-/// Le passage long, à la demande (`-- --ignored hasard`). `SHOT_HASARD_GRAINES=a..b` choisit les graines.
+/// Le passage long, à la demande (`-- --ignored hasard`). `SHOT_HASARD_GRAINES=a..b` choisit les graines,
+/// `SHOT_HASARD_PAS` le nombre de gestes, `SHOT_HASARD_FILS` le nombre de fils (4).
 #[test]
 #[ignore]
 fn hasard_long_run_of_random_gestures() {
@@ -905,7 +1115,8 @@ fn hasard_long_run_of_random_gestures() {
         .and_then(|v| v.split_once("..").and_then(|(a, b)| Some(a.trim().parse().ok()?..b.trim().parse().ok()?)))
         .unwrap_or(1000..1000 + GRAINES_LONGUES);
     let pas = std::env::var("SHOT_HASARD_PAS").ok().and_then(|v| v.parse().ok()).unwrap_or(PAS_LONGS);
-    passages(graines, pas);
+    let fils = std::env::var("SHOT_HASARD_FILS").ok().and_then(|v| v.parse().ok()).unwrap_or(4);
+    passages(graines, pas, fils);
 }
 
 /// Le hasard est reproductible : la même graine tire les mêmes gestes.
@@ -950,6 +1161,74 @@ fn hasard_undoing_new_plans_leaves_no_chosen_plan_that_does_not_exist() {
             Annuler(3),
         ],
     );
+}
+
+/// Une commande tapée pendant un Ctrl + Maj + glisser de caméra (réunir avec le plan précédent, supprimer le plan) : le
+/// mouvement prend d'abord son étape, la commande la sienne ; annuler défait la commande, puis le mouvement.
+#[test]
+fn hasard_a_command_during_a_camera_drag_keeps_the_move_undoable() {
+    rejouer(210, &[Interruption { geste: 1, case: 10, quoi: 5, dx: 0.46, dy: -0.12 }]);
+    rejouer(253, &[Interruption { geste: 1, case: 28, quoi: 2, dx: 0.46, dy: 0.11 }]);
+}
+
+/// Passer au Montage pendant un Ctrl + Maj + glisser de caméra : le mouvement se pose. Il restait ouvert (le lâcher n'arrive
+/// qu'aux Vignettes), et la planche gardait sa réserve de place : la case A restait sur les cases d'avant (chevauchement).
+#[test]
+fn hasard_a_workspace_switch_during_a_camera_drag_ends_the_move() {
+    rejouer(214, &[Interruption { geste: 2, case: 36, quoi: 4, dx: 0.94, dy: 0.38 }, Interruption { geste: 1, case: 61, quoi: 24, dx: -0.91, dy: -0.23 }]);
+}
+
+/// Réunir deux plans à une barre quand le second a un dossier de calques du même nom qu'un dossier du premier : ses calques
+/// rejoignent ce dossier. Ils désignaient le dossier du second plan, réuni à l'autre et disparu.
+#[test]
+fn hasard_joining_two_plans_keeps_the_layers_of_the_second_in_an_existing_folder() {
+    rejouer(211, &[Commande("calque.cle_position"), Commande("dossier.ranger"), Colonnes(4), Camera { case: 56, x0: 0.81, y0: 0.25, dx: 1.11, dy: 0.14, ajoute: true }, Barre { k: 32 }]);
+}
+
+/// Déplacer une sélection vectorielle, puis la supprimer par la commande, sans clic ni touche entre les deux (la feuille
+/// flottante du déplacement attend encore son rendu exact) : plus tard, la feuille qui se termine ne repose pas les éléments
+/// d'avant aux rangs d'avant (l'élément supprimé revenait, l'autre disparaissait, sans étape d'annulation).
+#[test]
+fn hasard_deleting_a_moved_vector_selection_before_its_exact_render_keeps_the_drawing() {
+    let mut e = Essai::new(crate::vignettes_tests::quatre_plans(), "flottante");
+    // Deux traits, à gauche et à droite de la feuille.
+    e.jouer(TraitDessin { outil: 0, x0: 0.15, y0: 0.3, x1: 0.3, y1: 0.7 });
+    e.jouer(TraitDessin { outil: 0, x0: 0.7, y0: 0.3, x1: 0.85, y1: 0.7 });
+    let cel = e.b.app.cel_here().expect("le dessin");
+    let elements = |e: &Essai| e.b.app.doc.cels[&cel].vector.as_ref().map(|v| v.elements.len()).unwrap_or(0);
+    assert_eq!(elements(&e), 2, "deux traits vectoriels");
+    // Le lasso autour du trait de gauche, puis le déplacer.
+    let r = e.toile().expect("le dessin à l'écran");
+    e.b.app.set_tool(Tool::Select);
+    let (de, a) = (r.lerp_inside(vec2(0.05, 0.1)), r.lerp_inside(vec2(0.45, 0.9)));
+    let tour = [de, pos2(a.x, de.y), a, pos2(de.x, a.y), de];
+    let mut chemin = Vec::new();
+    for w in tour.windows(2) {
+        chemin.extend(Essai::trajet(w[0], w[1], 4));
+    }
+    e.glisser(Modifiers::NONE, PointerButton::Primary, &chemin);
+    assert!(e.b.app.vsel.as_ref().is_some_and(|s| s.items == vec![0]), "le trait de gauche est choisi : {:?}", e.b.app.vsel.as_ref().map(|s| s.items.clone()));
+    // (Dans la boîte, loin de son centre : le pivot.)
+    let m = r.lerp_inside(vec2(0.17, 0.36));
+    let vers = m + vec2(60.0, 30.0);
+    e.img(vec![Event::PointerMoved(m)]);
+    e.img(vec![appui(m, PointerButton::Primary, true, Modifiers::NONE)]);
+    for q in Essai::trajet(m, vers, 12) {
+        e.img(vec![Event::PointerMoved(q)]);
+    }
+    e.img(vec![appui(vers, PointerButton::Primary, false, Modifiers::NONE)]);
+    assert_eq!(crate::vignettes_tests::dernier_nom(&e.b), "Déplacer");
+    assert!(e.b.app.flottante.as_ref().is_some_and(|f| f.pending.is_some()), "la feuille flottante du déplacement attend son rendu exact");
+    // Aussitôt (aucune image d'écran : le rendu exact n'a pas pu arriver), la commande.
+    e.b.app.run_action("edition.supprimer");
+    let traits = |e: &Essai| -> Vec<String> { e.b.app.doc.cels[&cel].vector.as_ref().expect("vectoriel").elements.iter().map(|el| serde_json::to_string(el).expect("élément")).collect() };
+    let apres = traits(&e);
+    assert_eq!(apres.len(), 1, "le trait de gauche est supprimé");
+    // La feuille d'un geste en attente se termine (un clic, une touche, le rendu exact) : le dessin ne change pas.
+    e.b.app.flush_flottante();
+    e.b.app.multi_flush();
+    e.b.chauffer(3);
+    assert_eq!(traits(&e), apres, "le trait qui reste est celui de droite, tel quel");
 }
 
 /// Couper un plan à une barre, après avoir choisi un calque : le calque choisi ne désigne pas un calque disparu.

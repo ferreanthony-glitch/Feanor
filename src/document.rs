@@ -2408,6 +2408,8 @@ impl Document {
         // Calques : par nom, puis par rang, s'ils sont réglés pareil.
         let same = |x: &Layer, y: &Layer| {
             x.kind == y.kind
+                // (Un dossier ne se réunit qu'à un dossier.)
+                && x.folder == y.folder
                 && x.decor == y.decor
                 && x.visible == y.visible
                 && x.opacity == y.opacity
@@ -2439,6 +2441,7 @@ impl Document {
         }
         // Calque d'arrivée de chaque calque de `b`, par son id (les ajouts décalent les rangs).
         let mut dest: Vec<u64> = Vec::with_capacity(b.layers.len());
+        let ids_b: Vec<u64> = b.layers.iter().map(|l| l.id).collect();
         for (j, mut lb) in b.layers.into_iter().enumerate() {
             lb.frames.truncate(b_len);
             lb.roles.retain(|f, _| *f < b_len);
@@ -2460,6 +2463,19 @@ impl Document {
         }
         for l in &mut a.layers {
             l.trim();
+        }
+        // Un calque de `b` ajouté tel quel garde son dossier : celui où le dossier de `b` est allé, s'il s'est réuni à un dossier
+        // de même nom (sinon le calque désignait un dossier disparu, passe de débogage au hasard, 2026-10-22). Puis chaque dossier
+        // rassemble ses calques juste sous lui (`folders::normalize`).
+        let ajoutes: std::collections::HashSet<u64> = ids_b.iter().zip(&dest).filter(|(b, d)| b == d).map(|(b, _)| *b).collect();
+        let vers: HashMap<u64, u64> = ids_b.iter().copied().zip(dest.iter().copied()).collect();
+        for l in a.layers.iter_mut().filter(|l| ajoutes.contains(&l.id)) {
+            if let Some(p) = l.parent {
+                l.parent = vers.get(&p).copied().or(Some(p));
+            }
+        }
+        if a.layers.iter().any(|l| l.folder || l.parent.is_some()) {
+            crate::folders::normalize(&mut a.layers);
         }
 
         // Le début de `b` : une marque d'image avec ses textes ; puis ses propres marques.
