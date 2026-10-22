@@ -1062,6 +1062,17 @@ disparaissait derrière le cadre B. Maintenant, **les cases qui suivent forment 
 Essais : `cases_tests` (le plan se coupe, dessin et caméra de la case 2 inchangés, vignette identique pixel pour pixel, une étape d'annulation, déplacer B ne touche pas le plan voisin ; la case
 faite après le mouvement voit toujours B). L'essai d'avant `the_case_after_a_camera_move_shows_the_last_frame_and_moving_b_updates_it` ajoute désormais la case de continuité après le mouvement.
 
+### Un zoom ne rétrécit jamais la case A (2026-10-22, même branche)
+
+« Lors d'un zoom, c'est le cadre A qui rétrécit » (un zoom arrière : A devenu petit, B de la taille de la case). **Cause** : un coin tiré sur un plan qui a déjà un mouvement prenait
+`Prise::Zoom(0)` quand le coin de A était à portée ; or, après un zoom arrière, B entoure A et son coin est à quelques points de celui de A : « le plus petit cadre l'emporte » donnait A. Le
+geste changeait **la caméra de A** (sa clé 0, ici de 1 à 0,62) ; comme **A fixe l'échelle de toute l'empreinte** (A = la case, `vignettecam::empreinte`), tout se redessinait à une autre
+échelle : A semblait avoir rétréci, B reprenait la taille de la case. **Règle** (`vignettecam::choisit`) : un coin de A ne zoome pas A quand le point est aussi dans un autre cadre (ou près de
+son coin) : on prend le plus petit des autres (son coin le zoome, sinon on le déplace) ; le coin de A reste saisissable quand rien d'autre n'est là. **Sur une case sans mouvement**, un coin
+tiré fait B, copie de A zoomée (`NouveauZoom`) autour de son centre, A inchangé (déjà le cas, maintenant couvert). **Un zoom arrière** : B plus grand que A autour de lui, limité à la hauteur de
+rangée, jamais A rétréci. Essais : `cases_tests` (zoom arrière, zoom arrière large et zoom avant sur une case sans mouvement : A est exactement la case d'avant, B plus grand ou plus petit ; un
+deuxième coin tiré au coin de A que B entoure zoome B, A reste la case et sa caméra ne change pas, feuille deux fois plus grande que le cadre ou de sa taille).
+
 ### À regarder à l'écran (le décor, par Anthony)
 
 1. Vignettes, colonne des pastilles : après les trois couleurs neutres et un petit trait, trois carrés arrondis gris-bleu (un trait fin, un trait épais, un carré plein), avant le « + ».
