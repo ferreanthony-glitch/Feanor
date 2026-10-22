@@ -1373,3 +1373,41 @@ fn grabbing_near_a_corner_of_a_from_inside_b_moves_b() {
     assert_eq!(apres[0], avant[0], "A ne bouge pas");
     assert!(apres[1].1 > avant[1].1 + 10.0 && (apres[1].3 - avant[1].3).abs() < 1e-6, "B glisse sans changer de zoom : {avant:?} {apres:?}");
 }
+/// « Réunir avec le plan précédent » depuis le clic droit d'un plan à mouvement de caméra ne plante pas (Anthony,
+/// 2026-10-22) : le menu se montre pendant qu'on peint les cases, et la planche de cette image ne valait plus.
+#[test]
+fn joining_a_moving_plan_from_its_right_click_menu_does_not_crash() {
+    fn textes(shape: &Shape, out: &mut Vec<(String, Pos2)>) {
+        match shape {
+            Shape::Text(t) => out.push((t.galley.job.text.clone(), t.pos + t.galley.size() / 2.0)),
+            Shape::Vec(v) => v.iter().for_each(|s| textes(s, out)),
+            _ => {}
+        }
+    }
+    let mut b = ouvert(plan_court(), 6);
+    let w = largeur_cadre_ecran(&b);
+    let case = vignette(&b, K);
+    ctrl_glisser(&mut b, case.center(), &pas(case.center(), vec2(w * 0.6, 0.0), 6), case.center() + vec2(w * 0.6, 0.0), true);
+    b.chauffer(3);
+    assert_eq!(b.app.doc.panels[1].camera.len(), 2, "le plan 2 a un mouvement");
+    let avant = b.app.doc.panels.len();
+    let case = vignette(&b, K);
+    b.image(vec![Event::PointerMoved(case.center())], 1.0 / 60.0);
+    b.image(vec![Event::PointerButton { pos: case.center(), button: PointerButton::Secondary, pressed: true, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    b.image(vec![Event::PointerButton { pos: case.center(), button: PointerButton::Secondary, pressed: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    b.garder_formes = true;
+    b.image(Vec::new(), 1.0 / 60.0);
+    b.image(Vec::new(), 1.0 / 60.0);
+    let mut out = Vec::new();
+    for s in &b.formes {
+        textes(&s.shape, &mut out);
+    }
+    let p = out.iter().find(|(t, _)| t == "Réunir avec le plan précédent").map(|(_, p)| *p).expect("l'entrée du menu est là");
+    b.garder_formes = false;
+    b.image(vec![Event::PointerMoved(p)], 1.0 / 60.0);
+    b.image(vec![Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    b.image(vec![Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    b.chauffer(4);
+    assert_eq!(b.app.doc.panels.len(), avant - 1, "les deux plans sont réunis");
+    assert!(b.app.cur_panel < b.app.doc.panels.len());
+}
