@@ -2,8 +2,8 @@
 //! sa rotation, sa bascule) et leurs réglages, en deux endroits (Anthony, 2026-10-21) :
 //! - **la règle**, dans la barre au-dessus du dessin, est le seul lieu des guides : les repères de composition
 //!   (tiers, grille d'or, spirale, diagonales, croix) et les guides de perspective du projet (`guides.rs`) ;
-//! - **le menu Cadrage**, à gauche de la barre sous le dessin (`viewbar.rs`) : le format, les zones de sécurité et
-//!   l'aspect des traits (couleur, opacité, épaisseur).
+//!   L'aspect de leurs traits (couleur, opacité, épaisseur) est là aussi, à côté d'eux ;
+//! - **le menu Cadrage**, à gauche de la barre sous le dessin (`viewbar.rs`) : le format et les zones de sécurité.
 //! La géométrie est dans `cadrage.rs`.
 
 use eframe::egui::{self, Color32, Pos2, Rect, RichText, Shape, Stroke};
@@ -58,7 +58,7 @@ impl App {
     /// d'or, spirale et son orientation, diagonales, croix), dessous les guides de perspective du projet (ce que
     /// faisait le panneau Guides, retiré le 2026-10-21 : afficher, aligner, verrouiller, lignes de référence, gomme,
     /// lignes du curseur, la liste, un guide de plus à 1, 2 ou 3 points de fuite, son nom, le supprimer).
-    /// Le format, les zones de sécurité et l'aspect des traits sont dans le menu Cadrage de la barre du bas.
+    /// Le format et les zones de sécurité sont dans le menu Cadrage de la barre du bas.
     pub(crate) fn guides_menu_ui(&mut self, ui: &mut egui::Ui) {
         use crate::bulles::interrupteur_a;
         use egui_phosphor::regular as ph;
@@ -108,6 +108,7 @@ impl App {
                 self.run_action("cadrage.aucune");
             }
         });
+        self.aspect_reperes_ui(ui);
         ui.separator();
         ui.label(RichText::new("Perspective").small().weak());
         self.guides_ui(ui);
@@ -144,8 +145,8 @@ impl App {
         self.layout.safe_frames || self.layout.frame_format.and_then(frames::sanitized).is_some()
     }
 
-    /// Le menu Cadrage, petit panneau de la barre du bas : le format (cadre d'un format de diffusion), les zones de
-    /// sécurité et l'aspect des traits des repères (couleur, opacité, épaisseur). Pas de sous-menu ni de liste
+    /// Le menu Cadrage, petit panneau de la barre du bas : le format (cadre d'un format de diffusion) et les zones de
+    /// sécurité. Pas de sous-menu ni de liste
     /// déroulante : le panneau se ferme dès qu'on clique hors de lui, et un sous-menu est « hors de lui ».
     pub(crate) fn cadrage_ui(&mut self, ui: &mut egui::Ui) {
         use crate::bulles::{bulle, interrupteur_a};
@@ -202,7 +203,13 @@ impl App {
         for z in SafeZones::ALL {
             ui.selectable_value(&mut self.cadrage.safe, z, z.label());
         }
-        ui.separator();
+        ui.label(RichText::new("Aides d'écran : elles suivent le cadre de la caméra et ne sont jamais exportées.").small().weak());
+    }
+
+    /// L'aspect des traits des repères de composition (couleur, opacité, épaisseur), sous la règle, à côté des repères
+    /// qu'il règle (Anthony, 2026-10-22 : il était dans le menu Cadrage, loin d'eux).
+    fn aspect_reperes_ui(&mut self, ui: &mut egui::Ui) {
+        use crate::bulles::bulle;
         ui.label(RichText::new("Aspect des traits des repères").small().weak());
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
@@ -235,6 +242,5 @@ impl App {
                 self.cadrage.color = [c.r(), c.g(), c.b()];
             }
         });
-        ui.label(RichText::new("Aides d'écran : elles suivent le cadre de la caméra et ne sont jamais exportées.").small().weak());
     }
 }

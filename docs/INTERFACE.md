@@ -3606,11 +3606,10 @@ Trois retouches demandées par Anthony sur une capture annotée de l'onglet Stor
    dispositions d'origine ; `Pane::Guides` n'est gardé que pour lire les dispositions enregistrées, que `DockLayout::sanitized` en débarrasse (comme l'ancien panneau Vue).
    Les actions `guide.*` (Ctrl+K, raccourcis) et le sous-menu Affichage > Guides restent.
 2. **Le menu Cadrage, tout à gauche de la barre sous le dessin** (icône « cadre », avant « Ajuster »). Un petit panneau au-dessus de l'icône : le **format** (Aucun, 16:9,
-   9:16, 4:5, 1:1, 4:3, 1,85:1, 2,39:1, Personnalisé avec sa largeur : sa hauteur), les **zones de sécurité** (l'interrupteur et les deux jeux de valeurs), et l'**aspect des
-   traits** (six couleurs, « Autre couleur » qui se déplie dans le panneau, opacité, épaisseur). Même taille d'icône que le reste de la barre (`barres::ICONE`, `CASE`).
-   L'icône s'allume avec un format ou les zones de sécurité (`framing_any_on`). Pas de sous-menu ni de liste déroulante dans ce panneau (il se ferme au clic hors de lui, et un
-   sous-menu est « hors de lui ») : des choix en ligne. **À confirmer avec Anthony** : l'aspect des traits (couleur, opacité, épaisseur) ne règle que les repères de la
-   règle (tiers, spirale…), pas les zones de sécurité (couleur du thème) : il est dans le menu Cadrage comme demandé, mais loin de ce qu'il règle.
+   9:16, 4:5, 1:1, 4:3, 1,85:1, 2,39:1, Personnalisé avec sa largeur : sa hauteur) et les **zones de sécurité** (l'interrupteur et les deux jeux de valeurs). Même taille
+   d'icône que le reste de la barre (`barres::ICONE`, `CASE`). L'icône s'allume avec un format ou les zones de sécurité (`framing_any_on`). Pas de sous-menu ni de liste
+   déroulante dans ce panneau (il se ferme au clic hors de lui, et un sous-menu est « hors de lui ») : des choix en ligne. L'**aspect des traits** des repères (six couleurs,
+   « Autre couleur », opacité, épaisseur) ne règle que les repères de la règle (tiers, spirale…) : il est sous la règle, à côté d'eux (Anthony, 2026-10-22).
 3. **La colonne des pastilles des personnages** (`pastilles_colonne`, `personnagesui.rs`). Plus de barre au-dessus du dessin : une colonne ronde et discrète au bord droit du
    dessin (46 points sous le haut, donc sous le titre « Séquence 1 — plan 1 ») et de la planche des Vignettes (8 points sous le haut). De haut en bas : « aucun personnage »
    (anneau barré, allumé quand la couleur est libre ; le texte « Aucun personnage » a disparu, la bulle le dit), les personnages, un trait, les couleurs neutres, « + », l'icône du

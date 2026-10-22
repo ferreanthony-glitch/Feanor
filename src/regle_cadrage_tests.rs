@@ -1,6 +1,7 @@
 //! La règle, le menu Cadrage et la colonne des pastilles (Anthony, 2026-10-21) :
 //! - la règle, au-dessus du dessin, est le seul lieu des guides : tout ce que faisait le panneau Guides y est ;
-//! - le format, les zones de sécurité et l'aspect des traits sont dans le menu Cadrage, à gauche de la barre du bas ;
+//! - le format et les zones de sécurité sont dans le menu Cadrage, à gauche de la barre du bas ; l'aspect des traits
+//!   des repères est sous la règle, à côté d'eux (2026-10-22) ;
 //! - les pastilles des personnages sont une colonne au bord droit du dessin (et de la planche des Vignettes), et
 //!   cliquer dessus ne dessine rien.
 
@@ -160,8 +161,10 @@ fn the_ruler_menu_keeps_only_guides_and_the_composition_marks() {
     for icone in [ph::GRID_NINE, ph::DOTS_NINE, ph::SPIRAL, ph::ARROWS_CLOCKWISE, ph::LINE_SEGMENTS, ph::CROSSHAIR_SIMPLE, ph::X] {
         assert!(trouver(&textes, icone).is_some(), "{icone:?} reste dans la règle");
     }
-    // Plus de format, de zones de sécurité ni d'aspect des traits : ils sont dans le menu Cadrage.
-    for absent in ["Format", "Zones de sécurité", "Aspect des traits", "Action 93 %", ph::CROP, ph::SELECTION] {
+    // L'aspect des traits des repères est à côté d'eux (Anthony, 2026-10-22).
+    assert!(contient(&textes, "Aspect des traits des repères"), "l'aspect des traits est sous la règle : {textes:?}");
+    // Plus de format ni de zones de sécurité : ils sont dans le menu Cadrage.
+    for absent in ["Format", "Zones de sécurité", "Action 93 %", ph::CROP, ph::SELECTION] {
         assert!(!contient(&textes, absent), "« {absent} » n'est plus dans la règle : {textes:?}");
     }
     assert!(contient(&textes, "ne sont jamais exportées"), "la note des aides d'écran reste");
@@ -195,11 +198,12 @@ fn the_framing_menu_is_the_first_icon_of_the_bottom_view_bar() {
     let loupe = trouver(&textes, ph::MAGNIFYING_GLASS).expect("loupe");
     assert!((cadrage.1.height() - loupe.1.height()).abs() < 0.5 && (cadrage.1.width() - loupe.1.width()).abs() < 0.5);
     assert!(!app.framing_any_on());
-    // Un clic ouvre le petit panneau : format, zones de sécurité, aspect des traits.
+    // Un clic ouvre le petit panneau : format et zones de sécurité (l'aspect des traits est sous la règle).
     let t = ecran.cliquer(&mut app, cadrage.1.center(), &mut barre);
-    for texte in ["Format", "Aucun", "16:9", "2.39:1", "Zones de sécurité", "Aspect des traits des repères"] {
+    for texte in ["Format", "Aucun", "16:9", "2.39:1", "Zones de sécurité"] {
         assert!(contient(&t, texte), "« {texte} » dans le menu Cadrage : {t:?}");
     }
+    assert!(!contient(&t, "Aspect des traits"), "l'aspect des traits n'est plus dans le menu Cadrage : {t:?}");
     assert!(contient(&t, "Action 93 %") && contient(&t, "Action 90 %"), "le choix des zones de sécurité : {t:?}");
     assert!(trouver(&t, ph::SELECTION).is_some(), "l'interrupteur des zones de sécurité");
     // Choisir un format.
