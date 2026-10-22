@@ -662,7 +662,8 @@ impl App {
     /// Le haut du panneau Réglages de l'outil pour le pinceau, le crayon et la gomme : la taille en
     /// premier, en grand (Anthony, 2026-10-18 : elle n'est plus que là, plus dans le panneau
     /// Pinceaux), l'opacité, puis le nom du réglage. Le panneau Pinceaux s'ouvre par la barre des
-    /// panneaux.
+    /// panneaux. La taille et l'opacité selon l'appui ne sont que dans « Plus de réglages » (Anthony,
+    /// 2026-10-22 : elles y étaient déjà, en double ici).
     pub(crate) fn brush_summary_ui(&mut self, ui: &mut egui::Ui) {
         self.size_row(ui);
         let target = self.panel_target();
@@ -671,14 +672,7 @@ impl App {
         let name = exact.map_or("(réglé à la main)".to_string(), |i| self.brushes.presets[i].name.clone());
         let base = self.base_preset(target);
         let s = self.panel_brush_mut();
-        ui.horizontal(|ui| {
-            interrupteur(ui, &mut s.pressure_size, ph::PEN_NIB, "Taille selon la pression", "Plus on appuie avec le stylet, plus le trait est gros.", "");
-            ui.label(RichText::new("Taille selon l'appui").small());
-        });
-        ui.horizontal(|ui| {
-            ui.add(egui::Slider::new(&mut s.opacity, 0.0..=1.0).text("Opacité"));
-            interrupteur(ui, &mut s.pressure_opacity, ph::PEN_NIB, "Opacité selon la pression", "Plus on appuie avec le stylet, plus le trait couvre.", "");
-        });
+        ui.add(egui::Slider::new(&mut s.opacity, 0.0..=1.0).text("Opacité"));
         ui.horizontal(|ui| {
             ui.label(RichText::new(name).strong());
             // Retouché à la main : on rappelle d'après quelle brosse (c'est elle que « Enregistrer » remplace).
