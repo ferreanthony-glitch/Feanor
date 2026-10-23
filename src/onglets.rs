@@ -577,6 +577,9 @@ impl App {
         if !fermeture {
             e.reserve_fx = Some(reserve);
             e.textures_gpu = textures;
+        } else {
+            // (Les dessins dérivés de l'onglet qui se ferme : rendus sur un autre fil, `lacher.rs`.)
+            crate::lacher::en_fond(reserve);
         }
         self.onglets[ancien].etat = Some(e);
         self.actif = vers;
@@ -733,6 +736,10 @@ impl App {
         if let Some(mut s) = e.partage.take() {
             let _ = std::thread::Builder::new().name("cooperation-fermeture".into()).spawn(move || s.fermer());
         }
+        // Le document, son historique et ses dessins dérivés sont rendus sur un autre fil (ceux d'un gros film tiennent des
+        // centaines de milliers de blocs, `lacher.rs`) ; le reste de l'onglet est lâché ici, comme avant.
+        let EtatProjet { doc, history, reserve_fx, .. } = *e;
+        crate::lacher::en_fond((doc, history, reserve_fx));
         nom
     }
 

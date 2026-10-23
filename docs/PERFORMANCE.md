@@ -1586,3 +1586,49 @@ remplacée par celle d'origine. Essais : `random_boards_with_rotated_cameras_alw
 étroite, fil à part, limite de 10 s, ordre de lecture et aucun recouvrement vérifiés) et
 `a_rotated_camera_wider_than_a_one_column_row_is_placed` (la planche qui gelait).
 
+## 25. Gros projets : fermer, remplacer et ouvrir un film de 300 plans (2026-10-23, branche `gros-projets`)
+
+Essai de charge du 2026-10-23 : un générateur de films « comme un court métrage de 7 à 10 minutes »
+(`lourd_tests.rs`, essais `#[ignore]` lancés à la main, voir l'en-tête du fichier ; `lourd_generer` fabrique le projet,
+`lourd_mesurer` le banc complet, `lourd_remplacer`, `lourd_fermer_onglet` et `lourd_planche` les mesures de cette section).
+Le film mesuré : **300 plans, 4 660 dessins, 766 Mo sur le disque, environ 160 000 tuiles de 16 Ko en mémoire**. Mesures
+sur une copie du projet, avec de faux `APPDATA` / `LOCALAPPDATA`. **La machine n'était pas seule** : d'autres travaux (un
+fuzzer sur 4 à 5 cœurs, des compilations) tournaient en même temps ; les temps de l'ordre de la seconde varient d'un passage
+à l'autre (jusqu'à × 2), les écarts de cent à mille fois ne le doivent pas.
+
+### 25.1 Fermer SHOT ou remplacer le projet : un quart d'heure (le tas de Windows)
+
+Fermer SHOT sur ce film, ou ouvrir un autre projet à sa place, gelait la fenêtre (« ne répond pas ») un quart d'heure. Ce
+n'était pas SHOT : **le tas par défaut de Windows rend les blocs de 16 Ko des tuiles (`Arc<[u32; 4096]>`) en un temps qui
+grandit comme le carré de leur nombre** (`lourd_tas`, un programme sans SHOT : 20 000 tuiles en 1 s, 40 000 en 4 s, 80 000
+en 20 s, 160 000 en 151 à 494 s). Le **tas segmenté** (Windows 10 2004 et plus) rend les mêmes 160 000 tuiles en 0,7 s.
+
+- **Le manifeste de `shot.exe`** (`build.rs`, `embarquer_manifeste`) demande le tas segmenté (`heapType` = `SegmentHeap`),
+  par l'éditeur de liens de MSVC (`/MANIFEST:EMBED` + `/MANIFESTINPUT`, `/MANIFESTUAC:NO`) : aucun autre outil, rien à
+  télécharger. Il n'y avait pas de manifeste avant ; il ne dit rien d'autre (winit règle la mise à l'échelle de l'écran au
+  démarrage, rien ne change à l'affichage ni aux boîtes de dialogue). Les exécutables d'essais l'ont aussi : les bancs
+  mesurent ce que SHOT fait vraiment. `SHOT_TAS_STANDARD=1` à la compilation le retire (comparaisons seulement). Essai
+  `le_tas_du_processus_est_le_tas_segmente` (`lacher_tests.rs`, signature de l'en-tête du tas du processus).
+- **Par-dessus, l'interface n'attend plus jamais de rendre la mémoire d'un projet** (`lacher.rs`) : le document remplacé
+  (`App::load_doc` : Ouvrir, Nouveau, fermer le dernier onglet), son historique et ses dessins dérivés des effets partent sur
+  un fil à eux, sous la priorité de l'interface ; de même pour l'onglet qu'on ferme (`jeter_onglet` ; le reste de l'onglet
+  se lâche comme avant). À la sortie (`App::sortie_sans_rendre`, après `fermeture` : écritures finies, copies de secours
+  fermées, réglages écrits), les documents, historiques et dessins dérivés ne sont pas rendus du tout : le système reprend
+  la mémoire du processus d'un coup. Tout le reste se lâche comme avant (exports arrêtés, fils et serveurs prévenus).
+  L'historique vidé garde un numéro qui avance (`History::take_steps`) : les gestes en cours et la copie de secours le voient
+  comme avant.
+
+| Film de 300 plans | Avant (22a8c9a) | Après |
+|---|---|---|
+| Fermer `shot.exe` (de la demande à la fin du processus) | 926 s (machine calme, ce matin) ; 1 128 s (chargée) | **0,9 s** |
+| Remplacer le projet (`load_doc`, fil de l'interface) | 1 069 s ; 1 475 s (chargée) | **0,014 s** |
+| Fermer l'onglet caché du film (fil de l'interface) | (même tas, mêmes minutes) | **2 ms** |
+| Mémoire rendue, sur le fil de fond | — | remplacement : 7,6 → 0,37 Go en moins de 5 s ; onglet fermé : 7,8 → 0,5 Go en 4 s |
+| Lecture du projet (fil de fond) | 13,5–14,4 s | 8,5–13,5 s |
+
+**Ce que coûte le tas segmenté ailleurs.** Mémoire : un peu plus, environ **+10 %** sur ce film (projet adopté : 5,8 → 6,5
+Go ; au calme, rejeux finis : 6,9–7,0 → 7,5–7,6 Go). Vitesse : le même exécutable d'essais avec et sans le manifeste
+(remplacé par `mt.exe`), bancs en alternance : `perf_cpu_bench` identique (composition, image filmée, vignette, PNG codé et
+décodé, feuille en tuiles, cent images d'interface : à ± 2 %, trois passages chacun) ; `perf_heavy_plan`,
+`perf_long_project`, `perf_project_open_save` égaux à ± 3 % (le bruit de la machine ; le temps d'interface est le même).
+

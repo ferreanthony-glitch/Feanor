@@ -1360,6 +1360,14 @@ pub fn forget_all() {
     COVERS.lock().unwrap_or_else(|e| e.into_inner()).clear();
 }
 
+/// Comme `forget_all`, mais rend les dessins dérivés oubliés au lieu de les lâcher ici : l'appelant les fait rendre sur
+/// un autre fil (`lacher.rs`, autre projet qui prend la place).
+pub(crate) fn forget_all_rendre() -> crate::fxcache::Reserve {
+    let r = crate::fxcache::mettre_de_cote();
+    COVERS.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    r
+}
+
 /// Demande d'avance les dessins dérivés de `items` (les images qui viennent, en lecture),
 /// `prio` : leur rang dans l'avenir (1 : la suivante). Rien pour ce qui est déjà gardé.
 pub fn prefetch(doc: &Document, items: &[crate::render::PlanItem], prio: u32, level: u8) {

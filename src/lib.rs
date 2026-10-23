@@ -111,6 +111,9 @@ mod perf;
 mod perf_tests;
 #[cfg(test)]
 mod optim_rendu_tests;
+mod lacher;
+#[cfg(test)]
+mod lacher_tests;
 pub mod logo;
 #[cfg(test)]
 mod logo_tests;
