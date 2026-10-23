@@ -107,7 +107,7 @@ pub(crate) fn projet_long(plans: usize, layers: usize, frames: usize, tiles: usi
 }
 
 /// Un seul plan, très chargé : `layers` calques de `frames` images.
-fn plan_charge(layers: usize, frames: usize, tiles: usize) -> Document {
+pub(crate) fn plan_charge(layers: usize, frames: usize, tiles: usize) -> Document {
     let mut doc = Document::with_frame(1920, 1080, 24);
     let mut ls = Vec::new();
     for l in 0..layers {
@@ -437,7 +437,7 @@ fn rapporter(titre: &str, mesures: &[Mesure]) {
 /// `n` images, `dt` secondes l'une après l'autre ; les événements de chacune sont donnés par
 /// `avant(numéro)` (qui peut aussi agir sur l'application). Les sections du profileur sont
 /// affichées (les plus coûteuses).
-fn scenario(titre: &str, b: &mut Banc, n: usize, dt: f64, mut avant: impl FnMut(&mut Banc, usize) -> Vec<Event>) -> Vec<Mesure> {
+pub(crate) fn scenario(titre: &str, b: &mut Banc, n: usize, dt: f64, mut avant: impl FnMut(&mut Banc, usize) -> Vec<Event>) -> Vec<Mesure> {
     crate::perf::activer(true);
     let mesures: Vec<Mesure> = (0..n)
         .map(|k| {
@@ -455,7 +455,7 @@ fn scenario(titre: &str, b: &mut Banc, n: usize, dt: f64, mut avant: impl FnMut(
 
 /// Images jusqu'à ce que plus rien ne demande de repeindre (vignettes, rejeux…), ou `max` images.
 /// Renvoie le nombre d'images et le temps total (ms).
-fn jusqu_au_repos(b: &mut Banc, max: usize) -> (usize, f64) {
+pub(crate) fn jusqu_au_repos(b: &mut Banc, max: usize) -> (usize, f64) {
     let t = Instant::now();
     for k in 0..max {
         let m = b.image(Vec::new(), 1.0 / 60.0);
@@ -473,7 +473,7 @@ fn jusqu_au_repos(b: &mut Banc, max: usize) -> (usize, f64) {
 
 /// Quatre déplacements de souris par image dans la zone `r` (de quoi garder l'interface éveillée,
 /// comme une main sur la souris).
-fn bouge(k: usize, r: Rect) -> Vec<Event> {
+pub(crate) fn bouge(k: usize, r: Rect) -> Vec<Event> {
     (0..4)
         .map(|j| {
             let u = ((k * 4 + j) % 97) as f32 / 97.0;
@@ -1301,4 +1301,41 @@ fn perf_save_ui_thread() {
     }
     mesurer(&mut b, "rien de modifié");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+// ------------------------------------------------------------------ passe « optim-rendu » (2026-10-23)
+
+/// Tuiles envoyées à la carte graphique depuis le début.
+fn tuiles_envoyees(b: &Banc) -> u64 {
+    b.app.gpu.as_ref().map_or(0, |g| g.stats().copies)
+}
+
+/// Tirer l'opacité d'un calque (ou une clé de position) dans un plan de 15 calques de 40 tuiles : avant, chaque image du geste
+/// appelait `invalidate_all` (toutes les tuiles de tous les dessins du plan renvoyées à la carte graphique, le hors-feuille
+/// refait) ; depuis, `invalidate_params`. Les deux, l'un après l'autre, dans le même processus (`optim_rendu_tests.rs` vérifie
+/// le geste réel).
+#[test]
+#[ignore]
+fn perf_parameter_drag() {
+    let mut b = banc(plan_charge(15, 200, 40), true);
+    b.app.set_mode(Mode::Animation);
+    b.chauffer(10);
+    jusqu_au_repos(&mut b, 600);
+    let zone = Rect::from_min_size(pos2(500.0, 880.0), vec2(900.0, 120.0));
+    scenario("repère : souris qui bouge", &mut b, 90, 1.0 / 60.0, |_, k| bouge(k, zone));
+    for passe in 0..2 {
+        for (titre, ancien) in [("opacité tirée, invalidate_all (avant)", true), ("opacité tirée, invalidate_params (après)", false)] {
+            let t0 = tuiles_envoyees(&b);
+            scenario(&format!("{titre}, série {}", passe + 1), &mut b, 90, 1.0 / 60.0, |b, k| {
+                b.app.doc.panels[0].layers[3].opacity = 0.3 + (k % 50) as f32 * 0.01;
+                if ancien {
+                    b.app.renderer.invalidate_all();
+                } else {
+                    b.app.renderer.invalidate_params();
+                }
+                bouge(k, zone)
+            });
+            println!("     tuiles envoyées à la carte : {} en 90 images", tuiles_envoyees(&b) - t0);
+        }
+    }
 }

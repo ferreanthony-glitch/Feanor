@@ -109,6 +109,8 @@ mod parallele_tests;
 mod perf;
 #[cfg(test)]
 mod perf_tests;
+#[cfg(test)]
+mod optim_rendu_tests;
 pub mod logo;
 #[cfg(test)]
 mod logo_tests;

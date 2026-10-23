@@ -937,10 +937,22 @@ impl Renderer {
         self.gpu = on;
     }
 
+    /// Des pixels ont pu changer partout (dessins, structure du plan) : tout se renvoie à la carte graphique et le
+    /// hors-feuille se refait.
     pub fn invalidate_all(&mut self) {
         self.dirty_all = true;
         self.gpu_all = true;
         self.world_all = true;
+    }
+
+    /// Seul un réglage a changé, aucun pixel d'aucun dessin : opacité, mode de fusion, clé de position ou d'effet, exposition,
+    /// fin du plan (ce qui est montré à cette image). Tout cela est dans le plan à composer (`Plan`), que la carte graphique
+    /// compare à celui de l'image gardée (`ItemKey`) et le hors-feuille au sien (`monde.rs`) : rien n'est renvoyé à la carte,
+    /// le hors-feuille ne se refait pas pour rien. Seule l'image du processeur (sans carte graphique) se recompose. Pendant
+    /// qu'on tire une opacité, `invalidate_all` renvoyait à la carte toutes les tuiles de tous les dessins du plan, à chaque
+    /// image du geste (+3 à 5 ms sur 15 calques de 40 tuiles, `perf_tests::perf_parameter_drag`).
+    pub fn invalidate_params(&mut self) {
+        self.dirty_all = true;
     }
 
     /// Un fond arrivé de l'arrière-plan (`fx::fond_poll`) remplace celui d'avant : le plan est le
