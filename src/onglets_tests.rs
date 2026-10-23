@@ -300,7 +300,9 @@ fn switching_keeps_the_playhead_the_selection_and_the_view() {
     let mut b = banc(projet(200, 6), false);
     b.app.cur_frame = 3;
     b.app.view.zoom = 3.25;
-    b.app.layer_sel = vec![4242];
+    // (Des calques qui existent : les calques choisis disparus sont oubliés à chaque image, `App::clamp_nav`.)
+    let choisi = b.app.layers()[0].id;
+    b.app.layer_sel = vec![choisi];
     b.app.frame_sel = Some((1, 4));
     b.app.timeline_cell = 33.0;
     b.app.montage_zoom = 7.0;
@@ -316,14 +318,15 @@ fn switching_keeps_the_playhead_the_selection_and_the_view() {
     assert!(b.app.layer_sel.is_empty() && b.app.frame_sel.is_none());
     assert_ne!(b.app.view.zoom, 3.25);
     b.app.cur_frame = 1;
-    b.app.layer_sel = vec![7];
+    let choisi_b = b.app.layers()[0].id;
+    b.app.layer_sel = vec![choisi_b];
     assert!(b.app.activer_onglet(0));
-    assert_eq!((b.app.cur_frame, b.app.view.zoom, b.app.layer_sel.clone(), b.app.frame_sel), (3, 3.25, vec![4242], Some((1, 4))));
+    assert_eq!((b.app.cur_frame, b.app.view.zoom, b.app.layer_sel.clone(), b.app.frame_sel), (3, 3.25, vec![choisi], Some((1, 4))));
     assert_eq!((b.app.timeline_cell, b.app.montage_zoom, b.app.mode), (33.0, 7.0, Mode::Animation));
     assert_eq!(b.app.espace.mode(), Mode::Animation, "le projet revient dans son espace de travail");
     assert!(!b.app.playing);
     assert!(b.app.activer_onglet(1));
-    assert_eq!((b.app.cur_frame, b.app.layer_sel.clone()), (1, vec![7]));
+    assert_eq!((b.app.cur_frame, b.app.layer_sel.clone()), (1, vec![choisi_b]));
 }
 
 #[test]
