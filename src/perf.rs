@@ -61,6 +61,32 @@ thread_local! {
     static ETAT: RefCell<Etat> = RefCell::new(Etat::default());
 }
 
+#[cfg(test)]
+thread_local! {
+    static ANCIEN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Essais de performance seulement : le fil d'essai repasse par le code d'avant une optimisation (numéros refaits par bloc,
+/// planche refaite à chaque appel, vignettes jamais lâchées…), pour comparer avant et après dans le même processus. Toujours
+/// faux dans SHOT.
+#[inline]
+pub fn ancien() -> bool {
+    #[cfg(test)]
+    {
+        ANCIEN.with(|a| a.get())
+    }
+    #[cfg(not(test))]
+    {
+        false
+    }
+}
+
+/// `ancien` pour le fil d'essai courant.
+#[cfg(test)]
+pub fn set_ancien(on: bool) {
+    ANCIEN.with(|a| a.set(on));
+}
+
 /// La mesure est-elle allumée ?
 pub fn actif() -> bool {
     ETAT.with(|e| e.borrow().actif)

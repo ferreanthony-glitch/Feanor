@@ -296,7 +296,7 @@ impl App {
         });
         if self.edited(&resp.inner) {
             self.layers_mut()[li].opacity = (pct / 100.0).clamp(0.0, 1.0);
-            self.renderer.invalidate_all();
+            self.renderer.invalidate_params();
         }
         if !folder {
             ui.menu_button(format!("Mode de fusion : {}", blend.label()), |ui| {
@@ -426,7 +426,7 @@ impl App {
             });
             if self.edited(&resp.inner) {
                 self.layers_mut()[li].opacity = (pct / 100.0).clamp(0.0, 1.0);
-                self.renderer.invalidate_all();
+                self.renderer.invalidate_params();
             }
         }
         if !folder {

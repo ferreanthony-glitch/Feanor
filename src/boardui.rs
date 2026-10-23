@@ -218,6 +218,20 @@ pub(crate) struct Vignettes {
     /// Les fenêtres d'export de la planche et du color script (`plancheui.rs`, `colorscriptui.rs`).
     pub planche: crate::plancheui::Etat,
     pub colorscript: crate::colorscriptui::Etat,
+    /// La dernière disposition de la planche et ce dont elle dépend (`board::CacheDisposition`) : `board_layout` ne la refait que
+    /// si quelque chose a changé.
+    pub disposition: std::cell::RefCell<board::CacheDisposition>,
+    /// Les notes déjà mesurées (`measure_notes`) : leur texte et leur nombre de lignes, à cette largeur et à cette échelle.
+    pub mesures: MesuresNotes,
+}
+
+/// Les notes mesurées par `measure_notes` (le nombre de lignes d'une note ne dépend que de son texte, de la largeur des cases et de
+/// l'échelle de l'écran) : une note qui n'a pas changé n'est plus remise en page, et rien n'est alloué quand aucune n'a changé.
+#[derive(Default)]
+pub(crate) struct MesuresNotes {
+    largeur: u32,
+    ppp: u32,
+    notes: HashMap<u64, (String, usize)>,
 }
 
 impl Default for Vignettes {
@@ -244,6 +258,8 @@ impl Default for Vignettes {
             depots: Vec::new(),
             planche: Default::default(),
             colorscript: Default::default(),
+            disposition: Default::default(),
+            mesures: Default::default(),
         }
     }
 }
@@ -268,7 +284,13 @@ impl App {
         let s = BoardSettings { rows: 0, ..self.layout.board_settings() };
         let hold = self.vignettes.cam.as_ref().filter(|g| g.actif && !g.annule).and_then(|g| g.hold);
         let opt = board::Options { hold, ..board::Options::pale(self.layout.board_min_rows) };
-        board::layout_with(&self.doc, &s, &self.vignettes.lines, self.vignettes.empty_joins, &opt)
+        // (Gardée tant que rien de ce dont elle dépend ne change : `board::CacheDisposition`. Un essai de performance mesure aussi
+        // l'ancien chemin, refaite à chaque appel : `perf::ancien`.)
+        if crate::perf::ancien() {
+            return board::layout_with(&self.doc, &s, &self.vignettes.lines, self.vignettes.empty_joins, &opt);
+        }
+        let mut cache = self.vignettes.disposition.borrow_mut();
+        board::layout_cache(&self.doc, &s, &self.vignettes.lines, self.vignettes.empty_joins, &opt, &mut cache)
     }
 
     /// La planche a glissé (`BoardLayout::decalage` : une enveloppe de caméra dépasse la page à gauche ou en haut) : la vue défile
@@ -417,7 +439,8 @@ impl App {
 
     /// Le texte de la bande de note de l'image `place` : les notes du plan (première image) ou de sa marque.
     pub(crate) fn card_notes(&self, place: &CardPlace) -> &str {
-        let p = &self.doc.panels[place.panel];
+        // (Une case d'une planche faite avant un changement du film peut désigner un plan qui n'est plus là : rien.)
+        let Some(p) = self.doc.panels.get(place.panel) else { return "" };
         if place.frame == 0 {
             &p.notes
         } else {
@@ -429,6 +452,10 @@ impl App {
     /// s'en sert pour descendre la rangée suivante juste ce qu'il faut.
     fn measure_notes(&mut self, ctx: &egui::Context, settings: &BoardSettings) {
         let width = (settings.card_w.clamp(CARD_MIN, CARD_MAX) - NOTE_PAD * 2.0).max(10.0);
+        if !crate::perf::ancien() {
+            self.measure_notes_gardees(ctx, width);
+            return;
+        }
         let mut lines = HashMap::new();
         for p in &self.doc.panels {
             let marks = p.marks.iter().map(|m| (m.id, m.notes.as_str()));
@@ -441,6 +468,57 @@ impl App {
                 lines.insert(id, galley.rows.len().clamp(1, NOTE_MAX_LINES));
             }
         }
+        self.vignettes.lines = lines;
+    }
+
+    /// `measure_notes` (le même nombre de lignes), sans remettre en page une note déjà mesurée à cette largeur et à cette échelle :
+    /// à chaque image d'écran, un passage sur les notes qui compare leurs textes ; rien n'est alloué si aucune n'a changé.
+    fn measure_notes_gardees(&mut self, ctx: &egui::Context, width: f32) {
+        let ppp = ctx.pixels_per_point();
+        let m = &mut self.vignettes.mesures;
+        if m.largeur != width.to_bits() || m.ppp != ppp.to_bits() {
+            *m = MesuresNotes { largeur: width.to_bits(), ppp: ppp.to_bits(), notes: HashMap::new() };
+        }
+        fn notes(p: &crate::document::Panel) -> impl Iterator<Item = (u64, &str)> {
+            std::iter::once((p.id, p.notes.as_str())).chain(p.marks.iter().map(|m| (m.id, m.notes.as_str())))
+        }
+        let mut vues = 0;
+        let mut pareil = true;
+        'plans: for p in &self.doc.panels {
+            for (id, text) in notes(p) {
+                if text.trim().is_empty() {
+                    continue;
+                }
+                vues += 1;
+                if !m.notes.get(&id).is_some_and(|(t, _)| t == text) {
+                    pareil = false;
+                    break 'plans;
+                }
+            }
+        }
+        if pareil && vues == m.notes.len() && self.vignettes.lines.len() == vues {
+            return;
+        }
+        let mut gardees: HashMap<u64, (String, usize)> = HashMap::with_capacity(vues);
+        let mut lines = HashMap::with_capacity(vues);
+        for p in &self.doc.panels {
+            for (id, text) in notes(p) {
+                if text.trim().is_empty() {
+                    continue;
+                }
+                let n = match m.notes.remove(&id).or_else(|| gardees.remove(&id)) {
+                    Some((t, n)) if t == text => n,
+                    _ => {
+                        let size = board::note_font_size(text.chars().count());
+                        let galley = ctx.fonts(|f| f.layout_job(note_job(text, size, width, NOTE_INK)));
+                        galley.rows.len().clamp(1, NOTE_MAX_LINES)
+                    }
+                };
+                gardees.insert(id, (text.to_string(), n));
+                lines.insert(id, n);
+            }
+        }
+        m.notes = gardees;
         self.vignettes.lines = lines;
     }
 
@@ -1070,14 +1148,16 @@ impl App {
                 tient = false;
                 break;
             }
-            self.board_tuile(ui, &painter, view, xf, &layout, k, pan_mode, deadline);
+            self.board_tuile(ui, &painter, view, xf, &layout, k, pan_mode, deadline, plans);
         }
+        // (Les numéros des plans, trouvés une fois pour toutes les cases : un par case refaisait l'ordre du film.)
+        let numeros = crate::numerotation::Numeros::pour_l_ecran(&self.doc);
         for k in (0..layout.cards.len()).take_while(|_| tient) {
             if !self.case_tient(&layout, plans, k) {
                 tient = false;
                 break;
             }
-            self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, deadline);
+            self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, deadline, &numeros, plans);
         }
         if !tient || !self.case_tient(&layout, plans, layout.cards.len().saturating_sub(1)) {
             ui.ctx().request_repaint();
@@ -1446,7 +1526,7 @@ impl App {
     /// tuile, composée sur un fil de fond. Hors de l'enveloppe, la tuile ne garde que le trait qui déborde. Peinte avant les cases :
     /// son rectangle déborde de l'enveloppe, les cases qui s'y trouvent passent par-dessus.
     #[allow(clippy::too_many_arguments)]
-    fn board_tuile(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant) {
+    fn board_tuile(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant, plans: usize) {
         let Some(mv) = layout.move_of(k).filter(|_| self.tool != Tool::Camera) else { return };
         let place = &layout.cards[k];
         let r = xf.rect(mv.tuile.rect);
@@ -1479,6 +1559,11 @@ impl App {
             self.card_canvas(&mut child, r);
             self.vignettes.zone = None;
             self.vignettes.enveloppe.clear();
+            // (Le menu du clic droit du dessin a pu changer le film : comme dans `board_card`.)
+            if !self.case_tient(layout, plans, k) {
+                ui.ctx().request_repaint();
+                return;
+            }
             // Hors de l'enveloppe (les coins de la tuile) : le papier de la planche, et ce que la vignette garde du trait qui déborde.
             // Tant que la tuile n'est pas refaite pour les nouveaux cadres, rien de tout cela : le dessin vivant montre tout le trait
             // dans la tuile, rien n'est coupé à une ligne d'avant le geste ; la marge revient dès que la tuile est prête.
@@ -1526,7 +1611,7 @@ impl App {
     /// Une vignette (une image de storyboard) : son numéro de plan s'il commence, l'image (le dessin lui-même
     /// pour l'image courante), son filet, sa bande de note. Les gestes sont pris plus haut (`board_press`).
     #[allow(clippy::too_many_arguments)]
-    fn board_card(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant) {
+    fn board_card(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant, numeros: &crate::numerotation::Numeros, plans: usize) {
         let place = &layout.cards[k];
         let mv = layout.move_of(k).filter(|_| self.tool != Tool::Camera);
         let card = xf.rect(place.card);
@@ -1553,7 +1638,7 @@ impl App {
             let font = (11.0 * xf.zoom).clamp(7.0, 22.0);
             let ink = Color32::from_gray(70);
             let clip = painter.with_clip_rect(label.intersect(view));
-            let galley = clip.layout_no_wrap(self.doc.scene_label(place.scene), FontId::proportional(font), ink);
+            let galley = clip.layout_no_wrap(numeros.scene_label(&self.doc, place.scene), FontId::proportional(font), ink);
             let at = pos2(label.left() + 1.0, label.top() + 1.0);
             clip.galley(at, galley, ink);
         }
@@ -1579,6 +1664,13 @@ impl App {
                     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area).id_salt("planche_vive"));
                     child.set_clip_rect(thumb.intersect(view));
                     self.card_canvas(&mut child, thumb);
+                    // Le menu du clic droit du dessin s'ouvre là-dedans (`canvas_panel`) : « Réunir avec le plan précédent », « Couper »…
+                    // peuvent avoir changé le film. La suite de la case lit `place` et `i`, de la planche du début de l'image : s'ils ne
+                    // désignent plus le même plan, la case s'arrête là (la planche se refait à l'image suivante).
+                    if !self.case_tient(layout, plans, k) {
+                        ui.ctx().request_repaint();
+                        return;
+                    }
                     // (Sa vignette se tient à jour en arrière-plan : quand une autre image prend la main, elle montre déjà le dernier trait.)
                     if let Some(c) = &case {
                         paint_ring(painter, thumb, c);

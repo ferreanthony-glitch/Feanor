@@ -720,7 +720,8 @@ impl App {
             Handle::FxKey { layer, effect, key } => {
                 let Some(e) = self.doc.panels[pi].layers.get_mut(layer).and_then(|l| l.fx.get_mut(effect)) else { return };
                 let f = move_fx_key(&mut e.keys, key, frame);
-                self.renderer.invalidate_all();
+                // (Les réglages des effets à cette image sont dans le plan : aucun pixel de dessin ne change.)
+                self.renderer.invalidate_params();
                 format!("Clé d'effet : image {}.", label(self, f))
             }
             // Le bord droit d'un dessin est le début de la clé suivante. Par défaut les clés d'après
@@ -820,7 +821,9 @@ impl App {
                 let (old, n) = (backup.panel.frame_count(), edge.max(1));
                 backup.restore(&mut self.doc);
                 self.doc.set_duration(pi, n);
-                self.renderer.invalidate_all();
+                // (Rogner ou rallonger la fin range des images dans la réserve du plan ou les en sort : aucun dessin n'est créé
+                // ni modifié, seul change ce que l'image courante montre, qui est dans le plan à composer.)
+                self.renderer.invalidate_params();
                 let base = format!("Durée du plan : {}", crate::storyboard::duration_label(n, self.doc.fps));
                 match sound_shift_note(&self.doc, pi, old, n) {
                     Some(note) => format!("{base}. {note}"),
@@ -891,7 +894,9 @@ impl App {
         if p.frame_count() < plan_len {
             p.length = plan_len;
         }
-        self.renderer.invalidate_all();
+        // (Expositions, début, fin, décalage d'un calque : les mêmes dessins à d'autres images ; ce que l'image courante
+        // montre est dans le plan à composer, aucun pixel n'est renvoyé à la carte graphique.)
+        self.renderer.invalidate_params();
     }
 
     /// Lâche la poignée : une étape d'annulation si quelque chose a bougé.
@@ -910,7 +915,7 @@ impl App {
                     p.length = plan_len;
                 }
             }
-            self.renderer.invalidate_all();
+            self.renderer.invalidate_params();
         }
         let move_mode = std::mem::take(&mut self.key_drag_mode);
         let Some(p) = self.doc.panels.iter().find(|p| p.id == d.panel) else { return };

@@ -119,6 +119,32 @@ fn joining_a_moving_plan_when_the_last_plan_moves_too_does_not_crash() {
     assert!(b.app.cur_panel < b.app.doc.panels.len());
 }
 
+/// « Réunir avec le plan précédent » depuis le clic droit de l'image du DERNIER plan, courant, case simple (sans mouvement de
+/// caméra) : le menu s'ouvre dans le dessin vivant de la case (`canvas_panel`), au milieu de `board_card` ; au retour, la suite
+/// de la case lisait encore son rang d'avant la réunion (« index out of bounds : the len is 2 but the index is 2 » dans
+/// `card_notes`, relecture du 2026-10-23).
+#[test]
+fn joining_the_current_last_plan_from_its_live_card_does_not_crash() {
+    let mut doc = Document::with_frame(160, 90, 24);
+    let a = doc.add_scene_after(0);
+    doc.add_scene_after(a);
+    doc.into_plans();
+    let mut b = ouvert(doc, 6);
+    let n = b.app.doc.panels.len();
+    assert_eq!(n, 3);
+    b.app.select_panel(n - 1);
+    b.chauffer(3);
+    let layout = b.app.board_layout();
+    let k = layout.cards.iter().position(|c| c.panel == n - 1).expect("la case du dernier plan");
+    assert!(layout.cards[k].mv.is_none(), "une case simple");
+    let case = vignette(&b, k);
+    let p = menu(&mut b, case.center(), "Réunir avec le plan précédent");
+    clic(&mut b, p);
+    b.chauffer(4);
+    assert_eq!(b.app.doc.panels.len(), n - 1, "le dernier plan est réuni au précédent");
+    assert!(b.app.cur_panel < b.app.doc.panels.len());
+}
+
 /// Le menu du clic droit d'une case reste ouvert pendant un Ctrl+Z qui décale les plans : il vise toujours le plan sur lequel
 /// on l'a ouvert (il gardait son rang, que l'annulation donnait au plan suivant : « Animer cette image » animait un autre plan).
 #[test]
@@ -137,14 +163,14 @@ fn the_case_menu_keeps_its_plan_when_an_undo_shifts_the_plans() {
     touche(&mut b, Key::Z, Modifiers::COMMAND);
     b.chauffer(2);
     assert_eq!(b.app.doc.panels.len(), n - 1, "l'annulation a retiré la copie");
+    // (Les deux constats sont sans condition : un menu fermé par l'annulation, ou une entrée qui ne fait rien, ne passent pas
+    // pour un succès.)
     let encore = textes_a_l_ecran(&mut b).iter().any(|(s, _)| s == "Animer cette image");
-    if encore {
-        clic(&mut b, p);
-        b.chauffer(2);
-    }
-    if b.app.mode == Mode::Animation {
-        assert_eq!(b.app.doc.panels[b.app.cur_panel].id, vise, "« Animer cette image » anime le plan du clic droit, pas son voisin");
-    }
+    assert!(encore, "le menu reste ouvert pendant l'annulation");
+    clic(&mut b, p);
+    b.chauffer(2);
+    assert_eq!(b.app.mode, Mode::Animation, "« Animer cette image » passe à l'animation");
+    assert_eq!(b.app.doc.panels[b.app.cur_panel].id, vise, "« Animer cette image » anime le plan du clic droit, pas son voisin");
 }
 
 /// Réunir le plan courant et le suivant (la barre noire entre leurs cases) quand le calque du bas du suivant ne ressemble à aucun

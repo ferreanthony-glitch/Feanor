@@ -600,7 +600,8 @@ impl App {
         let resp = bulle(resp, name, description, "");
         if self.edited(&resp) {
             self.layers_mut()[li].opacity = value;
-            self.renderer.invalidate_all();
+            // (Un réglage : aucune tuile n'est renvoyée à la carte graphique pendant le geste.)
+            self.renderer.invalidate_params();
         }
     }
 

@@ -107,7 +107,7 @@ pub(crate) fn projet_long(plans: usize, layers: usize, frames: usize, tiles: usi
 }
 
 /// Un seul plan, très chargé : `layers` calques de `frames` images.
-fn plan_charge(layers: usize, frames: usize, tiles: usize) -> Document {
+pub(crate) fn plan_charge(layers: usize, frames: usize, tiles: usize) -> Document {
     let mut doc = Document::with_frame(1920, 1080, 24);
     let mut ls = Vec::new();
     for l in 0..layers {
@@ -437,7 +437,7 @@ fn rapporter(titre: &str, mesures: &[Mesure]) {
 /// `n` images, `dt` secondes l'une après l'autre ; les événements de chacune sont donnés par
 /// `avant(numéro)` (qui peut aussi agir sur l'application). Les sections du profileur sont
 /// affichées (les plus coûteuses).
-fn scenario(titre: &str, b: &mut Banc, n: usize, dt: f64, mut avant: impl FnMut(&mut Banc, usize) -> Vec<Event>) -> Vec<Mesure> {
+pub(crate) fn scenario(titre: &str, b: &mut Banc, n: usize, dt: f64, mut avant: impl FnMut(&mut Banc, usize) -> Vec<Event>) -> Vec<Mesure> {
     crate::perf::activer(true);
     let mesures: Vec<Mesure> = (0..n)
         .map(|k| {
@@ -455,7 +455,7 @@ fn scenario(titre: &str, b: &mut Banc, n: usize, dt: f64, mut avant: impl FnMut(
 
 /// Images jusqu'à ce que plus rien ne demande de repeindre (vignettes, rejeux…), ou `max` images.
 /// Renvoie le nombre d'images et le temps total (ms).
-fn jusqu_au_repos(b: &mut Banc, max: usize) -> (usize, f64) {
+pub(crate) fn jusqu_au_repos(b: &mut Banc, max: usize) -> (usize, f64) {
     let t = Instant::now();
     for k in 0..max {
         let m = b.image(Vec::new(), 1.0 / 60.0);
@@ -473,7 +473,7 @@ fn jusqu_au_repos(b: &mut Banc, max: usize) -> (usize, f64) {
 
 /// Quatre déplacements de souris par image dans la zone `r` (de quoi garder l'interface éveillée,
 /// comme une main sur la souris).
-fn bouge(k: usize, r: Rect) -> Vec<Event> {
+pub(crate) fn bouge(k: usize, r: Rect) -> Vec<Event> {
     (0..4)
         .map(|j| {
             let u = ((k * 4 + j) % 97) as f32 / 97.0;
@@ -1303,7 +1303,89 @@ fn perf_save_ui_thread() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-/// Des notes à chaque plan et deux clés de caméra (`cams`) : un manifeste comme celui d'un vrai film.
+// ------------------------------------------------------------------ passe « optim-rendu » (2026-10-23)
+
+/// Tuiles envoyées à la carte graphique depuis le début.
+fn tuiles_envoyees(b: &Banc) -> u64 {
+    b.app.gpu.as_ref().map_or(0, |g| g.stats().copies)
+}
+
+/// Tirer l'opacité d'un calque (ou une clé de position) dans un plan de 15 calques de 40 tuiles : avant, chaque image du geste
+/// appelait `invalidate_all` (toutes les tuiles de tous les dessins du plan renvoyées à la carte graphique, le hors-feuille
+/// refait) ; depuis, `invalidate_params`. Les deux, l'un après l'autre, dans le même processus (`optim_rendu_tests.rs` vérifie
+/// le geste réel).
+#[test]
+#[ignore]
+fn perf_parameter_drag() {
+    let mut b = banc(plan_charge(15, 200, 40), true);
+    b.app.set_mode(Mode::Animation);
+    b.chauffer(10);
+    jusqu_au_repos(&mut b, 600);
+    let zone = Rect::from_min_size(pos2(500.0, 880.0), vec2(900.0, 120.0));
+    scenario("repère : souris qui bouge", &mut b, 90, 1.0 / 60.0, |_, k| bouge(k, zone));
+    for passe in 0..2 {
+        for (titre, ancien) in [("opacité tirée, invalidate_all (avant)", true), ("opacité tirée, invalidate_params (après)", false)] {
+            let t0 = tuiles_envoyees(&b);
+            scenario(&format!("{titre}, série {}", passe + 1), &mut b, 90, 1.0 / 60.0, |b, k| {
+                b.app.doc.panels[0].layers[3].opacity = 0.3 + (k % 50) as f32 * 0.01;
+                if ancien {
+                    b.app.renderer.invalidate_all();
+                } else {
+                    b.app.renderer.invalidate_params();
+                }
+                bouge(k, zone)
+            });
+            println!("     tuiles envoyées à la carte : {} en 90 images", tuiles_envoyees(&b) - t0);
+        }
+    }
+}
+
+/// Le montage d'un film de 600 plans, beaucoup de blocs visibles : avant (`perf::ancien` : numéros refaits par titre et par
+/// séquence, règle et barre des séquences peintes sur tout le film) puis après, deux fois, dans le même processus.
+#[test]
+#[ignore]
+fn perf_montage_numbering() {
+    let mut b = banc(projet_long(600, 3, 24, 2), true);
+    jusqu_au_repos(&mut b, 3000);
+    let zone = Rect::from_min_size(pos2(500.0, 880.0), vec2(900.0, 120.0));
+    let total = b.app.doc.total_frames();
+    for zoom in [0.6f32, 3.0] {
+        b.app.montage_zoom = zoom;
+        b.app.goto_global(total / 2);
+        b.app.follow_frame = true;
+        b.chauffer(4);
+        jusqu_au_repos(&mut b, 3000);
+        for passe in 0..2 {
+            for (titre, ancien) in [("avant", true), ("après", false)] {
+                crate::perf::set_ancien(ancien);
+                b.chauffer(2);
+                scenario(&format!("montage 600 plans, zoom {zoom}, souris, {titre} ({})", passe + 1), &mut b, 90, 1.0 / 60.0, |_, k| bouge(k, zone));
+            }
+        }
+        crate::perf::set_ancien(false);
+    }
+    // Les numéros seuls, comme une image d'écran du montage : 160 titres et une étiquette par séquence.
+    let doc = &b.app.doc;
+    for (titre, ancien) in [("avant", true), ("après", false)] {
+        crate::perf::set_ancien(ancien);
+        let t = Instant::now();
+        let mut n = 0;
+        for _ in 0..20 {
+            let numeros = crate::numerotation::Numeros::pour_l_ecran(doc);
+            for i in 0..160 {
+                n += crate::planversui::titre_avec_version_n(doc, &numeros, i * 3).len();
+            }
+            for s in &doc.sequences {
+                n += numeros.sequence_label(doc, s.id).len();
+            }
+        }
+        println!("PERF numéros d'une image du montage (600 plans, 160 titres, 60 séquences), {titre} : {:.3} ms ({n})", t.elapsed().as_secs_f64() * 1e3 / 20.0);
+    }
+    crate::perf::set_ancien(false);
+}
+
+/// Des notes sous toutes les cases, et (`cams`) un mouvement de caméra sur chaque plan : un manifeste comme celui d'un
+/// vrai film.
 pub(crate) fn avec_notes_et_cameras(doc: &mut Document, cams: bool) {
     for i in 0..doc.panels.len() {
         doc.panels[i].notes = format!("Plan {i} : le personnage entre par la gauche, regarde la fenêtre, puis sort lentement du cadre.");
@@ -1313,10 +1395,7 @@ pub(crate) fn avec_notes_et_cameras(doc: &mut Document, cams: bool) {
             c1.x += 300.0;
             c1.zoom *= 1.3;
             let n = doc.panels[i].frame_count();
-            doc.panels[i].camera = vec![
-                crate::camera::CameraKey { frame: 0, cam: c0, smooth: false, ease_in: 0.0, ease_out: 0.0 },
-                crate::camera::CameraKey { frame: n.saturating_sub(1), cam: c1, smooth: false, ease_in: 0.0, ease_out: 0.0 },
-            ];
+            doc.panels[i].camera = vec![crate::camera::CameraKey::new(0, c0), crate::camera::CameraKey::new(n.saturating_sub(1), c1)];
         }
     }
 }
@@ -1376,4 +1455,74 @@ fn perf_prepare_save_big_film() {
         println!("PERF   dont le mémo de l'enregistrement : {:.1} ms", t.elapsed().as_secs_f64() * 1e3);
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+/// La planche (vue Vignettes) de 100 à 600 plans, avec ou sans mouvements de caméra : `board_layout()` seule, puis l'image
+/// d'écran, avant (`perf::ancien` : refaite à chaque appel, notes remises en page à chaque image) et après.
+#[test]
+#[ignore]
+fn perf_board_layout() {
+    for (plans, cams) in [(100, false), (300, false), (300, true), (600, true)] {
+        let mut doc = projet_long(plans, 3, 24, 2);
+        avec_notes_et_cameras(&mut doc, cams);
+        let mut b = banc(doc, true);
+        b.app.board_view = crate::app::BoardView::Panels;
+        b.app.board_zoom = 0.0;
+        b.chauffer(5);
+        jusqu_au_repos(&mut b, 3000);
+        let zone = b.app.canvas_rect.shrink(100.0);
+        for passe in 0..2 {
+            for (titre, ancien) in [("avant", true), ("après", false)] {
+                crate::perf::set_ancien(ancien);
+                let t = Instant::now();
+                let mut cards = 0;
+                for _ in 0..50 {
+                    cards = std::hint::black_box(b.app.board_layout()).cards.len();
+                }
+                println!("PERF board_layout(), {plans} plans, caméras {cams}, {titre} ({}) : {:.3} ms par appel ({cards} cases)", passe + 1, t.elapsed().as_secs_f64() * 1e3 / 50.0);
+                scenario(&format!("planche {plans} plans, caméras {cams}, souris, {titre} ({})", passe + 1), &mut b, 60, 1.0 / 60.0, |_, k| bouge(k, zone));
+            }
+        }
+        crate::perf::set_ancien(false);
+    }
+}
+
+/// Octets des textures d'egui (vignettes comprises).
+fn textures_egui(ctx: &egui::Context) -> (usize, f64) {
+    let tm = ctx.tex_manager();
+    let tm = tm.read();
+    let bytes: usize = tm.allocated().map(|(_, m)| m.bytes_used()).sum();
+    (tm.num_allocated(), bytes as f64 / 1e6)
+}
+
+/// Zoomer et défiler toute une planche de 100 plans à huit zooms : la mémoire des vignettes, avant (`perf::ancien` : rien ne
+/// partait que les plans supprimés) puis après (bornée, `thumbs::LIMITE_OCTETS`).
+#[test]
+#[ignore]
+fn perf_board_thumbnail_memory() {
+    for (titre, ancien) in [("avant", true), ("après", false)] {
+        crate::perf::set_ancien(ancien);
+        let mut b = banc(projet_long(100, 3, 24, 2), true);
+        b.app.board_view = crate::app::BoardView::Panels;
+        b.app.board_zoom = 0.0;
+        b.chauffer(5);
+        jusqu_au_repos(&mut b, 3000);
+        let (n0, mb0) = textures_egui(&b.ctx);
+        println!("PERF {titre} : planche ajustée, {n0} textures, {mb0:.1} Mo");
+        let mut pire = 0.0f64;
+        for z in [0.5f32, 0.8, 1.2, 1.6, 2.0, 2.5, 3.0, 4.0] {
+            b.app.board_zoom = z;
+            for step in 0..40 {
+                b.app.board_pan = vec2(0.0, -(step as f32) * 400.0 * z);
+                b.chauffer(2);
+                b.attendre_vignettes();
+                pire = pire.max(b.app.thumbs.octets().0 as f64 / 1e6);
+            }
+            let (n, mb) = textures_egui(&b.ctx);
+            let (octets, vignettes) = b.app.thumbs.octets();
+            println!("PERF {titre} : après le zoom {z} et le défilement, {n} textures, {mb:.1} Mo (vignettes des plans : {vignettes}, {:.1} Mo)", octets as f64 / 1e6);
+        }
+        println!("PERF {titre} : vignettes des plans, au plus {pire:.1} Mo");
+    }
+    crate::perf::set_ancien(false);
 }

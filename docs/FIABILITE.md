@@ -334,7 +334,7 @@ Défauts trouvés et corrigés :
    d'aujourd'hui.
 ## 16. Enregistrer : le cliché léger (2026-10-23, branche `optim-sauvegarde`)
 
-Le fil de l'interface ne lit plus le dossier du projet et ne met plus rien en JSON (`docs/PERFORMANCE.md`, section 24).
+Le fil de l'interface ne lit plus le dossier du projet et ne met plus rien en JSON (`docs/PERFORMANCE.md`, section 25).
 Les protections ne bougent pas : elles vivent dans `SaveJob`, et la partie qui a changé de fil (`SaveJob::resoudre`) tourne
 avant toute écriture, donc une erreur y laisse le dossier tel qu'il était et suit le chemin d'un échec d'écriture
 (`modified` remis à vrai, `written` vidé, la suite annulée, la fenêtre « Enregistrement impossible »). Les dessins, sons,
