@@ -1072,12 +1072,14 @@ impl App {
             }
             self.board_tuile(ui, &painter, view, xf, &layout, k, pan_mode, deadline);
         }
+        // (Les numéros des plans, trouvés une fois pour toutes les cases : un par case refaisait l'ordre du film.)
+        let numeros = crate::numerotation::Numeros::pour_l_ecran(&self.doc);
         for k in (0..layout.cards.len()).take_while(|_| tient) {
             if !self.case_tient(&layout, plans, k) {
                 tient = false;
                 break;
             }
-            self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, deadline);
+            self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, deadline, &numeros);
         }
         if !tient || !self.case_tient(&layout, plans, layout.cards.len().saturating_sub(1)) {
             ui.ctx().request_repaint();
@@ -1526,7 +1528,7 @@ impl App {
     /// Une vignette (une image de storyboard) : son numéro de plan s'il commence, l'image (le dessin lui-même
     /// pour l'image courante), son filet, sa bande de note. Les gestes sont pris plus haut (`board_press`).
     #[allow(clippy::too_many_arguments)]
-    fn board_card(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant) {
+    fn board_card(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant, numeros: &crate::numerotation::Numeros) {
         let place = &layout.cards[k];
         let mv = layout.move_of(k).filter(|_| self.tool != Tool::Camera);
         let card = xf.rect(place.card);
@@ -1553,7 +1555,7 @@ impl App {
             let font = (11.0 * xf.zoom).clamp(7.0, 22.0);
             let ink = Color32::from_gray(70);
             let clip = painter.with_clip_rect(label.intersect(view));
-            let galley = clip.layout_no_wrap(self.doc.scene_label(place.scene), FontId::proportional(font), ink);
+            let galley = clip.layout_no_wrap(numeros.scene_label(&self.doc, place.scene), FontId::proportional(font), ink);
             let at = pos2(label.left() + 1.0, label.top() + 1.0);
             clip.galley(at, galley, ink);
         }

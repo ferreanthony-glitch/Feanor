@@ -22,7 +22,15 @@ use crate::theme;
 /// Le titre d'un plan dans la bande et sur la planche : « Plan 3 », et « Plan 3 · v2 » quand il a plusieurs
 /// versions.
 pub(crate) fn titre_avec_version(doc: &Document, index: usize) -> String {
-    let titre = crate::storyboard::panel_title(doc, index);
+    avec_version(doc, index, crate::storyboard::panel_title(doc, index))
+}
+
+/// `titre_avec_version`, les numéros du film déjà trouvés (un titre par bloc visible du montage, à chaque image d'écran).
+pub(crate) fn titre_avec_version_n(doc: &Document, numeros: &crate::numerotation::Numeros, index: usize) -> String {
+    avec_version(doc, index, crate::storyboard::panel_title_n(doc, numeros, index))
+}
+
+fn avec_version(doc: &Document, index: usize, titre: String) -> String {
     let plan = doc.panels[index].id;
     if doc.nombre_de_versions(plan) > 1 {
         format!("{titre} · {}", etiquette(doc.numero_de_version(plan)))

@@ -49,6 +49,29 @@ pub(crate) fn panel_title(doc: &Document, index: usize) -> String {
     format!("Plan {}", doc.scene_label(doc.panels[index].scene))
 }
 
+/// Les secondes de la règle du montage à peindre, de `lo` à `hi` compris, bornées par `last` : celles dont la graduation tombe
+/// dans `clip` (en x), plus celles, à gauche, dont le texte (« 12:34 », à droite de la graduation) peut encore y entrer. La
+/// graduation de la seconde `s` est à `left + s × fps × ppf`. Rien à peindre : `lo > hi`.
+pub(crate) fn visible_seconds(clip: Rect, left: f32, fps: usize, ppf: f32, last: usize) -> (usize, usize) {
+    // (Un texte de la règle fait moins de 60 points ; 120 de marge.)
+    const MARGE: f32 = 120.0;
+    let pas = fps as f32 * ppf;
+    if pas.is_nan() || pas <= 0.0 || !clip.is_finite() {
+        return (0, last);
+    }
+    let lo = ((clip.left() - MARGE - left) / pas).floor().max(0.0);
+    let hi = ((clip.right() + 1.0 - left) / pas).ceil().max(0.0);
+    if lo > last as f32 {
+        return (1, 0);
+    }
+    (lo as usize, (hi.min(last as f32)) as usize)
+}
+
+/// `panel_title`, les numéros du film déjà trouvés (`Numeros` : un titre par bloc visible, à chaque image d'écran).
+pub(crate) fn panel_title_n(doc: &Document, numeros: &crate::numerotation::Numeros, index: usize) -> String {
+    format!("Plan {}", numeros.scene_label(doc, doc.panels[index].scene))
+}
+
 /// « Séquence 1 — plan 3 » : pour la fiche et la barre d'état.
 pub fn panel_long_title(doc: &Document, index: usize) -> String {
     let seq = doc.sequence_of(index);
@@ -700,7 +723,10 @@ impl App {
         // Règle : une graduation par seconde, un repère lisible tous les ~60 pixels.
         painter.rect_filled(Rect::from_min_max(r.min, pos2(r.right(), bands_top)), 0.0, theme::regle());
         let label_every = ((60.0 / (fps as f32 * ppf)).ceil() as usize).max(1);
-        for s in 0..=(shown / fps + 2) {
+        // (Les seules secondes que la partie visible de la bande montre, plus un repère à gauche dont le texte peut y entrer :
+        // tout le film coûtait un `format!` et un texte par repère, à chaque image d'écran.)
+        let (s_lo, s_hi) = if crate::perf::ancien() { (0, shown / fps + 2) } else { visible_seconds(painter.clip_rect(), left, fps, ppf, shown / fps + 2) };
+        for s in s_lo..=s_hi {
             let x = x_of(s * fps);
             let major = s % label_every == 0;
             painter.line_segment(
@@ -718,7 +744,8 @@ impl App {
             }
         }
 
-        // Plans.
+        // Plans. (Les numéros du film, trouvés une fois pour les titres et la barre des séquences.)
+        let numeros = crate::numerotation::Numeros::pour_l_ecran(&self.doc);
         let deadline = std::time::Instant::now() + crate::thumbs::THUMB_TIME;
         let thumb_h = (block_h - 24.0).max(10.0);
         let aspect = self.doc.frame[0] as f32 / self.doc.frame[1].max(1) as f32;
@@ -786,7 +813,7 @@ impl App {
             if let Some(zone) = self.peindre_pastille(&clip, rect, self.doc.panels[i].id, 1.0) {
                 prises_zones.push((zone, self.doc.panels[i].id));
             }
-            let title = clip.layout_no_wrap(crate::planversui::titre_avec_version(&self.doc, i), FontId::proportional(12.0), visuals.text_color());
+            let title = clip.layout_no_wrap(crate::planversui::titre_avec_version_n(&self.doc, &numeros, i), FontId::proportional(12.0), visuals.text_color());
             let duration = clip.layout_no_wrap(
                 duration_label(len, self.doc.fps),
                 FontId::monospace(10.0),
@@ -851,7 +878,8 @@ impl App {
         // (La séquence de chaque plan et leur ordre, trouvés une fois : les chercher plan par plan
         // coûtait le carré du nombre de plans.)
         let seqs = self.doc.sequence_ids();
-        let seq_order = self.doc.sequence_order();
+        let clip_bar = painter.clip_rect();
+        let ancien_ordre = crate::perf::ancien().then(|| self.doc.sequence_order());
         for (band, y0, h) in [(0, bands_top, SEQ_H)] {
             let mut i = 0;
             while i < self.doc.panels.len() {
@@ -868,13 +896,20 @@ impl App {
                     pos2(blocks[start].left(), y0 + 1.0),
                     pos2(blocks[end - 1].right(), y0 + h - 1.0),
                 );
+                // Hors de la partie visible : ni dessin ni étiquette (la barre reste dans `runs`, les gestes s'en servent).
+                if !rect.intersects(clip_bar) && !crate::perf::ancien() {
+                    runs.push((rect, start));
+                    i = end;
+                    continue;
+                }
                 let (label, number) = if band == 0 {
                     let seq = seqs[start];
-                    let number = seq_order.iter().position(|&s| s == seq).map_or(0, |k| k + 1);
-                    let label = match self.doc.sequences.iter().find(|s| s.id == seq) {
-                        Some(s) if !s.name.trim().is_empty() => s.name.trim().to_string(),
-                        _ => self.doc.sequence_code(seq),
+                    // (Essai de performance du code d'avant : le rang dans l'ordre trouvé une fois, comme il l'était.)
+                    let number = match &ancien_ordre {
+                        Some(order) => order.iter().position(|&s| s == seq).map_or(0, |k| k + 1),
+                        None => numeros.sequence_number(&self.doc, seq),
                     };
+                    let label = numeros.sequence_label(&self.doc, seq);
                     (format!("Séquence {label}{}", crate::variantesui::suffixe_barre(&self.doc, seq)), number)
                 } else {
                     let scene = self.doc.panels[start].scene;

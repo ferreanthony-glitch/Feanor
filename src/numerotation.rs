@@ -51,9 +51,90 @@
 //! montage (`editorial.rs`).
 
 use std::cmp::Ordering;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::document::Document;
+
+/// Les numéros et les noms affichés de tous les plans et de toutes les séquences, trouvés en une passe sur le film : ce que
+/// montrent, à chaque image d'écran, les titres des blocs du montage, la barre des séquences et les numéros des cases de la
+/// planche. `plan_code`, `scene_label`, `sequence_code`… refont l'ordre du film (une liste de tous les plans, une table de
+/// toutes les scènes) à chaque appel : un titre par bloc visible et une étiquette par séquence coûtaient le carré du nombre
+/// de plans (1,8 ms d'un montage de 600 plans à chaque image d'écran, passe « optim-rendu »).
+///
+/// Mêmes textes que les fonctions du `Document`, un à un (essai `numbering_in_one_pass_matches_the_document`) : un plan ou une
+/// séquence qui n'est pas dans le film passe par elles.
+pub struct Numeros {
+    /// Le nom affiché d'un plan (`Document::scene_label`) : son nom, sinon son numéro.
+    plans: HashMap<u64, String>,
+    /// Le numéro d'une séquence (`sequence_code`), son nom affiché (`sequence_label`), et son rang dans le film (1, 2, 3…).
+    sequences: HashMap<u64, (String, String, usize)>,
+}
+
+impl Numeros {
+    /// Ceux de l'écran : `of`, sauf pour un essai de performance qui mesure le code d'avant (`perf::ancien`) : une table vide,
+    /// chaque texte est alors demandé au `Document`, comme avant.
+    pub fn pour_l_ecran(doc: &Document) -> Numeros {
+        if crate::perf::ancien() {
+            Numeros { plans: HashMap::new(), sequences: HashMap::new() }
+        } else {
+            Numeros::of(doc)
+        }
+    }
+
+    pub fn of(doc: &Document) -> Numeros {
+        // (Le premier de ce numéro, comme `Document::scene` et la recherche des séquences.)
+        let mut scenes: HashMap<u64, &crate::document::Scene> = HashMap::with_capacity(doc.scenes.len());
+        for s in &doc.scenes {
+            scenes.entry(s.id).or_insert(s);
+        }
+        let mut plans = HashMap::with_capacity(doc.scenes.len());
+        for (k, id) in doc.scene_order().into_iter().enumerate() {
+            let scene = scenes.get(&id).copied();
+            let num = scene.filter(|_| doc.numbering_locked).and_then(|s| Num::parse(&s.number)).unwrap_or_else(|| Num::new(k as i64 + 1));
+            let label = match scene {
+                Some(s) if !s.name.trim().is_empty() => s.name.trim().to_string(),
+                _ => num.text(),
+            };
+            plans.insert(id, label);
+        }
+        let mut seqs: HashMap<u64, &crate::document::Sequence> = HashMap::with_capacity(doc.sequences.len());
+        for s in &doc.sequences {
+            seqs.entry(s.id).or_insert(s);
+        }
+        let mut sequences = HashMap::with_capacity(doc.sequences.len());
+        for (k, id) in doc.sequence_order().into_iter().enumerate() {
+            let seq = seqs.get(&id).copied();
+            let code = seq.filter(|_| doc.numbering_locked).and_then(|s| Num::parse(&s.number)).unwrap_or_else(|| Num::new(k as i64 + 1)).text();
+            let label = match seq {
+                Some(s) if !s.name.trim().is_empty() => s.name.trim().to_string(),
+                _ => code.clone(),
+            };
+            sequences.insert(id, (code, label, k + 1));
+        }
+        Numeros { plans, sequences }
+    }
+
+    /// `Document::scene_label`.
+    pub fn scene_label(&self, doc: &Document, scene: u64) -> String {
+        self.plans.get(&scene).cloned().unwrap_or_else(|| doc.scene_label(scene))
+    }
+
+    /// `Document::sequence_code` (essais : l'écran montre `sequence_label`).
+    #[cfg(test)]
+    pub fn sequence_code(&self, doc: &Document, sequence: u64) -> String {
+        self.sequences.get(&sequence).map_or_else(|| doc.sequence_code(sequence), |s| s.0.clone())
+    }
+
+    /// `Document::sequence_label`.
+    pub fn sequence_label(&self, doc: &Document, sequence: u64) -> String {
+        self.sequences.get(&sequence).map_or_else(|| doc.sequence_label(sequence), |s| s.1.clone())
+    }
+
+    /// `Document::sequence_number` : le rang de la séquence dans le film (0 : elle n'y est pas).
+    pub fn sequence_number(&self, doc: &Document, sequence: u64) -> usize {
+        self.sequences.get(&sequence).map_or_else(|| doc.sequence_number(sequence), |s| s.2)
+    }
+}
 
 /// Les « chiffres » d'une queue : 0-9 puis A-Z.
 const DIGITS: &[u8; 36] = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";

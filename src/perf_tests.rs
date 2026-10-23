@@ -1339,3 +1339,47 @@ fn perf_parameter_drag() {
         }
     }
 }
+
+/// Le montage d'un film de 600 plans, beaucoup de blocs visibles : avant (`perf::ancien` : numéros refaits par titre et par
+/// séquence, règle et barre des séquences peintes sur tout le film) puis après, deux fois, dans le même processus.
+#[test]
+#[ignore]
+fn perf_montage_numbering() {
+    let mut b = banc(projet_long(600, 3, 24, 2), true);
+    jusqu_au_repos(&mut b, 3000);
+    let zone = Rect::from_min_size(pos2(500.0, 880.0), vec2(900.0, 120.0));
+    let total = b.app.doc.total_frames();
+    for zoom in [0.6f32, 3.0] {
+        b.app.montage_zoom = zoom;
+        b.app.goto_global(total / 2);
+        b.app.follow_frame = true;
+        b.chauffer(4);
+        jusqu_au_repos(&mut b, 3000);
+        for passe in 0..2 {
+            for (titre, ancien) in [("avant", true), ("après", false)] {
+                crate::perf::set_ancien(ancien);
+                b.chauffer(2);
+                scenario(&format!("montage 600 plans, zoom {zoom}, souris, {titre} ({})", passe + 1), &mut b, 90, 1.0 / 60.0, |_, k| bouge(k, zone));
+            }
+        }
+        crate::perf::set_ancien(false);
+    }
+    // Les numéros seuls, comme une image d'écran du montage : 160 titres et une étiquette par séquence.
+    let doc = &b.app.doc;
+    for (titre, ancien) in [("avant", true), ("après", false)] {
+        crate::perf::set_ancien(ancien);
+        let t = Instant::now();
+        let mut n = 0;
+        for _ in 0..20 {
+            let numeros = crate::numerotation::Numeros::pour_l_ecran(doc);
+            for i in 0..160 {
+                n += crate::planversui::titre_avec_version_n(doc, &numeros, i * 3).len();
+            }
+            for s in &doc.sequences {
+                n += numeros.sequence_label(doc, s.id).len();
+            }
+        }
+        println!("PERF numéros d'une image du montage (600 plans, 160 titres, 60 séquences), {titre} : {:.3} ms ({n})", t.elapsed().as_secs_f64() * 1e3 / 20.0);
+    }
+    crate::perf::set_ancien(false);
+}

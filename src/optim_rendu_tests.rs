@@ -3,12 +3,17 @@
 //!
 //! 1. Tirer un réglage (opacité d'un calque, clé de position, clé d'effet, exposition, fin du plan) ne renvoie aucune tuile à
 //!    la carte graphique (`Renderer::invalidate_params`).
+//! 2. Les numéros des plans et des séquences se trouvent une fois par image d'écran (`numerotation::Numeros`), la règle et la
+//!    barre des séquences du montage ne peignent que leur partie visible : mêmes textes, à la même place.
 
-use eframe::egui::{pos2, Event, Modifiers, PointerButton, Pos2, Shape};
+use std::time::Instant;
+
+use eframe::egui::{pos2, Event, Modifiers, PointerButton, Pos2, Rect, Shape};
 
 use crate::app::Mode;
-use crate::document::LayerTransform;
-use crate::perf_tests::{banc, plan_charge, Banc};
+use crate::document::{Document, LayerTransform};
+use crate::numerotation::Numeros;
+use crate::perf_tests::{banc, plan_charge, projet_long, Banc};
 use crate::poskeys::PosKey;
 
 /// Tuiles envoyées à la carte graphique et compositions faites depuis le début.
@@ -138,4 +143,166 @@ fn dragging_position_keys_and_drawing_keys_sends_no_tile_to_the_gpu() {
     b.app.renderer.invalidate_all();
     image(&mut b);
     assert!(carte(&b).0 > copies + 100, "invalidate_all renvoie les tuiles du plan");
+}
+
+// ------------------------------------------------------------------ 2. numéros des plans et des séquences
+
+/// Un film de `plans` plans en séquences de dix (sans dessin), avec ce qui change les titres : des plans et des séquences
+/// nommés (un nom fait d'espaces ne compte pas), des versions de plans ; en numérotation verrouillée, des plans insérés
+/// (12A…), un plan déplacé (numéros dans le désordre) et un numéro illisible (le rang le remplace).
+fn film_numerote(plans: usize, verrouille: bool) -> Document {
+    let mut doc = Document::with_frame(1920, 1080, 24);
+    let mut at = 0;
+    for i in 1..plans {
+        at = if i % 10 == 0 { doc.add_sequence_after(at) } else { doc.add_scene_after(at) };
+    }
+    for (k, s) in doc.scenes.iter_mut().enumerate() {
+        match k % 41 {
+            5 => s.name = format!("  Contrechamp {k} "),
+            9 => s.name = "   ".into(),
+            _ => {}
+        }
+    }
+    for (k, s) in doc.sequences.iter_mut().enumerate() {
+        if k % 7 == 3 {
+            s.name = format!("Poursuite {k}");
+        }
+    }
+    for i in [2, 30, plans / 2] {
+        doc.nouvelle_version(i, 0);
+    }
+    if verrouille {
+        doc.lock_numbering();
+        for at in [11, 11, 40, 0, plans / 3] {
+            doc.add_scene_after(at);
+        }
+        doc.add_sequence_after(plans / 4);
+        doc.move_panel(5, plans / 2);
+        let id = doc.panels[17].scene;
+        if let Some(s) = doc.scene_mut(id) {
+            s.number = "pas un numéro".into();
+        }
+    }
+    doc
+}
+
+#[test]
+fn numbering_in_one_pass_matches_the_document() {
+    for verrouille in [false, true] {
+        let doc = film_numerote(600, verrouille);
+        let n = Numeros::of(&doc);
+        for i in 0..doc.panels.len() {
+            assert_eq!(crate::planversui::titre_avec_version_n(&doc, &n, i), crate::planversui::titre_avec_version(&doc, i), "titre du plan {i} (verrouillée : {verrouille})");
+        }
+        let scenes: Vec<u64> = doc.scenes.iter().map(|s| s.id).chain([0, u64::MAX]).collect();
+        for id in scenes {
+            assert_eq!(n.scene_label(&doc, id), doc.scene_label(id), "plan {id}");
+        }
+        let seqs: Vec<u64> = doc.sequences.iter().map(|s| s.id).chain([0, u64::MAX]).collect();
+        for id in seqs {
+            assert_eq!(n.sequence_code(&doc, id), doc.sequence_code(id), "numéro de la séquence {id}");
+            assert_eq!(n.sequence_label(&doc, id), doc.sequence_label(id), "nom de la séquence {id}");
+            assert_eq!(n.sequence_number(&doc, id), doc.sequence_number(id), "rang de la séquence {id}");
+        }
+        // (Le film a bien de quoi : des numéros à lettre, des noms, des versions.)
+        let titres: Vec<String> = (0..doc.panels.len()).map(|i| crate::planversui::titre_avec_version(&doc, i)).collect();
+        assert!(titres.iter().any(|t| t.contains("Contrechamp")) && titres.iter().any(|t| t.contains(" · ")));
+        if verrouille {
+            assert!(titres.iter().any(|t| t.contains("12A")), "des plans insérés en numérotation verrouillée");
+        }
+    }
+}
+
+/// Les textes que l'image d'écran montre vraiment (dans leur zone de coupe), avec leur place.
+fn textes_visibles(b: &Banc) -> Vec<(String, [i32; 2])> {
+    fn visit(shape: &Shape, clip: Rect, out: &mut Vec<(String, [i32; 2])>) {
+        match shape {
+            Shape::Text(t) if t.visual_bounding_rect().intersects(clip) => out.push((t.galley.job.text.clone(), [(t.pos.x * 8.0).round() as i32, (t.pos.y * 8.0).round() as i32])),
+            Shape::Vec(v) => v.iter().for_each(|s| visit(s, clip, out)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    for s in &b.formes {
+        visit(&s.shape, s.clip_rect, &mut out);
+    }
+    out.sort();
+    out
+}
+
+#[test]
+fn the_montage_shows_the_same_titles_ruler_and_sequences_as_before() {
+    let mut doc = projet_long(240, 1, 12, 1);
+    for (k, s) in doc.sequences.iter_mut().enumerate() {
+        if k % 5 == 2 {
+            s.name = format!("Poursuite {k}");
+        }
+    }
+    doc.nouvelle_version(3, 0);
+    let mut b = banc(doc, false);
+    b.garder_formes = true;
+    let total = b.app.doc.total_frames();
+    for (zoom, image) in [(0.5, 0), (2.0, total / 3), (6.0, total / 2), (16.0, total - 5)] {
+        b.app.montage_zoom = zoom;
+        b.app.goto_global(image);
+        b.app.follow_frame = true;
+        // (Le défilement qui suit la tête de lecture s'arrête d'abord : deux images de suite identiques.)
+        b.chauffer(40);
+        let repos = textes_visibles(&b);
+        b.chauffer(2);
+        assert_eq!(textes_visibles(&b), repos, "zoom {zoom} : l'écran ne bouge plus");
+        crate::perf::set_ancien(true);
+        b.chauffer(2);
+        let avant = textes_visibles(&b);
+        crate::perf::set_ancien(false);
+        b.chauffer(2);
+        let apres = textes_visibles(&b);
+        let manque: Vec<_> = avant.iter().filter(|t| !apres.contains(t)).collect();
+        let de_plus: Vec<_> = apres.iter().filter(|t| !avant.contains(t)).collect();
+        assert!(manque.is_empty() && de_plus.is_empty(), "zoom {zoom}, image {image} : les mêmes textes visibles ; manquent {manque:?}, en plus {de_plus:?}");
+        assert_eq!(apres, avant);
+        // (Au zoom 0,5, un bloc de 12 images fait 6 points : son titre, coupé au bloc, ne se voit pas.)
+        assert!(apres.iter().any(|t| t.0.starts_with("Séquence ")) && (zoom < 1.0 || apres.iter().any(|t| t.0.starts_with("Plan "))), "zoom {zoom} : titres et séquences à l'écran");
+        assert!(apres.iter().any(|t| t.0.contains(':') && t.0.len() <= 6), "zoom {zoom} : des repères de la règle");
+    }
+}
+
+#[test]
+fn the_ruler_paints_every_second_that_can_be_seen() {
+    // Toutes les secondes dont la graduation ou le texte (moins de 60 points à droite) peut tomber dans la zone sont peintes.
+    for (left, fps, ppf) in [(6.0, 24, 0.5), (-5000.0, 24, 4.0), (-120000.0, 25, 16.0), (100.0, 30, 1.0)] {
+        let last = 600;
+        for (x0, x1) in [(0.0, 1900.0), (300.0, 900.0), (-50.0, 10.0), (5000.0, 9000.0)] {
+            let clip = Rect::from_min_max(pos2(x0, 0.0), pos2(x1, 100.0));
+            let (lo, hi) = crate::storyboard::visible_seconds(clip, left, fps, ppf as f32, last);
+            for s in 0..=last {
+                let x = left as f32 + (s * fps) as f32 * ppf as f32;
+                if x + 60.0 >= clip.left() && x <= clip.right() {
+                    assert!((lo..=hi).contains(&s), "seconde {s} (x = {x}) dans {clip:?} : peinte ({lo}..={hi})");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn the_numbering_of_a_long_film_costs_little_per_screen_image() {
+    // 2 000 plans : un titre par bloc visible (150) et une étiquette par séquence (200), comme une image d'écran du montage.
+    // Avant : l'ordre du film refait à chaque titre, ≈ 2 000 × 350 pas. La borne laisse une grande marge (machine partagée).
+    let doc = film_numerote(2000, true);
+    let t = Instant::now();
+    let tours = 10;
+    let mut n_titres = 0;
+    for _ in 0..tours {
+        let n = Numeros::of(&doc);
+        for i in (0..doc.panels.len()).step_by(13).take(150) {
+            n_titres += crate::planversui::titre_avec_version_n(&doc, &n, i).len();
+        }
+        for s in &doc.sequences {
+            n_titres += n.sequence_label(&doc, s.id).len() + n.sequence_number(&doc, s.id);
+        }
+    }
+    let ms = t.elapsed().as_secs_f64() * 1e3 / tours as f64;
+    assert!(n_titres > 0);
+    assert!(ms < 4.0, "numéros d'une image d'écran, 2 000 plans : {ms:.2} ms");
 }
