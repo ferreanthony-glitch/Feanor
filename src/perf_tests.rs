@@ -1302,3 +1302,70 @@ fn perf_save_ui_thread() {
     mesurer(&mut b, "rien de modifié");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// Des notes à chaque plan et deux clés de caméra (`cams`) : un manifeste comme celui d'un vrai film.
+pub(crate) fn avec_notes_et_cameras(doc: &mut Document, cams: bool) {
+    for i in 0..doc.panels.len() {
+        doc.panels[i].notes = format!("Plan {i} : le personnage entre par la gauche, regarde la fenêtre, puis sort lentement du cadre.");
+        if cams {
+            let c0 = doc.panel_camera(i, 0);
+            let mut c1 = c0;
+            c1.x += 300.0;
+            c1.zoom *= 1.3;
+            let n = doc.panels[i].frame_count();
+            doc.panels[i].camera = vec![
+                crate::camera::CameraKey { frame: 0, cam: c0, smooth: false, ease_in: 0.0, ease_out: 0.0 },
+                crate::camera::CameraKey { frame: n.saturating_sub(1), cam: c1, smooth: false, ease_in: 0.0, ease_out: 0.0 },
+            ];
+        }
+    }
+}
+
+/// Enregistrer un grand film où rien n'a changé (Ctrl+S, copie de secours) : ce que coûte le fil de l'interface
+/// (`prepare_save`, le cliché) et l'écriture (autre fil), 100 et 600 plans.
+#[test]
+#[ignore]
+fn perf_prepare_save_big_film() {
+    for plans in [100usize, 600] {
+        let mut doc = projet_long(plans, 3, 24, 1);
+        avec_notes_et_cameras(&mut doc, true);
+        let dir = std::env::temp_dir().join(format!("shot-perf-prep-{}-{plans}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("projet.pelure");
+        let mut written = std::collections::HashMap::new();
+        let t = Instant::now();
+        crate::project::save(&doc, &path, &mut written).expect("enregistrement");
+        println!("PERF premier enregistrement {plans} plans ({} dessins) : {:.0} ms", doc.cels.len(), t.elapsed().as_secs_f64() * 1e3);
+        // Avant et après en alternance, sept fois chacun : le meilleur de chaque (la machine est partagée).
+        let (mut avant, mut apres, mut fil) = (f64::MAX, f64::MAX, f64::MAX);
+        for _ in 0..7 {
+            let t = Instant::now();
+            std::hint::black_box(crate::project::prepare_save_avant(&doc, &path, &mut written).expect("préparation d'avant"));
+            avant = avant.min(t.elapsed().as_secs_f64() * 1e3);
+            let t = Instant::now();
+            let mut job = crate::project::prepare_save(&doc, &path, &mut written, None).expect("cliché");
+            apres = apres.min(t.elapsed().as_secs_f64() * 1e3);
+            let t = Instant::now();
+            job.resoudre_ici().expect("cliché résolu");
+            fil = fil.min(t.elapsed().as_secs_f64() * 1e3);
+        }
+        println!("PERF fil de l'interface, rien de modifié, {plans} plans : avant {avant:.2} ms, après {apres:.2} ms (et {fil:.2} ms de plus sur le fil d'écriture)");
+        let mut best_run = f64::MAX;
+        for _ in 0..5 {
+            let job = crate::project::prepare_save(&doc, &path, &mut written, None).expect("préparation");
+            let t = Instant::now();
+            job.run().expect("écriture");
+            best_run = best_run.min(t.elapsed().as_secs_f64() * 1e3);
+        }
+        println!("PERF écriture « rien de modifié » (autre fil, cliché compris), {plans} plans : {best_run:.1} ms");
+        let t = Instant::now();
+        let loaded = crate::project::load(&path).expect("ouverture");
+        println!("PERF ouverture {plans} plans : {:.0} ms ({} dessins, mémo de l'enregistrement compris)", t.elapsed().as_secs_f64() * 1e3, loaded.doc.cels.len());
+        let t = Instant::now();
+        loaded.doc.memo_enregistrement.lock().unwrap().clear();
+        loaded.doc.memoriser_dessins();
+        println!("PERF   dont le mémo de l'enregistrement : {:.1} ms", t.elapsed().as_secs_f64() * 1e3);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}

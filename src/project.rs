@@ -925,19 +925,99 @@ fn used_sounds(doc: &Document) -> BTreeSet<u64> {
         .collect()
 }
 
+/// Ce que l'enregistrement retient d'un dessin (`Document::memo_enregistrement`) : a-t-il quelque chose hors de la
+/// feuille (il faut lire les pixels du bord pour le savoir), quelles textures ses traits citent (il faut parcourir tous
+/// ses traits). Valable tant que sa clé est celle du dessin : sa version (elle change à chaque modification, et
+/// l'enregistrement s'y fie déjà pour ne pas réécrire un dessin), la taille de sa feuille et sa sorte.
+#[derive(Clone)]
+pub(crate) struct MemoDessin {
+    cle: (u64, usize, usize, bool),
+    hors: bool,
+    textures: Vec<(TextureKind, u32)>,
+}
+
+/// Le hachage des clés du mémo (des numéros de dessins) : une multiplication, au lieu du SipHash de la bibliothèque
+/// standard (le cliché d'un film de 600 plans consulte le mémo près de dix mille fois, sur le fil de l'interface).
+#[derive(Default)]
+pub(crate) struct HacheNumero(u64);
+
+impl std::hash::Hasher for HacheNumero {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for b in bytes {
+            self.0 = (self.0.rotate_left(8) ^ u64::from(*b)).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        }
+    }
+    fn write_u64(&mut self, n: u64) {
+        self.0 = (self.0 ^ n).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    }
+}
+
+/// Le mémo de l'enregistrement, par dessin (`Document::memo_enregistrement`).
+pub(crate) type MemoDessins = HashMap<CelId, MemoDessin, std::hash::BuildHasherDefault<HacheNumero>>;
+
+fn cle_memo(cel: &Cel) -> (u64, usize, usize, bool) {
+    (cel.version, cel.raster.width, cel.raster.height, cel.vector.is_some())
+}
+
+fn memo_de(cel: &Cel) -> MemoDessin {
+    let mut textures = BTreeSet::new();
+    for e in cel.vector.iter().flat_map(|v| &v.elements) {
+        if let crate::vector::Element::Stroke { brush: Some(b), .. } = e {
+            textures.extend(b.tip.map(|k| (TextureKind::Tip, k)));
+            textures.extend(b.paper.map(|k| (TextureKind::Paper, k)));
+        }
+    }
+    MemoDessin { cle: cle_memo(cel), hors: cel.vector.is_none() && cel.raster.has_beyond(), textures: textures.into_iter().collect() }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Essais : le mémo est recalculé à chaque fois, comme avant lui (banc avant / après dans le même processus).
+    static SANS_MEMO: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Le mémo du dessin `id`, refait s'il ne correspond plus au dessin.
+fn memo_a_jour<'m>(memo: &'m mut MemoDessins, id: CelId, cel: &Cel) -> &'m MemoDessin {
+    let cle = cle_memo(cel);
+    #[cfg(test)]
+    if SANS_MEMO.with(|s| s.get()) {
+        memo.remove(&id);
+    }
+    let m = memo.entry(id).or_insert_with(|| memo_de(cel));
+    if m.cle != cle {
+        *m = memo_de(cel);
+    }
+    m
+}
+
+impl Document {
+    /// Le mémo de l'enregistrement pour tous les dessins (à l'ouverture, sur le fil d'ouverture : le premier
+    /// enregistrement ne relit pas les pixels du bord de chaque dessin sur le fil de l'interface).
+    pub(crate) fn memoriser_dessins(&self) {
+        let mut memo = self.memo_enregistrement.lock().unwrap_or_else(|e| e.into_inner());
+        for (&id, cel) in &self.cels {
+            memo_a_jour(&mut memo, id, cel);
+        }
+    }
+}
+
 /// Les dessins bitmap parmi `used` qui ont quelque chose hors de la feuille (toile infinie). Un dessin
 /// vectoriel ne garde rien à part : ses traits se rendent à la lecture, hors de la feuille aussi.
 fn hors_of(doc: &Document, used: &BTreeSet<CelId>) -> BTreeSet<CelId> {
-    used.iter().copied().filter(|id| doc.cels.get(id).is_some_and(|c| c.vector.is_none() && c.raster.has_beyond())).collect()
+    let mut memo = doc.memo_enregistrement.lock().unwrap_or_else(|e| e.into_inner());
+    used.iter().copied().filter(|id| doc.cels.get(id).is_some_and(|c| c.vector.is_none() && memo_a_jour(&mut memo, *id, c).hors)).collect()
 }
 
 /// Textures citées par les traits vectoriels texturés des dessins `used` : (sorte, clé).
 fn used_textures(doc: &Document, used: &BTreeSet<CelId>) -> BTreeSet<(TextureKind, u32)> {
+    let mut memo = doc.memo_enregistrement.lock().unwrap_or_else(|e| e.into_inner());
     let mut out = BTreeSet::new();
-    for e in used.iter().filter_map(|id| doc.cels.get(id)).filter_map(|c| c.vector.as_ref()).flat_map(|v| &v.elements) {
-        if let crate::vector::Element::Stroke { brush: Some(b), .. } = e {
-            out.extend(b.tip.map(|k| (TextureKind::Tip, k)));
-            out.extend(b.paper.map(|k| (TextureKind::Paper, k)));
+    for &id in used {
+        if let Some(cel) = doc.cels.get(&id).filter(|c| c.vector.is_some()) {
+            out.extend(memo_a_jour(&mut memo, id, cel).textures.iter().copied());
         }
     }
     out
@@ -1003,13 +1083,30 @@ pub struct SaveReport {
     pub snapshots: Vec<u64>,
     /// Projet partagé : ce qui a été écrit (`projet_partage.rs`).
     pub partage: Option<partage_io::ResultatPartage>,
+    /// Des dessins que `written` disait écrits dans le dossier n'y étaient plus (effacés à côté de SHOT) : le cliché
+    /// n'avait pas leurs pixels, ils n'ont pas été écrits. À retirer de `written` et à enregistrer de nouveau tout de
+    /// suite (`App::finish_save`, `project::save`, `Recovery::tick`) : c'est ce que l'enregistrement d'avant faisait
+    /// d'un seul coup, quand il regardait le dossier sur le fil de l'interface.
+    pub manquants: Vec<CelId>,
 }
 
 /// Enregistre le projet. `written` retient la version de chaque dessin déjà écrit dans ce dossier.
 /// En cas d'échec, `written` est vidé : le prochain enregistrement réécrira tout.
 pub fn save(doc: &Document, manifest_path: &Path, written: &mut HashMap<CelId, u64>) -> Result<SaveReport, String> {
     let job = prepare_save(doc, manifest_path, written, None)?;
-    job.run().inspect_err(|_| written.clear())
+    let mut report = job.run().inspect_err(|_| written.clear())?;
+    // Des dessins manquaient dans le dossier : ils s'écrivent maintenant (ils sont dans le cliché suivant).
+    if !report.manquants.is_empty() {
+        for id in &report.manquants {
+            written.remove(id);
+        }
+        let suite = prepare_save(doc, manifest_path, written, None)?.run().inspect_err(|_| written.clear())?;
+        report.written += suite.written;
+        report.removed += suite.removed;
+        report.snapshots.extend(suite.snapshots);
+        report.manquants = suite.manquants;
+    }
+    Ok(report)
 }
 
 /// Un dessin à écrire : déjà converti (vectoriel), copié tel quel (bitmap, converti en PNG à
@@ -1090,6 +1187,12 @@ pub struct SaveJob {
     versions_from: Option<PathBuf>,
     /// Projet partagé : ce que je tiens, écrit à la place du manifeste unique (`projet_partage.rs`). Rien : projet classique.
     partage: Option<partage_io::TravailPartage>,
+    /// Ce que le fil de l'interface a laissé au fil d'écriture (`prepare_save`) : tant qu'il est là, les champs
+    /// ci-dessus qui en dépendent (manifeste, annexes, dessins, sons, textures, ce qu'il faut garder) sont vides ;
+    /// `run_with` les remplit d'abord (`SaveJob::resoudre`).
+    differe: Option<Box<Differe>>,
+    /// Les dessins déjà écrits dont les fichiers manquaient (`SaveReport::manquants`).
+    manquants: Vec<CelId>,
 }
 
 /// Les dessins de `used` à écrire dans `dir/dessins/` : ceux dont la version n'est pas celle déjà écrite (`written`) ou dont le
@@ -1176,8 +1279,95 @@ pub(crate) fn variantes_octets(doc: &Document) -> Result<Option<Vec<u8>>, String
     crate::variantes::to_bytes(doc, &hors_of(doc, &cels))
 }
 
+/// Un dessin dans le cliché d'un enregistrement (`prepare_save`).
+struct DessinCliche {
+    id: CelId,
+    vector: bool,
+    /// Il a une strate Fond peinte (format 23).
+    fond: bool,
+    /// Il a quelque chose hors de la feuille (toile infinie, format 30).
+    hors: bool,
+    /// Ce qu'il faut écrire. Rien : il est déjà écrit dans le dossier à cette version ; le fil d'écriture vérifie que
+    /// ses fichiers y sont (`SaveReport::manquants`).
+    donnees: Option<Box<DonneesCliche>>,
+}
+
+/// Le contenu d'un dessin à écrire, copié sur le fil de l'interface : ses traits, ou ses pixels (tuiles partagées,
+/// `Arc` : rien n'est recopié), et sa strate Fond.
+struct DonneesCliche {
+    vecteur: Option<crate::vector::VectorDrawing>,
+    raster: Option<Raster>,
+    /// La strate Fond : peinture et coupe.
+    fond: Option<(Raster, Raster)>,
+    /// Un autre dossier où cette version du dessin est déjà écrite (la copie de secours d'un projet enregistré) : ses
+    /// fichiers s'y recopient au lieu d'être encodés, s'ils y sont.
+    ailleurs: Option<PathBuf>,
+}
+
+/// Ce que le fil de l'interface laisse au fil d'écriture (`prepare_save`, `SaveJob::resoudre`) : le document sans ses
+/// dessins, les dessins du cliché, et ce qu'il en a déjà déduit.
+struct Differe {
+    doc: Document,
+    used: BTreeSet<CelId>,
+    dessins: Vec<DessinCliche>,
+    /// Les dessins des variantes rangées qui ont quelque chose hors de la feuille (`variantes.json`).
+    hors_variantes: BTreeSet<CelId>,
+    /// Le dossier `versions/` d'un autre dossier du projet (« Enregistrer sous »), à reprendre s'il existe.
+    versions_from: Option<PathBuf>,
+}
+
+/// Le cliché des dessins `used` : rien que la mémoire pour ceux qui sont déjà écrits à leur version, et le contenu des
+/// autres ; et les textures que leurs traits citent. Aucun accès au disque. `written` ne garde que les dessins de `used`,
+/// et il est mis à jour comme si l'écriture allait réussir.
+fn cliche_dessins(
+    doc: &Document,
+    used: &BTreeSet<CelId>,
+    written: &mut HashMap<CelId, u64>,
+    reuse: Option<&Reuse>,
+) -> (Vec<DessinCliche>, BTreeSet<(TextureKind, u32)>) {
+    let reuse_dir = reuse.and_then(|r| r.manifest_path.parent());
+    let mut memo = doc.memo_enregistrement.lock().unwrap_or_else(|e| e.into_inner());
+    let mut out = Vec::with_capacity(used.len());
+    let mut textures = BTreeSet::new();
+    // (`written` ne retient que des dessins de `used` : s'ils y sont tous, rien à retirer.)
+    let (avant, mut retenus) = (written.len(), 0);
+    for &id in used {
+        let deja = written.get(&id).copied();
+        retenus += usize::from(deja.is_some());
+        let Some(cel) = doc.cels.get(&id) else { continue };
+        let vector = cel.vector.is_some();
+        let fond = cel.fond.as_ref().is_some_and(|f| !f.is_empty());
+        let m = memo_a_jour(&mut memo, id, cel);
+        let hors = !vector && m.hors;
+        textures.extend(m.textures.iter().copied());
+        let donnees = if deja == Some(cel.version) {
+            None
+        } else {
+            written.insert(id, cel.version);
+            Some(Box::new(DonneesCliche {
+                vecteur: cel.vector.clone(),
+                raster: (!vector).then(|| cel.raster.clone()),
+                fond: cel.fond.as_ref().filter(|_| fond).map(|s| (s.peinture.raster.clone(), s.coupe.clone())),
+                ailleurs: reuse_dir.zip(reuse).filter(|(_, r)| r.written.get(&id) == Some(&cel.version)).map(|(d, _)| d.to_path_buf()),
+            }))
+        };
+        out.push(DessinCliche { id, vector, fond, hors, donnees });
+    }
+    if retenus < avant {
+        written.retain(|id, _| used.contains(id));
+    }
+    (out, textures)
+}
+
 /// Prépare l'enregistrement de `doc` dans `manifest_path`. `written` est mis à jour comme si
 /// l'écriture allait réussir (à vider si elle échoue).
+///
+/// C'est la part du fil de l'interface (Ctrl+S, copie de secours) : seulement ce qui demande le document vivant, et
+/// rien du disque. Il copie le document sans ses dessins (`Document::copie_sans_dessins`) et le contenu des seuls
+/// dessins modifiés depuis le dernier enregistrement ; le manifeste et les fichiers annexes se mettent en JSON, le
+/// dossier se lit (dessins déjà là, sons, textures, fichiers illisibles à garder, `references.json`) sur le fil
+/// d'écriture, au début de `SaveJob::run_with`. Avant : 8 à 58 ms sur le fil de l'interface pour un film où rien
+/// n'avait changé (100 à 600 plans), le manifeste à lui seul 10 à 24 ms.
 pub fn prepare_save(
     doc: &Document,
     manifest_path: &Path,
@@ -1186,79 +1376,214 @@ pub fn prepare_save(
 ) -> Result<SaveJob, String> {
     let dir = manifest_path.parent().ok_or("chemin de projet invalide")?;
     let used = doc.used_cels();
-    written.retain(|id, _| used.contains(id));
-    let (drawings, fonds, hors, _) = dessins_a_ecrire(doc, dir, &used, written, reuse.as_ref())?;
-    // Un son ne change jamais : on ne l'écrit que s'il n'est pas déjà dans le dossier.
-    let used_sounds = used_sounds(doc);
-    let sounds = used_sounds
-        .iter()
-        .map(|id| &doc.sounds[id])
-        .map(|s| (dir.join(SOUNDS).join(sound_file(s)), s.bytes.clone()))
-        .filter(|(path, _)| !path.exists())
-        .collect();
-    // Une texture non plus (sa clé vient de son contenu) : écrite seulement si elle manque.
-    let used_textures = used_textures(doc, &used);
-    let textures = used_textures
-        .iter()
-        .map(|&(kind, key)| (texture_file(dir, kind, key), kind, key))
-        .filter(|(path, _, _)| !path.exists())
-        .filter_map(|(path, kind, key)| crate::brushtex::shared_image(kind, key).map(|img| (path, img)))
-        .collect();
+    // (Les textures citées par les traits : le mémo de chaque dessin les connaît ; écrites si elles manquent.)
+    let (dessins, used_textures) = cliche_dessins(doc, &used, written, reuse.as_ref());
+    let mut job = SaveJob::vide(manifest_path);
+    job.used_textures = used_textures;
     // Images des calques vidéo : recopiées si elles ne sont pas déjà dans ce dossier.
-    let mut videos = Vec::new();
     for v in doc.panels.iter().chain(doc.plans_ranges()).flat_map(|p| &p.layers).filter_map(|l| l.video.as_ref()) {
         let to = dir.join(VIDEOS).join(v.id.to_string());
         if let Some(from) = crate::video::dir_of(v.id).filter(|from| *from != to) {
-            if !videos.iter().any(|(w, _, _): &(crate::video::VideoClip, PathBuf, PathBuf)| w.id == v.id) {
-                videos.push((v.clone(), from, to));
+            if !job.videos.iter().any(|(w, _, _)| w.id == v.id) {
+                job.videos.push((v.clone(), from, to));
             }
         }
     }
-    let manifest = serde_json::to_vec_pretty(&manifest_of(doc)).map_err(|e| e.to_string())?;
-    let unreadable = unreadable_in(dir);
-    let keep_drawings = crate::planvers::illisible(dir) || crate::variantes::illisible(dir);
     // Les instantanés d'envois pas encore écrits (`envois.rs`) : un dessin du projet qui a déjà leur contenu
     // dans `dessins/` est recopié (les dessins s'écrivent avant eux), pas encodé de nouveau ; un autre
     // dossier que celui du projet (« Enregistrer sous ») reçoit aussi les instantanés déjà écrits.
-    let snapshots = doc.envois.pending.clone();
-    let snapshot_reuse = crate::envois::dessins_reutilisables(&snapshots, written, &|id| Some(drawing_path(dir, id, false)));
-    let versions_from = if reuse.is_none() {
-        doc.envois.dossier.as_ref().filter(|d| d.as_path() != dir).map(|d| d.join(crate::envois::DIR)).filter(|v| v.is_dir())
-    } else {
-        None
-    };
-    Ok(SaveJob {
-        manifest_path: manifest_path.to_path_buf(),
-        drawings,
-        sounds,
-        textures,
-        videos,
-        manifest,
-        has_unreadable: !unreadable.is_empty() || keep_drawings,
-        kept: kept_files_in(dir),
-        used: used.union(&unreadable).copied().collect(),
-        fonds: fonds.union(&unreadable).copied().collect(),
-        hors: hors.union(&unreadable).copied().collect(),
-        used_sounds,
-        used_textures,
-        comments: crate::commentaires::to_bytes(doc)?,
-        reserves: crate::rognage::to_bytes(doc)?,
-        transitions: crate::transitions::to_bytes(doc)?,
-        sound_fx: crate::audiofx::to_bytes(doc)?,
-        personnages: crate::personnages::to_bytes(doc)?,
-        annotations: crate::annotations::to_bytes(doc)?,
-        sons_proposes: crate::indications::to_bytes(doc)?,
-        references: crate::references::plan_save(doc, dir)?,
-        envois: crate::envois::to_bytes(doc)?,
-        plans_versions: crate::planvers::to_bytes(doc)?,
-        variantes: variantes_octets(doc)?,
-        variantes_gardees: false,
-        keep_drawings,
-        snapshots,
-        snapshot_reuse,
-        versions_from,
-        partage: None,
-    })
+    job.snapshots = doc.envois.pending.clone();
+    job.snapshot_reuse = crate::envois::dessins_reutilisables(&job.snapshots, written, &|id| Some(drawing_path(dir, id, false)));
+    let versions_from = if reuse.is_none() { doc.envois.dossier.as_ref().filter(|d| d.as_path() != dir).map(|d| d.join(crate::envois::DIR)) } else { None };
+    let hors_variantes = if doc.variantes.is_empty() { BTreeSet::new() } else { hors_of(doc, &doc.cels_des_variantes()) };
+    job.differe = Some(Box::new(Differe { doc: doc.copie_sans_dessins(), used, dessins, hors_variantes, versions_from }));
+    Ok(job)
+}
+
+impl SaveJob {
+    /// La part de `prepare_save` laissée au fil d'écriture : ce que le dossier contient déjà, puis le manifeste et les
+    /// fichiers annexes en JSON, à partir du cliché. Mêmes octets, mêmes décisions que lorsque tout se faisait sur le
+    /// fil de l'interface ; un dessin que `written` disait écrit et dont un fichier manque est noté dans `manquants`.
+    fn resoudre(&mut self) -> Result<(), String> {
+        let Some(differe) = self.differe.take() else { return Ok(()) };
+        let Differe { doc, used, dessins, hors_variantes, versions_from } = *differe;
+        let dir = self.manifest_path.parent().ok_or("chemin de projet invalide")?.to_path_buf();
+        let dir = dir.as_path();
+        // Les fichiers déjà là, d'une seule lecture du dossier (un `exists` par dessin coûtait 0,15 ms chacun).
+        let present: std::collections::HashSet<std::ffi::OsString> =
+            fs::read_dir(dir.join(DRAWINGS)).map(|entries| entries.flatten().map(|e| e.file_name()).collect()).unwrap_or_default();
+        let there = |p: &Path| p.file_name().is_some_and(|n| present.contains(n));
+        let (mut fonds, mut hors) = (BTreeSet::new(), BTreeSet::new());
+        for c in dessins {
+            let id = c.id;
+            if c.fond {
+                fonds.insert(id);
+            }
+            if c.hors {
+                hors.insert(id);
+            }
+            let Some(DonneesCliche { vecteur, raster, fond, ailleurs }) = c.donnees.map(|d| *d) else {
+                let complet = there(&drawing_path(dir, id, c.vector))
+                    && (!c.fond || there(&fond_path(dir, id)))
+                    && (!c.hors || (there(&hors_png_path(dir, id)) && there(&hors_json_path(dir, id))));
+                if !complet {
+                    self.manquants.push(id);
+                }
+                continue;
+            };
+            let copie = |path_of: &dyn Fn(&Path) -> PathBuf| ailleurs.as_deref().map(path_of).filter(|p| p.exists());
+            // Ce que le dessin a hors de la feuille : recopié d'ailleurs si ses deux fichiers y sont, sinon ses tuiles.
+            let hors_ailleurs = c.hors.then(|| (copie(&|d| hors_png_path(d, id)), copie(&|d| hors_json_path(d, id))));
+            let tuiles = match (&hors_ailleurs, &raster) {
+                (Some((Some(_), Some(_))), _) | (None, _) => None,
+                (Some(_), r) => Some(r.as_ref().map(Raster::beyond_sheet_tiles).unwrap_or_default()),
+            };
+            let data = match (copie(&|d| drawing_path(d, id, c.vector)), vecteur, raster) {
+                (Some(from), _, _) => DrawingData::CopyFrom(from),
+                (None, Some(v), _) => DrawingData::Bytes(serde_json::to_vec(&v).map_err(|e| e.to_string())?),
+                (None, None, Some(r)) => DrawingData::Raster(r),
+                (None, None, None) => return Err(format!("dessin {id} : contenu absent du cliché")),
+            };
+            self.drawings.push((drawing_path(dir, id, c.vector), data));
+            if let Some(ailleurs_hors) = hors_ailleurs {
+                match (ailleurs_hors, tuiles) {
+                    ((Some(png), Some(json)), _) => {
+                        self.drawings.push((hors_png_path(dir, id), DrawingData::CopyFrom(png)));
+                        self.drawings.push((hors_json_path(dir, id), DrawingData::CopyFrom(json)));
+                    }
+                    (_, tiles) => {
+                        let tiles = tiles.unwrap_or_default();
+                        let index = HorsIndex { colonnes: (tiles.len() as f64).sqrt().ceil().max(1.0) as usize, tuiles: tiles.iter().map(|((x, y), _)| [*x, *y]).collect() };
+                        self.drawings.push((hors_json_path(dir, id), DrawingData::Bytes(serde_json::to_vec(&index).map_err(|e| e.to_string())?)));
+                        self.drawings.push((hors_png_path(dir, id), DrawingData::Atlas(tiles)));
+                    }
+                }
+            }
+            // La strate Fond : sa peinture et sa coupe, à côté du dessin.
+            if let (true, Some((peinture, coupe))) = (c.fond, fond) {
+                let parts: [(fn(&Path, CelId) -> PathBuf, Raster); 2] = [(fond_path, peinture), (coupe_path, coupe)];
+                for (path_of, raster) in parts {
+                    let data = match copie(&|d| path_of(d, id)) {
+                        Some(from) => DrawingData::CopyFrom(from),
+                        None => DrawingData::Raster(raster),
+                    };
+                    self.drawings.push((path_of(dir, id), data));
+                }
+            }
+        }
+        // Un son ne change jamais : on ne l'écrit que s'il n'est pas déjà dans le dossier.
+        self.used_sounds = used_sounds(&doc);
+        self.sounds = self.used_sounds.iter().map(|id| &doc.sounds[id]).map(|s| (dir.join(SOUNDS).join(sound_file(s)), s.bytes.clone())).filter(|(path, _)| !path.exists()).collect();
+        // Une texture non plus (sa clé vient de son contenu) : écrite seulement si elle manque.
+        self.textures = self
+            .used_textures
+            .iter()
+            .map(|&(kind, key)| (texture_file(dir, kind, key), kind, key))
+            .filter(|(path, _, _)| !path.exists())
+            .filter_map(|(path, kind, key)| crate::brushtex::shared_image(kind, key).map(|img| (path, img)))
+            .collect();
+        self.manifest = serde_json::to_vec_pretty(&manifest_de(&doc, true, &used, &hors)).map_err(|e| e.to_string())?;
+        let unreadable = unreadable_in(dir);
+        self.keep_drawings = crate::planvers::illisible(dir) || crate::variantes::illisible(dir);
+        self.has_unreadable = !unreadable.is_empty() || self.keep_drawings;
+        self.kept = kept_files_in(dir);
+        self.used = used.union(&unreadable).copied().collect();
+        self.fonds = fonds.union(&unreadable).copied().collect();
+        self.hors = hors.union(&unreadable).copied().collect();
+        self.comments = crate::commentaires::to_bytes(&doc)?;
+        self.reserves = crate::rognage::to_bytes(&doc)?;
+        self.transitions = crate::transitions::to_bytes(&doc)?;
+        self.sound_fx = crate::audiofx::to_bytes(&doc)?;
+        self.personnages = crate::personnages::to_bytes(&doc)?;
+        self.annotations = crate::annotations::to_bytes(&doc)?;
+        self.sons_proposes = crate::indications::to_bytes(&doc)?;
+        self.references = crate::references::plan_save(&doc, dir)?;
+        self.envois = crate::envois::to_bytes(&doc)?;
+        self.plans_versions = crate::planvers::to_bytes(&doc)?;
+        self.variantes = if doc.variantes.is_empty() { None } else { crate::variantes::to_bytes(&doc, &hors_variantes)? };
+        self.versions_from = versions_from.filter(|v| v.is_dir());
+        Ok(())
+    }
+
+    /// Essais : la part du fil d'écriture faite tout de suite, sur ce fil-ci (la mesurer à part).
+    #[cfg(test)]
+    pub(crate) fn resoudre_ici(&mut self) -> Result<(), String> {
+        self.resoudre()
+    }
+}
+
+/// Essais : `prepare_save` tel qu'il était avant le cliché léger (tout sur le fil de l'interface : manifeste et
+/// annexes en JSON, lecture du dossier, pixels du bord de chaque dessin relus deux fois), pour mesurer l'avant et
+/// l'après dans le même processus.
+#[cfg(test)]
+pub(crate) fn prepare_save_avant(doc: &Document, manifest_path: &Path, written: &mut HashMap<CelId, u64>) -> Result<SaveJob, String> {
+    SANS_MEMO.with(|s| s.set(true));
+    let job = (|| {
+        let dir = manifest_path.parent().ok_or("chemin de projet invalide")?;
+        let used = doc.used_cels();
+        written.retain(|id, _| used.contains(id));
+        let (drawings, fonds, hors, _) = dessins_a_ecrire(doc, dir, &used, written, None)?;
+        let mut job = SaveJob::vide(manifest_path);
+        job.used_sounds = used_sounds(doc);
+        job.sounds = job.used_sounds.iter().map(|id| &doc.sounds[id]).map(|s| (dir.join(SOUNDS).join(sound_file(s)), s.bytes.clone())).filter(|(path, _)| !path.exists()).collect();
+        job.used_textures = used_textures(doc, &used);
+        job.textures = job
+            .used_textures
+            .iter()
+            .map(|&(kind, key)| (texture_file(dir, kind, key), kind, key))
+            .filter(|(path, _, _)| !path.exists())
+            .filter_map(|(path, kind, key)| crate::brushtex::shared_image(kind, key).map(|img| (path, img)))
+            .collect();
+        for v in doc.panels.iter().chain(doc.plans_ranges()).flat_map(|p| &p.layers).filter_map(|l| l.video.as_ref()) {
+            let to = dir.join(VIDEOS).join(v.id.to_string());
+            if let Some(from) = crate::video::dir_of(v.id).filter(|from| *from != to) {
+                if !job.videos.iter().any(|(w, _, _)| w.id == v.id) {
+                    job.videos.push((v.clone(), from, to));
+                }
+            }
+        }
+        let drawn = doc.used_cels();
+        job.manifest = serde_json::to_vec_pretty(&manifest_de(doc, true, &drawn, &hors_of(doc, &drawn))).map_err(|e| e.to_string())?;
+        let unreadable = unreadable_in(dir);
+        job.keep_drawings = crate::planvers::illisible(dir) || crate::variantes::illisible(dir);
+        job.has_unreadable = !unreadable.is_empty() || job.keep_drawings;
+        job.kept = kept_files_in(dir);
+        job.drawings = drawings;
+        job.used = used.union(&unreadable).copied().collect();
+        job.fonds = fonds.union(&unreadable).copied().collect();
+        job.hors = hors.union(&unreadable).copied().collect();
+        job.snapshots = doc.envois.pending.clone();
+        job.snapshot_reuse = crate::envois::dessins_reutilisables(&job.snapshots, written, &|id| Some(drawing_path(dir, id, false)));
+        job.versions_from = doc.envois.dossier.as_ref().filter(|d| d.as_path() != dir).map(|d| d.join(crate::envois::DIR)).filter(|v| v.is_dir());
+        job.comments = crate::commentaires::to_bytes(doc)?;
+        job.reserves = crate::rognage::to_bytes(doc)?;
+        job.transitions = crate::transitions::to_bytes(doc)?;
+        job.sound_fx = crate::audiofx::to_bytes(doc)?;
+        job.personnages = crate::personnages::to_bytes(doc)?;
+        job.annotations = crate::annotations::to_bytes(doc)?;
+        job.sons_proposes = crate::indications::to_bytes(doc)?;
+        job.references = crate::references::plan_save(doc, dir)?;
+        job.envois = crate::envois::to_bytes(doc)?;
+        job.plans_versions = crate::planvers::to_bytes(doc)?;
+        job.variantes = variantes_octets(doc)?;
+        Ok(job)
+    })();
+    SANS_MEMO.with(|s| s.set(false));
+    job
+}
+
+/// Essais : le manifeste du document vivant, calculé comme avant le cliché léger (comparer les octets).
+#[cfg(test)]
+pub(crate) fn manifeste_vivant(doc: &Document) -> Vec<u8> {
+    let drawn = doc.used_cels();
+    serde_json::to_vec_pretty(&manifest_de(doc, true, &drawn, &hors_of(doc, &drawn))).expect("manifeste")
+}
+
+/// Essais : le manifeste qu'un enregistrement préparé écrira.
+#[cfg(test)]
+pub(crate) fn manifeste_du_travail(job: &mut SaveJob) -> Vec<u8> {
+    job.resoudre().expect("cliché");
+    job.manifest.clone()
 }
 
 /// Les sons proposés, lus dans `sons_proposes.json` (absent : aucun). Un fichier illisible ou d'une
@@ -1444,7 +1769,9 @@ impl SaveJob {
 
     /// Comme `run`, sur au plus `threads` fils, en comptant dans `progress` les dessins écrits (un
     /// autre fil l'affiche pendant que celui-ci écrit : `enregistrement.rs`).
-    pub fn run_with(self, progress: Option<&Progress>, threads: usize) -> Result<SaveReport, String> {
+    pub fn run_with(mut self, progress: Option<&Progress>, threads: usize) -> Result<SaveReport, String> {
+        // Ce que le fil de l'interface a laissé (le dossier lu, le manifeste et les annexes en JSON) : avant toute écriture.
+        self.resoudre()?;
         if self.partage.is_some() {
             return self.run_partage(progress, threads);
         }
@@ -1523,7 +1850,7 @@ impl SaveJob {
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
             + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) }
             + self.references.cleanup(dir);
-        Ok(SaveReport { written: count, removed, snapshots: self.snapshots.iter().map(|s| s.id).collect(), partage: None })
+        Ok(SaveReport { written: count, removed, snapshots: self.snapshots.iter().map(|s| s.id).collect(), partage: None, manquants: std::mem::take(&mut self.manquants) })
     }
 }
 
@@ -1814,17 +2141,16 @@ pub(crate) fn charger_plans(dir: &Path, tete: &Tete, scene: u64, entrees: Vec<se
     loaded
 }
 
-fn manifest_of(doc: &Document) -> Manifest {
-    manifest_de(doc, true)
-}
-
 /// Le manifeste de `doc`. Sans `avec_plans` (la structure d'un projet partagé), les scènes n'ont pas de panneaux : chaque
-/// plan est dans son propre fichier (`projet_partage.rs`).
-fn manifest_de(doc: &Document, avec_plans: bool) -> Manifest {
+/// plan est dans son propre fichier (`projet_partage.rs`). Avec : `drawn`, les dessins qui seront enregistrés
+/// (`Document::used_cels`, pris sur le document vivant : le cliché de `prepare_save` n'a pas les dessins), et `hors`,
+/// ceux qui ont quelque chose hors de la feuille.
+fn manifest_de(doc: &Document, avec_plans: bool, drawn: &BTreeSet<CelId>, hors: &BTreeSet<CelId>) -> Manifest {
     let mut sequences: Vec<SequenceEntry> = Vec::new();
     // Les dessins qui seront enregistrés : un calque de couleur n'écrit que les couples dont les deux
     // dessins le sont.
-    let drawn = if avec_plans { doc.used_cels() } else { BTreeSet::new() };
+    let vide = BTreeSet::new();
+    let drawn = if avec_plans { drawn } else { &vide };
     for (i, panel) in doc.panels.iter().enumerate() {
         let seq = doc.sequence_of(i);
         if sequences.last().is_none_or(|s| s.id != seq) {
@@ -1945,7 +2271,7 @@ fn manifest_de(doc: &Document, avec_plans: bool) -> Manifest {
                 fond: p.fond,
             }
         },
-        dessins_hors: if avec_plans { hors_of(doc, &drawn).into_iter().collect() } else { Vec::new() },
+        dessins_hors: if avec_plans { hors.iter().filter(|id| drawn.contains(id)).copied().collect() } else { Vec::new() },
         partage: None,
     }
 }
@@ -2656,6 +2982,9 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         keep_unreadable(dir, &missing);
         keep_files(dir, unreadable_files);
     }
+    // Ce que l'enregistrement doit savoir de chaque dessin (hors de la feuille, textures), appris ici, sur le fil
+    // d'ouverture : le premier Ctrl+S ne relit pas les pixels du bord de tout le film sur celui de l'interface.
+    doc.memoriser_dessins();
     Ok(Loaded {
         doc,
         written,

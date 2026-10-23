@@ -1468,3 +1468,58 @@ vignettes autour sont peintes aussi), de l'ordre de 0,1 ms.
 dessinant ; la création d'un plan dans une case vide sur un très gros film (une étape de structure : copie des plans,
 comme « Nouveau plan »).
 
+
+## 24. Enregistrer sans rien de lourd sur le fil de l'interface (2026-10-23, branche `optim-sauvegarde`)
+
+L'audit du 2026-10-22 trouvait Ctrl+S et chaque copie de secours à 8–58 ms sur le fil de l'interface (12 ms à 100 plans,
+58 ms à 600, rien de modifié) : une régression par rapport aux « 1 ms » de la section 9.1, venue des annexes ajoutées
+depuis (douze fichiers), du manifeste en JSON joli (10 ms pour 332 Ko, 24 ms pour 2 Mo), d'une lecture de `dessins/`, d'un
+`exists` par son, texture et référence, et surtout de `Raster::has_beyond` (les pixels du bord de chaque dessin, relus deux
+fois à chaque enregistrement : 40 ms pour 9 600 dessins sur la machine chargée).
+
+**Ce qui a bougé.**
+- **Fil de l'interface** (`project::prepare_save`) : seulement ce qui demande le document vivant, sans disque :
+  `used_cels`, le cliché des dessins (`cliche_dessins` : pour un dessin déjà écrit à sa version, son numéro, sa sorte et
+  deux drapeaux ; pour un dessin modifié, son contenu, tuiles partagées `Arc`), la liste des vidéos, les instantanés
+  d'envois, et une copie du document **sans ses dessins** (`Document::copie_sans_dessins` : chaque champ nommé, un champ
+  ajouté doit dire s'il part).
+- **Fil d'écriture** (`SaveJob::resoudre`, au début de `run_with`, avant toute écriture) : la lecture de `dessins/`, les
+  `exists` des sons, textures et dessins à recopier d'ailleurs, le manifeste (`manifest_de`, toujours en JSON joli : des
+  essais et des personnes le lisent comme du texte), les douze annexes, `references.json` relu, `unreadable_in`,
+  `kept_files_in`, `planvers::illisible`, `variantes::illisible`, le JSON des dessins vectoriels modifiés.
+- **Mémo par dessin** (`Document::memo_enregistrement`, `MemoDessin`) : « a quelque chose hors de la feuille » et « textures
+  citées par ses traits », gardés avec la clé (version, taille de la feuille, sorte). L'enregistrement se fiait déjà à la
+  version pour ne pas réécrire un dessin. Rempli à l'ouverture, sur le fil d'ouverture (26,7 ms pour 9 600 dessins).
+  `hors_of` et `used_textures` (projets partagés compris) passent par lui.
+- `Document::used_cels` ne trie plus qu'un numéro par exposition (quatre fois moins pour un film animé à 2 et à 8).
+
+**Mesures** (banc `perf_prepare_save_big_film`, `--ignored`, même processus, avant et après en alternance, le meilleur de
+sept ; machine partagée, chargée à 100 % par d'autres compilations) :
+
+| Film, rien de modifié | Fil de l'interface avant | après | ajouté au fil d'écriture |
+|---|---|---|---|
+| 100 plans, 1 600 dessins (feuilles 3840 × 2160) | 11,9 ms | **0,28 ms** | 3,4 ms |
+| 600 plans, 9 600 dessins | 70,4 ms | **2,3 ms** | 19,4 ms |
+
+Essai permanent `enregistrement_cliche_tests::the_interface_share_of_a_save_stays_small_on_a_big_film` (petites
+feuilles) : 100 plans 4,7–8,6 → 0,21–0,47 ms, 600 plans 30–51 → 1,9–3,3 ms ; bornes 6 et 15 ms, et « après » trois fois
+plus petit qu'« avant ». Au repos de la machine, la part de 600 plans devrait passer sous 1,5 ms (morceaux, au mieux de
+quinze sur la machine chargée : `used_cels` 0,15 ms, cliché des 9 600 dessins 0,3–0,5 ms, copie du document 0,43 ms) ;
+non mesuré au repos.
+
+**Ce qui reste** : la copie du document sans ses dessins grandit avec le film (plans, versions de plans, variantes rangées :
+0,4 ms pour 600 plans) ; le cliché lit la version de chaque dessin (dix mille lectures dispersées). L'enregistrement d'un
+**projet partagé** (`partage_io::preparer`) garde sa préparation d'avant sur le fil de l'interface (sauf le mémo, qui lui
+évite déjà les pixels du bord) : il a besoin de savoir tout de suite quels dessins il réécrit pour ses empreintes.
+
+**Un dessin que le dossier a perdu.** Avant, le fil de l'interface lisait `dessins/` et réécrivait tout de suite un dessin
+déjà écrit dont le fichier manquait (effacé à côté de SHOT). Le cliché n'a pas ses pixels : le fil d'écriture le note
+(`SaveReport::manquants`), et l'enregistrement repart aussitôt pour lui (`App::finish_save` : avant la suite qui attendait,
+Quitter compris ; `project::save` ; la copie de secours, à sa copie suivante). Essais :
+`a_drawing_deleted_beside_shot_is_written_again_by_the_next_save`, `ctrl_s_writes_again_…`, `the_recovery_copy_…`.
+
+**Mêmes octets.** `the_light_snapshot_writes_exactly_what_the_old_preparation_wrote` enregistre le projet complet de la
+fiabilité (plus une version de plan, une variante rangée et un dessin hors de la feuille) par l'ancienne préparation
+(`prepare_save_avant`, gardée pour les essais) et par la nouvelle : même dossier, fichier pour fichier, au premier
+enregistrement et au suivant. `the_snapshot_is_taken_at_the_call_not_when_the_writer_runs` : tout ce qui change entre le
+cliché et le fil d'écriture (notes, commentaire, dessin) n'est pas écrit.

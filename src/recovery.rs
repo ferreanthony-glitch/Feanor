@@ -188,7 +188,14 @@ impl Recovery {
             }
             let result = self.job.take().expect("copie en cours").join().unwrap_or(Err("copie interrompue".into()));
             return match result {
-                Ok(_) => {
+                Ok(report) => {
+                    // Des dessins que la copie disait écrits n'y sont plus : ils seront réécrits à la prochaine copie.
+                    if !report.manquants.is_empty() {
+                        for id in &report.manquants {
+                            self.written.remove(id);
+                        }
+                        self.copied_serial = None;
+                    }
                     self.info.copied = Some(now_secs());
                     self.write_info();
                     true
