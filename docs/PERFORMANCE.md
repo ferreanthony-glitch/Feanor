@@ -1632,3 +1632,37 @@ Go ; au calme, rejeux finis : 6,9–7,0 → 7,5–7,6 Go). Vitesse : le même ex
 décodé, feuille en tuiles, cent images d'interface : à ± 2 %, trois passages chacun) ; `perf_heavy_plan`,
 `perf_long_project`, `perf_project_open_save` égaux à ± 3 % (le bruit de la machine ; le temps d'interface est le même).
 
+### 25.2 L'image d'adoption et les rejeux exacts de l'ouverture
+
+À l'adoption du projet lu, chaque dessin vectoriel ouvert en rendu rapide (des milliers) était copié sur le fil de
+l'interface pour le rejeu exact (`Rejeu::submit_with` : `VectorDrawing::clone`), et chaque demande parcourait toute la file
+(`jobs.retain`) : le carré du nombre de dessins. Un seul fil rejouait ensuite tout.
+
+- **Les copies se font sur le fil de la lecture** (`OpenJob::start`, `rejeu::demandes`, réparties sur les cœurs), quand le
+  réglage « traits vectoriels texturés » demande le rendu exact aussitôt (le réglage d'origine) ; à l'adoption, elles entrent
+  dans la file d'un coup (`Rejeu::submit_batch` : la file prise une fois, ses fils réveillés une fois). Un réglage changé
+  pendant la lecture : les copies sont lâchées, le chemin d'avant sert.
+- **La file est indexée par dessin** (`File` : une demande par dessin, l'ordre à part ; une entrée remplacée ou retirée est
+  sautée) : remplacer ou retirer une demande ne la parcourt plus.
+- **Les fils** : un fil des gestes, à la priorité de l'interface, ne prend que les demandes interactives — il est toujours
+  libre pour un geste lâché ; la file du chargement a les siens, **autant que de cœurs moins deux** (au plafond de fils des
+  Préférences du moment), lancés à sa première demande, **sous la priorité de l'interface** (un fil du chargement libre prend
+  aussi une demande interactive). Les priorités ne changent pas : les gestes passent avant le chargement, la plus récente
+  d'abord ; le chargement dans l'ordre. Aucun rejeu du moteur sur le fil de l'interface (règle « sans latence »).
+
+| Ouvrir le film de 300 plans | Avant (22a8c9a) | Après |
+|---|---|---|
+| Image d'adoption (fil de l'interface) | 76 / 147 ms (178 / 247 ms sur 56e9d79) | **6 à 11 ms** (dont 3–4 ms d'adoption) |
+| Image suivante (la planche ou le montage du film entier, une fois) | — | 17 à 24 ms |
+| Rejeux exacts finis, après l'adoption (Vignettes) | 53 / 61 s | **6 / 7 s** |
+| Rejeux exacts finis (Storyboard) | (un seul fil : 181 s) | **11 à 19 s** |
+| Images jusque-là (Vignettes) : moyenne, p95, pire | 5,6–6,4 / 11–12 / 51–252 ms | 7,4–8,5 / 12–14 / 24–30 ms |
+| Images jusque-là (Storyboard) : moyenne, p95, pire | (un seul fil : 9,5 / 16 / 483 ms) | 8–17 / 14–25 / 24–70 ms |
+
+Pendant les rejeux, les images de l'interface sont un peu plus lentes (les fils du chargement occupent les cœurs voisins de
+celui de l'interface), mais dix fois moins longtemps ; la priorité basse les fait céder à tout travail normal (un autre
+programme qui calcule les retarde, jamais l'interface). Mesures : `lourd_remplacer` (`LOURD_ESPACE=storyboard`,
+`LOURD_FILS_REJEU=1` pour un seul fil). Essais (`rejeu_tests.rs`) : la file du chargement tourne sur plusieurs fils et un
+geste lâché pendant qu'ils sont tous pris est rendu tout de suite (fil des gestes) ; une demande remplacée ou retirée n'est
+jamais rendue ; l'essai de priorité d'avant, sur un seul fil de chargement.
+

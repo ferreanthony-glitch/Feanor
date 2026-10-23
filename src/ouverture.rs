@@ -15,17 +15,20 @@ use eframe::egui;
 
 use crate::app::App;
 use crate::project::{self, Loaded, Progress};
+use crate::rejeu::Demande;
 
 /// Un projet en cours d'ouverture.
 pub struct OpenJob {
     pub path: PathBuf,
     progress: Arc<Progress>,
-    handle: JoinHandle<Result<Loaded, String>>,
+    handle: JoinHandle<(Result<Loaded, String>, Vec<Demande>)>,
 }
 
 impl OpenJob {
-    /// Démarre la lecture de `path` ; `ctx` est réveillé à la fin pour que l'interface l'adopte.
-    pub fn start(path: PathBuf, ctx: &egui::Context, equipe: Option<crate::cooperationui::ParamsEquipe>) -> Self {
+    /// Démarre la lecture de `path` ; `ctx` est réveillé à la fin pour que l'interface l'adopte. `exacts` : le rendu
+    /// exact des dessins ouverts en rendu rapide est demandé dès l'adoption (réglage « traits vectoriels texturés ») ; leurs
+    /// copies pour le rejeu se font alors ici, sur ce fil, pas sur celui de l'interface.
+    pub fn start(path: PathBuf, ctx: &egui::Context, equipe: Option<crate::cooperationui::ParamsEquipe>, exacts: bool) -> Self {
         let progress = Arc::new(Progress::default());
         let (p, q, wake) = (path.clone(), progress.clone(), ctx.clone());
         let handle = std::thread::spawn(move || {
@@ -34,8 +37,12 @@ impl OpenJob {
             if let (Ok(loaded), Some(equipe)) = (result.as_mut(), equipe) {
                 crate::cooperationui::rejoindre_dans_le_fil(loaded, equipe, &p);
             }
+            let demandes = match &result {
+                Ok(loaded) if exacts => crate::rejeu::demandes(&loaded.doc, &loaded.approx),
+                _ => Vec::new(),
+            };
             wake.request_repaint();
-            result
+            (result, demandes)
         });
         OpenJob { path, progress, handle }
     }
@@ -49,9 +56,9 @@ impl OpenJob {
         self.handle.is_finished()
     }
 
-    /// Le résultat (à n'appeler qu'une fois `finished`).
-    pub fn join(self) -> Result<Loaded, String> {
-        self.handle.join().unwrap_or_else(|_| Err("la lecture du projet a planté".into()))
+    /// Le résultat (à n'appeler qu'une fois `finished`), et les copies des dessins à rejouer.
+    pub fn join(self) -> (Result<Loaded, String>, Vec<Demande>) {
+        self.handle.join().unwrap_or_else(|_| (Err("la lecture du projet a planté".into()), Vec::new()))
     }
 }
 
@@ -64,7 +71,8 @@ impl App {
         self.status = format!("Ouverture de {}…", path.display());
         // (Le film partagé a besoin de qui je suis : lu ici, sur le fil de l'interface, rien qu'en mémoire.)
         let equipe = Some(crate::cooperationui::ParamsEquipe { moi: self.identite_equipe(), delais: crate::cooperationui::delais_de(&self.settings.equipe), ctx: self.ctx.clone() });
-        self.open_job = Some(OpenJob::start(path, &self.ctx, equipe));
+        let exacts = self.settings.perf.traits_textures == crate::diagnostic::TraitsTextures::Exact;
+        self.open_job = Some(OpenJob::start(path, &self.ctx, equipe, exacts));
     }
 
     /// À chaque image d'écran : la fenêtre d'avancement, et l'adoption du projet une fois lu.
@@ -88,7 +96,9 @@ impl App {
         }
         let job = self.open_job.take().expect("ouverture en cours");
         let path = job.path.clone();
-        self.finish_open(path, job.join());
+        let _t = crate::perf::section("ouverture : adoption du projet");
+        let (loaded, demandes) = job.join();
+        self.finish_open_avec(path, loaded, demandes);
     }
 
     /// Le dessin `id` vient de s'ouvrir en rendu rapide : son rendu exact se demande selon le
@@ -103,17 +113,42 @@ impl App {
         }
     }
 
+    /// Les dessins `ids` viennent de s'ouvrir en rendu rapide ; `demandes` : leurs copies pour le rejeu, faites sur le fil
+    /// de la lecture (vide si le rendu exact n'était pas demandé à l'ouverture). Un film de 300 plans en a des milliers :
+    /// elles entrent dans la file d'un coup, sans copie sur le fil de l'interface.
+    pub(crate) fn rejeux_apres_ouverture(&mut self, ids: Vec<crate::document::CelId>, demandes: Vec<Demande>) {
+        if demandes.is_empty() || self.settings.perf.traits_textures != crate::diagnostic::TraitsTextures::Exact {
+            // (Le réglage a changé pendant la lecture : les copies ne servent pas.)
+            crate::lacher::en_fond(demandes);
+            for id in ids {
+                self.rejeu_apres_ouverture(id);
+            }
+            return;
+        }
+        let copies: std::collections::HashSet<crate::document::CelId> = demandes.iter().map(|d| d.cel).collect();
+        let (w, h) = (self.doc.width, self.doc.height);
+        self.rejeu.submit_batch(demandes, w, h, false);
+        for id in ids.into_iter().filter(|id| !copies.contains(id)) {
+            self.rejeu_apres_ouverture(id);
+        }
+    }
+
     /// Le projet est lu (ou ne l'a pas pu être) : il devient le projet courant.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn finish_open(&mut self, path: PathBuf, loaded: Result<Loaded, String>) {
+        self.finish_open_avec(path, loaded, Vec::new());
+    }
+
+    /// `finish_open`, avec les copies des dessins à rejouer faites sur le fil de la lecture (`OpenJob::start`).
+    pub(crate) fn finish_open_avec(&mut self, path: PathBuf, loaded: Result<Loaded, String>, demandes: Vec<Demande>) {
         match loaded {
             Ok(loaded) => {
                 if !self.charger_projet(loaded.doc) {
                     self.status = format!("« {} » n'a pas pu s'ouvrir dans un nouvel onglet : un travail attend l'onglet affiché.", path.display());
+                    crate::lacher::en_fond(demandes);
                     return;
                 }
-                for id in loaded.approx {
-                    self.rejeu_apres_ouverture(id);
-                }
+                self.rejeux_apres_ouverture(loaded.approx, demandes);
                 self.written = loaded.written;
                 // Un film partagé : la session démarre (`cooperationui.rs`). Sans elle, le projet reste en lecture seule : son
                 // chemin n'est pas retenu (un enregistrement ne doit jamais écrire un manifeste classique par-dessus la structure).
