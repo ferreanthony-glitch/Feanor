@@ -1620,7 +1620,7 @@ en 20 s, 160 000 en 151 à 494 s). Le **tas segmenté** (Windows 10 2004 et plus
 
 | Film de 300 plans | Avant (22a8c9a) | Après |
 |---|---|---|
-| Fermer `shot.exe` (de la demande à la fin du processus) | 926 s (machine calme, ce matin) ; 1 128 s (chargée) | **0,9 s** |
+| Fermer `shot.exe` (de la demande à la fin du processus) | 926 s (machine calme, ce matin) ; 1 128 s (chargée) | **0,9 à 1,1 s** |
 | Remplacer le projet (`load_doc`, fil de l'interface) | 1 069 s ; 1 475 s (chargée) | **0,014 s** |
 | Fermer l'onglet caché du film (fil de l'interface) | (même tas, mêmes minutes) | **2 ms** |
 | Mémoire rendue, sur le fil de fond | — | remplacement : 7,6 → 0,37 Go en moins de 5 s ; onglet fermé : 7,8 → 0,5 Go en 4 s |
@@ -1665,4 +1665,26 @@ programme qui calcule les retarde, jamais l'interface). Mesures : `lourd_remplac
 `LOURD_FILS_REJEU=1` pour un seul fil). Essais (`rejeu_tests.rs`) : la file du chargement tourne sur plusieurs fils et un
 geste lâché pendant qu'ils sont tous pris est rendu tout de suite (fil des gestes) ; une demande remplacée ou retirée n'est
 jamais rendue ; l'essai de priorité d'avant, sur un seul fil de chargement.
+
+### 25.3 La planche dézoomée (0,2) du film de 300 plans, mesurée de nouveau
+
+Le 2026-10-23 au matin (56e9d79), dessiner dans une case de la planche dézoomée à 0,2 coûtait 51 ms par image (pire 310 ms,
+29 ms d'attente de la carte graphique). Depuis, main (22a8c9a) garde la disposition et borne les vignettes (section 24).
+Mesure `lourd_planche` (90 cases à l'écran) :
+
+| Planche à 0,2, film de 300 plans : moyenne / p95 / pire | 56e9d79 | 22a8c9a (tas par défaut) | `gros-projets` |
+|---|---|---|---|
+| Rien ne bouge | — | 10,1 / 13,1 / 16 ms | 7,3 / 13,3 / 17 ms |
+| Trait dans une case (40 images, deux cases) | 51,3 / 109 / 310 ms | 13,7 / 19 / 122 ms ; 8,5 / 17 / 45 ms | 11,3 / 20 / 97 ms ; 8,9 / 17 / 80 ms |
+| Glisser la caméra d'une case | 18,5 / 42 / 171 ms | 7,2 / 21 / 28 ms | 4,5 / 7,7 / 7,8 ms |
+| Changer de plan à chaque image | 25,1 / 87 / 132 ms | 15,8 / 77 / 205 ms | 7,2 / 47 / 76 ms |
+
+**Ce n'est plus mauvais** : un trait dans une case coûte 9 à 11 ms par image en moyenne. Ce qui reste, ce sont les pics de la
+**première image où une case devient le plan courant** (le trait qui commence dans une autre case, changer de plan) : la case
+du plan courant montre le dessin vivant (`board_card`, `card_canvas`), dont les dessins du plan partent alors à la carte
+graphique en pleine définition (« gpu : textures créées » jusqu'à 25–39 ms, attente de la carte jusqu'à 50–150 ms sur 22a8c9a).
+C'est le même coût que changer de plan en Storyboard, à tout zoom ; ce ne sont pas les vignettes : à 0,2, une case fait 48
+points et sa vignette est à la plus petite largeur (128 pixels, `thumbs::width_for`), et leur envoi à la carte est déjà borné
+à 1 ms par image (`UPLOAD_TIME`). Rien de contenu à corriger ici : il faudrait des textures réduites pour le dessin vivant
+d'une petite case (à voir si Anthony sent ce pic en changeant de plan sur une planche dézoomée).
 
