@@ -323,13 +323,46 @@ pub fn layout(doc: &Document, s: &BoardSettings) -> BoardLayout {
 /// Un intervalle occupé d'une rangée : de `a` à `b`, puis l'écart qui suit, en x depuis le bord gauche des rangées.
 type Occupe = (f32, f32, f32);
 
+/// Ce qui est occupé, rangée par rangée : les rangées de la planche (`bas`, depuis la première), et celles qu'une enveloppe prend
+/// au-dessus de la page (`haut` : la rangée -1, puis -2…). Ces dernières n'existent pas (la planche glisse d'autant, `decalage`),
+/// mais deux enveloppes qui y montent ne doivent pas s'y recouvrir (passe de débogage au hasard, 2026-10-23 : deux plans voisins
+/// dont la caméra monte au-dessus de la première rangée se chevauchaient là-haut).
+#[derive(Default)]
+struct Occ {
+    bas: Vec<Vec<Occupe>>,
+    haut: Vec<Vec<Occupe>>,
+}
+
+impl Occ {
+    /// Le nombre de rangées de la planche occupées (celles d'au-dessus ne comptent pas).
+    fn len(&self) -> usize {
+        self.bas.len()
+    }
+
+    fn rangee(&self, row: i64) -> Option<&Vec<Occupe>> {
+        if row >= 0 {
+            self.bas.get(row as usize)
+        } else {
+            self.haut.get((-row - 1) as usize)
+        }
+    }
+
+    fn rangee_mut(&mut self, row: i64) -> &mut Vec<Occupe> {
+        let (v, i) = if row >= 0 { (&mut self.bas, row as usize) } else { (&mut self.haut, (-row - 1) as usize) };
+        while v.len() <= i {
+            v.push(Vec::new());
+        }
+        &mut v[i]
+    }
+}
+
 /// Ce qui empêche de poser quelque chose entre `a` et `b` (l'écart qui suit compris) dans la rangée `row` : la fin de l'intervalle
 /// occupé qui le gêne. `deborde` : `a` est le bord gauche d'une enveloppe qui dépasse à gauche de sa case : elle peut mordre sur
 /// l'écart de la case d'avant (il n'est là que pour séparer deux vignettes), pas sur la case elle-même.
-fn bloque(occ: &[Vec<Occupe>], row: i64, a: f32, b: f32, deborde: bool) -> Option<f32> {
+fn bloque(occ: &Occ, row: i64, a: f32, b: f32, deborde: bool) -> Option<f32> {
     let eps = 0.5;
     let fin = |iv: &Occupe| if deborde { iv.1 } else { iv.1 + iv.2 };
-    occ.get(usize::try_from(row).ok()?)?.iter().filter(|iv| a < fin(iv) - eps && b > iv.0 + eps).map(fin).fold(None, |m, e| Some(m.map_or(e, |m: f32| m.max(e))))
+    occ.rangee(row)?.iter().filter(|iv| a < fin(iv) - eps && b > iv.0 + eps).map(fin).fold(None, |m, e| Some(m.map_or(e, |m: f32| m.max(e))))
 }
 
 /// Une case à poser : ses rangées (par rapport à celle de A) avec leur intervalle en x depuis le bord gauche de A.
@@ -364,7 +397,7 @@ impl Gabarit {
 /// Toujours fini : à chaque tour, `x_a` avance d'au moins un demi-point dans la rangée, ou la rangée avance ; une rangée sous toutes
 /// les rangées occupées est libre, et une case paginée y trouve un début de page avant `page_cap` rangées. (Une borne de plus, au
 /// cas où : au-delà de toutes les rangées occupées et d'une page, la case se pose au début de la rangée où l'on est, qui est libre.)
-fn trouve(occ: &[Vec<Occupe>], g: &Gabarit, gap: f32, row_w: f32, page_cap: usize, depart: (usize, f32)) -> (usize, f32) {
+fn trouve(occ: &Occ, g: &Gabarit, gap: f32, row_w: f32, page_cap: usize, depart: (usize, f32)) -> (usize, f32) {
     let (mut r_a, mut x_a) = depart;
     let paginee = page_cap != usize::MAX && g.rangees > 1 && g.rangees <= page_cap;
     let trop_large = g.x_hi - g.x_lo > row_w + 1e-3;
@@ -400,19 +433,15 @@ fn trouve(occ: &[Vec<Occupe>], g: &Gabarit, gap: f32, row_w: f32, page_cap: usiz
     }
 }
 
-/// Note l'occupation d'une case posée (les rangées qui n'existent pas, au-dessus de la page, ne comptent pas).
-fn occupe(occ: &mut Vec<Vec<Occupe>>, g: &Gabarit, gap: f32, r_a: usize, x_a: f32) {
+/// Note l'occupation d'une case posée (au-dessus de la page aussi, `Occ::haut`).
+fn occupe(occ: &mut Occ, g: &Gabarit, gap: f32, r_a: usize, x_a: f32) {
     for &(b, lo, hi) in &g.bandes {
-        let Ok(row) = usize::try_from(r_a as i64 + b as i64) else { continue };
-        while occ.len() <= row {
-            occ.push(Vec::new());
-        }
-        occ[row].push((x_a + lo, x_a + hi, gap));
+        occ.rangee_mut(r_a as i64 + b as i64).push((x_a + lo, x_a + hi, gap));
     }
 }
 
 /// La case `g`, posée en (`r_a`, `x_a`), gênerait-elle ce qui est déjà noté ?
-fn gene(occ: &[Vec<Occupe>], g: &Gabarit, gap: f32, r_a: usize, x_a: f32) -> bool {
+fn gene(occ: &Occ, g: &Gabarit, gap: f32, r_a: usize, x_a: f32) -> bool {
     g.bandes.iter().any(|&(b, lo, hi)| bloque(occ, r_a as i64 + b as i64, x_a + lo, x_a + hi + gap, lo < -1e-3).is_some())
 }
 
@@ -445,32 +474,32 @@ fn gabarit_de(poly: &[Pos2], note: Option<Rect>, rh: &dyn Fn(i64) -> f32, r0: us
         if b > 0 && haut >= y_max - 0.25 {
             break;
         }
-        if let Some((lo, hi)) = etendue(haut, bas).filter(|_| r0 as i64 + b as i64 >= 0) {
+        if let Some((lo, hi)) = etendue(haut, bas) {
             bandes.push((b, lo, hi));
         }
         haut = bas;
         b += 1;
     }
-    // Vers le haut.
+    // Vers le haut. (Les rangées au-dessus de la page, qui n'existent pas, gardent leur bande : deux enveloppes ne s'y recouvrent pas,
+    // `Occ::haut` ; elles ne comptent ni dans la taille ni dans la place de la case.)
     let (mut b, mut bas) = (-1i32, -LABEL_H);
     while b > -24 {
         let haut = bas - rh(r0 as i64 + b as i64);
         if bas <= y_min + 0.25 {
             break;
         }
-        if r0 as i64 + b as i64 >= 0 {
-            if let Some((lo, hi)) = etendue(haut, bas) {
-                bandes.push((b, lo, hi));
-            }
+        if let Some((lo, hi)) = etendue(haut, bas) {
+            bandes.push((b, lo, hi));
         }
         bas = haut;
         b -= 1;
     }
     bandes.sort_by_key(|b| b.0);
-    let b_min = bandes.iter().map(|b| b.0).min().unwrap_or(0).min(0);
+    let existe = |b: &&(i32, f32, f32)| r0 as i64 + b.0 as i64 >= 0;
+    let b_min = bandes.iter().filter(existe).map(|b| b.0).min().unwrap_or(0).min(0);
     let b_max = bandes.iter().map(|b| b.0).max().unwrap_or(0).max(0);
-    let x_lo = bandes.iter().map(|b| b.1).fold(0.0, f32::min);
-    let x_hi = bandes.iter().map(|b| b.2).fold(0.0, f32::max);
+    let x_lo = bandes.iter().filter(existe).map(|b| b.1).fold(0.0, f32::min);
+    let x_hi = bandes.iter().filter(existe).map(|b| b.2).fold(0.0, f32::max);
     Gabarit { bandes, x_lo, x_hi, au_dessus: (-b_min) as usize, rangees: (b_max - b_min + 1) as usize, b_max }
 }
 
@@ -478,12 +507,12 @@ fn gabarit_de(poly: &[Pos2], note: Option<Rect>, rh: &dyn Fn(i64) -> f32, r0: us
 /// `gabarits[k]`) ; `unite` : celui d'une vignette seule.
 struct Pose {
     placed: Vec<(usize, f32)>,
-    occ: Vec<Vec<Occupe>>,
+    occ: Occ,
     cursor: (usize, f32),
 }
 
 fn poser(gabarits: &[Gabarit], unite: &Gabarit, prints: &[bool], forces: &[Option<(usize, f32)>], gap_after: &dyn Fn(usize) -> f32, row_w: f32, page_cap: usize) -> Pose {
-    let mut occ: Vec<Vec<Occupe>> = Vec::new();
+    let mut occ = Occ::default();
     let mut placed: Vec<(usize, f32)> = Vec::with_capacity(gabarits.len());
     let mut cursor = (0usize, 0.0_f32);
     for (k, g) in gabarits.iter().enumerate() {
@@ -669,7 +698,7 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     // cases posées : on repart des hauteurs de la passe d'avant (nominales d'abord) jusqu'à ce que rien ne change.
     let mut estimees: Vec<f32> = Vec::new();
     let mut rangs: Vec<usize> = vec![0; n];
-    let mut pose = Pose { placed: Vec::new(), occ: Vec::new(), cursor: (0, 0.0) };
+    let mut pose = Pose { placed: Vec::new(), occ: Occ::default(), cursor: (0, 0.0) };
     let mut gabarits: Vec<Gabarit> = Vec::new();
     let mut most: Vec<usize> = Vec::new();
     for passe in 0..5 {

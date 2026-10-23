@@ -13,7 +13,7 @@ use std::collections::{BTreeMap, HashMap};
 use eframe::egui;
 
 use crate::app::App;
-use crate::document::{Cel, CelId, Panel};
+use crate::document::{Cel, CelId, LayerKind, Panel};
 use crate::roles;
 
 /// Ce que devient la place d'images supprimées.
@@ -612,7 +612,16 @@ impl App {
         let at = if replace { a } else { self.cur_frame };
         let snap = self.snapshot();
         let mut copies: HashMap<CelId, CelId> = HashMap::new();
+        // Une rangée de dessins vectoriels ne va pas sur un calque bitmap, ni l'inverse : le calque montrerait des dessins d'une autre
+        // sorte (un trait puis une annulation en faisaient un dessin vide). Elle est laissée de côté (passe de débogage au hasard,
+        // 2026-10-23 : copier des images d'un calque bitmap et les coller sur le calque vectoriel d'un autre plan).
+        let mut autre_sorte = 0;
         for (k, (row, &li)) in clip.rows.iter().zip(&targets).enumerate() {
+            let vectoriel = self.layers()[li].kind == LayerKind::Vector;
+            if row.iter().flatten().any(|old| clip.cels.get(old).is_some_and(|c| c.vector.is_some() != vectoriel)) {
+                autre_sorte += 1;
+                continue;
+            }
             let pasted: Frames = row
                 .iter()
                 .map(|f| {
@@ -641,6 +650,13 @@ impl App {
         let mut status = format!("{n} image{} collée{}.", s(n), s(n));
         if lost > 0 {
             status += &format!(" {lost} rangée{} sans calque au-dessus, laissée{} de côté.", s(lost), s(lost));
+        }
+        if autre_sorte > 0 {
+            if autre_sorte == clip.rows.len().min(targets.len()) {
+                self.status = "Ces images sont d'une autre sorte de calque (vectoriel ou bitmap) : rien n'est collé.".into();
+                return;
+            }
+            status += &format!(" {autre_sorte} rangée{} d'une autre sorte de calque (vectoriel ou bitmap), laissée{} de côté.", s(autre_sorte), s(autre_sorte));
         }
         self.done(snap, status);
     }

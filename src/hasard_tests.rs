@@ -1462,6 +1462,39 @@ fn hasard_joining_a_plan_with_an_extra_bottom_layer_keeps_each_layer_its_own_dra
         }
     }
 }
+/// Copier des images d'un calque bitmap et les coller sur un calque vectoriel (d'un autre onglet, ou d'un plan neuf) : rien de la
+/// mauvaise sorte n'arrive dans le calque (des dessins bitmap dans un calque vectoriel).
+#[test]
+fn hasard_pasting_images_on_a_layer_of_the_other_kind_pastes_nothing_of_the_wrong_kind() {
+    rejouer(3586, &[Commande("images.copier"), Onglet { nouveau: true }, Commande("images.coller")]);
+    rejouer(3666, &[Commande("panneau.nouveau"), TraitDessin { outil: 5, x0: 0.74, y0: 0.8, x1: 0.64, y1: 0.94 }, Commande("images.copier"), Interruption { geste: 0, case: 22, quoi: 17, dx: -0.76, dy: -0.19 }, Commande("images.coller")]);
+}
+
+/// Deux plans voisins dont la caméra monte au-dessus de la première rangée (graine 3694) : leurs enveloppes ne se recouvrent pas là-haut.
+/// La planche ne notait pas ce que prennent les enveloppes au-dessus de la page (ces rangées n'existent pas) : la seconde s'y posait sur
+/// la première.
+#[test]
+fn hasard_two_moving_plans_rising_above_the_first_row_do_not_overlap() {
+    use crate::camera::{set_key, Camera};
+    let mut doc = Document::with_frame(160, 90, 24);
+    for i in 0..4 {
+        doc.add_scene_after(i);
+    }
+    for i in 0..5 {
+        doc.set_duration(i, 6);
+    }
+    let cam = |x: f32, y: f32| Camera { x, y, zoom: 1.0, angle: 0.0, dolly: 0.0, tilt: 0.0, pan: 0.0 };
+    set_key(&mut doc.panels[0].camera, 0, cam(160.0, 90.0));
+    set_key(&mut doc.panels[0].camera, 5, cam(206.4, 12.247292));
+    set_key(&mut doc.panels[1].camera, 0, cam(235.65042, 205.46805));
+    set_key(&mut doc.panels[1].camera, 5, cam(51.19999, 42.506195));
+    let s = crate::board::BoardSettings { card_w: 170.0, columns: 4, rows: 0 };
+    let l = crate::board::layout(&doc, &s);
+    if let Err(e) = sans_chevauchement(&l) {
+        panic!("{}", e.detail);
+    }
+}
+
 /// Couper un plan à une barre, après avoir choisi un calque : le calque choisi ne désigne pas un calque disparu.
 #[test]
 fn hasard_a_cut_bar_after_choosing_a_layer_leaves_no_chosen_layer_that_does_not_exist() {
