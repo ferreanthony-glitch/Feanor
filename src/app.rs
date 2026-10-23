@@ -1492,13 +1492,13 @@ impl App {
     pub(crate) fn clamp_nav(&mut self) {
         self.cur_panel = self.cur_panel.min(self.doc.panels.len() - 1);
         self.cur_layer = self.cur_layer.min(self.layers().len() - 1);
-        self.oublier_les_choix_disparus();
     }
 
     /// Les plans et les calques choisis qui n'existent plus (une annulation, deux plans réunis, une copie annulée) ne restent
     /// pas choisis : `board_sel.len() > 1` disait « plusieurs plans choisis » au color script et à la planche quand l'un
     /// d'eux avait disparu (passe de débogage au hasard, 2026-10-22, `hasard_tests.rs`). Les calques choisis d'un autre
-    /// plan restent : chaque usage ne prend que ceux du plan courant.
+    /// plan restent : chaque usage ne prend que ceux du plan courant. (Par `revalider_rangs` : ils ne disparaissent que par un
+    /// changement de structure, une annulation, un projet ouvert ou un changement venu d'un équipier, jamais d'une image à l'autre.)
     fn oublier_les_choix_disparus(&mut self) {
         let doc = &self.doc;
         if self.board_sel.len() > 8 {
@@ -1551,8 +1551,7 @@ impl App {
                 *drag = None;
             }
         }
-        let doc = &self.doc;
-        self.board_sel.retain(|id| doc.panels.iter().any(|p| p.id == *id));
+        self.oublier_les_choix_disparus();
         if let Some(crate::boardui::MenuTarget::Card { plan, case, .. }) = self.vignettes.menu {
             if self.case_du_menu(plan, case).is_none() {
                 self.vignettes.menu = None;

@@ -2469,6 +2469,13 @@ impl Document {
                 && x.pos_keys.is_empty()
                 && y.pos_keys.is_empty()
                 && x.depth == y.depth
+                // (Un calque de couleur ne se réunit qu'à un calque de couleur, un calque d'effet, de vidéo ou de toute la scène qu'à
+                // un calque de sa sorte : un calque bitmap ordinaire réuni à un calque de couleur voyait ses images refaites d'après le
+                // trait — ses dessins n'étaient plus nulle part, et l'enregistrement suivant les effaçait. Revue du 2026-10-23.)
+                && x.couleur.is_some() == y.couleur.is_some()
+                && x.effet.is_none() == y.effet.is_none()
+                && x.video.is_none() == y.video.is_none()
+                && x.scene_wide == y.scene_wide
         };
         let mut used = vec![false; a.layers.len()];
         let mut target: Vec<Option<usize>> = Vec::with_capacity(b.layers.len());
@@ -2495,11 +2502,19 @@ impl Document {
         // (Le calque d'arrivée par son id, pas par son rang : un calque de `b` ajouté plus bas décale les rangs de `a`, et les images
         // d'un calque bitmap partaient dans le calque vectoriel ajouté sous lui. Passe de débogage au hasard, 2026-10-23.)
         let cible: Vec<Option<u64>> = target.iter().map(|t| t.map(|k| a.layers[k].id)).collect();
+        // Les sources des calques de couleur de `b` réunis à un calque de couleur de `a` : remises sur les calques d'arrivée plus bas.
+        let mut sources_b: Vec<(u64, Vec<u64>)> = Vec::new();
         for (j, mut lb) in b.layers.into_iter().enumerate() {
             lb.frames.truncate(b_len);
             lb.roles.retain(|f, _| *f < b_len);
             match cible[j].and_then(|id| a.layers.iter().position(|l| l.id == id)) {
                 Some(k) => {
+                    // Deux calques de couleur réunis : la couleur de chaque dessin du trait de `b` et ses griffonnages suivent.
+                    if let (Some(ca), Some(cb)) = (a.layers[k].couleur.as_mut(), lb.couleur.take()) {
+                        ca.dessins.extend(cb.dessins);
+                        ca.griffonnages.extend(cb.griffonnages);
+                        sources_b.push((a.layers[k].id, cb.sources));
+                    }
                     a.layers[k].append_at(a_len, lb.frames, &lb.roles);
                     dest.push(a.layers[k].id);
                 }
@@ -2525,6 +2540,24 @@ impl Document {
         for l in a.layers.iter_mut().filter(|l| ajoutes.contains(&l.id)) {
             if let Some(p) = l.parent {
                 l.parent = vers.get(&p).copied().or(Some(p));
+            }
+            // De même pour le trait d'un calque de couleur ajouté tel quel, et ses sources : le calque où le leur est allé.
+            if let Some(c) = l.couleur.as_mut() {
+                if c.trait_id != 0 {
+                    c.trait_id = vers.get(&c.trait_id).copied().unwrap_or(c.trait_id);
+                }
+                for s in &mut c.sources {
+                    *s = vers.get(s).copied().unwrap_or(*s);
+                }
+            }
+        }
+        for (id, sources) in sources_b {
+            if let Some(c) = a.layers.iter_mut().find(|l| l.id == id).and_then(|l| l.couleur.as_mut()) {
+                for s in sources.into_iter().map(|s| vers.get(&s).copied().unwrap_or(s)) {
+                    if !c.sources.contains(&s) {
+                        c.sources.push(s);
+                    }
+                }
             }
         }
         if a.layers.iter().any(|l| l.folder || l.parent.is_some()) {

@@ -336,6 +336,11 @@ impl Geste {
 
 /// Les documents de départ : petits, faits dans le code.
 pub(crate) fn depart(graine: u64) -> Document {
+    // (Une graine sur cinq : des calques de couleur et d'effet. Les autres gardent les documents d'avant, et les suites réduites
+    // qui les citent rejouent pareil.)
+    if graine % 5 == 4 {
+        return projet_couleur(5);
+    }
     match graine % 4 {
         0 => crate::vignettes_tests::quatre_plans(),
         1 => crate::vignettes_camera_tests::plan_court(),
@@ -343,6 +348,51 @@ pub(crate) fn depart(graine: u64) -> Document {
         // (Deux séquences, trois calques : la planche ne tient plus à l'écran.)
         _ => petit_projet(14, 3, 8),
     }
+}
+
+/// `plans` plans d'une séquence, chacun avec un calque de couleur sous son trait vectoriel, un calque bitmap et un calque d'effet
+/// d'ajustement en haut ; les noms changent d'un plan à l'autre (« Trait » / « Ligne »…), pour que les réunions passent par les rangs.
+fn projet_couleur(plans: usize) -> Document {
+    use crate::calquecouleur::CalqueCouleur;
+    use crate::calqueffet::CalqueEffet;
+    use crate::document::{Cel, Layer, LayerKind};
+    let mut doc = Document::with_frame(160, 90, 24);
+    for i in 1..plans {
+        doc.add_scene_after(i - 1);
+    }
+    let images = 6;
+    for p in 0..doc.panels.len() {
+        let pair = p % 2 == 0;
+        let mut trait_ = Layer::new(if pair { "Trait" } else { "Ligne" }, LayerKind::Vector);
+        let mut bitmap = Layer::new(if pair { "Calque 1" } else { "Calque 2" }, LayerKind::Bitmap);
+        for f in 0..images {
+            if f % 2 == 0 {
+                let v = doc.add_cel(Cel::new(doc.width, doc.height, LayerKind::Vector));
+                let mut cel = Cel::new(doc.width, doc.height, LayerKind::Bitmap);
+                let mut t = crate::raster::empty_tile();
+                for (k, px) in t.iter_mut().enumerate() {
+                    if (k + p + f) % 7 < 2 {
+                        *px = eframe::egui::Color32::from_rgba_premultiplied(20, 60, (30 + p * 20) as u8, 220);
+                    }
+                }
+                let n = cel.raster.tiles.len();
+                cel.raster.tiles[(p * 3 + f) % n] = Some(t);
+                let b = doc.add_cel(cel);
+                trait_.frames.push(Some(v));
+                bitmap.frames.push(Some(b));
+            } else {
+                trait_.frames.push(trait_.frames.last().copied().flatten());
+                bitmap.frames.push(bitmap.frames.last().copied().flatten());
+            }
+        }
+        let mut couleur = Layer::new(if pair { "Couleur" } else { "Couleur 2" }, LayerKind::Bitmap);
+        couleur.couleur = Some(CalqueCouleur::new(trait_.id));
+        let effet = Layer::new_effect("Ajustement", CalqueEffet::ajustement(""));
+        doc.panels[p].layers = vec![couleur, trait_, bitmap, effet];
+        doc.panels[p].length = images;
+        crate::calquecouleur::refleter(&mut doc, p);
+    }
+    doc
 }
 
 /// Comme `perf_tests::projet_long`, sur une petite feuille (l'instantané de chaque geste relit tous les pixels) : `plans` plans
@@ -448,6 +498,31 @@ fn photo(doc: &Document) -> String {
         .map(|l| if l.starts_with("scenes ") { scenes.as_str() } else if l.starts_with("sequences ") { sequences.as_str() } else { l })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// Les étapes qui ne doivent faire disparaître aucun dessin d'un calque ordinaire (`dessins_ordinaires`).
+const GARDENT_LES_DESSINS: &[&str] = &[
+    "Réunir deux vignettes en un plan",
+    "Réunir avec le plan précédent",
+    "Réunir le plan et le suivant",
+    "Fusionner les plans choisis",
+    "Déplacer le plan",
+    "Avancer le plan",
+    "Reculer le plan",
+    "Nouveau plan",
+    "Nouvelle séquence",
+    "Nouveau plan avant le plan courant",
+];
+
+/// Les dessins montrés par les calques de dessin ordinaires des plans (pas le Décor, qu'une réunion peut remplacer, ni les calques
+/// de couleur, refaits d'après leur trait, ni les calques d'effet ou de vidéo).
+fn dessins_ordinaires(doc: &Document) -> BTreeSet<CelId> {
+    doc.panels
+        .iter()
+        .flat_map(|p| p.layers.iter())
+        .filter(|l| !l.folder && !l.decor && l.couleur.is_none() && l.effet.is_none() && l.video.is_none())
+        .flat_map(|l| l.frames.iter().flatten().copied())
+        .collect()
 }
 
 /// L'instantané de ce que l'enregistrement garde : la réserve d'un calque supprimé (le rognage, `rognage::to_bytes`) n'est pas
@@ -931,6 +1006,12 @@ impl Essai {
                 if let Some(id) = l.frames.iter().flatten().find(|id| !doc.cels.contains_key(id)) {
                     return Err(echec("dessin absent", format!("plan {i}, calque « {} » : le dessin {id} n'existe pas", l.name)));
                 }
+                // Un calque de couleur lié colore un calque de trait du plan.
+                if let Some(c) = l.couleur.as_ref().filter(|c| c.trait_id != 0) {
+                    if !p.layers.iter().any(|t| t.id == c.trait_id && t.couleur.is_none()) {
+                        return Err(echec("trait de couleur", format!("plan {i}, calque de couleur « {} » : son trait {} n'est pas un calque de trait du plan", l.name, c.trait_id)));
+                    }
+                }
                 // Un calque de dessin ordinaire ne montre que des dessins de sa sorte (vectoriel ou bitmap).
                 if !l.folder && l.couleur.is_none() && l.video.is_none() && l.effet.is_none() {
                     let vectoriel = l.kind == crate::document::LayerKind::Vector;
@@ -1006,6 +1087,7 @@ impl Essai {
     pub(crate) fn pas(&mut self, g: Geste) -> Result<(), Echec> {
         let onglet = self.b.app.actif;
         let (h0, s0, serie0) = (self.b.app.history.undo_len(), photo(&self.b.app.doc), self.b.app.history.serial());
+        let dessins0 = dessins_ordinaires(&self.b.app.doc);
         // (Une zone bitmap soulevée, déplacée par un geste d'avant, n'a son étape qu'en se reposant : l'annuler revient avant
         // le soulèvement, plus loin que l'état d'avant ce geste-ci. De même pour une sélection sur plusieurs calques.)
         let s0_net = self.b.app.bsel.as_ref().is_none_or(|s| s.lifted.is_none()) && self.b.app.multi.sel.is_none();
@@ -1025,6 +1107,15 @@ impl Essai {
         self.verifier()?;
         if self.b.app.actif == onglet && self.b.app.history.undo_len() > h0 {
             let nom = self.b.app.history.names().0.last().map(|s| s.to_string()).unwrap_or_default();
+            // Réunir ou déplacer des plans, en faire un neuf : aucun dessin d'un calque ordinaire ne se perd (ils restent tous
+            // quelque part dans le projet).
+            if self.b.app.history.undo_len() == h0 + 1 && GARDENT_LES_DESSINS.contains(&nom.as_str()) {
+                let apres = self.b.app.doc.used_cels();
+                let perdus: Vec<CelId> = dessins0.iter().copied().filter(|c| !apres.contains(c)).collect();
+                if !perdus.is_empty() {
+                    return Err(echec("dessins perdus", format!("« {nom} » : {} dessins ne sont plus nulle part : {perdus:?}", perdus.len())));
+                }
+            }
             *self.etapes.entry(nom).or_default() += 1;
         }
         // Le projet ne change pas sans que l'historique bouge : ce qu'on ne peut pas annuler serait perdu pour l'annulation.
@@ -1578,6 +1669,93 @@ fn hasard_a_new_version_during_a_bitmap_selection_move_lays_the_move_down_first(
     // Aucune zone soulevée ne reste sur un dessin qui n'est plus celui du plan.
     let dessins: BTreeSet<CelId> = e.b.app.layers().iter().flat_map(|l| l.frames.iter().flatten().copied()).collect();
     assert!(e.b.app.bsel.as_ref().is_none_or(|s| dessins.contains(&s.cel)), "la zone choisie est sur un dessin du plan courant");
+}
+
+/// Une zone bitmap choisie, soulevée et déplacée à l'image `image` du premier plan (un dessin neuf aux images paires).
+fn zone_soulevee(image: usize) -> Essai {
+    let mut e = Essai::new(petit_projet(2, 1, 6), "marque-zone");
+    e.toile().expect("le dessin à l'écran");
+    e.b.app.cur_frame = image;
+    e.b.chauffer(2);
+    e.jouer(TraitDessin { outil: 0, x0: 0.3, y0: 0.35, x1: 0.6, y1: 0.6 });
+    let r = e.toile().expect("le dessin à l'écran");
+    e.b.app.set_tool(Tool::Select);
+    let (de, a) = (r.lerp_inside(vec2(0.1, 0.1)), r.lerp_inside(vec2(0.9, 0.9)));
+    let tour = [de, pos2(a.x, de.y), a, pos2(de.x, a.y), de];
+    let mut chemin = Vec::new();
+    for w in tour.windows(2) {
+        chemin.extend(Essai::trajet(w[0], w[1], 4));
+    }
+    e.glisser(Modifiers::NONE, PointerButton::Primary, &chemin);
+    let m = r.lerp_inside(vec2(0.3, 0.3));
+    e.glisser(Modifiers::NONE, PointerButton::Primary, &Essai::trajet(m, m + vec2(30.0, 15.0), 6));
+    assert_eq!(e.b.app.cur_frame, image);
+    assert!(e.b.app.bsel.as_ref().is_some_and(|s| s.lifted.is_some()), "la zone est soulevée, déplacée");
+    e
+}
+
+/// M (« Marque d'image ») ne pose pas une zone soulevée quand la marque ne touche pas à son dessin (le dessin commence à cette
+/// image) : la zone reste soulevée, sur le même dessin. Quand le dessin est tenu par-dessus la marque, la case neuve en reçoit une
+/// copie (`cles_de_case`) : la zone se pose d'abord, avec son étape.
+#[test]
+fn hasard_a_mark_keeps_a_lifted_selection_unless_it_copies_its_drawing() {
+    // Image 2 : un dessin neuf commence là, la marque ne copie rien.
+    let mut e = zone_soulevee(2);
+    let cel = e.b.app.bsel.as_ref().map(|s| s.cel);
+    e.b.app.run_action("marque.basculer");
+    e.b.chauffer(2);
+    assert!(e.b.app.panel().marks.iter().any(|m| m.frame == 2), "la marque est posée");
+    assert!(e.b.app.bsel.as_ref().is_some_and(|s| s.lifted.is_some()) && e.b.app.bsel.as_ref().map(|s| s.cel) == cel, "la zone reste soulevée, sur son dessin");
+    assert_eq!(e.b.app.cel_here(), cel, "le dessin de l'image est toujours le sien");
+    // Image 3 : le dessin de l'image 2 est tenu jusque-là ; la marque en fait une copie pour sa case.
+    let mut e = zone_soulevee(3);
+    e.b.app.run_action("marque.basculer");
+    e.b.chauffer(2);
+    let noms = e.b.app.history.names().0.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    assert!(e.b.app.bsel.as_ref().is_none_or(|s| s.lifted.is_none()), "la zone s'est posée");
+    assert!(noms.len() >= 2 && noms[noms.len() - 2] == "Déplacer", "le déplacement a son étape, avant la marque : {noms:?}");
+}
+
+/// Réunir deux plans quand le premier a un calque de couleur sous son trait et le second un calque bitmap ordinaire sous le sien,
+/// de noms différents : le calque bitmap ne se réunit pas au calque de couleur (par le rang). Il s'y réunissait, et ses images
+/// étaient refaites d'après le trait (`calquecouleur::refleter`) : aucun de ses dessins n'était plus nulle part, et l'enregistrement
+/// suivant les effaçait (revue du 2026-10-23).
+#[test]
+fn hasard_joining_never_merges_an_ordinary_layer_into_a_colour_layer() {
+    use crate::calquecouleur::CalqueCouleur;
+    use crate::document::{Cel, Layer, LayerKind};
+    let mut doc = Document::with_frame(160, 90, 24);
+    doc.add_scene_after(0);
+    let n = 6;
+    let dessin = |doc: &mut Document, sorte: LayerKind| doc.add_cel(Cel::new(doc.width, doc.height, sorte));
+    let mut trait_a = Layer::new("Trait", LayerKind::Vector);
+    trait_a.frames = (0..n).map(|_| Some(dessin(&mut doc, LayerKind::Vector))).collect();
+    let mut couleur = Layer::new("Couleur", LayerKind::Bitmap);
+    couleur.couleur = Some(CalqueCouleur::new(trait_a.id));
+    let mut bitmap_b = Layer::new("Calque 2", LayerKind::Bitmap);
+    bitmap_b.frames = (0..n).map(|_| Some(dessin(&mut doc, LayerKind::Bitmap))).collect();
+    // (Un seul dessin de trait, tenu sur tout le plan, sous des images bitmap qui changent à chaque image.)
+    let mut ligne_b = Layer::new("Ligne", LayerKind::Vector);
+    let tenu = dessin(&mut doc, LayerKind::Vector);
+    ligne_b.frames = vec![Some(tenu); n];
+    let de_b: Vec<CelId> = bitmap_b.frames.iter().chain(&ligne_b.frames).flatten().copied().collect();
+    doc.panels[0].layers = vec![couleur, trait_a];
+    doc.panels[1].layers = vec![bitmap_b, ligne_b];
+    for p in &mut doc.panels {
+        p.length = n;
+    }
+    crate::calquecouleur::refleter(&mut doc, 0);
+    let i = doc.join_next_plan(0).expect("réunis");
+    // (Ce que fait `commit_structure` : les calques de couleur suivent leur trait.)
+    crate::calquecouleur::refleter(&mut doc, i);
+    let utilises = doc.used_cels();
+    let perdus: Vec<CelId> = de_b.iter().copied().filter(|c| !utilises.contains(c)).collect();
+    assert!(perdus.is_empty(), "{} dessins du second plan ne sont plus nulle part : {perdus:?}", perdus.len());
+    for l in &doc.panels[i].layers {
+        if let Some(c) = &l.couleur {
+            assert!(doc.panels[i].layers.iter().any(|t| t.id == c.trait_id && t.couleur.is_none()), "le calque de couleur « {} » colore un trait du plan", l.name);
+        }
+    }
 }
 
 /// Couper un plan à une barre, après avoir choisi un calque : le calque choisi ne désigne pas un calque disparu.

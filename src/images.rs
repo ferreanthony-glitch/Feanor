@@ -605,21 +605,33 @@ impl App {
             crate::collage::Preparation::Pret(crate::collage::Colle::Images(c)) => c,
             _ => return,
         };
+        let targets: Vec<usize> = (self.cur_layer..self.layers().len()).filter(|&li| !self.layers()[li].folder).take(clip.rows.len()).collect();
+        // Une rangée de dessins vectoriels ne va pas sur un calque bitmap, ni l'inverse : le calque montrerait des dessins d'une autre
+        // sorte (un trait puis une annulation en faisaient un dessin vide). Elle est laissée de côté (passe de débogage au hasard,
+        // 2026-10-23 : copier des images d'un calque bitmap et les coller sur le calque vectoriel d'un autre plan). Vu avant de rien
+        // toucher : si rien ne se colle, le trait en cours et la zone choisie restent tels quels.
+        let de_sa_sorte: Vec<bool> = clip
+            .rows
+            .iter()
+            .zip(&targets)
+            .map(|(row, &li)| {
+                let vectoriel = self.layers()[li].kind == LayerKind::Vector;
+                !row.iter().flatten().any(|old| clip.cels.get(old).is_some_and(|c| c.vector.is_some() != vectoriel))
+            })
+            .collect();
+        let autre_sorte = de_sa_sorte.iter().filter(|ok| !**ok).count();
+        if autre_sorte > 0 && autre_sorte == de_sa_sorte.len() {
+            self.status = "Ces images sont d'une autre sorte de calque (vectoriel ou bitmap) : rien n'est collé.".into();
+            return;
+        }
         self.end_stroke();
         self.drop_bitmap_selection();
-        let targets: Vec<usize> = (self.cur_layer..self.layers().len()).filter(|&li| !self.layers()[li].folder).take(clip.rows.len()).collect();
         let (a, b) = self.image_range();
         let at = if replace { a } else { self.cur_frame };
         let snap = self.snapshot();
         let mut copies: HashMap<CelId, CelId> = HashMap::new();
-        // Une rangée de dessins vectoriels ne va pas sur un calque bitmap, ni l'inverse : le calque montrerait des dessins d'une autre
-        // sorte (un trait puis une annulation en faisaient un dessin vide). Elle est laissée de côté (passe de débogage au hasard,
-        // 2026-10-23 : copier des images d'un calque bitmap et les coller sur le calque vectoriel d'un autre plan).
-        let mut autre_sorte = 0;
         for (k, (row, &li)) in clip.rows.iter().zip(&targets).enumerate() {
-            let vectoriel = self.layers()[li].kind == LayerKind::Vector;
-            if row.iter().flatten().any(|old| clip.cels.get(old).is_some_and(|c| c.vector.is_some() != vectoriel)) {
-                autre_sorte += 1;
+            if !de_sa_sorte[k] {
                 continue;
             }
             let pasted: Frames = row
@@ -652,11 +664,7 @@ impl App {
             status += &format!(" {lost} rangée{} sans calque au-dessus, laissée{} de côté.", s(lost), s(lost));
         }
         if autre_sorte > 0 {
-            if autre_sorte == clip.rows.len().min(targets.len()) {
-                self.status = "Ces images sont d'une autre sorte de calque (vectoriel ou bitmap) : rien n'est collé.".into();
-                return;
-            }
-            status += &format!(" {autre_sorte} rangée{} d'une autre sorte de calque (vectoriel ou bitmap), laissée{} de côté.", s(autre_sorte), s(autre_sorte));
+            status +=&format!(" {autre_sorte} rangée{} d'une autre sorte de calque (vectoriel ou bitmap), laissée{} de côté.", s(autre_sorte), s(autre_sorte));
         }
         self.done(snap, status);
     }

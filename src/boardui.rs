@@ -835,7 +835,7 @@ impl App {
             if self.storyboard_refuses() || !self.partage_peut_toucher(&[a.plan]) {
                 return false;
             }
-            let ok = self.avec_etape("Couper le plan entre deux vignettes", |s| s.structure_op(|d, _| d.split_plan(a.panel, b.frame)));
+            let ok = self.avec_etape("Couper le plan entre deux vignettes", |s| s.structure_op_dessins(|d, _| d.split_plan(a.panel, b.frame)));
             if ok {
                 self.cur_frame = 0;
                 self.board_sel = vec![self.doc.panels[self.cur_panel].id];
@@ -848,7 +848,7 @@ impl App {
                 return false;
             }
             let ok = self.avec_etape("Réunir deux vignettes en un plan", |s| {
-                s.structure_op(|d, _| {
+                s.structure_op_dessins(|d, _| {
                     let debut = d.panels.get(a.panel)?.frame_count();
                     let i = d.join_next_plan(a.panel)?;
                     // La case de droite devient une clé de dessin de plus sur chaque calque du plan (`cases.rs`).
