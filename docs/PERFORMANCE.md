@@ -1575,10 +1575,14 @@ la planche sont celles du code d'avant ; après réunir, supprimer, déplacer et
 - `the_case_menu_keeps_its_plan_when_an_undo_shifts_the_plans` vérifie sans condition (le menu reste ouvert, l'animation
   commence sur le plan du clic droit).
 
-### 24.6 Constat : une disposition qui ne finit pas
+### 24.6 Une disposition qui ne finissait pas (SHOT gelé)
 
-En cherchant des planches au hasard, une disposition **ne finit jamais** (avant comme après cette passe : `board::trouve`
-cherche sans fin une rangée où la case tienne) : cadre portrait 1080 × 1920, une colonne, pages de 3 rangées, des
-mouvements de caméra dont des cadres sont tournés. Rien n'est changé ici ; l'essai `random_boards_with_rotated_cameras`
-(`--ignored --nocapture`, une limite de 5 s) le montre et dit la planche.
+En cherchant des planches au hasard : cadre portrait 1080 × 1920, une colonne, pages de 3 rangées, un mouvement de caméra
+dont un cadre est tourné. Son empreinte, même resserrée, est plus large qu'une rangée ; `board::trouve` passait à la
+rangée suivante sans fin (d'avant cette passe). **Corrigé** : une case trop large pour toute rangée se pose au début d'une
+rangée et déborde à droite (papier infini), ses rangées vérifiées comme les autres ; une borne de plus (au-delà des rangées
+occupées et d'une page, le début de la rangée libre) ; cases pâles bornées ; largeur de case qui n'est pas un nombre
+remplacée par celle d'origine. Essais : `random_boards_with_rotated_cameras_always_finish` (60 planches, une sur deux
+étroite, fil à part, limite de 10 s, ordre de lecture et aucun recouvrement vérifiés) et
+`a_rotated_camera_wider_than_a_one_column_row_is_placed` (la planche qui gelait).
 
