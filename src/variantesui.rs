@@ -53,6 +53,7 @@ impl App {
             }
         }
         self.end_stroke();
+        self.poser_les_selections();
         self.playing = false;
         let courant = self.doc.panels.get(self.cur_panel).map(|p| p.id);
         let snap = self.snapshot();

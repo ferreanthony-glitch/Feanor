@@ -101,6 +101,17 @@ impl App {
         self.named_step(name, |app| app.push_pixels(sel.cel, lifted.prefix, tiles));
     }
 
+    /// Avant une opération sur la structure des plans (réunir, couper, dupliquer, une version, une variante, un rognage…) : les
+    /// sélections en cours se posent, chacune avec son étape — une zone bitmap soulevée (déplacée, tournée), la feuille flottante
+    /// d'une sélection vectorielle lâchée, la sélection sur plusieurs calques. Sinon l'opération copiait ou rangeait le dessin à mi-geste,
+    /// et la zone soulevée restait sur un dessin qui n'était plus celui du plan : une nouvelle version faite pendant un lasso
+    /// gardait les pixels déplacés sans étape pour les défaire (passe de débogage au hasard, 2026-10-23, graine 4667).
+    pub(crate) fn poser_les_selections(&mut self) {
+        self.drop_bitmap_selection();
+        self.flush_flottante();
+        self.multi_before_history();
+    }
+
     /// Un geste de plus sur les pixels soulevés (le nom de l'étape d'annulation de la pose).
     pub(crate) fn note_bitmap_step(&mut self, handle: Handle) {
         self.note_bitmap_name(handle.step_name());

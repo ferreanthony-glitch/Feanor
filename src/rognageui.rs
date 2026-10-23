@@ -417,6 +417,7 @@ impl App {
             return None;
         }
         self.end_stroke();
+        self.poser_les_selections();
         self.playing = false;
         let snap = self.snapshot();
         let done = self.doc.rogner(pi, op).ok()?;

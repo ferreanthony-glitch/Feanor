@@ -94,6 +94,7 @@ impl App {
             return false;
         }
         self.end_stroke();
+        self.poser_les_selections();
         self.playing = false;
         // « Report du décor » (Préférences > Vignettes) : lu par la jonction de deux plans (`decor.rs`).
         self.doc.report_decor = self.settings.vignettes.report_decor;

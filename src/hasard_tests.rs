@@ -1539,6 +1539,47 @@ fn hasard_joining_a_plan_whose_decor_is_in_a_folder_keeps_the_stack_in_order() {
     assert!(layers[0].decor && layers[0].parent.is_none(), "le Décor est tout en bas, hors du dossier : {:?}", cle(layers));
 }
 
+/// « Nouvelle version du plan » pendant qu'on déplace une zone bitmap choisie au lasso (graine 4667) : le déplacement se pose
+/// d'abord, avec son étape, puis la version prend la sienne. La zone soulevée restait sur le dessin de la version d'avant, rangée et
+/// invisible : la nouvelle version gardait les pixels à mi-chemin sans étape pour les défaire, et le premier Ctrl+Z ne défaisait
+/// rien de visible.
+#[test]
+fn hasard_a_new_version_during_a_bitmap_selection_move_lays_the_move_down_first() {
+    let mut e = Essai::new(petit_projet(3, 1, 6), "version-lasso");
+    // Un trait (bitmap) au milieu du dessin : la zone choisie a des pixels à déplacer.
+    e.jouer(TraitDessin { outil: 0, x0: 0.3, y0: 0.35, x1: 0.6, y1: 0.6 });
+    let r = e.toile().expect("le dessin à l'écran");
+    e.b.app.set_tool(Tool::Select);
+    let (de, a) = (r.lerp_inside(vec2(0.1, 0.1)), r.lerp_inside(vec2(0.9, 0.9)));
+    let tour = [de, pos2(a.x, de.y), a, pos2(de.x, a.y), de];
+    let mut chemin = Vec::new();
+    for w in tour.windows(2) {
+        chemin.extend(Essai::trajet(w[0], w[1], 4));
+    }
+    e.glisser(Modifiers::NONE, PointerButton::Primary, &chemin);
+    assert!(e.b.app.bsel.is_some(), "une zone bitmap est choisie");
+    // Le glissé de la zone (loin de son pivot, au centre) ; la commande en plein geste.
+    let m = r.lerp_inside(vec2(0.3, 0.3));
+    e.img(vec![Event::PointerMoved(m)]);
+    e.img(vec![appui(m, PointerButton::Primary, true, Modifiers::NONE)]);
+    for k in 1..=5 {
+        e.img(vec![Event::PointerMoved(m + vec2(6.0 * k as f32, 3.0 * k as f32))]);
+    }
+    assert!(e.b.app.bsel.as_ref().is_some_and(|s| s.lifted.is_some()), "la zone est soulevée, en plein déplacement");
+    e.b.app.run_action("version.nouvelle");
+    for k in 6..=10 {
+        e.img(vec![Event::PointerMoved(m + vec2(6.0 * k as f32, 3.0 * k as f32))]);
+    }
+    e.img(vec![appui(m + vec2(60.0, 30.0), PointerButton::Primary, false, Modifiers::NONE)]);
+    e.b.chauffer(2);
+    let noms = e.b.app.history.names().0.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    assert_eq!(noms.last().map(String::as_str), Some("Nouvelle version du plan"), "la version a la dernière étape : {noms:?}");
+    assert!(noms.len() >= 2 && noms[noms.len() - 2] == "Déplacer", "le déplacement s'est posé avant, avec son étape : {noms:?}");
+    // Aucune zone soulevée ne reste sur un dessin qui n'est plus celui du plan.
+    let dessins: BTreeSet<CelId> = e.b.app.layers().iter().flat_map(|l| l.frames.iter().flatten().copied()).collect();
+    assert!(e.b.app.bsel.as_ref().is_none_or(|s| dessins.contains(&s.cel)), "la zone choisie est sur un dessin du plan courant");
+}
+
 /// Couper un plan à une barre, après avoir choisi un calque : le calque choisi ne désigne pas un calque disparu.
 #[test]
 fn hasard_a_cut_bar_after_choosing_a_layer_leaves_no_chosen_layer_that_does_not_exist() {
