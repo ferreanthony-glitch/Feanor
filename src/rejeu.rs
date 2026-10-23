@@ -111,6 +111,10 @@ struct File {
     interactives: Vec<(CelId, u64)>,
     chargement: VecDeque<(CelId, u64)>,
     fermee: bool,
+    /// Le fil des gestes rend une demande : un fil du chargement libre peut alors prendre la demande interactive suivante.
+    /// Libre, le fil des gestes les prend toutes (un fil du chargement, sous la priorité de l'interface, ralentirait un
+    /// geste quand les cœurs sont pris).
+    interactif_occupe: bool,
 }
 
 impl File {
@@ -140,11 +144,13 @@ impl File {
     }
 
     /// La demande interactive la plus récente ; sinon, pour un fil du chargement (`chargement`), la plus ancienne du
-    /// chargement.
+    /// chargement. Un fil du chargement ne prend une demande interactive que si le fil des gestes est occupé.
     fn prendre(&mut self, chargement: bool) -> Option<Job> {
-        while let Some((cel, gen)) = self.interactives.pop() {
-            if self.jobs.get(&cel).is_some_and(|j| j.gen == gen) {
-                return self.jobs.remove(&cel);
+        if !chargement || self.interactif_occupe {
+            while let Some((cel, gen)) = self.interactives.pop() {
+                if self.jobs.get(&cel).is_some_and(|j| j.gen == gen) {
+                    return self.jobs.remove(&cel);
+                }
             }
         }
         if !chargement {
@@ -156,6 +162,11 @@ impl File {
             }
         }
         None
+    }
+
+    /// Reste-t-il une demande interactive valable ?
+    fn interactive_en_attente(&self) -> bool {
+        self.interactives.iter().any(|(cel, gen)| self.jobs.get(cel).is_some_and(|j| j.gen == *gen))
     }
 }
 
@@ -231,8 +242,8 @@ impl Drop for Rejeu {
 pub type Renderer = fn(&VectorDrawing, usize, usize) -> Raster;
 
 /// Un fil de travail : celui des gestes (`chargement` faux) ne prend que les demandes interactives ; ceux du chargement
-/// prennent d'abord une demande interactive s'il en reste une, sinon la plus ancienne du chargement, sous la priorité de
-/// l'interface.
+/// prennent d'abord une demande interactive s'il en reste une pendant que le fil des gestes est occupé, sinon la plus
+/// ancienne du chargement, sous la priorité de l'interface.
 fn spawn_worker(boite: Boite, done_tx: Sender<Msg>, render: Renderer, chargement: bool) -> JoinHandle<()> {
     thread::Builder::new()
         .name(if chargement { "rejeu-chargement".into() } else { "rejeu".into() })
@@ -243,11 +254,21 @@ fn spawn_worker(boite: Boite, done_tx: Sender<Msg>, render: Renderer, chargement
             loop {
                 let job = {
                     let mut f = boite.file.lock().unwrap_or_else(|e| e.into_inner());
+                    if !chargement {
+                        f.interactif_occupe = false;
+                    }
                     loop {
                         if f.fermee {
                             return;
                         }
                         if let Some(job) = f.prendre(chargement) {
+                            if !chargement {
+                                // Occupé : une autre demande interactive qui attend peut aller à un fil du chargement libre.
+                                f.interactif_occupe = true;
+                                if f.interactive_en_attente() {
+                                    boite.chargement.notify_one();
+                                }
+                            }
                             break job;
                         }
                         let cv = if chargement { &boite.chargement } else { &boite.interactif };
@@ -324,7 +345,7 @@ impl Rejeu {
             }
         }
         let n = demandes.len();
-        {
+        let occupe = {
             let mut f = self.boite.file.lock().unwrap_or_else(|e| e.into_inner());
             for d in demandes {
                 let gen = self.next_gen;
@@ -332,15 +353,18 @@ impl Rejeu {
                 self.pending.insert(d.cel, (gen, d.version));
                 f.mettre(Job { cel: d.cel, gen, version: d.version, priority, drawing: d.drawing, w, h });
             }
-        }
+            f.interactif_occupe
+        };
         let cv = if priority { &self.boite.interactif } else { &self.boite.chargement };
         if n == 1 {
             cv.notify_one();
         } else {
             cv.notify_all();
         }
-        // (Une demande interactive peut aussi être prise par un fil du chargement libre.)
-        if priority && !self.chargement.is_empty() {
+        // (Une demande interactive va à un fil du chargement libre seulement si celui des gestes est occupé : libre, il la
+        // prend lui-même, à la priorité de l'interface. S'il prend une demande et qu'il en reste, il réveille un fil du
+        // chargement lui-même.)
+        if priority && occupe && !self.chargement.is_empty() {
             self.boite.chargement.notify_one();
         }
     }

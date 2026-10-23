@@ -145,6 +145,59 @@ fn the_loading_queue_runs_on_several_threads_and_a_gesture_never_waits_for_it() 
     assert!((3..=4).contains(&max), "trois fils du chargement (plus celui des gestes) : {max}");
 }
 
+/// Le nom du fil qui a rendu chaque dessin (par son nombre d'éléments), et combien de temps durent les dessins de plus de 20
+/// éléments (les autres : 1 ms).
+static FILS_DES_RENDUS: Mutex<Vec<(usize, String)>> = Mutex::new(Vec::new());
+
+fn named_render(d: &VectorDrawing, w: usize, h: usize) -> Raster {
+    let n = d.elements.len();
+    FILS_DES_RENDUS.lock().unwrap().push((n, std::thread::current().name().unwrap_or("").to_string()));
+    std::thread::sleep(Duration::from_millis(if n > 20 { 300 } else { 1 }));
+    Raster::new(w, h)
+}
+
+/// Relecture indépendante (2026-10-23) : un fil du chargement libre (sous la priorité de l'interface) prenait une demande
+/// interactive alors que le fil des gestes était libre — sous charge, le geste tournait à basse priorité. Les fils du
+/// chargement ne prennent une demande interactive que si le fil des gestes est occupé ; sinon c'est lui qui la rend.
+#[test]
+fn an_idle_gesture_thread_renders_the_gestures_and_a_busy_one_hands_the_next_to_the_loading_threads() {
+    FILS_DES_RENDUS.lock().unwrap().clear();
+    let mut r = Rejeu::with_renderer_and_threads(named_render, 2);
+    // Les fils du chargement naissent, rendent la file et attendent, libres.
+    r.submit_batch((1..=4u64).map(|n| rejeu::Demande::new(n, &drawing(n as usize), 1)).collect(), 64, 64, false);
+    while r.has_pending() {
+        r.wait(Duration::from_secs(20));
+    }
+    // Des gestes, l'un après l'autre : tous rendus par le fil des gestes.
+    for k in 0..12u64 {
+        r.submit_with(100 + k, &drawing(5 + (k as usize % 3)), 64, 64, 1, true);
+        while r.has_pending() {
+            r.wait(Duration::from_secs(20));
+        }
+    }
+    let fils = FILS_DES_RENDUS.lock().unwrap().clone();
+    let gestes: Vec<&(usize, String)> = fils.iter().filter(|(n, _)| (5..=7).contains(n)).collect();
+    assert_eq!(gestes.len(), 12);
+    assert!(gestes.iter().all(|(_, f)| f == "rejeu"), "un geste, fil des gestes libre, est rendu par lui : {gestes:?}");
+    // Le fil des gestes est pris par un long geste : le suivant va à un fil du chargement libre, sans attendre.
+    FILS_DES_RENDUS.lock().unwrap().clear();
+    r.submit_with(200, &drawing(30), 64, 64, 1, true);
+    std::thread::sleep(Duration::from_millis(40));
+    let t = std::time::Instant::now();
+    r.submit_with(201, &drawing(8), 64, 64, 1, true);
+    let mut got = Vec::new();
+    while !got.contains(&201) {
+        got.extend(r.wait(Duration::from_secs(20)).into_iter().map(|d| d.cel));
+    }
+    assert!(t.elapsed() < Duration::from_millis(200), "le second geste n'attend pas le premier : {:?}", t.elapsed());
+    while r.has_pending() {
+        r.wait(Duration::from_secs(20));
+    }
+    let fils = FILS_DES_RENDUS.lock().unwrap().clone();
+    assert!(fils.iter().any(|(n, f)| *n == 30 && f == "rejeu"), "{fils:?}");
+    assert!(fils.iter().any(|(n, f)| *n == 8 && f == "rejeu-chargement"), "{fils:?}");
+}
+
 /// Une demande remplacée (même dessin, plus récente) ou retirée ne se rend pas : la file indexée par dessin saute ses
 /// anciennes entrées.
 static ORDER_2: Mutex<Vec<usize>> = Mutex::new(Vec::new());
