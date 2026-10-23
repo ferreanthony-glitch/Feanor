@@ -1503,9 +1503,11 @@ sept ; machine partagée, chargée à 100 % par d'autres compilations) :
 
 Essai permanent `enregistrement_cliche_tests::the_interface_share_of_a_save_stays_small_on_a_big_film` (petites
 feuilles) : 100 plans 4,7–8,6 → 0,21–0,47 ms, 600 plans 30–51 → 1,9–3,3 ms ; bornes 6 et 15 ms, et « après » trois fois
-plus petit qu'« avant ». Au repos de la machine, la part de 600 plans devrait passer sous 1,5 ms (morceaux, au mieux de
-quinze sur la machine chargée : `used_cels` 0,15 ms, cliché des 9 600 dessins 0,3–0,5 ms, copie du document 0,43 ms) ;
-non mesuré au repos.
+plus petit qu'« avant ». Machine presque au repos (20 % de charge), trois séries : 100 plans 4,3–5,0 → **0,15–0,20 ms**,
+600 plans 28,7–28,9 → **1,71–1,75 ms** (avant et après en alternance : les caches sont froids, comme sur le fil de
+l'interface qui fait autre chose entre deux enregistrements). Au mieux de quinze, caches chauds : `used_cels` 0,15 ms,
+cliché des 9 600 dessins 0,3–0,5 ms, copie du document 0,43 ms, soit environ 1,1 ms. La cible « environ 1,5 ms » pour
+600 plans est donc tenue à chaud, dépassée de 0,2 ms à froid.
 
 **Ce qui reste** : la copie du document sans ses dessins grandit avec le film (plans, versions de plans, variantes rangées :
 0,4 ms pour 600 plans) ; le cliché lit la version de chaque dessin (dix mille lectures dispersées). L'enregistrement d'un
