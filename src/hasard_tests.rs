@@ -21,7 +21,8 @@
 //! `PAS_LONGS`, sur quatre fils) :
 //! `cargo test --release --offline --target-dir target\msvc hasard_long -- --ignored --nocapture`.
 //! `SHOT_HASARD_GRAINES=300..400`, `SHOT_HASARD_PAS=80`, `SHOT_HASARD_FILS=6` changent les graines, la longueur et les
-//! fils ; `SHOT_HASARD_ETAPES=1` affiche les étapes d'annulation faites par graine (ce que le hasard atteint).
+//! fils ; `SHOT_HASARD_ETAPES=1` affiche les étapes d'annulation faites par graine (ce que le hasard atteint),
+//! `SHOT_HASARD_TEMPS=1` le temps de chaque geste.
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -36,8 +37,8 @@ use crate::perf_tests::{banc_taille, Banc};
 use crate::workspace::Espace;
 
 /// Passage court (dans la suite) : graines et gestes par graine.
-pub(crate) const GRAINES: u64 = 3;
-pub(crate) const PAS: usize = 15;
+pub(crate) const GRAINES: u64 = 4;
+pub(crate) const PAS: usize = 40;
 /// Passage long (`--ignored`) : graines et gestes par graine.
 pub(crate) const GRAINES_LONGUES: u64 = 150;
 pub(crate) const PAS_LONGS: usize = 120;
@@ -338,18 +339,49 @@ pub(crate) fn depart(graine: u64) -> Document {
     match graine % 4 {
         0 => crate::vignettes_tests::quatre_plans(),
         1 => crate::vignettes_camera_tests::plan_court(),
-        2 => {
-            let mut d = crate::perf_tests::projet_long(5, 2, 6, 1);
-            d.into_plans();
-            d
-        }
+        2 => petit_projet(5, 2, 6),
         // (Deux séquences, trois calques : la planche ne tient plus à l'écran.)
-        _ => {
-            let mut d = crate::perf_tests::projet_long(14, 3, 8, 1);
-            d.into_plans();
-            d
-        }
+        _ => petit_projet(14, 3, 8),
     }
+}
+
+/// Comme `perf_tests::projet_long`, sur une petite feuille (l'instantané de chaque geste relit tous les pixels) : `plans` plans
+/// (une séquence de plus tous les dix), `calques` calques bitmap de `images` images, un dessin neuf toutes les deux images sur le
+/// premier, tenu sur les autres.
+fn petit_projet(plans: usize, calques: usize, images: usize) -> Document {
+    use crate::document::{Cel, Layer, LayerKind};
+    let mut doc = Document::with_frame(160, 90, 24);
+    let mut at = 0;
+    for i in 1..plans {
+        at = if i % 10 == 0 { doc.add_sequence_after(at) } else { doc.add_scene_after(at) };
+    }
+    for p in 0..doc.panels.len() {
+        let mut ls = Vec::new();
+        for l in 0..calques {
+            let mut layer = Layer::new(&format!("Calque {}", l + 1), LayerKind::Bitmap);
+            let mut dernier = None;
+            for f in 0..images {
+                if f == 0 || (l == 0 && f % 2 == 0) {
+                    let mut cel = Cel::new(doc.width, doc.height, LayerKind::Bitmap);
+                    let mut t = crate::raster::empty_tile();
+                    for (k, px) in t.iter_mut().enumerate() {
+                        if (k + p * 7 + l * 3 + f) % 9 < 2 {
+                            *px = eframe::egui::Color32::from_rgba_premultiplied(30, (20 + p * 13) as u8, 40, 200);
+                        }
+                    }
+                    let n = cel.raster.tiles.len();
+                    cel.raster.tiles[(p + f) % n] = Some(t);
+                    dernier = Some(doc.add_cel(cel));
+                }
+                layer.frames.push(dernier);
+            }
+            ls.push(layer);
+        }
+        doc.panels[p].layers = ls;
+        doc.panels[p].length = images;
+    }
+    doc.into_plans();
+    doc
 }
 
 /// Ce qui a mal tourné : l'espèce (pour reconnaître le même échec pendant la réduction) et le détail.
@@ -1028,7 +1060,11 @@ impl Drop for Essai {
 
 /// Rejoue `gestes` depuis `depart(graine)` : l'échec au premier geste qui échoue (son rang).
 pub(crate) fn rejouer_depuis(graine: u64, gestes: &[Geste]) -> Result<(), (usize, Echec)> {
-    let mut e = Essai::new(depart(graine), &format!("g{graine}"));
+    rejouer_sur(depart(graine), graine, gestes)
+}
+
+fn rejouer_sur(doc: Document, graine: u64, gestes: &[Geste]) -> Result<(), (usize, Echec)> {
+    let mut e = Essai::new(doc, &format!("g{graine}"));
     for (k, g) in gestes.iter().enumerate() {
         e.pas(*g).map_err(|x| (k, x))?;
     }
@@ -1038,6 +1074,27 @@ pub(crate) fn rejouer_depuis(graine: u64, gestes: &[Geste]) -> Result<(), (usize
 /// Pour un essai de non-régression : la suite rejouée ne doit pas échouer.
 pub(crate) fn rejouer(graine: u64, gestes: &[Geste]) {
     if let Err((k, x)) = rejouer_depuis(graine, gestes) {
+        panic!("échec au geste {k} ({:?}) : {}\n{}", gestes[k], x.espece, x.detail);
+    }
+}
+
+/// Les documents de départ des premières suites réduites (avant le quatrième, et avant la petite feuille de `petit_projet`) :
+/// leurs essais de non-régression rejouent sur ceux-là.
+fn depart_v1(graine: u64) -> Document {
+    match graine % 3 {
+        0 => crate::vignettes_tests::quatre_plans(),
+        1 => crate::vignettes_camera_tests::plan_court(),
+        _ => {
+            let mut d = crate::perf_tests::projet_long(5, 2, 6, 1);
+            d.into_plans();
+            d
+        }
+    }
+}
+
+/// `rejouer` sur `depart_v1`.
+fn rejouer_v1(graine: u64, gestes: &[Geste]) {
+    if let Err((k, x)) = rejouer_sur(depart_v1(graine), graine, gestes) {
         panic!("échec au geste {k} ({:?}) : {}\n{}", gestes[k], x.espece, x.detail);
     }
 }
@@ -1074,12 +1131,22 @@ fn reduire(graine: u64, gestes: Vec<Geste>, espece: &str) -> Vec<Geste> {
 /// Une graine : `pas` gestes tirés au hasard. Un échec est réduit puis rapporté.
 pub(crate) fn passage(graine: u64, pas: usize) -> Result<(), String> {
     let mut h = Hasard::new(graine);
+    let temps = std::env::var_os("SHOT_HASARD_TEMPS").is_some();
+    let t0 = Instant::now();
     let mut e = Essai::new(depart(graine), &format!("g{graine}"));
+    if temps {
+        eprintln!("HASARD graine {graine} : banc {:.0} ms", t0.elapsed().as_secs_f64() * 1e3);
+    }
     let mut journal = Vec::new();
     for k in 0..pas {
         let g = Geste::tirer(&mut h);
         journal.push(g);
-        if let Err(x) = e.pas(g) {
+        let t = Instant::now();
+        let r = e.pas(g);
+        if temps {
+            eprintln!("HASARD graine {graine} geste {k} : {:.0} ms {g:?}", t.elapsed().as_secs_f64() * 1e3);
+        }
+        if let Err(x) = r {
             drop(e);
             let court = reduire(graine, journal.clone(), &x.espece);
             let detail = rejouer_depuis(graine, &court).err().map(|(_, x)| x.detail).unwrap_or_else(|| x.detail.clone());
@@ -1166,14 +1233,14 @@ fn hasard_the_same_seed_draws_the_same_gestures() {
 /// n'existe plus).
 #[test]
 fn hasard_undoing_a_layer_duplicate_leaves_no_chosen_layer_that_does_not_exist() {
-    rejouer(34, &[Commande("calque.dupliquer")]);
+    rejouer_v1(34, &[Commande("calque.dupliquer")]);
 }
 
 /// Annuler la création de plans faits par des gestes de caméra et un lasso : les plans choisis qui n'existent plus ne
 /// restent pas choisis (`board_sel.len() > 1` disait « plusieurs plans choisis » au color script, à la planche…).
 #[test]
 fn hasard_undoing_new_plans_leaves_no_chosen_plan_that_does_not_exist() {
-    rejouer(
+    rejouer_v1(
         0,
         &[
             Camera { case: 48, x0: 0.82, y0: 0.62, dx: -0.87, dy: -0.07, ajoute: false },
@@ -1182,7 +1249,7 @@ fn hasard_undoing_new_plans_leaves_no_chosen_plan_that_does_not_exist() {
             Annuler(3),
         ],
     );
-    rejouer(
+    rejouer_v1(
         16,
         &[
             Barre { k: 31 },
@@ -1197,22 +1264,22 @@ fn hasard_undoing_new_plans_leaves_no_chosen_plan_that_does_not_exist() {
 /// mouvement prend d'abord son étape, la commande la sienne ; annuler défait la commande, puis le mouvement.
 #[test]
 fn hasard_a_command_during_a_camera_drag_keeps_the_move_undoable() {
-    rejouer(210, &[Interruption { geste: 1, case: 10, quoi: 5, dx: 0.46, dy: -0.12 }]);
-    rejouer(253, &[Interruption { geste: 1, case: 28, quoi: 2, dx: 0.46, dy: 0.11 }]);
+    rejouer_v1(210, &[Interruption { geste: 1, case: 10, quoi: 5, dx: 0.46, dy: -0.12 }]);
+    rejouer_v1(253, &[Interruption { geste: 1, case: 28, quoi: 2, dx: 0.46, dy: 0.11 }]);
 }
 
 /// Passer au Montage pendant un Ctrl + Maj + glisser de caméra : le mouvement se pose. Il restait ouvert (le lâcher n'arrive
 /// qu'aux Vignettes), et la planche gardait sa réserve de place : la case A restait sur les cases d'avant (chevauchement).
 #[test]
 fn hasard_a_workspace_switch_during_a_camera_drag_ends_the_move() {
-    rejouer(214, &[Interruption { geste: 2, case: 36, quoi: 4, dx: 0.94, dy: 0.38 }, Interruption { geste: 1, case: 61, quoi: 24, dx: -0.91, dy: -0.23 }]);
+    rejouer_v1(214, &[Interruption { geste: 2, case: 36, quoi: 4, dx: 0.94, dy: 0.38 }, Interruption { geste: 1, case: 61, quoi: 24, dx: -0.91, dy: -0.23 }]);
 }
 
 /// Réunir deux plans à une barre quand le second a un dossier de calques du même nom qu'un dossier du premier : ses calques
 /// rejoignent ce dossier. Ils désignaient le dossier du second plan, réuni à l'autre et disparu.
 #[test]
 fn hasard_joining_two_plans_keeps_the_layers_of_the_second_in_an_existing_folder() {
-    rejouer(211, &[Commande("calque.cle_position"), Commande("dossier.ranger"), Colonnes(4), Camera { case: 56, x0: 0.81, y0: 0.25, dx: 1.11, dy: 0.14, ajoute: true }, Barre { k: 32 }]);
+    rejouer_v1(211, &[Commande("calque.cle_position"), Commande("dossier.ranger"), Colonnes(4), Camera { case: 56, x0: 0.81, y0: 0.25, dx: 1.11, dy: 0.14, ajoute: true }, Barre { k: 32 }]);
 }
 
 /// Déplacer une sélection vectorielle, puis la supprimer par la commande, sans clic ni touche entre les deux (la feuille
@@ -1340,7 +1407,7 @@ fn hasard_joining_the_last_plan_from_its_drawing_menu_does_not_crash() {
 /// Couper un plan à une barre, après avoir choisi un calque : le calque choisi ne désigne pas un calque disparu.
 #[test]
 fn hasard_a_cut_bar_after_choosing_a_layer_leaves_no_chosen_layer_that_does_not_exist() {
-    rejouer(
+    rejouer_v1(
         18,
         &[
             TraitCase { case: 4, outil: 4, x0: 0.78, y0: 0.92, dx: 1.07, dy: -0.7 },
