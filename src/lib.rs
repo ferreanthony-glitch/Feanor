@@ -115,6 +115,12 @@ mod perf;
 mod perf_tests;
 #[cfg(test)]
 mod optim_rendu_tests;
+// Projets lourds (300 plans et plus) : générateur et bancs, tous `#[ignore]` (`docs/PERFORMANCE.md`, section 25).
+#[cfg(test)]
+mod lourd_tests;
+mod lacher;
+#[cfg(test)]
+mod lacher_tests;
 pub mod logo;
 #[cfg(test)]
 mod logo_tests;

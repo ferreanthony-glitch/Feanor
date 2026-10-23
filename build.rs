@@ -17,9 +17,47 @@ fn main() {
     }
     if target_os == "windows" && target_env == "msvc" {
         embarquer_icone();
+        embarquer_manifeste();
     }
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/logo.rs");
+    println!("cargo:rerun-if-env-changed=SHOT_TAS_STANDARD");
+}
+
+/// Le manifeste de l'application, mis dans `shot.exe` (et dans les exécutables des essais, qui mesurent ainsi ce que SHOT
+/// fait vraiment) par l'éditeur de liens de MSVC, sans autre outil : `/MANIFEST:EMBED` + `/MANIFESTINPUT`.
+///
+/// Il ne dit qu'une chose : le **tas segmenté** de Windows 10 2004 et plus (`heapType` = `SegmentHeap`) au lieu du tas
+/// par défaut. Le tas par défaut rend les blocs de 16 Ko des tuiles (`Arc<[u32; 4096]>`) en un temps qui grandit comme
+/// le carré de leur nombre : 160 000 tuiles (un film de 300 plans) se rendaient en 8 min 14 s dans un programme à part,
+/// et SHOT mettait un quart d'heure à se fermer ou à remplacer le projet, fenêtre « ne répond pas » ; avec le tas
+/// segmenté, 0,7 s (`docs/PERFORMANCE.md`, section 25). Un Windows plus ancien ignore la ligne.
+///
+/// Rien d'autre n'y est : il n'y avait pas de manifeste avant (winit règle la mise à l'échelle de l'écran au démarrage,
+/// les boîtes de dialogue sont celles du système), et `/MANIFESTUAC:NO` n'ajoute pas le bloc `trustInfo` que l'éditeur de
+/// liens met sinon d'office. `SHOT_TAS_STANDARD=1` à la compilation le retire (mesures de comparaison seulement).
+fn embarquer_manifeste() {
+    if std::env::var_os("SHOT_TAS_STANDARD").is_some() {
+        return;
+    }
+    let out = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
+    let manifeste = out.join("shot.manifest");
+    std::fs::write(
+        &manifeste,
+        "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n\
+         <assembly xmlns=\"urn:schemas-microsoft-com:asm.v1\" manifestVersion=\"1.0\">\n\
+         \x20 <application xmlns=\"urn:schemas-microsoft-com:asm.v3\">\n\
+         \x20   <windowsSettings>\n\
+         \x20     <heapType xmlns=\"http://schemas.microsoft.com/SMI/2020/WindowsSettings\">SegmentHeap</heapType>\n\
+         \x20   </windowsSettings>\n\
+         \x20 </application>\n\
+         </assembly>\n",
+    )
+    .expect("écrire shot.manifest");
+    // (Pour tout ce que le paquet lie : l'exécutable, et les exécutables d'essais de la bibliothèque.)
+    println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
+    println!("cargo:rustc-link-arg=/MANIFESTUAC:NO");
+    println!("cargo:rustc-link-arg=/MANIFESTINPUT:{}", manifeste.display());
 }
 
 /// Met l'icône de SHOT et les informations de version dans `shot.exe` : un fichier de ressources

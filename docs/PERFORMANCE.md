@@ -1676,3 +1676,106 @@ dessins refaits par `Document::resize_frame` (mise à l'échelle) gardaient la v
 `written` dit déjà écrit ; Ctrl+S laissait les anciens PNG, refusés à la réouverture. `adaptation::adapte_dessin` donne
 maintenant au dessin adapté la version qui suit (essai
 `a_resolution_change_with_scaling_is_saved_and_reopened_at_the_new_size`).
+
+## 26. Gros projets : fermer, remplacer et ouvrir un film de 300 plans (2026-10-23, branche `gros-projets`)
+
+Essai de charge du 2026-10-23 : un générateur de films « comme un court métrage de 7 à 10 minutes »
+(`lourd_tests.rs`, essais `#[ignore]` lancés à la main, voir l'en-tête du fichier ; `lourd_generer` fabrique le projet,
+`lourd_mesurer` le banc complet, `lourd_remplacer`, `lourd_fermer_onglet` et `lourd_planche` les mesures de cette section).
+Le film mesuré : **300 plans, 4 660 dessins, 766 Mo sur le disque, environ 160 000 tuiles de 16 Ko en mémoire**. Mesures
+sur une copie du projet, avec de faux `APPDATA` / `LOCALAPPDATA`. **La machine n'était pas seule** : d'autres travaux (un
+fuzzer sur 4 à 5 cœurs, des compilations) tournaient en même temps ; les temps de l'ordre de la seconde varient d'un passage
+à l'autre (jusqu'à × 2), les écarts de cent à mille fois ne le doivent pas.
+
+### 25.1 Fermer SHOT ou remplacer le projet : un quart d'heure (le tas de Windows)
+
+Fermer SHOT sur ce film, ou ouvrir un autre projet à sa place, gelait la fenêtre (« ne répond pas ») un quart d'heure. Ce
+n'était pas SHOT : **le tas par défaut de Windows rend les blocs de 16 Ko des tuiles (`Arc<[u32; 4096]>`) en un temps qui
+grandit comme le carré de leur nombre** (`lourd_tas`, un programme sans SHOT : 20 000 tuiles en 1 s, 40 000 en 4 s, 80 000
+en 20 s, 160 000 en 151 à 494 s). Le **tas segmenté** (Windows 10 2004 et plus) rend les mêmes 160 000 tuiles en 0,7 s.
+
+- **Le manifeste de `shot.exe`** (`build.rs`, `embarquer_manifeste`) demande le tas segmenté (`heapType` = `SegmentHeap`),
+  par l'éditeur de liens de MSVC (`/MANIFEST:EMBED` + `/MANIFESTINPUT`, `/MANIFESTUAC:NO`) : aucun autre outil, rien à
+  télécharger. Il n'y avait pas de manifeste avant ; il ne dit rien d'autre (winit règle la mise à l'échelle de l'écran au
+  démarrage, rien ne change à l'affichage ni aux boîtes de dialogue). Les exécutables d'essais l'ont aussi : les bancs
+  mesurent ce que SHOT fait vraiment. `SHOT_TAS_STANDARD=1` à la compilation le retire (comparaisons seulement). Essai
+  `le_tas_du_processus_est_le_tas_segmente` (`lacher_tests.rs`, signature de l'en-tête du tas du processus).
+- **Par-dessus, l'interface n'attend plus jamais de rendre la mémoire d'un projet** (`lacher.rs`) : le document remplacé
+  (`App::load_doc` : Ouvrir, Nouveau, fermer le dernier onglet), son historique et ses dessins dérivés des effets partent sur
+  un fil à eux, sous la priorité de l'interface ; de même pour l'onglet qu'on ferme (`jeter_onglet` ; le reste de l'onglet
+  se lâche comme avant). À la sortie (`App::sortie_sans_rendre`, après `fermeture` : écritures finies, copies de secours
+  fermées, réglages écrits), les documents, historiques et dessins dérivés ne sont pas rendus du tout : le système reprend
+  la mémoire du processus d'un coup. Tout le reste se lâche comme avant (exports arrêtés, fils et serveurs prévenus).
+  L'historique vidé garde un numéro qui avance (`History::take_steps`) : les gestes en cours et la copie de secours le voient
+  comme avant.
+
+| Film de 300 plans | Avant (22a8c9a) | Après |
+|---|---|---|
+| Fermer `shot.exe` (de la demande à la fin du processus) | 926 s (machine calme, ce matin) ; 1 128 s (chargée) | **0,9 à 1,1 s** |
+| Remplacer le projet (`load_doc`, fil de l'interface) | 1 069 s ; 1 475 s (chargée) | **0,014 s** |
+| Fermer l'onglet caché du film (fil de l'interface) | (même tas, mêmes minutes) | **2 ms** |
+| Mémoire rendue, sur le fil de fond | — | remplacement : 7,6 → 0,37 Go en moins de 5 s ; onglet fermé : 7,8 → 0,5 Go en 4 s |
+| Lecture du projet (fil de fond) | 13,5–14,4 s | 8,5–13,5 s |
+
+**Ce que coûte le tas segmenté ailleurs.** Mémoire : un peu plus, environ **+10 %** sur ce film (projet adopté : 5,8 → 6,5
+Go ; au calme, rejeux finis : 6,9–7,0 → 7,5–7,6 Go). Vitesse : le même exécutable d'essais avec et sans le manifeste
+(remplacé par `mt.exe`), bancs en alternance : `perf_cpu_bench` identique (composition, image filmée, vignette, PNG codé et
+décodé, feuille en tuiles, cent images d'interface : à ± 2 %, trois passages chacun) ; `perf_heavy_plan`,
+`perf_long_project`, `perf_project_open_save` égaux à ± 3 % (le bruit de la machine ; le temps d'interface est le même).
+
+### 25.2 L'image d'adoption et les rejeux exacts de l'ouverture
+
+À l'adoption du projet lu, chaque dessin vectoriel ouvert en rendu rapide (des milliers) était copié sur le fil de
+l'interface pour le rejeu exact (`Rejeu::submit_with` : `VectorDrawing::clone`), et chaque demande parcourait toute la file
+(`jobs.retain`) : le carré du nombre de dessins. Un seul fil rejouait ensuite tout.
+
+- **Les copies se font sur le fil de la lecture** (`OpenJob::start`, `rejeu::demandes`, réparties sur les cœurs), quand le
+  réglage « traits vectoriels texturés » demande le rendu exact aussitôt (le réglage d'origine) ; à l'adoption, elles entrent
+  dans la file d'un coup (`Rejeu::submit_batch` : la file prise une fois, ses fils réveillés une fois). Un réglage changé
+  pendant la lecture : les copies sont lâchées, le chemin d'avant sert.
+- **La file est indexée par dessin** (`File` : une demande par dessin, l'ordre à part ; une entrée remplacée ou retirée est
+  sautée) : remplacer ou retirer une demande ne la parcourt plus.
+- **Les fils** : un fil des gestes, à la priorité de l'interface, ne prend que les demandes interactives — il est toujours
+  libre pour un geste lâché ; la file du chargement a les siens, **autant que de cœurs moins deux** (au plafond de fils des
+  Préférences du moment), lancés à sa première demande, **sous la priorité de l'interface** (un fil du chargement libre prend
+  aussi une demande interactive). Les priorités ne changent pas : les gestes passent avant le chargement, la plus récente
+  d'abord ; le chargement dans l'ordre. Aucun rejeu du moteur sur le fil de l'interface (règle « sans latence »).
+
+| Ouvrir le film de 300 plans | Avant (22a8c9a) | Après |
+|---|---|---|
+| Image d'adoption (fil de l'interface) | 76 / 147 ms (178 / 247 ms sur 56e9d79) | **6 à 11 ms** (dont 3–4 ms d'adoption) |
+| Image suivante (la planche ou le montage du film entier, une fois) | — | 17 à 24 ms |
+| Rejeux exacts finis, après l'adoption (Vignettes) | 53 / 61 s | **6 / 7 s** |
+| Rejeux exacts finis (Storyboard) | (un seul fil : 181 s) | **11 à 19 s** |
+| Images jusque-là (Vignettes) : moyenne, p95, pire | 5,6–6,4 / 11–12 / 51–252 ms | 7,4–8,5 / 12–14 / 24–30 ms |
+| Images jusque-là (Storyboard) : moyenne, p95, pire | (un seul fil : 9,5 / 16 / 483 ms) | 8–17 / 14–25 / 24–70 ms |
+
+Pendant les rejeux, les images de l'interface sont un peu plus lentes (les fils du chargement occupent les cœurs voisins de
+celui de l'interface), mais dix fois moins longtemps ; la priorité basse les fait céder à tout travail normal (un autre
+programme qui calcule les retarde, jamais l'interface). Mesures : `lourd_remplacer` (`LOURD_ESPACE=storyboard`,
+`LOURD_FILS_REJEU=1` pour un seul fil). Essais (`rejeu_tests.rs`) : la file du chargement tourne sur plusieurs fils et un
+geste lâché pendant qu'ils sont tous pris est rendu tout de suite (fil des gestes) ; une demande remplacée ou retirée n'est
+jamais rendue ; l'essai de priorité d'avant, sur un seul fil de chargement.
+
+### 25.3 La planche dézoomée (0,2) du film de 300 plans, mesurée de nouveau
+
+Le 2026-10-23 au matin (56e9d79), dessiner dans une case de la planche dézoomée à 0,2 coûtait 51 ms par image (pire 310 ms,
+29 ms d'attente de la carte graphique). Depuis, main (22a8c9a) garde la disposition et borne les vignettes (section 24).
+Mesure `lourd_planche` (90 cases à l'écran) :
+
+| Planche à 0,2, film de 300 plans : moyenne / p95 / pire | 56e9d79 | 22a8c9a (tas par défaut) | `gros-projets` |
+|---|---|---|---|
+| Rien ne bouge | — | 10,1 / 13,1 / 16 ms | 7,3 / 13,3 / 17 ms |
+| Trait dans une case (40 images, deux cases) | 51,3 / 109 / 310 ms | 13,7 / 19 / 122 ms ; 8,5 / 17 / 45 ms | 11,3 / 20 / 97 ms ; 8,9 / 17 / 80 ms |
+| Glisser la caméra d'une case | 18,5 / 42 / 171 ms | 7,2 / 21 / 28 ms | 4,5 / 7,7 / 7,8 ms |
+| Changer de plan à chaque image | 25,1 / 87 / 132 ms | 15,8 / 77 / 205 ms | 7,2 / 47 / 76 ms |
+
+**Ce n'est plus mauvais** : un trait dans une case coûte 9 à 11 ms par image en moyenne. Ce qui reste, ce sont les pics de la
+**première image où une case devient le plan courant** (le trait qui commence dans une autre case, changer de plan) : la case
+du plan courant montre le dessin vivant (`board_card`, `card_canvas`), dont les dessins du plan partent alors à la carte
+graphique en pleine définition (« gpu : textures créées » jusqu'à 25–39 ms, attente de la carte jusqu'à 50–150 ms sur 22a8c9a).
+C'est le même coût que changer de plan en Storyboard, à tout zoom ; ce ne sont pas les vignettes : à 0,2, une case fait 48
+points et sa vignette est à la plus petite largeur (128 pixels, `thumbs::width_for`), et leur envoi à la carte est déjà borné
+à 1 ms par image (`UPLOAD_TIME`). Rien de contenu à corriger ici : il faudrait des textures réduites pour le dessin vivant
+d'une petite case (à voir si Anthony sent ce pic en changeant de plan sur une planche dézoomée).
+

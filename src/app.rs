@@ -3195,14 +3195,16 @@ impl App {
         crate::fx::fond_cancel_all();
         // (Les suggestions sonores de l'ancien projet s'arrêtent : rien n'est rendu au nouveau.)
         self.reset_suggestions();
-        self.doc = doc;
+        // (L'ancien projet, son historique et ses dessins dérivés sont rendus sur un autre fil, à la fin : ceux d'un film
+        // de 300 plans tiennent des centaines de milliers de blocs, `lacher.rs`.)
+        let ancien = std::mem::replace(&mut self.doc, doc);
         // (Un plan a toujours un calque : `Document::un_calque_par_plan`.)
         self.doc.un_calque_par_plan();
         // (Une époque que ni cet onglet ni un autre n'a eue : les tâches de fond de l'ancien projet ne lui répondent plus.)
         self.doc_epoch = crate::onglets::nouvelle_epoque();
         // (Ses dessins portent les numéros et les versions de ceux de l'ancien : les dessins
         // dérivés des effets de l'ancien ne lui servent pas.)
-        crate::fx::forget_all();
+        let fx_anciens = crate::fx::forget_all_rendre();
         // (Un autre projet : l'effet choisi et les clés choisies étaient ceux de l'ancien.)
         self.fx_choice = None;
         self.fx_multi.clear();
@@ -3234,11 +3236,12 @@ impl App {
         self.menu_target = None;
         self.montage_drag = None;
         self.heard_frame = Some(0);
-        self.history.clear();
+        let etapes = self.history.take_steps();
         self.thumbs.clear();
         self.layer_thumbs.clear();
         self.renderer.invalidate_all();
         self.fit_pending = true;
+        crate::lacher::en_fond((ancien, etapes, fx_anciens));
         // Vue du plateau et vue 3D recadrées sur le nouveau projet (9d, 9e).
         self.stage_view = None;
         self.espace3d_reset();
@@ -4586,6 +4589,7 @@ impl eframe::App for App {
     /// Fermeture normale (même sans enregistrer) : voir `App::fermeture`.
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.fermeture();
+        self.sortie_sans_rendre();
     }
 
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -4860,6 +4864,25 @@ impl App {
         let _ = self.settings.save();
         // Le serveur de génération sonore que SHOT a lancé s'arrête avec lui (un serveur lancé à la main reste).
         self.sug.serveur.arreter();
+    }
+
+    /// À la sortie de SHOT, après `fermeture` (les écritures sont finies, les copies de secours fermées, les réglages
+    /// écrits) : les documents des onglets, leurs historiques et les dessins dérivés des effets ne sont pas rendus bloc par
+    /// bloc — un film de 300 plans en tient des centaines de milliers —, le système reprend la mémoire du processus d'un
+    /// coup quand il se termine. Tout le reste se lâche comme avant (exports arrêtés, fils et serveurs prévenus).
+    pub(crate) fn sortie_sans_rendre(&mut self) {
+        let garder = |doc: &mut Document, history: &mut crate::history::History| {
+            std::mem::forget(std::mem::replace(doc, Document::new(TILE, TILE, 24)));
+            std::mem::forget(history.take_steps());
+        };
+        garder(&mut self.doc, &mut self.history);
+        for t in &mut self.onglets {
+            if let Some(e) = t.etat.as_mut() {
+                garder(&mut e.doc, &mut e.history);
+                std::mem::forget(e.reserve_fx.take());
+            }
+        }
+        std::mem::forget(crate::fx::forget_all_rendre());
     }
 }
 

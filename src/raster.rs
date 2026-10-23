@@ -23,6 +23,13 @@ impl Tile {
     pub fn same_as(&self, other: &Tile) -> bool {
         std::sync::Arc::ptr_eq(&self.0, &other.0)
     }
+
+    /// Combien de dessins, d'étapes ou de copies tiennent ces pixels (essais : une tuile rendue au tas n'est plus tenue
+    /// que par l'essai).
+    #[cfg(test)]
+    pub fn partages(&self) -> usize {
+        std::sync::Arc::strong_count(&self.0)
+    }
 }
 
 impl std::ops::Deref for Tile {

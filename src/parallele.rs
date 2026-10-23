@@ -66,6 +66,12 @@ mod os {
     pub fn sous_la_normale() {}
 }
 
+/// Le fil appelant passe sous la priorité normale, sans condition (fils de fond qui ne doivent jamais passer avant
+/// l'interface : lâcher un projet, `lacher.rs` ; rejeux du chargement, `rejeu.rs`).
+pub(crate) fn fil_sous_la_normale() {
+    os::sous_la_normale();
+}
+
 /// Les exports travaillent-ils sous la priorité de l'interface ? Oui, toujours ; seules les mesures le coupent, pour
 /// voir ce que la priorité change.
 static PRIORITE_EXPORT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);

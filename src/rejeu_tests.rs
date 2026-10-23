@@ -83,7 +83,8 @@ fn slow_render(d: &VectorDrawing, w: usize, h: usize) -> Raster {
 #[test]
 fn an_interactive_request_goes_before_the_loading_queue() {
     ORDER.lock().unwrap().clear();
-    let mut r = Rejeu::with_renderer(slow_render);
+    // (Un seul fil pour le chargement : la file attend vraiment.)
+    let mut r = Rejeu::with_renderer_and_threads(slow_render, 1);
     // Le chargement d'un projet : cinq dessins en file (le nombre d'éléments tient lieu de nom).
     for n in 1..=5 {
         r.submit_with(n as u64, &drawing(n), 64, 64, 0, false);
@@ -100,6 +101,79 @@ fn an_interactive_request_goes_before_the_loading_queue() {
     assert!(pos(9) < pos(3) && pos(9) < pos(4) && pos(9) < pos(5), "{order:?}");
     got.sort_unstable();
     assert_eq!(got, vec![1, 2, 3, 4, 5, 9], "tout finit par arriver");
+}
+
+// ------------------------------------------------------------------ gros projets : fils du chargement
+
+static EN_MEME_TEMPS: Mutex<(usize, usize)> = Mutex::new((0, 0));
+
+fn counted_render(d: &VectorDrawing, w: usize, h: usize) -> Raster {
+    {
+        let mut c = EN_MEME_TEMPS.lock().unwrap();
+        c.0 += 1;
+        c.1 = c.1.max(c.0);
+    }
+    // (Le dessin de 9 éléments est le geste : il ne dure pas.)
+    std::thread::sleep(Duration::from_millis(if d.elements.len() == 9 { 1 } else { 400 }));
+    EN_MEME_TEMPS.lock().unwrap().0 -= 1;
+    Raster::new(w, h)
+}
+
+/// La file du chargement a plusieurs fils ; un geste lâché pendant qu'ils sont tous occupés n'attend pas qu'un se
+/// libère (le fil des gestes est à lui), et chaque demande ne se rend qu'une fois.
+#[test]
+fn the_loading_queue_runs_on_several_threads_and_a_gesture_never_waits_for_it() {
+    *EN_MEME_TEMPS.lock().unwrap() = (0, 0);
+    let mut r = Rejeu::with_renderer_and_threads(counted_render, 3);
+    let demandes: Vec<rejeu::Demande> = (1..=9u64).map(|n| rejeu::Demande::new(n, &drawing(1), 7)).collect();
+    r.submit_batch(demandes, 64, 64, false);
+    std::thread::sleep(Duration::from_millis(40));
+    let t = std::time::Instant::now();
+    r.submit_with(100, &drawing(9), 64, 64, 1, true);
+    let mut got = Vec::new();
+    while !got.contains(&100) {
+        got.extend(r.wait(Duration::from_secs(20)).into_iter().map(|d| d.cel));
+    }
+    // (Derrière la file, il attendrait au moins 350 ms.)
+    assert!(t.elapsed() < Duration::from_millis(300), "le geste est rendu tout de suite : {:?}", t.elapsed());
+    while r.has_pending() {
+        got.extend(r.wait(Duration::from_secs(20)).into_iter().map(|d| d.cel));
+    }
+    got.sort_unstable();
+    assert_eq!(got, vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 100], "chaque demande une fois");
+    let max = EN_MEME_TEMPS.lock().unwrap().1;
+    assert!((3..=4).contains(&max), "trois fils du chargement (plus celui des gestes) : {max}");
+}
+
+/// Une demande remplacée (même dessin, plus récente) ou retirée ne se rend pas : la file indexée par dessin saute ses
+/// anciennes entrées.
+static ORDER_2: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+
+fn slow_render_2(d: &VectorDrawing, w: usize, h: usize) -> Raster {
+    ORDER_2.lock().unwrap().push(d.elements.len());
+    std::thread::sleep(Duration::from_millis(60));
+    Raster::new(w, h)
+}
+
+#[test]
+fn a_replaced_or_cancelled_request_is_skipped() {
+    let mut r = Rejeu::with_renderer_and_threads(slow_render_2, 1);
+    // Le fil du chargement prend le 1 ; 2 à 5 attendent.
+    for n in 1..=5 {
+        r.submit_with(n as u64, &drawing(n), 64, 64, 0, false);
+    }
+    std::thread::sleep(Duration::from_millis(20));
+    // Le 3 est redemandé (un dessin de 13 éléments), le 4 retiré.
+    r.submit_with(3, &drawing(13), 64, 64, 1, false);
+    r.cancel(4);
+    let mut got = Vec::new();
+    while r.has_pending() {
+        got.extend(r.wait(Duration::from_secs(20)).into_iter().map(|d| (d.cel, d.drawing.elements.len())));
+    }
+    got.sort_unstable();
+    assert_eq!(got, vec![(1, 1), (2, 2), (3, 13), (5, 5)]);
+    let order = ORDER_2.lock().unwrap().clone();
+    assert!(!order.contains(&3) && !order.contains(&4), "ni l'ancien 3 ni le 4 ne sont rendus : {order:?}");
 }
 
 // ------------------------------------------------------------------ N9 : panic du rendu

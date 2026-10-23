@@ -133,6 +133,9 @@ impl Gesture {
     }
 }
 
+/// Les étapes retirées d'un historique (`History::take_steps`), à lâcher ailleurs.
+pub struct Steps(#[allow(dead_code)] Vec<Edit>, #[allow(dead_code)] Vec<Edit>);
+
 #[derive(Default)]
 pub struct History {
     undo: Vec<Edit>,
@@ -250,6 +253,14 @@ impl History {
         self.undo_names.clear();
         self.redo_names.clear();
         self.serial += 1;
+    }
+
+    /// Comme `clear`, mais rend les étapes au lieu de les lâcher ici : celles d'un gros projet tiennent des dizaines de
+    /// milliers de tuiles, que l'appelant fait rendre sur un autre fil (`lacher.rs`).
+    pub fn take_steps(&mut self) -> Steps {
+        let steps = Steps(std::mem::take(&mut self.undo), std::mem::take(&mut self.redo));
+        self.clear();
+        steps
     }
 
     /// Les étapes à annuler (la plus ancienne d'abord, la dernière faite à la fin) et celles à
