@@ -450,8 +450,17 @@ pub fn reechantillonne(src: &Raster, s: f32, t: Vec2, w: usize, h: usize, fils: 
 
 // ------------------------------------------------------------------------------------------------ dessins
 
-/// Un dessin adapté à la feuille d'arrivée `w`×`h`.
+/// Un dessin adapté à la feuille d'arrivée `w`×`h`. C'est une nouvelle version du dessin : sa version suit celle du
+/// dessin d'origine. Repartir de 0 laissait au même numéro la version d'un dessin relu (0) quand le document entier est
+/// mis à l'échelle sur place (`Document::resize_frame`) : l'enregistrement le croyait déjà écrit et gardait l'ancien PNG,
+/// que la réouverture refusait (taille différente de celle du projet).
 pub fn adapte_dessin(cel: &Cel, ad: &Adaptation, w: usize, h: usize, fils: usize) -> Cel {
+    let mut c = adapte_dessin_contenu(cel, ad, w, h, fils);
+    c.version = cel.version + 1;
+    c
+}
+
+fn adapte_dessin_contenu(cel: &Cel, ad: &Adaptation, w: usize, h: usize, fils: usize) -> Cel {
     let fond = cel.fond.as_ref().map(|f| {
         Box::new(Strate {
             peinture: adapte_dessin(&f.peinture, ad, w, h, fils),

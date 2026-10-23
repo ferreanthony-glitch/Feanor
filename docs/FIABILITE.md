@@ -332,3 +332,23 @@ Défauts trouvés et corrigés :
    impossible. Essai : `procreate_tests::a_damaged_binary_plist_is_refused_without_panic`.
 3. **Ancien `.pelure` d'une feuille vide ou démesurée** : il s'ouvrait (`io::load_legacy`) ; refusé comme un manifeste
    d'aujourd'hui.
+## 16. Enregistrer : le cliché léger (2026-10-23, branche `optim-sauvegarde`)
+
+Le fil de l'interface ne lit plus le dossier du projet et ne met plus rien en JSON (`docs/PERFORMANCE.md`, section 25).
+Les protections ne bougent pas : elles vivent dans `SaveJob`, et la partie qui a changé de fil (`SaveJob::resoudre`) tourne
+avant toute écriture, donc une erreur y laisse le dossier tel qu'il était et suit le chemin d'un échec d'écriture
+(`modified` remis à vrai, `written` vidé, la suite annulée, la fenêtre « Enregistrement impossible »). Les dessins, sons,
+modèles et annexes illisibles à garder se lisent sur le fil d'écriture comme avant sur celui de l'interface. Un dessin déjà
+écrit dont le fichier a disparu à côté de SHOT est réécrit par un second passage immédiat, avant la suite qui attendait.
+Un fichier annexe ou un manifeste qui a déjà les octets à écrire n'est plus réécrit (`write_sidecar`, `SaveJob::run_with`) :
+c'est un succès, rien ne change pour l'atomicité (le fichier en place est celui qu'on aurait écrit) ni pour la règle des
+fichiers illisibles (un fichier illisible n'a jamais les octets d'un fichier neuf : il est mis de côté comme avant).
+**Copie de secours demandée pendant une autre** (relecture de Fable, 2026-10-23). Quand la carte graphique est perdue,
+`App::secours_carte_perdue` lance une copie de secours tout de suite (`Recovery::start_copy`) ; si une copie s'écrivait
+déjà, la demande était perdue, et les dernières retouches attendaient la copie automatique suivante (le délai réglé par
+Anthony, ou jamais s'il l'a éteinte). Maintenant la demande est retenue (`Recovery::demander`, `en_attente`) et `tick` lance
+la copie dès la fin de celle qui s'écrit, dans le même passage, sans attendre le délai, pour l'onglet affiché comme pour les
+onglets cachés ; elle tombe si rien n'a changé depuis le cliché de la copie finie, ou si le projet a été enregistré. Essais :
+`recovery_tests::an_urgent_copy_asked_while_one_is_running_follows_it_at_once` (copie automatique éteinte : la copie
+demandée part quand même et a la dernière retouche), `an_urgent_copy_with_nothing_new_or_after_a_save_does_not_start`. Avec
+le cliché léger (section 16), lancer cette copie ne coûte plus au fil de l'interface que le cliché.

@@ -184,3 +184,90 @@ fn autosave_setting_defaults_to_one_minute() {
     let s: crate::settings::Settings = toml::from_str("copie_secours_minutes = 0").unwrap();
     assert_eq!(s.autosave_minutes, 0);
 }
+
+/// Un film dont la copie de secours prend un peu de temps : 48 dessins pleine feuille de bruit (des PNG lents à coder).
+fn film_lent() -> Document {
+    let mut doc = Document::with_frame(640, 360, 24);
+    let mut bruit = crate::raster::Raster::new(doc.width, doc.height);
+    let mut graine = 12_345u32;
+    for i in 0..bruit.tiles.len() {
+        let tuile = bruit.tile_mut(i);
+        for p in tuile.iter_mut() {
+            graine = graine.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+            *p = Color32::from_rgba_premultiplied((graine >> 8) as u8, (graine >> 16) as u8, (graine >> 24) as u8, 255);
+        }
+    }
+    let mut layer = Layer::new("B", LayerKind::Bitmap);
+    for _ in 0..48 {
+        let c = doc.new_cel(LayerKind::Bitmap);
+        doc.cels.get_mut(&c).unwrap().raster = bruit.clone();
+        layer.frames.push(Some(c));
+    }
+    doc.panels[0].layers = vec![layer];
+    doc.panels[0].length = 48;
+    doc
+}
+
+/// La carte graphique perdue pendant qu'une copie de secours s'écrit (`App::secours_carte_perdue` →
+/// `Recovery::start_copy`) : la copie demandée part dès la fin de celle-ci, même copie automatique éteinte, et elle a
+/// les dernières retouches.
+#[test]
+fn an_urgent_copy_asked_while_one_is_running_follows_it_at_once() {
+    let root = temp("secours-urgent");
+    let mut doc = film_lent();
+    let none = HashMap::new();
+    let mut rec = Recovery::start(&root).unwrap();
+    rec.start_copy(snap(&doc, 1, &none, None));
+    // Une retouche, puis la carte perdue pendant que la première copie s'écrit.
+    doc.panels[0].notes = "Retouche d'après la première copie".into();
+    rec.start_copy(snap(&doc, 2, &none, None));
+    assert!(rec.busy(), "la première copie s'écrit encore (sinon l'essai ne dit rien)");
+    assert!(rec.en_attente(), "la demande est retenue");
+    // Copie automatique éteinte (aucun délai) : seule la demande peut lancer la suivante.
+    let t = std::time::Instant::now();
+    while !rec.tick(snap(&doc, 2, &none, None), None, false) {
+        assert!(rec.error.is_none(), "{:?}", rec.error);
+        std::thread::sleep(Duration::from_millis(5));
+        assert!(t.elapsed() < Duration::from_secs(60));
+    }
+    assert!(rec.busy(), "la copie demandée part à la fin de la première, dans le même passage");
+    assert!(!rec.en_attente());
+    while !rec.tick(snap(&doc, 2, &none, None), None, false) {
+        assert!(rec.error.is_none(), "{:?}", rec.error);
+        std::thread::sleep(Duration::from_millis(5));
+        assert!(t.elapsed() < Duration::from_secs(60));
+    }
+    let manifest = rec.dir.join("projet").join("secours.pelure");
+    let texte = std::fs::read_to_string(&manifest).unwrap();
+    assert!(texte.contains("Retouche d'après la première copie"), "la copie a la dernière retouche");
+    // Rien de plus ne part ensuite : pas de copie en boucle.
+    assert!(!rec.tick(snap(&doc, 2, &none, None), None, false) && !rec.busy());
+    rec.close();
+    std::fs::remove_dir_all(&root).ok();
+}
+
+/// La demande est oubliée si rien n'a changé depuis le cliché de la copie qui s'écrivait, ou si le projet a été enregistré.
+#[test]
+fn an_urgent_copy_with_nothing_new_or_after_a_save_does_not_start() {
+    let root = temp("secours-urgent-rien");
+    let doc = film_lent();
+    let none = HashMap::new();
+    let mut rec = Recovery::start(&root).unwrap();
+    rec.start_copy(snap(&doc, 1, &none, None));
+    rec.start_copy(snap(&doc, 1, &none, None));
+    assert!(rec.busy() && rec.en_attente());
+    let t = std::time::Instant::now();
+    while !rec.tick(snap(&doc, 1, &none, None), None, false) {
+        std::thread::sleep(Duration::from_millis(5));
+        assert!(t.elapsed() < Duration::from_secs(60));
+    }
+    assert!(!rec.busy() && !rec.en_attente(), "la copie qui vient de finir avait déjà tout");
+    // Enregistré entre-temps (plus de modification) : la demande tombe.
+    rec.demander();
+    let mut s = snap(&doc, 2, &none, None);
+    s.modified = false;
+    rec.tick(s, None, false);
+    assert!(!rec.busy() && !rec.en_attente());
+    rec.close();
+    std::fs::remove_dir_all(&root).ok();
+}

@@ -477,7 +477,7 @@ pub(crate) struct EtatPlan {
 
 /// La structure du document, sans plans et sans révision : sa forme « canonique », celle dont on prend l'empreinte.
 pub(crate) fn structure_manifest(doc: &Document, projet: &str) -> Manifest {
-    let mut m = manifest_de(doc, false);
+    let mut m = manifest_de(doc, false, &BTreeSet::new(), &BTreeSet::new());
     m.version = crate::project::version_partage_ecrite();
     let mut plans = Vec::new();
     for s in &m.sequences {
@@ -810,6 +810,8 @@ impl SaveJob {
             snapshot_reuse: HashMap::new(),
             versions_from: None,
             partage: None,
+            differe: None,
+            manquants: Vec::new(),
         }
     }
 
@@ -936,7 +938,7 @@ impl SaveJob {
             depot.ecrire_commentaires(&travail.ctx.moi.id, octets)?;
             resultat.commentaires_ecrits = true;
         }
-        Ok(SaveReport { written: count, removed: 0, snapshots: self.snapshots.iter().map(|s| s.id).collect(), partage: Some(resultat) })
+        Ok(SaveReport { written: count, removed: 0, snapshots: self.snapshots.iter().map(|s| s.id).collect(), partage: Some(resultat), manquants: Vec::new() })
     }
 }
 

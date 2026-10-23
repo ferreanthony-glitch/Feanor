@@ -37,6 +37,10 @@ Mise à jour du 2026-10-23 (branche `optim-rendu`, partie d'`integration-debug` 
 graphique, numéros des plans en une passe, vignettes de la planche bornées en mémoire, disposition de la planche gardée ; voir
 la section 24.
 
+Mise à jour du 2026-10-23 (branche `optim-sauvegarde`, partie d'`integration-debug` 56e9d79) : Ctrl+S et la copie de secours ne
+font plus que le cliché sur le fil de l'interface (rien du disque, rien en JSON), et un fichier annexe ou un manifeste identique
+n'est plus réécrit ; voir la section 25.
+
 Ce document dit comment mesurer, ce qui a été mesuré avant et après, ce qui a été changé, ce qui reste
 (classé), et ce qu'il faut regarder à l'écran.
 
@@ -1586,7 +1590,94 @@ remplacée par celle d'origine. Essais : `random_boards_with_rotated_cameras_alw
 étroite, fil à part, limite de 10 s, ordre de lecture et aucun recouvrement vérifiés) et
 `a_rotated_camera_wider_than_a_one_column_row_is_placed` (la planche qui gelait).
 
-## 25. Gros projets : fermer, remplacer et ouvrir un film de 300 plans (2026-10-23, branche `gros-projets`)
+
+## 25. Enregistrer sans rien de lourd sur le fil de l'interface (2026-10-23, branche `optim-sauvegarde`)
+
+L'audit du 2026-10-22 trouvait Ctrl+S et chaque copie de secours à 8–58 ms sur le fil de l'interface (12 ms à 100 plans,
+58 ms à 600, rien de modifié) : une régression par rapport aux « 1 ms » de la section 9.1, venue des annexes ajoutées
+depuis (douze fichiers), du manifeste en JSON joli (10 ms pour 332 Ko, 24 ms pour 2 Mo), d'une lecture de `dessins/`, d'un
+`exists` par son, texture et référence, et surtout de `Raster::has_beyond` (les pixels du bord de chaque dessin, relus deux
+fois à chaque enregistrement : 40 ms pour 9 600 dessins sur la machine chargée).
+
+**Ce qui a bougé.**
+- **Fil de l'interface** (`project::prepare_save`) : seulement ce qui demande le document vivant, sans disque :
+  `used_cels`, le cliché des dessins (`cliche_dessins` : pour un dessin déjà écrit à sa version, son numéro, sa sorte et
+  deux drapeaux ; pour un dessin modifié, son contenu, tuiles partagées `Arc`), la liste des vidéos, les instantanés
+  d'envois, et une copie du document **sans ses dessins** (`Document::copie_sans_dessins` : chaque champ nommé, un champ
+  ajouté doit dire s'il part).
+- **Fil d'écriture** (`SaveJob::resoudre`, au début de `run_with`, avant toute écriture) : la lecture de `dessins/`, les
+  `exists` des sons, textures et dessins à recopier d'ailleurs, le manifeste (`manifest_de`, toujours en JSON joli : des
+  essais et des personnes le lisent comme du texte), les douze annexes, `references.json` relu, `unreadable_in`,
+  `kept_files_in`, `planvers::illisible`, `variantes::illisible`, le JSON des dessins vectoriels modifiés.
+- **Mémo par dessin** (`Document::memo_enregistrement`, `MemoDessin`) : « a quelque chose hors de la feuille » et « textures
+  citées par ses traits », gardés avec la clé (version, taille de la feuille, sorte). L'enregistrement se fiait déjà à la
+  version pour ne pas réécrire un dessin. Rempli à l'ouverture, sur le fil d'ouverture (26,7 ms pour 9 600 dessins).
+  `hors_of` et `used_textures` (projets partagés compris) passent par lui.
+- `Document::used_cels` ne trie plus qu'un numéro par exposition (quatre fois moins pour un film animé à 2 et à 8).
+
+**Mesures** (banc `perf_prepare_save_big_film`, `--ignored`, même processus, avant et après en alternance, le meilleur de
+sept ; machine partagée, chargée à 100 % par d'autres compilations) :
+
+| Film, rien de modifié | Fil de l'interface avant | après | ajouté au fil d'écriture |
+|---|---|---|---|
+| 100 plans, 1 600 dessins (feuilles 3840 × 2160) | 11,9 ms | **0,28 ms** | 3,4 ms |
+| 600 plans, 9 600 dessins | 70,4 ms | **2,3 ms** | 19,4 ms |
+
+Essai permanent `enregistrement_cliche_tests::the_interface_share_of_a_save_stays_small_on_a_big_film` (petites
+feuilles) : 100 plans 4,7–8,6 → 0,21–0,47 ms, 600 plans 30–51 → 1,9–3,3 ms ; bornes 6 et 15 ms, et « après » trois fois
+plus petit qu'« avant ». Machine presque au repos (20 % de charge), trois séries : 100 plans 4,3–5,0 → **0,15–0,20 ms**,
+600 plans 28,7–28,9 → **1,71–1,75 ms** (avant et après en alternance : les caches sont froids, comme sur le fil de
+l'interface qui fait autre chose entre deux enregistrements). Au mieux de quinze, caches chauds : `used_cels` 0,15 ms,
+cliché des 9 600 dessins 0,3–0,5 ms, copie du document 0,43 ms, soit environ 1,1 ms. La cible « environ 1,5 ms » pour
+600 plans est donc tenue à chaud, dépassée de 0,2 ms à froid.
+
+**Ce qui reste** : la copie du document sans ses dessins grandit avec le film (plans, versions de plans, variantes rangées :
+0,4 ms pour 600 plans) ; le cliché lit la version de chaque dessin (dix mille lectures dispersées). L'enregistrement d'un
+**projet partagé** (`partage_io::preparer`) garde sa préparation d'avant sur le fil de l'interface (sauf le mémo, qui lui
+évite déjà les pixels du bord) : il a besoin de savoir tout de suite quels dessins il réécrit pour ses empreintes.
+
+**Un dessin que le dossier a perdu.** Avant, le fil de l'interface lisait `dessins/` et réécrivait tout de suite un dessin
+déjà écrit dont le fichier manquait (effacé à côté de SHOT). Le cliché n'a pas ses pixels : le fil d'écriture le note
+(`SaveReport::manquants`), et l'enregistrement repart aussitôt pour lui (`App::finish_save` : avant la suite qui attendait,
+Quitter compris ; `project::save` ; la copie de secours, à sa copie suivante). Essais :
+`a_drawing_deleted_beside_shot_is_written_again_by_the_next_save`, `ctrl_s_writes_again_…`, `the_recovery_copy_…`.
+
+**Mêmes octets.** `the_light_snapshot_writes_exactly_what_the_old_preparation_wrote` enregistre le projet complet de la
+fiabilité (plus une version de plan, une variante rangée et un dessin hors de la feuille) par l'ancienne préparation
+(`prepare_save_avant`, gardée pour les essais) et par la nouvelle : même dossier, fichier pour fichier, au premier
+enregistrement et au suivant. `the_snapshot_is_taken_at_the_call_not_when_the_writer_runs` : tout ce qui change entre le
+cliché et le fil d'écriture (notes, commentaire, dessin) n'est pas écrit.
+
+**Fichiers identiques laissés tels quels** (item 9 de l'audit). `write_sidecar` lisait déjà l'ancien fichier (pour ne
+jamais effacer un fichier illisible) mais réécrivait et synchronisait toujours ; le manifeste aussi. Maintenant un fichier
+annexe ou un manifeste qui a déjà exactement ces octets n'est ni réécrit ni synchronisé, et c'est un succès pour tous les
+chemins qui comptent sur le résultat (`?` de `run_with`, `run_partage`, `SavePlan::write`). Pour Dropbox ou Drive : un
+enregistrement où rien n'a changé n'envoie plus rien. Ctrl+S écrit toujours la date de modification du projet (à la
+seconde) dans le manifeste : il change donc, sauf deux fois dans la même seconde ; une copie de secours sans changement ne
+touche plus rien. La coopération ne dépend pas des réécritures : un poste ne surveille que le fichier de structure, que
+`run_partage` n'écrivait déjà que s'il changeait (comme ses annexes et ses fichiers de plans) ; `Orphan::project_is_newer`
+compare la date du manifeste à celle de la copie, et un Ctrl+S réécrit le manifeste (sa date change).
+
+| Écriture « rien de modifié », cliché compris (même banc, en alternance) | Tout réécrit (avant) | Fichiers identiques laissés |
+|---|---|---|
+| 100 plans | 10,4 ms | 7,3 ms |
+| 600 plans (manifeste de 2 Mo) | 33,4 ms | 28,8 ms |
+
+Le reste de ces temps est la part du cliché passée sur ce fil (3 et 17 ms) et les deux lectures de `dessins/` (ce qui
+manque, ce qui ne sert plus). Essais (`enregistrement_identique_tests.rs`) : un enregistrement sans changement ne change la
+date d'aucun fichier, un commentaire de plus ne change que `commentaires.json` (« tout réécrire » en touchait plus de cinq,
+manifeste compris) ; une copie de secours sans changement ne touche rien ; Ctrl+S sans changement ne réécrit au plus que le
+manifeste ; une annexe identique est un succès et une annexe illisible remplacée est toujours mise de côté
+(`.illisible`). Deux essais de `enregistrement_tests.rs` qui bloquaient l'écriture du manifeste changent maintenant aussi le
+manifeste (sans cela, il n'est plus écrit et l'obstacle n'est pas atteint).
+
+**Résolution changée avec mise à l'échelle.** En vérifiant le mémo, un défaut ancien est apparu et a été corrigé : les
+dessins refaits par `Document::resize_frame` (mise à l'échelle) gardaient la version 0, celle d'un dessin relu que
+`written` dit déjà écrit ; Ctrl+S laissait les anciens PNG, refusés à la réouverture. `adaptation::adapte_dessin` donne
+maintenant au dessin adapté la version qui suit (essai
+`a_resolution_change_with_scaling_is_saved_and_reopened_at_the_new_size`).
+
+## 26. Gros projets : fermer, remplacer et ouvrir un film de 300 plans (2026-10-23, branche `gros-projets`)
 
 Essai de charge du 2026-10-23 : un générateur de films « comme un court métrage de 7 à 10 minutes »
 (`lourd_tests.rs`, essais `#[ignore]` lancés à la main, voir l'en-tête du fichier ; `lourd_generer` fabrique le projet,

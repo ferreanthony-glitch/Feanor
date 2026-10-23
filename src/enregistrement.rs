@@ -2,10 +2,13 @@
 //!
 //! `Ctrl+S`, « Enregistrer sous » et « Enregistrer » des boîtes « Modifications non enregistrées »
 //! ne font plus écrire le fil de l'interface. Il ne fait que le **cliché** de ce qui doit être écrit
-//! (`project::prepare_save` : le manifeste, les commentaires, le contenu rogné, et la copie des seuls
-//! dessins modifiés depuis le dernier enregistrement), puis un autre fil encode les PNG, écrit les
-//! fichiers et rend compte ; `tick_save` adopte le résultat à une image d'écran suivante. Avant :
-//! 270 ms de gel pour 50 dessins modifiés, 2,8 s pour un premier enregistrement de 500 dessins.
+//! (`project::prepare_save` : le document sans ses dessins, et la copie des seuls dessins modifiés depuis
+//! le dernier enregistrement ; aucun accès au disque), puis un autre fil lit le dossier, met le manifeste
+//! et les annexes en JSON, encode les PNG, écrit les fichiers et rend compte ; `tick_save` adopte le
+//! résultat à une image d'écran suivante. Avant : 270 ms de gel pour 50 dessins modifiés, 2,8 s pour un
+//! premier enregistrement de 500 dessins ; puis 8 à 58 ms pour un film de 100 à 600 plans où rien
+//! n'avait changé. Un dessin que le dossier a perdu à côté de SHOT (`SaveReport::manquants`) est réécrit
+//! aussitôt, par un second passage, avant la suite.
 //!
 //! **Le projet n'est jamais marqué enregistré à tort.** Au cliché, `modified` passe à faux ; toute
 //! modification qui suit le remet à vrai (c'est le compteur : un « vrai » vu à la fin de l'écriture
@@ -166,6 +169,8 @@ impl App {
             Ok(job) => job,
             Err(e) => {
                 self.written.clear();
+                // (Une seconde passe ou une file qui échoue : le dossier n'a pas tout, le projet reste à enregistrer.)
+                self.modified = true;
                 self.status = format!("Échec de l'enregistrement : {e}");
                 self.save_error = Some(e);
                 return false;
@@ -235,7 +240,8 @@ impl App {
         let same = epoch == self.doc_epoch;
         let folder = manifest.parent().and_then(|d| d.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
         match result {
-            Ok(report) => {
+            Ok(mut report) => {
+                let manquants = std::mem::take(&mut report.manquants);
                 // Le projet est un dossier à son nom (comme un projet Storyboard Pro) : on le dit, le
                 // fichier n'est pas là où l'on pensait l'avoir mis (Anthony, 2026-10-17 : « quand
                 // j'enregistre un fichier Pelure, il n'apparaît pas dans l'explorateur »).
@@ -258,10 +264,18 @@ impl App {
                     self.doc.envois.liberer(&report.snapshots);
                     self.doc.envois.dossier = manifest.parent().map(std::path::Path::to_path_buf);
                     self.remember_project(&manifest);
-                    self.path = Some(manifest);
+                    self.path = Some(manifest.clone());
                     self.import_source = None;
                     // (Le projet a un nom et un chemin : la session le retient, `onglets.rs`.)
                     self.session_a_ecrire = true;
+                    // Des dessins déjà écrits manquaient dans le dossier (effacés à côté de SHOT) : le cliché n'avait pas
+                    // leurs pixels. Ils repartent tout de suite, avec la suite qui attendait (`SaveReport::manquants`).
+                    if !manquants.is_empty() {
+                        for id in &manquants {
+                            self.written.remove(id);
+                        }
+                        return self.start_save(manifest, then);
+                    }
                 }
             }
             Err(e) => {
