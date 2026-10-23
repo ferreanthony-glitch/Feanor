@@ -354,15 +354,14 @@ fn board_thumbnails_stay_under_their_memory_bound_while_zooming() {
 
 // ------------------------------------------------------------------ 6. disposition de la planche gardée
 
-/// Un tirage pseudo-aléatoire reproductible (xorshift). `tourner` : des caméras tournées aussi.
+/// Un tirage pseudo-aléatoire reproductible (xorshift).
 struct Hasard {
     x: u64,
-    tourner: bool,
 }
 
 impl Hasard {
     fn new(x: u64) -> Hasard {
-        Hasard { x, tourner: false }
+        Hasard { x }
     }
 
     fn n(&mut self, max: usize) -> usize {
@@ -411,9 +410,9 @@ fn camera_au_hasard(doc: &mut Document, i: usize, h: &mut Hasard) {
         c.x += h.f(-900.0, 900.0);
         c.y += h.f(-500.0, 500.0);
         c.zoom *= h.f(0.4, 2.5);
-        // (Une caméra tournée seulement pour le constat `random_boards_with_rotated_cameras` : certaines font boucler la disposition
-        // sans fin, avant comme après cette passe.)
-        if h.tourner && h.n(4) == 0 {
+        // (Une caméra tournée sur quatre : sur une planche étroite, son empreinte peut être plus large qu'une rangée ; la disposition
+        // bouclait alors sans fin, `random_boards_with_rotated_cameras_always_finish`.)
+        if h.n(4) == 0 {
             c.angle = h.f(-40.0, 40.0);
         }
         keys.push(crate::camera::CameraKey::new((k * n / 4).min(n.saturating_sub(1)).max(k), c));
@@ -519,55 +518,119 @@ fn changer_au_hasard(doc: &mut Document, s: &mut crate::board::BoardSettings, li
     }
 }
 
-/// Constat de la passe (pas un essai de ce qu'elle change) : les mêmes planches au hasard, avec des caméras tournées ; chaque
-/// disposition sur un fil à part, cinq secondes au plus. Lancé à part : `... random_boards_with_rotated_cameras -- --ignored
-/// --nocapture` ; il dit la première qui ne finit pas.
+/// La disposition `l` (sans geste de caméra retenu) est juste : les cases sont dans l'ordre de lecture (rangée, puis x de l'image A),
+/// et aucune ne recouvre une autre (l'enveloppe d'une case à mouvement, l'image d'une case simple), à un point près.
+fn disposition_juste(l: &crate::board::BoardLayout) -> Result<(), String> {
+    for k in 1..l.cards.len() {
+        let (a, b) = (&l.cards[k - 1], &l.cards[k]);
+        if !(b.row > a.row || (b.row == a.row && b.thumb.left() > a.thumb.left() + 1e-3)) {
+            return Err(format!("ordre de lecture : la case {k} (rangée {}, x {}) avant la case {} (rangée {}, x {})", b.row, b.thumb.left(), k - 1, a.row, a.thumb.left()));
+        }
+    }
+    let formes: Vec<Vec<Pos2>> = (0..l.cards.len()).map(|k| l.zones_of(k).into_iter().next().unwrap_or_default()).collect();
+    for i in 0..formes.len() {
+        for j in i + 1..formes.len() {
+            if crate::vignettecam::se_recouvrent(&formes[i], &formes[j], 1.0) {
+                return Err(format!("les cases {i} et {j} se recouvrent : {:?} et {:?}", formes[i], formes[j]));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Des planches au hasard, avec des caméras tournées, dont beaucoup d'étroites (une ou deux colonnes, cadre portrait, pages de
+/// quelques rangées) : sur une planche d'une colonne, une empreinte tournée est plus large qu'une rangée, et `board::trouve`
+/// cherchait sans fin une rangée où elle tienne (SHOT gelait). Chaque disposition finit (un fil à part, une limite de temps : un
+/// gel se dit au lieu de geler la suite des essais), et elle est juste quand aucun geste ne la retient (`disposition_juste`).
 #[test]
-#[ignore]
-fn random_boards_with_rotated_cameras() {
+fn random_boards_with_rotated_cameras_always_finish() {
+    use std::sync::mpsc::{channel, RecvTimeoutError};
     use std::sync::{Arc, Mutex};
-    // (Le fil d'essai dit, avant chaque disposition, ce qu'il va disposer ; s'il ne dit plus rien pendant cinq secondes, c'est
-    // celle-là.)
-    let etat: Arc<Mutex<(u64, String)>> = Arc::new(Mutex::new((0, String::new())));
-    let fin = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let (e2, f2) = (etat.clone(), fin.clone());
-    std::thread::spawn(move || {
-        let mut h = Hasard::new(0x9e37_79b9_7f4a_7c15);
-        h.tourner = true;
-        for planche in 0..40 {
+    // (Le fil dit, avant chaque disposition, ce qu'il va disposer : si rien n'arrive pendant dix secondes, c'est celle-là.)
+    let etat: Arc<Mutex<String>> = Arc::new(Mutex::new(String::new()));
+    let e2 = etat.clone();
+    let (tx, rx) = channel::<bool>();
+    let fil = std::thread::spawn(move || {
+        let mut h = Hasard::new(0x2545_f491_4f6c_dd1d);
+        for planche in 0..60 {
             let mut doc = planche_au_hasard(&mut h);
             let mut s = reglages_au_hasard(&mut h);
+            // (Une planche sur deux étroite, comme celle qui gelait : une colonne ou deux, souvent en portrait, souvent en pages.)
+            if planche % 2 == 0 {
+                s.columns = 1 + h.n(2);
+                if h.n(2) == 0 {
+                    doc.frame = [1080, 1920];
+                }
+                if h.n(2) == 0 {
+                    s.rows = 1 + h.n(4);
+                }
+            }
             let mut lines = lignes_au_hasard(&doc, &mut h);
             let mut joins = h.n(2) == 0;
             let mut opt = options_au_hasard(&doc, &mut h);
             let mut quoi = "départ";
             for etape in 0..25 {
                 let cams: Vec<String> = doc.panels.iter().enumerate().filter(|(_, p)| p.camera.len() > 1).map(|(i, p)| format!("plan {i} ({} images) : {:?}", p.frame_count(), p.camera.iter().map(|k| (k.frame, k.cam.x, k.cam.y, k.cam.zoom, k.cam.angle)).collect::<Vec<_>>())).collect();
-                {
-                    let mut e = e2.lock().expect("état");
-                    e.0 += 1;
-                    e.1 = format!("planche {planche}, étape {etape} ({quoi}) : cadre {:?}, {} plans, réglages {s:?}, retenue {opt:?}, case pâle jointe {joins}\n  {}", doc.frame, doc.panels.len(), cams.join("\n  "));
+                *e2.lock().expect("état") = format!("planche {planche}, étape {etape} ({quoi}) : cadre {:?}, {} plans, réglages {s:?}, retenue {opt:?}, case pâle jointe {joins}\n  {}", doc.frame, doc.panels.len(), cams.join("\n  "));
+                let l = crate::board::layout_with(&doc, &s, &lines, joins, &opt);
+                if opt.hold.is_none() {
+                    if let Err(e) = disposition_juste(&l) {
+                        panic!("{} : {e}", e2.lock().expect("état"));
+                    }
                 }
-                std::hint::black_box(crate::board::layout_with(&doc, &s, &lines, joins, &opt));
+                let _ = tx.send(false);
                 quoi = changer_au_hasard(&mut doc, &mut s, &mut lines, &mut joins, &mut opt, &mut h);
             }
         }
-        f2.store(true, std::sync::atomic::Ordering::Relaxed);
+        let _ = tx.send(true);
     });
-    let mut vu = 0;
-    let mut depuis = Instant::now();
-    while !fin.load(std::sync::atomic::Ordering::Relaxed) {
-        std::thread::sleep(std::time::Duration::from_millis(50));
-        let e = etat.lock().expect("état");
-        if e.0 != vu {
-            vu = e.0;
-            depuis = Instant::now();
-        } else if depuis.elapsed() > std::time::Duration::from_secs(5) {
-            println!("CONSTAT : la disposition ne finit pas en 5 s : {}", e.1);
-            return;
+    loop {
+        match rx.recv_timeout(std::time::Duration::from_secs(10)) {
+            Ok(true) => break,
+            Ok(false) => {}
+            Err(RecvTimeoutError::Timeout) => panic!("la disposition ne finit pas en 10 s : {}", etat.lock().expect("état")),
+            Err(RecvTimeoutError::Disconnected) => {
+                if let Err(e) = fil.join() {
+                    std::panic::resume_unwind(e);
+                }
+                return;
+            }
         }
     }
-    println!("toutes les dispositions finissent");
+    fil.join().expect("fil des planches");
+}
+
+/// Celle qui gelait SHOT, telle quelle : cadre portrait, une colonne, pages de trois rangées, un mouvement de caméra dont un cadre
+/// est tourné (son empreinte est plus large que la rangée). Elle se pose au début d'une rangée, déborde à droite, sans rien
+/// recouvrir et dans l'ordre de lecture.
+#[test]
+fn a_rotated_camera_wider_than_a_one_column_row_is_placed() {
+    let mut doc = Document::with_frame(1080, 1920, 24);
+    let mut at = 0;
+    for _ in 0..4 {
+        at = doc.add_scene_after(at);
+    }
+    for p in &mut doc.panels {
+        p.length = 31;
+    }
+    // (Les clés de la planche trouvée par `random_boards_with_rotated_cameras_always_finish` avant la correction.)
+    let c0 = doc.panel_camera(2, 0);
+    let (mut c1, mut c2) = (c0, c0);
+    (c1.x, c1.y, c1.zoom) = (762.66, 2238.1, 0.78976);
+    (c2.x, c2.y, c2.zoom, c2.angle) = (1903.86, 1568.4, 1.3051, 25.608);
+    doc.panels[2].camera = vec![crate::camera::CameraKey::new(0, c0), crate::camera::CameraKey::new(7, c1), crate::camera::CameraKey::new(15, c2)];
+    let s = crate::board::BoardSettings { card_w: 470.44, columns: 1, rows: 3 };
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(crate::board::layout_with(&doc, &s, &HashMap::new(), true, &crate::board::Options::default()));
+    });
+    let l = rx.recv_timeout(std::time::Duration::from_secs(10)).expect("la disposition finit");
+    let k = l.cards.iter().position(|c| c.panel == 2).expect("la case du plan à mouvement");
+    let m = l.move_of(k).expect("une empreinte");
+    let row_w = 470.44;
+    assert!(crate::vignettecam::boite(&m.enveloppe).width() > row_w + 1.0, "l'empreinte est plus large que la rangée (le cas qui gelait)");
+    assert_eq!(l.cards.len(), 5);
+    disposition_juste(&l).expect("une disposition juste");
 }
 
 #[test]
