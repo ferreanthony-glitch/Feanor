@@ -169,6 +169,8 @@ impl App {
             Ok(job) => job,
             Err(e) => {
                 self.written.clear();
+                // (Une seconde passe ou une file qui échoue : le dossier n'a pas tout, le projet reste à enregistrer.)
+                self.modified = true;
                 self.status = format!("Échec de l'enregistrement : {e}");
                 self.save_error = Some(e);
                 return false;
