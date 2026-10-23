@@ -364,7 +364,9 @@ fn the_paths_default_to_shot_modeles_in_documents_and_the_settings_override_them
     let defaut = GenerationSonReglages::default();
     assert!(defaut.demarrage_auto && defaut.python_local.is_empty() && defaut.modeles_local.is_empty());
     let racine = crate::serveurlocal::racine_par_defaut();
-    assert!(racine.ends_with("Work/SHOT-modeles") || racine.ends_with("Work\\SHOT-modeles"), "{racine:?}");
+    let neuve = std::path::Path::new("SHOT").join("Modèles").join("SHOT-modeles");
+    let ancienne = std::path::Path::new("Work").join("SHOT-modeles");
+    assert!(racine.ends_with(&neuve) || racine.ends_with(&ancienne), "{racine:?}");
     assert_eq!(crate::serveurlocal::python_des_reglages(&defaut), crate::serveurlocal::python_de(&racine));
     assert!(crate::serveurlocal::python_de(&racine).ends_with("venv\\Scripts\\python.exe") || crate::serveurlocal::python_de(&racine).ends_with("venv/Scripts/python.exe"));
     let r = GenerationSonReglages { modeles_local: " \"D:\\Modeles\\SHOT\" ".into(), ..Default::default() }.sanitized();
@@ -373,6 +375,27 @@ fn the_paths_default_to_shot_modeles_in_documents_and_the_settings_override_them
     // Un fichier de réglages d'avant ces champs se lit toujours.
     let ancien: crate::settings::Settings = toml::from_str("[generation_son]\nlecture = \"local\"").unwrap();
     assert!(ancien.generation_son.demarrage_auto && ancien.generation_son.python_local.is_empty());
+}
+
+/// Le dossier des modèles a déménagé (2026-10-23) dans `Documents\SHOT\Modèles\SHOT-modeles` : c'est le défaut ;
+/// l'ancien `Documents\Work\SHOT-modeles` ne sert que s'il est le seul des deux à exister.
+#[test]
+fn the_default_models_folder_moved_to_documents_shot_and_falls_back_to_the_old_one() {
+    let docs = std::env::temp_dir().join(format!("shot-modeles-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&docs);
+    let neuve = docs.join("SHOT").join("Modèles").join("SHOT-modeles");
+    let ancienne = docs.join("Work").join("SHOT-modeles");
+    // Ni l'un ni l'autre : le nouveau (c'est lui que les Préférences proposent).
+    assert_eq!(crate::serveurlocal::racine_par_defaut_dans(&docs), neuve);
+    // Seulement l'ancien : l'ancien.
+    std::fs::create_dir_all(&ancienne).unwrap();
+    assert_eq!(crate::serveurlocal::racine_par_defaut_dans(&docs), ancienne);
+    // Les deux (la jonction laissée à l'ancienne place) : le nouveau.
+    std::fs::create_dir_all(&neuve).unwrap();
+    assert_eq!(crate::serveurlocal::racine_par_defaut_dans(&docs), neuve);
+    // Le Python suit la racine.
+    assert_eq!(crate::serveurlocal::python_de(&neuve), neuve.join("venv").join("Scripts").join("python.exe"));
+    let _ = std::fs::remove_dir_all(&docs);
 }
 
 #[test]

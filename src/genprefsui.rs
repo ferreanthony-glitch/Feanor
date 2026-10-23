@@ -2,7 +2,8 @@
 //! lire le storyboard, générer les bruitages et ambiances, générer les voix témoin — le fournisseur,
 //! **local** (le serveur de cet ordinateur) ou **service en ligne**.
 //!
-//! - Local : le serveur Python de `sidecar/` — le dossier `SHOT-modeles` et le Python à utiliser, le
+//! - Local : le serveur Python de `sidecar/` — le dossier `SHOT-modeles` (par défaut
+//!   `Documents\SHOT\Modèles\SHOT-modeles`, `serveurlocal::racine_par_defaut`) et le Python à utiliser, le
 //!   démarrage automatique, l'adresse (toujours `127.0.0.1`) et le port, « Démarrer le serveur local »,
 //!   « Arrêter » et « Tester » (`serveurlocal.rs` : tout se fait sur des fils à part).
 //! - En ligne : le service, « Saisir la clé… » (rangée dans le Gestionnaire d'identifiants de Windows,
@@ -207,13 +208,13 @@ impl App {
     fn serveur_local_prefs_ui(&mut self, ui: &mut egui::Ui) -> bool {
         let mut change = false;
         ui.label(RichText::new("Serveur local").strong());
-        ui.label(RichText::new("Un petit programme Python (sidecar/serveur.py) qui tourne sur cet ordinateur et fait tourner les modèles : rien ne sort de la machine. Les modèles et le Python sont dans le dossier SHOT-modeles.").small().weak());
+        ui.label(RichText::new("Un petit programme Python (sidecar/serveur.py) qui tourne sur cet ordinateur et fait tourner les modèles : rien ne sort de la machine. Les modèles et le Python sont dans le dossier SHOT-modeles (par défaut Documents\\SHOT\\Modèles\\SHOT-modeles).").small().weak());
         let (defaut_racine, defaut_python) = (crate::serveurlocal::racine_par_defaut(), crate::serveurlocal::python_de(&crate::serveurlocal::racine_des_reglages(&self.settings.generation_son)));
         ui.horizontal(|ui| {
             ui.label("Dossier des modèles");
             let r = ui.add(egui::TextEdit::singleline(&mut self.settings.generation_son.modeles_local).hint_text(defaut_racine.display().to_string()).desired_width(300.0));
             change |= r.lost_focus();
-            if ui.button("Choisir…").on_hover_text("Le dossier SHOT-modeles (il contient python, venv et modeles). Vide : le dossier par défaut.").clicked() {
+            if ui.button("Choisir…").on_hover_text("Le dossier SHOT-modeles (il contient python, venv et modeles). Vide : le dossier par défaut, Documents\\SHOT\\Modèles\\SHOT-modeles (ou l'ancien Documents\\Work\\SHOT-modeles s'il est le seul là).").clicked() {
                 if let Some(d) = rfd::FileDialog::new().set_title("Dossier SHOT-modeles").pick_folder() {
                     self.settings.generation_son.modeles_local = d.display().to_string();
                     change = true;

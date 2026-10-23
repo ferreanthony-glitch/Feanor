@@ -3,8 +3,9 @@
 #   .\sidecar\lancer.ps1
 #   .\sidecar\lancer.ps1 -Racine D:\SHOT-modeles -Port 8765
 #
-# -Racine : le dossier SHOT-modeles (python, venv et modeles). Par defaut : le dossier
-#           SHOT-modeles a cote du dossier Work de l'utilisateur, ou la variable SHOT_MODELES.
+# -Racine : le dossier SHOT-modeles (python, venv et modeles). Par defaut : la variable SHOT_MODELES,
+#           sinon Documents\SHOT\Modeles (avec l'accent grave)\SHOT-modeles, sinon l'ancien
+#           Documents\Work\SHOT-modeles s'il est le seul des deux a exister (comme SHOT).
 # Le serveur n'ecoute que sur 127.0.0.1. Ctrl+C l'arrete. Aucun acces au reseau.
 # (Le script est en ASCII : PowerShell 5.1 lit mal l'UTF-8 sans BOM.)
 
@@ -15,7 +16,13 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if (-not $Racine) { $Racine = $env:SHOT_MODELES }
-if (-not $Racine) { $Racine = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Work\SHOT-modeles' }
+if (-not $Racine) {
+    $documents = [Environment]::GetFolderPath('MyDocuments')
+    # (Le nom du dossier a un accent : ecrit par son code, le script reste en ASCII.)
+    $neuve = Join-Path $documents ('SHOT\Mod' + [char]0x00E8 + 'les\SHOT-modeles')
+    $ancienne = Join-Path $documents 'Work\SHOT-modeles'
+    if ((-not (Test-Path $neuve)) -and (Test-Path $ancienne)) { $Racine = $ancienne } else { $Racine = $neuve }
+}
 $python = Join-Path $Racine 'venv\Scripts\python.exe'
 if (-not (Test-Path $python)) {
     Write-Host "Python introuvable : $python" -ForegroundColor Red
