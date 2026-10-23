@@ -376,7 +376,7 @@ Fichier > Préférences… > Performance ; la valeur par défaut est le comporte
 | Traits vectoriels texturés | `App::finish_open`, `rejeu_idle_tick` | exact aussitôt | rapide jusqu'au repos (2 s de calme) | rapide partout | à l'ouverture d'un projet |
 | Tremblement : couper « Animer à l'arrêt » | `tremblement::Settings::of` | non | non | oui | tout de suite |
 | Pelure : images au plus | `onion::neighbours` | sans plafond | 6 | 2 | tout de suite |
-| Cache de la carte graphique | `GpuCanvas::set_cache_bytes` | 1 Go (2 Go si 8 Go de mémoire vidéo) | 0,5 à 1 Go | 256 à 512 Mo | tout de suite |
+| Cache de la carte graphique (au plus : moins si le budget de mémoire vidéo du système manque, section 27.1) | `GpuCanvas::set_cache_bytes` | 1 Go (2 Go si 8 Go de mémoire vidéo) | 0,5 à 1 Go | 256 à 512 Mo | tout de suite |
 | Cache des traits | `vector::set_cache_budget` | 512 Mo (1 Go si 32 Go de mémoire) | 512 (384 si < 16 Go) | 256 Mo | tout de suite |
 | Cache des effets | `fxcache::set_limit` | 768 Mo (1,5 Go si 32 Go) | 768 (512 si < 16 Go) | 384 (256 si < 8 Go) | tout de suite |
 | Fils de calcul | `parallele::coeurs` (tous les calculs répartis, fil des effets) | automatique | automatique | un cœur libre sur 3 à 4 fils | tout de suite |
@@ -1778,4 +1778,56 @@ C'est le même coût que changer de plan en Storyboard, à tout zoom ; ce ne son
 points et sa vignette est à la plus petite largeur (128 pixels, `thumbs::width_for`), et leur envoi à la carte est déjà borné
 à 1 ms par image (`UPLOAD_TIME`). Rien de contenu à corriger ici : il faudrait des textures réduites pour le dessin vivant
 d'une petite case (à voir si Anthony sent ce pic en changeant de plan sur une planche dézoomée).
+
+## 27. Mémoire vidéo et hors-feuille (2026-10-23, branche `optim-vram-monde`)
+
+Deux points de l'audit mesuré du 2026-10-23 (5 et 7), approuvés par Anthony, et deux points d'une relecture
+indépendante (rejeu, onglets fermés).
+
+### 27.1 Le cache des textures suit le budget de mémoire vidéo du système (`memoirevideo.rs`)
+
+**Le constat de l'audit** : le cache des textures de dessin (`gpu.rs`) visait un poids fixe, 1 à 2 Go selon le diagnostic,
+sans regarder ce que prennent les autres logiciels. Mémoire vidéo à 6,9 Go sur 8 (Storyboard Pro 3,5 Go, SHOT 1,5 Go, le
+bureau), chaque image recomposée attendait la carte 25 à 46 ms au lieu de 2 ; à 5,4 Go, 1,4 à 2,5 ms (cause déduite, non
+prouvée : la pagination de WDDM).
+
+**Ce qui change** : un fil (« memoire-video », sous la priorité normale) lit toutes les 1,5 s
+`IDXGIAdapter3::QueryVideoMemoryInfo` (segment local) : le budget que le système accorde à SHOT — il le calcule d'après ce
+que prennent tous les autres — et ce que SHOT utilise sur cette carte (Direct3D 12 ou Vulkan : c'est un compte du noyau).
+DXGI est chargé à la demande (`LoadLibraryW` + `GetProcAddress`), sans caisse de plus ; la carte est retrouvée par ses
+numéros PCI (ceux de l'adaptateur wgpu ; ici une RTX 2080 SUPER en Vulkan). À chaque nouvelle lecture, `sync` refait le
+plafond du cache avec le poids du cache de ce moment (`memoirevideo::cible_cache`, fonction pure) :
+
+    plafond = budget − (utilisé − cache des dessins) − marge      (marge : un dixième du budget, au moins 256 Mo ;
+                                                                   jamais sous 64 Mo)
+
+Le cache vise le plus petit du réglage et du plafond (`CanvasResources::limit`, aussi pour l'envoi d'avance et la part des
+onglets cachés). Le plafond est tenu jusqu'à la lecture suivante : ce qu'on libère entre deux lectures ne fait pas croire à
+une place qui n'est pas encore rendue. La place revient : le plafond remonte, le cache regrandit. Les dessins de l'image
+affichée ne partent jamais (même règle qu'avant : la chasse s'arrête à ceux de l'image). Chaque changement de plus d'un
+vingtième du poids visé est noté ; la fenêtre Aide > Diagnostic des performances montre la mémoire vidéo de SHOT, le budget,
+le cache visé et les trois dernières décisions. Sans lecture (autre système, Windows trop ancien, carte introuvable) :
+le poids réglé seul, comme avant.
+
+**Mesure** (`memoirevideo_tests::mesure_memoire_video`, `--ignored`, même processus, avant = sans lecture, après = vraies
+lectures) : un projet 4K dont 100 dessins pleins (3 Go de textures, cache réglé à 3 Go par `SHOT_CACHE_MO=3072`) sont vus une
+fois, puis six secondes d'images recomposées sur quatre calques ; un autre processus (`occupe_la_carte`) tient 4 Go de
+tampons sur la carte (`SHOT_OCCUPER_MO=4000`). Le budget accordé à SHOT tombe alors de 7,2 Go à 2,6–3,0 Go. **Le mécanisme
+marche** : en 0,8 s le cache passe de 2,5 à 2,25 Go, la mémoire est bien rendue (SHOT 2,64 → 2,44 Go à la lecture suivante),
+puis le plafond remonte un peu (2,37 Go) et tient. **Le gain, lui, n'a pas pu être mesuré proprement** : à la première
+série, l'image recomposée passait de 6,3 ms (pire 11,7) avant à 2,6 ms (pire 4,1) après ; aux suivantes, la machine était
+prise par d'autres travaux (Storyboard Pro et un SHOT ouverts, d'autres agents : 22 à 35 ms par image même sans l'autre
+processus) et les deux passes se valaient dans le bruit. Une lecture « dont 0 Mo de dessins » au tout début d'une passe
+vient de l'essai (une carte neuve pendant que la mémoire de la précédente n'est pas encore rendue) ; dans SHOT, il n'y a
+qu'une carte.
+
+Essais (`memoirevideo_tests.rs`) : la règle en fonction pure (la situation de l'audit : budget 2,5 Go, SHOT 1,5 Go dont 1 Go
+de dessins, cache réglé à 2 Go ramené à 1,75 Go ; au-delà du budget ; le plancher ; la place qui revient ; ce qui se note) ;
+sur une vraie carte, avec des lectures posées par l'essai (propres au fil d'essai : les autres essais ne les voient pas) :
+la chasse suit la cible, ne prend jamais un dessin de l'image affichée (six dessins affichés pour une cible de quatre :
+les six restent, rien n'est renvoyé), le cache regrandit quand la place revient, et sans lecture tout est comme avant.
+
+**Risques** : un pilote qui garderait la mémoire libérée dans ses réserves ferait baisser le plafond lecture après lecture
+jusqu'au plancher (ce n'est pas le cas ici : la mémoire revient à la lecture suivante) ; le pire serait alors un cache de
+64 Mo, les dessins de chaque image renvoyés à la carte (lent, juste). Deux cartes identiques : la première est prise.
 

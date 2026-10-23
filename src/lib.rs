@@ -36,6 +36,10 @@ mod donnees;
 #[cfg(test)]
 mod donnees_tests;
 mod materiel;
+// Le budget de mémoire vidéo du système : le cache des textures de dessin se fait plus petit quand il manque.
+mod memoirevideo;
+#[cfg(test)]
+mod memoirevideo_tests;
 #[cfg(test)]
 mod demarrage_tests;
 mod ouverture;

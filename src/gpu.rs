@@ -450,8 +450,13 @@ struct CanvasResources {
     /// Texture d'un pixel blanc, pour le papier.
     white: wgpu::BindGroup,
     textures: HashMap<CelId, CelTexture>,
-    /// Mémoire visée pour les textures des dessins (`CACHE_BYTES`, plus petite dans les essais).
+    /// Mémoire visée pour les textures des dessins (`CACHE_BYTES`, plus petite dans les essais), telle que réglée.
     cache_bytes: u64,
+    /// Plafond posé par le budget de mémoire vidéo du système (`memoirevideo.rs`) ; rien : pas de lecture (le poids
+    /// réglé vaut seul). Le cache vise le plus petit des deux (`limit`).
+    vram_cap: Option<u64>,
+    /// Numéro de la dernière lecture du budget prise en compte.
+    vram_seq: u64,
     /// Essais : chaque texture couvre l'image entière de son dessin, comme avant la taille au
     /// contenu (pour comparer les deux, pixel pour pixel).
     whole_textures: bool,
@@ -476,6 +481,33 @@ struct CanvasResources {
     fx_jobs: Vec<FxJob>,
     /// Passes d'effets dessinées, pour les mesures.
     fx_passes: u64,
+}
+
+impl CanvasResources {
+    /// Le poids que le cache des dessins vise : le réglage, ou moins si la mémoire vidéo manque (`memoirevideo.rs`).
+    fn limit(&self) -> u64 {
+        crate::memoirevideo::effectif(self.cache_bytes, self.vram_cap)
+    }
+
+    /// Prend en compte une lecture du budget de mémoire vidéo (une seule fois par lecture), `own` étant le poids du cache
+    /// des dessins maintenant. Une décision qui change le poids visé est notée pour la fenêtre de diagnostic.
+    fn follow_vram(&mut self, reading: Option<crate::memoirevideo::Lecture>, own: u64) {
+        let Some(l) = reading else {
+            // (Plus de lecture — essais — : le poids réglé, comme avant.)
+            self.vram_cap = None;
+            self.vram_seq = 0;
+            return;
+        };
+        if l.seq == self.vram_seq {
+            return;
+        }
+        self.vram_seq = l.seq;
+        let cap = crate::memoirevideo::cible_cache(l.budget, l.utilise, own);
+        if crate::memoirevideo::vaut_d_etre_note(self.vram_cap, Some(cap), self.cache_bytes) {
+            crate::memoirevideo::noter(crate::memoirevideo::decision(l, own, self.cache_bytes, cap));
+        }
+        self.vram_cap = Some(cap);
+    }
 }
 
 /// Un calque dont la texture d'effets est à refaire : la texture du dessin d'origine, celle du
@@ -689,6 +721,8 @@ impl GpuCanvas {
             white,
             textures: HashMap::new(),
             cache_bytes: CACHE_BYTES,
+            vram_cap: None,
+            vram_seq: 0,
             whole_textures: false,
             staging: Vec::new(),
             fresh_staging: false,
@@ -702,6 +736,8 @@ impl GpuCanvas {
             fx_jobs: Vec::new(),
             fx_passes: 0,
         });
+        // Le budget de mémoire vidéo du système, lu sur un autre fil (`memoirevideo.rs`).
+        crate::memoirevideo::suivre(&rs.adapter.get_info());
         Self {
             render_state: rs.clone(),
         }
@@ -835,7 +871,13 @@ impl GpuCanvas {
     /// La mémoire visée pour les textures des dessins (octets) : les onglets cachés n'en gardent pas plus,
     /// tous ensemble.
     pub(crate) fn limite_octets(&self) -> u64 {
-        self.render_state.renderer.read().callback_resources.get::<CanvasResources>().map_or(0, |r| r.cache_bytes)
+        self.render_state.renderer.read().callback_resources.get::<CanvasResources>().map_or(0, CanvasResources::limit)
+    }
+
+    /// Essais et mesures : le poids que le cache vise maintenant (le réglage, ou moins si la mémoire vidéo manque).
+    #[cfg(test)]
+    pub fn cache_limit(&self) -> u64 {
+        self.limite_octets()
     }
 
     /// Le projet qui revient reprend ses textures (le cache est celui de l'onglet qui part, vidé par
@@ -864,7 +906,7 @@ impl GpuCanvas {
         let cels = || res.textures.values().filter(|t| t.fx.is_none());
         let n = cels().count() as u64;
         let per = if n >= 8 { (cels().map(CelTexture::bytes).sum::<u64>() / n).clamp(64 << 10, sheet) } else { sheet / 4 };
-        ((res.cache_bytes / per) as usize).saturating_sub(shown + 4) / 2
+        ((res.limit() / per) as usize).saturating_sub(shown + 4) / 2
     }
 
     /// Met à jour les textures des dessins du plan. `all` : tout a pu changer ; `tiles` : tuiles
@@ -884,6 +926,9 @@ impl GpuCanvas {
         let mut up = Uploads { tick, data: std::mem::take(&mut res.staging), ..Default::default() };
         // Poids des textures gardées (mis à jour à chaque création, recyclage et départ).
         let mut bytes: u64 = res.textures.values().map(CelTexture::bytes).sum();
+        // Une nouvelle lecture du budget de mémoire vidéo (toutes les 1,5 s, sur un autre fil) : le plafond du cache est
+        // refait avec le poids du cache de maintenant, puis tenu jusqu'à la lecture suivante.
+        res.follow_vram(crate::memoirevideo::lecture(), bytes);
         // Un dessin passé par des effets (13i) : son dessin dérivé, sous son propre numéro ; en
         // aperçu ou en attente du fil de fond, une texture plus petite ou plus ancienne. Cherché
         // une fois par élément.
@@ -1044,7 +1089,7 @@ impl GpuCanvas {
         // (en octets : une texture n'a que la place du contenu de son dessin, un aperçu réduit
         // encore moins) ; celles de cette image restent. Un cache plein recycle déjà ses textures
         // de même taille (`place_texture`) ; ceci rattrape le reste.
-        let budget = res.cache_bytes;
+        let budget = res.limit();
         let mut total: u64 = res.textures.values().map(CelTexture::bytes).sum();
         if total > budget {
             let mut ages: Vec<(u64, CelId)> = res.textures.iter().map(|(&id, t)| (t.last_used, id)).collect();
@@ -1769,7 +1814,7 @@ fn place_texture(rs: &RenderState, res: &mut CanvasResources, id: CelId, dims: (
     }
     let new_bytes = rect[2] as u64 * rect[3] as u64 * 4;
     let mut recycled = None;
-    if *bytes + new_bytes > res.cache_bytes {
+    if *bytes + new_bytes > res.limit() {
         let oldest = res
             .textures
             .iter()
