@@ -597,6 +597,57 @@ fn the_kept_board_layout_is_the_one_computed_from_scratch() {
     assert!(faites > 40, "les changements refont la disposition");
 }
 
+/// La disposition gardée suit chaque changement de structure : sinon `case_tient` (la case `k` de la disposition du début de
+/// l'image désigne-t-elle encore le même plan ?) serait faux à chaque image, la planche ne peindrait rien et redemanderait une
+/// image sans fin. Après réunir, supprimer, déplacer et annuler : la disposition est celle qu'on referait, toutes les cases
+/// tiennent, tous les numéros de plan sont peints, et la vue revient au repos.
+#[test]
+fn the_board_paints_every_card_and_rests_after_structure_changes() {
+    let mut doc = Document::with_frame(160, 90, 24);
+    let mut at = 0;
+    for _ in 1..6 {
+        at = doc.add_scene_after(at);
+    }
+    doc.into_plans();
+    let mut b = crate::vignettes_tests::ouvert(doc, 6);
+    fn verifier(b: &mut Banc, quoi: &str) {
+        let images = crate::perf_tests::se_reposer(b, 120);
+        assert!(images < 120, "{quoi} : la planche revient au repos");
+        let layout = b.app.board_layout();
+        let plans = b.app.doc.panels.len();
+        assert!((0..layout.cards.len()).all(|k| b.app.case_tient(&layout, plans, k)), "{quoi} : toutes les cases tiennent");
+        let s = crate::board::BoardSettings { rows: 0, ..b.app.layout.board_settings() };
+        let neuve = crate::board::layout_with(&b.app.doc, &s, &b.app.vignettes.lines, b.app.vignettes.empty_joins, &crate::board::Options::pale(b.app.layout.board_min_rows));
+        assert_eq!(layout, neuve, "{quoi} : la disposition gardée est celle qu'on referait");
+        b.garder_formes = true;
+        b.image(Vec::new(), 1.0 / 60.0);
+        b.garder_formes = false;
+        let mut vus = Vec::new();
+        for f in &b.formes {
+            textes(&f.shape, &mut vus);
+        }
+        let numeros = Numeros::of(&b.app.doc);
+        for c in layout.cards.iter().filter(|c| c.starts_plan()) {
+            let label = numeros.scene_label(&b.app.doc, c.scene);
+            assert!(vus.iter().any(|(t, _)| *t == label), "{quoi} : le numéro « {label} » est peint");
+        }
+    }
+    verifier(&mut b, "départ");
+    b.app.select_panel(3);
+    b.app.join_previous_scene();
+    verifier(&mut b, "réunir");
+    let id = b.app.doc.panels[1].id;
+    b.app.delete_panels(&[id]);
+    verifier(&mut b, "supprimer");
+    b.app.move_panel(0, 3);
+    verifier(&mut b, "déplacer");
+    for k in 0..3 {
+        b.app.run_action("edition.annuler");
+        verifier(&mut b, &format!("annuler {}", k + 1));
+    }
+    assert_eq!(b.app.doc.panels.len(), 6, "tout est annulé");
+}
+
 #[test]
 fn the_board_view_keeps_its_layout_and_note_lines_until_something_changes() {
     let mut doc = projet_long(60, 1, 8, 1);
