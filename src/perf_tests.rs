@@ -1383,3 +1383,43 @@ fn perf_montage_numbering() {
     }
     crate::perf::set_ancien(false);
 }
+
+/// Octets des textures d'egui (vignettes comprises).
+fn textures_egui(ctx: &egui::Context) -> (usize, f64) {
+    let tm = ctx.tex_manager();
+    let tm = tm.read();
+    let bytes: usize = tm.allocated().map(|(_, m)| m.bytes_used()).sum();
+    (tm.num_allocated(), bytes as f64 / 1e6)
+}
+
+/// Zoomer et défiler toute une planche de 100 plans à huit zooms : la mémoire des vignettes, avant (`perf::ancien` : rien ne
+/// partait que les plans supprimés) puis après (bornée, `thumbs::LIMITE_OCTETS`).
+#[test]
+#[ignore]
+fn perf_board_thumbnail_memory() {
+    for (titre, ancien) in [("avant", true), ("après", false)] {
+        crate::perf::set_ancien(ancien);
+        let mut b = banc(projet_long(100, 3, 24, 2), true);
+        b.app.board_view = crate::app::BoardView::Panels;
+        b.app.board_zoom = 0.0;
+        b.chauffer(5);
+        jusqu_au_repos(&mut b, 3000);
+        let (n0, mb0) = textures_egui(&b.ctx);
+        println!("PERF {titre} : planche ajustée, {n0} textures, {mb0:.1} Mo");
+        let mut pire = 0.0f64;
+        for z in [0.5f32, 0.8, 1.2, 1.6, 2.0, 2.5, 3.0, 4.0] {
+            b.app.board_zoom = z;
+            for step in 0..40 {
+                b.app.board_pan = vec2(0.0, -(step as f32) * 400.0 * z);
+                b.chauffer(2);
+                b.attendre_vignettes();
+                pire = pire.max(b.app.thumbs.octets().0 as f64 / 1e6);
+            }
+            let (n, mb) = textures_egui(&b.ctx);
+            let (octets, vignettes) = b.app.thumbs.octets();
+            println!("PERF {titre} : après le zoom {z} et le défilement, {n} textures, {mb:.1} Mo (vignettes des plans : {vignettes}, {:.1} Mo)", octets as f64 / 1e6);
+        }
+        println!("PERF {titre} : vignettes des plans, au plus {pire:.1} Mo");
+    }
+    crate::perf::set_ancien(false);
+}

@@ -5,7 +5,9 @@
 //!    la carte graphique (`Renderer::invalidate_params`).
 //! 2. Les numéros des plans et des séquences se trouvent une fois par image d'écran (`numerotation::Numeros`), la règle et la
 //!    barre des séquences du montage ne peignent que leur partie visible : mêmes textes, à la même place.
+//! 4. Les vignettes de la planche gardées sur la carte graphique sont bornées en octets, sans jamais lâcher celles de l'écran.
 
+use std::collections::HashSet;
 use std::time::Instant;
 
 use eframe::egui::{pos2, Event, Modifiers, PointerButton, Pos2, Rect, Shape};
@@ -305,4 +307,45 @@ fn the_numbering_of_a_long_film_costs_little_per_screen_image() {
     let ms = t.elapsed().as_secs_f64() * 1e3 / tours as f64;
     assert!(n_titres > 0);
     assert!(ms < 4.0, "numéros d'une image d'écran, 2 000 plans : {ms:.2} ms");
+}
+
+// ------------------------------------------------------------------ 4. vignettes de la planche bornées
+
+#[test]
+fn board_thumbnails_stay_under_their_memory_bound_while_zooming() {
+    let mut b = banc(projet_long(100, 1, 4, 1), false);
+    b.app.board_view = crate::app::BoardView::Panels;
+    b.app.board_zoom = 0.0;
+    let limite: u64 = 12 << 20;
+    b.app.thumbs.limite = Some(limite);
+    b.chauffer(5);
+    b.attendre_vignettes();
+    let mut pire = 0u64;
+    // Les cases visibles qui avaient une vignette à l'étape d'avant.
+    let mut avant: HashSet<u64> = HashSet::new();
+    for z in [0.5f32, 1.0, 2.0, 3.0, 4.0, 2.0, 1.0, 0.5] {
+        b.app.board_zoom = z;
+        for step in 0..10 {
+            b.app.board_pan = eframe::egui::vec2(0.0, -(step as f32) * 300.0 * z);
+            b.chauffer(2);
+            b.attendre_vignettes();
+            let pass = b.ctx.cumulative_pass_nr();
+            let (octets, _) = b.app.thumbs.octets();
+            let ecran = b.app.thumbs.octets_a_l_ecran(pass);
+            pire = pire.max(octets);
+            assert!(octets <= limite + ecran, "zoom {z}, étape {step} : {octets} octets gardés pour une limite de {limite} (+ {ecran} à l'écran)");
+            // Une case qui reste à l'écran garde sa vignette (aucune ne disparaît sous les yeux).
+            let layout = b.app.board_layout();
+            let (xf, view) = (b.app.vignettes.xf, b.app.vignettes.view);
+            let visibles: Vec<u64> = layout.cards.iter().filter(|c| xf.rect(c.thumb).intersects(view) && c.mv.is_none()).map(|c| c.id).collect();
+            for id in &visibles {
+                if avant.contains(id) {
+                    assert!(b.app.thumbs.case_gardee(*id), "zoom {z}, étape {step} : la case {id}, restée à l'écran, a perdu sa vignette");
+                }
+            }
+            avant = visibles.into_iter().filter(|id| b.app.thumbs.case_gardee(*id)).collect();
+            assert!(!avant.is_empty(), "zoom {z}, étape {step} : des vignettes à l'écran");
+        }
+    }
+    println!("vignettes de la planche : au plus {:.1} Mo gardés (limite {:.0} Mo)", pire as f64 / 1e6, limite as f64 / 1e6);
 }
