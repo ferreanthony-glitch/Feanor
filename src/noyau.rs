@@ -77,9 +77,10 @@ impl Projet {
         Projet { doc: Document::with_frame(w, h, fps.clamp(1, 120)), chemin: None, written: HashMap::new(), modifie: false }
     }
 
-    /// Ouvre le projet dont `manifeste` est le fichier `.pelure` ; les problèmes non bloquants
+    /// Ouvre le projet dont `manifeste` est le fichier `.shot` (ou l'ancien `.pelure`) ; les problèmes non bloquants
     /// (dessin manquant…) sont rendus à part.
     pub fn ouvrir(manifeste: &Path) -> Result<(Projet, Vec<String>), String> {
+        let manifeste = &project::manifeste_a_ouvrir(manifeste);
         let loaded = project::load(manifeste)?;
         let projet = Projet { doc: loaded.doc, chemin: Some(manifeste.to_path_buf()), written: loaded.written, modifie: false };
         Ok((projet, loaded.warnings))
@@ -88,7 +89,14 @@ impl Projet {
     /// Enregistre dans le dossier du projet (seulement les dessins qui ont changé).
     pub fn enregistrer(&mut self) -> Result<(), String> {
         let chemin = self.chemin.clone().ok_or("Ce projet n'a pas encore de dossier.")?;
-        project::save(&self.doc, &chemin, &mut self.written)?;
+        // Un projet à l'ancien nom (`Bus.pelure`) passe à `Bus.shot`, comme dans SHOT (`enregistrement.rs`) ; la structure
+        // d'un film partagé garde le sien.
+        let cible = if project::est_ancien_manifeste(&chemin) && !project::est_une_structure_partagee(&chemin) { project::manifeste_shot(&chemin) } else { chemin.clone() };
+        project::save(&self.doc, &cible, &mut self.written)?;
+        if cible != chemin {
+            project::retirer_ancien_manifeste(&cible, &chemin);
+            self.chemin = Some(cible);
+        }
         self.modifie = false;
         Ok(())
     }

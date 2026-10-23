@@ -352,3 +352,21 @@ onglets cachés ; elle tombe si rien n'a changé depuis le cliché de la copie f
 `recovery_tests::an_urgent_copy_asked_while_one_is_running_follows_it_at_once` (copie automatique éteinte : la copie
 demandée part quand même et a la dernière retouche), `an_urgent_copy_with_nothing_new_or_after_a_save_does_not_start`. Avec
 le cliché léger (section 16), lancer cette copie ne coûte plus au fil de l'interface que le cliché.
+
+## 17. Le fichier du projet devient `.shot` (2026-10-23, branche `extension-shot`)
+
+Un projet s'appelle `MonFilm\MonFilm.shot` ; ceux d'avant (`MonFilm.pelure`) s'ouvrent toujours. L'enregistrement d'un
+projet `.pelure` écrit `MonFilm.shot` comme tout manifeste (à côté, synchronisé sur le disque, renommé), et seulement
+ensuite efface `MonFilm.pelure` (`project::retirer_ancien_manifeste`, sur le fil d'écriture) : à aucun moment le dossier n'a
+zéro manifeste lisible. Un plantage entre les deux laisse les deux noms : l'ouverture prend le plus récent
+(`project::manifeste_a_ouvrir`, le `.shot` à égalité), quel que soit le nom demandé (Ouvrir, récent, séance rouverte, ligne
+de commande, glisser-déposer), et l'enregistrement suivant efface le reste. L'effacement ne touche jamais un fichier d'un
+autre dossier ou d'un autre nom, ni la structure d'un film partagé (bloc `partage`, ou fichier illisible) : un film partagé
+garde son `.pelure`, que des équipiers à une version d'avant cherchent (`project::target_for_partage`). Les copies de secours
+s'appellent `secours.shot` ; celles d'une séance d'avant (`secours.pelure`) sont proposées de même, et « le projet a été
+enregistré après cette copie » se lit sous le nouveau nom du projet. Essais : `extension_tests.rs` (projet neuf en `.shot`,
+conversion par l'enregistrement sans toucher aux dessins ni aux fichiers à côté, plantage simulé entre l'écriture du `.shot`
+et l'effacement du `.pelure` — `project::PLANTER_AVANT_RETRAIT` —, récents et séance qui suivent, secours sous les deux noms,
+fichiers lâchés, gardes de l'effacement) et `cooperation_ui_tests::a_shared_film_keeps_its_pelure_structure_when_saved`.
+Beaucoup d'essais plus anciens écrivent encore des projets `.pelure` par `project::save` : ils prouvent que l'ancien nom se
+lit et s'écrit toujours.

@@ -536,7 +536,7 @@ fn the_old_projects_of_the_fixture_open_with_no_envois() {
 
 fn banc_projet(nom: &str, n: usize) -> (Banc, PathBuf) {
     let travail = dossier(nom);
-    let m = manifeste(&travail);
+    let m = project::manifeste_shot(&manifeste(&travail));
     let mut b = banc(film(n), false);
     b.app.path = Some(m.clone());
     b.app.modified = true;

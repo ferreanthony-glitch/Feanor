@@ -45,7 +45,7 @@ impl NewDocDialog {
         if stem.is_empty() {
             return None;
         }
-        Some(project::target_for(&self.folder.join(format!("{stem}.pelure"))))
+        Some(project::target_for(&self.folder.join(format!("{stem}.{}", project::EXTENSION))))
     }
 
     /// Pourquoi on ne peut pas créer là (un projet y est déjà), s'il y a lieu.

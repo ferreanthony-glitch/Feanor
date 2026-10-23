@@ -148,7 +148,7 @@ fn pomper(b: &mut Banc) {
 #[test]
 fn ctrl_s_writes_again_a_drawing_deleted_beside_shot_before_what_follows() {
     let travail = dossier("cliche-efface-interface");
-    let manifeste = travail.join("Film").join("Film.pelure");
+    let manifeste = travail.join("Film").join("Film.shot");
     let mut b = banc(petit_film(4), false);
     b.app.path = Some(manifeste.clone());
     b.app.modified = true;
@@ -185,7 +185,7 @@ fn the_recovery_copy_writes_again_a_drawing_missing_from_it() {
         }
     };
     copier(&mut rec, 1);
-    let manifeste = rec.dir.join("projet").join("secours.pelure");
+    let manifeste = rec.dir.join("projet").join("secours.shot");
     let id = doc.panels[0].layers[0].frames[0].expect("dessin");
     let fichier = chemin_du_dessin(&manifeste, id);
     std::fs::remove_file(&fichier).expect("effacé");

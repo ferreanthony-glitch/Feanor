@@ -683,7 +683,7 @@ fn missing_drawing_is_reported_not_fatal() {
 fn save_target_rules() {
     let base = std::path::Path::new("C:\\Films");
     let (d, m) = project::target_for(&base.join("Bus.pelure"));
-    assert_eq!((d.clone(), m.clone()), (base.join("Bus"), base.join("Bus").join("Bus.pelure")));
+    assert_eq!((d.clone(), m.clone()), (base.join("Bus"), base.join("Bus").join("Bus.shot")));
     // Choisir le manifeste déjà dans son dossier ne crée pas « Bus\Bus\ ».
     assert_eq!(project::target_for(&m), (d, m));
 

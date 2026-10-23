@@ -291,9 +291,10 @@ pub(crate) fn nom_de(path: Option<&Path>, import_source: Option<&Path>, vierge: 
     }
 }
 
-/// Le même projet, comparé comme Windows le fait (casse ignorée).
+/// Le même projet, comparé comme Windows le fait (casse ignorée), sous ses deux noms (`Bus.shot` et l'ancien
+/// `Bus.pelure`, `project::cle_de_projet`).
 pub(crate) fn meme_chemin(a: &Path, b: &Path) -> bool {
-    a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+    crate::project::cle_de_projet(a) == crate::project::cle_de_projet(b)
 }
 
 /// Le message d'un collage refusé parce que la copie vient d'une feuille d'une autre taille (un dessin n'a de sens
@@ -634,10 +635,10 @@ impl App {
         self.nouvel_onglet()
     }
 
-    /// Un fichier de projet (`.pelure`) lâché sur la fenêtre : il s'ouvre (dans un onglet, ou son onglet passe à
-    /// l'écran s'il est déjà ouvert). Vrai si le fichier en était un.
+    /// Un fichier de projet (`.shot`, ou l'ancien `.pelure`) lâché sur la fenêtre ou sur l'accueil : il s'ouvre (dans un
+    /// onglet, ou son onglet passe à l'écran s'il est déjà ouvert). Vrai si le fichier en était un.
     pub(crate) fn import_dropped_project(&mut self, path: &Path) -> bool {
-        let est_un_projet = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("pelure"));
+        let est_un_projet = crate::project::est_un_projet(path);
         if est_un_projet {
             self.open_path(path.to_path_buf());
         }

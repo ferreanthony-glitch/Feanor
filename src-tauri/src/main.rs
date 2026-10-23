@@ -51,13 +51,13 @@ fn nouveau_projet(etat: State<Etat>, largeur: usize, hauteur: usize, fps: u32) -
     Ok(resume)
 }
 
-/// Ouvre `chemin` (un fichier .pelure), ou celui choisi dans la fenêtre du système. Rien si on
+/// Ouvre `chemin` (un fichier .shot, ou l'ancien .pelure), ou celui choisi dans la fenêtre du système. Rien si on
 /// annule. Commande asynchrone : un gros projet se lit sans figer la fenêtre.
 #[tauri::command]
 async fn ouvrir_projet(etat: State<'_, Etat>, chemin: Option<String>) -> Result<Option<Ouverture>, String> {
     let chemin = match chemin {
         Some(c) => PathBuf::from(c),
-        None => match rfd::AsyncFileDialog::new().add_filter("Projet Pelure", &["pelure"]).pick_file().await {
+        None => match rfd::AsyncFileDialog::new().add_filter("Projet SHOT", &["shot", "pelure"]).pick_file().await {
             Some(f) => f.path().to_path_buf(),
             None => return Ok(None),
         },
@@ -135,7 +135,7 @@ async fn exporter_pdf(etat: State<'_, Etat>) -> Result<Option<String>, String> {
 }
 
 fn main() {
-    // Un projet passé en argument (ou par double-clic sur un .pelure) est ouvert au démarrage ;
+    // Un projet passé en argument (un .shot, ou l'ancien .pelure) est ouvert au démarrage ;
     // le frontend le demande par `resume_projet`.
     let initial = std::env::args_os()
         .nth(1)

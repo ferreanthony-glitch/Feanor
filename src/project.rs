@@ -2,9 +2,12 @@
 //!
 //! ```text
 //! MonFilm/
-//!   MonFilm.pelure        manifeste JSON lisible : réglages, séquences > scènes > panneaux > calques,
+//!   MonFilm.shot          manifeste JSON lisible : réglages, séquences > scènes > panneaux > calques,
 //!                         pistes son ; numérotation verrouillée (`numerotation_verrouillee`, `numero` des
-//!                         séquences et des plans : champs facultatifs, `numerotation.rs`)
+//!                         séquences et des plans : champs facultatifs, `numerotation.rs`). Avant le
+//!                         2026-10-23 : `MonFilm.pelure`, toujours ouvert ; le premier enregistrement écrit
+//!                         `MonFilm.shot` puis efface le `.pelure` (`retirer_ancien_manifeste`). La structure
+//!                         d'un film partagé garde son nom `.pelure` (`target_for_partage`).
 //!   dessins/<id>.png      dessins bitmap
 //!   dessins/<id>.json     dessins vectoriels
 //!   sons/<id>.<ext>       fichiers son importés, copiés tels quels
@@ -755,10 +758,127 @@ fn is_normal(m: &crate::blend::BlendMode) -> bool {
     *m == crate::blend::BlendMode::Normal
 }
 
+/// L'extension du manifeste d'un projet (Anthony, 2026-10-23 : le logiciel s'appelle SHOT). Un projet enregistré
+/// s'écrit `MonFilm/MonFilm.shot`.
+pub const EXTENSION: &str = "shot";
+/// L'extension d'avant (`MonFilm/MonFilm.pelure`) : toujours ouverte. Un projet classique enregistré passe à `.shot`
+/// (`App::save_then`) ; un film partagé la garde (`target_for_partage`).
+pub const ANCIENNE_EXTENSION: &str = "pelure";
+/// Les extensions qu'« Ouvrir », le glisser-déposer et la ligne de commande acceptent comme projet SHOT.
+pub const EXTENSIONS: [&str; 2] = [EXTENSION, ANCIENNE_EXTENSION];
+
+fn extension_est(path: &Path, ext: &str) -> bool {
+    path.extension().is_some_and(|e| e.eq_ignore_ascii_case(ext))
+}
+
+/// Un manifeste de projet SHOT (`.shot`, ou l'ancien `.pelure`) ?
+pub fn est_un_projet(path: &Path) -> bool {
+    EXTENSIONS.iter().any(|e| extension_est(path, e))
+}
+
+/// Un manifeste à l'ancienne extension (`.pelure`) ?
+pub fn est_ancien_manifeste(path: &Path) -> bool {
+    extension_est(path, ANCIENNE_EXTENSION)
+}
+
+/// Le manifeste `.shot` d'un projet : `Bus/Bus.pelure` → `Bus/Bus.shot` (même dossier ; un `.shot` reste tel quel).
+pub fn manifeste_shot(path: &Path) -> PathBuf {
+    if est_ancien_manifeste(path) {
+        path.with_extension(EXTENSION)
+    } else {
+        path.to_path_buf()
+    }
+}
+
+/// L'autre nom du même manifeste : `Bus.shot` ↔ `Bus.pelure` (rien pour un autre fichier).
+pub fn manifeste_jumeau(path: &Path) -> Option<PathBuf> {
+    if est_ancien_manifeste(path) {
+        Some(path.with_extension(EXTENSION))
+    } else if extension_est(path, EXTENSION) {
+        Some(path.with_extension(ANCIENNE_EXTENSION))
+    } else {
+        None
+    }
+}
+
+/// Le manifeste à ouvrir quand on demande `path`. Un projet converti (`.pelure` → `.shot`) peut être demandé sous son
+/// ancien nom (récents, séance d'avant, raccourci) : c'est son `.shot`. Un plantage entre l'écriture du `.shot` et
+/// l'effacement du `.pelure` laisse les deux : le plus récent est ouvert (le `.shot` à égalité). Lit le disque : pas sur
+/// le fil de l'interface pour un disque qui peut ne pas répondre (l'ouverture, elle, le lit de toute façon).
+pub fn manifeste_a_ouvrir(path: &Path) -> PathBuf {
+    let Some(jumeau) = manifeste_jumeau(path) else { return path.to_path_buf() };
+    let date = |p: &Path| fs::metadata(p).ok().filter(fs::Metadata::is_file).map(|m| m.modified().unwrap_or(std::time::UNIX_EPOCH));
+    match (date(path), date(&jumeau)) {
+        (Some(_), None) | (None, None) => path.to_path_buf(),
+        (None, Some(_)) => jumeau,
+        (Some(a), Some(b)) => {
+            let (shot, pelure, t_shot, t_pelure) = if est_ancien_manifeste(path) { (jumeau, path.to_path_buf(), b, a) } else { (path.to_path_buf(), jumeau, a, b) };
+            if t_pelure > t_shot {
+                pelure
+            } else {
+                shot
+            }
+        }
+    }
+}
+
+/// Le projet `path` est-il là (sous ce nom ou sous son jumeau, `manifeste_jumeau`) ?
+pub fn manifeste_present(path: &Path) -> bool {
+    path.exists() || manifeste_jumeau(path).is_some_and(|j| j.is_file())
+}
+
+/// La clé d'un projet pour le reconnaître sous ses deux noms (`Bus.shot`, `Bus.pelure`) et en ignorant la casse, comme
+/// Windows : la liste des récents et les onglets ne le montrent qu'une fois.
+pub fn cle_de_projet(path: &Path) -> String {
+    let p = if est_un_projet(path) { path.with_extension("") } else { path.to_path_buf() };
+    p.to_string_lossy().to_lowercase()
+}
+
+/// Le manifeste `ancien` est-il la structure d'un film partagé (`projet_partage.rs`) ? Un poste à une version d'avant la
+/// lit sous ce nom : elle n'est jamais effacée par une conversion.
+pub(crate) fn est_une_structure_partagee(ancien: &Path) -> bool {
+    #[derive(serde::Deserialize)]
+    struct Bloc {
+        #[serde(default)]
+        partage: Option<serde::de::IgnoredAny>,
+    }
+    let Ok(octets) = fs::read(ancien) else { return false };
+    let texte = String::from_utf8_lossy(&octets);
+    // (Illisible : on ne sait pas ce que c'est ; il reste, comme une structure.)
+    serde_json::from_str::<Bloc>(texte.trim_start_matches('\u{feff}')).map_or(true, |b| b.partage.is_some())
+}
+
+/// Après l'écriture du manifeste `nouveau` (`.shot`, écrit et synchronisé sur le disque) : l'ancien `ancien` (`.pelure`
+/// du même dossier) part. Rien ne se passe si le nouveau manque, si c'est le même fichier, si l'ancien n'est pas dans le
+/// même dossier ou s'il est la structure d'un film partagé. Rend vrai si l'ancien a été effacé. Un échec (fichier tenu
+/// par un autre programme) laisse les deux : l'ouverture prend le plus récent (`manifeste_a_ouvrir`), le prochain
+/// enregistrement réessaie.
+pub(crate) fn retirer_ancien_manifeste(nouveau: &Path, ancien: &Path) -> bool {
+    let meme_dossier = nouveau.parent() == ancien.parent();
+    if !meme_dossier || !est_ancien_manifeste(ancien) || est_ancien_manifeste(nouveau) || cle_de_projet(nouveau) != cle_de_projet(ancien) {
+        return false;
+    }
+    if !nouveau.is_file() || !ancien.is_file() || est_une_structure_partagee(ancien) {
+        return false;
+    }
+    fs::remove_file(ancien).is_ok()
+}
+
 /// Dossier et manifeste correspondant au nom choisi dans la boîte « Enregistrer sous ».
-/// « C:\Films\Bus.pelure » → dossier « C:\Films\Bus\ », manifeste « C:\Films\Bus\Bus.pelure »
-/// (ou directement dans « C:\Films\Bus\ » si l'on a choisi un fichier qui s'y trouve déjà).
+/// « C:\Films\Bus.shot » → dossier « C:\Films\Bus\ », manifeste « C:\Films\Bus\Bus.shot »
+/// (ou directement dans « C:\Films\Bus\ » si l'on a choisi un fichier qui s'y trouve déjà). Le manifeste est
+/// toujours un `.shot`, quelle que soit l'extension choisie.
 pub fn target_for(chosen: &Path) -> (PathBuf, PathBuf) {
+    target_for_ext(chosen, EXTENSION)
+}
+
+/// Comme `target_for`, pour un film partagé : sa structure garde le nom `.pelure` (des équipiers peuvent avoir une
+/// version de SHOT d'avant `.shot`, qui ne cherche que celui-là ; `docs/COOPERATION.md`).
+pub fn target_for_partage(chosen: &Path) -> (PathBuf, PathBuf) {
+    target_for_ext(chosen, ANCIENNE_EXTENSION)
+}
+
+fn target_for_ext(chosen: &Path, ext: &str) -> (PathBuf, PathBuf) {
     let stem = chosen
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
@@ -770,7 +890,7 @@ pub fn target_for(chosen: &Path) -> (PathBuf, PathBuf) {
     } else {
         parent.join(&stem)
     };
-    let manifest = dir.join(format!("{stem}.pelure"));
+    let manifest = dir.join(format!("{stem}.{ext}"));
     (dir, manifest)
 }
 
@@ -780,11 +900,11 @@ pub fn check_target(manifest: &Path, current: Option<&Path>) -> Result<(), Strin
         return Ok(());
     }
     let dir = manifest.parent().unwrap_or(Path::new("."));
-    if manifest.exists() {
-        return Err(format!(
-            "un projet existe déjà à cet endroit ({}). Choisis un autre nom.",
-            manifest.display()
-        ));
+    // (Le même projet sous l'autre nom, `Bus.pelure` à côté de `Bus.shot`, est aussi un projet qui existe.)
+    for m in std::iter::once(manifest.to_path_buf()).chain(manifeste_jumeau(manifest)) {
+        if m.exists() {
+            return Err(format!("un projet existe déjà à cet endroit ({}). Choisis un autre nom.", m.display()));
+        }
     }
     for sub in [DRAWINGS, SOUNDS, MODELS, VIDEOS, crate::references::DIR] {
         if dir.join(sub).exists() {
@@ -996,6 +1116,12 @@ fn memo_de(cel: &Cel) -> MemoDessin {
 thread_local! {
     /// Essais : le mémo est recalculé à chaque fois, comme avant lui (banc avant / après dans le même processus).
     static SANS_MEMO: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+#[cfg(test)]
+thread_local! {
+    /// Essais : l'écriture s'arrête juste après le nouveau manifeste, avant l'effacement de l'ancien (un plantage là).
+    pub(crate) static PLANTER_AVANT_RETRAIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// Le mémo du dessin `id`, refait s'il ne correspond plus au dessin.
@@ -1212,6 +1338,20 @@ pub struct SaveJob {
     differe: Option<Box<Differe>>,
     /// Les dessins déjà écrits dont les fichiers manquaient (`SaveReport::manquants`).
     manquants: Vec<CelId>,
+    /// L'ancien manifeste du projet (`Bus.pelure`, à côté du `Bus.shot` qu'on écrit) : effacé une fois le nouveau écrit et
+    /// synchronisé (`retirer_ancien_manifeste`). Jamais pour un film partagé.
+    ancien_manifeste: Option<PathBuf>,
+}
+
+impl SaveJob {
+    /// Après l'écriture du manifeste, l'ancien `ancien` (le `.pelure` du même projet) sera effacé, s'il est là
+    /// (`retirer_ancien_manifeste` dit quand ce n'est pas le cas). Sans effet pour un film partagé.
+    pub(crate) fn retirer_apres(mut self, ancien: PathBuf) -> SaveJob {
+        if self.partage.is_none() {
+            self.ancien_manifeste = Some(ancien);
+        }
+        self
+    }
 }
 
 /// Les dessins de `used` à écrire dans `dir/dessins/` : ceux dont la version n'est pas celle déjà écrite (`written`) ou dont le
@@ -1876,6 +2016,15 @@ impl SaveJob {
         // Le manifeste en dernier ; s'il a déjà ces octets-là (une copie de secours où rien n'a changé), il reste tel quel.
         if toujours_ecrire() || fs::read(&self.manifest_path).ok().as_deref() != Some(self.manifest.as_slice()) {
             write_atomic_synced(&self.manifest_path, &self.manifest)?;
+        }
+        // Le nouveau manifeste est sur le disque : l'ancien nom du projet (`.pelure`) peut partir. Un plantage avant laisse
+        // les deux fichiers, et l'ouverture prend le plus récent (`manifeste_a_ouvrir`).
+        if let Some(ancien) = self.ancien_manifeste.take() {
+            #[cfg(test)]
+            if PLANTER_AVANT_RETRAIT.with(|p| p.get()) {
+                return Err("plantage simulé entre l'écriture du .shot et l'effacement du .pelure".into());
+            }
+            retirer_ancien_manifeste(&self.manifest_path, &ancien);
         }
         let removed = if self.keep_drawings { 0 } else { remove_unused(dir, &self.used, &self.fonds, &self.hors) }
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)

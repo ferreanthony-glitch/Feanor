@@ -57,6 +57,9 @@ mod enregistrement;
 mod enregistrement_tests;
 #[cfg(test)]
 mod enregistrement_cliche_tests;
+// Le manifeste des projets passe de `.pelure` à `.shot` (2026-10-23) : nouveaux projets, conversion, plantage au milieu.
+#[cfg(test)]
+mod extension_tests;
 #[cfg(test)]
 mod enregistrement_identique_tests;
 // Travailler à plusieurs sur un film (`docs/COOPERATION.md`) : l'équipier (`equipe`), les prises (`verrous`, pur), le
@@ -785,8 +788,8 @@ mod xsheet;
 mod xsheet_tests;
 mod xsheetui;
 
-/// Lance SHOT (l'application egui). Un projet passé en argument (ou par double-clic sur un
-/// .pelure) est ouvert au démarrage.
+/// Lance SHOT (l'application egui). Un projet passé en argument (`.shot`, ou l'ancien `.pelure` ; un double-clic
+/// quand une installation aura associé l'extension) est ouvert au démarrage.
 pub fn lancer() -> eframe::Result<()> {
     demarrage::debut();
     // Une erreur de programme laisse un rapport (`plantage.rs`).

@@ -2201,7 +2201,13 @@ Demande d'Anthony : « ouvrir plusieurs fichiers dans la même fenêtre avec un 
 - **Menu Fichier** : Nouvel onglet, Fermer l'onglet, Fermer les autres onglets.
 - **Ouvrir, Nouveau, Projets récents, imports** : dans un nouvel onglet (réglable : Fichier > Préférences > Général > « Ouvrir
   dans un nouvel onglet »). Si l'onglet affiché est l'accueil, le projet y prend la place. Un projet déjà ouvert : son onglet
-  passe à l'écran (« … est déjà ouvert »). Un fichier `.pelure` lâché sur la fenêtre s'ouvre de même.
+  passe à l'écran (« … est déjà ouvert »). Un fichier `.shot` (ou un ancien `.pelure`) lâché sur la fenêtre ou sur l'accueil
+  s'ouvre de même. `Bus.shot` et l'ancien `Bus.pelure` sont le même projet : un seul onglet, une seule ligne dans les récents.
+- **Nom du fichier de projet** (2026-10-23) : `MonFilm\MonFilm.shot`. Fichier > Ouvrir propose les `.shot` et les anciens
+  `.pelure` ; « Enregistrer sous » et « Nouveau » écrivent un `.shot`. Le premier « Enregistrer » d'un projet `.pelure` écrit son
+  `.shot`, puis efface le `.pelure` (la barre d'état le dit : « Le fichier du projet s'appelle maintenant… ») ; dessins et
+  dossier ne bougent pas. Un film partagé garde son `.pelure` (la boîte « Partager ce projet » montre un `.shot`, la structure
+  écrite dans le dossier partagé s'appelle pourtant `.pelure`).
 - **Fermer un onglet modifié** : la boîte « Modifications non enregistrées » (elle nomme le projet) ; un onglet caché passe d'abord
   à l'écran. Le voisin de droite prend la place (celui de gauche pour le dernier). Le dernier onglet ne se ferme pas : l'accueil
   revient.

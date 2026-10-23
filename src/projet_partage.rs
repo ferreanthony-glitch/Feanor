@@ -812,6 +812,7 @@ impl SaveJob {
             partage: None,
             differe: None,
             manquants: Vec::new(),
+            ancien_manifeste: None,
         }
     }
 

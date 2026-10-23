@@ -129,7 +129,7 @@ fn pomper(b: &mut Banc) {
 #[test]
 fn ctrl_s_with_nothing_changed_rewrites_at_most_the_manifest() {
     let travail = dossier("identique-interface");
-    let manifeste = travail.join("Film").join("Film.pelure");
+    let manifeste = travail.join("Film").join("Film.shot");
     let mut b = banc(projet_riche(&travail), false);
     b.app.path = Some(manifeste.clone());
     b.app.modified = true;
@@ -142,6 +142,6 @@ fn ctrl_s_with_nothing_changed_rewrites_at_most_the_manifest() {
     pomper(&mut b);
     assert!(b.app.save_error.is_none(), "{}", b.app.status);
     let reecrits = touches(&avant, &dates(&dir));
-    assert!(reecrits.iter().all(|f| f == "Film.pelure"), "{reecrits:?}");
+    assert!(reecrits.iter().all(|f| f == "Film.shot"), "{reecrits:?}");
     let _ = std::fs::remove_dir_all(&travail);
 }

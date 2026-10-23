@@ -852,19 +852,21 @@ impl App {
             return;
         }
         self.end_stroke();
+        // (La boîte montre un projet `.shot`, comme partout ; la structure du film partagé garde pourtant le nom `.pelure`
+        // dans son dossier : des équipiers peuvent avoir une version de SHOT d'avant `.shot`, `target_for_partage`.)
         let nom_defaut = {
             let t: String = self.doc.properties.title.trim().chars().map(|c| if r#"<>:"/\|?*"#.contains(c) { '_' } else { c }).collect();
-            format!("{}.pelure", self.base_name_or(if t.is_empty() { "Mon film" } else { &t }))
+            format!("{}.{}", self.base_name_or(if t.is_empty() { "Mon film" } else { &t }), project::EXTENSION)
         };
         let Some(choisi) = rfd::FileDialog::new()
             .set_title("Partager ce projet : choisis le dossier partagé (Drive, Dropbox, réseau) ; un dossier à ce nom y sera créé")
-            .add_filter("Projet SHOT", &["pelure"])
+            .add_filter("Projet SHOT", &[project::EXTENSION])
             .set_file_name(nom_defaut)
             .save_file()
         else {
             return;
         };
-        let (_, manifeste) = project::target_for(&choisi);
+        let (_, manifeste) = project::target_for_partage(&choisi);
         self.demarrer_le_partage(manifeste);
     }
 

@@ -137,7 +137,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   vide la mémoire des dessins écrits : le suivant réécrit tout.
 - `recovery.rs` : un dossier par séance (`%LOCALAPPDATA%\Pelure\secours\<heure>-<processus>`),
   avec un `verrou` ouvert sans partage (Windows refuse de l'effacer tant que la séance vit),
-  `seance.json` et la copie `projet\secours.pelure`. Copie lancée quand le délai est passé, que
+  `seance.json` et la copie `projet\secours.shot` (`secours.pelure` avant le 2026-10-23, toujours proposée). Copie lancée quand le délai est passé, que
   le projet est modifié et que l'historique a bougé depuis la précédente, jamais pendant un
   geste ; écrite sur un fil. Au démarrage, les séances dont le verrou s'efface sont
   interrompues : avec copie, proposées (`recoveryui.rs`) ; sans, effacées. `on_exit` efface le
@@ -1621,7 +1621,9 @@ ne sont ni lus ni effacés (`remove_unused_models` a disparu).
 
 ```
 MonFilm/
-  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 17, "largeur",
+  MonFilm.shot        manifeste JSON (`MonFilm.pelure` avant le 2026-10-23 : toujours lu, renommé en `.shot` au
+                      premier enregistrement ; la structure d'un film partagé garde le `.pelure`) :
+                      {"format": "pelure-projet", "version": 17, "largeur",
                       "hauteur" (feuille), "cadre": [l, h], réglages,
                       "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }],
                       "marques": [{"id", "image", "action", …}] }]}]}]  (un panneau par scène),

@@ -237,7 +237,7 @@ fn an_urgent_copy_asked_while_one_is_running_follows_it_at_once() {
         std::thread::sleep(Duration::from_millis(5));
         assert!(t.elapsed() < Duration::from_secs(60));
     }
-    let manifest = rec.dir.join("projet").join("secours.pelure");
+    let manifest = rec.dir.join("projet").join("secours.shot");
     let texte = std::fs::read_to_string(&manifest).unwrap();
     assert!(texte.contains("Retouche d'après la première copie"), "la copie a la dernière retouche");
     // Rien de plus ne part ensuite : pas de copie en boucle.

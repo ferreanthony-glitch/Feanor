@@ -86,9 +86,9 @@ fn rouge_sur_disque(manifeste: &Path) -> u8 {
     loaded.doc.cels[&id].raster.get(0, 0).r()
 }
 
-/// Range le projet affiché dans un dossier d'essai (`Nom/Nom.pelure`) : il est enregistré, avec son chemin.
+/// Range le projet affiché dans un dossier d'essai (`Nom/Nom.shot`) : il est enregistré, avec son chemin.
 fn enregistrer_a(b: &mut Banc, dir: &Path, nom: &str) -> PathBuf {
-    let manifeste = dir.join(nom).join(format!("{nom}.pelure"));
+    let manifeste = dir.join(nom).join(format!("{nom}.shot"));
     b.app.path = Some(manifeste.clone());
     b.app.modified = true;
     assert!(b.app.save());
@@ -430,7 +430,7 @@ fn a_save_started_in_a_tab_is_adopted_by_that_tab_after_switching() {
     modifier(&mut b, 91);
     assert!(b.app.activer_onglet(0));
     // Le premier projet n'a pas encore de fichier : l'écriture le crée.
-    let manifeste = dir.join("Film").join("Film.pelure");
+    let manifeste = dir.join("Film").join("Film.shot");
     b.app.path = Some(manifeste.clone());
     modifier(&mut b, 201);
     assert!(b.app.save());
@@ -550,7 +550,7 @@ fn saving_then_closing_writes_the_project_and_closes_its_tab() {
 fn a_close_waiting_for_a_save_follows_it_even_when_another_tab_is_shown_meanwhile() {
     let dir = dossier("onglets-fermer-apres");
     let mut b = banc(projet(200, 6), false);
-    let a = dir.join("A").join("A.pelure");
+    let a = dir.join("A").join("A.shot");
     b.app.path = Some(a.clone());
     modifier(&mut b, 150);
     onglet_avec(&mut b, projet(90, 2));
@@ -563,7 +563,7 @@ fn a_close_waiting_for_a_save_follows_it_even_when_another_tab_is_shown_meanwhil
     assert_eq!(rouge(&b), 90, "l'autre projet est resté affiché");
     // Fermer l'onglet affiché pendant qu'il s'écrit (rien de modifié depuis le cliché) : la fermeture suit l'écriture.
     let mut c = banc(projet(120, 5), false);
-    c.app.path = Some(dir.join("C").join("C.pelure"));
+    c.app.path = Some(dir.join("C").join("C.shot"));
     modifier(&mut c, 121);
     onglet_avec(&mut c, projet(1, 1));
     assert!(c.app.activer_onglet(0));
@@ -571,7 +571,7 @@ fn a_close_waiting_for_a_save_follows_it_even_when_another_tab_is_shown_meanwhil
     c.app.fermer_onglet(0);
     assert!(c.app.after_save.is_some(), "la fermeture attend l'écriture");
     assert!(jusqu_a(&mut c, Duration::from_secs(60), |c| c.app.onglets.len() == 1));
-    assert_eq!(rouge_sur_disque(&dir.join("C").join("C.pelure")), 121);
+    assert_eq!(rouge_sur_disque(&dir.join("C").join("C.shot")), 121);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -706,7 +706,7 @@ fn quitting_with_several_modified_tabs_asks_once_and_lists_them() {
 fn quitting_waits_for_a_save_in_a_hidden_tab() {
     let dir = dossier("onglets-quitter-ecriture");
     let mut b = banc(projet(200, 6), false);
-    let a_path = dir.join("A").join("A.pelure");
+    let a_path = dir.join("A").join("A.shot");
     b.app.path = Some(a_path.clone());
     modifier(&mut b, 140);
     assert!(b.app.save());
@@ -1329,7 +1329,7 @@ fn the_session_is_not_overwritten_while_it_comes_back() {
     assert_eq!(b.app.settings.session_tabs, vec![p1.clone()]);
     // Pendant la réouverture, `retenir_la_session` ne touche à rien (la liste serait réduite au premier projet).
     b.app.session_prete = false;
-    b.app.settings.session_tabs = vec![p1.clone(), dir.join("Autre").join("Autre.pelure")];
+    b.app.settings.session_tabs = vec![p1.clone(), dir.join("Autre").join("Autre.shot")];
     b.app.retenir_la_session();
     assert_eq!(b.app.settings.session_tabs.len(), 2);
     let _ = std::fs::remove_dir_all(&dir);

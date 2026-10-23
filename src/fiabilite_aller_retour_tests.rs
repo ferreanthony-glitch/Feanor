@@ -66,7 +66,7 @@ fn enregistrer(doc: &Document, manifeste: &Path, chemin: Chemin, written: &mut H
                 std::thread::sleep(Duration::from_millis(5));
                 assert!(t.elapsed() < Duration::from_secs(60), "la copie de secours ne finit pas");
             }
-            let manifeste = rec.dir.join("projet").join("secours.pelure");
+            let manifeste = rec.dir.join("projet").join("secours.shot");
             // (La séance est abandonnée telle quelle, comme après un plantage : le dossier reste.)
             drop(rec);
             manifeste

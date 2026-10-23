@@ -813,7 +813,8 @@ pub struct App {
     pub(crate) input_time: f64,
     pub(crate) last_frame_time: f64,
     pub(crate) picking: bool,
-    /// Manifeste du projet en dossier (`MonFilm/MonFilm.pelure`).
+    /// Manifeste du projet en dossier (`MonFilm/MonFilm.shot` ; un projet d'avant, `MonFilm.pelure`, jusqu'à son
+    /// prochain enregistrement, `enregistrement.rs`).
     pub(crate) path: Option<PathBuf>,
     /// Ancien fichier `.pelure` importé, pas encore enregistré en dossier.
     pub(crate) import_source: Option<PathBuf>,
@@ -3118,8 +3119,8 @@ impl App {
 
     fn open_dialog(&mut self) {
         let Some(path) = rfd::FileDialog::new()
-            .add_filter("Projet SHOT ou Storyboard Pro", &["pelure", "sboard"])
-            .add_filter("Projet SHOT", &["pelure"])
+            .add_filter("Projet SHOT ou Storyboard Pro", &[crate::project::EXTENSION, crate::project::ANCIENNE_EXTENSION, "sboard"])
+            .add_filter("Projet SHOT", &crate::project::EXTENSIONS)
             .add_filter("Projet Storyboard Pro", &["sboard"])
             .pick_file()
         else {
@@ -3128,12 +3129,15 @@ impl App {
         self.open_path(path);
     }
 
-    /// Ouvre un projet en dossier, ou importe un ancien fichier `.pelure`. Un projet Storyboard
-    /// Pro (`.sboard`) ouvre la fenêtre d'import avec lui (14a).
+    /// Ouvre un projet en dossier (`.shot`, ou l'ancien nom `.pelure`), ou importe un ancien fichier `.pelure` d'un seul
+    /// tenant. Un projet Storyboard Pro (`.sboard`) ouvre la fenêtre d'import avec lui (14a).
     pub(crate) fn open_path(&mut self, path: PathBuf) {
         if self.import_dropped_sboard(&path) {
             return;
         }
+        // Un projet converti depuis (`Bus.pelure` devenu `Bus.shot`), ou les deux noms après un plantage au milieu de la
+        // conversion : le manifeste à ouvrir (le plus récent, `project::manifeste_a_ouvrir`).
+        let path = crate::project::manifeste_a_ouvrir(&path);
         // Déjà ouvert dans un onglet : on le montre au lieu de l'ouvrir une seconde fois (`onglets.rs`).
         if self.montrer_si_deja_ouvert(&path) {
             return;
