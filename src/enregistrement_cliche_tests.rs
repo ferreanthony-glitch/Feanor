@@ -261,3 +261,45 @@ fn the_interface_share_of_a_save_stays_small_on_a_big_film() {
         let _ = std::fs::remove_dir_all(&travail);
     }
 }
+
+/// Changer la résolution en mettant les dessins à l'échelle (Fichier > Réglages du projet), enregistrer, rouvrir : les
+/// dessins sont à la nouvelle taille, avec leurs pixels. (Les dessins refaits gardaient la version 0 d'un projet relu :
+/// l'enregistrement les croyait déjà écrits et laissait les anciens PNG, refusés à la réouverture.)
+#[test]
+fn a_resolution_change_with_scaling_is_saved_and_reopened_at_the_new_size() {
+    let travail = dossier("cliche-resolution");
+    let manifeste = travail.join("Film").join("Film.pelure");
+    // (Feuilles en tuiles entières et dessins loin des bords : rien hors de la feuille après la mise à l'échelle.)
+    let mut film = Document::with_frame(256, 128, 24);
+    let mut layer = Layer::new("Calque", LayerKind::Bitmap);
+    for k in 0..3usize {
+        let mut cel = Cel::new(film.width, film.height, LayerKind::Bitmap);
+        for y in 100..140 {
+            for x in 150 + 60 * k..190 + 60 * k {
+                let i = cel.raster.tile_index_of(x, y);
+                cel.raster.tile_mut(i)[(y % crate::raster::TILE) * crate::raster::TILE + x % crate::raster::TILE] = Color32::from_rgba_premultiplied(200, 30, 10, 255);
+            }
+        }
+        layer.frames.push(Some(film.add_cel(cel)));
+    }
+    film.panels[0].layers = vec![layer];
+    film.panels[0].length = 3;
+    project::save(&film, &manifeste, &mut HashMap::new()).expect("premier");
+    let project::Loaded { mut doc, mut written, .. } = project::load(&manifeste).expect("relu");
+    let (w0, h0) = (doc.width, doc.height);
+    doc.resize_frame(doc.frame[0] * 2, doc.frame[1] * 2, true);
+    assert_eq!((doc.width, doc.height), (w0 * 2, h0 * 2));
+    project::save(&doc, &manifeste, &mut written).expect("après le changement de résolution");
+    let relu = project::load(&manifeste).expect("rouvert");
+    assert!(relu.warnings.is_empty(), "{:?}", relu.warnings);
+    assert_eq!((relu.doc.width, relu.doc.height), (doc.width, doc.height));
+    for (id, cel) in &doc.cels {
+        let lu = &relu.doc.cels.get(id).expect("dessin relu").raster;
+        assert_eq!((lu.width, lu.height), (cel.raster.width, cel.raster.height), "dessin {id} : nouvelle taille");
+        let (a, b) = (cel.raster.to_rgba(), lu.to_rgba());
+        let ecart = a.iter().zip(&b).map(|(x, y)| x.abs_diff(*y)).max().unwrap_or(0);
+        assert!(ecart <= 2, "dessin {id} : les pixels mis à l'échelle (écart {ecart})");
+        assert!(a.chunks(4).any(|p| p[3] > 0), "dessin {id} : il reste quelque chose à comparer");
+    }
+    let _ = std::fs::remove_dir_all(&travail);
+}
