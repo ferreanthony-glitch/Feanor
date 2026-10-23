@@ -439,7 +439,8 @@ impl App {
 
     /// Le texte de la bande de note de l'image `place` : les notes du plan (première image) ou de sa marque.
     pub(crate) fn card_notes(&self, place: &CardPlace) -> &str {
-        let p = &self.doc.panels[place.panel];
+        // (Une case d'une planche faite avant un changement du film peut désigner un plan qui n'est plus là : rien.)
+        let Some(p) = self.doc.panels.get(place.panel) else { return "" };
         if place.frame == 0 {
             &p.notes
         } else {
@@ -1147,7 +1148,7 @@ impl App {
                 tient = false;
                 break;
             }
-            self.board_tuile(ui, &painter, view, xf, &layout, k, pan_mode, deadline);
+            self.board_tuile(ui, &painter, view, xf, &layout, k, pan_mode, deadline, plans);
         }
         // (Les numéros des plans, trouvés une fois pour toutes les cases : un par case refaisait l'ordre du film.)
         let numeros = crate::numerotation::Numeros::pour_l_ecran(&self.doc);
@@ -1156,7 +1157,7 @@ impl App {
                 tient = false;
                 break;
             }
-            self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, deadline, &numeros);
+            self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, deadline, &numeros, plans);
         }
         if !tient || !self.case_tient(&layout, plans, layout.cards.len().saturating_sub(1)) {
             ui.ctx().request_repaint();
@@ -1525,7 +1526,7 @@ impl App {
     /// tuile, composée sur un fil de fond. Hors de l'enveloppe, la tuile ne garde que le trait qui déborde. Peinte avant les cases :
     /// son rectangle déborde de l'enveloppe, les cases qui s'y trouvent passent par-dessus.
     #[allow(clippy::too_many_arguments)]
-    fn board_tuile(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant) {
+    fn board_tuile(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant, plans: usize) {
         let Some(mv) = layout.move_of(k).filter(|_| self.tool != Tool::Camera) else { return };
         let place = &layout.cards[k];
         let r = xf.rect(mv.tuile.rect);
@@ -1558,6 +1559,11 @@ impl App {
             self.card_canvas(&mut child, r);
             self.vignettes.zone = None;
             self.vignettes.enveloppe.clear();
+            // (Le menu du clic droit du dessin a pu changer le film : comme dans `board_card`.)
+            if !self.case_tient(layout, plans, k) {
+                ui.ctx().request_repaint();
+                return;
+            }
             // Hors de l'enveloppe (les coins de la tuile) : le papier de la planche, et ce que la vignette garde du trait qui déborde.
             // Tant que la tuile n'est pas refaite pour les nouveaux cadres, rien de tout cela : le dessin vivant montre tout le trait
             // dans la tuile, rien n'est coupé à une ligne d'avant le geste ; la marge revient dès que la tuile est prête.
@@ -1605,7 +1611,7 @@ impl App {
     /// Une vignette (une image de storyboard) : son numéro de plan s'il commence, l'image (le dessin lui-même
     /// pour l'image courante), son filet, sa bande de note. Les gestes sont pris plus haut (`board_press`).
     #[allow(clippy::too_many_arguments)]
-    fn board_card(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant, numeros: &crate::numerotation::Numeros) {
+    fn board_card(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant, numeros: &crate::numerotation::Numeros, plans: usize) {
         let place = &layout.cards[k];
         let mv = layout.move_of(k).filter(|_| self.tool != Tool::Camera);
         let card = xf.rect(place.card);
@@ -1658,6 +1664,13 @@ impl App {
                     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area).id_salt("planche_vive"));
                     child.set_clip_rect(thumb.intersect(view));
                     self.card_canvas(&mut child, thumb);
+                    // Le menu du clic droit du dessin s'ouvre là-dedans (`canvas_panel`) : « Réunir avec le plan précédent », « Couper »…
+                    // peuvent avoir changé le film. La suite de la case lit `place` et `i`, de la planche du début de l'image : s'ils ne
+                    // désignent plus le même plan, la case s'arrête là (la planche se refait à l'image suivante).
+                    if !self.case_tient(layout, plans, k) {
+                        ui.ctx().request_repaint();
+                        return;
+                    }
                     // (Sa vignette se tient à jour en arrière-plan : quand une autre image prend la main, elle montre déjà le dernier trait.)
                     if let Some(c) = &case {
                         paint_ring(painter, thumb, c);
