@@ -908,6 +908,16 @@ impl Essai {
             if p.frame_count() == 0 {
                 return Err(echec("plan vide", format!("le plan {i} n'a aucune image")));
             }
+            // Les dossiers en ordre (`folders::normalize` : ses calques juste sous chaque dossier, un parent qui est un dossier du plan) :
+            // c'est ce que la lecture d'un projet refait, la pile en mémoire doit déjà l'être.
+            if p.layers.iter().any(|l| l.folder || l.parent.is_some()) {
+                let mut rangee = p.layers.clone();
+                crate::folders::normalize(&mut rangee);
+                let cle = |ls: &[crate::document::Layer]| ls.iter().map(|l| (l.id, l.parent)).collect::<Vec<_>>();
+                if cle(&rangee) != cle(&p.layers) {
+                    return Err(echec("dossiers en désordre", format!("plan {i} : {:?} au lieu de {:?}", cle(&p.layers), cle(&rangee))));
+                }
+            }
             let lids: BTreeSet<u64> = p.layers.iter().map(|l| l.id).collect();
             if lids.len() != p.layers.len() {
                 return Err(echec("numéros de calques", format!("plan {i} : deux calques ont le même numéro")));
@@ -1493,6 +1503,40 @@ fn hasard_two_moving_plans_rising_above_the_first_row_do_not_overlap() {
     if let Err(e) = sans_chevauchement(&l) {
         panic!("{}", e.detail);
     }
+}
+
+/// Réunir deux plans quand le second a rangé son calque Décor dans un dossier (« Choisir tous les calques » puis « Placer les calques
+/// choisis dans un nouveau dossier », graine 4747) : le Décor passe tout en bas du plan réuni, hors du dossier. Il gardait son dossier,
+/// loin au-dessus de lui : la pile était en désordre, et la lecture du projet enregistré la remettait autrement.
+#[test]
+fn hasard_joining_a_plan_whose_decor_is_in_a_folder_keeps_the_stack_in_order() {
+    use crate::document::{Cel, Layer, LayerKind};
+    let mut doc = Document::with_frame(160, 90, 24);
+    doc.add_scene_after(0);
+    let dessin = |doc: &mut Document| doc.add_cel(Cel::new(doc.width, doc.height, LayerKind::Bitmap));
+    let mut a = Layer::new("Calque 1", LayerKind::Bitmap);
+    a.frames = vec![Some(dessin(&mut doc)); 4];
+    let mut dossier = Layer::new("Dossier", LayerKind::Bitmap);
+    dossier.folder = true;
+    let mut decor = Layer::new("Décor", LayerKind::Bitmap);
+    decor.decor = true;
+    decor.parent = Some(dossier.id);
+    decor.frames = vec![Some(dessin(&mut doc)); 4];
+    let mut autre = Layer::new("Autre", LayerKind::Bitmap);
+    autre.parent = Some(dossier.id);
+    autre.frames = vec![Some(dessin(&mut doc)); 4];
+    doc.panels[0].layers = vec![a];
+    doc.panels[1].layers = vec![decor, autre, dossier];
+    for p in &mut doc.panels {
+        p.length = 4;
+    }
+    let i = doc.join_next_plan(0).expect("réunis");
+    let layers = &doc.panels[i].layers;
+    let mut rangee = layers.clone();
+    crate::folders::normalize(&mut rangee);
+    let cle = |ls: &[Layer]| ls.iter().map(|l| (l.name.clone(), l.parent)).collect::<Vec<_>>();
+    assert_eq!(cle(layers), cle(&rangee), "la pile est en ordre");
+    assert!(layers[0].decor && layers[0].parent.is_none(), "le Décor est tout en bas, hors du dossier : {:?}", cle(layers));
 }
 
 /// Couper un plan à une barre, après avoir choisi un calque : le calque choisi ne désigne pas un calque disparu.

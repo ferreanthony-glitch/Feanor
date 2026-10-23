@@ -903,7 +903,7 @@ impl App {
         // (Pas pendant que le projet s'écrit dans son dossier : la copie recopierait des dessins qu'il n'a pas encore.)
         rec.tick(snap, interval, e.saving.is_some());
         let erreur = rec.error.take();
-        let revoir = if rec.busy() {
+        let revoir = if rec.busy() || rec.en_attente() {
             Some(Duration::from_millis(200))
         } else {
             interval.filter(|_| e.modified).map(|i| i.min(Duration::from_secs(10)))

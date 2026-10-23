@@ -1051,6 +1051,10 @@ pub struct Document {
     /// Préfixe des numéros neufs d'un projet partagé (`préfixe << 32`, `cooperation.rs`) : deux équipiers ne
     /// donnent jamais le même numéro. 0 pour un projet classique, dont les numéros ne changent pas.
     id_prefix: u64,
+    /// Ce que l'enregistrement sait déjà de chaque dessin, à sa version (`project::MemoDessin`) : qu'il a quelque chose
+    /// hors de la feuille, quelles textures ses traits citent. Sans lui, chaque enregistrement relisait sur le fil de
+    /// l'interface les pixels du bord de tous les dessins du film. Rempli à l'ouverture (sur le fil d'ouverture).
+    pub(crate) memo_enregistrement: std::sync::Mutex<crate::project::MemoDessins>,
 }
 
 /// Les 32 bits du bas d'un numéro : le compteur de son équipier (`Document::id_prefix`).
@@ -1108,6 +1112,7 @@ impl Document {
             report_decor: true,
             next_id: 1,
             id_prefix: 0,
+            memo_enregistrement: Default::default(),
         };
         let seq = doc.new_sequence();
         let scene = doc.new_scene(seq);
@@ -1176,9 +1181,54 @@ impl Document {
             report_decor: true,
             next_id: max_id + 1,
             id_prefix: 0,
+            memo_enregistrement: Default::default(),
         };
         doc.normalize();
         doc
+    }
+
+    /// Le même document sans ses dessins (`cels` vide) : ce que l'enregistrement emporte sur son fil pour y écrire le
+    /// manifeste et les fichiers annexes (`project::prepare_save`). Les sons et les instantanés d'envois sont partagés
+    /// (`Arc`), le reste est copié. Chaque champ est nommé : un champ ajouté au document doit dire ici s'il part.
+    pub(crate) fn copie_sans_dessins(&self) -> Document {
+        Document {
+            width: self.width,
+            height: self.height,
+            frame: self.frame,
+            fps: self.fps,
+            paper: self.paper,
+            sequences: self.sequences.clone(),
+            scenes: self.scenes.clone(),
+            panels: self.panels.clone(),
+            cels: HashMap::new(),
+            audio_tracks: self.audio_tracks.clone(),
+            sounds: self.sounds.clone(),
+            guides: self.guides.clone(),
+            board: self.board.clone(),
+            groups: self.groups.clone(),
+            start_frame: self.start_frame,
+            background: self.background,
+            paper_b: self.paper_b,
+            master_volume: self.master_volume,
+            storyboard_locked: self.storyboard_locked,
+            numbering_locked: self.numbering_locked,
+            properties: self.properties.clone(),
+            comments: self.comments.clone(),
+            reserves: self.reserves.clone(),
+            transitions: self.transitions.clone(),
+            sons_proposes: self.sons_proposes.clone(),
+            references: self.references.clone(),
+            personnages: self.personnages.clone(),
+            envois: crate::envois::Envois { list: self.envois.list.clone(), pending: self.envois.pending.clone(), dossier: self.envois.dossier.clone() },
+            versions: self.versions.clone(),
+            variantes: self.variantes.clone(),
+            variantes_partielles: self.variantes_partielles,
+            annotations: self.annotations.clone(),
+            report_decor: self.report_decor,
+            next_id: self.next_id,
+            id_prefix: self.id_prefix,
+            memo_enregistrement: Default::default(),
+        }
     }
 
     /// Cadre de la caméra sur la feuille (centré), en pixels de la feuille.
@@ -2892,12 +2942,19 @@ impl Document {
     }
 
     pub fn used_cels(&self) -> BTreeSet<CelId> {
-        let mut used: BTreeSet<CelId> = self
-            .panels
-            .iter()
-            .flat_map(|s| s.layers.iter())
-            .flat_map(|l| l.frames.iter().flatten().copied())
-            .collect();
+        // (Un dessin tenu sur plusieurs images n'est compté qu'une fois par exposition : quatre fois moins de numéros à
+        // trier pour un film animé à 2 et à 8, et c'est le fil de l'interface qui le fait à chaque enregistrement.)
+        let mut vus: Vec<CelId> = Vec::new();
+        for l in self.panels.iter().flat_map(|s| s.layers.iter()) {
+            let mut avant = None;
+            for id in l.frames.iter().flatten().copied() {
+                if avant != Some(id) {
+                    vus.push(id);
+                    avant = Some(id);
+                }
+            }
+        }
+        let mut used: BTreeSet<CelId> = vus.into_iter().collect();
         // Le contenu rogné reste dans le projet (`rognage.rs`).
         for (_, r) in self.live_reserves() {
             used.extend(r.cels());

@@ -54,7 +54,8 @@ impl App {
             self.status = format!("Copie de secours impossible : {e}");
         }
         // Rien ne bouge à l'écran : on revient quand même pour la prochaine copie.
-        if rec.busy() {
+        // (Une copie demandée tout de suite attend la fin de celle qui s'écrit : on revient vite pour la lancer.)
+        if rec.busy() || rec.en_attente() {
             ctx.request_repaint_after(Duration::from_millis(200));
         } else if let (Some(i), true) = (interval, self.modified) {
             ctx.request_repaint_after(i.min(Duration::from_secs(10)));
@@ -76,12 +77,16 @@ impl App {
                     project: self.path.clone(),
                     project_written: &self.written,
                 };
+                // (Une copie s'écrit déjà : celle-ci part dès sa fin, `Recovery::tick`.)
                 rec.start_copy(snap);
             }
         }
-        // Les onglets cachés : leur copie part aussi (délai nul).
+        // Les onglets cachés : leur copie part aussi (délai nul), ou dès la fin de celle qui s'écrit.
         for i in 0..self.onglets.len() {
             if i != self.actif {
+                if let Some(rec) = self.onglets[i].etat.as_mut().and_then(|e| e.recovery.as_mut()) {
+                    rec.demander();
+                }
                 self.tick_secours_cache(i, Some(Duration::ZERO));
             }
         }
