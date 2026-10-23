@@ -6,8 +6,10 @@
 //! 2. Les numéros des plans et des séquences se trouvent une fois par image d'écran (`numerotation::Numeros`), la règle et la
 //!    barre des séquences du montage ne peignent que leur partie visible : mêmes textes, à la même place.
 //! 4. Les vignettes de la planche gardées sur la carte graphique sont bornées en octets, sans jamais lâcher celles de l'écran.
+//! 6. La disposition de la planche et les lignes des notes sont gardées tant que rien de ce dont elles dépendent ne change :
+//!    la disposition gardée est celle qu'on referait (planches au hasard).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 use eframe::egui::{pos2, Event, Modifiers, PointerButton, Pos2, Rect, Shape};
@@ -348,4 +350,289 @@ fn board_thumbnails_stay_under_their_memory_bound_while_zooming() {
         }
     }
     println!("vignettes de la planche : au plus {:.1} Mo gardés (limite {:.0} Mo)", pire as f64 / 1e6, limite as f64 / 1e6);
+}
+
+// ------------------------------------------------------------------ 6. disposition de la planche gardée
+
+/// Un tirage pseudo-aléatoire reproductible (xorshift). `tourner` : des caméras tournées aussi.
+struct Hasard {
+    x: u64,
+    tourner: bool,
+}
+
+impl Hasard {
+    fn new(x: u64) -> Hasard {
+        Hasard { x, tourner: false }
+    }
+
+    fn n(&mut self, max: usize) -> usize {
+        self.x ^= self.x << 13;
+        self.x ^= self.x >> 7;
+        self.x ^= self.x << 17;
+        (self.x % max.max(1) as u64) as usize
+    }
+
+    fn f(&mut self, lo: f32, hi: f32) -> f32 {
+        lo + (hi - lo) * self.n(10_000) as f32 / 10_000.0
+    }
+}
+
+/// Une planche au hasard : plans, séquences, durées, marques d'image (certaines après la fin du plan), mouvements de caméra
+/// (déplacés, zoomés, tournés, de deux à quatre cadres).
+fn planche_au_hasard(h: &mut Hasard) -> Document {
+    let [w, hh] = [[1920, 1080], [1080, 1920], [2048, 858]][h.n(3)];
+    let mut doc = Document::with_frame(w, hh, 24);
+    let plans = 1 + h.n(40);
+    let mut at = 0;
+    for _ in 1..plans {
+        at = if h.n(6) == 0 { doc.add_sequence_after(at) } else { doc.add_scene_after(at) };
+    }
+    for i in 0..doc.panels.len() {
+        doc.panels[i].length = 1 + h.n(48);
+        let mut marks = Vec::new();
+        for _ in 0..h.n(3) {
+            marks.push(crate::document::ImageMark { id: doc.alloc(), frame: 1 + h.n(60), ..Default::default() });
+        }
+        marks.sort_by_key(|m| m.frame);
+        doc.panels[i].marks = marks;
+        if h.n(3) == 0 {
+            camera_au_hasard(&mut doc, i, h);
+        }
+    }
+    doc
+}
+
+fn camera_au_hasard(doc: &mut Document, i: usize, h: &mut Hasard) {
+    let c0 = doc.panel_camera(i, 0);
+    let n = doc.panels[i].frame_count();
+    let mut keys = vec![crate::camera::CameraKey::new(0, c0)];
+    for k in 1..2 + h.n(3) {
+        let mut c = c0;
+        c.x += h.f(-900.0, 900.0);
+        c.y += h.f(-500.0, 500.0);
+        c.zoom *= h.f(0.4, 2.5);
+        // (Une caméra tournée seulement pour le constat `random_boards_with_rotated_cameras` : certaines font boucler la disposition
+        // sans fin, avant comme après cette passe.)
+        if h.tourner && h.n(4) == 0 {
+            c.angle = h.f(-40.0, 40.0);
+        }
+        keys.push(crate::camera::CameraKey::new((k * n / 4).min(n.saturating_sub(1)).max(k), c));
+    }
+    doc.panels[i].camera = keys;
+}
+
+fn reglages_au_hasard(h: &mut Hasard) -> crate::board::BoardSettings {
+    crate::board::BoardSettings { card_w: h.f(100.0, 700.0), columns: 1 + h.n(6), rows: if h.n(3) == 0 { 1 + h.n(4) } else { 0 } }
+}
+
+fn options_au_hasard(doc: &Document, h: &mut Hasard) -> crate::board::Options {
+    let hold = (h.n(3) == 0).then(|| {
+        let p = &doc.panels[h.n(doc.panels.len())];
+        let r = Rect::from_min_size(pos2(h.f(-200.0, 0.0), h.f(-150.0, 0.0)), eframe::egui::vec2(h.f(100.0, 900.0), h.f(80.0, 600.0)));
+        crate::board::Reserve { plan: p.id, rect: r, pose: (h.n(2) == 0).then(|| (h.n(4), h.f(0.0, 600.0))) }
+    });
+    crate::board::Options { pale_rows: (h.n(4) != 0).then(|| 1 + h.n(5)), hold }
+}
+
+fn lignes_au_hasard(doc: &Document, h: &mut Hasard) -> HashMap<u64, usize> {
+    let mut lines = HashMap::new();
+    for p in &doc.panels {
+        for id in std::iter::once(p.id).chain(p.marks.iter().map(|m| m.id)) {
+            if h.n(3) == 0 {
+                lines.insert(id, 1 + h.n(3));
+            }
+        }
+    }
+    lines
+}
+
+/// Un changement au hasard de ce qui fait la planche (ou de rien qui la fasse : un nom de plan, une note).
+fn changer_au_hasard(doc: &mut Document, s: &mut crate::board::BoardSettings, lines: &mut HashMap<u64, usize>, joins: &mut bool, opt: &mut crate::board::Options, h: &mut Hasard) -> &'static str {
+    let i = h.n(doc.panels.len());
+    match h.n(14) {
+        0 => {
+            camera_au_hasard(doc, i, h);
+            "caméra"
+        }
+        1 => {
+            if let Some(k) = doc.panels[i].camera.last_mut() {
+                k.cam.x += 0.5;
+            }
+            "une clé de caméra bouge d'un demi-pixel"
+        }
+        2 => {
+            doc.panels[i].camera.clear();
+            "caméra retirée"
+        }
+        3 => {
+            let id = doc.alloc();
+            let frame = 1 + h.n(doc.panels[i].frame_count() + 4);
+            doc.panels[i].marks.push(crate::document::ImageMark { id, frame, ..Default::default() });
+            doc.panels[i].marks.sort_by_key(|m| m.frame);
+            "marque d'image"
+        }
+        4 => {
+            doc.panels[i].length = 1 + h.n(60);
+            "durée"
+        }
+        5 => {
+            *lines = lignes_au_hasard(doc, h);
+            "lignes de notes"
+        }
+        6 => {
+            *joins = !*joins;
+            "case pâle jointe"
+        }
+        7 => {
+            *s = reglages_au_hasard(h);
+            "réglages"
+        }
+        8 => {
+            *opt = options_au_hasard(doc, h);
+            "geste de caméra retenu"
+        }
+        9 => {
+            doc.frame = [[1920, 1080], [1080, 1920], [2048, 858]][h.n(3)];
+            "taille du cadre"
+        }
+        10 => {
+            let j = h.n(doc.panels.len());
+            doc.panels.swap(i, j);
+            "deux plans échangés"
+        }
+        11 => {
+            let id = doc.panels[i].scene;
+            if let Some(sc) = doc.scene_mut(id) {
+                sc.name = format!("Plan {}", h.n(100));
+            }
+            "nom de plan (rien)"
+        }
+        12 => {
+            doc.panels[i].notes = format!("note {}", h.n(1000));
+            "texte d'une note (rien : ses lignes sont dans `lines`)"
+        }
+        _ => {
+            let j = h.n(doc.panels.len());
+            doc.panels[i].scene = doc.panels[j].scene;
+            "scène d'un plan"
+        }
+    }
+}
+
+/// Constat de la passe (pas un essai de ce qu'elle change) : les mêmes planches au hasard, avec des caméras tournées ; chaque
+/// disposition sur un fil à part, cinq secondes au plus. Lancé à part : `... random_boards_with_rotated_cameras -- --ignored
+/// --nocapture` ; il dit la première qui ne finit pas.
+#[test]
+#[ignore]
+fn random_boards_with_rotated_cameras() {
+    use std::sync::{Arc, Mutex};
+    // (Le fil d'essai dit, avant chaque disposition, ce qu'il va disposer ; s'il ne dit plus rien pendant cinq secondes, c'est
+    // celle-là.)
+    let etat: Arc<Mutex<(u64, String)>> = Arc::new(Mutex::new((0, String::new())));
+    let fin = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let (e2, f2) = (etat.clone(), fin.clone());
+    std::thread::spawn(move || {
+        let mut h = Hasard::new(0x9e37_79b9_7f4a_7c15);
+        h.tourner = true;
+        for planche in 0..40 {
+            let mut doc = planche_au_hasard(&mut h);
+            let mut s = reglages_au_hasard(&mut h);
+            let mut lines = lignes_au_hasard(&doc, &mut h);
+            let mut joins = h.n(2) == 0;
+            let mut opt = options_au_hasard(&doc, &mut h);
+            let mut quoi = "départ";
+            for etape in 0..25 {
+                let cams: Vec<String> = doc.panels.iter().enumerate().filter(|(_, p)| p.camera.len() > 1).map(|(i, p)| format!("plan {i} ({} images) : {:?}", p.frame_count(), p.camera.iter().map(|k| (k.frame, k.cam.x, k.cam.y, k.cam.zoom, k.cam.angle)).collect::<Vec<_>>())).collect();
+                {
+                    let mut e = e2.lock().expect("état");
+                    e.0 += 1;
+                    e.1 = format!("planche {planche}, étape {etape} ({quoi}) : cadre {:?}, {} plans, réglages {s:?}, retenue {opt:?}, case pâle jointe {joins}\n  {}", doc.frame, doc.panels.len(), cams.join("\n  "));
+                }
+                std::hint::black_box(crate::board::layout_with(&doc, &s, &lines, joins, &opt));
+                quoi = changer_au_hasard(&mut doc, &mut s, &mut lines, &mut joins, &mut opt, &mut h);
+            }
+        }
+        f2.store(true, std::sync::atomic::Ordering::Relaxed);
+    });
+    let mut vu = 0;
+    let mut depuis = Instant::now();
+    while !fin.load(std::sync::atomic::Ordering::Relaxed) {
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        let e = etat.lock().expect("état");
+        if e.0 != vu {
+            vu = e.0;
+            depuis = Instant::now();
+        } else if depuis.elapsed() > std::time::Duration::from_secs(5) {
+            println!("CONSTAT : la disposition ne finit pas en 5 s : {}", e.1);
+            return;
+        }
+    }
+    println!("toutes les dispositions finissent");
+}
+
+#[test]
+fn the_kept_board_layout_is_the_one_computed_from_scratch() {
+    let mut h = Hasard::new(0x9e37_79b9_7f4a_7c15);
+    let mut faites = 0;
+    for planche in 0..40 {
+        let mut doc = planche_au_hasard(&mut h);
+        let mut s = reglages_au_hasard(&mut h);
+        let mut lines = lignes_au_hasard(&doc, &mut h);
+        let mut joins = h.n(2) == 0;
+        let mut opt = options_au_hasard(&doc, &mut h);
+        let mut cache = crate::board::CacheDisposition::default();
+        let mut quoi = "départ";
+        for etape in 0..25 {
+            let neuve = crate::board::layout_with(&doc, &s, &lines, joins, &opt);
+            let gardee = crate::board::layout_cache(&doc, &s, &lines, joins, &opt, &mut cache);
+            assert_eq!(gardee, neuve, "planche {planche}, étape {etape} ({quoi})");
+            // Rien n'a changé : la disposition n'est pas refaite.
+            let calculs = cache.calculs;
+            assert_eq!(crate::board::layout_cache(&doc, &s, &lines, joins, &opt, &mut cache), neuve);
+            assert_eq!(cache.calculs, calculs, "planche {planche}, étape {etape} : refaite sans changement");
+            faites += cache.calculs;
+            quoi = changer_au_hasard(&mut doc, &mut s, &mut lines, &mut joins, &mut opt, &mut h);
+        }
+    }
+    assert!(faites > 40, "les changements refont la disposition");
+}
+
+#[test]
+fn the_board_view_keeps_its_layout_and_note_lines_until_something_changes() {
+    let mut doc = projet_long(60, 1, 8, 1);
+    for i in 0..doc.panels.len() {
+        doc.panels[i].notes = if i % 3 == 0 { format!("Plan {i} : le personnage entre par la gauche, regarde la fenêtre, puis sort lentement du cadre, très lentement.") } else { String::new() };
+        if i % 4 == 1 {
+            let mut h = Hasard::new(i as u64 + 7);
+            camera_au_hasard(&mut doc, i, &mut h);
+        }
+    }
+    let mut b = banc(doc, false);
+    b.app.board_view = crate::app::BoardView::Panels;
+    b.app.board_zoom = 0.0;
+    b.chauffer(6);
+    let calculs = b.app.vignettes.disposition.borrow().calculs;
+    b.chauffer(10);
+    assert_eq!(b.app.vignettes.disposition.borrow().calculs, calculs, "au repos, la planche ne se refait pas");
+    // Les mêmes lignes de notes et la même planche que le code d'avant (tout refait à chaque image).
+    let (lignes, planche) = (b.app.vignettes.lines.clone(), b.app.board_layout());
+    crate::perf::set_ancien(true);
+    b.chauffer(2);
+    let (lignes_avant, planche_avant) = (b.app.vignettes.lines.clone(), b.app.board_layout());
+    crate::perf::set_ancien(false);
+    assert_eq!(lignes, lignes_avant);
+    assert_eq!(planche, planche_avant);
+    assert!(lignes.values().any(|&n| n > 1), "des notes sur plusieurs lignes");
+    // Une note plus longue : ses lignes et la planche suivent à l'image suivante.
+    let court = lignes[&b.app.doc.panels[3].id];
+    b.app.doc.panels[3].notes = "Une note courte.".into();
+    b.chauffer(2);
+    assert!(b.app.vignettes.lines[&b.app.doc.panels[3].id] < court, "la note raccourcie prend moins de lignes");
+    assert!(b.app.vignettes.disposition.borrow().calculs > calculs, "la planche suit");
+    crate::perf::set_ancien(true);
+    b.chauffer(2);
+    let avant = (b.app.vignettes.lines.clone(), b.app.board_layout());
+    crate::perf::set_ancien(false);
+    b.chauffer(2);
+    assert_eq!((b.app.vignettes.lines.clone(), b.app.board_layout()), avant);
 }

@@ -218,6 +218,20 @@ pub(crate) struct Vignettes {
     /// Les fenêtres d'export de la planche et du color script (`plancheui.rs`, `colorscriptui.rs`).
     pub planche: crate::plancheui::Etat,
     pub colorscript: crate::colorscriptui::Etat,
+    /// La dernière disposition de la planche et ce dont elle dépend (`board::CacheDisposition`) : `board_layout` ne la refait que
+    /// si quelque chose a changé.
+    pub disposition: std::cell::RefCell<board::CacheDisposition>,
+    /// Les notes déjà mesurées (`measure_notes`) : leur texte et leur nombre de lignes, à cette largeur et à cette échelle.
+    pub mesures: MesuresNotes,
+}
+
+/// Les notes mesurées par `measure_notes` (le nombre de lignes d'une note ne dépend que de son texte, de la largeur des cases et de
+/// l'échelle de l'écran) : une note qui n'a pas changé n'est plus remise en page, et rien n'est alloué quand aucune n'a changé.
+#[derive(Default)]
+pub(crate) struct MesuresNotes {
+    largeur: u32,
+    ppp: u32,
+    notes: HashMap<u64, (String, usize)>,
 }
 
 impl Default for Vignettes {
@@ -244,6 +258,8 @@ impl Default for Vignettes {
             depots: Vec::new(),
             planche: Default::default(),
             colorscript: Default::default(),
+            disposition: Default::default(),
+            mesures: Default::default(),
         }
     }
 }
@@ -268,7 +284,13 @@ impl App {
         let s = BoardSettings { rows: 0, ..self.layout.board_settings() };
         let hold = self.vignettes.cam.as_ref().filter(|g| g.actif && !g.annule).and_then(|g| g.hold);
         let opt = board::Options { hold, ..board::Options::pale(self.layout.board_min_rows) };
-        board::layout_with(&self.doc, &s, &self.vignettes.lines, self.vignettes.empty_joins, &opt)
+        // (Gardée tant que rien de ce dont elle dépend ne change : `board::CacheDisposition`. Un essai de performance mesure aussi
+        // l'ancien chemin, refaite à chaque appel : `perf::ancien`.)
+        if crate::perf::ancien() {
+            return board::layout_with(&self.doc, &s, &self.vignettes.lines, self.vignettes.empty_joins, &opt);
+        }
+        let mut cache = self.vignettes.disposition.borrow_mut();
+        board::layout_cache(&self.doc, &s, &self.vignettes.lines, self.vignettes.empty_joins, &opt, &mut cache)
     }
 
     /// La planche a glissé (`BoardLayout::decalage` : une enveloppe de caméra dépasse la page à gauche ou en haut) : la vue défile
@@ -429,6 +451,10 @@ impl App {
     /// s'en sert pour descendre la rangée suivante juste ce qu'il faut.
     fn measure_notes(&mut self, ctx: &egui::Context, settings: &BoardSettings) {
         let width = (settings.card_w.clamp(CARD_MIN, CARD_MAX) - NOTE_PAD * 2.0).max(10.0);
+        if !crate::perf::ancien() {
+            self.measure_notes_gardees(ctx, width);
+            return;
+        }
         let mut lines = HashMap::new();
         for p in &self.doc.panels {
             let marks = p.marks.iter().map(|m| (m.id, m.notes.as_str()));
@@ -441,6 +467,57 @@ impl App {
                 lines.insert(id, galley.rows.len().clamp(1, NOTE_MAX_LINES));
             }
         }
+        self.vignettes.lines = lines;
+    }
+
+    /// `measure_notes` (le même nombre de lignes), sans remettre en page une note déjà mesurée à cette largeur et à cette échelle :
+    /// à chaque image d'écran, un passage sur les notes qui compare leurs textes ; rien n'est alloué si aucune n'a changé.
+    fn measure_notes_gardees(&mut self, ctx: &egui::Context, width: f32) {
+        let ppp = ctx.pixels_per_point();
+        let m = &mut self.vignettes.mesures;
+        if m.largeur != width.to_bits() || m.ppp != ppp.to_bits() {
+            *m = MesuresNotes { largeur: width.to_bits(), ppp: ppp.to_bits(), notes: HashMap::new() };
+        }
+        fn notes(p: &crate::document::Panel) -> impl Iterator<Item = (u64, &str)> {
+            std::iter::once((p.id, p.notes.as_str())).chain(p.marks.iter().map(|m| (m.id, m.notes.as_str())))
+        }
+        let mut vues = 0;
+        let mut pareil = true;
+        'plans: for p in &self.doc.panels {
+            for (id, text) in notes(p) {
+                if text.trim().is_empty() {
+                    continue;
+                }
+                vues += 1;
+                if !m.notes.get(&id).is_some_and(|(t, _)| t == text) {
+                    pareil = false;
+                    break 'plans;
+                }
+            }
+        }
+        if pareil && vues == m.notes.len() && self.vignettes.lines.len() == vues {
+            return;
+        }
+        let mut gardees: HashMap<u64, (String, usize)> = HashMap::with_capacity(vues);
+        let mut lines = HashMap::with_capacity(vues);
+        for p in &self.doc.panels {
+            for (id, text) in notes(p) {
+                if text.trim().is_empty() {
+                    continue;
+                }
+                let n = match m.notes.remove(&id).or_else(|| gardees.remove(&id)) {
+                    Some((t, n)) if t == text => n,
+                    _ => {
+                        let size = board::note_font_size(text.chars().count());
+                        let galley = ctx.fonts(|f| f.layout_job(note_job(text, size, width, NOTE_INK)));
+                        galley.rows.len().clamp(1, NOTE_MAX_LINES)
+                    }
+                };
+                gardees.insert(id, (text.to_string(), n));
+                lines.insert(id, n);
+            }
+        }
+        m.notes = gardees;
         self.vignettes.lines = lines;
     }
 

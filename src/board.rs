@@ -495,6 +495,91 @@ fn poser(gabarits: &[Gabarit], unite: &Gabarit, prints: &[bool], forces: &[Optio
     }
     Pose { placed, occ, cursor }
 }
+/// La dernière disposition faite par `layout_cache`, et tout ce dont elle dépend. `layout_with` ne lit du projet que la taille du
+/// cadre et, de chaque plan, son numéro, sa scène, sa durée, ses marques d'image (numéro et image) et ses clés de caméra (image et
+/// caméra : `vignettecam::empreinte`) ; le reste vient de ses arguments. La même clé donne donc la même disposition : la planche
+/// ne la refait plus à chaque image d'écran (1 à 2 ms à 300 et 600 plans dont la caméra bouge, passe « optim-rendu »).
+/// Les nombres à virgule se comparent bit à bit.
+#[derive(Default)]
+pub struct CacheDisposition {
+    cle: Option<Cle>,
+    layout: BoardLayout,
+    /// Dispositions calculées depuis le début (essais).
+    pub calculs: u64,
+}
+
+struct Cle {
+    frame: [usize; 2],
+    plans: Vec<ClePlan>,
+    s: [u64; 3],
+    lines: HashMap<u64, usize>,
+    last_joins: bool,
+    pale_rows: Option<usize>,
+    hold: Option<(u64, [u32; 4], Option<(usize, u32)>)>,
+}
+
+struct ClePlan {
+    id: u64,
+    scene: u64,
+    n: usize,
+    marks: Vec<(u64, usize)>,
+    camera: Vec<(usize, [u32; 7])>,
+}
+
+fn bits_cam(k: &crate::camera::CameraKey) -> (usize, [u32; 7]) {
+    let c = &k.cam;
+    (k.frame, [c.x, c.y, c.zoom, c.angle, c.dolly, c.tilt, c.pan].map(f32::to_bits))
+}
+
+fn bits_reglages(s: &BoardSettings) -> [u64; 3] {
+    [s.card_w.to_bits() as u64, s.columns as u64, s.rows as u64]
+}
+
+fn bits_hold(opt: &Options) -> Option<(u64, [u32; 4], Option<(usize, u32)>)> {
+    opt.hold.map(|h| (h.plan, [h.rect.min.x, h.rect.min.y, h.rect.max.x, h.rect.max.y].map(f32::to_bits), h.pose.map(|(r, x)| (r, x.to_bits()))))
+}
+
+impl Cle {
+    fn de(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> Cle {
+        let plans = doc
+            .panels
+            .iter()
+            .map(|p| ClePlan { id: p.id, scene: p.scene, n: p.frame_count(), marks: p.marks.iter().map(|m| (m.id, m.frame)).collect(), camera: p.camera.iter().map(bits_cam).collect() })
+            .collect();
+        Cle { frame: doc.frame, plans, s: bits_reglages(s), lines: lines.clone(), last_joins, pale_rows: opt.pale_rows, hold: bits_hold(opt) }
+    }
+
+    /// La disposition de ces arguments serait-elle celle de cette clé ? (Un passage sur les plans, sans rien allouer.)
+    fn tient(&self, doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> bool {
+        self.frame == doc.frame
+            && self.s == bits_reglages(s)
+            && self.last_joins == last_joins
+            && self.pale_rows == opt.pale_rows
+            && self.hold == bits_hold(opt)
+            && self.plans.len() == doc.panels.len()
+            && self.plans.iter().zip(&doc.panels).all(|(k, p)| {
+                k.id == p.id
+                    && k.scene == p.scene
+                    && k.n == p.frame_count()
+                    && k.marks.len() == p.marks.len()
+                    && k.marks.iter().zip(&p.marks).all(|(a, m)| *a == (m.id, m.frame))
+                    && k.camera.len() == p.camera.len()
+                    && k.camera.iter().zip(&p.camera).all(|(a, c)| *a == bits_cam(c))
+            })
+            && self.lines == *lines
+    }
+}
+
+/// `layout_with`, gardée dans `cache` tant que rien de ce dont elle dépend ne change (`CacheDisposition`).
+pub fn layout_cache(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options, cache: &mut CacheDisposition) -> BoardLayout {
+    if !cache.cle.as_ref().is_some_and(|k| k.tient(doc, s, lines, last_joins, opt)) {
+        cache.layout = layout_with(doc, s, lines, last_joins, opt);
+        cache.cle = Some(Cle::de(doc, s, lines, last_joins, opt));
+        cache.calculs += 1;
+    }
+    cache.layout.clone()
+}
+
 /// Comme `layout`. `lines` : le nombre de lignes de note affichées (1 à 3) de chaque vignette, par son
 /// identifiant (absente : une ligne). `last_joins` : la première case pâle, si on la remplit, fait une
 /// image de plus du dernier plan (barre grise devant elle) et non un plan neuf (barre noire).

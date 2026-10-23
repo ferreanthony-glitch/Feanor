@@ -1384,6 +1384,51 @@ fn perf_montage_numbering() {
     crate::perf::set_ancien(false);
 }
 
+/// Des notes sous toutes les cases, et (`cams`) un mouvement de caméra sur chaque plan.
+fn avec_notes_et_cameras(doc: &mut Document, cams: bool) {
+    for i in 0..doc.panels.len() {
+        doc.panels[i].notes = format!("Plan {i} : le personnage entre par la gauche, regarde la fenêtre, puis sort lentement du cadre.");
+        if cams {
+            let c0 = doc.panel_camera(i, 0);
+            let mut c1 = c0;
+            c1.x += 300.0;
+            c1.zoom *= 1.3;
+            let n = doc.panels[i].frame_count();
+            doc.panels[i].camera = vec![crate::camera::CameraKey::new(0, c0), crate::camera::CameraKey::new(n.saturating_sub(1), c1)];
+        }
+    }
+}
+
+/// La planche (vue Vignettes) de 100 à 600 plans, avec ou sans mouvements de caméra : `board_layout()` seule, puis l'image
+/// d'écran, avant (`perf::ancien` : refaite à chaque appel, notes remises en page à chaque image) et après.
+#[test]
+#[ignore]
+fn perf_board_layout() {
+    for (plans, cams) in [(100, false), (300, false), (300, true), (600, true)] {
+        let mut doc = projet_long(plans, 3, 24, 2);
+        avec_notes_et_cameras(&mut doc, cams);
+        let mut b = banc(doc, true);
+        b.app.board_view = crate::app::BoardView::Panels;
+        b.app.board_zoom = 0.0;
+        b.chauffer(5);
+        jusqu_au_repos(&mut b, 3000);
+        let zone = b.app.canvas_rect.shrink(100.0);
+        for passe in 0..2 {
+            for (titre, ancien) in [("avant", true), ("après", false)] {
+                crate::perf::set_ancien(ancien);
+                let t = Instant::now();
+                let mut cards = 0;
+                for _ in 0..50 {
+                    cards = std::hint::black_box(b.app.board_layout()).cards.len();
+                }
+                println!("PERF board_layout(), {plans} plans, caméras {cams}, {titre} ({}) : {:.3} ms par appel ({cards} cases)", passe + 1, t.elapsed().as_secs_f64() * 1e3 / 50.0);
+                scenario(&format!("planche {plans} plans, caméras {cams}, souris, {titre} ({})", passe + 1), &mut b, 60, 1.0 / 60.0, |_, k| bouge(k, zone));
+            }
+        }
+        crate::perf::set_ancien(false);
+    }
+}
+
 /// Octets des textures d'egui (vignettes comprises).
 fn textures_egui(ctx: &egui::Context) -> (usize, f64) {
     let tm = ctx.tex_manager();
