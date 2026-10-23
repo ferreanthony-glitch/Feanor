@@ -1306,6 +1306,37 @@ fn hasard_joining_from_the_menu_of_a_frame_in_a_moving_tile_does_not_crash() {
     }
 }
 
+/// « Réunir avec le plan précédent » depuis le clic droit sur le dessin de la case courante, quand c'est le dernier plan : la
+/// suite de cette case (sa bande de note) ne vise pas le rang disparu (« index out of bounds » dans `card_notes`, graine 514).
+#[test]
+fn hasard_joining_the_last_plan_from_its_drawing_menu_does_not_crash() {
+    let mut doc = Document::with_frame(160, 90, 24);
+    doc.add_scene_after(0);
+    doc.add_scene_after(1);
+    let mut b = crate::vignettes_tests::ouvert(doc, 4);
+    b.app.select_board(2, 0);
+    b.chauffer(3);
+    let p = crate::vignettes_tests::vignette(&b, 2).center();
+    b.image(vec![Event::PointerMoved(p)], DT);
+    b.image(vec![appui(p, PointerButton::Secondary, true, Modifiers::NONE)], DT);
+    b.image(vec![appui(p, PointerButton::Secondary, false, Modifiers::NONE)], DT);
+    b.garder_formes = true;
+    b.image(Vec::new(), DT);
+    b.image(Vec::new(), DT);
+    let mut vus = Vec::new();
+    for s in &b.formes {
+        textes(&s.shape, &mut vus);
+    }
+    b.garder_formes = false;
+    let q = vus.iter().find(|(t, _)| t == "Réunir avec le plan précédent").map(|(_, q)| *q).expect("l'entrée du menu est là");
+    b.image(vec![Event::PointerMoved(q)], DT);
+    b.image(vec![appui(q, PointerButton::Primary, true, Modifiers::NONE)], DT);
+    b.image(vec![appui(q, PointerButton::Primary, false, Modifiers::NONE)], DT);
+    b.chauffer(4);
+    assert_eq!(b.app.doc.panels.len(), 2, "les deux derniers plans sont réunis");
+    assert!(b.app.cur_panel < b.app.doc.panels.len());
+}
+
 /// Couper un plan à une barre, après avoir choisi un calque : le calque choisi ne désigne pas un calque disparu.
 #[test]
 fn hasard_a_cut_bar_after_choosing_a_layer_leaves_no_chosen_layer_that_does_not_exist() {

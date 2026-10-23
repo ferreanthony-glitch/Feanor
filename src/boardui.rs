@@ -1558,6 +1558,12 @@ impl App {
                     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area).id_salt("planche_vive"));
                     child.set_clip_rect(thumb.intersect(view));
                     self.card_canvas(&mut child, thumb);
+                    // Le menu du clic droit de ce dessin a pu changer le film (« Réunir avec le plan précédent » sur le dernier plan) :
+                    // la case ne vaut plus, sa bande de note visait un rang disparu (passe de débogage au hasard, graine 514).
+                    if self.doc.panels.get(i).is_none_or(|p| p.id != place.plan) {
+                        ui.ctx().request_repaint();
+                        return;
+                    }
                     // (Sa vignette se tient à jour en arrière-plan : quand une autre image prend la main, elle montre déjà le dernier trait.)
                     if let Some(c) = &case {
                         paint_ring(painter, thumb, c);
