@@ -1523,3 +1523,25 @@ fiabilité (plus une version de plan, une variante rangée et un dessin hors de 
 (`prepare_save_avant`, gardée pour les essais) et par la nouvelle : même dossier, fichier pour fichier, au premier
 enregistrement et au suivant. `the_snapshot_is_taken_at_the_call_not_when_the_writer_runs` : tout ce qui change entre le
 cliché et le fil d'écriture (notes, commentaire, dessin) n'est pas écrit.
+**Fichiers identiques laissés tels quels** (item 9 de l'audit). `write_sidecar` lisait déjà l'ancien fichier (pour ne
+jamais effacer un fichier illisible) mais réécrivait et synchronisait toujours ; le manifeste aussi. Maintenant un fichier
+annexe ou un manifeste qui a déjà exactement ces octets n'est ni réécrit ni synchronisé, et c'est un succès pour tous les
+chemins qui comptent sur le résultat (`?` de `run_with`, `run_partage`, `SavePlan::write`). Pour Dropbox ou Drive : un
+enregistrement où rien n'a changé n'envoie plus rien. Ctrl+S écrit toujours la date de modification du projet (à la
+seconde) dans le manifeste : il change donc, sauf deux fois dans la même seconde ; une copie de secours sans changement ne
+touche plus rien. La coopération ne dépend pas des réécritures : un poste ne surveille que le fichier de structure, que
+`run_partage` n'écrivait déjà que s'il changeait (comme ses annexes et ses fichiers de plans) ; `Orphan::project_is_newer`
+compare la date du manifeste à celle de la copie, et un Ctrl+S réécrit le manifeste (sa date change).
+
+| Écriture « rien de modifié », cliché compris (même banc, en alternance) | Tout réécrit (avant) | Fichiers identiques laissés |
+|---|---|---|
+| 100 plans | 10,4 ms | 7,3 ms |
+| 600 plans (manifeste de 2 Mo) | 33,4 ms | 28,8 ms |
+
+Le reste de ces temps est la part du cliché passée sur ce fil (3 et 17 ms) et les deux lectures de `dessins/` (ce qui
+manque, ce qui ne sert plus). Essais (`enregistrement_identique_tests.rs`) : un enregistrement sans changement ne change la
+date d'aucun fichier, un commentaire de plus ne change que `commentaires.json` (« tout réécrire » en touchait plus de cinq,
+manifeste compris) ; une copie de secours sans changement ne touche rien ; Ctrl+S sans changement ne réécrit au plus que le
+manifeste ; une annexe identique est un succès et une annexe illisible remplacée est toujours mise de côté
+(`.illisible`). Deux essais de `enregistrement_tests.rs` qui bloquaient l'écriture du manifeste changent maintenant aussi le
+manifeste (sans cela, il n'est plus écrit et l'obstacle n'est pas atteint).

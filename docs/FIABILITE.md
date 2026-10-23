@@ -340,3 +340,6 @@ avant toute écriture, donc une erreur y laisse le dossier tel qu'il était et s
 (`modified` remis à vrai, `written` vidé, la suite annulée, la fenêtre « Enregistrement impossible »). Les dessins, sons,
 modèles et annexes illisibles à garder se lisent sur le fil d'écriture comme avant sur celui de l'interface. Un dessin déjà
 écrit dont le fichier a disparu à côté de SHOT est réécrit par un second passage immédiat, avant la suite qui attendait.
+Un fichier annexe ou un manifeste qui a déjà les octets à écrire n'est plus réécrit (`write_sidecar`, `SaveJob::run_with`) :
+c'est un succès, rien ne change pour l'atomicité (le fichier en place est celui qu'on aurait écrit) ni pour la règle des
+fichiers illisibles (un fichier illisible n'a jamais les octets d'un fichier neuf : il est mis de côté comme avant).

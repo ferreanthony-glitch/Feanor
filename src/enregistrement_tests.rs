@@ -191,6 +191,8 @@ fn a_failed_save_keeps_the_project_modified_and_cancels_what_followed() {
     // dessins passent, puis l'échec.
     std::fs::create_dir_all(dir.join("Essai.pelure.tmp")).expect("obstacle");
     modifier(&mut b, 33);
+    // (Le manifeste change aussi : un manifeste identique n'est plus réécrit, l'obstacle ne serait pas atteint.)
+    b.app.doc.panels[0].notes = "Plan retouché.".into();
     assert!(b.app.save());
     b.app.request(Pending::Quit);
     assert!(b.app.after_save.is_some());
@@ -284,6 +286,8 @@ fn a_project_save_cut_before_the_manifest_leaves_the_previous_project_readable()
     let cel = doc.cels.get_mut(&id).unwrap();
     cel.raster.tile_mut(0)[0] = Color32::from_rgba_premultiplied(5, 5, 5, 255);
     cel.version += 1;
+    // (Le manifeste change aussi : un manifeste identique n'est plus réécrit, l'obstacle ne serait pas atteint.)
+    doc.panels[0].notes = "Plan retouché.".into();
     std::fs::create_dir_all(dir.join("Essai.pelure.tmp")).unwrap();
     assert!(project::save(&doc, &manifeste, &mut written).is_err());
     assert!(written.is_empty(), "après un échec, tout sera réécrit");

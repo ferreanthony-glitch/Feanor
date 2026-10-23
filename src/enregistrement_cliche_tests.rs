@@ -19,7 +19,7 @@ use crate::recovery::{Recovery, Snapshot};
 
 /// Le projet complet de la fiabilité, plus ce qu'il n'a pas : une version de plan, une variante rangée, un dessin qui a
 /// quelque chose hors de la feuille.
-fn projet_riche(travail: &Path) -> Document {
+pub(crate) fn projet_riche(travail: &Path) -> Document {
     let mut doc = projet_complet(travail).doc;
     doc.nouvelle_version(1, 1_760_000_000);
     let seq = doc.sequence_of(0);

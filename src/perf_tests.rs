@@ -1351,14 +1351,22 @@ fn perf_prepare_save_big_film() {
             fil = fil.min(t.elapsed().as_secs_f64() * 1e3);
         }
         println!("PERF fil de l'interface, rien de modifié, {plans} plans : avant {avant:.2} ms, après {apres:.2} ms (et {fil:.2} ms de plus sur le fil d'écriture)");
-        let mut best_run = f64::MAX;
-        for _ in 0..5 {
+        // L'écriture : tout réécrire comme avant, ou laisser les fichiers identiques, en alternance.
+        let (mut toujours, mut identiques) = (f64::MAX, f64::MAX);
+        for k in 0..10 {
             let job = crate::project::prepare_save(&doc, &path, &mut written, None).expect("préparation");
+            crate::project::ecrire_toujours(k % 2 == 0);
             let t = Instant::now();
             job.run().expect("écriture");
-            best_run = best_run.min(t.elapsed().as_secs_f64() * 1e3);
+            let ms = t.elapsed().as_secs_f64() * 1e3;
+            crate::project::ecrire_toujours(false);
+            if k % 2 == 0 {
+                toujours = toujours.min(ms);
+            } else {
+                identiques = identiques.min(ms);
+            }
         }
-        println!("PERF écriture « rien de modifié » (autre fil, cliché compris), {plans} plans : {best_run:.1} ms");
+        println!("PERF écriture « rien de modifié » (autre fil, cliché compris), {plans} plans : tout réécrit {toujours:.1} ms, fichiers identiques laissés {identiques:.1} ms");
         let t = Instant::now();
         let loaded = crate::project::load(&path).expect("ouverture");
         println!("PERF ouverture {plans} plans : {:.0} ms ({} dessins, mémo de l'enregistrement compris)", t.elapsed().as_secs_f64() * 1e3, loaded.doc.cels.len());

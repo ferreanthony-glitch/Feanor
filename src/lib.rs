@@ -57,6 +57,8 @@ mod enregistrement;
 mod enregistrement_tests;
 #[cfg(test)]
 mod enregistrement_cliche_tests;
+#[cfg(test)]
+mod enregistrement_identique_tests;
 // Travailler à plusieurs sur un film (`docs/COOPERATION.md`) : l'équipier (`equipe`), les prises (`verrous`, pur), le
 // stockage (`depot`), les commentaires de chacun (`partagecom`), la session (`cooperation`) et son interface
 // (`cooperationui`). Le format est `projet_partage.rs`, sous-module de `project`.

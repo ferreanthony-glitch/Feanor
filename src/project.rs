@@ -936,6 +936,25 @@ pub(crate) struct MemoDessin {
     textures: Vec<(TextureKind, u32)>,
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Essais : les annexes et le manifeste sont réécrits même identiques, comme avant (banc avant / après).
+    static TOUJOURS_ECRIRE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Essais : réécrire les fichiers identiques sur ce fil-ci (`true`), comme avant, ou non.
+#[cfg(test)]
+pub(crate) fn ecrire_toujours(oui: bool) {
+    TOUJOURS_ECRIRE.with(|t| t.set(oui));
+}
+
+fn toujours_ecrire() -> bool {
+    #[cfg(test)]
+    return TOUJOURS_ECRIRE.with(|t| t.get());
+    #[cfg(not(test))]
+    false
+}
+
 /// Le hachage des clés du mémo (des numéros de dessins) : une multiplication, au lieu du SipHash de la bibliothèque
 /// standard (le cliché d'un film de 600 plans consulte le mémo près de dix mille fois, sur le fil de l'interface).
 #[derive(Default)]
@@ -1728,8 +1747,17 @@ fn load_comments(dir: &Path, warnings: &mut Vec<String>) -> Vec<crate::commentai
 /// (avec un avertissement) : « aucun commentaire » ne veut alors pas dire « fichier à effacer ». Il
 /// reste en place s'il n'y a rien à écrire ; sinon il est mis de côté sous le nom `<fichier>.illisible`
 /// avant que le neuf prenne sa place.
+///
+/// Un fichier qui a déjà exactement ces octets n'est pas réécrit (ni synchronisé sur le disque) : c'est un succès. Un
+/// dossier partagé par Dropbox ou Drive renvoyait sinon chaque annexe à chaque enregistrement.
 pub(crate) fn write_sidecar(path: &Path, bytes: Option<&[u8]>, lisible: impl Fn(&str) -> bool) -> Result<(), String> {
-    let existant = match fs::read(path) {
+    let lu = fs::read(path);
+    if let (Some(b), Ok(actuel)) = (bytes, &lu) {
+        if actuel.as_slice() == b && !toujours_ecrire() {
+            return Ok(());
+        }
+    }
+    let existant = match lu {
         Ok(b) => Some(String::from_utf8(b).ok().filter(|t| lisible(t.trim_start_matches('\u{feff}'))).is_some()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(_) => Some(false),
@@ -1845,7 +1873,10 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::planvers::FILE), self.plans_versions.as_deref(), |t| crate::planvers::parse(t).is_ok())?;
         // Les variantes rangées des séquences, de même (`variantes.rs`).
         write_sidecar(&dir.join(crate::variantes::FILE), self.variantes.as_deref(), |t| crate::variantes::parse(t).is_ok())?;
-        write_atomic_synced(&self.manifest_path, &self.manifest)?;
+        // Le manifeste en dernier ; s'il a déjà ces octets-là (une copie de secours où rien n'a changé), il reste tel quel.
+        if toujours_ecrire() || fs::read(&self.manifest_path).ok().as_deref() != Some(self.manifest.as_slice()) {
+            write_atomic_synced(&self.manifest_path, &self.manifest)?;
+        }
         let removed = if self.keep_drawings { 0 } else { remove_unused(dir, &self.used, &self.fonds, &self.hors) }
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
             + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) }
