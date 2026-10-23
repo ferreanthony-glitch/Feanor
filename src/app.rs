@@ -49,6 +49,13 @@ pub(crate) fn key_mode_of(mode: Mode, panel_focus: bool, images_focus: bool, key
     }
 }
 
+/// Les calques du plan courant à un instant (`App::empreinte_calques`) : de quoi savoir si une liste peinte rang par rang vaut
+/// encore (`App::calques_tiennent`).
+pub(crate) struct EmpreinteCalques {
+    plan: u64,
+    ids: Vec<u64>,
+}
+
 /// Storyboard : on monte les plans. Animation : on est entré dans un plan.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Mode {
@@ -884,7 +891,16 @@ impl App {
             // Une erreur de la carte graphique : wgpu en fait par défaut un plantage de tout
             // SHOT ; elle est notée dans un rapport (`plantage.rs`) et l'on continue.
             rs.device.on_uncaptured_error(Box::new(|e| crate::plantage::note_gpu_error(&format!("erreur de la carte graphique : {e}"))));
-            rs.device.set_device_lost_callback(|reason, message| crate::plantage::note_gpu_error(&format!("carte graphique perdue ({reason:?}) : {message}")));
+            // Carte perdue : en plus du rapport, une copie de secours tout de suite (`recoveryui::secours_carte_perdue`).
+            // (« Destroyed » : la carte est rendue par SHOT lui-même, à la fermeture ; rien à sauver.)
+            rs.device.set_device_lost_callback(|reason, message| {
+                let what = format!("carte graphique perdue ({reason:?}) : {message}");
+                if matches!(reason, eframe::egui_wgpu::wgpu::DeviceLostReason::Destroyed) {
+                    crate::plantage::note_gpu_error(&what);
+                } else {
+                    crate::plantage::note_device_lost(&what);
+                }
+            });
         }
         Self::construire(&cc.egui_ctx, cc.wgpu_render_state.as_ref(), true)
     }
@@ -1493,6 +1509,55 @@ impl App {
         }
         let cur = &doc.panels[self.cur_panel].layers;
         self.layer_sel.retain(|id| cur.iter().any(|l| l.id == *id) || doc.panels.iter().any(|p| p.layers.iter().any(|l| l.id == *id)));
+    }
+
+    /// Les calques du plan courant tels qu'ils sont maintenant (`calques_tiennent`).
+    pub(crate) fn empreinte_calques(&self) -> EmpreinteCalques {
+        EmpreinteCalques { plan: self.panel().id, ids: self.layers().iter().map(|l| l.id).collect() }
+    }
+
+    /// Les calques du plan courant sont-ils toujours ceux de `avant` (même plan, même nombre, et le calque de rang `li` le même) ?
+    /// Une liste de calques peinte rang par rang montre le menu du clic droit de chaque rang au milieu des autres : « Supprimer »
+    /// un dossier, « Fusionner »… changent les calques, et les rangs d'après ne désignent plus les mêmes calques (ou plus aucun).
+    /// La liste s'arrête alors ; l'image suivante la refait. (Un identifiant par rang : rien de lourd par image.)
+    pub(crate) fn calques_tiennent(&self, avant: &EmpreinteCalques, li: usize) -> bool {
+        let layers = self.layers();
+        self.panel().id == avant.plan && layers.len() == avant.ids.len() && avant.ids.get(li).is_none_or(|id| layers[li].id == *id)
+    }
+
+    /// Après un changement du film qui ne vient pas d'ici (le montage ou un plan d'un équipier, `cooperationui.rs`) : le plan et le
+    /// calque courants sont retrouvés par leur identifiant, pas par leur rang (le rang du plan qu'on regardait est peut-être devenu
+    /// celui d'un autre plan). `avant` : les identifiants du plan et du calque courants d'avant le changement.
+    pub(crate) fn retrouver_nav(&mut self, avant: (u64, u64)) {
+        if let Some(i) = self.doc.panels.iter().position(|p| p.id == avant.0) {
+            self.cur_panel = i;
+            if let Some(li) = self.doc.panels[i].layers.iter().position(|l| l.id == avant.1) {
+                self.cur_layer = li;
+            }
+        }
+        self.clamp_nav();
+        self.revalider_rangs();
+    }
+
+    /// Ce que l'application garde par rang ou par identifiant, recalé sur le film d'aujourd'hui, en un seul endroit : après chaque
+    /// changement de structure (`commit_structure`), une annulation (`after_history`), un projet ouvert, un changement venu d'un
+    /// équipier. Les menus ouverts sur un plan qui n'est plus là se ferment, les plans choisis disparus sont lâchés, les glissés de
+    /// calques dont le rang n'existe plus s'arrêtent. (Quelques recherches dans les plans et les calques : rien de lourd.)
+    pub(crate) fn revalider_rangs(&mut self) {
+        self.clamp_nav();
+        let n = self.layers().len();
+        for drag in [&mut self.head_drag, &mut self.panel_layer_drag, &mut self.montage_layer_drag] {
+            if drag.is_some_and(|li| li >= n) {
+                *drag = None;
+            }
+        }
+        let doc = &self.doc;
+        self.board_sel.retain(|id| doc.panels.iter().any(|p| p.id == *id));
+        if let Some(crate::boardui::MenuTarget::Card { plan, case, .. }) = self.vignettes.menu {
+            if self.case_du_menu(plan, case).is_none() {
+                self.vignettes.menu = None;
+            }
+        }
     }
 
     // ------------------------------------------------------------------ composition
@@ -2497,6 +2562,9 @@ impl App {
     pub(crate) fn commit_structure(&mut self, snap: Edit) {
         self.history.push(snap);
         self.modified = true;
+        // Ce qui est gardé par rang d'abord, sur le film d'après le changement : `sync_couleurs` lit les calques du plan courant
+        // (supprimer le dernier plan plantait là, Anthony 2026-10-22).
+        self.revalider_rangs();
         // Les calques de couleur suivent le trait tout de suite, dans la même étape d'annulation.
         self.sync_couleurs();
         self.renderer.invalidate_all();
@@ -2987,7 +3055,7 @@ impl App {
         self.rejeu_after_history();
         self.cur_panel = nav.panel;
         self.cur_layer = nav.layer;
-        self.clamp_nav();
+        self.revalider_rangs();
         self.guides.current = self.guides.current.min(self.doc.guides.len().saturating_sub(1));
         self.vsel = None;
         // (Les clés d'effets et de caméra choisies étaient celles d'avant l'annulation.)
@@ -3127,6 +3195,8 @@ impl App {
         // (Les suggestions sonores de l'ancien projet s'arrêtent : rien n'est rendu au nouveau.)
         self.reset_suggestions();
         self.doc = doc;
+        // (Un plan a toujours un calque : `Document::un_calque_par_plan`.)
+        self.doc.un_calque_par_plan();
         // (Une époque que ni cet onglet ni un autre n'a eue : les tâches de fond de l'ancien projet ne lui répondent plus.)
         self.doc_epoch = crate::onglets::nouvelle_epoque();
         // (Ses dessins portent les numéros et les versions de ceux de l'ancien : les dessins
@@ -3176,6 +3246,19 @@ impl App {
         self.import_source = None;
         self.written.clear();
         self.length_origin = None;
+        // Ce qui était choisi ou visé l'était dans l'ancien projet, dont les numéros de plans et de calques reviennent dans le
+        // nouveau (chaque projet compte depuis le début) : rien ne reste choisi, aucun menu ne vise plus rien.
+        self.board_sel.clear();
+        self.board_notes.clear();
+        self.board_text = None;
+        self.layer_sel.clear();
+        self.frame_sel = None;
+        self.key_sel.clear();
+        self.key_anchor = None;
+        self.trim_menu = None;
+        self.vignettes.menu = None;
+        self.vignettes.note = None;
+        self.revalider_rangs();
     }
 
     /// Après un changement de taille de la feuille (Fichier > Réglages du projet) : ce qui
@@ -3451,6 +3534,8 @@ impl App {
     /// Exécute une action désignée par son identifiant stable (voir `keymap::ACTIONS`). Les étapes
     /// d'annulation qu'elle enregistre portent son nom (panneau Historique).
     pub(crate) fn run_action(&mut self, action: &str) {
+        // (Le rapport d'une erreur dit quelle commande venait d'être lancée, `plantage.rs`.)
+        crate::plantage::noter_action(action);
         let name = crate::keymap::ACTIONS.iter().find(|a| a.id == action).map(|a| crate::historyui::step_name(a.label));
         let before = self.history.context.clone();
         if name.is_some() {
@@ -4738,6 +4823,10 @@ impl App {
         }
         // Couleurs et nuanciers : enregistrés quand ils changent (passe couleur).
         self.color_tick(ctx);
+        // (Un seul atome lu par image : la carte graphique perdue fait partir la copie de secours tout de suite.)
+        if crate::plantage::carte_perdue_a_signaler() {
+            self.secours_carte_perdue();
+        }
         self.tick_recovery(ctx);
         self.tick_session();
         {

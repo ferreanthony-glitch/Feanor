@@ -109,6 +109,8 @@ mod parallele_tests;
 mod perf;
 #[cfg(test)]
 mod perf_tests;
+#[cfg(test)]
+mod optim_rendu_tests;
 pub mod logo;
 #[cfg(test)]
 mod logo_tests;
@@ -208,6 +210,8 @@ mod board_tests;
 mod boardmove;
 mod boardui;
 mod debord;
+#[cfg(test)]
+mod debogage_tests;
 // Le décor des Vignettes : un calque par plan, partagé par les cases d'une continuité, fait par trois brosses de la colonne des pastilles ;
 // et les réglages des Vignettes (Préférences > Vignettes).
 mod cases;
@@ -222,6 +226,8 @@ mod decorui;
 mod vignettesreglages;
 #[cfg(test)]
 mod vignettes_tests;
+#[cfg(test)]
+mod indices_tests;
 #[cfg(test)]
 mod vignettes_retouches_tests;
 #[cfg(test)]

@@ -58,10 +58,33 @@ struct Entry {
     /// La géométrie pour laquelle elle a été composée (la tuile d'un mouvement de caméra) : l'image montre ce qu'elle a montré, à la
     /// place qu'elle avait, même si les cadres ont bougé depuis.
     geom: Option<Geom>,
+    /// La dernière passe d'egui (`Context::cumulative_pass_nr`) où elle a été montrée (ou est arrivée) : les plus anciennes partent
+    /// d'abord (`Thumbs::lacher`).
+    used: u64,
     /// L'image envoyée à la carte graphique (essais : la comparer à l'ancien calcul).
     #[cfg(test)]
     image: ColorImage,
 }
+
+impl Entry {
+    /// Ce qu'elle prend sur la carte graphique.
+    fn bytes(&self) -> u64 {
+        let [w, h] = self.texture.size();
+        (w * h * 4) as u64
+    }
+}
+
+/// Les vignettes des plans gardées sur la carte graphique, en octets, au plus (celles de l'écran ne comptent pas : elles restent
+/// toujours). Avant, rien ne partait que les vignettes des plans supprimés : zoomer et défiler une planche de 100 plans les
+/// gardait à chaque largeur, 10 Mo devenaient 277 Mo (passe « optim-rendu »). Une bande de montage de 600 plans en prend 50.
+pub const LIMITE_OCTETS: u64 = 128 << 20;
+
+/// Largeurs gardées d'une même vignette au plus (en plus de celles montrées aux dernières passes) : celle de l'écran et la
+/// précédente, qui reste à l'écran pendant que la nouvelle se fait et sert au retour d'un zoom.
+pub const LARGEURS_GARDEES: usize = 2;
+
+/// Une vignette montrée à l'une de ces dernières passes d'egui est à l'écran : elle ne part jamais.
+const PASSES_A_L_ECRAN: u64 = 2;
 
 /// La vignette d'une case de la planche : sa texture, et la marge (en pixels de la texture) qu'elle porte tout autour du
 /// cadre, où seul le trait qui déborde est peint (le reste est transparent).
@@ -155,6 +178,9 @@ pub struct Thumbs {
     /// Le débord du trait hors de sa case, en part de la largeur d'une case (Préférences > Vignettes) ; rien : `RING_FRACTION`.
     /// Il fait partie de la clé de la vignette (la marge en pixels) : le changer refait les cases, sur les fils de fond.
     pub debord: Option<f32>,
+    /// Essais : une autre limite que `LIMITE_OCTETS`.
+    #[cfg(test)]
+    pub limite: Option<u64>,
 }
 
 /// Largeur des vignettes de la bande de montage.
@@ -222,17 +248,89 @@ impl Thumbs {
         let shared = pool.shared.clone();
         shared.new_frame();
         let start = Instant::now();
+        let pass = ctx.cumulative_pass_nr();
         while let Some(d) = shared.next_done() {
-            self.apply(ctx, d);
+            self.apply(ctx, d, pass);
             if start.elapsed() >= UPLOAD_TIME {
                 break;
             }
         }
         self.pending = shared.has_done();
+        if !crate::perf::ancien() {
+            self.lacher(pass);
+        }
     }
 
-    /// Une image finie : la texture de sa vignette (créée si c'est la première).
-    fn apply(&mut self, ctx: &egui::Context, d: Done) {
+    /// Lâche les vignettes de trop, jamais celles de l'écran (montrées à l'une des `PASSES_A_L_ECRAN` dernières passes, ou tout
+    /// juste arrivées) : d'une même vignette, les largeurs au-delà des `LARGEURS_GARDEES` dernières montrées (zoomer la planche
+    /// en refait une à chaque palier de 128 points), puis les plus anciennes jusqu'à `LIMITE_OCTETS`. Une vignette lâchée qu'on
+    /// revoit se refait sur un fil de fond ; en attendant, une autre largeur du même plan, s'il en reste une, est montrée.
+    fn lacher(&mut self, pass: u64) {
+        #[cfg(test)]
+        let limite = self.limite.unwrap_or(LIMITE_OCTETS);
+        #[cfg(not(test))]
+        let limite = LIMITE_OCTETS;
+        let a_l_ecran = |e: &Entry| pass.saturating_sub(e.used) <= PASSES_A_L_ECRAN;
+        let mut total: u64 = 0;
+        let mut largeurs: HashMap<u64, usize> = HashMap::new();
+        for (slot, e) in &self.entries {
+            total += e.bytes();
+            *largeurs.entry(slot.0).or_insert(0) += 1;
+        }
+        // (Le plus souvent, rien à faire : un passage sur les vignettes gardées, sans rien trier.)
+        if total <= limite && largeurs.values().all(|&n| n <= LARGEURS_GARDEES) {
+            return;
+        }
+        // Les plus anciennes d'abord (puis par vignette, pour un ordre qui ne dépend pas de la table).
+        let mut ordre: Vec<(u64, Slot)> = self.entries.iter().map(|(slot, e)| (e.used, *slot)).collect();
+        ordre.sort_unstable();
+        // D'une même vignette : les largeurs de trop, en commençant par les plus anciennes.
+        let mut parties: Vec<Slot> = Vec::new();
+        for &(_, slot) in &ordre {
+            let n = largeurs.get_mut(&slot.0).expect("compté");
+            if *n > LARGEURS_GARDEES && !a_l_ecran(&self.entries[&slot]) {
+                *n -= 1;
+                parties.push(slot);
+            }
+        }
+        for slot in &parties {
+            if let Some(e) = self.entries.remove(slot) {
+                total -= e.bytes();
+            }
+        }
+        // Puis les plus anciennes, jusqu'à la limite.
+        for &(_, slot) in &ordre {
+            if total <= limite {
+                break;
+            }
+            if self.entries.get(&slot).is_some_and(|e| !a_l_ecran(e)) {
+                let e = self.entries.remove(&slot).expect("présente");
+                total -= e.bytes();
+            }
+        }
+    }
+
+    /// Octets des vignettes gardées sur la carte graphique, et leur nombre (essais).
+    #[cfg(test)]
+    pub fn octets(&self) -> (u64, usize) {
+        (self.entries.values().map(Entry::bytes).sum(), self.entries.len())
+    }
+
+    /// Octets des vignettes montrées à l'une des dernières passes avant `pass` (celles qui ne partent jamais, essais).
+    #[cfg(test)]
+    pub fn octets_a_l_ecran(&self, pass: u64) -> u64 {
+        self.entries.values().filter(|e| pass.saturating_sub(e.used) <= PASSES_A_L_ECRAN).map(Entry::bytes).sum()
+    }
+
+    /// Une vignette de la case `id` de la planche est-elle gardée, à une largeur ou une autre (essais) ?
+    #[cfg(test)]
+    pub fn case_gardee(&self, id: u64) -> bool {
+        self.entries.keys().any(|k| k.0 == id | CASE_BIT)
+    }
+
+    /// Une image finie : la texture de sa vignette (créée si c'est la première). `pass` : la passe d'egui où elle arrive (elle
+    /// compte comme montrée : elle va l'être).
+    fn apply(&mut self, ctx: &egui::Context, d: Done, pass: u64) {
         let slot = d.slot;
         match self.entries.get_mut(&slot) {
             Some(e) => {
@@ -251,6 +349,7 @@ impl Thumbs {
                 e.seq = d.seq;
                 e.marge = d.marge;
                 e.geom = d.geom;
+                e.used = e.used.max(pass);
             }
             None => {
                 #[cfg(test)]
@@ -265,6 +364,7 @@ impl Thumbs {
                         seq: d.seq,
                         marge: d.marge,
                         geom: d.geom,
+                        used: pass,
                         #[cfg(test)]
                         image,
                     },
@@ -396,11 +496,11 @@ impl Thumbs {
                 self.pending = true;
             }
         }
-        // En attendant : celle-ci, même ancienne, ou une autre taille du même plan.
-        self.entries
-            .get(&slot)
-            .or_else(|| self.entries.iter().find(|(k, _)| k.0 == id).map(|(_, e)| e))
-            .map(|e| CaseTex { id: e.texture.id(), marge: e.marge, taille: e.texture.size(), geom: e.geom })
+        // En attendant : celle-ci, même ancienne, ou une autre taille du même plan. (Elle est à l'écran : elle ne part pas.)
+        let shown = if self.entries.contains_key(&slot) { Some(slot) } else { self.entries.keys().find(|k| k.0 == id).copied() };
+        let e = self.entries.get_mut(&shown?)?;
+        e.used = ctx.cumulative_pass_nr();
+        Some(CaseTex { id: e.texture.id(), marge: e.marge, taille: e.texture.size(), geom: e.geom })
     }
 
     pub fn prune(&mut self, doc: &Document) {

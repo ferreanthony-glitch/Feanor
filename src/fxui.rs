@@ -701,7 +701,16 @@ impl App {
             self.effets_ui.open.insert(layer_id, flags);
         }
         let mut toggle_open = None;
+        // Le menu du clic droit sur le nom d'un effet se montre au milieu de la pile : « Remplacer les effets » (ou un collage) la
+        // change, et les effets d'après se lisaient à un rang qui n'existait plus (passe de débogage, 2026-10-22). La pile s'arrête
+        // là, et les clics de cette image, qui visaient les rangs d'avant, sont lâchés ; l'image suivante la refait.
+        let kinds: Vec<EffectKind> = self.layers()[li].fx.iter().map(|e| e.kind).collect();
+        let tient = |app: &App| app.cur_layer == li && app.layers().get(li).is_some_and(|l| l.id == layer_id && l.fx.len() == n && l.fx.iter().zip(&kinds).all(|(e, k)| e.kind == *k));
         for i in 0..n {
+            if !tient(self) {
+                ui.ctx().request_repaint();
+                return;
+            }
             let e = self.layers()[li].fx[i].clone();
             let chosen = picked.contains(&i);
             let opened = self.effets_ui.open.get(&layer_id).and_then(|v| v.get(i)).copied().unwrap_or(true);
@@ -902,6 +911,10 @@ impl App {
                 });
                 }
             });
+        }
+        if !tient(self) {
+            ui.ctx().request_repaint();
+            return;
         }
         // Un effet replié ou déplié : l'état n'est que de la séance (`plis_apres`).
         if let Some(i) = toggle_open {

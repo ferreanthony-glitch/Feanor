@@ -472,7 +472,8 @@ impl App {
             if let Some(l) = self.layers_mut().iter_mut().find(|l| l.id == d.layer) {
                 l.pos_keys = poskeys::moved(&d.before, &d.frames, delta, d.max);
             }
-            self.renderer.invalidate_all();
+            // (La position du calque est dans le plan à composer : aucun pixel n'est renvoyé à la carte graphique.)
+            self.renderer.invalidate_params();
             let n = d.frames.len();
             self.status = format!("{n} clé{} de position : {delta:+} image{}.", s(n), if delta.abs() > 1 { "s" } else { "" });
         }

@@ -33,6 +33,10 @@ Mise à jour du 2026-10-20 (branche `exports-fond`, partie de `main` f8b9222) : 
 l'interface** et ne verrouillent plus le projet (film, GIF, images, image courante, PDF, page HTML, son, montage, relecture, fiche
 technique, Storyboard Pro) ; voir la section 17 (conception, mesures avant / après, garde-fous, risques, à regarder à l'écran).
 
+Mise à jour du 2026-10-23 (branche `optim-rendu`, partie d'`integration-debug` 56e9d79) : réglages tirés sans renvoi à la carte
+graphique, numéros des plans en une passe, vignettes de la planche bornées en mémoire, disposition de la planche gardée ; voir
+la section 24.
+
 Ce document dit comment mesurer, ce qui a été mesuré avant et après, ce qui a été changé, ce qui reste
 (classé), et ce qu'il faut regarder à l'écran.
 
@@ -1467,4 +1471,118 @@ vignettes autour sont peintes aussi), de l'ordre de 0,1 ms.
 **Ce qui n'est pas mesuré** : à la tablette (pression, retard ressenti) ; une planche de plusieurs centaines de plans en
 dessinant ; la création d'un plan dans une case vide sur un très gros film (une étape de structure : copie des plans,
 comme « Nouveau plan »).
+
+## 24. Passe « optim-rendu » : réglages tirés, numéros, vignettes de la planche, disposition (2026-10-23, branche `optim-rendu`)
+
+Quatre points de l'audit mesuré du 2026-10-23, approuvés par Anthony. Le comportement ne change pas : seuls le temps et la
+mémoire. **Avant / après dans le même processus** : les bancs `perf_parameter_drag`, `perf_montage_numbering`,
+`perf_board_layout`, `perf_board_thumbnail_memory` (`perf_tests.rs`, `--ignored`) passent par le code d'avant puis par
+celui d'après, l'un après l'autre, deux séries chacun. Le code d'avant reste joignable par les essais seulement
+(`perf::ancien`, propre au fil d'essai, toujours faux dans SHOT). **La machine était très chargée** (d'autres compilations
+en même temps : la carte graphique prenait 15 à 25 ms par image au lieu de 2 à 3) : les totaux ne valent que comparés entre
+eux ; les temps d'interface et des sections sont les plus sûrs.
+
+### 24.1 Tirer un réglage ne renvoie plus rien à la carte graphique
+
+Tirer l'opacité d'un calque (barre de l'en-tête, curseur du menu du montage), glisser une clé de position, une clé
+d'effet, une limite d'exposition, un début, une fin ou un décalage de calque, la fin du plan appelaient
+`Renderer::invalidate_all` à chaque image du geste : toutes les tuiles de tous les dessins du plan repartaient à la carte
+graphique et le hors-feuille se refaisait. Or rien de cela ne change un pixel d'un dessin : ce qui change est dans le plan à
+composer (`Plan` : opacité, mode de fusion, transformation, effets à cette image, dessin montré), que la carte compare à
+l'image gardée (`ItemKey`) et le hors-feuille au sien. Ces gestes appellent maintenant `invalidate_params` (seule l'image
+composée par le processeur, sans carte graphique, se refait). `invalidate_all` reste pour les pixels et la structure ; au
+lâcher, `commit_structure` le fait une fois, comme avant.
+
+| Plan de 15 calques × 40 tuiles, opacité tirée à chaque image | Avant | Après |
+|---|---|---|
+| Interface (`App::frame`), moyenne | 8,2 / 6,9 ms | 2,5 / 2,3 ms |
+| Section « Dessin » | 5,1 / 4,3 ms | 0,16 / 0,14 ms |
+| Tuiles envoyées à la carte en 90 images | 64 800 | **0** |
+
+Essais (`optim_rendu_tests.rs`) : la barre d'opacité tirée à la souris, les clés de position, une limite d'exposition et
+la fin du plan tirées : aucune tuile envoyée pendant le geste (compteur `GpuStats::copies`), l'image se recompose bien.
+
+### 24.2 Numéros des plans et des séquences : une passe par image
+
+Le titre de chaque bloc visible du montage, l'étiquette de chaque séquence et le numéro de chaque case de la planche
+refaisaient l'ordre du film (`scene_order`, `sequence_ids` : tout le film) à chaque appel. `numerotation::Numeros` les
+trouve une fois par image d'écran (mêmes textes, numérotation verrouillée, noms, versions comprises ; un plan qui n'est pas
+dans le film passe par les fonctions du `Document`). La règle du montage et la barre des séquences ne peignent plus que leur
+partie visible (`storyboard::visible_seconds`, plus un repère à gauche dont le texte peut entrer).
+
+| Montage de 600 plans × 3 calques, souris | Avant | Après |
+|---|---|---|
+| Zoom 0,6 (≈ 160 blocs visibles) : section « Montage » | 13,8 / 15,0 ms | **1,7 / 1,8 ms** |
+| Zoom 0,6 : interface | 16,1 / 18,1 ms | 3,6 / 3,5 ms |
+| Zoom 3 : section « Montage » | 7,5 / 8,9 ms | 2,0 / 1,2 ms |
+| Les numéros seuls (160 titres, 60 séquences) | 11,8 ms | 0,36 ms |
+
+Essais : mêmes textes que le `Document` sur un film de 600 plans, suivie et verrouillée (12A, plans déplacés, numéro
+illisible, noms, versions) ; le montage montre les mêmes textes visibles, à la même place, que le code d'avant, à quatre
+zooms ; toutes les secondes visibles de la règle sont peintes ; les numéros d'une image d'un film de 2 000 plans en moins de
+4 ms (≈ 0,5 ms mesuré).
+
+### 24.3 Vignettes de la planche bornées
+
+Les vignettes des plans (`thumbs.rs`) étaient gardées pour chaque largeur demandée (paliers de 128 points) et ne partaient
+qu'avec leur plan : zoomer et défiler une planche les accumulait sur la carte graphique. Maintenant, au début de chaque image
+(`Thumbs::lacher`) : d'une même vignette, au plus deux largeurs (celle de l'écran et la précédente, qui reste montrée
+pendant que la nouvelle se fait et sert au retour d'un zoom), puis les plus anciennes jusqu'à **128 Mo** (`LIMITE_OCTETS` ;
+une bande de montage de 600 plans en prend 50). **Une vignette montrée à l'une des deux dernières passes d'egui ne part
+jamais** : rien ne disparaît sous les yeux. Une vignette lâchée qu'on revoit se refait sur un fil de fond.
+
+| Planche de 100 plans, zoomée de 0,5 à 4 et défilée en entier | Avant | Après |
+|---|---|---|
+| Vignettes des plans gardées, au plus | 276,7 Mo (369 textures) | **133,7 Mo** (la limite) |
+
+Essai : zoomer et défiler 100 plans avec une limite de 12 Mo : jamais plus que la limite plus ce qui est à l'écran, et une
+case qui reste à l'écran garde toujours sa vignette.
+
+### 24.4 Disposition de la planche gardée
+
+`board_layout()` refaisait toute la disposition à chaque appel (deux fois par image, plus à chaque appui) : jusqu'à cinq
+passes de `gabarit_de` (découpe de polygones) et une empreinte de caméra par plan. Elle est gardée
+(`board::CacheDisposition`, dans `Vignettes::disposition`) avec tout ce dont elle dépend, et ne se refait que si cela
+change : la taille du cadre ; de chaque plan, dans l'ordre, son numéro, sa scène, sa durée, ses marques (numéro, image) et
+ses clés de caméra (image, caméra) ; les réglages, les lignes des notes, la case pâle jointe, les rangées pâles et la place
+retenue d'un geste de caméra (nombres à virgule comparés bit à bit). La vérification est un passage sur les plans, sans rien
+allouer. `measure_notes` ne remet plus en page une note déjà mesurée à cette largeur et à cette échelle, et n'alloue rien
+quand aucune n'a changé.
+
+| Planche | `board_layout()` avant | après | Section « Vignettes » avant | après |
+|---|---|---|---|---|
+| 300 plans | 0,16–0,63 ms | 0,014 ms | 2,5–2,7 ms | 1,2–1,4 ms |
+| 300 plans, caméras qui bougent | 2,5–2,9 ms | 0,10–0,14 ms | 4,7–5,7 ms | 1,4–1,7 ms |
+| 600 plans, caméras qui bougent | 5,6–8,7 ms | 0,22–0,25 ms | 9,0–12,1 ms | 2,1–2,9 ms |
+
+Ce qui reste dans `board_layout()` gardée : la copie de la disposition (`clone`, 0,2 ms à 600 plans à mouvement : les
+enveloppes des empreintes) ; à voir si besoin (rendre un `Rc`).
+
+Essais : sur 40 planches au hasard (durées, marques, caméras, réglages, notes, geste retenu), 25 changements au hasard chacune
+(dont des changements qui ne touchent pas la planche : un nom, un texte de note) : la disposition gardée est toujours celle
+qu'on referait, et elle n'est pas refaite sans changement ; dans la vue, au repos, rien ne se refait, les lignes des notes et
+la planche sont celles du code d'avant ; après réunir, supprimer, déplacer et annuler, toutes les cases tiennent
+(`case_tient`), tous les numéros sont peints et la vue revient au repos.
+
+### 24.5 Relecture d'`integration-debug` (même branche)
+
+- **Plantage** : sur la planche, le DERNIER plan courant (case simple), clic droit sur son image (le menu s'ouvre dans le
+  dessin vivant de la case), « Réunir avec le plan précédent » : `index out of bounds` dans `card_notes`. `case_tient` ne
+  protégeait que les cases peintes après celle du menu ; dans la case elle-même, la suite de `board_card` lisait encore son
+  rang. Maintenant `board_card` et `board_tuile` s'arrêtent après le dessin vivant si la case ne tient plus, et `card_notes`
+  rend une note vide pour un rang absent. Essai `joining_the_current_last_plan_from_its_live_card_does_not_crash`
+  (`indices_tests.rs`), qui plantait avant.
+- `the_case_menu_keeps_its_plan_when_an_undo_shifts_the_plans` vérifie sans condition (le menu reste ouvert, l'animation
+  commence sur le plan du clic droit).
+
+### 24.6 Une disposition qui ne finissait pas (SHOT gelé)
+
+En cherchant des planches au hasard : cadre portrait 1080 × 1920, une colonne, pages de 3 rangées, un mouvement de caméra
+dont un cadre est tourné. Son empreinte, même resserrée, est plus large qu'une rangée ; `board::trouve` passait à la
+rangée suivante sans fin (d'avant cette passe). **Corrigé** : une case trop large pour toute rangée se pose au début d'une
+rangée et déborde à droite (papier infini), ses rangées vérifiées comme les autres ; une borne de plus (au-delà des rangées
+occupées et d'une page, le début de la rangée libre) ; cases pâles bornées ; largeur de case qui n'est pas un nombre
+remplacée par celle d'origine. Essais : `random_boards_with_rotated_cameras_always_finish` (60 planches, une sur deux
+étroite, fil à part, limite de 10 s, ordre de lecture et aucun recouvrement vérifiés) et
+`a_rotated_camera_wider_than_a_one_column_row_is_placed` (la planche qui gelait).
 

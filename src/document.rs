@@ -2921,6 +2921,20 @@ impl Document {
         used
     }
 
+    /// Un plan sans calque en reçoit un vide : l'interface a toujours un calque courant (sans calque, la première image
+    /// plantait, passe de débogage 2026-10-22). La lecture d'un projet en donne déjà un à chaque plan ; ceci garde la
+    /// porte d'entrée de l'application (`App::load_doc`) pour un document venu d'ailleurs. Rend le nombre de plans réparés.
+    pub fn un_calque_par_plan(&mut self) -> usize {
+        let mut n = 0;
+        for p in &mut self.panels {
+            if p.layers.is_empty() {
+                p.layers.push(Layer::new("Dessin", LayerKind::Vector));
+                n += 1;
+            }
+        }
+        n
+    }
+
     /// Première image du plan `index` dans le montage.
     pub fn panel_start(&self, index: usize) -> usize {
         self.panels[..index].iter().map(Panel::frame_count).sum()

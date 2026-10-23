@@ -354,9 +354,21 @@ impl Gabarit {
 
 /// La première place libre, dans l'ordre de lecture, à partir de (`r_a`, `x_a`) : la rangée de A et le bord gauche de A. Une
 /// case qui ne tient pas dans le reste de la rangée (ou de la page) passe tout entière plus loin, jamais coupée.
+///
+/// Une case **plus large qu'une rangée** (une empreinte de caméra dont des cadres sont tournés, sur une planche d'une colonne : même
+/// resserrée, son enveloppe dépasse la largeur des cases) ne tiendrait dans aucune rangée : elle se pose au début d'une rangée et
+/// déborde à droite, sur le papier infini, comme une enveloppe qui grandit vers la droite. Avant, `trouve` passait à la rangée
+/// suivante sans fin et la planche gelait SHOT (passe « optim-rendu », 2026-10-23). Ses rangées sont vérifiées comme les autres :
+/// elle ne recouvre rien, l'ordre de lecture est gardé.
+///
+/// Toujours fini : à chaque tour, `x_a` avance d'au moins un demi-point dans la rangée, ou la rangée avance ; une rangée sous toutes
+/// les rangées occupées est libre, et une case paginée y trouve un début de page avant `page_cap` rangées. (Une borne de plus, au
+/// cas où : au-delà de toutes les rangées occupées et d'une page, la case se pose au début de la rangée où l'on est, qui est libre.)
 fn trouve(occ: &[Vec<Occupe>], g: &Gabarit, gap: f32, row_w: f32, page_cap: usize, depart: (usize, f32)) -> (usize, f32) {
     let (mut r_a, mut x_a) = depart;
     let paginee = page_cap != usize::MAX && g.rangees > 1 && g.rangees <= page_cap;
+    let trop_large = g.x_hi - g.x_lo > row_w + 1e-3;
+    let au_dela = occ.len().max(depart.0).saturating_add(g.au_dessus + g.rangees + if paginee { page_cap } else { 0 } + 2);
     loop {
         if paginee && r_a < g.au_dessus {
             (r_a, x_a) = (g.au_dessus, -g.x_lo);
@@ -365,7 +377,12 @@ fn trouve(occ: &[Vec<Occupe>], g: &Gabarit, gap: f32, row_w: f32, page_cap: usiz
         if x_a + g.x_lo < -1e-3 {
             x_a = -g.x_lo;
         }
-        if x_a + g.x_hi > row_w + 1e-3 || (paginee && ((r_a - g.au_dessus) % page_cap) + g.rangees > page_cap) {
+        if r_a > au_dela {
+            return (r_a, -g.x_lo);
+        }
+        let au_debut = x_a <= -g.x_lo + 1e-3;
+        let deborde = x_a + g.x_hi > row_w + 1e-3 && !(trop_large && au_debut);
+        if deborde || (paginee && ((r_a - g.au_dessus) % page_cap) + g.rangees > page_cap) {
             (r_a, x_a) = (r_a + 1, -g.x_lo);
             continue;
         }
@@ -495,13 +512,100 @@ fn poser(gabarits: &[Gabarit], unite: &Gabarit, prints: &[bool], forces: &[Optio
     }
     Pose { placed, occ, cursor }
 }
+/// La dernière disposition faite par `layout_cache`, et tout ce dont elle dépend. `layout_with` ne lit du projet que la taille du
+/// cadre et, de chaque plan, son numéro, sa scène, sa durée, ses marques d'image (numéro et image) et ses clés de caméra (image et
+/// caméra : `vignettecam::empreinte`) ; le reste vient de ses arguments. La même clé donne donc la même disposition : la planche
+/// ne la refait plus à chaque image d'écran (1 à 2 ms à 300 et 600 plans dont la caméra bouge, passe « optim-rendu »).
+/// Les nombres à virgule se comparent bit à bit.
+#[derive(Default)]
+pub struct CacheDisposition {
+    cle: Option<Cle>,
+    layout: BoardLayout,
+    /// Dispositions calculées depuis le début (essais).
+    pub calculs: u64,
+}
+
+struct Cle {
+    frame: [usize; 2],
+    plans: Vec<ClePlan>,
+    s: [u64; 3],
+    lines: HashMap<u64, usize>,
+    last_joins: bool,
+    pale_rows: Option<usize>,
+    hold: Option<(u64, [u32; 4], Option<(usize, u32)>)>,
+}
+
+struct ClePlan {
+    id: u64,
+    scene: u64,
+    n: usize,
+    marks: Vec<(u64, usize)>,
+    camera: Vec<(usize, [u32; 7])>,
+}
+
+fn bits_cam(k: &crate::camera::CameraKey) -> (usize, [u32; 7]) {
+    let c = &k.cam;
+    (k.frame, [c.x, c.y, c.zoom, c.angle, c.dolly, c.tilt, c.pan].map(f32::to_bits))
+}
+
+fn bits_reglages(s: &BoardSettings) -> [u64; 3] {
+    [s.card_w.to_bits() as u64, s.columns as u64, s.rows as u64]
+}
+
+fn bits_hold(opt: &Options) -> Option<(u64, [u32; 4], Option<(usize, u32)>)> {
+    opt.hold.map(|h| (h.plan, [h.rect.min.x, h.rect.min.y, h.rect.max.x, h.rect.max.y].map(f32::to_bits), h.pose.map(|(r, x)| (r, x.to_bits()))))
+}
+
+impl Cle {
+    fn de(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> Cle {
+        let plans = doc
+            .panels
+            .iter()
+            .map(|p| ClePlan { id: p.id, scene: p.scene, n: p.frame_count(), marks: p.marks.iter().map(|m| (m.id, m.frame)).collect(), camera: p.camera.iter().map(bits_cam).collect() })
+            .collect();
+        Cle { frame: doc.frame, plans, s: bits_reglages(s), lines: lines.clone(), last_joins, pale_rows: opt.pale_rows, hold: bits_hold(opt) }
+    }
+
+    /// La disposition de ces arguments serait-elle celle de cette clé ? (Un passage sur les plans, sans rien allouer.)
+    fn tient(&self, doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> bool {
+        self.frame == doc.frame
+            && self.s == bits_reglages(s)
+            && self.last_joins == last_joins
+            && self.pale_rows == opt.pale_rows
+            && self.hold == bits_hold(opt)
+            && self.plans.len() == doc.panels.len()
+            && self.plans.iter().zip(&doc.panels).all(|(k, p)| {
+                k.id == p.id
+                    && k.scene == p.scene
+                    && k.n == p.frame_count()
+                    && k.marks.len() == p.marks.len()
+                    && k.marks.iter().zip(&p.marks).all(|(a, m)| *a == (m.id, m.frame))
+                    && k.camera.len() == p.camera.len()
+                    && k.camera.iter().zip(&p.camera).all(|(a, c)| *a == bits_cam(c))
+            })
+            && self.lines == *lines
+    }
+}
+
+/// `layout_with`, gardée dans `cache` tant que rien de ce dont elle dépend ne change (`CacheDisposition`).
+pub fn layout_cache(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options, cache: &mut CacheDisposition) -> BoardLayout {
+    if !cache.cle.as_ref().is_some_and(|k| k.tient(doc, s, lines, last_joins, opt)) {
+        cache.layout = layout_with(doc, s, lines, last_joins, opt);
+        cache.cle = Some(Cle::de(doc, s, lines, last_joins, opt));
+        cache.calculs += 1;
+    }
+    cache.layout.clone()
+}
+
 /// Comme `layout`. `lines` : le nombre de lignes de note affichées (1 à 3) de chaque vignette, par son
 /// identifiant (absente : une ligne). `last_joins` : la première case pâle, si on la remplit, fait une
 /// image de plus du dernier plan (barre grise devant elle) et non un plan neuf (barre noire).
 /// Ne dépend pas de la taille de la vue : les notes libres restent à leur place quand la fenêtre change.
 pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> BoardLayout {
     let cols = s.columns.clamp(1, MAX_COLUMNS);
-    let card_w = s.card_w.clamp(CARD_MIN, CARD_MAX);
+    // (Une largeur qui n'est pas un nombre, d'un fichier de réglages abîmé, passerait à travers `clamp` et rendrait toute la
+    // disposition fausse : la largeur d'origine.)
+    let card_w = if s.card_w.is_nan() { BoardSettings::default().card_w } else { s.card_w.clamp(CARD_MIN, CARD_MAX) };
     let thumb_h = card_w * doc.frame[1] as f32 / doc.frame[0].max(1) as f32;
     let mut boards: Vec<(usize, u64, usize, usize)> = Vec::new();
     for i in 0..doc.panels.len() {
@@ -602,9 +706,11 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         Some(min_rows) => {
             let total = min_rows.max(bottom + 1).max(cursor.0 + 1);
             let mut cur = cursor;
-            loop {
+            // (Une rangée tient au plus `cols` cases pâles : la borne ne coupe jamais une planche juste ; elle arrête une boucle sur un
+            // nombre qui n'en est pas un, où `x` n'avancerait plus.)
+            for _ in 0..total.saturating_mul(cols + 1).saturating_add(1) {
                 let (r, x) = trouve(&occ, &unite, g_cut, row_w, usize::MAX, cur);
-                if r >= total {
+                if r >= total || !x.is_finite() {
                     break;
                 }
                 occupe(&mut occ, &unite, g_cut, r, x);

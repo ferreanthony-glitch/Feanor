@@ -54,14 +54,16 @@ pub(crate) struct ClipDrag {
     pub snap: Edit,
 }
 
-/// Ce qu'on a cliqué du bouton droit dans la bande de montage.
+/// Ce qu'on a cliqué du bouton droit dans la bande de montage. Le plan, la piste son et le calque visés le sont par leur
+/// identifiant, pas par leur rang : le menu reste ouvert pendant un Ctrl+Z ou l'arrivée du montage d'un équipier, qui donnent
+/// leur rang à d'autres (passe de débogage, 2026-10-22).
 #[derive(Clone, Copy)]
 pub(crate) enum MenuTarget {
-    Panel(usize),
-    Lane { track: usize, clip: Option<u64>, frame: usize },
+    Panel(u64),
+    Lane { track: u64, clip: Option<u64>, frame: usize },
     /// Passe interface : une piste de calque (le calque du plan courant), la piste Caméra, la
     /// barre d'une séquence, la règle.
-    Layer(usize),
+    Layer(u64),
     /// Un losange de clé d'effet de la piste d'un calque (`fxkeys.rs`).
     FxKey,
     /// Un losange vert de clé de position de la piste d'un calque (`poskeysui.rs`).
@@ -588,7 +590,16 @@ impl App {
         let painter = ui.painter_at(rect);
         let mut toggle = None;
         let mut toggle_solo = None;
+        // Le menu du clic droit d'une piste se montre au milieu des noms : « Supprimer la piste », « Dupliquer la piste »…
+        // changent les pistes, et les noms d'après se peignaient à un rang qui n'existait plus (passe de débogage, 2026-10-22).
+        // On s'arrête là ; l'image suivante refait la colonne.
+        let ids: Vec<u64> = self.doc.audio_tracks.iter().map(|t| t.id).collect();
+        let tient = |app: &App| app.doc.audio_tracks.len() == n && app.doc.audio_tracks.iter().zip(&ids).all(|(t, id)| t.id == *id);
         for t in 0..n {
+            if t > 0 && !tient(self) {
+                ui.ctx().request_repaint();
+                return rect;
+            }
             let track = &self.doc.audio_tracks[t];
             let lane = Rect::from_min_size(
                 pos2(rect.left() + 2.0, rect.top() + lanes_top + t as f32 * TRACK_H + 1.0),
@@ -642,6 +653,10 @@ impl App {
                 toggle_solo = Some(t);
             }
             resp.context_menu(|ui| self.track_menu(ui, t));
+        }
+        if !tient(self) {
+            ui.ctx().request_repaint();
+            return rect;
         }
         if let Some(t) = toggle {
             self.record_step();
