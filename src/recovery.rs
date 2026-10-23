@@ -143,6 +143,9 @@ pub struct Recovery {
     pub info: SessionInfo,
     /// Dernière erreur d'écriture (affichée une fois).
     pub error: Option<String>,
+    /// Une copie tout de suite a été demandée (`start_copy`, `demander` : la carte graphique perdue) pendant qu'une autre
+    /// s'écrivait : elle part dès la fin de celle-ci (`tick`), sans attendre le délai des copies.
+    demandee: bool,
 }
 
 impl Recovery {
@@ -164,6 +167,7 @@ impl Recovery {
             last_try: Instant::now(),
             info: SessionInfo::default(),
             error: None,
+            demandee: false,
         })
     }
 
@@ -178,16 +182,28 @@ impl Recovery {
         self.job.is_some()
     }
 
+    /// Une copie tout de suite attend la fin de celle qui s'écrit.
+    pub fn en_attente(&self) -> bool {
+        self.demandee
+    }
+
+    /// Une copie tout de suite (sans attendre le délai) : maintenant si rien ne s'écrit et que le document a changé depuis
+    /// la dernière copie, sinon dès la fin de celle qui s'écrit (`tick`).
+    pub fn demander(&mut self) {
+        self.demandee = true;
+    }
+
     /// À chaque image : termine la copie en cours, ou en lance une si `interval` est passé et
-    /// que le document a changé. `hold` : ne pas lancer maintenant (trait en cours…).
-    /// Renvoie vrai quand une copie vient de se terminer.
+    /// que le document a changé, ou si une copie tout de suite attendait (`demander`). `hold` : ne pas
+    /// lancer maintenant (trait en cours…). Renvoie vrai quand une copie vient de se terminer.
     pub fn tick(&mut self, snap: Snapshot, interval: Option<Duration>, hold: bool) -> bool {
+        let mut fini = false;
         if let Some(job) = &self.job {
             if !job.is_finished() {
                 return false;
             }
             let result = self.job.take().expect("copie en cours").join().unwrap_or(Err("copie interrompue".into()));
-            return match result {
+            fini = match result {
                 Ok(report) => {
                     // Des dessins que la copie disait écrits n'y sont plus : ils seront réécrits à la prochaine copie.
                     if !report.manquants.is_empty() {
@@ -208,20 +224,44 @@ impl Recovery {
                     false
                 }
             };
+            // (Une copie tout de suite attendait celle-ci : elle part maintenant, plus bas.)
+            if !self.demandee {
+                return fini;
+            }
         }
-        let Some(interval) = interval else { return false };
-        if hold || self.last_try.elapsed() < interval || !snap.modified || self.copied_serial == Some(snap.serial) {
-            return false;
+        if hold {
+            return fini;
+        }
+        if !snap.modified {
+            // Enregistré entre-temps : la copie demandée n'a plus rien à garder.
+            self.demandee = false;
+            return fini;
+        }
+        if self.demandee {
+            // (La copie qui vient de finir a peut-être déjà tout : rien n'a changé depuis son cliché.)
+            if self.copied_serial == Some(snap.serial) {
+                self.demandee = false;
+            } else {
+                self.start_copy(snap);
+            }
+            return fini;
+        }
+        let Some(interval) = interval else { return fini };
+        if self.last_try.elapsed() < interval || self.copied_serial == Some(snap.serial) {
+            return fini;
         }
         self.start_copy(snap);
-        false
+        fini
     }
 
-    /// Lance une copie tout de suite (sans attendre le délai).
+    /// Lance une copie tout de suite (sans attendre le délai). Si une copie s'écrit déjà, celle-ci part dès sa fin
+    /// (`tick`) : une demande pressée (la carte graphique perdue) n'est jamais perdue.
     pub fn start_copy(&mut self, snap: Snapshot) {
         if self.job.is_some() {
+            self.demandee = true;
             return;
         }
+        self.demandee = false;
         self.last_try = Instant::now();
         self.info.title = snap.title;
         self.info.project = snap.project;
