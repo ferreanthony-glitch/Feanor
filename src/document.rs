@@ -2442,10 +2442,13 @@ impl Document {
         // Calque d'arrivée de chaque calque de `b`, par son id (les ajouts décalent les rangs).
         let mut dest: Vec<u64> = Vec::with_capacity(b.layers.len());
         let ids_b: Vec<u64> = b.layers.iter().map(|l| l.id).collect();
+        // (Le calque d'arrivée par son id, pas par son rang : un calque de `b` ajouté plus bas décale les rangs de `a`, et les images
+        // d'un calque bitmap partaient dans le calque vectoriel ajouté sous lui. Passe de débogage au hasard, 2026-10-23.)
+        let cible: Vec<Option<u64>> = target.iter().map(|t| t.map(|k| a.layers[k].id)).collect();
         for (j, mut lb) in b.layers.into_iter().enumerate() {
             lb.frames.truncate(b_len);
             lb.roles.retain(|f, _| *f < b_len);
-            match target[j] {
+            match cible[j].and_then(|id| a.layers.iter().position(|l| l.id == id)) {
                 Some(k) => {
                     a.layers[k].append_at(a_len, lb.frames, &lb.roles);
                     dest.push(a.layers[k].id);

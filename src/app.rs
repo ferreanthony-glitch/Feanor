@@ -1753,6 +1753,7 @@ impl App {
         let avant = self.espace;
         self.cancel_montage_drag();
         self.poser_le_geste_de_camera();
+        self.poser_la_creation();
         self.end_stroke();
         self.playing = false;
         self.aller_a_l_espace(espace);
@@ -3573,6 +3574,7 @@ impl App {
         // tiennent pendant un geste (la touche de la caméra elle-même, la main, les vues temporaires, l'aide-mémoire).
         if !matches!(action, "vignettes.camera" | "vue.pan_libre" | "vue.rotation_temporaire" | "vue.zoom_temporaire_avant" | "vue.zoom_temporaire_arriere" | "aide.aide_memoire") {
             self.poser_le_geste_de_camera();
+            self.poser_la_creation();
             // Un déplacement de sélection lâché dont la feuille flottante attend encore le rendu exact se termine d'abord, comme à
             // un clic ou une touche (`flush_flottante_on_input`) : la commande part d'un dessin juste. Sinon « Supprimer la
             // sélection » lancée sans clic ni touche laissait la feuille en attente, qui reposait plus tard ses éléments d'avant

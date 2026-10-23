@@ -475,6 +475,7 @@ impl App {
         self.finish_text_edit();
         self.finish_field_edit();
         self.poser_le_geste_de_camera();
+        self.poser_la_creation();
         self.end_stroke();
         self.playing = false;
         self.stop_audio();

@@ -921,6 +921,13 @@ impl Essai {
                 if let Some(id) = l.frames.iter().flatten().find(|id| !doc.cels.contains_key(id)) {
                     return Err(echec("dessin absent", format!("plan {i}, calque « {} » : le dessin {id} n'existe pas", l.name)));
                 }
+                // Un calque de dessin ordinaire ne montre que des dessins de sa sorte (vectoriel ou bitmap).
+                if !l.folder && l.couleur.is_none() && l.video.is_none() && l.effet.is_none() {
+                    let vectoriel = l.kind == crate::document::LayerKind::Vector;
+                    if let Some(id) = l.frames.iter().flatten().find(|id| doc.cels.get(id).is_some_and(|c| c.vector.is_some() != vectoriel)) {
+                        return Err(echec("sorte de dessin", format!("plan {i}, calque « {} » ({:?}) : le dessin {id} n'est pas de sa sorte", l.name, l.kind)));
+                    }
+                }
             }
         }
         // La planche : chaque case sur un plan qui existe, dans l'ordre du film et de lecture, sans chevauchement.
@@ -1071,7 +1078,9 @@ fn rejouer_sur(doc: Document, graine: u64, gestes: &[Geste]) -> Result<(), (usiz
     Ok(())
 }
 
-/// Pour un essai de non-régression : la suite rejouée ne doit pas échouer.
+/// Pour un essai de non-régression : la suite rejouée ne doit pas échouer. (C'est elle que cite le rapport d'un échec : la suite
+/// réduite s'y recopie telle quelle.)
+#[allow(dead_code)]
 pub(crate) fn rejouer(graine: u64, gestes: &[Geste]) {
     if let Err((k, x)) = rejouer_depuis(graine, gestes) {
         panic!("échec au geste {k} ({:?}) : {}\n{}", gestes[k], x.espece, x.detail);
@@ -1404,6 +1413,55 @@ fn hasard_joining_the_last_plan_from_its_drawing_menu_does_not_crash() {
     assert!(b.app.cur_panel < b.app.doc.panels.len());
 }
 
+/// Un trait de Décor tenu pendant qu'on passe à l'Animation (le calque Décor vient d'être fait pour lui), puis, plus tard, un trait
+/// dans une case pendant « Supprimer l'image » : chaque geste garde son étape d'annulation. La création attendait un lâcher sur la
+/// planche, et prenait dans son étape tout ce qui s'était fait depuis.
+#[test]
+fn hasard_a_creating_stroke_interrupted_by_a_workspace_switch_or_a_command_keeps_undo_steps_apart() {
+    rejouer(2442, &[Interruption { geste: 5, case: 22, quoi: 23, dx: -0.43, dy: -0.57 }, Interruption { geste: 0, case: 60, quoi: 16, dx: 0.76, dy: 0.53 }]);
+}
+
+/// Réunir deux plans quand le second a un calque de plus, sous les calques qu'il partage avec le premier (un calque vectoriel
+/// « Dessin » sous « Calque 1 » et « Calque 2 », bitmap) : chaque calque reçoit les images du sien. Les rangs des calques d'arrivée
+/// étaient pris avant d'ajouter « Dessin » en bas : les images de « Calque 1 » partaient dans « Dessin » (des dessins bitmap dans un
+/// calque vectoriel, qu'un trait puis une annulation vidaient), celles de « Calque 2 » dans « Calque 1 ».
+#[test]
+fn hasard_joining_a_plan_with_an_extra_bottom_layer_keeps_each_layer_its_own_drawings() {
+    use crate::document::{Cel, Layer, LayerKind};
+    let mut doc = Document::with_frame(160, 90, 24);
+    doc.add_scene_after(0);
+    let calque = |doc: &mut Document, nom: &str, sorte: LayerKind| {
+        let id = doc.add_cel(Cel::new(doc.width, doc.height, sorte));
+        let mut l = Layer::new(nom, sorte);
+        l.frames = vec![Some(id); 4];
+        (l, id)
+    };
+    let (a1, ca1) = calque(&mut doc, "Calque 1", LayerKind::Bitmap);
+    let (a2, ca2) = calque(&mut doc, "Calque 2", LayerKind::Bitmap);
+    let (b0, cb0) = calque(&mut doc, "Dessin", LayerKind::Vector);
+    let (b1, cb1) = calque(&mut doc, "Calque 1", LayerKind::Bitmap);
+    let (b2, cb2) = calque(&mut doc, "Calque 2", LayerKind::Bitmap);
+    doc.panels[0].layers = vec![a1, a2];
+    doc.panels[1].layers = vec![b0, b1, b2];
+    for p in &mut doc.panels {
+        p.length = 4;
+    }
+    assert_eq!(doc.sequence_of(0), doc.sequence_of(1));
+    let i = doc.join_next_plan(0).expect("réunis");
+    let dessins = |nom: &str| -> Vec<CelId> {
+        let mut v: Vec<CelId> = doc.panels[i].layers.iter().find(|l| l.name == nom).expect("le calque").frames.iter().flatten().copied().collect();
+        v.dedup();
+        v
+    };
+    assert_eq!(dessins("Calque 1"), vec![ca1, cb1]);
+    assert_eq!(dessins("Calque 2"), vec![ca2, cb2]);
+    assert_eq!(dessins("Dessin"), vec![cb0]);
+    for l in &doc.panels[i].layers {
+        for id in l.frames.iter().flatten() {
+            assert_eq!(doc.cels[id].vector.is_some(), l.kind == LayerKind::Vector, "« {} » : le dessin {id} est de sa sorte", l.name);
+        }
+    }
+}
 /// Couper un plan à une barre, après avoir choisi un calque : le calque choisi ne désigne pas un calque disparu.
 #[test]
 fn hasard_a_cut_bar_after_choosing_a_layer_leaves_no_chosen_layer_that_does_not_exist() {

@@ -911,6 +911,19 @@ impl App {
         true
     }
 
+    /// Une commande pendant le trait qui vient de faire un plan, une image ou le calque Décor (`Vignettes::created`), ou un
+    /// changement d'espace de travail ou d'onglet : le trait se termine et la création prend son étape tout de suite. Sinon la
+    /// création attendait le lâcher sur la planche — jamais vu si l'on avait quitté les Vignettes — et prenait dans son étape
+    /// tout ce qui s'était fait depuis (la commande, puis d'autres gestes ailleurs) : annuler défaisait tout d'un coup (passe
+    /// de débogage au hasard, 2026-10-23).
+    pub(crate) fn poser_la_creation(&mut self) {
+        if self.vignettes.created.is_none() {
+            return;
+        }
+        self.end_stroke();
+        self.finish_creation(false);
+    }
+
     /// Au lâcher : la création d'une case vide et le trait ne font qu'une étape d'annulation ; si rien n'a été
     /// tracé (un simple clic), le plan fait est défait sans laisser de trace.
     fn finish_creation(&mut self, any_down: bool) {
