@@ -163,14 +163,14 @@ fn the_case_menu_keeps_its_plan_when_an_undo_shifts_the_plans() {
     touche(&mut b, Key::Z, Modifiers::COMMAND);
     b.chauffer(2);
     assert_eq!(b.app.doc.panels.len(), n - 1, "l'annulation a retiré la copie");
+    // (Les deux constats sont sans condition : un menu fermé par l'annulation, ou une entrée qui ne fait rien, ne passent pas
+    // pour un succès.)
     let encore = textes_a_l_ecran(&mut b).iter().any(|(s, _)| s == "Animer cette image");
-    if encore {
-        clic(&mut b, p);
-        b.chauffer(2);
-    }
-    if b.app.mode == Mode::Animation {
-        assert_eq!(b.app.doc.panels[b.app.cur_panel].id, vise, "« Animer cette image » anime le plan du clic droit, pas son voisin");
-    }
+    assert!(encore, "le menu reste ouvert pendant l'annulation");
+    clic(&mut b, p);
+    b.chauffer(2);
+    assert_eq!(b.app.mode, Mode::Animation, "« Animer cette image » passe à l'animation");
+    assert_eq!(b.app.doc.panels[b.app.cur_panel].id, vise, "« Animer cette image » anime le plan du clic droit, pas son voisin");
 }
 
 /// Réunir le plan courant et le suivant (la barre noire entre leurs cases) quand le calque du bas du suivant ne ressemble à aucun
