@@ -319,17 +319,33 @@ impl Geste {
             _ => true,
         }
     }
+
+    /// Un geste qui ne doit pas changer le projet sans étape d'annulation (annuler, rétablir et leurs touches défont ou
+    /// refont sans en prendre ; un enregistrement date le projet ; un onglet en montre un autre).
+    fn change_avec_une_etape(&self) -> bool {
+        match self {
+            Touche(n) => !matches!(TOUCHES[*n as usize % TOUCHES.len()].0, Key::Z | Key::Y),
+            Espace(_) | Lecture(_) => true,
+            _ => self.verifie_l_annulation(),
+        }
+    }
 }
 
 // ------------------------------------------------------------------ un essai
 
 /// Les documents de départ : petits, faits dans le code.
 pub(crate) fn depart(graine: u64) -> Document {
-    match graine % 3 {
+    match graine % 4 {
         0 => crate::vignettes_tests::quatre_plans(),
         1 => crate::vignettes_camera_tests::plan_court(),
-        _ => {
+        2 => {
             let mut d = crate::perf_tests::projet_long(5, 2, 6, 1);
+            d.into_plans();
+            d
+        }
+        // (Deux séquences, trois calques : la planche ne tient plus à l'écran.)
+        _ => {
+            let mut d = crate::perf_tests::projet_long(14, 3, 8, 1);
             d.into_plans();
             d
         }
@@ -940,7 +956,7 @@ impl Essai {
     /// Un geste, ses vérifications et celles de son annulation.
     pub(crate) fn pas(&mut self, g: Geste) -> Result<(), Echec> {
         let onglet = self.b.app.actif;
-        let (h0, s0) = (self.b.app.history.undo_len(), photo(&self.b.app.doc));
+        let (h0, s0, serie0) = (self.b.app.history.undo_len(), photo(&self.b.app.doc), self.b.app.history.serial());
         // (Une zone bitmap soulevée, déplacée par un geste d'avant, n'a son étape qu'en se reposant : l'annuler revient avant
         // le soulèvement, plus loin que l'état d'avant ce geste-ci. De même pour une sélection sur plusieurs calques.)
         let s0_net = self.b.app.bsel.as_ref().is_none_or(|s| s.lifted.is_none()) && self.b.app.multi.sel.is_none();
@@ -961,6 +977,16 @@ impl Essai {
         if self.b.app.actif == onglet && self.b.app.history.undo_len() > h0 {
             let nom = self.b.app.history.names().0.last().map(|s| s.to_string()).unwrap_or_default();
             *self.etapes.entry(nom).or_default() += 1;
+        }
+        // Le projet ne change pas sans que l'historique bouge : ce qu'on ne peut pas annuler serait perdu pour l'annulation.
+        // (Sauf une zone bitmap encore soulevée, qui prend son étape en se reposant.)
+        let s1_net = self.b.app.bsel.as_ref().is_none_or(|s| s.lifted.is_none()) && self.b.app.multi.sel.is_none();
+        if s0_net && s1_net && g.change_avec_une_etape() && self.b.app.actif == onglet && self.b.app.history.serial() == serie0 {
+            // (Replier ou déplier une piste est de l'affichage, sans étape : `pistes.rs`.)
+            let sans_replis = |s: &str| s.replace("collapsed: true", "collapsed: false");
+            if let Err(e) = meme_projet(&sans_replis(&s0), &sans_replis(&photo(&self.b.app.doc))) {
+                return Err(echec("changement sans étape", format!("le projet a changé sans étape d'annulation.\n{e}")));
+            }
         }
         if s0_net && g.verifie_l_annulation() && self.b.app.actif == onglet && self.b.app.history.undo_len() == h0 + 1 {
             let s1 = photo(&self.b.app.doc);
@@ -1074,9 +1100,9 @@ pub(crate) fn passage(graine: u64, pas: usize) -> Result<(), String> {
 }
 
 /// Les graines `graines`, réparties sur `fils` fils (chacun son application).
-fn passages(graines: std::ops::Range<u64>, pas: usize, fils: usize) {
+fn passages(graines: Vec<u64>, pas: usize, fils: usize) {
     let t = Instant::now();
-    let toutes: Vec<u64> = graines.clone().collect();
+    let toutes = graines;
     let echecs = std::sync::Mutex::new(Vec::new());
     std::thread::scope(|s| {
         for f in 0..fils.max(1) {
@@ -1102,7 +1128,7 @@ fn passages(graines: std::ops::Range<u64>, pas: usize, fils: usize) {
 /// Le passage court, dans la suite.
 #[test]
 fn hasard_random_gestures_keep_the_application_consistent() {
-    passages(0..GRAINES, PAS, 1);
+    passages((0..GRAINES).collect(), PAS, 1);
 }
 
 /// Le passage long, à la demande (`-- --ignored hasard`). `SHOT_HASARD_GRAINES=a..b` choisit les graines,
@@ -1110,10 +1136,14 @@ fn hasard_random_gestures_keep_the_application_consistent() {
 #[test]
 #[ignore]
 fn hasard_long_run_of_random_gestures() {
-    let graines = std::env::var("SHOT_HASARD_GRAINES")
+    // (`a..b`, ou une liste `a,b,c` : une même graine plusieurs fois rejoue la même suite sur plusieurs fils à la fois.)
+    let graines: Vec<u64> = std::env::var("SHOT_HASARD_GRAINES")
         .ok()
-        .and_then(|v| v.split_once("..").and_then(|(a, b)| Some(a.trim().parse().ok()?..b.trim().parse().ok()?)))
-        .unwrap_or(1000..1000 + GRAINES_LONGUES);
+        .and_then(|v| match v.split_once("..") {
+            Some((a, b)) => Some((a.trim().parse().ok()?..b.trim().parse().ok()?).collect()),
+            None => v.split(',').map(|g| g.trim().parse().ok()).collect(),
+        })
+        .unwrap_or_else(|| (1000..1000 + GRAINES_LONGUES).collect());
     let pas = std::env::var("SHOT_HASARD_PAS").ok().and_then(|v| v.parse().ok()).unwrap_or(PAS_LONGS);
     let fils = std::env::var("SHOT_HASARD_FILS").ok().and_then(|v| v.parse().ok()).unwrap_or(4);
     passages(graines, pas, fils);
@@ -1229,6 +1259,51 @@ fn hasard_deleting_a_moved_vector_selection_before_its_exact_render_keeps_the_dr
     e.b.app.multi_flush();
     e.b.chauffer(3);
     assert_eq!(traits(&e), apres, "le trait qui reste est celui de droite, tel quel");
+}
+
+/// « Réunir avec le plan précédent » depuis le clic droit sur un cadre d'un plan qui bouge, dans sa tuile (le dessin de la case
+/// courante s'y montre, avec son menu) : la planche de cette image n'est plus peinte, la tuile du plan qui bouge après lui ne
+/// vise pas un rang de plan disparu (elle plantait : « index out of bounds » dans `panel_plan_at`, graine 461).
+#[test]
+fn hasard_joining_from_the_menu_of_a_frame_in_a_moving_tile_does_not_crash() {
+    use crate::vignettes_camera_tests::{cadre_ecran, centre, ctrl_glisser, largeur_cadre_ecran, pas, plan_court, K};
+    for decalage in [vec2(1.2, 0.3), vec2(0.6, 0.0), vec2(-0.8, 0.5)] {
+        let mut b = crate::vignettes_tests::ouvert(plan_court(), 6);
+        let w = largeur_cadre_ecran(&b);
+        // Le dernier plan bouge aussi : sa tuile se peint après celle du plan 2.
+        let derniere = crate::vignettes_tests::vignette(&b, b.app.board_layout().cards.len() - 1);
+        let d = vec2(0.7, 0.2) * w;
+        ctrl_glisser(&mut b, derniere.center(), &pas(derniere.center(), d, 6), derniere.center() + d, true);
+        b.chauffer(3);
+        let case = crate::vignettes_tests::vignette(&b, K);
+        let d = decalage * w;
+        ctrl_glisser(&mut b, case.center(), &pas(case.center(), d, 6), case.center() + d, true);
+        b.chauffer(3);
+        assert_eq!(b.app.doc.panels[1].camera.len(), 2, "le plan 2 a un mouvement");
+        assert_eq!(b.app.doc.panels.last().map(|p| p.camera.len()), Some(2), "le dernier plan a un mouvement");
+        assert_eq!(b.app.cur_panel, 1);
+        let avant = b.app.doc.panels.len();
+        // Le clic droit sur le cadre B, dans la tuile du plan.
+        let p = centre(cadre_ecran(&b, 1));
+        b.image(vec![Event::PointerMoved(p)], DT);
+        b.image(vec![appui(p, PointerButton::Secondary, true, Modifiers::NONE)], DT);
+        b.image(vec![appui(p, PointerButton::Secondary, false, Modifiers::NONE)], DT);
+        b.garder_formes = true;
+        b.image(Vec::new(), DT);
+        b.image(Vec::new(), DT);
+        let mut vus = Vec::new();
+        for s in &b.formes {
+            textes(&s.shape, &mut vus);
+        }
+        b.garder_formes = false;
+        let Some(q) = vus.iter().find(|(t, _)| t == "Réunir avec le plan précédent").map(|(_, q)| *q) else { panic!("l'entrée du menu est là ({decalage:?}) : {:?}", vus.iter().map(|v| &v.0).collect::<Vec<_>>()) };
+        b.image(vec![Event::PointerMoved(q)], DT);
+        b.image(vec![appui(q, PointerButton::Primary, true, Modifiers::NONE)], DT);
+        b.image(vec![appui(q, PointerButton::Primary, false, Modifiers::NONE)], DT);
+        b.chauffer(4);
+        assert_eq!(b.app.doc.panels.len(), avant - 1, "les deux plans sont réunis ({decalage:?})");
+        assert!(b.app.cur_panel < b.app.doc.panels.len());
+    }
 }
 
 /// Couper un plan à une barre, après avoir choisi un calque : le calque choisi ne désigne pas un calque disparu.

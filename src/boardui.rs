@@ -1044,14 +1044,25 @@ impl App {
         // la refait (Anthony, 2026-10-22 : réunir un plan à mouvement de caméra plantait sur un rang de plan disparu).
         // (Le nombre de plans, pas l'historique : un trait fini dans la case courante pousse une étape, et les cases d'après
         // doivent quand même se peindre.)
+        // (De même pendant les tuiles : la case courante d'un plan qui bouge montre son dessin dans sa tuile, avec le menu du clic
+        // droit sur ce dessin. Passe de débogage au hasard, 2026-10-22 : « Réunir avec le plan précédent » depuis un cadre de la
+        // tuile plantait à la tuile suivante, sur un rang de plan disparu. Et le plan de la case doit être celui de ce rang.)
         let plans = self.doc.panels.len();
+        let perimee = |app: &App, k: usize| {
+            let c = &layout.cards[k];
+            app.doc.panels.len() != plans || app.doc.panels.get(c.panel).is_none_or(|p| p.id != c.plan)
+        };
         for k in 0..layout.cards.len() {
+            if perimee(self, k) {
+                ui.ctx().request_repaint();
+                return;
+            }
             self.board_tuile(ui, &painter, view, xf, &layout, k, pan_mode, deadline);
         }
         for k in 0..layout.cards.len() {
-            if self.doc.panels.len() != plans || layout.cards[k].panel >= self.doc.panels.len() {
+            if perimee(self, k) {
                 ui.ctx().request_repaint();
-                break;
+                return;
             }
             self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, deadline);
         }
