@@ -216,6 +216,30 @@ fn nothing_is_rebuilt_when_only_layers_inside_the_sheet_change() {
     assert!(monde.pixel(px, py).is_some_and(|c| c.g() > rouge.g() + 50), "puis la nouvelle : {:?} après {rouge:?}", monde.pixel(px, py));
 }
 
+/// Relecture de Fable (2026-10-24) : un calque qui dépasse, caché, laisse au hors-feuille refait sur l'autre fil des
+/// tuiles qui n'existent plus ; à l'arrivée, elles sont effacées dans la texture (pas seulement oubliées).
+#[test]
+fn hiding_a_layer_that_goes_past_the_sheet_blanks_its_tiles() {
+    let s = scene();
+    let ctx = egui::Context::default();
+    let view = Area { x0: -400, y0: -300, x1: 800, y1: 600 };
+    let mut calques = [Calque::neuf(), Calque::neuf(), Calque::neuf(), Calque::neuf()];
+    let mut monde = Monde::new();
+    settle(&mut monde, &ctx, &s.doc, &plan_de(&s, &calques), view);
+    // Les tuiles du premier calque (seul à dessiner à gauche de la feuille) sont dans la texture.
+    let gauche = |m: &Monde| (-192..0).flat_map(|x| (-64..192).map(move |y| (x, y))).filter(|&(x, y)| m.pixel(x, y).is_some_and(|c| c.a() > 0)).count();
+    assert!(gauche(&monde) > 1000);
+    let rebuilds = monde.rebuilds();
+    calques[0].visible = false;
+    let plan = plan_de(&s, &calques);
+    settle(&mut monde, &ctx, &s.doc, &plan, view);
+    assert_eq!(monde.rebuilds(), rebuilds + 1, "refait sur l'autre fil");
+    assert_eq!(gauche(&monde), 0, "ses tuiles sont effacées");
+    let mut neuf = Monde::new();
+    settle(&mut neuf, &ctx, &s.doc, &plan, view);
+    memes_pixels(&monde, &neuf).expect("comme un hors-feuille refait de zéro");
+}
+
 #[test]
 fn a_layer_moved_past_the_sheet_edge_counts_and_one_well_inside_does_not() {
     let s = scene();

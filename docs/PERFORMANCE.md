@@ -1802,7 +1802,11 @@ plafond du cache avec le poids du cache de ce moment (`memoirevideo::cible_cache
                                                                    jamais sous 64 Mo)
 
 Le cache vise le plus petit du réglage et du plafond (`CanvasResources::limit`, aussi pour l'envoi d'avance et la part des
-onglets cachés). Le plafond est tenu jusqu'à la lecture suivante : ce qu'on libère entre deux lectures ne fait pas croire à
+onglets cachés). **Avec retenue** (relecture de Fable, `memoirevideo::prochain_plafond`) : le plafond ne baisse que si SHOT
+utilise plus que le budget moins la marge, d'un quart au plus par lecture, jamais sous ce que tient l'image affichée ; si
+la baisse d'avant n'a pas rendu de mémoire (SHOT a rendu moins de la moitié de ce que le cache a lâché — un pilote qui
+garde les sous-allocations des petites textures, sous Vulkan), il tient au lieu de descendre cran par cran jusqu'au
+plancher. Le plafond est tenu jusqu'à la lecture suivante : ce qu'on libère entre deux lectures ne fait pas croire à
 une place qui n'est pas encore rendue. La place revient : le plafond remonte, le cache regrandit. Les dessins de l'image
 affichée ne partent jamais (même règle qu'avant : la chasse s'arrête à ceux de l'image). Chaque changement de plus d'un
 vingtième du poids visé est noté ; la fenêtre Aide > Diagnostic des performances montre la mémoire vidéo de SHOT, le budget,
@@ -1827,9 +1831,9 @@ sur une vraie carte, avec des lectures posées par l'essai (propres au fil d'ess
 la chasse suit la cible, ne prend jamais un dessin de l'image affichée (six dessins affichés pour une cible de quatre :
 les six restent, rien n'est renvoyé), le cache regrandit quand la place revient, et sans lecture tout est comme avant.
 
-**Risques** : un pilote qui garderait la mémoire libérée dans ses réserves ferait baisser le plafond lecture après lecture
-jusqu'au plancher (ce n'est pas le cas ici : la mémoire revient à la lecture suivante) ; le pire serait alors un cache de
-64 Mo, les dessins de chaque image renvoyés à la carte (lent, juste). Deux cartes identiques : la première est prise.
+**Risques** : un pilote qui garde la mémoire libérée dans ses réserves : le plafond baisse d'un quart puis tient (essais
+`a_driver_that_keeps_evicted_memory_does_not_ratchet_the_cache_down`, `the_gpu_cache_holds_when_evictions_free_nothing`) ;
+SHOT reste alors au-delà de son budget, comme avant. Le plafond met plusieurs lectures (1,5 s chacune) à atteindre la cible. Deux cartes identiques : la première est prise.
 
 
 ### 27.2 Le hors-feuille ne se refait que quand ce qu'il montre change, et sur un autre fil (`monde.rs`)
@@ -1848,7 +1852,8 @@ une opacité tirée le refaisait.
   la marge du lissage — reste dans les tuiles entières de la feuille. Par prudence, un élément à effets, à remplissage au
   griffonnage ou qui n'est pas un dessin du projet y entre toujours (ce qu'il montre peut déborder de son dessin) ;
 - quand la clé change (autre plan, réglage d'un calque qui dépasse, `invalidate_all`), le hors-feuille se refait **sur un
-  autre fil** (« hors-feuille », la moitié des cœurs) d'après un instantané du plan : les dessins montrés (effets compris)
+  autre fil** (« hors-feuille », la moitié des cœurs, lui et ses fils sous la priorité normale : l'interface et le fil des
+  gestes du rejeu passent toujours avant) d'après un instantané du plan : les dessins montrés (effets compris)
   dont les tuiles sont partagées, rien n'est copié. L'écran garde l'image d'avant en attendant ; à l'arrivée, seules les
   tuiles qui ont changé vont à la texture, celles d'avant qui n'existent plus sont effacées. Un réglage tiré en continu est
   suivi au rythme de ces calculs (le suivant part à l'arrivée du précédent ; rien n'est jeté en route). Un trait posé
@@ -1872,8 +1877,9 @@ animé dans la feuille, un premier plan qui dépasse un peu ; vue sur tout le d�
 
 « Avant » bute sur le budget de 5 ms (plus la copie du tampon et l'envoi de la texture entière, que la mesure ne compte pas
 côté carte) **et ne finissait jamais** : refait de zéro à chaque image, le hors-feuille restait à moitié blanc pendant toute
-la lecture ou tout le geste. Après, le décor tiré se suit environ une image sur deux (le calcul d'un hors-feuille de
-~1 050 tuiles tient en une à deux images d'écran) ; ce qui reste sur le fil de l'interface est l'arrivée (comparer et
+la lecture ou tout le geste. Après, le décor tiré se suit environ une image sur deux, une sur trois depuis que le fil est
+sous la priorité normale, machine chargée (29 à 31 hors-feuilles en 90 images, interface 1,07 à 1,14 ms ; le calcul d'un
+hors-feuille de ~1 050 tuiles tient en une à deux images d'écran) ; ce qui reste sur le fil de l'interface est l'arrivée (comparer et
 écrire les tuiles, envoyer celles qui changent) et l'instantané.
 
 Essais (`monde_tests.rs`) : après 120 changements de réglages tirés au hasard (dessin montré, visibilité, opacité, teinte,
@@ -1881,7 +1887,8 @@ mode de fusion dont « Dissoudre », déplacement, agrandissement ; parfois plus
 est pixel pour pixel celui d'un hors-feuille refait de zéro (40 vérifications) ; 200 changements des seuls calques qui
 restent dans la feuille ne refont rien (aucune tuile composée) ; l'opacité d'un calque qui dépasse le refait sur l'autre
 fil, l'image d'avant restant à l'écran en attendant ; `contributes` (déplacé hors de la feuille, agrandi, vide, tuile de
-bord). Les essais de la toile infinie (`toile_tests.rs`) passent tels quels (leur `settle` attend l'autre fil).
+bord) ; un calque qui dépasse, caché : ses tuiles sont effacées de la texture à l'arrivée (`hiding_a_layer_that_goes_past_the_sheet_blanks_its_tiles`).
+Les essais de la toile infinie (`toile_tests.rs`) passent tels quels (leur `settle` attend l'autre fil).
 
 **Risques** : un plan qui change de contenu hors de la feuille montre une à deux images le hors-feuille d'avant (y compris
 celui de l'autre plan au passage d'un plan à l'autre pendant la lecture) au lieu d'un hors-feuille à moitié blanc. Si la

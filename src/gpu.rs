@@ -452,9 +452,9 @@ struct CanvasResources {
     textures: HashMap<CelId, CelTexture>,
     /// Mémoire visée pour les textures des dessins (`CACHE_BYTES`, plus petite dans les essais), telle que réglée.
     cache_bytes: u64,
-    /// Plafond posé par le budget de mémoire vidéo du système (`memoirevideo.rs`) ; rien : pas de lecture (le poids
-    /// réglé vaut seul). Le cache vise le plus petit des deux (`limit`).
-    vram_cap: Option<u64>,
+    /// Plafond posé par le budget de mémoire vidéo du système (`memoirevideo.rs`, avec ce qu'il faut pour le suivre avec
+    /// retenue) ; sans plafond : pas de lecture (le poids réglé vaut seul). Le cache vise le plus petit des deux (`limit`).
+    vram: crate::memoirevideo::Suivi,
     /// Numéro de la dernière lecture du budget prise en compte.
     vram_seq: u64,
     /// Essais : chaque texture couvre l'image entière de son dessin, comme avant la taille au
@@ -486,7 +486,7 @@ struct CanvasResources {
 impl CanvasResources {
     /// Le poids que le cache des dessins vise : le réglage, ou moins si la mémoire vidéo manque (`memoirevideo.rs`).
     fn limit(&self) -> u64 {
-        crate::memoirevideo::effectif(self.cache_bytes, self.vram_cap)
+        crate::memoirevideo::effectif(self.cache_bytes, self.vram.plafond)
     }
 
     /// Prend en compte une lecture du budget de mémoire vidéo (une seule fois par lecture), `own` étant le poids du cache
@@ -494,7 +494,7 @@ impl CanvasResources {
     fn follow_vram(&mut self, reading: Option<crate::memoirevideo::Lecture>, own: u64) {
         let Some(l) = reading else {
             // (Plus de lecture — essais — : le poids réglé, comme avant.)
-            self.vram_cap = None;
+            self.vram = Default::default();
             self.vram_seq = 0;
             return;
         };
@@ -502,11 +502,14 @@ impl CanvasResources {
             return;
         }
         self.vram_seq = l.seq;
-        let cap = crate::memoirevideo::cible_cache(l.budget, l.utilise, own);
-        if crate::memoirevideo::vaut_d_etre_note(self.vram_cap, Some(cap), self.cache_bytes) {
+        // Ce que tient l'image affichée (la dernière composée) : le plafond ne descend pas plus bas.
+        let tick = self.tick;
+        let travail: u64 = self.textures.values().filter(|t| t.last_used + 1 >= tick).map(CelTexture::bytes).sum();
+        let suivi = crate::memoirevideo::prochain_plafond(self.vram, l, own, self.cache_bytes, travail);
+        if let Some(cap) = suivi.plafond.filter(|_| crate::memoirevideo::vaut_d_etre_note(self.vram.plafond, suivi.plafond, self.cache_bytes)) {
             crate::memoirevideo::noter(crate::memoirevideo::decision(l, own, self.cache_bytes, cap));
         }
-        self.vram_cap = Some(cap);
+        self.vram = suivi;
     }
 }
 
@@ -721,7 +724,7 @@ impl GpuCanvas {
             white,
             textures: HashMap::new(),
             cache_bytes: CACHE_BYTES,
-            vram_cap: None,
+            vram: Default::default(),
             vram_seq: 0,
             whole_textures: false,
             staging: Vec::new(),

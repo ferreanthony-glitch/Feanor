@@ -17,6 +17,8 @@
 //! tenir sous le budget, moins une marge ; le cache ne descend pas sous un plancher (les dessins de l'image affichée
 //! ne partent de toute façon jamais, `gpu.rs`). La cible n'est refaite qu'à chaque nouvelle lecture, avec le poids
 //! du cache à ce moment : entre deux lectures, ce qu'on libère ne fait pas croire à une place qui n'est pas encore là.
+//! Le plafond suit la cible avec retenue (`prochain_plafond`) : il ne baisse qu'au-dessus du seuil, d'un quart au plus
+//! par lecture, jamais sous l'image affichée, et tient si la baisse d'avant n'a pas rendu de mémoire.
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -44,8 +46,45 @@ pub(crate) struct Lecture {
 /// moins la marge. Jamais sous `PLANCHER`.
 pub(crate) fn cible_cache(budget: u64, utilise: u64, propre: u64) -> u64 {
     let hors_cache = utilise.saturating_sub(propre);
-    let marge = (budget / 10).max(MARGE_MIN);
-    budget.saturating_sub(hors_cache).saturating_sub(marge).max(PLANCHER)
+    budget.saturating_sub(hors_cache).saturating_sub(marge(budget)).max(PLANCHER)
+}
+
+fn marge(budget: u64) -> u64 {
+    (budget / 10).max(MARGE_MIN)
+}
+
+/// Le suivi du plafond d'une lecture à l'autre : le plafond posé, et, s'il vient de baisser, ce que SHOT utilisait et ce
+/// que le cache tenait à ce moment (pour voir à la lecture suivante si la mémoire chassée a vraiment été rendue).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Suivi {
+    pub plafond: Option<u64>,
+    pub baisse: Option<(u64, u64)>,
+}
+
+/// Le plafond après la lecture `l` (relecture de Fable, 2026-10-24 : sans retenue, un pilote qui garde la mémoire des
+/// petites textures chassées — sous-allocations de Vulkan — laisse `utilise` presque au même niveau pendant que le cache
+/// baisse ; la lecture suivante voyait alors encore moins de place, et le plafond descendait cran par cran jusqu'au
+/// plancher). La règle :
+/// - sous le seuil (`budget − marge`), le plafond ne baisse jamais ; il remonte vers la cible s'il y a de la place ;
+/// - au-dessus, il baisse vers la cible, d'un quart au plus par lecture ;
+/// - sauf si la baisse d'avant n'a pas rendu la mémoire (SHOT a rendu moins de la moitié de ce que le cache a lâché) :
+///   le plafond tient, chasser davantage ne libérerait rien ;
+/// - jamais sous ce que tient l'image affichée (`travail`), ni sous `PLANCHER`.
+pub(crate) fn prochain_plafond(s: Suivi, l: Lecture, propre: u64, regle: u64, travail: u64) -> Suivi {
+    let actuel = effectif(regle, s.plafond);
+    let cible = cible_cache(l.budget, l.utilise, propre);
+    if l.utilise <= l.budget.saturating_sub(marge(l.budget)) {
+        return Suivi { plafond: Some(cible.max(actuel)), baisse: None };
+    }
+    if let Some((u0, p0)) = s.baisse {
+        let lache = p0.saturating_sub(propre);
+        let rendu = u0.saturating_sub(l.utilise);
+        if lache > 0 && rendu < lache / 2 {
+            return s;
+        }
+    }
+    let plafond = cible.max(actuel - actuel / 4).min(actuel).max(travail).max(PLANCHER);
+    Suivi { plafond: Some(plafond), baisse: Some((l.utilise, propre)) }
 }
 
 /// Le poids que le cache vise : celui des réglages, ou moins si la mémoire vidéo manque.

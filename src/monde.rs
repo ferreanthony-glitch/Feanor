@@ -486,7 +486,9 @@ impl Monde {
         let ctx = ctx.clone();
         let spawned = std::thread::Builder::new().name("hors-feuille".into()).spawn(move || {
             let mut out: Vec<((i32, i32), Vec<Color32>)> = tiles.into_iter().map(|t| (t, Vec::new())).collect();
-            // (La moitié des cœurs : l'interface et le dessin gardent les leurs.)
+            // (Sous la priorité normale, lui et ses fils, sur la moitié des cœurs : l'interface et le fil des gestes du rejeu
+            // passent toujours avant.)
+            crate::parallele::fil_et_ses_fils_sous_la_normale();
             crate::render::set_thread_cap((crate::parallele::coeurs() / 2).max(1));
             crate::render::par_chunks(&mut out, 4, |_, part| {
                 for (t, px) in part.iter_mut() {

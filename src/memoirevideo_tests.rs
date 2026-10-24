@@ -89,15 +89,23 @@ fn eviction_follows_the_vram_target_and_never_drops_what_is_on_screen() {
     assert_eq!(avant.textures, 10);
     assert_eq!(avant.bytes, 10 * 16 * MO);
     assert_eq!(gpu.cache_limit(), 1 << 30);
-    // La mémoire vidéo manque : la cible tombe à 64 Mo (quatre dessins). Deux dessins sont à l'écran.
-    poser_lecture_essai(Some(lecture_pour(1, avant.bytes, 64 * MO)));
+    // La mémoire vidéo manque : la cible tombe à 64 Mo (quatre dessins). Deux dessins sont à l'écran. Lecture après
+    // lecture (la mémoire chassée est bien rendue), le plafond descend d'un quart au plus à chaque fois.
     let deux = Plan { paper: None, items: vec![line_item(cels[3]), line_item(cels[7])] };
-    let on_gpu = render_with(&mut gpu, &rs, &doc, &deux, false);
-    assert_eq!(gpu.cache_limit(), 64 * MO);
+    let mut limites = vec![gpu.cache_limit()];
+    let mut on_gpu = Vec::new();
+    for seq in 1..=16 {
+        poser_lecture_essai(Some(lecture_pour(seq, gpu.stats().bytes, 64 * MO)));
+        on_gpu = render_with(&mut gpu, &rs, &doc, &deux, false);
+        limites.push(gpu.cache_limit());
+    }
+    assert_eq!(limites[1], 768 * MO, "un quart de moins à la première lecture : {limites:?}");
+    assert!(limites.windows(2).all(|w| w[1] <= w[0] && w[1] >= w[0] - w[0] / 4), "{limites:?}");
     let s = gpu.stats();
-    assert!(s.bytes <= 64 * MO, "{} Mo gardés pour une cible de 64", s.bytes / MO);
+    assert!(gpu.cache_limit() <= 80 * MO && s.bytes <= 80 * MO, "{} Mo gardés pour une cible de 64 : {limites:?}", s.bytes / MO);
     assert!(s.textures >= 2);
     assert!(pareilles(&on_gpu, &render::composite_full(&doc, &deux)), "l'image est la même");
+    let limite = gpu.cache_limit();
     // Les deux dessins affichés sont restés : les montrer de nouveau n'envoie rien.
     let copies = gpu.stats().copies;
     render_with(&mut gpu, &rs, &doc, &deux, false);
@@ -111,9 +119,9 @@ fn eviction_follows_the_vram_target_and_never_drops_what_is_on_screen() {
     render_with(&mut gpu, &rs, &doc, &six, false);
     assert_eq!(gpu.stats().copies, copies);
     // La même lecture vue de nouveau ne refait pas la cible (elle n'est refaite qu'à chaque lecture).
-    assert_eq!(gpu.cache_limit(), 64 * MO);
+    assert_eq!(gpu.cache_limit(), limite);
     // La place revient : à la lecture suivante, le cache retrouve son poids réglé, et regarde de nouveau grandir.
-    poser_lecture_essai(Some(Lecture { seq: 2, budget: 7 * GO, utilise: GO }));
+    poser_lecture_essai(Some(Lecture { seq: 100, budget: 7 * GO, utilise: GO }));
     for &c in &cels {
         render_with(&mut gpu, &rs, &doc, &Plan { paper: None, items: vec![line_item(c)] }, false);
     }
@@ -132,14 +140,77 @@ fn a_decision_is_written_for_the_diagnostic_window() {
     };
     let (doc, cels) = gros_dessins(2);
     let mut gpu = GpuCanvas::new(&rs);
-    poser_lecture_essai(Some(lecture_pour(41, 0, 100 * MO)));
+    // (Au-delà du budget : un quart de moins, 1 024 → 768 Mo.)
+    poser_lecture_essai(Some(Lecture { seq: 41, budget: 4 * GO, utilise: 4 * GO }));
     render_with(&mut gpu, &rs, &doc, &Plan { paper: None, items: vec![line_item(cels[0])] }, false);
     poser_lecture_essai(None);
     assert!(
-        crate::memoirevideo::journal().iter().any(|l| l.contains("ramené à 100 Mo") && l.contains("réglé : 1024 Mo")),
+        crate::memoirevideo::journal().iter().any(|l| l.contains("ramené à 768 Mo") && l.contains("réglé : 1024 Mo")),
         "{:?}",
         crate::memoirevideo::journal()
     );
+}
+
+/// Relecture de Fable (2026-10-24) : un pilote qui garde la mémoire des textures chassées (sous-allocations de Vulkan)
+/// laisse `utilise` au même niveau pendant que le cache baisse. Sans retenue, chaque lecture voyait moins de place et le
+/// plafond descendait jusqu'au plancher ; maintenant il baisse une fois, voit que rien n'a été rendu, et tient.
+#[test]
+fn a_driver_that_keeps_evicted_memory_does_not_ratchet_the_cache_down() {
+    use crate::memoirevideo::{prochain_plafond, Suivi};
+    let (regle, budget) = (GO, 4 * GO);
+    // SHOT au-delà de son budget, et rien de ce que le cache lâche ne revient.
+    let mut s = Suivi::default();
+    let mut propre = GO;
+    let mut plafonds = Vec::new();
+    for seq in 1..=20 {
+        s = prochain_plafond(s, Lecture { seq, budget, utilise: 4 * GO }, propre, regle, 32 * MO);
+        plafonds.push(effectif(regle, s.plafond));
+        propre = propre.min(effectif(regle, s.plafond));
+    }
+    assert_eq!(plafonds[0], 768 * MO, "un quart de moins");
+    assert!(plafonds.iter().all(|&p| p == 768 * MO), "le plafond tient : {plafonds:?}");
+    // La mémoire est rendue : la baisse reprend, vers la cible, d'un quart au plus par lecture, jamais sous l'image.
+    let mut s = Suivi::default();
+    let (mut propre, hors_cache) = (GO, 3 * GO);
+    let mut plafonds = Vec::new();
+    for seq in 1..=30 {
+        s = prochain_plafond(s, Lecture { seq, budget, utilise: hors_cache + propre }, propre, regle, 200 * MO);
+        plafonds.push(effectif(regle, s.plafond));
+        propre = propre.min(effectif(regle, s.plafond));
+    }
+    assert!(plafonds.windows(2).all(|w| w[1] <= w[0] && w[1] >= w[0] - w[0] / 4), "{plafonds:?}");
+    assert_eq!(*plafonds.last().unwrap(), 4 * GO - 3 * GO - 4 * GO / 10, "la cible est atteinte : {plafonds:?}");
+    // Une image affichée plus grosse que la cible : le plafond ne descend pas sous elle.
+    let s = prochain_plafond(Suivi { plafond: Some(300 * MO), baisse: None }, Lecture { seq: 1, budget, utilise: 4 * GO }, 300 * MO, regle, 280 * MO);
+    assert_eq!(s.plafond, Some(280 * MO));
+    // Sous le seuil (budget moins la marge) : jamais de baisse, même si la cible est plus basse que le plafond.
+    let s = prochain_plafond(Suivi { plafond: Some(900 * MO), baisse: None }, Lecture { seq: 1, budget, utilise: 3 * GO }, 900 * MO, regle, 0);
+    assert_eq!(s.plafond, Some(900 * MO).max(Some(cible_cache(budget, 3 * GO, 900 * MO))));
+    assert!(effectif(regle, s.plafond) >= 900 * MO);
+}
+
+/// La même chose sur une vraie carte : le cache réglé à 160 Mo, SHOT au-delà de son budget et la mémoire jamais rendue.
+#[test]
+fn the_gpu_cache_holds_when_evictions_free_nothing() {
+    let Some(rs) = headless() else {
+        return;
+    };
+    let (doc, cels) = gros_dessins(10);
+    let mut gpu = GpuCanvas::new(&rs);
+    gpu.set_cache_bytes(160 * MO);
+    poser_lecture_essai(None);
+    for &c in &cels {
+        render_with(&mut gpu, &rs, &doc, &Plan { paper: None, items: vec![line_item(c)] }, false);
+    }
+    assert_eq!(gpu.stats().bytes, 160 * MO);
+    let deux = Plan { paper: None, items: vec![line_item(cels[3]), line_item(cels[7])] };
+    for seq in 1..=12 {
+        poser_lecture_essai(Some(Lecture { seq, budget: 4 * GO, utilise: 4 * GO }));
+        render_with(&mut gpu, &rs, &doc, &deux, false);
+    }
+    poser_lecture_essai(None);
+    assert_eq!(gpu.cache_limit(), 120 * MO, "une baisse d'un quart, puis le plafond tient");
+    assert_eq!(gpu.stats().bytes, 112 * MO, "sept dessins gardés, pas le plancher");
 }
 
 // ---------------------------------------------------------------------------------------------- mesure sur cette machine
