@@ -7,8 +7,8 @@
 //!   « cases par colonne », six d'origine : six cases et cinq écarts de coupe) ; une case de plus passe en haut de la colonne suivante,
 //!   jamais coupée. Chaque case garde au-dessus d'elle la ligne de son numéro de plan (`LABEL_H`).
 //! - **Le texte** d'une case est dans une bande de la largeur d'une case, à `note_gap` (12 % + 8 points) de sa droite, en haut de l'image ;
-//!   ses lignes (de une à trois par champ montré) descendent d'autant : la case suivante de la colonne est sous l'image, ou sous le texte
-//!   s'il descend plus bas.
+//!   **une ligne par champ coché** (trois au plus) ; sans champ coché il n'y a pas de bande et la colonne n'est large que d'une case. La case
+//!   suivante de la colonne est sous l'image, ou sous le texte s'il descend plus bas.
 //! - **Un mouvement de caméra** : l'enveloppe des cadres est posée comme sur la planche en lignes, à l'échelle des cases ; le texte est à
 //!   droite du **cadre le plus à droite** (B…) et de l'enveloppe à cette hauteur ; **la colonne suivante est entièrement à droite** du
 //!   mouvement et de son texte (la colonne s'élargit d'autant, comme la rangée descend sous B et ses notes), et la case suivante de la
@@ -21,8 +21,6 @@
 //! - **Les cases pâles** suivent le même sens : au moins `pale_rows` colonnes de cases en tout (trois d'origine), et toujours une colonne
 //!   pâle après la dernière colonne occupée.
 //! - Les barres entre deux cases d'une colonne sont **horizontales** (grises dans un plan, noires à une coupe).
-
-use std::collections::HashMap;
 
 use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
 
@@ -62,7 +60,7 @@ struct Etendue {
 }
 
 /// La planche lue à la japonaise (voir le début du fichier). Mêmes arguments que `board::layout_with`.
-pub fn layout(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> BoardLayout {
+pub fn layout(doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options) -> BoardLayout {
     let cols = s.columns.clamp(1, MAX_COLUMNS);
     let card_w = if s.card_w.is_nan() { BoardSettings::default().card_w } else { s.card_w.clamp(CARD_MIN, CARD_MAX) };
     let thumb_h = card_w * doc.frame[1] as f32 / doc.frame[0].max(1) as f32;
@@ -71,8 +69,8 @@ pub fn layout(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, la
         boards.extend(plan_boards(doc, i).into_iter().map(|(id, frame, end)| (i, id, frame, end)));
     }
     let n = boards.len();
-    let lignes_max = opt.textes.lignes_max();
-    let note_lines = |k: usize| lines.get(&boards[k].1).copied().unwrap_or(1).clamp(1, lignes_max);
+    // Les lignes de texte à droite de chaque case : une par champ coché (zéro : pas de zone de texte).
+    let n_l = opt.textes.lignes();
     let joined_after = |k: usize| match boards.get(k + 1) {
         Some(next) => next.2 > 0,
         None => last_joins,
@@ -80,11 +78,13 @@ pub fn layout(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, la
     let (g_same, g_cut) = (gap_same(card_w), gap_cut(card_w));
     let ng = note_gap(card_w);
     let gap_after = |k: usize| if joined_after(k) { g_same } else { g_cut };
-    let texte_w = largeur_texte(card_w);
+    let texte_w = if n_l == 0 { 0.0 } else { largeur_texte(card_w) };
     let bloc = LABEL_H + thumb_h;
     let col_h = hauteur_colonne(card_w, thumb_h, cols);
     let col_gap = g_cut;
-    let col_nominal = card_w + ng + texte_w;
+    // (Sans champ coché : une colonne n'est large que d'une case.)
+    let col_nominal = card_w + if n_l == 0 { 0.0 } else { ng + texte_w };
+    let ng_texte = if n_l == 0 { 0.0 } else { ng };
     // Une empreinte n'est jamais plus haute qu'une colonne (sa case et la ligne de son numéro comprises), ni plus large que trois.
     let haut_max = (col_h - LABEL_H).max(thumb_h);
     let large_max = 3.0 * col_nominal + 2.0 * col_gap;
@@ -115,20 +115,20 @@ pub fn layout(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, la
     // Ce que prend chaque case.
     let etendues: Vec<Etendue> = (0..n)
         .map(|k| {
-            let hauteur_texte = note_lines(k) as f32 * NOTE_LINE_H;
+            let hauteur_texte = n_l as f32 * NOTE_LINE_H;
             match (&prints[k], &polys[k]) {
                 (Some(e), Some(poly)) => {
                     let boite = vignettecam::boite(poly);
                     // Le texte est à droite du cadre le plus à droite, et de l'enveloppe à sa hauteur, en haut de ce cadre.
                     let b = e.cadres.iter().max_by(|a, b| a.rect.right().total_cmp(&b.rect.right())).map_or(Rect::from_min_size(Pos2::ZERO, vec2(card_w, thumb_h)), |c| c.rect);
                     let droite_env = crate::viewbar::clip_to_rect(poly, Rect::from_min_max(pos2(-1e6, b.top()), pos2(1e6, b.bottom()))).iter().map(|q| q.x).fold(b.right(), f32::max);
-                    let note = Rect::from_min_size(pos2(droite_env + ng, b.top()), vec2(texte_w, hauteur_texte));
+                    let note = Rect::from_min_size(pos2(droite_env + ng_texte, b.top()), vec2(texte_w, hauteur_texte));
                     // (Pendant un geste, A garde le retrait qu'elle avait à l'appui : elle ne bouge pas, `Reserve::pose_dec`.)
                     let dec = opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && boards[k].2 == 0).and_then(|h| h.pose_dec).unwrap_or_else(|| (-boite.left()).max(0.0));
                     Etendue { x_lo: boite.left().min(0.0), dec, droite: dec + boite.right().max(card_w).max(note.right()), monte: (-boite.top()).max(0.0), bas: boite.bottom().max(thumb_h).max(note.bottom()), note }
                 }
                 _ => {
-                    let note = Rect::from_min_size(pos2(card_w + ng, 0.0), vec2(texte_w, hauteur_texte));
+                    let note = Rect::from_min_size(pos2(card_w + ng_texte, 0.0), vec2(texte_w, hauteur_texte));
                     Etendue { x_lo: 0.0, dec: 0.0, droite: note.right(), monte: 0.0, bas: thumb_h.max(note.bottom()), note }
                 }
             }

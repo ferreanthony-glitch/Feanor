@@ -18,9 +18,10 @@
 //! - **Barres** : un clic sur une barre grise coupe le plan à cet endroit (la vignette de droite commence un
 //!   nouveau plan) ; sur une barre noire, il réunit les deux plans (la vignette de droite devient une image du
 //!   plan de gauche). Une seule étape d'annulation, nommée.
-//! - **Notes** : un clic sur la bande sous une image écrit la note du plan (première image) ou de la marque
-//!   d'image ; Entrée valide, Maj + Entrée passe à la ligne, Échap abandonne. Trois lignes au plus à l'écran,
-//!   puis « … » ; le texte entier est gardé, visible pendant la saisie et dans la fiche du plan.
+//! - **Notes** : un clic sur l'icône d'écriture au bout de la bande, ou sur **la ligne Notes** quand ce champ est coché, écrit la note du
+//!   plan (première image) ou de la marque d'image ; Entrée valide, Maj + Entrée passe à la ligne, Échap abandonne. **Une ligne par champ
+//!   coché** (action, dialogue, notes), coupée par « … » ; aucun champ coché : aucune ligne. Le texte entier est gardé, visible pendant
+//!   la saisie et dans la fiche du plan.
 //! - Molette : défiler ; Ctrl + molette : zoom ; Espace, bouton du milieu ou outil Main : déplacer la planche.
 //!   Maj + clic sur une image : choisir des plans (au lieu de dessiner). **Ctrl + Maj + glisser**, ou **T tenue** (`vignettes.camera`),
 //!   dans une case : tirer les cadres de sa caméra (`vignettecamui.rs`), jamais un plan. **Ctrl seul + glisser** : le lasso, dans le
@@ -37,8 +38,8 @@ use eframe::egui::{
 };
 
 use crate::app::{App, BoardView, Mode, Tool};
-use crate::board::{self, BoardLayout, BoardSettings, CardPlace, Hit, NoteRef, CARD_MAX, CARD_MIN, MAX_COLUMNS, NOTE_MAX_LINES, NOTE_TEXT_SIZE};
-use crate::boardsens::{Champ, Textes};
+use crate::board::{self, BoardLayout, BoardSettings, CardPlace, Hit, NoteRef, CARD_MAX, CARD_MIN, MAX_COLUMNS, NOTE_TEXT_SIZE};
+use crate::boardsens::Champ;
 use crate::history::Nav;
 use crate::vector::VPoint;
 
@@ -185,8 +186,6 @@ impl Xf {
 pub(crate) struct Vignettes {
     pub press: Press,
     pub note: Option<NoteEdit>,
-    /// Lignes de note affichées de chaque image qui a une note (mesurées à chaque image d'écran).
-    pub lines: HashMap<u64, usize>,
     /// La première case pâle, une fois remplie, fait une image de plus du dernier plan (barre grise devant elle).
     pub empty_joins: bool,
     pub created: Option<Created>,
@@ -224,37 +223,9 @@ pub(crate) struct Vignettes {
     /// La dernière disposition de la planche et ce dont elle dépend (`board::CacheDisposition`) : `board_layout` ne la refait que
     /// si quelque chose a changé.
     pub disposition: std::cell::RefCell<board::CacheDisposition>,
-    /// Les notes déjà mesurées (`measure_notes`) : leur texte et leur nombre de lignes, à cette largeur et à cette échelle.
-    pub mesures: MesuresNotes,
     /// Les étiquettes de version (« V2 ») posées à cette image d'écran sur les cases des plans qui ont plusieurs versions : leur zone
     /// et leur plan. La pile des versions s'y accroche (`pileversui.rs`, la même que celle du montage).
     pub etiquettes: Vec<crate::pileversui::EtiquetteBloc>,
-}
-
-/// Les notes mesurées par `measure_notes` (le nombre de lignes d'une note ne dépend que de son texte, de la largeur des cases et de
-/// l'échelle de l'écran) : une note qui n'a pas changé n'est plus remise en page, et rien n'est alloué quand aucune n'a changé.
-#[derive(Default)]
-pub(crate) struct MesuresNotes {
-    largeur: u32,
-    ppp: u32,
-    /// Les champs montrés (`Textes::bits`) : en changer remesure tout.
-    textes: u8,
-    /// Par case : ses textes montrés, d'un seul tenant, et le nombre de lignes qu'ils prennent.
-    notes: HashMap<u64, (String, usize)>,
-}
-
-/// Le nombre de lignes de la bande de texte d'une case : la somme des lignes (une à trois) de chaque champ montré qui a un texte, à la
-/// largeur `width` ; zéro sans texte.
-fn lignes_de_la_case(ctx: &egui::Context, textes: Textes, champs: &[(Champ, &str)], width: f32) -> usize {
-    let etiquette = textes.etiquettes();
-    champs
-        .iter()
-        .map(|(c, t)| {
-            let size = board::note_font_size(t.chars().count());
-            let galley = ctx.fonts(|f| f.layout_job(champ_job(*c, t, size, width, etiquette)));
-            galley.rows.len().clamp(1, NOTE_MAX_LINES)
-        })
-        .sum()
 }
 
 impl Default for Vignettes {
@@ -262,7 +233,6 @@ impl Default for Vignettes {
         Vignettes {
             press: Press::None,
             note: None,
-            lines: HashMap::new(),
             empty_joins: false,
             created: None,
             menu: None,
@@ -282,15 +252,15 @@ impl Default for Vignettes {
             planche: Default::default(),
             colorscript: Default::default(),
             disposition: Default::default(),
-            mesures: Default::default(),
             etiquettes: Vec::new(),
         }
     }
 }
 
-/// Le texte d'un champ du plan (l'action, le dialogue, les notes), mis en page : `size` points, `width` de large, trois lignes au plus et
-/// « … ». `etiquette` : plusieurs champs sont montrés, le texte est précédé de l'étiquette colorée de son champ (« Action », « Dialogue »,
-/// « Note »), un peu plus petite ; un champ seul n'en a pas, comme avant le panneau « Vignettes ».
+/// Le texte d'un champ du plan (l'action, le dialogue, les notes), mis en page : `size` points, `width` de large, **une seule ligne**, coupée
+/// par « … » si le texte est plus long (Anthony, 2026-10-24). `etiquette` : plusieurs champs sont montrés, le texte est précédé de l'étiquette
+/// colorée de son champ (« Action », « Dialogue », « Note »), un peu plus petite ; un champ seul n'en a pas, comme avant le panneau
+/// « Vignettes ».
 fn champ_job(champ: Champ, text: &str, size: f32, width: f32, etiquette: bool) -> LayoutJob {
     let mut job = LayoutJob::default();
     job.wrap.max_width = width.max(1.0);
@@ -299,19 +269,9 @@ fn champ_job(champ: Champ, text: &str, size: f32, width: f32, etiquette: bool) -
         job.append(&format!("{}  ", champ.etiquette()), 0.0, egui::TextFormat::simple(FontId::proportional((size * 0.82).max(1.0)), Color32::from_rgb(r, g, b)));
     }
     job.append(text, 0.0, egui::TextFormat::simple(FontId::proportional(size.max(1.0)), NOTE_INK));
-    job.wrap.max_rows = NOTE_MAX_LINES;
+    job.wrap.max_rows = 1;
     job.wrap.overflow_character = Some('…');
     job
-}
-
-/// Les trois textes d'un plan ou d'une marque d'image, dans l'ordre des champs (`Champ::TOUS`).
-fn textes_du_plan(p: &crate::document::Panel) -> impl Iterator<Item = (u64, [&str; 3])> {
-    std::iter::once((p.id, [p.action.as_str(), p.dialogue.as_str(), p.notes.as_str()])).chain(p.marks.iter().map(|m| (m.id, [m.action.as_str(), m.dialogue.as_str(), m.notes.as_str()])))
-}
-
-/// Ceux des trois textes que `textes` montre et qui ne sont pas vides.
-fn champs_montres(textes: Textes, trois: [&str; 3]) -> Vec<(Champ, &str)> {
-    Champ::TOUS.into_iter().zip(trois).filter(|(c, t)| textes.montre(*c) && !t.trim().is_empty()).collect()
 }
 
 impl App {
@@ -320,8 +280,8 @@ impl App {
         self.mode == Mode::Storyboard && self.board_view == BoardView::Panels
     }
 
-    /// La disposition de la planche, avec ses réglages et les lignes de note mesurées : sur le papier infini, une seule page, les
-    /// cases pâles qui montrent où dessiner, et la place que prend le geste de caméra en cours (`board::Reserve`).
+    /// La disposition de la planche, avec ses réglages et les champs de texte cochés (une ligne chacun) : sur le papier infini, une seule
+    /// page, les cases pâles qui montrent où dessiner, et la place que prend le geste de caméra en cours (`board::Reserve`).
     pub(crate) fn board_layout(&self) -> BoardLayout {
         let s = BoardSettings { rows: 0, ..self.layout.board_settings() };
         let hold = self.vignettes.cam.as_ref().filter(|g| g.actif && !g.annule).and_then(|g| g.hold);
@@ -329,10 +289,10 @@ impl App {
         // (Gardée tant que rien de ce dont elle dépend ne change : `board::CacheDisposition`. Un essai de performance mesure aussi
         // l'ancien chemin, refaite à chaque appel : `perf::ancien`.)
         if crate::perf::ancien() {
-            return board::layout_with(&self.doc, &s, &self.vignettes.lines, self.vignettes.empty_joins, &opt);
+            return board::layout_with(&self.doc, &s, &HashMap::new(), self.vignettes.empty_joins, &opt);
         }
         let mut cache = self.vignettes.disposition.borrow_mut();
-        board::layout_cache(&self.doc, &s, &self.vignettes.lines, self.vignettes.empty_joins, &opt, &mut cache)
+        board::layout_cache(&self.doc, &s, &HashMap::new(), self.vignettes.empty_joins, &opt, &mut cache)
     }
 
     /// La planche a glissé (`BoardLayout::decalage` : une enveloppe de caméra dépasse la page à gauche ou en haut) : la vue défile
@@ -490,90 +450,25 @@ impl App {
         }
     }
 
-    /// Mesure le nombre de lignes (1 à 3) de chaque note, à la largeur des vignettes : la mise en page
-    /// s'en sert pour descendre la rangée suivante juste ce qu'il faut.
-    fn measure_notes(&mut self, ctx: &egui::Context, settings: &BoardSettings) {
-        let width = (settings.card_w.clamp(CARD_MIN, CARD_MAX) - NOTE_PAD * 2.0).max(10.0);
-        let textes = self.layout.board_textes;
-        if !crate::perf::ancien() {
-            self.measure_notes_gardees(ctx, width, textes);
-            return;
-        }
-        let mut lines = HashMap::new();
-        for p in &self.doc.panels {
-            for (id, trois) in textes_du_plan(p) {
-                let n = lignes_de_la_case(ctx, textes, &champs_montres(textes, trois), width);
-                if n > 0 {
-                    lines.insert(id, n);
-                }
-            }
-        }
-        self.vignettes.lines = lines;
-    }
-
-    /// `measure_notes` (le même nombre de lignes), sans remettre en page une note déjà mesurée à cette largeur et à cette échelle :
-    /// à chaque image d'écran, un passage sur les notes qui compare leurs textes ; rien n'est alloué si aucune n'a changé.
-    fn measure_notes_gardees(&mut self, ctx: &egui::Context, width: f32, textes: Textes) {
-        let ppp = ctx.pixels_per_point();
-        let m = &mut self.vignettes.mesures;
-        if m.largeur != width.to_bits() || m.ppp != ppp.to_bits() || m.textes != textes.bits() {
-            *m = MesuresNotes { largeur: width.to_bits(), ppp: ppp.to_bits(), textes: textes.bits(), notes: HashMap::new() };
-        }
-        // Les textes montrés d'une case, d'un seul tenant (de quoi savoir si l'un d'eux a changé).
-        let cle = |champs: &[(Champ, &str)]| -> String { champs.iter().map(|(_, t)| *t).collect::<Vec<_>>().join("\u{1}") };
-        let mut vues = 0;
-        let mut pareil = true;
-        'plans: for p in &self.doc.panels {
-            for (id, trois) in textes_du_plan(p) {
-                let champs = champs_montres(textes, trois);
-                if champs.is_empty() {
-                    continue;
-                }
-                vues += 1;
-                // (Rien n'est alloué ici tant que la case n'a pas changé : la comparaison se fait champ par champ.)
-                let meme = m.notes.get(&id).is_some_and(|(t, _)| t.split('\u{1}').eq(champs.iter().map(|(_, t)| *t)));
-                if !meme {
-                    pareil = false;
-                    break 'plans;
-                }
-            }
-        }
-        if pareil && vues == m.notes.len() && self.vignettes.lines.len() == vues {
-            return;
-        }
-        let mut gardees: HashMap<u64, (String, usize)> = HashMap::with_capacity(vues);
-        let mut lines = HashMap::with_capacity(vues);
-        for p in &self.doc.panels {
-            for (id, trois) in textes_du_plan(p) {
-                let champs = champs_montres(textes, trois);
-                if champs.is_empty() {
-                    continue;
-                }
-                let texte = cle(&champs);
-                let n = match m.notes.remove(&id).or_else(|| gardees.remove(&id)) {
-                    Some((t, n)) if t == texte => n,
-                    _ => lignes_de_la_case(ctx, textes, &champs, width),
-                };
-                gardees.insert(id, (texte, n));
-                lines.insert(id, n);
-            }
-        }
-        m.notes = gardees;
-        self.vignettes.lines = lines;
-    }
-
-    /// L'icône d'écriture de la case `place`, à l'écran : tout au bout (à droite) de sa bande de note. C'est le seul endroit de la bande qui
-    /// ouvre la note ; le reste de la bande dessine dans la case.
+    /// L'icône d'écriture de la case `place`, à l'écran : tout au bout (à droite) de sa bande de texte. Elle écrit toujours le champ Notes ;
+    /// la ligne Notes (quand ce champ est coché) l'ouvre aussi, `ligne_notes`. Le reste de la bande dessine dans la case.
     pub(crate) fn note_icone_rect(&self, place: &CardPlace) -> Rect {
         let strip = self.vignettes.xf.rect(place.note);
         Rect::from_min_size(pos2(strip.right() - NOTE_ICONE - 1.0, strip.top()), vec2(NOTE_ICONE, NOTE_ICONE))
     }
 
+    /// La ligne Notes de la case `place`, sur la planche, quand le champ Notes est coché : un clic dessus écrit la note, comme l'icône.
+    pub(crate) fn ligne_notes(&self, place: &CardPlace) -> Option<Rect> {
+        let i = self.layout.board_textes.ligne_du(Champ::Notes)?;
+        place.a_du_texte().then(|| place.ligne_de_texte(i))
+    }
+
     /// L'icône d'écriture, discrète : seulement quand le pointeur est sur la case ou sa bande (pas pendant un geste), et toujours sur la case dont
     /// la note s'écrit. Une bulle d'une seconde dit ce qu'elle fait.
     fn paint_note_icone(&self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, place: &CardPlace) {
+        // (Aucun champ coché : pas de zone de texte, pas d'icône.)
         let icone = self.note_icone_rect(place);
-        if !icone.intersects(view) || self.vignettes.note.as_ref().is_some_and(|e| e.id == place.id) {
+        if !place.a_du_texte() || !icone.intersects(view) || self.vignettes.note.as_ref().is_some_and(|e| e.id == place.id) {
             return;
         }
         let xf = self.vignettes.xf;
@@ -597,6 +492,10 @@ impl App {
     pub(crate) fn note_ecrire_courante(&mut self) {
         if !self.board_shown() {
             self.status = "Les notes de cases s'écrivent dans les Vignettes.".into();
+            return;
+        }
+        if self.layout.board_textes.lignes() == 0 {
+            self.status = "Coche un champ (Notes) dans le panneau Planche : sans champ coché, la planche n'a pas de ligne de texte.".into();
             return;
         }
         let layout = self.board_layout();
@@ -653,7 +552,8 @@ impl App {
             self.vignettes.note = None;
             return;
         };
-        let strip = xf.rect(place.note);
+        // L'éditeur remplace la ligne Notes (la bande entière si ce champ n'est pas coché : l'icône écrit quand même les notes).
+        let strip = xf.rect(self.ligne_notes(&place).unwrap_or(place.note));
         let icone = self.note_icone_rect(&place);
         let Some(ed) = self.vignettes.note.as_mut() else { return };
         let font = FontId::proportional((board::note_font_size(ed.buffer.chars().count()) * xf.zoom).clamp(9.0, 40.0));
@@ -747,7 +647,12 @@ impl App {
         }
         // L'icône d'écriture, au bout de la bande de note d'une case : seul un appui dessus ouvre la note (Anthony, 2026-10-22 : « les notes ne
         // doivent s'activer qu'en cliquant sur un bouton, sinon ça empêche parfois de dessiner »). Elle prime sur tout ce qu'il y a dessous.
-        if let Some(k) = layout.cards.iter().position(|c| self.note_icone_rect(c).contains(pos)) {
+        // La ligne Notes de la case, quand ce champ est coché, ouvre la note de même (Anthony, 2026-10-24 : « un clic sur la ligne Notes
+        // l'écrit ») ; sans modificateur ni touche de caméra tenue : Maj, Ctrl et T gardent leur geste. Les lignes Action et Dialogue, elles,
+        // dessinent dans la case comme le reste de la bande.
+        let simple = !m.shift && !m.ctrl && !m.command && !m.alt && !self.vignettes.camera_tenue;
+        let ouvre = |c: &CardPlace| c.a_du_texte() && (self.note_icone_rect(c).contains(pos) || (simple && self.ligne_notes(c).is_some_and(|r| r.contains(p))));
+        if let Some(k) = layout.cards.iter().position(ouvre) {
             self.commit_note_text(layout);
             self.commit_card_note();
             let c = layout.cards[k];
@@ -1020,8 +925,6 @@ impl App {
             NoteRef::Stroke(i) => i < ns,
             NoteRef::Text(i) => i < nt,
         });
-        let settings = self.layout.board_settings();
-        self.measure_notes(ui.ctx(), &settings);
         let mut layout = self.board_layout();
         self.suivre_decalage(&layout);
         if self.board_zoom <= 0.0 {
@@ -1193,6 +1096,8 @@ impl App {
             let icon = match hovered {
                 _ if pan_mode => CursorIcon::Grab,
                 Some(Hit::Bar(_)) => CursorIcon::PointingHand,
+                // La ligne Notes s'écrit d'un clic (sans Maj ni Ctrl) : le curseur de texte.
+                Some(Hit::Note(k)) if over.is_some_and(|p| self.ligne_notes(&layout.cards[k]).is_some_and(|r| r.contains(xf.to_board(p)))) => CursorIcon::Text,
                 Some(Hit::Empty(_)) if drawing => CursorIcon::Crosshair,
                 Some(Hit::Thumb(_) | Hit::Note(_)) if drawing || self.tool == Tool::Eraser => CursorIcon::Crosshair,
                 _ if self.tool == Tool::Text => CursorIcon::Text,
@@ -1790,31 +1695,35 @@ impl App {
             }
         }
     }
-    /// La bande de note sous l'image : le texte (trois lignes au plus, « … » au bout), ou un filet très pâle
-    /// quand elle est vide. Pendant la saisie, l'éditeur la remplace (`card_note_editor`).
+    /// Le texte sous l'image (à droite à la japonaise) : **une ligne par champ coché** (action, dialogue, notes, dans l'ordre de la fiche),
+    /// chacune coupée par « … » si le texte est trop long, et un filet très pâle dessous. Aucun champ coché : rien du tout. Pendant la
+    /// saisie, l'éditeur remplace la ligne Notes (`card_note_editor`).
     fn paint_card_note(&self, painter: &egui::Painter, xf: Xf, place: &CardPlace, strip: Rect) {
-        if self.vignettes.note.as_ref().is_some_and(|e| e.id == place.id) {
+        if !place.a_du_texte() {
             return;
         }
-        // Sous chaque bande, un filet très pâle (sans cadre : la maquette) ; le texte, petit et gris, au-dessus. (À la japonaise la bande
+        // Sous la zone, un filet très pâle (sans cadre : la maquette) ; le texte, petit et gris, au-dessus. (À la japonaise la zone
         // est à droite de la case, le filet est sous sa dernière ligne de même.)
         let y = strip.bottom() - 1.0;
         painter.line_segment([pos2(strip.left(), y), pos2(strip.right(), y)], Stroke::new(1.0_f32, HAIRLINE));
-        // Les champs montrés (action, dialogue, notes) qui ont un texte, l'un sous l'autre ; chacun avec son étiquette s'il y en a plusieurs.
         let textes = self.layout.board_textes;
-        let champs = crate::boardsens::champs_de_la_case(&self.doc, place.panel, place.id, place.frame, textes);
         let etiquette = textes.etiquettes();
+        let edite = self.vignettes.note.as_ref().is_some_and(|e| e.id == place.id);
         let width = (place.note.width() - NOTE_PAD * 2.0) * xf.zoom;
-        let mut y = strip.min.y;
-        for (champ, text) in champs {
+        for (i, champ) in textes.champs().into_iter().enumerate() {
+            if edite && champ == Champ::Notes {
+                continue;
+            }
+            let text = crate::boardsens::texte_du_champ(&self.doc, place.panel, place.id, place.frame, champ);
+            if text.trim().is_empty() {
+                continue;
+            }
             let size = board::note_font_size(text.chars().count()) * xf.zoom;
             if size < 4.0 {
                 return;
             }
-            let galley = painter.layout_job(champ_job(champ, text, size, width, etiquette));
-            let lignes = galley.rows.len().clamp(1, NOTE_MAX_LINES);
-            painter.galley(pos2(strip.min.x + NOTE_PAD * xf.zoom, y), galley, NOTE_INK);
-            y += lignes as f32 * board::NOTE_LINE_H * xf.zoom;
+            let galley = painter.layout_job(champ_job(champ, &crate::boardsens::une_ligne(text), size, width, etiquette));
+            painter.galley(pos2(strip.min.x + NOTE_PAD * xf.zoom, strip.min.y + i as f32 * board::NOTE_LINE_H * xf.zoom), galley, NOTE_INK);
         }
     }
 

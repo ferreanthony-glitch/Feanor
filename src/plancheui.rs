@@ -224,7 +224,7 @@ impl App {
             ui.vertical(|ui| {
                 let o = &mut e.opt;
                 bulles::bulle(ui.checkbox(&mut o.numeros, "Numéros de plan"), "Numéros de plan", "Le numéro du plan, au-dessus de sa première vignette.", "");
-                bulles::bulle(ui.checkbox(&mut o.notes, "Notes"), "Notes", "Les bandes de note sous les images (trois lignes au plus).", "");
+                bulles::bulle(ui.checkbox(&mut o.notes, "Notes"), "Notes", "Les textes sous les images : une ligne par champ coché dans le panneau Planche, coupée par « … » si elle est trop longue.", "");
                 bulles::bulle(ui.checkbox(&mut o.barres, "Barres de coupe"), "Barres de coupe", "Les barres entre deux vignettes : grises dans un même plan, noires à une coupe.", "");
                 bulles::bulle(ui.checkbox(&mut o.cadres, "Cadres de caméra"), "Cadres de caméra", "Là où la caméra bouge : les cadres A, B, C… en bleu fin, avec leurs lettres, la flèche ou les coins qui les relient.", "");
                 ui.add_enabled_ui(annotations > 0, |ui| {

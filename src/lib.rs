@@ -231,6 +231,8 @@ mod boardjapon;
 mod boardjapon_tests;
 mod boardmove;
 mod boardsens;
+#[cfg(test)]
+mod boardtextes_tests;
 mod boardui;
 mod vignettespanneau;
 mod debord;

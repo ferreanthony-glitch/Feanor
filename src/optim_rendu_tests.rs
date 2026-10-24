@@ -680,7 +680,7 @@ fn the_board_paints_every_card_and_rests_after_structure_changes() {
         let plans = b.app.doc.panels.len();
         assert!((0..layout.cards.len()).all(|k| b.app.case_tient(&layout, plans, k)), "{quoi} : toutes les cases tiennent");
         let s = crate::board::BoardSettings { rows: 0, ..b.app.layout.board_settings() };
-        let neuve = crate::board::layout_with(&b.app.doc, &s, &b.app.vignettes.lines, b.app.vignettes.empty_joins, &crate::board::Options::pale(b.app.layout.board_min_rows));
+        let neuve = crate::board::layout_with(&b.app.doc, &s, &Default::default(), b.app.vignettes.empty_joins, &crate::board::Options::pale(b.app.layout.board_min_rows));
         assert_eq!(layout, neuve, "{quoi} : la disposition gardée est celle qu'on referait");
         b.garder_formes = true;
         b.image(Vec::new(), 1.0 / 60.0);
@@ -712,7 +712,7 @@ fn the_board_paints_every_card_and_rests_after_structure_changes() {
 }
 
 #[test]
-fn the_board_view_keeps_its_layout_and_note_lines_until_something_changes() {
+fn the_board_view_keeps_its_layout_until_something_changes_and_a_note_does_not_change_it() {
     let mut doc = projet_long(60, 1, 8, 1);
     for i in 0..doc.panels.len() {
         doc.panels[i].notes = if i % 3 == 0 { format!("Plan {i} : le personnage entre par la gauche, regarde la fenêtre, puis sort lentement du cadre, très lentement.") } else { String::new() };
@@ -728,25 +728,30 @@ fn the_board_view_keeps_its_layout_and_note_lines_until_something_changes() {
     let calculs = b.app.vignettes.disposition.borrow().calculs;
     b.chauffer(10);
     assert_eq!(b.app.vignettes.disposition.borrow().calculs, calculs, "au repos, la planche ne se refait pas");
-    // Les mêmes lignes de notes et la même planche que le code d'avant (tout refait à chaque image).
-    let (lignes, planche) = (b.app.vignettes.lines.clone(), b.app.board_layout());
+    // La même planche que le code d'avant (tout refait à chaque image).
+    let planche = b.app.board_layout();
     crate::perf::set_ancien(true);
     b.chauffer(2);
-    let (lignes_avant, planche_avant) = (b.app.vignettes.lines.clone(), b.app.board_layout());
+    let planche_avant = b.app.board_layout();
     crate::perf::set_ancien(false);
-    assert_eq!(lignes, lignes_avant);
     assert_eq!(planche, planche_avant);
-    assert!(lignes.values().any(|&n| n > 1), "des notes sur plusieurs lignes");
-    // Une note plus longue : ses lignes et la planche suivent à l'image suivante.
-    let court = lignes[&b.app.doc.panels[3].id];
+    assert!(planche.cards.iter().all(|c| (c.note.height() - crate::board::NOTE_LINE_H).abs() < 1e-3), "une ligne par champ coché (les notes), quel que soit le texte");
+    // Une note plus courte ou plus longue ne change rien à la planche (une ligne coupée par « … », quelle que soit sa longueur) : la
+    // disposition gardée n'est pas refaite pour elle.
     b.app.doc.panels[3].notes = "Une note courte.".into();
     b.chauffer(2);
-    assert!(b.app.vignettes.lines[&b.app.doc.panels[3].id] < court, "la note raccourcie prend moins de lignes");
-    assert!(b.app.vignettes.disposition.borrow().calculs > calculs, "la planche suit");
+    assert_eq!(b.app.board_layout(), planche, "la planche ne dépend pas de ce qui est écrit");
+    assert_eq!(b.app.vignettes.disposition.borrow().calculs, calculs, "la note ne refait pas la planche");
+    // Un champ de plus coché : la planche suit, la même que le code d'avant.
+    b.app.layout.board_textes.action = true;
+    b.chauffer(2);
+    let deux = b.app.board_layout();
+    assert!(b.app.vignettes.disposition.borrow().calculs > calculs, "la planche suit les champs cochés");
+    assert!(deux.cards.iter().all(|c| (c.note.height() - 2.0 * crate::board::NOTE_LINE_H).abs() < 1e-3));
     crate::perf::set_ancien(true);
     b.chauffer(2);
-    let avant = (b.app.vignettes.lines.clone(), b.app.board_layout());
+    let avant = b.app.board_layout();
     crate::perf::set_ancien(false);
     b.chauffer(2);
-    assert_eq!((b.app.vignettes.lines.clone(), b.app.board_layout()), avant);
+    assert_eq!(b.app.board_layout(), avant);
 }

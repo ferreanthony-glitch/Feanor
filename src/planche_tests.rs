@@ -113,7 +113,7 @@ fn notes_make_taller_rows_and_are_drawn_only_when_asked() {
     let sans = construire(&doc, &tout(&doc), &reglages(), &Options { notes: false, ..opt() }, &doc.annotations);
     let carte = avec.cartes.iter().find(|c| c.place.plan == doc.panels[1].id).unwrap();
     let note: Vec<&String> = carte.champs.iter().flat_map(|(_, _, l)| l.iter()).collect();
-    assert!(note.len() >= 2 && note.len() <= 3, "{note:?}");
+    assert!(note.len() == 1 && note[0].ends_with('…'), "une seule ligne, coupée par « … » : {note:?}");
     assert!(avec.cadre.height() > sans.cadre.height(), "la rangée descend de ce que la note prend");
     let s = 1.5;
     let o = opt();

@@ -9,8 +9,9 @@
 //! coupe) et une courte barre verticale (grise : même plan ; noire : coupe).
 //!
 //! Vignettes simples (Anthony, 2026-10-21) : aucune bande de titre ; seul le numéro du plan, au-dessus
-//! de sa première vignette ; sous chaque vignette, une bande de note (de 1 à 3 lignes ; la ligne
-//! suivante descend d'autant). Une note libre reste où on l'a posée ; une note attachée à une vignette la suit,
+//! de sa première vignette ; sous chaque vignette, une bande de texte d'**une ligne par champ coché** du panneau Planche (action,
+//! dialogue, notes : de zéro à trois lignes, `Textes::lignes`, quel que soit le texte, coupé par « … ») ; la ligne
+//! suivante descend d'autant, et sans champ coché il n'y a pas de bande du tout. Une note libre reste où on l'a posée ; une note attachée à une vignette la suit,
 //! à son échelle.
 //!
 //! **Papier infini et cases pâles** (Anthony, 2026-10-21) : plus de carte blanche, les cases sont posées sur le papier. Après la
@@ -39,10 +40,12 @@
 //!   des cases d'avant, la case passe, une fois, à la première place où elle tient tout entière **après la précédente** : à droite sur la même
 //!   rangée, sinon sur la suivante. Les cases d'avant ne bougent jamais ;
 //! - une enveloppe qui dépasse la page en haut ou à gauche fait glisser toute la planche d'autant (`BoardLayout::decalage`) : la vue compense par
-//!   le défilement, rien ne saute à l'écran.
-//!//! Les rangées d'une planche dépendent de la hauteur de leurs notes, qui dépend de la place des cases : la place des rangées se
-//! déduit par quelques passes (`layout_with`), qui s'arrêtent dès que rien ne change (une seule passe tant que toutes les notes
-//! font une ligne).
+//!   le défilement, rien ne saute à l'écran (au repos, une enveloppe qui monte ou va à gauche ne dépasse plus : le cadre le plus haut est à la
+//!   ligne de la rangée).
+//!
+//! La hauteur des rangées d'une planche dépend de ce que les empreintes demandent à leur rangée (l'enveloppe et la note sous le dernier
+//! cadre), qui dépend de la place des cases : la place des rangées se
+//! déduit par quelques passes (`layout_with`), qui s'arrêtent dès que rien ne change (une seule passe sans mouvement de caméra).
 //!
 //! La place réservée peut être **retenue** (`Reserve`) : pendant un geste de caméra, l'étendue de l'enveloppe ne rétrécit
 //! jamais, si bien que les autres cases ne tremblent pas quand le cadre va et vient ; au lâcher tout se range d'après les cadres.
@@ -61,10 +64,9 @@ use crate::vignettecam::{self, Empreinte, Place, Zone};
 pub const LABEL_H: f32 = 30.0;
 /// Taille des lettres du numéro de plan, en part de la hauteur de sa ligne.
 pub const NUMERO_FRACTION: f32 = 0.68;
-/// Espace entre une vignette et sa bande de note ; hauteur d'une ligne de note ; lignes affichées au plus.
+/// Espace entre une vignette et sa bande de note ; hauteur d'une ligne de texte (une par champ coché : action, dialogue, notes).
 pub const NOTE_GAP: f32 = 8.0;
 pub const NOTE_LINE_H: f32 = 13.0;
-pub const NOTE_MAX_LINES: usize = 3;
 /// Largeur la plus étroite d'une bande de note (sous un cadre de caméra étroit).
 pub const MIN_NOTE_W: f32 = 60.0;
 /// Espace sous la dernière ligne de note, avant la ligne suivante.
@@ -239,6 +241,16 @@ impl CardPlace {
     /// La ligne du numéro de plan, au-dessus de l'image.
     pub fn label(&self) -> Rect {
         Rect::from_min_max(self.card.min, pos2(self.card.right(), self.thumb.top()))
+    }
+
+    /// La zone de texte existe-t-elle ? (Aucun champ coché : une bande sans hauteur, rien à peindre ni à toucher.)
+    pub fn a_du_texte(&self) -> bool {
+        self.note.is_positive()
+    }
+
+    /// La ligne `i` de la zone de texte (0 : la première), un champ coché chacune.
+    pub fn ligne_de_texte(&self, i: usize) -> Rect {
+        Rect::from_min_size(self.note.min + vec2(0.0, i as f32 * NOTE_LINE_H), vec2(self.note.width(), NOTE_LINE_H))
     }
 }
 
@@ -604,7 +616,6 @@ struct Cle {
     frame: [usize; 2],
     plans: Vec<ClePlan>,
     s: [u64; 3],
-    lines: HashMap<u64, usize>,
     last_joins: bool,
     pale_rows: Option<usize>,
     hold: Option<CleHold>,
@@ -637,17 +648,17 @@ fn bits_hold(opt: &Options) -> Option<CleHold> {
 }
 
 impl Cle {
-    fn de(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> Cle {
+    fn de(doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options) -> Cle {
         let plans = doc
             .panels
             .iter()
             .map(|p| ClePlan { id: p.id, scene: p.scene, n: p.frame_count(), marks: p.marks.iter().map(|m| (m.id, m.frame)).collect(), camera: p.camera.iter().map(bits_cam).collect() })
             .collect();
-        Cle { frame: doc.frame, plans, s: bits_reglages(s), lines: lines.clone(), last_joins, pale_rows: opt.pale_rows, hold: bits_hold(opt), sens: opt.sens, textes: opt.textes.bits() }
+        Cle { frame: doc.frame, plans, s: bits_reglages(s), last_joins, pale_rows: opt.pale_rows, hold: bits_hold(opt), sens: opt.sens, textes: opt.textes.bits() }
     }
 
     /// La disposition de ces arguments serait-elle celle de cette clé ? (Un passage sur les plans, sans rien allouer.)
-    fn tient(&self, doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> bool {
+    fn tient(&self, doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options) -> bool {
         self.frame == doc.frame
             && self.s == bits_reglages(s)
             && self.last_joins == last_joins
@@ -665,28 +676,28 @@ impl Cle {
                     && k.camera.len() == p.camera.len()
                     && k.camera.iter().zip(&p.camera).all(|(a, c)| *a == bits_cam(c))
             })
-            && self.lines == *lines
     }
 }
 
 /// `layout_with`, gardée dans `cache` tant que rien de ce dont elle dépend ne change (`CacheDisposition`).
 pub fn layout_cache(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options, cache: &mut CacheDisposition) -> BoardLayout {
-    if !cache.cle.as_ref().is_some_and(|k| k.tient(doc, s, lines, last_joins, opt)) {
+    if !cache.cle.as_ref().is_some_and(|k| k.tient(doc, s, last_joins, opt)) {
         cache.layout = layout_with(doc, s, lines, last_joins, opt);
-        cache.cle = Some(Cle::de(doc, s, lines, last_joins, opt));
+        cache.cle = Some(Cle::de(doc, s, last_joins, opt));
         cache.calculs += 1;
     }
     cache.layout.clone()
 }
 
-/// Comme `layout`. `lines` : le nombre de lignes de note affichées (1 à 3) de chaque vignette, par son
-/// identifiant (absente : une ligne). `last_joins` : la première case pâle, si on la remplit, fait une
+/// Comme `layout`. `_lines` : le nombre de lignes de note de chaque vignette, **ignoré depuis le 2026-10-24** (chaque champ coché fait
+/// exactement une ligne, `Textes::lignes`, quel que soit son texte : la bande ne dépend plus de ce qui est écrit) ; l'argument reste pour
+/// ne pas changer tous les appels. `last_joins` : la première case pâle, si on la remplit, fait une
 /// image de plus du dernier plan (barre grise devant elle) et non un plan neuf (barre noire).
 /// Ne dépend pas de la taille de la vue : les notes libres restent à leur place quand la fenêtre change.
-pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> BoardLayout {
+pub fn layout_with(doc: &Document, s: &BoardSettings, _lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> BoardLayout {
     // À la japonaise : les colonnes (`boardjapon.rs`), le même résultat (`BoardLayout`) rangé dans l'autre sens.
     if opt.sens.japonais() {
-        return crate::boardjapon::layout(doc, s, lines, last_joins, opt);
+        return crate::boardjapon::layout(doc, s, last_joins, opt);
     }
     let cols = s.columns.clamp(1, MAX_COLUMNS);
     // (Une largeur qui n'est pas un nombre, d'un fichier de réglages abîmé, passerait à travers `clamp` et rendrait toute la
@@ -699,8 +710,8 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     }
     let n = boards.len();
     let page_cap = if s.rows == 0 { usize::MAX } else { s.rows.min(MAX_ROWS).max(1) };
-    let lignes_max = opt.textes.lignes_max();
-    let note_lines = |k: usize| lines.get(&boards[k].1).copied().unwrap_or(1).clamp(1, lignes_max);
+    // Les lignes de texte sous chaque case : une par champ coché (zéro : pas de zone de texte, `texte_h`).
+    let n_l = opt.textes.lignes();
     // L'écart après la vignette `k` : serré dans un plan, large à une coupe ; après une case pâle, large.
     let joined_after = |k: usize| match boards.get(k + 1) {
         Some(next) => next.2 > 0,
@@ -711,13 +722,11 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let gap_after = |k: usize| if joined_after(k) { g_same } else { g_cut };
     let row_w = cols as f32 * card_w + (cols - 1) as f32 * g_cut;
 
-    // Les empreintes (la première image d'un plan dont la caméra bouge).
-    let mut prints: Vec<Option<Empreinte>> = Vec::with_capacity(n);
-    for (k, b) in boards.iter().enumerate() {
-        let total = ng + note_lines(k) as f32 * NOTE_LINE_H;
-        let place = Place { card_w, thumb_h, row_w, total, max_h: 3.0 * (LABEL_H + thumb_h + total + ROW_GAP) };
-        prints.push(if b.2 == 0 { vignettecam::empreinte(doc, b.0, &place) } else { None });
-    }
+    // Les empreintes (la première image d'un plan dont la caméra bouge). (La limite de taille d'un cadre compte toujours une ligne de texte,
+    // quels que soient les champs cochés : le dessin d'un mouvement ne change pas de forme quand on coche ou décoche un champ.)
+    let total = ng + NOTE_LINE_H;
+    let place = Place { card_w, thumb_h, row_w, total, max_h: 3.0 * (LABEL_H + thumb_h + total + ROW_GAP) };
+    let prints: Vec<Option<Empreinte>> = boards.iter().map(|b| if b.2 == 0 { vignettecam::empreinte(doc, b.0, &place) } else { None }).collect();
     // Ce qu'elles réservent : l'enveloppe (élargie à ce que le geste en cours a déjà couvert), et la bande de note de A quand elle
     // descend sous l'enveloppe. (Relatives au coin haut-gauche de A.)
     let polys: Vec<Option<Vec<Pos2>>> = prints
@@ -744,12 +753,13 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let notes: Vec<Option<Rect>> = prints
         .iter()
         .enumerate()
-        .map(|(k, e)| {
-            let e = e.as_ref()?;
+        .map(|(_, e)| {
+            // (Aucun champ coché : pas de note, rien sous le dernier cadre.)
+            let e = e.as_ref().filter(|_| n_l > 0)?;
             let b = e.cadres.last()?.rect;
             let (gauche, droite) = (b.left(), b.right().max(b.left() + MIN_NOTE_W));
             let sous_b = crate::viewbar::clip_to_rect(&e.enveloppe, Rect::from_min_max(pos2(gauche, -1e6), pos2(droite, 1e6))).iter().map(|q| q.y).fold(b.bottom(), f32::max);
-            Some(Rect::from_min_max(pos2(gauche, sous_b + ng), pos2(droite, sous_b + ng + note_lines(k) as f32 * NOTE_LINE_H)))
+            Some(Rect::from_min_max(pos2(gauche, sous_b + ng), pos2(droite, sous_b + ng + n_l as f32 * NOTE_LINE_H)))
         })
         .collect();
     // **Le cadre le plus haut du mouvement s'aligne sur le haut des images de la rangée** (Anthony, 2026-10-24), comme n'importe quelle case :
@@ -773,8 +783,10 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     // Le geste de caméra en cours : la case A du plan reste où elle était (`Reserve::pose`).
     let forces: Vec<Option<(usize, f32)>> = (0..n).map(|k| tenue(k).and_then(|h| h.pose)).collect();
     let unite = Gabarit::unite(card_w);
-    let nominal = LABEL_H + thumb_h + ng + NOTE_LINE_H + ROW_GAP;
-    let hauteur_rangee = |lignes: usize| LABEL_H + thumb_h + ng + lignes as f32 * NOTE_LINE_H + ROW_GAP;
+    // La hauteur d'une rangée sans mouvement : le numéro, l'image, le texte (l'espace sous la case puis une ligne par champ coché ; rien du
+    // tout sans champ coché, Anthony, 2026-10-24) et la marge. Toutes les rangées ont les mêmes lignes de texte : seule une empreinte plus
+    // haute les agrandit (`besoin`).
+    let nominal = LABEL_H + thumb_h + if n_l == 0 { 0.0 } else { ng } + n_l as f32 * NOTE_LINE_H + ROW_GAP;
 
     // Où chaque case se pose. Les rangées touchées par une enveloppe dépendent de la hauteur des rangées, qui dépend des notes des
     // cases posées : on repart des hauteurs de la passe d'avant (nominales d'abord) jusqu'à ce que rien ne change.
@@ -782,21 +794,15 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let mut rangs: Vec<usize> = vec![0; n];
     let mut pose = Pose { placed: Vec::new(), occ: Occ::default(), cursor: (0, 0.0) };
     let mut gabarits: Vec<Gabarit> = Vec::new();
-    let mut most: Vec<usize> = Vec::new();
     for passe in 0..5 {
         let hauteur_estimee = |r: i64| usize::try_from(r).ok().and_then(|r| estimees.get(r).copied()).unwrap_or(nominal);
         gabarits = (0..n).map(|k| polys_l[k].as_ref().map_or_else(|| unite.clone(), |poly| gabarit_de(poly, notes_l[k], &hauteur_estimee, rangs[k]))).collect();
         pose = poser(&gabarits, &unite, &a_print, &forces, &gap_after, row_w, page_cap);
-        // Les notes les plus hautes de chaque rangée (celles des cases dont l'image est dans la rangée).
         let derniere = pose.placed.iter().zip(&gabarits).map(|(p, g)| p.0 + g.b_max as usize).max().unwrap_or(0);
-        most = vec![1usize; derniere + 1];
-        for (k, p) in pose.placed.iter().enumerate() {
-            most[p.0] = most[p.0].max(note_lines(k));
-        }
         if !a_print.iter().any(|p| *p) {
             break;
         }
-        let mut reelles: Vec<f32> = most.iter().map(|&l| hauteur_rangee(l)).collect();
+        let mut reelles: Vec<f32> = vec![nominal; derniere + 1];
         for (k, p) in pose.placed.iter().enumerate() {
             if let Some(h) = reelles.get_mut(p.0) {
                 *h = h.max(besoin[k]);
@@ -840,9 +846,8 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let per_page = if page_cap == usize::MAX { rows_n } else { page_cap };
     let pages = rows_n.div_ceil(per_page).max(1);
 
-    // Hauteur de chaque ligne (ses notes les plus hautes : celles des cases dont l'image est dans la ligne), puis haut des
-    // lignes et des pages.
-    let mut row_h: Vec<f32> = (0..rows_n).map(|r| hauteur_rangee(most.get(r).copied().unwrap_or(1))).collect();
+    // Hauteur de chaque ligne (la nominale, plus haute si une empreinte le demande), puis haut des lignes et des pages.
+    let mut row_h: Vec<f32> = vec![nominal; rows_n];
     for (k, &(r, _)) in placed.iter().enumerate() {
         if let Some(h) = row_h.get_mut(r) {
             *h = h.max(besoin[k]);
@@ -893,7 +898,8 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         let p = &doc.panels[i];
         let mut foot = thumb;
         let mut mv = None;
-        let mut note = Rect::from_min_size(pos2(x, bottom + ng), vec2(card_w, note_lines(k) as f32 * NOTE_LINE_H));
+        // (Sans champ coché, la zone de texte n'a pas de hauteur : rien à peindre ni à toucher, et la case suivante n'attend rien.)
+        let mut note = Rect::from_min_size(pos2(x, bottom + if n_l == 0 { 0.0 } else { ng }), vec2(card_w, n_l as f32 * NOTE_LINE_H));
         if let Some(e) = &prints[k] {
             let au = vec2(x, top);
             let cadres: Vec<CadreBoard> = e.cadres.iter().map(|c| CadreBoard { rang: c.rang, rect: c.rect.translate(au), coins: c.coins.map(|q| q + au), reduit: c.reduit }).collect();
@@ -970,7 +976,7 @@ pub fn hit(layout: &BoardLayout, p: Pos2, bar_min_w: f32) -> Hit {
     if let Some(k) = layout.card_at(p) {
         return Hit::Thumb(k);
     }
-    if let Some(k) = layout.cards.iter().position(|c| c.note.contains(p)) {
+    if let Some(k) = layout.cards.iter().position(|c| c.a_du_texte() && c.note.contains(p)) {
         return Hit::Note(k);
     }
     match layout.empty.iter().position(|e| e.contains(p)) {
