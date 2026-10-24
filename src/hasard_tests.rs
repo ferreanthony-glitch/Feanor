@@ -364,6 +364,10 @@ fn projet_couleur(plans: usize) -> Document {
     for p in 0..doc.panels.len() {
         let pair = p % 2 == 0;
         let mut trait_ = Layer::new(if pair { "Trait" } else { "Ligne" }, LayerKind::Vector);
+        // (Réglé autrement d'un plan à l'autre : les traits ne se réunissent pas toujours, les couleurs de même nom si.)
+        if !pair {
+            trait_.opacity = 0.5;
+        }
         let mut bitmap = Layer::new(if pair { "Calque 1" } else { "Calque 2" }, LayerKind::Bitmap);
         for f in 0..images {
             if f % 2 == 0 {
@@ -385,7 +389,7 @@ fn projet_couleur(plans: usize) -> Document {
                 bitmap.frames.push(bitmap.frames.last().copied().flatten());
             }
         }
-        let mut couleur = Layer::new(if pair { "Couleur" } else { "Couleur 2" }, LayerKind::Bitmap);
+        let mut couleur = Layer::new(if p % 3 == 2 { "Couleur 2" } else { "Couleur" }, LayerKind::Bitmap);
         couleur.couleur = Some(CalqueCouleur::new(trait_.id));
         let effet = Layer::new_effect("Ajustement", CalqueEffet::ajustement(""));
         doc.panels[p].layers = vec![couleur, trait_, bitmap, effet];
@@ -526,13 +530,13 @@ const GARDENT_LES_DESSINS: &[&str] = &[
     "Nouveau plan avant le plan courant",
 ];
 
-/// Les dessins montrés par les calques de dessin ordinaires des plans (pas le Décor, qu'une réunion peut remplacer, ni les calques
-/// de couleur, refaits d'après leur trait, ni les calques d'effet ou de vidéo).
+/// Les dessins montrés par les calques de dessin des plans, calques de couleur compris (pas le Décor, qu'une réunion peut remplacer,
+/// ni les calques d'effet ou de vidéo).
 fn dessins_ordinaires(doc: &Document) -> BTreeSet<CelId> {
     doc.panels
         .iter()
         .flat_map(|p| p.layers.iter())
-        .filter(|l| !l.folder && !l.decor && l.couleur.is_none() && l.effet.is_none() && l.video.is_none())
+        .filter(|l| !l.folder && !l.decor && l.effet.is_none() && l.video.is_none())
         .flat_map(|l| l.frames.iter().flatten().copied())
         .collect()
 }
@@ -1745,6 +1749,93 @@ fn hasard_a_mark_keeps_a_lifted_selection_unless_it_copies_its_drawing() {
     let noms = e.b.app.history.names().0.iter().map(|s| s.to_string()).collect::<Vec<_>>();
     assert!(e.b.app.bsel.as_ref().is_none_or(|s| s.lifted.is_none()), "la zone s'est posée");
     assert!(noms.len() >= 2 && noms[noms.len() - 2] == "Déplacer", "le déplacement a son étape, avant la marque : {noms:?}");
+}
+
+/// Réunir deux plans qui ont chacun un calque « Couleur » sous leur trait, quand les traits ne se réunissent pas (« Trait » et
+/// « Ligne », réglés autrement) : la couleur du second plan garde son trait. Les deux calques de couleur se réunissaient par leur nom,
+/// la couleur réunie suivait le trait du premier plan, vide sur la suite : les dessins de couleur du second n'étaient plus montrés
+/// nulle part, et l'enregistrement les effaçait (revue du 2026-10-24).
+#[test]
+fn hasard_joining_keeps_the_colour_of_the_second_plan_when_its_line_stays_apart() {
+    use crate::calquecouleur::CalqueCouleur;
+    use crate::document::{Cel, Layer, LayerKind};
+    let mut doc = Document::with_frame(160, 90, 24);
+    doc.add_scene_after(0);
+    let n = 6;
+    let dessin = |doc: &mut Document| doc.add_cel(Cel::new(doc.width, doc.height, LayerKind::Vector));
+    let mut trait_a = Layer::new("Trait", LayerKind::Vector);
+    trait_a.frames = (0..n).map(|_| Some(dessin(&mut doc))).collect();
+    let mut couleur_a = Layer::new("Couleur", LayerKind::Bitmap);
+    couleur_a.couleur = Some(CalqueCouleur::new(trait_a.id));
+    let mut ligne_b = Layer::new("Ligne", LayerKind::Vector);
+    ligne_b.opacity = 0.5;
+    ligne_b.frames = (0..n).map(|_| Some(dessin(&mut doc))).collect();
+    let mut couleur_b = Layer::new("Couleur", LayerKind::Bitmap);
+    couleur_b.couleur = Some(CalqueCouleur::new(ligne_b.id));
+    doc.panels[0].layers = vec![couleur_a, trait_a];
+    doc.panels[1].layers = vec![couleur_b, ligne_b];
+    for p in &mut doc.panels {
+        p.length = n;
+    }
+    crate::calquecouleur::refleter(&mut doc, 0);
+    crate::calquecouleur::refleter(&mut doc, 1);
+    let de_b: Vec<CelId> = doc.panels[1].layers.iter().flat_map(|l| l.frames.iter().flatten().copied()).collect();
+    assert_eq!(de_b.len(), 2 * n, "le second plan a ses dessins de trait et de couleur");
+    let i = doc.join_next_plan(0).expect("réunis");
+    crate::calquecouleur::refleter(&mut doc, i);
+    let utilises = doc.used_cels();
+    let perdus: Vec<CelId> = de_b.iter().copied().filter(|c| !utilises.contains(c)).collect();
+    assert!(perdus.is_empty(), "{} dessins du second plan ne sont plus nulle part : {perdus:?}", perdus.len());
+    for l in &doc.panels[i].layers {
+        if let Some(c) = &l.couleur {
+            assert!(doc.panels[i].layers.iter().any(|t| t.id == c.trait_id && t.couleur.is_none()), "« {} » colore un trait du plan", l.name);
+        }
+    }
+}
+
+/// Réunir deux plans dont les calques de couleur se réunissent, quand la table du second garde la couleur d'un dessin de trait que
+/// le premier montre encore (reste d'un trait effacé du second) : la couleur du premier gardait sa place. Elle était écrasée, et ses
+/// dessins ne se montraient plus nulle part (graine 1029 du hasard, 2026-10-24).
+#[test]
+fn hasard_joining_keeps_the_colour_of_a_line_drawing_the_first_plan_still_shows() {
+    use crate::calquecouleur::CalqueCouleur;
+    use crate::document::{Cel, Layer, LayerKind};
+    let mut doc = Document::with_frame(160, 90, 24);
+    doc.add_scene_after(0);
+    let n = 4;
+    let dessin = |doc: &mut Document, genre| doc.add_cel(Cel::new(doc.width, doc.height, genre));
+    let trait_a_cel = dessin(&mut doc, LayerKind::Vector);
+    let couleur_a_cel = dessin(&mut doc, LayerKind::Bitmap);
+    let trait_b_cel = dessin(&mut doc, LayerKind::Vector);
+    let couleur_b_cel = dessin(&mut doc, LayerKind::Bitmap);
+    let reste_b_cel = dessin(&mut doc, LayerKind::Bitmap);
+    let mut trait_a = Layer::new("Trait", LayerKind::Vector);
+    trait_a.frames = vec![Some(trait_a_cel); n];
+    let mut couleur_a = Layer::new("Couleur", LayerKind::Bitmap);
+    let mut ca = CalqueCouleur::new(trait_a.id);
+    ca.dessins.insert(trait_a_cel, couleur_a_cel);
+    couleur_a.couleur = Some(ca);
+    couleur_a.frames = vec![Some(couleur_a_cel); n];
+    let mut trait_b = Layer::new("Trait", LayerKind::Vector);
+    trait_b.frames = vec![Some(trait_b_cel); n];
+    let mut couleur_b = Layer::new("Couleur", LayerKind::Bitmap);
+    let mut cb = CalqueCouleur::new(trait_b.id);
+    cb.dessins.insert(trait_b_cel, couleur_b_cel);
+    // (Un dessin de trait que `b` ne montre plus, mais que `a` montre : la table de `b` en garde la couleur.)
+    cb.dessins.insert(trait_a_cel, reste_b_cel);
+    couleur_b.couleur = Some(cb);
+    couleur_b.frames = vec![Some(couleur_b_cel); n];
+    doc.panels[0].layers = vec![couleur_a, trait_a];
+    doc.panels[1].layers = vec![couleur_b, trait_b];
+    for p in &mut doc.panels {
+        p.length = n;
+    }
+    let i = doc.join_next_plan(0).expect("réunis");
+    crate::calquecouleur::refleter(&mut doc, i);
+    let utilises = doc.used_cels();
+    for (nom, c) in [("couleur du premier", couleur_a_cel), ("couleur du second", couleur_b_cel)] {
+        assert!(utilises.contains(&c), "la {nom} n'est plus nulle part");
+    }
 }
 
 /// Réunir deux plans quand le premier a un calque de couleur sous son trait et le second un calque bitmap ordinaire sous le sien,

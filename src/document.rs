@@ -2492,6 +2492,22 @@ impl Document {
                 target[j] = Some(j);
             }
         }
+        // Un calque de couleur de `b` ne se réunit à un calque de couleur de `a` que si son trait va lui aussi dans le trait de
+        // celui-ci (ou s'ils sont libres tous les deux) : sinon la couleur réunie suivait le trait de `a`, vide sur la suite, et les
+        // dessins de couleur de `b` n'étaient plus montrés par aucun calque — l'enregistrement les effaçait (revue du 2026-10-24).
+        // Ajouté tel quel, il garde son trait (remis plus bas sur le calque où celui-ci est allé).
+        for j in 0..b.layers.len() {
+            let (Some(k), Some(cb)) = (target[j], b.layers[j].couleur.as_ref()) else { continue };
+            let Some(ca) = a.layers[k].couleur.as_ref() else { continue };
+            let accordes = match (ca.trait_id, cb.trait_id) {
+                (0, 0) => true,
+                (0, _) | (_, 0) => false,
+                (ta, tb) => b.layers.iter().position(|l| l.id == tb).and_then(|jt| target[jt]).is_some_and(|kt| a.layers[kt].id == ta),
+            };
+            if !accordes {
+                target[j] = None;
+            }
+        }
         for l in &mut a.layers {
             l.frames.resize(a_len, None);
             l.roles.retain(|f, _| *f < a_len);
@@ -2504,6 +2520,19 @@ impl Document {
         let cible: Vec<Option<u64>> = target.iter().map(|t| t.map(|k| a.layers[k].id)).collect();
         // Les sources des calques de couleur de `b` réunis à un calque de couleur de `a` : remises sur les calques d'arrivée plus bas.
         let mut sources_b: Vec<(u64, Vec<u64>)> = Vec::new();
+        // Les dessins que montrent le trait de `a` et celui de `b` (par calque de couleur de `b`) : la couleur d'un dessin de trait
+        // qui n'est plus montré garde son entrée dans la table (reste d'un trait effacé), et elle écrasait celle d'un dessin que
+        // `a` montre encore (passe de débogage au hasard, 2026-10-24).
+        let montres = |layers: &[Layer], trait_id: u64| -> BTreeSet<CelId> {
+            layers.iter().find(|l| l.id == trait_id).map(|t| t.frames.iter().flatten().copied().collect()).unwrap_or_default()
+        };
+        let de_a_et_b: Vec<Option<(BTreeSet<CelId>, BTreeSet<CelId>)>> = (0..b.layers.len())
+            .map(|j| {
+                let (k, cb) = (target[j]?, b.layers[j].couleur.as_ref()?);
+                let ca = a.layers[k].couleur.as_ref()?;
+                Some((montres(&a.layers, ca.trait_id), montres(&b.layers, cb.trait_id)))
+            })
+            .collect();
         for (j, mut lb) in b.layers.into_iter().enumerate() {
             lb.frames.truncate(b_len);
             lb.roles.retain(|f, _| *f < b_len);
@@ -2511,8 +2540,18 @@ impl Document {
                 Some(k) => {
                     // Deux calques de couleur réunis : la couleur de chaque dessin du trait de `b` et ses griffonnages suivent.
                     if let (Some(ca), Some(cb)) = (a.layers[k].couleur.as_mut(), lb.couleur.take()) {
-                        ca.dessins.extend(cb.dessins);
-                        ca.griffonnages.extend(cb.griffonnages);
+                        let (de_a, de_b) = de_a_et_b[j].clone().unwrap_or_default();
+                        for (trait_cel, couleur_cel) in cb.dessins {
+                            // (Celle de `b` l'emporte seulement si `b` montre ce dessin de trait et pas `a`.)
+                            if !ca.dessins.contains_key(&trait_cel) || (de_b.contains(&trait_cel) && !de_a.contains(&trait_cel)) {
+                                ca.dessins.insert(trait_cel, couleur_cel);
+                            }
+                        }
+                        for (trait_cel, g) in cb.griffonnages {
+                            if !ca.griffonnages.contains_key(&trait_cel) || (de_b.contains(&trait_cel) && !de_a.contains(&trait_cel)) {
+                                ca.griffonnages.insert(trait_cel, g);
+                            }
+                        }
                         sources_b.push((a.layers[k].id, cb.sources));
                     }
                     a.layers[k].append_at(a_len, lb.frames, &lb.roles);
