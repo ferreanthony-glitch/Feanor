@@ -493,9 +493,21 @@ fn photo(doc: &Document) -> String {
     let mut sequences = doc.sequences.clone();
     sequences.sort_by_key(|s| s.id);
     let (scenes, sequences) = (format!("scenes {scenes:?}"), format!("sequences {sequences:?}"));
+    // (Une strate Aplat vide est comme pas d'aplat : annuler le premier trait d'aplat d'un dessin la laisse là, vide.)
+    let vides: Vec<(String, String)> = doc.cels.iter().filter(|(_, c)| c.fond.as_ref().is_some_and(|s| s.is_empty())).map(|(id, _)| (format!("dessin {id} fond "), format!("dessin {id} sans fond"))).collect();
     instantane(doc, &sans_pixels(doc))
         .lines()
-        .map(|l| if l.starts_with("scenes ") { scenes.as_str() } else if l.starts_with("sequences ") { sequences.as_str() } else { l })
+        .map(|l| {
+            if l.starts_with("scenes ") {
+                scenes.clone()
+            } else if l.starts_with("sequences ") {
+                sequences.clone()
+            } else if let Some((_, sans)) = vides.iter().find(|(debut, _)| l.starts_with(debut.as_str())) {
+                sans.clone()
+            } else {
+                l.to_string()
+            }
+        })
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -536,8 +548,27 @@ fn photo_enregistrable(doc: &mut Document) -> String {
             }
         }
     }
+    // De même, un calque de couleur n'écrit que la couleur des dessins du trait encore dans le projet (`project.rs`, `garde`) : une
+    // entrée d'un dessin du trait supprimé reste en mémoire le temps d'une annulation.
+    let utilises = doc.used_cels();
+    let couleurs: Vec<Vec<Option<crate::calquecouleur::CalqueCouleur>>> = doc.panels.iter().map(|p| p.layers.iter().map(|l| l.couleur.clone()).collect()).collect();
+    for p in &mut doc.panels {
+        let ids: Vec<u64> = p.layers.iter().map(|l| l.id).collect();
+        for l in &mut p.layers {
+            if let Some(c) = l.couleur.as_mut() {
+                c.dessins.retain(|t, k| utilises.contains(t) && utilises.contains(k));
+                c.griffonnages.retain(|a, g| utilises.contains(a) && utilises.contains(g));
+                c.sources.retain(|s| ids.contains(s));
+            }
+        }
+    }
     let s = photo(doc);
     doc.reserves = gardees;
+    for (p, cs) in doc.panels.iter_mut().zip(couleurs) {
+        for (l, c) in p.layers.iter_mut().zip(cs) {
+            l.couleur = c;
+        }
+    }
     s
 }
 
