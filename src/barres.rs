@@ -22,7 +22,7 @@ use eframe::egui::{self, vec2, RichText, Ui};
 use egui_phosphor::regular as ph;
 use serde::{Deserialize, Serialize};
 
-use crate::app::{App, BoardView, Mode};
+use crate::app::{App, Mode};
 use crate::bulles::{self, bulle};
 
 /// Les quatre barres qui ont un « Plus… ». (La barre des panneaux, à droite, n'en a pas.)
@@ -163,7 +163,8 @@ pub(crate) const COMMANDES: &[Cmd] = &[
 ];
 
 /// Barre du montage : la lecture, un plan ou une séquence de plus, les menus Plans et Son, entrer
-/// dans le plan, la vue ; le reste sous « Plus… ».
+/// dans le plan ; le reste sous « Plus… ». (Les vues dessin et vignettes ne sont plus là : Maj+Tab, et
+/// l'onglet Vignettes.)
 pub(crate) const MONTAGE: &[Cmd] = &[
     bouton("montage.debut", ph::SKIP_BACK, "Début du montage", "Revenir à la première image du film.", true, 0),
     bouton("lecture.basculer", ph::PLAY, "Lire le montage / pause", "Tout le film à la suite (animatique), avec le son.", true, 0),
@@ -291,17 +292,6 @@ pub(crate) const MONTAGE: &[Cmd] = &[
     ),
     // (L'onglet Animation, en haut à droite, fait la même chose : sous « Plus… », comme le double-clic sur le plan.)
     bouton("mode.basculer", ph::FILM_SLATE, "Animer ce plan", "Entrer dans le plan courant pour l'animer (ou double-clic sur le plan).", false, 4),
-    cmd("vue.dessin", Genre::Etat, ph::PAINT_BRUSH, "Vue dessin", "Dessiner le plan courant.", "vue.planches", true, 5),
-    cmd(
-        "vue.vignettes",
-        Genre::Etat,
-        ph::SQUARES_FOUR,
-        "Vue vignettes",
-        "Toutes les images de storyboard en planche : le début de chaque plan, puis ses marques d'image.",
-        "vue.planches",
-        true,
-        5,
-    ),
 ];
 
 /// Barre de la timeline : le plan, le transport, les dessins et la caméra ; les dessins qu'on retire ou vide, la
@@ -383,7 +373,7 @@ pub(crate) const TIMELINE: &[Cmd] = &[
 /// Barre de l'espace Montage (troisième onglet) : celle du montage, remise pour le travail de montage.
 /// Les commandes d'édition sont montrées d'office, dans l'ordre d'un geste de monteur : lire, couper
 /// et rogner, transitions et son, pistes, relecture et exports. Les autres commandes de la barre du
-/// montage (verrouillages, envois, versions, vues) sont toutes là, sous « Plus… ». Elle a ses propres
+/// montage (verrouillages, envois, versions) sont toutes là, sous « Plus… ». Elle a ses propres
 /// épingles (`ReglageBarres::montage_edition`) : celles de la barre du storyboard n'y changent rien.
 fn montage_edition() -> &'static [Cmd] {
     static BARRE: OnceLock<Vec<Cmd>> = OnceLock::new();
@@ -777,8 +767,6 @@ impl App {
                 };
                 (v.icone, v.nom, v.description) = (icone.to_string(), nom.to_string(), what.to_string());
             }
-            "vue.dessin" => v.etat = Some(self.board_view == BoardView::Scene),
-            "vue.vignettes" => v.etat = Some(self.board_view == BoardView::Panels),
             "marque.basculer" => v.etat = Some(self.panel().marks.iter().any(|m| m.frame == self.cur_frame)),
             "camera.cle_debut" => v.icone = format!("|{}", ph::DIAMOND),
             "camera.cle_fin" => v.icone = format!("{}|", ph::DIAMOND),
@@ -836,8 +824,6 @@ impl App {
                 Mode::Storyboard => self.enter_animation(self.cur_panel),
                 Mode::Animation => self.set_mode(Mode::Storyboard),
             },
-            (_, "vue.dessin") => self.board_view = BoardView::Scene,
-            (_, "vue.vignettes") => self.board_view = BoardView::Panels,
             _ => self.run_action(c.action),
         }
     }

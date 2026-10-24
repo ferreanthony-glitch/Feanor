@@ -218,11 +218,23 @@ impl App {
         self.action_item(ui, "Retirer du nuancier", "pastille.retirer");
     }
 
-    /// Les nuanciers : celui qui est montré (à choisir parmi les autres) et ses commandes (nouveau, renommer, dupliquer,
-    /// supprimer, importer, exporter, ajouter ou retirer une couleur). Sous « Plus de couleurs » dans le panneau.
-    pub(crate) fn palette_manager(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            crate::bulles::etiquette(ui, ph::SWATCHES, "Nuancier", "Tes nuanciers : choisis celui qui est montré ; clic droit sur son nom : ses commandes.");
+    /// Sur la ligne du haut du panneau Couleur, après les deux carrés : « + » (ajouter la couleur d'avant-plan à la
+    /// fin du nuancier), « − » (retirer la pastille), « … » (les commandes du nuancier) ; à droite, le nuancier montré
+    /// (celui qu'on choisit parmi les autres ; clic droit sur son nom : ses commandes).
+    pub(crate) fn palette_top(&mut self, ui: &mut egui::Ui) {
+        let here = self.shown_palette().position(self.color);
+        if self.bouton_si(ui, here.is_none(), ph::PLUS, "Ajouter au nuancier", "Ajouter la couleur d'avant-plan à la fin du nuancier.", "nuancier.ajouter").clicked() {
+            self.add_to_palette(self.color);
+        }
+        if self
+            .bouton_si(ui, here.is_some(), ph::MINUS, "Retirer du nuancier", "La pastille sous la souris, sinon celle de la couleur d'avant-plan.", "pastille.retirer")
+            .clicked()
+        {
+            self.palette_action("pastille.retirer");
+        }
+        let resp = ui.menu_button(RichText::new(ph::DOTS_THREE).size(crate::bulles::TAILLE), |ui| self.palette_menu(ui)).response;
+        crate::bulles::bulle(resp, "Commandes du nuancier", "Nouveau, renommer, dupliquer, supprimer, importer, exporter.", "");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let renaming = matches!(self.couleurs.rename, Some(Rename { what: Renamed::Palette(_), .. }));
             if renaming {
                 let done = self.couleurs.rename.as_mut().and_then(|r| rename_field(ui, r, 130.0));
@@ -250,22 +262,9 @@ impl App {
                     self.couleurs.confirm_delete = None;
                 }
             }
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let resp = ui.menu_button(RichText::new(ph::DOTS_THREE).size(crate::bulles::TAILLE), |ui| self.palette_menu(ui)).response;
-                crate::bulles::bulle(resp, "Commandes du nuancier", "Nouveau, renommer, dupliquer, supprimer, importer, exporter.", "");
-                let here = self.shown_palette().position(self.color);
-                if self
-                    .bouton_si(ui, here.is_some(), ph::MINUS, "Retirer du nuancier", "La pastille sous la souris, sinon celle de la couleur d'avant-plan.", "pastille.retirer")
-                    .clicked()
-                {
-                    self.palette_action("pastille.retirer");
-                }
-                if self.bouton_si(ui, here.is_none(), ph::PLUS, "Ajouter au nuancier", "Ajouter la couleur d'avant-plan à la fin du nuancier.", "nuancier.ajouter").clicked() {
-                    self.add_to_palette(self.color);
-                }
-            });
+            // (Droite à gauche : le nuancier est le premier posé, à droite ; son étiquette se met à sa gauche.)
+            crate::bulles::etiquette(ui, ph::SWATCHES, "Nuancier", "Tes nuanciers : choisis celui qui est montré ; clic droit sur son nom : ses commandes.");
         });
-        self.delete_confirmation(ui);
     }
 
     /// Les couleurs du nuancier montré, et le nom de la pastille qu'on est en train de taper (panneau Couleur : elles
@@ -291,7 +290,7 @@ impl App {
     }
 
     /// « Supprimer le nuancier ? » sous son nom, avant de le faire (rien ne l'annulerait).
-    fn delete_confirmation(&mut self, ui: &mut egui::Ui) {
+    pub(crate) fn delete_confirmation(&mut self, ui: &mut egui::Ui) {
         let Some(i) = self.couleurs.confirm_delete else { return };
         let Some(p) = self.couleurs.prefs.palettes.get(i) else {
             self.couleurs.confirm_delete = None;
