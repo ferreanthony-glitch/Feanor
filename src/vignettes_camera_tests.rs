@@ -1199,7 +1199,7 @@ fn the_vignettes_rest_after_a_camera_drag() {
     assert!(se_reposer(&mut b, 3000) < 3000, "SHOT se repose après un mouvement de caméra");
     let repos: Vec<_> = (0..6).map(|_| b.image(Vec::new(), 0.5)).collect();
     let pire = repos.iter().map(|m| m.reveil).min().unwrap();
-    assert!(pire >= std::time::Duration::from_secs(1), "au repos, SHOT demande à être repeint dans {pire:?}");
+    assert!(pire >= std::time::Duration::from_secs(1), "au repos, SHOT demande à être repeint dans {pire:?}{}", b.raison_du_reveil());
     let _ = Camera::centered(1, 1);
 }
 

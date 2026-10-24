@@ -27,7 +27,11 @@ param(
     # Dossier de compilation (celui de la session principale).
     [string]$TargetDir = 'target\msvc',
     # Saute la verification des avertissements de compilation.
-    [switch]$SansAvertissements
+    [switch]$SansAvertissements,
+    # Duree maximale d'un passage de la suite complete, en minutes (compilation comprise). Une suite normale dure 3 a 8
+    # minutes ; au-dela, un essai est bloque : le script le nomme (les essais que libtest signale "running for over 60
+    # seconds" sans les avoir termines), arrete le processus d'essai et compte le passage comme echoue. 0 : sans limite.
+    [int]$DelaiSuite = 40
 )
 
 $ErrorActionPreference = 'Stop'
@@ -54,11 +58,48 @@ function Noter([string]$nom, [bool]$ok, [string]$detail) {
     Write-Host ('{0,-8} {1}  {2}' -f $etat, $nom, $detail) -ForegroundColor $couleur
 }
 
-# Lance cargo (sortie complete dans $fichier, sans toucher aux flux d'erreur de PowerShell).
-function Lancer-Cargo([string]$arguments, [string]$fichier) {
+# Les essais que libtest a signales longs ("has been running for over 60 seconds") sans qu'aucun resultat ne soit venu
+# ensuite : ceux qui tournent encore au moment ou l'on lit le fichier.
+function Lire-Bloques([string]$fichier) {
+    $longs = New-Object System.Collections.ArrayList
+    $finis = @{}
+    if (Test-Path $fichier) {
+        foreach ($ligne in (Get-Content $fichier -Encoding UTF8)) {
+            if ($ligne -match '^test (.+) has been running for over \d+ seconds') {
+                [void]$longs.Add($Matches[1])
+            }
+            elseif ($ligne -match '^test (.+) \.\.\. (ok|FAILED|ignored)') {
+                $finis[$Matches[1]] = $true
+            }
+        }
+    }
+    return @($longs | Where-Object { -not $finis.ContainsKey($_) })
+}
+
+# Les essais encore en cours quand Lancer-Cargo a coupe une suite trop longue.
+$script:bloques = @()
+
+# Lance cargo (sortie complete dans $fichier, sans toucher aux flux d'erreur de PowerShell). Avec $delai_min > 0 : si cargo
+# n'a pas fini a temps, les essais bloques sont notes dans $script:bloques, tout l'arbre de processus est arrete
+# (cargo et le processus d'essai) et le code rendu est 124.
+function Lancer-Cargo([string]$arguments, [string]$fichier, [int]$delai_min = 0) {
     $commande = 'cargo ' + $arguments + ' > "' + $fichier + '" 2>&1'
-    & cmd.exe /c $commande
-    return $LASTEXITCODE
+    if ($delai_min -le 0) {
+        & cmd.exe /c $commande
+        return $LASTEXITCODE
+    }
+    $p = Start-Process -FilePath cmd.exe -ArgumentList @('/c', $commande) -NoNewWindow -PassThru
+    # (Sans cette lecture du descripteur, PowerShell 5.1 rend un code de sortie vide une fois le processus fini.)
+    $null = $p.Handle
+    if (-not $p.WaitForExit($delai_min * 60 * 1000)) {
+        $script:bloques = Lire-Bloques $fichier
+        & taskkill.exe /T /F /PID $p.Id | Out-Null
+        $p.WaitForExit(20000) | Out-Null
+        return 124
+    }
+    $p.WaitForExit()
+    if ($null -eq $p.ExitCode) { return 1 }
+    return [int]$p.ExitCode
 }
 
 # Lit le resultat d'une suite d'essais : passes, echoues, noms des echoues.
@@ -108,7 +149,7 @@ for ($i = 1; $i -le [Math]::Max(1, $Repetitions); $i++) {
     Write-Host ('== Suite complete, passage ' + $i + ' / ' + [Math]::Max(1, $Repetitions) + ' ==')
     $f = Join-Path $temp ('suite-' + $i + '.txt')
     $t0 = Get-Date
-    $code = Lancer-Cargo ('test --release --offline --target-dir ' + $TargetDir) $f
+    $code = Lancer-Cargo ('test --release --offline --target-dir ' + $TargetDir) $f $DelaiSuite
     $duree = [int]((Get-Date) - $t0).TotalSeconds
     $r = Lire-Resultat $f
     [void]$passages.Add($r)
@@ -118,6 +159,15 @@ for ($i = 1; $i -le [Math]::Max(1, $Repetitions); $i++) {
     $ok = ($code -eq 0) -and $r.lu -and ($r.echoues -eq 0)
     $detail = [string]$r.passes + ' passes, ' + [string]$r.echoues + ' echoues, ' + $duree + ' s'
     if (-not $r.lu) { $detail = 'aucun resultat lu (la compilation des essais a echoue ? voir ' + $f + ')' }
+    if ($code -eq 124) {
+        # Suite coupee : on dit quels essais tournaient encore (c'est eux qu'il faut regarder).
+        $ok = $false
+        $detail = 'suite arretee apres ' + $DelaiSuite + ' min (essai bloque). En cours : ' + ($script:bloques -join ' ; ')
+        foreach ($n in $script:bloques) {
+            if ($echecs_par_essai.ContainsKey($n)) { $echecs_par_essai[$n] += 1 } else { $echecs_par_essai[$n] = 1 }
+        }
+        Copy-Item $f (Join-Path $env:TEMP ('shot-verifier-bloque-' + $PID + '-' + $i + '.txt')) -ErrorAction SilentlyContinue
+    }
     Noter ('suite complete ' + $i + '/' + [Math]::Max(1, $Repetitions)) $ok $detail
     if (-not $ok -and $r.noms.Count -gt 0) {
         foreach ($n in $r.noms) { Write-Host ('           echoue : ' + $n) -ForegroundColor Red }
@@ -152,13 +202,19 @@ Write-Host "== Essais de fiabilite, un par un =="
 foreach ($g in $groupes) {
     $f = Join-Path $temp ('groupe-' + $g[1] + '.txt')
     $t0 = Get-Date
-    $code = Lancer-Cargo ('test --release --offline --target-dir ' + $TargetDir + ' ' + $g[1]) $f
+    $limite_groupe = 0
+    if ($DelaiSuite -gt 0) { $limite_groupe = [Math]::Max(10, [int]($DelaiSuite / 2)) }
+    $code = Lancer-Cargo ('test --release --offline --target-dir ' + $TargetDir + ' ' + $g[1]) $f $limite_groupe
     $duree = [math]::Round(((Get-Date) - $t0).TotalSeconds, 1)
     $r = Lire-Resultat $f
     $ok = ($code -eq 0) -and $r.lu -and ($r.echoues -eq 0)
     $detail = [string]$r.passes + ' essai(s), ' + $duree + ' s'
     if (-not $r.lu) { $detail = 'aucun essai trouve pour ' + $g[1] }
     elseif ($r.echoues -gt 0) { $detail = [string]$r.echoues + ' echoue(s) : ' + ($r.noms -join ', ') }
+    if ($code -eq 124) {
+        $ok = $false
+        $detail = 'groupe arrete apres ' + $limite_groupe + ' min (essai bloque). En cours : ' + ($script:bloques -join ' ; ')
+    }
     Noter $g[0] $ok $detail
 }
 

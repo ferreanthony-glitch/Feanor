@@ -471,9 +471,9 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
             }
         }
     }
-    // Les annotations, par-dessus tout.
+    // Les annotations, par-dessus tout : calque par calque, du plus bas au plus haut (un calque caché n'y est pas).
     if opt.annotations {
-        for i in 0..p.annotations.traces.len() {
+        for i in p.annotations.ordre_de_peinture() {
             let Some(pts) = p.annotations.points_planche(&p.layout, i) else { continue };
             let px: Vec<(f32, f32, f32)> = pts.iter().map(|q| ((q.x - p.cadre.left()) * s, (q.y - p.cadre.top()) * s, q.r * s)).collect();
             trait_rond(&mut pix, &px, p.annotations.traces[i].color);

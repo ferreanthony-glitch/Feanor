@@ -270,6 +270,12 @@ mod vignettes_maquette_tests;
 // et le fichier (`annotations`), l'interface (`annotationsui`).
 mod annotations;
 mod annotationsui;
+// Calques d'annotation : ceux de la planche (liste, lasso) et le calque d'annotation d'un plan (`calqueannot`).
+mod calqueannot;
+#[cfg(test)]
+mod annotations_calques_tests;
+#[cfg(test)]
+mod calqueannot_tests;
 mod deposer;
 mod planche;
 mod colorscript;

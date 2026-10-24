@@ -293,7 +293,12 @@ fn the_ruler_paints_every_second_that_can_be_seen() {
 fn the_numbering_of_a_long_film_costs_little_per_screen_image() {
     // 2 000 plans : un titre par bloc visible (150) et une étiquette par séquence (200), comme une image d'écran du montage.
     // Avant : l'ordre du film refait à chaque titre, ≈ 2 000 × 350 pas. La borne laisse une grande marge (machine partagée).
+    // (Construire le film coûtait 100 s : `normalize` remettait l'ordre des plans en un temps de la puissance 4 du nombre de plans,
+    // à chaque plan ajouté. Une seconde et demie maintenant ; la borne laisse une grande marge, mais pas celle d'un temps qui monte
+    // à la puissance 4 — un essai qui tourne cent secondes au milieu de la suite ressemble à un blocage. Passe de fiabilité du 2026-10-24.)
+    let t_film = Instant::now();
     let doc = film_numerote(2000, true);
+    assert!(t_film.elapsed().as_secs_f64() < 20.0, "construire un film de 2 000 plans : {:?}", t_film.elapsed());
     let t = Instant::now();
     let tours = 10;
     let mut n_titres = 0;
@@ -309,6 +314,103 @@ fn the_numbering_of_a_long_film_costs_little_per_screen_image() {
     let ms = t.elapsed().as_secs_f64() * 1e3 / tours as f64;
     assert!(n_titres > 0);
     assert!(ms < 4.0, "numéros d'une image d'écran, 2 000 plans : {ms:.2} ms");
+}
+
+/// L'ordre que `Document::normalize` donnait avant d'être réécrit avec des tables (quatre boucles imbriquées : lent, mais on le lit
+/// d'un coup d'œil) : les numéros des plans dans l'ordre, les scènes et les séquences gardées, chacune avec sa séquence.
+fn normalize_de_reference(doc: &Document) -> (Vec<u64>, Vec<(u64, u64)>, Vec<u64>) {
+    let mut panels: Vec<(u64, u64)> = doc.panels.iter().map(|p| (p.id, p.scene)).collect();
+    let mut scenes: Vec<(u64, u64)> = doc.scenes.iter().map(|s| (s.id, s.sequence)).collect();
+    let sequences: Vec<u64> = doc.sequences.iter().map(|q| q.id).collect();
+    // Un panneau sans scène connue rejoint la scène du précédent ; une scène sans séquence connue, la première séquence.
+    for i in 1..panels.len() {
+        if !scenes.iter().any(|s| s.0 == panels[i].1) {
+            panels[i].1 = panels[i - 1].1;
+        }
+    }
+    for s in &mut scenes {
+        if !sequences.contains(&s.1) {
+            s.1 = sequences[0];
+        }
+    }
+    let seq_de = |sc: u64| scenes.iter().find(|s| s.0 == sc).map(|s| s.1);
+    let mut scene_order: Vec<u64> = Vec::new();
+    for p in &panels {
+        if !scene_order.contains(&p.1) {
+            scene_order.push(p.1);
+        }
+    }
+    let mut seq_order: Vec<u64> = Vec::new();
+    for &sc in &scene_order {
+        if let Some(q) = seq_de(sc) {
+            if !seq_order.contains(&q) {
+                seq_order.push(q);
+            }
+        }
+    }
+    let mut reste = panels;
+    let mut ordre = Vec::new();
+    for &q in &seq_order {
+        for &sc in scene_order.iter().filter(|&&sc| seq_de(sc) == Some(q)) {
+            let mut i = 0;
+            while i < reste.len() {
+                if reste[i].1 == sc {
+                    ordre.push(reste.remove(i).0);
+                } else {
+                    i += 1;
+                }
+            }
+        }
+    }
+    ordre.extend(reste.iter().map(|p| p.0));
+    let gardees: Vec<(u64, u64)> = scenes.iter().filter(|s| scene_order.contains(&s.0)).copied().collect();
+    let sequences_gardees: Vec<u64> = sequences.iter().filter(|q| seq_order.contains(q)).copied().collect();
+    (ordre, gardees, sequences_gardees)
+}
+
+/// `normalize`, réécrit avec des tables pour ne plus coûter la puissance 4 du nombre de plans, remet les plans, les scènes et les
+/// séquences dans le même ordre que l'ancien code, sur des films au hasard dont l'ordre est défait (plans mélangés, scènes d'une
+/// séquence dispersées, plans dont la scène n'existe plus, scènes dont la séquence n'existe plus).
+#[test]
+fn normalizing_puts_the_plans_in_the_order_the_slow_code_did() {
+    let mut h = Hasard::new(0x5eed_1234);
+    for essai in 0..300 {
+        let plans = 1 + h.n(45);
+        let mut doc = Document::with_frame(160, 90, 24);
+        let mut at = 0;
+        for _ in 1..plans {
+            at = if h.n(5) == 0 { doc.add_sequence_after(at) } else if h.n(3) == 0 { doc.add_panel_after(at) } else { doc.add_scene_after(at) };
+        }
+        let scenes: Vec<u64> = doc.scenes.iter().map(|s| s.id).collect();
+        let sequences: Vec<u64> = doc.sequences.iter().map(|q| q.id).collect();
+        let n = doc.panels.len();
+        // Les plans mélangés.
+        for _ in 0..h.n(2 * n + 1) {
+            let (a, b) = (h.n(n), h.n(n));
+            doc.panels.swap(a, b);
+        }
+        // Des plans qui changent de scène, ou dont la scène n'existe plus (jamais le premier : il n'aurait pas de voisin).
+        for i in 0..n {
+            match h.n(8) {
+                0 => doc.panels[i].scene = scenes[h.n(scenes.len())],
+                1 if i > 0 => doc.panels[i].scene = 9_000_000 + i as u64,
+                _ => {}
+            }
+        }
+        // Des scènes qui changent de séquence, ou dont la séquence n'existe plus.
+        for s in doc.scenes.iter_mut() {
+            match h.n(6) {
+                0 => s.sequence = sequences[h.n(sequences.len())],
+                1 => s.sequence = 8_000_000,
+                _ => {}
+            }
+        }
+        let (ordre, scenes_gardees, sequences_gardees) = normalize_de_reference(&doc);
+        doc.normalize();
+        assert_eq!(doc.panels.iter().map(|p| p.id).collect::<Vec<_>>(), ordre, "essai {essai} : l'ordre des plans");
+        assert_eq!(doc.scenes.iter().map(|s| (s.id, s.sequence)).collect::<Vec<_>>(), scenes_gardees, "essai {essai} : les scènes gardées");
+        assert_eq!(doc.sequences.iter().map(|q| q.id).collect::<Vec<_>>(), sequences_gardees, "essai {essai} : les séquences gardées");
+    }
 }
 
 // ------------------------------------------------------------------ 4. vignettes de la planche bornées

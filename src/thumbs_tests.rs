@@ -317,8 +317,48 @@ fn shared() -> Arc<Shared> {
         wake: Condvar::new(),
         stop: AtomicBool::new(false),
         ctx: egui::Context::default(),
+        retard_reveil: 0,
+        ancien_ordre: false,
         rendered: std::sync::atomic::AtomicUsize::new(0),
     })
+}
+
+/// Un fil de fond endormi à son pire moment (entre la fin de son calcul et son réveil de l'écran, 150 ms) ne fait pas
+/// voir l'application au repos avant que le réveil soit pris : tant que l'interface voit des vignettes « en cours »
+/// (`outstanding`), le réveil arrive ; quand elle n'en voit plus, il est déjà arrivé. Sinon une machine chargée donnait
+/// un réveil de plus à l'arrêt, après les images calmes (les essais de repos des Vignettes, 2026-10-24).
+#[test]
+fn a_sleeping_thumbnail_thread_is_never_seen_idle_before_it_has_woken_the_screen() {
+    monde::lire();
+    let doc = projet_long(1, 2, 4, 2);
+    // Combien de réveils l'écran a reçus quand l'interface voit enfin les fils au repos (`ancien` : l'ordre d'avant).
+    let reveils_au_repos = |ancien: bool| -> usize {
+        let ctx = egui::Context::default();
+        let reveils = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let r = reveils.clone();
+        ctx.set_request_repaint_callback(move |_| {
+            r.fetch_add(1, Ordering::SeqCst);
+        });
+        RETARD_REVEIL_ESSAI.with(|c| c.set(150));
+        crate::perf::set_ancien(ancien);
+        let mut thumbs = Thumbs::default();
+        let t = Instant::now();
+        loop {
+            thumbs.begin_frame(&ctx);
+            // (Les fils naissent avec la première vignette demandée : c'est là que le `Pool` lit les réglages d'essai.)
+            thumbs.texture_at(&ctx, &doc, 0, 0, 1, WIDTH, far());
+            RETARD_REVEIL_ESSAI.with(|c| c.set(0));
+            crate::perf::set_ancien(false);
+            // (Ensuite l'interface regarde, image après image, si les fils ont fini.)
+            if thumbs.is_complete(1, WIDTH) && !thumbs.busy() {
+                return reveils.load(Ordering::SeqCst);
+            }
+            assert!(t.elapsed() < Duration::from_secs(60), "la vignette ne finit pas");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    };
+    assert_eq!(reveils_au_repos(true), 0, "l'ancien ordre montre le défaut : l'interface voit les fils au repos avant le réveil de leur travail");
+    assert!(reveils_au_repos(false) > 0, "l'interface voit les fils au repos, et le réveil de leur travail n'est pas encore venu");
 }
 
 /// Une demande plus récente pour la même vignette remplace l'ancienne : celle-ci ne se compose jamais.
@@ -500,7 +540,10 @@ fn a_thumbnail_finished_during_the_frame_is_not_asked_again() {
     thumbs.texture_at(&ctx, &doc, 0, 0, wants[0].2, WIDTH, far());
     {
         let q = thumbs.pool.as_ref().unwrap().shared.lock();
-        assert!(q.waiting.is_empty() && q.running.is_empty(), "pas redemandée ({} en file, {} en calcul)", q.waiting.len(), q.running.len());
+        // (Le calcul fini reste « en cours » un instant après sa vignette, le temps de son réveil, `worker` : une demande neuve a un
+        // numéro plus grand que celui de la vignette finie.)
+        let fini = q.done.iter().map(|d| d.seq).max().expect("la vignette finie est là");
+        assert!(q.waiting.is_empty() && q.running.iter().all(|r| r.seq <= fini), "pas redemandée ({} en file, {} en calcul)", q.waiting.len(), q.running.len());
     }
     settle(&mut thumbs, &ctx, &doc, &wants);
     assert_eq!(thumbs.rendered(), 1, "une seule composition");

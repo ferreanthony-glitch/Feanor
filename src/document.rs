@@ -364,6 +364,9 @@ pub struct Layer {
     /// Le calque Décor du plan (`decor.rs`) : un par plan, fait par les brosses du décor des Vignettes, tout en bas du plan ; son
     /// dessin est tenu sur toutes les images du plan, donc partagé par ses cases.
     pub decor: bool,
+    /// Calque d'annotation (`calqueannot.rs`) : des notes de réalisateur sur le plan, vectorielles, peintes par-dessus tout à l'écran et
+    /// jamais dans un export ni dans les vignettes (sauf si on le demande). Un calque vectoriel ordinaire pour le reste.
+    pub annotation: bool,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -433,6 +436,7 @@ impl Layer {
             effet: None,
             couleur: None,
             decor: false,
+            annotation: false,
         }
     }
 
@@ -1636,53 +1640,61 @@ impl Document {
     /// d'une même séquence aussi (dans l'ordre de première apparition), et les scènes ou séquences
     /// vides disparaissent.
     pub fn normalize(&mut self) {
-        let seq_of_scene = |scenes: &[Scene], id: u64| scenes.iter().find(|s| s.id == id).map(|s| s.sequence);
+        use std::collections::{HashMap, HashSet};
+        // (Des tables, pas des recherches dans les listes : l'ordre des plans se remettait en un temps de l'ordre du
+        // nombre de plans à la puissance 4 — 100 s pour construire un film de 2 000 plans, une demi-seconde par
+        // opération de montage à ce nombre. Passe de fiabilité du 2026-10-24.)
+        let mut scenes_connues: HashSet<u64> = self.scenes.iter().map(|s| s.id).collect();
         // Un panneau sans scène connue rejoint la scène du panneau précédent (ou une scène neuve).
         for i in 0..self.panels.len() {
-            if self.scene(self.panels[i].scene).is_none() {
+            if !scenes_connues.contains(&self.panels[i].scene) {
                 let scene = match i.checked_sub(1) {
                     Some(prev) => self.panels[prev].scene,
                     None => {
                         let seq = self.sequences.first().map(|s| s.id).unwrap_or_else(|| self.new_sequence());
-                        self.new_scene(seq)
+                        let neuve = self.new_scene(seq);
+                        scenes_connues.insert(neuve);
+                        neuve
                     }
                 };
                 self.panels[i].scene = scene;
             }
         }
+        let mut sequences_connues: HashSet<u64> = self.sequences.iter().map(|q| q.id).collect();
         for s in 0..self.scenes.len() {
-            if !self.sequences.iter().any(|q| q.id == self.scenes[s].sequence) {
+            if !sequences_connues.contains(&self.scenes[s].sequence) {
                 let seq = self.sequences.first().map(|s| s.id).unwrap_or_else(|| self.new_sequence());
+                sequences_connues.insert(seq);
                 self.scenes[s].sequence = seq;
             }
         }
+        // La séquence de chaque scène (la première trouvée, comme `find`).
+        let mut seq_de_scene: HashMap<u64, u64> = HashMap::with_capacity(self.scenes.len());
+        for s in &self.scenes {
+            seq_de_scene.entry(s.id).or_insert(s.sequence);
+        }
         let scene_order = self.scene_order();
         let mut seq_order: Vec<u64> = Vec::new();
+        let mut rang_seq: HashMap<u64, usize> = HashMap::new();
         for &sc in &scene_order {
-            if let Some(q) = seq_of_scene(&self.scenes, sc) {
-                if !seq_order.contains(&q) {
+            if let Some(&q) = seq_de_scene.get(&sc) {
+                if let std::collections::hash_map::Entry::Vacant(v) = rang_seq.entry(q) {
+                    v.insert(seq_order.len());
                     seq_order.push(q);
                 }
             }
         }
-        let mut panels = std::mem::take(&mut self.panels);
-        let mut ordered = Vec::with_capacity(panels.len());
-        for &q in &seq_order {
-            for &sc in scene_order.iter().filter(|&&sc| seq_of_scene(&self.scenes, sc) == Some(q)) {
-                let mut i = 0;
-                while i < panels.len() {
-                    if panels[i].scene == sc {
-                        ordered.push(panels.remove(i));
-                    } else {
-                        i += 1;
-                    }
-                }
-            }
-        }
-        ordered.extend(panels);
-        self.panels = ordered;
-        self.scenes.retain(|s| scene_order.contains(&s.id));
-        self.sequences.retain(|q| seq_order.contains(&q.id));
+        // Les panneaux d'une même scène se suivent (dans leur ordre), les scènes d'une même séquence aussi (dans l'ordre de
+        // première apparition), les séquences dans l'ordre de première apparition ; ceux d'une scène sans séquence à la fin.
+        let rang_scene: HashMap<u64, usize> = scene_order.iter().enumerate().map(|(k, &sc)| (sc, k)).collect();
+        self.panels.sort_by_cached_key(|p| match seq_de_scene.get(&p.scene).and_then(|q| rang_seq.get(q)) {
+            Some(&rq) => (rq, rang_scene.get(&p.scene).copied().unwrap_or(0)),
+            None => (usize::MAX, 0),
+        });
+        let scenes_gardees: HashSet<u64> = scene_order.iter().copied().collect();
+        let sequences_gardees: HashSet<u64> = seq_order.iter().copied().collect();
+        self.scenes.retain(|s| scenes_gardees.contains(&s.id));
+        self.sequences.retain(|q| sequences_gardees.contains(&q.id));
         // Un plan retiré emporte ses commentaires (l'annulation les ramène avec lui).
         self.prune_comments();
         // Une transition dont un plan a disparu part avec lui (`transitions.rs`).
@@ -2104,6 +2116,10 @@ impl Document {
         if above.scene_wide.is_some() || below.scene_wide.is_some() {
             return Err("Un calque de toute la scène ne se fusionne pas avec un autre.".into());
         }
+        // (Les notes ne se fondent pas dans le dessin du film : un calque d'annotation ne se fusionne qu'avec un autre.)
+        if above.annotation != below.annotation {
+            return Err("Un calque d'annotation ne se fusionne qu'avec un autre calque d'annotation : ses notes n'entrent pas dans le dessin.".into());
+        }
         // Un calque du dessus en mode de fusion se fond dans les pixels : le résultat est bitmap.
         let vector = above.kind == LayerKind::Vector && below.kind == LayerKind::Vector && above.blend == BlendMode::Normal;
         let n = above.frames.len().max(below.frames.len());
@@ -2466,6 +2482,7 @@ impl Document {
                 // (Un dossier ne se réunit qu'à un dossier.)
                 && x.folder == y.folder
                 && x.decor == y.decor
+                && x.annotation == y.annotation
                 && x.visible == y.visible
                 && x.opacity == y.opacity
                 && x.blend == y.blend

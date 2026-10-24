@@ -17,27 +17,46 @@
 //! - Quand une vignette disparaît, ses annotations passent à sa voisine (`Annotations::rattacher_manquantes`), au
 //!   moment même (`release_removed_notes`) et, pour les changements que rien n'annonce (annuler, rétablir, ouvrir),
 //!   à l'image d'écran suivante (`annot_suivre`).
+//!
+//! # Les calques d'annotation et le lasso (Anthony, 2026-10-24)
+//!
+//! - **Le calque visé** : les trois outils (stylo, gomme, lasso) agissent sur *un* calque d'annotation, le calque actif (`Etat::calque`).
+//!   Le panneau « Planche » le liste, avec « Dessin » en bas (le dessin de la case) : un clic sur un calque d'annotation le vise
+//!   (et prend le stylo s'il n'y a pas d'outil d'annotation), un clic sur « Dessin » range les outils d'annotation, les outils de dessin
+//!   agissent de nouveau sur la case (`vignettespanneau.rs`). Un calque caché qu'on vise est remontré.
+//! - **Le lasso** (`vignettes.annotation_lasso`) : glisser dans le vide entoure des traits du calque actif (au moins un point dans le
+//!   lasso, comme le lasso d'un dessin) ; un clic choisit le trait dessous ; Maj ajoute. Les traits choisis ont la boîte de
+//!   sélection de SHOT (`selbox.rs` : huit poignées et un pivot) : glisser dedans déplace, un coin ou un côté met à l'échelle, hors
+//!   d'un coin tourne, un bord incline. **Une étape d'annulation par geste** (« Déplacer des annotations », « Mettre à l'échelle… »,
+//!   « Tourner… », « Incliner… »). Échap abandonne le geste en cours (rien n'a bougé), puis lève la sélection. Le trait déplacé est
+//!   rattaché à la case la plus proche de son nouveau centre (`Annotations::transformer`).
+//! - **Calques** : ajouter, renommer (double-clic), supprimer, monter, descendre, œil par calque ; chaque changement est une étape d'annulation.
 
-use eframe::egui::{self, vec2, Color32, Pos2, Rect, RichText, Stroke};
+use eframe::egui::{self, vec2, Color32, Modifiers, Pos2, Rect, RichText, Stroke};
 
-use crate::annotations::{self as ann, Annotations};
+use crate::annotations as ann;
 use crate::app::App;
 use crate::board::BoardLayout;
 use crate::boardui::Xf;
-use crate::vector::VPoint;
+use crate::selbox::{self, Grabs, Handle, Mods, SelFrame};
+use crate::vector::{Affine, VPoint};
 
-/// Les deux outils d'annotation.
+/// Les trois outils d'annotation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Outil {
     Stylo,
     Gomme,
+    Lasso,
 }
 
 impl Outil {
+    pub(crate) const TOUS: [Outil; 3] = [Outil::Stylo, Outil::Gomme, Outil::Lasso];
+
     pub(crate) fn icone(self) -> &'static str {
         match self {
             Outil::Stylo => egui_phosphor::regular::MARKER_CIRCLE,
             Outil::Gomme => egui_phosphor::regular::ERASER,
+            Outil::Lasso => egui_phosphor::regular::LASSO,
         }
     }
 
@@ -45,6 +64,7 @@ impl Outil {
         match self {
             Outil::Stylo => "Stylo d'annotation",
             Outil::Gomme => "Gomme d'annotation",
+            Outil::Lasso => "Lasso d'annotation",
         }
     }
 
@@ -52,6 +72,7 @@ impl Outil {
         match self {
             Outil::Stylo => "Trace en rouge par-dessus la planche pour montrer, corriger, entourer, flécher. N'a aucun effet sur le storyboard : ni dans les plans, ni dans le film, ni dans les exports (sauf la planche, si on le coche).",
             Outil::Gomme => "Efface des annotations, et seulement elles : le trait entier que touche le cercle.",
+            Outil::Lasso => "Entoure des annotations du calque visé (ou clique-en une), puis déplace, agrandis ou tourne-les avec la boîte. Maj ajoute. Échap abandonne.",
         }
     }
 
@@ -59,9 +80,36 @@ impl Outil {
         match self {
             Outil::Stylo => "vignettes.annotation_stylo",
             Outil::Gomme => "vignettes.annotation_gomme",
+            Outil::Lasso => "vignettes.annotation_lasso",
         }
     }
 }
+
+/// Le lasso en train d'être tracé : ses points (planche), et Maj tenue à l'appui (ajouter à ce qui est choisi).
+struct LassoEnCours {
+    points: Vec<Pos2>,
+    ajout: bool,
+}
+
+/// Un geste de la boîte de sélection sur les traits choisis : la partie prise, où (planche), la boîte de départ et la transformation
+/// que le geste donne maintenant (`selbox::gesture`). Rien n'est changé dans les traits avant le lâcher.
+struct GesteBoite {
+    handle: Handle,
+    start: Pos2,
+    frame: SelFrame,
+    aff: Affine,
+    /// Le pointeur a bougé : il y aura une étape d'annulation au lâcher.
+    change: bool,
+}
+
+/// Au plus ce nombre de points de lasso sont gardés (un lasso très long est éclairci : la ligne reste fidèle, le calcul court).
+const LASSO_MAX: usize = 4000;
+/// À moins de tant de pixels d'écran du centre, le pivot tiré s'y remet.
+const PIVOT_SNAP: f32 = 6.0;
+/// Le lasso qui ne dépasse pas ces pixels d'écran est un clic (il choisit le trait dessous).
+const CLIC_PX: f32 = 4.0;
+/// Tolérance d'un clic sur un trait, en pixels d'écran.
+const PRISE_PX: f32 = 6.0;
 
 /// L'état des annotations d'un onglet (hors du projet, sauf les traits eux-mêmes : `Document::annotations`).
 pub(crate) struct Etat {
@@ -77,6 +125,12 @@ pub(crate) struct Etat {
     pub marie_couleur: [u8; 3],
     /// La confirmation de « Effacer les annotations » est à l'écran.
     pub confirmer: bool,
+    /// Le calque d'annotation visé (l'identifiant d'un `Calque`) ; 0 ou un calque disparu : le premier.
+    pub calque: u64,
+    /// Les traits choisis au lasso (par identifiant : `Trace::id`).
+    pub selection: Vec<u64>,
+    /// Le calque qu'on est en train de renommer, et le texte.
+    pub renomme: Option<(u64, String)>,
     /// Le point d'écran de l'appui qui commence un geste (pris par la planche, tracé à l'image d'écran même).
     debut: Option<Pos2>,
     /// Le trait en cours, en points de la planche.
@@ -86,6 +140,11 @@ pub(crate) struct Etat {
     gomme_prise: bool,
     /// La planche à l'image d'écran d'avant (pour rattacher les traits d'une vignette qui disparaît).
     derniere: Option<BoardLayout>,
+    /// Le lasso en cours, et le geste de la boîte en cours.
+    lasso: Option<LassoEnCours>,
+    boite: Option<GesteBoite>,
+    /// Le pivot tiré (planche) ; rien : le centre de la boîte.
+    pivot: Option<Pos2>,
 }
 
 impl Default for Etat {
@@ -99,12 +158,33 @@ impl Default for Etat {
             marie: false,
             marie_couleur: crate::marie::COULEUR_PAR_DEFAUT,
             confirmer: false,
+            calque: 0,
+            selection: Vec::new(),
+            renomme: None,
             debut: None,
             en_cours: None,
             stylet: false,
             gomme_prise: false,
             derniere: None,
+            lasso: None,
+            boite: None,
+            pivot: None,
         }
+    }
+}
+
+impl Etat {
+    /// Abandonne ce que le lasso tient : le lasso en cours, le geste de la boîte (rien n'a bougé), le pivot tiré.
+    fn lacher_le_geste(&mut self) {
+        self.lasso = None;
+        self.boite = None;
+    }
+
+    /// Plus rien n'est choisi : la boîte, le pivot et les gestes s'en vont.
+    fn tout_lacher(&mut self) {
+        self.lacher_le_geste();
+        self.selection.clear();
+        self.pivot = None;
     }
 }
 
@@ -130,6 +210,8 @@ impl App {
         let a = &mut self.vignettes.annot;
         a.debut = None;
         a.en_cours = None;
+        // (Changer d'outil lâche ce que le lasso tenait ; le calque visé, lui, reste.)
+        a.tout_lacher();
         if a.outil == Some(outil) {
             a.outil = None;
             self.status = format!("{} rangé.", outil.nom());
@@ -141,7 +223,128 @@ impl App {
             self.status = match outil {
                 Outil::Stylo => "Stylo d'annotation : trace par-dessus la planche. Rien de ce que tu traces n'entre dans le storyboard.".into(),
                 Outil::Gomme => "Gomme d'annotation : elle n'efface que les annotations.".into(),
+                Outil::Lasso => "Lasso d'annotation : entoure des traits du calque visé, puis déplace-les, agrandis-les ou tourne-les.".into(),
             };
+            // Le calque visé se montre : on ne trace ni ne choisit rien sur ce qu'on ne voit pas.
+            self.annot_montrer_le_calque_vise();
+        }
+    }
+
+    // ------------------------------------------------------------------ les calques d'annotation
+
+    /// Le calque d'annotation visé : celui qu'on a pris s'il existe, sinon le premier ; rien tant qu'il n'y en a aucun
+    /// (le premier trait en crée un).
+    pub(crate) fn annot_calque_actif(&self) -> Option<u64> {
+        let a = &self.doc.annotations;
+        a.calque(self.vignettes.annot.calque).or_else(|| a.calques.first()).map(|c| c.id)
+    }
+
+    /// Le calque visé est caché : il se montre (un affichage, mais rien ne se fait sur ce qu'on ne voit pas).
+    fn annot_montrer_le_calque_vise(&mut self) {
+        if let Some(id) = self.annot_calque_actif() {
+            if self.doc.annotations.regler_visible(id, true) {
+                self.modified = true;
+            }
+        }
+    }
+
+    /// Vise le calque `id` : les trois outils y agissent. S'il n'y a pas d'outil d'annotation, le stylo est pris ; sinon l'outil reste.
+    /// Ce qui était choisi au lasso est lâché.
+    pub(crate) fn annot_viser_le_calque(&mut self, id: u64) {
+        if self.doc.annotations.calque(id).is_none() {
+            return;
+        }
+        if self.vignettes.annot.calque != id {
+            self.vignettes.annot.tout_lacher();
+        }
+        self.vignettes.annot.calque = id;
+        match self.vignettes.annot.outil {
+            None => self.annot_choisir(Outil::Stylo),
+            Some(_) => self.annot_montrer_le_calque_vise(),
+        }
+        if let Some(c) = self.doc.annotations.calque(id) {
+            self.status = format!("Calque d'annotation « {} » visé : le stylo, la gomme et le lasso y agissent.", c.nom);
+        }
+    }
+
+    /// Vise le dessin de la case : les outils d'annotation sont rangés, les outils de dessin agissent de nouveau sur la case.
+    pub(crate) fn annot_viser_le_dessin(&mut self) {
+        if self.vignettes.annot.outil.is_none() {
+            return;
+        }
+        self.end_stroke();
+        let a = &mut self.vignettes.annot;
+        a.debut = None;
+        a.en_cours = None;
+        a.outil = None;
+        a.tout_lacher();
+        self.status = "Dessin de la case visé : les outils de dessin agissent de nouveau sur la case.".into();
+    }
+
+    /// Un calque d'annotation de plus, au-dessus des autres, visé (une étape d'annulation).
+    pub(crate) fn annot_calque_nouveau(&mut self) {
+        if !self.board_shown() {
+            self.status = "Les calques d'annotation sont ceux de la planche : passe à la vue Vignettes.".into();
+            return;
+        }
+        if self.doc.annotations.calques.len() >= ann::MAX_CALQUES {
+            self.status = "Trop de calques d'annotation.".into();
+            return;
+        }
+        self.avec_etape("Ajouter un calque d'annotation", |a| a.record_step());
+        let Some(id) = self.doc.annotations.ajouter_calque() else { return };
+        self.annot_viser_le_calque(id);
+        if let Some(c) = self.doc.annotations.calque(id) {
+            self.status = format!("Calque d'annotation « {} » ajouté.", c.nom);
+        }
+    }
+
+    /// Renomme un calque d'annotation (une étape d'annulation, si le nom change).
+    pub(crate) fn annot_calque_renommer(&mut self, id: u64, nom: &str) {
+        let nom = nom.trim();
+        if nom.is_empty() || self.doc.annotations.calque(id).is_none_or(|c| c.nom == nom) {
+            return;
+        }
+        self.avec_etape("Renommer un calque d'annotation", |a| a.record_step());
+        self.doc.annotations.renommer_calque(id, nom);
+        self.status = format!("Calque d'annotation renommé « {nom} ».");
+    }
+
+    /// Supprime un calque d'annotation et ses traits (une étape d'annulation les rend).
+    pub(crate) fn annot_calque_supprimer(&mut self, id: u64) {
+        if self.doc.annotations.calque(id).is_none() {
+            return;
+        }
+        self.avec_etape("Supprimer un calque d'annotation", |a| a.record_step());
+        let n = self.doc.annotations.supprimer_calque(id).unwrap_or(0);
+        self.vignettes.annot.tout_lacher();
+        self.status = format!("Calque d'annotation supprimé ({n} annotation{} ; Ctrl+Z le rend).", if n > 1 { "s" } else { "" });
+    }
+
+    /// Monte ou descend un calque d'annotation d'un cran (une étape d'annulation).
+    pub(crate) fn annot_calque_deplacer(&mut self, id: u64, vers_le_haut: bool) {
+        let ok = {
+            let a = &self.doc.annotations;
+            a.calques.iter().position(|c| c.id == id).is_some_and(|k| if vers_le_haut { k + 1 < a.calques.len() } else { k > 0 })
+        };
+        if !ok {
+            return;
+        }
+        self.avec_etape(if vers_le_haut { "Monter un calque d'annotation" } else { "Descendre un calque d'annotation" }, |a| a.record_step());
+        self.doc.annotations.deplacer_calque(id, vers_le_haut);
+    }
+
+    /// Montre ou cache un calque d'annotation (un affichage : rien n'est effacé ni annulable). Cacher le calque visé range ce que le
+    /// lasso tenait.
+    pub(crate) fn annot_calque_basculer(&mut self, id: u64) {
+        let Some(visible) = self.doc.annotations.calque(id).map(|c| c.visible) else { return };
+        self.doc.annotations.regler_visible(id, !visible);
+        self.modified = true;
+        if visible && self.annot_calque_actif() == Some(id) {
+            self.vignettes.annot.tout_lacher();
+        }
+        if let Some(c) = self.doc.annotations.calque(id) {
+            self.status = if visible { format!("Calque « {} » caché (rien n'est effacé).", c.nom) } else { format!("Calque « {} » montré.", c.nom) };
         }
     }
 
@@ -176,7 +379,9 @@ impl App {
         }
         let n = self.doc.annotations.traces.len();
         self.avec_etape("Effacer les annotations", |a| a.record_step());
-        self.doc.annotations = Annotations::default();
+        // (Les traits partent, pas les calques : leurs noms, leur ordre et leur œil restent.)
+        self.doc.annotations.traces.clear();
+        self.vignettes.annot.tout_lacher();
         self.status = format!("{n} annotation{} effacée{} (Ctrl+Z les rétablit).", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" });
     }
 
@@ -195,6 +400,19 @@ impl App {
     /// leurs annotations passent à la voisine (d'après la planche de l'image d'avant) ; les rangs de secours suivent.
     pub(crate) fn annot_suivre(&mut self, layout: &BoardLayout) {
         let ids = |l: &BoardLayout| l.cards.iter().map(|c| c.id).collect::<Vec<u64>>();
+        // Un trait choisi qui n'existe plus (annuler, effacer, calque supprimé) n'est plus choisi ; un trait d'un autre calque non plus.
+        {
+            let calque = self.annot_calque_actif();
+            let traces = &self.doc.annotations.traces;
+            let a = &mut self.vignettes.annot;
+            if !a.selection.is_empty() {
+                a.selection.retain(|id| traces.iter().any(|t| t.id == *id && Some(t.calque) == calque));
+                if a.selection.is_empty() {
+                    a.boite = None;
+                    a.pivot = None;
+                }
+            }
+        }
         let a = &mut self.vignettes.annot;
         let same = a.derniere.as_ref().is_some_and(|d| d == layout);
         if same {
@@ -235,7 +453,7 @@ impl App {
     /// Le geste de l'image d'écran : début, points intermédiaires, fin. `events` : ceux de l'image ; `latest` : le pointeur ; `down` : un
     /// bouton est tenu ; `touch` : la pression du stylet reçue pendant l'image.
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn annot_geste(&mut self, layout: &BoardLayout, xf: Xf, events: &[egui::Event], latest: Option<Pos2>, down: bool, touch: bool, escape: bool) {
+    pub(crate) fn annot_geste(&mut self, layout: &BoardLayout, xf: Xf, events: &[egui::Event], latest: Option<Pos2>, down: bool, touch: bool, escape: bool, mods: Modifiers) {
         let outil = self.vignettes.annot.outil;
         if touch {
             self.vignettes.annot.stylet = true;
@@ -243,10 +461,16 @@ impl App {
         let Some(outil) = outil else {
             self.vignettes.annot.debut = None;
             self.vignettes.annot.en_cours = None;
+            self.vignettes.annot.tout_lacher();
             return;
         };
+        if outil != Outil::Lasso && (self.vignettes.annot.lasso.is_some() || self.vignettes.annot.boite.is_some() || !self.vignettes.annot.selection.is_empty()) {
+            self.vignettes.annot.tout_lacher();
+        }
         if let Some(pos) = self.vignettes.annot.debut.take() {
             self.vignettes.annot.gomme_prise = false;
+            // Tracer, effacer ou choisir sur un calque caché : il se montre d'abord.
+            self.annot_montrer_le_calque_vise();
             match outil {
                 Outil::Stylo => {
                     let p = self.annot_point(xf.to_board(pos));
@@ -256,15 +480,8 @@ impl App {
                     self.vignettes.annot.en_cours = Some(Vec::new());
                     self.annot_gommer(layout, xf.to_board(pos), xf.zoom);
                 }
+                Outil::Lasso => self.annot_lasso_appui(layout, xf, pos, mods),
             }
-        }
-        if self.vignettes.annot.en_cours.is_none() {
-            return;
-        }
-        if escape {
-            self.vignettes.annot.en_cours = None;
-            self.status = "Trait abandonné.".into();
-            return;
         }
         let mut points: Vec<Pos2> = events
             .iter()
@@ -276,6 +493,18 @@ impl App {
             .collect();
         if down {
             points.extend(latest);
+        }
+        if outil == Outil::Lasso {
+            self.annot_lasso_geste(layout, xf, &points, down, escape, mods);
+            return;
+        }
+        if self.vignettes.annot.en_cours.is_none() {
+            return;
+        }
+        if escape {
+            self.vignettes.annot.en_cours = None;
+            self.status = "Trait abandonné.".into();
+            return;
         }
         for p in points {
             let board = xf.to_board(p);
@@ -290,6 +519,7 @@ impl App {
                     }
                 }
                 Outil::Gomme => self.annot_gommer(layout, board, xf.zoom),
+                Outil::Lasso => {}
             }
         }
         if !down {
@@ -300,14 +530,16 @@ impl App {
     /// La gomme passe en `p` (planche) : les traits touchés partent, avec une seule étape d'annulation pour le geste.
     fn annot_gommer(&mut self, layout: &BoardLayout, p: Pos2, zoom: f32) {
         let radius = (self.vignettes.annot.taille_gomme * 0.5).max(4.0 / zoom.max(0.05));
-        if !self.doc.annotations.touche(layout, p, radius) {
+        // Le calque visé seulement : les traits des autres calques restent.
+        let Some(calque) = self.annot_calque_actif() else { return };
+        if !self.doc.annotations.touche_calque(layout, calque, p, radius) {
             return;
         }
         if !self.vignettes.annot.gomme_prise {
             self.vignettes.annot.gomme_prise = true;
             self.avec_etape("Effacer des annotations", |a| a.record_step());
         }
-        let n = self.doc.annotations.effacer_en(layout, p, radius);
+        let n = self.doc.annotations.effacer_en_calque(layout, calque, p, radius);
         if n > 0 {
             self.modified = true;
         }
@@ -326,9 +558,14 @@ impl App {
             return;
         }
         let color = self.vignettes.annot.couleur;
+        let voulu = self.annot_calque_actif();
         // (L'étape d'annulation n'est posée que si le trait est gardé.)
         let snap = self.snapshot();
-        if self.doc.annotations.ajouter(layout, &trace, color) {
+        if self.doc.annotations.ajouter_dans(layout, voulu, &trace, color) {
+            // (Le premier trait crée le calque « Annotations » : il devient le calque visé.)
+            if let Some(t) = self.doc.annotations.traces.last() {
+                self.vignettes.annot.calque = t.calque;
+            }
             self.avec_etape("Annotation", |a| {
                 a.history.push(snap);
                 a.gesture.reset();
@@ -337,15 +574,163 @@ impl App {
         }
     }
 
+    // ------------------------------------------------------------------ le lasso
+
+    /// La boîte des traits choisis, droite, avec un peu d'air autour (le pivot tiré, s'il y en a un) ; rien s'il n'y a rien de choisi.
+    fn annot_cadre(&self, layout: &BoardLayout, zoom: f32) -> Option<SelFrame> {
+        let a = &self.vignettes.annot;
+        if a.selection.is_empty() {
+            return None;
+        }
+        let b = self.doc.annotations.bornes(layout, &a.selection)?;
+        Some(SelFrame { rect0: b.expand(2.0 / zoom.max(0.05)), m: Affine::IDENTITY, pivot: a.pivot })
+    }
+
+    /// La boîte telle qu'on la voit : celle du geste en cours, ou la boîte au repos.
+    fn annot_cadre_vu(&self, layout: &BoardLayout, zoom: f32) -> Option<SelFrame> {
+        match &self.vignettes.annot.boite {
+            Some(g) if g.handle != Handle::Pivot => Some(g.frame.then(&g.aff)),
+            _ => self.annot_cadre(layout, zoom),
+        }
+    }
+
+    /// L'appui du lasso en `pos` (écran) : sur la boîte des traits choisis, le geste de la boîte ; ailleurs, un lasso (ou un clic).
+    fn annot_lasso_appui(&mut self, layout: &BoardLayout, xf: Xf, pos: Pos2, mods: Modifiers) {
+        let board = xf.to_board(pos);
+        if self.annot_calque_actif().is_none() {
+            self.status = "Aucune annotation à choisir : trace d'abord avec le stylo d'annotation.".into();
+        }
+        if let Some(frame) = self.annot_cadre(layout, xf.zoom) {
+            let quad = frame.corners().map(|q| xf.to_screen(q));
+            let pivot = xf.to_screen(frame.pivot_world());
+            // (Maj + appui dedans n'est pas un déplacement : il ajoute au choix, comme pour les traits d'un dessin.)
+            if let Some(h) = selbox::hit_test(quad, pivot, pos, &Grabs::default()).filter(|h| !(*h == Handle::Move && mods.shift)) {
+                self.vignettes.annot.boite = Some(GesteBoite { handle: h, start: board, frame, aff: Affine::IDENTITY, change: false });
+                return;
+            }
+        }
+        self.vignettes.annot.lasso = Some(LassoEnCours { points: vec![board], ajout: mods.shift });
+    }
+
+    /// Le geste du lasso à cette image d'écran : le lasso grandit, ou la boîte suit le pointeur ; au lâcher, il est posé. Échap abandonne
+    /// le geste en cours (rien n'a bougé), puis lève la sélection.
+    fn annot_lasso_geste(&mut self, layout: &BoardLayout, xf: Xf, points: &[Pos2], down: bool, escape: bool, mods: Modifiers) {
+        let a = &mut self.vignettes.annot;
+        if escape {
+            if a.lasso.is_some() || a.boite.is_some() {
+                a.lacher_le_geste();
+                self.status = "Geste abandonné : rien n'a bougé.".into();
+            } else if !a.selection.is_empty() {
+                a.tout_lacher();
+                self.status = "Sélection levée.".into();
+            }
+            return;
+        }
+        if a.boite.is_some() {
+            for p in points {
+                self.annot_boite_vers(xf, *p, mods);
+            }
+            if !down {
+                self.annot_boite_finir(layout);
+            }
+            return;
+        }
+        if let Some(l) = a.lasso.as_mut() {
+            let eps = 2.0 / xf.zoom.max(0.05);
+            for p in points {
+                let b = xf.to_board(*p);
+                if l.points.last().is_none_or(|q| (*q - b).length() >= eps) && l.points.len() < LASSO_MAX {
+                    l.points.push(b);
+                }
+            }
+            if !down {
+                self.annot_lasso_finir(layout, xf);
+            }
+        }
+    }
+
+    /// Le pointeur est en `p` (écran) pendant un geste de la boîte : la transformation du geste (`selbox::gesture`), ou le pivot tiré.
+    fn annot_boite_vers(&mut self, xf: Xf, p: Pos2, mods: Modifiers) {
+        let board = xf.to_board(p);
+        let m = Mods::with(mods.shift, mods.ctrl || mods.command, self.keep_proportions, self.settings.point_fixe, self.settings.rotation_autour);
+        let Some(g) = self.vignettes.annot.boite.as_mut() else { return };
+        if g.handle == Handle::Pivot {
+            let local = selbox::move_pivot(&g.frame, g.start, board, PIVOT_SNAP, xf.zoom);
+            self.vignettes.annot.pivot = local;
+            return;
+        }
+        g.aff = selbox::gesture(g.handle, &g.frame, g.start, board, m);
+        g.change = true;
+        self.status = crate::seltools::gesture_text(g.handle, &g.frame.then(&g.aff).params());
+    }
+
+    /// Le geste de la boîte est lâché : les traits reçoivent la transformation, une étape d'annulation au nom du geste.
+    fn annot_boite_finir(&mut self, layout: &BoardLayout) {
+        let Some(g) = self.vignettes.annot.boite.take() else { return };
+        if g.handle == Handle::Pivot || !g.change || g.aff == Affine::IDENTITY {
+            return;
+        }
+        let ids = self.vignettes.annot.selection.clone();
+        let nom = format!("{} des annotations", g.handle.step_name());
+        self.avec_etape(&nom, |a| a.record_step());
+        let n = self.doc.annotations.transformer(layout, &ids, &g.aff);
+        // (Les traits ont bougé : la boîte repart de leur nouvelle place, le pivot au centre.)
+        self.vignettes.annot.pivot = None;
+        self.status = format!("{} : {n} annotation{}.", g.handle.step_name(), if n > 1 { "s" } else { "" });
+    }
+
+    /// Le lasso est lâché : les traits du calque visé qu'il entoure sont choisis ; un lasso minuscule est un clic, qui choisit le trait dessous
+    /// (Maj : l'ajoute ou le retire). Un clic dans le vide lève le choix.
+    fn annot_lasso_finir(&mut self, layout: &BoardLayout, xf: Xf) {
+        let Some(l) = self.vignettes.annot.lasso.take() else { return };
+        let Some(calque) = self.annot_calque_actif() else { return };
+        let zoom = xf.zoom.max(0.05);
+        let etendue = Rect::from_points(&l.points).size().max_elem() * zoom;
+        let clic = l.points.len() < 3 || etendue < CLIC_PX;
+        let trouves: Vec<u64> = if clic {
+            self.doc.annotations.sous_le_point(layout, calque, l.points[0], PRISE_PX / zoom).into_iter().collect()
+        } else {
+            self.doc.annotations.dans_le_lasso(layout, calque, &l.points)
+        };
+        let a = &mut self.vignettes.annot;
+        if l.ajout {
+            for id in trouves {
+                match a.selection.iter().position(|s| *s == id) {
+                    Some(k) if clic => {
+                        a.selection.remove(k);
+                    }
+                    Some(_) => {}
+                    None => a.selection.push(id),
+                }
+            }
+        } else {
+            a.selection = trouves;
+        }
+        a.pivot = None;
+        let n = a.selection.len();
+        self.status = match n {
+            0 => "Rien dans le lasso : aucune annotation choisie.".into(),
+            1 => "1 annotation choisie : glisse-la, ou prends un coin pour l'agrandir ou la tourner.".into(),
+            n => format!("{n} annotations choisies : glisse-les, ou prends un coin pour les agrandir ou les tourner."),
+        };
+    }
+
     // ------------------------------------------------------------------ dessin
 
     /// Les annotations sur la planche, par-dessus tout : celles du projet, puis le trait en cours, puis le curseur de l'outil.
     pub(crate) fn annot_peindre(&self, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, survol: Option<Pos2>) {
         let a = &self.vignettes.annot;
         if a.visible {
-            for i in 0..self.doc.annotations.traces.len() {
-                if let Some(points) = self.doc.annotations.points_planche(layout, i) {
-                    crate::boardui::paint_note(painter, view, xf, &points, self.doc.annotations.traces[i].color);
+            // Calque par calque, du plus bas au plus haut ; un calque caché n'est pas peint. Pendant le geste de la boîte, les traits choisis se
+            // voient là où le geste les mène (rien n'est changé avant le lâcher : un aperçu, pas de rejeu).
+            let apercu = a.boite.as_ref().filter(|g| g.change && g.handle != Handle::Pivot).map(|g| g.aff);
+            let traces = &self.doc.annotations.traces;
+            for i in self.doc.annotations.ordre_de_peinture() {
+                let Some(points) = self.doc.annotations.points_planche(layout, i) else { continue };
+                let t = &traces[i];
+                match apercu {
+                    Some(aff) if a.selection.contains(&t.id) => crate::boardui::paint_note(painter, view, xf, &ann::transformee(&points, &aff), t.color),
+                    _ => crate::boardui::paint_note(painter, view, xf, &points, t.color),
                 }
             }
         }
@@ -354,6 +739,9 @@ impl App {
         }
         if !self.board_shown() {
             return;
+        }
+        if a.outil == Some(Outil::Lasso) {
+            self.annot_peindre_lasso(painter, xf, layout, survol);
         }
         if let (Some(outil), Some(p)) = (a.outil, survol) {
             let size = if outil == Outil::Stylo { a.taille } else { a.taille_gomme };
@@ -366,8 +754,79 @@ impl App {
                 Outil::Gomme => {
                     painter.circle_stroke(p, r, Stroke::new(1.0_f32, Color32::from_gray(40)));
                 }
+                Outil::Lasso => {}
             }
         }
+    }
+
+    /// Le lasso en cours (une ligne fine et des points ambrés, comme celui d'un dessin) et la boîte des traits choisis : le cadre, les huit
+    /// poignées carrées et le pivot rond (les mêmes que celles de l'outil Sélection, `seltools.rs`).
+    fn annot_peindre_lasso(&self, painter: &egui::Painter, xf: Xf, layout: &BoardLayout, survol: Option<Pos2>) {
+        use crate::theme::{SELECTION_BOITE as ACCENT, SELECTION_POIGNEE_FOND};
+        let a = &self.vignettes.annot;
+        if let Some(l) = &a.lasso {
+            let pts: Vec<Pos2> = l.points.iter().map(|p| xf.to_screen(*p)).collect();
+            if let Some(shape) = crate::contours::lasso_shape(&pts) {
+                painter.add(shape);
+            }
+        }
+        let Some(frame) = self.annot_cadre_vu(layout, xf.zoom) else { return };
+        let quad = frame.corners().map(|q| xf.to_screen(q));
+        let pivot = xf.to_screen(frame.pivot_world());
+        if !quad.iter().chain([&pivot]).all(|p| p.is_finite()) {
+            return;
+        }
+        let edge = Stroke::new(1.0_f32, ACCENT);
+        for k in 0..4 {
+            painter.line_segment([quad[k], quad[(k + 1) % 4]], edge);
+        }
+        let hover = a.boite.as_ref().map(|g| g.handle).or_else(|| survol.and_then(|p| selbox::hit_test(quad, pivot, p, &Grabs::default())));
+        let lit = |h: Handle| hover == Some(h);
+        let ppp = painter.ctx().pixels_per_point();
+        let poignee = |c: Pos2, on: bool| {
+            let c = selbox::snap_handle_center(c, ppp);
+            let fill = if on { ACCENT } else { SELECTION_POIGNEE_FOND };
+            painter.rect(selbox::handle_rect(c, selbox::HANDLE_SIDE), 0.0, fill, Stroke::new(1.0_f32, ACCENT), egui::StrokeKind::Middle);
+        };
+        for (k, c) in quad.iter().enumerate() {
+            poignee(*c, lit(Handle::Corner(k)));
+        }
+        for k in 0..4 {
+            poignee(quad[k] + (quad[(k + 1) % 4] - quad[k]) * 0.5, lit(Handle::Edge(k)));
+        }
+        if lit(Handle::Pivot) {
+            painter.circle_filled(pivot, selbox::PIVOT_RADIUS, ACCENT.gamma_multiply(0.3));
+        }
+        painter.circle_stroke(pivot, selbox::PIVOT_RADIUS, Stroke::new(1.0_f32, ACCENT));
+    }
+
+    /// Le curseur sur la planche pendant un outil d'annotation : une croix ; avec le lasso, celui de la partie de la boîte sous le pointeur.
+    pub(crate) fn annot_curseur(&self, ctx: &egui::Context, xf: Xf, layout: &BoardLayout, over: Option<Pos2>) {
+        use egui::CursorIcon;
+        let a = &self.vignettes.annot;
+        let mut icone = CursorIcon::Crosshair;
+        if a.outil == Some(Outil::Lasso) {
+            if let Some(frame) = self.annot_cadre_vu(layout, xf.zoom) {
+                let quad = frame.corners().map(|q| xf.to_screen(q));
+                let pivot = xf.to_screen(frame.pivot_world());
+                let handle = a.boite.as_ref().map(|g| g.handle).or_else(|| over.and_then(|p| selbox::hit_test(quad, pivot, p, &Grabs::default())));
+                let resize = |h: Handle| match selbox::handle_direction(quad, h).map(selbox::resize_cursor_axis) {
+                    Some(0) => CursorIcon::ResizeHorizontal,
+                    Some(1) => CursorIcon::ResizeNwSe,
+                    Some(2) => CursorIcon::ResizeVertical,
+                    Some(_) => CursorIcon::ResizeNeSw,
+                    None => CursorIcon::Crosshair,
+                };
+                icone = match handle {
+                    Some(Handle::Move) => CursorIcon::Move,
+                    Some(h @ (Handle::Corner(_) | Handle::Edge(_))) => resize(h),
+                    Some(Handle::Skew(k)) => if k % 2 == 0 { CursorIcon::ResizeHorizontal } else { CursorIcon::ResizeVertical },
+                    Some(Handle::Rotate(_)) => CursorIcon::Grab,
+                    Some(Handle::Pivot) | None => CursorIcon::Crosshair,
+                };
+            }
+        }
+        ctx.set_cursor_icon(icone);
     }
 
     /// Le passe-partout de la planche (si on l'a allumé) : tout ce qui est hors de l'intérieur des vignettes, par-dessus tout.
@@ -396,9 +855,9 @@ impl App {
         self.annot_outils_ligne(ui, taille, icone);
     }
 
-    /// Les deux boutons, sans séparateur (dans une ligne, ou sous le trait de la colonne).
+    /// Les trois boutons, sans séparateur (dans une ligne, ou sous le trait de la colonne).
     pub(crate) fn annot_outils_ligne(&mut self, ui: &mut egui::Ui, taille: [f32; 2], icone: f32) {
-        for outil in [Outil::Stylo, Outil::Gomme] {
+        for outil in Outil::TOUS {
             let on = self.vignettes.annot.outil == Some(outil);
             let mut texte = RichText::new(outil.icone()).size(icone);
             if !on {
@@ -443,6 +902,11 @@ impl App {
                     bulles::bulle(resp, "Taille de la gomme", "Le cercle qui efface : tout trait d'annotation qu'il touche part en entier.", "");
                 });
             }
+            Outil::Lasso => {
+                let n = self.vignettes.annot.selection.len();
+                ui.label(RichText::new(if n == 0 { "Rien de choisi.".to_string() } else { format!("{n} annotation{} choisie{}.", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" }) }).small());
+                ui.label(RichText::new("Glisser dans le vide : lasso (Maj : ajouter). Clic : un trait. Dans la boîte : déplacer ; un coin : agrandir ; hors d'un coin : tourner. Échap : abandonner.").small().weak());
+            }
         }
         ui.add_space(4.0);
         ui.horizontal(|ui| {
@@ -470,6 +934,8 @@ impl App {
         ui.menu_button("Annotations", |ui| {
             self.action_item(ui, "Stylo d'annotation", "vignettes.annotation_stylo");
             self.action_item(ui, "Gomme d'annotation", "vignettes.annotation_gomme");
+            self.action_item(ui, "Lasso d'annotation", "vignettes.annotation_lasso");
+            self.action_item(ui, "Nouveau calque d'annotation", "vignettes.annotation_calque_nouveau");
             let visible = self.vignettes.annot.visible;
             self.action_item(ui, if visible { "Cacher les annotations" } else { "Montrer les annotations" }, "vignettes.annotations_afficher");
             if ui.add_enabled(!self.doc.annotations.is_empty(), egui::Button::new("Effacer les annotations…")).clicked() {

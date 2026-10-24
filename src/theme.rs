@@ -287,6 +287,9 @@ pub struct Palette {
     /// Calque d'effet (`calqueffet.rs`) : cyan, vif et sourd.
     pub dessin_cfx: Color32,
     pub calque_cfx: Color32,
+    /// Calque d'annotation (`calqueannot.rs`, et ceux de la planche) : rouge-rose, vif et sourd.
+    pub dessin_annotation: Color32,
+    pub calque_annotation: Color32,
     /// Calques de toute la scène (le décor) : la teinte « fond » des noms, et celle de leurs dessins
     /// sous les plans du montage.
     pub decor: Color32,
@@ -378,6 +381,8 @@ impl Palette {
             calque_couleur: if claire { Color32::from_rgb(210, 120, 185) } else { Color32::from_rgb(176, 52, 136) },
             dessin_cfx: jeu([48, 208, 236], [0, 128, 168]),
             calque_cfx: if claire { Color32::from_rgb(120, 200, 224) } else { Color32::from_rgb(14, 130, 160) },
+            dessin_annotation: jeu([226, 54, 80], [186, 24, 52]),
+            calque_annotation: if claire { Color32::from_rgb(226, 130, 146) } else { Color32::from_rgb(168, 36, 62) },
             decor: jeu([214, 170, 92], [140, 92, 10]),
             calque_decor: if claire { Color32::from_rgb(228, 196, 130) } else { Color32::from_rgb(214, 170, 92) },
             image_courante: jeu([252, 67, 46], [205, 30, 20]),
@@ -541,6 +546,9 @@ couleurs_courantes! {
     /// Calque d'effet : cyan, vif et sourd.
     dessin_cfx,
     calque_cfx,
+    /// Calque d'annotation : rouge-rose, vif et sourd.
+    dessin_annotation,
+    calque_annotation,
     /// Calques de toute la scène (le décor) : le nom, puis les dessins sous les plans du montage.
     decor,
     calque_decor,
@@ -575,6 +583,8 @@ pub fn couleur_calque(kind: LayerKind, couleur: bool) -> Color32 {
 pub fn couleur_du_calque(l: &crate::document::Layer) -> Color32 {
     if l.effet.is_some() {
         palette().dessin_cfx
+    } else if l.annotation {
+        palette().dessin_annotation
     } else {
         couleur_calque(l.kind, l.couleur.is_some())
     }
@@ -584,6 +594,8 @@ pub fn couleur_du_calque(l: &crate::document::Layer) -> Color32 {
 pub fn fond_du_calque(l: &crate::document::Layer) -> Color32 {
     if l.effet.is_some() {
         palette().calque_cfx
+    } else if l.annotation {
+        palette().calque_annotation
     } else {
         fond_calque(l.kind, l.couleur.is_some())
     }

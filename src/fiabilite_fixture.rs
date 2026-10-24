@@ -563,8 +563,13 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
         use crate::annotations::{Ancre, Trace};
         use crate::vector::VPoint;
         let carte = doc.panels[0].id;
-        doc.annotations.traces.push(Trace { anchor: Ancre { card: carte, after: 0, rank: 0 }, color: [220, 38, 38], points: vec![VPoint { x: 0.25, y: 0.125, r: 0.0625 }, VPoint { x: 0.5, y: 0.25, r: 0.0625 }] });
-        doc.annotations.traces.push(Trace { anchor: Ancre { card: carte, after: 3, rank: 3 }, color: [30, 90, 200], points: vec![VPoint { x: 0.5, y: 0.5, r: 0.0625 }] });
+        // Deux calques d'annotation : « Annotations » (un trait) et « Reprises » (cachée, un trait dans la case vide).
+        let premier = doc.annotations.calque_ou_premier(None);
+        let reprises = doc.annotations.ajouter_calque().expect("un second calque");
+        doc.annotations.renommer_calque(reprises, "Reprises");
+        doc.annotations.regler_visible(reprises, false);
+        doc.annotations.traces.push(Trace::new(premier, Ancre { card: carte, after: 0, rank: 0 }, [220, 38, 38], vec![VPoint { x: 0.25, y: 0.125, r: 0.0625 }, VPoint { x: 0.5, y: 0.25, r: 0.0625 }]));
+        doc.annotations.traces.push(Trace::new(reprises, Ancre { card: carte, after: 3, rank: 3 }, [30, 90, 200], vec![VPoint { x: 0.5, y: 0.5, r: 0.0625 }]));
     }
     // Sons proposés par la lecture du storyboard (`sons_proposes.json`) : un bruitage à générer, une
     // voix rejetée et modifiée à la main, une ambiance acceptée (son posé), et la confirmation d'envoi
