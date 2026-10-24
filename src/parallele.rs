@@ -72,6 +72,13 @@ pub(crate) fn fil_sous_la_normale() {
     os::sous_la_normale();
 }
 
+/// Comme `fil_sous_la_normale`, et les fils que ce fil lance pour répartir son travail (`render::par_chunks`) le sont
+/// aussi (le hors-feuille de l'écran refait sur un autre fil, `monde.rs`).
+pub(crate) fn fil_et_ses_fils_sous_la_normale() {
+    PRIORITE_BASSE.with(|p| p.set(true));
+    os::sous_la_normale();
+}
+
 /// Les exports travaillent-ils sous la priorité de l'interface ? Oui, toujours ; seules les mesures le coupent, pour
 /// voir ce que la priorité change.
 static PRIORITE_EXPORT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);

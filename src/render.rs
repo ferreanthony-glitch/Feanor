@@ -121,7 +121,7 @@ pub fn sample(raster: &Raster, x: f32, y: f32) -> Color32 {
 }
 
 /// Transformation inverse (feuille → dessin) d'un dessin transformé.
-fn inverse_of(doc: &Document, item: &PlanItem) -> Option<Affine> {
+pub(crate) fn inverse_of(doc: &Document, item: &PlanItem) -> Option<Affine> {
     item.affine(doc.stage_center()).and_then(|a| a.inverse())
 }
 
@@ -411,16 +411,7 @@ pub(crate) fn composite_world_tile(doc: &Document, plan: &Plan, tx: i32, ty: i32
         // Calque transformé : chaque pixel va chercher le point correspondant du dessin.
         if let Some(inv) = inverse_of(doc, item) {
             let Some(cel) = crate::fx::shown(doc, item) else { continue };
-            for y in 0..t {
-                let s = at(ox, oy + y);
-                for (x, d) in buf[s..s + TILE].iter_mut().enumerate() {
-                    let p = inv.apply(egui::pos2((ox + x as i64) as f32 + 0.5, (oy + y) as f32 + 0.5));
-                    let src = sample(&cel.raster, p.x, p.y);
-                    if src.a() != 0 {
-                        *d = blend_over(*d, src, item.opacity, item.tint, item.blend, (world_dither(ox + x as i64), world_dither(oy + y)));
-                    }
-                }
-            }
+            world_item_over(&cel.raster, Some(inv), item.opacity, item.tint, item.blend, tx, ty, buf, stride, origin);
             continue;
         }
         let Some(cel) = crate::fx::shown(doc, item) else { continue };
@@ -447,18 +438,48 @@ pub(crate) fn composite_world_tile(doc: &Document, plan: &Plan, tx: i32, ty: i32
             }
             continue;
         }
-        let Some(tile) = r.tile_at(tx, ty) else { continue };
-        let tile: &[Color32; TILE_PIXELS] = tile;
-        for y in 0..TILE {
-            let s = at(ox, oy + y as i64);
-            let row = &tile[y * TILE..y * TILE + TILE];
-            for (x, (d, &src)) in buf[s..s + TILE].iter_mut().zip(row).enumerate() {
+        world_item_over(r, None, item.opacity, item.tint, item.blend, tx, ty, buf, stride, origin);
+    }
+}
+
+/// Pose sur la tuile du monde (`tx`, `ty`) de `buf` (largeur `stride`, coin haut gauche au point `origin` du monde) un
+/// dessin de la taille de la feuille, ou transformé (`inv` : du monde vers le dessin) : ce que `composite_world_tile`
+/// fait pour un élément du plan qui n'est ni posé par un maillage ni d'une autre taille. Le hors-feuille de l'écran le
+/// fait aussi sur un autre fil, avec les mêmes pixels (`monde.rs`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn world_item_over(raster: &Raster, inv: Option<Affine>, opacity: u8, tint: Option<[u8; 3]>, blend: BlendMode, tx: i32, ty: i32, buf: &mut [Color32], stride: usize, origin: (i64, i64)) {
+    let t = TILE as i64;
+    let (ox, oy) = (tx as i64 * t, ty as i64 * t);
+    let at = |x: i64, y: i64| ((y - origin.1) as usize) * stride + (x - origin.0) as usize;
+    if let Some(inv) = inv {
+        for y in 0..t {
+            let s = at(ox, oy + y);
+            for (x, d) in buf[s..s + TILE].iter_mut().enumerate() {
+                let p = inv.apply(egui::pos2((ox + x as i64) as f32 + 0.5, (oy + y) as f32 + 0.5));
+                let src = sample(raster, p.x, p.y);
                 if src.a() != 0 {
-                    *d = blend_over(*d, src, item.opacity, item.tint, item.blend, (world_dither(ox + x as i64), world_dither(oy + y as i64)));
+                    *d = blend_over(*d, src, opacity, tint, blend, (world_dither(ox + x as i64), world_dither(oy + y)));
                 }
             }
         }
+        return;
     }
+    let Some(tile) = raster.tile_at(tx, ty) else { return };
+    let tile: &[Color32; TILE_PIXELS] = tile;
+    for y in 0..TILE {
+        let s = at(ox, oy + y as i64);
+        let row = &tile[y * TILE..y * TILE + TILE];
+        for (x, (d, &src)) in buf[s..s + TILE].iter_mut().zip(row).enumerate() {
+            if src.a() != 0 {
+                *d = blend_over(*d, src, opacity, tint, blend, (world_dither(ox + x as i64), world_dither(oy + y as i64)));
+            }
+        }
+    }
+}
+
+/// Le papier du plan (transparent s'il n'en a pas).
+pub(crate) fn paper_of(paper: Option<[u8; 3]>) -> Color32 {
+    paper_color(&Plan { paper, items: Vec::new() })
 }
 
 /// La position d'un pixel du monde pour les motifs qui en dépendent (le tramage du mode « Dissoudre ») :
@@ -948,7 +969,8 @@ impl Renderer {
     /// Seul un réglage a changé, aucun pixel d'aucun dessin : opacité, mode de fusion, clé de position ou d'effet, exposition,
     /// fin du plan (ce qui est montré à cette image). Tout cela est dans le plan à composer (`Plan`), que la carte graphique
     /// compare à celui de l'image gardée (`ItemKey`) et le hors-feuille au sien (`monde.rs`) : rien n'est renvoyé à la carte,
-    /// le hors-feuille ne se refait pas pour rien. Seule l'image du processeur (sans carte graphique) se recompose. Pendant
+    /// le hors-feuille ne se refait que si le réglage touche un calque qui dépasse de la feuille (`monde::WorldKey`), et
+    /// alors sur un autre fil. Seule l'image du processeur (sans carte graphique) se recompose. Pendant
     /// qu'on tire une opacité, `invalidate_all` renvoyait à la carte toutes les tuiles de tous les dessins du plan, à chaque
     /// image du geste (+3 à 5 ms sur 15 calques de 40 tuiles, `perf_tests::perf_parameter_drag`).
     pub fn invalidate_params(&mut self) {

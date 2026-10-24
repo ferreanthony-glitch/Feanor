@@ -874,6 +874,9 @@ pub struct App {
     pub(crate) secours_actif: bool,
     /// La session (les projets ouverts) est à retenir ; faux tant que celle de la séance d'avant se rouvre.
     pub(crate) session_a_ecrire: bool,
+    /// Les onglets fermés dont la copie de secours, l'écriture en cours ou le film partagé se ferment sur un autre fil
+    /// (`jeter_onglet`) : `fermeture` les attend, pour que SHOT ne coupe jamais une écriture en quittant.
+    pub(crate) fermetures_d_onglets: Vec<std::thread::JoinHandle<()>>,
     pub(crate) session_prete: bool,
     /// Les projets de la séance d'avant qui restent à rouvrir, et celui à afficher à la fin.
     pub(crate) session_file: std::collections::VecDeque<PathBuf>,
@@ -1302,6 +1305,7 @@ impl App {
             prochain_onglet: 1,
             secours_actif: reel,
             session_a_ecrire: false,
+            fermetures_d_onglets: Vec::new(),
             session_prete: true,
             session_file: Default::default(),
             session_affichee: None,

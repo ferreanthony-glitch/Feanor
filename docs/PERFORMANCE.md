@@ -376,7 +376,7 @@ Fichier > Préférences… > Performance ; la valeur par défaut est le comporte
 | Traits vectoriels texturés | `App::finish_open`, `rejeu_idle_tick` | exact aussitôt | rapide jusqu'au repos (2 s de calme) | rapide partout | à l'ouverture d'un projet |
 | Tremblement : couper « Animer à l'arrêt » | `tremblement::Settings::of` | non | non | oui | tout de suite |
 | Pelure : images au plus | `onion::neighbours` | sans plafond | 6 | 2 | tout de suite |
-| Cache de la carte graphique | `GpuCanvas::set_cache_bytes` | 1 Go (2 Go si 8 Go de mémoire vidéo) | 0,5 à 1 Go | 256 à 512 Mo | tout de suite |
+| Cache de la carte graphique (au plus : moins si le budget de mémoire vidéo du système manque, section 27.1) | `GpuCanvas::set_cache_bytes` | 1 Go (2 Go si 8 Go de mémoire vidéo) | 0,5 à 1 Go | 256 à 512 Mo | tout de suite |
 | Cache des traits | `vector::set_cache_budget` | 512 Mo (1 Go si 32 Go de mémoire) | 512 (384 si < 16 Go) | 256 Mo | tout de suite |
 | Cache des effets | `fxcache::set_limit` | 768 Mo (1,5 Go si 32 Go) | 768 (512 si < 16 Go) | 384 (256 si < 8 Go) | tout de suite |
 | Fils de calcul | `parallele::coeurs` (tous les calculs répartis, fil des effets) | automatique | automatique | un cœur libre sur 3 à 4 fils | tout de suite |
@@ -1779,3 +1779,132 @@ points et sa vignette est à la plus petite largeur (128 pixels, `thumbs::width_
 à 1 ms par image (`UPLOAD_TIME`). Rien de contenu à corriger ici : il faudrait des textures réduites pour le dessin vivant
 d'une petite case (à voir si Anthony sent ce pic en changeant de plan sur une planche dézoomée).
 
+## 27. Mémoire vidéo et hors-feuille (2026-10-23, branche `optim-vram-monde`)
+
+Deux points de l'audit mesuré du 2026-10-23 (5 et 7), approuvés par Anthony, et deux points d'une relecture
+indépendante (rejeu, onglets fermés).
+
+### 27.1 Le cache des textures suit le budget de mémoire vidéo du système (`memoirevideo.rs`)
+
+**Le constat de l'audit** : le cache des textures de dessin (`gpu.rs`) visait un poids fixe, 1 à 2 Go selon le diagnostic,
+sans regarder ce que prennent les autres logiciels. Mémoire vidéo à 6,9 Go sur 8 (Storyboard Pro 3,5 Go, SHOT 1,5 Go, le
+bureau), chaque image recomposée attendait la carte 25 à 46 ms au lieu de 2 ; à 5,4 Go, 1,4 à 2,5 ms (cause déduite, non
+prouvée : la pagination de WDDM).
+
+**Ce qui change** : un fil (« memoire-video », sous la priorité normale) lit toutes les 1,5 s
+`IDXGIAdapter3::QueryVideoMemoryInfo` (segment local) : le budget que le système accorde à SHOT — il le calcule d'après ce
+que prennent tous les autres — et ce que SHOT utilise sur cette carte (Direct3D 12 ou Vulkan : c'est un compte du noyau).
+DXGI est chargé à la demande (`LoadLibraryW` + `GetProcAddress`), sans caisse de plus ; la carte est retrouvée par ses
+numéros PCI (ceux de l'adaptateur wgpu ; ici une RTX 2080 SUPER en Vulkan). À chaque nouvelle lecture, `sync` refait le
+plafond du cache avec le poids du cache de ce moment (`memoirevideo::cible_cache`, fonction pure) :
+
+    plafond = budget − (utilisé − cache des dessins) − marge      (marge : un dixième du budget, au moins 256 Mo ;
+                                                                   jamais sous 64 Mo)
+
+Le cache vise le plus petit du réglage et du plafond (`CanvasResources::limit`, aussi pour l'envoi d'avance et la part des
+onglets cachés). **Avec retenue** (relecture de Fable, `memoirevideo::prochain_plafond`) : le plafond ne baisse que si SHOT
+utilise plus que le budget moins la marge, d'un quart au plus par lecture, jamais sous ce que tient l'image affichée ; si
+la baisse d'avant n'a pas rendu de mémoire (SHOT a rendu moins de la moitié de ce que le cache a lâché — un pilote qui
+garde les sous-allocations des petites textures, sous Vulkan), il tient au lieu de descendre cran par cran jusqu'au
+plancher. Le plafond est tenu jusqu'à la lecture suivante : ce qu'on libère entre deux lectures ne fait pas croire à
+une place qui n'est pas encore rendue. La place revient : le plafond remonte, le cache regrandit. Les dessins de l'image
+affichée ne partent jamais (même règle qu'avant : la chasse s'arrête à ceux de l'image). Chaque changement de plus d'un
+vingtième du poids visé est noté ; la fenêtre Aide > Diagnostic des performances montre la mémoire vidéo de SHOT, le budget,
+le cache visé et les trois dernières décisions. Sans lecture (autre système, Windows trop ancien, carte introuvable) :
+le poids réglé seul, comme avant.
+
+**Mesure** (`memoirevideo_tests::mesure_memoire_video`, `--ignored`, même processus, avant = sans lecture, après = vraies
+lectures) : un projet 4K dont 100 dessins pleins (3 Go de textures, cache réglé à 3 Go par `SHOT_CACHE_MO=3072`) sont vus une
+fois, puis six secondes d'images recomposées sur quatre calques ; un autre processus (`occupe_la_carte`) tient 4 Go de
+tampons sur la carte (`SHOT_OCCUPER_MO=4000`). Le budget accordé à SHOT tombe alors de 7,2 Go à 2,6–3,0 Go. **Le mécanisme
+marche** : en 0,8 s le cache passe de 2,5 à 2,25 Go, la mémoire est bien rendue (SHOT 2,64 → 2,44 Go à la lecture suivante),
+puis le plafond remonte un peu (2,37 Go) et tient. **Le gain, lui, n'a pas pu être mesuré proprement** : à la première
+série, l'image recomposée passait de 6,3 ms (pire 11,7) avant à 2,6 ms (pire 4,1) après ; aux suivantes, la machine était
+prise par d'autres travaux (Storyboard Pro et un SHOT ouverts, d'autres agents : 22 à 35 ms par image même sans l'autre
+processus) et les deux passes se valaient dans le bruit. Une lecture « dont 0 Mo de dessins » au tout début d'une passe
+vient de l'essai (une carte neuve pendant que la mémoire de la précédente n'est pas encore rendue) ; dans SHOT, il n'y a
+qu'une carte.
+
+Essais (`memoirevideo_tests.rs`) : la règle en fonction pure (la situation de l'audit : budget 2,5 Go, SHOT 1,5 Go dont 1 Go
+de dessins, cache réglé à 2 Go ramené à 1,75 Go ; au-delà du budget ; le plancher ; la place qui revient ; ce qui se note) ;
+sur une vraie carte, avec des lectures posées par l'essai (propres au fil d'essai : les autres essais ne les voient pas) :
+la chasse suit la cible, ne prend jamais un dessin de l'image affichée (six dessins affichés pour une cible de quatre :
+les six restent, rien n'est renvoyé), le cache regrandit quand la place revient, et sans lecture tout est comme avant.
+
+**Risques** : un pilote qui garde la mémoire libérée dans ses réserves : le plafond baisse d'un quart puis tient (essais
+`a_driver_that_keeps_evicted_memory_does_not_ratchet_the_cache_down`, `the_gpu_cache_holds_when_evictions_free_nothing`) ;
+SHOT reste alors au-delà de son budget, comme avant. Le plafond met plusieurs lectures (1,5 s chacune) à atteindre la cible. Deux cartes identiques : la première est prise.
+
+
+### 27.2 Le hors-feuille ne se refait que quand ce qu'il montre change, et sur un autre fil (`monde.rs`)
+
+**Le constat de l'audit** : le hors-feuille de l'écran (toile infinie, travellings) se refaisait en entier dès que le
+`Plan` changeait — à chaque image de la lecture, du défilement, de la pelure d'oignon, de chaque réglage tiré —, sur le fil
+de l'interface : copie du tampon (jusqu'à 4096² pixels, 67 Mo), envoi de la texture entière, puis composition sous un
+budget de 5 ms par image. La relecture le notait aussi : « le hors-feuille ne se refait pas pour rien » était optimiste,
+une opacité tirée le refaisait.
+
+**Ce qui change** :
+- la clé n'est plus le plan entier mais **ce que le plan pose hors de la feuille** (`monde::WorldKey`) : le papier et les
+  éléments qui peuvent y montrer un pixel (`monde::contributes`), avec leur dessin, opacité, teinte, mode de fusion,
+  transformation. N'y entrent pas : une feuille posée par un maillage, un dessin d'une autre taille (tous deux posés sur la
+  feuille seulement, que le hors-feuille efface), un dessin vide, un dessin dont tout ce qui est dessiné — transformé, avec
+  la marge du lissage — reste dans les tuiles entières de la feuille. Par prudence, un élément à effets, à remplissage au
+  griffonnage ou qui n'est pas un dessin du projet y entre toujours (ce qu'il montre peut déborder de son dessin) ;
+- quand la clé change (autre plan, réglage d'un calque qui dépasse, `invalidate_all`), le hors-feuille se refait **sur un
+  autre fil** (« hors-feuille », la moitié des cœurs, lui et ses fils sous la priorité normale : l'interface et le fil des
+  gestes du rejeu passent toujours avant) d'après un instantané du plan : les dessins montrés (effets compris)
+  dont les tuiles sont partagées, rien n'est copié. L'écran garde l'image d'avant en attendant ; à l'arrivée, seules les
+  tuiles qui ont changé vont à la texture, celles d'avant qui n'existent plus sont effacées. Un réglage tiré en continu est
+  suivi au rythme de ces calculs (le suivant part à l'arrivée du précédent ; rien n'est jeté en route). Un trait posé
+  pendant ce temps est recomposé à l'arrivée ;
+- la composition d'une tuile est la même des deux côtés (`render::world_item_over`, tirée de `composite_world_tile`) ;
+- la texture n'est refaite que si sa taille change (nouvelle zone ou nouvelle finesse), sans copie du tampon (deux images
+  mises à zéro) ; à taille égale, les tuiles écrites sont effacées une à une. Une autre zone se compose ici, par petits
+  morceaux, comme avant.
+
+**Mesure** (`monde_tests::perf_monde`, `--ignored`, même processus : `monde_avant.rs` est le code d'eb82649, gardé pour les
+essais seulement). Feuille 1920 × 1080, un décor de 5 760 × 1 080 qui dépasse des deux côtés (travelling), un personnage
+animé dans la feuille, un premier plan qui dépasse un peu ; vue sur tout le décor (texture réduite de moitié) ; temps de
+`Monde::update` sur le fil de l'interface, 90 images, deux séries :
+
+| Geste | Avant (moyenne / pire) | Après (moyenne / pire) | Hors-feuilles refaits sur l'autre fil |
+|---|---|---|---|
+| Lecture (le personnage change de dessin à chaque image) | 5,92 / 6,7 ms ; 5,83 / 6,6 ms | **0,02 / 0,1 ms** ; 0,02 / 0,0 ms | 0 |
+| Opacité du personnage tirée | 5,95 / 7,0 ms ; 5,88 / 7,0 ms | **0,02 / 0,0 ms** ; 0,02 / 0,0 ms | 0 |
+| Opacité du décor tirée | 5,92 / 6,7 ms ; 5,90 / 6,8 ms | **1,15 / 3,6 ms** ; 1,18 / 3,6 ms | 44, 45 |
+| Changer de plan à chaque image | 5,88 / 6,6 ms ; 5,98 / 6,8 ms | **1,17 / 4,5 ms** ; 1,20 / 2,9 ms | 45, 45 |
+
+« Avant » bute sur le budget de 5 ms (plus la copie du tampon et l'envoi de la texture entière, que la mesure ne compte pas
+côté carte) **et ne finissait jamais** : refait de zéro à chaque image, le hors-feuille restait à moitié blanc pendant toute
+la lecture ou tout le geste. Après, le décor tiré se suit environ une image sur deux, une sur trois depuis que le fil est
+sous la priorité normale, machine chargée (29 à 31 hors-feuilles en 90 images, interface 1,07 à 1,14 ms ; le calcul d'un
+hors-feuille de ~1 050 tuiles tient en une à deux images d'écran) ; ce qui reste sur le fil de l'interface est l'arrivée (comparer et
+écrire les tuiles, envoyer celles qui changent) et l'instantané.
+
+Essais (`monde_tests.rs`) : après 120 changements de réglages tirés au hasard (dessin montré, visibilité, opacité, teinte,
+mode de fusion dont « Dissoudre », déplacement, agrandissement ; parfois plusieurs images avant l'arrivée), le hors-feuille
+est pixel pour pixel celui d'un hors-feuille refait de zéro (40 vérifications) ; 200 changements des seuls calques qui
+restent dans la feuille ne refont rien (aucune tuile composée) ; l'opacité d'un calque qui dépasse le refait sur l'autre
+fil, l'image d'avant restant à l'écran en attendant ; `contributes` (déplacé hors de la feuille, agrandi, vide, tuile de
+bord) ; un calque qui dépasse, caché : ses tuiles sont effacées de la texture à l'arrivée (`hiding_a_layer_that_goes_past_the_sheet_blanks_its_tiles`).
+Les essais de la toile infinie (`toile_tests.rs`) passent tels quels (leur `settle` attend l'autre fil).
+
+**Risques** : un plan qui change de contenu hors de la feuille montre une à deux images le hors-feuille d'avant (y compris
+celui de l'autre plan au passage d'un plan à l'autre pendant la lecture) au lieu d'un hors-feuille à moitié blanc. Si la
+règle `contributes` oubliait un cas où un calque « dans la feuille » montre un pixel au-delà, un réglage de ce calque ne
+referait pas le hors-feuille (l'essai au hasard couvre les cas connus ; les effets sont toujours comptés). La mémoire : le
+résultat du fil (les tuiles réduites) le temps de son arrivée.
+
+### 27.3 Deux points de la relecture indépendante
+
+- **Rejeu** (`rejeu.rs`) : une demande interactive réveillait aussi un fil du chargement libre, sous la priorité de
+  l'interface, qui pouvait la prendre alors que le fil des gestes était libre ; sous charge, le geste tournait à basse
+  priorité. La file sait maintenant si le fil des gestes est occupé : les fils du chargement ne prennent une demande
+  interactive que pendant ce temps (le fil des gestes réveille l'un d'eux s'il en laisse une en attente). Essai : douze
+  gestes rendus par le fil des gestes quand il est libre ; un second geste pendant un long premier va à un fil du
+  chargement, sans attendre. L'essai du chargement sur plusieurs fils passe tel quel.
+- **Onglets fermés** (`onglets.rs`) : la copie de secours, l'écriture en cours et le film partagé d'un onglet fermé se
+  ferment sur des fils détachés ; si SHOT quittait juste après, ils n'étaient pas attendus. Ils sont gardés
+  (`fermetures_d_onglets`) et attendus dans `fermer_tous_les_onglets`, avant `sortie_sans_rendre`. Essai : un onglet fermé
+  pendant une copie de secours, SHOT quitte aussitôt : aucun dossier de secours ne reste.

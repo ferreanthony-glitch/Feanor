@@ -725,17 +725,19 @@ impl App {
     fn jeter_onglet(&mut self, t: Onglet) -> String {
         let Some(mut e) = t.etat else { return String::new() };
         let nom = nom_de(e.path.as_deref(), e.import_source.as_deref(), false);
+        // (Les fils finis sont oubliés ; les autres, attendus à la sortie de SHOT : `fermeture`.)
+        self.fermetures_d_onglets.retain(|h| !h.is_finished());
         if let Some(r) = e.recovery.take() {
             // (Attendre une copie en cours ne doit pas figer l'interface.)
-            let _ = std::thread::Builder::new().name("secours-fermeture".into()).spawn(move || r.close());
+            self.fermetures_d_onglets.extend(std::thread::Builder::new().name("secours-fermeture".into()).spawn(move || r.close()).ok());
         }
         if let Some(s) = e.saving.take() {
-            // Une écriture en cours finit toute seule : on ne la coupe jamais.
-            let _ = std::thread::Builder::new().name("enregistrement-fermeture".into()).spawn(move || s.attendre());
+            // Une écriture en cours finit toute seule : on ne la coupe jamais (ni en quittant SHOT juste après).
+            self.fermetures_d_onglets.extend(std::thread::Builder::new().name("enregistrement-fermeture".into()).spawn(move || s.attendre()).ok());
         }
         // Un film partagé qu'on ferme : ses prises sont rendues (sur un fil, pour ne rien figer).
         if let Some(mut s) = e.partage.take() {
-            let _ = std::thread::Builder::new().name("cooperation-fermeture".into()).spawn(move || s.fermer());
+            self.fermetures_d_onglets.extend(std::thread::Builder::new().name("cooperation-fermeture".into()).spawn(move || s.fermer()).ok());
         }
         // Le document, son historique et ses dessins dérivés sont rendus sur un autre fil (ceux d'un gros film tiennent des
         // centaines de milliers de blocs, `lacher.rs`) ; le reste de l'onglet est lâché ici, comme avant.
@@ -1090,6 +1092,11 @@ impl App {
                     s.fermer();
                 }
             }
+        }
+        // Les onglets fermés pendant la séance : leur écriture en cours, leur copie de secours, leur film partagé se
+        // ferment sur des fils (`jeter_onglet`) ; on les attend avant de quitter (rien n'est coupé à la sortie).
+        for h in std::mem::take(&mut self.fermetures_d_onglets) {
+            let _ = h.join();
         }
     }
 

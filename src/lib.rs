@@ -36,6 +36,10 @@ mod donnees;
 #[cfg(test)]
 mod donnees_tests;
 mod materiel;
+// Le budget de mémoire vidéo du système : le cache des textures de dessin se fait plus petit quand il manque.
+mod memoirevideo;
+#[cfg(test)]
+mod memoirevideo_tests;
 #[cfg(test)]
 mod demarrage_tests;
 mod ouverture;
@@ -368,6 +372,11 @@ mod calquecouleurui;
 mod calquemenu;
 mod repli;
 pub mod monde;
+// Le hors-feuille d'avant `optim-vram-monde`, pour les mesures avant / après dans le même processus.
+#[cfg(test)]
+mod monde_avant;
+#[cfg(test)]
+mod monde_tests;
 // Toile infinie : tuiles hors de la feuille (essais).
 #[cfg(test)]
 mod toile_tests;

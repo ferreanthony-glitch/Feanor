@@ -182,7 +182,7 @@ const PARTAGES: &[&str] = &[
     "prefs_window", "editorial", "fiche", "about_window", "theme_applied", "theme_unsaved","pane_heights", "fit_set", "fit_busy", "recent_to_open", "recent_presence",
     "maximized_once", "clipboard", "montage_head_w", "snap_on", "length_field_active", "pen_pressure", "pen_touch", "input_time", "last_frame_time", "picking", "status", "new_dialog",
     "show_help", "allow_close", "export_transparent", "follow_frame", "following", "hover_canvas", "pending_keys", "assign", "keys_filter", "keymap", "title", "display_info", "gpu",
-    "quitter_prevenu", "confort", "collage", "onglets", "actif", "prochain_onglet", "secours_actif", "session_a_ecrire", "session_prete", "session_file", "session_affichee", "groupe",
+    "quitter_prevenu", "confort", "collage", "onglets", "actif", "prochain_onglet", "secours_actif", "session_a_ecrire", "fermetures_d_onglets", "session_prete", "session_file", "session_affichee", "groupe",
 ];
 
 /// Les noms des champs de `pub struct App`, lus dans `app.rs`.
@@ -1410,6 +1410,37 @@ fn closing_a_tab_removes_its_rescue_copy() {
         std::thread::sleep(Duration::from_millis(10));
     }
     assert_eq!(std::fs::read_dir(&racine).map(|d| d.count()).unwrap_or(0), 1, "le dossier de l'onglet fermé a disparu");
+}
+
+/// Relecture indépendante (2026-10-23) : un onglet fermé ferme sa copie de secours, son écriture en cours et son film
+/// partagé sur des fils détachés ; si SHOT quittait juste après, `fermeture` ne les attendait pas (une écriture pouvait
+/// être coupée, un dossier de secours rester et se proposer au lancement suivant). Ils sont gardés et attendus.
+#[test]
+fn quitting_right_after_closing_a_tab_waits_for_what_the_tab_was_finishing() {
+    crate::fxcache::monde::ecrire();
+    let mut b = banc(projet(200, 2), false);
+    b.app.secours_actif = true;
+    b.app.demarrer_secours();
+    onglet_avec(&mut b, projet(90, 60));
+    let racine = crate::recovery::root().expect("racine");
+    let compte = || std::fs::read_dir(&racine).map(|d| d.count()).unwrap_or(0);
+    assert_eq!(compte(), 2);
+    // Une copie de secours de l'onglet affiché est en route quand on le ferme.
+    {
+        let rec = b.app.recovery.as_mut().expect("copie de l'onglet affiché");
+        let snap = crate::recovery::Snapshot { doc: &b.app.doc, serial: b.app.history.serial(), modified: true, title: "Gros".into(), project: None, project_written: &b.app.written };
+        rec.start_copy(snap);
+    }
+    assert!(b.app.recovery.as_ref().is_some_and(|r| r.busy()), "la copie est en route");
+    assert!(!b.app.modified);
+    b.app.fermer_onglet(b.app.actif);
+    assert_eq!(b.app.onglets.len(), 1, "l'onglet se ferme sans question : {}", b.app.status);
+    assert!(!b.app.fermetures_d_onglets.is_empty(), "sa fermeture est gardée");
+    // SHOT quitte aussitôt : la copie finit, son dossier est effacé, avant la sortie.
+    b.app.fermeture();
+    assert!(b.app.fermetures_d_onglets.is_empty());
+    assert_eq!(compte(), 0, "aucun dossier de secours ne reste (l'onglet fermé, puis celui qui restait)");
+    b.app.sortie_sans_rendre();
 }
 
 // ---------------------------------------------------------------------------------------------- repos et mesures
