@@ -3919,3 +3919,28 @@ d'office reproduit donc l'ancien geste sans touche, et « Centre » l'ancien ges
   le réglage de départ de l'outil Pinceau (choix d'Anthony du 2026-10-16, `BrushLibrary::builtin`), pas le Crayon graphite (le départ de l'outil Crayon) ni une
   brosse texturée. Action `perso.classique` (sans touche d'office) ; `perso.aucun` (le bouton « Couleur libre » du panneau Personnages) lâche seulement, sans toucher
   au pinceau.
+
+### 4. La règle garde la perspective, les repères de composition ont leur icône
+
+- **La règle** (barre au-dessus du dessin) ne garde que les **guides de perspective** (tout ce que faisait le panneau Guides). Elle s'allume quand la perspective est
+  tracée (`perspective_on`), plus avec un repère.
+- **Les repères de composition** (tiers, grille d'or, spirale et son orientation, diagonales, croix centrale, « Éteindre les repères ») et **l'aspect de leurs traits**
+  (six couleurs, opacité, épaisseur, « Autre couleur ») ont leur propre icône (une grille) dans la barre sous le dessin, **juste à droite de Cadrage** : un petit panneau
+  à elle, pas dans Cadrage. Même taille et même écart que les autres icônes de la barre (`barres::ICONE`, `CASE`, `ECART`, par `case_icone`). Elle s'allume dès qu'un
+  repère est tracé (`reperes_any_on`). Cadrage garde le format et les zones de sécurité.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Sélection et Transformer : « Point fixe » et « Rotation » au-dessus de « Plus de réglages » ; tirer un coin (le coin opposé reste), Ctrl tenu (autour du centre) ;
+   « Coin opposé » : tourner juste hors d'un coin, le petit cercle passe sur le coin opposé. Les mêmes choix dans Préférences > Dessin.
+2. Pinceau : « Peint sur l'aplat » et le bouton d'aplat sous l'aperçu du trait ; plus de « Remplir la forme » ni de ligne « Le trait de ce calque bout ».
+3. Storyboard : les trois brosses du décor dans la colonne des pastilles ; un trait fait avec elles crée « Décor » en bas du plan ; la pastille « classique » en tête
+   remet le Pinceau rond.
+4. La règle : la perspective seule ; l'icône grille à droite de Cadrage : les repères et leur aspect.
+
+### Essais ajoutés
+
+`selbox_pointfixe_tests.rs` (les deux modes du point fixe, Ctrl, la rotation autour du pivot ou du coin opposé, les réglages, l'outil Transformer à l'écran, la place
+des choix dans Réglages) ; `brushfill_tests` (l'ancienne option se lit sans effet, `pinceau.remplir` donne l'aplat) ; `panneaux_tests`, `aplat_tests`,
+`notes_calques_tests` (l'ordre des réglages du pinceau) ; `pastilles_storyboard_tests.rs` (le décor dans le Storyboard, la pastille classique) ;
+`regle_cadrage_tests` (la règle sans les repères, l'icône des repères à côté de Cadrage : place, taille, écart, contenu, allumage).
