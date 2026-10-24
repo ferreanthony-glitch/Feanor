@@ -70,6 +70,9 @@ pub(crate) struct CamGeste {
     pub pose: Option<(usize, f32)>,
     /// Lue à la japonaise : le haut de l'image de la case A à l'appui, depuis le haut des colonnes (`Reserve::pose_y`).
     pub pose_y: Option<f32>,
+    /// Le retrait de A à l'appui, sous la ligne des images de sa rangée (à la japonaise : à droite du bord de sa colonne) : tenu pendant le
+    /// geste (`Reserve::pose_dec`).
+    pub pose_dec: Option<f32>,
 }
 
 impl App {
@@ -158,7 +161,7 @@ impl App {
                 grille.ys.extend([c as f32 * pas, c as f32 * pas + place.thumb.height()]);
             }
             for c in &layout.cards {
-                grille.xs.extend([c.thumb.left() - au.x, c.thumb.right() - au.x]);
+                grille.xs.extend([c.ligne.left() - au.x, c.ligne.right() - au.x]);
             }
             grille.xs.sort_by(f32::total_cmp);
             grille.xs.dedup_by(|a, b| (*a - *b).abs() < 0.5);
@@ -169,7 +172,7 @@ impl App {
                 grille.xs.extend([c as f32 * pas, c as f32 * pas + place.thumb.width()]);
             }
             for c in &layout.cards {
-                grille.ys.extend([c.thumb.top() - au.y, c.thumb.bottom() - au.y]);
+                grille.ys.extend([c.ligne.top() - au.y, c.ligne.bottom() - au.y]);
             }
         }
         grille.ys.sort_by(f32::total_cmp);
@@ -199,7 +202,8 @@ impl App {
             snap: None,
             hold: None,
             pose: reserve0.as_ref().and_then(|r| r.pose),
-            pose_y: reserve0.and_then(|r| r.pose_y),
+            pose_y: reserve0.as_ref().and_then(|r| r.pose_y),
+            pose_dec: reserve0.as_ref().and_then(|r| r.pose_dec),
         });
         true
     }
@@ -264,7 +268,7 @@ impl App {
         let Some(g) = self.vignettes.cam.as_mut().filter(|g| g.actif && !g.annule) else { return };
         let Some(k) = layout.cards.iter().position(|c| c.plan == g.plan && c.frame == 0) else { return };
         if let Some(r) = Reserve::depuis(layout, k) {
-            let r = Reserve { pose: g.pose.or(r.pose), pose_y: g.pose_y.or(r.pose_y), ..r };
+            let r = Reserve { pose: g.pose.or(r.pose), pose_y: g.pose_y.or(r.pose_y), pose_dec: g.pose_dec.or(r.pose_dec), ..r };
             g.hold = Some(g.hold.map_or(r, |h| h.avec(r)));
         }
     }

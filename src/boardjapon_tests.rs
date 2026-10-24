@@ -253,19 +253,26 @@ fn a_stays_put_when_the_hull_grows_right_or_down_and_the_hold_keeps_it_during_a_
         assert_eq!(l.cards.len(), ordinaire.cards.len());
         sans_chevauchement(&l);
     }
-    // Vers la gauche, sur la première colonne : tout glisse d'autant (la vue compense), A ne bouge pas à l'écran.
-    // Vers le haut : A passe sous la case d'avant, une fois, sans toucher aux cases d'avant.
+    // Vers la gauche : le cadre le plus à gauche s'aligne sur le bord de la colonne (c'est A qui est en retrait à droite, rien ne glisse),
+    // les cases d'avant ne bougent pas. Vers le haut : A passe sous la case d'avant, une fois.
     for (dx, dy) in [(-160.0, 0.0), (-400.0, 30.0), (0.0, -90.0), (-120.0, -60.0)] {
         let mut doc = plan_court();
         deux_cadres(&mut doc, 1, dx, dy);
         let l = disposer(&doc, 4);
         sans_chevauchement(&l);
+        assert_eq!(l.decalage.x, 0.0, "({dx}, {dy}) : rien ne glisse à gauche, A est en retrait");
         for j in 0..K {
             assert!((l.cards[j].thumb.translate(-l.decalage).min - ordinaire.cards[j].thumb.min).length() < 1e-3, "la case {j}, d'avant, reste ({dx}, {dy})");
         }
-        // A ne recule jamais : elle reste dans sa colonne (plus bas au plus), ou passe en haut de la colonne suivante quand elle n'y tient plus.
+        // Le cadre le plus à gauche est au bord de la colonne, comme les autres cases de la colonne.
+        let m = l.move_of(K).unwrap();
+        let gauche = m.cadres.iter().map(|c| c.rect.left()).fold(f32::MAX, f32::min).min(l.cards[K].thumb.left());
+        assert!(eg(gauche, l.cards[K].ligne.left()), "({dx}, {dy}) : le plus à gauche à la ligne de la colonne : {gauche} {:?}", l.cards[K].ligne);
+        assert!(l.cards.iter().filter(|n| n.row == l.cards[K].row && n.id != l.cards[K].id).all(|n| eg(l.cards[K].ligne.left(), n.thumb.left())), "({dx}, {dy}) : la même colonne que les autres");
+        // A ne recule jamais : elle reste dans sa colonne (plus bas au plus, et plus à droite si un cadre est à sa gauche), ou passe en haut de
+        // la colonne suivante quand elle n'y tient plus.
         let (avant, apres) = (ordinaire.cards[K].thumb, l.cards[K].thumb.translate(-l.decalage));
-        let plus_tard = l.cards[K].row > ordinaire.cards[K].row || ((apres.left() - avant.left()).abs() < 1e-3 && apres.top() >= avant.top() - 1e-3);
+        let plus_tard = l.cards[K].row > ordinaire.cards[K].row || (apres.left() >= avant.left() - 1e-3 && apres.top() >= avant.top() - 1e-3);
         assert!(plus_tard, "({dx}, {dy}) : A ne recule jamais : {avant:?} {apres:?}");
     }
     // Une première case dont le cadre monte au-dessus de la planche : tout descend, la vue compense.

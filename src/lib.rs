@@ -224,6 +224,8 @@ mod blend_tests;
 mod board;
 #[cfg(test)]
 mod board_tests;
+#[cfg(test)]
+mod boardalignement_tests;
 mod boardjapon;
 #[cfg(test)]
 mod boardjapon_tests;

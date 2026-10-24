@@ -25,6 +25,11 @@
 //! rangée que l'enveloppe touche, l'intervalle en x qu'elle y couvre). Les cases qui suivent se rangent **dans l'ordre de
 //! lecture** dans les places libres, à côté et dessous de l'enveloppe, jamais dessus.
 //!
+//! **Le cadre le plus haut s'aligne sur la rangée** (Anthony, 2026-10-24) : le haut de l'empreinte est le haut des images de la rangée, comme
+//! n'importe quelle case, quelle que soit la direction du mouvement. Quand un cadre (B…) est au-dessus de A, c'est A qui est **en retrait**,
+//! plus bas (`CardPlace::ligne` est la case à la ligne, `thumb` est A) ; les autres cases de la rangée ne descendent pas, la rangée est
+//! assez haute pour A et sa note, la suivante est dessous. Un mouvement qui descend garde A sur la ligne.
+//!
 //! **La case A reste en place quand on retouche ses autres cadres, et l'ordre de lecture ne se casse jamais** (Anthony, 2026-10-22) :
 //! - **pendant un geste** de caméra, A reste exactement où elle était (`Reserve::pose`, `poser`) : l'enveloppe peut recouvrir un instant des
 //!   cases d'avant, rien ne se range sous la main ;
@@ -140,12 +145,16 @@ pub struct Reserve {
     /// Lue à la japonaise : la case A tient aussi sa hauteur (le haut de l'image, depuis le haut des colonnes) ; `pose` est alors sa
     /// colonne et son x. Rien en lignes.
     pub pose_y: Option<f32>,
+    /// De combien la case A est en retrait de la ligne des autres cases de sa rangée (en lignes : plus bas, quand un cadre monte au-dessus
+    /// d'elle ; à la japonaise : plus à droite, quand un cadre va à sa gauche). Tenu pendant le geste, comme la pose : A ne bouge pas, même
+    /// si le cadre qu'on tire a besoin de plus de retrait (au lâcher, tout se range d'après les cadres).
+    pub pose_dec: Option<f32>,
 }
 
 impl Reserve {
     /// Cette réserve, élargie à `autre` (elle ne rétrécit jamais ; la case A reste là où le geste l'a trouvée).
     pub fn avec(self, autre: Reserve) -> Reserve {
-        Reserve { plan: self.plan, rect: self.rect.union(autre.rect), pose: self.pose.or(autre.pose), pose_y: self.pose_y.or(autre.pose_y) }
+        Reserve { plan: self.plan, rect: self.rect.union(autre.rect), pose: self.pose.or(autre.pose), pose_y: self.pose_y.or(autre.pose_y), pose_dec: self.pose_dec.or(autre.pose_dec) }
     }
 
     /// Ce que la case `k` de `layout` couvre, relativement à son image A (la case seule si sa caméra ne bouge pas), et où elle est.
@@ -155,8 +164,10 @@ impl Reserve {
             Some(m) => m.tuile.rect.translate(-c.thumb.min.to_vec2()),
             None => Rect::from_min_size(Pos2::ZERO, c.thumb.size()),
         };
-        let pose_y = layout.sens.japonais().then(|| c.thumb.top() - layout.origine_y);
-        Some(Reserve { plan: c.plan, rect, pose: Some((c.row, c.thumb.left() - layout.origine_x)), pose_y })
+        let jap = layout.sens.japonais();
+        let pose_y = jap.then(|| c.thumb.top() - layout.origine_y);
+        let dec = if jap { c.thumb.left() - c.ligne.left() } else { c.thumb.top() - c.ligne.top() };
+        Some(Reserve { plan: c.plan, rect, pose: Some((c.row, c.thumb.left() - layout.origine_x)), pose_y, pose_dec: Some(dec.max(0.0)) })
     }
 }
 
@@ -212,6 +223,11 @@ pub struct CardPlace {
     pub reach_y: f32,
     /// L'empreinte du mouvement dans `BoardLayout::moves`.
     pub mv: Option<usize>,
+    /// La case à la **ligne des autres cases de sa rangée** (Anthony, 2026-10-24) : le cadre le plus haut d'un mouvement s'aligne sur le haut
+    /// des images de la rangée (A est alors plus bas), le plus à gauche sur le bord gauche de la colonne à la japonaise (A est plus à droite).
+    /// `ligne` est l'image comme elle serait sans le retrait de A : ce sur quoi s'alignent les barres, les repères de pose et l'aimant.
+    /// C'est `thumb` pour une case ordinaire.
+    pub ligne: Rect,
 }
 
 impl CardPlace {
@@ -590,7 +606,7 @@ struct Cle {
     lines: HashMap<u64, usize>,
     last_joins: bool,
     pale_rows: Option<usize>,
-    hold: Option<(u64, [u32; 4], Option<(usize, u32)>, Option<u32>)>,
+    hold: Option<CleHold>,
     sens: Sens,
     textes: u8,
 }
@@ -612,8 +628,11 @@ fn bits_reglages(s: &BoardSettings) -> [u64; 3] {
     [s.card_w.to_bits() as u64, s.columns as u64, s.rows as u64]
 }
 
-fn bits_hold(opt: &Options) -> Option<(u64, [u32; 4], Option<(usize, u32)>, Option<u32>)> {
-    opt.hold.map(|h| (h.plan, [h.rect.min.x, h.rect.min.y, h.rect.max.x, h.rect.max.y].map(f32::to_bits), h.pose.map(|(r, x)| (r, x.to_bits())), h.pose_y.map(f32::to_bits)))
+/// La réserve du geste en cours, bit à bit : le plan, la boîte, la pose de A (rangée, x), sa hauteur (à la japonaise) et son retrait.
+type CleHold = (u64, [u32; 4], Option<(usize, u32)>, Option<u32>, Option<u32>);
+
+fn bits_hold(opt: &Options) -> Option<CleHold> {
+    opt.hold.map(|h| (h.plan, [h.rect.min.x, h.rect.min.y, h.rect.max.x, h.rect.max.y].map(f32::to_bits), h.pose.map(|(r, x)| (r, x.to_bits())), h.pose_y.map(f32::to_bits), h.pose_dec.map(f32::to_bits)))
 }
 
 impl Cle {
@@ -699,7 +718,7 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         prints.push(if b.2 == 0 { vignettecam::empreinte(doc, b.0, &place) } else { None });
     }
     // Ce qu'elles réservent : l'enveloppe (élargie à ce que le geste en cours a déjà couvert), et la bande de note de A quand elle
-    // descend sous l'enveloppe.
+    // descend sous l'enveloppe. (Relatives au coin haut-gauche de A.)
     let polys: Vec<Option<Vec<Pos2>>> = prints
         .iter()
         .enumerate()
@@ -732,12 +751,26 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
             Some(Rect::from_min_max(pos2(gauche, sous_b + ng), pos2(droite, sous_b + ng + note_lines(k) as f32 * NOTE_LINE_H)))
         })
         .collect();
+    // **Le cadre le plus haut du mouvement s'aligne sur le haut des images de la rangée** (Anthony, 2026-10-24), comme n'importe quelle case :
+    // quand un cadre (B…) est au-dessus de A, c'est A qui est en retrait, plus bas (de `decs[k]`), et non la rangée qui descend pour lui
+    // faire de la place. Les autres cases de la rangée restent à la ligne ; l'empreinte ne monte jamais au-dessus du haut de sa rangée.
+    // Pendant un geste, A garde le retrait qu'elle avait à l'appui (`Reserve::pose_dec`) : elle ne bouge pas.
+    let tenue = |k: usize| opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && boards[k].2 == 0);
+    let decs: Vec<f32> = (0..n)
+        .map(|k| match &polys[k] {
+            None => 0.0,
+            Some(poly) => tenue(k).and_then(|h| h.pose_dec).unwrap_or_else(|| (-vignettecam::boite(poly).top()).max(0.0)),
+        })
+        .collect();
+    // L'enveloppe et la note comptées depuis la ligne des images de la rangée (A y est à `decs[k]`) : ce que lit `gabarit_de`.
+    let polys_l: Vec<Option<Vec<Pos2>>> = (0..n).map(|k| polys[k].as_ref().map(|p| p.iter().map(|q| *q + vec2(0.0, decs[k])).collect())).collect();
+    let notes_l: Vec<Option<Rect>> = (0..n).map(|k| notes[k].map(|r| r.translate(vec2(0.0, decs[k])))).collect();
     // Ce que la case d'une caméra qui bouge demande à sa rangée, depuis le haut de la rangée : son enveloppe et sa note, puis la marge. La
     // rangée entière descend d'autant : rien de la suivante ne touche ni le cadre B ni sa note.
-    let besoin: Vec<f32> = (0..n).map(|k| prints[k].as_ref().map_or(0.0, |e| LABEL_H + e.y_max.max(notes[k].map_or(0.0, |r| r.bottom())) + ROW_GAP)).collect();
+    let besoin: Vec<f32> = (0..n).map(|k| prints[k].as_ref().map_or(0.0, |e| LABEL_H + (e.y_max + decs[k]).max(notes_l[k].map_or(0.0, |r| r.bottom())) + ROW_GAP)).collect();
     let a_print: Vec<bool> = prints.iter().map(Option::is_some).collect();
     // Le geste de caméra en cours : la case A du plan reste où elle était (`Reserve::pose`).
-    let forces: Vec<Option<(usize, f32)>> = (0..n).map(|k| opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && boards[k].2 == 0).and_then(|h| h.pose)).collect();
+    let forces: Vec<Option<(usize, f32)>> = (0..n).map(|k| tenue(k).and_then(|h| h.pose)).collect();
     let unite = Gabarit::unite(card_w);
     let nominal = LABEL_H + thumb_h + ng + NOTE_LINE_H + ROW_GAP;
     let hauteur_rangee = |lignes: usize| LABEL_H + thumb_h + ng + lignes as f32 * NOTE_LINE_H + ROW_GAP;
@@ -751,7 +784,7 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let mut most: Vec<usize> = Vec::new();
     for passe in 0..5 {
         let hauteur_estimee = |r: i64| usize::try_from(r).ok().and_then(|r| estimees.get(r).copied()).unwrap_or(nominal);
-        gabarits = (0..n).map(|k| polys[k].as_ref().map_or_else(|| unite.clone(), |poly| gabarit_de(poly, notes[k], &hauteur_estimee, rangs[k]))).collect();
+        gabarits = (0..n).map(|k| polys_l[k].as_ref().map_or_else(|| unite.clone(), |poly| gabarit_de(poly, notes_l[k], &hauteur_estimee, rangs[k]))).collect();
         pose = poser(&gabarits, &unite, &a_print, &forces, &gap_after, row_w, page_cap);
         // Les notes les plus hautes de chaque rangée (celles des cases dont l'image est dans la rangée).
         let derniere = pose.placed.iter().zip(&gabarits).map(|(p, g)| p.0 + g.b_max as usize).max().unwrap_or(0);
@@ -837,7 +870,7 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let mut decalage = Vec2::ZERO;
     for (k, &(r, x_a)) in placed.iter().enumerate() {
         if let Some(e) = &prints[k] {
-            let (gauche, haut) = (left + x_a + e.x_min, row_top[r] + LABEL_H + e.y_min);
+            let (gauche, haut) = (left + x_a + e.x_min, row_top[r] + LABEL_H + decs[k] + e.y_min);
             decalage.x = decalage.x.max(MARGIN - gauche);
             decalage.y = decalage.y.max(MARGIN - haut);
         }
@@ -850,7 +883,9 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let mut out = BoardLayout { decalage, origine_x: left, ..Default::default() };
     for (k, &(r, x_a)) in placed.iter().enumerate() {
         let x = left + x_a;
-        let top = row_top[r] + LABEL_H;
+        // La ligne des images de la rangée, et A (en retrait de `decs[k]` sous elle quand un cadre du mouvement monte au-dessus d'elle).
+        let ligne_top = row_top[r] + LABEL_H;
+        let top = ligne_top + decs[k];
         let bottom = top + thumb_h;
         let thumb = Rect::from_min_size(pos2(x, top), vec2(card_w, thumb_h));
         let (i, id, frame, end) = boards[k];
@@ -870,14 +905,18 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
             mv = Some(out.moves.len());
             out.moves.push(MoveBoard { cadres, enveloppe: e.enveloppe.iter().map(|q| *q + au).collect(), tuile });
         }
-        let card = Rect::from_min_max(pos2(x, row_top[r]), pos2(x + card_w, bottom));
+        // (Le numéro reste au-dessus de A.)
+        let card = Rect::from_min_max(pos2(x, top - LABEL_H), pos2(x + card_w, bottom));
         let reach = left + x_a + gabarits[k].x_hi;
         let reach_y = foot.bottom().max(note.bottom());
-        out.cards.push(CardPlace { panel: i, plan: p.id, id, frame, end, scene: p.scene, card, thumb, note, row: r, mouvement: mv.is_some(), foot, reach, reach_y, mv });
+        // La case à la ligne : au bord gauche de ce que la case prend (l'enveloppe peut dépasser A à gauche) et au haut des images de la rangée.
+        let ligne = Rect::from_min_size(pos2(foot.left().min(x), ligne_top), vec2(card_w, thumb_h));
+        out.cards.push(CardPlace { panel: i, plan: p.id, id, frame, end, scene: p.scene, card, thumb, note, row: r, mouvement: mv.is_some(), foot, reach, reach_y, mv, ligne });
         let gap = gap_after(k);
-        let zone = Rect::from_min_max(pos2(reach, thumb.top()), pos2(reach + gap, thumb.bottom()));
+        // Les barres sont à la ligne des images de la rangée, comme celles des cases ordinaires.
+        let zone = Rect::from_min_max(pos2(reach, ligne.top()), pos2(reach + gap, ligne.bottom()));
         let cut = !joined_after(k);
-        let bar = Rect::from_center_size(pos2(reach + gap * 0.5, thumb.center().y), vec2(if cut { BAR_CUT_W } else { BAR_W }, thumb_h * BAR_FRACTION));
+        let bar = Rect::from_center_size(pos2(reach + gap * 0.5, ligne.center().y), vec2(if cut { BAR_CUT_W } else { BAR_W }, thumb_h * BAR_FRACTION));
         out.bars.push(CutBar { after: k, cut, bar, zone });
     }
     for &(r, x_a) in &pale {
@@ -1022,30 +1061,31 @@ pub fn drop_slots(layout: &BoardLayout) -> Vec<DropSlot> {
                 Some((j, p)) if p.row == c.row => layout.bars.get(j).map_or(c.card.top() - PAGE_PAD * 0.5, |b| b.zone.center().y),
                 _ => c.card.top() - PAGE_PAD * 0.5,
             };
-            out.push(DropSlot::horizontale(Some(c.plan), y, c.thumb.left(), c.thumb.right()));
+            out.push(DropSlot::horizontale(Some(c.plan), y, c.ligne.left(), c.ligne.right()));
             continue;
         }
+        // (À la ligne des images de la rangée : celle d'une case dont la caméra monte ou va à gauche est en retrait, `CardPlace::ligne`.)
         let x = match prev {
-            Some((_, p)) if p.row == c.row => (p.reach + c.thumb.left()) * 0.5,
-            _ => c.thumb.left() - PAGE_PAD * 0.5,
+            Some((_, p)) if p.row == c.row => (p.reach + c.ligne.left()) * 0.5,
+            _ => c.ligne.left() - PAGE_PAD * 0.5,
         };
-        out.push(DropSlot::verticale(Some(c.plan), x, c.thumb.top(), c.thumb.bottom()));
+        out.push(DropSlot::verticale(Some(c.plan), x, c.ligne.top(), c.ligne.bottom()));
     }
     if let Some(last) = layout.cards.last() {
         if jap {
             // Après la dernière vignette : dans l'écart avant la première case pâle si elle est dans la même colonne.
             let y = match (layout.empty.first(), layout.bars.last()) {
-                (Some(e), Some(b)) if (e.left() - last.thumb.left()).abs() < 1.0 && e.top() > last.thumb.top() => b.zone.center().y,
+                (Some(e), Some(b)) if (e.left() - last.ligne.left()).abs() < 1.0 && e.top() > last.thumb.top() => b.zone.center().y,
                 _ => last.reach_y + PAGE_PAD * 0.5,
             };
-            out.push(DropSlot::horizontale(None, y, last.thumb.left(), last.thumb.right()));
+            out.push(DropSlot::horizontale(None, y, last.ligne.left(), last.ligne.right()));
         } else {
             // Après la dernière vignette : dans l'écart avant la première case pâle si elle est sur la même ligne.
             let x = match layout.empty.first() {
-                Some(e) if (e.top() - last.thumb.top()).abs() < 1.0 => (last.reach + e.left()) * 0.5,
+                Some(e) if (e.top() - last.ligne.top()).abs() < 1.0 => (last.reach + e.left()) * 0.5,
                 _ => last.reach + PAGE_PAD * 0.5,
             };
-            out.push(DropSlot::verticale(None, x, last.thumb.top(), last.thumb.bottom()));
+            out.push(DropSlot::verticale(None, x, last.ligne.top(), last.ligne.bottom()));
         }
     }
     out
