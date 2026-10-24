@@ -153,6 +153,7 @@ de l'horloge de l'aperçu et des réglages. Résultat avant correction : sur 6 p
 .\scripts\verifier.ps1                       # tout, une fois
 .\scripts\verifier.ps1 -Repetitions 5        # la suite complète 5 fois : nomme les essais intermittents
 .\scripts\verifier.ps1 -SansAvertissements   # saute le contrôle des avertissements de compilation
+.\scripts\verifier.ps1 -DelaiSuite 25        # coupe un passage de la suite au bout de 25 min (40 par défaut ; 0 : sans limite)
 ```
 
 Il lance : `cargo check --release` (aucun avertissement), la suite complète (autant de fois que demandé), puis chaque
@@ -426,3 +427,41 @@ module, dont 25 sous 16 fils de calcul) : la réserve et le dessin vide étaient
 qui calculent des remplissages au même moment faisaient partir de la réserve le résultat qu'il attendait de revoir (`le remplissage
 d'avant en attendant`) ou prendre le dessin vide d'une autre taille pour un remplissage arrivé. Les deux sont corrigés (réserve de 256 ;
 un dessin vide par taille), sans que l'essai lui-même ait changé.
+
+## 19. Le repos des Vignettes et l'essai qui tournait cent secondes (2026-10-24, branche `repos-et-blocage`)
+
+**Les essais de repos des Vignettes** (`the_vignettes_rest_after_a_camera_drag`, parfois `the_vignettes_view_is_idle_when_nothing_happens`)
+échouaient dans la suite complète quand la machine était chargée (d'autres sessions qui compilent ou qui lancent leurs essais), jamais seuls.
+Cause trouvée : **un vrai défaut de SHOT, petit, pas un défaut de l'essai** (ni un état commun entre essais : le réveil est venu de
+l'application elle-même). Le fil de fond des vignettes (`thumbs.rs`, `worker`) rangeait la vignette finie et retirait son calcul de la
+file sous le verrou, puis, **après** l'avoir rendu, demandait le réveil de l'écran. Entre les deux, l'interface pouvait voir la file vide
+(`Queue::outstanding` = 0), se reposer, puis être réveillée sans rien de neuf à montrer : une image de plus au repos, juste après
+les images calmes que l'essai attend. Sur une machine libre la fenêtre est de quelques instructions ; sur une machine chargée le fil peut y
+dormir plusieurs images. Pour l'utilisateur ce n'est qu'une image de trop, une fois, après un calcul de vignette (pas de consommation
+continue : aucun réveil sur minuterie ne s'est trouvé dans ces essais) ; pour un essai qui mesure le repos, c'est un échec au hasard.
+Correction : le calcul reste « en cours » dans la file jusqu'**après** le réveil (le réveil n'est pas demandé sous le verrou : l'interface peut
+tenir celui d'egui en interrogeant les vignettes). L'interface ne voit donc jamais la file vide avant que le réveil soit pris en compte.
+Essai : `a_sleeping_thumbnail_thread_is_never_seen_idle_before_it_has_woken_the_screen` endort le fil 150 ms à cet endroit
+(`RETARD_REVEIL_ESSAI`) et compte les réveils quand l'interface voit les fils au repos : l'ancien ordre (`perf::ancien`, gardé sous
+`cfg(test)`) en montre zéro (le défaut), le nouveau au moins un. Pas de seuil desserré. Les deux essais de repos disent maintenant d'où vient
+un réveil qu'ils n'attendaient pas (`Banc::raison_du_reveil` : les dernières images, leur réveil et le fichier:ligne de chaque
+`request_repaint`), pour qu'une prochaine panne se lise tout de suite. *Non reproduit avant la correction* malgré 5 passages complets
+(dont un sous 16 boucles qui occupent tous les cœurs et un autre processus d'essai à côté) : l'ordre défectueux est établi par l'essai
+ci-dessus, pas par une panne revue ; si les deux essais échouent encore, le message donnera la cause.
+
+**L'essai qui tourne cent secondes.** Un blocage de deux heures à 100 % d'un cœur (verificateur du 2026-10-24, 15 h 14) n'a pas été
+reproduit : une douzaine de passages complets, sous charge ou non, n'ont pas laissé d'essai bloqué. Le seul essai que libtest signalait
+(« has been running for over 60 seconds ») est `the_numbering_of_a_long_film_costs_little_per_screen_image` : seul, il dure **102 s**, et ce
+n'est pas sa mesure mais la construction de son film (2 000 plans) : `Document::normalize` remettait l'ordre des plans par quatre boucles
+imbriquées (recherches de la séquence d'une scène dans une liste, `remove` dans un vecteur), un temps de l'ordre du nombre de plans à la
+puissance 4, **à chaque opération de montage** (ajouter, déplacer, supprimer un plan ou une séquence) : une demi-seconde par opération à
+2 000 plans. Réécrit avec des tables (`HashSet`, `HashMap`, un tri stable par rang de séquence puis de scène) : mêmes résultats, 1 s pour
+construire le film, **la suite complète passe de 175-230 s à environ 100 s**. Essai : `normalizing_puts_the_plans_in_the_order_the_slow_code_did`
+compare, sur 300 films au hasard dont l'ordre est défait (plans mélangés, scènes d'une séquence dispersées, scènes inconnues, séquences
+inconnues), l'ordre, les scènes et les séquences gardées avec ceux de l'ancien code, recopié dans l'essai. Rien d'autre n'a été trouvé qui
+puisse tourner sans fin dans le code de SHOT (boucles de `board::trouve`, `fxcache`, `rejeu`, `monde`, `thumbs` relues : toutes finies, ou
+bornées par une durée ou un nombre). Faute de coupable prouvé, deux garde-fous : (1) l'essai du film long a une borne sur la construction
+(20 s) ; (2) `scripts/verifier.ps1` coupe un passage de la suite qui dépasse `-DelaiSuite` minutes (40 par défaut ; les groupes de fiabilité, la
+moitié), **nomme les essais que libtest signale longs sans qu'ils aient fini**, arrête le processus d'essai (cargo et son arbre) et compte le
+passage comme échoué : plus de processus oublié, et le nom du coupable dans le résumé (le fichier de sortie est copié dans le dossier
+temporaire sous `shot-verifier-bloque-…`).
