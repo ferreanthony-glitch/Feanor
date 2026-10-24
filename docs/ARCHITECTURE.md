@@ -255,6 +255,10 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   que `board::layout_with`, appelée par elle selon `Options::sens`), les champs de texte montrés à côté des cases (`Textes`), et le panneau
   « Vignettes » (`Pane::Vignettes`) qui les règle. Réglages de l'application (`Layout::board_sens`, `board_textes`), pas du projet.
   L'étiquette de version d'une case réutilise la pile du montage (`pileversui.rs`).
+- `annotations.rs` (modèle et fichier `annotations.json`, version 2), `annotationsui.rs` (stylo, gomme, lasso, calques, boîte de sélection de
+  `selbox.rs`) et `calqueannot.rs` : les annotations de la planche sont rangées en **calques d'annotation** (`Annotations::calques`, `Trace::calque`) ;
+  le calque d'annotation **d'un plan** est un `Layer::annotation` (vectoriel, tenu sur tout le plan), que `render::panel_plan_at` — le chemin de tous
+  les exports, vignettes et lectures — saute, et que `App::build_plan` peint en dernier à l'écran. Voir `docs/INTERFACE.md`, partie 45.
 - `boardui.rs` : la planche (zoom, décalage, gestes : déplacer, choisir, noter, gommer, glisser
   des panneaux), menus. `Document::move_panels` / `remove_panels` agissent sur plusieurs panneaux.
   La vignette du panneau courant appelle `canvas_panel` dans un `Ui` enfant, agrandi de la marge
