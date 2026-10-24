@@ -115,11 +115,11 @@ pub(crate) const HORS_BARRE: &[Entree] = &[
         "Suggestions sonores",
         "SHOT lit le storyboard et propose des bruitages, des ambiances et des voix témoins, que tu écoutes, acceptes ou supprimes. Un clic l'ouvre ou le met devant, un autre le ferme.",
     ),
-    // Le panneau « Vignettes » a son icône dans l'espace Vignettes seulement (`icones_de`), pas dans les douze de la barre.
+    // Le panneau « Planche » a son icône dans l'espace Vignettes seulement (`icones_de`), pas dans les douze de la barre.
     entree(
         Pane::Vignettes,
         "vue.vignettes_panneau",
-        "Vignettes",
+        "Planche",
         "Le sens de lecture de la planche (en lignes, ou à la japonaise) et les textes montrés à côté des cases. Un clic l'ouvre ou le met devant, un autre le ferme.",
     ),
 ];

@@ -488,8 +488,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("perso.suivant", "Personnage suivant (trait et aplat)", true, false),
     act("perso.precedent", "Personnage précédent (trait et aplat)", true, false),
     act("perso.aucun", "Ne plus dessiner en personnage (couleur libre)", true, false),
-    // Le panneau « Vignettes » : le sens de lecture de la planche et les textes à côté des cases (`vignettespanneau.rs`).
-    act("vue.vignettes_panneau", "Panneau Vignettes (ouvrir / fermer)", true, false),
+    // Le panneau « Planche » : le sens de lecture de la planche et les textes à côté des cases (`vignettespanneau.rs`).
+    act("vue.vignettes_panneau", "Panneau Planche (ouvrir / fermer)", true, false),
     act("vignettes.sens_lignes", "Vignettes : lire en lignes (de gauche à droite, le texte sous les cases)", true, false),
     act("vignettes.sens_japonais", "Vignettes : lire à la japonaise (en colonnes, le texte à droite des cases)", true, false),
     act("vignettes.texte_action", "Vignettes : montrer l'action à côté des cases (oui / non)", true, false),

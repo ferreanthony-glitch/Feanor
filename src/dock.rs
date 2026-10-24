@@ -167,7 +167,7 @@ impl Pane {
             Pane::SuggestionsSonores => "Suggestions sonores",
             Pane::References => "Références",
             Pane::Personnages => "Personnages",
-            Pane::Vignettes => "Vignettes",
+            Pane::Vignettes => "Planche",
         }
     }
 

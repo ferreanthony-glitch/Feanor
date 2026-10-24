@@ -633,7 +633,7 @@ fn the_panel_is_in_the_vignettes_layout_with_its_icon_its_command_and_its_name()
     for e in [Espace::Storyboard, Espace::Animation, Espace::Montage] {
         assert!(!e.defaut().dock_layout().contains(Pane::Vignettes), "{e:?} ne l'a pas d'office");
     }
-    assert_eq!(Pane::Vignettes.name(), "Vignettes");
+    assert_eq!(Pane::Vignettes.name(), "Planche");
     assert_eq!(serde_json::to_string(&Pane::Vignettes).unwrap(), "\"vignettes\"");
     assert!(Pane::ALL.contains(&Pane::Vignettes));
     assert_eq!(crate::barrepanneaux::pane_de_action("vue.vignettes_panneau"), Some(Pane::Vignettes));
