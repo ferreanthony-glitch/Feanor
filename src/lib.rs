@@ -587,6 +587,8 @@ mod vignettes_camera_tests;
 mod pistes;
 #[cfg(test)]
 mod pistes_tests;
+#[cfg(test)]
+mod pastilles_storyboard_tests;
 mod brushfill;
 #[cfg(test)]
 mod brushfill_tests;
@@ -697,6 +699,8 @@ mod scenario_tests;
 #[cfg(test)]
 mod scenelayer_tests;
 mod selbox;
+#[cfg(test)]
+mod selbox_pointfixe_tests;
 #[cfg(test)]
 mod selbox_tests;
 mod seltools;

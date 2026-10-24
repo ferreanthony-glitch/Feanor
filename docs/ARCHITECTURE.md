@@ -1010,7 +1010,8 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `App::goto_key` (montage entier en storyboard, plan en animation) ; actions `cle.*`.
   - Timeline : `on_playhead` (la case de la tête de lecture dans la règle) passe avant
     `timeline_handle_at` au début d'un glisser et pour le curseur.
-  - Peint derrière / remplir la forme : `brushfill.rs` (purs, testés : `closed_outline` — bout
+  - Peint sur l'aplat (l'ancien « peint derrière ») / remplir la forme (plus proposé par l'interface depuis le
+    2026-10-23, l'aplat sous le trait le remplace ; le moteur le garde) : `brushfill.rs` (purs, testés : `closed_outline` — bout
     près du début, ou boucle d'un trait qui se recoupe —, `paint_under`, `over_premul`,
     `fill_under_stroke`). `StrokeState::with_options(behind, fill_closed, close_tol)` : en
     peinture normale `paint_under` ; en humide, la peinture sous le pixel ; `fill_shape` au début

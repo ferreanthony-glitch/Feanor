@@ -322,9 +322,9 @@ pub struct App {
     pub(crate) fill: FillSettings,
     pub(crate) shape: ShapeSettings,
     pub(crate) vector_erase_whole: bool,
-    /// Options du pinceau et du crayon (`brushfill`) : peint derrière, remplir la forme.
+    /// Option du pinceau et du crayon (`brushfill`) : « Peint sur l'aplat ». (« Remplir la forme » n'existe plus,
+    /// 2026-10-23 : il faisait double emploi avec l'aplat sous le trait.)
     pub(crate) paint_behind: bool,
-    pub(crate) fill_shapes: bool,
     /// Toucher du stylet (sensation des brosses) : la copie de travail du réglage, enregistrée
     /// dans `update` quand elle change (hors glissé), comme les options du pinceau.
     pub(crate) toucher: crate::brush::Toucher,
@@ -940,7 +940,7 @@ impl App {
         egui_ctx.set_zoom_factor(crate::echelle::facteur(settings.echelle));
         crate::demarrage::marque("thème");
         let montage_head_w = crate::montagehead::clamp_head_w(settings.montage_head_w);
-        let (paint_behind, fill_shapes) = (settings.paint_behind, settings.fill_shapes);
+        let paint_behind = settings.paint_behind;
         // Diagnostic des performances : proposé une fois, sur une machine qui n'en a jamais eu
         // (jamais dans les essais).
         let diag_offer = reel && settings.diagnostic.a_proposer();
@@ -994,7 +994,6 @@ impl App {
             },
             vector_erase_whole: false,
             paint_behind,
-            fill_shapes,
             toucher: settings.toucher,
             pinceaux: settings.brushes_panel.clone(),
             // Les couleurs de la dernière fois (passe couleur).
@@ -2007,7 +2006,8 @@ impl App {
         // Calque de couleur : le trait reste dans la zone fermée par le trait où il commence.
         let stencil = self.couleur_pochoir(stencil, p);
         let painting = self.tool != Tool::Eraser;
-        let (behind, fill, tol) = (painting && self.paint_behind, painting && self.fill_shapes, self.close_tolerance());
+        // (Plus de « Remplir la forme » : le moteur garde l'option, l'application ne l'allume plus.)
+        let (behind, fill, tol) = (painting && self.paint_behind, false, self.close_tolerance());
         let mut stroke = StrokeState::new(cel, mode, settings, prefix, pen)
             .with_textures(textures)
             .with_feel(self.toucher)
@@ -4052,12 +4052,9 @@ impl App {
             "cle.suivante" => self.goto_key(true),
             "pinceau.derriere" => {
                 self.paint_behind = !self.paint_behind;
-                self.status = if self.paint_behind { "Peint derrière : la peinture passe sous ce qui est déjà dessiné." } else { "Peint derrière : non." }.into();
+                self.status = if self.paint_behind { "Peint sur l'aplat : la peinture passe sous ce qui est déjà dessiné." } else { "Peint sur l'aplat : non." }.into();
             }
-            "pinceau.remplir" => {
-                self.fill_shapes = !self.fill_shapes;
-                self.status = if self.fill_shapes { "Remplir la forme : un trait fermé remplit son intérieur, au lâcher." } else { "Remplir la forme : non." }.into();
-            }
+            // (« pinceau.remplir », l'ancien « Remplir la forme », est maintenant un double de « pinceau.fond » : `fond_action`.)
             "instance.tete" => self.goto_instance_end(false),
             "instance.queue" => self.goto_instance_end(true),
             "instance.casser" => self.break_instance_here(),
@@ -4784,16 +4781,15 @@ impl App {
             ctx.request_repaint();
         }
         // Réglages de la pelure, de la feuille d'exposition, des flips et des options du pinceau
-        // (peint derrière, remplir la forme) : enregistrés quand ils
-        // changent (pas pendant un glissé).
-        let options = (self.paint_behind, self.fill_shapes) != (self.settings.paint_behind, self.settings.fill_shapes);
+        // (peint sur l'aplat) : enregistrés quand ils changent (pas pendant un glissé).
+        let options = self.paint_behind != self.settings.paint_behind;
         let changed = self.onion != self.settings.onion || self.xsheet != self.settings.xsheet || self.flips != self.settings.flips || options || self.toucher != self.settings.toucher || self.pinceaux != self.settings.brushes_panel || self.cadrage != self.settings.framing;
         if changed && !ctx.input(|i| i.pointer.any_down()) {
             self.settings.framing = self.cadrage.clone();
             self.settings.onion = self.onion.clone();
             self.settings.xsheet = self.xsheet.clone();
             self.settings.flips = self.flips.clone();
-            (self.settings.paint_behind, self.settings.fill_shapes) = (self.paint_behind, self.fill_shapes);
+            self.settings.paint_behind = self.paint_behind;
             self.settings.toucher = self.toucher;
             self.settings.brushes_panel = self.pinceaux.clone();
             if let Err(e) = self.settings.save() {

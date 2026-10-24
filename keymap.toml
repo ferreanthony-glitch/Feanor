@@ -2716,6 +2716,11 @@ action = "perso.aucun"
 touches = []
 source = "SHOT (sans touche)"
 
+[[raccourci]]
+action = "perso.classique"
+touches = []
+source = "SHOT (sans touche)"
+
 # Effets, propagation, caméra, aides au cadrage.
 [[raccourci]]
 action = "fx.choisir_aucun"

@@ -112,8 +112,7 @@ impl App {
         // L'aperçu prend les textures du réglage, le trait gardera le réglage complet (7b, étape 5).
         let brush = self.brushes.for_vector(&settings).map(Box::new);
         let textures = self.brushes.textures(&settings);
-        // Peint derrière : l'aperçu passe déjà sous les autres traits ; le remplissage, lui, est un
-        // élément vectoriel posé au lâcher (`commit_vector_stroke`).
+        // Peint sur l'aplat : l'aperçu passe déjà sous les autres traits.
         let mut stroke = StrokeState::new(cel, StrokeMode::Paint(self.color), settings, None, pen)
             .with_textures(textures)
             .with_feel(self.toucher)
@@ -182,25 +181,13 @@ impl App {
             brush: vs.brush,
             trace,
         };
-        // Remplir la forme (`brushfill`) : une zone remplie de la couleur du trait, juste sous lui.
-        let fill = if self.fill_shapes && self.tool != Tool::Eraser {
-            let pts: Vec<Pos2> = path.iter().map(|p| p.pos()).collect();
-            crate::brushfill::closed_outline(&pts, self.close_tolerance()).map(|outline| Element::Fill {
-                contours: vec![outline.iter().map(|p| [p.x, p.y]).collect()],
-                color: vs.color,
-                opacity: vs.opacity,
-            })
-        } else {
-            None
-        };
+        // (« Remplir la forme », qui posait ici une zone de la couleur du trait sous lui, n'existe plus depuis le
+        // 2026-10-23 : l'aplat sous le trait du calque fait ce travail.)
         let behind = self.paint_behind && self.tool != Tool::Eraser;
         if let Some(d) = self.drawing_mut(vs.cel) {
-            // Peint derrière : la zone et le trait sous tous les autres éléments du dessin.
+            // Peint sur l'aplat : le trait sous tous les autres éléments du dessin.
             let at = if behind { 0 } else { d.elements.len() };
             d.elements.insert(at, element.clone());
-            if let Some(f) = &fill {
-                d.elements.insert(at, f.clone());
-            }
         }
         // Un trait au réglage complet se rejoue par le moteur, empreinte par empreinte : cela
         // coûte autant que de le tracer (44 ms pour 600 points de gouache, 174 ms pour 2400), donc
@@ -215,10 +202,10 @@ impl App {
             self.rejeu_cel(vs.cel);
             return;
         }
-        // Sous les autres, ou avec sa zone : on refait la zone du trait (le raccourci ci-dessous
-        // suppose le trait seul, dessus tout le reste).
-        if behind || fill.is_some() {
-            let region = fill.as_ref().map_or(Rect::NOTHING, |f| f.bounds()).union(element.bounds()).union(vector::path_bounds(&path));
+        // Sous les autres : on refait la zone du trait (le raccourci ci-dessous suppose le trait seul, dessus tout le
+        // reste).
+        if behind {
+            let region = element.bounds().union(vector::path_bounds(&path));
             self.refresh_cel_region(vs.cel, region);
             self.push_vector(vs.cel, vs.before, vs.prefix);
             return;

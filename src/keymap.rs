@@ -214,13 +214,14 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("outil.pipette", "Outil pipette", true, false),
     act("outil.selection", "Outil sélection", true, false),
     act("outil.selection_couleur", "Outil sélection par couleur", true, false),
-    act("pinceau.derriere", "Pinceau et crayon : peint derrière (oui / non)", true, false),
+    act("pinceau.derriere", "Pinceau et crayon : peint sur l'aplat (oui / non)", true, false),
     act("pinceau.fond", "Aplat sous le trait du calque courant (ajouter / retirer)", true, false),
     act("fond.calques_choisis", "Aplat sous le trait sur les calques choisis", true, false),
     act("fond.tout_le_plan", "Aplat sous le trait sur tous les calques de dessin du plan", true, false),
     act("fond.retirer_choisis", "Retirer l'aplat sous le trait des calques choisis", true, false),
     act("fond.couleur_partout", "Couleur du projet à tous les aplats sous le trait", true, false),
-    act("pinceau.remplir", "Pinceau et crayon : remplir la forme (oui / non)", true, false),
+    // L'ancien « Remplir la forme » (retiré le 2026-10-23) : un double de « pinceau.fond », pour les raccourcis déjà posés.
+    act("pinceau.remplir", "Aplat sous le trait du calque courant (ancien « remplir la forme »)", true, false),
     act("outil.cutter", "Outil cutter", true, false),
     act("outil.formes", "Outil formes (dernière forme utilisée)", true, false),
     act("outil.ligne", "Outil ligne", true, false),
@@ -485,6 +486,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("perso.suivant", "Personnage suivant (trait et aplat)", true, false),
     act("perso.precedent", "Personnage précédent (trait et aplat)", true, false),
     act("perso.aucun", "Ne plus dessiner en personnage (couleur libre)", true, false),
+    act("perso.classique", "Pastille classique : le pinceau de base, sans personnage ni décor", true, false),
     // Barre des panneaux (`barrepanneaux.rs`) : ouvrir, mettre devant ou fermer un panneau de côté.
     act("vue.reglages", "Panneau Réglages de l'outil (ouvrir / fermer)", true, false),
     act("vue.pinceaux", "Panneau Pinceaux (ouvrir / fermer)", true, false),
@@ -726,7 +728,9 @@ pub fn action_info(id: &str) -> Option<&'static ActionInfo> {
 
 /// Les doubles : (action double, action qu'elle répète). Même effet, autre identifiant, pour
 /// pouvoir poser une seconde touche sur une commande. La palette Ctrl+K ne montre que l'originale.
-pub const ALIASES: [(&str, &str); 21] = [
+pub const ALIASES: [(&str, &str); 22] = [
+    // L'ancien « Remplir la forme » du pinceau (2026-10-23) : l'aplat sous le trait du calque courant.
+    ("pinceau.remplir", "pinceau.fond"),
     ("scene.nouvelle", "panneau.nouveau"),
     ("scene.dupliquer", "panneau.dupliquer"),
     ("scene.supprimer", "panneau.supprimer"),

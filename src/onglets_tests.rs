@@ -169,7 +169,7 @@ fn projet_grand() -> Document {
 /// d'`App` doit être rangé dans l'un des deux jeux : `etat_projet!` (`onglets.rs`) s'il ne vaut que pour un projet, ici
 /// sinon. Sans cet essai, un champ de projet oublié fuirait d'un onglet à l'autre sans que rien ne le dise.
 const PARTAGES: &[&str] = &[
-    "ctx", "board_view", "tool", "brush", "pencil", "eraser", "brushes", "brushes_job", "reopen_probe", "fill", "shape", "vector_erase_whole", "paint_behind", "fill_shapes", "toucher",
+    "ctx", "board_view", "tool", "brush", "pencil", "eraser", "brushes", "brushes_job", "reopen_probe", "fill", "shape", "vector_erase_whole", "paint_behind", "toucher",
     "pinceaux", "color", "hsv", "couleurs", "canvas_rect", "ppp", "onion", "onion_window", "onion_shift", "onion_preset_name", "xsheet", "roles_view", "role_menu", "xsheet_role_menu",
     "flips", "flips_window", "fx_auto_key", "fx_keys_shown", "fx_key_clipboard", "fx_clip_recent", "fx_stack_clipboard", "fx_pane_focus", "fx_pile_recent", "layers_pane_focus","propagation", "coloriage", "sb_window",
     "scenario_window", "sb_export", "light_table", "light_table_strength", "groups_window", "groups_used_only", "image_clipboard", "key_clipboard", "tool_spring", "fake_hold_times",

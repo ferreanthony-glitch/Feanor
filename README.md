@@ -131,10 +131,10 @@ Chaque plan a ses calques, de deux sortes :
 
 - **Vectoriel** (Maj+S pour en créer un, par défaut, façon Storyboard Pro) : les traits restent des objets modifiables.
   - Pinceau et crayon tracent des traits à épaisseur variable (pression du stylet comprise).
-    Deux interrupteurs en haut de leurs réglages, aussi sur un calque bitmap : **Peint derrière**
-    (la peinture passe sous ce qui est déjà dessiné) et **Remplir la forme** (au lâcher, un trait
-    fermé, dont le bout revient près du début ou qui se recoupe, remplit son intérieur de sa
-    couleur, sous le trait ; en vectoriel, la zone reste modifiable).
+    Deux interrupteurs sous l'aperçu du trait, au-dessus de « Plus de réglages », aussi sur un calque
+    bitmap : **Peint sur l'aplat** (pour l'instant : la peinture passe sous ce qui est déjà dessiné)
+    et l'**aplat sous le trait** du calque courant (le même bouton que sur la ligne du calque).
+    (« Remplir la forme » a été retiré le 2026-10-23 : l'aplat fait ce travail.)
   - La gomme coupe les traits, ou retire des traits entiers en mode « traits entiers ».
   - Le pot de peinture crée une zone remplie qui passe sous les traits. Sur un trait ou une zone
     déjà peinte, il en change la couleur.
@@ -1082,7 +1082,10 @@ main (panneau Couleur, pipette, nuancier) la lâche aussi.
 - La barre se montre ou se cache **par espace de travail** (Affichage > « Montrer / Cacher la barre des personnages »,
   Ctrl+K `perso.barre`) : visible d'office en Storyboard (et dans l'espace Vignettes, quand il viendra), cachée d'office en
   Animation et en Montage.
-- Commandes à mettre sur des touches (Ctrl+K) : `perso.suivant`, `perso.precedent`, `perso.aucun`, `perso.ajouter`.
+- Commandes à mettre sur des touches (Ctrl+K) : `perso.suivant`, `perso.precedent`, `perso.aucun`, `perso.classique` (la pastille
+  « classique », en tête de colonne : le « Pinceau rond », sans personnage ni brosse du décor), `perso.ajouter`.
+- Les brosses du décor (crayon, feutre gris, aplat) sont dans la colonne du dessin du Storyboard comme sur la planche des Vignettes :
+  leurs traits vont dans le calque Décor du plan.
 - Choisir un personnage pendant que la sous-ligne d'un aplat est la cible du dessin ramène au **trait** : un personnage dessine
   son trait *et* son aplat. Cliquer ensuite sur la sous-ligne reprend l'aplat seul, et le pot de peinture y remplit avec
   l'aplat du personnage choisi.

@@ -1,8 +1,9 @@
 //! Aides au cadrage sur l'écran : le tracé des repères sur le cadre de la caméra (avec son zoom,
-//! sa rotation, sa bascule) et leurs réglages, en deux endroits (Anthony, 2026-10-21) :
-//! - **la règle**, dans la barre au-dessus du dessin, est le seul lieu des guides : les repères de composition
-//!   (tiers, grille d'or, spirale, diagonales, croix) et les guides de perspective du projet (`guides.rs`) ;
-//!   L'aspect de leurs traits (couleur, opacité, épaisseur) est là aussi, à côté d'eux ;
+//! sa rotation, sa bascule) et leurs réglages, en trois endroits (Anthony, 2026-10-21, puis 2026-10-23) :
+//! - **la règle**, dans la barre au-dessus du dessin : les seuls guides de perspective du projet (`guides.rs`) ;
+//! - **les repères**, une icône à elle dans la barre sous le dessin, juste à droite de Cadrage : les repères de
+//!   composition (tiers, grille d'or, spirale et son orientation, diagonales, croix, « Éteindre les repères ») et
+//!   l'aspect de leurs traits (couleurs, opacité, épaisseur, « Autre couleur ») ;
 //! - **le menu Cadrage**, à gauche de la barre sous le dessin (`viewbar.rs`) : le format et les zones de sécurité.
 //! La géométrie est dans `cadrage.rs`.
 
@@ -54,14 +55,23 @@ impl App {
         };
     }
 
-    /// La règle, au-dessus du dessin : le seul endroit des guides. En haut les repères de composition (tiers, grille
-    /// d'or, spirale et son orientation, diagonales, croix), dessous les guides de perspective du projet (ce que
-    /// faisait le panneau Guides, retiré le 2026-10-21 : afficher, aligner, verrouiller, lignes de référence, gomme,
-    /// lignes du curseur, la liste, un guide de plus à 1, 2 ou 3 points de fuite, son nom, le supprimer).
-    /// Le format et les zones de sécurité sont dans le menu Cadrage de la barre du bas.
+    /// La règle, au-dessus du dessin : les seuls guides de perspective du projet (ce que faisait le panneau Guides, retiré
+    /// le 2026-10-21 : afficher, aligner, verrouiller, lignes de référence, gomme, lignes du curseur, la liste, un guide
+    /// de plus à 1, 2 ou 3 points de fuite, son nom, le supprimer). Les repères de composition ont leur icône dans la
+    /// barre du bas, à côté de Cadrage (`reperes_menu_ui`, Anthony, 2026-10-23).
     pub(crate) fn guides_menu_ui(&mut self, ui: &mut egui::Ui) {
+        ui.label(RichText::new("Perspective").small().weak());
+        self.guides_ui(ui);
+        ui.separator();
+        ui.label(RichText::new("Aides d'écran : elles suivent le cadre de la caméra et ne sont jamais exportées.").small().weak());
+    }
+
+    /// Les repères de composition, petit panneau de l'icône à côté de Cadrage (barre sous le dessin) : tiers, grille d'or,
+    /// spirale et son orientation, diagonales, croix centrale, « Éteindre les repères », et l'aspect de leurs traits.
+    pub(crate) fn reperes_menu_ui(&mut self, ui: &mut egui::Ui) {
         use crate::bulles::interrupteur_a;
         use egui_phosphor::regular as ph;
+        ui.label(RichText::new("Repères de composition").small().weak());
         ui.horizontal_wrapped(|ui| {
             let key = self.raccourci("cadrage.tiers");
             interrupteur_a(ui, &mut self.cadrage.thirds, ph::GRID_NINE, "Tiers", "Règle des tiers : grille de 3 × 3 sur le cadre.", &key, "cadrage.tiers");
@@ -108,19 +118,16 @@ impl App {
                 self.run_action("cadrage.aucune");
             }
         });
+        ui.separator();
         self.aspect_reperes_ui(ui);
-        ui.separator();
-        ui.label(RichText::new("Perspective").small().weak());
-        self.guides_ui(ui);
-        ui.separator();
         ui.label(RichText::new("Aides d'écran : elles suivent le cadre de la caméra et ne sont jamais exportées.").small().weak());
     }
 
-    /// Le bouton de la règle, dans la barre au-dessus du dessin : le menu des guides. Il s'allume dès qu'un repère ou
-    /// le guide de perspective est tracé.
+    /// Le bouton de la règle, dans la barre au-dessus du dessin : le menu des guides de perspective. Il s'allume quand le
+    /// guide de perspective est tracé.
     pub(crate) fn guides_button(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
-        let on = self.guides_any_on();
+        let on = self.perspective_on();
         let [w, h] = crate::barres::CASE;
         let text = crate::bulles::encre_etat(RichText::new(ph::RULER).size(crate::barres::ICONE), on);
         let resp = egui::menu::menu_custom_button(ui, egui::Button::new(text).selected(on).frame(on).min_size(egui::vec2(w, h)), |ui| {
@@ -129,15 +136,20 @@ impl App {
         });
         crate::bulles::bulle(
             resp.response,
-            "Guides",
-            "Tiers, grille d'or, spirale d'or, diagonales, croix centrale, et les guides de perspective du projet (1, 2 ou 3 points de fuite, aligner les traits, verrouiller).",
+            "Guides de perspective",
+            "Les guides de perspective du projet : 1, 2 ou 3 points de fuite, aligner les traits, verrouiller. (Les repères de composition sont sous le dessin, à côté de Cadrage.)",
             "",
         );
     }
 
-    /// Un repère de composition ou le guide de perspective est tracé (la règle s'allume).
-    pub(crate) fn guides_any_on(&self) -> bool {
-        self.cadrage.any_on() || self.guides.enabled
+    /// Le guide de perspective est tracé (la règle s'allume).
+    pub(crate) fn perspective_on(&self) -> bool {
+        self.guides.enabled
+    }
+
+    /// Un repère de composition est tracé (l'icône des repères, à côté de Cadrage, s'allume).
+    pub(crate) fn reperes_any_on(&self) -> bool {
+        self.cadrage.any_on()
     }
 
     /// Un cadre de format ou les zones de sécurité sont tracés (l'icône Cadrage de la barre du bas s'allume).
@@ -206,8 +218,9 @@ impl App {
         ui.label(RichText::new("Aides d'écran : elles suivent le cadre de la caméra et ne sont jamais exportées.").small().weak());
     }
 
-    /// L'aspect des traits des repères de composition (couleur, opacité, épaisseur), sous la règle, à côté des repères
-    /// qu'il règle (Anthony, 2026-10-22 : il était dans le menu Cadrage, loin d'eux).
+    /// L'aspect des traits des repères de composition (couleur, opacité, épaisseur), sous les repères qu'il règle, dans
+    /// leur panneau (Anthony, 2026-10-22 : il était dans le menu Cadrage, loin d'eux ; 2026-10-23 : les repères et lui ont
+    /// leur icône à côté de Cadrage).
     fn aspect_reperes_ui(&mut self, ui: &mut egui::Ui) {
         use crate::bulles::bulle;
         ui.label(RichText::new("Aspect des traits des repères").small().weak());

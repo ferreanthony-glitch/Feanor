@@ -1,5 +1,7 @@
 //! La règle, le menu Cadrage et la colonne des pastilles (Anthony, 2026-10-21) :
-//! - la règle, au-dessus du dessin, est le seul lieu des guides : tout ce que faisait le panneau Guides y est ;
+//! - la règle, au-dessus du dessin, est le lieu des guides de perspective : tout ce que faisait le panneau Guides y est ;
+//!   les repères de composition et l'aspect de leurs traits ont leur icône sous le dessin, juste à droite de Cadrage
+//!   (2026-10-23) ;
 //! - le format et les zones de sécurité sont dans le menu Cadrage, à gauche de la barre du bas ; l'aspect des traits
 //!   des repères est sous la règle, à côté d'eux (2026-10-22) ;
 //! - les pastilles des personnages sont une colonne au bord droit du dessin (et de la planche des Vignettes), et
@@ -151,36 +153,86 @@ fn every_function_of_the_old_guides_panel_is_in_the_ruler_menu() {
     assert_eq!(app.doc.guides.len(), avant - 1, "le guide courant est supprimé");
 }
 
+/// Les icônes des repères de composition : tiers, grille d'or, spirale, orientation, diagonales, croix, tout éteindre.
+const REPERES: [&str; 7] = [ph::GRID_NINE, ph::DOTS_NINE, ph::SPIRAL, ph::ARROWS_CLOCKWISE, ph::LINE_SEGMENTS, ph::CROSSHAIR_SIMPLE, ph::X];
+
 #[test]
-fn the_ruler_menu_keeps_only_guides_and_the_composition_marks() {
+fn the_ruler_menu_keeps_only_the_perspective_guides() {
     let mut app = appli("seulement");
     let mut ecran = Ecran::new();
     let mut menu = |a: &mut App, ui: &mut egui::Ui| a.guides_menu_ui(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut menu);
-    // Les repères de composition : tiers, grille d'or, spirale, orientation, diagonales, croix, tout éteindre.
-    for icone in [ph::GRID_NINE, ph::DOTS_NINE, ph::SPIRAL, ph::ARROWS_CLOCKWISE, ph::LINE_SEGMENTS, ph::CROSSHAIR_SIMPLE, ph::X] {
-        assert!(trouver(&textes, icone).is_some(), "{icone:?} reste dans la règle");
+    assert!(trouver(&textes, ph::PERSPECTIVE).is_some() && contient(&textes, "Perspective"), "la perspective : {textes:?}");
+    // Plus de repères de composition ni leur aspect (Anthony, 2026-10-23 : ils ont leur icône à côté de Cadrage).
+    for icone in REPERES {
+        assert!(trouver(&textes, icone).is_none(), "{icone:?} n'est plus dans la règle : {textes:?}");
     }
-    // L'aspect des traits des repères est à côté d'eux (Anthony, 2026-10-22).
-    assert!(contient(&textes, "Aspect des traits des repères"), "l'aspect des traits est sous la règle : {textes:?}");
-    // Plus de format ni de zones de sécurité : ils sont dans le menu Cadrage.
-    for absent in ["Format", "Zones de sécurité", "Action 93 %", ph::CROP, ph::SELECTION] {
+    // Plus de format, de zones de sécurité ni d'aspect des traits.
+    for absent in ["Aspect des traits", "Autre couleur", "Format", "Zones de sécurité", "Action 93 %", ph::CROP, ph::SELECTION] {
         assert!(!contient(&textes, absent), "« {absent} » n'est plus dans la règle : {textes:?}");
     }
     assert!(contient(&textes, "ne sont jamais exportées"), "la note des aides d'écran reste");
-    // Le bouton de la règle s'allume avec un repère ou le guide de perspective.
-    assert!(!app.guides_any_on());
+    // Le bouton de la règle s'allume avec le guide de perspective, plus avec un repère.
+    assert!(!app.perspective_on());
     app.cadrage.thirds = true;
-    assert!(app.guides_any_on());
+    assert!(!app.perspective_on(), "un repère n'allume plus la règle");
+    assert!(app.reperes_any_on(), "il allume l'icône des repères");
     app.cadrage.thirds = false;
     app.guides.enabled = true;
-    assert!(app.guides_any_on());
-    // Un repère s'allume au clic, comme avant.
-    app.guides.enabled = false;
-    let t = ecran.chauffer(&mut app, 2, &mut menu);
+    assert!(app.perspective_on() && !app.reperes_any_on());
+}
+
+// ------------------------------------------------------------------------------------ les repères de composition
+
+#[test]
+fn the_composition_marks_have_their_own_icon_right_after_cadrage_in_the_bottom_bar() {
+    let mut app = appli("reperes");
+    let mut ecran = Ecran::new();
+    let mut barre = |a: &mut App, ui: &mut egui::Ui| a.view_tools_bar(ui);
+    let textes = ecran.chauffer(&mut app, 4, &mut barre);
+    let cadrage = trouver(&textes, ph::CROP).expect("Cadrage").1;
+    let reperes = trouver(&textes, ph::GRID_FOUR).expect("l'icône des repères est dans la barre du bas").1;
+    let ajuster = trouver(&textes, ph::ARROWS_OUT).expect("ajuster").1;
+    let loupe = trouver(&textes, ph::MAGNIFYING_GLASS).expect("loupe").1;
+    // Juste à droite de Cadrage, avant le trait et « ajuster ».
+    assert!(cadrage.center().x < reperes.center().x && reperes.center().x < ajuster.center().x, "{cadrage:?} {reperes:?} {ajuster:?}");
+    // Même taille d'icône, même écart que deux icônes voisines de la barre (ajuster, loupe).
+    assert!((reperes.height() - loupe.height()).abs() < 0.5 && (reperes.width() - loupe.width()).abs() < 1.5, "{reperes:?} / {loupe:?}");
+    let pas = reperes.center().x - cadrage.center().x;
+    let pas_voisins = loupe.center().x - ajuster.center().x;
+    assert!((pas - pas_voisins).abs() < 1.5, "écart Cadrage → repères {pas}, ajuster → zoom {pas_voisins}");
+    assert!(!app.reperes_any_on());
+    // Un clic ouvre son petit panneau : les repères et l'aspect de leurs traits ; rien du cadrage ni de la perspective.
+    let t = ecran.cliquer(&mut app, reperes.center(), &mut barre);
+    for icone in REPERES {
+        assert!(trouver(&t, icone).is_some(), "{icone:?} dans le panneau des repères : {t:?}");
+    }
+    for texte in ["Aspect des traits des repères", "Autre couleur", "70 %", "1.0 px"] {
+        assert!(contient(&t, texte), "« {texte} » dans le panneau des repères : {t:?}");
+    }
+    for absent in ["Format", "Zones de sécurité", "Perspective", ph::PERSPECTIVE] {
+        assert!(!contient(&t, absent), "« {absent} » n'est pas dans le panneau des repères : {t:?}");
+    }
+    // Un repère s'allume au clic, et l'icône avec lui.
     let p = trouver(&t, ph::GRID_NINE).unwrap().1.center();
-    ecran.cliquer(&mut app, p, &mut menu);
-    assert!(app.cadrage.thirds);
+    let t = ecran.cliquer(&mut app, p, &mut barre);
+    assert!(app.cadrage.thirds && app.reperes_any_on(), "le tiers s'allume, et l'icône des repères");
+    assert!(!app.perspective_on(), "la règle reste éteinte");
+    // Une couleur des repères (la blanche, la deuxième pastille) change l'aspect des traits.
+    let couleur = app.cadrage.color;
+    let ligne = trouver(&t, "Aspect des traits des repères").unwrap().1;
+    let blanc = egui::pos2(ligne.left() + 8.0 + 20.0, ligne.bottom() + 12.0);
+    let t = ecran.cliquer(&mut app, blanc, &mut barre);
+    assert!(app.cadrage.color != couleur || app.cadrage.color == [255, 255, 255], "la couleur suit le clic : {:?} / {t:?}", app.cadrage.color);
+    // « Éteindre les repères ».
+    if let Some(x) = trouver(&t, ph::X).map(|x| x.1.center()) {
+        ecran.cliquer(&mut app, x, &mut barre);
+        assert!(!app.reperes_any_on(), "tout éteint");
+    }
+    // Le panneau Cadrage n'a plus l'aspect des traits ni les repères.
+    let mut cadrage_seul = |a: &mut App, ui: &mut egui::Ui| a.cadrage_ui(ui);
+    let t = ecran.chauffer(&mut app, 3, &mut cadrage_seul);
+    assert!(!contient(&t, "Aspect des traits") && trouver(&t, ph::GRID_NINE).is_none(), "{t:?}");
 }
 
 // ------------------------------------------------------------------------------------ le menu Cadrage
@@ -230,6 +282,10 @@ fn the_view_bar_above_the_drawing_has_the_ruler_not_the_framing() {
     let textes = ecran.chauffer(&mut app, 4, &mut barre);
     assert!(trouver(&textes, ph::RULER).is_some(), "la règle est dans la barre du haut");
     assert!(trouver(&textes, ph::CROP).is_none(), "le cadrage n'y est plus");
+    assert!(trouver(&textes, ph::GRID_FOUR).is_none(), "les repères de composition non plus");
+    // La règle s'allume avec la perspective seule.
+    app.cadrage.thirds = true;
+    assert!(!app.perspective_on());
 }
 
 // ------------------------------------------------------------------------------------ les pastilles
@@ -274,9 +330,9 @@ fn the_pastilles_are_a_slim_column_on_the_right_edge_of_the_drawing() {
     let mut b = banc();
     assert_eq!(b.app.espace, Espace::Storyboard);
     let dessin = b.app.canvas_rect;
-    // Aucun personnage au départ : « aucun », les trois couleurs neutres, « + », l'icône du panneau.
+    // Aucun personnage au départ : « classique », les trois couleurs neutres, les brosses du décor, « + », l'icône du panneau.
     let cases: Vec<Case> = b.app.perso.cases.iter().map(|(_, c)| *c).collect();
-    assert_eq!(cases.first(), Some(&Case::Aucun));
+    assert_eq!(cases.first(), Some(&Case::Classique));
     assert!(cases.contains(&Case::Plus) && cases.contains(&Case::Panneau));
     assert_eq!(cases.iter().filter(|c| matches!(c, Case::Choix(Choix::Neutre(_)))).count(), 3, "{cases:?}");
     // Une colonne : toutes les cases l'une sous l'autre, le long du bord droit, sous le titre du plan.
@@ -332,7 +388,7 @@ fn clicking_a_pastille_chooses_it_and_draws_nothing() {
     clic_case(&mut b, Case::Choix(Choix::Neutre(1)));
     assert_eq!(b.app.perso.actif, None);
     // Un clic entre deux pastilles (sur la colonne) ne dessine pas non plus.
-    let entre = case(&b, Case::Aucun).center() + vec2(-9.0, 0.0);
+    let entre = case(&b, Case::Classique).center() + vec2(-9.0, 0.0);
     appuyer(&mut b, entre, PointerButton::Primary);
     assert!(b.app.stroke.is_none(), "les marges de la colonne ne dessinent pas");
     relacher(&mut b, entre, PointerButton::Primary);
@@ -353,8 +409,8 @@ fn the_plus_adds_a_character_and_the_empty_pastille_lets_go() {
     let p = rangs.iter().position(|c| *c == Case::Choix(Choix::Personnage(id))).expect("la pastille du personnage");
     let n = rangs.iter().position(|c| *c == Case::Choix(Choix::Neutre(0))).unwrap();
     assert!(p < n, "les personnages d'abord : {rangs:?}");
-    // « Aucun personnage » le lâche.
-    clic_case(&mut b, Case::Aucun);
+    // La pastille « classique » le lâche.
+    clic_case(&mut b, Case::Classique);
     assert_eq!(b.app.perso.actif, None);
     // La pastille du personnage le choisit de nouveau.
     clic_case(&mut b, Case::Choix(Choix::Personnage(id)));

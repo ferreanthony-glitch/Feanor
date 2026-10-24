@@ -300,24 +300,8 @@ impl App {
         }
     }
 
-    /// Le réglage « tremblement du trait » des outils de dessin vectoriels (Réglages du pinceau et
-    /// du crayon) : un interrupteur pour le calque courant, comme l'action `fx.tremblement`.
-    pub(crate) fn boil_tool_toggle(&mut self, ui: &mut egui::Ui) {
-        let li = self.cur_layer;
-        if self.fx_offer(li, EffectKind::Boil) != Offer::Enabled {
-            return;
-        }
-        let on = self.fx_on(li, EffectKind::Boil);
-        ui.horizontal(|ui| {
-            if self
-                .bouton_etat(ui, on, ph::WAVE_SINE, "Tremblement du trait", "Le trait de ce calque vectoriel « bout » comme dans WigglyPaint (variantes légèrement déplacées). Les dessins ne changent pas ; les réglages sont dans le panneau Effets.", "fx.tremblement")
-                .clicked()
-            {
-                self.run_action("fx.tremblement");
-            }
-            ui.label(RichText::new(if on { "Le trait de ce calque bout." } else { "Le trait de ce calque est fixe." }).small().weak());
-        });
-    }
+    // (Le tremblement du trait n'a plus de ligne dans les réglages du pinceau et du crayon, Anthony, 2026-10-23 : il se
+    // règle dans le panneau Effets, l'action `fx.tremblement` et le menu des effets du calque.)
 
     /// Ajoute l'effet `kind` à la pile du calque `li`, ou, s'il y est déjà (les effets réservés au
     /// vectoriel ne sont qu'une fois par calque), l'active et le choisit (une étape d'annulation).

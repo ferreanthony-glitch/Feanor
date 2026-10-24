@@ -24,7 +24,7 @@ pub(crate) fn tool_hint(tool: crate::app::Tool) -> &'static str {
         Tool::Rect | Tool::Ellipse => "Glisser : tracer · Maj : carré ou cercle",
         Tool::Polyline => "Un clic par point (Maj : par 15°) · double-clic ou Entrée : terminer",
         Tool::Text => "Clic : poser un texte · Ctrl + Entrée : valider · Échap : annuler",
-        Tool::Transform => "Coin : agrandir (Maj : proportions) · côté : étirer · rond : tourner · Ctrl+R : annuler",
+        Tool::Transform => "Coin : agrandir (Maj : proportions · Ctrl : autre point fixe) · côté : étirer · rond ou hors d'un coin : tourner · Ctrl+R : annuler",
         Tool::Perspective => "Enveloppe ou perspective (Réglages) · tirer un coin ou une poignée ronde · l'intérieur : déplacer · Entrée : terminer",
         Tool::Picker => "Clic : prendre la couleur",
         Tool::Pan => "Glisser : déplacer la vue",
@@ -166,7 +166,7 @@ pub(crate) fn around_screen(rect: Rect, inner: &[Pos2]) -> [Pos2; 4] {
 
 impl App {
     /// Barre sous le dessin, réduite à des icônes (simplification des barres, 2026-10-21) : le cadrage (format, zones de
-    /// sécurité, aspect des traits), puis ajuster, zoom, rotation, miroir, pelure d'oignon, table lumineuse. Les réglages
+    /// sécurité), les repères de composition (et l'aspect de leurs traits, 2026-10-23), puis ajuster, zoom, rotation, miroir, pelure d'oignon, table lumineuse. Les réglages
     /// fins (le pourcentage du zoom, l'angle, combien de dessins avant et après, la force de la table lumineuse) sont dans
     /// de petits panneaux qui s'ouvrent au clic, au-dessus de l'icône. Les vues (plateau, caméra, Espace 3D) et la règle
     /// des guides sont dans la barre au-dessus du dessin.
@@ -187,6 +187,7 @@ impl App {
                 ui.add_space(crate::barres::MARGE_TRAIT);
             };
             self.cadrage_reglage(ui);
+            self.reperes_reglage(ui);
             sep(ui);
             self.command_button(ui, ph::ARROWS_OUT, "vue.ajuster", "Ajuster à la fenêtre", "Toute la feuille dans la vue.", None);
             self.zoom_reglage(ui);
@@ -229,20 +230,30 @@ impl App {
     }
 
     /// Le cadrage, tout à gauche : une icône (allumée quand un format ou les zones de sécurité sont tracés), et au clic
-    /// le format, les zones de sécurité et l'aspect des traits des repères (`cadrageui.rs`). Les repères eux-mêmes
-    /// (tiers, spirale…) et les guides sont dans la règle, au-dessus du dessin.
+    /// le format et les zones de sécurité (`cadrageui.rs`). Les repères de composition sont juste à droite
+    /// (`reperes_reglage`), les guides de perspective dans la règle, au-dessus du dessin.
     pub(crate) fn cadrage_reglage(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         let on = self.framing_any_on();
+        let resp = self.case_icone(ui, ph::CROP, Some(on), "Cadrage", "Le format (16:9, 2,39:1…) et les zones de sécurité.", "");
+        self.panneau_de_case(ui, "cadrage", &resp, 250.0, |app, ui| app.cadrage_ui(ui));
+    }
+
+    /// Les repères de composition, juste à droite de Cadrage (Anthony, 2026-10-23) : une icône de la même taille (allumée
+    /// quand un repère est tracé), et au clic les tiers, la grille d'or, la spirale et son orientation, les diagonales, la
+    /// croix, « Éteindre les repères » et l'aspect de leurs traits (`reperes_menu_ui`).
+    pub(crate) fn reperes_reglage(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        let on = self.reperes_any_on();
         let resp = self.case_icone(
             ui,
-            ph::CROP,
+            ph::GRID_FOUR,
             Some(on),
-            "Cadrage",
-            "Le format (16:9, 2,39:1…), les zones de sécurité, et la couleur, l'opacité et l'épaisseur des repères du cadrage.",
+            "Repères de composition",
+            "Tiers, grille d'or, spirale d'or, diagonales, croix centrale, et la couleur, l'opacité et l'épaisseur de leurs traits.",
             "",
         );
-        self.panneau_de_case(ui, "cadrage", &resp, 250.0, |app, ui| app.cadrage_ui(ui));
+        self.panneau_de_case(ui, "reperes", &resp, 260.0, |app, ui| app.reperes_menu_ui(ui));
     }
 
     /// Le zoom : une icône, et au clic le pourcentage (qu'on glisse ou qu'on tape), « − » et « + », ajuster et 100 %.
@@ -372,9 +383,9 @@ impl App {
         self.status = format!("Vue {}.", if on { "caméra" } else { "du plateau" });
     }
 
-    /// La barre au-dessus du dessin : les trois vues (le plateau, ce que filme la caméra, l'Espace 3D) et la règle, le
-    /// seul lieu des guides (repères de composition et guides de perspective). Le format et les zones de sécurité sont
-    /// dans le menu Cadrage, à gauche de la barre sous le dessin. En Espace 3D, ses outils.
+    /// La barre au-dessus du dessin : les trois vues (le plateau, ce que filme la caméra, l'Espace 3D) et la règle des
+    /// guides de perspective. Le format, les zones de sécurité et les repères de composition sont à gauche de la barre
+    /// sous le dessin (Cadrage et l'icône des repères). En Espace 3D, ses outils.
     pub(crate) fn view_bar(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         ui.painter().rect_filled(ui.max_rect(), 0.0, crate::theme::entete());

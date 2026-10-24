@@ -475,6 +475,28 @@ impl App {
                 ui.label(RichText::new("Le toucher du stylet se règle en bas des réglages du pinceau.").small().weak());
             }
             Groupe::Camera => self.passe_partout_pref_ui(ui),
+            Groupe::Poignees => {
+                use crate::selbox::{CentreRotation, PointFixe};
+                let avant = (self.settings.point_fixe, self.settings.rotation_autour);
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Point fixe des poignées");
+                    ui.radio_value(&mut self.settings.point_fixe, PointFixe::Opposee, "Poignée opposée")
+                        .on_hover_text("Un coin ou un côté tiré (échelle, inclinaison) garde la poignée opposée en place.");
+                    ui.radio_value(&mut self.settings.point_fixe, PointFixe::Centre, "Centre")
+                        .on_hover_text("Un coin ou un côté tiré met à l'échelle autour du centre de la boîte (le pivot, s'il a été déplacé).");
+                });
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("Rotation autour de");
+                    ui.radio_value(&mut self.settings.rotation_autour, CentreRotation::Pivot, "Pivot")
+                        .on_hover_text("Juste hors d'un coin, la boîte tourne autour du pivot (le centre, sauf s'il a été déplacé).");
+                    ui.radio_value(&mut self.settings.rotation_autour, CentreRotation::CoinOppose, "Coin opposé")
+                        .on_hover_text("Juste hors d'un coin, la boîte tourne autour du coin opposé.");
+                });
+                ui.label(RichText::new("Ctrl tenu pendant le geste : l'autre point fixe. Aussi dans les réglages des outils Sélection et Transformer.").small().weak());
+                if avant != (self.settings.point_fixe, self.settings.rotation_autour) {
+                    let _ = self.settings.save();
+                }
+            }
             Groupe::Pistes => self.montage_prefs_ui(ui),
             Groupe::Vignettes => self.vignettes_prefs_ui(ui),
             Groupe::CadresCamera => self.cadres_camera_prefs_ui(ui),

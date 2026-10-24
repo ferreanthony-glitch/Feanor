@@ -3868,3 +3868,79 @@ Trois retouches demandées par Anthony sur une capture annotée de l'onglet Stor
 la première icône de la barre du bas (même taille, format, zones de sécurité, aspect) ; la colonne des pastilles (au bord droit, mince, sous le titre ; choisir, ajouter, aucun personnage,
 neutres, clic droit ; cliquer ou glisser dessus ne dessine rien et ne crée aucune étape d'annulation ; la même sur la planche des Vignettes). `barrepanneaux_tests` : plus de panneau Guides
 dans la barre, les jeux d'origine ni les dispositions.
+
+## 42. Retouches d'interface (2026-10-23, branche `retouches-interface`)
+
+Quatre retouches demandées par Anthony sur une capture annotée.
+
+### 1. Le point fixe des poignées, la rotation autour du coin opposé
+
+Deux réglages de l'application (`reglages.toml` : `point_fixe_poignees`, `rotation_autour_de` ; absents : les valeurs d'office), pour toutes les boîtes à poignées : la boîte
+de la Sélection (vectorielle, bitmap, plusieurs calques, Sélection par couleur), le Transformer sur une zone bitmap et le Transformer d'un calque (un ou plusieurs calques
+choisis). Ils sont au-dessus de « Plus de réglages » des outils Sélection, Sélection par couleur et Transformer (deux petits choix à deux icônes, `point_fixe_ui`) et dans
+Préférences > Dessin, groupe « Poignées de la Sélection et du Transformer ».
+
+- **Point fixe des poignées** : « Poignée opposée » (d'office) — un coin ou le milieu d'un côté tiré (mettre à l'échelle) et un bord tiré (incliner) gardent la poignée
+  opposée en place ; « Centre » — tout se fait autour du pivot (le centre de la boîte, s'il n'a pas été déplacé ; le centre de la boîte pour le Transformer d'un calque).
+  **Ctrl tenu pendant le geste donne l'autre mode** : c'était déjà le geste de Ctrl (« autour du pivot »), il l'est toujours avec le réglage d'office. Le mode « Centre » est
+  exactement l'ancien geste avec Ctrl (essai `centre_mode_is_exactly_the_old_ctrl_gesture…`). Maj garde les proportions, comme avant ; « Garder les proportions » aussi.
+- **Rotation autour de** : « Pivot » (d'office, comme avant) ou « Coin opposé » — une rotation prise juste hors d'un coin tourne autour du coin opposé de la boîte. Le petit
+  cercle du pivot passe sur ce coin dès qu'on survole la zone de rotation, et pendant le geste. La poignée ronde du Transformer tourne toujours autour du centre.
+- Le **Transformer d'un calque** a maintenant lui aussi la rotation juste hors d'un coin (comme la boîte de la Sélection, curseur de rotation), en plus de sa poignée ronde.
+
+Remarque : avant ce réglage, le geste sans touche gardait déjà la poignée opposée (Sélection et Transformer) ; seul Ctrl faisait tourner autour du pivot. Le mode
+d'office reproduit donc l'ancien geste sans touche, et « Centre » l'ancien geste avec Ctrl.
+
+### 2. Les réglages du pinceau, du crayon et de la gomme
+
+- **« Peint derrière » s'appelle « Peint sur l'aplat »** (nom, bulle, barre d'état, liste des raccourcis, aide-mémoire). Son effet ne change pas encore (la peinture passe
+  sous ce qui est déjà dessiné) ; la clé `peint_derriere` des réglages et l'action `pinceau.derriere` gardent leur nom.
+- **« Remplir la forme » est retiré** : il faisait double emploi avec l'aplat sous le trait. Choix : **son effet s'arrête**, il n'est pas reporté sur l'aplat. C'était un
+  réglage de l'application, global (tous les calques, tous les projets), qui posait sous chaque trait fermé une zone de la couleur du trait ; l'aplat est un réglage du
+  **calque**, une seule forme recalculée, de sa propre couleur. Allumer de soi-même un aplat sur des calques parce qu'un ancien fichier de réglages avait cette case cochée
+  changerait des projets sans qu'on l'ait demandé. Un ancien `reglages.toml` avec `remplir_la_forme = true` s'ouvre toujours (lu, sans effet, plus écrit) ; les brosses ne
+  l'ont jamais porté. L'action `pinceau.remplir` (un raccourci déjà posé dessus) devient un double de `pinceau.fond` : elle ajoute ou retire l'aplat du calque courant.
+- **Au-dessus de « Plus de réglages »**, sous l'aperçu du trait, toujours visibles (pinceau et crayon) : l'interrupteur « Peint sur l'aplat » et le bouton d'aplat du calque
+  courant (le même que sur sa ligne du panneau Calques : ajouter ou retirer l'aplat).
+- **La ligne « Le trait de ce calque bout »** (et son icône de tremblement) n'est plus dans les réglages du pinceau et du crayon : le tremblement du trait se règle dans le
+  panneau Effets (et l'action `fx.tremblement`).
+
+### 3. La colonne des pastilles : le décor dans le Storyboard, la pastille « classique »
+
+- **Les brosses du décor** (crayon, feutre gris, aplat ; couleur et tailles de Préférences > Vignettes) sont maintenant aussi dans la colonne du dessin du Storyboard,
+  à la même place que sur la planche (après les couleurs neutres, avant « + »). Elles sont proposées sur tout le côté storyboard (`decor_offert` : `Mode::Storyboard`,
+  hors Espace 3D) et lâchées en passant à l'animation, comme avant. Un trait fait avec elles sur le dessin part dans le **calque Décor du plan courant** : créé au
+  premier trait, tout en bas du plan, tenu sur toutes ses images (le même calque que celui des cases de ce plan dans les Vignettes) ; le calque et ce premier trait ne
+  font qu'une étape d'annulation, un clic qui ne trace rien ne laisse pas de calque vide (`finish_creation`, au lâcher). Le calque courant devient le calque Décor tant
+  que la brosse est choisie ; la lâcher rend le calque d'avant. Ce que cela veut dire dans le Storyboard : un plan qui a plusieurs images (marques d'image, animatique)
+  a un seul décor pour toutes, exactement comme ses cases dans les Vignettes ; pour un décor qui change dans le plan, dessiner sur un calque ordinaire.
+- **La pastille « classique »** remplace « aucun personnage », en tête de colonne (un anneau avec un petit pinceau, allumé quand ni personnage ni brosse du décor ne
+  dessine). Un clic : plus de personnage ni de brosse du décor (la couleur reste libre), l'outil Pinceau au réglage **« Pinceau rond »** — le premier pinceau de SHOT et
+  le réglage de départ de l'outil Pinceau (choix d'Anthony du 2026-10-16, `BrushLibrary::builtin`), pas le Crayon graphite (le départ de l'outil Crayon) ni une
+  brosse texturée. Action `perso.classique` (sans touche d'office) ; `perso.aucun` (le bouton « Couleur libre » du panneau Personnages) lâche seulement, sans toucher
+  au pinceau.
+
+### 4. La règle garde la perspective, les repères de composition ont leur icône
+
+- **La règle** (barre au-dessus du dessin) ne garde que les **guides de perspective** (tout ce que faisait le panneau Guides). Elle s'allume quand la perspective est
+  tracée (`perspective_on`), plus avec un repère.
+- **Les repères de composition** (tiers, grille d'or, spirale et son orientation, diagonales, croix centrale, « Éteindre les repères ») et **l'aspect de leurs traits**
+  (six couleurs, opacité, épaisseur, « Autre couleur ») ont leur propre icône (une grille) dans la barre sous le dessin, **juste à droite de Cadrage** : un petit panneau
+  à elle, pas dans Cadrage. Même taille et même écart que les autres icônes de la barre (`barres::ICONE`, `CASE`, `ECART`, par `case_icone`). Elle s'allume dès qu'un
+  repère est tracé (`reperes_any_on`). Cadrage garde le format et les zones de sécurité.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Sélection et Transformer : « Point fixe » et « Rotation » au-dessus de « Plus de réglages » ; tirer un coin (le coin opposé reste), Ctrl tenu (autour du centre) ;
+   « Coin opposé » : tourner juste hors d'un coin, le petit cercle passe sur le coin opposé. Les mêmes choix dans Préférences > Dessin.
+2. Pinceau : « Peint sur l'aplat » et le bouton d'aplat sous l'aperçu du trait ; plus de « Remplir la forme » ni de ligne « Le trait de ce calque bout ».
+3. Storyboard : les trois brosses du décor dans la colonne des pastilles ; un trait fait avec elles crée « Décor » en bas du plan ; la pastille « classique » en tête
+   remet le Pinceau rond.
+4. La règle : la perspective seule ; l'icône grille à droite de Cadrage : les repères et leur aspect.
+
+### Essais ajoutés
+
+`selbox_pointfixe_tests.rs` (les deux modes du point fixe, Ctrl, la rotation autour du pivot ou du coin opposé, les réglages, l'outil Transformer à l'écran, la place
+des choix dans Réglages) ; `brushfill_tests` (l'ancienne option se lit sans effet, `pinceau.remplir` donne l'aplat) ; `panneaux_tests`, `aplat_tests`,
+`notes_calques_tests` (l'ordre des réglages du pinceau) ; `pastilles_storyboard_tests.rs` (le décor dans le Storyboard, la pastille classique) ;
+`regle_cadrage_tests` (la règle sans les repères, l'icône des repères à côté de Cadrage : place, taille, écart, contenu, allumage).

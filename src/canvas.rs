@@ -429,6 +429,14 @@ impl App {
                         self.pick_color(stage);
                         continue;
                     }
+                    // Une brosse du décor choisie, sur le dessin du Storyboard : le trait part dans le calque Décor du plan
+                    // (créé au premier trait, `decorui.rs` ; dans une case de la planche, c'est la planche qui l'a fait).
+                    let p = if !self.in_card && self.perso.decor.is_some() {
+                        self.decor_avant_trait();
+                        self.to_layer(stage)
+                    } else {
+                        p
+                    };
                     match self.tool {
                         Tool::Fill => self.fill_at(p),
                         Tool::Brush | Tool::Pencil | Tool::Eraser => {
@@ -504,7 +512,7 @@ impl App {
                     } else if self.cam_drag.is_some() {
                         self.camera_drag(stage, mods.shift);
                     } else if self.layer_drag.is_some() {
-                        self.transform_drag(stage, mods.shift);
+                        self.transform_drag(stage, mods.shift, mods.command || mods.ctrl);
                     } else if self.picking {
                         self.pick_color(stage);
                     }
@@ -541,6 +549,11 @@ impl App {
             self.end_stroke();
             self.picking = false;
             self.guides.drag = None;
+            // Le calque Décor né de ce trait et le trait ne font qu'une étape ; un clic qui n'a rien tracé ne le laisse pas
+            // (`decor_avant_trait`). Dans une case de la planche, c'est la planche qui finit.
+            if !self.in_card {
+                self.finish_creation(false);
+            }
         }
 
         self.hover_canvas = hover
@@ -661,7 +674,7 @@ impl App {
                 Some(BoxHandle::Corner(_)) => CursorIcon::ResizeNeSw,
                 Some(BoxHandle::Edge(0 | 2)) => CursorIcon::ResizeVertical,
                 Some(BoxHandle::Edge(_)) => CursorIcon::ResizeHorizontal,
-                Some(BoxHandle::Rotate) => CursorIcon::Alias,
+                Some(BoxHandle::Rotate | BoxHandle::RotateCorner(_)) => CursorIcon::Alias,
                 None => CursorIcon::Default,
             });
             return;
