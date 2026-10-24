@@ -375,3 +375,54 @@ Une version de SHOT d'avant ne cherche que `.pelure` : après le premier enregis
 plus le projet (« Introuvable » dans ses récents). Un même dossier de projet ne s'ouvre donc qu'avec une seule version.
 L'appli compagnon refuse d'enregistrer la structure d'un film partagé (`noyau::Projet::enregistrer`) : un manifeste
 classique par-dessus la casserait pour l'équipe (`noyau_tests::the_companion_never_writes_over_a_shared_film`).
+
+## 18. Retours de terrain du 2026-10-24 (branche `retours-terrain`)
+
+Trois défauts vus à l'usage ; chacun a son essai, écrit avant la correction (et vu échouer), dans `src/retours_terrain_tests.rs`.
+
+**Les cases des Vignettes se réunissent après un passage par le Storyboard.** Ce qu'on a cherché d'abord : un passage par l'espace
+Storyboard et le retour ne touchent à rien (`a_trip_through_the_storyboard_keeps_every_case_of_a_plan`, qui passe avant comme après :
+ni marque perdue, ni recalcul). La cause est dans ce qu'on fait *au* Storyboard. Une case (marque d'image, `Panel::marks`) et sa clé de
+dessin (l'exposition d'un calque) sont la même chose vue de deux côtés, mais le montage et la timeline ne connaissent que les clés :
+tirer la limite entre deux expositions (les clés d'après suivent), glisser une clé ou en supprimer une laissait la marque à son
+ancienne image, et la case montrait le dessin de sa voisine (`dessins_des_cases` : deux cases d'un même dessin, les suivantes
+décalées d'un rang). Correction (`cases.rs`, `Document::cases_suivent_les_cles`, appelée par `App::commit_structure` avec le cliché
+d'avant : toutes les retouches de clés y passent, dans leur étape d'annulation) : une case dont **toutes** les clés (sur chaque calque
+de dessin qui en avait une à son image) sont maintenant à une même autre image la suit ; si les calques ne sont pas d'accord (on n'a
+glissé que la clé de l'un) elle reste ; une case dont les clés ont été supprimées, une voisine tenant son image, est réunie à la
+précédente (`drop_joint_mark` : ses textes s'ajoutent aux siens, les notes de la planche passent à celle-ci) ; des images laissées
+vides gardent leur case ; des clés réordonnées (l'ordre des cases ne tiendrait plus) ne bougent rien ; les retouches qui changent les
+marques elles-mêmes (poser, couper, réunir) ne sont pas touchées. Essais : glisser une clé, retour aux Vignettes, annuler / refaire,
+enregistrer et rouvrir ; supprimer une clé (texte gardé, annulation) ; vider ses images ; un seul calque qui bouge. *Non fait, à
+décider :* une clé posée au montage sur une image sans marque ne fait pas de case (en animation, les clés sont des images
+intermédiaires : des dizaines de cases par plan).
+
+**Coller un calque dans un autre plan ne fait rien.** Trois causes. (1) Ctrl+C dans le panneau Calques copiait la sélection du dessin et
+Ctrl+V n'avait rien à coller : seuls W et X (et le menu Presse-papiers) copiaient un calque. Maintenant, le panneau Calques ayant la main
+(`layers_pane_focus`, le dernier clic y était), Ctrl+C copie le calque courant et Ctrl+V colle le dernier calque copié (`layer_clip_recent` :
+tombe à faux dès qu'on copie autre chose, comme `fx_pile_recent`) ; un clic ailleurs rend ces touches à ce qui est cliqué. (2) Un calque
+de couleur copié seul perdait son trait au collage dans un autre plan et devenait un calque bitmap ordinaire (`reparer`) : copier un calque
+de couleur lié copie maintenant son trait, avec tous les calques de couleur de ce trait. (3) Les liens n'étaient pas remis à jour pour un
+dossier (le calque de couleur d'un trait rangé dans le dossier colorait encore le trait de l'autre plan : même sort) ni pour les sources
+d'un calque de couleur libre (des numéros de calques de l'autre plan) : `paste_layer` garde la correspondance ancien numéro -> nouveau pour
+tous les calques collés et ne garde que les sources qui existent dans le plan. Dessins neufs pour tous (aucun dessin partagé avec le plan
+d'origine), une seule étape d'annulation, enregistré et rouvert sans lien qui pende (`liens_perdus`). Bitmap, vectoriel et calque d'effet
+collaient déjà bien : l'essai les garde.
+
+**L'aplat perd des morceaux.** Le calcul est exact : après une nouvelle clé (copie) et une retouche du trait, ce que l'écran montre une
+fois les fils de fond finis est, pixel pour pixel, le calcul exact (remplissage d'un calque de couleur, et aplat sous le trait). Ce qui
+disparaissait, c'est ce qui est **montré en attendant** le calcul, deux fois. (1) `fxcache` ne gardait que **douze** « derniers
+résultats » (un par dessin d'origine) : dès que treize remplissages avaient été calculés depuis, par exemple pour les vignettes d'une
+planche ou d'une bande de montage, le résultat d'avant du dessin qu'on retouche était parti, et l'écran ne montrait plus rien le temps du
+recalcul (tout le remplissage du calque, ou ceux des calques les moins récents d'un plan : « des morceaux »). La réserve est maintenant de
+256 dessins au plus et 192 Mo de pixels (`LAST_MAX`, `LAST_OCTETS`). (2) Une clé neuve faite par copie n'avait aucun résultat d'avant : son
+aplat n'apparaissait qu'après le premier calcul. Elle hérite maintenant de celui de la clé dont elle est la copie (`fxcache::heriter`, par
+`noter_copie` et la copie d'un plan) : mêmes griffonnages, mêmes traits, donc même remplissage jusqu'à la première retouche. Le
+« dessin vide » que montre un remplissage jamais calculé n'était gardé que pour une taille à la fois (`fx::cel_vide`) : un par taille,
+maintenant. Essais : `a_fill_stays_on_screen_while_it_is_recomputed_even_after_many_other_fills_were_shown`,
+`a_new_key_made_by_copy_shows_the_fill_of_its_source_until_its_own_is_computed` (pixels composés), `the_blank_fill_shown_before_the_first_computation_is_kept_for_each_size`.
+Cause probable de l'essai intermittent `griffonnage_tests::editing_the_line_layer_recomputes_the_fill_of_a_colour_layer` (non reproduit : 37 passages du
+module, dont 25 sous 16 fils de calcul) : la réserve et le dessin vide étaient communs à tous les essais, et sous charge les autres essais
+qui calculent des remplissages au même moment faisaient partir de la réserve le résultat qu'il attendait de revoir (`le remplissage
+d'avant en attendant`) ou prendre le dessin vide d'une autre taille pour un remplissage arrivé. Les deux sont corrigés (réserve de 256 ;
+un dessin vide par taille), sans que l'essai lui-même ait changé.

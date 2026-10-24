@@ -3944,3 +3944,21 @@ d'office reproduit donc l'ancien geste sans touche, et « Centre » l'ancien ges
 des choix dans Réglages) ; `brushfill_tests` (l'ancienne option se lit sans effet, `pinceau.remplir` donne l'aplat) ; `panneaux_tests`, `aplat_tests`,
 `notes_calques_tests` (l'ordre des réglages du pinceau) ; `pastilles_storyboard_tests.rs` (le décor dans le Storyboard, la pastille classique) ;
 `regle_cadrage_tests` (la règle sans les repères, l'icône des repères à côté de Cadrage : place, taille, écart, contenu, allumage).
+
+### Vignettes : le numéro du plan plus gros, les notes plus bas (2026-10-24, branche `retours-terrain`)
+
+Retour d'Anthony. **Le numéro du plan** (au-dessus de sa première case) est écrit gros et gras, presque noir sur le papier : la ligne qui le porte
+passe de 20 à 30 points (`board::LABEL_H`) et les lettres en font 68 % (`NUMERO_FRACTION`, soit 20 points au zoom d'origine), comme avant une part fixe de la
+ligne : il suit le zoom de la planche. (Pas de police grasse dans SHOT : le gras est le même texte posé trois fois, à un demi-point d'écart.)
+**La zone de texte (la bande de note)** descend sous la marge de débord du dessin : un trait peut dépasser la case d'environ 12 % de sa largeur
+(`RING_FRACTION`), et la note, juste sous la case, était recouverte par ce débord. Elle commence maintenant à `board::note_gap(largeur)` = 12 % de la largeur +
+`NOTE_GAP` sous la case ; chaque rangée est plus haute d'autant, donc toute la rangée suivante descend avec elle. La marge est celle d'origine (12 %) : le
+réglage « Débord du trait » des Préférences (jusqu'à 40 %) ne change pas la planche, un débord plus grand recouvre donc un peu la note.
+**Un plan dont la caméra bouge** : sa note est sous **le dernier cadre** (B, C… : le dernier du mouvement), à sa largeur, sous son bord bas et la marge de débord
+(ou sous l'enveloppe si elle descend plus bas à cet endroit), et non plus sous A. Toute sa rangée est assez haute pour l'enveloppe et la note
+(`besoin` dans `board::layout_with`, retenu par les passes qui calculent les hauteurs de rangées) : **toute la rangée suivante** descend dessous, rien
+d'elle ne touche B ni sa note (avant, seules les cases qui se trouvaient sous l'enveloppe se rangeaient ailleurs). La disposition gardée
+(`CacheDisposition`), le toucher (`board::hit`, `note_icone_rect`), l'export de la planche (`planche.rs`) et les enveloppes lisent tous `CardPlace::note` : rien
+d'autre à suivre. Essais : `board_tests::the_note_sits_below_the_overflow_margin_of_the_drawing_and_the_plan_number_is_big`,
+`vignettes_camera_tests::the_note_of_a_move_sits_under_frame_b_and_the_whole_next_row_goes_below_it` (cinq mouvements, dont B en bas à droite et B une hauteur plus bas) ;
+les essais qui lisaient l'espace sous la case (`NOTE_GAP`) lisent `note_gap`, et la planche de `vignettes_maquette_tests` se voit à 60 %.

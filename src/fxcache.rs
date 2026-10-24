@@ -60,8 +60,13 @@ pub(crate) fn set_limit(bytes: usize) {
 }
 /// Nombre d'entrées au plus, quelle que soit leur taille.
 const CACHE_ENTRIES: usize = 2048;
-/// Dernier résultat gardé par dessin d'origine, pour l'afficher en attendant le suivant.
-const LAST_MAX: usize = 12;
+/// Dernier résultat gardé par dessin d'origine, pour l'afficher en attendant le suivant : au plus ce nombre de dessins, et au plus
+/// LAST_OCTETS octets de pixels (la plupart sont aussi dans la réserve : ce ne sont alors que des références). Douze seulement, c'était
+/// trop peu (retour d'Anthony, 2026-10-24 : l'aplat disparaît pendant qu'il retouche) : les vignettes d'une planche ou d'une bande de
+/// montage calculent chacune leur remplissage, et treize dessins plus récents faisaient partir le résultat d'avant du dessin qu'on
+/// retouchait, qui ne montrait plus rien le temps du recalcul.
+const LAST_MAX: usize = 256;
+const LAST_OCTETS: usize = 192 << 20;
 /// Copies de dessins d'origine gardées pour le fil de fond.
 const SOURCES_MAX: usize = 8;
 /// Une demande que l'interface n'a pas renouvelée depuis ce nombre d'images d'écran est abandonnée.
@@ -110,6 +115,7 @@ struct Last {
     id: CelId,
     cel: Arc<Cel>,
     used: u64,
+    bytes: usize,
 }
 
 struct State {
@@ -381,10 +387,10 @@ fn insert_within(st: &mut State, id: CelId, version: u64, cel: Arc<Cel>, origin:
         }
     }
     if let Some(origin) = origin {
-        if let Some(prev) = st.last.insert(origin, Last { id, cel, used }) {
+        if let Some(prev) = st.last.insert(origin, Last { id, cel, used, bytes }) {
             dropped.push(prev.cel);
         }
-        while st.last.len() > LAST_MAX {
+        while (st.last.len() > LAST_MAX || st.last.values().map(|l| l.bytes).sum::<usize>() > LAST_OCTETS) && st.last.len() > 1 {
             let Some(old) = st.last.iter().min_by_key(|(_, l)| l.used).map(|(k, _)| *k) else { break };
             if let Some(l) = st.last.remove(&old) {
                 dropped.push(l.cel);
@@ -563,6 +569,23 @@ pub(crate) fn fallback(origin: CelId) -> Option<(CelId, Arc<Cel>)> {
     let l = st.last.get_mut(&origin)?;
     l.used = tick();
     Some((l.id, l.cel.clone()))
+}
+
+/// Le dessin d'origine `copie` est une copie de `source` (une clé neuve faite par copie du dessin : ses griffonnages sont ceux de la
+/// clé d'avant, et ses traits aussi) : en attendant son propre calcul, son remplissage à l'écran est celui de `source`, au lieu de
+/// rien (l'aplat de la clé neuve ne disparaît pas le temps qu'il se calcule). Sans effet si `source` n'a pas de dernier résultat ou si
+/// `copie` en a déjà un.
+pub(crate) fn heriter(source: CelId, copie: CelId) {
+    if privee_active() || monde_perime() {
+        return;
+    }
+    let mut st = lock();
+    if st.last.contains_key(&copie) {
+        return;
+    }
+    let Some(l) = st.last.get(&source) else { return };
+    let neuf = Last { id: l.id, cel: l.cel.clone(), used: tick(), bytes: l.bytes };
+    st.last.insert(copie, neuf);
 }
 
 /// Le dessin dérivé `id` de la version `version` est-il déjà demandé (en file ou en cours) ? Si oui, la demande est

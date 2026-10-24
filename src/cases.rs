@@ -16,7 +16,59 @@
 //! Toujours dans l'étape d'annulation de ce qui fait la case : une annulation défait la case et ses clés.
 
 use crate::camera::CameraKey;
-use crate::document::Document;
+use crate::document::{CelId, Document, Layer, Panel};
+
+/// Les calques dont les clés font les cases d'un plan : les mêmes que ceux qui reçoivent une clé quand une case est faite
+/// (`cles_de_case`).
+fn calque_de_case(l: &Layer) -> bool {
+    !(l.folder || l.effet.is_some() || l.video.is_some() || l.decor || l.couleur.is_some() || l.scene_wide.is_some())
+}
+
+/// Le dessin qui commence à l'image `f` de `l` : sa clé, s'il y en a une.
+fn cle_a(l: &Layer, f: usize) -> Option<CelId> {
+    let c = l.frames.get(f).copied().flatten()?;
+    (f == 0 || l.frames[f - 1] != Some(c)).then_some(c)
+}
+
+/// Ce que devient une case (une marque d'image) quand on a retouché les clés de son plan.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Sort {
+    /// Elle garde sa place (rien n'a bougé, ou les calques ne sont pas d'accord).
+    Reste,
+    /// Ses clés sont maintenant à cette image : elle les suit.
+    Va(usize),
+    /// Ses clés ont été supprimées et les voisines ont pris leur place : la case est réunie à celle d'avant.
+    Part,
+}
+
+/// Le sort de la case de l'image `f` : `porteurs` sont les clés qu'elle avait (calque, dessin) avant la retouche, `apres` le plan
+/// retouché.
+fn sort_de(porteurs: &[(u64, CelId)], apres: &Panel, f: usize) -> Sort {
+    if porteurs.is_empty() {
+        return Sort::Reste;
+    }
+    // Où est maintenant le début de chacun de ces dessins (l'exposition la plus proche, s'il en reste plusieurs).
+    let mut ou: Vec<usize> = Vec::new();
+    for &(calque, cel) in porteurs {
+        let Some(l) = apres.layers.iter().find(|l| l.id == calque) else { continue };
+        if let Some(s) = (0..l.frames.len()).filter(|&k| cle_a(l, k) == Some(cel)).min_by_key(|&k| k.abs_diff(f)) {
+            ou.push(s);
+        }
+    }
+    if ou.is_empty() {
+        // Plus une seule des clés de la case : si un dessin voisin tient maintenant son image et que personne d'autre n'y pose de
+        // clé, la case n'a plus de dessin à elle ; elle est réunie à la précédente. (Une image laissée vide, elle, reste une case.)
+        let tenue = porteurs.iter().all(|&(calque, _)| apres.layers.iter().find(|l| l.id == calque).is_some_and(|l| l.frames.get(f).copied().flatten().is_some()));
+        let portee = apres.layers.iter().filter(|l| calque_de_case(l)).any(|l| cle_a(l, f).is_some());
+        return if tenue && !portee { Sort::Part } else { Sort::Reste };
+    }
+    let s = ou[0];
+    if s != f && ou.iter().all(|&x| x == s) {
+        Sort::Va(s)
+    } else {
+        Sort::Reste
+    }
+}
 
 impl Document {
     /// Un mouvement de caméra vient d'être **créé** sur la première case du plan `index` (Anthony, 2026-10-22) : les cases qui la suivent dans
@@ -34,6 +86,71 @@ impl Document {
             premier.camera = finale;
         }
         suite
+    }
+
+    /// Les cases suivent leurs clés (Anthony, 2026-10-24 : « une clé du Storyboard doit rester sa propre case dans les Vignettes »).
+    /// Une case (marque d'image) et sa clé de dessin sont la même chose vue de deux côtés ; or le montage et la timeline ne connaissent que
+    /// les clés : en glisser une, tirer la limite entre deux expositions (les clés d'après suivent), ou en supprimer une laissait la marque
+    /// où elle était, et la case montrait le dessin de sa voisine (deux cases d'une même image : « réunies »). `avant` : les plans tels
+    /// qu'ils étaient avant la retouche (le cliché de l'étape d'annulation). Pour chaque plan dont les marques n'ont pas été touchées par
+    /// la retouche elle-même (poser, retirer, couper, réunir : elles savent ce qu'elles font) :
+    /// - une case dont **toutes** les clés (sur chaque calque de dessin qui en avait une à son image) sont maintenant à une même autre
+    ///   image s'y rend ; si les calques ne sont pas d'accord (on n'a glissé que la clé de l'un), elle reste, collée aux autres ;
+    /// - une case dont les clés ont été supprimées, une voisine tenant maintenant son image, est réunie à la précédente : ses textes
+    ///   s'ajoutent aux siens et les notes de la planche passent à celle-ci (`drop_joint_mark`) ;
+    /// - si l'ordre des cases ne tenait plus (clés réordonnées), rien ne bouge.
+    ///
+    /// Dans l'étape d'annulation de la retouche. Renvoie le nombre de cases déplacées ou réunies.
+    pub(crate) fn cases_suivent_les_cles(&mut self, avant: &[Panel]) -> usize {
+        let mut touchees = 0;
+        for i in 0..self.panels.len() {
+            if self.panels[i].marks.is_empty() {
+                continue;
+            }
+            let Some(old) = avant.iter().find(|p| p.id == self.panels[i].id) else { continue };
+            let new = &self.panels[i];
+            let memes_clefs = old.layers.len() == new.layers.len() && old.layers.iter().zip(&new.layers).all(|(a, b)| a.id == b.id && a.frames == b.frames);
+            if old.marks != new.marks || memes_clefs {
+                continue;
+            }
+            let sorts: Vec<Sort> = old
+                .marks
+                .iter()
+                .map(|m| {
+                    let porteurs: Vec<(u64, CelId)> = old.layers.iter().filter(|l| calque_de_case(l)).filter_map(|l| cle_a(l, m.frame).map(|c| (l.id, c))).collect();
+                    sort_de(&porteurs, new, m.frame)
+                })
+                .collect();
+            if sorts.iter().all(|s| *s == Sort::Reste) {
+                continue;
+            }
+            // Les cases qui restent, à leur nouvelle image : dans l'ordre, après la première image, avant la fin.
+            let n = new.frame_count();
+            let frames: Vec<usize> = old.marks.iter().zip(&sorts).filter_map(|(m, s)| match s {
+                Sort::Reste => Some(m.frame),
+                Sort::Va(f) => Some(*f),
+                Sort::Part => None,
+            }).collect();
+            if frames.windows(2).any(|w| w[0] >= w[1]) || frames.iter().any(|&f| f == 0 || f >= n) {
+                continue;
+            }
+            for (m, s) in old.marks.iter().zip(&sorts).rev() {
+                if *s == Sort::Part {
+                    self.drop_joint_mark(i, m.frame);
+                    touchees += 1;
+                }
+            }
+            for (m, s) in old.marks.iter().zip(&sorts) {
+                if let Sort::Va(f) = s {
+                    if let Some(mark) = self.panels[i].marks.iter_mut().find(|x| x.id == m.id) {
+                        mark.frame = *f;
+                        touchees += 1;
+                    }
+                }
+            }
+            self.panels[i].marks.sort_by_key(|m| m.frame);
+        }
+        touchees
     }
 
     /// Pose, à l'image `frame` du plan `index`, la clé de la case qui commence là sur chacun de ses calques de dessin (voir plus haut).

@@ -2280,7 +2280,12 @@ impl Document {
     /// copié (`copies`) reçoivent aussi une copie de ses griffonnages — jamais un dessin partagé entre l'original et sa
     /// copie, qu'on retoucherait ensemble.
     pub(crate) fn copier_griffonnages(&mut self, layers: &[Layer], copies: &mut HashMap<CelId, CelId>) {
-        self.copier_griffonnages_avec(layers, copies, |d, g| Some(d.duplicate_cel(g)));
+        // (Le remplissage de la copie, à l'écran en attendant le sien : celui de l'original, xcache::heriter.)
+        self.copier_griffonnages_avec(layers, copies, |d, g| {
+            let copie = d.duplicate_cel(g);
+            crate::fxcache::heriter(g, copie);
+            Some(copie)
+        });
     }
 
     /// `copier_griffonnages`, la copie d'un dessin de griffonnages étant faite par `make` (rien : le dessin manque, la copie
@@ -2665,7 +2670,7 @@ impl Document {
     /// Retire la marque d'image laissée par une jointure à l'image `joint` du plan `index` : ses
     /// textes s'ajoutent à ceux de l'image de storyboard d'avant (la marque précédente, sinon le
     /// plan), ses notes de la planche s'y attachent.
-    fn drop_joint_mark(&mut self, index: usize, joint: usize) {
+    pub(crate) fn drop_joint_mark(&mut self, index: usize, joint: usize) {
         let Some(k) = self.panels[index].marks.iter().position(|m| m.frame == joint) else { return };
         let m = self.panels[index].marks.remove(k);
         let append = |dst: &mut String, src: &str| {

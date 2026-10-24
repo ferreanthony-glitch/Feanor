@@ -388,6 +388,8 @@ pub struct App {
     /// (`layers_pane_focus`, le dernier clic était dedans) : Ctrl+V y colle ces effets sur le calque cliqué.
     pub(crate) fx_pile_recent: bool,
     pub(crate) layers_pane_focus: bool,
+    /// La dernière chose copiée est un calque (copy_layer) : Ctrl+V, depuis le panneau Calques, le colle (même dans un autre plan).
+    pub(crate) layer_clip_recent: bool,
     /// Import vidéo en cours (13k, `videoui.rs`).
     pub(crate) video_import: Option<crate::videoui::VideoImport>,
     /// Propagation d'une peinture sur la vidéo, façon EbSynth (`propagerui.rs`).
@@ -1036,6 +1038,7 @@ impl App {
             fx_pane_focus: false,
             fx_pile_recent: false,
             layers_pane_focus: false,
+            layer_clip_recent: false,
             video_import: None,
             propagation: crate::propagerui::Propagation::new(wgpu_render_state),
             coloriage: crate::coloriageui::Coloriage::new(),
@@ -2565,6 +2568,11 @@ impl App {
     }
 
     pub(crate) fn commit_structure(&mut self, snap: Edit) {
+        // Les cases d'un plan suivent leurs clés quand on les retouche au montage ou dans la timeline (`cases.rs`) : dans la même étape
+        // d'annulation que la retouche.
+        if let Edit::Structure { structure, .. } = &snap {
+            self.doc.cases_suivent_les_cles(&structure.panels);
+        }
         self.history.push(snap);
         self.modified = true;
         // Ce qui est gardé par rang d'abord, sur le film d'après le changement : `sync_couleurs` lit les calques du plan courant
@@ -2873,12 +2881,15 @@ impl App {
 
     /// Copie le calque courant, avec ses dessins et sa timeline (W) ; un dossier, avec ses
     /// calques (13b-5).
+    ///
+    /// Un calque de couleur lié à son trait ne se copie pas sans lui (retour d'Anthony, 2026-10-24 : collé dans un autre plan, il
+    /// aurait perdu son trait, et ses images ne suivaient plus rien) : c'est le trait qui est copié, avec tous ses calques de couleur.
     pub(crate) fn copy_layer(&mut self) {
-        let layer = self.layer().clone();
-        let children: Vec<Layer> =
-            crate::folders::children_of(self.layers(), self.cur_layer).into_iter().map(|i| self.layers()[i].clone()).collect();
-        let colours: Vec<Layer> =
-            crate::calquecouleur::couleurs_de(self.layers(), self.cur_layer).into_iter().map(|i| self.layers()[i].clone()).collect();
+        let li = crate::calquecouleur::trait_de(self.layers(), self.cur_layer).unwrap_or(self.cur_layer);
+        let avec_son_trait = li != self.cur_layer;
+        let layer = self.layers()[li].clone();
+        let children: Vec<Layer> = crate::folders::children_of(self.layers(), li).into_iter().map(|i| self.layers()[i].clone()).collect();
+        let colours: Vec<Layer> = crate::calquecouleur::couleurs_de(self.layers(), li).into_iter().map(|i| self.layers()[i].clone()).collect();
         let cels = children
             .iter()
             .chain(colours.iter())
@@ -2887,7 +2898,10 @@ impl App {
             .filter_map(|id| self.doc.cels.get(&id).map(|c| (id, c.clone())))
             .collect();
         let what = if layer.folder { "Dossier" } else { "Calque" };
-        self.status = format!("{what} « {} » copié : X pour le coller dans un autre plan.", layer.name);
+        let avec = if avec_son_trait { " (le calque de couleur emmène son trait)" } else { "" };
+        self.status = format!("{what} « {} » copié{avec} : X (ou Ctrl+V dans le panneau Calques) pour le coller dans un autre plan.", layer.name);
+        // La dernière chose copiée : Ctrl+V depuis le panneau Calques le colle (`layer_clip_recent`).
+        self.layer_clip_recent = true;
         self.layer_clipboard = Some(LayerClip {
             layer,
             children,
@@ -2956,19 +2970,30 @@ impl App {
         let snap = self.snapshot();
         let mut copies: HashMap<CelId, CelId> = HashMap::new();
         let mut layer = self.pasted_layer(&clip.layer, &clip, &mut copies);
+        // Les numéros des calques collés, par ceux des calques copiés : les calques de couleur collés colorient les traits collés.
+        let mut ids: HashMap<u64, u64> = HashMap::from([(clip.layer.id, layer.id)]);
         let mut children: Vec<Layer> = Vec::new();
         for c in &clip.children {
             let mut child = self.pasted_layer(c, &clip, &mut copies);
             child.parent = Some(layer.id);
+            ids.insert(c.id, child.id);
             children.push(child);
         }
         // Ses calques de couleur reviennent avec lui, sous la copie.
+        let mut colours: Vec<Layer> = Vec::new();
         for c in &clip.colours {
-            let mut colour = self.pasted_layer(c, &clip, &mut copies);
-            if let Some(link) = colour.couleur.as_mut() {
-                link.relink(&HashMap::from([(clip.layer.id, layer.id)]), &copies);
+            let colour = self.pasted_layer(c, &clip, &mut copies);
+            ids.insert(c.id, colour.id);
+            colours.push(colour);
+        }
+        // Les liens des calques de couleur : leur trait collé (jamais celui du plan d'où ils viennent), et seulement les sources
+        // qui existent dans ce plan (celles d'un autre plan n'y sont pas : un lien qui pend).
+        let ici: std::collections::HashSet<u64> = self.layers().iter().map(|l| l.id).chain(ids.values().copied()).collect();
+        for l in std::iter::once(&mut layer).chain(children.iter_mut()).chain(colours.iter_mut()) {
+            if let Some(link) = l.couleur.as_mut() {
+                link.relink(&ids, &copies);
+                link.sources.retain(|s| ici.contains(s));
             }
-            children.push(colour);
         }
         let cur = self.cur_layer;
         let folder_of_current = crate::folders::parent_index(self.layers(), cur);
@@ -2978,12 +3003,12 @@ impl App {
             _ => cur + 1,
         };
         layer.parent = if layer.folder { None } else { folder_of_current.map(|fi| self.layers()[fi].id) };
-        for c in children.iter_mut().filter(|c| c.couleur.is_some()) {
+        for c in colours.iter_mut() {
             c.parent = layer.parent;
         }
         let name = layer.name.clone();
         let id = layer.id;
-        let block: Vec<Layer> = children.into_iter().chain(std::iter::once(layer)).collect();
+        let block: Vec<Layer> = children.into_iter().chain(colours).chain(std::iter::once(layer)).collect();
         for (k, l) in block.into_iter().enumerate() {
             self.layers_mut().insert(at + k, l);
         }
@@ -3563,6 +3588,7 @@ impl App {
         // depuis le panneau Calques ; la copie d'effets, plus bas, la redonne (`fxcopie.rs`).
         if matches!(action, "edition.copier" | "edition.couper") {
             self.fx_pile_recent = false;
+            self.layer_clip_recent = false;
         }
         // Le panneau Références a la main : Ctrl+V y colle l'image du presse-papiers.
         if self.refs.focus && matches!(action, "edition.coller" | "edition.coller_a_la_tete" | "edition.coller_sur_place") {
@@ -3746,6 +3772,12 @@ impl App {
             // Coller des effets : le panneau Effets a la main, ou le panneau Calques l'a et la dernière
             // copie est celle d'effets (on a cliqué le calque où les coller).
             "edition.coller" if self.fx_paste_has_hand() => self.fx_paste(self.fx_paste_targets(self.cur_layer), false),
+            // Le panneau Calques a la main (le dernier clic était dedans) : Ctrl+C copie le calque courant, et Ctrl+V colle le dernier
+            // calque copié (ici ou dans un autre plan), comme W et X (retour d'Anthony, 2026-10-24 : « copier-coller un calque sur un autre
+            // plan ne fait rien » : Ctrl+C copiait la sélection du dessin, et Ctrl+V n'avait rien à coller). Un clic ailleurs rend ces
+            // touches à ce qui est cliqué (clés, images, plans, dessin) ; après une autre copie, Ctrl+V garde son sens d'avant.
+            "edition.copier" if self.layers_pane_focus => self.copy_layer(),
+            "edition.coller" if self.layers_pane_focus && self.layer_clip_recent && self.layer_clipboard.is_some() => self.paste_layer(),
             // Des clés de caméra choisies (un losange jaune de la piste Caméra) : copier, couper,
             // supprimer les visent, coller aussi tant que c'est la dernière chose copiée
             // (`camkeys.rs`).

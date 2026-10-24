@@ -386,7 +386,7 @@ fn a_zoom_out_is_drawn_around_the_case_and_clamped_to_the_row_height() {
     let l = board::layout(&doc, &s);
     let c = l.cards[K];
     let m = l.move_of(K).unwrap();
-    let hauteur_rangee = c.thumb.height() + board::NOTE_GAP + board::NOTE_LINE_H;
+    let hauteur_rangee = c.thumb.height() + board::note_gap(170.0) + board::NOTE_LINE_H;
     assert!(m.cadres[1].reduit, "limite de taille");
     assert!((m.cadres[1].rect.height() - hauteur_rangee).abs() < 1e-2, "B est limité à la case et sa bande de note : {} pour {hauteur_rangee}", m.cadres[1].rect.height());
     assert!(m.cadres[1].rect.contains_rect(c.thumb), "B entoure la case");
@@ -457,6 +457,32 @@ fn a_move_down_sits_between_the_rows_and_the_cases_after_go_around_it_while_a_st
     let l = board::layout_with(&doc, &s, &lignes, false, &board::Options::default());
     sans_chevauchement(&l);
     assert_eq!(l.cards.len(), nl);
+}
+
+#[test]
+fn the_note_of_a_move_sits_under_frame_b_and_the_whole_next_row_goes_below_it() {
+    use crate::vignettecam::{coins_de, se_recouvrent};
+    let s = board::BoardSettings { card_w: 170.0, columns: 4, rows: 0 };
+    for (dx, dy) in [(160.0, 55.0), (0.0, 90.0), (160.0, 0.0), (80.0, 120.0), (40.0, 70.0)] {
+        let mut doc = plan_court();
+        deux_cadres(&mut doc, 1, dx, dy);
+        let l = board::layout(&doc, &s);
+        let (c, m) = (l.cards[K], l.move_of(K).unwrap());
+        let b = m.cadres.last().unwrap().rect;
+        // Sous B, à sa largeur, plus bas que son bord et la marge de débord de 12 % (et l'espace de la note).
+        assert!((c.note.left() - b.left()).abs() < 1e-3 && (c.note.width() - b.width()).abs() < 1e-3, "({dx}, {dy}) : à la largeur de B, sous lui : {:?} {b:?}", c.note);
+        assert!(c.note.top() >= b.bottom() + board::note_gap(170.0) - 1e-3, "({dx}, {dy}) : sous le bord de B et la marge de débord");
+        assert!(c.note.top() >= b.bottom() + 0.12 * 170.0, "({dx}, {dy}) : plus bas que le trait qui déborde de B");
+        assert!(!se_recouvrent(&coins_de(c.note).to_vec(), &m.enveloppe, 0.5), "({dx}, {dy}) : la note ne recouvre pas l'enveloppe");
+        assert_eq!(board::hit(&l, c.note.center(), 0.0), board::Hit::Note(K), "({dx}, {dy}) : on peut la toucher");
+        // Toute la rangée suivante est plus bas que B et sa note, pas seulement les cases qui sont dessous.
+        let bas = c.note.bottom().max(c.foot.bottom());
+        for n in l.cards.iter().filter(|n| n.row > c.row) {
+            assert!(n.card.top() >= bas + board::ROW_GAP - 1e-3, "({dx}, {dy}) : la case {} de la rangée suivante remonte jusqu'à {} (B et sa note vont jusqu'à {bas})", n.id, n.card.top());
+        }
+        assert_eq!(c.thumb, board::layout(&plan_court(), &s).cards[K].thumb, "({dx}, {dy}) : A ne bouge pas");
+        sans_chevauchement(&l);
+    }
 }
 
 /// Les numéros de plan se lisent dans l'ordre : de gauche à droite, rangée par rangée.

@@ -235,6 +235,12 @@ mod cases;
 #[cfg(test)]
 mod cases_tests;
 #[cfg(test)]
+mod retours_cases_tests;
+#[cfg(test)]
+mod retours_collage_tests;
+#[cfg(test)]
+mod retours_aplat_tests;
+#[cfg(test)]
 mod notes_cases_tests;
 mod decor;
 #[cfg(test)]
