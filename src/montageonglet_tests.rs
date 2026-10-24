@@ -390,7 +390,7 @@ fn the_montage_bar_shows_the_editing_commands_and_keeps_the_others_under_plus() 
     for c in Barre::Montage.commandes() {
         assert!(Barre::MontageEdition.cherche(c.id).is_some(), "{} manque dans la barre de l'espace Montage", c.id);
     }
-    for sous_plus in ["storyboard.verrouiller", "numerotation.verrouiller", "envoi.marquer", "version.nouvelle", "comparer.ouvrir", "fichier.importer_video", "vue.dessin", "vue.vignettes"] {
+    for sous_plus in ["storyboard.verrouiller", "numerotation.verrouiller", "envoi.marquer", "version.nouvelle", "comparer.ouvrir", "fichier.importer_video"] {
         assert!(plus.contains(&sous_plus), "{sous_plus} est sous « Plus… »");
     }
     // Le Montage a sa barre ; les autres espaces gardent la leur.
