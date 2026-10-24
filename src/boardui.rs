@@ -1006,6 +1006,8 @@ impl App {
         // au-dessus : `pastilles_colonne`, `personnagesui.rs`.)
         // Le débord du trait hors des cases suit les Préférences (il fait partie de la clé des vignettes : elles se refont en fond).
         self.thumbs.debord = Some(self.settings.vignettes.debord_fraction());
+        // (Les cases ne montrent pas les calques d'annotation du plan : on ne dessine pas dedans depuis la planche.)
+        self.ecarter_le_calque_d_annotation();
         self.board_toolbar(ui);
         self.variantes_barre(ui);
         let view = ui.available_rect_before_wrap();
@@ -1174,7 +1176,7 @@ impl App {
         self.update_cam_geste(latest, escape);
         self.cam_garder_la_place(&layout);
         // Le geste du stylo ou de la gomme d'annotation, point après point (`annotationsui.rs`).
-        self.annot_geste(&layout, xf, &events, latest, any_down, touch.is_some(), escape);
+        self.annot_geste(&layout, xf, &events, latest, any_down, touch.is_some(), escape, mods);
 
         // Le papier est blanc partout (rien autour des cases) ; les barres, les cases pâles qui montrent où dessiner, les vignettes.
         let hovered = over.map(|p| board::hit(&layout, xf.to_board(p), BAR_TOUCH / xf.zoom.max(1e-3)));
@@ -1302,7 +1304,7 @@ impl App {
         }
         // Le stylo ou la gomme d'annotation : curseur en croix (le cercle de l'outil est peint avec les annotations).
         if self.annot_actif() && over.is_some() && !pan_mode {
-            ui.ctx().set_cursor_icon(CursorIcon::Crosshair);
+            self.annot_curseur(ui.ctx(), xf, &layout, over);
         }
         if !any_down {
             self.finish_board_drag(&layout, &texts);

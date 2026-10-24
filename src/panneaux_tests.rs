@@ -198,11 +198,11 @@ fn the_kind_of_each_layer_has_its_own_icon() {
     assert_eq!(Sorte::of(&app.layers()[1]), Sorte::Vecto);
     assert_eq!(Sorte::of(&app.layers()[2]), Sorte::Video);
     assert_eq!(Sorte::of(&app.layers()[3]), Sorte::Dossier);
-    // Six sortes, six icônes différentes.
+    // Sept sortes (le calque d'annotation est la septième), sept icônes différentes.
     let mut icones: Vec<&str> = Sorte::TOUTES.iter().map(|s| s.icone()).collect();
     icones.sort_unstable();
     icones.dedup();
-    assert_eq!(icones.len(), 6);
+    assert_eq!(icones.len(), 7);
 }
 
 #[test]

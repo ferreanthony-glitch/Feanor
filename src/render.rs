@@ -728,15 +728,23 @@ pub fn composite_pixel_i(doc: &Document, plan: &Plan, x: i64, y: i64) -> Color32
 
 /// Plan de l'image `frame` du panneau `index` tel que la caméra le filme (vignettes, export) :
 /// les calques en profondeur défilent selon le décalage de la caméra (multiplan).
+///
+/// **Sans les calques d'annotation du plan** (`Layer::annotation`, `calqueannot.rs`) : tout ce qui sort du film (exports, vignettes, lecture)
+/// passe par ici, et des notes de réalisateur n'y ont pas leur place. `panel_plan_at_avec` les laisse venir quand on le demande.
 pub fn panel_plan_at(doc: &Document, index: usize, frame: usize, paper: Option<[u8; 3]>) -> Plan {
+    panel_plan_at_avec(doc, index, frame, paper, false)
+}
+
+/// Comme `panel_plan_at`, avec ou sans les calques d'annotation du plan : `annotations` vrai, ils sont posés par-dessus tout le reste.
+pub fn panel_plan_at_avec(doc: &Document, index: usize, frame: usize, paper: Option<[u8; 3]>, annotations: bool) -> Plan {
     let camera = doc.camera_seen(index, frame);
-    plan_with_camera(&crate::espace3d::Monde::of(doc), &doc.panels[index], frame, paper, &camera, doc.fps)
+    plan_with_camera(&crate::espace3d::Monde::of(doc), &doc.panels[index], frame, paper, &camera, doc.fps, annotations)
 }
 
 /// L'image `frame` d'un plan rangé (une version qui n'est pas dans `doc.panels`), avec sa propre caméra : la
 /// vignette d'une carte de la pile des versions.
 pub fn stored_panel_plan(doc: &Document, panel: &Panel, frame: usize, paper: Option<[u8; 3]>) -> Plan {
-    plan_with_camera(&crate::espace3d::Monde::of(doc), panel, frame, paper, &doc.camera_seen_du_plan_range(panel, frame), doc.fps)
+    plan_with_camera(&crate::espace3d::Monde::of(doc), panel, frame, paper, &doc.camera_seen_du_plan_range(panel, frame), doc.fps, false)
 }
 
 /// Le calque `li` du plan `index` seul, à l'image `frame`, tel que la caméra au centre le voit
@@ -746,7 +754,8 @@ pub fn stored_panel_plan(doc: &Document, panel: &Panel, frame: usize, paper: Opt
 pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> Option<Plan> {
     let panel = doc.panels.get(index)?;
     let l = panel.layers.get(li)?;
-    if l.folder || l.effet.is_some() {
+    // (Un calque d'annotation n'est pas un dessin du film : l'export vers Storyboard Pro ne le prend pas.)
+    if l.folder || l.effet.is_some() || l.annotation {
         return None;
     }
     let cel = crate::video::cel_at(l, frame, doc.fps)?;
@@ -766,12 +775,14 @@ pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> O
     Some(Plan { paper: None, items: griffon_item(&panel.layers, li, frame, &line).into_iter().chain(fond_item(l, &line)).chain([line]).collect() })
 }
 
-fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32) -> Plan {
+fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32, annotations: bool) -> Plan {
     let mut items: Vec<PlanItem> = Vec::new();
     // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
-    let mut starts: Vec<usize> = Vec::with_capacity(panel.layers.len());
-    for (li, l) in panel.layers.iter().enumerate() {
-        starts.push(items.len());
+    let mut starts: Vec<usize> = vec![0; panel.layers.len()];
+    // Les calques d'annotation du plan (`calqueannot.rs`) : absents, ou, si on les veut, posés après tous les autres, par-dessus tout.
+    for li in crate::calqueannot::ordre(&panel.layers, annotations) {
+        let l = &panel.layers[li];
+        starts[li] = items.len();
         // Caché (lui ou son dossier, 13b-5) : rien ; l'opacité du dossier s'ajoute.
         let Some(opacity) = crate::folders::effect(&panel.layers, li) else { continue };
         // Calque d'effet (`calqueffet.rs`) : son repère, ou rien (une incrustation se pose sur l'image

@@ -1666,6 +1666,11 @@ touches = []
 source = "SHOT (calque de couleur sous le trait, choix d'Anthony 2026-10-20 ; la façon de faire de Storyboard Pro ou de Harmony n'est pas vérifiée : à vérifier)"
 
 [[raccourci]]
+action = "calque.nouveau_annotation"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
 action = "calque.detacher_couleur"
 touches = []
 source = "SHOT (calque de couleur sous le trait)"
@@ -2193,6 +2198,16 @@ source = "SHOT (sans touche)"
 
 [[raccourci]]
 action = "vignettes.annotation_gomme"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vignettes.annotation_lasso"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vignettes.annotation_calque_nouveau"
 touches = []
 source = "SHOT (sans touche)"
 

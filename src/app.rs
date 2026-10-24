@@ -1608,9 +1608,11 @@ impl App {
         let layers: &[crate::document::Layer] = preview.as_ref().map_or(self.layers(), |p| p.0.as_slice());
         let cur = preview.as_ref().map_or(self.cur_layer, |p| p.1);
         // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
-        let mut starts: Vec<usize> = Vec::with_capacity(layers.len());
-        for (li, layer) in layers.iter().enumerate() {
-            starts.push(items.len());
+        let mut starts: Vec<usize> = vec![0; layers.len()];
+        // À l'écran, les calques d'annotation du plan (`calqueannot.rs`) viennent après tous les autres : par-dessus tout, même un calque d'effet.
+        for li in crate::calqueannot::ordre(layers, true) {
+            let layer = &layers[li];
+            starts[li] = items.len();
             // Caché (lui ou son dossier) : rien ; sinon son opacité, avec celle de son dossier.
             let Some(mut opacity) = crate::folders::effect(layers, li) else { continue };
             // Calque d'effet (`calqueffet.rs`) : son repère, qui couvre ce qui est dessous.
@@ -3784,6 +3786,8 @@ impl App {
             // Vignettes : annotations par-dessus la planche et marie-louise (`annotationsui.rs`).
             "vignettes.annotation_stylo" => self.annot_choisir(crate::annotationsui::Outil::Stylo),
             "vignettes.annotation_gomme" => self.annot_choisir(crate::annotationsui::Outil::Gomme),
+            "vignettes.annotation_lasso" => self.annot_choisir(crate::annotationsui::Outil::Lasso),
+            "vignettes.annotation_calque_nouveau" => self.annot_calque_nouveau(),
             "vignettes.annotations_afficher" => self.annot_basculer_visibles(),
             "vignettes.annotations_effacer" => self.annot_demander_effacement(),
             "vignettes.marie_louise" => self.marie_basculer(),
@@ -4339,6 +4343,7 @@ impl App {
             }
             // Calque de couleur (`calquecouleurui.rs`) : en ajouter un, le détacher, griffonner.
             "calque.nouveau_couleur" => self.new_colour_layer(),
+            "calque.nouveau_annotation" => self.nouveau_calque_d_annotation(),
             "calque.detacher_couleur" => self.detach_colour_layer(),
             "calque.griffonner" => self.toggle_griffonner(),
             // Calque vidéo (13k, `videoui.rs`).

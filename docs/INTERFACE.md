@@ -1185,7 +1185,8 @@ sur la planche tant qu'on ne prend pas un de ces outils (deux icônes de plus da
 menu du clic droit sur le fond et la palette Ctrl+K). Vocabulaire : **annotation** (un trait du stylo), **case** (une vignette ou une
 case vide), **marie-louise** (le passe-partout), **Plan**, **Case**, **Vignettes**, **Aplat** (inchangés).
 
-- **Stylo et gomme d'annotation** (`annotations.rs`, `annotationsui.rs`). Deux icônes sous les outils de dessin, **seulement quand la
+- **Stylo et gomme d'annotation** (`annotations.rs`, `annotationsui.rs`). *(Depuis le 2026-10-24 : plusieurs calques d'annotation, un lasso pour choisir et transformer les traits, et un calque d'annotation
+  dans les plans : partie 45.)* Deux icônes sous les outils de dessin, **seulement quand la
   planche est à l'écran** : le stylo (icône rouge, rouge d'origine, sa couleur et sa taille dans les Réglages) et la gomme. Aucune touche par
   défaut (`vignettes.annotation_stylo`, `vignettes.annotation_gomme`, réglables dans Préférences > Raccourcis). Prendre un autre outil les range ;
   cliquer deux fois le même aussi.
@@ -4179,3 +4180,84 @@ cachée quand on replie ; les autres outils n'ont pas le bouton, le pinceau, le 
 liste, la replie au second appui. `dock_tests` : aucune disposition d'origine n'a l'onglet, une disposition enregistrée qui l'avait s'ouvre sans lui (onglet actif, fichier, état
 d'egui_dock), seul dans sa colonne / flottant / dans sa fenêtre : pas de trou. `pinceaux_tests` : « Mes brosses » en tête (pinceaux, gommes, recherche), `liste_ouverte` écrit et
 relu. `barrepanneaux_tests`, `workspace_tests`, `vignettes_camera_tests`, `ajuste_tests` : plus d'icône Pinceaux (onze icônes, trois groupes 3-4-4), plus dans les panneaux d'office.
+
+## 46. Calques d'annotation et lasso d'annotation (2026-10-24, branche `calques-annotation`)
+
+Demande d'Anthony : un **lasso** pour les annotations de la planche (choisir, déplacer, agrandir, tourner), un **panneau de calques** propre à l'onglet Vignettes, **plusieurs calques
+d'annotation** (ajouter, renommer, supprimer, ranger, œil par calque), et le **calque d'annotation comme une vraie sorte de calque**, utilisable ailleurs (vue Dessin, Storyboard).
+Fichiers : `annotations.rs` (modèle, fichier), `annotationsui.rs` (outils, geste du lasso, calques), `vignettespanneau.rs` (la liste des calques), `calqueannot.rs` (le calque d'un plan),
+`render.rs` (`panel_plan_at`), `document.rs` (`Layer::annotation`), `project.rs`, `cases.rs`, `calquemenu.rs`, `layersui.rs`, `layerheads.rs`, `theme.rs`.
+Essais : `annotations_calques_tests.rs` (11, la planche), `calqueannot_tests.rs` (4, le calque d'un plan) et, dans `annotations_tests.rs`, 6 de plus (modèle, ancien fichier, projets `.shot` et `.pelure`).
+
+### Le choix : un seul mot, deux endroits (planche et plan)
+
+Un trait d'annotation de la planche n'est **dans aucun plan** : il s'attache à une case de la planche (`Ancre`) et peut entourer deux cases, flécher d'une case à l'autre. Un calque de plan, lui, est
+une pile d'images **d'un plan** (`Panel::layers`, `Layer::frames`, des dessins par image). Les deux modèles ne se rangent pas dans un seul sans déformer l'un : un calque de plan n'a pas de case, et
+une annotation de planche n'a pas d'image. **On n'en a pas fait un système double** : c'est **le même mot, la même couleur** (rouge-rose, `theme::dessin_annotation`), **la même icône** (le feutre),
+**la même règle** (jamais dans un export), **la même commande** « Nouveau calque d'annotation » (`calque.nouveau_annotation` : sur la planche des Vignettes elle crée un calque d'annotation de la planche,
+dans la vue Dessin un calque d'annotation du plan courant). Ils ne se transforment pas l'un en l'autre ; un plan n'affiche jamais les annotations de la planche et la planche n'affiche jamais celles d'un plan.
+**À trancher avec toi** : faut-il un jour un geste « verser les annotations de la planche dans le plan (ou l'inverse) » ? Pas fait : il faudrait décider dans quelle case et à quelle image.
+
+### Sur la planche : les calques, le calque visé, le lasso
+
+- **Panneau « Planche »** (l'espace Vignettes, à droite) : un **bloc « Calques » tout en haut**, plutôt qu'un panneau à lui. Raison : il n'a de sens que sur la planche, comme le sens de lecture et les
+  textes qui y sont ; et une disposition de fenêtre déjà enregistrée le montre tout de suite, sans qu'on ait à ouvrir un panneau de plus. La liste va **du calque le plus haut au plus bas, puis « Dessin »**
+  (le dessin de la case) tout en bas : un œil par calque, son nom, le nombre de ses annotations ; « + » pour un calque de plus (au-dessus des autres).
+- **Un clic sur un calque d'annotation le vise** : le stylo, la gomme et le lasso d'annotation y agissent (le stylo est pris s'il n'y avait aucun outil d'annotation ; l'outil pris reste le même sinon).
+  **Un clic sur « Dessin »** range les outils d'annotation : le pinceau, la gomme et le lasso de la barre d'outils agissent de nouveau sur la case. Viser un calque **caché** le remontre.
+  Double-clic : renommer (Entrée valide, Échap abandonne). Clic droit : renommer, monter, descendre, supprimer.
+- **Annulation** : ajouter, renommer, monter / descendre, supprimer (le calque **et ses annotations** : Ctrl+Z les rend) sont chacun une étape (« Ajouter un calque d'annotation », « Renommer… »,
+  « Monter… » / « Descendre… », « Supprimer un calque d'annotation »). L'œil n'est pas une étape (c'est un affichage) mais il est enregistré avec le projet.
+- **Le lasso d'annotation** (`vignettes.annotation_lasso`, la troisième icône sous les outils de dessin, sans touche d'origine) : glisser dans le vide entoure des annotations **du calque visé** (au moins un
+  point dans le lasso : la règle du lasso d'un dessin) ; **un clic choisit le trait dessous** ; Maj ajoute (un clic Maj sur un trait choisi le retire). Les traits choisis ont **la boîte de sélection de SHOT**
+  (`selbox.rs`, la même géométrie que l'outil Sélection : huit poignées carrées, un pivot rond) : glisser dedans **déplace**, un coin ou un milieu de côté **met à l'échelle** (le coin opposé reste en place ;
+  l'épaisseur du trait suit), juste hors d'un coin **tourne** autour du pivot (Maj : par 15°), un bord **incline**, le pivot se tire. Les réglages « Point fixe » et « Rotation autour de » sont ceux de l'outil Sélection.
+  **Une étape d'annulation par geste** (« Déplacer des annotations », « Mettre à l'échelle des annotations », « Tourner… », « Incliner… »). **Échap** abandonne le geste en cours (rien n'a bougé, aucune étape) ;
+  sans geste, Échap lève la sélection. Rien n'est changé avant le lâcher (le geste est un aperçu peint, aucun rejeu). Un trait emporté dans une autre case **s'y rattache** (la case la plus proche de son nouveau centre).
+- **La gomme** n'efface que dans le calque visé. « Effacer les annotations… » efface les annotations de tous les calques mais **garde les calques** (noms, ordre, œil).
+- **Les exports de la planche** suivent l'œil : un calque caché n'est ni dessiné, ni compté, ni dans le cadrage.
+
+### Compatibilité des fichiers
+
+- `annotations.json` passe en **version 2** : `calques` (id, nom, œil, et les traits de chaque calque). **Un fichier de la version 1 (traits à plat, d'avant les calques) se lit comme un seul calque, « Annotations »**,
+  avec les mêmes traits dans le même ordre, aux mêmes places (essais : projets `.shot` et `.pelure` écrits avec la structure de l'ancien fichier). **L'enregistrement écrit la version 2.** Un projet sans annotation ni
+  calque particulier (nom, œil, deuxième calque) n'écrit toujours aucun fichier. Une version d'avant les calques qui ouvrirait un fichier de version 2 le refuse proprement (« écrit par une version plus récente »), le
+  laisse en place et n'efface rien. Un identifiant de calque en double ou à zéro, un trait dans un calque qui n'existe pas, plus de 64 calques : aucun trait n'est perdu (`Annotations::normaliser`).
+- Le calque d'annotation d'un **plan** est un champ de plus du calque dans le manifeste (`annotation`, absent : calque ordinaire), **sans changer `VERSION` du projet** : une version d'avant l'ouvre comme un calque
+  vectoriel ordinaire avec ses notes (rien n'est perdu ; elles redeviennent du dessin du film si on exporte avec cette vieille version).
+
+### Dans un plan (vue Dessin, Storyboard) : le calque d'annotation du plan
+
+- **Création** : « + » du panneau Calques > **Calque d'annotation** (ou la palette, `calque.nouveau_annotation`), une étape d'annulation. Il se pose **tout au-dessus**, s'appelle « Annotations » (puis « Annotations 2 »…).
+  Vectoriel, son dessin **tenu sur tout le plan** (avant sa première image et après sa dernière) : une feuille de notes posée sur le plan. Pinceau, lasso, gomme, transformation, œil, cadenas, opacité : ceux de tous les calques.
+- **Reconnaissable** : l'icône du feutre et le rouge-rose dans le panneau Calques (la bande, l'icône de la ligne), dans la timeline (à la place de la lettre V) et dans le menu du « + ».
+- **Peint par-dessus tout à l'écran** (`App::build_plan`) : même tout au fond de la pile, même sous un calque d'effet.
+- **Jamais dans le film** : ni dans les exports (vidéo, images, PDF, GIF, montage, envois, export vers Storyboard Pro), ni dans les vignettes de la planche et de la timeline, ni dans la lecture de fond. Tout cela passe par
+  `render::panel_plan_at`, qui saute les calques d'annotation ; `render::panel_plan_at_avec(.., true)` les pose par-dessus tout quand on le demande expressément. **Aucun export ne le demande aujourd'hui** (pas de case
+  « inclure les calques d'annotation » : à décider avec toi).
+- **Pas de clé de case** : une case de plus dans un plan (`cases.rs`) ne copie pas ses traits. **Fusionner** un calque d'annotation et un calque ordinaire est refusé (ses notes n'entreraient plus dans le dessin).
+- **Sur la planche des Vignettes** les cases ne montrent pas ces calques : si le calque courant en est un quand on passe à la planche, le calque courant passe au plus haut calque qui se dessine (on ne dessine pas dans une case
+  sans le voir).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Espace Vignettes : le bloc **Calques** en haut du panneau Planche : « Annotations » (si tu as déjà des annotations), puis **Dessin** en bas. Ouvre un ancien projet qui avait des annotations : elles sont là, dans un
+   calque « Annotations », exactement où elles étaient. Enregistre, ferme, rouvre : pareil.
+2. « + » : un calque « Annotations 2 », visé, le stylo est pris. Trace dedans, puis clique « Annotations » : trace dedans. Clique **Dessin** : le pinceau dessine dans la case, plus d'annotation.
+3. Œil d'un calque : ses traits disparaissent, les autres restent ; rien n'est effacé. Cliquer son nom le remontre. Double-clic : renomme. Clic droit : monter, descendre, supprimer (Ctrl+Z rend le calque et ses traits).
+4. Lasso (troisième icône rouge) : entoure un trait : la boîte apparaît. Glisse dedans : il se déplace ; coin : il grandit ; juste hors d'un coin : il tourne. Ctrl+Z : un geste à la fois. Échap pendant un geste :
+   rien ne bouge. Échap ensuite : plus de sélection. Un clic sur un trait le choisit, Maj + clic en ajoute un autre.
+5. Le lasso et la gomme ne touchent que le calque visé (deux calques qui se superposent).
+6. Vue Dessin : « + » > **Calque d'annotation** : il se pose tout en haut, rouge-rose, avec un feutre. Dessine dessus ; cache-le (œil). Exporte un plan (image, vidéo) : **aucun** trait du calque d'annotation.
+   Les vignettes de la planche et de la timeline ne le montrent pas non plus.
+7. Les trois thèmes : le rouge-rose du calque d'annotation reste lisible.
+
+### Essais ajoutés (partie 45)
+
+`annotations_tests.rs` : un **ancien fichier** (écrit comme la version 1) s'ouvre comme un seul calque, mêmes traits au bit près, mêmes places sur la planche à deux réglages ; projets `.shot` et `.pelure` avec cet ancien
+fichier : ouverture, enregistrement en version 2, réouverture identique ; ajouter / renommer / cacher / monter / descendre / supprimer des calques (noms uniques, identifiants différents, les traits suivent leur calque,
+ordre de peinture, fichier qui garde un calque vide) ; un fichier hostile ne perd aucun trait ; transformer (déplacer, échelle, rotation, rattachement à la case la plus proche, il suit sa nouvelle case) ; lasso et
+clic au niveau du modèle (un calque à la fois, le trait du dessus, la gomme d'un calque). `annotations_calques_tests.rs` : lasso + déplacer en **une** étape (annuler, rétablir) ; clic et Maj ; coin = échelle, hors du coin =
+rotation (angle et distances) ; **Échap** (geste, lasso, sélection) ; les outils agissent sur le calque visé seulement (lasso, gomme, stylo) et « Dessin » range les outils ; œil par calque (peinture, export, cadrage) ; ajouter /
+renommer / supprimer / monter en une étape chacun, annuler et rétablir ; le panneau (liste, ordre, clic sur un calque, sur « Dessin », sur l'œil) ; double-clic et Entrée ; enregistrer et rouvrir ; repos.
+`calqueannot_tests.rs` : **le calque d'annotation d'un plan** : créé tout au-dessus, dessiné, caché, par-dessus tout à l'écran, absent du plan du film, des images exportées et des vignettes, enregistré et rouvert, fusion refusée, pas de clé de case, couleur propre.

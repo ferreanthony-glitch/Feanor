@@ -151,7 +151,8 @@ pub fn prepare(doc: &Document, title: &str) -> SbOut {
             };
             let mut layers = Vec::new();
             for (li, l) in p.layers.iter().enumerate() {
-                if l.folder {
+                // (Un calque d'annotation n'est pas un dessin du film : il ne part pas vers Storyboard Pro.)
+                if l.folder || l.annotation {
                     continue;
                 }
                 let first = crate::video::cel_at(l, start, doc.fps);

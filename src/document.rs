@@ -364,6 +364,9 @@ pub struct Layer {
     /// Le calque Décor du plan (`decor.rs`) : un par plan, fait par les brosses du décor des Vignettes, tout en bas du plan ; son
     /// dessin est tenu sur toutes les images du plan, donc partagé par ses cases.
     pub decor: bool,
+    /// Calque d'annotation (`calqueannot.rs`) : des notes de réalisateur sur le plan, vectorielles, peintes par-dessus tout à l'écran et
+    /// jamais dans un export ni dans les vignettes (sauf si on le demande). Un calque vectoriel ordinaire pour le reste.
+    pub annotation: bool,
 }
 
 /// Pré / post-comportement d'un calque (13c, sens confirmé par Anthony) : avant la première
@@ -433,6 +436,7 @@ impl Layer {
             effet: None,
             couleur: None,
             decor: false,
+            annotation: false,
         }
     }
 
@@ -2112,6 +2116,10 @@ impl Document {
         if above.scene_wide.is_some() || below.scene_wide.is_some() {
             return Err("Un calque de toute la scène ne se fusionne pas avec un autre.".into());
         }
+        // (Les notes ne se fondent pas dans le dessin du film : un calque d'annotation ne se fusionne qu'avec un autre.)
+        if above.annotation != below.annotation {
+            return Err("Un calque d'annotation ne se fusionne qu'avec un autre calque d'annotation : ses notes n'entrent pas dans le dessin.".into());
+        }
         // Un calque du dessus en mode de fusion se fond dans les pixels : le résultat est bitmap.
         let vector = above.kind == LayerKind::Vector && below.kind == LayerKind::Vector && above.blend == BlendMode::Normal;
         let n = above.frames.len().max(below.frames.len());
@@ -2474,6 +2482,7 @@ impl Document {
                 // (Un dossier ne se réunit qu'à un dossier.)
                 && x.folder == y.folder
                 && x.decor == y.decor
+                && x.annotation == y.annotation
                 && x.visible == y.visible
                 && x.opacity == y.opacity
                 && x.blend == y.blend
