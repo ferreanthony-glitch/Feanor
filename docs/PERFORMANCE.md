@@ -1779,3 +1779,98 @@ points et sa vignette est à la plus petite largeur (128 pixels, `thumbs::width_
 à 1 ms par image (`UPLOAD_TIME`). Rien de contenu à corriger ici : il faudrait des textures réduites pour le dessin vivant
 d'une petite case (à voir si Anthony sent ce pic en changeant de plan sur une planche dézoomée).
 
+
+## 27. Dessins hors de la mémoire : un film de 300 plans dans 3 Go (2026-10-24, branche `memoire-dessins`)
+
+Le film de 300 plans de la section 26 (1 870 dessins bitmap = 2,6 Go de pixels, 2 400 dessins vectoriels dont les images
+exactes font 2,2 Go) tenait **6,4 Go à l'ouverture et 9,5 Go (octets privés) après avoir parcouru ses plans** : chaque dessin
+restait en mémoire du début à la fin, les dessins vectoriels gardaient leur image exacte, l'annulation gardait des copies.
+
+### 27.1 Ce qui a été fait
+
+- **Un dessin peut être absent** (`Cel::absent`, `residence.rs`). Il reste dans le document (numéro, version, traits, strate
+  Fond) mais ses pixels n'y sont plus ; `Document::cels` (un `Dessins`) ne montre aux lecteurs ordinaires que les dessins
+  présents. Deux sortes : un dessin **bitmap** écrit à sa version dans le dossier du projet (ses pixels se relisent de son
+  PNG, hors-feuille compris), l'**image exacte** d'un dessin vectoriel (ses traits restent ; le rejeu la refait).
+- **Toujours en mémoire** : l'image à l'écran, le plan courant et ses voisins (changer de plan, une transition), la pelure et
+  la table lumineuse, ce que la lecture va montrer (six secondes, dans la limite du budget), les dessins des 4 prochaines
+  annulations et du prochain rétablissement, et **tout dessin modifié et pas encore enregistré**. Un projet neuf, un film
+  partagé, un dessin avec strate Fond : rien ne part.
+- **Éviction** (`App::tenir_le_budget`, au plus toutes les 15 images d'écran) : au-delà du budget, les dessins présents les
+  moins récemment voulus partent, jusqu'à 85 % du budget. Un dessin bitmap part quand son fichier a été **vérifié** (présent,
+  taille et date retenues) par le fil du chargeur il y a moins de 600 images ; une image vectorielle part tout de suite.
+- **Retour** (`residence.rs`, le chargeur : 3 fils sous la priorité de l'interface, les demandes les plus récentes d'abord,
+  oubliées si on ne les redemande plus) : la lecture du PNG et le décodage se font sur ces fils, jamais sur celui de
+  l'interface. Sur le plan courant, ses voisins et la lecture, les demandes partent avant qu'on en ait besoin
+  (préchargement). Si un dessin n'est pas revenu, **la vignette du plan couvre l'image** (elle a son propre cache) et
+  l'écran se repaint à l'arrivée ; la carte graphique garde la texture d'un dessin parti tant qu'elle est à sa version.
+  Un geste de dessin ne commence pas sur un dessin pas revenu (message), une commande qui touche le plan attend son retour,
+  Annuler et Rétablir attendent les dessins de l'étape (message « N dessin(s) reviennent… »).
+- **Ouverture** : un projet classique s'ouvre **sans lire les pixels** (`load_paresseux_progress` : les dessins bitmap
+  s'ouvrent absents, les dessins vectoriels lisent leurs traits). Ancien format, calques CTG, plusieurs panneaux par scène :
+  lecture complète comme avant. (Mesure : la première version rejetait les projets qui ont d'autres versions de plans, leurs
+  panneaux étant rangés dans une séquence à part ; la condition regarde maintenant les scènes du film seulement, essai
+  `a_project_with_plan_versions_also_opens_without_reading_its_pixels`.)
+- **Annulation** (`histocomprime.rs`) : au-delà des 8 dernières étapes de chaque côté, les tuiles d'une étape sont comprimées
+  (deflate rapide, `flate2` déjà dans le projet) **sur un fil de fond** ; Ctrl+Z reste instantané pour les étapes récentes ;
+  une vieille étape se décomprime à son application (mémoire seulement, 20 à 40 µs par tuile). Une vieille étape dont un
+  dessin est parti attend ce dessin. Les étapes `Structure` et vectorielles ne sont pas comprimées.
+- **Réglage** : Préférences > Performance > « Mémoire des dessins » : automatique (un trente-deuxième de la mémoire vive,
+  entre 512 Mo et 1,5 Go ; 1 Go sur 32 Go), « au plus » N Mo (256 à 65 536), ou sans limite (comme avant). La ligne montre la
+  taille en mémoire ; le diagnostic des performances montre la mémoire des dessins, le budget, les dessins hors de la
+  mémoire et la taille de l'annulation.
+
+### 27.2 Mesures (film de 300 plans de la section 26, banc `memoire_mesurer`)
+
+Même exécutable d'essais, trois passages, de faux `APPDATA` / `LOCALAPPDATA` : **A** = sans limite et sans compression de
+l'annulation (le comportement d'avant), **B** = budget 2 Go, **C** = budget 1 Go (le réglage d'office d'aujourd'hui sur cette
+machine de 32 Go). Les temps sont d'un banc qui rend ses images d'affilée ; **la machine n'était pas seule** (d'autres
+sessions compilaient) : à ± 30 % près pour les temps de quelques millisecondes.
+
+| Film de 300 plans | A : avant | B : 2 Go | C : 1 Go |
+|---|---|---|---|
+| Lecture du projet jusqu'à l'adoption (fil de fond) | 11,0 à 11,6 s | 0,7 s (6,4 s une fois, disque froid) | 0,7 s |
+| Image d'adoption (fil de l'interface) | 9 à 17 ms | 7 à 9 ms | 5 à 6 ms |
+| Mémoire du processus à l'adoption (RSS / octets privés) | 6,5 / 6,7 Go | 0,7 / 0,8 Go | 0,7 / 0,8 Go |
+| Au calme, vignettes faites | 7,1 / 7,3 Go | 1,0 / 1,2 Go | 1,1 / 1,2 Go |
+| Après avoir parcouru les 300 plans | 7,1 / 9,5 Go | 4,1 / 6,1 Go | **2,9 / 5,1 Go** |
+| Après 150 traits sur 150 plans, puis 150 annulations | 7,3 / 9,5 Go | 4,8 / 6,9 Go | 3,6 / 5,7 Go |
+| Mémoire de l'annulation (150 étapes) | 44 Mo (75 après annulation) | 3 Mo | 3 Mo |
+| Changement de plan : image du changement (moy / p95 / pire) | 12–15 / 22–28 / 584–677 ms | 12–18 / 20–45 / 571–605 ms | 13 / 21 / 495 ms |
+| Les deux images suivantes (moy / p95 / pire) | 6–8 / 14–17 / 32–59 ms | 9–14 / 19–33 / 40–67 ms | 10 / 18 / 30 ms |
+| Lecture du montage, 15 s à 24 images/s (moy ; images au-delà de 41,7 ms) | 3,7–4,9 ms ; 0 | 4,6–10,6 ms ; 0 à 1 | 4,7–12,7 ms ; 0 à 3 |
+| Images pendant 150 traits (moy / p95 / pire) | 5,3 / 10,8 / 52 ms | 7,9 / 16,2 / 32 ms | 8,5 / 17 / 47 ms |
+| Attente du plan avant un trait après un saut (médiane / p95 / pire) | 0 | 36 / 150 / 511 ms | 59 / 225 / 495 ms |
+| Annuler 150 fois (moyenne / pire) | 0,01 / 0,09 ms | 0,34 / 0,98 ms | 0,36 / 0,84 ms |
+| Part de « dessins en mémoire » dans une image | — | 0,26 ms (lecture) à 1,2 ms | 0,28 à 0,9 ms |
+
+À lire ainsi :
+- **L'ouverture** passe de 11 s et 6,5 Go à moins d'une seconde et 0,75 Go, et la mémoire suit le budget : au calme après
+  avoir tout regardé, 2,9 Go de mémoire résidente au lieu de 7,1 (1 Go de dessins, 0,5 Go de caches de traits, le reste
+  d'autres caches et de l'interface).
+- **Les octets privés restent à 5 Go** après le parcours : **l'écart avec la mémoire résidente (2,2 à 2,4 Go) est le même
+  que dans A**. Cette part n'est pas liée aux dessins (elle est là sans éviction), elle n'est pas résidente (le système la
+  retire de la mémoire physique) ; probablement de la mémoire réservée par le pilote graphique et le tas pour les vignettes et les
+  textures. Non étudiée ici.
+- **Le coût** : un dessin qui revient demande un décodage sur un fil de fond, donc les images qui suivent un changement de plan
+  sont un peu plus lentes (la carte graphique renvoie des textures), et un trait ne peut pas commencer avant que le plan
+  soit revenu : après un **saut** vers un plan lointain, 36 à 59 ms de médiane et 150 à 225 ms au p95 (le pire, une demi-seconde,
+  est le plan dont les images vectorielles sont longues à rendre ; la vignette du plan est à l'écran pendant ce temps). Un plan
+  voisin est déjà là. Pendant la lecture, au plus 3 images sur 360 dépassent 41,7 ms au budget de 1 Go.
+- Le pire changement de plan (500 à 680 ms) est le même sans limite : c'est la première construction de la planche.
+
+### 27.3 Mesurer
+
+```
+# fabriquer le film (section 26), puis, dans l'environnement de LOURD_PROJET et de faux APPDATA / LOCALAPPDATA :
+cargo test --release --offline --target-dir target\msvc --lib memoire_mesurer -- --ignored --nocapture
+#   MEMOIRE_BUDGET_MO = 0 (sans limite) ou N Mo ; sans la variable : le réglage d'office
+#   MEMOIRE_SANS_COMPRESSION = 1 : l'annulation n'est pas comprimée (le comportement d'avant)
+cargo test --release --offline --target-dir target\msvc --lib memoire_lecture_paresseuse -- --ignored --nocapture
+```
+
+### 27.4 Ce qui reste
+
+Les étapes d'annulation `Structure` (tout le document hors dessins) et vectorielles ne sont pas comprimées ; les dessins d'un
+film partagé ne quittent pas la mémoire ; les 2,3 Go d'octets privés non résidents ci-dessus ne sont pas expliqués. Les
+garanties de ne rien perdre sont dans `docs/FIABILITE.md`, section 17.

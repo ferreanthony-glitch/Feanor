@@ -352,3 +352,68 @@ onglets cachés ; elle tombe si rien n'a changé depuis le cliché de la copie f
 `recovery_tests::an_urgent_copy_asked_while_one_is_running_follows_it_at_once` (copie automatique éteinte : la copie
 demandée part quand même et a la dernière retouche), `an_urgent_copy_with_nothing_new_or_after_a_save_does_not_start`. Avec
 le cliché léger (section 16), lancer cette copie ne coûte plus au fil de l'interface que le cliché.
+## 17. Dessins hors de la mémoire : ce qui ne se perd jamais (2026-10-24, branche `memoire-dessins`)
+
+Pour tenir un film de 300 plans (`docs/PERFORMANCE.md`, section 27), un dessin peut quitter la mémoire (`residence.rs`,
+`residenceapp.rs`). C'est la seule fonction de SHOT qui **enlève des pixels de la mémoire** : la règle absolue est qu'ils
+sont toujours ailleurs, intacts, et qu'aucun chemin ne peut les prendre pour une image vide.
+
+**Quand un dessin peut partir** (`App::bitmap_laissable`, `App::tenir_le_budget`) : seulement s'il est écrit **à sa
+version** dans le dossier du projet (`App::written` = `Cel::version`), que ses fichiers ont été vus sur disque par le fil du
+chargeur il y a moins de 600 images d'écran (`Travail::Verifier`, taille et date retenues), qu'aucun enregistrement ne
+s'écrit, qu'aucun geste, aucune feuille flottante ne le touche, que le projet est classique (pas un film partagé :
+`Depot`) et enregistré (un projet neuf n'a pas de dossier). Un dessin modifié et pas encore enregistré n'a pas sa version
+dans `written` : il ne part **jamais**. Un dessin avec strate Fond ne part jamais. L'image exacte d'un dessin vectoriel peut
+partir sans fichier : ses traits restent, le rejeu la refait. Ne partent pas non plus : l'image à l'écran, le plan courant
+et ses voisins, la pelure et la table lumineuse, ce que la lecture va montrer, les dessins des prochaines annulations.
+
+**Ce qui empêche de confondre « absent » et « vide »** (le point où tout se joue) :
+- `Document::cels` est un `Dessins` (`residence.rs`) : `get`, `get_mut`, `values`, `iter` ne montrent **que les dessins
+  présents**. Un dessin absent y est comme un dessin manquant : on ne peut ni le lire ni le peindre. Rien ne peut donc
+  écrire dans l'image vide qui le remplace, et aucun cache (vignettes, effets, carte graphique) ne garde une image vide
+  sous la version du dessin. Les rares lecteurs qui voient les absents (`get_ou_absent`, `tous`) ne lisent ni pixels ni
+  traits d'un dessin bitmap : numéros, versions, traits, strate Fond, enregistrement.
+- Un geste de dessin ne commence pas tant qu'un dessin de l'image n'est pas revenu (`dessin_pret_pour_un_geste`, barre
+  d'état) ; une commande qui travaille les dessins du plan courant attend leur retour (`action_attend_le_plan`) ;
+  Annuler et Rétablir attendent les dessins de l'étape (`historique_attend`, `History::prete` : `undo` ne s'applique jamais
+  à un dessin absent) ; changer la taille du projet les fait tous revenir d'abord.
+- Une relecture qui échoue (fichier illisible, taille différente, hors-feuille abîmé) laisse le dessin absent, le dit dans la
+  barre d'état et réessaie plus tard ; le dessin n'est jamais rendu vide.
+
+**Qui lit les pixels d'un dessin, et comment un dessin absent y passe**
+
+| Lecteur | Sur quel fil | Dessin absent |
+|---|---|---|
+| Affichage (composition, carte graphique, pelure) | interface | `get` le saute ; la carte garde sa texture à la même version ; sinon la vignette du plan couvre l'image, l'écran se repeint à l'arrivée |
+| Pinceau, gomme, remplissage, sélections, déformations, retournement | interface | refusés ou en attente (voir plus haut) |
+| Annuler / Rétablir | interface | attend le retour des dessins de l'étape |
+| Enregistrer (`project::prepare_save`, `SaveJob`) | interface (cliché), écriture sur son fil | le cliché tient l'absence ; le fil d'écriture recopie le fichier (`DrawingData::CopyFrom`) ou, si les pixels sont déjà revenus, les écrit ; jamais effacé (`fichiers_a_garder`) ; fichier disparu : message « Enregistré, mais N dessin(s)… » |
+| Enregistrer sous / copie de secours | fil d'écriture | recopie des fichiers du dossier du projet (même chemin) ; après « Enregistrer sous », les absents se relisent du nouveau dossier (`absents_apres_enregistrement`) |
+| Exports (images, vidéo, PDF) | fil de l'export | le cliché emporte l'absence ; `resoudre_copie` fait revenir les pixels (lus du fichier, ou rendus d'après les traits) sur le fil du cliché |
+| Vignettes (planche, montage, bandes) | fils des vignettes | même chose (`thumbs::worker`) ; leurs clés suivent la version du dessin, pas ses pixels |
+| Comparaison, envois et versions de plans (`envois.rs`) | fils de fond | `Donnees::resoudre` ; un dessin qui ne revient pas est laissé de côté comme un dessin introuvable |
+| Presse-papiers (plans, calques, images, entre onglets) | interface (copie), fil de collage (adaptation) | la copie tient l'absence ; `Absent::charge` reçoit les pixels dès que le document les fait revenir ; le collage les relit sur son fil (`pixels_hors_interface`) ; les dessins absents venus d'un autre dossier sont tous demandés |
+| Variantes et versions de plans | comme les autres dessins | écrits et relus comme tous |
+| Film partagé (`Depot`) | — | rien ne part : un projet partagé garde tout, et s'ouvre en entier |
+| Ouverture | fil de lecture | un projet classique s'ouvre sans lire les pixels (`load_paresseux_progress`) ; ancien format, calques CTG, plusieurs panneaux par scène : lecture complète comme avant |
+
+**Vieilles étapes d'annulation** (`histocomprime.rs`) : au-delà des 8 dernières de chaque côté, les tuiles d'une étape sont
+comprimées (deflate) sur un fil de fond ; le fil de l'interface ne fait que remplacer l'étape, et seulement si ses tuiles
+sont exactement celles qui ont été comprimées (même mémoire, même dessin) : une étape appliquée ou oubliée entre-temps
+fait jeter le résultat. Décomprimée à l'application (mémoire seulement), elle redonne les mêmes pixels.
+
+**Essais** : `residence_tests.rs` (un dessin non enregistré ne part jamais ; revenu, mêmes pixels, hors-feuille compris ;
+le budget est tenu ; Enregistrer ne retire pas le fichier d'un dessin absent et Enregistrer sous le recopie ; une annulation
+ancienne attend son dessin puis le rend exactement ; l'export, le collage et la copie de secours trouvent les pixels ; un
+projet ouvert sans pixels (avec ou sans versions de plans) donne le même projet ; la lecture ne montre jamais d'image vide
+là où le plan a une vignette), `histocomprime_tests.rs` (aller-retour exact, groupes, étape appliquée pendant sa
+compression), et le hasard sous pression de mémoire (`hasard_random_gestures_under_memory_pressure` : budget d'un octet,
+toutes les vérifications du hasard, annuler, rétablir, enregistrer et rouvrir ; les dessins revenus sont comparés à leur
+empreinte d'avant et un dessin absent a toujours son fichier).
+
+**Risques connus** : (1) un fichier du dossier effacé ou changé à côté de SHOT entre la vérification et la relecture : le
+dessin reste absent, avec un message, et le fichier manquant est signalé à l'enregistrement ; ce qui était en mémoire est
+perdu seulement si le fichier l'était aussi. (2) Des dessins copiés d'un autre projet puis laissés absents tiennent le
+dossier de ce projet : il vaut mieux ne pas le déplacer avant de les avoir regardés (ils sont tous demandés au collage).
+(3) Les étapes `Structure` et vectorielles de l'annulation ne sont pas comprimées. (4) Les dessins d'un film partagé ne
+quittent pas la mémoire : le gain ne vaut pas pour eux.
