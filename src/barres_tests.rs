@@ -43,9 +43,9 @@ fn the_bars_are_slim_by_default() {
     // Les plans et le transport ne sont plus dans cette barre, même sous « Plus… » : ils sont dans celles du montage
     // et de la timeline (une commande, un endroit principal ; `docs/DOUBLONS.md`).
     assert_eq!(Barre::Commandes.commandes().len(), 9);
-    // Barre du montage : 21 icônes avant, une dizaine maintenant (la position et « Plus… » en plus).
+    // Barre du montage : 21 icônes avant, huit maintenant (les vues dessin et vignettes sont parties ; « Plus… » en plus).
     let montage = d_office(Barre::Montage);
-    assert!((9..=12).contains(&montage.len()), "montage : {montage:?}");
+    assert!((8..=12).contains(&montage.len()), "montage : {montage:?}");
     // Barre de la timeline : les dessins qu'on retire ou vide, la cadence, la marque, le commentaire,
     // les flips et le son sont sous « Plus… » ; la pelure d'oignon aussi (elle se règle sous le dessin), et
     // le panneau Effets n'y est plus (sa place est la barre des panneaux).
@@ -62,8 +62,12 @@ fn the_bars_are_slim_by_default() {
 #[test]
 fn what_the_montage_bar_keeps_and_moves() {
     let montage = d_office(Barre::Montage);
-    for reste in ["montage.debut", "lecture.basculer", "lecture.boucle", "panneau.nouveau", "sequence.nouvelle", "plans", "son.importer", "son", "vue.dessin", "vue.vignettes"] {
+    for reste in ["montage.debut", "lecture.basculer", "lecture.boucle", "panneau.nouveau", "sequence.nouvelle", "plans", "son.importer", "son"] {
         assert!(montage.contains(&reste), "{reste} reste dans la barre du montage");
+    }
+    // Les vues dessin et vignettes ont quitté la barre (leur action reste sur Maj+Tab).
+    for parti in ["vue.dessin", "vue.vignettes"] {
+        assert!(Barre::Montage.cherche(parti).is_none(), "{parti} n'est plus dans la barre du montage");
     }
     // Les commandes que INTERFACE.md range sous « Plus… », et la transition (arrivée depuis) ; « Animer ce plan »
     // aussi : l'onglet Animation, en haut à droite, le fait.
@@ -268,13 +272,10 @@ fn the_bar_commands_do_what_their_old_buttons_did() {
     assert_eq!(app.vue_de(Barre::Montage, son).etat, Some(on));
     app.executer_commande(Barre::Montage, son);
     assert_eq!(app.sound_on, !on);
-    // Les deux vues du montage sont un choix.
-    let (dessin, vignettes) = (Barre::Montage.cherche("vue.dessin").unwrap(), Barre::Montage.cherche("vue.vignettes").unwrap());
-    app.executer_commande(Barre::Montage, vignettes);
-    assert_eq!(app.vue_de(Barre::Montage, vignettes).etat, Some(true));
-    assert_eq!(app.vue_de(Barre::Montage, dessin).etat, Some(false));
-    app.executer_commande(Barre::Montage, dessin);
-    assert_eq!(app.vue_de(Barre::Montage, dessin).etat, Some(true));
+    // Les deux vues (dessin, vignettes) sont un choix, par leur action (Maj+Tab) : elles ne sont plus dans la barre.
+    let avant = app.board_view;
+    app.run_action("vue.planches");
+    assert!(app.board_view != avant, "Maj+Tab change de vue");
     // « Coller les plans » est grisé tant que rien n'est copié.
     let coller = Barre::Montage.cherche("edition.coller").unwrap();
     assert!(!app.vue_de(Barre::Montage, coller).actif || app.panel_clipboard.is_some());
