@@ -55,6 +55,7 @@ pub fn commandes_de_l_onglet(espace: Espace) -> &'static [(&'static str, &'stati
             ("vignettes.camera", "Caméra : tenir, puis glisser (Ctrl + Maj aussi)"),
             ("vignettes.annotation_stylo", "Stylo d'annotation"),
             ("vignettes.annotation_gomme", "Gomme d'annotation"),
+            ("vignettes.annotation_lasso", "Lasso d'annotation"),
             ("vignettes.annotations_afficher", "Montrer ou cacher les annotations"),
             ("vignettes.marie_louise", "Marie-louise"),
             ("vue.zoom_avant", "Zoom avant"),

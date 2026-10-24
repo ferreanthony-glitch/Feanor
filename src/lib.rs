@@ -266,6 +266,8 @@ mod vignettes_maquette_tests;
 // et le fichier (`annotations`), l'interface (`annotationsui`).
 mod annotations;
 mod annotationsui;
+#[cfg(test)]
+mod annotations_calques_tests;
 mod deposer;
 mod planche;
 mod colorscript;

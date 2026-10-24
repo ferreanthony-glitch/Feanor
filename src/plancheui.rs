@@ -193,7 +193,8 @@ impl App {
         let n_plans = self.doc.panels.len();
         let choisis = self.planche_plans(Etendue::Choisis).len();
         let (a, b) = self.doc.sequence_run(self.cur_panel.min(n_plans.saturating_sub(1)));
-        let annotations = self.doc.annotations.traces.len();
+        // (Les calques cachés n'y sont pas.)
+        let annotations = self.doc.annotations.ordre_de_peinture().len();
         let mut e = std::mem::take(&mut self.vignettes.planche);
         egui::Grid::new("planche_grille").num_columns(2).spacing([10.0, 7.0]).show(ui, |ui| {
             ui.label("Plans");

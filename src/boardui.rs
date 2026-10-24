@@ -1174,7 +1174,7 @@ impl App {
         self.update_cam_geste(latest, escape);
         self.cam_garder_la_place(&layout);
         // Le geste du stylo ou de la gomme d'annotation, point après point (`annotationsui.rs`).
-        self.annot_geste(&layout, xf, &events, latest, any_down, touch.is_some(), escape);
+        self.annot_geste(&layout, xf, &events, latest, any_down, touch.is_some(), escape, mods);
 
         // Le papier est blanc partout (rien autour des cases) ; les barres, les cases pâles qui montrent où dessiner, les vignettes.
         let hovered = over.map(|p| board::hit(&layout, xf.to_board(p), BAR_TOUCH / xf.zoom.max(1e-3)));
@@ -1302,7 +1302,7 @@ impl App {
         }
         // Le stylo ou la gomme d'annotation : curseur en croix (le cercle de l'outil est peint avec les annotations).
         if self.annot_actif() && over.is_some() && !pan_mode {
-            ui.ctx().set_cursor_icon(CursorIcon::Crosshair);
+            self.annot_curseur(ui.ctx(), xf, &layout, over);
         }
         if !any_down {
             self.finish_board_drag(&layout, &texts);

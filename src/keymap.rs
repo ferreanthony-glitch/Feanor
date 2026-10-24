@@ -156,6 +156,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("vignettes.camera", "Vignettes : tenir pour tirer les cadres de caméra (maintenir ; comme Ctrl + Maj)", true, false),
     act("vignettes.annotation_stylo", "Vignettes : stylo d'annotation (par-dessus la planche)", true, false),
     act("vignettes.annotation_gomme", "Vignettes : gomme d'annotation", true, false),
+    act("vignettes.annotation_lasso", "Vignettes : lasso d'annotation (choisir, déplacer, agrandir, tourner des traits)", true, false),
+    act("vignettes.annotation_calque_nouveau", "Vignettes : nouveau calque d'annotation", true, false),
     act("vignettes.annotations_afficher", "Vignettes : cacher ou montrer les annotations", true, false),
     act("vignettes.annotations_effacer", "Vignettes : effacer les annotations", true, false),
     act("vignettes.marie_louise", "Vignettes : marie-louise (ne montrer que les vignettes)", true, false),

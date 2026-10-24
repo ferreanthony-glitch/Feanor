@@ -3783,6 +3783,8 @@ impl App {
             // Vignettes : annotations par-dessus la planche et marie-louise (`annotationsui.rs`).
             "vignettes.annotation_stylo" => self.annot_choisir(crate::annotationsui::Outil::Stylo),
             "vignettes.annotation_gomme" => self.annot_choisir(crate::annotationsui::Outil::Gomme),
+            "vignettes.annotation_lasso" => self.annot_choisir(crate::annotationsui::Outil::Lasso),
+            "vignettes.annotation_calque_nouveau" => self.annot_calque_nouveau(),
             "vignettes.annotations_afficher" => self.annot_basculer_visibles(),
             "vignettes.annotations_effacer" => self.annot_demander_effacement(),
             "vignettes.marie_louise" => self.marie_basculer(),
