@@ -2566,6 +2566,9 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         return Err(format!("taille d'image démesurée dans le manifeste ({w} × {h})"));
     }
     let mut warnings = Vec::new();
+    // (Avant que les autres versions des plans et les variantes ne mettent leurs panneaux dans des séquences à part : ce
+    // sont les scènes du film que l'ouverture mettrait bout à bout, pas elles.)
+    let une_scene_par_plan = manifest.sequences.iter().flat_map(|s| &s.scenes).all(|s| s.panneaux.len() == 1);
     // Les textures d'abord : les dessins vectoriels texturés en ont besoin pour leur rendu.
     load_textures(dir, &mut warnings, annexes.plans_seuls);
     // Les autres versions des plans (`plans_versions.json`) : leurs plans passent par la même lecture que
@@ -2647,7 +2650,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
     // strate Fond se lit en entier (il ne quitte jamais la mémoire).
     let paresseux = annexes.paresseux
         && manifest.cadre.is_some()
-        && manifest.sequences.iter().flat_map(|s| &s.scenes).all(|s| s.panneaux.len() == 1)
+        && une_scene_par_plan
         && !manifest.sequences.iter().flat_map(|s| &s.scenes).flat_map(|s| &s.panneaux).flat_map(|p| &p.calques).any(|l| l.ctg.is_some());
     let presents: std::collections::HashSet<std::ffi::OsString> =
         if paresseux { fs::read_dir(dir.join(DRAWINGS)).map(|e| e.flatten().map(|e| e.file_name()).collect()).unwrap_or_default() } else { Default::default() };

@@ -360,3 +360,65 @@ fn playback_never_shows_an_empty_frame_where_a_thumbnail_exists() {
     crate::residence::budget_essai(None);
     let _ = std::fs::remove_dir_all(dir);
 }
+
+fn cliche_de_secours(b: &Banc, projet: Option<PathBuf>) -> crate::recovery::Snapshot<'_> {
+    crate::recovery::Snapshot { doc: &b.app.doc, serial: 1, modified: true, title: "Film".into(), project: projet, project_written: &b.app.written }
+}
+
+/// La copie de secours (avec ou sans le projet enregistré comme source de dessins déjà écrits) recopie les dessins qui sont
+/// hors de la mémoire : relue, elle donne les mêmes pixels.
+#[test]
+fn a_recovery_copy_keeps_the_pixels_of_drawings_that_left_memory() {
+    use crate::recovery::Recovery;
+    for avec_le_projet in [false, true] {
+        let dir = dossier(if avec_le_projet { "secours-projet" } else { "secours" });
+        let mut b = banc_enregistre(film(8), &dir, 1);
+        let avant = empreintes(&b.app.doc);
+        b.app.select_panel(0);
+        au_calme(&mut b, Duration::from_secs(30));
+        assert!(absents(&b) > 0, "des dessins sont hors de la mémoire");
+        let racine = dir.with_extension("secours");
+        let _ = std::fs::remove_dir_all(&racine);
+        let mut rec = Recovery::start(&racine).expect("séance de secours");
+        let projet = b.app.path.clone();
+        let projet = if avec_le_projet { projet } else { None };
+        rec.start_copy(cliche_de_secours(&b, projet.clone()));
+        let t = Instant::now();
+        while !rec.tick(cliche_de_secours(&b, projet.clone()), None, false) {
+            assert!(rec.error.is_none(), "{:?}", rec.error);
+            std::thread::sleep(Duration::from_millis(5));
+            assert!(t.elapsed() < Duration::from_secs(60), "la copie de secours ne finit pas");
+        }
+        let manifeste = rec.dir.join("projet").join("secours.pelure");
+        drop(rec);
+        let relu = crate::project::load(&manifeste).expect("relecture de la copie de secours");
+        for (id, e) in &avant {
+            let c = relu.doc.cels.get(id).unwrap_or_else(|| panic!("le dessin {id} est dans la copie de secours"));
+            assert_eq!(empreinte(c), *e, "dessin {id} copié tel quel (avec le projet : {avec_le_projet})");
+        }
+        crate::residence::budget_essai(None);
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&racine);
+    }
+}
+/// Un projet qui a d'autres versions de plans s'ouvre lui aussi sans lire ses pixels (leurs panneaux passent par la
+/// lecture dans une séquence à part, que l'ouverture ne met pas bout à bout).
+#[test]
+fn a_project_with_plan_versions_also_opens_without_reading_its_pixels() {
+    let dir = dossier("versions");
+    let mut doc = film(6);
+    assert!(doc.nouvelle_version(2, 1).is_some(), "une version de plan");
+    let manifeste = dir.join("Film.pelure");
+    crate::project::save(&doc, &manifeste, &mut Default::default()).expect("enregistrement");
+    let complet = crate::project::load(&manifeste).expect("lecture complète");
+    let paresseux = crate::project::load_paresseux(&manifeste).expect("lecture sans pixels");
+    assert!(!paresseux.doc.versions.is_empty(), "les versions de plans sont relues");
+    assert_eq!(paresseux.doc.cels.absents(), paresseux.doc.cels.len(), "tous les dessins s'ouvrent absents");
+    let (revenu, perdus) = crate::residence::copie_resolue(&paresseux.doc);
+    assert!(perdus.is_empty(), "{perdus:?}");
+    assert_eq!(complet.doc.cels.len(), revenu.cels.len());
+    for (id, c) in complet.doc.cels.iter() {
+        assert_eq!(empreinte(revenu.cels.get(id).expect("dessin revenu")), empreinte(c), "dessin {id}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
+}

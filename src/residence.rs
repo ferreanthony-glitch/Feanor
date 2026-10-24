@@ -398,11 +398,13 @@ pub(crate) fn budget_essai(octets: Option<u64>) {
     BUDGET_ESSAI.with(|b| b.set(octets));
 }
 
-/// Le budget d'office, d'après la mémoire de la machine : un seizième de la mémoire vive, entre 512 Mo et 2 Go (un film de
-/// 300 plans tenait 4,9 Go de pixels ; ce qu'on regarde, ses voisins et la lecture qui vient en demandent bien moins).
+/// Le budget d'office, d'après la mémoire de la machine : un trente-deuxième de la mémoire vive, entre 512 Mo et 1,5 Go (un
+/// film de 300 plans tenait 4,9 Go de pixels ; ce qu'on regarde, ses voisins et la lecture qui vient en demandent bien
+/// moins : mesuré sur ce film, 1 Go tient tout cela et la mémoire du processus passe de 7,2 à 2,9 Go, docs/PERFORMANCE.md
+/// section 27).
 pub(crate) fn budget_auto_mo() -> u32 {
     let ram = crate::materiel::memoire().map_or(16 << 30, |m| m.totale);
-    ((ram / 16) >> 20).clamp(512, 2048) as u32
+    ((ram / 32) >> 20).clamp(512, 1536) as u32
 }
 
 /// Octets d'une tuile.
