@@ -402,11 +402,12 @@ impl Occ {
 }
 
 /// Ce qui empêche de poser quelque chose entre `a` et `b` (l'écart qui suit compris) dans la rangée `row` : la fin de l'intervalle
-/// occupé qui le gêne. `deborde` : `a` est le bord gauche d'une enveloppe qui dépasse à gauche de sa case : elle peut mordre sur
-/// l'écart de la case d'avant (il n'est là que pour séparer deux vignettes), pas sur la case elle-même.
-fn bloque(occ: &Occ, row: i64, a: f32, b: f32, deborde: bool) -> Option<f32> {
+/// occupé qui le gêne, **son écart compris**. Une enveloppe qui dépasse à gauche de sa case ne mord donc jamais sur l'écart de la case
+/// d'avant, où est la barre de coupe : elle commence un écart normal après elle (Anthony, 2026-10-24 : un cadre B en haut à gauche de A
+/// passait sur la barre et sur la case d'avant ; le plan se décale à droite d'autant qu'il faut).
+fn bloque(occ: &Occ, row: i64, a: f32, b: f32) -> Option<f32> {
     let eps = 0.5;
-    let fin = |iv: &Occupe| if deborde { iv.1 } else { iv.1 + iv.2 };
+    let fin = |iv: &Occupe| iv.1 + iv.2;
     occ.rangee(row)?.iter().filter(|iv| a < fin(iv) - eps && b > iv.0 + eps).map(fin).fold(None, |m, e| Some(m.map_or(e, |m: f32| m.max(e))))
 }
 
@@ -466,7 +467,7 @@ fn trouve(occ: &Occ, g: &Gabarit, gap: f32, row_w: f32, page_cap: usize, depart:
         }
         let mut pousse = None;
         for &(b, lo, hi) in &g.bandes {
-            if let Some(fin) = bloque(occ, r_a as i64 + b as i64, x_a + lo, x_a + hi + gap, lo < -1e-3) {
+            if let Some(fin) = bloque(occ, r_a as i64 + b as i64, x_a + lo, x_a + hi + gap) {
                 pousse = Some(fin - lo);
                 break;
             }
@@ -487,7 +488,7 @@ fn occupe(occ: &mut Occ, g: &Gabarit, gap: f32, r_a: usize, x_a: f32) {
 
 /// La case `g`, posée en (`r_a`, `x_a`), gênerait-elle ce qui est déjà noté ?
 fn gene(occ: &Occ, g: &Gabarit, gap: f32, r_a: usize, x_a: f32) -> bool {
-    g.bandes.iter().any(|&(b, lo, hi)| bloque(occ, r_a as i64 + b as i64, x_a + lo, x_a + hi + gap, lo < -1e-3).is_some())
+    g.bandes.iter().any(|&(b, lo, hi)| bloque(occ, r_a as i64 + b as i64, x_a + lo, x_a + hi + gap).is_some())
 }
 
 /// Ce que prend sur la planche une case dont l'enveloppe est `poly` (relative au coin haut-gauche de A) : pour chaque rangée

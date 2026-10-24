@@ -545,6 +545,79 @@ fn during_a_gesture_the_hold_keeps_a_exactly_where_it_was_even_over_earlier_case
         assert!(l.pages.iter().any(|p| p.contains_rect(l.cards[K].foot)), "l'empreinte tient dans la page ({dx}, {dy})");
     }
 }
+
+/// L'enveloppe du mouvement de la case `K` ne touche ni la barre de coupe d'avant (le trait et sa zone), ni les cases d'avant (image,
+/// enveloppe, texte).
+fn rien_d_avant_n_est_touche(l: &board::BoardLayout, etiquette: &str) {
+    use crate::vignettecam::{coins_de, se_recouvrent};
+    let m = l.move_of(K).expect("une empreinte");
+    let barre = &l.bars[K - 1];
+    assert!(!se_recouvrent(&m.enveloppe, &coins_de(barre.bar).to_vec(), 0.25), "{etiquette} : l'enveloppe passe sur la barre de coupe {:?}", barre.bar);
+    assert!(!se_recouvrent(&m.enveloppe, &coins_de(barre.zone).to_vec(), 0.25), "{etiquette} : l'enveloppe est dans l'écart de la barre {:?}", barre.zone);
+    for j in 0..K {
+        for z in l.zones_of(j) {
+            assert!(!se_recouvrent(&m.enveloppe, &z, 0.25), "{etiquette} : l'enveloppe recouvre la case d'avant {j}");
+        }
+        assert!(!m.enveloppe.iter().any(|p| l.cards[j].note.contains(*p)), "{etiquette} : l'enveloppe est dans le texte de la case {j}");
+    }
+}
+
+#[test]
+fn a_move_never_crosses_the_cut_bar_or_the_previous_case_it_shifts_right_and_the_rest_follows() {
+    let ordinaire = board::layout(&plan_court(), &board::BoardSettings { card_w: 170.0, columns: 4, rows: 0 });
+    for (dx, dy) in [(-80.0, -60.0), (-160.0, 0.0), (-120.0, -60.0), (-40.0, -200.0), (-17.3, -23.9), (-80.0, 60.0), (-400.0, 30.0)] {
+        for colonnes in [4, 6] {
+            let s = board::BoardSettings { card_w: 170.0, columns: colonnes, rows: 0 };
+            let mut doc = plan_court();
+            deux_cadres(&mut doc, 1, dx, dy);
+            let l = board::layout(&doc, &s);
+            let etiquette = format!("({dx}, {dy}), {colonnes} colonnes");
+            let (c, m) = (l.cards[K], l.move_of(K).unwrap());
+            if c.row == l.cards[K - 1].row {
+                // Sur la rangée de la case d'avant : l'enveloppe commence un écart normal après elle (celui de la barre de coupe).
+                let ecart = l.bars[K - 1].zone.width();
+                assert!(m.tuile.rect.left() >= l.cards[K - 1].reach + ecart - 1e-2, "{etiquette} : l'enveloppe commence à {} (la case d'avant va jusqu'à {} + écart {ecart})", m.tuile.rect.left(), l.cards[K - 1].reach);
+                rien_d_avant_n_est_touche(&l, &etiquette);
+                // Ce qui suit se range à la suite de l'empreinte, jamais dessus.
+                for n in l.cards[K + 1..].iter().filter(|n| n.row == c.row) {
+                    assert!(n.card.left() >= c.reach + board::gap_same(170.0).min(board::gap_cut(170.0)) - 1e-2, "{etiquette} : la suite se range après l'empreinte");
+                }
+            }
+            // A est à droite de là où elle serait sans mouvement, ou plus loin dans l'ordre de lecture : jamais en arrière.
+            let ordre = board::layout(&plan_court(), &s);
+            assert!(c.row > ordre.cards[K].row || c.thumb.left() >= ordre.cards[K].thumb.left() - 1e-2, "{etiquette} : A ne recule pas");
+            for j in 0..K {
+                assert_eq!(l.cards[j].thumb, ordre.cards[j].thumb, "{etiquette} : la case {j}, d'avant, ne bouge pas");
+            }
+            sans_chevauchement(&l);
+            assert_eq!(l.cards.len(), ordinaire.cards.len(), "{etiquette} : aucune vignette perdue");
+        }
+    }
+}
+
+#[test]
+fn a_move_never_crosses_the_cut_bar_or_the_previous_case_in_the_japanese_reading_either() {
+    use crate::boardsens::Sens;
+    for (dx, dy) in [(-80.0, -60.0), (-160.0, 0.0), (0.0, -90.0), (-40.0, -200.0), (80.0, -60.0), (-120.0, 60.0)] {
+        for colonnes in [4, 6] {
+            let s = board::BoardSettings { card_w: 170.0, columns: colonnes, rows: 0 };
+            let mut doc = plan_court();
+            deux_cadres(&mut doc, 1, dx, dy);
+            let l = board::layout_with(&doc, &s, &Default::default(), false, &board::Options { sens: Sens::Japonais, ..Default::default() });
+            let etiquette = format!("({dx}, {dy}), {colonnes} par colonne, à la japonaise");
+            let (c, m) = (l.cards[K], l.move_of(K).unwrap());
+            if c.row == l.cards[K - 1].row {
+                // Dans la colonne de la case d'avant : l'enveloppe commence un écart normal sous elle (la barre de coupe comprise).
+                let ecart = l.bars[K - 1].zone.height();
+                assert!(m.tuile.rect.top() >= l.cards[K - 1].reach_y + ecart - 1e-2, "{etiquette} : l'enveloppe commence à {} (la case d'avant va jusqu'à {} + écart {ecart})", m.tuile.rect.top(), l.cards[K - 1].reach_y);
+                rien_d_avant_n_est_touche(&l, &etiquette);
+            }
+            sans_chevauchement(&l);
+            assert_eq!(l.cards.len(), 6, "{etiquette} : aucune vignette perdue");
+        }
+    }
+}
+
 #[test]
 fn the_other_cases_reflow_around_a_wide_footprint_and_come_back_when_the_move_goes() {
     let s = board::BoardSettings { card_w: 170.0, columns: 4, rows: 0 };
