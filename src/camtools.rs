@@ -17,31 +17,26 @@ fn camera_color() -> Color32 {
     crate::theme::camera()
 }
 
-/// Opacité du passe-partout (le voile du hors-champ) d'origine, en pour cent : 27 % (70 sur 255) sur la
-/// feuille, comme avant que ce soit un réglage (Préférences > « Opacité du passe-partout »).
-pub const PASSE_PARTOUT_DEFAUT: u8 = 27;
+/// Opacité du passe-partout d'origine, en pour cent : 100 %, opaque (Anthony, 2026-10-24 : un passe-partout noir autour
+/// du cadre de la caméra, à la place de l'ancien voile gris translucide). Préférences > Dessin > Passe-partout.
+pub const PASSE_PARTOUT_DEFAUT: u8 = 100;
 
-/// Où le voile se pose : il s'adapte pour rester lisible (plus léger quand il couvre tout l'écran autour du
-/// cadre, plus fort pendant la lecture).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum PasseContexte {
-    /// La feuille autour du cadre : la valeur du réglage.
-    Feuille,
-    /// La toile infinie : tout l'écran autour du cadre, 65 % de la valeur.
-    ToileInfinie,
-    /// Pendant la lecture : plus de deux fois la valeur (le hors-champ se voit mieux qu'à l'arrêt).
-    Lecture,
+/// Couleur d'origine du passe-partout : noir.
+pub const PASSE_PARTOUT_COULEUR: [u8; 3] = [0, 0, 0];
+
+/// L'opacité (0 à 255) du passe-partout pour le réglage `pourcent` (0 à 100) : 0 % ne couvre rien, 100 % est opaque. La
+/// même partout (feuille, toile infinie, lecture) : un passe-partout ne change pas d'aspect selon le moment.
+pub(crate) fn passe_partout_alpha(pourcent: u8) -> u8 {
+    (f32::from(pourcent.min(100)) * 2.55).round().clamp(0.0, 255.0) as u8
 }
 
-/// L'opacité (0 à 255) du passe-partout pour le réglage `pourcent` (0 à 100) : 0 % ne voile rien.
-pub(crate) fn passe_partout_alpha(pourcent: u8, contexte: PasseContexte) -> u8 {
-    let base = f32::from(pourcent.min(100)) * 2.55;
-    let facteur = match contexte {
-        PasseContexte::Feuille => 1.0,
-        PasseContexte::ToileInfinie => 0.65,
-        PasseContexte::Lecture => 2.15,
-    };
-    (base * facteur).round().clamp(0.0, 255.0) as u8
+/// La couleur du passe-partout pour la couleur `rvb` et le réglage d'opacité `pourcent` : opaque d'origine.
+pub(crate) fn passe_partout_couleur(rvb: [u8; 3], pourcent: u8) -> Color32 {
+    // (Prémultipliée à la main : `from_rgba_unmultiplied` passe par l'espace linéaire et éclaircit une couleur translucide,
+    // alors que les images se composent partout ailleurs dans SHOT en espace d'écran.)
+    let a = passe_partout_alpha(pourcent);
+    let m = |c: u8| (f32::from(c) * f32::from(a) / 255.0).round() as u8;
+    Color32::from_rgba_premultiplied(m(rvb[0]), m(rvb[1]), m(rvb[2]), a)
 }
 
 /// Opacité du liseré sombre sous le cadre de la caméra.
@@ -329,7 +324,7 @@ impl App {
         }
     }
 
-    /// Cadre de la caméra par-dessus le dessin : hors-champ estompé (masqué en vue caméra), cadre,
+    /// Cadre de la caméra par-dessus le dessin : passe-partout autour (couleur du fond en vue caméra), cadre,
     /// et poignées avec l'outil Caméra.
     pub(crate) fn paint_camera(&self, painter: &egui::Painter, rect: Rect) {
         let size = self.canvas_size();
@@ -345,27 +340,24 @@ impl App {
         if fills_stage && !self.camera_view && !infinite {
             return;
         }
-        // Hors-champ : en vue caméra, tout l'écran autour du cadre ; sinon la feuille, si on veut. Le passe-partout
-        // (le voile) prend l'opacité des Préférences (« Opacité du passe-partout »).
+        // Hors-champ : en vue caméra, tout l'écran autour du cadre ; sinon la feuille (ou, sur la toile infinie, tout l'écran
+        // autour du cadre), si on veut. Le passe-partout prend la couleur et l'opacité des Préférences (noir, opaque
+        // d'origine) ; en vue caméra, la couleur du fond.
         let alpha = if self.camera_view {
-            235
-        } else if !self.camera_mask {
+            255
+        } else if !self.settings.passe_partout_actif {
             0
-        } else if self.playing {
-            passe_partout_alpha(self.settings.passe_partout, PasseContexte::Lecture)
-        } else if infinite {
-            // (Plus léger : le hors-champ est tout l'écran autour du cadre.)
-            passe_partout_alpha(self.settings.passe_partout, PasseContexte::ToileInfinie)
         } else {
-            passe_partout_alpha(self.settings.passe_partout, PasseContexte::Feuille)
+            passe_partout_alpha(self.settings.passe_partout)
         };
+        let passe_partout = passe_partout_couleur(self.settings.passe_partout_couleur, self.settings.passe_partout);
         // Le trait du cadre : un pixel de l'écran, net, et un liseré sombre qui le garde visible sur n'importe quel fond.
         let ppp = painter.ctx().pixels_per_point();
         if fills_stage && infinite {
-            // Le cadre de la caméra est la feuille : voile léger autour, et un trait fin, discret.
+            // Le cadre de la caméra est la feuille : le passe-partout autour, et un trait fin, discret.
             let quad = corners.map(to_s);
             if alpha > 0 {
-                painter.add(crate::viewbar::band(around(&quad), quad, Color32::from_black_alpha(alpha)));
+                painter.add(crate::viewbar::band(around(&quad), quad, passe_partout));
             }
             let net = crisp_quad(&quad, ppp);
             painter.add(Shape::closed_line(net.clone(), Stroke::new(frame_halo_width(ppp, false), Color32::from_black_alpha(FRAME_HALO_ALPHA / 2))));
@@ -384,7 +376,7 @@ impl App {
                     crate::viewbar::clip_to_rect(&corners, stage).into_iter().map(to_s).collect(),
                 )
             };
-            painter.add(crate::viewbar::nested_band(&outer, &inner, Color32::from_black_alpha(alpha)));
+            painter.add(crate::viewbar::nested_band(&outer, &inner, passe_partout));
         } else if alpha > 0 {
             let outer: [Pos2; 4] = if self.camera_view {
                 [rect.left_top(), rect.right_top(), rect.right_bottom(), rect.left_bottom()]
@@ -395,11 +387,7 @@ impl App {
             };
             let inner = corners.map(to_s);
             // En vue caméra, rien ne doit transparaître hors du cadre : couleur du fond, opaque.
-            let color = if self.camera_view {
-                crate::theme::fond()
-            } else {
-                Color32::from_black_alpha(alpha)
-            };
+            let color = if self.camera_view { crate::theme::fond() } else { passe_partout };
             // La bande entre le bord extérieur et le cadre (sans apparier les coins : voir `band`).
             painter.add(crate::viewbar::band(outer, inner, color));
         }
@@ -644,8 +632,10 @@ impl App {
                 if self.bouton_etat(ui, on, ph::FRAME_CORNERS, "Vue à travers la caméra", "Voir ce que filme la caméra du plan.", "camera.vue").clicked() {
                     self.set_camera_view(!on);
                 }
-                let key = self.raccourci("camera.masque");
-                crate::bulles::interrupteur_a(ui, &mut self.camera_mask, ph::SELECTION_INVERSE, "Estomper le hors-champ", "Voiler ce qui est hors du cadre de la caméra.", &key, "camera.masque");
+                let on = self.settings.passe_partout_actif;
+                if self.bouton_etat(ui, on, ph::SELECTION_INVERSE, "Passe-partout", "Couvrir ce qui est hors du cadre de la caméra, noir d'origine (la couleur se règle dans Préférences > Dessin).", "camera.masque").clicked() {
+                    self.run_action("camera.masque");
+                }
             });
         });
         // (Les aides au cadrage sont dans le menu « Cadrage » de la barre au-dessus du dessin.)

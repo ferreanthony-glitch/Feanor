@@ -156,8 +156,6 @@ impl App {
         ui.label(RichText::new("Changer une couleur passe en « Personnalisé » ; le survol, le texte secondaire et les couleurs de la timeline s'en déduisent.").small().weak());
     }
 
-    /// « Opacité du passe-partout » : le voile autour du cadre de la caméra quand « Estomper le hors-champ » est
-    /// allumé (`camtools.rs`). De 0 % (rien) à 100 % (le hors-champ noir) ; retenu dans les réglages.
     /// Vignettes > Planche des Vignettes : le nombre de rangées de cases pâles qu'on voit toujours (pour montrer où dessiner), le nombre de
     /// cases par rangée, et le débord du trait hors des cases. Les rangées et les colonnes sont des réglages de la disposition
     /// (`Layout`, retenus dans `reglages.toml` comme avant) ; le débord est `ReglagesVignettes::debord`.
@@ -282,7 +280,25 @@ impl App {
         }
     }
 
+    /// Dessin > Caméra : le passe-partout, ce qui couvre le hors-champ autour du cadre de la caméra quand « Passe-partout »
+    /// est allumé (`camtools.rs`) : sa couleur (noir d'origine) et son opacité (de 0 %, rien, à 100 %, opaque, d'origine).
+    /// Un seul réglage : il remplace l'ancien voile gris translucide. Retenu dans les réglages.
     pub(crate) fn passe_partout_pref_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Couleur du passe-partout");
+            let mut c = self.settings.passe_partout_couleur;
+            let resp = ui.color_edit_button_srgb(&mut c);
+            let resp = crate::bulles::bulle(
+                resp,
+                "Couleur du passe-partout",
+                "La couleur qui couvre ce qui est hors du cadre de la caméra, quand « Passe-partout » est allumé : noir d'origine. Elle ne touche pas aux exports.",
+                &self.raccourci("camera.masque"),
+            );
+            if resp.changed() {
+                self.settings.passe_partout_couleur = c;
+                self.settings_a_ecrire = true;
+            }
+        });
         ui.horizontal(|ui| {
             ui.label("Opacité du passe-partout");
             let mut v = f32::from(self.settings.passe_partout);
@@ -290,7 +306,7 @@ impl App {
             let resp = crate::bulles::bulle(
                 resp,
                 "Opacité du passe-partout",
-                "Le voile qui estompe ce qui est hors du cadre de la caméra, quand « Estomper le hors-champ » est allumé. 0 % : aucun voile ; 100 % : le hors-champ noir.",
+                "À quel point le passe-partout cache le hors-champ. 100 % : opaque, rien ne se voit autour du cadre (d'origine) ; 0 % : rien n'est couvert.",
                 &self.raccourci("camera.masque"),
             );
             if resp.changed() {
@@ -299,8 +315,9 @@ impl App {
             if resp.drag_stopped() || (resp.changed() && !resp.dragged()) {
                 let _ = self.settings.save();
             }
-            if ui.small_button("Rétablir").on_hover_text("Revenir à l'opacité d'origine (27 %).").clicked() {
+            if ui.small_button("Rétablir").on_hover_text("Revenir au passe-partout d'origine : noir, opaque.").clicked() {
                 self.settings.passe_partout = crate::camtools::PASSE_PARTOUT_DEFAUT;
+                self.settings.passe_partout_couleur = crate::camtools::PASSE_PARTOUT_COULEUR;
                 let _ = self.settings.save();
             }
         });

@@ -4179,3 +4179,43 @@ cachée quand on replie ; les autres outils n'ont pas le bouton, le pinceau, le 
 liste, la replie au second appui. `dock_tests` : aucune disposition d'origine n'a l'onglet, une disposition enregistrée qui l'avait s'ouvre sans lui (onglet actif, fichier, état
 d'egui_dock), seul dans sa colonne / flottant / dans sa fenêtre : pas de trou. `pinceaux_tests` : « Mes brosses » en tête (pinceaux, gommes, recherche), `liste_ouverte` écrit et
 relu. `barrepanneaux_tests`, `workspace_tests`, `vignettes_camera_tests`, `ajuste_tests` : plus d'icône Pinceaux (onze icônes, trois groupes 3-4-4), plus dans les panneaux d'office.
+
+## 46. Le passe-partout autour du cadre de la caméra (2026-10-24, branche `petites-fonctions`)
+
+Demande d'Anthony : le voile gris translucide qui estompait le hors-champ devient un **passe-partout** : une couleur **opaque** autour du cadre de la caméra, **noire** d'origine.
+
+### Ce qui change
+
+- **Opaque et noir d'origine.** Il couvre tout ce qui est hors du cadre de la caméra : sur la feuille, la feuille moins le cadre ; sur la toile infinie, tout l'écran autour du cadre
+  (le dessin hors cadre ne se voit plus tant qu'il est allumé : l'éteindre le fait revenir). Il suit la caméra (déplacement, zoom, inclinaison, panoramique, rotation), la rotation
+  et le miroir de la vue (la bande est découpée côté par côté, pas de triangles de travers), la toile hors de la feuille. Une seule force pour tous les cas : plus de passe-partout
+  plus léger sur la toile infinie ni plus fort pendant la lecture. En **vue caméra**, rien n'a changé (la couleur du fond, opaque). **Les exports, les vignettes et la lecture
+  composée ne le connaissent pas** : c'est un habillage de l'écran.
+- **Dans la barre sous le dessin, à gauche, après la table lumineuse** (après un trait de séparation, mêmes cases que les autres icônes) : l'**icône du passe-partout** (carré avec
+  un cadre inversé) l'allume et l'éteint, avec la bulle à 1 s (nom, description, raccourci) et le clic droit « Assigner un raccourci » (commande `camera.masque`, qui s'appelle
+  maintenant « Passe-partout autour du cadre de la caméra » dans la liste des raccourcis) ; à côté, un **petit curseur d'opacité** avec sa valeur en pour cent (« 100 % »).
+  Le même interrupteur est toujours dans le panneau des réglages de la caméra (« Passe-partout », ancien « Estomper le hors-champ »).
+- **La couleur est dans Préférences > Dessin > Caméra** (« Couleur du passe-partout », noir d'origine ; « Opacité du passe-partout » y est aussi, et « Rétablir » remet noir et 100 %).
+  Il n'y a qu'un réglage : celui de l'ancien voile.
+- **Allumé, opacité et couleur sont retenus sur ce poste** (`reglages.toml` : `passe_partout_actif`, `passe_partout_opacite`, `passe_partout_couleur`). Allumé d'origine.
+- **Les anciens réglages** : l'ancienne clé `opacite_passe_partout` (27 % d'origine) **n'est plus lue** (elle donnerait un passe-partout gris translucide, pas ce qu'on demande) :
+  un ancien fichier s'ouvre avec un passe-partout noir opaque. Quelqu'un qui avait réglé une autre opacité la règle de nouveau (curseur de la barre). L'ancien interrupteur
+  « Estomper le hors-champ » n'était pas retenu (rallumé à chaque lancement) : il l'est maintenant.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Le cadre de la caméra resserré (outil Caméra, zoom) : tout ce qui est autour est **noir, opaque**, y compris au-delà de la feuille. Tourner la vue, la retourner (miroir),
+   incliner la caméra : la bande noire suit sans trou ni triangle de travers.
+2. Barre sous le dessin, à droite de la lampe : l'icône du passe-partout et le curseur « 100 % ». Un clic sur l'icône éteint le noir (le hors-champ se voit), un autre le rallume.
+   Le curseur à 50 % : le noir devient translucide ; à 0 %, il n'y a plus rien. Bulle à 1 s sur l'icône et le curseur ; clic droit sur l'icône : assigner un raccourci.
+3. Préférences > Dessin : « Couleur du passe-partout » (choisir un bleu : le passe-partout devient bleu), « Opacité du passe-partout », « Rétablir » : noir, 100 %.
+4. Quitter et relancer SHOT : l'icône, l'opacité et la couleur sont comme on les a laissées.
+5. Exporter un plan avec la caméra resserrée : l'image est celle du cadre, sans passe-partout.
+
+### Essais ajoutés
+
+`passe_partout_tests.rs` (les triangles du passe-partout sont rastérisés sur un fond uni et lus pixel par pixel) : dehors, la couleur, dedans, rien de changé ; dans toutes les vues
+tournées (0 à 270°), en miroir, caméra tournée ou non ; sur la feuille seule (vignette), seule la feuille autour du cadre est couverte ; l'icône (commande) éteint et rallume ;
+0 %, 50 % et 100 % donnent les pixels composés attendus (100 % : aucun fond ne transparaît) ; les exports ne le connaissent pas ; allumé, opacité et couleur s'écrivent et se
+relisent, un ancien fichier donne noir opaque allumé ; dans la barre, l'icône et le curseur sont après la lampe, à sa taille et sur sa ligne, et un clic sur l'icône bascule le réglage.
+`notes_calques_tests.rs` : l'opacité (0 à 255, 100 % opaque), la fenêtre des Préférences (couleur et opacité), le réglage de l'opacité sur l'écran.

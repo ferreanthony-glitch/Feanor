@@ -501,6 +501,8 @@ mod prereglagesui;
 mod prereglagesui_tests;
 #[cfg(test)]
 mod effetsperf_tests;
+#[cfg(test)]
+mod passe_partout_tests;
 mod tremblement;
 #[cfg(test)]
 mod tremblement_tests;

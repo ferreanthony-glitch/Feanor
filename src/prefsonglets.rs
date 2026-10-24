@@ -82,7 +82,7 @@ impl Onglet {
         match self {
             Onglet::General => "Ouvrir et rouvrir les projets, copies de secours, collage entre projets, conseils.",
             Onglet::Apparence => "Le thème et ses couleurs, la taille de l'interface, la hauteur des panneaux.",
-            Onglet::Dessin => "Le curseur du stylet, sa pression, le point fixe des poignées et le voile autour de la caméra.",
+            Onglet::Dessin => "Le curseur du stylet, sa pression, le point fixe des poignées, et le passe-partout autour de la caméra.",
             Onglet::Montage => "Les pistes du montage et leur repliage.",
             Onglet::Vignettes => "La planche : cases pâles, débord du trait, cadres de caméra, et le décor partagé entre les cases d'un plan.",
             Onglet::Raccourcis => "Le jeu de raccourcis du clavier et ses fichiers.",
@@ -208,7 +208,8 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Dessin, G::StyletMain, "dessin.regler_stylet", "Régler le stylet à ma main", "pression courbe appui tablette léger moyen fort toucher"),
     r(O::Dessin, G::Poignees, "dessin.point_fixe", "Point fixe des poignées", "ancre poignée opposée centre échelle incliner coin côté transformer sélection boîte ctrl"),
     r(O::Dessin, G::Poignees, "dessin.rotation_autour", "Rotation autour de", "pivot coin opposé tourner rotation transformer sélection boîte"),
-    r(O::Dessin, G::Camera, "dessin.passe_partout", "Opacité du passe-partout", "voile hors-champ estomper cadre caméra rétablir"),
+    r(O::Dessin, G::Camera, "dessin.passe_partout_couleur", "Couleur du passe-partout", "noir hors-champ voile cadre caméra"),
+    r(O::Dessin, G::Camera, "dessin.passe_partout", "Opacité du passe-partout", "voile hors-champ estomper cadre caméra rétablir noir opaque"),
     // ---- Montage
     r(O::Montage, G::Pistes, "montage.repliage", "Repliage des pistes", "replier commun plan calques"),
     r(O::Montage, G::Pistes, "montage.deplier", "Déplier le calque courant tout seul", "piste automatique"),
