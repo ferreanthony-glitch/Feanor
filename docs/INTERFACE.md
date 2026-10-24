@@ -4258,3 +4258,48 @@ nulle ne change rien ; un calque qui a son propre tremblement garde le sien (all
 tremblement passe en tête) ; ni calque bitmap, ni vue d'édition (`without_boil`) ; il n'écrit rien dans le document (aucun effet ajouté, le JSON du plan est le même) ; le réglage
 s'écrit et se relit, n'est pas écrit au départ, un ancien fichier donne éteint, des valeurs folles sont bornées ; dans l'application, il est posé là où le rendu le lit, le plan de
 l'écran et l'image d'export le montrent ; les Préférences ont les trois réglages. (Dans les essais, le réglage est propre à chaque fil : les essais tournent côte à côte.)
+
+## 48. Choisir une couleur recolore la sélection (2026-10-24, branche `petites-fonctions`)
+
+Demande d'Anthony : avec une sélection active, choisir une autre couleur dans le panneau Couleur recolore l'objet sélectionné.
+
+### Ce que ça fait
+
+- **Quand** : une sélection est active (outil Sélection au lasso ou au rectangle, Sélection par couleur, et leurs cousins Transformer et Perspective, qui gardent la zone) sur un
+  calque qu'on peut modifier (ni verrouillé, ni dossier, ni vidéo). Les **manières de choisir** : un clic sur une pastille (neutres, nuancier, couleurs récentes), la roue ou les
+  curseurs (TSV, RVB, TSL), le code hexadécimal, « Intervertir les couleurs », « Couleurs par défaut », « Couleur d'avant-plan » du menu d'une pastille. La **pipette**, le texte, les
+  couleurs des personnages et les brosses du décor changent la couleur d'avant-plan **sans** recolorer. Une sélection sur **plusieurs calques** choisis n'est pas recolorée.
+- **Vectoriel** : les traits, les zones et les textes sélectionnés prennent la couleur ; les autres éléments ne changent pas. Les zones et traits simples sont redessinés dans la zone
+  touchée tout de suite ; les traits du moteur de brosses (feutre, gouache, fusain…) sont **rejoués par le fil de travail** (jamais sur le fil de l'interface), l'ancienne image reste
+  affichée jusqu'à l'arrivée de la nouvelle.
+- **Bitmap** : les pixels de la zone sont recolorés **en gardant leur alpha** : on remplace la couleur, pas la couverture (un pixel à moitié transparent reste à moitié transparent,
+  l'anticrénelage du dessin est gardé). Sur le bord de la zone (couverture partielle), la couleur est mêlée au prorata de la couverture. Si la zone a été soulevée (déplacée,
+  tournée…), ce sont les pixels soulevés qui sont recolorés ; la couleur se pose avec le reste du geste, en une étape à la pose, comme les autres transformations.
+- **Une étape d'annulation par choix de couleur** (« Couleur de la sélection » dans l'Historique). Glisser un curseur ou la roue, ou taper un code sans quitter le champ, **en fait
+  une seule** pour tout le geste : la même étape tient tant que le curseur est tenu (ou que le champ a le clavier) et qu'aucune autre étape ne s'est glissée entre-temps. Annuler rend
+  d'un coup les couleurs d'avant (traits et zones, ou tous les pixels).
+- **Sans sélection, rien ne change** : choisir une couleur règle seulement la couleur d'avant-plan des outils (aucune étape, aucun changement du dessin). Idem avec un outil qui ne
+  garde pas la sélection (le pinceau) : la couleur sert au pinceau.
+- Le bouton « Couleur courante » du panneau de la sélection vectorielle (donner la couleur courante aux éléments choisis) reste : il fait la même chose sur demande.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Dessin vectoriel avec des traits de plusieurs couleurs : lasso sur deux traits, clic sur une pastille du nuancier : ces deux traits prennent la couleur, pas les autres. Ctrl+Z : ils
+   retrouvent leurs couleurs, en une seule étape.
+2. Même chose en tirant un curseur (RVB ou TSV) ou la roue : le trait suit la main (les traits texturés peuvent suivre un instant après) ; **un seul** Ctrl+Z rend la couleur d'origine.
+3. Taper un code (#ff8800) dans le champ : la sélection prend la couleur ; un Ctrl+Z.
+4. Dessin bitmap : lasso sur une zone dessinée au pinceau (bords doux) : choisir une couleur recolore la zone, les bords gardent leur douceur (rien de dur, pas de liseré de l'ancienne
+   couleur) ; ce qui est hors de la zone ne bouge pas.
+5. Sélectionner, déplacer la zone (elle est soulevée), choisir une couleur : la zone déplacée change de couleur ; en quittant la sélection, un seul Ctrl+Z défait déplacement et couleur.
+6. Pas de sélection (Échap) : choisir une couleur ne touche à aucun dessin. Avec le pinceau pris, des éléments encore « choisis » ne changent pas.
+7. La pipette (Alt + clic) avec une sélection : elle prend la couleur sans recolorer.
+
+### Essais ajoutés
+
+`recolorsel_tests.rs` : vectoriel (traits et zone sélectionnés recolorés, trait non choisi intact, zone redessinée à l'image, la même couleur ne fait aucune étape) ; une étape par choix,
+annuler et rétablir ; un glissé de trente images, un arrêt sans changement, puis un autre choix : une étape par geste ; traits du moteur : le rendu exact est demandé au fil de travail,
+aucun rejeu sur le fil de l'interface (`cache_missing`, `is_pending`) ; autre outil ou calque verrouillé : rien ; sans sélection, ni le dessin vectoriel ni le bitmap ne changent, aucune
+étape ; le pixel (alpha gardé, mélange par la couverture, jamais de couleur au-dessus de l'alpha) ; bitmap : le carré recoloré, le pixel à moitié transparent garde son alpha, rien ne
+bouge hors de la zone ni dans le vide ; un glissé bitmap de vingt images, une étape, annuler rend tous les pixels ; pixels soulevés recolorés, une étape à la pose ; code hexadécimal,
+intervertir, couleurs par défaut recolorent, la pipette (`set_front`) non. (Les essais simulent les images d'un glissé — début d'image, choix, curseur tenu — plutôt que de piloter le
+curseur d'egui.)

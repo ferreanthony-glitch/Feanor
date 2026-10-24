@@ -254,7 +254,7 @@ impl App {
                 self.status = "Couleurs récentes effacées.".into();
             }
             "pastille.avant_plan" | "pastille.arriere_plan" => match self.target_color() {
-                Some(c) if action == "pastille.avant_plan" => self.set_front(c),
+                Some(c) if action == "pastille.avant_plan" => self.choose_front(c),
                 Some(c) => self.set_back(c),
                 None => self.no_target(),
             },
@@ -290,15 +290,17 @@ impl App {
     pub(crate) fn swap_colors(&mut self) {
         std::mem::swap(&mut self.color, &mut self.couleurs.prefs.back);
         std::mem::swap(&mut self.hsv, &mut self.couleurs.back_hsv);
-        // Une couleur changée ailleurs (pipette, texte…) : sa teinte suit.
         self.sync_hsv();
         let back = self.couleurs.prefs.back;
         self.set_back(back);
+        // (Un choix fait dans le panneau : la sélection prend la nouvelle couleur d'avant-plan, `recolorsel.rs`.)
+        let front = self.color;
+        self.recolorier_la_selection(front);
     }
 
     /// Noir à l'avant-plan, blanc à l'arrière-plan.
     pub(crate) fn default_colors(&mut self) {
-        self.set_front(couleur::NOIR);
+        self.choose_front(couleur::NOIR);
         self.set_back(couleur::BLANC);
     }
 
@@ -308,10 +310,20 @@ impl App {
         self.sync_hsv();
     }
 
-    /// Nouvelle couleur d'avant-plan, réglée en TSV (la teinte d'un gris reste).
+    /// Nouvelle couleur d'avant-plan **choisie dans le panneau Couleur** (pastille, nuancier, code, curseurs, roue) : avec une
+    /// sélection active, elle prend cette couleur (`recolorsel.rs`) ; sans sélection, c'est `set_front`, rien de plus. Les autres
+    /// chemins (pipette, personnages, brosses du décor, texte) restent `set_front` : ils ne recolorent rien.
+    pub(crate) fn choose_front(&mut self, c: [u8; 3]) {
+        self.set_front(c);
+        self.recolorier_la_selection(c);
+    }
+
+    /// Nouvelle couleur d'avant-plan, réglée en TSV (la teinte d'un gris reste). Choix des curseurs : la sélection suit.
     fn set_hsv(&mut self, hsv: [f32; 3]) {
         self.hsv = hsv;
         self.color = hsv_to_rgb(hsv);
+        let c = self.color;
+        self.recolorier_la_selection(c);
     }
 
     /// Nouvelle couleur d'arrière-plan.
@@ -380,7 +392,7 @@ impl App {
         let resp = ui.add(egui::TextEdit::singleline(&mut text).id(id).desired_width(72.0).font(egui::TextStyle::Monospace));
         if resp.changed() {
             if let Some(c) = couleur::parse_hex(&text) {
-                self.set_front(c);
+                self.choose_front(c);
             }
         }
         if resp.has_focus() {
@@ -465,6 +477,8 @@ impl App {
         if hsv != self.hsv {
             self.hsv = hsv;
             self.color = hsv_to_rgb(hsv);
+            let c = self.color;
+            self.recolorier_la_selection(c);
         }
         let resp = crate::bulles::bulle(
             resp,
@@ -580,7 +594,7 @@ impl App {
                 if let Some((k, t)) = changed {
                     let mut next = c;
                     next[k] = (t * 255.0).round().clamp(0.0, 255.0) as u8;
-                    self.set_front(next);
+                    self.choose_front(next);
                 }
                 parts
             }
@@ -659,7 +673,7 @@ impl App {
             self.couleurs.hovered_now = Some(target);
         }
         if resp.clicked() {
-            self.set_front(c);
+            self.choose_front(c);
         }
         resp.context_menu(|ui| self.target_menu(ui, target));
     }
@@ -716,6 +730,8 @@ impl App {
         self.couleurs.menu = self.couleurs.menu_now.take();
         self.couleurs.hovered = self.couleurs.hovered_now.take();
         self.couleurs.prefs.front = self.color;
+        // Un curseur ou la roue tenus, un code qu'on tape : le choix de couleur est un seul geste, une seule étape d'annulation.
+        self.recolor_geste_tick(ctx);
         if self.couleurs.prefs != self.settings.colors && !ctx.input(|i| i.pointer.any_down()) && !ctx.wants_keyboard_input() {
             self.settings.colors = self.couleurs.prefs.clone();
             if let Err(e) = self.settings.save() {

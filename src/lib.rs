@@ -356,6 +356,9 @@ mod commentairesui;
 mod colorsel;
 #[cfg(test)]
 mod colorsel_tests;
+mod recolorsel;
+#[cfg(test)]
+mod recolorsel_tests;
 mod colorui;
 mod couleur;
 #[cfg(test)]
