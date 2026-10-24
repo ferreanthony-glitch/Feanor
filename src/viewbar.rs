@@ -26,6 +26,8 @@ pub(crate) fn tool_hint(tool: crate::app::Tool) -> &'static str {
         Tool::Text => "Clic : poser un texte · Ctrl + Entrée : valider · Échap : annuler",
         Tool::Transform => "Coin : agrandir (Maj : proportions · Ctrl : autre point fixe) · côté : étirer · rond ou hors d'un coin : tourner · Ctrl+R : annuler",
         Tool::Perspective => "Enveloppe ou perspective (Réglages) · tirer un coin ou une poignée ronde · l'intérieur : déplacer · Entrée : terminer",
+        Tool::Grab => "Appui : prendre les points du cercle · glisser : les tirer (plus ou moins selon la distance au centre) · rayon, force, atténuation : Réglages",
+        Tool::Pull => "Glisser : les points sous le cercle suivent le mouvement, comme un doigt · rayon, force, atténuation : Réglages",
         Tool::Picker => "Clic : prendre la couleur",
         Tool::Pan => "Glisser : déplacer la vue",
         Tool::Camera => "Glisser : déplacer (Maj : à l'horizontale ou à la verticale) · coin : zoomer · rond : tourner (Maj : 15°)",

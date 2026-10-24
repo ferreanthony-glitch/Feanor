@@ -118,6 +118,7 @@ pub fn commandes_de_l_outil(tool: Tool) -> Vec<(&'static str, &'static str)> {
         ],
         Tool::Camera => &[("camera.cle_ici", "Clé de caméra ici"), ("camera.reinitialiser", "Réinitialiser la caméra")],
         Tool::Transform => &[("calque.reinit_transformation", "Annuler la transformation")],
+        Tool::Grab | Tool::Pull => &[("outil.taille_plus", "Rayon plus grand"), ("outil.taille_moins", "Rayon plus petit")],
         Tool::Cutter | Tool::Picker | Tool::Pan | Tool::Text | Tool::Perspective => &[],
     };
     v.extend_from_slice(suite);

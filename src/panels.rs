@@ -485,6 +485,7 @@ impl App {
             Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_options_ui(ui),
             Tool::Text => self.text_options_ui(ui),
             Tool::Perspective => self.deform_options_ui(ui),
+            Tool::Grab | Tool::Pull => self.sculpt_options_ui(ui),
             Tool::Select => self.selection_ui(ui, true),
             Tool::SelectColor => self.color_select_ui(ui),
             Tool::Cutter => {

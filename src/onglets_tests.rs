@@ -176,7 +176,7 @@ const PARTAGES: &[&str] = &[
     "time_display", "empty_x", "timeline_thumbs", "mark_color", "mark_repeat", "mark_next_layer", "mark_used_only", "bottom_tab", "checker", "notes", "properties_window", "settings_tab",
     "brush_previews", "preset_edit", "brush_import_notes", "record_strokes", "camera_mask", "top_view", "play_meter", "frame_start", "export_dialog", "export_last", "export_job", "export_projet", "ffmpeg",
     "settings", "layout", "dock", "detached", "detach_request", "exposition_masquee", "espace", "vue_camera_du_montage", "settings_a_ecrire", "workspace_name", "orphans", "default_exposure", "looping", "audio",
-    "audio_tried", "audio_clock", "sound_on", "sound_scrub", "brt", "sug", "activity", "perf_applied", "diag", "keep_proportions", "field_edit_alive", "deform_mode", "select_rect",
+    "audio_tried", "audio_clock", "sound_on", "sound_scrub", "brt", "sug", "activity", "perf_applied", "diag", "keep_proportions", "field_edit_alive", "deform_mode", "sculpte", "select_rect",
     "pixel_clipboard", "layer_clipboard", "multi_clip", "panel_clipboard", "cam_key_clipboard", "cam_clip_recent", "cam_fx", "cadrage", "cadrage_cache", "text_font", "text_size",
     "text_fonts", "text_font_filter", "color_select", "tool_recent", "tool_flyout", "paste_event", "messages", "last_status", "toasts", "messages_window", "palette", "export_hub",
     "prefs_window", "editorial", "fiche", "about_window", "theme_applied", "theme_unsaved","pane_heights", "fit_set", "fit_busy", "recent_to_open", "recent_presence",

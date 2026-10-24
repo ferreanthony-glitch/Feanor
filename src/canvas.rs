@@ -468,6 +468,8 @@ impl App {
                         Tool::Select => self.select_press(p, *pos, modifiers.shift),
                         Tool::SelectColor => self.color_select_press(p, *pos, modifiers.shift),
                         Tool::Cutter => self.cutter_press(p),
+                        // Grab et Pull (`sculptapp.rs`).
+                        Tool::Grab | Tool::Pull => self.sculpt_press(p, pen),
                         Tool::Camera => self.camera_press(stage, *pos),
                         Tool::Transform => {
                             // Une zone bitmap choisie : sa boîte la transforme ; ailleurs, c'est le calque.
@@ -498,6 +500,7 @@ impl App {
                             self.stroke_point(self.to_layer(q), pressure, &mods, true);
                         }
                     } else if self.cutter_drag(p) {
+                    } else if self.sculpt_drag(p) {
                     } else if self.envelope_drag(p) {
                     } else if self.persp_drag(p) {
                     } else if self.shape_bend_move(p) {
@@ -544,6 +547,8 @@ impl App {
         }
         self.input_time = now;
         self.last_frame_time = now;
+        // Grab et Pull : les pas du pointeur de cette image, posés une seule fois.
+        self.sculpt_tick();
         // Relâchement manqué (perte de focus…) : on clôt le geste quand même.
         if !primary_down {
             self.end_stroke();
@@ -593,6 +598,9 @@ impl App {
             painter.add(Shape::line(pts.clone(), Stroke::new(3.0_f32, Color32::from_black_alpha(120))));
             painter.add(Shape::line(pts, Stroke::new(1.5_f32, Color32::from_rgb(240, 70, 60))));
         }
+
+        // Geste de Grab : le cercle de l'appui et le trait jusqu'au pointeur.
+        self.paint_sculpt_overlay(painter);
 
         // Contour de la zone bitmap sélectionnée : un trait orange d'1 px (gardé, `contours.rs`).
         if let Some(shape) = self.bitmap_selection_shape() {
@@ -660,6 +668,11 @@ impl App {
         }
         if self.tool == Tool::Perspective {
             ctx.set_cursor_icon(self.deform_cursor(p));
+            return;
+        }
+        // Grab et Pull : le cercle du pinceau.
+        if matches!(self.tool, Tool::Grab | Tool::Pull) {
+            self.sculpt_cursor(ctx, painter, p);
             return;
         }
         // La zone bitmap choisie reste transformable avec l'outil Transformer.

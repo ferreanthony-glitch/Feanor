@@ -95,10 +95,14 @@ pub enum Tool {
     Text,
     /// Déformer en perspective (5f).
     Perspective,
+    /// Grab : saisir les points sous le pinceau et les tirer (`sculpt.rs`, `sculptapp.rs`).
+    Grab,
+    /// Pull : étirer le trait avec le pinceau, comme un doigt (`sculpt.rs`, `sculptapp.rs`).
+    Pull,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 17] = [
+    pub const ALL: [Tool; 19] = [
         Tool::Brush,
         Tool::Pencil,
         Tool::Eraser,
@@ -116,6 +120,8 @@ impl Tool {
         Tool::Camera,
         Tool::Transform,
         Tool::Perspective,
+        Tool::Grab,
+        Tool::Pull,
     ];
 
     pub fn label(self) -> &'static str {
@@ -137,6 +143,8 @@ impl Tool {
             Tool::Transform => "Transformer",
             Tool::Text => "Texte",
             Tool::Perspective => "Déformer",
+            Tool::Grab => "Grab",
+            Tool::Pull => "Pull",
         }
     }
 
@@ -160,6 +168,8 @@ impl Tool {
             Tool::Transform => "Déplacer, agrandir ou tourner le calque entier (tous ses dessins).",
             Tool::Text => "Clic : poser un texte ; Ctrl + Entrée pour le valider.",
             Tool::Perspective => "Déformer le dessin, la sélection ou la zone choisie : en enveloppe de Bézier (coins et poignées pour courber les côtés) ou en perspective (les quatre coins). Le mode se choisit dans Réglages.",
+            Tool::Grab => "Saisir les points du dessin sous le cercle du pinceau et les tirer d'un coup : chaque point suit le curseur, plus ou moins selon sa distance au centre (atténuation, force et rayon dans Réglages). Plusieurs clés choisies : la même déformation sur chacune.",
+            Tool::Pull => "Étirer le dessin en glissant, comme un doigt : à chaque instant, les points sous le cercle du pinceau suivent le mouvement (atténuation, force et rayon dans Réglages). Plusieurs clés choisies : la même déformation sur chacune.",
         }
     }
 
@@ -184,6 +194,8 @@ impl Tool {
             Tool::Transform => ph::BOUNDING_BOX,
             Tool::Text => ph::TEXT_T,
             Tool::Perspective => ph::PERSPECTIVE,
+            Tool::Grab => ph::HAND_GRABBING,
+            Tool::Pull => ph::HAND_POINTING,
         }
     }
 
@@ -207,6 +219,8 @@ impl Tool {
             Tool::Transform => "outil.transformer",
             Tool::Text => "outil.texte",
             Tool::Perspective => "outil.perspective",
+            Tool::Grab => "outil.grab",
+            Tool::Pull => "outil.pull",
         }
     }
 
@@ -660,6 +674,8 @@ pub struct App {
     pub(crate) field_edit_alive: bool,
     /// Mode de l'outil Déformer : enveloppe de Bézier ou perspective.
     pub(crate) deform_mode: crate::envelopetools::DeformMode,
+    /// Réglages de Grab et de Pull (rayon, force, atténuation, curseur), un jeu par outil (`sculpt.rs`).
+    pub(crate) sculpte: crate::sculpt::SculpteReglages,
     /// Sélection bitmap au rectangle (sinon au lasso).
     pub(crate) select_rect: bool,
     /// Zone bitmap copiée.
@@ -770,6 +786,8 @@ pub struct App {
     pub(crate) maximized_once: u8,
     /// Geste du cutter en cours (points du dessin).
     pub(crate) cut_gesture: Option<Vec<Pos2>>,
+    /// Geste de Grab ou de Pull en cours (`sculptapp.rs`).
+    pub(crate) sculpt_geste: Option<crate::sculptapp::Geste>,
     /// Enveloppe de Bézier en cours (outil Déformer, mode Enveloppe).
     pub(crate) envelope: Option<crate::envelopetools::EnvelopeEdit>,
     /// Déformation en perspective en cours (5f).
@@ -1185,6 +1203,7 @@ impl App {
             keep_proportions: false,
             field_edit_alive: false,
             deform_mode: Default::default(),
+            sculpte: Default::default(),
             select_rect: false,
             pixel_clipboard: None,
             layer_clipboard: None,
@@ -1214,6 +1233,7 @@ impl App {
             tool_recent: Vec::new(),
             tool_flyout: None,
             cut_gesture: None,
+            sculpt_geste: None,
             paste_event: false,
             maximized_once: 0,
             goto_plan: None,
@@ -2247,6 +2267,7 @@ impl App {
         }
         self.finish_vector_erase();
         self.finish_cut();
+        self.sculpt_finish();
         // (Le geste d'un champ chiffré de la boîte de sélection dure tant que le champ a la main :
         // `finish_field_edit_if_idle`.)
         if self.vdrag.is_some() && !matches!(&self.vdrag, Some(VDrag::Transform { field: true, .. })) {
@@ -2447,6 +2468,7 @@ impl App {
             || self.multi.busy_on(cel)
             || self.envelope.as_ref().is_some_and(|e| e.busy_on(cel))
             || self.persp.as_ref().is_some_and(|e| e.busy_on(cel))
+            || self.sculpt_occupe(cel)
     }
 
     /// Après Ctrl+Z / Ctrl+Maj+Z : les rejeux des dessins que l'historique a refaits ne valent
@@ -2550,6 +2572,10 @@ impl App {
     pub(crate) fn resize_brush(&mut self, factor: f32) {
         if self.tool.is_shape() {
             self.shape.width = (self.shape.width * factor).clamp(0.5, 200.0);
+        } else if matches!(self.tool, Tool::Grab | Tool::Pull) {
+            // Le rayon du cercle de Grab et de Pull (`sculpt.rs`).
+            let r = self.sculpte.de_mut(self.tool);
+            r.rayon = (r.rayon * factor).clamp(crate::sculpt::Reglages::RAYON_MIN, crate::sculpt::Reglages::RAYON_MAX);
         } else if let Some(b) = self.current_brush_mut() {
             b.size = (b.size * factor).clamp(0.5, 400.0);
         }
@@ -4004,6 +4030,8 @@ impl App {
             }
             "outil.texte" => self.set_tool(Tool::Text),
             "outil.perspective" => self.set_tool(Tool::Perspective),
+            "outil.grab" => self.set_tool(Tool::Grab),
+            "outil.pull" => self.set_tool(Tool::Pull),
             "deformer.enveloppe" => {
                 self.set_deform_mode(crate::envelopetools::DeformMode::Envelope);
                 self.set_tool(Tool::Perspective);

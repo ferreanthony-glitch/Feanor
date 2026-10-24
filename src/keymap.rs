@@ -233,6 +233,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("outil.polyligne", "Outil polyligne", true, false),
     act("outil.texte", "Outil texte", true, false),
     act("outil.perspective", "Outil déformer (enveloppe ou perspective, le dernier mode pris)", true, false),
+    act("outil.grab", "Outil Grab (saisir les points sous le pinceau et les tirer)", true, false),
+    act("outil.pull", "Outil Pull (étirer le trait avec le pinceau, comme un doigt)", true, false),
     act("deformer.enveloppe", "Outil déformer : enveloppe de Bézier", true, false),
     act("deformer.perspective", "Outil déformer : perspective (quatre coins)", true, false),
     act("selection.reinit_pivot", "Remettre le pivot de la sélection au centre", true, false),

@@ -188,6 +188,7 @@ etat_projet! {
     shape_edit: Option<crate::shapes::ShapeEdit> = None,
     text_edit: Option<crate::texttools::TextEditState> = None,
     cut_gesture: Option<Vec<Pos2>> = None,
+    sculpt_geste: Option<crate::sculptapp::Geste> = None,
     envelope: Option<crate::envelopetools::EnvelopeEdit> = None,
     persp: Option<crate::perstools::PerspEdit> = None,
     length_origin: Option<crate::rognageui::PlanBackup> = None,
