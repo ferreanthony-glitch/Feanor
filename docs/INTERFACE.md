@@ -1565,7 +1565,7 @@ références visuelles éventuellement ». Il y a maintenant **quatre onglets**,
   storyboard / animation). « Animer cette image » (clic droit d'une case) entre en animation ; Tab y ramène aux Vignettes (on revient à
   l'espace du côté storyboard où l'on était, `Settings::storyboard_space`). SHOT rouvre dans les Vignettes si on l'a quitté ainsi.
 - **Disposition d'origine** (`DockLayout::pour_les_vignettes`) : la planche en grand ; à sa droite une seule colonne, les
-  **Réglages** de l'outil (le pinceau) au-dessus, la **Couleur** et les **Pinceaux** en onglets dessous ; la **barre des
+  **Réglages** de l'outil (le pinceau, avec sa liste de brosses : voir la partie 44) au-dessus, la **Couleur** dessous ; la **barre des
   personnages** au-dessus de la planche (`Espace::barre_personnages_par_defaut`, ligne « Vignettes » ajoutée ; la planche la peint
   maintenant) ; une **colonne d'outils minimale** (`TOOL_GROUPS_VIGNETTES` : pinceau, crayon, gomme ; les autres outils restent
   à leurs raccourcis et dans Ctrl+K ; la case du stylo d'annotation de la planche viendra s'y poser). **Ni bande (montage, timeline), ni
@@ -1579,7 +1579,7 @@ références visuelles éventuellement ». Il y a maintenant **quatre onglets**,
 
 1. Les quatre onglets en haut à droite, dans l'ordre Vignettes, Storyboard, Animation, Montage, lisibles dans les trois thèmes, le
    bon allumé ; la bulle de Vignettes à 1 s (nom, Maj+Alt+V, description).
-2. Un clic sur Vignettes : la planche seule, grande ; à droite Réglages du pinceau, Couleur et Pinceaux ; la colonne des pastilles
+2. Un clic sur Vignettes : la planche seule, grande ; à droite Réglages du pinceau et Couleur ; la colonne des pastilles
    des personnages au bord droit de la planche ; à gauche seulement pinceau, crayon, gomme ; rien en bas. Un clic sur Références dans la barre des panneaux l'ouvre.
 3. Le plan courant, l'image et les plans choisis sont les mêmes qu'avant le clic, dans les deux sens.
 4. Tab depuis les Vignettes : le Storyboard. Clic droit sur une case > Animer cette image, puis Tab : retour aux Vignettes.
@@ -3376,7 +3376,7 @@ main depuis la sous-ligne du calque (partie 33) : un personnage et la sous-ligne
   de haut en bas « aucun personnage » (anneau barré), une pastille par personnage, un trait, les pastilles neutres, un « + » et l'icône du panneau (enfoncée quand
   il est ouvert). La pastille choisie a un halo de la couleur d'accent ; la bulle (une seconde) donne le nom, les codes des couleurs et le clic droit. Sans
   personnage, la bulle de la pastille « aucun personnage » le dit.
-- **Panneau Personnages** (en onglet avec Couleur et Pinceaux ; icône dans la barre des panneaux) : « + », « Couleur libre » (lâcher), le nombre de
+- **Panneau Personnages** (en onglet avec Couleur ; icône dans la barre des panneaux) : « + », « Couleur libre » (lâcher), le nombre de
   personnages ; une ligne par personnage (poignée, pastille, nom, couleur du trait, interrupteur « Avec un aplat », couleur de l'aplat, corbeille) ;
   puis « Couleurs neutres » (mêmes lignes), « + » et « Couleurs neutres d'origine ».
 - **Fenêtre « Modifier le personnage »** (clic droit > Modifier…) : la même ligne ; chaque champ ou sélecteur de couleur est une étape nommée « Modifier
@@ -3423,7 +3423,7 @@ tiennent compte du nouveau panneau et des six commandes.
 6. Prendre une autre couleur (panneau Couleur, pipette Alt + clic, échange des deux couleurs) : le halo disparaît de la barre. Recliquer la pastille : la couleur revient.
 7. Cliquer la pastille choisie : elle est lâchée (« Couleur libre »). L'outil Sélection actif, cliquer une pastille : le pinceau est pris.
 8. Clic droit sur une pastille : Modifier…, Dupliquer (« Lou (copie) »), Déplacer à gauche / à droite, Supprimer. Les pastilles se rangent ; Ctrl+Z remet l'ordre.
-9. Icône « personnages » à droite de la barre, ou barre des panneaux : le panneau s'ouvre (onglet avec Couleur et Pinceaux). Glisser la poignée d'une ligne
+9. Icône « personnages » à droite de la barre, ou barre des panneaux : le panneau s'ouvre (onglet avec Couleur). Glisser la poignée d'une ligne
    change l'ordre de la barre ; la corbeille supprime ; les couleurs neutres se modifient là aussi, et « Couleurs neutres d'origine » les remet.
 10. Fermer et rouvrir SHOT : les couleurs neutres modifiées sont là ; enregistrer le projet, le rouvrir : mêmes personnages, mêmes aplats (la silhouette de Lou garde
     son rose). Ouvrir un autre projet : ses personnages à lui, les mêmes couleurs neutres.
@@ -3708,8 +3708,8 @@ les questions pour Anthony).
    sous « Plus… »). La pelure d'oignon se règle sous le dessin seulement ; le panneau Effets et les Bruitages ont leur icône dans la barre des panneaux, pas une seconde dans
    les barres du montage ; « Animer ce plan » est l'onglet Animation. Les vues (plateau, caméra, Espace 3D) sont dans la barre AU-DESSUS du dessin, avec un seul menu
    « Cadrage » (les zones de sécurité et le format n'ont plus de bouton ni de liste en plus). Les menus du haut restent le catalogue.
-2. **Les panneaux de la barre de droite, par espace.** `barrepanneaux::panneaux_d_office` : Vignettes 4 icônes (Réglages, Pinceaux, Couleur, Références), Storyboard 9,
-   Animation 9, Montage 4 (Fiche, Commentaires, Historique, Bruitages). Un panneau ouvert à la main a son icône tant qu'il est ouvert (chaque espace retient sa
+2. **Les panneaux de la barre de droite, par espace.** `barrepanneaux::panneaux_d_office` : Vignettes 3 icônes (Réglages, Couleur, Références ; le panneau Pinceaux est devenu la liste des brosses des
+   Réglages, partie 44), Storyboard 7, Animation 7, Montage 4 (Fiche, Commentaires, Historique, Bruitages). Un panneau ouvert à la main a son icône tant qu'il est ouvert (chaque espace retient sa
    disposition, la barre ne se bat pas contre l'utilisateur) ; les autres : Ctrl+K et Affichage > Espaces de travail > Panneaux.
 3. **Légende des clés et filtre** (`legendecles.rs`) : une icône « ? » au bout de l'en-tête du montage et de la timeline ; au survol, la légende (dessin bleu et vert,
    caméra jaune, effet violet, position verte, transition) avec une case par sorte pour cacher caméra, effets, positions, transitions. **Un affichage seulement** : la sorte
@@ -4118,3 +4118,64 @@ version, et rien ne coûte alors. Si le montage et la planche sont affichés ens
 5. Maj + glisser le cadre d'une case : un trait horizontal montre où le plan se pose. Un clic sur une barre coupe ou réunit. Dessiner dans une case, à droite d'elle dans son texte, marche comme avant.
 6. Quitte SHOT et rouvre-le : le sens et les cases cochées sont ceux que tu avais laissés. Fichier > Exporter > Planche des vignettes : même ordre, mêmes textes.
 7. Un plan à deux versions (Storyboard > Versions du plan > Nouvelle version) : **V2** en haut à droite de sa case ; le survoler ouvre la liste ; un clic sur V1 change la case ; Ctrl+Z revient. Un plan à une version n'a rien.
+
+## 45. Les pinceaux dans les Réglages de l'outil (2026-10-24, branche `pinceaux-dans-reglages`)
+
+Demande d'Anthony : « le panneau Pinceaux disparaît ; sa liste rejoint les réglages du pinceau ». Une interface plus simple : un panneau de moins, et tout ce qui touche au
+pinceau au même endroit.
+
+### Ce qui bouge
+
+- **Plus de panneau Pinceaux** : plus d'onglet à côté de la Couleur (disposition d'origine, espace Vignettes, Storyboard, Animation), plus d'icône dans la barre des panneaux,
+  plus de case dans Affichage > Panneaux. `Pane::Brushes` reste dans le code **seulement pour lire les anciennes dispositions** (nom de fichier `pinceaux`) ; `DockLayout::sanitized`
+  l'enlève partout (fenêtre principale, panneaux flottants, fenêtre à part), comme les anciens panneaux Vue, Guides et Timeline.
+- **Un bouton à l'extrême droite de l'aperçu du trait**, dans le panneau Réglages de l'outil (icône « livres », bulle à 1 s : « Liste des pinceaux », sa description, le raccourci
+  de `vue.pinceaux` s'il y en a un ; clic droit : assigner un raccourci). Enfoncé quand la liste est dépliée. Un clic déplie la liste, un autre la replie. L'aperçu du trait perd
+  d'autant de largeur (il garde ses paliers de 24 points). L'état est retenu d'une séance à l'autre (`[panneau_pinceaux] liste_ouverte`, replié d'office ; un ancien fichier se lit).
+- **La liste est dépliée en place, sous l'aperçu** (et non dans une fenêtre qui s'ouvre au clic) : dans un panneau étroit, une fenêtre flottante cache les réglages qu'on
+  veut regarder pendant qu'on choisit, se ferme au moindre clic à côté (et avec elle la saisie d'un nom, ou l'import), et ne se teste pas. Dépliée, elle pousse vers le bas
+  « Peint sur l'aplat », l'aplat du calque et « Plus de réglages » ; elle fait 300 points de haut au plus et défile au-delà (`pinceauxui::LIST_H`).
+- **Tout ce que le panneau offrait y est** : la recherche par nom ; liste ou vignettes ; les dossiers repliables (retenus) ; un clic choisit la brosse (même effet qu'avant : le
+  réglage est pris, un autre outil que le pinceau est remplacé par le pinceau pour la liste des pinceaux, la brosse devient celle que « Enregistrer » remplacera, mot dans la barre
+  d'état) ; clic droit sur une brosse : renommer, dupliquer dans « Mes brosses », remplacer par le réglage courant, supprimer (celles de SHOT ne se renomment, ne se remplacent
+  ni ne se suppriment) ; en bas : importer des brosses, nouvelle brosse (saisie du nom dans la liste), supprimer la brosse choisie. Le bouton « Enregistrer » (disquette) reste dans
+  le résumé, à côté du nom de la brosse. **Il n'y avait pas de glisser-déposer pour ranger les brosses dans l'ancien panneau : il n'y en a pas non plus ; ce n'est pas une
+  régression.**
+- **« Mes brosses » est le premier dossier** de la liste, vide ou non, avant les dossiers de SHOT (Crayons, Encres et feutres, Peinture, Craie et fusain) et les dossiers de
+  fichiers importés (`pinceaux::ranger`). Il s'ouvre d'office. Même chose pour la liste des gommes.
+- **La gomme** a le même bouton (sa liste : « Mes brosses », puis Gommes). Les réglages des **autres outils** (remplissage, texte, sélection, formes, transformer…) n'ont ni bouton
+  ni liste : rien ne change pour eux.
+
+### Anciennes dispositions et raccourcis
+
+- **Une disposition enregistrée qui a encore l'onglet Pinceaux** (disposition d'origine d'avant, espace de travail enregistré, panneau flottant ou dans sa fenêtre) **s'ouvre sans
+  lui** : l'onglet est retiré ; s'il était seul dans sa colonne ou son groupe, la colonne disparaît et ses voisins la remplacent (pas de trou) ; l'onglet actif, si c'était lui, devient
+  le premier du groupe ; une fenêtre flottante qui n'avait que lui disparaît. Aucune montée de version : le retrait se fait à chaque lecture. Rouvrir « Brushes » en code ouvre les
+  Réglages de l'outil.
+- **L'action `vue.pinceaux`** (palette Ctrl+K, et le raccourci qu'on lui avait peut-être donné ; la barre des panneaux n'a plus son icône) **ouvre les Réglages avec la liste
+  dépliée** : les Réglages s'ouvrent ou viennent devant, l'outil devient le pinceau s'il n'avait pas de brosses (sélection, remplissage…), la liste se déplie. Un second appui, quand
+  on la voit, la replie (comme l'ancien panneau, qu'un second appui fermait). Son nom dans la palette : « Liste des pinceaux, dans les réglages (déplier / replier) ».
+- **Les raccourcis des brosses ne changent pas** (taille, `^` et `$`, brosse du décor, brosse par personnage…) : rien d'eux ne passait par le panneau.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Plus d'onglet « Pinceaux » à côté de Couleur, ni dans la barre des panneaux, ni dans Affichage > Panneaux.
+2. Outil Pinceau : l'aperçu du trait, et **tout à droite** un petit bouton « livres » ; la bulle à 1 s donne son nom et sa description. Un clic : la liste se déplie sous l'aperçu ;
+   « Mes brosses » est en tête, avant Crayons. Un autre clic : elle se replie. Quitter et relancer SHOT : elle est dans l'état où on l'a laissée.
+3. Choisir une brosse dans la liste : le nom change au-dessus de l'aperçu, le trait de l'aperçu aussi, et on dessine avec. Une recherche (« gou ») ne laisse que les brosses qui
+   répondent. Le bouton liste / vignettes change l'affichage.
+4. Clic droit sur une de « Mes brosses » : renommer, dupliquer, remplacer, supprimer. Le « + » en bas garde le réglage courant sous un nom, dans « Mes brosses » (la saisie est dans
+   la liste) ; l'icône du dossier avec la flèche importe des brosses.
+5. La gomme : le même bouton, la liste des gommes. Les autres outils (Remplir, Texte, Sélection) : pas de bouton.
+6. Étroit : tirer le bord du panneau Réglages jusqu'à une largeur minimale : l'aperçu rétrécit, le bouton reste à droite, la liste garde sa recherche et ses boutons.
+7. Ouvrir une ancienne disposition (un espace de travail enregistré avant) : pas de trou à la place de Pinceaux. Ctrl+K « Liste des pinceaux » : les Réglages s'ouvrent, liste dépliée.
+
+### Essais ajoutés
+
+`pinceaux_reglages_tests.rs` : le bouton est tout à droite de l'aperçu, à sa hauteur ; replié d'office ; un clic déplie la liste sous l'aperçu (recherche, « Mes brosses », dossiers,
+trois boutons du bas, « Plus de réglages » dessous), un second la replie, et le bouton ne bouge pas ; « Mes brosses » avant les dossiers de SHOT ; choisir une brosse la prend (pinceau
+et gomme, nom dans la barre d'état, brosse de base) ; la recherche, liste ou vignettes, importer, nouvelle brosse (saisie du nom), supprimer sont là, la saisie d'un nom ne reste pas
+cachée quand on replie ; les autres outils n'ont pas le bouton, le pinceau, le crayon et la gomme l'ont ; l'action `vue.pinceaux` ouvre les Réglages, prend le pinceau, déplie la
+liste, la replie au second appui. `dock_tests` : aucune disposition d'origine n'a l'onglet, une disposition enregistrée qui l'avait s'ouvre sans lui (onglet actif, fichier, état
+d'egui_dock), seul dans sa colonne / flottant / dans sa fenêtre : pas de trou. `pinceaux_tests` : « Mes brosses » en tête (pinceaux, gommes, recherche), `liste_ouverte` écrit et
+relu. `barrepanneaux_tests`, `workspace_tests`, `vignettes_camera_tests`, `ajuste_tests` : plus d'icône Pinceaux (onze icônes, trois groupes 3-4-4), plus dans les panneaux d'office.

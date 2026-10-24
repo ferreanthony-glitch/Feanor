@@ -11,12 +11,11 @@ fn panes() -> Vec<Pane> {
 }
 
 #[test]
-fn the_bar_has_the_twelve_side_panels_in_order() {
+fn the_bar_has_the_eleven_side_panels_in_order() {
     assert_eq!(
         panes(),
         vec![
             Pane::ToolOptions,
-            Pane::Brushes,
             Pane::Color,
             Pane::Personnages,
             Pane::Layers,
@@ -31,8 +30,23 @@ fn the_bar_has_the_twelve_side_panels_in_order() {
     );
     // Trois groupes : le dessin, le plan, puis les commentaires, l'historique, les bruitages et les
     // références. (Les suggestions sonores sont dans le menu Labo, sans icône : HORS_BARRE.)
-    assert_eq!(GROUPES.iter().map(|g| g.len()).collect::<Vec<_>>(), vec![4, 4, 4]);
+    assert_eq!(GROUPES.iter().map(|g| g.len()).collect::<Vec<_>>(), vec![3, 4, 4]);
     assert_eq!(pane_de_action("vue.suggestions_sonores"), Some(Pane::SuggestionsSonores));
+}
+
+#[test]
+fn the_brushes_panel_is_gone_from_the_bar_and_from_every_default_set_but_its_action_stays() {
+    // Plus d'icône Pinceaux (2026-10-24) : la liste des brosses est dans les réglages de l'outil. L'action
+    // `vue.pinceaux` reste (palette, raccourci qu'on lui avait donné) : elle déplie cette liste.
+    assert!(!panes().contains(&Pane::Brushes));
+    assert_eq!(pane_de_action("vue.pinceaux"), None, "ce n'est plus un panneau qu'on ouvre");
+    assert!(crate::keymap::action_info("vue.pinceaux").is_some_and(|a| a.implemented));
+    for e in Espace::TOUS {
+        assert!(!panneaux_d_office(e).contains(&Pane::Brushes), "{e:?}");
+        assert!(!icones_de(e, true, &[]).contains(&Pane::Brushes), "{e:?}");
+    }
+    // Il n'est plus dans la liste des panneaux (menu Affichage).
+    assert!(!Pane::ALL.contains(&Pane::Brushes));
 }
 
 #[test]
@@ -70,9 +84,9 @@ fn the_guides_panel_is_gone_from_the_bar_and_from_every_default_set() {
 fn the_exposure_sheet_icon_is_only_there_in_animation() {
     use crate::barrepanneaux::icones;
     let panes = |animation: bool| icones(animation).into_iter().flatten().map(|e| e.pane).collect::<Vec<_>>();
-    assert_eq!(panes(true), self::panes(), "en animation : les douze icônes");
+    assert_eq!(panes(true), self::panes(), "en animation : les onze icônes");
     let storyboard = panes(false);
-    assert_eq!(storyboard.len(), 11);
+    assert_eq!(storyboard.len(), 10);
     assert!(!storyboard.contains(&Pane::XSheet), "pas de feuille d'exposition en storyboard");
     assert!(storyboard.contains(&Pane::Sheet) && storyboard.contains(&Pane::History) && storyboard.contains(&Pane::Comments));
     // Les trois groupes restent là (aucun ne s'est vidé).
@@ -90,22 +104,22 @@ fn icones_de(espace: Espace, animation: bool, ouverts: &[Pane]) -> Vec<Pane> {
 #[test]
 fn each_workspace_shows_only_the_panels_useful_for_its_work() {
     // Vignettes : « la plus épurée possible, rien de distraction, que du dessin et des références ».
-    // (Et le panneau « Vignettes », sens de lecture et textes, qui a son icône dans cet espace seulement, en tête.)
-    assert_eq!(icones_de(Espace::Vignettes, false, &[]), vec![Pane::Vignettes, Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::References]);
+    // (Et le panneau « Planche », sens de lecture et textes, qui a son icône dans cet espace seulement, en tête.)
+    assert_eq!(icones_de(Espace::Vignettes, false, &[]), vec![Pane::Vignettes, Pane::ToolOptions, Pane::Color, Pane::References]);
     // Montage : la fiche du plan et ce qui sert à la relecture et au son.
     assert_eq!(icones_de(Espace::Montage, false, &[]), vec![Pane::Sheet, Pane::Comments, Pane::History, Pane::Bruitages]);
     // Storyboard : le dessin, les calques, la fiche ; pas de feuille d'exposition, de commentaires ni d'historique.
     let storyboard = icones_de(Espace::Storyboard, false, &[]);
-    assert_eq!(storyboard.len(), 8, "{storyboard:?}");
+    assert_eq!(storyboard.len(), 7, "{storyboard:?}");
     for absent in [Pane::XSheet, Pane::Comments, Pane::History, Pane::Bruitages] {
         assert!(!storyboard.contains(&absent), "{absent:?} n'est pas dans la barre du storyboard");
     }
     // Animation : la feuille d'exposition en plus, sans les personnages.
     let animation = icones_de(Espace::Animation, true, &[]);
     assert!(animation.contains(&Pane::XSheet) && !animation.contains(&Pane::Personnages), "{animation:?}");
-    // Chaque espace a moins d'icônes que les douze du catalogue.
+    // Chaque espace a moins d'icônes que les onze du catalogue.
     for e in Espace::TOUS {
-        assert!(icones_de(e, true, &[]).len() < 12, "{e:?}");
+        assert!(icones_de(e, true, &[]).len() < 11, "{e:?}");
     }
     // Rien n'est perdu : chaque panneau de la barre est d'office dans au moins un espace, et garde son action
     // (palette Ctrl+K) et sa case dans le menu Affichage.

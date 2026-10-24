@@ -283,6 +283,8 @@ mod brushui;
 mod pinceaux;
 #[cfg(test)]
 mod pinceaux_tests;
+#[cfg(test)]
+mod pinceaux_reglages_tests;
 mod pinceauxui;
 mod dynui;
 pub mod banc;

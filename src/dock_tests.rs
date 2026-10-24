@@ -169,25 +169,92 @@ fn layouts_from_before_9b_put_the_sheet_with_the_settings() {
 }
 
 #[test]
-fn the_brushes_panel_sits_with_the_colour() {
-    // Disposition par défaut : couleur et pinceaux en onglets (11c).
+fn there_is_no_brushes_tab_in_the_default_layouts_and_the_colour_keeps_its_tabs() {
+    // Plus de panneau Pinceaux (2026-10-24) : la couleur et les personnages restent en onglets, et le panneau
+    // n'est dans aucune disposition d'origine.
     let d = DockLayout::from_legacy(&Layout::default());
-    assert!(format!("{:?}", d.principal).contains("Tabs { panneaux: [Color, Brushes, Personnages]"), "{:?}", d.principal);
-    // Disposition enregistrée avant 11c (sans le panneau) : il arrive à côté de la couleur.
-    let mut v2 = d.clone();
-    v2.close(Pane::Brushes);
+    assert!(format!("{:?}", d.principal).contains("Tabs { panneaux: [Color, Personnages]"), "{:?}", d.principal);
+    for l in [d, DockLayout::pour_les_vignettes(), DockLayout::pour_le_montage(290.0)] {
+        assert_eq!(count(&l, Pane::Brushes), 0, "{:?}", l.principal);
+    }
+    for e in crate::workspace::Espace::TOUS {
+        assert_eq!(count(&e.defaut().dock_layout(), Pane::Brushes), 0, "{e:?}");
+    }
+    assert!(!Pane::ALL.contains(&Pane::Brushes));
+    // Rouvrir « le panneau » ouvre les réglages de l'outil, où la liste des brosses est maintenant.
+    let mut l = DockLayout::from_legacy(&Layout::default());
+    l.close(Pane::ToolOptions);
+    l.open(Pane::Brushes);
+    assert_eq!((count(&l, Pane::Brushes), count(&l, Pane::ToolOptions)), (0, 1));
+    // Les personnages se rouvrent comme avant, avec la couleur.
+    let mut l = DockLayout::from_legacy(&Layout::default());
+    l.close(Pane::Personnages);
+    l.open(Pane::Personnages);
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Color, Personnages]"), "{:?}", l.principal);
+}
+
+#[test]
+fn a_saved_layout_that_still_has_the_brushes_tab_loads_without_it() {
+    // Une disposition d'avant : couleur, pinceaux, personnages en onglets, le panneau des pinceaux actif.
+    let mut old = DockLayout::from_legacy(&Layout::default());
+    fn with_brushes(n: &mut DockNode) {
+        match n {
+            DockNode::Tabs { panneaux, actif } => {
+                if let Some(i) = panneaux.iter().position(|p| *p == Pane::Color) {
+                    panneaux.insert(i + 1, Pane::Brushes);
+                    *actif = i + 1;
+                }
+            }
+            DockNode::Row { gauche: a, droite: b, .. } | DockNode::Column { haut: a, bas: b, .. } => {
+                with_brushes(a);
+                with_brushes(b);
+            }
+        }
+    }
+    with_brushes(&mut old.principal);
+    assert_eq!(count(&old, Pane::Brushes), 1);
+    // Le fichier garde le nom d'avant (« pinceaux ») : il se lit encore.
+    let text = serde_json::to_string(&old).expect("écrite");
+    assert!(text.contains("\"pinceaux\""), "{text}");
+    let back: DockLayout = serde_json::from_str(&text).expect("lue");
+    assert_eq!(back, old);
+    // Chargée comme les espaces de travail la chargent : l'onglet part, la couleur et les personnages restent, et
+    // l'onglet actif est un onglet qui existe.
+    let l = Layout { panneaux: Some(back), ..Layout::default() }.dock_layout();
+    assert_eq!(count(&l, Pane::Brushes), 0);
+    assert!(format!("{:?}", l.principal).contains("Tabs { panneaux: [Color, Personnages], actif: 0 }"), "{:?}", l.principal);
+    // Dans l'état d'egui_dock non plus.
+    let state = dock::to_state(&l);
+    assert!(state.find_tab(&Pane::Brushes).is_none());
+    assert!(state.find_tab(&Pane::Color).is_some() && state.find_tab(&Pane::ToolOptions).is_some());
+    // Une version d'avant 11c (3) ou d'après : pas de panneau rouvert « à côté de la couleur ».
+    let mut v2 = DockLayout::from_legacy(&Layout::default());
     v2.version = 2;
-    let l = Layout { panneaux: Some(v2), ..Layout::default() };
-    let up = l.dock_layout();
-    assert_eq!(up.version, dock::LAYOUT_VERSION);
-    assert_eq!(count(&up, Pane::Brushes), 1);
-    assert!(format!("{:?}", up.principal).contains("Tabs { panneaux: [Color, Brushes, Personnages]"), "{:?}", up.principal);
-    // Fermé puis rouvert : il revient avec la couleur ; fermé par l'utilisateur, il le reste.
-    let mut closed = up.clone();
-    closed.close(Pane::Brushes);
-    assert!(!closed.clone().upgraded().contains(Pane::Brushes), "fermé par l'utilisateur : il le reste");
-    closed.open(Pane::Brushes);
-    assert!(format!("{:?}", closed.principal).contains("Tabs { panneaux: [Color, Brushes, Personnages]"));
+    assert_eq!(count(&v2.upgraded(), Pane::Brushes), 0);
+}
+
+#[test]
+fn the_brushes_tab_leaves_no_hole_when_it_was_alone_floating_or_in_its_own_window() {
+    let canvas = tabs(&[Pane::Canvas]);
+    // Seul dans sa colonne : la colonne disparaît, les deux autres parties se rejoignent.
+    let col = |a: DockNode, b: DockNode| DockNode::Column { part: 0.5, haut: Box::new(a), bas: Box::new(b) };
+    let row = |a: DockNode, b: DockNode| DockNode::Row { part: 0.7, gauche: Box::new(a), droite: Box::new(b) };
+    let old = DockLayout {
+        version: dock::LAYOUT_VERSION,
+        principal: row(canvas.clone(), col(tabs(&[Pane::ToolOptions]), col(tabs(&[Pane::Brushes]), tabs(&[Pane::Color])))),
+        fenetres: vec![
+            FloatingPanel { panneaux: tabs(&[Pane::Brushes]), x: 10.0, y: 10.0, largeur: 300.0, hauteur: 300.0 },
+            FloatingPanel { panneaux: tabs(&[Pane::Brushes, Pane::Layers]), x: 40.0, y: 40.0, largeur: 300.0, hauteur: 300.0 },
+        ],
+        detachees: vec![dock::DetachedPanel { panneau: Pane::Brushes, x: 0.0, y: 0.0, largeur: 0.0, hauteur: 0.0 }],
+    };
+    let l = old.sanitized();
+    assert_eq!(count(&l, Pane::Brushes), 0);
+    assert_eq!(l.principal, row(canvas, col(tabs(&[Pane::ToolOptions]), tabs(&[Pane::Color]))), "pas de trou : {:?}", l.principal);
+    // La fenêtre flottante qui n'avait que lui disparaît ; l'autre garde ses calques.
+    assert_eq!(l.fenetres.len(), 1);
+    assert_eq!(l.fenetres[0].panneaux, tabs(&[Pane::Layers]));
+    assert!(l.detachees.is_empty());
 }
 
 #[test]

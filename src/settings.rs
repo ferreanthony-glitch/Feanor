@@ -129,8 +129,8 @@ pub struct Settings {
     /// plancher de taille, traits fins, bord, seuil d'appui ; commun à tous les pinceaux.
     #[serde(default, rename = "toucher")]
     pub toucher: crate::brush::Toucher,
-    /// Panneau Pinceaux (2026-10-18) : l'onglet, liste ou vignettes, la catégorie des réglages et les
-    /// dossiers ouverts ou repliés.
+    /// La liste des pinceaux (l'ancien panneau Pinceaux, 2026-10-18, depuis le 2026-10-24 dans les réglages de
+    /// l'outil) : dépliée ou non, liste ou vignettes, la catégorie des réglages et les dossiers ouverts ou repliés.
     #[serde(default, rename = "panneau_pinceaux")]
     pub brushes_panel: crate::pinceaux::Panneau,
     /// Fenêtre « Nouveau projet » (2026-10-18) : dernières valeurs, dernier dossier et préréglages

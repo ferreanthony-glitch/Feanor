@@ -342,7 +342,8 @@ pub struct App {
     /// Toucher du stylet (sensation des brosses) : la copie de travail du réglage, enregistrée
     /// dans `update` quand elle change (hors glissé), comme les options du pinceau.
     pub(crate) toucher: crate::brush::Toucher,
-    /// État du panneau Pinceaux retenu d'une séance à l'autre (onglet, liste ou vignettes, dossiers).
+    /// État de la liste des pinceaux (dans les réglages de l'outil) retenu d'une séance à l'autre (dépliée, liste ou
+    /// vignettes, dossiers).
     pub(crate) pinceaux: crate::pinceaux::Panneau,
     pub(crate) color: [u8; 3],
     /// La couleur en teinte, saturation, valeur (panneau Couleur, 6b).

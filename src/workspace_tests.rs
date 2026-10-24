@@ -222,10 +222,10 @@ fn resetting_the_layout_resets_only_the_current_space() {
     app.toggle_pane(Pane::Sheet);
     app.set_mode(Mode::Animation);
     app.toggle_pane(Pane::Color);
-    app.toggle_pane(Pane::Brushes);
-    assert!(!has(&app, Pane::Color) && !has(&app, Pane::Brushes));
+    app.toggle_pane(Pane::ToolOptions);
+    assert!(!has(&app, Pane::Color) && !has(&app, Pane::ToolOptions));
     app.run_action("espace.retablir");
-    assert!(has(&app, Pane::Color) && has(&app, Pane::Brushes), "l'animation retrouve sa disposition d'origine");
+    assert!(has(&app, Pane::Color) && has(&app, Pane::ToolOptions), "l'animation retrouve sa disposition d'origine");
     assert_eq!(app.layout.montage_height, Espace::Animation.defaut().montage_height);
     assert_eq!(app.mode, Mode::Animation, "le mode ne change pas");
     // Le storyboard, lui, n'a pas bougé : sa fiche est toujours fermée.

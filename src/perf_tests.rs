@@ -945,7 +945,7 @@ fn perf_vector_drawing() {
     }
 }
 
-/// Les panneaux : Calques (60 calques), Pinceaux (400 pinceaux), Couleur, Réglages.
+/// Les panneaux : Calques (60 calques), Couleur, Réglages (avec la liste de 400 pinceaux dépliée).
 #[test]
 #[ignore]
 fn perf_panels() {
@@ -968,7 +968,10 @@ fn perf_panels() {
     }
     println!("PERF pinceaux : {} réglages dans la bibliothèque", b.app.brushes.presets.len());
     let zone = Rect::from_min_size(pos2(1500.0, 300.0), vec2(300.0, 400.0));
-    for (pane, nom) in [(Pane::Layers, "panneau Calques (60 calques)"), (Pane::Brushes, "panneau Pinceaux (480 réglages)"), (Pane::Color, "panneau Couleur"), (Pane::ToolOptions, "panneau Réglages"), (Pane::Effects, "panneau Effets"), (Pane::History, "panneau Historique"), (Pane::Comments, "panneau Commentaires (300 commentaires)")] {
+    // La liste des brosses est dans les réglages de l'outil (le pinceau) : dépliée, avec ses 480 réglages.
+    b.app.set_tool(crate::app::Tool::Brush);
+    b.app.pinceaux.liste_ouverte = true;
+    for (pane, nom) in [(Pane::Layers, "panneau Calques (60 calques)"), (Pane::Color, "panneau Couleur"), (Pane::ToolOptions, "panneau Réglages (liste de 480 pinceaux dépliée)"), (Pane::Effects, "panneau Effets"), (Pane::History, "panneau Historique"), (Pane::Comments, "panneau Commentaires (300 commentaires)")] {
         b.app.show_pane(pane);
         let (images, ms) = jusqu_au_repos(&mut b, 200);
         println!("PERF {nom} : {images} images, {ms:.0} ms avant le repos");

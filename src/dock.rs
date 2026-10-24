@@ -23,7 +23,9 @@ pub enum Pane {
     Tools,
     #[serde(rename = "couleur")]
     Color,
-    /// Réglages de pinceau, chacun avec l'aperçu de son trait (11c), en onglet avec la couleur.
+    /// Ancien panneau Pinceaux (11c), en onglet avec la couleur : sa liste de brosses est depuis le 2026-10-24 dans le
+    /// panneau Réglages de l'outil, derrière le bouton à droite de l'aperçu du trait (Anthony : « un seul panneau »).
+    /// Gardé pour lire les dispositions enregistrées ; `sanitized` l'enlève, sans laisser de trou.
     #[serde(rename = "pinceaux")]
     Brushes,
     /// Réglages de l'outil courant.
@@ -86,7 +88,7 @@ pub enum Pane {
     #[serde(rename = "references")]
     References,
     /// Les personnages du projet et les couleurs neutres (`personnagesui.rs`) : leurs couleurs de trait et de
-    /// fond, leur ordre. En onglet avec la couleur et les pinceaux dans la disposition par défaut.
+    /// fond, leur ordre. En onglet avec la couleur dans la disposition par défaut.
     #[serde(rename = "personnages")]
     Personnages,
     /// Le panneau « Vignettes » (`vignettespanneau.rs`, 2026-10-24) : le sens de lecture de la planche (en lignes, ou à la japonaise) et
@@ -111,11 +113,10 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 17] = [
+    pub const ALL: [Pane; 16] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
-        Pane::Brushes,
         Pane::ToolOptions,
         Pane::Sheet,
         Pane::Layers,
@@ -327,11 +328,12 @@ fn left_column(only: &[Pane]) -> Option<DockNode> {
 /// le 2026-10-17, et les guides dans le menu de la règle depuis le 2026-10-21.
 const SETTINGS_TABS: [Pane; 2] = [Pane::ToolOptions, Pane::Sheet];
 
-/// Les onglets du bas de la colonne : couleur et pinceaux (11c), et les personnages (brosse par personnage).
-const COLOR_TABS: [Pane; 3] = [Pane::Color, Pane::Brushes, Pane::Personnages];
+/// Les onglets du bas de la colonne : la couleur, et les personnages (brosse par personnage). Les pinceaux n'y sont
+/// plus : leur liste est dans les réglages de l'outil.
+const COLOR_TABS: [Pane; 2] = [Pane::Color, Pane::Personnages];
 
-/// Remet `pane` parmi les onglets `tabs` de sa famille : à la fin pour les réglages ; pour la couleur, les pinceaux et les
-/// personnages, à leur rang (couleur, pinceaux, personnages), quels que soient ceux qui sont restés.
+/// Remet `pane` parmi les onglets `tabs` de sa famille : à la fin pour les réglages ; pour la couleur et les
+/// personnages, à leur rang (couleur, personnages), quels que soient ceux qui sont restés.
 fn place_in_family(tabs: &mut Vec<Pane>, pane: Pane, family: &[Pane]) {
     if family != COLOR_TABS {
         tabs.push(pane);
@@ -535,7 +537,7 @@ impl DockLayout {
         // À droite du dessin : les calques, puis les réglages (avec la fiche) et la couleur.
         let mut settings = Vec::new();
         if l.tools {
-            settings.extend([Pane::ToolOptions, Pane::Color, Pane::Brushes, Pane::Personnages]);
+            settings.extend([Pane::ToolOptions, Pane::Color, Pane::Personnages]);
             if l.sheet {
                 settings.push(Pane::Sheet);
             }
@@ -581,13 +583,13 @@ impl DockLayout {
     }
 
     /// La disposition d'origine de l'espace Vignettes (le premier onglet, en haut à droite) : la planche en grand,
-    /// et à sa droite une seule colonne, les réglages de l'outil (le pinceau) au-dessus, la couleur et les pinceaux
-    /// en onglets dessous. Ni bande (montage, timeline), ni calques, ni effets, ni fiche du plan, ni guides :
+    /// et à sa droite une seule colonne, les réglages de l'outil (le pinceau, avec sa liste de brosses) au-dessus, la
+    /// couleur dessous. Ni bande (montage, timeline), ni calques, ni effets, ni fiche du plan, ni guides :
     /// « la partie Vignettes doit être la plus épurée possible, rien de distraction ». Les Références restent à la
     /// demande (un clic dans la barre des panneaux) ; les personnages sont dans leur barre au-dessus de la planche.
     pub fn pour_les_vignettes() -> DockLayout {
-        // Le panneau « Vignettes » (sens de lecture, textes) tout en haut : petit, il prend la hauteur de son contenu (`ajuste.rs`).
-        let reglages = column(0.5, tabs(vec![Pane::ToolOptions]), tabs(vec![Pane::Color, Pane::Brushes]));
+        // Le panneau « Planche » (sens de lecture, textes) tout en haut : petit, il prend la hauteur de son contenu (`ajuste.rs`).
+        let reglages = column(0.5, tabs(vec![Pane::ToolOptions]), tabs(vec![Pane::Color]));
         let cote = column(0.2, tabs(vec![Pane::Vignettes]), reglages);
         DockLayout { principal: row(1.0 - TOOLS_WIDTH / REF_WIDTH, tabs(vec![Pane::Canvas]), cote), ..DockLayout::empty() }.sanitized()
     }
@@ -605,9 +607,8 @@ impl DockLayout {
             self.close(Pane::Sheet);
             self.open(Pane::Sheet);
         }
-        if self.version < 3 && !self.contains(Pane::Brushes) {
-            self.open(Pane::Brushes);
-        }
+        // (Avant 11c, le panneau Pinceaux arrivait à côté de la couleur : il n'existe plus, ses brosses sont dans les
+        // réglages de l'outil, et `sanitized` retire l'onglet des dispositions qui l'ont.)
         // (Les versions 4 et 5 avaient une timeline à part, que `sanitized` enlève : si elle
         // était seule en bas, le montage revient à sa place.)
         if (4..6).contains(&self.version) && self.contains(Pane::Timeline) && !self.contains(Pane::Montage) {
@@ -728,8 +729,9 @@ impl DockLayout {
     /// bornées, panneaux flottants vides retirés.
     pub fn sanitized(self) -> DockLayout {
         // L'ancienne timeline à part (versions 4 et 5), l'ancien panneau Vue (ses outils sont sous le
-        // dessin) et l'ancien panneau Guides (dans le menu de la règle) sont enlevés partout.
-        let mut seen = vec![Pane::Timeline, Pane::View, Pane::Guides];
+        // dessin), l'ancien panneau Guides (dans le menu de la règle) et l'ancien panneau Pinceaux (sa liste est dans
+        // les réglages de l'outil) sont enlevés partout.
+        let mut seen = vec![Pane::Timeline, Pane::View, Pane::Guides, Pane::Brushes];
         let mut principal = self.principal.sanitized(&mut seen);
         let mut fenetres = Vec::new();
         for mut w in self.fenetres {
@@ -813,6 +815,10 @@ impl DockLayout {
         // L'ancienne timeline à part n'existe plus : c'est la bande.
         if pane == Pane::Timeline {
             return self.open(Pane::Montage);
+        }
+        // L'ancien panneau Pinceaux non plus : ses brosses sont dans les réglages de l'outil.
+        if pane == Pane::Brushes {
+            return self.open(Pane::ToolOptions);
         }
         // Les effets : sous les calques (dans la fenêtre principale), sinon dans la colonne des
         // calques.

@@ -1,4 +1,4 @@
-//! Tests du panneau Pinceaux (2026-10-18) : le rangement des réglages en dossiers, la recherche,
+//! Tests de la liste des pinceaux (ancien panneau Pinceaux, 2026-10-18) : le rangement des réglages en dossiers, la recherche,
 //! l'état retenu d'une séance à l'autre, la migration des réglages de l'application, les
 //! catégories qu'on allume et qu'on éteint.
 
@@ -31,8 +31,29 @@ fn builtin_brushes_go_into_their_family_folder() {
     assert!(dossiers.iter().any(|d| d.nom == MINE));
     // Les gommes ont leur dossier.
     let gommes = ranger(&lib.presets, Target::Eraser, "");
-    assert_eq!(gommes.iter().map(|d| d.nom.as_str()).collect::<Vec<_>>(), [GOMMES, MINE]);
-    assert_eq!(noms(&lib, &gommes[0]), ["Gomme", "Gomme à grain"]);
+    assert_eq!(gommes.iter().map(|d| d.nom.as_str()).collect::<Vec<_>>(), [MINE, GOMMES]);
+    assert_eq!(noms(&lib, &gommes[1]), ["Gomme", "Gomme à grain"]);
+}
+
+/// « Mes brosses » est le premier dossier de la liste, avant celles de SHOT et les dossiers importés (Anthony,
+/// 2026-10-24), qu'il soit vide ou non, pour les pinceaux comme pour les gommes ; une recherche ne le montre que
+/// s'il répond.
+#[test]
+fn my_brushes_come_first() {
+    let mut lib = BrushLibrary::builtin();
+    lib.presets.push(preset("Importé", Target::Brush, "pack.abr"));
+    let premier = |lib: &BrushLibrary, cible, q: &str| ranger(&lib.presets, cible, q).first().map(|d| d.nom.clone());
+    assert_eq!(premier(&lib, Target::Brush, ""), Some(MINE.to_string()), "vide, il est quand même en tête");
+    assert_eq!(premier(&lib, Target::Eraser, ""), Some(MINE.to_string()));
+    lib.save_mine("Ma craie", Target::Brush, BrushSettings::chalk());
+    let d = ranger(&lib.presets, Target::Brush, "");
+    assert_eq!(d[0].nom, MINE);
+    assert_eq!(noms(&lib, &d[0]), ["Ma craie"]);
+    assert_eq!(d.iter().map(|d| d.nom.as_str()).collect::<Vec<_>>(), [MINE, CRAYONS, ENCRES, PEINTURE, CRAIE, "pack.abr"]);
+    // Il s'ouvre d'office (on y retrouve ce qu'on a gardé), et une recherche qui ne l'atteint pas le cache.
+    assert!(Panneau::default().ouvert(MINE));
+    assert_eq!(premier(&lib, Target::Brush, "fusain"), Some(CRAIE.to_string()));
+    assert_eq!(premier(&lib, Target::Brush, "ma craie"), Some(MINE.to_string()));
 }
 
 /// Chaque réglage est dans un seul dossier : la somme des dossiers est la liste de l'outil.
@@ -48,9 +69,9 @@ fn every_preset_is_in_exactly_one_folder() {
     tous.sort_unstable();
     let voulus: Vec<usize> = lib.presets.iter().enumerate().filter(|(_, p)| p.target == Target::Brush).map(|(i, _)| i).collect();
     assert_eq!(tous, voulus);
-    // Mes brosses, puis un dossier par fichier, dans l'ordre où ils arrivent.
+    // Mes brosses d'abord, puis celles de SHOT, puis un dossier par fichier, dans l'ordre où ils arrivent.
     let ordre: Vec<&str> = dossiers.iter().map(|d| d.nom.as_str()).collect();
-    assert_eq!(ordre, [CRAYONS, ENCRES, PEINTURE, CRAIE, MINE, "raccourcis outils.tvpx", "pack.abr"]);
+    assert_eq!(ordre, [MINE, CRAYONS, ENCRES, PEINTURE, CRAIE, "raccourcis outils.tvpx", "pack.abr"]);
     let importe = dossiers.iter().find(|d| d.nom == "raccourcis outils.tvpx").unwrap();
     assert!(importe.importe);
     assert_eq!(importe.rangs.len(), 2);
@@ -113,6 +134,7 @@ fn folder_state_defaults_and_remembers_only_changes() {
 fn panel_state_round_trips_and_old_settings_migrate() {
     let mut s = Settings::default();
     s.brushes_panel.liste = false;
+    s.brushes_panel.liste_ouverte = true;
     s.brushes_panel.onglet = Onglet::Reglages;
     s.brushes_panel.categorie = Categorie::Grain;
     s.brushes_panel.regler("raccourcis outils.tvpx", true);
@@ -125,6 +147,7 @@ fn panel_state_round_trips_and_old_settings_migrate() {
     let old: Settings = toml::from_str("copie_secours_minutes = 7\n").expect("ancien fichier");
     assert_eq!(old.autosave_minutes, 7);
     assert_eq!(old.brushes_panel, Panneau::default());
+    assert!(!old.brushes_panel.liste_ouverte, "la liste des pinceaux est repliée d'office");
     // Un fichier partiel, ou avec des valeurs d'une version à venir, ne perd pas les réglages.
     let part: Settings = toml::from_str("copie_secours_minutes = 3\n[panneau_pinceaux]\nliste = false\n").expect("partiel");
     assert!(!part.brushes_panel.liste);
