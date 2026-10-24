@@ -122,7 +122,9 @@ impl App {
             },
             || {},
         );
-        Ok(job.pour_planche(message))
+        // (« Avec les annotations » : les calques d'annotation de la planche — dessinés par `composer` — et ceux des plans, posés par-dessus
+        // chaque vignette — `panel_plan_at_avec`.)
+        Ok(job.pour_planche(message).avec_annotations(opt.annotations))
     }
 
     /// Les plans de l'étendue choisie.
@@ -141,6 +143,7 @@ impl App {
             opt.resolution = e.resolution();
             (opt, e.etendue)
         };
+        let opt = Options { annotations: self.settings.export_annotations, ..opt };
         let plans = self.planche_plans(etendue);
         let ext = opt.sortie.extension();
         let base = self.base_name();
@@ -193,8 +196,9 @@ impl App {
         let n_plans = self.doc.panels.len();
         let choisis = self.planche_plans(Etendue::Choisis).len();
         let (a, b) = self.doc.sequence_run(self.cur_panel.min(n_plans.saturating_sub(1)));
-        // (Les calques cachés n'y sont pas.)
+        // (Les calques d'annotation cachés de la planche n'y sont pas.)
         let annotations = self.doc.annotations.ordre_de_peinture().len();
+        let mut avec_annotations = self.settings.export_annotations;
         let mut e = std::mem::take(&mut self.vignettes.planche);
         egui::Grid::new("planche_grille").num_columns(2).spacing([10.0, 7.0]).show(ui, |ui| {
             ui.label("Plans");
@@ -228,10 +232,14 @@ impl App {
                 bulles::bulle(ui.checkbox(&mut o.notes, "Notes"), "Notes", "Les textes sous les images : une ligne par champ coché dans le panneau Planche, coupée par « … » si elle est trop longue.", "");
                 bulles::bulle(ui.checkbox(&mut o.barres, "Barres de coupe"), "Barres de coupe", "Les barres entre deux vignettes : grises dans un même plan, noires à une coupe.", "");
                 bulles::bulle(ui.checkbox(&mut o.cadres, "Cadres de caméra"), "Cadres de caméra", "Là où la caméra bouge : les cadres A, B, C… en bleu fin, avec leurs lettres, la flèche ou les coins qui les relient.", "");
-                ui.add_enabled_ui(annotations > 0, |ui| {
-                    let t = if annotations > 0 { format!("Annotations ({annotations})") } else { "Annotations (aucune)".into() };
-                    bulles::bulle(ui.checkbox(&mut o.annotations, t), "Annotations", "Les traits du stylo d'annotation, par-dessus la planche. Décochées d'office : elles ne font pas partie du storyboard.", "");
-                });
+                // Une seule case pour la planche et les plans (comme dans la fenêtre d'export du film) : les calques d'annotation de la planche
+                // (par-dessus la planche) et ceux des plans (par-dessus chaque vignette). Décochée d'office, retenue par poste de travail.
+                bulles::bulle(
+                    ui.checkbox(&mut avec_annotations, "Avec les annotations"),
+                    "Avec les annotations",
+                    &format!("Les calques d'annotation de la planche ({annotations} annotation(s) visible(s)) et ceux des plans, par-dessus. Décochée d'office : elles ne font pas partie du storyboard. Retenu d'une séance à l'autre."),
+                    "",
+                );
                 ui.horizontal(|ui| {
                     bulles::bulle(ui.checkbox(&mut o.marie, "Marie-louise"), "Marie-louise", "Un passe-partout couvre tout ce qui est hors de l'intérieur des vignettes : seules les images se voient, les traits qui débordent aussi sont masqués.", "");
                     if o.marie {
@@ -242,6 +250,12 @@ impl App {
             ui.end_row();
         });
         ui.separator();
+        // « Avec les annotations » : retenu par poste de travail.
+        if avec_annotations != self.settings.export_annotations {
+            self.settings.export_annotations = avec_annotations;
+            self.settings_a_ecrire = true;
+        }
+        e.opt.annotations = avec_annotations;
         // Ce qui partirait.
         let mut opt = e.opt.clone();
         opt.resolution = e.resolution();

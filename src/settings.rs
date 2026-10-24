@@ -68,6 +68,11 @@ pub struct Settings {
     /// il reste fermé.
     #[serde(default, rename = "panneau_vignettes_pose", skip_serializing_if = "std::ops::Not::not")]
     pub panneau_vignettes_pose: bool,
+    /// « Avec les annotations » des fenêtres d'export (la planche des Vignettes, les images, la vidéo, le GIF, le storyboard PDF) : coché,
+    /// les calques d'annotation (de la planche et des plans) sont dans l'export. Décoché d'origine ; retenu par poste de travail, d'une séance à
+    /// l'autre (`calqueannot.rs`).
+    #[serde(default, rename = "export_avec_annotations", skip_serializing_if = "std::ops::Not::not")]
+    pub export_annotations: bool,
     #[serde(default, rename = "espace_storyboard")]
     pub storyboard_space: Espace,
     /// Commandes épinglées dans la barre de commandes, la barre du montage et celle de la timeline,
@@ -247,6 +252,7 @@ impl Default for Settings {
             montage_layout: None,
             vignettes_layout: None,
             panneau_vignettes_pose: false,
+            export_annotations: false,
             storyboard_space: Espace::Storyboard,
             bars: ReglageBarres::default(),
             key_filter: Default::default(),

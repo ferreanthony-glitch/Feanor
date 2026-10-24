@@ -20,7 +20,8 @@
 //! - **Peint par-dessus tout, à l'écran** : même un calque d'effet au-dessus de lui ne le couvre pas (`App::build_plan`).
 //! - **Jamais dans le film** : ni dans les exports (vidéo, images, PDF, GIF, montage, envois), ni dans les vignettes de la planche et de la
 //!   timeline, ni dans la lecture de fond (`render::panel_plan_at`, que tous ces chemins empruntent : il saute les calques d'annotation).
-//!   `render::panel_plan_at_avec` les laisse venir quand on le demande expressément (aucun export ne le demande aujourd'hui).
+//!   `render::panel_plan_at_avec` les laisse venir quand on le demande expressément : seule la case « Avec les annotations » des fenêtres
+//!   d'export le demande (décochée d'office, `ExportJob::avec_annotations`).
 //! - **Pas de clé de case** : une case de plus dans le plan ne copie pas ses traits (`cases.rs`), ce sont des notes sur le plan, pas un dessin
 //!   de la case.
 //! - **Enregistré** avec le calque (`annotation` dans le manifeste, sans changer `VERSION`) ; une version d'avant l'ouvre comme un calque

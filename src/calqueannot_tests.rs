@@ -10,7 +10,7 @@ use crate::vignettes_tests::{appui, ouvert, quatre_plans};
 
 // ------------------------------------------------------------------------------------ dans un plan
 
-fn banc_dessin() -> Banc {
+pub(crate) fn banc_dessin() -> Banc {
     let mut b = banc_taille(Document::new(400, 300, 24), false, 1600, 900);
     b.app.tool = Tool::Brush;
     b.chauffer(6);
@@ -19,7 +19,7 @@ fn banc_dessin() -> Banc {
 }
 
 /// Un trait de gauche à droite au milieu du dessin.
-fn trait_au_milieu(b: &mut Banc, dy: f32) {
+pub(crate) fn trait_au_milieu(b: &mut Banc, dy: f32) {
     let c = b.app.canvas_rect.center() + vec2(0.0, dy);
     let (a, z) = (c - vec2(60.0, 0.0), c + vec2(60.0, 10.0));
     b.image(vec![Event::PointerMoved(a)], 1.0 / 60.0);

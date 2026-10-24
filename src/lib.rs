@@ -275,6 +275,8 @@ mod calqueannot;
 #[cfg(test)]
 mod annotations_calques_tests;
 #[cfg(test)]
+mod annotations_retouches_tests;
+#[cfg(test)]
 mod calqueannot_tests;
 mod deposer;
 mod planche;

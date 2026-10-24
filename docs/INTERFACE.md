@@ -4277,8 +4277,8 @@ dans la vue Dessin un calque d'annotation du plan courant). Ils ne se transforme
 - **Reconnaissable** : l'icône du feutre et le rouge-rose dans le panneau Calques (la bande, l'icône de la ligne), dans la timeline (à la place de la lettre V) et dans le menu du « + ».
 - **Peint par-dessus tout à l'écran** (`App::build_plan`) : même tout au fond de la pile, même sous un calque d'effet.
 - **Jamais dans le film** : ni dans les exports (vidéo, images, PDF, GIF, montage, envois, export vers Storyboard Pro), ni dans les vignettes de la planche et de la timeline, ni dans la lecture de fond. Tout cela passe par
-  `render::panel_plan_at`, qui saute les calques d'annotation ; `render::panel_plan_at_avec(.., true)` les pose par-dessus tout quand on le demande expressément. **Aucun export ne le demande aujourd'hui** (pas de case
-  « inclure les calques d'annotation » : à décider avec toi).
+  `render::panel_plan_at`, qui saute les calques d'annotation ; `render::panel_plan_at_avec(.., true)` les pose par-dessus tout quand on le demande expressément. **Seule la case « Avec les annotations » des
+  fenêtres d'export le demande** (voir « Suites » plus bas) : décochée d'office, jamais dans le film sinon.
 - **Pas de clé de case** : une case de plus dans un plan (`cases.rs`) ne copie pas ses traits. **Fusionner** un calque d'annotation et un calque ordinaire est refusé (ses notes n'entreraient plus dans le dessin).
 - **Sur la planche des Vignettes** les cases ne montrent pas ces calques : si le calque courant en est un quand on passe à la planche, le calque courant passe au plus haut calque qui se dessine (on ne dessine pas dans une case
   sans le voir).
@@ -4295,6 +4295,33 @@ dans la vue Dessin un calque d'annotation du plan courant). Ils ne se transforme
 6. Vue Dessin : « + » > **Calque d'annotation** : il se pose tout en haut, rouge-rose, avec un feutre. Dessine dessus ; cache-le (œil). Exporte un plan (image, vidéo) : **aucun** trait du calque d'annotation.
    Les vignettes de la planche et de la timeline ne le montrent pas non plus.
 7. Les trois thèmes : le rouge-rose du calque d'annotation reste lisible.
+
+### Suites : exports « Avec les annotations », Suppr, glisser les calques (2026-10-24, branche `planche-retouches`)
+
+Trois suites que tu as approuvées. Fichiers : `export.rs` / `exportrender.rs` / `exportui.rs` / `plancheui.rs` / `settings.rs` (la case), `annotationsui.rs` / `annotations.rs` / `app.rs` (Suppr, le rangement),
+`vignettespanneau.rs` (le glissé). Essais : `annotations_retouches_tests.rs` (6).
+
+**(a) La case « Avec les annotations ».** Dans la fenêtre d'**export du film** (images PNG, vidéo MP4 / ProRes, GIF, storyboard PDF ; pas pour le son seul) et dans celle de la **planche des vignettes** (PNG, JPEG, PDF).
+**Décochée d'office** ; **retenue par poste de travail**, d'une séance à l'autre, dès qu'on la coche (`Settings::export_annotations`, clé `export_avec_annotations` de `reglages.toml`, absente tant qu'elle est décochée ; un
+seul choix pour les deux fenêtres). Cochée : l'export prend **les calques d'annotation des plans** (par-dessus tout, `render::panel_plan_at_avec(.., true)` : `ExportJob::avec_annotations` → `Rendu::avec_annotations`) ;
+pour la planche, **aussi ceux de la planche** (les traits d'annotation par-dessus la planche, comme avant la case « Annotations (n) » qu'elle remplace : plus de case propre à la planche). L'image courante exportée
+(`fichier.exporter_image_courante`) suit le même choix (`App::build_plan_avec`). **Pas dans cette suite** : l'export du color script, la page HTML du storyboard, l'export vers Storyboard Pro et celui du montage éditorial
+(ils ne prennent toujours aucune annotation) ; à dire si tu les veux.
+
+**(b) Suppr** efface les annotations choisies au lasso d'annotation : **une seule étape d'annulation** (« Supprimer des annotations »), le lasso reste pris, rien n'est choisi ensuite ; Ctrl+Z les rend toutes d'un coup.
+Rien de choisi : Suppr ne touche pas aux annotations (et ne prend aucune étape). Les notes libres choisies et les plans gardent leur Suppr (`edition.supprimer` passe d'abord par la sélection d'annotations).
+
+**(c) Glisser pour ranger les calques** dans la liste « Calques » du panneau Planche : on tient un calque **par son nom** et on le dépose entre deux autres ; un trait d'accent montre où il tombera, le curseur est
+la main qui tient. **Une étape d'annulation par dépôt** (« Ranger un calque d'annotation »), aucune si le calque retombe où il est. **Monter / Descendre du clic droit restent** (une étape chacun) ; un clic simple vise
+toujours le calque, le double-clic le renomme.
+
+À vérifier à l'écran (par Anthony) :
+
+1. Fichier > Exporter (images, film, GIF, PDF) et Fichier > Exporter > Planche des vignettes : la case **Avec les annotations**, décochée la première fois. Coche-la, ferme, rouvre l'autre fenêtre : elle est cochée ; relance SHOT : encore cochée.
+2. Un plan avec un calque d'annotation du plan (vue Dessin, « + » > Calque d'annotation) : export d'images PNG décoché : aucun trait rouge ; coché : le trait est par-dessus l'image. Même chose pour la vidéo et le storyboard PDF.
+3. Planche des vignettes cochée : les annotations de la planche (lasso, stylo) et celles des plans sont dans l'image ; décochée : aucune.
+4. Lasso d'annotation : entoure ou clique deux traits (Maj), appuie sur **Suppr** : ils disparaissent ; Ctrl+Z les rend d'un coup. Suppr sans rien de choisi ne fait rien.
+5. Panneau Planche > Calques (avec deux ou trois calques) : tiens un nom, glisse-le entre deux autres : un trait montre où il tombera, il s'y range ; Ctrl+Z le remet. Glisse-le sur sa propre ligne : rien ne change, aucune étape.
 
 ### Essais ajoutés (partie 45)
 

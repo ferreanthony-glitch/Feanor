@@ -278,6 +278,26 @@ impl Annotations {
         true
     }
 
+    /// Pose un calque à la place `vers` de la liste (0 : tout en bas, le dernier : tout en haut) : un glissé dans la liste du panneau. Vrai
+    /// s'il a bougé.
+    pub fn placer_calque(&mut self, id: u64, vers: usize) -> bool {
+        let Some(k) = self.calques.iter().position(|c| c.id == id) else { return false };
+        let vers = vers.min(self.calques.len() - 1);
+        if vers == k {
+            return false;
+        }
+        let c = self.calques.remove(k);
+        self.calques.insert(vers, c);
+        true
+    }
+
+    /// Retire les traits `ids` (ceux qu'on a choisis au lasso). Rend combien sont partis.
+    pub fn supprimer_traces(&mut self, ids: &[u64]) -> usize {
+        let avant = self.traces.len();
+        self.traces.retain(|t| !ids.contains(&t.id));
+        avant - self.traces.len()
+    }
+
     /// Montre ou cache un calque (un affichage). Vrai si l'état a changé.
     pub fn regler_visible(&mut self, id: u64, visible: bool) -> bool {
         match self.calques.iter_mut().find(|c| c.id == id) {
