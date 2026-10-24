@@ -55,6 +55,17 @@ impl App {
     /// Peint l'étiquette de version du plan `index` sur son bloc `bloc`, s'il a plusieurs versions ; rend sa zone.
     /// `repere` : le bloc porte la pastille « modifié depuis l'envoi » en haut à droite.
     pub(crate) fn peindre_etiquette_version(&self, painter: &egui::Painter, bloc: Rect, index: usize, repere: bool) -> Option<EtiquetteBloc> {
+        self.peindre_etiquette_placee(painter, index, |texte| pilevers::placer_etiquette(bloc, texte, repere))
+    }
+
+    /// L'étiquette de version d'une case de la planche des Vignettes : la même, en haut à droite de l'image `case` (écran). Le survol
+    /// ouvre la même pile (`pile_versions_ui`), un clic sur une de ses cartes passe le plan à cette version (`passer_a_la_version`).
+    pub(crate) fn peindre_etiquette_case(&self, painter: &egui::Painter, case: Rect, index: usize) -> Option<EtiquetteBloc> {
+        self.peindre_etiquette_placee(painter, index, |texte| pilevers::placer_etiquette_coin(case, texte))
+    }
+
+    /// L'étiquette du plan `index` (rien s'il n'a qu'une version), posée là où `place` (largeur du texte « V2 ») la met.
+    fn peindre_etiquette_placee(&self, painter: &egui::Painter, index: usize, place: impl FnOnce(f32) -> pilevers::Etiquette) -> Option<EtiquetteBloc> {
         let plan = self.doc.panels.get(index)?.id;
         if !pilevers::etiquette_visible(self.doc.nombre_de_versions(plan)) {
             return None;
@@ -62,7 +73,7 @@ impl App {
         let ouverte = self.pile_versions.ouverte() == Some(plan);
         let ink = if ouverte { theme::sur_accent() } else { theme::texte_fort() };
         let nom = painter.layout_no_wrap(etiquette(self.doc.numero_de_version(plan)), FontId::proportional(10.5), ink);
-        let place = pilevers::placer_etiquette(bloc, nom.size().x, repere);
+        let place = place(nom.size().x);
         match place {
             Etiquette::Texte(r) => {
                 let fond = if ouverte { theme::accent() } else { theme::fenetre().gamma_multiply(0.94) };
