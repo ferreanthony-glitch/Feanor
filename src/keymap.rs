@@ -486,6 +486,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("perso.suivant", "Personnage suivant (trait et aplat)", true, false),
     act("perso.precedent", "Personnage précédent (trait et aplat)", true, false),
     act("perso.aucun", "Ne plus dessiner en personnage (couleur libre)", true, false),
+    act("perso.classique", "Pastille classique : le pinceau de base, sans personnage ni décor", true, false),
     // Barre des panneaux (`barrepanneaux.rs`) : ouvrir, mettre devant ou fermer un panneau de côté.
     act("vue.reglages", "Panneau Réglages de l'outil (ouvrir / fermer)", true, false),
     act("vue.pinceaux", "Panneau Pinceaux (ouvrir / fermer)", true, false),

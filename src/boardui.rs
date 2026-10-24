@@ -912,8 +912,9 @@ impl App {
     }
 
     /// Au lâcher : la création d'une case vide et le trait ne font qu'une étape d'annulation ; si rien n'a été
-    /// tracé (un simple clic), le plan fait est défait sans laisser de trace.
-    fn finish_creation(&mut self, any_down: bool) {
+    /// tracé (un simple clic), le plan fait est défait sans laisser de trace. (Aussi pour le calque Décor fait par le premier
+    /// trait d'une brosse du décor sur le dessin du Storyboard, `canvas_input`.)
+    pub(crate) fn finish_creation(&mut self, any_down: bool) {
         let Some(c) = self.vignettes.created else { return };
         if any_down || self.stroke.is_some() || self.shape_drag.is_some() {
             return;

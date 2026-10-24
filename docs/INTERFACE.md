@@ -3904,3 +3904,18 @@ d'office reproduit donc l'ancien geste sans touche, et « Centre » l'ancien ges
   courant (le même que sur sa ligne du panneau Calques : ajouter ou retirer l'aplat).
 - **La ligne « Le trait de ce calque bout »** (et son icône de tremblement) n'est plus dans les réglages du pinceau et du crayon : le tremblement du trait se règle dans le
   panneau Effets (et l'action `fx.tremblement`).
+
+### 3. La colonne des pastilles : le décor dans le Storyboard, la pastille « classique »
+
+- **Les brosses du décor** (crayon, feutre gris, aplat ; couleur et tailles de Préférences > Vignettes) sont maintenant aussi dans la colonne du dessin du Storyboard,
+  à la même place que sur la planche (après les couleurs neutres, avant « + »). Elles sont proposées sur tout le côté storyboard (`decor_offert` : `Mode::Storyboard`,
+  hors Espace 3D) et lâchées en passant à l'animation, comme avant. Un trait fait avec elles sur le dessin part dans le **calque Décor du plan courant** : créé au
+  premier trait, tout en bas du plan, tenu sur toutes ses images (le même calque que celui des cases de ce plan dans les Vignettes) ; le calque et ce premier trait ne
+  font qu'une étape d'annulation, un clic qui ne trace rien ne laisse pas de calque vide (`finish_creation`, au lâcher). Le calque courant devient le calque Décor tant
+  que la brosse est choisie ; la lâcher rend le calque d'avant. Ce que cela veut dire dans le Storyboard : un plan qui a plusieurs images (marques d'image, animatique)
+  a un seul décor pour toutes, exactement comme ses cases dans les Vignettes ; pour un décor qui change dans le plan, dessiner sur un calque ordinaire.
+- **La pastille « classique »** remplace « aucun personnage », en tête de colonne (un anneau avec un petit pinceau, allumé quand ni personnage ni brosse du décor ne
+  dessine). Un clic : plus de personnage ni de brosse du décor (la couleur reste libre), l'outil Pinceau au réglage **« Pinceau rond »** — le premier pinceau de SHOT et
+  le réglage de départ de l'outil Pinceau (choix d'Anthony du 2026-10-16, `BrushLibrary::builtin`), pas le Crayon graphite (le départ de l'outil Crayon) ni une
+  brosse texturée. Action `perso.classique` (sans touche d'office) ; `perso.aucun` (le bouton « Couleur libre » du panneau Personnages) lâche seulement, sans toucher
+  au pinceau.

@@ -274,9 +274,9 @@ fn the_pastilles_are_a_slim_column_on_the_right_edge_of_the_drawing() {
     let mut b = banc();
     assert_eq!(b.app.espace, Espace::Storyboard);
     let dessin = b.app.canvas_rect;
-    // Aucun personnage au départ : « aucun », les trois couleurs neutres, « + », l'icône du panneau.
+    // Aucun personnage au départ : « classique », les trois couleurs neutres, les brosses du décor, « + », l'icône du panneau.
     let cases: Vec<Case> = b.app.perso.cases.iter().map(|(_, c)| *c).collect();
-    assert_eq!(cases.first(), Some(&Case::Aucun));
+    assert_eq!(cases.first(), Some(&Case::Classique));
     assert!(cases.contains(&Case::Plus) && cases.contains(&Case::Panneau));
     assert_eq!(cases.iter().filter(|c| matches!(c, Case::Choix(Choix::Neutre(_)))).count(), 3, "{cases:?}");
     // Une colonne : toutes les cases l'une sous l'autre, le long du bord droit, sous le titre du plan.
@@ -332,7 +332,7 @@ fn clicking_a_pastille_chooses_it_and_draws_nothing() {
     clic_case(&mut b, Case::Choix(Choix::Neutre(1)));
     assert_eq!(b.app.perso.actif, None);
     // Un clic entre deux pastilles (sur la colonne) ne dessine pas non plus.
-    let entre = case(&b, Case::Aucun).center() + vec2(-9.0, 0.0);
+    let entre = case(&b, Case::Classique).center() + vec2(-9.0, 0.0);
     appuyer(&mut b, entre, PointerButton::Primary);
     assert!(b.app.stroke.is_none(), "les marges de la colonne ne dessinent pas");
     relacher(&mut b, entre, PointerButton::Primary);
@@ -353,8 +353,8 @@ fn the_plus_adds_a_character_and_the_empty_pastille_lets_go() {
     let p = rangs.iter().position(|c| *c == Case::Choix(Choix::Personnage(id))).expect("la pastille du personnage");
     let n = rangs.iter().position(|c| *c == Case::Choix(Choix::Neutre(0))).unwrap();
     assert!(p < n, "les personnages d'abord : {rangs:?}");
-    // « Aucun personnage » le lâche.
-    clic_case(&mut b, Case::Aucun);
+    // La pastille « classique » le lâche.
+    clic_case(&mut b, Case::Classique);
     assert_eq!(b.app.perso.actif, None);
     // La pastille du personnage le choisit de nouveau.
     clic_case(&mut b, Case::Choix(Choix::Personnage(id)));

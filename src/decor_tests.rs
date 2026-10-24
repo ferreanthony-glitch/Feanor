@@ -400,7 +400,7 @@ fn the_decor_pastilles_sit_after_a_separator_in_the_column_and_choosing_one_take
     assert!(b.app.perso.actif.is_some());
     choisir(&mut b, Genre::Feutre);
     assert_eq!(b.app.perso.actif, None, "le décor remplace le personnage");
-    let aucun = b.app.perso.cases.iter().find(|(_, c)| *c == Case::Aucun).unwrap().0.center();
+    let aucun = b.app.perso.cases.iter().find(|(_, c)| *c == Case::Classique).unwrap().0.center();
     clic(&mut b, aucun);
     assert_eq!(b.app.perso.decor, None);
 }
@@ -804,7 +804,8 @@ fn changing_the_pale_rows_and_columns_from_the_vignettes_tab_changes_the_board_a
 }
 
 #[test]
-fn the_decor_pastilles_exist_only_in_the_vignettes_and_leaving_them_lets_the_decor_go() {
+fn the_decor_pastilles_exist_only_on_the_storyboard_side_and_leaving_it_lets_the_decor_go() {
+    // (Depuis le 2026-10-23, elles sont aussi dans le dessin du Storyboard : `pastilles_storyboard_tests.rs` ; pas en animation.)
     use crate::workspace::Espace;
     let mut b = ouvert(quatre_plans(), 4);
     let brosse0 = b.app.brush;
@@ -813,7 +814,7 @@ fn the_decor_pastilles_exist_only_in_the_vignettes_and_leaving_them_lets_the_dec
     b.app.set_espace(Espace::Animation);
     b.chauffer(4);
     assert!(!b.app.board_shown(), "l'animation n'est pas la planche");
-    assert_eq!(b.app.perso.decor, None, "le décor est lâché en quittant les Vignettes");
+    assert_eq!(b.app.perso.decor, None, "le décor est lâché en passant à l'animation");
     assert_eq!(b.app.brush, brosse0, "et le pinceau d'avant est revenu");
-    assert!(b.app.perso.cases.iter().all(|(_, c)| !matches!(c, Case::Decor(_))), "pas de pastille de décor hors des Vignettes");
+    assert!(b.app.perso.cases.iter().all(|(_, c)| !matches!(c, Case::Decor(_))), "pas de pastille de décor en animation");
 }

@@ -587,6 +587,8 @@ mod vignettes_camera_tests;
 mod pistes;
 #[cfg(test)]
 mod pistes_tests;
+#[cfg(test)]
+mod pastilles_storyboard_tests;
 mod brushfill;
 #[cfg(test)]
 mod brushfill_tests;

@@ -2,10 +2,11 @@
 //! dessin, le panneau « Personnages », la fenêtre « Modifier », et ce que fait le choix d'un personnage.
 //!
 //! - **La colonne** (Anthony, 2026-10-21 : plus de barre au-dessus du dessin) : une colonne ronde et discrète au bord
-//!   droit du dessin (Storyboard) ou de la planche (Vignettes), sous le titre du plan. De haut en bas : « aucun
-//!   personnage » (la couleur libre, un anneau barré, sans texte : la bulle le dit), une pastille ronde par personnage
-//!   (anneau = couleur du trait, dedans = couleur de l'aplat), un petit trait, les couleurs neutres, un « + » et
-//!   l'icône qui ouvre le panneau. Un clic choisit : la couleur du trait devient celle du personnage et l'aplat sous le
+//!   droit du dessin (Storyboard) ou de la planche (Vignettes), sous le titre du plan. De haut en bas : la pastille
+//!   « classique » (2026-10-23 ; avant « aucun personnage » : le pinceau de base, « Pinceau rond », sans personnage ni
+//!   décor ; un anneau barré, sans texte : la bulle le dit), une pastille ronde par personnage (anneau = couleur du
+//!   trait, dedans = couleur de l'aplat), un petit trait, les couleurs neutres, les brosses du décor (Storyboard et
+//!   Vignettes, `decorui.rs`), un « + » et l'icône qui ouvre le panneau. Un clic choisit : la couleur du trait devient celle du personnage et l'aplat sous le
 //!   trait s'allume avec le sien (un nouveau trait gagne son aplat tout de suite, `persofond.rs`) ; un clic sur la
 //!   pastille choisie la lâche. Clic droit : modifier, dupliquer, supprimer, monter, descendre. Elle se montre ou se
 //!   cache par espace de travail (`Layout::character_bar`, `Espace::barre_personnages_par_defaut`). C'est une `Area` au-dessus du
@@ -37,19 +38,21 @@ const CASE_H: f32 = PASTILLE + 6.0;
 pub(crate) const COLONNE_L: f32 = CASE_H + 2.0;
 /// Écart de la colonne au bord droit du dessin.
 const COLONNE_BORD: f32 = 6.0;
+/// Le pinceau que rend la pastille « classique » : le premier pinceau de SHOT, réglage de départ de l'outil Pinceau.
+pub(crate) const PINCEAU_DE_BASE: &str = "Pinceau rond";
 
 /// Une case de la colonne des pastilles.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Case {
-    /// « Aucun personnage » : la couleur libre.
-    Aucun,
+    /// La pastille « classique » : le pinceau de base, sans personnage ni décor (`perso_classique`).
+    Classique,
     /// Un personnage ou une couleur neutre.
     Choix(Choix),
     /// « + » : un personnage de plus.
     Plus,
     /// L'icône du panneau Personnages.
     Panneau,
-    /// Une brosse du décor (Vignettes seulement, `decorui.rs`).
+    /// Une brosse du décor (Storyboard et Vignettes, `decorui.rs`).
     Decor(Genre),
 }
 
@@ -211,6 +214,28 @@ impl App {
         if self.perso.actif.take().is_some() {
             self.status = "Couleur libre : plus de personnage choisi.".into();
         }
+    }
+
+    /// La pastille « classique » (Anthony, 2026-10-23) : ce que faisait « aucun personnage » (plus de personnage ni de
+    /// brosse du décor, la couleur reste libre), et le retour au pinceau de base : l'outil Pinceau au réglage
+    /// « Pinceau rond », le premier pinceau de SHOT et le réglage de départ de l'outil (`BrushLibrary::builtin`).
+    pub(crate) fn perso_classique(&mut self) {
+        self.perso_lacher();
+        self.end_stroke();
+        self.aplat_cible = None;
+        let rond = self.brushes.presets.iter().find(|p| p.target == crate::brushtex::Target::Brush && p.source == crate::pinceaux::PELURE && p.name == PINCEAU_DE_BASE);
+        match rond {
+            Some(p) => {
+                self.brush = p.settings;
+                self.brush_previews.base = Some((p.target, p.name.clone(), p.source.clone()));
+            }
+            None => self.brush = crate::brush::BrushSettings::brush(),
+        }
+        self.brush_previews.memory.clear();
+        if self.tool != Tool::Brush {
+            self.set_tool(Tool::Brush);
+        }
+        self.status = format!("Classique : le pinceau de base (« {PINCEAU_DE_BASE} »), sans personnage ni décor.");
     }
 
     /// Le personnage suivant (ou précédent) de la barre, en tournant.
@@ -439,6 +464,7 @@ impl App {
             "perso.suivant" => self.perso_voisin(1),
             "perso.precedent" => self.perso_voisin(-1),
             "perso.aucun" => self.perso_lacher(),
+            "perso.classique" => self.perso_classique(),
             _ => return false,
         }
         true
@@ -594,7 +620,7 @@ impl App {
         // La colonne défile seulement quand elle ne tient pas : un `ScrollArea` dans une `Area` ne grandit jamais au-delà de la taille
         // que l'`Area` avait à l'image d'avant, si bien qu'une colonne qui s'allonge (un personnage de plus, les brosses du décor en
         // arrivant dans les Vignettes) restait coupée à son ancienne hauteur, ses dernières pastilles hors de portée du pointeur.
-        let decor = self.board_shown();
+        let decor = self.decor_offert();
         let lignes = 3 + persos.len() + neutres.len() + if decor { Genre::ALL.len() } else { 0 };
         let defile = lignes as f32 * (CASE_H + 1.0) + 16.0 > hauteur_max;
         egui::Area::new(Id::new("pastilles_colonne")).order(egui::Order::Middle).fixed_pos(place).constrain_to(zone).show(ctx, |ui| {
@@ -616,8 +642,8 @@ impl App {
 
     /// Les pastilles de la colonne, de haut en bas.
     fn colonne_contenu(&mut self, ui: &mut egui::Ui, persos: &[Personnage], neutres: &[Neutre], decor: bool, cases: &mut Vec<(Rect, Case)>) {
-        let r = self.pastille_aucun(ui, persos.is_empty());
-        cases.push((r.rect, Case::Aucun));
+        let r = self.pastille_classique(ui, persos.is_empty());
+        cases.push((r.rect, Case::Classique));
         trait_de_colonne(ui);
         for p in persos {
             let r = self.pastille_de_colonne(ui, Choix::Personnage(p.id), &p.name, p.line, p.fill);
@@ -630,8 +656,8 @@ impl App {
             let r = self.pastille_de_colonne(ui, Choix::Neutre(i), &n.name, n.line, n.fill);
             cases.push((r.rect, Case::Choix(Choix::Neutre(i))));
         }
-        // Les brosses du décor (Vignettes seulement), après un petit trait : des carrés arrondis, pour ne pas les
-        // confondre avec les personnages (des ronds).
+        // Les brosses du décor (Storyboard et Vignettes, `decor_offert`), après un petit trait : des carrés arrondis,
+        // pour ne pas les confondre avec les personnages (des ronds).
         if decor {
             trait_de_colonne(ui);
             for g in Genre::ALL {
@@ -655,9 +681,10 @@ impl App {
         cases.push((r.rect, Case::Panneau));
     }
 
-    /// « Aucun personnage » : la couleur libre. Une pastille vide (un anneau barré), allumée quand aucun personnage
-    /// ne dessine ; un clic lâche le personnage choisi. Pas de texte : la bulle le dit.
-    fn pastille_aucun(&mut self, ui: &mut egui::Ui, sans_personnage: bool) -> Response {
+    /// La pastille « classique » (avant : « aucun personnage ») : un anneau avec un petit pinceau, allumé quand ni
+    /// personnage ni brosse du décor ne dessine ; un clic revient au pinceau de base sans personnage ni décor
+    /// (`perso_classique`). Pas de texte : la bulle le dit.
+    fn pastille_classique(&mut self, ui: &mut egui::Ui, sans_personnage: bool) -> Response {
         let libre = self.perso.actif.is_none() && self.perso.decor.is_none();
         let (rect, resp) = ui.allocate_exact_size(vec2(PASTILLE + 6.0, PASTILLE + 6.0), Sense::click());
         if ui.is_rect_visible(rect) {
@@ -672,17 +699,16 @@ impl App {
             }
             let encre = crate::theme::texte_doux();
             p.circle_stroke(c, r, Stroke::new(1.5_f32, encre));
-            let d = r * 0.7;
-            p.line_segment([c + vec2(-d, d), c + vec2(d, -d)], Stroke::new(1.5_f32, encre));
+            p.text(c, egui::Align2::CENTER_CENTER, ph::PAINT_BRUSH, egui::FontId::proportional(11.0), encre);
         }
         let description = if sans_personnage {
-            "Pas encore de personnage : le trait garde la couleur libre. Le « + » en bas de la colonne en ajoute un."
+            "Le pinceau de base (« Pinceau rond ») avec la couleur libre, sans personnage ni brosse du décor. Le « + » en bas de la colonne ajoute un personnage."
         } else {
-            "Dessiner avec la couleur libre, sans personnage ni aplat de personnage. Un clic sur la pastille d'un personnage le lâche aussi."
+            "Le pinceau de base (« Pinceau rond ») avec la couleur libre, sans personnage ni brosse du décor. Un clic sur la pastille choisie la lâche aussi, sans changer de pinceau."
         };
-        let resp = crate::bulles::bulle(resp, "Aucun personnage", description, &self.raccourci("perso.aucun"));
+        let resp = crate::bulles::bulle(resp, "Classique", description, &self.raccourci("perso.classique"));
         if resp.clicked() {
-            self.perso_lacher();
+            self.perso_classique();
         }
         resp
     }
