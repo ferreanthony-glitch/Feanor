@@ -4,7 +4,7 @@
 
 use eframe::egui::{pos2, vec2, Rect};
 
-use crate::board::{self, gap_cut, gap_same, Board, BoardSettings, Hit, NoteRef, BAR_CUT_W, BAR_W, GAP_CUT, GAP_SAME, LABEL_H, MARGIN, MAX_COLUMNS, NOTE_GAP, NOTE_LINE_H, NOTE_MAX_LINES, PAGE_PAD, ROW_GAP};
+use crate::board::{self, gap_cut, gap_same, note_gap, Board, BoardSettings, Hit, NoteRef, BAR_CUT_W, BAR_W, GAP_CUT, GAP_SAME, LABEL_H, MARGIN, MAX_COLUMNS, NOTE_LINE_H, NOTE_MAX_LINES, PAGE_PAD, ROW_GAP};
 use crate::document::Document;
 use crate::history::{Edit, History, Nav};
 use crate::project;
@@ -36,7 +36,7 @@ fn settings(columns: usize, rows: usize) -> BoardSettings {
 
 /// La hauteur d'une ligne dont les notes les plus hautes ont `lines` lignes (cadre 16:9, vignettes de 200 de large).
 fn row_height(lines: usize) -> f32 {
-    LABEL_H + 200.0 * 90.0 / 160.0 + NOTE_GAP + lines as f32 * NOTE_LINE_H + ROW_GAP
+    LABEL_H + 200.0 * 90.0 / 160.0 + note_gap(200.0) + lines as f32 * NOTE_LINE_H + ROW_GAP
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn cards_follow_each_other_in_pages() {
     assert_eq!(p.pages.len(), 1);
     assert_eq!(p.empty.len(), 12, "deux rangées pâles de six cases sous la rangée pleine");
     assert!(p.empty[0].top() > p.cards[0].thumb.top());
-    assert_eq!(p.pages[0].bottom(), p.empty[11].bottom() + board::NOTE_GAP + NOTE_LINE_H + PAGE_PAD, "la planche s'arrête après la dernière rangée pâle");
+    assert_eq!(p.pages[0].bottom(), p.empty[11].bottom() + note_gap(200.0) + NOTE_LINE_H + PAGE_PAD, "la planche s'arrête après la dernière rangée pâle");
     // Jamais plus de six colonnes.
     let l = board::layout(&doc, &settings(10, 0));
     assert_eq!(l.cards[5].card.top(), l.cards[0].card.top());
@@ -138,7 +138,7 @@ fn a_row_goes_down_just_enough_for_a_note_of_two_or_three_lines() {
     let plain = board::layout(&doc, &s);
     assert_eq!(plain.cards[4].card.top() - plain.cards[0].card.top(), row_height(1));
     assert_eq!(plain.cards[0].note.height(), NOTE_LINE_H, "une bande vide garde une ligne");
-    assert_eq!(plain.cards[0].note.top(), plain.cards[0].thumb.bottom() + NOTE_GAP);
+    assert_eq!(plain.cards[0].note.top(), plain.cards[0].thumb.bottom() + note_gap(200.0));
     for lines in [2usize, 3] {
         let mut notes = std::collections::HashMap::new();
         notes.insert(doc.panels[0].marks[0].id, lines);
@@ -159,6 +159,23 @@ fn a_row_goes_down_just_enough_for_a_note_of_two_or_three_lines() {
     let l = board::layout_with(&doc, &s, &notes, false, &Default::default());
     assert_eq!(l.cards[4].card.top(), plain.cards[4].card.top());
     assert!(l.pages[0].height() > plain.pages[0].height());
+}
+
+#[test]
+fn the_note_sits_below_the_overflow_margin_of_the_drawing_and_the_plan_number_is_big() {
+    let doc = doc();
+    let l = board::layout(&doc, &settings(4, 0));
+    for c in &l.cards {
+        // Le trait déborde de la case de 12 % de sa largeur : la note est dessous, pas dedans.
+        assert!(c.note.top() >= c.thumb.bottom() + board::RING_FRACTION * 200.0 + 1.0, "la note est sous la marge de débord : {} pour {}", c.note.top(), c.thumb.bottom());
+        assert_eq!(c.note.top(), c.thumb.bottom() + note_gap(200.0));
+    }
+    // La ligne suivante descend d'autant, et l'espace suit la largeur des vignettes (donc le zoom).
+    assert_eq!(l.cards[4].card.top() - l.cards[0].card.top(), row_height(1));
+    let grand = board::layout(&doc, &BoardSettings { card_w: 400.0, ..settings(4, 0) });
+    assert!(grand.cards[0].note.top() - grand.cards[0].thumb.bottom() > l.cards[0].note.top() - l.cards[0].thumb.bottom());
+    // Le numéro du plan : des lettres d'au moins 18 points à l'échelle 1, dans une ligne qui les contient.
+    assert!(LABEL_H * board::NUMERO_FRACTION >= 18.0 && board::NUMERO_FRACTION < 0.9, "numéro gros mais dans sa ligne");
 }
 
 #[test]

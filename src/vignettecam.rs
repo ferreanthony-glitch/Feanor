@@ -221,7 +221,7 @@ pub struct Place {
     pub thumb_h: f32,
     /// La largeur d'une rangée de la planche : une empreinte n'est jamais plus large.
     pub row_w: f32,
-    /// Ce dont une tuile peut dépasser la hauteur de la case : la bande de note (l'espace et ses lignes). Un cadre est limité à
+    /// Ce dont une tuile peut dépasser la hauteur de la case : la bande de note (l'espace, la marge de débord et ses lignes). Un cadre est limité à
     /// la hauteur d'une rangée : la case et sa bande de note.
     pub total: f32,
     /// La hauteur la plus grande que prend toute l'empreinte (trois rangées).
@@ -261,8 +261,6 @@ pub struct Empreinte {
     pub x_max: f32,
     pub y_min: f32,
     pub y_max: f32,
-    /// Le point le plus bas de l'enveloppe sous la largeur de A : la note de la case se pose dessous.
-    pub bas_a: f32,
 }
 
 /// L'empreinte du plan `panel` (rien s'il n'a pas de mouvement). Les cadres sont à l'échelle de la case : un cadre A fait une
@@ -326,7 +324,6 @@ pub fn empreinte(doc: &Document, panel: usize, p: &Place) -> Option<Empreinte> {
     let sur_la_feuille = |q: Pos2| ra.center() + (q - centre_thumb) / echelle;
     let zone = Zone { centre: sur_la_feuille(boite_e.center()), taille: boite_e.size() / echelle, echelle };
     let masque: Vec<Pos2> = enveloppe.iter().map(|q| sur_la_feuille(*q)).collect();
-    let bas_a = crate::viewbar::clip_to_rect(&enveloppe, Rect::from_min_max(pos2(0.0, -1e6), pos2(cw, 1e6))).iter().map(|q| q.y).fold(ch, f32::max);
     Some(Empreinte {
         cadres: cadres_aff,
         enveloppe,
@@ -335,7 +332,6 @@ pub fn empreinte(doc: &Document, panel: usize, p: &Place) -> Option<Empreinte> {
         x_max: boite_e.right(),
         y_min: boite_e.top(),
         y_max: boite_e.bottom(),
-        bas_a,
     })
 }
 
