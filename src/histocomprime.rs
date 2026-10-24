@@ -31,6 +31,10 @@ const LOT_TUILES: usize = 256;
 /// Fils de compression en route en même temps.
 const FILS: usize = 2;
 
+/// Essais (mesure A/B) : la compression est coupée.
+#[cfg(test)]
+pub(crate) static COUPEE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 /// Les tuiles d'une étape comprimées : celles d'une étape `Tiles` (`coupe: None`) ou `FondTiles`.
 pub struct Comprime {
     pub cel: CelId,
@@ -145,6 +149,10 @@ impl crate::history::History {
     /// (à annuler, à rétablir) qui ne sont pas encore comprimées partent au fil de fond. Rend vrai si des étapes ont été
     /// remplacées.
     pub(crate) fn comprimer_les_anciennes(&mut self, garder: usize, reveil: Option<&eframe::egui::Context>) -> bool {
+        #[cfg(test)]
+        if COUPEE.load(std::sync::atomic::Ordering::Relaxed) {
+            return false;
+        }
         let mut change = false;
         let arrives: Vec<Resultat> = std::mem::take(&mut *self.compression.boite.lock().unwrap_or_else(|e| e.into_inner()));
         for res in arrives {
