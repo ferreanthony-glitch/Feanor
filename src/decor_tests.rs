@@ -361,11 +361,11 @@ fn encre_ailleurs(b: &Banc, i: usize) -> bool {
 #[test]
 fn the_decor_pastilles_sit_after_a_separator_in_the_column_and_choosing_one_takes_its_tool_colour_and_size() {
     let mut b = ouvert(quatre_plans(), 4);
-    // Toute la colonne est à portée du pointeur, jusqu'à l'icône du panneau (l'`Area` a grandi avec ses pastilles).
-    let colonne = b.ctx.memory(|m| m.area_rect(egui::Id::new("pastilles_colonne"))).expect("l'aire de la colonne");
+    // Toute la rangée est à portée du pointeur, jusqu'à l'icône du panneau (l'`Area` a grandi avec ses pastilles).
+    let colonne = b.ctx.memory(|m| m.area_rect(egui::Id::new("pastilles_rangee_planche"))).expect("l'aire de la rangée");
     for (r, c) in &b.app.perso.cases {
-        assert!(colonne.contains(r.center()), "{c:?} est hors de l'aire de la colonne : {r:?} dans {colonne:?}");
-        assert_eq!(b.ctx.layer_id_at(r.center()), Some(egui::LayerId::new(egui::Order::Middle, egui::Id::new("pastilles_colonne"))), "{c:?} reçoit les clics");
+        assert!(colonne.contains(r.center()), "{c:?} est hors de l'aire de la rangée : {r:?} dans {colonne:?}");
+        assert_eq!(b.ctx.layer_id_at(r.center()), Some(egui::LayerId::new(egui::Order::Middle, egui::Id::new("pastilles_rangee_planche"))), "{c:?} reçoit les clics");
     }
     let rangs: Vec<Case> = b.app.perso.cases.iter().map(|(_, c)| *c).collect();
     let decor: Vec<usize> = Genre::ALL.iter().map(|g| rangs.iter().position(|c| *c == Case::Decor(*g)).expect("la pastille")).collect();

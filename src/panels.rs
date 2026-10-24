@@ -240,7 +240,7 @@ impl App {
                 ui.separator();
                 ui.menu_button("Caméra", |ui| {
                     self.action_item(ui, "Vue à travers la caméra", "camera.vue");
-                    self.action_item(ui, "Estomper le hors-champ", "camera.masque");
+                    self.action_item(ui, "Passe-partout", "camera.masque");
                     self.action_item(ui, "Zones de sécurité", "vue.cadres_securite");
                     ui.separator();
                     self.action_item(ui, "Réinitialiser la caméra du plan", "camera.reinitialiser");

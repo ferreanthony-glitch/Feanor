@@ -56,10 +56,17 @@ pub(crate) enum Case {
     Decor(Genre),
 }
 
-/// Un petit trait horizontal entre deux groupes de pastilles.
+/// Un petit trait entre deux groupes de pastilles : horizontal dans une colonne (la planche des Vignettes, d'avant), vertical dans la
+/// rangée de la barre au-dessus du dessin.
 fn trait_de_colonne(ui: &mut egui::Ui) {
-    let (rect, _) = ui.allocate_exact_size(vec2(COLONNE_L - 12.0, 5.0), Sense::hover());
-    ui.painter().hline(rect.x_range(), rect.center().y, Stroke::new(1.0_f32, crate::theme::bord()));
+    let stroke = Stroke::new(1.0_f32, crate::theme::bord());
+    if ui.layout().main_dir().is_horizontal() {
+        let (rect, _) = ui.allocate_exact_size(vec2(5.0, COLONNE_L - 12.0), Sense::hover());
+        ui.painter().vline(rect.center().x, rect.y_range(), stroke);
+    } else {
+        let (rect, _) = ui.allocate_exact_size(vec2(COLONNE_L - 12.0, 5.0), Sense::hover());
+        ui.painter().hline(rect.x_range(), rect.center().y, stroke);
+    }
 }
 
 /// Ce qui est choisi dans la barre : un personnage du projet, ou une couleur neutre (son rang).
@@ -599,47 +606,92 @@ impl App {
 
     // ------------------------------------------------------------------------------- la barre
 
-    /// La colonne des pastilles, le long du bord droit du dessin (Anthony, 2026-10-21 : plus de barre au-dessus, une
-    /// colonne ronde et discrète à droite, sous le titre du plan). `zone` : le dessin (ou la planche des Vignettes) ;
-    /// `haut` : de combien la colonne descend sous le haut de `zone` (le titre du plan y a sa place).
+    /// Les pastilles (Anthony, 2026-10-21 : une colonne ronde et discrète à droite du dessin ; 2026-10-24 : une rangée dans la barre
+    /// du haut, voir plus bas).
     ///
-    /// De haut en bas : « aucun personnage » (la couleur libre), les personnages, les couleurs neutres, « + » (un
-    /// personnage de plus), et l'icône du panneau Personnages. C'est une `Area` : elle est au-dessus du dessin, et ce
-    /// qui est dessous ne reçoit pas ses clics (`layer_id_at`, comme pour les menus) : cliquer une pastille ne trace
-    /// rien. Elle ne couvre que sa largeur, ni plus. Rien n'est calculé de lourd : une dizaine de cercles.
-    pub(crate) fn pastilles_colonne(&mut self, ctx: &egui::Context, zone: Rect, haut: f32) {
-        if !self.barre_perso_visible() || zone.height() < haut + 4.0 * CASE_H {
+    /// Dans l'ordre : « classique » (la couleur libre), les personnages, les couleurs neutres, les brosses du décor, « + » (un
+    /// personnage de plus), et l'icône du panneau Personnages. Dans la barre, ce sont de vrais éléments de la barre : cliquer une pastille
+    /// ne trace rien. Rien n'est calculé de lourd : une dizaine de cercles.
+    ///
+    /// **Depuis le 2026-10-24 (Anthony, d'après une copie d'écran) : une rangée, plus une colonne.** Les mêmes pastilles, dans le même
+    /// ordre, vont à l'extrémité droite de la barre du haut de la vue (`viewbar::view_bar`, à droite des icônes des vues et de la règle),
+    /// et à celle de la barre du haut de la planche des Vignettes (`pastilles_rangee_flottante`). Le dessin ne leur laisse plus de colonne.
+    /// Même hauteur de case et mêmes écarts que les icônes de la barre (`barres::CASE`, `barres::ECART`). Quand la barre est trop étroite,
+    /// la rangée défile (jamais à la ligne sur le dessin) ; les bulles à 1 s, les clics droits, le « + » et le bouton du panneau sont ceux
+    /// d'avant.
+    pub(crate) fn pastilles_rangee(&mut self, ui: &mut egui::Ui) {
+        if !self.barre_perso_visible() {
             self.perso.cases.clear();
             return;
         }
-        let persos: Vec<Personnage> = self.doc.personnages.clone();
-        let neutres: Vec<Neutre> = self.settings.neutral_colors.clone();
-        let place = pos2(zone.right() - COLONNE_L - COLONNE_BORD, zone.top() + haut);
-        let hauteur_max = (zone.height() - haut - COLONNE_BORD).max(2.0 * CASE_H);
-        let mut cases: Vec<(Rect, Case)> = Vec::new();
-        // La colonne défile seulement quand elle ne tient pas : un `ScrollArea` dans une `Area` ne grandit jamais au-delà de la taille
-        // que l'`Area` avait à l'image d'avant, si bien qu'une colonne qui s'allonge (un personnage de plus, les brosses du décor en
-        // arrivant dans les Vignettes) restait coupée à son ancienne hauteur, ses dernières pastilles hors de portée du pointeur.
-        let decor = self.decor_offert();
-        let lignes = 3 + persos.len() + neutres.len() + if decor { Genre::ALL.len() } else { 0 };
-        let defile = lignes as f32 * (CASE_H + 1.0) + 16.0 > hauteur_max;
-        egui::Area::new(Id::new("pastilles_colonne")).order(egui::Order::Middle).fixed_pos(place).constrain_to(zone).show(ctx, |ui| {
-            ui.set_max_width(COLONNE_L);
-            ui.spacing_mut().item_spacing = vec2(0.0, 1.0);
-            let fond = crate::theme::entete().gamma_multiply(0.62);
-            egui::Frame::NONE.fill(fond).corner_radius(COLONNE_L / 2.0).inner_margin(egui::Margin::symmetric(1, 4)).show(ui, |ui| {
-                if defile {
-                    egui::ScrollArea::vertical().max_height(hauteur_max).scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
-                        self.colonne_contenu(ui, &persos, &neutres, decor, &mut cases);
-                    });
-                } else {
-                    self.colonne_contenu(ui, &persos, &neutres, decor, &mut cases);
-                }
-            });
-        });
-        self.perso.cases = cases;
+        // La rangée se pose à l'extrémité droite de la place libre de la barre. Sa largeur est celle de l'image d'avant (elle est
+        // mesurée à chaque image : une zone qui défile ne se pose pas bien de droite à gauche) ; trop large pour la place, elle défile.
+        let id = Id::new("pastilles_rangee_largeur");
+        let dispo = ui.available_rect_before_wrap();
+        let max = (dispo.width() - COLONNE_BORD).max(CASE_H);
+        let connu: f32 = ui.data(|d| d.get_temp(id)).unwrap_or(max);
+        let largeur = connu.clamp(CASE_H, max);
+        let zone = Rect::from_min_size(pos2(dispo.right() - COLONNE_BORD - largeur, dispo.top()), vec2(largeur, dispo.height()));
+        let mut rangee = ui.new_child(egui::UiBuilder::new().max_rect(zone).layout(egui::Layout::left_to_right(egui::Align::Center)));
+        let mesuree = self.rangee_contenu(&mut rangee, largeur);
+        ui.data_mut(|d| d.insert_temp(id, mesuree));
+        if (mesuree - connu).abs() > 0.5 {
+            ui.ctx().request_repaint();
+        }
     }
 
+    /// La même rangée, flottante, à l'extrémité droite de la barre du haut de la planche des Vignettes : `haut_droite` est le coin haut
+    /// droit de la planche, `largeur_max` ce que la barre de réglages laisse libre. C'est une `Area` : ce qui est dessous ne reçoit pas ses clics.
+    pub(crate) fn pastilles_rangee_flottante(&mut self, ctx: &egui::Context, haut_droite: egui::Pos2, largeur_max: f32) {
+        if !self.barre_perso_visible() {
+            self.perso.cases.clear();
+            return;
+        }
+        let id = Id::new("pastilles_rangee_planche_largeur");
+        let max = largeur_max.max(CASE_H);
+        let connu: f32 = ctx.data(|d| d.get_temp(id)).unwrap_or(max);
+        let largeur = connu.clamp(CASE_H, max);
+        let place = pos2(haut_droite.x - COLONNE_BORD - largeur, haut_droite.y + 1.0);
+        let mesuree = egui::Area::new(Id::new("pastilles_rangee_planche"))
+            .order(egui::Order::Middle)
+            .fixed_pos(place)
+            .show(ctx, |ui| {
+                ui.set_max_width(largeur);
+                self.rangee_contenu(ui, largeur)
+            })
+            .inner;
+        ctx.data_mut(|d| d.insert_temp(id, mesuree));
+        if (mesuree - connu).abs() > 0.5 {
+            ctx.request_repaint();
+        }
+    }
+
+    /// Les pastilles, de gauche à droite, dans une zone qui défile si `largeur` ne leur suffit pas ; rend la largeur de leur contenu.
+    fn rangee_contenu(&mut self, ui: &mut egui::Ui, largeur: f32) -> f32 {
+        let persos: Vec<Personnage> = self.doc.personnages.clone();
+        let neutres: Vec<Neutre> = self.settings.neutral_colors.clone();
+        let decor = self.decor_offert();
+        let mut cases: Vec<(Rect, Case)> = Vec::new();
+        let fond = crate::theme::entete().gamma_multiply(0.62);
+        let sortie = egui::ScrollArea::horizontal()
+            .id_salt("pastilles_rangee")
+            .max_width(largeur)
+            .max_height(CASE_H)
+            // (Elle se resserre sur son contenu dans les deux sens : une zone qui prendrait toute la hauteur libre d'une `Area` couvrirait,
+            // dans la planche, tout ce qui est dessous.)
+            .auto_shrink([true, true])
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+            .show(ui, |ui| {
+                egui::Frame::NONE.fill(fond).corner_radius(CASE_H / 2.0).inner_margin(egui::Margin::symmetric(6, 0)).show(ui, |ui| {
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        ui.spacing_mut().item_spacing = vec2(crate::barres::ECART, 0.0);
+                        self.colonne_contenu(ui, &persos, &neutres, decor, &mut cases);
+                    });
+                });
+            });
+        self.perso.cases = cases;
+        sortie.content_size.x
+    }
     /// Les pastilles de la colonne, de haut en bas.
     fn colonne_contenu(&mut self, ui: &mut egui::Ui, persos: &[Personnage], neutres: &[Neutre], decor: bool, cases: &mut Vec<(Rect, Case)>) {
         let r = self.pastille_classique(ui, persos.is_empty());

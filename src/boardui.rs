@@ -1002,8 +1002,9 @@ impl App {
     // ------------------------------------------------------------------ la vue
 
     pub(crate) fn board_view(&mut self, ui: &mut egui::Ui) {
-        // (Les pastilles des personnages : une colonne au bord droit de la planche, posée en fin d'image, plus de barre
-        // au-dessus : `pastilles_colonne`, `personnagesui.rs`.)
+        // (Les pastilles des personnages : une rangée à l'extrémité droite de la barre du haut de la planche, posée en fin d'image :
+        // `pastilles_rangee_flottante`, `personnagesui.rs`.)
+        let haut_droite = egui::pos2(ui.max_rect().right(), ui.available_rect_before_wrap().top());
         // Le débord du trait hors des cases suit les Préférences (il fait partie de la clé des vignettes : elles se refont en fond).
         self.thumbs.debord = Some(self.settings.vignettes.debord_fraction());
         // (Les cases ne montrent pas les calques d'annotation du plan : on ne dessine pas dedans depuis la planche.)
@@ -1327,9 +1328,11 @@ impl App {
         if !any_down {
             self.vignettes.press = Press::None;
         }
-        // Les pastilles des personnages, en colonne au bord droit de la planche (au-dessus d'elle : ses clics ne vont
-        // pas à la planche).
-        self.pastilles_colonne(ui.ctx(), view, 8.0);
+        // Les pastilles des personnages, en rangée à l'extrémité droite de la barre du haut de la planche (au-dessus d'elle : ses clics
+        // ne vont pas à la planche) ; elle ne prend que la place que les réglages de la planche laissent libre.
+        let reglages: Option<Rect> = ui.data(|d| d.get_temp(egui::Id::new("vignettes_reglages")));
+        let gauche_libre = reglages.map(|r| r.right() + 10.0).filter(|x| *x < haut_droite.x - 200.0).unwrap_or(view.left() + 380.0);
+        self.pastilles_rangee_flottante(ui.ctx(), haut_droite, haut_droite.x - gauche_libre);
     }
 
     /// Les barres entre les images : un trait court, gris ou noir ; sous la souris, l'accent et une bulle.

@@ -198,6 +198,8 @@ impl App {
             sep(ui);
             self.pelure_reglage(ui);
             self.table_lumineuse_reglage(ui);
+            sep(ui);
+            self.passe_partout_reglage(ui);
             // Ce que font les touches avec l'outil courant (Anthony, 2026-10-18, axe d'ergonomie 4).
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(6.0);
@@ -355,6 +357,30 @@ impl App {
         });
     }
 
+    /// Le passe-partout autour du cadre de la caméra (Anthony, 2026-10-24) : l'icône l'allume et l'éteint (la commande
+    /// `camera.masque`, avec « Assigner un raccourci » au clic droit), et à côté un petit curseur règle son opacité, en pour
+    /// cent (100 % d'origine : opaque). La couleur (noir d'origine) est dans Préférences > Dessin. Les deux sont retenus dans
+    /// les réglages du poste.
+    pub(crate) fn passe_partout_reglage(&mut self, ui: &mut egui::Ui) {
+        use egui_phosphor::regular as ph;
+        let on = self.settings.passe_partout_actif;
+        self.command_button(ui, ph::SELECTION_INVERSE, "camera.masque", "Passe-partout", "Couvrir ce qui est hors du cadre de la caméra, noir d'origine (la couleur se règle dans Préférences > Dessin).", Some(on));
+        let mut pct = f32::from(self.settings.passe_partout);
+        let resp = ui
+            .scope(|ui| {
+                ui.spacing_mut().slider_width = 64.0;
+                ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix(" %").fixed_decimals(0))
+            })
+            .inner;
+        let resp = crate::bulles::bulle(resp, "Opacité du passe-partout", "À quel point le passe-partout cache le hors-champ : 100 %, opaque ; 0 %, rien n'est couvert.", "");
+        if resp.changed() {
+            self.settings.passe_partout = pct.round().clamp(0.0, 100.0) as u8;
+        }
+        if resp.drag_stopped() || (resp.changed() && !resp.dragged()) {
+            let _ = self.settings.save();
+        }
+    }
+
     /// Une petite flèche collée à une icône, qui ouvre ses réglages fins.
     fn petite_fleche(&self, ui: &mut egui::Ui, nom: &str, description: &str) -> egui::Response {
         let text = egui::RichText::new(egui_phosphor::regular::CARET_UP).size(10.0);
@@ -426,6 +452,9 @@ impl App {
                 return;
             }
             self.guides_button(ui);
+            // Les pastilles (classique, personnages, couleurs neutres, brosses du décor, « + », panneau Personnages) : à l'extrémité
+            // droite de la barre, rangée de cases de la même hauteur et des mêmes écarts que les icônes ; trop étroite, elle défile.
+            self.pastilles_rangee(ui);
         });
     }
 

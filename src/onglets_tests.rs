@@ -174,7 +174,7 @@ const PARTAGES: &[&str] = &[
     "flips", "flips_window", "fx_auto_key", "fx_keys_shown", "fx_key_clipboard", "fx_clip_recent", "fx_stack_clipboard", "fx_pane_focus", "fx_pile_recent", "layers_pane_focus", "layer_clip_recent", "propagation", "coloriage", "sb_window",
     "scenario_window", "sb_export", "light_table", "light_table_strength", "groups_window", "groups_used_only", "image_clipboard", "key_clipboard", "tool_spring", "fake_hold_times",
     "time_display", "empty_x", "timeline_thumbs", "mark_color", "mark_repeat", "mark_next_layer", "mark_used_only", "bottom_tab", "checker", "notes", "properties_window", "settings_tab",
-    "brush_previews", "preset_edit", "brush_import_notes", "record_strokes", "camera_mask", "top_view", "play_meter", "frame_start", "export_dialog", "export_last", "export_job", "export_projet", "ffmpeg",
+    "brush_previews", "preset_edit", "brush_import_notes", "record_strokes", "top_view", "play_meter", "frame_start", "export_dialog", "export_last", "export_job", "export_projet", "ffmpeg",
     "settings", "layout", "dock", "detached", "detach_request", "exposition_masquee", "espace", "vue_camera_du_montage", "settings_a_ecrire", "workspace_name", "orphans", "default_exposure", "looping", "audio",
     "audio_tried", "audio_clock", "sound_on", "sound_scrub", "brt", "sug", "activity", "perf_applied", "diag", "keep_proportions", "field_edit_alive", "deform_mode", "sculpte", "select_rect",
     "pixel_clipboard", "layer_clipboard", "multi_clip", "panel_clipboard", "cam_key_clipboard", "cam_clip_recent", "cam_fx", "cadrage", "cadrage_cache", "text_font", "text_size",

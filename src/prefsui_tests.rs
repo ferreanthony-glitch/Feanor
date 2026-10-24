@@ -264,7 +264,7 @@ fn the_open_tab_is_remembered_by_clicking_and_across_sessions() {
     let ancien: crate::settings::Settings = toml::from_str("").unwrap();
     assert_eq!(ancien.prefs_onglet, Onglet::General, "des réglages d'avant : Général");
     // (Les autres clés n'ont pas bougé : la même que `reglages.toml` d'avant.)
-    for cle in ["copie_secours_minutes", "curseur_systeme", "rouvrir_dernier_projet", "ouvrir_dans_un_nouvel_onglet", "panneaux_ajustes", "opacite_passe_partout"] {
+    for cle in ["copie_secours_minutes", "curseur_systeme", "rouvrir_dernier_projet", "ouvrir_dans_un_nouvel_onglet", "panneaux_ajustes", "passe_partout_opacite"] {
         assert!(ecrit.contains(cle), "la clé {cle} manque : {ecrit}");
     }
 }

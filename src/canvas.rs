@@ -8,8 +8,6 @@ use crate::pixtools::BDrag;
 use crate::vtools::VDrag;
 
 const ACCENT: Color32 = crate::theme::SELECTION_BOITE;
-/// Où la colonne des pastilles commence sous le haut du dessin : sous le titre du plan (`paint_canvas_title`).
-const PASTILLES_HAUT: f32 = 46.0;
 
 impl App {
     pub(crate) fn canvas_panel(&mut self, ui: &mut egui::Ui) {
@@ -20,8 +18,7 @@ impl App {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(bar).id_salt("barre_vue"));
             self.view_bar(&mut child);
             rect.min.y = bar.max.y;
-            // (Les pastilles des personnages ne sont plus une barre ici : une colonne ronde au bord droit du dessin,
-            // posée en fin d'image par `pastilles_colonne`.)
+            // (Les pastilles des personnages sont à l'extrémité droite de cette barre, `view_bar`.)
             // Dessous, les commandes de la vue (en 3D : seulement les vues, pour en sortir).
             let tools = Rect::from_min_max(egui::pos2(rect.left(), rect.bottom() - crate::viewbar::TOOLS_BAR_H), rect.max);
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(tools).id_salt("outils_vue"));
@@ -240,10 +237,7 @@ impl App {
         }
         self.paint_cursor(ui.ctx(), &painter, &response);
         self.text_edit_window(ui.ctx());
-        // Les pastilles des personnages, en colonne au bord droit, sous le titre du plan (hors vignette de la planche).
-        if !self.in_card {
-            self.pastilles_colonne(ui.ctx(), rect, PASTILLES_HAUT);
-        }
+        // (Les pastilles des personnages ne sont plus sur le dessin : elles sont à droite de la barre du haut, `view_bar`.)
     }
 
     /// La zone du monde (pixels de la toile infinie) que la vue regarde : le rectangle d'écran `rect`

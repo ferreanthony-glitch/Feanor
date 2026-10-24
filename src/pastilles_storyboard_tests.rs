@@ -1,6 +1,7 @@
-//! La colonne des pastilles dans le Storyboard (Anthony, 2026-10-23) :
+//! Les pastilles dans le Storyboard (Anthony, 2026-10-23 ; depuis le 2026-10-24 une rangée à l'extrémité droite de la barre du haut,
+//! plus une colonne sur le dessin) :
 //! - les brosses du décor y sont aussi, comme dans les Vignettes : leurs traits vont dans le calque Décor du plan ;
-//! - la pastille « classique », en tête de colonne : le pinceau de base (« Pinceau rond »), sans personnage ni décor.
+//! - la pastille « classique », en tête de rangée : le pinceau de base (« Pinceau rond »), sans personnage ni décor.
 
 use eframe::egui::{vec2, Event, Modifiers, PointerButton, Pos2};
 
@@ -55,6 +56,38 @@ fn trait_au_milieu(b: &mut Banc) {
 fn encre(b: &Banc, li: usize) -> bool {
     let doc = &b.app.doc;
     doc.panels[b.app.cur_panel].layers[li].frames.iter().flatten().any(|c| doc.cels.get(c).is_some_and(|c| !c.raster.is_blank() || c.vector.as_ref().is_some_and(|v| !v.elements.is_empty())))
+}
+
+#[test]
+fn clicking_a_pastille_in_the_top_bar_picks_it_and_a_right_click_opens_its_menu_without_drawing() {
+    let mut b = banc();
+    b.garder_textes = true;
+    let avant = b.app.history.undo_len();
+    // Les pastilles sont dans la barre du haut : un clic sur « classique » puis sur une couleur neutre les choisit, sans rien tracer.
+    let dessin = b.app.canvas_rect;
+    assert!(case(&b, Case::Classique).y < dessin.top(), "au-dessus du dessin, dans la barre");
+    clic_case(&mut b, Case::Choix(Choix::Neutre(1)));
+    assert_eq!(b.app.perso.actif, Some(Choix::Neutre(1)));
+    assert!(b.app.stroke.is_none());
+    assert_eq!(b.app.history.undo_len(), avant, "choisir n'est pas une étape d'annulation");
+    // Clic droit : le menu de la pastille (modifier, dupliquer…).
+    let p = case(&b, Case::Choix(Choix::Neutre(1)));
+    b.image(vec![Event::PointerMoved(p)], 1.0 / 60.0);
+    b.image(vec![Event::PointerButton { pos: p, button: PointerButton::Secondary, pressed: true, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    b.image(vec![Event::PointerButton { pos: p, button: PointerButton::Secondary, pressed: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    b.chauffer(3);
+    assert!(b.textes.iter().any(|t| t.contains("Modifier…")) && b.textes.iter().any(|t| t.contains("Dupliquer")), "{:?}", b.textes);
+    assert!(b.app.stroke.is_none());
+    // « + » : un personnage de plus (la fenêtre « Modifier » s'ouvre sur lui) ; l'icône du panneau l'ouvre.
+    b.image(vec![Event::PointerGone], 1.0 / 60.0);
+    b.chauffer(3);
+    let n = b.app.doc.personnages.len();
+    clic_case(&mut b, Case::Plus);
+    assert_eq!(b.app.doc.personnages.len(), n + 1, "le « + » ajoute un personnage");
+    assert!(case(&b, Case::Classique).y < dessin.top(), "toujours dans la barre");
+    // La pastille du personnage neuf est dans la rangée, avant les couleurs neutres.
+    let rangs: Vec<Case> = b.app.perso.cases.iter().map(|(_, c)| *c).collect();
+    assert!(matches!(rangs[1], Case::Choix(Choix::Personnage(_))), "{rangs:?}");
 }
 
 #[test]

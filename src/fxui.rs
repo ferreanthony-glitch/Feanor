@@ -660,6 +660,11 @@ impl App {
             }
             self.matiere_menu(ui, li);
         });
+        // Le tremblement par défaut des Préférences joue sur ce calque tant qu'il n'a pas le sien (rien n'est écrit dans le calque).
+        let calque = &self.layers()[li];
+        if crate::tremblement::defaut().is_some() && calque.kind == crate::document::LayerKind::Vector && !calque.fx.iter().any(|e| e.kind == EffectKind::Boil) {
+            ui.label(RichText::new("Tremblement du trait par défaut actif (Préférences > Dessin). Ajoute « Tremblement du trait » pour régler le sien.").small().weak());
+        }
         let key = self.raccourci("fx.cle_auto");
         let resp = ui.checkbox(&mut self.fx_auto_key, "Création automatique des clés");
         crate::bulles::bulle(resp, "Création automatique des clés", "Une clé est posée à l'image courante à chaque changement d'un paramètre.", &key);

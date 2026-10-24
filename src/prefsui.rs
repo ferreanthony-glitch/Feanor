@@ -156,8 +156,6 @@ impl App {
         ui.label(RichText::new("Changer une couleur passe en « Personnalisé » ; le survol, le texte secondaire et les couleurs de la timeline s'en déduisent.").small().weak());
     }
 
-    /// « Opacité du passe-partout » : le voile autour du cadre de la caméra quand « Estomper le hors-champ » est
-    /// allumé (`camtools.rs`). De 0 % (rien) à 100 % (le hors-champ noir) ; retenu dans les réglages.
     /// Vignettes > Planche des Vignettes : le nombre de rangées de cases pâles qu'on voit toujours (pour montrer où dessiner), le nombre de
     /// cases par rangée, et le débord du trait hors des cases. Les rangées et les colonnes sont des réglages de la disposition
     /// (`Layout`, retenus dans `reglages.toml` comme avant) ; le débord est `ReglagesVignettes::debord`.
@@ -282,7 +280,25 @@ impl App {
         }
     }
 
+    /// Dessin > Caméra : le passe-partout, ce qui couvre le hors-champ autour du cadre de la caméra quand « Passe-partout »
+    /// est allumé (`camtools.rs`) : sa couleur (noir d'origine) et son opacité (de 0 %, rien, à 100 %, opaque, d'origine).
+    /// Un seul réglage : il remplace l'ancien voile gris translucide. Retenu dans les réglages.
     pub(crate) fn passe_partout_pref_ui(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Couleur du passe-partout");
+            let mut c = self.settings.passe_partout_couleur;
+            let resp = ui.color_edit_button_srgb(&mut c);
+            let resp = crate::bulles::bulle(
+                resp,
+                "Couleur du passe-partout",
+                "La couleur qui couvre ce qui est hors du cadre de la caméra, quand « Passe-partout » est allumé : noir d'origine. Elle ne touche pas aux exports.",
+                &self.raccourci("camera.masque"),
+            );
+            if resp.changed() {
+                self.settings.passe_partout_couleur = c;
+                self.settings_a_ecrire = true;
+            }
+        });
         ui.horizontal(|ui| {
             ui.label("Opacité du passe-partout");
             let mut v = f32::from(self.settings.passe_partout);
@@ -290,7 +306,7 @@ impl App {
             let resp = crate::bulles::bulle(
                 resp,
                 "Opacité du passe-partout",
-                "Le voile qui estompe ce qui est hors du cadre de la caméra, quand « Estomper le hors-champ » est allumé. 0 % : aucun voile ; 100 % : le hors-champ noir.",
+                "À quel point le passe-partout cache le hors-champ. 100 % : opaque, rien ne se voit autour du cadre (d'origine) ; 0 % : rien n'est couvert.",
                 &self.raccourci("camera.masque"),
             );
             if resp.changed() {
@@ -299,11 +315,62 @@ impl App {
             if resp.drag_stopped() || (resp.changed() && !resp.dragged()) {
                 let _ = self.settings.save();
             }
-            if ui.small_button("Rétablir").on_hover_text("Revenir à l'opacité d'origine (27 %).").clicked() {
+            if ui.small_button("Rétablir").on_hover_text("Revenir au passe-partout d'origine : noir, opaque.").clicked() {
                 self.settings.passe_partout = crate::camtools::PASSE_PARTOUT_DEFAUT;
+                self.settings.passe_partout_couleur = crate::camtools::PASSE_PARTOUT_COULEUR;
                 let _ = self.settings.save();
             }
         });
+    }
+
+    /// Dessin > Tremblement des traits : le tremblement par défaut de tous les calques vectoriels (`tremblement::Defaut`) :
+    /// allumé ou non, son intensité (pixels) et sa fréquence (doux à nerveux). Un calque qui a son propre « Tremblement du trait »
+    /// (panneau Effets) garde le sien. Joue à l'écran, dans les vignettes et dans les exports ; n'écrit rien dans les projets.
+    pub(crate) fn tremblement_defaut_pref_ui(&mut self, ui: &mut egui::Ui) {
+        let avant = self.settings.tremblement_defaut;
+        let mut d = avant;
+        let resp = ui.checkbox(&mut d.actif, "Tremblement du trait par défaut");
+        crate::bulles::bulle(
+            resp,
+            "Tremblement du trait par défaut",
+            "Tous les traits vectoriels tremblent un peu, comme redessinés à la main, sans rien ajouter aux calques : un calque qui a son propre « Tremblement du trait » (panneau Effets) garde le sien. Les exports le montrent aussi. Rien n'est écrit dans les projets.",
+            "",
+        );
+        ui.add_enabled_ui(d.actif, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Intensité du tremblement par défaut");
+                let resp = ui.add(egui::Slider::new(&mut d.intensite, 0.0..=crate::tremblement::MAX_INTENSITY).suffix(" px").max_decimals(1));
+                crate::bulles::bulle(resp, "Intensité du tremblement par défaut", "De combien de pixels de la feuille un trait peut bouger au plus (2 px d'origine).", "");
+            });
+            ui.horizontal(|ui| {
+                ui.label("Fréquence du tremblement par défaut");
+                let resp = ui.add(egui::Slider::new(&mut d.frequence, 0.0..=100.0).suffix(" %").fixed_decimals(0));
+                crate::bulles::bulle(resp, "Fréquence du tremblement par défaut", "0 % : le trait ondule doucement ; 100 % : nerveux, par petites vagues (55 % d'origine).", "");
+            });
+        });
+        ui.horizontal(|ui| {
+            if ui.add_enabled(!d.est_defaut(), egui::Button::new("Rétablir")).on_hover_text("Éteint, 2 px, 55 %.").clicked() {
+                d = Default::default();
+            }
+            ui.label(RichText::new("Le trait tremble d'une image à l'autre : sur une image fixe, il reste immobile (effet « Tremblement du trait » d'un calque : « Animer à l'arrêt »).").small().weak());
+        });
+        if d != avant {
+            self.settings.tremblement_defaut = d;
+            self.settings_a_ecrire = true;
+        }
+    }
+
+    /// Pose le tremblement par défaut là où le rendu le lit (`tremblement::set_defaut`) dès que le réglage change : les vignettes
+    /// et l'image de l'écran sont à refaire ; les dessins dérivés, eux, ont leur propre numéro par réglage (rien à vider).
+    pub(crate) fn appliquer_tremblement_defaut(&mut self, ctx: &egui::Context) {
+        let voulu = self.settings.tremblement_defaut.actif.then(|| self.settings.tremblement_defaut.sanitized());
+        if crate::tremblement::defaut() != voulu {
+            crate::tremblement::set_defaut(voulu);
+            self.thumbs.clear();
+            self.layer_thumbs.clear();
+            self.renderer.invalidate_all();
+            ctx.request_repaint();
+        }
     }
 
     /// La fenêtre Préférences… (menu Fichier) : une liste d'onglets à gauche, le contenu à droite, la recherche en
@@ -475,6 +542,7 @@ impl App {
                 ui.label(RichText::new("Le toucher du stylet se règle en bas des réglages du pinceau.").small().weak());
             }
             Groupe::Camera => self.passe_partout_pref_ui(ui),
+            Groupe::Tremblement => self.tremblement_defaut_pref_ui(ui),
             Groupe::Poignees => {
                 use crate::selbox::{CentreRotation, PointFixe};
                 let avant = (self.settings.point_fixe, self.settings.rotation_autour);

@@ -362,6 +362,9 @@ mod commentairesui;
 mod colorsel;
 #[cfg(test)]
 mod colorsel_tests;
+mod recolorsel;
+#[cfg(test)]
+mod recolorsel_tests;
 mod colorui;
 mod couleur;
 #[cfg(test)]
@@ -507,9 +510,13 @@ mod prereglagesui;
 mod prereglagesui_tests;
 #[cfg(test)]
 mod effetsperf_tests;
+#[cfg(test)]
+mod passe_partout_tests;
 mod tremblement;
 #[cfg(test)]
 mod tremblement_tests;
+#[cfg(test)]
+mod tremblement_defaut_tests;
 mod fxtrait;
 #[cfg(test)]
 mod fxtrait_tests;

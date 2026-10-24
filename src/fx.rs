@@ -743,12 +743,23 @@ pub fn steps_at_with(fx: &[Effect], frame: usize, rest: Option<usize>, vector: b
 
 /// Les effets du calque `layer` à l'image `frame` (voir `steps_at_with`) : le tremblement n'agit que
 /// sur un calque vectoriel.
+///
+/// **Le tremblement par défaut** (Préférences > Dessin, `tremblement::Defaut`) s'ajoute ici, au rendu, en tête des effets d'un
+/// calque vectoriel qui n'a **aucun** « Tremblement du trait » à lui (allumé ou non : un tremblement éteint à la main reste
+/// éteint) : rien n'est écrit dans le document. Le bouton « fx » éteint du calque l'éteint aussi.
 pub fn layer_steps(layer: &crate::document::Layer, frame: usize, rest: Option<usize>) -> Vec<FxStep> {
     // Bouton « fx » du calque éteint : aucun effet, la pile reste en place.
     if !layer.fx_enabled {
         return Vec::new();
     }
-    steps_at_with(&layer.fx, frame, rest, layer.kind == crate::document::LayerKind::Vector)
+    let vector = layer.kind == crate::document::LayerKind::Vector;
+    let mut steps = steps_at_with(&layer.fx, frame, rest, vector);
+    if vector && !layer.folder && layer.effet.is_none() && !layer.fx.iter().any(|e| e.kind == EffectKind::Boil) {
+        if let Some(step) = crate::tremblement::default_step(frame, rest) {
+            steps.insert(0, step);
+        }
+    }
+    steps
 }
 
 /// Un élément du plan dont la pile mêle des effets du trait (calculés en arrière-plan : ils lisent les

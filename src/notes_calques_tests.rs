@@ -831,34 +831,34 @@ fn cancelling_a_gif_removes_the_unfinished_file() {
 
 #[test]
 fn the_passe_partout_opacity_runs_from_nothing_to_black() {
-    use crate::camtools::{passe_partout_alpha as alpha, PasseContexte as C, PASSE_PARTOUT_DEFAUT};
-    assert_eq!(alpha(0, C::Feuille), 0, "0 % : aucun voile");
-    assert_eq!(alpha(100, C::Feuille), 255, "100 % : noir");
-    assert_eq!(alpha(200, C::Feuille), 255, "jamais au-delà");
-    assert!((alpha(PASSE_PARTOUT_DEFAUT, C::Feuille) as i32 - 70).abs() <= 1, "la valeur d'origine, 70 sur 255");
-    assert!((alpha(PASSE_PARTOUT_DEFAUT, C::ToileInfinie) as i32 - 45).abs() <= 1);
-    assert!((alpha(PASSE_PARTOUT_DEFAUT, C::Lecture) as i32 - 150).abs() <= 3);
+    use crate::camtools::{passe_partout_alpha as alpha, PASSE_PARTOUT_DEFAUT};
+    assert_eq!(alpha(0), 0, "0 % : rien n'est couvert");
+    assert_eq!(alpha(100), 255, "100 % : opaque");
+    assert_eq!(alpha(200), 255, "jamais au-delà");
+    assert_eq!(alpha(PASSE_PARTOUT_DEFAUT), 255, "d'origine : opaque");
     let mut avant = 0;
     for p in 0..=100u8 {
-        let a = alpha(p, C::Feuille);
+        let a = alpha(p);
         assert!(a >= avant, "croissante");
         avant = a;
     }
-    assert!(alpha(50, C::ToileInfinie) < alpha(50, C::Feuille) && alpha(50, C::Feuille) < alpha(50, C::Lecture));
 }
 
 #[test]
-fn the_passe_partout_setting_is_saved_and_old_settings_keep_the_old_look() {
+fn the_passe_partout_setting_is_saved_and_the_old_veil_setting_is_ignored() {
     let vide: crate::settings::Settings = toml::from_str("").unwrap();
-    assert_eq!(vide.passe_partout, crate::camtools::PASSE_PARTOUT_DEFAUT, "des réglages d'avant : l'opacité d'avant");
-    let s: crate::settings::Settings = toml::from_str("opacite_passe_partout = 40").unwrap();
-    assert_eq!(s.passe_partout, 40);
+    assert_eq!(vide.passe_partout, 100, "des réglages d'avant : opaque");
+    assert_eq!(vide.passe_partout_couleur, [0, 0, 0], "et noir");
+    // L'ancien voile (27 % d'origine) n'est pas repris : un passe-partout est opaque et noir d'origine.
+    let ancien: crate::settings::Settings = toml::from_str("opacite_passe_partout = 27").unwrap();
+    assert_eq!(ancien.passe_partout, 100);
     let mut s = crate::settings::Settings::default();
     s.passe_partout = 65;
+    s.passe_partout_couleur = [10, 20, 30];
     let texte = toml::to_string(&s).unwrap();
-    assert!(texte.contains("opacite_passe_partout = 65"), "{texte}");
+    assert!(texte.contains("passe_partout_opacite = 65") && texte.contains("passe_partout_couleur"), "{texte}");
     let relu: crate::settings::Settings = toml::from_str(&texte).unwrap();
-    assert_eq!(relu.passe_partout, 65);
+    assert_eq!((relu.passe_partout, relu.passe_partout_couleur), (65, [10, 20, 30]));
 }
 
 #[test]
@@ -873,7 +873,8 @@ fn the_preferences_window_has_the_passe_partout_slider() {
     };
     let textes = ecran.chauffer(&mut app, 4, &mut ui_prefs);
     assert!(contient(&textes, "Opacité du passe-partout"), "{textes:?}");
-    assert!(contient(&textes, "27 %"), "la valeur d'origine : {textes:?}");
+    assert!(contient(&textes, "Couleur du passe-partout"), "{textes:?}");
+    assert!(contient(&textes, "100 %"), "la valeur d'origine : {textes:?}");
 }
 
 #[test]
@@ -938,31 +939,26 @@ fn the_camera_frame_is_painted_thin_on_a_dark_halo() {
 }
 
 #[test]
-fn estomper_le_hors_champ_uses_the_preferred_opacity() {
+fn the_passe_partout_uses_the_preferred_opacity() {
     let mut app = app_with_zoomed_camera("voile");
-    app.camera_mask = true;
+    app.settings.passe_partout_actif = true;
     let alpha_max = |app: &App| peindre_camera(app, 1.0).1.into_iter().max().unwrap_or(0);
     app.settings.passe_partout = crate::camtools::PASSE_PARTOUT_DEFAUT;
-    // (Sur la toile infinie, le voile couvre tout l'écran autour du cadre : 45 sur 255 d'origine.)
-    let defaut = alpha_max(&app);
-    assert!((defaut as i32 - 45).abs() <= 1, "l'aspect d'origine : {defaut}");
+    // D'origine : opaque, sur la toile infinie comme ailleurs.
+    assert_eq!(alpha_max(&app), 255, "le passe-partout d'origine est opaque");
     app.settings.passe_partout = 60;
-    let plus = alpha_max(&app);
-    assert_eq!(plus, crate::camtools::passe_partout_alpha(60, crate::camtools::PasseContexte::ToileInfinie));
-    assert!(plus > defaut);
-    app.settings.passe_partout = 100;
-    assert_eq!(alpha_max(&app), crate::camtools::passe_partout_alpha(100, crate::camtools::PasseContexte::ToileInfinie));
-    // Pendant la lecture, le voile est plus fort.
+    assert_eq!(alpha_max(&app), crate::camtools::passe_partout_alpha(60));
+    // Pendant la lecture, il ne change pas d'aspect.
     app.playing = true;
-    assert_eq!(alpha_max(&app), crate::camtools::passe_partout_alpha(100, crate::camtools::PasseContexte::Lecture));
+    assert_eq!(alpha_max(&app), crate::camtools::passe_partout_alpha(60));
     app.playing = false;
-    // 0 % : aucun voile (comme si « Estomper » était éteint) ; le cadre, lui, reste.
+    // 0 % : rien n'est couvert (comme si « Passe-partout » était éteint) ; le cadre, lui, reste.
     app.settings.passe_partout = 0;
     let (traits, voile) = peindre_camera(&app, 1.0);
     assert!(voile.is_empty() || voile.iter().all(|a| *a == 0), "{voile:?}");
     assert_eq!(traits.len(), 2);
     // Éteint : rien non plus, quelle que soit l'opacité.
     app.settings.passe_partout = 80;
-    app.camera_mask = false;
+    app.settings.passe_partout_actif = false;
     assert!(peindre_camera(&app, 1.0).1.iter().all(|a| *a == 0));
 }

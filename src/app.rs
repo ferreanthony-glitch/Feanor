@@ -544,8 +544,6 @@ pub struct App {
     /// Notes choisies sur la planche, et texte de note en cours d'écriture (8).
     pub(crate) board_notes: Vec<crate::board::NoteRef>,
     pub(crate) board_text: Option<crate::boardui::NoteTextEdit>,
-    /// Hors-champ estompé sur la feuille.
-    pub(crate) camera_mask: bool,
     /// Fenêtre « Vue de dessus » (profondeur des calques) et son glisser en cours.
     pub(crate) top_view: bool,
     pub(crate) top_drag: Option<crate::topview::TopDrag>,
@@ -1134,7 +1132,6 @@ impl App {
             board_drag: None,
             board_notes: Vec::new(),
             board_text: None,
-            camera_mask: true,
             top_view: false,
             top_drag: None,
             play_meter: Default::default(),
@@ -4398,7 +4395,11 @@ impl App {
             "calque.reinit_transformation" => self.reset_layer_transform(),
             "camera.vue" => self.set_camera_view(!self.camera_view),
             "vue.cadres_securite" => self.layout.safe_frames = !self.layout.safe_frames,
-            "camera.masque" => self.camera_mask = !self.camera_mask,
+            // Le passe-partout autour du cadre de la caméra : allumé ou éteint, retenu dans les réglages du poste.
+            "camera.masque" => {
+                self.settings.passe_partout_actif = !self.settings.passe_partout_actif;
+                let _ = self.settings.save();
+            }
             "camera.reinitialiser" => self.reset_camera(),
             "camera.cle_debut" => self.add_camera_key(0),
             "camera.cle_ici" => self.add_camera_key(self.cur_frame),
@@ -4721,6 +4722,8 @@ impl App {
         // Réglages de performance (Préférences, Aide > Diagnostic des performances) : posés dans
         // le programme dès qu'ils changent.
         self.appliquer_performance(ctx);
+        // Le tremblement du trait par défaut (Préférences > Dessin) : posé là où le rendu le lit.
+        self.appliquer_tremblement_defaut(ctx);
         // Effets de calque : l'horloge de leurs demandes avance (calculs de fond, `fxcache.rs`).
         crate::fx::begin_frame(ctx);
         let prep = crate::perf::section("préparation (raccourcis, lecture)");

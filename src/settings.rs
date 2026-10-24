@@ -169,11 +169,24 @@ pub struct Settings {
     /// une clé : elles sont dans le Gestionnaire d'identifiants de Windows (`clessecretes.rs`).
     #[serde(default, rename = "generation_son")]
     pub generation_son: crate::genreglages::GenerationSonReglages,
-    /// Opacité du passe-partout, en pour cent (0 à 100) : le voile du hors-champ autour du cadre de la caméra
-    /// quand « Estomper le hors-champ » est allumé (`camtools.rs`, Fichier > Préférences…). Absente des anciens
-    /// réglages : la valeur d'avant (`camtools::PASSE_PARTOUT_DEFAUT`).
-    #[serde(default = "default_passe_partout", rename = "opacite_passe_partout")]
+    /// Opacité du passe-partout, en pour cent (0 à 100) : ce qui couvre le hors-champ autour du cadre de la caméra
+    /// quand « Passe-partout » est allumé (`camtools.rs`, Fichier > Préférences…) ; 100 % : opaque, d'origine.
+    /// Migration (2026-10-24) : l'ancien voile translucide gardait son opacité sous la clé `opacite_passe_partout` (27 %
+    /// d'origine). Cette clé n'est plus lue : un passe-partout est opaque et noir d'origine, et un ancien fichier ne le
+    /// rend pas gris à 27 %. La clé du nouveau réglage est donc autre.
+    #[serde(default = "default_passe_partout", rename = "passe_partout_opacite")]
     pub passe_partout: u8,
+    /// Le tremblement du trait par défaut (`tremblement.rs`, Préférences > Dessin) : éteint d'origine. Appliqué au rendu à tout
+    /// calque vectoriel qui n'a pas le sien ; rien n'est écrit dans les projets.
+    #[serde(default, rename = "tremblement_par_defaut", skip_serializing_if = "crate::tremblement::Defaut::est_defaut")]
+    pub tremblement_defaut: crate::tremblement::Defaut,
+    /// Le passe-partout est allumé (icône de la barre sous le dessin, commande `camera.masque`) : allumé d'origine,
+    /// retenu d'une séance à l'autre sur ce poste.
+    #[serde(default = "yes", rename = "passe_partout_actif")]
+    pub passe_partout_actif: bool,
+    /// Couleur du passe-partout (rouge, vert, bleu) : noir d'origine.
+    #[serde(default = "default_passe_partout_couleur", rename = "passe_partout_couleur")]
+    pub passe_partout_couleur: [u8; 3],
     /// Coller ce qui vient d'un projet d'une autre taille ou d'une autre cadence (`adaptation.rs`, `collage.rs`) : contenir
     /// ou remplir, images ou secondes, et poser la question ou non.
     #[serde(default, rename = "collage")]
@@ -210,6 +223,10 @@ pub struct Settings {
 
 fn default_passe_partout() -> u8 {
     crate::camtools::PASSE_PARTOUT_DEFAUT
+}
+
+fn default_passe_partout_couleur() -> [u8; 3] {
+    crate::camtools::PASSE_PARTOUT_COULEUR
 }
 
 fn default_autosave() -> u32 {
@@ -276,6 +293,9 @@ impl Default for Settings {
             bruitages: Default::default(),
             generation_son: Default::default(),
             passe_partout: default_passe_partout(),
+            tremblement_defaut: Default::default(),
+            passe_partout_actif: true,
+            passe_partout_couleur: default_passe_partout_couleur(),
             collage: Default::default(),
             equipe: Default::default(),
             neutral_colors: crate::personnages::neutres_par_defaut(),
@@ -335,6 +355,7 @@ impl Settings {
         }
         s.generation_son = std::mem::take(&mut s.generation_son).sanitized();
         s.passe_partout = s.passe_partout.min(100);
+        s.tremblement_defaut = s.tremblement_defaut.sanitized();
         s.equipe = std::mem::take(&mut s.equipe).nettoye();
         s.neutral_colors = crate::personnages::neutres_nettoyees(std::mem::take(&mut s.neutral_colors));
         s.echelle = crate::echelle::echelle_valide(s.echelle);

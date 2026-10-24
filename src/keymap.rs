@@ -592,7 +592,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("outil.camera", "Outil caméra", true, false),
     act("outil.transformer", "Outil transformer le calque", true, false),
     act("camera.vue", "Vue à travers la caméra", true, false),
-    act("camera.masque", "Masque hors-champ de la caméra", true, false),
+    act("camera.masque", "Passe-partout autour du cadre de la caméra", true, false),
     act("camera.reinitialiser", "Réinitialiser la caméra", true, false),
     act("camera.cle_debut", "Clé de caméra au début du plan", true, false),
     act("camera.cle_ici", "Clé de caméra à l'image courante", true, false),
