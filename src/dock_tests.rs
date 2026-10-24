@@ -20,7 +20,7 @@ fn default_panes() -> impl Iterator<Item = Pane> {
     Pane::ALL.into_iter().filter(|p| {
         !matches!(
             p,
-            Pane::Tools | Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References
+            Pane::Tools | Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes
         )
     })
 }

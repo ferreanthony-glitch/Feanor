@@ -38,6 +38,7 @@ use eframe::egui::{
 
 use crate::app::{App, BoardView, Mode, Tool};
 use crate::board::{self, BoardLayout, BoardSettings, CardPlace, Hit, NoteRef, CARD_MAX, CARD_MIN, MAX_COLUMNS, NOTE_MAX_LINES, NOTE_TEXT_SIZE};
+use crate::boardsens::{Champ, Textes};
 use crate::history::Nav;
 use crate::vector::VPoint;
 
@@ -106,6 +107,8 @@ pub(crate) enum Press {
     Move,
     /// Le stylo ou la gomme d'annotation tient l'appui (`annotationsui.rs`) : le dessin de la vignette ne reçoit rien.
     Annot,
+    /// Un appui sur l'étiquette de version (« V2 », en haut à droite d'une case) : il épingle la pile des versions, rien à dessiner.
+    Version,
 }
 
 /// Un plan (ou plusieurs plans choisis) pris par le cadre d'une de ses vignettes (Maj + appui), qu'on glisse ailleurs.
@@ -223,6 +226,9 @@ pub(crate) struct Vignettes {
     pub disposition: std::cell::RefCell<board::CacheDisposition>,
     /// Les notes déjà mesurées (`measure_notes`) : leur texte et leur nombre de lignes, à cette largeur et à cette échelle.
     pub mesures: MesuresNotes,
+    /// Les étiquettes de version (« V2 ») posées à cette image d'écran sur les cases des plans qui ont plusieurs versions : leur zone
+    /// et leur plan. La pile des versions s'y accroche (`pileversui.rs`, la même que celle du montage).
+    pub etiquettes: Vec<crate::pileversui::EtiquetteBloc>,
 }
 
 /// Les notes mesurées par `measure_notes` (le nombre de lignes d'une note ne dépend que de son texte, de la largeur des cases et de
@@ -231,7 +237,24 @@ pub(crate) struct Vignettes {
 pub(crate) struct MesuresNotes {
     largeur: u32,
     ppp: u32,
+    /// Les champs montrés (`Textes::bits`) : en changer remesure tout.
+    textes: u8,
+    /// Par case : ses textes montrés, d'un seul tenant, et le nombre de lignes qu'ils prennent.
     notes: HashMap<u64, (String, usize)>,
+}
+
+/// Le nombre de lignes de la bande de texte d'une case : la somme des lignes (une à trois) de chaque champ montré qui a un texte, à la
+/// largeur `width` ; zéro sans texte.
+fn lignes_de_la_case(ctx: &egui::Context, textes: Textes, champs: &[(Champ, &str)], width: f32) -> usize {
+    let etiquette = textes.etiquettes();
+    champs
+        .iter()
+        .map(|(c, t)| {
+            let size = board::note_font_size(t.chars().count());
+            let galley = ctx.fonts(|f| f.layout_job(champ_job(*c, t, size, width, etiquette)));
+            galley.rows.len().clamp(1, NOTE_MAX_LINES)
+        })
+        .sum()
 }
 
 impl Default for Vignettes {
@@ -260,16 +283,35 @@ impl Default for Vignettes {
             colorscript: Default::default(),
             disposition: Default::default(),
             mesures: Default::default(),
+            etiquettes: Vec::new(),
         }
     }
 }
 
-/// Le texte d'une note, mis en page : `size` points, `width` de large, trois lignes au plus et « … ».
-fn note_job(text: &str, size: f32, width: f32, color: Color32) -> LayoutJob {
-    let mut job = LayoutJob::simple(text.to_string(), FontId::proportional(size.max(1.0)), color, width.max(1.0));
+/// Le texte d'un champ du plan (l'action, le dialogue, les notes), mis en page : `size` points, `width` de large, trois lignes au plus et
+/// « … ». `etiquette` : plusieurs champs sont montrés, le texte est précédé de l'étiquette colorée de son champ (« Action », « Dialogue »,
+/// « Note »), un peu plus petite ; un champ seul n'en a pas, comme avant le panneau « Vignettes ».
+fn champ_job(champ: Champ, text: &str, size: f32, width: f32, etiquette: bool) -> LayoutJob {
+    let mut job = LayoutJob::default();
+    job.wrap.max_width = width.max(1.0);
+    if etiquette {
+        let [r, g, b] = champ.encre();
+        job.append(&format!("{}  ", champ.etiquette()), 0.0, egui::TextFormat::simple(FontId::proportional((size * 0.82).max(1.0)), Color32::from_rgb(r, g, b)));
+    }
+    job.append(text, 0.0, egui::TextFormat::simple(FontId::proportional(size.max(1.0)), NOTE_INK));
     job.wrap.max_rows = NOTE_MAX_LINES;
     job.wrap.overflow_character = Some('…');
     job
+}
+
+/// Les trois textes d'un plan ou d'une marque d'image, dans l'ordre des champs (`Champ::TOUS`).
+fn textes_du_plan(p: &crate::document::Panel) -> impl Iterator<Item = (u64, [&str; 3])> {
+    std::iter::once((p.id, [p.action.as_str(), p.dialogue.as_str(), p.notes.as_str()])).chain(p.marks.iter().map(|m| (m.id, [m.action.as_str(), m.dialogue.as_str(), m.notes.as_str()])))
+}
+
+/// Ceux des trois textes que `textes` montre et qui ne sont pas vides.
+fn champs_montres(textes: Textes, trois: [&str; 3]) -> Vec<(Champ, &str)> {
+    Champ::TOUS.into_iter().zip(trois).filter(|(c, t)| textes.montre(*c) && !t.trim().is_empty()).collect()
 }
 
 impl App {
@@ -283,7 +325,7 @@ impl App {
     pub(crate) fn board_layout(&self) -> BoardLayout {
         let s = BoardSettings { rows: 0, ..self.layout.board_settings() };
         let hold = self.vignettes.cam.as_ref().filter(|g| g.actif && !g.annule).and_then(|g| g.hold);
-        let opt = board::Options { hold, ..board::Options::pale(self.layout.board_min_rows) };
+        let opt = board::Options { hold, sens: self.layout.board_sens, textes: self.layout.board_textes, ..board::Options::pale(self.layout.board_min_rows) };
         // (Gardée tant que rien de ce dont elle dépend ne change : `board::CacheDisposition`. Un essai de performance mesure aussi
         // l'ancien chemin, refaite à chaque appel : `perf::ancien`.)
         if crate::perf::ancien() {
@@ -452,20 +494,18 @@ impl App {
     /// s'en sert pour descendre la rangée suivante juste ce qu'il faut.
     fn measure_notes(&mut self, ctx: &egui::Context, settings: &BoardSettings) {
         let width = (settings.card_w.clamp(CARD_MIN, CARD_MAX) - NOTE_PAD * 2.0).max(10.0);
+        let textes = self.layout.board_textes;
         if !crate::perf::ancien() {
-            self.measure_notes_gardees(ctx, width);
+            self.measure_notes_gardees(ctx, width, textes);
             return;
         }
         let mut lines = HashMap::new();
         for p in &self.doc.panels {
-            let marks = p.marks.iter().map(|m| (m.id, m.notes.as_str()));
-            for (id, text) in std::iter::once((p.id, p.notes.as_str())).chain(marks) {
-                if text.trim().is_empty() {
-                    continue;
+            for (id, trois) in textes_du_plan(p) {
+                let n = lignes_de_la_case(ctx, textes, &champs_montres(textes, trois), width);
+                if n > 0 {
+                    lines.insert(id, n);
                 }
-                let size = board::note_font_size(text.chars().count());
-                let galley = ctx.fonts(|f| f.layout_job(note_job(text, size, width, NOTE_INK)));
-                lines.insert(id, galley.rows.len().clamp(1, NOTE_MAX_LINES));
             }
         }
         self.vignettes.lines = lines;
@@ -473,24 +513,26 @@ impl App {
 
     /// `measure_notes` (le même nombre de lignes), sans remettre en page une note déjà mesurée à cette largeur et à cette échelle :
     /// à chaque image d'écran, un passage sur les notes qui compare leurs textes ; rien n'est alloué si aucune n'a changé.
-    fn measure_notes_gardees(&mut self, ctx: &egui::Context, width: f32) {
+    fn measure_notes_gardees(&mut self, ctx: &egui::Context, width: f32, textes: Textes) {
         let ppp = ctx.pixels_per_point();
         let m = &mut self.vignettes.mesures;
-        if m.largeur != width.to_bits() || m.ppp != ppp.to_bits() {
-            *m = MesuresNotes { largeur: width.to_bits(), ppp: ppp.to_bits(), notes: HashMap::new() };
+        if m.largeur != width.to_bits() || m.ppp != ppp.to_bits() || m.textes != textes.bits() {
+            *m = MesuresNotes { largeur: width.to_bits(), ppp: ppp.to_bits(), textes: textes.bits(), notes: HashMap::new() };
         }
-        fn notes(p: &crate::document::Panel) -> impl Iterator<Item = (u64, &str)> {
-            std::iter::once((p.id, p.notes.as_str())).chain(p.marks.iter().map(|m| (m.id, m.notes.as_str())))
-        }
+        // Les textes montrés d'une case, d'un seul tenant (de quoi savoir si l'un d'eux a changé).
+        let cle = |champs: &[(Champ, &str)]| -> String { champs.iter().map(|(_, t)| *t).collect::<Vec<_>>().join("\u{1}") };
         let mut vues = 0;
         let mut pareil = true;
         'plans: for p in &self.doc.panels {
-            for (id, text) in notes(p) {
-                if text.trim().is_empty() {
+            for (id, trois) in textes_du_plan(p) {
+                let champs = champs_montres(textes, trois);
+                if champs.is_empty() {
                     continue;
                 }
                 vues += 1;
-                if !m.notes.get(&id).is_some_and(|(t, _)| t == text) {
+                // (Rien n'est alloué ici tant que la case n'a pas changé : la comparaison se fait champ par champ.)
+                let meme = m.notes.get(&id).is_some_and(|(t, _)| t.split('\u{1}').eq(champs.iter().map(|(_, t)| *t)));
+                if !meme {
                     pareil = false;
                     break 'plans;
                 }
@@ -502,19 +544,17 @@ impl App {
         let mut gardees: HashMap<u64, (String, usize)> = HashMap::with_capacity(vues);
         let mut lines = HashMap::with_capacity(vues);
         for p in &self.doc.panels {
-            for (id, text) in notes(p) {
-                if text.trim().is_empty() {
+            for (id, trois) in textes_du_plan(p) {
+                let champs = champs_montres(textes, trois);
+                if champs.is_empty() {
                     continue;
                 }
+                let texte = cle(&champs);
                 let n = match m.notes.remove(&id).or_else(|| gardees.remove(&id)) {
-                    Some((t, n)) if t == text => n,
-                    _ => {
-                        let size = board::note_font_size(text.chars().count());
-                        let galley = ctx.fonts(|f| f.layout_job(note_job(text, size, width, NOTE_INK)));
-                        galley.rows.len().clamp(1, NOTE_MAX_LINES)
-                    }
+                    Some((t, n)) if t == texte => n,
+                    _ => lignes_de_la_case(ctx, textes, &champs, width),
                 };
-                gardees.insert(id, (text.to_string(), n));
+                gardees.insert(id, (texte, n));
                 lines.insert(id, n);
             }
         }
@@ -694,6 +734,15 @@ impl App {
             return false;
         }
         if button != PointerButton::Primary {
+            return false;
+        }
+        // L'étiquette de version (« V2 ») d'une case : un appui dessus épingle la pile des versions (pour un stylet qui ne survole pas), comme
+        // sur le bloc du montage ; il ne dessine rien dans la case.
+        if let Some(plan) = self.pile_versions.etiquettes.iter().find(|(z, _)| z.contains(pos)).map(|(_, p)| *p) {
+            self.commit_note_text(layout);
+            self.commit_card_note();
+            self.pile_epingler(plan);
+            self.vignettes.press = Press::Version;
             return false;
         }
         // L'icône d'écriture, au bout de la bande de note d'une case : seul un appui dessus ouvre la note (Anthony, 2026-10-22 : « les notes ne
@@ -961,6 +1010,7 @@ impl App {
         self.variantes_barre(ui);
         let view = ui.available_rect_before_wrap();
         self.vignettes.view = view;
+        self.vignettes.etiquettes.clear();
         let bg = ui.allocate_rect(view, Sense::click_and_drag());
         let painter = ui.painter_at(view);
         painter.rect_filled(view, 0.0, PAPER);
@@ -975,7 +1025,10 @@ impl App {
         let mut layout = self.board_layout();
         self.suivre_decalage(&layout);
         if self.board_zoom <= 0.0 {
-            self.board_zoom = (view.width() / layout.size.x.max(1.0)).clamp(ZOOM_MIN, 1.5);
+            // En lignes la page tient à la largeur de la vue (les rangées s'ajoutent dessous) ; à la japonaise, à sa hauteur (les colonnes
+            // s'ajoutent à droite).
+            let tient = if layout.sens.japonais() { view.height() / layout.size.y.max(1.0) } else { view.width() / layout.size.x.max(1.0) };
+            self.board_zoom = tient.clamp(ZOOM_MIN, 1.5);
             self.board_pan = Vec2::ZERO;
         }
         // Les annotations d'une vignette qui a disparu passent à sa voisine (`annotationsui.rs`).
@@ -1264,6 +1317,11 @@ impl App {
             self.images_focus = false;
             self.key_focus = false;
         }
+        // La pile des versions (la même que celle du montage) : survoler l'étiquette « V2 » d'une case l'ouvre au-dessus d'elle, un clic sur une
+        // carte passe le plan à cette version (`passer_a_la_version`, la même étape d'annulation que la timeline). Fermée, elle ne coûte rien.
+        let occupe = (any_down && !matches!(self.vignettes.press, Press::None | Press::Version)) || self.vignettes.moving.as_ref().is_some_and(|m| m.active) || self.vignettes.cam.as_ref().is_some_and(|g| g.actif);
+        let etiquettes = std::mem::take(&mut self.vignettes.etiquettes);
+        self.pile_versions_ui(ui, &etiquettes, occupe, view);
         if !any_down {
             self.vignettes.press = Press::None;
         }
@@ -1279,8 +1337,8 @@ impl App {
             if !zone.intersects(view) {
                 continue;
             }
-            // (La barre de coupe est un peu plus épaisse que la grise : 2 contre 1,5.)
-            let width = (b.bar.width() * xf.zoom).clamp(1.0, 3.5);
+            // (La barre de coupe est un peu plus épaisse que la grise : 2 contre 1,5.) À la japonaise, la barre est horizontale : son épaisseur est sa hauteur.
+            let width = (b.bar.size().min_elem() * xf.zoom).clamp(1.0, 3.5);
             let hot = hovered == Some(Hit::Bar(b.after));
             let color = if hot {
                 crate::theme::accent()
@@ -1290,9 +1348,10 @@ impl App {
                 BAR_JOINED
             };
             let r = xf.rect(b.bar);
-            painter.line_segment([pos2(r.center().x, r.top()), pos2(r.center().x, r.bottom())], Stroke::new(if hot { width + 1.0 } else { width }, color));
+            let trait_ = if layout.sens.japonais() { [pos2(r.left(), r.center().y), pos2(r.right(), r.center().y)] } else { [pos2(r.center().x, r.top()), pos2(r.center().x, r.bottom())] };
+            painter.line_segment(trait_, Stroke::new(if hot { width + 1.0 } else { width }, color));
             if hot {
-                let resp = ui.interact(zone.expand2(vec2(((BAR_TOUCH - zone.width()) * 0.5).max(0.0), 0.0)), ui.id().with(("planche_barre", b.after)), Sense::hover());
+                let resp = ui.interact(board::zone_tactile(zone, layout.sens, BAR_TOUCH), ui.id().with(("planche_barre", b.after)), Sense::hover());
                 let (nom, texte) = if b.after + 1 >= layout.cards.len() {
                     if self.vignettes.empty_joins {
                         ("Prochaine case : image du plan", "Grise : la prochaine case vide fera une image de plus du dernier plan. Clic : en faire un nouveau plan.")
@@ -1447,11 +1506,14 @@ impl App {
                     if bulle(resp, "Taille des vignettes", "", "").changed() {
                         self.layout.card_size = size;
                     }
-                    etiquette(ui, ph::COLUMNS, "Colonnes", "Vignettes par ligne (6 au plus).");
+                    let japonais = self.layout.board_sens.japonais();
+                    let (nom, description) = if japonais { ("Cases par colonne", "Vignettes par colonne (6 au plus) : la colonne suivante est à droite.") } else { ("Colonnes", "Vignettes par ligne (6 au plus).") };
+                    etiquette(ui, ph::COLUMNS, nom, description);
                     let resp = ui.add(egui::DragValue::new(&mut self.layout.board_columns).range(1..=MAX_COLUMNS).speed(0.05));
-                    bulle(resp, "Colonnes", "Vignettes par ligne (6 au plus).", "");
+                    bulle(resp, nom, description, "");
                     let resp = ui.button(format!("{:.0} %", self.board_zoom * 100.0));
-                    if bulle(resp, "Zoom de la planche", "Ctrl + molette. Clic : la page à la largeur de la vue.", "").clicked() {
+                    let ajuste = if japonais { "Clic : la planche à la hauteur de la vue." } else { "Clic : la page à la largeur de la vue." };
+                    if bulle(resp, "Zoom de la planche", &format!("Ctrl + molette. {ajuste}"), "").clicked() {
                         self.board_fit();
                     }
                 });
@@ -1720,27 +1782,40 @@ impl App {
         }
         self.paint_card_note(&clip, xf, place, note);
         self.paint_note_icone(ui, painter, view, place);
+        // L'étiquette de version (« V2 »), en haut à droite de la première case d'un plan qui a plusieurs versions : rien pour un plan à
+        // une seule version. La survoler ouvre la pile des versions (`pile_versions_ui`, en fin d'image).
+        if place.starts_plan() {
+            if let Some(e) = self.peindre_etiquette_case(&clip, thumb, i) {
+                self.vignettes.etiquettes.push(e);
+            }
+        }
     }
     /// La bande de note sous l'image : le texte (trois lignes au plus, « … » au bout), ou un filet très pâle
     /// quand elle est vide. Pendant la saisie, l'éditeur la remplace (`card_note_editor`).
     fn paint_card_note(&self, painter: &egui::Painter, xf: Xf, place: &CardPlace, strip: Rect) {
-        let text = self.card_notes(place);
         if self.vignettes.note.as_ref().is_some_and(|e| e.id == place.id) {
             return;
         }
-        // Sous chaque bande, un filet très pâle (sans cadre : la maquette) ; le texte, petit et gris, au-dessus.
+        // Sous chaque bande, un filet très pâle (sans cadre : la maquette) ; le texte, petit et gris, au-dessus. (À la japonaise la bande
+        // est à droite de la case, le filet est sous sa dernière ligne de même.)
         let y = strip.bottom() - 1.0;
         painter.line_segment([pos2(strip.left(), y), pos2(strip.right(), y)], Stroke::new(1.0_f32, HAIRLINE));
-        if text.trim().is_empty() {
-            return;
+        // Les champs montrés (action, dialogue, notes) qui ont un texte, l'un sous l'autre ; chacun avec son étiquette s'il y en a plusieurs.
+        let textes = self.layout.board_textes;
+        let champs = crate::boardsens::champs_de_la_case(&self.doc, place.panel, place.id, place.frame, textes);
+        let etiquette = textes.etiquettes();
+        let width = (place.note.width() - NOTE_PAD * 2.0) * xf.zoom;
+        let mut y = strip.min.y;
+        for (champ, text) in champs {
+            let size = board::note_font_size(text.chars().count()) * xf.zoom;
+            if size < 4.0 {
+                return;
+            }
+            let galley = painter.layout_job(champ_job(champ, text, size, width, etiquette));
+            let lignes = galley.rows.len().clamp(1, NOTE_MAX_LINES);
+            painter.galley(pos2(strip.min.x + NOTE_PAD * xf.zoom, y), galley, NOTE_INK);
+            y += lignes as f32 * board::NOTE_LINE_H * xf.zoom;
         }
-        let size = board::note_font_size(text.chars().count()) * xf.zoom;
-        if size < 4.0 {
-            return;
-        }
-        let job = note_job(text, size, (place.note.width() - NOTE_PAD * 2.0) * xf.zoom, NOTE_INK);
-        let galley = painter.layout_job(job);
-        painter.galley(strip.min + vec2(NOTE_PAD * xf.zoom, 0.0), galley, NOTE_INK);
     }
 
     /// Le dessin dans la vignette du panneau courant : vue à travers la caméra, cadrée sur la
@@ -1895,7 +1970,7 @@ impl App {
             ui.close_menu();
             self.board_sel = self.doc.panels.iter().map(|p| p.id).collect();
         }
-        if ui.button("Page à la largeur de la vue").clicked() {
+        if ui.button(if self.layout.board_sens.japonais() { "Planche à la hauteur de la vue" } else { "Page à la largeur de la vue" }).clicked() {
             ui.close_menu();
             self.board_fit();
         }

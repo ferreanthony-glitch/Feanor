@@ -2716,6 +2716,37 @@ action = "perso.aucun"
 touches = []
 source = "SHOT (sans touche)"
 
+# Panneau Vignettes : sens de lecture de la planche et textes à côté des cases (sans touche : à choisir).
+[[raccourci]]
+action = "vue.vignettes_panneau"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vignettes.sens_lignes"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vignettes.sens_japonais"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vignettes.texte_action"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vignettes.texte_dialogue"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "vignettes.texte_notes"
+touches = []
+source = "SHOT (sans touche)"
+
 [[raccourci]]
 action = "perso.classique"
 touches = []

@@ -90,7 +90,8 @@ fn icones_de(espace: Espace, animation: bool, ouverts: &[Pane]) -> Vec<Pane> {
 #[test]
 fn each_workspace_shows_only_the_panels_useful_for_its_work() {
     // Vignettes : « la plus épurée possible, rien de distraction, que du dessin et des références ».
-    assert_eq!(icones_de(Espace::Vignettes, false, &[]), vec![Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::References]);
+    // (Et le panneau « Vignettes », sens de lecture et textes, qui a son icône dans cet espace seulement, en tête.)
+    assert_eq!(icones_de(Espace::Vignettes, false, &[]), vec![Pane::Vignettes, Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::References]);
     // Montage : la fiche du plan et ce qui sert à la relecture et au son.
     assert_eq!(icones_de(Espace::Montage, false, &[]), vec![Pane::Sheet, Pane::Comments, Pane::History, Pane::Bruitages]);
     // Storyboard : le dessin, les calques, la fiche ; pas de feuille d'exposition, de commentaires ni d'historique.

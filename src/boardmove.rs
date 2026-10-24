@@ -160,10 +160,14 @@ impl App {
         }
         // Le repère de pose.
         if let Some(s) = mv.target {
-            let (a, b) = (xf.to_screen(pos2(s.x, s.top)), xf.to_screen(pos2(s.x, s.bottom)));
-            clip.line_segment([a - vec2(0.0, 5.0), b + vec2(0.0, 5.0)], Stroke::new(3.5_f32, accent));
-            clip.circle_filled(a - vec2(0.0, 5.0), 4.0, accent);
-            clip.circle_filled(b + vec2(0.0, 5.0), 4.0, accent);
+            // (Un trait vertical entre deux cases d'une ligne ; horizontal entre deux cases d'une colonne, à la japonaise.)
+            let (a, b) = (xf.to_screen(s.a), xf.to_screen(s.b));
+            let dir = (b - a).normalized();
+            let dir = if dir.x.is_finite() && dir.y.is_finite() { dir } else { vec2(0.0, 1.0) };
+            let (a, b) = (a - dir * 5.0, b + dir * 5.0);
+            clip.line_segment([a, b], Stroke::new(3.5_f32, accent));
+            clip.circle_filled(a, 4.0, accent);
+            clip.circle_filled(b, 4.0, accent);
         }
         // Le fantôme.
         let shift = mv.now - mv.grab;

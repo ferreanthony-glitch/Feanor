@@ -486,6 +486,13 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("perso.suivant", "Personnage suivant (trait et aplat)", true, false),
     act("perso.precedent", "Personnage précédent (trait et aplat)", true, false),
     act("perso.aucun", "Ne plus dessiner en personnage (couleur libre)", true, false),
+    // Le panneau « Vignettes » : le sens de lecture de la planche et les textes à côté des cases (`vignettespanneau.rs`).
+    act("vue.vignettes_panneau", "Panneau Vignettes (ouvrir / fermer)", true, false),
+    act("vignettes.sens_lignes", "Vignettes : lire en lignes (de gauche à droite, le texte sous les cases)", true, false),
+    act("vignettes.sens_japonais", "Vignettes : lire à la japonaise (en colonnes, le texte à droite des cases)", true, false),
+    act("vignettes.texte_action", "Vignettes : montrer l'action à côté des cases (oui / non)", true, false),
+    act("vignettes.texte_dialogue", "Vignettes : montrer le dialogue à côté des cases (oui / non)", true, false),
+    act("vignettes.texte_notes", "Vignettes : montrer les notes à côté des cases (oui / non)", true, false),
     act("perso.classique", "Pastille classique : le pinceau de base, sans personnage ni décor", true, false),
     // Barre des panneaux (`barrepanneaux.rs`) : ouvrir, mettre devant ou fermer un panneau de côté.
     act("vue.reglages", "Panneau Réglages de l'outil (ouvrir / fermer)", true, false),

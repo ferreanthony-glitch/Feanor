@@ -68,6 +68,8 @@ pub(crate) struct CamGeste {
     pub hold: Option<Reserve>,
     /// Où était la case A à l'appui (sa rangée, son x) : elle y reste tant que le geste dure (`Reserve::pose`).
     pub pose: Option<(usize, f32)>,
+    /// Lue à la japonaise : le haut de l'image de la case A à l'appui, depuis le haut des colonnes (`Reserve::pose_y`).
+    pub pose_y: Option<f32>,
 }
 
 impl App {
@@ -148,17 +150,32 @@ impl App {
             grille.xs.extend([r.left(), r.center().x, r.right()]);
             grille.ys.extend([r.top(), r.center().y, r.bottom()]);
         }
-        // Les colonnes de la planche (un pas de case et d'écart de coupe, depuis A) et ses rangées (le haut et le bas des vignettes).
-        let pas = place.thumb.width() + board::gap_cut(place.thumb.width());
-        for c in -6..=6 {
-            grille.xs.extend([c as f32 * pas, c as f32 * pas + place.thumb.width()]);
-        }
-        for c in &layout.cards {
-            grille.ys.extend([c.thumb.top() - au.y, c.thumb.bottom() - au.y]);
+        if layout.sens.japonais() {
+            // Lue à la japonaise, c'est l'inverse : les rangées de la planche sont les cases d'une colonne (un pas de case, de sa ligne de
+            // numéro et d'écart de coupe, depuis A) et ses colonnes (le bord gauche et le bord droit des vignettes).
+            let pas = board::LABEL_H + place.thumb.height() + board::gap_cut(place.thumb.width());
+            for c in -6..=6 {
+                grille.ys.extend([c as f32 * pas, c as f32 * pas + place.thumb.height()]);
+            }
+            for c in &layout.cards {
+                grille.xs.extend([c.thumb.left() - au.x, c.thumb.right() - au.x]);
+            }
+            grille.xs.sort_by(f32::total_cmp);
+            grille.xs.dedup_by(|a, b| (*a - *b).abs() < 0.5);
+        } else {
+            // Les colonnes de la planche (un pas de case et d'écart de coupe, depuis A) et ses rangées (le haut et le bas des vignettes).
+            let pas = place.thumb.width() + board::gap_cut(place.thumb.width());
+            for c in -6..=6 {
+                grille.xs.extend([c as f32 * pas, c as f32 * pas + place.thumb.width()]);
+            }
+            for c in &layout.cards {
+                grille.ys.extend([c.thumb.top() - au.y, c.thumb.bottom() - au.y]);
+            }
         }
         grille.ys.sort_by(f32::total_cmp);
         grille.ys.dedup_by(|a, b| (*a - *b).abs() < 0.5);
         let avant = if keys0.len() >= 2 { keys0.len() } else { 0 };
+        let reserve0 = layout.cards.iter().position(|c| c.plan == place.plan && c.frame == 0).and_then(|j| Reserve::depuis(layout, j));
         self.vignettes.cam = Some(CamGeste {
             plan: place.plan,
             image: place.frame,
@@ -181,7 +198,8 @@ impl App {
             avant,
             snap: None,
             hold: None,
-            pose: layout.cards.iter().position(|c| c.plan == place.plan && c.frame == 0).and_then(|j| Reserve::depuis(layout, j)).and_then(|r| r.pose),
+            pose: reserve0.as_ref().and_then(|r| r.pose),
+            pose_y: reserve0.and_then(|r| r.pose_y),
         });
         true
     }
@@ -246,7 +264,7 @@ impl App {
         let Some(g) = self.vignettes.cam.as_mut().filter(|g| g.actif && !g.annule) else { return };
         let Some(k) = layout.cards.iter().position(|c| c.plan == g.plan && c.frame == 0) else { return };
         if let Some(r) = Reserve::depuis(layout, k) {
-            let r = Reserve { pose: g.pose.or(r.pose), ..r };
+            let r = Reserve { pose: g.pose.or(r.pose), pose_y: g.pose_y.or(r.pose_y), ..r };
             g.hold = Some(g.hold.map_or(r, |h| h.avec(r)));
         }
     }

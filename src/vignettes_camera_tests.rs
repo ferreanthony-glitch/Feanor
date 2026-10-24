@@ -610,7 +610,7 @@ pub(crate) fn deux_cadres(doc: &mut Document, plan: usize, dx: f32, dy: f32) {
     crate::camera::set_key(&mut doc.panels[plan].camera, n - 1, a.shifted(dx, dy));
 }
 
-fn sans_chevauchement(l: &board::BoardLayout) {
+pub(crate) fn sans_chevauchement(l: &board::BoardLayout) {
     use crate::vignettecam::{coins_de, se_recouvrent};
     for (i, a) in l.cards.iter().enumerate() {
         let za = l.zones_of(i);

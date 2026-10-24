@@ -37,7 +37,7 @@ pub const MIN_FIT: f32 = 56.0;
 
 /// Les panneaux qui prennent la hauteur de leur contenu.
 pub fn fits(pane: Pane) -> bool {
-    matches!(pane, Pane::Tools | Pane::ToolOptions | Pane::Sheet | Pane::Effects)
+    matches!(pane, Pane::Tools | Pane::ToolOptions | Pane::Sheet | Pane::Effects | Pane::Vignettes)
 }
 
 /// Les panneaux dont on mesure le contenu : ceux qui s'ajustent, et la couleur (souple, mais dont

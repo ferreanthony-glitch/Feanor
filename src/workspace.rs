@@ -63,6 +63,13 @@ pub struct Layout {
     pub board_scene_breaks: bool,
     #[serde(rename = "attacher_notes")]
     pub board_attach: bool,
+    /// Vue Vignettes (panneau « Vignettes », 2026-10-24) : le sens de lecture de la planche (en lignes, ou à la japonaise : les cases
+    /// en colonnes, `board_columns` par colonne), et les champs de texte montrés à côté des cases (`boardsens.rs`). Des réglages de
+    /// l'application, comme la taille des cases et leur nombre par ligne.
+    #[serde(rename = "sens_lecture")]
+    pub board_sens: crate::boardsens::Sens,
+    #[serde(rename = "textes_vignettes")]
+    pub board_textes: crate::boardsens::Textes,
     /// Cadres de composition sur le dessin (9d) : zones de sécurité, et cadre d'un format de
     /// diffusion (largeur:hauteur ; absent : aucun).
     #[serde(rename = "cadres_securite")]
@@ -96,6 +103,8 @@ impl Default for Layout {
             board_spacing: 18.0,
             board_scene_breaks: false,
             board_attach: false,
+            board_sens: Default::default(),
+            board_textes: Default::default(),
             safe_frames: false,
             frame_format: None,
             character_bar: None,
@@ -161,6 +170,8 @@ impl Layout {
             board_spacing: vue.board_spacing,
             board_scene_breaks: vue.board_scene_breaks,
             board_attach: vue.board_attach,
+            board_sens: vue.board_sens,
+            board_textes: vue.board_textes,
             safe_frames: vue.safe_frames,
             frame_format: vue.frame_format,
             ..self
