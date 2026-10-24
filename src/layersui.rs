@@ -363,6 +363,8 @@ impl App {
                 accent
             } else if cfx {
                 crate::theme::palette().dessin_cfx
+            } else if self.layers()[li].annotation {
+                crate::theme::palette().dessin_annotation
             } else {
                 crate::theme::couleur_calque(kind, couleur)
             };

@@ -11,7 +11,8 @@
 //! - un calque qui avait un dessin à la case d'avant mais rien à celle-ci (le plan qu'on vient de réunir n'avait pas ce calque) reçoit
 //!   un **dessin vide** : la case est bien à elle, et on y dessine sans toucher à l'autre ;
 //! - un calque qui n'a rien dessiné d'avant, un dossier, un calque d'effet, un calque vidéo, un calque de couleur (il suit son calque de trait,
-//!   `sync_couleurs`) et **le calque Décor** (un seul dessin pour toute la continuité, `decor.rs`) ne reçoivent rien.
+//!   `sync_couleurs`), **le calque Décor** (un seul dessin pour toute la continuité, `decor.rs`) et **le calque d'annotation** du plan (des notes
+//!   sur le plan, pas un dessin de la case, `calqueannot.rs`) ne reçoivent rien.
 //!
 //! Toujours dans l'étape d'annulation de ce qui fait la case : une annulation défait la case et ses clés.
 
@@ -21,7 +22,7 @@ use crate::document::{CelId, Document, Layer, Panel};
 /// Les calques dont les clés font les cases d'un plan : les mêmes que ceux qui reçoivent une clé quand une case est faite
 /// (`cles_de_case`).
 fn calque_de_case(l: &Layer) -> bool {
-    !(l.folder || l.effet.is_some() || l.video.is_some() || l.decor || l.couleur.is_some() || l.scene_wide.is_some())
+    !(l.folder || l.effet.is_some() || l.video.is_some() || l.decor || l.annotation || l.couleur.is_some() || l.scene_wide.is_some())
 }
 
 /// Le dessin qui commence à l'image `f` de `l` : sa clé, s'il y en a une.
@@ -164,7 +165,7 @@ impl Document {
         let mut posees = 0;
         for li in 0..self.panels[index].layers.len() {
             let l = &self.panels[index].layers[li];
-            if l.folder || l.effet.is_some() || l.video.is_some() || l.decor || l.couleur.is_some() || l.scene_wide.is_some() {
+            if l.folder || l.effet.is_some() || l.video.is_some() || l.decor || l.annotation || l.couleur.is_some() || l.scene_wide.is_some() {
                 continue;
             }
             let (avant, ici, genre) = (l.cel_at(frame - 1), l.cel_at(frame), l.kind);

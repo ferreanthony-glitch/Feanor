@@ -649,6 +649,10 @@ struct LayerEntry {
     /// `VERSION` (une version d'avant l'ouvre comme un calque ordinaire nommé « Décor »).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     decor: bool,
+    /// Calque d'annotation du plan (`calqueannot.rs`) : des notes, jamais dans les exports ; absent : calque ordinaire. Sans changer `VERSION`
+    /// (une version d'avant l'ouvre comme un calque vectoriel ordinaire, avec ses notes).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    annotation: bool,
     /// Les expositions dans l'ordre : quel dessin (fichier `dessins/<id>.*`, ou aucun) et pendant
     /// combien d'images.
     expositions: Vec<Exposure>,
@@ -2171,6 +2175,7 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                     })
                 }),
                 decor: l.decor,
+                annotation: l.annotation,
                 expositions: to_exposures(&l.frames.iter().map(|f| f.map(key)).collect::<Vec<_>>()),
             })
             .collect(),
@@ -2951,6 +2956,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         // Calque de couleur (format 30) : le lien vient après (rang du trait → son id).
                         couleur: None,
                         decor: l.decor,
+                        annotation: l.annotation,
                     })
                     .collect();
                 // Dossiers (format 14) : le rang du dossier devient l'id de son calque.

@@ -561,6 +561,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fx.preset_arc_en_ciel", "Préréglage de la matière : arc-en-ciel (dégradé sur tout le dessin)", true, false),
     act("fx.preset_plume_calligraphique", "Préréglage de la matière : plume calligraphique (changer de plume)", true, false),
     act("calque.nouveau_couleur", "Nouveau calque de couleur (sous le trait du calque courant)", true, false),
+    act("calque.nouveau_annotation", "Nouveau calque d'annotation (des notes par-dessus, jamais dans les exports)", true, false),
     act("calque.detacher_couleur", "Détacher le calque de couleur de son trait", true, false),
     act("calque.griffonner", "Calque de couleur : griffonner (les couleurs posées remplissent les zones fermées par le trait)", true, false),
     act("fichier.importer_video", "Importer une vidéo (calque vidéo)", true, false),
