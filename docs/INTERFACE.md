@@ -3890,3 +3890,17 @@ Préférences > Dessin, groupe « Poignées de la Sélection et du Transformer �
 
 Remarque : avant ce réglage, le geste sans touche gardait déjà la poignée opposée (Sélection et Transformer) ; seul Ctrl faisait tourner autour du pivot. Le mode
 d'office reproduit donc l'ancien geste sans touche, et « Centre » l'ancien geste avec Ctrl.
+
+### 2. Les réglages du pinceau, du crayon et de la gomme
+
+- **« Peint derrière » s'appelle « Peint sur l'aplat »** (nom, bulle, barre d'état, liste des raccourcis, aide-mémoire). Son effet ne change pas encore (la peinture passe
+  sous ce qui est déjà dessiné) ; la clé `peint_derriere` des réglages et l'action `pinceau.derriere` gardent leur nom.
+- **« Remplir la forme » est retiré** : il faisait double emploi avec l'aplat sous le trait. Choix : **son effet s'arrête**, il n'est pas reporté sur l'aplat. C'était un
+  réglage de l'application, global (tous les calques, tous les projets), qui posait sous chaque trait fermé une zone de la couleur du trait ; l'aplat est un réglage du
+  **calque**, une seule forme recalculée, de sa propre couleur. Allumer de soi-même un aplat sur des calques parce qu'un ancien fichier de réglages avait cette case cochée
+  changerait des projets sans qu'on l'ait demandé. Un ancien `reglages.toml` avec `remplir_la_forme = true` s'ouvre toujours (lu, sans effet, plus écrit) ; les brosses ne
+  l'ont jamais porté. L'action `pinceau.remplir` (un raccourci déjà posé dessus) devient un double de `pinceau.fond` : elle ajoute ou retire l'aplat du calque courant.
+- **Au-dessus de « Plus de réglages »**, sous l'aperçu du trait, toujours visibles (pinceau et crayon) : l'interrupteur « Peint sur l'aplat » et le bouton d'aplat du calque
+  courant (le même que sur sa ligne du panneau Calques : ajouter ou retirer l'aplat).
+- **La ligne « Le trait de ce calque bout »** (et son icône de tremblement) n'est plus dans les réglages du pinceau et du crayon : le tremblement du trait se règle dans le
+  panneau Effets (et l'action `fx.tremblement`).

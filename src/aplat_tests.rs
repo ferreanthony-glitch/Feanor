@@ -168,7 +168,8 @@ fn the_aplat_is_activated_from_the_layer_only() {
     let ph_aplat = egui_phosphor::regular::USER_SQUARE;
     let mut ecran = Ecran::new();
     // Dans les réglages de chaque outil de dessin, avec ou sans aplat sur le calque courant : ni bascule « Peindre dans »,
-    // ni réglages d'aplat, ni bouton d'aplat.
+    // ni réglages d'aplat. Le pinceau et le crayon ont le bouton d'aplat du calque courant (le même que sur sa ligne,
+    // Anthony, 2026-10-23, à côté de « Peint sur l'aplat ») ; la gomme, le pot et le cutter non.
     app.toggle_fond(2);
     assert!(app.layers()[2].fond.is_some());
     let mut ui_outil = |a: &mut App, ui: &mut egui::Ui| a.tool_options_panel(ui);
@@ -176,9 +177,11 @@ fn the_aplat_is_activated_from_the_layer_only() {
         app.set_tool(tool);
         let textes = ecran.chauffer(&mut app, 4, &mut ui_outil);
         // (« Débord » est un réglage du pot de peinture lui-même, pas de l'aplat.)
-        for interdit in ["Peindre dans", "Couleur de l'aplat", "Couleur du fond", "Fermer les trous", ph_aplat, "Le trait", "Le fond"] {
+        for interdit in ["Peindre dans", "Couleur de l'aplat", "Couleur du fond", "Fermer les trous", "Le trait", "Le fond"] {
             assert!(!contient(&textes, interdit), "{tool:?} : « {interdit} » ne devrait plus être dans les réglages : {textes:?}");
         }
+        let bouton = matches!(tool, Tool::Brush | Tool::Pencil);
+        assert_eq!(contient(&textes, ph_aplat), bouton, "{tool:?} : le bouton d'aplat du calque : {textes:?}");
     }
     // L'action de bascule du trait / fond n'existe plus.
     assert!(crate::keymap::ACTIONS.iter().all(|a| a.id != "pinceau.strate_fond"));

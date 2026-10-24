@@ -87,12 +87,15 @@ pub struct Settings {
     /// (`pistes.rs`, Préférences > Montage). Un réglage de l'application : rien n'est écrit dans le projet.
     #[serde(default, rename = "repliage_pistes", skip_serializing_if = "crate::pistes::ReplisPistes::est_commun")]
     pub montage_folds: crate::pistes::ReplisPistes,
-    /// Pinceau et crayon : peint derrière, remplir la forme (`brushfill`), retenus d'une séance à
-    /// l'autre (Anthony, 2026-10-17).
+    /// Pinceau et crayon : « Peint sur l'aplat » (`brushfill`, l'ancien « Peint derrière » : la clé garde son nom),
+    /// retenu d'une séance à l'autre (Anthony, 2026-10-17).
     #[serde(default, rename = "peint_derriere")]
     pub paint_behind: bool,
-    #[serde(default, rename = "remplir_la_forme")]
-    pub fill_shapes: bool,
+    /// L'ancien « Remplir la forme » (retiré le 2026-10-23 : il faisait double emploi avec l'aplat sous le trait). Lu
+    /// pour qu'un ancien fichier de réglages s'ouvre, jamais écrit, sans effet.
+    #[serde(default, rename = "remplir_la_forme", skip_serializing)]
+    #[allow(dead_code)]
+    pub ancien_remplir_la_forme: bool,
     /// Projets récents, le plus récent d'abord (`recents.rs`), et rouvrir le dernier au lancement.
     #[serde(default, rename = "projets_recents", skip_serializing_if = "Vec::is_empty")]
     pub recent_projects: Vec<PathBuf>,
@@ -246,7 +249,7 @@ impl Default for Settings {
             montage_auto_open: true,
             montage_folds: Default::default(),
             paint_behind: false,
-            fill_shapes: false,
+            ancien_remplir_la_forme: false,
             recent_projects: Vec::new(),
             reopen_last: true,
             open_in_new_tab: true,

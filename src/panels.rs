@@ -360,34 +360,30 @@ impl App {
         }
     }
 
-    /// Sous les réglages de la brosse du pinceau et du crayon, dans « Plus de réglages » : peint derrière, remplir
-    /// la forme (`brushfill`).
-    fn brush_extras_ui(&mut self, ui: &mut egui::Ui) {
+    /// Sous l'aperçu du trait du pinceau et du crayon, au-dessus de « Plus de réglages », toujours à portée (Anthony,
+    /// 2026-10-23) : « Peint sur l'aplat » (`paint_behind`, `brushfill`) et l'aplat sous le trait du calque courant (le
+    /// même bouton que sur sa ligne du panneau Calques, `fond_layer_button`). « Remplir la forme » n'existe plus : il
+    /// faisait double emploi avec l'aplat.
+    pub(crate) fn brush_extras_ui(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
-        ui.separator();
-        let (behind_key, fill_key) = (self.raccourci("pinceau.derriere"), self.raccourci("pinceau.remplir"));
+        let behind_key = self.raccourci("pinceau.derriere");
         ui.horizontal(|ui| {
             crate::bulles::interrupteur_a(
                 ui,
                 &mut self.paint_behind,
                 ph::SELECTION_BACKGROUND,
-                "Peint derrière",
+                "Peint sur l'aplat",
                 "La peinture passe sous ce qui est déjà dessiné sur le calque.",
                 &behind_key,
                 "pinceau.derriere",
             );
-            crate::bulles::interrupteur_a(
-                ui,
-                &mut self.fill_shapes,
-                ph::PAINT_BUCKET,
-                "Remplir la forme",
-                "Au lâcher, un trait fermé (son bout revient près de son début, ou il se recoupe) remplit son intérieur de sa couleur, sous le trait. Sur un calque vectoriel, la zone reste modifiable.",
-                &fill_key,
-                "pinceau.remplir",
-            );
+            let li = self.cur_layer;
+            if let Some(resp) = self.fond_layer_button(ui, li, false) {
+                if resp.clicked() {
+                    self.toggle_fond(li);
+                }
+            }
         });
-        // (L'aplat sous le trait n'est plus un réglage du pinceau : il s'active depuis le calque, et ses réglages sont
-        // en haut de ce panneau quand sa sous-ligne est choisie, `aplat_section_ui`.)
     }
 
     /// Panneau des réglages de l'outil courant.
@@ -414,44 +410,29 @@ impl App {
         // Sous-ligne d'aplat choisie : « Aplat de <calque> » et ses réglages (couleur, débord, trous) d'abord ; l'outil et
         // sa brosse suivent, ce sont eux qui travaillent l'aplat.
         self.aplat_section_ui(ui);
-        // Pinceau, crayon, gomme : la taille en premier, les réglages de la brosse, puis en bas
-        // peint derrière et remplir la forme (Anthony, 2026-10-18).
         match self.tool {
             // Pinceau, crayon, gomme : la taille, l'opacité et le nom de la brosse en haut ; sous l'aperçu du trait,
-            // « Plus de réglages » (replié d'office) : les catégories de la brosse, peint derrière, remplir la forme
-            // et le mode d'emploi. Le mode « Griffonner » d'un calque de couleur reste à portée.
+            // « Peint sur l'aplat » et l'aplat du calque (pinceau et crayon), puis « Plus de réglages » (replié
+            // d'office) : les catégories de la brosse et le mode d'emploi. Le mode « Griffonner » d'un calque de couleur
+            // reste à portée. (Le tremblement du trait se règle dans le panneau Effets : plus de ligne ici, 2026-10-23.)
             Tool::Brush => {
                 self.brush_summary_ui(ui);
                 self.brush_settings_ui(ui);
-                let plus = self.pinceaux.reglages_ouverts;
-                if plus {
-                    self.brush_extras_ui(ui);
-                }
                 // Calque de couleur : le mode « Griffonner » (`calquecouleurui.rs`).
                 self.griffonner_options_ui(ui);
-                if vector {
-                    if plus {
-                        let key = between_parens(&self.raccourci("outil.selection"));
-                        note(ui, &format!("Le trait reste modifiable avec l'outil Sélection{key}, même texturé (pointe en \
-                              image, grain du papier)."));
-                    }
-                    self.boil_tool_toggle(ui);
+                if vector && self.pinceaux.reglages_ouverts {
+                    let key = between_parens(&self.raccourci("outil.selection"));
+                    note(ui, &format!("Le trait reste modifiable avec l'outil Sélection{key}, même texturé (pointe en \
+                          image, grain du papier)."));
                 }
             }
             Tool::Pencil => {
                 self.brush_summary_ui(ui);
                 self.brush_settings_ui(ui);
-                let plus = self.pinceaux.reglages_ouverts;
-                if plus {
-                    self.brush_extras_ui(ui);
-                }
                 self.griffonner_options_ui(ui);
-                if vector {
-                    if plus {
-                        let key = between_parens(&self.raccourci("outil.selection"));
-                        note(ui, &format!("Le trait reste modifiable avec l'outil Sélection{key}."));
-                    }
-                    self.boil_tool_toggle(ui);
+                if vector && self.pinceaux.reglages_ouverts {
+                    let key = between_parens(&self.raccourci("outil.selection"));
+                    note(ui, &format!("Le trait reste modifiable avec l'outil Sélection{key}."));
                 }
             }
             Tool::Eraser => {

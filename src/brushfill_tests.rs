@@ -76,13 +76,39 @@ fn the_brush_options_are_remembered_between_sessions() {
     // Anthony : « retiens-les, et garde-les pour le crayon ».
     use crate::settings::Settings;
     let mut s = Settings::default();
-    assert!(!s.paint_behind && !s.fill_shapes, "éteintes au premier lancement");
-    (s.paint_behind, s.fill_shapes) = (true, true);
+    assert!(!s.paint_behind, "éteinte au premier lancement");
+    s.paint_behind = true;
     let text = toml::to_string(&s).unwrap();
-    assert!(text.contains("peint_derriere = true") && text.contains("remplir_la_forme = true"));
+    assert!(text.contains("peint_derriere = true"), "« Peint sur l'aplat » garde la clé d'avant");
+    assert!(!text.contains("remplir_la_forme"), "« Remplir la forme » n'est plus écrit (retiré le 2026-10-23)");
     let back: Settings = toml::from_str(&text).unwrap();
-    assert!(back.paint_behind && back.fill_shapes);
-    // Un fichier de réglages d'avant, sans ces lignes : éteintes.
+    assert!(back.paint_behind);
+    // Un fichier de réglages d'avant, sans ces lignes : éteinte.
     let old: Settings = toml::from_str("copie_secours_minutes = 1").unwrap();
-    assert!(!old.paint_behind && !old.fill_shapes);
+    assert!(!old.paint_behind);
+    // Un fichier de réglages d'avant où « Remplir la forme » était allumé s'ouvre toujours, sans rien perdre d'autre ;
+    // l'option n'a plus d'effet et disparaît au prochain enregistrement.
+    let old: Settings = toml::from_str("peint_derriere = true\nremplir_la_forme = true\ncopie_secours_minutes = 3").unwrap();
+    assert!(old.paint_behind && old.ancien_remplir_la_forme && old.autosave_minutes == 3);
+    assert!(!toml::to_string(&old).unwrap().contains("remplir_la_forme"));
+}
+
+#[test]
+fn the_old_fill_shape_option_no_longer_fills_and_its_shortcut_toggles_the_aplat() {
+    use crate::document::{Layer, LayerKind};
+    let dir = std::env::temp_dir().join(format!("shot-remplir-{}-{:?}", std::process::id(), std::thread::current().id()));
+    let _ = std::fs::create_dir_all(&dir);
+    crate::donnees::bac_a_sable(&dir);
+    let ctx = eframe::egui::Context::default();
+    let mut app = crate::app::App::sans_fenetre(&ctx, None);
+    app.welcome = false;
+    app.doc.panels[0].layers = vec![Layer::new("Dessin", LayerKind::Bitmap)];
+    app.cur_layer = 0;
+    // L'action d'avant (un raccourci posé dessus) : l'aplat du calque courant, comme « pinceau.fond ».
+    assert!(app.layers()[0].fond.is_none());
+    app.run_action("pinceau.remplir");
+    assert!(app.layers()[0].fond.is_some(), "« pinceau.remplir » donne un aplat au calque : {}", app.status);
+    app.run_action("pinceau.remplir");
+    assert!(app.layers()[0].fond.is_none(), "et le retire");
+    assert!(crate::keymap::ALIASES.contains(&("pinceau.remplir", "pinceau.fond")));
 }
