@@ -213,6 +213,10 @@ impl Document {
                 lb.frames = frames;
                 lb.roles.clear();
                 lb.trim();
+                // (Tout en bas du plan, hors de tout dossier : le dossier où le second plan l'avait rangé n'est plus juste au-dessus,
+                // et la pile était en désordre — un calque rangé loin de son dossier, que la lecture du projet remettait ailleurs.
+                // Passe de débogage au hasard, 2026-10-23.)
+                lb.parent = None;
                 self.panels[index].layers.insert(0, lb);
             }
             return;

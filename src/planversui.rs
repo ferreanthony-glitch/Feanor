@@ -74,6 +74,7 @@ impl App {
             return false;
         }
         self.end_stroke();
+        self.poser_les_selections();
         let snap = self.snapshot();
         if !op(&mut self.doc) {
             return false;

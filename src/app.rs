@@ -1498,6 +1498,23 @@ impl App {
         self.cur_layer = self.cur_layer.min(self.layers().len() - 1);
     }
 
+    /// Les plans et les calques choisis qui n'existent plus (une annulation, deux plans réunis, une copie annulée) ne restent
+    /// pas choisis : `board_sel.len() > 1` disait « plusieurs plans choisis » au color script et à la planche quand l'un
+    /// d'eux avait disparu (passe de débogage au hasard, 2026-10-22, `hasard_tests.rs`). Les calques choisis d'un autre
+    /// plan restent : chaque usage ne prend que ceux du plan courant. (Par `revalider_rangs` : ils ne disparaissent que par un
+    /// changement de structure, une annulation, un projet ouvert ou un changement venu d'un équipier, jamais d'une image à l'autre.)
+    fn oublier_les_choix_disparus(&mut self) {
+        let doc = &self.doc;
+        if self.board_sel.len() > 8 {
+            let ids: std::collections::HashSet<u64> = doc.panels.iter().map(|p| p.id).collect();
+            self.board_sel.retain(|id| ids.contains(id));
+        } else {
+            self.board_sel.retain(|id| doc.panels.iter().any(|p| p.id == *id));
+        }
+        let cur = &doc.panels[self.cur_panel].layers;
+        self.layer_sel.retain(|id| cur.iter().any(|l| l.id == *id) || doc.panels.iter().any(|p| p.layers.iter().any(|l| l.id == *id)));
+    }
+
     /// Les calques du plan courant tels qu'ils sont maintenant (`calques_tiennent`).
     pub(crate) fn empreinte_calques(&self) -> EmpreinteCalques {
         EmpreinteCalques { plan: self.panel().id, ids: self.layers().iter().map(|l| l.id).collect() }
@@ -1538,8 +1555,7 @@ impl App {
                 *drag = None;
             }
         }
-        let doc = &self.doc;
-        self.board_sel.retain(|id| doc.panels.iter().any(|p| p.id == *id));
+        self.oublier_les_choix_disparus();
         if let Some(crate::boardui::MenuTarget::Card { plan, case, .. }) = self.vignettes.menu {
             if self.case_du_menu(plan, case).is_none() {
                 self.vignettes.menu = None;
@@ -1739,6 +1755,8 @@ impl App {
         use crate::workspace::Espace;
         let avant = self.espace;
         self.cancel_montage_drag();
+        self.poser_le_geste_de_camera();
+        self.poser_la_creation();
         self.end_stroke();
         self.playing = false;
         self.aller_a_l_espace(espace);
@@ -3562,6 +3580,18 @@ impl App {
         // Un champ de la boîte de sélection (Réglages) en cours de saisie : son geste se termine
         // avant toute commande (annuler, changer d'image…).
         self.finish_field_edit();
+        // De même pour un mouvement de caméra en cours dans les Vignettes (`vignettecamui.rs`) ; pas pour les touches qui se
+        // tiennent pendant un geste (la touche de la caméra elle-même, la main, les vues temporaires, l'aide-mémoire).
+        if !matches!(action, "vignettes.camera" | "vue.pan_libre" | "vue.rotation_temporaire" | "vue.zoom_temporaire_avant" | "vue.zoom_temporaire_arriere" | "aide.aide_memoire") {
+            self.poser_le_geste_de_camera();
+            self.poser_la_creation();
+            // Un déplacement de sélection lâché dont la feuille flottante attend encore le rendu exact se termine d'abord, comme à
+            // un clic ou une touche (`flush_flottante_on_input`) : la commande part d'un dessin juste. Sinon « Supprimer la
+            // sélection » lancée sans clic ni touche laissait la feuille en attente, qui reposait plus tard ses éléments d'avant
+            // aux rangs d'avant (l'élément supprimé revenait, un autre disparaissait, sans étape d'annulation).
+            self.flush_flottante();
+            self.multi_flush();
+        }
         // Annuler ou rétablir pendant une déformation : elle repartirait d'un dessin périmé.
         if matches!(action, "edition.annuler" | "edition.retablir") {
             self.persp = None;

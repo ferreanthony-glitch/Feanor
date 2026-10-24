@@ -90,10 +90,24 @@ impl App {
     /// Comme `structure_op`. `montage` : l'opération change le montage (ordre, nombre, durée : il faut le jeton dans un film
     /// partagé) ; sinon elle ne change que le contenu du plan courant (une marque d'image : il faut tenir le plan).
     pub(crate) fn structure_op_porte(&mut self, montage: bool, op: impl FnOnce(&mut Document, usize) -> Option<usize>) -> bool {
+        self.structure_op_avec(montage, false, op)
+    }
+
+    /// Comme `structure_op`, pour une opération qui copie, coupe, réunit ou déplace les dessins des plans (réunir, couper,
+    /// dupliquer, coller, déplacer) : les sélections en cours se posent d'abord (`poser_les_selections`). Les autres (nouveau plan,
+    /// marque d'image…) laissent une zone soulevée telle quelle : le dessin qu'elle déplace reste celui du plan.
+    pub(crate) fn structure_op_dessins(&mut self, op: impl FnOnce(&mut Document, usize) -> Option<usize>) -> bool {
+        self.structure_op_avec(true, true, op)
+    }
+
+    fn structure_op_avec(&mut self, montage: bool, poser: bool, op: impl FnOnce(&mut Document, usize) -> Option<usize>) -> bool {
         if montage && self.storyboard_refuses() || !montage && self.content_refuses() {
             return false;
         }
         self.end_stroke();
+        if poser {
+            self.poser_les_selections();
+        }
         self.playing = false;
         // « Report du décor » (Préférences > Vignettes) : lu par la jonction de deux plans (`decor.rs`).
         self.doc.report_decor = self.settings.vignettes.report_decor;
@@ -136,7 +150,7 @@ impl App {
 
     /// Copie du plan courant, juste après lui.
     pub(crate) fn duplicate_panel(&mut self) {
-        self.structure_op(|d, i| Some(d.duplicate_scene_after(i)));
+        self.structure_op_dessins(|d, i| Some(d.duplicate_scene_after(i)));
     }
 
     // ------------------------------------------------------------------ plans choisis (12e)
@@ -188,7 +202,7 @@ impl App {
         };
         let n = clip.panels.len();
         let after = panel_title(&self.doc, self.cur_panel);
-        if self.structure_op(|d, i| d.paste_plans(&clip, i)) {
+        if self.structure_op_dessins(|d, i| d.paste_plans(&clip, i)) {
             let end = (self.cur_panel + n).min(self.doc.panels.len());
             self.board_sel = self.doc.panels[self.cur_panel..end].iter().map(|p| p.id).collect();
             self.status = match n {
@@ -223,7 +237,7 @@ impl App {
     pub(crate) fn move_plans_before(&mut self, ids: &[u64], before: Option<u64>) -> bool {
         let current = self.panel().id;
         let ids = ids.to_vec();
-        self.structure_op(|d, _| {
+        self.structure_op_dessins(|d, _| {
             d.move_plans(&ids, before)?;
             d.panels.iter().position(|p| p.id == current)
         })
@@ -250,7 +264,7 @@ impl App {
             return;
         }
         let at = self.cur_frame;
-        if self.structure_op(|d, i| d.split_plan(i, at)) {
+        if self.structure_op_dessins(|d, i| d.split_plan(i, at)) {
             self.status = format!("Plan coupé : la suite est le {}.", panel_title(&self.doc, self.cur_panel).to_lowercase());
         } else {
             self.status = "Place la tête de lecture dans le plan, après sa première image, pour le couper.".into();
@@ -264,7 +278,7 @@ impl App {
         if self.storyboard_refuses() || !self.partage_peut_toucher(&voisins) {
             return;
         }
-        if self.structure_op(|d, i| d.join_next_plan_without_mark(i)) {
+        if self.structure_op_dessins(|d, i| d.join_next_plan_without_mark(i)) {
             self.status = format!("Plans réunis : {}.", panel_title(&self.doc, self.cur_panel));
         } else {
             self.status = "Pas de plan suivant dans cette séquence.".into();
@@ -286,7 +300,7 @@ impl App {
             self.status = "Choisis au moins deux plans (Ctrl ou Maj + clic dans le montage) pour les fusionner.".into();
             return;
         }
-        if self.structure_op(|d, _| d.join_plans(&ids)) {
+        if self.structure_op_dessins(|d, _| d.join_plans(&ids)) {
             self.board_sel.clear();
             self.status = format!("{n} plans fusionnés : {}.", panel_title(&self.doc, self.cur_panel));
         } else {
@@ -300,7 +314,7 @@ impl App {
         if self.storyboard_refuses() || !self.partage_peut_toucher(&voisins) {
             return;
         }
-        if self.structure_op(|d, i| d.join_next_plan_without_mark(i.checked_sub(1)?)) {
+        if self.structure_op_dessins(|d, i| d.join_next_plan_without_mark(i.checked_sub(1)?)) {
             self.status = format!("Plans réunis : {}.", panel_title(&self.doc, self.cur_panel));
         } else {
             self.status = "Pas de plan précédent dans cette séquence.".into();
@@ -311,6 +325,16 @@ impl App {
     /// plus ou de moins dans les vignettes et le PDF).
     pub(crate) fn toggle_mark(&mut self) {
         let frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
+        // Une marque posée fait une case de plus, et le dessin tenu par-dessus la marque y est copié (`cles_de_case`) : si c'est celui
+        // d'une zone soulevée, la zone se pose d'abord (sinon elle continuerait sur le dessin d'avant la marque, et la copie
+        // garderait les pixels à mi-chemin). Ailleurs, la zone reste soulevée : la marque ne touche pas à son dessin.
+        let pose = frame > 0 && !self.panel().marks.iter().any(|m| m.frame == frame) && {
+            let soulevee = self.bsel.as_ref().filter(|s| s.lifted.is_some()).map(|s| s.cel);
+            soulevee.is_some_and(|c| self.layers().iter().any(|l| l.cel_at(frame) == Some(c) && l.cel_at(frame - 1) == Some(c)))
+        };
+        if pose {
+            self.poser_les_selections();
+        }
         let mut placed = None;
         let done = self.structure_op_porte(false, |d, i| {
             placed = d.toggle_mark(i, frame);

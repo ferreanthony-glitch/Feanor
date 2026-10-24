@@ -835,7 +835,7 @@ impl App {
             if self.storyboard_refuses() || !self.partage_peut_toucher(&[a.plan]) {
                 return false;
             }
-            let ok = self.avec_etape("Couper le plan entre deux vignettes", |s| s.structure_op(|d, _| d.split_plan(a.panel, b.frame)));
+            let ok = self.avec_etape("Couper le plan entre deux vignettes", |s| s.structure_op_dessins(|d, _| d.split_plan(a.panel, b.frame)));
             if ok {
                 self.cur_frame = 0;
                 self.board_sel = vec![self.doc.panels[self.cur_panel].id];
@@ -848,7 +848,7 @@ impl App {
                 return false;
             }
             let ok = self.avec_etape("Réunir deux vignettes en un plan", |s| {
-                s.structure_op(|d, _| {
+                s.structure_op_dessins(|d, _| {
                     let debut = d.panels.get(a.panel)?.frame_count();
                     let i = d.join_next_plan(a.panel)?;
                     // La case de droite devient une clé de dessin de plus sur chaque calque du plan (`cases.rs`).
@@ -909,6 +909,19 @@ impl App {
         self.vignettes.created = Some(Created { base_len: self.history.undo_len() });
         self.status = if joins && e == 0 { "Nouvelle image du plan : dessine-la.".into() } else { "Nouveau plan : dessine-le.".into() };
         true
+    }
+
+    /// Une commande pendant le trait qui vient de faire un plan, une image ou le calque Décor (`Vignettes::created`), ou un
+    /// changement d'espace de travail ou d'onglet : le trait se termine et la création prend son étape tout de suite. Sinon la
+    /// création attendait le lâcher sur la planche — jamais vu si l'on avait quitté les Vignettes — et prenait dans son étape
+    /// tout ce qui s'était fait depuis (la commande, puis d'autres gestes ailleurs) : annuler défaisait tout d'un coup (passe
+    /// de débogage au hasard, 2026-10-23).
+    pub(crate) fn poser_la_creation(&mut self) {
+        if self.vignettes.created.is_none() {
+            return;
+        }
+        self.end_stroke();
+        self.finish_creation(false);
     }
 
     /// Au lâcher : la création d'une case vide et le trait ne font qu'une étape d'annulation ; si rien n'a été
