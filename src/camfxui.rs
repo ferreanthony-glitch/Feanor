@@ -29,7 +29,7 @@ impl App {
         let g = Generator::new(&params, fps);
         let len = self.frame_count();
         let extra: Vec<usize> = self.doc.panels[pi].camera.iter().map(|k| k.frame).collect();
-        let plan = camfx::plan(&g, self.doc.frame, start, len, &extra, !extra.is_empty(), &|f| self.doc.panel_camera(pi, f));
+        let plan = camfx::plan(&g, self.doc.frame, start, len, &extra, !extra.is_empty(), &|f| self.doc.panel_camera_douce(pi, f));
         let Some(last) = plan.last_frame() else {
             self.status = "Effet de caméra : l'image de départ est après la fin du plan, rien n'est posé.".into();
             return;

@@ -4422,3 +4422,81 @@ la hauteur d'une icône (`barres::CASE`) et à 2 points l'une de l'autre (`barre
 personnages, fenêtre étroite), la rangée reste sur une seule ligne dans la barre ; la planche des Vignettes a sa rangée au-dessus d'elle, au bord droit. `pastilles_storyboard_tests` : un
 clic sur une pastille de la barre la choisit sans rien tracer ni étape d'annulation, le clic droit ouvre son menu, « + » ajoute un personnage en tête des pastilles. `decor_tests` : la rangée
 des Vignettes reçoit les clics sur toutes ses cases (aire « pastilles_rangee_planche »).
+
+## 51. Caméra « par paliers » : la postérisation temporelle (2026-10-24, branche `camera-et-fusion`)
+
+Demande d'Anthony : montrer le mouvement de caméra **saccadé**, comme filmé image par image sur des temps tenus : la caméra, interpolée en douceur entre ses clés, ne change que toutes les N images et se tient entre deux.
+Fichiers : `camera.rs` (`Saccade`), `document.rs` (`Panel::saccade`, `panel_camera`, `panel_camera_douce`), `camtools.rs` (la case et le nombre), `project.rs` (format 37), `exportrender.rs`, `planvers.rs`.
+Essais : `saccade_tests.rs` (9).
+
+### Ce que c'est
+
+- **Un réglage par plan** : une case « Par paliers » et un nombre « toutes les N images » (2, 3, 4… entier libre, au moins 2, au plus 120 ; 2 d'origine). Dans les **Réglages de l'outil Caméra**, section « Mouvement par paliers »,
+  juste sous « Caméra à cette image ». Une étape d'annulation par changement (« Mouvement de caméra par paliers »).
+- **Aucune clé n'est posée ni changée** : le réglage s'applique quand la caméra est évaluée (`Document::panel_camera`). Décocher rend le mouvement doux, **à l'identique** (la cadence reste, pour la retrouver en recochant).
+- **Où ça s'applique** : partout où la caméra est lue pour montrer ou sortir une image, puisque tout passe par `panel_camera` : la vue Dessin et la vue à travers la caméra, la lecture, la timeline et les vignettes, la planche, les
+  exports (vidéo, suite de PNG, image seule, GIF, PDF, montage, FCPXML et EDL : tous rendent les images par `Rendu`), la toile infinie (le monde hors de la feuille suit la même caméra), la comparaison de versions, le plan d'une
+  version rangée (`camera_du_plan_range`). L'export vers Storyboard Pro n'embarque pas la caméra (il la signale seulement) : rien à changer.
+- **Quelle image** : à l'image `f` d'un plan, la caméra est celle de l'image `f - f % N`, **comptée depuis le début du plan** (images 0 à N-1 : la caméra de l'image 0 ; N à 2N-1 : celle de l'image N ; etc.). C'est la caméra douce
+  *de l'image où commence le palier*, pas une moyenne.
+- **Un écart voulu** : à partir de la **dernière clé**, c'est l'image elle-même qui compte. Après la dernière clé la caméra ne bouge plus ; sans cette règle, un mouvement qui finit à l'image 10 avec N = 3 resterait
+  deux images au cadre de l'image 9 et n'arriverait jamais **pile** sur son cadre final (la clé que le réalisateur a réglée). Le mouvement finit donc exactement sur sa dernière clé.
+- **Moins de deux clés** : rien ne bouge, donc rien ne change ; la case reste cochée (et le dit).
+- **Un plan sans clé** qui suit la caméra du plan d'avant (continuité) prend la caméra que ce plan a **montrée** à sa dernière image (le palier), pas la caméra douce : le raccord ne saute pas.
+
+### Ce que l'édition lit : la caméra douce
+
+L'outil Caméra, la pose d'une clé, les effets de caméra (secousse, zoom…) et la réunion de deux plans lisent **la caméra douce** (`panel_camera_douce`, celle des clés) : on règle des clés, pas des paliers, sinon poser une
+clé aurait figé la caméra sur un palier et deux plans réunis auraient tenu une caméra décalée. La vue peint la caméra par paliers ; le cadre que l'outil Caméra dessine, lui, suit les clés.
+
+### Compatibilité des fichiers
+
+- **Format 37** (`project::VERSION`) : `saccade` d'un plan (`actif`, `cadence`), absent quand le réglage est celui d'origine (éteint, cadence 2). Une version précédente **refuse** le projet (« créé par une version plus
+  récente ») plutôt que de montrer le mouvement en douceur, ce qui changerait le film sans prévenir. Un projet de version 36 ou moins s'ouvre tel quel, la postérisation éteinte. Une cadence abîmée (0, énorme) est
+  ramenée entre 2 et 120 à l'ouverture.
+- **Couper un plan** garde le réglage aux deux parties ; **réunir deux plans** garde celui du premier (les clés tenues aux bords sont les caméras douces). Un plan qu'on **range** dans une version (`planvers.rs`) emporte son
+  réglage avec lui.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Plan avec une caméra animée (deux clés au moins, par exemple un travelling). Outil Caméra > Réglages : **« Mouvement par paliers »**, coche « Par paliers » : le mouvement devient saccadé, « toutes les 2 images » d'abord.
+2. Mets 3, puis 4, puis 6 : la caméra change toutes les 3, 4, 6 images et se tient entre deux ; la lecture, la vue à travers la caméra et les vignettes de la timeline le montrent. Décoche : le mouvement redevient doux, comme avant.
+3. Les clés de la piste Caméra ne bougent pas (mêmes losanges, mêmes images). Déplace la tête de lecture sur une image du milieu d'un palier et règle la caméra avec l'outil : la clé posée a la caméra douce.
+4. Ctrl+Z après la case, puis après le nombre : chacun défait un changement. Enregistre, ferme, rouvre : même réglage.
+5. Exporte une suite de PNG (ou un film) du plan : les images d'un même palier sont identiques ; la dernière image est au cadre de la dernière clé.
+6. Ouvre un ancien projet : la case est décochée partout, rien n'a changé.
+
+## 52. Fusionner deux plans en glissant l'un sur l'autre (2026-10-24, branche `camera-et-fusion`)
+
+Demande d'Anthony : dans le montage, glisser un plan **sur le milieu** d'un autre le **fusionne** avec lui ; les bords gardent le sens d'avant (« déplacer ici »).
+Fichiers : `fusionglisse.rs` (zones, plan visé, `Document::merge_plan_into`, `App::fusionner_en_glissant`), `storyboard.rs` (le glissé de la bande du montage, le repère), `hasard_tests.rs` (le geste du hasard).
+Essais : `fusionglisse_tests.rs` (9, dont huit par la vraie fenêtre sans écran) et le geste `FusionnerPlans` du hasard.
+
+### Le geste
+
+- **Prendre un plan dans la bande du montage** (au milieu du bloc, pas sur ses bords : ceux-ci rognent) et le tirer sur un autre plan. Chaque bloc a **trois zones** dans sa largeur : le premier quart (déplacer **devant** ce plan), la **moitié du milieu**
+  (**fusionner**), le dernier quart (déplacer **derrière**). Les deux quarts de bord sont exactement l'ancien geste, avec son repère épais entre deux plans.
+- **Au milieu d'un plan** (dans la hauteur des blocs) : le plan visé **s'entoure** (contour épais, voile) et porte la pastille **« Fusionner »** ; le repère de place disparaît. Lâcher : les deux plans n'en font qu'un.
+- **Lequel garde son identité** : comme « Réunir avec le plan précédent », **le plan qui vient le premier** (son numéro, son nom, ses versions, ses commentaires) reçoit les images de l'autre **à la suite**. Si le plan glissé venait
+  avant le plan visé, **ses images passent avant** ; s'il venait après, elles passent après. Les textes, les marques d'image, les notes de la planche, les calques, les clés : ceux de la fusion qui existait déjà (`append_plan`), sans repère
+  laissé à la jointure (`join_next_plan_without_mark`). Le réglage « Par paliers » de la caméra (partie 47) est celui du premier plan.
+- **Deux plans qui ne se touchent pas** : le plan glissé **quitte sa place** et vient se coller au plan visé, du côté d'où il venait, puis ils sont réunis. Les plans entre les deux ne changent pas, sauf qu'il n'y en a plus un.
+- **Une seule étape d'annulation**, « Fusionner deux plans » : Ctrl+Z rend les deux plans exactement, à leur place (le déplacement éventuel et la réunion font une seule étape).
+- **Échap** pendant le glissé l'abandonne : rien ne change, aucune étape. (Comme pour tous les glissés du montage : Ctrl+Z aussi.)
+- **Ce qui ne fusionne pas** (la zone du milieu garde alors son sens d'avant, « déplacer ici ») : un plan **d'une autre séquence** (le plan glissé ne change jamais de séquence : une séquence vidée perdrait son nom), **plusieurs plans choisis
+  qu'on glisse ensemble** (le groupe se déplace), un **storyboard verrouillé** (le plan ne part même pas), un plan sur lui-même.
+- **Film partagé** : les deux plans doivent être à toi (ou libres : ils sont pris), comme pour « Fusionner les plans choisis » ; sinon un message le dit et rien ne bouge.
+
+### À trancher avec toi
+
+- **Qui garde le numéro** : j'ai gardé la règle des autres fusions (le plan qui vient **le premier** garde son identité). Quand tu glisses un plan A *avant* un plan B, c'est donc **A** qui reste, pas B (le plan « visé »).
+  Si tu préfères que le plan visé garde toujours son numéro, c'est un échange d'identité à décider (les commentaires, versions et notes de la planche s'accrochent aux numéros).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Dans le montage, prends un plan par son milieu et tire-le sur le milieu d'un autre : l'autre s'entoure, « Fusionner » apparaît. Lâche : un seul plan, les images de l'un puis de l'autre. Ctrl+Z : les deux plans sont revenus.
+2. Recommence en lâchant sur le premier quart ou le dernier quart d'un plan : c'est le déplacement d'avant (repère épais), rien n'est fusionné.
+3. Un plan qui vient avant : ses images sont devant. Un plan qui vient après : derrière. Avec un plan entre les deux : il vient se coller, les autres restent.
+4. Pendant le glissé, Échap : le plan reste où il était, et Ctrl+Z n'a rien de plus à défaire.
+5. Deux séquences : glisse un plan sur le milieu d'un plan d'une autre séquence : pas de contour, pas de fusion.
+6. Choisis deux plans (Ctrl + clic) et glisse-les sur un troisième : ils se déplacent, sans fusion.

@@ -368,6 +368,8 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
         let plan = camfx::plan(&g, doc.frame, 14, len, &extra, true, &|f| doc.panel_camera(0, f));
         assert!(plan.last_frame().is_some(), "l'effet de caméra pose des clés");
         camfx::write(&mut doc.panels[0].camera, &plan);
+        // Postérisation temporelle : le mouvement montré par paliers de 3 images.
+        doc.panels[0].saccade = crate::camera::Saccade { actif: true, cadence: 3 };
     }
     // Marques d'image (avec leurs textes), signets, entrée et sortie, notes dessinées.
     doc.toggle_mark(0, 8);
@@ -678,6 +680,7 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
         let _ = writeln!(s, "plan {i} id {} scene {} duree {} couleur {:?}", p.id, p.scene, p.length, p.color);
         let _ = writeln!(s, "  textes {:?} {:?} {:?}", p.action, p.dialogue, p.notes);
         let _ = writeln!(s, "  camera {:?}", p.camera);
+        let _ = writeln!(s, "  saccade {:?}", p.saccade);
         let _ = writeln!(s, "  marques {:?}", p.marks);
         let _ = writeln!(s, "  reperes {:?}", p.cues);
         for (k, l) in p.layers.iter().enumerate() {

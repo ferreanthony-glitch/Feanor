@@ -461,6 +461,13 @@ mod fiabilite_fixture;
 // Essais au hasard des gestes dans l'application (passe de débogage du 2026-10-22).
 #[cfg(test)]
 mod hasard_tests;
+// Postérisation temporelle de la caméra (« saccade »).
+#[cfg(test)]
+mod saccade_tests;
+// Fusionner deux plans en glissant l'un sur l'autre dans le montage.
+mod fusionglisse;
+#[cfg(test)]
+mod fusionglisse_tests;
 #[cfg(test)]
 mod fiabilite_aller_retour_tests;
 #[cfg(test)]

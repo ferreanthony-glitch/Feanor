@@ -176,7 +176,12 @@ pub const FORMAT: &str = "pelure-projet";
 /// (`griffonnage::migrer_ctg`) ; ses fichiers de graffitis servent tels quels de dessins de griffonnages. Une version
 /// précédente refuse le projet : elle montrerait les calques de couleur sans leur remplissage, le film changerait sans
 /// prévenir. Un projet de version 35 ou moins s'ouvre tel quel, à l'identique.
-pub const VERSION: u32 = 36;
+/// 37 (2026-10-24, `docs/INTERFACE.md` partie 47) : **postérisation temporelle de la caméra** d'un plan (`saccade` d'un plan :
+/// `actif`, `cadence` en images, au moins 2) : le mouvement de caméra est montré par paliers. Omise quand elle est éteinte avec
+/// la cadence 2. Une version précédente refuse le projet : elle montrerait le mouvement de caméra en douceur, le film changerait
+/// sans prévenir. Un projet de version 36 ou moins s'ouvre tel quel, la postérisation éteinte. (Si une autre branche a aussi
+/// pris le numéro 37, la fusion garde le 37 et réunit les deux descriptions.)
+pub const VERSION: u32 = 37;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -439,6 +444,9 @@ pub(crate) struct PanelEntry {
     /// Images clés de la caméra (absent : caméra au centre de la feuille).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     camera: Vec<CameraEntry>,
+    /// Postérisation temporelle de la caméra (format 37 ; absente : éteinte, cadence 2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    saccade: Option<SaccadeEntry>,
     /// Marques d'image du plan (format 12 ; absent : aucune).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     marques: Vec<MarkEntry>,
@@ -455,6 +463,14 @@ pub(crate) struct PanelEntry {
     /// Notes dessinées sur la timeline (format 17 ; absentes : aucune).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     notes_dessinees: Vec<TimeNoteEntry>,
+}
+
+/// Postérisation temporelle de la caméra d'un plan (format 37) : allumée ou non, et « toutes les N images ».
+#[derive(Serialize, Deserialize)]
+struct SaccadeEntry {
+    #[serde(default)]
+    actif: bool,
+    cadence: usize,
 }
 
 /// Une note dessinée (format 17) : couleur (0 bleu, 1 rouge, 2 noir), épaisseur, points
@@ -2196,6 +2212,7 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 panoramique: k.cam.pan,
             })
             .collect(),
+        saccade: (panel.saccade != crate::camera::Saccade::default()).then(|| SaccadeEntry { actif: panel.saccade.actif, cadence: panel.saccade.cadence }),
         marques: panel
             .marks
             .iter()
@@ -3033,6 +3050,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                     dialogue: p.dialogue,
                     notes: p.notes,
                     camera,
+                    saccade: p.saccade.map_or_else(crate::camera::Saccade::default, |s| crate::camera::Saccade { actif: s.actif, cadence: s.cadence }.normalise()),
                     marks: marks_of(p.marques),
                     cues: crate::document::Cues {
                         bookmarks: {

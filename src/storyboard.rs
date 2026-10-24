@@ -18,11 +18,18 @@ pub(crate) enum MontageDrag {
     /// (`rognageui.rs`).
     Edge(crate::rognageui::EdgeDrag),
     /// Plan déplacé dans le montage (son identifiant : le montage d'un équipier peut arriver pendant le geste) ; `target` est la
-    /// place où il sera inséré.
-    Move { panel: u64, target: usize },
+    /// place où il sera inséré. `merge` : le plan sur lequel il est, par le milieu, quand on le lâcherait pour le fusionner
+    /// avec lui (`fusionglisse.rs`) ; alors `target` ne compte pas.
+    Move { panel: u64, target: usize, merge: Option<u64> },
     Scrub,
     /// Extrait de son déplacé, ou raccourci par un bord.
     Clip(ClipDrag),
+}
+
+// Les blocs de plans que la bande du montage a peints à sa dernière image (pour les essais, `fusionglisse_tests.rs`).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static BLOCS_DU_MONTAGE: std::cell::RefCell<Vec<Rect>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
 pub(crate) const RULER_H: f32 = 18.0;
@@ -897,6 +904,9 @@ impl App {
             }
         }
 
+        // (Les essais retrouvent les plans à l'écran par les blocs de la dernière image.)
+        #[cfg(test)]
+        BLOCS_DU_MONTAGE.with(|b| b.borrow_mut().clone_from(&blocks));
         // Barre des séquences au-dessus des plans (13a : un plan = un bloc, plus de barre de scène).
         let mut runs: Vec<(Rect, usize)> = Vec::new();
         // (La séquence de chaque plan et leur ordre, trouvés une fois : les chercher plan par plan
@@ -1184,7 +1194,7 @@ impl App {
                             self.board_sel.clear();
                         }
                         self.set_panel(i);
-                        MontageDrag::Move { panel: self.doc.panels[i].id, target: i }
+                        MontageDrag::Move { panel: self.doc.panels[i].id, target: i, merge: None }
                     }
                 } else {
                     MontageDrag::Scrub
@@ -1293,8 +1303,15 @@ impl App {
                             self.goto_global(g);
                         }
                     }
-                    Some(MontageDrag::Move { target, .. }) => {
-                        *target = blocks.iter().filter(|b| b.center().x < p.x).count();
+                    Some(MontageDrag::Move { panel, .. }) => {
+                        let panel = *panel;
+                        let slot = blocks.iter().filter(|b| b.center().x < p.x).count();
+                        // Le milieu d'un plan (dans la hauteur des blocs) : fusionner (`fusionglisse.rs`).
+                        let seul = self.board_selection().len() <= 1;
+                        let onto = if in_blocks(p) { crate::fusionglisse::plan_vise(&self.doc, &blocks, p, panel, seul) } else { None };
+                        if let Some(MontageDrag::Move { target, merge, .. }) = &mut self.montage_drag {
+                            (*target, *merge) = (slot, onto);
+                        }
                     }
                     Some(MontageDrag::Edge(_)) => self.update_edge_drag(p.x),
                     Some(MontageDrag::Clip(_)) => self.update_clip_drag(p, ppf, lanes_top),
@@ -1306,7 +1323,8 @@ impl App {
         if resp.drag_stopped() {
             match self.montage_drag.take() {
                 Some(MontageDrag::Edge(d)) => self.finish_edge_drag(d),
-                Some(MontageDrag::Move { panel, target }) => {
+                Some(MontageDrag::Move { panel, merge: Some(onto), .. }) => self.fusionner_en_glissant(panel, onto),
+                Some(MontageDrag::Move { panel, target, merge: None }) => {
                     let ids = self.board_selection();
                     if ids.len() > 1 {
                         self.move_chosen_panels(&ids, target);
@@ -1646,15 +1664,27 @@ impl App {
             cur_frame(),
             Stroke::NONE,
         ));
-        if let Some(MontageDrag::Move { target, .. }) = &self.montage_drag {
-            let x = match blocks.get(*target) {
-                Some(b) => b.left() - 1.0,
-                None => blocks.last().map_or(left, |b| b.right() + 1.0),
-            };
-            painter.line_segment(
-                [pos2(x, top - 2.0), pos2(x, top + block_h + 2.0)],
-                Stroke::new(3.0_f32, theme::contour()),
-            );
+        if let Some(MontageDrag::Move { target, merge, .. }) = &self.montage_drag {
+            let cible = merge.and_then(|id| self.doc.panels.iter().position(|p| p.id == id)).and_then(|i| blocks.get(i));
+            if let Some(b) = cible {
+                // Lâché là : fusionné. Le plan visé s'entoure et le dit (au lieu du repère de place).
+                painter.rect_filled(*b, 4.0, theme::contour().gamma_multiply(0.18));
+                painter.rect_stroke(*b, 4.0, Stroke::new(3.0_f32, theme::contour()), StrokeKind::Inside);
+                let galley = painter.layout_no_wrap("Fusionner".into(), FontId::proportional(13.0), theme::contour());
+                let pill = Rect::from_center_size(b.center(), galley.size() + vec2(14.0, 6.0));
+                painter.rect_filled(pill, 4.0, visuals.window_fill());
+                painter.rect_stroke(pill, 4.0, Stroke::new(1.0_f32, theme::contour()), StrokeKind::Inside);
+                painter.galley(pill.center() - galley.size() * 0.5, galley, theme::contour());
+            } else {
+                let x = match blocks.get(*target) {
+                    Some(b) => b.left() - 1.0,
+                    None => blocks.last().map_or(left, |b| b.right() + 1.0),
+                };
+                painter.line_segment(
+                    [pos2(x, top - 2.0), pos2(x, top + block_h + 2.0)],
+                    Stroke::new(3.0_f32, theme::contour()),
+                );
+            }
         }
         // Rognage en cours : le repère de la coupe dans le film d'avant le geste, et la durée.
         if matches!(self.montage_drag, Some(MontageDrag::Edge(_))) {
