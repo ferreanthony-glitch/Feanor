@@ -126,6 +126,8 @@ impl App {
             "vue.panneau_bande" => self.toggle_pane_group(Group::Bottom),
             "vue.reajuster_panneaux" => self.refit_panes(),
             "vue.barre_panneaux" => self.toggle_panel_bar(),
+            // La liste des brosses (l'ancien panneau Pinceaux) : dans les réglages de l'outil.
+            "vue.pinceaux" => self.basculer_liste_pinceaux(),
             // Les panneaux de la barre des panneaux : même règle que son clic.
             a => match crate::barrepanneaux::pane_de_action(a) {
                 Some(pane) => self.clic_panneau(pane),
@@ -219,7 +221,7 @@ impl App {
             // Panneaux qui s'ajustent à leur contenu (`ajuste.rs`).
             let resp = ui.checkbox(&mut self.settings.panes_fit, "Ajuster les panneaux à leur contenu").on_hover_text(
                 "Les réglages de l'outil, les guides, la fiche et les effets prennent la hauteur de ce \
-                 qu'ils montrent ; la couleur, les pinceaux et les calques gagnent le reste. Un bord \
+                 qu'ils montrent ; la couleur et les calques gagnent le reste. Un bord \
                  tiré à la main reste où on l'a mis.",
             );
             if resp.changed() {

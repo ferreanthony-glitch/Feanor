@@ -83,7 +83,7 @@ fn which_panes_fit() {
     for p in [Pane::ToolOptions, Pane::Sheet, Pane::Effects, Pane::Tools] {
         assert!(fits(p) && measured(p), "{p:?}");
     }
-    for p in [Pane::Color, Pane::Brushes, Pane::Layers, Pane::Canvas, Pane::Montage, Pane::XSheet] {
+    for p in [Pane::Color, Pane::Layers, Pane::Canvas, Pane::Montage, Pane::XSheet] {
         assert!(!fits(p), "{p:?}");
         assert!(flex_min(p) >= 140.0, "{p:?}");
     }

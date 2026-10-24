@@ -66,15 +66,13 @@ impl egui_dock::TabViewer for Panes<'_> {
     fn scroll_bars(&self, tab: &Pane) -> [bool; 2] {
         match tab {
             // Calques : l'en-tête (mode, opacité, commandes) reste en haut, seule la liste défile
-            // (`layers_panel`). L'historique défile seul, pour rester sur la dernière étape. Pinceaux : la
-            // taille et les onglets restent en haut, les boutons en bas, la liste défile entre les deux.
+            // (`layers_panel`). L'historique défile seul, pour rester sur la dernière étape.
             Pane::Canvas
             | Pane::Montage
             | Pane::Timeline
             | Pane::XSheet
             | Pane::Layers
             | Pane::History
-            | Pane::Brushes
             | Pane::Comments
             | Pane::Bruitages
             | Pane::SuggestionsSonores
@@ -141,7 +139,8 @@ impl App {
             }
             Pane::Tools => self.tool_bar(ui),
             Pane::Color => self.color_panel(ui),
-            Pane::Brushes => self.brushes_panel(ui),
+            // Retiré : la liste des brosses est dans les réglages de l'outil, `sanitized` ôte ce panneau.
+            Pane::Brushes => {}
             Pane::ToolOptions => self.tool_options_panel(ui),
             Pane::View => self.view_panel(ui),
             // Retiré : les guides sont dans le menu de la règle (`cadrageui.rs`), `sanitized` ôte ce panneau.

@@ -82,16 +82,14 @@ pub struct Dossier {
 }
 
 /// Les réglages de `cible` rangés en dossiers, ceux dont le nom contient `requete` (sans tenir
-/// compte des majuscules ni des accents). Les dossiers fournis d'abord, « Mes brosses », puis un
-/// dossier par fichier importé dans l'ordre où ils apparaissent. Un dossier vide ne se montre pas,
-/// sauf « Mes brosses » quand on ne cherche rien (pour savoir où vont les brosses enregistrées).
+/// compte des majuscules ni des accents). « Mes brosses » d'abord (Anthony, 2026-10-24 : ce sont celles qu'on
+/// reprend le plus), puis les dossiers fournis, puis un dossier par fichier importé dans l'ordre où ils
+/// apparaissent. Un dossier vide ne se montre pas, sauf « Mes brosses » quand on ne cherche rien (pour savoir où
+/// vont les brosses enregistrées).
 pub fn ranger(presets: &[Preset], cible: Target, requete: &str) -> Vec<Dossier> {
     let q = plie(requete.trim());
-    let mut out: Vec<Dossier> = DOSSIERS_FOURNIS
-        .iter()
-        .map(|n| Dossier { nom: n.to_string(), rangs: Vec::new(), importe: false })
-        .collect();
-    out.push(Dossier { nom: MINE.to_string(), rangs: Vec::new(), importe: false });
+    let mut out: Vec<Dossier> = vec![Dossier { nom: MINE.to_string(), rangs: Vec::new(), importe: false }];
+    out.extend(DOSSIERS_FOURNIS.iter().map(|n| Dossier { nom: n.to_string(), rangs: Vec::new(), importe: false }));
     for (i, p) in presets.iter().enumerate().filter(|(_, p)| p.target == cible) {
         if !q.is_empty() && !plie(&p.name).contains(&q) {
             continue;
@@ -148,6 +146,9 @@ pub struct Panneau {
     /// Les réglages détaillés (catégories et leurs réglages), sous l'aperçu du trait, sont dépliés
     /// (Anthony, 2026-10-20 : repliés par défaut, une petite flèche les déplie).
     pub reglages_ouverts: bool,
+    /// La liste des brosses (l'ancien panneau Pinceaux) est dépliée sous l'aperçu du trait, dans le panneau
+    /// Réglages de l'outil : le bouton à droite de l'aperçu la déplie et la replie. Repliée d'office.
+    pub liste_ouverte: bool,
     /// « Plus de réglages » des autres outils (remplir, sélection, transformer…) : ceux dont la section est dépliée,
     /// par l'action de l'outil. Repliée d'office : les deux ou trois réglages qui servent le plus sont en haut.
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
@@ -170,6 +171,7 @@ impl Default for Panneau {
             categorie: Categorie::Pointe,
             dossiers: BTreeMap::new(),
             reglages_ouverts: false,
+            liste_ouverte: false,
             plus_outils: BTreeSet::new(),
             pinceau_vecto: None,
             pinceau_bitmap: None,

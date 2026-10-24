@@ -491,7 +491,9 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("perso.classique", "Pastille classique : le pinceau de base, sans personnage ni décor", true, false),
     // Barre des panneaux (`barrepanneaux.rs`) : ouvrir, mettre devant ou fermer un panneau de côté.
     act("vue.reglages", "Panneau Réglages de l'outil (ouvrir / fermer)", true, false),
-    act("vue.pinceaux", "Panneau Pinceaux (ouvrir / fermer)", true, false),
+    // (L'ancien panneau Pinceaux : la liste des brosses est dans les réglages de l'outil ; le raccourci qu'on lui avait
+    // donné continue de servir.)
+    act("vue.pinceaux", "Liste des pinceaux, dans les réglages (déplier / replier)", true, false),
     act("vue.couleur", "Panneau Couleur (ouvrir / fermer)", true, false),
     act("vue.calques", "Panneau Calques (ouvrir / fermer)", true, false),
     act("vue.fiche", "Panneau Fiche du plan (ouvrir / fermer)", true, false),

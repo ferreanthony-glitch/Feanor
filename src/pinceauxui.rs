@@ -1,13 +1,16 @@
-//! Panneau Pinceaux, l'affichage (refonte du 2026-10-18, d'après la demande d'Anthony : « une
-//! organisation des brosses plus simple, et la taille du pinceau mise en avant ») :
-//! - la bibliothèque : recherche, liste ou vignettes, dossiers repliables, trois boutons en bas ;
-//! - la taille de l'outil courant (curseur et champ en px) est en tête du panneau Réglages de
-//!   l'outil (`brush_summary_ui`), plus ici (Anthony, 2026-10-18 : elle était dans les deux).
+//! Le pinceau dans le panneau Réglages de l'outil : la taille et l'opacité, le nom de la brosse, l'aperçu
+//! du trait et, à l'extrême droite de cet aperçu, un bouton qui déplie la liste des brosses juste dessous
+//! (`brush_list_ui`), puis les réglages détaillés (`brush_settings_ui`).
 //!
-//! Les réglages du pinceau (l'aperçu du trait, les catégories à gauche, les réglages de la
-//! catégorie à droite) sont dans le panneau Réglages de l'outil, sous son résumé
-//! (`brush_summary_ui`, `brush_settings_ui`) : un onglet du panneau Pinceaux les a portés le
-//! 2026-10-18, retiré le même jour (Anthony : il faisait doublon avec le panneau Réglages).
+//! La liste des brosses était un panneau à part (« Pinceaux », en onglet avec la couleur) : depuis le
+//! 2026-10-24 elle est là, sous l'aperçu (Anthony : « le panneau Pinceaux disparaît, il rejoint les
+//! réglages du pinceau »). Elle garde tout ce que le panneau offrait : recherche, liste ou vignettes, « Mes
+//! brosses » en premier, les dossiers de SHOT et des fichiers importés, clic droit (renommer, dupliquer,
+//! remplacer, supprimer), et en bas importer, garder le réglage courant, supprimer.
+//!
+//! La taille de l'outil courant (curseur et champ en px) est en tête du panneau (`brush_summary_ui`).
+//! Les réglages du pinceau (les catégories à gauche, les réglages de la catégorie à droite) sont sous
+//! l'aperçu, derrière « Plus de réglages ».
 //!
 //! Le rangement, la recherche et l'état retenu sont dans `pinceaux.rs`.
 
@@ -20,6 +23,7 @@ use crate::brushtex::Target;
 use crate::brushui::{preset_menu, IMPORT_HINT};
 use crate::bulles::{bulle, choix, icone, icone_si, interrupteur};
 use crate::dockui::{fit_to_pane, fit_w};
+use crate::dock::Pane;
 use crate::document::LayerKind;
 use crate::pinceaux::{choisi, dossier_de, ranger, supprimable, Categorie};
 
@@ -28,9 +32,13 @@ const LINE_H: f32 = 26.0;
 const LINE_THUMB: Vec2 = vec2(64.0, 18.0);
 /// Largeur de la liste en dessous de laquelle la ligne n'a plus d'aperçu de trait.
 const LINE_THUMB_MIN_W: f32 = 200.0;
-/// Hauteur de l'aperçu du trait courant (panneau Réglages de l'outil), et de la barre de boutons du bas.
+/// Hauteur de l'aperçu du trait courant (panneau Réglages de l'outil).
 const CURRENT_H: f32 = 38.0;
-const BAR_H: f32 = 34.0;
+/// Place du bouton de la liste, à droite de l'aperçu du trait.
+const LIST_BUTTON_W: f32 = 30.0;
+/// Hauteur de la liste des brosses dépliée (elle défile au-delà) : de quoi voir « Mes brosses » et le début des
+/// dossiers sans chasser les réglages sous elle.
+const LIST_H: f32 = 300.0;
 /// Largeur de la colonne des catégories ; en dessous de `NARROW` points de panneau, elle devient
 /// une liste déroulante au-dessus des réglages.
 const CATEGORIES_W: f32 = 142.0;
@@ -104,11 +112,42 @@ impl App {
         }
     }
 
-    /// Panneau Pinceaux : la taille, puis la bibliothèque. Les réglages du pinceau sont dans le
-    /// panneau Réglages de l'outil (Anthony, 2026-10-18 : réglages du pinceau (panneau Réglages de l'outil) faisait
-    /// doublon avec lui, « autant tout mettre dans le panneau Réglages »).
-    pub(crate) fn brushes_panel(&mut self, ui: &mut egui::Ui) {
-        self.library_tab(ui);
+    /// Les outils qui ont des brosses : le pinceau, le crayon et la gomme (la liste des brosses se montre dans leur
+    /// panneau Réglages).
+    fn outil_a_brosses(&self) -> bool {
+        matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser)
+    }
+
+    /// Déplie la liste des brosses dans le panneau Réglages de l'outil : ce que faisait l'ouverture de l'ancien
+    /// panneau Pinceaux (l'action `vue.pinceaux`, un raccourci qu'on lui avait donné). Le panneau Réglages s'ouvre ou
+    /// vient devant ; avec un outil sans brosses (sélection, remplissage…), le pinceau est pris, c'est lui que la
+    /// liste sert.
+    pub(crate) fn ouvrir_liste_pinceaux(&mut self) {
+        if !self.outil_a_brosses() {
+            self.set_tool(Tool::Brush);
+        }
+        self.pinceaux.liste_ouverte = true;
+        self.show_pane(Pane::ToolOptions);
+    }
+
+    /// Replie la liste des brosses (et laisse de côté un nom en cours de saisie qui n'aurait plus de ligne où se
+    /// montrer).
+    pub(crate) fn replier_liste_pinceaux(&mut self) {
+        self.pinceaux.liste_ouverte = false;
+        if self.preset_edit.as_ref().is_some_and(|e| !e.summary) {
+            self.preset_edit = None;
+        }
+    }
+
+    /// L'action `vue.pinceaux` : déplie la liste ; si elle est déjà dépliée et qu'on la voit, la replie (comme
+    /// l'ancien panneau, qu'un second appui fermait).
+    pub(crate) fn basculer_liste_pinceaux(&mut self) {
+        let visible = self.pinceaux.liste_ouverte && self.outil_a_brosses() && self.pane_shown(Pane::ToolOptions);
+        if visible {
+            self.replier_liste_pinceaux();
+        } else {
+            self.ouvrir_liste_pinceaux();
+        }
     }
 
     /// La taille de l'outil courant (pinceau, crayon ou gomme ; la largeur d'une forme), en grand :
@@ -142,10 +181,18 @@ impl App {
         }
     }
 
-    // ------------------------------------------------------------------ onglet Pinceaux
+    // ------------------------------------------------------------------ la liste des brosses
 
-    /// La bibliothèque : recherche, liste ou vignettes, dossiers repliables, trois boutons.
-    fn library_tab(&mut self, ui: &mut egui::Ui) {
+    /// La liste des brosses, dépliée sous l'aperçu du trait : dans un cadre, recherche, liste ou vignettes,
+    /// dossiers repliables (« Mes brosses » en premier), trois boutons en bas.
+    fn brush_list_ui(&mut self, ui: &mut egui::Ui) {
+        egui::Frame::group(ui.style()).show(ui, |ui| {
+            ui.set_min_width(ui.available_width());
+            self.brush_list_content(ui);
+        });
+    }
+
+    fn brush_list_content(&mut self, ui: &mut egui::Ui) {
         let target = self.panel_target();
         let current = match target {
             Target::Eraser => self.eraser,
@@ -169,11 +216,7 @@ impl App {
         let mut pick = None;
         let mut menu = None;
         let mut toggles: Vec<(String, bool)> = Vec::new();
-        let mut height = ui.available_height() - BAR_H;
-        if !height.is_finite() {
-            height = 400.0;
-        }
-        egui::ScrollArea::vertical().id_salt("pinceaux_dossiers").auto_shrink([false, false]).max_height(height.max(60.0)).show(ui, |ui| {
+        egui::ScrollArea::vertical().id_salt("pinceaux_dossiers").auto_shrink([false, true]).max_height(LIST_H).show(ui, |ui| {
             if folders.is_empty() {
                 ui.label(RichText::new("Aucun pinceau de ce nom.").weak());
             }
@@ -345,6 +388,11 @@ impl App {
         let wide = ui.available_width() >= NARROW;
         ui.add_space(4.0);
         self.current_preview(ui);
+        // La liste des brosses (l'ancien panneau Pinceaux), dépliée par le bouton à droite de l'aperçu.
+        if self.pinceaux.liste_ouverte {
+            ui.add_space(4.0);
+            self.brush_list_ui(ui);
+        }
         // Pinceau et crayon : « Peint sur l'aplat » et l'aplat du calque, toujours à portée, sous l'aperçu (Anthony,
         // 2026-10-23 ; avant, dans « Plus de réglages »).
         if matches!(self.tool, Tool::Brush | Tool::Pencil) {
@@ -501,12 +549,13 @@ impl App {
         }
     }
 
-    /// Le trait du pinceau courant, tracé par le moteur, sur le papier du projet.
+    /// Le trait du pinceau courant, tracé par le moteur, sur un fond gris ; à son extrême droite, le bouton qui
+    /// déplie ou replie la liste des brosses (`brush_list_ui`).
     fn current_preview(&mut self, ui: &mut egui::Ui) {
         let settings = self.panel_brush();
         let ppp = ui.ctx().pixels_per_point();
         // Largeur par paliers : on ne refait pas l'aperçu à chaque point quand on tire un bord.
-        let shown = ((ui.available_width() - 4.0) / 24.0).floor().max(2.0) * 24.0;
+        let shown = ((ui.available_width() - 4.0 - LIST_BUTTON_W - 4.0) / 24.0).floor().max(2.0) * 24.0;
         let px = [(shown * ppp).round() as usize, (CURRENT_H * ppp).round() as usize];
         let fresh = self.brush_previews.current.as_ref().is_some_and(|(s, size, _)| *s == settings && *size == px);
         if !fresh {
@@ -517,14 +566,40 @@ impl App {
         }
         let Some((_, _, tex)) = &self.brush_previews.current else { return };
         let tex = tex.id();
-        let (rect, resp) = ui.allocate_exact_size(vec2(shown, CURRENT_H), Sense::hover());
         let [cr, cg, cb] = self.color;
         let trait_ = if self.tool == Tool::Eraser { Color32::from_gray(150) } else { Color32::from_rgb(cr, cg, cb) };
-        // Fond : un gris un peu plus clair que le panneau, pas le papier du projet (Anthony,
-        // 2026-10-20) ; poussé vers le blanc ou le noir si le trait s'y perdrait.
-        ui.painter().rect_filled(rect, 3.0, crate::theme::fond_apercu_trait(trait_));
-        ui.painter().image(tex, rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), trait_);
-        bulle(resp, "Aperçu du trait", "Le trait du pinceau courant, tracé par le moteur avec tous ses réglages.", "");
+        let ouverte = self.pinceaux.liste_ouverte;
+        let mut clic = false;
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            let (rect, resp) = ui.allocate_exact_size(vec2(shown, CURRENT_H), Sense::hover());
+            // Fond : un gris un peu plus clair que le panneau, pas le papier du projet (Anthony,
+            // 2026-10-20) ; poussé vers le blanc ou le noir si le trait s'y perdrait.
+            ui.painter().rect_filled(rect, 3.0, crate::theme::fond_apercu_trait(trait_));
+            ui.painter().image(tex, rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), trait_);
+            bulle(resp, "Aperçu du trait", "Le trait du pinceau courant, tracé par le moteur avec tous ses réglages.", "");
+            // Tout à droite : la liste des brosses (enfoncé quand elle est dépliée).
+            let reste = ui.available_width();
+            ui.allocate_ui_with_layout(vec2(reste, CURRENT_H), Layout::right_to_left(Align::Center), |ui| {
+                clic = self
+                    .bouton_etat(
+                        ui,
+                        ouverte,
+                        ph::BOOKS,
+                        "Liste des pinceaux",
+                        "Les brosses de SHOT, « Mes brosses » et celles importées : en choisir une, en importer, garder le réglage courant, renommer, supprimer. Un clic déplie la liste sous l'aperçu, un autre la replie.",
+                        "vue.pinceaux",
+                    )
+                    .clicked();
+            });
+        });
+        if clic {
+            if ouverte {
+                self.replier_liste_pinceaux();
+            } else {
+                self.pinceaux.liste_ouverte = true;
+            }
+        }
     }
 
     // ------------------------------------------------------------------ pointe, papier, toucher
@@ -669,8 +744,8 @@ impl App {
 
     /// Le haut du panneau Réglages de l'outil pour le pinceau, le crayon et la gomme : la taille en
     /// premier, en grand (Anthony, 2026-10-18 : elle n'est plus que là, plus dans le panneau
-    /// Pinceaux), l'opacité, puis le nom du réglage. Le panneau Pinceaux s'ouvre par la barre des
-    /// panneaux. La taille et l'opacité selon l'appui ne sont que dans « Plus de réglages » (Anthony,
+    /// Pinceaux), l'opacité, puis le nom du réglage. La liste des brosses se déplie sous l'aperçu du trait
+    /// (`brush_settings_ui`, bouton à droite de l'aperçu). La taille et l'opacité selon l'appui ne sont que dans « Plus de réglages » (Anthony,
     /// 2026-10-22 : elles y étaient déjà, en double ici).
     pub(crate) fn brush_summary_ui(&mut self, ui: &mut egui::Ui) {
         self.size_row(ui);

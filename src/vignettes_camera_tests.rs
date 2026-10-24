@@ -169,7 +169,7 @@ fn the_shortcut_reaches_the_vignettes_and_tab_leaves_them_for_the_storyboard() {
 fn the_vignettes_layout_is_bare_the_board_the_brush_the_colour() {
     let layout = Espace::Vignettes.defaut();
     let dock = layout.dock_layout();
-    for p in [Pane::Canvas, Pane::ToolOptions, Pane::Color, Pane::Brushes] {
+    for p in [Pane::Canvas, Pane::ToolOptions, Pane::Color] {
         assert!(dock.contains(p), "{p:?} est dans les Vignettes");
     }
     for p in [Pane::Montage, Pane::Timeline, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::References, Pane::Tools, Pane::Guides, Pane::History, Pane::Comments, Pane::Bruitages, Pane::SuggestionsSonores] {

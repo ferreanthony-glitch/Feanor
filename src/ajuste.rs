@@ -50,7 +50,6 @@ pub fn measured(pane: Pane) -> bool {
 pub fn flex_min(pane: Pane) -> f32 {
     match pane {
         Pane::Color => 200.0,
-        Pane::Brushes => 160.0,
         Pane::Layers | Pane::XSheet => 140.0,
         Pane::Canvas => 240.0,
         Pane::Montage | Pane::Timeline => 160.0,

@@ -49,7 +49,6 @@ const fn entree(pane: Pane, action: &'static str, nom: &'static str, description
 pub(crate) const GROUPES: &[&[Entree]] = &[
     &[
         entree(Pane::ToolOptions, "vue.reglages", "Réglages de l'outil", "Taille, opacité et options de l'outil courant. Un clic l'ouvre ou le met devant, un autre le ferme."),
-        entree(Pane::Brushes, "vue.pinceaux", "Pinceaux", "Les pinceaux et leurs réglages, chacun avec l'aperçu de son trait. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Color, "vue.couleur", "Couleur", "Roue, curseurs, couleurs récentes et nuanciers. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Personnages, "vue.personnages", "Personnages", "Les personnages du projet, chacun avec sa couleur de trait et son aplat, et les couleurs neutres. Un clic l'ouvre ou le met devant, un autre le ferme."),
     ],
@@ -72,19 +71,19 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
 /// Espaces de travail > Panneaux ; un panneau ouvert à la main, lui, a son icône tant qu'il est ouvert, et comme
 /// chaque espace retient sa disposition, il la retrouve la fois suivante : la barre ne se bat jamais contre
 /// l'utilisateur.
-/// - Vignettes : « rien de distraction, que du dessin et des références » : les réglages, les pinceaux, la couleur,
-///   les références.
-/// - Storyboard : dessiner (réglages, pinceaux, couleur, personnages), les calques et leurs effets, la fiche
-///   du plan, les références.
+/// - Vignettes : « rien de distraction, que du dessin et des références » : les réglages (avec la liste des pinceaux),
+///   la couleur, les références.
+/// - Storyboard : dessiner (réglages avec la liste des pinceaux, couleur, personnages), les calques et leurs effets, la
+///   fiche du plan, les références.
 /// - Animation : comme le storyboard, sans les personnages, avec la feuille d'exposition.
 /// - Montage : la fiche du plan, les bruitages, les commentaires et l'historique.
 ///
 /// Les guides n'y sont plus : ils sont dans le menu de la règle, au-dessus du dessin (`cadrageui.rs`).
 pub(crate) fn panneaux_d_office(espace: Espace) -> &'static [Pane] {
     match espace {
-        Espace::Vignettes => &[Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::References],
-        Espace::Storyboard => &[Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::Personnages, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::References],
-        Espace::Animation => &[Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::References],
+        Espace::Vignettes => &[Pane::ToolOptions, Pane::Color, Pane::References],
+        Espace::Storyboard => &[Pane::ToolOptions, Pane::Color, Pane::Personnages, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::References],
+        Espace::Animation => &[Pane::ToolOptions, Pane::Color, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::References],
         Espace::Montage => &[Pane::Sheet, Pane::Bruitages, Pane::Comments, Pane::History],
     }
 }
