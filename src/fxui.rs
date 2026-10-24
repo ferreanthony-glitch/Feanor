@@ -92,6 +92,7 @@ impl App {
             || self.multi.sel.is_some()
             || !self.multi.floats.is_empty()
             || self.cut_gesture.is_some()
+            || self.sculpt_geste.is_some()
             || self.envelope.is_some()
             || self.persp.is_some()
             || self.shape_drag.is_some()

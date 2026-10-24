@@ -419,6 +419,10 @@ mod pasteimage_tests;
 mod cutter;
 #[cfg(test)]
 mod cutter_tests;
+mod sculpt;
+mod sculptapp;
+#[cfg(test)]
+mod sculpt_tests;
 mod document;
 mod export;
 mod exportrender;

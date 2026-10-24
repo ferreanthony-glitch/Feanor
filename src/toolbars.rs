@@ -16,7 +16,8 @@ pub(crate) const TOOL_GROUPS: &[&[&[Tool]]] = &[
     &[&[Tool::Select, Tool::SelectColor], &[Tool::Brush], &[Tool::Pencil], &[Tool::Eraser], &[Tool::Cutter], &[Tool::Fill]],
     &[&[Tool::Rect, Tool::Line, Tool::Ellipse, Tool::Polyline], &[Tool::Text]],
     // Transformer et Perspective dans une seule case (Anthony, 2026-10-18).
-    &[&[Tool::Transform, Tool::Perspective], &[Tool::Picker]],
+    // Grab et Pull (`sculpt.rs`) dans une case à eux, juste après.
+    &[&[Tool::Transform, Tool::Perspective], &[Tool::Grab, Tool::Pull], &[Tool::Picker]],
     &[&[Tool::Pan], &[Tool::Camera]],
 ];
 

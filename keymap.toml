@@ -435,6 +435,17 @@ action = "outil.perspective"
 touches = []
 source = "Storyboard Pro 27 sans touche par défaut : DRAWING_PERSPECTIVE_TOOL_KEY"
 
+# Grab et Pull (`sculpt.rs`) : outils demandés par Anthony (2026-10-24), sans touche par défaut.
+[[raccourci]]
+action = "outil.grab"
+touches = []
+source = "sans touche par défaut : outil demandé le 2026-10-24 (Grab de Grease Pencil)"
+
+[[raccourci]]
+action = "outil.pull"
+touches = []
+source = "sans touche par défaut : outil demandé le 2026-10-24 (Pull de Grease Pencil)"
+
 [[raccourci]]
 action = "outil.main"
 touches = ["H"]
