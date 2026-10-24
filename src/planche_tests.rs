@@ -402,7 +402,7 @@ fn both_windows_open_from_their_actions_draw_and_the_hub_lists_them() {
     b.app.run_action("fichier.exporter_planche");
     b.chauffer(4);
     assert!(b.app.vignettes.planche.ouverte);
-    assert!(b.textes.iter().any(|t| t.contains("Tout le film (4)")) && b.textes.iter().any(|t| t.contains("Annotations (aucune)")), "{:?}", b.textes);
+    assert!(b.textes.iter().any(|t| t.contains("Tout le film (4)")) && b.textes.iter().any(|t| t.contains("Avec les annotations")), "{:?}", b.textes);
     b.app.run_action("fichier.exporter_colorscript");
     b.chauffer(4);
     assert!(b.app.vignettes.colorscript.ouverte);
