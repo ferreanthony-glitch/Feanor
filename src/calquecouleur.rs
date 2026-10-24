@@ -303,6 +303,8 @@ pub fn noter_copie(doc: &mut Document, pi: usize, li: usize, source: CelId, copi
     let own = panel.layers.get(li).and_then(|l| l.couleur.as_ref()).and_then(|c| c.griffonnages.get(&source).copied());
     if let Some(g) = own {
         let d = doc.duplicate_cel(g);
+        // (Son remplissage à l'écran, en attendant le sien : celui du dessin dont il est la copie.)
+        crate::fxcache::heriter(g, d);
         if let Some(c) = doc.panels[pi].layers[li].couleur.as_mut() {
             c.griffonnages.insert(copie, d);
         }
@@ -312,8 +314,13 @@ pub fn noter_copie(doc: &mut Document, pi: usize, li: usize, source: CelId, copi
         let Some(&old) = doc.panels[pi].layers[ci].couleur.as_ref().and_then(|c| c.dessins.get(&source)) else { continue };
         let fresh = doc.duplicate_cel(old);
         // Ses griffonnages aussi : la copie du dessin garde son remplissage.
-        let scribbles = doc.panels[pi].layers[ci].couleur.as_ref().and_then(|c| c.griffonnages.get(&old).copied());
-        let scribbles = scribbles.map(|g| doc.duplicate_cel(g));
+        let source_scribbles = doc.panels[pi].layers[ci].couleur.as_ref().and_then(|c| c.griffonnages.get(&old).copied());
+        let scribbles = source_scribbles.map(|g| doc.duplicate_cel(g));
+        // Le remplissage de la clé neuve est, en attendant le sien, celui de la clé dont elle est la copie : l'aplat ne disparaît pas
+        // le temps qu'il se calcule (`fxcache::heriter`).
+        if let (Some(g), Some(d)) = (source_scribbles, scribbles) {
+            crate::fxcache::heriter(g, d);
+        }
         if let Some(c) = doc.panels[pi].layers[ci].couleur.as_mut() {
             c.dessins.insert(copie, fresh);
             if let Some(g) = scribbles {

@@ -2280,7 +2280,12 @@ impl Document {
     /// copié (`copies`) reçoivent aussi une copie de ses griffonnages — jamais un dessin partagé entre l'original et sa
     /// copie, qu'on retoucherait ensemble.
     pub(crate) fn copier_griffonnages(&mut self, layers: &[Layer], copies: &mut HashMap<CelId, CelId>) {
-        self.copier_griffonnages_avec(layers, copies, |d, g| Some(d.duplicate_cel(g)));
+        // (Le remplissage de la copie, à l'écran en attendant le sien : celui de l'original, xcache::heriter.)
+        self.copier_griffonnages_avec(layers, copies, |d, g| {
+            let copie = d.duplicate_cel(g);
+            crate::fxcache::heriter(g, copie);
+            Some(copie)
+        });
     }
 
     /// `copier_griffonnages`, la copie d'un dessin de griffonnages étant faite par `make` (rien : le dessin manque, la copie
