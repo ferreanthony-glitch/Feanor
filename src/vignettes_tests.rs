@@ -656,7 +656,7 @@ fn the_vignettes_view_is_idle_when_nothing_happens() {
     let n = se_reposer(&mut b, 80);
     assert!(n < 80, "la vue Vignettes se repose ({n} images)");
     let m = b.image(Vec::new(), 0.5);
-    assert!(m.reveil >= std::time::Duration::from_secs(1), "aucune image demandée avant une seconde : {:?}", m.reveil);
+    assert!(m.reveil >= std::time::Duration::from_secs(1), "aucune image demandée avant une seconde : {:?}{}", m.reveil, b.raison_du_reveil());
 }
 /// Des images de la vue Vignettes (dessins, notes de une à trois lignes, coupes, cases vides) dans le dossier
 /// `SHOT_CAPTURE_DIR`, pour en vérifier la mise en page à l'œil. Sans carte graphique : rien.
