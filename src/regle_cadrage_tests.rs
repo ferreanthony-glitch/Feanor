@@ -326,34 +326,73 @@ fn case(b: &Banc, c: Case) -> Rect {
 }
 
 #[test]
-fn the_pastilles_are_a_slim_column_on_the_right_edge_of_the_drawing() {
+fn the_pastilles_are_a_row_at_the_right_end_of_the_top_bar_and_leave_the_drawing_alone() {
     let mut b = banc();
     assert_eq!(b.app.espace, Espace::Storyboard);
     let dessin = b.app.canvas_rect;
+    // La barre du haut de la vue : juste au-dessus du dessin, sur toute sa largeur.
+    let barre = Rect::from_min_max(egui::pos2(dessin.left(), dessin.top() - crate::viewbar::VIEW_BAR_H), egui::pos2(dessin.right(), dessin.top()));
     // Aucun personnage au départ : « classique », les trois couleurs neutres, les brosses du décor, « + », l'icône du panneau.
     let cases: Vec<Case> = b.app.perso.cases.iter().map(|(_, c)| *c).collect();
     assert_eq!(cases.first(), Some(&Case::Classique));
     assert!(cases.contains(&Case::Plus) && cases.contains(&Case::Panneau));
     assert_eq!(cases.iter().filter(|c| matches!(c, Case::Choix(Choix::Neutre(_)))).count(), 3, "{cases:?}");
-    // Une colonne : toutes les cases l'une sous l'autre, le long du bord droit, sous le titre du plan.
+    // Une rangée : toutes les cases l'une à côté de l'autre, dans la barre, à son extrémité droite.
     let rects: Vec<Rect> = b.app.perso.cases.iter().map(|(r, _)| *r).collect();
     for w in rects.windows(2) {
-        assert!(w[1].top() >= w[0].bottom() - 0.5, "l'une sous l'autre : {w:?}");
+        assert!(w[1].left() >= w[0].right() - 0.5, "l'une à côté de l'autre : {w:?}");
+    }
+    for r in &rects {
+        assert!(barre.contains_rect(r.shrink(0.5)), "dans la barre du haut : {r:?} dans {barre:?}");
+        assert!((r.center().y - barre.center().y).abs() < 3.0, "sur la ligne des icônes de la barre : {r:?}");
     }
     let (gauche, droite) = (rects.iter().map(|r| r.left()).fold(f32::MAX, f32::min), rects.iter().map(|r| r.right()).fold(f32::MIN, f32::max));
-    assert!(droite <= dessin.right() && dessin.right() - droite < 14.0, "au bord droit : {droite} dans {dessin:?}");
-    assert!(droite - gauche < 34.0, "une colonne mince ({} points)", droite - gauche);
-    assert!(rects[0].top() > dessin.top() + 30.0, "sous le titre du plan : {:?} dans {dessin:?}", rects[0]);
-    // Plus de texte « Aucun personnage » ni de barre au-dessus du dessin : la bulle le dit.
+    assert!(droite <= barre.right() && barre.right() - droite < 14.0, "à l'extrémité droite : {droite} dans {barre:?}");
+    // À droite de tout ce que la barre a à gauche (les icônes des vues, la règle).
+    assert!(gauche > barre.left() + 120.0, "après les icônes de la barre : {gauche}");
+    // Même taille de case et mêmes écarts que les icônes de la barre : la hauteur d'une case de la barre, 2 points entre deux pastilles.
+    let classique = case(&b, Case::Classique);
+    assert!((classique.height() - crate::barres::CASE[1]).abs() < 0.5, "la hauteur d'une icône de la barre : {classique:?}");
+    let neutres: Vec<Rect> = b.app.perso.cases.iter().filter(|(_, c)| matches!(c, Case::Choix(Choix::Neutre(_)))).map(|(r, _)| *r).collect();
+    for w in neutres.windows(2) {
+        assert!((w[1].left() - w[0].right() - crate::barres::ECART).abs() < 0.5, "l'écart des icônes de la barre : {w:?}");
+    }
+    // Plus rien sur le dessin : aucune case dans sa moitié haute droite, pas de texte « Aucun personnage ».
+    assert!(rects.iter().all(|r| r.bottom() <= dessin.top() + 0.5), "aucune pastille sur le dessin");
     assert!(!b.textes.iter().any(|t| t.contains("Aucun personnage")), "{:?}", b.textes);
-    // La rangée de la barre a disparu : le dessin garde la même place, pastilles montrées ou cachées.
+    // Le dessin garde la même place, pastilles montrées ou cachées.
     b.app.layout.character_bar = Some(false);
     b.chauffer(4);
-    assert!(b.app.perso.cases.is_empty(), "cachées : plus de colonne");
-    assert_eq!(b.app.canvas_rect, dessin, "la colonne ne prend pas de place au dessin");
+    assert!(b.app.perso.cases.is_empty(), "cachées : plus de rangée");
+    assert_eq!(b.app.canvas_rect, dessin, "la rangée ne prend pas de place au dessin");
     b.app.layout.character_bar = Some(true);
     b.chauffer(4);
     assert!(!b.app.perso.cases.is_empty());
+    assert_eq!(b.app.canvas_rect, dessin);
+}
+
+#[test]
+fn the_pastilles_scroll_instead_of_wrapping_when_the_bar_is_too_narrow() {
+    use crate::personnages::Personnage;
+    let mut b = banc_taille(Document::new(400, 300, 24), false, 700, 600);
+    b.app.tool = Tool::Brush;
+    // Beaucoup de personnages : la rangée ne tient plus dans la barre.
+    for k in 0..14 {
+        b.app.doc.personnages.push(Personnage { id: 900 + k, name: format!("P{k}"), line: [20 * k as u8, 40, 90], fill: Some([200, 200, 200]) });
+    }
+    b.chauffer(6);
+    let dessin = b.app.canvas_rect;
+    let barre = Rect::from_min_max(egui::pos2(dessin.left(), dessin.top() - crate::viewbar::VIEW_BAR_H), egui::pos2(dessin.right(), dessin.top()));
+    let rects: Vec<Rect> = b.app.perso.cases.iter().map(|(r, _)| *r).collect();
+    assert!(rects.len() >= 18, "toutes les cases sont peintes (elles défilent) : {}", rects.len());
+    // Aucune ne passe à la ligne : toutes sur la même ligne, la barre garde sa hauteur, le dessin sa place.
+    let y0 = rects[0].center().y;
+    assert!(rects.iter().all(|r| (r.center().y - y0).abs() < 0.5), "une seule ligne");
+    assert!(barre.y_range().contains(y0), "dans la barre");
+    assert_eq!(b.app.canvas_rect.top(), dessin.top());
+    // Celles qui sont à portée sont dans la barre, pas sur le dessin.
+    let visibles = rects.iter().filter(|r| barre.contains_rect(r.shrink(0.5)) && r.right() <= barre.right()).count();
+    assert!(visibles >= 4, "au moins quelques pastilles à portée : {visibles}");
 }
 
 #[test]
@@ -442,8 +481,9 @@ fn the_pastilles_are_also_on_the_vignettes_board() {
     assert!(b.app.barre_perso_visible());
     let planche = b.app.vignettes.view;
     let plus = case(&b, Case::Plus);
-    assert!(planche.contains(plus.center()), "la colonne est sur la planche : {plus:?} dans {planche:?}");
-    assert!(planche.right() - plus.right() < 14.0, "au bord droit de la planche");
+    // Une rangée à l'extrémité droite de la barre du haut de la planche, au-dessus d'elle (plus sur la planche).
+    assert!(plus.bottom() <= planche.top() + 0.5, "la rangée est dans la barre du haut de la planche : {plus:?} au-dessus de {planche:?}");
+    assert!(planche.right() - plus.right() < 14.0 || b.app.perso.cases.iter().any(|(r, _)| planche.right() - r.right() < 14.0), "au bord droit de la planche");
     let panneaux = b.app.doc.panels.len();
     let pas = b.app.history.undo_len();
     // Un clic sur une pastille la choisit et ne touche pas à la planche : ni nouveau plan, ni trait, ni annulation.

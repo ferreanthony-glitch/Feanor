@@ -4303,3 +4303,40 @@ aucun rejeu sur le fil de l'interface (`cache_missing`, `is_pending`) ; autre ou
 bouge hors de la zone ni dans le vide ; un glissé bitmap de vingt images, une étape, annuler rend tous les pixels ; pixels soulevés recolorés, une étape à la pose ; code hexadécimal,
 intervertir, couleurs par défaut recolorent, la pipette (`set_front`) non. (Les essais simulent les images d'un glissé — début d'image, choix, curseur tenu — plutôt que de piloter le
 curseur d'egui.)
+
+## 49. Les pastilles passent dans la barre du haut (2026-10-24, branche `petites-fonctions`)
+
+Demande d'Anthony, d'après une copie d'écran : la colonne ronde des pastilles (classique, personnages, couleurs neutres, brosses du décor, « + », bouton du panneau Personnages),
+qui longeait le bord droit du dessin, devient **une rangée à l'extrémité droite de la barre du haut du dessin**, celle qui a à gauche les vues (plateau, caméra, 3D) et la règle.
+
+### Ce qui change
+
+- **Où** : dans la barre du haut de la vue (`viewbar::view_bar`), tout à droite, après les icônes des vues et la règle ; à la hauteur des icônes de la barre. Dans la vue **Vignettes**,
+  où il n'y a pas cette barre, la rangée est à l'extrémité droite de la ligne des réglages de la planche (taille des vignettes, colonnes, zoom), au-dessus d'elle ; elle ne prend que la place
+  que ces réglages laissent libre.
+- **Même taille et mêmes écarts que les icônes de la barre** : cases de la hauteur d'une icône (26 points), 2 points entre deux pastilles ; un petit trait vertical sépare les groupes
+  (classique | personnages | neutres | décor | « + » et panneau) ; un fond arrondi discret l'entoure.
+- **Le dessin n'a plus de colonne** à droite : rien n'est peint sur lui, il garde toute sa place (le titre « Séquence 1 — plan 1 » reste dans la vue, en haut à droite, comme avant).
+- **Trop étroite**, la rangée **défile** (molette ou glisser sur la rangée) au lieu de passer à la ligne ou de recouvrir le dessin ; elle est de nouveau à sa largeur dès que la barre s'élargit.
+- **Tout ce que les pastilles faisaient, elles le font** : un clic choisit (un second clic sur la pastille choisie la lâche), le clic droit ouvre le menu (modifier, dupliquer, monter,
+  descendre, supprimer), « + » ajoute un personnage, le bouton du panneau l'ouvre, les bulles à 1 s sont les mêmes, la pastille choisie garde son halo, le contenu (brosses du décor,
+  « classique » en tête) est celui du Storyboard et des Vignettes d'avant ; elles restent montrées ou cachées par espace de travail (menu Affichage, `perso.barre`). Cliquer une pastille
+  ne trace rien. Elles ne sont pas dans la vue caméra de la vignette (grande case) ni en Espace 3D, comme avant.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Storyboard : la barre du haut a, à droite, les pastilles en rangée (classique d'abord, les trois couleurs neutres, les trois brosses du décor, « + », l'icône du panneau) ; plus rien
+   sur le bord droit du dessin, qui est plus large d'une colonne ; le titre du plan est resté en haut à droite du dessin.
+2. Clic sur une pastille : elle s'allume (halo) ; un second clic la lâche. Clic droit sur une couleur neutre : le menu. « + » : un personnage de plus, sa pastille apparaît après la
+   classique. L'icône du panneau ouvre le panneau Personnages. Les bulles apparaissent après une seconde.
+3. Rétrécir la fenêtre (ou ajouter beaucoup de personnages) : la rangée reste sur la ligne de la barre et défile à la molette ; elle ne recouvre pas le dessin.
+4. Vignettes : la rangée est au bout de la ligne des réglages de la planche (au-dessus d'elle) ; les brosses du décor y sont ; un clic dessus ne touche pas à la planche.
+5. Affichage > Cacher les pastilles : la rangée disparaît, la barre et le dessin ne bougent pas.
+
+### Essais ajoutés ou changés
+
+`regle_cadrage_tests` : les pastilles sont une rangée dans la barre du haut, à son extrémité droite, à droite des icônes de la barre, l'une à côté de l'autre, sur la ligne de la barre, de
+la hauteur d'une icône (`barres::CASE`) et à 2 points l'une de l'autre (`barres::ECART`), aucune sur le dessin, qui garde sa place montrées ou cachées ; trop étroite (quatorze
+personnages, fenêtre étroite), la rangée reste sur une seule ligne dans la barre ; la planche des Vignettes a sa rangée au-dessus d'elle, au bord droit. `pastilles_storyboard_tests` : un
+clic sur une pastille de la barre la choisit sans rien tracer ni étape d'annulation, le clic droit ouvre son menu, « + » ajoute un personnage en tête des pastilles. `decor_tests` : la rangée
+des Vignettes reçoit les clics sur toutes ses cases (aire « pastilles_rangee_planche »).

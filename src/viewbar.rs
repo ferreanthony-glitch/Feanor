@@ -452,6 +452,9 @@ impl App {
                 return;
             }
             self.guides_button(ui);
+            // Les pastilles (classique, personnages, couleurs neutres, brosses du décor, « + », panneau Personnages) : à l'extrémité
+            // droite de la barre, rangée de cases de la même hauteur et des mêmes écarts que les icônes ; trop étroite, elle défile.
+            self.pastilles_rangee(ui);
         });
     }
 
