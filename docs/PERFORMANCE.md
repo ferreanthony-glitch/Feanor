@@ -1908,3 +1908,33 @@ résultat du fil (les tuiles réduites) le temps de son arrivée.
   ferment sur des fils détachés ; si SHOT quittait juste après, ils n'étaient pas attendus. Ils sont gardés
   (`fermetures_d_onglets`) et attendus dans `fermer_tous_les_onglets`, avant `sortie_sans_rendre`. Essai : un onglet fermé
   pendant une copie de secours, SHOT quitte aussitôt : aucun dossier de secours ne reste.
+
+## 28. Grab et Pull : un pas ne coûte que le cercle du pinceau (2026-10-24, branche `outils-deformation`)
+
+Les outils Grab et Pull (`sculpt.rs`, `sculptapp.rs` ; `docs/INTERFACE.md`, partie 43) suivent la règle « sans latence » : **aucun rejeu du moteur de brosses sur le fil de
+l'interface**, ni pendant le geste ni au lâcher (les essais lisent `vector::replay_count()`, compteur du fil, avant et après). Ce qui est fait à la place :
+
+- **Les points** (calque vectoriel) : un pas de Pull ne regarde que les éléments dont la boîte (`sculpt::Boites`, tenue à jour) touche le cercle ; **0,06 ms par pas sur
+  202 000 points** (2 000 traits de 100 points ; pinceau de 40 px). Les écarts trop longs reçoivent des points seulement dans le cercle. Grab ne cherche ses points qu'à l'appui
+  (un parcours du dessin) puis ne touche que ceux qu'il a pris.
+- **Les pixels** (calque bitmap ; image d'un dessin vectoriel pendant le geste ; aplat) : seuls ceux du cercle, une fois par image d'écran. Pull : pour chaque pixel
+  d'arrivée, trois reprises pour trouver d'où il vient, la courbe en table (aucune racine carrée par pixel), les lignes lues sur une copie et posées tuile par tuile
+  (`ecrire_ligne`) ; un cercle de plus de 40 000 px de boîte se partage entre les cœurs (au plus 8). Grab : un maillage de 6 à 40 cases par côté sur la boîte du cercle, posé
+  par deux triangles par case, ligne par ligne, sur la copie d'avant ; `restaurer` remet les tuiles de l'image d'avant (elles sont partagées : aucune copie) avant chaque pas.
+- Pull pose le mouvement de l'image en pas d'au plus le quart du rayon (16 au plus) ; si l'image a déjà pris 10 ms, le reste du mouvement est posé d'un seul pas. Jamais plus
+  d'une image de retard.
+- Au lâcher : la géométrie est posée et le rendu exact des traits déformés est demandé au fil de travail (`rejeu_cel`) ; l'image du geste reste jusqu'à son arrivée.
+
+**Mesures** (`sculpt_tests::a_pixel_step_costs_milliseconds_not_a_replay_at_any_radius` et `a_vector_pull_step_over_a_big_drawing_costs_far_less_than_a_millisecond`,
+`--ignored --nocapture` ; feuille de 1 920 × 1 080 quadrillée ; le Core i7-10700K d'Anthony, la machine occupée par d'autres travaux ; durées d'un pas) :
+
+| Rayon (px) | Pull (décalage de 8 px) | Grab (décalage de 120 px, restaurer compris) |
+|---:|---:|---:|
+| 30 | 0,16 ms | 0,24 ms |
+| 60 | 0,60 ms | 0,66 ms |
+| 120 | 0,87 ms | 1,80 ms |
+| 250 | 2,9 ms | 6,6 ms |
+| 400 (le plus grand) | 7,6 ms | 16,6 ms |
+
+Avant le partage entre les cœurs et la pose par tuile, Pull coûtait 0,58, 2,3, 10 et 26 ms à 60, 120, 250 et 400 px. **Reste** : Grab à 400 px (16 ms par image, la pose des
+triangles ne se partage pas) ; au rayon par défaut (60 px), les deux coûtent moins d'une milliseconde.

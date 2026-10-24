@@ -2151,3 +2151,33 @@ aucun fichier de `modeles/` n'est jamais effacé. Le calque « Fond 3D » est un
 | Cartes composées dans l'ordre de la pile, pas par distance | les modes de fusion, calques d'ajustement et dossiers sont des opérations « sur ce qui est dessous » | une carte plus proche peut être cachée par une plus loin si la pile le dit (commande « Ordonner… ») | surprise de l'utilisateur : dit dans la vue et l'aide | oui : un tri par distance serait un réglage de plan |
 | Supprimer les objets 3D et le repère 3D (décision d'Anthony, 2026-10-21) | « focus sur le dessin » : ils alourdissaient le logiciel et l'interface pour pas grand-chose | environ 9 000 lignes de code et leurs essais en moins ; plus de calque « Fond 3D » mis à jour tout seul | un ancien projet : lecture qui ignore, jamais d'effacement (essais) | oui, par l'historique git (`5f3fda7`) |
 | Vue d'édition toute en egui | plus d'objets, donc plus de passe wgpu ni de tampon de profondeur | aucun | cartes très nombreuses : 16 × 16 cases chacune (10 cartes ≈ 1 ms) | oui |
+
+## Grab et Pull (2026-10-24, branche `outils-deformation`)
+
+Deux outils qui déforment le dessin au pinceau, sur le modèle de Grab et de Pull de Grease Pencil (code à nous). Mode d'emploi, réglages et liste de contrôle :
+`docs/INTERFACE.md`, partie 43 ; coûts : `docs/PERFORMANCE.md`, partie 28.
+
+**Les modules** : `sculpt.rs` (le cœur, sans interface : `Attenuation` et ses quatre courbes, `Reglages`, les fonctions sur les points d'un dessin vectoriel `densifier`,
+`prendre`, `grab_appliquer`, `pull_pas`, et sur des pixels `pousser`, `saisir_raster`, `restaurer`) ; `sculptapp.rs` (le geste dans l'application : `Geste`, appui, glisser,
+une pose par image d'écran, lâcher en une étape d'annulation, réglages, curseur) ; `sculpt_tests.rs`. Branchements : `Tool::Grab` et `Tool::Pull` (`app.rs`), la case de
+`toolbars.rs`, `canvas.rs` (appui, mouvement, `sculpt_tick` en fin de lecture des événements, curseur, cercle de l'appui), `panels.rs` (Réglages), les actions
+`outil.grab` / `outil.pull` (`keymap.rs`, `keymap.toml`, sans touche). Champs d'`App` : `sculpte` (réglages, partagé entre les onglets) et `sculpt_geste` (le geste, par projet).
+
+**Un geste** : à l'appui, `Geste` garde par dessin touché l'image (les tuiles se partagent : une copie ne coûte rien), le dessin vectoriel d'avant et une **copie de travail**
+(Grab : densifiée là, ses points pris), l'aplat d'avant. Les pas du pointeur de l'image d'écran sont posés une fois (`sculpt_tick`) : les points de la copie de travail bougent
+(`grab_appliquer` repart toujours des points de départ ; `pull_pas` bouge ceux qui sont sous le pinceau à cet instant, `Boites` ne laisse regarder que les éléments voisins) et les
+pixels du cercle sont déformés de la même façon (Grab : une feuille de caoutchouc maillée, des triangles ligne par ligne sur la copie d'avant, `restaurer` entre deux pas ;
+Pull : pour chaque pixel d'arrivée on cherche d'où il vient, en trois reprises, le poids étant celui de l'endroit d'où il vient — l'inverse du pas des points). Le lâcher
+pose la géométrie (un dessin vectoriel : `Edit::Vector`, puis `rejeu_cel` : le rendu exact vient du fil de travail), les tuiles d'avant (bitmap : `Edit::Tiles` ; aplat :
+`Edit::FondTiles`), le tout en un `Edit::Group` nommé « Grab » ou « Pull ».
+
+**Plusieurs clés** : `App::sculpt_cibles` — les clés de `key_sel` qui sont du plan et du calque courants ; deux au moins : leurs dessins (et le dessin qu'on voit) reçoivent
+les mêmes pas, dans la même étape.
+
+### Décisions (coût / risque / réversibilité)
+
+| Décision | Pourquoi | Coût | Risque | Réversible |
+|---|---|---|---|---|
+| L'aperçu est la déformation elle-même, limitée au cercle (pas une feuille flottante maillée comme l'enveloppe) | Pull change à chaque pas l'ensemble de ce qui bouge : une feuille maillée aurait dû couvrir tout le dessin, avec un maillage assez fin pour un petit pinceau | un pas de pixels ne dépend que du rayon (partagé entre les cœurs au-delà de 40 000 px) ; mesures en partie 28 de PERFORMANCE.md | un rayon énorme sur un geste rapide : un budget de 10 ms par image, le reste du mouvement en un seul pas | oui : `sculptapp.rs` seul décide |
+| Un calque vectoriel déforme une copie de travail ; le document ne change qu'au lâcher | l'annulation est un seul `Edit::Vector` exact, aucun rendu exact à retenir pendant le geste (`cel_busy`) | une copie du dessin de plus pendant le geste | un rendu exact qui arrive en plein geste : retenu | oui |
+| Un décalage plus grand que le rayon replie le trait | c'est ce que font les points (Blender aussi) ; un bornage serait une règle de plus que le réalisateur n'a pas demandée | aucun | surprise : dit dans INTERFACE.md | oui : borner `delta` dans `sculpt_tick` |

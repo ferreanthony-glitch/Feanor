@@ -3944,3 +3944,89 @@ d'office reproduit donc l'ancien geste sans touche, et « Centre » l'ancien ges
 des choix dans Réglages) ; `brushfill_tests` (l'ancienne option se lit sans effet, `pinceau.remplir` donne l'aplat) ; `panneaux_tests`, `aplat_tests`,
 `notes_calques_tests` (l'ordre des réglages du pinceau) ; `pastilles_storyboard_tests.rs` (le décor dans le Storyboard, la pastille classique) ;
 `regle_cadrage_tests` (la règle sans les repères, l'icône des repères à côté de Cadrage : place, taille, écart, contenu, allumage).
+
+## 43. Grab et Pull : déformer le trait au pinceau (2026-10-24, branche `outils-deformation`)
+
+Demande d'Anthony : les outils **Grab** et **Pull** du mode sculpture de Grease Pencil (Blender), « avec les mêmes options ». Code à nous (`sculpt.rs` pour le
+cœur sans interface, `sculptapp.rs` pour l'application) : on a regardé ce que font les outils, pas lu le code de Blender.
+
+### Mots et commandes
+
+- **Grab** : à l'appui, les points du dessin qui sont dans le **cercle du pinceau** sont pris, chacun avec un poids tiré de la courbe d'**atténuation** et de sa
+  distance au point d'appui. En glissant, chaque point pris bouge de `décalage × poids × force` (le décalage est celui depuis l'appui : revenir au point d'appui
+  remet tout en place). **L'ensemble des points est fixé à l'appui.**
+- **Pull** : continu. À chaque pas du pointeur, les points qui sont **à cet instant** sous le cercle bougent de `décalage × poids × force` : un doigt qui étire le
+  trait. L'ensemble change avec le pinceau (un point qui reste en arrière, parce que la force est faible, sort du cercle et s'arrête).
+- Actions `outil.grab` et `outil.pull`, **sans touche d'office** (aucune touche évidente de libre ; clic droit sur le bouton ou Ctrl+K pour en poser une).
+  Dans la barre d'outils de gauche, **une case à eux** (clic maintenu : l'autre), juste sous celle de Transformer et Déformer ; icônes mains (`HAND_GRABBING`,
+  `HAND_POINTING`) ; bulle d'une seconde : nom, raccourci s'il y en a un, description. Les touches de taille du pinceau (`[` et `]`, actions `outil.taille_moins` /
+  `outil.taille_plus`) changent le **rayon** de l'outil pris ; l'aide-mémoire (touche R tenue) les liste.
+- **Réglages** (panneau Réglages, un jeu par outil, comme dans Blender ; simples, en français) :
+  - **Rayon (px)** (en pixels du dessin, comme la taille du pinceau) + l'interrupteur plume « **Rayon selon l'appui** » ;
+  - **Force** (0 à 1 : à 1 le centre suit exactement le curseur ; 0 ne change rien) + « **Force selon l'appui** » ;
+  - **Atténuation** : quatre choix en icônes, **Douce** (descente en S), **Linéaire**, **Constante** (tout le cercle pareil, rien dehors), **Pointue** (pic au centre),
+    avec un petit dessin de la courbe de bord à bord ;
+  - **Afficher le curseur** : le cercle du pinceau sur le dessin (éteint : la croix du système seule). Pendant un Grab, le cercle de l'appui reste en place et un trait
+    le relie au pointeur. À la souris la pression vaut 100 % : les deux « selon l'appui » ne servent qu'au stylet.
+  - Départ : Grab rayon 60, force 1 ; Pull rayon 40, force 0,7 ; atténuation douce. Les réglages ne s'écrivent pas dans les réglages de l'application (ils reviennent
+    à leur départ au prochain lancement).
+
+### Ce qui bouge
+
+- **Calque vectoriel** : les points des traits et des zones remplies. **Les épaisseurs et les appuis restent** (les textes ne bougent pas). Un long écart entre deux
+  points reçoit des points de plus (`densifier` : un point tous les `max(rayon / 8, 2)` px au plus, dans le cercle, sur le segment, avec rayon, appui et instant
+  interpolés), pour qu'une ligne droite en deux points ou un trait étiré reste lisse. Une étape d'annulation par geste, nommée « Grab » ou « Pull ».
+- **Calque bitmap** : une déformation façon « liquéfier » des pixels du cercle, par les mêmes déplacements pondérés. Rien hors du cercle ne change (Pull) ; Grab ne
+  touche pas un pixel à plus de `rayon + décalage` du centre. Une étape d'annulation (les tuiles d'avant).
+- **L'aplat** (la peinture de la strate et sa coupe) **suit** la même déformation, dans la même étape ; sa forme déduite du trait suit le trait toute seule. Quand la
+  sous-ligne de l'aplat est la cible du dessin (clic dessus dans Calques), seul l'aplat est déformé. Un aplat sans rien de peint n'a rien à déformer (la forme suit le trait).
+- **Plusieurs clés choisies** (montage ou timeline) : si au moins deux clés du **calque courant** sont choisies, la même déformation est posée sur le dessin de
+  chacune, et sur le dessin qu'on voit s'il n'en fait pas partie ; **une seule étape d'annulation** pour tous. Une clé seule choisie, ou aucune : le dessin courant seul.
+  Les clés choisies d'un autre calque ne comptent pas. Le panneau Réglages dit combien de clés sont visées.
+- Un calque verrouillé, caché ou vidéo, ou une image sans dessin : refusé avec le message habituel, sans geste.
+
+### Sans latence (règle d'Anthony)
+
+- **Rien ne rejoue le moteur de brosses sur le fil de l'interface**, ni pendant le geste ni au lâcher (essais : `vector::replay_count()` ne bouge pas). Un geste ne
+  travaille que les **pixels du cercle** et les **points qui y sont**, une fois par image d'écran (les mouvements du pointeur d'une image sont réunis ; Pull les pose
+  en pas d'au plus le quart du rayon, 16 par image, et d'un seul pas s'il a déjà pris 10 ms).
+- **Calque vectoriel** : les points bougent dans une **copie de travail** (le document garde sa géométrie jusqu'au lâcher) ; l'image du dessin montre les pixels
+  du cercle déformés (les tuiles se partagent : rien ne se recopie que ce qui s'écrit). Au lâcher, la nouvelle géométrie est posée et **le rendu exact des traits
+  déformés est demandé au fil de travail** (`rejeu_cel`, `rejeu.rs`) ; l'image du geste reste jusqu'à son arrivée (`cel_busy` retient un rendu qui arrive pendant le
+  geste). Les traits qui n'ont pas bougé gardent leurs pixels en cache.
+- **Calque bitmap** : le résultat du geste est l'image, rien n'est refait au lâcher.
+- Coûts mesurés : `docs/PERFORMANCE.md`, partie 28.
+
+### À vérifier à l'écran (par Anthony)
+
+1. La barre de gauche : une case mains sous Transformer / Déformer ; clic maintenu : Grab et Pull ; bulle d'une seconde (nom, description) ; clic droit : assigner une touche.
+2. Réglages : rayon, force (chacun avec « selon l'appui » si tu as un stylet), les quatre atténuations (et leur petite courbe), « Afficher le curseur » (le cercle suit
+   le pinceau, de la taille du rayon ; éteint, la croix seule).
+3. **Calque vectoriel**, un personnage au pinceau texturé : **Grab** sur un bras (appui au milieu, glisser) : les points du cercle suivent, le bord du cercle reste ;
+   rien ne saute au lâcher (le rendu exact remplace l'aperçu sans à-coup) ; Ctrl+Z rend le dessin d'avant d'un seul coup.
+4. **Pull** sur une ligne droite de deux points : elle s'étire en courbe lisse sous le pinceau (pas d'angles) ; force 0,3 : le trait traîne derrière le pinceau.
+5. Les quatre atténuations changent la forme de la bosse (Constante : tout le cercle d'un bloc ; Pointue : seul le centre bouge).
+6. **Calque bitmap** : Grab et Pull étirent les pixels du cercle, rien autour ; Ctrl+Z.
+7. **Aplat** : un personnage avec aplat (peint dedans) : Grab sur le contour, l'aplat suit. Clic sur la sous-ligne « Aplat » : seul l'aplat bouge.
+8. **Plusieurs clés** : choisis trois clés du calque dans le montage (Ctrl + clic), Grab sur le dessin courant : les trois dessins changent pareil ; un seul Ctrl+Z.
+9. Gros rayon (400) et glisser vite : le pinceau reste fluide (c'est le cas le plus coûteux : voir PERFORMANCE.md, partie 28).
+
+### Limites connues
+
+- Un décalage plus grand que le rayon **replie** le trait (les points se croisent, comme dans Blender) ; sur un calque bitmap, la feuille de caoutchouc se replie de même.
+- Les réglages (rayon, force, atténuation, curseur) ne sont pas gardés d'un lancement à l'autre.
+- L'aperçu d'un calque vectoriel pendant le geste est fait de pixels déformés (lissés) ; le rendu exact (texture de la brosse) arrive d'un fil de travail au lâcher,
+  comme pour l'enveloppe et la perspective.
+- Pas de touche d'Échap pour abandonner un geste en cours (Ctrl+Z après le lâcher).
+
+### Essais ajoutés
+
+`sculpt_tests.rs` : les quatre courbes (1 au centre, 0 au bord, jamais ne remontent) ; la pression n'agit que si son interrupteur est allumé ; Grab ne prend que les points
+du rayon avec leur poids, les déplace de `décalage × poids × force`, garde les épaisseurs, et revient en place ; force 0 ne change rien (points et pixels, et aucune
+étape d'annulation dans l'application) ; Pull étire le long du mouvement, l'ensemble sous le pinceau suit, les points lointains ne bougent jamais ; un long écart reçoit
+des points (forme, rayon, appui, instant gardés) et une ligne à deux points s'étire sans marche ; zones remplies suivent, textes rigides ; pixels : Pull ne change aucun
+pixel hors du cercle, Grab aucun à plus de `rayon + décalage`, annulation exacte des tuiles ; **plusieurs clés** : la même déformation sur chacune, une seule étape,
+annulation et rétablissement exacts ; une seule clé choisie, ou celles d'un autre calque : le dessin courant seul ; **l'aplat suit** (peinture et coupe, une seule étape,
+annulation exacte) et, cible, bouge seul ; **aucun rejeu du moteur sur le fil de l'interface** pendant le geste ni au lâcher, le rendu exact demandé au fil de travail ;
+l'image du dessin montre le trait déformé avant le lâcher ; calque verrouillé et image vide refusés ; changer d'outil en plein geste le termine en une étape ; la case de la
+barre, les actions et leur absence de touche ; le panneau Réglages et le cercle du pinceau. Essais `#[ignore]` des durées (`--ignored --nocapture`).
