@@ -698,6 +698,8 @@ pub struct Panel {
     pub notes: String,
     /// Images clés de la caméra, triées (aucune : caméra au centre de la feuille).
     pub camera: Vec<CameraKey>,
+    /// Postérisation temporelle de la caméra (« saccade ») : rien dans les clés, tout à l'évaluation.
+    pub saccade: camera::Saccade,
     /// Marques d'image (13a), triées par image, toutes après la première image du plan.
     pub marks: Vec<ImageMark>,
     /// Signets, points d'entrée et de sortie (13d).
@@ -1350,30 +1352,45 @@ impl Document {
     /// Caméra du panneau `index` à son image `frame`. Un panneau sans image clé garde la caméra
     /// où le panneau d'avant (dans la scène) l'a laissée, sinon celle où le panneau d'après la
     /// prend : la caméra ne revient pas au centre en passant d'un panneau à l'autre (9c).
+    ///
+    /// C'est la caméra **montrée** : avec la postérisation temporelle du plan (`Panel::saccade`), elle ne change
+    /// que toutes les N images ; tout ce qui montre ou exporte l'image passe par ici. Ce qui règle les clés
+    /// (outil Caméra, pose d'une clé, réunion) lit la caméra douce : `panel_camera_douce`.
     pub fn panel_camera(&self, index: usize, frame: usize) -> Camera {
+        self.panel_camera_selon(index, frame, true)
+    }
+
+    /// La caméra du plan `index` à l'image `frame`, interpolée en douceur entre les clés, sans la
+    /// postérisation temporelle : celle des clés, que l'édition règle.
+    pub fn panel_camera_douce(&self, index: usize, frame: usize) -> Camera {
+        self.panel_camera_selon(index, frame, false)
+    }
+
+    fn panel_camera_selon(&self, index: usize, frame: usize, montree: bool) -> Camera {
         let default = self.default_camera();
         let Some(p) = self.panels.get(index) else { return default };
+        let au = |q: &Panel, f: usize| camera::camera_at(&q.camera, if montree { q.saccade.image_montree(&q.camera, f) } else { f }, default);
         if !p.camera.is_empty() {
-            return camera::camera_at(&p.camera, frame, default);
+            return au(p, frame);
         }
         let (start, end) = self.scene_run(index);
         if let Some(q) = self.panels[start..index].iter().rev().find(|q| !q.camera.is_empty()) {
-            return camera::camera_at(&q.camera, q.frame_count().saturating_sub(1), default);
+            return au(q, q.frame_count().saturating_sub(1));
         }
         if let Some(q) = self.panels[index + 1..end].iter().find(|q| !q.camera.is_empty()) {
-            return camera::camera_at(&q.camera, 0, default);
+            return au(q, 0);
         }
         default
     }
 
     /// Caméra d'un plan rangé (une version qui n'est pas dans `panels`) à son image `frame` : ses propres clés,
-    /// sinon la caméra par défaut.
+    /// sinon la caméra par défaut (avec la postérisation temporelle du plan, s'il en a une).
     pub fn camera_du_plan_range(&self, p: &Panel, frame: usize) -> Camera {
         let default = self.default_camera();
         if p.camera.is_empty() {
             default
         } else {
-            camera::camera_at(&p.camera, frame, default)
+            camera::camera_at(&p.camera, p.saccade.image_montree(&p.camera, frame), default)
         }
     }
 
@@ -1958,6 +1975,7 @@ impl Document {
             dialogue: String::new(),
             notes: String::new(),
             camera: keys_after,
+            saccade: source.saccade,
             marks: Vec::new(),
             // Les signets d'après la coupe passent au nouveau plan ; les points d'entrée et de
             // sortie restent au premier.
@@ -2233,6 +2251,7 @@ impl Document {
             dialogue: String::new(),
             notes: String::new(),
             camera: Vec::new(),
+            saccade: camera::Saccade::default(),
             marks: Vec::new(),
             cues: Cues::default(),
             color: None,
@@ -2442,8 +2461,9 @@ impl Document {
     /// Met le plan (ou panneau) `index + 1` au bout du plan `index` (voir `append_plan`).
     pub(crate) fn append_next(&mut self, index: usize) -> Option<String> {
         let last = |d: &Document, i: usize| d.panels[i].frame_count() - 1;
-        let cams_a = (self.panel_camera(index, 0), self.panel_camera(index, last(self, index)));
-        let cams_b = (self.panel_camera(index + 1, 0), self.panel_camera(index + 1, last(self, index + 1)));
+        // (Les caméras douces, celles des clés : la postérisation temporelle n'est pas une pose.)
+        let cams_a = (self.panel_camera_douce(index, 0), self.panel_camera_douce(index, last(self, index)));
+        let cams_b = (self.panel_camera_douce(index + 1, 0), self.panel_camera_douce(index + 1, last(self, index + 1)));
         let b = self.panels.remove(index + 1);
         self.append_plan(index, b, cams_a, cams_b)
     }

@@ -380,6 +380,54 @@ pub fn camera_at(keys: &[CameraKey], f: usize, default: Camera) -> Camera {
     }
 }
 
+/// Cadence la plus lente qu'on puisse régler à la postérisation temporelle de la caméra.
+pub const SACCADE_MAX: usize = 120;
+
+/// Postérisation temporelle de la caméra d'un plan (« saccade ») : le mouvement, interpolé en
+/// douceur entre les clés, est montré **par paliers** : la caméra ne change que toutes les
+/// `cadence` images et se tient entre deux. Aucune clé n'est posée ni changée : le réglage
+/// s'applique quand la caméra est évaluée (`Document::panel_camera`), et le décocher rend le
+/// mouvement doux, à l'identique.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Saccade {
+    pub actif: bool,
+    /// « Toutes les N images » : au moins 2.
+    pub cadence: usize,
+}
+
+impl Default for Saccade {
+    fn default() -> Self {
+        Saccade { actif: false, cadence: 2 }
+    }
+}
+
+impl Saccade {
+    /// Une cadence réglable (entre 2 et `SACCADE_MAX`).
+    pub fn cadence_valide(n: usize) -> usize {
+        n.clamp(2, SACCADE_MAX)
+    }
+
+    /// Le réglage, la cadence ramenée dans ses bornes.
+    pub fn normalise(self) -> Saccade {
+        Saccade { cadence: Saccade::cadence_valide(self.cadence), ..self }
+    }
+
+    /// L'image dont la caméra est montrée à l'image `f` d'un plan dont les clés sont `keys` : le début
+    /// de son palier de `cadence` images (compté depuis le début du plan). À partir de la dernière clé,
+    /// l'image elle-même : la caméra ne bouge plus, et le mouvement finit pile sur son cadre final
+    /// au lieu de rester jusqu'à `cadence - 1` images en deçà.
+    pub fn image_montree(self, keys: &[CameraKey], f: usize) -> usize {
+        if !self.actif || keys.len() < 2 {
+            return f;
+        }
+        let n = Saccade::cadence_valide(self.cadence);
+        if keys.last().is_some_and(|k| f >= k.frame) {
+            return f;
+        }
+        f - f % n
+    }
+}
+
 /// Pose (ou remplace) la clé de l'image `frame`, en gardant les clés triées (et l'adoucissement
 /// d'une clé remplacée).
 pub fn set_key(keys: &mut Vec<CameraKey>, frame: usize, cam: Camera) {

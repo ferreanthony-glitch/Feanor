@@ -4261,3 +4261,46 @@ clic au niveau du modèle (un calque à la fois, le trait du dessus, la gomme d'
 rotation (angle et distances) ; **Échap** (geste, lasso, sélection) ; les outils agissent sur le calque visé seulement (lasso, gomme, stylo) et « Dessin » range les outils ; œil par calque (peinture, export, cadrage) ; ajouter /
 renommer / supprimer / monter en une étape chacun, annuler et rétablir ; le panneau (liste, ordre, clic sur un calque, sur « Dessin », sur l'œil) ; double-clic et Entrée ; enregistrer et rouvrir ; repos.
 `calqueannot_tests.rs` : **le calque d'annotation d'un plan** : créé tout au-dessus, dessiné, caché, par-dessus tout à l'écran, absent du plan du film, des images exportées et des vignettes, enregistré et rouvert, fusion refusée, pas de clé de case, couleur propre.
+
+## 47. Caméra « par paliers » : la postérisation temporelle (2026-10-24, branche `camera-et-fusion`)
+
+Demande d'Anthony : montrer le mouvement de caméra **saccadé**, comme filmé image par image sur des temps tenus : la caméra, interpolée en douceur entre ses clés, ne change que toutes les N images et se tient entre deux.
+Fichiers : `camera.rs` (`Saccade`), `document.rs` (`Panel::saccade`, `panel_camera`, `panel_camera_douce`), `camtools.rs` (la case et le nombre), `project.rs` (format 37), `exportrender.rs`, `planvers.rs`.
+Essais : `saccade_tests.rs` (9).
+
+### Ce que c'est
+
+- **Un réglage par plan** : une case « Par paliers » et un nombre « toutes les N images » (2, 3, 4… entier libre, au moins 2, au plus 120 ; 2 d'origine). Dans les **Réglages de l'outil Caméra**, section « Mouvement par paliers »,
+  juste sous « Caméra à cette image ». Une étape d'annulation par changement (« Mouvement de caméra par paliers »).
+- **Aucune clé n'est posée ni changée** : le réglage s'applique quand la caméra est évaluée (`Document::panel_camera`). Décocher rend le mouvement doux, **à l'identique** (la cadence reste, pour la retrouver en recochant).
+- **Où ça s'applique** : partout où la caméra est lue pour montrer ou sortir une image, puisque tout passe par `panel_camera` : la vue Dessin et la vue à travers la caméra, la lecture, la timeline et les vignettes, la planche, les
+  exports (vidéo, suite de PNG, image seule, GIF, PDF, montage, FCPXML et EDL : tous rendent les images par `Rendu`), la toile infinie (le monde hors de la feuille suit la même caméra), la comparaison de versions, le plan d'une
+  version rangée (`camera_du_plan_range`). L'export vers Storyboard Pro n'embarque pas la caméra (il la signale seulement) : rien à changer.
+- **Quelle image** : à l'image `f` d'un plan, la caméra est celle de l'image `f - f % N`, **comptée depuis le début du plan** (images 0 à N-1 : la caméra de l'image 0 ; N à 2N-1 : celle de l'image N ; etc.). C'est la caméra douce
+  *de l'image où commence le palier*, pas une moyenne.
+- **Un écart voulu** : à partir de la **dernière clé**, c'est l'image elle-même qui compte. Après la dernière clé la caméra ne bouge plus ; sans cette règle, un mouvement qui finit à l'image 10 avec N = 3 resterait
+  deux images au cadre de l'image 9 et n'arriverait jamais **pile** sur son cadre final (la clé que le réalisateur a réglée). Le mouvement finit donc exactement sur sa dernière clé.
+- **Moins de deux clés** : rien ne bouge, donc rien ne change ; la case reste cochée (et le dit).
+- **Un plan sans clé** qui suit la caméra du plan d'avant (continuité) prend la caméra que ce plan a **montrée** à sa dernière image (le palier), pas la caméra douce : le raccord ne saute pas.
+
+### Ce que l'édition lit : la caméra douce
+
+L'outil Caméra, la pose d'une clé, les effets de caméra (secousse, zoom…) et la réunion de deux plans lisent **la caméra douce** (`panel_camera_douce`, celle des clés) : on règle des clés, pas des paliers, sinon poser une
+clé aurait figé la caméra sur un palier et deux plans réunis auraient tenu une caméra décalée. La vue peint la caméra par paliers ; le cadre que l'outil Caméra dessine, lui, suit les clés.
+
+### Compatibilité des fichiers
+
+- **Format 37** (`project::VERSION`) : `saccade` d'un plan (`actif`, `cadence`), absent quand le réglage est celui d'origine (éteint, cadence 2). Une version précédente **refuse** le projet (« créé par une version plus
+  récente ») plutôt que de montrer le mouvement en douceur, ce qui changerait le film sans prévenir. Un projet de version 36 ou moins s'ouvre tel quel, la postérisation éteinte. Une cadence abîmée (0, énorme) est
+  ramenée entre 2 et 120 à l'ouverture.
+- **Couper un plan** garde le réglage aux deux parties ; **réunir deux plans** garde celui du premier (les clés tenues aux bords sont les caméras douces). Un plan qu'on **range** dans une version (`planvers.rs`) emporte son
+  réglage avec lui.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Plan avec une caméra animée (deux clés au moins, par exemple un travelling). Outil Caméra > Réglages : **« Mouvement par paliers »**, coche « Par paliers » : le mouvement devient saccadé, « toutes les 2 images » d'abord.
+2. Mets 3, puis 4, puis 6 : la caméra change toutes les 3, 4, 6 images et se tient entre deux ; la lecture, la vue à travers la caméra et les vignettes de la timeline le montrent. Décoche : le mouvement redevient doux, comme avant.
+3. Les clés de la piste Caméra ne bougent pas (mêmes losanges, mêmes images). Déplace la tête de lecture sur une image du milieu d'un palier et règle la caméra avec l'outil : la clé posée a la caméra douce.
+4. Ctrl+Z après la case, puis après le nombre : chacun défait un changement. Enregistre, ferme, rouvre : même réglage.
+5. Exporte une suite de PNG (ou un film) du plan : les images d'un même palier sont identiques ; la dernière image est au cadre de la dernière clé.
+6. Ouvre un ancien projet : la case est décochée partout, rien n'a changé.

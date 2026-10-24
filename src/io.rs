@@ -235,6 +235,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
             dialogue: s.dialogue,
             notes: s.notes,
             camera: Vec::new(),
+            saccade: Default::default(),
             marks: Vec::new(),
             cues: Default::default(),
             color: None,

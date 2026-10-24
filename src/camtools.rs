@@ -144,7 +144,8 @@ pub(crate) fn turned_view(cam: &Camera, frame: [usize; 2], rect: Rect) -> View {
 impl App {
     /// Caméra du panneau courant à l'image courante.
     pub(crate) fn current_camera(&self) -> Camera {
-        self.doc.panel_camera(self.cur_panel, self.cur_frame)
+        // (La caméra douce, celle des clés : l'outil règle les clés, pas les paliers de la postérisation temporelle.)
+        self.doc.panel_camera_douce(self.cur_panel, self.cur_frame)
     }
 
     /// Règle la caméra du plan courant. Caméra fixe (aucune ou une image clé) : on change
@@ -168,7 +169,7 @@ impl App {
     /// qu'elle y est déjà (l'image ne change pas) ; on la règle ensuite à la souris.
     pub(crate) fn add_camera_key(&mut self, frame: usize) {
         let frame = frame.min(self.frame_count().saturating_sub(1));
-        let cam = self.doc.panel_camera(self.cur_panel, frame);
+        let cam = self.doc.panel_camera_douce(self.cur_panel, frame);
         self.record_step();
         let keys = &mut self.doc.panels[self.cur_panel].camera;
         // Une caméra fixe sans clé à elle devient la clé du début.
@@ -634,6 +635,9 @@ impl App {
             self.set_current_camera(c);
         }
 
+        // Postérisation temporelle : le mouvement montré par paliers (aucune clé n'est touchée).
+        section(ui, "Mouvement par paliers", &mut |ui| self.camera_saccade_ui(ui));
+
         // Effets de caméra : des préréglages qui posent des clés (`camfxui.rs`).
         section(ui, "Effets de caméra", &mut |ui| self.camera_effects_ui(ui));
 
@@ -666,6 +670,50 @@ impl App {
             .small()
             .weak(),
         );
+    }
+
+    /// Règle la postérisation temporelle de la caméra du plan `pi` (une étape d'annulation, appelée par le geste `key`) : les
+    /// clés ne changent pas, le mouvement est seulement montré par paliers.
+    pub(crate) fn set_camera_saccade(&mut self, pi: usize, s: camera::Saccade) {
+        if let Some(p) = self.doc.panels.get_mut(pi) {
+            p.saccade = s.normalise();
+            self.modified = true;
+        }
+    }
+
+    /// « Saccade » : une case et un nombre. Cochée, la caméra ne change que toutes les N images et se tient entre deux.
+    pub(crate) fn camera_saccade_ui(&mut self, ui: &mut egui::Ui) {
+        let pi = self.cur_panel;
+        let mut s = self.doc.panels[pi].saccade;
+        let mut changed = false;
+        let name = "Mouvement de caméra par paliers";
+        ui.horizontal(|ui| {
+            let r = ui.checkbox(&mut s.actif, "Par paliers");
+            let r = crate::bulles::bulle(
+                r,
+                "Mouvement par paliers (saccade)",
+                "Le mouvement de caméra n'est montré que toutes les N images et se tient entre deux : un effet saccadé. Aucune clé n'est changée ; décocher rend le mouvement doux, à l'identique.",
+                "",
+            );
+            let before = self.history.context.replace(name.to_string());
+            changed |= self.edited(&r);
+            self.history.context = before;
+            if s.actif {
+                ui.label("toutes les");
+                let r = ui
+                    .add(egui::DragValue::new(&mut s.cadence).range(2..=camera::SACCADE_MAX).speed(0.1).suffix(" images"))
+                    .on_hover_text("La caméra change toutes les N images (au moins 2), en comptant depuis le début du plan.");
+                let before = self.history.context.replace(name.to_string());
+                changed |= self.edited(&r);
+                self.history.context = before;
+            }
+        });
+        if changed {
+            self.set_camera_saccade(pi, s);
+        }
+        if self.doc.panels[pi].saccade.actif && self.doc.panels[pi].camera.len() < 2 {
+            ui.label(RichText::new("Sans mouvement (moins de deux clés), rien ne change.").small().weak());
+        }
     }
 
     /// Réglages de la caméra du plan courant (fiche du panneau et outil Caméra).
