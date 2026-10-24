@@ -738,11 +738,24 @@ impl Queue {
     }
 }
 
+// Essais : le temps (ms) que les fils du prochain `Pool` lancé par ce fil d'essai attendent entre la fin d'un calcul et
+// le réveil de l'écran (une machine chargée endort un fil n'importe où : l'essai le fait exprès).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static RETARD_REVEIL_ESSAI: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
 pub(crate) struct Shared {
     queue: Mutex<Queue>,
     wake: Condvar,
     stop: AtomicBool,
     ctx: egui::Context,
+    /// Essais : attente avant le réveil (`RETARD_REVEIL_ESSAI`).
+    #[cfg(test)]
+    retard_reveil: u64,
+    /// Essais : l'ordre d'avant (`perf::ancien` du fil qui a lancé le `Pool`).
+    #[cfg(test)]
+    ancien_ordre: bool,
     /// Vignettes composées par les fils depuis le début (essais).
     #[cfg(test)]
     rendered: std::sync::atomic::AtomicUsize,
@@ -849,6 +862,10 @@ impl Pool {
             stop: AtomicBool::new(false),
             ctx: ctx.clone(),
             #[cfg(test)]
+            retard_reveil: RETARD_REVEIL_ESSAI.with(std::cell::Cell::get),
+            #[cfg(test)]
+            ancien_ordre: crate::perf::ancien(),
+            #[cfg(test)]
             rendered: std::sync::atomic::AtomicUsize::new(0),
         });
         let n = crate::parallele::coeurs().saturating_sub(2).clamp(1, threads.max(1));
@@ -926,9 +943,17 @@ fn worker(shared: &Shared) {
         };
         #[cfg(test)]
         shared.rendered.fetch_add(1, Ordering::Relaxed);
+        // (Essais : `perf::ancien` remet l'ordre d'avant, retirer le calcul d'abord et réveiller ensuite, pour montrer le défaut.)
+        #[cfg(test)]
+        let ancien = shared.ancien_ordre;
+        #[cfg(not(test))]
+        let ancien = false;
         {
             let mut q = shared.lock();
-            q.running.retain(|r| r.seq != job.seq);
+            // (Le calcul reste « en cours » jusqu'après le réveil, plus bas.)
+            if ancien {
+                q.running.retain(|r| r.seq != job.seq);
+            }
             if let Some((image, waiting)) = finished {
                 if job.era == q.era && !job.cancel.load(Ordering::Relaxed) {
                     let (marge, geom) = match &job.work {
@@ -939,7 +964,20 @@ fn worker(shared: &Shared) {
                 }
             }
         }
+        // Le réveil est demandé tant que le calcul compte encore comme « en cours » (`Queue::outstanding`), et le calcul n'est
+        // retiré qu'ensuite : l'interface ne voit jamais la file vide avant que le réveil soit pris en compte. Avant, le
+        // calcul était retiré d'abord : une machine chargée pouvait endormir ce fil entre les deux, l'interface voyait la
+        // file vide, se reposait, puis était réveillée sans rien de neuf à montrer — un réveil de plus au repos, que les
+        // essais de repos voyaient de temps en temps. (Pas sous le verrou : l'interface peut tenir celui du contexte egui
+        // en lui demandant l'état des vignettes.) Passe de fiabilité du 2026-10-24.
+        #[cfg(test)]
+        if shared.retard_reveil > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(shared.retard_reveil));
+        }
         shared.ctx.request_repaint();
+        if !ancien {
+            shared.lock().running.retain(|r| r.seq != job.seq);
+        }
     }
 }
 

@@ -176,6 +176,8 @@ pub(crate) struct Banc {
     pub crochet: bool,
     /// Les touches tenues pendant les images (Maj, Ctrl, Alt) : `RawInput::modifiers`.
     pub touches: Modifiers,
+    /// Les dernières images : le réveil qu'elles ont laissé, et ce qui les avait demandées (`raison_du_reveil`).
+    reveils_recents: std::collections::VecDeque<String>,
 }
 
 /// Efface les dossiers `shot-perf-bac-*` du dossier temporaire plus vieux que `age` (date de modification).
@@ -239,7 +241,7 @@ pub(crate) fn banc_taille(doc: Document, avec_gpu: bool, largeur: u32, hauteur: 
             view_formats: &[],
         })
     });
-    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false, formes: Vec::new(), garder_formes: false, curseur: egui::CursorIcon::Default, crochet: false, touches: Modifiers::NONE };
+    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false, formes: Vec::new(), garder_formes: false, curseur: egui::CursorIcon::Default, crochet: false, touches: Modifiers::NONE, reveils_recents: Default::default() };
     b.attendre_pinceaux();
     b.chauffer(8);
     b.attendre_vignettes();
@@ -283,6 +285,14 @@ impl Banc {
         self.chauffer(3);
     }
 
+    /// Pourquoi l'application a demandé à être repeinte, pour le message d'un essai de repos qui échoue : les dernières
+    /// images avec leur réveil et le fichier:ligne de ce qui les a demandées (un fil de fond, un compteur, l'interface).
+    /// Fait une image de plus (la demande faite pendant l'image qui a échoué n'apparaît qu'à la suivante).
+    pub fn raison_du_reveil(&mut self) -> String {
+        self.image(Vec::new(), 0.5);
+        format!("\n  {}", self.reveils_recents.iter().cloned().collect::<Vec<_>>().join("\n  "))
+    }
+
     /// Quelques images pour que la mise en page se stabilise (egui mesure en deux passes).
     pub fn chauffer(&mut self, n: usize) {
         for _ in 0..n {
@@ -305,6 +315,13 @@ impl Banc {
         let t1 = Instant::now();
         let ppp = out.pixels_per_point;
         let reveil = out.viewport_output.get(&ViewportId::ROOT).map_or(Duration::MAX, |v| v.repaint_delay);
+        // Ce qui a demandé cette image (fichier et ligne de chaque `request_repaint`, demandé pendant l'image d'avant ou entre
+        // les deux) : gardé pour les essais de repos, qui disent d'où vient un réveil qu'ils n'attendaient pas.
+        let causes: Vec<String> = self.ctx.repaint_causes().iter().map(|c| format!("{}:{} {}", c.file.rsplit(['/', '\\']).next().unwrap_or(c.file), c.line, c.reason).trim().to_string()).collect();
+        if self.reveils_recents.len() >= 16 {
+            self.reveils_recents.pop_front();
+        }
+        self.reveils_recents.push_back(format!("t={:.1}s réveil dans {reveil:?}, demandée par {}", self.t, if causes.is_empty() { "rien".to_string() } else { causes.join(", ") }));
         let (textures, octets) = (out.textures_delta.set.len(), out.textures_delta.set.iter().map(|(_, d)| d.image.width() * d.image.height() * 4).sum());
         let formes = out.shapes.len();
         if self.garder_textes {
