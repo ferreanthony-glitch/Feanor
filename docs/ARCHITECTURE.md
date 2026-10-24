@@ -250,6 +250,11 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   coordonnées de la planche (points au zoom 1, retour à la ligne à la largeur de la vue), place
   visée par des panneaux lâchés (`drop_target`), notes (`Board`, `NoteStroke`). Les notes sont
   dans `Structure` : l'annulation et l'enregistrement (`planche`) les couvrent.
+- `boardsens.rs` (sans interface), `boardjapon.rs` (testé dans `boardjapon_tests.rs`) et `vignettespanneau.rs` : le sens de lecture de la
+  planche (`Sens` : en lignes, ou à la japonaise : colonnes, texte à droite des cases, `boardjapon::layout`, qui rend le même `BoardLayout`
+  que `board::layout_with`, appelée par elle selon `Options::sens`), les champs de texte montrés à côté des cases (`Textes`), et le panneau
+  « Vignettes » (`Pane::Vignettes`) qui les règle. Réglages de l'application (`Layout::board_sens`, `board_textes`), pas du projet.
+  L'étiquette de version d'une case réutilise la pile du montage (`pileversui.rs`).
 - `boardui.rs` : la planche (zoom, décalage, gestes : déplacer, choisir, noter, gommer, glisser
   des panneaux), menus. `Document::move_panels` / `remove_panels` agissent sur plusieurs panneaux.
   La vignette du panneau courant appelle `canvas_panel` dans un `Ui` enfant, agrandi de la marge
