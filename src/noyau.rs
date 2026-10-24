@@ -89,9 +89,13 @@ impl Projet {
     /// Enregistre dans le dossier du projet (seulement les dessins qui ont changé).
     pub fn enregistrer(&mut self) -> Result<(), String> {
         let chemin = self.chemin.clone().ok_or("Ce projet n'a pas encore de dossier.")?;
-        // Un projet à l'ancien nom (`Bus.pelure`) passe à `Bus.shot`, comme dans SHOT (`enregistrement.rs`) ; la structure
-        // d'un film partagé garde le sien.
-        let cible = if project::est_ancien_manifeste(&chemin) && !project::est_une_structure_partagee(&chemin) { project::manifeste_shot(&chemin) } else { chemin.clone() };
+        // La structure d'un film partagé ne s'écrit que par SHOT (`projet_partage.rs`) : un manifeste classique par-dessus
+        // casserait le film pour toute l'équipe.
+        if project::est_une_structure_partagee(&chemin) {
+            return Err("Film partagé : enregistre-le depuis SHOT.".into());
+        }
+        // Un projet à l'ancien nom (`Bus.pelure`) passe à `Bus.shot`, comme dans SHOT (`enregistrement.rs`).
+        let cible = if project::est_ancien_manifeste(&chemin) { project::manifeste_shot(&chemin) } else { chemin.clone() };
         project::save(&self.doc, &cible, &mut self.written)?;
         if cible != chemin {
             project::retirer_ancien_manifeste(&cible, &chemin);

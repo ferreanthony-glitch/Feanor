@@ -370,3 +370,8 @@ et l'effacement du `.pelure` — `project::PLANTER_AVANT_RETRAIT` —, récents 
 fichiers lâchés, gardes de l'effacement) et `cooperation_ui_tests::a_shared_film_keeps_its_pelure_structure_when_saved`.
 Beaucoup d'essais plus anciens écrivent encore des projets `.pelure` par `project::save` : ils prouvent que l'ancien nom se
 lit et s'écrit toujours.
+
+Une version de SHOT d'avant ne cherche que `.pelure` : après le premier enregistrement dans la nouvelle, elle ne trouve
+plus le projet (« Introuvable » dans ses récents). Un même dossier de projet ne s'ouvre donc qu'avec une seule version.
+L'appli compagnon refuse d'enregistrer la structure d'un film partagé (`noyau::Projet::enregistrer`) : un manifeste
+classique par-dessus la casserait pour l'équipe (`noyau_tests::the_companion_never_writes_over_a_shared_film`).
