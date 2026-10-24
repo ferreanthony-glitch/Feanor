@@ -503,7 +503,8 @@ fn a_project_without_variants_has_no_file_and_the_format_does_not_change() {
     enregistrer(&doc, &m);
     assert!(!m.parent().unwrap().join("variantes.json").exists());
     assert!(project::variantes_octets(&doc).unwrap().is_none());
-    assert_eq!(project::VERSION, 36, "le format du projet est celui d'avant : la variante est une annexe");
+    // (Les variantes n'ont pas de numéro de format à elles : la 36 est celle d'avant leur chantier, la 37 celle de la caméra par paliers.)
+    assert!(project::VERSION >= 36, "le format du projet est celui d'avant : la variante est une annexe");
 }
 
 // ------------------------------------------------------------------------------------ envois
