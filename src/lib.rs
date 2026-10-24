@@ -461,6 +461,10 @@ mod hasard_tests;
 // Postérisation temporelle de la caméra (« saccade »).
 #[cfg(test)]
 mod saccade_tests;
+// Fusionner deux plans en glissant l'un sur l'autre dans le montage.
+mod fusionglisse;
+#[cfg(test)]
+mod fusionglisse_tests;
 #[cfg(test)]
 mod fiabilite_aller_retour_tests;
 #[cfg(test)]

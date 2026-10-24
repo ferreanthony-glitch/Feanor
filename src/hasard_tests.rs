@@ -205,6 +205,9 @@ pub(crate) enum Geste {
     MenuCase { case: u16, cadre: u8, entree: u8 },
     /// Maj (+ Alt : une copie) + glisser le cadre d'une vignette jusqu'à une autre : déplacer le plan.
     DeplacerPlan { de: u16, vers: u16, alt: bool },
+    /// Dans la bande du montage : glisser un plan sur un autre, jusqu'au milieu de l'autre (`zone` 0 : le fusionner) ou jusqu'à
+    /// l'un de ses bords (1 : devant, 2 : derrière : le déplacer). Les nombres sont des rangs parmi les plans à l'écran.
+    FusionnerPlans { de: u16, vers: u16, zone: u8 },
     /// Annuler `n` fois.
     Annuler(u8),
     /// Rétablir `n` fois.
@@ -297,7 +300,9 @@ impl Geste {
             61..=64 => Decor { genre: h.sous(3) as u8, case, x0: h.entre(0.0, 1.0), y0: h.entre(0.0, 1.0), dx: h.entre(-0.8, 0.8), dy: h.entre(-0.6, 0.6), lacher: h.pile(3) },
             65..=72 => Camera { case, x0: h.entre(0.1, 0.9), y0: h.entre(0.1, 0.9), dx: h.entre(-1.2, 1.2), dy: h.entre(-0.8, 0.8), ajoute: h.pile(3) },
             73..=78 => MenuCase { case, cadre: h.sous(4) as u8, entree: h.sous(MENU_CASE.len()) as u8 },
-            79..=81 => DeplacerPlan { de: case, vers: h.sous(64) as u16, alt: h.pile(4) },
+            79 => DeplacerPlan { de: case, vers: h.sous(64) as u16, alt: h.pile(4) },
+            // (Les deux rangs pris à `DeplacerPlan` : les autres gestes gardent leurs rangs, donc leurs suites de graines.)
+            80..=81 => FusionnerPlans { de: case, vers: h.sous(64) as u16, zone: h.sous(3) as u8 },
             82..=87 => Annuler(1 + h.sous(3) as u8),
             88..=91 => Retablir(1 + h.sous(2) as u8),
             92..=93 => Lecture(2 + h.sous(10) as u8),
@@ -522,6 +527,7 @@ const GARDENT_LES_DESSINS: &[&str] = &[
     "Réunir avec le plan précédent",
     "Réunir le plan et le suivant",
     "Fusionner les plans choisis",
+    "Fusionner deux plans",
     "Déplacer le plan",
     "Avancer le plan",
     "Reculer le plan",
@@ -532,7 +538,7 @@ const GARDENT_LES_DESSINS: &[&str] = &[
 
 /// Les dessins montrés par les calques de dessin des plans, calques de couleur compris (pas le Décor, qu'une réunion peut remplacer,
 /// ni les calques d'effet ou de vidéo).
-fn dessins_ordinaires(doc: &Document) -> BTreeSet<CelId> {
+pub(crate) fn dessins_ordinaires(doc: &Document) -> BTreeSet<CelId> {
     doc.panels
         .iter()
         .flat_map(|p| p.layers.iter())
@@ -834,6 +840,24 @@ impl Essai {
                 let q = pos2(c.left() + c.width() * 0.6, c.center().y);
                 let m = Modifiers { shift: true, alt, ..Modifiers::NONE };
                 self.glisser(m, PointerButton::Primary, &Self::trajet(p, q, 8));
+            }
+            FusionnerPlans { de, vers, zone } => {
+                // La bande du montage, et les plans que la dernière image y a peints, entièrement à l'écran.
+                self.b.app.set_espace(Espace::Montage);
+                self.b.chauffer(3);
+                let ecran = Rect::from_min_size(Pos2::ZERO, self.b.taille);
+                let visibles: Vec<Rect> = crate::storyboard::BLOCS_DU_MONTAGE.with(|b| b.borrow().clone()).into_iter().filter(|r| r.width() > 16.0 && ecran.contains_rect(*r)).collect();
+                if visibles.len() < 2 {
+                    return;
+                }
+                let (a, c) = (visibles[de as usize % visibles.len()], visibles[vers as usize % visibles.len()]);
+                let p = a.center();
+                let q = match zone % 3 {
+                    0 => c.center(),
+                    1 => pos2(c.left() + c.width() * 0.1, c.center().y),
+                    _ => pos2(c.right() - c.width() * 0.1, c.center().y),
+                };
+                self.glisser(Modifiers::NONE, PointerButton::Primary, &Self::trajet(p, q, 8));
             }
             Annuler(n) => {
                 for _ in 0..n {

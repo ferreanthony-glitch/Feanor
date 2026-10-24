@@ -4304,3 +4304,38 @@ clé aurait figé la caméra sur un palier et deux plans réunis auraient tenu u
 4. Ctrl+Z après la case, puis après le nombre : chacun défait un changement. Enregistre, ferme, rouvre : même réglage.
 5. Exporte une suite de PNG (ou un film) du plan : les images d'un même palier sont identiques ; la dernière image est au cadre de la dernière clé.
 6. Ouvre un ancien projet : la case est décochée partout, rien n'a changé.
+
+## 48. Fusionner deux plans en glissant l'un sur l'autre (2026-10-24, branche `camera-et-fusion`)
+
+Demande d'Anthony : dans le montage, glisser un plan **sur le milieu** d'un autre le **fusionne** avec lui ; les bords gardent le sens d'avant (« déplacer ici »).
+Fichiers : `fusionglisse.rs` (zones, plan visé, `Document::merge_plan_into`, `App::fusionner_en_glissant`), `storyboard.rs` (le glissé de la bande du montage, le repère), `hasard_tests.rs` (le geste du hasard).
+Essais : `fusionglisse_tests.rs` (9, dont huit par la vraie fenêtre sans écran) et le geste `FusionnerPlans` du hasard.
+
+### Le geste
+
+- **Prendre un plan dans la bande du montage** (au milieu du bloc, pas sur ses bords : ceux-ci rognent) et le tirer sur un autre plan. Chaque bloc a **trois zones** dans sa largeur : le premier quart (déplacer **devant** ce plan), la **moitié du milieu**
+  (**fusionner**), le dernier quart (déplacer **derrière**). Les deux quarts de bord sont exactement l'ancien geste, avec son repère épais entre deux plans.
+- **Au milieu d'un plan** (dans la hauteur des blocs) : le plan visé **s'entoure** (contour épais, voile) et porte la pastille **« Fusionner »** ; le repère de place disparaît. Lâcher : les deux plans n'en font qu'un.
+- **Lequel garde son identité** : comme « Réunir avec le plan précédent », **le plan qui vient le premier** (son numéro, son nom, ses versions, ses commentaires) reçoit les images de l'autre **à la suite**. Si le plan glissé venait
+  avant le plan visé, **ses images passent avant** ; s'il venait après, elles passent après. Les textes, les marques d'image, les notes de la planche, les calques, les clés : ceux de la fusion qui existait déjà (`append_plan`), sans repère
+  laissé à la jointure (`join_next_plan_without_mark`). Le réglage « Par paliers » de la caméra (partie 47) est celui du premier plan.
+- **Deux plans qui ne se touchent pas** : le plan glissé **quitte sa place** et vient se coller au plan visé, du côté d'où il venait, puis ils sont réunis. Les plans entre les deux ne changent pas, sauf qu'il n'y en a plus un.
+- **Une seule étape d'annulation**, « Fusionner deux plans » : Ctrl+Z rend les deux plans exactement, à leur place (le déplacement éventuel et la réunion font une seule étape).
+- **Échap** pendant le glissé l'abandonne : rien ne change, aucune étape. (Comme pour tous les glissés du montage : Ctrl+Z aussi.)
+- **Ce qui ne fusionne pas** (la zone du milieu garde alors son sens d'avant, « déplacer ici ») : un plan **d'une autre séquence** (le plan glissé ne change jamais de séquence : une séquence vidée perdrait son nom), **plusieurs plans choisis
+  qu'on glisse ensemble** (le groupe se déplace), un **storyboard verrouillé** (le plan ne part même pas), un plan sur lui-même.
+- **Film partagé** : les deux plans doivent être à toi (ou libres : ils sont pris), comme pour « Fusionner les plans choisis » ; sinon un message le dit et rien ne bouge.
+
+### À trancher avec toi
+
+- **Qui garde le numéro** : j'ai gardé la règle des autres fusions (le plan qui vient **le premier** garde son identité). Quand tu glisses un plan A *avant* un plan B, c'est donc **A** qui reste, pas B (le plan « visé »).
+  Si tu préfères que le plan visé garde toujours son numéro, c'est un échange d'identité à décider (les commentaires, versions et notes de la planche s'accrochent aux numéros).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Dans le montage, prends un plan par son milieu et tire-le sur le milieu d'un autre : l'autre s'entoure, « Fusionner » apparaît. Lâche : un seul plan, les images de l'un puis de l'autre. Ctrl+Z : les deux plans sont revenus.
+2. Recommence en lâchant sur le premier quart ou le dernier quart d'un plan : c'est le déplacement d'avant (repère épais), rien n'est fusionné.
+3. Un plan qui vient avant : ses images sont devant. Un plan qui vient après : derrière. Avec un plan entre les deux : il vient se coller, les autres restent.
+4. Pendant le glissé, Échap : le plan reste où il était, et Ctrl+Z n'a rien de plus à défaire.
+5. Deux séquences : glisse un plan sur le milieu d'un plan d'une autre séquence : pas de contour, pas de fusion.
+6. Choisis deux plans (Ctrl + clic) et glisse-les sur un troisième : ils se déplacent, sans fusion.
