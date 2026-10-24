@@ -9,7 +9,7 @@
 //! - les champs chiffrés du panneau Réglages (position, taille, angle, inclinaison) passent par
 //!   le même chemin qu'un glissé : la valeur change, la feuille flottante suit, un seul lâcher.
 
-use eframe::egui::{self, vec2, Color32, Context, CursorIcon, Painter, Pos2, Rect, Shape, Stroke, StrokeKind, Vec2};
+use eframe::egui::{self, vec2, Color32, Context, CursorIcon, Painter, Pos2, Rect, RichText, Shape, Stroke, StrokeKind, Vec2};
 
 use crate::app::{App, Tool};
 use crate::document::CelId;
@@ -172,7 +172,7 @@ impl App {
 
     /// Touches et réglage du geste.
     pub(crate) fn box_mods(&self, shift: bool, ctrl: bool) -> Mods {
-        Mods { shift, ctrl, keep: self.keep_proportions }
+        Mods::with(shift, ctrl, self.keep_proportions, self.settings.point_fixe, self.settings.rotation_autour)
     }
 
     /// La partie de la boîte tenue en ce moment (curseur, poignée éclairée).
@@ -419,6 +419,32 @@ impl App {
         self.apply_box_params(live, p, which);
     }
 
+    /// « Point fixe des poignées » et « Rotation autour de » (`selbox::PointFixe`, `selbox::CentreRotation`) : deux
+    /// petits choix à deux icônes, au-dessus de « Plus de réglages » des outils Sélection et Transformer (et dans
+    /// Préférences > Dessin). Des réglages de l'application, enregistrés dès qu'ils changent.
+    pub(crate) fn point_fixe_ui(&mut self, ui: &mut egui::Ui) {
+        use crate::bulles::choix;
+        use crate::selbox::{CentreRotation, PointFixe};
+        use egui_phosphor::regular as ph;
+        let (avant_p, avant_r) = (self.settings.point_fixe, self.settings.rotation_autour);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(RichText::new("Point fixe").small().weak());
+            let p = &mut self.settings.point_fixe;
+            choix(ui, p, PointFixe::Opposee, ph::CORNERS_OUT, "Point fixe : poignée opposée", "Un coin ou un côté tiré (échelle, inclinaison) garde la poignée opposée en place. Ctrl tenu : autour du centre, le temps du geste.", "");
+            choix(ui, p, PointFixe::Centre, ph::ARROWS_OUT_CARDINAL, "Point fixe : centre", "Un coin ou un côté tiré met à l'échelle (ou incline) autour du centre de la boîte (le pivot, s'il a été déplacé). Ctrl tenu : autour de la poignée opposée, le temps du geste.", "");
+            ui.add_space(6.0);
+            ui.label(RichText::new("Rotation").small().weak());
+            let r = &mut self.settings.rotation_autour;
+            choix(ui, r, CentreRotation::Pivot, ph::CROSSHAIR_SIMPLE, "Rotation autour du pivot", "Juste hors d'un coin, la boîte tourne autour du pivot (le centre, sauf s'il a été déplacé).", "");
+            choix(ui, r, CentreRotation::CoinOppose, ph::ANCHOR_SIMPLE, "Rotation autour du coin opposé", "Juste hors d'un coin, la boîte tourne autour du coin opposé ; un petit cercle le montre pendant le geste.", "");
+        });
+        if (avant_p, avant_r) != (self.settings.point_fixe, self.settings.rotation_autour) {
+            if let Err(e) = self.settings.save() {
+                self.status = format!("Réglages non enregistrés : {e}");
+            }
+        }
+    }
+
     // ------------------------------------------------------------------ l'écran
 
     /// Vrai quand la boîte répond à la souris (outils de sélection, ou Transformer sur une zone).
@@ -466,7 +492,15 @@ impl App {
         if let Some(Handle::Skew(k)) = hover {
             painter.line_segment([quad[k], quad[(k + 1) % 4]], Stroke::new(2.5_f32, ACCENT));
         }
-        // Le pivot : un petit cercle fin, sans remplissage (un voile orange quand on le tient).
+        // Le pivot : un petit cercle fin, sans remplissage (un voile orange quand on le tient). Une rotation autour du
+        // coin opposé (réglage « Rotation autour de ») : le cercle passe sur ce coin pendant qu'on la prépare ou la fait.
+        let pivot = match hover {
+            Some(Handle::Rotate(k)) if self.settings.rotation_autour == selbox::CentreRotation::CoinOppose => {
+                painter.circle_filled(quad[(k + 2) % 4], selbox::PIVOT_RADIUS, ACCENT.gamma_multiply(0.3));
+                quad[(k + 2) % 4]
+            }
+            _ => pivot,
+        };
         if lit(Handle::Pivot) {
             painter.circle_filled(pivot, selbox::PIVOT_RADIUS, ACCENT.gamma_multiply(0.3));
         }

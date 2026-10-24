@@ -504,7 +504,7 @@ impl App {
                     } else if self.cam_drag.is_some() {
                         self.camera_drag(stage, mods.shift);
                     } else if self.layer_drag.is_some() {
-                        self.transform_drag(stage, mods.shift);
+                        self.transform_drag(stage, mods.shift, mods.command || mods.ctrl);
                     } else if self.picking {
                         self.pick_color(stage);
                     }
@@ -661,7 +661,7 @@ impl App {
                 Some(BoxHandle::Corner(_)) => CursorIcon::ResizeNeSw,
                 Some(BoxHandle::Edge(0 | 2)) => CursorIcon::ResizeVertical,
                 Some(BoxHandle::Edge(_)) => CursorIcon::ResizeHorizontal,
-                Some(BoxHandle::Rotate) => CursorIcon::Alias,
+                Some(BoxHandle::Rotate | BoxHandle::RotateCorner(_)) => CursorIcon::Alias,
                 None => CursorIcon::Default,
             });
             return;

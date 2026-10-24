@@ -698,6 +698,8 @@ mod scenario_tests;
 mod scenelayer_tests;
 mod selbox;
 #[cfg(test)]
+mod selbox_pointfixe_tests;
+#[cfg(test)]
 mod selbox_tests;
 mod seltools;
 mod settings;

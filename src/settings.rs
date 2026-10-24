@@ -191,6 +191,13 @@ pub struct Settings {
     /// cadres de caméra, « Report du décor », couleur et tailles des brosses du décor. Absents des anciens réglages : ceux d'avant.
     #[serde(default, rename = "vignettes", skip_serializing_if = "crate::vignettesreglages::ReglagesVignettes::est_defaut")]
     pub vignettes: crate::vignettesreglages::ReglagesVignettes,
+    /// Le point fixe d'un coin ou d'un côté tiré, dans les boîtes de la Sélection et du Transformer (`selbox.rs`) : la
+    /// poignée opposée (d'office) ou le centre. Absent des anciens réglages : la poignée opposée.
+    #[serde(default, rename = "point_fixe_poignees", skip_serializing_if = "crate::selbox::PointFixe::est_defaut")]
+    pub point_fixe: crate::selbox::PointFixe,
+    /// Le centre d'une rotation prise hors d'un coin : le pivot (d'office) ou le coin opposé.
+    #[serde(default, rename = "rotation_autour_de", skip_serializing_if = "crate::selbox::CentreRotation::est_defaut")]
+    pub rotation_autour: crate::selbox::CentreRotation,
 }
 
 fn default_passe_partout() -> u8 {
@@ -267,6 +274,8 @@ impl Default for Settings {
             conseils: Default::default(),
             echelle: crate::echelle::ECHELLE_DEFAUT,
             vignettes: Default::default(),
+            point_fixe: Default::default(),
+            rotation_autour: Default::default(),
         }
     }
 }

@@ -3868,3 +3868,25 @@ Trois retouches demandées par Anthony sur une capture annotée de l'onglet Stor
 la première icône de la barre du bas (même taille, format, zones de sécurité, aspect) ; la colonne des pastilles (au bord droit, mince, sous le titre ; choisir, ajouter, aucun personnage,
 neutres, clic droit ; cliquer ou glisser dessus ne dessine rien et ne crée aucune étape d'annulation ; la même sur la planche des Vignettes). `barrepanneaux_tests` : plus de panneau Guides
 dans la barre, les jeux d'origine ni les dispositions.
+
+## 42. Retouches d'interface (2026-10-23, branche `retouches-interface`)
+
+Quatre retouches demandées par Anthony sur une capture annotée.
+
+### 1. Le point fixe des poignées, la rotation autour du coin opposé
+
+Deux réglages de l'application (`reglages.toml` : `point_fixe_poignees`, `rotation_autour_de` ; absents : les valeurs d'office), pour toutes les boîtes à poignées : la boîte
+de la Sélection (vectorielle, bitmap, plusieurs calques, Sélection par couleur), le Transformer sur une zone bitmap et le Transformer d'un calque (un ou plusieurs calques
+choisis). Ils sont au-dessus de « Plus de réglages » des outils Sélection, Sélection par couleur et Transformer (deux petits choix à deux icônes, `point_fixe_ui`) et dans
+Préférences > Dessin, groupe « Poignées de la Sélection et du Transformer ».
+
+- **Point fixe des poignées** : « Poignée opposée » (d'office) — un coin ou le milieu d'un côté tiré (mettre à l'échelle) et un bord tiré (incliner) gardent la poignée
+  opposée en place ; « Centre » — tout se fait autour du pivot (le centre de la boîte, s'il n'a pas été déplacé ; le centre de la boîte pour le Transformer d'un calque).
+  **Ctrl tenu pendant le geste donne l'autre mode** : c'était déjà le geste de Ctrl (« autour du pivot »), il l'est toujours avec le réglage d'office. Le mode « Centre » est
+  exactement l'ancien geste avec Ctrl (essai `centre_mode_is_exactly_the_old_ctrl_gesture…`). Maj garde les proportions, comme avant ; « Garder les proportions » aussi.
+- **Rotation autour de** : « Pivot » (d'office, comme avant) ou « Coin opposé » — une rotation prise juste hors d'un coin tourne autour du coin opposé de la boîte. Le petit
+  cercle du pivot passe sur ce coin dès qu'on survole la zone de rotation, et pendant le geste. La poignée ronde du Transformer tourne toujours autour du centre.
+- Le **Transformer d'un calque** a maintenant lui aussi la rotation juste hors d'un coin (comme la boîte de la Sélection, curseur de rotation), en plus de sa poignée ronde.
+
+Remarque : avant ce réglage, le geste sans touche gardait déjà la poignée opposée (Sélection et Transformer) ; seul Ctrl faisait tourner autour du pivot. Le mode
+d'office reproduit donc l'ancien geste sans touche, et « Centre » l'ancien geste avec Ctrl.

@@ -17,13 +17,57 @@
 //! Choix de touches, à vérifier avec le vrai Storyboard Pro (rien n'est tiré de son code) :
 //! - Maj sur un coin ou un côté : proportions gardées ; Maj en déplaçant : un seul axe ; Maj en
 //!   tournant : par pas de 15° ;
-//! - Ctrl en tirant une poignée ou un bord : autour du pivot au lieu du côté opposé (Alt est pris
-//!   par la pipette) ;
 //! - le réglage « Garder les proportions » inverse l'effet de Maj sur les poignées.
+//!
+//! Le point fixe (Anthony, 2026-10-23 : « l'ancre est toujours la poignée opposée, seule la rotation se fait
+//! autour du centre ») est un réglage de l'application, en deux parties (`PointFixe`, `CentreRotation`, Réglages des
+//! outils Sélection et Transformer, Préférences > Dessin) :
+//! - **Point fixe des poignées** : « Poignée opposée » (d'office) — un coin ou un côté tiré (échelle ou inclinaison)
+//!   garde la poignée opposée en place ; ou « Centre » — tout se fait autour du pivot (le centre de la boîte, s'il
+//!   n'est pas déplacé). Ctrl tenu pendant le geste donne l'autre mode (Alt est pris par la pipette) ;
+//! - **Rotation autour de** : « Pivot » (d'office) ou « Coin opposé » — une rotation prise juste hors d'un coin
+//!   tourne autour du coin opposé de la boîte.
 
 use eframe::egui::{pos2, vec2, Pos2, Rect};
+use serde::{Deserialize, Serialize};
 
 use crate::vector::Affine;
+
+/// Le point fixe d'un coin ou d'un côté tiré (échelle, inclinaison) : un réglage de l'application.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PointFixe {
+    /// La poignée opposée reste en place.
+    #[default]
+    #[serde(rename = "poignee_opposee")]
+    Opposee,
+    /// Autour du pivot (le centre de la boîte, s'il n'est pas déplacé).
+    #[serde(rename = "centre")]
+    Centre,
+}
+
+impl PointFixe {
+    pub fn est_defaut(&self) -> bool {
+        *self == PointFixe::default()
+    }
+}
+
+/// Le centre d'une rotation prise juste hors d'un coin : un réglage de l'application.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CentreRotation {
+    /// Le pivot (le centre de la boîte, s'il n'est pas déplacé).
+    #[default]
+    #[serde(rename = "pivot")]
+    Pivot,
+    /// Le coin opposé à celui d'où part la rotation.
+    #[serde(rename = "coin_oppose")]
+    CoinOppose,
+}
+
+impl CentreRotation {
+    pub fn est_defaut(&self) -> bool {
+        *self == CentreRotation::default()
+    }
+}
 
 /// Rayon de prise d'une poignée carrée (coin ou milieu de côté), en pixels d'écran.
 pub const GRAB_HANDLE: f32 = 9.0;
@@ -71,16 +115,40 @@ impl Handle {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Mods {
     pub shift: bool,
-    /// Autour du pivot au lieu du côté opposé.
+    /// Ctrl tenu : l'autre point fixe que celui du réglage (`centre`).
     pub ctrl: bool,
     /// Réglage « Garder les proportions » : inverse l'effet de Maj sur les poignées.
     pub keep: bool,
+    /// Réglage « Point fixe des poignées » sur « Centre » : autour du pivot au lieu de la poignée opposée.
+    pub centre: bool,
+    /// Réglage « Rotation autour de » sur « Coin opposé ».
+    pub coin: bool,
 }
 
 impl Mods {
+    /// Les touches tenues et les réglages de l'application.
+    pub fn with(shift: bool, ctrl: bool, keep: bool, point: PointFixe, rotation: CentreRotation) -> Mods {
+        Mods { shift, ctrl, keep, centre: point == PointFixe::Centre, coin: rotation == CentreRotation::CoinOppose }
+    }
+
     /// Les proportions sont-elles gardées ?
     pub fn proportional(self) -> bool {
         self.keep != self.shift
+    }
+
+    /// Un coin ou un côté tiré se fait-il autour du pivot (sinon : autour de la poignée opposée) ? Le réglage, que
+    /// Ctrl inverse le temps du geste.
+    pub fn from_pivot(self) -> bool {
+        self.centre != self.ctrl
+    }
+}
+
+/// Le centre d'une rotation prise hors du coin `k` de `frame`, tel qu'on le voit : le pivot, ou le coin opposé.
+pub fn rotation_centre(frame: &SelFrame, k: usize, coin: bool) -> Pos2 {
+    if coin {
+        frame.corners()[(k + 2) % 4]
+    } else {
+        frame.pivot_world()
     }
 }
 
@@ -301,8 +369,8 @@ pub fn gesture(handle: Handle, frame: &SelFrame, start: Pos2, p: Pos2, mods: Mod
             }
             Affine::translate(d)
         }
-        Handle::Rotate(_) => {
-            let c = frame.pivot_world();
+        Handle::Rotate(k) => {
+            let c = rotation_centre(frame, k, mods.coin);
             let mut a = (p - c).angle() - (start - c).angle();
             if mods.shift {
                 let step = ROTATE_STEP.to_radians();
@@ -314,7 +382,7 @@ pub fn gesture(handle: Handle, frame: &SelFrame, start: Pos2, p: Pos2, mods: Mod
             let (Some(l), Some(l0)) = (frame.to_local(p), frame.to_local(start)) else { return Affine::IDENTITY };
             let c = frame.corners_local();
             let corner = c[k % 4];
-            let anchor = if mods.ctrl { frame.pivot_local() } else { c[(k + 2) % 4] };
+            let anchor = if mods.from_pivot() { frame.pivot_local() } else { c[(k + 2) % 4] };
             let target = corner + (l - l0);
             let (mut sx, mut sy) = (ratio(target.x - anchor.x, corner.x - anchor.x), ratio(target.y - anchor.y, corner.y - anchor.y));
             if mods.proportional() {
@@ -328,7 +396,7 @@ pub fn gesture(handle: Handle, frame: &SelFrame, start: Pos2, p: Pos2, mods: Mod
         Handle::Edge(k) => {
             let (Some(l), Some(l0)) = (frame.to_local(p), frame.to_local(start)) else { return Affine::IDENTITY };
             let mid = frame.mid_local(k);
-            let anchor = if mods.ctrl { frame.pivot_local() } else { frame.mid_local(k + 2) };
+            let anchor = if mods.from_pivot() { frame.pivot_local() } else { frame.mid_local(k + 2) };
             let target = mid + (l - l0);
             let (sx, sy) = if k % 2 == 1 {
                 let s = ratio(target.x - anchor.x, mid.x - anchor.x);
@@ -347,13 +415,13 @@ pub fn gesture(handle: Handle, frame: &SelFrame, start: Pos2, p: Pos2, mods: Mod
             let shear = if k % 2 == 0 {
                 // Haut ou bas : les x glissent, proportionnellement à la distance au bord opposé.
                 let (edge, other) = if k == 0 { (r.min.y, r.max.y) } else { (r.max.y, r.min.y) };
-                let anchor = if mods.ctrl { pl.y } else { other };
+                let anchor = if mods.from_pivot() { pl.y } else { other };
                 let den = edge - anchor;
                 let f = if den.abs() < 1e-3 { 0.0 } else { ((l.x - l0.x) / den).clamp(-limit, limit) };
                 Affine { a: 1.0, b: f, c: 0.0, d: 1.0, tx: -f * anchor, ty: 0.0 }
             } else {
                 let (edge, other) = if k == 3 { (r.min.x, r.max.x) } else { (r.max.x, r.min.x) };
-                let anchor = if mods.ctrl { pl.x } else { other };
+                let anchor = if mods.from_pivot() { pl.x } else { other };
                 let den = edge - anchor;
                 let f = if den.abs() < 1e-3 { 0.0 } else { ((l.y - l0.y) / den).clamp(-limit, limit) };
                 Affine { a: 1.0, b: 0.0, c: f, d: 1.0, tx: 0.0, ty: -f * anchor }

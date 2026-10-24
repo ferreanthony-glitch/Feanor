@@ -80,20 +80,20 @@ fn stretching_by_a_side_or_a_corner_keeps_the_opposite_in_place() {
     let b = Rect::from_min_max(pos2(80.0, 40.0), pos2(120.0, 60.0));
     let t0 = LayerTransform::default();
     // Milieu du côté droit tiré deux fois plus loin : largeur × 2, le côté gauche ne bouge pas.
-    let t = stretched(t0, pivot, b, BoxHandle::Edge(1), pos2(160.0, 50.0), false);
+    let t = stretched(t0, pivot, b, BoxHandle::Edge(1), pos2(160.0, 50.0), false, false);
     assert!((t.stretch_x - 2.0).abs() < 1e-5 && (t.stretch_y - 1.0).abs() < 1e-6, "{t:?}");
     let a = t.affine(pivot);
     assert!(a.apply(pos2(80.0, 50.0)).distance(pos2(80.0, 50.0)) < 1e-3, "côté gauche immobile");
     assert!(a.apply(pos2(120.0, 50.0)).distance(pos2(160.0, 50.0)) < 1e-3);
     // Coin bas-droit : largeur et hauteur libres ; avec Maj, les mêmes.
-    let t = stretched(t0, pivot, b, BoxHandle::Corner(2), pos2(160.0, 70.0), false);
+    let t = stretched(t0, pivot, b, BoxHandle::Corner(2), pos2(160.0, 70.0), false, false);
     assert!((t.stretch_x - 2.0).abs() < 1e-5 && (t.stretch_y - 1.5).abs() < 1e-5, "{t:?}");
-    let t = stretched(t0, pivot, b, BoxHandle::Corner(2), pos2(160.0, 70.0), true);
+    let t = stretched(t0, pivot, b, BoxHandle::Corner(2), pos2(160.0, 70.0), true, false);
     assert!((t.stretch_x - t.stretch_y).abs() < 1e-5, "proportions gardées : {t:?}");
     // Un calque déjà tourné et agrandi : le coin opposé reste à sa place sur la feuille.
     let turned = LayerTransform { angle: 30.0, scale: 1.5, x: 4.0, ..Default::default() };
     let before = turned.affine(pivot).apply(pos2(80.0, 40.0));
-    let t = stretched(turned, pivot, b, BoxHandle::Corner(2), pos2(130.0, 75.0), false);
+    let t = stretched(turned, pivot, b, BoxHandle::Corner(2), pos2(130.0, 75.0), false, false);
     assert!(t.affine(pivot).apply(pos2(80.0, 40.0)).distance(before) < 1e-3);
     assert_eq!((t.angle, t.scale), (30.0, 1.5), "ni la rotation ni l'échelle ne changent");
 }

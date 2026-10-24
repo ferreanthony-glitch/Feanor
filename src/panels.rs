@@ -46,8 +46,8 @@ fn menu_item(ui: &mut egui::Ui, label: &str, shortcut: &str) -> bool {
 
 /// Mode d'emploi de la boîte de sélection (Réglages de l'outil Sélection).
 const BOX_NOTE: &str = "Boîte : glisser dedans pour déplacer (Maj : un seul axe) ; un coin ou le milieu d'un côté pour \
-mettre à l'échelle (Maj : proportions ; Ctrl : autour du pivot) ; juste hors d'un coin pour tourner autour du pivot \
-(Maj : par 15°) ; un bord entre les poignées pour incliner ; le point rond pour déplacer le pivot. \
+mettre à l'échelle, la poignée opposée restant en place (Maj : proportions ; Ctrl : l'autre point fixe, réglé par « Point \
+fixe ») ; juste hors d'un coin pour tourner autour du pivot ou du coin opposé (réglé par « Rotation » ; Maj : par 15°) ; un bord entre les poignées pour incliner ; le point rond pour déplacer le pivot. \
 Flèches : déplacer d'un pixel (Maj : dix).";
 
 fn note(ui: &mut egui::Ui, text: &str) {
@@ -345,6 +345,11 @@ impl App {
     /// simplicité, 2026-10-21). Le pinceau, le crayon et la gomme ont la leur, sous l'aperçu du trait
     /// (`brush_settings_ui`).
     pub(crate) fn plus_de_reglages(&mut self, ui: &mut egui::Ui, contenu: impl FnOnce(&mut App, &mut egui::Ui)) {
+        // Sélection et Transformer : le point fixe des poignées et le centre des rotations, toujours à portée, juste
+        // au-dessus (`point_fixe_ui`).
+        if matches!(self.tool, Tool::Select | Tool::SelectColor | Tool::Transform) {
+            self.point_fixe_ui(ui);
+        }
         let outil = self.tool.action();
         let mut ouvert = self.pinceaux.plus_ouvert(outil);
         if crate::repli::entete(ui, &mut ouvert, "Plus de réglages", "Les réglages qui servent moins souvent, et le mode d'emploi de l'outil.") {
@@ -531,8 +536,10 @@ impl App {
                     note(
                         ui,
                         "Glisser dans la boîte : déplacer le calque (Maj : à l'horizontale ou à la \
-                         verticale). Coin : agrandir ou réduire (Maj : en gardant les proportions). Milieu \
-                         d'un côté : étirer dans un seul sens. Poignée ronde : tourner (Maj : par 15°). \
+                         verticale). Coin : agrandir ou réduire, le coin opposé restant en place (Maj : en \
+                         gardant les proportions ; Ctrl : l'autre point fixe, réglé par « Point fixe »). Milieu \
+                         d'un côté : étirer dans un seul sens. Poignée ronde : tourner autour du centre ; juste \
+                         hors d'un coin : tourner autour du centre ou du coin opposé (« Rotation ») ; Maj : par 15°. \
                          Pour courber le dessin, l'outil Déformer a son mode Enveloppe. \
                          Les dessins ne sont pas modifiés : on peut annuler la transformation à tout moment.",
                     );

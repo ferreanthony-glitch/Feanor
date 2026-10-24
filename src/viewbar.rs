@@ -24,7 +24,7 @@ pub(crate) fn tool_hint(tool: crate::app::Tool) -> &'static str {
         Tool::Rect | Tool::Ellipse => "Glisser : tracer · Maj : carré ou cercle",
         Tool::Polyline => "Un clic par point (Maj : par 15°) · double-clic ou Entrée : terminer",
         Tool::Text => "Clic : poser un texte · Ctrl + Entrée : valider · Échap : annuler",
-        Tool::Transform => "Coin : agrandir (Maj : proportions) · côté : étirer · rond : tourner · Ctrl+R : annuler",
+        Tool::Transform => "Coin : agrandir (Maj : proportions · Ctrl : autre point fixe) · côté : étirer · rond ou hors d'un coin : tourner · Ctrl+R : annuler",
         Tool::Perspective => "Enveloppe ou perspective (Réglages) · tirer un coin ou une poignée ronde · l'intérieur : déplacer · Entrée : terminer",
         Tool::Picker => "Clic : prendre la couleur",
         Tool::Pan => "Glisser : déplacer la vue",
