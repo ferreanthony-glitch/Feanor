@@ -1,4 +1,5 @@
-//! Les notes des cases ne s'écrivent plus qu'au bouton (2026-10-22) : un appui sur la bande de note dessine, l'icône au bout de la bande l'ouvre.
+//! Les notes des cases s'écrivent au bouton (2026-10-22) : l'icône au bout de la bande l'ouvre ; un appui sur une ligne de texte autre que
+//! Notes dessine. Depuis le 2026-10-24, un clic sur la ligne Notes l'ouvre aussi (`boardtextes_tests.rs`).
 
 use eframe::egui::{self, epaint::Shape, vec2, Event, Key, Modifiers, Rect};
 
@@ -33,28 +34,33 @@ fn banc() -> Banc {
 }
 
 #[test]
-fn a_press_drag_that_starts_on_the_note_strip_draws_in_the_case_and_never_opens_the_note() {
+fn a_press_drag_that_starts_on_a_text_line_other_than_notes_draws_in_the_case_and_never_opens_the_note() {
     let mut b = banc();
+    // L'action et les notes : deux lignes sous la case ; la ligne Notes s'écrit d'un clic (2026-10-24), l'Action laisse dessiner.
+    b.app.layout.board_textes = crate::boardsens::Textes { action: true, dialogue: false, notes: true };
+    b.chauffer(3);
     let (strip, case) = (bande(&b, 3), vignette(&b, 3));
     assert!(strip.top() >= case.bottom(), "la bande est sous la case");
+    let ligne_action = b.app.vignettes.xf.rect(b.app.board_layout().cards[3].ligne_de_texte(0));
     let n = pas_d_annulation(&b);
-    // Un trait qui part du bas de la case, dans la bande (loin de l'icône), et remonte dans la case.
-    let depart = egui::pos2(strip.left() + 20.0, strip.center().y);
+    // Un trait qui part de la ligne Action (loin de l'icône) et remonte dans la case.
+    let depart = egui::pos2(ligne_action.left() + 20.0, ligne_action.center().y);
     glisser(&mut b, &vague(depart, egui::pos2(depart.x + 40.0, case.center().y), 12));
-    assert!(b.app.vignettes.note.is_none(), "la bande n'ouvre plus la note");
+    assert!(b.app.vignettes.note.is_none(), "la ligne Action n'ouvre pas la note");
     assert!(encre(&b.app.doc, 1), "le trait est dans la case du plan 2");
     assert_eq!(b.app.cur_panel, 1);
     assert_eq!(pas_d_annulation(&b), n + 1, "une étape : le trait");
-    // Un simple clic dans la bande n'ouvre rien non plus (un point est un point de dessin).
-    let milieu = strip.center() + vec2(-30.0, 0.0);
-    clic_avec(&mut b, milieu, Modifiers::NONE);
-    assert!(b.app.vignettes.note.is_none());
-    // Même avec du texte dans la bande : le texte n'est pas un bouton.
-    b.app.doc.panels[1].notes = "Contre-champ".into();
+    // Un simple clic sur la ligne Action n'ouvre rien non plus, même avec du texte dedans : le texte de l'action n'est pas un bouton.
+    b.app.doc.panels[1].action = "Il court".into();
     b.chauffer(3);
-    let (strip, case) = (bande(&b, 3), vignette(&b, 3));
-    glisser(&mut b, &vague(egui::pos2(strip.left() + 20.0, strip.center().y), egui::pos2(strip.left() + 60.0, case.center().y), 8));
-    assert!(b.app.vignettes.note.is_none(), "ni sur son texte");
+    let ligne_action = b.app.vignettes.xf.rect(b.app.board_layout().cards[3].ligne_de_texte(0));
+    clic_avec(&mut b, ligne_action.center() + vec2(-30.0, 0.0), Modifiers::NONE);
+    assert!(b.app.vignettes.note.is_none());
+    // La ligne Notes, elle, écrit la note d'un clic (comme l'icône).
+    let ligne_notes = b.app.vignettes.xf.rect(b.app.board_layout().cards[3].ligne_de_texte(1));
+    clic_avec(&mut b, ligne_notes.center() + vec2(-30.0, 0.0), Modifiers::NONE);
+    b.chauffer(2);
+    assert_eq!(b.app.vignettes.note.as_ref().map(|e| e.id), Some(b.app.board_layout().cards[3].id), "la ligne Notes écrit la note");
 }
 
 #[test]

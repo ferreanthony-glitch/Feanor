@@ -4145,8 +4145,12 @@ l'enveloppe mordre sur l'écart entre colonnes (c'est A qui est en retrait).
 d'espace sous les cases ; la colonne à la japonaise est large d'une case). Plus rien n'est mesuré à chaque image (`Vignettes::lines` et les mesures de notes sont partis ; l'argument `lines` de
 `layout_with` reste, ignoré). Un clic sur la **ligne Notes** (champ coché, sans Maj ni Ctrl) écrit la note comme l'icône ; curseur de texte dessus ; l'éditeur remplace cette ligne seule.
 L'export (PNG, JPEG, PDF) a les mêmes lignes ; sans l'option « Notes » de l'export, pas de zone de texte du tout. La commande `vignettes.note` sans champ coché le dit dans la barre d'état.
+(Ceci revient sur le choix du 2026-10-22 « les notes ne s'activent qu'au bouton » pour la seule ligne Notes, à la demande d'Anthony ; une ligne Action ou Dialogue, et la marge sous
+la case, laissent toujours dessiner.)
 Essais modifiés parce qu'ils encodaient l'ancien comportement : `board_tests` (la rangée suivant des notes de 2 ou 3 lignes), `vignettes_tests` (une note longue : 3 lignes → 1),
-`optim_rendu_tests` (lignes mesurées), `boardjapon_tests` (texte à droite de 3 puis 9 lignes, texte très long, A à droite d'un cadre à gauche).
+`optim_rendu_tests` (lignes mesurées), `boardjapon_tests` (texte à droite de 3 puis 9 lignes, texte très long, A à droite d'un cadre à gauche), `notes_cases_tests` (un appui sur la
+ligne Notes ouvre la note ; le glissé part de la ligne Action), `planche_tests` (une ligne, sans l'option pas de zone), `cases_tests` (un zoom depuis un coin : B plus grand que A
+dépasse en haut à gauche, donc A est en retrait : l'empreinte commence où la case était, A garde sa taille).
 
 À vérifier à l'écran (par Anthony) :
 
