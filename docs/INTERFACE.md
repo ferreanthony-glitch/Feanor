@@ -4068,23 +4068,27 @@ Son onglet porte le même nom que celui de la planche (« Vignettes ») : ce son
 |---|---|---|
 | **Sens de lecture** | **En lignes** (d'origine) / **À la japonaise** | `vignettes.sens_lignes`, `vignettes.sens_japonais` |
 | **Cases par ligne / par colonne** | 1 à 6 (six d'origine) : le réglage « Colonnes » de la barre de la planche, renommé selon le sens | — |
-| **Textes sous / à droite des cases** | Action, Dialogue, Notes (cases à cocher ; d'origine les notes seules, comme avant) | `vignettes.texte_action`, `vignettes.texte_dialogue`, `vignettes.texte_notes` |
+| **Textes sous / à droite des cases** | Action, Dialogue, Notes (cases à cocher, **une ligne chacun** ; d'origine les notes seules, comme avant) | `vignettes.texte_action`, `vignettes.texte_dialogue`, `vignettes.texte_notes` |
 
 Les champs sont ceux de la fiche du plan (`Panel::action`, `dialogue`, `notes`) et de ses marques d'image. **Plusieurs champs montrés : chacun a son étiquette colorée**
-(« Action » bleu, « Dialogue » ocre, « Note » gris), un champ seul n'en a pas. Chaque champ prend de une à trois lignes (« … » au bout), l'un sous l'autre : la bande de texte
-d'une case a jusqu'à trois lignes par champ montré (`Textes::lignes_max`). L'écriture d'une note (icône crayon, `vignettes.note`) écrit toujours le champ Notes.
+(« Action » bleu, « Dialogue » ocre, « Note » gris), un champ seul n'en a pas. **Chaque champ coché fait exactement une ligne** sous la case (à droite à la japonaise), dans l'ordre
+de la fiche, quel que soit son texte (même vide : la ligne garde sa place) ; un texte plus long que la ligne est coupé par « … » (`Textes::lignes`, `board::CardPlace::ligne_de_texte`).
+**Aucun champ coché : aucune ligne**, plus d'espace sous les cases, plus d'icône d'écriture. L'écriture d'une note (icône crayon, `vignettes.note`, ou **un clic sur la ligne Notes**
+quand ce champ est coché) écrit toujours le champ Notes ; les lignes Action et Dialogue, elles, laissent dessiner dans la case comme le reste de la bande. (Avant le 2026-10-24,
+un champ prenait de une à trois lignes selon son texte ; cela demandait de mesurer chaque texte à chaque image d'écran : plus rien n'est mesuré.)
 
 ### À la japonaise (`boardjapon.rs`, le miroir de `board::layout_with`)
 
 - Les cases se suivent **de haut en bas**, puis la colonne suivante est **à droite**. La hauteur d'une colonne est celle d'une rangée en lignes : **« cases par ligne » devient
   « cases par colonne »** (six cases et cinq écarts de coupe). Chaque case garde au-dessus d'elle la ligne de son numéro de plan ; les écarts entre deux cases d'une colonne sont ceux
   d'une ligne (serré dans un plan, large à une coupe), les barres entre elles sont **horizontales**.
-- Le **texte est à droite de la case**, en haut de l'image, à `note_gap` (12 % + 8 points) et de la largeur d'une case. Plus haut que l'image, il fait descendre la case suivante ;
-  la colonne garde ses six cases (`marge`).
+- Le **texte est à droite de la case**, en haut de l'image, à `note_gap` (12 % + 8 points) et de la largeur d'une case, une ligne par champ coché (trois au plus : il tient toujours
+  à côté de l'image). Sans champ coché, il n'y a pas de zone de texte et une colonne n'est large que d'une case.
 - **Un mouvement de caméra** : l'enveloppe des cadres est posée comme en lignes ; le texte est **à droite du cadre le plus à droite** (B…), en haut de ce cadre ; **toute la colonne
   suivante est à droite du mouvement et de son texte** (comme toute la rangée suivante est sous B et ses notes), et la case suivante de la colonne est sous l'enveloppe et son texte.
-  Une enveloppe qui descend ou va à droite ne bouge pas A (le papier est infini : elle déborde sous la colonne, les cases d'après passent à la colonne suivante) ; qui monte ou va à
-  gauche pousse A plus bas (ou en haut de la colonne suivante si elle n'y tient plus), une fois, sans toucher aux cases d'avant ; au bord de la planche tout glisse (`decalage`).
+  Une enveloppe qui descend ou va à droite ne bouge pas A (le papier est infini : elle déborde sous la colonne, les cases d'après passent à la colonne suivante) ; qui monte pousse A
+  plus bas (ou en haut de la colonne suivante si elle n'y tient plus), une fois, sans toucher aux cases d'avant ; **qui va à gauche : le cadre le plus à gauche s'aligne sur le bord
+  de la colonne, A est en retrait à sa droite** (voir « Alignement des mouvements » plus bas) ; au bord haut de la planche tout glisse (`decalage`).
 - **Pendant un geste de caméra**, A reste exactement où elle était (`Reserve::pose` et `pose_y`) et l'enveloppe ne rétrécit pas ; au lâcher, tout se range d'après les cadres.
 - **Les cases pâles** suivent le même sens : au moins trois colonnes de cases en tout (« Rangées de cases pâles » des Préférences, devenues des colonnes), une colonne pâle après la dernière occupée.
 - **Zoom** (clic sur le pourcentage, ou « Planche à la hauteur de la vue ») : la planche tient **à la hauteur** de la vue (en lignes : à la largeur) ; les colonnes s'ajoutent à droite.
@@ -4113,11 +4117,47 @@ version, et rien ne coûte alors. Si le montage et la planche sont affichés ens
 1. Espace Vignettes : le panneau **Vignettes** en haut de la colonne de droite (En lignes allumé, trois cases à cocher, Notes cochée) ; la planche est exactement comme avant.
 2. Clic sur **À la japonaise** : les cases se rangent en colonnes de six, la colonne suivante à droite, le numéro du plan au-dessus de chaque case, les barres horizontales ; la planche tient à la
    hauteur de la vue. Le texte d'une case (clic sur l'icône crayon, à droite de sa bande) se lit à sa droite.
-3. Coche **Action** puis **Dialogue** : chaque case montre ses champs l'un sous l'autre, avec leur étiquette colorée ; décoche : l'étiquette part quand il n'en reste qu'un. Même chose en lignes : sous la case.
+3. Coche **Action** puis **Dialogue** : chaque case montre ses champs l'un sous l'autre, **une ligne chacun**, avec leur étiquette colorée ; décoche : l'étiquette part quand il n'en reste qu'un. Même chose en lignes : sous la case.
 4. Un mouvement de caméra dans une case (Ctrl + Maj + glisser) : B à droite ou en dessous, le texte à droite de B ; **la colonne suivante est entièrement à droite**, jamais dessus. Pendant le geste, A ne bouge pas.
 5. Maj + glisser le cadre d'une case : un trait horizontal montre où le plan se pose. Un clic sur une barre coupe ou réunit. Dessiner dans une case, à droite d'elle dans son texte, marche comme avant.
 6. Quitte SHOT et rouvre-le : le sens et les cases cochées sont ceux que tu avais laissés. Fichier > Exporter > Planche des vignettes : même ordre, mêmes textes.
 7. Un plan à deux versions (Storyboard > Versions du plan > Nouvelle version) : **V2** en haut à droite de sa case ; le survoler ouvre la liste ; un clic sur V1 change la case ; Ctrl+Z revient. Un plan à une version n'a rien.
+
+### Retouches de la planche : l'alignement des mouvements, la barre de coupe, une ligne par champ (2026-10-24, branche `planche-retouches`)
+
+Retour d'Anthony après essai (capture annotée) : trois points de la mise en page. Fichiers : `board.rs`, `boardjapon.rs`, `boardsens.rs`, `boardui.rs`, `planche.rs`,
+`vignettecamui.rs`. Essais : `boardalignement_tests.rs`, `boardtextes_tests.rs`, et dans `vignettes_camera_tests.rs` les trois essais « a_move_never… ».
+
+**1. Alignement des mouvements de caméra** (`CardPlace::ligne`, `Reserve::pose_dec`). Le cadre le plus haut d'un mouvement est **au haut des images de la rangée**, comme n'importe quelle
+case, quelle que soit la direction : quand B est au-dessus de A, ce n'est plus la rangée qui descend, c'est **A qui est en retrait**, plus bas (de ce dont B est plus haut qu'elle).
+Les autres cases de la rangée restent à la ligne (rien ne glisse), la rangée est assez haute pour A et sa note (`besoin`), la rangée suivante est dessous. Un mouvement qui descend garde A sur
+la ligne. **À la japonaise, le miroir** : le cadre le plus à gauche est au bord de la colonne, A est en retrait à sa droite (plus de glissement de la planche vers la droite) ; en haut d'une
+colonne le cadre qui monte au-dessus de la planche fait toujours glisser le tout (`decalage`). `CardPlace::ligne` est « la case à la ligne » (l'image comme elle serait sans retrait) : les barres
+de coupe, les repères de pose (Maj + glisser) et l'aimant des cadres s'y alignent, pas sur A. **Pendant un geste**, A ne bouge pas : la réserve garde son retrait de l'appui (`pose_dec`,
+`CamGeste::pose_dec`) ; au lâcher tout se range d'après les cadres, A prend son retrait.
+
+**2. Jamais sur la barre de coupe ni sur la case d'avant.** Une enveloppe qui dépassait à gauche de sa case pouvait mordre sur l'écart de la case d'avant, où est la barre (`bloque` comptait
+l'écart libre pour une enveloppe à gauche). L'écart est maintenant toujours libre : le plan se décale à droite d'autant qu'il faut (A est alors en retrait à droite de la ligne), les cases d'après
+suivent, et la rangée passe à la suivante quand elle déborde, comme avant. À la japonaise, la case descendait déjà sous la case d'avant et son écart ; la colonne suivante ne laisse plus
+l'enveloppe mordre sur l'écart entre colonnes (c'est A qui est en retrait).
+
+**3. Une ligne par champ coché.** Voir le panneau plus haut : exactement une ligne par champ, « … » au bout d'un texte trop long, **aucune ligne sans champ coché** (la rangée se resserre : plus
+d'espace sous les cases ; la colonne à la japonaise est large d'une case). Plus rien n'est mesuré à chaque image (`Vignettes::lines` et les mesures de notes sont partis ; l'argument `lines` de
+`layout_with` reste, ignoré). Un clic sur la **ligne Notes** (champ coché, sans Maj ni Ctrl) écrit la note comme l'icône ; curseur de texte dessus ; l'éditeur remplace cette ligne seule.
+L'export (PNG, JPEG, PDF) a les mêmes lignes ; sans l'option « Notes » de l'export, pas de zone de texte du tout. La commande `vignettes.note` sans champ coché le dit dans la barre d'état.
+Essais modifiés parce qu'ils encodaient l'ancien comportement : `board_tests` (la rangée suivant des notes de 2 ou 3 lignes), `vignettes_tests` (une note longue : 3 lignes → 1),
+`optim_rendu_tests` (lignes mesurées), `boardjapon_tests` (texte à droite de 3 puis 9 lignes, texte très long, A à droite d'un cadre à gauche).
+
+À vérifier à l'écran (par Anthony) :
+
+1. En lignes, tire B **au-dessus** de A (Ctrl + Maj + glisser vers le haut) : le cadre bleu le plus haut est à la hauteur des autres cases de la rangée ; A est plus bas ; les autres cases ne
+   bougent pas ; la rangée suivante reste sous A et sa note. Pendant le geste A ne bouge pas ; au lâcher elle descend.
+2. B **en haut à gauche** de A : le plan se décale à droite, le cadre ne passe ni sur la barre de coupe ni sur la case d'avant ; les cases d'après suivent (ou passent à la rangée suivante).
+3. À la japonaise, B à gauche de A : le cadre le plus à gauche est au bord de la colonne, A est un peu à droite ; B en haut à gauche : le plan descend sous la case d'avant et sa barre.
+4. Panneau **Planche** : avec Action, Dialogue, Notes cochés, chaque case a exactement trois lignes, un texte long finit par « … » ; deux champs : deux lignes ; **aucun coché : plus de texte, plus
+   d'icône, les rangées se resserrent**. Un clic sur la ligne Notes (curseur de texte) l'écrit ; un clic sur la ligne Action ou Dialogue dessine dans la case.
+5. Maj + glisser un plan : les repères de pose, la barre de coupe et l'aimant des cadres restent à la hauteur des images de la rangée, même pour un plan dont A est en retrait ; Fichier > Exporter >
+   Planche des vignettes : mêmes lignes, mêmes alignements.
 
 ## 45. Les pinceaux dans les Réglages de l'outil (2026-10-24, branche `pinceaux-dans-reglages`)
 
