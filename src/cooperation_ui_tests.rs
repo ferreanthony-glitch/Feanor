@@ -153,6 +153,30 @@ fn saving_a_shared_project_writes_what_one_holds_by_the_ordinary_path() {
     assert!(b.app.partage.is_some());
 }
 
+/// Les projets classiques passent de `.pelure` à `.shot` à leur enregistrement (2026-10-23) ; pas un film partagé : sa
+/// structure garde son nom, que des équipiers à une version d'avant cherchent.
+#[test]
+fn a_shared_film_keeps_its_pelure_structure_when_saved() {
+    let (mut b, _, h, racine) = app_partagee("garde-pelure", 3);
+    let structure = racine.join("Film").join("Film.pelure");
+    b.app.run_action("equipe.prendre_montage");
+    b.app.run_action("equipe.prendre_plan");
+    h.avancer(9_000);
+    image(&mut b);
+    b.app.doc.properties.title = "Titre changé par le montage".into();
+    b.app.modified = true;
+    assert!(b.app.save());
+    pomper_enregistrement(&mut b);
+    assert!(!b.app.modified && b.app.save_error.is_none(), "{}", b.app.status);
+    assert!(structure.is_file(), "la structure garde son nom");
+    assert!(!structure.with_extension("shot").exists(), "aucun manifeste .shot à côté");
+    assert_eq!(b.app.path.as_ref(), Some(&structure));
+    assert!(b.app.partage.is_some());
+    assert_eq!(fx::lire_json(&structure)["version"], project::version_partage_ecrite());
+    // « Partager ce projet » : un nouveau film partagé s'écrit aussi sous `.pelure`, quel que soit le nom tapé.
+    assert_eq!(project::target_for_partage(&racine.join("Autre.shot")).1, racine.join("Autre").join("Autre.pelure"));
+}
+
 #[test]
 fn save_as_makes_a_flat_classic_copy_and_leaves_the_sharing() {
     let (mut b, _, h, racine) = app_partagee("enregistrer-sous", 3);

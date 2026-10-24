@@ -3,7 +3,8 @@
 //!
 //! - Le serveur est le script `sidecar/serveur.py` (voir `docs/GENERATION_SON.md`), lancé avec le Python du
 //!   venv de `SHOT-modeles` (`<racine>\venv\Scripts\python.exe -I serveur.py --racine <racine> --port N`).
-//!   Le Python et le dossier des modèles sont des **réglages** ; par défaut `Documents\Work\SHOT-modeles`.
+//!   Le Python et le dossier des modèles sont des **réglages** ; par défaut `Documents\SHOT\Modèles\SHOT-modeles`
+//!   (l'ancien `Documents\Work\SHOT-modeles` s'il est le seul des deux à exister).
 //!   Aucun chemin d'utilisateur n'est écrit dans le code : le dossier Documents vient de l'environnement.
 //! - **Rien ne bloque le fil de l'interface** : démarrer, attendre que le serveur réponde et arrêter se font
 //!   sur des fils de travail (`genprefsui.rs`, `sidecar.rs`). Charger un modèle ne bloque pas non plus :
@@ -41,9 +42,23 @@ fn documents() -> PathBuf {
     crate::nouveau::default_folder()
 }
 
-/// Le dossier `SHOT-modeles` par défaut : `Documents\Work\SHOT-modeles`.
+/// Le dossier `SHOT-modeles` par défaut : `Documents\SHOT\Modèles\SHOT-modeles` (rangement d'Anthony, 2026-10-23) ;
+/// s'il n'existe pas et que l'ancien `Documents\Work\SHOT-modeles` existe, l'ancien. Regardé une fois par séance (les
+/// Préférences le montrent à chaque image d'écran).
 pub fn racine_par_defaut() -> PathBuf {
-    documents().join("Work").join("SHOT-modeles")
+    static RACINE: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    RACINE.get_or_init(|| racine_par_defaut_dans(&documents())).clone()
+}
+
+/// `racine_par_defaut` pour le dossier Documents `documents`.
+pub fn racine_par_defaut_dans(documents: &Path) -> PathBuf {
+    let neuve = documents.join("SHOT").join("Modèles").join("SHOT-modeles");
+    let ancienne = documents.join("Work").join("SHOT-modeles");
+    if !neuve.is_dir() && ancienne.is_dir() {
+        ancienne
+    } else {
+        neuve
+    }
 }
 
 /// Le Python du venv d'une racine `SHOT-modeles`.

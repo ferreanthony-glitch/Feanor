@@ -362,7 +362,7 @@ fn the_background_is_a_button_of_the_layer_and_each_layer_has_its_own() {
 }
 
 #[test]
-fn the_layer_row_and_the_layer_commands_carry_the_background_button_and_the_brush_does_not() {
+fn the_layer_row_and_the_brush_settings_carry_the_aplat_button() {
     let mut app = app_with_folder("fond-bouton");
     let ph_fond = egui_phosphor::regular::USER_SQUARE;
     let mut ecran = Ecran::new();
@@ -382,15 +382,15 @@ fn the_layer_row_and_the_layer_commands_carry_the_background_button_and_the_brus
         .clone();
     let textes = ecran.cliquer(&mut app, bouton.center(), &mut ui_calques);
     assert!(app.layers()[0].fond.is_some(), "{} / {textes:?}", app.status);
-    // Les réglages du pinceau n'ont plus de bouton « Fond sous le trait » (seulement « Peint derrière » et « Remplir la forme »).
+    // Les réglages du pinceau ont « Peint sur l'aplat » et, à côté, le même bouton d'aplat que la ligne du calque
+    // (Anthony, 2026-10-23), au-dessus de « Plus de réglages », replié.
     app.set_tool(crate::app::Tool::Brush);
     app.cur_layer = 3;
-    // (« Peint derrière » est dans « Plus de réglages » : déplié ici.)
-    app.pinceaux.reglages_ouverts = true;
     let mut ui_outil = |a: &mut App, ui: &mut egui::Ui| a.tool_options_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_outil);
-    assert!(!contient(&textes, ph_fond), "plus de bouton de fond dans les réglages du pinceau : {textes:?}");
-    assert!(contient(&textes, egui_phosphor::regular::SELECTION_BACKGROUND), "« Peint derrière » y est toujours");
+    assert!(contient(&textes, ph_fond), "le bouton d'aplat du calque courant est dans les réglages du pinceau : {textes:?}");
+    assert!(contient(&textes, egui_phosphor::regular::SELECTION_BACKGROUND), "« Peint sur l'aplat » y est");
+    assert!(!contient(&textes, egui_phosphor::regular::PAINT_BUCKET), "plus de « Remplir la forme »");
     assert!(!contient(&textes, "Peindre dans"), "la bascule Trait / Fond a disparu");
     // Un calque qui en a un ne montre rien non plus sous le pinceau : ses réglages sont dans Réglages quand sa
     // sous-ligne est choisie (`aplat_tests.rs`).

@@ -1,4 +1,4 @@
-//! Les vieilles étapes d'annulation, comprimées (`docs/PERFORMANCE.md`, section 27).
+//! Les vieilles étapes d'annulation, comprimées (`docs/PERFORMANCE.md`, section 28).
 //!
 //! Une étape de dessin garde les tuiles d'avant (16 Ko chacune). Deux cents étapes de gros gestes (un remplissage, une
 //! gomme sur toute la feuille) tiennent des centaines de mégaoctets que personne ne demandera de sitôt. Les étapes au-delà

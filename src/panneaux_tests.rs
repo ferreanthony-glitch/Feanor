@@ -571,10 +571,24 @@ fn the_brush_keeps_size_and_opacity_first_and_folds_its_extras() {
     let textes = ecran.chauffer(&mut app, 4, &mut ui_outil);
     assert!(contient(&textes, "Taille") && contient(&textes, "Opacité"), "{textes:?}");
     assert!(contient(&textes, "Plus de réglages"), "le même titre partout : {textes:?}");
-    assert!(!contient(&textes, ph::SELECTION_BACKGROUND), "« Peint derrière » est plié : {textes:?}");
+    // « Peint sur l'aplat » et l'aplat du calque sont au-dessus de « Plus de réglages », toujours visibles (Anthony,
+    // 2026-10-23) ; « Remplir la forme » n'existe plus, ni la ligne du tremblement du trait.
+    let y = |textes: &[(String, Rect)], t: &str| textes.iter().find(|(s, _)| s.trim() == t).map(|(_, r)| r.center().y);
+    let plus = y(&textes, "Plus de réglages").expect("le titre");
+    let derriere = y(&textes, ph::SELECTION_BACKGROUND).unwrap_or_else(|| panic!("« Peint sur l'aplat » est visible replié : {textes:?}"));
+    let aplat = y(&textes, ph::USER_SQUARE).unwrap_or_else(|| panic!("l'aplat du calque est visible replié : {textes:?}"));
+    assert!(derriere < plus && aplat < plus, "au-dessus de « Plus de réglages »");
     app.pinceaux.reglages_ouverts = true;
     let textes = ecran.chauffer(&mut app, 4, &mut ui_outil);
-    assert!(contient(&textes, ph::SELECTION_BACKGROUND), "déplié : {textes:?}");
+    assert!(contient(&textes, ph::SELECTION_BACKGROUND), "déplié aussi : {textes:?}");
+    // (L'icône du tremblement, une sinusoïde, sert aussi à la catégorie « Lissage » : on cherche sa phrase.)
+    for absent in [ph::PAINT_BUCKET, "Le trait de ce calque", "Remplir la forme"] {
+        assert!(!contient(&textes, absent), "« {absent} » n'est plus dans les réglages du pinceau : {textes:?}");
+    }
+    // La gomme n'a ni l'un ni l'autre.
+    app.set_tool(crate::app::Tool::Eraser);
+    let textes = ecran.chauffer(&mut app, 4, &mut ui_outil);
+    assert!(!contient(&textes, ph::SELECTION_BACKGROUND), "{textes:?}");
 }
 
 #[test]

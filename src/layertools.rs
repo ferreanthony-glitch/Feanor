@@ -4,6 +4,11 @@
 //! 2026-10-18 : « beaucoup plus de transformations comme l'étirement latéral ») : un coin agrandit
 //! librement (Maj : en gardant les proportions), le milieu d'un côté étire dans un seul sens, le
 //! côté opposé restant en place ; comportement exact de Storyboard Pro à vérifier.
+//!
+//! Le point fixe suit les réglages de l'application, comme la boîte de la Sélection (`selbox.rs`, Anthony,
+//! 2026-10-23) : « Point fixe des poignées » (la poignée opposée d'office, ou le centre de la boîte ; Ctrl tenu donne
+//! l'autre) et « Rotation autour de » (juste hors d'un coin : le centre de la boîte d'office, ou le coin opposé). La
+//! poignée ronde tourne toujours autour du centre de la boîte.
 
 use eframe::egui::{self, pos2, vec2, Color32, Pos2, Rect, Shape, Stroke, Vec2};
 
@@ -23,13 +28,17 @@ pub(crate) enum BoxHandle {
     Corner(usize),
     /// Milieux des côtés : haut, droite, bas, gauche.
     Edge(usize),
+    /// La poignée ronde au-dessus de la boîte : tourner autour de son centre.
     Rotate,
+    /// Juste hors du coin `k` : tourner (autour du centre, ou du coin opposé selon le réglage).
+    RotateCorner(usize),
 }
 
 /// Étirement par un coin ou le milieu d'un côté de la boîte `b` du contenu (repère du dessin du
 /// calque) : `m`, la souris ramenée dans ce repère ; le coin (ou le côté) opposé reste en place sur
-/// la feuille. Coin : largeur et hauteur (Maj : les deux pareil) ; côté : un seul sens.
-pub(crate) fn stretched(t0: LayerTransform, pivot: Pos2, b: Rect, handle: BoxHandle, m: Pos2, shift: bool) -> LayerTransform {
+/// la feuille — ou le centre de la boîte, avec `centre` (réglage « Point fixe des poignées »). Coin :
+/// largeur et hauteur (Maj : les deux pareil) ; côté : un seul sens.
+pub(crate) fn stretched(t0: LayerTransform, pivot: Pos2, b: Rect, handle: BoxHandle, m: Pos2, shift: bool, centre: bool) -> LayerTransform {
     let corners = [b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()];
     let mids = [b.center_top(), b.right_center(), b.center_bottom(), b.left_center()];
     let (h, anchor, along_x, along_y) = match handle {
@@ -37,6 +46,7 @@ pub(crate) fn stretched(t0: LayerTransform, pivot: Pos2, b: Rect, handle: BoxHan
         BoxHandle::Edge(k) => (mids[k], mids[(k + 2) % 4], k % 2 == 1, k % 2 == 0),
         _ => return t0,
     };
+    let anchor = if centre { b.center() } else { anchor };
     let ratio = |num: f32, den: f32| if den.abs() < 1e-3 { 1.0 } else { (num / den).clamp(0.01, 100.0) };
     let (mut fx, mut fy) = (
         if along_x { ratio(m.x - anchor.x, h.x - anchor.x) } else { 1.0 },
@@ -89,6 +99,8 @@ pub(crate) struct LayerDrag {
     /// du geste : pour les étirements.
     content: Rect,
     to_local: Option<crate::vector::Affine>,
+    /// Les coins de la boîte telle qu'on la voit au début du geste : le centre d'une rotation prise hors d'un coin.
+    corners: [Pos2; 4],
     snap: Edit,
     changed: bool,
 }
@@ -199,7 +211,22 @@ impl App {
             return Some(BoxHandle::Edge(k));
         }
         let quad: Vec<Pos2> = corners.iter().map(|c| self.stage_to_screen(*c)).collect();
-        crate::vector::point_in_polygon(screen, &quad).then_some(BoxHandle::Move)
+        if crate::vector::point_in_polygon(screen, &quad) {
+            return Some(BoxHandle::Move);
+        }
+        // Juste hors d'un coin : tourner, comme la boîte de la Sélection (`selbox::hit_test`).
+        let (k, d) = (0..4).map(|k| (k, quad[k].distance(screen))).min_by(|a, b| a.1.total_cmp(&b.1))?;
+        (d <= crate::selbox::GRAB_ROTATE).then_some(BoxHandle::RotateCorner(k))
+    }
+
+    /// Le centre de la rotation prise hors du coin `k` de la boîte vue `corners` : son centre, ou le coin opposé
+    /// (réglage « Rotation autour de »).
+    fn corner_rotation_centre(&self, corners: &[Pos2; 4], k: usize) -> Pos2 {
+        if self.settings.rotation_autour == crate::selbox::CentreRotation::CoinOppose {
+            corners[(k + 2) % 4]
+        } else {
+            pos2(corners.iter().map(|c| c.x).sum::<f32>() / 4.0, corners.iter().map(|c| c.y).sum::<f32>() / 4.0)
+        }
     }
 
     pub(crate) fn transform_press(&mut self, stage: Pos2, screen: Pos2) {
@@ -247,6 +274,7 @@ impl App {
             seen_center,
             content: self.content_box(),
             to_local: self.layer_affine().inverse(),
+            corners,
             snap: self.snapshot(),
             changed: false,
         });
@@ -283,25 +311,28 @@ impl App {
             seen_center: Pos2::ZERO,
             content: box0,
             to_local: None,
+            corners: [box0.left_top(), box0.right_top(), box0.right_bottom(), box0.left_bottom()],
             snap: self.snapshot(),
             changed: false,
         });
     }
 
     /// Le geste sur plusieurs calques : la même similitude de la feuille pour chacun, `T = D(t0)`.
-    fn transform_many_drag(&mut self, p: Pos2, shift: bool) {
+    fn transform_many_drag(&mut self, p: Pos2, shift: bool, ctrl: bool) {
         use crate::vector::Affine;
         let pivot = self.doc.stage_center();
+        let centre = (self.settings.point_fixe == crate::selbox::PointFixe::Centre) != ctrl;
+        let coin = self.settings.rotation_autour == crate::selbox::CentreRotation::CoinOppose;
         let Some(d) = &mut self.layer_drag else { return };
         let (handle, start) = (d.handle, d.start);
         let Some(m) = &mut d.many else { return };
         let c = m.box0.center();
         let corners = [m.box0.left_top(), m.box0.right_top(), m.box0.right_bottom(), m.box0.left_bottom()];
-        // La similitude : décalage `delta`, ou rotation `turn` degrés autour du centre, ou facteur
-        // `f` autour du coin opposé.
+        // La similitude : décalage `delta`, ou rotation `turn` degrés autour d'un point (le centre, ou le coin
+        // opposé), ou facteur `f` autour du coin opposé (ou du centre).
         enum Op {
             Shift(Vec2),
-            Turn(f32),
+            Turn(f32, Pos2),
             Scale(f32, Pos2),
         }
         let (a, text, op) = match handle {
@@ -316,15 +347,20 @@ impl App {
                 }
                 (Affine::translate(delta), format!("décalés de {:+.0} × {:+.0} px", delta.x, delta.y), Op::Shift(delta))
             }
-            BoxHandle::Rotate => {
-                let mut turn = ((p - c).angle() - (start - c).angle()).to_degrees();
+            BoxHandle::Rotate | BoxHandle::RotateCorner(_) => {
+                let rc = match handle {
+                    BoxHandle::RotateCorner(k) if coin => corners[(k + 2) % 4],
+                    _ => c,
+                };
+                let mut turn = ((p - rc).angle() - (start - rc).angle()).to_degrees();
                 if shift {
                     turn = (turn / 15.0).round() * 15.0;
                 }
-                (Affine::rotate_about(c, turn.to_radians()), format!("tournés de {turn:.1}°"), Op::Turn(turn))
+                (Affine::rotate_about(rc, turn.to_radians()), format!("tournés de {turn:.1}°"), Op::Turn(turn, rc))
             }
             BoxHandle::Corner(k) => {
-                let (corner, anchor) = (corners[k % 4], corners[(k + 2) % 4]);
+                let corner = corners[k % 4];
+                let anchor = if centre { c } else { corners[(k + 2) % 4] };
                 let dir = corner - anchor;
                 let f = ((p - anchor).dot(dir) / dir.length_sq().max(1e-6)).clamp(0.01, 100.0);
                 (Affine::scale_about(anchor, f, f), format!("à {:.0} %", f * 100.0), Op::Scale(f, anchor))
@@ -339,7 +375,7 @@ impl App {
             .map(|q| {
                 let t = match op {
                     Op::Shift(delta) => LayerTransform { x: q.t0.x + delta.x, y: q.t0.y + delta.y, ..q.t0 },
-                    Op::Turn(turn) => q.t0.around(pivot, c - q.off, 1.0, turn),
+                    Op::Turn(turn, rc) => q.t0.around(pivot, rc - q.off, 1.0, turn),
                     Op::Scale(f, anchor) => q.t0.around(pivot, anchor - q.off, f, 0.0),
                 };
                 (q.li, t)
@@ -353,19 +389,36 @@ impl App {
         self.status = format!("{n} calques {text}.");
     }
 
-    pub(crate) fn transform_drag(&mut self, p: Pos2, shift: bool) {
+    /// Le geste de l'outil Transformer suit la souris (point de la feuille `p`) ; `shift`, `ctrl` : les touches tenues
+    /// maintenant (Ctrl : l'autre point fixe que celui du réglage).
+    pub(crate) fn transform_drag(&mut self, p: Pos2, shift: bool, ctrl: bool) {
         if self.layer_drag.as_ref().is_some_and(|d| d.many.is_some()) {
-            self.transform_many_drag(p, shift);
+            self.transform_many_drag(p, shift, ctrl);
             return;
         }
         let pivot = self.doc.stage_center();
+        let centre = (self.settings.point_fixe == crate::selbox::PointFixe::Centre) != ctrl;
+        let rotation_centre = match self.layer_drag.as_ref().map(|d| (d.handle, d.corners)) {
+            Some((BoxHandle::RotateCorner(k), corners)) => Some(self.corner_rotation_centre(&corners, k)),
+            _ => None,
+        };
         let Some(d) = &mut self.layer_drag else { return };
         let (t0, start, q, seen) = (d.t0, d.start, d.center, d.seen_center);
         let t = match d.handle {
             BoxHandle::Corner(_) | BoxHandle::Edge(_) => match d.to_local {
-                Some(inv) => stretched(t0, pivot, d.content, d.handle, inv.apply(p), shift),
+                Some(inv) => stretched(t0, pivot, d.content, d.handle, inv.apply(p), shift, centre),
                 None => t0,
             },
+            BoxHandle::RotateCorner(_) => {
+                // Autour du centre de la boîte ou du coin opposé, tel qu'on le voit ; ramené au repère de la
+                // transformation du calque comme le centre (`q` = `seen` sans le défilement multiplan).
+                let rc = rotation_centre.unwrap_or(seen);
+                let mut turn = ((p - rc).angle() - (start - rc).angle()).to_degrees();
+                if shift {
+                    turn = ((t0.angle + turn) / 15.0).round() * 15.0 - t0.angle;
+                }
+                t0.around(pivot, rc - (seen - q), 1.0, turn)
+            }
             BoxHandle::Move => {
                 let mut delta = p - start;
                 if shift {
@@ -409,7 +462,7 @@ impl App {
             // Plusieurs calques : une seule étape, au nom du geste.
             let name = match d.handle {
                 BoxHandle::Move => "Déplacer",
-                BoxHandle::Rotate => "Tourner",
+                BoxHandle::Rotate | BoxHandle::RotateCorner(_) => "Tourner",
                 BoxHandle::Corner(_) | BoxHandle::Edge(_) => "Mettre à l'échelle",
             };
             if d.many.is_some() {
@@ -491,6 +544,16 @@ impl App {
                 Stroke::new(1.5_f32, COLOR),
                 egui::StrokeKind::Middle,
             );
+        }
+        // Une rotation prise hors d'un coin, préparée (survol) ou en cours : son centre, un petit cercle (le coin
+        // opposé avec « Rotation autour de : Coin opposé », sinon le centre de la boîte).
+        let tenue = self.layer_drag.as_ref().map(|d| (d.handle, d.corners));
+        let survol = painter.ctx().pointer_hover_pos().and_then(|p| self.transform_handle_at(p)).map(|h| (h, corners));
+        if let Some((BoxHandle::RotateCorner(k), seen)) = tenue.or(survol) {
+            // (Pendant le geste, le coin opposé ne bouge pas : celui du début est celui qu'on voit.)
+            let c = self.stage_to_screen(self.corner_rotation_centre(&seen, k));
+            painter.circle_filled(c, 5.0, COLOR.gamma_multiply(0.35));
+            painter.circle_stroke(c, 5.0, Stroke::new(1.5_f32, COLOR));
         }
         // Les milieux des côtés : étirer dans un seul sens.
         for m in Self::box_mids(&corners) {

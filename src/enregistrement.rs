@@ -97,9 +97,21 @@ impl App {
     pub(crate) fn save_then(&mut self, then: Option<Pending>) -> bool {
         self.end_stroke();
         match self.path.clone() {
-            Some(p) => self.start_save(p, then),
+            // Un projet à l'ancien nom (`Bus/Bus.pelure`) s'enregistre en `Bus/Bus.shot`, dans le même dossier : seul le
+            // manifeste change de nom, l'ancien part une fois le nouveau écrit (`project::retirer_ancien_manifeste`). Un
+            // film partagé garde le sien (des équipiers peuvent avoir une version d'avant, `docs/COOPERATION.md`).
+            Some(p) => {
+                let cible = if self.partage.is_none() { project::manifeste_shot(&p) } else { p };
+                self.start_save(cible, then)
+            }
             None => self.save_as_then(then),
         }
+    }
+
+    /// `manifest` est-il le projet ouvert, sous son nom ou sous son nouveau nom (`Bus.pelure` → `Bus.shot`) ? Ses
+    /// dessins sont alors déjà dans le dossier.
+    fn meme_projet(&self, manifest: &std::path::Path) -> bool {
+        self.path.as_deref().is_some_and(|p| p == manifest || (self.partage.is_none() && project::manifeste_shot(p) == manifest))
     }
 
     /// « Enregistrer sous » : on choisit un nom, SHOT crée le dossier du projet à ce nom.
@@ -111,10 +123,10 @@ impl App {
         self.end_stroke();
         // Sans nom de fichier : le titre du projet (un projet importé, 14a), sinon « Mon film ».
         let title: String = self.doc.properties.title.trim().chars().map(|c| if r#"<>:"/\|?*"#.contains(c) { '_' } else { c }).collect();
-        let name = format!("{}.pelure", self.base_name_or(if title.is_empty() { "Mon film" } else { &title }));
+        let name = format!("{}.{}", self.base_name_or(if title.is_empty() { "Mon film" } else { &title }), project::EXTENSION);
         let mut dialog = rfd::FileDialog::new()
             .set_title("Enregistrer le projet (un dossier à ce nom sera créé)")
-            .add_filter("Projet SHOT", &["pelure"])
+            .add_filter("Projet SHOT", &[project::EXTENSION])
             .set_file_name(name);
         if let Some(dir) = self.import_source.as_ref().and_then(|p| p.parent()) {
             dialog = dialog.set_directory(dir);
@@ -123,7 +135,9 @@ impl App {
             return false;
         };
         let (_, manifest) = project::target_for(&chosen);
-        if let Err(e) = project::check_target(&manifest, self.path.as_deref()) {
+        // (Le projet ouvert sous son ancien nom, `Bus/Bus.pelure`, enregistré sous `Bus/Bus.shot` : c'est lui, pas un autre.)
+        let courant = self.path.as_deref().map(|p| if self.partage.is_none() { project::manifeste_shot(p) } else { p.to_path_buf() });
+        if let Err(e) = project::check_target(&manifest, courant.as_deref()) {
             self.status = format!("Enregistrement annulé : {e}");
             return false;
         }
@@ -150,7 +164,7 @@ impl App {
         if !partage_ici || self.partage.as_ref().is_some_and(|s| s.tiens(crate::verrous::Cible::Montage)) {
             self.doc.properties.modified = crate::recovery::now_secs();
         }
-        if self.path.as_ref() != Some(&manifest) {
+        if !self.meme_projet(&manifest) {
             // Nouveau dossier : tous les dessins y seront écrits.
             self.written.clear();
         }
@@ -163,7 +177,12 @@ impl App {
                 let ctx = s.contexte_ecriture(&self.doc, then.is_some() || self.after_save.is_some());
                 project::partage_io::preparer(&self.doc, &manifest, &mut self.written, ctx)
             }
-            None => project::prepare_save(&self.doc, &manifest, &mut self.written, None),
+            // (Un `.shot` : l'ancien `.pelure` du même projet part après lui, s'il est là — conversion, ou reste d'un
+            // plantage au milieu d'une conversion.)
+            None => project::prepare_save(&self.doc, &manifest, &mut self.written, None).map(|job| match project::manifeste_jumeau(&manifest).filter(|j| project::est_ancien_manifeste(j)) {
+                Some(ancien) => job.retirer_apres(ancien),
+                None => job,
+            }),
         };
         let job = match prepare {
             Ok(job) => job,
@@ -263,6 +282,12 @@ impl App {
                     // « Enregistrer sous » reprendra `versions/` de ce dossier-ci (`envois.rs`).
                     self.doc.envois.liberer(&report.snapshots);
                     self.doc.envois.dossier = manifest.parent().map(std::path::Path::to_path_buf);
+                    // Un projet passé de `.pelure` à `.shot` : on le dit ; les récents (et le « dernier projet ») ne
+                    // gardent que le nouveau nom (`recents::remember`), la séance et le secours suivent `path`.
+                    if self.path.as_deref().is_some_and(|p| p != manifest && project::est_ancien_manifeste(p) && project::manifeste_shot(p) == manifest) {
+                        let nom = manifest.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                        self.status.push_str(&format!(" Le fichier du projet s'appelle maintenant « {nom} » (l'ancien « .pelure » est remplacé ; dessins et dossier inchangés)."));
+                    }
                     self.remember_project(&manifest);
                     self.path = Some(manifest.clone());
                     // Les dessins hors de la mémoire se relisent désormais de ce dossier (`residenceapp.rs`).

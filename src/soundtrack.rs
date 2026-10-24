@@ -291,7 +291,7 @@ impl App {
 
     /// Fichiers son lâchés sur la fenêtre : importés à l'image courante ; une vidéo devient un
     /// calque vidéo (13k) ; un projet Storyboard Pro ouvre la fenêtre d'import (14a) ; un projet SHOT
-    /// (`.pelure`) s'ouvre dans un onglet.
+    /// (`.shot`, ou l'ancien `.pelure`) s'ouvre dans un onglet.
     pub(crate) fn handle_dropped_files(&mut self, ctx: &egui::Context) {
         let paths: Vec<_> = ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
         // Lâchés sur la planche des Vignettes : ce sont ses images (`deposer.rs`).

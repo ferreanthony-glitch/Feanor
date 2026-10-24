@@ -50,12 +50,17 @@ use crate::document::Document;
 use crate::vector::VPoint;
 use crate::vignettecam::{self, Empreinte, Place, Zone};
 
-/// Hauteur de la ligne du numéro de plan, au-dessus de chaque vignette (réservée sur toute la ligne).
-pub const LABEL_H: f32 = 20.0;
+/// Hauteur de la ligne du numéro de plan, au-dessus de chaque vignette (réservée sur toute la ligne) : le numéro y est écrit gros et
+/// gras (`boardui::board_card`, `NUMERO_FRACTION` de cette hauteur), lisible au zoom d'origine (retour d'Anthony, 2026-10-24).
+pub const LABEL_H: f32 = 30.0;
+/// Taille des lettres du numéro de plan, en part de la hauteur de sa ligne.
+pub const NUMERO_FRACTION: f32 = 0.68;
 /// Espace entre une vignette et sa bande de note ; hauteur d'une ligne de note ; lignes affichées au plus.
 pub const NOTE_GAP: f32 = 8.0;
 pub const NOTE_LINE_H: f32 = 13.0;
 pub const NOTE_MAX_LINES: usize = 3;
+/// Largeur la plus étroite d'une bande de note (sous un cadre de caméra étroit).
+pub const MIN_NOTE_W: f32 = 60.0;
 /// Espace sous la dernière ligne de note, avant la ligne suivante.
 pub const ROW_GAP: f32 = 8.0;
 /// Écart entre deux vignettes d'un même plan, et à une coupe, **à la largeur de référence** `REF_W` : les proportions de la
@@ -74,6 +79,13 @@ pub const BAR_FRACTION: f32 = 1.0 / 3.0;
 /// coupe) : la marge d'une case recouvre alors un peu la case voisine, et c'est le trait de la case peinte en dernier qui se voit
 /// (l'ordre de la planche : toujours le même, rien ne clignote).
 pub const RING_FRACTION: f32 = 0.12;
+
+/// L'espace entre une vignette (ou le bas d'un cadre de caméra) et sa bande de note, pour des vignettes de `card_w` de large : la marge de
+/// débord du trait (`RING_FRACTION`, 12 % de la largeur) puis `NOTE_GAP` (retour d'Anthony, 2026-10-24 : la note était trop près de la
+/// case, sous le trait qui déborde). Il suit la largeur des vignettes, donc le zoom.
+pub fn note_gap(card_w: f32) -> f32 {
+    RING_FRACTION * card_w + NOTE_GAP
+}
 
 /// L'écart entre deux vignettes d'un même plan, pour des vignettes de `card_w` de large.
 pub fn gap_same(card_w: f32) -> f32 {
@@ -649,13 +661,14 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         None => last_joins,
     };
     let (g_same, g_cut) = (gap_same(card_w), gap_cut(card_w));
+    let ng = note_gap(card_w);
     let gap_after = |k: usize| if joined_after(k) { g_same } else { g_cut };
     let row_w = cols as f32 * card_w + (cols - 1) as f32 * g_cut;
 
     // Les empreintes (la première image d'un plan dont la caméra bouge).
     let mut prints: Vec<Option<Empreinte>> = Vec::with_capacity(n);
     for (k, b) in boards.iter().enumerate() {
-        let total = NOTE_GAP + note_lines(k) as f32 * NOTE_LINE_H;
+        let total = ng + note_lines(k) as f32 * NOTE_LINE_H;
         let place = Place { card_w, thumb_h, row_w, total, max_h: 3.0 * (LABEL_H + thumb_h + total + ROW_GAP) };
         prints.push(if b.2 == 0 { vignettecam::empreinte(doc, b.0, &place) } else { None });
     }
@@ -679,20 +692,29 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
             })
         })
         .collect();
+    // La note d'une case dont la caméra bouge se pose **sous le dernier cadre** (B, C… : le dernier du mouvement), à sa largeur, sous son
+    // bord bas et la marge de débord (ou sous l'enveloppe, si elle descend plus bas à cet endroit), et non plus sous A (retour d'Anthony,
+    // 2026-10-24). Relative au coin haut-gauche de A.
     let notes: Vec<Option<Rect>> = prints
         .iter()
         .enumerate()
         .map(|(k, e)| {
             let e = e.as_ref()?;
-            (e.bas_a > thumb_h + 1e-3).then(|| Rect::from_min_size(pos2(0.0, e.bas_a + NOTE_GAP), vec2(card_w, note_lines(k) as f32 * NOTE_LINE_H)))
+            let b = e.cadres.last()?.rect;
+            let (gauche, droite) = (b.left(), b.right().max(b.left() + MIN_NOTE_W));
+            let sous_b = crate::viewbar::clip_to_rect(&e.enveloppe, Rect::from_min_max(pos2(gauche, -1e6), pos2(droite, 1e6))).iter().map(|q| q.y).fold(b.bottom(), f32::max);
+            Some(Rect::from_min_max(pos2(gauche, sous_b + ng), pos2(droite, sous_b + ng + note_lines(k) as f32 * NOTE_LINE_H)))
         })
         .collect();
+    // Ce que la case d'une caméra qui bouge demande à sa rangée, depuis le haut de la rangée : son enveloppe et sa note, puis la marge. La
+    // rangée entière descend d'autant : rien de la suivante ne touche ni le cadre B ni sa note.
+    let besoin: Vec<f32> = (0..n).map(|k| prints[k].as_ref().map_or(0.0, |e| LABEL_H + e.y_max.max(notes[k].map_or(0.0, |r| r.bottom())) + ROW_GAP)).collect();
     let a_print: Vec<bool> = prints.iter().map(Option::is_some).collect();
     // Le geste de caméra en cours : la case A du plan reste où elle était (`Reserve::pose`).
     let forces: Vec<Option<(usize, f32)>> = (0..n).map(|k| opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && boards[k].2 == 0).and_then(|h| h.pose)).collect();
     let unite = Gabarit::unite(card_w);
-    let nominal = LABEL_H + thumb_h + NOTE_GAP + NOTE_LINE_H + ROW_GAP;
-    let hauteur_rangee = |lignes: usize| LABEL_H + thumb_h + NOTE_GAP + lignes as f32 * NOTE_LINE_H + ROW_GAP;
+    let nominal = LABEL_H + thumb_h + ng + NOTE_LINE_H + ROW_GAP;
+    let hauteur_rangee = |lignes: usize| LABEL_H + thumb_h + ng + lignes as f32 * NOTE_LINE_H + ROW_GAP;
 
     // Où chaque case se pose. Les rangées touchées par une enveloppe dépendent de la hauteur des rangées, qui dépend des notes des
     // cases posées : on repart des hauteurs de la passe d'avant (nominales d'abord) jusqu'à ce que rien ne change.
@@ -714,7 +736,12 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         if !a_print.iter().any(|p| *p) {
             break;
         }
-        let reelles: Vec<f32> = most.iter().map(|&l| hauteur_rangee(l)).collect();
+        let mut reelles: Vec<f32> = most.iter().map(|&l| hauteur_rangee(l)).collect();
+        for (k, p) in pose.placed.iter().enumerate() {
+            if let Some(h) = reelles.get_mut(p.0) {
+                *h = h.max(besoin[k]);
+            }
+        }
         let egal = |a: &[f32], b: &[f32]| (0..a.len().max(b.len())).all(|r| (a.get(r).copied().unwrap_or(nominal) - b.get(r).copied().unwrap_or(nominal)).abs() < 1e-3);
         let stable = egal(&reelles, &estimees) && rangs == pose.placed.iter().map(|p| p.0).collect::<Vec<_>>();
         estimees = reelles;
@@ -755,7 +782,12 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
 
     // Hauteur de chaque ligne (ses notes les plus hautes : celles des cases dont l'image est dans la ligne), puis haut des
     // lignes et des pages.
-    let row_h: Vec<f32> = (0..rows_n).map(|r| hauteur_rangee(most.get(r).copied().unwrap_or(1))).collect();
+    let mut row_h: Vec<f32> = (0..rows_n).map(|r| hauteur_rangee(most.get(r).copied().unwrap_or(1))).collect();
+    for (k, &(r, _)) in placed.iter().enumerate() {
+        if let Some(h) = row_h.get_mut(r) {
+            *h = h.max(besoin[k]);
+        }
+    }
     let rows_of = |p: usize| p * per_page..((p + 1) * per_page).min(rows_n);
     let page_h: Vec<f32> = (0..pages).map(|p| PAGE_PAD * 2.0 + row_h[rows_of(p)].iter().sum::<f32>() - ROW_GAP).collect();
     let page_w = PAGE_PAD * 2.0 + row_w;
@@ -799,18 +831,20 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         let p = &doc.panels[i];
         let mut foot = thumb;
         let mut mv = None;
-        let mut note_top = bottom + NOTE_GAP;
+        let mut note = Rect::from_min_size(pos2(x, bottom + ng), vec2(card_w, note_lines(k) as f32 * NOTE_LINE_H));
         if let Some(e) = &prints[k] {
             let au = vec2(x, top);
             let cadres: Vec<CadreBoard> = e.cadres.iter().map(|c| CadreBoard { rang: c.rang, rect: c.rect.translate(au), coins: c.coins.map(|q| q + au), reduit: c.reduit }).collect();
             let tuile = TuileBoard { rect: e.tuile.rect.translate(au), zone: e.tuile.zone, masque: e.tuile.masque.clone() };
             foot = foot.union(tuile.rect);
-            note_top = top + e.bas_a.max(thumb_h) + NOTE_GAP;
+            // (La note de la case est sous son dernier cadre.)
+            if let Some(n) = notes[k] {
+                note = n.translate(vec2(x, top));
+            }
             mv = Some(out.moves.len());
             out.moves.push(MoveBoard { cadres, enveloppe: e.enveloppe.iter().map(|q| *q + au).collect(), tuile });
         }
         let card = Rect::from_min_max(pos2(x, row_top[r]), pos2(x + card_w, bottom));
-        let note = Rect::from_min_size(pos2(x, note_top), vec2(card_w, note_lines(k) as f32 * NOTE_LINE_H));
         let reach = left + x_a + gabarits[k].x_hi;
         out.cards.push(CardPlace { panel: i, plan: p.id, id, frame, end, scene: p.scene, card, thumb, note, row: r, mouvement: mv.is_some(), foot, reach, mv });
         let gap = gap_after(k);

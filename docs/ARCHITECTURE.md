@@ -137,7 +137,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   vide la mémoire des dessins écrits : le suivant réécrit tout.
 - `recovery.rs` : un dossier par séance (`%LOCALAPPDATA%\Pelure\secours\<heure>-<processus>`),
   avec un `verrou` ouvert sans partage (Windows refuse de l'effacer tant que la séance vit),
-  `seance.json` et la copie `projet\secours.pelure`. Copie lancée quand le délai est passé, que
+  `seance.json` et la copie `projet\secours.shot` (`secours.pelure` avant le 2026-10-23, toujours proposée). Copie lancée quand le délai est passé, que
   le projet est modifié et que l'historique a bougé depuis la précédente, jamais pendant un
   geste ; écrite sur un fil. Au démarrage, les séances dont le verrou s'efface sont
   interrompues : avec copie, proposées (`recoveryui.rs`) ; sans, effacées. `on_exit` efface le
@@ -1010,7 +1010,8 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     `App::goto_key` (montage entier en storyboard, plan en animation) ; actions `cle.*`.
   - Timeline : `on_playhead` (la case de la tête de lecture dans la règle) passe avant
     `timeline_handle_at` au début d'un glisser et pour le curseur.
-  - Peint derrière / remplir la forme : `brushfill.rs` (purs, testés : `closed_outline` — bout
+  - Peint sur l'aplat (l'ancien « peint derrière ») / remplir la forme (plus proposé par l'interface depuis le
+    2026-10-23, l'aplat sous le trait le remplace ; le moteur le garde) : `brushfill.rs` (purs, testés : `closed_outline` — bout
     près du début, ou boucle d'un trait qui se recoupe —, `paint_under`, `over_premul`,
     `fill_under_stroke`). `StrokeState::with_options(behind, fill_closed, close_tol)` : en
     peinture normale `paint_under` ; en humide, la peinture sous le pixel ; `fill_shape` au début
@@ -1621,7 +1622,9 @@ ne sont ni lus ni effacés (`remove_unused_models` a disparu).
 
 ```
 MonFilm/
-  MonFilm.pelure      manifeste JSON : {"format": "pelure-projet", "version": 17, "largeur",
+  MonFilm.shot        manifeste JSON (`MonFilm.pelure` avant le 2026-10-23 : toujours lu, renommé en `.shot` au
+                      premier enregistrement ; la structure d'un film partagé garde le `.pelure`) :
+                      {"format": "pelure-projet", "version": 17, "largeur",
                       "hauteur" (feuille), "cadre": [l, h], réglages,
                       "sequences": [{ "scenes": [{ "panneaux": [{ "calques": [{ "expositions": … }],
                       "marques": [{"id", "image", "action", …}] }]}]}]  (un panneau par scène),

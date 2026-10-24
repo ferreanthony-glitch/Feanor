@@ -293,9 +293,10 @@ pub(crate) fn nom_de(path: Option<&Path>, import_source: Option<&Path>, vierge: 
     }
 }
 
-/// Le même projet, comparé comme Windows le fait (casse ignorée).
+/// Le même projet, comparé comme Windows le fait (casse ignorée), sous ses deux noms (`Bus.shot` et l'ancien
+/// `Bus.pelure`, `project::cle_de_projet`).
 pub(crate) fn meme_chemin(a: &Path, b: &Path) -> bool {
-    a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+    crate::project::cle_de_projet(a) == crate::project::cle_de_projet(b)
 }
 
 /// Le message d'un collage refusé parce que la copie vient d'une feuille d'une autre taille (un dessin n'a de sens
@@ -638,10 +639,10 @@ impl App {
         self.nouvel_onglet()
     }
 
-    /// Un fichier de projet (`.pelure`) lâché sur la fenêtre : il s'ouvre (dans un onglet, ou son onglet passe à
-    /// l'écran s'il est déjà ouvert). Vrai si le fichier en était un.
+    /// Un fichier de projet (`.shot`, ou l'ancien `.pelure`) lâché sur la fenêtre ou sur l'accueil : il s'ouvre (dans un
+    /// onglet, ou son onglet passe à l'écran s'il est déjà ouvert). Vrai si le fichier en était un.
     pub(crate) fn import_dropped_project(&mut self, path: &Path) -> bool {
-        let est_un_projet = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("pelure"));
+        let est_un_projet = crate::project::est_un_projet(path);
         if est_un_projet {
             self.open_path(path.to_path_buf());
         }
@@ -728,17 +729,19 @@ impl App {
     fn jeter_onglet(&mut self, t: Onglet) -> String {
         let Some(mut e) = t.etat else { return String::new() };
         let nom = nom_de(e.path.as_deref(), e.import_source.as_deref(), false);
+        // (Les fils finis sont oubliés ; les autres, attendus à la sortie de SHOT : `fermeture`.)
+        self.fermetures_d_onglets.retain(|h| !h.is_finished());
         if let Some(r) = e.recovery.take() {
             // (Attendre une copie en cours ne doit pas figer l'interface.)
-            let _ = std::thread::Builder::new().name("secours-fermeture".into()).spawn(move || r.close());
+            self.fermetures_d_onglets.extend(std::thread::Builder::new().name("secours-fermeture".into()).spawn(move || r.close()).ok());
         }
         if let Some(s) = e.saving.take() {
-            // Une écriture en cours finit toute seule : on ne la coupe jamais.
-            let _ = std::thread::Builder::new().name("enregistrement-fermeture".into()).spawn(move || s.attendre());
+            // Une écriture en cours finit toute seule : on ne la coupe jamais (ni en quittant SHOT juste après).
+            self.fermetures_d_onglets.extend(std::thread::Builder::new().name("enregistrement-fermeture".into()).spawn(move || s.attendre()).ok());
         }
         // Un film partagé qu'on ferme : ses prises sont rendues (sur un fil, pour ne rien figer).
         if let Some(mut s) = e.partage.take() {
-            let _ = std::thread::Builder::new().name("cooperation-fermeture".into()).spawn(move || s.fermer());
+            self.fermetures_d_onglets.extend(std::thread::Builder::new().name("cooperation-fermeture".into()).spawn(move || s.fermer()).ok());
         }
         // Le document, son historique et ses dessins dérivés sont rendus sur un autre fil (ceux d'un gros film tiennent des
         // centaines de milliers de blocs, `lacher.rs`) ; le reste de l'onglet est lâché ici, comme avant.
@@ -1093,6 +1096,11 @@ impl App {
                     s.fermer();
                 }
             }
+        }
+        // Les onglets fermés pendant la séance : leur écriture en cours, leur copie de secours, leur film partagé se
+        // ferment sur des fils (`jeter_onglet`) ; on les attend avant de quitter (rien n'est coupé à la sortie).
+        for h in std::mem::take(&mut self.fermetures_d_onglets) {
+            let _ = h.join();
         }
     }
 

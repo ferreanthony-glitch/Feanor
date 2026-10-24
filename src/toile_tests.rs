@@ -433,9 +433,13 @@ use crate::render::Area;
 fn settle(monde: &mut Monde, ctx: &egui::Context, app: &mut App, plan: &render::Plan, view: Area) -> Option<crate::monde::Shown> {
     let (all, ids) = app.renderer.take_world_dirty();
     let mut shown = monde.update(ctx, &app.doc, plan, view, all, &ids);
-    for _ in 0..2000 {
+    for _ in 0..4000 {
         if monde.pending() == 0 {
             break;
+        }
+        // (Un hors-feuille refait sur un autre fil : on lui laisse le temps d'arriver.)
+        if monde.busy() {
+            std::thread::sleep(std::time::Duration::from_millis(1));
         }
         shown = monde.update(ctx, &app.doc, plan, view, false, &[]);
     }

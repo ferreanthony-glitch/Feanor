@@ -106,7 +106,8 @@ pub struct GenerationSonReglages {
     /// Le Python du serveur local (celui du venv de `SHOT-modeles`). Vide : `<modèles>\venv\Scripts\python.exe`.
     #[serde(rename = "python_local")]
     pub python_local: String,
-    /// Le dossier `SHOT-modeles` (python, venv, modèles). Vide : `Documents\Work\SHOT-modeles`.
+    /// Le dossier `SHOT-modeles` (python, venv, modèles). Vide : `Documents\SHOT\Modèles\SHOT-modeles` (ou l'ancien
+    /// `Documents\Work\SHOT-modeles` s'il est le seul là, `serveurlocal::racine_par_defaut`).
     #[serde(rename = "modeles_local")]
     pub modeles_local: String,
     /// SHOT lance le serveur local tout seul quand une génération locale le demande, et l'arrête en

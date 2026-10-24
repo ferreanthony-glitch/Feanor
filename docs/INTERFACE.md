@@ -2201,7 +2201,13 @@ Demande d'Anthony : « ouvrir plusieurs fichiers dans la même fenêtre avec un 
 - **Menu Fichier** : Nouvel onglet, Fermer l'onglet, Fermer les autres onglets.
 - **Ouvrir, Nouveau, Projets récents, imports** : dans un nouvel onglet (réglable : Fichier > Préférences > Général > « Ouvrir
   dans un nouvel onglet »). Si l'onglet affiché est l'accueil, le projet y prend la place. Un projet déjà ouvert : son onglet
-  passe à l'écran (« … est déjà ouvert »). Un fichier `.pelure` lâché sur la fenêtre s'ouvre de même.
+  passe à l'écran (« … est déjà ouvert »). Un fichier `.shot` (ou un ancien `.pelure`) lâché sur la fenêtre ou sur l'accueil
+  s'ouvre de même. `Bus.shot` et l'ancien `Bus.pelure` sont le même projet : un seul onglet, une seule ligne dans les récents.
+- **Nom du fichier de projet** (2026-10-23) : `MonFilm\MonFilm.shot`. Fichier > Ouvrir propose les `.shot` et les anciens
+  `.pelure` ; « Enregistrer sous » et « Nouveau » écrivent un `.shot`. Le premier « Enregistrer » d'un projet `.pelure` écrit son
+  `.shot`, puis efface le `.pelure` (la barre d'état le dit : « Le fichier du projet s'appelle maintenant… ») ; dessins et
+  dossier ne bougent pas. Un film partagé garde son `.pelure` (la boîte « Partager ce projet » montre un `.shot`, la structure
+  écrite dans le dossier partagé s'appelle pourtant `.pelure`).
 - **Fermer un onglet modifié** : la boîte « Modifications non enregistrées » (elle nomme le projet) ; un onglet caché passe d'abord
   à l'écran. Le voisin de droite prend la place (celui de gauche pour le dernier). Le dernier onglet ne se ferme pas : l'accueil
   revient.
@@ -3862,3 +3868,97 @@ Trois retouches demandées par Anthony sur une capture annotée de l'onglet Stor
 la première icône de la barre du bas (même taille, format, zones de sécurité, aspect) ; la colonne des pastilles (au bord droit, mince, sous le titre ; choisir, ajouter, aucun personnage,
 neutres, clic droit ; cliquer ou glisser dessus ne dessine rien et ne crée aucune étape d'annulation ; la même sur la planche des Vignettes). `barrepanneaux_tests` : plus de panneau Guides
 dans la barre, les jeux d'origine ni les dispositions.
+
+## 42. Retouches d'interface (2026-10-23, branche `retouches-interface`)
+
+Quatre retouches demandées par Anthony sur une capture annotée.
+
+### 1. Le point fixe des poignées, la rotation autour du coin opposé
+
+Deux réglages de l'application (`reglages.toml` : `point_fixe_poignees`, `rotation_autour_de` ; absents : les valeurs d'office), pour toutes les boîtes à poignées : la boîte
+de la Sélection (vectorielle, bitmap, plusieurs calques, Sélection par couleur), le Transformer sur une zone bitmap et le Transformer d'un calque (un ou plusieurs calques
+choisis). Ils sont au-dessus de « Plus de réglages » des outils Sélection, Sélection par couleur et Transformer (deux petits choix à deux icônes, `point_fixe_ui`) et dans
+Préférences > Dessin, groupe « Poignées de la Sélection et du Transformer ».
+
+- **Point fixe des poignées** : « Poignée opposée » (d'office) — un coin ou le milieu d'un côté tiré (mettre à l'échelle) et un bord tiré (incliner) gardent la poignée
+  opposée en place ; « Centre » — tout se fait autour du pivot (le centre de la boîte, s'il n'a pas été déplacé ; le centre de la boîte pour le Transformer d'un calque).
+  **Ctrl tenu pendant le geste donne l'autre mode** : c'était déjà le geste de Ctrl (« autour du pivot »), il l'est toujours avec le réglage d'office. Le mode « Centre » est
+  exactement l'ancien geste avec Ctrl (essai `centre_mode_is_exactly_the_old_ctrl_gesture…`). Maj garde les proportions, comme avant ; « Garder les proportions » aussi.
+- **Rotation autour de** : « Pivot » (d'office, comme avant) ou « Coin opposé » — une rotation prise juste hors d'un coin tourne autour du coin opposé de la boîte. Le petit
+  cercle du pivot passe sur ce coin dès qu'on survole la zone de rotation, et pendant le geste. La poignée ronde du Transformer tourne toujours autour du centre.
+- Le **Transformer d'un calque** a maintenant lui aussi la rotation juste hors d'un coin (comme la boîte de la Sélection, curseur de rotation), en plus de sa poignée ronde.
+
+Remarque : avant ce réglage, le geste sans touche gardait déjà la poignée opposée (Sélection et Transformer) ; seul Ctrl faisait tourner autour du pivot. Le mode
+d'office reproduit donc l'ancien geste sans touche, et « Centre » l'ancien geste avec Ctrl.
+
+### 2. Les réglages du pinceau, du crayon et de la gomme
+
+- **« Peint derrière » s'appelle « Peint sur l'aplat »** (nom, bulle, barre d'état, liste des raccourcis, aide-mémoire). Son effet ne change pas encore (la peinture passe
+  sous ce qui est déjà dessiné) ; la clé `peint_derriere` des réglages et l'action `pinceau.derriere` gardent leur nom.
+- **« Remplir la forme » est retiré** : il faisait double emploi avec l'aplat sous le trait. Choix : **son effet s'arrête**, il n'est pas reporté sur l'aplat. C'était un
+  réglage de l'application, global (tous les calques, tous les projets), qui posait sous chaque trait fermé une zone de la couleur du trait ; l'aplat est un réglage du
+  **calque**, une seule forme recalculée, de sa propre couleur. Allumer de soi-même un aplat sur des calques parce qu'un ancien fichier de réglages avait cette case cochée
+  changerait des projets sans qu'on l'ait demandé. Un ancien `reglages.toml` avec `remplir_la_forme = true` s'ouvre toujours (lu, sans effet, plus écrit) ; les brosses ne
+  l'ont jamais porté. L'action `pinceau.remplir` (un raccourci déjà posé dessus) devient un double de `pinceau.fond` : elle ajoute ou retire l'aplat du calque courant.
+- **Au-dessus de « Plus de réglages »**, sous l'aperçu du trait, toujours visibles (pinceau et crayon) : l'interrupteur « Peint sur l'aplat » et le bouton d'aplat du calque
+  courant (le même que sur sa ligne du panneau Calques : ajouter ou retirer l'aplat).
+- **La ligne « Le trait de ce calque bout »** (et son icône de tremblement) n'est plus dans les réglages du pinceau et du crayon : le tremblement du trait se règle dans le
+  panneau Effets (et l'action `fx.tremblement`).
+
+### 3. La colonne des pastilles : le décor dans le Storyboard, la pastille « classique »
+
+- **Les brosses du décor** (crayon, feutre gris, aplat ; couleur et tailles de Préférences > Vignettes) sont maintenant aussi dans la colonne du dessin du Storyboard,
+  à la même place que sur la planche (après les couleurs neutres, avant « + »). Elles sont proposées sur tout le côté storyboard (`decor_offert` : `Mode::Storyboard`,
+  hors Espace 3D) et lâchées en passant à l'animation, comme avant. Un trait fait avec elles sur le dessin part dans le **calque Décor du plan courant** : créé au
+  premier trait, tout en bas du plan, tenu sur toutes ses images (le même calque que celui des cases de ce plan dans les Vignettes) ; le calque et ce premier trait ne
+  font qu'une étape d'annulation, un clic qui ne trace rien ne laisse pas de calque vide (`finish_creation`, au lâcher). Le calque courant devient le calque Décor tant
+  que la brosse est choisie ; la lâcher rend le calque d'avant. Ce que cela veut dire dans le Storyboard : un plan qui a plusieurs images (marques d'image, animatique)
+  a un seul décor pour toutes, exactement comme ses cases dans les Vignettes ; pour un décor qui change dans le plan, dessiner sur un calque ordinaire.
+- **La pastille « classique »** remplace « aucun personnage », en tête de colonne (un anneau avec un petit pinceau, allumé quand ni personnage ni brosse du décor ne
+  dessine). Un clic : plus de personnage ni de brosse du décor (la couleur reste libre), l'outil Pinceau au réglage **« Pinceau rond »** — le premier pinceau de SHOT et
+  le réglage de départ de l'outil Pinceau (choix d'Anthony du 2026-10-16, `BrushLibrary::builtin`), pas le Crayon graphite (le départ de l'outil Crayon) ni une
+  brosse texturée. Action `perso.classique` (sans touche d'office) ; `perso.aucun` (le bouton « Couleur libre » du panneau Personnages) lâche seulement, sans toucher
+  au pinceau.
+
+### 4. La règle garde la perspective, les repères de composition ont leur icône
+
+- **La règle** (barre au-dessus du dessin) ne garde que les **guides de perspective** (tout ce que faisait le panneau Guides). Elle s'allume quand la perspective est
+  tracée (`perspective_on`), plus avec un repère.
+- **Les repères de composition** (tiers, grille d'or, spirale et son orientation, diagonales, croix centrale, « Éteindre les repères ») et **l'aspect de leurs traits**
+  (six couleurs, opacité, épaisseur, « Autre couleur ») ont leur propre icône (une grille) dans la barre sous le dessin, **juste à droite de Cadrage** : un petit panneau
+  à elle, pas dans Cadrage. Même taille et même écart que les autres icônes de la barre (`barres::ICONE`, `CASE`, `ECART`, par `case_icone`). Elle s'allume dès qu'un
+  repère est tracé (`reperes_any_on`). Cadrage garde le format et les zones de sécurité.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Sélection et Transformer : « Point fixe » et « Rotation » au-dessus de « Plus de réglages » ; tirer un coin (le coin opposé reste), Ctrl tenu (autour du centre) ;
+   « Coin opposé » : tourner juste hors d'un coin, le petit cercle passe sur le coin opposé. Les mêmes choix dans Préférences > Dessin.
+2. Pinceau : « Peint sur l'aplat » et le bouton d'aplat sous l'aperçu du trait ; plus de « Remplir la forme » ni de ligne « Le trait de ce calque bout ».
+3. Storyboard : les trois brosses du décor dans la colonne des pastilles ; un trait fait avec elles crée « Décor » en bas du plan ; la pastille « classique » en tête
+   remet le Pinceau rond.
+4. La règle : la perspective seule ; l'icône grille à droite de Cadrage : les repères et leur aspect.
+
+### Essais ajoutés
+
+`selbox_pointfixe_tests.rs` (les deux modes du point fixe, Ctrl, la rotation autour du pivot ou du coin opposé, les réglages, l'outil Transformer à l'écran, la place
+des choix dans Réglages) ; `brushfill_tests` (l'ancienne option se lit sans effet, `pinceau.remplir` donne l'aplat) ; `panneaux_tests`, `aplat_tests`,
+`notes_calques_tests` (l'ordre des réglages du pinceau) ; `pastilles_storyboard_tests.rs` (le décor dans le Storyboard, la pastille classique) ;
+`regle_cadrage_tests` (la règle sans les repères, l'icône des repères à côté de Cadrage : place, taille, écart, contenu, allumage).
+
+### Vignettes : le numéro du plan plus gros, les notes plus bas (2026-10-24, branche `retours-terrain`)
+
+Retour d'Anthony. **Le numéro du plan** (au-dessus de sa première case) est écrit gros et gras, presque noir sur le papier : la ligne qui le porte
+passe de 20 à 30 points (`board::LABEL_H`) et les lettres en font 68 % (`NUMERO_FRACTION`, soit 20 points au zoom d'origine), comme avant une part fixe de la
+ligne : il suit le zoom de la planche. (Pas de police grasse dans SHOT : le gras est le même texte posé trois fois, à un demi-point d'écart.)
+**La zone de texte (la bande de note)** descend sous la marge de débord du dessin : un trait peut dépasser la case d'environ 12 % de sa largeur
+(`RING_FRACTION`), et la note, juste sous la case, était recouverte par ce débord. Elle commence maintenant à `board::note_gap(largeur)` = 12 % de la largeur +
+`NOTE_GAP` sous la case ; chaque rangée est plus haute d'autant, donc toute la rangée suivante descend avec elle. La marge est celle d'origine (12 %) : le
+réglage « Débord du trait » des Préférences (jusqu'à 40 %) ne change pas la planche, un débord plus grand recouvre donc un peu la note.
+**Un plan dont la caméra bouge** : sa note est sous **le dernier cadre** (B, C… : le dernier du mouvement), à sa largeur, sous son bord bas et la marge de débord
+(ou sous l'enveloppe si elle descend plus bas à cet endroit), et non plus sous A. Toute sa rangée est assez haute pour l'enveloppe et la note
+(`besoin` dans `board::layout_with`, retenu par les passes qui calculent les hauteurs de rangées) : **toute la rangée suivante** descend dessous, rien
+d'elle ne touche B ni sa note (avant, seules les cases qui se trouvaient sous l'enveloppe se rangeaient ailleurs). La disposition gardée
+(`CacheDisposition`), le toucher (`board::hit`, `note_icone_rect`), l'export de la planche (`planche.rs`) et les enveloppes lisent tous `CardPlace::note` : rien
+d'autre à suivre. Essais : `board_tests::the_note_sits_below_the_overflow_margin_of_the_drawing_and_the_plan_number_is_big`,
+`vignettes_camera_tests::the_note_of_a_move_sits_under_frame_b_and_the_whole_next_row_goes_below_it` (cinq mouvements, dont B en bas à droite et B une hauteur plus bas) ;
+les essais qui lisaient l'espace sous la case (`NOTE_GAP`) lisent `note_gap`, et la planche de `vignettes_maquette_tests` se voit à 60 %.

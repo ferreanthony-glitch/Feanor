@@ -121,7 +121,7 @@ impl App {
         let nom = if ids.len() == 1 { "Dupliquer le plan" } else { "Dupliquer les plans" };
         let mut copies: Vec<u64> = Vec::new();
         let ok = self.avec_etape(nom, |s| {
-            s.structure_op(|d, _| {
+            s.structure_op_dessins(|d, _| {
                 for id in ids {
                     let i = d.panels.iter().position(|p| p.id == *id)?;
                     let n = {

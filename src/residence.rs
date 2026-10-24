@@ -1,4 +1,4 @@
-//! Les dessins en mémoire (`docs/PERFORMANCE.md`, section 27) : un film de 300 plans tenait tous ses pixels, 2,7 Go de
+//! Les dessins en mémoire (`docs/PERFORMANCE.md`, section 28) : un film de 300 plans tenait tous ses pixels, 2,7 Go de
 //! dessins bitmap et 2,2 Go d'images de dessins vectoriels, du début à la fin de la séance.
 //!
 //! Un dessin peut maintenant être **absent** (`Cel::absent`) : il est toujours dans le document (son numéro, sa version,
@@ -401,10 +401,28 @@ pub(crate) fn budget_essai(octets: Option<u64>) {
 /// Le budget d'office, d'après la mémoire de la machine : un trente-deuxième de la mémoire vive, entre 512 Mo et 1,5 Go (un
 /// film de 300 plans tenait 4,9 Go de pixels ; ce qu'on regarde, ses voisins et la lecture qui vient en demandent bien
 /// moins : mesuré sur ce film, 1 Go tient tout cela et la mémoire du processus passe de 7,2 à 2,9 Go, docs/PERFORMANCE.md
-/// section 27).
+/// section 28).
 pub(crate) fn budget_auto_mo() -> u32 {
     let ram = crate::materiel::memoire().map_or(16 << 30, |m| m.totale);
     ((ram / 32) >> 20).clamp(512, 1536) as u32
+}
+
+// Essais : l'empreinte des pixels d'un dessin bitmap au moment où il est laissé, par son absence (Weak : l'adresse ne sert
+// pas à un autre) ; le hasard sous pression vérifie qu'il revient du fichier avec les mêmes pixels.
+#[cfg(test)]
+thread_local! {
+    static EMPREINTES_LAISSEES: std::cell::RefCell<HashMap<usize, (std::sync::Weak<Absent>, u64)>> = Default::default();
+}
+
+#[cfg(test)]
+pub(crate) fn noter_empreinte(a: &Arc<Absent>, c: &Cel) {
+    let e = crate::empreinte::Donnees::de(c).empreinte();
+    EMPREINTES_LAISSEES.with(|m| m.borrow_mut().insert(Arc::as_ptr(a) as usize, (Arc::downgrade(a), e)));
+}
+
+#[cfg(test)]
+pub(crate) fn empreinte_notee(a: &Arc<Absent>) -> Option<u64> {
+    EMPREINTES_LAISSEES.with(|m| m.borrow().get(&(Arc::as_ptr(a) as usize)).filter(|(w, _)| w.upgrade().is_some_and(|x| Arc::ptr_eq(&x, a))).map(|(_, e)| *e))
 }
 
 /// Octets d'une tuile.

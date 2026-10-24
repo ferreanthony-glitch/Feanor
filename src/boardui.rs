@@ -835,7 +835,7 @@ impl App {
             if self.storyboard_refuses() || !self.partage_peut_toucher(&[a.plan]) {
                 return false;
             }
-            let ok = self.avec_etape("Couper le plan entre deux vignettes", |s| s.structure_op(|d, _| d.split_plan(a.panel, b.frame)));
+            let ok = self.avec_etape("Couper le plan entre deux vignettes", |s| s.structure_op_dessins(|d, _| d.split_plan(a.panel, b.frame)));
             if ok {
                 self.cur_frame = 0;
                 self.board_sel = vec![self.doc.panels[self.cur_panel].id];
@@ -848,7 +848,7 @@ impl App {
                 return false;
             }
             let ok = self.avec_etape("Réunir deux vignettes en un plan", |s| {
-                s.structure_op(|d, _| {
+                s.structure_op_dessins(|d, _| {
                     let debut = d.panels.get(a.panel)?.frame_count();
                     let i = d.join_next_plan(a.panel)?;
                     // La case de droite devient une clé de dessin de plus sur chaque calque du plan (`cases.rs`).
@@ -925,8 +925,9 @@ impl App {
     }
 
     /// Au lâcher : la création d'une case vide et le trait ne font qu'une étape d'annulation ; si rien n'a été
-    /// tracé (un simple clic), le plan fait est défait sans laisser de trace.
-    fn finish_creation(&mut self, any_down: bool) {
+    /// tracé (un simple clic), le plan fait est défait sans laisser de trace. (Aussi pour le calque Décor fait par le premier
+    /// trait d'une brosse du décor sur le dessin du Storyboard, `canvas_input`.)
+    pub(crate) fn finish_creation(&mut self, any_down: bool) {
         let Some(c) = self.vignettes.created else { return };
         if any_down || self.stroke.is_some() || self.shape_drag.is_some() {
             return;
@@ -1648,12 +1649,18 @@ impl App {
         // Le numéro du plan, au-dessus de sa première image : rien d'autre (pas de pastille d'envoi ni de version : elles sont au montage).
         if place.starts_plan() && card.height() > thumb.height() + 6.0 {
             let label = Rect::from_min_max(card.min, pos2(card.right(), thumb.top()));
-            let font = (11.0 * xf.zoom).clamp(7.0, 22.0);
-            let ink = Color32::from_gray(70);
+            // Gros et gras, presque noir sur le papier blanc (retour d'Anthony, 2026-10-24 : « le numéro du plan doit se voir bien plus ») :
+            // une part fixe de la ligne du numéro, donc il suit le zoom de la planche. (Pas de police grasse dans SHOT : le gras est le
+            // même texte posé trois fois, à un demi-point d'écart.)
+            let font = (board::LABEL_H * board::NUMERO_FRACTION * xf.zoom).clamp(9.0, 60.0);
+            let ink = Color32::from_gray(15);
             let clip = painter.with_clip_rect(label.intersect(view));
             let galley = clip.layout_no_wrap(numeros.scene_label(&self.doc, place.scene), FontId::proportional(font), ink);
-            let at = pos2(label.left() + 1.0, label.top() + 1.0);
-            clip.galley(at, galley, ink);
+            let at = pos2(label.left() + 1.0, label.center().y - galley.size().y * 0.5);
+            let gras = (font * 0.035).max(0.4);
+            for d in [vec2(0.0, 0.0), vec2(gras, 0.0), vec2(0.0, gras)] {
+                clip.galley(at + d, galley.clone(), ink);
+            }
         }
 
         // Le panneau courant : le dessin lui-même ; les autres : leur vignette.

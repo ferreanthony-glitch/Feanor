@@ -1026,9 +1026,10 @@ pub struct StrokeState {
     next_time: f64,
     /// Couleur d'arrière-plan (B), mêlée à la couleur du trait par la connexion « couleur ».
     secondary: Option<[u8; 3]>,
-    /// Peint derrière (`brushfill`) : la peinture passe sous ce qui est déjà dessiné.
+    /// Peint sur l'aplat (`brushfill`, l'ancien « peint derrière ») : la peinture passe sous ce qui est déjà dessiné.
     behind: bool,
-    /// Remplir la forme (`brushfill`) : au lâcher, un trait fermé (à `close_tol` près) remplit
+    /// Remplir la forme (`brushfill` ; plus proposé par l'interface depuis le 2026-10-23, l'aplat sous le trait le
+    /// remplace) : au lâcher, un trait fermé (à `close_tol` près) remplit
     /// son intérieur de sa couleur.
     fill_closed: bool,
     close_tol: f32,

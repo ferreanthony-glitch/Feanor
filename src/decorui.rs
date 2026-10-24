@@ -5,14 +5,17 @@
 //! Dans la **colonne des pastilles** de la planche (`personnagesui::pastilles_colonne`), après un petit trait, sous les couleurs
 //! neutres : trois carrés arrondis (crayon, feutre gris, aplat), de la couleur du décor. La colonne est déjà le « avec quoi je dessine ? »
 //! de la planche (personnage, couleur neutre ou couleur libre) : le décor y est un choix de plus, sans rien ajouter à la barre d'outils ni
-//! aux Vignettes. Des carrés, pas des ronds, pour qu'on ne les prenne pas pour des personnages. Elles n'existent que dans les Vignettes
-//! (le décor y est un calque par plan, fait en vue d'ensemble).
+//! aux Vignettes. Des carrés, pas des ronds, pour qu'on ne les prenne pas pour des personnages. Elles sont aussi dans la colonne du
+//! dessin du Storyboard (Anthony, 2026-10-23 : les mêmes brosses, réglées dans Préférences > Vignettes) : tout le côté storyboard
+//! (`Mode::Storyboard`, `decor_offert`), pas l'animation (le décor y est un calque par plan, et un plan du storyboard est ce que montrent
+//! ses cases). Dans le dessin, le trait part aussi dans le calque Décor du plan courant, créé au premier trait en bas du plan, tenu sur
+//! toutes ses images (le même dessin que dans ses cases) ; un simple clic qui ne trace rien ne laisse pas de calque vide.
 //!
 //! # Ce que fait le choix
 //!
 //! Choisir une brosse du décor prend l'outil qu'il faut (Crayon pour le crayon, Pinceau pour le feutre et l'aplat), son réglage à la
 //! taille des Préférences et la couleur du décor ; l'outil, les deux pinceaux, la couleur et le calque courant d'avant sont mis de côté
-//! (`Avant`) et reviennent quand on lâche le décor (clic sur sa pastille, « aucun personnage », ou un personnage). Tant qu'elle est choisie,
+//! (`Avant`) et reviennent quand on lâche le décor (clic sur sa pastille, « classique », ou un personnage). Tant qu'elle est choisie,
 //! **chaque trait part dans le calque Décor du plan où il commence** (`decor_avant_trait`, à l'appui sur une case) : le calque est créé
 //! à ce premier trait, tout en bas du plan, et le trait et la création ne font qu'une étape d'annulation (`Vignettes::created`, la même
 //! mécanique que pour un plan fait en dessinant dans une case vide). Choisir à la main un autre calque, ou une autre couleur, lâche le décor.
@@ -112,11 +115,17 @@ impl App {
         self.decor_lacher(false);
     }
 
-    /// À chaque image : le décor suit les Préférences (couleur, taille), se lâche quand on quitte les Vignettes, ou quand une autre
-    /// couleur est prise à la main (elle reste).
+    /// Les brosses du décor sont-elles proposées ici ? Tout le côté storyboard : la planche des Vignettes et le dessin du Storyboard
+    /// (pas l'animation, ni l'Espace 3D).
+    pub(crate) fn decor_offert(&self) -> bool {
+        self.mode == crate::app::Mode::Storyboard && !(self.espace3d.on && !self.camera_view)
+    }
+
+    /// À chaque image : le décor suit les Préférences (couleur, taille), se lâche quand on quitte le côté storyboard (l'animation),
+    /// ou quand une autre couleur est prise à la main (elle reste).
     pub(crate) fn decor_tick(&mut self) {
         let Some(g) = self.perso.decor else { return };
-        if !self.board_shown() {
+        if !self.decor_offert() {
             self.decor_lacher(true);
             return;
         }
@@ -130,8 +139,9 @@ impl App {
         }
     }
 
-    /// À l'appui d'un trait dans une case de la planche : si une brosse du décor est choisie, le plan de la case a son calque Décor (créé
-    /// au besoin, en bas du plan) et il est le calque courant. La création et le trait ne font qu'une étape d'annulation.
+    /// À l'appui d'un trait dans une case de la planche, ou sur le dessin du Storyboard : si une brosse du décor est choisie, le plan a
+    /// son calque Décor (créé au besoin, en bas du plan) et il est le calque courant. La création et le trait ne font qu'une étape
+    /// d'annulation (`finish_creation`, au lâcher).
     pub(crate) fn decor_avant_trait(&mut self) {
         if self.perso.decor.is_none() || !matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser | Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline | Tool::Fill) {
             return;

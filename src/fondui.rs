@@ -270,8 +270,9 @@ impl App {
     /// Commandes de l'aplat ; vrai si `action` en était une.
     pub(crate) fn fond_action(&mut self, action: &str) -> bool {
         match action {
-            // (Ce sont des alias : les raccourcis d'avant continuent d'allumer l'aplat des calques visés.)
-            "pinceau.fond" => {
+            // (Ce sont des alias : les raccourcis d'avant continuent d'allumer l'aplat des calques visés. « pinceau.remplir »,
+            // l'ancien « Remplir la forme » retiré le 2026-10-23, en est un double : `keymap::ALIASES`.)
+            "pinceau.fond" | "pinceau.remplir" => {
                 if self.refuse_on_folder() {
                     return true;
                 }

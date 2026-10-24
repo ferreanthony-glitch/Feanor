@@ -22,7 +22,7 @@ use crate::griffonnage::{self, GriffonInput};
 use crate::raster::{Raster, TILE};
 use crate::render::{self, PlanItem};
 
-fn put(r: &mut Raster, x: usize, y: usize, c: Color32) {
+pub(crate) fn put(r: &mut Raster, x: usize, y: usize, c: Color32) {
     let idx = r.tile_index_of(x, y);
     r.tile_mut(idx)[(y % TILE) * TILE + x % TILE] = c;
 }
@@ -141,7 +141,7 @@ fn the_stamp_is_a_disc_and_gives_back_the_tiles_it_replaced() {
 
 // ------------------------------------------------------------------ le calque de couleur qui griffonne
 
-fn ring(w: usize, h: usize, (cx, cy): (f32, f32), rad: f32, gap: f32) -> Raster {
+pub(crate) fn ring(w: usize, h: usize, (cx, cy): (f32, f32), rad: f32, gap: f32) -> Raster {
     let mut r = Raster::new(w, h);
     for y in 0..h {
         for x in 0..w {
@@ -155,7 +155,7 @@ fn ring(w: usize, h: usize, (cx, cy): (f32, f32), rad: f32, gap: f32) -> Raster 
     r
 }
 
-fn app(name: &str) -> App {
+pub(crate) fn app(name: &str) -> App {
     let dir = std::env::temp_dir().join(format!("shot-griffonnage-{name}-{}-{:?}", std::process::id(), std::thread::current().id()));
     let _ = std::fs::create_dir_all(&dir);
     crate::donnees::bac_a_sable(&dir);
@@ -168,7 +168,7 @@ fn app(name: &str) -> App {
 /// Un plan de 12 images à deux calques : « Trait » (un anneau de rayon 60 au centre de 400×300 ; `gap` : son trou) et
 /// « Autre » au-dessus (vide), le calque de couleur « Trait couleur » créé dessous et courant, en mode « Griffonner »,
 /// pinceau rouge. Les dessins ont des versions à eux (le cache des dessins dérivés est commun aux essais).
-fn app_griffonne(name: &str, gap: f32, base: u64) -> (App, CelId) {
+pub(crate) fn app_griffonne(name: &str, gap: f32, base: u64) -> (App, CelId) {
     let mut app = app(name);
     let mut doc = Document::new(400, 300, 24);
     // (Des numéros de dessins à cet essai : le cache des dessins dérivés, lui, est commun à tous les essais.)
@@ -188,7 +188,7 @@ fn app_griffonne(name: &str, gap: f32, base: u64) -> (App, CelId) {
     (app, a)
 }
 
-fn trace(app: &mut App, from: Pos2, to: Pos2) {
+pub(crate) fn trace(app: &mut App, from: Pos2, to: Pos2) {
     app.begin_paint(from, 1.0, false);
     for k in 0..=10 {
         let t = k as f32 / 10.0;
@@ -198,16 +198,16 @@ fn trace(app: &mut App, from: Pos2, to: Pos2) {
 }
 
 /// La couleur du plan de l'image courante au pixel (`x`, `y`) : calcul exact (hors de `differe`).
-fn pixel(app: &App, x: usize, y: usize) -> Color32 {
+pub(crate) fn pixel(app: &App, x: usize, y: usize) -> Color32 {
     let plan = app.build_plan(app.cur_frame, false, false);
     render::composite_pixel(&app.doc, &plan, x, y)
 }
 
-fn is_red(c: Color32) -> bool {
+pub(crate) fn is_red(c: Color32) -> bool {
     c.r() > 200 && c.g() < 40 && c.b() < 40 && c.a() > 200
 }
 
-fn undo_steps(app: &App) -> usize {
+pub(crate) fn undo_steps(app: &App) -> usize {
     app.history.names().0.len()
 }
 
@@ -391,7 +391,7 @@ fn the_old_propagation_entry_point_still_exists_and_shows_no_fill() {
 }
 // ------------------------------------------------------------------ le recalcul quand le trait change
 
-fn arc_of(doc: &Document, item: &PlanItem) -> Arc<Cel> {
+pub(crate) fn arc_of(doc: &Document, item: &PlanItem) -> Arc<Cel> {
     match fx::shown(doc, item).expect("remplissage") {
         fx::Shown::Fx(c) => c,
         fx::Shown::Plain(_) => panic!("le remplissage est un dessin dérivé"),
@@ -399,7 +399,7 @@ fn arc_of(doc: &Document, item: &PlanItem) -> Arc<Cel> {
 }
 
 /// Un document 64×64 : le carré de traits, des griffonnages rouges au centre ; l'élément du plan de leur remplissage.
-fn doc_fill(base: u64) -> (Document, CelId, CelId, PlanItem) {
+pub(crate) fn doc_fill(base: u64) -> (Document, CelId, CelId, PlanItem) {
     let mut doc = Document::new(64, 64, 24);
     doc.reserve_id(base);
     let (lines, g) = (doc.new_cel(LayerKind::Bitmap), doc.new_cel(LayerKind::Bitmap));
@@ -423,7 +423,7 @@ fn doc_fill(base: u64) -> (Document, CelId, CelId, PlanItem) {
 }
 
 /// Attend que le remplissage affiché de `item` ne soit plus `old`.
-fn wait_new(doc: &Document, item: &PlanItem, old: &Arc<Cel>) -> Arc<Cel> {
+pub(crate) fn wait_new(doc: &Document, item: &PlanItem, old: &Arc<Cel>) -> Arc<Cel> {
     let deadline = Instant::now() + Duration::from_secs(30);
     loop {
         fx::griffon_poll();

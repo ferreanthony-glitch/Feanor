@@ -343,7 +343,12 @@ impl App {
                 // Le fichier, vérifié il y a peu à cette version : on s'y fie. Sinon il est vérifié d'abord, sur le fil du
                 // chargeur (le dessin part au contrôle suivant s'il est toujours à laisser).
                 match self.residence.verifies.get(&id) {
-                    Some(&(v, i, t)) if v == version && t + 600 > tour => Absent::fichier(dossier, id, hors, Some(i), crate::residence::tuiles_de(&c.raster)),
+                    Some(&(v, i, t)) if v == version && t + 600 > tour => {
+                        let a = Absent::fichier(dossier, id, hors, Some(i), crate::residence::tuiles_de(&c.raster));
+                        #[cfg(test)]
+                        crate::residence::noter_empreinte(&a, c);
+                        a
+                    }
                     _ => {
                         if self.residence.verifs.insert(id) {
                             let mut fichiers = vec![dossier.join("dessins").join(format!("{id}.png"))];

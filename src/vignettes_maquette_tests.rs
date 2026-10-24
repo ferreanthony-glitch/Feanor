@@ -70,6 +70,10 @@ fn there_is_always_one_pale_row_after_the_last_used_one() {
 #[test]
 fn the_paper_is_white_and_endless_the_pale_cases_are_drawn_faintly_without_a_plus() {
     let mut b = ouvert(quatre_plans(), 4);
+    // (Un peu plus petit : le numéro des plans est plus haut et les notes plus bas depuis le 2026-10-24, la dernière rangée pâle doit
+    // encore tenir dans la vue pour être peinte.)
+    b.app.board_zoom = 0.6;
+    b.chauffer(3);
     b.garder_formes = true;
     b.garder_textes = true;
     b.image(Vec::new(), 1.0 / 60.0);

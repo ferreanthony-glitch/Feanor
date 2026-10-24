@@ -193,8 +193,9 @@ impl App {
                     self.status = "La copie de secours n'a pas pu s'ouvrir dans un nouvel onglet : un travail attend l'onglet affiché.".into();
                     return;
                 }
-                // « Enregistrer » écrira dans le projet d'origine, s'il existe encore.
-                self.path = o.info.project.clone().filter(|p| p.parent().is_some_and(|d| d.exists()));
+                // « Enregistrer » écrira dans le projet d'origine, s'il existe encore (sous son nom d'aujourd'hui : un
+                // `.pelure` converti depuis est son `.shot` ; un `.pelure` se convertit à l'enregistrement).
+                self.path = o.info.project.as_deref().map(crate::project::manifeste_a_ouvrir).filter(|p| p.parent().is_some_and(|d| d.exists()));
                 self.modified = true;
                 let _ = std::fs::remove_dir_all(&o.dir);
                 self.status = format!(

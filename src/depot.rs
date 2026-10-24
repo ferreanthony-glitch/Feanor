@@ -164,7 +164,8 @@ pub trait Depot: Send + Sync {
 /// Un film partagé dans un dossier ordinaire (local, Dropbox, Drive, partage réseau).
 pub struct DossierPartage {
     racine: PathBuf,
-    /// Nom du fichier de structure (`MonFilm.pelure`).
+    /// Nom du fichier de structure (`MonFilm.pelure`). Il garde ce nom depuis le passage des projets classiques à
+    /// `.shot` (2026-10-23) : un équipier à une version d'avant le cherche sous lui (`project::target_for_partage`).
     structure: String,
 }
 

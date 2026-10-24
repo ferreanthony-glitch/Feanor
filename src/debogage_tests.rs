@@ -351,7 +351,7 @@ fn a_lost_graphics_card_starts_a_recovery_copy_at_once() {
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
     let dir = b.app.recovery.as_ref().expect("secours").dir.clone();
-    assert!(dir.join("projet").join("secours.pelure").exists(), "la copie est écrite");
+    assert!(dir.join("projet").join("secours.shot").exists(), "la copie est écrite");
     if let Some(r) = b.app.recovery.take() {
         r.close();
     }

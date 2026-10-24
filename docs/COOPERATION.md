@@ -57,7 +57,9 @@ Un projet classique garde **un manifeste** pour tous les plans : deux personnes 
 MonFilm/
   MonFilm.pelure           LA STRUCTURE (format 34) : séquences, ordre des plans, noms et numéros, pistes son, guides,
                            groupes de couleur, propriétés, cadence, feuille… + un bloc « partage » (voir plus bas).
-                           Écrite par qui tient le jeton du montage.
+                           Écrite par qui tient le jeton du montage. Elle garde le nom `.pelure` quand les projets
+                           classiques passent à `.shot` (2026-10-23) : un équipier à une version d'avant la cherche
+                           sous ce nom (`project::target_for_partage`).
   plans/<n° de plan>.json  UN PLAN : ses calques, sa caméra, ses marques, ses textes, sa durée, ses versions rangées,
                            son contenu rogné, et l'empreinte du fichier de chacun de ses dessins.
                            Écrit par qui tient le plan.

@@ -345,15 +345,19 @@ impl App {
         let wide = ui.available_width() >= NARROW;
         ui.add_space(4.0);
         self.current_preview(ui);
-        // Tout ce qui est sous l'aperçu du trait est replié derrière une petite flèche (retenu) : « Plus de
-        // réglages », comme pour les autres outils (`repli.rs`). Le panneau Réglages y range aussi peint derrière,
-        // remplir la forme et le mode d'emploi.
+        // Pinceau et crayon : « Peint sur l'aplat » et l'aplat du calque, toujours à portée, sous l'aperçu (Anthony,
+        // 2026-10-23 ; avant, dans « Plus de réglages »).
+        if matches!(self.tool, Tool::Brush | Tool::Pencil) {
+            self.brush_extras_ui(ui);
+        }
+        // Le reste est replié derrière une petite flèche (retenu) : « Plus de réglages », comme pour les autres
+        // outils (`repli.rs`), avec le mode d'emploi.
         let mut open = self.pinceaux.reglages_ouverts;
         crate::repli::entete(
             ui,
             &mut open,
             "Plus de réglages",
-            "Les catégories de réglages (pointe, taille et appui, dispersion, grain, couleur, lissage, toucher) sous l'aperçu du trait, peint derrière et remplir la forme.",
+            "Les catégories de réglages (pointe, taille et appui, dispersion, grain, couleur, lissage, toucher) et le mode d'emploi.",
         );
         self.pinceaux.reglages_ouverts = open;
         if !open {

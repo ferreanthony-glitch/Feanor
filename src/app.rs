@@ -322,9 +322,9 @@ pub struct App {
     pub(crate) fill: FillSettings,
     pub(crate) shape: ShapeSettings,
     pub(crate) vector_erase_whole: bool,
-    /// Options du pinceau et du crayon (`brushfill`) : peint derrière, remplir la forme.
+    /// Option du pinceau et du crayon (`brushfill`) : « Peint sur l'aplat ». (« Remplir la forme » n'existe plus,
+    /// 2026-10-23 : il faisait double emploi avec l'aplat sous le trait.)
     pub(crate) paint_behind: bool,
-    pub(crate) fill_shapes: bool,
     /// Toucher du stylet (sensation des brosses) : la copie de travail du réglage, enregistrée
     /// dans `update` quand elle change (hors glissé), comme les options du pinceau.
     pub(crate) toucher: crate::brush::Toucher,
@@ -388,6 +388,8 @@ pub struct App {
     /// (`layers_pane_focus`, le dernier clic était dedans) : Ctrl+V y colle ces effets sur le calque cliqué.
     pub(crate) fx_pile_recent: bool,
     pub(crate) layers_pane_focus: bool,
+    /// La dernière chose copiée est un calque (copy_layer) : Ctrl+V, depuis le panneau Calques, le colle (même dans un autre plan).
+    pub(crate) layer_clip_recent: bool,
     /// Import vidéo en cours (13k, `videoui.rs`).
     pub(crate) video_import: Option<crate::videoui::VideoImport>,
     /// Propagation d'une peinture sur la vidéo, façon EbSynth (`propagerui.rs`).
@@ -815,7 +817,8 @@ pub struct App {
     pub(crate) input_time: f64,
     pub(crate) last_frame_time: f64,
     pub(crate) picking: bool,
-    /// Manifeste du projet en dossier (`MonFilm/MonFilm.pelure`).
+    /// Manifeste du projet en dossier (`MonFilm/MonFilm.shot` ; un projet d'avant, `MonFilm.pelure`, jusqu'à son
+    /// prochain enregistrement, `enregistrement.rs`).
     pub(crate) path: Option<PathBuf>,
     /// Ancien fichier `.pelure` importé, pas encore enregistré en dossier.
     pub(crate) import_source: Option<PathBuf>,
@@ -875,6 +878,9 @@ pub struct App {
     pub(crate) secours_actif: bool,
     /// La session (les projets ouverts) est à retenir ; faux tant que celle de la séance d'avant se rouvre.
     pub(crate) session_a_ecrire: bool,
+    /// Les onglets fermés dont la copie de secours, l'écriture en cours ou le film partagé se ferment sur un autre fil
+    /// (`jeter_onglet`) : `fermeture` les attend, pour que SHOT ne coupe jamais une écriture en quittant.
+    pub(crate) fermetures_d_onglets: Vec<std::thread::JoinHandle<()>>,
     pub(crate) session_prete: bool,
     /// Les projets de la séance d'avant qui restent à rouvrir, et celui à afficher à la fin.
     pub(crate) session_file: std::collections::VecDeque<PathBuf>,
@@ -941,7 +947,7 @@ impl App {
         egui_ctx.set_zoom_factor(crate::echelle::facteur(settings.echelle));
         crate::demarrage::marque("thème");
         let montage_head_w = crate::montagehead::clamp_head_w(settings.montage_head_w);
-        let (paint_behind, fill_shapes) = (settings.paint_behind, settings.fill_shapes);
+        let paint_behind = settings.paint_behind;
         // Diagnostic des performances : proposé une fois, sur une machine qui n'en a jamais eu
         // (jamais dans les essais).
         let diag_offer = reel && settings.diagnostic.a_proposer();
@@ -995,7 +1001,6 @@ impl App {
             },
             vector_erase_whole: false,
             paint_behind,
-            fill_shapes,
             toucher: settings.toucher,
             pinceaux: settings.brushes_panel.clone(),
             // Les couleurs de la dernière fois (passe couleur).
@@ -1035,6 +1040,7 @@ impl App {
             fx_pane_focus: false,
             fx_pile_recent: false,
             layers_pane_focus: false,
+            layer_clip_recent: false,
             video_import: None,
             propagation: crate::propagerui::Propagation::new(wgpu_render_state),
             coloriage: crate::coloriageui::Coloriage::new(),
@@ -1305,6 +1311,7 @@ impl App {
             prochain_onglet: 1,
             secours_actif: reel,
             session_a_ecrire: false,
+            fermetures_d_onglets: Vec::new(),
             session_prete: true,
             session_file: Default::default(),
             session_affichee: None,
@@ -1495,13 +1502,13 @@ impl App {
     pub(crate) fn clamp_nav(&mut self) {
         self.cur_panel = self.cur_panel.min(self.doc.panels.len() - 1);
         self.cur_layer = self.cur_layer.min(self.layers().len() - 1);
-        self.oublier_les_choix_disparus();
     }
 
     /// Les plans et les calques choisis qui n'existent plus (une annulation, deux plans réunis, une copie annulée) ne restent
     /// pas choisis : `board_sel.len() > 1` disait « plusieurs plans choisis » au color script et à la planche quand l'un
     /// d'eux avait disparu (passe de débogage au hasard, 2026-10-22, `hasard_tests.rs`). Les calques choisis d'un autre
-    /// plan restent : chaque usage ne prend que ceux du plan courant.
+    /// plan restent : chaque usage ne prend que ceux du plan courant. (Par `revalider_rangs` : ils ne disparaissent que par un
+    /// changement de structure, une annulation, un projet ouvert ou un changement venu d'un équipier, jamais d'une image à l'autre.)
     fn oublier_les_choix_disparus(&mut self) {
         let doc = &self.doc;
         if self.board_sel.len() > 8 {
@@ -1554,8 +1561,7 @@ impl App {
                 *drag = None;
             }
         }
-        let doc = &self.doc;
-        self.board_sel.retain(|id| doc.panels.iter().any(|p| p.id == *id));
+        self.oublier_les_choix_disparus();
         if let Some(crate::boardui::MenuTarget::Card { plan, case, .. }) = self.vignettes.menu {
             if self.case_du_menu(plan, case).is_none() {
                 self.vignettes.menu = None;
@@ -2032,7 +2038,8 @@ impl App {
         // Calque de couleur : le trait reste dans la zone fermée par le trait où il commence.
         let stencil = self.couleur_pochoir(stencil, p);
         let painting = self.tool != Tool::Eraser;
-        let (behind, fill, tol) = (painting && self.paint_behind, painting && self.fill_shapes, self.close_tolerance());
+        // (Plus de « Remplir la forme » : le moteur garde l'option, l'application ne l'allume plus.)
+        let (behind, fill, tol) = (painting && self.paint_behind, false, self.close_tolerance());
         let mut stroke = StrokeState::new(cel, mode, settings, prefix, pen)
             .with_textures(textures)
             .with_feel(self.toucher)
@@ -2572,6 +2579,11 @@ impl App {
     }
 
     pub(crate) fn commit_structure(&mut self, snap: Edit) {
+        // Les cases d'un plan suivent leurs clés quand on les retouche au montage ou dans la timeline (`cases.rs`) : dans la même étape
+        // d'annulation que la retouche.
+        if let Edit::Structure { structure, .. } = &snap {
+            self.doc.cases_suivent_les_cles(&structure.panels);
+        }
         self.history.push(snap);
         self.modified = true;
         // Ce qui est gardé par rang d'abord, sur le film d'après le changement : `sync_couleurs` lit les calques du plan courant
@@ -2880,12 +2892,15 @@ impl App {
 
     /// Copie le calque courant, avec ses dessins et sa timeline (W) ; un dossier, avec ses
     /// calques (13b-5).
+    ///
+    /// Un calque de couleur lié à son trait ne se copie pas sans lui (retour d'Anthony, 2026-10-24 : collé dans un autre plan, il
+    /// aurait perdu son trait, et ses images ne suivaient plus rien) : c'est le trait qui est copié, avec tous ses calques de couleur.
     pub(crate) fn copy_layer(&mut self) {
-        let layer = self.layer().clone();
-        let children: Vec<Layer> =
-            crate::folders::children_of(self.layers(), self.cur_layer).into_iter().map(|i| self.layers()[i].clone()).collect();
-        let colours: Vec<Layer> =
-            crate::calquecouleur::couleurs_de(self.layers(), self.cur_layer).into_iter().map(|i| self.layers()[i].clone()).collect();
+        let li = crate::calquecouleur::trait_de(self.layers(), self.cur_layer).unwrap_or(self.cur_layer);
+        let avec_son_trait = li != self.cur_layer;
+        let layer = self.layers()[li].clone();
+        let children: Vec<Layer> = crate::folders::children_of(self.layers(), li).into_iter().map(|i| self.layers()[i].clone()).collect();
+        let colours: Vec<Layer> = crate::calquecouleur::couleurs_de(self.layers(), li).into_iter().map(|i| self.layers()[i].clone()).collect();
         let cels = children
             .iter()
             .chain(colours.iter())
@@ -2894,7 +2909,10 @@ impl App {
             .filter_map(|id| self.doc.cels.get_ou_absent(&id).map(|c| (id, c.clone())))
             .collect();
         let what = if layer.folder { "Dossier" } else { "Calque" };
-        self.status = format!("{what} « {} » copié : X pour le coller dans un autre plan.", layer.name);
+        let avec = if avec_son_trait { " (le calque de couleur emmène son trait)" } else { "" };
+        self.status = format!("{what} « {} » copié{avec} : X (ou Ctrl+V dans le panneau Calques) pour le coller dans un autre plan.", layer.name);
+        // La dernière chose copiée : Ctrl+V depuis le panneau Calques le colle (`layer_clip_recent`).
+        self.layer_clip_recent = true;
         self.layer_clipboard = Some(LayerClip {
             layer,
             children,
@@ -2963,19 +2981,30 @@ impl App {
         let snap = self.snapshot();
         let mut copies: HashMap<CelId, CelId> = HashMap::new();
         let mut layer = self.pasted_layer(&clip.layer, &clip, &mut copies);
+        // Les numéros des calques collés, par ceux des calques copiés : les calques de couleur collés colorient les traits collés.
+        let mut ids: HashMap<u64, u64> = HashMap::from([(clip.layer.id, layer.id)]);
         let mut children: Vec<Layer> = Vec::new();
         for c in &clip.children {
             let mut child = self.pasted_layer(c, &clip, &mut copies);
             child.parent = Some(layer.id);
+            ids.insert(c.id, child.id);
             children.push(child);
         }
         // Ses calques de couleur reviennent avec lui, sous la copie.
+        let mut colours: Vec<Layer> = Vec::new();
         for c in &clip.colours {
-            let mut colour = self.pasted_layer(c, &clip, &mut copies);
-            if let Some(link) = colour.couleur.as_mut() {
-                link.relink(&HashMap::from([(clip.layer.id, layer.id)]), &copies);
+            let colour = self.pasted_layer(c, &clip, &mut copies);
+            ids.insert(c.id, colour.id);
+            colours.push(colour);
+        }
+        // Les liens des calques de couleur : leur trait collé (jamais celui du plan d'où ils viennent), et seulement les sources
+        // qui existent dans ce plan (celles d'un autre plan n'y sont pas : un lien qui pend).
+        let ici: std::collections::HashSet<u64> = self.layers().iter().map(|l| l.id).chain(ids.values().copied()).collect();
+        for l in std::iter::once(&mut layer).chain(children.iter_mut()).chain(colours.iter_mut()) {
+            if let Some(link) = l.couleur.as_mut() {
+                link.relink(&ids, &copies);
+                link.sources.retain(|s| ici.contains(s));
             }
-            children.push(colour);
         }
         let cur = self.cur_layer;
         let folder_of_current = crate::folders::parent_index(self.layers(), cur);
@@ -2985,12 +3014,12 @@ impl App {
             _ => cur + 1,
         };
         layer.parent = if layer.folder { None } else { folder_of_current.map(|fi| self.layers()[fi].id) };
-        for c in children.iter_mut().filter(|c| c.couleur.is_some()) {
+        for c in colours.iter_mut() {
             c.parent = layer.parent;
         }
         let name = layer.name.clone();
         let id = layer.id;
-        let block: Vec<Layer> = children.into_iter().chain(std::iter::once(layer)).collect();
+        let block: Vec<Layer> = children.into_iter().chain(colours).chain(std::iter::once(layer)).collect();
         for (k, l) in block.into_iter().enumerate() {
             self.layers_mut().insert(at + k, l);
         }
@@ -3156,8 +3185,8 @@ impl App {
 
     fn open_dialog(&mut self) {
         let Some(path) = rfd::FileDialog::new()
-            .add_filter("Projet SHOT ou Storyboard Pro", &["pelure", "sboard"])
-            .add_filter("Projet SHOT", &["pelure"])
+            .add_filter("Projet SHOT ou Storyboard Pro", &[crate::project::EXTENSION, crate::project::ANCIENNE_EXTENSION, "sboard"])
+            .add_filter("Projet SHOT", &crate::project::EXTENSIONS)
             .add_filter("Projet Storyboard Pro", &["sboard"])
             .pick_file()
         else {
@@ -3166,12 +3195,15 @@ impl App {
         self.open_path(path);
     }
 
-    /// Ouvre un projet en dossier, ou importe un ancien fichier `.pelure`. Un projet Storyboard
-    /// Pro (`.sboard`) ouvre la fenêtre d'import avec lui (14a).
+    /// Ouvre un projet en dossier (`.shot`, ou l'ancien nom `.pelure`), ou importe un ancien fichier `.pelure` d'un seul
+    /// tenant. Un projet Storyboard Pro (`.sboard`) ouvre la fenêtre d'import avec lui (14a).
     pub(crate) fn open_path(&mut self, path: PathBuf) {
         if self.import_dropped_sboard(&path) {
             return;
         }
+        // Un projet converti depuis (`Bus.pelure` devenu `Bus.shot`), ou les deux noms après un plantage au milieu de la
+        // conversion : le manifeste à ouvrir (le plus récent, `project::manifeste_a_ouvrir`).
+        let path = crate::project::manifeste_a_ouvrir(&path);
         // Déjà ouvert dans un onglet : on le montre au lieu de l'ouvrir une seconde fois (`onglets.rs`).
         if self.montrer_si_deja_ouvert(&path) {
             return;
@@ -3582,6 +3614,7 @@ impl App {
         // depuis le panneau Calques ; la copie d'effets, plus bas, la redonne (`fxcopie.rs`).
         if matches!(action, "edition.copier" | "edition.couper") {
             self.fx_pile_recent = false;
+            self.layer_clip_recent = false;
         }
         // Le panneau Références a la main : Ctrl+V y colle l'image du presse-papiers.
         if self.refs.focus && matches!(action, "edition.coller" | "edition.coller_a_la_tete" | "edition.coller_sur_place") {
@@ -3765,6 +3798,12 @@ impl App {
             // Coller des effets : le panneau Effets a la main, ou le panneau Calques l'a et la dernière
             // copie est celle d'effets (on a cliqué le calque où les coller).
             "edition.coller" if self.fx_paste_has_hand() => self.fx_paste(self.fx_paste_targets(self.cur_layer), false),
+            // Le panneau Calques a la main (le dernier clic était dedans) : Ctrl+C copie le calque courant, et Ctrl+V colle le dernier
+            // calque copié (ici ou dans un autre plan), comme W et X (retour d'Anthony, 2026-10-24 : « copier-coller un calque sur un autre
+            // plan ne fait rien » : Ctrl+C copiait la sélection du dessin, et Ctrl+V n'avait rien à coller). Un clic ailleurs rend ces
+            // touches à ce qui est cliqué (clés, images, plans, dessin) ; après une autre copie, Ctrl+V garde son sens d'avant.
+            "edition.copier" if self.layers_pane_focus => self.copy_layer(),
+            "edition.coller" if self.layers_pane_focus && self.layer_clip_recent && self.layer_clipboard.is_some() => self.paste_layer(),
             // Des clés de caméra choisies (un losange jaune de la piste Caméra) : copier, couper,
             // supprimer les visent, coller aussi tant que c'est la dernière chose copiée
             // (`camkeys.rs`).
@@ -4105,12 +4144,9 @@ impl App {
             "cle.suivante" => self.goto_key(true),
             "pinceau.derriere" => {
                 self.paint_behind = !self.paint_behind;
-                self.status = if self.paint_behind { "Peint derrière : la peinture passe sous ce qui est déjà dessiné." } else { "Peint derrière : non." }.into();
+                self.status = if self.paint_behind { "Peint sur l'aplat : la peinture passe sous ce qui est déjà dessiné." } else { "Peint sur l'aplat : non." }.into();
             }
-            "pinceau.remplir" => {
-                self.fill_shapes = !self.fill_shapes;
-                self.status = if self.fill_shapes { "Remplir la forme : un trait fermé remplit son intérieur, au lâcher." } else { "Remplir la forme : non." }.into();
-            }
+            // (« pinceau.remplir », l'ancien « Remplir la forme », est maintenant un double de « pinceau.fond » : `fond_action`.)
             "instance.tete" => self.goto_instance_end(false),
             "instance.queue" => self.goto_instance_end(true),
             "instance.casser" => self.break_instance_here(),
@@ -4839,16 +4875,15 @@ impl App {
             ctx.request_repaint();
         }
         // Réglages de la pelure, de la feuille d'exposition, des flips et des options du pinceau
-        // (peint derrière, remplir la forme) : enregistrés quand ils
-        // changent (pas pendant un glissé).
-        let options = (self.paint_behind, self.fill_shapes) != (self.settings.paint_behind, self.settings.fill_shapes);
+        // (peint sur l'aplat) : enregistrés quand ils changent (pas pendant un glissé).
+        let options = self.paint_behind != self.settings.paint_behind;
         let changed = self.onion != self.settings.onion || self.xsheet != self.settings.xsheet || self.flips != self.settings.flips || options || self.toucher != self.settings.toucher || self.pinceaux != self.settings.brushes_panel || self.cadrage != self.settings.framing;
         if changed && !ctx.input(|i| i.pointer.any_down()) {
             self.settings.framing = self.cadrage.clone();
             self.settings.onion = self.onion.clone();
             self.settings.xsheet = self.xsheet.clone();
             self.settings.flips = self.flips.clone();
-            (self.settings.paint_behind, self.settings.fill_shapes) = (self.paint_behind, self.fill_shapes);
+            self.settings.paint_behind = self.paint_behind;
             self.settings.toucher = self.toucher;
             self.settings.brushes_panel = self.pinceaux.clone();
             if let Err(e) = self.settings.save() {

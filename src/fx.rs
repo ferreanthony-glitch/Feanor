@@ -1272,15 +1272,23 @@ pub(crate) fn display_with<'a>(doc: &'a Document, item: &crate::render::PlanItem
     })
 }
 
-/// Un dessin vide de `w` × `h` pixels, gardé : ce que montre un remplissage au griffonnage en attendant son premier calcul.
-fn cel_vide(w: usize, h: usize) -> Arc<Cel> {
-    static VIDE: Mutex<Option<Arc<Cel>>> = Mutex::new(None);
-    let mut v = VIDE.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(c) = v.as_ref().filter(|c| c.raster.width == w && c.raster.height == h) {
-        return c.clone();
+/// Un dessin vide de `w` × `h` pixels, gardé : ce que montre un remplissage au griffonnage en attendant son premier calcul. Un par
+/// taille (les quatre dernières demandées) : deux projets de tailles différentes, ouverts ensemble, ne se volaient pas le seul dessin
+/// gardé, et un dessin vide qui change de numéro à chaque image se prenait pour un remplissage arrivé.
+pub(crate) fn cel_vide(w: usize, h: usize) -> Arc<Cel> {
+    static VIDES: Mutex<Vec<Arc<Cel>>> = Mutex::new(Vec::new());
+    let mut v = VIDES.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(k) = v.iter().position(|c| c.raster.width == w && c.raster.height == h) {
+        // (Le dernier servi à la fin : ce sont les plus anciens qui partent.)
+        let c = v.remove(k);
+        v.push(c.clone());
+        return c;
     }
     let c = Arc::new(Cel { raster: Raster::new(w, h), vector: None, version: 0, fond: None, absent: None });
-    *v = Some(c.clone());
+    v.push(c.clone());
+    if v.len() > 4 {
+        v.remove(0);
+    }
     c
 }
 

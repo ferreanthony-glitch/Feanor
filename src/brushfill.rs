@@ -8,6 +8,12 @@
 //!   ce qui était dessiné avant (`fill_under_stroke`) ; avec « peint derrière », sous tout.
 //!   (Dans Storyboard Pro, l'outil Pinceau a « Draw Behind » et « Auto Fill » : le détail de leur
 //!   comportement est à vérifier.)
+//!
+//! 2026-10-23 (Anthony) : « Peint derrière » s'appelle **« Peint sur l'aplat »** (même effet pour l'instant, la clé
+//! `peint_derriere` des réglages et l'action `pinceau.derriere` gardent leur nom) ; « Remplir la forme » n'est plus
+//! proposé par l'interface (il faisait double emploi avec l'aplat sous le trait, `fond.rs`) : l'ancienne clé
+//! `remplir_la_forme` se lit sans effet, l'action `pinceau.remplir` est un double de `pinceau.fond`. Le moteur garde
+//! le remplissage (`closed_outline`, `fill_under_stroke`), testé, que l'application n'allume plus.
 
 use eframe::egui::{Color32, Pos2};
 

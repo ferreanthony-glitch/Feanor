@@ -331,6 +331,15 @@ impl App {
                         .small()
                         .color(theme::texte_doux()),
                     );
+                    // Le budget de mémoire vidéo du système et ce que le cache des dessins en fait (`memoirevideo.rs`).
+                    if let Some(l) = crate::memoirevideo::lecture() {
+                        let vise = self.gpu.as_ref().map_or(0, |g| g.limite_octets());
+                        let texte = format!("Mémoire vidéo de SHOT : {} Mo utilisés, budget du système {} Mo ; cache des dessins visé : {} Mo.", l.utilise >> 20, l.budget >> 20, vise >> 20);
+                        ui.label(RichText::new(texte).small().color(theme::texte_doux()));
+                    }
+                    for ligne in crate::memoirevideo::journal().iter().rev().take(3) {
+                        ui.label(RichText::new(ligne).small().color(theme::texte_doux()));
+                    }
                     ui.add_space(8.0);
                     ui.separator();
                     // Le banc en cours.

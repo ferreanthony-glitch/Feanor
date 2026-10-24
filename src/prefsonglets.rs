@@ -82,7 +82,7 @@ impl Onglet {
         match self {
             Onglet::General => "Ouvrir et rouvrir les projets, copies de secours, collage entre projets, conseils.",
             Onglet::Apparence => "Le thème et ses couleurs, la taille de l'interface, la hauteur des panneaux.",
-            Onglet::Dessin => "Le curseur du stylet, sa pression et le voile autour de la caméra.",
+            Onglet::Dessin => "Le curseur du stylet, sa pression, le point fixe des poignées et le voile autour de la caméra.",
             Onglet::Montage => "Les pistes du montage et leur repliage.",
             Onglet::Vignettes => "La planche : cases pâles, débord du trait, cadres de caméra, et le décor partagé entre les cases d'un plan.",
             Onglet::Raccourcis => "Le jeu de raccourcis du clavier et ses fichiers.",
@@ -125,6 +125,8 @@ pub enum Groupe {
     Conseils,
     /// Régler le stylet à sa main (`reglagestylet.rs`).
     StyletMain,
+    /// Les poignées des boîtes de la Sélection et du Transformer : point fixe et centre des rotations (`selbox.rs`).
+    Poignees,
 }
 
 impl Groupe {
@@ -151,6 +153,7 @@ impl Groupe {
             Groupe::Echelle => "Taille de l'interface",
             Groupe::Conseils => "Conseils",
             Groupe::StyletMain => "Stylet à ma main",
+            Groupe::Poignees => "Poignées de la Sélection et du Transformer",
         }
     }
 }
@@ -203,6 +206,8 @@ pub const REGLAGES: &[Reglage] = &[
     // ---- Dessin
     r(O::Dessin, G::Stylet, "dessin.croix", "Croix du système sur le pinceau", "curseur stylet retard pointe"),
     r(O::Dessin, G::StyletMain, "dessin.regler_stylet", "Régler le stylet à ma main", "pression courbe appui tablette léger moyen fort toucher"),
+    r(O::Dessin, G::Poignees, "dessin.point_fixe", "Point fixe des poignées", "ancre poignée opposée centre échelle incliner coin côté transformer sélection boîte ctrl"),
+    r(O::Dessin, G::Poignees, "dessin.rotation_autour", "Rotation autour de", "pivot coin opposé tourner rotation transformer sélection boîte"),
     r(O::Dessin, G::Camera, "dessin.passe_partout", "Opacité du passe-partout", "voile hors-champ estomper cadre caméra rétablir"),
     // ---- Montage
     r(O::Montage, G::Pistes, "montage.repliage", "Repliage des pistes", "replier commun plan calques"),

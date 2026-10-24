@@ -34,7 +34,7 @@ fn dossier(nom: &str) -> PathBuf {
 fn banc_enregistre(nom: &str) -> (Banc, PathBuf, PathBuf) {
     let dir = dossier(nom);
     let mut b = banc(petit_projet(6), false);
-    let manifeste = dir.join("Essai.pelure");
+    let manifeste = dir.join("Essai.shot");
     b.app.path = Some(manifeste.clone());
     b.app.modified = true;
     (b, dir, manifeste)
@@ -189,7 +189,7 @@ fn a_failed_save_keeps_the_project_modified_and_cancels_what_followed() {
     let avant = std::fs::read(&manifeste).expect("manifeste");
     // Le manifeste ne peut plus être écrit (son fichier provisoire est occupé par un dossier) : les
     // dessins passent, puis l'échec.
-    std::fs::create_dir_all(dir.join("Essai.pelure.tmp")).expect("obstacle");
+    std::fs::create_dir_all(dir.join("Essai.shot.tmp")).expect("obstacle");
     modifier(&mut b, 33);
     // (Le manifeste change aussi : un manifeste identique n'est plus réécrit, l'obstacle ne serait pas atteint.)
     b.app.doc.panels[0].notes = "Plan retouché.".into();
@@ -204,7 +204,7 @@ fn a_failed_save_keeps_the_project_modified_and_cancels_what_followed() {
     assert_eq!(std::fs::read(&manifeste).expect("manifeste"), avant, "l'ancien manifeste est intact");
     assert!(project::load(&manifeste).is_ok(), "le projet reste lisible");
     // L'obstacle levé, l'enregistrement suivant réécrit tout et réussit.
-    std::fs::remove_dir_all(dir.join("Essai.pelure.tmp")).expect("obstacle levé");
+    std::fs::remove_dir_all(dir.join("Essai.shot.tmp")).expect("obstacle levé");
     assert!(b.app.save());
     pomper(&mut b);
     assert!(!b.app.modified);

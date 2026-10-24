@@ -114,3 +114,19 @@ fn a_project_is_saved_reopened_and_exported() {
     assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF"));
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn the_companion_never_writes_over_a_shared_film() {
+    let dir = std::env::temp_dir().join(format!("pelure-test-noyau-partage-{}", std::process::id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    let structure = dir.join("Film.pelure");
+    let avant = br#"{"version": 1, "partage": {}}"#;
+    std::fs::write(&structure, avant).unwrap();
+    let mut p = Projet::nouveau(320, 180, 24);
+    p.chemin = Some(structure.clone());
+    assert!(p.enregistrer().is_err(), "un film partagé ne s'enregistre que par SHOT");
+    assert_eq!(std::fs::read(&structure).unwrap(), avant.to_vec(), "la structure est intacte");
+    assert!(!structure.with_extension("shot").exists());
+    std::fs::remove_dir_all(&dir).ok();
+}

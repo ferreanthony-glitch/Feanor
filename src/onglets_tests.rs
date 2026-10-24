@@ -86,9 +86,9 @@ fn rouge_sur_disque(manifeste: &Path) -> u8 {
     loaded.doc.cels[&id].raster.get(0, 0).r()
 }
 
-/// Range le projet affiché dans un dossier d'essai (`Nom/Nom.pelure`) : il est enregistré, avec son chemin.
+/// Range le projet affiché dans un dossier d'essai (`Nom/Nom.shot`) : il est enregistré, avec son chemin.
 fn enregistrer_a(b: &mut Banc, dir: &Path, nom: &str) -> PathBuf {
-    let manifeste = dir.join(nom).join(format!("{nom}.pelure"));
+    let manifeste = dir.join(nom).join(format!("{nom}.shot"));
     b.app.path = Some(manifeste.clone());
     b.app.modified = true;
     assert!(b.app.save());
@@ -169,9 +169,9 @@ fn projet_grand() -> Document {
 /// d'`App` doit être rangé dans l'un des deux jeux : `etat_projet!` (`onglets.rs`) s'il ne vaut que pour un projet, ici
 /// sinon. Sans cet essai, un champ de projet oublié fuirait d'un onglet à l'autre sans que rien ne le dise.
 const PARTAGES: &[&str] = &[
-    "ctx", "board_view", "tool", "brush", "pencil", "eraser", "brushes", "brushes_job", "reopen_probe", "fill", "shape", "vector_erase_whole", "paint_behind", "fill_shapes", "toucher",
+    "ctx", "board_view", "tool", "brush", "pencil", "eraser", "brushes", "brushes_job", "reopen_probe", "fill", "shape", "vector_erase_whole", "paint_behind", "toucher",
     "pinceaux", "color", "hsv", "couleurs", "canvas_rect", "ppp", "onion", "onion_window", "onion_shift", "onion_preset_name", "xsheet", "roles_view", "role_menu", "xsheet_role_menu",
-    "flips", "flips_window", "fx_auto_key", "fx_keys_shown", "fx_key_clipboard", "fx_clip_recent", "fx_stack_clipboard", "fx_pane_focus", "fx_pile_recent", "layers_pane_focus","propagation", "coloriage", "sb_window",
+    "flips", "flips_window", "fx_auto_key", "fx_keys_shown", "fx_key_clipboard", "fx_clip_recent", "fx_stack_clipboard", "fx_pane_focus", "fx_pile_recent", "layers_pane_focus", "layer_clip_recent", "propagation", "coloriage", "sb_window",
     "scenario_window", "sb_export", "light_table", "light_table_strength", "groups_window", "groups_used_only", "image_clipboard", "key_clipboard", "tool_spring", "fake_hold_times",
     "time_display", "empty_x", "timeline_thumbs", "mark_color", "mark_repeat", "mark_next_layer", "mark_used_only", "bottom_tab", "checker", "notes", "properties_window", "settings_tab",
     "brush_previews", "preset_edit", "brush_import_notes", "record_strokes", "camera_mask", "top_view", "play_meter", "frame_start", "export_dialog", "export_last", "export_job", "export_projet", "ffmpeg",
@@ -182,7 +182,7 @@ const PARTAGES: &[&str] = &[
     "prefs_window", "editorial", "fiche", "about_window", "theme_applied", "theme_unsaved","pane_heights", "fit_set", "fit_busy", "recent_to_open", "recent_presence",
     "maximized_once", "clipboard", "montage_head_w", "snap_on", "length_field_active", "pen_pressure", "pen_touch", "input_time", "last_frame_time", "picking", "status", "new_dialog",
     "show_help", "allow_close", "export_transparent", "follow_frame", "following", "hover_canvas", "pending_keys", "assign", "keys_filter", "keymap", "title", "display_info", "gpu",
-    "quitter_prevenu", "confort", "collage", "onglets", "actif", "prochain_onglet", "secours_actif", "session_a_ecrire", "session_prete", "session_file", "session_affichee", "groupe",
+    "quitter_prevenu", "confort", "collage", "onglets", "actif", "prochain_onglet", "secours_actif", "session_a_ecrire", "fermetures_d_onglets", "session_prete", "session_file", "session_affichee", "groupe",
 ];
 
 /// Les noms des champs de `pub struct App`, lus dans `app.rs`.
@@ -433,7 +433,7 @@ fn a_save_started_in_a_tab_is_adopted_by_that_tab_after_switching() {
     modifier(&mut b, 91);
     assert!(b.app.activer_onglet(0));
     // Le premier projet n'a pas encore de fichier : l'écriture le crée.
-    let manifeste = dir.join("Film").join("Film.pelure");
+    let manifeste = dir.join("Film").join("Film.shot");
     b.app.path = Some(manifeste.clone());
     modifier(&mut b, 201);
     assert!(b.app.save());
@@ -553,7 +553,7 @@ fn saving_then_closing_writes_the_project_and_closes_its_tab() {
 fn a_close_waiting_for_a_save_follows_it_even_when_another_tab_is_shown_meanwhile() {
     let dir = dossier("onglets-fermer-apres");
     let mut b = banc(projet(200, 6), false);
-    let a = dir.join("A").join("A.pelure");
+    let a = dir.join("A").join("A.shot");
     b.app.path = Some(a.clone());
     modifier(&mut b, 150);
     onglet_avec(&mut b, projet(90, 2));
@@ -566,7 +566,7 @@ fn a_close_waiting_for_a_save_follows_it_even_when_another_tab_is_shown_meanwhil
     assert_eq!(rouge(&b), 90, "l'autre projet est resté affiché");
     // Fermer l'onglet affiché pendant qu'il s'écrit (rien de modifié depuis le cliché) : la fermeture suit l'écriture.
     let mut c = banc(projet(120, 5), false);
-    c.app.path = Some(dir.join("C").join("C.pelure"));
+    c.app.path = Some(dir.join("C").join("C.shot"));
     modifier(&mut c, 121);
     onglet_avec(&mut c, projet(1, 1));
     assert!(c.app.activer_onglet(0));
@@ -574,7 +574,7 @@ fn a_close_waiting_for_a_save_follows_it_even_when_another_tab_is_shown_meanwhil
     c.app.fermer_onglet(0);
     assert!(c.app.after_save.is_some(), "la fermeture attend l'écriture");
     assert!(jusqu_a(&mut c, Duration::from_secs(60), |c| c.app.onglets.len() == 1));
-    assert_eq!(rouge_sur_disque(&dir.join("C").join("C.pelure")), 121);
+    assert_eq!(rouge_sur_disque(&dir.join("C").join("C.shot")), 121);
     let _ = std::fs::remove_dir_all(&dir);
 }
 
@@ -709,7 +709,7 @@ fn quitting_with_several_modified_tabs_asks_once_and_lists_them() {
 fn quitting_waits_for_a_save_in_a_hidden_tab() {
     let dir = dossier("onglets-quitter-ecriture");
     let mut b = banc(projet(200, 6), false);
-    let a_path = dir.join("A").join("A.pelure");
+    let a_path = dir.join("A").join("A.shot");
     b.app.path = Some(a_path.clone());
     modifier(&mut b, 140);
     assert!(b.app.save());
@@ -1332,7 +1332,7 @@ fn the_session_is_not_overwritten_while_it_comes_back() {
     assert_eq!(b.app.settings.session_tabs, vec![p1.clone()]);
     // Pendant la réouverture, `retenir_la_session` ne touche à rien (la liste serait réduite au premier projet).
     b.app.session_prete = false;
-    b.app.settings.session_tabs = vec![p1.clone(), dir.join("Autre").join("Autre.pelure")];
+    b.app.settings.session_tabs = vec![p1.clone(), dir.join("Autre").join("Autre.shot")];
     b.app.retenir_la_session();
     assert_eq!(b.app.settings.session_tabs.len(), 2);
     let _ = std::fs::remove_dir_all(&dir);
@@ -1413,6 +1413,37 @@ fn closing_a_tab_removes_its_rescue_copy() {
         std::thread::sleep(Duration::from_millis(10));
     }
     assert_eq!(std::fs::read_dir(&racine).map(|d| d.count()).unwrap_or(0), 1, "le dossier de l'onglet fermé a disparu");
+}
+
+/// Relecture indépendante (2026-10-23) : un onglet fermé ferme sa copie de secours, son écriture en cours et son film
+/// partagé sur des fils détachés ; si SHOT quittait juste après, `fermeture` ne les attendait pas (une écriture pouvait
+/// être coupée, un dossier de secours rester et se proposer au lancement suivant). Ils sont gardés et attendus.
+#[test]
+fn quitting_right_after_closing_a_tab_waits_for_what_the_tab_was_finishing() {
+    crate::fxcache::monde::ecrire();
+    let mut b = banc(projet(200, 2), false);
+    b.app.secours_actif = true;
+    b.app.demarrer_secours();
+    onglet_avec(&mut b, projet(90, 60));
+    let racine = crate::recovery::root().expect("racine");
+    let compte = || std::fs::read_dir(&racine).map(|d| d.count()).unwrap_or(0);
+    assert_eq!(compte(), 2);
+    // Une copie de secours de l'onglet affiché est en route quand on le ferme.
+    {
+        let rec = b.app.recovery.as_mut().expect("copie de l'onglet affiché");
+        let snap = crate::recovery::Snapshot { doc: &b.app.doc, serial: b.app.history.serial(), modified: true, title: "Gros".into(), project: None, project_written: &b.app.written };
+        rec.start_copy(snap);
+    }
+    assert!(b.app.recovery.as_ref().is_some_and(|r| r.busy()), "la copie est en route");
+    assert!(!b.app.modified);
+    b.app.fermer_onglet(b.app.actif);
+    assert_eq!(b.app.onglets.len(), 1, "l'onglet se ferme sans question : {}", b.app.status);
+    assert!(!b.app.fermetures_d_onglets.is_empty(), "sa fermeture est gardée");
+    // SHOT quitte aussitôt : la copie finit, son dossier est effacé, avant la sortie.
+    b.app.fermeture();
+    assert!(b.app.fermetures_d_onglets.is_empty());
+    assert_eq!(compte(), 0, "aucun dossier de secours ne reste (l'onglet fermé, puis celui qui restait)");
+    b.app.sortie_sans_rendre();
 }
 
 // ---------------------------------------------------------------------------------------------- repos et mesures

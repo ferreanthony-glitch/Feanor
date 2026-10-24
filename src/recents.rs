@@ -39,7 +39,8 @@ impl Presence {
         std::thread::spawn(move || {
             let mut changed = false;
             for p in paths {
-                let now = p.exists();
+                // (Un projet converti `.pelure` → `.shot` est encore là sous son nouveau nom : `open_path` le trouve.)
+                let now = crate::project::manifeste_present(&p);
                 let before = known.lock().unwrap_or_else(|e| e.into_inner()).insert(p, now);
                 changed |= before != Some(now);
             }
@@ -56,9 +57,10 @@ impl Presence {
     }
 }
 
-/// `path` passe en tête de la liste (sans doublon, la casse ignorée comme sous Windows).
+/// `path` passe en tête de la liste (sans doublon, la casse ignorée comme sous Windows). Un projet n'y est qu'une
+/// fois sous ses deux noms : `Bus.shot` remplace `Bus.pelure` (projet converti, `project::cle_de_projet`).
 pub fn remember(list: &mut Vec<PathBuf>, path: &Path) {
-    let key = |p: &Path| p.to_string_lossy().to_lowercase();
+    let key = |p: &Path| crate::project::cle_de_projet(p);
     let k = key(path);
     list.retain(|p| key(p) != k);
     list.insert(0, path.to_path_buf());
@@ -139,7 +141,9 @@ impl App {
         let (tx, rx) = std::sync::mpsc::channel();
         let (ctx, a_sonder) = (self.ctx.clone(), candidats.clone());
         std::thread::spawn(move || {
-            let presents: Vec<PathBuf> = a_sonder.into_iter().filter(|p| p.exists()).collect();
+            // (Un projet converti depuis, ou un plantage au milieu d'une conversion : le manifeste à ouvrir, sous son nom
+            // d'aujourd'hui, `project::manifeste_a_ouvrir`.)
+            let presents: Vec<PathBuf> = a_sonder.into_iter().map(|p| crate::project::manifeste_a_ouvrir(&p)).filter(|p| p.exists()).collect();
             let _ = tx.send(presents);
             ctx.request_repaint();
         });
@@ -154,7 +158,14 @@ impl App {
             Err(TryRecvError::Empty) => {}
             Ok(presents) => {
                 // Celui qui était affiché à la fin de la séance d'avant, s'il est encore là.
-                let affiche = self.settings.session_tabs.get(self.settings.session_active).filter(|p| presents.contains(p)).cloned().or_else(|| presents.first().cloned());
+                let cle = |p: &Path| crate::project::cle_de_projet(p);
+                let affiche = self
+                    .settings
+                    .session_tabs
+                    .get(self.settings.session_active)
+                    .and_then(|a| presents.iter().find(|p| cle(p) == cle(a)))
+                    .cloned()
+                    .or_else(|| presents.first().cloned());
                 let _ = candidats;
                 self.reopen_probe = None;
                 // (Anthony a déjà ouvert, créé ou dessiné quelque chose : on ne lui prend pas la main.)

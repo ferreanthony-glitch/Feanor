@@ -4,8 +4,9 @@
 //! - `verrou` : tenu ouvert (sans partage) tant que SHOT tourne ; tant qu'on ne peut pas
 //!   l'effacer, la séance est vivante (un autre SHOT ouvert à côté, par exemple) ;
 //! - `seance.json` : le projet d'origine, son titre, l'heure de la dernière copie ;
-//! - `projet\secours.pelure` : une copie du projet, écrite toutes les N minutes s'il a changé,
-//!   sur un autre fil (on continue à dessiner pendant ce temps).
+//! - `projet\secours.shot` : une copie du projet, écrite toutes les N minutes s'il a changé,
+//!   sur un autre fil (on continue à dessiner pendant ce temps). Une séance d'une version d'avant le
+//!   2026-10-23 a laissé `projet\secours.pelure` : elle est proposée de même.
 //!
 //! Le vrai projet n'est jamais touché : seul « Enregistrer » l'écrit. Fermeture normale (même
 //! « Ne pas enregistrer ») : le dossier est effacé. Plantage : il reste, et la séance suivante
@@ -25,7 +26,9 @@ use crate::project::{self, Reuse, SaveReport};
 const LOCK: &str = "verrou";
 const INFO: &str = "seance.json";
 const COPY: &str = "projet";
-const MANIFEST: &str = "secours.pelure";
+const MANIFEST: &str = "secours.shot";
+/// La copie d'une séance d'une version d'avant `.shot`.
+const ANCIEN_MANIFEST: &str = "secours.pelure";
 
 /// Fiche d'une séance.
 #[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
@@ -51,13 +54,14 @@ pub struct Orphan {
 
 impl Orphan {
     /// Le projet d'origine a-t-il été enregistré après la dernière copie ? (La copie n'apporte
-    /// alors sans doute rien.)
+    /// alors sans doute rien.) Un projet passé de `.pelure` à `.shot` depuis se regarde sous son
+    /// nouveau nom (`project::manifeste_a_ouvrir`).
     pub fn project_is_newer(&self) -> bool {
         let saved = self
             .info
             .project
             .as_ref()
-            .and_then(|p| fs::metadata(p).ok())
+            .and_then(|p| fs::metadata(project::manifeste_a_ouvrir(p)).ok())
             .and_then(|m| m.modified().ok())
             .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
             .map(|d| d.as_secs());
@@ -100,11 +104,11 @@ pub fn orphans(root: &Path, own: Option<&Path>) -> Vec<Orphan> {
         if lock.exists() && fs::remove_file(&lock).is_err() {
             continue; // séance vivante
         }
-        let manifest = dir.join(COPY).join(MANIFEST);
-        if !manifest.exists() {
+        // (La copie d'une version d'avant `.shot` porte l'ancien nom.)
+        let Some(manifest) = [MANIFEST, ANCIEN_MANIFEST].into_iter().map(|m| dir.join(COPY).join(m)).find(|m| m.exists()) else {
             let _ = fs::remove_dir_all(&dir);
             continue;
-        }
+        };
         let info = fs::read_to_string(dir.join(INFO))
             .ok()
             .and_then(|t| serde_json::from_str(&t).ok())

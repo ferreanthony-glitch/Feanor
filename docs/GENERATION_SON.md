@@ -85,7 +85,7 @@ bruitages attendent Stable Audio (§8.5).
 Réglages (`[generation_son]`) : `lecture`, `sons`, `voix` (`"regles"`, `"local"`, `"en_ligne"`), `lecture_service`,
 `sons_service`, `voix_service` (`"claude"`, `"elevenlabs"`, `"stableaudio"`), `port_local` (8765),
 `modele_claude`, `envoyer_vignettes` (vrai), `voix_locale` (`"ff_siwis"`), `voix_en_ligne` (vide), et pour le
-serveur local : `modeles_local` (le dossier `SHOT-modeles` ; vide : `Documents\Work\SHOT-modeles`), `python_local` (le
+serveur local : `modeles_local` (le dossier `SHOT-modeles` ; vide : `Documents\SHOT\Modèles\SHOT-modeles`, ou l'ancien `Documents\Work\SHOT-modeles` s'il est le seul là), `python_local` (le
 `python.exe` du venv ; vide : `<modeles_local>\venv\Scripts\python.exe`), `demarrage_auto` (vrai). Le journal du
 serveur lancé par SHOT : `%LOCALAPPDATA%\SHOT\serveur_son.log`.
 
@@ -313,7 +313,7 @@ que le Python, le venv et les modèles) :
 | `sidecar/lancer.ps1` | Lance le serveur à la main (PowerShell 5.1). |
 | `sidecar/essai.py` | L'essai de fumée, à lancer à la main (`pytest` n'est pas installé dans le venv). |
 
-### 8.1 Ce qui est installé (dans `Documents\Work\SHOT-modeles`, installé avec l'accord d'Anthony)
+### 8.1 Ce qui est installé (dans `Documents\SHOT\Modèles\SHOT-modeles`, installé avec l'accord d'Anthony)
 
 - `python\` : CPython 3.12.10 ; `venv\` : torch 2.14.1+cu126 (CUDA marche sur la RTX 2080 SUPER, 8 Go), transformers 5.20.1,
   accelerate, qwen-vl-utils, kokoro 0.9.4 (avec espeakng-loader), soundfile, fastapi, uvicorn, huggingface_hub.
@@ -323,7 +323,7 @@ que le Python, le venv et les modèles) :
 ### 8.2 Le lancer
 
 - **Par SHOT** (le plus simple) : Fichier > Préférences > Génération sonore > « Serveur local » : le dossier des modèles et
-  le Python (par défaut ceux de `Documents\Work\SHOT-modeles`), « Démarrer le serveur local » / « Arrêter » / « Tester ».
+  le Python (par défaut ceux de `Documents\SHOT\Modèles\SHOT-modeles`), « Démarrer le serveur local » / « Arrêter » / « Tester ».
   Avec la case « Démarrer le serveur tout seul… » (cochée d'origine), un « Générer » local ou une lecture par Qwen lance le
   serveur si personne n'écoute, **en arrière-plan, sans fenêtre**, attend qu'il réponde et reprend. SHOT l'arrête en se
   fermant (le processus est dans un objet de travail Windows qui le tue même si SHOT plante, avec le Python de base que le
@@ -396,7 +396,7 @@ SHOT (le contrat le permet) ; il bride aussi un bruitage à 3 s et une ambiance 
 | `lecturerules.rs` | Le lecteur sans modèle |
 | `fournisseurs.rs` | Les traits `LecteurStoryboard`, `GenerateurSon`, `GenerateurVoix`, `Controle` (annulation, avancement), `ErreurGen` |
 | `httplocal.rs`, `sidecar.rs` | Le client HTTP de boucle locale et le contrat du serveur local |
-| `serveurlocal.rs` | Le serveur lancé par SHOT : chemins (`Documents\Work\SHOT-modeles` par défaut), processus sans console dans un objet de travail Windows, attente, arrêt, démarrage automatique (`Demarrage`) |
+| `serveurlocal.rs` | Le serveur lancé par SHOT : chemins (`Documents\SHOT\Modèles\SHOT-modeles` par défaut), processus sans console dans un objet de travail Windows, attente, arrêt, démarrage automatique (`Demarrage`) |
 | `sidecar/` | Le serveur Python (voir §8) |
 | `fournisseursapi.rs` | Claude, ElevenLabs, Stable Audio : requêtes, réponses, erreurs, `Transport` (à brancher) |
 | `clessecretes.rs` | Le Gestionnaire d'identifiants de Windows (`CredWriteW` / `CredReadW` / `CredDeleteW`) |

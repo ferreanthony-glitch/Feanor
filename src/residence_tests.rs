@@ -389,7 +389,7 @@ fn a_recovery_copy_keeps_the_pixels_of_drawings_that_left_memory() {
             std::thread::sleep(Duration::from_millis(5));
             assert!(t.elapsed() < Duration::from_secs(60), "la copie de secours ne finit pas");
         }
-        let manifeste = rec.dir.join("projet").join("secours.pelure");
+        let manifeste = rec.dir.join("projet").join("secours.shot");
         drop(rec);
         let relu = crate::project::load(&manifeste).expect("relecture de la copie de secours");
         for (id, e) in &avant {
@@ -420,5 +420,24 @@ fn a_project_with_plan_versions_also_opens_without_reading_its_pixels() {
     for (id, c) in complet.doc.cels.iter() {
         assert_eq!(empreinte(revenu.cels.get(id).expect("dessin revenu")), empreinte(c), "dessin {id}");
     }
+    let _ = std::fs::remove_dir_all(dir);
+}
+/// Copier un dessin qui est hors de la mémoire (une case de plus, un calque collé, un retournement) donne une copie qui
+/// revient avec les mêmes pixels, jamais un dessin vide.
+#[test]
+fn duplicating_a_drawing_that_left_memory_gives_a_copy_with_its_pixels() {
+    let dir = dossier("dupliquer");
+    let mut b = banc_enregistre(film(8), &dir, 1);
+    let avant = empreintes(&b.app.doc);
+    b.app.select_panel(0);
+    au_calme(&mut b, Duration::from_secs(30));
+    let cel = b.app.doc.panels[6].layers[0].frames[0].expect("un dessin");
+    assert!(b.app.doc.cels.est_absent(&cel), "le dessin est hors de la mémoire");
+    let copie = b.app.doc.duplicate_cel(cel);
+    assert!(b.app.doc.cels.est_absent(&copie), "la copie est absente comme lui");
+    let (revenu, perdus) = crate::residence::copie_resolue(&b.app.doc);
+    assert!(perdus.is_empty(), "{perdus:?}");
+    assert_eq!(empreinte(revenu.cels.get(&copie).expect("copie")), avant[&cel], "la copie a les pixels de l'original");
+    crate::residence::budget_essai(None);
     let _ = std::fs::remove_dir_all(dir);
 }

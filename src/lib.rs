@@ -36,6 +36,10 @@ mod donnees;
 #[cfg(test)]
 mod donnees_tests;
 mod materiel;
+// Le budget de mémoire vidéo du système : le cache des textures de dessin se fait plus petit quand il manque.
+mod memoirevideo;
+#[cfg(test)]
+mod memoirevideo_tests;
 #[cfg(test)]
 mod demarrage_tests;
 mod ouverture;
@@ -57,6 +61,9 @@ mod enregistrement;
 mod enregistrement_tests;
 #[cfg(test)]
 mod enregistrement_cliche_tests;
+// Le manifeste des projets passe de `.pelure` à `.shot` (2026-10-23) : nouveaux projets, conversion, plantage au milieu.
+#[cfg(test)]
+mod extension_tests;
 #[cfg(test)]
 mod enregistrement_identique_tests;
 // Travailler à plusieurs sur un film (`docs/COOPERATION.md`) : l'équipier (`equipe`), les prises (`verrous`, pur), le
@@ -123,7 +130,7 @@ mod memoire_tests;
 mod lacher;
 #[cfg(test)]
 mod lacher_tests;
-// Les dessins en mémoire : absents (pixels relus du dossier ou refaits), budget, préchargement (`docs/PERFORMANCE.md`, 27).
+// Les dessins en mémoire : absents (pixels relus du dossier ou refaits), budget, préchargement (`docs/PERFORMANCE.md`, 28).
 mod residence;
 mod residenceapp;
 // Les vieilles étapes d'annulation, comprimées en fond.
@@ -238,6 +245,12 @@ mod debogage_tests;
 mod cases;
 #[cfg(test)]
 mod cases_tests;
+#[cfg(test)]
+mod retours_cases_tests;
+#[cfg(test)]
+mod retours_collage_tests;
+#[cfg(test)]
+mod retours_aplat_tests;
 #[cfg(test)]
 mod notes_cases_tests;
 mod decor;
@@ -376,6 +389,11 @@ mod calquecouleurui;
 mod calquemenu;
 mod repli;
 pub mod monde;
+// Le hors-feuille d'avant `optim-vram-monde`, pour les mesures avant / après dans le même processus.
+#[cfg(test)]
+mod monde_avant;
+#[cfg(test)]
+mod monde_tests;
 // Toile infinie : tuiles hors de la feuille (essais).
 #[cfg(test)]
 mod toile_tests;
@@ -598,6 +616,8 @@ mod vignettes_camera_tests;
 mod pistes;
 #[cfg(test)]
 mod pistes_tests;
+#[cfg(test)]
+mod pastilles_storyboard_tests;
 mod brushfill;
 #[cfg(test)]
 mod brushfill_tests;
@@ -709,6 +729,8 @@ mod scenario_tests;
 mod scenelayer_tests;
 mod selbox;
 #[cfg(test)]
+mod selbox_pointfixe_tests;
+#[cfg(test)]
 mod selbox_tests;
 mod seltools;
 mod settings;
@@ -799,8 +821,8 @@ mod xsheet;
 mod xsheet_tests;
 mod xsheetui;
 
-/// Lance SHOT (l'application egui). Un projet passé en argument (ou par double-clic sur un
-/// .pelure) est ouvert au démarrage.
+/// Lance SHOT (l'application egui). Un projet passé en argument (`.shot`, ou l'ancien `.pelure` ; un double-clic
+/// quand une installation aura associé l'extension) est ouvert au démarrage.
 pub fn lancer() -> eframe::Result<()> {
     demarrage::debut();
     // Une erreur de programme laisse un rapport (`plantage.rs`).

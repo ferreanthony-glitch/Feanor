@@ -7,8 +7,12 @@ Logiciel d'animation 2D écrit en Rust avec egui : storyboard en séquences et p
 une timeline de calques façon TVPaint, ses images de storyboard marquées), animation image par
 image, et dessin vectoriel modifiable.
 
-Ce qui garde l'ancien nom, pour que rien d'existant ne casse : les projets (dossier du projet,
-fichier `.pelure`, format `pelure-projet`), la bibliothèque Rust (`pelure::`, la caisse reste
+Depuis le 2026-10-23, le fichier d'un projet s'appelle `MonFilm.shot` (dans le dossier `MonFilm\`).
+Un projet d'avant (`MonFilm.pelure`) s'ouvre toujours ; son premier enregistrement écrit
+`MonFilm.shot` puis efface `MonFilm.pelure` — seul ce fichier change de nom, le dossier, les dessins
+et les fichiers à côté restent tels quels. Un film partagé garde son `.pelure` (des équipiers ont
+peut-être une version d'avant). Ce qui garde l'ancien nom, pour que rien d'existant ne casse : le
+format `pelure-projet` dans le manifeste, la bibliothèque Rust (`pelure::`, la caisse reste
 `pelure`) et les variables d'environnement `PELURE_*`. La « pelure d'oignon » est un terme de
 dessin, pas l'ancien nom du logiciel.
 
@@ -19,8 +23,9 @@ cargo run --release
 ```
 
 L'exécutable est ensuite dans `target\release\shot.exe`. On peut lui passer un projet :
-`shot.exe "C:\Films\Bus\Bus.pelure"` (et donc associer les fichiers `.pelure` à SHOT pour les
-ouvrir d'un double-clic).
+`shot.exe "C:\Films\Bus\Bus.shot"` (un ancien `Bus.pelure` aussi). SHOT n'associe pas lui-même
+l'extension `.shot` à Windows : ce sera le travail d'un futur installateur (en attendant, « Ouvrir
+avec » sur un `.shot` et choisir `shot.exe`).
 
 Les réglages, raccourcis, brosses importées, rapports d'erreur et copies de secours sont dans
 `%APPDATA%\SHOT` et `%LOCALAPPDATA%\SHOT`. Au premier lancement, ce que l'ancien nom avait rangé
@@ -126,10 +131,10 @@ Chaque plan a ses calques, de deux sortes :
 
 - **Vectoriel** (Maj+S pour en créer un, par défaut, façon Storyboard Pro) : les traits restent des objets modifiables.
   - Pinceau et crayon tracent des traits à épaisseur variable (pression du stylet comprise).
-    Deux interrupteurs en haut de leurs réglages, aussi sur un calque bitmap : **Peint derrière**
-    (la peinture passe sous ce qui est déjà dessiné) et **Remplir la forme** (au lâcher, un trait
-    fermé, dont le bout revient près du début ou qui se recoupe, remplit son intérieur de sa
-    couleur, sous le trait ; en vectoriel, la zone reste modifiable).
+    Deux interrupteurs sous l'aperçu du trait, au-dessus de « Plus de réglages », aussi sur un calque
+    bitmap : **Peint sur l'aplat** (pour l'instant : la peinture passe sous ce qui est déjà dessiné)
+    et l'**aplat sous le trait** du calque courant (le même bouton que sur la ligne du calque).
+    (« Remplir la forme » a été retiré le 2026-10-23 : l'aplat fait ce travail.)
   - La gomme coupe les traits, ou retire des traits entiers en mode « traits entiers ».
   - Le pot de peinture crée une zone remplie qui passe sous les traits. Sur un trait ou une zone
     déjà peinte, il en change la couleur.
@@ -1077,7 +1082,10 @@ main (panneau Couleur, pipette, nuancier) la lâche aussi.
 - La barre se montre ou se cache **par espace de travail** (Affichage > « Montrer / Cacher la barre des personnages »,
   Ctrl+K `perso.barre`) : visible d'office en Storyboard (et dans l'espace Vignettes, quand il viendra), cachée d'office en
   Animation et en Montage.
-- Commandes à mettre sur des touches (Ctrl+K) : `perso.suivant`, `perso.precedent`, `perso.aucun`, `perso.ajouter`.
+- Commandes à mettre sur des touches (Ctrl+K) : `perso.suivant`, `perso.precedent`, `perso.aucun`, `perso.classique` (la pastille
+  « classique », en tête de colonne : le « Pinceau rond », sans personnage ni brosse du décor), `perso.ajouter`.
+- Les brosses du décor (crayon, feutre gris, aplat) sont dans la colonne du dessin du Storyboard comme sur la planche des Vignettes :
+  leurs traits vont dans le calque Décor du plan.
 - Choisir un personnage pendant que la sous-ligne d'un aplat est la cible du dessin ramène au **trait** : un personnage dessine
   son trait *et* son aplat. Cliquer ensuite sur la sous-ligne reprend l'aplat seul, et le pot de peinture y remplit avec
   l'aplat du personnage choisi.
@@ -1794,7 +1802,8 @@ sans accord. Le détail, le contrat du serveur local, comment le lancer et ce qu
   (Kokoro-82M local, ElevenLabs en ligne). Le **serveur local** (`sidecar/serveur.py`, Python, 127.0.0.1, port
   réglable) est écrit : SHOT le lance tout seul (sans fenêtre) au premier « Générer » local et l'arrête en se
   fermant, ou « Démarrer le serveur local » / « Arrêter » / « Tester » dans les Préférences (dossier `SHOT-modeles`
-  et Python réglables). **Les voix (Kokoro) et la lecture par Qwen2.5-VL marchent** ; les bruitages attendent
+  et Python réglables ; par défaut `Documents\SHOT\Modèles\SHOT-modeles`, ou l'ancien `Documents\Work\SHOT-modeles` s'il
+  est le seul des deux à exister). **Les voix (Kokoro) et la lecture par Qwen2.5-VL marchent** ; les bruitages attendent
   Stable Audio Open, pas encore téléchargé (licence à accepter par l'utilisateur). Les requêtes des services en
   ligne sont prêtes, leur envoi HTTPS est **à brancher** (aucune caisse TLS hors ligne).
 - **Accepter** copie le son dans le projet et le pose à la bonne image sur la piste « Sons proposés » (une étape
@@ -1980,7 +1989,7 @@ annulation, sa tête de lecture, sa sélection, sa vue (zoom, mode storyboard / 
 l'autre est instantané (aucune relecture du disque : 7 à 14 µs, l'image d'écran suivante ne coûte pas plus qu'une autre).
 
 - **Ouvrir** : Fichier > Ouvrir, Nouveau, un projet récent, un import Storyboard Pro ou de scénario, « nouveau projet à partir
-  des plans choisis », ou un `.pelure` lâché sur la fenêtre prennent un **nouvel onglet** (Préférences > Général > « Ouvrir dans un nouvel
+  des plans choisis », ou un `.shot` (ou un ancien `.pelure`) lâché sur la fenêtre prennent un **nouvel onglet** (Préférences > Général > « Ouvrir dans un nouvel
   onglet », allumé ; éteint, ils remplacent le projet affiché après la question habituelle). Un projet déjà ouvert : son onglet
   passe à l'écran. L'accueil (un onglet « Nouvel onglet ») est réutilisé par le premier projet qu'on y ouvre.
 - **Gestes** : clic = passer à l'onglet ; clic du milieu ou croix = fermer ; clic droit = Fermer, Fermer les autres, Afficher dans
@@ -2034,7 +2043,8 @@ le stockage est derrière une couture (`Depot`) pour passer plus tard à un serv
 
 - **Partager** : Fichier > **Partager ce projet…** crée le film partagé dans le dossier choisi (le projet ouvert n'est pas touché), puis
   l'ouvre dans un nouvel onglet. Le fichier `.pelure` du film partagé ne contient que la structure (format 34) : un SHOT sans le
-  partage le refuse. Un projet classique ne change pas du tout.
+  partage le refuse. Un projet classique ne change pas du tout. Ce fichier garde le nom `.pelure` (pas `.shot`, même pour un film
+  partagé après le 2026-10-23) : un équipier qui a une version de SHOT d'avant le cherche sous ce nom.
 - **Prendre / rendre** : clic droit sur un plan (montage ou planche) > **Prendre ce plan**, **Prendre la séquence**, **Rendre ce plan**,
   **Prendre le montage**. Sans prise, un plan se regarde, se joue et se **commente** ; le dessin, les calques, la caméra, les textes sont refusés
   avec la raison dans la barre d'état (« Plan 3 est à Léa… »). Le **montage** (ordre, nombre, durée, noms des plans, son, transitions…) demande
@@ -2146,7 +2156,7 @@ rattrapé par la copie de secours.
 
 ```
 Bus/
-  Bus.pelure        manifeste lisible (réglages, séquences > plans > calques, marques d'image)
+  Bus.shot          manifeste lisible (réglages, séquences > plans > calques, marques d'image)
   dessins/12.png    un fichier par dessin bitmap
   dessins/13.json   un fichier par dessin vectoriel
   sons/14.mp3       les sons importés, copiés tels quels
@@ -2163,13 +2173,21 @@ Bus/
   plans_versions.json  les autres versions de chaque plan (absent : aucun plan n'a de version)
 ```
 
-Si tu enregistres « Bus.pelure » dans `Films`, le fichier est donc dans `Films\Bus\Bus.pelure`, pas
+Si tu enregistres « Bus.shot » dans `Films`, le fichier est donc dans `Films\Bus\Bus.shot`, pas
 directement dans `Films` : la barre d'état le dit après l'enregistrement, et Fichier > « Afficher le
 projet dans l'Explorateur » ouvre l'Explorateur sur lui. On ouvre le projet en choisissant
-`Bus.pelure`. Un enregistrement n'écrit que les dessins modifiés,
+`Bus.shot`. Un enregistrement n'écrit que les dessins modifiés,
 et chaque fichier est écrit à côté puis renommé : un plantage pendant l'enregistrement n'abîme pas la
-version précédente. Les anciens fichiers `.pelure` (un seul fichier) s'ouvrent toujours : chaque
-ancien « plan » devient un plan de Pelure, et le premier « Enregistrer » crée le dossier.
+version précédente.
+
+**Projets d'avant le 2026-10-23** (`Bus\Bus.pelure`) : ils s'ouvrent comme avant (Ouvrir, récents,
+glisser-déposer, ligne de commande). Le premier « Enregistrer » écrit `Bus\Bus.shot`, attend qu'il soit
+sur le disque, puis efface `Bus.pelure` ; la barre d'état le dit. Rien d'autre ne bouge (dossier,
+dessins, sons, fichiers à côté), et les projets récents, la séance rouverte au lancement et les
+copies de secours suivent le nouveau nom. Un plantage entre les deux laisse les deux fichiers : SHOT
+ouvre le plus récent (le `.shot`), et l'enregistrement suivant efface l'autre. Un film partagé, lui,
+garde son `.pelure`. Les très anciens fichiers `.pelure` (un seul fichier) s'ouvrent toujours : chaque
+ancien « plan » devient un plan, et le premier « Enregistrer » crée le dossier (avec un `.shot`).
 
 **Cadre et feuille** : la feuille de dessin est deux fois plus grande que le cadre de la caméra (la
 taille de l'image finale, choisie à la création du projet). Le cadre est tracé (« Caméra »), le

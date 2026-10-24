@@ -816,6 +816,7 @@ impl SaveJob {
             manquants: Vec::new(),
             introuvables: Vec::new(),
             garder: BTreeSet::new(),
+            ancien_manifeste: None,
         }
     }
 
