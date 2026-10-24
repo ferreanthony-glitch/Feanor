@@ -4,12 +4,13 @@
 //! Passe couleur (2026-10-16), refaite le 2026-10-21 pour que le nuancier passe en premier. De haut en bas :
 //! - deux couleurs, avant-plan et arrière-plan, comme dans Photoshop (deux carrés qui se
 //!   chevauchent ; un clic sur celui de derrière les échange) ; les outils dessinent avec
-//!   l'avant-plan, `App::color`, et le mélange de deux couleurs de certains pinceaux prend l'arrière-plan ;
+//!   l'avant-plan, `App::color`, et le mélange de deux couleurs de certains pinceaux prend l'arrière-plan.
+//!   À leur droite : « + », « − », « … » du nuancier, et le nuancier montré, à droite (`nuancierui.rs`) ;
 //! - les neutres : noir, cinq gris, blanc (`couleur::NEUTRES`) ;
 //! - les couleurs du nuancier montré (`nuancierui.rs`) ;
 //! - « Plus de couleurs », replié d'office et retenu dans les réglages de l'application : la roue chromatique
 //!   (`wheel_ui`, géométrie dans `roue.rs`) ou les curseurs TSV, RVB, TSL (un seul à la fois, retenu ; l'opacité
-//!   du pinceau est dans le panneau Réglages), le code, les couleurs récentes et la gestion des nuanciers.
+//!   du pinceau est dans le panneau Réglages), le code et les couleurs récentes.
 //!
 //! Le même choix de couleur s'ouvre au pied de la barre d'outils. Conversions : `couleur.rs`.
 
@@ -391,10 +392,8 @@ impl App {
         resp.context_menu(|ui| self.action_item(ui, "Copier le code de la couleur d'avant-plan", "couleur.copier_code"));
     }
 
-    /// Les deux carrés et leurs boutons ; `avec_code` : le code hexadécimal et sa copie dessous (la fenêtre de la
-    /// barre d'outils). Le panneau Couleur les range sous « Plus de couleurs » (`hex_row`) : il ne garde que les
-    /// deux carrés, intervertir et les couleurs par défaut.
-    fn front_back_row(&mut self, ui: &mut egui::Ui, avec_code: bool) {
+    /// Les deux carrés, leurs boutons et le code hexadécimal avec sa copie (la fenêtre de la barre d'outils).
+    fn front_back_row(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             self.front_back(ui, 30.0, "");
             ui.vertical(|ui| {
@@ -406,15 +405,24 @@ impl App {
                     if self.bouton(ui, ph::SQUARE_HALF, "Couleurs par défaut", "Noir à l'avant-plan, blanc à l'arrière-plan.", "couleur.defaut").clicked() {
                         self.default_colors();
                     }
-                    if avec_code && self.bouton(ui, ph::COPY, "Copier le code", "Copier le code hexadécimal de la couleur d'avant-plan.", "couleur.copier_code").clicked() {
+                    if self.bouton(ui, ph::COPY, "Copier le code", "Copier le code hexadécimal de la couleur d'avant-plan.", "couleur.copier_code").clicked() {
                         self.color_action("couleur.copier_code");
                     }
                 });
-                if avec_code {
-                    self.hex_field(ui);
-                }
+                self.hex_field(ui);
             });
         });
+    }
+
+    /// La ligne du haut du panneau Couleur : les deux carrés, puis les commandes du nuancier et le nuancier montré
+    /// à droite (`nuancierui.rs`). Intervertir et les couleurs par défaut n'y ont plus de bouton : leurs raccourcis
+    /// et le clic droit sur les carrés restent.
+    fn panel_top_row(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            self.front_back(ui, 30.0, "");
+            self.palette_top(ui);
+        });
+        self.delete_confirmation(ui);
     }
 
     /// Le code hexadécimal de la couleur d'avant-plan et sa copie, sur une ligne (sous « Plus de couleurs »).
@@ -676,24 +684,20 @@ impl App {
 
     /// Panneau Couleur.
     /// Le nuancier d'abord (Anthony, 2026-10-21 : « c'est le nuancier qui est prioritaire et qui doit être visible
-    /// en premier »), de haut en bas : les deux couleurs, les neutres (noir, cinq gris, blanc), les couleurs du
-    /// nuancier montré ; puis, en dépliant « Plus de couleurs » (retenu dans les réglages de l'application) : la
-    /// roue ou les curseurs, le code, les couleurs récentes et la gestion des nuanciers.
+    /// en premier »), de haut en bas : la ligne des deux couleurs, avec les commandes du nuancier et le nuancier
+    /// montré à droite ; les neutres (noir, cinq gris, blanc) ; les couleurs du nuancier montré ; puis, en dépliant
+    /// « Plus de couleurs » (retenu dans les réglages de l'application) : la roue ou les curseurs, le code et les
+    /// couleurs récentes.
     pub(crate) fn color_panel(&mut self, ui: &mut egui::Ui) {
-        self.front_back_row(ui, false);
+        self.panel_top_row(ui);
         ui.add_space(4.0);
         self.neutral_row(ui);
         ui.add_space(4.0);
-        // Les couleurs du nuancier montré (ses commandes sont dessous, repliées).
+        // Les couleurs du nuancier montré.
         self.palette_swatches(ui);
         ui.add_space(4.0);
         let mut open = self.couleurs.prefs.more_open;
-        crate::repli::entete(
-            ui,
-            &mut open,
-            "Plus de couleurs",
-            "La roue chromatique ou les curseurs (TSV, RVB, TSL), le code hexadécimal, les couleurs récentes et la gestion des nuanciers.",
-        );
+        crate::repli::entete(ui, &mut open, "Plus de couleurs", "La roue chromatique ou les curseurs (TSV, RVB, TSL), le code hexadécimal et les couleurs récentes.");
         self.couleurs.prefs.more_open = open;
         if !open {
             return;
@@ -703,9 +707,6 @@ impl App {
         self.hex_row(ui);
         ui.add_space(2.0);
         self.recent_row(ui);
-        ui.add_space(6.0);
-        // Nuanciers personnels (`nuancierui.rs`).
-        self.palette_manager(ui);
     }
 
     /// À chaque image : les réglages de la couleur sont enregistrés quand ils changent (pas
@@ -746,7 +747,7 @@ impl App {
                 egui::Frame::popup(ui.style()).show(ui, |ui| {
                     egui::ScrollArea::vertical().max_height(max_height).show(ui, |ui| {
                         ui.set_width(250.0);
-                        self.front_back_row(ui, true);
+                        self.front_back_row(ui);
                         ui.add_space(4.0);
                         self.color_picker(ui, 200.0);
                         ui.add_space(2.0);

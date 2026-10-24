@@ -370,10 +370,37 @@ fn the_colour_panel_shows_the_swatches_first_from_top_to_bottom() {
     assert!(avant.1.center().y < neutres[0].1.top(), "les deux couleurs d'abord");
     let rouge = cases.iter().find(|(f, _)| *f == egui::Color32::from_rgb(205, 45, 45)).expect("une couleur du nuancier");
     assert!(rouge.1.top() > neutres[0].1.bottom(), "le nuancier sous les neutres : {rouge:?} / {:?}", neutres[0]);
-    // Le reste est replié : ni curseurs, ni code, ni couleurs récentes, ni gestion des nuanciers.
+    // Le reste est replié : ni curseurs, ni code, ni couleurs récentes.
     assert!(contient(&textes, "Plus de couleurs"), "{textes:?}");
     assert!(contient(&textes, ph::CARET_RIGHT));
-    assert!(!contient(&textes, "#18181C") && !contient(&textes, "TSV") && !contient(&textes, "pour l'instant") && !contient(&textes, "SHOT"), "replié : {textes:?}");
+    assert!(!contient(&textes, "#18181C") && !contient(&textes, "TSV") && !contient(&textes, "pour l'instant"), "replié : {textes:?}");
+}
+
+#[test]
+fn the_colour_panel_top_row_has_the_palette_buttons_and_the_chooser_on_the_right() {
+    let mut app = app_couleur("couleur-haut");
+    let nuancier = app.shown_palette().name.clone();
+    let mut ecran = Ecran::new();
+    let mut ui_couleur = |a: &mut App, ui: &mut egui::Ui| a.color_panel(ui);
+    let cases = ecran.cases(&mut app, &mut ui_couleur);
+    let textes = ecran.chauffer(&mut app, 2, &mut ui_couleur);
+    // Intervertir et les couleurs par défaut n'ont plus de bouton dans le panneau.
+    assert!(!contient(&textes, ph::SWAP) && !contient(&textes, ph::SQUARE_HALF), "{textes:?}");
+    // « + », « − », « … » sur la ligne des carrés, à droite d'eux, dans cet ordre ; le nuancier montré tout à droite.
+    let avant = cases.iter().find(|(f, r)| *f == egui::Color32::from_rgb(24, 24, 28) && r.width() > 25.0).expect("le carré d'avant-plan").1;
+    let (plus, moins, dots) = (
+        trouver(&textes, ph::PLUS).expect("le + du nuancier").1,
+        trouver(&textes, ph::MINUS).expect("le − du nuancier").1,
+        trouver(&textes, ph::DOTS_THREE).expect("le … du nuancier").1,
+    );
+    let (_, nom) = trouver(&textes, &nuancier).expect("le nuancier montré");
+    for b in [plus, moins, dots] {
+        assert!(b.center().y > avant.top() && b.center().y < avant.bottom(), "sur la ligne des carrés : {b:?} / {avant:?}");
+    }
+    assert!(plus.left() > avant.right() && plus.left() < moins.left() && moins.left() < dots.left(), "+ − … dans cet ordre");
+    assert!(nom.left() > dots.right(), "le nuancier à droite des commandes : {nom:?} / {dots:?}");
+    let blanc = cases.iter().filter(|(f, _)| *f == egui::Color32::WHITE).map(|c| c.1).max_by(|a, b| a.top().total_cmp(&b.top())).expect("le blanc des neutres");
+    assert!(blanc.right() - nom.right() < 40.0, "le nuancier calé au bord droit : {nom:?} / {blanc:?}");
 }
 
 #[test]

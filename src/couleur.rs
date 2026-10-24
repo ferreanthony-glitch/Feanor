@@ -187,7 +187,7 @@ pub struct ColorSettings {
     /// Curseurs montrés : TSV, RVB ou TSL.
     #[serde(rename = "curseurs")]
     pub sliders: SliderMode,
-    /// « Plus de couleurs » (la roue ou les curseurs, le code, les couleurs récentes, les nuanciers) est
+    /// « Plus de couleurs » (la roue ou les curseurs, le code, les couleurs récentes) est
     /// dépliée dans le panneau Couleur. Replié d'office : le nuancier passe en premier. Un réglage de
     /// l'application, pas du projet.
     #[serde(rename = "plus_ouvert")]
