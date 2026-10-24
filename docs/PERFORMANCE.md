@@ -1831,3 +1831,73 @@ les six restent, rien n'est renvoyé), le cache regrandit quand la place revient
 jusqu'au plancher (ce n'est pas le cas ici : la mémoire revient à la lecture suivante) ; le pire serait alors un cache de
 64 Mo, les dessins de chaque image renvoyés à la carte (lent, juste). Deux cartes identiques : la première est prise.
 
+
+### 27.2 Le hors-feuille ne se refait que quand ce qu'il montre change, et sur un autre fil (`monde.rs`)
+
+**Le constat de l'audit** : le hors-feuille de l'écran (toile infinie, travellings) se refaisait en entier dès que le
+`Plan` changeait — à chaque image de la lecture, du défilement, de la pelure d'oignon, de chaque réglage tiré —, sur le fil
+de l'interface : copie du tampon (jusqu'à 4096² pixels, 67 Mo), envoi de la texture entière, puis composition sous un
+budget de 5 ms par image. La relecture le notait aussi : « le hors-feuille ne se refait pas pour rien » était optimiste,
+une opacité tirée le refaisait.
+
+**Ce qui change** :
+- la clé n'est plus le plan entier mais **ce que le plan pose hors de la feuille** (`monde::WorldKey`) : le papier et les
+  éléments qui peuvent y montrer un pixel (`monde::contributes`), avec leur dessin, opacité, teinte, mode de fusion,
+  transformation. N'y entrent pas : une feuille posée par un maillage, un dessin d'une autre taille (tous deux posés sur la
+  feuille seulement, que le hors-feuille efface), un dessin vide, un dessin dont tout ce qui est dessiné — transformé, avec
+  la marge du lissage — reste dans les tuiles entières de la feuille. Par prudence, un élément à effets, à remplissage au
+  griffonnage ou qui n'est pas un dessin du projet y entre toujours (ce qu'il montre peut déborder de son dessin) ;
+- quand la clé change (autre plan, réglage d'un calque qui dépasse, `invalidate_all`), le hors-feuille se refait **sur un
+  autre fil** (« hors-feuille », la moitié des cœurs) d'après un instantané du plan : les dessins montrés (effets compris)
+  dont les tuiles sont partagées, rien n'est copié. L'écran garde l'image d'avant en attendant ; à l'arrivée, seules les
+  tuiles qui ont changé vont à la texture, celles d'avant qui n'existent plus sont effacées. Un réglage tiré en continu est
+  suivi au rythme de ces calculs (le suivant part à l'arrivée du précédent ; rien n'est jeté en route). Un trait posé
+  pendant ce temps est recomposé à l'arrivée ;
+- la composition d'une tuile est la même des deux côtés (`render::world_item_over`, tirée de `composite_world_tile`) ;
+- la texture n'est refaite que si sa taille change (nouvelle zone ou nouvelle finesse), sans copie du tampon (deux images
+  mises à zéro) ; à taille égale, les tuiles écrites sont effacées une à une. Une autre zone se compose ici, par petits
+  morceaux, comme avant.
+
+**Mesure** (`monde_tests::perf_monde`, `--ignored`, même processus : `monde_avant.rs` est le code d'eb82649, gardé pour les
+essais seulement). Feuille 1920 × 1080, un décor de 5 760 × 1 080 qui dépasse des deux côtés (travelling), un personnage
+animé dans la feuille, un premier plan qui dépasse un peu ; vue sur tout le décor (texture réduite de moitié) ; temps de
+`Monde::update` sur le fil de l'interface, 90 images, deux séries :
+
+| Geste | Avant (moyenne / pire) | Après (moyenne / pire) | Hors-feuilles refaits sur l'autre fil |
+|---|---|---|---|
+| Lecture (le personnage change de dessin à chaque image) | 5,92 / 6,7 ms ; 5,83 / 6,6 ms | **0,02 / 0,1 ms** ; 0,02 / 0,0 ms | 0 |
+| Opacité du personnage tirée | 5,95 / 7,0 ms ; 5,88 / 7,0 ms | **0,02 / 0,0 ms** ; 0,02 / 0,0 ms | 0 |
+| Opacité du décor tirée | 5,92 / 6,7 ms ; 5,90 / 6,8 ms | **1,15 / 3,6 ms** ; 1,18 / 3,6 ms | 44, 45 |
+| Changer de plan à chaque image | 5,88 / 6,6 ms ; 5,98 / 6,8 ms | **1,17 / 4,5 ms** ; 1,20 / 2,9 ms | 45, 45 |
+
+« Avant » bute sur le budget de 5 ms (plus la copie du tampon et l'envoi de la texture entière, que la mesure ne compte pas
+côté carte) **et ne finissait jamais** : refait de zéro à chaque image, le hors-feuille restait à moitié blanc pendant toute
+la lecture ou tout le geste. Après, le décor tiré se suit environ une image sur deux (le calcul d'un hors-feuille de
+~1 050 tuiles tient en une à deux images d'écran) ; ce qui reste sur le fil de l'interface est l'arrivée (comparer et
+écrire les tuiles, envoyer celles qui changent) et l'instantané.
+
+Essais (`monde_tests.rs`) : après 120 changements de réglages tirés au hasard (dessin montré, visibilité, opacité, teinte,
+mode de fusion dont « Dissoudre », déplacement, agrandissement ; parfois plusieurs images avant l'arrivée), le hors-feuille
+est pixel pour pixel celui d'un hors-feuille refait de zéro (40 vérifications) ; 200 changements des seuls calques qui
+restent dans la feuille ne refont rien (aucune tuile composée) ; l'opacité d'un calque qui dépasse le refait sur l'autre
+fil, l'image d'avant restant à l'écran en attendant ; `contributes` (déplacé hors de la feuille, agrandi, vide, tuile de
+bord). Les essais de la toile infinie (`toile_tests.rs`) passent tels quels (leur `settle` attend l'autre fil).
+
+**Risques** : un plan qui change de contenu hors de la feuille montre une à deux images le hors-feuille d'avant (y compris
+celui de l'autre plan au passage d'un plan à l'autre pendant la lecture) au lieu d'un hors-feuille à moitié blanc. Si la
+règle `contributes` oubliait un cas où un calque « dans la feuille » montre un pixel au-delà, un réglage de ce calque ne
+referait pas le hors-feuille (l'essai au hasard couvre les cas connus ; les effets sont toujours comptés). La mémoire : le
+résultat du fil (les tuiles réduites) le temps de son arrivée.
+
+### 27.3 Deux points de la relecture indépendante
+
+- **Rejeu** (`rejeu.rs`) : une demande interactive réveillait aussi un fil du chargement libre, sous la priorité de
+  l'interface, qui pouvait la prendre alors que le fil des gestes était libre ; sous charge, le geste tournait à basse
+  priorité. La file sait maintenant si le fil des gestes est occupé : les fils du chargement ne prennent une demande
+  interactive que pendant ce temps (le fil des gestes réveille l'un d'eux s'il en laisse une en attente). Essai : douze
+  gestes rendus par le fil des gestes quand il est libre ; un second geste pendant un long premier va à un fil du
+  chargement, sans attendre. L'essai du chargement sur plusieurs fils passe tel quel.
+- **Onglets fermés** (`onglets.rs`) : la copie de secours, l'écriture en cours et le film partagé d'un onglet fermé se
+  ferment sur des fils détachés ; si SHOT quittait juste après, ils n'étaient pas attendus. Ils sont gardés
+  (`fermetures_d_onglets`) et attendus dans `fermer_tous_les_onglets`, avant `sortie_sans_rendre`. Essai : un onglet fermé
+  pendant une copie de secours, SHOT quitte aussitôt : aucun dossier de secours ne reste.

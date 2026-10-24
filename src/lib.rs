@@ -369,6 +369,11 @@ mod calquecouleurui;
 mod calquemenu;
 mod repli;
 pub mod monde;
+// Le hors-feuille d'avant `optim-vram-monde`, pour les mesures avant / après dans le même processus.
+#[cfg(test)]
+mod monde_avant;
+#[cfg(test)]
+mod monde_tests;
 // Toile infinie : tuiles hors de la feuille (essais).
 #[cfg(test)]
 mod toile_tests;
