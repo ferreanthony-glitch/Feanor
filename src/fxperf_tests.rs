@@ -29,7 +29,7 @@ const COPY: &str = r"C:\Users\ferre\AppData\Local\Temp\claude\C--Users-ferre-Doc
 fn real_vector(id: u64, w: usize, h: usize) -> Option<Cel> {
     let text = std::fs::read_to_string(Path::new(COPY).join(format!("{id}.json"))).ok()?;
     let drawing: crate::vector::VectorDrawing = serde_json::from_str(&text).ok()?;
-    Some(Cel { raster: drawing.render(w, h), vector: Some(drawing), version: 0, fond: None })
+    Some(Cel { raster: drawing.render(w, h), vector: Some(drawing), version: 0, fond: None, absent: None })
 }
 
 fn real_bitmap(id: u64, w: usize, h: usize) -> Option<Cel> {

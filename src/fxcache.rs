@@ -851,7 +851,7 @@ fn worker_loop() {
             None if job.griffon.is_some() => Raster::new(job.src.width, job.src.height),
             None => crate::fxproxy::downscale(&job.src, job.level),
         });
-        let cel = Arc::new(Cel { raster, vector: None, version: job.version, fond: None });
+        let cel = Arc::new(Cel { raster, vector: None, version: job.version, fond: None, absent: None });
         // (Un autre projet s'est ouvert pendant le calcul : le résultat ne lui appartient pas.)
         if job.world == world() {
             let dropped = insert(&mut lock(), job.id, job.version, cel, Some(job.origin));

@@ -161,7 +161,7 @@ pub fn shown(doc: &Document, cel: CelId) -> Option<Arc<Cel>> {
         }
     }
     let raster = read_frame(doc, &frame_file(&dir_of(id)?, k, &ext))?;
-    let loaded = Arc::new(Cel { raster, vector: None, version: 1, fond: None });
+    let loaded = Arc::new(Cel { raster, vector: None, version: 1, fond: None, absent: None });
     let mut cache = CACHE.lock().unwrap_or_else(|e| e.into_inner());
     cache.push((cel, loaded.clone()));
     if cache.len() > CACHE_MAX {

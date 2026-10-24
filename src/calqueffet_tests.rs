@@ -255,7 +255,7 @@ fn a_resolved_plan_keeps_its_derived_drawings_when_the_cache_lets_them_go() {
     let _rend = Rend(crate::fxcache::limit());
     crate::fxcache::set_limit(1 << 20);
     let other = crate::raster::Raster::from_rgba(1024, 1024, &vec![200u8; 1024 * 1024 * 4]);
-    crate::fxcache::get_or_compute((1 << 63) | 0xC0FFEE, 1, None, || crate::document::Cel { raster: other, vector: None, version: 1, fond: None });
+    crate::fxcache::get_or_compute((1 << 63) | 0xC0FFEE, 1, None, || crate::document::Cel { raster: other, vector: None, version: 1, fond: None, absent: None });
     assert!(crate::fxcache::get_any(id).is_none(), "le dessin dérivé a quitté la réserve");
     let again = render::composite_full(&d, &resolved);
     assert!(again == exact, "le plan résolu compose encore le calque d'effet : {:?} au point (20, 20)", at(&again, 20, 20));

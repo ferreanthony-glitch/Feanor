@@ -25,9 +25,9 @@ pub(crate) enum Choose {
 
 /// Le calque n'a aucun dessin, ou seulement des dessins vides.
 pub(crate) fn is_empty_layer(doc: &Document, layer: &Layer) -> bool {
-    layer.frames.iter().flatten().all(|id| doc.cels.get(id).is_none_or(|c| c.is_empty()))
+    layer.frames.iter().flatten().all(|id| doc.cels.get_ou_absent(id).is_none_or(|c| c.is_empty()))
         // (Les griffonnages d'un calque de couleur comptent : ils remplissent des zones.)
-        && layer.couleur.as_ref().is_none_or(|c| c.dessins_griffonnages().all(|g| doc.cels.get(&g).is_none_or(|c| c.is_empty())))
+        && layer.couleur.as_ref().is_none_or(|c| c.dessins_griffonnages().all(|g| doc.cels.get_ou_absent(&g).is_none_or(|c| c.is_empty())))
 }
 
 /// Calques choisis par `how` (ids), pour un plan dont le calque courant est `cur`.

@@ -298,6 +298,14 @@ impl App {
             if self.content_refuses() {
                 return;
             }
+            // Tous les dessins changent de taille : ceux qui sont hors de la mémoire reviennent d'abord (`residenceapp.rs`).
+            let absents = self.doc.cels.absents();
+            if absents > 0 {
+                self.residence.tout_garder = true;
+                self.status = format!("Changer la taille du projet demande tous ses dessins : {absents} reviennent du dossier du projet. Applique de nouveau dans un instant.");
+                return;
+            }
+            self.residence.tout_garder = false;
             self.end_stroke();
             self.playing = false;
             self.doc.resize_frame(e.w, e.h, e.scale);

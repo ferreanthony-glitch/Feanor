@@ -122,6 +122,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
                 vector: Some(drawing),
                 version: 0,
                 fond: None,
+                absent: None,
             },
             None => {
                 let end = c.offset.checked_add(c.length).ok_or("fichier tronqué")?;
@@ -137,6 +138,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
                     vector: None,
                     version: 0,
                     fond: None,
+                    absent: None,
                 }
             }
         };

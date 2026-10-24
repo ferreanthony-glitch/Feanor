@@ -466,7 +466,10 @@ fn textures_de(d: &Donnees) -> Vec<(TextureKind, u32)> {
 /// Hache les dessins de `demande`, puis chaque plan ; pour un envoi, bâtit aussi son instantané. Rien ici ne
 /// touche au document : tout vient de copies (`Panel`, tuiles partagées), c'est un travail de fil de fond.
 pub fn construire(demande: Demande) -> Result<Resultat, String> {
-    let Demande { plans, cels, connus, tete, envoi } = demande;
+    let Demande { plans, mut cels, connus, tete, envoi } = demande;
+    // Les dessins hors de la mémoire (`residence.rs`) reviennent ici, sur ce fil ; celui qui ne le peut pas est laissé de
+    // côté (il compte comme un dessin qu'on ne trouve pas : jamais une image vide à sa place).
+    cels.retain(|_, c| c.donnees.resoudre());
     // Les dessins : l'empreinte connue si la version n'a pas bougé, sinon on la calcule (en parallèle).
     let ids: Vec<CelId> = cels.keys().copied().collect();
     let hachees: Vec<u64> = crate::parallele::par_map(&ids, 8, |_, id| {

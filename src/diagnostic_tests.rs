@@ -197,8 +197,10 @@ fn the_settings_become_the_values_the_program_reads() {
         animations_coupees: true,
         traits_textures: TraitsTextures::Rapide,
         effets_gpu: false,
+        memoire_dessins_mo: 1024,
     }
     .cibles();
+    assert_eq!(p.memoire_dessins, 1024 << 20);
     assert_eq!((p.effets_min, p.tremblement_coupe, p.pelure_max, p.fils, p.vignettes_pct, p.animations_coupees, p.effets_gpu), (1, true, 2, 3, 25, true, false));
     assert_eq!((p.cache_carte, p.cache_traits, p.cache_effets), (512 << 20, 256 << 20, 384 << 20));
     // Hors bornes (fichier édité à la main) : ramené dans les bornes.

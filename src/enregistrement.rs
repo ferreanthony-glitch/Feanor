@@ -265,6 +265,16 @@ impl App {
                     self.doc.envois.dossier = manifest.parent().map(std::path::Path::to_path_buf);
                     self.remember_project(&manifest);
                     self.path = Some(manifest.clone());
+                    // Les dessins hors de la mémoire se relisent désormais de ce dossier (`residenceapp.rs`).
+                    if let Some(d) = manifest.parent() {
+                        self.absents_apres_enregistrement(d);
+                    }
+                    if !report.introuvables.is_empty() {
+                        self.status = format!(
+                            "Enregistré, mais {} dessin(s) hors de la mémoire n'ont plus leur fichier dans le dossier du projet (effacé à côté de SHOT) : ils ne peuvent pas être réécrits.",
+                            report.introuvables.len()
+                        );
+                    }
                     self.import_source = None;
                     // (Le projet a un nom et un chemin : la session le retient, `onglets.rs`.)
                     self.session_a_ecrire = true;

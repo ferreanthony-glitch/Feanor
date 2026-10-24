@@ -35,11 +35,23 @@ pub enum Edit {
     /// (images, expositions, réglages), pistes son, guides, papier, cadence.
     Structure { structure: Structure, nav: Nav },
     Group(Vec<Edit>),
+    /// Une étape `Tiles` ou `FondTiles` ancienne, dont les tuiles sont comprimées (`histocomprime.rs`) : elle se
+    /// décomprime à son application et redevient une étape ordinaire.
+    Comprime(Box<crate::histocomprime::Comprime>),
 }
 
 impl Edit {
     pub fn apply(self, doc: &mut Document, nav: &mut Nav) -> Edit {
         match self {
+            Edit::Comprime(c) => {
+                let (cel, coupe) = (c.cel, c.coupe);
+                let tiles = c.decomprimer();
+                match coupe {
+                    None => Edit::Tiles { cel, tiles },
+                    Some(coupe) => Edit::FondTiles { cel, tiles, coupe },
+                }
+                .apply(doc, nav)
+            }
             Edit::Tiles { cel, tiles } => {
                 let Some(c) = doc.cels.get_mut(&cel) else {
                     return Edit::Group(Vec::new());
@@ -149,12 +161,33 @@ pub struct History {
     /// Le nom des étapes enregistrées maintenant : la commande lancée, sinon le panneau ou l'outil
     /// en cours (posé par l'application) ; à défaut, la sorte de modification.
     pub context: Option<String>,
+    /// Les vieilles étapes comprimées en fond (`histocomprime.rs`).
+    pub(crate) compression: crate::histocomprime::SuiviCompression,
+}
+
+/// Les dessins dont l'étape `e` touche les pixels ou les traits.
+fn dessins_de(e: &Edit, out: &mut Vec<CelId>) {
+    match e {
+        Edit::Tiles { cel, .. } | Edit::FondTiles { cel, .. } | Edit::Vector { cel, .. } => {
+            if !out.contains(cel) {
+                out.push(*cel);
+            }
+        }
+        Edit::Comprime(c) => {
+            if !out.contains(&c.cel) {
+                out.push(c.cel);
+            }
+        }
+        Edit::Group(v) => v.iter().for_each(|e| dessins_de(e, out)),
+        Edit::Structure { .. } => {}
+    }
 }
 
 /// Le nom d'une étape sans contexte : ce qu'elle a changé.
 fn kind_name(edit: &Edit) -> &'static str {
     match edit {
         Edit::Tiles { .. } => "Dessin",
+        Edit::Comprime(c) => if c.coupe.is_some() { "Aplat" } else { "Dessin" },
         Edit::Vector { .. } => "Dessin vectoriel",
         Edit::FondTiles { .. } => "Aplat",
         Edit::Structure { .. } => "Modification",
@@ -227,7 +260,16 @@ impl History {
         true
     }
 
+    /// La prochaine étape (`redo` : à rétablir) peut s'appliquer : aucun de ses dessins n'est absent (`residence.rs` ;
+    /// l'appliquer à un dessin absent la perdrait). `App::undo` fait revenir les dessins d'abord.
+    pub(crate) fn prete(&self, doc: &Document, redo: bool) -> bool {
+        self.dessins_de_la_prochaine(redo).iter().all(|id| !doc.cels.est_absent(id))
+    }
+
     pub fn undo(&mut self, doc: &mut Document, nav: &mut Nav) -> bool {
+        if !self.prete(doc, false) {
+            return false;
+        }
         let Some(edit) = self.undo.pop() else {
             return false;
         };
@@ -238,6 +280,9 @@ impl History {
     }
 
     pub fn redo(&mut self, doc: &mut Document, nav: &mut Nav) -> bool {
+        if !self.prete(doc, true) {
+            return false;
+        }
         let Some(edit) = self.redo.pop() else {
             return false;
         };
@@ -276,5 +321,61 @@ impl History {
     /// Aucune étape à annuler ni à rétablir (un projet qu'on n'a pas encore touché, `onglets.rs`).
     pub fn is_empty(&self) -> bool {
         self.undo.is_empty() && self.redo.is_empty()
+    }
+
+    /// Les dessins dont la prochaine annulation (`redo` : le prochain rétablissement) touche les pixels ou les traits :
+    /// ils doivent être présents pour qu'elle s'applique (`residence.rs`).
+    pub(crate) fn dessins_de_la_prochaine(&self, redo: bool) -> Vec<CelId> {
+        let mut out = Vec::new();
+        if let Some(e) = if redo { self.redo.last() } else { self.undo.last() } {
+            dessins_de(e, &mut out);
+        }
+        out
+    }
+
+    /// Les dessins des `n` dernières étapes à annuler et de la prochaine à rétablir (gardés en mémoire : Ctrl+Z reste
+    /// instantané).
+    pub(crate) fn dessins_proches(&self, n: usize) -> Vec<CelId> {
+        let mut out = Vec::new();
+        for e in self.undo.iter().rev().take(n).chain(self.redo.last()) {
+            dessins_de(e, &mut out);
+        }
+        out
+    }
+
+    /// Les tuiles que les étapes gardent (dessins et strates Fond, à annuler et à rétablir) : leur nombre (le
+    /// diagnostic des performances en montre le poids).
+    pub(crate) fn tuiles_gardees(&self) -> usize {
+        fn de(e: &Edit) -> usize {
+            match e {
+                Edit::Tiles { tiles, .. } | Edit::FondTiles { tiles, .. } => tiles.iter().filter(|t| t.1.is_some()).count(),
+                Edit::Group(v) => v.iter().map(de).sum(),
+                Edit::Vector { .. } | Edit::Structure { .. } | Edit::Comprime(_) => 0,
+            }
+        }
+        self.undo.iter().chain(&self.redo).map(de).sum()
+    }
+
+    /// Les octets que tiennent les étapes comprimées (diagnostic).
+    pub(crate) fn octets_comprimes(&self) -> usize {
+        fn de(e: &Edit) -> usize {
+            match e {
+                Edit::Comprime(c) => c.octets(),
+                Edit::Group(v) => v.iter().map(de).sum(),
+                _ => 0,
+            }
+        }
+        self.undo.iter().chain(&self.redo).map(de).sum()
+    }
+
+    /// Toutes les étapes, à annuler puis à rétablir.
+    pub(crate) fn etapes_mut(&mut self) -> impl Iterator<Item = &mut Edit> {
+        self.undo.iter_mut().chain(self.redo.iter_mut())
+    }
+
+    /// Les étapes au-delà des `garder` plus récentes de chaque côté : à annuler (la dernière faite est la plus récente),
+    /// à rétablir (la prochaine est la plus récente).
+    pub(crate) fn etapes_anciennes(&self, garder: usize) -> [&[Edit]; 2] {
+        [&self.undo[..self.undo.len().saturating_sub(garder)], &self.redo[..self.redo.len().saturating_sub(garder)]]
     }
 }

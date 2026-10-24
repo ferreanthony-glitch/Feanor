@@ -154,6 +154,8 @@ impl App {
         // superposer, composés par la carte graphique comme le plan courant (`transitionsui.rs`).
         let mixed = if self.gpu.is_some() { self.transition_preview() } else { None };
         let setup = mixed.map(|(_, mix)| self.mix_setup(&mix, &plan, rect, size));
+        // (Composé par le processeur : un dessin absent n'y est pas, `residence.rs`.)
+        let mut attente = self.gpu.is_none() && plan.items.iter().any(|i| self.doc.cels.est_absent(&i.cel));
         if let Some(gpu) = &mut self.gpu {
             // Les calques sont superposés par la carte graphique, directement à leur place.
             let (all, tiles) = self.renderer.take_gpu_dirty();
@@ -166,6 +168,8 @@ impl App {
                         crate::fx::differe(|| gpu.sync(&self.doc, &plan, all, &tiles, &ahead, level))
                     };
                     painter.add(gpu.paint(&plan, &resolved, corners, ws, rect, stage));
+                    // Un dessin pas encore revenu en mémoire, sans texture : la vignette du plan en attendant (`residenceapp.rs`).
+                    attente = plan.items.iter().zip(&resolved).any(|(i, r)| r.is_none() && self.doc.cels.est_absent(&i.cel));
                 }
                 Some(s) => {
                     // Les dessins des deux plans partent ensemble à la carte (un seul `sync` : les
@@ -211,6 +215,9 @@ impl App {
                 }
             }
             painter.add(Shape::mesh(mesh));
+        }
+        if attente {
+            self.poser_vignette_d_attente(ui.ctx(), &painter, rect, size);
         }
 
         // (La grande case d'un mouvement de caméra a ses propres cadres, A, B, C… : `vignettecamui.rs`.)

@@ -283,7 +283,7 @@ impl App {
             return Err("Le calque où écrire est verrouillé.".into());
         }
         // Les clés.
-        let has_colour = |f: usize| source.cel_at(f).and_then(|id| self.doc.cels.get(&id)).is_some_and(|cel| !cel.is_empty());
+        let has_colour = |f: usize| source.cel_at(f).and_then(|id| self.doc.cels.get_ou_absent(&id)).is_some_and(|cel| !cel.is_empty());
         let mut key_frames: Vec<usize> = if c.keys_typed {
             parse_frames(&c.keys_text, self)?.into_iter().filter(|&f| f < count && has_colour(f)).collect()
         } else {
@@ -806,7 +806,7 @@ fn run_job(
             LayerKind::Bitmap => Cel::bitmap(coloriage::fill_raster(&image.seg, &image.couleurs)),
             LayerKind::Vector => {
                 let drawing = coloriage::fill_vector(&image.seg, &image.couleurs);
-                Cel { raster: drawing.render(size.0, size.1), vector: Some(drawing), version: 0, fond: None }
+                Cel { raster: drawing.render(size.0, size.1), vector: Some(drawing), version: 0, fond: None, absent: None }
             }
         };
         cels.push((image.cadre, cel));

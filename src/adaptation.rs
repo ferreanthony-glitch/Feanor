@@ -474,11 +474,16 @@ fn adapte_dessin_contenu(cel: &Cel, ad: &Adaptation, w: usize, h: usize, fils: u
             for e in &mut d.elements {
                 *e = e.transformed(&m);
             }
-            let mut c = Cel { raster: Raster::new(w, h), vector: Some(d), version: 0, fond };
+            let mut c = Cel { raster: Raster::new(w, h), vector: Some(d), version: 0, fond, absent: None };
             c.rerender();
             c
         }
-        None => Cel { raster: reechantillonne(&cel.raster, ad.s, ad.t, w, h, fils), vector: None, version: 0, fond },
+        // (Un dessin hors de la mémoire revient d'abord, `residence.rs` : on est sur un fil de collage. S'il ne peut pas
+        // revenir, il reste absent, tel quel : jamais une image vide à sa place.)
+        None => match cel.pixels_hors_interface(cel.raster.width, cel.raster.height) {
+            Ok(src) => Cel { raster: reechantillonne(&src, ad.s, ad.t, w, h, fils), vector: None, version: 0, fond, absent: None },
+            Err(_) => cel.clone(),
+        },
     }
 }
 

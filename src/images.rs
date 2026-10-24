@@ -570,7 +570,7 @@ impl App {
             .iter()
             .flatten()
             .flatten()
-            .filter_map(|id| self.doc.cels.get(id).map(|c| (*id, c.clone())))
+            .filter_map(|id| self.doc.cels.get_ou_absent(id).map(|c| (*id, c.clone())))
             .collect();
         let (n, k) = (b - a, rows.len());
         self.image_clipboard = Some(ImageClip { rows, cels, roles: role_rows, origine: crate::adaptation::Origine::de(&self.doc) });

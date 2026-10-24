@@ -888,13 +888,31 @@ fn hors_atlas(tiles: &[((i32, i32), crate::raster::Tile)]) -> (Raster, HorsIndex
 /// Remet dans le dessin `cel` ce qu'il avait hors de la feuille (rien, sans bruit, si les fichiers
 /// sont abîmés : un avertissement le dit).
 fn read_hors(dir: &Path, id: CelId, cel: &mut Cel) -> Result<(), String> {
-    let text = fs::read_to_string(hors_json_path(dir, id)).map_err(|e| format!("dessin {id} : ce qu'il a hors de la feuille est illisible ({e})"))?;
+    read_hors_dans(&hors_json_path(dir, id), &hors_png_path(dir, id), id, &mut cel.raster)
+}
+
+/// Les pixels d'un dessin bitmap absent (`residence.rs`), relus de son fichier `png` et, s'il en a, de son hors-feuille
+/// (`hors` : atlas, index) : sur un fil de fond. Un hors-feuille illisible est une erreur (le dessin reste absent : le
+/// faire revenir sans lui le perdrait au prochain enregistrement).
+pub(crate) fn relire_bitmap(png: &Path, hors: Option<(&Path, &Path)>, w: usize, h: usize) -> Result<Raster, String> {
+    let nom = png.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let mut raster = read_rgba(png, |pw, ph, data| (pw == w && ph == h).then(|| Raster::from_rgba(w, h, data)))
+        .map_err(|e| format!("dessin {nom} illisible : {e}"))?
+        .ok_or_else(|| format!("dessin {nom} : taille différente de celle du projet"))?;
+    if let Some((atlas, index)) = hors {
+        read_hors_dans(index, atlas, nom.parse().unwrap_or(0), &mut raster)?;
+    }
+    Ok(raster)
+}
+
+fn read_hors_dans(json: &Path, png: &Path, id: CelId, raster: &mut Raster) -> Result<(), String> {
+    let text = fs::read_to_string(json).map_err(|e| format!("dessin {id} : ce qu'il a hors de la feuille est illisible ({e})"))?;
     let index: HorsIndex = serde_json::from_str(&text).map_err(|e| format!("dessin {id} : ce qu'il a hors de la feuille est illisible ({e})"))?;
     if index.tuiles.len() > MAX_HORS_TUILES || index.colonnes == 0 || index.colonnes > 4096 {
         return Err(format!("dessin {id} : ce qu'il a hors de la feuille est démesuré"));
     }
     let tile = crate::raster::TILE;
-    let atlas = read_rgba(&hors_png_path(dir, id), |pw, ph, data| {
+    let atlas = read_rgba(png, |pw, ph, data| {
         (pw % tile == 0 && ph % tile == 0 && pw / tile >= index.colonnes && (ph / tile) * index.colonnes >= index.tuiles.len()).then(|| Raster::from_rgba(pw, ph, data))
     })
     .map_err(|e| format!("dessin {id} : ce qu'il a hors de la feuille est illisible ({e})"))?
@@ -902,7 +920,7 @@ fn read_hors(dir: &Path, id: CelId, cel: &mut Cel) -> Result<(), String> {
     for (i, [tx, ty]) in index.tuiles.iter().enumerate() {
         let slot = (i / index.colonnes) * atlas.tiles_x + i % index.colonnes;
         if let Some(Some(t)) = atlas.tiles.get(slot) {
-            cel.raster.absorb_beyond(*tx, *ty, t.clone());
+            raster.absorb_beyond(*tx, *ty, t.clone());
         }
     }
     Ok(())
@@ -982,6 +1000,10 @@ fn cle_memo(cel: &Cel) -> (u64, usize, usize, bool) {
 }
 
 fn memo_de(cel: &Cel) -> MemoDessin {
+    // Un dessin bitmap absent (`residence.rs`) : son image vide ne dit rien ; son absence sait s'il a un hors-feuille.
+    if let (Some(a), None) = (&cel.absent, &cel.vector) {
+        return MemoDessin { cle: cle_memo(cel), hors: a.a_du_hors(), textures: Vec::new() };
+    }
     let mut textures = BTreeSet::new();
     for e in cel.vector.iter().flat_map(|v| &v.elements) {
         if let crate::vector::Element::Stroke { brush: Some(b), .. } = e {
@@ -1012,12 +1034,18 @@ fn memo_a_jour<'m>(memo: &'m mut MemoDessins, id: CelId, cel: &Cel) -> &'m MemoD
     m
 }
 
+/// Le dessin bitmap `id` a-t-il quelque chose hors de la feuille, à sa version (le mémo, refait au besoin) ? Ce qu'un
+/// dessin laissé hors de la mémoire doit relire avec lui (`residence.rs`).
+pub(crate) fn memo_hors(memo: &mut MemoDessins, id: CelId, cel: &Cel) -> bool {
+    cel.vector.is_none() && memo_a_jour(memo, id, cel).hors
+}
+
 impl Document {
     /// Le mémo de l'enregistrement pour tous les dessins (à l'ouverture, sur le fil d'ouverture : le premier
     /// enregistrement ne relit pas les pixels du bord de chaque dessin sur le fil de l'interface).
     pub(crate) fn memoriser_dessins(&self) {
         let mut memo = self.memo_enregistrement.lock().unwrap_or_else(|e| e.into_inner());
-        for (&id, cel) in &self.cels {
+        for (&id, cel) in self.cels.tous() {
             memo_a_jour(&mut memo, id, cel);
         }
     }
@@ -1027,7 +1055,7 @@ impl Document {
 /// vectoriel ne garde rien à part : ses traits se rendent à la lecture, hors de la feuille aussi.
 fn hors_of(doc: &Document, used: &BTreeSet<CelId>) -> BTreeSet<CelId> {
     let mut memo = doc.memo_enregistrement.lock().unwrap_or_else(|e| e.into_inner());
-    used.iter().copied().filter(|id| doc.cels.get(id).is_some_and(|c| c.vector.is_none() && memo_a_jour(&mut memo, *id, c).hors)).collect()
+    used.iter().copied().filter(|id| doc.cels.get_ou_absent(id).is_some_and(|c| c.vector.is_none() && memo_a_jour(&mut memo, *id, c).hors)).collect()
 }
 
 /// Textures citées par les traits vectoriels texturés des dessins `used` : (sorte, clé).
@@ -1035,7 +1063,7 @@ fn used_textures(doc: &Document, used: &BTreeSet<CelId>) -> BTreeSet<(TextureKin
     let mut memo = doc.memo_enregistrement.lock().unwrap_or_else(|e| e.into_inner());
     let mut out = BTreeSet::new();
     for &id in used {
-        if let Some(cel) = doc.cels.get(&id).filter(|c| c.vector.is_some()) {
+        if let Some(cel) = doc.cels.get_ou_absent(&id).filter(|c| c.vector.is_some()) {
             out.extend(memo_a_jour(&mut memo, id, cel).textures.iter().copied());
         }
     }
@@ -1107,6 +1135,9 @@ pub struct SaveReport {
     /// suite (`App::finish_save`, `project::save`, `Recovery::tick`) : c'est ce que l'enregistrement d'avant faisait
     /// d'un seul coup, quand il regardait le dossier sur le fil de l'interface.
     pub manquants: Vec<CelId>,
+    /// Des dessins absents (`residence.rs`) dont le fichier, le seul à tenir leurs pixels, n'est plus dans le dossier : rien
+    /// ne peut les réécrire ; l'interface le dit.
+    pub introuvables: Vec<CelId>,
 }
 
 /// Enregistre le projet. `written` retient la version de chaque dessin déjà écrit dans ce dossier.
@@ -1212,6 +1243,10 @@ pub struct SaveJob {
     differe: Option<Box<Differe>>,
     /// Les dessins déjà écrits dont les fichiers manquaient (`SaveReport::manquants`).
     manquants: Vec<CelId>,
+    /// Les dessins absents dont le fichier manque (`SaveReport::introuvables`).
+    introuvables: Vec<CelId>,
+    /// Les dessins absents (`residence.rs`) dont le fichier est dans ce dossier : jamais effacés (avec leur hors-feuille).
+    garder: BTreeSet<CelId>,
 }
 
 /// Les dessins de `used` à écrire dans `dir/dessins/` : ceux dont la version n'est pas celle déjà écrite (`written`) ou dont le
@@ -1229,7 +1264,7 @@ fn dessins_a_ecrire(
     let mut drawings = Vec::new();
     let mut reecrits = BTreeSet::new();
     // Les dessins qui ont une strate Fond peinte (format 23) : les autres `<id>_fond.png` partent.
-    let fonds: BTreeSet<CelId> = used.iter().copied().filter(|id| doc.cels.get(id).and_then(|c| c.fond.as_ref()).is_some_and(|f| !f.is_empty())).collect();
+    let fonds: BTreeSet<CelId> = used.iter().copied().filter(|id| doc.cels.get_ou_absent(id).and_then(|c| c.fond.as_ref()).is_some_and(|f| !f.is_empty())).collect();
     let hors = hors_of(doc, used);
     // Les fichiers déjà là, d'une seule lecture du dossier : un `exists` par dessin coûtait 0,15 ms
     // chacun sur le fil de l'interface (450 ms pour un enregistrement de 3 000 dessins où rien
@@ -1316,6 +1351,8 @@ struct DessinCliche {
 struct DonneesCliche {
     vecteur: Option<crate::vector::VectorDrawing>,
     raster: Option<Raster>,
+    /// Un dessin bitmap absent (`residence.rs`) : ses pixels sont dans son fichier (recopié), ou déjà revenus.
+    absent: Option<Arc<crate::residence::Absent>>,
     /// La strate Fond : peinture et coupe.
     fond: Option<(Raster, Raster)>,
     /// Un autre dossier où cette version du dessin est déjà écrite (la copie de secours d'un projet enregistré) : ses
@@ -1353,7 +1390,8 @@ fn cliche_dessins(
     for &id in used {
         let deja = written.get(&id).copied();
         retenus += usize::from(deja.is_some());
-        let Some(cel) = doc.cels.get(&id) else { continue };
+        // (Un dessin absent aussi : ses traits, ou le fichier qui tient ses pixels.)
+        let Some(cel) = doc.cels.get_ou_absent(&id) else { continue };
         let vector = cel.vector.is_some();
         let fond = cel.fond.as_ref().is_some_and(|f| !f.is_empty());
         let m = memo_a_jour(&mut memo, id, cel);
@@ -1365,7 +1403,8 @@ fn cliche_dessins(
             written.insert(id, cel.version);
             Some(Box::new(DonneesCliche {
                 vecteur: cel.vector.clone(),
-                raster: (!vector).then(|| cel.raster.clone()),
+                raster: (!vector && cel.absent.is_none()).then(|| cel.raster.clone()),
+                absent: cel.absent.clone().filter(|_| !vector),
                 fond: cel.fond.as_ref().filter(|_| fond).map(|s| (s.peinture.raster.clone(), s.coupe.clone())),
                 ailleurs: reuse_dir.zip(reuse).filter(|(_, r)| r.written.get(&id) == Some(&cel.version)).map(|(d, _)| d.to_path_buf()),
             }))
@@ -1415,6 +1454,8 @@ pub fn prepare_save(
     job.snapshot_reuse = crate::envois::dessins_reutilisables(&job.snapshots, written, &|id| Some(drawing_path(dir, id, false)));
     let versions_from = if reuse.is_none() { doc.envois.dossier.as_ref().filter(|d| d.as_path() != dir).map(|d| d.join(crate::envois::DIR)) } else { None };
     let hors_variantes = if doc.variantes.is_empty() { BTreeSet::new() } else { hors_of(doc, &doc.cels_des_variantes()) };
+    // Les fichiers des dessins absents de ce dossier tiennent leurs seuls pixels : jamais effacés.
+    job.garder = doc.cels.fichiers_a_garder(dir);
     job.differe = Some(Box::new(Differe { doc: doc.copie_sans_dessins(), used, dessins, hors_variantes, versions_from }));
     Ok(job)
 }
@@ -1441,7 +1482,7 @@ impl SaveJob {
             if c.hors {
                 hors.insert(id);
             }
-            let Some(DonneesCliche { vecteur, raster, fond, ailleurs }) = c.donnees.map(|d| *d) else {
+            let Some(DonneesCliche { vecteur, raster, absent, fond, ailleurs }) = c.donnees.map(|d| *d) else {
                 let complet = there(&drawing_path(dir, id, c.vector))
                     && (!c.fond || there(&fond_path(dir, id)))
                     && (!c.hors || (there(&hors_png_path(dir, id)) && there(&hors_json_path(dir, id))));
@@ -1450,6 +1491,29 @@ impl SaveJob {
                 }
                 continue;
             };
+            // Un dessin bitmap absent (`residence.rs`) : ses pixels, s'ils sont déjà revenus ; sinon ses fichiers, recopiés
+            // (le fichier même du dessin dans ce dossier : rien à écrire, il est là ou il est perdu).
+            let raster = raster.or_else(|| absent.as_ref().and_then(|a| a.deja_charge()));
+            if let (None, None, Some(a)) = (&vecteur, &raster, &absent) {
+                let Some(png) = a.png() else { return Err(format!("dessin {id} : contenu absent du cliché")) };
+                let cible = drawing_path(dir, id, false);
+                if png == cible {
+                    if !there(&cible) {
+                        self.introuvables.push(id);
+                    }
+                    continue;
+                }
+                self.drawings.push((cible, DrawingData::CopyFrom(png)));
+                if let Some((atlas, index)) = a.hors() {
+                    self.drawings.push((hors_png_path(dir, id), DrawingData::CopyFrom(atlas)));
+                    self.drawings.push((hors_json_path(dir, id), DrawingData::CopyFrom(index)));
+                }
+                if let (true, Some((peinture, coupe))) = (c.fond, fond) {
+                    self.drawings.push((fond_path(dir, id), DrawingData::Raster(peinture)));
+                    self.drawings.push((coupe_path(dir, id), DrawingData::Raster(coupe)));
+                }
+                continue;
+            }
             let copie = |path_of: &dyn Fn(&Path) -> PathBuf| ailleurs.as_deref().map(path_of).filter(|p| p.exists());
             // Ce que le dessin a hors de la feuille : recopié d'ailleurs si ses deux fichiers y sont, sinon ses tuiles.
             let hors_ailleurs = c.hors.then(|| (copie(&|d| hors_png_path(d, id)), copie(&|d| hors_json_path(d, id))));
@@ -1507,8 +1571,11 @@ impl SaveJob {
         self.has_unreadable = !unreadable.is_empty() || self.keep_drawings;
         self.kept = kept_files_in(dir);
         self.used = used.union(&unreadable).copied().collect();
+        self.used.extend(self.garder.iter().copied());
         self.fonds = fonds.union(&unreadable).copied().collect();
         self.hors = hors.union(&unreadable).copied().collect();
+        self.fonds.extend(self.garder.iter().copied());
+        self.hors.extend(self.garder.iter().copied());
         self.comments = crate::commentaires::to_bytes(&doc)?;
         self.reserves = crate::rognage::to_bytes(&doc)?;
         self.transitions = crate::transitions::to_bytes(&doc)?;
@@ -1881,7 +1948,7 @@ impl SaveJob {
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
             + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) }
             + self.references.cleanup(dir);
-        Ok(SaveReport { written: count, removed, snapshots: self.snapshots.iter().map(|s| s.id).collect(), partage: None, manquants: std::mem::take(&mut self.manquants) })
+        Ok(SaveReport { written: count, removed, snapshots: self.snapshots.iter().map(|s| s.id).collect(), partage: None, manquants: std::mem::take(&mut self.manquants), introuvables: std::mem::take(&mut self.introuvables) })
     }
 }
 
@@ -2397,7 +2464,21 @@ pub fn load_quick(manifest_path: &Path) -> Result<Loaded, String> {
 /// dessins lus / à lire : l'interface l'affiche pendant qu'un autre fil ouvre le projet
 /// (`ouverture.rs`).
 pub fn load_quick_progress(manifest_path: &Path, progress: &Progress) -> Result<Loaded, String> {
-    load_with(manifest_path, true, Some(progress))
+    load_with_avec(manifest_path, true, Some(progress), false)
+}
+
+/// Comme `load_quick_progress`, sans lire les pixels (`residence.rs`) : un projet classique s'ouvre avec ses dessins bitmap
+/// **absents** (relus de leur fichier quand on les regarde) et les images de ses dessins vectoriels à refaire (leurs traits
+/// sont lus). Ce que l'ouverture doit transformer (ancien format, calques CTG, panneaux à mettre bout à bout) se lit en
+/// entier, comme avant ; un projet partagé aussi.
+pub fn load_paresseux_progress(manifest_path: &Path, progress: &Progress) -> Result<Loaded, String> {
+    load_with_avec(manifest_path, true, Some(progress), true)
+}
+
+/// `load_paresseux_progress` sans suivre l'avancement (essais).
+#[cfg(test)]
+pub fn load_paresseux(manifest_path: &Path) -> Result<Loaded, String> {
+    load_with_avec(manifest_path, true, None, true)
 }
 
 /// Avancement d'une ouverture, lu par l'interface pendant qu'un autre fil travaille.
@@ -2408,6 +2489,10 @@ pub struct Progress {
 }
 
 fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> Result<Loaded, String> {
+    load_with_avec(manifest_path, quick, progress, false)
+}
+
+fn load_with_avec(manifest_path: &Path, quick: bool, progress: Option<&Progress>, paresseux: bool) -> Result<Loaded, String> {
     // (Des messages en français qui disent quel fichier : « stream did not contain valid UTF-8 »
     // ou « Le chemin d'accès spécifié est introuvable » ne disent pas ce qui ne va pas.)
     let marque_structure = fs::metadata(manifest_path).ok().map(|m| crate::depot::marque_de(&m));
@@ -2441,7 +2526,7 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
         }
         return Ok(loaded);
     }
-    load_manifest(manifest, dir, quick, progress)
+    load_manifest_avec(manifest, dir, quick, progress, Annexes { paresseux, ..Annexes::default() })
 }
 
 /// La suite de l'ouverture, une fois le manifeste lu : les dessins de `dir/dessins/`, les sons, les
@@ -2466,6 +2551,8 @@ pub(crate) struct Annexes {
     pub commentaires: Vec<crate::commentaires::Comment>,
     /// Sons déjà en mémoire, par numéro : ils ne sont pas relus du dossier (relecture de la structure).
     pub sons_connus: HashMap<u64, Sound>,
+    /// Ouvrir sans lire les pixels (`load_paresseux_progress`, `residence.rs`).
+    pub paresseux: bool,
 }
 
 fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress: Option<&Progress>, mut annexes: Annexes) -> Result<Loaded, String> {
@@ -2555,8 +2642,17 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         p.total.store(referenced.len(), std::sync::atomic::Ordering::Relaxed);
     }
     let hors: BTreeSet<CelId> = manifest.dessins_hors.iter().copied().collect();
+    // Sans lire les pixels (`residence.rs`) : seulement un projet que l'ouverture ne transforme pas (format au cadre, pas de
+    // calque CTG à convertir, une scène par plan). Les fichiers du dossier, d'une seule lecture : un dessin qui a une
+    // strate Fond se lit en entier (il ne quitte jamais la mémoire).
+    let paresseux = annexes.paresseux
+        && manifest.cadre.is_some()
+        && manifest.sequences.iter().flat_map(|s| &s.scenes).all(|s| s.panneaux.len() == 1)
+        && !manifest.sequences.iter().flat_map(|s| &s.scenes).flat_map(|s| &s.panneaux).flat_map(|p| &p.calques).any(|l| l.ctg.is_some());
+    let presents: std::collections::HashSet<std::ffi::OsString> =
+        if paresseux { fs::read_dir(dir.join(DRAWINGS)).map(|e| e.flatten().map(|e| e.file_name()).collect()).unwrap_or_default() } else { Default::default() };
     let loaded = crate::parallele::par_map(&referenced, LOAD_THREADS, |_, &id| {
-        let r = load_drawing(dir, id, w, h, quick, hors.contains(&id));
+        let r = if paresseux { load_drawing_paresseux(dir, id, w, h, quick, hors.contains(&id), &presents) } else { load_drawing(dir, id, w, h, quick, hors.contains(&id)) };
         if let Some(p) = progress {
             p.done.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
@@ -3193,6 +3289,33 @@ fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize, quick: bool, hors: bo
     Ok((cel, approximate, warning))
 }
 
+/// Le dessin `id` sans ses pixels (`residence.rs`) : un dessin bitmap devient absent (son fichier les tient), un dessin
+/// vectoriel garde ses traits et son image est à refaire. Un dessin qui a une strate Fond, ou que le dossier n'a pas sous
+/// le nom attendu, se lit comme d'habitude (`load_drawing`). `presents` : les fichiers de `dessins/`.
+fn load_drawing_paresseux(dir: &Path, id: CelId, w: usize, h: usize, quick: bool, hors: bool, presents: &std::collections::HashSet<std::ffi::OsString>) -> Result<(Cel, bool, Option<String>), String> {
+    let la = |nom: String| presents.contains(std::ffi::OsStr::new(&nom));
+    if la(format!("{id}_fond.png")) || la(format!("{id}_coupe.png")) {
+        return load_drawing(dir, id, w, h, quick, hors);
+    }
+    if la(format!("{id}.json")) {
+        let path = drawing_path(dir, id, true);
+        let text = fs::read_to_string(&path).map_err(|e| format!("dessin {id} illisible : {e}"))?;
+        let drawing: VectorDrawing = serde_json::from_str(&text).map_err(|e| format!("dessin {id} illisible : {e}"))?;
+        if let Some(k) = implausible(&drawing) {
+            return Err(format!("dessin {id} illisible : valeurs hors limites dans l'élément {} ; son fichier n'est pas modifié", k + 1));
+        }
+        let mut cel = Cel::de(Raster::new(w, h), Some(drawing), 0, None);
+        cel.absent = Some(crate::residence::Absent::rendu(0));
+        return Ok((cel, false, None));
+    }
+    if la(format!("{id}.png")) && (!hors || (la(format!("{id}_hors.png")) && la(format!("{id}_hors.json")))) {
+        let mut cel = Cel::bitmap(Raster::new(w, h));
+        cel.absent = Some(crate::residence::Absent::fichier(dir.to_path_buf(), id, hors, None, 0));
+        return Ok((cel, false, None));
+    }
+    load_drawing(dir, id, w, h, quick, hors)
+}
+
 /// Coordonnée la plus lointaine qu'un élément vectoriel garde (une feuille fait 16 384 pixels au
 /// plus ; un trait traîné bien hors du dessin reste loin en deçà), et rayon le plus gros.
 const MAX_COORD: f32 = 1.0e5;
@@ -3232,6 +3355,7 @@ fn load_line(dir: &Path, id: CelId, w: usize, h: usize, quick: bool) -> Result<(
                 vector: Some(drawing),
                 version: 0,
                 fond: None,
+                absent: None,
             },
             approximate,
         ));

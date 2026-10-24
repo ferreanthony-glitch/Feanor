@@ -475,7 +475,8 @@ impl Thumbs {
         let versions = plan
             .items
             .iter()
-            .map(|i| doc.cels.get(&i.cel).map_or(0, |c| c.version))
+            // (Un dessin hors de la mémoire garde sa version : sa vignette ne se refait pas pour autant, `residence.rs`.)
+            .map(|i| doc.cels.get_ou_absent(&i.cel).map_or(0, |c| c.version))
             .chain([if fonds { crate::fx::fond_epoch() } else { 0 }, frame[0] as u64, frame[1] as u64, marge as u64])
             // (Et l'enveloppe de la tuile : elle change la forme du papier.)
             .chain(masque.iter().flatten().flat_map(|p| [p.x.to_bits() as u64, p.y.to_bits() as u64]))
@@ -604,8 +605,11 @@ pub(crate) fn snapshot(doc: &Document, plan: &Plan) -> Document {
             }
             // (Pas un dessin du projet : un dessin dérivé d'un calque d'effet, ou une image de calque
             // vidéo, que la composition trouve toute seule.)
-            if let Some(c) = doc.cels.get(&id) {
-                mini.cels.insert(id, Cel { raster: c.raster.clone(), vector: None, version: c.version, fond: c.fond.clone() });
+            // Un dessin hors de la mémoire (`residence.rs`) part tel quel, avec son absence (et ses traits, pour une image
+            // vectorielle) : le fil de la vignette le fait revenir (`worker`).
+            if let Some(c) = doc.cels.get_ou_absent(&id) {
+                let vector = c.absent.as_ref().and_then(|_| c.vector.clone());
+                mini.cels.insert(id, Cel { raster: c.raster.clone(), vector, version: c.version, fond: c.fond.clone(), absent: c.absent.clone() });
             }
         }
     }
@@ -897,7 +901,7 @@ impl Pool {
 
 fn worker(shared: &Shared) {
     loop {
-        let job = {
+        let mut job = {
             let mut q = shared.lock();
             loop {
                 if shared.stop.load(Ordering::Relaxed) {
@@ -911,6 +915,11 @@ fn worker(shared: &Shared) {
                 q = shared.wake.wait(q).unwrap_or_else(|e| e.into_inner());
             }
         };
+        // Les dessins du cliché qui ne sont pas en mémoire (`residence.rs`) reviennent ici, sur ce fil : lus de leur
+        // fichier, ou rendus d'après leurs traits. La vignette d'un plan laissé se refait comme les autres.
+        if let Work::Plan { doc, .. } = &mut job.work {
+            crate::residence::resoudre_copie(doc);
+        }
         // Un dessin qui fait planter la composition ne ferme pas SHOT et n'est pas redemandé sans fin :
         // la vignette est alors vide.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| render_job(&job)));

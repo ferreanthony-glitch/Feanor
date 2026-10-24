@@ -86,7 +86,9 @@ impl App {
         if !add {
             self.drop_bitmap_selection();
         }
-        let raster = &self.doc.cels[&cel].raster;
+        // (Un dessin pas encore revenu en mémoire, `residence.rs` : rien à choisir.)
+        let Some(c) = self.doc.cels.get(&cel) else { return };
+        let raster = &c.raster;
         let (w, h) = (raster.width, raster.height);
         if p.x < 0.0 || p.y < 0.0 || p.x >= w as f32 || p.y >= h as f32 {
             return;

@@ -587,7 +587,7 @@ impl App {
         let g0 = self.doc.panel_start(p0) + s0;
         let mut keys = Vec::new();
         for &(pi, li, s, e) in &targets {
-            let Some(cel) = self.key_cel(pi, li, s).and_then(|id| self.doc.cels.get(&id)).cloned() else { continue };
+            let Some(cel) = self.key_cel(pi, li, s).and_then(|id| self.doc.cels.get_ou_absent(&id)).cloned() else { continue };
             let layers = &self.doc.panels[pi].layers;
             let (kind, name, rank) = (layers[li].kind, layers[li].name.clone(), layers.len() - 1 - li);
             keys.push(ClipKey { offset: self.doc.panel_start(pi) + s - g0, len: e - s, cel, kind, name, rank });

@@ -316,6 +316,21 @@ impl App {
                             machine_grille(ui, m);
                         }
                     }
+                    // Les dessins en mémoire (`residence.rs`) : ce que le projet tient, et le budget.
+                    let s = self.residence.stats;
+                    let budget = if s.budget == 0 { "sans limite".to_string() } else { format!("{:.0} Mo", s.budget as f64 / 1e6) };
+                    ui.label(
+                        RichText::new(format!(
+                            "Dessins en mémoire : {:.0} Mo ({} dessins ; {} hors de la mémoire, relus ou refaits à la demande) — budget {budget}. Annulation : {:.0} Mo de tuiles, {:.1} Mo d'anciennes étapes comprimées.",
+                            s.octets_presents as f64 / 1e6,
+                            s.presents,
+                            s.absents,
+                            self.history.tuiles_gardees() as f64 * crate::residence::OCTETS_TUILE as f64 / 1e6,
+                            self.history.octets_comprimes() as f64 / 1e6
+                        ))
+                        .small()
+                        .color(theme::texte_doux()),
+                    );
                     ui.add_space(8.0);
                     ui.separator();
                     // Le banc en cours.
@@ -539,6 +554,40 @@ impl App {
             ui.end_row();
             aide(ui, "Cache des effets", Interrupteur::CacheEffets);
             ui.add(egui::DragValue::new(&mut p.cache_effets_mo).range(64..=8192).speed(16).suffix(" Mo"));
+            ui.end_row();
+            // Mémoire des dessins (`residence.rs`) : 0 automatique, `SANS_LIMITE` : tout reste (comme avant).
+            let r = ui.label("Mémoire des dessins");
+            crate::bulles::bulle(
+                r,
+                "Mémoire des dessins",
+                "Au-delà, les dessins les moins récemment regardés quittent la mémoire : relus du dossier du projet (dessins bitmap déjà enregistrés), ou refaits d'après leurs traits (dessins vectoriels), quand on y revient. Le plan courant, ses voisins, ce que la lecture va montrer et tout ce qui n'est pas enregistré restent toujours.",
+                "",
+            );
+            ui.horizontal(|ui| {
+                let auto = crate::residence::budget_auto_mo();
+                let mut mode = match p.memoire_dessins_mo {
+                    0 => 0,
+                    crate::diagnostic::SANS_LIMITE => 2,
+                    _ => 1,
+                };
+                let noms = [format!("automatique ({auto} Mo)"), "au plus".to_string(), "sans limite".to_string()];
+                egui::ComboBox::from_id_salt("prefs_memoire_dessins").selected_text(noms[mode].clone()).show_ui(ui, |ui| {
+                    for (k, n) in noms.iter().enumerate() {
+                        ui.selectable_value(&mut mode, k, n);
+                    }
+                });
+                p.memoire_dessins_mo = match mode {
+                    0 => 0,
+                    2 => crate::diagnostic::SANS_LIMITE,
+                    _ => {
+                        let mut mo = if p.memoire_dessins_mo == 0 || p.memoire_dessins_mo == crate::diagnostic::SANS_LIMITE { auto } else { p.memoire_dessins_mo };
+                        ui.add(egui::DragValue::new(&mut mo).range(256..=65536).speed(32).suffix(" Mo"));
+                        mo
+                    }
+                };
+                let s = self.residence.stats;
+                ui.label(RichText::new(format!("en mémoire : {:.0} Mo ({} dessins, {} hors de la mémoire)", s.octets_presents as f64 / 1e6, s.presents, s.absents)).small().weak());
+            });
             ui.end_row();
             aide(ui, "Fils de calcul", Interrupteur::Fils);
             ui.add(egui::DragValue::new(&mut p.fils).range(0..=64).custom_formatter(|n, _| if n == 0.0 { "automatique".into() } else { format!("{n} au plus") }));

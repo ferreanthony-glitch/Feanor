@@ -1279,7 +1279,7 @@ fn cel_vide(w: usize, h: usize) -> Arc<Cel> {
     if let Some(c) = v.as_ref().filter(|c| c.raster.width == w && c.raster.height == h) {
         return c.clone();
     }
-    let c = Arc::new(Cel { raster: Raster::new(w, h), vector: None, version: 0, fond: None });
+    let c = Arc::new(Cel { raster: Raster::new(w, h), vector: None, version: 0, fond: None, absent: None });
     *v = Some(c.clone());
     c
 }
@@ -1560,7 +1560,7 @@ fn fond_shown<'a>(doc: &'a Document, item: &crate::render::PlanItem, r: &crate::
         let cover = cover_of(id, src, r, tick);
         let strate = src.fond.as_deref();
         let raster = crate::fond::compose(&cover, w, h, r.couleur, strate.map(|s| &s.peinture.raster), strate.map(|s| &s.coupe));
-        Cel { raster, vector: None, version, fond: None }
+        Cel { raster, vector: None, version, fond: None, absent: None }
     });
     Some(Shown::Fx(derived))
 }
@@ -1632,7 +1632,7 @@ pub fn fond_poll() -> bool {
                 }
             }
         }
-        let cel = Arc::new(Cel { raster: d.raster, vector: None, version: d.version, fond: None });
+        let cel = Arc::new(Cel { raster: d.raster, vector: None, version: d.version, fond: None, absent: None });
         crate::fxcache::put(d.id, d.version, cel);
     }
     FOND_EPOCH.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -1700,7 +1700,7 @@ pub fn fond_patch(doc: &Document, cel: CelId, r: &crate::fond::FondReglages, til
         for &idx in tiles.iter().filter(|&&i| i < n) {
             crate::fond::compose_tile(&mut raster, idx, &cover, r.couleur, strate.map(|s| &s.peinture.raster), strate.map(|s| &s.coupe));
         }
-        Arc::new(Cel { raster, vector: None, version: old.version, fond: None })
+        Arc::new(Cel { raster, vector: None, version: old.version, fond: None, absent: None })
     });
 }
 
@@ -1742,7 +1742,7 @@ pub fn shown_with<'a>(doc: &'a Document, cel: CelId, steps: &[FxStep], ctg: Opti
                 apply(&crate::griffonnage::fill(&rasters, &src.raster, input.gap as usize), steps)
             }
         };
-        Cel { raster, vector: None, version, fond: None }
+        Cel { raster, vector: None, version, fond: None, absent: None }
     });
     Some(Shown::Fx(derived))
 }

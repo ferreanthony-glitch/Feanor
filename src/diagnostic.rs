@@ -148,7 +148,15 @@ pub struct PerfReglages {
     /// la lecture (le comportement d'avant).
     #[serde(rename = "effets_carte_graphique")]
     pub effets_gpu: bool,
+    /// Mémoire des dessins (`residence.rs`), en Mo : au-delà, les dessins les moins récemment vus quittent la mémoire
+    /// (relus du dossier du projet, ou refaits d'après leurs traits, quand on y revient). 0 : d'après la mémoire de la
+    /// machine ; `SANS_LIMITE` : tout reste en mémoire (comme avant).
+    #[serde(rename = "memoire_dessins_mo")]
+    pub memoire_dessins_mo: u32,
 }
+
+/// `PerfReglages::memoire_dessins_mo` : aucune limite.
+pub const SANS_LIMITE: u32 = u32::MAX;
 
 impl Default for PerfReglages {
     fn default() -> Self {
@@ -164,6 +172,7 @@ impl Default for PerfReglages {
             vignettes: Vignettes::Normales,
             animations_coupees: false,
             effets_gpu: true,
+            memoire_dessins_mo: 0,
         }
     }
 }
@@ -176,6 +185,9 @@ impl PerfReglages {
         self.cache_traits_mo = self.cache_traits_mo.clamp(64, 16384);
         self.cache_effets_mo = self.cache_effets_mo.clamp(64, 16384);
         self.fils = self.fils.min(256);
+        if self.memoire_dessins_mo != 0 && self.memoire_dessins_mo != SANS_LIMITE {
+            self.memoire_dessins_mo = self.memoire_dessins_mo.clamp(256, 262_144);
+        }
         self
     }
 
@@ -194,6 +206,11 @@ impl PerfReglages {
             vignettes_pct: r.vignettes.pourcent(),
             animations_coupees: r.animations_coupees,
             effets_gpu: r.effets_gpu,
+            memoire_dessins: match r.memoire_dessins_mo {
+                0 => crate::residence::budget_auto_mo() as u64 * (1 << 20),
+                SANS_LIMITE => 0,
+                mo => mo as u64 * (1 << 20),
+            },
         }
     }
 }
@@ -218,6 +235,8 @@ pub struct Cibles {
     pub animations_coupees: bool,
     /// Effets de calque dessinés par la carte graphique (`GpuCanvas::set_effects_gpu`).
     pub effets_gpu: bool,
+    /// Budget des pixels des dessins présents, en octets (0 : sans limite, `residence.rs`).
+    pub memoire_dessins: u64,
 }
 
 impl Cibles {
@@ -232,6 +251,7 @@ impl Cibles {
         crate::parallele::set_plafond(self.fils);
         crate::thumbs::set_scale_pct(self.vignettes_pct);
         crate::ajuste::set_animations_off(self.animations_coupees);
+        crate::residence::set_budget(self.memoire_dessins);
     }
 }
 
@@ -665,6 +685,7 @@ pub fn reglages_du_profil(profil: Profil, m: &Materiel) -> PerfReglages {
                 vignettes: if tres_peu { Vignettes::Minimales } else { Vignettes::Reduites },
                 animations_coupees: true,
                 effets_gpu: carte_dediee,
+                memoire_dessins_mo: 0,
             }
         }
     }

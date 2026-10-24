@@ -118,9 +118,20 @@ mod optim_rendu_tests;
 // Projets lourds (300 plans et plus) : générateur et bancs, tous `#[ignore]` (`docs/PERFORMANCE.md`, section 25).
 #[cfg(test)]
 mod lourd_tests;
+#[cfg(test)]
+mod memoire_tests;
 mod lacher;
 #[cfg(test)]
 mod lacher_tests;
+// Les dessins en mémoire : absents (pixels relus du dossier ou refaits), budget, préchargement (`docs/PERFORMANCE.md`, 27).
+mod residence;
+mod residenceapp;
+// Les vieilles étapes d'annulation, comprimées en fond.
+mod histocomprime;
+#[cfg(test)]
+mod histocomprime_tests;
+#[cfg(test)]
+mod residence_tests;
 pub mod logo;
 #[cfg(test)]
 mod logo_tests;

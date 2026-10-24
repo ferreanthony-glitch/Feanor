@@ -832,7 +832,7 @@ pub(crate) fn cpu() -> f64 {
     s(k) + s(u)
 }
 
-fn mem(titre: &str, b: &crate::perf_tests::Banc) {
+pub(crate) fn mem(titre: &str, b: &crate::perf_tests::Banc) {
     let (ws, pv) = memoire();
     let g = b.app.gpu.as_ref().map(|g| g.stats()).unwrap_or_default();
     println!("MEM {titre:<44} RSS {ws:>7.0} Mo, privée {pv:>7.0} Mo | carte : {} textures de dessin, {:.0} Mo", g.textures, g.bytes as f64 / 1e6);
@@ -841,7 +841,7 @@ fn mem(titre: &str, b: &crate::perf_tests::Banc) {
 use crate::perf_tests::{Banc, Mesure};
 use eframe::egui::{self, Event, Modifiers, PointerButton};
 
-fn tri(mut v: Vec<f64>) -> (f64, f64, f64) {
+pub(crate) fn tri(mut v: Vec<f64>) -> (f64, f64, f64) {
     if v.is_empty() {
         return (0.0, 0.0, 0.0);
     }
@@ -849,7 +849,7 @@ fn tri(mut v: Vec<f64>) -> (f64, f64, f64) {
     (v.iter().sum::<f64>() / v.len() as f64, v[v.len() * 95 / 100], *v.last().unwrap())
 }
 
-fn rapport(titre: &str, m: &[Mesure]) {
+pub(crate) fn rapport(titre: &str, m: &[Mesure]) {
     let (moy, p95, max) = tri(m.iter().map(Mesure::total).collect());
     let (c, _, cmax) = tri(m.iter().map(|x| x.construction).collect());
     let (att, _, attmax) = tri(m.iter().map(|x| x.detail[3]).collect());
@@ -863,7 +863,7 @@ fn rapport(titre: &str, m: &[Mesure]) {
     );
 }
 
-fn scene<F: FnMut(&mut Banc, usize) -> Vec<Event>>(titre: &str, b: &mut Banc, n: usize, dt: f64, mut f: F) -> Vec<Mesure> {
+pub(crate) fn scene<F: FnMut(&mut Banc, usize) -> Vec<Event>>(titre: &str, b: &mut Banc, n: usize, dt: f64, mut f: F) -> Vec<Mesure> {
     crate::perf::activer(true);
     let m: Vec<Mesure> = (0..n)
         .map(|k| {
@@ -879,16 +879,16 @@ fn scene<F: FnMut(&mut Banc, usize) -> Vec<Event>>(titre: &str, b: &mut Banc, n:
     m
 }
 
-fn bouge(k: usize, r: Rect) -> Vec<Event> {
+pub(crate) fn bouge(k: usize, r: Rect) -> Vec<Event> {
     (0..4).map(|j| Event::PointerMoved(pos2(r.left() + r.width() * (0.2 + 0.6 * (((k * 4 + j) % 97) as f32 / 97.0)), r.center().y))).collect()
 }
 
-fn appui(p: Pos2, down: bool, m: Modifiers) -> Event {
+pub(crate) fn appui(p: Pos2, down: bool, m: Modifiers) -> Event {
     Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: down, modifiers: m }
 }
 
 /// Un glissé de `de` à `a` en `n` images (avec `m` tenus), mesuré image par image.
-fn glisse(b: &mut Banc, titre: &str, de: Pos2, a: Pos2, n: usize, m: Modifiers) -> Vec<Mesure> {
+pub(crate) fn glisse(b: &mut Banc, titre: &str, de: Pos2, a: Pos2, n: usize, m: Modifiers) -> Vec<Mesure> {
     b.touches = m;
     b.image(vec![Event::PointerMoved(de)], 1.0 / 60.0);
     let r = scene(titre, b, n + 2, 1.0 / 60.0, |_, k| {
@@ -908,7 +908,7 @@ fn glisse(b: &mut Banc, titre: &str, de: Pos2, a: Pos2, n: usize, m: Modifiers) 
 
 /// Images jusqu'à ce que plus rien ne travaille en arrière-plan (vignettes, rejeux) et que l'écran ne demande plus rien ;
 /// rend (images, ms, pire image ms).
-fn jusqu_au_calme(b: &mut Banc, max_s: f64) -> (usize, f64, f64) {
+pub(crate) fn jusqu_au_calme(b: &mut Banc, max_s: f64) -> (usize, f64, f64) {
     let t = Instant::now();
     let mut calmes = 0;
     let mut pire = 0.0f64;

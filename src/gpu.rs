@@ -919,9 +919,17 @@ impl GpuCanvas {
                 t.last_used = tick;
             }
         }
-        for (item, shown) in plan.items.iter().zip(&displays) {
+        for (k, (item, shown)) in plan.items.iter().zip(&displays).enumerate() {
             let Some(shown) = shown else {
-                resolved.push(None);
+                // Un dessin hors de la mémoire (`residence.rs`) dont la carte graphique a encore la texture, à sa version :
+                // elle se montre en attendant le retour de ses pixels (rien ne s'envoie, rien ne s'efface).
+                let sans_fx_processeur = item.fx.is_empty() || on_gpu[k];
+                let garde = doc.cels.get_ou_absent(&item.cel).filter(|c| c.est_absent() && sans_fx_processeur && item.ctg.is_none() && item.fond.is_none()).and_then(|c| {
+                    let t = res.textures.get_mut(&item.cel).filter(|t| t.version == c.version && t.partial.is_none())?;
+                    t.last_used = tick;
+                    Some(item.cel)
+                });
+                resolved.push(garde);
                 continue;
             };
             let (cel, id) = (&shown.cel, shown.id);

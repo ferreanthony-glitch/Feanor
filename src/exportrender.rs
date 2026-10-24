@@ -198,7 +198,8 @@ impl SnapshotBuilder {
         while self.pos < self.ids.len() {
             let id = self.ids[self.pos];
             self.pos += 1;
-            if let (Some(snap), Some(c)) = (self.snap.as_mut(), doc.cels.get(&id)) {
+            // (Un dessin hors de la mémoire part avec son absence : il revient sur le fil du cliché, plus bas.)
+            if let (Some(snap), Some(c)) = (self.snap.as_mut(), doc.cels.get_ou_absent(&id)) {
                 snap.cels.insert(id, c.clone());
             }
             if self.pos % 8 == 0 && t0.elapsed() >= budget {
@@ -208,10 +209,12 @@ impl SnapshotBuilder {
         if self.pos < self.ids.len() {
             return false;
         }
-        if self.exact.is_empty() {
+        let absents = self.snap.as_ref().is_some_and(|s| s.cels.absents() > 0);
+        if self.exact.is_empty() && !absents {
             return true;
         }
-        // Les dessins sont copiés : le rendu exact se fait sur un fil à part, sur la copie.
+        // Les dessins sont copiés : ceux qui ne sont pas en mémoire reviennent (lus de leur fichier, rendus d'après leurs
+        // traits, `residence.rs`), puis le rendu exact se fait, sur un fil à part, sur la copie.
         let (ids, Some(snap)) = (std::mem::take(&mut self.exact), self.snap.take()) else { return true };
         let slot = Arc::new(Mutex::new(Some(snap)));
         let ma_case = slot.clone();
@@ -219,7 +222,10 @@ impl SnapshotBuilder {
             crate::parallele::baisser_la_priorite_ici();
             let Some(mut snap) = ma_case.lock().unwrap_or_else(|e| e.into_inner()).take() else { return };
             // (Même en cas de panique, la copie revient telle quelle.)
-            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| rendre_exacts(&mut snap, &ids)));
+            let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                crate::residence::resoudre_copie(&mut snap);
+                rendre_exacts(&mut snap, &ids)
+            }));
             *ma_case.lock().unwrap_or_else(|e| e.into_inner()) = Some(snap);
         });
         match started {
@@ -249,7 +255,10 @@ impl SnapshotBuilder {
 #[cfg(test)]
 pub fn snapshot_of(doc: &Document, panels: &[usize]) -> Arc<Document> {
     let mut b = SnapshotBuilder::new(doc, panels);
-    b.step(doc, Duration::MAX);
+    // (Des dessins absents, ou à refaire exacts : le cliché les finit sur un fil à part.)
+    while !b.step(doc, Duration::MAX) {
+        std::thread::sleep(Duration::from_millis(1));
+    }
     b.finish()
 }
 

@@ -238,6 +238,8 @@ etat_projet! {
     rejeu_warm: std::collections::HashMap<CelId, u64> = Default::default(),
     rejeu_deferred: Vec<crate::rejeu::Done> = Vec::new(),
     rejeu_idle: Vec<CelId> = Vec::new(),
+    // Les dessins en mémoire : ce qui est voulu, chargé, laissé (`residence.rs`).
+    residence: crate::residence::Suivi = Default::default(),
     // --- tâches de fond
     saving: Option<crate::enregistrement::Enregistrement> = None,
     save_queue: Option<(PathBuf, Option<Pending>)> = None,

@@ -70,8 +70,9 @@ pub fn petit_projet(doc: &Document, panel: &Panel) -> Document {
     mini.paper_b = doc.paper_b;
     mini.panels = vec![panel.clone()];
     for id in crate::empreinte::dessins_du_plan(panel) {
-        if let Some(c) = doc.cels.get(&id) {
-            mini.cels.insert(id, Cel { raster: c.raster.clone(), vector: None, version: c.version, fond: c.fond.clone() });
+        if let Some(c) = doc.cels.get_ou_absent(&id) {
+            let vector = c.absent.as_ref().and_then(|_| c.vector.clone());
+            mini.cels.insert(id, Cel { raster: c.raster.clone(), vector, version: c.version, fond: c.fond.clone(), absent: c.absent.clone() });
         }
     }
     mini
@@ -249,7 +250,12 @@ impl Drop for Moteur {
 /// Le document à un seul plan d'un côté, et les avertissements de sa lecture.
 fn ouvrir(e: Entree) -> Result<(Document, Vec<String>), String> {
     match e {
-        Entree::Doc(d) => Ok((*d, Vec::new())),
+        // (Ses dessins hors de la mémoire reviennent ici, sur le fil de la comparaison : `residence.rs`.)
+        Entree::Doc(d) => {
+            let mut d = *d;
+            crate::residence::resoudre_copie(&mut d);
+            Ok((d, Vec::new()))
+        }
         Entree::Envoi { dossier, envoi, plan } => {
             let l = crate::envois::charger_plan(&dossier, &envoi, plan)?;
             if l.doc.panels.is_empty() {

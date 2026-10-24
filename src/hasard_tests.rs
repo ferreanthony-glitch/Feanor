@@ -407,6 +407,9 @@ pub(crate) struct Essai {
     /// Les étapes d'annulation que les gestes ont faites, par nom (`SHOT_HASARD_ETAPES` les affiche) : ce que le hasard
     /// atteint vraiment.
     pub etapes: std::collections::BTreeMap<String, usize>,
+    /// Sous pression de mémoire : l'empreinte des pixels de chaque dessin bitmap présent, à sa version ; revenu de son fichier,
+    /// il doit avoir la même.
+    empreintes: std::collections::HashMap<CelId, (u64, u64)>,
 }
 
 const DT: f64 = 1.0 / 60.0;
@@ -437,6 +440,13 @@ fn sans_pixels(doc: &Document) -> BTreeSet<CelId> {
 /// L'instantané du projet (`fiabilite_fixture::instantane`), la liste des scènes rangée par numéro : son ordre en mémoire
 /// ne dit rien (une scène se cherche par son numéro), le fichier les écrit dans l'ordre du film.
 fn photo(doc: &Document) -> String {
+    // Sous pression de mémoire (`residence.rs`) : les dessins absents reviennent de leur fichier pour la photo, et doivent
+    // donner les mêmes pixels qu'avant de partir (toute différence se voit à la comparaison).
+    if doc.cels.absents() > 0 {
+        let (copie, perdus) = crate::residence::copie_resolue(doc);
+        assert!(perdus.is_empty(), "INVARIANT dessins absents : {perdus:?} ne reviennent pas de leur fichier");
+        return photo(&copie);
+    }
     // (De même pour les séquences : leur numéro d'ordre se calcule sur les plans, `Document::sequence_order`.)
     let mut scenes = doc.scenes.clone();
     scenes.sort_by_key(|s| s.id);
@@ -478,7 +488,12 @@ impl Essai {
         let dossier = std::env::temp_dir().join(format!("shot-hasard-{nom}-{}-{:?}", std::process::id(), std::thread::current().id()));
         let _ = std::fs::remove_dir_all(&dossier);
         std::fs::create_dir_all(&dossier).expect("dossier d'essai");
-        Essai { b, dossier, enregistrements: 0, etapes: Default::default() }
+        // Sous pression de mémoire : le projet est d'abord enregistré (un dessin bitmap ne part qu'écrit à sa version).
+        if PRESSION.with(std::cell::Cell::get) {
+            assert!(b.app.save_to_blocking(dossier.join("p0").join("Film.pelure")), "enregistrement de départ");
+            b.chauffer(2);
+        }
+        Essai { b, dossier, enregistrements: 0, etapes: Default::default(), empreintes: Default::default() }
     }
 
     fn img(&mut self, ev: Vec<Event>) {
@@ -1016,6 +1031,7 @@ impl Essai {
             // d'après soit celui que garde l'étape.
             self.b.app.flush_flottante();
             self.b.app.multi_flush();
+            self.attendre_les_dessins();
         }));
         if let Err(e) = r {
             let m = message(&*e);
@@ -1042,6 +1058,7 @@ impl Essai {
             let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 self.b.app.run_action("edition.annuler");
                 self.b.chauffer(1);
+                self.attendre_les_dessins();
             }));
             if let Err(e) = r {
                 return Err(echec(&format!("plantage en annulant : {}", sans_chiffres(&message(&*e))), message(&*e)));
@@ -1054,6 +1071,7 @@ impl Essai {
             let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 self.b.app.run_action("edition.retablir");
                 self.b.chauffer(1);
+                self.attendre_les_dessins();
             }));
             if let Err(e) = r {
                 return Err(echec(&format!("plantage en rétablissant : {}", sans_chiffres(&message(&*e))), message(&*e)));
@@ -1064,6 +1082,47 @@ impl Essai {
             self.verifier()?;
         }
         Ok(())
+    }
+}
+
+thread_local! {
+    /// Sous pression de mémoire (`residence.rs`) : un budget des dessins d'un octet, tout ce qui n'est pas voulu quitte la
+    /// mémoire à chaque contrôle (`hasard_random_gestures_under_memory_pressure`).
+    static PRESSION: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+impl Essai {
+    /// Sous pression : laisse revenir ce qu'une annulation ou une commande attend (au plus deux secondes), et vérifie que les
+    /// dessins absents ont toujours leur fichier.
+    fn attendre_les_dessins(&mut self) {
+        if !PRESSION.with(std::cell::Cell::get) {
+            return;
+        }
+        let t = Instant::now();
+        while (self.b.app.residence.attente_historique.is_some() || self.b.app.residence.action_en_attente.is_some() || crate::residence::en_cours() > 0) && t.elapsed() < Duration::from_secs(2) {
+            self.b.image(Vec::new(), DT);
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let (w, h) = (self.b.app.doc.width, self.b.app.doc.height);
+        for (id, c) in self.b.app.doc.cels.tous() {
+            if c.vector.is_some() {
+                continue;
+            }
+            match c.absent.as_ref() {
+                None => {
+                    self.empreintes.insert(*id, (c.version, crate::empreinte::Donnees::de(c).empreinte()));
+                }
+                Some(a) => {
+                    let png = a.png().expect("un dessin bitmap absent a son fichier");
+                    assert!(png.is_file(), "INVARIANT dessin absent sans fichier : le dessin {id} n'a plus {}", png.display());
+                    if let Some(&(v, e)) = self.empreintes.get(id).filter(|(v, _)| *v == c.version) {
+                        let r = a.lire(w, h).unwrap_or_else(|e| panic!("INVARIANT dessin absent illisible : {id} ({e})"));
+                        let revenu = crate::document::Cel::de(r, None, v, c.fond.clone());
+                        assert_eq!(crate::empreinte::Donnees::de(&revenu).empreinte(), e, "INVARIANT dessin revenu : le dessin {id} n'a plus les mêmes pixels");
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1215,6 +1274,41 @@ fn passages(graines: Vec<u64>, pas: usize, fils: usize) {
 #[test]
 fn hasard_random_gestures_keep_the_application_consistent() {
     passages((0..GRAINES).collect(), PAS, 1);
+}
+
+/// Le même passage sous pression de mémoire (`residence.rs`) : budget des dessins d'un octet, le projet enregistré d'abord
+/// (un dessin bitmap ne quitte la mémoire qu'écrit à sa version) ; les images vectorielles partent sans cela. Toutes les
+/// vérifications du hasard tiennent (relire, annuler, rétablir, enregistrer et rouvrir), les dessins revenus doivent donner
+/// les mêmes pixels (les photos les relisent de leur fichier), et un dessin absent a toujours son fichier.
+#[test]
+fn hasard_random_gestures_under_memory_pressure() {
+    passages_sous_pression((100..100 + GRAINES).collect(), PAS);
+}
+
+/// `passages` sous pression de mémoire, sur un fil à lui (le budget d'essai est celui du fil).
+pub(crate) fn passages_sous_pression(graines: Vec<u64>, pas: usize) {
+    let echecs: Vec<String> = std::thread::scope(|s| {
+        std::thread::Builder::new()
+            .stack_size(16 << 20)
+            .spawn_scoped(s, || {
+                PRESSION.with(|p| p.set(true));
+                crate::residence::budget_essai(Some(1));
+                let mut echecs = Vec::new();
+                for g in graines {
+                    if let Err(m) = passage(g, pas) {
+                        eprintln!("{m}");
+                        echecs.push(m);
+                    }
+                }
+                crate::residence::budget_essai(None);
+                PRESSION.with(|p| p.set(false));
+                echecs
+            })
+            .expect("fil d'essai")
+            .join()
+            .expect("fil d'essai")
+    });
+    assert!(echecs.is_empty(), "{}", echecs.join("\n"));
 }
 
 /// Le passage long, à la demande (`-- --ignored hasard`). `SHOT_HASARD_GRAINES=a..b` choisit les graines,

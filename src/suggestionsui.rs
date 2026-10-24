@@ -380,6 +380,13 @@ impl App {
         while c.suivant < c.entrees.len() && (c.suivant == 0 || debut.elapsed() < BUDGET_VIGNETTES) {
             let id = c.entrees[c.suivant].plan;
             if let Some(i) = self.doc.panels.iter().position(|p| p.id == id) {
+                // Un plan dont des dessins sont hors de la mémoire (`residence.rs`) : ils sont demandés, la collecte reprend
+                // à l'image suivante (sa vignette ne se fait jamais sans eux).
+                let absents: Vec<_> = crate::empreinte::dessins_du_plan(&self.doc.panels[i]).into_iter().filter(|d| self.doc.cels.est_absent(d)).collect();
+                if !absents.is_empty() {
+                    self.residence.en_plus.extend(absents);
+                    break;
+                }
                 c.entrees[c.suivant].vignette_png = vignette_png(&self.doc, i, LARGEUR_VIGNETTE);
             }
             c.suivant += 1;

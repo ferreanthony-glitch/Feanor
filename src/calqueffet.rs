@@ -724,7 +724,7 @@ fn bake(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Option<[u8; 3]>,
     match mode {
         Mode::Blocking => {
             let base = snapshot();
-            let cel = crate::fxcache::get_or_compute(id, sig, Some(origin), || Cel { raster: base.render(0), vector: None, version: sig, fond: None });
+            let cel = crate::fxcache::get_or_compute(id, sig, Some(origin), || Cel { raster: base.render(0), vector: None, version: sig, fond: None, absent: None });
             tenus.tenir(id, cel);
             Some(item(id))
         }

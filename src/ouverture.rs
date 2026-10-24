@@ -29,10 +29,13 @@ impl OpenJob {
     /// exact des dessins ouverts en rendu rapide est demandé dès l'adoption (réglage « traits vectoriels texturés ») ; leurs
     /// copies pour le rejeu se font alors ici, sur ce fil, pas sur celui de l'interface.
     pub fn start(path: PathBuf, ctx: &egui::Context, equipe: Option<crate::cooperationui::ParamsEquipe>, exacts: bool) -> Self {
+        // Avec un budget pour les dessins (`residence.rs`), le projet s'ouvre sans lire leurs pixels : ils reviennent quand on
+        // les regarde. Sans limite, tout se lit, comme avant.
+        let paresseux = crate::residence::budget() != 0;
         let progress = Arc::new(Progress::default());
         let (p, q, wake) = (path.clone(), progress.clone(), ctx.clone());
         let handle = std::thread::spawn(move || {
-            let mut result = project::load_quick_progress(&p, &q);
+            let mut result = if paresseux { project::load_paresseux_progress(&p, &q) } else { project::load_quick_progress(&p, &q) };
             // Un film partagé : l'équipe se rejoint ici aussi, sur ce fil (ma fiche est écrite, celles des autres lues).
             if let (Ok(loaded), Some(equipe)) = (result.as_mut(), equipe) {
                 crate::cooperationui::rejoindre_dans_le_fil(loaded, equipe, &p);

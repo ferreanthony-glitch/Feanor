@@ -639,6 +639,8 @@ pub struct App {
     /// Dessins ouverts en rendu rapide dont le rendu exact attend le repos (ou l'image affichée),
     /// d'après le réglage « traits vectoriels texturés » (`diagnostic.rs`).
     pub(crate) rejeu_idle: Vec<CelId>,
+    /// Les dessins en mémoire : voulus, chargés, laissés hors de la mémoire (`residence.rs`).
+    pub(crate) residence: crate::residence::Suivi,
     /// Dernier instant d'activité de l'utilisateur ou de la lecture, en secondes d'egui.
     pub(crate) activity: f64,
     /// Réglages de performance posés dans le programme (`App::appliquer_performance`).
@@ -1169,6 +1171,7 @@ impl App {
             rejeu_warm: Default::default(),
             rejeu_deferred: Vec::new(),
             rejeu_idle: Vec::new(),
+            residence: Default::default(),
             activity: 0.0,
             perf_applied: Default::default(),
             diag: crate::diagnosticui::DiagnosticUi::new(diag_offer, wgpu_render_state),
@@ -1927,6 +1930,10 @@ impl App {
         if self.content_refuses() {
             return false;
         }
+        // Un dessin de l'image pas encore revenu en mémoire (`residenceapp.rs`) : on n'y touche pas avant son retour.
+        if !self.dessin_pret_pour_un_geste() {
+            return false;
+        }
         if self.layer().folder {
             self.status = FOLDER_NOT_DRAWABLE.into();
             return false;
@@ -2315,7 +2322,8 @@ impl App {
             return render::composite_full(&self.doc, &self.build_plan(self.cur_frame, false, false));
         }
         match self.cel_here() {
-            Some(id) => self.doc.cels[&id].raster.to_flat(),
+            // (Un dessin pas encore revenu en mémoire ne se remplit pas : `layer_editable` l'a refusé avant.)
+            Some(id) => self.doc.cels.get(&id).map_or_else(|| vec![Color32::TRANSPARENT; w * h], |c| c.raster.to_flat()),
             None => vec![Color32::TRANSPARENT; w * h],
         }
     }
@@ -2394,7 +2402,8 @@ impl App {
         // (Le rendu exact vient : il n'attend plus le repos.)
         self.rejeu_idle.retain(|&c| c != cel);
         let (w, h) = (self.doc.width, self.doc.height);
-        if let Some((d, version)) = self.doc.cels.get(&cel).and_then(|c| c.vector.as_ref().map(|d| (d, c.version))) {
+        // (Une image absente aussi, `residence.rs` : ses traits sont là, c'est ainsi qu'elle revient.)
+        if let Some((d, version)) = self.doc.cels.get_ou_absent(&cel).and_then(|c| c.vector.as_ref().map(|d| (d, c.version))) {
             self.rejeu.submit_with(cel, d, w, h, version, priority);
         }
     }
@@ -2446,7 +2455,7 @@ impl App {
     /// plus (leur version a changé), les autres continuent. Un dessin refait est exact ; on en
     /// redemande quand même le rendu : sans effet s'il l'est, juste s'il ne l'était pas.
     pub(crate) fn rejeu_after_history(&mut self) {
-        for cel in crate::rejeu::outdated(&self.rejeu, |c| self.doc.cels.get(&c).map(|c| c.version)) {
+        for cel in crate::rejeu::outdated(&self.rejeu, |c| self.doc.cels.get_ou_absent(&c).map(|c| c.version)) {
             self.rejeu.cancel(cel);
             self.rejeu_again.insert(cel);
         }
@@ -2480,7 +2489,8 @@ impl App {
             let waiting = self.flottante.as_ref().is_some_and(|f| f.pending.is_some() && f.src == done.cel);
             // Les feuilles d'un geste lâché sur plusieurs calques (`multisel.rs`).
             let waiting_multi = self.multi.floats.iter().any(|f| f.pending.is_some() && f.src == done.cel);
-            let Some(c) = self.doc.cels.get(&done.cel) else { continue };
+            // (Une image absente aussi : c'est ainsi qu'elle revient, `residence.rs`.)
+            let Some(c) = self.doc.cels.get_ou_absent(&done.cel) else { continue };
             if !crate::rejeu::adoptable(c, &done) {
                 // Une enveloppe ou une perspective qu'on a reprise avant l'arrivée du rendu : un
                 // rendu plus récent est déjà demandé, la feuille déformée l'attend.
@@ -2508,8 +2518,9 @@ impl App {
             if waiting_multi {
                 self.multi_settle(done.cel, true);
             }
-            let Some(c) = self.doc.cels.get_mut(&done.cel) else { continue };
+            let Some(c) = self.doc.cels.get_ou_absent_mut(&done.cel) else { continue };
             let Some(d) = c.vector.as_mut() else { continue };
+            c.absent = None;
             for (e, exact) in d.elements.iter_mut().zip(&done.drawing.elements) {
                 e.adopt_cache(exact);
             }
@@ -2880,7 +2891,7 @@ impl App {
             .chain(colours.iter())
             .chain(std::iter::once(&layer))
             .flat_map(|l| crate::calquecouleur::dessins_du_calque(l))
-            .filter_map(|id| self.doc.cels.get(&id).map(|c| (id, c.clone())))
+            .filter_map(|id| self.doc.cels.get_ou_absent(&id).map(|c| (id, c.clone())))
             .collect();
         let what = if layer.folder { "Dossier" } else { "Calque" };
         self.status = format!("{what} « {} » copié : X pour le coller dans un autre plan.", layer.name);
@@ -3022,6 +3033,10 @@ impl App {
         // Une zone bitmap déplacée est d'abord reposée : l'annulation défait alors ce déplacement.
         self.drop_bitmap_selection();
         self.multi_before_history();
+        // Une étape dont un dessin est hors de la mémoire : elle s'applique quand il est revenu (`residence.rs`).
+        if self.historique_attend(false) {
+            return;
+        }
         let mut nav = Nav {
             panel: self.cur_panel,
             layer: self.cur_layer,
@@ -3039,6 +3054,10 @@ impl App {
         self.end_stroke();
         self.drop_bitmap_selection();
         self.multi_before_history();
+        // Une étape dont un dessin est hors de la mémoire : elle s'applique quand il est revenu (`residence.rs`).
+        if self.historique_attend(true) {
+            return;
+        }
         let mut nav = Nav {
             panel: self.cur_panel,
             layer: self.cur_layer,
@@ -3192,6 +3211,8 @@ impl App {
         self.rejeu_warm.clear();
         self.rejeu_deferred.clear();
         self.rejeu_idle.clear();
+        // (Ce que l'on suivait des dessins de l'ancien : leurs lectures en route arrivent dans une boîte que plus personne ne lit.)
+        self.residence = Default::default();
         crate::fx::fond_cancel_all();
         // (Les suggestions sonores de l'ancien projet s'arrêtent : rien n'est rendu au nouveau.)
         self.reset_suggestions();
@@ -3550,6 +3571,11 @@ impl App {
     }
 
     fn run_action_now(&mut self, action: &str) {
+        // Une commande qui travaille les dessins du plan courant attend qu'ils soient tous en mémoire (juste après un
+        // changement de plan, `residenceapp.rs`) : elle part dès leur retour.
+        if self.action_attend_le_plan(action) {
+            return;
+        }
         // Un texte en cours de saisie est posé avant toute commande (annuler, changer d'image…).
         self.finish_text_edit();
         // Une autre copie (dessin, plans, images, clés…) prend la place des effets copiés pour Ctrl+V
@@ -4700,6 +4726,8 @@ impl App {
             self.poll_rejeu(ctx);
             self.rejeu_idle_tick(ctx);
             self.warm_current_cel();
+            // Les dessins en mémoire : arrivés, voulus, laissés au-delà du budget (`residenceapp.rs`).
+            self.residence_tick(ctx);
         }
         self.update_title(ctx);
         {

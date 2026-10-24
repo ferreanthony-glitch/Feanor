@@ -585,7 +585,7 @@ fn fixture(name: &str, frames: usize, kind: LayerKind, keys: &[usize], shapes: &
                 LayerKind::Bitmap => doc.add_cel(Cel::bitmap(paint(W, H, &s))),
                 LayerKind::Vector => {
                     let drawing = paint_vector(&s);
-                    doc.add_cel(Cel { raster: drawing.render(W, H), vector: Some(drawing), version: 0, fond: None })
+                    doc.add_cel(Cel { raster: drawing.render(W, H), vector: Some(drawing), version: 0, fond: None, absent: None })
                 }
             };
             colour.set(f, Some(cel));
@@ -746,7 +746,7 @@ fn a_vector_line_layer_is_read_through_its_render() {
     let mut colour = Layer::new("Couleur", LayerKind::Bitmap);
     for f in 0..4 {
         let drawing = VectorDrawing { elements: vec![square(150.0 + 20.0 * f as f32)] };
-        let cel = doc.add_cel(Cel { raster: drawing.render(W, H), vector: Some(drawing), version: 0, fond: None });
+        let cel = doc.add_cel(Cel { raster: drawing.render(W, H), vector: Some(drawing), version: 0, fond: None, absent: None });
         line.set(f, Some(cel));
     }
     let key = doc.add_cel(Cel::bitmap(paint(W, H, &[closed(rect(150.0, 150.0, 120.0, 90.0, 0.0), YELLOW)])));

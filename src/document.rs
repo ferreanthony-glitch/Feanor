@@ -41,6 +41,9 @@ pub struct Cel {
     /// Strate Fond (`fond.rs`) : ce qu'on a peint dans le fond de ce dessin, sous le trait, et où
     /// on l'a coupé ; rien tant qu'on n'y a pas touché.
     pub fond: Option<Box<Strate>>,
+    /// Les pixels du dessin ne sont pas en mémoire (`residence.rs`) : `raster` est une image vide de la taille de la
+    /// feuille, que rien ne doit lire ; d'où ils reviennent. Seul `residence.rs` (et l'ouverture) le pose ou l'ôte.
+    pub(crate) absent: Option<Arc<crate::residence::Absent>>,
 }
 
 /// La strate Fond d'un dessin (`fond.rs`).
@@ -70,15 +73,30 @@ impl Cel {
             vector: (kind == LayerKind::Vector).then(VectorDrawing::default),
             version: 0,
             fond: None,
+            absent: None,
         }
     }
 
     /// Un dessin bitmap fait de `raster`.
     pub fn bitmap(raster: Raster) -> Self {
-        Self { raster, vector: None, version: 0, fond: None }
+        Self { raster, vector: None, version: 0, fond: None, absent: None }
+    }
+
+    /// Un dessin fait de ces parties (présent).
+    pub fn de(raster: Raster, vector: Option<VectorDrawing>, version: u64, fond: Option<Box<Strate>>) -> Self {
+        Self { raster, vector, version, fond, absent: None }
+    }
+
+    /// Ses pixels ne sont pas en mémoire (`residence.rs`).
+    pub fn est_absent(&self) -> bool {
+        self.absent.is_some()
     }
 
     pub fn is_empty(&self) -> bool {
+        // (Un dessin bitmap absent a un fichier : on le tient pour non vide.)
+        if self.absent.is_some() && self.vector.is_none() {
+            return false;
+        }
         match &self.vector {
             Some(v) => v.elements.is_empty(),
             None => self.raster.is_blank(),
@@ -982,8 +1000,9 @@ pub struct Document {
     pub scenes: Vec<Scene>,
     pub panels: Vec<Panel>,
     /// Tous les dessins du projet. On n'en retire jamais pendant la session (l'historique
-    /// d'annulation peut y faire référence) ; seuls ceux encore utilisés sont enregistrés.
-    pub cels: HashMap<CelId, Cel>,
+    /// d'annulation peut y faire référence) ; seuls ceux encore utilisés sont enregistrés. Certains peuvent être absents
+    /// (pixels hors de la mémoire, `residence.rs`) : `get` ne montre que les présents.
+    pub cels: crate::residence::Dessins,
     /// Pistes son, en temps du montage (elles ne bougent pas avec les panneaux).
     pub audio_tracks: Vec<AudioTrack>,
     /// Sons importés. Comme les dessins, on n'en retire pas pendant la session.
@@ -1085,7 +1104,7 @@ impl Document {
             sequences: Vec::new(),
             scenes: Vec::new(),
             panels: Vec::new(),
-            cels: HashMap::new(),
+            cels: Default::default(),
             audio_tracks: Vec::new(),
             sounds: HashMap::new(),
             guides: Vec::new(),
@@ -1154,7 +1173,7 @@ impl Document {
             sequences: structure.sequences,
             scenes: structure.scenes,
             panels: structure.panels,
-            cels,
+            cels: cels.into(),
             audio_tracks: structure.audio_tracks,
             sounds,
             guides: structure.guides,
@@ -1200,7 +1219,7 @@ impl Document {
             sequences: self.sequences.clone(),
             scenes: self.scenes.clone(),
             panels: self.panels.clone(),
-            cels: HashMap::new(),
+            cels: Default::default(),
             audio_tracks: self.audio_tracks.clone(),
             sounds: self.sounds.clone(),
             guides: self.guides.clone(),
@@ -1314,7 +1333,9 @@ impl Document {
         let src = Origine::de(self);
         let dst = Origine { cadre, feuille: [nw, nh], cadence: src.cadence };
         let a = Adaptation { src, dst, ajustement: Ajustement::Remplir, duree: Duree::Images, s, t: Vec2::ZERO };
-        self.cels = crate::adaptation::adapte_dessins(&self.cels, &a, &Progression::default());
+        // (Tous les dessins sont là : `App` fait revenir les absents avant de changer la taille du projet, `residence.rs`.)
+        let table: HashMap<CelId, Cel> = self.cels.tous().map(|(id, c)| (*id, c.clone())).collect();
+        self.cels = crate::adaptation::adapte_dessins(&table, &a, &Progression::default()).into();
         for g in &mut self.guides {
             for p in &mut g.points {
                 p[0] *= s;
@@ -1761,7 +1782,8 @@ impl Document {
             .flat_map(|p| &p.layers)
             .flat_map(crate::calquecouleur::dessins_du_calque)
             .chain(rogne.iter().copied())
-            .filter_map(|id| self.cels.get(&id).map(|c| (id, c.clone())))
+            // (Un dessin hors de la mémoire part avec son absence : ses pixels le suivent, `residence.rs`.)
+            .filter_map(|id| self.cels.get_ou_absent(&id).map(|c| (id, c.clone())))
             .collect();
         let mut doc = Document::from_parts(self.width, self.height, s, cels, HashMap::new());
         doc.frame = self.frame;
@@ -2079,7 +2101,7 @@ impl Document {
         }
         // Le remplissage au griffonnage d'un calque de couleur se calcule d'après les traits (`griffonnage.rs`) : il ne se
         // fige pas dans un dessin de la fusion.
-        let griffonne = |l: &Layer| l.couleur.as_ref().is_some_and(|c| c.dessins_griffonnages().any(|g| self.cels.get(&g).is_some_and(|c| !c.is_empty())));
+        let griffonne = |l: &Layer| l.couleur.as_ref().is_some_and(|c| c.dessins_griffonnages().any(|g| self.cels.get_ou_absent(&g).is_some_and(|c| !c.is_empty())));
         if griffonne(&above) || griffonne(&below) {
             return Err("Un calque de couleur qui a des griffonnages ne se fusionne pas : son remplissage suit les traits. Gomme ses griffonnages d'abord, ou garde le calque.".into());
         }
@@ -2315,7 +2337,8 @@ impl Document {
             .flat_map(|p| &p.layers)
             .filter(|l| l.scene_wide.is_none())
             .flat_map(crate::calquecouleur::dessins_du_calque)
-            .filter_map(|id| self.cels.get(&id).map(|c| (id, c.clone())))
+            // (Un dessin hors de la mémoire part avec son absence : ses pixels le suivent, `residence.rs`.)
+            .filter_map(|id| self.cels.get_ou_absent(&id).map(|c| (id, c.clone())))
             .collect();
         Some(PanelClip { panels, cels, origine: crate::adaptation::Origine::de(self) })
     }
@@ -2892,7 +2915,9 @@ impl Document {
     pub fn flipped_cel(&mut self, source: CelId, h: bool, v: bool) -> CelId {
         let id = self.duplicate_cel(source);
         let (w, hh) = (self.width, self.height);
-        let cel = self.cels.get_mut(&id).expect("dessin copié juste avant");
+        // (Un dessin hors de la mémoire, `residence.rs` : jamais retourné à vide. Les commandes qui retournent attendent son
+        // retour, `App::action_attend_le_plan` ; ici, au pire, la copie reste telle quelle.)
+        let Some(cel) = self.cels.get_mut(&id) else { return id };
         match cel.vector.as_mut() {
             Some(d) => {
                 let flip = crate::vector::Affine {

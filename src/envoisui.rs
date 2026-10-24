@@ -162,7 +162,7 @@ impl App {
     pub(crate) fn envois_releve(&self) -> Releve {
         Releve {
             serial: self.history.serial(),
-            versions: self.doc.cels.values().fold(0u64, |a, c| a.wrapping_add(c.version)),
+            versions: self.doc.cels.tous().fold(0u64, |a, (_, c)| a.wrapping_add(c.version)),
             dessins: self.doc.cels.len(),
             plans: self.doc.panels.len(),
         }
@@ -226,7 +226,7 @@ impl App {
                 if !vus.insert(id) {
                     continue;
                 }
-                let Some(c) = self.doc.cels.get(&id) else { continue };
+                let Some(c) = self.doc.cels.get_ou_absent(&id) else { continue };
                 if self.envois_ui.connus.get(&id).is_none_or(|(v, _)| *v != c.version) {
                     restants.push(id);
                 }
@@ -240,7 +240,7 @@ impl App {
         let start = Instant::now();
         let Some(prep) = &mut self.envois_ui.prep else { return };
         while let Some(id) = prep.restants.pop() {
-            if let Some(c) = self.doc.cels.get(&id) {
+            if let Some(c) = self.doc.cels.get_ou_absent(&id) {
                 prep.cels.insert(id, Copie { version: c.version, donnees: Donnees::de(c) });
             }
             if start.elapsed() >= budget {
@@ -328,7 +328,7 @@ impl App {
         let mut cels = HashMap::new();
         for p in &self.doc.panels {
             for id in crate::empreinte::dessins_du_plan(p) {
-                if let Some(c) = self.doc.cels.get(&id) {
+                if let Some(c) = self.doc.cels.get_ou_absent(&id) {
                     cels.entry(id).or_insert_with(|| Copie { version: c.version, donnees: Donnees::de(c) });
                 }
             }

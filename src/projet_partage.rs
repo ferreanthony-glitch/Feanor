@@ -273,7 +273,7 @@ pub(crate) fn charger_plan(dir: &Path, tete: &Tete, plan: u64, octets: &[u8], qu
         panel,
         versions: doc.versions.remove(&plan),
         reserve: doc.reserves.remove(&plan),
-        cels: std::mem::take(&mut doc.cels),
+        cels: std::mem::take(&mut doc.cels).into_map(),
         hash_fichier,
         hash_contenu,
         dessins,
@@ -318,7 +318,7 @@ impl Document {
         let PlanCharge { plan, mut panel, cels, versions, reserve, .. } = pc;
         panel.scene = self.panels[i].scene;
         for (id, mut cel) in cels {
-            if let Some(old) = self.cels.get(&id) {
+            if let Some(old) = self.cels.get_ou_absent(&id) {
                 cel.version = old.version + 1;
             }
             self.cels.insert(id, cel);
@@ -425,7 +425,9 @@ impl Document {
         }
         // Les dessins de la version sont des copies à elle (modifier la version ne touche jamais le plan, ni l'inverse).
         for (id, cel) in cels {
-            self.cels.entry(id).or_insert(cel);
+            if !self.cels.contains_key(&id) {
+                self.cels.insert(id, cel);
+            }
         }
         let mut panel = self.copie_de(&panel);
         panel.scene = self.panels[index].scene;
@@ -812,6 +814,8 @@ impl SaveJob {
             partage: None,
             differe: None,
             manquants: Vec::new(),
+            introuvables: Vec::new(),
+            garder: BTreeSet::new(),
         }
     }
 
@@ -938,7 +942,7 @@ impl SaveJob {
             depot.ecrire_commentaires(&travail.ctx.moi.id, octets)?;
             resultat.commentaires_ecrits = true;
         }
-        Ok(SaveReport { written: count, removed: 0, snapshots: self.snapshots.iter().map(|s| s.id).collect(), partage: Some(resultat), manquants: Vec::new() })
+        Ok(SaveReport { written: count, removed: 0, snapshots: self.snapshots.iter().map(|s| s.id).collect(), partage: Some(resultat), manquants: Vec::new(), introuvables: Vec::new() })
     }
 }
 

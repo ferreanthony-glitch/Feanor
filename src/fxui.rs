@@ -505,7 +505,8 @@ impl App {
         let (w, h) = (self.doc.width, self.doc.height);
         let mut changed = Vec::new();
         for cel in cels {
-            let Some(c) = self.doc.cels.get_mut(&cel) else { continue };
+            // (Une image vectorielle hors de la mémoire aussi, `residence.rs` : seuls ses traits changent, son image est refaite.)
+            let Some(c) = self.doc.cels.get_ou_absent_mut(&cel) else { continue };
             let Some(before) = c.vector.clone() else { continue };
             let mut baked = before.clone();
             if crate::fxmatiere::bake_nib(&mut baked, &nib) == 0 {
@@ -513,6 +514,7 @@ impl App {
             }
             // (Les pixels : ceux du cache des traits redessinés ; ce qui manque, en rapide d'abord.)
             c.raster = baked.render_quick(w, h);
+            c.absent = None;
             c.vector = Some(baked);
             c.version += 1;
             edits.push(crate::history::Edit::Vector { cel, drawing: before });

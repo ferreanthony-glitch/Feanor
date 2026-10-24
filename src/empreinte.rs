@@ -115,6 +115,9 @@ pub struct Donnees {
     pub contenu: Contenu,
     /// Strate Fond (peinture, coupe), s'il y en a une qui montre quelque chose.
     pub fond: Option<(Raster, Raster)>,
+    /// Un dessin bitmap hors de la mémoire (`residence.rs`) : ses pixels reviennent sur le fil de fond (`resoudre`) avant
+    /// d'être hachés ou écrits ; d'ici là, `contenu` est une image vide.
+    pub(crate) absent: Option<std::sync::Arc<crate::residence::Absent>>,
 }
 
 #[derive(Clone)]
@@ -130,7 +133,23 @@ impl Donnees {
             None => Contenu::Bitmap(cel.raster.clone()),
         };
         let fond = cel.fond.as_ref().filter(|s| !s.is_empty()).map(|s| (s.peinture.raster.clone(), s.coupe.clone()));
-        Donnees { largeur: cel.raster.width, hauteur: cel.raster.height, contenu, fond }
+        let absent = cel.absent.clone().filter(|_| cel.vector.is_none());
+        Donnees { largeur: cel.raster.width, hauteur: cel.raster.height, contenu, fond, absent }
+    }
+
+    /// Sur un fil de fond : les pixels d'un dessin bitmap absent reviennent (lus de son fichier). Faux s'ils n'ont pas pu.
+    pub fn resoudre(&mut self) -> bool {
+        let Some(a) = self.absent.take() else { return true };
+        match a.lire(self.largeur, self.hauteur) {
+            Ok(r) => {
+                self.contenu = Contenu::Bitmap(r);
+                true
+            }
+            Err(_) => {
+                self.absent = Some(a);
+                false
+            }
+        }
     }
 
     /// Un dessin vide du genre `kind` (un dessin qu'on ne trouve pas).
@@ -139,7 +158,7 @@ impl Donnees {
             LayerKind::Vector => Contenu::Vectoriel(VectorDrawing::default()),
             LayerKind::Bitmap => Contenu::Bitmap(Raster::new(largeur, hauteur)),
         };
-        Donnees { largeur, hauteur, contenu, fond: None }
+        Donnees { largeur, hauteur, contenu, fond: None, absent: None }
     }
 
     pub fn vectoriel(&self) -> bool {

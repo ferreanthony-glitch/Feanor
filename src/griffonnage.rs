@@ -295,7 +295,7 @@ const PEINTURE_BIT: CelId = 1 << 60;
 /// couleur. Dérivé du numéro de `base` plutôt que tiré du compteur du projet : deux ouvertures du même vieux projet
 /// (ou deux équipiers qui relisent le même plan partagé) donnent les mêmes numéros, et rien ne peut heurter un dessin
 /// d'un autre plan. Si un dessin porte déjà ce numéro (jamais en pratique), on cherche le suivant.
-fn numero_peinture(cels: &HashMap<CelId, Cel>, base: CelId) -> CelId {
+fn numero_peinture(cels: &crate::residence::Dessins, base: CelId) -> CelId {
     let mut id = base | PEINTURE_BIT;
     while cels.contains_key(&id) {
         id = id.wrapping_add(1) | PEINTURE_BIT;
@@ -345,7 +345,7 @@ fn recouvre(ctg: &Layer, t: &Layer) -> Option<BTreeMap<CelId, Option<CelId>>> {
 ///   sources sont les mêmes que celles du calque CTG (aucune choisie : tous les autres calques de dessin).
 /// - Les dessins de peinture (vides) sont neufs (`numero_peinture`). Le mode « Griffonner » est allumé : sur ce calque,
 ///   dessiner continue de griffonner, comme avant.
-pub fn migrer_ctg(panel: &mut Panel, cels: &mut HashMap<CelId, Cel>, (w, h): (usize, usize), anciens: &[AncienCtg]) -> usize {
+pub fn migrer_ctg(panel: &mut Panel, cels: &mut crate::residence::Dessins, (w, h): (usize, usize), anciens: &[AncienCtg]) -> usize {
     let ctg_ids: HashSet<u64> = anciens.iter().map(|a| a.calque).collect();
     let mut convertis = 0;
     for a in anciens {
@@ -369,7 +369,7 @@ pub fn migrer_ctg(panel: &mut Panel, cels: &mut HashMap<CelId, Cel>, (w, h): (us
         link.griffonner = true;
         let mut nouvelles: HashMap<CelId, CelId> = HashMap::new();
         let mut frames: Vec<Option<CelId>> = Vec::new();
-        let mut peinture_de = |cels: &mut HashMap<CelId, Cel>, graffiti: Option<CelId>, base: CelId, link: &mut CalqueCouleur| -> CelId {
+        let mut peinture_de = |cels: &mut crate::residence::Dessins, graffiti: Option<CelId>, base: CelId, link: &mut CalqueCouleur| -> CelId {
             let id = numero_peinture(cels, base);
             cels.insert(id, Cel::new(w, h, LayerKind::Bitmap));
             if let Some(g) = graffiti {
@@ -408,7 +408,8 @@ pub fn migrer_ctg(panel: &mut Panel, cels: &mut HashMap<CelId, Cel>, (w, h): (us
         // Un calque vectoriel de graffitis : son image (les pixels) est ce qui compte pour le remplissage.
         if panel.layers[i].kind == LayerKind::Vector {
             for g in link.griffonnages.values() {
-                if let Some(c) = cels.get_mut(g) {
+                // (Jamais d'absent ici : l'ouverture lit tout quand un projet a des calques CTG, `project.rs`.)
+                if let Some(c) = cels.get_ou_absent_mut(g).filter(|c| c.absent.is_none()) {
                     c.vector = None;
                 }
             }
