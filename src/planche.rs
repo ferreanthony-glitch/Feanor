@@ -27,6 +27,7 @@ use tiny_skia::{Color, FillRule, LineCap, LineJoin, Paint, PathBuilder, Pixmap, 
 
 use crate::annotations::Annotations;
 use crate::board::{self, BoardLayout, BoardSettings, CardPlace};
+use crate::boardsens::{Champ, Sens, Textes};
 use crate::document::Document;
 
 /// Ce que l'export écrit.
@@ -87,6 +88,10 @@ pub struct Options {
     pub marie_couleur: [u8; 3],
     /// La couleur des cadres de caméra : celle de l'écran (Préférences > Vignettes), posée par `App::planche_job`.
     pub couleur_cadre: [u8; 3],
+    /// Le sens de lecture de la planche et les champs de texte montrés à côté des cases : ceux de l'écran (panneau « Vignettes »), posés
+    /// par `App::planche_job`. D'origine : en lignes, les notes seules.
+    pub sens: Sens,
+    pub textes: Textes,
 }
 
 impl Default for Options {
@@ -102,6 +107,8 @@ impl Default for Options {
             marie: false,
             marie_couleur: crate::marie::COULEUR_PAR_DEFAUT,
             couleur_cadre: crate::vignettesreglages::CADRE_DEFAUT,
+            sens: Sens::default(),
+            textes: Textes::default(),
         }
     }
 }
@@ -125,9 +132,9 @@ pub struct Carte {
     pub plan_reel: usize,
     /// Le numéro du plan, s'il commence là.
     pub etiquette: Option<String>,
-    /// Les lignes de la note (trois au plus, « … » au bout).
-    pub note: Vec<String>,
-    pub note_taille: f32,
+    /// Les champs montrés (action, dialogue, notes) qui ont un texte : leur taille et leurs lignes (trois au plus chacun, « … » au bout).
+    /// Quand plusieurs champs sont montrés, la première ligne de chacun commence par son étiquette.
+    pub champs: Vec<(Champ, f32, Vec<String>)>,
     /// L'empreinte du mouvement de caméra (cadres A, B, C…, à l'échelle des cases), si la caméra bouge et que les cadres sont demandés.
     pub mouvement: Option<board::MoveBoard>,
 }
@@ -198,36 +205,44 @@ pub fn construire(doc: &Document, plans: &[usize], s: &BoardSettings, opt: &Opti
     let plans: Vec<usize> = plans.iter().copied().filter(|&i| i < doc.panels.len()).collect();
     // Les notes d'abord (leur nombre de lignes règle la hauteur des rangées).
     let largeur_note = (s.card_w.clamp(board::CARD_MIN, board::CARD_MAX) - 2.0).max(10.0);
-    let mut notes: std::collections::HashMap<u64, (Vec<String>, f32)> = std::collections::HashMap::new();
+    let textes = opt.textes;
+    let avec_etiquettes = textes.etiquettes();
+    let mut notes: std::collections::HashMap<u64, Vec<(Champ, f32, Vec<String>)>> = std::collections::HashMap::new();
     let mut lignes = std::collections::HashMap::new();
     if opt.notes {
         for p in &sub.panels {
-            let marks = p.marks.iter().map(|m| (m.id, m.notes.as_str()));
-            for (id, texte) in std::iter::once((p.id, p.notes.as_str())).chain(marks) {
-                if texte.trim().is_empty() {
-                    continue;
+            let marks = p.marks.iter().map(|m| (m.id, [m.action.as_str(), m.dialogue.as_str(), m.notes.as_str()]));
+            for (id, trois) in std::iter::once((p.id, [p.action.as_str(), p.dialogue.as_str(), p.notes.as_str()])).chain(marks) {
+                let mut champs: Vec<(Champ, f32, Vec<String>)> = Vec::new();
+                let mut total = 0;
+                for (champ, texte) in Champ::TOUS.into_iter().zip(trois).filter(|(c, t)| textes.montre(*c) && !t.trim().is_empty()) {
+                    let taille = board::note_font_size(texte.chars().count());
+                    let brut = if avec_etiquettes { format!("{} {texte}", champ.etiquette()) } else { texte.to_string() };
+                    let l = lignes_de(&brut, taille, largeur_note, board::NOTE_MAX_LINES);
+                    if !l.is_empty() {
+                        total += l.len().clamp(1, board::NOTE_MAX_LINES);
+                        champs.push((champ, taille, l));
+                    }
                 }
-                let taille = board::note_font_size(texte.chars().count());
-                let l = lignes_de(texte, taille, largeur_note, board::NOTE_MAX_LINES);
-                if !l.is_empty() {
-                    lignes.insert(id, l.len().clamp(1, board::NOTE_MAX_LINES));
-                    notes.insert(id, (l, taille));
+                if total > 0 {
+                    lignes.insert(id, total);
+                    notes.insert(id, champs);
                 }
             }
         }
     }
     // (Même rangement qu'à l'écran, sans les cases pâles : elles ne sont pas exportées.)
-    let layout = board::layout_with(&sub, s, &lignes, false, &board::Options::default());
+    let layout = board::layout_with(&sub, s, &lignes, false, &board::Options { sens: opt.sens, textes, ..Default::default() });
     let cartes: Vec<Carte> = layout
         .cards
         .iter()
         .enumerate()
         .map(|(k, c)| {
             let plan_reel = plans[c.panel];
-            let (note, note_taille) = notes.get(&c.id).cloned().unwrap_or_default();
+            let champs = notes.get(&c.id).cloned().unwrap_or_default();
             let etiquette = (c.starts_plan() && opt.numeros).then(|| doc.scene_label(c.scene));
             let mouvement = if opt.cadres { layout.move_of(k).cloned() } else { None };
-            Carte { place: *c, plan_reel, etiquette, note, note_taille, mouvement }
+            Carte { place: *c, plan_reel, etiquette, champs, mouvement }
         })
         .collect();
     let mut cadre = layout.pages.iter().fold(Rect::NOTHING, |r, p| r.union(*p));
@@ -366,9 +381,17 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
                 continue;
             }
             let r = rect_px(b.bar, p.cadre, s);
-            let largeur = (b.bar.width() * s).round().max(1.0) as i32;
-            let cx = (r[0] + r[2]) / 2;
-            remplir(&mut pix, [cx - largeur / 2, r[1], cx - largeur / 2 + largeur, r[3]], if b.cut { BARRE_NOIRE } else { BARRE_GRISE });
+            let couleur = if b.cut { BARRE_NOIRE } else { BARRE_GRISE };
+            if p.layout.sens.japonais() {
+                // À la japonaise, la barre est horizontale (les cases d'une colonne se suivent de haut en bas).
+                let epaisseur = (b.bar.height() * s).round().max(1.0) as i32;
+                let cy = (r[1] + r[3]) / 2;
+                remplir(&mut pix, [r[0], cy - epaisseur / 2, r[2], cy - epaisseur / 2 + epaisseur], couleur);
+            } else {
+                let largeur = (b.bar.width() * s).round().max(1.0) as i32;
+                let cx = (r[0] + r[2]) / 2;
+                remplir(&mut pix, [cx - largeur / 2, r[1], cx - largeur / 2 + largeur, r[3]], couleur);
+            }
         }
     }
     for (k, c) in p.cartes.iter().enumerate() {
@@ -431,10 +454,23 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
             let y = (l.center().y - p.cadre.top()) * s - lay.bounds.height() * 0.5;
             ecrire(&mut pix, e, (l.left() + 1.0 - p.cadre.left()) * s, y, taille, ENCRE_NUMERO);
         }
-        // La note, sous l'image.
-        for (i, ligne) in c.note.iter().enumerate().filter(|_| opt.notes) {
-            let y = (c.place.note.top() - p.cadre.top() + i as f32 * board::NOTE_LINE_H) * s;
-            ecrire(&mut pix, ligne, (c.place.note.left() + 1.0 - p.cadre.left()) * s, y, c.note_taille * s, ENCRE_NOTE);
+        // Les textes, sous l'image (ou à sa droite, à la japonaise) : chaque champ montré l'un sous l'autre ; avec plusieurs champs, la
+        // première ligne de chacun commence par son étiquette, dans la couleur du champ.
+        let mut haut = c.place.note.top();
+        let x = (c.place.note.left() + 1.0 - p.cadre.left()) * s;
+        for (champ, taille, lignes) in c.champs.iter().filter(|_| opt.notes) {
+            for (i, ligne) in lignes.iter().enumerate() {
+                let y = (haut - p.cadre.top() + i as f32 * board::NOTE_LINE_H) * s;
+                match ligne.strip_prefix(champ.etiquette()).filter(|_| i == 0 && opt.textes.etiquettes()) {
+                    Some(reste) => {
+                        ecrire(&mut pix, champ.etiquette(), x, y, taille * s, champ.encre());
+                        let decalage = crate::text::layout(&format!("{} ", champ.etiquette()), crate::text::FALLBACK, (taille * s).max(1.0)).bounds.width();
+                        ecrire(&mut pix, reste.trim_start(), x + decalage, y, taille * s, ENCRE_NOTE);
+                    }
+                    None => ecrire(&mut pix, ligne, x, y, taille * s, ENCRE_NOTE),
+                }
+            }
+            haut += lignes.len().clamp(1, board::NOTE_MAX_LINES) as f32 * board::NOTE_LINE_H;
         }
     }
     // Les annotations, par-dessus tout.

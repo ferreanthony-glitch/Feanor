@@ -46,6 +46,7 @@ use std::collections::HashMap;
 
 use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
 
+use crate::boardsens::{Sens, Textes};
 use crate::document::Document;
 use crate::vector::VPoint;
 use crate::vignettecam::{self, Empreinte, Place, Zone};
@@ -136,12 +137,15 @@ pub struct Reserve {
     /// Où est la case A (sa rangée, son x depuis le bord gauche des rangées) quand le geste commence : elle ne bouge pas tant qu'il
     /// dure, quitte à recouvrir les cases d'avant ; au lâcher la planche se range à nouveau, dans l'ordre de lecture.
     pub pose: Option<(usize, f32)>,
+    /// Lue à la japonaise : la case A tient aussi sa hauteur (le haut de l'image, depuis le haut des colonnes) ; `pose` est alors sa
+    /// colonne et son x. Rien en lignes.
+    pub pose_y: Option<f32>,
 }
 
 impl Reserve {
     /// Cette réserve, élargie à `autre` (elle ne rétrécit jamais ; la case A reste là où le geste l'a trouvée).
     pub fn avec(self, autre: Reserve) -> Reserve {
-        Reserve { plan: self.plan, rect: self.rect.union(autre.rect), pose: self.pose.or(autre.pose) }
+        Reserve { plan: self.plan, rect: self.rect.union(autre.rect), pose: self.pose.or(autre.pose), pose_y: self.pose_y.or(autre.pose_y) }
     }
 
     /// Ce que la case `k` de `layout` couvre, relativement à son image A (la case seule si sa caméra ne bouge pas), et où elle est.
@@ -151,7 +155,8 @@ impl Reserve {
             Some(m) => m.tuile.rect.translate(-c.thumb.min.to_vec2()),
             None => Rect::from_min_size(Pos2::ZERO, c.thumb.size()),
         };
-        Some(Reserve { plan: c.plan, rect, pose: Some((c.row, c.thumb.left() - layout.origine_x)) })
+        let pose_y = layout.sens.japonais().then(|| c.thumb.top() - layout.origine_y);
+        Some(Reserve { plan: c.plan, rect, pose: Some((c.row, c.thumb.left() - layout.origine_x)), pose_y })
     }
 }
 
@@ -159,15 +164,19 @@ impl Reserve {
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Options {
     /// Les cases pâles : au moins ce nombre de rangées en tout (plus une rangée après la dernière occupée). Rien : pas de case
-    /// pâle (les exports).
+    /// pâle (les exports). Lues à la japonaise : des colonnes.
     pub pale_rows: Option<usize>,
     /// La place retenue pendant un geste de caméra.
     pub hold: Option<Reserve>,
+    /// Le sens de lecture (`boardsens.rs`) : en lignes, ou à la japonaise (`boardjapon.rs`).
+    pub sens: Sens,
+    /// Les champs de texte montrés à côté des cases : ils règlent le nombre de lignes qu'une bande peut avoir au plus.
+    pub textes: Textes,
 }
 
 impl Options {
     pub fn pale(rows: usize) -> Options {
-        Options { pale_rows: Some(rows.clamp(1, MIN_ROWS_MAX)), hold: None }
+        Options { pale_rows: Some(rows.clamp(1, MIN_ROWS_MAX)), ..Default::default() }
     }
 }
 
@@ -189,14 +198,18 @@ pub struct CardPlace {
     pub thumb: Rect,
     /// La bande de note sous l'image, de la hauteur de ses lignes affichées (sous l'enveloppe quand elle descend sous la case).
     pub note: Rect,
-    /// La rangée de l'image (A).
+    /// La rangée de l'image (A) ; lue à la japonaise, sa colonne.
     pub row: usize,
     /// La case d'un plan dont la caméra bouge (deux clés au moins) : son empreinte montre les cadres (`BoardLayout::moves`).
     pub mouvement: bool,
     /// Tout ce que la case couvre : l'image, plus sa tuile quand la caméra bouge.
     pub foot: Rect,
-    /// Le bord droit de la place réservée à la case (la suivante commence un écart après).
+    /// Le bord droit de la place réservée à la case (la suivante commence un écart après). Lue à la japonaise : le bord droit de la
+    /// colonne, texte compris.
     pub reach: f32,
+    /// Le bord bas de la place réservée à la case, texte compris (lue à la japonaise, la suivante de la colonne commence un écart
+    /// après).
+    pub reach_y: f32,
     /// L'empreinte du mouvement dans `BoardLayout::moves`.
     pub mv: Option<usize>,
 }
@@ -284,6 +297,10 @@ pub struct BoardLayout {
     pub decalage: Vec2,
     /// Le bord gauche des rangées (le x des cases est compté depuis lui, `Reserve::pose`).
     pub origine_x: f32,
+    /// Le sens de lecture de cette disposition (`boardsens::Sens`).
+    pub sens: Sens,
+    /// Le haut des colonnes (lue à la japonaise : le y des cases est compté depuis lui, `Reserve::pose_y`).
+    pub origine_y: f32,
 }
 
 impl BoardLayout {
@@ -573,7 +590,9 @@ struct Cle {
     lines: HashMap<u64, usize>,
     last_joins: bool,
     pale_rows: Option<usize>,
-    hold: Option<(u64, [u32; 4], Option<(usize, u32)>)>,
+    hold: Option<(u64, [u32; 4], Option<(usize, u32)>, Option<u32>)>,
+    sens: Sens,
+    textes: u8,
 }
 
 struct ClePlan {
@@ -593,8 +612,8 @@ fn bits_reglages(s: &BoardSettings) -> [u64; 3] {
     [s.card_w.to_bits() as u64, s.columns as u64, s.rows as u64]
 }
 
-fn bits_hold(opt: &Options) -> Option<(u64, [u32; 4], Option<(usize, u32)>)> {
-    opt.hold.map(|h| (h.plan, [h.rect.min.x, h.rect.min.y, h.rect.max.x, h.rect.max.y].map(f32::to_bits), h.pose.map(|(r, x)| (r, x.to_bits()))))
+fn bits_hold(opt: &Options) -> Option<(u64, [u32; 4], Option<(usize, u32)>, Option<u32>)> {
+    opt.hold.map(|h| (h.plan, [h.rect.min.x, h.rect.min.y, h.rect.max.x, h.rect.max.y].map(f32::to_bits), h.pose.map(|(r, x)| (r, x.to_bits())), h.pose_y.map(f32::to_bits)))
 }
 
 impl Cle {
@@ -604,7 +623,7 @@ impl Cle {
             .iter()
             .map(|p| ClePlan { id: p.id, scene: p.scene, n: p.frame_count(), marks: p.marks.iter().map(|m| (m.id, m.frame)).collect(), camera: p.camera.iter().map(bits_cam).collect() })
             .collect();
-        Cle { frame: doc.frame, plans, s: bits_reglages(s), lines: lines.clone(), last_joins, pale_rows: opt.pale_rows, hold: bits_hold(opt) }
+        Cle { frame: doc.frame, plans, s: bits_reglages(s), lines: lines.clone(), last_joins, pale_rows: opt.pale_rows, hold: bits_hold(opt), sens: opt.sens, textes: opt.textes.bits() }
     }
 
     /// La disposition de ces arguments serait-elle celle de cette clé ? (Un passage sur les plans, sans rien allouer.)
@@ -614,6 +633,8 @@ impl Cle {
             && self.last_joins == last_joins
             && self.pale_rows == opt.pale_rows
             && self.hold == bits_hold(opt)
+            && self.sens == opt.sens
+            && self.textes == opt.textes.bits()
             && self.plans.len() == doc.panels.len()
             && self.plans.iter().zip(&doc.panels).all(|(k, p)| {
                 k.id == p.id
@@ -643,6 +664,10 @@ pub fn layout_cache(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usiz
 /// image de plus du dernier plan (barre grise devant elle) et non un plan neuf (barre noire).
 /// Ne dépend pas de la taille de la vue : les notes libres restent à leur place quand la fenêtre change.
 pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> BoardLayout {
+    // À la japonaise : les colonnes (`boardjapon.rs`), le même résultat (`BoardLayout`) rangé dans l'autre sens.
+    if opt.sens.japonais() {
+        return crate::boardjapon::layout(doc, s, lines, last_joins, opt);
+    }
     let cols = s.columns.clamp(1, MAX_COLUMNS);
     // (Une largeur qui n'est pas un nombre, d'un fichier de réglages abîmé, passerait à travers `clamp` et rendrait toute la
     // disposition fausse : la largeur d'origine.)
@@ -654,7 +679,8 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     }
     let n = boards.len();
     let page_cap = if s.rows == 0 { usize::MAX } else { s.rows.min(MAX_ROWS).max(1) };
-    let note_lines = |k: usize| lines.get(&boards[k].1).copied().unwrap_or(1).clamp(1, NOTE_MAX_LINES);
+    let lignes_max = opt.textes.lignes_max();
+    let note_lines = |k: usize| lines.get(&boards[k].1).copied().unwrap_or(1).clamp(1, lignes_max);
     // L'écart après la vignette `k` : serré dans un plan, large à une coupe ; après une case pâle, large.
     let joined_after = |k: usize| match boards.get(k + 1) {
         Some(next) => next.2 > 0,
@@ -846,7 +872,8 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
         }
         let card = Rect::from_min_max(pos2(x, row_top[r]), pos2(x + card_w, bottom));
         let reach = left + x_a + gabarits[k].x_hi;
-        out.cards.push(CardPlace { panel: i, plan: p.id, id, frame, end, scene: p.scene, card, thumb, note, row: r, mouvement: mv.is_some(), foot, reach, mv });
+        let reach_y = foot.bottom().max(note.bottom());
+        out.cards.push(CardPlace { panel: i, plan: p.id, id, frame, end, scene: p.scene, card, thumb, note, row: r, mouvement: mv.is_some(), foot, reach, reach_y, mv });
         let gap = gap_after(k);
         let zone = Rect::from_min_max(pos2(reach, thumb.top()), pos2(reach + gap, thumb.bottom()));
         let cut = !joined_after(k);
@@ -883,11 +910,21 @@ pub enum Hit {
     Nothing,
 }
 
+/// La zone où l'on touche une barre : tout l'écart, élargie à `min` si l'écart est plus étroit (dans le sens de la lecture : en
+/// largeur d'une rangée, en hauteur d'une colonne à la japonaise).
+pub fn zone_tactile(zone: Rect, sens: Sens, min: f32) -> Rect {
+    if sens.japonais() {
+        zone.expand2(vec2(0.0, ((min - zone.height()) * 0.5).max(0.0)))
+    } else {
+        zone.expand2(vec2(((min - zone.width()) * 0.5).max(0.0), 0.0))
+    }
+}
+
 /// Ce qui est sous le point `p` (planche). Les barres d'abord, élargies à `bar_min_w` si leur écart est plus
 /// étroit (pour qu'une barre reste facile à toucher quand la planche est petite à l'écran) ; puis les images,
 /// les notes, les cases pâles.
 pub fn hit(layout: &BoardLayout, p: Pos2, bar_min_w: f32) -> Hit {
-    if let Some(b) = layout.bars.iter().find(|b| b.zone.expand2(vec2(((bar_min_w - b.zone.width()) * 0.5).max(0.0), 0.0)).contains(p)) {
+    if let Some(b) = layout.bars.iter().find(|b| zone_tactile(b.zone, layout.sens, bar_min_w).contains(p)) {
         return Hit::Bar(b.after);
     }
     if let Some(k) = layout.card_at(p) {
@@ -940,34 +977,76 @@ pub fn frame_hit(layout: &BoardLayout, p: Pos2, tol: f32) -> Option<usize> {
 /// Où l'on peut poser des plans déplacés : devant un plan (`before`), ou tout à la fin (`None`). Le repère est un
 /// trait vertical (`x`, de `top` à `bottom`, en coordonnées de la planche) dans l'écart qui précède la première
 /// vignette de ce plan. Jamais à l'intérieur d'un plan : seules les premières vignettes ont un repère.
+///
+/// Lue à la japonaise, le repère est un trait **horizontal** dans l'écart au-dessus de la case (`top` = `bottom` = son y, `x` = son milieu) ;
+/// `a` et `b` sont toujours ses deux bouts, dans les deux sens de lecture.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct DropSlot {
     pub before: Option<u64>,
     pub x: f32,
     pub top: f32,
     pub bottom: f32,
+    pub a: Pos2,
+    pub b: Pos2,
+}
+
+impl DropSlot {
+    fn verticale(before: Option<u64>, x: f32, top: f32, bottom: f32) -> DropSlot {
+        DropSlot { before, x, top, bottom, a: pos2(x, top), b: pos2(x, bottom) }
+    }
+
+    fn horizontale(before: Option<u64>, y: f32, gauche: f32, droite: f32) -> DropSlot {
+        DropSlot { before, x: (gauche + droite) * 0.5, top: y, bottom: y, a: pos2(gauche, y), b: pos2(droite, y) }
+    }
+
+    /// La distance du point `p` au repère.
+    fn distance(&self, p: Pos2) -> f32 {
+        let (ab, ap) = (self.b - self.a, p - self.a);
+        let t = if ab.length_sq() < 1e-9 { 0.0 } else { (ap.dot(ab) / ab.length_sq()).clamp(0.0, 1.0) };
+        (p - (self.a + ab * t)).length()
+    }
 }
 
 /// Les endroits où poser un plan : devant chaque plan, et après le dernier.
 pub fn drop_slots(layout: &BoardLayout) -> Vec<DropSlot> {
+    let jap = layout.sens.japonais();
     let mut out = Vec::new();
     for (k, c) in layout.cards.iter().enumerate() {
         if !c.starts_plan() {
             continue;
         }
-        let x = match k.checked_sub(1).map(|j| &layout.cards[j]) {
-            Some(prev) if prev.row == c.row => (prev.reach + c.thumb.left()) * 0.5,
+        let prev = k.checked_sub(1).map(|j| (j, &layout.cards[j]));
+        if jap {
+            // Entre deux cases d'une colonne : au milieu de l'écart (la zone de la barre) ; en haut d'une colonne : au-dessus de la case.
+            let y = match prev {
+                Some((j, p)) if p.row == c.row => layout.bars.get(j).map_or(c.card.top() - PAGE_PAD * 0.5, |b| b.zone.center().y),
+                _ => c.card.top() - PAGE_PAD * 0.5,
+            };
+            out.push(DropSlot::horizontale(Some(c.plan), y, c.thumb.left(), c.thumb.right()));
+            continue;
+        }
+        let x = match prev {
+            Some((_, p)) if p.row == c.row => (p.reach + c.thumb.left()) * 0.5,
             _ => c.thumb.left() - PAGE_PAD * 0.5,
         };
-        out.push(DropSlot { before: Some(c.plan), x, top: c.thumb.top(), bottom: c.thumb.bottom() });
+        out.push(DropSlot::verticale(Some(c.plan), x, c.thumb.top(), c.thumb.bottom()));
     }
     if let Some(last) = layout.cards.last() {
-        // Après la dernière vignette : dans l'écart avant la première case pâle si elle est sur la même ligne.
-        let x = match layout.empty.first() {
-            Some(e) if (e.top() - last.thumb.top()).abs() < 1.0 => (last.reach + e.left()) * 0.5,
-            _ => last.reach + PAGE_PAD * 0.5,
-        };
-        out.push(DropSlot { before: None, x, top: last.thumb.top(), bottom: last.thumb.bottom() });
+        if jap {
+            // Après la dernière vignette : dans l'écart avant la première case pâle si elle est dans la même colonne.
+            let y = match (layout.empty.first(), layout.bars.last()) {
+                (Some(e), Some(b)) if (e.left() - last.thumb.left()).abs() < 1.0 && e.top() > last.thumb.top() => b.zone.center().y,
+                _ => last.reach_y + PAGE_PAD * 0.5,
+            };
+            out.push(DropSlot::horizontale(None, y, last.thumb.left(), last.thumb.right()));
+        } else {
+            // Après la dernière vignette : dans l'écart avant la première case pâle si elle est sur la même ligne.
+            let x = match layout.empty.first() {
+                Some(e) if (e.top() - last.thumb.top()).abs() < 1.0 => (last.reach + e.left()) * 0.5,
+                _ => last.reach + PAGE_PAD * 0.5,
+            };
+            out.push(DropSlot::verticale(None, x, last.thumb.top(), last.thumb.bottom()));
+        }
     }
     out
 }
@@ -991,13 +1070,9 @@ pub fn drop_changes_order(order: &[u64], moving: &[u64], before: Option<u64>) ->
 /// changerait rien (devant un plan qu'on déplace, ou devant celui qui le suit déjà) : lâcher près de sa place, c'est
 /// la garder, et aucun repère ne se montre.
 pub fn nearest_slot(slots: &[DropSlot], order: &[u64], moving: &[u64], p: Pos2) -> Option<DropSlot> {
-    let dist = |s: &DropSlot| {
-        let y = p.y.clamp(s.top, s.bottom);
-        ((p.x - s.x).powi(2) + (p.y - y).powi(2)).sqrt()
-    };
     slots
         .iter()
-        .min_by(|a, b| dist(a).total_cmp(&dist(b)))
+        .min_by(|a, b| a.distance(p).total_cmp(&b.distance(p)))
         .filter(|s| s.before.is_none_or(|b| !moving.contains(&b)) && drop_changes_order(order, moving, s.before))
         .copied()
 }
@@ -1005,11 +1080,7 @@ pub fn nearest_slot(slots: &[DropSlot], order: &[u64], moving: &[u64], p: Pos2) 
 /// L'endroit de pose le plus proche du point `p` pour la **copie** d'un plan (Maj + Alt) : tous les repères valent, même devant
 /// l'original ou juste après lui (la copie est un plan de plus, elle n'enlève rien d'où elle vient).
 pub fn nearest_slot_copie(slots: &[DropSlot], p: Pos2) -> Option<DropSlot> {
-    let dist = |s: &DropSlot| {
-        let y = p.y.clamp(s.top, s.bottom);
-        ((p.x - s.x).powi(2) + (p.y - y).powi(2)).sqrt()
-    };
-    slots.iter().min_by(|a, b| dist(a).total_cmp(&dist(b))).copied()
+    slots.iter().min_by(|a, b| a.distance(p).total_cmp(&b.distance(p))).copied()
 }
 
 /// Plans dont une vignette touche le rectangle `r` (sélection au lasso rectangulaire), sans

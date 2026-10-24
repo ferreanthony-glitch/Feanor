@@ -3787,6 +3787,12 @@ impl App {
             "vignettes.annotations_effacer" => self.annot_demander_effacement(),
             "vignettes.marie_louise" => self.marie_basculer(),
             "vignettes.note" => self.note_ecrire_courante(),
+            // Le panneau « Vignettes » : sens de lecture et textes à côté des cases (`vignettespanneau.rs`).
+            "vignettes.sens_lignes" => self.vignettes_regler_sens(crate::boardsens::Sens::Lignes),
+            "vignettes.sens_japonais" => self.vignettes_regler_sens(crate::boardsens::Sens::Japonais),
+            "vignettes.texte_action" => self.vignettes_basculer_texte(crate::boardsens::Champ::Action),
+            "vignettes.texte_dialogue" => self.vignettes_basculer_texte(crate::boardsens::Champ::Dialogue),
+            "vignettes.texte_notes" => self.vignettes_basculer_texte(crate::boardsens::Champ::Notes),
             "fichier.exporter_planche" => self.open_planche(),
             "fichier.exporter_colorscript" => self.open_colorscript(),
             "edition.annuler" => self.undo(),

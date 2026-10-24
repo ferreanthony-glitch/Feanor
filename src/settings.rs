@@ -63,6 +63,11 @@ pub struct Settings {
     /// Disposition de l'espace Vignettes (le quatrième espace, `Espace::Vignettes`) ; absente : son origine.
     #[serde(default, rename = "disposition_vignettes", skip_serializing_if = "Option::is_none")]
     pub vignettes_layout: Option<Layout>,
+    /// Le panneau « Vignettes » (2026-10-24) a été posé, une fois, dans la disposition retenue de l'espace Vignettes
+    /// (`poser_le_panneau_vignettes`) : une disposition d'avant lui ne l'avait pas, et il se voit avec l'onglet. Fermé ensuite à la main,
+    /// il reste fermé.
+    #[serde(default, rename = "panneau_vignettes_pose", skip_serializing_if = "std::ops::Not::not")]
+    pub panneau_vignettes_pose: bool,
     #[serde(default, rename = "espace_storyboard")]
     pub storyboard_space: Espace,
     /// Commandes épinglées dans la barre de commandes, la barre du montage et celle de la timeline,
@@ -241,6 +246,7 @@ impl Default for Settings {
             animation_layout: None,
             montage_layout: None,
             vignettes_layout: None,
+            panneau_vignettes_pose: false,
             storyboard_space: Espace::Storyboard,
             bars: ReglageBarres::default(),
             key_filter: Default::default(),
@@ -333,7 +339,24 @@ impl Settings {
         s.neutral_colors = crate::personnages::neutres_nettoyees(std::mem::take(&mut s.neutral_colors));
         s.echelle = crate::echelle::echelle_valide(s.echelle);
         s.vignettes = std::mem::take(&mut s.vignettes).nettoyes();
+        s.poser_le_panneau_vignettes();
         s
+    }
+
+    /// Une fois : le panneau « Vignettes » rejoint la disposition retenue de l'espace Vignettes si elle n'avait pas encore de panneau de ce
+    /// nom (elle date d'avant lui). Sans disposition retenue, l'origine du jour l'a déjà. Une fois posé, c'est à l'utilisateur de le garder
+    /// ou de le fermer.
+    pub fn poser_le_panneau_vignettes(&mut self) {
+        if std::mem::replace(&mut self.panneau_vignettes_pose, true) {
+            return;
+        }
+        if let Some(l) = self.vignettes_layout.as_mut() {
+            let mut d = l.dock_layout();
+            if !d.contains(crate::dock::Pane::Vignettes) {
+                d.open(crate::dock::Pane::Vignettes);
+                l.panneaux = Some(d);
+            }
+        }
     }
 
     pub fn save(&self) -> Result<(), String> {

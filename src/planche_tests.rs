@@ -112,7 +112,8 @@ fn notes_make_taller_rows_and_are_drawn_only_when_asked() {
     let avec = construire(&doc, &tout(&doc), &reglages(), &opt(), &doc.annotations);
     let sans = construire(&doc, &tout(&doc), &reglages(), &Options { notes: false, ..opt() }, &doc.annotations);
     let carte = avec.cartes.iter().find(|c| c.place.plan == doc.panels[1].id).unwrap();
-    assert!(carte.note.len() >= 2 && carte.note.len() <= 3, "{:?}", carte.note);
+    let note: Vec<&String> = carte.champs.iter().flat_map(|(_, _, l)| l.iter()).collect();
+    assert!(note.len() >= 2 && note.len() <= 3, "{note:?}");
     assert!(avec.cadre.height() > sans.cadre.height(), "la rangée descend de ce que la note prend");
     let s = 1.5;
     let o = opt();

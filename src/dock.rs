@@ -89,6 +89,11 @@ pub enum Pane {
     /// fond, leur ordre. En onglet avec la couleur et les pinceaux dans la disposition par défaut.
     #[serde(rename = "personnages")]
     Personnages,
+    /// Le panneau « Vignettes » (`vignettespanneau.rs`, 2026-10-24) : le sens de lecture de la planche (en lignes, ou à la japonaise) et
+    /// les textes montrés à côté des cases (action, dialogue, notes). Il est dans la colonne de droite de l'espace Vignettes ; fermé
+    /// ailleurs, où il s'ouvre à la demande (il règle la planche de l'espace Vignettes).
+    #[serde(rename = "vignettes")]
+    Vignettes,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -101,10 +106,12 @@ pub enum Group {
     /// En bas, sur toute la largeur : le montage ou la timeline, selon le mode.
     Bottom,
     Center,
+    /// Les réglages de la planche des Vignettes : une petite colonne à droite du dessin.
+    Planche,
 }
 
 impl Pane {
-    pub const ALL: [Pane; 16] = [
+    pub const ALL: [Pane; 17] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
@@ -121,13 +128,14 @@ impl Pane {
         Pane::SuggestionsSonores,
         Pane::References,
         Pane::Personnages,
+        Pane::Vignettes,
     ];
 
     /// Les panneaux fermés dans la disposition par défaut, qui ne s'ouvrent qu'à la demande.
     pub fn on_demand(self) -> bool {
         matches!(
             self,
-            Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References
+            Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes
         )
     }
 
@@ -159,6 +167,7 @@ impl Pane {
             Pane::SuggestionsSonores => "Suggestions sonores",
             Pane::References => "Références",
             Pane::Personnages => "Personnages",
+            Pane::Vignettes => "Vignettes",
         }
     }
 
@@ -195,6 +204,7 @@ impl Pane {
             Pane::SuggestionsSonores => ph::SPARKLE,
             Pane::References => ph::IMAGES,
             Pane::Personnages => ph::USERS_THREE,
+            Pane::Vignettes => ph::SQUARES_FOUR,
         }
     }
 
@@ -211,6 +221,7 @@ impl Pane {
             | Pane::SuggestionsSonores
             | Pane::References => Group::Right,
             Pane::Montage | Pane::Timeline => Group::Bottom,
+            Pane::Vignettes => Group::Planche,
         }
     }
 }
@@ -575,7 +586,9 @@ impl DockLayout {
     /// « la partie Vignettes doit être la plus épurée possible, rien de distraction ». Les Références restent à la
     /// demande (un clic dans la barre des panneaux) ; les personnages sont dans leur barre au-dessus de la planche.
     pub fn pour_les_vignettes() -> DockLayout {
-        let cote = column(0.5, tabs(vec![Pane::ToolOptions]), tabs(vec![Pane::Color, Pane::Brushes]));
+        // Le panneau « Vignettes » (sens de lecture, textes) tout en haut : petit, il prend la hauteur de son contenu (`ajuste.rs`).
+        let reglages = column(0.5, tabs(vec![Pane::ToolOptions]), tabs(vec![Pane::Color, Pane::Brushes]));
+        let cote = column(0.2, tabs(vec![Pane::Vignettes]), reglages);
         DockLayout { principal: row(1.0 - TOOLS_WIDTH / REF_WIDTH, tabs(vec![Pane::Canvas]), cote), ..DockLayout::empty() }.sanitized()
     }
 
@@ -808,6 +821,12 @@ impl DockLayout {
             self.principal.wrap_tabs_of(Pane::Layers, &mut under);
             return;
         }
+        // Le panneau « Vignettes » : tout en haut de la colonne des réglages (au-dessus des réglages de l'outil), sinon dans sa colonne.
+        if pane == Pane::Vignettes && self.principal_has(Pane::ToolOptions) {
+            let mut above = |n: DockNode| column(0.2, tabs(vec![Pane::Vignettes]), n);
+            self.principal.wrap_tabs_of(Pane::ToolOptions, &mut above);
+            return;
+        }
         // Les calques rouverts quand les effets sont restés seuls : au-dessus d'eux.
         if pane == Pane::Layers && self.principal_has(Pane::Effects) {
             let mut above = |n: DockNode| column(0.6, tabs(vec![Pane::Layers]), n);
@@ -866,6 +885,15 @@ impl DockLayout {
                 let mut right = Some(right);
                 self.principal
                     .wrap_tabs_of(Pane::Canvas, &mut |canvas| row(0.78, canvas, right.take().unwrap_or_else(|| tabs(Vec::new()))));
+            }
+            Group::Planche => {
+                // Une colonne à droite du dessin ; le panneau y garde la hauteur de son contenu.
+                let panes: Vec<Pane> = panes.iter().copied().filter(|p| p.group() == Group::Planche).collect();
+                if panes.is_empty() {
+                    return;
+                }
+                let mut col = Some(tabs(panes));
+                self.principal.wrap_tabs_of(Pane::Canvas, &mut |canvas| row(0.8, canvas, col.take().unwrap_or_else(|| tabs(Vec::new()))));
             }
         }
         let version = self.version;

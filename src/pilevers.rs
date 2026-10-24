@@ -101,6 +101,27 @@ pub fn placer_etiquette(bloc: Rect, texte: f32, pastille: bool) -> Etiquette {
     Etiquette::Aucune
 }
 
+/// Marge de l'étiquette d'une case des Vignettes, au bord haut et au bord droit de l'image.
+pub const COIN: f32 = 4.0;
+
+/// Place l'étiquette en **haut à droite** de la case `case` (une image de la planche des Vignettes) ; `texte` : la largeur du texte « V2 ».
+/// Une case trop étroite ne garde qu'un point ; trop petite, rien.
+pub fn placer_etiquette_coin(case: Rect, texte: f32) -> Etiquette {
+    if case.height() < 2.0 * COIN + ETIQ_H + 6.0 {
+        return Etiquette::Aucune;
+    }
+    let largeur = texte + 10.0;
+    let libre = case.width() - 2.0 * COIN;
+    if libre >= largeur {
+        return Etiquette::Texte(Rect::from_min_size(pos2(case.right() - COIN - largeur, case.top() + COIN), vec2(largeur, ETIQ_H)));
+    }
+    if libre >= 8.0 {
+        let largeur = libre.min(14.0);
+        return Etiquette::Point(Rect::from_center_size(pos2(case.right() - COIN - largeur / 2.0, case.top() + COIN + ETIQ_H / 2.0), vec2(largeur, 14.0)));
+    }
+    Etiquette::Aucune
+}
+
 /// Où la pile se pose : son cadre, et le rectangle de chaque carte visible (de haut en bas).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Dispo {

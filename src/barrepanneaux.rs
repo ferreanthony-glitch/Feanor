@@ -82,7 +82,7 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
 /// Les guides n'y sont plus : ils sont dans le menu de la règle, au-dessus du dessin (`cadrageui.rs`).
 pub(crate) fn panneaux_d_office(espace: Espace) -> &'static [Pane] {
     match espace {
-        Espace::Vignettes => &[Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::References],
+        Espace::Vignettes => &[Pane::Vignettes, Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::References],
         Espace::Storyboard => &[Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::Personnages, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::References],
         Espace::Animation => &[Pane::ToolOptions, Pane::Brushes, Pane::Color, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::References],
         Espace::Montage => &[Pane::Sheet, Pane::Bruitages, Pane::Comments, Pane::History],
@@ -93,21 +93,36 @@ pub(crate) fn panneaux_d_office(espace: Espace) -> &'static [Pane] {
 /// d'office de l'espace et ceux qui sont ouverts (`ouvert`), sans la feuille d'exposition hors animation.
 pub(crate) fn icones_de(espace: Espace, animation: bool, ouvert: &dyn Fn(Pane) -> bool) -> Vec<Vec<&'static Entree>> {
     let d_office = panneaux_d_office(espace);
-    GROUPES
+    let mut groupes: Vec<Vec<&'static Entree>> = GROUPES
         .iter()
         .map(|g| g.iter().filter(|e| e.visible(animation) && (d_office.contains(&e.pane) || ouvert(e.pane))).collect::<Vec<_>>())
         .filter(|g| !g.is_empty())
-        .collect()
+        .collect();
+    // Le panneau « Vignettes » : une icône à part, en tête, dans l'espace Vignettes (ou tant qu'il est ouvert ailleurs).
+    let vignettes: Vec<&'static Entree> = HORS_BARRE.iter().filter(|e| e.pane == Pane::Vignettes && (d_office.contains(&e.pane) || ouvert(e.pane))).collect();
+    if !vignettes.is_empty() {
+        groupes.insert(0, vignettes);
+    }
+    groupes
 }
 
 /// Les panneaux qui s'ouvrent et se ferment comme ceux de la barre, sans icône dans la barre : ceux
 /// des fonctions à l'essai, rangés dans le menu Labo (Anthony, 2026-10-20).
-pub(crate) const HORS_BARRE: &[Entree] = &[entree(
-    Pane::SuggestionsSonores,
-    "vue.suggestions_sonores",
-    "Suggestions sonores",
-    "SHOT lit le storyboard et propose des bruitages, des ambiances et des voix témoins, que tu écoutes, acceptes ou supprimes. Un clic l'ouvre ou le met devant, un autre le ferme.",
-)];
+pub(crate) const HORS_BARRE: &[Entree] = &[
+    entree(
+        Pane::SuggestionsSonores,
+        "vue.suggestions_sonores",
+        "Suggestions sonores",
+        "SHOT lit le storyboard et propose des bruitages, des ambiances et des voix témoins, que tu écoutes, acceptes ou supprimes. Un clic l'ouvre ou le met devant, un autre le ferme.",
+    ),
+    // Le panneau « Vignettes » a son icône dans l'espace Vignettes seulement (`icones_de`), pas dans les douze de la barre.
+    entree(
+        Pane::Vignettes,
+        "vue.vignettes_panneau",
+        "Vignettes",
+        "Le sens de lecture de la planche (en lignes, ou à la japonaise) et les textes montrés à côté des cases. Un clic l'ouvre ou le met devant, un autre le ferme.",
+    ),
+];
 
 /// Le panneau qu'une action ouvre ou ferme, si c'en est une de la barre (ou du menu Labo).
 pub(crate) fn pane_de_action(action: &str) -> Option<Pane> {

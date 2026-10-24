@@ -96,6 +96,8 @@ impl App {
         if plans.is_empty() {
             return Err("Aucun plan dans cette étendue.".into());
         }
+        // (Le sens de lecture et les textes montrés sont ceux de l'écran : l'export range les cases comme la planche.)
+        let opt = &Options { sens: self.layout.board_sens, textes: self.layout.board_textes, ..opt.clone() };
         let p = planche::construire(&self.doc, plans, &self.layout.board_settings(), opt, &self.doc.annotations);
         let (s, dims, reduit) = planche::dimensions(p.cadre, opt.resolution);
         let n = p.cartes.len();
@@ -242,6 +244,7 @@ impl App {
         // Ce qui partirait.
         let mut opt = e.opt.clone();
         opt.resolution = e.resolution();
+        (opt.sens, opt.textes) = (self.layout.board_sens, self.layout.board_textes);
         let cle: Cle = (opt.clone(), e.etendue, self.history.serial(), self.doc_epoch, (self.layout.card_size.to_bits(), self.layout.board_columns, self.layout.board_rows), self.board_sel.clone(), self.cur_panel);
         if e.resume.as_ref().map(|r| &r.0) != Some(&cle) {
             let plans = self.planche_plans(e.etendue);

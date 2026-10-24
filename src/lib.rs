@@ -224,8 +224,13 @@ mod blend_tests;
 mod board;
 #[cfg(test)]
 mod board_tests;
+mod boardjapon;
+#[cfg(test)]
+mod boardjapon_tests;
 mod boardmove;
+mod boardsens;
 mod boardui;
+mod vignettespanneau;
 mod debord;
 #[cfg(test)]
 mod debogage_tests;

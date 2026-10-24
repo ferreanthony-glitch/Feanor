@@ -4048,3 +4048,73 @@ annulation et rétablissement exacts ; une seule clé choisie, ou celles d'un au
 annulation exacte) et, cible, bouge seul ; **aucun rejeu du moteur sur le fil de l'interface** pendant le geste ni au lâcher, le rendu exact demandé au fil de travail ;
 l'image du dessin montre le trait déformé avant le lâcher ; calque verrouillé et image vide refusés ; changer d'outil en plein geste le termine en une étape ; la case de la
 barre, les actions et leur absence de touche ; le panneau Réglages et le cercle du pinceau. Essais `#[ignore]` des durées (`--ignored --nocapture`).
+
+## 44. Le panneau « Vignettes » : sens de lecture, textes à côté des cases, version sur la case (2026-10-24, branche `panneau-vignettes`)
+
+Demande d'Anthony : lire la planche **à la japonaise** (feuille d'e-konte), choisir **quels textes** du plan se montrent à côté des cases, et changer de **version** d'un
+plan depuis sa case. Fichiers : `boardsens.rs` (le sens et les champs), `boardjapon.rs` (la mise en page en colonnes), `vignettespanneau.rs` (le panneau),
+`board.rs` (`Options::sens` et `textes`, repères de pose, toucher), `boardui.rs` (peinture des textes et des barres, étiquette de version), `planche.rs` (l'export),
+`pileversui.rs` et `pilevers.rs` (l'étiquette en haut à droite). Essais : `boardjapon_tests.rs` (23).
+
+### Le panneau
+
+Une petite fenêtre modulable, **Vignettes**, tout en haut de la colonne de droite de l'espace Vignettes (au-dessus des Réglages de l'outil ; elle prend la hauteur de
+son contenu, `ajuste::fits`). Une icône dans la barre des panneaux, dans l'espace Vignettes seulement (`barrepanneaux::HORS_BARRE`, commande `vue.vignettes_panneau`,
+sans touche d'origine) ; ailleurs elle s'ouvre par Affichage > Espaces de travail > Panneaux ou Ctrl+K. Une disposition de l'espace Vignettes retenue **avant** le panneau
+le reçoit une fois (`Settings::poser_le_panneau_vignettes`, `panneau_vignettes_pose` dans `reglages.toml`) ; fermé à la main ensuite, il reste fermé.
+Son onglet porte le même nom que celui de la planche (« Vignettes ») : ce sont deux fenêtres côte à côte.
+
+| Réglage | Choix | Commande (sans touche, clic droit : en assigner une) |
+|---|---|---|
+| **Sens de lecture** | **En lignes** (d'origine) / **À la japonaise** | `vignettes.sens_lignes`, `vignettes.sens_japonais` |
+| **Cases par ligne / par colonne** | 1 à 6 (six d'origine) : le réglage « Colonnes » de la barre de la planche, renommé selon le sens | — |
+| **Textes sous / à droite des cases** | Action, Dialogue, Notes (cases à cocher ; d'origine les notes seules, comme avant) | `vignettes.texte_action`, `vignettes.texte_dialogue`, `vignettes.texte_notes` |
+
+Les champs sont ceux de la fiche du plan (`Panel::action`, `dialogue`, `notes`) et de ses marques d'image. **Plusieurs champs montrés : chacun a son étiquette colorée**
+(« Action » bleu, « Dialogue » ocre, « Note » gris), un champ seul n'en a pas. Chaque champ prend de une à trois lignes (« … » au bout), l'un sous l'autre : la bande de texte
+d'une case a jusqu'à trois lignes par champ montré (`Textes::lignes_max`). L'écriture d'une note (icône crayon, `vignettes.note`) écrit toujours le champ Notes.
+
+### À la japonaise (`boardjapon.rs`, le miroir de `board::layout_with`)
+
+- Les cases se suivent **de haut en bas**, puis la colonne suivante est **à droite**. La hauteur d'une colonne est celle d'une rangée en lignes : **« cases par ligne » devient
+  « cases par colonne »** (six cases et cinq écarts de coupe). Chaque case garde au-dessus d'elle la ligne de son numéro de plan ; les écarts entre deux cases d'une colonne sont ceux
+  d'une ligne (serré dans un plan, large à une coupe), les barres entre elles sont **horizontales**.
+- Le **texte est à droite de la case**, en haut de l'image, à `note_gap` (12 % + 8 points) et de la largeur d'une case. Plus haut que l'image, il fait descendre la case suivante ;
+  la colonne garde ses six cases (`marge`).
+- **Un mouvement de caméra** : l'enveloppe des cadres est posée comme en lignes ; le texte est **à droite du cadre le plus à droite** (B…), en haut de ce cadre ; **toute la colonne
+  suivante est à droite du mouvement et de son texte** (comme toute la rangée suivante est sous B et ses notes), et la case suivante de la colonne est sous l'enveloppe et son texte.
+  Une enveloppe qui descend ou va à droite ne bouge pas A (le papier est infini : elle déborde sous la colonne, les cases d'après passent à la colonne suivante) ; qui monte ou va à
+  gauche pousse A plus bas (ou en haut de la colonne suivante si elle n'y tient plus), une fois, sans toucher aux cases d'avant ; au bord de la planche tout glisse (`decalage`).
+- **Pendant un geste de caméra**, A reste exactement où elle était (`Reserve::pose` et `pose_y`) et l'enveloppe ne rétrécit pas ; au lâcher, tout se range d'après les cadres.
+- **Les cases pâles** suivent le même sens : au moins trois colonnes de cases en tout (« Rangées de cases pâles » des Préférences, devenues des colonnes), une colonne pâle après la dernière occupée.
+- **Zoom** (clic sur le pourcentage, ou « Planche à la hauteur de la vue ») : la planche tient **à la hauteur** de la vue (en lignes : à la largeur) ; les colonnes s'ajoutent à droite.
+- **Maj + glisser un plan** : le repère de pose est un trait **horizontal** entre deux cases d'une colonne, ou au-dessus de la première d'une colonne (`DropSlot::a`, `b`). L'aimant des cadres de
+  caméra s'accroche aux bords gauche et droit des cases et à un pas de case en hauteur (l'inverse de la planche en lignes). Le toucher d'une barre s'élargit en hauteur (`board::zone_tactile`).
+- **L'export de la planche** (PNG, JPEG, PDF) range les cases dans le même sens, avec les mêmes textes et les mêmes étiquettes, une seule grande page (`planche::Options::sens` et `textes`, posés
+  par `App::planche_job`). Un PDF A4 ou A3 d'une planche à la japonaise est mis à la largeur de la page puis coupé en hauteur, comme les autres : de nombreuses colonnes y deviennent petites.
+
+### Où sont gardés ces réglages, et pourquoi pas dans le projet
+
+Demandé : avec le projet. **Gardés dans les réglages de l'application** (`Layout::board_sens`, `board_textes`, dans `reglages.toml` avec la taille des cases et leur nombre par ligne, qu'ils
+accompagnent ; retenus à chaque changement, d'un espace de travail à l'autre, `Layout::avec_les_reglages_de`). Raison : écrire dans le projet demande de toucher `document.rs`, `project.rs` et le
+chargeur (un champ de plus dans le modèle, le manifeste et `Structure`), les fichiers en chantier dans les travaux sur la mémoire du dessin ; et la taille des cases, les colonnes, le zoom de la
+même planche sont déjà des réglages de l'utilisateur. Passer au projet plus tard est mécanique (même forme que `annotations.json`), à décider ensemble : un collègue qui ouvre le projet verrait alors
+la planche comme on l'a laissée.
+
+### Une version depuis sa case
+
+Un plan qui a **deux versions ou plus** porte, en haut à droite de sa première case, **la même étiquette que sur son bloc du montage** (« V2 »). La survoler ouvre **la même pile** (une carte par
+version, avec son aperçu, au-dessus de l'étiquette) ; un clic sur une carte passe le plan à cette version : `App::passer_a_la_version`, le même chemin que le montage et la fiche du plan, **une étape
+d'annulation nommée « Passer à la version V1 »** ; Ctrl+Z la rend. Un appui sur l'étiquette épingle la pile (stylet sans survol) sans rien dessiner. **Pas d'étiquette** pour un plan à une seule
+version, et rien ne coûte alors. Si le montage et la planche sont affichés ensemble (rare : le montage n'est pas dans les Vignettes d'origine), la pile est partagée : chacun redit ses étiquettes à son tour.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Espace Vignettes : le panneau **Vignettes** en haut de la colonne de droite (En lignes allumé, trois cases à cocher, Notes cochée) ; la planche est exactement comme avant.
+2. Clic sur **À la japonaise** : les cases se rangent en colonnes de six, la colonne suivante à droite, le numéro du plan au-dessus de chaque case, les barres horizontales ; la planche tient à la
+   hauteur de la vue. Le texte d'une case (clic sur l'icône crayon, à droite de sa bande) se lit à sa droite.
+3. Coche **Action** puis **Dialogue** : chaque case montre ses champs l'un sous l'autre, avec leur étiquette colorée ; décoche : l'étiquette part quand il n'en reste qu'un. Même chose en lignes : sous la case.
+4. Un mouvement de caméra dans une case (Ctrl + Maj + glisser) : B à droite ou en dessous, le texte à droite de B ; **la colonne suivante est entièrement à droite**, jamais dessus. Pendant le geste, A ne bouge pas.
+5. Maj + glisser le cadre d'une case : un trait horizontal montre où le plan se pose. Un clic sur une barre coupe ou réunit. Dessiner dans une case, à droite d'elle dans son texte, marche comme avant.
+6. Quitte SHOT et rouvre-le : le sens et les cases cochées sont ceux que tu avais laissés. Fichier > Exporter > Planche des vignettes : même ordre, mêmes textes.
+7. Un plan à deux versions (Storyboard > Versions du plan > Nouvelle version) : **V2** en haut à droite de sa case ; le survoler ouvre la liste ; un clic sur V1 change la case ; Ctrl+Z revient. Un plan à une version n'a rien.
