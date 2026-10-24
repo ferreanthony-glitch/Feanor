@@ -4717,6 +4717,8 @@ impl App {
         // Réglages de performance (Préférences, Aide > Diagnostic des performances) : posés dans
         // le programme dès qu'ils changent.
         self.appliquer_performance(ctx);
+        // Le tremblement du trait par défaut (Préférences > Dessin) : posé là où le rendu le lit.
+        self.appliquer_tremblement_defaut(ctx);
         // Effets de calque : l'horloge de leurs demandes avance (calculs de fond, `fxcache.rs`).
         crate::fx::begin_frame(ctx);
         let prep = crate::perf::section("préparation (raccourcis, lecture)");

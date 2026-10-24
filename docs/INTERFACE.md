@@ -4219,3 +4219,42 @@ tournées (0 à 270°), en miroir, caméra tournée ou non ; sur la feuille seul
 0 %, 50 % et 100 % donnent les pixels composés attendus (100 % : aucun fond ne transparaît) ; les exports ne le connaissent pas ; allumé, opacité et couleur s'écrivent et se
 relisent, un ancien fichier donne noir opaque allumé ; dans la barre, l'icône et le curseur sont après la lampe, à sa taille et sur sa ligne, et un clic sur l'icône bascule le réglage.
 `notes_calques_tests.rs` : l'opacité (0 à 255, 100 % opaque), la fenêtre des Préférences (couleur et opacité), le réglage de l'opacité sur l'écran.
+
+## 47. Le tremblement du trait par défaut, dans les Préférences (2026-10-24, branche `petites-fonctions`)
+
+Demande d'Anthony : un réglage pour que **tout trait vectoriel tremble** par défaut, sans ajouter l'effet « Tremblement du trait » à chaque calque.
+
+### Ce que c'est
+
+- **Préférences > Dessin > Tremblement des traits** : une case « Tremblement du trait par défaut » (éteint d'origine) et, quand elle est cochée, « Intensité du tremblement par défaut »
+  (0 à 20 px, 2 px d'origine) et « Fréquence du tremblement par défaut » (0 à 100 %, 55 % d'origine : de doux à nerveux), avec « Rétablir ». Les autres réglages de l'effet sont ceux
+  d'origine de l'effet (trois variantes, deux images par variante, pas de variation d'épaisseur, pas de « Animer à l'arrêt » : sur une image fixe le trait reste immobile ; pour qu'un
+  calque « bouille » à l'arrêt, on lui ajoute l'effet, qui a son propre « Animer à l'arrêt »). Retenu dans `reglages.toml` (`[tremblement_par_defaut]`, absent tant qu'on n'y touche pas).
+- **Appliqué au moment du rendu, pas écrit dans les calques** : la pile d'effets d'un calque vectoriel reçoit, en tête, un « Tremblement du trait » avec ces réglages
+  (`fx::layer_steps`). Rien n'est ajouté au document : **un projet ouvert est inchangé sur le disque** (le fichier enregistré est le même, case cochée ou non).
+- **Un calque qui a son propre « Tremblement du trait » garde le sien**, qu'il soit allumé ou éteint à la main (un tremblement éteint à la main reste éteint). Le bouton « fx » éteint
+  d'un calque l'éteint aussi. Les calques bitmap ne tremblent pas (comme l'effet).
+- **Ce que tu vois est ce que tu exportes** : l'écran, la lecture, les vignettes, les exports d'images, de GIF et de film passent par la même pile d'effets.
+- **Sans latence** : même chemin que l'effet (calcul en arrière-plan, cache des dessins dérivés par réglage, aperçu réduit pendant la lecture), jamais de rejeu du moteur sur le fil de
+  l'interface. **Le calque qu'on édite se montre sans tremblement** pendant un geste de dessin, de gomme ou de sélection (comme l'effet) : on dessine et on prend ce qu'on voit.
+- **Dans le panneau Effets**, un calque vectoriel sans tremblement à lui montre, quand le réglage est allumé, une ligne : « Tremblement du trait par défaut actif (Préférences >
+  Dessin). Ajoute « Tremblement du trait » pour régler le sien. »
+
+### À vérifier à l'écran (par Anthony)
+
+1. Préférences > Dessin : cocher « Tremblement du trait par défaut ». Sur un calque vectoriel qui a des traits, aller d'une image à l'autre : le trait bouge légèrement (une variante
+   toutes les deux images). Les curseurs d'intensité et de fréquence jouent tout de suite ; la souris reste fluide.
+2. Décocher : les traits redeviennent immobiles. « Rétablir » : éteint, 2 px, 55 %.
+3. Ajouter « Tremblement du trait » (menu Trait du panneau Effets) à un calque, avec une autre intensité : ce calque garde la sienne quand le réglage par défaut change ; les autres
+   suivent le réglage par défaut.
+4. Dessiner sur le calque courant : pendant le geste, il est net, sans tremblement ; il retrouve son tremblement après.
+5. Exporter quelques images : elles ont le même tremblement qu'à l'écran. Enregistrer le projet : ses fichiers sont les mêmes qu'avant (aucun effet n'a été ajouté).
+6. Quitter et relancer : le réglage est tel qu'on l'a laissé.
+
+### Essais ajoutés
+
+`tremblement_defaut_tests.rs` : allumé, il change les pixels composés (une variante toutes les deux images, retour au bout de six), éteint il les rend au pixel près, une intensité
+nulle ne change rien ; un calque qui a son propre tremblement garde le sien (allumé comme éteint à la main), le bouton « fx » éteint l'éteint, un autre effet ne l'empêche pas (le
+tremblement passe en tête) ; ni calque bitmap, ni vue d'édition (`without_boil`) ; il n'écrit rien dans le document (aucun effet ajouté, le JSON du plan est le même) ; le réglage
+s'écrit et se relit, n'est pas écrit au départ, un ancien fichier donne éteint, des valeurs folles sont bornées ; dans l'application, il est posé là où le rendu le lit, le plan de
+l'écran et l'image d'export le montrent ; les Préférences ont les trois réglages. (Dans les essais, le réglage est propre à chaque fil : les essais tournent côte à côte.)

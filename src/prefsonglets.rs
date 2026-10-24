@@ -82,7 +82,7 @@ impl Onglet {
         match self {
             Onglet::General => "Ouvrir et rouvrir les projets, copies de secours, collage entre projets, conseils.",
             Onglet::Apparence => "Le thème et ses couleurs, la taille de l'interface, la hauteur des panneaux.",
-            Onglet::Dessin => "Le curseur du stylet, sa pression, le point fixe des poignées, et le passe-partout autour de la caméra.",
+            Onglet::Dessin => "Le curseur du stylet, sa pression, le point fixe des poignées, le passe-partout autour de la caméra et le tremblement du trait par défaut.",
             Onglet::Montage => "Les pistes du montage et leur repliage.",
             Onglet::Vignettes => "La planche : cases pâles, débord du trait, cadres de caméra, et le décor partagé entre les cases d'un plan.",
             Onglet::Raccourcis => "Le jeu de raccourcis du clavier et ses fichiers.",
@@ -105,6 +105,8 @@ pub enum Groupe {
     Panneaux,
     Stylet,
     Camera,
+    /// Le tremblement du trait par défaut de tous les calques vectoriels (`tremblement::Defaut`).
+    Tremblement,
     Pistes,
     /// La planche des Vignettes : cases pâles, colonnes, débord du trait (papier infini).
     Vignettes,
@@ -139,6 +141,7 @@ impl Groupe {
             Groupe::Panneaux => "Panneaux",
             Groupe::Stylet => "Stylet et pinceau",
             Groupe::Camera => "Caméra",
+            Groupe::Tremblement => "Tremblement des traits",
             Groupe::Pistes => "Pistes du montage",
             Groupe::Vignettes => "Planche des Vignettes",
             Groupe::CadresCamera => "Cadres de caméra",
@@ -210,6 +213,9 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Dessin, G::Poignees, "dessin.rotation_autour", "Rotation autour de", "pivot coin opposé tourner rotation transformer sélection boîte"),
     r(O::Dessin, G::Camera, "dessin.passe_partout_couleur", "Couleur du passe-partout", "noir hors-champ voile cadre caméra"),
     r(O::Dessin, G::Camera, "dessin.passe_partout", "Opacité du passe-partout", "voile hors-champ estomper cadre caméra rétablir noir opaque"),
+    r(O::Dessin, G::Tremblement, "dessin.tremblement_defaut", "Tremblement du trait par défaut", "wiggle boil vectoriel tous les calques trait qui bouge allumer"),
+    r(O::Dessin, G::Tremblement, "dessin.tremblement_intensite", "Intensité du tremblement par défaut", "amplitude pixels"),
+    r(O::Dessin, G::Tremblement, "dessin.tremblement_frequence", "Fréquence du tremblement par défaut", "doux nerveux vagues rétablir"),
     // ---- Montage
     r(O::Montage, G::Pistes, "montage.repliage", "Repliage des pistes", "replier commun plan calques"),
     r(O::Montage, G::Pistes, "montage.deplier", "Déplier le calque courant tout seul", "piste automatique"),

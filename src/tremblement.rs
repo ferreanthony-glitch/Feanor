@@ -120,6 +120,102 @@ pub fn set_rest_off(off: bool) {
     REST_OFF.store(off, std::sync::atomic::Ordering::Relaxed);
 }
 
+// ---------------------------------------------------------------------- le tremblement par défaut
+
+/// Le tremblement du trait **par défaut** (Anthony, 2026-10-24 ; Préférences > Dessin) : quand il est allumé, tout calque
+/// vectoriel qui n'a pas son propre « Tremblement du trait » tremble avec ces réglages. C'est un réglage de l'application,
+/// pas du projet : il s'ajoute à la pile d'effets d'un calque **au moment du rendu** (`fx::layer_steps`), sans rien écrire
+/// dans le document (un projet ouvert sans lui est inchangé sur le disque), et il passe par le même chemin que l'effet — calcul
+/// en arrière-plan, cache des dessins dérivés, aperçu réduit, export et vignettes —, jamais par un rejeu sur le fil de l'interface.
+/// Les autres réglages de l'effet (variantes, vitesse, épaisseur, graine, « Animer à l'arrêt ») gardent ceux d'origine de l'effet.
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct Defaut {
+    #[serde(default, rename = "actif")]
+    pub actif: bool,
+    /// Amplitude maximale, en pixels de la feuille (0 à `MAX_INTENSITY`).
+    #[serde(default = "intensite_d_origine", rename = "intensite")]
+    pub intensite: f32,
+    /// 0 : doux ; 100 : nerveux.
+    #[serde(default = "frequence_d_origine", rename = "frequence")]
+    pub frequence: f32,
+}
+
+fn intensite_d_origine() -> f32 {
+    2.0
+}
+
+fn frequence_d_origine() -> f32 {
+    55.0
+}
+
+impl Default for Defaut {
+    fn default() -> Self {
+        Defaut { actif: false, intensite: intensite_d_origine(), frequence: frequence_d_origine() }
+    }
+}
+
+impl Defaut {
+    pub fn est_defaut(&self) -> bool {
+        *self == Defaut::default()
+    }
+
+    /// Les valeurs bornées (un fichier de réglages abîmé ou modifié à la main ne fait rien planter).
+    pub fn sanitized(self) -> Defaut {
+        let fini = |v: f32, d: f32| if v.is_finite() { v } else { d };
+        Defaut {
+            actif: self.actif,
+            intensite: fini(self.intensite, intensite_d_origine()).clamp(0.0, MAX_INTENSITY),
+            frequence: fini(self.frequence, frequence_d_origine()).clamp(0.0, 100.0),
+        }
+    }
+
+    /// Les valeurs d'un effet « Tremblement du trait » (dans l'ordre de `INTENSITY`…`REST`) : ces deux réglages, les autres
+    /// d'origine (trois variantes, deux images par variante, ni épaisseur ni « Animer à l'arrêt »).
+    pub fn values(&self) -> Vec<f32> {
+        vec![self.intensite, self.frequence, 3.0, 2.0, 0.0, 1.0, 0.0]
+    }
+}
+
+#[cfg(not(test))]
+static DEFAUT: std::sync::Mutex<Option<Defaut>> = std::sync::Mutex::new(None);
+
+// (Dans les essais, un fil à lui : les essais tournent côte à côte, et l'un qui allume le tremblement par défaut ne doit pas
+// faire trembler les images des autres. Les essais qui s'en servent composent sur leur propre fil.)
+#[cfg(test)]
+thread_local! {
+    static DEFAUT: std::cell::Cell<Option<Defaut>> = const { std::cell::Cell::new(None) };
+}
+
+/// Pose le tremblement par défaut : `None`, éteint. Appelé par l'application à chaque changement du réglage.
+pub fn set_defaut(d: Option<Defaut>) {
+    #[cfg(not(test))]
+    {
+        *DEFAUT.lock().unwrap_or_else(|e| e.into_inner()) = d;
+    }
+    #[cfg(test)]
+    DEFAUT.with(|c| c.set(d));
+}
+
+/// Le tremblement par défaut posé, s'il est allumé.
+pub fn defaut() -> Option<Defaut> {
+    #[cfg(not(test))]
+    {
+        *DEFAUT.lock().unwrap_or_else(|e| e.into_inner())
+    }
+    #[cfg(test)]
+    DEFAUT.with(std::cell::Cell::get)
+}
+
+/// L'étape de tremblement par défaut à l'image `frame` (`rest` : l'image virtuelle du repos, que le réglage par défaut
+/// n'utilise pas puisqu'il n'anime pas à l'arrêt), s'il est allumé et change quelque chose.
+pub fn default_step(frame: usize, rest: Option<usize>) -> Option<crate::fx::FxStep> {
+    let d = defaut()?.sanitized();
+    let mut values = d.values();
+    values.push(variant_for(&values, frame, rest) as f32);
+    let step = crate::fx::FxStep { kind: crate::fx::EffectKind::Boil, values };
+    step.kind.changes(&step.values).then_some(step)
+}
+
 /// La variante de l'image `frame` : `(image / vitesse) % variantes`.
 pub fn variant_at(frame: usize, speed: usize, variants: usize) -> usize {
     (frame / speed.max(1)) % variants.max(1)

@@ -506,6 +506,8 @@ mod passe_partout_tests;
 mod tremblement;
 #[cfg(test)]
 mod tremblement_tests;
+#[cfg(test)]
+mod tremblement_defaut_tests;
 mod fxtrait;
 #[cfg(test)]
 mod fxtrait_tests;

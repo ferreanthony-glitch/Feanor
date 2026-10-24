@@ -323,6 +323,56 @@ impl App {
         });
     }
 
+    /// Dessin > Tremblement des traits : le tremblement par défaut de tous les calques vectoriels (`tremblement::Defaut`) :
+    /// allumé ou non, son intensité (pixels) et sa fréquence (doux à nerveux). Un calque qui a son propre « Tremblement du trait »
+    /// (panneau Effets) garde le sien. Joue à l'écran, dans les vignettes et dans les exports ; n'écrit rien dans les projets.
+    pub(crate) fn tremblement_defaut_pref_ui(&mut self, ui: &mut egui::Ui) {
+        let avant = self.settings.tremblement_defaut;
+        let mut d = avant;
+        let resp = ui.checkbox(&mut d.actif, "Tremblement du trait par défaut");
+        crate::bulles::bulle(
+            resp,
+            "Tremblement du trait par défaut",
+            "Tous les traits vectoriels tremblent un peu, comme redessinés à la main, sans rien ajouter aux calques : un calque qui a son propre « Tremblement du trait » (panneau Effets) garde le sien. Les exports le montrent aussi. Rien n'est écrit dans les projets.",
+            "",
+        );
+        ui.add_enabled_ui(d.actif, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Intensité du tremblement par défaut");
+                let resp = ui.add(egui::Slider::new(&mut d.intensite, 0.0..=crate::tremblement::MAX_INTENSITY).suffix(" px").max_decimals(1));
+                crate::bulles::bulle(resp, "Intensité du tremblement par défaut", "De combien de pixels de la feuille un trait peut bouger au plus (2 px d'origine).", "");
+            });
+            ui.horizontal(|ui| {
+                ui.label("Fréquence du tremblement par défaut");
+                let resp = ui.add(egui::Slider::new(&mut d.frequence, 0.0..=100.0).suffix(" %").fixed_decimals(0));
+                crate::bulles::bulle(resp, "Fréquence du tremblement par défaut", "0 % : le trait ondule doucement ; 100 % : nerveux, par petites vagues (55 % d'origine).", "");
+            });
+        });
+        ui.horizontal(|ui| {
+            if ui.add_enabled(!d.est_defaut(), egui::Button::new("Rétablir")).on_hover_text("Éteint, 2 px, 55 %.").clicked() {
+                d = Default::default();
+            }
+            ui.label(RichText::new("Le trait tremble d'une image à l'autre : sur une image fixe, il reste immobile (effet « Tremblement du trait » d'un calque : « Animer à l'arrêt »).").small().weak());
+        });
+        if d != avant {
+            self.settings.tremblement_defaut = d;
+            self.settings_a_ecrire = true;
+        }
+    }
+
+    /// Pose le tremblement par défaut là où le rendu le lit (`tremblement::set_defaut`) dès que le réglage change : les vignettes
+    /// et l'image de l'écran sont à refaire ; les dessins dérivés, eux, ont leur propre numéro par réglage (rien à vider).
+    pub(crate) fn appliquer_tremblement_defaut(&mut self, ctx: &egui::Context) {
+        let voulu = self.settings.tremblement_defaut.actif.then(|| self.settings.tremblement_defaut.sanitized());
+        if crate::tremblement::defaut() != voulu {
+            crate::tremblement::set_defaut(voulu);
+            self.thumbs.clear();
+            self.layer_thumbs.clear();
+            self.renderer.invalidate_all();
+            ctx.request_repaint();
+        }
+    }
+
     /// La fenêtre Préférences… (menu Fichier) : une liste d'onglets à gauche, le contenu à droite, la recherche en
     /// haut. Redimensionnable, plus large que haute au départ.
     pub(crate) fn preferences_window(&mut self, ctx: &egui::Context) {
@@ -492,6 +542,7 @@ impl App {
                 ui.label(RichText::new("Le toucher du stylet se règle en bas des réglages du pinceau.").small().weak());
             }
             Groupe::Camera => self.passe_partout_pref_ui(ui),
+            Groupe::Tremblement => self.tremblement_defaut_pref_ui(ui),
             Groupe::Poignees => {
                 use crate::selbox::{CentreRotation, PointFixe};
                 let avant = (self.settings.point_fixe, self.settings.rotation_autour);

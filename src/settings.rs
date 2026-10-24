@@ -176,6 +176,10 @@ pub struct Settings {
     /// rend pas gris à 27 %. La clé du nouveau réglage est donc autre.
     #[serde(default = "default_passe_partout", rename = "passe_partout_opacite")]
     pub passe_partout: u8,
+    /// Le tremblement du trait par défaut (`tremblement.rs`, Préférences > Dessin) : éteint d'origine. Appliqué au rendu à tout
+    /// calque vectoriel qui n'a pas le sien ; rien n'est écrit dans les projets.
+    #[serde(default, rename = "tremblement_par_defaut", skip_serializing_if = "crate::tremblement::Defaut::est_defaut")]
+    pub tremblement_defaut: crate::tremblement::Defaut,
     /// Le passe-partout est allumé (icône de la barre sous le dessin, commande `camera.masque`) : allumé d'origine,
     /// retenu d'une séance à l'autre sur ce poste.
     #[serde(default = "yes", rename = "passe_partout_actif")]
@@ -289,6 +293,7 @@ impl Default for Settings {
             bruitages: Default::default(),
             generation_son: Default::default(),
             passe_partout: default_passe_partout(),
+            tremblement_defaut: Default::default(),
             passe_partout_actif: true,
             passe_partout_couleur: default_passe_partout_couleur(),
             collage: Default::default(),
@@ -350,6 +355,7 @@ impl Settings {
         }
         s.generation_son = std::mem::take(&mut s.generation_son).sanitized();
         s.passe_partout = s.passe_partout.min(100);
+        s.tremblement_defaut = s.tremblement_defaut.sanitized();
         s.equipe = std::mem::take(&mut s.equipe).nettoye();
         s.neutral_colors = crate::personnages::neutres_nettoyees(std::mem::take(&mut s.neutral_colors));
         s.echelle = crate::echelle::echelle_valide(s.echelle);
