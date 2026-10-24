@@ -2546,6 +2546,11 @@ impl App {
         self.history.push(snap);
         self.modified = true;
         // Ce qui est gardé par rang d'abord, sur le film d'après le changement : `sync_couleurs` lit les calques du plan courant
+        // Les cases d'un plan suivent leurs clés quand on les retouche au montage ou dans la timeline (`cases.rs`) : dans la même étape
+        // d'annulation que la retouche.
+        if let Edit::Structure { structure, .. } = &snap {
+            self.doc.cases_suivent_les_cles(&structure.panels);
+        }
         // (supprimer le dernier plan plantait là, Anthony 2026-10-22).
         self.revalider_rangs();
         // Les calques de couleur suivent le trait tout de suite, dans la même étape d'annulation.
