@@ -1589,6 +1589,12 @@ impl App {
     /// Ce qu'il faut empiler pour afficher l'image `frame` du plan courant. `onion` : affichage
     /// de travail (pelure d'oignon et table lumineuse), sinon l'image telle qu'elle est.
     pub(crate) fn build_plan(&self, frame: usize, onion: bool, paper: bool) -> Plan {
+        self.build_plan_avec(frame, onion, paper, true)
+    }
+
+    /// Comme `build_plan`, avec ou sans les calques d'annotation du plan : à l'écran ils y sont, l'export de l'image courante ne les prend que
+    /// si « Avec les annotations » est coché (`Settings::export_annotations`).
+    pub(crate) fn build_plan_avec(&self, frame: usize, onion: bool, paper: bool, annotations: bool) -> Plan {
         let mut items = Vec::new();
         // Table lumineuse : les autres calques sont estompés, le calque courant reste net.
         let washed = onion && self.light_table && !self.playing;
@@ -1607,7 +1613,7 @@ impl App {
         // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
         let mut starts: Vec<usize> = vec![0; layers.len()];
         // À l'écran, les calques d'annotation du plan (`calqueannot.rs`) viennent après tous les autres : par-dessus tout, même un calque d'effet.
-        for li in crate::calqueannot::ordre(layers, true) {
+        for li in crate::calqueannot::ordre(layers, annotations) {
             let layer = &layers[li];
             starts[li] = items.len();
             // Caché (lui ou son dossier) : rien ; sinon son opacité, avec celle de son dossier.
@@ -3399,7 +3405,7 @@ impl App {
         }
         // Le plan que montre l'écran (sans pelure ni table lumineuse) se fait ici, sans pixel ; l'image, avec ses
         // incrustations (timecode…) gravées, se calcule sur un autre fil (`ExportJob::still`).
-        let plan = self.build_plan(self.cur_frame, false, !self.export_transparent);
+        let plan = self.build_plan_avec(self.cur_frame, false, !self.export_transparent, self.settings.export_annotations);
         let cam = self.doc.panel_camera(self.cur_panel, self.cur_frame);
         let job = crate::export::ExportJob::still(&path, plan, cam, self.cur_panel, self.cur_frame, self.doc.frame);
         self.start_job(job);
@@ -3932,6 +3938,10 @@ impl App {
                 } else {
                     self.paste();
                 }
+            }
+            // Des annotations choisies au lasso d'annotation : Suppr les efface, en une étape (`annotationsui.rs`).
+            "edition.supprimer" if self.board_shown() && !self.vignettes.annot.selection.is_empty() => {
+                self.annot_supprimer_selection();
             }
             "edition.supprimer" if self.board_shown() && !self.board_notes.is_empty() => self.delete_board_notes(),
             "edition.supprimer" => {

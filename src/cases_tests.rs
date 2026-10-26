@@ -396,8 +396,14 @@ fn a_corner_drag_on_a_case_without_a_move_makes_b_and_never_shrinks_a() {
             let b_ecran = xf.rect(crate::vignettecam::boite(&quads[1]));
             let case_apres = vignette(&b, K);
             eprintln!("ZOOM {nom} egale={egale} : case avant {avant:?} apres {case_apres:?} ; A {a_ecran:?} ; B {b_ecran:?}");
-            assert!((case_apres.min - avant.min).length() < 0.5 && (case_apres.size() - avant.size()).length() < 0.5, "{nom} : la case ne bouge ni ne change de taille");
-            assert!((a_ecran.min - avant.min).length() < 0.5 && (a_ecran.size() - avant.size()).length() < 0.5, "{nom} : A est exactement la case d'avant : {a_ecran:?} contre {avant:?}");
+            // (Depuis le 2026-10-24, le cadre le plus haut et le plus à gauche de l'empreinte s'aligne sur la ligne de la rangée et le bord de la
+            // case d'avant : si B dépasse A en haut ou à gauche, c'est A qui est en retrait, plus bas et plus à droite, de ce dont B la dépasse.)
+            let empreinte = a_ecran.union(b_ecran);
+            assert!((empreinte.min - avant.min).length() < 0.5, "{nom} : l'empreinte commence où la case était : {empreinte:?} contre {avant:?}");
+            assert!((case_apres.size() - avant.size()).length() < 0.5, "{nom} : la case ne change pas de taille");
+            assert!((case_apres.min - a_ecran.min).length() < 0.5, "{nom} : la case est A");
+            assert!(a_ecran.min.x >= avant.min.x - 0.5 && a_ecran.min.y >= avant.min.y - 0.5, "{nom} : A ne remonte ni ne recule : {a_ecran:?} contre {avant:?}");
+            assert!((a_ecran.size() - avant.size()).length() < 0.5, "{nom} : A garde la taille de la case d'avant : {a_ecran:?} contre {avant:?}");
             if facteur > 0.0 {
                 assert!(b_ecran.width() > a_ecran.width() + 0.5 || b_ecran.height() > a_ecran.height() + 0.5, "{nom} : B est plus grand que A : {b_ecran:?} contre {a_ecran:?}");
             } else {

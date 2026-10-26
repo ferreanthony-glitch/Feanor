@@ -224,11 +224,15 @@ mod blend_tests;
 mod board;
 #[cfg(test)]
 mod board_tests;
+#[cfg(test)]
+mod boardalignement_tests;
 mod boardjapon;
 #[cfg(test)]
 mod boardjapon_tests;
 mod boardmove;
 mod boardsens;
+#[cfg(test)]
+mod boardtextes_tests;
 mod boardui;
 mod vignettespanneau;
 mod debord;
@@ -270,6 +274,8 @@ mod annotationsui;
 mod calqueannot;
 #[cfg(test)]
 mod annotations_calques_tests;
+#[cfg(test)]
+mod annotations_retouches_tests;
 #[cfg(test)]
 mod calqueannot_tests;
 mod deposer;

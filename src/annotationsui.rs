@@ -129,6 +129,8 @@ pub(crate) struct Etat {
     pub calque: u64,
     /// Les traits choisis au lasso (par identifiant : `Trace::id`).
     pub selection: Vec<u64>,
+    /// Le calque qu'on tient pour le ranger, dans la liste du panneau Planche (`vignettespanneau.rs`).
+    pub glisse: Option<u64>,
     /// Le calque qu'on est en train de renommer, et le texte.
     pub renomme: Option<(u64, String)>,
     /// Le point d'écran de l'appui qui commence un geste (pris par la planche, tracé à l'image d'écran même).
@@ -160,6 +162,7 @@ impl Default for Etat {
             confirmer: false,
             calque: 0,
             selection: Vec::new(),
+            glisse: None,
             renomme: None,
             debut: None,
             en_cours: None,
@@ -188,6 +191,17 @@ impl Etat {
     }
 }
 
+
+/// Où tombe un calque glissé dans la liste du panneau : `centres` sont les centres (y) des lignes, du haut (le calque du dessus) vers le bas,
+/// `d` la ligne tenue, `y` le pointeur. Rend la ligne devant laquelle il s'insère (de 0 à `centres.len()` : la dernière, sous tout) et sa
+/// place dans `Annotations::calques` (0 : tout en bas).
+pub(crate) fn depot_du_calque(centres: &[f32], d: usize, y: f32) -> (usize, usize) {
+    let n = centres.len();
+    let ligne = centres.iter().filter(|c| **c < y).count();
+    // (La ligne tenue ne compte plus une fois levée : après elle, les rangs reculent d'un.)
+    let rang = if ligne > d { ligne - 1 } else { ligne };
+    (ligne, n.saturating_sub(1 + rang))
+}
 
 fn couleur32(c: [u8; 3]) -> Color32 {
     Color32::from_rgb(c[0], c[1], c[2])
@@ -332,6 +346,38 @@ impl App {
         }
         self.avec_etape(if vers_le_haut { "Monter un calque d'annotation" } else { "Descendre un calque d'annotation" }, |a| a.record_step());
         self.doc.annotations.deplacer_calque(id, vers_le_haut);
+    }
+
+    /// Pose le calque `id` à la place `vers` de la liste (0 : tout en bas, le dernier : tout en haut) : le glissé du panneau Planche, **une
+    /// seule étape d'annulation par dépôt**, aucune si le calque ne change pas de place.
+    pub(crate) fn annot_calque_placer(&mut self, id: u64, vers: usize) {
+        let a = &self.doc.annotations;
+        let Some(k) = a.calques.iter().position(|c| c.id == id) else { return };
+        if vers.min(a.calques.len() - 1) == k {
+            return;
+        }
+        self.avec_etape("Ranger un calque d'annotation", |a| a.record_step());
+        self.doc.annotations.placer_calque(id, vers);
+        self.status = "Calque d'annotation rangé (Ctrl+Z le remet).".into();
+    }
+
+    /// Suppr : efface les traits choisis au lasso d'annotation, **une seule étape d'annulation** (« Supprimer des annotations »). Faux, sans
+    /// rien faire, quand rien n'est choisi.
+    pub(crate) fn annot_supprimer_selection(&mut self) -> bool {
+        let ids = self.vignettes.annot.selection.clone();
+        if ids.is_empty() {
+            return false;
+        }
+        // (Un trait choisi qui n'existe plus : rien à effacer, plus rien n'est choisi.)
+        if !self.doc.annotations.traces.iter().any(|t| ids.contains(&t.id)) {
+            self.vignettes.annot.tout_lacher();
+            return false;
+        }
+        self.avec_etape("Supprimer des annotations", |a| a.record_step());
+        let n = self.doc.annotations.supprimer_traces(&ids);
+        self.vignettes.annot.tout_lacher();
+        self.status = format!("{n} annotation{} supprimée{} (Ctrl+Z les rend).", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" });
+        true
     }
 
     /// Montre ou cache un calque d'annotation (un affichage : rien n'est effacé ni annulable). Cacher le calque visé range ce que le

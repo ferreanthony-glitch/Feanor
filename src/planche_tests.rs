@@ -113,7 +113,7 @@ fn notes_make_taller_rows_and_are_drawn_only_when_asked() {
     let sans = construire(&doc, &tout(&doc), &reglages(), &Options { notes: false, ..opt() }, &doc.annotations);
     let carte = avec.cartes.iter().find(|c| c.place.plan == doc.panels[1].id).unwrap();
     let note: Vec<&String> = carte.champs.iter().flat_map(|(_, _, l)| l.iter()).collect();
-    assert!(note.len() >= 2 && note.len() <= 3, "{note:?}");
+    assert!(note.len() == 1 && note[0].ends_with('…'), "une seule ligne, coupée par « … » : {note:?}");
     assert!(avec.cadre.height() > sans.cadre.height(), "la rangée descend de ce que la note prend");
     let s = 1.5;
     let o = opt();
@@ -122,10 +122,10 @@ fn notes_make_taller_rows_and_are_drawn_only_when_asked() {
     let (x0, y0) = (((r.left() - avec.cadre.left()) * s) as u32, ((r.top() - avec.cadre.top()) * s) as u32);
     let sombre = (0..(r.width() * s) as u32).any(|dx| (0..(r.height() * s) as u32).any(|dy| a.get_pixel(x0 + dx, y0 + dy).0[0] < 160));
     assert!(sombre, "la note est écrite sous l'image");
+    // Sans l'option, aucune zone de texte : ni ligne, ni espace sous les images (la planche est plus basse).
+    assert!(sans.cartes.iter().all(|c| !c.place.a_du_texte() && c.champs.is_empty()), "sans l'option, pas de zone de texte");
     let b = composer(&sans, &vignettes(&sans, s), &Options { notes: false, ..o }, s).unwrap();
-    let (x0, y0) = (((r.left() - sans.cadre.left()) * s) as u32, ((r.top() - sans.cadre.top()) * s) as u32);
-    let clair = (0..(r.width() * s) as u32).all(|dx| (0..(board::NOTE_LINE_H * s) as u32).all(|dy| b.get_pixel(x0 + dx, y0 + dy).0[0] > 200));
-    assert!(clair, "sans l'option, la bande reste vide");
+    assert!(b.height() < a.height(), "sans l'option, la planche se resserre : {} contre {}", b.height(), a.height());
 }
 
 #[test]
@@ -402,7 +402,7 @@ fn both_windows_open_from_their_actions_draw_and_the_hub_lists_them() {
     b.app.run_action("fichier.exporter_planche");
     b.chauffer(4);
     assert!(b.app.vignettes.planche.ouverte);
-    assert!(b.textes.iter().any(|t| t.contains("Tout le film (4)")) && b.textes.iter().any(|t| t.contains("Annotations (aucune)")), "{:?}", b.textes);
+    assert!(b.textes.iter().any(|t| t.contains("Tout le film (4)")) && b.textes.iter().any(|t| t.contains("Avec les annotations")), "{:?}", b.textes);
     b.app.run_action("fichier.exporter_colorscript");
     b.chauffer(4);
     assert!(b.app.vignettes.colorscript.ouverte);

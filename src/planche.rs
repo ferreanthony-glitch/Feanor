@@ -11,7 +11,7 @@
 //!   rien.
 //! - **Étendue** : tout le film, la séquence courante ou les plans choisis. Les vignettes se rangent alors comme sur la planche
 //!   qui n'aurait que ces plans (mêmes colonnes).
-//! - **Options** : numéros de plan, notes (bandes sous les images, trois lignes au plus), barres de coupe, cadres de caméra
+//! - **Options** : numéros de plan, notes (une ligne par champ coché sous les images, « … » au bout), barres de coupe, cadres de caméra
 //!   (là où la caméra bouge : l'empreinte de la case, A, B, C… en bleu fin avec leurs lettres, reliés comme à l'écran),
 //!   annotations (décochées d'office), marie-louise (le passe-partout couvre tout ce qui est hors de l'intérieur des vignettes,
 //!   traits qui débordent compris).
@@ -203,36 +203,33 @@ pub fn construire(doc: &Document, plans: &[usize], s: &BoardSettings, opt: &Opti
     sub.scenes = doc.scenes.clone();
     sub.panels = plans.iter().filter(|&&i| i < doc.panels.len()).map(|&i| crate::exportrender::plan_leger(&doc.panels[i])).collect();
     let plans: Vec<usize> = plans.iter().copied().filter(|&i| i < doc.panels.len()).collect();
-    // Les notes d'abord (leur nombre de lignes règle la hauteur des rangées).
+    // Les textes d'abord : une ligne par champ coché, coupée par « … » (sans l'option Notes : aucune ligne, la place se resserre).
     let largeur_note = (s.card_w.clamp(board::CARD_MIN, board::CARD_MAX) - 2.0).max(10.0);
-    let textes = opt.textes;
+    let textes = if opt.notes { opt.textes } else { Textes { action: false, dialogue: false, notes: false } };
     let avec_etiquettes = textes.etiquettes();
     let mut notes: std::collections::HashMap<u64, Vec<(Champ, f32, Vec<String>)>> = std::collections::HashMap::new();
-    let mut lignes = std::collections::HashMap::new();
     if opt.notes {
         for p in &sub.panels {
             let marks = p.marks.iter().map(|m| (m.id, [m.action.as_str(), m.dialogue.as_str(), m.notes.as_str()]));
             for (id, trois) in std::iter::once((p.id, [p.action.as_str(), p.dialogue.as_str(), p.notes.as_str()])).chain(marks) {
                 let mut champs: Vec<(Champ, f32, Vec<String>)> = Vec::new();
-                let mut total = 0;
                 for (champ, texte) in Champ::TOUS.into_iter().zip(trois).filter(|(c, t)| textes.montre(*c) && !t.trim().is_empty()) {
                     let taille = board::note_font_size(texte.chars().count());
-                    let brut = if avec_etiquettes { format!("{} {texte}", champ.etiquette()) } else { texte.to_string() };
-                    let l = lignes_de(&brut, taille, largeur_note, board::NOTE_MAX_LINES);
+                    let texte = crate::boardsens::une_ligne(texte);
+                    let brut = if avec_etiquettes { format!("{} {texte}", champ.etiquette()) } else { texte };
+                    let l = lignes_de(&brut, taille, largeur_note, 1);
                     if !l.is_empty() {
-                        total += l.len().clamp(1, board::NOTE_MAX_LINES);
                         champs.push((champ, taille, l));
                     }
                 }
-                if total > 0 {
-                    lignes.insert(id, total);
+                if !champs.is_empty() {
                     notes.insert(id, champs);
                 }
             }
         }
     }
     // (Même rangement qu'à l'écran, sans les cases pâles : elles ne sont pas exportées.)
-    let layout = board::layout_with(&sub, s, &lignes, false, &board::Options { sens: opt.sens, textes, ..Default::default() });
+    let layout = board::layout_with(&sub, s, &Default::default(), false, &board::Options { sens: opt.sens, textes, ..Default::default() });
     let cartes: Vec<Carte> = layout
         .cards
         .iter()
@@ -456,12 +453,14 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
         }
         // Les textes, sous l'image (ou à sa droite, à la japonaise) : chaque champ montré l'un sous l'autre ; avec plusieurs champs, la
         // première ligne de chacun commence par son étiquette, dans la couleur du champ.
-        let mut haut = c.place.note.top();
+        let haut = c.place.note.top();
         let x = (c.place.note.left() + 1.0 - p.cadre.left()) * s;
         for (champ, taille, lignes) in c.champs.iter().filter(|_| opt.notes) {
-            for (i, ligne) in lignes.iter().enumerate() {
-                let y = (haut - p.cadre.top() + i as f32 * board::NOTE_LINE_H) * s;
-                match ligne.strip_prefix(champ.etiquette()).filter(|_| i == 0 && opt.textes.etiquettes()) {
+            // La ligne du champ : son rang parmi les champs cochés (un champ sans texte garde sa ligne, vide).
+            let Some(rang) = opt.textes.ligne_du(*champ) else { continue };
+            for ligne in lignes {
+                let y = (haut - p.cadre.top() + rang as f32 * board::NOTE_LINE_H) * s;
+                match ligne.strip_prefix(champ.etiquette()).filter(|_| opt.textes.etiquettes()) {
                     Some(reste) => {
                         ecrire(&mut pix, champ.etiquette(), x, y, taille * s, champ.encre());
                         let decalage = crate::text::layout(&format!("{} ", champ.etiquette()), crate::text::FALLBACK, (taille * s).max(1.0)).bounds.width();
@@ -470,7 +469,6 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
                     None => ecrire(&mut pix, ligne, x, y, taille * s, ENCRE_NOTE),
                 }
             }
-            haut += lignes.len().clamp(1, board::NOTE_MAX_LINES) as f32 * board::NOTE_LINE_H;
         }
     }
     // Les annotations, par-dessus tout : calque par calque, du plus bas au plus haut (un calque caché n'y est pas).

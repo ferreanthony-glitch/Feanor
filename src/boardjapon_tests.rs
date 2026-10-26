@@ -41,7 +41,7 @@ fn film(n: usize) -> Document {
     doc
 }
 
-fn banc_vignettes(doc: Document, sens: Sens, colonnes: usize) -> Banc {
+pub(crate) fn banc_vignettes(doc: Document, sens: Sens, colonnes: usize) -> Banc {
     let mut b = banc_taille(doc, false, 1600, 900);
     b.garder_textes = true;
     b.garder_formes = true;
@@ -55,7 +55,7 @@ fn banc_vignettes(doc: Document, sens: Sens, colonnes: usize) -> Banc {
     b
 }
 
-fn ecran(b: &Banc, r: Rect) -> Rect {
+pub(crate) fn ecran(b: &Banc, r: Rect) -> Rect {
     b.app.vignettes.xf.rect(r)
 }
 
@@ -83,7 +83,7 @@ fn texte_exact(b: &Banc, texte: &str) -> Pos2 {
     panic!("le texte « {texte} » n'est pas à l'écran : {:?}", b.textes);
 }
 
-fn clic(b: &mut Banc, p: Pos2) {
+pub(crate) fn clic(b: &mut Banc, p: Pos2) {
     clic_avec(b, p, Modifiers::NONE);
     b.chauffer(2);
 }
@@ -137,26 +137,18 @@ fn the_text_of_a_case_is_to_its_right_and_taller_text_pushes_the_next_case_down(
         assert!(eg(c.note.width(), 170.0), "à la largeur d'une case");
         assert!((c.note.height() - NOTE_LINE_H).abs() < 1e-3, "une bande vide garde une ligne");
     }
-    // Trois lignes : la bande grandit, sans toucher à la colonne (elle tient à côté de l'image).
-    let mut lignes = HashMap::new();
-    lignes.insert(doc.panels[1].id, 3);
-    let l3 = board::layout_with(&doc, &reglages(6), &lignes, false, &japonais());
+    // Trois champs cochés : trois lignes, la zone grandit, sans toucher à la colonne (elle tient à côté de l'image).
+    let tout = Options { textes: Textes { action: true, dialogue: true, notes: true }, ..japonais() };
+    let l3 = board::layout_with(&doc, &reglages(6), &HashMap::new(), false, &tout);
     assert!(eg(l3.cards[1].note.height(), 3.0 * NOTE_LINE_H));
     assert_eq!(l3.cards[2].thumb.top(), l.cards[2].thumb.top(), "trois lignes tiennent à côté de l'image : la colonne ne bouge pas");
-    // Neuf lignes (trois champs montrés) : plus hautes que l'image, la case suivante descend d'autant.
-    let tout = Options { textes: Textes { action: true, dialogue: true, notes: true }, ..japonais() };
-    let mut lignes = HashMap::new();
-    lignes.insert(doc.panels[1].id, 9);
-    let l9 = board::layout_with(&doc, &reglages(6), &lignes, false, &tout);
-    let (c1, c2) = (l9.cards[1], l9.cards[2]);
-    assert!(eg(c1.note.height(), 9.0 * NOTE_LINE_H));
-    assert!(c1.note.height() > c1.thumb.height());
-    assert!((c2.thumb.top() - c1.note.bottom() - (LABEL_H + board::gap_cut(170.0))).abs() < 1e-3, "la case suivante est sous le texte");
-    // Jamais plus que trois lignes par champ montré : un seul champ, trois lignes ; trois champs, neuf.
-    let mut trop = HashMap::new();
-    trop.insert(doc.panels[1].id, 40);
-    assert!(eg(board::layout_with(&doc, &reglages(6), &trop, false, &japonais()).cards[1].note.height(), 3.0 * NOTE_LINE_H));
-    assert!(eg(board::layout_with(&doc, &reglages(6), &trop, false, &tout).cards[1].note.height(), 9.0 * NOTE_LINE_H));
+    // Une ligne par champ coché, jamais plus, quelle que soit la longueur du texte ; des cases de 170 sont plus larges que haute de 96 :
+    // trois lignes de 13 tiennent toujours à côté de l'image, la colonne ne descend donc pas plus.
+    let mut long = film(5);
+    long.panels[1].notes = "mot ".repeat(200);
+    let ll = board::layout_with(&long, &reglages(6), &HashMap::new(), false, &tout);
+    assert!(eg(ll.cards[1].note.height(), 3.0 * NOTE_LINE_H));
+    assert_eq!(ll.cards[2].thumb.top(), l.cards[2].thumb.top());
 }
 
 #[test]
@@ -253,19 +245,26 @@ fn a_stays_put_when_the_hull_grows_right_or_down_and_the_hold_keeps_it_during_a_
         assert_eq!(l.cards.len(), ordinaire.cards.len());
         sans_chevauchement(&l);
     }
-    // Vers la gauche, sur la première colonne : tout glisse d'autant (la vue compense), A ne bouge pas à l'écran.
-    // Vers le haut : A passe sous la case d'avant, une fois, sans toucher aux cases d'avant.
+    // Vers la gauche : le cadre le plus à gauche s'aligne sur le bord de la colonne (c'est A qui est en retrait à droite, rien ne glisse),
+    // les cases d'avant ne bougent pas. Vers le haut : A passe sous la case d'avant, une fois.
     for (dx, dy) in [(-160.0, 0.0), (-400.0, 30.0), (0.0, -90.0), (-120.0, -60.0)] {
         let mut doc = plan_court();
         deux_cadres(&mut doc, 1, dx, dy);
         let l = disposer(&doc, 4);
         sans_chevauchement(&l);
+        assert_eq!(l.decalage.x, 0.0, "({dx}, {dy}) : rien ne glisse à gauche, A est en retrait");
         for j in 0..K {
             assert!((l.cards[j].thumb.translate(-l.decalage).min - ordinaire.cards[j].thumb.min).length() < 1e-3, "la case {j}, d'avant, reste ({dx}, {dy})");
         }
-        // A ne recule jamais : elle reste dans sa colonne (plus bas au plus), ou passe en haut de la colonne suivante quand elle n'y tient plus.
+        // Le cadre le plus à gauche est au bord de la colonne, comme les autres cases de la colonne.
+        let m = l.move_of(K).unwrap();
+        let gauche = m.cadres.iter().map(|c| c.rect.left()).fold(f32::MAX, f32::min).min(l.cards[K].thumb.left());
+        assert!(eg(gauche, l.cards[K].ligne.left()), "({dx}, {dy}) : le plus à gauche à la ligne de la colonne : {gauche} {:?}", l.cards[K].ligne);
+        assert!(l.cards.iter().filter(|n| n.row == l.cards[K].row && n.id != l.cards[K].id).all(|n| eg(l.cards[K].ligne.left(), n.thumb.left())), "({dx}, {dy}) : la même colonne que les autres");
+        // A ne recule jamais : elle reste dans sa colonne (plus bas au plus, et plus à droite si un cadre est à sa gauche), ou passe en haut de
+        // la colonne suivante quand elle n'y tient plus.
         let (avant, apres) = (ordinaire.cards[K].thumb, l.cards[K].thumb.translate(-l.decalage));
-        let plus_tard = l.cards[K].row > ordinaire.cards[K].row || ((apres.left() - avant.left()).abs() < 1e-3 && apres.top() >= avant.top() - 1e-3);
+        let plus_tard = l.cards[K].row > ordinaire.cards[K].row || (apres.left() >= avant.left() - 1e-3 && apres.top() >= avant.top() - 1e-3);
         assert!(plus_tard, "({dx}, {dy}) : A ne recule jamais : {avant:?} {apres:?}");
     }
     // Une première case dont le cadre monte au-dessus de la planche : tout descend, la vue compense.
@@ -468,7 +467,7 @@ fn zoom_to_fit_follows_the_flow_width_in_rows_height_in_columns() {
 
 // ------------------------------------------------------------------------------------------- les textes à côté des cases
 
-fn plan_avec_textes() -> Document {
+pub(crate) fn plan_avec_textes() -> Document {
     let mut doc = quatre_plans();
     doc.panels[1].action = "Il court".into();
     doc.panels[1].dialogue = "Où vas-tu ?".into();
@@ -491,12 +490,12 @@ fn the_fields_toggles_change_what_is_laid_out_and_what_is_painted() {
     assert_eq!(b.app.layout.board_textes, Textes { action: true, dialogue: false, notes: true });
     assert!(peint(&b, "Action  Il court") && peint(&b, "Note  La clé"), "{:?}", b.textes);
     assert!(eg(hauteur(&b), 2.0 * NOTE_LINE_H));
-    // Le dialogue aussi : trois lignes. (Les autres cases, sans texte, gardent leur ligne.)
+    // Le dialogue aussi : trois lignes. (Les autres cases, sans texte, ont les mêmes trois lignes, vides : une ligne par champ coché.)
     b.app.run_action("vignettes.texte_dialogue");
     b.chauffer(4);
     assert!(peint(&b, "Dialogue  Où vas-tu ?"), "{:?}", b.textes);
     assert!(eg(hauteur(&b), 3.0 * NOTE_LINE_H));
-    assert!(eg(b.app.board_layout().cards[0].note.height(), NOTE_LINE_H));
+    assert!(eg(b.app.board_layout().cards[0].note.height(), 3.0 * NOTE_LINE_H));
     // Décocher les notes puis l'action : le dialogue seul, sans étiquette.
     b.app.run_action("vignettes.texte_notes");
     b.app.run_action("vignettes.texte_action");
@@ -529,11 +528,13 @@ fn the_text_beside_a_case_is_measured_and_painted_to_the_right_in_the_japanese_r
         assert!(p.x > ecran(&b, c.thumb).right(), "{morceau} est à droite de la case : {p:?}");
         assert!(p.y >= ecran(&b, c.note).top() - 1.0 && p.y <= ecran(&b, c.note).bottom() + 1.0, "{morceau} est dans la bande du texte");
     }
-    // Un texte très long : trois lignes au plus par champ.
+    // Un texte très long : une seule ligne par champ, coupée par « … » (trois lignes en tout pour trois champs).
     b.app.doc.panels[1].action = "mot ".repeat(200);
     b.chauffer(4);
-    assert!(b.app.board_layout().cards[3].note.height() <= 9.0 * NOTE_LINE_H + 1e-3);
-    assert!(b.app.board_layout().cards[3].note.height() >= 5.0 * NOTE_LINE_H, "un champ de trois lignes, et les deux autres d'une");
+    assert!(eg(b.app.board_layout().cards[3].note.height(), 3.0 * NOTE_LINE_H), "une ligne par champ, quel que soit le texte");
+    let galley = b.formes.iter().filter_map(|s| if let Shape::Text(t) = &s.shape { Some(t.galley.clone()) } else { None }).find(|g| g.job.text.contains("mot mot mot")).expect("l'action est peinte");
+    assert_eq!(galley.rows.len(), 1, "une seule ligne");
+    assert!(galley.rows[0].text().ends_with('…'), "« … » au bout : {:?}", galley.rows[0].text());
 }
 
 // ------------------------------------------------------------------------------------------- l'export de la planche

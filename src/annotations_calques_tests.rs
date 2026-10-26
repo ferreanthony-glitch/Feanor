@@ -22,7 +22,7 @@ fn diag(c: Pos2, demi: f32) -> Vec<VPoint> {
 }
 
 /// Pose un trait de `demi` de demi-longueur au centre de la case `k`, dans le calque `calque` (le premier, sinon). Rend son identifiant.
-fn poser(b: &mut Banc, calque: Option<u64>, k: usize, demi: f32) -> u64 {
+pub(crate) fn poser(b: &mut Banc, calque: Option<u64>, k: usize, demi: f32) -> u64 {
     let layout = b.app.board_layout();
     let c = layout.cards[k].thumb.center();
     assert!(b.app.doc.annotations.ajouter_dans(&layout, calque, &diag(c, demi), COULEUR_PAR_DEFAUT));
@@ -46,7 +46,7 @@ fn boite(b: &Banc, ids: &[u64]) -> Rect {
 }
 
 /// L'espace Vignettes (la planche et son panneau Planche à droite), `colonnes` cases par ligne, assez petites pour tenir à l'écran.
-fn ouvert_vignettes(doc: Document, colonnes: usize) -> Banc {
+pub(crate) fn ouvert_vignettes(doc: Document, colonnes: usize) -> Banc {
     let mut b = banc_taille(doc, false, 1600, 900);
     b.garder_formes = true;
     b.app.set_espace(crate::workspace::Espace::Vignettes);
@@ -58,7 +58,7 @@ fn ouvert_vignettes(doc: Document, colonnes: usize) -> Banc {
     b
 }
 
-fn lasso(b: &mut Banc) {
+pub(crate) fn lasso(b: &mut Banc) {
     b.app.run_action("vignettes.annotation_lasso");
     b.chauffer(2);
     assert!(b.app.annot_actif());
@@ -72,7 +72,7 @@ fn entourer(b: &mut Banc, r: Rect) {
 }
 
 /// Un lasso qui fait le tour des traits `ids`, avec `marge` points d'écran d'air.
-fn entourer_trait(b: &mut Banc, ids: &[u64], marge: f32) {
+pub(crate) fn entourer_trait(b: &mut Banc, ids: &[u64], marge: f32) {
     let r = boite(b, ids).expand(marge);
     entourer(b, r);
 }
@@ -86,7 +86,7 @@ fn proches(a: &[VPoint], b: &[VPoint], tol: f32) -> bool {
 }
 
 /// Le texte `t` dans ce que la dernière image a peint : le centre de sa zone, à l'écran (il faut `garder_formes`).
-fn texte_en(b: &Banc, t: &str) -> Option<Pos2> {
+pub(crate) fn texte_en(b: &Banc, t: &str) -> Option<Pos2> {
     b.formes.iter().find_map(|s| match &s.shape {
         egui::epaint::Shape::Text(x) if x.galley.job.text == t => Some(x.pos + x.galley.size() * 0.5),
         _ => None,
@@ -107,7 +107,7 @@ fn textes_en(b: &Banc, t: &str) -> Vec<Pos2> {
     v
 }
 
-fn clic(b: &mut Banc, p: Pos2) {
+pub(crate) fn clic(b: &mut Banc, p: Pos2) {
     b.image(vec![Event::PointerMoved(p)], 1.0 / 60.0);
     b.image(vec![appui(p, true, Modifiers::NONE)], 1.0 / 60.0);
     b.image(vec![appui(p, false, Modifiers::NONE)], 1.0 / 60.0);

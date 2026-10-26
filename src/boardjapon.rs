@@ -7,20 +7,20 @@
 //!   « cases par colonne », six d'origine : six cases et cinq écarts de coupe) ; une case de plus passe en haut de la colonne suivante,
 //!   jamais coupée. Chaque case garde au-dessus d'elle la ligne de son numéro de plan (`LABEL_H`).
 //! - **Le texte** d'une case est dans une bande de la largeur d'une case, à `note_gap` (12 % + 8 points) de sa droite, en haut de l'image ;
-//!   ses lignes (de une à trois par champ montré) descendent d'autant : la case suivante de la colonne est sous l'image, ou sous le texte
-//!   s'il descend plus bas.
+//!   **une ligne par champ coché** (trois au plus) ; sans champ coché il n'y a pas de bande et la colonne n'est large que d'une case. La case
+//!   suivante de la colonne est sous l'image, ou sous le texte s'il descend plus bas.
 //! - **Un mouvement de caméra** : l'enveloppe des cadres est posée comme sur la planche en lignes, à l'échelle des cases ; le texte est à
 //!   droite du **cadre le plus à droite** (B…) et de l'enveloppe à cette hauteur ; **la colonne suivante est entièrement à droite** du
 //!   mouvement et de son texte (la colonne s'élargit d'autant, comme la rangée descend sous B et ses notes), et la case suivante de la
-//!   colonne entièrement sous l'enveloppe et son texte. Une enveloppe qui monte ou va à gauche pousse sa case plus bas ou plus à droite, sans
-//!   toucher les cases d'avant ; au bord de la planche, tout glisse d'autant (`BoardLayout::decalage`, la vue compense).
+//!   colonne entièrement sous l'enveloppe et son texte. Une enveloppe qui monte pousse sa case plus bas, sans toucher les cases d'avant ;
+//!   **le cadre le plus à gauche s'aligne sur le bord de la colonne** (le miroir de « le cadre le plus haut s'aligne sur la rangée ») : c'est
+//!   A qui est en retrait, à droite (`CardPlace::ligne` est la case au bord de la colonne). Au bord haut de la planche, tout glisse d'autant
+//!   (`BoardLayout::decalage`, la vue compense).
 //! - **Pendant un geste de caméra**, la case A reste où elle était (`Reserve::pose` et `pose_y`), l'enveloppe ne rétrécit pas (`Reserve::rect`) :
 //!   au lâcher, tout se range d'après les cadres.
 //! - **Les cases pâles** suivent le même sens : au moins `pale_rows` colonnes de cases en tout (trois d'origine), et toujours une colonne
 //!   pâle après la dernière colonne occupée.
 //! - Les barres entre deux cases d'une colonne sont **horizontales** (grises dans un plan, noires à une coupe).
-
-use std::collections::HashMap;
 
 use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
 
@@ -46,7 +46,10 @@ pub fn hauteur_colonne(card_w: f32, thumb_h: f32, colonnes: usize) -> f32 {
 struct Etendue {
     /// Jusqu'où l'enveloppe va à gauche (négatif ou nul).
     x_lo: f32,
-    /// Le bord droit de tout ce que la case prend : l'image, l'enveloppe, le texte.
+    /// Le retrait de A à droite du bord gauche de la colonne : **le cadre le plus à gauche du mouvement s'aligne sur ce bord**, comme n'importe
+    /// quelle case (Anthony, 2026-10-24, le miroir de « le cadre le plus haut s'aligne sur le haut de la rangée »). Nul sans cadre à gauche de A.
+    dec: f32,
+    /// Le bord droit de tout ce que la case prend, **depuis le bord gauche de la colonne** : le retrait, l'image, l'enveloppe, le texte.
     droite: f32,
     /// De combien l'enveloppe monte au-dessus de l'image (positif ou nul).
     monte: f32,
@@ -57,7 +60,7 @@ struct Etendue {
 }
 
 /// La planche lue à la japonaise (voir le début du fichier). Mêmes arguments que `board::layout_with`.
-pub fn layout(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> BoardLayout {
+pub fn layout(doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options) -> BoardLayout {
     let cols = s.columns.clamp(1, MAX_COLUMNS);
     let card_w = if s.card_w.is_nan() { BoardSettings::default().card_w } else { s.card_w.clamp(CARD_MIN, CARD_MAX) };
     let thumb_h = card_w * doc.frame[1] as f32 / doc.frame[0].max(1) as f32;
@@ -66,8 +69,8 @@ pub fn layout(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, la
         boards.extend(plan_boards(doc, i).into_iter().map(|(id, frame, end)| (i, id, frame, end)));
     }
     let n = boards.len();
-    let lignes_max = opt.textes.lignes_max();
-    let note_lines = |k: usize| lines.get(&boards[k].1).copied().unwrap_or(1).clamp(1, lignes_max);
+    // Les lignes de texte à droite de chaque case : une par champ coché (zéro : pas de zone de texte).
+    let n_l = opt.textes.lignes();
     let joined_after = |k: usize| match boards.get(k + 1) {
         Some(next) => next.2 > 0,
         None => last_joins,
@@ -75,11 +78,13 @@ pub fn layout(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, la
     let (g_same, g_cut) = (gap_same(card_w), gap_cut(card_w));
     let ng = note_gap(card_w);
     let gap_after = |k: usize| if joined_after(k) { g_same } else { g_cut };
-    let texte_w = largeur_texte(card_w);
+    let texte_w = if n_l == 0 { 0.0 } else { largeur_texte(card_w) };
     let bloc = LABEL_H + thumb_h;
     let col_h = hauteur_colonne(card_w, thumb_h, cols);
     let col_gap = g_cut;
-    let col_nominal = card_w + ng + texte_w;
+    // (Sans champ coché : une colonne n'est large que d'une case.)
+    let col_nominal = card_w + if n_l == 0 { 0.0 } else { ng + texte_w };
+    let ng_texte = if n_l == 0 { 0.0 } else { ng };
     // Une empreinte n'est jamais plus haute qu'une colonne (sa case et la ligne de son numéro comprises), ni plus large que trois.
     let haut_max = (col_h - LABEL_H).max(thumb_h);
     let large_max = 3.0 * col_nominal + 2.0 * col_gap;
@@ -110,19 +115,21 @@ pub fn layout(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, la
     // Ce que prend chaque case.
     let etendues: Vec<Etendue> = (0..n)
         .map(|k| {
-            let hauteur_texte = note_lines(k) as f32 * NOTE_LINE_H;
+            let hauteur_texte = n_l as f32 * NOTE_LINE_H;
             match (&prints[k], &polys[k]) {
                 (Some(e), Some(poly)) => {
                     let boite = vignettecam::boite(poly);
                     // Le texte est à droite du cadre le plus à droite, et de l'enveloppe à sa hauteur, en haut de ce cadre.
                     let b = e.cadres.iter().max_by(|a, b| a.rect.right().total_cmp(&b.rect.right())).map_or(Rect::from_min_size(Pos2::ZERO, vec2(card_w, thumb_h)), |c| c.rect);
                     let droite_env = crate::viewbar::clip_to_rect(poly, Rect::from_min_max(pos2(-1e6, b.top()), pos2(1e6, b.bottom()))).iter().map(|q| q.x).fold(b.right(), f32::max);
-                    let note = Rect::from_min_size(pos2(droite_env + ng, b.top()), vec2(texte_w, hauteur_texte));
-                    Etendue { x_lo: boite.left().min(0.0), droite: boite.right().max(card_w).max(note.right()), monte: (-boite.top()).max(0.0), bas: boite.bottom().max(thumb_h).max(note.bottom()), note }
+                    let note = Rect::from_min_size(pos2(droite_env + ng_texte, b.top()), vec2(texte_w, hauteur_texte));
+                    // (Pendant un geste, A garde le retrait qu'elle avait à l'appui : elle ne bouge pas, `Reserve::pose_dec`.)
+                    let dec = opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && boards[k].2 == 0).and_then(|h| h.pose_dec).unwrap_or_else(|| (-boite.left()).max(0.0));
+                    Etendue { x_lo: boite.left().min(0.0), dec, droite: dec + boite.right().max(card_w).max(note.right()), monte: (-boite.top()).max(0.0), bas: boite.bottom().max(thumb_h).max(note.bottom()), note }
                 }
                 _ => {
-                    let note = Rect::from_min_size(pos2(card_w + ng, 0.0), vec2(texte_w, hauteur_texte));
-                    Etendue { x_lo: 0.0, droite: note.right(), monte: 0.0, bas: thumb_h.max(note.bottom()), note }
+                    let note = Rect::from_min_size(pos2(card_w + ng_texte, 0.0), vec2(texte_w, hauteur_texte));
+                    Etendue { x_lo: 0.0, dec: 0.0, droite: note.right(), monte: 0.0, bas: thumb_h.max(note.bottom()), note }
                 }
             }
         })
@@ -199,16 +206,15 @@ pub fn layout(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, la
     };
 
     // Les colonnes : leur x (depuis le bord gauche des colonnes), leur largeur (tout ce que leurs cases prennent, texte compris). Une colonne
-    // commence un écart de coupe après la précédente, plus loin si une enveloppe déborde à sa gauche ; celle où la case A est tenue garde son x.
+    // commence un écart de coupe après la précédente : l'enveloppe d'un mouvement ne mord jamais sur elle, c'est A qui est en retrait pour que
+    // le cadre le plus à gauche s'aligne sur le bord de la colonne (`Etendue::dec`) ; celle où la case A est tenue garde la place de A.
     let mut droite_col = vec![card_w; total_colonnes];
-    let mut gauche_col = vec![0.0f32; total_colonnes];
     let mut x_tenu: Vec<Option<f32>> = vec![None; total_colonnes];
     for (k, p) in poses.iter().enumerate() {
         droite_col[p.0] = droite_col[p.0].max(etendues[k].droite);
-        gauche_col[p.0] = gauche_col[p.0].max(-etendues[k].x_lo);
         if let Some((c, x, _)) = forces[k] {
             if let Some(t) = x_tenu.get_mut(c) {
-                *t = Some(x);
+                *t = Some(x - etendues[k].dec);
             }
         }
     }
@@ -220,16 +226,16 @@ pub fn layout(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, la
         tx[c] = match x_tenu[c] {
             Some(x) => x,
             None if c == 0 => 0.0,
-            // (L'enveloppe peut mordre sur l'écart entre deux colonnes, pas sur la colonne d'avant.)
-            None => tx[c - 1] + droite_col[c - 1] + col_gap + (gauche_col[c] - col_gap).max(0.0),
+            None => tx[c - 1] + droite_col[c - 1] + col_gap,
         };
     }
 
     // Une enveloppe qui dépasse le bord gauche ou haut de la planche : tout glisse d'autant (la vue compense, la case A ne bouge pas à l'écran).
+    // (A gauche, seulement pendant un geste : au repos, le cadre le plus à gauche est au bord de la colonne.)
     let mut decalage = Vec2::ZERO;
     for (k, p) in poses.iter().enumerate() {
         if p.0 == 0 {
-            decalage.x = decalage.x.max(-(PAGE_PAD + tx[0] + etendues[k].x_lo));
+            decalage.x = decalage.x.max(-(PAGE_PAD + tx[0] + etendues[k].dec + etendues[k].x_lo));
         }
         decalage.y = decalage.y.max(-(PAGE_PAD + p.1 - etendues[k].monte));
     }
@@ -237,7 +243,9 @@ pub fn layout(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, la
 
     let mut out = BoardLayout { decalage, origine_x, origine_y, sens: Sens::Japonais, ..Default::default() };
     for (k, &(c, haut_image, bas)) in poses.iter().enumerate() {
-        let x = origine_x + tx[c];
+        // Le bord gauche de la colonne, et A (en retrait de `dec` à sa droite quand un cadre du mouvement va à gauche d'elle).
+        let colonne_x = origine_x + tx[c];
+        let x = colonne_x + etendues[k].dec;
         let top = origine_y + haut_image;
         let thumb = Rect::from_min_size(pos2(x, top), vec2(card_w, thumb_h));
         let (i, id, frame, end) = boards[k];
@@ -254,13 +262,15 @@ pub fn layout(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, la
             out.moves.push(MoveBoard { cadres, enveloppe: e.enveloppe.iter().map(|q| *q + au).collect(), tuile });
         }
         let card = Rect::from_min_max(pos2(x, top - LABEL_H), pos2(x + card_w, top + thumb_h));
-        let reach = x + droite_col[c];
+        let reach = colonne_x + droite_col[c];
         let reach_y = origine_y + bas;
-        out.cards.push(CardPlace { panel: i, plan: p.id, id, frame, end, scene: p.scene, card, thumb, note, row: c, mouvement: mv.is_some(), foot, reach, reach_y, mv });
+        // La case à la ligne : au bord gauche de la colonne, à la hauteur de A. Les barres et les repères de pose s'y alignent.
+        let ligne = Rect::from_min_size(pos2(colonne_x, top), vec2(card_w, thumb_h));
+        out.cards.push(CardPlace { panel: i, plan: p.id, id, frame, end, scene: p.scene, card, thumb, note, row: c, mouvement: mv.is_some(), foot, reach, reach_y, mv, ligne });
         let gap = gap_after(k);
-        let zone = Rect::from_min_max(pos2(x, reach_y), pos2(x + card_w, reach_y + gap));
+        let zone = Rect::from_min_max(pos2(colonne_x, reach_y), pos2(colonne_x + card_w, reach_y + gap));
         let cut = !joined_after(k);
-        let bar = Rect::from_center_size(pos2(thumb.center().x, reach_y + gap * 0.5), vec2(card_w * BAR_FRACTION, if cut { BAR_CUT_W } else { BAR_W }));
+        let bar = Rect::from_center_size(pos2(ligne.center().x, reach_y + gap * 0.5), vec2(card_w * BAR_FRACTION, if cut { BAR_CUT_W } else { BAR_W }));
         out.bars.push(CutBar { after: k, cut, bar, zone });
     }
     for &(c, haut_image) in &pale {
