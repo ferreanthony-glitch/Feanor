@@ -65,7 +65,7 @@ pub(crate) enum Colle {
 pub(crate) enum Reprise {
     Plans,
     Calque,
-    Images { replace: bool },
+    Images { replace: bool, at_head: bool },
     Cles { insert: bool },
     Zone,
     Elements,
@@ -282,7 +282,7 @@ impl App {
         match reprise {
             Reprise::Plans => self.paste_panels(),
             Reprise::Calque => self.paste_layer(),
-            Reprise::Images { replace } => self.paste_images(replace),
+            Reprise::Images { replace, at_head } => self.paste_images_with(replace, at_head),
             Reprise::Cles { insert } => self.paste_keys_with(insert),
             Reprise::Zone => self.bitmap_paste(),
             Reprise::Elements => self.paste(),

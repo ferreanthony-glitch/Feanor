@@ -801,23 +801,9 @@ impl App {
             if self.storyboard_refuses() || !self.partage_peut_toucher(&[a.plan, b.plan]) {
                 return false;
             }
-            let ok = self.avec_etape("Réunir deux vignettes en un plan", |s| {
-                s.structure_op_dessins(|d, _| {
-                    let debut = d.panels.get(a.panel)?.frame_count();
-                    let i = d.join_next_plan(a.panel)?;
-                    // La case de droite devient une clé de dessin de plus sur chaque calque du plan (`cases.rs`).
-                    d.cles_de_case(i, debut);
-                    Some(i)
-                })
-            });
-            if ok {
-                self.cur_frame = a.end;
-                self.board_sel = vec![self.doc.panels[self.cur_panel].id];
-                self.status = format!("Plans réunis : la vignette de droite est une image du {}.", crate::storyboard::panel_title(&self.doc, self.cur_panel).to_lowercase());
-            } else {
-                self.status = "Ces deux plans ne sont pas dans la même séquence : impossible de les réunir.".into();
-            }
-            ok
+            // Deux calques de même nom : la fenêtre le demande d'abord (`fusionnoms.rs`) ; fausse tant qu'elle attend la réponse.
+            let Some(a_id) = self.doc.panels.get(a.panel).map(|p| p.id) else { return false };
+            self.jonction_demander(crate::fusionnoms::Jonction::Case { a: a_id, fin: a.end })
         }
     }
 
@@ -1793,6 +1779,12 @@ impl App {
         self.version_menu(ui, i, true);
         ui.menu_button("Plus", |ui| {
             self.plan_color_menu(ui);
+            // Plusieurs plans choisis : une séquence à eux, une durée pour tous (`sequenceplans.rs`, `dureeplans.rs`).
+            let n = self.board_selection().len();
+            if n > 1 {
+                self.action_item(ui, &format!("Nouvelle séquence avec les {n} plans choisis"), "sequence.nouvelle_avec_plans");
+                self.action_item(ui, &format!("Changer la durée des {n} plans choisis…"), "montage.duree_plans");
+            }
             item(self, ui, "Recadrer (outil Caméra)", &|a| a.set_tool(Tool::Camera));
             item(self, ui, "Réinitialiser le cadrage", &|a| a.run_action("camera.reinitialiser"));
         });

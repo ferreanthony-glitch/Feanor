@@ -48,6 +48,11 @@ impl Document {
     /// son identité. Renvoie l'indice du plan réuni, ou rien (et alors rien n'a bougé) si l'un n'existe plus, s'ils sont le même
     /// plan ou s'ils ne sont pas de la même séquence.
     pub fn merge_plan_into(&mut self, x: u64, y: u64) -> Option<usize> {
+        self.merge_plan_into_with(x, y, &crate::fusionnoms::JoinOpts::default())
+    }
+
+    /// `merge_plan_into`, avec la réponse à la question des calques de même nom (`JoinOpts`, `fusionnoms.rs`).
+    pub fn merge_plan_into_with(&mut self, x: u64, y: u64, opts: &crate::fusionnoms::JoinOpts) -> Option<usize> {
         let (px, py) = (self.panels.iter().position(|p| p.id == x)?, self.panels.iter().position(|p| p.id == y)?);
         if px == py || self.sequence_of(px) != self.sequence_of(py) {
             return None;
@@ -61,7 +66,7 @@ impl Document {
         if px + 1 != py && py + 1 != px {
             return None;
         }
-        self.join_next_plan_without_mark(px.min(py))
+        self.join_next_plan_without_mark_with(px.min(py), opts)
     }
 }
 
@@ -71,15 +76,8 @@ impl App {
         if self.storyboard_refuses() || !self.partage_peut_toucher(&[x, y]) {
             return;
         }
-        let nom = "Fusionner deux plans";
-        let avant = self.history.context.replace(nom.to_string());
-        let fait = self.structure_op_dessins(|d, _| d.merge_plan_into(x, y));
-        self.history.context = avant;
-        if fait {
-            self.board_sel.clear();
-            self.status = format!("Plans fusionnés : {}.", crate::storyboard::panel_title(&self.doc, self.cur_panel));
-        } else {
-            self.status = "Ces deux plans ne peuvent pas être fusionnés : ils doivent être de la même séquence.".into();
-        }
+        // Deux calques de même nom : la fenêtre le demande d'abord (`fusionnoms.rs`) ; sans cela, tout de suite, en une étape nommée
+        // « Fusionner deux plans ».
+        self.jonction_demander(crate::fusionnoms::Jonction::Glisse { x, y });
     }
 }

@@ -2355,6 +2355,16 @@ touches = []
 source = "SHOT (sans touche)"
 
 [[raccourci]]
+action = "montage.duree_plans"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "sequence.nouvelle_avec_plans"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
 action = "montage.debut_a_tete"
 touches = []
 source = "SHOT (sans touche)"

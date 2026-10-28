@@ -4684,3 +4684,67 @@ Cinq retours d'Anthony après essais. Essais : `saccade_ecran_tests.rs`, `select
 3. Ouvre un projet, regarde (zoom, vue caméra, panneaux, outils, lecture) et ferme : aucune question. Modifie, ferme : la question, avec « Dernier changement : … » ; « Enregistrer » : le projet s'écrit, puis l'onglet se ferme tout seul. Dis-moi si une question revient à tort, avec ce « Dernier changement ».
 4. Fichier > Préférences > Dessin > Tremblement des traits : tous les réglages sont là, l'aperçu à droite ; coche « Animer à l'arrêt » : le trait d'exemple bouge ; change vitesse, variantes, graine : l'aperçu suit tout de suite, sans à-coup.
 5. « Régler le stylet à ma main… » : trace trois traits, « Appliquer » : la fenêtre se ferme ; rouvre-la : « Rétablir » rend la courbe d'avant.
+
+---------------------------------------------------------------------------------------------------
+
+## 55. Timeline et plans : Alt + glisser, coller les clés, séquence des plans choisis, calques de même nom, durées (2026-10-28, branche `timeline-et-plans`)
+
+Demande d'Anthony, cinq points. Fichiers : `images.rs` et `timeline.rs` (Alt + glisser, Maj+Ctrl+V des images), `sequenceplans.rs`, `fusionnoms.rs`, `dureeplans.rs`, `document.rs` (`layer_targets`, `append_plan`, `Document::duree_plan_neuf`),
+`storyboard.rs`, `panels.rs`, `boardui.rs` (les menus), `prefsonglets.rs` et `prefsui.rs` (Préférences > Montage > Plans neufs), `settings.rs`, `keymap.rs` et `keymap.toml` (deux commandes sans touche), `hasard_tests.rs` (deux gestes du hasard).
+Essais : `timeline_alt_tests.rs` (4), `timeline_cles_tests.rs` (6), `sequenceplans_tests.rs` (7), `fusionnoms_tests.rs` (11), `dureeplans_tests.rs` (9), et les gestes `JonctionNoms` et `DureePlans` du hasard.
+
+### 1. Alt + glisser duplique les images choisies (timeline)
+
+- Dans la grille de la timeline, glisser les **images choisies** les déplace. **Ctrl copiait déjà, Maj insère déjà** (le README le disait) : **Alt copie maintenant comme Ctrl** (les deux restent, Alt + Ctrl aussi). Sans touche : déplacer, comme avant.
+- Les copies ont **leurs propres dessins** (`Document::duplicate_cel`, un dessin tenu sur plusieurs images reste un seul dessin copié), posés à l'endroit lâché par-dessus ce qui y était. **Une seule étape d'annulation** ; **Échap** abandonne (rien n'est posé).
+- **Dans le montage, Alt garde son ancien sens** : sur les **clés de dessins** des pistes, Alt tenue = « Réordonner les clés » (partie 36). Je n'y ai pas touché, pour ne rien casser ; la copie d'une clé se fait par Ctrl+C / Ctrl+V (point 2).
+  *À trancher avec toi* : si tu veux aussi « Alt + glisser = dupliquer » sur les clés du montage, il faut donner un autre geste à « Réordonner ».
+
+### 2. Copier et coller des clés de dessins
+
+Ce qui **existait déjà** (je l'ai vérifié, et gardé par des essais) : sur les **clés de dessins du montage** (`montagekeys.rs`), Ctrl+C copie, **Ctrl+V insère après la clé sous la tête de lecture** en repoussant la suite, **Maj+Ctrl+V pose exactement sur la tête de lecture** sans rien repousser ;
+dans le plan et d'un plan à l'autre (sur le calque courant du plan visé), avec **de nouveaux dessins**, en une étape d'annulation ; mêmes règles de focus que les clés de caméra et d'effets (la dernière chose copiée, le dernier clic).
+**Ce qui manquait** : dans la **timeline** (les images choisies de la grille), Maj+Ctrl+V ne faisait que la même chose que Ctrl+V. Maintenant **Maj+Ctrl+V pose les images copiées sur la tête de lecture** (`App::paste_images_at_head`), par-dessus ce qui y était, **sans rien repousser** ;
+Ctrl+V les **insère** avant l'image courante, comme avant. Aussi d'un plan à l'autre (sur le calque courant du plan visé), de nouveaux dessins, une étape. La barre d'état de la copie le dit.
+
+### 3. Nouvelle séquence avec les plans choisis
+
+- Choisis plusieurs plans (Ctrl ou Maj + clic dans le montage, ou les vignettes), puis **clic droit > « Nouvelle séquence avec les N plans choisis »** (montage : « Couper et réunir » ; vignette : « Plus »), ou le menu **Plans** (barre du montage, « … », et Storyboard > Plans). La commande est aussi une action
+  (`sequence.nouvelle_avec_plans`, sans touche par défaut : clic droit sur son entrée pour lui en donner une).
+- La séquence neuve contient **exactement** ces plans, **dans l'ordre du film**. Contigus : elle est **à leur place**. Non contigus : ils **se rejoignent à la place du premier choisi**. Les autres plans restent dans leur séquence.
+- Une séquence **coupée en deux** par la neuve (les plans choisis étaient en son milieu) devient deux séquences : **la première garde son identité** (nom, numéro, variantes), la suite reçoit une séquence à elle, **de même nom**, sans numéro propre.
+- **Numérotation verrouillée** : chaque plan garde son numéro (ils ne dépendent pas de la place) ; la séquence neuve (et la suite d'une séquence coupée) reçoit son numéro **entre ses voisines** (`assign_numbers`).
+- Une séquence **vidée** (tous ses plans choisis) disparaît, comme en déplaçant ses derniers plans : la barre d'état le dit, Ctrl+Z la rend. Des plans qui **forment déjà, tels quels, une séquence entière** : rien ne change.
+- **Une seule étape d'annulation**, aucun dessin touché ; refusé sous le verrou du storyboard ; film partagé : les plans doivent être à toi (ou libres).
+
+### 4. Réunir des plans qui ont un calque de même nom : la question
+
+- Quand on réunit deux plans (**« Réunir avec le plan suivant » / « précédent », la barre noire des Vignettes, « Fusionner les plans choisis », la fusion en glissant un plan sur un autre**) et qu'**un calque du second a le même nom qu'un calque du premier** (et serait réuni avec lui : même
+  sorte, même visibilité, même opacité…), une fenêtre **« Calques de même nom »** le dit d'abord, avec **trois réponses** et « Annuler » :
+  - **Fusionner ces calques** : ce qui se faisait toujours ; les calques de même nom n'en font qu'un, les images du second à la suite ;
+  - **Renommer avant de fusionner** : la **liste des calques en conflit**, chacun avec un champ, **« Dessin_2 » d'avance** (« Dessin_3 » pour celui d'un troisième plan) ; on retape, **« Renommer et fusionner »**. Les calques renommés restent à part (ni par nom, ni par rang) ; retaper le nom que le premier plan a déjà les réunit, puisque c'est demandé ;
+  - **Ne pas fusionner les calques** : ils restent séparés, celui du second renommé « Dessin_2 » (« _3 »… si ce nom existe déjà).
+- **Annuler** (ou Échap) : la jonction est abandonnée, rien ne bouge, aucune étape. **La fenêtre n'apparaît que s'il y a un nom en commun** ; sinon (noms différents, ou calques réglés différemment) la jonction se fait tout de suite, comme avant.
+- **Une seule étape d'annulation** pour toute la jonction, renommages compris. Aucun dessin perdu, quelle que soit la réponse.
+- En code : `append_plan` garde sa règle (par nom, puis par rang), maintenant dans `document::layer_targets` ; il reçoit `JoinOpts` (`LayerJoin::Merge`, `Rename(noms)`, `Apart`) ; `Document::join_name_conflicts` trouve les conflits sans toucher au document. Les essais (et le hasard) répondent d'avance
+  « Fusionner » (`App::fusion_noms_auto`), pour que leurs jonctions se fassent d'un geste ; le hasard pose la vraie question avec son geste `JonctionNoms` (les quatre réponses).
+
+### 5. Durées de plans
+
+- **(a) Préférences > Montage > « Plans neufs » > « Durée d'un nouveau plan »** : en **secondes** et en **images** (deux champs liés, à la cadence du projet ouvert) ; **2 s d'origine, ce que SHOT donnait déjà** (`Document::make_panel` avait 2 s en dur). Tout plan **créé ensuite** la reçoit (nouveau plan, plan avant, nouvelle
+  séquence, case dessinée dans une case vide de la planche) ; les plans qui existent gardent leur durée, comme ceux que donne un import. Un réglage de l'application (pas du projet), retenu d'une séance à l'autre (`duree_nouveau_plan` dans `reglages.toml`, rien d'écrit tant qu'il vaut 2 s).
+- **(b) « Changer la durée des plans choisis… »** (clic droit sur un plan du montage ou une vignette, menus Plans ; action `montage.duree_plans`, **sans touche**) : une petite fenêtre, le champ **prérempli de la durée d'un nouveau plan** ; tous les plans choisis prennent cette durée d'un coup.
+  C'est « Durée… » pour plusieurs plans, **la même règle** : la fin de chaque plan est rognée (**ce qui sort reste en réserve**) ou prolongée (le dernier dessin est tenu, la réserve revient d'abord). Le champ lit des images (36), des secondes (1:12, 1s12) et un **écart** (+12, -4) qui s'ajoute à chaque plan.
+  **Le son ne bouge pas** ; s'il suit, la fenêtre et la barre d'état **préviennent** que les plans d'après se décalent par rapport à lui. **Une seule étape d'annulation** (« Durée des plans »), refusée sous le verrou du storyboard.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Timeline, choisis deux images (glisse sur les cases, avec « Images » allumé) : **Alt + glisse-les** plus loin : elles restent, des copies se posent là où tu lâches. Ctrl + glisser fait pareil ; Maj + glisser insère ; sans touche, elles se déplacent. Échap pendant le glisser : rien. Un seul Ctrl+Z défait la copie. Modifie une copie : l'original ne bouge pas.
+2. Dans le montage, choisis une clé de dessin (clic sur son losange), Ctrl+C, place la tête sur une autre clé, Ctrl+V : la copie vient **après** cette clé, la suite recule. Maj+Ctrl+V : elle se pose **sur** la tête, rien ne recule. Même chose vers un autre plan (sur son calque courant).
+3. Timeline, choisis des images, Ctrl+C, place la tête plus loin : Ctrl+V les **insère** ; Maj+Ctrl+V les **pose sur la tête** sans repousser. Vers un autre plan aussi. Ctrl+Z : un seul pas.
+4. Choisis trois plans qui se suivent au milieu d'une séquence (Ctrl + clic), clic droit > « Nouvelle séquence avec les 3 plans choisis » : ils sont à leur place, dans une séquence neuve ; la séquence d'avant est coupée en deux (la suite porte le même nom). Ctrl+Z. Recommence avec deux plans qui ne se suivent pas : ils se rejoignent à la place du premier.
+5. Verrouille la numérotation, refais-le : les plans gardent leur numéro, la séquence neuve a un numéro entre ses voisines.
+6. Deux plans qui ont chacun un calque « Dessin » : « Réunir avec le plan suivant » ouvre « Calques de même nom ». « Fusionner ces calques » : un seul « Dessin ». Ctrl+Z, recommence avec « Renommer avant de fusionner » (change « Dessin_2 » en « Action » : deux calques « Dessin » et « Action ») puis « Ne pas fusionner les calques »
+   (« Dessin » et « Dessin_2 », toutes les images là). Refais-le par la barre noire des Vignettes, « Fusionner les plans choisis » et en glissant un plan sur un autre. « Annuler » : rien ne bouge. Deux plans sans nom en commun : la jonction se fait sans question.
+7. Préférences > Montage > « Durée d'un nouveau plan » : mets 3 s ; « Nouveau plan » donne un plan de 3 s (72 images à 24 i/s) ; les anciens plans ne changent pas. « Rétablir 2 s ».
+8. Choisis trois plans, clic droit > « Changer la durée des plans choisis… » : le champ montre la durée d'un nouveau plan ; tape 36 : les trois durent 36 images. Tape « +12 » : chacun gagne 12. Raccourcis : la fin est rognée, et revient en rallongeant. S'il y a du son après, la fenêtre et la barre d'état le disent. Ctrl+Z : un seul pas.
