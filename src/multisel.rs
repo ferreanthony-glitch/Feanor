@@ -52,6 +52,52 @@ pub(crate) struct Target {
     /// des pixels reposés à chaque image d'un geste ; les autres suivent à la fin, sans rien coûter
     /// pendant le geste.
     pub live: bool,
+    /// La cible est l'**aplat** du dessin (sa strate, `fond.rs` : des pixels), pas son trait : tout ce qui suit lit et écrit
+    /// la peinture de la strate (`raster_of`), et les étapes d'annulation sont celles de l'aplat (`Edit::FondTiles`).
+    pub aplat: bool,
+}
+
+/// Les pixels que la sélection lit et déplace : ceux du dessin, ou ceux de la strate d'aplat de ce dessin (`aplat`).
+pub(crate) fn raster_of(doc: &Document, cel: CelId, aplat: bool) -> Option<&Raster> {
+    let c = doc.cels.get(&cel)?;
+    if aplat {
+        c.fond.as_ref().map(|s| &s.peinture.raster)
+    } else {
+        Some(&c.raster)
+    }
+}
+
+/// `raster_of`, en écriture.
+pub(crate) fn raster_of_mut(doc: &mut Document, cel: CelId, aplat: bool) -> Option<&mut Raster> {
+    let c = doc.cels.get_mut(&cel)?;
+    if aplat {
+        c.fond.as_mut().map(|s| &mut s.peinture.raster)
+    } else {
+        Some(&mut c.raster)
+    }
+}
+
+/// Le dessin `cel` vient de changer (un geste fini, une annulation) : sa version et, pour l'aplat, celle de sa strate
+/// (c'est elle qui fait refaire l'aplat affiché, en arrière-plan). Pendant un geste on n'y touche pas : l'aplat montré est
+/// recomposé sur les seules tuiles changées (`fx::fond_patch`), ce qui garde les formes en cache.
+pub(crate) fn bump_version(doc: &mut Document, cel: CelId, aplat: bool) {
+    let Some(c) = doc.cels.get_mut(&cel) else { return };
+    if aplat {
+        if let Some(s) = c.fond.as_mut() {
+            s.peinture.version += 1;
+        }
+    }
+    c.version += 1;
+}
+
+/// Un geste en cours sur la strate d'aplat de `cel` : l'aplat affiché est recomposé sur les tuiles `tiles` (sans latence :
+/// seules ces tuiles sont refaites, comme quand on peint dans l'aplat). Rien pour un dessin sans aplat.
+pub(crate) fn patch_aplat(doc: &Document, panel: usize, layer: u64, cel: CelId, tiles: &[usize]) {
+    if tiles.is_empty() {
+        return;
+    }
+    let Some(r) = doc.panels.get(panel).and_then(|p| p.layers.iter().find(|l| l.id == layer)).and_then(|l| l.fond) else { return };
+    crate::fx::fond_patch(doc, cel, &r, tiles);
 }
 
 /// Les calques utilisables, et ceux qu'on laisse de côté (nom, raison).
@@ -86,13 +132,24 @@ pub(crate) fn layer_to_stage(doc: &Document, panel: usize, frame: usize, li: usi
 pub(crate) fn targets(doc: &Document, panel: usize, frame: usize, chosen: &[usize]) -> Targets {
     let mut out = Targets::default();
     for &li in chosen {
-        push_target(doc, panel, frame, li, true, &mut out);
+        push_target(doc, panel, frame, li, true, false, &mut out);
     }
     out
 }
 
-/// Le dessin du calque `li` du plan `panel` à l'image `frame` : une cible, ou la raison de l'écarter.
-fn push_target(doc: &Document, panel: usize, frame: usize, li: usize, live: bool, out: &mut Targets) {
+/// Comme `targets`, mais la cible de chaque calque est l'**aplat** de son dessin (sa strate, `Target::aplat`) : les calques
+/// sans aplat sont laissés de côté, avec la raison.
+pub(crate) fn targets_aplat(doc: &Document, panel: usize, frame: usize, chosen: &[usize]) -> Targets {
+    let mut out = Targets::default();
+    for &li in chosen {
+        push_target(doc, panel, frame, li, true, true, &mut out);
+    }
+    out
+}
+
+/// Le dessin du calque `li` du plan `panel` à l'image `frame` : une cible, ou la raison de l'écarter. `aplat` : c'est
+/// l'aplat de ce dessin qu'on vise (le calque doit en avoir un).
+fn push_target(doc: &Document, panel: usize, frame: usize, li: usize, live: bool, aplat: bool, out: &mut Targets) {
     let Some(p) = doc.panels.get(panel) else { return };
     let layers = &p.layers;
     let Some(l) = layers.get(li) else { return };
@@ -115,9 +172,14 @@ fn push_target(doc: &Document, panel: usize, frame: usize, li: usize, live: bool
             skip("derrière la caméra");
             return;
         };
-        let vector = l.kind == LayerKind::Vector && doc.cels[&cel].vector.is_some();
-        let elements = doc.cels[&cel].vector.as_ref().map_or(0, |d| d.elements.len());
-        out.list.push(Target { id: l.id, name: l.name.clone(), cel, vector, elements, to_stage, frame, live });
+        if aplat && doc.cels[&cel].fond.is_none() {
+            skip("sans aplat à cette image");
+            return;
+        }
+        // (L'aplat est fait de pixels, même sous un trait vectoriel.)
+        let vector = !aplat && l.kind == LayerKind::Vector && doc.cels[&cel].vector.is_some();
+        let elements = if aplat { 0 } else { doc.cels[&cel].vector.as_ref().map_or(0, |d| d.elements.len()) };
+        out.list.push(Target { id: l.id, name: l.name.clone(), cel, vector, elements, to_stage, frame, live, aplat });
     }
 }
 
@@ -125,20 +187,20 @@ fn push_target(doc: &Document, panel: usize, frame: usize, li: usize, live: bool
 /// l'image courante `cur_frame` : chaque dessin une seule fois, même si plusieurs clés ou plusieurs
 /// images le montrent (une clé tenue sur plusieurs images est UN dessin). Les clés d'un autre plan
 /// sont ignorées ; ce qui ne peut pas être pris (masqué, verrouillé…) est dit dans `skipped`.
-pub(crate) fn targets_for_keys(doc: &Document, panel: usize, cur_frame: usize, keys: &[(u64, usize)]) -> Targets {
+pub(crate) fn targets_for_keys_in(doc: &Document, panel: usize, cur_frame: usize, keys: &[(u64, usize)], aplat: bool) -> Targets {
     let mut out = Targets::default();
     let Some(p) = doc.panels.get(panel) else { return out };
     for &(layer, start) in keys {
         let Some(li) = p.layers.iter().position(|l| l.id == layer) else { continue };
         let Some(cel) = p.layers[li].cel_at(start) else {
-            push_target(doc, panel, start, li, false, &mut out);
+            push_target(doc, panel, start, li, false, aplat, &mut out);
             continue;
         };
         if out.list.iter().any(|t| t.cel == cel) {
             continue;
         }
         let live = p.layers[li].cel_at(cur_frame) == Some(cel);
-        push_target(doc, panel, if live { cur_frame } else { start }, li, live, &mut out);
+        push_target(doc, panel, if live { cur_frame } else { start }, li, live, aplat, &mut out);
     }
     out
 }
@@ -173,6 +235,8 @@ pub(crate) struct Part {
     /// L'image de ce dessin (celle de sa clé) et s'il est celui qu'on voit (Target).
     pub frame: usize,
     pub live: bool,
+    /// La cible est l'aplat du dessin (voir `Target::aplat`).
+    pub aplat: bool,
     pub kind: PartKind,
 }
 
@@ -241,11 +305,12 @@ impl MultiSel {
 
     /// « 3 calques, 42 éléments » (et « 2 zones » pour les calques bitmap).
     pub fn summary(&self) -> String {
-        // Prise sur des clés : on parle de dessins (« 3 dessins, 42 éléments »).
+        // Prise sur des clés : on parle de dessins (« 3 dessins, 42 éléments ») ; sur l'aplat : « 3 aplats, 3 zones ».
         if self.by_keys {
             let elements: usize = self.parts.iter().filter(|p| matches!(p.kind, PartKind::Vector { .. })).map(Part::count).sum();
             let zones = self.parts.iter().filter(|p| matches!(p.kind, PartKind::Bitmap { .. })).count();
-            let mut s = plural(self.parts.len(), "dessin", "dessins");
+            let aplat = !self.parts.is_empty() && self.parts.iter().all(|p| p.aplat);
+            let mut s = if aplat { plural(self.parts.len(), "aplat", "aplats") } else { plural(self.parts.len(), "dessin", "dessins") };
             if elements > 0 || zones == 0 {
                 s += &format!(", {}", plural(elements, "élément", "éléments"));
             }
@@ -256,7 +321,8 @@ impl MultiSel {
         }
         let elements: usize = self.parts.iter().filter(|p| matches!(p.kind, PartKind::Vector { .. })).map(Part::count).sum();
         let zones = self.parts.iter().filter(|p| matches!(p.kind, PartKind::Bitmap { .. })).count();
-        let mut s = plural(self.parts.len(), "calque", "calques");
+        let aplat = !self.parts.is_empty() && self.parts.iter().all(|p| p.aplat);
+        let mut s = if aplat { plural(self.parts.len(), "aplat", "aplats") } else { plural(self.parts.len(), "calque", "calques") };
         if elements > 0 || zones == 0 {
             s += &format!(", {}", plural(elements, "élément", "éléments"));
         }
@@ -376,6 +442,8 @@ impl MultiSel {
                     let n = c.vector.as_ref().map_or(0, |d| d.elements.len());
                     n == part.elements && !items.is_empty() && items.iter().all(|&i| i < n)
                 }
+                // (Un aplat est fait de pixels, même sous un trait vectoriel : il suffit que le dessin en ait un.)
+                (PartKind::Bitmap { .. }, Some(c)) if part.aplat => c.fond.is_some(),
                 (PartKind::Bitmap { .. }, Some(c)) => c.vector.is_none(),
                 _ => false,
             }
@@ -384,12 +452,12 @@ impl MultiSel {
 }
 
 pub(crate) fn vector_part(t: &Target, items: Vec<usize>) -> Part {
-    Part { layer: t.id, name: t.name.clone(), cel: t.cel, elements: t.elements, to_stage: t.to_stage, frame: t.frame, live: t.live, kind: PartKind::Vector { items } }
+    Part { layer: t.id, name: t.name.clone(), cel: t.cel, elements: t.elements, to_stage: t.to_stage, frame: t.frame, live: t.live, aplat: t.aplat, kind: PartKind::Vector { items } }
 }
 
 /// La part bitmap d'un calque : sa zone (`outline`, `mask`), pixels pas encore soulevés.
 pub(crate) fn bitmap_part(t: &Target, mask: PixelMask, outline: Vec<Vec<Pos2>>, lift: Option<Lift>) -> Part {
-    Part { layer: t.id, name: t.name.clone(), cel: t.cel, elements: 0, to_stage: t.to_stage, frame: t.frame, live: t.live, kind: PartKind::Bitmap { mask, outline, lift } }
+    Part { layer: t.id, name: t.name.clone(), cel: t.cel, elements: 0, to_stage: t.to_stage, frame: t.frame, live: t.live, aplat: t.aplat, kind: PartKind::Bitmap { mask, outline, lift } }
 }
 
 /// Ce que fait un geste de la boîte sur un calque : la transformation `a` (sur la feuille) vue
@@ -452,9 +520,11 @@ pub(crate) fn select_polygon(doc: &Document, targets: &Targets, poly: &[Pos2]) -
             if !items.is_empty() {
                 parts.push(vector_part(t, items));
             }
-        } else if let Some(mask) = PixelMask::from_polygons(std::slice::from_ref(&local), doc.width, doc.height) {
-            if mask_hits_pixels(&cel.raster, &mask) {
-                parts.push(bitmap_part(t, mask, vec![local], None));
+        } else if let Some(raster) = raster_of(doc, t.cel, t.aplat) {
+            if let Some(mask) = PixelMask::from_polygons(std::slice::from_ref(&local), doc.width, doc.height) {
+                if mask_hits_pixels(raster, &mask) {
+                    parts.push(bitmap_part(t, mask, vec![local], None));
+                }
             }
         }
     }
@@ -472,7 +542,7 @@ pub(crate) fn select_everything(doc: &Document, targets: &Targets) -> Vec<Part> 
             if n > 0 {
                 parts.push(vector_part(t, (0..n).collect()));
             }
-        } else if let Some(r) = raster_content_rect(&cel.raster) {
+        } else if let Some(r) = raster_of(doc, t.cel, t.aplat).and_then(raster_content_rect) {
             let poly = pixsel::rect_polygon(r);
             if let Some(mask) = PixelMask::from_polygons(std::slice::from_ref(&poly), doc.width, doc.height) {
                 parts.push(bitmap_part(t, mask, vec![poly], None));
@@ -538,12 +608,13 @@ pub(crate) fn begin_gesture(doc: &mut Document, sel: &mut MultiSel, floats: &mut
                 snaps.push(Snap { part: k, before: Some(before), originals, before_raster: None, aff0: Affine::IDENTITY });
             }
             PartKind::Bitmap { mask, lift, .. } => {
-                let Some(c) = doc.cels.get_mut(&part.cel) else { continue };
-                let before = c.raster.clone();
+                // (Le trait du dessin, ou la peinture de sa strate d'aplat.)
+                let Some(raster) = raster_of_mut(doc, part.cel, part.aplat) else { continue };
+                let before = raster.clone();
                 if lift.is_none() {
-                    let floating = pixsel::lift(&mut c.raster, mask);
-                    let base = c.raster.clone();
-                    let placed = pixsel::stamp(&mut c.raster, &floating, &Affine::IDENTITY);
+                    let floating = pixsel::lift(raster, mask);
+                    let base = raster.clone();
+                    let placed = pixsel::stamp(raster, &floating, &Affine::IDENTITY);
                     *lift = Some(Lift { floating, base, aff: Affine::IDENTITY, placed });
                 }
                 let aff0 = lift.as_ref().map_or(Affine::IDENTITY, |l| l.aff);
@@ -554,20 +625,20 @@ pub(crate) fn begin_gesture(doc: &mut Document, sel: &mut MultiSel, floats: &mut
     snaps
 }
 
-/// Pose les pixels soulevés avec `aff` (à la place de la précédente) : les tuiles touchées.
-fn place_lift(c: &mut crate::document::Cel, l: &mut Lift, aff: Affine, dirty: &mut Vec<usize>) {
+/// Pose les pixels soulevés avec `aff` (à la place de la précédente) dans `raster` : les tuiles touchées. (La version du
+/// dessin est à l'appelant : `bump_version`.)
+fn place_lift(raster: &mut Raster, l: &mut Lift, aff: Affine, dirty: &mut Vec<usize>) {
     if let Some(r) = l.placed {
-        for idx in vector::tiles_in(&c.raster, r) {
-            c.raster.tiles[idx] = l.base.tiles[idx].clone();
+        for idx in vector::tiles_in(raster, r) {
+            raster.tiles[idx] = l.base.tiles[idx].clone();
             dirty.push(idx);
         }
     }
-    l.placed = pixsel::stamp(&mut c.raster, &l.floating, &aff);
+    l.placed = pixsel::stamp(raster, &l.floating, &aff);
     if let Some(r) = l.placed {
-        dirty.extend(vector::tiles_in(&c.raster, r));
+        dirty.extend(vector::tiles_in(raster, r));
     }
     l.aff = aff;
-    c.version += 1;
 }
 
 /// Chaque image du geste : la transformation `a` (sur la feuille) devient celle de chaque feuille
@@ -575,6 +646,7 @@ fn place_lift(c: &mut crate::document::Cel, l: &mut Lift, aff: Affine, dirty: &m
 /// tombent sur des pixels entiers (l'image reste nette). Rend les tuiles à rafraîchir.
 pub(crate) fn set_gesture(doc: &mut Document, sel: &mut MultiSel, floats: &mut [Flottante], snaps: &[Snap], a: &Affine, snap: bool) -> Vec<usize> {
     let mut dirty = Vec::new();
+    let panel = sel.panel;
     for s in snaps {
         let part = &mut sel.parts[s.part];
         let Some(mut delta) = layer_delta(&part.to_stage, a) else { continue };
@@ -591,9 +663,17 @@ pub(crate) fn set_gesture(doc: &mut Document, sel: &mut MultiSel, floats: &mut [
                     delta.tx = delta.tx.round();
                     delta.ty = delta.ty.round();
                 }
-                if let Some(c) = doc.cels.get_mut(&part.cel) {
-                    place_lift(c, l, s.aff0.then(&delta), &mut dirty);
+                let mut tiles = Vec::new();
+                if let Some(r) = raster_of_mut(doc, part.cel, part.aplat) {
+                    place_lift(r, l, s.aff0.then(&delta), &mut tiles);
                 }
+                if part.aplat {
+                    // L'aplat se voit en direct sur les tuiles changées, sans changer de version (elle change au lâcher).
+                    patch_aplat(doc, panel, part.layer, part.cel, &tiles);
+                } else {
+                    bump_version(doc, part.cel, false);
+                }
+                dirty.extend(tiles);
             }
             PartKind::Bitmap { .. } => {}
         }
@@ -615,8 +695,11 @@ pub(crate) fn commit_gesture(doc: &mut Document, sel: &mut MultiSel, floats: &mu
                 delta.tx = delta.tx.round();
                 delta.ty = delta.ty.round();
             }
-            if let Some(c) = doc.cels.get_mut(&part.cel) {
-                place_lift(c, l, s.aff0.then(&delta), &mut Vec::new());
+            if let Some(r) = raster_of_mut(doc, part.cel, part.aplat) {
+                place_lift(r, l, s.aff0.then(&delta), &mut Vec::new());
+            }
+            if !part.aplat {
+                bump_version(doc, part.cel, false);
             }
         }
         let part = &sel.parts[s.part];
@@ -632,10 +715,14 @@ pub(crate) fn commit_gesture(doc: &mut Document, sel: &mut MultiSel, floats: &mu
                 }
             }
             PartKind::Bitmap { .. } => {
-                let (Some(before), Some(c)) = (s.before_raster, doc.cels.get(&part.cel)) else { continue };
-                let tiles = changed_tiles(&before, &c.raster);
+                let (Some(before), Some(raster)) = (s.before_raster, raster_of(doc, part.cel, part.aplat)) else { continue };
+                let tiles = changed_tiles(&before, raster);
                 if !tiles.is_empty() {
-                    edits.push(Edit::Tiles { cel: part.cel, tiles });
+                    edits.push(if part.aplat { Edit::FondTiles { cel: part.cel, tiles, coupe: false } } else { Edit::Tiles { cel: part.cel, tiles } });
+                    // L'aplat change de version au lâcher : il est alors refait en arrière-plan (celui qu'on voit est déjà juste).
+                    if part.aplat {
+                        bump_version(doc, part.cel, true);
+                    }
                 }
             }
         }
@@ -660,6 +747,24 @@ pub(crate) fn run_gesture(doc: &mut Document, sel: &mut MultiSel, floats: &mut V
 pub(crate) fn delete_selection(doc: &mut Document, sel: &MultiSel) -> Vec<Edit> {
     let mut edits = Vec::new();
     for part in &sel.parts {
+        if let PartKind::Bitmap { mask, lift, .. } = &part.kind {
+            // Une zone : les pixels du dessin, ou ceux de sa strate d'aplat.
+            let Some(raster) = raster_of_mut(doc, part.cel, part.aplat) else { continue };
+            let before = raster.clone();
+            match lift {
+                // Les pixels soulevés étaient les seuls de la zone : le dessin sans eux.
+                Some(l) => *raster = l.base.clone(),
+                None => {
+                    pixsel::lift(raster, mask);
+                }
+            }
+            let tiles = changed_tiles(&before, raster);
+            bump_version(doc, part.cel, part.aplat);
+            if !tiles.is_empty() {
+                edits.push(if part.aplat { Edit::FondTiles { cel: part.cel, tiles, coupe: false } } else { Edit::Tiles { cel: part.cel, tiles } });
+            }
+            continue;
+        }
         let Some(c) = doc.cels.get_mut(&part.cel) else { continue };
         match &part.kind {
             PartKind::Vector { items } => {
@@ -676,21 +781,8 @@ pub(crate) fn delete_selection(doc: &mut Document, sel: &MultiSel) -> Vec<Edit> 
                 c.rerender();
                 edits.push(Edit::Vector { cel: part.cel, drawing: before });
             }
-            PartKind::Bitmap { mask, lift, .. } => {
-                let before = c.raster.clone();
-                match lift {
-                    // Les pixels soulevés étaient les seuls de la zone : le dessin sans eux.
-                    Some(l) => c.raster = l.base.clone(),
-                    None => {
-                        pixsel::lift(&mut c.raster, mask);
-                    }
-                }
-                let tiles = changed_tiles(&before, &c.raster);
-                c.version += 1;
-                if !tiles.is_empty() {
-                    edits.push(Edit::Tiles { cel: part.cel, tiles });
-                }
-            }
+            // (Les zones sont faites plus haut.)
+            PartKind::Bitmap { .. } => {}
         }
     }
     edits
@@ -721,11 +813,11 @@ impl MultiClip {
 /// Les pixels d'une zone bitmap, tels qu'affichés (déplacés s'ils ont été soulevés).
 fn part_pixels(doc: &Document, part: &Part) -> Option<Floating> {
     let PartKind::Bitmap { mask, lift, .. } = &part.kind else { return None };
-    let c = doc.cels.get(&part.cel)?;
+    let src = raster_of(doc, part.cel, part.aplat)?;
     let f = match lift {
-        None => pixsel::copy(&c.raster, mask),
+        None => pixsel::copy(src, mask),
         Some(l) => {
-            let mut r = Raster::new(c.raster.width, c.raster.height);
+            let mut r = Raster::new(src.width, src.height);
             let placed = pixsel::stamp(&mut r, &l.floating, &l.aff)?;
             let m = PixelMask::from_polygons(&[pixsel::rect_polygon(placed)], r.width, r.height)?;
             pixsel::lift(&mut r, &m)
@@ -763,6 +855,23 @@ pub(crate) fn paste_clip(doc: &mut Document, targets: &Targets, clip: &MultiClip
     for (layer, what) in &clip.items {
         let Some(t) = targets.list.iter().find(|t| t.id == *layer) else { continue };
         let (w, h) = (doc.width, doc.height);
+        if let (ClipWhat::Pixels(f), false) = (what, t.vector) {
+            // Des pixels : dans le dessin, ou dans la strate d'aplat de ce dessin.
+            let Some(raster) = raster_of_mut(doc, t.cel, t.aplat) else { continue };
+            let before = raster.clone();
+            let base = raster.clone();
+            let placed = pixsel::stamp(raster, f, &Affine::IDENTITY);
+            let tiles = changed_tiles(&before, raster);
+            bump_version(doc, t.cel, t.aplat);
+            if !tiles.is_empty() {
+                edits.push(if t.aplat { Edit::FondTiles { cel: t.cel, tiles, coupe: false } } else { Edit::Tiles { cel: t.cel, tiles } });
+            }
+            let poly = pixsel::rect_polygon(f.bounds());
+            let Some(mask) = PixelMask::from_polygons(std::slice::from_ref(&poly), w, h) else { continue };
+            let lift = Lift { floating: f.clone(), base, aff: Affine::IDENTITY, placed };
+            parts.push(bitmap_part(t, mask, vec![poly], Some(lift)));
+            continue;
+        }
         let Some(c) = doc.cels.get_mut(&t.cel) else { continue };
         match what {
             ClipWhat::Vector(elements) if t.vector => {
@@ -777,20 +886,7 @@ pub(crate) fn paste_clip(doc: &mut Document, targets: &Targets, clip: &MultiClip
                 part.elements = start + elements.len();
                 parts.push(part);
             }
-            ClipWhat::Pixels(f) if !t.vector => {
-                let before = c.raster.clone();
-                let base = c.raster.clone();
-                let placed = pixsel::stamp(&mut c.raster, f, &Affine::IDENTITY);
-                c.version += 1;
-                let poly = pixsel::rect_polygon(f.bounds());
-                let Some(mask) = PixelMask::from_polygons(std::slice::from_ref(&poly), w, h) else { continue };
-                let tiles = changed_tiles(&before, &c.raster);
-                if !tiles.is_empty() {
-                    edits.push(Edit::Tiles { cel: t.cel, tiles });
-                }
-                let lift = Lift { floating: f.clone(), base, aff: Affine::IDENTITY, placed };
-                parts.push(bitmap_part(t, mask, vec![poly], Some(lift)));
-            }
+            // (Les pixels sont faits plus haut.)
             _ => {}
         }
     }

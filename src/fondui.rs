@@ -46,7 +46,8 @@ impl App {
             self.select_layer(li);
         }
         self.aplat_cible = Some(id);
-        if !matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser | Tool::Fill | Tool::Cutter) {
+        // (L'outil Sélection reste : il prend les pixels de l'aplat et la boîte les transforme, `multitools.rs`.)
+        if !matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser | Tool::Fill | Tool::Cutter | Tool::Select) {
             self.set_tool(Tool::Brush);
         }
         self.status = self.aplat_indication();
@@ -59,6 +60,7 @@ impl App {
             Tool::Fill => "clic : remplir la zone fermée par le trait, sous le trait",
             Tool::Cutter => "clic : retirer la zone fermée de l'aplat",
             Tool::Eraser => "la gomme coupe l'aplat",
+            Tool::Select => "lasso, rectangle, clic : prendre les pixels de l'aplat, la boîte les déplace, les met à l'échelle, les tourne (Ctrl+A : tout, sur plusieurs clés aussi)",
             _ => "peindre sous le trait, dans la forme (recoud l'aplat coupé)",
         };
         format!("Aplat de {nom} · {quoi} · clic sur le calque : revenir au trait")

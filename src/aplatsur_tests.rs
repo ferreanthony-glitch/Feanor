@@ -252,3 +252,268 @@ fn paint_on_aplat_does_not_divert_the_eraser_or_a_colour_layer() {
     app.set_tool(Tool::Fill);
     assert_eq!(app.sur_aplat_cible(), None);
 }
+
+// ------------------------------------------------------------------------------------ sélectionner et transformer l'aplat
+
+use crate::document::{CelId, Layer, LayerKind, Strate};
+use crate::multisel::{self, PartKind};
+use crate::fond::FondReglages;
+use crate::montagekeys::KeyRef;
+use crate::raster::Raster;
+use eframe::egui::vec2;
+
+const VERT: Color32 = Color32::from_rgb(10, 200, 10);
+
+fn remplir(r: &mut Raster, x0: usize, y0: usize, x1: usize, y1: usize, c: Color32) {
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let i = r.tile_index_of(x, y);
+            r.tile_mut(i)[(y % crate::raster::TILE) * crate::raster::TILE + x % crate::raster::TILE] = c;
+        }
+    }
+}
+
+/// Un calque « A » (bitmap) aux dessins des images 0 à 4, 5 à 9 et 10 à 19 (trois clés). Chaque dessin a un anneau noir (le
+/// trait), un aplat dont la peinture est un rectangle vert décalé selon la clé. La sous-ligne de l'aplat est choisie.
+struct AplatFix {
+    app: App,
+    panel: u64,
+    layer: u64,
+    cels: Vec<CelId>,
+}
+
+fn aplat_fix(name: &str) -> AplatFix {
+    let dir = std::env::temp_dir().join(format!("shot-aplatsel-{name}-{}-{:?}", std::process::id(), std::thread::current().id()));
+    let _ = std::fs::create_dir_all(&dir);
+    crate::donnees::bac_a_sable(&dir);
+    let ctx = egui::Context::default();
+    let mut app = App::sans_fenetre(&ctx, None);
+    app.welcome = false;
+    let mut doc = Document::with_frame(200, 150, 24);
+    doc.panels[0].layers.clear();
+    doc.panels[0].set_length(20);
+    let mut layer = Layer::new("A", LayerKind::Bitmap);
+    layer.fond = Some(FondReglages::default());
+    let mut cels = Vec::new();
+    for (k, (from, to)) in [(0usize, 5usize), (5, 10), (10, 20)].into_iter().enumerate() {
+        let cel = doc.new_cel(LayerKind::Bitmap);
+        let c = doc.cels.get_mut(&cel).unwrap();
+        let black = Color32::from_rgb(0, 0, 0);
+        remplir(&mut c.raster, 20, 20, 100, 23, black);
+        remplir(&mut c.raster, 20, 77, 100, 80, black);
+        remplir(&mut c.raster, 20, 20, 23, 80, black);
+        remplir(&mut c.raster, 97, 20, 100, 80, black);
+        let mut s = Strate::new(200, 150);
+        remplir(&mut s.peinture.raster, 40 + k * 6, 35, 70 + k * 6, 55, VERT);
+        c.fond = Some(Box::new(s));
+        for f in from..to {
+            layer.set(f, Some(cel));
+        }
+        cels.push(cel);
+    }
+    let id = layer.id;
+    doc.panels[0].layers.push(layer);
+    let panel = doc.panels[0].id;
+    app.doc = doc;
+    app.cur_panel = 0;
+    app.cur_layer = 0;
+    app.cur_frame = 0;
+    app.tool = Tool::Select;
+    app.aplat_cible = Some(id);
+    AplatFix { app, panel, layer: id, cels }
+}
+
+impl AplatFix {
+    fn choose(&mut self, starts: &[usize]) {
+        self.app.key_sel = starts.iter().map(|&s| KeyRef { panel: self.panel, layer: self.layer, start: s }).collect();
+    }
+
+    fn peinture(&self, k: usize) -> &Raster {
+        &self.app.doc.cels[&self.cels[k]].fond.as_ref().expect("aplat").peinture.raster
+    }
+
+    fn vert(&self, k: usize, x: usize, y: usize) -> bool {
+        self.peinture(k).get(x, y) == VERT
+    }
+
+    fn trait_(&self, k: usize) -> Vec<Color32> {
+        self.app.doc.cels[&self.cels[k]].raster.to_flat()
+    }
+}
+
+#[test]
+fn the_selection_tool_takes_the_pixels_of_the_aplat_when_its_sub_row_is_the_target() {
+    let mut f = aplat_fix("un");
+    assert!(f.app.aplat_en_cible() && f.app.aplat_strate_selection() && f.app.multi_wanted());
+    assert!(f.app.aplat_indication().contains("pixels de l'aplat"), "la ligne du bas le dit : {}", f.app.aplat_indication());
+    // Cliquer la sous-ligne avec l'outil Sélection garde l'outil.
+    f.app.aplat_cible = None;
+    f.app.select_aplat(0);
+    assert_eq!(f.app.tool, Tool::Select);
+    assert!(f.app.aplat_strate_selection());
+    // Un lasso qui n'entoure que le trait (pas la peinture de l'aplat) ne prend rien : le trait n'est pas la cible.
+    f.app.multi_select_polygon(&[pos2(10.0, 10.0), pos2(30.0, 10.0), pos2(30.0, 90.0), pos2(10.0, 90.0)], false);
+    assert!(f.app.multi.sel.is_none(), "le trait n'est pas pris : {}", f.app.status);
+    // Un lasso autour de la peinture la prend.
+    f.app.multi_select_polygon(&[pos2(30.0, 30.0), pos2(80.0, 30.0), pos2(80.0, 60.0), pos2(30.0, 60.0)], false);
+    let sel = f.app.multi.sel.as_ref().expect("la peinture de l'aplat");
+    assert_eq!(sel.parts.len(), 1);
+    assert!(sel.parts[0].aplat && matches!(sel.parts[0].kind, PartKind::Bitmap { .. }));
+    assert!(sel.summary().contains("aplat"), "{}", sel.summary());
+    // Le rectangle fait pareil.
+    f.app.multi.sel = None;
+    f.app.select_rect = true;
+    f.app.multi.drag = Some(crate::multisel::MDrag::Rect { from: pos2(30.0, 30.0), to: pos2(80.0, 60.0), add: false });
+    f.app.multi_finish_drag();
+    assert!(f.app.multi.sel.as_ref().is_some_and(|s| s.parts.len() == 1 && s.parts[0].aplat), "{}", f.app.status);
+    // Un clic sur la peinture choisit sa forme ; un clic sur le trait ne choisit rien.
+    f.app.multi.sel = None;
+    assert!(f.app.multi_pick_object(pos2(50.0, 40.0), false));
+    assert!(f.app.multi.sel.as_ref().is_some_and(|s| s.parts[0].aplat));
+    f.app.multi.sel = None;
+    assert!(!f.app.multi_pick_object(pos2(21.0, 40.0), false), "le trait n'est pas un objet de l'aplat");
+    // Tout sélectionner : le rectangle de la peinture.
+    f.app.multi.sel = None;
+    f.app.select_all();
+    assert!(f.app.multi.sel.as_ref().is_some_and(|s| s.parts.len() == 1 && s.parts[0].aplat));
+    // Sans aplat (ou si l'on revient au trait) la sélection n'est plus la bonne.
+    f.app.aplat_cible = None;
+    f.app.multi_sync();
+    assert!(f.app.multi.sel.is_none(), "revenir au trait lâche la sélection de l'aplat");
+}
+
+#[test]
+fn moving_the_aplat_selection_never_touches_the_line_and_one_undo_restores_it() {
+    let mut f = aplat_fix("deplacer");
+    f.app.select_all();
+    let (trait0, replays) = (f.trait_(0), crate::vector::replay_count());
+    let n0 = noms(&f.app).len();
+    f.app.multi_nudge(vec2(20.0, 10.0));
+    assert!(f.vert(0, 70, 50) && !f.vert(0, 50, 40), "la peinture de l'aplat a bougé de (20, 10)");
+    assert_eq!(f.trait_(0), trait0, "le trait n'est pas touché");
+    assert_eq!(noms(&f.app).len(), n0 + 1, "une étape : {:?}", noms(&f.app));
+    assert_eq!(noms(&f.app).last().map(String::as_str), Some("Déplacer"));
+    assert_eq!(crate::vector::replay_count(), replays, "aucun rejeu du moteur des brosses");
+    // La version de la strate a changé : l'aplat affiché est refait.
+    f.app.run_action("edition.annuler");
+    assert!(f.vert(0, 50, 40) && !f.vert(0, 70, 50), "l'annulation rend la peinture");
+    assert_eq!(f.trait_(0), trait0);
+    f.app.run_action("edition.retablir");
+    assert!(f.vert(0, 70, 50), "rétablir la remet");
+}
+
+#[test]
+fn a_gesture_of_the_box_scales_and_rotates_the_aplat_with_no_replay_and_one_step() {
+    let mut f = aplat_fix("boite");
+    f.app.select_all();
+    let (trait0, replays) = (f.trait_(0), crate::vector::replay_count());
+    let before = f.peinture(0).to_flat();
+    let pivot = pos2(55.0, 45.0);
+    let a = crate::vector::Affine::rotate_about(pivot, 90f32.to_radians()).then(&crate::vector::Affine::scale_about(pivot, 1.0, 1.0));
+    // Le geste en deux temps, comme la souris : la pose à chaque image (sans rien rejouer), puis le lâcher.
+    let n0 = noms(&f.app).len();
+    let sel = f.app.multi.sel.as_mut().unwrap();
+    let mut floats = Vec::new();
+    let snaps = multisel::begin_gesture(&mut f.app.doc, sel, &mut floats);
+    assert!(floats.is_empty(), "des pixels, pas de feuille vectorielle");
+    let dirty = multisel::set_gesture(&mut f.app.doc, sel, &mut floats, &snaps, &a, false);
+    assert!(!dirty.is_empty());
+    let edits = multisel::commit_gesture(&mut f.app.doc, sel, &mut floats, snaps, &a);
+    assert_eq!(edits.len(), 1);
+    assert!(matches!(edits[0], crate::history::Edit::FondTiles { coupe: false, .. }), "l'étape est celle de l'aplat");
+    f.app.history.push(crate::history::Edit::Group(edits));
+    assert_eq!(noms(&f.app).len(), n0 + 1);
+    assert_ne!(f.peinture(0).to_flat(), before, "la peinture a tourné");
+    assert_eq!(f.trait_(0), trait0);
+    assert_eq!(crate::vector::replay_count(), replays);
+    // Le rectangle de 30 × 20 tourné de 90° autour de son centre : 20 × 30.
+    assert!(f.vert(0, 55, 33) && f.vert(0, 55, 56) && !f.vert(0, 42, 45), "tourné de 90° autour de son centre");
+}
+
+#[test]
+fn several_chosen_keys_move_the_aplat_of_every_key_in_one_undo_step() {
+    let mut f = aplat_fix("cles");
+    f.choose(&[0, 5, 10]);
+    assert!(f.app.keys_mode());
+    f.app.select_all();
+    let sel = f.app.multi.sel.as_ref().expect("une sélection sur les trois aplats");
+    assert_eq!(sel.parts.len(), 3);
+    assert!(sel.parts.iter().all(|p| p.aplat) && sel.by_keys);
+    assert_eq!(sel.summary(), "3 aplats, 3 zones", "{}", sel.summary());
+    let traits: Vec<Vec<Color32>> = (0..3).map(|k| f.trait_(k)).collect();
+    let n0 = noms(&f.app).len();
+    f.app.multi_nudge(vec2(15.0, 5.0));
+    for k in 0..3 {
+        assert!(f.vert(k, 50 + k * 6 + 15, 40 + 5) && !f.vert(k, 50 + k * 6, 40), "l'aplat de la clé {k} a bougé de (15, 5)");
+        assert_eq!(f.trait_(k), traits[k], "le trait de la clé {k} n'est pas touché");
+    }
+    assert_eq!(noms(&f.app).len(), n0 + 1, "une seule étape pour les trois : {:?}", noms(&f.app));
+    f.app.run_action("edition.annuler");
+    for k in 0..3 {
+        assert!(f.vert(k, 50 + k * 6, 40) && !f.vert(k, 80 + k * 6, 45), "l'annulation rend l'aplat de la clé {k}");
+    }
+    // Un seul dessin sans aplat : écarté, avec sa raison.
+    f.app.doc.cels.get_mut(&f.cels[2]).unwrap().fond = None;
+    let t = f.app.multi_targets();
+    assert_eq!(t.list.len(), 2);
+    assert!(t.skipped_text().is_some_and(|s| s.contains("sans aplat")), "{:?}", t.skipped_text());
+}
+
+#[test]
+fn deleting_the_aplat_selection_empties_the_aplat_not_the_line() {
+    let mut f = aplat_fix("suppr");
+    f.choose(&[0, 5]);
+    f.app.select_all();
+    let traits: Vec<Vec<Color32>> = (0..3).map(|k| f.trait_(k)).collect();
+    f.app.multi_delete();
+    assert_eq!(peint(&f.peinture(0).to_flat()), 0);
+    assert_eq!(peint(&f.peinture(1).to_flat()), 0);
+    assert!(peint(&f.peinture(2).to_flat()) > 0, "la clé 10 n'était pas choisie");
+    for k in 0..3 {
+        assert_eq!(f.trait_(k), traits[k]);
+    }
+    f.app.run_action("edition.annuler");
+    assert!(f.vert(0, 50, 40) && f.vert(1, 56, 40));
+}
+
+#[test]
+fn the_keys_of_a_colour_layer_select_and_move_together_with_the_colour_layer_as_target() {
+    let mut f = aplat_fix("couleur");
+    // Un calque de couleur sous le calque « A » ; l'aplat de strate n'est plus visé.
+    f.app.aplat_cible = None;
+    f.app.cur_layer = 0;
+    f.app.new_colour_layer();
+    f.app.sync_couleurs();
+    let colour = f.app.cur_layer;
+    assert!(f.app.layers()[colour].couleur.is_some());
+    let colour_id = f.app.layers()[colour].id;
+    let mut cels = Vec::new();
+    for fr in [0usize, 5, 10] {
+        let c = f.app.layers()[colour].frames[fr].expect("la couleur suit le trait");
+        remplir(&mut f.app.doc.cels.get_mut(&c).unwrap().raster, 30, 30, 50, 45, VERT);
+        cels.push(c);
+    }
+    // Les clés choisies sont celles du calque de trait : la couleur est visée, ce sont ses dessins qui bougent.
+    f.choose(&[0, 5, 10]);
+    f.app.tool = Tool::Select;
+    assert!(f.app.keys_mode());
+    f.app.select_all();
+    let sel = f.app.multi.sel.as_ref().expect("la sélection sur les trois dessins de couleur");
+    assert_eq!(sel.parts.len(), 3);
+    assert!(sel.parts.iter().all(|p| p.layer == colour_id && !p.aplat), "ce sont les dessins du calque de couleur");
+    let traits: Vec<Vec<Color32>> = (0..3).map(|k| f.trait_(k)).collect();
+    let n0 = noms(&f.app).len();
+    f.app.multi_nudge(vec2(10.0, 10.0));
+    for c in &cels {
+        let r = &f.app.doc.cels[c].raster;
+        assert!(r.get(45, 45) == VERT && r.get(32, 32).a() == 0, "la couleur a bougé de (10, 10)");
+    }
+    for k in 0..3 {
+        assert_eq!(f.trait_(k), traits[k], "le trait n'est pas touché");
+    }
+    assert_eq!(noms(&f.app).len(), n0 + 1, "une étape : {:?}", noms(&f.app));
+    f.app.run_action("edition.annuler");
+    for c in &cels {
+        assert!(f.app.doc.cels[c].raster.get(32, 32) == VERT);
+    }
+}

@@ -43,14 +43,38 @@ impl App {
 
     /// Le lasso prend-il sur plusieurs calques ? L'outil Sélection, et plusieurs calques choisis.
     pub(crate) fn multi_wanted(&self) -> bool {
-        self.tool == Tool::Select && (self.chosen_layers().len() >= 2 || self.multi.sel.is_some() || self.keys_mode())
+        self.tool == Tool::Select && (self.chosen_layers().len() >= 2 || self.multi.sel.is_some() || self.keys_mode() || self.aplat_strate_selection())
+    }
+
+    /// L'outil Sélection travaille l'**aplat** du dessin (sa strate, `fond.rs`) : la sous-ligne de l'aplat du calque courant
+    /// est la cible (Anthony, 2026-10-28). Le clic, le lasso, le rectangle et « Tout sélectionner » prennent alors les
+    /// pixels de l'aplat, que la boîte déplace, met à l'échelle et tourne comme le trait ; le trait n'est pas touché. Ce
+    /// chemin est celui de la sélection sur plusieurs calques (`multisel.rs`), qui sait déjà plusieurs clés d'un coup.
+    /// (Un calque de couleur est un calque bitmap ordinaire : il n'a besoin de rien de plus.)
+    pub(crate) fn aplat_strate_selection(&self) -> bool {
+        self.tool == Tool::Select && self.aplat_en_cible()
     }
 
     /// Les clés choisies du plan courant, calque (id) et image de début : de quoi prendre leurs
-    /// dessins ensemble.
+    /// dessins ensemble. L'aplat étant visé, seules comptent les clés du calque dont c'est l'aplat : celles de son calque de
+    /// trait aussi quand c'est un calque de couleur (elles se lisent sur la couleur qui les suit).
     fn chosen_key_drawings(&self) -> Vec<(u64, usize)> {
         let Some(panel) = self.doc.panels.get(self.cur_panel).map(|p| p.id) else { return Vec::new() };
-        self.key_sel.iter().filter(|k| k.panel == panel).map(|k| (k.layer, k.start)).collect()
+        let keys = self.key_sel.iter().filter(|k| k.panel == panel).map(|k| (k.layer, k.start));
+        let Some(cur) = self.layers().get(self.cur_layer) else { return keys.collect() };
+        if self.aplat_strate_selection() {
+            return keys.filter(|k| k.0 == cur.id).collect();
+        }
+        match cur.couleur.as_ref().filter(|c| c.est_lie()) {
+            Some(c) if self.tool == Tool::Select => {
+                let (own, line) = (cur.id, c.trait_id);
+                let mut v: Vec<(u64, usize)> = keys.filter(|k| k.0 == own || k.0 == line).map(|k| (own, k.1)).collect();
+                v.sort_unstable();
+                v.dedup();
+                v
+            }
+            _ => keys.collect(),
+        }
     }
 
     /// Plusieurs clés sont choisies (dans le montage ou la timeline) : l'outil Sélection agit sur leurs
@@ -62,7 +86,7 @@ impl App {
 
     /// Les dessins des clés choisies, à prendre ensemble (`keys_mode`).
     fn key_targets(&self) -> Targets {
-        multisel::targets_for_keys(&self.doc, self.cur_panel, self.cur_frame, &self.chosen_key_drawings())
+        multisel::targets_for_keys_in(&self.doc, self.cur_panel, self.cur_frame, &self.chosen_key_drawings(), self.aplat_strate_selection())
     }
 
     /// Une sélection neuve sur les cibles de ce moment : sur des clés ou sur des calques.
@@ -97,6 +121,10 @@ impl App {
     pub(crate) fn multi_targets(&self) -> Targets {
         if self.keys_mode() {
             return self.key_targets();
+        }
+        // L'aplat est la cible : celui du calque courant seul.
+        if self.aplat_strate_selection() {
+            return multisel::targets_aplat(&self.doc, self.cur_panel, self.cur_frame, &[self.cur_layer]);
         }
         let ranks = if self.multi.all_layers { self.all_layer_ranks() } else { self.chosen_layers() };
         multisel::targets(&self.doc, self.cur_panel, self.cur_frame, &ranks)
@@ -631,7 +659,10 @@ impl App {
         let chosen: Vec<u64> = self.chosen_layers().iter().filter_map(|&li| self.layers().get(li).map(|l| l.id)).collect();
         // Sur des clés : leurs calques comptent comme choisis ; une seule clé (ou Échap) : fini.
         let keyed: Vec<u64> = if self.keys_mode() { self.chosen_key_drawings().iter().map(|k| k.0).collect() } else { Vec::new() };
+        // La cible (le trait ou l'aplat) a changé depuis la prise : la sélection n'est plus la bonne.
+        let aplat = self.aplat_strate_selection();
         let valid = sel.still_valid(&self.doc, self.cur_panel, self.cur_frame)
+            && sel.parts.iter().all(|p| p.aplat == aplat)
             && sel.parts.iter().all(|p| chosen.contains(&p.layer) || keyed.contains(&p.layer))
             && !(sel.by_keys && !self.keys_mode());
         if !valid {
@@ -764,7 +795,16 @@ impl App {
         use egui_phosphor::regular as ph;
         let targets = self.multi_targets();
         let chosen = self.chosen_layers().len();
-        if self.keys_mode() {
+        if self.aplat_strate_selection() {
+            let nom = self.layers().get(self.cur_layer).map(|l| l.name.clone()).unwrap_or_default();
+            if self.keys_mode() {
+                let (n, m) = (self.chosen_key_drawings().len(), targets.list.len());
+                ui.label(egui::RichText::new(format!("Aplat de {nom} : {n} clés, le geste s'applique aux aplats de {m} dessins.")).strong());
+                ui.label(egui::RichText::new("Échap : revenir à l'aplat du dessin courant seul.").small().weak());
+            } else {
+                ui.label(egui::RichText::new(format!("Aplat de {nom} : la sélection prend ses pixels, pas le trait.")).strong());
+            }
+        } else if self.keys_mode() {
             let (n, m) = (self.chosen_key_drawings().len(), targets.list.len());
             ui.label(egui::RichText::new(format!("{n} clés : le geste s'applique aux {m} dessins.")).strong());
             ui.label(egui::RichText::new("Échap : revenir au dessin courant seul.").small().weak());
