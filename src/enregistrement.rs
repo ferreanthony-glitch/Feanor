@@ -134,14 +134,17 @@ impl App {
         let Some(chosen) = dialog.save_file() else {
             return false;
         };
-        let (_, manifest) = project::target_for(&chosen);
-        // (Le projet ouvert sous son ancien nom, `Bus/Bus.pelure`, enregistré sous `Bus/Bus.shot` : c'est lui, pas un autre.)
-        let courant = self.path.as_deref().map(|p| if self.partage.is_none() { project::manifeste_shot(p) } else { p.to_path_buf() });
-        if let Err(e) = project::check_target(&manifest, courant.as_deref()) {
-            self.status = format!("Enregistrement annulé : {e}");
-            return false;
+        // (La décision — écrire, demander à remplacer, refuser — se prend à part de la fenêtre de fichiers : `remplacer.rs`.)
+        self.enregistrer_sous_vers(&chosen, then)
+    }
+
+    /// « Enregistrer » d'une boîte « Modifications non enregistrées » : l'écriture, puis `action`. Si rien ne part, la
+    /// boîte ne disparaît jamais en silence : une fenêtre dit pourquoi (refus, erreur, projet existant à remplacer), ou, si
+    /// la fenêtre de fichiers a été fermée sans choisir, la question revient. Le projet reste ouvert et modifié.
+    pub(crate) fn enregistrer_puis(&mut self, action: Pending) {
+        if !self.save_then(Some(action)) {
+            self.rendre_la_question(Some(action));
         }
-        self.start_save(manifest, then)
     }
 
     /// Enregistre dans `manifest` et attend la fin (création d'un projet neuf, déjà minuscule).
@@ -217,6 +220,8 @@ impl App {
     /// et l'adoption du résultat dès que l'écriture est finie.
     pub(crate) fn tick_save(&mut self, ctx: &egui::Context) {
         self.save_error_window(ctx);
+        // « Un projet existe déjà ici » (`remplacer.rs`).
+        self.remplacement_fenetre(ctx);
         let Some(job) = &self.saving else { return };
         if !job.handle.is_finished() {
             if self.after_save.is_some() && job.started.elapsed() >= DELAI_FENETRE {

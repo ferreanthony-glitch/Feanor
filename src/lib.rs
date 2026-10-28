@@ -60,6 +60,9 @@ mod collage;
 #[cfg(test)]
 mod collage_tests;
 mod enregistrement;
+mod remplacer;
+#[cfg(test)]
+mod remplacer_tests;
 #[cfg(test)]
 mod enregistrement_tests;
 #[cfg(test)]

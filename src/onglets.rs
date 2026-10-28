@@ -251,6 +251,7 @@ etat_projet! {
     save_queue: Option<(PathBuf, Option<Pending>)> = None,
     after_save: Option<Pending> = None,
     save_error: Option<String> = None,
+    remplacement: Option<crate::remplacer::Remplacement> = None,
     open_job: Option<crate::ouverture::OpenJob> = None,
     video_import: Option<crate::videoui::VideoImport> = None,
     recovery: Option<crate::recovery::Recovery> = None,
@@ -968,10 +969,13 @@ impl App {
                 break;
             }
         }
-        // On revient où l'on était.
-        if let Some(r) = self.rang_onglet(garde) {
-            if r != self.actif {
-                self.bascule(r, false);
+        // On revient où l'on était — sauf si un enregistrement n'est pas parti : ses fenêtres (erreur, projet existant à
+        // remplacer, choix du fichier) parlent de l'onglet affiché, qui y reste.
+        if ok {
+            if let Some(r) = self.rang_onglet(garde) {
+                if r != self.actif {
+                    self.bascule(r, false);
+                }
             }
         }
         ok
@@ -1031,6 +1035,11 @@ impl App {
                 };
                 if self.enregistrer_les_onglets(sauf) {
                     self.groupe = Some(Groupe { attente: true, ..g });
+                } else {
+                    // Un enregistrement n'est pas parti (refus, erreur, projet existant, fenêtre de fichiers fermée) : la
+                    // boîte reste, avec ce qui n'est pas encore enregistré. Rien ne se ferme.
+                    let restes: Vec<(u64, String)> = self.onglets_modifies().into_iter().filter(|(id, _)| !matches!(g.action, ActionGroupe::FermerAutres(garde) if garde == *id)).collect();
+                    self.groupe = Some(Groupe { onglets: if restes.is_empty() { g.onglets.clone() } else { restes }, attente: false, action: g.action });
                 }
             }
             1 => self.faire_l_action_du_groupe(g.action),
@@ -1085,7 +1094,21 @@ impl App {
             if i == self.actif {
                 self.finish_save_on_exit();
                 if let Some(r) = self.recovery.take() {
-                    r.close();
+                    // Un projet modifié que personne n'a confirmé d'abandonner (la fenêtre s'est fermée malgré la question :
+                    // le système, un plantage de l'affichage) : sa copie de secours reste, mise à jour une dernière fois.
+                    if self.modified && !self.sortie_confirmee {
+                        let snap = crate::recovery::Snapshot {
+                            doc: &self.doc,
+                            serial: self.history.serial(),
+                            modified: true,
+                            title: nom_de(self.path.as_deref(), self.import_source.as_deref(), false),
+                            project: self.path.clone(),
+                            project_written: &self.written,
+                        };
+                        r.copie_finale(snap);
+                    } else {
+                        r.close();
+                    }
                 }
                 // Un film partagé : ce qu'on tient est rendu avant de quitter.
                 if let Some(mut s) = self.partage.take() {
@@ -1096,7 +1119,19 @@ impl App {
                     s.attendre();
                 }
                 if let Some(r) = e.recovery.take() {
-                    r.close();
+                    if e.modified && !self.sortie_confirmee {
+                        let snap = crate::recovery::Snapshot {
+                            doc: &e.doc,
+                            serial: e.history.serial(),
+                            modified: true,
+                            title: nom_de(e.path.as_deref(), e.import_source.as_deref(), false),
+                            project: e.path.clone(),
+                            project_written: &e.written,
+                        };
+                        r.copie_finale(snap);
+                    } else {
+                        r.close();
+                    }
                 }
                 if let Some(mut s) = e.partage.take() {
                     s.fermer();
