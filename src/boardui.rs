@@ -1793,6 +1793,10 @@ impl App {
         self.version_menu(ui, i, true);
         ui.menu_button("Plus", |ui| {
             self.plan_color_menu(ui);
+            let n = self.board_selection().len();
+            if n > 1 {
+                self.action_item(ui, &format!("Nouvelle séquence avec les {n} plans choisis"), "sequence.nouvelle_avec_plans");
+            }
             item(self, ui, "Recadrer (outil Caméra)", &|a| a.set_tool(Tool::Camera));
             item(self, ui, "Réinitialiser le cadrage", &|a| a.run_action("camera.reinitialiser"));
         });

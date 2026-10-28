@@ -476,6 +476,10 @@ mod timeline_alt_tests;
 // Copier et coller les clés de dessins et les images.
 #[cfg(test)]
 mod timeline_cles_tests;
+// Nouvelle séquence avec les plans choisis.
+mod sequenceplans;
+#[cfg(test)]
+mod sequenceplans_tests;
 // Fusionner deux plans en glissant l'un sur l'autre dans le montage.
 mod fusionglisse;
 #[cfg(test)]

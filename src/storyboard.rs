@@ -505,6 +505,7 @@ impl App {
         let n = self.board_selection().len();
         if n > 1 {
             item(self, ui, &format!("Fusionner les {n} plans choisis"), "panneau.fusionner_choisis");
+            item(self, ui, &format!("Nouvelle séquence avec les {n} plans choisis"), "sequence.nouvelle_avec_plans");
         }
         item(self, ui, if n > 1 { "Retourner les plans choisis" } else { "Retourner le plan" }, "plan.retourner");
         ui.separator();
@@ -681,6 +682,11 @@ impl App {
             if n > 1 && ui.button(format!("Fusionner les {n} plans choisis")).on_hover_text("Ils doivent se suivre, dans une même séquence. Pas de repère aux jointures : leurs textes rejoignent ceux du plan.").clicked() {
                 ui.close_menu();
                 self.merge_chosen_panels();
+            }
+            // Plusieurs plans choisis : une séquence à eux (`sequenceplans.rs`).
+            if n > 1 && ui.button(format!("Nouvelle séquence avec les {n} plans choisis")).on_hover_text("Ils quittent leur séquence et forment une séquence neuve, dans l'ordre du film.").clicked() {
+                ui.close_menu();
+                self.new_sequence_from_chosen();
             }
         });
         // Les versions du plan (`planversui.rs`) : « Nouvelle version › » (en dupliquant la version en cours, ou en

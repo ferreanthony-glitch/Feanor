@@ -2235,7 +2235,7 @@ impl Document {
     }
 
     /// Remet en ordre, et renvoie le nouvel indice du panneau `id`.
-    fn normalize_keeping(&mut self, id: u64) -> usize {
+    pub(crate) fn normalize_keeping(&mut self, id: u64) -> usize {
         self.normalize();
         self.panels.iter().position(|p| p.id == id).unwrap_or(0)
     }

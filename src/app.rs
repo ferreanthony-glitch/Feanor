@@ -4395,6 +4395,7 @@ impl App {
             "panneau.couper" => self.split_current_panel(),
             "panneau.fusionner_suivant" => self.merge_next_panel(),
             "panneau.fusionner_choisis" => self.merge_chosen_panels(),
+            "sequence.nouvelle_avec_plans" => self.new_sequence_from_chosen(),
             "scene.couper" => self.split_current_panel(),
             "scene.joindre_precedente" => self.join_previous_scene(),
             "calque.copier" => self.copy_layer(),

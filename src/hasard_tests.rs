@@ -95,6 +95,7 @@ pub(crate) const COMMANDES: &[&str] = &[
     "panneau.fusionner_suivant",
     "panneau.fusionner_choisis",
     "sequence.nouvelle",
+    "sequence.nouvelle_avec_plans",
     "plan.nouveau_avant",
     "marque.basculer",
     "panneau.ajouter_image",
@@ -534,6 +535,7 @@ const GARDENT_LES_DESSINS: &[&str] = &[
     "Nouveau plan",
     "Nouvelle séquence",
     "Nouveau plan avant le plan courant",
+    "Nouvelle séquence avec les plans choisis",
 ];
 
 /// Les dessins montrés par les calques de dessin des plans, calques de couleur compris (pas le Décor, qu'une réunion peut remplacer,
