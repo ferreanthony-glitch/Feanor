@@ -5347,3 +5347,44 @@ La grille ne mesure que ses quelques boutons (une passe, pas de texture, pas de 
 ### Essais
 
 `monpanneau_tests.rs` (20) : ajouter et retirer un bouton (doublons refusés, brosse et gomme distinctes) ; réordonner ; séparateurs (entre deux boutons seulement, déplacés, retirés) ; renommer et nom libre d'un outil perso ; réglages écrits et relus (toutes les sortes de boutons, brosse comprise), fichier du poste relu par `Settings::load`, panneau vide non écrit et anciens réglages ; **commande inconnue, genre inconnu, table abîmée et outil disparu ignorés sans planter, les autres réglages lus** ; commande inconnue refusée à l'ajout ; **outil perso : capture puis restitution de l'outil, de la brosse et de la couleur** (crayon, pinceau, gomme, outil sans brosse, outil disparu, enregistrement avec nom libre, clic du bouton) ; bouton de brosse (prise, brosse disparue) ; bouton de commande (lance l'action du registre) ; l'entrée du clic droit n'existe que panneau ouvert, et l'ajout qu'elle demande ; icône habituelle (outil, barre, panneau, icône apprise seulement panneau ouvert) ; le panneau se dessine avec toutes les sortes de boutons, avec et sans noms, étroit et large, avec la recherche, et vide ; grille (retours à la ligne, séparateur jamais en tête de ligne) ; case visée par un glisser.
+
+---------------------------------------------------------------------------------------------------
+
+## 67. Enregistrer par-dessus un projet : remplacer sans rien perdre (2026-10-28, branche `enregistrer-par-dessus`)
+
+**Ce qui s'est passé (Anthony, 2026-10-28, une soirée perdue).** Un projet « Sans titre » jamais enregistré, plein de dessins. Fermeture, boîte « Modifications non enregistrées », « Enregistrer », la fenêtre de fichiers de Windows : il choisit « Mon film.shot » (un projet qui existe) et confirme le remplacement de Windows. SHOT **refusait** d'écrire sur un projet existant (`project::check_target`, voulu : ne jamais écraser un autre projet), mais ne le disait **que dans la barre d'état**, et la boîte « Modifications non enregistrées » avait déjà disparu : rien ne montrait que rien n'était enregistré. Le projet a ensuite été quitté, et la copie de secours effacée à la sortie.
+
+### Ce qui change
+
+- **Une vraie fenêtre, « Un projet existe déjà ici »** (`remplacer.rs`, la même pour un projet, son jumeau `.pelure`, ou un dossier qui a déjà `dessins/`) : « Un projet existe déjà ici : « Mon film » (dernier enregistrement : 26/10/2026 à 21:03). » avec trois boutons :
+  - **Remplacer** : ne supprime RIEN. Le dossier de l'ancien projet est renommé à côté, « Mon film (remplacé le 2026-10-28 22h45) » (un nom pris prend « 2 », « 3 »…), tel quel ; la fenêtre le dit d'avance. Le projet en cours est écrit à la place demandée, puis l'action en attente (fermer, quitter, ouvrir…) suit normalement.
+  - **Choisir un autre nom** : la fenêtre d'enregistrement se rouvre.
+  - **Annuler** : rien n'a changé, le projet reste ouvert et modifié, et la boîte « Modifications non enregistrées » revient.
+- **Refus nets, dans la fenêtre d'erreur** : le projet à remplacer est ouvert dans un autre onglet de SHOT ; ou c'est le projet de cet onglet (ou son dossier le contient) ; ou le renommage échoue (dossier tenu par un autre programme, droits) : « Impossible de remplacer « Mon film » : … Rien n'a été écrit ni effacé. » Rien n'est écrit ni fermé. Si l'écriture ne peut pas partir après le renommage, l'ancien dossier reprend sa place.
+- **La décision est séparée de la fenêtre de fichiers** (`App::decider_enregistrer_sous` reçoit le chemin choisi ; `enregistrer_sous_vers` agit) : `rfd` ne tourne pas dans les essais.
+
+### Ne plus jamais perdre en silence
+
+- **La boîte « Modifications non enregistrées » ne disparaît plus** quand « Enregistrer » ne part pas (`App::enregistrer_puis`) : un refus ou un échec ouvre la fenêtre d'erreur ; un projet existant ouvre la fenêtre « Un projet existe déjà ici » ; une fenêtre de fichiers fermée sans choisir ramène la question. Le projet reste ouvert et modifié, l'action est annulée (rien ne se ferme).
+- **« Enregistrer tout »** (plusieurs onglets, croix de la fenêtre, « Fermer les autres ») : si un enregistrement ne part pas, la boîte « Projets non enregistrés » reste (avec ce qui reste à enregistrer), et SHOT reste sur l'onglet concerné pour que ses fenêtres parlent de lui. Avant, cette boîte disparaissait aussi.
+- Pendant que la fenêtre « Un projet existe déjà ici » attend, une demande de quitter ou de fermer ne passe pas avant elle (`App::request`), et la croix de la fenêtre reste retenue (`CancelClose`) tant que le projet est modifié.
+
+### La copie de secours
+
+`recovery.rs` : la copie d'un projet n'est effacée (`Recovery::close`) que par un enregistrement réussi, ou par un abandon choisi (« Ne pas enregistrer », qui passe par `perform(Pending::Quit)` : `App::sortie_confirmee`). Si la fenêtre se ferme malgré tout avec un projet modifié (le système, un plantage de l'affichage : `on_exit` → `fermeture`), `fermer_tous_les_onglets` ne l'efface plus : `Recovery::copie_finale` attend la copie en cours, en fait une dernière du document tel qu'il est, et **garde** le dossier de la séance ; au prochain démarrage SHOT propose de la rouvrir (« SHOT s'est fermé sans enregistrer »). Même règle pour les onglets cachés.
+
+### Ce que je n'ai pas pu établir
+
+Anthony croit que la fenêtre « s'est fermée toute seule ». Dans le code, la fenêtre ne se ferme que par `perform(Pending::Quit)` (`allow_close`) ou par le système ; chaque chemin de la croix (`handle_close_request`) retient la fermeture tant qu'un projet est modifié, avant comme après ce chantier (essai : la croix après un refus est retenue, la question revient). Un départ non demandé reste possible (fermeture de session Windows, plantage de l'affichage) : c'est ce que la copie finale couvre désormais.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Nouveau projet (« Sans titre »), quelques traits, **croix de la fenêtre**, « Enregistrer », choisis **le projet « Mon film » existant** : la fenêtre « Un projet existe déjà ici » s'ouvre, avec la date de son dernier enregistrement. **Annuler** : la boîte « Modifications non enregistrées » revient, rien n'est fermé.
+2. Même chose, puis **Remplacer** : SHOT s'enregistre à la place, puis ferme. Dans « Documents », un dossier « Mon film (remplacé le … ) » contient l'ancien projet, qui s'ouvre normalement.
+3. Même chose, **Choisir un autre nom** : la fenêtre d'enregistrement se rouvre ; ferme-la sans choisir : la question revient.
+4. « Fichier > Fermer » (Ctrl+W) sur un projet sans titre : mêmes fenêtres, l'onglet ne se ferme qu'après l'enregistrement.
+5. Avec « Mon film » ouvert dans un autre onglet : le remplacer est refusé, avec la raison.
+
+### Essais
+
+`remplacer_tests.rs` : la décision (existant, jumeau `.pelure`, dossier à `dessins/` : on demande ; nom libre : on écrit ; rien n'est écrit) ; projet ouvert dans un autre onglet refusé ; **la suite d'Anthony** (croix, « Enregistrer », projet existant : la fenêtre s'ouvre, rien n'est écrit, la croix reste retenue, même avec la fenêtre de remplacement ouverte) ; **Remplacer** (ancien dossier renommé avec tout son contenu intact, nouveau projet écrit et lisible, l'action « Quitter » suit) ; deux remplacements dans la même minute (rien n'est écrasé) ; **Annuler** (rien n'a changé, la boîte revient, l'onglet reste) ; **Remplacer puis Fermer l'onglet** ; **renommage impossible** (un fichier tenu sans partage) : erreur claire, rien d'écrit, l'ancien projet intact ; **échec d'écriture pendant Quitter et Fermer l'onglet** (disque plein simulé) : projet ouvert et modifié, fenêtre d'erreur, la croix retenue et la question qui revient ; fenêtre de fichiers fermée sans choisir : la question revient ; deux onglets modifiés et croix : une seule boîte ; **la copie de secours reste** quand la fenêtre se ferme sur un projet modifié non confirmé (et contient le travail), est effacée après « Ne pas enregistrer » ou un enregistrement réussi ; la copie finale attend la copie en cours ; le nom du dossier remplacé et ses collisions. `Banc::fermer_la_fenetre` (`perf_tests.rs`) simule la croix (`close_requested`) et dit si SHOT l'a retenue (`CancelClose`).

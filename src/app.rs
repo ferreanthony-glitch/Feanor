@@ -895,6 +895,11 @@ pub struct App {
     pub(crate) after_save: Option<Pending>,
     /// Pourquoi le dernier enregistrement a échoué (fenêtre à fermer).
     pub(crate) save_error: Option<String>,
+    /// « Enregistrer sous » a visé un projet qui existe déjà : la fenêtre « Remplacer » attend la réponse (`remplacer.rs`).
+    pub(crate) remplacement: Option<crate::remplacer::Remplacement>,
+    /// Quitter a été confirmé (« Enregistrer » réussi, ou « Ne pas enregistrer » choisi). Sans cela, une fenêtre qui se
+    /// ferme malgré tout (le système, un plantage de l'affichage) ne doit pas effacer la copie de secours d'un projet modifié.
+    pub(crate) sortie_confirmee: bool,
     /// Change à chaque projet remplacé (`load_doc`) : un enregistrement ne s'adopte que pour le
     /// projet dont il est le cliché.
     pub(crate) doc_epoch: u64,
@@ -1353,6 +1358,8 @@ impl App {
             save_queue: None,
             after_save: None,
             save_error: None,
+            remplacement: None,
+            sortie_confirmee: false,
             doc_epoch: 0,
             show_help: false,
             allow_close: false,
@@ -1538,6 +1545,7 @@ impl App {
             || self.open_job.is_some()
             || self.after_save.is_some()
             || self.save_error.is_some()
+            || self.remplacement.is_some()
             || self.assign.is_some()
             || self.propagation.running()
             || self.coloriage.running()
@@ -3217,6 +3225,10 @@ impl App {
     pub(crate) fn request(&mut self, action: Pending) {
         self.end_stroke();
         self.playing = false;
+        // La fenêtre « Un projet existe déjà ici » attend sa réponse : la question est déjà posée, rien ne passe avant elle.
+        if self.remplacement.is_some() {
+            return;
+        }
         // Quitter : si d'autres onglets ont quelque chose à perdre, une seule boîte les liste tous (`onglets.rs`) ;
         // sinon la question est celle de toujours, pour le projet affiché.
         if matches!(action, Pending::Quit) && self.d_autres_onglets_a_perdre() {
@@ -3269,6 +3281,7 @@ impl App {
                 if self.quitter_arrete_un_export() {
                     return;
                 }
+                self.sortie_confirmee = true;
                 self.allow_close = true;
                 self.ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }

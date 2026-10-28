@@ -892,9 +892,7 @@ impl App {
                 });
             match choice {
                 // L'écriture se fait sur un autre fil : l'action suit à sa fin (`enregistrement.rs`).
-                Some(0) => {
-                    self.save_then(Some(action));
-                }
+                Some(0) => self.enregistrer_puis(action),
                 Some(1) => self.perform(action),
                 Some(_) => {}
                 None => self.pending = Some(action),

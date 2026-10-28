@@ -283,6 +283,23 @@ impl Recovery {
         }
     }
 
+    /// Fermeture d'un projet modifié que personne n'a confirmé d'abandonner : on attend la copie en cours, on en fait une
+    /// dernière du document tel qu'il est, et le dossier de la séance RESTE (verrou rendu) : au prochain démarrage, SHOT
+    /// propose de rouvrir la copie. Seuls un enregistrement réussi ou « Ne pas enregistrer » (`close`) l'effacent.
+    pub fn copie_finale(mut self, snap: Snapshot) {
+        if let Some(job) = self.job.take() {
+            let _ = job.join();
+        }
+        self.demandee = false;
+        self.start_copy(snap);
+        if let Some(job) = self.job.take() {
+            if job.join().is_ok_and(|r| r.is_ok()) {
+                self.info.copied = Some(now_secs());
+            }
+        }
+        self.write_info();
+    }
+
     /// Fermeture normale : on attend la copie en cours, puis on efface le dossier de la séance.
     pub fn close(mut self) {
         if let Some(job) = self.job.take() {

@@ -178,6 +178,10 @@ pub(crate) struct Banc {
     pub touches: Modifiers,
     /// Les dernières images : le réveil qu'elles ont laissé, et ce qui les avait demandées (`raison_du_reveil`).
     reveils_recents: std::collections::VecDeque<String>,
+    /// La prochaine image porte une demande de fermeture de la fenêtre (la croix de Windows) : `fermer_la_fenetre`.
+    demander_fermeture: bool,
+    /// L'application a répondu `CancelClose` à la dernière demande de fermeture : la fenêtre reste ouverte.
+    pub fermeture_retenue: bool,
 }
 
 /// Efface les dossiers `shot-perf-bac-*` du dossier temporaire plus vieux que `age` (date de modification).
@@ -241,7 +245,7 @@ pub(crate) fn banc_taille(doc: Document, avec_gpu: bool, largeur: u32, hauteur: 
             view_formats: &[],
         })
     });
-    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false, formes: Vec::new(), garder_formes: false, curseur: egui::CursorIcon::Default, crochet: false, touches: Modifiers::NONE, reveils_recents: Default::default() };
+    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false, formes: Vec::new(), garder_formes: false, curseur: egui::CursorIcon::Default, crochet: false, touches: Modifiers::NONE, reveils_recents: Default::default(), demander_fermeture: false, fermeture_retenue: false };
     b.attendre_pinceaux();
     b.chauffer(8);
     b.attendre_vignettes();
@@ -293,6 +297,14 @@ impl Banc {
         format!("\n  {}", self.reveils_recents.iter().cloned().collect::<Vec<_>>().join("\n  "))
     }
 
+    /// La croix de la fenêtre Windows : une image porte la demande de fermeture (`close_requested`). Rend vrai si
+    /// l'application la retient (`CancelClose`) ; faux si la fenêtre se serait fermée.
+    pub fn fermer_la_fenetre(&mut self) -> bool {
+        self.demander_fermeture = true;
+        self.image(Vec::new(), 1.0 / 60.0);
+        self.fermeture_retenue
+    }
+
     /// Quelques images pour que la mise en page se stabilise (egui mesure en deux passes).
     pub fn chauffer(&mut self, n: usize) {
         for _ in 0..n {
@@ -305,12 +317,19 @@ impl Banc {
         self.t += dt;
         let mut input = RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), self.taille)), time: Some(self.t), events, modifiers: self.touches, ..RawInput::default() };
         input.viewports.entry(ViewportId::ROOT).or_default().native_pixels_per_point = Some(1.0);
+        let fermeture = std::mem::take(&mut self.demander_fermeture);
+        if fermeture {
+            input.viewports.entry(ViewportId::ROOT).or_default().events.push(egui::ViewportEvent::Close);
+        }
         let t0 = Instant::now();
         let app = &mut self.app;
         if self.crochet {
             eframe::App::raw_input_hook(app, &self.ctx, &mut input);
         }
         let out = self.ctx.run(input, |ctx| app.frame(ctx));
+        if fermeture {
+            self.fermeture_retenue = out.viewport_output.get(&ViewportId::ROOT).is_some_and(|v| v.commands.iter().any(|c| matches!(c, egui::ViewportCommand::CancelClose)));
+        }
         let construction = t0.elapsed().as_secs_f64() * 1e3;
         let t1 = Instant::now();
         let ppp = out.pixels_per_point;
