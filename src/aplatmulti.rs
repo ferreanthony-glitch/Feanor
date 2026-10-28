@@ -577,8 +577,7 @@ impl App {
         true
     }
 
-    /// Essais : attend les résultats en route et les pose.
-    #[cfg(test)]
+    /// Attend les résultats en route et les pose : avant d'enregistrer (le fichier écrit les a), et dans les essais.
     pub(crate) fn attendre_aplat_multi(&mut self) {
         let debut = std::time::Instant::now();
         while self.aplat_travaux.en_route > 0 && debut.elapsed() < std::time::Duration::from_secs(60) {

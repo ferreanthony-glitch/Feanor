@@ -537,6 +537,27 @@ fn avec_calque_de_couleur(f: &mut AplatFix) -> (usize, Vec<CelId>) {
     (colour, cels)
 }
 
+/// Enregistrer juste après un pot sur plusieurs clés : le fichier écrit a l'aplat de toutes les clés (l'enregistrement attend
+/// le travail en route), rien n'arrive après lui.
+#[test]
+fn saving_right_after_a_multi_key_fill_waits_for_the_other_keys() {
+    let mut f = aplat_fix("pot-cles-enregistrer");
+    f.app.set_tool(Tool::Fill);
+    f.choose(&[0, 5, 10]);
+    f.app.color = [200, 10, 10];
+    f.app.fill_at(pos2(30.0, 70.0));
+    let dossier = std::env::temp_dir().join(format!("shot-aplat-enregistrer-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dossier);
+    std::fs::create_dir_all(&dossier).unwrap();
+    assert!(f.app.save_to_blocking(dossier.join("essai.shot")), "{}", f.app.status);
+    assert_eq!(f.app.aplat_travaux.en_route, 0, "plus rien en route après l'enregistrement");
+    for k in 0..3 {
+        assert_eq!(f.peinture(k).get(30, 70), ROUGE, "l'aplat de la clé {k} est rempli avant l'écriture");
+    }
+    assert!(!f.app.modified, "rien n'est arrivé après l'enregistrement");
+    let _ = std::fs::remove_dir_all(&dossier);
+}
+
 #[test]
 fn the_bucket_fills_the_same_zone_of_the_aplat_of_every_chosen_key_in_one_step() {
     let mut f = aplat_fix("pot-cles");

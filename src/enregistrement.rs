@@ -159,6 +159,8 @@ impl App {
         }
         // (Une zone bitmap qu'on vient de transformer : le dessin reçoit d'abord ses pixels à leur place, `pixtools.rs`.)
         self.flush_bitmap_float();
+        // (De même, l'aplat posé sur les autres clés en arrière-plan, `aplatmulti.rs` : quelques dixièmes de seconde au plus.)
+        self.attendre_aplat_multi();
         // Film partagé enregistré à sa place : seulement ce qu'on tient (`projet_partage.rs`). Ailleurs (« Enregistrer sous »), c'est
         // une copie à plat, comme un projet ordinaire.
         let partage_ici = self.partage.is_some() && self.path.as_ref() == Some(&manifest);
