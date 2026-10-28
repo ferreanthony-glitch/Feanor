@@ -695,6 +695,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("bruitage.ecouter", "Écouter (ou arrêter) le bruitage choisi", true, false),
     act("vue.suggestions_sonores", "Panneau Suggestions sonores (ouvrir / fermer)", true, false),
     act("suggestion.lire", "Lire le storyboard pour proposer des sons", true, false),
+    act("vue.mon_panneau", "Panneau Mon panneau, essai du Labo (ouvrir / fermer)", true, false),
     act("son.fondu_entree","Fondu d'entrée de l'extrait choisi (poser / retirer)", true, false),
     act("son.fondu_sortie", "Fondu de sortie de l'extrait choisi (poser / retirer)", true, false),
     act("son.enchaine", "Fondu enchaîné de l'extrait choisi avec le suivant (poser / retirer)", true, false),

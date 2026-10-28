@@ -183,6 +183,8 @@ const PARTAGES: &[&str] = &[
     "maximized_once", "clipboard", "montage_head_w", "snap_on", "length_field_active", "pen_pressure", "pen_touch", "input_time", "last_frame_time", "picking", "status", "new_dialog",
     "show_help", "allow_close", "export_transparent", "follow_frame", "following", "hover_canvas", "pending_keys", "assign", "keys_filter", "keymap", "title", "display_info", "gpu",
     "fusion_noms_auto", "quitter_prevenu", "confort", "collage", "onglets", "actif", "prochain_onglet", "secours_actif", "session_a_ecrire", "fermetures_d_onglets", "session_prete", "session_file", "session_affichee", "groupe",
+    // Mon panneau (essai du Labo) : un réglage du poste, le même dans tous les onglets.
+    "mon_panneau",
 ];
 
 /// Les noms des champs de `pub struct App`, lus dans `app.rs`.

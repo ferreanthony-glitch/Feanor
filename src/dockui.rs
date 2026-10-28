@@ -177,6 +177,7 @@ impl App {
             Pane::References => self.references_panel(ui),
             Pane::Personnages => self.personnages_panel(ui),
             Pane::Vignettes => self.vignettes_panneau(ui),
+            Pane::MonPanneau => self.mon_panneau(ui),
         }
     }
 
@@ -196,6 +197,8 @@ impl App {
     pub(crate) fn show_dock(&mut self, ctx: &egui::Context) {
         // (Le panneau Références se redit à chaque image où il est dessiné ici.)
         self.refs.pane_rect = None;
+        // Mon panneau (essai du Labo) : ouvert ou non, et les ajouts demandés par un clic droit (`monpanneauui.rs`).
+        self.mon_panneau_suivre(ctx);
         let mut state = self.dock.take().unwrap_or_else(|| dock::to_state(&self.layout.dock_layout()));
         // La bande suit l'image courante ; ce que l'on fait pendant l'affichage se suit à l'image
         // d'écran d'après.

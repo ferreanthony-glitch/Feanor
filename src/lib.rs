@@ -183,6 +183,11 @@ mod suggestions_tests;
 mod barrepanneaux;
 #[cfg(test)]
 mod barrepanneaux_tests;
+// Mon panneau (essai du menu Labo) : commandes, brosses et outils perso rangés au choix.
+mod monpanneau;
+mod monpanneauui;
+#[cfg(test)]
+mod monpanneau_tests;
 mod barres;
 #[cfg(test)]
 mod barres_tests;

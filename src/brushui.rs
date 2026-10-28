@@ -47,6 +47,8 @@ pub(crate) enum PresetMenu {
     Duplicate,
     Update,
     Delete,
+    /// « Ajouter à Mon panneau » (essai du Labo ; seulement quand ce panneau est ouvert).
+    Panneau,
 }
 
 /// Le menu d'un réglage : renommer, dupliquer dans « Mes brosses », remplacer par le réglage
@@ -65,6 +67,9 @@ pub(crate) fn preset_menu(ui: &mut egui::Ui, source: &str) -> Option<PresetMenu>
     }
     if own && ui.button("Supprimer").clicked() {
         out = Some(PresetMenu::Delete);
+    }
+    if crate::monpanneauui::ouvert(ui.ctx()) && ui.button(format!("{}  Ajouter à Mon panneau", egui_phosphor::regular::STAR)).clicked() {
+        out = Some(PresetMenu::Panneau);
     }
     if out.is_some() {
         ui.close_menu();
@@ -204,6 +209,11 @@ impl App {
 
     /// Fait ce que demande le menu du réglage `i`.
     pub(crate) fn apply_preset_menu(&mut self, i: usize, action: PresetMenu, target: Target, current: BrushSettings) {
+        // Mon panneau ne touche pas à la bibliothèque : il en garde seulement le nom.
+        if matches!(action, PresetMenu::Panneau) {
+            self.mon_panneau_ajouter_brosse(i);
+            return;
+        }
         if self.brushes_busy() {
             return;
         }
@@ -230,6 +240,7 @@ impl App {
                 self.brush_previews = BrushPreviews::default();
                 self.status = format!("« {} » supprimé.", p.name);
             }
+            PresetMenu::Panneau => {}
         }
         if let Some(e) = self.save_brushes() {
             self.status = format!("{} (pas gardé pour la prochaine fois : {e})", self.status);

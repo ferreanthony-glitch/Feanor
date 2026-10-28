@@ -96,6 +96,10 @@ pub enum Pane {
     /// ailleurs, où il s'ouvre à la demande (il règle la planche de l'espace Vignettes).
     #[serde(rename = "vignettes")]
     Vignettes,
+    /// « Mon panneau » (`monpanneau.rs`, essai du menu Labo, 2026-10-28) : les commandes, les brosses et les outils perso que
+    /// l'utilisateur y a rangés. Fermé d'office ; s'ouvre depuis le menu Labo, et se place où l'on veut comme les autres.
+    #[serde(rename = "mon_panneau")]
+    MonPanneau,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -113,7 +117,7 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 16] = [
+    pub const ALL: [Pane; 17] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
@@ -130,13 +134,14 @@ impl Pane {
         Pane::References,
         Pane::Personnages,
         Pane::Vignettes,
+        Pane::MonPanneau,
     ];
 
     /// Les panneaux fermés dans la disposition par défaut, qui ne s'ouvrent qu'à la demande.
     pub fn on_demand(self) -> bool {
         matches!(
             self,
-            Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes
+            Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau
         )
     }
 
@@ -169,6 +174,7 @@ impl Pane {
             Pane::References => "Références",
             Pane::Personnages => "Personnages",
             Pane::Vignettes => "Planche",
+            Pane::MonPanneau => "Mon panneau",
         }
     }
 
@@ -206,6 +212,7 @@ impl Pane {
             Pane::References => ph::IMAGES,
             Pane::Personnages => ph::USERS_THREE,
             Pane::Vignettes => ph::SQUARES_FOUR,
+            Pane::MonPanneau => ph::STAR,
         }
     }
 
@@ -220,6 +227,7 @@ impl Pane {
             | Pane::Comments
             | Pane::Bruitages
             | Pane::SuggestionsSonores
+            | Pane::MonPanneau
             | Pane::References => Group::Right,
             Pane::Montage | Pane::Timeline => Group::Bottom,
             Pane::Vignettes => Group::Planche,
