@@ -383,6 +383,9 @@ mod zoombande;
 mod zoombande_tests;
 mod camtools;
 mod canvas;
+mod reglagesdroit;
+#[cfg(test)]
+mod reglagesdroit_tests;
 mod crayonnesheritage;
 #[cfg(test)]
 mod color_tests;

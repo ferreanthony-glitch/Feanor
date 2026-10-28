@@ -5441,6 +5441,54 @@ Le geste vit dans la mémoire d'egui (un état temporaire, jamais enregistré). 
 
 ---------------------------------------------------------------------------------------------------
 
+## 66. Clic droit : les réglages de l'outil sous le curseur (2026-10-28, branche `reglages-clic-droit`)
+
+Anthony : « Clic droit avec n'importe quel outil ouvre une fenêtre flottante des réglages, qui se referme aussitôt qu'on a cliqué en dehors de la fenêtre. » Puis : « sauf pour l'outil sélection », et la Pipette n'ouvre pas la fenêtre non plus.
+
+### Ce que ça fait
+
+- **Ouvrir.** Un clic droit dans le dessin (Storyboard, Animation) ouvre, sous le curseur, une fenêtre flottante entièrement visible à l'écran (ramenée dans l'écran près des bords ; si l'écran est trop bas, elle défile). Elle contient **exactement le panneau Réglages de l'outil** : ce n'est pas une copie, c'est le même code (`App::pane_ui(Pane::ToolOptions)`), donc la taille, l'opacité, l'aperçu du trait et le choix du pinceau, « Plus de réglages », l'aplat quand sa sous-ligne est visée, les options de la forme, du texte, du dégradé… sont les mêmes que dans le panneau, et un changement dans l'un se voit dans l'autre. Largeur : celle du panneau (350, moins ses marges). Elle suit le thème (cadre d'une fenêtre flottante d'egui). Elle s'ouvre même si le panneau Réglages est déjà à l'écran : c'est un raccourci sous la main.
+- **Fermer.** Un clic (ou l'appui de la pointe du stylet) **n'importe où hors de la fenêtre** la ferme, et ne fait **rien d'autre** : ni trait, ni sélection, ni outil choisi, ni étape d'annulation. Échap la ferme aussi (et ne fait rien d'autre : l'appui est pris avant les raccourcis), ainsi qu'un nouveau clic droit. Un menu ou une liste ouverts depuis la fenêtre (liste des brosses, menu d'une icône…) sont au-dessus d'elle : un clic dedans ne la ferme pas, Échap les ferme d'abord.
+- **Comment le clic du dehors ne fait rien d'autre.** Tant que la fenêtre est ouverte, une zone transparente de la taille de l'écran est posée dessous (la même couche que la fenêtre, comme `egui::Modal`). Le dessin, la planche et les panneaux demandent déjà quelle couche est sous le pointeur avant d'agir : ils ne voient pas le clic, qui ferme la fenêtre.
+- **L'outil change, la fenêtre suit.** Passer à la Sélection ou à la Pipette (touche), ouvrir une boîte de dialogue, entrer dans l'Espace 3D : elle se ferme. Un autre outil : elle montre ses réglages.
+- **« Sans latence ».** Rien n'est calculé à l'ouverture : la fenêtre est une image de plus du panneau, le temps d'une première image invisible pour mesurer sa taille (une demande de repeinture, une fois). Pendant qu'elle est ouverte, aucun trait ne part, et au repos elle ne demande aucune repeinture continue.
+
+### Les clics droits du dessin d'avant : ce qui est gardé, déplacé, remplacé
+
+| Avant | Maintenant |
+|---|---|
+| Clic droit sur le dessin (Storyboard, Animation) : menu « Annuler, Rétablir, Couper, Copier, Coller, Supprimer la sélection, Ajuster à la fenêtre, Animer ce plan / Revenir au storyboard » (`canvas_menu`) | **Remplacé** par la fenêtre des réglages avec tous les outils, **sauf la Sélection, la Sélection par couleur et la Pipette**, qui **gardent ce menu tel quel**. Les commandes du menu restent au menu Édition, dans leurs raccourcis (Ctrl+Z, Ctrl+C…, Ctrl+0, Tab) et, pour la sélection, dans les réglages de la Sélection. |
+| Vignettes : clic droit sur une case (la case courante vivante, par `card_context_menu`, ou une autre, par `board_press`) : menu de la case | **Gardé**, avec une entrée de plus en tête, « Réglages de l'outil… », qui ouvre la fenêtre sous le curseur (sauf Sélection et Pipette). Une case est un objet précis : son menu reste prioritaire. |
+| Vignettes : clic droit sur une barre de coupe, une note, le fond de la planche : menu de la planche | **Gardé** (inchangé). |
+| Timeline et montage : clics droits sur les plans, les pistes, les clés, les transitions, les fanions de commentaire | **Gardés** (inchangés : ce n'est pas la vue de dessin). |
+| Icônes, pastilles, panneaux, calques, couleurs (« Assigner un raccourci… », etc.) | **Gardés** (inchangés). |
+| Espace 3D : glisser le bouton droit tourne la caméra | **Gardé** : la fenêtre ne s'ouvre pas en 3D. |
+
+Il n'y avait **pas** d'autre clic droit dans le dessin : ni menu de poignée de transformation ou de sélection, ni annulation d'une polyligne ou d'un lasso par le bouton droit (le bouton droit n'y servait à rien d'autre qu'à ce menu). Rien à préserver de ce côté.
+
+Pendant un trait (bouton gauche tenu), un clic droit n'ouvre rien.
+
+### Choix
+
+- **Vignettes : le menu de la case reste, la fenêtre y est une entrée de menu** plutôt qu'un clic droit direct : sur la case courante (celle qui est dessinée en direct) le clic droit ne peut pas servir à deux choses, et « Animer cette image », « Nouveau plan après », « Réunir avec le plan précédent »… sont des commandes qu'on ne veut pas perdre. Si Anthony préfère la fenêtre d'abord, le menu de la case peut passer derrière Maj + clic droit.
+- **La fenêtre n'a ni titre ni bouton de fermeture** : le titre de l'outil est la première ligne du panneau, on la ferme en cliquant ailleurs.
+- **Pas de format de projet touché** : aucune donnée enregistrée (la fenêtre ne garde que son point d'ouverture, en mémoire).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Pinceau : clic droit au milieu du dessin ; la fenêtre apparaît sous le curseur, avec la taille, l'opacité, l'aperçu du trait. Change la taille : celle du panneau à droite suit ; ce que tu dessines ensuite est à la nouvelle taille. Clic droit près du bord de l'écran ou en bas : elle reste entière.
+2. Clique sur le dessin, hors de la fenêtre : elle se ferme et **aucun trait** ne part (Ctrl+Z n'annule rien de nouveau). Pareil en cliquant sur un panneau ou un bouton d'outil : elle se ferme, l'outil ne change pas. Échap, un nouveau clic droit, le stylet : pareil.
+3. Gomme, Remplir, Ligne, Texte, Caméra, Transformer, Grab… : chacun montre ses réglages. Une sous-ligne Aplat visée dans Calques : la fenêtre montre les réglages de l'aplat.
+4. **Sélection, Sélection par couleur, Pipette** : le clic droit ouvre l'ancien menu (Annuler, Couper, Copier…), pas la fenêtre.
+5. Vignettes : clic droit sur une case : le menu de la case, avec « Réglages de l'outil… » en haut. Barre de coupe, note, fond de la planche : leurs menus.
+6. Au repos, fenêtre ouverte : rien ne bouge, le processeur reste à zéro.
+
+### Essais
+
+`reglagesdroit_tests.rs` (12) : le clic droit ouvre la fenêtre avec les réglages du pinceau (titre, taille, opacité, « Plus de réglages »), sous le curseur, sans trait ni étape d'annulation ; elle reste entière aux coins du dessin et de l'écran, et dans un écran bas ; **chacun des 21 outils** (la fenêtre porte le titre de ses réglages) **sauf la Sélection, la Sélection par couleur et la Pipette**, qui gardent le menu du dessin ; **un changement de taille dans la fenêtre est celui du panneau** (et inversement) ; un clic dedans ne ferme pas, un clic dehors ferme sans trait, sans étape, un glissé qui part de dehors ne trace pas, et le trait d'après fonctionne ; un clic sur la barre d'outils ou le menu du haut ferme sans changer d'outil ; Échap, un second clic droit et la pointe du stylet ferment ; passer à la Sélection ferme ; au repos, aucune repeinture continue ; l'ouverture ne crée ni dessin ni rejeu ; Vignettes : la case garde son menu, qui offre l'entrée, qui ouvre la fenêtre, et un clic sur une autre case ne la dessine pas ; avec la Sélection, pas d'entrée.
+
+---------------------------------------------------------------------------------------------------
+
 ## 67. Enregistrer par-dessus un projet : remplacer sans rien perdre (2026-10-28, branche `enregistrer-par-dessus`)
 
 **Ce qui s'est passé (Anthony, 2026-10-28, une soirée perdue).** Un projet « Sans titre » jamais enregistré, plein de dessins. Fermeture, boîte « Modifications non enregistrées », « Enregistrer », la fenêtre de fichiers de Windows : il choisit « Mon film.shot » (un projet qui existe) et confirme le remplacement de Windows. SHOT **refusait** d'écrire sur un projet existant (`project::check_target`, voulu : ne jamais écraser un autre projet), mais ne le disait **que dans la barre d'état**, et la boîte « Modifications non enregistrées » avait déjà disparu : rien ne montrait que rien n'était enregistré. Le projet a ensuite été quitté, et la copie de secours effacée à la sortie.

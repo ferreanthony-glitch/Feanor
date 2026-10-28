@@ -1753,6 +1753,13 @@ impl App {
         item(self, ui, "Animer cette image", &|a| {
             a.set_mode(crate::app::Mode::Animation);
         });
+        // Les réglages de l'outil sous le curseur (`reglagesdroit.rs`) : sur une case, le clic droit garde son menu, qui les offre.
+        if self.reglages_droit_permis() && ui.button("Réglages de l'outil…").clicked() {
+            ui.close_menu();
+            if let Some(p) = ui.ctx().pointer_latest_pos() {
+                self.ouvrir_reglages_droit(p);
+            }
+        }
         // La caméra du plan : un cadre de plus (C, D… : le glissé ne crée plus rien), ou celui qu'on a visé en moins.
         let possible = frame == 0 || self.doc.panels.get(i).is_some_and(|p| p.camera.len() < 2);
         if let Some(rang) = cadre.filter(|_| possible) {
