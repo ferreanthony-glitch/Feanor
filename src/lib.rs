@@ -476,6 +476,10 @@ mod timeline_alt_tests;
 // Copier et coller les clés de dessins et les images.
 #[cfg(test)]
 mod timeline_cles_tests;
+// Durée d'un nouveau plan, durée des plans choisis.
+mod dureeplans;
+#[cfg(test)]
+mod dureeplans_tests;
 // Nouvelle séquence avec les plans choisis.
 mod sequenceplans;
 #[cfg(test)]

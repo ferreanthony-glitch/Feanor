@@ -172,6 +172,9 @@ pub(crate) const COMMANDES: &[&str] = &[
 /// Les entrées du menu d'une case (clic droit) que le hasard peut cliquer.
 pub(crate) const MENU_CASE: &[&str] = &["Retirer ce cadre", "Ajouter un cadre", "Nouveau plan après", "Dupliquer le plan", "Faire de cette image un nouveau plan", "Réunir avec le plan précédent"];
 
+/// Les durées que `Geste::DureePlans` tape : des images, des secondes, un écart.
+const DUREES_TAPEES: &[&str] = &["1", "5", "12", "24", "37", "1:12", "2s6", "+3", "-2", "+30"];
+
 /// Les outils d'un trait.
 const OUTILS: [Tool; 11] = [Tool::Brush, Tool::Pencil, Tool::Eraser, Tool::Brush, Tool::Pencil, Tool::Fill, Tool::Line, Tool::Rect, Tool::Ellipse, Tool::Select, Tool::Cutter];
 
@@ -209,6 +212,9 @@ pub(crate) enum Geste {
     /// Dans la bande du montage : glisser un plan sur un autre, jusqu'au milieu de l'autre (`zone` 0 : le fusionner) ou jusqu'à
     /// l'un de ses bords (1 : devant, 2 : derrière : le déplacer). Les nombres sont des rangs parmi les plans à l'écran.
     FusionnerPlans { de: u16, vers: u16, zone: u8 },
+    /// « Changer la durée des plans choisis… » : tous les plans choisis (ou tous les plans du film si `tous`) prennent la durée que dit
+    /// `DUREES_TAPEES[quoi]` (`dureeplans.rs`).
+    DureePlans { quoi: u8, tous: bool },
     /// Annuler `n` fois.
     Annuler(u8),
     /// Rétablir `n` fois.
@@ -294,7 +300,9 @@ impl Geste {
             26..=33 => TraitDessin { outil: h.sous(OUTILS.len()) as u8, x0: h.entre(0.05, 0.95), y0: h.entre(0.05, 0.95), x1: h.entre(-0.2, 1.2), y1: h.entre(-0.2, 1.2) },
             34..=45 => TraitCase { case, outil: h.sous(OUTILS.len()) as u8, x0: h.entre(-0.12, 1.12), y0: h.entre(-0.12, 1.35), dx: h.entre(-1.3, 1.3), dy: h.entre(-1.0, 1.0) },
             46..=48 => TraitCaseVide { e: h.sous(3) as u8, dx: h.entre(-0.6, 0.6), dy: h.entre(-0.4, 0.4) },
-            49..=53 => Barre { k: case },
+            49..=52 => Barre { k: case },
+            // (Le dernier rang de `Barre` : les autres gestes gardent leurs rangs.)
+            53 => DureePlans { quoi: h.sous(DUREES_TAPEES.len()) as u8, tous: h.pile(3) },
             54..=55 => Note { case, texte: h.sous(4) as u8, valider: !h.pile(4) },
             56..=58 => LassoDessin { x0: h.entre(0.1, 0.5), y0: h.entre(0.1, 0.5), x1: h.entre(0.5, 0.95), y1: h.entre(0.5, 0.95), dx: h.entre(-0.3, 0.3), dy: h.entre(-0.3, 0.3), supprimer: h.pile(2) },
             59..=60 => LassoCase { case, x0: h.entre(0.0, 0.5), y0: h.entre(0.0, 0.5), x1: h.entre(0.5, 1.0), y1: h.entre(0.5, 1.0), supprimer: h.pile(2) },
@@ -718,6 +726,11 @@ impl Essai {
                 self.b.app.set_tool(Tool::Brush);
                 let a = view.shrink(2.0).clamp(r.center() + vec2(dx, dy) * r.width());
                 self.glisser(Modifiers::NONE, PointerButton::Primary, &Self::trajet(r.center(), a, 8));
+            }
+            DureePlans { quoi, tous } => {
+                let ids: Vec<u64> = if tous { self.b.app.doc.panels.iter().map(|p| p.id).collect() } else { self.b.app.board_selection() };
+                self.b.app.change_plans_duration(&ids, DUREES_TAPEES[quoi as usize % DUREES_TAPEES.len()]);
+                self.b.chauffer(2);
             }
             Barre { k } => {
                 self.vers_vignettes();

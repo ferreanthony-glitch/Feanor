@@ -817,6 +817,8 @@ pub struct App {
     pub(crate) edge_sel: Option<crate::rognageui::EdgeSel>,
     pub(crate) snap_on: bool,
     pub(crate) duration_dialog: Option<crate::rognageui::DurationDialog>,
+    /// La fenêtre « Changer la durée des plans choisis… » (`dureeplans.rs`).
+    pub(crate) duree_plans: Option<crate::dureeplans::DureePlans>,
     pub(crate) trim_menu: Option<(u64, usize)>,
     /// Plan tel qu'il était au début du réglage de sa durée : chaque valeur intermédiaire
     /// repart de lui, rien n'est perdu avant la fin du geste.
@@ -1278,6 +1280,7 @@ impl App {
             edge_sel: None,
             snap_on: true,
             duration_dialog: None,
+            duree_plans: None,
             trim_menu: None,
             length_origin: None,
             length_field_active: false,
@@ -3614,6 +3617,8 @@ impl App {
     }
 
     fn run_action_now(&mut self, action: &str) {
+        // « Durée d'un nouveau plan » (Préférences > Montage) : lue par les plans que la commande crée (`dureeplans.rs`).
+        self.doc.duree_plan_neuf = self.settings.new_plan_secs;
         // Un texte en cours de saisie est posé avant toute commande (annuler, changer d'image…).
         self.finish_text_edit();
         // Une autre copie (dessin, plans, images, clés…) prend la place des effets copiés pour Ctrl+V
@@ -4396,6 +4401,7 @@ impl App {
             "panneau.fusionner_suivant" => self.merge_next_panel(),
             "panneau.fusionner_choisis" => self.merge_chosen_panels(),
             "sequence.nouvelle_avec_plans" => self.new_sequence_from_chosen(),
+            "montage.duree_plans" => self.open_plans_duration_dialog(),
             "scene.couper" => self.split_current_panel(),
             "scene.joindre_precedente" => self.join_previous_scene(),
             "calque.copier" => self.copy_layer(),

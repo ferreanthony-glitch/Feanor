@@ -1053,6 +1053,9 @@ pub struct Document {
     /// « Report du décor » (Préférences > Vignettes) : en réunissant deux plans, le décor du premier se tient sur la suite
     /// (`decor.rs`). Un réglage de l'application que `App::structure_op_porte` pose avant chaque opération : il n'est pas dans le projet.
     pub report_decor: bool,
+    /// « Durée d'un nouveau plan » (Préférences > Montage), en secondes : celle que reçoit un plan neuf (`make_panel`). Comme `report_decor`,
+    /// un réglage de l'application que `App` pose avant ses commandes (`dureeplans.rs`) : il n'est pas dans le projet.
+    pub duree_plan_neuf: f32,
     next_id: u64,
     /// Préfixe des numéros neufs d'un projet partagé (`préfixe << 32`, `cooperation.rs`) : deux équipiers ne
     /// donnent jamais le même numéro. 0 pour un projet classique, dont les numéros ne changent pas.
@@ -1116,6 +1119,7 @@ impl Document {
             variantes_partielles: false,
             annotations: Default::default(),
             report_decor: true,
+            duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
             next_id: 1,
             id_prefix: 0,
             memo_enregistrement: Default::default(),
@@ -1185,6 +1189,7 @@ impl Document {
             variantes_partielles: false,
             annotations: structure.annotations,
             report_decor: true,
+            duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
             next_id: max_id + 1,
             id_prefix: 0,
             memo_enregistrement: Default::default(),
@@ -1231,6 +1236,7 @@ impl Document {
             variantes_partielles: self.variantes_partielles,
             annotations: self.annotations.clone(),
             report_decor: self.report_decor,
+            duree_plan_neuf: self.duree_plan_neuf,
             next_id: self.next_id,
             id_prefix: self.id_prefix,
             memo_enregistrement: Default::default(),
@@ -2245,7 +2251,7 @@ impl Document {
         Panel {
             id: self.alloc(),
             scene,
-            length: self.fps as usize * 2,
+            length: crate::dureeplans::images(self.duree_plan_neuf, self.fps),
             layers: vec![Layer::new("Dessin", LayerKind::Vector)],
             action: String::new(),
             dialogue: String::new(),

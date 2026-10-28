@@ -441,6 +441,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("lecture.boucle", "Lecture en boucle (oui / non)", true, false),
     // Rognage des plans dans le montage (`rognageui.rs`).
     act("montage.duree", "Durée du plan : taper la durée exacte…", true, false),
+    act("montage.duree_plans", "Changer la durée des plans choisis…", true, false),
     act("montage.debut_a_tete", "Raccourcir le début du plan jusqu'à la tête de lecture", true, false),
     act("montage.fin_a_tete", "Raccourcir la fin du plan jusqu'à la tête de lecture", true, false),
     act("montage.rognage_retablir", "Rétablir le contenu rogné du plan (début et fin)", true, false),

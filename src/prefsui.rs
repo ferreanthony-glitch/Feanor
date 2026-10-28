@@ -566,6 +566,7 @@ impl App {
                 }
             }
             Groupe::Pistes => self.montage_prefs_ui(ui),
+            Groupe::PlansNeufs => self.new_plan_duration_pref_ui(ui),
             Groupe::Vignettes => self.vignettes_prefs_ui(ui),
             Groupe::CadresCamera => self.cadres_camera_prefs_ui(ui),
             Groupe::Decor => self.decor_prefs_ui(ui),

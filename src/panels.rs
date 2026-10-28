@@ -99,6 +99,7 @@ impl App {
         self.action_item(ui, "Réunir avec le plan précédent", "scene.joindre_precedente");
         self.action_item(ui, "Fusionner les plans choisis", "panneau.fusionner_choisis");
         self.action_item(ui, "Nouvelle séquence avec les plans choisis", "sequence.nouvelle_avec_plans");
+        self.action_item(ui, "Changer la durée des plans choisis…", "montage.duree_plans");
         self.action_item(ui, "Retourner les plans choisis", "plan.retourner");
         ui.separator();
         self.action_item(ui, "Nouveau projet à partir des plans choisis", "projet.nouveau_depuis_plans");
@@ -815,6 +816,7 @@ impl App {
         self.smart_rename_window(ctx);
         self.goto_window(ctx);
         self.duration_dialog_ui(ctx);
+        self.plans_duration_dialog_ui(ctx);
         self.palette_window(ctx);
         // Nouveau projet (`nouveauui.rs`).
         self.new_project_window(ctx);

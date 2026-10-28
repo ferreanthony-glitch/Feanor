@@ -83,7 +83,7 @@ impl Onglet {
             Onglet::General => "Ouvrir et rouvrir les projets, copies de secours, collage entre projets, conseils.",
             Onglet::Apparence => "Le thème et ses couleurs, la taille de l'interface, la hauteur des panneaux.",
             Onglet::Dessin => "Le curseur du stylet, sa pression, le point fixe des poignées, le passe-partout autour de la caméra et le tremblement du trait par défaut.",
-            Onglet::Montage => "Les pistes du montage et leur repliage.",
+            Onglet::Montage => "Les pistes du montage et leur repliage, la durée d'un nouveau plan.",
             Onglet::Vignettes => "La planche : cases pâles, débord du trait, cadres de caméra, et le décor partagé entre les cases d'un plan.",
             Onglet::Raccourcis => "Le jeu de raccourcis du clavier et ses fichiers.",
             Onglet::Export => "Les programmes et les modèles dont les exports ont besoin.",
@@ -108,6 +108,8 @@ pub enum Groupe {
     /// Le tremblement du trait par défaut de tous les calques vectoriels (`tremblement::Defaut`).
     Tremblement,
     Pistes,
+    /// La durée d'un plan neuf (`dureeplans.rs`).
+    PlansNeufs,
     /// La planche des Vignettes : cases pâles, colonnes, débord du trait (papier infini).
     Vignettes,
     /// Les cadres de caméra dessinés dans les cases : l'aimant et la couleur.
@@ -143,6 +145,7 @@ impl Groupe {
             Groupe::Camera => "Caméra",
             Groupe::Tremblement => "Tremblement des traits",
             Groupe::Pistes => "Pistes du montage",
+            Groupe::PlansNeufs => "Plans neufs",
             Groupe::Vignettes => "Planche des Vignettes",
             Groupe::CadresCamera => "Cadres de caméra",
             Groupe::Decor => "Décor",
@@ -219,6 +222,7 @@ pub const REGLAGES: &[Reglage] = &[
     // ---- Montage
     r(O::Montage, G::Pistes, "montage.repliage", "Repliage des pistes", "replier commun plan calques"),
     r(O::Montage, G::Pistes, "montage.deplier", "Déplier le calque courant tout seul", "piste automatique"),
+    r(O::Montage, G::PlansNeufs, "montage.duree_nouveau_plan", "Durée d'un nouveau plan", "secondes images deux défaut créer plan neuf long court"),
     // ---- Vignettes
     r(O::Vignettes, G::Vignettes, "vignettes.rangees_pales", "Rangées de cases pâles", "vignettes planche papier cases vides dessiner minimum lignes"),
     r(O::Vignettes, G::Vignettes, "vignettes.colonnes", "Cases par rangée", "vignettes planche colonnes largeur six"),
