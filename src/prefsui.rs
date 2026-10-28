@@ -247,6 +247,19 @@ impl App {
             self.settings_a_ecrire = true;
         }
         ui.horizontal(|ui| {
+            ui.label("Calque Décor");
+            let mut bitmap = self.settings.vignettes.decor_bitmap;
+            let a = ui.selectable_value(&mut bitmap, false, "Vectoriel");
+            let a = crate::bulles::bulle(a, "Décor vectoriel", "Le calque Décor que les brosses du décor créent dans un plan est vectoriel : ses traits restent des traits qu'on peut sélectionner et déformer. D'origine.", "");
+            let b = ui.selectable_value(&mut bitmap, true, "Bitmap");
+            let b = crate::bulles::bulle(b, "Décor bitmap", "Le calque Décor que les brosses du décor créent dans un plan est un dessin de pixels, comme celui des anciens projets.", "");
+            if a.changed() || b.changed() {
+                self.settings.vignettes.decor_bitmap = bitmap;
+                self.settings_a_ecrire = true;
+            }
+        });
+        ui.label(RichText::new("Ne change pas le calque Décor d'un plan qui en a déjà un : il garde sa sorte et reçoit toujours les traits du décor.").small().weak());
+        ui.horizontal(|ui| {
             ui.label("Couleur du décor");
             let mut c = self.settings.vignettes.couleur_decor;
             let resp = ui.color_edit_button_srgb(&mut c);

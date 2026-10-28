@@ -242,6 +242,7 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Vignettes, G::CadresCamera, "vignettes.aimant", "Aimant des cadres de caméra", "alignement colonnes rangées points magnétique éteindre zéro"),
     r(O::Vignettes, G::CadresCamera, "vignettes.couleur_cadre", "Couleur des cadres de caméra", "bleu lettres flèche empreinte export"),
     r(O::Vignettes, G::Decor, "vignettes.report_decor", "Report du décor", "continuité coupe plan suivant case réunir décor partagé"),
+    r(O::Vignettes, G::Decor, "vignettes.calque_decor", "Calque Décor", "vectoriel bitmap pixels sorte créer brosses du décor pastilles"),
     r(O::Vignettes, G::Decor, "vignettes.couleur_decor", "Couleur du décor", "gris bleu brosses pastilles"),
     r(O::Vignettes, G::Decor, "vignettes.brosses_decor", "Taille des brosses du décor", "crayon feutre aplat pixels"),
     // ---- Raccourcis

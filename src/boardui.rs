@@ -725,8 +725,9 @@ impl App {
                     if lasso {
                         self.prendre_le_lasso();
                     } else if !cam_mode {
-                        // Une brosse du décor choisie : le trait part dans le calque Décor du plan (`decorui.rs`).
-                        self.decor_avant_trait();
+                        // Une brosse du décor choisie : le trait part dans le calque Décor du plan (`decorui.rs`) ; un personnage : dans son
+                        // calque (`calquespastilles.rs`).
+                        self.pastille_avant_trait();
                     }
                 }
                 false
@@ -736,7 +737,7 @@ impl App {
                 if !cam_mode && !lasso && self.tool_draws_in_empty() && self.board_create_from_empty(e) {
                     self.vignettes.press = Press::Card;
                     self.draw_has_focus();
-                    self.decor_avant_trait();
+                    self.pastille_avant_trait();
                     true
                 } else {
                     self.vignettes.press = Press::Dead;

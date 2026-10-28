@@ -3,8 +3,11 @@
 //!
 //! # Ce que c'est
 //!
-//! - **Un calque comme les autres, marqué `Layer::decor`.** Bitmap, tout en bas du plan (sous les calques des personnages et
-//!   des traits), nommé « Décor ». Il est créé par le premier trait d'une brosse du décor (`decorui.rs`) et n'existe pas avant.
+//! - **Un calque comme les autres, marqué `Layer::decor`.** Vectoriel d'origine depuis le 2026-10-28 (bitmap si Préférences > Vignettes,
+//!   « Calque Décor », le demande ; un décor bitmap d'un ancien projet reste bitmap et reçoit toujours les traits), tout en bas du plan
+//!   (sous les calques des personnages et des traits), nommé « Décor ». Il est créé par le premier trait d'une brosse du décor
+//!   (`decorui.rs`) et n'existe pas avant. Un seul par plan, commun aux trois brosses ; le partage entre les cases, le « Maintenir » et le
+//!   report par la dernière image valent pour les deux sortes.
 //!   Ce n'est pas l'ancien « calque de fond », retiré le 2026-10-21 : celui-là était un calque de toute la scène ; celui-ci
 //!   est un calque ordinaire, un par plan, que seul un drapeau distingue.
 //! - **Un seul dessin, exposé sur tout le plan.** Les cases d'un plan sont ses images (la première, puis les marques d'image) :
@@ -94,9 +97,16 @@ impl Genre {
 }
 
 impl Layer {
-    /// Le calque Décor d'un plan : bitmap, un seul dessin tenu jusqu'au bout du plan (et plus loin si le plan s'allonge).
+    /// Le calque Décor d'un plan, bitmap (celui d'avant le 2026-10-28, que les anciens projets gardent) : un seul dessin tenu jusqu'au bout du
+    /// plan (et plus loin si le plan s'allonge).
     pub fn new_decor() -> Layer {
-        Layer { decor: true, post: Behaviour::Hold, auto_break: false, ..Layer::new(NOM, LayerKind::Bitmap) }
+        Layer::new_decor_en(LayerKind::Bitmap)
+    }
+
+    /// Le calque Décor d'un plan, de la sorte `kind` : vectoriel d'origine (`Document::decor_bitmap` éteint), bitmap si Préférences >
+    /// Vignettes le demande. Un seul dessin tenu jusqu'au bout du plan (et plus loin si le plan s'allonge).
+    pub fn new_decor_en(kind: LayerKind) -> Layer {
+        Layer { decor: true, post: Behaviour::Hold, auto_break: false, ..Layer::new(NOM, kind) }
     }
 }
 
@@ -117,7 +127,8 @@ impl Document {
     /// Le plan `index` prêt à recevoir un trait de décor à l'image `frame` : son calque Décor existe (en bas du plan) et montre un
     /// dessin à cette image. Rend le rang du calque et si quelque chose a changé (calque créé, dessin créé). Un dessin neuf couvre
     /// toute la plage d'images vides qui contient `frame` : tout le plan, d'ordinaire ; la case seule, si « Report du décor » est
-    /// éteint et que le calque est encore vide.
+    /// éteint et que le calque est encore vide. Un calque Décor neuf est vectoriel (`decor_bitmap` : bitmap) ; un calque Décor qui existe
+    /// déjà garde sa sorte (un ancien projet a un décor bitmap : il le reste, et reçoit toujours les traits), et ses dessins neufs aussi.
     pub fn assurer_decor(&mut self, index: usize, frame: usize) -> Option<(usize, bool)> {
         let n = self.panels.get(index)?.frame_count();
         let frame = frame.min(n - 1);
@@ -125,13 +136,14 @@ impl Document {
         let at = match self.decor_de(index) {
             Some(i) => i,
             None => {
-                self.panels[index].layers.insert(0, Layer::new_decor());
+                let sorte = if self.decor_bitmap { LayerKind::Bitmap } else { LayerKind::Vector };
+                self.panels[index].layers.insert(0, Layer::new_decor_en(sorte));
                 changed = true;
                 0
             }
         };
         if self.panels[index].layers[at].shown_at(frame).is_none() {
-            let cel = self.new_cel(LayerKind::Bitmap);
+            let cel = self.new_cel(self.panels[index].layers[at].kind);
             let (mut a, mut b) = {
                 let l = &self.panels[index].layers[at];
                 let mut a = frame;
@@ -178,7 +190,7 @@ impl Document {
         if from == 0 || from >= n || self.panels[index].layers[at].shown_at(from - 1).is_none() {
             return;
         }
-        let vide = self.new_cel(LayerKind::Bitmap);
+        let vide = self.new_cel(self.panels[index].layers[at].kind);
         let l = &mut self.panels[index].layers[at];
         for f in from..n {
             l.set(f, Some(vide));
@@ -222,8 +234,28 @@ impl Document {
             return;
         };
         let a_last = self.panels[index].layers[ka].shown_at(a_len - 1);
+        let sorte = self.panels[index].layers[ka].kind;
+        // Les deux décors ne sont pas de la même sorte (un ancien décor bitmap, puis un décor vectoriel fait depuis : le réglage a changé) :
+        // leurs dessins ne se mêlent pas dans un même calque. Celui du second plan, quand il doit rester, devient un calque à part, en
+        // dessous du décor : rien ne se perd, et le plan n'a toujours qu'un calque Décor.
+        let (b, a_part) = match b {
+            Some(lb) if lb.kind != sorte && !(report && a_last.is_some()) => (None, Some(lb)),
+            autre => (autre, None),
+        };
         // Un dessin vide pour la suite, si elle ne doit rien montrer du décor d'avant.
-        let vide = (!report && b.is_none() && a_last.is_some()).then(|| self.new_cel(LayerKind::Bitmap));
+        let vide = (!report && b.is_none() && a_last.is_some()).then(|| self.new_cel(sorte));
+        if let Some(mut lb) = a_part {
+            lb.decor = false;
+            lb.frames.truncate(b_len);
+            let mut frames = vec![None; a_len];
+            frames.extend(lb.frames);
+            lb.frames = frames;
+            lb.roles.clear();
+            lb.trim();
+            lb.parent = None;
+            self.panels[index].layers.insert(ka, lb);
+        }
+        let ka = self.decor_de(index).unwrap_or(ka);
         let l = &mut self.panels[index].layers[ka];
         // Le début du calque tel qu'il se voyait (le « Maintenir » prolongeait son dernier dessin jusqu'à la jonction).
         l.frames.resize(a_len, None);

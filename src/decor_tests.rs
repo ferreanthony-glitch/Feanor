@@ -69,6 +69,8 @@ fn une_continuite() -> Document {
 
 /// Le décor du plan `i`, peint d'un pixel en (`x`, `y`) à l'image `frame` (comme un trait de la brosse du décor).
 fn decorer(doc: &mut Document, i: usize, frame: usize, x: usize, y: usize) -> CelId {
+    // (Un décor bitmap, celui d'avant le 2026-10-28 : les essais y posent un pixel à la main ; le décor vectoriel est dans `calques_pastilles_tests.rs`.)
+    doc.decor_bitmap = true;
     let (at, _) = doc.assurer_decor(i, frame).expect("le calque Décor");
     let cel = doc.panels[i].layers[at].shown_at(frame).expect("un dessin du décor");
     pixel(doc, cel, x, y, GRIS_BLEU);
@@ -86,6 +88,7 @@ fn voit(doc: &Document, i: usize, frame: usize, x: usize, y: usize) -> Color32 {
 fn the_decor_layer_is_made_at_the_bottom_of_the_plan_with_one_drawing_held_over_all_its_images() {
     let mut doc = une_continuite();
     assert!(doc.decor_de(0).is_none(), "pas de décor avant le premier trait");
+    doc.decor_bitmap = true;
     let (at, change) = doc.assurer_decor(0, 4).expect("le plan existe");
     assert_eq!((at, change), (0, true), "créé tout en bas du plan");
     let l = &doc.panels[0].layers[0];
@@ -621,7 +624,7 @@ fn the_vignettes_settings_persist_have_clean_defaults_and_keep_old_files_readabl
     assert_eq!(defaut.vignettes.couleur_decor, [0x8F, 0xA3, 0xB8]);
     assert!(!toml::to_string(&defaut).unwrap().contains("[vignettes]"), "des réglages d'origine n'écrivent rien de plus");
     let mut s = Settings::default();
-    s.vignettes = ReglagesVignettes { debord: 20, aimant: 0, couleur_cadre: [200, 10, 10], report_decor: false, couleur_decor: [10, 20, 30], tailles_decor: [3.0, 30.0, 120.0] };
+    s.vignettes = ReglagesVignettes { debord: 20, aimant: 0, couleur_cadre: [200, 10, 10], report_decor: false, couleur_decor: [10, 20, 30], tailles_decor: [3.0, 30.0, 120.0], decor_bitmap: true };
     let texte = toml::to_string(&s).unwrap();
     assert!(texte.contains("[vignettes]") && texte.contains("report_decor = false") && texte.contains("aimant_points = 0"), "{texte}");
     let relu: Settings = toml::from_str(&texte).unwrap();

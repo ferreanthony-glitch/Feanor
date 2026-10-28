@@ -40,6 +40,10 @@ pub struct ReglagesVignettes {
     /// La taille des brosses du décor (crayon, feutre, aplat), en pixels du dessin.
     #[serde(rename = "tailles_decor")]
     pub tailles_decor: [f32; 3],
+    /// La sorte du calque Décor que le premier trait d'une brosse du décor crée dans un plan : faux (d'origine), vectoriel ; vrai, bitmap. Ne
+    /// change pas un calque Décor qui existe déjà (`Document::assurer_decor`).
+    #[serde(rename = "calque_decor_bitmap")]
+    pub decor_bitmap: bool,
 }
 
 impl Default for ReglagesVignettes {
@@ -51,6 +55,7 @@ impl Default for ReglagesVignettes {
             report_decor: true,
             couleur_decor: decor::COULEUR_DEFAUT,
             tailles_decor: Genre::ALL.map(Genre::taille_defaut),
+            decor_bitmap: false,
         }
     }
 }

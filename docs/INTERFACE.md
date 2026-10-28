@@ -5108,3 +5108,51 @@ Rien d'autre. Un essai vérifie qu'il n'y a dans la fenêtre principale qu'un se
 ### Essais
 
 `charte_tests.rs` : installation neuve = SHOT, et ses fonds, boutons et sélection sont ceux de Gris sombre ; la liste des thèmes ; un poste qui a déjà choisi un thème le garde (chaque choix, ancien fichier Gris sombre, thème personnalisé d'avant la charte, personnalisé qui part de SHOT) ; pas de noir dans les fonds ; texte presque identique à l'ancien ; contrastes du texte et du texte secondaire ≥ 4,5:1 et du rehaut ≥ 3:1 ; sélection, contour (blanc), survol et boutons exactement ceux de Gris sombre, aucune couleur de la palette orange hors le rehaut, couleurs du travail inchangées ; **dans les quatre espaces de travail : un seul rectangle plein orange (le trait, mince, sous le mot actif et pas sous les autres), moins de 0,5 % de la fenêtre, aucun contour ni trait orange, le mot actif garde son fond de sélection gris** ; couleurs du logo (pixels, deux variantes) ; icône orange (fond, coin arrondi, angle noir, centre du S), icône sombre, `.ico` orange ; petit logotype (couleurs, angles, pas de devise) ; logotype tout à gauche de la barre et sans gêne à 1280 points ; accueil (deux boutons gris pareils, icône de « Nouveau projet » orange, aucun remplissage orange, carte du fond des fenêtres, thème clair sans orange). Les captures (`charte_captures`, `charte_icones`, ignorées) écrivent dans `SHOT_CAPTURE_DIR` : `accueil.png`, `fenetre-principale-{vignettes,storyboard,animation,montage}.png`, `icone-{orange,sombre}-256.png`.
+
+---------------------------------------------------------------------------------------------------
+
+## 62. Les pastilles créent leurs calques : personnage et Décor (2026-10-28, branche `calques-pastilles`)
+
+Demande d'Anthony : **la pastille dit dans quel calque on dessine, et le calque se crée tout seul.** Fichiers : `calquespastilles.rs` (le calque d'un personnage), `decor.rs` et `decorui.rs` (le calque Décor), `personnagesui.rs` (choisir, renommer), `vignettesreglages.rs` et `prefsui.rs` (le réglage), `document.rs` et `project.rs` (un champ de plus au calque), essais `calques_pastilles_tests.rs` (21).
+
+### Une pastille de personnage dessine dans son calque
+
+- Le **premier trait** fait avec la pastille d'un personnage, dans un plan qui n'a pas encore son calque, **crée un calque vectoriel au nom du personnage**, posé juste au-dessus du calque courant (dans son dossier). Sa sous-ligne **Aplat** est allumée, à la **couleur d'aplat du personnage** ; un personnage sans aplat donne un calque sans aplat.
+- Les traits suivants vont dans ce calque. **Chaque plan a le sien** : un trait qui commence dans un autre plan crée le calque du personnage dans ce plan-là. Depuis la planche des Vignettes, depuis le dessin du Storyboard et depuis l'Animation (où la barre des pastilles est cachée d'office : on y dessine avec un personnage choisi ailleurs) : même comportement.
+- **Choisir la pastille d'un personnage qui a déjà son calque dans le plan le rend courant.** Tant que la pastille est choisie, un trait va dans ce calque même si l'on avait cliqué un autre calque ensuite (la pastille « classique » est là pour dessiner ailleurs). Exception : quand la sous-ligne Aplat d'un calque est visée, on peint l'aplat du calque visé, comme avant.
+- **Le calque porte le numéro du personnage** (`Layer::personnage`), pour le retrouver même si on le renomme. **Renommer le personnage dans son panneau renomme ses calques**, dans tous les plans (une seule étape d'annulation, celle du champ du nom) ; un calque que l'on a soi-même rebaptisé garde son nom. La copie d'un calque (« Dupliquer ») n'est plus « le » calque du personnage. Supprimer le personnage ne supprime pas ses calques.
+- **Le calque et le premier trait ne font qu'une seule étape d'annulation** (même mécanique que le plan fait en dessinant dans une case vide et que le calque Décor : `Vignettes::created`, `finish_creation` au lâcher). Un simple clic qui ne trace rien ne laisse pas de calque vide. Dans une case vide de la planche, le plan neuf, son calque et le trait sont une seule étape.
+- **Sans latence** : à l'appui, un cliché de la structure et un calque vide (comme le calque Décor) ; le fond de l'aplat se calcule sur le fil de fond, comme avant.
+- Ne crée rien : la **gomme**, le pot de peinture, une **couleur neutre** (ce n'est pas un personnage : elle dessine dans le calque courant, avec ou sans aplat, comme avant), la pastille **« classique »** (le pinceau de base dans le calque courant, rien de créé).
+
+### Les pinceaux de décor : un seul calque « Décor » par plan
+
+- **Un seul calque Décor par plan**, commun aux trois pinceaux (crayon, feutre gris, aplat), tout en bas du plan, créé au premier trait en une étape avec lui.
+- **Vectoriel d'origine.** Préférences > Vignettes > Décor : **« Calque Décor : Vectoriel / Bitmap »** choisit la sorte du calque que les pinceaux de décor créent. Il ne change pas un calque Décor qui existe déjà.
+- Comme avant, et pour les deux sortes : **une clé tenue sur tout le plan** (« Maintenir »), partagée par les cases d'une continuité, copie indépendante quand on coche la coupe, report par la dernière image quand la caméra bouge ou que le plan s'allonge, « Report du décor » à la jonction de deux plans.
+- **Anciens projets** : un calque Décor bitmap existant reste bitmap, ses dessins neufs aussi, et il reçoit toujours les traits des pinceaux de décor, quel que soit le réglage. À la jonction de deux plans dont les décors ne sont pas de la même sorte (un ancien décor bitmap, un décor vectoriel fait depuis), les dessins ne se mêlent pas : celui du second plan, s'il doit rester, devient un calque à part sous le décor (rien ne se perd).
+
+### Le fichier
+
+**Le format ne change pas** : `project::VERSION` reste 39. Un champ de plus, optionnel, sur le calque dans le manifeste : `personnage` (le numéro du personnage ; absent : calque ordinaire ; rien d'écrit pour un projet sans calque de personnage). Une version d'avant ouvre un tel calque comme un calque vectoriel ordinaire, à son nom, avec son aplat. Le réglage du décor est un réglage de l'application (`reglages.toml`, `[vignettes]`, `calque_decor_bitmap`, absent : vectoriel) ; il n'est pas dans le projet.
+
+### Ce qui a été interprété
+
+- Le calque d'un personnage est posé **au-dessus du calque courant** (comme « Nouveau calque »), pas tout en haut de la pile.
+- Renommer le personnage ne renomme que les calques qui portaient encore son nom (un calque rebaptisé à la main n'est pas écrasé).
+- Un trait dont le calque est visé par la sous-ligne Aplat reste sur ce calque (on n'écrase pas un geste précis).
+- Un personnage sans nom donne un calque « Personnage ».
+
+### À vérifier à l'écran (par Anthony)
+
+1. Crée un personnage (« + »), choisis sa pastille, trace dans le Storyboard : un calque **vectoriel au nom du personnage** apparaît dans le panneau Calques, avec la sous-ligne **Aplat** de sa couleur ; Ctrl+Z défait le calque et le trait **d'un coup**.
+2. Trace encore : même calque. Clique un autre calque, rechoisis la pastille : le calque du personnage redevient courant.
+3. Change le nom du personnage (clic droit sur la pastille > Modifier…) : le calque est renommé.
+4. Passe à un autre plan, trace avec la même pastille : le calque du personnage naît dans ce plan.
+5. Pastille « classique » : le trait va dans le calque choisi, aucun calque ne naît.
+6. Pinceaux de décor, planche des Vignettes puis Storyboard : un seul calque « Décor », vectoriel, tout en bas, commun aux trois pinceaux ; un trait dans la 2e case d'une continuité se voit dans toutes ses cases.
+7. Préférences > Vignettes > Décor : « Calque Décor : Bitmap », puis un plan neuf : son décor est un calque bitmap. Rouvre un ancien projet : son décor bitmap est là et reçoit les traits.
+
+### Essais
+
+`calques_pastilles_tests.rs` (21) : premier trait = calque vectoriel nommé, avec aplat (et sans aplat pour un personnage sans), né à l'appui, en une étape ; deuxième trait dans le même calque ; une annulation défait calque et trait, rétablir les rend ; clic sans trait, gomme et couleur neutre ne créent rien ; choisir la pastille rend le calque courant, un plan, un calque ; renommage (tous les plans, annulation, calque rebaptisé à la main gardé) ; copie de calque, aller-retour du fichier, projet sans personnage ; pastille classique ; planche (case, case vide) et animation ; décor vectoriel d'origine, bitmap selon le réglage, ancien décor bitmap conservé (réglage changé, jonction de sortes différentes, projet rouvert), partage en continuité, report par la dernière image, un seul calque pour trois brosses ; réglage dans `reglages.toml`. Adaptés : `decor_tests.rs` et `cases_tests.rs` (leurs essais de modèle posent un pixel à la main : ils demandent un décor bitmap).

@@ -68,7 +68,8 @@ fn layer_copy(doc: &mut Document, source: &Layer, copies: &mut HashMap<CelId, Ce
     let names = source.names.iter().map(|(c, n)| (copies.get(c).copied().unwrap_or(*c), n.clone())).collect();
     let color_marks = source.color_marks.iter().map(|(c, k)| (copies.get(c).copied().unwrap_or(*c), *k)).collect();
     // (La copie du calque Décor est un calque ordinaire : le plan n'a qu'un décor.)
-    let mut copy = Layer { id: fresh_layer_id(), frames, scene_wide: None, names, color_marks, decor: false, ..source.clone() };
+    // (De même, la copie du calque d'un personnage n'est pas « le » calque du personnage : la pastille retrouve l'original.)
+    let mut copy = Layer { id: fresh_layer_id(), frames, scene_wide: None, names, color_marks, decor: false, personnage: None, ..source.clone() };
     // Un calque de couleur copié seul garde son trait, avec les copies de ses dessins de couleur et de ses griffonnages.
     doc.copier_griffonnages(std::slice::from_ref(source), copies);
     if let Some(c) = copy.couleur.as_mut() {

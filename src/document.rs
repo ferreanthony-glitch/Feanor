@@ -365,6 +365,9 @@ pub struct Layer {
     /// Le calque Décor du plan (`decor.rs`) : un par plan, fait par les brosses du décor des Vignettes, tout en bas du plan ; son
     /// dessin est tenu sur toutes les images du plan, donc partagé par ses cases.
     pub decor: bool,
+    /// Le personnage de ce calque (`calquespastilles.rs`) : le numéro du personnage (`Personnage::id`) dont la pastille a fait le calque,
+    /// pour le retrouver même si le personnage est renommé. Vectoriel, nommé comme lui, avec l'aplat qu'il a. Aucun : calque ordinaire.
+    pub personnage: Option<u64>,
     /// Calque d'annotation (`calqueannot.rs`) : des notes de réalisateur sur le plan, vectorielles, peintes par-dessus tout à l'écran et
     /// jamais dans un export ni dans les vignettes (sauf si on le demande). Un calque vectoriel ordinaire pour le reste.
     pub annotation: bool,
@@ -437,6 +440,7 @@ impl Layer {
             effet: None,
             couleur: None,
             decor: false,
+            personnage: None,
             annotation: false,
         }
     }
@@ -1116,6 +1120,10 @@ pub struct Document {
     /// « Report du décor » (Préférences > Vignettes) : en réunissant deux plans, le décor du premier se tient sur la suite
     /// (`decor.rs`). Un réglage de l'application que `App::structure_op_porte` pose avant chaque opération : il n'est pas dans le projet.
     pub report_decor: bool,
+    /// « Calque Décor : vectoriel / bitmap » (Préférences > Vignettes) : la sorte du calque Décor que le premier trait d'une brosse du décor
+    /// crée dans un plan (`decor.rs`). Faux (d'origine) : vectoriel. Un calque Décor qui existe déjà garde sa sorte. Réglage de l'application,
+    /// posé par `decor_avant_trait` : il n'est pas dans le projet.
+    pub decor_bitmap: bool,
     /// « Durée d'un nouveau plan » (Préférences > Montage), en secondes : celle que reçoit un plan neuf (`make_panel`). Comme `report_decor`,
     /// un réglage de l'application que `App` pose avant ses commandes (`dureeplans.rs`) : il n'est pas dans le projet.
     pub duree_plan_neuf: f32,
@@ -1182,6 +1190,7 @@ impl Document {
             variantes_partielles: false,
             annotations: Default::default(),
             report_decor: true,
+            decor_bitmap: false,
             duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
             next_id: 1,
             id_prefix: 0,
@@ -1252,6 +1261,7 @@ impl Document {
             variantes_partielles: false,
             annotations: structure.annotations,
             report_decor: true,
+            decor_bitmap: false,
             duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
             next_id: max_id + 1,
             id_prefix: 0,
@@ -1299,6 +1309,7 @@ impl Document {
             variantes_partielles: self.variantes_partielles,
             annotations: self.annotations.clone(),
             report_decor: self.report_decor,
+            decor_bitmap: self.decor_bitmap,
             duree_plan_neuf: self.duree_plan_neuf,
             next_id: self.next_id,
             id_prefix: self.id_prefix,

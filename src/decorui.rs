@@ -19,6 +19,8 @@
 //! **chaque trait part dans le calque Décor du plan où il commence** (`decor_avant_trait`, à l'appui sur une case) : le calque est créé
 //! à ce premier trait, tout en bas du plan, et le trait et la création ne font qu'une étape d'annulation (`Vignettes::created`, la même
 //! mécanique que pour un plan fait en dessinant dans une case vide). Choisir à la main un autre calque, ou une autre couleur, lâche le décor.
+//! Le calque Décor créé est vectoriel d'origine, bitmap si Préférences > Vignettes (« Calque Décor ») le demande ; celui d'un plan qui en a
+//! déjà un garde sa sorte (`Document::assurer_decor`). Les personnages ont leur calque aussi : `calquespastilles.rs`.
 
 use eframe::egui::{self, vec2, Color32, Rect, Response, Sense, Stroke, StrokeKind};
 
@@ -152,6 +154,8 @@ impl App {
         self.end_stroke();
         let frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
         self.doc.report_decor = self.settings.vignettes.report_decor;
+        // Le calque Décor neuf est vectoriel, ou bitmap si Préférences > Vignettes le demande ; un décor qui existe déjà garde sa sorte.
+        self.doc.decor_bitmap = self.settings.vignettes.decor_bitmap;
         let snap = self.snapshot();
         let Some((at, change)) = self.doc.assurer_decor(self.cur_panel, frame) else { return };
         self.cur_layer = at;
