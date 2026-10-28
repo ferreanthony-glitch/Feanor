@@ -819,6 +819,11 @@ pub struct App {
     pub(crate) duration_dialog: Option<crate::rognageui::DurationDialog>,
     /// La fenêtre « Changer la durée des plans choisis… » (`dureeplans.rs`).
     pub(crate) duree_plans: Option<crate::dureeplans::DureePlans>,
+    /// La question posée avant de réunir deux plans qui ont un calque de même nom (`fusionnoms.rs`).
+    pub(crate) fusion_noms: Option<crate::fusionnoms::FusionNoms>,
+    /// Réponse d'avance à cette question (les essais et le hasard : sans elle, chaque jonction attendrait un clic).
+    /// `None` : la fenêtre se montre, comme pour l'utilisateur.
+    pub(crate) fusion_noms_auto: Option<crate::fusionnoms::Reponse>,
     pub(crate) trim_menu: Option<(u64, usize)>,
     /// Plan tel qu'il était au début du réglage de sa durée : chaque valeur intermédiaire
     /// repart de lui, rien n'est perdu avant la fin du geste.
@@ -1281,6 +1286,9 @@ impl App {
             snap_on: true,
             duration_dialog: None,
             duree_plans: None,
+            fusion_noms: None,
+            // (Les essais répondent d'avance « Fusionner » : leurs jonctions se font d'un seul geste, comme avant la question.)
+            fusion_noms_auto: if cfg!(test) { Some(crate::fusionnoms::Reponse::Fusionner) } else { None },
             trim_menu: None,
             length_origin: None,
             length_field_active: false,

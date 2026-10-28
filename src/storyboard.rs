@@ -287,11 +287,9 @@ impl App {
         if self.storyboard_refuses() || !self.partage_peut_toucher(&voisins) {
             return;
         }
-        if self.structure_op_dessins(|d, i| d.join_next_plan_without_mark(i)) {
-            self.status = format!("Plans réunis : {}.", panel_title(&self.doc, self.cur_panel));
-        } else {
-            self.status = "Pas de plan suivant dans cette séquence.".into();
-        }
+        // Deux calques de même nom : la fenêtre le demande d'abord (`fusionnoms.rs`).
+        let a = self.panel().id;
+        self.jonction_demander(crate::fusionnoms::Jonction::Suivant { a, precedent: false });
     }
 
     /// Fusionne les plans choisis (deux ou plus, qui se suivent dans une même séquence) en un
@@ -309,12 +307,8 @@ impl App {
             self.status = "Choisis au moins deux plans (Ctrl ou Maj + clic dans le montage) pour les fusionner.".into();
             return;
         }
-        if self.structure_op_dessins(|d, _| d.join_plans(&ids)) {
-            self.board_sel.clear();
-            self.status = format!("{n} plans fusionnés : {}.", panel_title(&self.doc, self.cur_panel));
-        } else {
-            self.status = "Les plans choisis doivent se suivre, dans une même séquence.".into();
-        }
+        // Deux calques de même nom : la fenêtre le demande d'abord (`fusionnoms.rs`).
+        self.jonction_demander(crate::fusionnoms::Jonction::Choisis(ids));
     }
 
     /// Réunit le plan précédent (de la même séquence) et le plan courant.
@@ -323,11 +317,12 @@ impl App {
         if self.storyboard_refuses() || !self.partage_peut_toucher(&voisins) {
             return;
         }
-        if self.structure_op_dessins(|d, i| d.join_next_plan_without_mark(i.checked_sub(1)?)) {
-            self.status = format!("Plans réunis : {}.", panel_title(&self.doc, self.cur_panel));
-        } else {
+        let Some(a) = self.cur_panel.checked_sub(1).and_then(|i| self.doc.panels.get(i)).map(|p| p.id) else {
             self.status = "Pas de plan précédent dans cette séquence.".into();
-        }
+            return;
+        };
+        // Deux calques de même nom : la fenêtre le demande d'abord (`fusionnoms.rs`).
+        self.jonction_demander(crate::fusionnoms::Jonction::Suivant { a, precedent: true });
     }
 
     /// Pose ou retire une marque d'image à l'image courante du plan (une image de storyboard de

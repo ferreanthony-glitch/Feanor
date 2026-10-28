@@ -250,9 +250,9 @@ impl Document {
     }
 
     /// Réunit le plan `index` et le suivant en tenant compte du décor (`decor_avant_jonction`, `decor_apres_jonction`).
-    pub(crate) fn join_with_decor(&mut self, index: usize) {
+    pub(crate) fn join_with_decor_with(&mut self, index: usize, opts: &crate::fusionnoms::JoinOpts) {
         let j = self.decor_avant_jonction(index);
-        self.append_next(index);
+        self.append_next_with(index, opts);
         self.decor_apres_jonction(index, j);
     }
 }

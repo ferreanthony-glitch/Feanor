@@ -200,6 +200,7 @@ etat_projet! {
     res_edit: Option<crate::projetui::ResolutionEdit> = None,
     duration_dialog: Option<crate::rognageui::DurationDialog> = None,
     duree_plans: Option<crate::dureeplans::DureePlans> = None,
+    fusion_noms: Option<crate::fusionnoms::FusionNoms> = None,
     trim_menu: Option<(u64, usize)> = None,
     goto_plan: Option<String> = None,
     renumber_confirm: bool = false,

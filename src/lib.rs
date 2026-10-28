@@ -480,6 +480,10 @@ mod timeline_cles_tests;
 mod dureeplans;
 #[cfg(test)]
 mod dureeplans_tests;
+// Réunir deux plans qui ont un calque de même nom : la question.
+mod fusionnoms;
+#[cfg(test)]
+mod fusionnoms_tests;
 // Nouvelle séquence avec les plans choisis.
 mod sequenceplans;
 #[cfg(test)]

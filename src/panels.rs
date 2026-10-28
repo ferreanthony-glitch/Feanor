@@ -816,7 +816,9 @@ impl App {
         self.smart_rename_window(ctx);
         self.goto_window(ctx);
         self.duration_dialog_ui(ctx);
+        // Changer la durée des plans choisis (`dureeplans.rs`) ; réunir deux plans qui ont un calque de même nom (`fusionnoms.rs`).
         self.plans_duration_dialog_ui(ctx);
+        self.fusion_noms_ui(ctx);
         self.palette_window(ctx);
         // Nouveau projet (`nouveauui.rs`).
         self.new_project_window(ctx);
