@@ -102,7 +102,8 @@ pub fn commandes_de_l_outil(tool: Tool) -> Vec<(&'static str, &'static str)> {
         Tool::Brush | Tool::Pencil | Tool::Eraser => &[
             ("outil.taille_plus", "Plus gros"),
             ("outil.taille_moins", "Plus fin"),
-            ("pinceau.derriere", "Peint sur l'aplat"),
+            ("pinceau.derriere", "Peindre derrière"),
+            ("pinceau.sur_aplat", "Peint sur l'aplat"),
             ("pinceau.fond", "Aplat sous le trait"),
             ("couleur.intervertir", "Intervertir les couleurs"),
         ],

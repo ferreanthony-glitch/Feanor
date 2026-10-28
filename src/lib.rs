@@ -218,6 +218,9 @@ mod fondfil;
 #[cfg(test)]
 mod fondfil_tests;
 mod fondui;
+mod aplatsur;
+#[cfg(test)]
+mod aplatsur_tests;
 mod blend;
 #[cfg(test)]
 mod blend_tests;
