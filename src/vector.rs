@@ -566,6 +566,12 @@ pub enum Element {
         contours: Vec<Vec<[f32; 2]>>,
         color: [u8; 3],
         opacity: f32,
+        /// Un dégradé à la place de la couleur unie (outil Dégradé, `degrade.rs`, format 38) : il reste un
+        /// réglage de la zone (jamais des pixels écrits dans le dessin), suit la forme quand elle se déplace
+        /// ou se déforme, et se rend avec elle. `color` reste la couleur de départ (sélection par couleur,
+        /// pastilles) ; `opacity` multiplie celle du dégradé. Absent : couleur unie, comme avant.
+        #[serde(default, rename = "degrade", skip_serializing_if = "Option::is_none")]
+        gradient: Option<crate::degrade::Degrade>,
     },
     /// Texte (5d), modifiable avec l'outil Texte : dessiné par les contours des lettres de sa
     /// police (voir `text.rs`).
@@ -664,11 +670,25 @@ impl Element {
         }
     }
 
+    /// Une couleur choisie pour l'élément. Une zone en dégradé devient unie (le dégradé se refait avec l'outil Dégradé ;
+    /// Ctrl+Z le rend).
     pub fn set_color(&mut self, c: [u8; 3]) {
         match self {
-            Element::Stroke { color, .. } | Element::Fill { color, .. } | Element::Text { color, .. } => *color = c,
+            Element::Stroke { color, .. } | Element::Text { color, .. } => *color = c,
+            Element::Fill { color, gradient, .. } => {
+                *color = c;
+                *gradient = None;
+            }
         }
         self.invalidate_cache();
+    }
+
+    /// Le dégradé de la zone, s'il en a un.
+    pub fn gradient(&self) -> Option<&crate::degrade::Degrade> {
+        match self {
+            Element::Fill { gradient, .. } => gradient.as_ref(),
+            _ => None,
+        }
     }
 
     pub fn scale_width(&mut self, k: f32) {
@@ -781,6 +801,7 @@ impl Element {
                 contours,
                 color,
                 opacity,
+                gradient,
             } => Element::Fill {
                 contours: contours
                     .iter()
@@ -795,6 +816,8 @@ impl Element {
                     .collect(),
                 color: *color,
                 opacity: *opacity,
+                // L'axe du dégradé suit la forme.
+                gradient: gradient.map(|g| g.transformed(a)),
             },
             Element::Text { text, font, size, color, opacity, place } => Element::Text {
                 text: text.clone(),
@@ -1175,6 +1198,25 @@ impl Mask {
             }
         }
     }
+
+    /// Comme `composite`, avec la couleur et l'opacité du dégradé `g` au centre de chaque pixel.
+    fn composite_gradient(&self, raster: &mut Raster, g: &crate::degrade::Degrade, opacity: f32) {
+        for ly in 0..self.h {
+            for lx in 0..self.w {
+                let m = self.data[ly * self.w + lx];
+                if m <= 0.0 {
+                    continue;
+                }
+                let (x, y) = (self.x0 + lx as i64, self.y0 + ly as i64);
+                let (rgb, a) = g.couleur(x as f32 + 0.5, y as f32 + 0.5);
+                let t = TILE as i64;
+                let idx = raster.id_of(x.div_euclid(t) as i32, y.div_euclid(t) as i32);
+                let i = y.rem_euclid(t) as usize * TILE + x.rem_euclid(t) as usize;
+                let tile = raster.tile_mut(idx);
+                tile[i] = paint(tile[i], [rgb[0].round() as u8, rgb[1].round() as u8, rgb[2].round() as u8], m.min(1.0) * opacity * a);
+            }
+        }
+    }
 }
 
 pub fn render_element(raster: &mut Raster, e: &Element) {
@@ -1321,9 +1363,13 @@ pub fn render_element_in(raster: &mut Raster, e: &Element, clip: Rect, place: Pl
             contours,
             color,
             opacity,
+            gradient,
         } => {
             fill_even_odd(&mut mask, contours);
-            mask.composite(raster, *color, *opacity);
+            match gradient {
+                Some(g) => mask.composite_gradient(raster, g, *opacity),
+                None => mask.composite(raster, *color, *opacity),
+            }
         }
         Element::Text { color, opacity, .. } => {
             // Lettre par lettre (règle non nulle des polices) ; les couvertures s'ajoutent, deux

@@ -329,6 +329,7 @@ impl App {
                 contours,
                 color,
                 opacity: 1.0,
+                gradient: None,
             },
         );
         // L'insertion décale les éléments : une sélection garderait de mauvais indices.

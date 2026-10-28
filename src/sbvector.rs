@@ -121,7 +121,7 @@ fn data_layer_elements(layer: &Value, color_of: &dyn Fn(Option<&str>) -> ([u8; 3
     for (id, contours) in zones {
         let (color, opacity) = color_of(id);
         if opacity > 0.0 {
-            out.push(Element::Fill { contours, color, opacity });
+            out.push(Element::Fill { contours, color, opacity, gradient: None });
         }
     }
     let thickness_paths: Vec<&Value> = layer.get("thicknessPaths").and_then(Value::as_array).map(|a| a.iter().collect()).unwrap_or_default();
@@ -205,7 +205,7 @@ fn layer_elements(layer: &Value, color_of: &dyn Fn(Option<&str>) -> ([u8; 3], f3
             continue;
         }
         let (color, opacity) = color_of(*id);
-        out.push(Element::Fill { contours: rings, color, opacity });
+        out.push(Element::Fill { contours: rings, color, opacity, gradient: None });
     }
     out.extend(pencils);
 }
@@ -401,10 +401,14 @@ pub fn fit_to_image(raw: &[Element], target: &Raster) -> Option<Fit> {
                     brush: brush.clone(),
                     trace: trace.without_cache(),
                 },
-                Element::Fill { contours, color, opacity } => Element::Fill {
+                Element::Fill { contours, color, opacity, gradient } => Element::Fill {
                     contours: contours.iter().map(|c| c.iter().map(|p| place(*p)).collect()).collect(),
                     color: *color,
                     opacity: *opacity,
+                    gradient: gradient.map(|g| g.mapped(|p| {
+                        let q = place([p.x, p.y]);
+                        eframe::egui::pos2(q[0], q[1])
+                    })),
                 },
                 other => other.clone(),
             })

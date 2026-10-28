@@ -1004,7 +1004,7 @@ pub fn fill_vector(seg: &Segmentation, couleurs: &[Option<Rgba>]) -> VectorDrawi
         if contours.is_empty() {
             continue;
         }
-        elements.push(Element::Fill { contours, color: [c[0], c[1], c[2]], opacity: c[3] as f32 / 255.0 });
+        elements.push(Element::Fill { contours, color: [c[0], c[1], c[2]], opacity: c[3] as f32 / 255.0, gradient: None });
     }
     VectorDrawing { elements }
 }

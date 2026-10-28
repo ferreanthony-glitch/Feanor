@@ -113,7 +113,7 @@ fn morph(a: &Element, b: &Element, t: f32) -> Option<Element> {
             };
             Some(Element::Stroke { points, color: lerp_rgb(*ca, *cb, t), opacity: lerp(*oa, *ob, t), hardness: lerp(*ha, *hb, t), brush: brush.clone(), trace })
         }
-        (Element::Fill { contours: ka, color: ca, opacity: oa }, Element::Fill { contours: kb, color: cb, opacity: ob }) if ka.len() == kb.len() => {
+        (Element::Fill { contours: ka, color: ca, opacity: oa, gradient: ga }, Element::Fill { contours: kb, color: cb, opacity: ob, gradient: gb }) if ka.len() == kb.len() => {
             let contours = ka
                 .iter()
                 .zip(kb)
@@ -123,7 +123,13 @@ fn morph(a: &Element, b: &Element, t: f32) -> Option<Element> {
                     rx.iter().zip(&ry).map(|(p, q)| [lerp(p[0], q[0], t), lerp(p[1], q[1], t)]).collect()
                 })
                 .collect();
-            Some(Element::Fill { contours, color: lerp_rgb(*ca, *cb, t), opacity: lerp(*oa, *ob, t) })
+            // Deux dégradés de même genre se mélangent (axe, couleurs, opacités) ; sinon celui du plus proche.
+            let gradient = match (ga, gb) {
+                (Some(x), Some(y)) if x.genre == y.genre => Some(crate::degrade::Degrade::entre(x, y, t)),
+                (None, None) => None,
+                _ => *(if t < 0.5 { ga } else { gb }),
+            };
+            Some(Element::Fill { contours, color: lerp_rgb(*ca, *cb, t), opacity: lerp(*oa, *ob, t), gradient })
         }
         _ => None,
     }

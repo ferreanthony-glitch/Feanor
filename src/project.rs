@@ -181,7 +181,14 @@ pub const FORMAT: &str = "pelure-projet";
 /// la cadence 2. Une version précédente refuse le projet : elle montrerait le mouvement de caméra en douceur, le film changerait
 /// sans prévenir. Un projet de version 36 ou moins s'ouvre tel quel, la postérisation éteinte. (Si une autre branche a aussi
 /// pris le numéro 37, la fusion garde le 37 et réunit les deux descriptions.)
-pub const VERSION: u32 = 37;
+/// 38 (2026-10-24, `docs/INTERFACE.md` partie 54, outil Dégradé) : **zone vectorielle en dégradé** — un élément `Fill` d'un dessin
+/// vectoriel peut porter `degrade` (`genre` « lineaire » ou « radial », `depart` et `arrivee` : les deux points de l'axe, en
+/// pixels du dessin, `couleur_depart`, `couleur_arrivee`, `opacite_depart`, `opacite_arrivee`) ; la zone se rend avec son dégradé,
+/// et l'axe suit la forme quand elle se déplace, tourne ou se déforme. Omis : couleur unie, comme avant. Une version précédente
+/// refuse le projet : elle montrerait ces zones en couleur unie, le film changerait sans prévenir. Un projet de version 37 ou
+/// moins s'ouvre tel quel, à l'identique. (Si une autre branche a aussi pris le numéro 38, la fusion garde le 38 et réunit les
+/// deux descriptions.)
+pub const VERSION: u32 = 38;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -3382,7 +3389,9 @@ fn implausible(d: &VectorDrawing) -> Option<usize> {
         Element::Stroke { points, opacity, hardness, .. } => {
             !points.iter().all(|p| coord(p.x) && coord(p.y) && p.r.is_finite() && (0.0..=MAX_RADIUS).contains(&p.r)) || !opacity.is_finite() || !hardness.is_finite()
         }
-        Element::Fill { contours, opacity, .. } => !contours.iter().flatten().all(|p| coord(p[0]) && coord(p[1])) || !opacity.is_finite(),
+        Element::Fill { contours, opacity, gradient, .. } => {
+            !contours.iter().flatten().all(|p| coord(p[0]) && coord(p[1])) || !opacity.is_finite() || gradient.as_ref().is_some_and(|g| !g.is_sane() || !g.depart.iter().chain(g.arrivee.iter()).all(|v| coord(*v)))
+        }
         Element::Text { size, place, opacity, .. } => !(size.is_finite() && *size > 0.0 && *size <= MAX_RADIUS) || !place.iter().all(|v| v.is_finite() && v.abs() <= MAX_COORD * 10.0) || !opacity.is_finite(),
     })
 }

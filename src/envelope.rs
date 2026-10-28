@@ -353,10 +353,11 @@ pub fn warp_drawing(original: &VectorDrawing, items: Option<&[usize]>, src: Rect
                 let trace = if samples.len() == pts.len() { trace.with_samples(&samples) } else { trace.without_samples() };
                 Element::Stroke { points: pts, color: *color, opacity: *opacity, hardness: *hardness, brush: brush.clone(), trace }
             }
-            Element::Fill { contours, color, opacity } => Element::Fill {
+            Element::Fill { contours, color, opacity, gradient } => Element::Fill {
                 contours: contours.iter().map(|c| densify_points(c, step, true)).collect(),
                 color: *color,
                 opacity: *opacity,
+                gradient: *gradient,
             },
             Element::Text { .. } => e.clone(),
         };

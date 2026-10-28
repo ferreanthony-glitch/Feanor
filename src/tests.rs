@@ -208,6 +208,7 @@ fn vector_fill_follows_region_with_hole() {
         contours,
         color: [255, 0, 0],
         opacity: 1.0,
+        gradient: None,
     };
     let r = VectorDrawing { elements: vec![fill.clone()] }.render(w, h);
     assert_eq!(r.get(15, 15).a(), 255);
@@ -525,6 +526,7 @@ fn demo_project() {
             contours: vec![vec![[0.0, 760.0], [1920.0, 700.0], [1920.0, 1080.0], [0.0, 1080.0]]],
             color: [200, 210, 225],
             opacity: 1.0,
+            gradient: None,
         });
         d.elements.push(line(0.0, 760.0, 1920.0, 700.0, 4.0));
         let r = 120.0 + 70.0 * i as f32;
