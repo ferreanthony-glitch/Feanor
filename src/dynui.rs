@@ -5,7 +5,7 @@
 
 use eframe::egui::{self, pos2, vec2, Rect, Sense, Shape, Stroke};
 
-use crate::brush::{BrushSettings, Connection, Curve, Source};
+use crate::brush::{BrushSettings, Connection, Curve, MixKind, Source};
 use crate::bulles::bulle;
 use crate::theme;
 
@@ -43,22 +43,65 @@ pub(crate) fn scatter_ui(ui: &mut egui::Ui, s: &mut BrushSettings) {
     bulle(resp, "Nombre", "Empreintes posées à chaque pas, chacune dispersée à part.", "");
 }
 
-/// Peinture humide (moteur de dessin, étape 11) : mélange avec la couleur déjà posée, et charge
-/// de la brosse. Une partie de la catégorie « Couleur et mélange ».
-pub(crate) fn wet_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) {
-    let resp = ui.add(egui::Slider::new(&mut s.mix, 0.0..=1.0).text("Mélange"));
-    bulle(resp, "Mélange", "La brosse prend la couleur déjà posée sous elle, la mêle à la sienne et l'entraîne (0 : peinture qui couvre, comme avant).", "");
-    let resp = ui.add(egui::Slider::new(&mut s.charge, 0.0..=1.0).text("Charge"));
-    bulle(resp, "Charge", "La peinture dans la brosse : 1, elle ne s'épuise pas ; moins, elle s'épuise le long du trait, puis la brosse ne fait plus qu'étaler.", "");
-    ui.label(
-        egui::RichText::new(if vector {
-            "Calque vectoriel : la peinture humide ne vaut que pendant le tracé ; elle est faite pour un calque bitmap."
+/// « La couleur se mélange » (moteur de dessin, étape 11, puis 2026-10-28) : une case ; cochée, le type
+/// (pigment, eau, lisser) et son ou ses curseurs. Une partie de la catégorie « Couleur et mélange ». Sur un
+/// calque vectoriel, la case est grisée (la peinture qui se mêle lit les pixels : « Sur un calque bitmap »).
+pub(crate) fn wet_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool, mixer: bool) {
+    // Outil Mélangeur : toujours « Lisser », il n'y a que l'entraînement à régler.
+    if mixer {
+        smudge_slider(ui, s);
+        return;
+    }
+    let mut on = s.mixes();
+    let resp = ui.add_enabled(!vector, egui::Checkbox::new(&mut on, "La couleur se mélange"));
+    let help = if vector {
+        "Sur un calque bitmap"
+    } else {
+        "La couleur posée entraîne et se mêle à celle sur laquelle elle passe : gouache, acrylique, aquarelle, ou le doigt qui étale."
+    };
+    let resp = bulle(resp, "La couleur se mélange", help, "");
+    if resp.changed() {
+        if on {
+            s.turn_mix_on();
         } else {
-            "Modèle de SHOT (la formule de TVPaint n'est pas publiée) : à comparer avec tes outils de peinture."
-        })
-        .small()
-        .weak(),
-    );
+            // Les valeurs restent : la case, recochée, les retrouve.
+            s.mix_off = true;
+        }
+    }
+    if vector || !s.mixes() {
+        return;
+    }
+    ui.horizontal_wrapped(|ui| {
+        let before = s.mix_kind;
+        for kind in MixKind::ALL {
+            let resp = ui.selectable_value(&mut s.mix_kind, kind, kind.label());
+            bulle(resp, kind.label(), kind.help(), "");
+        }
+        if s.mix_kind != before {
+            // (Un type qui n'aurait rien à mêler avec les valeurs d'avant prend une valeur de départ.)
+            s.turn_mix_on();
+        }
+    });
+    match s.mix_kind {
+        MixKind::Pigment => {
+            let resp = ui.add(egui::Slider::new(&mut s.mix, 0.05..=1.0).text("Mélange"));
+            bulle(resp, "Mélange", "La part de la couleur déjà posée que la brosse prend à chaque empreinte et mêle à la sienne, comme de la peinture : bleu plus jaune donnent un vert.", "");
+            let resp = ui.add(egui::Slider::new(&mut s.charge, 0.0..=1.0).text("Charge"));
+            bulle(resp, "Charge", "La peinture dans la brosse : 1, elle ne s'épuise pas ; moins, elle s'épuise le long du trait, puis la brosse ne fait plus qu'étaler.", "");
+        }
+        MixKind::Water => {
+            let resp = ui.add(egui::Slider::new(&mut s.water, 0.05..=1.0).text("Eau"));
+            bulle(resp, "Eau", "Peu d'eau : une couleur franche. Beaucoup : très diluée et transparente, elle se mêle davantage aux couleurs mouillées dessous.", "");
+        }
+        MixKind::Smudge => smudge_slider(ui, s),
+    }
+    ui.label(egui::RichText::new("Modèle de SHOT (la formule de TVPaint n'est pas publiée) : à comparer avec tes outils de peinture.").small().weak());
+}
+
+/// Le curseur d'entraînement du doigt (type « Lisser » et outil Mélangeur).
+fn smudge_slider(ui: &mut egui::Ui, s: &mut BrushSettings) {
+    let resp = ui.add(egui::Slider::new(&mut s.smudge, 0.05..=1.0).text("Entraînement"));
+    bulle(resp, "Entraînement", "Haut : la brosse emporte longtemps ce qu'elle a pris, un long traînage. Bas : elle reprend vite la couleur du lieu. Aucune couleur n'est posée.", "");
 }
 
 /// Les connexions d'une brosse. `color` faux : la taille, l'opacité, l'angle et la rondeur (catégorie

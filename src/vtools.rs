@@ -100,10 +100,12 @@ impl App {
     // ------------------------------------------------------------------ trait et gomme
 
     pub(crate) fn begin_vector_stroke(&mut self, p: Pos2, pressure: f32, pen: bool) {
-        let Some(mut settings) = self.current_brush().copied() else {
+        let Some(mut settings) = self.current_brush() else {
             return;
         };
         settings.aliased = false;
+        // « La couleur se mélange » lit les pixels : sur un calque vectoriel, elle ne vaut pas (la case est grisée).
+        settings.mix_off = true;
         if self.tool == Tool::Pencil {
             settings.hardness = 1.0;
         }
