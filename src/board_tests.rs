@@ -4,7 +4,7 @@
 
 use eframe::egui::{pos2, vec2, Rect};
 
-use crate::board::{self, gap_cut, gap_same, note_gap, Board, BoardSettings, Hit, NoteRef, BAR_CUT_W, BAR_W, GAP_CUT, GAP_SAME, LABEL_H, MARGIN, MAX_COLUMNS, NOTE_LINE_H, NOTE_MAX_LINES, PAGE_PAD, ROW_GAP};
+use crate::board::{self, gap_cut, gap_same, note_gap, Board, BoardSettings, Hit, NoteRef, BAR_CUT_W, BAR_W, GAP_CUT, GAP_SAME, LABEL_H, MARGIN, MAX_COLUMNS, NOTE_LINE_H, PAGE_PAD, ROW_GAP};
 use crate::document::Document;
 use crate::history::{Edit, History, Nav};
 use crate::project;
@@ -34,7 +34,8 @@ fn settings(columns: usize, rows: usize) -> BoardSettings {
     BoardSettings { card_w: 200.0, columns, rows }
 }
 
-/// La hauteur d'une ligne dont les notes les plus hautes ont `lines` lignes (cadre 16:9, vignettes de 200 de large).
+/// La hauteur d'une ligne dont les textes ont `lines` lignes (cadre 16:9, vignettes de 200 de large) ; avec `lines` nul, l'espace sous la
+/// case reste compté ici (`row_height(0) - note_gap(200.0)` est la hauteur d'une ligne sans zone de texte).
 fn row_height(lines: usize) -> f32 {
     LABEL_H + 200.0 * 90.0 / 160.0 + note_gap(200.0) + lines as f32 * NOTE_LINE_H + ROW_GAP
 }
@@ -132,33 +133,37 @@ fn bars_are_grey_in_a_plan_black_at_a_cut_and_the_last_leads_to_the_empty_box() 
 }
 
 #[test]
-fn a_row_goes_down_just_enough_for_a_note_of_two_or_three_lines() {
-    let doc = doc();
+fn a_row_is_as_high_as_its_checked_fields_one_line_each_and_none_means_no_text_zone() {
+    use crate::boardsens::Textes;
+    let base = doc();
     let s = settings(4, 0);
-    let plain = board::layout(&doc, &s);
+    let plain = board::layout(&base, &s);
     assert_eq!(plain.cards[4].card.top() - plain.cards[0].card.top(), row_height(1));
-    assert_eq!(plain.cards[0].note.height(), NOTE_LINE_H, "une bande vide garde une ligne");
+    assert_eq!(plain.cards[0].note.height(), NOTE_LINE_H, "d'origine, les notes : une ligne, même vide");
     assert_eq!(plain.cards[0].note.top(), plain.cards[0].thumb.bottom() + note_gap(200.0));
-    for lines in [2usize, 3] {
-        let mut notes = std::collections::HashMap::new();
-        notes.insert(doc.panels[0].marks[0].id, lines);
-        let l = board::layout_with(&doc, &s, &notes, false, &Default::default());
-        assert_eq!(l.cards[1].note.height(), lines as f32 * NOTE_LINE_H);
+    // Une ligne par champ coché, jamais plus, quelle que soit la longueur des textes ; la rangée suivante descend d'autant.
+    let mut doc = base;
+    doc.panels[0].marks[0].notes = "une note beaucoup trop longue pour tenir sur une seule ligne de la vignette, ".repeat(20);
+    for (t, lines) in [(Textes { action: true, dialogue: false, notes: true }, 2usize), (Textes { action: true, dialogue: true, notes: true }, 3)] {
+        let l = board::layout_with(&doc, &s, &Default::default(), false, &board::Options { textes: t, ..Default::default() });
+        for c in &l.cards {
+            assert_eq!(c.note.height(), lines as f32 * NOTE_LINE_H, "{lines} champs : {lines} lignes, pas plus");
+        }
         assert_eq!(l.cards[4].card.top() - l.cards[0].card.top(), row_height(lines), "la rangée suivante descend d'autant ({lines} lignes)");
-        assert_eq!(l.cards[0].note.height(), NOTE_LINE_H, "les autres bandes gardent leur ligne");
-        assert!(l.cards[4].card.top() >= l.cards[1].note.bottom() + ROW_GAP - 1e-3, "la marge sous la note est gardée");
+        assert!(l.cards[4].card.top() >= l.cards[1].note.bottom() + ROW_GAP - 1e-3, "la marge sous le texte est gardée");
     }
-    // Quatre lignes ne sont jamais affichées : au plus trois.
-    let mut notes = std::collections::HashMap::new();
-    notes.insert(doc.panels[0].id, 9);
-    let l = board::layout_with(&doc, &s, &notes, false, &Default::default());
-    assert_eq!(l.cards[0].note.height(), NOTE_MAX_LINES as f32 * NOTE_LINE_H);
-    // Une note sur la dernière ligne de la planche descend la page, pas ce qui est avant.
-    let mut notes = std::collections::HashMap::new();
-    notes.insert(doc.panels[3].id, 2);
-    let l = board::layout_with(&doc, &s, &notes, false, &Default::default());
-    assert_eq!(l.cards[4].card.top(), plain.cards[4].card.top());
-    assert!(l.pages[0].height() > plain.pages[0].height());
+    // Aucun champ coché : pas de zone de texte, la rangée se resserre (plus d'espace sous les cases), rien à toucher.
+    let rien = board::layout_with(&doc, &s, &Default::default(), false, &board::Options { textes: Textes { action: false, dialogue: false, notes: false }, ..Default::default() });
+    assert!((rien.cards[4].card.top() - rien.cards[0].card.top() - (row_height(0) - note_gap(200.0))).abs() < 1e-3, "sans champ, ni ligne ni espace sous la case");
+    assert!(rien.cards[4].card.top() - rien.cards[0].card.top() < plain.cards[4].card.top() - plain.cards[0].card.top());
+    for (k, c) in rien.cards.iter().enumerate() {
+        assert!(!c.a_du_texte() && c.note.height() == 0.0);
+        assert_ne!(board::hit(&rien, c.note.center(), 0.0), Hit::Note(k), "pas de zone de note sans champ");
+    }
+    // Un texte qui change n'a plus d'effet sur la planche : sa hauteur ne dépend que des champs cochés.
+    let mut autre = self::doc();
+    autre.panels[3].notes = "court".into();
+    assert_eq!(board::layout(&doc, &s), board::layout(&autre, &s));
 }
 
 #[test]

@@ -470,18 +470,15 @@ fn the_notes_strip_writes_the_notes_of_the_plan_or_of_the_image_mark() {
 }
 
 #[test]
-fn a_long_note_shows_three_lines_and_an_ellipsis_but_is_stored_in_full() {
+fn a_long_note_shows_one_line_and_an_ellipsis_but_is_stored_in_full() {
     let mut b = ouvert(quatre_plans(), 4);
     let long = "Elle traverse la cour sans se retourner, le sac contre la hanche, et le gardien lève la tête un instant trop tard : la grille est déjà refermée derrière elle, et personne ne l'a vue partir ce matin-là, pas même le chien.";
     b.app.doc.panels[1].notes = long.into();
     b.chauffer(3);
-    let id = b.app.doc.panels[1].id;
-    let lines = b.app.vignettes.lines[&id];
-    assert_eq!(lines, 3, "trois lignes au plus");
     let l = b.app.board_layout();
-    assert_eq!(l.cards[3].note.height(), 3.0 * board::NOTE_LINE_H);
+    assert_eq!(l.cards[3].note.height(), board::NOTE_LINE_H, "une seule ligne pour le champ Notes, quelle que soit la longueur");
     assert_eq!(b.app.doc.panels[1].notes, long, "le texte entier est gardé");
-    // À l'écran : trois lignes, la dernière finit par « … ».
+    // À l'écran : une ligne, qui finit par « … ».
     b.garder_formes = true;
     b.image(Vec::new(), 1.0 / 60.0);
     let galley = b
@@ -490,18 +487,19 @@ fn a_long_note_shows_three_lines_and_an_ellipsis_but_is_stored_in_full() {
         .filter_map(|s| if let egui::epaint::Shape::Text(t) = &s.shape { Some(t.galley.clone()) } else { None })
         .find(|g| g.job.text == long)
         .expect("la note est peinte");
-    assert_eq!(galley.rows.len(), 3);
-    assert!(galley.rows.last().unwrap().text().ends_with('…'), "« … » au bout de la troisième ligne : {:?}", galley.rows.last().unwrap().text());
+    assert_eq!(galley.rows.len(), 1);
+    assert!(galley.rows.last().unwrap().text().ends_with('…'), "« … » au bout de la ligne : {:?}", galley.rows.last().unwrap().text());
     // Pendant la saisie, tout est là : le tampon a le texte entier.
     { let p = icone_note(&b, 3).center(); clic(&mut b, p); }
     assert_eq!(b.app.vignettes.note.as_ref().map(|e| e.buffer.as_str()), Some(long));
     b.chauffer(3);
     assert!(b.app.vignettes.note.is_some());
-    // Une note de deux lignes descend la ligne d'autant : la rangée suivante garde sa marge.
+    // Une note plus courte ne change pas la hauteur : la ligne reste une ligne, la planche ne bouge pas.
     { let p = vignette(&b, 0).center(); clic(&mut b, p); }
+    let avant = b.app.board_layout();
     b.app.doc.panels[1].notes = "Contre-champ serré sur son visage, elle ne dit rien.".into();
     b.chauffer(3);
-    assert_eq!(b.app.vignettes.lines[&id], 2);
+    assert_eq!(b.app.board_layout(), avant);
 }
 
 #[test]

@@ -5,7 +5,9 @@
 //!   « À la japonaise » les range de haut en bas, colonne par colonne (la colonne suivante est à droite), leur texte à droite de la case,
 //!   comme une feuille d'e-konte (`boardjapon.rs`).
 //! - **Textes** (`Textes`) : lesquels des champs du plan (l'action, le dialogue, les notes : ceux de la fiche) se montrent à côté des cases.
-//!   D'origine, les notes seules (ce qui se voyait avant le panneau). Quand plusieurs champs sont montrés, chacun porte une courte
+//!   D'origine, les notes seules (ce qui se voyait avant le panneau). **Chaque champ coché fait exactement une ligne** sous la case (à sa
+//!   droite à la japonaise), dans l'ordre de la fiche ; un texte plus long que la ligne est coupé par « … » ; **aucun champ coché : aucune
+//!   ligne** et la place sous les cases se resserre (Anthony, 2026-10-24). Quand plusieurs champs sont montrés, chacun porte une courte
 //!   étiquette colorée ; un champ seul reste sans étiquette, comme avant.
 //!
 //! Ces deux réglages sont des réglages de l'application, dans la disposition de la fenêtre (`Layout::board_sens`, `Layout::board_textes`),
@@ -13,7 +15,6 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::board::NOTE_MAX_LINES;
 use crate::document::Document;
 
 /// Le sens de lecture de la planche.
@@ -131,9 +132,14 @@ impl Textes {
         self.champs().len() >= 2
     }
 
-    /// Les lignes qu'une bande de texte peut avoir au plus : trois par champ montré (au moins trois : une bande vide garde sa place).
-    pub fn lignes_max(self) -> usize {
-        NOTE_MAX_LINES * self.champs().len().max(1)
+    /// Les lignes de la bande de texte d'une case : une par champ montré, qu'il ait un texte ou non (zéro : pas de bande).
+    pub fn lignes(self) -> usize {
+        self.champs().len()
+    }
+
+    /// La ligne qu'occupe le champ `c` dans la bande (0 : la première), s'il est montré.
+    pub fn ligne_du(self, c: Champ) -> Option<usize> {
+        self.champs().iter().position(|x| *x == c)
     }
 
     /// Une valeur qui change avec les champs montrés (clés de mémoire).
@@ -161,6 +167,13 @@ pub fn texte_du_champ(doc: &Document, panel: usize, id: u64, frame: usize, champ
 }
 
 /// Les champs montrés de la case, ceux qui ont un texte : (champ, texte), dans l'ordre de la fiche.
+#[cfg(test)]
 pub fn champs_de_la_case<'a>(doc: &'a Document, panel: usize, id: u64, frame: usize, textes: Textes) -> Vec<(Champ, &'a str)> {
     textes.champs().into_iter().map(|c| (c, texte_du_champ(doc, panel, id, frame, c))).filter(|(_, t)| !t.trim().is_empty()).collect()
+}
+
+/// Un texte mis sur une seule ligne : les retours à la ligne et les espaces qui se suivent deviennent un seul espace (la ligne de la case
+/// est ensuite coupée par « … » à sa largeur).
+pub fn une_ligne(texte: &str) -> String {
+    texte.split_whitespace().collect::<Vec<_>>().join(" ")
 }

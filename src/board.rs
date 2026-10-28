@@ -9,8 +9,9 @@
 //! coupe) et une courte barre verticale (grise : même plan ; noire : coupe).
 //!
 //! Vignettes simples (Anthony, 2026-10-21) : aucune bande de titre ; seul le numéro du plan, au-dessus
-//! de sa première vignette ; sous chaque vignette, une bande de note (de 1 à 3 lignes ; la ligne
-//! suivante descend d'autant). Une note libre reste où on l'a posée ; une note attachée à une vignette la suit,
+//! de sa première vignette ; sous chaque vignette, une bande de texte d'**une ligne par champ coché** du panneau Planche (action,
+//! dialogue, notes : de zéro à trois lignes, `Textes::lignes`, quel que soit le texte, coupé par « … ») ; la ligne
+//! suivante descend d'autant, et sans champ coché il n'y a pas de bande du tout. Une note libre reste où on l'a posée ; une note attachée à une vignette la suit,
 //! à son échelle.
 //!
 //! **Papier infini et cases pâles** (Anthony, 2026-10-21) : plus de carte blanche, les cases sont posées sur le papier. Après la
@@ -25,6 +26,11 @@
 //! rangée que l'enveloppe touche, l'intervalle en x qu'elle y couvre). Les cases qui suivent se rangent **dans l'ordre de
 //! lecture** dans les places libres, à côté et dessous de l'enveloppe, jamais dessus.
 //!
+//! **Le cadre le plus haut s'aligne sur la rangée** (Anthony, 2026-10-24) : le haut de l'empreinte est le haut des images de la rangée, comme
+//! n'importe quelle case, quelle que soit la direction du mouvement. Quand un cadre (B…) est au-dessus de A, c'est A qui est **en retrait**,
+//! plus bas (`CardPlace::ligne` est la case à la ligne, `thumb` est A) ; les autres cases de la rangée ne descendent pas, la rangée est
+//! assez haute pour A et sa note, la suivante est dessous. Un mouvement qui descend garde A sur la ligne.
+//!
 //! **La case A reste en place quand on retouche ses autres cadres, et l'ordre de lecture ne se casse jamais** (Anthony, 2026-10-22) :
 //! - **pendant un geste** de caméra, A reste exactement où elle était (`Reserve::pose`, `poser`) : l'enveloppe peut recouvrir un instant des
 //!   cases d'avant, rien ne se range sous la main ;
@@ -34,10 +40,12 @@
 //!   des cases d'avant, la case passe, une fois, à la première place où elle tient tout entière **après la précédente** : à droite sur la même
 //!   rangée, sinon sur la suivante. Les cases d'avant ne bougent jamais ;
 //! - une enveloppe qui dépasse la page en haut ou à gauche fait glisser toute la planche d'autant (`BoardLayout::decalage`) : la vue compense par
-//!   le défilement, rien ne saute à l'écran.
-//!//! Les rangées d'une planche dépendent de la hauteur de leurs notes, qui dépend de la place des cases : la place des rangées se
-//! déduit par quelques passes (`layout_with`), qui s'arrêtent dès que rien ne change (une seule passe tant que toutes les notes
-//! font une ligne).
+//!   le défilement, rien ne saute à l'écran (au repos, une enveloppe qui monte ou va à gauche ne dépasse plus : le cadre le plus haut est à la
+//!   ligne de la rangée).
+//!
+//! La hauteur des rangées d'une planche dépend de ce que les empreintes demandent à leur rangée (l'enveloppe et la note sous le dernier
+//! cadre), qui dépend de la place des cases : la place des rangées se
+//! déduit par quelques passes (`layout_with`), qui s'arrêtent dès que rien ne change (une seule passe sans mouvement de caméra).
 //!
 //! La place réservée peut être **retenue** (`Reserve`) : pendant un geste de caméra, l'étendue de l'enveloppe ne rétrécit
 //! jamais, si bien que les autres cases ne tremblent pas quand le cadre va et vient ; au lâcher tout se range d'après les cadres.
@@ -56,10 +64,9 @@ use crate::vignettecam::{self, Empreinte, Place, Zone};
 pub const LABEL_H: f32 = 30.0;
 /// Taille des lettres du numéro de plan, en part de la hauteur de sa ligne.
 pub const NUMERO_FRACTION: f32 = 0.68;
-/// Espace entre une vignette et sa bande de note ; hauteur d'une ligne de note ; lignes affichées au plus.
+/// Espace entre une vignette et sa bande de note ; hauteur d'une ligne de texte (une par champ coché : action, dialogue, notes).
 pub const NOTE_GAP: f32 = 8.0;
 pub const NOTE_LINE_H: f32 = 13.0;
-pub const NOTE_MAX_LINES: usize = 3;
 /// Largeur la plus étroite d'une bande de note (sous un cadre de caméra étroit).
 pub const MIN_NOTE_W: f32 = 60.0;
 /// Espace sous la dernière ligne de note, avant la ligne suivante.
@@ -140,12 +147,16 @@ pub struct Reserve {
     /// Lue à la japonaise : la case A tient aussi sa hauteur (le haut de l'image, depuis le haut des colonnes) ; `pose` est alors sa
     /// colonne et son x. Rien en lignes.
     pub pose_y: Option<f32>,
+    /// De combien la case A est en retrait de la ligne des autres cases de sa rangée (en lignes : plus bas, quand un cadre monte au-dessus
+    /// d'elle ; à la japonaise : plus à droite, quand un cadre va à sa gauche). Tenu pendant le geste, comme la pose : A ne bouge pas, même
+    /// si le cadre qu'on tire a besoin de plus de retrait (au lâcher, tout se range d'après les cadres).
+    pub pose_dec: Option<f32>,
 }
 
 impl Reserve {
     /// Cette réserve, élargie à `autre` (elle ne rétrécit jamais ; la case A reste là où le geste l'a trouvée).
     pub fn avec(self, autre: Reserve) -> Reserve {
-        Reserve { plan: self.plan, rect: self.rect.union(autre.rect), pose: self.pose.or(autre.pose), pose_y: self.pose_y.or(autre.pose_y) }
+        Reserve { plan: self.plan, rect: self.rect.union(autre.rect), pose: self.pose.or(autre.pose), pose_y: self.pose_y.or(autre.pose_y), pose_dec: self.pose_dec.or(autre.pose_dec) }
     }
 
     /// Ce que la case `k` de `layout` couvre, relativement à son image A (la case seule si sa caméra ne bouge pas), et où elle est.
@@ -155,8 +166,10 @@ impl Reserve {
             Some(m) => m.tuile.rect.translate(-c.thumb.min.to_vec2()),
             None => Rect::from_min_size(Pos2::ZERO, c.thumb.size()),
         };
-        let pose_y = layout.sens.japonais().then(|| c.thumb.top() - layout.origine_y);
-        Some(Reserve { plan: c.plan, rect, pose: Some((c.row, c.thumb.left() - layout.origine_x)), pose_y })
+        let jap = layout.sens.japonais();
+        let pose_y = jap.then(|| c.thumb.top() - layout.origine_y);
+        let dec = if jap { c.thumb.left() - c.ligne.left() } else { c.thumb.top() - c.ligne.top() };
+        Some(Reserve { plan: c.plan, rect, pose: Some((c.row, c.thumb.left() - layout.origine_x)), pose_y, pose_dec: Some(dec.max(0.0)) })
     }
 }
 
@@ -212,6 +225,11 @@ pub struct CardPlace {
     pub reach_y: f32,
     /// L'empreinte du mouvement dans `BoardLayout::moves`.
     pub mv: Option<usize>,
+    /// La case à la **ligne des autres cases de sa rangée** (Anthony, 2026-10-24) : le cadre le plus haut d'un mouvement s'aligne sur le haut
+    /// des images de la rangée (A est alors plus bas), le plus à gauche sur le bord gauche de la colonne à la japonaise (A est plus à droite).
+    /// `ligne` est l'image comme elle serait sans le retrait de A : ce sur quoi s'alignent les barres, les repères de pose et l'aimant.
+    /// C'est `thumb` pour une case ordinaire.
+    pub ligne: Rect,
 }
 
 impl CardPlace {
@@ -223,6 +241,16 @@ impl CardPlace {
     /// La ligne du numéro de plan, au-dessus de l'image.
     pub fn label(&self) -> Rect {
         Rect::from_min_max(self.card.min, pos2(self.card.right(), self.thumb.top()))
+    }
+
+    /// La zone de texte existe-t-elle ? (Aucun champ coché : une bande sans hauteur, rien à peindre ni à toucher.)
+    pub fn a_du_texte(&self) -> bool {
+        self.note.is_positive()
+    }
+
+    /// La ligne `i` de la zone de texte (0 : la première), un champ coché chacune.
+    pub fn ligne_de_texte(&self, i: usize) -> Rect {
+        Rect::from_min_size(self.note.min + vec2(0.0, i as f32 * NOTE_LINE_H), vec2(self.note.width(), NOTE_LINE_H))
     }
 }
 
@@ -386,11 +414,12 @@ impl Occ {
 }
 
 /// Ce qui empêche de poser quelque chose entre `a` et `b` (l'écart qui suit compris) dans la rangée `row` : la fin de l'intervalle
-/// occupé qui le gêne. `deborde` : `a` est le bord gauche d'une enveloppe qui dépasse à gauche de sa case : elle peut mordre sur
-/// l'écart de la case d'avant (il n'est là que pour séparer deux vignettes), pas sur la case elle-même.
-fn bloque(occ: &Occ, row: i64, a: f32, b: f32, deborde: bool) -> Option<f32> {
+/// occupé qui le gêne, **son écart compris**. Une enveloppe qui dépasse à gauche de sa case ne mord donc jamais sur l'écart de la case
+/// d'avant, où est la barre de coupe : elle commence un écart normal après elle (Anthony, 2026-10-24 : un cadre B en haut à gauche de A
+/// passait sur la barre et sur la case d'avant ; le plan se décale à droite d'autant qu'il faut).
+fn bloque(occ: &Occ, row: i64, a: f32, b: f32) -> Option<f32> {
     let eps = 0.5;
-    let fin = |iv: &Occupe| if deborde { iv.1 } else { iv.1 + iv.2 };
+    let fin = |iv: &Occupe| iv.1 + iv.2;
     occ.rangee(row)?.iter().filter(|iv| a < fin(iv) - eps && b > iv.0 + eps).map(fin).fold(None, |m, e| Some(m.map_or(e, |m: f32| m.max(e))))
 }
 
@@ -450,7 +479,7 @@ fn trouve(occ: &Occ, g: &Gabarit, gap: f32, row_w: f32, page_cap: usize, depart:
         }
         let mut pousse = None;
         for &(b, lo, hi) in &g.bandes {
-            if let Some(fin) = bloque(occ, r_a as i64 + b as i64, x_a + lo, x_a + hi + gap, lo < -1e-3) {
+            if let Some(fin) = bloque(occ, r_a as i64 + b as i64, x_a + lo, x_a + hi + gap) {
                 pousse = Some(fin - lo);
                 break;
             }
@@ -471,7 +500,7 @@ fn occupe(occ: &mut Occ, g: &Gabarit, gap: f32, r_a: usize, x_a: f32) {
 
 /// La case `g`, posée en (`r_a`, `x_a`), gênerait-elle ce qui est déjà noté ?
 fn gene(occ: &Occ, g: &Gabarit, gap: f32, r_a: usize, x_a: f32) -> bool {
-    g.bandes.iter().any(|&(b, lo, hi)| bloque(occ, r_a as i64 + b as i64, x_a + lo, x_a + hi + gap, lo < -1e-3).is_some())
+    g.bandes.iter().any(|&(b, lo, hi)| bloque(occ, r_a as i64 + b as i64, x_a + lo, x_a + hi + gap).is_some())
 }
 
 /// Ce que prend sur la planche une case dont l'enveloppe est `poly` (relative au coin haut-gauche de A) : pour chaque rangée
@@ -587,10 +616,9 @@ struct Cle {
     frame: [usize; 2],
     plans: Vec<ClePlan>,
     s: [u64; 3],
-    lines: HashMap<u64, usize>,
     last_joins: bool,
     pale_rows: Option<usize>,
-    hold: Option<(u64, [u32; 4], Option<(usize, u32)>, Option<u32>)>,
+    hold: Option<CleHold>,
     sens: Sens,
     textes: u8,
 }
@@ -612,22 +640,25 @@ fn bits_reglages(s: &BoardSettings) -> [u64; 3] {
     [s.card_w.to_bits() as u64, s.columns as u64, s.rows as u64]
 }
 
-fn bits_hold(opt: &Options) -> Option<(u64, [u32; 4], Option<(usize, u32)>, Option<u32>)> {
-    opt.hold.map(|h| (h.plan, [h.rect.min.x, h.rect.min.y, h.rect.max.x, h.rect.max.y].map(f32::to_bits), h.pose.map(|(r, x)| (r, x.to_bits())), h.pose_y.map(f32::to_bits)))
+/// La réserve du geste en cours, bit à bit : le plan, la boîte, la pose de A (rangée, x), sa hauteur (à la japonaise) et son retrait.
+type CleHold = (u64, [u32; 4], Option<(usize, u32)>, Option<u32>, Option<u32>);
+
+fn bits_hold(opt: &Options) -> Option<CleHold> {
+    opt.hold.map(|h| (h.plan, [h.rect.min.x, h.rect.min.y, h.rect.max.x, h.rect.max.y].map(f32::to_bits), h.pose.map(|(r, x)| (r, x.to_bits())), h.pose_y.map(f32::to_bits), h.pose_dec.map(f32::to_bits)))
 }
 
 impl Cle {
-    fn de(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> Cle {
+    fn de(doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options) -> Cle {
         let plans = doc
             .panels
             .iter()
             .map(|p| ClePlan { id: p.id, scene: p.scene, n: p.frame_count(), marks: p.marks.iter().map(|m| (m.id, m.frame)).collect(), camera: p.camera.iter().map(bits_cam).collect() })
             .collect();
-        Cle { frame: doc.frame, plans, s: bits_reglages(s), lines: lines.clone(), last_joins, pale_rows: opt.pale_rows, hold: bits_hold(opt), sens: opt.sens, textes: opt.textes.bits() }
+        Cle { frame: doc.frame, plans, s: bits_reglages(s), last_joins, pale_rows: opt.pale_rows, hold: bits_hold(opt), sens: opt.sens, textes: opt.textes.bits() }
     }
 
     /// La disposition de ces arguments serait-elle celle de cette clé ? (Un passage sur les plans, sans rien allouer.)
-    fn tient(&self, doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> bool {
+    fn tient(&self, doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options) -> bool {
         self.frame == doc.frame
             && self.s == bits_reglages(s)
             && self.last_joins == last_joins
@@ -645,28 +676,28 @@ impl Cle {
                     && k.camera.len() == p.camera.len()
                     && k.camera.iter().zip(&p.camera).all(|(a, c)| *a == bits_cam(c))
             })
-            && self.lines == *lines
     }
 }
 
 /// `layout_with`, gardée dans `cache` tant que rien de ce dont elle dépend ne change (`CacheDisposition`).
 pub fn layout_cache(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options, cache: &mut CacheDisposition) -> BoardLayout {
-    if !cache.cle.as_ref().is_some_and(|k| k.tient(doc, s, lines, last_joins, opt)) {
+    if !cache.cle.as_ref().is_some_and(|k| k.tient(doc, s, last_joins, opt)) {
         cache.layout = layout_with(doc, s, lines, last_joins, opt);
-        cache.cle = Some(Cle::de(doc, s, lines, last_joins, opt));
+        cache.cle = Some(Cle::de(doc, s, last_joins, opt));
         cache.calculs += 1;
     }
     cache.layout.clone()
 }
 
-/// Comme `layout`. `lines` : le nombre de lignes de note affichées (1 à 3) de chaque vignette, par son
-/// identifiant (absente : une ligne). `last_joins` : la première case pâle, si on la remplit, fait une
+/// Comme `layout`. `_lines` : le nombre de lignes de note de chaque vignette, **ignoré depuis le 2026-10-24** (chaque champ coché fait
+/// exactement une ligne, `Textes::lignes`, quel que soit son texte : la bande ne dépend plus de ce qui est écrit) ; l'argument reste pour
+/// ne pas changer tous les appels. `last_joins` : la première case pâle, si on la remplit, fait une
 /// image de plus du dernier plan (barre grise devant elle) et non un plan neuf (barre noire).
 /// Ne dépend pas de la taille de la vue : les notes libres restent à leur place quand la fenêtre change.
-pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> BoardLayout {
+pub fn layout_with(doc: &Document, s: &BoardSettings, _lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> BoardLayout {
     // À la japonaise : les colonnes (`boardjapon.rs`), le même résultat (`BoardLayout`) rangé dans l'autre sens.
     if opt.sens.japonais() {
-        return crate::boardjapon::layout(doc, s, lines, last_joins, opt);
+        return crate::boardjapon::layout(doc, s, last_joins, opt);
     }
     let cols = s.columns.clamp(1, MAX_COLUMNS);
     // (Une largeur qui n'est pas un nombre, d'un fichier de réglages abîmé, passerait à travers `clamp` et rendrait toute la
@@ -679,8 +710,8 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     }
     let n = boards.len();
     let page_cap = if s.rows == 0 { usize::MAX } else { s.rows.min(MAX_ROWS).max(1) };
-    let lignes_max = opt.textes.lignes_max();
-    let note_lines = |k: usize| lines.get(&boards[k].1).copied().unwrap_or(1).clamp(1, lignes_max);
+    // Les lignes de texte sous chaque case : une par champ coché (zéro : pas de zone de texte, `texte_h`).
+    let n_l = opt.textes.lignes();
     // L'écart après la vignette `k` : serré dans un plan, large à une coupe ; après une case pâle, large.
     let joined_after = |k: usize| match boards.get(k + 1) {
         Some(next) => next.2 > 0,
@@ -691,15 +722,13 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let gap_after = |k: usize| if joined_after(k) { g_same } else { g_cut };
     let row_w = cols as f32 * card_w + (cols - 1) as f32 * g_cut;
 
-    // Les empreintes (la première image d'un plan dont la caméra bouge).
-    let mut prints: Vec<Option<Empreinte>> = Vec::with_capacity(n);
-    for (k, b) in boards.iter().enumerate() {
-        let total = ng + note_lines(k) as f32 * NOTE_LINE_H;
-        let place = Place { card_w, thumb_h, row_w, total, max_h: 3.0 * (LABEL_H + thumb_h + total + ROW_GAP) };
-        prints.push(if b.2 == 0 { vignettecam::empreinte(doc, b.0, &place) } else { None });
-    }
+    // Les empreintes (la première image d'un plan dont la caméra bouge). (La limite de taille d'un cadre compte toujours une ligne de texte,
+    // quels que soient les champs cochés : le dessin d'un mouvement ne change pas de forme quand on coche ou décoche un champ.)
+    let total = ng + NOTE_LINE_H;
+    let place = Place { card_w, thumb_h, row_w, total, max_h: 3.0 * (LABEL_H + thumb_h + total + ROW_GAP) };
+    let prints: Vec<Option<Empreinte>> = boards.iter().map(|b| if b.2 == 0 { vignettecam::empreinte(doc, b.0, &place) } else { None }).collect();
     // Ce qu'elles réservent : l'enveloppe (élargie à ce que le geste en cours a déjà couvert), et la bande de note de A quand elle
-    // descend sous l'enveloppe.
+    // descend sous l'enveloppe. (Relatives au coin haut-gauche de A.)
     let polys: Vec<Option<Vec<Pos2>>> = prints
         .iter()
         .enumerate()
@@ -724,23 +753,40 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let notes: Vec<Option<Rect>> = prints
         .iter()
         .enumerate()
-        .map(|(k, e)| {
-            let e = e.as_ref()?;
+        .map(|(_, e)| {
+            // (Aucun champ coché : pas de note, rien sous le dernier cadre.)
+            let e = e.as_ref().filter(|_| n_l > 0)?;
             let b = e.cadres.last()?.rect;
             let (gauche, droite) = (b.left(), b.right().max(b.left() + MIN_NOTE_W));
             let sous_b = crate::viewbar::clip_to_rect(&e.enveloppe, Rect::from_min_max(pos2(gauche, -1e6), pos2(droite, 1e6))).iter().map(|q| q.y).fold(b.bottom(), f32::max);
-            Some(Rect::from_min_max(pos2(gauche, sous_b + ng), pos2(droite, sous_b + ng + note_lines(k) as f32 * NOTE_LINE_H)))
+            Some(Rect::from_min_max(pos2(gauche, sous_b + ng), pos2(droite, sous_b + ng + n_l as f32 * NOTE_LINE_H)))
         })
         .collect();
+    // **Le cadre le plus haut du mouvement s'aligne sur le haut des images de la rangée** (Anthony, 2026-10-24), comme n'importe quelle case :
+    // quand un cadre (B…) est au-dessus de A, c'est A qui est en retrait, plus bas (de `decs[k]`), et non la rangée qui descend pour lui
+    // faire de la place. Les autres cases de la rangée restent à la ligne ; l'empreinte ne monte jamais au-dessus du haut de sa rangée.
+    // Pendant un geste, A garde le retrait qu'elle avait à l'appui (`Reserve::pose_dec`) : elle ne bouge pas.
+    let tenue = |k: usize| opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && boards[k].2 == 0);
+    let decs: Vec<f32> = (0..n)
+        .map(|k| match &polys[k] {
+            None => 0.0,
+            Some(poly) => tenue(k).and_then(|h| h.pose_dec).unwrap_or_else(|| (-vignettecam::boite(poly).top()).max(0.0)),
+        })
+        .collect();
+    // L'enveloppe et la note comptées depuis la ligne des images de la rangée (A y est à `decs[k]`) : ce que lit `gabarit_de`.
+    let polys_l: Vec<Option<Vec<Pos2>>> = (0..n).map(|k| polys[k].as_ref().map(|p| p.iter().map(|q| *q + vec2(0.0, decs[k])).collect())).collect();
+    let notes_l: Vec<Option<Rect>> = (0..n).map(|k| notes[k].map(|r| r.translate(vec2(0.0, decs[k])))).collect();
     // Ce que la case d'une caméra qui bouge demande à sa rangée, depuis le haut de la rangée : son enveloppe et sa note, puis la marge. La
     // rangée entière descend d'autant : rien de la suivante ne touche ni le cadre B ni sa note.
-    let besoin: Vec<f32> = (0..n).map(|k| prints[k].as_ref().map_or(0.0, |e| LABEL_H + e.y_max.max(notes[k].map_or(0.0, |r| r.bottom())) + ROW_GAP)).collect();
+    let besoin: Vec<f32> = (0..n).map(|k| prints[k].as_ref().map_or(0.0, |e| LABEL_H + (e.y_max + decs[k]).max(notes_l[k].map_or(0.0, |r| r.bottom())) + ROW_GAP)).collect();
     let a_print: Vec<bool> = prints.iter().map(Option::is_some).collect();
     // Le geste de caméra en cours : la case A du plan reste où elle était (`Reserve::pose`).
-    let forces: Vec<Option<(usize, f32)>> = (0..n).map(|k| opt.hold.filter(|h| h.plan == doc.panels[boards[k].0].id && boards[k].2 == 0).and_then(|h| h.pose)).collect();
+    let forces: Vec<Option<(usize, f32)>> = (0..n).map(|k| tenue(k).and_then(|h| h.pose)).collect();
     let unite = Gabarit::unite(card_w);
-    let nominal = LABEL_H + thumb_h + ng + NOTE_LINE_H + ROW_GAP;
-    let hauteur_rangee = |lignes: usize| LABEL_H + thumb_h + ng + lignes as f32 * NOTE_LINE_H + ROW_GAP;
+    // La hauteur d'une rangée sans mouvement : le numéro, l'image, le texte (l'espace sous la case puis une ligne par champ coché ; rien du
+    // tout sans champ coché, Anthony, 2026-10-24) et la marge. Toutes les rangées ont les mêmes lignes de texte : seule une empreinte plus
+    // haute les agrandit (`besoin`).
+    let nominal = LABEL_H + thumb_h + if n_l == 0 { 0.0 } else { ng } + n_l as f32 * NOTE_LINE_H + ROW_GAP;
 
     // Où chaque case se pose. Les rangées touchées par une enveloppe dépendent de la hauteur des rangées, qui dépend des notes des
     // cases posées : on repart des hauteurs de la passe d'avant (nominales d'abord) jusqu'à ce que rien ne change.
@@ -748,21 +794,15 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let mut rangs: Vec<usize> = vec![0; n];
     let mut pose = Pose { placed: Vec::new(), occ: Occ::default(), cursor: (0, 0.0) };
     let mut gabarits: Vec<Gabarit> = Vec::new();
-    let mut most: Vec<usize> = Vec::new();
     for passe in 0..5 {
         let hauteur_estimee = |r: i64| usize::try_from(r).ok().and_then(|r| estimees.get(r).copied()).unwrap_or(nominal);
-        gabarits = (0..n).map(|k| polys[k].as_ref().map_or_else(|| unite.clone(), |poly| gabarit_de(poly, notes[k], &hauteur_estimee, rangs[k]))).collect();
+        gabarits = (0..n).map(|k| polys_l[k].as_ref().map_or_else(|| unite.clone(), |poly| gabarit_de(poly, notes_l[k], &hauteur_estimee, rangs[k]))).collect();
         pose = poser(&gabarits, &unite, &a_print, &forces, &gap_after, row_w, page_cap);
-        // Les notes les plus hautes de chaque rangée (celles des cases dont l'image est dans la rangée).
         let derniere = pose.placed.iter().zip(&gabarits).map(|(p, g)| p.0 + g.b_max as usize).max().unwrap_or(0);
-        most = vec![1usize; derniere + 1];
-        for (k, p) in pose.placed.iter().enumerate() {
-            most[p.0] = most[p.0].max(note_lines(k));
-        }
         if !a_print.iter().any(|p| *p) {
             break;
         }
-        let mut reelles: Vec<f32> = most.iter().map(|&l| hauteur_rangee(l)).collect();
+        let mut reelles: Vec<f32> = vec![nominal; derniere + 1];
         for (k, p) in pose.placed.iter().enumerate() {
             if let Some(h) = reelles.get_mut(p.0) {
                 *h = h.max(besoin[k]);
@@ -806,9 +846,8 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let per_page = if page_cap == usize::MAX { rows_n } else { page_cap };
     let pages = rows_n.div_ceil(per_page).max(1);
 
-    // Hauteur de chaque ligne (ses notes les plus hautes : celles des cases dont l'image est dans la ligne), puis haut des
-    // lignes et des pages.
-    let mut row_h: Vec<f32> = (0..rows_n).map(|r| hauteur_rangee(most.get(r).copied().unwrap_or(1))).collect();
+    // Hauteur de chaque ligne (la nominale, plus haute si une empreinte le demande), puis haut des lignes et des pages.
+    let mut row_h: Vec<f32> = vec![nominal; rows_n];
     for (k, &(r, _)) in placed.iter().enumerate() {
         if let Some(h) = row_h.get_mut(r) {
             *h = h.max(besoin[k]);
@@ -837,7 +876,7 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let mut decalage = Vec2::ZERO;
     for (k, &(r, x_a)) in placed.iter().enumerate() {
         if let Some(e) = &prints[k] {
-            let (gauche, haut) = (left + x_a + e.x_min, row_top[r] + LABEL_H + e.y_min);
+            let (gauche, haut) = (left + x_a + e.x_min, row_top[r] + LABEL_H + decs[k] + e.y_min);
             decalage.x = decalage.x.max(MARGIN - gauche);
             decalage.y = decalage.y.max(MARGIN - haut);
         }
@@ -850,14 +889,17 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
     let mut out = BoardLayout { decalage, origine_x: left, ..Default::default() };
     for (k, &(r, x_a)) in placed.iter().enumerate() {
         let x = left + x_a;
-        let top = row_top[r] + LABEL_H;
+        // La ligne des images de la rangée, et A (en retrait de `decs[k]` sous elle quand un cadre du mouvement monte au-dessus d'elle).
+        let ligne_top = row_top[r] + LABEL_H;
+        let top = ligne_top + decs[k];
         let bottom = top + thumb_h;
         let thumb = Rect::from_min_size(pos2(x, top), vec2(card_w, thumb_h));
         let (i, id, frame, end) = boards[k];
         let p = &doc.panels[i];
         let mut foot = thumb;
         let mut mv = None;
-        let mut note = Rect::from_min_size(pos2(x, bottom + ng), vec2(card_w, note_lines(k) as f32 * NOTE_LINE_H));
+        // (Sans champ coché, la zone de texte n'a pas de hauteur : rien à peindre ni à toucher, et la case suivante n'attend rien.)
+        let mut note = Rect::from_min_size(pos2(x, bottom + if n_l == 0 { 0.0 } else { ng }), vec2(card_w, n_l as f32 * NOTE_LINE_H));
         if let Some(e) = &prints[k] {
             let au = vec2(x, top);
             let cadres: Vec<CadreBoard> = e.cadres.iter().map(|c| CadreBoard { rang: c.rang, rect: c.rect.translate(au), coins: c.coins.map(|q| q + au), reduit: c.reduit }).collect();
@@ -870,14 +912,18 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize
             mv = Some(out.moves.len());
             out.moves.push(MoveBoard { cadres, enveloppe: e.enveloppe.iter().map(|q| *q + au).collect(), tuile });
         }
-        let card = Rect::from_min_max(pos2(x, row_top[r]), pos2(x + card_w, bottom));
+        // (Le numéro reste au-dessus de A.)
+        let card = Rect::from_min_max(pos2(x, top - LABEL_H), pos2(x + card_w, bottom));
         let reach = left + x_a + gabarits[k].x_hi;
         let reach_y = foot.bottom().max(note.bottom());
-        out.cards.push(CardPlace { panel: i, plan: p.id, id, frame, end, scene: p.scene, card, thumb, note, row: r, mouvement: mv.is_some(), foot, reach, reach_y, mv });
+        // La case à la ligne : au bord gauche de ce que la case prend (l'enveloppe peut dépasser A à gauche) et au haut des images de la rangée.
+        let ligne = Rect::from_min_size(pos2(foot.left().min(x), ligne_top), vec2(card_w, thumb_h));
+        out.cards.push(CardPlace { panel: i, plan: p.id, id, frame, end, scene: p.scene, card, thumb, note, row: r, mouvement: mv.is_some(), foot, reach, reach_y, mv, ligne });
         let gap = gap_after(k);
-        let zone = Rect::from_min_max(pos2(reach, thumb.top()), pos2(reach + gap, thumb.bottom()));
+        // Les barres sont à la ligne des images de la rangée, comme celles des cases ordinaires.
+        let zone = Rect::from_min_max(pos2(reach, ligne.top()), pos2(reach + gap, ligne.bottom()));
         let cut = !joined_after(k);
-        let bar = Rect::from_center_size(pos2(reach + gap * 0.5, thumb.center().y), vec2(if cut { BAR_CUT_W } else { BAR_W }, thumb_h * BAR_FRACTION));
+        let bar = Rect::from_center_size(pos2(reach + gap * 0.5, ligne.center().y), vec2(if cut { BAR_CUT_W } else { BAR_W }, thumb_h * BAR_FRACTION));
         out.bars.push(CutBar { after: k, cut, bar, zone });
     }
     for &(r, x_a) in &pale {
@@ -930,7 +976,7 @@ pub fn hit(layout: &BoardLayout, p: Pos2, bar_min_w: f32) -> Hit {
     if let Some(k) = layout.card_at(p) {
         return Hit::Thumb(k);
     }
-    if let Some(k) = layout.cards.iter().position(|c| c.note.contains(p)) {
+    if let Some(k) = layout.cards.iter().position(|c| c.a_du_texte() && c.note.contains(p)) {
         return Hit::Note(k);
     }
     match layout.empty.iter().position(|e| e.contains(p)) {
@@ -1022,30 +1068,31 @@ pub fn drop_slots(layout: &BoardLayout) -> Vec<DropSlot> {
                 Some((j, p)) if p.row == c.row => layout.bars.get(j).map_or(c.card.top() - PAGE_PAD * 0.5, |b| b.zone.center().y),
                 _ => c.card.top() - PAGE_PAD * 0.5,
             };
-            out.push(DropSlot::horizontale(Some(c.plan), y, c.thumb.left(), c.thumb.right()));
+            out.push(DropSlot::horizontale(Some(c.plan), y, c.ligne.left(), c.ligne.right()));
             continue;
         }
+        // (À la ligne des images de la rangée : celle d'une case dont la caméra monte ou va à gauche est en retrait, `CardPlace::ligne`.)
         let x = match prev {
-            Some((_, p)) if p.row == c.row => (p.reach + c.thumb.left()) * 0.5,
-            _ => c.thumb.left() - PAGE_PAD * 0.5,
+            Some((_, p)) if p.row == c.row => (p.reach + c.ligne.left()) * 0.5,
+            _ => c.ligne.left() - PAGE_PAD * 0.5,
         };
-        out.push(DropSlot::verticale(Some(c.plan), x, c.thumb.top(), c.thumb.bottom()));
+        out.push(DropSlot::verticale(Some(c.plan), x, c.ligne.top(), c.ligne.bottom()));
     }
     if let Some(last) = layout.cards.last() {
         if jap {
             // Après la dernière vignette : dans l'écart avant la première case pâle si elle est dans la même colonne.
             let y = match (layout.empty.first(), layout.bars.last()) {
-                (Some(e), Some(b)) if (e.left() - last.thumb.left()).abs() < 1.0 && e.top() > last.thumb.top() => b.zone.center().y,
+                (Some(e), Some(b)) if (e.left() - last.ligne.left()).abs() < 1.0 && e.top() > last.thumb.top() => b.zone.center().y,
                 _ => last.reach_y + PAGE_PAD * 0.5,
             };
-            out.push(DropSlot::horizontale(None, y, last.thumb.left(), last.thumb.right()));
+            out.push(DropSlot::horizontale(None, y, last.ligne.left(), last.ligne.right()));
         } else {
             // Après la dernière vignette : dans l'écart avant la première case pâle si elle est sur la même ligne.
             let x = match layout.empty.first() {
-                Some(e) if (e.top() - last.thumb.top()).abs() < 1.0 => (last.reach + e.left()) * 0.5,
+                Some(e) if (e.top() - last.ligne.top()).abs() < 1.0 => (last.reach + e.left()) * 0.5,
                 _ => last.reach + PAGE_PAD * 0.5,
             };
-            out.push(DropSlot::verticale(None, x, last.thumb.top(), last.thumb.bottom()));
+            out.push(DropSlot::verticale(None, x, last.ligne.top(), last.ligne.bottom()));
         }
     }
     out

@@ -381,6 +381,8 @@ pub struct Rendu {
     papier: Papier,
     /// Graver les incrustations (timecode…) dans l'image.
     graver: bool,
+    /// Avec les calques d'annotation des plans (`render::panel_plan_at_avec`) ; non d'origine.
+    annotations: bool,
     zones: Vec<Zone>,
     starts: Vec<usize>,
     /// Un seul plan, déjà fait (l'image courante exportée telle que l'écran l'a construit) : à la place de celui
@@ -396,13 +398,19 @@ impl Rendu {
     /// `cancel` : levé, les fils qui attendent une image en cours de calcul l'abandonnent.
     pub fn new(doc: Arc<Document>, papier: Papier, graver: bool, zones: Vec<Zone>, cancel: Arc<AtomicBool>) -> Rendu {
         let starts = if zones.is_empty() { Vec::new() } else { (0..doc.panels.len()).map(|i| doc.panel_start(i)).collect() };
-        Rendu { doc, papier, graver, zones, starts, explicite: None, store: ImageStore::new(fils_de_rendu().0 + 1), cancel, composees: AtomicUsize::new(0) }
+        Rendu { doc, papier, graver, annotations: false, zones, starts, explicite: None, store: ImageStore::new(fils_de_rendu().0 + 1), cancel, composees: AtomicUsize::new(0) }
     }
 
     /// Combien d'images ont été vraiment composées jusqu'ici.
     #[cfg(test)]
     pub fn composed(&self) -> usize {
         self.composees.load(Ordering::Relaxed)
+    }
+
+    /// Avec ou sans les calques d'annotation des plans (« Avec les annotations » des fenêtres d'export) : posés par-dessus tout le reste.
+    pub fn avec_annotations(mut self, oui: bool) -> Rendu {
+        self.annotations = oui;
+        self
     }
 
     /// Un seul plan (`plan` filmé par `cam`) au lieu de celui que le document donne.
@@ -423,7 +431,7 @@ impl Rendu {
                     Papier::Fond => doc.render_paper(),
                     Papier::Feuille => Some(doc.paper),
                 };
-                (render::panel_plan_at(doc, p, f, paper), doc.panel_camera(p, f))
+                (render::panel_plan_at_avec(doc, p, f, paper, self.annotations), doc.panel_camera(p, f))
             }
         };
         // (Le cache garde l'image sans incrustation : le timecode change à chaque image, `burned` la grave sur la

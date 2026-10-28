@@ -196,11 +196,14 @@ pub struct ExportSettings {
     pub comments: bool,
     /// Taille, cadence, boucle et tramage du GIF (`Format::Gif`).
     pub gif: GifSettings,
+    /// Avec les calques d'annotation des plans (« Avec les annotations ») : retenu par poste de travail (`Settings::export_annotations`).
+    pub annotations: bool,
 }
 
 impl Default for ExportSettings {
     fn default() -> Self {
         Self {
+            annotations: false,
             format: Format::Mp4,
             range: Range::Montage,
             half: false,
@@ -830,6 +833,9 @@ pub struct ExportJob {
     frames: Arc<Vec<(usize, usize)>>,
     papier: Papier,
     graver: bool,
+    /// Avec les calques d'annotation des plans (« Avec les annotations » des fenêtres d'export, `avec_annotations`) : posés par-dessus tout
+    /// (`render::panel_plan_at_avec`). Non d'origine : jamais dans le film.
+    annotations: bool,
     explicite: Option<(Plan, Camera)>,
     /// Les zones des transitions du montage (`with_transitions`) ; vides : aucune transition.
     zones: Vec<crate::transitions::Zone>,
@@ -1207,6 +1213,7 @@ impl ExportJob {
             frames: Arc::new(frames),
             papier: if paper { Papier::Fond } else { Papier::Aucun },
             graver: true,
+            annotations: false,
             explicite: None,
             zones: Vec::new(),
             snapshot: None,
@@ -1267,6 +1274,12 @@ impl ExportJob {
     /// carte graphique ne sert qu'à l'écran).
     pub fn with_transitions(mut self, doc: &Document) -> ExportJob {
         self.zones = crate::transitions::zones(doc);
+        self
+    }
+
+    /// « Avec les annotations » : les calques d'annotation des plans sont dans les images de cet export, par-dessus tout le reste.
+    pub fn avec_annotations(mut self, oui: bool) -> ExportJob {
+        self.annotations = oui;
         self
     }
 
@@ -1374,7 +1387,7 @@ impl ExportJob {
         let Some(tx) = self.tx.take() else {
             return self.stop_with(Err("l'écriture n'a pas démarré".into()));
         };
-        let mut rendu = Rendu::new(snapshot, self.papier, self.graver, self.zones.clone(), self.cancel.clone());
+        let mut rendu = Rendu::new(snapshot, self.papier, self.graver, self.zones.clone(), self.cancel.clone()).avec_annotations(self.annotations);
         if let Some((plan, cam)) = self.explicite.clone() {
             rendu = rendu.avec_plan(plan, cam);
         }

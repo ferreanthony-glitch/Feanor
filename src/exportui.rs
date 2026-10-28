@@ -34,6 +34,7 @@ impl App {
         let mut s = self.export_last.clone();
         s.format = format;
         s.transparent = self.export_transparent;
+        s.annotations = self.settings.export_annotations;
         self.export_dialog = Some(s);
     }
 
@@ -207,6 +208,17 @@ impl App {
                     ui.checkbox(&mut s.transparent, "Sans le papier (fond transparent)");
                     ui.end_row();
                 }
+                // Les calques d'annotation des plans (`calqueannot.rs`) : jamais dans le film d'office, posés par-dessus tout si on les veut.
+                if s.format != Format::Wav {
+                    ui.label("Annotations");
+                    crate::bulles::bulle(
+                        ui.checkbox(&mut s.annotations, "Avec les annotations"),
+                        "Avec les annotations",
+                        "Pose les calques d'annotation des plans par-dessus l'image. Décoché d'office : des notes de réalisateur ne font pas partie du film. Retenu d'une séance à l'autre.",
+                        "",
+                    );
+                    ui.end_row();
+                }
                 // Les fondus, volets et noirs du montage (`transitions.rs`) : calculés comme le reste
                 // de l'export, image par image.
                 if (s.format.is_video() || matches!(s.format, Format::Png | Format::Gif)) && has_transitions {
@@ -254,6 +266,11 @@ impl App {
         if choose {
             self.choose_ffmpeg();
         }
+        // Le choix « Avec les annotations » est retenu par poste de travail, tout de suite (avec les réglages de l'application).
+        if s.format != Format::Wav && self.settings.export_annotations != s.annotations {
+            self.settings.export_annotations = s.annotations;
+            self.settings_a_ecrire = true;
+        }
         if go {
             self.export_last = s.clone();
             if s.format == Format::Png {
@@ -279,13 +296,13 @@ impl App {
             }
             Format::Png => {
                 let Some(dir) = Self::pick_folder("Dossier où exporter les images") else { return };
-                let job = ExportJob::images(&dir, &base, frames, self.doc.frame, !s.transparent);
+                let job = ExportJob::images(&dir, &base, frames, self.doc.frame, !s.transparent).avec_annotations(s.annotations);
                 self.start_job(if s.transitions { job.with_transitions(&self.doc) } else { job });
             }
             Format::Pdf => {
                 let Some(out) = save_dialog(&base, Format::Pdf) else { return };
                 let (shots, boards) = export::storyboard_of_with(&self.doc, &export::panels_of(&frames), s.comments);
-                self.start_job(ExportJob::pdf(&out, &base, shots, boards, self.doc.frame));
+                self.start_job(ExportJob::pdf(&out, &base, shots, boards, self.doc.frame).avec_annotations(s.annotations));
             }
             Format::Gif => {
                 let Some((ffmpeg, Ok(_))) = self.ffmpeg_info().cloned() else {
@@ -298,7 +315,10 @@ impl App {
                 let kept = export::gif_sample(&frames, fps, rate);
                 let args = export::gif_args(self.doc.frame, rate, &s.gif, &out);
                 match ExportJob::gif(&ffmpeg, args, &out, kept) {
-                    Ok(job) => self.start_job(if s.transitions { job.with_transitions(&self.doc) } else { job }),
+                    Ok(job) => {
+                        let job = job.avec_annotations(s.annotations);
+                        self.start_job(if s.transitions { job.with_transitions(&self.doc) } else { job })
+                    }
                     Err(e) => self.status = format!("Export impossible : {e}"),
                 }
             }
@@ -319,7 +339,7 @@ impl App {
                     SoundSpan { start, len }
                 });
                 let (format, frame, half, target) = (s.format, self.doc.frame, s.half, out.clone());
-                let job = ExportJob::video_with_sound(&ffmpeg, move |wav| export::video_args(format, &enc, frame, fps, half, wav, &target), &out, frames, span);
+                let job = ExportJob::video_with_sound(&ffmpeg, move |wav| export::video_args(format, &enc, frame, fps, half, wav, &target), &out, frames, span).avec_annotations(s.annotations);
                 self.start_job(if s.transitions { job.with_transitions(&self.doc) } else { job });
             }
         }
