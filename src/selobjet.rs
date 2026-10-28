@@ -165,11 +165,12 @@ impl App {
         let (panel, frame) = (self.cur_panel, self.cur_frame);
         for t in targets.list.iter().rev().filter(|t| !t.vector) {
             let Some(inv) = t.to_stage.inverse() else { continue };
-            let Some(c) = self.doc.cels.get(&t.cel) else { continue };
+            // (Les pixels du dessin, ou ceux de sa strate d'aplat quand l'aplat est la cible.)
+            let Some(raster) = multisel::raster_of(&self.doc, t.cel, t.aplat) else { continue };
             let local = inv.apply(stage);
-            let Some((mask, outline)) = object_near(&c.raster, local, tol * inv.width_factor()) else { continue };
+            let Some((mask, outline)) = object_near(raster, local, tol * inv.width_factor()) else { continue };
             let n = size_text(&mask);
-            let (px, py) = nearest_drawn(&c.raster, local, tol * inv.width_factor()).unwrap_or((0, 0));
+            let (px, py) = nearest_drawn(raster, local, tol * inv.width_factor()).unwrap_or((0, 0));
             if !add {
                 self.multi.sel = Some(MultiSel::new(panel, frame, vec![multisel::bitmap_part(t, mask, outline, None)]));
                 self.status = format!("Objet choisi sur « {} » ({n}). Ctrl+Maj + clic : en ajouter un autre.", t.name);

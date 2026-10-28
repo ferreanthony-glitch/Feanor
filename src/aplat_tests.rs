@@ -337,8 +337,12 @@ fn clicking_the_sub_row_aims_the_drawing_at_the_aplat_and_the_layer_gives_the_li
     let textes = ecran.cliquer(&mut app, sous.center(), &mut ui_calques);
     assert_eq!(app.cur_layer, 1);
     assert!(app.aplat_en_cible(), "{}", app.status);
-    assert_eq!(app.tool, Tool::Brush, "l'outil Sélection cède la place au pinceau");
+    assert_eq!(app.tool, Tool::Select, "l'outil Sélection reste : il prend les pixels de l'aplat (2026-10-28)");
     assert!(app.status.starts_with("Aplat de B"), "la barre d'état le dit : {}", app.status);
+    // Un outil qui ne travaille pas l'aplat (une forme) cède la place au pinceau.
+    app.set_tool(Tool::Rect);
+    app.select_aplat(1);
+    assert_eq!(app.tool, Tool::Brush, "une forme cède la place au pinceau");
     assert_eq!(noms(&app).len(), n0, "choisir la cible n'est pas une étape d'annulation");
     assert!(contient(&textes, "Aplat"));
     // Le même clic sur la ligne du calque B ramène au trait.

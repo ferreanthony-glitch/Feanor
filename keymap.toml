@@ -2279,6 +2279,11 @@ touches = []
 source = "SHOT (sans touche)"
 
 [[raccourci]]
+action = "pinceau.sur_aplat"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
 action = "pinceau.fond"
 touches = []
 source = "SHOT (sans touche)"

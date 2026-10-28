@@ -97,10 +97,15 @@ pub struct Settings {
     /// (`pistes.rs`, Préférences > Montage). Un réglage de l'application : rien n'est écrit dans le projet.
     #[serde(default, rename = "repliage_pistes", skip_serializing_if = "crate::pistes::ReplisPistes::est_commun")]
     pub montage_folds: crate::pistes::ReplisPistes,
-    /// Pinceau et crayon : « Peint sur l'aplat » (`brushfill`, l'ancien « Peint derrière » : la clé garde son nom),
-    /// retenu d'une séance à l'autre (Anthony, 2026-10-17).
+    /// Pinceau et crayon : « Peindre derrière » (`brushfill`), retenu d'une séance à l'autre (Anthony, 2026-10-17).
+    /// La clé garde son nom d'avant le 2026-10-23, quand l'interrupteur s'appelait « Peint sur l'aplat » : les anciens
+    /// réglages donnent donc « Peindre derrière ».
     #[serde(default, rename = "peint_derriere")]
     pub paint_behind: bool,
+    /// Pinceau et crayon : « Peint sur l'aplat » (la peinture va directement dans l'aplat du dessin, pas sur le trait ;
+    /// exclusif avec « Peindre derrière »), retenu d'une séance à l'autre. Éteint d'office.
+    #[serde(default, rename = "peint_sur_aplat")]
+    pub paint_on_aplat: bool,
     /// L'ancien « Remplir la forme » (retiré le 2026-10-23 : il faisait double emploi avec l'aplat sous le trait). Lu
     /// pour qu'un ancien fichier de réglages s'ouvre, jamais écrit, sans effet.
     #[serde(default, rename = "remplir_la_forme", skip_serializing)]
@@ -282,6 +287,7 @@ impl Default for Settings {
             montage_auto_open: true,
             montage_folds: Default::default(),
             paint_behind: false,
+            paint_on_aplat: false,
             ancien_remplir_la_forme: false,
             recent_projects: Vec::new(),
             reopen_last: true,

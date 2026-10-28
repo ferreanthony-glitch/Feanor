@@ -175,7 +175,10 @@ impl App {
         // Aplat (`fondui.rs`) : un clic retire de l'aplat la zone fermée par le trait, sur un
         // calque bitmap comme vectoriel.
         if self.aplat_en_cible() {
+            let avant = self.history.serial();
             self.fond_zone_at(p, true);
+            // (Plusieurs clés choisies : la même zone se retire de l'aplat des autres, `aplatmulti.rs`.)
+            self.aplat_autres_cles(p, true, avant);
             return;
         }
         if self.layer().kind != LayerKind::Vector {

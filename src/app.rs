@@ -347,10 +347,12 @@ pub struct App {
     pub(crate) degrade_geste: Option<crate::degradeui::Geste>,
     pub(crate) shape: ShapeSettings,
     pub(crate) vector_erase_whole: bool,
-    /// Option du pinceau et du crayon (`brushfill`) : « Peint sur l'aplat ». (« Remplir la forme » n'existe plus,
-    /// 2026-10-23 : il faisait double emploi avec l'aplat sous le trait.)
+    /// Option du pinceau et du crayon (`brushfill`) : « Peindre derrière » (la peinture passe sous ce qui est déjà dessiné
+    /// sur le calque). (« Remplir la forme » n'existe plus, 2026-10-23 : il faisait double emploi avec l'aplat.)
     pub(crate) paint_behind: bool,
-    /// Toucher du stylet (sensation des brosses) : la copie de travail du réglage, enregistrée
+    /// Option du pinceau et du crayon : « Peint sur l'aplat » (la peinture va directement dans l'aplat du dessin, calque de
+    /// couleur ou strate, pas sur le trait). Exclusive avec `paint_behind`.
+    pub(crate) paint_on_aplat: bool,    /// Toucher du stylet (sensation des brosses) : la copie de travail du réglage, enregistrée
     /// dans `update` quand elle change (hors glissé), comme les options du pinceau.
     pub(crate) toucher: crate::brush::Toucher,
     /// État de la liste des pinceaux (dans les réglages de l'outil) retenu d'une séance à l'autre (dépliée, liste ou
@@ -779,6 +781,14 @@ pub struct App {
     pub(crate) fond_stroke: Option<CelId>,
     /// Le trait qui suit le même geste sur la coupe du fond (la gomme coupe, le pinceau recoud).
     pub(crate) fond_cut: Option<StrokeState>,
+    /// Plusieurs clés choisies, l'aplat visé : le même trait en cours sur l'aplat des autres clés, et les remplissages qui s'y
+    /// calculent en arrière-plan (`aplatmulti.rs`). Propres à un projet.
+    pub(crate) aplat_miroirs: crate::aplatmulti::Miroirs,
+    pub(crate) aplat_travaux: crate::aplatmulti::Travaux,
+    /// La couleur de l'aplat choisie dans le sélecteur, retenue jusqu'au lâcher, et la portée du changement de couleur de l'aplat
+    /// (la clé, le plan, tout le storyboard : `aplatcouleur.rs`). La portée est un réglage de l'application.
+    pub(crate) aplat_couleur_attente: Option<crate::aplatcouleur::CouleurAttente>,
+    pub(crate) aplat_portee: crate::aplatcouleur::AplatPortee,
     /// Panneaux qui s'ajustent (`ajuste.rs`) : hauteur du contenu de chaque panneau à sa dernière
     /// image affichée, part posée par paire de panneaux, un bord a glissé à cette image.
     pub(crate) pane_heights: std::collections::HashMap<crate::dock::Pane, f32>,
@@ -980,7 +990,9 @@ impl App {
         egui_ctx.set_zoom_factor(crate::echelle::facteur(settings.echelle));
         crate::demarrage::marque("thème");
         let montage_head_w = crate::montagehead::clamp_head_w(settings.montage_head_w);
+        // (« Peindre derrière » et « Peint sur l'aplat » sont exclusifs : un fichier de réglages qui aurait les deux garde le premier.)
         let paint_behind = settings.paint_behind;
+        let paint_on_aplat = settings.paint_on_aplat && !paint_behind;
         // Diagnostic des performances : proposé une fois, sur une machine qui n'en a jamais eu
         // (jamais dans les essais).
         let diag_offer = reel && settings.diagnostic.a_proposer();
@@ -1036,6 +1048,7 @@ impl App {
             },
             vector_erase_whole: false,
             paint_behind,
+            paint_on_aplat,
             toucher: settings.toucher,
             pinceaux: settings.brushes_panel.clone(),
             // Les couleurs de la dernière fois (passe couleur).
@@ -1274,6 +1287,10 @@ impl App {
             aplat_cible: None,
             fond_stroke: None,
             fond_cut: None,
+            aplat_miroirs: Default::default(),
+            aplat_travaux: Default::default(),
+            aplat_couleur_attente: None,
+            aplat_portee: Default::default(),
             pane_heights: Default::default(),
             fit_set: Default::default(),
             fit_busy: false,
@@ -2034,8 +2051,10 @@ impl App {
         false
     }
 
-    /// Début d'un trait de pinceau, de crayon ou de gomme, bitmap ou vectoriel selon le calque.
-    pub(crate) fn begin_paint(&mut self, p: Pos2, pressure: f32, pen: bool) {
+    /// Début d'un trait de pinceau, de crayon ou de gomme, bitmap ou vectoriel selon le calque, sur le calque courant (ou sur
+    /// son aplat quand sa sous-ligne est choisie). `begin_paint` (`aplatsur.rs`) le précède : « Peint sur l'aplat » y
+    /// détourne le trait vers l'aplat.
+    pub(crate) fn begin_paint_ici(&mut self, p: Pos2, pressure: f32, pen: bool) {
         self.end_stroke();
         self.playing = false;
         // On dessine : Suppr doit de nouveau viser le dessin, pas un extrait de son.
@@ -2213,6 +2232,8 @@ impl App {
             stroke.add_point_at(&mut c.raster, p, pressure, time, &mut dirty);
         }
         self.renderer.invalidate_tiles(&dirty);
+        // (Plusieurs clés choisies, l'aplat visé : le même point sur l'aplat des autres clés, `aplatmulti.rs`.)
+        self.miroirs_point(p, pressure);
     }
 
     /// Termine tout geste en cours : trait, gomme vectorielle, transformation, forme.
@@ -2291,6 +2312,8 @@ impl App {
                 }
             }
         }
+        // Les autres clés choisies finissent le même trait ; leurs étapes rejoignent celle du trait (`aplatmulti.rs`).
+        self.miroirs_finish();
         // Le fond que le trait d'un personnage vient de gagner se calcule sur le fil de fond.
         if let Some((cel, tiles)) = trait_de_personnage {
             self.perso_apres_trait(cel, tiles);
@@ -2345,13 +2368,18 @@ impl App {
             return;
         }
         // Aplat (`fondui.rs`) : si sa sous-ligne est choisie, la zone fermée par le trait se remplit dans l'aplat.
+        // (Plusieurs clés choisies : la même zone se remplit sur l'aplat des autres, en arrière-plan, `aplatmulti.rs`.)
         if self.aplat_en_cible() {
+            let avant = self.history.serial();
             self.fond_zone_at(p, false);
+            self.aplat_autres_cles(p, false, avant);
             return;
         }
         // Calque de couleur (`calquecouleurui.rs`) : la zone fermée par le trait de son calque de trait.
         if self.layer().couleur.is_some() {
+            let avant = self.history.serial();
             self.fill_couleur(p);
+            self.aplat_autres_cles(p, false, avant);
             return;
         }
         self.end_stroke();
@@ -4197,7 +4225,19 @@ impl App {
             "cle.suivante" => self.goto_key(true),
             "pinceau.derriere" => {
                 self.paint_behind = !self.paint_behind;
-                self.status = if self.paint_behind { "Peint sur l'aplat : la peinture passe sous ce qui est déjà dessiné." } else { "Peint sur l'aplat : non." }.into();
+                // (Exclusif avec « Peint sur l'aplat ».)
+                self.paint_on_aplat &= !self.paint_behind;
+                self.status = if self.paint_behind { "Peindre derrière : la peinture passe sous ce qui est déjà dessiné." } else { "Peindre derrière : non." }.into();
+            }
+            "pinceau.sur_aplat" => {
+                self.paint_on_aplat = !self.paint_on_aplat;
+                self.paint_behind &= !self.paint_on_aplat;
+                self.status = if self.paint_on_aplat {
+                    "Peint sur l'aplat : le pinceau et le crayon peignent dans l'aplat du dessin (calque de couleur, sinon l'aplat sous le trait), pas sur le trait."
+                } else {
+                    "Peint sur l'aplat : non."
+                }
+                .into();
             }
             // (« pinceau.remplir », l'ancien « Remplir la forme », est maintenant un double de « pinceau.fond » : `fond_action`.)
             "instance.tete" => self.goto_instance_end(false),
@@ -4806,6 +4846,8 @@ impl App {
         self.tick_references(ctx);
         self.tick_personnages();
         self.tick_aplat();
+        self.poll_aplat_multi();
+        self.tick_aplat_couleur(ctx);
         self.propagation_ui(ctx);
         self.coloriage_ui(ctx);
         if self.playing {
@@ -4938,7 +4980,7 @@ impl App {
         }
         // Réglages de la pelure, de la feuille d'exposition, des flips et des options du pinceau
         // (peint sur l'aplat) : enregistrés quand ils changent (pas pendant un glissé).
-        let options = self.paint_behind != self.settings.paint_behind;
+        let options = self.paint_behind != self.settings.paint_behind || self.paint_on_aplat != self.settings.paint_on_aplat;
         let changed = self.onion != self.settings.onion || self.xsheet != self.settings.xsheet || self.flips != self.settings.flips || options || self.toucher != self.settings.toucher || self.pinceaux != self.settings.brushes_panel || self.cadrage != self.settings.framing;
         if changed && !ctx.input(|i| i.pointer.any_down()) {
             self.settings.framing = self.cadrage.clone();
@@ -4946,6 +4988,7 @@ impl App {
             self.settings.xsheet = self.xsheet.clone();
             self.settings.flips = self.flips.clone();
             self.settings.paint_behind = self.paint_behind;
+            self.settings.paint_on_aplat = self.paint_on_aplat;
             self.settings.toucher = self.toucher;
             self.settings.brushes_panel = self.pinceaux.clone();
             if let Err(e) = self.settings.save() {

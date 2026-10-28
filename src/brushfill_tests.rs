@@ -79,7 +79,8 @@ fn the_brush_options_are_remembered_between_sessions() {
     assert!(!s.paint_behind, "éteinte au premier lancement");
     s.paint_behind = true;
     let text = toml::to_string(&s).unwrap();
-    assert!(text.contains("peint_derriere = true"), "« Peint sur l'aplat » garde la clé d'avant");
+    assert!(text.contains("peint_derriere = true"), "« Peindre derrière » garde sa clé d'avant");
+    assert!(text.contains("peint_sur_aplat = false"), "« Peint sur l'aplat » a sa clé à lui, éteinte d'office");
     assert!(!text.contains("remplir_la_forme"), "« Remplir la forme » n'est plus écrit (retiré le 2026-10-23)");
     let back: Settings = toml::from_str(&text).unwrap();
     assert!(back.paint_behind);

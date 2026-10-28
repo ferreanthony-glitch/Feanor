@@ -4748,3 +4748,70 @@ Ctrl+V les **insère** avant l'image courante, comme avant. Aussi d'un plan à l
    (« Dessin » et « Dessin_2 », toutes les images là). Refais-le par la barre noire des Vignettes, « Fusionner les plans choisis » et en glissant un plan sur un autre. « Annuler » : rien ne bouge. Deux plans sans nom en commun : la jonction se fait sans question.
 7. Préférences > Montage > « Durée d'un nouveau plan » : mets 3 s ; « Nouveau plan » donne un plan de 3 s (72 images à 24 i/s) ; les anciens plans ne changent pas. « Rétablir 2 s ».
 8. Choisis trois plans, clic droit > « Changer la durée des plans choisis… » : le champ montre la durée d'un nouveau plan ; tape 36 : les trois durent 36 images. Tape « +12 » : chacun gagne 12. Raccourcis : la fin est rognée, et revient en rallongeant. S'il y a du son après, la fenêtre et la barre d'état le disent. Ctrl+Z : un seul pas.
+
+
+## 56. Les outils de l'aplat : deux interrupteurs, sélection, plusieurs clés, portée de la couleur (2026-10-28, branche `aplat-outils`)
+
+Demande d'Anthony : « Peindre derrière » revient à côté de « Peint sur l'aplat » ; la Sélection prend et transforme l'aplat ; peindre et remplir
+l'aplat se fait sur plusieurs clés d'un coup ; la couleur de l'aplat se change sur la clé, le plan ou tout le storyboard. Code : `aplatsur.rs`
+(interrupteurs), `multisel.rs` / `multitools.rs` (sélection), `aplatmulti.rs` (plusieurs clés), `aplatcouleur.rs` (portée) ; essais `aplatsur_tests.rs`.
+
+### 1. Deux interrupteurs, exclusifs (réglages du pinceau et du crayon, au-dessus de « Plus de réglages »)
+
+| Interrupteur | Icône | Effet | Clé des réglages, action |
+|---|---|---|---|
+| **Peindre derrière** | rectangle en pointillé (`SELECTION_BACKGROUND`) | la peinture passe sous ce qui est déjà dessiné sur le calque (comme avant) | `peint_derriere`, `pinceau.derriere` (les anciens réglages donnent « Peindre derrière ») |
+| **Peint sur l'aplat** | carré à moitié plein (`SQUARE_HALF_BOTTOM`) | la peinture va **directement dans l'aplat** du dessin, jamais sur le trait | `peint_sur_aplat`, `pinceau.sur_aplat` (sans touche) |
+
+- Allumer l'un éteint l'autre. Chacun a sa bulle d'une seconde et son clic droit « assigner un raccourci ».
+- « Peint sur l'aplat », sur un calque de trait : dans le dessin du **calque de couleur** de ce calque à cette image (celui juste sous le trait s'il y en a
+  plusieurs) ; sinon dans la **strate d'aplat** du dessin ; sans aplat, il est **créé** (« Aplat : ajouter », comme le bouton du calque) et la barre d'état
+  le dit. Sur un calque de couleur : rien à détourner. La gomme, le pot de peinture et les autres outils ne sont pas détournés.
+
+### 2. Sélectionner et transformer l'aplat
+
+- Quand la sous-ligne de l'aplat est la cible (cliquer la sous-ligne **garde** l'outil Sélection) : clic, lasso, rectangle et Ctrl+A prennent les **pixels de
+  l'aplat** ; la boîte les déplace, les met à l'échelle, les tourne, les retourne ; flèches, Suppr, copier-coller aussi. Le trait n'est jamais touché.
+  Même chemin que la sélection sur plusieurs calques : feuille flottante, aucun rejeu du moteur des brosses, une étape d'annulation par geste.
+- **Plusieurs clés choisies** dans la timeline : Ctrl+A prend l'aplat de chacune ; un geste les transforme toutes, en une seule étape. Un calque de couleur visé :
+  les clés de son calque de trait comptent aussi.
+- Un dessin sans aplat est laissé de côté, avec sa raison dans la barre d'état. L'aplat est fait de pixels : ce sont les pixels peints dans l'aplat qu'on prend
+  (la forme blanche déduite du trait n'est pas un objet : elle suit le trait).
+
+### 3. Peindre et remplir l'aplat de plusieurs clés
+
+- L'aplat visé (sous-ligne choisie, calque de couleur, ou « Peint sur l'aplat ») et plusieurs clés choisies **dont celle qu'on voit** : le pinceau, le crayon,
+  la gomme, le pot de peinture et le cutter font la même chose sur l'aplat de **chaque** clé choisie, en **une seule étape** d'annulation.
+- Le trait qu'on voit se fait comme toujours. Les autres clés reçoivent chaque point en direct. Sur un calque de couleur, le trait est ensuite **retenu dans la
+  zone fermée** par le trait de chaque clé, sur un fil de travail (un trait annulé entre-temps n'est pas ressuscité).
+- Le pot et le cutter : la zone de chaque clé se calcule sur un fil de travail et se pose à son arrivée, dans la même étape (sinon dans une étape à elle) ;
+  un dessin retouché entre-temps n'est pas écrasé, la barre d'état le dit. Une seule clé choisie : rien ne change.
+
+### 4. Portée du changement de couleur de l'aplat
+
+- Dans Réglages de l'aplat, sous « Couleur de l'aplat » : « Changer la couleur de l'aplat sur : **La clé** · Le plan · Tout le storyboard » (la clé d'office).
+- La couleur est retenue pendant le glissé du sélecteur et posée **au lâcher**. Les aplats de la portée qui avaient l'ancienne couleur prennent la nouvelle, leur
+  opacité gardée : les pixels peints dans l'aplat (strate) et les calques de couleur ; pour le plan et le storyboard, la couleur de chaque calque qui était
+  l'ancienne aussi. **La clé** : la forme de l'aplat de ce dessin est peinte de la nouvelle couleur (sur un fil de travail) sans changer la couleur du calque, donc
+  sans changer les autres clés. Une étape « Aplat : couleur » ; la barre d'état dit « couleur changée sur N dessins (la clé / le plan / tout le storyboard) ».
+- Limite : pour « la clé », la nouvelle forme est peinte dans l'aplat du dessin ; si le trait change plus tard, la peinture ne suit pas (la couleur du calque
+  s'applique à ce qui n'est pas peint).
+
+### Essais ajoutés (`aplatsur_tests.rs`, 26)
+
+Interrupteurs séparés et exclusifs, anciens réglages (`peint_derriere = true`), boutons au-dessus de « Plus de réglages » ; « Peint sur l'aplat » : strate créée,
+calque de couleur, jamais le trait, gomme et calque de couleur non détournés ; sélection de l'aplat (lasso, rectangle, clic, Ctrl+A, boîte, Suppr, une clé et plusieurs,
+annulation, aucun rejeu) ; plusieurs clés : pinceau, gomme, pot, cutter, calque de couleur, zone, un seul geste d'annulation, dessin retouché abandonné ; portée de la
+couleur : clé, clés choisies, plan, storyboard, calque de couleur, glissé retenu puis posé, rien à changer.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Réglages du pinceau : deux boutons, « Peindre derrière » et « Peint sur l'aplat » ; en allumer un éteint l'autre ; bulle d'une seconde sur chacun.
+2. « Peindre derrière » allumé : la peinture passe sous le trait, comme avant. Éteint, « Peint sur l'aplat » allumé sur un personnage fermé : la peinture va dans l'aplat
+   (barre d'état : l'aplat est créé s'il manquait), le trait ne bouge pas ; avec un calque de couleur sous le trait, elle va dans ce calque.
+3. Cliquer la sous-ligne « Aplat » avec l'outil Sélection : l'outil reste ; lasso ou clic sur de la peinture d'aplat, déplacer / tourner / mettre à l'échelle : seul l'aplat bouge ;
+   Ctrl+Z annule d'un coup.
+4. Choisir trois clés dans la timeline, aplat visé : Ctrl+A puis déplacer : les trois aplats bougent ensemble ; un Ctrl+Z.
+5. Mêmes trois clés : peindre un trait, gommer, pot de peinture, cutter sur l'aplat : chaque clé le reçoit (le pot se pose un instant plus tard sur les autres) ; un Ctrl+Z.
+6. Couleur de l'aplat : changer la couleur avec « La clé » : seul ce dessin change ; avec « Le plan » : toutes ses clés ; « Tout le storyboard » : tous les plans.
+   La barre d'état dit combien de dessins ; Ctrl+Z rend tout.

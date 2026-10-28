@@ -46,7 +46,8 @@ impl App {
             self.select_layer(li);
         }
         self.aplat_cible = Some(id);
-        if !matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser | Tool::Fill | Tool::Gradient | Tool::Cutter) {
+        // (L'outil Sélection reste : il prend les pixels de l'aplat et la boîte les transforme, `multitools.rs`.)
+        if !matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser | Tool::Fill | Tool::Gradient | Tool::Cutter | Tool::Select) {
             self.set_tool(Tool::Brush);
         }
         self.status = self.aplat_indication();
@@ -60,6 +61,7 @@ impl App {
             Tool::Gradient => "glisser : un dégradé dans la zone fermée par le trait, sous le trait (Alt : tout l'aplat)",
             Tool::Cutter => "clic : retirer la zone fermée de l'aplat",
             Tool::Eraser => "la gomme coupe l'aplat",
+            Tool::Select => "lasso, rectangle, clic : prendre les pixels de l'aplat, la boîte les déplace, les met à l'échelle, les tourne (Ctrl+A : tout, sur plusieurs clés aussi)",
             _ => "peindre sous le trait, dans la forme (recoud l'aplat coupé)",
         };
         format!("Aplat de {nom} · {quoi} · clic sur le calque : revenir au trait")
@@ -105,13 +107,8 @@ impl App {
         let Some(r) = self.layers().get(li).and_then(|l| l.fond) else { return };
         let mut next = r;
         let mut changed = None;
-        ui.horizontal(|ui| {
-            ui.label("Couleur de l'aplat");
-            let resp = ui.color_edit_button_srgb(&mut next.couleur);
-            if self.aplat_edited(&resp) {
-                changed = Some(next);
-            }
-        });
+        // La couleur n'est pas posée à chaque image du glissé : elle l'est au lâcher, sur la portée choisie (`aplatcouleur.rs`).
+        self.aplat_couleur_ui(ui, li, r.couleur);
         let mut debord = next.debord as f32;
         let resp = ui.add(egui::Slider::new(&mut debord, 0.0..=30.0).text("Débord (px)").fixed_decimals(0));
         let resp = crate::bulles::bulle(resp, "Débord", "Pixels d'aplat au-delà du bord extérieur du trait.", "");

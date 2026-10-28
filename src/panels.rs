@@ -363,22 +363,39 @@ impl App {
     }
 
     /// Sous l'aperçu du trait du pinceau et du crayon, au-dessus de « Plus de réglages », toujours à portée (Anthony,
-    /// 2026-10-23) : « Peint sur l'aplat » (`paint_behind`, `brushfill`) et l'aplat sous le trait du calque courant (le
-    /// même bouton que sur sa ligne du panneau Calques, `fond_layer_button`). « Remplir la forme » n'existe plus : il
-    /// faisait double emploi avec l'aplat.
+    /// 2026-10-23, puis 2026-10-28) : « Peindre derrière » (`paint_behind`, `brushfill`), « Peint sur l'aplat »
+    /// (`paint_on_aplat`, `aplatmulti.rs` ; exclusifs l'un de l'autre) et l'aplat sous le trait du calque courant (le même
+    /// bouton que sur sa ligne du panneau Calques, `fond_layer_button`). « Remplir la forme » n'existe plus : il faisait
+    /// double emploi avec l'aplat.
     pub(crate) fn brush_extras_ui(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
         let behind_key = self.raccourci("pinceau.derriere");
+        let on_key = self.raccourci("pinceau.sur_aplat");
         ui.horizontal(|ui| {
-            crate::bulles::interrupteur_a(
+            let resp = crate::bulles::interrupteur_a(
                 ui,
                 &mut self.paint_behind,
                 ph::SELECTION_BACKGROUND,
-                "Peint sur l'aplat",
-                "La peinture passe sous ce qui est déjà dessiné sur le calque.",
+                "Peindre derrière",
+                "La peinture passe sous ce qui est déjà dessiné sur le calque. Éteint « Peint sur l'aplat ».",
                 &behind_key,
                 "pinceau.derriere",
             );
+            if resp.changed() && self.paint_behind {
+                self.paint_on_aplat = false;
+            }
+            let resp = crate::bulles::interrupteur_a(
+                ui,
+                &mut self.paint_on_aplat,
+                ph::SQUARE_HALF_BOTTOM,
+                "Peint sur l'aplat",
+                "Le pinceau et le crayon peignent directement dans l'aplat du dessin (le calque de couleur du calque, sinon l'aplat sous le trait, créé au besoin), pas sur le trait. Éteint « Peindre derrière ».",
+                &on_key,
+                "pinceau.sur_aplat",
+            );
+            if resp.changed() && self.paint_on_aplat {
+                self.paint_behind = false;
+            }
             let li = self.cur_layer;
             if let Some(resp) = self.fond_layer_button(ui, li, false) {
                 if resp.clicked() {

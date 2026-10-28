@@ -389,7 +389,8 @@ fn the_layer_row_and_the_brush_settings_carry_the_aplat_button() {
     let mut ui_outil = |a: &mut App, ui: &mut egui::Ui| a.tool_options_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_outil);
     assert!(contient(&textes, ph_fond), "le bouton d'aplat du calque courant est dans les réglages du pinceau : {textes:?}");
-    assert!(contient(&textes, egui_phosphor::regular::SELECTION_BACKGROUND), "« Peint sur l'aplat » y est");
+    assert!(contient(&textes, egui_phosphor::regular::SELECTION_BACKGROUND), "« Peindre derrière » y est");
+    assert!(contient(&textes, egui_phosphor::regular::SQUARE_HALF_BOTTOM), "« Peint sur l'aplat » y est");
     assert!(!contient(&textes, egui_phosphor::regular::PAINT_BUCKET), "plus de « Remplir la forme »");
     assert!(!contient(&textes, "Peindre dans"), "la bascule Trait / Fond a disparu");
     // Un calque qui en a un ne montre rien non plus sous le pinceau : ses réglages sont dans Réglages quand sa
