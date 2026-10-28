@@ -242,7 +242,7 @@ impl App {
         if autres.is_empty() {
             return;
         }
-        let Some(settings) = self.current_brush().copied() else { return };
+        let Some(settings) = self.current_brush() else { return };
         let erase = self.tool == Tool::Eraser;
         let strate = matches!(v, Visee::Strate { .. });
         let layer_id = match v {

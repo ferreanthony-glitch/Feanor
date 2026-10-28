@@ -25,6 +25,10 @@ pub(crate) struct Confort {
     /// La courbe de pression d'avant le dernier « Appliquer » : la fenêtre se ferme à l'application, « Rétablir » la rend à
     /// l'ouverture suivante.
     pub stylet_avant: Option<crate::brush::Curve>,
+    /// La palette de mélange du panneau Couleur (`melangeur.rs`) : au poste, pas au projet ; lue dans le dossier des
+    /// réglages à la première ouverture du volet (`palette_ouverte`, replié d'office).
+    pub palette: Option<crate::melangeur::PaletteMelange>,
+    pub palette_ouverte: bool,
 }
 
 impl Confort {

@@ -713,14 +713,16 @@ impl App {
         let mut open = self.couleurs.prefs.more_open;
         crate::repli::entete(ui, &mut open, "Plus de couleurs", "La roue chromatique ou les curseurs (TSV, RVB, TSL), le code hexadécimal et les couleurs récentes.");
         self.couleurs.prefs.more_open = open;
-        if !open {
-            return;
+        if open {
+            ui.add_space(2.0);
+            self.color_picker(ui, 240.0);
+            self.hex_row(ui);
+            ui.add_space(2.0);
+            self.recent_row(ui);
         }
-        ui.add_space(2.0);
-        self.color_picker(ui, 240.0);
-        self.hex_row(ui);
-        ui.add_space(2.0);
-        self.recent_row(ui);
+        // La palette de mélange (`melangeur.rs`), repliée d'office, sous « Plus de couleurs ».
+        ui.add_space(4.0);
+        self.palette_melange_ui(ui);
     }
 
     /// À chaque image : les réglages de la couleur sont enregistrés quand ils changent (pas

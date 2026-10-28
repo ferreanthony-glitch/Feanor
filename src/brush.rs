@@ -33,6 +33,23 @@ pub struct BrushSettings {
     /// La peinture chargée dans la brosse : 1, elle ne s'épuise pas ; moins, elle s'épuise le long
     /// du trait, et la brosse vide ne fait plus qu'étaler.
     pub charge: f32,
+    /// Comment la couleur se mélange (« La couleur se mélange », 2026-10-28) : pigment (gouache,
+    /// acrylique : `mix` et `charge`), eau (aquarelle : `water`) ou doigt (pas de couleur posée, seulement
+    /// l'entraînement : `smudge`). Sans effet tant que le mélange est éteint (`mixes`).
+    #[serde(rename = "melange_type", default, skip_serializing_if = "MixKind::is_default")]
+    pub mix_kind: MixKind,
+    /// L'eau de l'aquarelle (0 : peu d'eau, couleur franche ; 1 : très diluée, transparente, qui coule dans
+    /// les couleurs mouillées).
+    #[serde(rename = "eau", default = "default_water", skip_serializing_if = "is_default_water")]
+    pub water: f32,
+    /// L'entraînement du doigt (`MixKind::Smudge`, outil Mélangeur) : haut, la brosse emporte longtemps ce
+    /// qu'elle a pris.
+    #[serde(rename = "entrainement", default = "default_smudge", skip_serializing_if = "is_default_smudge")]
+    pub smudge: f32,
+    /// Le mélange est coupé : la case « La couleur se mélange » est décochée. Les valeurs (`mix`, `charge`,
+    /// `water`, `smudge`, type) sont gardées pour la rallumer telle qu'elle était.
+    #[serde(rename = "melange_coupe", default, skip_serializing_if = "is_false")]
+    pub mix_off: bool,
     /// 0 = bord très flou, 1 = bord net.
     #[serde(rename = "durete")]
     pub hardness: f32,
@@ -149,6 +166,68 @@ pub struct BrushSettings {
     /// pression, la vitesse, la direction du trait, un fondu ou le hasard, par une courbe.
     #[serde(rename = "dynamique")]
     pub dynamics: Dynamics,
+}
+
+fn default_water() -> f32 {
+    0.5
+}
+
+fn is_default_water(w: &f32) -> bool {
+    (*w - 0.5).abs() < 1e-6
+}
+
+fn default_smudge() -> f32 {
+    0.6
+}
+
+fn is_default_smudge(w: &f32) -> bool {
+    (*w - 0.6).abs() < 1e-6
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+/// Le type de mélange de la couleur (case « La couleur se mélange » des réglages de la brosse, sur un
+/// calque bitmap) : de quoi retrouver la gouache, l'acrylique, l'aquarelle ou le doigt.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
+pub enum MixKind {
+    /// Gouache, acrylique : la brosse se charge de la couleur qu'elle traverse (mélange soustractif, bleu
+    /// plus jaune donnent un vert) et se vide le long du trait (`mix`, `charge`).
+    #[default]
+    #[serde(rename = "pigment")]
+    Pigment,
+    /// Aquarelle : la couleur est diluée et transparente, elle se mêle aux couleurs mouillées dessous, avec
+    /// un léger bord plus foncé (`water`).
+    #[serde(rename = "eau")]
+    Water,
+    /// Le doigt : aucune couleur posée, la brosse entraîne et étale ce qu'elle traverse (`smudge`).
+    #[serde(rename = "doigt")]
+    Smudge,
+}
+
+impl MixKind {
+    pub const ALL: [MixKind; 3] = [MixKind::Pigment, MixKind::Water, MixKind::Smudge];
+
+    pub fn is_default(&self) -> bool {
+        *self == MixKind::Pigment
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            MixKind::Pigment => "Pigment",
+            MixKind::Water => "Eau",
+            MixKind::Smudge => "Lisser",
+        }
+    }
+
+    pub fn help(self) -> &'static str {
+        match self {
+            MixKind::Pigment => "Gouache, acrylique : la brosse se charge de la couleur qu'elle traverse et la mêle à la sienne comme de la vraie peinture (bleu plus jaune donnent un vert) ; elle se vide le long du trait.",
+            MixKind::Water => "Aquarelle : la couleur est diluée et transparente, elle se mêle aux couleurs mouillées dessous et laisse un léger bord plus foncé.",
+            MixKind::Smudge => "Le doigt : aucune couleur n'est posée, la brosse entraîne et étale ce qui est déjà peint.",
+        }
+    }
 }
 
 /// Comment le trait suit la pointe du stylet. « Suivi » : le lissage d'avant (le point posé
@@ -631,6 +710,10 @@ impl BrushSettings {
             build_up: false,
             mix: 0.0,
             charge: 1.0,
+            mix_kind: MixKind::Pigment,
+            water: 0.5,
+            smudge: 0.6,
+            mix_off: false,
             hardness: 0.85,
             profile: None,
             spacing: 0.08,
@@ -671,6 +754,47 @@ impl BrushSettings {
             flip_y: false,
             dynamics: Dynamics::default(),
         }
+    }
+
+    /// La couleur se mélange-t-elle, avec ces réglages ? Faux si la case est décochée (`mix_off`), ou si le
+    /// type choisi n'a rien à mêler (pigment sans mélange ni décharge, eau sans eau, doigt sans entraînement).
+    pub fn mixes(&self) -> bool {
+        !self.mix_off
+            && match self.mix_kind {
+                MixKind::Pigment => self.mix > 0.0 || self.charge < 1.0,
+                MixKind::Water => self.water > 0.0,
+                MixKind::Smudge => self.smudge > 0.0,
+            }
+    }
+
+    /// Allume le mélange (la case « La couleur se mélange » est cochée) : les valeurs gardées reviennent ;
+    /// si le type choisi n'a rien à mêler avec elles, il prend une valeur de départ.
+    pub fn turn_mix_on(&mut self) {
+        self.mix_off = false;
+        if !self.mixes() {
+            match self.mix_kind {
+                MixKind::Pigment => self.mix = 0.4,
+                MixKind::Water => self.water = 0.5,
+                MixKind::Smudge => self.smudge = 0.6,
+            }
+        }
+    }
+
+    /// Le mélange agit-il, de ce type ? (Le moteur choisit son chemin d'après ceci.)
+    fn mixes_as(&self, kind: MixKind) -> bool {
+        self.mix_kind == kind && self.mixes()
+    }
+
+    /// Cette brosse en « Mélangeur » (l'outil) : le doigt, qui entraîne et étale ce qui est peint sans
+    /// poser de couleur. Un doigt réglé pour ne rien entraîner (`mix` à 0) prend un entraînement moyen.
+    pub fn as_mixer(&self) -> Self {
+        let mut s = *self;
+        s.mix_kind = MixKind::Smudge;
+        s.mix_off = false;
+        if s.smudge <= 0.0 {
+            s.smudge = 0.6;
+        }
+        s
     }
 
     /// La connexion de la taille : celle de la dynamique si elle est choisie, sinon « taille
@@ -939,6 +1063,10 @@ pub fn stroke_preview(settings: &BrushSettings, textures: BrushTextures, w: usiz
     s.smoothing = 0.0;
     s.smooth_kind = SmoothKind::Follow;
     s.smooth_deferred = false;
+    // (Le doigt ne pose rien sur une feuille vide : son aperçu montre la pointe, comme un pinceau.)
+    if s.mix_kind == MixKind::Smudge {
+        s.mix_off = true;
+    }
     let mut raster = Raster::new(w, h);
     let mut stroke = StrokeState::new(0, StrokeMode::Paint([0, 0, 0]), s, None, true).with_textures(textures);
     let mut dirty = Vec::new();
@@ -1020,6 +1148,10 @@ pub struct StrokeState {
     /// reste de sa charge (0 à 1).
     wet_rgb: [f32; 3],
     wet_load: f32,
+    /// Le doigt (`MixKind::Smudge`) : la couverture (0 à 1) de ce que la brosse emporte ; elle ne prend
+    /// rien avant son premier contact.
+    wet_cover: f32,
+    wet_started: bool,
     /// Les points reçus tels quels (x, y, appui, instant ; −1 : instant inconnu), pour le banc
     /// de traits (moteur de dessin, étape 1).
     pub raw_log: Vec<[f64; 4]>,
@@ -1112,6 +1244,8 @@ impl StrokeState {
             dabs: 0,
             wet_rgb: wet_start(mode),
             wet_load: 1.0,
+            wet_cover: 0.0,
+            wet_started: false,
             raw_log: Vec::new(),
             next_time: -1.0,
             secondary: None,
@@ -1423,6 +1557,8 @@ impl StrokeState {
         self.dabs = 0;
         self.wet_rgb = wet_start(self.mode);
         self.wet_load = 1.0;
+        self.wet_cover = 0.0;
+        self.wet_started = false;
         self.next_time = -1.0;
         self.last_time = None;
         self.dt = None;
@@ -1754,19 +1890,20 @@ impl StrokeState {
         // Préserver la transparence : on ne peint que sur ce qui est déjà dessiné (13b).
         let keep_alpha = self.keep_alpha && matches!(mode, StrokeMode::Paint(_));
         // Couleur de cette empreinte (A, ou A mêlée à B).
-        let mode = match mode {
+        let mut mode = match mode {
             StrokeMode::Paint(a) => StrokeMode::Paint(self.paint_color(a, &inp)),
             m => m,
         };
-        // Peinture humide (étape 11) : la brosse prend la couleur sous elle, la mêle à la sienne
-        // et pose le mélange directement (pas de masque : repasser mêle encore).
-        if matches!(mode, StrokeMode::Paint(_)) && (s.mix > 0.0 || s.charge < 1.0) {
-            // Une brosse à deux couleurs se recharge de la couleur de l'empreinte.
-            if let (StrokeMode::Paint(fresh), true) = (mode, s.dynamics.color.active()) {
-                for k in 0..3 {
-                    self.wet_rgb[k] += (fresh[k] as f32 - self.wet_rgb[k]) * self.wet_load;
-                }
-            }
+        // « La couleur se mélange » (réglages de la brosse, `mixes`) : pigment (gouache, acrylique), doigt
+        // (rien de posé, seulement l'entraînement) ou eau (aquarelle). Seul le trait de peinture se mêle, jamais
+        // la gomme. Sans mélange : le chemin d'avant, inchangé.
+        let painting = matches!(mode, StrokeMode::Paint(_));
+        let pigment = painting && s.mixes_as(MixKind::Pigment);
+        let finger = painting && s.mixes_as(MixKind::Smudge);
+        let water = painting && s.mixes_as(MixKind::Water);
+        // La couleur moyenne sous l'empreinte (sans prémultiplication) et sa couverture, lues dans le calque
+        // même, pendant le trait : (couleur, couverture, il y a de la peinture dessous).
+        let under = |raster: &Raster| -> ([f32; 3], f32, bool) {
             let (mut acc, mut wsum) = ([0f32; 4], 0f32);
             for py in y0..y1 {
                 for px in x0..x1 {
@@ -1782,28 +1919,62 @@ impl StrokeState {
                     wsum += cov;
                 }
             }
-            // Couleur moyenne sous l'empreinte (sans prémultiplication) et sa couverture.
-            let under_a = if wsum > 0.0 { acc[3] / wsum / 255.0 } else { 0.0 };
+            let cover = if wsum > 0.0 { acc[3] / wsum / 255.0 } else { 0.0 };
             if acc[3] > 0.0 {
-                let pick = s.mix.clamp(0.0, 1.0) * under_a;
+                ([acc[0] / acc[3] * 255.0, acc[1] / acc[3] * 255.0, acc[2] / acc[3] * 255.0], cover, true)
+            } else {
+                ([0.0; 3], cover, false)
+            }
+        };
+        // Peinture humide (étape 11) : la brosse prend la couleur sous elle, la mêle à la sienne
+        // et pose le mélange directement (pas de masque : repasser mêle encore). Le doigt fait de même
+        // sans couleur à lui : il emporte ce qu'il a pris.
+        if pigment || finger {
+            // Une brosse à deux couleurs se recharge de la couleur de l'empreinte.
+            if let (StrokeMode::Paint(fresh), true, true) = (mode, s.dynamics.color.active(), pigment) {
                 for k in 0..3 {
-                    let under = acc[k] / acc[3] * 255.0;
-                    self.wet_rgb[k] += (under - self.wet_rgb[k]) * pick;
+                    self.wet_rgb[k] += (fresh[k] as f32 - self.wet_rgb[k]) * self.wet_load;
                 }
             }
-            let load = self.wet_load;
-            // La charge s'épuise avec la distance (en diamètres, d'une empreinte à la suivante) :
-            // sans charge, il reste un vingtième de la peinture au bout de dix diamètres.
-            self.wet_load *= (-(1.0 - s.charge.clamp(0.0, 1.0)) * 0.3 * s.spacing.max(0.02)).exp();
-            // Ce que pose la brosse : sa charge, plus ce qu'elle entraîne de la peinture prise.
-            let target_a = (load + (1.0 - load) * under_a * s.mix.clamp(0.0, 1.0)).clamp(0.0, 1.0);
-            let rgb = self.wet_rgb;
+            let (under_rgb, under_a, any) = under(raster);
+            let (rgb, target_a, strength);
+            if finger {
+                // Entraînement e : élevé, la brosse garde longtemps ce qu'elle a pris (un long traînage) ;
+                // bas, elle reprend vite la couleur du lieu. Au premier contact, elle prend tout.
+                let e = s.smudge.clamp(0.0, 1.0);
+                let pick = if self.wet_started { (1.0 - e) * (1.0 - e) * 0.9 + 0.03 } else { 1.0 };
+                self.wet_started = true;
+                let carried = self.wet_cover;
+                if any && under_a > 0.0 {
+                    // La part de la couleur dessous dans ce que la brosse emporte, pesée par les couvertures.
+                    let t = pick * under_a / (carried * (1.0 - pick) + pick * under_a);
+                    self.wet_rgb = crate::melange::melanger(self.wet_rgb, under_rgb, t);
+                }
+                self.wet_cover = (carried + (under_a - carried) * pick).clamp(0.0, 1.0);
+                (rgb, target_a, strength) = (self.wet_rgb, self.wet_cover, 0.35 + 0.65 * e);
+            } else {
+                if any {
+                    // Mélange soustractif : bleu plus jaune donnent un vert, pas un gris.
+                    let pick = s.mix.clamp(0.0, 1.0) * under_a;
+                    if pick > 0.002 {
+                        self.wet_rgb = crate::melange::melanger(self.wet_rgb, under_rgb, pick);
+                    }
+                }
+                let load = self.wet_load;
+                // La charge s'épuise avec la distance (en diamètres, d'une empreinte à la suivante) :
+                // sans charge, il reste un vingtième de la peinture au bout de dix diamètres.
+                self.wet_load *= (-(1.0 - s.charge.clamp(0.0, 1.0)) * 0.3 * s.spacing.max(0.02)).exp();
+                // Ce que pose la brosse : sa charge, plus ce qu'elle entraîne de la peinture prise.
+                let target = (load + (1.0 - load) * under_a * s.mix.clamp(0.0, 1.0)).clamp(0.0, 1.0);
+                (rgb, target_a, strength) = (self.wet_rgb, target, 1.0);
+            }
             let behind = self.behind;
             let stencil = self.stencil.as_ref();
             for ty in y0.div_euclid(tile_px)..=(y1 - 1).div_euclid(tile_px) {
                 for tx in x0.div_euclid(tile_px)..=(x1 - 1).div_euclid(tile_px) {
                     let idx = raster.id_of(tx as i32, ty as i32);
-                    if (keep_alpha && raster.slot(idx).is_none()) || stencil.is_some_and(|st| st.blocks(idx)) {
+                    // (Le doigt qui ne porte rien n'a rien à poser sur une tuile vide : on ne l'alloue pas.)
+                    if (keep_alpha && raster.slot(idx).is_none()) || stencil.is_some_and(|st| st.blocks(idx)) || (finger && target_a <= 0.0 && raster.slot(idx).is_none()) {
                         continue;
                     }
                     let (ox, oy) = (tx * tile_px, ty * tile_px);
@@ -1821,7 +1992,7 @@ impl StrokeState {
                             let grain = grain_at(px, py);
                             let i = (py - oy) as usize * TILE + (px - ox) as usize;
                             let through = stencil.map_or(1.0, |st| st.at(idx, i));
-                            let amt = cov * flow * grain * through * s.opacity * s.power.clamp(0.0, 1.0);
+                            let amt = cov * flow * grain * through * s.opacity * s.power.clamp(0.0, 1.0) * strength;
                             if amt <= 0.0 {
                                 continue;
                             }
@@ -1838,8 +2009,26 @@ impl StrokeState {
             }
             return;
         }
+        // Aquarelle : la couleur emportée se mêle (soustractivement) à celle des couleurs mouillées dessous,
+        // d'autant plus qu'il y a d'eau ; elle est posée diluée (transparente, d'autant plus qu'il y a d'eau)
+        // par le chemin ordinaire du trait (un masque : repasser dans le même trait ne fonce pas), avec un bord
+        // un peu plus dense, comme le pigment que l'eau pousse vers le bord de la flaque.
+        let (mut wash, mut edge) = (1.0f32, 0.0f32);
+        if water {
+            let w = s.water.clamp(0.0, 1.0);
+            let (under_rgb, under_a, any) = under(raster);
+            if any {
+                let pick = (0.1 + 0.5 * w) * under_a;
+                if pick > 0.002 {
+                    self.wet_rgb = crate::melange::melanger(self.wet_rgb, under_rgb, pick);
+                }
+            }
+            mode = StrokeMode::Paint(std::array::from_fn(|k| (self.wet_rgb[k] + 0.5).clamp(0.0, 255.0) as u8));
+            (wash, edge) = (1.0 - 0.75 * w, 0.5);
+        }
         let stencil = self.stencil.as_ref();
         let behind = self.behind;
+        let diluted = s.opacity * wash;
         for ty in y0.div_euclid(tile_px)..=(y1 - 1).div_euclid(tile_px) {
             for tx in x0.div_euclid(tile_px)..=(x1 - 1).div_euclid(tile_px) {
                 let idx = raster.id_of(tx as i32, ty as i32);
@@ -1884,11 +2073,13 @@ impl StrokeState {
                         }
                         mask[i] = m;
                         let b = before.map_or(Color32::TRANSPARENT, |t| t[i]);
+                        // Aquarelle : plus dense où le trait finit (m entre 0 et 1), jamais au-delà du plein.
+                        let a = if edge > 0.0 { (m * (1.0 + edge * 4.0 * m * (1.0 - m))).min(1.0) * diluted } else { m * s.opacity };
                         tile[i] = match mode {
-                            StrokeMode::Paint(rgb) if keep_alpha => paint_over(b, rgb, m * s.opacity),
-                            StrokeMode::Paint(rgb) if behind => crate::brushfill::paint_under(b, rgb, m * s.opacity),
-                            StrokeMode::Paint(rgb) => paint(b, rgb, m * s.opacity),
-                            StrokeMode::Erase => erase(b, m * s.opacity),
+                            StrokeMode::Paint(rgb) if keep_alpha => paint_over(b, rgb, a),
+                            StrokeMode::Paint(rgb) if behind => crate::brushfill::paint_under(b, rgb, a),
+                            StrokeMode::Paint(rgb) => paint(b, rgb, a),
+                            StrokeMode::Erase => erase(b, a),
                         };
                         changed = true;
                     }

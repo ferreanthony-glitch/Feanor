@@ -107,6 +107,7 @@ pub fn commandes_de_l_outil(tool: Tool) -> Vec<(&'static str, &'static str)> {
             ("pinceau.fond", "Aplat sous le trait"),
             ("couleur.intervertir", "Intervertir les couleurs"),
         ],
+        Tool::Mixer => &[("outil.taille_plus", "Plus gros"), ("outil.taille_moins", "Plus fin")],
         Tool::Fill | Tool::Gradient => &[("couleur.intervertir", "Intervertir les couleurs"), ("couleur.defaut", "Noir et blanc")],
         Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => &[("outil.taille_plus", "Trait plus gros"), ("outil.taille_moins", "Trait plus fin"), ("couleur.intervertir", "Intervertir les couleurs")],
         Tool::Select | Tool::SelectColor => &[
@@ -130,7 +131,7 @@ pub fn commandes_de_l_outil(tool: Tool) -> Vec<(&'static str, &'static str)> {
 /// Des gestes à la souris ou au stylet, qui ne passent pas par le fichier de raccourcis : (ce qu'ils font, le geste).
 pub fn gestes_de_l_outil(tool: Tool) -> &'static [(&'static str, &'static str)] {
     match tool {
-        Tool::Brush | Tool::Pencil | Tool::Eraser => &[("Pipette", "Alt + clic")],
+        Tool::Brush | Tool::Mixer | Tool::Pencil | Tool::Eraser => &[("Pipette", "Alt + clic")],
         Tool::Text => &[("Valider le texte", "Ctrl + Entrée")],
         Tool::SelectColor => &[("Ajouter à la sélection", "Maj + clic")],
         _ => &[],

@@ -213,6 +213,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("outil.gomme", "Outil gomme", true, false),
     act("outil.remplissage", "Outil remplissage", true, false),
     act("outil.degrade", "Outil dégradé (linéaire ou radial, bitmap et vectoriel)", true, false),
+    act("outil.melangeur", "Outil mélangeur (étaler et mêler les couleurs déjà peintes, calque bitmap)", true, false),
     act("outil.peindre_non_peint", "Outil peindre les zones non peintes", false, false),
     act("outil.pipette", "Outil pipette", true, false),
     act("outil.selection", "Outil sélection", true, false),

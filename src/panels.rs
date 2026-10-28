@@ -434,7 +434,11 @@ impl App {
             // « Peint sur l'aplat » et l'aplat du calque (pinceau et crayon), puis « Plus de réglages » (replié
             // d'office) : les catégories de la brosse et le mode d'emploi. Le mode « Griffonner » d'un calque de couleur
             // reste à portée. (Le tremblement du trait se règle dans le panneau Effets : plus de ligne ici, 2026-10-23.)
-            Tool::Brush => {
+            Tool::Brush | Tool::Mixer => {
+                if self.tool == Tool::Mixer {
+                    // Le Mélangeur est le pinceau courant en « Lisser » : mêmes taille, dureté, espacement, grain.
+                    note(ui, "Mélangeur : la brosse du pinceau, en « Lisser » : elle étale ce qui est peint sans poser de couleur. « Couleur et mélange » règle l'entraînement.");
+                }
                 self.brush_summary_ui(ui);
                 self.brush_settings_ui(ui);
                 // Calque de couleur : le mode « Griffonner » (`calquecouleurui.rs`).

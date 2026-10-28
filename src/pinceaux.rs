@@ -305,7 +305,7 @@ impl Categorie {
         match self {
             Categorie::Dispersion => s.scatter > 0.0 || s.scatter_along > 0.0 || s.count > 1 || s.size_jitter > 0.0 || s.angle_jitter > 0.0,
             Categorie::Grain => (s.paper.is_some() && s.grain > 0.0) || s.pencil_grain != crate::brush::PencilGrain::None,
-            Categorie::Couleur => s.mix > 0.0 || s.charge < 1.0 || s.dynamics.color.active(),
+            Categorie::Couleur => s.mixes() || s.dynamics.color.active(),
             Categorie::Lissage => match s.smooth_kind {
                 crate::brush::SmoothKind::Follow => s.smoothing > 0.0,
                 crate::brush::SmoothKind::PulledString | crate::brush::SmoothKind::AverageDistance => s.smooth_px > 0.0,
@@ -326,7 +326,7 @@ impl Categorie {
                 s.pencil_grain = crate::brush::PencilGrain::None;
             }
             Categorie::Couleur => {
-                (s.mix, s.charge) = (0.0, 1.0);
+                (s.mix, s.charge, s.water, s.smudge) = (0.0, 1.0, 0.0, 0.0);
                 s.dynamics.color = Connection { source: Source::None, ..s.dynamics.color };
             }
             Categorie::Lissage => {
@@ -358,8 +358,11 @@ impl Categorie {
                 }
             }
             Categorie::Couleur => match avant {
-                Some(b) => (s.mix, s.charge, s.dynamics.color) = (b.mix, b.charge, b.dynamics.color),
-                None => s.mix = 0.4,
+                Some(b) => {
+                    (s.mix, s.charge, s.dynamics.color) = (b.mix, b.charge, b.dynamics.color);
+                    (s.mix_kind, s.water, s.smudge, s.mix_off) = (b.mix_kind, b.water, b.smudge, false);
+                }
+                None => s.turn_mix_on(),
             },
             Categorie::Lissage => match avant {
                 Some(b) => (s.smoothing, s.smooth_px, s.smooth_points) = (b.smoothing, b.smooth_px, b.smooth_points),

@@ -663,6 +663,14 @@ mod degrade;
 mod degradeui;
 #[cfg(test)]
 mod degrade_tests;
+// Couleur qui se mélange (2026-10-28) : le mélange soustractif (`melange`), l'outil Mélangeur et la palette de mélange
+// (`melangeur`, `melangeurui`).
+mod melange;
+#[cfg(test)]
+mod melange_tests;
+mod melangeur;
+#[cfg(test)]
+mod melangeur_tests;
 mod selobjet;
 pub mod poskeys;
 mod poskeysui;

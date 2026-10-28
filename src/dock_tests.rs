@@ -462,7 +462,8 @@ fn grouped_tools_share_one_slot() {
     // une seule case, au rectangle.
     let first = TOOL_GROUPS[0];
     assert_eq!(first[0], &[Tool::Select, Tool::SelectColor][..]);
-    assert_eq!(first[1], &[Tool::Brush][..]);
+    // (Le Mélangeur, le pinceau en « Lisser », partage la case du pinceau : 2026-10-28.)
+    assert_eq!(first[1], &[Tool::Brush, Tool::Mixer][..]);
     let shapes = TOOL_GROUPS.iter().flat_map(|g| g.iter()).find(|s| s.contains(&Tool::Line)).expect("case des formes");
     assert_eq!(shapes.len(), 4);
     assert_eq!(shapes[0], Tool::Rect, "le rectangle au début");
