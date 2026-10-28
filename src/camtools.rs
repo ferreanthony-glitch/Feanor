@@ -143,6 +143,17 @@ impl App {
         self.doc.panel_camera_douce(self.cur_panel, self.cur_frame)
     }
 
+    /// La caméra que **l'écran montre** (vue caméra, cadre, aides au cadrage) à l'image courante : celle des paliers de la
+    /// postérisation temporelle du plan (`Panel::saccade`), comme les exports et la lecture. Seul l'outil Caméra arrêté lit
+    /// la caméra douce : il règle les clés, et ses poignées doivent suivre ce que la souris tire.
+    pub(crate) fn camera_montree(&self) -> Camera {
+        if self.tool == crate::app::Tool::Camera && !self.playing {
+            self.current_camera()
+        } else {
+            self.doc.panel_camera(self.cur_panel, self.cur_frame)
+        }
+    }
+
     /// Règle la caméra du plan courant. Caméra fixe (aucune ou une image clé) : on change
     /// cette caméra. Caméra animée (plusieurs clés) : on règle la clé de l'image courante (créée
     /// au besoin).
@@ -321,7 +332,7 @@ impl App {
     /// Ce qui est fait avant de dessiner le canevas : en vue caméra, la vue suit la caméra.
     pub(crate) fn apply_camera_view(&mut self, rect: Rect) {
         if self.camera_view {
-            self.view = view_through(&self.current_camera(), self.doc.frame, self.canvas_size(), rect);
+            self.view = view_through(&self.camera_montree(), self.doc.frame, self.canvas_size(), rect);
         }
     }
 
@@ -330,7 +341,7 @@ impl App {
     pub(crate) fn paint_camera(&self, painter: &egui::Painter, rect: Rect) {
         let size = self.canvas_size();
         let to_s = |p: Pos2| self.view.to_screen(rect, size, p);
-        let cam = self.current_camera();
+        let cam = self.camera_montree();
         let corners = cam.corners(self.doc.frame);
         let stage = Rect::from_min_size(Pos2::ZERO, size);
         let fills_stage = cam == self.doc.default_camera() && self.doc.frame_rect() == stage;
@@ -703,6 +714,8 @@ impl App {
         }
         if self.doc.panels[pi].saccade.actif && self.doc.panels[pi].camera.len() < 2 {
             ui.label(RichText::new("Sans mouvement (moins de deux clés), rien ne change.").small().weak());
+        } else if self.doc.panels[pi].saccade.actif && self.tool == crate::app::Tool::Camera && !self.playing {
+            ui.label(RichText::new("L'outil Caméra arrêté montre le mouvement doux, pour le régler. Lance la lecture ou change d'outil pour voir les paliers.").small().weak());
         }
     }
 
