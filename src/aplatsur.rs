@@ -11,6 +11,7 @@
 //! quand sa sous-ligne est choisie).
 
 use crate::app::{App, Tool};
+use crate::aplatmulti::Visee;
 use crate::calquecouleur as cc;
 use eframe::egui::Pos2;
 
@@ -50,14 +51,19 @@ impl App {
     /// sinon c'est `begin_paint_ici`.
     pub(crate) fn begin_paint(&mut self, p: Pos2, pressure: f32, pen: bool) {
         self.end_stroke();
-        match self.sur_aplat_cible() {
-            None => self.begin_paint_ici(p, pressure, pen),
+        // L'aplat que vise ce trait (`aplatmulti.rs`) : plusieurs clés choisies, et il se fait sur l'aplat de chacune.
+        let visee = match self.sur_aplat_cible() {
+            None => {
+                self.begin_paint_ici(p, pressure, pen);
+                self.aplat_visee()
+            }
             Some(SurAplat::Couleur(ci)) => {
                 // Le calque de couleur « est » le calque courant le temps d'ouvrir le trait (sa zone fermée, son mode
                 // Griffonner, ses verrous) : le trait garde son dessin, le calque courant revient aussitôt.
                 let garde = std::mem::replace(&mut self.cur_layer, ci);
                 self.begin_paint_ici(p, pressure, pen);
                 self.cur_layer = garde;
+                self.layers().get(ci).filter(|l| l.couleur.as_ref().is_some_and(|c| !c.griffonner)).map(|l| Visee::Couleur { layer: l.id })
             }
             Some(SurAplat::Strate { cree }) => {
                 let li = self.cur_layer;
@@ -75,7 +81,11 @@ impl App {
                 if cree && !self.status.contains("dessine d'abord") {
                     self.status = "Peint sur l'aplat : ce calque n'avait pas d'aplat, il vient d'être créé sous le trait (Ctrl+Z l'enlève) ; la peinture y va, pas sur le trait.".into();
                 }
+                Some(Visee::Strate { layer: id })
             }
+        };
+        if let (Some(v), Some(primary)) = (visee, self.stroke.as_ref().map(|s| s.cel)) {
+            self.miroirs_begin(v, primary, p, pressure, pen);
         }
     }
 }

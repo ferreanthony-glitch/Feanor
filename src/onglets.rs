@@ -163,6 +163,8 @@ etat_projet! {
     bdrag: Option<crate::pixtools::BDrag> = None,
     fond_stroke: Option<CelId> = None,
     fond_cut: Option<crate::brush::StrokeState> = None,
+    aplat_miroirs: crate::aplatmulti::Miroirs = Default::default(),
+    aplat_travaux: crate::aplatmulti::Travaux = Default::default(),
     cam_drag: Option<crate::camtools::CamDrag> = None,
     layer_drag: Option<crate::layertools::LayerDrag> = None,
     head_drag: Option<usize> = None,

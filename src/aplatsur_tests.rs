@@ -283,13 +283,10 @@ struct AplatFix {
 }
 
 fn aplat_fix(name: &str) -> AplatFix {
-    let dir = std::env::temp_dir().join(format!("shot-aplatsel-{name}-{}-{:?}", std::process::id(), std::thread::current().id()));
-    let _ = std::fs::create_dir_all(&dir);
-    crate::donnees::bac_a_sable(&dir);
-    let ctx = egui::Context::default();
-    let mut app = App::sans_fenetre(&ctx, None);
-    app.welcome = false;
+    let _ = name;
     let mut doc = Document::with_frame(200, 150, 24);
+    // (La feuille n'est pas le cadre : les dessins de la strate ont la taille de la feuille.)
+    let (dw, dh) = (doc.width, doc.height);
     doc.panels[0].layers.clear();
     doc.panels[0].set_length(20);
     let mut layer = Layer::new("A", LayerKind::Bitmap);
@@ -303,7 +300,7 @@ fn aplat_fix(name: &str) -> AplatFix {
         remplir(&mut c.raster, 20, 77, 100, 80, black);
         remplir(&mut c.raster, 20, 20, 23, 80, black);
         remplir(&mut c.raster, 97, 20, 100, 80, black);
-        let mut s = Strate::new(200, 150);
+        let mut s = Strate::new(dw, dh);
         remplir(&mut s.peinture.raster, 40 + k * 6, 35, 70 + k * 6, 55, VERT);
         c.fond = Some(Box::new(s));
         for f in from..to {
@@ -314,11 +311,14 @@ fn aplat_fix(name: &str) -> AplatFix {
     let id = layer.id;
     doc.panels[0].layers.push(layer);
     let panel = doc.panels[0].id;
-    app.doc = doc;
+    // Un banc : l'application a tourné quelques images (bibliothèque de pinceaux lue, vue ajustée), comme une vraie.
+    let Banc { mut app, .. } = banc(doc, false);
     app.cur_panel = 0;
     app.cur_layer = 0;
     app.cur_frame = 0;
     app.tool = Tool::Select;
+    // (Dessiner se fait en mode Animation : en Storyboard, le dessin passe par les plans.)
+    app.mode = crate::app::Mode::Animation;
     app.aplat_cible = Some(id);
     AplatFix { app, panel, layer: id, cels }
 }
@@ -515,5 +515,221 @@ fn the_keys_of_a_colour_layer_select_and_move_together_with_the_colour_layer_as_
     f.app.run_action("edition.annuler");
     for c in &cels {
         assert!(f.app.doc.cels[c].raster.get(32, 32) == VERT);
+    }
+}
+
+// ------------------------------------------------------------------------------------ plusieurs clés : peindre, remplir
+
+const ROUGE: Color32 = Color32::from_rgb(200, 10, 10);
+
+fn coupe_de(f: &AplatFix, k: usize) -> &Raster {
+    &f.app.doc.cels[&f.cels[k]].fond.as_ref().expect("aplat").coupe
+}
+
+/// Un calque de couleur sous le calque « A » de `aplat_fix`, le calque de couleur courant ; ses dessins (images 0, 5, 10).
+fn avec_calque_de_couleur(f: &mut AplatFix) -> (usize, Vec<CelId>) {
+    f.app.aplat_cible = None;
+    f.app.cur_layer = 0;
+    f.app.new_colour_layer();
+    f.app.sync_couleurs();
+    let colour = f.app.cur_layer;
+    let cels = [0usize, 5, 10].iter().map(|&fr| f.app.layers()[colour].frames[fr].expect("la couleur suit le trait")).collect();
+    (colour, cels)
+}
+
+#[test]
+fn the_bucket_fills_the_same_zone_of_the_aplat_of_every_chosen_key_in_one_step() {
+    let mut f = aplat_fix("pot-cles");
+    f.app.set_tool(Tool::Fill);
+    f.choose(&[0, 5, 10]);
+    f.app.color = [200, 10, 10];
+    let traits: Vec<Vec<Color32>> = (0..3).map(|k| f.trait_(k)).collect();
+    let n0 = noms(&f.app).len();
+    f.app.fill_at(pos2(30.0, 70.0));
+    // La clé qu'on voit est remplie tout de suite ; les autres sur un fil de travail, sans attendre.
+    assert_eq!(f.peinture(0).get(30, 70), ROUGE, "la clé qu'on voit : {}", f.app.status);
+    assert!(f.app.aplat_travaux.en_route > 0, "les autres se calculent en arrière-plan : {}", f.app.status);
+    f.app.attendre_aplat_multi();
+    for k in 0..3 {
+        assert_eq!(f.peinture(k).get(30, 70), ROUGE, "l'aplat de la clé {k} est rempli");
+        assert_eq!(f.trait_(k), traits[k], "le trait de la clé {k} n'est pas touché");
+    }
+    assert_eq!(noms(&f.app).len(), n0 + 1, "une seule étape pour les trois : {:?}", noms(&f.app));
+    assert_eq!(noms(&f.app).last().map(String::as_str), Some("Aplat : remplir"));
+    f.app.run_action("edition.annuler");
+    for k in 0..3 {
+        assert_eq!(f.peinture(k).get(30, 70).a(), 0, "l'annulation rend l'aplat de la clé {k}");
+    }
+    // Une seule clé choisie : rien d'autre ne change.
+    f.choose(&[0]);
+    f.app.fill_at(pos2(30.0, 70.0));
+    assert!(f.app.aplat_travaux.en_route == 0);
+    f.app.attendre_aplat_multi();
+    assert_eq!(f.peinture(0).get(30, 70), ROUGE);
+    assert_eq!(f.peinture(1).get(30, 70).a(), 0);
+    // La clé qu'on voit n'est pas parmi les clés choisies : rien d'autre non plus.
+    f.app.run_action("edition.annuler");
+    f.choose(&[5, 10]);
+    f.app.fill_at(pos2(30.0, 70.0));
+    f.app.attendre_aplat_multi();
+    assert_eq!(f.peinture(1).get(30, 70).a(), 0, "les clés choisies sans celle qu'on voit ne sont pas touchées");
+}
+
+#[test]
+fn the_cutter_removes_the_zone_from_the_aplat_of_every_chosen_key() {
+    let mut f = aplat_fix("cutter-cles");
+    f.app.set_tool(Tool::Cutter);
+    f.choose(&[0, 5, 10]);
+    let n0 = noms(&f.app).len();
+    f.app.cutter_press(pos2(30.0, 70.0));
+    f.app.attendre_aplat_multi();
+    for k in 0..3 {
+        assert!(coupe_de(&f, k).get(30, 70).a() > 0, "la zone est retirée de l'aplat de la clé {k}");
+    }
+    assert_eq!(noms(&f.app).len(), n0 + 1, "une seule étape : {:?}", noms(&f.app));
+    f.app.run_action("edition.annuler");
+    for k in 0..3 {
+        assert_eq!(coupe_de(&f, k).get(30, 70).a(), 0);
+    }
+}
+
+#[test]
+fn a_brush_stroke_on_the_aplat_is_made_on_every_chosen_key_in_one_step_without_replay() {
+    let mut f = aplat_fix("trait-cles");
+    f.app.set_tool(Tool::Brush);
+    f.choose(&[0, 5, 10]);
+    f.app.color = [10, 10, 220];
+    let traits: Vec<Vec<Color32>> = (0..3).map(|k| f.trait_(k)).collect();
+    let (replays, n0) = (crate::vector::replay_count(), noms(&f.app).len());
+    gliss(&mut f.app, pos2(30.0, 70.0), pos2(80.0, 70.0));
+    for k in 0..3 {
+        let bleu = (30..80).filter(|&x| f.peinture(k).get(x, 70).b() > 150 && f.peinture(k).get(x, 70).r() < 80).count();
+        assert!(bleu > 20, "l'aplat de la clé {k} a reçu le trait ({bleu} pixels bleus)");
+        assert_eq!(f.trait_(k), traits[k], "le trait de la clé {k} n'est pas touché");
+    }
+    assert_eq!(noms(&f.app).len(), n0 + 1, "un geste, une étape pour les trois : {:?}", noms(&f.app));
+    assert_eq!(noms(&f.app).last().map(String::as_str), Some("Aplat : peinture"));
+    assert_eq!(crate::vector::replay_count(), replays, "aucun rejeu du moteur sur le fil de l'interface");
+    f.app.run_action("edition.annuler");
+    for k in 0..3 {
+        assert!((30..80).all(|x| f.peinture(k).get(x, 70).b() < 150), "l'annulation rend l'aplat de la clé {k}");
+    }
+    assert!(f.vert(1, 56, 40), "et la peinture d'avant est toujours là");
+    // La gomme coupe l'aplat de chaque clé choisie.
+    f.app.set_tool(Tool::Eraser);
+    gliss(&mut f.app, pos2(30.0, 100.0), pos2(80.0, 100.0));
+    for k in 0..3 {
+        assert!((30..80).any(|x| coupe_de(&f, k).get(x, 100).a() > 0), "la gomme a coupé l'aplat de la clé {k}");
+    }
+}
+
+#[test]
+fn painting_on_the_aplat_toggle_also_works_on_every_chosen_key() {
+    let mut f = aplat_fix("sur-aplat-cles");
+    // Pas de sous-ligne choisie : c'est « Peint sur l'aplat » qui vise l'aplat, depuis le trait.
+    f.app.aplat_cible = None;
+    f.app.set_tool(Tool::Brush);
+    f.app.paint_on_aplat = true;
+    f.choose(&[0, 5, 10]);
+    f.app.color = [10, 10, 220];
+    let n0 = noms(&f.app).len();
+    let traits: Vec<Vec<Color32>> = (0..3).map(|k| f.trait_(k)).collect();
+    gliss(&mut f.app, pos2(30.0, 70.0), pos2(80.0, 70.0));
+    for k in 0..3 {
+        assert!((30..80).any(|x| f.peinture(k).get(x, 70).b() > 150), "l'aplat de la clé {k} a reçu le trait");
+        assert_eq!(f.trait_(k), traits[k]);
+    }
+    assert_eq!(noms(&f.app).len(), n0 + 1, "{:?}", noms(&f.app));
+}
+
+#[test]
+fn a_colour_layer_gets_the_same_stroke_and_the_same_fill_on_every_chosen_key() {
+    let mut f = aplat_fix("couleur-cles");
+    let (colour, cels) = avec_calque_de_couleur(&mut f);
+    // Les clés choisies sont celles du calque de trait : la couleur est visée.
+    f.choose(&[0, 5, 10]);
+    f.app.set_tool(Tool::Brush);
+    f.app.color = [10, 10, 220];
+    let (n0, replays) = (noms(&f.app).len(), crate::vector::replay_count());
+    gliss(&mut f.app, pos2(30.0, 70.0), pos2(80.0, 70.0));
+    for c in &cels {
+        let r = &f.app.doc.cels[c].raster;
+        assert!((30..80).any(|x| r.get(x, 70).b() > 150), "le trait de couleur est sur chaque clé");
+    }
+    assert_eq!(f.app.cur_layer, colour);
+    assert_eq!(noms(&f.app).len(), n0 + 1, "une seule étape : {:?}", noms(&f.app));
+    assert_eq!(crate::vector::replay_count(), replays);
+    f.app.run_action("edition.annuler");
+    for c in &cels {
+        assert!(f.app.doc.cels[c].raster.is_blank(), "annulé sur chaque clé");
+    }
+    // Le pot de peinture : la zone fermée par le trait de chaque clé.
+    f.app.set_tool(Tool::Fill);
+    f.app.color = [200, 10, 10];
+    let n1 = noms(&f.app).len();
+    f.app.fill_at(pos2(30.0, 90.0));
+    f.app.attendre_aplat_multi();
+    // (Le point (30, 90) est hors de l'anneau : le dehors se remplit ; (30, 70) est dedans.)
+    f.app.fill_at(pos2(30.0, 70.0));
+    f.app.attendre_aplat_multi();
+    for c in &cels {
+        assert_eq!(f.app.doc.cels[c].raster.get(30, 70), ROUGE, "la zone est remplie sur chaque clé");
+    }
+    assert_eq!(noms(&f.app).len(), n1 + 2, "une étape par clic : {:?}", noms(&f.app));
+}
+
+#[test]
+fn a_drawing_touched_while_the_fill_is_computed_is_left_alone() {
+    let mut f = aplat_fix("retouche");
+    f.app.set_tool(Tool::Fill);
+    f.choose(&[0, 5]);
+    f.app.color = [200, 10, 10];
+    f.app.fill_at(pos2(30.0, 70.0));
+    // La clé 5 est retouchée avant l'arrivée du résultat : il est abandonné pour elle, avec un mot dans la barre d'état.
+    f.app.doc.cels.get_mut(&f.cels[1]).unwrap().version += 1;
+    f.app.attendre_aplat_multi();
+    assert_eq!(f.peinture(1).get(30, 70).a(), 0, "le dessin retouché n'est pas écrasé");
+    assert_eq!(f.peinture(0).get(30, 70), ROUGE);
+    assert!(f.app.status.contains("retouchée"), "{}", f.app.status);
+}
+
+#[test]
+fn a_bucket_on_a_single_key_never_starts_a_worker() {
+    let mut f = aplat_fix("un-seul");
+    f.app.set_tool(Tool::Fill);
+    f.app.fill_at(pos2(30.0, 70.0));
+    assert_eq!(f.app.aplat_travaux.en_route, 0);
+    assert!(f.app.aplat_miroirs.est_vide());
+    gliss(&mut f.app, pos2(30.0, 70.0), pos2(80.0, 70.0));
+    assert!(f.app.aplat_miroirs.est_vide());
+}
+
+#[test]
+fn a_colour_stroke_is_kept_inside_the_closed_zone_of_every_chosen_key() {
+    let mut f = aplat_fix("zone-cles");
+    let (_, cels) = avec_calque_de_couleur(&mut f);
+    f.choose(&[0, 5, 10]);
+    f.app.set_tool(Tool::Brush);
+    f.app.color = [10, 10, 220];
+    let n0 = noms(&f.app).len();
+    // Un trait qui part de l'intérieur de l'anneau (x de 20 à 100) et sort largement au-delà.
+    gliss(&mut f.app, pos2(30.0, 50.0), pos2(160.0, 50.0));
+    f.app.attendre_aplat_multi();
+    for (k, c) in cels.iter().enumerate() {
+        let r = &f.app.doc.cels[c].raster;
+        assert!(r.get(60, 50).b() > 150, "la clé {k} est peinte dans la zone");
+        assert_eq!(r.get(130, 50).a(), 0, "la clé {k} : le trait ne sort pas de la zone fermée par son trait");
+    }
+    assert_eq!(noms(&f.app).len(), n0 + 1, "une seule étape : {:?}", noms(&f.app));
+    f.app.run_action("edition.annuler");
+    for c in &cels {
+        assert!(f.app.doc.cels[c].raster.is_blank(), "une annulation rend toutes les clés");
+    }
+    // Annulé avant l'arrivée de la zone : rien n'est ressuscité.
+    gliss(&mut f.app, pos2(30.0, 50.0), pos2(160.0, 50.0));
+    f.app.run_action("edition.annuler");
+    f.app.attendre_aplat_multi();
+    for c in &cels {
+        assert!(f.app.doc.cels[c].raster.is_blank(), "le résultat d'un geste annulé est abandonné");
     }
 }

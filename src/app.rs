@@ -770,6 +770,10 @@ pub struct App {
     pub(crate) fond_stroke: Option<CelId>,
     /// Le trait qui suit le même geste sur la coupe du fond (la gomme coupe, le pinceau recoud).
     pub(crate) fond_cut: Option<StrokeState>,
+    /// Plusieurs clés choisies, l'aplat visé : le même trait en cours sur l'aplat des autres clés, et les remplissages qui s'y
+    /// calculent en arrière-plan (`aplatmulti.rs`). Propres à un projet.
+    pub(crate) aplat_miroirs: crate::aplatmulti::Miroirs,
+    pub(crate) aplat_travaux: crate::aplatmulti::Travaux,
     /// Panneaux qui s'ajustent (`ajuste.rs`) : hauteur du contenu de chaque panneau à sa dernière
     /// image affichée, part posée par paire de panneaux, un bord a glissé à cette image.
     pub(crate) pane_heights: std::collections::HashMap<crate::dock::Pane, f32>,
@@ -1259,6 +1263,8 @@ impl App {
             aplat_cible: None,
             fond_stroke: None,
             fond_cut: None,
+            aplat_miroirs: Default::default(),
+            aplat_travaux: Default::default(),
             pane_heights: Default::default(),
             fit_set: Default::default(),
             fit_busy: false,
@@ -2196,6 +2202,8 @@ impl App {
             stroke.add_point_at(&mut c.raster, p, pressure, time, &mut dirty);
         }
         self.renderer.invalidate_tiles(&dirty);
+        // (Plusieurs clés choisies, l'aplat visé : le même point sur l'aplat des autres clés, `aplatmulti.rs`.)
+        self.miroirs_point(p, pressure);
     }
 
     /// Termine tout geste en cours : trait, gomme vectorielle, transformation, forme.
@@ -2274,6 +2282,8 @@ impl App {
                 }
             }
         }
+        // Les autres clés choisies finissent le même trait ; leurs étapes rejoignent celle du trait (`aplatmulti.rs`).
+        self.miroirs_finish();
         // Le fond que le trait d'un personnage vient de gagner se calcule sur le fil de fond.
         if let Some((cel, tiles)) = trait_de_personnage {
             self.perso_apres_trait(cel, tiles);
@@ -2326,13 +2336,18 @@ impl App {
             return;
         }
         // Aplat (`fondui.rs`) : si sa sous-ligne est choisie, la zone fermée par le trait se remplit dans l'aplat.
+        // (Plusieurs clés choisies : la même zone se remplit sur l'aplat des autres, en arrière-plan, `aplatmulti.rs`.)
         if self.aplat_en_cible() {
+            let avant = self.history.serial();
             self.fond_zone_at(p, false);
+            self.aplat_autres_cles(p, false, avant);
             return;
         }
         // Calque de couleur (`calquecouleurui.rs`) : la zone fermée par le trait de son calque de trait.
         if self.layer().couleur.is_some() {
+            let avant = self.history.serial();
             self.fill_couleur(p);
+            self.aplat_autres_cles(p, false, avant);
             return;
         }
         self.end_stroke();
@@ -4790,6 +4805,7 @@ impl App {
         self.tick_references(ctx);
         self.tick_personnages();
         self.tick_aplat();
+        self.poll_aplat_multi();
         self.propagation_ui(ctx);
         self.coloriage_ui(ctx);
         if self.playing {
