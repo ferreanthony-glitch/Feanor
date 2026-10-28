@@ -22,7 +22,7 @@ fn the_command_is_listed_for_the_palette() {
 fn the_logo_follows_the_panel_background() {
     let mut r = ReglageTheme::default();
     theme::installer(&r);
-    assert!(crate::accueil::logo_sombre(), "Gris sombre : logo des fonds sombres");
+    assert!(crate::accueil::logo_sombre(), "SHOT : logo des fonds sombres");
     r.choisir(ChoixTheme::GrisClair);
     theme::installer(&r);
     assert!(!crate::accueil::logo_sombre(), "Gris clair : logo des fonds clairs");

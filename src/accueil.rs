@@ -13,6 +13,10 @@
 //!//! En tête de la carte : une image de storyboard tirée au hasard dans le dossier des images d'accueil, une fois par
 //! apparition de l'accueil (`accueilimages.rs`) ; sans image, le logo de SHOT (« Frame the story », la devise est dans le
 //! dessin), rasterisé une fois à la taille de l'écran (`logo.rs`) et gardé.
+//!
+//! Charte graphique (2026-10-28, `docs/INTERFACE.md`, partie 61) : les deux entrées sont des boutons gris ;
+//! l'icône de « Nouveau projet » est le rehaut orange de la carte ; la carte prend le fond des fenêtres du thème. Ce fichier fabrique aussi le petit
+//! logotype (« SHOT » et ses deux angles) tout à gauche de la barre de menus.
 
 use eframe::egui::{self, vec2, Align2, FontId, RichText, Sense};
 use egui_phosphor::regular as ph;
@@ -75,25 +79,62 @@ pub(crate) const ENTREES: [(&str, &str, &str, &str); 2] = [
     (ph::FILE_PLUS, "Nouveau projet", "Choisis le format, la cadence et le dossier, puis commence.", "fichier.nouveau"),
     (ph::FOLDER_OPEN, "Ouvrir un projet", "Un projet SHOT ou Storyboard Pro.", "fichier.ouvrir"),
 ];
-/// Une grande entrée : l'icône, le titre et sa ligne d'explication, sur toute la largeur.
-fn entree(ui: &mut egui::Ui, icone: &str, titre: &str, aide: &str) -> egui::Response {
+/// Une grande entrée : l'icône, le titre et sa ligne d'explication, sur toute la largeur. Les deux sont des boutons gris
+/// ordinaires, avec un filet clair au survol. L'icône de l'entrée `en_rehaut` (Nouveau projet) est orange dans le thème
+/// SHOT : le seul rehaut de la carte (`Palette::rehaut`, qui est l'accent ordinaire dans les autres thèmes).
+fn entree(ui: &mut egui::Ui, icone: &str, titre: &str, aide: &str, en_rehaut: bool) -> egui::Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ENTREE_H), Sense::click());
+    let p = theme::palette();
     let fond = if resp.is_pointer_button_down_on() {
-        theme::controle_actif()
+        p.controle_actif
     } else if resp.hovered() || resp.has_focus() {
-        theme::controle_survol()
+        p.controle_survol
     } else {
-        theme::controle()
+        p.controle
     };
+    let couleur_icone = if en_rehaut { p.rehaut } else { p.accent_texte };
     let peintre = ui.painter();
     peintre.rect_filled(rect, 8.0, fond);
     if resp.hovered() {
-        peintre.rect_stroke(rect, 8.0, egui::Stroke::new(1.0_f32, theme::accent_texte()), egui::StrokeKind::Inside);
+        peintre.rect_stroke(rect, 8.0, egui::Stroke::new(1.0_f32, p.accent_texte), egui::StrokeKind::Inside);
     }
-    peintre.text(rect.left_center() + vec2(18.0, 0.0), Align2::LEFT_CENTER, icone, FontId::proportional(26.0), theme::accent_texte());
-    peintre.text(rect.left_top() + vec2(60.0, 11.0), Align2::LEFT_TOP, titre, FontId::proportional(16.0), theme::texte_fort());
-    peintre.text(rect.left_top() + vec2(60.0, 33.0), Align2::LEFT_TOP, aide, FontId::proportional(12.0), theme::texte_doux());
+    peintre.text(rect.left_center() + vec2(18.0, 0.0), Align2::LEFT_CENTER, icone, FontId::proportional(26.0), couleur_icone);
+    peintre.text(rect.left_top() + vec2(60.0, 11.0), Align2::LEFT_TOP, titre, FontId::proportional(16.0), p.texte_fort);
+    peintre.text(rect.left_top() + vec2(60.0, 33.0), Align2::LEFT_TOP, aide, FontId::proportional(12.0), p.texte_doux);
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+/// La texture du petit logotype (le mot « SHOT » et ses deux angles, sans la devise) de la barre de menus, à la taille
+/// exacte de l'écran (`hauteur` points × pixels par point). Les angles sont orange (`rehaut`) dans le thème SHOT ; les
+/// lettres, de la couleur du texte (blanc cassé ou noir cinéma). Rendu une fois et gardé : refait seulement si la taille
+/// en pixels, la variante ou la couleur des angles change.
+pub(crate) fn logotype_texture(ctx: &egui::Context, hauteur: f32) -> (egui::TextureHandle, egui::Vec2) {
+    let p = theme::palette();
+    let pixels = (hauteur * ctx.pixels_per_point()).round().max(8.0) as u32;
+    let angles = if p.identite { Some([p.rehaut.r(), p.rehaut.g(), p.rehaut.b()]) } else { None };
+    let cle = (pixels, !p.claire, angles);
+    let id = egui::Id::new("shot_logotype");
+    let taille = |w: u32, h: u32| vec2(w as f32 / ctx.pixels_per_point(), h as f32 / ctx.pixels_per_point());
+    if let Some((c, texture, w, h)) = ctx.data(|d| d.get_temp::<((u32, bool, Option<[u8; 3]>), egui::TextureHandle, u32, u32)>(id)) {
+        if c == cle {
+            return (texture, taille(w, h));
+        }
+    }
+    let variante = if p.claire { Variante::Clair } else { Variante::Sombre };
+    let (w, h, rgba) = logo::logotype(pixels, variante, angles);
+    let image = egui::ColorImage::from_rgba_premultiplied([w as usize, h as usize], &rgba);
+    let texture = ctx.load_texture("shot-logotype", image, egui::TextureOptions::LINEAR);
+    ctx.data_mut(|d| d.insert_temp(id, (cle, texture.clone(), w, h)));
+    (texture, taille(w, h))
+}
+
+/// Hauteur du petit logotype de la barre de menus, en points : celle de la barre (un peu moins, pour qu'il y respire).
+pub(crate) const LOGOTYPE_HAUTEUR: f32 = 20.0;
+
+/// Le petit logotype tout à gauche de la barre de menus : discret, sans bulle ni clic, suivi d'un petit espace.
+pub(crate) fn logotype_barre(ui: &mut egui::Ui) {
+    let (texture, taille) = logotype_texture(ui.ctx(), LOGOTYPE_HAUTEUR);
+    ui.add(egui::Image::new(egui::load::SizedTexture::new(texture.id(), taille)).sense(Sense::hover()));
+    ui.add_space(6.0);
 }
 
 impl App {
@@ -147,8 +188,9 @@ impl App {
                     }
                     ui.add_space(10.0);
                 });
-                for (icone, titre, aide, a) in ENTREES {
-                    if entree(ui, icone, titre, aide).clicked() {
+                for (k, (icone, titre, aide, a)) in ENTREES.into_iter().enumerate() {
+                    // (L'icône de la première entrée, Nouveau projet, est le rehaut orange de la carte.)
+                    if entree(ui, icone, titre, aide, k == 0).clicked() {
                         action = Some(a);
                     }
                     ui.add_space(4.0);

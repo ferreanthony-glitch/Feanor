@@ -5046,3 +5046,65 @@ Demande d'Anthony : dans la timeline, Alt + glisser duplique (partie 55) ; **les
 4. Pendant un glisser, **Échap** : rien n'est posé. Lâche Alt en cours de geste : retour au glissé normal (la suite suit).
 5. **Ctrl + Maj** pressées pendant le glisser : l'ancien « réordonner » (le dessin prend sa place parmi les autres) ; **Maj** seule : la clé seule bouge, comme avant ; sans touche : la suite suit, comme avant.
 6. Copie tout au bout du plan : elle est coupée à la fin, le plan garde sa durée.
+
+---------------------------------------------------------------------------------------------------
+
+## 61. Charte SHOT : thème, logo, icône (2026-10-28, branche `charte`)
+
+Demande d'Anthony : suivre la **planche de charte** (`Documents\SHOT\Identité\Charte\planche-charte-SHOT.webp`). Une première version faisait de l'orange l'identité de toute l'interface (fonds presque noirs, sélection orange) ; Anthony l'a trouvée **trop lourde** (« pas fan du orange partout… même le noir est trop lourd »). Cette partie décrit la version retenue : **le gris sombre d'avant, avec seulement quelques rehauts orange**, le logo et l'icône aux couleurs de la charte. Fichiers : `theme.rs` (thème, `souligner_actif`), `logo.rs` (couleurs, icône, `logotype`), `accueil.rs` (icône de « Nouveau projet », petit logotype de la barre), `panels.rs` (logotype et trait dans la barre de menus), `build.rs` (inchangé : il lit `logo::ico`), essais `charte_tests.rs` (12, et 2 essais ignorés qui font les images) ; `theme_tests.rs`, `logo_tests.rs`, `aproposui_tests.rs`, `dessin_notes_tests.rs` adaptés.
+
+### La palette de la charte
+
+| Rôle | Couleur | Où elle sert dans SHOT |
+|---|---|---|
+| Noir cinéma | `#0E0E0E` | texte sur clair dans le logo, « S » et angles de l'icône orange, carré de l'icône sombre. **Plus aucun fond de l'interface.** |
+| Blanc cassé | `#F4F1EA` | texte du thème SHOT, logo, lettres du petit logotype |
+| Gris scène | `#8A8A8A` | (pas imposé : le texte secondaire reste déduit comme avant) |
+| Orange | `#E76F3C` | l'icône de l'application et quelques rehauts, voir plus bas |
+
+### Le thème « SHOT » (le défaut d'une installation neuve)
+
+- **Fonds, boutons, bordures et sélection : exactement ceux de « Gris sombre »** (panneaux 64, barres 54, fenêtres 56, boutons 90, autour du dessin 46, rangées 72, sélection grise `#C8C8C8`, contour blanc). Seul le texte change : `#F4F1EA` au lieu de `#E6E6E6` (presque rien : moins de 1,2:1 entre les deux). Mêmes contrastes qu'avant (texte ≥ 4,5:1 partout, 7:1 sur les panneaux).
+- La **sélection et les éléments choisis ne sont pas orange** : clés, plans, séquences, calque courant, contours, fond de sélection d'egui, boutons allumés, plans courant et choisis du montage gardent leurs gris et leur contour blanc. Pas de survol orange, pas de bouton principal orange dans les fenêtres, pas de poignée de séparateur orange.
+- **Un poste qui a déjà choisi un thème le garde** (son choix est écrit dans `reglages.toml`) ; un thème personnalisé d'avant la charte garde ses neuf couleurs, sans rehauts. Seul un fichier sans section `[theme]` (installation neuve) prend SHOT. « Rétablir » (Préférences) remet SHOT.
+- Les choix (Préférences > Apparence) : **SHOT, Gris sombre, Gris clair, Sombre, Personnalisé**. SHOT et Gris sombre ne diffèrent que par le texte et les rehauts. Un thème Personnalisé créé depuis SHOT garde les rehauts ; depuis un autre, rien d'orange.
+- **Pas de « SHOT clair »** : la première version en avait un ; avec la sélection et les fonds de Gris clair, il n'aurait été que Gris clair avec les mêmes rehauts. Il est retiré (jamais livré).
+- Un champ de plus dans `Couleurs` (non réglé dans la fenêtre) : `identite`, « le thème a les rehauts orange » ; absent d'un fichier de réglages, il vaut « non » : aucun ancien thème ne change. La palette en tire `Palette::rehaut` (l'orange, poussé si besoin jusqu'à 3:1 sur les panneaux et les barres ; l'accent ordinaire dans un thème sans identité).
+
+### Ce qui reste orange (très peu)
+
+1. **L'icône de l'application** (exécutable, barre des tâches, fenêtre) : carré orange.
+2. **Le petit logotype** de la barre de menus : angles orange, « SHOT » blanc cassé.
+3. **L'espace de travail actif** (Vignettes, Storyboard, Animation, Montage) : un **mince trait orange** (2 points) juste sous son étiquette ; l'étiquette garde son fond de sélection gris comme avant. Un seul trait à l'écran.
+4. **L'accueil** : l'**icône** du bouton « Nouveau projet » est orange. Les deux boutons de l'accueil sont gris, avec le filet clair d'avant au survol.
+
+Rien d'autre. Un essai vérifie qu'il n'y a dans la fenêtre principale qu'un seul rectangle plein orange (le trait, 2 points de haut), moins de 0,5 % de la fenêtre, et aucun contour ni trait orange, dans les quatre espaces de travail.
+
+**Ne devient pas orange** : la feuille et les pelures d'oignon (données du document), les couleurs des calques, les repères de caméra, l'image courante, les clés d'effets, le rouge des alertes. À savoir : deux repères de SHOT étaient déjà orange avant la charte et ne changent pas : les **marques d'image** de la timeline (`#F4810C`) et la **boîte de sélection** du dessin (`#E87810`, « comme Storyboard Pro »).
+
+### Le logo et l'icône
+
+- **Logo** (`logo.rs`, dessin de `assets/shot-logo.svg` inchangé) : variante sombre = `#F4F1EA` sur `#0E0E0E` (lettres, angles, devise « FRAME THE », barre ; « STORY » en creux `#0E0E0E`) ; variante claire = l'inverse. Sur l'accueil, il reste **tout blanc cassé** comme sur la planche.
+- **Icône de l'application** (`logo::icone`) : **orange** `#E76F3C`, coins arrondis à 22 % du côté, « S » et angles `#0E0E0E`. La variante sombre (`logo::icone_sombre` : carré `#0E0E0E`, « S » et angles `#F4F1EA`) existe, pas utilisée. PNG 256 px dans `Documents\SHOT\Identité\Charte\` : `icone-orange-256.png`, `icone-sombre-256.png`.
+- **Petit logotype** (`logo::logotype`, `accueil::logotype_barre`) : le mot « SHOT » et ses deux angles, sans la devise, 20 points de haut, tout à gauche de la barre de menus, rendu une fois (texture gardée, refaite seulement si la taille ou le thème change). Il décale les menus d'une quarantaine de points ; à 150 % (fenêtre de 1280 points) les menus et les quatre espaces de travail ne se touchent pas (essai). Dans un thème sans rehauts, ses angles sont de la couleur des lettres.
+
+### Limites connues
+
+- **La police** est toujours Segoe UI : la capitale condensée de la charte (« Shrink ») n'est pas fournie, rien n'a été ajouté. Pas de titres de section en capitales espacées : le gain de lisibilité n'est pas net avec cette police ; à décider avec la vraie police.
+- Si Anthony veut un peu plus ou un peu moins d'orange : tout est dans `Palette::rehaut` (la couleur), `theme::souligner_actif` (le trait), `accueil::entree` (l'icône) et `accueil::logotype_texture` (les angles).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Installation neuve (ou réglages effacés) : l'interface est le **gris sombre d'avant**, rien de noir, texte blanc cassé. Préférences > Apparence : « SHOT » est coché, suivi de Gris sombre, Gris clair, Sombre, Personnalisé. Un poste qui avait Gris sombre le garde.
+2. **Icône** : l'exécutable dans l'Explorateur, la barre des tâches et la fenêtre montrent le carré **orange** avec le « S » noir entre deux angles. Compare avec `icone-orange-256.png`.
+3. **Barre de menus** : le petit logotype « SHOT » (angles orange, lettres blanc cassé) est tout à gauche, à la hauteur de la barre ; les menus suivent sans être serrés. Passe l'échelle de l'interface à 150 % (Préférences) : rien ne se chevauche.
+4. **Espaces de travail** : l'actif garde son fond gris clair d'avant et a, juste dessous, un **mince trait orange** ; les autres n'ont rien. Il suit au clic.
+5. **Sélection** : choisis une clé, plusieurs (Ctrl + clic), un plan, une séquence, un calque : contours **blancs**, fonds gris, comme avant la charte. Aucun orange.
+6. **Boutons et fenêtres** : Fichier > Nouveau…, Exporter, Nouveau calque, Réglages du projet : boutons gris ordinaires, survol sans orange.
+7. **Accueil** : la carte a le fond d'une fenêtre ; le logo est blanc cassé sur sombre ; « Nouveau projet » et « Ouvrir un projet » sont deux boutons gris pareils, avec l'**icône** de « Nouveau projet » en orange.
+8. **Gris clair** et **Sombre** : rien n'a changé, rien d'orange.
+9. Au repos : rien ne bouge, le processeur reste à zéro (le logotype est une texture gardée).
+
+### Essais
+
+`charte_tests.rs` : installation neuve = SHOT, et ses fonds, boutons et sélection sont ceux de Gris sombre ; la liste des thèmes ; un poste qui a déjà choisi un thème le garde (chaque choix, ancien fichier Gris sombre, thème personnalisé d'avant la charte, personnalisé qui part de SHOT) ; pas de noir dans les fonds ; texte presque identique à l'ancien ; contrastes du texte et du texte secondaire ≥ 4,5:1 et du rehaut ≥ 3:1 ; sélection, contour (blanc), survol et boutons exactement ceux de Gris sombre, aucune couleur de la palette orange hors le rehaut, couleurs du travail inchangées ; **dans les quatre espaces de travail : un seul rectangle plein orange (le trait, mince, sous le mot actif et pas sous les autres), moins de 0,5 % de la fenêtre, aucun contour ni trait orange, le mot actif garde son fond de sélection gris** ; couleurs du logo (pixels, deux variantes) ; icône orange (fond, coin arrondi, angle noir, centre du S), icône sombre, `.ico` orange ; petit logotype (couleurs, angles, pas de devise) ; logotype tout à gauche de la barre et sans gêne à 1280 points ; accueil (deux boutons gris pareils, icône de « Nouveau projet » orange, aucun remplissage orange, carte du fond des fenêtres, thème clair sans orange). Les captures (`charte_captures`, `charte_icones`, ignorées) écrivent dans `SHOT_CAPTURE_DIR` : `accueil.png`, `fenetre-principale-{vignettes,storyboard,animation,montage}.png`, `icone-{orange,sombre}-256.png`.

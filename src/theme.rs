@@ -2,9 +2,15 @@
 //! `Visuals` d'egui posés une seule fois quand le thème change. Seulement des couleurs et des
 //! tailles : aucun élément ni ressource graphique repris.
 //!
-//! Trois thèmes livrés, des gris neutres (Anthony, 2026-10-18 : « un gris sombre/clair plus proche de
-//! Storyboard Pro ou Clip Studio Paint ») : **Gris sombre** (par défaut), **Gris clair** et
-//! **Sombre** (l'ancien presque noir). Un quatrième, **Personnalisé**, part du thème courant et se
+//! Cinq choix. **SHOT** (par défaut depuis la charte graphique d'Anthony, 2026-10-28) est le gris sombre
+//! d'avant, avec seulement quelques rehauts orange (`#E76F3C`, l'orange de la charte) pour rappeler
+//! l'identité : un mince trait sous l'espace de travail actif, l'icône de « Nouveau projet » sur
+//! l'accueil, les angles du petit logotype. Rien d'autre n'est orange : la sélection, les éléments
+//! choisis et les boutons gardent leurs gris (Anthony, après avoir vu la première version, plus
+//! chargée : « l'orange est trop présent, le noir trop lourd »). Puis trois thèmes de gris neutres
+//! (Anthony, 2026-10-18 : « un gris sombre/clair plus proche de Storyboard Pro ou Clip Studio
+//! Paint ») : **Gris sombre**, **Gris clair** et **Sombre** (l'ancien presque noir). Un dernier,
+//! **Personnalisé**, part du thème courant et se
 //! règle dans Fichier > Préférences… avec neuf couleurs ; tout le reste de la palette (survol,
 //! onglet actif, texte secondaire, couleur des dessins sur la timeline…) en est déduit, et choisi
 //! pour rester lisible sur le thème (contraste WCAG, `contraste`).
@@ -40,7 +46,9 @@ fn couleur(c: Rvb) -> Color32 {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChoixTheme {
+    /// Le gris sombre avec les rehauts orange de la charte : le thème d'une installation neuve.
     #[default]
+    Shot,
     GrisSombre,
     GrisClair,
     Sombre,
@@ -48,10 +56,11 @@ pub enum ChoixTheme {
 }
 
 impl ChoixTheme {
-    pub const TOUS: [ChoixTheme; 4] = [ChoixTheme::GrisSombre, ChoixTheme::GrisClair, ChoixTheme::Sombre, ChoixTheme::Personnalise];
+    pub const TOUS: [ChoixTheme; 5] = [ChoixTheme::Shot, ChoixTheme::GrisSombre, ChoixTheme::GrisClair, ChoixTheme::Sombre, ChoixTheme::Personnalise];
 
     pub fn nom(self) -> &'static str {
         match self {
+            ChoixTheme::Shot => "SHOT",
             ChoixTheme::GrisSombre => "Gris sombre",
             ChoixTheme::GrisClair => "Gris clair",
             ChoixTheme::Sombre => "Sombre",
@@ -62,7 +71,9 @@ impl ChoixTheme {
 
 /// Les neuf couleurs qu'on règle dans les préférences. Tout le reste en est déduit.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
+// (Une couleur absente d'un fichier de réglages garde le gris sombre d'avant : un thème personnalisé
+// écrit avant la charte ne change pas d'aspect.)
+#[serde(default = "Couleurs::gris_sombre")]
 pub struct Couleurs {
     /// Fond des panneaux.
     pub panneau: Rvb,
@@ -82,15 +93,32 @@ pub struct Couleurs {
     pub timeline: Rvb,
     /// Traits de séparation, bordures.
     pub bordure: Rvb,
+    /// Vrai pour le thème de la charte : quelques rehauts orange (`Palette::rehaut`) rappellent l'identité
+    /// de SHOT (trait sous l'espace actif, icône de « Nouveau projet », angles du petit logotype). Pas réglé
+    /// dans les préférences ; absent d'un fichier de réglages, il vaut « non ».
+    #[serde(default)]
+    pub identite: bool,
 }
+
+/// Les couleurs de la charte utilisées par l'interface.
+/// (Elles sont écrites dans `logo.rs`, qui sert aussi à `build.rs`.)
+pub const BLANC_CASSE: Rvb = crate::logo::BLANC_CASSE;
+pub const ORANGE_SHOT: Rvb = crate::logo::ORANGE_SHOT;
 
 impl Default for Couleurs {
     fn default() -> Self {
-        Couleurs::gris_sombre()
+        Couleurs::shot()
     }
 }
 
 impl Couleurs {
+    /// Le thème de la charte : les gris de « Gris sombre » (mêmes fonds, même sélection grise, mêmes
+    /// boutons), le texte en blanc cassé `#F4F1EA` (à peine plus chaud que le gris clair d'avant), et les
+    /// rehauts orange (`identite`).
+    pub const fn shot() -> Couleurs {
+        Couleurs { texte: BLANC_CASSE, identite: true, ..Couleurs::gris_sombre() }
+    }
+
     pub const fn gris_sombre() -> Couleurs {
         Couleurs {
             panneau: [64, 64, 64],
@@ -104,6 +132,7 @@ impl Couleurs {
             fond: [46, 46, 46],
             timeline: [72, 72, 72],
             bordure: [80, 80, 80],
+            identite: false,
         }
     }
 
@@ -119,6 +148,7 @@ impl Couleurs {
             fond: [158, 158, 158],
             timeline: [205, 205, 205],
             bordure: [150, 150, 150],
+            identite: false,
         }
     }
 
@@ -134,6 +164,7 @@ impl Couleurs {
             fond: [17, 17, 17],
             timeline: [40, 40, 40],
             bordure: [50, 50, 50],
+            identite: false,
         }
     }
 
@@ -154,7 +185,8 @@ impl Couleurs {
 }
 
 /// Le réglage de l'application (`reglages.toml`, `[theme]`) : le thème choisi et, gardées à part,
-/// les couleurs du thème personnalisé. Un fichier sans cette section donne Gris sombre.
+/// les couleurs du thème personnalisé. Un fichier sans cette section (une installation neuve) donne
+/// SHOT ; un poste qui a déjà choisi un thème le garde (son choix est écrit dans le fichier).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ReglageTheme {
@@ -166,6 +198,7 @@ impl ReglageTheme {
     /// Les neuf couleurs du thème courant.
     pub fn couleurs(&self) -> Couleurs {
         match self.choix {
+            ChoixTheme::Shot => Couleurs::shot(),
             ChoixTheme::GrisSombre => Couleurs::gris_sombre(),
             ChoixTheme::GrisClair => Couleurs::gris_clair(),
             ChoixTheme::Sombre => Couleurs::sombre(),
@@ -190,8 +223,8 @@ impl ReglageTheme {
         }
     }
 
-    /// « Rétablir » : le thème par défaut, Gris sombre (les couleurs personnalisées sont aussi
-    /// remises à celles de ce thème).
+    /// « Rétablir » : le thème par défaut, SHOT (les couleurs personnalisées sont aussi remises à
+    /// celles de ce thème).
     pub fn retablir(&mut self) {
         *self = ReglageTheme::default();
     }
@@ -256,6 +289,12 @@ pub struct Palette {
     pub accent: Color32,
     pub sur_accent: Color32,
     pub accent_texte: Color32,
+    /// Thème de la charte (`Couleurs::identite`) : quelques rehauts orange.
+    pub identite: bool,
+    /// Le rehaut : l'orange de la charte, poussé si besoin jusqu'à 3:1 sur les panneaux et les barres ; dans
+    /// un thème sans identité, l'accent des traits (`accent_texte`). Trait sous l'espace de travail actif,
+    /// icône de « Nouveau projet », angles du petit logotype : rien d'autre.
+    pub rehaut: Color32,
     // Timeline et montage.
     pub regle: Color32,
     pub rangee: Color32,
@@ -329,7 +368,8 @@ impl Palette {
         let texte_doux = (0..=9).map(|k| melange(texte, panneau, 0.45 - 0.05 * k as f32)).find(|x| lisibles.iter().all(|f| contraste(*x, *f) >= 4.5)).unwrap_or(texte);
         let accent_texte = (0..=20).map(|k| melange(accent, texte_fort, k as f32 * 0.05)).find(|x| contraste(*x, panneau) >= 4.5).unwrap_or(texte_fort);
         let sur_accent = if contraste(Color32::WHITE, accent) >= 4.5 || contraste(Color32::WHITE, accent) >= contraste(gris(15), accent) { Color32::WHITE } else { gris(15) };
-
+        // Le rehaut orange de la charte (thème avec identité) : jamais sous 3:1 sur les panneaux et les barres.
+        let rehaut = if c.identite { assurer(couleur(ORANGE_SHOT), &[panneau, entete], 3.0, texte_fort) } else { accent_texte };
         // Couleurs des repères : un jeu vif pour les fonds sombres, un jeu plus profond pour les
         // clairs ; chacune est poussée si besoin jusqu'à 3,2:1 sur les rangées.
         let jeu = |sombre: [u8; 3], clair: [u8; 3]| assurer(couleur(if claire { clair } else { sombre }), &[rangee, rangee_sombre], 3.2, anti_de(claire));
@@ -358,6 +398,8 @@ impl Palette {
             accent,
             sur_accent,
             accent_texte,
+            identite: c.identite,
+            rehaut,
             regle: entete,
             rangee,
             rangee_sombre,
@@ -446,6 +488,7 @@ impl Palette {
             w.inactive.bg_stroke = Stroke::new(1.0_f32, self.bord);
         }
         w.hovered.bg_stroke = Stroke::new(1.0_f32, self.controle_actif);
+
         v
     }
 }
@@ -457,7 +500,7 @@ fn anti_de(claire: bool) -> Color32 {
 }
 
 thread_local! {
-    static COURANTE: RefCell<Palette> = RefCell::new(Palette::depuis(&Couleurs::gris_sombre()));
+    static COURANTE: RefCell<Palette> = RefCell::new(Palette::depuis(&Couleurs::default()));
 }
 
 /// Installe le thème : les couleurs que lisent les panneaux changent aussitôt. Les `Visuals`
@@ -512,6 +555,8 @@ couleurs_courantes! {
     accent,
     sur_accent,
     accent_texte,
+    /// Le rehaut orange de la charte (thème SHOT) : trait sous l'espace actif, icône de « Nouveau projet ».
+    rehaut,
     /// Règle des images (au-dessus des rangées).
     regle,
     /// Rangée d'un calque ; rangées de la caméra, du son et des pistes, plus sombres.
@@ -749,6 +794,15 @@ pub fn dock(mut s: egui_dock::Style) -> egui_dock::Style {
     s
 }
 
+/// Le trait orange sous l'espace de travail actif (Vignettes, Storyboard, Animation, Montage) : deux points de
+/// haut, juste sous son étiquette (sans toucher le mot), seulement dans un thème avec identité (le thème SHOT) ; les autres n'ont rien.
+pub fn souligner_actif(ui: &egui::Ui, etiquette: egui::Rect) {
+    let p = palette();
+    if p.identite {
+        let trait_ = egui::Rect::from_min_max(egui::pos2(etiquette.left() + 3.0, etiquette.bottom() - 0.5), egui::pos2(etiquette.right() - 3.0, etiquette.bottom() + 1.5));
+        ui.painter().rect_filled(trait_, 0.0, p.rehaut);
+    }
+}
 /// Applique le thème courant à egui : couleurs, densité. À refaire quand le thème change
 /// (`installer` d'abord).
 pub fn appliquer(ctx: &egui::Context) {

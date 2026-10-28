@@ -1,5 +1,6 @@
 //! Logo et icône de SHOT : le dessin rasterisé n'est pas vide, a les bonnes proportions, et reste
-//! lisible dans les deux variantes.
+//! lisible dans les deux variantes. Les couleurs de la charte (logo, icône orange, petit logotype) sont
+//! vérifiées dans `charte_tests.rs`.
 
 use crate::logo::{self, Variante, VUE_H, VUE_L, VUE_X, VUE_Y};
 
@@ -40,12 +41,12 @@ fn le_logo_n_est_pas_vide_et_a_les_bonnes_proportions() {
 fn le_fond_est_transparent_et_les_formes_ont_les_couleurs_du_logo() {
     // Coin du cadre : rien.
     assert_eq!(pixel_au(Variante::Sombre, 948, VUE_X + 1.0, VUE_Y + 1.0)[3], 0);
-    // Le montant du « H » : #ECE8DC plein.
-    assert_eq!(pixel_au(Variante::Sombre, 948, 407.0, 300.0), [0xEC, 0xE8, 0xDC, 255]);
+    // Le montant du « H » : le blanc cassé de la charte, #F4F1EA, plein.
+    assert_eq!(pixel_au(Variante::Sombre, 948, 407.0, 300.0), [0xF4, 0xF1, 0xEA, 255]);
     // Le trou du « O » reste vide (règle pair-impair).
     assert_eq!(pixel_au(Variante::Sombre, 948, 547.0, 330.0)[3], 0);
     // La barre en bas à droite est claire, et « STORY » y est écrit en creux, couleur du fond.
-    assert_eq!(pixel_au(Variante::Sombre, 948, 606.0, 442.0), [0xEC, 0xE8, 0xDC, 255]);
+    assert_eq!(pixel_au(Variante::Sombre, 948, 606.0, 442.0), [0xF4, 0xF1, 0xEA, 255]);
     let (w, h, px) = logo::image(948, Variante::Sombre);
     let s = w as f32 / VUE_L;
     let mut creux = 0;
@@ -62,9 +63,9 @@ fn le_fond_est_transparent_et_les_formes_ont_les_couleurs_du_logo() {
 
 #[test]
 fn la_variante_claire_inverse_le_logo_pour_un_fond_clair() {
-    assert_eq!(pixel_au(Variante::Clair, 948, 407.0, 300.0), [0x1E, 0x1E, 0x22, 255]);
-    // Le creux de « STORY » prend le papier : lisible dans la barre sombre.
-    assert_eq!(pixel_au(Variante::Clair, 948, 606.0, 442.0), [0x1E, 0x1E, 0x22, 255]);
+    assert_eq!(pixel_au(Variante::Clair, 948, 407.0, 300.0), [0x0E, 0x0E, 0x0E, 255]);
+    // La barre est du noir cinéma, et « STORY » y est en creux (voir `charte_tests.rs` pour les couleurs officielles).
+    assert_eq!(pixel_au(Variante::Clair, 948, 606.0, 442.0), [0x0E, 0x0E, 0x0E, 255]);
 }
 
 #[test]
@@ -80,7 +81,7 @@ fn les_chemins_du_svg_sont_lus_en_entier() {
 }
 
 #[test]
-fn l_icone_est_un_carre_sombre_avec_le_s_et_deux_angles() {
+fn l_icone_est_un_carre_arrondi_avec_le_s_et_deux_angles() {
     for taille in [16u32, 32, 64, 256] {
         let px = logo::icone(taille);
         assert_eq!(px.len(), (taille * taille * 4) as usize);
@@ -88,13 +89,13 @@ fn l_icone_est_un_carre_sombre_avec_le_s_et_deux_angles() {
         // Coins arrondis : le tout premier pixel est transparent, le centre du bord haut ne l'est pas.
         assert!(at(0, 0)[3] < 100, "{taille}");
         assert_eq!(at(taille / 2, 0)[3], 255, "{taille}");
-        // Angle haut gauche du logo : clair.
-        let (x, y) = ((taille as f32 * 0.14) as u32, (taille as f32 * 0.14) as u32);
-        assert!(at(x, y)[0] > 0xC0, "angle haut gauche à {taille} px : {:?}", at(x, y));
-        // Du clair (le S et les angles) et du sombre (le fond) en proportions raisonnables.
-        let clairs = px.chunks_exact(4).filter(|p| p[3] == 255 && p[0] > 0xC0).count();
-        let part = clairs as f32 / (taille * taille) as f32;
-        assert!((0.10..0.45).contains(&part), "part de clair à {taille} px : {part}");
+        // Angle haut gauche du logo : sombre (le noir cinéma sur l'orange de l'icône).
+        let (x, y) = ((taille as f32 * 0.16) as u32, (taille as f32 * 0.16) as u32);
+        assert!(at(x, y)[0] < 0x40, "angle haut gauche à {taille} px : {:?}", at(x, y));
+        // Du fond (orange) et de l'encre (le S et les angles) en proportions raisonnables.
+        let encre = px.chunks_exact(4).filter(|p| p[3] == 255 && p[0] < 0x80).count();
+        let part = encre as f32 / (taille * taille) as f32;
+        assert!((0.04..0.35).contains(&part), "part d'encre à {taille} px : {part}");
     }
 }
 
@@ -128,7 +129,7 @@ fn le_fichier_ico_a_une_entree_par_taille_et_des_decalages_justes() {
 fn logo_planches() {
     let Some(dir) = std::env::var_os("SHOT_PLANCHES").map(std::path::PathBuf::from) else { return };
     std::fs::create_dir_all(&dir).unwrap();
-    for (nom, v, fond) in [("logo-sombre", Variante::Sombre, [0x12u8, 0x12, 0x14]), ("logo-clair", Variante::Clair, [0xF4, 0xF2, 0xEC])] {
+    for (nom, v, fond) in [("logo-sombre", Variante::Sombre, [0x0Eu8, 0x0E, 0x0E]), ("logo-clair", Variante::Clair, [0xF4, 0xF1, 0xEA])] {
         for largeur in [948u32, 400] {
             let (w, h, px) = logo::image(largeur, v);
             let mut rgb = Vec::new();
@@ -143,5 +144,6 @@ fn logo_planches() {
     }
     for t in [16u32, 32, 64, 256] {
         image::save_buffer(dir.join(format!("icone-{t}.png")), &logo::icone(t), t, t, image::ExtendedColorType::Rgba8).unwrap();
+        image::save_buffer(dir.join(format!("icone-sombre-{t}.png")), &logo::icone_sombre(t), t, t, image::ExtendedColorType::Rgba8).unwrap();
     }
 }
