@@ -73,6 +73,8 @@ pub enum BoardView {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tool {
     Brush,
+    /// Mélangeur (`melangeur.rs`) : la brosse courante en « Lisser », qui entraîne et mêle ce qui est déjà peint, sans poser de couleur.
+    Mixer,
     Pencil,
     Eraser,
     /// Cutter : coupe les traits vectoriels à leurs croisements (`cutter.rs`).
@@ -104,8 +106,9 @@ pub enum Tool {
 }
 
 impl Tool {
-    pub const ALL: [Tool; 20] = [
+    pub const ALL: [Tool; 21] = [
         Tool::Brush,
+        Tool::Mixer,
         Tool::Pencil,
         Tool::Eraser,
         Tool::Cutter,
@@ -130,6 +133,7 @@ impl Tool {
     pub fn label(self) -> &'static str {
         match self {
             Tool::Brush => "Pinceau",
+            Tool::Mixer => "Mélangeur",
             Tool::Pencil => "Crayon",
             Tool::Eraser => "Gomme",
             Tool::Cutter => "Cutter",
@@ -156,6 +160,7 @@ impl Tool {
     pub fn description(self) -> &'static str {
         match self {
             Tool::Brush => "Peindre ; la taille peut suivre la pression du stylet.",
+            Tool::Mixer => "Mélanger ce qui est déjà peint : la brosse courante entraîne et étale les couleurs qu'elle traverse, sans en poser de neuve. Sur un calque bitmap.",
             Tool::Pencil => "Dessiner au crayon.",
             Tool::Eraser => "Effacer ; sur un calque vectoriel, des bouts de trait ou des traits entiers.",
             Tool::Cutter => "Glisser en travers des bouts de traits vectoriels à enlever : ils sont coupés là où ils croisent les autres traits.",
@@ -183,6 +188,7 @@ impl Tool {
         use egui_phosphor::regular as ph;
         match self {
             Tool::Brush => ph::PAINT_BRUSH,
+            Tool::Mixer => ph::DROP_HALF_BOTTOM,
             Tool::Pencil => ph::PENCIL_SIMPLE,
             Tool::Eraser => ph::ERASER,
             Tool::Cutter => ph::KNIFE,
@@ -209,6 +215,7 @@ impl Tool {
     pub fn action(self) -> &'static str {
         match self {
             Tool::Brush => "outil.pinceau",
+            Tool::Mixer => "outil.melangeur",
             Tool::Pencil => "outil.crayon",
             Tool::Eraser => "outil.gomme",
             Tool::Cutter => "outil.cutter",
@@ -1508,18 +1515,21 @@ impl App {
             || self.collage_occupe()
     }
 
-    pub(crate) fn current_brush(&self) -> Option<&BrushSettings> {
+    /// Les réglages de la brosse de l'outil courant. Le Mélangeur prend ceux du pinceau, en « Lisser »
+    /// (`BrushSettings::as_mixer`).
+    pub(crate) fn current_brush(&self) -> Option<BrushSettings> {
         match self.tool {
-            Tool::Brush => Some(&self.brush),
-            Tool::Pencil => Some(&self.pencil),
-            Tool::Eraser => Some(&self.eraser),
+            Tool::Brush => Some(self.brush),
+            Tool::Mixer => Some(self.brush.as_mixer()),
+            Tool::Pencil => Some(self.pencil),
+            Tool::Eraser => Some(self.eraser),
             _ => None,
         }
     }
 
     fn current_brush_mut(&mut self) -> Option<&mut BrushSettings> {
         match self.tool {
-            Tool::Brush => Some(&mut self.brush),
+            Tool::Brush | Tool::Mixer => Some(&mut self.brush),
             Tool::Pencil => Some(&mut self.pencil),
             Tool::Eraser => Some(&mut self.eraser),
             _ => None,
@@ -2033,7 +2043,8 @@ impl App {
             return;
         }
         let erase = self.tool == Tool::Eraser;
-        if !erase {
+        // (Le Mélangeur ne pose aucune couleur : ni personnage, ni couleur récente.)
+        if !erase && self.tool != Tool::Mixer {
             // Un personnage qui a un fond le donne au calque (`personnagesui.rs`).
             self.perso_avant_trait();
             // Elle rejoint les couleurs récentes (passe couleur).
@@ -2049,6 +2060,10 @@ impl App {
             return;
         }
         match (self.layer().kind, erase) {
+            // Le Mélangeur lit les pixels du calque : il n'a rien à mêler sur un calque vectoriel.
+            (LayerKind::Vector, false) if self.tool == Tool::Mixer => {
+                self.status = "Le Mélangeur agit sur un calque bitmap.".into();
+            }
             (LayerKind::Vector, true) => self.begin_vector_erase(p, pen),
             (LayerKind::Vector, false) => self.begin_vector_stroke(p, pressure, pen),
             (LayerKind::Bitmap, _) => self.begin_stroke(p, pressure, pen),
@@ -2056,7 +2071,7 @@ impl App {
     }
 
     fn begin_stroke(&mut self, p: Pos2, pressure: f32, pen: bool) {
-        let Some(settings) = self.current_brush().copied() else {
+        let Some(settings) = self.current_brush() else {
             return;
         };
         let (cel, prefix) = self.ensure_cel();
@@ -2071,7 +2086,7 @@ impl App {
         let stencil = self.couleur_pochoir(stencil, p);
         let painting = self.tool != Tool::Eraser;
         // (Plus de « Remplir la forme » : le moteur garde l'option, l'application ne l'allume plus.)
-        let (behind, fill, tol) = (painting && self.paint_behind, false, self.close_tolerance());
+        let (behind, fill, tol) = (painting && self.paint_behind && self.tool != Tool::Mixer, false, self.close_tolerance());
         let mut stroke = StrokeState::new(cel, mode, settings, prefix, pen)
             .with_textures(textures)
             .with_feel(self.toucher)
@@ -2100,7 +2115,7 @@ impl App {
     /// Un trait dans la strate Fond du dessin courant : la peinture reste dans la forme du fond
     /// (déduite du trait, gardée comme un pochoir), sous le trait.
     fn begin_fond_stroke(&mut self, p: Pos2, pressure: f32, pen: bool) {
-        let (Some(settings), Some(r)) = (self.current_brush().copied(), self.layer().fond) else {
+        let (Some(settings), Some(r)) = (self.current_brush(), self.layer().fond) else {
             return;
         };
         let (cel, prefix) = self.ensure_cel();
@@ -4050,6 +4065,7 @@ impl App {
             "outil.gomme" => self.set_tool(Tool::Eraser),
             "outil.remplissage" => self.set_tool(Tool::Fill),
             "outil.degrade" => self.set_tool(Tool::Gradient),
+            "outil.melangeur" => self.set_tool(Tool::Mixer),
             "outil.pipette" => self.set_tool(Tool::Picker),
             "outil.selection" => self.set_tool(Tool::Select),
             "outil.selection_couleur" => self.set_tool(Tool::SelectColor),

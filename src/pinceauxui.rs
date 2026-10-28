@@ -115,7 +115,7 @@ impl App {
     /// Les outils qui ont des brosses : le pinceau, le crayon et la gomme (la liste des brosses se montre dans leur
     /// panneau Réglages).
     fn outil_a_brosses(&self) -> bool {
-        matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser)
+        matches!(self.tool, Tool::Brush | Tool::Mixer | Tool::Pencil | Tool::Eraser)
     }
 
     /// Déplie la liste des brosses dans le panneau Réglages de l'outil : ce que faisait l'ouverture de l'ancien
@@ -291,7 +291,7 @@ impl App {
                 Target::Eraser => self.eraser = settings,
                 Target::Brush => {
                     self.brush = settings;
-                    if self.tool != Tool::Brush {
+                    if !matches!(self.tool, Tool::Brush | Tool::Mixer) {
                         self.set_tool(Tool::Brush);
                     }
                 }
@@ -539,8 +539,9 @@ impl App {
             Categorie::Dispersion => crate::dynui::scatter_ui(ui, self.panel_brush_mut()),
             Categorie::Grain => self.paper_ui(ui),
             Categorie::Couleur => {
+                let mixer = self.tool == Tool::Mixer;
                 let b = self.panel_brush_mut();
-                crate::dynui::wet_ui(ui, b, vector);
+                crate::dynui::wet_ui(ui, b, vector, mixer);
                 ui.add_space(4.0);
                 crate::dynui::dynamics_ui(ui, b, vector, true);
             }

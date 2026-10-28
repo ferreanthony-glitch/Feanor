@@ -435,7 +435,7 @@ impl App {
                     match self.tool {
                         Tool::Fill => self.fill_at(p),
                         Tool::Gradient => self.degrade_press(p, modifiers.alt),
-                        Tool::Brush | Tool::Pencil | Tool::Eraser => {
+                        Tool::Brush | Tool::Mixer | Tool::Pencil | Tool::Eraser => {
                             let pressure = if pen { self.pen_pressure } else { 1.0 };
                             // Le trait d'abord (`begin_paint` clôt le précédent, ce qui oublie le
                             // guide), puis le guide qu'il suit : sinon l'aimant ne servait jamais.
