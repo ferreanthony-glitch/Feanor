@@ -1,6 +1,6 @@
-//! L'écran d'accueil (`accueil.rs`) après la demande d'Anthony du 2026-10-28 : quatre grandes entrées (Nouveau fichier,
-//! Dessiner un storyboard, Dessiner des vignettes, Ouvrir un projet), les projets récents dessous, plus d'« Importer un scénario » (il reste dans le
-//! menu Fichier), et le dépôt d'images qui marche depuis l'onglet Vignettes où mène la deuxième entrée. Le tirage de l'image
+//! L'écran d'accueil (`accueil.rs`) après la demande d'Anthony du 2026-10-28 : deux grandes entrées (Nouveau projet,
+//! Ouvrir un projet), les projets récents dessous, plus d'« Importer un scénario » (il reste dans le
+//! menu Fichier), et le dépôt d'images qui marche depuis l'onglet Vignettes où mène un nouveau projet (par défaut). Le tirage de l'image
 //! du haut est dans `accueilimages_tests.rs`.
 
 use eframe::egui::{epaint::Shape, pos2, Event, Modifiers, PointerButton, Pos2};
@@ -51,34 +51,35 @@ fn clic(b: &mut Banc, p: Pos2) {
 }
 
 #[test]
-fn the_welcome_card_shows_four_big_entries_in_order_and_nothing_else_big() {
+fn the_welcome_card_shows_two_big_entries_in_order_and_nothing_else_big() {
     let b = accueil();
     assert!(b.app.welcome_shown());
     let y: Vec<f32> = ENTREES.iter().map(|(_, titre, _, _)| centre(&b, titre).y).collect();
-    assert!(y.windows(2).all(|w| w[0] < w[1]), "les quatre entrées se suivent de haut en bas : {y:?}");
-    assert_eq!(ENTREES.map(|e| e.1), ["Nouveau fichier", "Dessiner un storyboard", "Dessiner des vignettes", "Ouvrir un projet"]);
+    assert!(y.windows(2).all(|w| w[0] < w[1]), "les deux entrées se suivent de haut en bas : {y:?}");
+    assert_eq!(ENTREES.map(|e| e.1), ["Nouveau projet", "Ouvrir un projet"]);
     // Chaque entrée dit en une ligne ce qu'elle fait, sous son titre.
     for (_, titre, aide, _) in ENTREES {
         let ligne = centre(&b, aide);
         assert!(ligne.y > centre(&b, titre).y, "{titre} : l'explication est dessous");
     }
     // Les anciennes entrées qui encombraient la carte n'y sont plus.
-    assert!(!est_la(&b, "Commencer sans projet") && !est_la(&b, ".sboard"), "{:?}", tous_les_textes(&b).iter().map(|t| &t.0).collect::<Vec<_>>());
-    // La devise et la case « Rouvrir le dernier projet » restent.
+    let tout = || tous_les_textes(&b).iter().map(|t| t.0.clone()).collect::<Vec<_>>();
+    for ancien in ["Commencer sans projet", ".sboard", "Importer un scénario", "Dessiner des vignettes", "Dessiner un storyboard", "Nouveau fichier", "Nouveau projet…"] {
+        assert!(!est_la(&b, ancien), "« {ancien} » n'est plus sur l'accueil : {:?}", tout());
+    }
+    // La case « Rouvrir le dernier projet » reste.
     assert!(est_la(&b, "Rouvrir le dernier projet au lancement"));
-    // « Importer un scénario » n'est plus sur l'accueil, et le petit « Nouveau projet… » est devenu la grande entrée.
-    assert!(!est_la(&b, "Importer un scénario") && !est_la(&b, "Nouveau projet…"), "{:?}", tous_les_textes(&b).iter().map(|t| &t.0).collect::<Vec<_>>());
 }
 
 #[test]
-fn the_recent_projects_stay_under_the_four_entries() {
+fn the_recent_projects_stay_under_the_two_entries() {
     let mut b = accueil();
     let dossier = std::env::temp_dir().join(format!("shot-accueil-recent-{}", std::process::id()));
     std::fs::create_dir_all(&dossier).unwrap();
     b.app.settings.recent_projects = vec![dossier.clone()];
     b.chauffer(6);
     assert!(est_la(&b, "Projets récents"));
-    let (recents, derniere) = (centre(&b, "Projets récents").y, centre(&b, ENTREES[3].1).y);
+    let (recents, derniere) = (centre(&b, "Projets récents").y, centre(&b, ENTREES[1].1).y);
     assert!(recents > derniere, "les récents sont sous les entrées : {recents} contre {derniere}");
     std::fs::remove_dir_all(&dossier).ok();
 }
@@ -86,27 +87,21 @@ fn the_recent_projects_stay_under_the_four_entries() {
 #[test]
 fn the_entries_run_real_commands() {
     for (_, titre, _, action) in ENTREES {
-        if action.starts_with("accueil.") {
-            assert!(["Dessiner un storyboard", "Dessiner des vignettes"].contains(&titre), "seules ces deux-là sont faites par l'accueil lui-même");
-        } else {
-            assert!(crate::keymap::action_info(action).is_some_and(|a| a.implemented), "{titre} : {action} existe");
-        }
+        assert!(crate::keymap::action_info(action).is_some_and(|a| a.implemented), "{titre} : {action} existe");
     }
     assert_eq!(ENTREES[0].3, "fichier.nouveau", "la fenêtre de nouveau projet, avec le choix du format");
-    assert_eq!(ENTREES[1].3, crate::accueil::ACCUEIL_STORYBOARD);
-    assert_eq!(ENTREES[2].3, crate::accueil::ACCUEIL_VIGNETTES);
-    assert_eq!(ENTREES[3].3, "fichier.ouvrir");
-    // L'import de scénario existe toujours : dans le menu Fichier.
+    assert_eq!(ENTREES[1].3, "fichier.ouvrir");
+    // L'import de scénario existe toujours : dans le menu Fichier > Importer.
     assert!(crate::keymap::action_info("fichier.importer_scenario").is_some_and(|a| a.implemented));
 }
 
 #[test]
-fn new_file_opens_the_new_project_window_and_the_welcome_steps_aside_and_comes_back_with_the_same_image() {
+fn new_project_opens_the_new_project_window_and_the_welcome_steps_aside_and_comes_back_with_the_same_image() {
     let mut b = accueil();
     assert!(b.app.new_dialog.is_none());
-    let p = centre(&b, "Nouveau fichier");
+    let p = centre(&b, "Nouveau projet");
     clic(&mut b, p);
-    assert!(b.app.new_dialog.is_some(), "la fenêtre de nouveau projet est ouverte");
+    assert!(b.app.new_dialog.is_some(), "la fenêtre de nouveau projet (avec le choix du format) est ouverte");
     assert!(!b.app.welcome_shown(), "la fenêtre est ce qu'on regarde");
     // Fermée sans rien créer : l'accueil revient, avec la même image (le tirage n'est pas refait).
     let tirages = b.app.confort.accueil.tirages;
@@ -117,40 +112,86 @@ fn new_file_opens_the_new_project_window_and_the_welcome_steps_aside_and_comes_b
     assert_eq!(b.app.confort.accueil.tirages, tirages, "pas de nouveau tirage pour une fenêtre passagère");
 }
 
-#[test]
-fn drawing_vignettes_opens_the_vignettes_tab_with_an_empty_project_and_the_welcome_goes() {
-    let mut b = accueil();
-    assert_eq!(b.app.espace, Espace::Storyboard);
-    let p = centre(&b, "Dessiner des vignettes");
-    clic(&mut b, p);
+/// Clique « Nouveau projet » sur l'accueil, puis « OK » dans la fenêtre : un projet vide, sans nom.
+fn creer_un_projet(b: &mut Banc) {
+    let p = centre(b, "Nouveau projet");
+    clic(b, p);
+    assert!(b.app.new_dialog.is_some());
+    b.chauffer(3);
+    let ok = centre(b, "OK");
+    clic(b, ok);
+    b.chauffer(4);
+    assert!(b.app.new_dialog.is_none(), "la fenêtre s'est fermée : le projet est créé");
     assert!(!b.app.welcome_shown(), "l'accueil est parti");
-    assert_eq!(b.app.espace, Espace::Vignettes, "l'onglet Vignettes");
-    assert!(b.app.board_shown(), "la planche est à l'écran");
-    assert!(b.app.path.is_none() && !b.app.modified, "un projet vide, sans fichier : « Enregistrer » demandera où le ranger");
-    assert!(!est_la(&b, "Dessiner des vignettes"), "la carte n'est plus peinte");
 }
 
 #[test]
-fn drawing_a_storyboard_opens_the_storyboard_space_with_an_empty_project_and_the_welcome_goes() {
+fn a_new_project_opens_on_the_vignettes_page_by_default() {
     let mut b = accueil();
-    // On part d'un autre espace pour voir le changement.
+    assert_eq!(b.app.settings.new_project.ouvre_sur, crate::nouveau::OuvreSur::Vignettes, "d'origine : les Vignettes");
+    assert_eq!(b.app.espace, Espace::Storyboard);
+    creer_un_projet(&mut b);
+    assert_eq!(b.app.espace, Espace::Vignettes, "la page Vignettes");
+    assert!(b.app.board_shown(), "la planche est à l'écran");
+    assert!(b.app.path.is_none(), "un projet sans fichier : « Enregistrer » demandera où le ranger");
+}
+
+#[test]
+fn with_the_setting_on_storyboard_a_new_project_opens_on_the_storyboard_space() {
+    let mut b = accueil();
+    b.app.settings.new_project.ouvre_sur = crate::nouveau::OuvreSur::Storyboard;
+    // On part de l'espace Vignettes pour voir le changement.
     b.app.set_espace(Espace::Vignettes);
     b.chauffer(4);
-    assert!(b.app.welcome_shown() && b.app.board_shown());
-    let p = centre(&b, "Dessiner un storyboard");
-    clic(&mut b, p);
-    assert!(!b.app.welcome_shown(), "l'accueil est parti");
+    assert!(b.app.welcome_shown());
+    creer_un_projet(&mut b);
     assert_eq!(b.app.espace, Espace::Storyboard, "l'espace Storyboard, avec sa timeline");
     assert!(!b.app.board_shown(), "pas la planche : le plan et sa timeline");
-    assert!(b.app.path.is_none() && !b.app.modified, "un projet vide, sans fichier : « Enregistrer » demandera où le ranger");
-    assert!(!est_la(&b, "Dessiner un storyboard"), "la carte n'est plus peinte");
 }
 
+#[test]
+fn the_same_setting_applies_to_file_new_project_from_a_project_tab() {
+    let mut b = accueil();
+    b.app.settings.new_project.ouvre_sur = crate::nouveau::OuvreSur::Storyboard;
+    b.app.welcome = false;
+    b.app.set_espace(Espace::Animation);
+    b.chauffer(3);
+    // Fichier > Nouveau projet… (la même fenêtre) : « OK ».
+    b.app.run_action("fichier.nouveau");
+    b.chauffer(4);
+    assert!(b.app.new_dialog.is_some());
+    let ok = centre(&b, "OK");
+    clic(&mut b, ok);
+    b.chauffer(4);
+    assert!(b.app.new_dialog.is_none());
+    assert_eq!(b.app.espace, Espace::Storyboard);
+}
+
+#[test]
+fn the_new_project_page_setting_is_saved_and_read_back_and_is_in_the_preferences_table() {
+    use crate::nouveau::OuvreSur;
+    let mut b = accueil();
+    b.app.settings.new_project.ouvre_sur = OuvreSur::Storyboard;
+    b.app.settings.save().unwrap();
+    assert_eq!(crate::settings::Settings::load().new_project.ouvre_sur, OuvreSur::Storyboard, "relu au lancement suivant");
+    b.app.settings.new_project.ouvre_sur = OuvreSur::Vignettes;
+    b.app.settings.save().unwrap();
+    assert_eq!(crate::settings::Settings::load().new_project.ouvre_sur, OuvreSur::Vignettes);
+    // Un ancien fichier de réglages : les Vignettes.
+    let ancien: crate::settings::Settings = toml::from_str("").unwrap();
+    assert_eq!(ancien.new_project.ouvre_sur, OuvreSur::Vignettes);
+    // Dans la table de recherche des Préférences, onglet Général.
+    for requete in ["nouveau projet s'ouvre", "storyboard", "vignettes"] {
+        let r = crate::prefsonglets::chercher(requete);
+        assert!(r.iter().any(|t| t.onglet == crate::prefsonglets::Onglet::General && t.libelles.contains(&"Un nouveau projet s'ouvre sur")), "« {requete} »");
+    }
+}
 #[test]
 fn images_dropped_on_the_board_work_right_after_the_welcome_entry() {
     use crate::vignettes_tests::vignette;
     let mut b = accueil();
-    b.app.commencer_par_les_vignettes();
+    b.app.welcome = false;
+    b.app.set_espace(Espace::Vignettes);
     b.chauffer(8);
     assert!(b.app.board_shown());
     let dir = std::env::temp_dir().join(format!("shot-accueil-depot-{}-{:?}", std::process::id(), std::thread::current().id()));
@@ -197,10 +238,10 @@ fn the_logo_shrinks_with_the_window_so_the_card_fits_at_150_percent() {
     assert_eq!(logo_largeur(600.0), 300.0, "une fenêtre de 900 pixels à 150 % : 600 points de haut");
     assert_eq!(logo_largeur(300.0), 240.0, "jamais plus petit que 240");
     assert!(logo_largeur(647.0) % 10.0 == 0.0, "par dizaines de points : la texture ne se refait pas à chaque pixel");
-    // La carte entière tient dans la fenêtre à toutes les tailles : le logo, quatre entrées, le reste.
+    // La carte entière tient dans la fenêtre à toutes les tailles : le logo, deux entrées, le reste.
     for e in [90.0_f32, 100.0, 125.0, 150.0] {
         let hauteur = 900.0 / (e / 100.0);
-        let carte = logo_largeur(hauteur) * 0.54 + 4.0 * (crate::accueil::ENTREE_H + 4.0) + 140.0;
+        let carte = logo_largeur(hauteur) * 0.54 + 2.0 * (crate::accueil::ENTREE_H + 4.0) + 140.0;
         assert!(carte < hauteur - 60.0, "{e} % : la carte ({carte}) tient sous les menus dans {hauteur} points");
     }
 }

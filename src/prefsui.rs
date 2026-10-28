@@ -556,6 +556,18 @@ impl App {
                 {
                     let _ = self.settings.save();
                 }
+                ui.horizontal_wrapped(|ui| {
+                    use crate::nouveau::OuvreSur;
+                    ui.label("Un nouveau projet s'ouvre sur");
+                    let avant = self.settings.new_project.ouvre_sur;
+                    ui.radio_value(&mut self.settings.new_project.ouvre_sur, OuvreSur::Vignettes, "Vignettes")
+                        .on_hover_text("La planche des Vignettes : tu dessines dans les Cases (d'origine).");
+                    ui.radio_value(&mut self.settings.new_project.ouvre_sur, OuvreSur::Storyboard, "Storyboard")
+                        .on_hover_text("L'espace Storyboard, avec le plan et sa timeline.");
+                    if avant != self.settings.new_project.ouvre_sur {
+                        let _ = self.settings.save();
+                    }
+                });
             }
             Groupe::Secours => self.autosave_menu_ui(ui),
             Groupe::Collage => self.collage_prefs_ui(ui),

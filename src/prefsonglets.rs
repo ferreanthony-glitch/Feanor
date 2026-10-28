@@ -190,6 +190,7 @@ pub const REGLAGES: &[Reglage] = &[
     // ---- Général
     r(O::General, G::Ouverture, "general.rouvrir", "Rouvrir le dernier projet au lancement", "démarrage session onglets rouvrir"),
     r(O::General, G::Ouverture, "general.nouvel_onglet", "Ouvrir dans un nouvel onglet", "projet récent importer nouveau remplacer"),
+    r(O::General, G::Ouverture, "general.nouveau_sur", "Un nouveau projet s'ouvre sur", "vignettes storyboard planche timeline page espace créer nouveau projet accueil"),
     r(O::General, G::Secours, "general.secours", "Copie de secours toutes les", "sauvegarde automatique autosave plantage minutes"),
     r(O::General, G::Collage, "collage.proportions", "Proportions différentes", "contenir remplir taille"),
     r(O::General, G::Collage, "collage.cadence", "Cadence différente", "images secondes durée fps"),

@@ -187,7 +187,7 @@ fn the_image_is_drawn_once_per_appearance_not_at_every_frame() {
     }
     assert_eq!(b.app.confort.accueil.tirages, apres_tirage, "soixante images de plus : aucun nouveau tirage, aucun nouveau décodage");
     assert!(matches!(b.app.confort.accueil.tirage, Tirage::Image(..)));
-    // La fenêtre « Nouveau fichier » passe par-dessus puis est annulée : l'image reste, rien n'est redécodé.
+    // La fenêtre « Nouveau projet » passe par-dessus puis est annulée : l'image reste, rien n'est redécodé.
     b.app.run_action("fichier.nouveau");
     b.chauffer(4);
     assert!(b.app.new_dialog.is_some());

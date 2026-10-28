@@ -32,7 +32,7 @@ impl App {
     /// Allume ou éteint le mode concentration (la touche, le menu, le bouton de la barre minimale).
     pub(crate) fn basculer_concentration(&mut self) {
         if !self.confort.concentration && self.welcome_shown() {
-            self.status = "Le mode concentration attend qu'un projet soit ouvert (ou « Dessiner des vignettes »).".into();
+            self.status = "Le mode concentration attend qu'un projet soit ouvert (ou créé : « Nouveau projet »).".into();
             return;
         }
         self.confort.concentration = !self.confort.concentration;
