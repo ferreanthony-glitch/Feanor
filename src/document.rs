@@ -1894,6 +1894,8 @@ impl Document {
         if self.panels.len() <= 1 {
             return None;
         }
+        // (Un plan qu'une autre version de sa séquence montre est gardé : `variantes.rs`.)
+        self.ranger_plan_partage(self.panels[index].id, false);
         self.panels.remove(index);
         let next = self.panels[index.min(self.panels.len() - 1)].id;
         Some(self.normalize_keeping(next))
@@ -1905,6 +1907,8 @@ impl Document {
         if end - start >= self.panels.len() {
             return None;
         }
+        let retires: Vec<u64> = self.panels[start..end].iter().map(|p| p.id).collect();
+        self.ranger_plans_partages(&retires, false);
         self.panels.drain(start..end);
         let next = self.panels[start.min(self.panels.len() - 1)].id;
         Some(self.normalize_keeping(next))
@@ -1982,6 +1986,10 @@ impl Document {
         // Tous visés : le premier panneau du film reste.
         let spared = self.panels.iter().all(|p| ids.contains(&p.id)).then(|| self.panels[0].id);
         let before = self.panels.len();
+        if !self.variantes.is_empty() {
+            let retires: Vec<u64> = self.panels.iter().filter(|p| ids.contains(&p.id) && Some(p.id) != spared).map(|p| p.id).collect();
+            self.ranger_plans_partages(&retires, false);
+        }
         self.panels.retain(|p| !ids.contains(&p.id) || Some(p.id) == spared);
         if self.panels.len() == before {
             return None;
@@ -2081,6 +2089,8 @@ impl Document {
         }
         // Caméras qu'ils montraient (un panneau sans clé hérite de ses voisins) : gardées.
         let (cam_a, cam_b) = (self.panel_camera(index, 0), self.panel_camera(index + 1, 0));
+        // (Le plan réuni, qu'une autre version de sa séquence montre, en garde une copie : `variantes.rs`.)
+        self.ranger_plan_partage(self.panels[index + 1].id, true);
         let next = self.panels.remove(index + 1);
         self.forget_joint_reserves(self.panels[index].id, next.id);
         let next_len = next.frame_count();
@@ -2538,6 +2548,7 @@ impl Document {
         // (Les caméras douces, celles des clés : la postérisation temporelle n'est pas une pose.)
         let cams_a = (self.panel_camera_douce(index, 0), self.panel_camera_douce(index, last(self, index)));
         let cams_b = (self.panel_camera_douce(index + 1, 0), self.panel_camera_douce(index + 1, last(self, index + 1)));
+        self.ranger_plan_partage(self.panels[index + 1].id, true);
         let b = self.panels.remove(index + 1);
         self.append_plan(index, b, cams_a, cams_b, opts)
     }
@@ -3113,7 +3124,7 @@ impl Document {
             used.extend(r.cels());
         }
         // Et celui des variantes rangées (`variantes.rs`).
-        for r in self.variantes.values().flat_map(|v| v.autres.iter()).flat_map(|r| r.contenu.reserves.values()) {
+        for r in self.reserves_de_variantes() {
             used.extend(r.cels());
         }
         // Les autres versions des plans aussi (`planvers.rs`).

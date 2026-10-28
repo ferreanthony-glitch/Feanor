@@ -1622,6 +1622,8 @@ d'annulation nommée, sans rien recopier) ; supprimer (jamais la dernière, apr�
 (le plan de même rang). Un envoi note la variante choisie de chaque séquence ; un plan copié se compare au plan dont il vient. Dans un film partagé il faut le
 jeton du montage. Détail, limites et vérifications : `docs/INTERFACE.md`, partie 36.
 
+**Versions de séquence (2026-10-28, format 39).** Les variantes s'appellent « versions de séquence » à l'écran et **partagent leurs plans** : un plan existe une fois avec toutes ses versions (V1, V2…), et chaque version de séquence (A, B…) garde seulement son choix de plans, leur ordre, leur durée et **la version de chaque plan** qu'elle montre (ariantes.json format 2 : emplacements et garage). Une nouvelle version d'un plan est proposée par toutes les versions de séquence (pile du badge V2, avec les lettres qui la montrent) ; « Mettre à jour dans les autres versions de séquence… » (ariante.mettre_a_jour) fait montrer la version courante du plan aux versions cochées ; « Nouvelle version, en gardant les plans » (défaut), « en copiant les plans » (ariante.copie, indépendant) ou « en partant d'un plan vide ». Un projet 38 avec variantes s'ouvre sans perte (ses copies deviennent des plans du garage). Détail : `docs/INTERFACE.md`, partie 59.
+
 **Comparer** : icône « Comparer le plan » (barre du montage sous « Plus… »), fenêtre « Envois » (une icône par envoi),
 ligne « Version » de la fiche (une icône par version), clic droit sur un plan > « Version du plan » > « Comparer le plan… »,
 ou Ctrl+K `comparer.ouvrir`. Une fenêtre à deux côtés : *Aujourd'hui*, chaque version du plan, ou le plan **tel qu'il

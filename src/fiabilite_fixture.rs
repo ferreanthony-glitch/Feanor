@@ -708,6 +708,21 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
             let _ = writeln!(s, "  reserve {r:?}");
         }
     }
+    // Les versions des plans et les versions de séquence (`planvers.rs`, `variantes.rs`) : leurs numéros, leurs emplacements, leurs
+    // plans du garage (les calques de leurs plans sont neufs à chaque lecture : on en garde le nombre).
+    for (i, v) in doc.versions_vivantes() {
+        let _ = writeln!(s, "versions plan {} active {} autres {:?}", doc.panels[i].id, v.actuelle, v.autres.iter().map(|r| (r.numero, r.panel.frame_count(), r.panel.layers.len())).collect::<Vec<_>>());
+    }
+    for (seq, v) in doc.variantes.iter() {
+        let _ = writeln!(s, "variantes sequence {seq} choisie {} nom {:?}", v.actuelle, v.nom_actuelle);
+        for r in &v.autres {
+            let _ = writeln!(s, "  rangee {} nom {:?} scenes {:?} emplacements {:?} transitions {:?} references {:?}", r.numero, r.nom, r.contenu.scenes, r.contenu.slots, r.contenu.transitions, r.contenu.references);
+        }
+        for (id, g) in &v.garage {
+            let autres = g.versions.as_ref().map(|x| (x.actuelle, x.autres.iter().map(|r| (r.numero, r.panel.frame_count())).collect::<Vec<_>>()));
+            let _ = writeln!(s, "  garage {id} scene {} duree {} calques {} versions {autres:?} reserve {} commentaires {:?}", g.panel.scene, g.panel.length, g.panel.layers.len(), g.reserve.is_some(), g.comments);
+        }
+    }
     for id in doc.used_cels() {
         let Some(c) = doc.cels.get(&id) else {
             let _ = writeln!(s, "dessin {id} ABSENT");

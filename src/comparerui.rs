@@ -102,7 +102,7 @@ impl App {
         let sequence = self.doc.sequence_of(index);
         if let Some(v) = self.doc.variantes_de(sequence) {
             let rang = self.rang_dans_sequence(index);
-            out.extend(v.autres.iter().filter(|r| r.contenu.panels.len() > rang).map(|r| Source::Variante(r.numero)));
+            out.extend(v.autres.iter().filter(|r| r.contenu.slots.len() > rang).map(|r| Source::Variante(r.numero)));
         }
         let mut envois: Vec<&crate::envois::Envoi> = self.doc.envois.list.iter().filter(|e| self.doc.plan_dans_envoi(e, plan).is_some()).collect();
         envois.sort_by_key(|e| std::cmp::Reverse(e.id));
@@ -125,7 +125,7 @@ impl App {
             },
             Source::Variante(n) => {
                 let sequence = self.doc.panels.iter().position(|p| p.id == plan).map_or(0, |i| self.doc.sequence_of(i));
-                format!("Variante {}", self.doc.etiquette_de_variante(sequence, *n))
+                format!("Version de séquence {}", self.doc.etiquette_de_variante(sequence, *n))
             }
             Source::Envoi(id) => match self.doc.envois.trouve(*id) {
                 Some(e) => {
@@ -155,7 +155,7 @@ impl App {
                 let r = self
                     .doc
                     .plan_de_variante_au_rang(sequence, *n, rang)
-                    .ok_or_else(|| format!("la variante {} n'a pas de plan au rang {} de la séquence", self.doc.etiquette_de_variante(sequence, *n), rang + 1))?;
+                    .ok_or_else(|| format!("la version de séquence {} n'a pas de plan au rang {} de la séquence", self.doc.etiquette_de_variante(sequence, *n), rang + 1))?;
                 Ok(Entree::Doc(Box::new(comparer::petit_projet(&self.doc, r))))
             }
             Source::Envoi(id) => {

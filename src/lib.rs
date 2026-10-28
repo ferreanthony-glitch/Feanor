@@ -99,6 +99,8 @@ mod planversui;
 mod variantes;
 #[cfg(test)]
 mod variantes_tests;
+#[cfg(test)]
+mod versions_sequence_tests;
 mod variantesui;
 // La pile des versions au survol de « V2 » sur le bloc d'un plan : la logique sans interface (`pilevers`) et son
 // dessin (`pileversui`).

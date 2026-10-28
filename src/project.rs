@@ -188,7 +188,15 @@ pub const FORMAT: &str = "pelure-projet";
 /// refuse le projet : elle montrerait ces zones en couleur unie, le film changerait sans prévenir. Un projet de version 37 ou
 /// moins s'ouvre tel quel, à l'identique. (Si une autre branche a aussi pris le numéro 38, la fusion garde le 38 et réunit les
 /// deux descriptions.)
-pub const VERSION: u32 = 38;
+/// 39 (2026-10-28, `docs/INTERFACE.md` partie 59) : **versions de séquence qui partagent leurs plans** — un plan existe une seule
+/// fois, avec toutes ses versions (V1, V2…), et chaque version de séquence (A, B…) n'est plus qu'un découpage : les plans qu'elle
+/// montre, leur ordre, leur durée et **la version de chaque plan** qu'elle montre (`emplacements` de `variantes.json`, dont le
+/// format passe à 2 ; les plans qu'aucune version choisie ne montre sont au `garage` du même fichier). Une version précédente
+/// refuse le projet : elle ne saurait pas retrouver les plans que ces versions de séquence montrent sans les avoir à elles, et
+/// montrerait un film différent sans prévenir. Un projet de version 38 ou moins s'ouvre tel quel, sans rien perdre : ses variantes
+/// (copies complètes de plans) deviennent des plans du garage, montrés par leurs versions de séquence. (Si une autre branche a
+/// aussi pris le numéro 39, la fusion garde le 39 et réunit les deux descriptions.)
+pub const VERSION: u32 = 39;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -3240,16 +3248,38 @@ fn cacher_variantes(
         Ok(())
     };
     for (si, s) in f.sequences.iter_mut().enumerate() {
+        // Les plans du garage (format 2), puis ceux des copies complètes d'un fichier du format 1.
+        for (pi, p) in s.garage.iter_mut().enumerate() {
+            if let Err(e) = poser(std::mem::take(&mut p.entree), Cle::Parque(si, pi), &mut scenes) {
+                warnings.push(format!("version de séquence : un plan illisible ({e}), ignoré."));
+                continue;
+            }
+            if let Some(vf) = p.versions.as_mut() {
+                for (ri, r) in vf.autres.iter_mut().enumerate() {
+                    if let Err(e) = poser(std::mem::take(&mut r.entree), Cle::ParqueVersion(si, pi, ri), &mut scenes) {
+                        warnings.push(format!("version de séquence : une version de plan illisible ({e}), ignorée."));
+                    }
+                }
+            }
+            if let Some(val) = &p.rognage {
+                match crate::rognage::parse(&val.to_string()) {
+                    Ok(l) => {
+                        rognages.insert(Cle::Parque(si, pi), l);
+                    }
+                    Err(e) => warnings.push(format!("version de séquence : contenu rogné illisible ({e}).")),
+                }
+            }
+        }
         for (vi, v) in s.autres.iter_mut().enumerate() {
             for (pi, p) in v.plans.iter_mut().enumerate() {
                 if let Err(e) = poser(std::mem::take(&mut p.entree), Cle::Plan(si, vi, pi), &mut scenes) {
-                    warnings.push(format!("variante {} d'une séquence : un plan illisible ({e}), ignoré.", crate::variantes::lettre(v.numero)));
+                    warnings.push(format!("version {} d'une séquence : un plan illisible ({e}), ignoré.", crate::variantes::lettre(v.numero)));
                     continue;
                 }
                 if let Some(vf) = p.versions.as_mut() {
                     for (ri, r) in vf.autres.iter_mut().enumerate() {
                         if let Err(e) = poser(std::mem::take(&mut r.entree), Cle::Version(si, vi, pi, ri), &mut scenes) {
-                            warnings.push(format!("variante {} d'une séquence : une version de plan illisible ({e}), ignorée.", crate::variantes::lettre(v.numero)));
+                            warnings.push(format!("version {} d'une séquence : une version de plan illisible ({e}), ignorée.", crate::variantes::lettre(v.numero)));
                         }
                     }
                 }
@@ -3258,7 +3288,7 @@ fn cacher_variantes(
                         Ok(l) => {
                             rognages.insert(Cle::Plan(si, vi, pi), l);
                         }
-                        Err(e) => warnings.push(format!("variante {} d'une séquence : contenu rogné illisible ({e}).", crate::variantes::lettre(v.numero))),
+                        Err(e) => warnings.push(format!("version {} d'une séquence : contenu rogné illisible ({e}).", crate::variantes::lettre(v.numero))),
                     }
                 }
             }
