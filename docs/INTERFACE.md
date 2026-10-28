@@ -4684,3 +4684,64 @@ Cinq retours d'Anthony après essais. Essais : `saccade_ecran_tests.rs`, `select
 3. Ouvre un projet, regarde (zoom, vue caméra, panneaux, outils, lecture) et ferme : aucune question. Modifie, ferme : la question, avec « Dernier changement : … » ; « Enregistrer » : le projet s'écrit, puis l'onglet se ferme tout seul. Dis-moi si une question revient à tort, avec ce « Dernier changement ».
 4. Fichier > Préférences > Dessin > Tremblement des traits : tous les réglages sont là, l'aperçu à droite ; coche « Animer à l'arrêt » : le trait d'exemple bouge ; change vitesse, variantes, graine : l'aperçu suit tout de suite, sans à-coup.
 5. « Régler le stylet à ma main… » : trace trois traits, « Appliquer » : la fenêtre se ferme ; rouvre-la : « Rétablir » rend la courbe d'avant.
+
+---------------------------------------------------------------------------------------------------
+
+## 58. Couleur qui se mélange, Mélangeur, palette de mélange (2026-10-28, branche `melange`)
+
+Demande d'Anthony : un outil mélangeur de couleur, une palette pour mélanger, et dans Réglages > Brosse une option « la couleur se mélange » (la couleur posée entraîne et se mêle à celle sur laquelle elle passe), avec plusieurs types (eau, pigment…) pour retrouver l'aquarelle, la gouache, l'acrylique. Sans latence, l'interface la plus simple possible, rien de perdu.
+Fichiers : `melange.rs` (le mélange soustractif), `brush.rs` (`MixKind`, les réglages, le moteur), `dynui.rs` (la case et ses curseurs), `pinceaux.rs` (la catégorie), `app.rs` (`Tool::Mixer`), `melangeur.rs` (la palette), `confort.rs`, `colorui.rs`.
+Essais : `melange_tests.rs` (13), `melangeur_tests.rs` (9). **Format du projet : inchangé (38).**
+
+### 58.1 L'option de brosse « La couleur se mélange » (calques bitmap)
+
+- **Où** : Réglages de la brosse > « Couleur et mélange ». **Une case** « La couleur se mélange » ; cochée, **un choix de type** (Pigment / Eau / Lisser) et **le ou les curseurs de ce type**, pas plus :
+  - **Pigment** (gouache, acrylique) : la brosse se charge de la couleur qu'elle traverse et la mêle à la sienne **en soustractif** : bleu plus jaune donnent un vert, pas un gris. Curseurs **Mélange** et **Charge** (la durée avant que la brosse soit vide de sa couleur). C'est l'ancienne « peinture humide » (mêmes curseurs, mêmes valeurs, la gouache de SHOT inchangée) dont le calcul de la couleur est maintenant soustractif.
+  - **Eau** (aquarelle) : la couleur est **diluée et transparente** (d'autant plus qu'il y a d'eau), elle se mêle aux couleurs mouillées dessous (d'autant plus qu'il y a d'eau), avec un **léger bord plus dense**. Un curseur **Eau**.
+  - **Lisser** (le doigt) : **aucune couleur n'est posée**, la brosse entraîne et étale ce qu'elle traverse. Un curseur **Entraînement** (haut : un long traînage ; bas : la brosse reprend vite la couleur du lieu). Sur une feuille vide, ou sur une couleur unie, il ne change rien.
+- **Calque vectoriel** : la case est **grisée**, sa bulle dit « Sur un calque bitmap ». Un trait vectoriel ne mêle jamais (le moteur le force pendant le tracé : l'aperçu et le trait gardé sont les mêmes ; avant, la gouache faisait un aperçu humide qui se changeait au lâcher).
+- **Décocher** coupe le mélange **sans rien perdre** : type et curseurs sont gardés (champ `mix_off` de la brosse), recocher les retrouve. La case de la catégorie « Couleur et mélange » (colonne de gauche) suit : elle est allumée quand le mélange l'est (ou la couleur A→B).
+- **Enregistré avec la brosse** (« Mes brosses », préréglages, brosses importées, réglage courant) : nouveaux champs de la brosse `melange_type`, `eau`, `entrainement`, `melange_coupe`, **écrits seulement s'ils ne valent pas le défaut** : une brosse sans mélange s'écrit comme avant, un vieux réglage se relit à l'identique (la gouache d'avant mêle encore). Aucun changement du format du projet (38) : les traits vectoriels gardent leur brosse complète, ces champs absents valent le défaut.
+- **Sans latence** : la lecture des pixels dessous se fait dans le calque courant, pendant le trait, dans le même chemin que la pose des touches (`StrokeState::dab`) : aucun rejeu du moteur sur le fil de l'interface. Le mélange de deux couleurs est calculé **une fois par touche**, pas par pixel. Une seule étape d'annulation par trait (les tuiles d'avant, comme tout trait).
+- **Le modèle** (`melange.rs`, écrit pour SHOT à partir de principes publics ; aucun code d'un autre logiciel, rien de Mixbox) : chaque couleur RVB devient une réflectance sur 13 bandes (la part de gris en plat, le reste réparti sur trois courbes douces dont la somme vaut 1) ; deux réflectances se mêlent par leur **moyenne géométrique pondérée** (loi de Beer-Lambert, la forme la plus simple de Kubelka-Munk) ; le résultat est relu en trois canaux avec correction de l'aller-retour (une couleur mêlée à elle-même, ou à poids nul, se rend exactement). Exemples (sRVB) : bleu pur plus jaune pur à parts égales ≈ (85, 128, 110), un vert ; rouge plus jaune : un orange ; rouge plus bleu : un violet ; blanc plus noir : un gris. Un modèle **à comparer avec tes outils de peinture**, comme le reste.
+- **Limite connue** : le curseur Mélange du pigment est par touche (comme avant) : une valeur haute fait prendre toute la couleur dessous en quelques touches (le trait finit de la couleur traversée). Pour garder la brosse, baisser Mélange ou lui laisser sa Charge.
+
+### 58.2 L'outil Mélangeur
+
+- **Dans la case du pinceau** de la barre d'outils (clic maintenu sur l'icône : le pinceau, le mélangeur), plutôt qu'une case de plus : c'est le pinceau en « Lisser », pas un outil à part. Icône « goutte à moitié pleine », bulle d'une seconde, action `outil.melangeur` **sans touche** (aucune touche libre et évidente : Alt + M est le Montage). Clic droit sur l'icône : lui en assigner une.
+- Il prend **la brosse courante en type Lisser** (`BrushSettings::as_mixer` : même taille, dureté, pointe, grain, espacement ; l'entraînement est le curseur « Entraînement » de Réglages) pour **mêler ce qui est déjà peint**. Il ne pose aucune couleur : pas de couleur récente, pas de « peint sur l'aplat ». Alt + clic : pipette, comme les autres.
+- **Sur un calque vectoriel** : rien n'est fait, la barre d'état dit « Le Mélangeur agit sur un calque bitmap. » Dans l'aplat d'un calque, il travaille la peinture de l'aplat comme le pinceau.
+
+### 58.3 La palette de mélange
+
+- **Où** : panneau Couleur, sous « Plus de couleurs », un volet **« Palette de mélange », replié d'office** (même flèche, même geste).
+- **On y peint** avec la brosse courante, **en mélange** (celle du pinceau si elle mêle déjà, sinon un pigment moyen ; taille limitée à 4–40) dans la couleur d'avant-plan. **Alt + clic** ou **l'outil Pipette** y prend la couleur sous le pointeur (elle devient l'avant-plan). **Le bouton corbeille** la vide.
+- **Au poste, pas au projet** : elle vit dans `Confort` (`palette`, `palette_ouverte`, partagée par tous les onglets), est gardée en **PNG** dans le dossier des réglages (`%APPDATA%\SHOT\palette_melange.png`), pas dans `reglages.toml`, écrite au relâché de chaque trait et au vidage (vide : le fichier est retiré), lue à la **première ouverture du volet** (rien n'est lu au lancement). Un fichier illisible ou d'une autre taille : palette vide, sans erreur. Pas d'annulation pour la palette (le bouton la vide).
+
+### 58.4 Mesures (touches de brosse)
+
+Un long trait de 300 points, pinceau de 24 px, sur une feuille 1200 × 400 déjà peinte, meilleur de cinq passes, la même machine, les deux binaires l'un après l'autre (`mixing_dabs_stay_fast` ; « avant » : la même mesure sur le commit d'avant, 2643fb1) :
+
+| | avant | après |
+|---|---|---|
+| pinceau ordinaire | 5,2 à 8,0 ms | 5,4 à 6,5 ms |
+| pigment (ancienne peinture humide) | 13,2 à 19,8 ms | 13,9 à 18,4 ms |
+| eau | n'existait pas | 9,9 à 11,6 ms |
+| lisser | n'existait pas | 13,0 à 17,4 ms |
+
+Le pinceau ordinaire n'est pas ralenti (la machine fait aussi tourner d'autres sessions : l'écart d'une passe à l'autre est plus grand que l'écart avant / après). Le doigt et le pigment coûtent environ deux touches ordinaires, l'eau une et demie. L'essai échoue si un type dépasse six touches ordinaires.
+
+### À trancher avec toi
+- **Pigment : Mélange par touche** (voir la limite en 58.1) : le calibrer par distance parcourue changerait la gouache d'aujourd'hui ; dis-moi si tu veux ce changement.
+- **L'aquarelle** : l'eau règle la transparence, le mélange et le bord ensemble (un seul curseur). Une « bavure » qui coule au-delà du trait demanderait un second passage de calcul après le geste : à voir à l'usage.
+- **La palette** garde la couleur de tous tes essais d'un lancement à l'autre ; dis-moi si tu la veux vide à chaque lancement.
+
+### À vérifier à l'écran (par Anthony)
+1. Calque bitmap, pinceau, Réglages > Plus de réglages > « Couleur et mélange » : la case « La couleur se mélange » ; cochée, les trois types Pigment, Eau, Lisser et leurs curseurs. Décoche, recoche : les valeurs reviennent. Survol d'une seconde : les bulles.
+2. Remplis un rectangle jaune, choisis du bleu, **Pigment** (Mélange 0,1 à 0,2) et trace à travers : le trait passe par du vert (pas un gris), puis finit jaune. Baisse la Charge : le trait se vide le long du geste.
+3. **Eau** : le même geste sur du blanc : un bleu transparent, un bord un peu plus dense ; monte l'Eau : plus transparent. Sur du jaune : il passe par du vert, doux.
+4. **Lisser** : trace entre deux aplats de couleurs différentes : elles s'étalent l'une dans l'autre, aucune couleur nouvelle (choisis du vert : il ne paraît jamais). Un seul Ctrl+Z défait tout le trait. Sur une feuille vide : rien.
+5. Sur un **calque vectoriel** : la case est grisée ; la bulle dit « Sur un calque bitmap ». Un trait de gouache y reste uni.
+6. **Mélangeur** : clic maintenu sur l'icône du pinceau (petit coin) : le mélangeur, icône de goutte ; bulle d'une seconde ; sur un calque bitmap il étale ce qui est peint, sur un vectoriel la barre d'état le refuse. Clic droit sur l'icône : « Assigner un raccourci ».
+7. Panneau Couleur : le volet « Palette de mélange » est replié ; ouvre-le : peins du jaune, puis du bleu en travers : du vert. Alt + clic sur le vert : il devient l'avant-plan ; essaie aussi avec l'outil Pipette. Quitte SHOT, relance, rouvre le volet : la palette est là. La corbeille la vide.
+8. Un projet ouvert avant cette branche : les brosses de gouache se comportent à peu près comme avant (le mélange des couleurs est devenu soustractif : un blanc sur du rouge est plus rosé, un bleu sur du jaune plus vert).
