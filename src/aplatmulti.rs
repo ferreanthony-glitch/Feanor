@@ -116,6 +116,26 @@ fn calculer(t: Travail) -> Option<Resultat> {
     Some(Resultat { cel, strate, peinture, coupe, versions })
 }
 
+/// La forme de l'aplat d'un dessin, peinte de la couleur `new` dans sa strate (là où rien n'est peint) : l'aplat de ce dessin change
+/// de couleur sans que le calque, et donc les autres dessins, en changent (`aplatcouleur.rs`). Le calcul de la forme est celui de
+/// l'aplat affiché ; la peinture est opaque, l'aplat la montre dans sa forme seulement, au bord adouci de la forme.
+fn teinter(cel: CelId, trait_: Raster, r: crate::fond::FondReglages, mut peinture: Raster, coupe: Raster, new: [u8; 3], versions: (u64, u64)) -> Option<Retour> {
+    let cover = crate::fond::silhouette(&trait_, &r);
+    let w = trait_.width;
+    let encre = Color32::from_rgb(new[0], new[1], new[2]);
+    for idx in 0..peinture.tiles.len() {
+        let (ox, oy, tw, th) = peinture.tile_bounds(idx);
+        for ty in 0..th {
+            for tx in 0..tw {
+                if cover[(oy + ty) * w + ox + tx] > 0 && peinture.get(ox + tx, oy + ty).a() == 0 {
+                    peinture.tile_mut(idx)[ty * TILE + tx] = encre;
+                }
+            }
+        }
+    }
+    Some(Retour::Rempli(Resultat { cel, strate: true, peinture, coupe, versions }))
+}
+
 /// Un trait de couleur fait sur l'aplat d'une autre clé sans zone (`avant` : les tuiles d'avant le trait, `apres` : celles de
 /// maintenant, aux mêmes rangs) : les tuiles retenues dans la zone fermée par le trait de cette clé où il a commencé en `p`.
 /// Rien s'il n'y a pas de zone (clé sans trait, départ sur le trait) : le trait reste tel quel.
@@ -161,12 +181,14 @@ pub(crate) struct Travaux {
     abandonnes: usize,
     /// Dessins remplis depuis le début de ce geste.
     poses: usize,
+    /// Le travail en route est un changement de couleur (`aplatcouleur.rs`) : pas de phrase « zone posée » à son arrivée.
+    silencieux: bool,
 }
 
 impl Default for Travaux {
     fn default() -> Self {
         let (tx, rx) = channel();
-        Travaux { tx, rx, en_route: 0, serial: 0, nom: "Aplat : remplir", abandonnes: 0, poses: 0 }
+        Travaux { tx, rx, en_route: 0, serial: 0, nom: "Aplat : remplir", abandonnes: 0, poses: 0, silencieux: false }
     }
 }
 
@@ -426,6 +448,7 @@ impl App {
             t.nom = if retirer { "Aplat : retirer la zone" } else { "Aplat : remplir" };
             t.abandonnes = 0;
             t.poses = 0;
+            t.silencieux = false;
             self.status = format!("Aplat : la zone se {} sur {} autre{} clé{} (calcul en arrière-plan).", if retirer { "retire" } else { "remplit" }, lances, if lances > 1 { "s" } else { "" }, if lances > 1 { "s" } else { "" });
         }
     }
@@ -457,7 +480,7 @@ impl App {
             let (poses, abandonnes) = (std::mem::take(&mut t.poses), std::mem::take(&mut t.abandonnes));
             if abandonnes > 0 {
                 self.status = format!("Aplat : {abandonnes} clé(s) retouchée(s) pendant le calcul n'ont pas été changées ; {poses} remplie(s).");
-            } else if poses > 0 {
+            } else if poses > 0 && !t.silencieux {
                 self.status = format!("Aplat : zone posée sur {} autre(s) clé(s).", poses);
             }
         }
@@ -524,6 +547,34 @@ impl App {
         }
         c.version += 1;
         self.renderer.invalidate_all();
+    }
+
+    /// Le dessin `cel` du calque de rang `li` : sa forme d'aplat est peinte de la couleur `new` sur un fil de travail ; le résultat
+    /// rejoint l'étape d'annulation `serial` (`aplatcouleur.rs`). Faux si le travail n'a pas pu partir.
+    pub(crate) fn lancer_teinte(&mut self, li: usize, cel: CelId, new: [u8; 3], serial: u64) -> bool {
+        let Some(r) = self.layers().get(li).and_then(|l| l.fond) else { return false };
+        let Some(c) = self.doc.cels.get(&cel) else { return false };
+        let (w, h) = (self.doc.width, self.doc.height);
+        let (peinture, coupe, versions) = match c.fond.as_deref() {
+            Some(s) => (s.peinture.raster.clone(), s.coupe.clone(), (c.version, s.peinture.version)),
+            None => (Raster::new(w, h), Raster::new(w, h), (c.version, u64::MAX)),
+        };
+        let trait_ = c.raster.clone();
+        let tx = self.aplat_travaux.tx.clone();
+        let ctx = self.ctx.clone();
+        let spawned = std::thread::Builder::new().name("aplat-teinte".into()).spawn(move || {
+            let _ = tx.send(teinter(cel, trait_, r, peinture, coupe, new, versions));
+            ctx.request_repaint();
+        });
+        if spawned.is_err() {
+            return false;
+        }
+        let t = &mut self.aplat_travaux;
+        t.en_route += 1;
+        t.serial = serial;
+        t.nom = "Aplat : couleur";
+        t.silencieux = true;
+        true
     }
 
     /// Essais : attend les résultats en route et les pose.

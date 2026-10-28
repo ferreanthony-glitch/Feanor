@@ -733,3 +733,155 @@ fn a_colour_stroke_is_kept_inside_the_closed_zone_of_every_chosen_key() {
         assert!(f.app.doc.cels[c].raster.is_blank(), "le résultat d'un geste annulé est abandonné");
     }
 }
+
+// ------------------------------------------------------------------------------------ la portée du changement de couleur
+
+use crate::aplatcouleur::AplatPortee;
+
+const NEUF: [u8; 3] = [200, 10, 10];
+
+/// Comme `aplat_fix`, avec un aplat vert (la couleur du calque, et celle de la peinture de chaque dessin).
+fn fix_vert(name: &str) -> AplatFix {
+    let mut f = aplat_fix(name);
+    f.app.aplat_cible = None;
+    f.app.layers_mut()[0].fond = Some(FondReglages { couleur: [10, 200, 10], ..FondReglages::default() });
+    f
+}
+
+fn change(f: &mut AplatFix, portee: AplatPortee) -> usize {
+    f.app.aplat_portee = portee;
+    f.app.choisir_couleur_aplat(0, NEUF, 1);
+    assert_eq!(f.app.couleur_attente(), Some(NEUF), "la couleur est retenue jusqu'au lâcher");
+    let n = f.app.appliquer_couleur_aplat();
+    f.app.attendre_aplat_multi();
+    n
+}
+
+#[test]
+fn the_colour_scope_defaults_to_the_key_and_recolours_that_key_only() {
+    let mut f = fix_vert("portee-cle");
+    assert_eq!(f.app.aplat_portee, AplatPortee::Cle);
+    let n0 = noms(&f.app).len();
+    assert_eq!(change(&mut f, AplatPortee::Cle), 1);
+    // La clé qu'on voit : sa peinture a pris la nouvelle couleur, et sa forme aussi ; les autres n'ont pas bougé.
+    assert_eq!(f.peinture(0).get(50, 40), ROUGE, "la peinture de la clé a changé de couleur");
+    assert!(f.peinture(0).get(30, 70).a() > 0 && f.peinture(0).get(30, 70).r() > 150, "sa forme prend la nouvelle couleur");
+    for k in 1..3 {
+        assert_eq!(f.peinture(k).get(50 + 6 * k, 40), VERT, "la clé {k} garde sa couleur");
+        assert_eq!(f.peinture(k).get(30, 70).a(), 0, "et sa forme");
+    }
+    assert_eq!(f.app.layers()[0].fond.unwrap().couleur, [10, 200, 10], "la couleur du calque ne change pas : les autres clés gardent la leur");
+    assert!(f.app.status.contains("1 dessin") && f.app.status.contains("la clé"), "{}", f.app.status);
+    assert_eq!(noms(&f.app).len(), n0 + 1, "une seule étape : {:?}", noms(&f.app));
+    assert_eq!(noms(&f.app).last().map(String::as_str), Some("Aplat : couleur"));
+    f.app.run_action("edition.annuler");
+    assert_eq!(f.peinture(0).get(50, 40), VERT);
+    assert_eq!(f.peinture(0).get(30, 70).a(), 0, "l'annulation rend aussi la forme");
+}
+
+#[test]
+fn the_key_scope_follows_the_chosen_keys() {
+    let mut f = fix_vert("portee-cles");
+    f.choose(&[0, 5, 10]);
+    assert_eq!(change(&mut f, AplatPortee::Cle), 3);
+    for k in 0..3 {
+        assert_eq!(f.peinture(k).get(50 + 6 * k, 40).r(), 200, "la clé {k}");
+    }
+    assert!(f.app.status.contains("3 dessins"), "{}", f.app.status);
+}
+
+#[test]
+fn the_plan_scope_recolours_every_drawing_of_the_plan_and_the_colour_of_the_layer() {
+    let mut f = fix_vert("portee-plan");
+    let n0 = noms(&f.app).len();
+    assert_eq!(change(&mut f, AplatPortee::Plan), 3);
+    assert_eq!(f.app.layers()[0].fond.unwrap().couleur, NEUF, "la couleur du calque");
+    for k in 0..3 {
+        assert_eq!(f.peinture(k).get(50 + 6 * k, 40).r(), 200, "la peinture de la clé {k}");
+    }
+    assert!(f.app.status.contains("3 dessins") && f.app.status.contains("le plan"), "{}", f.app.status);
+    assert_eq!(noms(&f.app).len(), n0 + 1, "{:?}", noms(&f.app));
+    f.app.run_action("edition.annuler");
+    assert_eq!(f.app.layers()[0].fond.unwrap().couleur, [10, 200, 10]);
+    for k in 0..3 {
+        assert_eq!(f.peinture(k).get(50 + 6 * k, 40), VERT);
+    }
+    // Une autre couleur d'aplat n'est pas touchée : seul ce qui avait l'ancienne couleur change.
+    f.app.layers_mut()[0].fond = Some(FondReglages { couleur: [0, 0, 255], ..FondReglages::default() });
+    f.app.choisir_couleur_aplat(0, NEUF, 2);
+    f.app.aplat_couleur_attente.as_mut().unwrap().set_old_for_test([10, 200, 10]);
+    f.app.aplat_portee = AplatPortee::Plan;
+    f.app.appliquer_couleur_aplat();
+    assert_eq!(f.app.layers()[0].fond.unwrap().couleur, [0, 0, 255], "un aplat d'une autre couleur ne change pas");
+}
+
+#[test]
+fn the_storyboard_scope_reaches_every_plan_and_counts_the_drawings() {
+    let mut f = fix_vert("portee-storyboard");
+    f.app.doc.duplicate_panel_after(0);
+    assert_eq!(f.app.doc.panels.len(), 2);
+    let n = change(&mut f, AplatPortee::Storyboard);
+    assert_eq!(n, 6, "trois dessins dans chacun des deux plans : {}", f.app.status);
+    for pi in 0..2 {
+        assert_eq!(f.app.doc.panels[pi].layers[0].fond.unwrap().couleur, NEUF, "plan {pi}");
+    }
+    assert!(f.app.status.contains("6 dessins") && f.app.status.contains("tout le storyboard"), "{}", f.app.status);
+    f.app.run_action("edition.annuler");
+    for pi in 0..2 {
+        assert_eq!(f.app.doc.panels[pi].layers[0].fond.unwrap().couleur, [10, 200, 10]);
+    }
+    // Le plan seul ne touche pas l'autre plan.
+    f.app.aplat_portee = AplatPortee::Plan;
+    f.app.choisir_couleur_aplat(0, NEUF, 3);
+    assert_eq!(f.app.appliquer_couleur_aplat(), 3);
+    assert_eq!(f.app.doc.panels[1].layers[0].fond.unwrap().couleur, [10, 200, 10], "l'autre plan n'a pas bougé");
+}
+
+#[test]
+fn a_colour_layer_is_recoloured_by_the_plan_scope_and_nothing_changes_without_the_old_colour() {
+    let mut f = fix_vert("portee-couleur");
+    let (_, cels) = avec_calque_de_couleur(&mut f);
+    for c in &cels {
+        remplir(&mut f.app.doc.cels.get_mut(c).unwrap().raster, 30, 30, 50, 45, VERT);
+    }
+    f.app.cur_layer = 1;
+    assert_eq!(change_layer(&mut f, 1, AplatPortee::Plan), 6, "trois dessins de couleur et trois strates : {}", f.app.status);
+    for c in &cels {
+        assert_eq!(f.app.doc.cels[c].raster.get(40, 40).r(), 200, "le calque de couleur est recoloré, opacité gardée");
+        assert_eq!(f.app.doc.cels[c].raster.get(40, 40).a(), 255);
+    }
+    // Plus rien n'a l'ancienne couleur : aucun dessin, aucune étape de plus.
+    let n0 = noms(&f.app).len();
+    f.app.aplat_portee = AplatPortee::Plan;
+    f.app.choisir_couleur_aplat(1, [1, 2, 3], 9);
+    f.app.aplat_couleur_attente.as_mut().unwrap().set_old_for_test([99, 99, 99]);
+    assert_eq!(f.app.appliquer_couleur_aplat(), 0);
+    assert_eq!(noms(&f.app).len(), n0, "pas d'étape pour rien");
+    assert!(f.app.status.contains("aucun dessin"), "{}", f.app.status);
+}
+
+fn change_layer(f: &mut AplatFix, li: usize, portee: AplatPortee) -> usize {
+    f.app.aplat_portee = portee;
+    f.app.choisir_couleur_aplat(li, NEUF, 1);
+    let n = f.app.appliquer_couleur_aplat();
+    f.app.attendre_aplat_multi();
+    n
+}
+
+#[test]
+fn the_colour_choice_is_held_while_dragging_and_laid_down_when_released() {
+    let mut f = fix_vert("portee-glisse");
+    let ctx = egui::Context::default();
+    f.app.choisir_couleur_aplat(0, [1, 1, 1], 5);
+    f.app.choisir_couleur_aplat(0, NEUF, 6);
+    assert_eq!(f.app.layers()[0].fond.unwrap().couleur, [10, 200, 10], "rien n'est posé pendant le glissé");
+    // (Une image plus tard, bouton relâché : posé.)
+    for _ in 0..8 {
+        let _ = ctx.run(Default::default(), |_| {});
+    }
+    f.app.tick_aplat_couleur(&ctx);
+    assert!(f.app.couleur_attente().is_none(), "posée au lâcher");
+    assert!(f.app.status.contains("dessin"), "{}", f.app.status);
+    f.app.attendre_aplat_multi();
+    assert_eq!(f.peinture(0).get(50, 40).r(), 200);
+}

@@ -107,13 +107,8 @@ impl App {
         let Some(r) = self.layers().get(li).and_then(|l| l.fond) else { return };
         let mut next = r;
         let mut changed = None;
-        ui.horizontal(|ui| {
-            ui.label("Couleur de l'aplat");
-            let resp = ui.color_edit_button_srgb(&mut next.couleur);
-            if self.aplat_edited(&resp) {
-                changed = Some(next);
-            }
-        });
+        // La couleur n'est pas posée à chaque image du glissé : elle l'est au lâcher, sur la portée choisie (`aplatcouleur.rs`).
+        self.aplat_couleur_ui(ui, li, r.couleur);
         let mut debord = next.debord as f32;
         let resp = ui.add(egui::Slider::new(&mut debord, 0.0..=30.0).text("Débord (px)").fixed_decimals(0));
         let resp = crate::bulles::bulle(resp, "Débord", "Pixels d'aplat au-delà du bord extérieur du trait.", "");

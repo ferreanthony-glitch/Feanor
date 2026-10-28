@@ -785,6 +785,10 @@ pub struct App {
     /// calculent en arrière-plan (`aplatmulti.rs`). Propres à un projet.
     pub(crate) aplat_miroirs: crate::aplatmulti::Miroirs,
     pub(crate) aplat_travaux: crate::aplatmulti::Travaux,
+    /// La couleur de l'aplat choisie dans le sélecteur, retenue jusqu'au lâcher, et la portée du changement de couleur de l'aplat
+    /// (la clé, le plan, tout le storyboard : `aplatcouleur.rs`). La portée est un réglage de l'application.
+    pub(crate) aplat_couleur_attente: Option<crate::aplatcouleur::CouleurAttente>,
+    pub(crate) aplat_portee: crate::aplatcouleur::AplatPortee,
     /// Panneaux qui s'ajustent (`ajuste.rs`) : hauteur du contenu de chaque panneau à sa dernière
     /// image affichée, part posée par paire de panneaux, un bord a glissé à cette image.
     pub(crate) pane_heights: std::collections::HashMap<crate::dock::Pane, f32>,
@@ -1285,6 +1289,8 @@ impl App {
             fond_cut: None,
             aplat_miroirs: Default::default(),
             aplat_travaux: Default::default(),
+            aplat_couleur_attente: None,
+            aplat_portee: Default::default(),
             pane_heights: Default::default(),
             fit_set: Default::default(),
             fit_busy: false,
@@ -4841,6 +4847,7 @@ impl App {
         self.tick_personnages();
         self.tick_aplat();
         self.poll_aplat_multi();
+        self.tick_aplat_couleur(ctx);
         self.propagation_ui(ctx);
         self.coloriage_ui(ctx);
         if self.playing {
