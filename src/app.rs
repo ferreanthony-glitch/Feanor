@@ -776,6 +776,8 @@ pub struct App {
     pub(crate) equipe_ui: crate::cooperationui::EquipeUi,
     /// Fenêtre « À propos de SHOT » (`aproposui.rs`).
     pub(crate) about_window: bool,
+    /// Clic droit dans le dessin : la fenêtre flottante des réglages de l'outil, quand elle est ouverte (`reglagesdroit.rs`).
+    pub(crate) reglages_droit: Option<crate::reglagesdroit::ReglagesDroit>,
     /// Le thème dont les couleurs sont posées dans egui : quand le réglage change, tout est
     /// reposé une fois (`theme.rs`).
     pub(crate) theme_applied: crate::theme::ReglageTheme,
@@ -1293,6 +1295,7 @@ impl App {
             partage: None,
             equipe_ui: Default::default(),
             about_window: false,
+            reglages_droit: None,
             theme_applied,
             theme_unsaved: false,
             welcome: true,
@@ -4860,6 +4863,8 @@ impl App {
             // Et pour le panneau Références (`referencesui.rs`).
             self.refs.focus = false;
         }
+        // Échap ferme la fenêtre des réglages du clic droit et ne fait rien d'autre (`reglagesdroit.rs`).
+        self.reglages_droit_echap(ctx);
         self.handle_shortcuts(ctx);
         self.sync_scene_layers();
         // Calques de couleur : leurs images suivent celles du trait (`calquecouleur.rs`).
@@ -4982,6 +4987,8 @@ impl App {
             self.comparer_fenetre(ctx);
             self.purge_versions_fenetre(ctx);
             self.variantes_fenetres(ctx);
+            // Clic droit dans le dessin : les réglages de l'outil sous le curseur, par-dessus tout (`reglagesdroit.rs`).
+            self.reglages_droit_fenetre(ctx);
         }
         // Export en cours : le projet se copie par tranches de quelques millisecondes au départ, puis l'export tourne sur
         // d'autres fils ; ici on ne fait que le regarder, à peu près dix fois par seconde (la barre d'avancement).

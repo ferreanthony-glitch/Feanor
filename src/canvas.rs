@@ -62,10 +62,17 @@ impl App {
         // La boîte de la sélection est à jour avant d'agir (`seltools.rs`).
         self.sync_sel_box();
         self.canvas_input(ui.ctx(), &response, rect);
-        // Clic droit sur le dessin (passe interface) : les commandes courantes. Pas dans une
+        // Clic droit sur le dessin (passe interface) : les réglages de l'outil sous le curseur, avec tous les outils sauf la
+        // Sélection et la Pipette, qui gardent le menu des commandes courantes (`reglagesdroit.rs`). Pas dans une
         // vignette de la planche, qui a son propre menu.
         if !self.in_card && !self.modal_open() {
-            response.context_menu(|ui| self.canvas_menu(ui));
+            if self.reglages_droit_permis() {
+                if response.secondary_clicked() {
+                    self.clic_droit_dans_le_dessin(response.interact_pointer_pos());
+                }
+            } else {
+                response.context_menu(|ui| self.canvas_menu(ui));
+            }
         } else if self.in_card && !self.modal_open() {
             // Dans la vue Vignettes, le clic droit sur l'image courante ouvre le menu de la vignette (`boardui.rs`).
             response.context_menu(|ui| self.card_context_menu(ui));
