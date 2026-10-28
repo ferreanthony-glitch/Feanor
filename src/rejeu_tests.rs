@@ -13,7 +13,7 @@ use crate::rejeu::{self, Rejeu};
 use crate::vector::{Element, VectorDrawing};
 
 fn fill() -> Element {
-    Element::Fill { contours: vec![vec![[2.0, 2.0], [40.0, 2.0], [40.0, 30.0], [2.0, 30.0]]], color: [10, 20, 30], opacity: 1.0 }
+    Element::Fill { contours: vec![vec![[2.0, 2.0], [40.0, 2.0], [40.0, 30.0], [2.0, 30.0]]], color: [10, 20, 30], opacity: 1.0, gradient: None }
 }
 
 /// Un dessin de `n` éléments (le nombre d'éléments dit de quel dessin il s'agit, pour les essais).

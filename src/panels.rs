@@ -482,6 +482,7 @@ impl App {
                     }
                 });
             }
+            Tool::Gradient => self.degrade_options_ui(ui),
             Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_options_ui(ui),
             Tool::Text => self.text_options_ui(ui),
             Tool::Perspective => self.deform_options_ui(ui),

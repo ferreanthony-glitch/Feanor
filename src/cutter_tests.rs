@@ -78,7 +78,7 @@ fn a_click_cuts_the_nearest_piece_and_a_lone_stroke_goes_whole() {
 
 #[test]
 fn fills_and_untouched_strokes_stay() {
-    let fill = Element::Fill { contours: vec![vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]]], color: [9, 9, 9], opacity: 1.0 };
+    let fill = Element::Fill { contours: vec![vec![[0.0, 0.0], [10.0, 0.0], [10.0, 10.0]]], color: [9, 9, 9], opacity: 1.0, gradient: None };
     let mut d = VectorDrawing { elements: vec![fill.clone(), stroke(&[(0.0, 200.0), (100.0, 200.0)])] };
     assert!(cut_strokes(&mut d, &[pos2(0.0, 5.0), pos2(20.0, 5.0)], 2.0).is_none(), "le geste ne touche aucun trait");
     assert_eq!(d.elements[0], fill);

@@ -83,7 +83,7 @@ fn vector_points_follow() {
                 brush: None,
                 trace: Default::default(),
             },
-            Element::Fill { contours: vec![vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0]]], color: [1, 1, 1], opacity: 1.0 },
+            Element::Fill { contours: vec![vec![[0.0, 0.0], [100.0, 0.0], [100.0, 100.0]]], color: [1, 1, 1], opacity: 1.0, gradient: None },
         ],
     };
     let src = Rect::from_min_max(pos2(0.0, 0.0), pos2(100.0, 100.0));

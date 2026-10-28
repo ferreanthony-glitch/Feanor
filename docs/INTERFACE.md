@@ -4572,6 +4572,66 @@ Essais : `fusionglisse_tests.rs` (9, dont huit par la vraie fenêtre sans écran
 5. Deux séquences : glisse un plan sur le milieu d'un plan d'une autre séquence : pas de contour, pas de fusion.
 6. Choisis deux plans (Ctrl + clic) et glisse-les sur un troisième : ils se déplacent, sans fusion.
 
+---------------------------------------------------------------------------------------------------
+
+## 53. L'outil Dégradé, bitmap et vectoriel (2026-10-28, branche `outil-degrade`)
+
+Demande d'Anthony : « un outil dégradé, vecto et bitmap » ; sans latence, l'interface la plus simple possible, rien de perdu. Format du projet : **38** (voir plus bas).
+Fichiers : `degrade.rs` (le noyau : le dégradé, ses réglages, l'écriture des pixels), `degradeui.rs` (le geste, l'aperçu, les réglages), `vector.rs` (`Element::Fill::gradient`, rendu, transformation), `project.rs` (format 38).
+Essais : `degrade_tests.rs` (19).
+
+### Le geste
+
+- **L'outil** est dans la case du pot de peinture de la barre d'outils (clic maintenu sur l'icône : le pot, le dégradé), avec son icône, sa bulle d'une seconde et l'action `outil.degrade` (**Alt + G**, libre). Le curseur est une croix.
+- **Appuyer, glisser, lâcher** : le glisser trace l'axe. Le point d'appui prend la **couleur d'avant-plan**, le pointeur la **couleur d'arrière-plan** (les deux carrés du panneau Couleur). Maj : l'axe par pas de 15°. Au-delà des deux points, la couleur reste celle du bout.
+  Un simple clic ne pose rien (la barre d'état le dit).
+- **Aperçu en direct, sans le moteur de pinceaux** : pendant le glisser, un maillage de sommets colorés (le dégradé, calculé aux sommets d'une grille de 56 × 56) est posé sur une petite image de la zone (sa couverture, faite une fois à l'appui),
+  avec l'axe tracé (rond plein au départ, rond vide à l'arrivée, le cercle d'arrivée en radial). Rien n'est écrit dans le dessin avant le lâcher (essai : le compteur de rejeux du moteur ne bouge pas, ni pendant le glisser ni au lâcher).
+- **Réglages** (Réglages, outil Dégradé) : **Type** Linéaire / Radial (en radial, le point d'appui est le centre et le pointeur est sur le cercle d'arrivée) ; **Fin** « Vers la couleur de fond » ou « Vers le transparent » (la couleur d'avant-plan, de plus en plus transparente) ;
+  **Opacité** ; **Inverser** (échange les bouts) ; **Tout le calque**. Une petite bande montre le dégradé que ces réglages donnent, sur un fond gris (le transparent se voit).
+
+### Où il s'applique
+
+Dans cet ordre :
+
+1. **La sélection**, s'il y en a une (lasso, rectangle, sélection par couleur en bitmap : la zone reste avec l'outil Dégradé, sans être transformable ni recolorée par un choix de couleur ; une zone soulevée refuse). Le bord de la zone est anticrénelé et le dégradé se pose
+   par-dessus, dans la mesure de la couverture ; un calque qui préserve la transparence ne change que ce qui est dessiné ; les pochoirs des autres calques le limitent (comme « Remplir la sélection »).
+   Sur un calque **vectoriel**, une sélection de zones remplies : elles reçoivent le dégradé (une sélection de traits seuls : rien à remplir, un message le dit).
+2. **La zone fermée** où l'on appuie, trouvée **exactement comme le fait le pot de peinture** (même recherche, même tolérance, même débord, « Contours pris sur » de ses réglages). Sur un calque vectoriel, une zone déjà remplie sous le pointeur reçoit le dégradé
+   en place (le pot de peinture en change la couleur) ; sinon une zone neuve est créée sous les traits.
+3. **Toute la feuille** : **Alt** tenu (avec cet outil Alt n'est pas la pipette), ou « Tout le calque » dans Réglages.
+
+### Bitmap
+Les pixels s'écrivent au lâcher (`degrade::peindre`), tuile par tuile, **répartis sur les cœurs**, sans le moteur de pinceaux : une feuille 1920 × 1080 en quelques millisecondes. Dans la zone du pot, le dégradé **remplace** ce qui est là (de quoi recolorer un aplat) et, dans le débord,
+passe **sous** le trait (le bord anticrénelé du trait n'est pas abîmé) ; dans la sélection et sur toute la feuille il se pose **par-dessus**. Une seule étape d'annulation, « Dégradé ».
+
+### Vectoriel
+La zone **garde** un dégradé (`Element::Fill::gradient` : genre, les deux points de l'axe, les deux couleurs et les deux opacités) : ce n'est jamais des pixels écrits dans les données, il se rend avec la zone par le rendu vectoriel. **Il suit la forme** : déplacée, mise à l'échelle,
+tournée (Sélection, Transformer, flèches), déformée en enveloppe ou en perspective, interpolée entre deux images (`tween.rs`) : les deux points de l'axe passent par la même transformation que les contours. Il s'enregistre et se relit (dessin vectoriel, champ `degrade`) et se rend dans les exports comme le reste du dessin.
+Le pot de peinture (ou toute couleur choisie pour la zone) la remet unie.
+
+### L'aplat et le calque de couleur
+Avec la sous-ligne de l'**aplat** choisie, le dégradé remplit la zone fermée par le trait **comme le fait le pot de peinture dans l'aplat** (la peinture de l'aplat, sous le trait ; l'aplat y est recousu s'il était coupé) ; Alt : tout l'aplat. Une étape « Aplat : dégradé ». Sur un **calque de couleur**,
+il remplit la zone fermée par son trait, sous le trait (sauf en mode « Griffonner » : un message le dit).
+
+### Format du projet : 38
+Une zone vectorielle en dégradé s'écrit avec un champ `degrade` ; une version précédente refuse le projet (elle montrerait la zone en couleur unie : le film changerait sans prévenir). **Un projet de version 37 ou moins s'ouvre tel quel**, à l'identique ; une zone unie n'écrit rien de plus.
+Un dégradé aux valeurs absurdes est refusé comme tout dessin abîmé (le dessin est signalé, son fichier n'est pas modifié). (Une autre branche peut aussi prendre le 38 : la fusion garde le 38 et réunit les deux descriptions.)
+
+### À trancher avec toi
+- **Radial et étirement** : le dégradé radial reste un cercle (son rayon suit l'échelle) : étirer une zone d'un seul côté ne le rend pas elliptique. Dis-moi si tu veux l'ellipse.
+- **L'outil dans la case du pot** : j'ai mis le dégradé avec le pot (un clic maintenu sur l'icône montre les deux). Un bouton à lui, sous le pot, est un changement d'une ligne si tu préfères.
+
+### À vérifier à l'écran (par Anthony)
+1. Barre d'outils : l'icône du pot a un petit coin ; clic maintenu : le pot et le dégradé. Ou Alt + G. Réglages : Type, Fin, Opacité, Inverser, Tout le calque, et la bande qui montre le dégradé.
+2. Calque bitmap : dessine un anneau fermé, mets deux couleurs (avant-plan rouge, arrière-plan bleu), outil Dégradé, glisse dans l'anneau : l'aperçu suit la souris sans retard, et au lâcher l'intérieur est rouge puis bleu, le trait intact. Ctrl+Z : tout part d'un coup.
+3. « Vers le transparent » : le rouge s'efface le long de l'axe. « Radial » : le centre est l'appui. « Inverser » : les bouts changent de place. Opacité 50 % : la moitié.
+4. Lasso une zone avec l'outil Sélection, passe au Dégradé, glisse : seule la zone est remplie, bord doux. Alt + glisser : toute la feuille.
+5. Calque vectoriel : le même geste donne une zone vectorielle ; choisis-la avec la Sélection et déplace-la, tourne-la : le dégradé suit. Enregistre, rouvre : il est là. Pot de peinture sur la zone : elle redevient unie.
+6. Aplat : sur un calque avec aplat, clique sa sous-ligne, outil Dégradé, glisse dans une zone fermée : l'aplat y a le dégradé, sous le trait. Un calque de couleur : pareil.
+
+---------------------------------------------------------------------------------------------------
+
 ## 54. Corrections : paliers de caméra à l'écran, lasso bitmap fluide, fermeture, tremblement par défaut complet, stylet (2026-10-28, branche `corrections-preferences`)
 
 Cinq retours d'Anthony après essais. Essais : `saccade_ecran_tests.rs`, `selection_bitmap_tests.rs`, `fermeture_tests.rs`, `tremblementapercu_tests.rs`, `tremblement_defaut_tests.rs`, `reglagestylet_tests.rs`.

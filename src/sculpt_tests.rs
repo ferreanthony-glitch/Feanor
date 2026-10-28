@@ -230,7 +230,7 @@ fn a_long_gap_gets_extra_points_that_keep_the_shape_the_widths_and_the_pressures
 
 #[test]
 fn filled_areas_move_with_the_points_and_texts_stay_rigid() {
-    let carre = Element::Fill { contours: vec![vec![[90.0, 90.0], [110.0, 90.0], [110.0, 110.0], [90.0, 110.0]]], color: [1, 2, 3], opacity: 1.0 };
+    let carre = Element::Fill { contours: vec![vec![[90.0, 90.0], [110.0, 90.0], [110.0, 110.0], [90.0, 110.0]]], color: [1, 2, 3], opacity: 1.0, gradient: None };
     let d0 = VectorDrawing { elements: vec![carre] };
     let prises = sculpt::prendre(&d0, pos2(100.0, 100.0), 40.0, Attenuation::Constante);
     assert_eq!(prises.len(), 4);

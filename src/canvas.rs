@@ -418,7 +418,8 @@ impl App {
                         self.guides.drag = Some(k);
                         continue;
                     }
-                    if modifiers.alt || self.tool == Tool::Picker {
+                    // (Avec le Dégradé, Alt dit « tout le calque » : la pipette reste à l'outil Pipette.)
+                    if (modifiers.alt && self.tool != Tool::Gradient) || self.tool == Tool::Picker {
                         self.picking = true;
                         self.pick_color(stage);
                         continue;
@@ -433,6 +434,7 @@ impl App {
                     };
                     match self.tool {
                         Tool::Fill => self.fill_at(p),
+                        Tool::Gradient => self.degrade_press(p, modifiers.alt),
                         Tool::Brush | Tool::Pencil | Tool::Eraser => {
                             let pressure = if pen { self.pen_pressure } else { 1.0 };
                             // Le trait d'abord (`begin_paint` clôt le précédent, ce qui oublie le
@@ -498,6 +500,7 @@ impl App {
                     } else if self.envelope_drag(p) {
                     } else if self.persp_drag(p) {
                     } else if self.shape_bend_move(p) {
+                    } else if self.degrade_drag(p, mods.shift) {
                     } else if let Some((_, end)) = &mut self.shape_drag {
                         *end = p;
                     } else if self.multi.drag.is_some() {
@@ -521,6 +524,7 @@ impl App {
                 }
                 | Event::PointerGone => {
                     self.shape_release(mods.shift);
+                    self.degrade_release();
                     self.persp_release();
                     self.envelope_release();
                     if self.multi.drag.is_some() {
@@ -545,6 +549,7 @@ impl App {
         self.sculpt_tick();
         // Relâchement manqué (perte de focus…) : on clôt le geste quand même.
         if !primary_down {
+            self.degrade_release();
             self.end_stroke();
             self.picking = false;
             self.guides.drag = None;
@@ -569,6 +574,7 @@ impl App {
         let to_s = |p: Pos2| self.layer_to_screen(p);
 
         self.paint_shape_overlay(painter, shift);
+        self.paint_degrade_overlay(painter);
 
         // Lasso ou rectangle en cours de tracé (vectoriel ou bitmap).
         // Une ligne fine ouverte et des points ambrés (`contours::lasso_shape`) ; un rectangle se
@@ -652,7 +658,7 @@ impl App {
             ctx.set_cursor_icon(CursorIcon::Move);
             return;
         }
-        if alt || matches!(self.tool, Tool::Picker | Tool::Fill | Tool::Cutter) || self.tool.is_shape() {
+        if alt || matches!(self.tool, Tool::Picker | Tool::Fill | Tool::Gradient | Tool::Cutter) || self.tool.is_shape() {
             ctx.set_cursor_icon(CursorIcon::Crosshair);
             return;
         }

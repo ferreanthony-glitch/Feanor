@@ -46,7 +46,7 @@ impl App {
             self.select_layer(li);
         }
         self.aplat_cible = Some(id);
-        if !matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser | Tool::Fill | Tool::Cutter) {
+        if !matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser | Tool::Fill | Tool::Gradient | Tool::Cutter) {
             self.set_tool(Tool::Brush);
         }
         self.status = self.aplat_indication();
@@ -57,6 +57,7 @@ impl App {
         let nom = self.layers().get(self.cur_layer).map(|l| l.name.as_str()).unwrap_or_default();
         let quoi = match self.tool {
             Tool::Fill => "clic : remplir la zone fermée par le trait, sous le trait",
+            Tool::Gradient => "glisser : un dégradé dans la zone fermée par le trait, sous le trait (Alt : tout l'aplat)",
             Tool::Cutter => "clic : retirer la zone fermée de l'aplat",
             Tool::Eraser => "la gomme coupe l'aplat",
             _ => "peindre sous le trait, dans la forme (recoud l'aplat coupé)",

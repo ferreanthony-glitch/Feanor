@@ -632,6 +632,11 @@ mod springtools_tests;
 // sélection, clés de position.
 mod tracedroit;
 mod remplirsel;
+// Outil Dégradé (2026-10-24) : le noyau (`degrade`), l'outil et ses réglages (`degradeui`).
+mod degrade;
+mod degradeui;
+#[cfg(test)]
+mod degrade_tests;
 mod selobjet;
 pub mod poskeys;
 mod poskeysui;

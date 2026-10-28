@@ -78,6 +78,8 @@ pub enum Tool {
     /// Cutter : coupe les traits vectoriels à leurs croisements (`cutter.rs`).
     Cutter,
     Fill,
+    /// Dégradé (`degrade.rs`, `degradeui.rs`) : glisser trace l'axe, de la couleur d'avant-plan à celle d'arrière-plan.
+    Gradient,
     /// Formes (5c) : outils séparés, comme dans Storyboard Pro.
     Line,
     Rect,
@@ -102,12 +104,13 @@ pub enum Tool {
 }
 
 impl Tool {
-    pub const ALL: [Tool; 19] = [
+    pub const ALL: [Tool; 20] = [
         Tool::Brush,
         Tool::Pencil,
         Tool::Eraser,
         Tool::Cutter,
         Tool::Fill,
+        Tool::Gradient,
         Tool::Line,
         Tool::Rect,
         Tool::Ellipse,
@@ -131,6 +134,7 @@ impl Tool {
             Tool::Eraser => "Gomme",
             Tool::Cutter => "Cutter",
             Tool::Fill => "Remplir",
+            Tool::Gradient => "Dégradé",
             Tool::Line => "Ligne",
             Tool::Rect => "Rectangle",
             Tool::Ellipse => "Ellipse",
@@ -156,6 +160,7 @@ impl Tool {
             Tool::Eraser => "Effacer ; sur un calque vectoriel, des bouts de trait ou des traits entiers.",
             Tool::Cutter => "Glisser en travers des bouts de traits vectoriels à enlever : ils sont coupés là où ils croisent les autres traits.",
             Tool::Fill => "Remplir une zone avec la couleur courante.",
+            Tool::Gradient => "Glisser pour tracer l'axe d'un dégradé, de la couleur d'avant-plan à celle d'arrière-plan : dans la sélection, dans la zone fermée où l'on appuie, ou (Alt) sur tout le calque. Sur un calque vectoriel, il reste un réglage de la zone.",
             Tool::Line => "Tracer une droite, une courbe ou une courbe en S.",
             Tool::Rect => "Tracer un rectangle, vide ou plein.",
             Tool::Ellipse => "Tracer une ellipse, vide ou pleine.",
@@ -182,6 +187,7 @@ impl Tool {
             Tool::Eraser => ph::ERASER,
             Tool::Cutter => ph::KNIFE,
             Tool::Fill => ph::PAINT_BUCKET,
+            Tool::Gradient => ph::GRADIENT,
             Tool::Line => ph::LINE_SEGMENT,
             Tool::Rect => ph::RECTANGLE,
             Tool::Ellipse => ph::CIRCLE,
@@ -207,6 +213,7 @@ impl Tool {
             Tool::Eraser => "outil.gomme",
             Tool::Cutter => "outil.cutter",
             Tool::Fill => "outil.remplissage",
+            Tool::Gradient => "outil.degrade",
             Tool::Line => "outil.ligne",
             Tool::Rect => "outil.rectangle",
             Tool::Ellipse => "outil.ellipse",
@@ -334,6 +341,10 @@ pub struct App {
     /// disque réseau éteint ne gèle pas la première image.
     pub(crate) reopen_probe: Option<(Vec<PathBuf>, std::sync::mpsc::Receiver<Vec<PathBuf>>)>,
     pub(crate) fill: FillSettings,
+    /// Réglages de l'outil Dégradé (`degrade.rs`) : forme, fin, opacité, inverser, tout le calque.
+    pub(crate) degrade: crate::degrade::Reglages,
+    /// Le geste du dégradé en cours : l'axe tiré, ce qu'il remplit, son aperçu (`degradeui.rs`).
+    pub(crate) degrade_geste: Option<crate::degradeui::Geste>,
     pub(crate) shape: ShapeSettings,
     pub(crate) vector_erase_whole: bool,
     /// Option du pinceau et du crayon (`brushfill`) : « Peint sur l'aplat ». (« Remplir la forme » n'existe plus,
@@ -1007,6 +1018,8 @@ impl App {
             brushes_job: brushes_job.ok(),
             reopen_probe: None,
             fill: FillSettings::default(),
+            degrade: crate::degrade::Reglages::default(),
+            degrade_geste: None,
             shape: ShapeSettings {
                 filled: false,
                 width: 4.0,
@@ -2289,6 +2302,8 @@ impl App {
         self.finish_layer_drag();
         self.guides.stroke = None;
         self.shape_drag = None;
+        // (Le dégradé se pose au lâcher, `degrade_release`, avant ceci : ce qui reste est un geste abandonné.)
+        self.degrade_geste = None;
     }
 
     pub(crate) fn pick_color(&mut self, p: Pos2) {
@@ -4034,6 +4049,7 @@ impl App {
             "outil.crayon" => self.set_tool(Tool::Pencil),
             "outil.gomme" => self.set_tool(Tool::Eraser),
             "outil.remplissage" => self.set_tool(Tool::Fill),
+            "outil.degrade" => self.set_tool(Tool::Gradient),
             "outil.pipette" => self.set_tool(Tool::Picker),
             "outil.selection" => self.set_tool(Tool::Select),
             "outil.selection_couleur" => self.set_tool(Tool::SelectColor),

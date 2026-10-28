@@ -481,7 +481,7 @@ fn another_nib_redraws_the_strokes_with_the_same_path_pressure_and_colour_withou
     assert_eq!(differing(&render_with(&d, &nib_steps(&[(m::NIB_ID, 1.0)])), &plain), 0);
     // Les zones remplies ne sont pas des traits : elles restent.
     let mut with_fill = d.clone();
-    with_fill.elements.insert(0, Element::Fill { contours: vec![vec![[40.0, 150.0], [100.0, 150.0], [100.0, 200.0], [40.0, 200.0]]], color: [200, 30, 30], opacity: 1.0 });
+    with_fill.elements.insert(0, Element::Fill { contours: vec![vec![[40.0, 150.0], [100.0, 150.0], [100.0, 200.0], [40.0, 200.0]]], color: [200, 30, 30], opacity: 1.0, gradient: None });
     assert_eq!(render_with(&with_fill, &s).get(60, 170), with_fill.render(W, H).get(60, 170));
 }
 
@@ -521,7 +521,7 @@ fn every_library_brush_works_as_a_nib_and_a_redrawn_stroke_is_replayed_once() {
 fn applying_the_nib_for_good_gives_the_pictures_of_the_effect_and_keeps_fills_and_pressure() {
     crate::fxcache::monde::ecrire();
     let mut d = VectorDrawing { elements: vec![pressed_stroke(80.13), pressed_stroke(160.29)] };
-    d.elements.insert(0, Element::Fill { contours: vec![vec![[120.0, 110.0], [180.0, 110.0], [180.0, 140.0], [120.0, 140.0]]], color: [10, 150, 60], opacity: 0.8 });
+    d.elements.insert(0, Element::Fill { contours: vec![vec![[120.0, 110.0], [180.0, 110.0], [180.0, 140.0], [120.0, 140.0]]], color: [10, 150, 60], opacity: 0.8, gradient: None });
     let s = nib_steps(&[(m::NIB_ID, m::name_id("Feutre") as f32)]);
     let shown = render_with(&d, &s);
     let nib = m::NibCtx::resolve(&m::NibS::of(&s[0].values)).expect("plume");
