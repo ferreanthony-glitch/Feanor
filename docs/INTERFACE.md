@@ -5373,7 +5373,7 @@ Anthony : « Clic droit avec n'importe quel outil ouvre une fenêtre flottante d
 | Icônes, pastilles, panneaux, calques, couleurs (« Assigner un raccourci… », etc.) | **Gardés** (inchangés). |
 | Espace 3D : glisser le bouton droit tourne la caméra | **Gardé** : la fenêtre ne s'ouvre pas en 3D. |
 
-Il n'y avait **pas** d'autre clic droit dans le dessin : ni menu de poignée de transformation ou de sélection, ni annulation d'une polyligne ou d'un lasso par le bouton droit (la polyligne se termine autrement, le lasso par Échap). Rien à préserver de ce côté.
+Il n'y avait **pas** d'autre clic droit dans le dessin : ni menu de poignée de transformation ou de sélection, ni annulation d'une polyligne ou d'un lasso par le bouton droit (le bouton droit n'y servait à rien d'autre qu'à ce menu). Rien à préserver de ce côté.
 
 Pendant un trait (bouton gauche tenu), un clic droit n'ouvre rien.
 
