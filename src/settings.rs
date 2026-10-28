@@ -213,6 +213,10 @@ pub struct Settings {
     /// La taille de l'interface, en pour cent : 90, 100, 125 ou 150 (`echelle.rs`, Préférences > Apparence).
     #[serde(default = "crate::echelle::defaut", rename = "echelle_interface", skip_serializing_if = "crate::echelle::est_defaut")]
     pub echelle: u16,
+    /// Le dossier des images de l'écran d'accueil (`accueilimages.rs`, Préférences > Apparence > Images d'accueil) : un réglage de ce
+    /// poste, pas du projet. Vide : `Documents\SHOT\Identité\Accueil`.
+    #[serde(default, rename = "dossier_accueil", skip_serializing_if = "String::is_empty")]
+    pub dossier_accueil: String,
     /// Les réglages des Vignettes (`vignettesreglages.rs`, Préférences > Vignettes) : débord du trait, aimant et couleur des
     /// cadres de caméra, « Report du décor », couleur et tailles des brosses du décor. Absents des anciens réglages : ceux d'avant.
     #[serde(default, rename = "vignettes", skip_serializing_if = "crate::vignettesreglages::ReglagesVignettes::est_defaut")]
@@ -308,6 +312,7 @@ impl Default for Settings {
             prefs_onglet: Default::default(),
             conseils: Default::default(),
             echelle: crate::echelle::ECHELLE_DEFAUT,
+            dossier_accueil: String::new(),
             vignettes: Default::default(),
             point_fixe: Default::default(),
             rotation_autour: Default::default(),

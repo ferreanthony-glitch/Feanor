@@ -25,6 +25,8 @@ pub(crate) struct Confort {
     /// La courbe de pression d'avant le dernier « Appliquer » : la fenêtre se ferme à l'application, « Rétablir » la rend à
     /// l'ouverture suivante.
     pub stylet_avant: Option<crate::brush::Curve>,
+    /// Les images de l'accueil : le tirage de l'apparition en cours et les miniatures des Préférences (`accueilimages.rs`).
+    pub accueil: crate::accueilimages::AccueilImages,
 }
 
 impl Confort {

@@ -635,6 +635,7 @@ impl App {
                 ui.label(RichText::new(format!("Affichage : {}", self.display_info)).small().weak());
             }
             Groupe::Echelle => self.echelle_prefs_ui(ui),
+            Groupe::ImagesAccueil => self.images_accueil_prefs_ui(ui),
             Groupe::Conseils => self.conseils_prefs_ui(ui),
             Groupe::StyletMain => {
                 let b = ui.button("Régler le stylet à ma main…");

@@ -1,23 +1,25 @@
 //! Écran d'accueil (Anthony, 2026-10-18, sa suggestion retenue : « un écran d'accueil (récents,
 //! « Nouveau ») quand aucun projet n'est ouvert ») : au lancement sans projet, ou après « Fermer
 //! le projet », une carte au milieu de la fenêtre propose trois grandes entrées, puis les projets récents. Elle s'en va
-//! dès qu'un projet s'ouvre ou se crée, qu'on commence à dessiner, ou d'un clic sur « Dessiner des vignettes ».
+//! dès qu'un projet s'ouvre ou se crée, qu'on commence à dessiner, ou d'un clic sur « Dessiner un storyboard ».
 //!
-//! Passe « simplicité » du 2026-10-21 : trois entrées, et rien d'autre de grand.
-//! - **Dessiner des vignettes** : un projet vide, tout de suite, dans l'onglet Vignettes (la planche : on dessine dans les
-//!   Cases, ou on y dépose des images de l'Explorateur, `deposer.rs`). C'est l'ancien « Commencer sans projet », dans
-//!   l'onglet où l'on dessine d'abord ; « Enregistrer » demandera où ranger le projet.
-//! - **Importer un scénario** : Fountain, Final Draft, Word ou texte, la fenêtre d'import (`scenarioui.rs`) ; depuis
-//!   l'accueil, elle part d'un nouveau projet.
+//! Passe « simplicité » du 2026-10-21, puis demande d'Anthony du 2026-10-28 : trois entrées, et rien d'autre de grand.
+//! - **Nouveau fichier** : la fenêtre de nouveau projet, avec le choix du format, de la cadence et du dossier (c'était le
+//!   petit lien « Nouveau projet… »).
+//! - **Dessiner un storyboard** : un projet vide, tout de suite, dans l'onglet Vignettes (la planche : on dessine dans les
+//!   Cases, ou on y dépose des images de l'Explorateur, `deposer.rs`). C'est l'ancien « Dessiner des vignettes » ;
+//!   « Enregistrer » demandera où ranger le projet.
 //! - **Ouvrir un projet** : un projet SHOT ou un projet Storyboard Pro (la fenêtre d'ouverture accepte les deux).
-//! Dessous : un petit « Nouveau projet… » (avec le choix du format), puis les projets récents.
+//! Dessous : les projets récents. (« Importer un scénario » n'est plus ici : il reste dans le menu Fichier.)
 //!
-//! En tête de la carte : le logo de SHOT (« Frame the story », la devise est dans le dessin),
-//! rasterisé une fois à la taille de l'écran (`logo.rs`) et gardé.
+//! En tête de la carte : une image de storyboard tirée au hasard dans le dossier des images d'accueil, une fois par
+//! apparition de l'accueil (`accueilimages.rs`) ; sans image, le logo de SHOT (« Frame the story », la devise est dans le
+//! dessin), rasterisé une fois à la taille de l'écran (`logo.rs`) et gardé.
 
 use eframe::egui::{self, vec2, Align2, FontId, RichText, Sense};
 use egui_phosphor::regular as ph;
 
+use crate::accueilimages::Visuel;
 use crate::app::{App, Pending};
 use crate::logo::{self, Variante, VUE_H, VUE_L};
 use crate::theme;
@@ -33,6 +35,14 @@ const LOGO_LARGEUR: f32 = 400.0;
 /// dizaines de points (la texture ne se refait pas à chaque pixel quand on tire le bord de la fenêtre).
 pub(crate) fn logo_largeur(hauteur: f32) -> f32 {
     ((hauteur * 0.5 / 10.0).floor() * 10.0).clamp(240.0, LOGO_LARGEUR)
+}
+
+/// La taille à l'écran d'une image de `[w, h]` pixels dans `place` : toute la place si elle est de ses proportions, sinon la plus
+/// grande taille qui y tient, proportions gardées.
+pub(crate) fn place_de_l_image(pixels: [usize; 2], place: egui::Vec2) -> egui::Vec2 {
+    let (w, h) = (pixels[0].max(1) as f32, pixels[1].max(1) as f32);
+    let echelle = (place.x / w).min(place.y / h);
+    vec2(w * echelle, h * echelle)
 }
 
 /// Hauteur d'une grande entrée, en points.
@@ -63,10 +73,10 @@ pub(crate) fn logo_texture(ctx: &egui::Context, largeur: f32) -> egui::TextureHa
     texture
 }
 
-/// Les trois grandes entrées de l'accueil : (icône, titre, une ligne d'explication, action ou rien pour « Dessiner des vignettes »).
+/// Les trois grandes entrées de l'accueil : (icône, titre, une ligne d'explication, action ou rien pour « Dessiner un storyboard »).
 pub(crate) const ENTREES: [(&str, &str, &str, &str); 3] = [
-    (ph::SQUARES_FOUR, "Dessiner des vignettes", "Une planche vide, tout de suite : tu dessines dans les Cases.", ""),
-    (ph::FILE_TEXT, "Importer un scénario", "Fountain, Final Draft, Word ou texte : SHOT en fait des Plans.", "fichier.importer_scenario"),
+    (ph::FILE_PLUS, "Nouveau fichier", "Choisis le format, la cadence et le dossier, puis commence.", "fichier.nouveau"),
+    (ph::SQUARES_FOUR, "Dessiner un storyboard", "Une planche vide, tout de suite : tu dessines tes plans dans les Cases.", ""),
     (ph::FOLDER_OPEN, "Ouvrir un projet", "Un projet SHOT ou Storyboard Pro.", "fichier.ouvrir"),
 ];
 
@@ -98,7 +108,7 @@ impl App {
         self.welcome && self.path.is_none() && !self.modified && self.new_dialog.is_none() && self.scenario_window.is_none() && self.sb_window.is_none()
     }
 
-    /// « Dessiner des vignettes » : un projet vide, dans l'onglet Vignettes, l'accueil parti.
+    /// « Dessiner un storyboard » : un projet vide, dans l'onglet Vignettes, l'accueil parti.
     pub(crate) fn commencer_par_les_vignettes(&mut self) {
         self.welcome = false;
         self.set_espace(Espace::Vignettes);
@@ -107,8 +117,14 @@ impl App {
     /// La carte d'accueil, si aucun projet n'est ouvert.
     pub(crate) fn welcome_ui(&mut self, ctx: &egui::Context) {
         if !self.welcome_shown() {
+            // L'accueil s'en va pour de bon (un projet est là) : la prochaine apparition tirera une autre image. (La
+            // fenêtre « Nouveau fichier », posée par-dessus, ne compte pas : annulée, l'accueil revient avec la même image.)
+            if !(self.welcome || self.new_dialog.is_some()) || self.path.is_some() || self.modified {
+                self.confort.accueil.oublier_le_tirage();
+            }
             return;
         }
+        let visuel = self.accueil_visuel(ctx);
         let mut action: Option<&str> = None;
         let mut vignettes = false;
         let mut open: Option<std::path::PathBuf> = None;
@@ -121,10 +137,26 @@ impl App {
                 ui.set_width(460.0);
                 ui.vertical_centered(|ui| {
                     ui.add_space(6.0);
-                    // (Le logo rapetisse avec la hauteur de la fenêtre : à 150 %, la carte ne déborde pas sur les menus.)
+                    // (La place rapetisse avec la hauteur de la fenêtre : à 150 %, la carte ne déborde pas sur les menus.)
                     let largeur = logo_largeur(ctx.screen_rect().height());
-                    let texture = logo_texture(ctx, largeur);
-                    ui.image(egui::load::SizedTexture::new(texture.id(), egui::vec2(largeur, largeur * VUE_H / VUE_L)));
+                    let place = vec2(largeur, largeur * VUE_H / VUE_L);
+                    match visuel {
+                        // L'image se range dans la place du logo, proportions gardées, centrée.
+                        Visuel::Image(texture, [w, h]) => {
+                            let taille = place_de_l_image([w, h], place);
+                            ui.add_space((place.y - taille.y) / 2.0);
+                            ui.add(egui::Image::new(egui::load::SizedTexture::new(texture.id(), taille)).corner_radius(6.0));
+                            ui.add_space((place.y - taille.y) / 2.0);
+                        }
+                        // (Pendant que le fil décode : la place du logo, vide.)
+                        Visuel::Attente => {
+                            ui.allocate_space(place);
+                        }
+                        Visuel::Logo => {
+                            let texture = logo_texture(ctx, largeur);
+                            ui.image(egui::load::SizedTexture::new(texture.id(), place));
+                        }
+                    }
                     ui.add_space(10.0);
                 });
                 for (icone, titre, aide, a) in ENTREES {
@@ -137,12 +169,6 @@ impl App {
                     }
                     ui.add_space(4.0);
                 }
-                ui.horizontal(|ui| {
-                    let nouveau = ui.add(egui::Button::new(RichText::new(format!("{}  Nouveau projet…", ph::FILE_PLUS)).color(theme::texte_doux())).frame(false));
-                    if crate::bulles::bulle(nouveau, "Nouveau projet", "Choisir le format, la cadence et le dossier du projet avant de commencer.", &self.raccourci("fichier.nouveau")).clicked() {
-                        action = Some("fichier.nouveau");
-                    }
-                });
                 ui.add_space(8.0);
                 let recents: Vec<std::path::PathBuf> = self.settings.recent_projects.iter().take(RECENTS).cloned().collect();
                 if !recents.is_empty() {

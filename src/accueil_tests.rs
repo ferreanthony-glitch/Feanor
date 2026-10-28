@@ -1,6 +1,7 @@
-//! L'écran d'accueil (`accueil.rs`) après la passe « simplicité » du 2026-10-21 : trois grandes entrées (Dessiner des
-//! vignettes, Importer un scénario, Ouvrir un projet), les projets récents dessous, et le dépôt d'images qui marche depuis
-//! l'onglet Vignettes où mène la première entrée.
+//! L'écran d'accueil (`accueil.rs`) après la demande d'Anthony du 2026-10-28 : trois grandes entrées (Nouveau fichier,
+//! Dessiner un storyboard, Ouvrir un projet), les projets récents dessous, plus d'« Importer un scénario » (il reste dans le
+//! menu Fichier), et le dépôt d'images qui marche depuis l'onglet Vignettes où mène la deuxième entrée. Le tirage de l'image
+//! du haut est dans `accueilimages_tests.rs`.
 
 use eframe::egui::{epaint::Shape, pos2, Event, Modifiers, PointerButton, Pos2};
 
@@ -55,7 +56,7 @@ fn the_welcome_card_shows_three_big_entries_in_order_and_nothing_else_big() {
     assert!(b.app.welcome_shown());
     let y: Vec<f32> = ENTREES.iter().map(|(_, titre, _, _)| centre(&b, titre).y).collect();
     assert!(y.windows(2).all(|w| w[0] < w[1]), "les trois entrées se suivent de haut en bas : {y:?}");
-    assert_eq!(ENTREES.map(|e| e.1), ["Dessiner des vignettes", "Importer un scénario", "Ouvrir un projet"]);
+    assert_eq!(ENTREES.map(|e| e.1), ["Nouveau fichier", "Dessiner un storyboard", "Ouvrir un projet"]);
     // Chaque entrée dit en une ligne ce qu'elle fait, sous son titre.
     for (_, titre, aide, _) in ENTREES {
         let ligne = centre(&b, aide);
@@ -65,7 +66,8 @@ fn the_welcome_card_shows_three_big_entries_in_order_and_nothing_else_big() {
     assert!(!est_la(&b, "Commencer sans projet") && !est_la(&b, ".sboard"), "{:?}", tous_les_textes(&b).iter().map(|t| &t.0).collect::<Vec<_>>());
     // La devise et la case « Rouvrir le dernier projet » restent.
     assert!(est_la(&b, "Rouvrir le dernier projet au lancement"));
-    assert!(est_la(&b, "Nouveau projet…"), "un petit lien pour choisir le format");
+    // « Importer un scénario » n'est plus sur l'accueil, et le petit « Nouveau projet… » est devenu la grande entrée.
+    assert!(!est_la(&b, "Importer un scénario") && !est_la(&b, "Dessiner des vignettes") && !est_la(&b, "Nouveau projet…"), "{:?}", tous_les_textes(&b).iter().map(|t| &t.0).collect::<Vec<_>>());
 }
 
 #[test]
@@ -85,26 +87,45 @@ fn the_recent_projects_stay_under_the_three_entries() {
 fn the_entries_run_real_commands() {
     for (_, titre, _, action) in ENTREES {
         if action.is_empty() {
-            assert_eq!(titre, "Dessiner des vignettes", "seule la première n'est pas une commande du fichier de raccourcis");
+            assert_eq!(titre, "Dessiner un storyboard", "seule celle-ci n'est pas une commande du fichier de raccourcis");
         } else {
             assert!(crate::keymap::action_info(action).is_some_and(|a| a.implemented), "{titre} : {action} existe");
         }
     }
-    assert_eq!(ENTREES[1].3, "fichier.importer_scenario", "l'import de scénario existe : l'entrée n'est pas vide");
+    assert_eq!(ENTREES[0].3, "fichier.nouveau", "la fenêtre de nouveau projet, avec le choix du format");
     assert_eq!(ENTREES[2].3, "fichier.ouvrir");
+    // L'import de scénario existe toujours : dans le menu Fichier.
+    assert!(crate::keymap::action_info("fichier.importer_scenario").is_some_and(|a| a.implemented));
+}
+
+#[test]
+fn new_file_opens_the_new_project_window_and_the_welcome_steps_aside_and_comes_back_with_the_same_image() {
+    let mut b = accueil();
+    assert!(b.app.new_dialog.is_none());
+    let p = centre(&b, "Nouveau fichier");
+    clic(&mut b, p);
+    assert!(b.app.new_dialog.is_some(), "la fenêtre de nouveau projet est ouverte");
+    assert!(!b.app.welcome_shown(), "la fenêtre est ce qu'on regarde");
+    // Fermée sans rien créer : l'accueil revient, avec la même image (le tirage n'est pas refait).
+    let tirages = b.app.confort.accueil.tirages;
+    b.app.new_dialog = None;
+    b.app.welcome = true; // (Annuler la fenêtre rend l'accueil : `nouveauui.rs`, `from_welcome`.)
+    b.chauffer(4);
+    assert!(b.app.welcome_shown());
+    assert_eq!(b.app.confort.accueil.tirages, tirages, "pas de nouveau tirage pour une fenêtre passagère");
 }
 
 #[test]
 fn drawing_vignettes_opens_the_vignettes_tab_with_an_empty_project_and_the_welcome_goes() {
     let mut b = accueil();
     assert_eq!(b.app.espace, Espace::Storyboard);
-    let p = centre(&b, "Dessiner des vignettes");
+    let p = centre(&b, "Dessiner un storyboard");
     clic(&mut b, p);
     assert!(!b.app.welcome_shown(), "l'accueil est parti");
     assert_eq!(b.app.espace, Espace::Vignettes, "l'onglet Vignettes");
     assert!(b.app.board_shown(), "la planche est à l'écran");
     assert!(b.app.path.is_none() && !b.app.modified, "un projet vide, sans fichier : « Enregistrer » demandera où le ranger");
-    assert!(!est_la(&b, "Dessiner des vignettes"), "la carte n'est plus peinte");
+    assert!(!est_la(&b, "Dessiner un storyboard"), "la carte n'est plus peinte");
 }
 
 #[test]
@@ -146,7 +167,7 @@ fn the_welcome_steps_aside_while_the_scenario_window_is_open_and_comes_back() {
     b.app.scenario_window = None;
     b.chauffer(3);
     assert!(b.app.welcome_shown());
-    assert!(est_la(&b, "Importer un scénario"));
+    assert!(est_la(&b, "Ouvrir un projet") && !est_la(&b, "Importer un scénario"));
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -163,6 +184,19 @@ fn the_logo_shrinks_with_the_window_so_the_card_fits_at_150_percent() {
         let hauteur = 900.0 / (e / 100.0);
         let carte = logo_largeur(hauteur) * 0.54 + 3.0 * 62.0 + 140.0;
         assert!(carte < hauteur - 60.0, "{e} % : la carte ({carte}) tient sous les menus dans {hauteur} points");
+    }
+}
+
+#[test]
+fn an_image_of_any_proportions_fits_in_the_place_of_the_logo_with_its_proportions() {
+    use crate::accueil::place_de_l_image;
+    use crate::logo::{VUE_H, VUE_L};
+    let place = eframe::egui::vec2(400.0, 400.0 * VUE_H / VUE_L);
+    for [w, h] in [[1920, 1080], [1600, 1200], [1000, 1000], [3000, 1000], [600, 1800], [16, 9], [1, 1]] {
+        let t = place_de_l_image([w, h], place);
+        assert!(t.x <= place.x + 0.01 && t.y <= place.y + 0.01, "{w}x{h} : {t:?} sort de la place {place:?}");
+        assert!((t.x / t.y - w as f32 / h as f32).abs() < 0.01, "{w}x{h} : les proportions sont gardées ({t:?})");
+        assert!((t.x - place.x).abs() < 0.01 || (t.y - place.y).abs() < 0.01, "{w}x{h} : elle prend toute la place possible");
     }
 }
 
