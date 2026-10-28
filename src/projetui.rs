@@ -267,7 +267,7 @@ impl App {
         }
         let mut apply = false;
         ui.horizontal(|ui| {
-            apply = ui.add_enabled(resized || e.fps != fps, egui::Button::new("Appliquer")).clicked();
+            apply = crate::theme::bouton_principal(ui, resized || e.fps != fps, "Appliquer").clicked();
             if ui.button("Remettre").on_hover_text("Revenir aux valeurs du projet.").clicked() {
                 e = current;
             }

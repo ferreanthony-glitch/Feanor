@@ -558,7 +558,7 @@ impl App {
                     }
                 }
                 ui.horizontal(|ui| {
-                    if ui.add_enabled(parsed.is_some(), egui::Button::new("Valider")).clicked() {
+                    if crate::theme::bouton_principal(ui, parsed.is_some(), "Valider").clicked() {
                         apply = true;
                     }
                     if ui.button("Annuler").clicked() {

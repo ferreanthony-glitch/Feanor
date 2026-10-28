@@ -872,6 +872,8 @@ mod tests;
 mod theme;
 #[cfg(test)]
 mod theme_tests;
+#[cfg(test)]
+mod charte_tests;
 mod thumbs;
 mod timeline;
 mod toolbars;

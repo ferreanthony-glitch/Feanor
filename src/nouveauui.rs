@@ -285,8 +285,7 @@ impl App {
 
             // ----------------------------------------------------------------- boutons
             ui.horizontal(|ui| {
-                let button = egui::Button::new(RichText::new("OK").strong()).min_size(vec2(70.0, 0.0));
-                if ui.add_enabled(problem.is_none(), button).on_hover_text("Créer le projet (Entrée).").clicked() {
+                if crate::theme::bouton_principal_taille(ui, problem.is_none(), "OK", vec2(70.0, 0.0)).on_hover_text("Créer le projet (Entrée).").clicked() {
                     ok = true;
                 }
                 if ui.add(egui::Button::new("Annuler").min_size(vec2(70.0, 0.0))).on_hover_text("Fermer sans rien créer (Échap).").clicked() {

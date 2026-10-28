@@ -1,16 +1,17 @@
-//! Tests du thème : les textes restent lisibles sur leurs fonds dans chacun des trois thèmes
-//! livrés, l'accent marque la sélection, le thème « Personnalisé » naît d'une couleur changée, les
-//! réglages se relisent (et un vieux fichier donne Gris sombre), la police de Windows passe devant
-//! celles d'egui sans les remplacer.
+//! Tests du thème : les textes restent lisibles sur leurs fonds dans chacun des cinq thèmes
+//! livrés (SHOT, SHOT clair et les trois gris), l'accent marque la sélection, le thème « Personnalisé »
+//! naît d'une couleur changée, les réglages se relisent (une installation neuve donne SHOT, un poste
+//! qui a déjà choisi un thème le garde), la police de Windows passe devant celles d'egui sans les
+//! remplacer. La charte (couleurs, contrastes, ce que l'accent touche) est dans `charte_tests.rs`.
 
 use eframe::egui::{Color32, FontDefinitions, FontFamily};
 
 use crate::settings::Settings;
 use crate::theme::{self, contraste, ChoixTheme, Couleurs, Palette, ReglageTheme};
 
-/// Les trois thèmes livrés, avec leur palette.
+/// Les cinq thèmes livrés, avec leur palette.
 fn livres() -> Vec<(ChoixTheme, Palette)> {
-    [ChoixTheme::GrisSombre, ChoixTheme::GrisClair, ChoixTheme::Sombre]
+    [ChoixTheme::Shot, ChoixTheme::ShotClair, ChoixTheme::GrisSombre, ChoixTheme::GrisClair, ChoixTheme::Sombre]
         .into_iter()
         .map(|c| {
             let mut r = ReglageTheme::default();
@@ -28,11 +29,15 @@ fn contrast_is_computed_like_wcag() {
 }
 
 #[test]
-fn the_default_theme_is_dark_grey() {
-    assert_eq!(ReglageTheme::default().choix, ChoixTheme::GrisSombre);
-    assert_eq!(ReglageTheme::default().couleurs(), Couleurs::gris_sombre());
-    // Des gris neutres, pas du bleu-noir : rouge, vert et bleu égaux aux fonds.
+fn the_default_theme_is_shot_and_the_grey_themes_stay_neutral() {
+    assert_eq!(ReglageTheme::default().choix, ChoixTheme::Shot);
+    assert_eq!(ReglageTheme::default().couleurs(), Couleurs::shot());
+    // Des gris neutres, pas du bleu-noir : rouge, vert et bleu égaux aux fonds (les thèmes de la charte
+    // ont, eux aussi, des fonds sombres neutres ; seul leur clair est un blanc cassé).
     for (choix, p) in livres() {
+        if choix == ChoixTheme::ShotClair {
+            continue;
+        }
         for fond in [p.panneau, p.entete, p.fenetre, p.fond, p.rangee, p.controle, p.bord] {
             assert!(fond.r() == fond.g() && fond.g() == fond.b(), "{choix:?} : {fond:?} n'est pas un gris neutre");
         }
@@ -76,8 +81,14 @@ fn selections_stay_visible_in_every_theme() {
     for (choix, p) in livres() {
         // Le contour des éléments choisis (clés, séquences, calque courant) se voit sur les rangées
         // comme sur les blocs sourds, et l'accent se distingue des rangées.
-        for fond in [p.rangee, p.rangee_sombre, p.panneau, p.calque_vectoriel, p.calque_bitmap, p.calque_couleur] {
+        for fond in [p.rangee, p.rangee_sombre, p.panneau] {
             assert!(contraste(p.contour, fond) >= 3.0, "{choix:?} : contour sur {fond:?} : {}", contraste(p.contour, fond));
+        }
+        // Sur les blocs sourds aux couleurs des calques : 3:1 pour le contour blanc ou presque noir ; l'orange de la
+        // charte, lui, se distingue par sa teinte (au moins 1,5:1 : voir `charte_tests.rs`).
+        let minimum = if p.identite { 1.5 } else { 3.0 };
+        for fond in [p.calque_vectoriel, p.calque_bitmap, p.calque_couleur] {
+            assert!(contraste(p.contour, fond) >= minimum, "{choix:?} : contour sur {fond:?} : {}", contraste(p.contour, fond));
         }
         assert!(contraste(p.accent, p.rangee) >= 1.4 || contraste(p.accent_texte, p.rangee) >= 3.0, "{choix:?} : accent sur la timeline");
         // La sélection d'egui est l'accent, son texte est celui qui lit sur lui.
@@ -246,7 +257,7 @@ fn editing_a_colour_switches_to_custom_starting_from_the_current_theme() {
 }
 
 #[test]
-fn restore_goes_back_to_dark_grey() {
+fn restore_goes_back_to_shot() {
     let mut r = ReglageTheme::default();
     r.choisir(ChoixTheme::Personnalise);
     let mut c = r.couleurs();
@@ -254,7 +265,7 @@ fn restore_goes_back_to_dark_grey() {
     r.modifier(c);
     r.retablir();
     assert_eq!(r, ReglageTheme::default());
-    assert_eq!(r.choix, ChoixTheme::GrisSombre);
+    assert_eq!(r.choix, ChoixTheme::Shot);
 }
 
 #[test]
@@ -277,13 +288,13 @@ fn a_custom_theme_derives_a_readable_palette() {
 
 #[test]
 fn settings_round_trip_and_old_files_get_the_default_theme() {
-    // Un vieux fichier, sans section [theme] : Gris sombre.
+    // Un vieux fichier, sans section [theme] (une installation neuve) : SHOT.
     let old: Settings = toml::from_str("copie_secours_minutes = 3\nrouvrir_dernier_projet = false\n").unwrap();
     assert_eq!(old.theme, ReglageTheme::default());
-    assert_eq!(old.theme.choix, ChoixTheme::GrisSombre);
+    assert_eq!(old.theme.choix, ChoixTheme::Shot);
     assert_eq!(old.autosave_minutes, 3);
     // Un fichier vide aussi.
-    assert_eq!(toml::from_str::<Settings>("").unwrap().theme.choix, ChoixTheme::GrisSombre);
+    assert_eq!(toml::from_str::<Settings>("").unwrap().theme.choix, ChoixTheme::Shot);
     // Une section incomplète complète ses trous.
     let partial: Settings = toml::from_str("[theme]\nchoix = \"gris_clair\"\n").unwrap();
     assert_eq!(partial.theme.choix, ChoixTheme::GrisClair);

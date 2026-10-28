@@ -507,7 +507,7 @@ fn everything_under_the_stroke_preview_is_folded_until_the_arrow_is_clicked() {
 
 #[test]
 fn the_stroke_preview_background_is_a_grey_a_little_lighter_than_the_panel_in_the_three_themes() {
-    for choix in [ChoixTheme::GrisSombre, ChoixTheme::GrisClair, ChoixTheme::Sombre] {
+    for choix in [ChoixTheme::Shot, ChoixTheme::ShotClair, ChoixTheme::GrisSombre, ChoixTheme::GrisClair, ChoixTheme::Sombre] {
         let mut r = ReglageTheme::default();
         r.choisir(choix);
         theme::installer(&r);

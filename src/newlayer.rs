@@ -197,7 +197,7 @@ impl App {
                 });
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    if ui.button("Créer").clicked() {
+                    if crate::theme::bouton_principal(ui, true, "Créer").clicked() {
                         create = true;
                     }
                     if ui.button("Annuler").clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {

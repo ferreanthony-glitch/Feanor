@@ -293,7 +293,7 @@ impl App {
                 }
             }
             None => {
-                start = ui.add_enabled(ready, egui::Button::new("Exporter")).clicked();
+                start = crate::theme::bouton_principal(ui, ready, "Exporter").clicked();
             }
         }
         match &w.result {
