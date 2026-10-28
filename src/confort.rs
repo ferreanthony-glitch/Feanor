@@ -29,6 +29,8 @@ pub(crate) struct Confort {
     /// réglages à la première ouverture du volet (`palette_ouverte`, replié d'office).
     pub palette: Option<crate::melangeur::PaletteMelange>,
     pub palette_ouverte: bool,
+    /// Les images de l'accueil : le tirage de l'apparition en cours et les miniatures des Préférences (`accueilimages.rs`).
+    pub accueil: crate::accueilimages::AccueilImages,
 }
 
 impl Confort {

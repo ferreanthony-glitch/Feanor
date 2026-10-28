@@ -214,7 +214,7 @@ fn focus_waits_for_a_project_and_never_hides_the_welcome_card() {
     b.chauffer(2);
     assert!(!b.app.confort.concentration, "rien à garder sans projet");
     assert!(b.app.status.contains("concentration"), "{}", b.app.status);
-    assert!(est_la(&b, "Dessiner des vignettes"));
+    assert!(est_la(&b, "Nouveau projet"));
 }
 
 #[test]

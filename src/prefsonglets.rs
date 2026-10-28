@@ -81,7 +81,7 @@ impl Onglet {
     pub fn resume(self) -> &'static str {
         match self {
             Onglet::General => "Ouvrir et rouvrir les projets, copies de secours, collage entre projets, conseils.",
-            Onglet::Apparence => "Le thème et ses couleurs, la taille de l'interface, la hauteur des panneaux.",
+            Onglet::Apparence => "Le thème et ses couleurs, la taille de l'interface, la hauteur des panneaux, les images de l'accueil.",
             Onglet::Dessin => "Le curseur du stylet, sa pression, le point fixe des poignées, le passe-partout autour de la caméra et le tremblement du trait par défaut.",
             Onglet::Montage => "Les pistes du montage et leur repliage, la durée d'un nouveau plan.",
             Onglet::Vignettes => "La planche : cases pâles, débord du trait, cadres de caméra, et le décor partagé entre les cases d'un plan.",
@@ -125,6 +125,8 @@ pub enum Groupe {
     Affichage,
     /// Taille de l'interface (`echelle.rs`).
     Echelle,
+    /// Les images de l'écran d'accueil : le dossier, l'import, la liste (`accueilimages.rs`).
+    ImagesAccueil,
     /// Conseils d'un seul passage (`conseils.rs`).
     Conseils,
     /// Régler le stylet à sa main (`reglagestylet.rs`).
@@ -157,6 +159,7 @@ impl Groupe {
             Groupe::Performance => "Réglages de performance",
             Groupe::Affichage => "Affichage",
             Groupe::Echelle => "Taille de l'interface",
+            Groupe::ImagesAccueil => "Images d'accueil",
             Groupe::Conseils => "Conseils",
             Groupe::StyletMain => "Stylet à ma main",
             Groupe::Poignees => "Poignées de la Sélection et du Transformer",
@@ -190,6 +193,7 @@ pub const REGLAGES: &[Reglage] = &[
     // ---- Général
     r(O::General, G::Ouverture, "general.rouvrir", "Rouvrir le dernier projet au lancement", "démarrage session onglets rouvrir"),
     r(O::General, G::Ouverture, "general.nouvel_onglet", "Ouvrir dans un nouvel onglet", "projet récent importer nouveau remplacer"),
+    r(O::General, G::Ouverture, "general.nouveau_sur", "Un nouveau projet s'ouvre sur", "vignettes storyboard planche timeline page espace créer nouveau projet accueil"),
     r(O::General, G::Secours, "general.secours", "Copie de secours toutes les", "sauvegarde automatique autosave plantage minutes"),
     r(O::General, G::Collage, "collage.proportions", "Proportions différentes", "contenir remplir taille"),
     r(O::General, G::Collage, "collage.cadence", "Cadence différente", "images secondes durée fps"),
@@ -209,6 +213,9 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Apparence, G::Echelle, "apparence.echelle", "Échelle", "taille interface zoom agrandir réduire texte boutons 90 100 125 150 pour cent"),
     r(O::Apparence, G::Panneaux, "panneaux.ajuster", "Ajuster les panneaux à leur contenu", "hauteur fiche guides effets réglages"),
     r(O::Apparence, G::Panneaux, "panneaux.reajuster", "Réajuster les panneaux", "hauteur"),
+    r(O::Apparence, G::ImagesAccueil, "accueil.dossier", "Dossier des images d'accueil", "écran d'accueil logo image storyboard choisir changer"),
+    r(O::Apparence, G::ImagesAccueil, "accueil.importer", "Importer des images", "copier ajouter png jpeg jpg photo écran d'accueil"),
+    r(O::Apparence, G::ImagesAccueil, "accueil.liste", "Images du dossier", "retirer supprimer miniatures liste écran d'accueil"),
     // ---- Dessin
     r(O::Dessin, G::Stylet, "dessin.croix", "Croix du système sur le pinceau", "curseur stylet retard pointe"),
     r(O::Dessin, G::StyletMain, "dessin.regler_stylet", "Régler le stylet à ma main", "pression courbe appui tablette léger moyen fort toucher"),

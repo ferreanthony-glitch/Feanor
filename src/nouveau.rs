@@ -389,9 +389,38 @@ impl Values {
 
 /// Réglages de la fenêtre dans `reglages.toml` : les dernières valeurs, le dernier dossier et les
 /// préréglages de l'utilisateur.
+/// La page sur laquelle un projet neuf s'ouvre (Préférences > Général > « Un nouveau projet s'ouvre sur »). Un réglage de ce
+/// poste, pas du projet.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OuvreSur {
+    /// La planche des Vignettes (d'origine).
+    #[default]
+    #[serde(rename = "vignettes")]
+    Vignettes,
+    /// L'espace Storyboard, avec la timeline.
+    #[serde(rename = "storyboard")]
+    Storyboard,
+}
+
+impl OuvreSur {
+    pub fn est_defaut(&self) -> bool {
+        *self == OuvreSur::Vignettes
+    }
+
+    pub fn espace(self) -> crate::workspace::Espace {
+        match self {
+            OuvreSur::Vignettes => crate::workspace::Espace::Vignettes,
+            OuvreSur::Storyboard => crate::workspace::Espace::Storyboard,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NewProjectSettings {
+    /// La page où le projet créé s'ouvre.
+    #[serde(rename = "ouvre_sur", skip_serializing_if = "OuvreSur::est_defaut")]
+    pub ouvre_sur: OuvreSur,
     #[serde(rename = "dernieres_valeurs")]
     pub values: Values,
     #[serde(rename = "dossier", skip_serializing_if = "Option::is_none")]

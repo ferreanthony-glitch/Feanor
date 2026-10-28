@@ -358,6 +358,8 @@ impl App {
             return;
         }
         self.welcome = false;
+        // Le projet neuf s'ouvre sur la page choisie dans les Préférences (les Vignettes, d'origine).
+        self.set_espace(self.settings.new_project.ouvre_sur.espace());
         self.settings.new_project.values = values.clone();
         self.settings.new_project.folder = Some(d.folder.clone());
         self.save_settings_quietly();

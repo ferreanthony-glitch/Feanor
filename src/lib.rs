@@ -4,6 +4,9 @@
 //! `lancer`. La bibliothèque garde le nom `pelure` (les chemins `pelure::` ne changent pas).
 
 mod accueil;
+mod accueilimages;
+#[cfg(test)]
+mod accueilimages_tests;
 #[cfg(test)]
 mod accueil_tests;
 // Accueil et confort (passe « simplicité » du 2026-10-21) : mode concentration, conseils d'un seul passage, taille de
