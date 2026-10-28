@@ -336,23 +336,51 @@ impl App {
             "Tous les traits vectoriels tremblent un peu, comme redessinés à la main, sans rien ajouter aux calques : un calque qui a son propre « Tremblement du trait » (panneau Effets) garde le sien. Les exports le montrent aussi. Rien n'est écrit dans les projets.",
             "",
         );
-        ui.add_enabled_ui(d.actif, |ui| {
-            ui.horizontal(|ui| {
-                ui.label("Intensité du tremblement par défaut");
-                let resp = ui.add(egui::Slider::new(&mut d.intensite, 0.0..=crate::tremblement::MAX_INTENSITY).suffix(" px").max_decimals(1));
-                crate::bulles::bulle(resp, "Intensité du tremblement par défaut", "De combien de pixels de la feuille un trait peut bouger au plus (2 px d'origine).", "");
+        // Les réglages à gauche, l'aperçu à droite (il bouge quand « Animer à l'arrêt » est allumé).
+        ui.horizontal_top(|ui| {
+            ui.vertical(|ui| {
+                ui.add_enabled_ui(d.actif, |ui| {
+                    egui::Grid::new("tremblement_defaut_reglages").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+                        ui.label("Intensité du tremblement par défaut");
+                        let resp = ui.add(egui::Slider::new(&mut d.intensite, 0.0..=crate::tremblement::MAX_INTENSITY).suffix(" px").max_decimals(1));
+                        crate::bulles::bulle(resp, "Intensité du tremblement par défaut", "De combien de pixels de la feuille un trait peut bouger au plus (2 px d'origine).", "");
+                        ui.end_row();
+                        ui.label("Fréquence du tremblement par défaut");
+                        let resp = ui.add(egui::Slider::new(&mut d.frequence, 0.0..=100.0).suffix(" %").fixed_decimals(0));
+                        crate::bulles::bulle(resp, "Fréquence du tremblement par défaut", "0 % : le trait ondule doucement ; 100 % : nerveux, par petites vagues (55 % d'origine).", "");
+                        ui.end_row();
+                        ui.label("Variantes du tremblement par défaut");
+                        let resp = ui.add(egui::Slider::new(&mut d.variantes, crate::tremblement::MIN_VARIANTS..=crate::tremblement::MAX_VARIANTS));
+                        crate::bulles::bulle(resp, "Variantes du tremblement par défaut", "Combien de dessins légèrement différents se suivent avant de recommencer (3 d'origine). Plus il y en a, moins le trait se répète.", "");
+                        ui.end_row();
+                        ui.label("Vitesse du tremblement par défaut");
+                        let resp = ui.add(egui::Slider::new(&mut d.vitesse, 1..=crate::tremblement::MAX_SPEED).suffix(" img/var."));
+                        crate::bulles::bulle(resp, "Vitesse du tremblement par défaut", "Combien d'images du projet pour chaque variante : 1, le trait change à chaque image ; 2, une image sur deux (d'origine, comme un dessin à la main).", "");
+                        ui.end_row();
+                        ui.label("Épaisseur du tremblement par défaut");
+                        let resp = ui.add(egui::Slider::new(&mut d.epaisseur, 0.0..=100.0).suffix(" %").fixed_decimals(0));
+                        crate::bulles::bulle(resp, "Épaisseur du tremblement par défaut", "De combien le trait s'épaissit et s'amincit d'une variante à l'autre, sur son bord (0 % d'origine : seulement le déplacement).", "");
+                        ui.end_row();
+                        ui.label("Graine du tremblement par défaut");
+                        let resp = ui.add(egui::DragValue::new(&mut d.graine).range(1..=999).speed(0.2));
+                        crate::bulles::bulle(resp, "Graine du tremblement par défaut", "Le hasard du tremblement : une autre graine, un autre mouvement, aussi doux ou nerveux (1 d'origine).", "");
+                        ui.end_row();
+                    });
+                    let resp = ui.checkbox(&mut d.repos, "Animer à l'arrêt (tremblement par défaut)");
+                    crate::bulles::bulle(resp, "Animer à l'arrêt", "Allumé, le trait continue de trembler quand on s'arrête sur une image, à la cadence du réglage (l'écran se repeint à cette cadence seulement). Éteint (d'origine), une image fixe reste immobile : rien ne coûte au repos.", "");
+                });
             });
-            ui.horizontal(|ui| {
-                ui.label("Fréquence du tremblement par défaut");
-                let resp = ui.add(egui::Slider::new(&mut d.frequence, 0.0..=100.0).suffix(" %").fixed_decimals(0));
-                crate::bulles::bulle(resp, "Fréquence du tremblement par défaut", "0 % : le trait ondule doucement ; 100 % : nerveux, par petites vagues (55 % d'origine).", "");
+            ui.add_space(12.0);
+            ui.vertical(|ui| {
+                ui.label(RichText::new("Aperçu").small().weak());
+                crate::tremblementapercu::apercu_ui(ui, &d, self.doc.fps);
             });
         });
         ui.horizontal(|ui| {
-            if ui.add_enabled(!d.est_defaut(), egui::Button::new("Rétablir")).on_hover_text("Éteint, 2 px, 55 %.").clicked() {
+            if ui.add_enabled(!d.est_defaut(), egui::Button::new("Rétablir")).on_hover_text("Éteint, 2 px, 55 %, 3 variantes, 2 images par variante, épaisseur 0 %, graine 1, immobile à l'arrêt.").clicked() {
                 d = Default::default();
             }
-            ui.label(RichText::new("Le trait tremble d'une image à l'autre : sur une image fixe, il reste immobile (effet « Tremblement du trait » d'un calque : « Animer à l'arrêt »).").small().weak());
+            ui.label(RichText::new("Le trait tremble d'une image à l'autre. Un calque qui a son propre « Tremblement du trait » (panneau Effets) garde le sien.").small().weak());
         });
         if d != avant {
             self.settings.tremblement_defaut = d;

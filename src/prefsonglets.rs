@@ -216,6 +216,11 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Dessin, G::Tremblement, "dessin.tremblement_defaut", "Tremblement du trait par défaut", "wiggle boil vectoriel tous les calques trait qui bouge allumer"),
     r(O::Dessin, G::Tremblement, "dessin.tremblement_intensite", "Intensité du tremblement par défaut", "amplitude pixels"),
     r(O::Dessin, G::Tremblement, "dessin.tremblement_frequence", "Fréquence du tremblement par défaut", "doux nerveux vagues rétablir"),
+    r(O::Dessin, G::Tremblement, "dessin.tremblement_variantes", "Variantes du tremblement par défaut", "dessins différents boil nombre aperçu"),
+    r(O::Dessin, G::Tremblement, "dessin.tremblement_vitesse", "Vitesse du tremblement par défaut", "images par variante cadence lent rapide"),
+    r(O::Dessin, G::Tremblement, "dessin.tremblement_epaisseur", "Épaisseur du tremblement par défaut", "trait varie pour cent bord"),
+    r(O::Dessin, G::Tremblement, "dessin.tremblement_graine", "Graine du tremblement par défaut", "hasard autre tremblement numéro"),
+    r(O::Dessin, G::Tremblement, "dessin.tremblement_repos", "Animer à l'arrêt (tremblement par défaut)", "image fixe immobile bouge repos aperçu"),
     // ---- Montage
     r(O::Montage, G::Pistes, "montage.repliage", "Repliage des pistes", "replier commun plan calques"),
     r(O::Montage, G::Pistes, "montage.deplier", "Déplier le calque courant tout seul", "piste automatique"),

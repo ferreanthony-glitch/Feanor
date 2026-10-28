@@ -472,6 +472,10 @@ mod hasard_tests;
 mod saccade_tests;
 #[cfg(test)]
 mod saccade_ecran_tests;
+// L'aperçu du tremblement par défaut (Préférences > Dessin).
+mod tremblementapercu;
+#[cfg(test)]
+mod tremblementapercu_tests;
 // Fermer un projet : jamais de question quand rien n'a changé, « Enregistrer » enregistre puis ferme.
 #[cfg(test)]
 mod fermeture_tests;
