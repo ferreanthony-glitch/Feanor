@@ -146,7 +146,7 @@ impl App {
         egui::Grid::new("theme_couleurs").num_columns(2).spacing([12.0, 4.0]).show(ui, |ui| {
             for (nom, aide, rvb) in couleurs.champs() {
                 ui.label(nom).on_hover_text(aide);
-                ui.color_edit_button_srgb(rvb).on_hover_text(aide);
+                crate::champcouleur::srgb(ui, rvb).on_hover_text(aide);
                 ui.end_row();
             }
         });
@@ -222,7 +222,7 @@ impl App {
         ui.horizontal(|ui| {
             ui.label("Couleur des cadres de caméra");
             let mut c = self.settings.vignettes.couleur_cadre;
-            let resp = ui.color_edit_button_srgb(&mut c);
+            let resp = crate::champcouleur::srgb(ui, &mut c);
             let resp = crate::bulles::bulle(resp, "Couleur des cadres de caméra", "La couleur fine des cadres A, B, C…, de leurs lettres et de la flèche, sur la planche et dans l'export de la planche. Bleu #378ADD d'origine.", "");
             if resp.changed() {
                 self.settings.vignettes.couleur_cadre = c;
@@ -262,7 +262,7 @@ impl App {
         ui.horizontal(|ui| {
             ui.label("Couleur du décor");
             let mut c = self.settings.vignettes.couleur_decor;
-            let resp = ui.color_edit_button_srgb(&mut c);
+            let resp = crate::champcouleur::srgb(ui, &mut c);
             let resp = crate::bulles::bulle(resp, "Couleur du décor", "La couleur des trois brosses du décor, un gris-bleu clair d'origine (#8FA3B8) pour que le décor se lise à part des personnages.", "");
             if resp.changed() {
                 self.settings.vignettes.couleur_decor = c;
@@ -300,7 +300,7 @@ impl App {
         ui.horizontal(|ui| {
             ui.label("Couleur du passe-partout");
             let mut c = self.settings.passe_partout_couleur;
-            let resp = ui.color_edit_button_srgb(&mut c);
+            let resp = crate::champcouleur::srgb(ui, &mut c);
             let resp = crate::bulles::bulle(
                 resp,
                 "Couleur du passe-partout",
@@ -316,7 +316,7 @@ impl App {
             ui.add_space(12.0);
             ui.label("Cadre de format");
             let mut c = self.settings.cadre_format_couleur;
-            let resp = ui.color_edit_button_srgb(&mut c);
+            let resp = crate::champcouleur::srgb(ui, &mut c);
             let resp = crate::bulles::bulle(
                 resp,
                 "Couleur du cadre de format",

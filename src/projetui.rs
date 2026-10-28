@@ -369,7 +369,7 @@ impl App {
             ui.label("Couleur des aplats sous le trait");
             ui.horizontal(|ui| {
                 let mut c = self.doc.properties.fond.unwrap_or(crate::fond::FondReglages::default().couleur);
-                let resp = ui.color_edit_button_srgb(&mut c);
+                let resp = crate::champcouleur::srgb(ui, &mut c);
                 let resp = crate::bulles::bulle(resp, "Couleur des aplats", "La couleur d'un aplat qu'on ajoute à un calque (bouton « Aplat sous le trait » de sa ligne), par exemple un gris clair.", "");
                 if self.edited(&resp) {
                     self.doc.properties.fond = Some(c);

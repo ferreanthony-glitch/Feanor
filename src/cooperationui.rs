@@ -933,7 +933,7 @@ impl App {
             let resp = ui.add(egui::TextEdit::singleline(&mut self.settings.equipe.nom).hint_text(hint).desired_width(140.0)).on_hover_text("Le nom que les autres équipiers voient sur les plans que tu tiens. Vide : le nom de la signature des commentaires.");
             change |= resp.lost_focus();
             let mut c = couleur(self.settings.equipe.couleur.unwrap_or_else(|| crate::equipe::couleur_pour(&self.settings.equipe.id)));
-            if ui.color_edit_button_srgba(&mut c).on_hover_text("Ta couleur dans l'équipe : le liseré des plans que tu tiens.").changed() {
+            if crate::champcouleur::srgba(ui, &mut c).on_hover_text("Ta couleur dans l'équipe : le liseré des plans que tu tiens.").changed() {
                 self.settings.equipe.couleur = Some([c.r(), c.g(), c.b()]);
                 change = true;
             }

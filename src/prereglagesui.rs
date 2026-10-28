@@ -337,7 +337,7 @@ impl App {
                     ui.end_row();
                     if r.genre.has_color() {
                         ui.label("Couleur");
-                        ui.color_edit_button_srgb(&mut r.couleur);
+                        crate::champcouleur::srgb(ui, &mut r.couleur);
                         ui.end_row();
                     }
                     if r.genre.has_seed() {
@@ -364,7 +364,7 @@ impl App {
                         ui.horizontal(|ui| {
                             ui.checkbox(&mut r.teinte, "Teinte");
                             if r.teinte {
-                                ui.color_edit_button_srgb(&mut r.couleur);
+                                crate::champcouleur::srgb(ui, &mut r.couleur);
                             }
                         });
                         ui.checkbox(&mut r.eclat, "Éclat de rayons (burst)");
@@ -588,7 +588,7 @@ pub(crate) fn incrustation_editor(ui: &mut egui::Ui, inc: &mut Incrustation, sam
         ui.add(egui::DragValue::new(&mut inc.taille).range(1.0..=30.0).speed(0.1).max_decimals(1).suffix(" %")).on_hover_text("Hauteur des lettres, en % de la hauteur du cadre.");
         ui.end_row();
         ui.label("Couleur");
-        ui.color_edit_button_srgba_unmultiplied(&mut inc.couleur);
+        crate::champcouleur::srgba_non_multipliee(ui, &mut inc.couleur);
         ui.end_row();
         ui.label("Boîte");
         ui.horizontal(|ui| {
@@ -597,7 +597,7 @@ pub(crate) fn incrustation_editor(ui: &mut egui::Ui, inc: &mut Incrustation, sam
                 inc.fond = on.then_some([0, 0, 0, 160]);
             }
             if let Some(f) = &mut inc.fond {
-                ui.color_edit_button_srgba_unmultiplied(f);
+                crate::champcouleur::srgba_non_multipliee(ui, f);
             }
         });
         ui.end_row();

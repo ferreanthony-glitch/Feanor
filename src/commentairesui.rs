@@ -641,7 +641,7 @@ impl App {
             }
             // Une couleur à soi.
             let mut custom = c.color;
-            let resp = ui.color_edit_button_srgb(&mut custom);
+            let resp = crate::champcouleur::srgb(ui, &mut custom);
             crate::bulles::bulle(resp.clone(), "Autre couleur", "Choisir une couleur du sélecteur.", "");
             if self.edited_as(&resp, "Couleur du commentaire") {
                 if let Some(m) = self.doc.comment_mut(id) {

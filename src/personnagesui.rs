@@ -897,7 +897,7 @@ impl App {
         let resp = ui.add(egui::TextEdit::singleline(&mut nom).desired_width(110.0).char_limit(personnages::NOM_MAX).hint_text("Nom"));
         let resp = crate::bulles::bulle(resp, "Nom", "Le nom, montré dans la bulle de la pastille.", "");
         change |= self.perso_edited(&resp, c);
-        let resp = ui.color_edit_button_srgb(&mut ligne);
+        let resp = crate::champcouleur::srgb(ui, &mut ligne);
         let resp = crate::bulles::bulle(resp, "Couleur du trait", "La couleur dont ce personnage dessine.", "");
         change |= self.perso_edited(&resp, c);
         let mut avec = fond.is_some();
@@ -912,7 +912,7 @@ impl App {
             change = true;
         }
         if let Some(f) = fond.as_mut() {
-            let resp = ui.color_edit_button_srgb(f);
+            let resp = crate::champcouleur::srgb(ui, f);
             let resp = crate::bulles::bulle(resp, "Couleur de l'aplat", "La couleur de l'aplat sous le trait de ce personnage.", "");
             change |= self.perso_edited(&resp, c);
         }

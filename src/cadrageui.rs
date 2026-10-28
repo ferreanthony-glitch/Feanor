@@ -249,10 +249,9 @@ impl App {
         });
         // Une couleur à soi : le sélecteur se déplie ici, dans le panneau (un sous-menu le fermerait).
         egui::CollapsingHeader::new(RichText::new("Autre couleur").small().weak()).id_salt("cadrage_autre_couleur").show(ui, |ui| {
-            let [r, g, b] = self.cadrage.color;
-            let mut c = Color32::from_rgb(r, g, b);
-            if egui::color_picker::color_picker_color32(ui, &mut c, egui::color_picker::Alpha::Opaque) {
-                self.cadrage.color = [c.r(), c.g(), c.b()];
+            let mut c = self.cadrage.color;
+            if crate::champcouleur::srgb_en_ligne(ui, &mut c) {
+                self.cadrage.color = c;
             }
         });
     }

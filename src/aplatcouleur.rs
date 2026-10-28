@@ -97,7 +97,7 @@ impl App {
         let mut shown = self.aplat_couleur_attente.filter(|a| a.layer == id).map_or(couleur, |a| a.new);
         ui.horizontal(|ui| {
             ui.label("Couleur de l'aplat");
-            let resp = ui.color_edit_button_srgb(&mut shown);
+            let resp = crate::champcouleur::srgb(ui, &mut shown);
             if resp.changed() {
                 self.choisir_couleur_aplat(li, shown, ui.ctx().cumulative_pass_nr());
             }
