@@ -169,7 +169,7 @@ fn projet_grand() -> Document {
 /// d'`App` doit être rangé dans l'un des deux jeux : `etat_projet!` (`onglets.rs`) s'il ne vaut que pour un projet, ici
 /// sinon. Sans cet essai, un champ de projet oublié fuirait d'un onglet à l'autre sans que rien ne le dise.
 const PARTAGES: &[&str] = &[
-    "ctx", "board_view", "tool", "brush", "pencil", "eraser", "brushes", "brushes_job", "reopen_probe", "fill", "shape", "vector_erase_whole", "paint_behind", "paint_on_aplat", "toucher",
+    "ctx", "board_view", "tool", "brush", "pencil", "eraser", "brushes", "brushes_job", "reopen_probe", "fill", "degrade", "shape", "vector_erase_whole", "paint_behind", "paint_on_aplat", "toucher",
     "pinceaux", "color", "hsv", "couleurs", "canvas_rect", "ppp", "onion", "onion_window", "onion_shift", "onion_preset_name", "xsheet", "roles_view", "role_menu", "xsheet_role_menu",
     "flips", "flips_window", "fx_auto_key", "fx_keys_shown", "fx_key_clipboard", "fx_clip_recent", "fx_stack_clipboard", "fx_pane_focus", "fx_pile_recent", "layers_pane_focus", "layer_clip_recent", "propagation", "coloriage", "sb_window",
     "scenario_window", "sb_export", "light_table", "light_table_strength", "groups_window", "groups_used_only", "image_clipboard", "key_clipboard", "tool_spring", "fake_hold_times",
@@ -182,7 +182,7 @@ const PARTAGES: &[&str] = &[
     "prefs_window", "editorial", "fiche", "about_window", "theme_applied", "theme_unsaved","pane_heights", "fit_set", "fit_busy", "recent_to_open", "recent_presence",
     "maximized_once", "clipboard", "montage_head_w", "snap_on", "length_field_active", "pen_pressure", "pen_touch", "input_time", "last_frame_time", "picking", "status", "new_dialog",
     "show_help", "allow_close", "export_transparent", "follow_frame", "following", "hover_canvas", "pending_keys", "assign", "keys_filter", "keymap", "title", "display_info", "gpu",
-    "quitter_prevenu", "confort", "collage", "onglets", "actif", "prochain_onglet", "secours_actif", "session_a_ecrire", "fermetures_d_onglets", "session_prete", "session_file", "session_affichee", "groupe",
+    "fusion_noms_auto", "quitter_prevenu", "confort", "collage", "onglets", "actif", "prochain_onglet", "secours_actif", "session_a_ecrire", "fermetures_d_onglets", "session_prete", "session_file", "session_affichee", "groupe",
 ];
 
 /// Les noms des champs de `pub struct App`, lus dans `app.rs`.

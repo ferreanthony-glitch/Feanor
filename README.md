@@ -299,7 +299,8 @@ On peut :
 Sur tout le plan, ses clés de caméra et ses marques suivent : I ajoute une image après l'image
 courante, Maj+I en insère une avant, et Maj+F5 supprime l'image.
 
-Glisser les images choisies les déplace ; avec Ctrl elles sont copiées, avec Maj insérées. Le
+Glisser les images choisies les déplace ; avec Ctrl ou Alt elles sont copiées (des dessins à elles), avec Maj
+insérées. Ctrl+V les insère avant l'image courante, Maj+Ctrl+V les pose sur la tête de lecture sans rien repousser. Le
 même menu Images contient aussi :
 - **Instances** (un dessin et ses expositions) : précédente / suivante (Ctrl + Gauche /
   Droite), tête / queue, casser à l'image courante, une exposition de plus ou de moins à chaque

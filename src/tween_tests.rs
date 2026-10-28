@@ -45,7 +45,7 @@ fn a_stroke_drawn_the_other_way_is_turned_round() {
 fn unmatched_elements_fade() {
     let a = VectorDrawing { elements: vec![stroke(&[(0.0, 0.0), (10.0, 0.0)], 1.0)] };
     let b = VectorDrawing {
-        elements: vec![stroke(&[(0.0, 5.0), (10.0, 5.0)], 1.0), Element::Fill { contours: vec![vec![[0.0, 0.0], [5.0, 0.0], [5.0, 5.0]]], color: [255, 0, 0], opacity: 1.0 }],
+        elements: vec![stroke(&[(0.0, 5.0), (10.0, 5.0)], 1.0), Element::Fill { contours: vec![vec![[0.0, 0.0], [5.0, 0.0], [5.0, 5.0]]], color: [255, 0, 0], opacity: 1.0, gradient: None }],
     };
     let mid = tween::tween_vector(&a, &b, 0.25);
     assert_eq!(mid.elements.len(), 2);

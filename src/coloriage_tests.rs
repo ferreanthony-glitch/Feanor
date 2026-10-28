@@ -143,7 +143,7 @@ pub(crate) fn paint_vector(shapes: &[Shape]) -> VectorDrawing {
     VectorDrawing {
         elements: shapes
             .iter()
-            .filter_map(|s| s.fill.map(|c| Element::Fill { contours: vec![s.pts.iter().map(|p| [p.0, p.1]).collect()], color: c, opacity: 1.0 }))
+            .filter_map(|s| s.fill.map(|c| Element::Fill { contours: vec![s.pts.iter().map(|p| [p.0, p.1]).collect()], color: c, opacity: 1.0, gradient: None }))
             .collect(),
     }
 }

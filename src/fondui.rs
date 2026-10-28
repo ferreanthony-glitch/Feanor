@@ -47,7 +47,7 @@ impl App {
         }
         self.aplat_cible = Some(id);
         // (L'outil Sélection reste : il prend les pixels de l'aplat et la boîte les transforme, `multitools.rs`.)
-        if !matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser | Tool::Fill | Tool::Cutter | Tool::Select) {
+        if !matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Eraser | Tool::Fill | Tool::Gradient | Tool::Cutter | Tool::Select) {
             self.set_tool(Tool::Brush);
         }
         self.status = self.aplat_indication();
@@ -58,6 +58,7 @@ impl App {
         let nom = self.layers().get(self.cur_layer).map(|l| l.name.as_str()).unwrap_or_default();
         let quoi = match self.tool {
             Tool::Fill => "clic : remplir la zone fermée par le trait, sous le trait",
+            Tool::Gradient => "glisser : un dégradé dans la zone fermée par le trait, sous le trait (Alt : tout l'aplat)",
             Tool::Cutter => "clic : retirer la zone fermée de l'aplat",
             Tool::Eraser => "la gomme coupe l'aplat",
             Tool::Select => "lasso, rectangle, clic : prendre les pixels de l'aplat, la boîte les déplace, les met à l'échelle, les tourne (Ctrl+A : tout, sur plusieurs clés aussi)",

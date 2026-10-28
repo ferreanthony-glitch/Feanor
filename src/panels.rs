@@ -98,6 +98,8 @@ impl App {
         self.action_item(ui, "Réunir avec le plan suivant", "panneau.fusionner_suivant");
         self.action_item(ui, "Réunir avec le plan précédent", "scene.joindre_precedente");
         self.action_item(ui, "Fusionner les plans choisis", "panneau.fusionner_choisis");
+        self.action_item(ui, "Nouvelle séquence avec les plans choisis", "sequence.nouvelle_avec_plans");
+        self.action_item(ui, "Changer la durée des plans choisis…", "montage.duree_plans");
         self.action_item(ui, "Retourner les plans choisis", "plan.retourner");
         ui.separator();
         self.action_item(ui, "Nouveau projet à partir des plans choisis", "projet.nouveau_depuis_plans");
@@ -499,6 +501,7 @@ impl App {
                     }
                 });
             }
+            Tool::Gradient => self.degrade_options_ui(ui),
             Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline => self.shape_options_ui(ui),
             Tool::Text => self.text_options_ui(ui),
             Tool::Perspective => self.deform_options_ui(ui),
@@ -831,6 +834,9 @@ impl App {
         self.smart_rename_window(ctx);
         self.goto_window(ctx);
         self.duration_dialog_ui(ctx);
+        // Changer la durée des plans choisis (`dureeplans.rs`) ; réunir deux plans qui ont un calque de même nom (`fusionnoms.rs`).
+        self.plans_duration_dialog_ui(ctx);
+        self.fusion_noms_ui(ctx);
         self.palette_window(ctx);
         // Nouveau projet (`nouveauui.rs`).
         self.new_project_window(ctx);
@@ -839,12 +845,17 @@ impl App {
             let mut choice = None;
             // (Avec plusieurs onglets, la boîte dit de quel projet elle parle.)
             let nom = crate::onglets::nom_de(self.path.as_deref(), self.import_source.as_deref(), false);
+            // (Ce qui a changé, pour qu'on voie tout de suite si la question est juste : le dernier geste de l'historique.)
+            let dernier = self.history.names().0.last().map(|s| (*s).to_string());
             egui::Window::new("Modifications non enregistrées")
                 .collapsible(false)
                 .resizable(false)
                 .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
                 .show(ctx, |ui| {
                     ui.label(format!("Le projet « {nom} » a été modifié depuis le dernier enregistrement."));
+                    if let Some(d) = &dernier {
+                        ui.label(RichText::new(format!("Dernier changement : « {d} ».")).small().weak());
+                    }
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
                         if ui.button("Enregistrer").clicked() {

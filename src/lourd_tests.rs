@@ -416,7 +416,7 @@ fn fabriquer_plan(seed: u64, lib: &BrushLibrary, feuille: (usize, usize), cadre:
                         let t = i as f32 / 16.0 * std::f32::consts::TAU;
                         [c.x + t.cos() * rx * 1.1, c.y + t.sin() * ry]
                     }).collect();
-                    els.push(Element::Fill { contours: vec![contour], color: [40, 40, 60], opacity: 0.25 });
+                    els.push(Element::Fill { contours: vec![contour], color: [40, 40, 60], opacity: 0.25, gradient: None });
                 }
                 traits += els.len();
                 zones_par_dessin.push(sil.zones.clone());

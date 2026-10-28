@@ -131,6 +131,7 @@ pub fn element(points: &[Pos2], closed: bool, filled: bool, width: f32, color: [
             contours: vec![pts.iter().map(|p| [p.x, p.y]).collect()],
             color,
             opacity: 1.0,
+            gradient: None,
         });
     }
     if closed && pts.len() >= 3 {

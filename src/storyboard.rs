@@ -118,6 +118,8 @@ impl App {
         self.playing = false;
         // « Report du décor » (Préférences > Vignettes) : lu par la jonction de deux plans (`decor.rs`).
         self.doc.report_decor = self.settings.vignettes.report_decor;
+        // « Durée d'un nouveau plan » (Préférences > Montage) : lue par `make_panel`.
+        self.doc.duree_plan_neuf = self.settings.new_plan_secs;
         let snap = self.snapshot();
         let before = self.panel().id;
         let layer_before = self.layer().id;
@@ -285,11 +287,9 @@ impl App {
         if self.storyboard_refuses() || !self.partage_peut_toucher(&voisins) {
             return;
         }
-        if self.structure_op_dessins(|d, i| d.join_next_plan_without_mark(i)) {
-            self.status = format!("Plans réunis : {}.", panel_title(&self.doc, self.cur_panel));
-        } else {
-            self.status = "Pas de plan suivant dans cette séquence.".into();
-        }
+        // Deux calques de même nom : la fenêtre le demande d'abord (`fusionnoms.rs`).
+        let a = self.panel().id;
+        self.jonction_demander(crate::fusionnoms::Jonction::Suivant { a, precedent: false });
     }
 
     /// Fusionne les plans choisis (deux ou plus, qui se suivent dans une même séquence) en un
@@ -307,12 +307,8 @@ impl App {
             self.status = "Choisis au moins deux plans (Ctrl ou Maj + clic dans le montage) pour les fusionner.".into();
             return;
         }
-        if self.structure_op_dessins(|d, _| d.join_plans(&ids)) {
-            self.board_sel.clear();
-            self.status = format!("{n} plans fusionnés : {}.", panel_title(&self.doc, self.cur_panel));
-        } else {
-            self.status = "Les plans choisis doivent se suivre, dans une même séquence.".into();
-        }
+        // Deux calques de même nom : la fenêtre le demande d'abord (`fusionnoms.rs`).
+        self.jonction_demander(crate::fusionnoms::Jonction::Choisis(ids));
     }
 
     /// Réunit le plan précédent (de la même séquence) et le plan courant.
@@ -321,11 +317,12 @@ impl App {
         if self.storyboard_refuses() || !self.partage_peut_toucher(&voisins) {
             return;
         }
-        if self.structure_op_dessins(|d, i| d.join_next_plan_without_mark(i.checked_sub(1)?)) {
-            self.status = format!("Plans réunis : {}.", panel_title(&self.doc, self.cur_panel));
-        } else {
+        let Some(a) = self.cur_panel.checked_sub(1).and_then(|i| self.doc.panels.get(i)).map(|p| p.id) else {
             self.status = "Pas de plan précédent dans cette séquence.".into();
-        }
+            return;
+        };
+        // Deux calques de même nom : la fenêtre le demande d'abord (`fusionnoms.rs`).
+        self.jonction_demander(crate::fusionnoms::Jonction::Suivant { a, precedent: true });
     }
 
     /// Pose ou retire une marque d'image à l'image courante du plan (une image de storyboard de
@@ -505,6 +502,8 @@ impl App {
         let n = self.board_selection().len();
         if n > 1 {
             item(self, ui, &format!("Fusionner les {n} plans choisis"), "panneau.fusionner_choisis");
+            item(self, ui, &format!("Nouvelle séquence avec les {n} plans choisis"), "sequence.nouvelle_avec_plans");
+            item(self, ui, &format!("Changer la durée des {n} plans choisis…"), "montage.duree_plans");
         }
         item(self, ui, if n > 1 { "Retourner les plans choisis" } else { "Retourner le plan" }, "plan.retourner");
         ui.separator();
@@ -682,6 +681,11 @@ impl App {
                 ui.close_menu();
                 self.merge_chosen_panels();
             }
+            // Plusieurs plans choisis : une séquence à eux (`sequenceplans.rs`).
+            if n > 1 && ui.button(format!("Nouvelle séquence avec les {n} plans choisis")).on_hover_text("Ils quittent leur séquence et forment une séquence neuve, dans l'ordre du film.").clicked() {
+                ui.close_menu();
+                self.new_sequence_from_chosen();
+            }
         });
         // Les versions du plan (`planversui.rs`) : « Nouvelle version › » (en dupliquant la version en cours, ou en
         // partant d'un plan vide), puis passer à, restaurer, supprimer, comparer.
@@ -694,6 +698,9 @@ impl App {
             // Rogner : la durée exacte et les coupes à la tête de lecture ; le contenu rogné reste en
             // réserve et revient en rallongeant le plan (`rognage.rs`).
             ui.menu_button("Rogner le plan", |ui| self.trim_menu_items(ui, index));
+            if self.board_selection().len() > 1 {
+                self.action_item(ui, "Changer la durée des plans choisis…", "montage.duree_plans");
+            }
             if ui.button("Importer un son au début du plan…").clicked() {
                 ui.close_menu();
                 let at = self.doc.panel_start(index.min(self.doc.panels.len() - 1));

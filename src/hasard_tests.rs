@@ -33,6 +33,7 @@ use eframe::egui::{epaint::Shape, pos2, vec2, Event, Key, Modifiers, PointerButt
 use crate::app::{BoardView, Tool};
 use crate::document::{CelId, Document};
 use crate::fiabilite_fixture::{instantane, meme_projet};
+use crate::fusionnoms::Reponse;
 use crate::perf_tests::{banc_taille, Banc};
 use crate::workspace::Espace;
 
@@ -95,6 +96,7 @@ pub(crate) const COMMANDES: &[&str] = &[
     "panneau.fusionner_suivant",
     "panneau.fusionner_choisis",
     "sequence.nouvelle",
+    "sequence.nouvelle_avec_plans",
     "plan.nouveau_avant",
     "marque.basculer",
     "panneau.ajouter_image",
@@ -171,6 +173,12 @@ pub(crate) const COMMANDES: &[&str] = &[
 /// Les entrées du menu d'une case (clic droit) que le hasard peut cliquer.
 pub(crate) const MENU_CASE: &[&str] = &["Retirer ce cadre", "Ajouter un cadre", "Nouveau plan après", "Dupliquer le plan", "Faire de cette image un nouveau plan", "Réunir avec le plan précédent"];
 
+/// Les jonctions de plans qui posent la question des calques de même nom (`Geste::JonctionNoms`).
+const JONCTIONS: &[&str] = &["scene.joindre_precedente", "panneau.fusionner_suivant", "panneau.fusionner_choisis"];
+
+/// Les durées que `Geste::DureePlans` tape : des images, des secondes, un écart.
+const DUREES_TAPEES: &[&str] = &["1", "5", "12", "24", "37", "1:12", "2s6", "+3", "-2", "+30"];
+
 /// Les outils d'un trait.
 const OUTILS: [Tool; 11] = [Tool::Brush, Tool::Pencil, Tool::Eraser, Tool::Brush, Tool::Pencil, Tool::Fill, Tool::Line, Tool::Rect, Tool::Ellipse, Tool::Select, Tool::Cutter];
 
@@ -208,6 +216,13 @@ pub(crate) enum Geste {
     /// Dans la bande du montage : glisser un plan sur un autre, jusqu'au milieu de l'autre (`zone` 0 : le fusionner) ou jusqu'à
     /// l'un de ses bords (1 : devant, 2 : derrière : le déplacer). Les nombres sont des rangs parmi les plans à l'écran.
     FusionnerPlans { de: u16, vers: u16, zone: u8 },
+    /// Réunir des plans par `JONCTIONS[quoi]` avec la question des calques de même nom posée pour de vrai (`fusionnoms.rs`), puis y
+    /// répondre : 0, « Fusionner ces calques » ; 1, « Renommer avant de fusionner » (les noms d'avance) ; 2, « Ne pas fusionner les
+    /// calques » ; 3, « Annuler ». Sans calque de même nom, la jonction se fait d'un trait, comme toujours.
+    JonctionNoms { quoi: u8, choix: u8 },
+    /// « Changer la durée des plans choisis… » : tous les plans choisis (ou tous les plans du film si `tous`) prennent la durée que dit
+    /// `DUREES_TAPEES[quoi]` (`dureeplans.rs`).
+    DureePlans { quoi: u8, tous: bool },
     /// Annuler `n` fois.
     Annuler(u8),
     /// Rétablir `n` fois.
@@ -293,7 +308,10 @@ impl Geste {
             26..=33 => TraitDessin { outil: h.sous(OUTILS.len()) as u8, x0: h.entre(0.05, 0.95), y0: h.entre(0.05, 0.95), x1: h.entre(-0.2, 1.2), y1: h.entre(-0.2, 1.2) },
             34..=45 => TraitCase { case, outil: h.sous(OUTILS.len()) as u8, x0: h.entre(-0.12, 1.12), y0: h.entre(-0.12, 1.35), dx: h.entre(-1.3, 1.3), dy: h.entre(-1.0, 1.0) },
             46..=48 => TraitCaseVide { e: h.sous(3) as u8, dx: h.entre(-0.6, 0.6), dy: h.entre(-0.4, 0.4) },
-            49..=53 => Barre { k: case },
+            49..=52 => Barre { k: case },
+            // (Le dernier rang de `Barre` : les autres gestes gardent leurs rangs. Ces deux gestes sont ceux de la passe du 2026-10-28.)
+            53 if h.pile(2) => JonctionNoms { quoi: h.sous(JONCTIONS.len()) as u8, choix: h.sous(4) as u8 },
+            53 => DureePlans { quoi: h.sous(DUREES_TAPEES.len()) as u8, tous: h.pile(3) },
             54..=55 => Note { case, texte: h.sous(4) as u8, valider: !h.pile(4) },
             56..=58 => LassoDessin { x0: h.entre(0.1, 0.5), y0: h.entre(0.1, 0.5), x1: h.entre(0.5, 0.95), y1: h.entre(0.5, 0.95), dx: h.entre(-0.3, 0.3), dy: h.entre(-0.3, 0.3), supprimer: h.pile(2) },
             59..=60 => LassoCase { case, x0: h.entre(0.0, 0.5), y0: h.entre(0.0, 0.5), x1: h.entre(0.5, 1.0), y1: h.entre(0.5, 1.0), supprimer: h.pile(2) },
@@ -534,6 +552,7 @@ const GARDENT_LES_DESSINS: &[&str] = &[
     "Nouveau plan",
     "Nouvelle séquence",
     "Nouveau plan avant le plan courant",
+    "Nouvelle séquence avec les plans choisis",
 ];
 
 /// Les dessins montrés par les calques de dessin des plans, calques de couleur compris (pas le Décor, qu'une réunion peut remplacer,
@@ -716,6 +735,33 @@ impl Essai {
                 self.b.app.set_tool(Tool::Brush);
                 let a = view.shrink(2.0).clamp(r.center() + vec2(dx, dy) * r.width());
                 self.glisser(Modifiers::NONE, PointerButton::Primary, &Self::trajet(r.center(), a, 8));
+            }
+            JonctionNoms { quoi, choix } => {
+                // La question se pose pour de vrai (les essais y répondent d'avance, d'ordinaire) ; la réponse est donnée ici.
+                let d_avance = self.b.app.fusion_noms_auto.take();
+                self.b.app.run_action(JONCTIONS[quoi as usize % JONCTIONS.len()]);
+                self.b.chauffer(2);
+                if let Some(dlg) = self.b.app.fusion_noms.as_ref() {
+                    let reponse = match choix % 4 {
+                        0 => Some(Reponse::Fusionner),
+                        1 => dlg.noms_retapes().map(Reponse::Renommer),
+                        2 => Some(Reponse::Separer),
+                        _ => None,
+                    };
+                    match reponse {
+                        Some(r) => {
+                            self.b.app.fusion_noms_repondre(r);
+                        }
+                        None => self.b.app.fusion_noms_annuler(),
+                    }
+                    self.b.chauffer(2);
+                }
+                self.b.app.fusion_noms_auto = d_avance;
+            }
+            DureePlans { quoi, tous } => {
+                let ids: Vec<u64> = if tous { self.b.app.doc.panels.iter().map(|p| p.id).collect() } else { self.b.app.board_selection() };
+                self.b.app.change_plans_duration(&ids, DUREES_TAPEES[quoi as usize % DUREES_TAPEES.len()]);
+                self.b.chauffer(2);
             }
             Barre { k } => {
                 self.vers_vignettes();
@@ -1383,6 +1429,31 @@ fn hasard_long_run_of_random_gestures() {
     let pas = std::env::var("SHOT_HASARD_PAS").ok().and_then(|v| v.parse().ok()).unwrap_or(PAS_LONGS);
     let fils = std::env::var("SHOT_HASARD_FILS").ok().and_then(|v| v.parse().ok()).unwrap_or(4);
     passages(graines, pas, fils);
+}
+
+/// Le hasard tire la question des calques de même nom, avec chacune de ses quatre réponses, et le changement de durée des plans choisis.
+#[test]
+fn hasard_draws_the_name_question_and_the_duration_gestures() {
+    let mut h = Hasard::new(5);
+    let v: Vec<Geste> = (0..4000).map(|_| Geste::tirer(&mut h)).collect();
+    for choix in 0..4 {
+        assert!(v.iter().any(|g| matches!(g, JonctionNoms { choix: c, .. } if *c == choix)), "la réponse {choix} n'est jamais tirée");
+    }
+    for quoi in 0..JONCTIONS.len() as u8 {
+        assert!(v.iter().any(|g| matches!(g, JonctionNoms { quoi: q, .. } if *q == quoi)), "la jonction {quoi} n'est jamais tirée");
+    }
+    assert!(v.iter().any(|g| matches!(g, DureePlans { tous: true, .. })) && v.iter().any(|g| matches!(g, DureePlans { tous: false, .. })));
+}
+
+/// Réunir deux plans qui ont chacun un calque de même nom, quelle que soit la réponse à la question : aucun dessin n'est perdu, une seule
+/// étape d'annulation (le hasard le vérifie à chaque pas : `GARDENT_LES_DESSINS`, annuler puis rétablir).
+#[test]
+fn hasard_joining_plans_with_a_same_named_layer_keeps_every_drawing_whatever_the_answer() {
+    for quoi in 0..2 {
+        for choix in 0..4 {
+            rejouer(3, &[Commande("panneau.dupliquer"), Commande("panneau.dupliquer"), JonctionNoms { quoi, choix }, JonctionNoms { quoi, choix }, Annuler(2), Retablir(1)]);
+        }
+    }
 }
 
 /// Le hasard est reproductible : la même graine tire les mêmes gestes.

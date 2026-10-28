@@ -17,6 +17,7 @@ pub(crate) fn tool_hint(tool: crate::app::Tool) -> &'static str {
     match tool {
         Tool::Brush | Tool::Pencil | Tool::Eraser => "Alt + clic : pipette · Ctrl tenu : lasso · Espace : déplacer la vue · ^ $ : taille",
         Tool::Fill => "Clic : remplir · Alt + clic : pipette",
+        Tool::Gradient => "Glisser : tracer l'axe (Maj : par 15°) · dans la sélection, sinon dans la zone fermée · Alt : tout le calque",
         Tool::Cutter => "Glisser en travers des bouts à enlever · clic : un bout",
         Tool::Select => "Lasso (Maj : ajouter · Ctrl+Maj : tous les calques) · boîte : dedans déplacer · coin ou côté : échelle (Maj : proportions) · hors d'un coin : tourner · bord : incliner · point rond : pivot · flèches : 1 px (Maj : 10)",
         Tool::SelectColor => "Clic : une couleur (Maj : ajouter) · la boîte se manie comme avec la Sélection",
@@ -206,7 +207,7 @@ impl App {
                 // Sur l'aplat (`fondui.rs`), ce que font les outils : « Aplat de <calque> ».
                 let aplat = self.aplat_en_cible().then(|| self.aplat_indication());
                 let hint = match self.tool {
-                    crate::app::Tool::Fill | crate::app::Tool::Cutter | crate::app::Tool::Eraser | crate::app::Tool::Brush | crate::app::Tool::Pencil | crate::app::Tool::Select if aplat.is_some() => {
+                    crate::app::Tool::Fill | crate::app::Tool::Gradient | crate::app::Tool::Cutter | crate::app::Tool::Eraser | crate::app::Tool::Brush | crate::app::Tool::Pencil | crate::app::Tool::Select if aplat.is_some() => {
                         aplat.as_deref().unwrap_or_default()
                     }
                     // Plusieurs calques choisis (Ctrl ou Maj + clic sur leur ligne).
@@ -510,7 +511,7 @@ impl App {
         if format.is_none() && !self.layout.safe_frames && !self.cadrage.any_on() {
             return;
         }
-        let (cam, frame, size) = (self.current_camera(), self.doc.frame, self.canvas_size());
+        let (cam, frame, size) = (self.camera_montree(), self.doc.frame, self.canvas_size());
         let quad = |r: Rect| {
             [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom()]
                 .map(|p| self.view.to_screen(rect, size, cam.to_stage(frame, p.x, p.y)))

@@ -78,6 +78,8 @@ pub enum Tool {
     /// Cutter : coupe les traits vectoriels à leurs croisements (`cutter.rs`).
     Cutter,
     Fill,
+    /// Dégradé (`degrade.rs`, `degradeui.rs`) : glisser trace l'axe, de la couleur d'avant-plan à celle d'arrière-plan.
+    Gradient,
     /// Formes (5c) : outils séparés, comme dans Storyboard Pro.
     Line,
     Rect,
@@ -102,12 +104,13 @@ pub enum Tool {
 }
 
 impl Tool {
-    pub const ALL: [Tool; 19] = [
+    pub const ALL: [Tool; 20] = [
         Tool::Brush,
         Tool::Pencil,
         Tool::Eraser,
         Tool::Cutter,
         Tool::Fill,
+        Tool::Gradient,
         Tool::Line,
         Tool::Rect,
         Tool::Ellipse,
@@ -131,6 +134,7 @@ impl Tool {
             Tool::Eraser => "Gomme",
             Tool::Cutter => "Cutter",
             Tool::Fill => "Remplir",
+            Tool::Gradient => "Dégradé",
             Tool::Line => "Ligne",
             Tool::Rect => "Rectangle",
             Tool::Ellipse => "Ellipse",
@@ -156,6 +160,7 @@ impl Tool {
             Tool::Eraser => "Effacer ; sur un calque vectoriel, des bouts de trait ou des traits entiers.",
             Tool::Cutter => "Glisser en travers des bouts de traits vectoriels à enlever : ils sont coupés là où ils croisent les autres traits.",
             Tool::Fill => "Remplir une zone avec la couleur courante.",
+            Tool::Gradient => "Glisser pour tracer l'axe d'un dégradé, de la couleur d'avant-plan à celle d'arrière-plan : dans la sélection, dans la zone fermée où l'on appuie, ou (Alt) sur tout le calque. Sur un calque vectoriel, il reste un réglage de la zone.",
             Tool::Line => "Tracer une droite, une courbe ou une courbe en S.",
             Tool::Rect => "Tracer un rectangle, vide ou plein.",
             Tool::Ellipse => "Tracer une ellipse, vide ou pleine.",
@@ -182,6 +187,7 @@ impl Tool {
             Tool::Eraser => ph::ERASER,
             Tool::Cutter => ph::KNIFE,
             Tool::Fill => ph::PAINT_BUCKET,
+            Tool::Gradient => ph::GRADIENT,
             Tool::Line => ph::LINE_SEGMENT,
             Tool::Rect => ph::RECTANGLE,
             Tool::Ellipse => ph::CIRCLE,
@@ -207,6 +213,7 @@ impl Tool {
             Tool::Eraser => "outil.gomme",
             Tool::Cutter => "outil.cutter",
             Tool::Fill => "outil.remplissage",
+            Tool::Gradient => "outil.degrade",
             Tool::Line => "outil.ligne",
             Tool::Rect => "outil.rectangle",
             Tool::Ellipse => "outil.ellipse",
@@ -334,6 +341,10 @@ pub struct App {
     /// disque réseau éteint ne gèle pas la première image.
     pub(crate) reopen_probe: Option<(Vec<PathBuf>, std::sync::mpsc::Receiver<Vec<PathBuf>>)>,
     pub(crate) fill: FillSettings,
+    /// Réglages de l'outil Dégradé (`degrade.rs`) : forme, fin, opacité, inverser, tout le calque.
+    pub(crate) degrade: crate::degrade::Reglages,
+    /// Le geste du dégradé en cours : l'axe tiré, ce qu'il remplit, son aperçu (`degradeui.rs`).
+    pub(crate) degrade_geste: Option<crate::degradeui::Geste>,
     pub(crate) shape: ShapeSettings,
     pub(crate) vector_erase_whole: bool,
     /// Option du pinceau et du crayon (`brushfill`) : « Peindre derrière » (la peinture passe sous ce qui est déjà dessiné
@@ -823,6 +834,13 @@ pub struct App {
     pub(crate) edge_sel: Option<crate::rognageui::EdgeSel>,
     pub(crate) snap_on: bool,
     pub(crate) duration_dialog: Option<crate::rognageui::DurationDialog>,
+    /// La fenêtre « Changer la durée des plans choisis… » (`dureeplans.rs`).
+    pub(crate) duree_plans: Option<crate::dureeplans::DureePlans>,
+    /// La question posée avant de réunir deux plans qui ont un calque de même nom (`fusionnoms.rs`).
+    pub(crate) fusion_noms: Option<crate::fusionnoms::FusionNoms>,
+    /// Réponse d'avance à cette question (les essais et le hasard : sans elle, chaque jonction attendrait un clic).
+    /// `None` : la fenêtre se montre, comme pour l'utilisateur.
+    pub(crate) fusion_noms_auto: Option<crate::fusionnoms::Reponse>,
     pub(crate) trim_menu: Option<(u64, usize)>,
     /// Plan tel qu'il était au début du réglage de sa durée : chaque valeur intermédiaire
     /// repart de lui, rien n'est perdu avant la fin du geste.
@@ -1015,6 +1033,8 @@ impl App {
             brushes_job: brushes_job.ok(),
             reopen_probe: None,
             fill: FillSettings::default(),
+            degrade: crate::degrade::Reglages::default(),
+            degrade_geste: None,
             shape: ShapeSettings {
                 filled: false,
                 width: 4.0,
@@ -1289,6 +1309,10 @@ impl App {
             edge_sel: None,
             snap_on: true,
             duration_dialog: None,
+            duree_plans: None,
+            fusion_noms: None,
+            // (Les essais répondent d'avance « Fusionner » : leurs jonctions se font d'un seul geste, comme avant la question.)
+            fusion_noms_auto: if cfg!(test) { Some(crate::fusionnoms::Reponse::Fusionner) } else { None },
             trim_menu: None,
             length_origin: None,
             length_field_active: false,
@@ -2306,6 +2330,8 @@ impl App {
         self.finish_layer_drag();
         self.guides.stroke = None;
         self.shape_drag = None;
+        // (Le dégradé se pose au lâcher, `degrade_release`, avant ceci : ce qui reste est un geste abandonné.)
+        self.degrade_geste = None;
     }
 
     pub(crate) fn pick_color(&mut self, p: Pos2) {
@@ -3636,6 +3662,8 @@ impl App {
     }
 
     fn run_action_now(&mut self, action: &str) {
+        // « Durée d'un nouveau plan » (Préférences > Montage) : lue par les plans que la commande crée (`dureeplans.rs`).
+        self.doc.duree_plan_neuf = self.settings.new_plan_secs;
         // Un texte en cours de saisie est posé avant toute commande (annuler, changer d'image…).
         self.finish_text_edit();
         // Une autre copie (dessin, plans, images, clés…) prend la place des effets copiés pour Ctrl+V
@@ -3671,6 +3699,8 @@ impl App {
             // aux rangs d'avant (l'élément supprimé revenait, un autre disparaissait, sans étape d'annulation).
             self.flush_flottante();
             self.multi_flush();
+            // Une zone bitmap transformée dont le rendu exact se calcule encore.
+            self.flush_bitmap_float();
         }
         // Annuler ou rétablir pendant une déformation : elle repartirait d'un dessin périmé.
         if matches!(action, "edition.annuler" | "edition.retablir") {
@@ -3906,6 +3936,8 @@ impl App {
             }
             "edition.coller" if self.key_focus && self.key_clipboard.is_some() => self.paste_keys(),
             "edition.coller_a_la_tete" if self.key_focus && self.key_clipboard.is_some() => self.paste_keys_at_head(),
+            // Les images copiées de la timeline (grille) : Maj+Ctrl+V les pose sur la tête de lecture, sans rien repousser.
+            "edition.coller_a_la_tete" if self.images_focus && self.image_clipboard.is_some() => self.paste_images_at_head(),
             // Ni clés de caméra, ni clés d'effets, ni clés de dessins à coller : Maj+Ctrl+V fait
             // ce qu'il faisait avant (« Coller sur place », un alias de Ctrl+V).
             "edition.coller_a_la_tete" => self.run_action("edition.coller"),
@@ -4054,6 +4086,7 @@ impl App {
             "outil.crayon" => self.set_tool(Tool::Pencil),
             "outil.gomme" => self.set_tool(Tool::Eraser),
             "outil.remplissage" => self.set_tool(Tool::Fill),
+            "outil.degrade" => self.set_tool(Tool::Gradient),
             "outil.pipette" => self.set_tool(Tool::Picker),
             "outil.selection" => self.set_tool(Tool::Select),
             "outil.selection_couleur" => self.set_tool(Tool::SelectColor),
@@ -4427,6 +4460,8 @@ impl App {
             "panneau.couper" => self.split_current_panel(),
             "panneau.fusionner_suivant" => self.merge_next_panel(),
             "panneau.fusionner_choisis" => self.merge_chosen_panels(),
+            "sequence.nouvelle_avec_plans" => self.new_sequence_from_chosen(),
+            "montage.duree_plans" => self.open_plans_duration_dialog(),
             "scene.couper" => self.split_current_panel(),
             "scene.joindre_precedente" => self.join_previous_scene(),
             "calque.copier" => self.copy_layer(),
@@ -4822,6 +4857,8 @@ impl App {
         {
             let _t = crate::perf::section("arrière-plan (rejeu, fonds)");
             self.poll_rejeu(ctx);
+            // (Le rendu exact d'une zone bitmap transformée, calculé sur un fil : `pixtools.rs`.)
+            self.poll_bitmap_settle();
             self.rejeu_idle_tick(ctx);
             self.warm_current_cel();
         }

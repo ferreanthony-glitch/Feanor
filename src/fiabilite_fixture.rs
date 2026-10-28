@@ -167,7 +167,7 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
         vec![
             trait_texture(&lib, "Gouache", 18.0, (40.0, 60.0), (200.0, 40.0)),
             trait_texture(&lib, "Feutre", 10.0, (60.0, 180.0), (260.0, -60.0)),
-            Element::Fill { contours: vec![vec![[300.0, 40.0], [380.0, 60.0], [350.0, 120.0]]], color: [220, 180, 40], opacity: 0.75 },
+            Element::Fill { contours: vec![vec![[300.0, 40.0], [380.0, 60.0], [350.0, 120.0]]], color: [220, 180, 40], opacity: 0.75, gradient: None },
         ],
     );
     let perso2 = dessin_vectoriel(&mut doc, vec![trait_texture(&lib, "Fusain", 22.0, (80.0, 200.0), (180.0, -120.0))]);
@@ -433,7 +433,7 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
             brush: None,
             trace: Trace::default(),
         };
-        let cercle = Element::Fill { contours: vec![vec![[200.0, 150.0], [260.0, 150.0], [260.0, 210.0], [200.0, 210.0]], vec![[215.0, 165.0], [245.0, 165.0], [245.0, 195.0], [215.0, 195.0]]], color: [200, 30, 30], opacity: 1.0 };
+        let cercle = Element::Fill { contours: vec![vec![[200.0, 150.0], [260.0, 150.0], [260.0, 210.0], [200.0, 210.0]], vec![[215.0, 165.0], [245.0, 165.0], [245.0, 195.0], [215.0, 195.0]]], color: [200, 30, 30], opacity: 1.0, gradient: None };
         let formes = dessin_vectoriel(&mut doc, vec![simple.clone(), cercle.clone()]);
         // Un texte : son image dépend des polices du poste, elle n'est pas comparée.
         let texte = Element::text("Fin de la scène".into(), "Arial".into(), 24.0, [10, 10, 10], crate::vector::Affine::translate(eframe::egui::vec2(40.0, 30.0)));

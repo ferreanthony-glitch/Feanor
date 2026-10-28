@@ -202,10 +202,12 @@ pub fn warp_element_with(e: &Element, f: &impl Fn(Pos2) -> Pos2, k: f32) -> Elem
             brush: brush.as_ref().map(|b| Box::new(crate::brush::BrushSettings { size: b.size * k, ..**b })),
             trace: trace.without_cache(),
         },
-        Element::Fill { contours, color, opacity } => Element::Fill {
+        Element::Fill { contours, color, opacity, gradient } => Element::Fill {
             contours: contours.iter().map(|c| c.iter().map(|p| map(p[0], p[1])).collect()).collect(),
             color: *color,
             opacity: *opacity,
+            // L'axe du dégradé suit la déformation (ses deux points sont déformés comme ceux du contour).
+            gradient: gradient.map(|g| g.mapped(f)),
         },
         Element::Text { text, font, size, color, opacity, place } => {
             let mut out = Element::Text { text: text.clone(), font: font.clone(), size: *size, color: *color, opacity: *opacity, place: *place };

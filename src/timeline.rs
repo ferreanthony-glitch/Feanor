@@ -981,7 +981,7 @@ impl App {
         }
         let shift = ui.input(|i| i.modifiers.shift);
         // Glisser les images choisies (13c-3) : on les prend dans leur cadre ; lâchées sans
-        // touche elles sont déplacées, avec Ctrl copiées, avec Maj insérées.
+        // touche elles sont déplacées, avec Ctrl ou Alt copiées (des dessins à elles), avec Maj insérées.
         let col_of = |x: f32| ((x - r.left()) / cell).floor().max(0.0) as usize;
         if resp.drag_started() && !holding_key && !in_notes {
             if let (Some((a, b)), Some(p)) = (self.frame_sel, ui.input(|i| i.pointer.press_origin())) {
@@ -1000,14 +1000,7 @@ impl App {
             if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
                 let (c0, c1) = self.image_drag.take().unwrap_or((c0, c0));
                 let m = ui.input(|i| i.modifiers);
-                let mode = if m.command {
-                    crate::images::DropMode::Copy
-                } else if m.shift {
-                    crate::images::DropMode::Insert
-                } else {
-                    crate::images::DropMode::Move
-                };
-                self.drop_images(c1 as isize - c0 as isize, mode);
+                self.drop_images(c1 as isize - c0 as isize, crate::images::DropMode::de_touches(&m));
             }
         }
         // Choisir au rectangle (chantier 3) : un glisser qui part d'une case d'un calque (hors
@@ -1048,7 +1041,7 @@ impl App {
                 let (a, b) = self.image_range();
                 let (n, m) = (b - a, self.image_layers().len());
                 self.status = format!(
-                    "{n} image{} × {m} calque{} choisis : les glisser pour les déplacer (Ctrl : copier, Maj : insérer), Suppr pour les supprimer, Échap pendant le geste pour l'abandonner.",
+                    "{n} image{} × {m} calque{} choisis : les glisser pour les déplacer (Ctrl ou Alt : copier, Maj : insérer), Suppr pour les supprimer, Échap pendant le geste pour l'abandonner.",
                     if n > 1 { "s" } else { "" },
                     if m > 1 { "s" } else { "" }
                 );

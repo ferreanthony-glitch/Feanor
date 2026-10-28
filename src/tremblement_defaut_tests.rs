@@ -38,7 +38,7 @@ fn image(doc: &Document, frame: usize) -> Vec<Color32> {
 }
 
 fn allume(intensite: f32) {
-    t::set_defaut(Some(Defaut { actif: true, intensite, frequence: 60.0 }));
+    t::set_defaut(Some(Defaut { actif: true, intensite, frequence: 60.0, ..Defaut::default() }));
 }
 
 fn own_boil(intensity: f32, enabled: bool) -> Effect {
@@ -62,7 +62,7 @@ fn turning_it_on_changes_the_composed_vector_pixels_and_turning_it_off_gives_the
     assert!(image(&doc, 2) != image(&doc, 4));
     assert!(image(&doc, 2) == image(&doc, 8), "trois variantes : on revient au bout de six images");
     // Une intensité nulle ne change rien.
-    t::set_defaut(Some(Defaut { actif: true, intensite: 0.0, frequence: 60.0 }));
+    t::set_defaut(Some(Defaut { actif: true, intensite: 0.0, frequence: 60.0, ..Defaut::default() }));
     assert!(image(&doc, 2) == eteint, "intensité nulle");
     t::set_defaut(None);
     assert!(image(&doc, 2) == eteint, "éteint : l'image d'avant, au pixel près");
@@ -133,13 +133,13 @@ fn the_preference_is_saved_and_reloaded_and_stays_out_of_the_file_when_untouched
     let ancien: crate::settings::Settings = toml::from_str("").unwrap();
     assert_eq!(ancien.tremblement_defaut, Defaut::default(), "des réglages d'avant : éteint");
     let mut s = crate::settings::Settings::default();
-    s.tremblement_defaut = Defaut { actif: true, intensite: 4.5, frequence: 80.0 };
+    s.tremblement_defaut = Defaut { actif: true, intensite: 4.5, frequence: 80.0, ..Defaut::default() };
     let texte = toml::to_string(&s).unwrap();
     assert!(texte.contains("tremblement_par_defaut"), "{texte}");
     let relu: crate::settings::Settings = toml::from_str(&texte).unwrap();
-    assert_eq!(relu.tremblement_defaut, Defaut { actif: true, intensite: 4.5, frequence: 80.0 });
+    assert_eq!(relu.tremblement_defaut, Defaut { actif: true, intensite: 4.5, frequence: 80.0, ..Defaut::default() });
     // Un fichier modifié à la main : valeurs bornées.
-    let fou = Defaut { actif: true, intensite: 900.0, frequence: f32::NAN }.sanitized();
+    let fou = Defaut { actif: true, intensite: 900.0, frequence: f32::NAN, ..Defaut::default() }.sanitized();
     assert_eq!((fou.intensite, fou.frequence), (t::MAX_INTENSITY, 55.0));
 }
 
@@ -169,7 +169,7 @@ fn the_app_applies_the_preference_to_the_screen_plan_and_to_the_export_images() 
     let export = |app: &App| render::composite_full(&app.doc, &app.build_plan(2, false, true));
     let eteint = export(&app);
     assert!(app.build_plan(2, false, true).items.iter().all(|i| i.fx.is_empty()));
-    app.settings.tremblement_defaut = Defaut { actif: true, intensite: 6.0, frequence: 60.0 };
+    app.settings.tremblement_defaut = Defaut { actif: true, intensite: 6.0, frequence: 60.0, ..Defaut::default() };
     app.appliquer_tremblement_defaut(&ctx);
     assert_eq!(t::defaut(), Some(app.settings.tremblement_defaut), "posé là où le rendu le lit");
     let plan = app.build_plan(2, false, true);
@@ -193,7 +193,7 @@ fn the_preferences_window_has_the_default_tremble_settings() {
     let ctx = egui::Context::default();
     let mut textes: Vec<String> = Vec::new();
     for k in 0..4 {
-        let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(900.0, 700.0))), time: Some(k as f64 / 60.0), ..Default::default() };
+        let input = egui::RawInput { screen_rect: Some(egui::Rect::from_min_size(egui::pos2(0.0, 0.0), egui::vec2(1000.0, 1400.0))), time: Some(k as f64 / 60.0), ..Default::default() };
         let out = ctx.run(input, |ctx| app.preferences_window(ctx));
         textes.clear();
         fn collecter(s: &egui::Shape, out: &mut Vec<String>) {
@@ -205,7 +205,81 @@ fn the_preferences_window_has_the_default_tremble_settings() {
         }
         out.shapes.iter().for_each(|s| collecter(&s.shape, &mut textes));
     }
-    for libelle in ["Tremblement du trait par défaut", "Intensité du tremblement par défaut", "Fréquence du tremblement par défaut"] {
+    for libelle in [
+        "Tremblement du trait par défaut",
+        "Intensité du tremblement par défaut",
+        "Fréquence du tremblement par défaut",
+        "Variantes du tremblement par défaut",
+        "Vitesse du tremblement par défaut",
+        "Épaisseur du tremblement par défaut",
+        "Aperçu",
+        // (La graine et « Animer à l'arrêt » sont plus bas : la fenêtre défile, `prefsui_tests` les parcourt.)
+    ] {
         assert!(textes.iter().any(|t| t.contains(libelle)), "« {libelle} » : {textes:?}");
     }
+}
+
+// ------------------------------------------------------------------------------------ tous les réglages de l'effet
+
+#[test]
+fn every_setting_of_the_effect_changes_what_the_default_tremble_shows() {
+    crate::fxcache::monde::ecrire();
+    let doc = doc_with(24, LayerKind::Vector, Vec::new());
+    let base = Defaut { actif: true, intensite: 6.0, frequence: 60.0, ..Defaut::default() };
+    t::set_defaut(Some(base));
+    let reference = image(&doc, 4);
+    for (nom, autre) in [
+        ("graine", Defaut { graine: 7, ..base }),
+        ("épaisseur", Defaut { epaisseur: 90.0, ..base }),
+        ("variantes", Defaut { variantes: 2, ..base }),
+        ("vitesse", Defaut { vitesse: 1, ..base }),
+    ] {
+        t::set_defaut(Some(autre));
+        assert!(image(&doc, 4) != reference, "« {nom} » change l'image du trait");
+    }
+    t::set_defaut(None);
+}
+
+#[test]
+fn animating_at_rest_follows_the_resting_frame_only_when_it_is_on() {
+    crate::fxcache::monde::ecrire();
+    let doc = doc_with(24, LayerKind::Vector, Vec::new());
+    let layer = &doc.panels[0].layers[0];
+    let variante = |d: Defaut, frame: usize, rest: Option<usize>| {
+        t::set_defaut(Some(d));
+        let v = *fx::layer_steps(layer, frame, rest).first().and_then(|s| s.values.last()).expect("l'étape") as usize;
+        t::set_defaut(None);
+        v
+    };
+    let base = Defaut { actif: true, intensite: 6.0, ..Defaut::default() };
+    // Éteint : l'image fixe montre la variante de l'image courante, quelle que soit l'horloge.
+    assert_eq!(variante(base, 2, Some(10)), 1);
+    assert_eq!(variante(base, 2, None), 1);
+    // Allumé : à l'arrêt, c'est la variante de l'image virtuelle du repos (qui avance avec l'horloge).
+    let repos = Defaut { repos: true, ..base };
+    assert_eq!(variante(repos, 2, Some(10)), 2);
+    assert_eq!(variante(repos, 2, Some(12)), 0);
+    // En lecture (pas d'image du repos) : l'image elle-même.
+    assert_eq!(variante(repos, 2, None), 1);
+}
+
+#[test]
+fn the_new_settings_are_saved_old_files_keep_the_other_ones_and_bad_values_are_bounded() {
+    let tout = Defaut { actif: true, intensite: 5.5, frequence: 33.0, variantes: 5, vitesse: 4, epaisseur: 40.0, graine: 123, repos: true };
+    let mut s = crate::settings::Settings::default();
+    s.tremblement_defaut = tout;
+    let texte = toml::to_string(&s).unwrap();
+    let relu: crate::settings::Settings = toml::from_str(&texte).unwrap();
+    assert_eq!(relu.tremblement_defaut, tout, "{texte}");
+    // Un fichier d'avant, qui n'a que les trois premiers réglages : les autres sont ceux d'origine.
+    let ancien: crate::settings::Settings = toml::from_str("[tremblement_par_defaut]\nactif = true\nintensite = 3.0\nfrequence = 40.0\n").unwrap();
+    assert_eq!(ancien.tremblement_defaut, Defaut { actif: true, intensite: 3.0, frequence: 40.0, ..Defaut::default() });
+    // Des valeurs hors bornes (fichier modifié à la main) sont ramenées.
+    let fou = Defaut { variantes: 99, vitesse: 0, epaisseur: -5.0, graine: 0, ..tout }.sanitized();
+    assert_eq!((fou.variantes, fou.vitesse, fou.epaisseur, fou.graine), (t::MAX_VARIANTS, 1, 0.0, 1));
+    let fou = Defaut { vitesse: 500, epaisseur: f32::NAN, graine: 5000, variantes: 0, ..tout }.sanitized();
+    assert_eq!((fou.variantes, fou.vitesse, fou.epaisseur, fou.graine), (t::MIN_VARIANTS, t::MAX_SPEED, 0.0, 999));
+    // Les valeurs de l'effet suivent l'ordre de `tremblement::INTENSITY`…`REST`.
+    let v = tout.values();
+    assert_eq!((v[t::INTENSITY], v[t::FREQUENCY], v[t::VARIANTS], v[t::SPEED], v[t::THICKNESS], v[t::SEED], v[t::REST]), (5.5, 33.0, 5.0, 4.0, 40.0, 123.0, 1.0));
 }

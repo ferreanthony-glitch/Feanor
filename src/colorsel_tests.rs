@@ -56,7 +56,7 @@ fn every_element_of_the_clicked_colour() {
         elements: vec![
             stroke(red, 0.0),
             stroke(blue, 10.0),
-            Element::Fill { contours: vec![vec![[0.0, 0.0], [5.0, 0.0], [5.0, 5.0]]], color: red, opacity: 1.0 },
+            Element::Fill { contours: vec![vec![[0.0, 0.0], [5.0, 0.0], [5.0, 5.0]]], color: red, opacity: 1.0, gradient: None },
             stroke(red, 20.0),
         ],
     };

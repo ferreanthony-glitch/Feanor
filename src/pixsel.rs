@@ -123,6 +123,29 @@ impl Floating {
         self.pixels.iter().all(|c| c.a() == 0)
     }
 
+    /// Les pixels soulevés posés à leur place d'origine dans une image vide `width` × `height` : la feuille que la
+    /// carte graphique transforme pendant un geste (`Flottante::lift_bitmap`). Aucun rééchantillonnage.
+    pub fn to_raster(&self, width: usize, height: usize) -> Raster {
+        let mut r = Raster::new(width, height);
+        for ly in 0..self.h {
+            let y = self.y0 + ly;
+            if y >= height {
+                break;
+            }
+            for lx in 0..self.w {
+                let x = self.x0 + lx;
+                if x >= width {
+                    break;
+                }
+                let c = self.pixels[ly * self.w + lx];
+                if c.a() != 0 {
+                    set(&mut r, x, y, c);
+                }
+            }
+        }
+        r
+    }
+
     /// Valeur interpolée (bilinéaire) au point `(x, y)` exprimé en pixels du rectangle soulevé.
     fn sample(&self, x: f32, y: f32) -> Color32 {
         let (fx, fy) = (x - 0.5, y - 0.5);
@@ -154,6 +177,10 @@ fn scaled(c: Color32, k: f32) -> Color32 {
     if k >= 1.0 {
         return c;
     }
+    // (Rien du tout : le même résultat que le calcul ci-dessous, sans le calculer pour chaque pixel d'une zone entière.)
+    if k <= 0.0 {
+        return Color32::TRANSPARENT;
+    }
     let m = |v: u8| (v as f32 * k).round() as u8;
     Color32::from_rgba_premultiplied(m(c.r()), m(c.g()), m(c.b()), m(c.a()))
 }
@@ -169,19 +196,36 @@ fn set(raster: &mut Raster, x: usize, y: usize, c: Color32) {
 /// Retire de l'image les pixels de la zone et les renvoie.
 pub fn lift(raster: &mut Raster, mask: &PixelMask) -> Floating {
     let mut pixels = vec![Color32::TRANSPARENT; mask.w * mask.h];
-    for ly in 0..mask.h {
-        for lx in 0..mask.w {
-            let m = mask.data[ly * mask.w + lx];
-            if m <= 0.0 {
-                continue;
+    // Tuile par tuile (une tuile vide n'est pas visitée, chaque tuile touchée est prise une seule fois) : c'est la saisie
+    // d'une zone, au premier appui d'un geste, qui ne doit pas se sentir (3840 × 2160 : 300 ms pixel par pixel).
+    let (x_end, y_end) = ((mask.x0 + mask.w).min(raster.width), (mask.y0 + mask.h).min(raster.height));
+    if mask.x0 < x_end && mask.y0 < y_end {
+        for ty in mask.y0 / TILE..y_end.div_ceil(TILE) {
+            for tx in mask.x0 / TILE..x_end.div_ceil(TILE) {
+                let idx = ty * raster.tiles_x + tx;
+                if raster.tiles[idx].is_none() {
+                    continue;
+                }
+                let tile = raster.tile_mut(idx);
+                let (ox, oy) = (tx * TILE, ty * TILE);
+                for y in oy.max(mask.y0)..(oy + TILE).min(y_end) {
+                    let ly = y - mask.y0;
+                    for x in ox.max(mask.x0)..(ox + TILE).min(x_end) {
+                        let lx = x - mask.x0;
+                        let m = mask.data[ly * mask.w + lx];
+                        if m <= 0.0 {
+                            continue;
+                        }
+                        let i = (y - oy) * TILE + (x - ox);
+                        let c = tile[i];
+                        if c.a() == 0 {
+                            continue;
+                        }
+                        pixels[ly * mask.w + lx] = scaled(c, m);
+                        tile[i] = scaled(c, 1.0 - m);
+                    }
+                }
             }
-            let (x, y) = (mask.x0 + lx, mask.y0 + ly);
-            let c = raster.get(x, y);
-            if c.a() == 0 {
-                continue;
-            }
-            pixels[ly * mask.w + lx] = scaled(c, m);
-            set(raster, x, y, scaled(c, 1.0 - m));
         }
     }
     Floating {
@@ -228,6 +272,39 @@ pub fn stamp(raster: &mut Raster, f: &Floating, aff: &Affine) -> Option<Rect> {
     let y1 = (area.max.y.ceil().max(0.0) as usize).min(raster.height);
     if x0 >= x1 || y0 >= y1 {
         return None;
+    }
+    // Sans transformation (la saisie d'une zone) : les pixels se posent tels quels, sans les rééchantillonner un à un.
+    // (Le même résultat que le chemin général : à l'identité, l'interpolation rend le pixel lui-même.)
+    if *aff == Affine::IDENTITY {
+        let (fx0, fx1, fy0, fy1) = (x0.max(f.x0), x1.min(f.x0 + f.w), y0.max(f.y0), y1.min(f.y0 + f.h));
+        if fx0 < fx1 && fy0 < fy1 {
+            // (Tuile par tuile : une tuile où rien ne tombe n'est ni créée ni copiée.)
+            for ty in fy0 / TILE..=(fy1 - 1) / TILE {
+                for tx in fx0 / TILE..=(fx1 - 1) / TILE {
+                    let idx = ty * raster.tiles_x + tx;
+                    let (ox, oy) = (tx * TILE, ty * TILE);
+                    let (rx, ry) = (ox.max(fx0)..(ox + TILE).min(fx1), oy.max(fy0)..(oy + TILE).min(fy1));
+                    let lands = ry.clone().any(|y| rx.clone().any(|x| f.pixels[(y - f.y0) * f.w + (x - f.x0)].a() != 0));
+                    if !lands {
+                        continue;
+                    }
+                    let t = raster.tile_mut(idx);
+                    for y in ry {
+                        for x in rx.clone() {
+                            let c = f.pixels[(y - f.y0) * f.w + (x - f.x0)];
+                            let a = c.a();
+                            if a == 0 {
+                                continue;
+                            }
+                            let c = Color32::from_rgba_premultiplied(c.r().min(a), c.g().min(a), c.b().min(a), a);
+                            let i = (y - oy) * TILE + (x - ox);
+                            t[i] = over(t[i], c, 255, None);
+                        }
+                    }
+                }
+            }
+        }
+        return Some(Rect::from_min_max(pos2(x0 as f32, y0 as f32), pos2(x1 as f32, y1 as f32)));
     }
     let (ox, oy) = (f.x0 as f32, f.y0 as f32);
     for y in y0..y1 {

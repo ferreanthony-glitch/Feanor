@@ -330,7 +330,7 @@ fn vector_cel(elements: Vec<crate::vector::Element>) -> Cel {
 #[test]
 fn vector_strokes_and_fills_are_rendered_outside_the_sheet() {
     use crate::vector::Element;
-    let fill = Element::Fill { contours: vec![vec![[-300.0, 700.0], [-200.0, 700.0], [-200.0, 800.0], [-300.0, 800.0]]], color: [0, 0, 255], opacity: 1.0 };
+    let fill = Element::Fill { contours: vec![vec![[-300.0, 700.0], [-200.0, 700.0], [-200.0, 800.0], [-300.0, 800.0]]], color: [0, 0, 255], opacity: 1.0, gradient: None };
     let c = vector_cel(vec![
         line(&[(-500.0, -300.0), (-420.0, -300.0)], 4.0, [255, 0, 0]),
         // À cheval sur le bord droit de la feuille (400).

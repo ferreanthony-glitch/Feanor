@@ -474,6 +474,36 @@ mod hasard_tests;
 // Postérisation temporelle de la caméra (« saccade »).
 #[cfg(test)]
 mod saccade_tests;
+#[cfg(test)]
+mod saccade_ecran_tests;
+// L'aperçu du tremblement par défaut (Préférences > Dessin).
+mod tremblementapercu;
+#[cfg(test)]
+mod tremblementapercu_tests;
+// Fermer un projet : jamais de question quand rien n'a changé, « Enregistrer » enregistre puis ferme.
+#[cfg(test)]
+mod fermeture_tests;
+// Transformer une sélection bitmap au zéro latence (feuille flottante bitmap).
+#[cfg(test)]
+mod selection_bitmap_tests;
+// Alt + glisser les images de la timeline.
+#[cfg(test)]
+mod timeline_alt_tests;
+// Copier et coller les clés de dessins et les images.
+#[cfg(test)]
+mod timeline_cles_tests;
+// Durée d'un nouveau plan, durée des plans choisis.
+mod dureeplans;
+#[cfg(test)]
+mod dureeplans_tests;
+// Réunir deux plans qui ont un calque de même nom : la question.
+mod fusionnoms;
+#[cfg(test)]
+mod fusionnoms_tests;
+// Nouvelle séquence avec les plans choisis.
+mod sequenceplans;
+#[cfg(test)]
+mod sequenceplans_tests;
 // Fusionner deux plans en glissant l'un sur l'autre dans le montage.
 mod fusionglisse;
 #[cfg(test)]
@@ -624,6 +654,11 @@ mod springtools_tests;
 // sélection, clés de position.
 mod tracedroit;
 mod remplirsel;
+// Outil Dégradé (2026-10-24) : le noyau (`degrade`), l'outil et ses réglages (`degradeui`).
+mod degrade;
+mod degradeui;
+#[cfg(test)]
+mod degrade_tests;
 mod selobjet;
 pub mod poskeys;
 mod poskeysui;

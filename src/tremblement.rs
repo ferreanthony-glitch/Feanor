@@ -127,7 +127,8 @@ pub fn set_rest_off(off: bool) {
 /// pas du projet : il s'ajoute à la pile d'effets d'un calque **au moment du rendu** (`fx::layer_steps`), sans rien écrire
 /// dans le document (un projet ouvert sans lui est inchangé sur le disque), et il passe par le même chemin que l'effet — calcul
 /// en arrière-plan, cache des dessins dérivés, aperçu réduit, export et vignettes —, jamais par un rejeu sur le fil de l'interface.
-/// Les autres réglages de l'effet (variantes, vitesse, épaisseur, graine, « Animer à l'arrêt ») gardent ceux d'origine de l'effet.
+/// Il a tous les réglages de l'effet (intensité, fréquence, variantes, vitesse, épaisseur, graine, « Animer à l'arrêt »), comme
+/// le tremblement d'un calque ; un réglage d'avant qui n'a que les trois premiers garde les autres d'origine.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct Defaut {
     #[serde(default, rename = "actif")]
@@ -138,6 +139,21 @@ pub struct Defaut {
     /// 0 : doux ; 100 : nerveux.
     #[serde(default = "frequence_d_origine", rename = "frequence")]
     pub frequence: f32,
+    /// Combien de dessins différents se suivent (`MIN_VARIANTS` à `MAX_VARIANTS`).
+    #[serde(default = "variantes_d_origine", rename = "variantes")]
+    pub variantes: usize,
+    /// Images du projet par variante (1 à `MAX_SPEED`).
+    #[serde(default = "vitesse_d_origine", rename = "vitesse")]
+    pub vitesse: usize,
+    /// Variation d'épaisseur du trait, 0 à 100 %.
+    #[serde(default, rename = "epaisseur")]
+    pub epaisseur: f32,
+    /// Le hasard du champ (1 à 999) : une autre graine, un autre tremblement.
+    #[serde(default = "graine_d_origine", rename = "graine")]
+    pub graine: u32,
+    /// Animer à l'arrêt : sur une image fixe, le trait continue de trembler à la cadence du réglage.
+    #[serde(default, rename = "repos")]
+    pub repos: bool,
 }
 
 fn intensite_d_origine() -> f32 {
@@ -148,9 +164,30 @@ fn frequence_d_origine() -> f32 {
     55.0
 }
 
+fn variantes_d_origine() -> usize {
+    3
+}
+
+fn vitesse_d_origine() -> usize {
+    2
+}
+
+fn graine_d_origine() -> u32 {
+    1
+}
+
 impl Default for Defaut {
     fn default() -> Self {
-        Defaut { actif: false, intensite: intensite_d_origine(), frequence: frequence_d_origine() }
+        Defaut {
+            actif: false,
+            intensite: intensite_d_origine(),
+            frequence: frequence_d_origine(),
+            variantes: variantes_d_origine(),
+            vitesse: vitesse_d_origine(),
+            epaisseur: 0.0,
+            graine: graine_d_origine(),
+            repos: false,
+        }
     }
 }
 
@@ -166,13 +203,17 @@ impl Defaut {
             actif: self.actif,
             intensite: fini(self.intensite, intensite_d_origine()).clamp(0.0, MAX_INTENSITY),
             frequence: fini(self.frequence, frequence_d_origine()).clamp(0.0, 100.0),
+            variantes: self.variantes.clamp(MIN_VARIANTS, MAX_VARIANTS),
+            vitesse: self.vitesse.clamp(1, MAX_SPEED),
+            epaisseur: fini(self.epaisseur, 0.0).clamp(0.0, 100.0),
+            graine: self.graine.clamp(1, 999),
+            repos: self.repos,
         }
     }
 
-    /// Les valeurs d'un effet « Tremblement du trait » (dans l'ordre de `INTENSITY`…`REST`) : ces deux réglages, les autres
-    /// d'origine (trois variantes, deux images par variante, ni épaisseur ni « Animer à l'arrêt »).
+    /// Les valeurs d'un effet « Tremblement du trait » (dans l'ordre de `INTENSITY`…`REST`).
     pub fn values(&self) -> Vec<f32> {
-        vec![self.intensite, self.frequence, 3.0, 2.0, 0.0, 1.0, 0.0]
+        vec![self.intensite, self.frequence, self.variantes as f32, self.vitesse as f32, self.epaisseur, self.graine as f32, if self.repos { 1.0 } else { 0.0 }]
     }
 }
 
@@ -206,8 +247,8 @@ pub fn defaut() -> Option<Defaut> {
     DEFAUT.with(std::cell::Cell::get)
 }
 
-/// L'étape de tremblement par défaut à l'image `frame` (`rest` : l'image virtuelle du repos, que le réglage par défaut
-/// n'utilise pas puisqu'il n'anime pas à l'arrêt), s'il est allumé et change quelque chose.
+/// L'étape de tremblement par défaut à l'image `frame` (`rest` : l'image virtuelle du repos, que le réglage prend à la place de
+/// l'image quand « Animer à l'arrêt » est allumé), s'il est allumé et change quelque chose.
 pub fn default_step(frame: usize, rest: Option<usize>) -> Option<crate::fx::FxStep> {
     let d = defaut()?.sanitized();
     let mut values = d.values();

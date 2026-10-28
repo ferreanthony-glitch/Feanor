@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::audio::Pcm;
 use crate::blend::BlendMode;
 use crate::camera::{self, Camera, CameraKey};
+use crate::fusionnoms::JoinOpts;
 use crate::guides::Guide;
 use crate::raster::Raster;
 use crate::vector::VectorDrawing;
@@ -850,6 +851,68 @@ fn held_keys(keys: &[CameraKey], len: usize, cams: (Camera, Camera)) -> Vec<Came
     v
 }
 
+/// Deux calques sont réglés pareil : ils peuvent se réunir à la jonction de deux plans sans que rien ne change à l'écran.
+pub(crate) fn layers_same(x: &Layer, y: &Layer) -> bool {
+    x.kind == y.kind
+        // (Un dossier ne se réunit qu'à un dossier.)
+        && x.folder == y.folder
+        && x.decor == y.decor
+        && x.annotation == y.annotation
+        && x.visible == y.visible
+        && x.opacity == y.opacity
+        && x.blend == y.blend
+        && x.transform == y.transform
+        // (Un calque animé ne se réunit pas à un autre : il reste un calque à part.)
+        && x.pos_keys.is_empty()
+        && y.pos_keys.is_empty()
+        && x.depth == y.depth
+        // (Un calque de couleur ne se réunit qu'à un calque de couleur, un calque d'effet, de vidéo ou de toute la scène qu'à
+        // un calque de sa sorte : un calque bitmap ordinaire réuni à un calque de couleur voyait ses images refaites d'après le
+        // trait — ses dessins n'étaient plus nulle part, et l'enregistrement suivant les effaçait. Revue du 2026-10-23.)
+        && x.couleur.is_some() == y.couleur.is_some()
+        && x.effet.is_none() == y.effet.is_none()
+        && x.video.is_none() == y.video.is_none()
+        && x.scene_wide == y.scene_wide
+}
+
+/// Le calque de `a` où va chaque calque de `b` à la jonction de deux plans (rien : il s'ajoute). Par nom, puis par rang, s'ils sont réglés
+/// pareil (`layers_same`) ; `apart` : les calques de `b` (par numéro) qui ne se réunissent pas par rang (renommés ou gardés à part,
+/// `fusionnoms.rs`).
+pub(crate) fn layer_targets(a: &[Layer], b: &[Layer], apart: &std::collections::HashSet<u64>) -> Vec<Option<usize>> {
+    let mut used = vec![false; a.len()];
+    let mut target: Vec<Option<usize>> = Vec::with_capacity(b.len());
+    for lb in b {
+        let k = (0..a.len()).find(|&k| !used[k] && a[k].name == lb.name && layers_same(&a[k], lb));
+        if let Some(k) = k {
+            used[k] = true;
+        }
+        target.push(k);
+    }
+    for (j, lb) in b.iter().enumerate() {
+        if target[j].is_none() && j < a.len() && !used[j] && !apart.contains(&lb.id) && layers_same(&a[j], lb) {
+            used[j] = true;
+            target[j] = Some(j);
+        }
+    }
+    // Un calque de couleur de `b` ne se réunit à un calque de couleur de `a` que si son trait va lui aussi dans le trait de
+    // celui-ci (ou s'ils sont libres tous les deux) : sinon la couleur réunie suivait le trait de `a`, vide sur la suite, et les
+    // dessins de couleur de `b` n'étaient plus montrés par aucun calque — l'enregistrement les effaçait (revue du 2026-10-24).
+    // Ajouté tel quel, il garde son trait (remis plus bas sur le calque où celui-ci est allé).
+    for j in 0..b.len() {
+        let (Some(k), Some(cb)) = (target[j], b[j].couleur.as_ref()) else { continue };
+        let Some(ca) = a[k].couleur.as_ref() else { continue };
+        let accordes = match (ca.trait_id, cb.trait_id) {
+            (0, 0) => true,
+            (0, _) | (_, 0) => false,
+            (ta, tb) => b.iter().position(|l| l.id == tb).and_then(|jt| target[jt]).is_some_and(|kt| a[kt].id == ta),
+        };
+        if !accordes {
+            target[j] = None;
+        }
+    }
+    target
+}
+
 /// Images d'un panneau sans compter ses calques de toute la scène (qui suivent sa durée).
 fn own_frame_count(p: &Panel) -> usize {
     p.layers
@@ -1053,6 +1116,9 @@ pub struct Document {
     /// « Report du décor » (Préférences > Vignettes) : en réunissant deux plans, le décor du premier se tient sur la suite
     /// (`decor.rs`). Un réglage de l'application que `App::structure_op_porte` pose avant chaque opération : il n'est pas dans le projet.
     pub report_decor: bool,
+    /// « Durée d'un nouveau plan » (Préférences > Montage), en secondes : celle que reçoit un plan neuf (`make_panel`). Comme `report_decor`,
+    /// un réglage de l'application que `App` pose avant ses commandes (`dureeplans.rs`) : il n'est pas dans le projet.
+    pub duree_plan_neuf: f32,
     next_id: u64,
     /// Préfixe des numéros neufs d'un projet partagé (`préfixe << 32`, `cooperation.rs`) : deux équipiers ne
     /// donnent jamais le même numéro. 0 pour un projet classique, dont les numéros ne changent pas.
@@ -1116,6 +1182,7 @@ impl Document {
             variantes_partielles: false,
             annotations: Default::default(),
             report_decor: true,
+            duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
             next_id: 1,
             id_prefix: 0,
             memo_enregistrement: Default::default(),
@@ -1185,6 +1252,7 @@ impl Document {
             variantes_partielles: false,
             annotations: structure.annotations,
             report_decor: true,
+            duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
             next_id: max_id + 1,
             id_prefix: 0,
             memo_enregistrement: Default::default(),
@@ -1231,6 +1299,7 @@ impl Document {
             variantes_partielles: self.variantes_partielles,
             annotations: self.annotations.clone(),
             report_decor: self.report_decor,
+            duree_plan_neuf: self.duree_plan_neuf,
             next_id: self.next_id,
             id_prefix: self.id_prefix,
             memo_enregistrement: Default::default(),
@@ -2235,7 +2304,7 @@ impl Document {
     }
 
     /// Remet en ordre, et renvoie le nouvel indice du panneau `id`.
-    fn normalize_keeping(&mut self, id: u64) -> usize {
+    pub(crate) fn normalize_keeping(&mut self, id: u64) -> usize {
         self.normalize();
         self.panels.iter().position(|p| p.id == id).unwrap_or(0)
     }
@@ -2245,7 +2314,7 @@ impl Document {
         Panel {
             id: self.alloc(),
             scene,
-            length: self.fps as usize * 2,
+            length: crate::dureeplans::images(self.duree_plan_neuf, self.fps),
             layers: vec![Layer::new("Dessin", LayerKind::Vector)],
             action: String::new(),
             dialogue: String::new(),
@@ -2460,12 +2529,17 @@ impl Document {
 
     /// Met le plan (ou panneau) `index + 1` au bout du plan `index` (voir `append_plan`).
     pub(crate) fn append_next(&mut self, index: usize) -> Option<String> {
+        self.append_next_with(index, &JoinOpts::default())
+    }
+
+    /// Comme `append_next`, avec ce qu'on a répondu à la question des calques de même nom (`JoinOpts`).
+    pub(crate) fn append_next_with(&mut self, index: usize, opts: &JoinOpts) -> Option<String> {
         let last = |d: &Document, i: usize| d.panels[i].frame_count() - 1;
         // (Les caméras douces, celles des clés : la postérisation temporelle n'est pas une pose.)
         let cams_a = (self.panel_camera_douce(index, 0), self.panel_camera_douce(index, last(self, index)));
         let cams_b = (self.panel_camera_douce(index + 1, 0), self.panel_camera_douce(index + 1, last(self, index + 1)));
         let b = self.panels.remove(index + 1);
-        self.append_plan(index, b, cams_a, cams_b)
+        self.append_plan(index, b, cams_a, cams_b, opts)
     }
 
     /// Met le plan `b` (déjà retiré du document) au bout du plan `index`.
@@ -2479,7 +2553,7 @@ impl Document {
     /// - Les notes de la planche attachées à `b` s'attachent à cette marque.
     ///
     /// Renvoie un avertissement si quelque chose de `b` n'a pas pu être gardé (plus rien aujourd'hui : l'ancien repère 3D du plan a disparu).
-    fn append_plan(&mut self, index: usize, b: Panel, cams_a: (Camera, Camera), cams_b: (Camera, Camera)) -> Option<String> {
+    fn append_plan(&mut self, index: usize, mut b: Panel, cams_a: (Camera, Camera), cams_b: (Camera, Camera), opts: &JoinOpts) -> Option<String> {
         let mark_id = self.alloc();
         self.forget_joint_reserves(self.panels[index].id, b.id);
         let a_len = self.panels[index].frame_count();
@@ -2496,60 +2570,10 @@ impl Document {
             a.camera = keys;
         }
 
-        // Calques : par nom, puis par rang, s'ils sont réglés pareil.
-        let same = |x: &Layer, y: &Layer| {
-            x.kind == y.kind
-                // (Un dossier ne se réunit qu'à un dossier.)
-                && x.folder == y.folder
-                && x.decor == y.decor
-                && x.annotation == y.annotation
-                && x.visible == y.visible
-                && x.opacity == y.opacity
-                && x.blend == y.blend
-                && x.transform == y.transform
-                // (Un calque animé ne se réunit pas à un autre : il reste un calque à part.)
-                && x.pos_keys.is_empty()
-                && y.pos_keys.is_empty()
-                && x.depth == y.depth
-                // (Un calque de couleur ne se réunit qu'à un calque de couleur, un calque d'effet, de vidéo ou de toute la scène qu'à
-                // un calque de sa sorte : un calque bitmap ordinaire réuni à un calque de couleur voyait ses images refaites d'après le
-                // trait — ses dessins n'étaient plus nulle part, et l'enregistrement suivant les effaçait. Revue du 2026-10-23.)
-                && x.couleur.is_some() == y.couleur.is_some()
-                && x.effet.is_none() == y.effet.is_none()
-                && x.video.is_none() == y.video.is_none()
-                && x.scene_wide == y.scene_wide
-        };
-        let mut used = vec![false; a.layers.len()];
-        let mut target: Vec<Option<usize>> = Vec::with_capacity(b.layers.len());
-        for lb in &b.layers {
-            let k = (0..a.layers.len()).find(|&k| !used[k] && a.layers[k].name == lb.name && same(&a.layers[k], lb));
-            if let Some(k) = k {
-                used[k] = true;
-            }
-            target.push(k);
-        }
-        for (j, lb) in b.layers.iter().enumerate() {
-            if target[j].is_none() && j < a.layers.len() && !used[j] && same(&a.layers[j], lb) {
-                used[j] = true;
-                target[j] = Some(j);
-            }
-        }
-        // Un calque de couleur de `b` ne se réunit à un calque de couleur de `a` que si son trait va lui aussi dans le trait de
-        // celui-ci (ou s'ils sont libres tous les deux) : sinon la couleur réunie suivait le trait de `a`, vide sur la suite, et les
-        // dessins de couleur de `b` n'étaient plus montrés par aucun calque — l'enregistrement les effaçait (revue du 2026-10-24).
-        // Ajouté tel quel, il garde son trait (remis plus bas sur le calque où celui-ci est allé).
-        for j in 0..b.layers.len() {
-            let (Some(k), Some(cb)) = (target[j], b.layers[j].couleur.as_ref()) else { continue };
-            let Some(ca) = a.layers[k].couleur.as_ref() else { continue };
-            let accordes = match (ca.trait_id, cb.trait_id) {
-                (0, 0) => true,
-                (0, _) | (_, 0) => false,
-                (ta, tb) => b.layers.iter().position(|l| l.id == tb).and_then(|jt| target[jt]).is_some_and(|kt| a.layers[kt].id == ta),
-            };
-            if !accordes {
-                target[j] = None;
-            }
-        }
+        // Calques : par nom, puis par rang, s'ils sont réglés pareil (`layer_targets`). Ce qu'on a répondu à la question des calques de même
+        // nom (`fusionnoms.rs`) : renommés d'avance, ou gardés à part (le second renommé « Dessin_2 »…) ; ceux-là ne se réunissent pas par rang.
+        let apart = opts.layers.prepare(&a.layers, &mut b.layers);
+        let target = layer_targets(&a.layers, &b.layers, &apart);
         for l in &mut a.layers {
             l.frames.resize(a_len, None);
             l.roles.retain(|f, _| *f < a_len);
@@ -2675,6 +2699,11 @@ impl Document {
     /// propres marques restent. Ils doivent être au moins deux, se suivre et être dans une même
     /// séquence ; sinon rien. Renvoie l'indice du plan réuni.
     pub fn join_plans(&mut self, ids: &[u64]) -> Option<usize> {
+        self.join_plans_with(ids, &JoinOpts::default())
+    }
+
+    /// `join_plans`, avec la réponse à la question des calques de même nom (`JoinOpts`, `fusionnoms.rs`).
+    pub fn join_plans_with(&mut self, ids: &[u64], opts: &JoinOpts) -> Option<usize> {
         let mut at: Vec<usize> = ids.iter().filter_map(|id| self.panels.iter().position(|p| p.id == *id)).collect();
         at.sort_unstable();
         at.dedup();
@@ -2688,7 +2717,7 @@ impl Document {
         let first = self.panels[at[0]].id;
         for _ in 1..at.len() {
             let i = self.panels.iter().position(|p| p.id == first)?;
-            self.join_next_plan_without_mark(i)?;
+            self.join_next_plan_without_mark_with(i, opts)?;
         }
         self.panels.iter().position(|p| p.id == first)
     }
@@ -2696,9 +2725,14 @@ impl Document {
     /// `join_next_plan` sans marque d'image à la jointure (Anthony, 2026-10-17, pour « Réunir le
     /// plan et le suivant » comme pour « Fusionner les plans choisis ») ; voir `drop_joint_mark`.
     pub fn join_next_plan_without_mark(&mut self, index: usize) -> Option<usize> {
+        self.join_next_plan_without_mark_with(index, &JoinOpts::default())
+    }
+
+    /// `join_next_plan_without_mark`, avec la réponse à la question des calques de même nom (`JoinOpts`).
+    pub fn join_next_plan_without_mark_with(&mut self, index: usize, opts: &JoinOpts) -> Option<usize> {
         let first = self.panels.get(index)?.id;
         let joint = self.panels[index].frame_count();
-        self.join_next_plan(index)?;
+        self.join_next_plan_with(index, opts)?;
         let i = self.panels.iter().position(|p| p.id == first)?;
         self.drop_joint_mark(i, joint);
         Some(i)
@@ -2739,11 +2773,16 @@ impl Document {
     /// Réunit le plan `index` et le suivant de la même séquence : les images du suivant viennent
     /// après (voir `append_plan`). Rien si le suivant est dans une autre séquence.
     pub fn join_next_plan(&mut self, index: usize) -> Option<usize> {
+        self.join_next_plan_with(index, &JoinOpts::default())
+    }
+
+    /// `join_next_plan`, avec la réponse à la question des calques de même nom (`JoinOpts`).
+    pub fn join_next_plan_with(&mut self, index: usize, opts: &JoinOpts) -> Option<usize> {
         if index + 1 >= self.panels.len() || self.sequence_of(index) != self.sequence_of(index + 1) {
             return None;
         }
         // (Le décor du premier plan se tient sur la suite, ou la suite repart d'un décor vide : `decor.rs`.)
-        self.join_with_decor(index);
+        self.join_with_decor_with(index, opts);
         let id = self.panels[index].id;
         Some(self.normalize_keeping(id))
     }

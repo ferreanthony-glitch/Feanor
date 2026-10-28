@@ -354,10 +354,24 @@ pub(crate) fn stretch_frames(frames: &Frames, len: usize, how: Stretch) -> Frame
 pub(crate) enum DropMode {
     /// Sans touche : déplacé (sa place se vide, il recouvre ce qu'il y a là où on le pose).
     Move,
-    /// Ctrl : copié (il recouvre ce qu'il y a là où on le pose).
+    /// Ctrl ou Alt : copié (il recouvre ce qu'il y a là où on le pose).
     Copy,
     /// Maj : inséré (il quitte sa place, la suite recule, puis il s'insère là où on le pose).
     Insert,
+}
+
+impl DropMode {
+    /// Le geste que les touches tenues au lâcher demandent : Ctrl ou Alt, copier ; Maj, insérer ; rien, déplacer.
+    /// (Alt copie comme Ctrl, Anthony 2026-10-28 : « Alt + glisser duplique les images choisies » ; Ctrl garde son sens d'avant.)
+    pub(crate) fn de_touches(m: &eframe::egui::Modifiers) -> DropMode {
+        if m.command || m.ctrl || m.alt {
+            DropMode::Copy
+        } else if m.shift {
+            DropMode::Insert
+        } else {
+            DropMode::Move
+        }
+    }
 }
 
 /// Pose les images [a, b) à partir de l'image `to`, selon `mode` ; `row` : les images posées
@@ -579,7 +593,7 @@ impl App {
         self.cam_clip_recent = false;
         // Dans le presse-papiers de Windows : Ctrl+V vise de nouveau Pelure (`pasteimage`).
         self.ctx.copy_text(format!("{}images copiées", crate::pasteimage::MARK));
-        self.status = format!("{n} image{} de {k} calque{} copiée{}.", s(n), s(k), s(n));
+        self.status = format!("{n} image{} de {k} calque{} copiée{} : Ctrl+V les insère avant l'image courante, Maj+Ctrl+V les pose sur la tête de lecture.", s(n), s(k), s(n));
     }
 
     /// Coupe les images visées : copiées, puis supprimées (selon le mode de trou).
@@ -592,6 +606,18 @@ impl App {
     /// place des images choisies. La première rangée va sur le calque courant, les suivantes
     /// sur les calques au-dessus ; chaque collage a ses propres copies des dessins.
     pub(crate) fn paste_images(&mut self, replace: bool) {
+        self.paste_images_with(replace, false);
+    }
+
+    /// Maj+Ctrl+V dans la timeline (`edition.coller_a_la_tete`) : les images copiées se posent exactement à partir de la tête de
+    /// lecture, par-dessus ce qui y était, sans rien repousser (Ctrl+V les insère avant l'image courante et repousse la suite).
+    pub(crate) fn paste_images_at_head(&mut self) {
+        self.paste_images_with(false, true);
+    }
+
+    /// Colle les images copiées. `replace` : à la place des images choisies ; `at_head` : sur la tête de lecture, sans repousser la
+    /// suite ; sinon, avant l'image courante, en insérant.
+    pub(crate) fn paste_images_with(&mut self, replace: bool, at_head: bool) {
         let Some(clip) = self.image_clipboard.clone() else {
             self.status = "Aucune image copiée.".into();
             return;
@@ -601,7 +627,7 @@ impl App {
         }
         // D'un projet d'une autre feuille : adaptées (`adaptation.rs`, `collage.rs`) ; l'original reste dans le
         // presse-papiers.
-        let clip = match self.collage_preparer(crate::collage::Colle::Images(clip), crate::collage::Reprise::Images { replace }) {
+        let clip = match self.collage_preparer(crate::collage::Colle::Images(clip), crate::collage::Reprise::Images { replace, at_head }) {
             crate::collage::Preparation::Pret(crate::collage::Colle::Images(c)) => c,
             _ => return,
         };
@@ -648,12 +674,17 @@ impl App {
                 })
                 .collect();
             let layer = &mut self.layers_mut()[li];
-            if replace {
-                delete_frames(&mut layer.frames, a, b, Hole::FromRight);
-                layer.shift_frames(a, b - a, true);
+            if at_head {
+                // Sur la tête : elles recouvrent ce qu'il y avait là, rien ne recule ni n'avance.
+                drop_frames(&mut layer.frames, at, at, at, DropMode::Copy, &pasted);
+            } else {
+                if replace {
+                    delete_frames(&mut layer.frames, a, b, Hole::FromRight);
+                    layer.shift_frames(a, b - a, true);
+                }
+                insert_frames(&mut layer.frames, at, &pasted);
+                layer.shift_frames(at, pasted.len(), false);
             }
-            insert_frames(&mut layer.frames, at, &pasted);
-            layer.shift_frames(at, pasted.len(), false);
             roles::put(&mut layer.roles, at, pasted.len(), clip.roles.get(k).map_or(&[][..], Vec::as_slice));
         }
         let n = clip.rows.first().map_or(0, Vec::len);
@@ -1168,7 +1199,7 @@ impl App {
                 }
             });
         });
-        ui.label(egui::RichText::new("Glisser les images choisies : déplacer ; avec Ctrl : copier ; avec Maj : insérer.").weak().small());
+        ui.label(egui::RichText::new("Glisser les images choisies : déplacer ; avec Ctrl ou Alt : copier ; avec Maj : insérer.").weak().small());
     }
 }
 

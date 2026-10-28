@@ -196,7 +196,12 @@ fn the_window_proposes_with_a_preview_and_changes_nothing_until_appliquer() {
     // Comme le panneau Réglages de l'outil : le réglage de l'application suit (écrit dans les réglages).
     b.chauffer(3);
     assert_eq!(b.app.settings.toucher.pressure_curve, neuve);
-    // « Rétablir » rend la courbe d'avant.
+    // « Appliquer » ferme la fenêtre (il n'y a plus rien à y faire).
+    assert!(b.app.confort.stylet.is_none(), "la fenêtre est fermée");
+    assert!(!est_la(&b, "Trace trois traits dans le cadre") && !est_la(&b, "Appliquer"));
+    // Rouverte : « Rétablir » est là, et rend la courbe d'avant.
+    b.app.run_action("aide.regler_stylet");
+    b.chauffer(6);
     let retablir = tous_les_textes(&b).into_iter().find(|(t, _)| t == "Rétablir").unwrap().1;
     clic(&mut b, retablir);
     assert_eq!(b.app.toucher.pressure_curve, avant, "la courbe d'avant");

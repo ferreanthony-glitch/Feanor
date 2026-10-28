@@ -433,10 +433,11 @@ fn vector_layer_comes_back_as_vectors() {
     let elements: Vec<crate::vector::Element> = raw
         .iter()
         .map(|e| match e {
-            crate::vector::Element::Fill { contours, color, opacity } => crate::vector::Element::Fill {
+            crate::vector::Element::Fill { contours, color, opacity, gradient } => crate::vector::Element::Fill {
                 contours: contours.iter().map(|c| c.iter().map(|p| tf(p[0], p[1])).collect()).collect(),
                 color: *color,
                 opacity: *opacity,
+                gradient: *gradient,
             },
             crate::vector::Element::Stroke { points, color, opacity, hardness, brush, trace } => crate::vector::Element::Stroke {
                 points: points.iter().map(|p| { let q = tf(p.x, p.y); crate::vector::VPoint { x: q[0], y: q[1], r: (p.r * s).max(0.3) } }).collect(),

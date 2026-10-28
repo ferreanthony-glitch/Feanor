@@ -229,6 +229,10 @@ pub struct Settings {
     /// Le centre d'une rotation prise hors d'un coin : le pivot (d'office) ou le coin opposé.
     #[serde(default, rename = "rotation_autour_de", skip_serializing_if = "crate::selbox::CentreRotation::est_defaut")]
     pub rotation_autour: crate::selbox::CentreRotation,
+    /// La durée d'un plan neuf, en secondes (`dureeplans.rs`, Préférences > Montage) : 2 s d'origine. Un réglage de l'application,
+    /// commun à tous les projets ; seuls les plans créés ensuite l'ont (les plans qui existent gardent leur durée).
+    #[serde(default = "crate::dureeplans::secondes_d_origine", rename = "duree_nouveau_plan", skip_serializing_if = "crate::dureeplans::est_d_origine")]
+    pub new_plan_secs: f32,
 }
 
 fn default_passe_partout() -> u8 {
@@ -317,6 +321,7 @@ impl Default for Settings {
             vignettes: Default::default(),
             point_fixe: Default::default(),
             rotation_autour: Default::default(),
+            new_plan_secs: crate::dureeplans::secondes_d_origine(),
         }
     }
 }
@@ -372,6 +377,7 @@ impl Settings {
         s.neutral_colors = crate::personnages::neutres_nettoyees(std::mem::take(&mut s.neutral_colors));
         s.echelle = crate::echelle::echelle_valide(s.echelle);
         s.vignettes = std::mem::take(&mut s.vignettes).nettoyes();
+        s.new_plan_secs = crate::dureeplans::secondes_valides(s.new_plan_secs);
         s.poser_le_panneau_vignettes();
         s
     }
