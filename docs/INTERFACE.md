@@ -5108,3 +5108,88 @@ Rien d'autre. Un essai vérifie qu'il n'y a dans la fenêtre principale qu'un se
 ### Essais
 
 `charte_tests.rs` : installation neuve = SHOT, et ses fonds, boutons et sélection sont ceux de Gris sombre ; la liste des thèmes ; un poste qui a déjà choisi un thème le garde (chaque choix, ancien fichier Gris sombre, thème personnalisé d'avant la charte, personnalisé qui part de SHOT) ; pas de noir dans les fonds ; texte presque identique à l'ancien ; contrastes du texte et du texte secondaire ≥ 4,5:1 et du rehaut ≥ 3:1 ; sélection, contour (blanc), survol et boutons exactement ceux de Gris sombre, aucune couleur de la palette orange hors le rehaut, couleurs du travail inchangées ; **dans les quatre espaces de travail : un seul rectangle plein orange (le trait, mince, sous le mot actif et pas sous les autres), moins de 0,5 % de la fenêtre, aucun contour ni trait orange, le mot actif garde son fond de sélection gris** ; couleurs du logo (pixels, deux variantes) ; icône orange (fond, coin arrondi, angle noir, centre du S), icône sombre, `.ico` orange ; petit logotype (couleurs, angles, pas de devise) ; logotype tout à gauche de la barre et sans gêne à 1280 points ; accueil (deux boutons gris pareils, icône de « Nouveau projet » orange, aucun remplissage orange, carte du fond des fenêtres, thème clair sans orange). Les captures (`charte_captures`, `charte_icones`, ignorées) écrivent dans `SHOT_CAPTURE_DIR` : `accueil.png`, `fenetre-principale-{vignettes,storyboard,animation,montage}.png`, `icone-{orange,sombre}-256.png`.
+
+---------------------------------------------------------------------------------------------------
+
+## 64. Mon panneau (essai, Labo) : mes commandes et mes outils perso (2026-10-28, branche `panneau-perso`)
+
+Demande d'Anthony : « un panneau personnalisable pour mes raccourcis et mes outils personnalisés ». C'est un **prototype**, à essayer avant de l'intégrer pour de bon : il vit dans le menu **Labo**, avec les autres fonctions à l'essai. Fichiers : `monpanneau.rs` (la logique : la liste des boutons, la grille, les réglages), `monpanneauui.rs` (l'affichage et les gestes), `monpanneau_tests.rs` (20 essais) ; petits ajouts dans `dock.rs` (le panneau `Pane::MonPanneau`), `barrepanneaux.rs`, `panels.rs` (menu Labo), `raccourcisui.rs` (clic droit), `brushui.rs` (clic droit sur une brosse), `bulles.rs` et `toolbars.rs` (retenir l'icône d'une commande), `settings.rs`, `keymap.rs` et `keymap.toml` (l'action `vue.mon_panneau`).
+
+### Ouvrir
+
+**Labo > Mon panneau (essai)** ouvre, et referme, le panneau « Mon panneau » (la palette Ctrl+K a aussi « Panneau Mon panneau, essai du Labo (ouvrir / fermer) », sans touche : on peut lui en assigner une). C'est un panneau ancrable comme les autres : il arrive en onglet dans la colonne de droite (avec Calques, Effets, Suggestions sonores), et l'on tire son onglet où l'on veut (à côté du dessin, sous la timeline, dans une fenêtre à part). Il n'est **pas** dans la barre des panneaux, ni dans la liste Affichage > Espaces de travail > Panneaux : rien ne change hors du Labo.
+
+### Ce qu'il contient
+
+Une **grille de boutons-icônes** (34 points ; avec les noms : 64 sur 52), qui passe à la ligne selon la largeur du panneau. Chaque bouton a l'icône habituelle de sa commande et **la même bulle d'aide qu'ailleurs** (nom, raccourci, courte description, après 1 s). Il y en a trois sortes, plus le séparateur :
+
+| Sorte | Ce qu'un clic fait | Son icône |
+|---|---|---|
+| **Commande** du registre (`keymap::ACTIONS`, celui des raccourcis et de Ctrl+K : pas de second système) | la lance, exactement comme la touche ou la palette (`run_action`) : choisir un outil, une action de menu, ouvrir un panneau… | celle qu'on lui voit ailleurs (voir plus bas) ; un outil allumé est enfoncé |
+| **Brosse** de « Mes brosses » | la prend : son réglage devient celui du pinceau (ou de la gomme, qui passe aussi à l'outil Gomme) et l'outil Pinceau est pris | un pinceau (une gomme) ; enfoncée tant que c'est la brosse courante |
+| **Outil perso** | remet d'un coup **l'outil, les réglages de sa brosse et la couleur d'avant-plan** gardés | l'icône de l'outil, avec une **pastille de la couleur** gardée |
+| **Séparateur** | rien | un trait fin entre deux groupes |
+
+**L'icône habituelle d'une commande** vient, dans cet ordre : de l'outil (`Tool::icon`), du panneau (`Pane::icon`), de la barre où elle est (`barres.rs`), puis de ce que SHOT a dessiné pour elle **depuis que le panneau est ouvert** (les boutons d'icônes de SHOT retiennent leur icône, leur nom et leur description le temps de la séance ; sinon rien n'est retenu) ; une commande sans aucune icône prend un éclair, sous son nom du registre. Deux boutons ne sont jamais identiques : la même commande ou la même brosse ne se pose qu'une fois.
+
+### Ajouter un bouton
+
+- **Clic droit sur n'importe quelle icône de SHOT** (là où « Assigner un raccourci… » existe) > **Ajouter à Mon panneau**. L'entrée **n'existe que si le panneau est ouvert** ; panneau fermé, le clic droit est celui d'avant. Même entrée au clic droit sur une brosse de la liste des brosses.
+- **Le « + »** (dernière case de la grille) ouvre sous la grille une **recherche** comme Ctrl+K : on tape quelques lettres du nom (« persp », « flou »), huit commandes au plus, et les brosses de « Mes brosses » qui répondent ; un clic ajoute et referme. Les commandes déjà dans le panneau sont grisées.
+- **« Enregistrer l'outil actuel ici »** (en haut) garde l'outil courant, les réglages de sa brosse (pinceau, mélangeur, crayon ou gomme ; les autres outils n'ont pas de brosse) et la couleur d'avant-plan, dans un outil perso nommé d'office « Pinceau perso », « Pinceau perso 2 »… Le champ du nom s'ouvre tout de suite sous la grille (Entrée ou OK : valider ; Échap : garder le nom proposé).
+
+### Organiser
+
+- **Glisser** un bouton pour le réordonner : la case où il se posera est cernée ; il prend la place de la case sous la souris (ou la plus proche).
+- **Clic droit sur un bouton** : *Assigner un raccourci…* (commandes), *Renommer…* (outil perso), *Ajouter un séparateur* (juste après ce bouton, pas contre un autre séparateur ni tout au bout), *Retirer*. Un séparateur se glisse et se retire comme un bouton.
+- **Afficher les noms** (l'icône Aa, en haut) : le nom sous chaque icône (une ligne, coupée par « … »), ou les icônes seules (d'origine).
+
+### Enregistrement : par poste, pas dans le projet
+
+Dans les réglages du poste (`%APPDATA%\SHOT\reglages.toml`, `Settings::mon_panneau`, à côté des autres réglages par poste), **jamais dans le projet : aucun changement de format du projet.** La section n'est écrite que si le panneau n'est pas vide ; un fichier d'avant lit un panneau vide. On enregistre à chaque changement (ajouter, retirer, réordonner, renommer, « noms »), jamais à l'image.
+
+```toml
+[mon_panneau]
+noms = true
+
+[[mon_panneau.boutons]]
+genre = "commande"          # commande | brosse | outil | separateur
+id = "outil.gomme"
+
+[[mon_panneau.boutons]]
+genre = "outil"
+nom = "Crayon bleu"
+outil = "outil.crayon"
+couleur = [10, 20, 200]
+[mon_panneau.boutons.pinceau]  # les réglages de la brosse, comme dans « Mes brosses »
+size = 33.5
+```
+
+**Une version qui lit des réglages qu'elle ne comprend pas ne casse rien** : un bouton d'un genre inconnu, une table abîmée (une valeur du mauvais type), une commande qui n'existe plus au registre ou n'est pas encore faite, un outil perso dont l'outil a disparu, des séparateurs de trop sont **ignorés à la lecture** (`Reglage::nettoye`), sans toucher aux autres réglages. Une brosse qui n'est plus dans la bibliothèque garde son bouton, grisé, avec la raison dans la bulle (clic droit : retirer) ; la bibliothèque des pinceaux importés se lit sur un autre fil au lancement, un clic trop tôt le dit (« se chargent encore »).
+
+### « Sans latence »
+
+La grille ne mesure que ses quelques boutons (une passe, pas de texture, pas de lecture de disque) ; un clic agit tout de suite (`run_action`, ou trois affectations pour un outil perso) ; rien n'est enregistré sans changement. Quand le panneau est fermé, le seul coût est un drapeau lu par les icônes de SHOT (et l'entrée de clic droit n'existe pas). La recherche du « + » classe les commandes comme la palette Ctrl+K (une passe sur la liste du registre), seulement tant qu'elle est ouverte avec un texte.
+
+### Choix et limites (c'est un essai)
+
+- **Un seul panneau, le même dans tous les espaces de travail** (le panneau lui-même est placé par espace, comme les autres, mais son contenu est celui du poste).
+- **Pas de dossiers, pas de raccourci par défaut** pour ouvrir le panneau : le Labo décidera, après essai.
+- **Les commandes à état** (afficher / cacher…) n'y montrent pas leur état, sauf les outils ; la description de la bulle est celle du registre quand on la connaît, sinon le nom seul.
+- **L'outil perso ne touche pas aux réglages propres des autres outils** (taille d'une forme, remplissage…) : il garde l'outil, la brosse et la couleur, comme demandé.
+- La **seule trace hors Labo** est l'entrée « Ajouter à Mon panneau » du clic droit, quand le panneau est ouvert.
+
+### À vérifier à l'écran (par Anthony)
+
+1. **Labo > Mon panneau (essai)** : le panneau s'ouvre en onglet à droite, vide, avec la phrase d'aide. Tire son onglet à côté du dessin, puis dans une fenêtre à part : il se place comme les autres. Refermer : plus rien, et ni la barre des panneaux ni Affichage > Panneaux ne le montrent.
+2. Panneau **ouvert**, clic droit sur une icône d'outil de la barre de gauche, une icône de la barre de commandes, une icône sous le dessin : « Ajouter à Mon panneau » ; elle arrive avec **sa propre icône** et sa bulle. Panneau **fermé** : cette entrée n'y est pas.
+3. **Le +** : tape « persp » ; la commande Déformer arrive. Tape le nom d'une brosse de « Mes brosses » : elle se propose. Clic droit sur une brosse de la liste : « Ajouter à Mon panneau ».
+4. **Enregistrer l'outil actuel ici** : prends le crayon, une taille, une couleur ; enregistre ; donne un nom. Change d'outil, de taille, de couleur, puis clique le bouton : l'outil, la taille de la brosse et la couleur reviennent d'un coup. L'icône est celle du crayon avec une pastille de la couleur.
+5. **Glisser** un bouton : la case cible est cernée, il se pose là. Clic droit : *Ajouter un séparateur*, *Renommer*, *Retirer*, *Assigner un raccourci* (une commande).
+6. **Afficher les noms** : les noms sous les icônes ; rétrécis le panneau : la grille passe à la ligne, rien ne dépasse.
+7. **Ferme SHOT et rouvre-le** : le panneau, l'ordre, les noms et les outils perso sont là. Rien dans le projet : ouvre un projet sur un autre poste (ou sans le fichier de réglages) : il est identique.
+8. Au repos : rien ne bouge, le processeur reste à zéro.
+
+### Essais
+
+`monpanneau_tests.rs` (20) : ajouter et retirer un bouton (doublons refusés, brosse et gomme distinctes) ; réordonner ; séparateurs (entre deux boutons seulement, déplacés, retirés) ; renommer et nom libre d'un outil perso ; réglages écrits et relus (toutes les sortes de boutons, brosse comprise), fichier du poste relu par `Settings::load`, panneau vide non écrit et anciens réglages ; **commande inconnue, genre inconnu, table abîmée et outil disparu ignorés sans planter, les autres réglages lus** ; commande inconnue refusée à l'ajout ; **outil perso : capture puis restitution de l'outil, de la brosse et de la couleur** (crayon, pinceau, gomme, outil sans brosse, outil disparu, enregistrement avec nom libre, clic du bouton) ; bouton de brosse (prise, brosse disparue) ; bouton de commande (lance l'action du registre) ; l'entrée du clic droit n'existe que panneau ouvert, et l'ajout qu'elle demande ; icône habituelle (outil, barre, panneau, icône apprise seulement panneau ouvert) ; le panneau se dessine avec toutes les sortes de boutons, avec et sans noms, étroit et large, avec la recherche, et vide ; grille (retours à la ligne, séparateur jamais en tête de ligne) ; case visée par un glisser.
