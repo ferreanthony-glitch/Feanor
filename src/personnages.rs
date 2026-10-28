@@ -57,12 +57,25 @@ pub struct Neutre {
     pub fill: Option<[u8; 3]>,
 }
 
-/// Les couleurs neutres d'un SHOT neuf : noir sans fond, gris sur gris clair, rouge de correction sans fond.
+/// Les couleurs neutres d'un SHOT neuf (Anthony, 2026-10-28) : trois niveaux de gris, le trait toujours plus foncé que l'aplat, et
+/// l'ensemble qui s'éclaircit à chaque niveau (#1E1E1E sur #8C8C8C, #4A4A4A sur #B4B4B4, #7A7A7A sur #DADADA). Avant : noir sans
+/// aplat, gris, rouge de correction sans aplat.
 pub fn neutres_par_defaut() -> Vec<Neutre> {
     vec![
-        Neutre { name: "Noir".into(), line: [0, 0, 0], fill: None },
-        Neutre { name: "Gris".into(), line: [90, 90, 90], fill: Some([217, 217, 217]) },
-        Neutre { name: "Rouge de correction".into(), line: [205, 40, 40], fill: None },
+        Neutre { name: "Gris 1".into(), line: [0x1E, 0x1E, 0x1E], fill: Some([0x8C, 0x8C, 0x8C]) },
+        Neutre { name: "Gris 2".into(), line: [0x4A, 0x4A, 0x4A], fill: Some([0xB4, 0xB4, 0xB4]) },
+        Neutre { name: "Gris 3".into(), line: [0x7A, 0x7A, 0x7A], fill: Some([0xDA, 0xDA, 0xDA]) },
+    ]
+}
+
+/// Les personnages d'un projet neuf (Anthony, 2026-10-28) : « Perso 1 », « Perso 2 », « Perso 3 », avec le trait et l'aplat qu'il avait
+/// réglés sur ses trois premières pastilles d'origine (rouge foncé sur rose, bleu nuit sur bleu, vert foncé sur vert). Un projet
+/// qui existe déjà n'en reçoit pas : seuls les projets créés par « Nouveau projet » (`nouveau::build_document`) les ont.
+pub fn personnages_d_origine() -> [(&'static str, [u8; 3], [u8; 3]); 3] {
+    [
+        ("Perso 1", [39, 2, 2], [150, 97, 97]),
+        ("Perso 2", [0, 28, 46], [78, 110, 145]),
+        ("Perso 3", [19, 39, 17], [93, 114, 96]),
     ]
 }
 

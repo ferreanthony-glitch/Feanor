@@ -197,12 +197,15 @@ fn a_click_that_draws_nothing_leaves_no_layer_and_the_eraser_and_neutral_colours
     trait_au_milieu(&mut b, 0.0);
     assert_eq!(b.app.layers().len(), couches, "la gomme ne crée rien");
     b.app.set_tool(Tool::Brush);
-    // Une couleur neutre n'est pas un personnage : son trait va dans le calque courant.
+    // Une couleur neutre n'est pas un personnage : son trait va dans le calque courant. (Celles d'origine ont un aplat : son premier
+    // trait allume l'aplat du calque, à sa couleur d'aplat, par une étape « Aplat du personnage » à part, puis le trait.)
     b.app.perso_choisir(Choix::Neutre(0));
     trait_au_milieu(&mut b, 0.0);
     assert_eq!(b.app.layers().len(), couches, "une couleur neutre ne crée pas de calque");
     assert!(calques_de(&b.app.doc, 0, lou).is_empty());
-    assert_eq!(pas_d_annulation(&b), avant + 1, "son trait est une étape, rien d'autre");
+    assert_eq!(pas_d_annulation(&b), avant + 2, "l'aplat du calque, puis le trait : rien d'autre");
+    let gris = b.app.settings.neutral_colors[0].fill.expect("aplat du gris");
+    assert_eq!(b.app.layers()[b.app.cur_layer].fond.map(|f| f.couleur), Some(gris), "l'aplat du calque a la couleur d'aplat de la couleur neutre");
 }
 
 #[test]

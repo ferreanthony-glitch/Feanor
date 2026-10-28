@@ -211,7 +211,9 @@ fn two_characters_on_the_same_layer_keep_their_own_fills() {
 fn a_character_without_fill_cuts_the_fond_and_a_neutral_without_fond_adds_none() {
     let mut b = banc_dessin();
     let app = &mut b.app;
-    // Noir, sans fond (la première couleur neutre) sur un calque sans fond : aucun fond n'apparaît.
+    // Noir, sans fond (une couleur neutre réglée ainsi : celles d'origine ont toutes un aplat) sur un calque sans fond : aucun fond
+    // n'apparaît.
+    app.settings.neutral_colors[0] = Neutre { name: "Noir".into(), line: [0, 0, 0], fill: None };
     app.perso_choisir(Choix::Neutre(0));
     assert_eq!(app.color, [0, 0, 0]);
     anneau(app, 60.0, 60.0, 160.0, 160.0);
@@ -426,8 +428,8 @@ fn next_and_previous_walk_through_the_characters_then_the_neutrals() {
 #[test]
 fn the_neutral_colours_are_app_settings_with_sensible_defaults() {
     let d = personnages::neutres_par_defaut();
-    assert_eq!(d[0], Neutre { name: "Noir".into(), line: [0, 0, 0], fill: None });
-    assert!(d[1].fill.is_some(), "le gris a un fond clair");
+    assert_eq!(d[0], Neutre { name: "Gris 1".into(), line: [0x1E; 3], fill: Some([0x8C; 3]) });
+    assert!(d.iter().all(|n| n.fill.is_some()), "les trois gris ont un aplat plus clair que leur trait");
     assert!(d.len() <= personnages::MAX_NEUTRES);
     let mut s = crate::settings::Settings::default();
     assert_eq!(s.neutral_colors, d);
@@ -454,7 +456,7 @@ fn neutral_colours_can_be_added_edited_moved_and_deleted_and_the_choice_follows(
     app.perso_choisir(Choix::Neutre(1));
     app.perso_deplacer(Choix::Neutre(1), -1);
     assert_eq!(app.perso.actif, Some(Choix::Neutre(0)), "le choix suit sa couleur");
-    assert_eq!(app.settings.neutral_colors[0].name, "Gris");
+    assert_eq!(app.settings.neutral_colors[0].name, "Gris 2");
     app.perso_supprimer(Choix::Neutre(0));
     assert_eq!((app.perso.actif, app.settings.neutral_colors.len()), (None, n0 - 1));
     let i = app.perso_ajouter_neutre().expect("ajout");

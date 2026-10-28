@@ -753,6 +753,8 @@ mod persofond;
 mod personnages;
 #[cfg(test)]
 mod personnages_tests;
+#[cfg(test)]
+mod aplattrous_tests;
 mod personnagesui;
 mod persp;
 #[cfg(test)]
