@@ -2,13 +2,15 @@
 //! `Visuals` d'egui posés une seule fois quand le thème change. Seulement des couleurs et des
 //! tailles : aucun élément ni ressource graphique repris.
 //!
-//! Six choix. **SHOT** (par défaut depuis la charte graphique d'Anthony, 2026-10-28) et **SHOT clair**
-//! suivent la planche de charte : noir cinéma `#0E0E0E`, blanc cassé `#F4F1EA`, gris scène `#8A8A8A`
-//! et l'orange `#E76F3C`, qui est l'identité du logiciel : il marque ce qui est choisi ou important
-//! (sélection, élément actif, clés et plans choisis, bouton principal d'une fenêtre), jamais de
-//! grandes surfaces. Puis trois thèmes de gris neutres (Anthony, 2026-10-18 : « un gris sombre/clair
-//! plus proche de Storyboard Pro ou Clip Studio Paint ») : **Gris sombre**, **Gris clair** et
-//! **Sombre** (l'ancien presque noir). Un dernier, **Personnalisé**, part du thème courant et se
+//! Cinq choix. **SHOT** (par défaut depuis la charte graphique d'Anthony, 2026-10-28) est le gris sombre
+//! d'avant, avec seulement quelques rehauts orange (`#E76F3C`, l'orange de la charte) pour rappeler
+//! l'identité : un mince trait sous l'espace de travail actif, l'icône de « Nouveau projet » sur
+//! l'accueil, les angles du petit logotype. Rien d'autre n'est orange : la sélection, les éléments
+//! choisis et les boutons gardent leurs gris (Anthony, après avoir vu la première version, plus
+//! chargée : « l'orange est trop présent, le noir trop lourd »). Puis trois thèmes de gris neutres
+//! (Anthony, 2026-10-18 : « un gris sombre/clair plus proche de Storyboard Pro ou Clip Studio
+//! Paint ») : **Gris sombre**, **Gris clair** et **Sombre** (l'ancien presque noir). Un dernier,
+//! **Personnalisé**, part du thème courant et se
 //! règle dans Fichier > Préférences… avec neuf couleurs ; tout le reste de la palette (survol,
 //! onglet actif, texte secondaire, couleur des dessins sur la timeline…) en est déduit, et choisi
 //! pour rester lisible sur le thème (contraste WCAG, `contraste`).
@@ -44,11 +46,9 @@ fn couleur(c: Rvb) -> Color32 {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChoixTheme {
-    /// La charte de SHOT, sombre : le thème d'une installation neuve.
+    /// Le gris sombre avec les rehauts orange de la charte : le thème d'une installation neuve.
     #[default]
     Shot,
-    /// La charte de SHOT, claire (fonds blanc cassé).
-    ShotClair,
     GrisSombre,
     GrisClair,
     Sombre,
@@ -56,12 +56,11 @@ pub enum ChoixTheme {
 }
 
 impl ChoixTheme {
-    pub const TOUS: [ChoixTheme; 6] = [ChoixTheme::Shot, ChoixTheme::ShotClair, ChoixTheme::GrisSombre, ChoixTheme::GrisClair, ChoixTheme::Sombre, ChoixTheme::Personnalise];
+    pub const TOUS: [ChoixTheme; 5] = [ChoixTheme::Shot, ChoixTheme::GrisSombre, ChoixTheme::GrisClair, ChoixTheme::Sombre, ChoixTheme::Personnalise];
 
     pub fn nom(self) -> &'static str {
         match self {
             ChoixTheme::Shot => "SHOT",
-            ChoixTheme::ShotClair => "SHOT clair",
             ChoixTheme::GrisSombre => "Gris sombre",
             ChoixTheme::GrisClair => "Gris clair",
             ChoixTheme::Sombre => "Sombre",
@@ -94,23 +93,17 @@ pub struct Couleurs {
     pub timeline: Rvb,
     /// Traits de séparation, bordures.
     pub bordure: Rvb,
-    /// Le gris des textes secondaires et des icônes au repos, quand le thème en impose un (le gris
-    /// scène de la charte) : la palette le pousse vers le texte jusqu'à 4,5:1 sur les fonds. Absent :
-    /// déduit du texte et du fond des panneaux. Pas réglé dans les préférences.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub doux: Option<Rvb>,
-    /// Vrai pour les thèmes de la charte : l'accent marque aussi les éléments choisis (clés, plans,
-    /// calques, séquences) et le survol des boutons, là où les autres thèmes ont un contour blanc.
+    /// Vrai pour le thème de la charte : quelques rehauts orange (`Palette::rehaut`) rappellent l'identité
+    /// de SHOT (trait sous l'espace actif, icône de « Nouveau projet », angles du petit logotype). Pas réglé
+    /// dans les préférences ; absent d'un fichier de réglages, il vaut « non ».
     #[serde(default)]
     pub identite: bool,
 }
 
-/// Les couleurs de la charte de SHOT.
-/// (Les trois couleurs du logo sont écrites dans `logo.rs`, qui sert aussi à `build.rs`.)
-pub const NOIR_CINEMA: Rvb = crate::logo::NOIR_CINEMA;
+/// Les couleurs de la charte utilisées par l'interface.
+/// (Elles sont écrites dans `logo.rs`, qui sert aussi à `build.rs`.)
 pub const BLANC_CASSE: Rvb = crate::logo::BLANC_CASSE;
 pub const ORANGE_SHOT: Rvb = crate::logo::ORANGE_SHOT;
-pub const GRIS_SCENE: Rvb = [0x8A, 0x8A, 0x8A];
 
 impl Default for Couleurs {
     fn default() -> Self {
@@ -119,40 +112,11 @@ impl Default for Couleurs {
 }
 
 impl Couleurs {
-    /// Le thème de la charte : des fonds déclinés du noir cinéma en quelques gris très foncés (barres
-    /// 20, panneaux 26, fenêtres 31, rangées 34, boutons 46 ; autour du dessin, le noir cinéma
-    /// lui-même), texte blanc cassé, accent orange.
+    /// Le thème de la charte : les gris de « Gris sombre » (mêmes fonds, même sélection grise, mêmes
+    /// boutons), le texte en blanc cassé `#F4F1EA` (à peine plus chaud que le gris clair d'avant), et les
+    /// rehauts orange (`identite`).
     pub const fn shot() -> Couleurs {
-        Couleurs {
-            panneau: [26, 26, 26],
-            entete: [20, 20, 20],
-            fenetre: [31, 31, 31],
-            widgets: [46, 46, 46],
-            texte: BLANC_CASSE,
-            accent: ORANGE_SHOT,
-            fond: NOIR_CINEMA,
-            timeline: [34, 34, 34],
-            bordure: [54, 54, 54],
-            doux: Some(GRIS_SCENE),
-            identite: true,
-        }
-    }
-
-    /// La charte, claire : fonds blanc cassé, texte noir cinéma, même accent.
-    pub const fn shot_clair() -> Couleurs {
-        Couleurs {
-            panneau: BLANC_CASSE,
-            entete: [229, 225, 216],
-            fenetre: [250, 248, 243],
-            widgets: [226, 222, 212],
-            texte: NOIR_CINEMA,
-            accent: ORANGE_SHOT,
-            fond: [200, 196, 187],
-            timeline: [236, 232, 223],
-            bordure: [196, 191, 181],
-            doux: Some(GRIS_SCENE),
-            identite: true,
-        }
+        Couleurs { texte: BLANC_CASSE, identite: true, ..Couleurs::gris_sombre() }
     }
 
     pub const fn gris_sombre() -> Couleurs {
@@ -168,7 +132,6 @@ impl Couleurs {
             fond: [46, 46, 46],
             timeline: [72, 72, 72],
             bordure: [80, 80, 80],
-            doux: None,
             identite: false,
         }
     }
@@ -185,7 +148,6 @@ impl Couleurs {
             fond: [158, 158, 158],
             timeline: [205, 205, 205],
             bordure: [150, 150, 150],
-            doux: None,
             identite: false,
         }
     }
@@ -202,7 +164,6 @@ impl Couleurs {
             fond: [17, 17, 17],
             timeline: [40, 40, 40],
             bordure: [50, 50, 50],
-            doux: None,
             identite: false,
         }
     }
@@ -238,7 +199,6 @@ impl ReglageTheme {
     pub fn couleurs(&self) -> Couleurs {
         match self.choix {
             ChoixTheme::Shot => Couleurs::shot(),
-            ChoixTheme::ShotClair => Couleurs::shot_clair(),
             ChoixTheme::GrisSombre => Couleurs::gris_sombre(),
             ChoixTheme::GrisClair => Couleurs::gris_clair(),
             ChoixTheme::Sombre => Couleurs::sombre(),
@@ -329,12 +289,12 @@ pub struct Palette {
     pub accent: Color32,
     pub sur_accent: Color32,
     pub accent_texte: Color32,
-    /// Le bouton principal (fond d'accent) survolé et enfoncé : le texte posé dessus (`sur_accent`)
-    /// y reste lisible.
-    pub accent_survol: Color32,
-    pub accent_actif: Color32,
-    /// Thème de la charte : l'accent marque les éléments choisis (`contour`) et le survol des boutons.
+    /// Thème de la charte (`Couleurs::identite`) : quelques rehauts orange.
     pub identite: bool,
+    /// Le rehaut : l'orange de la charte, poussé si besoin jusqu'à 3:1 sur les panneaux et les barres ; dans
+    /// un thème sans identité, l'accent des traits (`accent_texte`). Trait sous l'espace de travail actif,
+    /// icône de « Nouveau projet », angles du petit logotype : rien d'autre.
+    pub rehaut: Color32,
     // Timeline et montage.
     pub regle: Color32,
     pub rangee: Color32,
@@ -405,24 +365,11 @@ impl Palette {
         let texte_fort = melange(texte, pole, 0.55);
         // Le texte secondaire est le plus doux qui reste lisible (4,5:1) sur les fonds d'interface.
         let lisibles = [panneau, entete, fenetre, rangee, rangee_sombre];
-        let texte_doux = match c.doux {
-            // Le gris du thème (le gris scène de la charte), poussé vers le texte s'il n'est pas assez lu.
-            Some(d) => assurer(couleur(d), &lisibles, 4.5, texte),
-            None => (0..=9).map(|k| melange(texte, panneau, 0.45 - 0.05 * k as f32)).find(|x| lisibles.iter().all(|f| contraste(*x, *f) >= 4.5)).unwrap_or(texte),
-        };
+        let texte_doux = (0..=9).map(|k| melange(texte, panneau, 0.45 - 0.05 * k as f32)).find(|x| lisibles.iter().all(|f| contraste(*x, *f) >= 4.5)).unwrap_or(texte);
         let accent_texte = (0..=20).map(|k| melange(accent, texte_fort, k as f32 * 0.05)).find(|x| contraste(*x, panneau) >= 4.5).unwrap_or(texte_fort);
-        // Ce qui s'écrit sur l'accent : le noir cinéma (`#0E0E0E`) ou le blanc, selon le plus lisible.
-        let noir = couleur(NOIR_CINEMA);
-        let sur_accent = if contraste(Color32::WHITE, accent) >= 4.5 || contraste(Color32::WHITE, accent) >= contraste(noir, accent) { Color32::WHITE } else { noir };
-        // Le bouton principal : plus clair (ou plus sombre, si le texte est blanc) au survol, pour que le
-        // texte y reste lisible ; enfoncé, il revient vers le texte d'un cran tant que ça reste lisible.
-        let eloigne = if sur_accent == Color32::WHITE { Color32::BLACK } else { Color32::WHITE };
-        let accent_survol = melange(accent, eloigne, 0.14);
-        let accent_actif = (0..=4).map(|k| melange(accent, sur_accent, 0.12 - 0.03 * k as f32)).find(|x| contraste(sur_accent, *x) >= 4.5).unwrap_or(accent);
-        // Les éléments choisis : blanc ou presque noir, ou l'accent dans un thème de la charte (poussé
-        // si besoin jusqu'à 3:1 sur les panneaux, les barres et les rangées).
-        let contour = if c.identite { assurer(accent, &[panneau, entete, rangee, rangee_sombre], 3.0, texte_fort) } else if claire { gris(15) } else { Color32::WHITE };
-
+        let sur_accent = if contraste(Color32::WHITE, accent) >= 4.5 || contraste(Color32::WHITE, accent) >= contraste(gris(15), accent) { Color32::WHITE } else { gris(15) };
+        // Le rehaut orange de la charte (thème avec identité) : jamais sous 3:1 sur les panneaux et les barres.
+        let rehaut = if c.identite { assurer(couleur(ORANGE_SHOT), &[panneau, entete], 3.0, texte_fort) } else { accent_texte };
         // Couleurs des repères : un jeu vif pour les fonds sombres, un jeu plus profond pour les
         // clairs ; chacune est poussée si besoin jusqu'à 3,2:1 sur les rangées.
         let jeu = |sombre: [u8; 3], clair: [u8; 3]| assurer(couleur(if claire { clair } else { sombre }), &[rangee, rangee_sombre], 3.2, anti_de(claire));
@@ -451,9 +398,8 @@ impl Palette {
             accent,
             sur_accent,
             accent_texte,
-            accent_survol,
-            accent_actif,
             identite: c.identite,
+            rehaut,
             regle: entete,
             rangee,
             rangee_sombre,
@@ -465,7 +411,7 @@ impl Palette {
             // Un peu plus clair que le panneau : vers le blanc, de 12 % (thèmes sombres) ou de
             // 55 % (thème clair, dont le panneau est déjà pâle).
             apercu_trait: melange(panneau, Color32::WHITE, if claire { 0.55 } else { 0.12 }),
-            contour,
+            contour: if claire { gris(15) } else { Color32::WHITE },
             encre: if claire { Color32::WHITE } else { melange(rangee, Color32::BLACK, 0.6) },
             sur_calque: if claire { gris(20) } else { gris(242) },
             dessin_vectoriel: jeu([86, 129, 255], [40, 90, 210]),
@@ -541,9 +487,8 @@ impl Palette {
         if self.claire {
             w.inactive.bg_stroke = Stroke::new(1.0_f32, self.bord);
         }
-        // Un thème de la charte : le survol d'un bouton se marque d'un filet d'accent (sobre : un
-        // seul pixel, aucun remplissage).
-        w.hovered.bg_stroke = Stroke::new(1.0_f32, if self.identite { self.accent_texte } else { self.controle_actif });
+        w.hovered.bg_stroke = Stroke::new(1.0_f32, self.controle_actif);
+
         v
     }
 }
@@ -610,9 +555,8 @@ couleurs_courantes! {
     accent,
     sur_accent,
     accent_texte,
-    /// Le bouton principal d'une fenêtre, survolé et enfoncé.
-    accent_survol,
-    accent_actif,
+    /// Le rehaut orange de la charte (thème SHOT) : trait sous l'espace actif, icône de « Nouveau projet ».
+    rehaut,
     /// Règle des images (au-dessus des rangées).
     regle,
     /// Rangée d'un calque ; rangées de la caméra, du son et des pistes, plus sombres.
@@ -850,29 +794,15 @@ pub fn dock(mut s: egui_dock::Style) -> egui_dock::Style {
     s
 }
 
-/// Le bouton principal d'une fenêtre (OK, Exporter, Valider…) : fond d'accent, texte posé dessus,
-/// un peu plus clair au survol. Un seul par fenêtre ; désactivé (`actif` faux), il prend l'aspect
-/// grisé des autres boutons. La réponse sert comme celle de `ui.button`.
-pub fn bouton_principal(ui: &mut egui::Ui, actif: bool, texte: &str) -> egui::Response {
-    bouton_principal_taille(ui, actif, texte, Vec2::ZERO)
-}
-
-/// `bouton_principal` avec une taille minimale.
-pub fn bouton_principal_taille(ui: &mut egui::Ui, actif: bool, texte: &str, min: Vec2) -> egui::Response {
+/// Le trait orange sous l'espace de travail actif (Vignettes, Storyboard, Animation, Montage) : deux points de
+/// haut, juste sous son étiquette (sans toucher le mot), seulement dans un thème avec identité (le thème SHOT) ; les autres n'ont rien.
+pub fn souligner_actif(ui: &egui::Ui, etiquette: egui::Rect) {
     let p = palette();
-    ui.scope(|ui| {
-        let w = &mut ui.style_mut().visuals.widgets;
-        for (etat, fond) in [(&mut w.inactive, p.accent), (&mut w.hovered, p.accent_survol), (&mut w.active, p.accent_actif)] {
-            etat.bg_fill = fond;
-            etat.weak_bg_fill = fond;
-            etat.bg_stroke = Stroke::NONE;
-            etat.fg_stroke = Stroke::new(1.0_f32, p.sur_accent);
-        }
-        ui.add_enabled(actif, egui::Button::new(texte).min_size(min))
-    })
-    .inner
+    if p.identite {
+        let trait_ = egui::Rect::from_min_max(egui::pos2(etiquette.left() + 3.0, etiquette.bottom() - 0.5), egui::pos2(etiquette.right() - 3.0, etiquette.bottom() + 1.5));
+        ui.painter().rect_filled(trait_, 0.0, p.rehaut);
+    }
 }
-
 /// Applique le thème courant à egui : couleurs, densité. À refaire quand le thème change
 /// (`installer` d'abord).
 pub fn appliquer(ctx: &egui::Context) {

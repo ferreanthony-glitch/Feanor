@@ -167,7 +167,7 @@ impl App {
                     }
                 }
                 ui.horizontal(|ui| {
-                    if crate::theme::bouton_principal(ui, voulues.is_some(), "Valider").clicked() {
+                    if ui.add_enabled(voulues.is_some(), egui::Button::new("Valider")).clicked() {
                         apply = true;
                     }
                     if ui.button("Annuler").clicked() {

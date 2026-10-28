@@ -257,7 +257,7 @@ impl App {
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                go = crate::theme::bouton_principal(ui, true, "Exporter…").clicked();
+                go = ui.button("Exporter…").clicked();
                 close = ui.button("Annuler").clicked();
             });
             ui.add_space(4.0);

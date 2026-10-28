@@ -367,7 +367,7 @@ impl App {
         ui.separator();
         ui.horizontal(|ui| {
             let can = outline.plan_count() > 0;
-            if crate::theme::bouton_principal(ui, can, "Importer").clicked() {
+            if ui.add_enabled(can, egui::Button::new("Importer")).clicked() {
                 act = Act::Import;
             }
             if ui.button("Annuler").clicked() {

@@ -1,9 +1,12 @@
-//! La charte graphique de SHOT (planche d'Anthony, 2026-10-28) : le thème « SHOT » (défaut d'une installation
-//! neuve, un poste qui a déjà choisi un thème le garde), ses couleurs et ses contrastes, ce que l'orange touche (et ce
-//! qu'il ne touche pas), le logo et l'icône aux couleurs officielles, le petit logotype de la barre de menus, le bouton
-//! principal de l'accueil et des fenêtres. Les captures d'écran (essais ignorés) vont dans `SHOT_CAPTURE_DIR`.
+//! La charte graphique de SHOT (planche d'Anthony, 2026-10-28, puis sa demande de la rendre plus discrète) : le thème
+//! « SHOT » est le gris sombre d'avant avec seulement quelques rehauts orange (défaut d'une installation neuve ; un poste
+//! qui a déjà choisi un thème le garde). Ces essais vérifient ses couleurs et ses contrastes, ce que l'orange touche (très
+//! peu) et ce qu'il ne touche pas (la sélection, les éléments choisis, les boutons), le logo et l'icône aux couleurs
+//! officielles, le petit logotype de la barre de menus, le trait sous l'espace actif et l'accueil. Les captures d'écran
+//! (essais ignorés) vont dans `SHOT_CAPTURE_DIR`.
 
-use eframe::egui::{self, epaint::Shape, vec2, Color32, Pos2, Rect};
+use eframe::egui::{self, epaint::Shape, Color32, Rect};
+use egui_phosphor::regular as ph;
 
 use crate::document::Document;
 use crate::logo::{self, Variante};
@@ -12,36 +15,36 @@ use crate::settings::Settings;
 use crate::theme::{self, contraste, ChoixTheme, Couleurs, Palette, ReglageTheme};
 use crate::workspace::Espace;
 
-const NOIR: Color32 = Color32::from_rgb(0x0E, 0x0E, 0x0E);
 const BLANC_CASSE: Color32 = Color32::from_rgb(0xF4, 0xF1, 0xEA);
-const GRIS_SCENE: Color32 = Color32::from_rgb(0x8A, 0x8A, 0x8A);
 const ORANGE: Color32 = Color32::from_rgb(0xE7, 0x6F, 0x3C);
 
 fn rvb(c: Color32) -> [u8; 3] {
     [c.r(), c.g(), c.b()]
 }
 
-fn luminance_proche(a: Color32, b: Color32) -> bool {
-    (theme::luminance(a) - theme::luminance(b)).abs() < 0.25
-}
-
 fn palette(c: Couleurs) -> Palette {
     Palette::depuis(&c)
+}
+
+/// Cette couleur est-elle un orange (de la charte ou de la famille) ?
+fn orangee(c: Color32) -> bool {
+    c.r() >= 180 && (80..=170).contains(&c.g()) && c.b() <= 110 && c.r() as i32 - c.b() as i32 >= 100
 }
 
 // ---------------------------------------------------------------------------------------- choix du thème
 
 #[test]
-fn a_fresh_install_gets_shot_and_the_installed_palette_is_orange() {
+fn a_fresh_install_gets_shot_which_is_dark_grey_with_orange_touches() {
     assert_eq!(Settings::default().theme.choix, ChoixTheme::Shot);
     assert_eq!(toml::from_str::<Settings>("").unwrap().theme.choix, ChoixTheme::Shot);
     assert_eq!(ChoixTheme::default().nom(), "SHOT");
     theme::installer(&ReglageTheme::default());
-    assert_eq!(theme::accent(), ORANGE);
-    assert_eq!(theme::fond(), NOIR);
-    assert_eq!(theme::texte(), BLANC_CASSE);
-    // La liste des Préférences : SHOT d'abord, puis sa variante claire, puis les gris, puis Personnalisé.
-    assert_eq!(ChoixTheme::TOUS.map(ChoixTheme::nom), ["SHOT", "SHOT clair", "Gris sombre", "Gris clair", "Sombre", "Personnalisé"]);
+    let (shot, gris) = (theme::palette(), palette(Couleurs::gris_sombre()));
+    assert_eq!((shot.panneau, shot.fond, shot.accent), (gris.panneau, gris.fond, gris.accent));
+    assert_eq!(theme::rehaut(), ORANGE);
+    // La liste des Préférences : SHOT d'abord, puis les trois gris, puis Personnalisé (« SHOT clair » n'existe plus : un clair
+    // de la charte n'aurait été que « Gris clair » avec les mêmes rehauts).
+    assert_eq!(ChoixTheme::TOUS.map(ChoixTheme::nom), ["SHOT", "Gris sombre", "Gris clair", "Sombre", "Personnalisé"]);
 }
 
 #[test]
@@ -55,7 +58,7 @@ fn a_computer_that_already_chose_a_theme_keeps_it() {
         let relu: Settings = toml::from_str(&texte).unwrap();
         assert_eq!(relu.theme.choix, choix, "{choix:?}");
     }
-    for (ecrit, attendu) in [("gris_sombre", ChoixTheme::GrisSombre), ("gris_clair", ChoixTheme::GrisClair), ("sombre", ChoixTheme::Sombre), ("shot", ChoixTheme::Shot), ("shot_clair", ChoixTheme::ShotClair)] {
+    for (ecrit, attendu) in [("gris_sombre", ChoixTheme::GrisSombre), ("gris_clair", ChoixTheme::GrisClair), ("sombre", ChoixTheme::Sombre), ("shot", ChoixTheme::Shot)] {
         let s: Settings = toml::from_str(&format!("[theme]\nchoix = \"{ecrit}\"\n")).unwrap();
         assert_eq!(s.theme.choix, attendu);
     }
@@ -65,13 +68,13 @@ fn a_computer_that_already_chose_a_theme_keeps_it() {
     assert_eq!(s.theme.choix, ChoixTheme::GrisSombre);
     assert_eq!(s.theme.couleurs(), Couleurs::gris_sombre());
     assert!(!Palette::depuis(&s.theme.couleurs()).identite, "pas d'orange dans un thème d'avant la charte");
-    // Un thème personnalisé d'avant la charte garde ses neuf couleurs, sans l'identité ni le gris scène.
+    // Un thème personnalisé d'avant la charte garde ses neuf couleurs, sans rehauts orange.
     let perso = ancien.replace("gris_sombre", "personnalise").replace("[200, 200, 200]", "[10, 20, 30]");
     let s: Settings = toml::from_str(&perso).unwrap();
     assert_eq!(s.theme.choix, ChoixTheme::Personnalise);
     let c = s.theme.couleurs();
-    assert_eq!((c.accent, c.panneau, c.doux, c.identite), ([10, 20, 30], [64, 64, 64], None, false));
-    // Un thème personnalisé qui part de SHOT garde, lui, l'identité (et la relit).
+    assert_eq!((c.accent, c.panneau, c.identite), ([10, 20, 30], [64, 64, 64], false));
+    // Un thème personnalisé qui part de SHOT garde, lui, les rehauts (et les relit).
     let mut r = ReglageTheme::default();
     let mut c = r.couleurs();
     c.fond = [30, 10, 10];
@@ -81,86 +84,87 @@ fn a_computer_that_already_chose_a_theme_keeps_it() {
     s.theme = r;
     let relu: Settings = toml::from_str(&toml::to_string(&s).unwrap()).unwrap();
     assert_eq!(relu.theme, r);
-    assert!(relu.theme.couleurs().identite && relu.theme.couleurs().doux == Some(rvb(GRIS_SCENE)));
+    assert!(relu.theme.couleurs().identite);
 }
 
 // ---------------------------------------------------------------------------------------- couleurs
 
 #[test]
-fn the_shot_theme_is_built_on_the_four_colours_of_the_charter() {
-    let c = Couleurs::shot();
-    assert_eq!((c.fond, c.texte, c.accent, c.doux), (rvb(NOIR), rvb(BLANC_CASSE), rvb(ORANGE), Some(rvb(GRIS_SCENE))));
-    // Les fonds sont des gris très foncés déclinés du noir cinéma : du plus sombre (autour du dessin) au plus clair
-    // (les boutons), tous distincts les uns des autres de plusieurs crans.
+fn the_shot_theme_is_the_dark_grey_of_before_with_a_slightly_warmer_text() {
+    let (c, g) = (Couleurs::shot(), Couleurs::gris_sombre());
+    // Les fonds, les boutons, les bordures et la sélection sont ceux de « Gris sombre » (valeurs identiques).
+    assert_eq!((c.panneau, c.entete, c.fenetre, c.widgets, c.fond, c.timeline, c.bordure, c.accent), (g.panneau, g.entete, g.fenetre, g.widgets, g.fond, g.timeline, g.bordure, g.accent));
+    // Plus de noir lourd : le fond le plus sombre est un gris moyen-foncé, et le panneau reste autour de #40.
     let p = palette(c);
-    let niveaux = [p.fond, p.entete, p.panneau, p.controle, p.bord];
-    for n in niveaux {
-        assert!(n.r() == n.g() && n.g() == n.b() && n.r() <= 0x40, "{n:?} : un gris très foncé");
+    for fond in [p.fond, p.entete, p.panneau, p.fenetre, p.rangee, p.controle] {
+        assert!(fond.r() >= 0x2A, "{fond:?} : pas de noir cinéma pour l'interface");
     }
-    assert!(niveaux.windows(2).all(|w| w[1].r() >= w[0].r() + 5), "fonds distincts, du plus sombre au plus clair : {niveaux:?}");
-    for (a, b, nom) in [(p.panneau, p.entete, "panneau et barre"), (p.panneau, p.rangee, "panneau et rangée"), (p.panneau, p.fenetre, "panneau et fenêtre"), (p.panneau, p.controle, "panneau et bouton"), (p.panneau, p.fond, "panneau et fond")] {
-        assert!((a.r() as i32 - b.r() as i32).abs() >= 5, "{nom} se distinguent : {a:?} {b:?}");
-    }
-    // Le texte secondaire et les icônes au repos : le gris scène lui-même quand il se lit assez.
-    assert_eq!(p.texte_doux, GRIS_SCENE);
-    assert_eq!(p.texte, BLANC_CASSE);
-    assert_eq!(p.accent, ORANGE);
-    // La variante claire : fonds blanc cassé, texte noir cinéma, même accent.
-    let l = Couleurs::shot_clair();
-    assert_eq!((l.panneau, l.texte, l.accent), (rvb(BLANC_CASSE), rvb(NOIR), rvb(ORANGE)));
-    let p = palette(l);
-    assert!(p.claire);
-    assert_eq!((p.texte, p.accent), (NOIR, ORANGE));
-    assert!(contraste(p.texte_doux, p.panneau) >= 4.5 && p.texte_doux.r() <= GRIS_SCENE.r(), "le gris scène est foncé jusqu'à se lire sur le clair : {:?}", p.texte_doux);
+    assert!((0x3a..=0x44).contains(&p.panneau.r()));
+    // Le texte est le blanc cassé de la charte, à peine différent du gris très clair d'avant.
+    assert_eq!(c.texte, rvb(BLANC_CASSE));
+    let avant = palette(g).texte;
+    assert!(contraste(p.texte, avant) < 1.2, "le texte change à peine : {:?} contre {avant:?}", p.texte);
+    // Les rehauts : l'orange de la charte, et lui seul.
+    assert!(c.identite && p.identite && !g.identite);
+    assert_eq!(p.rehaut, ORANGE);
+    assert_eq!(palette(g).rehaut, palette(g).accent_texte, "sans identité, le rehaut est l'accent ordinaire");
 }
 
 #[test]
-fn shot_texts_reach_4_5_to_1_on_every_background_in_both_variants() {
-    for (nom, c) in [("SHOT", Couleurs::shot()), ("SHOT clair", Couleurs::shot_clair())] {
-        let p = palette(c);
-        for fond in [p.panneau, p.entete, p.fenetre, p.rangee, p.rangee_sombre, p.controle, p.controle_survol, p.eleve, p.champ, p.fond] {
-            assert!(contraste(p.texte, fond) >= 4.5, "{nom} : texte sur {fond:?} : {:.2}", contraste(p.texte, fond));
-        }
-        // Texte secondaire et icônes au repos : sur les panneaux, les barres, les menus et les rangées.
-        for fond in [p.panneau, p.entete, p.fenetre, p.rangee, p.rangee_sombre] {
-            assert!(contraste(p.texte_doux, fond) >= 4.5, "{nom} : texte secondaire sur {fond:?} : {:.2}", contraste(p.texte_doux, fond));
-        }
-        assert!(contraste(p.texte_fort, p.controle_actif) >= 4.5, "{nom} : bouton enfoncé");
-        // Ce qui s'écrit sur l'orange (élément choisi, bouton principal, repos, survol, appui).
-        for fond in [p.accent, p.accent_survol, p.accent_actif] {
-            assert!(contraste(p.sur_accent, fond) >= 4.5, "{nom} : texte sur {fond:?} : {:.2}", contraste(p.sur_accent, fond));
-        }
-        // L'orange des traits et des textes sur le panneau (liens, filets) ; le contour des éléments choisis sur les rangées.
-        assert!(contraste(p.accent_texte, p.panneau) >= 4.5, "{nom} : orange sur le panneau");
-        for fond in [p.panneau, p.entete, p.rangee, p.rangee_sombre] {
-            assert!(contraste(p.contour, fond) >= 3.0, "{nom} : contour sur {fond:?} : {:.2}", contraste(p.contour, fond));
-        }
-    }
-    // Sur le thème sombre, l'orange est l'orange de la charte tel quel, partout.
+fn shot_texts_stay_readable_and_the_orange_touches_stay_visible() {
     let p = palette(Couleurs::shot());
-    assert_eq!((p.accent, p.accent_texte, p.contour), (ORANGE, ORANGE, ORANGE));
-    assert_eq!(p.sur_accent, NOIR, "noir cinéma sur l'orange (6,2:1 ; le blanc n'aurait que 3,1:1)");
+    for fond in [p.panneau, p.entete, p.fenetre, p.rangee, p.rangee_sombre, p.controle, p.controle_survol, p.eleve, p.champ, p.fond] {
+        assert!(contraste(p.texte, fond) >= 4.5, "texte sur {fond:?} : {:.2}", contraste(p.texte, fond));
+    }
+    for fond in [p.panneau, p.entete, p.fenetre, p.rangee, p.rangee_sombre] {
+        assert!(contraste(p.texte_doux, fond) >= 4.5, "texte secondaire sur {fond:?} : {:.2}", contraste(p.texte_doux, fond));
+    }
+    assert!(contraste(p.sur_accent, p.accent) >= 4.5, "ce qui s'écrit sur la sélection");
+    // Le trait orange sous l'espace actif, l'icône de « Nouveau projet » et les angles du logotype : 3:1 au moins sur les
+    // panneaux et les barres (le minimum d'un élément graphique).
+    for fond in [p.panneau, p.entete, p.fenetre] {
+        assert!(contraste(p.rehaut, fond) >= 3.0, "rehaut sur {fond:?} : {:.2}", contraste(p.rehaut, fond));
+    }
 }
 
 // ---------------------------------------------------------------------------------------- ce que l'orange touche
 
 #[test]
-fn orange_marks_what_is_chosen_and_leaves_the_working_colours_alone() {
+fn orange_is_only_a_touch_selection_and_buttons_keep_their_greys() {
     let (shot, gris) = (palette(Couleurs::shot()), palette(Couleurs::gris_sombre()));
-    // Ce que l'accent marque : la sélection d'egui, l'élément choisi (contour des clés, plans, séquences, calques), le filet
-    // du survol d'un bouton, le bouton principal.
+    // La sélection, les éléments choisis, les boutons : exactement ceux de Gris sombre (sélection grise, contour blanc).
+    assert_eq!((shot.accent, shot.accent_texte, shot.sur_accent, shot.contour), (gris.accent, gris.accent_texte, gris.sur_accent, gris.contour));
+    assert_eq!(shot.contour, Color32::WHITE);
     let v = shot.visuels();
-    assert_eq!((v.selection.bg_fill, v.selection.stroke.color), (ORANGE, shot.sur_accent));
-    assert_eq!(v.widgets.hovered.bg_stroke.color, shot.accent_texte);
-    assert_eq!(shot.contour, ORANGE);
-    // Les autres thèmes ne changent pas : contour blanc, survol sans accent.
-    assert_eq!(gris.contour, Color32::WHITE);
-    assert_eq!(gris.visuels().widgets.hovered.bg_stroke.color, gris.controle_actif);
-    // Ce que l'orange ne touche pas : les couleurs du travail sont celles d'avant (feuille et pelures d'oignon sont des
-    // données du document ; calques, repères de caméra, rouge des alertes viennent de la palette).
-    // (Les repères vifs de la timeline sont poussés vers le blanc jusqu'à 3,2:1 sur les rangées : sur les rangées plus
-    // sombres de SHOT ils restent un peu plus saturés, de la même teinte.)
-    let dominante = |c: Color32| [c.r(), c.g(), c.b()].iter().enumerate().max_by_key(|(_, v)| **v).map(|(i, _)| i).unwrap();
+    assert_eq!((v.selection.bg_fill, v.selection.stroke.color), (gris.accent, gris.sur_accent));
+    assert_eq!(v.widgets.hovered.bg_stroke.color, shot.controle_actif, "pas de filet orange au survol");
+    assert_eq!((v.widgets.inactive.weak_bg_fill, v.widgets.hovered.weak_bg_fill, v.widgets.active.weak_bg_fill), (shot.controle, shot.controle_survol, shot.controle_actif));
+    // Aucune couleur de la palette, hors le rehaut, n'est orange : fonds, boutons, texte, sélection, contour, bords.
+    for (nom, c) in [
+        ("fond", shot.fond),
+        ("entête", shot.entete),
+        ("panneau", shot.panneau),
+        ("fenêtre", shot.fenetre),
+        ("élevé", shot.eleve),
+        ("bord", shot.bord),
+        ("champ", shot.champ),
+        ("bouton", shot.controle),
+        ("bouton survolé", shot.controle_survol),
+        ("bouton enfoncé", shot.controle_actif),
+        ("texte", shot.texte),
+        ("texte secondaire", shot.texte_doux),
+        ("texte fort", shot.texte_fort),
+        ("accent", shot.accent),
+        ("texte d'accent", shot.accent_texte),
+        ("contour", shot.contour),
+        ("rangée", shot.rangee),
+        ("bloc", shot.bloc),
+        ("poignée", shot.poignee),
+    ] {
+        assert!(!orangee(c), "{nom} n'est pas orange : {c:?}");
+    }
+    // Les couleurs du travail sont celles d'avant (feuille et pelures d'oignon sont des données du document ; calques,
+    // repères de caméra, rouge des alertes viennent de la palette, identiques puisque les fonds le sont).
     for (nom, a, b) in [
         ("dessin vectoriel", shot.dessin_vectoriel, gris.dessin_vectoriel),
         ("dessin bitmap", shot.dessin_bitmap, gris.dessin_bitmap),
@@ -172,11 +176,6 @@ fn orange_marks_what_is_chosen_and_leaves_the_working_colours_alone() {
         ("clés de caméra", shot.camera, gris.camera),
         ("marques d'image", shot.marque, gris.marque),
         ("clés d'effets", shot.effet, gris.effet),
-    ] {
-        assert_eq!(dominante(a), dominante(b), "{nom} garde sa teinte avec la charte : {a:?} contre {b:?}");
-        assert!(luminance_proche(a, b), "{nom} : {a:?} contre {b:?}");
-    }
-    for (nom, a, b) in [
         ("calque vectoriel (sourd)", shot.calque_vectoriel, gris.calque_vectoriel),
         ("calque bitmap (sourd)", shot.calque_bitmap, gris.calque_bitmap),
         ("calque de couleur (sourd)", shot.calque_couleur, gris.calque_couleur),
@@ -187,10 +186,7 @@ fn orange_marks_what_is_chosen_and_leaves_the_working_colours_alone() {
     ] {
         assert_eq!(a, b, "{nom} ne change pas avec la charte");
     }
-    // Le rouge des alertes reste rouge, et n'est pas l'orange.
-    assert!(shot.erreur.r() > 200 && shot.erreur.g() < 120 && shot.erreur != ORANGE);
 }
-
 /// Les formes à plat (`Shape::Vec` déroulés).
 fn a_plat<'a>(formes: &'a [egui::epaint::ClippedShape]) -> Vec<&'a Shape> {
     fn va<'a>(s: &'a Shape, out: &mut Vec<&'a Shape>) {
@@ -218,24 +214,48 @@ fn texte_a<'a>(formes: &'a [&'a Shape], texte: &str) -> Option<(&'a egui::epaint
     })
 }
 
+
 #[test]
-fn orange_never_fills_a_large_surface_in_the_main_window() {
+fn orange_is_one_thin_line_in_the_main_window_under_the_active_workspace() {
     let mut b = banc_taille(crate::vignettes_tests::quatre_plans(), false, 1600, 900);
     b.garder_formes = true;
     let ecran = b.taille.x * b.taille.y;
     for espace in [Espace::Vignettes, Espace::Storyboard, Espace::Animation, Espace::Montage] {
         b.app.set_espace(espace);
         b.chauffer(6);
-        let orange = surface_de(&b.formes, ORANGE);
-        assert!(orange < ecran * 0.02, "{} : l'orange remplit {:.1} % de la fenêtre", espace.nom(), orange / ecran * 100.0);
-        // L'espace de travail actif est marqué d'orange : son nom est écrit en noir cinéma sur un fond orange.
         let formes = a_plat(&b.formes);
-        let (texte, _) = texte_a(&formes, &format!(" {} ", espace.nom())).unwrap_or_else(|| panic!("onglet {}", espace.nom()));
-        assert_eq!(texte.galley.job.sections[0].format.color, theme::sur_accent(), "{}", espace.nom());
-        assert!(orange > 0.0, "{} : l'espace actif est orange", espace.nom());
+        // Le seul rectangle plein orange de la fenêtre : le trait, mince, sous le mot de l'espace actif.
+        let traits: Vec<Rect> = formes.iter().filter_map(|s| if let Shape::Rect(r) = s { (r.fill == ORANGE).then_some(r.rect) } else { None }).collect();
+        assert_eq!(traits.len(), 1, "{} : un seul trait orange : {traits:?}", espace.nom());
+        let trait_ = traits[0];
+        assert!(trait_.height() <= 2.5 && trait_.width() < 120.0, "{} : un mince trait : {trait_:?}", espace.nom());
+        let (_, mot) = texte_a(&formes, &format!(" {} ", espace.nom())).unwrap_or_else(|| panic!("onglet {}", espace.nom()));
+        assert!(trait_.center().x > mot.left() && trait_.center().x < mot.right(), "{} : sous le mot actif : {trait_:?} contre {mot:?}", espace.nom());
+        assert!(trait_.center().y > mot.center().y && trait_.center().y < mot.bottom() + 6.0, "{} : au bas du mot : {trait_:?} contre {mot:?}", espace.nom());
+        // Les autres espaces n'ont pas de trait.
+        for autre in [Espace::Vignettes, Espace::Storyboard, Espace::Animation, Espace::Montage] {
+            if autre != espace {
+                let (_, m) = texte_a(&formes, &format!(" {} ", autre.nom())).unwrap();
+                assert!(!(trait_.center().x > m.left() && trait_.center().x < m.right()), "{} actif : {} n'a pas de trait", espace.nom(), autre.nom());
+            }
+        }
+        // Très peu d'orange plein : le trait seul, bien moins de 0,5 % de la fenêtre.
+        let orange = surface_de(&b.formes, ORANGE);
+        assert!(orange < ecran * 0.005, "{} : l'orange remplit {:.3} % de la fenêtre", espace.nom(), orange / ecran * 100.0);
+        // Aucun contour ni trait orange : la sélection et les éléments choisis ne sont pas orange (ni crème changé).
+        let trait_orange = formes.iter().any(|s| match s {
+            Shape::Rect(r) => r.stroke.color == ORANGE,
+            Shape::LineSegment { stroke, .. } => stroke.color == ORANGE,
+            Shape::Path(p) => matches!(p.stroke.color, egui::epaint::ColorMode::Solid(c) if c == ORANGE),
+            _ => false,
+        });
+        assert!(!trait_orange, "{} : aucun contour orange", espace.nom());
+        // Le mot actif garde son fond de sélection gris, texte foncé dessus, comme avant la charte.
+        let (t, _) = texte_a(&formes, &format!(" {} ", espace.nom())).unwrap();
+        assert_eq!(t.galley.job.sections[0].format.color, theme::sur_accent(), "{}", espace.nom());
+        assert!(formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == theme::accent() && r.rect.intersects(mot))), "{} : fond de sélection gris", espace.nom());
     }
 }
-
 // ---------------------------------------------------------------------------------------- logo et icône
 
 /// Pixel RVBA (non prémultiplié) d'une icône carrée de `t` pixels.
@@ -345,6 +365,7 @@ fn the_small_logotype_is_the_word_and_two_corners_without_the_tagline() {
     }
 }
 
+
 // ---------------------------------------------------------------------------------------- la fenêtre
 
 /// L'image du logotype de la barre, à l'écran : le rectangle de l'image dont la texture est celle du logotype.
@@ -380,6 +401,16 @@ fn the_small_logotype_sits_first_in_the_menu_bar_without_crowding_it_at_150_perc
     assert_eq!(avant, apres);
 }
 
+
+/// La couleur de l'icône `icone` posée à gauche du titre de la grande entrée dont `titre` est le texte (la barre d'outils
+/// a des icônes pareilles : on ne prend que celle qui est sur la même ligne, à gauche du titre).
+fn icone_de_l_entree(formes: &[&Shape], icone: &str, titre: Rect) -> Option<Color32> {
+    formes.iter().find_map(|s| match s {
+        Shape::Text(t) if t.galley.job.text == icone && (t.pos.y - titre.center().y).abs() < 30.0 && t.pos.x < titre.left() && titre.left() - t.pos.x < 80.0 => Some(t.fallback_color),
+        _ => None,
+    })
+}
+
 fn accueil() -> Banc {
     let mut b = banc_taille(Document::with_frame(160, 90, 24), false, 1600, 900);
     b.garder_formes = true;
@@ -389,78 +420,45 @@ fn accueil() -> Banc {
 }
 
 #[test]
-fn the_welcome_card_follows_the_theme_and_new_project_is_the_orange_button() {
+fn the_welcome_card_has_two_grey_buttons_and_only_the_new_project_icon_is_orange() {
     let b = accueil();
     assert!(b.app.welcome_shown());
     let p = theme::palette();
     let formes = a_plat(&b.formes);
-    // « Nouveau projet » : un grand bouton plein d'orange, son texte en noir cinéma. « Ouvrir un projet » : un bouton ordinaire.
     let (titre, titre_rect) = texte_a(&formes, "Nouveau projet").expect("Nouveau projet");
-    assert_eq!(titre.fallback_color, p.sur_accent);
-    let bouton = formes
-        .iter()
-        .find_map(|s| match s {
-            Shape::Rect(r) if r.fill == p.accent && r.rect.width() > 300.0 && r.rect.contains(titre_rect.center()) => Some(r.rect),
-            _ => None,
-        })
-        .expect("le bouton principal est rempli d'orange");
-    assert!((bouton.height() - crate::accueil::ENTREE_H).abs() < 1.0);
     let (autre, autre_rect) = texte_a(&formes, "Ouvrir un projet").expect("Ouvrir un projet");
-    assert_eq!(autre.fallback_color, p.texte_fort);
-    assert!(!bouton.contains(autre_rect.center()));
-    let ordinaire = formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == p.controle && r.rect.contains(autre_rect.center())));
-    assert!(ordinaire, "l'autre entrée est au repos, de la couleur des boutons");
-    // L'orange ne remplit que ce bouton (et de petits repères) : moins de 5 % de l'écran.
-    let ecran = b.taille.x * b.taille.y;
-    assert!(surface_de(&b.formes, ORANGE) < ecran * 0.05, "{:.1} %", surface_de(&b.formes, ORANGE) / ecran * 100.0);
+    // Deux boutons gris pareils, titre en texte fort.
+    assert_eq!((titre.fallback_color, autre.fallback_color), (p.texte_fort, p.texte_fort));
+    for rect in [titre_rect, autre_rect] {
+        assert!(formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == p.controle && r.rect.width() > 300.0 && r.rect.contains(rect.center()))), "bouton gris");
+    }
+    // Aucun remplissage orange sur la carte (le trait sous l'espace actif de la barre y est : mince).
+    let remplis: Vec<Rect> = formes.iter().filter_map(|s| if let Shape::Rect(r) = s { (r.fill == ORANGE).then_some(r.rect) } else { None }).collect();
+    assert!(remplis.iter().all(|r| r.height() <= 2.5), "pas de bouton orange : {remplis:?}");
+    // L'icône de « Nouveau projet » est orange ; celle de « Ouvrir un projet » est de l'accent ordinaire.
+    let nouveau = icone_de_l_entree(&formes, ph::FILE_PLUS, titre_rect).expect("icône de Nouveau projet");
+    let ouvrir = icone_de_l_entree(&formes, ph::FOLDER_OPEN, autre_rect).expect("icône de Ouvrir un projet");
+    assert_eq!(nouveau, ORANGE);
+    assert_eq!(ouvrir, p.accent_texte);
     // La carte est du fond des fenêtres du thème.
     assert!(formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == p.fenetre && r.rect.width() >= 460.0)), "la carte prend le fond des fenêtres");
 }
 
 #[test]
-fn the_welcome_card_follows_a_light_theme_too() {
+fn the_welcome_card_follows_a_light_theme_without_any_orange() {
     let mut b = accueil();
-    b.app.settings.theme.choisir(ChoixTheme::ShotClair);
+    b.app.settings.theme.choisir(ChoixTheme::GrisClair);
     b.chauffer(6);
     let p = theme::palette();
-    assert!(p.claire && p.identite);
+    assert!(p.claire && !p.identite);
     let formes = a_plat(&b.formes);
     assert!(formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == p.fenetre && r.rect.width() >= 460.0)), "carte claire");
-    let (titre, _) = texte_a(&formes, "Nouveau projet").unwrap();
-    assert_eq!(titre.fallback_color, NOIR, "noir cinéma sur l'orange, aussi sur le thème clair");
+    let (titre, titre_rect) = texte_a(&formes, "Nouveau projet").unwrap();
+    assert_eq!(titre.fallback_color, p.texte_fort);
+    assert_eq!(icone_de_l_entree(&formes, ph::FILE_PLUS, titre_rect), Some(p.accent_texte), "sans identité, pas d'orange");
+    assert!(!formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == ORANGE)));
     assert!(crate::accueil::logo_texture(&b.ctx, 240.0).size()[0] > 0 && !crate::accueil::logo_sombre(), "le logo est celui des fonds clairs");
     theme::installer(&ReglageTheme::default());
-}
-
-#[test]
-fn the_main_button_of_a_window_is_orange_and_greys_out_when_disabled() {
-    theme::installer(&ReglageTheme::default());
-    let p = theme::palette();
-    let ctx = egui::Context::default();
-    ctx.set_visuals(theme::visuels());
-    let mut cliques = [None, None];
-    let out = ctx.run(egui::RawInput { screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(400.0, 200.0))), ..Default::default() }, |ctx| {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                cliques[0] = Some(theme::bouton_principal(ui, true, "Exporter").rect);
-                cliques[1] = Some(theme::bouton_principal(ui, false, "Valider").rect);
-            });
-        });
-    });
-    let formes: Vec<&Shape> = out.shapes.iter().map(|c| &c.shape).collect();
-    let plat: Vec<&Shape> = formes
-        .iter()
-        .flat_map(|s| match s {
-            Shape::Vec(v) => v.iter().collect::<Vec<_>>(),
-            s => vec![*s],
-        })
-        .collect();
-    let [actif, inactif] = [cliques[0].unwrap(), cliques[1].unwrap()];
-    let remplissage = |zone: Rect| plat.iter().find_map(|s| if let Shape::Rect(r) = s { (zone.contains(r.rect.center()) && r.fill != Color32::TRANSPARENT).then_some(r.fill) } else { None });
-    assert_eq!(remplissage(actif), Some(p.accent), "actif : fond d'accent");
-    assert_ne!(remplissage(inactif), Some(p.accent), "désactivé : grisé");
-    let texte = plat.iter().find_map(|s| if let Shape::Text(t) = s { (t.galley.job.text == "Exporter").then_some(t.fallback_color) } else { None });
-    assert_eq!(texte, Some(p.sur_accent), "texte noir cinéma sur l'orange");
 }
 
 // ---------------------------------------------------------------------------------------- captures (à regarder)
@@ -492,7 +490,6 @@ fn charte_captures() {
         image::save_buffer(dir.join(nom), &rgba, 1920, 1080, image::ColorType::Rgba8).expect("png");
         println!("CHARTE {nom}");
     };
-    // (Les thèmes clairs en dernier : la palette courante est propre au fil d'essai, et un banc qui vient de naître ne la remet pas.)
     theme::installer(&ReglageTheme::default());
     let mut a = crate::perf_tests::banc(Document::with_frame(160, 90, 24), true);
     a.app.welcome = true;
@@ -505,12 +502,4 @@ fn charte_captures() {
         b.chauffer(8);
         sauver(&b, nom);
     }
-    b.app.settings.theme.choisir(ChoixTheme::ShotClair);
-    b.app.set_espace(Espace::Storyboard);
-    b.chauffer(8);
-    sauver(&b, "fenetre-principale-clair.png");
-    a.app.settings.theme.choisir(ChoixTheme::ShotClair);
-    a.chauffer(8);
-    sauver(&a, "accueil-clair.png");
-    theme::installer(&ReglageTheme::default());
 }

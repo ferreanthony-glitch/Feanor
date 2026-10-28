@@ -324,7 +324,7 @@ fn window_body(ui: &mut egui::Ui, w: &mut SbWindow, ctx: &egui::Context) -> bool
                 None => {}
             }
             let ready = matches!(w.project, Some(Ok(_)));
-            if crate::theme::bouton_principal(ui, ready, "Ouvrir avec ces dessins").clicked() {
+            if ui.add_enabled(ready, egui::Button::new("Ouvrir avec ces dessins")).clicked() {
                 w.drawings_note = None;
                 import = true;
             }

@@ -23,9 +23,6 @@ fn the_logo_follows_the_panel_background() {
     let mut r = ReglageTheme::default();
     theme::installer(&r);
     assert!(crate::accueil::logo_sombre(), "SHOT : logo des fonds sombres");
-    r.choisir(ChoixTheme::ShotClair);
-    theme::installer(&r);
-    assert!(!crate::accueil::logo_sombre(), "SHOT clair : logo des fonds clairs");
     r.choisir(ChoixTheme::GrisClair);
     theme::installer(&r);
     assert!(!crate::accueil::logo_sombre(), "Gris clair : logo des fonds clairs");

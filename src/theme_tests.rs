@@ -1,5 +1,5 @@
-//! Tests du thème : les textes restent lisibles sur leurs fonds dans chacun des cinq thèmes
-//! livrés (SHOT, SHOT clair et les trois gris), l'accent marque la sélection, le thème « Personnalisé »
+//! Tests du thème : les textes restent lisibles sur leurs fonds dans chacun des quatre thèmes
+//! livrés (SHOT et les trois gris), l'accent marque la sélection, le thème « Personnalisé »
 //! naît d'une couleur changée, les réglages se relisent (une installation neuve donne SHOT, un poste
 //! qui a déjà choisi un thème le garde), la police de Windows passe devant celles d'egui sans les
 //! remplacer. La charte (couleurs, contrastes, ce que l'accent touche) est dans `charte_tests.rs`.
@@ -9,9 +9,9 @@ use eframe::egui::{Color32, FontDefinitions, FontFamily};
 use crate::settings::Settings;
 use crate::theme::{self, contraste, ChoixTheme, Couleurs, Palette, ReglageTheme};
 
-/// Les cinq thèmes livrés, avec leur palette.
+/// Les quatre thèmes livrés, avec leur palette.
 fn livres() -> Vec<(ChoixTheme, Palette)> {
-    [ChoixTheme::Shot, ChoixTheme::ShotClair, ChoixTheme::GrisSombre, ChoixTheme::GrisClair, ChoixTheme::Sombre]
+    [ChoixTheme::Shot, ChoixTheme::GrisSombre, ChoixTheme::GrisClair, ChoixTheme::Sombre]
         .into_iter()
         .map(|c| {
             let mut r = ReglageTheme::default();
@@ -32,12 +32,8 @@ fn contrast_is_computed_like_wcag() {
 fn the_default_theme_is_shot_and_the_grey_themes_stay_neutral() {
     assert_eq!(ReglageTheme::default().choix, ChoixTheme::Shot);
     assert_eq!(ReglageTheme::default().couleurs(), Couleurs::shot());
-    // Des gris neutres, pas du bleu-noir : rouge, vert et bleu égaux aux fonds (les thèmes de la charte
-    // ont, eux aussi, des fonds sombres neutres ; seul leur clair est un blanc cassé).
+    // Des gris neutres, pas du bleu-noir : rouge, vert et bleu égaux aux fonds.
     for (choix, p) in livres() {
-        if choix == ChoixTheme::ShotClair {
-            continue;
-        }
         for fond in [p.panneau, p.entete, p.fenetre, p.fond, p.rangee, p.controle, p.bord] {
             assert!(fond.r() == fond.g() && fond.g() == fond.b(), "{choix:?} : {fond:?} n'est pas un gris neutre");
         }
@@ -84,11 +80,8 @@ fn selections_stay_visible_in_every_theme() {
         for fond in [p.rangee, p.rangee_sombre, p.panneau] {
             assert!(contraste(p.contour, fond) >= 3.0, "{choix:?} : contour sur {fond:?} : {}", contraste(p.contour, fond));
         }
-        // Sur les blocs sourds aux couleurs des calques : 3:1 pour le contour blanc ou presque noir ; l'orange de la
-        // charte, lui, se distingue par sa teinte (au moins 1,5:1 : voir `charte_tests.rs`).
-        let minimum = if p.identite { 1.5 } else { 3.0 };
         for fond in [p.calque_vectoriel, p.calque_bitmap, p.calque_couleur] {
-            assert!(contraste(p.contour, fond) >= minimum, "{choix:?} : contour sur {fond:?} : {}", contraste(p.contour, fond));
+            assert!(contraste(p.contour, fond) >= 3.0, "{choix:?} : contour sur {fond:?} : {}", contraste(p.contour, fond));
         }
         assert!(contraste(p.accent, p.rangee) >= 1.4 || contraste(p.accent_texte, p.rangee) >= 3.0, "{choix:?} : accent sur la timeline");
         // La sélection d'egui est l'accent, son texte est celui qui lit sur lui.

@@ -299,24 +299,36 @@ impl App {
                 let on = self.espace == Espace::Montage;
                 let montage = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Montage ").strong(), on));
                 let montage = self.aide(montage, "Montage", "Le film en grand, avec toutes ses pistes : couper, rogner, transitions, son, relecture. Tab : retour au storyboard.", "espace.montage");
+                if on {
+                    crate::theme::souligner_actif(ui, montage.rect);
+                }
                 if montage.clicked() && !on {
                     self.set_espace(Espace::Montage);
                 }
                 let on = self.espace == Espace::Animation;
                 let animation = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Animation ").strong(), on));
                 let animation = self.aide(animation, "Animation", "Animer le plan courant, image par image. Tab : retour au storyboard.", "mode.basculer");
+                if on {
+                    crate::theme::souligner_actif(ui, animation.rect);
+                }
                 if animation.clicked() && !on {
                     self.set_espace(Espace::Animation);
                 }
                 let on = self.espace == Espace::Storyboard;
                 let board = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Storyboard ").strong(), on));
                 let board = self.aide(board, "Storyboard", "Monter les plans et les séquences.", "mode.basculer");
+                if on {
+                    crate::theme::souligner_actif(ui, board.rect);
+                }
                 if board.clicked() && !on {
                     self.set_espace(Espace::Storyboard);
                 }
                 let on = self.espace == Espace::Vignettes;
                 let vignettes = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Vignettes ").strong(), on));
                 let vignettes = self.aide(vignettes, "Vignettes", "La planche seule : dessiner dans les cases, avec le pinceau, la couleur et les personnages. Ctrl + Maj + glisser un cadre : mouvement de caméra ; Ctrl + glisser : lasso ; Maj + Alt + glisser le cadre d'une case : copie du plan.", "espace.vignettes");
+                if on {
+                    crate::theme::souligner_actif(ui, vignettes.rect);
+                }
                 if vignettes.clicked() && !on {
                     self.set_espace(Espace::Vignettes);
                 }
