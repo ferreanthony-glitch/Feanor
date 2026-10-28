@@ -4571,3 +4571,56 @@ Essais : `fusionglisse_tests.rs` (9, dont huit par la vraie fenêtre sans écran
 4. Pendant le glissé, Échap : le plan reste où il était, et Ctrl+Z n'a rien de plus à défaire.
 5. Deux séquences : glisse un plan sur le milieu d'un plan d'une autre séquence : pas de contour, pas de fusion.
 6. Choisis deux plans (Ctrl + clic) et glisse-les sur un troisième : ils se déplacent, sans fusion.
+
+## 54. Corrections : paliers de caméra à l'écran, lasso bitmap fluide, fermeture, tremblement par défaut complet, stylet (2026-10-28, branche `corrections-preferences`)
+
+Cinq retours d'Anthony après essais. Essais : `saccade_ecran_tests.rs`, `selection_bitmap_tests.rs`, `fermeture_tests.rs`, `tremblementapercu_tests.rs`, `tremblement_defaut_tests.rs`, `reglagestylet_tests.rs`.
+
+### 54.1 Caméra « par paliers » : l'écran les montre enfin (suite de la partie 51)
+
+- **Cause** : la vue à travers la caméra (donc tout le Montage), le cadre de la caméra et les aides au cadrage lisaient `App::current_camera`, qui est **toujours la caméra douce** (celle des clés, faite pour l'outil Caméra). Seuls les exports, les vignettes et la planche passaient par
+  `Document::panel_camera` (les paliers) : le réglage marchait à l'export, jamais à l'écran ni à la lecture.
+- **Correction** : `App::camera_montree` (`camtools.rs`) est la caméra que l'écran montre : celle des paliers, comme l'export. **Seule exception** : l'outil Caméra **arrêté** lit la caméra douce, parce qu'il règle des clés et que ses poignées doivent suivre ce que
+  la souris tire. Sous la case, un petit texte le dit tant que c'est le cas (« L'outil Caméra arrêté montre le mouvement doux… »). Lecture lancée, ou un autre outil : les paliers.
+- Essais : on coche la case dans le panneau de l'outil Caméra (clic réel), puis on avance image par image et on lit la vue et la caméra d'export ; l'essai échouait avant la correction.
+
+### 54.2 Transformer une zone bitmap au lasso : plus de ralentissement
+
+- **Cause** : à **chaque image** d'un glissé, la zone entière était rééchantillonnée au pixel près sur le fil de l'interface (`pixsel::stamp`), ses tuiles recopiées puis renvoyées à la carte graphique. Mesuré sur un dessin 3840 × 2160 et un octogone qui en couvre les trois quarts :
+  **215 ms** par image (déplacer), **235 ms** (échelle, jusqu'à 330), **240 ms** (rotation, jusqu'à 418) ; la saisie (premier appui) coûtait 341 ms.
+- **Correction** (comme la feuille flottante des traits, `flottante.rs`) : pendant le geste, la zone se montre par une **feuille flottante bitmap** (le dessin sans la zone + la zone seule à sa place d'origine) que la carte graphique pose avec la transformation du geste ;
+  chaque image ne change qu'un paramètre : **0,00 ms** médiane. Au lâcher, le **rendu exact** (les pixels d'origine passés une seule fois par la transformation finale : aucun flou cumulé, au pixel près le même résultat qu'avant) se calcule sur un fil de travail ; la feuille reste
+  jusqu'à son arrivée. Un clic ou une touche avant l'arrivée l'attendent ; un nouveau geste le jette ; effacer dedans / autour, Ctrl+Z, enregistrer, quitter la sélection posent d'abord les pixels (une seule étape d'annulation).
+- **La saisie** (premier appui) passe aussi de 341 à **74 ms** : le soulèvement va tuile par tuile (sans toucher les tuiles vides) et la pose sans transformation ne rééchantillonne plus. Il reste, au premier appui, une pause de l'ordre de 70 ms pour une zone de 6 millions de pixels
+  (la feuille se fait une fois) ; une zone ordinaire ne la sent pas.
+- Les flèches, le miroir et « recolorier » posent toujours les pixels tout de suite (un seul coup, comme avant). Les champs chiffrés de la boîte (position, taille, angle) passent par la feuille comme un glissé.
+- Essais : exactitude (déplacer, échelle, rotation, reprise avant l'arrivée, pose immédiate puis Ctrl+Z, effacer pendant l'attente, soulèvement tuile par tuile = pixel par pixel) et mesure (`dragging_a_big_selection_on_a_4k_drawing_costs_almost_nothing_per_frame` : médiane < 20 ms, aucune image > 120 ms).
+
+### 54.3 Fermer un projet
+
+- **Ce qui est vérifié** (`fermeture_tests.rs`) : un projet qu'on **ouvre** puis qu'on ferme (onglet ou fenêtre) ne pose **aucune question** ; un petit projet comme le grand projet d'essai (calques de couleur, caméras, effets, son…) ; au repos, rien ne le marque modifié ; une soixantaine de commandes de vue et
+  d'outils (zoom, rotation, miroir, grille, panneaux, outils, espaces, vue caméra, lecture, plans…) ne le marquent pas non plus ; juste après un **enregistrement**, fermer ne demande rien.
+- **« Enregistrer » dans la question** : l'écriture se fait sur un autre fil, **puis** l'onglet (ou la fenêtre) se ferme tout seul, sans seconde question ; si l'écriture échoue, le projet reste ouvert et marqué modifié, avec la fenêtre d'erreur (rien ne se ferme, aucune suite ne reste en attente).
+  Tout cela marchait déjà dans ces essais : **je n'ai pas pu faire apparaître la question à tort**. Si elle revient chez toi, regarde la nouvelle ligne de la boîte : **« Dernier changement : « … » »** (le dernier geste de l'historique) dit ce qui a marqué le projet ; dis-moi lequel, et le projet sur lequel c'est arrivé.
+- Un projet d'un **ancien format** (feuille agrandie à l'ouverture) reste marqué modifié à l'ouverture : c'est voulu (le fichier est à réécrire), la boîte le dit.
+
+### 54.4 Préférences > Dessin > Tremblement des traits
+
+- **Tous les réglages de l'effet**, comme le tremblement d'un calque : intensité, fréquence, **variantes** (2 à 6), **vitesse** (1 à 12 images par variante), **épaisseur** (0 à 100 %), **graine** (1 à 999), **« Animer à l'arrêt »**. Les anciens fichiers de réglages (trois valeurs) gardent
+  les autres d'origine (3 variantes, 2 images par variante, épaisseur 0, graine 1, immobile). « Rétablir » les remet tous.
+- **Un aperçu à côté** (`tremblementapercu.rs`) : un trait d'exemple avec le tremblement par défaut, qui **bouge à la cadence du réglage** quand « Animer à l'arrêt » est allumé, immobile sinon. Il ne coûte presque rien : le moteur de brosses ne dessine le trait d'exemple **qu'une fois par séance** ;
+  à chaque changement de réglage (pas à chaque image) une petite image par variante est recalculée (le même calcul que l'effet) ; ensuite l'aperçu ne fait que changer d'image, et l'écran ne se repeint qu'à la cadence du tremblement, seulement quand il est montré et animé.
+- « Animer à l'arrêt » du tremblement par défaut suit le même chemin que celui d'un calque (l'écran se repeint à la cadence du réglage, jamais à 60 Hz) ; le réglage de performance « Tremblement du trait : animer à l'arrêt » le coupe aussi.
+
+### 54.5 « Régler le stylet à ma main »
+
+- Après **« Appliquer »**, la fenêtre **se ferme**. « Rétablir » rend la courbe d'avant : rouvre « Régler le stylet à ma main… » (Aide, Préférences > Dessin ou palette), le bouton est là.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Plan avec une caméra animée, Montage (ou vue à travers la caméra) : outil Caméra > Réglages > « Mouvement par paliers », coche, 3 images. Change d'outil (la main, le pinceau) ou lance la lecture : le mouvement est saccadé, à l'écran comme à l'export. Avec l'outil Caméra arrêté, tu règles toujours des clés
+   (mouvement doux) : le petit texte sous la case le dit.
+2. Dessin bitmap grand format, lasso d'une grande zone, puis déplace, mets à l'échelle, tourne par la boîte : plus de retard, même sur une grande zone ; lâche : la zone reste nette (un instant, c'est la feuille ; l'image exacte arrive aussitôt). Ctrl+Z, Échap, autre outil : comme avant. Tourne deux fois de suite : pas de flou en plus.
+3. Ouvre un projet, regarde (zoom, vue caméra, panneaux, outils, lecture) et ferme : aucune question. Modifie, ferme : la question, avec « Dernier changement : … » ; « Enregistrer » : le projet s'écrit, puis l'onglet se ferme tout seul. Dis-moi si une question revient à tort, avec ce « Dernier changement ».
+4. Fichier > Préférences > Dessin > Tremblement des traits : tous les réglages sont là, l'aperçu à droite ; coche « Animer à l'arrêt » : le trait d'exemple bouge ; change vitesse, variantes, graine : l'aperçu suit tout de suite, sans à-coup.
+5. « Régler le stylet à ma main… » : trace trois traits, « Appliquer » : la fenêtre se ferme ; rouvre-la : « Rétablir » rend la courbe d'avant.
