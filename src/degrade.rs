@@ -310,6 +310,73 @@ pub fn peindre(raster: &mut Raster, portee: &Portee, g: &Degrade, garde_alpha: b
     avant
 }
 
+/// Écart (par canal, opacité comprise) entre deux pixels voisins en dessous duquel la variation est « douce » : une pente de
+/// dégradé ou de peinture, pas un trait. Un dégradé noir → blanc posé sur 26 pixels ou plus passe sous ce seuil ; le bord
+/// d'un trait (un saut de plusieurs dizaines de niveaux d'un pixel à l'autre) ne le passe pas.
+pub const PAS_DOUX: i32 = 10;
+
+fn proche(a: Color32, b: Color32, tol: i32) -> bool {
+    (a.r() as i32 - b.r() as i32).abs() <= tol
+        && (a.g() as i32 - b.g() as i32).abs() <= tol
+        && (a.b() as i32 - b.b() as i32).abs() <= tol
+        && (a.a() as i32 - b.a() as i32).abs() <= tol
+}
+
+/// Le pixel `i` est « lisse » : aucun de ses quatre voisins n'en diffère de plus de `PAS_DOUX`. Un pixel du bord d'un trait ne
+/// l'est jamais (il a un voisin de l'autre côté du saut), même quand son bord anticrénelé varie doucement le long du trait.
+fn lisse(src: &[Color32], w: usize, h: usize, i: usize) -> bool {
+    let (x, y, p) = (i % w, i / w, src[i]);
+    (x == 0 || proche(src[i - 1], p, PAS_DOUX)) && (x + 1 == w || proche(src[i + 1], p, PAS_DOUX)) && (y == 0 || proche(src[i - w], p, PAS_DOUX)) && (y + 1 == h || proche(src[i + w], p, PAS_DOUX))
+}
+
+/// La zone fermée où l'on appuie, pour le dégradé : celle du pot de peinture (les pixels de la couleur du point d'appui, à
+/// `tol` près, de proche en proche), **plus** les pixels lisses qu'on atteint de proche en proche (un dégradé, une peinture
+/// douce), plus **une couche** de pixels voisins de la même couleur (le bord de la zone, collé au trait). Le trait la borne :
+/// un saut de couleur d'un pixel à l'autre. Sur une couleur unie, c'est la zone du pot de peinture, au pixel près. Sur un
+/// dégradé, ce n'est plus une bande de couleurs voisines : la zone va jusqu'au trait.
+pub fn zone_douce(src: &[Color32], w: usize, h: usize, sx: usize, sy: usize, tol: u8) -> Vec<bool> {
+    let mut mask = crate::fill::flood(src, w, h, sx, sy, tol);
+    let cible = src[sy * w + sx];
+    let tol = tol as i32;
+    let voisins4 = |i: usize| {
+        let (x, y) = (i % w, i / w);
+        [(x > 0).then(|| i - 1), (x + 1 < w).then(|| i + 1), (y > 0).then(|| i - w), (y + 1 < h).then(|| i + w)]
+    };
+    // Les pixels de la zone qui touchent un voisin hors de la zone : de là, la zone continue sur les pixels lisses.
+    let frontiere = |mask: &[bool]| -> Vec<usize> { (0..w * h).filter(|&i| mask[i] && voisins4(i).into_iter().flatten().any(|j| !mask[j])).collect() };
+    let mut pile = frontiere(&mask);
+    while let Some(i) = pile.pop() {
+        for j in voisins4(i).into_iter().flatten() {
+            if !mask[j] && (proche(src[j], cible, tol) || lisse(src, w, h, j)) {
+                mask[j] = true;
+                pile.push(j);
+            }
+        }
+    }
+    // Une couche de plus, en huit voisins : les pixels de la zone collés au trait ne sont pas lisses (le trait est leur voisin)
+    // et seraient restés de l'ancienne couleur. Une seule couche : la zone ne glisse pas le long du bord du trait.
+    let mut ajouts = Vec::new();
+    for i in frontiere(&mask) {
+        let (x, y) = ((i % w) as isize, (i / w) as isize);
+        for dy in -1isize..=1 {
+            for dx in -1isize..=1 {
+                let (nx, ny) = (x + dx, y + dy);
+                if nx < 0 || ny < 0 || nx >= w as isize || ny >= h as isize {
+                    continue;
+                }
+                let j = ny as usize * w + nx as usize;
+                if !mask[j] && proche(src[j], src[i], PAS_DOUX) {
+                    ajouts.push(j);
+                }
+            }
+        }
+    }
+    for j in ajouts {
+        mask[j] = true;
+    }
+    mask
+}
+
 /// Le dégradé en couleurs d'une grille de `n` × `n` cases sur le rectangle `de`..`a` : de quoi peindre l'aperçu d'un geste
 /// avec un maillage de sommets colorés (un sommet par angle de case, prémultiplié).
 pub fn sommets(g: &Degrade, de: Pos2, a: Pos2, nx: usize, ny: usize, k: f32) -> Vec<Color32> {

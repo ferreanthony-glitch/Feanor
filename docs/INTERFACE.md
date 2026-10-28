@@ -4604,7 +4604,7 @@ Dans cet ordre :
 1. **La sélection**, s'il y en a une (lasso, rectangle, sélection par couleur en bitmap : la zone reste avec l'outil Dégradé, sans être transformable ni recolorée par un choix de couleur ; une zone soulevée refuse). Le bord de la zone est anticrénelé et le dégradé se pose
    par-dessus, dans la mesure de la couverture ; un calque qui préserve la transparence ne change que ce qui est dessiné ; les pochoirs des autres calques le limitent (comme « Remplir la sélection »).
    Sur un calque **vectoriel**, une sélection de zones remplies : elles reçoivent le dégradé (une sélection de traits seuls : rien à remplir, un message le dit).
-2. **La zone fermée** où l'on appuie, trouvée **exactement comme le fait le pot de peinture** (même recherche, même tolérance, même débord, « Contours pris sur » de ses réglages). Sur un calque vectoriel, une zone déjà remplie sous le pointeur reçoit le dégradé
+2. **La zone fermée** où l'on appuie, trouvée **comme le fait le pot de peinture** (même recherche, même tolérance, même débord, « Contours pris sur » de ses réglages), mais qui traverse un dégradé ou une peinture douce jusqu'au trait (voir « Correction du 2026-10-28 » plus bas). Sur un calque vectoriel, une zone déjà remplie sous le pointeur reçoit le dégradé
    en place (le pot de peinture en change la couleur) ; sinon une zone neuve est créée sous les traits.
 3. **Toute la feuille** : **Alt** tenu (avec cet outil Alt n'est pas la pipette), ou « Tout le calque » dans Réglages.
 
@@ -4636,6 +4636,24 @@ Un dégradé aux valeurs absurdes est refusé comme tout dessin abîmé (le dess
 4. Lasso une zone avec l'outil Sélection, passe au Dégradé, glisse : seule la zone est remplie, bord doux. Alt + glisser : toute la feuille.
 5. Calque vectoriel : le même geste donne une zone vectorielle ; choisis-la avec la Sélection et déplace-la, tourne-la : le dégradé suit. Enregistre, rouvre : il est là. Pot de peinture sur la zone : elle redevient unie.
 6. Aplat : sur un calque avec aplat, clique sa sous-ligne, outil Dégradé, glisse dans une zone fermée : l'aplat y a le dégradé, sous le trait. Un calque de couleur : pareil.
+
+### Correction du 2026-10-28 : un dégradé sur un autre dégradé (branche `degrade-sur-degrade`)
+
+Retour d'Anthony : sur un calque bitmap qui avait déjà un dégradé (noir → gris clair), un second dégradé tracé par-dessus ne couvrait qu'une bande irrégulière : le haut restait noir plein, avec un bord net en diagonale, et une grande partie de l'ancien dégradé restait, coupée par une limite qui n'a rien à voir avec le dessin.
+
+- **La cause**. Sans sélection, l'outil cherche « la zone fermée » où l'on appuie comme le pot de peinture : les pixels qui ont **la même couleur que le point d'appui, à une tolérance près** (12 %), de proche en proche. Sur une couleur unie, c'est toute la zone. Sur un dégradé, aucun pixel n'a la couleur du point d'appui sauf ceux d'une bande étroite
+  (ceux qui en sont à moins de 12 % de gris) : la « zone » n'était que cette bande, et sa limite dure suivait la ligne où le gris dépasse la tolérance. Le second dégradé ne remplaçait que la bande.
+- **La règle**. La zone est **bornée par le trait, pas par une variation douce**. Pour le dégradé, la zone est celle du pot de peinture, **plus** tout ce qu'on atteint de proche en proche par des pixels « lisses » (`degrade::zone_douce`) : un pixel est lisse quand ses quatre voisins ne diffèrent de lui que de très peu (10 niveaux sur 255, opacité comprise). Un dégradé, même court, est lisse partout ;
+  le bord d'un trait ne l'est jamais, parce qu'il a un voisin de l'autre côté du saut, y compris le bord anticrénelé d'un trait un peu penché (on ne glisse pas le long du bord). Une couche de pixels est ajoutée collée au trait, pour que le bord de la zone soit remplacé aussi. Un dégradé posé sur un autre remplace donc l'ancien **sur toute la zone qu'il remplissait**, jusqu'au trait ;
+  hors d'une forme fermée, rien ne change ; sur une couleur unie, la zone est celle du pot de peinture, au pixel près (l'essai du noyau le vérifie).
+- **Ce qui ne change pas**. La sélection (le dégradé reste dans la sélection), Alt (tout le calque), le pot de peinture lui-même (il garde la tolérance sur la couleur : « même couleur » est son sens), l'aplat et le calque de couleur (leur zone est fermée par le **trait** seul, pas par la peinture : le second dégradé y remplaçait déjà tout, un essai le garde),
+  et le vectoriel (appuyer sur une zone remplie lui donne le dégradé en place, même quand elle a déjà un dégradé : un essai le garde aussi).
+- **Les limites** (à savoir). Un trait de la couleur même du dégradé à cet endroit (un trait noir contre un dégradé qui commence par du noir) n'est pas un saut : la zone passe dessus, comme le pot de peinture le fait d'une couleur unie ; choisir une autre couleur de départ, ou faire une sélection. Un dégradé plus court que 26 pixels pour toute l'étendue du noir au blanc est vu comme un bord.
+  Un trait très flou (un bord qui s'étale sur plus de 25 pixels) est vu comme un dégradé et ne borne pas la zone.
+- **Sans latence**. La recherche se fait **une fois, à l'appui** (comme avant), en un passage (une feuille 4K : quelques centaines de millisecondes au pire, un essai le mesure) ; pendant le glisser, l'aperçu ne change pas (le même maillage de sommets).
+- Essais : `degrade_sur_degrade_tests.rs` (bitmap vide, dans une forme fermée, sélection, Alt, trait tracé par-dessus le dégradé, vectoriel, aplat, calque de couleur, le noyau : bande, couleur unie, vide, bord penché, feuille 4K).
+
+**À vérifier à l'écran (par Anthony)** : sur un calque bitmap, pose un dégradé noir → gris clair sur toute la feuille ; pose un second dégradé (autres couleurs, un axe court) par-dessus sans sélection : il remplace tout l'ancien, sans bord dur. Recommence dans un anneau tracé au pinceau : le second dégradé reste dans l'anneau. Puis avec une sélection, et avec Alt.
 
 ---------------------------------------------------------------------------------------------------
 

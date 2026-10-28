@@ -177,12 +177,13 @@ impl App {
     }
 
     /// Une zone trouvée comme le fait le pot de peinture sur le dessin du calque (ou sur tous les calques, d'après ses
-    /// réglages) : la zone et la zone élargie du débord.
+    /// réglages), mais bornée par le trait seul : elle traverse un dégradé ou une peinture douce (`degrade::zone_douce`).
+    /// La zone et la zone élargie du débord.
     fn degrade_zone_du_pot(&self, p: Pos2) -> (Vec<bool>, Vec<bool>) {
         let (w, h) = (self.doc.width, self.doc.height);
         let source = self.fill_source();
         let tolerance = (self.fill.tolerance * 255.0).round() as u8;
-        let region = crate::fill::flood(&source, w, h, p.x as usize, p.y as usize, tolerance);
+        let region = degrade::zone_douce(&source, w, h, p.x as usize, p.y as usize, tolerance);
         let grown = crate::fill::dilate(&region, w, h, self.fill.expand);
         (region, grown)
     }
