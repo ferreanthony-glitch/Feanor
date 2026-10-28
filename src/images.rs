@@ -354,10 +354,24 @@ pub(crate) fn stretch_frames(frames: &Frames, len: usize, how: Stretch) -> Frame
 pub(crate) enum DropMode {
     /// Sans touche : déplacé (sa place se vide, il recouvre ce qu'il y a là où on le pose).
     Move,
-    /// Ctrl : copié (il recouvre ce qu'il y a là où on le pose).
+    /// Ctrl ou Alt : copié (il recouvre ce qu'il y a là où on le pose).
     Copy,
     /// Maj : inséré (il quitte sa place, la suite recule, puis il s'insère là où on le pose).
     Insert,
+}
+
+impl DropMode {
+    /// Le geste que les touches tenues au lâcher demandent : Ctrl ou Alt, copier ; Maj, insérer ; rien, déplacer.
+    /// (Alt copie comme Ctrl, Anthony 2026-10-28 : « Alt + glisser duplique les images choisies » ; Ctrl garde son sens d'avant.)
+    pub(crate) fn de_touches(m: &eframe::egui::Modifiers) -> DropMode {
+        if m.command || m.ctrl || m.alt {
+            DropMode::Copy
+        } else if m.shift {
+            DropMode::Insert
+        } else {
+            DropMode::Move
+        }
+    }
 }
 
 /// Pose les images [a, b) à partir de l'image `to`, selon `mode` ; `row` : les images posées
@@ -1168,7 +1182,7 @@ impl App {
                 }
             });
         });
-        ui.label(egui::RichText::new("Glisser les images choisies : déplacer ; avec Ctrl : copier ; avec Maj : insérer.").weak().small());
+        ui.label(egui::RichText::new("Glisser les images choisies : déplacer ; avec Ctrl ou Alt : copier ; avec Maj : insérer.").weak().small());
     }
 }
 
