@@ -327,7 +327,7 @@ impl App {
         // Les valeurs sont celles de la boîte vue ; la boîte de départ du geste s'y ramène.
         let Some(target) = live.with_params(&params) else { return };
         if self.bsel.is_some() {
-            self.place_floating(target.m);
+            self.float_preview(target.m);
             self.status = gesture_text(handle, &params);
         } else if let Some(d) = frame0.delta_to(&target) {
             self.set_vector_gesture(d);
@@ -342,6 +342,8 @@ impl App {
         }
         if matches!(&self.bdrag, Some(BDrag::Transform { field: true, .. })) {
             self.bdrag = None;
+            // (La zone bitmap garde sa place : son rendu exact se calcule en arrière-plan.)
+            self.settle_bitmap_float();
         }
         if matches!(&self.multi.drag, Some(crate::multisel::MDrag::Transform { field: true, .. })) {
             self.multi_finish_drag();

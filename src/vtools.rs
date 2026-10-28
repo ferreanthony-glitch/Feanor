@@ -472,7 +472,11 @@ impl App {
     /// pour que tout ce qui suit parte d'une image juste.
     pub(crate) fn flush_flottante_on_input(&mut self, ctx: &eframe::egui::Context) {
         let multi_pending = self.multi.has_pending();
-        if !self.flottante.as_ref().is_some_and(|f| f.pending.is_some()) && !multi_pending {
+        // Une zone bitmap transformée dont le rendu exact se calcule encore (aucun geste en cours) : le dessin n'a pas encore ses
+        // pixels à leur place ; un clic ou une touche le mettent d'abord à jour (`flush_bitmap_float`) — sauf un clic sur la boîte
+        // de la zone, qui reprend la feuille pour un nouveau geste.
+        let bitmap_waiting = self.bdrag.is_none() && self.bsel.as_ref().and_then(|s| s.lifted.as_ref()).is_some_and(|l| l.stale);
+        if !self.flottante.as_ref().is_some_and(|f| f.pending.is_some()) && !multi_pending && !bitmap_waiting {
             return;
         }
         use eframe::egui::{Event, Key};
@@ -487,11 +491,13 @@ impl App {
                 Event::Key { pressed: true, .. } | Event::Text(_) | Event::Paste(_) | Event::Cut | Event::Copy => true,
                 _ => false,
             };
-            (i.pointer.any_pressed() && !grabs) || i.events.iter().any(on_keys)
+            let on_box = bitmap_waiting && i.pointer.interact_pos().is_some_and(|p| self.box_hit(p).is_some());
+            (i.pointer.any_pressed() && !grabs && !on_box) || i.events.iter().any(on_keys)
         });
         if acts {
             self.flush_flottante();
             self.multi_flush();
+            self.flush_bitmap_float();
         }
     }
 

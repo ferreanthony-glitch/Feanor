@@ -157,6 +157,8 @@ impl App {
             self.status = "Enregistrement en cours : le suivant partira à sa fin.".into();
             return true;
         }
+        // (Une zone bitmap qu'on vient de transformer : le dessin reçoit d'abord ses pixels à leur place, `pixtools.rs`.)
+        self.flush_bitmap_float();
         // Film partagé enregistré à sa place : seulement ce qu'on tient (`projet_partage.rs`). Ailleurs (« Enregistrer sous »), c'est
         // une copie à plat, comme un projet ordinaire.
         let partage_ici = self.partage.is_some() && self.path.as_ref() == Some(&manifest);

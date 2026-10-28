@@ -164,7 +164,7 @@ impl App {
         if sel.lifted.is_some() {
             let Some(sel) = self.bsel.as_mut() else { return };
             let Some(lifted) = sel.lifted.as_mut() else { return };
-            if !recolorer_soulevee(&mut lifted.floating, couleur) {
+            if !recolorer_soulevee(std::sync::Arc::make_mut(&mut lifted.floating), couleur) {
                 return;
             }
             let aff = lifted.aff;

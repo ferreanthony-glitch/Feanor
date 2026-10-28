@@ -472,6 +472,9 @@ mod hasard_tests;
 mod saccade_tests;
 #[cfg(test)]
 mod saccade_ecran_tests;
+// Transformer une sélection bitmap au zéro latence (feuille flottante bitmap).
+#[cfg(test)]
+mod selection_bitmap_tests;
 // Fusionner deux plans en glissant l'un sur l'autre dans le montage.
 mod fusionglisse;
 #[cfg(test)]

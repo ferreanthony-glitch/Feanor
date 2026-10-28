@@ -4,6 +4,17 @@
 //! Les pixels ne sont soulevés qu'au premier déplacement. Tant que la sélection est active, ils
 //! restent soulevés : chaque transformation repart de l'image d'origine. Tout est reposé (et
 //! enregistré pour l'annulation, en une étape) quand on quitte la sélection.
+//!
+//! **Sans latence** : pendant un geste de la boîte (déplacer, échelle, rotation, inclinaison, champs chiffrés), aucun pixel n'est
+//! rééchantillonné à chaque image. La zone se montre par une feuille flottante (`flottante.rs`, `Flottante::bitmap`) que la carte
+//! graphique pose avec la transformation du geste (`float_preview` : un paramètre par image) ; l'image du dessin ne bouge pas.
+//! Au lâcher, le rendu exact (le dessin sans la zone, les pixels posés une fois, depuis les pixels d'origine : aucun flou
+//! cumulé) se calcule sur un fil de travail (`settle_bitmap_float`) et le dessin le reçoit à son arrivée
+//! (`poll_bitmap_settle`). Un clic ou une touche avant l'arrivée l'attendent (`flush_bitmap_float`) ; un nouveau geste le jette.
+//! Les actions d'un seul coup (flèches, miroir, recolorier) posent les pixels tout de suite (`place_floating`).
+
+use std::sync::mpsc::{self, Receiver, TryRecvError};
+use std::sync::Arc;
 
 use eframe::egui::{Pos2, Rect};
 
@@ -25,7 +36,8 @@ pub(crate) struct BSelection {
 }
 
 pub(crate) struct Lifted {
-    pub floating: Floating,
+    /// Les pixels soulevés (partagés avec le fil qui calcule le rendu exact d'un geste).
+    pub floating: Arc<Floating>,
     /// Le dessin sans les pixels soulevés.
     pub base: Raster,
     /// Le dessin avant la sélection, pour l'annulation.
@@ -37,6 +49,27 @@ pub(crate) struct Lifted {
     pub placed: Option<Rect>,
     /// Les gestes faits depuis le soulèvement, pour nommer l'étape d'annulation de la pose.
     pub steps: Vec<&'static str>,
+    /// Un geste a changé `aff` sans que l'image du dessin ait reçu les pixels à leur nouvelle place : la feuille flottante
+    /// (`flottante.rs`) les montre, et le rendu exact arrive d'un fil de travail (`settle_bitmap_float`). L'image du dessin est
+    /// alors celle d'avant le geste, les pixels de la zone à `placed` (qui est celle d'avant).
+    pub stale: bool,
+    /// Le numéro du dernier geste : un rendu exact d'un geste dépassé est jeté.
+    pub generation: u64,
+    /// Le rendu exact en route.
+    pub exact: Option<Receiver<Exact>>,
+}
+
+/// Le rendu exact d'une zone soulevée : le dessin sans la zone, avec les pixels posés par `aff` (celui du geste `generation`).
+pub(crate) struct Exact {
+    generation: u64,
+    raster: Raster,
+    placed: Option<Rect>,
+}
+
+impl Lifted {
+    fn new(floating: Floating, base: Raster, before: Raster, prefix: Option<Edit>, placed: Option<Rect>) -> Lifted {
+        Lifted { floating: Arc::new(floating), base, before, prefix, aff: Affine::IDENTITY, placed, steps: Vec::new(), stale: false, generation: 0, exact: None }
+    }
 }
 
 pub(crate) enum BDrag {
@@ -84,6 +117,8 @@ impl App {
     /// Repose les pixels soulevés (une étape d'annulation) et oublie la sélection.
     pub(crate) fn drop_bitmap_selection(&mut self) {
         self.bdrag = None;
+        // (Un geste lâché dont le rendu exact n'est pas posé : l'image du dessin le reçoit d'abord.)
+        self.flush_bitmap_float();
         let Some(sel) = self.bsel.take() else { return };
         let Some(lifted) = sel.lifted else { return };
         let Some(c) = self.doc.cels.get(&sel.cel) else { return };
@@ -164,15 +199,7 @@ impl App {
         let floating = pixsel::lift(&mut c.raster, &sel.mask);
         let base = c.raster.clone();
         let placed = pixsel::stamp(&mut c.raster, &floating, &Affine::IDENTITY);
-        sel.lifted = Some(Lifted {
-            floating,
-            base,
-            before,
-            prefix: None,
-            aff: Affine::IDENTITY,
-            placed,
-            steps: Vec::new(),
-        });
+        sel.lifted = Some(Lifted::new(floating, base, before, None, placed));
         true
     }
 
@@ -184,11 +211,16 @@ impl App {
         self.bdrag = Some(BDrag::Transform { handle, start: p, frame, field: false });
     }
 
-    /// Pose les pixels soulevés avec la transformation `aff` (à la place de la précédente).
+    /// Pose les pixels soulevés avec la transformation `aff` (à la place de la précédente), tout de suite et au pixel près
+    /// (sur le fil de l'interface : flèches, miroir, recolorier ; un geste à la souris passe par `float_preview`).
     pub(crate) fn place_floating(&mut self, aff: Affine) {
         let Some(sel) = self.bsel.as_mut() else { return };
         let Some(lifted) = sel.lifted.as_mut() else { return };
         let Some(c) = self.doc.cels.get_mut(&sel.cel) else { return };
+        // (Un rendu exact en route, ou la feuille flottante d'un geste d'avant, sont dépassés.)
+        lifted.generation += 1;
+        lifted.exact = None;
+        lifted.stale = false;
         let mut dirty = Vec::new();
         if let Some(r) = lifted.placed {
             for idx in vector::tiles_in(&c.raster, r) {
@@ -204,6 +236,140 @@ impl App {
         c.version += 1;
         self.renderer.invalidate_tiles(&dirty);
         self.modified = true;
+        self.release_bitmap_float();
+    }
+
+    /// La feuille flottante d'une zone bitmap s'en va (le dessin a ses pixels, ou le geste est abandonné).
+    fn release_bitmap_float(&mut self) {
+        if self.flottante.as_ref().is_some_and(|f| f.bitmap) {
+            self.flottante = None;
+            crate::flottante::Flottante::release(&mut self.doc);
+        }
+    }
+
+    /// Un geste à la souris (ou un champ chiffré) sur la zone soulevée : sa transformation devient `aff`, et c'est tout. La zone
+    /// se montre par la feuille flottante (`flottante.rs`), que la carte graphique pose avec `aff` : aucun pixel n'est refait ni
+    /// envoyé à chaque image (avant, chaque image rééchantillonnait toute la zone sur le fil de l'interface : 200 ms et plus
+    /// pour une grande zone d'un dessin 4K). Le rendu exact se calcule au lâcher, sur un autre fil (`settle_bitmap_float`).
+    pub(crate) fn float_preview(&mut self, aff: Affine) {
+        let Some(sel) = self.bsel.as_mut() else { return };
+        let cel = sel.cel;
+        let Some(lifted) = sel.lifted.as_mut() else { return };
+        lifted.aff = aff;
+        lifted.generation += 1;
+        lifted.exact = None;
+        lifted.stale = true;
+        let needs_sheet = !self.flottante.as_ref().is_some_and(|f| f.bitmap && f.src == cel);
+        if needs_sheet {
+            let Some(lifted) = self.bsel.as_ref().and_then(|s| s.lifted.as_ref()) else { return };
+            let Some((w, h)) = self.doc.cels.get(&cel).map(|c| (c.raster.width, c.raster.height)) else { return };
+            let (base, sheet) = (lifted.base.clone(), lifted.floating.to_raster(w, h));
+            // (La feuille d'un autre geste se termine d'abord.)
+            self.flush_flottante();
+            if self.flottante.take().is_some() {
+                crate::flottante::Flottante::release(&mut self.doc);
+            }
+            self.flottante = Some(crate::flottante::Flottante::lift_bitmap(&mut self.doc, cel, &base, sheet));
+        }
+        if let Some(f) = self.flottante.as_mut() {
+            f.aff = aff;
+        }
+        self.modified = true;
+    }
+
+    /// Le geste est lâché : le rendu exact (le dessin sans la zone, les pixels posés par `aff`) se calcule sur un fil de travail ;
+    /// la feuille flottante reste affichée jusqu'à son arrivée (`poll_bitmap_settle`), donc le lâcher ne coûte rien.
+    pub(crate) fn settle_bitmap_float(&mut self) {
+        let Some(lifted) = self.bsel.as_mut().and_then(|s| s.lifted.as_mut()).filter(|l| l.stale && l.exact.is_none()) else { return };
+        let (base, floating, aff, generation) = (lifted.base.clone(), lifted.floating.clone(), lifted.aff, lifted.generation);
+        let (tx, rx) = mpsc::channel();
+        let ctx = self.ctx.clone();
+        let started = std::thread::Builder::new().name("zone-bitmap".into()).spawn(move || {
+            let mut raster = base;
+            let placed = pixsel::stamp(&mut raster, &floating, &aff);
+            let _ = tx.send(Exact { generation, raster, placed });
+            ctx.request_repaint();
+        });
+        // (Le fil n'a pas pu partir : `flush_bitmap_float` fera le travail, sur le fil de l'interface, à la première action.)
+        if started.is_ok() {
+            lifted.exact = Some(rx);
+        }
+    }
+
+    /// Chaque image : adopte le rendu exact arrivé (l'image du dessin le reçoit, la feuille flottante s'en va).
+    pub(crate) fn poll_bitmap_settle(&mut self) {
+        // Une feuille de zone bitmap sans zone qui l'attende (la sélection a été lâchée autrement) ne reste pas.
+        let waiting = self.bsel.as_ref().and_then(|s| s.lifted.as_ref()).is_some_and(|l| l.stale);
+        if !waiting {
+            self.release_bitmap_float();
+            return;
+        }
+        if self.bdrag.is_some() {
+            return;
+        }
+        let Some(sel) = self.bsel.as_mut() else { return };
+        let cel = sel.cel;
+        let Some(lifted) = sel.lifted.as_mut() else { return };
+        let Some(rx) = lifted.exact.as_ref() else { return };
+        let result = match rx.try_recv() {
+            Ok(exact) => Some(exact),
+            Err(TryRecvError::Empty) => return,
+            Err(TryRecvError::Disconnected) => None,
+        };
+        lifted.exact = None;
+        if let Some(exact) = result.filter(|e| e.generation == lifted.generation) {
+            self.adopt_exact(cel, exact);
+        }
+    }
+
+    /// L'image du dessin reçoit le rendu exact : seules les tuiles de la zone d'avant et de la zone d'après changent.
+    fn adopt_exact(&mut self, cel: CelId, exact: Exact) {
+        let Some(lifted) = self.bsel.as_mut().and_then(|s| s.lifted.as_mut()) else { return };
+        let Some(c) = self.doc.cels.get_mut(&cel) else { return };
+        let zone = match (lifted.placed, exact.placed) {
+            (Some(a), Some(b)) => Some(a.union(b)),
+            (a, b) => a.or(b),
+        };
+        let mut dirty = Vec::new();
+        if let Some(r) = zone {
+            for idx in vector::tiles_in(&c.raster, r) {
+                c.raster.tiles[idx] = exact.raster.tiles[idx].clone();
+                dirty.push(idx);
+            }
+        }
+        lifted.placed = exact.placed;
+        lifted.stale = false;
+        c.version += 1;
+        self.renderer.invalidate_tiles(&dirty);
+        self.release_bitmap_float();
+    }
+
+    /// L'image du dessin doit être juste maintenant (clic, touche, pose de la zone) : le rendu exact en route est attendu (il est
+    /// presque fini : on ne le refait pas), sinon il est fait ici.
+    pub(crate) fn flush_bitmap_float(&mut self) {
+        let Some(sel) = self.bsel.as_mut() else { return };
+        let cel = sel.cel;
+        let Some(lifted) = sel.lifted.as_mut().filter(|l| l.stale) else { return };
+        let aff = lifted.aff;
+        if let Some(rx) = lifted.exact.take() {
+            if let Ok(exact) = rx.recv() {
+                if exact.generation == lifted.generation {
+                    self.adopt_exact(cel, exact);
+                    return;
+                }
+            }
+        }
+        self.place_floating(aff);
+    }
+
+    /// Le geste est abandonné sans rien poser (l'image du dessin est déjà celle qu'on garde) : pas de rendu à attendre.
+    fn discard_bitmap_float(&mut self) {
+        if let Some(l) = self.bsel.as_mut().and_then(|s| s.lifted.as_mut()) {
+            l.stale = false;
+            l.exact = None;
+            l.generation += 1;
+        }
+        self.release_bitmap_float();
     }
 
     pub(crate) fn bitmap_drag(&mut self, p: Pos2, shift: bool, ctrl: bool) {
@@ -225,7 +391,7 @@ impl App {
                     t.ty = t.ty.round();
                 }
                 let after = frame.then(&t);
-                self.place_floating(after.m);
+                self.float_preview(after.m);
                 self.status = crate::seltools::gesture_text(handle, &after.params());
             }
             Some(BDrag::Pivot { start, frame }) => {
@@ -239,7 +405,12 @@ impl App {
     pub(crate) fn finish_bdrag(&mut self) {
         let Some(drag) = self.bdrag.take() else { return };
         let (polygon, add, click) = match drag {
-            BDrag::Transform { .. } | BDrag::Pivot { .. } => return,
+            // Le geste est lâché : le rendu exact de la zone se calcule en arrière-plan.
+            BDrag::Transform { .. } => {
+                self.settle_bitmap_float();
+                return;
+            }
+            BDrag::Pivot { .. } => return,
             BDrag::Lasso { points, add } => {
                 let click = points.first().copied();
                 let screen: Vec<Pos2> = points.iter().map(|q| self.layer_to_screen(*q)).collect();
@@ -331,6 +502,8 @@ impl App {
         if !self.layer_editable() {
             return;
         }
+        // (Ce qui suit remplace l'image du dessin : le rendu exact d'un geste n'a plus rien à poser.)
+        self.discard_bitmap_float();
         let Some(sel) = self.bsel.as_mut() else { return };
         let Some(c) = self.doc.cels.get_mut(&sel.cel) else { return };
         if let Some(lifted) = &sel.lifted {
@@ -437,15 +610,7 @@ impl App {
             cel,
             mask,
             outline: vec![polygon],
-            lifted: Some(Lifted {
-                floating: f,
-                base,
-                before,
-                prefix,
-                aff: Affine::IDENTITY,
-                placed,
-                steps: Vec::new(),
-            }),
+            lifted: Some(Lifted::new(f, base, before, prefix, placed)),
         });
         self.tool = Tool::Select;
         self.modified = true;
