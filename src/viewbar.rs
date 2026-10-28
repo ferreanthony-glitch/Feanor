@@ -510,7 +510,7 @@ impl App {
         if format.is_none() && !self.layout.safe_frames && !self.cadrage.any_on() {
             return;
         }
-        let (cam, frame, size) = (self.current_camera(), self.doc.frame, self.canvas_size());
+        let (cam, frame, size) = (self.camera_montree(), self.doc.frame, self.canvas_size());
         let quad = |r: Rect| {
             [r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom()]
                 .map(|p| self.view.to_screen(rect, size, cam.to_stage(frame, p.x, p.y)))

@@ -217,7 +217,10 @@ fn dessiner_courbes(painter: &egui::Painter, zone: Rect, actuelle: &Curve, propo
 impl App {
     /// Ouvre la fenêtre (Aide > Régler le stylet…, Préférences > Dessin).
     pub(crate) fn ouvrir_reglage_stylet(&mut self) {
-        self.confort.stylet = Some(Reglage::nouveau());
+        let mut r = Reglage::nouveau();
+        // (« Appliquer » ferme la fenêtre : « Rétablir » rend la courbe d'avant à la réouverture.)
+        r.a_retablir = self.confort.stylet_avant;
+        self.confort.stylet = Some(r);
     }
 
     /// Chaque image d'écran, la fenêtre si elle est ouverte.
@@ -331,21 +334,24 @@ impl App {
             });
             ui.label(RichText::new("Ne change rien tant que tu n'as pas cliqué « Appliquer ». Avec la souris, l'appui vaut toujours 100 %.").small().weak());
         });
+        // « Appliquer » règle la courbe et ferme la fenêtre : il n'y a plus rien à faire dedans.
+        let applique = appliquer.is_some();
         if let Some(neuve) = appliquer {
-            r.a_retablir = Some(self.toucher.pressure_curve);
+            self.confort.stylet_avant = Some(self.toucher.pressure_curve);
             self.toucher.pressure_curve = neuve;
-            self.status = "Courbe de pression réglée sur ta main (Réglages de l'outil > Toucher du stylet pour la voir ; Rétablir dans la fenêtre pour revenir).".into();
+            self.status = "Courbe de pression réglée sur ta main (Réglages de l'outil > Toucher du stylet pour la voir ; « Régler le stylet à ma main… » puis Rétablir pour revenir).".into();
         }
         if retablir {
             if let Some(avant) = r.a_retablir.take() {
                 self.toucher.pressure_curve = avant;
+                self.confort.stylet_avant = None;
                 self.status = "Courbe de pression d'avant rétablie.".into();
             }
         }
         if recommencer {
             r.recommencer();
         }
-        if ouverte {
+        if ouverte && !applique {
             self.confort.stylet = Some(r);
         }
     }

@@ -22,6 +22,9 @@ pub(crate) struct Confort {
     pub aide_touches: bool,
     /// La fenêtre « Régler le stylet à ma main ».
     pub stylet: Option<crate::reglagestylet::Reglage>,
+    /// La courbe de pression d'avant le dernier « Appliquer » : la fenêtre se ferme à l'application, « Rétablir » la rend à
+    /// l'ouverture suivante.
+    pub stylet_avant: Option<crate::brush::Curve>,
 }
 
 impl Confort {

@@ -3649,6 +3649,8 @@ impl App {
             // aux rangs d'avant (l'élément supprimé revenait, un autre disparaissait, sans étape d'annulation).
             self.flush_flottante();
             self.multi_flush();
+            // Une zone bitmap transformée dont le rendu exact se calcule encore.
+            self.flush_bitmap_float();
         }
         // Annuler ou rétablir pendant une déformation : elle repartirait d'un dessin périmé.
         if matches!(action, "edition.annuler" | "edition.retablir") {
@@ -4787,6 +4789,8 @@ impl App {
         {
             let _t = crate::perf::section("arrière-plan (rejeu, fonds)");
             self.poll_rejeu(ctx);
+            // (Le rendu exact d'une zone bitmap transformée, calculé sur un fil : `pixtools.rs`.)
+            self.poll_bitmap_settle();
             self.rejeu_idle_tick(ctx);
             self.warm_current_cel();
         }

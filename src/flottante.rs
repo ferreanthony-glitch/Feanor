@@ -75,6 +75,9 @@ pub struct Flottante {
     /// Cette feuille est celle d'une séance d'enveloppe ou de perspective (`App::warp_float`),
     /// faite du dessin d'origine de la séance : elle sert à chaque geste de la séance.
     pub for_warp: bool,
+    /// Feuille d'une zone bitmap soulevée (`pixtools.rs`) : le dessin sans la zone, et la zone seule à sa place
+    /// d'origine ; `aff` est la transformation de la zone (`Lifted::aff`). Aucun élément vectoriel.
+    pub bitmap: bool,
 }
 
 impl crate::app::App {
@@ -156,7 +159,23 @@ impl Flottante {
             c.version = version;
             doc.cels.insert(id, c);
         }
-        Flottante { src, slot, aff: Affine::IDENTITY, pending: None, margin, dims, warp: None, for_warp: false }
+        Flottante { src, slot, aff: Affine::IDENTITY, pending: None, margin, dims, warp: None, for_warp: false, bitmap: false }
+    }
+
+    /// Saisie d'une zone bitmap : `base`, le dessin sans la zone, et `sheet`, la zone seule à sa place d'origine (images de la
+    /// taille du dessin, rien n'est copié : les tuiles se partagent). La carte graphique pose la feuille avec `aff` à chaque
+    /// image du geste ; aucun pixel n'est refait ni envoyé (`pixtools.rs`).
+    pub fn lift_bitmap(doc: &mut Document, src: CelId, base: &Raster, sheet: Raster) -> Flottante {
+        let (w, h) = (base.width, base.height);
+        let dims = ((sheet.width, sheet.height) != (w, h)).then_some([sheet.width, sheet.height]);
+        let version = VERSION.fetch_add(2, Ordering::Relaxed);
+        let (base_id, sheet_id) = slot_ids(0);
+        for (id, raster, version) in [(base_id, base.clone(), version), (sheet_id, sheet, version + 1)] {
+            let mut c = Cel::bitmap(raster);
+            c.version = version;
+            doc.cels.insert(id, c);
+        }
+        Flottante { src, slot: 0, aff: Affine::IDENTITY, pending: None, margin: (0, 0), dims, warp: None, for_warp: false, bitmap: true }
     }
 
     /// Le maillage du geste en cours : la région `src` du dessin (le cadre de l'enveloppe), chaque
