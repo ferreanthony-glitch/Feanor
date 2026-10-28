@@ -3884,6 +3884,8 @@ impl App {
             }
             "edition.coller" if self.key_focus && self.key_clipboard.is_some() => self.paste_keys(),
             "edition.coller_a_la_tete" if self.key_focus && self.key_clipboard.is_some() => self.paste_keys_at_head(),
+            // Les images copiées de la timeline (grille) : Maj+Ctrl+V les pose sur la tête de lecture, sans rien repousser.
+            "edition.coller_a_la_tete" if self.images_focus && self.image_clipboard.is_some() => self.paste_images_at_head(),
             // Ni clés de caméra, ni clés d'effets, ni clés de dessins à coller : Maj+Ctrl+V fait
             // ce qu'il faisait avant (« Coller sur place », un alias de Ctrl+V).
             "edition.coller_a_la_tete" => self.run_action("edition.coller"),
