@@ -1,67 +1,37 @@
-//! Colonne de gauche du montage : ce qui tient dans la rangée d'un calque selon la largeur
-//! qu'on lui donne, et la largeur permise.
+//! Colonne de gauche du montage : la largeur permise, et ce que porte la rangée d'un calque.
+//!
+//! Adaptation du 2026-10-28 (branche `timeline-repliee`) : la rangée d'un calque ne montre plus selon sa largeur l'opacité, le verrou, la
+//! pelure, le menu ⋮, le mode de fusion et la boucle (anciens essais `head_layout`) ; elle ne montre que l'œil, la pastille de la sorte du
+//! calque et son nom, le reste étant au clic droit. Les essais d'avant sont remplacés par ceux de la nouvelle mise en page.
 
 use eframe::egui::{pos2, vec2, Rect};
 
-use crate::montagehead::{clamp_head_w, head_layout, HEAD_ALL, HEAD_MAX, HEAD_MIN};
+use crate::montagehead::{clamp_head_w, HEAD_ALL, HEAD_MAX, HEAD_MIN};
 use crate::montagerows::LAYER_H;
+use crate::pistes::{head_layout, name_size, FOLDED_H};
 
-/// La rangée d'un calque dans une colonne large de `column` (comme `row_headers` : 8 points de
-/// moins, la hauteur d'une piste moins 2).
-fn row(column: f32) -> Rect {
-    Rect::from_min_size(pos2(2.0, 101.0), vec2(column - 8.0, LAYER_H - 2.0))
+/// La rangée d'un calque dans une colonne large de `column` (comme `row_headers` : 8 points de moins, la hauteur d'une piste moins 2).
+fn row(column: f32, h: f32) -> Rect {
+    Rect::from_min_size(pos2(2.0, 101.0), vec2(column - 8.0, h - 2.0))
 }
 
 #[test]
-fn the_narrow_column_keeps_the_name_alone() {
-    // La largeur d'avant : le nom (et le menu ⋮), rien d'autre, le nom centré dans la hauteur.
-    let r = row(HEAD_MIN);
-    let at = head_layout(r);
-    assert!(at.icons.is_empty() && at.opacity.is_none() && at.blend.is_none() && at.after.is_none());
-    assert!(at.menu.is_some(), "le menu ⋮ dit qu'il y a des réglages");
-    assert!((at.name.center().y - r.center().y).abs() < 0.5);
-    assert!(at.name.width() >= 56.0);
-}
-
-#[test]
-fn widening_the_column_brings_the_options_in_order() {
-    // Afficher et verrouiller avec l'opacité, puis la pelure, le mode de fusion, enfin la boucle.
-    let mut seen = Vec::new();
-    for column in (HEAD_MIN as i32..=HEAD_MAX as i32).step_by(2) {
-        let at = head_layout(row(column as f32));
-        let state = (at.icons.len(), at.opacity.is_some(), at.blend.is_some(), at.after.is_some());
-        if seen.last() != Some(&state) {
-            seen.push(state);
-        }
-    }
-    let (first, last) = (seen[0], *seen.last().unwrap());
-    assert_eq!(first, (0, false, false, false));
-    assert_eq!(last, (3, true, true, true));
-    // Rien ne disparaît en élargissant.
-    for pair in seen.windows(2) {
-        let ((i0, o0, b0, a0), (i1, o1, b1, a1)) = (pair[0], pair[1]);
-        assert!(i1 >= i0 && o1 >= o0 && b1 >= b0 && a1 >= a0, "{pair:?}");
-    }
-    // Le double-clic sur la barre montre tout.
-    let at = head_layout(row(HEAD_ALL));
-    assert_eq!((at.icons.len(), at.blend.is_some(), at.after.is_some()), (3, true, true));
-}
-
-#[test]
-fn the_options_stay_in_the_row_without_overlapping() {
-    for column in [HEAD_MIN, 130.0, 180.0, 240.0, HEAD_ALL, HEAD_MAX] {
-        let r = row(column);
-        let at = head_layout(r);
-        let mut all: Vec<Rect> = vec![at.name];
-        all.extend(at.icons.iter().copied());
-        all.extend([at.menu, at.opacity, at.blend, at.after].into_iter().flatten());
-        for (i, a) in all.iter().enumerate() {
-            assert!(r.contains_rect(*a), "colonne {column} : {a:?} sort de {r:?}");
-            for b in &all[i + 1..] {
-                assert!(!a.intersects(b.shrink(0.5)), "colonne {column} : {a:?} et {b:?} se chevauchent");
+fn the_row_of_a_layer_carries_the_eye_the_dot_and_the_name_without_overlapping() {
+    for h in [LAYER_H, FOLDED_H] {
+        for column in [HEAD_MIN, 130.0, 180.0, HEAD_ALL, HEAD_MAX] {
+            let r = row(column, h);
+            let at = head_layout(r, h == FOLDED_H);
+            for part in [at.eye, at.name] {
+                assert!(r.contains_rect(part), "colonne {column}, hauteur {h} : {part:?} sort de {r:?}");
             }
+            assert!(r.contains(at.dot), "la pastille est dans la rangée");
+            assert!(at.eye.right() <= at.dot.x - at.dot_r + 0.5, "l'œil est avant la pastille");
+            assert!(at.dot.x + at.dot_r <= at.name.left(), "la pastille est avant le nom");
+            assert!(at.name.width() >= 30.0, "le nom garde de la place : {}", at.name.width());
+            assert!((at.name.center().y - r.center().y).abs() < 0.5, "le nom est centré dans la hauteur");
         }
     }
+    assert!(name_size(true) < name_size(false), "le nom d'une bande fine est plus petit");
 }
 
 #[test]

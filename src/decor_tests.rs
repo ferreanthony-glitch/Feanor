@@ -780,7 +780,7 @@ fn the_vignettes_tab_holds_only_the_vignettes_settings_and_the_pale_rows_moved_o
         assert!(contient(&vus, m), "{m}");
     }
     // Ce qui n'y est pas : rien du montage, du dessin ou de l'équipe.
-    for m in ["Repliage des pistes", "Opacité du passe-partout", "Mon nom"] {
+    for m in ["Calques non actifs", "Opacité du passe-partout", "Mon nom"] {
         assert!(!contient(&vus, m), "{m} n'est pas un réglage des Vignettes");
     }
     // L'onglet Montage n'a plus les rangées pâles.
@@ -789,7 +789,7 @@ fn the_vignettes_tab_holds_only_the_vignettes_settings_and_the_pale_rows_moved_o
     ouvrir_preferences(&mut b, Onglet::Montage);
     let vus = textes(&b);
     assert!(!contient(&vus, "Rangées de cases pâles"), "déménagées dans l'onglet Vignettes");
-    assert!(contient(&vus, "Repliage des pistes"));
+    assert!(contient(&vus, "Calques non actifs"));
 }
 
 #[test]

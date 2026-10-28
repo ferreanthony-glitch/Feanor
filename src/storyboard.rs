@@ -795,6 +795,8 @@ impl App {
         // Les étiquettes de version « V2 » posées ce coup-ci (`pileversui.rs`).
         let mut etiquettes: Vec<crate::pileversui::EtiquetteBloc> = Vec::new();
         let mut start = 0;
+        // (La souris tenue : un geste change peut-être un plan sans étape d'historique, les clés du bloc se recalculent alors.)
+        let pointer_tenu = ui.input(|i| i.pointer.any_down());
         for i in 0..self.doc.panels.len() {
             let len = self.doc.panels[i].frame_count();
             let rect = Rect::from_min_max(
@@ -859,11 +861,15 @@ impl App {
             );
             // La durée n'est affichée que si elle tient à côté du titre.
             if title.size().x + duration.size().x + 20.0 < rect.width() {
-                let at = pos2(rect.right() - 7.0 - duration.size().x, rect.bottom() - 4.0 - duration.size().y);
+                let at = pos2(rect.right() - 7.0 - duration.size().x, rect.bottom() - 7.0 - duration.size().y);
                 clip.galley(at, duration, visuals.weak_text_color());
             }
-            let at = pos2(rect.left() + 5.0, rect.bottom() - 4.0 - title.size().y);
+            let at = pos2(rect.left() + 5.0, rect.bottom() - 7.0 - title.size().y);
             clip.galley(at, title, visuals.text_color());
+            // Les clés de tous les calques du plan, en petits traits le long du bas du bloc (`clesplan.rs`), de la couleur de leur calque ;
+            // calculées une fois par changement du document.
+            let cles = self.cles_blocs.pour(self.history.serial(), &self.doc.panels[i], pointer_tenu);
+            crate::clesplan::peindre(&painter.with_clip_rect(rect.intersect(painter.clip_rect())), rect, &cles, ppf);
             // (Les marques d'image, les limites des cases du plan, ne se dessinent plus dans le montage : réunir deux plans en décochant une
             // coupe y laissait un repère orange qui ne sert à rien. Elles restent dans les données, la planche et la timeline du plan.)
             // La version du plan (« V2 »), près du haut, au milieu, quand il en a plusieurs : la survoler ouvre
