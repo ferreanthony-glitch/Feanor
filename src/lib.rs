@@ -472,6 +472,9 @@ mod hasard_tests;
 mod saccade_tests;
 #[cfg(test)]
 mod saccade_ecran_tests;
+// Fermer un projet : jamais de question quand rien n'a changé, « Enregistrer » enregistre puis ferme.
+#[cfg(test)]
+mod fermeture_tests;
 // Transformer une sélection bitmap au zéro latence (feuille flottante bitmap).
 #[cfg(test)]
 mod selection_bitmap_tests;
