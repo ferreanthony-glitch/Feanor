@@ -930,7 +930,7 @@ impl App {
             Outil::Stylo => {
                 ui.horizontal(|ui| {
                     bulles::etiquette(ui, ph::PALETTE, "Couleur du stylo", "La couleur des annotations à venir (celles déjà tracées ne changent pas).");
-                    ui.color_edit_button_srgb(&mut self.vignettes.annot.couleur);
+                    crate::champcouleur::srgb(ui, &mut self.vignettes.annot.couleur);
                     if bulles::icone(ui, ph::ARROW_COUNTER_CLOCKWISE, "Rouge d'origine", "Reprendre le rouge du stylo.", "").clicked() {
                         self.vignettes.annot.couleur = ann::COULEUR_PAR_DEFAUT;
                     }

@@ -763,7 +763,7 @@ impl App {
                                 name.on_hover_text(param_hint);
                             }
                             let mut rgb = [values[k] as u8, values[k + 1] as u8, values[k + 2] as u8];
-                            let resp = ui.color_edit_button_srgb(&mut rgb);
+                            let resp = crate::champcouleur::srgb(ui, &mut rgb);
                             let resp = if param_hint.is_empty() { resp } else { resp.on_hover_text(param_hint) };
                             if resp.dragged() || resp.changed() {
                                 crate::fx::note_interaction(ui.ctx());

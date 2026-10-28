@@ -224,7 +224,7 @@ impl App {
                 }
                 // Couleur et nom (une étape d'annulation par geste).
                 let mut color = self.doc.groups[g].color;
-                let resp = ui.color_edit_button_srgb(&mut color);
+                let resp = crate::champcouleur::srgb(ui, &mut color);
                 if self.edited(&resp) {
                     self.doc.groups[g].color = color;
                 }

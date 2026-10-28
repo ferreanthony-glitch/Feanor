@@ -268,12 +268,12 @@ impl App {
             ui.horizontal(|ui| {
                 ui.checkbox(&mut d.values.paper_on, "Papier").on_hover_text("L'arrière-plan du projet, qui sort à l'export. Décoché : transparent.");
                 ui.add_enabled_ui(d.values.paper_on, |ui| {
-                    let resp = ui.color_edit_button_srgb(&mut d.values.paper);
+                    let resp = crate::champcouleur::srgb(ui, &mut d.values.paper);
                     crate::bulles::bulle(resp, "Couleur du papier", "La couleur de l'arrière-plan du projet.", "");
                 });
                 ui.add_space(18.0);
                 ui.label("Aplat sous le trait");
-                let resp = ui.color_edit_button_srgb(&mut d.values.fond);
+                let resp = crate::champcouleur::srgb(ui, &mut d.values.fond);
                 crate::bulles::bulle(resp, "Couleur des aplats", "La couleur d'un aplat qu'on ajoute à un calque (bouton « Aplat sous le trait » de sa ligne).", "");
                 ui.add_space(18.0);
                 ui.label("Premier plan");

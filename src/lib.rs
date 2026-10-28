@@ -394,6 +394,9 @@ mod recolorsel;
 #[cfg(test)]
 mod recolorsel_tests;
 mod colorui;
+mod champcouleur;
+#[cfg(test)]
+mod champcouleur_tests;
 mod couleur;
 #[cfg(test)]
 mod couleur_tests;

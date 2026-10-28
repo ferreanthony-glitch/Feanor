@@ -163,14 +163,14 @@ impl App {
         ui.separator();
         ui.label("Couleur A");
         let mut a = self.doc.paper;
-        let resp = ui.color_edit_button_srgb(&mut a);
+        let resp = crate::champcouleur::srgb(ui, &mut a);
         if self.edited(&resp) {
             self.doc.paper = a;
             self.renderer.invalidate_all();
         }
         ui.label("Couleur B (damier)");
         let mut b = self.doc.paper_b;
-        let resp = ui.color_edit_button_srgb(&mut b);
+        let resp = crate::champcouleur::srgb(ui, &mut b);
         if self.edited(&resp) {
             self.doc.paper_b = b;
         }

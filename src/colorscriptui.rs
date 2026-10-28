@@ -174,7 +174,7 @@ impl App {
             });
             ui.end_row();
             ui.label("Fond");
-            ui.color_edit_button_srgb(&mut e.opt.fond);
+            crate::champcouleur::srgb(ui, &mut e.opt.fond);
             ui.end_row();
             ui.label("Dessus");
             ui.vertical(|ui| {

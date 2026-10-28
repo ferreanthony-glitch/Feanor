@@ -243,7 +243,7 @@ impl App {
                 ui.horizontal(|ui| {
                     bulles::bulle(ui.checkbox(&mut o.marie, "Marie-louise"), "Marie-louise", "Un passe-partout couvre tout ce qui est hors de l'intérieur des vignettes : seules les images se voient, les traits qui débordent aussi sont masqués.", "");
                     if o.marie {
-                        ui.color_edit_button_srgb(&mut o.marie_couleur);
+                        crate::champcouleur::srgb(ui, &mut o.marie_couleur);
                     }
                 });
             });

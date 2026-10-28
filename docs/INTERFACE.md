@@ -5347,3 +5347,51 @@ La grille ne mesure que ses quelques boutons (une passe, pas de texture, pas de 
 ### Essais
 
 `monpanneau_tests.rs` (20) : ajouter et retirer un bouton (doublons refusés, brosse et gomme distinctes) ; réordonner ; séparateurs (entre deux boutons seulement, déplacés, retirés) ; renommer et nom libre d'un outil perso ; réglages écrits et relus (toutes les sortes de boutons, brosse comprise), fichier du poste relu par `Settings::load`, panneau vide non écrit et anciens réglages ; **commande inconnue, genre inconnu, table abîmée et outil disparu ignorés sans planter, les autres réglages lus** ; commande inconnue refusée à l'ajout ; **outil perso : capture puis restitution de l'outil, de la brosse et de la couleur** (crayon, pinceau, gomme, outil sans brosse, outil disparu, enregistrement avec nom libre, clic du bouton) ; bouton de brosse (prise, brosse disparue) ; bouton de commande (lance l'action du registre) ; l'entrée du clic droit n'existe que panneau ouvert, et l'ajout qu'elle demande ; icône habituelle (outil, barre, panneau, icône apprise seulement panneau ouvert) ; le panneau se dessine avec toutes les sortes de boutons, avec et sans noms, étroit et large, avec la recherche, et vide ; grille (retours à la ligne, séparateur jamais en tête de ligne) ; case visée par un glisser.
+
+---------------------------------------------------------------------------------------------------
+
+## 65. Une pipette dans chaque choix de couleur (2026-10-28, branche `pipette-champs`)
+
+Demande d'Anthony : « Ajoute une pipette quand on ouvre un panneau de sélection de couleur. » Chaque case de couleur de SHOT (la « Couleur de l'aplat » des Réglages, les cases des couleurs neutres et des personnages, les Préférences, les effets, les groupes…) ouvre la même fenêtre de choix qu'avant (carré de teinte, barre arc-en-ciel, champs R, V, B), avec **une rangée de plus en haut : le bouton pipette**.
+
+### Une seule enveloppe
+
+`src/champcouleur.rs` remplace les `color_edit_button_*` et `color_picker_*` d'egui, dont la fenêtre ne laissait pas de place à un bouton. Quatre fonctions : `srgb` (`[u8; 3]`), `srgba` (`Color32`), `srgba_non_multipliee` (`[u8; 4]`) et `srgb_en_ligne` (le choix posé dans la page, sans case : « Autre couleur » des repères de cadrage). La fenêtre garde l'identifiant et le comportement d'egui (ouverte tant qu'on n'a pas cliqué ailleurs ou appuyé sur Échap) : `App::edited` y voit toujours « un geste d'annulation par ouverture ».
+
+Un essai (`every_colour_field_goes_through_the_one_wrapper`) lit tous les fichiers de `src/` et refuse tout `color_edit_button*`, `color_picker_color32` ou `color_picker_hsva_2d` hors de `champcouleur.rs` : une case de couleur de plus ne peut plus oublier la pipette. (Le panneau **Couleur** de la couleur de dessin, avec sa roue, n'est pas un de ces champs : il garde sa propre pipette, Alt + clic.)
+
+### Le geste
+
+1. **Clic sur la pipette** (bulle : « Pipette ») : la fenêtre de choix **reste ouverte**, le curseur devient une pipette dessinée (le curseur du système est caché), et le geste est armé pour **ce champ** seulement.
+2. **Une seule capture d'écran** (`ViewportCommand::Screenshot`, réponse en `Event::Screenshot`), demandée deux images après l'armement (la bulle du bouton s'efface) ; rien n'est dessiné par-dessus pendant l'image capturée. Elle montre exactement ce qui est affiché, **partout dans la fenêtre de SHOT** : dessin, panneau Références, vignettes, palette, et la fenêtre de choix elle-même. Jamais une capture par image (règle « sans latence »).
+3. **Une loupe** près du curseur (9 × 9 pixels grossis, le pixel visé cerné, son code `#RRGGBB` dessous) est lue dans cette capture : pas de lecture de l'écran à chaque image.
+4. **Le clic suivant, n'importe où**, écrit la couleur du pixel dans le champ, à la même image. La fenêtre de choix reste ouverte. La transparence du champ, s'il en a une, est gardée.
+5. **Échap ou un clic droit** annule : le champ ne change pas. (Le premier Échap ne sert qu'à la pipette : la fenêtre de choix reste ouverte.)
+
+**Le clic de la pipette ne fait rien d'autre.** Tant que le geste est armé, les appuis de la souris et du stylet et la touche Échap sont retirés de l'entrée d'egui (`champcouleur::filtrer_entree`, appelée au tout début de `App::raw_input_hook`) : pas de trait, pas de sélection, pas de bouton activé, aucun raccourci. Un voile transparent couvre aussi l'écran (le survol ne touche plus rien dessous).
+
+### Annulation
+
+Un champ qui appartient au projet passe par `App::edited` comme avant : la pipette ne fait qu'un seul changement de couleur, dans la fenêtre de choix ouverte, donc **une seule étape d'annulation** (Ctrl+Z rend la couleur d'avant). La pipette ne touche **que** le champ d'où elle part : la couleur de dessin, l'outil courant et la pipette de l'outil (Alt + clic) ne changent pas.
+
+### Sans capture d'écran (affichage OpenGL de secours)
+
+Si la capture n'arrive pas (le moteur OpenGL de secours ne sait pas la faire), le clic demande à l'application la **couleur du dessin sous le curseur** (`App::couleur_sous_le_curseur`, la lecture de la pipette de l'outil, sans toucher à `App::color`) ; hors du dessin, rien n'est pris et la barre d'état le dit. La loupe n'est alors pas montrée.
+
+### Pas de changement de format
+
+Le geste vit dans la mémoire d'egui (un état temporaire, jamais enregistré). Aucun réglage, aucun changement du projet.
+
+### À vérifier à l'écran (par Anthony)
+
+1. **Réglages > Couleur de l'aplat** : clique la case ; en haut de la fenêtre, une **icône pipette**. Survole-la une seconde : sa bulle.
+2. Clique la pipette : le curseur devient une pipette, avec une **loupe** et le code de la couleur visée. Clique sur un pixel du dessin : la case prend cette couleur, la fenêtre reste ouverte. **Ctrl+Z** : la couleur d'avant, en une seule étape.
+3. Même chose en visant ailleurs : une **vignette**, le panneau **Références**, la **palette** de couleurs, la barre de pastilles, et la fenêtre de choix elle-même (la barre arc-en-ciel).
+4. Pendant la pipette, clique sur un bouton ou dessine : **rien ne se passe** (pas de trait, pas de bouton activé). **Échap**, puis **clic droit** : le geste s'arrête et la couleur ne change pas.
+5. Les cases des **couleurs neutres** et des **personnages** (clic droit sur une pastille > Modifier) : la pipette y est aussi, et ne change que la case d'où elle part. La **couleur de dessin** (celle du panneau Couleur) reste la même.
+6. Les autres cases : Préférences (thème, repères), effets, groupes, nouveau projet, annotations, commentaires, onion skin : la pipette est partout.
+7. Au repos : rien ne bouge, le processeur reste à zéro.
+
+### Essais
+
+`champcouleur_tests.rs` (10) : une seule enveloppe pour tous les champs (recherche dans `src/`) ; **une seule capture** demandée pour tout un geste, le pixel sous le clic écrit dans CE champ, un champ modifié une seule fois, le dessin et le bouton dessous intacts, un clic sur la fenêtre de choix elle-même sans effet sur le carré de teinte ; Échap annule (et la fenêtre reste ouverte, les clics redeviennent normaux) ; le clic droit annule ; sans capture, le clic demande la couleur à l'application (et sans réponse le geste s'arrête) ; la capture en pixels (deux fois l'écran en points, bords compris) ; **une seule étape d'annulation** pour un champ du projet, et Ctrl+Z ; dans l'application entière (par `raw_input_hook`) : **le clic posé sur le dessin pendant la pipette ne pose aucun trait, aucune étape d'annulation, ne change ni la couleur de dessin ni l'outil**, puis l'application dessine de nouveau ; Échap vu avant tous les raccourcis.

@@ -2368,23 +2368,37 @@ impl App {
     }
 
     pub(crate) fn pick_color(&mut self, p: Pos2) {
+        if let Some(c) = self.couleur_du_monde(p) {
+            self.color = c;
+        }
+    }
+
+    /// La couleur du dessin au point `p` de la feuille (la pipette de l'outil, sans toucher à la couleur de dessin).
+    pub(crate) fn couleur_du_monde(&self, p: Pos2) -> Option<[u8; 3]> {
         if !p.x.is_finite() || !p.y.is_finite() {
-            return;
+            return None;
         }
         let plan = self.build_plan(self.cur_frame, false, true);
         let c = if p.x < 0.0 || p.y < 0.0 || p.x >= self.doc.width as f32 || p.y >= self.doc.height as f32 {
             // Toile infinie : la pipette prend aussi hors de la feuille (le pixel du monde, papier compris).
             let (x, y) = (p.x.floor(), p.y.floor());
             let area = render::Area::around((x, y), (x + 1.0, y + 1.0));
-            match render::composite_area(&self.doc, &plan, area).first() {
-                Some(&c) => c,
-                None => return,
-            }
+            *render::composite_area(&self.doc, &plan, area).first()?
         } else {
             render::composite_pixel(&self.doc, &plan, p.x as usize, p.y as usize)
         };
         let [r, g, b, _] = unpremultiply(c);
-        self.color = [r, g, b];
+        Some([r, g, b])
+    }
+
+    /// La pipette d'un champ de couleur, sans capture d'écran (`champcouleur.rs`) : la couleur du dessin sous le
+    /// point `pos` de l'écran, s'il est dans le dessin.
+    pub(crate) fn couleur_sous_le_curseur(&self, pos: Pos2) -> Option<[u8; 3]> {
+        if !self.canvas_rect.contains(pos) {
+            return None;
+        }
+        let stage = self.view.to_canvas(self.canvas_rect, self.canvas_size(), pos);
+        self.couleur_du_monde(stage)
     }
 
     pub(crate) fn fill_at(&mut self, p: Pos2) {
@@ -4755,6 +4769,8 @@ impl eframe::App for App {
     /// egui se sert de Tab pour passer d'un champ à l'autre ; hors d'un champ texte, on le lui
     /// retire pour en faire un raccourci comme les autres.
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        // Pipette d'un champ de couleur armée : les clics et Échap sont pour elle seule (`champcouleur.rs`).
+        crate::champcouleur::filtrer_entree(ctx, raw_input);
         if ctx.wants_keyboard_input() {
             return;
         }
@@ -4804,6 +4820,14 @@ impl App {
     /// `perf_tests.rs` l'appellent directement (sans fenêtre, sans sommeil).
     pub(crate) fn frame(&mut self, ctx: &egui::Context) {
         crate::perf::begin_frame(ctx);
+        // Pipette d'un champ de couleur (`champcouleur.rs`) : sans capture d'écran, la couleur du dessin sous le curseur.
+        if let Some(pos) = crate::champcouleur::surveiller(ctx) {
+            let couleur = self.couleur_sous_le_curseur(pos);
+            if couleur.is_none() {
+                self.status = "La pipette n'a pas pu lire cet endroit : clique dans le dessin.".into();
+            }
+            crate::champcouleur::fournir_repli(ctx, couleur);
+        }
         // Plein écran à l'ouverture (Anthony, 2026-10-18) : la fenêtre, créée cachée, perd la
         // consigne de `with_maximized` sous Windows : elle est marquée maximisée mais garde sa taille.
         // Une fois affichée, on la remet à sa taille, puis on la maximise vraiment.

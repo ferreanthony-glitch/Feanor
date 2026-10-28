@@ -32,9 +32,9 @@ fn side_ui(ui: &mut egui::Ui, s: &mut OnionSettings, after: bool) {
         let what = if after { "suivantes" } else { "précédentes" };
         ui.checkbox(tint, "Coloriser").on_hover_text(format!("Montrer les images {what} dans la couleur choisie (sinon : leurs vraies couleurs)."));
         ui.add_enabled_ui(*tint, |ui| {
-            ui.color_edit_button_srgb(color);
+            crate::champcouleur::srgb(ui, color);
             ui.checkbox(gradient, "Dégradé").on_hover_text("De la première couleur pour l'image la plus proche à la seconde pour la plus lointaine.");
-            ui.add_enabled_ui(*gradient, |ui| ui.color_edit_button_srgb(color2));
+            ui.add_enabled_ui(*gradient, |ui| crate::champcouleur::srgb(ui, color2));
         });
     });
     let n = if after { s.after } else { s.before };
