@@ -371,9 +371,30 @@ pub(crate) enum KeyMove {
     /// Maj tenue : seules les clés choisies bougent, l'exposition d'avant s'allonge ou raccourcit
     /// et la leur fait l'inverse, la suite ne bouge pas : `move_keys_only`.
     Single,
-    /// Alt tenue : l'ancien geste, les clés prennent leur place parmi les autres expositions,
-    /// toutes gardent leur durée : `shift_runs`.
+    /// Ctrl + Maj tenues : l'ancien geste « Alt », les clés prennent leur place parmi les autres
+    /// expositions, toutes gardent leur durée : `shift_runs`.
     Reorder,
+    /// Alt (ou Ctrl) tenue, comme pour copier des images dans la timeline (Anthony, 2026-10-28) :
+    /// les clés sont dupliquées à l'endroit lâché, par-dessus ce qui y était ; les originales
+    /// restent, les copies ont leurs propres dessins (`montagekeys::copy_keys_by`).
+    Copy,
+}
+
+/// Le geste que les touches tenues demandent pour des clés de dessins : Alt, ou Ctrl seule, copie
+/// (comme dans la timeline, `DropMode::de_touches`) ; Ctrl + Maj réordonne (ni Alt ni Ctrl seule :
+/// c'est la combinaison que les deux autres gestes laissaient libre) ; Maj, la clé seule ; sinon
+/// les clés d'après suivent.
+pub(crate) fn key_move_for(m: &egui::Modifiers) -> KeyMove {
+    let ctrl = m.command || m.ctrl;
+    if m.alt || (ctrl && !m.shift) {
+        KeyMove::Copy
+    } else if ctrl {
+        KeyMove::Reorder
+    } else if m.shift {
+        KeyMove::Single
+    } else {
+        KeyMove::Ripple
+    }
 }
 
 /// Le calque est tenu jusqu'à la fin du plan (`plan_len`) : sa dernière exposition en est la
@@ -502,6 +523,12 @@ pub fn move_keys_only(layer: &mut Layer, starts: &[usize], delta: isize) -> Vec<
 pub(crate) fn clamp_key_delta(layer: &Layer, starts: &[usize], want: isize, mode: KeyMove, plan_len: usize) -> isize {
     match mode {
         KeyMove::Reorder => want,
+        // Chaque copie commence dans le plan : la première clé ne passe pas avant 0, la dernière reste dans le plan.
+        KeyMove::Copy => {
+            let lo = -(starts.iter().copied().min().unwrap_or(0) as isize);
+            let hi = plan_len as isize - 1 - starts.iter().copied().max().unwrap_or(0) as isize;
+            want.clamp(lo, hi.max(0))
+        }
         KeyMove::Ripple => starts.iter().copied().min().map_or(0, |m| clamp_ripple_delta(layer, m, want, plan_len)),
         KeyMove::Single => {
             let (lo, hi) = single_bounds(layer, starts);
@@ -525,6 +552,8 @@ pub(crate) fn clamp_key_delta(layer: &Layer, starts: &[usize], want: isize, mode
 pub(crate) fn apply_key_move(layer: &mut Layer, starts: &[usize], delta: isize, mode: KeyMove, plan_len: usize) -> Vec<usize> {
     match mode {
         KeyMove::Reorder => shift_runs(layer, starts, delta),
+        // Copier crée des dessins : c'est `montagekeys::copy_keys_by` (il a le document). Ici, rien ne bouge.
+        KeyMove::Copy => starts.iter().map(|&s| (s as isize + delta).max(0) as usize).collect(),
         KeyMove::Single => move_keys_only(layer, starts, delta),
         KeyMove::Ripple => {
             if let Some(m) = starts.iter().copied().min() {
@@ -545,6 +574,12 @@ pub(crate) fn key_preview(layer: &Layer, starts: &[usize], delta: isize, mode: K
     }
     if delta == 0 {
         return (Vec::new(), Vec::new());
+    }
+    if mode == KeyMove::Copy {
+        // Les copies tombent à `début + delta`, durée gardée, coupée à la fin du plan.
+        let at = |s: usize| (s as isize + delta).max(0) as usize;
+        let ghosts = starts.iter().map(|&s| (at(s) as isize, (layer.run_bounds(s).1 as isize + delta).min(plan_len as isize))).collect();
+        return (ghosts, starts.iter().map(|&s| at(s)).collect());
     }
     let mut after = layer.clone();
     let landed = apply_key_move(&mut after, starts, delta, mode, plan_len);
@@ -779,7 +814,7 @@ impl App {
             }
             // La clé ne se pose qu'au lâcher (`end_handle_drag`) ; d'ici là, un repère montre où.
             // Par défaut la clé et tout ce qui la suit glissent ; Maj tenue : la clé seule ; Alt
-            // tenue : l'ancien geste, elle prend sa place parmi les autres (`KeyMove`).
+            // tenue : elle est copiée ; Ctrl + Maj : l'ancien geste, elle prend sa place parmi les autres (`KeyMove`).
             Handle::Key { layer, start, grab, .. } => {
                 let Some((l, plan_len)) = self.layer_before(layer) else { return };
                 let mode = self.key_move_now();
@@ -788,12 +823,14 @@ impl App {
                 let marks = key_preview(&l, &[start], self.key_drag_delta, mode, plan_len).1;
                 let d = self.key_drag_delta;
                 match (mode, marks.first()) {
+                    (KeyMove::Copy, None) => "Lâcher ici : rien n'est copié.".into(),
                     (_, None) => "Lâcher ici : la clé reste à sa place.".into(),
                     (KeyMove::Ripple, Some(&m)) => {
-                        format!("Lâcher : la clé passe à l'image {} ({d:+}) et tout ce qui la suit sur sa piste avec elle (Maj : seule, Alt : réordonner).", label(self, m))
+                        format!("Lâcher : la clé passe à l'image {} ({d:+}) et tout ce qui la suit sur sa piste avec elle (Maj : seule, Alt : copier, Ctrl+Maj : réordonner).", label(self, m))
                     }
                     (KeyMove::Single, Some(&m)) => format!("Lâcher : la clé seule passe à l'image {} (Maj tenue), la suite reste en place.", label(self, m)),
-                    (KeyMove::Reorder, Some(&m)) => format!("Lâcher : la clé se pose à l'image {} (repère), sa durée gardée (Alt tenue).", label(self, m)),
+                    (KeyMove::Reorder, Some(&m)) => format!("Lâcher : la clé se pose à l'image {} (repère), sa durée gardée (Ctrl+Maj tenues).", label(self, m)),
+                    (KeyMove::Copy, Some(&m)) => format!("Lâcher : une copie de la clé, avec son dessin, à l'image {} (Alt ou Ctrl tenue) ; l'originale reste.", label(self, m)),
                 }
             }
             // La limite entre deux expositions est le début d'une clé : par défaut les clés d'après
@@ -906,11 +943,23 @@ impl App {
         if let Handle::Key { layer, start, .. } = d.handle {
             let delta = std::mem::take(&mut self.key_drag_delta);
             let plan_len = d.before.frame_count();
-            if let Some(p) = self.doc.panels.iter_mut().find(|p| p.id == d.panel) {
-                if let Some(l) = p.layers.get_mut(layer) {
-                    apply_key_move(l, &[start], delta, self.key_drag_mode, plan_len);
+            let mode = self.key_drag_mode;
+            if mode == KeyMove::Copy {
+                // Copier : une nouvelle clé, avec son propre dessin ; la copie devient le choix.
+                if let Some(pi) = self.doc.panels.iter().position(|p| p.id == d.panel) {
+                    let made = crate::montagekeys::copy_keys_by(&mut self.doc, pi, layer, &[start], delta, plan_len);
+                    if let (Some(&at), Some(l)) = (made.first(), self.doc.panels[pi].layers.get(layer)) {
+                        self.key_sel = vec![crate::montagekeys::KeyRef { panel: d.panel, layer: l.id, start: at }];
+                        self.status = "Clé copiée : la copie a son propre dessin.".into();
+                    }
                 }
-                // La durée du plan reste celle d'avant le geste.
+            } else if let Some(p) = self.doc.panels.iter_mut().find(|p| p.id == d.panel) {
+                if let Some(l) = p.layers.get_mut(layer) {
+                    apply_key_move(l, &[start], delta, mode, plan_len);
+                }
+            }
+            // La durée du plan reste celle d'avant le geste.
+            if let Some(p) = self.doc.panels.iter_mut().find(|p| p.id == d.panel) {
                 if p.frame_count() < plan_len {
                     p.length = plan_len;
                 }

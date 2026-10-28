@@ -243,7 +243,7 @@ qui force la couleur de son texte.
 | Ctrl + clic | ajoute / retire, sur n'importe quel calque | idem (d'un plan à l'autre) | idem (sur l'effet choisi) |
 | Maj + clic | le rectangle entre la clé de départ et celle-ci, **rangées d'entre comprises** (était : la même rangée) | toutes celles d'entre, d'un plan à l'autre | toutes celles d'entre, sur ce calque |
 | Rectangle | oui, sur **toutes les rangées couvertes** ; Maj ajoute, Ctrl bascule (était : Ctrl ajoutait) | oui (piste Caméra) ; Maj ajoute, Ctrl bascule | non |
-| Glisser | la clé et TOUTES celles d'après sur son calque suivent (chaque calque touché) ; Maj : seules les choisies ; Alt : réordonner | la clé et toutes celles d'après dans son plan ; Maj : seules les choisies | la clé et toutes celles d'après du même effet ; Maj : seules les choisies |
+| Glisser | la clé et TOUTES celles d'après sur son calque suivent (chaque calque touché) ; Maj : seules les choisies ; Alt ou Ctrl : dupliquer ; Ctrl+Maj : réordonner | la clé et toutes celles d'après dans son plan ; Maj : seules les choisies | la clé et toutes celles d'après du même effet ; Maj : seules les choisies |
 | Ctrl+C / X | oui | oui | oui |
 | Ctrl+V | **insère** après la clé de la tête, repousse la suite | idem | idem |
 | Maj+Ctrl+V | colle exactement sur la tête | idem | idem |
@@ -324,7 +324,7 @@ leur sens. ~~Ctrl+Maj remplace la sélection (il n'ajoute pas).~~ **Depuis le 20
    passe d'un plan à l'autre.
 3. Suppr : la clé de dessin laisse une voisine tenir plus longtemps (ou un vide : « Supprimer en laissant
    un vide ») ; la caméra et les effets suppriment simplement.
-4. Alt + glisser (réordonner) n'existe que pour les dessins.
+4. Alt + glisser (dupliquer) et Ctrl+Maj + glisser (réordonner) n'existent que pour les dessins (partie 60).
 5. Ctrl+D (dupliquer sur place) n'existe que pour les dessins.
 6. Dans la timeline en animation, le clic droit sur un dessin ouvre « Rôle / Images », pas le menu des clés.
 
@@ -4815,3 +4815,34 @@ couleur : clé, clés choisies, plan, storyboard, calque de couleur, glissé ret
 5. Mêmes trois clés : peindre un trait, gommer, pot de peinture, cutter sur l'aplat : chaque clé le reçoit (le pot se pose un instant plus tard sur les autres) ; un Ctrl+Z.
 6. Couleur de l'aplat : changer la couleur avec « La clé » : seul ce dessin change ; avec « Le plan » : toutes ses clés ; « Tout le storyboard » : tous les plans.
    La barre d'état dit combien de dessins ; Ctrl+Z rend tout.
+
+---------------------------------------------------------------------------------------------------
+
+## 60. Alt + glisser duplique aussi dans le montage (2026-10-28, branche `montage-alt`)
+
+Demande d'Anthony : dans la timeline, Alt + glisser duplique (partie 55) ; **les clés de dessins des pistes du montage font pareil**, et « Réordonner les clés » reçoit un autre geste. Fichiers : `handles.rs` (`KeyMove::Copy`, `key_move_for`, clamp / aperçu), `montagekeys.rs` (`copy_keys_by`, glisser des clés choisies), `panels.rs` (aide), essais `montage_alt_tests.rs` (6).
+
+### Les gestes sur les clés de dessins (une ou plusieurs clés choisies, pistes du montage)
+
+| Touche tenue | Geste |
+|---|---|
+| rien | la clé et **toutes celles d'après** sur son calque glissent (inchangé) |
+| **Maj** | seules les clés choisies bougent (inchangé) |
+| **Alt**, ou **Ctrl** | **dupliquer** : les originales restent, les copies sont posées à l'endroit lâché |
+| **Ctrl + Maj** | **réordonner** (l'ancien geste d'Alt, `shift_runs`) |
+
+- Les copies ont **leurs propres dessins** (`Document::duplicate_cel`, calques de couleur compris, `noter_copie`), gardent leurs écarts et leurs durées, et se posent **par-dessus ce qui y était, sans rien repousser** (comme dans la timeline et comme Maj+Ctrl+V). La durée du plan ne change pas : une copie qui dépasse la fin est coupée, et aucune ne peut commencer hors du plan (le glissé est ramené).
+- Fantômes et repères (`drop_view`) montrent les copies pendant le geste ; **rien n'est posé avant le lâcher**. **Une seule étape d'annulation** (« Dupliquer une clé » / « Dupliquer des clés ») ; **Échap** (ou Ctrl+Z) abandonne : rien n'est posé, aucun dessin n'est créé. Les copies deviennent le choix. Refusé sous le verrou du storyboard.
+- **Pourquoi Ctrl + Maj pour réordonner** : dans la timeline, toute combinaison avec Alt ou Ctrl copie, et Maj seule est prise (« la clé seule ») ; Ctrl + Maj est la seule combinaison libre, et c'est celle qu'Anthony avait donnée en exemple. Elle rappelle aussi « Ctrl + Maj » des autres gestes avancés de SHOT (caméra des Vignettes, sélection sur tous les calques).
+- **Alt se tient dès l'appui ; Ctrl, Maj et Ctrl + Maj se pressent en cours de geste** : tenues dès l'appui, Ctrl et Maj tracent un rectangle de choix (partie 36, inchangé). Les touches se lisent à chaque image d'écran, on peut donc les presser ou les lâcher pendant que la clé suit la souris.
+- Mis à jour : la barre d'état pendant le glisser (« Alt : copier, Ctrl+Maj : réordonner »), le message du choix de plusieurs clés, l'aide des gestes (`panels.rs`), le README, les tableaux des parties 36 (lignes « Glisser » et limite 4).
+- Les clés de **caméra** et d'**effets** n'ont pas de duplication au glisser (comme avant : Ctrl+C, Ctrl+V).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Montage, un calque à plusieurs dessins : **Alt + glisser** un dessin par son milieu : un fantôme et un repère suivent la souris, **rien ne bouge** ; au lâcher, une **copie** est posée là, l'original est resté. La barre d'état dit « une copie … avec son dessin ».
+2. Redessine dans la copie : l'original n'a pas changé (chacun son dessin). **Ctrl+Z** : la copie disparaît d'un coup.
+3. Choisis plusieurs clés (rectangle, sur deux calques) puis **Alt + glisser** : toutes sont copiées du même nombre d'images, chacune garde sa durée ; un seul Ctrl+Z.
+4. Pendant un glisser, **Échap** : rien n'est posé. Lâche Alt en cours de geste : retour au glissé normal (la suite suit).
+5. **Ctrl + Maj** pressées pendant le glisser : l'ancien « réordonner » (le dessin prend sa place parmi les autres) ; **Maj** seule : la clé seule bouge, comme avant ; sans touche : la suite suit, comme avant.
+6. Copie tout au bout du plan : elle est coupée à la fin, le plan garde sa durée.

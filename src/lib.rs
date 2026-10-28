@@ -493,6 +493,9 @@ mod timeline_alt_tests;
 // Copier et coller les clés de dessins et les images.
 #[cfg(test)]
 mod timeline_cles_tests;
+// Alt + glisser les clés de dessins du montage (dupliquer), Ctrl + Maj (réordonner).
+#[cfg(test)]
+mod montage_alt_tests;
 // Durée d'un nouveau plan, durée des plans choisis.
 mod dureeplans;
 #[cfg(test)]
