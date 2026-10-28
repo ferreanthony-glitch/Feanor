@@ -225,6 +225,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fond.tout_le_plan", "Aplat sous le trait sur tous les calques de dessin du plan", true, false),
     act("fond.retirer_choisis", "Retirer l'aplat sous le trait des calques choisis", true, false),
     act("fond.couleur_partout", "Couleur du projet à tous les aplats sous le trait", true, false),
+    act("aplat.colorier_comme_precedente", "Aplat intelligent : colorier les clés choisies comme la clé précédente", true, false),
     // L'ancien « Remplir la forme » (retiré le 2026-10-23) : un double de « pinceau.fond », pour les raccourcis déjà posés.
     act("pinceau.remplir", "Aplat sous le trait du calque courant (ancien « remplir la forme »)", true, false),
     act("outil.cutter", "Outil cutter", true, false),

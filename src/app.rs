@@ -794,6 +794,8 @@ pub struct App {
     /// calculent en arrière-plan (`aplatmulti.rs`). Propres à un projet.
     pub(crate) aplat_miroirs: crate::aplatmulti::Miroirs,
     pub(crate) aplat_travaux: crate::aplatmulti::Travaux,
+    /// L'aplat intelligent (platintel.rs) : le dessin d'avant le trait en cours, les calculs en route.
+    pub(crate) aplat_intel: crate::aplatintel::Etat,
     /// La couleur de l'aplat choisie dans le sélecteur, retenue jusqu'au lâcher, et la portée du changement de couleur de l'aplat
     /// (la clé, le plan, tout le storyboard : `aplatcouleur.rs`). La portée est un réglage de l'application.
     pub(crate) aplat_couleur_attente: Option<crate::aplatcouleur::CouleurAttente>,
@@ -1299,6 +1301,7 @@ impl App {
             fond_cut: None,
             aplat_miroirs: Default::default(),
             aplat_travaux: Default::default(),
+            aplat_intel: Default::default(),
             aplat_couleur_attente: None,
             aplat_portee: Default::default(),
             pane_heights: Default::default(),
@@ -2256,6 +2259,8 @@ impl App {
 
     /// Termine tout geste en cours : trait, gomme vectorielle, transformation, forme.
     pub(crate) fn end_stroke(&mut self) {
+        // Un trait (ou une gomme vectorielle) est-il en cours ? L'aplat intelligent le suit à sa fin (platintel.rs).
+        let trait_en_cours = self.stroke.is_some() || self.verase.is_some();
         // Un segment droit en attente (Maj tenue) est posé avant de finir le trait.
         self.droit_flush();
         // Le trait d'un personnage (`personnagesui.rs`) : son dessin et les tuiles d'avant, pour le fond qu'il gagne.
@@ -2356,6 +2361,10 @@ impl App {
         self.shape_drag = None;
         // (Le dégradé se pose au lâcher, `degrade_release`, avant ceci : ce qui reste est un geste abandonné.)
         self.degrade_geste = None;
+        // Aplat intelligent : le trait fini, l'aplat de la clé suit (en arrière-plan, platintel.rs).
+        if trait_en_cours {
+            self.intel_apres_trait();
+        }
     }
 
     pub(crate) fn pick_color(&mut self, p: Pos2) {

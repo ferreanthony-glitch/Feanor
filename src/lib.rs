@@ -231,6 +231,10 @@ mod fondui;
 mod aplatsur;
 mod aplatmulti;
 mod aplatcouleur;
+mod aplatregions;
+mod aplatintel;
+#[cfg(test)]
+mod aplatintel_tests;
 #[cfg(test)]
 mod aplatsur_tests;
 mod blend;

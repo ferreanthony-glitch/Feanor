@@ -51,6 +51,8 @@ impl App {
     /// sinon c'est `begin_paint_ici`.
     pub(crate) fn begin_paint(&mut self, p: Pos2, pressure: f32, pen: bool) {
         self.end_stroke();
+        // Aplat intelligent (platintel.rs) : le dessin d'avant le trait, pour que l'aplat en garde les couleurs après.
+        self.intel_avant_trait();
         // L'aplat que vise ce trait (`aplatmulti.rs`) : plusieurs clés choisies, et il se fait sur l'aplat de chacune.
         let visee = match self.sur_aplat_cible() {
             None => {

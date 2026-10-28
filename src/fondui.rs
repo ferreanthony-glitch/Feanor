@@ -128,6 +128,31 @@ impl App {
         if self.aplat_edited(&resp) {
             changed = Some(next);
         }
+        // Aplat intelligent (`aplatintel.rs`) : l'aplat suit le trait en gardant la couleur de chaque zone fermée, sans IA.
+        let resp = ui.checkbox(&mut next.intelligent, "Aplat intelligent");
+        let resp = crate::bulles::bulle(
+            resp,
+            "Aplat intelligent",
+            "L'aplat suit le trait : après une retouche du trait, ou sur une clé qui suit une clé coloriée, chaque zone fermée (une peau, un œil, une ombre) garde sa couleur, retrouvée par sa position et sa forme. Pas d'IA ; calculé en arrière-plan. Éteint, rien ne change.",
+            "",
+        );
+        if self.aplat_edited(&resp) {
+            changed = Some(next);
+        }
+        if r.intelligent && li == self.cur_layer {
+            let resp = ui.small_button("Colorier comme la clé précédente");
+            let key = self.raccourci("aplat.colorier_comme_precedente");
+            let resp = crate::bulles::bulle(
+                resp,
+                "Colorier comme la clé précédente",
+                "Les clés choisies dans la timeline (sinon la clé qu'on voit) prennent les couleurs de la clé coloriée d'avant, zone par zone. Plusieurs clés : chacune suit la précédente, en chaîne.",
+                &key,
+            );
+            crate::raccourcisui::shortcut_menu(&resp, "aplat.colorier_comme_precedente", &key);
+            if resp.clicked() {
+                self.run_action("aplat.colorier_comme_precedente");
+            }
+        }
         if let Some(n) = changed {
             self.layers_mut()[li].fond = Some(n);
             self.renderer.invalidate_all();
@@ -270,6 +295,8 @@ impl App {
         match action {
             // (Ce sont des alias : les raccourcis d'avant continuent d'allumer l'aplat des calques visés. « pinceau.remplir »,
             // l'ancien « Remplir la forme » retiré le 2026-10-23, en est un double : `keymap::ALIASES`.)
+            // L'aplat intelligent (`aplatintel.rs`) : les clés choisies, chacune comme la clé coloriée d'avant, en chaîne.
+            "aplat.colorier_comme_precedente" => self.colorier_comme_precedente(),
             "pinceau.fond" | "pinceau.remplir" => {
                 if self.refuse_on_folder() {
                     return true;

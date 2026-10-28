@@ -165,6 +165,7 @@ etat_projet! {
     fond_cut: Option<crate::brush::StrokeState> = None,
     aplat_miroirs: crate::aplatmulti::Miroirs = Default::default(),
     aplat_travaux: crate::aplatmulti::Travaux = Default::default(),
+    aplat_intel: crate::aplatintel::Etat = Default::default(),
     aplat_couleur_attente: Option<crate::aplatcouleur::CouleurAttente> = None,
     cam_drag: Option<crate::camtools::CamDrag> = None,
     layer_drag: Option<crate::layertools::LayerDrag> = None,

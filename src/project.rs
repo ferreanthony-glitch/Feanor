@@ -196,7 +196,13 @@ pub const FORMAT: &str = "pelure-projet";
 /// montrerait un film différent sans prévenir. Un projet de version 38 ou moins s'ouvre tel quel, sans rien perdre : ses variantes
 /// (copies complètes de plans) deviennent des plans du garage, montrés par leurs versions de séquence. (Si une autre branche a
 /// aussi pris le numéro 39, la fusion garde le 39 et réunit les deux descriptions.)
-pub const VERSION: u32 = 39;
+/// 41 (2026-10-28, `docs/INTERFACE.md` partie 63) : **aplat intelligent** — le réglage `intelligent` de l'aplat d'un calque
+/// (`FondReglages`, case « Aplat intelligent »), écrit dans le manifeste avec les autres réglages de l'aplat, seulement s'il est
+/// allumé ; absent, il est éteint. Une version précédente qui ouvrirait le projet perdrait ce réglage (non les couleurs, qui sont de
+/// la peinture ordinaire dans la strate de l'aplat) : elle le refuse donc, au lieu de l'effacer sans le dire. Un projet de version
+/// 40 ou moins s'ouvre tel quel. (Le numéro 40 est réservé à une autre branche : la fusion garde le plus grand et réunit les
+/// descriptions.)
+pub const VERSION: u32 = 41;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se

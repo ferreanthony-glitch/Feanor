@@ -179,7 +179,7 @@ fn the_fond_survives_save_and_reload() {
     let drawings = manifest.parent().unwrap().join("dessins");
     let mut doc = Document::new(64, 48, 24);
     let (a, b) = (doc.new_cel(LayerKind::Vector), doc.new_cel(LayerKind::Vector));
-    let reglages = FondReglages { couleur: [250, 240, 200], debord: 5, trous: 9, bord: false };
+    let reglages = FondReglages { couleur: [250, 240, 200], debord: 5, trous: 9, bord: false, intelligent: false };
     doc.panels[0].layers[0].frames = vec![Some(a), Some(b)];
     doc.panels[0].layers[0].fond = Some(reglages);
     doc.properties.fond = Some([220, 220, 220]);

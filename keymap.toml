@@ -2319,6 +2319,11 @@ touches = []
 source = "SHOT (sans touche)"
 
 [[raccourci]]
+action = "aplat.colorier_comme_precedente"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
 action = "deformer.enveloppe"
 touches = []
 source = "SHOT (sans touche)"

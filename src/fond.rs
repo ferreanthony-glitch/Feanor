@@ -28,6 +28,15 @@ pub struct FondReglages {
     /// fond jusqu'au bord ; éteint, ce qui touche le bord reste dehors.
     #[serde(default = "yes")]
     pub bord: bool,
+    /// « Aplat intelligent » (`aplatregions.rs`, `aplatintel.rs`) : l'aplat suit le trait en gardant la couleur de chaque
+    /// zone fermée, par correspondance de forme et de position entre les clés. Éteint d'office ; n'est écrit dans le projet
+    /// que s'il est allumé (un projet sans l'option reste tel qu'avant, à son numéro de format près).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub intelligent: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 fn yes() -> bool {
@@ -48,7 +57,7 @@ pub const TROUS: u8 = 6;
 
 impl Default for FondReglages {
     fn default() -> Self {
-        FondReglages { couleur: [255, 255, 255], debord: DEBORD, trous: TROUS, bord: true }
+        FondReglages { couleur: [255, 255, 255], debord: DEBORD, trous: TROUS, bord: true, intelligent: false }
     }
 }
 
@@ -127,11 +136,22 @@ pub fn edt(feature: &[bool], w: usize, h: usize) -> Vec<f64> {
     grid
 }
 
-/// La forme du fond d'après le trait `line` : une couverture de 0 à 255 par pixel du dessin
-/// (`width × height`), vide s'il n'y a pas de trait.
-pub fn silhouette(line: &Raster, r: &FondReglages) -> Vec<u8> {
+/// Ce que le calcul de la forme (et des régions de l'aplat intelligent, `aplatregions.rs`) sait du trait : le rectangle de
+/// travail (`bx0`, `by0`, `bw` × `bh`, coordonnées du dessin), et dans ce rectangle, pour chaque pixel : est-il
+/// un mur (`wall` : le trait épaissi de `trous`, qui ferme les trous), est-il le dehors (`outside`, atteint depuis le bord sans
+/// traverser de mur).
+pub(crate) struct Geometrie {
+    pub bx0: usize,
+    pub by0: usize,
+    pub bw: usize,
+    pub bh: usize,
+    pub wall: Vec<bool>,
+    pub outside: Vec<bool>,
+}
+
+/// La géométrie du trait `line` pour les réglages `r` ; rien s'il n'y a pas de trait.
+pub(crate) fn geometrie(line: &Raster, r: &FondReglages) -> Option<Geometrie> {
     let (w, h) = (line.width, line.height);
-    let mut out = vec![0u8; w * h];
     // Le rectangle du trait, agrandi de la fermeture et du débord : on ne calcule que dedans.
     let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0usize, 0usize);
     for (idx, t) in line.tiles.iter().enumerate() {
@@ -149,10 +169,9 @@ pub fn silhouette(line: &Raster, r: &FondReglages) -> Vec<u8> {
         }
     }
     if x0 == usize::MAX {
-        return out;
+        return None;
     }
     let trous = r.trous as f64;
-    let debord = r.debord as f64;
     let pad = (r.trous.max(r.debord) as usize) + 3;
     let (bx0, by0) = (x0.saturating_sub(pad), y0.saturating_sub(pad));
     let (bx1, by1) = ((x1 + pad).min(w - 1), (y1 + pad).min(h - 1));
@@ -199,6 +218,17 @@ pub fn silhouette(line: &Raster, r: &FondReglages) -> Vec<u8> {
             }
         }
     }
+    Some(Geometrie { bx0, by0, bw, bh, wall, outside })
+}
+
+/// La forme du fond d'après le trait `line` : une couverture de 0 à 255 par pixel du dessin
+/// (`width × height`), vide s'il n'y a pas de trait.
+pub fn silhouette(line: &Raster, r: &FondReglages) -> Vec<u8> {
+    let (w, h) = (line.width, line.height);
+    let mut out = vec![0u8; w * h];
+    let Some(Geometrie { bx0, by0, bw, bh, outside, .. }) = geometrie(line, r) else { return out };
+    let trous = r.trous as f64;
+    let debord = r.debord as f64;
     // La forme fermée, rendue à sa vraie taille : rongée de `trous - debord` (ou agrandie si le
     // débord est plus grand), au bord adouci d'un pixel.
     let grow = debord - trous;

@@ -5164,6 +5164,107 @@ Demande d'Anthony : **la pastille dit dans quel calque on dessine, et le calque 
 
 ---------------------------------------------------------------------------------------------------
 
+---------------------------------------------------------------------------------------------------
+
+## 63. L'aplat intelligent : suivre le trait sans IA (2026-10-28, branche `aplat-intelligent`)
+
+Demande d'Anthony : « un aplat intelligent qui suit le trait et comprend la peinture à l'intérieur (un œil, une ombre…), réglable en redessinant, une option à cocher, **sans IA** ». Sa décision : de la **correspondance de régions entre clés**, pas de modèle ; la propagation du Labo (type EbSynth) reste à part. (L'aplat : partie 33 ; ses outils, plusieurs clés, portée de la couleur : partie 56.) Code : `aplatregions.rs` (régions, correspondance, mise en couleur : de la géométrie, aucun accès à l'application), `aplatintel.rs` (quand ça agit, calcul en arrière-plan, pose et annulation), `fond.rs` (`geometrie`, partagée avec `silhouette`) ; essais `aplatintel_tests.rs`.
+
+### Ce qui change à l'écran
+
+- **Une case « Aplat intelligent »** dans les réglages de l'aplat d'un calque (la sous-ligne « Aplat » choisie : Réglages ; ou son clic droit), sous « Le bord de l'image ferme la forme ». Éteinte d'office.
+- **Une commande « Colorier comme la clé précédente »** : un petit bouton sous la case (quand elle est cochée), le clic droit d'une clé dans le montage (quand le calque de la piste est intelligent), la palette Ctrl+K et la liste des raccourcis (`aplat.colorier_comme_precedente`, sans touche d'office).
+- Rien d'autre : pas de nouveau panneau, pas de nouvel outil. **Décochée, la case laisse exactement le comportement d'avant** (aucun calcul ne part, aucune étape d'annulation de plus).
+
+### Les régions
+
+Pour un trait, les **régions** sont les zones fermées que l'aplat remplit : exactement le « dedans » de la forme de l'aplat (mêmes murs, même **fermeture des trous** `trous`, même règle du **bord de l'image**), découpé en composantes connexes ; le dehors n'est pas une région ; moins de 6 pixels : poussière, pas une région. Un œil fermé dans un visage fermé : deux régions (la peau, qui entoure l'œil, et l'œil) ; une zone d'ombre fermée par un trait : une région de plus. Chaque région connaît son aire, son centre, sa boîte, et sa **région englobante** (la seule région voisine à travers le trait, si elle n'ouvre pas sur le dehors : l'œil est dans la peau, la peau n'est dans rien).
+
+- **Le territoire** d'une région est ce qu'elle colorie : ses pixels, la bande du trait qui l'entoure et le débord (chaque pixel du trait va à la région la plus proche).
+- **La couleur d'une région** n'est pas une donnée nouvelle : c'est **ce qui est peint dans son territoire** dans la strate de l'aplat, sa couleur la plus fréquente si au moins la moitié de ses pixels sont peints ; sinon la couleur du calque. Le pot de peinture de l'aplat, le pinceau sur l'aplat, la couleur de la portée : tout ce qui peint dans l'aplat définit donc la couleur d'une région, comme avant.
+
+### La correspondance (déterministe, sans hasard)
+
+Pour retrouver la région « correspondante » d'une région de la clé cible dans la clé source (une autre clé, ou la même avant une retouche) :
+
+1. **Recalage global**, le meilleur de quatre : l'identité ; la **boîte englobante** de toutes les régions (translation et échelle, chaque axe borné à 0,5–2) ; le **centre de masse** (translation seule) ; le centre de masse avec l'échelle `√(aire cible / aire source)`. Le meilleur est celui qui recouvre le plus de surface ; un candidat ne détrône le précédent que s'il gagne **au moins 1 % de la surface cible** (en cas de quasi-égalité, l'identité l'emporte). Pour une retouche de la même clé, seul l'identité est essayée (le dessin n'a pas bougé).
+2. **Recouvrement** : sous ce recalage, le rapport (surface commune) / (surface réunie) de chaque couple ; du meilleur au moins bon, une région une seule fois, à partir de **0,2**.
+3. **Centre, aire, inclusion** pour les restantes : le centre source recalé à moins de 0,75 × `√(plus grande aire)` du centre cible ; des aires dans un rapport de 1 à 3 ; une **inclusion compatible** (toutes deux sans région englobante, ou toutes deux dedans avec leurs englobantes appariées entre elles) ; du plus proche au plus loin.
+
+Les égalités se départagent par le rang des régions (l'ordre de lecture du dessin) : le résultat ne dépend de rien d'autre que des deux dessins. Coût : quelques passes sur le rectangle du dessin (290 ms mesurés en 1920 × 1080, trois zones, régions des deux clés et forme de l'aplat comprises), toujours en arrière-plan.
+
+### Ce qui est posé dans l'aplat
+
+Pour chaque région cible appariée, sur son territoire **là où l'aplat est visible** (la forme de l'aplat > 0) :
+
+- le pixel de peinture (et de coupe, la gomme dans l'aplat) de la source à l'endroit recalé **est repris** s'il est dans l'intérieur de la région source (peint ou non : un reflet, une ombre peinte à la main, un trou, suivent donc le dessin), ou dans son territoire quand il y est peint (la bande sous le trait) ;
+- sinon le pixel est **gagné** par la région (le trait a bougé) : il prend la **couleur de la région source** (ou celle du calque si elle n'était pas peinte).
+
+**Sans correspondance** (choix) :
+
+| Cas | Ce qui est fait |
+|---|---|
+| Une région **neuve** dans une région appariée, en **suivant une autre clé** (un œil neuf dans un visage colorié) | elle prend la couleur de sa région englobante : sûr, elle est dedans |
+| Une région neuve qui n'est dans rien, ou dans deux régions à la fois (une boucle hors du visage, une zone au bord) | **laissée comme elle est** : vide, donc à la couleur du calque |
+| Une région neuve en **retouche** de la même clé (une narine fermée dans la peau) | **laissée comme elle est** : ce qu'elle avait (la peau) |
+| Une région **source** qui disparaît : l'œil dont on efface l'anneau | la région qui l'absorbe garde sa couleur à elle (la peau) ; ce qu'était l'œil devient de la peau |
+| Une région source dont le contour s'ouvre (une brèche de gomme, plus de `2 × trous` pixels) : elle fuit vers le dehors | plus de région, plus d'aplat à cet endroit (comme avant) ; **la peinture n'est pas effacée** : elle reste dans la strate, cachée, pour quand le contour sera refermé |
+
+### Quand ça agit (case cochée seulement)
+
+1. **Retouche du trait d'une clé déjà coloriée.** Au début d'un trait de pinceau, de crayon ou de gomme (bitmap ou vectoriel) sur le **trait** du calque, le dessin et sa peinture d'aplat sont gardés (tuiles partagées : rien n'est recopié). À la fin du trait, si le trait a changé, l'aplat de la clé est refait : chaque zone **garde sa couleur** par correspondance avec les zones d'avant. C'est ce qui règle les morceaux d'aplat qui disparaissaient après une retouche : une zone dont le bord bougeait gardait sa peinture à ses anciens pixels, et ce qu'elle gagnait restait à la couleur du calque.
+   - **Un souvenir** pour la brèche : un trait qui ouvre un contour fait disparaître la zone ; la retouche qui le referme (peut-être plus loin) ne la trouverait pas dans l'état d'avant ce trait-là. Le calcul garde donc, par clé, **l'état d'avant qui avait le plus de zones fermées** (avec ses couleurs) et essaie les deux, en gardant celui qui retrouve le plus de zones. Le souvenir est abandonné dès que la peinture de l'aplat est touchée à la main.
+   - Deux traits coup sur coup : le second part de l'état d'avant le **premier** (le calcul du premier est remplacé).
+2. **Une clé neuve, ou sans aplat peint, qui suit une clé coloriée.** À la fin d'un trait sur une clé dont l'aplat n'a encore **aucune peinture**, ses zones prennent les couleurs de la **clé coloriée la plus proche avant elle** sur le calque (celle dont l'aplat est peint). Une clé faite par **duplication** emporte déjà l'aplat de l'original, peinture comprise : ses retouches suivent le cas 1. La commande **« Colorier comme la clé précédente »** le fait pour les **clés choisies** dans la timeline (sinon la clé qu'on voit), **en chaîne** : chaque clé choisie suit la clé coloriée la plus proche avant elle, et une clé choisie qui en précède une autre lui sert de source, une fois coloriée ; un mouvement progressif suit donc bien. Les clés choisies sans clé avant elles sont laissées de côté, la barre d'état le dit.
+3. **Réglable en redessinant.** Peindre ou remplir une zone à la main (la sous-ligne de l'aplat choisie, ou « Peint sur l'aplat ») **ne lance rien** : la peinture est dans la strate, et c'est elle que lisent les cas 1 et 2. Repeindre la peau d'une autre couleur : la clé suivante, ou la retouche suivante, suit cette couleur-là.
+
+### Calcul et annulation
+
+- **Jamais sur le fil de l'interface** (règle « sans latence ») : un fil de travail reçoit les tuiles partagées (trait, peinture, coupe) et rend la peinture et la coupe refaites. Le résultat est posé par `poll_aplat_multi` (chaque image d'écran, rien au repos).
+- **Une seule étape d'annulation par action** : le résultat d'une retouche rejoint l'étape du trait (Ctrl+Z rend le trait et les couleurs ensemble) ; celui de la commande est une étape à lui, « Aplat : colorier comme la clé précédente », pour toutes les clés. Si une autre étape s'est glissée avant l'arrivée, le résultat a la sienne (« Aplat intelligent »).
+- **Pas de pose pendant un geste de dessin** : un résultat qui arrive pendant un trait attend sa fin. Un résultat périmé (un calcul plus récent est parti pour ce dessin, ou le dessin a changé) est jeté ; la barre d'état le dit pour un dessin changé pendant le calcul.
+- **Un trait vectoriel** attend son rendu exact (`rejeu.rs`) avant que le calcul parte.
+- **L'enregistrement attend** les calculs en route (`attendre_aplat_multi`, comme pour l'aplat sur plusieurs clés) et n'attend pas le rendu exact d'un trait vectoriel (le calcul part tout de suite) : le fichier écrit a les couleurs.
+
+### Calques
+
+- **Vectoriel et bitmap**, de la même façon : l'aplat se déduit de l'image du trait (pour un dessin vectoriel, son rendu). Les calques de couleur (partie 25) ne sont pas concernés : leur couleur est déjà un dessin de leur calque.
+- Ne suit que les traits de **pinceau, crayon et gomme**. Un trait fait avec les formes, le texte, la sélection ou la transformation, un déplacement ou une déformation du trait, le pot de peinture sur le trait, le collage, ne déclenchent rien ; la commande « Colorier comme la clé précédente » rattrape ces cas.
+
+### Format du projet
+
+- `FondReglages` (réglages de l'aplat d'un calque, dans le manifeste) a un champ de plus, **`intelligent`**, écrit **seulement s'il est allumé** : un projet sans l'option est écrit comme avant, au numéro de format près. Un projet d'avant s'ouvre tel quel, l'option éteinte.
+- **`project::VERSION` passe de 39 à 41** (le 40 est réservé à une autre branche : à la fusion, garder le plus grand numéro et réunir les descriptions du commentaire de `project.rs`). Une version précédente refuse un projet 41 (« créé par une version plus récente ») au lieu de perdre le réglage sans le dire. Les couleurs posées sont de la peinture ordinaire dans la strate de l'aplat : rien d'autre n'est enregistré, et la correspondance se recalcule à chaque besoin.
+
+### Limites connues
+
+- Une zone doit mesurer plus de **6 pixels** une fois le trait épaissi de `trous` (6 d'office) : un œil dont l'intérieur est plus petit que 8 pixels de large n'est pas une région. Régler « Fermer les trous » plus petit les fait apparaître.
+- Un changement de **pose** (une tête qui tourne, un bras qui se replie) peut déplacer et déformer les zones plus qu'un recalage global ne le rattrape : celles qui se recouvrent ou dont les centres se suivent sont retrouvées, les autres restent vides (couleur du calque) ; on les repeint, et la clé suivante suit.
+- Les détails peints à la main suivent par **un recalage global** (translation et échelle) : ils tombent à leur place si le dessin a seulement bougé ou grandi ; sur une pose qui change, ils restent dans la bonne zone (jamais dans une autre) mais pas forcément au bon endroit.
+- Le recalage ne tourne pas : un dessin tourné de plus d'une dizaine de degrés recouvre mal ; les centres le rattrapent pour les zones de taille semblable.
+- Les retouches **sans trait** (déplacer un dessin, le retourner, le transformer, y coller) ne suivent pas toutes seules : la commande « Colorier comme la clé précédente » fait ce travail à la demande.
+- Une zone dont le contour est **refermé après une brèche** retrouve sa couleur grâce au souvenir ; si la peinture de l'aplat a été touchée à la main entre-temps, le souvenir est oublié et la zone refermée est laissée comme elle est.
+- Un résultat périmé par un autre trait rapide n'est pas rejoué : le trait suivant refait le calcul (la clé est alors à jour après le dernier trait).
+
+### Essais ajoutés (`aplatintel_tests.rs`, 25)
+
+Régions : un visage rond avec un œil fermé et une ombre fermée (trois régions, inclusion, dehors, trait ouvert, pas de trait) ; couleurs lues dans la peinture (peau, œil, ombre ; un reflet peint à la main ne change pas la couleur d'une région) ; correspondance d'un dessin déplacé et agrandi (les trois zones retrouvées, un recalage trouvé, identité pour une retouche) et déterministe. Mise en couleur : la clé suivante déplacée et agrandie reprend les mêmes couleurs aux bonnes zones, le reflet peint à la main suit ; une zone neuve dans une zone appariée (peau en suivant une autre clé, laissée en retouche) ; une zone neuve qui n'est dans rien reste vide ; la **chaîne de quatre clés** ; une retouche qui déplace le contour (les pixels gagnés prennent la couleur de leur zone) ; une retouche qui ferme une petite zone ; une zone qui disparaît (l'œil effacé : la peau) ; un contour ouvert par la gomme (rien n'est cassé, la peinture reste). Réglage : écrit seulement allumé, anciens fichiers lus éteints. Dans l'application : **option décochée = rien ne change** (même peinture, une seule étape) ; retouche suivie dans **la même étape d'annulation** que le trait (Ctrl+Z rend les deux) ; **brèche à la gomme refermée plus loin** (le souvenir) ; une clé neuve sans couleurs qui suit la clé coloriée à la fin d'un trait ; la **commande en chaîne** sur trois clés choisies (une étape, un Ctrl+Z) ; la commande sans l'option ou sans clé avant ; **enregistrement juste après un trait** (tout est posé, le réglage est dans le projet) ; un projet sans l'option ne la mentionne pas ; un résultat qui arrive pendant un geste attend sa fin ; **repeindre à la main devient la référence** de la clé suivante ; un trait peint à la main dans l'aplat ne lance rien ; **un calque vectoriel** (anneau tracé au pinceau, colorié au pot de peinture, clé suivante) ; **un dessin de 1920 × 1080** apparié et colorié en moins de dix secondes (290 ms mesurés).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Calque avec un aplat : sa sous-ligne « Aplat » choisie, Réglages : la case **« Aplat intelligent »** est là, décochée. Cochée, un petit bouton « Colorier comme la clé précédente » apparaît dessous. Décochée, tout se comporte comme avant.
+2. Dessine un visage fermé avec un œil fermé et une ombre fermée (trois zones). Pot de peinture de l'aplat (sous-ligne choisie) : peau, blanc de l'œil, ombre de trois couleurs. Coche la case.
+3. **Retouche** : repasse le contour du visage plus loin avec le pinceau (retourne au trait d'abord : clic sur le calque). Un instant après, la peau remplit tout le visage, l'œil et l'ombre gardent leur couleur. Ctrl+Z : le trait et les couleurs reviennent ensemble.
+4. **Brèche** : avec la gomme, ouvre un trou dans le contour (l'aplat disparaît, c'est normal), puis referme avec le pinceau en faisant un renflement : la peau revient, renflement compris.
+5. **Une clé qui suit** : fais une clé neuve plus loin (nouvelle clé vide), redessine le visage un peu décalé et un peu plus grand ; à la fin du trait qui ferme chaque zone, l'aplat prend les couleurs de la clé d'avant (peau, œil, ombre).
+6. **La commande** : choisis trois clés qui n'ont qu'un trait (Ctrl + clic dans la timeline), « Colorier comme la clé précédente » (bouton, clic droit d'une clé, ou Ctrl+K) : les trois clés prennent les couleurs, chacune de la précédente ; un seul Ctrl+Z.
+7. **Réglable en redessinant** : repeins la peau d'une autre couleur au pot de peinture sur la clé 1 ; recolorie la clé suivante avec la commande : elle suit la nouvelle couleur.
+8. Enregistre juste après un trait, ferme, rouvre : les couleurs sont là, la case est cochée.
+9. Calque **vectoriel** : le même essai ; les traits restent des traits, l'aplat suit.
+10. Au repos : rien ne bouge, le processeur reste à zéro.
+
+---------------------------------------------------------------------------------------------------
+
 ## 64. Mon panneau (essai, Labo) : mes commandes et mes outils perso (2026-10-28, branche `panneau-perso`)
 
 Demande d'Anthony : « un panneau personnalisable pour mes raccourcis et mes outils personnalisés ». C'est un **prototype**, à essayer avant de l'intégrer pour de bon : il vit dans le menu **Labo**, avec les autres fonctions à l'essai. Fichiers : `monpanneau.rs` (la logique : la liste des boutons, la grille, les réglages), `monpanneauui.rs` (l'affichage et les gestes), `monpanneau_tests.rs` (20 essais) ; petits ajouts dans `dock.rs` (le panneau `Pane::MonPanneau`), `barrepanneaux.rs`, `panels.rs` (menu Labo), `raccourcisui.rs` (clic droit), `brushui.rs` (clic droit sur une brosse), `bulles.rs` et `toolbars.rs` (retenir l'icône d'une commande), `settings.rs`, `keymap.rs` et `keymap.toml` (l'action `vue.mon_panneau`).
