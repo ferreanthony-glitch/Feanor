@@ -680,6 +680,10 @@ struct LayerEntry {
     /// `VERSION` (une version d'avant l'ouvre comme un calque ordinaire nommé « Décor »).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     decor: bool,
+    /// Le personnage du calque (`calquespastilles.rs` : le numéro d'un personnage de `personnages.json`) ; absent : calque ordinaire. Sans changer
+    /// `VERSION` (une version d'avant l'ouvre comme un calque vectoriel ordinaire, au nom du personnage).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    personnage: Option<u64>,
     /// Calque d'annotation du plan (`calqueannot.rs`) : des notes, jamais dans les exports ; absent : calque ordinaire. Sans changer `VERSION`
     /// (une version d'avant l'ouvre comme un calque vectoriel ordinaire, avec ses notes).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -2206,6 +2210,7 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                     })
                 }),
                 decor: l.decor,
+                personnage: l.personnage,
                 annotation: l.annotation,
                 expositions: to_exposures(&l.frames.iter().map(|f| f.map(key)).collect::<Vec<_>>()),
             })
@@ -2988,6 +2993,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                         // Calque de couleur (format 30) : le lien vient après (rang du trait → son id).
                         couleur: None,
                         decor: l.decor,
+                        personnage: l.personnage,
                         annotation: l.annotation,
                     })
                     .collect();

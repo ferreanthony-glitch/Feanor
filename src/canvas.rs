@@ -426,8 +426,9 @@ impl App {
                     }
                     // Une brosse du décor choisie, sur le dessin du Storyboard : le trait part dans le calque Décor du plan
                     // (créé au premier trait, `decorui.rs` ; dans une case de la planche, c'est la planche qui l'a fait).
-                    let p = if !self.in_card && self.perso.decor.is_some() {
-                        self.decor_avant_trait();
+                    // (Un personnage choisi : son calque, `calquespastilles.rs`.)
+                    let p = if !self.in_card && self.pastille_a_un_calque() {
+                        self.pastille_avant_trait();
                         self.to_layer(stage)
                     } else {
                         p

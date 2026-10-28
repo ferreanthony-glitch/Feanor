@@ -29,6 +29,8 @@ fn un_plan_a_dessins() -> (Document, CelId, CelId) {
         doc.panels[0].layers[0].set(f, Some(x));
     }
     doc.panels[0].layers.push(crate::document::Layer::new("Calque 2", LayerKind::Bitmap));
+    // (Un décor bitmap : les essais y posent un pixel à la main.)
+    doc.decor_bitmap = true;
     doc.assurer_decor(0, 0).unwrap();
     let d = doc.panels[0].layers[doc.decor_de(0).unwrap()].cel_at(0).unwrap();
     pixel(&mut doc, d, 60, 50, Color32::from_rgb(0x8F, 0xA3, 0xB8));

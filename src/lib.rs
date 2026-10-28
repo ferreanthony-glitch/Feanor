@@ -265,6 +265,9 @@ mod decor;
 #[cfg(test)]
 mod decor_tests;
 mod decorui;
+mod calquespastilles;
+#[cfg(test)]
+mod calques_pastilles_tests;
 mod vignettesreglages;
 #[cfg(test)]
 mod vignettes_tests;

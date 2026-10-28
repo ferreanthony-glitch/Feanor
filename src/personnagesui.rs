@@ -143,12 +143,17 @@ fn pastille(ui: &mut egui::Ui, ligne: [u8; 3], fond: Option<[u8; 3]>, choisie: b
 }
 
 /// Le texte de la bulle d'une pastille.
-fn description(ligne: [u8; 3], fond: Option<[u8; 3]>, choisie: bool) -> String {
+fn description(ligne: [u8; 3], fond: Option<[u8; 3]>, choisie: bool, personnage: bool) -> String {
     let fond = match fond {
         Some(f) => format!("aplat {}", crate::couleur::hex(f)),
         None => "sans aplat".to_string(),
     };
-    let clic = if choisie { "Clic : lâcher" } else { "Clic : dessiner avec" };
+    // (Un personnage dessine dans son calque, créé au premier trait ; une couleur neutre, dans le calque courant.)
+    let clic = match (choisie, personnage) {
+        (true, _) => "Clic : lâcher",
+        (false, true) => "Clic : dessiner avec, dans un calque à son nom",
+        (false, false) => "Clic : dessiner avec",
+    };
     format!("Trait {} · {fond}. {clic} ; clic droit : modifier, dupliquer, supprimer, monter, descendre.", crate::couleur::hex(ligne))
 }
 
@@ -203,6 +208,10 @@ impl App {
         self.set_front(ligne);
         self.perso.actif = Some(c);
         self.perso.posee = ligne;
+        // Un personnage qui a déjà son calque dans ce plan : il devient le calque courant (`calquespastilles.rs`).
+        if let Choix::Personnage(id) = c {
+            self.perso_rendre_son_calque(id);
+        }
         let nom = self.perso_nom(c).unwrap_or_default();
         self.status = match fond {
             Some(_) => format!("« {nom} » : le trait et l'aplat de ce personnage."),
@@ -297,8 +306,11 @@ impl App {
         match c {
             Choix::Personnage(id) => {
                 if let Some(p) = self.doc.personnages.iter_mut().find(|p| p.id == id) {
-                    (p.name, p.line, p.fill) = (nom, ligne, fond);
+                    let ancien = std::mem::replace(&mut p.name, nom.clone());
+                    (p.line, p.fill) = (ligne, fond);
                     self.modified = true;
+                    // Renommer le personnage renomme ses calques (`calquespastilles.rs`).
+                    self.doc.renommer_calques_de_personnage(id, &ancien, &nom);
                 }
             }
             Choix::Neutre(i) => {
@@ -754,9 +766,9 @@ impl App {
             p.text(c, egui::Align2::CENTER_CENTER, ph::PAINT_BRUSH, egui::FontId::proportional(11.0), encre);
         }
         let description = if sans_personnage {
-            "Le pinceau de base (« Pinceau rond ») avec la couleur libre, sans personnage ni brosse du décor. Le « + » en bas de la colonne ajoute un personnage."
+            "Le pinceau de base (« Pinceau rond ») avec la couleur libre, sans personnage ni brosse du décor : il dessine dans le calque courant, sans rien créer. Le « + » en bas de la colonne ajoute un personnage."
         } else {
-            "Le pinceau de base (« Pinceau rond ») avec la couleur libre, sans personnage ni brosse du décor. Un clic sur la pastille choisie la lâche aussi, sans changer de pinceau."
+            "Le pinceau de base (« Pinceau rond ») avec la couleur libre, sans personnage ni brosse du décor : il dessine dans le calque courant, sans rien créer. Un clic sur la pastille choisie la lâche aussi, sans changer de pinceau."
         };
         let resp = crate::bulles::bulle(resp, "Classique", description, &self.raccourci("perso.classique"));
         if resp.clicked() {
@@ -769,7 +781,7 @@ impl App {
     fn pastille_de_colonne(&mut self, ui: &mut egui::Ui, c: Choix, nom: &str, ligne: [u8; 3], fond: Option<[u8; 3]>) -> Response {
         let choisie = self.perso.actif == Some(c);
         let resp = pastille(ui, ligne, fond, choisie);
-        let resp = crate::bulles::bulle(resp, if nom.is_empty() { "Sans nom" } else { nom }, &description(ligne, fond, choisie), "");
+        let resp = crate::bulles::bulle(resp, if nom.is_empty() { "Sans nom" } else { nom }, &description(ligne, fond, choisie, matches!(c, Choix::Personnage(_))), "");
         if resp.clicked() {
             if choisie {
                 self.perso_lacher();
