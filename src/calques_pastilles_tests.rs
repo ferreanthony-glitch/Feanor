@@ -206,6 +206,21 @@ fn a_click_that_draws_nothing_leaves_no_layer_and_the_eraser_and_neutral_colours
 }
 
 #[test]
+fn neutral_colours_are_smaller_than_characters_in_the_bar_and_the_status_says_who_makes_a_layer() {
+    // Anthony (2026-10-28) prenait les couleurs neutres d'un projet neuf pour des personnages et attendait leur calque.
+    let mut b = banc();
+    let lou = personnage(&mut b, "Lou", ROUGE, Some(ROSE));
+    assert!(b.app.status.contains("créé au premier trait"), "{}", b.app.status);
+    b.chauffer(3);
+    assert!(!b.app.settings.neutral_colors.is_empty(), "des couleurs neutres d'origine");
+    let largeur = |c: Case| b.app.perso.cases.iter().find(|(_, k)| *k == c).map(|(r, _)| r.width()).expect("la case est dans la rangée");
+    let (perso, neutre) = (largeur(Case::Choix(Choix::Personnage(lou))), largeur(Case::Choix(Choix::Neutre(0))));
+    assert!(neutre + 6.0 <= perso, "une couleur neutre ({neutre}) est nettement plus petite qu'un personnage ({perso})");
+    b.app.perso_choisir(Choix::Neutre(0));
+    assert!(b.app.status.contains("sans créer de calque"), "{}", b.app.status);
+}
+
+#[test]
 fn choosing_a_character_that_has_its_layer_makes_it_current_and_each_plan_gets_its_own() {
     let mut b = banc();
     let lou = personnage(&mut b, "Lou", ROUGE, Some(ROSE));

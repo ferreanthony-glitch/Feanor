@@ -115,10 +115,19 @@ pub(crate) fn tuiles_de(edit: Option<&Edit>) -> Option<Vec<(usize, Option<Tile>)
 /// Une pastille : l'anneau est la couleur du trait, l'intérieur celle du fond (rayé s'il n'y en a pas) ; un halo
 /// de la couleur d'accent quand elle est choisie.
 fn pastille(ui: &mut egui::Ui, ligne: [u8; 3], fond: Option<[u8; 3]>, choisie: bool) -> Response {
-    let (rect, resp) = ui.allocate_exact_size(vec2(PASTILLE + 6.0, PASTILLE + 6.0), Sense::click());
+    pastille_taille(ui, ligne, fond, choisie, PASTILLE)
+}
+
+/// Diamètre d'une couleur neutre dans la barre (Anthony, 2026-10-28 : il prenait les couleurs neutres d'un projet neuf pour des
+/// personnages et attendait leur calque) : nettement plus petite qu'un personnage, pour qu'on ne les confonde plus.
+const PASTILLE_NEUTRE: f32 = 12.0;
+
+/// Une pastille de diamètre `d`, dans une case de la hauteur d'une pastille de personnage (la rangée reste alignée).
+fn pastille_taille(ui: &mut egui::Ui, ligne: [u8; 3], fond: Option<[u8; 3]>, choisie: bool, d: f32) -> Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(d + 6.0, PASTILLE + 6.0), Sense::click());
     if ui.is_rect_visible(rect) {
         let c = rect.center();
-        let r = PASTILLE / 2.0;
+        let r = d / 2.0;
         let p = ui.painter();
         if choisie {
             p.circle_filled(c, r + 3.0, crate::theme::accent_texte());
@@ -126,7 +135,7 @@ fn pastille(ui: &mut egui::Ui, ligne: [u8; 3], fond: Option<[u8; 3]>, choisie: b
             p.circle_stroke(c, r + 2.0, Stroke::new(1.5_f32, crate::theme::bord()));
         }
         p.circle_filled(c, r, to_color(ligne));
-        let dedans = r - 3.5;
+        let dedans = r - (3.5 * d / PASTILLE).max(2.0);
         match fond {
             Some(f) => {
                 p.circle_filled(c, dedans, to_color(f));
@@ -213,9 +222,11 @@ impl App {
             self.perso_rendre_son_calque(id);
         }
         let nom = self.perso_nom(c).unwrap_or_default();
-        self.status = match fond {
-            Some(_) => format!("« {nom} » : le trait et l'aplat de ce personnage."),
-            None => format!("« {nom} » : le trait de ce personnage, sans aplat."),
+        self.status = match (c, fond) {
+            // (Le calque du personnage naît au premier trait, pas au clic : choix d'Anthony, 2026-10-28.)
+            (Choix::Personnage(_), Some(_)) => format!("« {nom} » : le trait et l'aplat de ce personnage, dans son calque (créé au premier trait s'il n'existe pas encore)."),
+            (Choix::Personnage(_), None) => format!("« {nom} » : le trait de ce personnage, sans aplat, dans son calque (créé au premier trait s'il n'existe pas encore)."),
+            (Choix::Neutre(_), _) => format!("Couleur neutre « {nom} » : elle dessine dans le calque courant, sans créer de calque."),
         };
     }
 
@@ -780,7 +791,8 @@ impl App {
     /// Une pastille de la colonne : clic = choisir (ou lâcher), clic droit = son menu.
     fn pastille_de_colonne(&mut self, ui: &mut egui::Ui, c: Choix, nom: &str, ligne: [u8; 3], fond: Option<[u8; 3]>) -> Response {
         let choisie = self.perso.actif == Some(c);
-        let resp = pastille(ui, ligne, fond, choisie);
+        let d = if matches!(c, Choix::Neutre(_)) { PASTILLE_NEUTRE } else { PASTILLE };
+        let resp = pastille_taille(ui, ligne, fond, choisie, d);
         let resp = crate::bulles::bulle(resp, if nom.is_empty() { "Sans nom" } else { nom }, &description(ligne, fond, choisie, matches!(c, Choix::Personnage(_))), "");
         if resp.clicked() {
             if choisie {
