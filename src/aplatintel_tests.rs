@@ -663,3 +663,28 @@ fn on_a_vector_layer_a_new_key_follows_a_coloured_key() {
     let p = app.doc.cels[&k1].fond.as_ref().map(|s| s.peinture.raster.clone()).expect("l'aplat de la clé 2 est peint");
     assert_eq!(p.get(210, 170), PEAU, "l'anneau vectoriel suit la clé coloriée");
 }
+#[test]
+fn a_full_hd_drawing_is_matched_and_coloured_in_a_fraction_of_a_second() {
+    // Un visage de plan poitrine en 1920 × 1080 : la peau, un œil, une ombre, puis la même chose déplacée et agrandie.
+    let grand = |cx: f32, cy: f32, s: f32| {
+        let mut r = Raster::new(1920, 1080);
+        anneau(&mut r, cx, cy, 380.0 * s, 6.0);
+        anneau(&mut r, cx - 120.0 * s, cy - 70.0 * s, 60.0 * s, 5.0);
+        anneau(&mut r, cx + 140.0 * s, cy + 160.0 * s, 80.0 * s, 5.0);
+        r
+    };
+    let (a, b) = (grand(900.0, 520.0, 1.0), grand(1000.0, 560.0, 1.1));
+    let mut pa = Raster::new(1920, 1080);
+    for (c, p) in [(PEAU, (900.0 - 300.0, 520.0 + 20.0)), (OEIL, (900.0 - 120.0, 520.0 - 70.0)), (OMBRE, (900.0 + 140.0, 520.0 + 160.0))] {
+        let m = fond::zone(&a, p.0 as usize, p.1 as usize, fond::TROUS).expect("zone fermée");
+        fond::paint_mask(&mut pa, &m, Some(c));
+    }
+    let (c, d) = (Raster::new(1920, 1080), Raster::new(1920, 1080));
+    let debut = std::time::Instant::now();
+    let (peinture, _, bilan) = reg::colorier_comme(&entree(&a, &pa, &c), &entree(&b, &d, &c), &reglages(), false).expect("une mise en couleur");
+    let duree = debut.elapsed();
+    eprintln!("aplat intelligent, 1920 × 1080, 3 zones : {duree:?}");
+    assert_eq!((bilan.appariees, bilan.laissees), (3, 0), "{bilan:?}");
+    assert_eq!(peinture.get(1000 - 120 * 11 / 10, 560 - 70 * 11 / 10), OEIL);
+    assert!(duree < std::time::Duration::from_secs(10), "{duree:?}");
+}
