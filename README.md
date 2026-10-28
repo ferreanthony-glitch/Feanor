@@ -660,8 +660,9 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   calque, ou clic droit), **décaler une clé** (la prendre par son milieu ou par la limite entre
   deux dessins : elle **et toutes les clés d'après** sur ce calque glissent, chacune gardant sa
   durée, l'exposition d'avant s'allonge ou raccourcit ; **Maj tenue : la clé seule** bouge, la
-  suite reste en place ; **Alt tenue : l'ancien geste**, la clé prend sa place avant ou après les
-  autres dessins, chacun gardant sa durée), décaler un calque (sa barre), le rogner ou l'allonger
+  suite reste en place ; **Alt tenue** (ou Ctrl) : la clé est **dupliquée** à l'endroit lâché, avec son
+  propre dessin, comme les images dans la timeline ; **Ctrl+Maj tenues** : la clé prend sa place avant ou
+  après les autres dessins, chacun gardant sa durée), décaler un calque (sa barre), le rogner ou l'allonger
   (ses bouts). La durée du plan ne change jamais pendant ces gestes : un calque tenu jusqu'à la
   fin du plan le reste (sa dernière exposition absorbe le décalage, en gardant au moins une
   image), sinon le contenu s'arrête à la fin du plan (le bord droit d'un dessin dans la timeline

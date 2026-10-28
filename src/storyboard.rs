@@ -1264,7 +1264,7 @@ impl App {
                 self.key_rect = None;
                 let n = self.key_sel.len();
                 self.status = format!(
-                    "{} choisie{} : Ctrl+C, Ctrl+V (insérer), Maj+Ctrl+V (sur la tête), Suppr, Ctrl+D ; une clé choisie prise par son milieu décale la suite avec elle, calque par calque (Maj : seules les clés choisies).",
+                    "{} choisie{} : Ctrl+C, Ctrl+V (insérer), Maj+Ctrl+V (sur la tête), Suppr, Ctrl+D ; une clé choisie prise par son milieu décale la suite avec elle, calque par calque (Maj : seules les clés choisies ; Alt : les copier).",
                     crate::montagekeys::key_counts_text(&self.key_sel),
                     if n > 1 { "s" } else { "" }
                 );
