@@ -4631,9 +4631,10 @@ Demande d'Anthony : « À l'ouverture du logiciel : proposer "Nouveau fichier", 
 
 ### 57.1 Ce qui change sur l'accueil (`accueil.rs`)
 
-- **Trois grandes entrées**, dans cet ordre :
+- **Quatre grandes entrées**, dans cet ordre :
   - **Nouveau fichier** : la fenêtre de nouveau projet, avec le choix du format, de la cadence et du dossier (c'était le petit lien « Nouveau projet… », qui disparaît).
-  - **Dessiner un storyboard** : un projet vide tout de suite, dans l'onglet Vignettes (la planche), comme l'ancien « Dessiner des vignettes ». La ligne d'aide dit : « Une planche vide, tout de suite : tu dessines tes plans dans les Cases. »
+  - **Dessiner un storyboard** (nouveau : ce n'est **pas** un autre nom de « Dessiner des vignettes ») : un projet vide tout de suite, ouvert directement sur la page **Storyboard** (l'espace de travail Storyboard, avec le plan et sa timeline), prêt à dessiner. Aide : « Un plan vide avec sa timeline : tu dessines le premier plan. »
+  - **Dessiner des vignettes** : inchangé, un projet vide tout de suite dans l'onglet Vignettes (la planche, on dessine dans les Cases).
   - **Ouvrir un projet** : inchangé (SHOT ou Storyboard Pro).
 - **« Importer un scénario »** n'est plus sur l'accueil ; il reste dans le menu **Fichier > Importer > Un scénario…**.
 - Les **projets récents** restent dessous, dans le même ordre, avec le même comportement ; la case « Rouvrir le dernier projet au lancement » reste tout en bas.
@@ -4662,15 +4663,15 @@ Demande d'Anthony : « À l'ouverture du logiciel : proposer "Nouveau fichier", 
 
 ### 57.5 Essais
 
-`accueil_tests.rs` (les trois entrées, l'absence d'« Importer un scénario », chaque action, la fenêtre « Nouveau fichier » qui garde l'image, une image de toute proportion dans la place du logo) et `accueilimages_tests.rs` (le dossier d'origine, la liste, le tirage : dossier vide ou absent, image valide, illisible, deux images à tour de rôle ; **un seul tirage par apparition et soixante images de plus sans nouveau décodage** ; l'import : copie, « _2 », « _3 », rien d'écrasé ; le retrait : seulement une image du dossier ; le réglage du dossier relu depuis `reglages.toml` ; les Préférences : miniatures décodées une fois, « Retirer » par image). Tous travaillent dans un dossier temporaire, jamais dans le tien.
+`accueil_tests.rs` (les quatre entrées, l'absence d'« Importer un scénario », chaque action, la fenêtre « Nouveau fichier » qui garde l'image, une image de toute proportion dans la place du logo) et `accueilimages_tests.rs` (le dossier d'origine, la liste, le tirage : dossier vide ou absent, image valide, illisible, deux images à tour de rôle ; **un seul tirage par apparition et soixante images de plus sans nouveau décodage** ; l'import : copie, « _2 », « _3 », rien d'écrasé ; le retrait : seulement une image du dossier ; le réglage du dossier relu depuis `reglages.toml` ; les Préférences : miniatures décodées une fois, « Retirer » par image). Tous travaillent dans un dossier temporaire, jamais dans le tien.
 
 ### À vérifier à l'écran (par Anthony)
 
-1. Lance SHOT sans projet ouvert : la carte montre **Nouveau fichier**, **Dessiner un storyboard**, **Ouvrir un projet**, puis les récents. Plus d'« Importer un scénario » (il est dans Fichier > Importer > Un scénario…). Plus de petit lien « Nouveau projet… ».
+1. Lance SHOT sans projet ouvert : la carte montre **Nouveau fichier**, **Dessiner un storyboard**, **Dessiner des vignettes**, **Ouvrir un projet**, puis les récents. Plus d'« Importer un scénario » (il est dans Fichier > Importer > Un scénario…). Plus de petit lien « Nouveau projet… ».
 2. Dossier d'images **vide** : le logo SHOT s'affiche comme avant, sans message.
 3. Préférences > Apparence, en bas : **Images d'accueil**. « Importer des images… », choisis deux ou trois images (png ou jpeg, plusieurs d'un coup) : elles apparaissent en miniatures, copiées dans `Documents\SHOT\Identité\Accueil`. Réimporte la même : elle arrive en `_2`.
 4. Ferme le projet (ou relance SHOT) : l'accueil montre **une de tes images** à la place du logo, proportions gardées, sans que l'ouverture ne rame. Refais-le plusieurs fois : ce n'est pas toujours la même.
-5. « Nouveau fichier » : la fenêtre du format s'ouvre ; annule : l'accueil revient avec la même image. « Dessiner un storyboard » : la planche vide, tout de suite. « Ouvrir un projet » : comme avant.
+5. « Nouveau fichier » : la fenêtre du format s'ouvre ; annule : l'accueil revient avec la même image. « Dessiner un storyboard » : tu arrives dans l'espace Storyboard, avec sa timeline et un plan vide prêt à dessiner (quel que soit l'espace où SHOT était resté). « Dessiner des vignettes » : la planche vide, tout de suite. « Ouvrir un projet » : comme avant.
 6. « Retirer » sur une image : la question apparaît, « Garder » ne fait rien, « Supprimer » l'efface du dossier (elle ne passe pas par la Corbeille). Une image cassée ou un fichier texte déposé dans le dossier : pas d'erreur sur l'accueil.
 7. « Changer… » : choisis un autre dossier ; l'accueil tire dedans. « Dossier d'origine » rend `Documents\SHOT\Identité\Accueil`.
-8. Taille de l'interface à 150 % : la carte, avec l'image, ne déborde pas sur les menus.
+8. Taille de l'interface à 150 % : la carte, avec l'image et ses quatre entrées, ne déborde pas sur les menus (les entrées sont un peu moins hautes qu'avant).

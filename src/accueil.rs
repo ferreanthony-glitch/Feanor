@@ -1,14 +1,16 @@
 //! Écran d'accueil (Anthony, 2026-10-18, sa suggestion retenue : « un écran d'accueil (récents,
 //! « Nouveau ») quand aucun projet n'est ouvert ») : au lancement sans projet, ou après « Fermer
 //! le projet », une carte au milieu de la fenêtre propose trois grandes entrées, puis les projets récents. Elle s'en va
-//! dès qu'un projet s'ouvre ou se crée, qu'on commence à dessiner, ou d'un clic sur « Dessiner un storyboard ».
+//! dès qu'un projet s'ouvre ou se crée, qu'on commence à dessiner, ou d'un clic sur « Dessiner un storyboard » ou
+//! « Dessiner des vignettes ».
 //!
 //! Passe « simplicité » du 2026-10-21, puis demande d'Anthony du 2026-10-28 : trois entrées, et rien d'autre de grand.
 //! - **Nouveau fichier** : la fenêtre de nouveau projet, avec le choix du format, de la cadence et du dossier (c'était le
 //!   petit lien « Nouveau projet… »).
-//! - **Dessiner un storyboard** : un projet vide, tout de suite, dans l'onglet Vignettes (la planche : on dessine dans les
-//!   Cases, ou on y dépose des images de l'Explorateur, `deposer.rs`). C'est l'ancien « Dessiner des vignettes » ;
-//!   « Enregistrer » demandera où ranger le projet.
+//! - **Dessiner un storyboard** : un projet vide, tout de suite, dans l'espace Storyboard (le plan et sa timeline, prêt à
+//!   dessiner). « Enregistrer » demandera où ranger le projet.
+//! - **Dessiner des vignettes** : un projet vide, tout de suite, dans l'onglet Vignettes (la planche : on dessine dans les
+//!   Cases, ou on y dépose des images de l'Explorateur, `deposer.rs`). Inchangé.
 //! - **Ouvrir un projet** : un projet SHOT ou un projet Storyboard Pro (la fenêtre d'ouverture accepte les deux).
 //! Dessous : les projets récents. (« Importer un scénario » n'est plus ici : il reste dans le menu Fichier.)
 //!
@@ -46,7 +48,7 @@ pub(crate) fn place_de_l_image(pixels: [usize; 2], place: egui::Vec2) -> egui::V
 }
 
 /// Hauteur d'une grande entrée, en points.
-const ENTREE_H: f32 = 58.0;
+pub(crate) const ENTREE_H: f32 = 50.0;
 
 /// Le logo à montrer est-il celui des fonds sombres ? Non quand le fond des panneaux est clair
 /// (thème clair : `Palette::claire`, `Visuals::light`).
@@ -73,10 +75,14 @@ pub(crate) fn logo_texture(ctx: &egui::Context, largeur: f32) -> egui::TextureHa
     texture
 }
 
-/// Les trois grandes entrées de l'accueil : (icône, titre, une ligne d'explication, action ou rien pour « Dessiner un storyboard »).
-pub(crate) const ENTREES: [(&str, &str, &str, &str); 3] = [
+/// Les quatre grandes entrées de l'accueil : (icône, titre, une ligne d'explication, action). Une action qui commence par
+/// « accueil. » est faite ici même (`ACCUEIL_STORYBOARD`, `ACCUEIL_VIGNETTES`) ; les autres sont des commandes du fichier de raccourcis.
+pub(crate) const ACCUEIL_STORYBOARD: &str = "accueil.storyboard";
+pub(crate) const ACCUEIL_VIGNETTES: &str = "accueil.vignettes";
+pub(crate) const ENTREES: [(&str, &str, &str, &str); 4] = [
     (ph::FILE_PLUS, "Nouveau fichier", "Choisis le format, la cadence et le dossier, puis commence.", "fichier.nouveau"),
-    (ph::SQUARES_FOUR, "Dessiner un storyboard", "Une planche vide, tout de suite : tu dessines tes plans dans les Cases.", ""),
+    (ph::FILM_STRIP, "Dessiner un storyboard", "Un plan vide avec sa timeline : tu dessines le premier plan.", ACCUEIL_STORYBOARD),
+    (ph::SQUARES_FOUR, "Dessiner des vignettes", "Une planche vide, tout de suite : tu dessines dans les Cases.", ACCUEIL_VIGNETTES),
     (ph::FOLDER_OPEN, "Ouvrir un projet", "Un projet SHOT ou Storyboard Pro.", "fichier.ouvrir"),
 ];
 
@@ -96,8 +102,8 @@ fn entree(ui: &mut egui::Ui, icone: &str, titre: &str, aide: &str) -> egui::Resp
         peintre.rect_stroke(rect, 8.0, egui::Stroke::new(1.0_f32, theme::accent_texte()), egui::StrokeKind::Inside);
     }
     peintre.text(rect.left_center() + vec2(18.0, 0.0), Align2::LEFT_CENTER, icone, FontId::proportional(26.0), theme::accent_texte());
-    peintre.text(rect.left_top() + vec2(60.0, 11.0), Align2::LEFT_TOP, titre, FontId::proportional(16.0), theme::texte_fort());
-    peintre.text(rect.left_top() + vec2(60.0, 33.0), Align2::LEFT_TOP, aide, FontId::proportional(12.0), theme::texte_doux());
+    peintre.text(rect.left_top() + vec2(60.0, 8.0), Align2::LEFT_TOP, titre, FontId::proportional(16.0), theme::texte_fort());
+    peintre.text(rect.left_top() + vec2(60.0, 29.0), Align2::LEFT_TOP, aide, FontId::proportional(12.0), theme::texte_doux());
     resp.on_hover_cursor(egui::CursorIcon::PointingHand)
 }
 
@@ -108,7 +114,13 @@ impl App {
         self.welcome && self.path.is_none() && !self.modified && self.new_dialog.is_none() && self.scenario_window.is_none() && self.sb_window.is_none()
     }
 
-    /// « Dessiner un storyboard » : un projet vide, dans l'onglet Vignettes, l'accueil parti.
+    /// « Dessiner un storyboard » : un projet vide, dans l'espace Storyboard (le plan et sa timeline), l'accueil parti.
+    pub(crate) fn commencer_par_le_storyboard(&mut self) {
+        self.welcome = false;
+        self.set_espace(Espace::Storyboard);
+    }
+
+    /// « Dessiner des vignettes » : un projet vide, dans l'onglet Vignettes, l'accueil parti.
     pub(crate) fn commencer_par_les_vignettes(&mut self) {
         self.welcome = false;
         self.set_espace(Espace::Vignettes);
@@ -126,7 +138,7 @@ impl App {
         }
         let visuel = self.accueil_visuel(ctx);
         let mut action: Option<&str> = None;
-        let mut vignettes = false;
+        let mut local: Option<&str> = None;
         let mut open: Option<std::path::PathBuf> = None;
         egui::Window::new("Accueil")
             .title_bar(false)
@@ -161,8 +173,8 @@ impl App {
                 });
                 for (icone, titre, aide, a) in ENTREES {
                     if entree(ui, icone, titre, aide).clicked() {
-                        if a.is_empty() {
-                            vignettes = true;
+                        if a.starts_with("accueil.") {
+                            local = Some(a);
                         } else {
                             action = Some(a);
                         }
@@ -189,8 +201,10 @@ impl App {
                     let _ = self.settings.save();
                 }
             });
-        if vignettes {
-            self.commencer_par_les_vignettes();
+        match local {
+            Some(ACCUEIL_STORYBOARD) => self.commencer_par_le_storyboard(),
+            Some(ACCUEIL_VIGNETTES) => self.commencer_par_les_vignettes(),
+            _ => {}
         }
         if let Some(path) = open {
             self.welcome = false;
