@@ -356,6 +356,11 @@ touches = ["Alt+I"]
 source = "Storyboard Pro 27 : DRAWING_PAINT_TOOL_KEY"
 
 [[raccourci]]
+action = "outil.degrade"
+touches = ["Alt+G"]
+source = "proposition (Alt + G : le G du dégradé ; libre)"
+
+[[raccourci]]
 action = "outil.peindre_non_peint"
 touches = ["Alt+Y"]
 source = "Storyboard Pro 27 : DRAWING_PAINT_UNPAINTED_TOOL_KEY"

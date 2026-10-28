@@ -184,7 +184,7 @@ fn the_soft_edge_fades_the_front_and_the_ease_slows_the_ends() {
 #[test]
 fn filled_zones_follow_the_write_on_when_asked() {
     let mut d = six_lines();
-    d.elements.insert(0, Element::Fill { contours: vec![vec![[40.0, 10.0], [200.0, 10.0], [200.0, 200.0], [40.0, 200.0]]], color: [200, 30, 30], opacity: 1.0 });
+    d.elements.insert(0, Element::Fill { contours: vec![vec![[40.0, 10.0], [200.0, 10.0], [200.0, 200.0], [40.0, 200.0]]], color: [200, 30, 30], opacity: 1.0, gradient: None });
     let stay = render_with(&d, &write_steps(30.0, &[]));
     assert!(stay.get(60, 195).a() == 255, "les zones remplies restent");
     let follow = render_with(&d, &write_steps(30.0, &[(t::WRITE_FILLS, 1.0)]));

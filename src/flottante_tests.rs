@@ -111,7 +111,7 @@ fn the_cheap_release_gives_the_geometry_the_background_replay_will_confirm() {
 /// un parallélogramme, le processeur inverse la matrice entière).
 #[test]
 fn a_floating_sheet_takes_a_shear_and_slants_the_drawing() {
-    let bar = Element::Fill { contours: vec![vec![[50.0, 100.0], [150.0, 100.0], [150.0, 110.0], [50.0, 110.0]]], color: [200, 30, 30], opacity: 1.0 };
+    let bar = Element::Fill { contours: vec![vec![[50.0, 100.0], [150.0, 100.0], [150.0, 110.0], [50.0, 110.0]]], color: [200, 30, 30], opacity: 1.0, gradient: None };
     let (mut doc, id) = doc_with(vec![bar]);
     let mut f = Flottante::lift(&mut doc, id, &[0]).unwrap();
     // x' = x + 0,5 · (y − 100) : le bord du haut (y = 100) ne bouge pas, le bas glisse de 5 px.

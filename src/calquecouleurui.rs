@@ -289,7 +289,7 @@ impl App {
     /// sur un autre fil, pour que le premier clic ou trait n'attende pas.
     pub(crate) fn warm_couleur(&mut self) {
         self.murs.poll();
-        if self.playing || !matches!(self.tool, Tool::Fill | Tool::Brush | Tool::Pencil) {
+        if self.playing || !matches!(self.tool, Tool::Fill | Tool::Gradient | Tool::Brush | Tool::Pencil) {
             return;
         }
         let Some(link) = self.layer().couleur.as_ref().map(|c| (c.trous, c.zone && !c.griffonner)) else { return };
@@ -297,7 +297,7 @@ impl App {
             // (En mode « Griffonner », ni le pot ni le pinceau n'ont besoin des murs du trait : le remplissage se calcule à part.)
             return;
         }
-        if self.tool != Tool::Fill && !link.1 {
+        if !matches!(self.tool, Tool::Fill | Tool::Gradient) && !link.1 {
             return;
         }
         let Some(li) = cc::trait_de(self.layers(), self.cur_layer) else { return };

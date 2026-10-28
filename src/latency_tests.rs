@@ -27,6 +27,7 @@ fn busy_cel() -> Cel {
         contours: vec![vec![[20.0, 20.0], [180.0, 30.0], [150.0, 170.0], [10.0, 140.0]]],
         color: [200, 210, 225],
         opacity: 1.0,
+        gradient: None,
     });
     for k in 0..25 {
         let x = 5.0 + k as f32 * 12.0;
@@ -36,6 +37,7 @@ fn busy_cel() -> Cel {
         contours: vec![vec![[120.0, 60.0], [290.0, 80.0], [260.0, 190.0]], vec![[180.0, 100.0], [240.0, 110.0], [220.0, 160.0]]],
         color: [230, 120, 60],
         opacity: 0.6,
+        gradient: None,
     });
     c.rerender();
     c

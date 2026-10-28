@@ -45,7 +45,7 @@ fn trait_simple(color: [u8; 3], y: f32) -> Element {
 }
 
 fn zone(color: [u8; 3]) -> Element {
-    Element::Fill { contours: vec![vec![[4.0, 20.0], [40.0, 20.0], [40.0, 44.0], [4.0, 44.0]]], color, opacity: 1.0 }
+    Element::Fill { contours: vec![vec![[4.0, 20.0], [40.0, 20.0], [40.0, 44.0], [4.0, 44.0]]], color, opacity: 1.0, gradient: None }
 }
 
 /// Un dessin vectoriel : 0 trait rouge, 1 trait bleu, 2 zone rouge, 3 trait rouge ; la sélection : 0 et 2 (outil Sélection).

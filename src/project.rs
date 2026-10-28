@@ -181,7 +181,7 @@ pub const FORMAT: &str = "pelure-projet";
 /// la cadence 2. Une version précédente refuse le projet : elle montrerait le mouvement de caméra en douceur, le film changerait
 /// sans prévenir. Un projet de version 36 ou moins s'ouvre tel quel, la postérisation éteinte. (Si une autre branche a aussi
 /// pris le numéro 37, la fusion garde le 37 et réunit les deux descriptions.)
-/// 38 (2026-10-24, `docs/INTERFACE.md` partie 54, outil Dégradé) : **zone vectorielle en dégradé** — un élément `Fill` d'un dessin
+/// 38 (2026-10-28, `docs/INTERFACE.md` partie 53, outil Dégradé) : **zone vectorielle en dégradé** — un élément `Fill` d'un dessin
 /// vectoriel peut porter `degrade` (`genre` « lineaire » ou « radial », `depart` et `arrivee` : les deux points de l'axe, en
 /// pixels du dessin, `couleur_depart`, `couleur_arrivee`, `opacite_depart`, `opacite_arrivee`) ; la zone se rend avec son dégradé,
 /// et l'axe suit la forme quand elle se déplace, tourne ou se déforme. Omis : couleur unie, comme avant. Une version précédente

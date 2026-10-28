@@ -75,7 +75,8 @@ impl App {
         let Some(sel) = &self.bsel else { return };
         let valid = Some(sel.cel) == self.cel_here()
             && self.layer().kind == LayerKind::Bitmap
-            && self.tool.keeps_zone();
+            // (Le Dégradé remplit la zone choisie : elle reste avec lui, sans être transformable ni recolorée.)
+            && (self.tool.keeps_zone() || self.tool == Tool::Gradient);
         if !valid && self.bdrag.is_none() {
             self.drop_bitmap_selection();
         }

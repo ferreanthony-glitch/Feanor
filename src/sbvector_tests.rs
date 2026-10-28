@@ -71,10 +71,11 @@ fn exported(raw: &[Element], s: f32, ox: f32, oy: f32) -> Raster {
     let elements = raw
         .iter()
         .map(|e| match e {
-            Element::Fill { contours, color, opacity } => Element::Fill {
+            Element::Fill { contours, color, opacity, gradient } => Element::Fill {
                 contours: contours.iter().map(|c| c.iter().map(|p| tf(p[0], p[1])).collect()).collect(),
                 color: *color,
                 opacity: *opacity,
+                gradient: *gradient,
             },
             Element::Stroke { points, color, opacity, hardness, brush, trace } => Element::Stroke {
                 points: points.iter().map(|p| { let q = tf(p.x, p.y); VPoint { x: q[0], y: q[1], r: p.r * s } }).collect(),
@@ -167,7 +168,7 @@ fn getdata_drawings_become_fills_with_holes_and_texture_colours() {
     let raw = raw_elements(&data_drawing(), &palette);
     let fills: Vec<&Element> = raw.iter().filter(|e| matches!(e, Element::Fill { .. })).collect();
     assert_eq!((fills.len(), raw.len()), (2, 3), "deux zones (grain, noir), un trait de crayon");
-    let Element::Fill { contours, color, opacity } = fills[0] else { unreachable!() };
+    let Element::Fill { contours, color, opacity, .. } = fills[0] else { unreachable!() };
     assert_eq!((contours.len(), *color), (2, [255, 0, 0]), "les deux boucles du grain ensemble");
     assert!((opacity - 0.5).abs() < 0.01);
     let Element::Stroke { points, color, .. } = &raw[2] else { panic!("le trait de crayon en dernier") };
@@ -217,7 +218,7 @@ fn real_getdata_drawings_from_the_test_script() {
             let placed: Vec<Element> = raw
                 .iter()
                 .map(|e| match e {
-                    Element::Fill { contours, color, opacity } => Element::Fill { contours: contours.iter().map(|c| c.iter().map(|p| tf(*p)).collect()).collect(), color: *color, opacity: *opacity },
+                    Element::Fill { contours, color, opacity, gradient } => Element::Fill { contours: contours.iter().map(|c| c.iter().map(|p| tf(*p)).collect()).collect(), color: *color, opacity: *opacity, gradient: *gradient },
                     other => other.clone(),
                 })
                 .collect();
