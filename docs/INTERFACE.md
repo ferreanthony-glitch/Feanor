@@ -4697,7 +4697,7 @@ Essais : `timeline_alt_tests.rs` (4), `timeline_cles_tests.rs` (6), `sequencepla
 
 - Dans la grille de la timeline, glisser les **images choisies** les déplace. **Ctrl copiait déjà, Maj insère déjà** (le README le disait) : **Alt copie maintenant comme Ctrl** (les deux restent, Alt + Ctrl aussi). Sans touche : déplacer, comme avant.
 - Les copies ont **leurs propres dessins** (`Document::duplicate_cel`, un dessin tenu sur plusieurs images reste un seul dessin copié), posés à l'endroit lâché par-dessus ce qui y était. **Une seule étape d'annulation** ; **Échap** abandonne (rien n'est posé).
-- **Dans le montage, Alt garde son ancien sens** : sur les **clés de dessins** des pistes, Alt tenue = « Réordonner les clés » (partie 36). Je n'y ai pas touché, pour ne rien casser ; la copie d'une clé se fait par Ctrl+C / Ctrl+V (point 2).
+- **Dans le montage** : remplacé par la partie 60 (réponse d'Anthony du 2026-10-28) — Alt ou Ctrl + glisser des clés de dessins les duplique aussi, et « Réordonner les clés » passe sur Ctrl+Maj + glisser.
   *À trancher avec toi* : si tu veux aussi « Alt + glisser = dupliquer » sur les clés du montage, il faut donner un autre geste à « Réordonner ».
 
 ### 2. Copier et coller des clés de dessins

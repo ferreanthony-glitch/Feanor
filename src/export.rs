@@ -247,8 +247,8 @@ pub fn video_size(frame: [usize; 2], half: bool) -> [usize; 2] {
 
 // ------------------------------------------------------------------------------------- ffmpeg
 
-/// ffmpeg à utiliser : `PELURE_FFMPEG`, celui choisi dans SHOT, celui du PATH, puis ceux
-/// installés avec d'autres logiciels (Krita) ou par winget.
+/// ffmpeg à utiliser : `PELURE_FFMPEG`, celui choisi dans SHOT, celui posé à côté de SHOT (version portable), celui du
+/// PATH, puis ceux installés avec d'autres logiciels (Krita) ou par winget.
 pub fn find_ffmpeg(saved: Option<&Path>) -> Option<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Some(p) = std::env::var_os("PELURE_FFMPEG") {
@@ -256,6 +256,9 @@ pub fn find_ffmpeg(saved: Option<&Path>) -> Option<PathBuf> {
     }
     if let Some(p) = saved {
         candidates.push(p.to_path_buf());
+    }
+    if let Some(dir) = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf)) {
+        candidates.push(dir.join("ffmpeg.exe"));
     }
     if let Some(path) = std::env::var_os("PATH") {
         candidates.extend(std::env::split_paths(&path).map(|d| d.join("ffmpeg.exe")));
