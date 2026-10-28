@@ -72,7 +72,7 @@ fn there_are_five_tips_at_most_each_one_sentence_with_a_stable_id() {
 fn the_shortcut_tip_reads_the_live_keymap() {
     let mut b = banc();
     let t = b.app.conseil_texte(Conseil::Raccourcis);
-    assert!(t.contains("Z masque") && t.contains("maintiens R"), "{t}");
+    assert!(t.contains("F11 masque") && t.contains("maintiens R"), "{t}");
     // Le fichier personnel les change : la phrase suit.
     let user = "version = 1\n[[raccourci]]\naction = \"vue.concentration\"\ntouches = [\"K\"]\n[[raccourci]]\naction = \"aide.aide_memoire\"\ntouches = [\"J\"]\n";
     b.app.keymap = Keymap::build(PresetId::Shot, Some(user));

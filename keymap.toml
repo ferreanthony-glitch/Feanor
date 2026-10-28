@@ -302,8 +302,8 @@ source = "proposition (palette de commandes)"
 # Storyboard Pro » et dans le fichier personnel d'Anthony (B, E, L, Maj+1, Maj+2).
 [[raccourci]]
 action = "vue.concentration"
-touches = ["Z"]
-source = "proposition (Z comme zen : seuls le dessin et une barre minimale restent ; la même touche remet tout)"
+touches = ["F11"]
+source = "proposition (F11, la touche « plein écran » habituelle : seuls le dessin et une barre minimale restent ; la même touche remet tout). Z jusqu'au 2026-10-28 : Anthony y entrait sans le vouloir (Z seul, à côté de Ctrl+Z)"
 
 [[raccourci]]
 action = "aide.aide_memoire"

@@ -74,7 +74,7 @@ fn the_card_lists_the_tool_the_tab_and_what_works_everywhere_with_their_keys() {
     assert_eq!(ligne(0, "Pipette"), "Alt + clic", "un geste de souris, écrit comme tel");
     assert_eq!(ligne(1, "Nouveau Plan"), map.keys_text("panneau.nouveau"));
     assert_eq!(ligne(2, "Annuler"), "Ctrl+Z");
-    assert_eq!(ligne(2, "Mode concentration"), "Z");
+    assert_eq!(ligne(2, "Mode concentration"), "F11");
     assert_eq!(ligne(2, "Chercher une commande"), "Ctrl+K");
     // Chaque onglet a sa colonne.
     for e in Espace::TOUS {

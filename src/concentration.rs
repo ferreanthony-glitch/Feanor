@@ -11,8 +11,9 @@
 //! recalculé de plus qu'à un changement d'onglet. Les panneaux posés dans leur propre fenêtre (sur un autre écran) restent
 //! où ils sont : les fermer puis les rouvrir coûterait des fenêtres Windows, et ils ne gênent pas le dessin.
 //!
-//! La touche est `vue.concentration` (Z, comme « zen », libre dans le jeu de SHOT comme dans celui de Storyboard Pro).
-//! Aussi dans le menu Affichage, la palette de commandes (Ctrl+K) et le bouton de la barre minimale.
+//! La touche est `vue.concentration` (F11, la touche « plein écran » habituelle ; Z jusqu'au 2026-10-28, mais Z seul, à côté
+//! de Ctrl+Z, y faisait entrer sans le vouloir). Aussi dans le menu Affichage, la palette de commandes (Ctrl+K) et le bouton
+//! de la barre minimale, qui dit en toutes lettres comment revenir : la barre d'état n'est pas à l'écran dans ce mode.
 
 use eframe::egui::{self, vec2, Align, Layout, RichText};
 use egui_phosphor::regular as ph;
@@ -73,7 +74,14 @@ impl App {
             ui.separator();
             ui.label(RichText::new(crate::planversui::titre_long_avec_version(&self.doc, self.cur_panel)).color(crate::theme::texte_doux()));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if self.bouton(ui, ph::ARROWS_IN, "Quitter le mode concentration", "Les panneaux et les barres reviennent exactement comme avant.", "vue.concentration").clicked() {
+                // En toutes lettres, et pas une icône seule : c'est la seule porte de sortie visible.
+                let touche = self.raccourci("vue.concentration");
+                let texte = if touche.is_empty() {
+                    format!("{}  Revenir aux panneaux", ph::ARROWS_IN)
+                } else {
+                    format!("{}  Revenir aux panneaux ({touche})", ph::ARROWS_IN)
+                };
+                if ui.button(texte).on_hover_text("Quitter le mode concentration : les panneaux et les barres reviennent exactement comme avant.").clicked() {
                     self.basculer_concentration();
                 }
                 ui.separator();

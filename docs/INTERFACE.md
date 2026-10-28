@@ -3779,7 +3779,12 @@ que la fenêtre d'import d'un scénario ou d'un projet Storyboard Pro est ouvert
 **Déposer des images** (`deposer.rs`) marche dès la première entrée : l'onglet Vignettes montre la planche, qui prend les fichiers lâchés (essai
 `accueil_tests::images_dropped_on_the_board_work_right_after_the_welcome_entry`). Lâcher des images sur la carte d'accueil elle-même ne fait rien (il faut d'abord « Dessiner des vignettes »).
 
-### 2. Le mode concentration (Z)
+### 2. Le mode concentration (F11 ; Z jusqu'au 2026-10-28)
+**Changé le 2026-10-28** (Anthony y est entré sans le vouloir et ne savait pas comment revenir) : la touche passe de **Z** à **F11**, la touche « plein écran » habituelle.
+Z seule, juste à côté de Ctrl+Z, s'enclenchait quand on lâchait Ctrl trop tôt. Le bouton de sortie n'est plus une icône seule mais un texte, « Revenir aux panneaux (F11) » : la barre d'état,
+qui annonçait la touche, n'est pas à l'écran dans ce mode. Z seule ne porte plus rien ; Maj+Z et Ctrl+Z ne changent pas. Essai renommé
+`concentration_tests::f11_and_r_are_free_keys_with_no_conflict_in_either_key_set`.
+
 Cache les menus, les onglets de projets, toutes les barres, la barre d'état, la barre des panneaux et **tous les panneaux** ; le dessin prend la fenêtre, sous une barre
 minimale (l'outil et la couleur, le plan, annuler, rétablir, et le bouton de sortie). C'est une **couche posée par-dessus** : `App::frame` ne dessine plus les barres ni le dock, mais le dock,
 les dispositions des quatre espaces et les panneaux tirés à la main ne sont **ni lus ni écrits** autrement qu'à l'ordinaire : l'éteindre rend exactement ce qu'on avait (essai
