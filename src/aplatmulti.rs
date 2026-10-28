@@ -455,6 +455,8 @@ impl App {
 
     /// Une fois par image d'écran : pose les résultats arrivés. Rien au repos.
     pub(crate) fn poll_aplat_multi(&mut self) {
+        // (L'aplat intelligent, platintel.rs : ses calculs arrivent par ici aussi.)
+        self.poll_intel(false);
         if self.aplat_travaux.en_route == 0 {
             return;
         }
@@ -580,8 +582,11 @@ impl App {
     /// Attend les résultats en route et les pose : avant d'enregistrer (le fichier écrit les a), et dans les essais.
     pub(crate) fn attendre_aplat_multi(&mut self) {
         let debut = std::time::Instant::now();
-        while self.aplat_travaux.en_route > 0 && debut.elapsed() < std::time::Duration::from_secs(60) {
+        // (Un trait vectoriel dont le rendu exact n'est pas arrivé part tout de suite : l'enregistrement n'attend pas ce rendu.)
+        self.poll_intel(true);
+        while (self.aplat_travaux.en_route > 0 || self.intel_occupe()) && debut.elapsed() < std::time::Duration::from_secs(60) {
             std::thread::sleep(std::time::Duration::from_millis(5));
+            self.poll_intel(true);
             self.poll_aplat_multi();
         }
     }

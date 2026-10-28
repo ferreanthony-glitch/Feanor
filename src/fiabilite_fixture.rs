@@ -214,7 +214,7 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
 
     let mut perso = Layer::new("Personnage", LayerKind::Vector);
     perso.frames = [vec![Some(perso1); 8], vec![Some(perso2); 8], vec![None; 4], vec![Some(perso3); 4]].concat();
-    perso.fond = Some(FondReglages { couleur: [250, 240, 200], debord: 4, trous: 7, bord: false });
+    perso.fond = Some(FondReglages { couleur: [250, 240, 200], debord: 4, trous: 7, bord: false, intelligent: false });
     perso.blend = BlendMode::Multiply;
     perso.opacity = 0.8;
     perso.transform = LayerTransform { x: 12.5, y: -4.0, scale: 1.1, angle: 3.0, stretch_x: 1.2, stretch_y: 0.9, ..Default::default() };

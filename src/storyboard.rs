@@ -1611,6 +1611,14 @@ impl App {
                         ui.close_menu();
                         self.duplicate_keys();
                     }
+                    // Aplat intelligent (`aplatintel.rs`) : le calque de cette piste en a un.
+                    if self.layers().get(k).and_then(|l| l.fond).is_some_and(|f| f.intelligent) {
+                        let resp = ui.add(egui::Button::new(what("Colorier comme la clé précédente", "Colorier les clés comme la précédente")).shortcut_text(self.keymap.label("aplat.colorier_comme_precedente")));
+                        if crate::bulles::bulle(resp, "Colorier comme la clé précédente", "Les clés choisies prennent les couleurs de la clé coloriée d'avant, zone par zone (en chaîne s'il y en a plusieurs).", "").clicked() {
+                            ui.close_menu();
+                            self.colorier_comme_precedente();
+                        }
+                    }
                     let resp = ui.button(what("Supprimer la clé en laissant un vide", "Supprimer les clés en laissant un vide"));
                     if crate::bulles::bulle(resp, "Laisser un vide", "Leurs images restent vides ; les autres clés ne bougent pas.", "").clicked() {
                         ui.close_menu();
