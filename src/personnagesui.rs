@@ -363,6 +363,15 @@ impl App {
         Some(self.settings.neutral_colors.len() - 1)
     }
 
+    /// Remet les couleurs neutres d'origine (le bouton « ↺ » du panneau) : les trois gris. Un réglage de l'application, sans annulation.
+    pub(crate) fn perso_neutres_d_origine(&mut self) {
+        self.settings.neutral_colors = personnages::neutres_par_defaut();
+        self.settings_a_ecrire = true;
+        if matches!(self.perso.actif, Some(Choix::Neutre(_))) {
+            self.perso.actif = None;
+        }
+    }
+
     /// Duplique ce personnage ou cette couleur neutre, juste après lui.
     pub(crate) fn perso_dupliquer(&mut self, c: Choix) {
         match c {
@@ -546,6 +555,13 @@ impl App {
         let avant = self.history.context.replace("Aplat du personnage".to_string());
         self.toggle_fond(li);
         self.history.context = avant;
+        // L'aplat du calque naît de la couleur d'aplat de la pastille (et non du blanc d'un aplat neuf) : les morceaux que
+        // l'aplat gagnera plus tard, sans que la pastille y ait peint, ont la même couleur que le reste.
+        if let Some((_, Some(fond))) = self.perso_couleurs(c) {
+            if let Some(f) = self.layers_mut().get_mut(li).and_then(|l| l.fond.as_mut()) {
+                f.couleur = fond;
+            }
+        }
         // Ce qui était déjà dessiné sur ce calque n'est pas à un personnage : il reste sans fond (le fond du calque
         // se pose sur tout son trait), coupé comme le ferait un personnage sans fond.
         let Some(reglages) = self.layer().fond else { return };
@@ -554,6 +570,36 @@ impl App {
         let apres = c.raster.clone();
         let avant = crate::raster::Raster::new(apres.width, apres.height);
         self.perso_envoyer(Travail { cel, serial: u64::MAX, reglages, couleur: None, avant, apres });
+    }
+
+    /// La couleur d'aplat de la pastille qui dessine devient la « Couleur de l'aplat » du calque (Anthony, 2026-10-28 : « la couleur
+    /// d'aplat du pinceau change la couleur d'aplat du calque »). Elle était blanche (celle d'un aplat neuf) pendant que la pastille
+    /// peignait son aplat dans la strate : tout morceau d'aplat gagné ensuite sans pinceau de pastille (gomme, transformation,
+    /// Cutter) retombait sur la couleur du calque, blanche, à côté du reste. Dans la même étape d'annulation que le trait (la
+    /// structure d'avant se range à la suite de l'étape du trait). Une couleur neutre à aplat fait de même, dans le calque courant.
+    /// Sans effet pour une pastille sans aplat, la pastille « classique » (aucune pastille), la gomme, ni quand l'aplat lui-même
+    /// est visé.
+    ///
+    /// Le choix : la couleur du calque change, pas celle des pixels déjà peints (une peinture blanche volontaire, les yeux, ne
+    /// devient pas brune) ; les clés du calque dont l'aplat n'était pas peint prennent la couleur, comme celles des autres
+    /// traits de la pastille.
+    pub(crate) fn perso_aligner_couleur_aplat(&mut self) {
+        if matches!(self.tool, Tool::Eraser | Tool::Mixer) || self.aplat_en_cible() || self.griffonne_ici() {
+            return;
+        }
+        let Some((_, Some(fond))) = self.perso_couleurs_actives() else { return };
+        let li = self.cur_layer;
+        let Some(r) = self.layers().get(li).and_then(|l| l.fond) else { return };
+        if r.couleur == fond {
+            return;
+        }
+        let avant = self.snapshot();
+        if let Some(f) = self.layers_mut().get_mut(li).and_then(|l| l.fond.as_mut()) {
+            f.couleur = fond;
+        }
+        self.history.extend_last(avant);
+        self.modified = true;
+        self.renderer.invalidate_all();
     }
 
     /// Confie un trait au fil de fond (lancé au premier).
@@ -980,12 +1026,8 @@ impl App {
             if crate::bulles::icone(ui, ph::PLUS, "Nouvelle couleur neutre", "Ajouter une couleur neutre (un trait, avec ou sans aplat).", "").clicked() {
                 self.perso_ajouter_neutre();
             }
-            if crate::bulles::icone(ui, ph::ARROW_COUNTER_CLOCKWISE, "Couleurs neutres d'origine", "Remettre le noir, le gris et le rouge de correction.", "").clicked() {
-                self.settings.neutral_colors = personnages::neutres_par_defaut();
-                self.settings_a_ecrire = true;
-                if matches!(self.perso.actif, Some(Choix::Neutre(_))) {
-                    self.perso.actif = None;
-                }
+            if crate::bulles::icone(ui, ph::ARROW_COUNTER_CLOCKWISE, "Couleurs neutres d'origine", "Remettre les trois gris d'origine (le trait plus foncé que l'aplat, de plus en plus clairs).", "").clicked() {
+                self.perso_neutres_d_origine();
             }
         });
     }

@@ -2265,6 +2265,8 @@ impl App {
         self.droit_flush();
         // Le trait d'un personnage (`personnagesui.rs`) : son dessin et les tuiles d'avant, pour le fond qu'il gagne.
         let mut trait_de_personnage: Option<(CelId, Vec<(usize, Option<crate::raster::Tile>)>)> = None;
+        // Un trait de pastille (pas dans l'aplat) : sa couleur d'aplat devient celle du calque (`perso_aligner_couleur_aplat`).
+        let mut trait_de_pastille = false;
         if let Some(mut stroke) = self.stroke.take() {
             // Banc de traits : le trait tel que reçu, avec son réglage.
             if let Some(n) = self.record_strokes.as_mut() {
@@ -2314,6 +2316,7 @@ impl App {
                 self.renderer.invalidate_tiles(&dirty);
                 if self.perso.actif.is_some() {
                     trait_de_personnage = crate::personnagesui::tuiles_de(edit.as_ref()).map(|t| (cel, t));
+                    trait_de_pastille = true;
                 }
                 match self.vstroke.take() {
                     Some(vs) => {
@@ -2337,6 +2340,10 @@ impl App {
         }
         // Les autres clés choisies finissent le même trait ; leurs étapes rejoignent celle du trait (`aplatmulti.rs`).
         self.miroirs_finish();
+        // (Avant le fil de fond : son numéro d'étape compte l'étape du trait, couleur du calque comprise.)
+        if trait_de_pastille {
+            self.perso_aligner_couleur_aplat();
+        }
         // Le fond que le trait d'un personnage vient de gagner se calcule sur le fil de fond.
         if let Some((cel, tiles)) = trait_de_personnage {
             self.perso_apres_trait(cel, tiles);
