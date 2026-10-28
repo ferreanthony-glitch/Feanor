@@ -236,6 +236,9 @@ fn the_preferences_button_revoir_les_conseils_is_in_the_general_tab() {
     b.chauffer(8);
     let bouton = tous_les_textes(&b).into_iter().find(|(t, _)| t == "Revoir les conseils").expect("le bouton").1;
     assert!(est_la(&b, "1 conseil(s) vu(s) sur 5"));
+    // (Le pointeur vient d'ailleurs : on le pose d'abord sur le bouton, le temps que le survol se fasse.)
+    b.image(vec![Event::PointerMoved(bouton)], 1.0 / 60.0);
+    b.chauffer(3);
     clic(&mut b, bouton);
     assert!(b.app.settings.conseils.est_vide());
 }
