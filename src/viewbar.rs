@@ -37,9 +37,8 @@ pub(crate) fn tool_hint(tool: crate::app::Tool) -> &'static str {
 }
 /// Hauteur de la barre des commandes de la vue, sous le dessin.
 pub(crate) const TOOLS_BAR_H: f32 = 28.0;
-/// Couleurs des zones de sécurité et du cadre de format.
+/// Couleur des zones de sécurité (celle du cadre de format est un réglage : `Settings::cadre_format_couleur`).
 const SAFE: Color32 = crate::theme::CADRAGE_SECURITE;
-const FORMAT: Color32 = crate::theme::CADRAGE_FORMAT;
 
 /// Voile blanc d'opacité `a` (couleur prémultipliée : `Color32::from_white_alpha` passe par
 /// l'espace linéaire et donne un voile bien plus clair).
@@ -524,8 +523,9 @@ impl App {
             let q = quad(r);
             painter.add(band(quad(full), q, Color32::from_black_alpha(140)));
             painter.add(Shape::closed_line(q.to_vec(), Stroke::new(3.0_f32, Color32::from_black_alpha(90))));
-            painter.add(Shape::closed_line(q.to_vec(), Stroke::new(1.5_f32, FORMAT)));
-            painter.text(q[0] + vec2(4.0, 3.0), Align2::LEFT_TOP, frames::label(ratio), FontId::proportional(11.0), FORMAT);
+            // (Sans étiquette « 16:9 » dans le champ, Anthony 2026-10-28 : le choix est dans Cadrage.)
+            let [r_, g_, b_] = self.settings.cadre_format_couleur;
+            painter.add(Shape::closed_line(q.to_vec(), Stroke::new(1.5_f32, Color32::from_rgb(r_, g_, b_))));
             inside = r;
         }
         // Aides au cadrage (`cadrage.rs`) : tiers, grille d'or, spirale, diagonales, croix, dans le

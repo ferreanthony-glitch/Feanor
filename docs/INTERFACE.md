@@ -5347,3 +5347,14 @@ La grille ne mesure que ses quelques boutons (une passe, pas de texture, pas de 
 ### Essais
 
 `monpanneau_tests.rs` (20) : ajouter et retirer un bouton (doublons refusés, brosse et gomme distinctes) ; réordonner ; séparateurs (entre deux boutons seulement, déplacés, retirés) ; renommer et nom libre d'un outil perso ; réglages écrits et relus (toutes les sortes de boutons, brosse comprise), fichier du poste relu par `Settings::load`, panneau vide non écrit et anciens réglages ; **commande inconnue, genre inconnu, table abîmée et outil disparu ignorés sans planter, les autres réglages lus** ; commande inconnue refusée à l'ajout ; **outil perso : capture puis restitution de l'outil, de la brosse et de la couleur** (crayon, pinceau, gomme, outil sans brosse, outil disparu, enregistrement avec nom libre, clic du bouton) ; bouton de brosse (prise, brosse disparue) ; bouton de commande (lance l'action du registre) ; l'entrée du clic droit n'existe que panneau ouvert, et l'ajout qu'elle demande ; icône habituelle (outil, barre, panneau, icône apprise seulement panneau ouvert) ; le panneau se dessine avec toutes les sortes de boutons, avec et sans noms, étroit et large, avec la recherche, et vide ; grille (retours à la ligne, séparateur jamais en tête de ligne) ; case visée par un glisser.
+
+---------------------------------------------------------------------------------------------------
+
+## 64b. Petites retouches du 2026-10-28 au soir (sur main)
+
+Demandes d'Anthony pendant ses essais, faites directement :
+- **Menu clic droit d'un plan du montage, sans sous-menu « Plus »** (copie d'écran annotée : « éviter le sur-développement ») : « Couleur du plan », « Transition au début du plan » et « Transition à la fin du plan » montent au premier niveau. « Rogner le plan » (règle de la timeline, menu Storyboard) et « Importer un son au début du plan » (menu Son) quittent ce menu. Dans « Version du plan », les deux « Nouvelle version » sont directement dans le sous-menu (« Nouvelle version (copie de celle-ci) », « Nouvelle version vide »), sans troisième niveau. Le menu a jusqu'à douze entrées (`menus_tests`).
+- **Cadre de format** (Cadrage > Format) : gris d'origine au lieu de rose, et plus d'étiquette « 16:9 » dans le champ. Sa couleur se règle dans Préférences > Dessin > Caméra, sur la ligne du passe-partout (« Cadre de format » ; clic droit : revenir au gris). Réglage du poste, `cadre_format_couleur`.
+- **Couleurs des calques** : vectoriel = l'orange de SHOT (assombri dans les rangées pour que les noms se lisent), bitmap = le bleu qu'avait le vectoriel. L'ancien vert du bitmap n'est plus utilisé.
+- **« + » d'un nouveau personnage** : plus de fenêtre « Modifier » ; le personnage arrive dans la barre, son nom et ses couleurs se changent au clic droit sur sa pastille ou dans le panneau Personnages.
+- **Mode concentration** sur F11 (voir la partie 17, § 2).

@@ -644,8 +644,8 @@ impl App {
     /// Menu du clic droit sur un plan de la bande de montage.
     ///
     /// Une dizaine d'entrées au premier niveau (simplification des barres, 2026-10-21) : les gestes de tous les jours
-    /// (animer, nouveau, dupliquer, copier, coller, supprimer), puis « Couper et réunir », « Version du plan » et « Plus »
-    /// (la couleur, le rognage, les transitions, un son au début du plan). Rien n'est retiré.
+    /// (animer, nouveau, dupliquer, copier, coller, supprimer), puis « Couper et réunir », « Version du plan », la couleur
+    /// du plan et ses deux transitions (2026-10-28 : plus de sous-menu « Plus »).
     pub(crate) fn panel_menu(&mut self, ui: &mut egui::Ui, index: usize) {
         if ui.button("Animer ce plan").clicked() {
             ui.close_menu();
@@ -687,26 +687,20 @@ impl App {
                 self.new_sequence_from_chosen();
             }
         });
-        // Les versions du plan (`planversui.rs`) : « Nouvelle version › » (en dupliquant la version en cours, ou en
+        // Les versions du plan (`planversui.rs`) : les deux « Nouvelle version » (en dupliquant la version en cours, ou en
         // partant d'un plan vide), puis passer à, restaurer, supprimer, comparer.
         self.version_menu(ui, index, true);
-        ui.menu_button("Plus", |ui| {
-            self.plan_color_menu(ui);
-            // Les coupes de part et d'autre du plan (`transitionsui.rs`).
-            self.cut_menu_named(ui, index, "Transition au début du plan");
-            self.cut_menu_named(ui, index + 1, "Transition à la fin du plan");
-            // Rogner : la durée exacte et les coupes à la tête de lecture ; le contenu rogné reste en
-            // réserve et revient en rallongeant le plan (`rognage.rs`).
-            ui.menu_button("Rogner le plan", |ui| self.trim_menu_items(ui, index));
-            if self.board_selection().len() > 1 {
-                self.action_item(ui, "Changer la durée des plans choisis…", "montage.duree_plans");
-            }
-            if ui.button("Importer un son au début du plan…").clicked() {
-                ui.close_menu();
-                let at = self.doc.panel_start(index.min(self.doc.panels.len() - 1));
-                self.import_sound(None, Some(at));
-            }
-        });
+        // Plus de sous-menu « Plus » (Anthony, 2026-10-28, copie d'écran annotée : « éviter le sur-développement ») : la
+        // couleur et les deux transitions montent au premier niveau. « Rogner le plan » (sur la règle de la timeline et dans
+        // le menu Storyboard) et « Importer un son au début du plan » (menu Son) quittent ce menu.
+        ui.separator();
+        self.plan_color_menu(ui);
+        // Les coupes de part et d'autre du plan (`transitionsui.rs`).
+        self.cut_menu_named(ui, index, "Transition au début du plan");
+        self.cut_menu_named(ui, index + 1, "Transition à la fin du plan");
+        if self.board_selection().len() > 1 {
+            self.action_item(ui, "Changer la durée des plans choisis…", "montage.duree_plans");
+        }
     }
 
     fn montage_strip(&mut self, ui: &mut egui::Ui, rows: &crate::montagerows::Rows) {

@@ -414,11 +414,13 @@ impl Palette {
             contour: if claire { gris(15) } else { Color32::WHITE },
             encre: if claire { Color32::WHITE } else { melange(rangee, Color32::BLACK, 0.6) },
             sur_calque: if claire { gris(20) } else { gris(242) },
-            dessin_vectoriel: jeu([86, 129, 255], [40, 90, 210]),
-            dessin_bitmap: jeu([10, 154, 128], [0, 120, 96]),
+            // Vectoriel : l'orange de SHOT (#E76F3C, assombri pour que les noms se lisent dessus) ; bitmap : le bleu qu'avait le
+            // vectoriel (Anthony, 2026-10-28). Le vert d'avant du bitmap n'est plus utilisé.
+            dessin_vectoriel: jeu([238, 124, 76], [200, 84, 36]),
+            dessin_bitmap: jeu([86, 129, 255], [40, 90, 210]),
             dessin_vide,
-            calque_vectoriel: if claire { Color32::from_rgb(110, 150, 230) } else { Color32::from_rgb(52, 91, 248) },
-            calque_bitmap: if claire { Color32::from_rgb(90, 175, 150) } else { Color32::from_rgb(6, 122, 103) },
+            calque_vectoriel: if claire { Color32::from_rgb(240, 150, 110) } else { Color32::from_rgb(178, 74, 30) },
+            calque_bitmap: if claire { Color32::from_rgb(110, 150, 230) } else { Color32::from_rgb(52, 91, 248) },
             dessin_couleur: jeu([229, 91, 182], [180, 30, 130]),
             calque_couleur: if claire { Color32::from_rgb(210, 120, 185) } else { Color32::from_rgb(176, 52, 136) },
             dessin_cfx: jeu([48, 208, 236], [0, 128, 168]),
@@ -710,8 +712,7 @@ pub const POIGNEE_DEFORMER: Color32 = Color32::from_rgb(255, 150, 60);
 pub const POIGNEE_CALQUE: Color32 = Color32::from_rgb(120, 220, 140);
 /// Zones de sécurité (action, titres).
 pub const CADRAGE_SECURITE: Color32 = Color32::from_rgb(0, 165, 195);
-/// Cadre d'un format de diffusion (16:9, 2,39:1…).
-pub const CADRAGE_FORMAT: Color32 = Color32::from_rgb(230, 60, 160);
+// (Le cadre d'un format de diffusion a sa couleur dans les réglages depuis le 2026-10-28 : `Settings::cadre_format_couleur`.)
 
 // ------------------------------------------------------------------- egui
 

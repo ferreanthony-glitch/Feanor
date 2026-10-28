@@ -311,6 +311,25 @@ impl App {
                 self.settings.passe_partout_couleur = c;
                 self.settings_a_ecrire = true;
             }
+            // Le cadre de format (Cadrage > Format) : gris d'origine depuis le 2026-10-28 (Anthony : il était rose). Sur la même
+            // ligne que le passe-partout : le groupe Caméra ne grandit pas.
+            ui.add_space(12.0);
+            ui.label("Cadre de format");
+            let mut c = self.settings.cadre_format_couleur;
+            let resp = ui.color_edit_button_srgb(&mut c);
+            let resp = crate::bulles::bulle(
+                resp,
+                "Couleur du cadre de format",
+                "Le cadre du format de diffusion (Cadrage > Format) tracé dans le cadre de la caméra : gris d'origine. Il ne touche pas aux exports. Clic droit : revenir au gris.",
+                "",
+            );
+            if resp.secondary_clicked() {
+                c = crate::settings::CADRE_FORMAT_COULEUR;
+            }
+            if c != self.settings.cadre_format_couleur {
+                self.settings.cadre_format_couleur = c;
+                self.settings_a_ecrire = true;
+            }
         });
         ui.horizontal(|ui| {
             ui.label("Opacité du passe-partout");

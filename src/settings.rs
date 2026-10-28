@@ -197,6 +197,10 @@ pub struct Settings {
     /// Couleur du passe-partout (rouge, vert, bleu) : noir d'origine.
     #[serde(default = "default_passe_partout_couleur", rename = "passe_partout_couleur")]
     pub passe_partout_couleur: [u8; 3],
+    /// Couleur du cadre de format tracé dans le cadre de la caméra (Cadrage > Format) : gris d'origine depuis le 2026-10-28
+    /// (rose avant ; Anthony le trouvait criard, et sans étiquette « 16:9 » dans le champ).
+    #[serde(default = "default_cadre_format_couleur", rename = "cadre_format_couleur")]
+    pub cadre_format_couleur: [u8; 3],
     /// Coller ce qui vient d'un projet d'une autre taille ou d'une autre cadence (`adaptation.rs`, `collage.rs`) : contenir
     /// ou remplir, images ou secondes, et poser la question ou non.
     #[serde(default, rename = "collage")]
@@ -249,6 +253,13 @@ fn default_passe_partout() -> u8 {
 
 fn default_passe_partout_couleur() -> [u8; 3] {
     crate::camtools::PASSE_PARTOUT_COULEUR
+}
+
+/// Le gris d'origine du cadre de format.
+pub const CADRE_FORMAT_COULEUR: [u8; 3] = [150, 150, 150];
+
+fn default_cadre_format_couleur() -> [u8; 3] {
+    CADRE_FORMAT_COULEUR
 }
 
 fn default_autosave() -> u32 {
@@ -320,6 +331,7 @@ impl Default for Settings {
             tremblement_defaut: Default::default(),
             passe_partout_actif: true,
             passe_partout_couleur: default_passe_partout_couleur(),
+            cadre_format_couleur: default_cadre_format_couleur(),
             collage: Default::default(),
             equipe: Default::default(),
             neutral_colors: crate::personnages::neutres_par_defaut(),

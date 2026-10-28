@@ -487,8 +487,11 @@ impl App {
                 self.status = if self.barre_perso_visible() { "Pastilles des personnages montrées dans cet espace de travail." } else { "Pastilles des personnages cachées dans cet espace de travail." }.into();
             }
             "perso.ajouter" => {
+                // Le personnage arrive tout de suite dans la barre, sans fenêtre « Modifier » (Anthony, 2026-10-28) : son nom et
+                // ses couleurs se changent dans le panneau Personnages ou au clic droit sur sa pastille.
                 if let Some(id) = self.perso_ajouter() {
-                    self.perso.edition = Some(Choix::Personnage(id));
+                    let nom = self.perso_nom(Choix::Personnage(id)).unwrap_or_default();
+                    self.status = format!("« {nom} » ajouté. Clic droit sur sa pastille ou panneau Personnages : son nom et ses couleurs.");
                 }
             }
             "perso.suivant" => self.perso_voisin(1),

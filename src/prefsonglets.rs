@@ -223,6 +223,7 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Dessin, G::Poignees, "dessin.rotation_autour", "Rotation autour de", "pivot coin opposé tourner rotation transformer sélection boîte"),
     r(O::Dessin, G::Camera, "dessin.passe_partout_couleur", "Couleur du passe-partout", "noir hors-champ voile cadre caméra"),
     r(O::Dessin, G::Camera, "dessin.passe_partout", "Opacité du passe-partout", "voile hors-champ estomper cadre caméra rétablir noir opaque"),
+    r(O::Dessin, G::Camera, "dessin.cadre_format_couleur", "Cadre de format", "cadre caméra format 16:9 rose gris cadrage couleur"),
     r(O::Dessin, G::Tremblement, "dessin.tremblement_defaut", "Tremblement du trait par défaut", "wiggle boil vectoriel tous les calques trait qui bouge allumer"),
     r(O::Dessin, G::Tremblement, "dessin.tremblement_intensite", "Intensité du tremblement par défaut", "amplitude pixels"),
     r(O::Dessin, G::Tremblement, "dessin.tremblement_frequence", "Fréquence du tremblement par défaut", "doux nerveux vagues rétablir"),

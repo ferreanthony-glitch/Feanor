@@ -130,10 +130,11 @@ fn each_kind_of_layer_has_its_colour() {
     use crate::document::LayerKind;
     for (choix, p) in livres() {
         theme::installer(&ReglageTheme { choix, perso: Couleurs::default() });
-        // Anthony : bitmap vert, vectoriel bleu, calque de couleur rose (ex-CTG) ; trois couleurs distinctes.
+        // Anthony (2026-10-28) : vectoriel orange (celui de SHOT), bitmap bleu (l'ancien bleu du vectoriel), calque de couleur
+        // rose (ex-CTG) ; trois couleurs distinctes.
         let (b, v, c) = (theme::couleur_calque(LayerKind::Bitmap, false), theme::couleur_calque(LayerKind::Vector, false), theme::couleur_calque(LayerKind::Bitmap, true));
-        assert!(b.g() > b.r() && b.g() > b.b() / 2, "{choix:?} : bitmap vert");
-        assert!(v.b() > v.r() && v.b() > v.g(), "{choix:?} : vectoriel bleu");
+        assert!(b.b() > b.r() && b.b() > b.g(), "{choix:?} : bitmap bleu");
+        assert!(v.r() > v.g() && v.g() > v.b(), "{choix:?} : vectoriel orange");
         assert!(c.r() > c.g() && c.b() > c.g(), "{choix:?} : calque de couleur rose");
         assert_eq!(theme::couleur_calque(LayerKind::Vector, true), c, "un calque de couleur reste rose, quelle que soit sa sorte");
         assert_eq!(theme::fond_calque(LayerKind::Vector, false), p.calque_vectoriel);

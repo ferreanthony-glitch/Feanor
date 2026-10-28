@@ -441,7 +441,7 @@ fn the_plus_adds_a_character_and_the_empty_pastille_lets_go() {
     assert_eq!(b.app.doc.personnages.len(), 1, "le « + » ajoute un personnage");
     let id = b.app.doc.personnages[0].id;
     assert_eq!(b.app.perso.actif, Some(Choix::Personnage(id)), "il est choisi tout de suite");
-    assert_eq!(b.app.perso.edition, Some(Choix::Personnage(id)), "et sa fenêtre Modifier s'ouvre");
+    assert_eq!(b.app.perso.edition, None, "sans fenêtre Modifier (Anthony, 2026-10-28)");
     assert!(b.app.stroke.is_none());
     // Sa pastille est dans la colonne, avant les couleurs neutres.
     let rangs: Vec<Case> = b.app.perso.cases.iter().map(|(_, c)| *c).collect();

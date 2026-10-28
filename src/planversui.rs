@@ -299,23 +299,21 @@ impl App {
         }
     }
 
-    /// « Nouvelle version › » du clic droit sur un plan : en dupliquant la version en cours, ou en partant d'un
-    /// plan vide.
+    /// Les deux « Nouvelle version » du clic droit sur un plan : en dupliquant la version en cours, ou en partant d'un
+    /// plan vide. Directement dans « Version du plan », sans sous-menu de plus (Anthony, 2026-10-28).
     pub(crate) fn nouvelle_version_menu(&mut self, ui: &mut egui::Ui, index: usize) {
-        ui.menu_button("Nouvelle version", |ui| {
-            let r = self.raccourci("version.nouvelle");
-            let b = ui.add(egui::Button::new("En dupliquant la version en cours").shortcut_text(r));
-            if bulles::bulle(b, "En dupliquant", "Garde le plan tel qu'il est comme version plus ancienne et continue sur une copie.", "").clicked() {
-                ui.close_menu();
-                self.nouvelle_version_du_plan(index);
-            }
-            let r = self.raccourci("version.vide");
-            let b = ui.add(egui::Button::new("En partant d'un plan vide").shortcut_text(r));
-            if bulles::bulle(b, "En partant d'un plan vide", "Garde le plan tel qu'il est et repart d'un calque de dessin vide : même durée, même cadre, même caméra.", "").clicked() {
-                ui.close_menu();
-                self.nouvelle_version_vide_du_plan(index);
-            }
-        });
+        let r = self.raccourci("version.nouvelle");
+        let b = ui.add(egui::Button::new("Nouvelle version (copie de celle-ci)").shortcut_text(r));
+        if bulles::bulle(b, "Nouvelle version, en dupliquant", "Garde le plan tel qu'il est comme version plus ancienne et continue sur une copie.", "").clicked() {
+            ui.close_menu();
+            self.nouvelle_version_du_plan(index);
+        }
+        let r = self.raccourci("version.vide");
+        let b = ui.add(egui::Button::new("Nouvelle version vide").shortcut_text(r));
+        if bulles::bulle(b, "Nouvelle version vide", "Garde le plan tel qu'il est et repart d'un calque de dessin vide : même durée, même cadre, même caméra.", "").clicked() {
+            ui.close_menu();
+            self.nouvelle_version_vide_du_plan(index);
+        }
     }
 
     /// Le sous-menu « Version du plan » du clic droit sur le plan `index` ; `avec_nouvelle` : il porte aussi

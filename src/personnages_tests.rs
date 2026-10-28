@@ -556,7 +556,7 @@ fn the_right_click_menu_actions_reach_the_same_commands() {
     let mut b = banc_dessin();
     b.app.run_action("perso.ajouter");
     assert_eq!(b.app.doc.personnages.len(), 1);
-    assert!(b.app.perso.edition.is_some(), "un nouveau personnage s'ouvre dans la fenêtre « Modifier »");
+    assert!(b.app.perso.edition.is_none(), "un nouveau personnage n'ouvre plus la fenêtre « Modifier » (Anthony, 2026-10-28)");
     assert!(b.app.perso.actif.is_some(), "et il est choisi");
 }
 
