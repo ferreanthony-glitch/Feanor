@@ -170,6 +170,15 @@ impl App {
             };
             textures.push(t);
         }
+        // Les versions de séquence (A, B…) qui montrent chaque version de ce plan, hors celle du film (`variantes.rs`).
+        let sequence = self.doc.sequence_of(e.index);
+        let par: Vec<String> = montrees
+            .iter()
+            .map(|c| {
+                let l: Vec<String> = self.doc.variantes_montrant(sequence, plan).into_iter().filter(|(_, v)| *v == c.numero).map(|(n, _)| crate::variantes::lettre(n)).collect();
+                l.join(", ")
+            })
+            .collect();
         let aspect = self.doc.frame[0] as f32 / self.doc.frame[1].max(1) as f32;
         let confirme = self.pile_versions.confirme;
         let affichee = etiquette(cartes.iter().find(|c| c.actuelle).map_or(1, |c| c.numero));
@@ -253,6 +262,8 @@ impl App {
                 } else {
                     String::new()
                 };
+                // Les autres versions de séquence qui montrent cette version : leurs lettres.
+                let sous = if par[k].is_empty() { sous } else if sous.is_empty() { par[k].clone() } else { format!("{sous} · {}", par[k]) };
                 p.text(pos2(x, rect.top() + 26.0), Align2::LEFT_TOP, sous, FontId::proportional(10.0), doux);
                 // La croix : supprimer la version (jamais celle qui est affichée).
                 let mut sur_croix = false;
@@ -272,11 +283,12 @@ impl App {
                 if survol && !c.actuelle && !sur_croix {
                     ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
                 }
+                let aussi = if par[k].is_empty() { String::new() } else { format!(" Les versions de séquence {} la montrent aussi : elles ne changent pas toutes seules, et elle ne se supprime pas tant qu'elles la montrent.", par[k]) };
                 if c.actuelle {
-                    bulles::bulle(carte, &format!("{nom}, version affichée"), "C'est celle que montrent le film, l'export et les envois.", "");
+                    bulles::bulle(carte, &format!("{nom}, version affichée"), &format!("C'est celle que montrent le film, l'export et les envois.{aussi}"), "");
                 } else {
                     let note = crate::planversui::phrase_duree(duree_affichee, c.duree, fps);
-                    bulles::bulle(carte, &format!("Passer à la {nom}"), &format!("Elle devient la version affichée ; la {affichee} est gardée. {note}"), "");
+                    bulles::bulle(carte, &format!("Passer à la {nom}"), &format!("Elle devient la version affichée ; la {affichee} est gardée. {note}{aussi}"), "");
                 }
                 if clique {
                     geste = Some(Geste::Passer(c.numero));

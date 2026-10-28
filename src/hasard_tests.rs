@@ -244,6 +244,11 @@ pub(crate) enum Geste {
     /// Un geste interrompu : appui et début du glissé (`geste` : trait dans une case, caméra, plan déplacé, trait dans le
     /// dessin, lasso, Décor), puis `INTERRUPTIONS[quoi]` pendant que le bouton est tenu, puis la fin du glissé et le lâcher.
     Interruption { geste: u8, case: u16, quoi: u8, dx: f32, dy: f32 },
+    /// Les versions de séquence qui partagent leurs plans (`variantes.rs`, partie 59) : `quoi` % 9, 0 à 2 une nouvelle version de
+    /// séquence (en gardant les plans, en les copiant, vide), 3 et 4 passer à l'une des autres (la `k`-ième), 5 une nouvelle version
+    /// du plan courant, 6 mettre le plan courant à jour dans les autres versions de séquence qui le montrent, 7 supprimer la
+    /// `k`-ième version de séquence, 8 passer le plan courant à sa version suivante.
+    Versions { quoi: u8, k: u8 },
 }
 
 /// Ce qui arrive pendant un geste (une touche de raccourci tenue, un clic ailleurs…) : une commande, un espace de travail
@@ -330,6 +335,8 @@ impl Geste {
             104..=108 => ChoisirCase { case, maj: h.pile(2) },
             109..=110 => Molette { dy: h.entre(-240.0, 240.0), ctrl: h.pile(2) },
             111 => Colonnes(h.sous(5) as u8),
+            // (Les quatre derniers rangs pris à `Interruption` : les autres gestes gardent leurs rangs, donc leurs suites de graines.)
+            120..=123 => Versions { quoi: h.sous(9) as u8, k: h.sous(8) as u8 },
             _ => Interruption { geste: h.sous(6) as u8, case, quoi: h.sous(INTERRUPTIONS.len()) as u8, dx: h.entre(-1.0, 1.0), dy: h.entre(-0.7, 0.7) },
         }
     }
@@ -591,7 +598,21 @@ fn photo_enregistrable(doc: &mut Document) -> String {
             }
         }
     }
+    // Le contenu rogné des plans du garage (`variantes.rs`) de même.
+    let variantes_gardees = doc.variantes.clone();
+    if !doc.variantes.is_empty() {
+        for var in std::sync::Arc::make_mut(&mut doc.variantes).values_mut() {
+            for g in var.garage.values_mut() {
+                if let Some(r) = g.reserve.as_mut() {
+                    for piece in [&mut r.head, &mut r.tail] {
+                        piece.layers.retain(|lp| g.panel.layers.iter().any(|l| l.id == lp.layer));
+                    }
+                }
+            }
+        }
+    }
     let s = photo(doc);
+    doc.variantes = variantes_gardees;
     doc.reserves = gardees;
     for (p, cs) in doc.panels.iter_mut().zip(couleurs) {
         for (l, c) in p.layers.iter_mut().zip(cs) {
@@ -1019,6 +1040,39 @@ impl Essai {
                 self.b.chauffer(2);
             }
             Enregistrer { rouvrir } => self.enregistrer(rouvrir),
+            Versions { quoi, k } => {
+                use crate::variantes::Nouvelle;
+                let app = &mut self.b.app;
+                let cur = app.cur_panel.min(app.doc.panels.len().saturating_sub(1));
+                let seq = app.doc.sequence_of(cur);
+                let numeros: Vec<u32> = app.doc.variantes_de(seq).map(|v| v.numeros()).unwrap_or_default();
+                let autres: Vec<u32> = app.doc.variantes_de(seq).map(|v| v.autres.iter().map(|r| r.numero).collect()).unwrap_or_default();
+                match quoi % 9 {
+                    0 => app.nouvelle_variante_de_sequence(seq, Nouvelle::Partager),
+                    1 => app.nouvelle_variante_de_sequence(seq, Nouvelle::Copier),
+                    2 => app.nouvelle_variante_de_sequence(seq, Nouvelle::Vide),
+                    3 | 4 => {
+                        if !autres.is_empty() {
+                            app.passer_a_la_variante(seq, autres[k as usize % autres.len()]);
+                        }
+                    }
+                    5 => app.nouvelle_version_du_plan(cur),
+                    6 => {
+                        let plan = app.doc.panels[cur].id;
+                        let cibles: Vec<u32> = app.doc.variantes_montrant(seq, plan).into_iter().map(|(n, _)| n).collect();
+                        if !cibles.is_empty() {
+                            app.mettre_a_jour_dans_les_variantes(seq, plan, &cibles);
+                        }
+                    }
+                    7 => {
+                        if numeros.len() > 1 {
+                            app.supprimer_la_variante(seq, numeros[k as usize % numeros.len()]);
+                        }
+                    }
+                    _ => app.run_action("version.suivante"),
+                }
+                self.b.chauffer(2);
+            }
         }
     }
 
@@ -1124,6 +1178,48 @@ impl Essai {
                         return Err(echec("sorte de dessin", format!("plan {i}, calque « {} » ({:?}) : le dessin {id} n'est pas de sa sorte", l.name, l.kind)));
                     }
                 }
+            }
+        }
+        // Les versions de séquence (`variantes.rs`) : chaque emplacement montre un plan qui est au film ou au garage, jamais aux
+        // deux, une seule fois par version de séquence, sous une version que le plan a ; le garage ne garde que ce que montre une
+        // version rangée ; ses dessins existent.
+        for (seq, v) in doc.variantes.iter() {
+            if !doc.sequences.iter().any(|s| s.id == *seq) {
+                return Err(echec("versions de séquence orphelines", format!("la séquence {seq} n'existe plus et garde des versions")));
+            }
+            if v.autres.is_empty() || v.autres.iter().any(|r| r.numero == v.actuelle) {
+                return Err(echec("numéros de versions de séquence", format!("séquence {seq} : choisie {} et rangées {:?}", v.actuelle, v.autres.iter().map(|r| r.numero).collect::<Vec<_>>())));
+            }
+            for (id, g) in &v.garage {
+                if g.panel.id != *id {
+                    return Err(echec("garage", format!("le plan {} est rangé sous le numéro {id}", g.panel.id)));
+                }
+                if ids.contains(id) {
+                    return Err(echec("plan au film et au garage", format!("le plan {id} est dans le film et au garage de la séquence {seq}")));
+                }
+                for c in std::iter::once(&g.panel).chain(g.versions.iter().flat_map(|x| x.autres.iter().map(|r| &r.panel))).flat_map(|p| p.layers.iter().flat_map(|l| l.frames.iter().flatten())) {
+                    if !doc.cels.contains_key(c) {
+                        return Err(echec("dessin du garage absent", format!("le plan {id} du garage cite le dessin {c}, qui n'existe pas")));
+                    }
+                }
+            }
+            for r in &v.autres {
+                let mut vus = BTreeSet::new();
+                for e in &r.contenu.slots {
+                    if !vus.insert(e.plan) {
+                        return Err(echec("plan en double", format!("la version de séquence {} de {seq} montre deux fois le plan {}", r.numero, e.plan)));
+                    }
+                    if !ids.contains(&e.plan) && !v.garage.contains_key(&e.plan) {
+                        return Err(echec("emplacement sans plan", format!("la version de séquence {} de {seq} montre le plan {}, ni au film ni au garage", r.numero, e.plan)));
+                    }
+                    if !doc.versions_connues(e.plan).contains(&e.version) {
+                        return Err(echec("version inconnue", format!("la version de séquence {} de {seq} montre {} du plan {}, qui a {:?}", r.numero, e.version, e.plan, doc.versions_connues(e.plan))));
+                    }
+                }
+            }
+            let montres: BTreeSet<u64> = v.autres.iter().flat_map(|r| r.contenu.slots.iter().map(|e| e.plan)).collect();
+            if let Some(id) = v.garage.keys().find(|id| !montres.contains(id)) {
+                return Err(echec("plan orphelin au garage", format!("le plan {id} est au garage de la séquence {seq} et aucune version rangée ne le montre")));
             }
         }
         // La planche : chaque case sur un plan qui existe, dans l'ordre du film et de lecture, sans chevauchement.
@@ -1699,6 +1795,29 @@ fn hasard_joining_a_plan_with_an_extra_bottom_layer_keeps_each_layer_its_own_dra
 fn hasard_pasting_images_on_a_layer_of_the_other_kind_pastes_nothing_of_the_wrong_kind() {
     rejouer(3586, &[Commande("images.copier"), Onglet { nouveau: true }, Commande("images.coller")]);
     rejouer(3666, &[Commande("panneau.nouveau"), TraitDessin { outil: 5, x0: 0.74, y0: 0.8, x1: 0.64, y1: 0.94 }, Commande("images.copier"), Interruption { geste: 0, case: 22, quoi: 17, dx: -0.76, dy: -0.19 }, Commande("images.coller")]);
+}
+
+/// Versions de séquence qui partagent leurs plans (partie 59) : réunir un plan qu'une autre version de séquence montre en garde une
+/// copie au garage, avec son contenu rogné rangé sous les numéros de calques de la copie ; l'enregistrement se relit à l'identique
+/// (graine 117 du passage long : un dessin du contenu rogné de la copie n'était pas relu).
+#[test]
+fn hasard_merging_a_plan_another_sequence_version_shows_keeps_its_trimmed_content() {
+    rejouer(
+        117,
+        &[
+            Espace(0),
+            MenuCase { case: 56, cadre: 3, entree: 4 },
+            Molette { dy: 119.56, ctrl: true },
+            Interruption { geste: 5, case: 42, quoi: 17, dx: 0.71, dy: -0.62 },
+            Note { case: 21, texte: 2, valider: true },
+            Interruption { geste: 3, case: 40, quoi: 11, dx: -0.81, dy: 0.33 },
+            Commande("image.precedente"),
+            Versions { quoi: 0, k: 0 },
+            Interruption { geste: 1, case: 5, quoi: 11, dx: -0.31, dy: -0.69 },
+            FusionnerPlans { de: 52, vers: 50, zone: 0 },
+            Enregistrer { rouvrir: false },
+        ],
+    );
 }
 
 /// Deux plans voisins dont la caméra monte au-dessus de la première rangée (graine 3694) : leurs enveloppes ne se recouvrent pas là-haut.

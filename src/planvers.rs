@@ -90,7 +90,7 @@ pub fn etiquette(numero: u32) -> String {
 }
 
 /// Échange le contenu de deux plans : tout, sauf leur numéro et leur scène.
-fn echanger(a: &mut Panel, b: &mut Panel) {
+pub(crate) fn echanger(a: &mut Panel, b: &mut Panel) {
     std::mem::swap(&mut a.layers, &mut b.layers);
     std::mem::swap(&mut a.length, &mut b.length);
     std::mem::swap(&mut a.action, &mut b.action);
@@ -253,16 +253,21 @@ impl Document {
         Some(v.actuelle)
     }
 
-    /// Supprime la version rangée `numero` du plan `plan` (jamais l'active). Quand il ne reste que
-    /// l'active, le plan n'a plus de versions.
+    /// Supprime la version rangée `numero` du plan `plan` (jamais l'active, jamais une version que montre une autre version de
+    /// séquence : `variantes.rs`). Quand il ne reste que l'active, le plan n'a plus de versions.
     pub fn supprimer_version(&mut self, plan: u64, numero: u32) -> bool {
+        if !self.version_montree_ailleurs(plan, numero).is_empty() {
+            return false;
+        }
+        let protegee = self.versions.get(&plan).is_some_and(|v| self.versions_protegees().contains(&(plan, v.actuelle)));
         let Some(v) = self.versions.get_mut(&plan) else { return false };
         let n = v.autres.len();
         v.autres.retain(|r| r.numero != numero);
         if v.autres.len() == n {
             return false;
         }
-        if v.autres.is_empty() {
+        // (Sauf si une autre version de séquence montre la version active sous son numéro : le plan le garde, `variantes.rs`.)
+        if v.autres.is_empty() && !protegee {
             self.versions.remove(&plan);
         }
         true
@@ -271,15 +276,23 @@ impl Document {
     /// Les versions « non affichées » : toutes les versions rangées (pas les actives) des plans qui existent
     /// encore, ou de ce seul plan (`seulement`). Rend (versions, plans). Les états gardés par les envois
     /// (`versions/`) n'en font pas partie : ils ne sont pas des versions du plan.
+    ///
+    /// Les versions que montrent d'autres versions de séquence (`variantes.rs`) ne sont pas « non affichées » : elles restent.
     pub fn versions_non_affichees(&self, seulement: Option<u64>) -> (usize, usize) {
+        let protegees = self.versions_protegees();
         let mut plans = 0;
         let mut versions = 0;
         for (i, v) in self.versions_vivantes() {
-            if seulement.is_some_and(|p| p != self.panels[i].id) || v.autres.is_empty() {
+            let id = self.panels[i].id;
+            if seulement.is_some_and(|p| p != id) {
+                continue;
+            }
+            let n = v.autres.iter().filter(|r| !protegees.contains(&(id, r.numero))).count();
+            if n == 0 {
                 continue;
             }
             plans += 1;
-            versions += v.autres.len();
+            versions += n;
         }
         (versions, plans)
     }
@@ -287,8 +300,16 @@ impl Document {
     /// Supprime les versions non affichées (voir `versions_non_affichees`) ; rend (versions, plans) supprimées.
     pub fn supprimer_versions_non_affichees(&mut self, seulement: Option<u64>) -> (usize, usize) {
         let compte = self.versions_non_affichees(seulement);
-        let vivants: Vec<u64> = self.panels.iter().map(|p| p.id).collect();
-        self.versions.retain(|plan, _| !(vivants.contains(plan) && seulement.is_none_or(|p| p == *plan)));
+        let protegees = self.versions_protegees();
+        let vivants: std::collections::HashSet<u64> = self.panels.iter().map(|p| p.id).collect();
+        for (plan, v) in self.versions.iter_mut() {
+            if vivants.contains(plan) && seulement.is_none_or(|p| p == *plan) {
+                v.autres.retain(|r| protegees.contains(&(*plan, r.numero)));
+            }
+        }
+        // Un plan qui n'a plus que sa version affichée n'a plus de versions (sauf si une autre version de séquence la
+        // montre sous son numéro : il le garde, pour que ce numéro reste le sien).
+        self.versions.retain(|plan, v| !v.autres.is_empty() || protegees.contains(&(*plan, v.actuelle)));
         compte
     }
 
@@ -355,7 +376,9 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
     for (i, v) in doc.versions_vivantes() {
         plans.push(plan_fichier(doc.panels[i].id, v)?);
     }
-    plans.retain(|p| !p.autres.is_empty());
+    // (Un plan sans autre version n'est écrit que si une autre version de séquence en montre la version active sous son numéro.)
+    let protegees = if doc.variantes.is_empty() { Default::default() } else { doc.versions_protegees() };
+    plans.retain(|p| !p.autres.is_empty() || protegees.contains(&(p.plan, p.actuelle)));
     if plans.is_empty() {
         return Ok(None);
     }
@@ -424,13 +447,15 @@ pub(crate) fn installer(doc: &mut Document, lu: Fichier, cles: Vec<(u64, u32)>, 
             continue;
         }
         let mut autres = Vec::new();
+        let sans_autre = p.autres.is_empty();
         for v in p.autres {
             match par_cle.remove(&(p.plan, v.numero)) {
                 Some(panel) => autres.push(Rangee { numero: v.numero, date: v.date, panel }),
                 None => warnings.push(format!("version {} d'un plan : illisible, ignorée.", etiquette(v.numero))),
             }
         }
-        if autres.is_empty() {
+        // (Une entrée sans autre version, écrite pour qu'une autre version de séquence retrouve le numéro de la version active, est gardée.)
+        if autres.is_empty() && !sans_autre {
             continue;
         }
         for r in &autres {

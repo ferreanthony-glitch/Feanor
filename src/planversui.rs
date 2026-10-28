@@ -181,6 +181,17 @@ impl App {
     /// Supprime la version rangée `numero` du plan `index` (une étape d'annulation la ramène).
     pub(crate) fn supprimer_la_version(&mut self, index: usize, numero: u32) {
         let Some(plan) = self.doc.panels.get(index).map(|p| p.id) else { return };
+        // Une version qu'une autre version de séquence montre ne se supprime pas (`variantes.rs`).
+        let ailleurs = self.doc.version_montree_ailleurs(plan, numero);
+        if !ailleurs.is_empty() && !self.content_refuses() {
+            let lettres: Vec<String> = ailleurs.iter().map(|n| crate::variantes::lettre(*n)).collect();
+            self.status = format!(
+                "La version {} est montrée par la version de séquence {} : elle ne se supprime pas. Faites montrer une autre version à celle-ci, ou supprimez-la d'abord.",
+                etiquette(numero),
+                lettres.join(", ")
+            );
+            return;
+        }
         if self.version_op(&format!("Supprimer la version {}", etiquette(numero)), index, |d| d.supprimer_version(plan, numero)) {
             self.status = format!("Version {} supprimée (Ctrl+Z la ramène).", etiquette(numero));
         }
@@ -221,6 +232,10 @@ impl App {
         let fps = self.doc.fps;
         let duree_active = crate::storyboard::duration_label(self.duree_du_plan(index), fps);
         let (mut passer, mut restaurer, mut supprimer, mut nouvelle, mut vide, mut comparer) = (None, None, None, false, false, None);
+        let sequence = self.doc.sequence_of(index);
+        let ailleurs = !self.doc.variantes_montrant(sequence, plan).is_empty();
+        let mut mettre_a_jour = false;
+        let parts: Vec<String> = autres.iter().map(|(n, _, _)| crate::variantesui::montree_par(&self.doc, sequence, plan, *n)).collect();
         ui.vertical(|ui| {
             ui.horizontal(|ui| {
                 ui.label(RichText::new(etiquette(actuelle)).strong()).on_hover_text("La version active du plan : celle que montrent le montage, l'export et les envois.");
@@ -236,12 +251,16 @@ impl App {
                 if bulles::icone(ui, ph::FILE_PLUS, "Nouvelle version, plan vide", "Garde le plan tel qu'il est et repart d'un calque vide : même durée, même cadre, même caméra.", &r).clicked() {
                     vide = true;
                 }
+                if ailleurs && bulles::icone(ui, ph::GIT_MERGE, "Mettre à jour dans les autres versions de séquence", "Les autres versions de la séquence où ce plan apparaît (celles que vous cochez) montreront la version d'aujourd'hui.", &self.raccourci("variante.mettre_a_jour")).clicked() {
+                    mettre_a_jour = true;
+                }
             });
-            for &(numero, date, duree) in &autres {
+            for (k, &(numero, date, duree)) in autres.iter().enumerate() {
                 ui.horizontal(|ui| {
                     let quand = if date > 0 { format!(" · {}", date_courte(date)) } else { String::new() };
                     let duree = crate::storyboard::duration_label(duree, fps);
-                    ui.label(RichText::new(format!("{}{quand} · {duree}", etiquette(numero))).color(theme::texte_doux()));
+                    let par = if parts[k].is_empty() { String::new() } else { format!(" · {}", parts[k]) };
+                    ui.label(RichText::new(format!("{}{quand} · {duree}{par}", etiquette(numero))).color(theme::texte_doux()));
                     if bulles::icone(ui, ph::SWAP, "Passer à cette version", "Elle devient la version active ; la version d'aujourd'hui est gardée.", "").clicked() {
                         passer = Some(numero);
                     }
@@ -262,6 +281,9 @@ impl App {
         }
         if vide {
             self.nouvelle_version_vide_du_plan(index);
+        }
+        if mettre_a_jour {
+            self.mettre_a_jour_demander(index);
         }
         if let Some(n) = passer {
             self.passer_a_la_version(index, n);
@@ -303,6 +325,8 @@ impl App {
         let actuelle = self.doc.numero_de_version(plan);
         let autres: Vec<(u32, u64, usize)> = self.doc.versions_du_plan(plan).map(|v| v.autres.iter().map(|r| (r.numero, r.date, r.panel.frame_count())).collect()).unwrap_or_default();
         let fps = self.doc.fps;
+        let sequence = self.doc.sequence_of(index);
+        let ailleurs = !self.doc.variantes_montrant(sequence, plan).is_empty();
         ui.menu_button(format!("Version du plan ({})", etiquette(actuelle)), |ui| {
             if avec_nouvelle {
                 self.nouvelle_version_menu(ui, index);
@@ -313,7 +337,9 @@ impl App {
                 }
                 let quand = if date > 0 { format!(" · {}", date_courte(date)) } else { String::new() };
                 let duree = crate::storyboard::duration_label(duree, fps);
-                ui.label(RichText::new(format!("{}{quand} · {duree}", etiquette(numero))).color(theme::texte_doux()));
+                let par = crate::variantesui::montree_par(&self.doc, sequence, plan, numero);
+                let par = if par.is_empty() { par } else { format!(" · {par}") };
+                ui.label(RichText::new(format!("{}{quand} · {duree}{par}", etiquette(numero))).color(theme::texte_doux()));
                 if ui.button(format!("Passer à la {}", etiquette(numero))).clicked() {
                     ui.close_menu();
                     self.passer_a_la_version(index, numero);
@@ -331,6 +357,13 @@ impl App {
             if ui.button("Comparer le plan…").on_hover_text("Deux versions, ou aujourd'hui et un envoi (lecture seule).").clicked() {
                 ui.close_menu();
                 self.comparer_ouvrir(index, None, None);
+            }
+            if ailleurs {
+                let b = ui.button("Mettre à jour dans les autres versions de séquence…");
+                if bulles::bulle(b, "Mettre à jour dans les autres versions de séquence", "Les autres versions de la séquence où ce plan apparaît montreront sa version d'aujourd'hui (celles que vous cochez).", "").clicked() {
+                    ui.close_menu();
+                    self.mettre_a_jour_demander(index);
+                }
             }
         });
     }

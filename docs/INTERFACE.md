@@ -3535,6 +3535,8 @@ vocabulaire.
 
 ## 36. Variantes de séquence : un autre découpage sans perdre le premier (2026-10-21, branche `variantes-sequence`)
 
+> **Depuis le 2026-10-28 (format 39, partie 59) :** les variantes s'appellent « versions de séquence » à l'écran et **partagent leurs plans** (une seule réserve de versions par plan ; chaque version de séquence garde son choix de plans, leurs durées et la version de chaque plan). Ce qui suit décrit le modèle d'avant (une variante = une copie complète des plans) : il reste vrai pour « Nouvelle version, en copiant les plans » et pour les anciens projets ; le reste est dans la partie 59.
+
 Anthony : « essayer un autre découpage d'une séquence (A plus serrée, B avec un plan de plus…) sans perdre le premier ». Ce ne sont ni des versions du film
 entier (trop lourd) ni des versions d'un plan (partie 15) : une variante est **un jeu de plans pour la séquence**. Code : `src/variantes.rs` (modèle et fichier),
 `src/variantesui.rs` (sélecteur, menus, fenêtres), essais `src/variantes_tests.rs`.
@@ -4749,6 +4751,7 @@ Ctrl+V les **insère** avant l'image courante, comme avant. Aussi d'un plan à l
 7. Préférences > Montage > « Durée d'un nouveau plan » : mets 3 s ; « Nouveau plan » donne un plan de 3 s (72 images à 24 i/s) ; les anciens plans ne changent pas. « Rétablir 2 s ».
 8. Choisis trois plans, clic droit > « Changer la durée des plans choisis… » : le champ montre la durée d'un nouveau plan ; tape 36 : les trois durent 36 images. Tape « +12 » : chacun gagne 12. Raccourcis : la fin est rognée, et revient en rallongeant. S'il y a du son après, la fenêtre et la barre d'état le disent. Ctrl+Z : un seul pas.
 
+---------------------------------------------------------------------------------------------------
 
 ## 56. Les outils de l'aplat : deux interrupteurs, sélection, plusieurs clés, portée de la couleur (2026-10-28, branche `aplat-outils`)
 
@@ -4876,6 +4879,86 @@ Le pinceau ordinaire n'est pas ralenti (la machine fait aussi tourner d'autres s
 6. **Mélangeur** : clic maintenu sur l'icône du pinceau (petit coin) : le mélangeur, icône de goutte ; bulle d'une seconde ; sur un calque bitmap il étale ce qui est peint, sur un vectoriel la barre d'état le refuse. Clic droit sur l'icône : « Assigner un raccourci ».
 7. Panneau Couleur : le volet « Palette de mélange » est replié ; ouvre-le : peins du jaune, puis du bleu en travers : du vert. Alt + clic sur le vert : il devient l'avant-plan ; essaie aussi avec l'outil Pipette. Quitte SHOT, relance, rouvre le volet : la palette est là. La corbeille la vide.
 8. Un projet ouvert avant cette branche : les brosses de gouache se comportent à peu près comme avant (le mélange des couleurs est devenu soustractif : un blanc sur du rouge est plus rosé, un bleu sur du jaune plus vert).
+
+---------------------------------------------------------------------------------------------------
+
+## 59. Versions de séquence et versions de plans (2026-10-28, branche `versions-sequence`)
+
+Anthony : « On a parlé je crois d'avoir des versions de séquences également. Il faut permettre de basculer une version de plan, d'une version de séquence à une autre. » Puis : toute nouvelle version d'un plan est disponible dans toutes les versions de séquence ; le choix des plans et leurs durées varient d'une version de séquence à l'autre ; on peut mettre à jour un plan dans une autre version de séquence.
+Code : `src/variantes.rs` (modèle et fichier), `src/variantesui.rs` (sélecteur, menus, fenêtres), `src/planvers*.rs` et `pileversui.rs` (versions de plans, partie 15), essais `src/versions_sequence_tests.rs` et `src/variantes_tests.rs`, gestes du hasard `Geste::Versions` dans `src/hasard_tests.rs`. **Format du projet : 39.**
+
+### Le modèle d'avant (partie 36 jusqu'au format 38)
+
+- Une **variante** de séquence (A, B…) était **un jeu de plans complet et indépendant** : à la création « en dupliquant », la séquence recevait une copie profonde (numéros neufs, dessins dupliqués, tuiles partagées jusqu'à la première retouche) de ses plans, de leurs versions, de leurs commentaires et de leurs transitions ; la copie était rangée.
+- Les **versions d'un plan** (V1, V2…, partie 15) vivaient **dans chaque plan** : `Document::versions[numéro du plan]`. Une copie de variante avait donc ses propres versions, avec les mêmes numéros V1, V2 mais d'autres plans : une nouvelle version créée dans une variante n'existait **pas** dans l'autre.
+
+### Le modèle d'aujourd'hui (format 39) — et pourquoi
+
+- **Un plan existe une fois**, avec toutes ses versions : **une seule réserve de versions par plan**, quelle que soit la version de séquence qui le montre.
+- Une **version de séquence** (nom d'interface ; « variante » dans le code) n'a plus de plans à elle : elle garde **sa liste d'emplacements** — quel plan, dans quelle scène, **quelle version du plan** elle montre, **quelle durée** elle lui donne — plus ses scènes, ses transitions et les liens des références. L'ordre, le choix des plans, les durées et la version montrée sont donc propres à chaque version de séquence ; ce qu'il y a dans un plan (dessins, caméra, textes, commentaires, contenu rogné, versions) est commun.
+- La version de séquence **choisie** est celle du film (comme avant : montage, lecture, exports, numérotation, relecture et fiche technique la suivent). Les autres sont rangées avec leurs emplacements seulement ; les plans que le film ne montre pas pour l'instant (mais qu'une version rangée montre) sont **au garage** (`VariantesDeSequence::garage`), avec leurs versions, leur contenu rogné et leurs commentaires.
+- Passer d'une version de séquence à une autre : on range les emplacements de l'une et on fait entrer les plans de l'autre, chacun **sur la version et à la durée de son emplacement**. Aucun dessin n'est recopié ni relu.
+- Pourquoi cette évolution (la plus petite qui donne les trois règles) : une copie par variante ne pouvait pas partager les versions ; garder le plan unique et faire de la version de séquence un simple découpage donne les trois règles sans ajouter de concept à l'écran (le badge V1 / V2 et sa pile font le choix de version, comme avant).
+- Nom à l'écran : **« version de séquence »** (lettres A, B, C… inchangées), distinct des **versions de plan** (V1, V2…). Les commandes gardent leurs identifiants `variante.*` (les raccourcis assignés restent).
+
+### Où ça se trouve
+
+| Geste | Où |
+|---|---|
+| Sélecteur « A · B · C » (clic = passer à la version de séquence ; clic droit = renommer, comparer, supprimer) | rangée discrète en haut de la vue Vignettes (partie 36) ; icône branche = menu « Versions de la séquence » |
+| **Nouvelle version, en gardant les plans** (`variante.nouvelle`, par défaut) / **en copiant les plans** (`variante.copie`) / **en partant d'un plan vide** (`variante.vide`) | menu de l'icône ; Storyboard > Versions de la séquence ; clic droit sur la barre de la séquence du montage ; Ctrl+K |
+| **Choisir la version d'un plan dans la version de séquence en cours** | le badge « V2 » du plan (timeline, planche) : survoler ouvre la pile, clic sur une carte (`Passer à la version V1`, partie 15) ; fiche du plan ; clic droit > Version du plan |
+| **Mettre à jour dans les autres versions de séquence…** (`variante.mettre_a_jour`, sans touche) | menu des versions de la séquence ; clic droit sur le plan > Version du plan ; fiche du plan (icône fusion, visible quand une autre version de séquence montre le plan) ; Ctrl+K |
+| Passer à la version précédente / suivante, renommer, comparer, supprimer | comme avant (`variante.precedente`, `variante.suivante`, `variante.renommer`, `variante.comparer`, `variante.supprimer`) |
+
+### Les gestes
+
+- **Nouvelle version de séquence, en gardant les plans** : la séquence continue sur **les mêmes plans**, aux mêmes versions et aux mêmes durées ; l'ancienne est rangée telle quelle (ses emplacements). **Rien n'est recopié.** Attention : retoucher un plan **le retouche dans les deux versions de séquence** s'ils en montrent la même version. Pour continuer à part sans toucher à l'autre : « Nouvelle version du plan » (le plan d'avant reste tel quel dans l'autre version de séquence).
+- **Nouvelle version, en copiant les plans** : comme avant le format 39, une copie profonde que rien ne relie à l'original (la copie est rangée au garage, sous l'ancienne lettre ; le film ne bouge pas). Pour essayer un autre découpage **en redessinant** sans toucher au premier.
+- **Nouvelle version, en partant d'un plan vide** : le découpage en cours est rangé, la séquence repart d'une scène et d'un plan vide ; les plans d'avant sont au garage.
+- **Mettre à jour dans les autres versions de séquence…** : une petite fenêtre liste les **autres versions de séquence où ce plan apparaît** (« B · serré — montre V1 »), avec une case chacune ; celles qui montrent déjà la version courante sont grisées. « Mettre à jour » fait **montrer la version courante du plan** aux versions cochées : leur durée, leur ordre et leurs autres plans ne bougent pas ; l'ancienne version reste dans le plan.
+- **Une nouvelle version d'un plan est proposée par toutes les versions de séquence** (pile du badge, fiche, menu) ; les **autres versions de séquence ne basculent pas d'elles-mêmes** : seule la mise à jour le fait, ou le choix dans la version de séquence en cours. Dans la pile, chaque carte dit par quelle(s) autre(s) version(s) de séquence (A, B…) sa version est montrée (« affichée · A »).
+- **Une version de plan qu'une autre version de séquence montre ne se supprime pas** (la croix, le menu, la fiche le refusent avec la raison ; « Supprimer les versions non affichées » la garde et ne la compte pas). Une fois que cette version de séquence en montre une autre, elle se supprime.
+- **Supprimer un plan, une scène ou réunir deux plans** dans une version de séquence : si une autre version de séquence montre ce plan, il est **gardé au garage** (on ne supprime un plan que de la version de séquence où l'on est). Supprimer une version de séquence ne supprime que les plans que plus aucune autre ne montre (la confirmation le dit : « Aucun plan n'est supprimé : … »).
+- Un geste = **une étape d'annulation nommée** (panneau Historique) : « Nouvelle version de la séquence », « … plans copiés », « … vide », « Passer à la version de séquence B », « Supprimer la version de séquence B », « Renommer la version de séquence B », « Mettre à jour le plan dans N versions de séquence », et celles des versions de plans (« Passer à la version V1 »…). Le storyboard verrouillé les refuse.
+
+### Anciens projets (format 38 ou moins)
+
+Un projet d'avant s'ouvre **sans rien perdre ni fusionner**, à l'identique à l'écran : ses variantes étaient des copies complètes ; chacun de leurs plans devient un plan du garage (avec ses versions, son contenu rogné, ses commentaires) montré par un emplacement de la version de séquence qui le portait. Le plan copié et son original **restent deux plans** : ces anciennes copies ne partagent pas leurs versions avec le film. Les nouvelles versions de séquence, elles, partagent leurs plans. Enregistré, le projet passe au format 39 ; une version de SHOT qui connaît 38 au plus **refuse** un projet 39 (« créé par une version plus récente »).
+
+### Fichier
+
+`variantes.json` (format 2 ; le 1, celui des copies complètes, se lit toujours) : par séquence, la version choisie, les **plans du garage** (entrée du manifeste, versions, contenu rogné, commentaires) et pour chaque version rangée ses scènes, ses **emplacements** (`plan`, `scene`, `version`, `duree`), ses transitions, ses références. Les dessins sont dans `dessins/`. Un fichier illisible ou plus récent n'est jamais effacé ; le projet s'ouvre sans les versions de séquence rangées (avertissement) et l'enregistrement ne nettoie pas `dessins/`.
+
+### Travailler à plusieurs
+
+Comme avant : créer, passer, supprimer, renommer, **mettre à jour** demandent le jeton du montage ; les plans que l'échange fait sortir du film doivent être à moi ou libres. Les plans du garage et les emplacements sont une annexe du montage (`variantes.json` du dossier partagé, écrit par celui qui tient le jeton). Voir `docs/COOPERATION.md`, §12.
+
+### Limites connues
+
+- Retoucher une version de plan que deux versions de séquence montrent la retouche dans les deux (c'est le même plan) : pour les séparer, faire une nouvelle version du plan **avant** de retoucher, ou créer la version de séquence « en copiant les plans ».
+- La durée d'un plan propre à une version de séquence n'est appliquée que **sans couper d'images** : une durée plus courte que le contenu animé du plan ne le raccourcit pas (on rogne dans le montage, ce qui vaut pour toutes les versions de séquence) ; pour les plans fixes (un dessin tenu), la durée est exactement celle de chaque version de séquence.
+- Un plan déplacé vers une **autre séquence** (« Nouvelle séquence avec les plans choisis », déplacement) n'est plus montré par les autres versions de sa séquence d'origine.
+- Les anciennes copies de variantes (format 38) ne partagent pas leurs versions de plan avec les plans du film.
+- Comparer reste plan par plan (même rang), sous la version que chaque version de séquence montre.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Vue Vignettes : l'icône branche de la séquence du plan courant > « Nouvelle version, en gardant les plans » : la rangée montre « Séquence 2 · A B » avec **B** enfoncée ; le film n'a pas bougé ; la barre de la séquence dit « Séquence 2 · B ».
+2. Sur un plan, clic droit > Nouvelle version > En dupliquant : « V2 » apparaît. Survole « V2 » : dans la pile, la carte V1 porte la lettre **A** (« V1 · A ») : la version de séquence A la montre.
+3. Clique **A** : le plan montre V1 (la B avait V2) ; clique **B** : V2 est là. Ctrl+Z après chaque passage.
+4. Dans la B, raccourcis un plan fixe, supprime-en un autre, change l'ordre : clique **A** : tout est comme avant (durées, plans, ordre) ; reclique **B** : ton découpage est là.
+5. Dans la B, plan en V2 : clic droit > Version du plan > « Mettre à jour dans les autres versions de séquence… » (ou l'icône de la fiche) : la fenêtre liste « A — montre V1 » avec une case ; coche, valide : la barre d'état le dit ; passe à **A** : le plan montre V2, à sa durée d'avant. Ctrl+Z défait.
+6. Une version de plan montrée par une autre version de séquence : la croix de sa carte (ou le menu) refuse avec la raison ; « Supprimer les versions non affichées… » ne la compte pas.
+7. Dans la B, supprime un plan (Suppr) : clique **A** : le plan y est toujours. Supprime la version de séquence B (clic droit sur la lettre) : la confirmation dit combien de plans partent (aucun si A montre les mêmes).
+8. « Nouvelle version, en copiant les plans » : redessine un plan dans la nouvelle : la première n'a pas bougé. Avec « en gardant les plans », redessiner dans l'une redessine dans l'autre : normal, c'est le même plan (fais une version du plan avant de redessiner pour séparer).
+9. Enregistre, ferme, rouvre : les versions de séquence, leurs noms, leurs durées, la version de chaque plan et la version choisie sont là. Rouvre un **projet d'avant** qui avait des variantes : elles sont là, identiques, sans rien en plus à l'écran.
+10. Film partagé : sans le jeton du montage, créer, passer et mettre à jour sont refusés avec la raison ; avec le jeton, ça marche.
+11. Au repos, avec des versions de séquence : rien ne bouge, le processeur reste à zéro.
+
+### Essais
+
+`versions_sequence_tests.rs` : une nouvelle version de plan visible dans toutes les versions de séquence sans rien recopier ; durées, plans et ordre différents par version de séquence ; plan supprimé gardé pour l'autre ; suppression d'une version de séquence (seuls les plans exclusifs partent) ; plan partagé retouché dans les deux, copie à part ; bascule d'une version de plan dans une seule version de séquence ; mise à jour des versions cochées seulement, durées gardées ; version montrée ailleurs ni supprimée ni purgée (numérotation gardée) ; chaque geste est une étape d'annulation nommée ; la fenêtre de mise à jour ; enregistrer puis relire à l'identique, octet pour octet ; **projet 38 avec variantes ouvert sans perte** (fichier réécrit au format 1) et projet plus récent refusé ; film partagé (jeton, garage, relecture). `variantes_tests.rs` (reprise de la partie 36 sur le nouveau modèle) ; le hasard (`hasard_tests.rs`, `Geste::Versions`) crée, passe, met à jour, supprime et bascule au hasard, avec les invariants du garage et des emplacements.
 
 ---------------------------------------------------------------------------------------------------
 

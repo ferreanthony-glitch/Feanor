@@ -23,7 +23,7 @@ pub(crate) fn projet_riche(travail: &Path) -> Document {
     let mut doc = projet_complet(travail).doc;
     doc.nouvelle_version(1, 1_760_000_000);
     let seq = doc.sequence_of(0);
-    doc.nouvelle_variante(seq, false, 1_760_000_100);
+    doc.nouvelle_variante(seq, crate::variantes::Nouvelle::Copier, 1_760_000_100);
     let id = doc.panels.iter().flat_map(|p| &p.layers).flat_map(|l| l.frames.iter().flatten()).copied().find(|id| doc.cels[id].vector.is_none()).expect("un dessin bitmap");
     let cel = doc.cels.get_mut(&id).expect("dessin");
     cel.raster.absorb_beyond(-2, -1, Tile::new([Color32::from_rgba_premultiplied(40, 90, 200, 255); TILE_PIXELS]));

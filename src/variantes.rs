@@ -1,52 +1,69 @@
-//! Variantes de séquence : essayer un autre découpage d'une SÉQUENCE (A plus serrée, B avec un plan de plus…) sans
-//! perdre le premier (Anthony, 2026-10-21). Ce ne sont pas des versions du film entier (trop lourd), ni des
-//! versions d'un plan (`planvers.rs`) : une variante est **un jeu de plans** pour la séquence.
+//! Versions de séquence (le code les appelle encore « variantes » ; à l'écran : « version de séquence », A, B, C…) :
+//! essayer un autre découpage d'une SÉQUENCE (A plus serrée, B avec un plan de plus…) sans perdre le premier
+//! (Anthony, 2026-10-21), **en partageant les plans** (Anthony, 2026-10-28 : « toute nouvelle version d'un plan est
+//! disponible dans toutes les versions de séquence ; le choix des plans et leurs durées varient d'une version de séquence
+//! à l'autre ; on peut mettre à jour un plan dans une autre version de séquence »).
 //!
-//! # Le modèle
+//! # Le modèle (format 39)
 //!
-//! Une séquence a toujours **une variante choisie** : ce sont ses scènes et ses plans dans `Document::scenes` et
-//! `Document::panels`, donc ce que montrent le montage, la lecture, les exports, la numérotation, l'export pour le
-//! montage, la relecture et la fiche technique. Les **autres variantes** sont rangées (`VarianteRangee`) dans
-//! `Document::variantes`, par numéro de séquence, avec **tout ce qui tient à leurs plans** : leurs scènes, leurs
-//! plans (dessins, marques d'image, clés de caméra, textes), les versions de chaque plan (`planvers.rs`), le contenu
-//! rogné, les commentaires, les transitions d'un plan à l'autre de la variante et les liens des références. Une
-//! variante rangée est donc complète et indépendante : rien d'elle ne traîne dans les tables du film.
+//! Un **plan** existe une seule fois dans le projet, avec **ses versions** (V1, V2…, `planvers.rs`) : une seule réserve de
+//! versions par plan, quel que soit le nombre de versions de séquence qui le montrent. Une **version de séquence** ne
+//! possède plus de plans : c'est une liste d'**emplacements** (`Emplacement`) — quel plan, dans quelle scène, **quelle
+//! version** du plan elle montre, et quelle **durée** elle lui donne — plus ses scènes, ses transitions et les liens des
+//! références. L'ordre, le choix des plans, leurs durées et la version montrée de chacun sont donc propres à chaque version
+//! de séquence ; ce qui est dans un plan (ses dessins, sa caméra, ses textes, ses commentaires, son contenu rogné, ses
+//! versions) est commun.
 //!
-//! Une séquence qui n'a jamais eu de variante n'a pas d'entrée : c'est la variante A.
+//! - La **version choisie** de la séquence est celle du film : ses plans sont dans `Document::panels` (montage, lecture,
+//!   exports, numérotation, relecture, fiche technique la suivent), chacun montrant sa version active.
+//! - Les **autres versions de séquence** sont rangées (`VarianteRangee`) dans `Document::variantes`, par numéro de
+//!   séquence : seulement leurs emplacements. Les plans que le film ne montre pas pour l'instant, mais qu'une version
+//!   rangée montre, sont au **garage** (`VariantesDeSequence::garage` : le plan tel qu'il serait dans le film, avec ses
+//!   versions, son contenu rogné et ses commentaires).
+//! - Passer d'une version de séquence à une autre : on range les emplacements de l'une, et on fait entrer les plans de
+//!   l'autre (ceux que le film montre déjà y restent, les autres sortent du garage), chacun sur la version et à la durée de
+//!   son emplacement. Aucun dessin n'est recopié ni relu.
+//! - **Retoucher un plan retouche le plan** : si une autre version de séquence en montre la même version, elle la voit
+//!   retouchée. Pour continuer sur une autre forme sans toucher à la première : « Nouvelle version du plan » (partie 15) ;
+//!   la nouvelle version est tout de suite proposée par toutes les versions de séquence, qui ne basculent pas d'elles-mêmes.
+//!   « Mettre à jour dans les autres versions de séquence » fait montrer la version courante du plan aux versions cochées.
+//! - Un plan retiré du film (supprimé, ou réuni à un voisin) qu'une autre version de séquence montre est **gardé au
+//!   garage** (`Document::ranger_plan_partage`) : on ne supprime un plan que de la version de séquence où l'on est.
+//! - Une version d'un plan que montre une autre version de séquence **ne se supprime pas** (`version_montree_ailleurs`).
 //!
-//! - **Nouvelle variante, en dupliquant** : le film ne bouge pas (mêmes plans, mêmes numéros : l'historique, la
-//!   sélection, les notes de la planche accrochées à ses plans, les envois suivent) ; ce sont ses plans qui prennent
-//!   le numéro suivant, et c'est une **copie profonde** (numéros neufs de plans, de scènes, de marques et de calques,
-//!   dessins dupliqués — les tuiles restent partagées jusqu'à la première retouche) qui est rangée sous le numéro
-//!   qu'ils portaient.
-//! - **Nouvelle variante, vide** : le jeu de plans en cours est rangé tel quel ; la séquence repart d'une scène et d'un
-//!   plan vide.
-//! - **Passer à une variante** : le jeu de plans de la séquence et celui de la variante choisie s'échangent. Les
-//!   transitions aux bords de la séquence (avec le plan d'avant et le plan d'après) restent sur la coupe : elles
-//!   passent au nouveau premier ou dernier plan.
-//! - **Supprimer** une variante (jamais la dernière) ; **renommer** (A, B, C par défaut ; un nom court en plus).
+//! # Trois façons d'en créer une
 //!
-//! Tout cela est dans `Structure` (`Arc` : la copier pour l'annulation ne recopie rien) : une opération = une étape
-//! d'annulation nommée. Les dessins des variantes rangées sont de vrais dessins du projet (`dessins/`), comptés par
-//! `Document::used_cels`.
+//! - **Garder les plans** (`Nouvelle::Partager`, par défaut) : la nouvelle version montre les mêmes plans, aux mêmes versions
+//!   et durées ; l'ancienne est rangée telle quelle. Rien n'est recopié.
+//! - **Copier les plans** (`Nouvelle::Copier`) : comme avant le format 39, une copie profonde (numéros neufs, dessins
+//!   dupliqués : les tuiles restent partagées jusqu'à la première retouche) que rien ne relie à l'original. La copie est
+//!   rangée au garage, sous l'ancienne version de séquence ; le film ne bouge pas.
+//! - **Partir d'un plan vide** (`Nouvelle::Vide`) : le jeu en cours est rangé, la séquence repart d'une scène et d'un plan vide.
+//!
+//! # Anciens projets
+//!
+//! Un projet d'avant (format 38 ou moins) a des variantes qui sont des copies profondes complètes : elles s'ouvrent
+//! **sans rien perdre ni fusionner** (`installer`) — chacun de leurs plans devient un plan du garage, avec ses versions, son
+//! contenu rogné et ses commentaires, montré par un emplacement. Ces plans n'ont pas de lien avec ceux du film (le plan
+//! copié et son original sont deux plans) : les nouvelles versions de séquence, elles, partagent leurs plans.
 //!
 //! # Les envois
 //!
-//! Une copie profonde a des numéros de plans neufs : pour que « modifié depuis l'envoi » reste juste, chaque plan copié
-//! se souvient du plan dont il vient (`VariantesDeSequence::origines`), et `Document::plan_dans_envoi` remonte cette
-//! filiation jusqu'à un plan que l'envoi connaît. Un envoi note aussi la variante choisie de chaque séquence qui en a
-//! plusieurs (`envois::VarianteEnvoyee`).
+//! Un plan copié (`Nouvelle::Copier`) se souvient du plan dont il vient (`VariantesDeSequence::origines`), et
+//! `Document::plan_dans_envoi` remonte cette filiation jusqu'à un plan que l'envoi connaît ; les plans partagés gardent leur
+//! numéro. Un envoi note aussi la version choisie de chaque séquence qui en a plusieurs (`envois::VarianteEnvoyee`).
 //!
 //! # Fichier
 //!
-//! `variantes.json` à côté du manifeste, sans changer `project::VERSION` : pour chaque séquence, la variante choisie
-//! (son numéro et son nom) et, pour chaque variante rangée, ses scènes, ses plans (l'entrée du manifeste,
-//! `project::snapshot_value`), les versions de chaque plan, son contenu rogné, ses commentaires et ses transitions. À
-//! l'ouverture, les plans passent par la lecture ordinaire du manifeste (une séquence cachée qu'on retire ensuite du
-//! film, comme pour `plans_versions.json`) : leurs dessins se chargent avec les autres, avec les mêmes protections.
-//! Un fichier illisible ou plus récent n'est jamais effacé (`write_sidecar`), et tant qu'il est là l'enregistrement ne
-//! nettoie pas `dessins/`. Dans un projet partagé (`docs/COOPERATION.md`), c'est une annexe du montage : seul le
-//! porteur du jeton l'écrit, et changer de variante demande ce jeton.
+//! `variantes.json` à côté du manifeste (format 2 ; le format 1, celui des copies complètes, se lit toujours) : pour chaque
+//! séquence, la version choisie (son numéro et son nom), les plans du garage (l'entrée du manifeste,
+//! `project::snapshot_value`, leurs versions, leur contenu rogné, leurs commentaires) et, pour chaque version rangée, ses
+//! scènes, ses emplacements, ses transitions. À l'ouverture, les plans du garage passent par la lecture ordinaire du
+//! manifeste (une séquence cachée qu'on retire ensuite du film, comme pour `plans_versions.json`) : leurs dessins se
+//! chargent avec les autres, avec les mêmes protections. Un fichier illisible ou plus récent n'est jamais effacé
+//! (`write_sidecar`), et tant qu'il est là l'enregistrement ne nettoie pas `dessins/`. Dans un projet partagé
+//! (`docs/COOPERATION.md`), c'est une annexe du montage : seul le porteur du jeton l'écrit, et changer de version de
+//! séquence demande ce jeton.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::Path;
@@ -62,37 +79,128 @@ use crate::transitions::Transition;
 
 pub(crate) const FILE: &str = "variantes.json";
 const FORMAT: &str = "shot-variantes-sequences";
-const VERSION: u32 = 1;
-/// Le plus grand nombre de variantes d'une séquence : une lettre chacune, de A à Z.
+/// 2 : versions de séquence qui partagent leurs plans (`garage`, `emplacements`) ; 1 : copies complètes (toujours lu).
+const VERSION: u32 = 2;
+/// Le plus grand nombre de versions de séquence d'une séquence : une lettre chacune, de A à Z.
 pub const MAX_VARIANTES: usize = 26;
-/// Plus long nom de variante gardé.
+/// Plus long nom de version de séquence gardé.
 pub const MAX_NOM: usize = 40;
-/// Le plus de plans qu'une variante rangée peut avoir à la lecture (un fichier abîmé ne remplit pas la mémoire).
+/// Le plus de plans que le garage d'une séquence peut avoir à la lecture (un fichier abîmé ne remplit pas la mémoire).
 const MAX_PLANS: usize = 20_000;
 
-/// Tout ce que possède un jeu de plans : ce qui s'échange quand on passe d'une variante à l'autre.
+/// Comment on crée une version de séquence (voir l'en-tête du module).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Nouvelle {
+    /// Les mêmes plans, aux mêmes versions et aux mêmes durées : rien n'est recopié.
+    Partager,
+    /// Une copie profonde des plans, que rien ne relie à l'original.
+    Copier,
+    /// Un plan vide.
+    Vide,
+}
+
+/// Où une version de séquence montre un plan : le plan, sa scène dans cette version, la version du plan qu'elle montre et
+/// la durée qu'elle lui donne.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Emplacement {
+    /// Le numéro du plan.
+    pub plan: u64,
+    pub scene: u64,
+    /// Le numéro de la version du plan montrée (1 tant que le plan n'a qu'une version).
+    pub version: u32,
+    /// La durée voulue, en images (la durée du plan quand la version de séquence a été rangée).
+    pub duree: usize,
+}
+
+/// Ce que possède une version de séquence rangée : de quoi refaire son découpage.
 #[derive(Clone, Default)]
 pub struct Contenu {
     pub scenes: Vec<Scene>,
-    pub panels: Vec<Panel>,
-    /// Les versions de chaque plan (`planvers.rs`), par numéro de plan.
-    pub versions: BTreeMap<u64, VersionsDuPlan>,
-    /// Le contenu rogné de chaque plan (`rognage.rs`).
-    pub reserves: BTreeMap<u64, Reserve>,
-    pub comments: Vec<Comment>,
-    /// Les transitions entre deux plans de la variante.
+    /// Les plans, dans l'ordre.
+    pub slots: Vec<Emplacement>,
+    /// Les transitions entre deux plans de la version.
     pub transitions: Vec<Transition>,
-    /// Les références liées à des plans de la variante : (numéro de la référence, plans).
+    /// Les références liées à des plans de la version : (numéro de la référence, plans).
     pub references: Vec<(u64, Vec<u64>)>,
 }
 
 impl Contenu {
     pub fn ids_plans(&self) -> HashSet<u64> {
-        self.panels.iter().map(|p| p.id).collect()
+        self.slots.iter().map(|s| s.plan).collect()
     }
 }
 
-/// Une variante rangée : le jeu de plans, sous son numéro.
+/// Un plan hors du film : tout ce qui est à lui — le plan (sa version active), ses autres versions, son contenu rogné et
+/// ses commentaires. C'est aussi ce qui sort du film et y entre quand une version de séquence en remplace une autre.
+#[derive(Clone)]
+pub struct Parque {
+    pub panel: Panel,
+    pub versions: Option<VersionsDuPlan>,
+    pub reserve: Option<Reserve>,
+    pub comments: Vec<Comment>,
+}
+
+impl Parque {
+    /// Le numéro de la version active.
+    pub fn numero(&self) -> u32 {
+        self.versions.as_ref().map_or(1, |v| v.actuelle)
+    }
+
+    /// Le plan de la version `version` (l'active ou une rangée).
+    pub fn montre(&self, version: u32) -> Option<&Panel> {
+        if self.numero() == version {
+            return Some(&self.panel);
+        }
+        self.versions.as_ref()?.rangee(version).map(|r| &r.panel)
+    }
+
+    /// Le numéro des versions du plan.
+    pub fn numeros(&self) -> Vec<u32> {
+        self.versions.as_ref().map_or_else(|| vec![1], VersionsDuPlan::numeros)
+    }
+
+    /// Fait de la version rangée `version` la version active (les deux échangent leur contenu).
+    fn changer_de_version(&mut self, version: u32) -> bool {
+        let Some(v) = self.versions.as_mut() else { return false };
+        let Some(k) = v.autres.iter().position(|r| r.numero == version) else { return false };
+        let rangee = &mut v.autres[k];
+        crate::planvers::echanger(&mut self.panel, &mut rangee.panel);
+        std::mem::swap(&mut rangee.numero, &mut v.actuelle);
+        std::mem::swap(&mut rangee.date, &mut v.date_actuelle);
+        v.autres.sort_by_key(|r| r.numero);
+        true
+    }
+
+    /// Prépare le plan pour un emplacement : sa version, sa durée (jamais en coupant des images : une durée plus courte que
+    /// le contenu ne change rien) et sa scène.
+    fn montrer(&mut self, e: &Emplacement) {
+        if e.version != self.numero() {
+            self.changer_de_version(e.version);
+        }
+        appliquer_duree(&mut self.panel, e.duree);
+        poser_scene(&mut self.panel, e.scene);
+    }
+}
+
+/// La durée `duree` pour un plan : seulement quand elle est au moins celle de son contenu (on ne coupe jamais d'images).
+fn appliquer_duree(p: &mut Panel, duree: usize) {
+    let contenu = p.layers.iter().map(|l| l.frames.len()).max().unwrap_or(0).max(1);
+    if duree >= contenu {
+        p.length = duree.max(1);
+    }
+}
+
+/// La scène réelle d'un plan : ses calques de toute la scène la citent.
+fn poser_scene(panel: &mut Panel, scene: u64) {
+    panel.scene = scene;
+    for l in &mut panel.layers {
+        if let Some(w) = l.scene_wide.as_mut() {
+            w.scene = scene;
+        }
+    }
+}
+
+/// Une version de séquence rangée : son découpage, sous son numéro.
 #[derive(Clone)]
 pub struct VarianteRangee {
     pub numero: u32,
@@ -103,10 +211,10 @@ pub struct VarianteRangee {
     pub contenu: Contenu,
 }
 
-/// Les variantes d'une séquence.
+/// Les versions de séquence d'une séquence.
 #[derive(Clone)]
 pub struct VariantesDeSequence {
-    /// Le numéro de la variante choisie (celle du film).
+    /// Le numéro de la version choisie (celle du film).
     pub actuelle: u32,
     pub nom_actuelle: String,
     pub date_actuelle: u64,
@@ -114,6 +222,8 @@ pub struct VariantesDeSequence {
     pub autres: Vec<VarianteRangee>,
     /// Plan copié → plan dont il vient (voir l'en-tête du module, « Les envois »).
     pub origines: BTreeMap<u64, u64>,
+    /// Les plans que le film ne montre pas pour l'instant et que des versions rangées montrent.
+    pub garage: BTreeMap<u64, Parque>,
 }
 
 impl VariantesDeSequence {
@@ -132,7 +242,7 @@ impl VariantesDeSequence {
         self.autres.iter().find(|r| r.numero == numero)
     }
 
-    /// Le nom court de la variante `numero` (vide : aucun).
+    /// Le nom court de la version `numero` (vide : aucun).
     pub fn nom(&self, numero: u32) -> &str {
         if numero == self.actuelle {
             &self.nom_actuelle
@@ -141,16 +251,27 @@ impl VariantesDeSequence {
         }
     }
 
-    /// Le plus petit numéro libre (la lettre d'une variante supprimée est reprise).
+    /// Le plus petit numéro libre (la lettre d'une version supprimée est reprise).
     fn numero_libre(&self) -> u32 {
         (1..).find(|n| *n != self.actuelle && self.rangee(*n).is_none()).unwrap_or(1)
     }
+
+    /// Les plans que montre au moins une version rangée.
+    fn plans_montres(&self) -> HashSet<u64> {
+        self.autres.iter().flat_map(|r| r.contenu.slots.iter().map(|s| s.plan)).collect()
+    }
+
+    /// Retire du garage les plans que plus aucune version rangée ne montre.
+    fn nettoyer_garage(&mut self) {
+        let utiles = self.plans_montres();
+        self.garage.retain(|id, _| utiles.contains(id));
+    }
 }
 
-/// Les variantes de tout le projet, partagées (`Arc`) : une étape d'annulation ne les recopie pas.
+/// Les versions de séquence de tout le projet, partagées (`Arc`) : une étape d'annulation ne les recopie pas.
 pub type Variantes = Arc<BTreeMap<u64, VariantesDeSequence>>;
 
-/// « A », « B »… « Z » : la lettre d'une variante.
+/// « A », « B »… « Z » : la lettre d'une version de séquence.
 pub fn lettre(numero: u32) -> String {
     match numero {
         1..=26 => char::from(b'A' + (numero - 1) as u8).to_string(),
@@ -158,7 +279,7 @@ pub fn lettre(numero: u32) -> String {
     }
 }
 
-/// « B » ou « B · serré » : le nom d'une variante, partout (sélecteur, montage, comparaison, messages).
+/// « B » ou « B · serré » : le nom d'une version de séquence, partout (sélecteur, montage, comparaison, messages).
 pub fn etiquette(numero: u32, nom: &str) -> String {
     let nom = nom.trim();
     if nom.is_empty() {
@@ -168,18 +289,60 @@ pub fn etiquette(numero: u32, nom: &str) -> String {
     }
 }
 
-/// Un nom de variante nettoyé : espaces retirés, une seule ligne, `MAX_NOM` lettres au plus.
+/// Un nom de version de séquence nettoyé : espaces retirés, une seule ligne, `MAX_NOM` lettres au plus.
 pub fn nom_propre(texte: &str) -> String {
     texte.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(MAX_NOM).collect()
 }
 
+/// Un jeu de plans qui sort du film ou y entre : tout ce qui tient à lui dans les tables du film.
+#[derive(Default)]
+struct Jeu {
+    scenes: Vec<Scene>,
+    plans: Vec<Parque>,
+    transitions: Vec<Transition>,
+    references: Vec<(u64, Vec<u64>)>,
+}
+
+/// L'ancien contenu d'une variante : une copie profonde complète, plans compris (format 1 du fichier ; `Nouvelle::Copier`).
+#[derive(Clone, Default)]
+struct Ancien {
+    scenes: Vec<Scene>,
+    panels: Vec<Panel>,
+    versions: BTreeMap<u64, VersionsDuPlan>,
+    reserves: BTreeMap<u64, Reserve>,
+    comments: Vec<Comment>,
+    transitions: Vec<Transition>,
+    references: Vec<(u64, Vec<u64>)>,
+}
+
+impl Ancien {
+    /// Les plans passent au garage, un emplacement chacun ; le reste est le découpage.
+    fn en_parques(self) -> (Contenu, Vec<Parque>) {
+        let Ancien { scenes, panels, mut versions, mut reserves, comments, transitions, references } = self;
+        let mut par_plan: HashMap<u64, Vec<Comment>> = HashMap::new();
+        for c in comments {
+            par_plan.entry(c.panel).or_default().push(c);
+        }
+        let mut slots = Vec::with_capacity(panels.len());
+        let mut parques = Vec::with_capacity(panels.len());
+        for panel in panels {
+            let id = panel.id;
+            let versions = versions.remove(&id).filter(|v| !v.autres.is_empty());
+            slots.push(Emplacement { plan: id, scene: panel.scene, version: versions.as_ref().map_or(1, |v| v.actuelle), duree: panel.frame_count() });
+            let reserve = reserves.remove(&id).filter(|r| !r.is_empty());
+            parques.push(Parque { panel, versions, reserve, comments: par_plan.remove(&id).unwrap_or_default() });
+        }
+        (Contenu { scenes, slots, transitions, references }, parques)
+    }
+}
+
 impl Document {
-    /// Les variantes de la séquence `sequence`, si elle en a plusieurs.
+    /// Les versions de la séquence `sequence`, si elle en a plusieurs.
     pub fn variantes_de(&self, sequence: u64) -> Option<&VariantesDeSequence> {
         self.variantes.get(&sequence)
     }
 
-    /// Le numéro de la variante choisie de la séquence (1 tant qu'elle n'a qu'une variante).
+    /// Le numéro de la version de séquence choisie (1 tant qu'elle n'en a qu'une).
     pub fn numero_de_variante(&self, sequence: u64) -> u32 {
         self.variantes.get(&sequence).map_or(1, |v| v.actuelle)
     }
@@ -188,7 +351,7 @@ impl Document {
         self.variantes.get(&sequence).map_or(1, VariantesDeSequence::nombre)
     }
 
-    /// « B · serré » : le nom de la variante `numero` de la séquence.
+    /// « B · serré » : le nom de la version `numero` de la séquence.
     pub fn etiquette_de_variante(&self, sequence: u64, numero: u32) -> String {
         etiquette(numero, self.variantes.get(&sequence).map_or("", |v| v.nom(numero)))
     }
@@ -197,32 +360,42 @@ impl Document {
         Arc::make_mut(&mut self.variantes)
     }
 
-    /// Les plans des variantes rangées, et les plans de leurs versions.
+    /// Les plans du garage, et les plans de leurs versions : tout ce que les versions de séquence gardent hors du film.
     pub fn plans_de_variantes(&self) -> impl Iterator<Item = &Panel> {
-        self.variantes
-            .values()
-            .flat_map(|v| v.autres.iter())
-            .flat_map(|r| r.contenu.panels.iter().chain(r.contenu.versions.values().flat_map(|v| v.autres.iter().map(|x| &x.panel))))
+        self.variantes.values().flat_map(|v| v.garage.values()).flat_map(|p| std::iter::once(&p.panel).chain(p.versions.iter().flat_map(|v| v.autres.iter().map(|x| &x.panel))))
     }
 
-    /// Les dessins des variantes rangées (plans, versions des plans, contenu rogné).
+    /// Le contenu rogné des plans du garage.
+    pub(crate) fn reserves_de_variantes(&self) -> impl Iterator<Item = &Reserve> {
+        self.variantes.values().flat_map(|v| v.garage.values()).filter_map(|p| p.reserve.as_ref())
+    }
+
+    /// Les dessins du garage (plans, versions des plans, contenu rogné).
     pub fn cels_des_variantes(&self) -> BTreeSet<CelId> {
         let mut out: BTreeSet<CelId> = self.plans_de_variantes().flat_map(crate::empreinte::dessins_du_plan).collect();
-        for r in self.variantes.values().flat_map(|v| v.autres.iter()) {
-            for res in r.contenu.reserves.values() {
-                out.extend(res.cels());
-            }
+        for res in self.reserves_de_variantes() {
+            out.extend(res.cels());
         }
         out
     }
 
-    /// Tous les numéros de plans (et de marques) que les variantes rangées possèdent, pour ne pas les redonner.
+    /// Tous les numéros (de plans, de marques, de scènes, de commentaires, de transitions) que les versions rangées possèdent,
+    /// pour ne pas les redonner.
     pub(crate) fn ids_des_variantes(&self) -> Vec<u64> {
         let mut ids = Vec::new();
         for r in self.variantes.values().flat_map(|v| v.autres.iter()) {
             ids.extend(r.contenu.scenes.iter().map(|s| s.id));
-            ids.extend(r.contenu.comments.iter().map(|c| c.id));
             ids.extend(r.contenu.transitions.iter().map(|t| t.id));
+            ids.extend(r.contenu.slots.iter().map(|s| s.plan));
+        }
+        for g in self.variantes.values().flat_map(|v| v.garage.values()) {
+            ids.extend(g.comments.iter().map(|c| c.id));
+            if let Some(r) = &g.reserve {
+                for piece in [&r.head, &r.tail] {
+                    ids.extend(piece.marks.iter().map(|m| m.id));
+                    ids.extend(piece.comments.iter().map(|c| c.id));
+                }
+            }
         }
         for p in self.plans_de_variantes() {
             ids.push(p.id);
@@ -264,7 +437,7 @@ impl Document {
         None
     }
 
-    /// Ce que note un envoi : la variante choisie de chaque séquence qui en a plusieurs.
+    /// Ce que note un envoi : la version choisie de chaque séquence qui en a plusieurs.
     pub fn variantes_pour_envoi(&self) -> Vec<crate::envois::VarianteEnvoyee> {
         self.variantes
             .iter()
@@ -272,16 +445,44 @@ impl Document {
             .collect()
     }
 
-    /// Le plan de la variante rangée `numero` qui est au même rang que `rang` dans sa séquence (pour comparer).
-    pub fn plan_de_variante_au_rang(&self, sequence: u64, numero: u32, rang: usize) -> Option<&Panel> {
-        self.variantes.get(&sequence)?.rangee(numero)?.contenu.panels.get(rang)
+    /// Le plan `plan` sous sa version `version`, où qu'il soit : dans le film (la version active, ou une version rangée) ou
+    /// au garage.
+    pub fn plan_montre(&self, plan: u64, version: u32) -> Option<&Panel> {
+        if let Some(p) = self.panels.iter().find(|p| p.id == plan) {
+            if self.numero_de_version(plan) == version {
+                return Some(p);
+            }
+            return self.versions.get(&plan)?.rangee(version).map(|r| &r.panel);
+        }
+        self.variantes.values().find_map(|v| v.garage.get(&plan)).and_then(|g| g.montre(version))
     }
 
-    // ------------------------------------------------------------------ échanger un jeu de plans
+    /// Les numéros des versions du plan `plan`, où qu'il soit (rien : le plan n'existe pas).
+    pub fn versions_connues(&self, plan: u64) -> Vec<u32> {
+        if self.panels.iter().any(|p| p.id == plan) {
+            return self.versions.get(&plan).map_or_else(|| vec![1], VersionsDuPlan::numeros);
+        }
+        self.variantes.values().find_map(|v| v.garage.get(&plan)).map_or_else(Vec::new, Parque::numeros)
+    }
 
-    /// Retire de la séquence `sequence` tout son jeu de plans : plans, scènes, et ce qui tient à eux dans les tables du
+    /// Le plan de la version rangée `numero` qui est au même rang que `rang` dans sa séquence (pour comparer), sous la version
+    /// que cette version de séquence montre.
+    pub fn plan_de_variante_au_rang(&self, sequence: u64, numero: u32, rang: usize) -> Option<&Panel> {
+        let e = self.variantes.get(&sequence)?.rangee(numero)?.contenu.slots.get(rang)?;
+        self.plan_montre(e.plan, e.version)
+    }
+
+    /// Les emplacements de la séquence `sequence` tels que le film la montre : c'est ce qu'on range quand on la quitte.
+    pub(crate) fn emplacements_du_film(&self, sequence: u64) -> Vec<Emplacement> {
+        let Some((a, b)) = self.course_de_sequence(sequence) else { return Vec::new() };
+        self.panels[a..b].iter().map(|p| Emplacement { plan: p.id, scene: p.scene, version: self.numero_de_version(p.id), duree: p.frame_count() }).collect()
+    }
+
+    // ------------------------------------------------------------------ sortir un jeu de plans du film, le poser
+
+    /// Retire du film tout le jeu de plans de la séquence `sequence` : plans, scènes, et ce qui tient à eux dans les tables du
     /// film. Rend la place où il était, et son contenu.
-    fn extraire(&mut self, sequence: u64) -> Option<(usize, Contenu)> {
+    fn sortir(&mut self, sequence: u64) -> Option<(usize, Jeu)> {
         let (start, end) = self.course_de_sequence(sequence)?;
         let panels: Vec<Panel> = self.panels.drain(start..end).collect();
         let ids: HashSet<u64> = panels.iter().map(|p| p.id).collect();
@@ -297,10 +498,19 @@ impl Document {
                 scenes.push(self.scenes.remove(k));
             }
         }
-        let versions: BTreeMap<u64, VersionsDuPlan> = ids.iter().filter_map(|id| self.versions.remove(id).map(|v| (*id, v))).collect();
-        let reserves: BTreeMap<u64, Reserve> = ids.iter().filter_map(|id| self.reserves.remove(id).map(|r| (*id, r))).collect();
-        let (comments, gardes): (Vec<Comment>, Vec<Comment>) = std::mem::take(&mut self.comments).into_iter().partition(|c| ids.contains(&c.panel));
+        let (mes_commentaires, gardes): (Vec<Comment>, Vec<Comment>) = std::mem::take(&mut self.comments).into_iter().partition(|c| ids.contains(&c.panel));
         self.comments = gardes;
+        let mut par_plan: HashMap<u64, Vec<Comment>> = HashMap::new();
+        for c in mes_commentaires {
+            par_plan.entry(c.panel).or_default().push(c);
+        }
+        let plans: Vec<Parque> = panels
+            .into_iter()
+            .map(|panel| {
+                let id = panel.id;
+                Parque { versions: self.versions.remove(&id), reserve: self.reserves.remove(&id), comments: par_plan.remove(&id).unwrap_or_default(), panel }
+            })
+            .collect();
         let (transitions, gardees): (Vec<Transition>, Vec<Transition>) =
             std::mem::take(&mut self.transitions).into_iter().partition(|t| t.out.is_some_and(|o| ids.contains(&o)) && t.inn.is_some_and(|i| ids.contains(&i)));
         self.transitions = gardees;
@@ -312,44 +522,11 @@ impl Document {
                 references.push((r.id, liens));
             }
         }
-        Some((start, Contenu { scenes, panels, versions, reserves, comments, transitions, references }))
-    }
-
-    /// Remplace le jeu de plans de la séquence par `nouveau` et rend l'ancien. Les transitions aux bords de la séquence
-    /// (avec le plan d'avant ou le plan d'après) restent sur la coupe : elles passent au nouveau premier ou dernier plan.
-    fn echanger_contenu(&mut self, sequence: u64, nouveau: Contenu) -> Option<Contenu> {
-        let (a, b) = self.course_de_sequence(sequence)?;
-        let ids: HashSet<u64> = self.panels[a..b].iter().map(|p| p.id).collect();
-        // Les transitions de bord : (numéro, côté sortant).
-        let bords: Vec<(u64, bool)> = self
-            .transitions
-            .iter()
-            .filter_map(|t| {
-                let (o, i) = (t.out.is_some_and(|x| ids.contains(&x)), t.inn.is_some_and(|x| ids.contains(&x)));
-                match (o, i) {
-                    (true, false) => Some((t.id, true)),
-                    (false, true) => Some((t.id, false)),
-                    _ => None,
-                }
-            })
-            .collect();
-        let (premier, dernier) = (nouveau.panels.first().map(|p| p.id), nouveau.panels.last().map(|p| p.id));
-        let (start, ancien) = self.extraire(sequence)?;
-        self.inserer(start, nouveau);
-        for (id, sortant) in bords {
-            if let Some(t) = self.transitions.iter_mut().find(|t| t.id == id) {
-                if sortant {
-                    t.out = dernier;
-                } else {
-                    t.inn = premier;
-                }
-            }
-        }
-        Some(ancien)
+        Some((start, Jeu { scenes, plans, transitions, references }))
     }
 
     /// Pose un jeu de plans dans le film, à la place `start`.
-    fn inserer(&mut self, start: usize, mut c: Contenu) {
+    fn poser(&mut self, start: usize, mut c: Jeu) {
         // Numérotation verrouillée : un numéro de plan déjà pris ailleurs repart de rien, `normalize` en donne un autre.
         if self.numbering_locked {
             let pris: HashSet<String> = self.scenes.iter().filter(|s| !s.number.is_empty()).map(|s| s.number.clone()).collect();
@@ -361,10 +538,20 @@ impl Document {
         }
         self.scenes.extend(c.scenes);
         let start = start.min(self.panels.len());
-        self.panels.splice(start..start, c.panels);
-        self.versions.extend(c.versions);
-        self.reserves.extend(c.reserves);
-        self.comments.extend(c.comments);
+        let mut panels = Vec::with_capacity(c.plans.len());
+        for p in c.plans {
+            let id = p.panel.id;
+            // (Une entrée sans autre version garde le numéro de la version active : une autre version de séquence le montre.)
+            if let Some(v) = p.versions {
+                self.versions.insert(id, v);
+            }
+            if let Some(r) = p.reserve.filter(|r| !r.is_empty()) {
+                self.reserves.insert(id, r);
+            }
+            self.comments.extend(p.comments);
+            panels.push(p.panel);
+        }
+        self.panels.splice(start..start, panels);
         self.transitions.extend(c.transitions);
         for (id, liens) in c.references {
             if let Some(r) = self.references.iter_mut().find(|r| r.id == id) {
@@ -377,10 +564,61 @@ impl Document {
         }
     }
 
+    /// Les transitions aux bords de la séquence (avec le plan d'avant ou le plan d'après) : (numéro, côté sortant).
+    fn bords_de(&self, ids: &HashSet<u64>) -> Vec<(u64, bool)> {
+        self.transitions
+            .iter()
+            .filter_map(|t| {
+                let (o, i) = (t.out.is_some_and(|x| ids.contains(&x)), t.inn.is_some_and(|x| ids.contains(&x)));
+                match (o, i) {
+                    (true, false) => Some((t.id, true)),
+                    (false, true) => Some((t.id, false)),
+                    _ => None,
+                }
+            })
+            .collect()
+    }
+
+    /// Les transitions de bord restent sur la coupe : elles passent au nouveau premier ou dernier plan.
+    fn refixer_bords(&mut self, bords: Vec<(u64, bool)>, premier: Option<u64>, dernier: Option<u64>) {
+        for (id, sortant) in bords {
+            if let Some(t) = self.transitions.iter_mut().find(|t| t.id == id) {
+                if sortant {
+                    t.out = dernier;
+                } else {
+                    t.inn = premier;
+                }
+            }
+        }
+    }
+
+    /// Les clones des scènes, des transitions internes et des liens de références de la séquence `sequence` (le film ne bouge pas).
+    fn copie_du_decoupage(&self, sequence: u64) -> Option<(Vec<Scene>, Vec<Transition>, Vec<(u64, Vec<u64>)>)> {
+        let (a, b) = self.course_de_sequence(sequence)?;
+        let ids: HashSet<u64> = self.panels[a..b].iter().map(|p| p.id).collect();
+        let mut scene_ids: Vec<u64> = Vec::new();
+        for p in &self.panels[a..b] {
+            if !scene_ids.contains(&p.scene) {
+                scene_ids.push(p.scene);
+            }
+        }
+        let scenes = scene_ids.iter().filter_map(|id| self.scene(*id).cloned()).collect();
+        let transitions = self.transitions.iter().filter(|t| t.out.is_some_and(|o| ids.contains(&o)) && t.inn.is_some_and(|i| ids.contains(&i))).cloned().collect();
+        let references = self
+            .references
+            .iter()
+            .filter_map(|r| {
+                let liens: Vec<u64> = r.plans.iter().copied().filter(|p| ids.contains(p)).collect();
+                (!liens.is_empty()).then_some((r.id, liens))
+            })
+            .collect();
+        Some((scenes, transitions, references))
+    }
+
     /// Une copie profonde du jeu de plans de la séquence : numéros neufs de plans, de scènes, de marques et de calques,
     /// dessins dupliqués. Rend aussi les couples (copie, original) des plans. Les versions des plans, les commentaires,
     /// les transitions internes et les liens des références sont copiés ; le contenu rogné ne l'est pas.
-    fn copier_contenu(&mut self, sequence: u64) -> Option<(Contenu, Vec<(u64, u64)>)> {
+    fn copier_contenu(&mut self, sequence: u64) -> Option<(Ancien, Vec<(u64, u64)>)> {
         let (start, end) = self.course_de_sequence(sequence)?;
         let sources: Vec<Panel> = self.panels[start..end].to_vec();
         let mut scenes: Vec<Scene> = Vec::new();
@@ -453,68 +691,119 @@ impl Document {
                 (!liens.is_empty()).then_some((r.id, liens))
             })
             .collect();
-        Some((Contenu { scenes, panels, versions, reserves: BTreeMap::new(), comments, transitions, references }, couples))
+        Some((Ancien { scenes, panels, versions, reserves: BTreeMap::new(), comments, transitions, references }, couples))
     }
 
     // ------------------------------------------------------------------ les opérations
 
-    /// « Nouvelle variante » de la séquence `sequence` : le jeu de plans en cours est rangé sous son numéro, et la
-    /// séquence prend le numéro suivant. `vide` : elle repart d'un plan vide ; sinon ses plans restent ceux du film
-    /// et c'est une copie profonde qui est rangée (voir l'en-tête du module). Rend le numéro de la variante choisie.
-    pub fn nouvelle_variante(&mut self, sequence: u64, vide: bool, now: u64) -> Option<u32> {
+    /// « Nouvelle version de séquence » de la séquence `sequence` : le découpage en cours est rangé sous son numéro, et la
+    /// séquence prend le numéro suivant (voir l'en-tête du module pour les trois façons). Rend le numéro de la version choisie.
+    pub fn nouvelle_variante(&mut self, sequence: u64, mode: Nouvelle, now: u64) -> Option<u32> {
         self.course_de_sequence(sequence)?;
         let (actuelle, nom_actuelle, date_actuelle, libre) = match self.variantes.get(&sequence) {
             Some(v) if v.nombre() >= MAX_VARIANTES => return None,
             Some(v) => (v.actuelle, v.nom_actuelle.clone(), v.date_actuelle, v.numero_libre()),
             None => (1, String::new(), 0, 2),
         };
-        let (rangee, couples) = if vide {
-            let scene = self.new_scene(sequence);
-            let panel = self.make_panel(scene);
-            let neuve = self.scenes.pop().expect("scène créée juste avant");
-            let ancien = self.echanger_contenu(sequence, Contenu { scenes: vec![neuve], panels: vec![panel], ..Contenu::default() })?;
-            (ancien, Vec::new())
-        } else {
-            self.copier_contenu(sequence)?
+        let slots = self.emplacements_du_film(sequence);
+        let (contenu, parques, couples) = match mode {
+            Nouvelle::Partager => {
+                let (scenes, transitions, references) = self.copie_du_decoupage(sequence)?;
+                (Contenu { scenes, slots, transitions, references }, Vec::new(), Vec::new())
+            }
+            Nouvelle::Copier => {
+                let (ancien, couples) = self.copier_contenu(sequence)?;
+                let (contenu, parques) = ancien.en_parques();
+                (contenu, parques, couples)
+            }
+            Nouvelle::Vide => {
+                let scene = self.new_scene(sequence);
+                let panel = self.make_panel(scene);
+                let neuve = self.scenes.pop().expect("scène créée juste avant");
+                let ids: HashSet<u64> = self.plans_de_sequence(sequence).into_iter().collect();
+                let bords = self.bords_de(&ids);
+                let (start, jeu) = self.sortir(sequence)?;
+                let (premier, dernier) = (Some(panel.id), Some(panel.id));
+                self.poser(start, Jeu { scenes: vec![neuve], plans: vec![Parque { panel, versions: None, reserve: None, comments: Vec::new() }], ..Jeu::default() });
+                self.refixer_bords(bords, premier, dernier);
+                (Contenu { scenes: jeu.scenes, slots, transitions: jeu.transitions, references: jeu.references }, jeu.plans, Vec::new())
+            }
         };
-        let v = self.variantes_mut().entry(sequence).or_insert_with(|| VariantesDeSequence { actuelle: 1, nom_actuelle: String::new(), date_actuelle: 0, autres: Vec::new(), origines: BTreeMap::new() });
-        v.autres.push(VarianteRangee { numero: actuelle, nom: nom_actuelle, date: date_actuelle, contenu: rangee });
+        let v = self.variantes_mut().entry(sequence).or_insert_with(|| VariantesDeSequence {
+            actuelle: 1,
+            nom_actuelle: String::new(),
+            date_actuelle: 0,
+            autres: Vec::new(),
+            origines: BTreeMap::new(),
+            garage: BTreeMap::new(),
+        });
+        v.autres.push(VarianteRangee { numero: actuelle, nom: nom_actuelle, date: date_actuelle, contenu });
         v.autres.sort_by_key(|r| r.numero);
         v.actuelle = libre;
         v.nom_actuelle = String::new();
         v.date_actuelle = now;
         v.origines.extend(couples);
+        for p in parques {
+            v.garage.insert(p.panel.id, p);
+        }
         self.normalize();
         Some(libre)
     }
 
-    /// Fait de la variante rangée `numero` la variante choisie de la séquence : les deux jeux de plans s'échangent.
-    /// Rend faux si ce numéro n'est pas rangé.
+    /// Fait de la version rangée `numero` la version choisie de la séquence : on range les emplacements de l'ancienne et on
+    /// fait entrer les plans de l'autre, chacun sur sa version et à sa durée. Rend faux si ce numéro n'est pas rangé.
     pub fn changer_de_variante(&mut self, sequence: u64, numero: u32) -> bool {
         let Some(v) = self.variantes.get(&sequence) else { return false };
-        if numero == v.actuelle || !v.rangee(numero).is_some_and(|r| !r.contenu.panels.is_empty()) {
+        if numero == v.actuelle {
             return false;
         }
-        if self.course_de_sequence(sequence).is_none() {
+        let Some(entrante) = v.rangee(numero).filter(|r| !r.contenu.slots.is_empty()) else { return false };
+        let Some((a, b)) = self.course_de_sequence(sequence) else { return false };
+        let dans_le_film: HashSet<u64> = self.panels[a..b].iter().map(|p| p.id).collect();
+        if !entrante.contenu.slots.iter().any(|s| dans_le_film.contains(&s.plan) || v.garage.contains_key(&s.plan)) {
             return false;
         }
+        let slots_sortants = self.emplacements_du_film(sequence);
+        let bords = self.bords_de(&dans_le_film);
+        let Some((start, mut sorti)) = self.sortir(sequence) else { return false };
         let v = self.variantes_mut().get_mut(&sequence).expect("variantes lues juste avant");
-        let k = v.autres.iter().position(|r| r.numero == numero).expect("variante lue juste avant");
+        let k = v.autres.iter().position(|r| r.numero == numero).expect("version lue juste avant");
         let entrante = v.autres.remove(k);
-        let Some(ancien) = self.echanger_contenu(sequence, entrante.contenu) else { return false };
-        let v = self.variantes_mut().get_mut(&sequence).expect("variantes lues juste avant");
-        let sortante = VarianteRangee { numero: v.actuelle, nom: std::mem::take(&mut v.nom_actuelle), date: v.date_actuelle, contenu: ancien };
+        // Tous les plans à portée : ceux qui sortent du film et ceux du garage ; les plans de la version entrante en sont pris.
+        let mut pool: BTreeMap<u64, Parque> = std::mem::take(&mut v.garage);
+        for p in std::mem::take(&mut sorti.plans) {
+            pool.insert(p.panel.id, p);
+        }
+        let mut plans = Vec::with_capacity(entrante.contenu.slots.len());
+        for e in &entrante.contenu.slots {
+            if let Some(mut p) = pool.remove(&e.plan) {
+                p.montrer(e);
+                plans.push(p);
+            }
+        }
+        v.garage = pool;
+        let sortante = VarianteRangee {
+            numero: v.actuelle,
+            nom: std::mem::take(&mut v.nom_actuelle),
+            date: v.date_actuelle,
+            contenu: Contenu { scenes: sorti.scenes, slots: slots_sortants, transitions: sorti.transitions, references: sorti.references },
+        };
         v.autres.push(sortante);
         v.autres.sort_by_key(|r| r.numero);
         v.actuelle = numero;
         v.nom_actuelle = entrante.nom;
         v.date_actuelle = entrante.date;
+        let (premier, dernier) = (plans.first().map(|p| p.panel.id), plans.last().map(|p| p.panel.id));
+        let c = entrante.contenu;
+        self.poser(start, Jeu { scenes: c.scenes, plans, transitions: c.transitions, references: c.references });
+        self.refixer_bords(bords, premier, dernier);
         self.normalize();
         true
     }
 
-    /// Supprime la variante `numero` (jamais la dernière). Si c'est la variante choisie, la séquence passe d'abord à la
-    /// plus petite des autres. Rend le numéro de la variante choisie ensuite.
+    /// Supprime la version de séquence `numero` (jamais la dernière). Si c'est la version choisie, la séquence passe d'abord à
+    /// la plus petite des autres. Les plans que plus aucune version ne montre sont supprimés avec elle ; les autres restent.
+    /// Rend le numéro de la version choisie ensuite.
     pub fn supprimer_variante(&mut self, sequence: u64, numero: u32) -> Option<u32> {
         let v = self.variantes.get(&sequence)?;
         if v.nombre() < 2 || !v.numeros().contains(&numero) {
@@ -528,6 +817,7 @@ impl Document {
         }
         let v = self.variantes_mut().get_mut(&sequence)?;
         v.autres.retain(|r| r.numero != numero);
+        v.nettoyer_garage();
         let reste = v.actuelle;
         if v.autres.is_empty() {
             self.variantes_mut().remove(&sequence);
@@ -535,7 +825,19 @@ impl Document {
         Some(reste)
     }
 
-    /// Donne le nom court `nom` à la variante `numero`. Faux si la séquence n'a pas cette variante, ou si rien ne change.
+    /// Les plans que supprimerait « Supprimer la version de séquence `numero` » : ceux que ni une autre version de séquence ni
+    /// le film (si l'on en change) ne montrent. Rend (plan, durée en images).
+    pub fn plans_exclusifs_de_variante(&self, sequence: u64, numero: u32) -> Vec<(u64, usize)> {
+        let Some(v) = self.variantes.get(&sequence) else { return Vec::new() };
+        let ailleurs = |plan: u64| v.autres.iter().filter(|r| r.numero != numero).any(|r| r.contenu.slots.iter().any(|s| s.plan == plan));
+        if numero == v.actuelle {
+            return self.emplacements_du_film(sequence).into_iter().filter(|e| !ailleurs(e.plan)).map(|e| (e.plan, e.duree)).collect();
+        }
+        let dans_le_film = self.plans_de_sequence(sequence);
+        v.rangee(numero).map_or_else(Vec::new, |r| r.contenu.slots.iter().filter(|e| !ailleurs(e.plan) && !dans_le_film.contains(&e.plan)).map(|e| (e.plan, e.duree)).collect())
+    }
+
+    /// Donne le nom court `nom` à la version `numero`. Faux si la séquence n'a pas cette version, ou si rien ne change.
     pub fn renommer_variante(&mut self, sequence: u64, numero: u32, nom: &str) -> bool {
         let nom = nom_propre(nom);
         let Some(v) = self.variantes.get(&sequence) else { return false };
@@ -551,7 +853,7 @@ impl Document {
         true
     }
 
-    /// Les variantes dont la séquence n'existe plus s'en vont avec elle (l'annulation les ramène, `Structure`).
+    /// Les versions de séquence dont la séquence n'existe plus s'en vont avec elle (l'annulation les ramène, `Structure`).
     pub(crate) fn elaguer_variantes(&mut self) {
         if self.variantes.is_empty() {
             return;
@@ -559,6 +861,126 @@ impl Document {
         let seqs: HashSet<u64> = self.sequences.iter().map(|s| s.id).collect();
         if self.variantes.keys().any(|s| !seqs.contains(s)) {
             self.variantes_mut().retain(|s, _| seqs.contains(s));
+        }
+    }
+
+    // ------------------------------------------------------------------ plans et versions partagés
+
+    /// Les autres versions de séquence de `sequence` qui montrent le plan `plan` : (numéro de la version de séquence, version du
+    /// plan qu'elle y montre), dans l'ordre des lettres.
+    pub fn variantes_montrant(&self, sequence: u64, plan: u64) -> Vec<(u32, u32)> {
+        let Some(v) = self.variantes.get(&sequence) else { return Vec::new() };
+        v.autres.iter().filter_map(|r| r.contenu.slots.iter().find(|s| s.plan == plan).map(|s| (r.numero, s.version))).collect()
+    }
+
+    /// Les versions de séquence (rangées) qui montrent la version `version` du plan `plan`.
+    pub fn version_montree_ailleurs(&self, plan: u64, version: u32) -> Vec<u32> {
+        let mut out: Vec<u32> = self
+            .variantes
+            .values()
+            .flat_map(|v| v.autres.iter())
+            .filter(|r| r.contenu.slots.iter().any(|s| s.plan == plan && s.version == version))
+            .map(|r| r.numero)
+            .collect();
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+
+    /// Les (plan, version) que montrent les versions de séquence rangées : on ne les supprime pas.
+    pub(crate) fn versions_protegees(&self) -> HashSet<(u64, u32)> {
+        self.variantes.values().flat_map(|v| v.autres.iter()).flat_map(|r| r.contenu.slots.iter().map(|s| (s.plan, s.version))).collect()
+    }
+
+    /// Dans la version de séquence rangée `numero`, le plan `plan` montre désormais sa version `version`. Faux si cette version
+    /// de séquence ne montre pas ce plan, si le plan n'a pas cette version, ou si rien ne change.
+    pub fn choisir_version_dans_variante(&mut self, sequence: u64, numero: u32, plan: u64, version: u32) -> bool {
+        if !self.versions_connues(plan).contains(&version) {
+            return false;
+        }
+        let Some(v) = self.variantes.get(&sequence) else { return false };
+        if !v.rangee(numero).is_some_and(|r| r.contenu.slots.iter().any(|s| s.plan == plan && s.version != version)) {
+            return false;
+        }
+        let v = self.variantes_mut().get_mut(&sequence).expect("variantes lues juste avant");
+        let r = v.autres.iter_mut().find(|r| r.numero == numero).expect("version lue juste avant");
+        for s in r.contenu.slots.iter_mut().filter(|s| s.plan == plan) {
+            s.version = version;
+        }
+        true
+    }
+
+    /// « Mettre à jour dans les autres versions de séquence » : les versions de séquence rangées `cibles` montrent désormais la
+    /// version courante du plan `plan` (le plan du film). Leur durée, leur ordre et leurs autres plans ne changent pas. Rend le
+    /// nombre de versions de séquence changées.
+    pub fn mettre_a_jour_variantes(&mut self, sequence: u64, plan: u64, cibles: &[u32]) -> usize {
+        if !self.panels.iter().any(|p| p.id == plan) {
+            return 0;
+        }
+        let version = self.numero_de_version(plan);
+        let mut n = 0;
+        for &numero in cibles {
+            if self.choisir_version_dans_variante(sequence, numero, plan, version) {
+                n += 1;
+            }
+        }
+        n
+    }
+
+    /// Avant qu'un plan quitte le film (supprimé, ou réuni à un voisin) : si une autre version de sa séquence le montre, il est
+    /// gardé au garage tel qu'il est (`copier` : une copie qui a ses propres dessins, quand le plan va servir de matière à un
+    /// autre). Sans effet pour un plan que personne d'autre ne montre.
+    pub(crate) fn ranger_plan_partage(&mut self, plan: u64, copier: bool) {
+        if self.variantes.is_empty() {
+            return;
+        }
+        let Some(sequence) = self.variantes.iter().find(|(_, v)| v.autres.iter().any(|r| r.contenu.slots.iter().any(|s| s.plan == plan))).map(|(s, _)| *s) else { return };
+        let Some(index) = self.panels.iter().position(|p| p.id == plan) else { return };
+        let source = self.panels[index].clone();
+        let anciens: Vec<u64> = source.layers.iter().map(|l| l.id).collect();
+        let panel = if copier {
+            let mut c = self.copie_de(&source);
+            c.id = plan;
+            c
+        } else {
+            source
+        };
+        let versions = self.versions.remove(&plan);
+        let reserve = if copier {
+            // (La copie a des numéros de calques neufs : le contenu rogné, rangé par numéro de calque, les suit calque pour calque.)
+            let rang: HashMap<u64, u64> = anciens.iter().copied().zip(panel.layers.iter().map(|l| l.id)).collect();
+            self.reserves.get(&plan).cloned().map(|mut r| {
+                for piece in [&mut r.head, &mut r.tail] {
+                    // (Ce qu'un calque déjà supprimé avait laissé là ne revient plus : il n'est pas enregistré non plus.)
+                    piece.layers.retain(|lp| rang.contains_key(&lp.layer));
+                    for lp in &mut piece.layers {
+                        lp.layer = rang[&lp.layer];
+                    }
+                }
+                r
+            })
+        } else {
+            self.reserves.remove(&plan)
+        };
+        let mut comments: Vec<Comment> = self.comments.iter().filter(|c| c.panel == plan).cloned().collect();
+        if copier {
+            for c in &mut comments {
+                c.id = self.alloc();
+            }
+        } else {
+            self.comments.retain(|c| c.panel != plan);
+        }
+        let parque = Parque { panel, versions, reserve, comments };
+        self.variantes_mut().get_mut(&sequence).expect("séquence lue juste avant").garage.insert(plan, parque);
+    }
+
+    /// Comme `ranger_plan_partage`, pour plusieurs plans.
+    pub(crate) fn ranger_plans_partages(&mut self, plans: &[u64], copier: bool) {
+        if self.variantes.is_empty() {
+            return;
+        }
+        for &p in plans {
+            self.ranger_plan_partage(p, copier);
         }
     }
 }
@@ -571,7 +993,7 @@ pub(crate) struct Fichier {
     version: u32,
     #[serde(default)]
     pub sequences: Vec<SeqFichier>,
-    /// Dessins bitmap des variantes qui ont quelque chose hors de la feuille (toile infinie).
+    /// Dessins bitmap des plans du garage qui ont quelque chose hors de la feuille (toile infinie).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub hors: Vec<u64>,
 }
@@ -587,6 +1009,9 @@ pub(crate) struct SeqFichier {
     /// Couples (plan copié, plan d'origine).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub origines: Vec<[u64; 2]>,
+    /// Les plans du garage (format 2).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub garage: Vec<PlanVarFichier>,
     #[serde(default)]
     pub autres: Vec<VarFichier>,
 }
@@ -600,14 +1025,33 @@ pub(crate) struct VarFichier {
     pub date: u64,
     #[serde(default)]
     pub scenes: Vec<SceneFichier>,
-    #[serde(default)]
-    pub plans: Vec<PlanVarFichier>,
+    /// Les emplacements (format 2).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub commentaires: Vec<Comment>,
+    pub emplacements: Vec<EmplacementFichier>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub transitions: Vec<Transition>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub references: Vec<(u64, Vec<u64>)>,
+    /// Format 1 seulement : les plans complets de la variante (jamais écrit).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub plans: Vec<PlanVarFichier>,
+    /// Format 1 seulement : les commentaires de ces plans (jamais écrit).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub commentaires: Vec<Comment>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct EmplacementFichier {
+    pub plan: u64,
+    pub scene: u64,
+    #[serde(default = "un")]
+    pub version: u32,
+    #[serde(default)]
+    pub duree: usize,
+}
+
+fn un() -> u32 {
+    1
 }
 
 #[derive(Serialize, Deserialize)]
@@ -631,51 +1075,61 @@ pub(crate) struct PlanVarFichier {
     /// Le contenu rogné du plan, au format de `rognages.json` pour ce plan seul.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rognage: Option<serde_json::Value>,
+    /// Les commentaires du plan (format 2 ; au format 1 ils sont dans la variante).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub commentaires: Vec<Comment>,
 }
 
-/// Où est un plan lu dans le fichier : (séquence, variante, plan) ou (séquence, variante, plan, version).
+/// Où est un plan lu dans le fichier : un plan d'une variante du format 1 (séquence, variante, plan) ou l'une de ses versions,
+/// un plan du garage (séquence, plan) ou l'une de ses versions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(crate) enum Cle {
     Plan(usize, usize, usize),
     Version(usize, usize, usize, usize),
+    Parque(usize, usize),
+    ParqueVersion(usize, usize, usize),
 }
 
-/// Le contenu de `variantes.json` ; rien s'il n'y a aucune variante rangée (le fichier part, ou, s'il est illisible,
-/// reste là). `hors` : ceux des dessins des variantes qui ont quelque chose hors de la feuille.
+/// Le contenu de `variantes.json` ; rien s'il n'y a aucune version rangée (le fichier part, ou, s'il est illisible, reste là).
+/// `hors` : ceux des dessins du garage qui ont quelque chose hors de la feuille.
 pub(crate) fn to_bytes(doc: &Document, hors: &BTreeSet<CelId>) -> Result<Option<Vec<u8>>, String> {
     let existe: HashSet<u64> = doc.panels.iter().map(|p| p.id).chain(doc.plans_de_variantes().map(|p| p.id)).collect();
+    let protegees = doc.versions_protegees();
     let mut sequences = Vec::new();
     for (sequence, v) in doc.variantes.iter() {
         if v.autres.is_empty() {
             continue;
         }
+        let mut garage = Vec::new();
+        for (id, g) in &v.garage {
+            garage.push(PlanVarFichier {
+                scene: g.panel.scene,
+                entree: crate::project::snapshot_value(&g.panel, &|c| c)?,
+                // (Une entrée sans autre version est écrite quand elle porte un numéro de version qu'une autre version de séquence montre.)
+                versions: match g.versions.as_ref().filter(|v| !v.autres.is_empty() || protegees.contains(&(*id, v.actuelle))) {
+                    Some(v) => Some(crate::planvers::plan_fichier(*id, v)?),
+                    None => None,
+                },
+                rognage: match g.reserve.as_ref().filter(|r| !r.is_empty()) {
+                    Some(res) => Some(crate::rognage::plan_value(&g.panel, res)?),
+                    None => None,
+                },
+                commentaires: g.comments.clone(),
+            });
+        }
         let mut autres = Vec::new();
         for r in &v.autres {
             let c = &r.contenu;
-            let mut plans = Vec::new();
-            for p in &c.panels {
-                plans.push(PlanVarFichier {
-                    scene: p.scene,
-                    entree: crate::project::snapshot_value(p, &|c| c)?,
-                    versions: match c.versions.get(&p.id).filter(|v| !v.autres.is_empty()) {
-                        Some(v) => Some(crate::planvers::plan_fichier(p.id, v)?),
-                        None => None,
-                    },
-                    rognage: match c.reserves.get(&p.id).filter(|r| !r.is_empty()) {
-                        Some(res) => Some(crate::rognage::plan_value(p, res)?),
-                        None => None,
-                    },
-                });
-            }
             autres.push(VarFichier {
                 numero: r.numero,
                 nom: r.nom.clone(),
                 date: r.date,
                 scenes: c.scenes.iter().map(|s| SceneFichier { id: s.id, nom: s.name.clone(), numero: s.number.clone() }).collect(),
-                plans,
-                commentaires: c.comments.clone(),
+                emplacements: c.slots.iter().map(|e| EmplacementFichier { plan: e.plan, scene: e.scene, version: e.version, duree: e.duree }).collect(),
                 transitions: c.transitions.clone(),
                 references: c.references.clone(),
+                plans: Vec::new(),
+                commentaires: Vec::new(),
             });
         }
         sequences.push(SeqFichier {
@@ -684,6 +1138,7 @@ pub(crate) fn to_bytes(doc: &Document, hors: &BTreeSet<CelId>) -> Result<Option<
             nom_actuelle: v.nom_actuelle.clone(),
             date_actuelle: v.date_actuelle,
             origines: v.origines.iter().filter(|(p, _)| existe.contains(p)).map(|(p, o)| [*p, *o]).collect(),
+            garage,
             autres,
         });
     }
@@ -694,12 +1149,12 @@ pub(crate) fn to_bytes(doc: &Document, hors: &BTreeSet<CelId>) -> Result<Option<
     serde_json::to_vec_pretty(&f).map(Some).map_err(|e| e.to_string())
 }
 
-/// Les variantes lues dans le texte de `variantes.json` : numéros uniques et non nuls, la variante choisie n'est pas
-/// aussi rangée, pas plus de `MAX_VARIANTES` par séquence, une variante sans plan est oubliée.
+/// Les versions de séquence lues dans le texte de `variantes.json` : numéros uniques et non nuls, la version choisie n'est pas
+/// aussi rangée, pas plus de `MAX_VARIANTES` par séquence, une version sans plan est oubliée.
 pub(crate) fn parse(text: &str) -> Result<Fichier, String> {
     let mut f: Fichier = serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("illisible ({e})"))?;
     if f.format != FORMAT {
-        return Err("ce n'est pas un fichier de variantes de séquences".into());
+        return Err("ce n'est pas un fichier de versions de séquences".into());
     }
     if f.version > VERSION {
         return Err(format!("écrit par une version plus récente (format {})", f.version));
@@ -709,13 +1164,15 @@ pub(crate) fn parse(text: &str) -> Result<Fichier, String> {
     for s in &mut f.sequences {
         s.actuelle = s.actuelle.max(1);
         s.nom_actuelle = nom_propre(&s.nom_actuelle);
+        s.garage.truncate(MAX_PLANS);
         let mut numeros = HashSet::from([s.actuelle]);
-        s.autres.retain(|v| v.numero >= 1 && !v.plans.is_empty() && numeros.insert(v.numero));
+        s.autres.retain(|v| v.numero >= 1 && (!v.plans.is_empty() || !v.emplacements.is_empty()) && numeros.insert(v.numero));
         s.autres.truncate(MAX_VARIANTES - 1);
         s.autres.sort_by_key(|v| v.numero);
         for v in &mut s.autres {
             v.nom = nom_propre(&v.nom);
             v.plans.truncate(MAX_PLANS);
+            v.emplacements.truncate(MAX_PLANS);
         }
     }
     f.sequences.retain(|s| !s.autres.is_empty());
@@ -723,27 +1180,27 @@ pub(crate) fn parse(text: &str) -> Result<Fichier, String> {
 }
 
 /// Le fichier du dossier `dir` : rien s'il n'existe pas, et un avertissement s'il est illisible (le projet s'ouvre sans
-/// variantes rangées, le fichier reste en place).
+/// versions de séquence rangées, le fichier reste en place).
 pub(crate) fn lire(dir: &Path, warnings: &mut Vec<String>) -> Option<Fichier> {
     let path = dir.join(FILE);
     match std::fs::read(&path) {
         Ok(bytes) => match String::from_utf8(bytes).map_err(|_| "le fichier n'est pas du texte (UTF-8)".to_string()).and_then(|t| parse(&t)) {
             Ok(f) => Some(f),
             Err(e) => {
-                warnings.push(format!("{FILE} : {e} ; les variantes de séquences ne sont pas chargées."));
+                warnings.push(format!("{FILE} : {e} ; les versions de séquences ne sont pas chargées."));
                 None
             }
         },
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
         Err(e) => {
-            warnings.push(format!("{} : {e} ; les variantes de séquences ne sont pas chargées.", path.display()));
+            warnings.push(format!("{} : {e} ; les versions de séquences ne sont pas chargées.", path.display()));
             None
         }
     }
 }
 
 /// Le fichier existe mais cette version ne sait pas le lire : l'enregistrement n'efface alors aucun dessin de `dessins/`
-/// (ceux des variantes qu'il décrit y sont encore).
+/// (ceux des versions qu'il décrit y sont encore).
 pub(crate) fn illisible(dir: &Path) -> bool {
     match std::fs::read(dir.join(FILE)) {
         Ok(bytes) => String::from_utf8(bytes).map_err(|_| ()).and_then(|t| parse(&t).map(|_| ()).map_err(|_| ())).is_err(),
@@ -751,19 +1208,36 @@ pub(crate) fn illisible(dir: &Path) -> bool {
     }
 }
 
-/// Le scène réelle d'un plan lu : ses calques de toute la scène la citent (la lecture les avait posés sur une scène cachée).
-fn poser_scene(panel: &mut Panel, scene: u64) {
-    panel.scene = scene;
-    for l in &mut panel.layers {
-        if let Some(w) = l.scene_wide.as_mut() {
-            w.scene = scene;
+/// Un plan du garage lu : son plan, ses versions rangées, son contenu rogné, ses commentaires.
+fn lire_un_plan(
+    pf: PlanVarFichier,
+    cle: Cle,
+    cle_version: impl Fn(usize) -> Cle,
+    panels: &mut HashMap<Cle, Panel>,
+    rognages: &mut HashMap<Cle, crate::rognage::Loaded>,
+    missing: &BTreeSet<CelId>,
+) -> Option<Parque> {
+    let mut panel = panels.remove(&cle)?;
+    poser_scene(&mut panel, pf.scene);
+    let versions = pf.versions.and_then(|vf| {
+        let mut rangees = Vec::new();
+        for (ri, r) in vf.autres.iter().enumerate() {
+            if let Some(mut p) = panels.remove(&cle_version(ri)) {
+                poser_scene(&mut p, pf.scene);
+                rangees.push(Rangee { numero: r.numero, date: r.date, panel: p });
+            }
         }
-    }
+        (!rangees.is_empty() || vf.autres.is_empty()).then_some(VersionsDuPlan { actuelle: vf.actuelle, date_actuelle: vf.date_actuelle, prochaine: vf.prochaine, autres: rangees })
+    });
+    let reserve = rognages.remove(&cle).and_then(|l| l.pour_plans(&[&panel], missing).into_iter().next().map(|(_, r)| r));
+    let id = panel.id;
+    Some(Parque { panel, versions, reserve, comments: pf.commentaires.into_iter().filter(|c| c.panel == id).collect() })
 }
 
-/// Met en place les variantes lues : `panels` donne, pour chaque clé du fichier, le plan lu ; `rognages`, le contenu rogné lu
-/// pour la clé d'un plan. Les variantes d'une séquence qui n'existe plus sont oubliées. `missing` : dessins illisibles ; si
-/// une variante en cite, `Document::variantes_partielles` est levé.
+/// Met en place les versions de séquence lues : `panels` donne, pour chaque clé du fichier, le plan lu ; `rognages`, le contenu
+/// rogné lu pour la clé d'un plan. Les versions d'une séquence qui n'existe plus sont oubliées. `missing` : dessins illisibles ;
+/// si une version en cite, `Document::variantes_partielles` est levé. Un fichier du format 1 (copies complètes) est lu sans
+/// rien perdre : chaque plan copié devient un plan du garage (voir l'en-tête du module).
 pub(crate) fn installer(
     doc: &mut Document,
     lu: Fichier,
@@ -778,80 +1252,106 @@ pub(crate) fn installer(
         if !doc.sequences.iter().any(|q| q.id == s.sequence) {
             continue;
         }
+        let mut garage: BTreeMap<u64, Parque> = BTreeMap::new();
+        for (pi, pf) in s.garage.into_iter().enumerate() {
+            match lire_un_plan(pf, Cle::Parque(si, pi), |ri| Cle::ParqueVersion(si, pi, ri), &mut panels, &mut rognages, missing) {
+                Some(g) => {
+                    garage.insert(g.panel.id, g);
+                }
+                None => warnings.push("version de séquence : un plan illisible, ignoré.".into()),
+            }
+        }
+        let film: HashSet<u64> = doc.panels.iter().map(|p| p.id).collect();
         let mut autres = Vec::new();
         for (vi, v) in s.autres.into_iter().enumerate() {
             let scenes: Vec<Scene> = v.scenes.iter().map(|f| Scene { id: f.id, name: f.nom.clone(), number: f.numero.clone(), sequence: s.sequence }).collect();
-            let mut c = Contenu::default();
-            for (pi, pf) in v.plans.into_iter().enumerate() {
-                let Some(mut panel) = panels.remove(&Cle::Plan(si, vi, pi)) else { continue };
-                if !scenes.iter().any(|sc| sc.id == pf.scene) {
-                    warnings.push(format!("variante {} d'une séquence : un plan sans scène connue, ignoré.", lettre(v.numero)));
-                    continue;
-                }
-                poser_scene(&mut panel, pf.scene);
-                if let Some(vf) = pf.versions {
-                    let mut rangees = Vec::new();
-                    for (ri, r) in vf.autres.iter().enumerate() {
-                        if let Some(mut p) = panels.remove(&Cle::Version(si, vi, pi, ri)) {
-                            poser_scene(&mut p, pf.scene);
-                            rangees.push(Rangee { numero: r.numero, date: r.date, panel: p });
-                        }
+            let mut contenu = if v.plans.is_empty() {
+                let slots: Vec<Emplacement> = v.emplacements.into_iter().map(|e| Emplacement { plan: e.plan, scene: e.scene, version: e.version.max(1), duree: e.duree }).collect();
+                Contenu { scenes, slots, transitions: v.transitions, references: v.references }
+            } else {
+                // Format 1 : une copie complète. Ses plans passent au garage, un emplacement chacun.
+                let mut ancien = Ancien { scenes, ..Ancien::default() };
+                let mut commentaires = v.commentaires;
+                for (pi, pf) in v.plans.into_iter().enumerate() {
+                    let scene = pf.scene;
+                    let mut pf = pf;
+                    pf.commentaires = Vec::new();
+                    let Some(g) = lire_un_plan(pf, Cle::Plan(si, vi, pi), |ri| Cle::Version(si, vi, pi, ri), &mut panels, &mut rognages, missing) else { continue };
+                    if !ancien.scenes.iter().any(|sc| sc.id == scene) {
+                        warnings.push(format!("version {} d'une séquence : un plan sans scène connue, ignoré.", lettre(v.numero)));
+                        continue;
                     }
-                    if !rangees.is_empty() {
-                        c.versions.insert(panel.id, VersionsDuPlan { actuelle: vf.actuelle, date_actuelle: vf.date_actuelle, prochaine: vf.prochaine, autres: rangees });
+                    let id = g.panel.id;
+                    if let Some(vv) = g.versions {
+                        ancien.versions.insert(id, vv);
                     }
+                    if let Some(r) = g.reserve {
+                        ancien.reserves.insert(id, r);
+                    }
+                    ancien.panels.push(g.panel);
                 }
-                if let Some(l) = rognages.remove(&Cle::Plan(si, vi, pi)) {
-                    c.reserves.extend(l.pour_plans(&[&panel], missing));
+                let ids: HashSet<u64> = ancien.panels.iter().map(|p| p.id).collect();
+                commentaires.retain(|k| ids.contains(&k.panel));
+                ancien.comments = commentaires;
+                ancien.transitions = v.transitions;
+                ancien.references = v.references;
+                let (contenu, parques) = ancien.en_parques();
+                for g in parques {
+                    garage.insert(g.panel.id, g);
                 }
-                c.panels.push(panel);
+                contenu
+            };
+            // Un emplacement dont le plan n'est ni au film ni au garage est ignoré ; la scène de chaque plan est connue.
+            let avant = contenu.slots.len();
+            contenu.slots.retain(|e| film.contains(&e.plan) || garage.contains_key(&e.plan));
+            if contenu.slots.len() < avant {
+                warnings.push(format!("version {} d'une séquence : {} plan(s) illisible(s) ignoré(s).", lettre(v.numero), avant - contenu.slots.len()));
             }
-            if c.panels.is_empty() {
-                warnings.push(format!("variante {} d'une séquence : illisible, ignorée.", lettre(v.numero)));
+            if contenu.slots.is_empty() {
+                warnings.push(format!("version {} d'une séquence : illisible, ignorée.", lettre(v.numero)));
                 continue;
             }
-            let ids = c.ids_plans();
-            c.scenes = scenes.into_iter().filter(|sc| c.panels.iter().any(|p| p.scene == sc.id)).collect();
-            c.comments = v.commentaires.into_iter().filter(|k| ids.contains(&k.panel)).collect();
-            c.transitions = v.transitions.into_iter().filter(|t| t.out.is_some_and(|o| ids.contains(&o)) && t.inn.is_some_and(|i| ids.contains(&i))).collect();
-            c.references = v.references.into_iter().map(|(r, liens)| (r, liens.into_iter().filter(|p| ids.contains(p)).collect::<Vec<_>>())).filter(|(_, l)| !l.is_empty()).collect();
-            for sc in &c.scenes {
+            let ids = contenu.ids_plans();
+            contenu.scenes.retain(|sc| contenu.slots.iter().any(|e| e.scene == sc.id));
+            contenu.transitions.retain(|t| t.out.is_some_and(|o| ids.contains(&o)) && t.inn.is_some_and(|i| ids.contains(&i)));
+            contenu.references = contenu.references.into_iter().map(|(r, liens)| (r, liens.into_iter().filter(|p| ids.contains(p)).collect::<Vec<_>>())).filter(|(_, l)| !l.is_empty()).collect();
+            for sc in &contenu.scenes {
                 doc.reserve_id(sc.id);
             }
-            for k in &c.comments {
-                doc.reserve_id(k.id);
-            }
-            for t in &c.transitions {
+            for t in &contenu.transitions {
                 doc.reserve_id(t.id);
             }
-            for r in c.reserves.values() {
+            autres.push(VarianteRangee { numero: v.numero, nom: v.nom, date: v.date, contenu });
+        }
+        if autres.is_empty() {
+            continue;
+        }
+        let mut v = VariantesDeSequence {
+            actuelle: s.actuelle,
+            nom_actuelle: s.nom_actuelle,
+            date_actuelle: s.date_actuelle,
+            autres,
+            origines: s.origines.into_iter().map(|[p, o]| (p, o)).collect(),
+            garage,
+        };
+        v.nettoyer_garage();
+        for g in v.garage.values() {
+            for p in std::iter::once(&g.panel).chain(g.versions.iter().flat_map(|v| v.autres.iter().map(|r| &r.panel))) {
+                doc.reserve_id(p.id);
+                p.marks.iter().for_each(|m| doc.reserve_id(m.id));
+            }
+            g.comments.iter().for_each(|k| doc.reserve_id(k.id));
+            if let Some(r) = &g.reserve {
                 for piece in [&r.head, &r.tail] {
                     piece.marks.iter().for_each(|m| doc.reserve_id(m.id));
                     piece.comments.iter().for_each(|k| doc.reserve_id(k.id));
                 }
             }
-            for p in c.panels.iter().chain(c.versions.values().flat_map(|v| v.autres.iter().map(|r| &r.panel))) {
-                doc.reserve_id(p.id);
-                p.marks.iter().for_each(|m| doc.reserve_id(m.id));
-            }
-            autres.push(VarianteRangee { numero: v.numero, nom: v.nom, date: v.date, contenu: c });
         }
-        if autres.is_empty() {
-            continue;
-        }
-        out.insert(
-            s.sequence,
-            VariantesDeSequence {
-                actuelle: s.actuelle,
-                nom_actuelle: s.nom_actuelle,
-                date_actuelle: s.date_actuelle,
-                autres,
-                origines: s.origines.into_iter().map(|[p, o]| (p, o)).collect(),
-            },
-        );
+        out.insert(s.sequence, v);
     }
     if partielle {
-        warnings.push("Des dessins de variantes de séquences manquent : le fichier des variantes ne sera pas réécrit tant qu'ils ne sont pas là.".into());
+        warnings.push("Des dessins de versions de séquences manquent : le fichier des versions de séquences ne sera pas réécrit tant qu'ils ne sont pas là.".into());
     }
     doc.variantes_partielles = partielle;
     doc.variantes = Arc::new(out);

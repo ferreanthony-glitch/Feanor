@@ -2653,9 +2653,19 @@ action = "version.suivante"
 touches = []
 source = "SHOT (sans touche)"
 
-# Variantes d'une séquence (A · B · C) : sans touche, à choisir.
+# Versions d'une séquence (A · B · C) : sans touche, à choisir.
 [[raccourci]]
 action = "variante.nouvelle"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "variante.copie"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "variante.mettre_a_jour"
 touches = []
 source = "SHOT (sans touche)"
 
