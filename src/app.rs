@@ -331,6 +331,8 @@ pub struct App {
     /// Brosse par personnage (`personnagesui.rs`) : le personnage qui dessine, la fenêtre « Modifier » et le fil
     /// des fonds de trait ; les personnages eux-mêmes sont dans le projet (`Document::personnages`).
     pub(crate) perso: crate::personnagesui::Etat,
+    /// Mon panneau (essai du Labo, `monpanneauui.rs`) : la recherche du « + », le nom qu'on saisit, le bouton qu'on glisse.
+    pub(crate) mon_panneau: crate::monpanneauui::Etat,
     pub(crate) cur_panel: usize,
     pub(crate) cur_layer: usize,
     pub(crate) cur_frame: usize,
@@ -1031,6 +1033,7 @@ impl App {
             board_view: BoardView::Scene,
             vignettes: Default::default(),
             perso: Default::default(),
+            mon_panneau: Default::default(),
             cur_panel: 0,
             cur_layer: 0,
             cur_frame: 0,

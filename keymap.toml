@@ -2523,6 +2523,12 @@ action = "suggestion.lire"
 touches = []
 source = "SHOT (sans touche : le bouton « Lire le storyboard » du panneau le lance aussi)"
 
+# Mon panneau (essai du menu Labo) : tes commandes, tes brosses et tes outils perso en un panneau (sans touche : à choisir).
+[[raccourci]]
+action = "vue.mon_panneau"
+touches = []
+source = "SHOT (sans touche)"
+
 # Effets des extraits de son (sans touche : à choisir).
 [[raccourci]]
 action = "son.fondu_entree"

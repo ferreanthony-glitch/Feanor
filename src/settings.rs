@@ -237,6 +237,10 @@ pub struct Settings {
     /// commun à tous les projets ; seuls les plans créés ensuite l'ont (les plans qui existent gardent leur durée).
     #[serde(default = "crate::dureeplans::secondes_d_origine", rename = "duree_nouveau_plan", skip_serializing_if = "crate::dureeplans::est_d_origine")]
     pub new_plan_secs: f32,
+    /// « Mon panneau » (essai du menu Labo, `monpanneau.rs`) : les boutons que ce poste y a rangés (commandes, brosses, outils perso,
+    /// séparateurs) et « Afficher les noms ». Un réglage du poste : rien n'est écrit dans le projet. Absent : le panneau vide.
+    #[serde(default, rename = "mon_panneau", skip_serializing_if = "crate::monpanneau::Reglage::est_vide")]
+    pub mon_panneau: crate::monpanneau::Reglage,
 }
 
 fn default_passe_partout() -> u8 {
@@ -327,6 +331,7 @@ impl Default for Settings {
             point_fixe: Default::default(),
             rotation_autour: Default::default(),
             new_plan_secs: crate::dureeplans::secondes_d_origine(),
+            mon_panneau: Default::default(),
         }
     }
 }
@@ -383,6 +388,8 @@ impl Settings {
         s.echelle = crate::echelle::echelle_valide(s.echelle);
         s.vignettes = std::mem::take(&mut s.vignettes).nettoyes();
         s.new_plan_secs = crate::dureeplans::secondes_valides(s.new_plan_secs);
+        // Mon panneau : une commande qui n'existe plus (réglages d'une autre version) est ignorée, sans rien casser.
+        s.mon_panneau = std::mem::take(&mut s.mon_panneau).nettoye(crate::monpanneau::commande_connue);
         s.poser_le_panneau_vignettes();
         s
     }

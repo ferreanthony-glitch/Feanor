@@ -65,6 +65,11 @@ pub(crate) fn shortcut_menu(resp: &Response, action: &str, current: &str) {
             ask_assign(ui.ctx(), action);
             ui.close_menu();
         }
+        // Mon panneau (essai du Labo) : l'entrée n'existe que tant que le panneau est ouvert.
+        if crate::monpanneauui::ouvert(ui.ctx()) && ui.button(format!("{}  Ajouter à Mon panneau", ph::STAR)).clicked() {
+            crate::monpanneauui::demander_ajout(ui.ctx(), action);
+            ui.close_menu();
+        }
     });
 }
 

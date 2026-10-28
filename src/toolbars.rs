@@ -66,6 +66,7 @@ impl App {
             Some(on) => ui.add_sized(crate::barres::CASE, egui::SelectableLabel::new(on, text)),
             None => ui.add_sized(crate::barres::CASE, egui::Button::new(text).frame(false)),
         };
+        crate::monpanneauui::apprendre(ui.ctx(), action, icon, name, description);
         self.aide(resp, name, description, action)
     }
 

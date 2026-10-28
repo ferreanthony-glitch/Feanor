@@ -102,6 +102,7 @@ pub(crate) fn interrupteur(ui: &mut Ui, valeur: &mut bool, symbole: &str, nom: &
 /// `interrupteur` d'une commande liée à `action` : clic droit, lui assigner un raccourci.
 pub(crate) fn interrupteur_a(ui: &mut Ui, valeur: &mut bool, symbole: &str, nom: &str, description: &str, raccourci: &str, action: &str) -> Response {
     let resp = interrupteur(ui, valeur, symbole, nom, description, raccourci);
+    crate::monpanneauui::apprendre(ui.ctx(), action, symbole, nom, description);
     crate::raccourcisui::shortcut_menu(&resp, action, raccourci);
     resp
 }
@@ -110,6 +111,7 @@ pub(crate) fn interrupteur_a(ui: &mut Ui, valeur: &mut bool, symbole: &str, nom:
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn choix_a<T: PartialEq>(ui: &mut Ui, valeur: &mut T, cette: T, symbole: &str, nom: &str, description: &str, raccourci: &str, action: &str) -> Response {
     let resp = choix(ui, valeur, cette, symbole, nom, description, raccourci);
+    crate::monpanneauui::apprendre(ui.ctx(), action, symbole, nom, description);
     crate::raccourcisui::shortcut_menu(&resp, action, raccourci);
     resp
 }
@@ -146,6 +148,7 @@ impl App {
     pub(crate) fn bouton(&self, ui: &mut Ui, symbole: &str, nom: &str, description: &str, action: &str) -> Response {
         let r = self.raccourci(action);
         let resp = icone(ui, symbole, nom, description, &r);
+        crate::monpanneauui::apprendre(ui.ctx(), action, symbole, nom, description);
         crate::raccourcisui::shortcut_menu(&resp, action, &r);
         resp
     }
@@ -154,6 +157,7 @@ impl App {
     pub(crate) fn bouton_si(&self, ui: &mut Ui, actif: bool, symbole: &str, nom: &str, description: &str, action: &str) -> Response {
         let r = self.raccourci(action);
         let resp = icone_si(ui, actif, symbole, nom, description, &r);
+        crate::monpanneauui::apprendre(ui.ctx(), action, symbole, nom, description);
         crate::raccourcisui::shortcut_menu(&resp, action, &r);
         resp
     }
@@ -162,6 +166,7 @@ impl App {
     pub(crate) fn bouton_etat(&self, ui: &mut Ui, on: bool, symbole: &str, nom: &str, description: &str, action: &str) -> Response {
         let r = self.raccourci(action);
         let resp = etat(ui, on, symbole, nom, description, &r);
+        crate::monpanneauui::apprendre(ui.ctx(), action, symbole, nom, description);
         crate::raccourcisui::shortcut_menu(&resp, action, &r);
         resp
     }

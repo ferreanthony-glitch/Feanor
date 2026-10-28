@@ -276,6 +276,9 @@ impl App {
                 ui.separator();
                 self.action_item(ui, "Propager la peinture du calque…", "calque.propager");
                 ui.separator();
+                // Mon panneau : l'essai d'un panneau à soi (commandes, brosses, outils perso ; `monpanneau.rs`).
+                self.action_item(ui, "Mon panneau (essai)", crate::monpanneau::ACTION);
+                ui.separator();
                 let rec = if self.record_strokes.is_some() { "Arrêter d'enregistrer mes traits" } else { "Enregistrer mes traits (banc d'essai du moteur)" };
                 self.action_item(ui, rec, "pinceau.enregistrer_traits");
             });

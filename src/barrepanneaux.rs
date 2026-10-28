@@ -121,11 +121,23 @@ pub(crate) const HORS_BARRE: &[Entree] = &[
         "Planche",
         "Le sens de lecture de la planche (en lignes, ou à la japonaise) et les textes montrés à côté des cases. Un clic l'ouvre ou le met devant, un autre le ferme.",
     ),
+    // « Mon panneau » (essai du menu Labo, `monpanneau.rs`) : pas d'icône dans la barre, comme les suggestions sonores.
+    entree(
+        Pane::MonPanneau,
+        "vue.mon_panneau",
+        "Mon panneau (essai)",
+        "Tes commandes, tes brosses et tes outils perso rangés en un seul panneau. Un clic l'ouvre ou le met devant, un autre le ferme.",
+    ),
 ];
+
+/// L'icône (de la barre ou du menu Labo) qu'une action ouvre ou ferme.
+pub(crate) fn entree_de_action(action: &str) -> Option<&'static Entree> {
+    GROUPES.iter().flat_map(|g| g.iter()).chain(HORS_BARRE).find(|e| e.action == action)
+}
 
 /// Le panneau qu'une action ouvre ou ferme, si c'en est une de la barre (ou du menu Labo).
 pub(crate) fn pane_de_action(action: &str) -> Option<Pane> {
-    GROUPES.iter().flat_map(|g| g.iter()).chain(HORS_BARRE).find(|e| e.action == action).map(|e| e.pane)
+    entree_de_action(action).map(|e| e.pane)
 }
 
 /// Ce que fait un clic sur l'icône d'un panneau.

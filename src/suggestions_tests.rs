@@ -730,7 +730,7 @@ fn the_pane_is_closed_by_default_opens_on_the_right_and_has_its_icon_and_command
     assert!(Pane::SuggestionsSonores.on_demand());
     assert_eq!(Pane::SuggestionsSonores.group(), Group::Right);
     assert_eq!(serde_json::to_string(&Pane::SuggestionsSonores).unwrap(), "\"suggestions_sonores\"");
-    assert_eq!(Pane::ALL.len(), 16, "le panneau Planche en plus, le panneau Pinceaux en moins (2026-10-24)");
+    assert_eq!(Pane::ALL.len(), 17, "le panneau Planche en plus, le panneau Pinceaux en moins (2026-10-24), Mon panneau en plus (Labo, 2026-10-28)");
     assert!(Pane::ALL.contains(&Pane::SuggestionsSonores));
     let mut l = DockLayout::from_legacy(&Layout::default());
     assert!(!l.contains(Pane::SuggestionsSonores), "fermé par défaut");
