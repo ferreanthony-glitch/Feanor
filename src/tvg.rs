@@ -286,7 +286,10 @@ fn read_bitmap(raw: &[u8]) -> Option<TvgBitmap> {
     for (px, py, img) in &parts {
         for (x, y, p) in img.enumerate_pixels() {
             let o = (((py - y0) as usize + y as usize) * w + (px - x0) as usize + x as usize) * 4;
-            rgba[o..o + 4].copy_from_slice(&p.0);
+            // Ordre des canaux des PNG des tuiles : (rouge, vert, opacité, bleu), pas (rouge, vert, bleu, opacité). Relevé sur les
+            // 328 bitmaps des trois projets : rouge = vert = « alpha » du PNG sur 99,5 % des pixels de 323 d'entre eux (des gris),
+            // et l'ancien ordre donnait des arcs jaunes et des halos bleus là où les vignettes montrent du blanc et du gris.
+            rgba[o..o + 4].copy_from_slice(&[p.0[0], p.0[1], p.0[3], p.0[2]]);
         }
     }
     Some(TvgBitmap { x: x0, y: y0, width: w, height: h, rgba })
@@ -495,6 +498,9 @@ mod tests {
             walk(&raw, 1, &mut shown);
         }
     }
+    fn h_img(i: &image::RgbaImage) -> usize {
+        i.height() as usize
+    }
     /// Sonde des pertes : `TVG_PERTES=<fichier ou dossier>` compte les zones perdues, par cause.
     #[test]
     #[ignore]
@@ -681,6 +687,9 @@ mod tests {
         }
         for (col, contours) in &groups {
             let c = d.palette.get(col).copied().unwrap_or([255, 0, 255, 255]);
+            if groups.len() <= 8 {
+                println!("zone {col:x} : {c:?}, {} contours", contours.len());
+            }
             for y in 0..h {
                 let yc = y as f32 + 0.5;
                 let mut xs: Vec<f32> = Vec::new();
@@ -703,7 +712,7 @@ mod tests {
                 }
             }
         }
-        let mut line = |pts: &[[f32; 2]], rgb: [u8; 3]| {
+        let line = |img: &mut image::RgbaImage, pts: &[[f32; 2]], rgb: [u8; 3]| {
             for k in 1..pts.len() {
                 let (a, b) = (to(pts[k - 1]), to(pts[k]));
                 let n = ((b[0] - a[0]).abs().max((b[1] - a[1]).abs()) as usize + 1).max(1);
@@ -716,10 +725,47 @@ mod tests {
                 }
             }
         };
+        if std::env::var_os("TVG_ATTRS").is_some() {
+            let mut hist: std::collections::BTreeMap<Vec<u8>, usize> = Default::default();
+            for o in &d.open {
+                *hist.entry(o.attrs.clone()).or_default() += 1;
+            }
+            for (a, n) in hist.iter().take(40) {
+                println!("attrs {} : {n}", a.iter().map(|x| format!("{x:02x}")).collect::<Vec<_>>().join(" "));
+            }
+        }
+        {
+            // Part des points des lignes sans couleur qui tombent sur un pixel déjà rempli (ligne médiane d'un trait) ou sur le papier.
+            let (mut sur, mut hors) = (0usize, 0usize);
+            let (mut lignes_hors, mut lignes) = (0usize, 0usize);
+            for o in &d.open {
+                let closed = o.line.len() >= 4 && (o.line[0][0] - o.line[o.line.len() - 1][0]).hypot(o.line[0][1] - o.line[o.line.len() - 1][1]) < 0.5;
+                if closed {
+                    continue;
+                }
+                lignes += 1;
+                let mut h = 0;
+                for p in &o.line {
+                    let q = to(*p);
+                    if q[0] >= 0.0 && q[1] >= 0.0 && (q[0] as usize) < w && (q[1] as usize) < h_img(&img) {
+                        if img.get_pixel(q[0] as u32, q[1] as u32).0 == [255, 255, 255, 255] {
+                            hors += 1;
+                            h += 1;
+                        } else {
+                            sur += 1;
+                        }
+                    }
+                }
+                if h * 2 > o.line.len() {
+                    lignes_hors += 1;
+                }
+            }
+            println!("lignes ouvertes : {lignes}, dont {lignes_hors} surtout sur le papier ; points sur un trait {sur}, sur le papier {hors}");
+        }
         if std::env::var_os("TVG_SANS_LIGNES").is_none() {
             for o in &d.open {
                 let closed = o.line.len() >= 4 && (o.line[0][0] - o.line[o.line.len() - 1][0]).hypot(o.line[0][1] - o.line[o.line.len() - 1][1]) < 0.5;
-                line(&o.line, if closed { [255, 0, 0] } else { [0, 0, 255] });
+                line(&mut img, &o.line, if closed { [255, 0, 0] } else { [0, 0, 255] });
             }
         }
         img.save(out).unwrap();
@@ -801,6 +847,78 @@ mod tests {
         if let Some(e) = exemple {
             println!("exemple : {} section {}", e.0.display(), e.1);
         }
+    }
+    /// Sonde des bitmaps : `TVG_BITMAPS=<fichier ou dossier>` : par dessin bitmap, les couleurs les plus fréquentes (RVBA brut des tuiles).
+    #[test]
+    #[ignore]
+    fn sonde_bitmaps() {
+        let Some(p) = std::env::var_os("TVG_BITMAPS") else { return };
+        let mut files = Vec::new();
+        fn walk_files(d: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            if d.is_file() {
+                out.push(d.to_path_buf());
+                return;
+            }
+            for e in std::fs::read_dir(d).unwrap().flatten() {
+                walk_files(&e.path(), out);
+            }
+        }
+        walk_files(std::path::Path::new(&p), &mut files);
+        files.retain(|f| f.extension().is_some_and(|x| x == "tvg"));
+        files.sort();
+        let max: usize = std::env::var("TVG_MAX").ok().and_then(|v| v.parse().ok()).unwrap_or(1000);
+        let mut shown = 0;
+        let mut classes: std::collections::BTreeMap<String, usize> = Default::default();
+        for f in &files {
+            let Ok(bytes) = std::fs::read(f) else { continue };
+            let Ok(d) = super::read(&bytes) else { continue };
+            let Some(bm) = d.bitmap else { continue };
+            if shown >= max {
+                break;
+            }
+            shown += 1;
+            let mut h: HashMap<[u8; 4], usize> = HashMap::new();
+            let (mut mn, mut mx, mut sum, mut n) = ([255u8; 4], [0u8; 4], [0u64; 4], 0u64);
+            let (mut gris, mut opaque, mut vide) = (0u64, 0u64, 0u64);
+            for px in bm.rgba.chunks(4) {
+                if px[3] == 0 {
+                    vide += 1;
+                    continue;
+                }
+                n += 1;
+                if px[0] == px[1] && px[1] == px[2] {
+                    gris += 1;
+                }
+                if px[3] == 255 {
+                    opaque += 1;
+                }
+                for k in 0..4 {
+                    mn[k] = mn[k].min(px[k]);
+                    mx[k] = mx[k].max(px[k]);
+                    sum[k] += px[k] as u64;
+                }
+                *h.entry([px[0], px[1], px[2], px[3]]).or_default() += 1;
+            }
+            let mut top: Vec<_> = h.into_iter().collect();
+            top.sort_by_key(|x| std::cmp::Reverse(x.1));
+            let mut eq = [0u64; 6];
+            for px in bm.rgba.chunks(4).filter(|p| p[3] != 0) {
+                for (k, (a, b)) in [(0, 1), (0, 2), (0, 3), (1, 2), (1, 3), (2, 3)].into_iter().enumerate() {
+                    if px[a] == px[b] {
+                        eq[k] += 1;
+                    }
+                }
+            }
+            let noms = ["R=V", "R=B", "R=A", "V=B", "V=A", "B=A"];
+            let classe: Vec<&str> = (0..6).filter(|&k| eq[k] * 1000 >= n * 995).map(|k| noms[k]).collect();
+            *classes.entry(classe.join(" ")).or_default() += 1;
+            if std::env::var_os("TVG_RESUME").is_some() && std::env::var("TVG_CLASSE").ok().is_none_or(|c| c.replace('-', "") != classe.join(" ")) {
+                continue;
+            }
+            println!("{}/{} {}x{} : non vides {n}, vides {vide}, gris {gris}, alpha 255 {opaque}, min {mn:?}, max {mx:?}, moy {:?}", f.parent().and_then(|p| p.file_name()).unwrap().to_string_lossy(), f.file_name().unwrap().to_string_lossy(), bm.width, bm.height, sum.map(|s| s / n.max(1)));
+            println!("   top {:?}", &top[..top.len().min(6)]);
+        }
+        println!("{shown} bitmaps ; classes (canaux égaux sur 99,5 % des pixels) : {classes:?}");
     }
     /// Sonde à la main : `TVG_BITMAP=<fichier>` et `TVG_SORTIE=<png>` : écrit le bitmap décodé du dessin.
     #[test]
