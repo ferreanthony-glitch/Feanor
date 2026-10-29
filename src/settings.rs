@@ -93,10 +93,11 @@ pub struct Settings {
     /// (les autres gardent leur état).
     #[serde(default = "yes", rename = "deplier_calque_courant")]
     pub montage_auto_open: bool,
-    /// Repliage des pistes du montage : commun à tous les plans (d'office) ou propre à chaque plan
-    /// (`pistes.rs`, Préférences > Montage). Un réglage de l'application : rien n'est écrit dans le projet.
-    #[serde(default, rename = "repliage_pistes", skip_serializing_if = "crate::pistes::ReplisPistes::est_commun")]
-    pub montage_folds: crate::pistes::ReplisPistes,
+    /// Les calques qui ne sont pas actifs, dans le Storyboard et le Montage : en bandes fines (d'office) ou cachés derrière une
+    /// ligne « N autres calques » (`pistes.rs`, Préférences > Montage). Un réglage du poste : rien n'est écrit dans le projet.
+    /// (L'ancien réglage « repliage_pistes », commun ou propre à chaque plan, n'existe plus : une vieille clé est ignorée.)
+    #[serde(default, rename = "calques_non_actifs", skip_serializing_if = "crate::pistes::Inactifs::est_replie")]
+    pub montage_inactifs: crate::pistes::Inactifs,
     /// Pinceau et crayon : « Peindre derrière » (`brushfill`), retenu d'une séance à l'autre (Anthony, 2026-10-17).
     /// La clé garde son nom d'avant le 2026-10-23, quand l'interrupteur s'appelait « Peint sur l'aplat » : les anciens
     /// réglages donnent donc « Peindre derrière ».
@@ -304,7 +305,7 @@ impl Default for Settings {
             workspaces: Vec::new(),
             montage_head_w: default_head_w(),
             montage_auto_open: true,
-            montage_folds: Default::default(),
+            montage_inactifs: Default::default(),
             paint_behind: false,
             paint_on_aplat: false,
             ancien_remplir_la_forme: false,

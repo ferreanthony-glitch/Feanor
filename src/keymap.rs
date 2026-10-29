@@ -456,7 +456,6 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("piste.replier_tout", "Pistes du montage : replier toutes les pistes", true, false),
     act("piste.deplier_tout", "Pistes du montage : déplier toutes les pistes", true, false),
     act("piste.auto_deplier", "Pistes du montage : déplier tout seul le calque courant (oui / non)", true, false),
-    act("piste.replis_par_plan", "Pistes du montage : replis propres à chaque plan (oui) ou communs à tous les plans (non)", true, false),
     act("storyboard.verrouiller", "Verrouiller / déverrouiller le storyboard", true, false),
     act("projet.proprietes", "Réglages du projet (propriétés, résolution, cadence)", true, false),
     act("projet.nouveau_depuis_plans", "Nouveau projet à partir des plans choisis", true, false),

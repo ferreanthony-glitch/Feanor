@@ -233,7 +233,7 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Dessin, G::Tremblement, "dessin.tremblement_graine", "Graine du tremblement par défaut", "hasard autre tremblement numéro"),
     r(O::Dessin, G::Tremblement, "dessin.tremblement_repos", "Animer à l'arrêt (tremblement par défaut)", "image fixe immobile bouge repos aperçu"),
     // ---- Montage
-    r(O::Montage, G::Pistes, "montage.repliage", "Repliage des pistes", "replier commun plan calques"),
+    r(O::Montage, G::Pistes, "montage.repliage", "Calques non actifs", "replier cacher calques actif bande autres"),
     r(O::Montage, G::Pistes, "montage.deplier", "Déplier le calque courant tout seul", "piste automatique"),
     r(O::Montage, G::PlansNeufs, "montage.duree_nouveau_plan", "Durée d'un nouveau plan", "secondes images deux défaut créer plan neuf long court"),
     // ---- Vignettes

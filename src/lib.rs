@@ -724,6 +724,9 @@ mod vignettes_camera_tests;
 mod pistes;
 #[cfg(test)]
 mod pistes_tests;
+mod clesplan;
+#[cfg(test)]
+mod timeline_repliee_tests;
 #[cfg(test)]
 mod pastilles_storyboard_tests;
 mod brushfill;

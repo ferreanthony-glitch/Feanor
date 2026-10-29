@@ -835,6 +835,9 @@ pub struct App {
     pub(crate) montage_zoom: f32,
     /// Pistes repliables du montage : le calque qui s'est déplié tout seul (`pistes.rs`).
     pub(crate) pistes: crate::pistes::PistesUi,
+    /// Les clés de tous les calques de chaque plan, en traits sur son bloc du montage, gardées d'un changement du document à l'autre
+    /// (`clesplan.rs`).
+    pub(crate) cles_blocs: crate::clesplan::ClesBlocs,
     /// Le zoom du montage et de la timeline reste calé sur la tête de lecture (`zoombande.rs`) :
     /// où elle était dans la vue au dernier affichage, et le défilement demandé par un zoom.
     pub(crate) strip_geo: [crate::zoombande::StripGeo; 2],
@@ -1328,6 +1331,7 @@ impl App {
             thumbs: Thumbs::default(),
             montage_zoom: 4.0,
             pistes: Default::default(),
+            cles_blocs: Default::default(),
             strip_geo: Default::default(),
             strip_anchor: [None, None],
             montage_fit: false,
@@ -4408,7 +4412,6 @@ impl App {
                 self.set_all_tracks_folded(false);
             }
             "piste.auto_deplier" => self.toggle_auto_open(),
-            "piste.replis_par_plan" => self.toggle_replis_pistes(),
             "projet.proprietes" => self.properties_window = !self.properties_window,
             "projet.nouveau_depuis_plans" => self.request(Pending::FromChosen),
             // Panneau de la pelure d'oignon (13f, `onionui.rs`).

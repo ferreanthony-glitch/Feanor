@@ -33,8 +33,10 @@ pub(crate) const LAYER_H: f32 = 40.0;
 /// Barre d'un calque sous ses dessins (chantier 5, comme dans la timeline) : on la prend pour
 /// décaler le calque.
 pub(crate) const BAR_H: f32 = 5.0;
-/// La barre d'un calque dans une piste repliée.
-const BAR_FOLDED_H: f32 = 3.0;
+/// Distance entre le bas d'une piste dépliée et la barre du calque : la place du liseré (3 points) du calque de couleur lié.
+pub(crate) const BAR_OFF: f32 = 3.0;
+/// Hauteur du liseré d'un calque de couleur lié, sous le bloc de son calque de trait.
+const LISERE_H: f32 = 3.0;
 /// La couleur des clés de caméra (celle du thème).
 fn cam_color() -> Color32 {
     theme::camera()
@@ -44,9 +46,22 @@ fn cam_color() -> Color32 {
 /// Le calque d'un plan (`layers`, du bas vers le haut) à la rangée `row` du montage (0 : en
 /// haut) : chaque plan montre ses calques dans son propre ordre, du haut de sa pile vers le bas
 /// (Anthony, 2026-10-17 : « l'organisation et l'ordre des calques indépendants d'un shot à un
-/// autre »).
+/// autre »). Un calque de couleur lié à un calque de trait n'a pas de rangée : un liseré sous le
+/// bloc de son trait le montre (2026-10-28).
 pub(crate) fn layer_in_row(layers: &[Layer], row: usize) -> Option<usize> {
-    layers.len().checked_sub(row + 1)
+    layers.iter().enumerate().rev().filter(|(_, l)| !l.keys_follow_line()).nth(row).map(|(k, _)| k)
+}
+
+/// La rangée du calque `li` (celle de son trait, pour un calque de couleur lié) : l'inverse de `layer_in_row`.
+pub(crate) fn row_of_layer(layers: &[Layer], li: usize) -> Option<usize> {
+    let l = layers.get(li)?;
+    let li = if l.keys_follow_line() { crate::calquecouleur::trait_de(layers, li)? } else { li };
+    Some(layers[li + 1..].iter().filter(|l| !l.keys_follow_line()).count())
+}
+
+/// Combien de rangées les calques de `layers` font (les calques de couleur liés n'en font pas).
+pub(crate) fn row_count(layers: &[Layer]) -> usize {
+    layers.iter().filter(|l| !l.keys_follow_line()).count()
 }
 
 /// Rangées de la bande, en distance depuis son haut.
@@ -82,7 +97,10 @@ impl Rows {
     /// La rangée sous la hauteur `y` (depuis le haut des pistes de calques), la plus proche si `y`
     /// est avant la première piste ou après la dernière (choix au rectangle).
     pub fn row_near(&self, y: f32) -> usize {
-        self.lane_at(y).or_else(|| if y < 0.0 { self.lanes.first() } else { self.lanes.last() }).map_or(0, |l| l.row)
+        // (Sans la ligne « N autres calques », qui n'est la rangée d'aucun calque : un rectangle de choix qui s'y termine s'arrête à la
+        // dernière piste de calque.)
+        let real = || self.lanes.iter().filter(|l| !l.is_more());
+        real().find(|l| y >= l.top && y < l.top + l.h).or_else(|| if y < 0.0 { real().next() } else { real().last() }).map_or(0, |l| l.row)
     }
     pub fn lanes_top(&self) -> f32 {
         self.background_top() + LANE_GAP
@@ -97,8 +115,8 @@ impl Rows {
 impl App {
     /// Rangées pour une bande haute de `available` : les panneaux prennent la place qui reste.
     pub(crate) fn montage_rows(&self, available: f32) -> Rows {
-        let count = self.doc.panels.iter().map(|p| p.layers.len()).max().unwrap_or(0);
-        let lanes = crate::pistes::lanes_in(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), self.pistes_replis());
+        let count = self.doc.panels.iter().map(|p| row_count(&p.layers)).max().unwrap_or(0);
+        let lanes = crate::pistes::lanes_in(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), &self.pistes_replis());
         let mut rows = Rows { block_h: 0.0, lanes };
         let fixed = rows.height(self.doc.audio_tracks.len()) + 12.0;
         rows.block_h = (available - fixed).clamp(56.0, 170.0);
@@ -141,6 +159,7 @@ impl App {
                 .collect()
         };
         let mut pick = None;
+        let cur_row = row_of_layer(self.layers(), self.cur_layer);
         let mut grid: Vec<crate::layerheads::Row> = Vec::new();
         // Le menu du clic droit d'une rangée se montre au milieu des rangées : « Supprimer » un dossier emmène ses calques, et les
         // rangées d'après lisaient des rangs qui n'existaient plus (passe de débogage, 2026-10-22). On s'arrête dès que les calques
@@ -155,6 +174,10 @@ impl App {
             }
             let row = track.row;
             let r = lane(rows.layers_top() + track.top, track.h);
+            if track.is_more() {
+                self.more_line(ui, &painter, r);
+                continue;
+            }
             let Some(k) = item else {
                 label(r, &name, visuals.weak_text_color());
                 ui.interact(r, ui.id().with(("piste_calque_absente", row)), Sense::hover())
@@ -162,7 +185,8 @@ impl App {
                 continue;
             };
             grid.push(crate::layerheads::Row { li: k, top: track.top, h: track.h });
-            let current = k == self.cur_layer;
+            // (Le calque de couleur courant est « actif » par la rangée de son trait.)
+            let current = Some(row) == cur_row;
             // Un calque de toute la scène : son nom teinté « fond ».
             let wide = self.doc.panels[self.cur_panel].layers[k].scene_wide.is_some();
             let color = match (wide, current) {
@@ -173,12 +197,7 @@ impl App {
             // Le fond de la rangée (choisir, glisser, menu), puis le nom et les réglages qui tiennent
             // dans la largeur de la colonne, au-dessus (`montagehead.rs`).
             painter.rect_filled(r, 3.0, theme::etiquette());
-            // La bande de sa sorte (bitmap vert, vectoriel bleu, calque de couleur rose), au bord gauche.
-            let l = &self.doc.panels[self.cur_panel].layers[k];
-            if !l.folder {
-                let band = Rect::from_min_size(r.left_top() + vec2(0.0, 3.0), vec2(3.0, r.height() - 6.0));
-                painter.rect_filled(band, 1.0, theme::couleur_du_calque(l));
-            }
+            // (La sorte du calque, vectoriel, bitmap…, est la pastille de couleur de l'en-tête : `montage_head`.)
             if current {
                 painter.rect_stroke(r, 3.0, Stroke::new(1.5_f32, theme::contour()), StrokeKind::Inside);
             }
@@ -192,14 +211,14 @@ impl App {
                 self.montage_layer_drag = Some(k);
             }
             let resp = resp.on_hover_text(
-                "Calque du plan courant : clic, il devient courant ; double-clic sur le nom, le renommer ; double-clic à côté, replier ou déplier la piste ; glisser, il monte ou descend ; clic droit, tout ce qui touche au calque. Tirer le bord droit de la colonne : ses réglages.",
+                "Calque du plan courant : clic, il devient actif (la piste se déplie) ; double-clic sur le nom, le renommer ; double-clic à côté, replier ou déplier la piste ; glisser, il monte ou descend ; clic droit, tout ce qui touche au calque (opacité, verrou, fusion…).",
             );
             if resp.clicked() || resp.secondary_clicked() {
                 pick = Some((k, resp.secondary_clicked()));
             }
             if let (true, Some(p)) = (resp.double_clicked(), resp.interact_pointer_pos()) {
-                let (name_rect, size) = if track.folded { (crate::pistes::folded_layout(r).name, 11.0) } else { (crate::montagehead::head_layout(r).name, 12.0) };
-                if self.double_click_is_on_name(ui, p, name_rect, &name, size) {
+                let name_rect = crate::pistes::head_layout(r, track.folded).name;
+                if self.double_click_is_on_name(ui, p, name_rect, &name, crate::pistes::name_size(track.folded)) {
                     let id = self.doc.panels[self.cur_panel].layers[k].id;
                     self.layer_rename = Some(crate::layersui::LayerRename { in_montage: true, ..crate::layersui::LayerRename::new(id, &name, false) });
                 } else {
@@ -207,11 +226,7 @@ impl App {
                 }
             }
             resp.context_menu(|ui| self.montage_layer_menu(ui, k));
-            if track.folded {
-                self.montage_folded_head(ui, r, k, color);
-            } else {
-                self.montage_layer_head(ui, r, k, color);
-            }
+            self.montage_head(ui, r, k, color, track.folded);
         }
         // (Les calques ont changé pendant les rangées : le glissé et le clic de cette image visaient les rangs d'avant.)
         tient &= self.calques_tiennent(&avant, usize::MAX);
@@ -245,6 +260,27 @@ impl App {
             if !(secondary && self.is_chosen_layer(k)) {
                 self.click_layer_head(k, m.command && !secondary, m.shift && !secondary);
             }
+        }
+    }
+
+    /// La ligne « ▾ N autres calques » (mode « cachés ») : un clic montre les autres calques en bandes fines, un autre les cache.
+    fn more_line(&mut self, ui: &mut egui::Ui, painter: &Painter, r: Rect) {
+        use egui_phosphor::regular as ph;
+        let count = self.doc.panels.iter().map(|p| row_count(&p.layers)).max().unwrap_or(0);
+        let n = crate::pistes::others_count(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), &self.pistes_replis());
+        let shown = self.pistes.autres_montres;
+        painter.rect_filled(r, 3.0, theme::etiquette());
+        let text = match (shown, n) {
+            (false, 1) => format!("{} 1 autre calque", ph::CARET_DOWN),
+            (false, n) => format!("{} {n} autres calques", ph::CARET_DOWN),
+            (true, _) => format!("{} Cacher les autres", ph::CARET_UP),
+        };
+        let resp = ui.interact(r, ui.id().with("autres_calques"), Sense::click());
+        let ink = if resp.hovered() { theme::texte_fort() } else { ui.visuals().weak_text_color() };
+        painter.with_clip_rect(r).text(pos2(r.left() + 8.0, r.center().y), Align2::LEFT_CENTER, text, FontId::proportional(10.5), ink);
+        let resp = resp.on_hover_text("Les calques non actifs sont cachés (Préférences > Montage). Un clic les montre en bandes fines, un autre les cache de nouveau.");
+        if resp.clicked() {
+            self.pistes.autres_montres = !shown;
         }
     }
 
@@ -347,10 +383,16 @@ impl App {
         }
 
         // Les calques de chaque plan, dans son ordre.
+        let current_plan = &self.doc.panels[self.cur_panel.min(self.doc.panels.len() - 1)];
         for track in &rows.lanes {
             let row = track.row;
             let lr = lane(rows.layers_top() + track.top, track.h);
             painter.rect_filled(lr, 0.0, theme::rangee_sombre());
+            if track.is_more() {
+                continue;
+            }
+            // Le nom de la rangée : celui du calque du plan courant, que la colonne de gauche écrit. Un bloc n'écrit son nom que s'il en diffère.
+            let row_name = layer_in_row(&current_plan.layers, row).map(|k| current_plan.layers[k].name.as_str());
             for (i, b) in blocks.iter().enumerate() {
                 let cell = Rect::from_min_max(pos2(b.left(), lr.top()), pos2(b.right(), lr.bottom()));
                 if !painter.clip_rect().intersects(cell) {
@@ -361,13 +403,13 @@ impl App {
                 let current = i == self.cur_panel && k == self.cur_layer;
                 let hot = lit.filter(|(pi, h, _)| *pi == i && h.layer() == Some(k)).map(|(_, h, held)| (h, held));
                 let chosen: Vec<usize> = self.key_sel.iter().filter(|c| c.panel == p.id && c.layer == p.layers[k].id).map(|c| c.start).collect();
-                paint_layer_cell(painter, cell, &p.layers[k], ppf, current, hot, &chosen, track.folded);
+                let show_name = row_name != Some(p.layers[k].name.as_str());
+                paint_layer_cell(painter, cell, &p.layers[k], &p.layers, ppf, current, hot, &chosen, track.folded, show_name);
                 let x0 = cell.left() - 1.0;
                 let visible = (painter.clip_rect().left(), painter.clip_rect().right());
-                let lane_top = lr.top() - 1.0;
                 if track.folded {
-                    // Piste repliée : les mêmes losanges, plus petits (`pistes.rs`).
-                    self.paint_mini_markers(painter, p, k, |f| x0 + f as f32 * ppf + ppf * 0.5, lane_top, track, visible);
+                    // Bande fine : les clés de position et d'effets en petits traits.
+                    self.paint_ticks(painter, p, k, |f| x0 + f as f32 * ppf + ppf * 0.5, cell, visible);
                 } else {
                     // Clés d'effets (13i) : un losange violet en haut de la piste, par image clée.
                     self.paint_fx_markers(painter, p.id, &p.layers[k], |f| x0 + f as f32 * ppf + ppf * 0.5, cell.top() + 8.0, p.frame_count(), visible);
@@ -382,6 +424,40 @@ impl App {
                 if let Some(d) = drops.iter().find(|d| d.panel == p.id && d.layer == p.layers[k].id) {
                     paint_drop(painter, cell, ppf, d);
                 }
+            }
+        }
+    }
+
+    /// Les clés de position (vertes, moitié basse) et d'effets (violettes, moitié haute) du calque `k` du plan `p`, en petits traits sur
+    /// toute la hauteur d'une bande fine `cell`. Les mêmes conditions que dans une piste dépliée (`paint_fx_markers`,
+    /// `paint_pos_markers`) ; on ne les prend pas à la souris (un clic choisit le calque).
+    pub(crate) fn paint_ticks(&self, painter: &Painter, p: &crate::document::Panel, k: usize, x_of: impl Fn(usize) -> f32, cell: Rect, visible: (f32, f32)) {
+        let layer = &p.layers[k];
+        let max = p.frame_count();
+        let on_screen = |x: f32| x >= visible.0 - 4.0 && x <= visible.1 + 4.0;
+        let (top, bottom) = (cell.top() + 1.0, cell.bottom() - 1.0);
+        let middle = (top + bottom) * 0.5;
+        let tick = |x: f32, y0: f32, y1: f32, color: Color32, on: bool| {
+            let w = if on { 2.5 } else { 1.5 };
+            painter.rect_filled(Rect::from_min_max(pos2(x - w * 0.5, y0), pos2(x + w * 0.5, y1)), 0.0, if on { theme::contour() } else { color });
+        };
+        if let Some(sel) = self.fx_shown(p.id, layer) {
+            let chosen = self.fx_chosen_frames(p.id, layer.id);
+            for f in crate::fxkeys::marker_frames(&layer.fx[sel.effect]) {
+                let x = x_of(f);
+                if f < max && on_screen(x) {
+                    tick(x, top, middle, crate::fxkeys::color(), chosen.contains(&f));
+                }
+            }
+        }
+        let current_layer = self.layers().get(self.cur_layer).is_some_and(|l| l.id == layer.id);
+        // (Les positions cachées par le filtre de la légende, `legendecles.rs`, ne se dessinent pas.)
+        let positions: &[crate::poskeys::PosKey] = if self.cle_vue(crate::legendecles::Sorte::Position) { &layer.pos_keys } else { &[] };
+        for key in positions {
+            let x = x_of(key.frame);
+            if key.frame < max && on_screen(x) {
+                let on = self.pos_ui.sel.contains(&(layer.id, key.frame)) || (key.frame == self.cur_frame && current_layer);
+                tick(x, middle, bottom, theme::POIGNEE_CALQUE, on);
             }
         }
     }
@@ -558,19 +634,20 @@ pub(crate) fn cell_handle_in(layer: &Layer, k: usize, p: Pos2, x0: f32, lane_top
 }
 
 /// Un calque sous un plan : un bloc par dessin exposé (tenu sur plusieurs images), sa barre
-/// dessous (chantier 5), son nom. `hot` : sa poignée survolée ou tenue (vrai : tenue) ;
-/// `chosen` : début des clés choisies.
+/// dessous (chantier 5), son nom s'il diffère de celui de sa rangée (`show_name`), le liseré de ses calques de couleur liés
+/// (cherchés dans `stack`, la pile du plan). `hot` : sa poignée survolée ou tenue (vrai : tenue) ; `chosen` : début des clés choisies.
+/// Une bande fine (`folded`, `pistes.rs`) : les dessins en barres de la couleur du calque, un peu atténuée, sans barre ni nom ni liseré.
 #[allow(clippy::too_many_arguments)]
-fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, current: bool, hot: Option<(Handle, bool)>, chosen: &[usize], folded: bool) {
+fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, stack: &[Layer], ppf: f32, current: bool, hot: Option<(Handle, bool)>, chosen: &[usize], folded: bool, show_name: bool) {
     let (hot, held) = (hot.map(|h| h.0), hot.is_some_and(|h| h.1));
-    // Piste repliée (`pistes.rs`) : les dessins en barres minces, la barre du calque en trait fin.
-    let (pad, bar_h, bar_off, name_size) = if folded { (1.0, BAR_FOLDED_H, 1.0, 10.0) } else { (2.0, BAR_H, 2.0, 12.0) };
-    let seg_off = bar_off + bar_h + 1.0;
+    let (pad, bar_h, bar_off, name_size) = if folded { (1.0, 0.0, 0.0, 9.0) } else { (2.0, BAR_H, BAR_OFF, 12.0) };
+    let seg_off = if folded { 1.0 } else { bar_off + bar_h + 1.0 };
     painter.rect_filled(cell, 2.0, theme::etiquette());
     // Un calque de toute la scène : ses dessins teintés « fond ».
-    let fill = match layer.scene_wide.is_some() {
-        true => theme::calque_decor(),
-        false => theme::fond_du_calque(layer),
+    let fill = match (layer.scene_wide.is_some(), folded) {
+        (true, _) => theme::calque_decor(),
+        (false, true) => theme::couleur_du_calque(layer).gamma_multiply(0.7),
+        (false, false) => theme::fond_du_calque(layer),
     };
     let fill = if layer.visible { fill } else { fill.gamma_multiply(0.35) };
     let x0 = cell.left() - 1.0;
@@ -614,7 +691,7 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
     }
     // La barre du calque, de son premier dessin à la fin du dernier ; ses bouts plus clairs. Elle
     // s'éclaire sous la souris et pendant le geste (comme dans la timeline).
-    if let Some((a, b)) = content_bounds(layer).filter(|_| !layer.folder && layer.video.is_none()) {
+    if let Some((a, b)) = content_bounds(layer).filter(|_| !folded && !layer.folder && layer.video.is_none()) {
         let bar = Rect::from_min_max(
             pos2((x0 + a as f32 * ppf + 1.0).max(cell.left()), cell.bottom() - bar_off - bar_h),
             pos2((x0 + b as f32 * ppf - 1.0).min(cell.right()), cell.bottom() - bar_off),
@@ -645,7 +722,28 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, ppf: f32, curr
             painter.line_segment([pos2(x, cell.top()), pos2(x, cell.bottom())], Stroke::new(1.5_f32, theme::contour()));
         }
     }
-    if cell.width() > 28.0 {
+    // Les calques de couleur liés à ce calque de trait (l'aplat) n'ont pas de piste : un liseré de leur couleur (rose) sous le bloc, tant
+    // que la piste est dépliée ; rien quand elle est repliée (leurs clés comptent dans celles du bloc du plan).
+    if !folded && layer.couleur.is_none() && !layer.folder {
+        let linked: Vec<&Layer> = stack.iter().filter(|c| c.couleur.as_ref().is_some_and(|cc| cc.trait_id == layer.id)).collect();
+        let band_h = LISERE_H / linked.len().max(1) as f32;
+        for (n, c) in linked.iter().enumerate() {
+            let ink = if c.visible { theme::couleur_du_calque(c) } else { theme::couleur_du_calque(c).gamma_multiply(0.35) };
+            let y0 = cell.bottom() - LISERE_H + n as f32 * band_h;
+            let mut f = 0;
+            while f < c.frames.len() {
+                let (s, e) = c.run_bounds(f);
+                if c.frames[f].is_some() {
+                    let seg = Rect::from_min_max(pos2((x0 + s as f32 * ppf).max(cell.left()), y0), pos2((x0 + e as f32 * ppf - 1.0).min(cell.right()), y0 + band_h));
+                    if seg.width() > 0.0 {
+                        painter.rect_filled(seg, 0.0, ink);
+                    }
+                }
+                f = e;
+            }
+        }
+    }
+    if cell.width() > 28.0 && show_name && !folded {
         let text = if layer.visible { theme::sur_calque() } else { theme::texte_doux() };
         painter.with_clip_rect(cell.shrink(1.0)).text(
             pos2(cell.left() + 4.0, (cell.top() + pad + cell.bottom() - seg_off) * 0.5),

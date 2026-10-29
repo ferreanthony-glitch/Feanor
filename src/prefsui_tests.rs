@@ -105,7 +105,7 @@ const D_AVANT: &[&str] = &[
     "Dire dans la barre d'état ce que font les autres",
     "Croix du système sur le pinceau",
     "Opacité du passe-partout",
-    "Repliage des pistes",
+    "Calques non actifs",
     "Déplier le calque courant tout seul",
     "Ajuster les panneaux à leur contenu",
     "Réajuster les panneaux",

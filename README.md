@@ -2076,22 +2076,16 @@ nettoyage du dossier. À regarder à l'écran : la liste de `docs/INTERFACE.md`,
 ## Pistes repliables du montage
 
 Dans le montage (Storyboard), chaque piste de calque a deux hauteurs : **dépliée** (40 points, avec l'œil, le verrou, la pelure, le ⋮ et la barre d'opacité dans la colonne de gauche) et
-**repliée** (16 points : le triangle, le nom, l'œil, le verrou ; les dessins en barres minces avec leurs limites d'exposition, les losanges d'effets et de position en petit). Beaucoup de calques
+**repliée** (11 points : l'œil, la pastille, le nom ; les dessins en barres minces avec leurs limites d'exposition, les clés d'effets et de position en petits traits). Beaucoup de calques
 tiennent ainsi dans la bande, et tout se prend comme avant (choisir, glisser un dessin ou une clé, rectangle, clic droit).
 
-- **Triangle** à gauche de chaque piste : la plie ou la déplie ; **Alt + clic** : toutes les pistes. **Double-clic** sur la colonne, à côté du nom : même chose (sur le nom : renommer).
-- **Clic droit sur une piste > Replier / déplier les pistes**, ou **« Plus… »** dans la barre du montage : replier toutes, déplier toutes, « Déplier le calque courant ». Actions `piste.basculer`,
-  `piste.replier_tout`, `piste.deplier_tout`, `piste.auto_deplier` (aucune touche par défaut : clic droit sur l'icône pour en assigner une).
-- **Déplier le calque courant** (allumé d'office) : la piste du calque courant se montre dépliée, les autres gardent leur état ; elle s'ouvre quand on relâche la souris, jamais en plein geste.
-- **Dossiers** : le triangle d'un dossier le ferme ; ses calques n'ont plus de piste (comme dans le panneau Calques et la timeline).
-- Même état que les **lignes réduites** de la timeline de l'animation (`Layer::collapsed`), enregistré avec le projet (format inchangé). Replier est de l'affichage : pas d'étape d'annulation.
-  Une piste traverse tous les plans (la rangée n) : en mode d'origine, elle est repliée dès qu'un de ses calques l'est.
-- **Deux façons de replier** (Fichier > Préférences… > Montage > « Repliage des pistes », ou clic droit sur une piste > Replier / déplier les pistes, ou « Replis propres à chaque plan »
-  sous « Plus… » du montage, action `piste.replis_par_plan`) : **commun à tous les plans** (d'origine : le triangle et « tout replier » écrivent dans tous les plans) ou **propre à chaque plan**
-  (chaque plan retient ses replis, les hauteurs suivent le plan courant, le triangle et « tout replier » ne touchent que lui, « … de tous les plans » est au clic droit). Les hauteurs changent
-  au relâchement de la souris, jamais sous le pointeur. Changer de mode n'écrit rien dans le projet ; en mode par plan, replier n'écrit jamais dans un plan qu'on ne tient pas (film partagé).
+- **Seul le calque actif est déplié** (Storyboard et Montage ; l'Animation garde sa timeline dépliée) : les autres calques sont de fines bandes (blocs, clés en petits traits), ou cachés derrière « ▾ N autres calques » (Fichier > Préférences… > Montage > « Calques non actifs »). Cliquer le nom ou un bloc d'un calque replié le rend actif (il se déplie au relâchement de la souris). **Double-clic** sur la colonne, à côté du nom : replier ou déplier à la main (sur le nom : renommer).
+- **Clic droit sur une piste > Replier / déplier les pistes**, ou **« Plus… »** dans la barre du montage : replier toutes, déplier toutes, « Déplier le calque courant ». Actions `piste.basculer`, `piste.replier_tout`, `piste.deplier_tout`, `piste.auto_deplier` (aucune touche par défaut).
+- **En-tête réduit** : l'œil, une pastille de la couleur de la sorte du calque et le nom ; opacité, verrou, fusion sont au clic droit. Un **calque de couleur lié** n'a plus de rangée : un liseré rose sous le bloc de son trait. Un bloc n'écrit son nom que s'il diffère de celui de sa rangée.
+- **Les clés de tous les calques** du plan sont de petits traits, de la couleur de leur type de calque, le long du bas de son bloc.
+- Un état d'affichage, par poste : rien n'est écrit dans le projet (format inchangé, `Layer::collapsed` n'est plus lu par le montage ; les lignes réduites de la timeline de l'animation sont à part).
 
-Détail, ce que chaque geste écrit et listes de contrôle à l'écran : `docs/INTERFACE.md` § 29 (29.8 et 29.9 pour les deux modes).
+Détail, ce que chaque geste écrit et listes de contrôle à l'écran : `docs/INTERFACE.md` § 68 (la § 29 décrit l'état d'avant).
 ## Importer un scénario
 
 Fichier > Importer > « Un scénario… » (action `fichier.importer_scenario`, donc aussi dans Ctrl+K) : on

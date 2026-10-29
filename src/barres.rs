@@ -219,25 +219,16 @@ pub(crate) const MONTAGE: &[Cmd] = &[
         "piste.replier_tout",
         ph::ARROWS_IN_LINE_VERTICAL,
         "Replier toutes les pistes",
-        "Les pistes de calques en bandes fines : le nom et les dessins restent visibles. Le triangle d'une piste ne replie que celle-là (Alt + clic : toutes).",
+        "Tous les calques en bandes fines, même le calque actif : le nom, les dessins et les clés restent visibles. Double-clic sur un calque : le déplier seul.",
         false,
         1,
     ),
-    bouton("piste.deplier_tout", ph::ARROWS_OUT_LINE_VERTICAL, "Déplier toutes les pistes", "Les pistes de calques à leur pleine hauteur, avec leurs réglages ; les dossiers s'ouvrent.", false, 1),
+    bouton("piste.deplier_tout", ph::ARROWS_OUT_LINE_VERTICAL, "Déplier toutes les pistes", "Toutes les pistes de calques à leur pleine hauteur (les dossiers s'ouvrent). Un clic sur un autre calque les replie de nouveau.", false, 1),
     etat(
         "piste.auto_deplier",
         ph::CURSOR_CLICK,
         "Déplier le calque courant",
-        "Allumé, la piste du calque courant se montre dépliée (les autres gardent leur état), dès que la souris est relâchée.",
-        false,
-        1,
-    ),
-    // Repliage propre à chaque plan (allumé) ou commun à tous les plans (éteint) : `pistes.rs`.
-    etat(
-        "piste.replis_par_plan",
-        ph::LINK_SIMPLE_BREAK,
-        "Replis propres à chaque plan",
-        "Allumé, chaque plan retient ses replis et les pistes suivent le plan courant. Éteint, une piste est repliée dans tous les plans à la fois.",
+        "Allumé, seul le calque actif est déplié, dès que la souris est relâchée. Éteint, tous les calques restent en bandes fines tant qu'on ne les déplie pas.",
         false,
         1,
     ),
@@ -414,7 +405,6 @@ fn montage_edition() -> &'static [Cmd] {
         reprend(&mut v, "piste.replier_tout", true, 4);
         reprend(&mut v, "piste.deplier_tout", true, 4);
         reprend(&mut v, "piste.auto_deplier", false, 4);
-        reprend(&mut v, "piste.replis_par_plan", false, 4);
         // 5. Relecture et exports.
         reprend(&mut v, "commentaire.ajouter", true, 5);
         reprend(&mut v, "fichier.exporter_relecture", true, 5);
@@ -737,10 +727,6 @@ impl App {
             }
             "montage.aimanter" => v.etat = Some(self.snap_on),
             "piste.auto_deplier" => v.etat = Some(self.settings.montage_auto_open),
-            "piste.replis_par_plan" => {
-                v.etat = Some(self.pistes_par_plan());
-                v.icone = (if self.pistes_par_plan() { ph::LINK_SIMPLE_BREAK } else { ph::LINK_SIMPLE }).to_string();
-            }
             "envoi.liste" => v.etat = Some(self.envois_ui.liste),
             "comparer.ouvrir" => v.etat = Some(self.comparaison.is_some()),
             "envoi.modifie_suivant" | "envoi.modifie_precedent" => {
