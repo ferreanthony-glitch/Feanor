@@ -58,6 +58,11 @@ pub struct SbShot {
 pub struct SbCamKey {
     pub frame: usize,
     pub pos: [f64; 3],
+    /// Rotation en degrés : x bascule, y panoramique, z roulis (chemin de rotation du PEG).
+    pub rot: [f64; 3],
+    /// Adoucis d'entrée et de sortie, en images (poignées plates de la courbe de vitesse) ; 0 : vitesse régulière.
+    pub ease_in: f32,
+    pub ease_out: f32,
 }
 
 /// Un panneau, avec ses légendes réparties dans les trois textes de Pelure.
@@ -87,6 +92,15 @@ pub struct SbLayer {
     pub locked: bool,
     /// Placement du calque dans le panneau : décalage en champs, échelle, rotation en degrés.
     pub offset: [f32; 2],
+    /// Profondeur du calque (offset/z, en champs ; plus grand : plus près de la caméra).
+    pub z: f32,
+    /// Groupe (PEG parent du calque dans le réseau de nœuds) : son nom, et s'il est désactivé ; vide : hors groupe.
+    pub group: String,
+    pub group_off: bool,
+    /// Flou gaussien relié au calque (GAUSSIANBLUR-PLUGIN) : sa valeur lurriness (constante, ou celle de la première clé de
+    /// sa courbe), et si la courbe a plusieurs clés (seule la première est reprise).
+    pub blur: Option<f32>,
+    pub blur_animated: bool,
     pub scale: f32,
     pub angle: f32,
     /// Effets reliés au calque (noms des modules), non repris.
@@ -267,6 +281,11 @@ fn read_panel(p: &Element, id: String, frames: usize, fields: &HashMap<String, S
         let cols: HashMap<&str, &Element> = p.child("columns").map(|c| c.children_named("column").filter_map(|c| Some((c.attr("name")?, c))).collect()).unwrap_or_default();
         let blurs: Vec<&Element> = modules.iter().copied().filter(|m| m.attr("type").is_some_and(|t| t != "READ" && t != "PEG" && t != "COMPOSITE" && t != "CAMERA")).collect();
         let links: Vec<(&str, &str)> = group.child("linkedlist").map(|l| l.children_named("link").filter_map(|k| Some((k.attr("out")?, k.attr("in")?))).collect()).unwrap_or_default();
+        let pegs: HashMap<&str, bool> = modules
+            .iter()
+            .filter(|m| m.attr("type") == Some("PEG") && !m.attr("name").is_some_and(|n| n.starts_with("Camera")))
+            .filter_map(|m| Some((m.attr("name")?, m.path("options/disabled").and_then(|d| d.attr("val")) == Some("true"))))
+            .collect();
         for m in modules.iter().copied().filter(|m| m.attr("type") == Some("READ")) {
             let attrs = m.child("attrs");
             let val = |k: &str| attrs.and_then(|a| a.child(k)).and_then(|e| e.attr("val"));
@@ -277,13 +296,26 @@ fn read_panel(p: &Element, id: String, frames: usize, fields: &HashMap<String, S
                 .and_then(|c| cols.get(c))
                 .and_then(|c| c.child("elementSeq"));
             let name = m.attr("name").unwrap_or("Calque");
-            let effects = links.iter().filter(|(o, _)| *o == name).filter_map(|(_, i)| blurs.iter().find(|b| b.attr("name") == Some(i)).map(|b| format!("{}", b.attr("type").unwrap_or("?")))).collect();
+            let effects = links.iter().filter(|(o, _)| *o == name).filter_map(|(_, i)| blurs.iter().find(|b| b.attr("name") == Some(i)).map(|b| b.attr("type").unwrap_or("?").to_string())).filter(|t: &String| t != "GAUSSIANBLUR-PLUGIN").collect();
+            let blur_module = links.iter().filter(|(o, _)| *o == name).find_map(|(_, i)| blurs.iter().copied().find(|b| b.attr("name") == Some(*i) && b.attr("type") == Some("GAUSSIANBLUR-PLUGIN")));
+            let blur_attr = blur_module.and_then(|b| b.path("attrs/blurriness"));
+            let blur_points = blur_attr.and_then(|a| a.attr("col")).and_then(|c| cols.get(c)).and_then(|c| c.path("points"));
+            let blur_value = blur_attr.map(|a| {
+                let first = blur_points.and_then(|p| p.children_named("pt").next()).and_then(|pt| pt.attr("y")).and_then(|v| v.parse::<f32>().ok());
+                first.or_else(|| a.attr("val").and_then(|v| v.parse::<f32>().ok())).unwrap_or(0.0)
+            });
+            let blur_animated = blur_points.is_some_and(|p| p.children_named("pt").count() > 1);
             panel.layers.push(SbLayer {
                 element: seq.and_then(|s| s.attr("id")).unwrap_or("").to_string(),
                 drawing: seq.and_then(|s| s.attr("val")).unwrap_or("").to_string(),
                 visible: m.path("options/disabled").and_then(|d| d.attr("val")) != Some("true"),
                 locked: m.path("options/locked").and_then(|d| d.attr("val")) == Some("true"),
                 offset: [sub("offset", "x").unwrap_or(0.0), sub("offset", "y").unwrap_or(0.0)],
+                z: sub("offset", "z").unwrap_or(0.0),
+                blur: blur_value,
+                blur_animated,
+                group: links.iter().find(|(o, i)| *i == name && pegs.contains_key(o)).map_or(String::new(), |(o, _)| o.to_string()),
+                group_off: links.iter().find(|(o, i)| *i == name && pegs.contains_key(o)).is_some_and(|(o, _)| pegs[o]),
                 scale: sub("scale", "xy").unwrap_or(1.0),
                 angle: sub("rotation", "anglez").unwrap_or(0.0),
                 effects,
@@ -337,9 +369,70 @@ fn read_tracks(top: &Element, warnings: &mut Vec<String>) -> Vec<SbTrack> {
     tracks
 }
 
-/// Clés de la caméra d'un plan : le chemin 3D du `PEG` de la caméra (colonne de type 2), à
-/// l'image `lockedInTime` de chaque point (depuis 1) ; sinon la position fixe du `PEG`. Unités :
-/// champs (à vérifier, `docs/IMPORT-SBP.md`).
+/// Un point d'un chemin 3D (position ou rotation) de la caméra, avec les poignées de sa courbe de vitesse.
+struct PathPt {
+    frame: usize,
+    v: [f64; 3],
+    ease_in: f32,
+    ease_out: f32,
+}
+
+/// Les points du chemin 3D de la colonne `col` (position ou rotation en degrés), à l'image `lockedInTime` de chacun (depuis 1) ;
+/// les poignées horizontales de la courbe de vitesse (`velocity/points/pt`, `rx` et `lx` en images) donnent les adoucis : seules
+/// les poignées plates (même hauteur que le point) sont reprises, le reste est une courbe que SHOT n'a pas (vitesse régulière).
+fn read_path(columns: &Element, col: &str) -> Vec<PathPt> {
+    let Some(column) = columns.children_named("column").find(|c| c.attr("name") == Some(col)) else { return Vec::new() };
+    let Some(points) = column.path("path3D/points") else { return Vec::new() };
+    let speed: Vec<(f64, f64, f64, f64, f64, f64)> = column
+        .path("velocity/points")
+        .map(|p| {
+            p.children_named("pt")
+                .filter_map(|e| {
+                    let n = |k: &str| e.attr(k).and_then(|v| v.parse::<f64>().ok());
+                    Some((n("x")?, n("y")?, n("rx")?, n("ry")?, n("lx")?, n("ly")?))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let mut out = Vec::new();
+    for pt in points.children_named("pt") {
+        let v: Vec<f64> = pt.attr("val").unwrap_or("").split(',').filter_map(|s| s.trim().parse().ok()).collect();
+        let Some(at) = pt.attr("lockedInTime").and_then(|s| s.parse::<usize>().ok()) else { continue };
+        if v.len() != 3 {
+            continue;
+        }
+        let (mut ease_in, mut ease_out) = (0.0f32, 0.0f32);
+        if let Some(&(x, y, rx, ry, lx, ly)) = speed.iter().find(|s| (s.0 - at as f64).abs() < 0.5) {
+            if (ry - y).abs() < 1e-6 && rx > x {
+                ease_out = (rx - x) as f32;
+            }
+            if (ly - y).abs() < 1e-6 && lx < x {
+                ease_in = (x - lx) as f32;
+            }
+        }
+        out.push(PathPt { frame: at.saturating_sub(1), v: [v[0], v[1], v[2]], ease_in, ease_out });
+    }
+    out
+}
+
+/// Valeur d'un chemin à l'image `f` : droite entre les points, tenue avant le premier et après le dernier.
+fn path_at(path: &[PathPt], f: usize, fixed: [f64; 3]) -> [f64; 3] {
+    let Some(first) = path.first() else { return fixed };
+    if f <= first.frame {
+        return first.v;
+    }
+    for w in path.windows(2) {
+        if f <= w[1].frame {
+            let t = (f - w[0].frame) as f64 / (w[1].frame - w[0].frame).max(1) as f64;
+            return [0, 1, 2].map(|i| w[0].v[i] + (w[1].v[i] - w[0].v[i]) * t);
+        }
+    }
+    path[path.len() - 1].v
+}
+
+/// Clés de la caméra d'un plan : le chemin 3D du `PEG` de la caméra (colonne de type 2) et son chemin de rotation (colonne de
+/// type 8, en degrés : x bascule, y panoramique, z roulis), à l'image `lockedInTime` de chaque point (depuis 1) ; sinon la
+/// position et la rotation fixes du `PEG`. Unités : champs (voir `docs/IMPORT-SBP.md`).
 fn read_camera(shot: &Element) -> Vec<SbCamKey> {
     let mut modules = Vec::new();
     if let Some(g) = shot.child("rootgroup") {
@@ -347,27 +440,38 @@ fn read_camera(shot: &Element) -> Vec<SbCamKey> {
     }
     let Some(peg) = modules.iter().find(|m| m.attr("type") == Some("PEG") && m.attr("name").is_some_and(|n| n.starts_with("Camera"))) else { return Vec::new() };
     let pos = peg.path("attrs/position");
-    let fixed = |k: &str| pos.and_then(|p| p.child(k)).and_then(|e| e.attr("val")).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
-    let base = [fixed("x"), fixed("y"), fixed("z")];
-    let col = pos.and_then(|p| p.child("attr3dpath")).and_then(|e| e.attr("col"));
-    let mut keys = Vec::new();
-    if let (Some(col), Some(columns)) = (col, shot.child("columns")) {
-        if let Some(points) = columns.children_named("column").find(|c| c.attr("name") == Some(col)).and_then(|c| c.path("path3D/points")) {
-            for pt in points.children_named("pt") {
-                let v: Vec<f64> = pt.attr("val").unwrap_or("").split(',').filter_map(|s| s.trim().parse().ok()).collect();
-                let at = pt.attr("lockedInTime").and_then(|s| s.parse::<usize>().ok());
-                if let (3, Some(at)) = (v.len(), at) {
-                    keys.push(SbCamKey { frame: at.saturating_sub(1), pos: [v[0], v[1], v[2]] });
-                }
-            }
+    let rot = peg.path("attrs/rotation");
+    let num = |parent: Option<&Element>, k: &str| parent.and_then(|p| p.child(k)).and_then(|e| e.attr("val")).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+    let base = [num(pos, "x"), num(pos, "y"), num(pos, "z")];
+    let base_rot = [num(rot, "anglex"), num(rot, "angley"), num(rot, "anglez")];
+    let path = |parent: Option<&Element>, tag: &str| -> Vec<PathPt> {
+        let col = parent.and_then(|p| p.child(tag)).and_then(|e| e.attr("col"));
+        match (col, shot.child("columns")) {
+            (Some(col), Some(columns)) => read_path(columns, col),
+            _ => Vec::new(),
         }
+    };
+    let (ppos, prot) = (path(pos, "attr3dpath"), path(rot, "quaternionpath"));
+    let mut frames: Vec<usize> = ppos.iter().chain(prot.iter()).map(|p| p.frame).collect();
+    frames.sort_unstable();
+    frames.dedup();
+    if frames.is_empty() && (base != [0.0; 3] || base_rot != [0.0; 3]) {
+        return vec![SbCamKey { frame: 0, pos: base, rot: base_rot, ..Default::default() }];
     }
-    if keys.is_empty() && base != [0.0, 0.0, 0.0] {
-        keys.push(SbCamKey { frame: 0, pos: base });
-    }
-    keys
+    frames
+        .into_iter()
+        .map(|f| {
+            let eased = ppos.iter().chain(prot.iter()).find(|p| p.frame == f);
+            SbCamKey {
+                frame: f,
+                pos: path_at(&ppos, f, base),
+                rot: path_at(&prot, f, base_rot),
+                ease_in: eased.map_or(0.0, |p| p.ease_in),
+                ease_out: eased.map_or(0.0, |p| p.ease_out),
+            }
+        })
+        .collect()
 }
-
 fn has_col(e: &Element) -> bool {
     e.attr("col").is_some() || e.children.iter().any(has_col)
 }

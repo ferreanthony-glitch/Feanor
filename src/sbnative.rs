@@ -27,11 +27,40 @@ use crate::vector::{Element, VectorDrawing};
 pub const UNITS_PER_FIELD: f32 = 576.0;
 /// Distance de la caméra au plan du dessin, en champs.
 const CAMERA_Z: f64 = 12.0;
-/// Taille de la feuille, en cadres.
-const SHEET_FACTOR: usize = 6;
-/// Unités du chemin de la caméra, en champs (x, y, z) : calées sur les vignettes de Storyboard Pro
-/// (plan 1 de BRAWLIDAYS_CLEAN_PART_1, deux poses) ; à confirmer sur d'autres projets.
-const CAM_UNIT: [f64; 3] = [0.366, 0.274, 0.52];
+
+/// Unités du chemin de la caméra de Storyboard Pro, en champs (un champ : un neuvième de la hauteur du cadre) : z de la caméra,
+/// x, y (calés sur les vignettes de Storyboard Pro, sbnative::tests::calage_descente : x 0,366 sur les deux projets ; y vaut les
+/// trois quarts de x) et z des calques (profondeur de leur offset). La caméra est un sténopé à 12 champs du plan z = 0.
+const CALAGE_DEFAUT: [f32; 4] = [0.45, 0.366, 0.2745, 1.1];
+
+/// Les réglages en vigueur : ceux du calage ; les essais de calage (module de tests) les font varier.
+fn calage() -> [f32; 4] {
+    #[cfg(test)]
+    {
+        *CALAGE.lock().unwrap()
+    }
+    #[cfg(not(test))]
+    {
+        CALAGE_DEFAUT
+    }
+}
+
+#[cfg(test)]
+static CALAGE: std::sync::Mutex<[f32; 4]> = std::sync::Mutex::new(CALAGE_DEFAUT);
+
+/// Pixels de flou de SHOT par unité de lurriness de Storyboard Pro (calé sur les vignettes).
+const FLOU_PAR_UNITE: f32 = 10.0;
+
+fn flou_par_unite() -> f32 {
+    #[cfg(test)]
+    {
+        std::env::var("SBP_KB").ok().and_then(|v| v.parse().ok()).unwrap_or(FLOU_PAR_UNITE)
+    }
+    #[cfg(not(test))]
+    {
+        FLOU_PAR_UNITE
+    }
+}
 
 /// Placement d'un calque sur la feuille.
 #[derive(Clone, Copy)]
@@ -77,8 +106,8 @@ pub fn build(sb: &SbProject, dir: &Path, progress: &dyn Fn(f32)) -> (Document, V
     let mut warnings = sb.warnings.clone();
     let [w, h] = sb.size;
     let mut doc = Document::with_frame(w, h, sb.fps).created_now();
-    // Les décors de Storyboard Pro débordent largement le cadre (plusieurs dizaines de champs) : feuille 6 fois plus grande.
-    doc.enlarge_stage(w * SHEET_FACTOR, h * SHEET_FACTOR);
+    // Les décors de Storyboard Pro débordent largement le cadre (plusieurs dizaines de champs) : on garde la feuille du projet
+    // (deux fois le cadre, ce que la carte graphique sait montrer) ; ce qui la dépasse va sur la toile infinie, hors de la feuille.
     doc.sequences.clear();
     doc.scenes.clear();
     doc.panels.clear();
@@ -117,6 +146,31 @@ pub fn build(sb: &SbProject, dir: &Path, progress: &dyn Fn(f32)) -> (Document, V
             for l in p.layers.iter().rev() {
                 layers.push(layer(&mut doc, sb, dir, l, p.frames, place0, &mut cels, &mut notes, &shot.name));
             }
+            // Groupes de Storyboard Pro : un dossier de calques SHOT (nom, visibilité), au-dessus de ses calques.
+            let mut groups: Vec<(String, bool)> = Vec::new();
+            for l in p.layers.iter().rev() {
+                if !l.group.is_empty() && !groups.iter().any(|g| g.0 == l.group) {
+                    groups.push((l.group.clone(), l.group_off));
+                }
+            }
+            let mut folders: Vec<(usize, Layer)> = Vec::new();
+            for (name, off) in groups {
+                let mut folder = Layer::new_folder(name.clone());
+                folder.visible = !off;
+                let mut top = 0;
+                for (k, l) in p.layers.iter().rev().enumerate() {
+                    if l.group == name {
+                        layers[k].parent = Some(folder.id);
+                        top = k;
+                    }
+                }
+                folders.push((top + 1, folder));
+            }
+            // (De haut en bas : les rangs d'insertion restent justes.)
+            folders.sort_by_key(|f| std::cmp::Reverse(f.0));
+            for (at, folder) in folders {
+                layers.insert(at, folder);
+            }            crate::folders::normalize(&mut layers);
             if !layers.is_empty() {
                 panel.layers = layers;
             }
@@ -148,7 +202,7 @@ fn report(n: &Notes, out: &mut Vec<String>) {
         out.push(format!("Dessins illisibles : {} ; par exemple {}.", n.unreadable.len(), n.unreadable.iter().take(3).cloned().collect::<Vec<_>>().join(", ")));
     }
     if n.skipped_zones > 0 {
-        out.push(format!("{} zone(s) sans couleur (traits de construction ou de crayon sans épaisseur lue) non reprises.", n.skipped_zones));
+        out.push(format!("{} ligne(s) médiane(s) sans couleur ni épaisseur (zones ouvertes) non reprises ; les contours fermés sans couleur sont repris comme trous.", n.skipped_zones));
     }
     for (e, c) in &n.effects {
         out.push(format!("Effet de calque non repris : {e} ({c} calque(s))."));
@@ -175,11 +229,22 @@ fn layer(
     layer.visible = l.visible;
     layer.locked = l.locked;
     layer.opacity = l.opacity;
+    // Multiplan : le calque de profondeur z (en champs, plus grand = plus près) est à la distance 12 - z de la caméra de repos ;
+    // dans SHOT, profondeur d = -z / 12, dessin rapetissé de 1 / (1 + d) (Storyboard Pro ne grossit pas un calque lointain).
+    let depth = (-(l.z as f32) * calage()[3] / CAMERA_Z as f32).max(Layer::MIN_DEPTH);
+    layer.depth = depth;
+    layer.transform.scale = 1.0 / (1.0 + depth);
     for e in &l.effects {
         *notes.effects.entry(e.clone()).or_default() += 1;
     }
-    if l.animated {
+    if l.animated || l.blur_animated {
         notes.animated += 1;
+    }
+    // Flou gaussien de Storyboard Pro : l'effet « Flou gaussien » de SHOT (rayon en pixels de la feuille).
+    if let Some(b) = l.blur.filter(|b| *b > 0.0) {
+        let mut fx = crate::fx::Effect::new(crate::fx::EffectKind::GaussianBlur);
+        fx.values[0] = (b * flou_par_unite()).clamp(0.0, 100.0);
+        layer.fx.push(fx);
     }
     if l.drawing.is_empty() {
         return layer;
@@ -235,6 +300,15 @@ fn vector_drawing(d: &TvgDrawing, place: &Place) -> VectorDrawing {
     let mut last: Option<(usize, u64)> = None;
     for s in &d.shapes {
         let contour: Vec<[f32; 2]> = s.ring.iter().map(|&p| place.map(p)).collect();
+        if s.hole {
+            // Contour fermé sans couleur : un trou de la zone qui le précède dans le même calque plan.
+            if last.is_some_and(|l| l.0 == s.layer) {
+                if let Some(Element::Fill { contours, .. }) = elements.last_mut() {
+                    contours.push(contour);
+                }
+            }
+            continue;
+        }
         if last == Some((s.layer, s.color)) {
             if let Some(Element::Fill { contours, .. }) = elements.last_mut() {
                 contours.push(contour);
@@ -258,12 +332,12 @@ fn bitmap_raster(doc: &Document, bm: &tvg::TvgBitmap, place: &Place) -> Raster {
     let dy = (place.center[1] - place.offset[1] * place.field).round() as i64;
     for y in 0..bm.height {
         let sy = dy + bm.y as i64 + y as i64;
-        if sy < 0 || sy >= doc.height as i64 {
+        if sy.abs() > crate::raster::WORLD {
             continue;
         }
         for x in 0..bm.width {
             let sx = dx + bm.x as i64 + x as i64;
-            if sx < 0 || sx >= doc.width as i64 {
+            if sx.abs() > crate::raster::WORLD {
                 continue;
             }
             let o = (y * bm.width + x) * 4;
@@ -271,18 +345,23 @@ fn bitmap_raster(doc: &Document, bm: &tvg::TvgBitmap, place: &Place) -> Raster {
             if p[3] == 0 {
                 continue;
             }
-            let (sx, sy) = (sx as usize, sy as usize);
-            let idx = out.tile_index_of(sx, sy);
-            out.tile_mut(idx)[(sy % TILE) * TILE + sx % TILE] = premultiply(p[0], p[1], p[2], p[3]);
+            // Toile infinie : un pixel hors de la feuille va dans une tuile hors-feuille.
+            let t = TILE as i64;
+            let idx = out.id_of(sx.div_euclid(t) as i32, sy.div_euclid(t) as i32);
+            out.tile_mut(idx)[(sy.rem_euclid(t) as usize) * TILE + sx.rem_euclid(t) as usize] = premultiply(p[0], p[1], p[2], p[3]);
         }
     }
     out
 }
 
-/// Caméra de chaque plan : le `PEG` de la caméra en champs (x droite, y haut), z en distance de la
-/// caméra au plan du dessin (12 champs + z : le zoom est 12 / (12 + z)). À vérifier.
+/// Caméra de chaque plan : le `PEG` de la caméra est un sténopé à la distance 12 champs du plan z = 0 (FOV vertical de 41,11°
+/// = 9 champs de haut à cette distance). x, y en champs (x droite, y haut), z : la caméra recule de z champs. Dans SHOT :
+/// zoom 1, avancée (`dolly`) négative de z × (distance de référence / 12), de sorte que le plan z = 0 est grossi de 12 / (12 + z)
+/// et un calque de profondeur z_l de 12 / (12 + z - z_l) (`Layer::depth`, voir `layer`).
 fn cameras(doc: &mut Document, shots: &[SbShot], field: f32, warnings: &mut Vec<String>) {
     let (cx, cy) = (doc.width as f32 / 2.0, doc.height as f32 / 2.0);
+    let d0 = crate::camera::ref_distance(doc.frame);
+    let [kz, kx, ky, _] = calage();
     let mut moved = 0;
     for (i, shot) in shots.iter().enumerate() {
         let Some(panel) = doc.panels.get_mut(i) else { break };
@@ -292,11 +371,20 @@ fn cameras(doc: &mut Document, shots: &[SbShot], field: f32, warnings: &mut Vec<
         let n = panel.frame_count();
         let mut keys: Vec<CameraKey> = Vec::new();
         for k in &shot.camera {
-            let z = (CAMERA_Z / (CAMERA_Z - k.pos[2] * CAM_UNIT[2]).max(1.0)) as f32;
-            let cam = Camera { x: cx + (k.pos[0] * CAM_UNIT[0]) as f32 * field, y: cy - (k.pos[1] * CAM_UNIT[1]) as f32 * field, zoom: z, ..Camera::centered(doc_w(cx), doc_w(cy)) };
+            let cam = Camera {
+                x: cx + k.pos[0] as f32 * field * kx,
+                y: cy - k.pos[1] as f32 * field * ky,
+                zoom: 1.0,
+                // Rotation du PEG : x bascule (positif : la caméra regarde en haut), y panoramique (positif : à gauche dans Storyboard Pro,
+                // donc signe changé), z roulis (anti-horaire dans Storyboard Pro, horaire dans SHOT).
+                angle: -(k.rot[2] as f32),
+                dolly: -(k.pos[2] as f32) * kz * d0 / CAMERA_Z as f32,
+                tilt: k.rot[0] as f32,
+                pan: -(k.rot[1] as f32),
+            };
             let frame = k.frame.min(n.saturating_sub(1));
             if keys.last().is_none_or(|l| l.frame < frame) {
-                keys.push(CameraKey::new(frame, cam));
+                keys.push(CameraKey { ease_in: k.ease_in, ease_out: k.ease_out, ..CameraKey::new(frame, cam) });
             }
         }
         if keys.len() > 1 {
@@ -306,11 +394,6 @@ fn cameras(doc: &mut Document, shots: &[SbShot], field: f32, warnings: &mut Vec<
     }
     let _ = (moved, warnings);
 }
-
-fn doc_w(half: f32) -> usize {
-    (half * 2.0) as usize
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -356,6 +439,10 @@ mod tests {
         let (doc, warnings) = build(&sb, &dir, &|_| {});
         std::fs::remove_dir_all(&dir).ok();
         assert!(warnings.is_empty(), "{warnings:?}");
+        assert_eq!((doc.width, doc.height), (384, 216), "la feuille garde la taille du projet (deux fois le cadre) : le décor qui dépasse va sur la toile infinie");
+        let mut grand = Document::with_frame(192, 108, 24);
+        grand.enlarge_stage(40_000, 40_000);
+        assert!(grand.width <= crate::document::MAX_SHEET_SIDE && grand.height <= crate::document::MAX_SHEET_SIDE, "une feuille ne dépasse jamais la texture minimale de la carte graphique");
         assert_eq!(doc.panels.len(), 1, "un plan SBP = un Plan");
         let p = &doc.panels[0];
         assert_eq!(p.frame_count(), 10);
@@ -366,10 +453,79 @@ mod tests {
         assert!(!doc.cels[&a].is_empty());
         // Caméra : deux clés, x en pixels (2 unités de 0,366 champ de 12 pixels).
         assert_eq!(p.camera.len(), 2);
-        assert!((p.camera[1].cam.x - p.camera[0].cam.x - 2.0 * 0.366 * 12.0).abs() < 1e-2);
+        assert!((p.camera[1].cam.x - p.camera[0].cam.x - 2.0 * 12.0 * CALAGE_DEFAUT[1]).abs() < 1e-2);
         assert_eq!(p.camera[1].frame, 9);
     }
 
+    const XML2: &str = r#"<?xml version="1.0"?>
+<project version="2700">
+ <options><resolution size="192,108"/><framerate val="24"/></options>
+ <elements><element id="1" elementName="Draw" elementFolder="Draw"/></elements>
+ <scenes>
+  <scene name="Top" id="top" nbframes="10"><columns><column type="0" name="T"><warpSeq exposures="1-10" id="s1"/></column></columns></scene>
+  <scene name="shot" id="s1" nbframes="10">
+   <columns>
+    <column type="0" name="S"><warpSeq exposures="1-10" id="p1"/></column>
+    <column type="2" name="PATH"><path3D><points><pt val="0,0,0" lockedInTime="1"/><pt val="2,1,12" lockedInTime="10"/></points></path3D>
+     <velocity type="3"><points version="2">
+      <pt x="1" y="0" rx="4" ry="0" lx="1" ly="0"/><pt x="10" y="1" rx="10" ry="1" lx="6" ly="1"/></points></velocity></column>
+    <column type="8" name="ROT"><path3D><points><pt val="0,0,0" lockedInTime="1"/><pt val="10,20,30" lockedInTime="10"/></points></path3D></column>
+   </columns>
+   <rootgroup name="Top"><nodeslist>
+    <module type="PEG" name="Camera-Peg"><attrs><position><attr3dpath col="PATH"/><x val="0"/><y val="0"/><z val="0"/></position><rotation><quaternionpath col="ROT"/></rotation></attrs></module>
+   </nodeslist></rootgroup>
+   <metas><meta type="sceneInfo"><sceneInfo name="1" sequenceName=""/></meta></metas>
+  </scene>
+  <scene name="panel" id="p1"><columns><column type="0" name="C1"><elementSeq exposures="1-10" val="1" id="1"/></column></columns>
+   <rootgroup name="Top"><nodeslist>
+    <module type="PEG" name="Groupe"><options><disabled val="true"/></options><attrs/></module>
+    <module type="GAUSSIANBLUR-PLUGIN" name="Flou"><attrs><blurriness val="3"/></attrs></module>
+    <module type="READ" name="A"><attrs><offset><x val="0"/><y val="0"/><z val="6"/></offset><opacity val="100"/><lineArtDrawingMode val="VectorDrawingMode"/><drawing><element col="C1"/></drawing></attrs></module>
+   </nodeslist><linkedlist><link out="Groupe" in="A"/><link out="A" in="Flou"/></linkedlist></rootgroup></scene>
+ </scenes>
+ <timeline><scene id="top"/></timeline>
+</project>"#;
+
+    #[test]
+    fn camera_rotation_eases_depth_group_and_blur() {
+        let dir = std::env::temp_dir().join(format!("shot-test-sbnative2-{}", std::process::id()));
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::create_dir_all(dir.join("elements/Draw")).unwrap();
+        let sq = |h: f32| [(-h, -h, true), (h, -h, true), (h, h, true), (-h, h, true), (-h, -h, true)];
+        // Un carré noir avec un trou (contour fermé sans couleur) et une ligne ouverte sans couleur.
+        let open = [(0.0, 0.0, true), (10.0, 0.0, true), (20.0, 5.0, true)];
+        let bytes = tvg(&[zone(7, &sq(288.0)), crate::tvg::fabrique::zone_sans_couleur(&sq(100.0)), crate::tvg::fabrique::zone_sans_couleur(&open)], &palette(7, [0, 0, 0, 255]));
+        std::fs::write(dir.join("elements/Draw/Draw-1.tvg"), bytes).unwrap();
+        let sb = crate::sboard::parse(XML2, "essai").unwrap();
+        let k = &sb.shots[0].camera;
+        assert_eq!(k.len(), 2);
+        assert_eq!((k[0].ease_out, k[1].ease_in), (3.0, 4.0), "poignées plates de la courbe de vitesse");
+        assert_eq!(k[1].rot, [10.0, 20.0, 30.0]);
+        let (doc, warnings) = build(&sb, &dir, &|_| {});
+        std::fs::remove_dir_all(&dir).ok();
+        let p = &doc.panels[0];
+        let (c0, c1) = (p.camera[0], p.camera[1]);
+        assert_eq!((c1.cam.tilt, c1.cam.pan, c1.cam.angle), (10.0, -20.0, -30.0), "bascule, panoramique et roulis");
+        assert_eq!((c0.ease_out, c1.ease_in), (3.0, 4.0));
+        let [kz, ..] = CALAGE_DEFAUT;
+        assert!(c1.cam.dolly < 0.0 && (c1.cam.dolly + 12.0 * kz * crate::camera::ref_distance(doc.frame) / 12.0).abs() < 1e-2, "la caméra recule de z champs");
+        // Calque à z = 6 : profondeur négative (plus près), dessin rapetissé de 1 / (1 + profondeur).
+        let folder = p.layers.iter().find(|l| l.folder).expect("le groupe devient un dossier");
+        assert_eq!(folder.name, "Groupe");
+        assert!(!folder.visible, "groupe désactivé : dossier caché");
+        let a = p.layers.iter().find(|l| l.name == "A").unwrap();
+        assert_eq!(a.parent, Some(folder.id));
+        assert!((a.depth + 6.0 * CALAGE_DEFAUT[3] / 12.0).abs() < 1e-6);
+        assert!((a.transform.scale * (1.0 + a.depth) - 1.0).abs() < 1e-6);
+        // Flou : 3 unités.
+        assert_eq!(a.fx.len(), 1);
+        assert!((a.fx[0].values[0] - 3.0 * FLOU_PAR_UNITE).abs() < 1e-4);
+        // Le trou est repris (le carré est creux), la ligne ouverte est dite.
+        let cel = &doc.cels[&a.cel_at(0).unwrap()];
+        let centre = cel.raster.get(doc.width / 2, doc.height / 2);
+        assert_eq!(centre.a(), 0, "trou au centre");
+        assert!(warnings.iter().any(|w| w.contains("ligne(s) médiane(s)")), "{warnings:?}");
+    }
     #[test]
     fn missing_drawings_are_reported_not_lost() {
         let dir = std::env::temp_dir().join(format!("shot-test-sbnative-vide-{}", std::process::id()));
@@ -416,4 +572,188 @@ mod tests {
         }
         assert_eq!(frames, sbp_frames);
     }
-}
+
+    /// Calage de la caméra sur les vignettes de Storyboard Pro (à la main, sur une COPIE) : rend chaque image composée dont
+    /// on a la vignette (`SBP_VIGNETTES` : dossier de `NNNN.png` et `thumbs.txt`) et écrit côte à côte vignette / rendu de
+    /// SHOT dans `SBP_SORTIE`, avec l'écart moyen de luminance.
+    #[test]
+    #[ignore]
+    fn calage_vignettes() {
+        let (Some(dir), Some(vign), Some(out)) = (std::env::var_os("SBP_ESSAI").map(PathBuf::from), std::env::var_os("SBP_VIGNETTES").map(PathBuf::from), std::env::var_os("SBP_SORTIE").map(PathBuf::from)) else { return };
+        std::fs::create_dir_all(&out).unwrap();
+        let sboard = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|x| x == "sboard")).unwrap();
+        let sb = crate::sboard::read(&sboard).unwrap();
+        let (doc, _) = build(&sb, &dir, &|_| {});
+        let only: Option<Vec<String>> = std::env::var("SBP_PLANS").ok().map(|s| s.split(',').map(str::to_string).collect());
+        let mut total = (0.0f64, 0);
+        for line in std::fs::read_to_string(vign.join("thumbs.txt")).unwrap().lines() {
+            let line = line.trim_start_matches('\u{feff}');
+            let parts: Vec<&str> = line.splitn(2, ' ').collect();
+            let f: Vec<&str> = parts[1].split('|').collect();
+            if f[0] != "#0" || f.len() < 5 {
+                continue;
+            }
+            let Some(i) = sb.shots.iter().position(|s| s.id == f[2]) else { continue };
+            if only.as_ref().is_some_and(|o| !o.contains(&i.to_string())) {
+                continue;
+            }
+            let frame = f[4].trim_start_matches('#').parse::<usize>().unwrap() - 1;
+            let mini = crate::comparer::petit_projet(&doc, &doc.panels[i]);
+            let ours = crate::comparer::rendre(&mini, frame, 300);
+            let theirs = image::open(vign.join(format!("{}.png", parts[0].trim()))).unwrap_or_else(|e| panic!("{} : {e}", parts[0])).to_rgba8();
+            let (w, h) = (theirs.width() as usize, theirs.height() as usize);
+            let lum = |r: u8, g: u8, b: u8| (r as i32 * 299 + g as i32 * 587 + b as i32 * 114) / 1000;
+            let (mut sum, mut n) = (0i64, 0i64);
+            let mut side = image::RgbaImage::new((w * 2) as u32, h as u32);
+            for y in 0..h {
+                for x in 0..w {
+                    let p = theirs.get_pixel(x as u32, y as u32);
+                    side.put_pixel(x as u32, y as u32, *p);
+                    let c = ours.pixels[(y * ours.size[1] / h).min(ours.size[1] - 1) * ours.size[0] + (x * ours.size[0] / w).min(ours.size[0] - 1)];
+                    side.put_pixel((w + x) as u32, y as u32, image::Rgba([c.r(), c.g(), c.b(), 255]));
+                    sum += (lum(p[0], p[1], p[2]) - lum(c.r(), c.g(), c.b())).abs() as i64;
+                    n += 1;
+                }
+            }
+            let mae = sum as f64 / n as f64;
+            total = (total.0 + mae, total.1 + 1);
+            side.save(out.join(format!("p{i:02}-f{:04}-{}.png", frame + 1, parts[0]))).unwrap();
+            println!("plan {i} image {} vignette {} : écart {mae:.1}", frame + 1, parts[0]);
+        }
+        println!("écart moyen : {:.2} sur {} images", total.0 / total.1.max(1) as f64, total.1);
+    }
+    /// Écart moyen (masses d'encre, blocs de 6 pixels) entre les vignettes `cibles` et le rendu de SHOT avec les réglages `p`.
+    fn ecart_calage(doc: &mut Document, sb: &SbProject, field: f32, cibles: &[(usize, usize, image::RgbaImage)], p: [f32; 4]) -> f64 {
+        *CALAGE.lock().unwrap() = p;
+        cameras(doc, &sb.shots, field, &mut Vec::new());
+        for (pi, shot) in sb.shots.iter().enumerate() {
+            for l in doc.panels[pi].layers.iter_mut() {
+                if let Some(sl) = shot.panels.iter().flat_map(|p| &p.layers).find(|s| s.name == l.name) {
+                    let d = (-(sl.z as f32) * p[3] / CAMERA_Z as f32).max(Layer::MIN_DEPTH);
+                    l.depth = d;
+                    l.transform.scale = 1.0 / (1.0 + d);
+                }
+            }
+        }
+        let mut sum = 0.0;
+        for (i, frame, theirs) in cibles {
+            let mini = crate::comparer::petit_projet(doc, &doc.panels[*i]);
+            let ours = crate::comparer::rendre(&mini, *frame, 300);
+            let (w, h) = (theirs.width() as usize, theirs.height() as usize);
+            let lum = |r: u8, g: u8, b: u8| (r as f32 * 0.299 + g as f32 * 0.587 + b as f32 * 0.114) / 255.0;
+            let bloc = 6;
+            let mut s = 0.0f32;
+            for by in 0..h / bloc {
+                for bx in 0..w / bloc {
+                    let (mut a, mut c2) = (0.0f32, 0.0f32);
+                    for y in by * bloc..(by + 1) * bloc {
+                        for x in bx * bloc..(bx + 1) * bloc {
+                            let q = theirs.get_pixel(x as u32, y as u32);
+                            a += lum(q[0], q[1], q[2]);
+                            let c = ours.pixels[(y * ours.size[1] / h).min(ours.size[1] - 1) * ours.size[0] + (x * ours.size[0] / w).min(ours.size[0] - 1)];
+                            c2 += lum(c.r(), c.g(), c.b());
+                        }
+                    }
+                    s += (a - c2).abs() / (bloc * bloc) as f32;
+                }
+            }
+            sum += s as f64 / ((w / bloc) * (h / bloc)) as f64 * 100.0;
+        }
+        sum / cibles.len().max(1) as f64
+    }
+
+    /// Descente par coordonnées des réglages du calage sur les vignettes des plans `SBP_PLANS` (tous si absent) ; départ `SBP_DEPART="kz,kx,ky,kl"`.
+    #[test]
+    #[ignore]
+    fn calage_descente() {
+        let (Some(dir), Some(vign)) = (std::env::var_os("SBP_ESSAI").map(PathBuf::from), std::env::var_os("SBP_VIGNETTES").map(PathBuf::from)) else { return };
+        let sboard = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|x| x == "sboard")).unwrap();
+        let sb = crate::sboard::read(&sboard).unwrap();
+        let (mut doc, _) = build(&sb, &dir, &|_| {});
+        let field = doc.frame[1] as f32 / 9.0;
+        let only: Option<Vec<String>> = std::env::var("SBP_PLANS").ok().map(|s| s.split(',').map(str::to_string).collect());
+        let mut cibles = Vec::new();
+        for line in std::fs::read_to_string(vign.join("thumbs.txt")).unwrap().lines() {
+            let line = line.trim_start_matches('\u{feff}');
+            let parts: Vec<&str> = line.splitn(2, ' ').collect();
+            let f: Vec<&str> = parts[1].split('|').collect();
+            if f[0] != "#0" || f.len() < 5 {
+                continue;
+            }
+            let Some(i) = sb.shots.iter().position(|s| s.id == f[2]) else { continue };
+            if only.as_ref().is_some_and(|o| !o.contains(&i.to_string())) {
+                continue;
+            }
+            let frame = f[4].trim_start_matches('#').parse::<usize>().unwrap() - 1;
+            cibles.push((i, frame, image::open(vign.join(format!("{}.png", parts[0].trim()))).unwrap().to_rgba8()));
+        }
+        // Au plus SBP_MAX vignettes par plan (réparties), pour que l'essai reste court.
+        let max: usize = std::env::var("SBP_MAX").ok().and_then(|v| v.parse().ok()).unwrap_or(usize::MAX);
+        let mut gardees = Vec::new();
+        let mut plans: Vec<usize> = cibles.iter().map(|c| c.0).collect();
+        plans.dedup();
+        for pl in plans {
+            let de: Vec<_> = cibles.iter().filter(|c| c.0 == pl).collect();
+            let n = de.len().min(max);
+            for k in 0..n {
+                let c = de[k * de.len() / n];
+                gardees.push((c.0, c.1, c.2.clone()));
+            }
+        }
+        let cibles = gardees;
+        let mut p: [f32; 4] = std::env::var("SBP_DEPART").map_or([0.5, 0.366, 0.274, 1.0], |s| {
+            let v: Vec<f32> = s.split(',').filter_map(|x| x.parse().ok()).collect();
+            [v[0], v[1], v[2], v[3]]
+        });
+        let mut best = ecart_calage(&mut doc, &sb, field, &cibles, p);
+        println!("départ {p:?} : {best:.2} sur {} images", cibles.len());
+        let mut step = 0.1f32;
+        while step > 0.004 {
+            let mut moved = false;
+            for k in 0..4 {
+                for sign in [1.0f32, -1.0] {
+                    let mut q = p;
+                    q[k] += sign * step * p[k].abs().max(0.2);
+                    let e = ecart_calage(&mut doc, &sb, field, &cibles, q);
+                    if e < best - 1e-4 {
+                        best = e;
+                        p = q;
+                        moved = true;
+                        println!("  {p:?} : {best:.3}");
+                        break;
+                    }
+                }
+            }
+            if !moved {
+                step /= 2.0;
+            }
+        }
+        println!("RESULTAT {p:?} : écart {best:.3}");
+    }
+    #[test]
+    #[ignore]
+    fn liste_cameras() {
+        let Some(dir) = std::env::var_os("SBP_ESSAI").map(PathBuf::from) else { return };
+        let sboard = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|x| x == "sboard")).unwrap();
+        let sb = crate::sboard::read(&sboard).unwrap();
+        for (i, s) in sb.shots.iter().enumerate() {
+            let zs: Vec<f32> = s.panels.iter().flat_map(|p| p.layers.iter().map(|l| l.z)).collect();
+            let (zmin, zmax) = zs.iter().fold((0.0f32, 0.0f32), |a, &z| (a.0.min(z), a.1.max(z)));
+            let cam: Vec<String> = s.camera.iter().map(|k| format!("f{}=({:.1},{:.1},{:.1})", k.frame, k.pos[0], k.pos[1], k.pos[2])).collect();
+            println!("plan {i} {} : {} panneaux, calques z {zmin:.1}..{zmax:.1}, caméra {}", s.id, s.panels.len(), cam.join(" "));
+        }
+    }
+    #[test]
+    #[ignore]
+    fn liste_calques() {
+        let Some(dir) = std::env::var_os("SBP_ESSAI").map(PathBuf::from) else { return };
+        let plan: usize = std::env::var("SBP_PLAN").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+        let sboard = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|x| x == "sboard")).unwrap();
+        let sb = crate::sboard::read(&sboard).unwrap();
+        for p in sb.shots[plan].panels.iter().take(2) {
+            println!("panneau {} ({} images)", p.id, p.frames);
+            for l in &p.layers {
+                println!("  {} vecteur {} visible {} opacité {} z {} off {:?} échelle {} angle {} effets {:?} animé {} dessin {}/{}", l.name, l.vector, l.visible, l.opacity, l.z, l.offset, l.scale, l.angle, l.effects, l.animated, l.element, l.drawing);
+            }
+        }
+    }}

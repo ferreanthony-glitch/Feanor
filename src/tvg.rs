@@ -29,6 +29,8 @@ pub struct TvgShape {
     pub color: u64,
     /// Rang du calque plan (`TGLY`) qui porte la zone, dans tout le dessin.
     pub layer: usize,
+    /// Zone sans couleur et fermée : un trou de la zone colorée qui la précède (même calque plan).
+    pub hole: bool,
 }
 
 /// Une image bitmap : rectangle `(x, y, largeur, hauteur)` en pixels de la toile, centrée sur 0.
@@ -48,6 +50,16 @@ pub struct TvgDrawing {
     pub bitmap: Option<TvgBitmap>,
     /// Zones sans couleur (traits de construction ?), non reprises.
     pub skipped: usize,
+    /// Les zones sans couleur : leur ligne (courbes aplanies) et les 13 octets de leurs attributs.
+    pub open: Vec<TvgOpen>,
+}
+
+/// Une zone sans couleur (TGSD de 13 octets) : une ligne médiane.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TvgOpen {
+    pub line: Vec<[f32; 2]>,
+    pub attrs: Vec<u8>,
+    pub layer: usize,
 }
 
 fn le(b: &[u8]) -> u64 {
@@ -167,9 +179,11 @@ fn read_art(raw: &[u8], d: &mut TvgDrawing) {
 
 fn shape(body: &[u8], d: &mut TvgDrawing, layer: usize) {
     let (mut color, mut ring) = (None, None);
+    let mut attrs: Vec<u8> = Vec::new();
     for (tag, data) in blocks(body) {
         match tag {
             b"TGSD" => {
+                attrs = data.to_vec();
                 if let Some(co) = blocks(data).into_iter().find(|(t, _)| *t == b"TGCO").map(|x| x.1) {
                     if co.len() >= 57 {
                         color = Some(le(&co[49..57]));
@@ -181,8 +195,15 @@ fn shape(body: &[u8], d: &mut TvgDrawing, layer: usize) {
         }
     }
     match (color, ring) {
-        (Some(c), Some(r)) if r.len() >= 3 => d.shapes.push(TvgShape { ring: r, color: c, layer }),
-        (None, Some(_)) => d.skipped += 1,
+        (Some(c), Some(r)) if r.len() >= 3 => d.shapes.push(TvgShape { ring: r, color: c, layer, hole: false }),
+        (None, Some(r)) if r.len() >= 4 && (r[0][0] - r[r.len() - 1][0]).hypot(r[0][1] - r[r.len() - 1][1]) < 0.5 => {
+            d.shapes.push(TvgShape { ring: r.clone(), color: 0, layer, hole: true });
+            d.open.push(TvgOpen { line: r, attrs, layer });
+        }
+        (None, Some(r)) => {
+            d.skipped += 1;
+            d.open.push(TvgOpen { line: r, attrs, layer });
+        }
         _ => {}
     }
 }
@@ -296,6 +317,26 @@ pub(crate) mod fabrique {
         blk(b"TGVS", &vs)
     }
 
+    /// Une zone sans couleur (TGSD de 13 octets, sans TGCO).
+    pub fn zone_sans_couleur(pts: &[(f32, f32, bool)]) -> Vec<u8> {
+        let mut bp = (pts.len() as u32).to_le_bytes().to_vec();
+        let mut mask = vec![0u8; pts.len().div_ceil(8)];
+        for (i, p) in pts.iter().enumerate() {
+            if p.2 {
+                mask[i / 8] |= 1 << (i % 8);
+            }
+        }
+        bp.extend(mask);
+        for p in pts {
+            bp.extend(p.0.to_le_bytes());
+            bp.extend(p.1.to_le_bytes());
+        }
+        let mut vs = blk(b"TGSD", &[0u8; 13]);
+        vs.push(1);
+        vs.extend(blk(b"TGBP", &bp));
+        blk(b"TGVS", &vs)
+    }
+
     pub fn palette(id: u64, rgba: [u8; 4]) -> Vec<u8> {
         let mut v = blk(b"TCSC", &rgba);
         let mut c = 1u32.to_le_bytes().to_vec();
@@ -373,4 +414,175 @@ mod tests {
     fn refuses_other_files() {
         assert!(read(b"not a tvg at all, really").is_err());
     }
-}
+
+    #[test]
+    fn closed_colorless_zone_is_a_hole_and_open_one_is_skipped() {
+        use super::fabrique::{palette, tvg, zone, zone_sans_couleur};
+        let sq = |h: f32| [(-h, -h, true), (h, -h, true), (h, h, true), (-h, h, true), (-h, -h, true)];
+        let open = [(0.0, 0.0, true), (10.0, 0.0, true), (20.0, 5.0, true)];
+        let d = super::read(&tvg(&[zone(7, &sq(100.0)), zone_sans_couleur(&sq(40.0)), zone_sans_couleur(&open)], &palette(7, [0, 0, 0, 255]))).unwrap();
+        assert_eq!(d.shapes.len(), 2, "une zone et son trou");
+        assert!(!d.shapes[0].hole && d.shapes[1].hole);
+        assert_eq!(d.skipped, 1, "la ligne ouverte est comptée, pas reprise");
+    }
+    /// Sonde à la main : `TVG_SONDE=<fichier .tvg>` affiche les zones (couleur ou non) et leurs attributs.
+    #[test]
+    #[ignore]
+    fn sonde() {
+        let Some(path) = std::env::var_os("TVG_SONDE") else { return };
+        let bytes = std::fs::read(path).unwrap();
+        for (name, raw) in super::sections(&bytes).unwrap() {
+            println!("section {name} : {} octets", raw.len());
+            if !name.starts_with('t') {
+                continue;
+            }
+            fn walk(b: &[u8], depth: usize, shown: &mut usize) {
+                for (tag, body) in super::blocks(b) {
+                    let tag = String::from_utf8_lossy(tag).into_owned();
+                    if tag == "TGVS" {
+                        if *shown < 400 && super::blocks(body).iter().any(|(t, d)| *t == b"TGSD" && !super::blocks(d).iter().any(|(t3, _)| *t3 == b"TGCO")) {
+                            *shown += 1;
+                            println!("{:indent$}TGVS {} octets", "", body.len(), indent = depth * 2);
+                            for (t2, d2) in super::blocks(body) {
+                                let t2 = String::from_utf8_lossy(t2).into_owned();
+                                let hex: String = d2.iter().take(80).map(|x| format!("{x:02x}")).collect::<Vec<_>>().join(" ");
+                                println!("{:indent$}  {t2} ({}) {hex}", "", d2.len(), indent = depth * 2);
+                                if t2 == "TGSD" {
+                                    for (t3, d3) in super::blocks(d2) {
+                                        let hex3: String = d3.iter().take(70).map(|x| format!("{x:02x}")).collect::<Vec<_>>().join(" ");
+                                        println!("{:indent$}    {} ({}) {hex3}", "", String::from_utf8_lossy(t3), d3.len(), indent = depth * 2);
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        println!("{:indent$}{tag} ({})", "", body.len(), indent = depth * 2);
+                        walk(body, depth + 1, shown);
+                    }
+                }
+            }
+            let mut shown = 0;
+            walk(&raw, 1, &mut shown);
+        }
+    }
+    /// Sonde à la main : `TVG_DOSSIER=<dossier elements>` compte, par section d'art, les zones avec et sans couleur.
+    #[test]
+    #[ignore]
+    fn sonde_dossier() {
+        let Some(dir) = std::env::var_os("TVG_DOSSIER") else { return };
+        let mut count: std::collections::BTreeMap<String, (usize, usize)> = Default::default();
+        let mut exemple: Option<(std::path::PathBuf, String)> = None;
+        fn walk_files(d: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            for e in std::fs::read_dir(d).unwrap().flatten() {
+                let p = e.path();
+                if p.is_dir() {
+                    walk_files(&p, out);
+                } else if p.extension().is_some_and(|x| x == "tvg") {
+                    out.push(p);
+                }
+            }
+        }
+        let mut files = Vec::new();
+        walk_files(std::path::Path::new(&dir), &mut files);
+        for f in &files {
+            let Ok(bytes) = std::fs::read(f) else { continue };
+            let Ok(secs) = super::sections(&bytes) else { continue };
+            for (name, raw) in secs {
+                if !name.starts_with('t') {
+                    continue;
+                }
+                fn walk(b: &[u8], e: &mut (usize, usize), first_none: &mut Option<usize>, depth: usize) {
+                    for (tag, body) in super::blocks(b) {
+                        if tag == b"TGVS" {
+                            let sd = super::blocks(body).into_iter().find(|(t, _)| *t == b"TGSD").map(|x| x.1);
+                            let has = sd.is_some_and(|d| super::blocks(d).iter().any(|(t, _)| *t == b"TGCO"));
+                            if has {
+                                e.0 += 1;
+                            } else {
+                                e.1 += 1;
+                                first_none.get_or_insert(body.len());
+                            }
+                        } else {
+                            walk(body, e, first_none, depth + 1);
+                        }
+                    }
+                }
+                let mut e = (0, 0);
+                let mut first_none = None;
+                walk(&raw, &mut e, &mut first_none, 0);
+                let c = count.entry(name.clone()).or_default();
+                c.0 += e.0;
+                c.1 += e.1;
+                if e.1 > 0 && exemple.as_ref().is_none_or(|x| x.1 != name) {
+                    exemple = Some((f.clone(), name.clone()));
+                }
+            }
+        }
+        let (mut closed, mut opened, mut n) = (0usize, 0usize, 0usize);
+        let mut tailles: std::collections::BTreeMap<usize, usize> = Default::default();
+        for f in &files {
+            let Ok(bytes) = std::fs::read(f) else { continue };
+            let Ok(d) = super::read(&bytes) else { continue };
+            for o in &d.open {
+                n += 1;
+                *tailles.entry(o.line.len().min(40)).or_default() += 1;
+                let (a, b) = (o.line[0], *o.line.last().unwrap());
+                if (a[0] - b[0]).hypot(a[1] - b[1]) < 0.5 {
+                    closed += 1;
+                } else {
+                    opened += 1;
+                }
+            }
+        }
+        println!("sans couleur : {n}, fermées {closed}, ouvertes {opened}");
+        println!("points : {tailles:?}");
+        for (k, v) in &count {
+            println!("section {k} : {} zones colorées, {} sans couleur", v.0, v.1);
+        }
+        if let Some(e) = exemple {
+            println!("exemple : {} section {}", e.0.display(), e.1);
+        }
+    }
+    /// Sonde à la main : `TVG_BITMAP=<fichier>` et `TVG_SORTIE=<png>` : écrit le bitmap décodé du dessin.
+    #[test]
+    #[ignore]
+    fn sonde_bitmap() {
+        let (Some(path), Some(out)) = (std::env::var_os("TVG_BITMAP"), std::env::var_os("TVG_SORTIE")) else { return };
+        let bytes = std::fs::read(&path).unwrap();
+        for (name, raw) in super::sections(&bytes).unwrap() {
+            if name == "TLAB" {
+                let sig = [0x89u8, 0x50, 0x4e, 0x47, 13, 10, 26, 10];
+                let mut o = 0;
+                while let Some(p) = raw[o..].windows(8).position(|w| w == sig) {
+                    let h = &raw[o + p + 16..o + p + 29];
+                    println!("PNG largeur {} hauteur {} profondeur {} type {} ", u32::from_be_bytes([h[0], h[1], h[2], h[3]]), u32::from_be_bytes([h[4], h[5], h[6], h[7]]), h[8], h[9]);
+                    o += p + 8;
+                }
+            }
+        }
+        {
+            fn tiles<'a>(b: &'a [u8], out: &mut Vec<&'a [u8]>) {
+                for (tag, d) in super::blocks(b) {
+                    if tag == b"TBBM" { out.push(d); } else { tiles(d, out); }
+                }
+            }
+            for (name, raw) in super::sections(&bytes).unwrap() {
+                if name != "TLAB" { continue; }
+                let mut list = Vec::new();
+                tiles(&raw, &mut list);
+                for t in list.iter().take(6) {
+                    println!("tuile {} octets ; blocs : {:?}", t.len(), super::blocks(t).iter().map(|(g, x)| (String::from_utf8_lossy(g).into_owned(), x.len())).collect::<Vec<_>>());
+                    for (_, x) in super::blocks(t) {
+                        for (g, y) in super::blocks(x) {
+                            let v: Vec<i32> = y.chunks(4).take(6).map(|c| if c.len() == 4 { i32::from_le_bytes([c[0], c[1], c[2], c[3]]) } else { -1 }).collect();
+                            println!("   sous-bloc {} {} octets : {:?}", String::from_utf8_lossy(g), y.len(), v);
+                        }
+                    }
+                }
+            }
+        }
+        let d = super::read(&bytes).unwrap();
+        let Some(bm) = d.bitmap else { println!("pas de bitmap ; {} zones", d.shapes.len()); return };
+        println!("bitmap {}x{} en ({}, {})", bm.width, bm.height, bm.x, bm.y);
+        image::RgbaImage::from_raw(bm.width as u32, bm.height as u32, bm.rgba).unwrap().save(out).unwrap();
+    }}

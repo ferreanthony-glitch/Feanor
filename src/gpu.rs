@@ -550,6 +550,11 @@ pub struct GpuCanvas {
 }
 
 impl GpuCanvas {
+    /// Plus grand côté d'une texture de la carte (au-delà, l'image composée de la feuille ne se crée pas).
+    pub fn max_side(&self) -> u32 {
+        self.render_state.device.limits().max_texture_dimension_2d
+    }
+
     pub fn new(rs: &RenderState) -> Self {
         let device = &rs.device;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {

@@ -5792,4 +5792,29 @@ verrou, opacité et placement. Une fenêtre de remarques dit ce qui n'est pas re
 
 `tvg.rs` (3 : lecture d'un `.tvg` synthétique, Béziers aplanies, fichier refusé), `sbnative.rs` (2 : panneaux en clés + marques + caméra ; dessins manquants signalés ; 1 essai à la main `projet_reel`, ignoré).
 
+
+### Mise à jour (2026-10-29, branche `import-sbp-camera`)
+
+- **La vue de dessin blanche** après l'import venait de la feuille (6 fois le cadre, 11 520 px de large) plus grande que la texture
+  maximale de la carte graphique (8 192) : la feuille garde maintenant la taille du projet, et le décor qui la dépasse est sur la toile
+  infinie (§19). **Garde générale** : `Document::enlarge_stage` plafonne à 8 192 px, et une feuille que la carte ne peut pas montrer affiche
+  la raison sur le dessin et dans la barre d'état au lieu d'une vue blanche.
+- **Caméra** : sténopé à 12 champs (z des calques = profondeur multiplan de SHOT, z de la caméra = avancée négative, x et y en champs ×
+  0,366 / 0,2745), rotations (bascule, panoramique, roulis) et adoucis de la courbe de vitesse repris ; calés sur les vignettes de SBP.
+- **Groupes** de calques : dossiers de calques (nom, visibilité). **Flou gaussien** : effet « Flou gaussien » du calque (10 px par unité,
+  à confirmer). **Zones sans couleur** fermées : trous des zones colorées (la pastille « BRAWL STARR » retrouve son étoile) ; ouvertes : non reprises.
+- Reste : couleurs de certains bitmaps (PART_1 plan 003), courbes de vitesse libres, opacité animée (SHOT n'a pas de clés d'opacité).
+
+### À vérifier à l'écran (mise à jour)
+
+1. Ouvre une copie de PART_1 : la vue de dessin montre le plan 001 (même cadrage que sa vignette dans SBP), plus de feuille blanche ; zoomer
+   arrière montre le décor au-delà de la feuille.
+2. Plan 001 : la caméra va du coin gauche du décor vers le centre en ralentissant au départ et à l'arrivée (jouer le plan).
+3. Calques > un calque de groupe (par exemple dans le plan 004) est rangé dans un dossier du même nom.
+4. Les calques à flou (plan 001) ont un effet « Flou gaussien » dans les Effets.
+
+### Essais (mise à jour)
+
+`sbnative.rs` : feuille de la taille du projet et plafond `MAX_SHEET_SIDE` ; caméra (rotation, adoucis, recul), profondeur des calques, groupe en dossier, flou, trou de zone ;
+`tvg.rs` : zone fermée sans couleur = trou, ouverte = comptée.
 ---------------------------------------------------------------------------------------------------
