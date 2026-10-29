@@ -105,17 +105,10 @@ impl App {
         w.report = None;
         let Some(Ok(sb)) = &w.project else { return };
         let total: usize = sb.shots.iter().map(|s| s.panels.len()).sum();
-        match crate::sbbatch::find_storyboard_pro() {
-            Some(exe) => {
-                let batch = Batch::start(exe, path.to_path_buf(), total);
-                w.work = Some(batch.work.clone());
-                w.export = Some(batch);
-            }
-            None => {
-                w.drawings_note = Some("Storyboard Pro n'a pas été trouvé sur ce poste : les dessins ne sont pas repris (calques vides).".into());
-                self.request(Pending::SbImport);
-            }
-        }
+        // Import 71 : les dessins sont lus directement dans les `.tvg` du projet ; Storyboard Pro
+        // n'est plus lancé (la voie du script reste dans « Dessins à la main »).
+        let _ = total;
+        self.request(Pending::SbImport);
     }
 
     /// Lance l'import (le projet ouvert a été enregistré ou abandonné).
@@ -133,7 +126,10 @@ impl App {
         let (p, r) = (progress.clone(), result.clone());
         std::thread::spawn(move || {
             let report = |f: f32| p.store(f.to_bits(), Ordering::Relaxed);
-            let (doc, mut warnings) = crate::sbimport::build(&sb, &dir, drawings.as_ref(), &report);
+            let (doc, mut warnings) = match drawings.as_ref() {
+                Some(d) => crate::sbimport::build(&sb, &dir, Some(d), &report),
+                None => crate::sbnative::build(&sb, &dir, &report),
+            };
             if let Some(n) = note {
                 warnings.insert(0, n);
             }

@@ -826,9 +826,11 @@ pub mod sboard;
 #[cfg(test)]
 mod sboard_tests;
 mod sbimport;
+mod sbnative;
 pub mod sbscript;
 mod sbui;
 pub mod sbvector;
+pub mod tvg;
 #[cfg(test)]
 mod sbvector_tests;
 pub mod stretch;

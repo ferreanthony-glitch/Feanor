@@ -32,6 +32,9 @@ pub struct SbProject {
     pub size: [usize; 2],
     pub shots: Vec<SbShot>,
     pub tracks: Vec<SbTrack>,
+    /// Table des éléments de dessin : identifiant -> (dossier, nom) ; le dessin `val` de l'élément
+    /// est `elements/<dossier>/<nom>-<val>.tvg` (import 71).
+    pub elements: HashMap<String, (String, String)>,
     /// Ce qui n'a pas pu être lu tel quel.
     pub warnings: Vec<String>,
 }
@@ -46,6 +49,15 @@ pub struct SbShot {
     /// Première image du plan dans le film, comptée depuis 1.
     pub start: usize,
     pub panels: Vec<SbPanel>,
+    /// Clés de la caméra du plan (import 71) : position du « peg » de la caméra, par image du plan.
+    pub camera: Vec<SbCamKey>,
+}
+
+/// Une clé de la caméra : image du plan (depuis 0), position en champs (x droite, y haut) et z.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct SbCamKey {
+    pub frame: usize,
+    pub pos: [f64; 3],
 }
 
 /// Un panneau, avec ses légendes réparties dans les trois textes de Pelure.
@@ -53,6 +65,8 @@ pub struct SbShot {
 pub struct SbPanel {
     pub id: String,
     pub frames: usize,
+    /// Nom du panneau (méta `panelInfo`), vide si aucun.
+    pub name: String,
     pub dialogue: String,
     pub action: String,
     pub notes: String,
@@ -66,6 +80,19 @@ pub struct SbLayer {
     pub vector: bool,
     /// Opacité, de 0 à 1.
     pub opacity: f32,
+    /// Élément et nom du dessin exposé (`elementSeq@id`, `@val`) ; vides : calque sans dessin.
+    pub element: String,
+    pub drawing: String,
+    pub visible: bool,
+    pub locked: bool,
+    /// Placement du calque dans le panneau : décalage en champs, échelle, rotation en degrés.
+    pub offset: [f32; 2],
+    pub scale: f32,
+    pub angle: f32,
+    /// Effets reliés au calque (noms des modules), non repris.
+    pub effects: Vec<String>,
+    /// Un réglage du calque est animé par une courbe (non repris), ou incliné (`skew`).
+    pub animated: bool,
 }
 
 /// Une piste son.
@@ -180,9 +207,17 @@ fn parse_any(src: &str, fallback_title: &str) -> Result<SbProject, String> {
             sb.warnings.push(format!("Plan {name} : aucun panneau, sauté."));
             continue;
         }
-        sb.shots.push(SbShot { id, name, sequence, start: range.map_or(0, |r| r.0), panels });
+        let camera = read_camera(shot);
+        sb.shots.push(SbShot { id, name, sequence, start: range.map_or(0, |r| r.0), panels, camera });
     }
     sb.tracks = read_tracks(top, &mut sb.warnings);
+    if let Some(els) = root.child("elements") {
+        for e in els.children_named("element") {
+            if let (Some(id), Some(folder)) = (e.attr("id"), e.attr("elementFolder")) {
+                sb.elements.insert(id.to_string(), (folder.to_string(), e.attr("elementName").unwrap_or("Draw").to_string()));
+            }
+        }
+    }
     Ok(sb)
 }
 
@@ -203,6 +238,7 @@ fn sequence_of(scene: &Element) -> Vec<(String, Option<(usize, usize)>)> {
 
 fn read_panel(p: &Element, id: String, frames: usize, fields: &HashMap<String, String>) -> SbPanel {
     let mut panel = SbPanel { id, frames, ..Default::default() };
+    panel.name = meta(p, "panelInfo").and_then(|m| m.child("panelInfo")).and_then(|i| i.attr("name")).unwrap_or("").to_string();
     let mut notes = Vec::new();
     if let Some(info) = meta(p, "infoFields").and_then(|m| m.child("infoFields")) {
         for f in info.children_named("field") {
@@ -228,10 +264,30 @@ fn read_panel(p: &Element, id: String, frames: usize, fields: &HashMap<String, S
     if let Some(group) = p.child("rootgroup") {
         let mut modules = Vec::new();
         group.find_all("module", &mut modules);
-        for m in modules.into_iter().filter(|m| m.attr("type") == Some("READ")) {
+        let cols: HashMap<&str, &Element> = p.child("columns").map(|c| c.children_named("column").filter_map(|c| Some((c.attr("name")?, c))).collect()).unwrap_or_default();
+        let blurs: Vec<&Element> = modules.iter().copied().filter(|m| m.attr("type").is_some_and(|t| t != "READ" && t != "PEG" && t != "COMPOSITE" && t != "CAMERA")).collect();
+        let links: Vec<(&str, &str)> = group.child("linkedlist").map(|l| l.children_named("link").filter_map(|k| Some((k.attr("out")?, k.attr("in")?))).collect()).unwrap_or_default();
+        for m in modules.iter().copied().filter(|m| m.attr("type") == Some("READ")) {
             let attrs = m.child("attrs");
             let val = |k: &str| attrs.and_then(|a| a.child(k)).and_then(|e| e.attr("val"));
+            let sub = |a: &str, b: &str| attrs.and_then(|x| x.child(a)).and_then(|x| x.child(b)).and_then(|e| e.attr("val")).and_then(|v| v.parse::<f32>().ok());
+            let seq = attrs
+                .and_then(|a| a.path("drawing/element"))
+                .and_then(|e| e.attr("col"))
+                .and_then(|c| cols.get(c))
+                .and_then(|c| c.child("elementSeq"));
+            let name = m.attr("name").unwrap_or("Calque");
+            let effects = links.iter().filter(|(o, _)| *o == name).filter_map(|(_, i)| blurs.iter().find(|b| b.attr("name") == Some(i)).map(|b| format!("{}", b.attr("type").unwrap_or("?")))).collect();
             panel.layers.push(SbLayer {
+                element: seq.and_then(|s| s.attr("id")).unwrap_or("").to_string(),
+                drawing: seq.and_then(|s| s.attr("val")).unwrap_or("").to_string(),
+                visible: m.path("options/disabled").and_then(|d| d.attr("val")) != Some("true"),
+                locked: m.path("options/locked").and_then(|d| d.attr("val")) == Some("true"),
+                offset: [sub("offset", "x").unwrap_or(0.0), sub("offset", "y").unwrap_or(0.0)],
+                scale: sub("scale", "xy").unwrap_or(1.0),
+                angle: sub("rotation", "anglez").unwrap_or(0.0),
+                effects,
+                animated: attrs.is_some_and(|a| a.children.iter().filter(|c| c.name != "drawing").any(|c| has_col(c))),
                 name: m.attr("name").unwrap_or("Calque").to_string(),
                 vector: val("lineArtDrawingMode") == Some("VectorDrawingMode"),
                 opacity: val("opacity").and_then(|v| v.parse::<f32>().ok()).map_or(1.0, |o| (o / 100.0).clamp(0.0, 1.0)),
@@ -279,6 +335,41 @@ fn read_tracks(top: &Element, warnings: &mut Vec<String>) -> Vec<SbTrack> {
         tracks.push(SbTrack { name, muted: col.attr("disabled") == Some("true"), clips });
     }
     tracks
+}
+
+/// Clés de la caméra d'un plan : le chemin 3D du `PEG` de la caméra (colonne de type 2), à
+/// l'image `lockedInTime` de chaque point (depuis 1) ; sinon la position fixe du `PEG`. Unités :
+/// champs (à vérifier, `docs/IMPORT-SBP.md`).
+fn read_camera(shot: &Element) -> Vec<SbCamKey> {
+    let mut modules = Vec::new();
+    if let Some(g) = shot.child("rootgroup") {
+        g.find_all("module", &mut modules);
+    }
+    let Some(peg) = modules.iter().find(|m| m.attr("type") == Some("PEG") && m.attr("name").is_some_and(|n| n.starts_with("Camera"))) else { return Vec::new() };
+    let pos = peg.path("attrs/position");
+    let fixed = |k: &str| pos.and_then(|p| p.child(k)).and_then(|e| e.attr("val")).and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+    let base = [fixed("x"), fixed("y"), fixed("z")];
+    let col = pos.and_then(|p| p.child("attr3dpath")).and_then(|e| e.attr("col"));
+    let mut keys = Vec::new();
+    if let (Some(col), Some(columns)) = (col, shot.child("columns")) {
+        if let Some(points) = columns.children_named("column").find(|c| c.attr("name") == Some(col)).and_then(|c| c.path("path3D/points")) {
+            for pt in points.children_named("pt") {
+                let v: Vec<f64> = pt.attr("val").unwrap_or("").split(',').filter_map(|s| s.trim().parse().ok()).collect();
+                let at = pt.attr("lockedInTime").and_then(|s| s.parse::<usize>().ok());
+                if let (3, Some(at)) = (v.len(), at) {
+                    keys.push(SbCamKey { frame: at.saturating_sub(1), pos: [v[0], v[1], v[2]] });
+                }
+            }
+        }
+    }
+    if keys.is_empty() && base != [0.0, 0.0, 0.0] {
+        keys.push(SbCamKey { frame: 0, pos: base });
+    }
+    keys
+}
+
+fn has_col(e: &Element) -> bool {
+    e.attr("col").is_some() || e.children.iter().any(has_col)
 }
 
 /// La méta `type` d'un élément (ses `metas/meta`).

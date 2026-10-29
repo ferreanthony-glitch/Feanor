@@ -298,7 +298,7 @@ pub fn place_image(doc: &Document, img: image::RgbaImage) -> Raster {
 }
 
 /// Pistes et extraits de son.
-fn add_sounds(doc: &mut Document, sb: &SbProject, audio_dir: &Path, warnings: &mut Vec<String>) {
+pub(crate) fn add_sounds(doc: &mut Document, sb: &SbProject, audio_dir: &Path, warnings: &mut Vec<String>) {
     // Chaque fichier n'est lu qu'une fois : (son de Pelure, son décodé) ou rien s'il manque.
     let mut sources: HashMap<String, Option<(u64, Arc<Pcm>)>> = HashMap::new();
     let fps = doc.fps.max(1) as f64;

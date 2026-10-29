@@ -5771,3 +5771,25 @@ Pas de petit menu « type » sur la ligne : passer de Personnage à Classique ou
 `brosses_perso_tests.rs` (11) : projet neuf (trois de chaque type, dans l'ordre, aux bonnes couleurs, formes, pas de ⊘) ; Décor (calque vectoriel avec l'aplat de la brosse en une étape, un seul calque pour trois brosses, bitmap selon le réglage) ; pinceau, taille et couleur d'un Décor suivis, suppression qui lâche, rangs qui suivent ; recliquer lâche les trois types ; « + » à trois types ; panneau à trois sections et ↺ par type (Personnage : une étape, les autres intacts) ; bulles ; anciens réglages (couleurs neutres, tailles du décor, rien d'écrit en double) ; ancien fichier de personnages ; choix du calque d'une copie (rester, dernier utilisé, plus haut). **Adaptés** (avec un commentaire qui dit pourquoi) : `personnages_tests`, `calques_pastilles_tests` (la copie reste liée ; la classique devient une brosse), `decor_tests`, `pastilles_storyboard_tests`, `regle_cadrage_tests` (le « + » ouvre un menu), `aplatperso_tests`, `aplattrous_tests`, `cases_tests`, `hasard_tests`.
 
 ---------------------------------------------------------------------------------------------------
+
+
+## 71. Import Storyboard Pro : panels en clés, trait, caméras, son (2026-10-29, branche `import-sbp`)
+
+Détail complet : `docs/IMPORT-SBP.md`. **Fichier > Importer > Un projet Storyboard Pro** lit maintenant les dessins `.tvg` du projet
+**sans lancer Storyboard Pro** (`tvg.rs` : conteneur, zones vectorielles, tuiles bitmap, palette ; `sbnative.rs` : construction). Chaque
+panneau est une **clé de dessin** sur les calques de son Plan (avec sa marque d'image : une case par panneau dans les Vignettes), les
+caméras du plan deviennent des clés de caméra, le son et les légendes sont repris comme avant. Les calques gardent nom, ordre, visibilité,
+verrou, opacité et placement. Une fenêtre de remarques dit ce qui n'est pas repris (flou, groupes, animations par courbe, zones sans couleur).
+
+### À vérifier à l'écran
+
+1. Ouvre une copie de BRAWLIDAYS_CLEAN_PART_1 : 8 plans, 526 images, des dessins visibles dans chaque case des Vignettes.
+2. Sur un plan à plusieurs panneaux : une case par panneau, et chaque panneau est sa propre clé sur la timeline.
+3. Les caméras : l'ampleur du zoom (z de SBP) et la position sont à confirmer (déduites).
+4. Les calques bitmap (dégradés de fond) : taille et position.
+
+### Essais
+
+`tvg.rs` (3 : lecture d'un `.tvg` synthétique, Béziers aplanies, fichier refusé), `sbnative.rs` (2 : panneaux en clés + marques + caméra ; dessins manquants signalés ; 1 essai à la main `projet_reel`, ignoré).
+
+---------------------------------------------------------------------------------------------------
