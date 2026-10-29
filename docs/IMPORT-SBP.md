@@ -146,3 +146,18 @@ de PART_1 est sur fond blanc) : c'est du contenu (calques `BG` à opacité parti
 
 Outils d'essai (ignorés) : `tvg::tests::sonde_pertes` (`TVG_PERTES`), `sonde_rendu` (`TVG_SONDE`, `TVG_SORTIE`, `TVG_ECHELLE`, `TVG_ZONE`),
 `sonde_bitmaps` (`TVG_BITMAPS`, `TVG_RESUME`, `TVG_CLASSE`) ; `sbnative::tests::liste_calques` avec `SBP_CHERCHE=<dossier/dessin>` ou `bitmap`.
+
+## 8. Vitesse d'un gros projet importé (import 73, 2026-10-29, branche `import-sbp-vitesse`)
+
+Un projet de Storyboard Pro lourd (7 plans, une vingtaine de calques chacun, format carré 1920 × 1920 : feuille de 3 840 × 3 840) ramait.
+**Mesure, pas supposition** : le temps par image restait de 2 à 11 ms ; ce qui pesait, c'était la mémoire. Chaque dessin vectoriel importé garde son
+rendu (tuiles de 64 × 64) à la taille de la feuille, plus ce qui dépasse sur la toile infinie. Les décors de SBP sont de grands aplats : 31 % (PART_2),
+59 % (7 plans carrés de l'animatic) des tuiles sont d'une seule couleur. Poids avant : PART_2 3,2 Go, animatic 20,7 Go (13,3 Go de tuiles de feuille et 5 Go
+hors feuille), 7 plans carrés 17,4 Go ; imports de 21 s, 181 s et 139 s (un seul fil).
+
+Corrections : tuiles d'une seule couleur partagées (`Raster::share_solid_tiles`, dans `VectorDrawing::render`, pour tous les projets) et import des dessins
+en parallèle (`sbnative::precalculer`, `faire`, `cible` : mêmes dessins, mêmes clés, mêmes remarques). Après : PART_2 2,4 s et 2,7 Go ; animatic 16,9 s et 10,8 Go ;
+7 plans carrés 14,6 s et 7,4 Go. Aucun pixel ne change (test `les_tuiles_pleines_se_partagent_sans_changer_un_pixel`). Reste : le rendu gardé pour chaque
+dessin (même caché), l'envoi à la carte d'un dessin énorme jamais vu (20 à 50 ms au premier affichage). Format carré : l'import ne l'a jamais changé (il lit
+`resolution size` du .sboard) ; la barre d'état dit le cadre, la feuille en fait le double.
+Outils : `src/sbperf_tests.rs` (`projet_importe`, `projet_shot`, ignorés).

@@ -519,7 +519,7 @@ pub(crate) fn bouge(k: usize, r: Rect) -> Vec<Event> {
 }
 
 /// Un trait de pinceau à la souris : appui, déplacements (`par_image` par image), puis lâcher.
-fn trait_souris(k: usize, n: usize, par_image: usize, r: Rect) -> Vec<Event> {
+pub(crate) fn trait_souris(k: usize, n: usize, par_image: usize, r: Rect) -> Vec<Event> {
     let mut ev = Vec::new();
     let point = |i: usize| {
         let t = i as f32 / (n * par_image) as f32;
