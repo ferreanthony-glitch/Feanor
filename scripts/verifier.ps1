@@ -234,7 +234,7 @@ $vivants = @{}
 Get-Process | ForEach-Object { $vivants[[string]$_.Id] = $true }
 Get-ChildItem $env:TEMP -Directory -Filter 'shot-perf-bac-*' -ErrorAction SilentlyContinue | ForEach-Object {
     if ($_.Name -match '^shot-perf-bac-(\d+)-' -and -not $vivants.ContainsKey($Matches[1])) {
-        Remove-Item -Recurse -Force $_.FullName -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 Write-Host ''

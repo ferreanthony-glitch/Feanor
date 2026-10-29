@@ -313,21 +313,25 @@ fn the_tools_act_on_the_targeted_layer_only() {
 
 #[test]
 fn a_layer_can_be_shown_or_hidden_alone_and_nothing_is_erased() {
+    // (On compte les formes peintes : les vignettes des plans, calculées sur des fils de fond communs à tous les essais, s'y
+    // ajoutent en arrivant, et un compte pris avant leur arrivée et un autre après ne se comparent pas — « 553 contre 553 ».
+    // État commun pour cet essai seul, et on attend les vignettes avant chaque compte.)
+    crate::fxcache::monde::ecrire();
     let mut b = ouvert(quatre_plans(), 3);
     let a = b.app.doc.annotations.calque_ou_premier(None);
     let c = b.app.doc.annotations.ajouter_calque().unwrap();
     poser(&mut b, Some(a), 0, 40.0);
     poser(&mut b, Some(c), 4, 40.0);
     b.garder_formes = true;
-    b.chauffer(2);
+    b.attendre_vignettes();
     let deux = b.formes.len();
     b.app.annot_calque_basculer(c);
-    b.chauffer(2);
+    b.attendre_vignettes();
     let un = b.formes.len();
     assert!(un < deux, "un calque caché n'est pas peint ({un} contre {deux})");
     b.app.annot_calque_basculer(a);
-    b.chauffer(2);
-    assert!(b.formes.len() < un, "les deux cachés : moins encore");
+    b.attendre_vignettes();
+    assert!(b.formes.len() < un, "les deux cachés : moins encore ({} contre {un})", b.formes.len());
     assert_eq!(b.app.doc.annotations.traces.len(), 2, "rien n'est effacé");
     assert!(b.app.doc.annotations.calques.iter().all(|k| !k.visible));
     // Viser un calque caché le remontre : on ne trace pas sur ce qu'on ne voit pas.
