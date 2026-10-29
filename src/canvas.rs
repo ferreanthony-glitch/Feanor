@@ -81,6 +81,16 @@ impl App {
         self.check_persp();
         self.check_envelope();
 
+        // Garde : une feuille plus grande que la texture maximale de la carte graphique (ou de l'affichage de
+        // secours) ne se compose pas ; au lieu d'une vue blanche en silence, on le dit sur le dessin et dans la barre d'état.
+        let limit = self.gpu.as_ref().map_or(crate::document::MAX_SHEET_SIDE as u32, |g| g.max_side()) as usize;
+        if self.doc.width > limit || self.doc.height > limit {
+            let msg = format!("La feuille ({}×{} px) dépasse la taille maximale de l'affichage ({limit} px de côté) : elle ne peut pas être montrée. Réduire la feuille ou le projet.", self.doc.width, self.doc.height);
+            self.status = msg.clone();
+            ui.painter_at(rect).rect_filled(rect, 0.0, Color32::from_gray(30));
+            ui.painter_at(rect).text(rect.center(), egui::Align2::CENTER_CENTER, msg, egui::FontId::proportional(15.0), Color32::from_rgb(255, 190, 120));
+            return;
+        }
         let plan = self.build_plan(self.cur_frame, true, true);
         // Tremblement du trait animé à l'arrêt (`tremblement.rs`) : seul le prochain changement de
         // variante réveille l'écran (12 fois par seconde par défaut), jamais à la cadence de l'écran.

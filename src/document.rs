@@ -1042,6 +1042,9 @@ pub struct Structure {
     pub annotations: crate::annotations::Annotations,
 }
 
+/// Plus grand côté de la feuille, en pixels : la texture minimale que toute carte graphique garantit (wgpu : 8 192).
+pub const MAX_SHEET_SIDE: usize = 8192;
+
 pub struct Document {
     /// Taille de la feuille de dessin (de tous les dessins), en pixels. Elle déborde du cadre
     /// pour qu'on puisse dessiner hors champ (panoramiques, mouvements de caméra).
@@ -1328,6 +1331,8 @@ impl Document {
     /// Agrandit la feuille à `width`×`height` en gardant le dessin au centre : dessins bitmap et
     /// vectoriels, guides, tout est décalé ; le cadre ne change pas de taille et reste centré.
     pub fn enlarge_stage(&mut self, width: usize, height: usize) {
+        // Jamais plus grande que la texture minimale garantie des cartes graphiques : au-delà, la vue serait blanche.
+        let (width, height) = (width.min(MAX_SHEET_SIDE), height.min(MAX_SHEET_SIDE));
         if width < self.width || height < self.height {
             return;
         }
