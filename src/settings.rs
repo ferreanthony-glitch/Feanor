@@ -127,6 +127,10 @@ pub struct Settings {
     pub session_tabs: Vec<PathBuf>,
     #[serde(default, rename = "onglet_actif", skip_serializing_if = "is_zero")]
     pub session_active: usize,
+    /// La séance d'avant s'est finie sans aucun projet ouvert (Anthony avait fermé le dernier) : au lancement,
+    /// « Rouvrir le dernier projet » ne rouvre rien et SHOT démarre sur l'accueil (`sansprojet.rs`).
+    #[serde(default, rename = "sans_projet_a_la_fin", skip_serializing_if = "std::ops::Not::not")]
+    pub session_vide: bool,
     /// Les panneaux de réglages prennent la hauteur de leur contenu (`ajuste.rs`), sauf entre les
     /// paires (premier panneau du haut, premier du bas) dont on a tiré le bord à la main.
     #[serde(default = "yes", rename = "panneaux_ajustes")]
@@ -318,6 +322,7 @@ impl Default for Settings {
             open_in_new_tab: true,
             session_tabs: Vec::new(),
             session_active: 0,
+            session_vide: false,
             panes_fit: true,
             panel_bar: true,
             panes_fixed: Vec::new(),

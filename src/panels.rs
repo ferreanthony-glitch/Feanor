@@ -34,14 +34,13 @@ pub(crate) const MOUSE_GESTURES: [(&str, &str); 27] = [
     ("Échap ou Ctrl+Z pendant un glisser", "abandonner le geste"),
 ];
 
-fn menu_item(ui: &mut egui::Ui, label: &str, shortcut: &str) -> bool {
-    let clicked = ui
-        .add(egui::Button::new(label).shortcut_text(shortcut))
-        .clicked();
-    if clicked {
-        ui.close_menu();
+/// Un menu de la barre qui parle d'un projet : sans projet ouvert, son titre est grisé et ne s'ouvre pas (`sansprojet.rs`).
+/// Rend vrai quand le menu est à construire.
+fn menu_actif(ui: &mut egui::Ui, sans_projet: bool, titre: &str) -> bool {
+    if sans_projet {
+        ui.add_enabled(false, egui::Button::new(titre).frame(false));
     }
-    clicked
+    !sans_projet
 }
 
 /// Mode d'emploi de la boîte de sélection (Réglages de l'outil Sélection).
@@ -69,7 +68,8 @@ impl App {
     /// Clic droit : lui assigner un raccourci.
     pub(crate) fn action_item(&mut self, ui: &mut egui::Ui, text: &str, action: &str) {
         let shortcut = self.keymap.label(action);
-        let resp = ui.add(egui::Button::new(text).shortcut_text(&shortcut));
+        // (Sans projet ouvert, une commande qui en vise un est grisée : `sansprojet.rs`.)
+        let resp = ui.add_enabled(!self.action_bloquee(action), egui::Button::new(text).shortcut_text(&shortcut));
         if resp.clicked() {
             ui.close_menu();
             self.run_action(action);
@@ -114,6 +114,8 @@ impl App {
             // un sous-menu ou une fenêtre (Exporter, Préférences, `prefsui.rs`) ; ce qui a déjà un
             // bouton toujours visible (vue sous le dessin) n'est plus répété. Toute commande reste
             // trouvable par la palette (Ctrl+K).
+            // Sans projet ouvert (`sansprojet.rs`) : seuls Fichier et Aide servent ; les autres menus sont grisés.
+            let sans_projet = self.sans_projet();
             ui.menu_button("Fichier", |ui| {
                 self.action_item(ui, "Nouveau…", "fichier.nouveau");
                 self.action_item(ui, "Ouvrir…", "fichier.ouvrir");
@@ -126,7 +128,7 @@ impl App {
                 self.action_item(ui, "Fermer les autres onglets", "onglet.fermer_autres");
                 ui.separator();
                 ui.menu_button("Importer", |ui| {
-                    if menu_item(ui, "Une image (calque bitmap)…", "") {
+                    if ui.add_enabled(!sans_projet, egui::Button::new("Une image (calque bitmap)…")).clicked() {
                         ui.close_menu();
                         self.import_image();
                     }
@@ -152,7 +154,7 @@ impl App {
                 ui.separator();
                 self.action_item(ui, "Quitter", "fichier.quitter");
             });
-            ui.menu_button("Édition", |ui| {
+            if menu_actif(ui, sans_projet, "Édition") { ui.menu_button("Édition", |ui| {
                 self.action_item(ui, "Annuler", "edition.annuler");
                 self.action_item(ui, "Rétablir", "edition.retablir");
                 self.action_item(ui, "Historique…", "vue.historique");
@@ -172,8 +174,8 @@ impl App {
                     self.action_item(ui, "De gauche à droite", "selection.miroir_h");
                     self.action_item(ui, "De haut en bas", "selection.miroir_v");
                 });
-            });
-            ui.menu_button("Storyboard", |ui| {
+            }); }
+            if menu_actif(ui, sans_projet, "Storyboard") { ui.menu_button("Storyboard", |ui| {
                 self.action_item(ui, "Nouveau plan", "panneau.nouveau");
                 self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
                 ui.separator();
@@ -214,10 +216,10 @@ impl App {
                     Mode::Animation => "Retour au storyboard",
                 };
                 self.action_item(ui, label, "mode.basculer");
-            });
-            ui.menu_button("Son", |ui| self.sound_menu(ui));
-            ui.menu_button("Calques", |ui| self.layer_ops_menu(ui));
-            ui.menu_button("Animation", |ui| {
+            }); }
+            if menu_actif(ui, sans_projet, "Son") { ui.menu_button("Son", |ui| self.sound_menu(ui)); }
+            if menu_actif(ui, sans_projet, "Calques") { ui.menu_button("Calques", |ui| self.layer_ops_menu(ui)); }
+            if menu_actif(ui, sans_projet, "Animation") { ui.menu_button("Animation", |ui| {
                 self.action_item(ui, "Lecture / pause", "lecture.basculer");
                 ui.menu_button("Aller à", |ui| {
                     self.action_item(ui, "Image précédente", "image.precedente");
@@ -235,8 +237,8 @@ impl App {
                 ui.menu_button("Images", |ui| self.images_menu(ui));
                 ui.separator();
                 self.action_item(ui, "Colorier par zones…", "calque.colorier_zones");
-            });
-            ui.menu_button("Affichage", |ui| {
+            }); }
+            if menu_actif(ui, sans_projet, "Affichage") { ui.menu_button("Affichage", |ui| {
                 // Zoom, rotation, miroir, pelure, table lumineuse : boutons sous le dessin.
                 self.action_item(ui, "Ajuster à la fenêtre", "vue.ajuster");
                 self.action_item(ui, "Zoom 100 %", "vue.reinit_zoom");
@@ -266,9 +268,9 @@ impl App {
                 self.action_item(ui, "Mode concentration (le dessin seul)", "vue.concentration");
                 self.action_item(ui, "Plein écran", "vue.plein_ecran");
                 self.action_item(ui, "Performance (temps de l'interface)", "vue.performance");
-            });
+            }); }
             // Les fonctions à l'essai, rangées ensemble (Anthony, 2026-10-20) : elles peuvent changer.
-            ui.menu_button("Labo", |ui| {
+            if menu_actif(ui, sans_projet, "Labo") { ui.menu_button("Labo", |ui| {
                 ui.label(RichText::new("Fonctions à l'essai : elles peuvent encore changer.").weak());
                 ui.separator();
                 self.action_item(ui, "Suggestions sonores…", "vue.suggestions_sonores");
@@ -281,7 +283,7 @@ impl App {
                 ui.separator();
                 let rec = if self.record_strokes.is_some() { "Arrêter d'enregistrer mes traits" } else { "Enregistrer mes traits (banc d'essai du moteur)" };
                 self.action_item(ui, rec, "pinceau.enregistrer_traits");
-            });
+            }); }
             ui.menu_button("Aide", |ui| {
                 self.action_item(ui, "Palette de commandes…", "aide.palette");
                 self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
@@ -292,7 +294,8 @@ impl App {
                 self.action_item(ui, "Diagnostic des performances…", "aide.diagnostic");
             });
 
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            // (Sans projet, il n'y a pas d'espace de travail à choisir : les quatre mots ne paraissent pas.)
+            if !sans_projet { ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 // Les quatre espaces de travail restent écrits en toutes lettres, dans l'ordre du
                 // travail (de gauche à droite : Vignettes, Storyboard, Animation, Montage) : on voit d'un coup
                 // d'œil où l'on est. Passer de l'un à l'autre est instantané : le plan, l'image, la
@@ -335,7 +338,7 @@ impl App {
                 if vignettes.clicked() && !on {
                     self.set_espace(Espace::Vignettes);
                 }
-            });
+            }); }
         });
     }
 
@@ -752,6 +755,18 @@ impl App {
         });
     }
     pub(crate) fn status_bar(&mut self, ui: &mut egui::Ui) {
+        // Sans projet ouvert : ni format, ni zoom (il n'y a rien à mesurer), seulement le message (`sansprojet.rs`).
+        if self.sans_projet() {
+            ui.horizontal(|ui| {
+                if self.status != crate::sansprojet::STATUT_DE_DEPART {
+                    self.status_message(ui);
+                } else {
+                    // (La barre garde sa hauteur : rien ne bouge quand un message paraît.)
+                    ui.allocate_space(vec2(0.0, ui.spacing().interact_size.y));
+                }
+            });
+            return;
+        }
         ui.horizontal(|ui| {
             // À gauche, seulement ce qui sert : le format du film et le zoom. L'espace de travail est l'onglet allumé,
             // le plan est écrit sur le dessin et dans l'en-tête du montage ou de la timeline, la rotation et le

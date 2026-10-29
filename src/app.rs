@@ -1365,7 +1365,7 @@ impl App {
             import_source: None,
             written: HashMap::new(),
             modified: false,
-            status: "Storyboard : dessine le premier plan ; P pour un nouveau plan, double-clic sur un plan pour l'animer (F1 : raccourcis).".into(),
+            status: crate::sansprojet::STATUT_DE_DEPART.into(),
             new_dialog: None,
             new_layer_dialog: None,
             effets_ui: Default::default(),
@@ -3354,14 +3354,9 @@ impl App {
             // La fenêtre « Nouveau projet » (`nouveauui.rs`).
             Pending::New => self.open_new_project(),
             Pending::Open => self.open_dialog(),
-            Pending::FromChosen => {
-                self.welcome = false;
-                self.new_project_from_chosen();
-            }
-            Pending::SbImport => {
-                self.welcome = false;
-                self.start_sb_import();
-            }
+            Pending::FromChosen => self.new_project_from_chosen(),
+            // (L'onglet reste « sans projet » tant que l'import n'est pas fait : fermée sans rien importer, la fenêtre rend l'accueil.)
+            Pending::SbImport => self.start_sb_import(),
             Pending::OpenRecent => {
                 if let Some(path) = self.recent_to_open.take() {
                     self.open_path(path);
@@ -3764,17 +3759,18 @@ impl App {
             self.paste_event = false;
         }
         // Une flèche tenue qui déplace la sélection reste une seule étape d'annulation.
-        if ctx.input(|i| crate::nudge::ARROWS.iter().any(|k| i.key_down(*k))) {
+        if !self.sans_projet() && ctx.input(|i| crate::nudge::ARROWS.iter().any(|k| i.key_down(*k))) {
             self.keep_gesture(crate::nudge::GESTURE);
         }
         for (key, physical, m, repeat) in keys {
             // Entrée, Échap, Retour arrière servent d'abord à l'outil en cours (forme à finir…).
-            if !m.any() && self.tool_key(key) {
+            let sans_projet = self.sans_projet();
+            if !sans_projet && !m.any() && self.tool_key(key) {
                 continue;
             }
             // Une sélection sur le dessin : les flèches la déplacent (`nudge.rs`), avant de changer
             // d'image ou de calque.
-            if let Some(d) = crate::nudge::arrow_step(key, m).filter(|_| self.nudge_ready()) {
+            if let Some(d) = crate::nudge::arrow_step(key, m).filter(|_| !sans_projet && self.nudge_ready()) {
                 self.nudge_selection(d);
                 continue;
             }
@@ -3797,6 +3793,11 @@ impl App {
     /// Exécute une action désignée par son identifiant stable (voir `keymap::ACTIONS`). Les étapes
     /// d'annulation qu'elle enregistre portent son nom (panneau Historique).
     pub(crate) fn run_action(&mut self, action: &str) {
+        // Aucun projet ouvert : une commande qui en vise un ne part pas (`sansprojet.rs`). Le document caché ne change pas.
+        if self.action_bloquee(action) {
+            self.status = "Crée ou ouvre d'abord un projet.".into();
+            return;
+        }
         // (Le rapport d'une erreur dit quelle commande venait d'être lancée, `plantage.rs`.)
         crate::plantage::noter_action(action);
         let name = crate::keymap::ACTIONS.iter().find(|a| a.id == action).map(|a| crate::historyui::step_name(a.label));
@@ -4860,6 +4861,14 @@ impl App {
     }
 
     fn update_title(&mut self, ctx: &egui::Context) {
+        // Sans projet ouvert : le titre est celui du logiciel (`sansprojet.rs`).
+        if self.sans_projet() {
+            if self.title != "SHOT" {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Title("SHOT".into()));
+                self.title = "SHOT".into();
+            }
+            return;
+        }
         let name = self
             .path
             .as_ref()
@@ -5001,7 +5010,11 @@ impl App {
         self.sync_couleurs();
         self.warm_couleur();
         if !self.modal_open() {
-            self.handle_dropped_files(ctx);
+            if self.sans_projet() {
+                self.deposer_sans_projet(ctx);
+            } else {
+                self.handle_dropped_files(ctx);
+            }
         }
         self.tick_playback(ctx);
         self.tick_flip(ctx);
@@ -5047,16 +5060,19 @@ impl App {
         // Mode concentration (`concentration.rs`) : ni menus, ni barres, ni panneaux ; le dessin seul, sous une barre
         // minimale. Une couche par-dessus : le dock et les dispositions ne sont pas touchés.
         let concentre = self.concentration_active();
+        // Sans projet ouvert (`sansprojet.rs`) : les menus, la barre d'état et l'accueil sur un fond neutre, rien d'autre. La
+        // bande des onglets ne paraît que s'il y en a plusieurs (un seul onglet sans projet n'est pas un onglet à montrer).
+        let sans_projet = self.sans_projet();
         if !concentre {
             let _t = crate::perf::section("barre de menus");
             egui::TopBottomPanel::top("menu").show(ctx, |ui| self.menu_bar(ui));
         }
-        if !concentre {
+        if !concentre && !(sans_projet && self.onglets.len() <= 1) {
             // La bande des onglets de projets (`ongletsui.rs`), sous les menus.
             let _t = crate::perf::section("onglets");
             egui::TopBottomPanel::top("onglets").show(ctx, |ui| self.onglets_bar(ui));
         }
-        if self.layout.command_bar && !concentre {
+        if self.layout.command_bar && !concentre && !sans_projet {
             let _t = crate::perf::section("barre de commandes");
             egui::TopBottomPanel::top("commandes").show(ctx, |ui| self.command_bar(ui));
         }
@@ -5064,7 +5080,7 @@ impl App {
             let _t = crate::perf::section("barre d'état");
             egui::TopBottomPanel::bottom("statut").show(ctx, |ui| self.status_bar(ui));
         }
-        if self.layout.tool_bar && !concentre {
+        if self.layout.tool_bar && !concentre && !sans_projet {
             let _t = crate::perf::section("barre d'outils");
             egui::SidePanel::left("barre_outils")
                 .exact_width(40.0)
@@ -5072,7 +5088,7 @@ impl App {
                 .show(ctx, |ui| self.vertical_tool_bar(ui));
         }
         // La barre des panneaux, sur le bord droit : avant les panneaux, qui prennent le reste.
-        if self.settings.panel_bar && !concentre {
+        if self.settings.panel_bar && !concentre && !sans_projet {
             let _t = crate::perf::section("barre des panneaux");
             let frame = egui::Frame::side_top_panel(&ctx.style()).inner_margin(egui::Margin::symmetric(2, 4));
             egui::SidePanel::right("barre_panneaux")
@@ -5085,6 +5101,9 @@ impl App {
         if concentre {
             let _t = crate::perf::section("mode concentration");
             self.concentration_ui(ctx);
+        } else if sans_projet {
+            let _t = crate::perf::section("zone de travail vide");
+            self.zone_vide(ctx);
         } else {
             let _t = crate::perf::section("panneaux (dock, total)");
             self.show_dock(ctx);

@@ -665,6 +665,8 @@ impl App {
             return false;
         }
         self.load_doc(doc);
+        // (Un projet est là, même sans nom et sans changement : plus d'accueil, `sansprojet.rs`.)
+        self.welcome = false;
         self.session_a_ecrire = true;
         true
     }
@@ -711,11 +713,18 @@ impl App {
     /// dernier onglet ne se ferme pas : un projet vide du même format le remplace, et l'accueil revient.
     pub(crate) fn fermer_l_onglet_affiche(&mut self) {
         if self.onglets.len() == 1 {
+            // Rien n'est ouvert : rien à fermer (et pas de séance « fermée » à retenir pour le prochain lancement).
+            if self.sans_projet() {
+                return;
+            }
+            // Le dernier projet se ferme : SHOT revient à l'état du lancement, sans projet (`sansprojet.rs`). Le document
+            // qui reste en mémoire n'est montré nulle part ; aucun projet vide n'est créé.
             let (w, h, fps) = (self.doc.frame[0], self.doc.frame[1], self.doc.fps);
             self.load_doc(Document::with_frame(w, h, fps).created_now());
             self.path = None;
             self.welcome = true;
-            self.status = "Projet fermé : un projet vide du même format le remplace.".into();
+            self.settings.session_vide = true;
+            self.status = "Projet fermé.".into();
             self.session_a_ecrire = true;
             return;
         }
@@ -1159,9 +1168,13 @@ impl App {
         let affiche = chemins.get(self.actif).cloned().flatten();
         let tabs: Vec<PathBuf> = chemins.into_iter().flatten().collect();
         let actif = affiche.and_then(|p| tabs.iter().position(|t| meme_chemin(t, &p))).unwrap_or(0);
-        if tabs != self.settings.session_tabs || actif != self.settings.session_active {
+        // (Plus aucun projet parce qu'Anthony a fermé le dernier : le prochain lancement démarre sans projet. Un projet
+        // ouvert plus tard rend le départ habituel.)
+        let vide = tabs.is_empty() && self.settings.session_vide;
+        if tabs != self.settings.session_tabs || actif != self.settings.session_active || vide != self.settings.session_vide {
             self.settings.session_tabs = tabs;
             self.settings.session_active = actif;
+            self.settings.session_vide = vide;
             let _ = self.settings.save();
         }
     }

@@ -141,7 +141,19 @@ impl App {
     /// L'accueil est-il à montrer ? Pas pendant qu'une fenêtre d'import (scénario, Storyboard Pro) ou de « Nouveau projet »
     /// est ouverte : elle est ce qu'on regarde, et l'accueil revient si on la ferme sans rien importer.
     pub(crate) fn welcome_shown(&self) -> bool {
-        self.welcome && self.path.is_none() && !self.modified && self.new_dialog.is_none() && self.scenario_window.is_none() && self.sb_window.is_none()
+        self.welcome
+            && self.path.is_none()
+            && !self.modified
+            && self.new_dialog.is_none()
+            && self.scenario_window.is_none()
+            && self.sb_window.is_none()
+            // (Pas pendant qu'un projet s'ouvre, ni pendant que la séance d'avant ou un projet donné au lancement revient, ni
+            // avant la réponse à « SHOT s'est fermé sans enregistrer » : sinon l'accueil clignote devant le projet qui arrive,
+            // `sansprojet.rs`.)
+            && self.open_job.is_none()
+            && self.session_file.is_empty()
+            && self.reopen_probe.is_none()
+            && self.orphans.is_empty()
     }
 
     /// La carte d'accueil, si aucun projet n'est ouvert.
