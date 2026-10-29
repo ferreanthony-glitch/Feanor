@@ -7,7 +7,7 @@ use crate::app::Tool;
 use crate::decor::Genre;
 use crate::document::{Behaviour, CelId, Document, LayerKind};
 use crate::perf_tests::{se_reposer, Banc};
-use crate::personnagesui::Case;
+use crate::personnagesui::{Case, Choix};
 use crate::prefsonglets::{Onglet, REGLAGES};
 use crate::raster::TILE;
 use crate::render;
@@ -336,8 +336,18 @@ fn clic(b: &mut Banc, p: Pos2) {
     b.chauffer(3);
 }
 
+/// Les trois brosses Décor d'origine reprennent les trois anciens pinceaux dans cet ordre (2026-10-29) : le rang de la brosse du genre `g`.
+pub(crate) fn rang(g: Genre) -> usize {
+    Genre::ALL.iter().position(|x| *x == g).expect("un genre")
+}
+
+/// La case de la rangée des pastilles de la brosse Décor d'origine du genre `g`.
+pub(crate) fn case_du_decor(g: Genre) -> Case {
+    Case::Choix(Choix::Decor(rang(g)))
+}
+
 fn case_decor(b: &Banc, g: Genre) -> Rect {
-    b.app.perso.cases.iter().find(|(_, c)| *c == Case::Decor(g)).map(|(r, _)| *r).unwrap_or_else(|| panic!("la pastille du décor {g:?} n'est pas dans la colonne : {:?}", b.app.perso.cases))
+    b.app.perso.cases.iter().find(|(_, c)| *c == crate::decor_tests::case_du_decor(g)).map(|(r, _)| *r).unwrap_or_else(|| panic!("la pastille du décor {g:?} n'est pas dans la colonne : {:?}", b.app.perso.cases))
 }
 
 pub(crate) fn choisir(b: &mut Banc, g: Genre) {
@@ -371,9 +381,9 @@ fn the_decor_pastilles_sit_after_a_separator_in_the_column_and_choosing_one_take
         assert_eq!(b.ctx.layer_id_at(r.center()), Some(egui::LayerId::new(egui::Order::Middle, egui::Id::new("pastilles_rangee_planche"))), "{c:?} reçoit les clics");
     }
     let rangs: Vec<Case> = b.app.perso.cases.iter().map(|(_, c)| *c).collect();
-    let decor: Vec<usize> = Genre::ALL.iter().map(|g| rangs.iter().position(|c| *c == Case::Decor(*g)).expect("la pastille")).collect();
-    let derniere_neutre = rangs.iter().rposition(|c| matches!(c, Case::Choix(_))).unwrap();
-    assert!(decor[0] > derniere_neutre && decor.windows(2).all(|w| w[1] == w[0] + 1), "après les couleurs neutres, ensemble : {rangs:?}");
+    let decor: Vec<usize> = Genre::ALL.iter().map(|g| rangs.iter().position(|c| *c == case_du_decor(*g)).expect("la pastille")).collect();
+    let derniere_classique = rangs.iter().rposition(|c| matches!(c, Case::Choix(Choix::Personnage(_) | Choix::Classique(_)))).unwrap();
+    assert!(decor[0] > derniere_classique && decor.windows(2).all(|w| w[1] == w[0] + 1), "après les classiques, ensemble : {rangs:?}");
     assert!(decor[2] < rangs.iter().position(|c| *c == Case::Plus).unwrap(), "avant le « + »");
     // Carrés arrondis, de la taille d'une pastille : une colonne, l'une sous l'autre.
     let r = case_decor(&b, Genre::Crayon);
@@ -382,30 +392,30 @@ fn the_decor_pastilles_sit_after_a_separator_in_the_column_and_choosing_one_take
     let (brosse0, crayon0, couleur0, outil0) = (b.app.brush, b.app.pencil, b.app.color, b.app.tool);
     for (g, outil) in [(Genre::Crayon, Tool::Pencil), (Genre::Feutre, Tool::Brush), (Genre::Aplat, Tool::Brush)] {
         choisir(&mut b, g);
-        assert_eq!(b.app.perso.decor, Some(g), "{g:?}");
+        assert_eq!(b.app.decor_actif(), Some(crate::decor_tests::rang(g)), "{g:?}");
         assert_eq!(b.app.tool, outil);
-        assert_eq!(b.app.color, [0x8F, 0xA3, 0xB8], "la couleur du décor");
+        assert_eq!(b.app.color, crate::personnages::decors_par_defaut()[rang(g)].line, "la couleur de trait de la brosse Décor");
         let taille = if g == Genre::Crayon { b.app.pencil.size } else { b.app.brush.size };
         assert_eq!(taille, g.taille_defaut());
-        assert_eq!(b.app.perso.actif, None);
+        assert_eq!(b.app.perso.actif, Some(Choix::Decor(rang(g))), "la brosse Décor est la brosse perso choisie");
     }
     assert!((b.app.brush.hardness - 1.0).abs() < 1e-6, "l'aplat est plein");
     assert_eq!(pas_d_annulation(&b), n, "choisir une brosse n'est pas une étape d'annulation");
     // Un clic sur la pastille choisie la lâche : tout revient.
     choisir(&mut b, Genre::Aplat);
-    assert_eq!(b.app.perso.decor, None);
+    assert_eq!(b.app.decor_actif(), None);
     assert_eq!((b.app.brush, b.app.pencil, b.app.color, b.app.tool), (brosse0, crayon0, couleur0, outil0), "l'outil, les pinceaux et la couleur d'avant");
     // Un personnage remplace le décor, « aucun personnage » le lâche aussi.
     choisir(&mut b, Genre::Feutre);
-    let perso = b.app.perso.cases.iter().find(|(_, c)| matches!(c, Case::Choix(_))).unwrap().0.center();
+    let perso = b.app.perso.cases.iter().find(|(_, c)| matches!(c, Case::Choix(Choix::Classique(_)))).unwrap().0.center();
     clic(&mut b, perso);
-    assert_eq!(b.app.perso.decor, None);
+    assert_eq!(b.app.decor_actif(), None);
     assert!(b.app.perso.actif.is_some());
     choisir(&mut b, Genre::Feutre);
-    assert_eq!(b.app.perso.actif, None, "le décor remplace le personnage");
-    let aucun = b.app.perso.cases.iter().find(|(_, c)| *c == Case::Classique).unwrap().0.center();
-    clic(&mut b, aucun);
-    assert_eq!(b.app.perso.decor, None);
+    assert_eq!(b.app.perso.actif, Some(Choix::Decor(rang(Genre::Feutre))), "le décor remplace le personnage");
+    // (Plus de pastille ⊘ : « couleur libre » lâche la brosse perso, la brosse Décor comprise.)
+    b.app.perso_lacher();
+    assert_eq!(b.app.decor_actif(), None);
 }
 
 #[test]
@@ -502,7 +512,7 @@ fn a_decor_brush_draws_in_the_decor_layer_whatever_the_current_layer_and_gives_t
     assert!(b.app.layer().decor);
     // Lâcher le décor : le calque d'avant (par son numéro, il a changé de rang) redevient courant.
     choisir(&mut b, Genre::Crayon);
-    assert_eq!(b.app.perso.decor, None);
+    assert_eq!(b.app.decor_actif(), None);
     assert_eq!(b.app.layer().id, perso_id);
     assert_eq!(b.app.cur_layer, 2, "le décor a pris le rang 0");
     // Un trait normal va dans ce calque, pas dans le décor.
@@ -513,7 +523,7 @@ fn a_decor_brush_draws_in_the_decor_layer_whatever_the_current_layer_and_gives_t
     // Choisir un calque à la main pendant le décor le lâche : on dessine où l'on a cliqué.
     choisir(&mut b, Genre::Feutre);
     b.app.select_layer(1);
-    assert_eq!(b.app.perso.decor, None);
+    assert_eq!(b.app.decor_actif(), None);
     assert_eq!(b.app.cur_layer, 1);
 }
 
@@ -624,7 +634,8 @@ fn the_vignettes_settings_persist_have_clean_defaults_and_keep_old_files_readabl
     assert_eq!(defaut.vignettes.couleur_decor, [0x8F, 0xA3, 0xB8]);
     assert!(!toml::to_string(&defaut).unwrap().contains("[vignettes]"), "des réglages d'origine n'écrivent rien de plus");
     let mut s = Settings::default();
-    s.vignettes = ReglagesVignettes { debord: 20, aimant: 0, couleur_cadre: [200, 10, 10], report_decor: false, couleur_decor: [10, 20, 30], tailles_decor: [3.0, 30.0, 120.0], decor_bitmap: true };
+    // (Adapté 2026-10-29 : la couleur et les tailles du décor sont d'anciennes clés, lues mais plus écrites : voir l'essai des brosses Décor.)
+    s.vignettes = ReglagesVignettes { debord: 20, aimant: 0, couleur_cadre: [200, 10, 10], report_decor: false, decor_bitmap: true, ..Default::default() };
     let texte = toml::to_string(&s).unwrap();
     assert!(texte.contains("[vignettes]") && texte.contains("report_decor = false") && texte.contains("aimant_points = 0"), "{texte}");
     let relu: Settings = toml::from_str(&texte).unwrap();
@@ -776,7 +787,7 @@ fn the_vignettes_tab_holds_only_the_vignettes_settings_and_the_pale_rows_moved_o
         assert!(contient(&vus, r.libelle), "« {} » manque dans l'onglet Vignettes :\n{vus:#?}", r.libelle);
     }
     // Ce qui y est : les rangées pâles, les colonnes, le débord, l'aimant, la couleur des cadres, le report, le décor.
-    for m in ["Rangées de cases pâles", "Cases par rangée", "Débord du trait hors des cases", "Aimant des cadres de caméra", "Couleur des cadres de caméra", "Report du décor", "Couleur du décor", "Taille des brosses du décor"] {
+    for m in ["Rangées de cases pâles", "Cases par rangée", "Débord du trait hors des cases", "Aimant des cadres de caméra", "Couleur des cadres de caméra", "Report du décor", "Brosses Décor"] {
         assert!(contient(&vus, m), "{m}");
     }
     // Ce qui n'y est pas : rien du montage, du dessin ou de l'équipe.
@@ -813,11 +824,11 @@ fn the_decor_pastilles_exist_only_on_the_storyboard_side_and_leaving_it_lets_the
     let mut b = ouvert(quatre_plans(), 4);
     let brosse0 = b.app.brush;
     choisir(&mut b, Genre::Feutre);
-    assert_eq!(b.app.perso.decor, Some(Genre::Feutre));
+    assert_eq!(b.app.decor_actif(), Some(crate::decor_tests::rang(Genre::Feutre)));
     b.app.set_espace(Espace::Animation);
     b.chauffer(4);
     assert!(!b.app.board_shown(), "l'animation n'est pas la planche");
-    assert_eq!(b.app.perso.decor, None, "le décor est lâché en passant à l'animation");
+    assert_eq!(b.app.decor_actif(), None, "le décor est lâché en passant à l'animation");
     assert_eq!(b.app.brush, brosse0, "et le pinceau d'avant est revenu");
-    assert!(b.app.perso.cases.iter().all(|(_, c)| !matches!(c, Case::Decor(_))), "pas de pastille de décor en animation");
+    assert!(b.app.perso.cases.iter().all(|(_, c)| !matches!(c, Case::Choix(Choix::Decor(_)))), "pas de pastille de décor en animation");
 }

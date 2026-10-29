@@ -259,35 +259,14 @@ impl App {
             }
         });
         ui.label(RichText::new("Ne change pas le calque Décor d'un plan qui en a déjà un : il garde sa sorte et reçoit toujours les traits du décor.").small().weak());
-        ui.horizontal(|ui| {
-            ui.label("Couleur du décor");
-            let mut c = self.settings.vignettes.couleur_decor;
-            let resp = crate::champcouleur::srgb(ui, &mut c);
-            let resp = crate::bulles::bulle(resp, "Couleur du décor", "La couleur des trois brosses du décor, un gris-bleu clair d'origine (#8FA3B8) pour que le décor se lise à part des personnages.", "");
-            if resp.changed() {
-                self.settings.vignettes.couleur_decor = c;
-                self.settings_a_ecrire = true;
-            }
-        });
+        // (2026-10-29 : la couleur et les tailles des trois pinceaux du décor sont celles des brosses perso Décor, réglées dans leur panneau.)
         ui.horizontal_wrapped(|ui| {
-            ui.label("Taille des brosses du décor");
-            for g in crate::decor::Genre::ALL {
-                let mut t = self.settings.vignettes.taille_decor(g);
-                let nom = match g {
-                    crate::decor::Genre::Crayon => "Crayon",
-                    crate::decor::Genre::Feutre => "Feutre",
-                    crate::decor::Genre::Aplat => "Aplat",
-                };
-                ui.label(RichText::new(nom).weak());
-                let resp = ui.add(egui::DragValue::new(&mut t).range(0.5..=400.0).speed(0.3).max_decimals(0).suffix(" px"));
-                let resp = crate::bulles::bulle(resp, g.nom(), "Sa taille, en pixels du dessin. Elle se pose en choisissant la brosse dans la colonne des pastilles.", "");
-                if resp.changed() {
-                    self.settings.vignettes.tailles_decor[g.rang()] = t;
-                    self.settings_a_ecrire = true;
-                }
+            ui.label(RichText::new("Brosses Décor : couleurs, pinceau et taille se règlent dans le panneau Brosses perso.").small().weak());
+            if ui.small_button("Ouvrir le panneau").on_hover_text("Ouvre le panneau Brosses perso, section Décors : nom, couleur du trait, aplat, pinceau (crayon, feutre ou aplat) et taille de chaque brosse Décor.").clicked() {
+                self.show_pane(crate::dock::Pane::Personnages);
             }
         });
-        if ui.small_button("Rétablir les réglages des Vignettes").on_hover_text("Remet le débord, l'aimant, les couleurs, le report et les tailles des brosses du décor à leurs valeurs d'origine (pas les rangées ni les cases par rangée).").clicked() {
+        if ui.small_button("Rétablir les réglages des Vignettes").on_hover_text("Remet le débord, l'aimant, la couleur des cadres, le report et la sorte du calque Décor à leurs valeurs d'origine (pas les rangées ni les cases par rangée ; les brosses Décor se remettent dans le panneau Brosses perso).").clicked() {
             self.settings.vignettes = Default::default();
             self.settings_a_ecrire = true;
         }

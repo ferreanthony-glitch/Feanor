@@ -6,7 +6,7 @@ use crate::app::{App, Tool};
 use crate::document::{Document, Layer, LayerKind};
 use crate::fiabilite_fixture::{arbre, dossier, racine};
 use crate::perf_tests::{banc, se_reposer, Banc};
-use crate::personnages::{self, Neutre, Personnage};
+use crate::personnages::{self, Brosse, Personnage};
 use crate::personnagesui::Choix;
 use crate::project;
 use crate::render;
@@ -213,18 +213,18 @@ fn a_character_without_fill_cuts_the_fond_and_a_neutral_without_fond_adds_none()
     let app = &mut b.app;
     // Noir, sans fond (une couleur neutre réglée ainsi : celles d'origine ont toutes un aplat) sur un calque sans fond : aucun fond
     // n'apparaît.
-    app.settings.neutral_colors[0] = Neutre { name: "Noir".into(), line: [0, 0, 0], fill: None };
-    app.perso_choisir(Choix::Neutre(0));
+    app.settings.brosses_classiques[0] = Brosse::classique("Noir", [0, 0, 0], None);
+    app.perso_choisir(Choix::Classique(0));
     assert_eq!(app.color, [0, 0, 0]);
     anneau(app, 60.0, 60.0, 160.0, 160.0);
     app.perso_attendre();
     assert!(app.layers()[0].fond.is_none(), "un neutre sans fond n'allume pas le fond");
     assert_eq!(vu(app, 110, 110).a(), 0, "on voit à travers");
     // Le gris a un fond, clair.
-    app.perso_choisir(Choix::Neutre(1));
+    app.perso_choisir(Choix::Classique(1));
     anneau(app, 220.0, 60.0, 320.0, 160.0);
     app.perso_attendre();
-    let gris = app.settings.neutral_colors[1].fill.expect("fond du gris");
+    let gris = app.settings.brosses_classiques[1].fill.expect("fond du gris");
     assert_eq!(vu(app, 270, 110), rgb(gris));
     assert_eq!(vu(app, 110, 110).a(), 0, "le noir n'a toujours pas de fond");
     // Un personnage sans fond, sur ce même calque à fond : le fond gagné est coupé.
@@ -416,7 +416,7 @@ fn next_and_previous_walk_through_the_characters_then_the_neutrals() {
     app.run_action("perso.suivant");
     assert_eq!(app.perso.actif, Some(Choix::Personnage(max)));
     app.run_action("perso.suivant");
-    assert_eq!(app.perso.actif, Some(Choix::Neutre(0)), "après les personnages, les neutres");
+    assert_eq!(app.perso.actif, Some(Choix::Classique(0)), "après les personnages, les neutres");
     app.run_action("perso.precedent");
     assert_eq!(app.perso.actif, Some(Choix::Personnage(max)));
     app.run_action("perso.aucun");
@@ -427,48 +427,48 @@ fn next_and_previous_walk_through_the_characters_then_the_neutrals() {
 
 #[test]
 fn the_neutral_colours_are_app_settings_with_sensible_defaults() {
-    let d = personnages::neutres_par_defaut();
-    assert_eq!(d[0], Neutre { name: "Gris 1".into(), line: [0x1E; 3], fill: Some([0x8C; 3]) });
+    let d = personnages::classiques_par_defaut();
+    assert_eq!(d[0], Brosse::classique("Gris 1", [0x1E; 3], Some([0x8C; 3])));
     assert!(d.iter().all(|n| n.fill.is_some()), "les trois gris ont un aplat plus clair que leur trait");
-    assert!(d.len() <= personnages::MAX_NEUTRES);
+    assert!(d.len() <= personnages::MAX_CLASSIQUES);
     let mut s = crate::settings::Settings::default();
-    assert_eq!(s.neutral_colors, d);
-    s.neutral_colors.push(Neutre { name: "Vert".into(), line: [0, 128, 0], fill: Some([200, 255, 200]) });
-    s.neutral_colors.remove(0);
+    assert_eq!(s.brosses_classiques, d);
+    s.brosses_classiques.push(Brosse::classique("Vert", [0, 128, 0], Some([200, 255, 200])));
+    s.brosses_classiques.remove(0);
     let text = toml::to_string(&s).expect("TOML");
     let back: crate::settings::Settings = toml::from_str(&text).expect("relecture");
-    assert_eq!(back.neutral_colors, s.neutral_colors, "les couleurs neutres reviennent telles quelles");
+    assert_eq!(back.brosses_classiques, s.brosses_classiques, "les couleurs neutres reviennent telles quelles");
     // Un ancien fichier de réglages, sans la clé : les couleurs d'origine.
     let ancien: crate::settings::Settings = toml::from_str("").expect("réglages vides");
-    assert_eq!(ancien.neutral_colors, d);
+    assert_eq!(ancien.brosses_classiques, d);
     // Une liste vide reste vide ; trop longue, elle est coupée ; les noms sont nets.
-    assert!(personnages::neutres_nettoyees(Vec::new()).is_empty());
-    let trop: Vec<Neutre> = (0..20).map(|k| Neutre { name: format!("  n{k}  "), line: [0; 3], fill: None }).collect();
-    let net = personnages::neutres_nettoyees(trop);
-    assert_eq!((net.len(), net[0].name.as_str()), (personnages::MAX_NEUTRES, "n0"));
+    assert!(personnages::brosses_nettoyees(Vec::new(), personnages::MAX_CLASSIQUES).is_empty());
+    let trop: Vec<Brosse> = (0..20).map(|k| Brosse::classique(&format!("  n{k}  "), [0; 3], None)).collect();
+    let net = personnages::brosses_nettoyees(trop, personnages::MAX_CLASSIQUES);
+    assert_eq!((net.len(), net[0].name.as_str()), (personnages::MAX_CLASSIQUES, "n0"));
 }
 
 #[test]
 fn neutral_colours_can_be_added_edited_moved_and_deleted_and_the_choice_follows() {
     let mut b = banc_dessin();
     let app = &mut b.app;
-    let n0 = app.settings.neutral_colors.len();
-    app.perso_choisir(Choix::Neutre(1));
-    app.perso_deplacer(Choix::Neutre(1), -1);
-    assert_eq!(app.perso.actif, Some(Choix::Neutre(0)), "le choix suit sa couleur");
-    assert_eq!(app.settings.neutral_colors[0].name, "Gris 2");
-    app.perso_supprimer(Choix::Neutre(0));
-    assert_eq!((app.perso.actif, app.settings.neutral_colors.len()), (None, n0 - 1));
-    let i = app.perso_ajouter_neutre().expect("ajout");
-    app.perso_ecrire(Choix::Neutre(i), "Sépia".into(), [112, 66, 20], Some([240, 220, 190]));
-    assert_eq!(app.settings.neutral_colors[i].name, "Sépia");
-    app.perso_dupliquer(Choix::Neutre(i));
-    assert_eq!(app.settings.neutral_colors[i + 1].name, "Sépia (copie)");
+    let n0 = app.settings.brosses_classiques.len();
+    app.perso_choisir(Choix::Classique(1));
+    app.perso_deplacer(Choix::Classique(1), -1);
+    assert_eq!(app.perso.actif, Some(Choix::Classique(0)), "le choix suit sa couleur");
+    assert_eq!(app.settings.brosses_classiques[0].name, "Gris 2");
+    app.perso_supprimer(Choix::Classique(0));
+    assert_eq!((app.perso.actif, app.settings.brosses_classiques.len()), (None, n0 - 1));
+    let i = app.perso_ajouter_classique().expect("ajout");
+    app.perso_ecrire(Choix::Classique(i), "Sépia".into(), [112, 66, 20], Some([240, 220, 190]));
+    assert_eq!(app.settings.brosses_classiques[i].name, "Sépia");
+    app.perso_dupliquer(Choix::Classique(i));
+    assert_eq!(app.settings.brosses_classiques[i + 1].name, "Sépia (copie)");
     assert!(app.settings_a_ecrire, "à écrire dans les réglages");
     // Les neutres ne touchent pas à l'historique du projet.
     assert!(!app.history.names().0.iter().any(|n| n.contains("neutre")));
-    while app.perso_ajouter_neutre().is_some() {}
-    assert_eq!(app.settings.neutral_colors.len(), personnages::MAX_NEUTRES);
+    while app.perso_ajouter_classique().is_some() {}
+    assert_eq!(app.settings.brosses_classiques.len(), personnages::MAX_CLASSIQUES);
 }
 
 // ------------------------------------------------------------------------------ la barre et le panneau
@@ -511,7 +511,7 @@ fn the_bar_and_the_panel_are_drawn_and_the_application_rests() {
     crate::fxcache::monde::ecrire();
     let mut b = banc_dessin();
     deux_personnages(&mut b.app);
-    b.app.perso_choisir(Choix::Neutre(1));
+    b.app.perso_choisir(Choix::Classique(1));
     b.garder_textes = true;
     b.chauffer(4);
     assert!(b.app.barre_perso_visible());
@@ -519,15 +519,15 @@ fn the_bar_and_the_panel_are_drawn_and_the_application_rests() {
     assert!(b.app.dock_layout().contains(crate::dock::Pane::Personnages), "le panneau est dans la disposition du storyboard");
     b.app.show_pane(crate::dock::Pane::Personnages);
     b.chauffer(4);
-    assert!(b.textes.iter().any(|t| t.contains("Couleurs neutres")), "le panneau est dessiné : {:?}", b.textes.iter().take(40).collect::<Vec<_>>());
+    assert!(b.textes.iter().any(|t| t.contains("Classiques")) && b.textes.iter().any(|t| t.contains("Décors")), "le panneau est dessiné : {:?}", b.textes.iter().take(40).collect::<Vec<_>>());
     // La fenêtre « Modifier ».
     let lou = b.app.doc.personnages[0].id;
     b.app.perso.edition = Some(Choix::Personnage(lou));
     b.chauffer(3);
-    assert!(b.textes.iter().any(|t| t.contains("Modifier le personnage")));
-    b.app.perso.edition = Some(Choix::Neutre(0));
+    assert!(b.textes.iter().any(|t| t.contains("Modifier la brosse personnage")));
+    b.app.perso.edition = Some(Choix::Classique(0));
     b.chauffer(3);
-    assert!(b.textes.iter().any(|t| t.contains("Modifier la couleur neutre")));
+    assert!(b.textes.iter().any(|t| t.contains("Modifier la brosse classique")));
     b.app.perso.edition = None;
     // Au repos, rien ne demande de repeindre.
     assert!(se_reposer(&mut b, 3000) < 3000, "SHOT se repose avec la barre et le panneau");

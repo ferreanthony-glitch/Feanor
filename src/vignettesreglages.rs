@@ -34,11 +34,12 @@ pub struct ReglagesVignettes {
     /// En réunissant deux plans, le décor du premier se tient sur la suite.
     #[serde(rename = "report_decor")]
     pub report_decor: bool,
-    /// La couleur des brosses du décor.
-    #[serde(rename = "couleur_decor")]
+    /// Ancienne couleur des brosses du décor : **lue, jamais écrite** (2026-10-29 : chaque brosse perso Décor a ses couleurs, voir
+    /// `Settings::brosses_decor` et `Settings::reprendre_les_anciens_pinceaux_de_decor`).
+    #[serde(rename = "couleur_decor", skip_serializing)]
     pub couleur_decor: [u8; 3],
-    /// La taille des brosses du décor (crayon, feutre, aplat), en pixels du dessin.
-    #[serde(rename = "tailles_decor")]
+    /// Anciennes tailles des pinceaux du décor (crayon, feutre, aplat) : **lues, jamais écrites** (elles sont désormais celles des brosses Décor).
+    #[serde(rename = "tailles_decor", skip_serializing)]
     pub tailles_decor: [f32; 3],
     /// La sorte du calque Décor que le premier trait d'une brosse du décor crée dans un plan : faux (d'origine), vectoriel ; vrai, bitmap. Ne
     /// change pas un calque Décor qui existe déjà (`Document::assurer_decor`).
@@ -85,10 +86,6 @@ impl ReglagesVignettes {
         (self.aimant > 0).then(|| f32::from(self.aimant.min(AIMANT_MAX)))
     }
 
-    /// La taille de la brosse `g` du décor.
-    pub fn taille_decor(&self, g: Genre) -> f32 {
-        self.tailles_decor[g.rang()]
-    }
 }
 
 /// Une couleur d'affichage.

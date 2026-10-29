@@ -171,32 +171,32 @@ fn a_stroke_with_a_neutral_on_a_character_layer_does_not_change_its_aplat_colour
     let rang = b.app.doc.calque_de_personnage(0, lou).expect("le calque de Lou");
     assert_eq!(b.app.layers()[rang].fond.map(|f| f.couleur), Some(ROSE));
     // Une couleur neutre à aplat dessine dans le calque de Lou (c'est le calque courant) : sa couleur d'aplat ne change pas.
-    let gris = b.app.settings.neutral_colors[0].fill.expect("aplat du gris");
+    let gris = b.app.settings.brosses_classiques[0].fill.expect("aplat du gris");
     assert_ne!(gris, ROSE);
-    b.app.perso_choisir(Choix::Neutre(0));
+    b.app.perso_choisir(Choix::Classique(0));
     assert_eq!(b.app.cur_layer, rang, "le neutre dessine dans le calque courant");
     anneau(&mut b, 100.0);
     assert_eq!(b.app.layers()[rang].fond.map(|f| f.couleur), Some(ROSE), "la couleur d'aplat du calque de Lou n'a pas bougé");
     let cel = dessins_de(&b.app.doc, lou)[0];
     assert_eq!(compte(&b.app.doc, cel, gris), 0, "et le trait du neutre y a peint l'aplat de Lou, pas le sien");
     assert!(compte(&b.app.doc, cel, ROSE) > 2 * MIN, "les deux anneaux ont l'aplat de Lou");
-    // La pastille « classique » non plus.
-    b.app.perso_classique();
+    // La couleur libre non plus (adapté 2026-10-29 : plus de pastille « classique », on lâche la brosse).
+    b.app.perso_lacher();
     assert_eq!(b.app.layers()[rang].fond.map(|f| f.couleur), Some(ROSE));
 }
 
 #[test]
 fn an_ordinary_layer_keeps_the_rule_of_the_pastilles() {
     let mut b = banc();
-    let gris = b.app.settings.neutral_colors[0].fill.expect("aplat du gris");
-    b.app.perso_choisir(Choix::Neutre(0));
+    let gris = b.app.settings.brosses_classiques[0].fill.expect("aplat du gris");
+    b.app.perso_choisir(Choix::Classique(0));
     anneau(&mut b, 0.0);
     let li = b.app.cur_layer;
     assert!(b.app.layers()[li].personnage.is_none());
     assert_eq!(b.app.layers()[li].fond.map(|f| f.couleur), Some(gris), "un calque ordinaire prend la couleur d'aplat de la pastille");
     // Un autre neutre : le calque ordinaire change encore de couleur.
-    let autre = b.app.settings.neutral_colors[1].fill.expect("aplat du second gris");
-    b.app.perso_choisir(Choix::Neutre(1));
+    let autre = b.app.settings.brosses_classiques[1].fill.expect("aplat du second gris");
+    b.app.perso_choisir(Choix::Classique(1));
     anneau(&mut b, 100.0);
     assert_eq!(b.app.layers()[li].fond.map(|f| f.couleur), Some(autre));
     // Changer la couleur d'aplat d'un personnage ne touche pas un calque ordinaire de la même couleur.

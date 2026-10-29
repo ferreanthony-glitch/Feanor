@@ -1902,6 +1902,8 @@ impl App {
             self.cur_layer = layer;
             // Un calque choisi à la main lâche la brosse du décor : on dessine là où l'on a cliqué (`decorui.rs`).
             self.decor_calque_choisi();
+            // Le calque d'un personnage choisi devient son « dernier calque utilisé » du plan (`calquespastilles.rs`).
+            self.noter_calque_de_personnage();
             // Changer de calque, c'est revenir au trait (la cible aplat suit la sous-ligne choisie).
             self.aplat_cible = None;
             self.vsel = None;

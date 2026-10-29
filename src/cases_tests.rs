@@ -127,7 +127,7 @@ fn drawing_in_the_pale_case_after_the_last_plan_without_a_cut_adds_a_key_and_one
 fn the_decor_gets_no_key_when_a_case_is_added_to_a_plan() {
     let mut b = ouvert(quatre_plans(), 4);
     crate::decor_tests::choisir(&mut b, Genre::Aplat);
-    assert_eq!(b.app.perso.decor, Some(Genre::Aplat));
+    assert_eq!(b.app.decor_actif(), Some(crate::decor_tests::rang(Genre::Aplat)));
     let v = vignette(&b, 5);
     glisser(&mut b, &vague(v.center() - vec2(30.0, 0.0), v.center() + vec2(30.0, 0.0), 10));
     let dernier = b.app.doc.panels.len() - 1;

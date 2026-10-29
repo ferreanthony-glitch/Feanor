@@ -20,7 +20,7 @@ const CIEL: [u8; 3] = [190, 210, 250];
 // ------------------------------------------------------------------------------------------ outils d'essai
 
 /// Le dessin du Storyboard, sur une feuille de 400 par 300, l'outil Pinceau.
-fn banc() -> Banc {
+pub(crate) fn banc() -> Banc {
     crate::fxcache::monde::ecrire();
     let mut b = banc_taille(Document::new(400, 300, 24), false, 1600, 900);
     b.app.tool = Tool::Brush;
@@ -34,7 +34,7 @@ fn appui(p: Pos2, enfonce: bool) -> Event {
     Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: enfonce, modifiers: Modifiers::NONE }
 }
 
-fn clic(b: &mut Banc, p: Pos2) {
+pub(crate) fn clic(b: &mut Banc, p: Pos2) {
     b.image(vec![Event::PointerMoved(p)], 1.0 / 60.0);
     b.image(vec![appui(p, true)], 1.0 / 60.0);
     b.image(vec![appui(p, false)], 1.0 / 60.0);
@@ -42,17 +42,17 @@ fn clic(b: &mut Banc, p: Pos2) {
     b.chauffer(3);
 }
 
-fn case(b: &Banc, c: Case) -> Pos2 {
+pub(crate) fn case(b: &Banc, c: Case) -> Pos2 {
     b.app.perso.cases.iter().find(|(_, k)| *k == c).map(|(r, _)| r.center()).unwrap_or_else(|| panic!("la case {c:?} n'est pas dans la rangée : {:?}", b.app.perso.cases))
 }
 
-fn clic_case(b: &mut Banc, c: Case) {
+pub(crate) fn clic_case(b: &mut Banc, c: Case) {
     let p = case(b, c);
     clic(b, p);
 }
 
 /// Un trait au milieu du dessin, de gauche à droite, avec un décalage vertical (`dy`) pour que deux traits ne se confondent pas.
-fn trait_au_milieu(b: &mut Banc, dy: f32) {
+pub(crate) fn trait_au_milieu(b: &mut Banc, dy: f32) {
     let c = b.app.canvas_rect.center() + vec2(0.0, dy);
     let (a, z) = (c - vec2(60.0, 0.0), c + vec2(60.0, 10.0));
     b.image(vec![Event::PointerMoved(a)], 1.0 / 60.0);
@@ -66,7 +66,7 @@ fn trait_au_milieu(b: &mut Banc, dy: f32) {
 }
 
 /// Un personnage de plus, choisi : son nom, sa couleur de trait et sa couleur d'aplat.
-fn personnage(b: &mut Banc, nom: &str, ligne: [u8; 3], fond: Option<[u8; 3]>) -> u64 {
+pub(crate) fn personnage(b: &mut Banc, nom: &str, ligne: [u8; 3], fond: Option<[u8; 3]>) -> u64 {
     let id = b.app.perso_ajouter().expect("un personnage de plus");
     b.app.perso_ecrire(Choix::Personnage(id), nom.into(), ligne, fond);
     b.app.perso_choisir(Choix::Personnage(id));
@@ -74,7 +74,7 @@ fn personnage(b: &mut Banc, nom: &str, ligne: [u8; 3], fond: Option<[u8; 3]>) ->
 }
 
 /// Le calque `li` du plan courant a de l'encre : un pixel peint, ou un trait vectoriel.
-fn encre(b: &Banc, li: usize) -> bool {
+pub(crate) fn encre(b: &Banc, li: usize) -> bool {
     let doc = &b.app.doc;
     doc.panels[b.app.cur_panel].layers[li].frames.iter().flatten().any(|c| a_de_l_encre(doc, *c))
 }
@@ -84,7 +84,7 @@ fn a_de_l_encre(doc: &Document, cel: CelId) -> bool {
 }
 
 /// Les calques du plan `i` qui sont celui du personnage `id`.
-fn calques_de(doc: &Document, i: usize, id: u64) -> Vec<usize> {
+pub(crate) fn calques_de(doc: &Document, i: usize, id: u64) -> Vec<usize> {
     doc.panels[i].layers.iter().enumerate().filter(|(_, l)| l.personnage == Some(id)).map(|(k, _)| k).collect()
 }
 
@@ -199,12 +199,12 @@ fn a_click_that_draws_nothing_leaves_no_layer_and_the_eraser_and_neutral_colours
     b.app.set_tool(Tool::Brush);
     // Une couleur neutre n'est pas un personnage : son trait va dans le calque courant. (Celles d'origine ont un aplat : son premier
     // trait allume l'aplat du calque, à sa couleur d'aplat, par une étape « Aplat du personnage » à part, puis le trait.)
-    b.app.perso_choisir(Choix::Neutre(0));
+    b.app.perso_choisir(Choix::Classique(0));
     trait_au_milieu(&mut b, 0.0);
     assert_eq!(b.app.layers().len(), couches, "une couleur neutre ne crée pas de calque");
     assert!(calques_de(&b.app.doc, 0, lou).is_empty());
     assert_eq!(pas_d_annulation(&b), avant + 2, "l'aplat du calque, puis le trait : rien d'autre");
-    let gris = b.app.settings.neutral_colors[0].fill.expect("aplat du gris");
+    let gris = b.app.settings.brosses_classiques[0].fill.expect("aplat du gris");
     assert_eq!(b.app.layers()[b.app.cur_layer].fond.map(|f| f.couleur), Some(gris), "l'aplat du calque a la couleur d'aplat de la couleur neutre");
 }
 
@@ -215,11 +215,11 @@ fn neutral_colours_are_smaller_than_characters_in_the_bar_and_the_status_says_wh
     let lou = personnage(&mut b, "Lou", ROUGE, Some(ROSE));
     assert!(b.app.status.contains("créé au premier trait"), "{}", b.app.status);
     b.chauffer(3);
-    assert!(!b.app.settings.neutral_colors.is_empty(), "des couleurs neutres d'origine");
+    assert!(!b.app.settings.brosses_classiques.is_empty(), "des couleurs neutres d'origine");
     let largeur = |c: Case| b.app.perso.cases.iter().find(|(_, k)| *k == c).map(|(r, _)| r.width()).expect("la case est dans la rangée");
-    let (perso, neutre) = (largeur(Case::Choix(Choix::Personnage(lou))), largeur(Case::Choix(Choix::Neutre(0))));
+    let (perso, neutre) = (largeur(Case::Choix(Choix::Personnage(lou))), largeur(Case::Choix(Choix::Classique(0))));
     assert!(neutre + 6.0 <= perso, "une couleur neutre ({neutre}) est nettement plus petite qu'un personnage ({perso})");
-    b.app.perso_choisir(Choix::Neutre(0));
+    b.app.perso_choisir(Choix::Classique(0));
     assert!(b.app.status.contains("sans créer de calque"), "{}", b.app.status);
 }
 
@@ -235,7 +235,8 @@ fn choosing_a_character_that_has_its_layer_makes_it_current_and_each_plan_gets_i
     b.app.perso_choisir(Choix::Personnage(lou));
     assert_eq!(b.app.cur_layer, rang, "la pastille rend son calque courant");
     let couches = b.app.layers().len();
-    clic_case(&mut b, Case::Classique);
+    // (Adapté 2026-10-29 : plus de pastille « classique » ; une brosse Classique, elle, ne change pas de calque.)
+    clic_case(&mut b, Case::Choix(Choix::Classique(0)));
     b.app.select_layer(0);
     clic_case(&mut b, Case::Choix(Choix::Personnage(lou)));
     assert_eq!(b.app.cur_layer, rang, "par un clic sur la pastille aussi");
@@ -304,14 +305,15 @@ fn renaming_reaches_the_layers_of_every_plan_and_one_undo_step_gives_the_old_nam
 }
 
 #[test]
-fn a_duplicated_layer_is_not_the_character_layer_and_the_character_survives_the_file() {
+fn a_duplicated_layer_keeps_its_link_to_the_character_and_the_character_survives_the_file() {
     let mut b = banc();
     let lou = personnage(&mut b, "Lou", ROUGE, Some(ROSE));
     trait_au_milieu(&mut b, 0.0);
     let rang = calques_de(&b.app.doc, 0, lou)[0];
     b.app.select_layer(rang);
     b.app.duplicate_layer();
-    assert_eq!(calques_de(&b.app.doc, 0, lou), vec![rang], "la copie n'est plus « le » calque du personnage");
+    // (Adapté 2026-10-29 : la copie d'un calque de personnage reste liée au personnage, comme celle d'un copier-coller.)
+    assert_eq!(calques_de(&b.app.doc, 0, lou), vec![rang, rang + 1], "la copie reste liée au personnage, juste au-dessus de l'original");
     // Le fichier : le numéro du personnage revient avec le calque ; un projet sans personnage n'écrit rien de plus.
     let dir = dossier("fichier");
     let manifeste = dir.join("P.pelure");
@@ -319,7 +321,7 @@ fn a_duplicated_layer_is_not_the_character_layer_and_the_character_survives_the_
     let texte = std::fs::read_to_string(&manifeste).unwrap();
     assert!(texte.contains("\"personnage\""), "le calque du personnage est marqué dans le manifeste");
     let relu = crate::project::load(&manifeste).expect("réouverture");
-    assert_eq!(calques_de(&relu.doc, 0, lou), vec![rang]);
+    assert_eq!(calques_de(&relu.doc, 0, lou), vec![rang, rang + 1]);
     assert_eq!(relu.doc.panels[0].layers[rang].name, "Lou");
     assert_eq!(relu.doc.panels[0].layers[rang].fond.map(|f| f.couleur), Some(ROSE));
     assert_eq!(relu.doc.panels[0].layers[rang].kind, LayerKind::Vector);
@@ -339,9 +341,12 @@ fn the_classic_pastille_draws_in_the_current_layer_and_creates_nothing() {
     let rang = calques_de(&b.app.doc, 0, lou)[0];
     b.app.select_layer(0);
     let (couches, avant) = (b.app.layers().len(), pas_d_annulation(&b));
-    clic_case(&mut b, Case::Classique);
-    assert_eq!(b.app.perso.actif, None);
-    assert_eq!(b.app.cur_layer, 0, "classique ne change pas de calque");
+    // (Adapté 2026-10-29 : la brosse Classique remplace la pastille « classique » ; elle dessine dans le calque courant, sans rien créer.)
+    // (Une brosse sans aplat : son premier trait n'allume pas l'aplat du calque, une étape de plus ; ce n'est pas le sujet ici.)
+    b.app.settings.brosses_classiques[1].fill = None;
+    clic_case(&mut b, Case::Choix(Choix::Classique(1)));
+    assert_eq!(b.app.perso.actif, Some(Choix::Classique(1)));
+    assert_eq!(b.app.cur_layer, 0, "une classique ne change pas de calque");
     trait_au_milieu(&mut b, 0.0);
     assert_eq!(b.app.layers().len(), couches, "aucun calque créé");
     assert_eq!(b.app.cur_layer, 0);
@@ -509,7 +514,7 @@ fn the_vector_decor_is_held_through_the_last_frame_of_a_camera_move_and_follows_
 fn decor_brushes_make_one_vector_decor_layer_per_plan_shared_by_all_of_them_in_one_undo_step() {
     let mut b = banc();
     let (couches, avant) = (b.app.layers().len(), pas_d_annulation(&b));
-    clic_case(&mut b, Case::Decor(Genre::Feutre));
+    clic_case(&mut b, crate::decor_tests::case_du_decor(Genre::Feutre));
     trait_au_milieu(&mut b, -40.0);
     let at = b.app.doc.decor_de(0).expect("le calque Décor est né au premier trait");
     let l = &b.app.layers()[at];
@@ -518,9 +523,9 @@ fn decor_brushes_make_one_vector_decor_layer_per_plan_shared_by_all_of_them_in_o
     assert!(encre(&b, at));
     assert_eq!(pas_d_annulation(&b), avant + 1, "le calque et le premier trait ne font qu'une étape");
     // Une autre brosse du décor : le même calque.
-    clic_case(&mut b, Case::Decor(Genre::Crayon));
+    clic_case(&mut b, crate::decor_tests::case_du_decor(Genre::Crayon));
     trait_au_milieu(&mut b, 0.0);
-    clic_case(&mut b, Case::Decor(Genre::Aplat));
+    clic_case(&mut b, crate::decor_tests::case_du_decor(Genre::Aplat));
     trait_au_milieu(&mut b, 40.0);
     assert_eq!(b.app.doc.panels[0].layers.iter().filter(|l| l.decor).count(), 1, "un seul calque Décor pour toutes les brosses");
     assert_eq!(b.app.layers().len(), couches + 1);
@@ -540,7 +545,7 @@ fn decor_brushes_make_one_vector_decor_layer_per_plan_shared_by_all_of_them_in_o
 fn with_the_setting_the_decor_layer_is_made_bitmap_and_changing_it_later_leaves_the_existing_one() {
     let mut b = banc();
     b.app.settings.vignettes.decor_bitmap = true;
-    clic_case(&mut b, Case::Decor(Genre::Feutre));
+    clic_case(&mut b, crate::decor_tests::case_du_decor(Genre::Feutre));
     trait_au_milieu(&mut b, 0.0);
     let at = b.app.doc.decor_de(0).expect("le calque Décor");
     assert_eq!(b.app.layers()[at].kind, LayerKind::Bitmap, "bitmap, comme le demandent les Préférences");
@@ -580,12 +585,13 @@ fn an_old_project_with_a_bitmap_decor_opens_with_it_and_its_decor_brushes_keep_d
     b.chauffer(6);
     assert!(!b.app.settings.vignettes.decor_bitmap);
     let (couches, avant) = (b.app.layers().len(), pas_d_annulation(&b));
-    clic_case(&mut b, Case::Decor(Genre::Crayon));
+    clic_case(&mut b, crate::decor_tests::case_du_decor(Genre::Crayon));
     trait_au_milieu(&mut b, 0.0);
     assert_eq!(b.app.layers().len(), couches, "aucun calque de plus");
     assert_eq!(b.app.doc.panels[0].layers.iter().filter(|l| l.decor).count(), 1);
     assert_eq!(b.app.layers()[b.app.cur_layer].kind, LayerKind::Bitmap);
-    assert_eq!(pas_d_annulation(&b), avant + 1);
+    // (Adapté 2026-10-29 : la brosse Décor a un aplat ; ce vieux décor n'en avait pas, le trait l'allume, une étape à part comme pour une classique.)
+    assert_eq!(pas_d_annulation(&b), avant + 2);
     std::fs::remove_dir_all(&dir).ok();
 }
 

@@ -1,5 +1,10 @@
-//! Les pastilles créent leurs calques (Anthony, 2026-10-28) : une pastille de personnage dessine dans « son » calque, la pastille de
-//! décor dans le calque Décor du plan, la pastille « classique » dans le calque courant.
+//! Les brosses perso créent leurs calques (Anthony, 2026-10-28, repris au §70 le 2026-10-29) : une brosse Personnage dessine dans « son » calque, une
+//! brosse Décor dans le calque Décor du plan, une brosse Classique dans le calque courant (il n'y a plus de pastille « classique » ⊘).
+//!
+//! **2026-10-29 : le choix du calque d'un personnage.** La copie d'un calque de personnage (« Dupliquer le calque » comme le copier-coller) reste
+//! liée au personnage. Choisir sa brosse : le calque courant s'il est de ce personnage (l'original ou une copie), sinon **le dernier calque de ce
+//! personnage utilisé dans le plan** (le plus récemment dessiné ou choisi : `Etat::dernier_calque`, en mémoire, jamais dans le fichier), sinon le
+//! plus haut dans la pile (`App::calque_pour_personnage`). Un trait fait avec la brosse choisie suit la même règle.
 //!
 //! # Le calque d'un personnage
 //!
@@ -16,7 +21,7 @@
 //!   case vide et que le calque Décor (`Vignettes::created`, `finish_creation` au lâcher) ; un simple clic qui ne trace rien ne laisse
 //!   pas de calque vide. Rien de lourd à l'appui : un cliché de la structure et un calque vide, comme pour le calque Décor.
 //! - Pas pour la gomme ni le pot de peinture (ils agissent sur le calque courant), ni quand la sous-ligne d'un aplat est visée (on peint
-//!   l'aplat du calque qu'on a choisi), ni pour une couleur neutre (ce n'est pas un personnage : elle dessine dans le calque courant).
+//!   l'aplat du calque qu'on a choisi), ni pour une brosse Classique (elle dessine dans le calque courant).
 //!
 //! # Le calque Décor
 //!
@@ -67,7 +72,7 @@ impl Document {
 }
 
 impl App {
-    /// Le personnage qui dessine, s'il y en a un (pas une couleur neutre).
+    /// Le personnage qui dessine, s'il y en a un (pas une classique ni un décor).
     pub(crate) fn personnage_actif(&self) -> Option<u64> {
         match self.perso.actif {
             Some(Choix::Personnage(id)) => Some(id),
@@ -75,26 +80,51 @@ impl App {
         }
     }
 
-    /// Une pastille qui a son calque est choisie : un trait qui commence va dans ce calque (`pastille_avant_trait`).
+    /// Une brosse qui a son calque est choisie : un trait qui commence va dans ce calque (`pastille_avant_trait`).
     pub(crate) fn pastille_a_un_calque(&self) -> bool {
-        self.perso.decor.is_some() || self.personnage_actif().is_some()
+        self.decor_actif().is_some() || self.personnage_actif().is_some()
     }
 
-    /// À l'appui d'un trait dans une case de la planche, ou sur le dessin : la pastille choisie prépare son calque. Une brosse du décor : le
-    /// calque Décor du plan (`decor_avant_trait`) ; un personnage : son calque (`perso_calque_avant_trait`) ; « classique » ou une couleur
-    /// neutre : rien, le trait va dans le calque courant.
+    /// À l'appui d'un trait dans une case de la planche, ou sur le dessin : la brosse choisie prépare son calque. Une brosse Décor : le
+    /// calque Décor du plan (`decor_avant_trait`) ; un personnage : son calque (`perso_calque_avant_trait`) ; une classique : rien, le trait
+    /// va dans le calque courant.
     pub(crate) fn pastille_avant_trait(&mut self) {
-        if self.perso.decor.is_some() {
+        if self.decor_actif().is_some() {
             self.decor_avant_trait();
         } else {
             self.perso_calque_avant_trait();
         }
     }
 
-    /// Choisir un personnage qui a déjà son calque dans le plan courant le rend courant.
+    /// Le calque que le personnage `id` doit prendre dans le plan courant, s'il en a un (Anthony, 2026-10-29) : **le calque courant s'il est de
+    /// ce personnage** (l'original ou une copie : elles gardent leur lien), sinon **le dernier calque de ce personnage utilisé dans ce plan**
+    /// (le plus récemment dessiné ou choisi, `noter_calque_de_personnage`), sinon **le plus haut dans la pile**.
+    pub(crate) fn calque_pour_personnage(&self, id: u64) -> Option<usize> {
+        let layers = self.layers();
+        let est_a_lui = |l: &Layer| l.personnage == Some(id) && !l.folder;
+        if layers.get(self.cur_layer).is_some_and(est_a_lui) {
+            return Some(self.cur_layer);
+        }
+        let dernier = self.doc.panels.get(self.cur_panel).and_then(|p| self.perso.dernier_calque.get(&(p.id, id)).copied());
+        if let Some(i) = dernier.and_then(|lid| layers.iter().position(|l| l.id == lid && est_a_lui(l))) {
+            return Some(i);
+        }
+        layers.iter().rposition(est_a_lui)
+    }
+
+    /// Le calque courant est celui d'un personnage : il devient le « dernier utilisé » de ce personnage dans ce plan (en mémoire, pas dans le
+    /// fichier). Appelé quand on choisit un calque, quand une brosse en prend un et quand un trait commence.
+    pub(crate) fn noter_calque_de_personnage(&mut self) {
+        let Some(plan) = self.doc.panels.get(self.cur_panel).map(|p| p.id) else { return };
+        let Some((pid, lid)) = self.layers().get(self.cur_layer).filter(|l| !l.folder).and_then(|l| l.personnage.map(|p| (p, l.id))) else { return };
+        self.perso.dernier_calque.insert((plan, pid), lid);
+    }
+
+    /// Choisir la brosse d'un personnage rend courant son calque du plan (voir `calque_pour_personnage`).
     pub(crate) fn perso_rendre_son_calque(&mut self, id: u64) {
-        if let Some(i) = self.doc.calque_de_personnage(self.cur_panel, id) {
+        if let Some(i) = self.calque_pour_personnage(id) {
             self.select_layer(i);
+            self.noter_calque_de_personnage();
         }
     }
 
@@ -111,10 +141,11 @@ impl App {
         }
         let Some((nom, fond)) = self.doc.personnages.iter().find(|p| p.id == id).map(|p| (p.name.clone(), p.fill)) else { return };
         self.end_stroke();
-        if let Some(i) = self.doc.calque_de_personnage(self.cur_panel, id) {
+        if let Some(i) = self.calque_pour_personnage(id) {
             if i != self.cur_layer {
                 self.select_layer(i);
             }
+            self.noter_calque_de_personnage();
             return;
         }
         let snap = self.snapshot();
@@ -127,6 +158,7 @@ impl App {
         let at = (self.cur_layer + 1).min(self.layers().len());
         self.layers_mut().insert(at, layer);
         self.cur_layer = at;
+        self.noter_calque_de_personnage();
         self.aplat_cible = None;
         self.vsel = None;
         self.modified = true;

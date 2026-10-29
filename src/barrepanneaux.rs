@@ -50,7 +50,7 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
     &[
         entree(Pane::ToolOptions, "vue.reglages", "Réglages de l'outil", "Taille, opacité et options de l'outil courant. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Color, "vue.couleur", "Couleur", "Roue, curseurs, couleurs récentes et nuanciers. Un clic l'ouvre ou le met devant, un autre le ferme."),
-        entree(Pane::Personnages, "vue.personnages", "Personnages", "Les personnages du projet, chacun avec sa couleur de trait et son aplat, et les couleurs neutres. Un clic l'ouvre ou le met devant, un autre le ferme."),
+        entree(Pane::Personnages, "vue.personnages", "Brosses perso", "Les brosses perso : personnages du projet, classiques et décors, chacune avec sa couleur de trait et son aplat. Un clic l'ouvre ou le met devant, un autre le ferme."),
     ],
     &[
         entree(Pane::Layers, "vue.calques", "Calques", "Les calques du plan, leur mode et leur opacité. Un clic l'ouvre ou le met devant, un autre le ferme."),

@@ -210,10 +210,14 @@ pub struct Settings {
     /// prise sans nouvelles, la prise automatique, les notifications.
     #[serde(default, rename = "equipe")]
     pub equipe: crate::equipe::ReglageEquipe,
-    /// Les couleurs neutres de la barre des personnages (`personnages.rs`, `personnagesui.rs`) : un réglage de
-    /// l'application, commun à tous les projets (les personnages, eux, sont ceux du projet).
-    #[serde(default = "crate::personnages::neutres_par_defaut", rename = "couleurs_neutres")]
-    pub neutral_colors: Vec<crate::personnages::Neutre>,
+    /// Les brosses perso **Classique** de la barre (`personnages.rs`, `personnagesui.rs`) : un réglage de l'application, commun à tous les
+    /// projets (les brosses Personnage, elles, sont celles du projet). Avant le 2026-10-29 : les « couleurs neutres » (même clé du fichier).
+    #[serde(default = "crate::personnages::classiques_par_defaut", rename = "couleurs_neutres")]
+    pub brosses_classiques: Vec<crate::personnages::Brosse>,
+    /// Les brosses perso **Décor** de la barre : un réglage de l'application. Remplacent les trois pinceaux de décor (crayon, feutre gris,
+    /// aplat) de Préférences > Vignettes. Absentes d'un ancien fichier : les trois d'origine (avec les anciennes tailles, `Settings::load`).
+    #[serde(default = "crate::personnages::decors_par_defaut", rename = "brosses_decor")]
+    pub brosses_decor: Vec<crate::personnages::Brosse>,
     /// L'onglet ouvert de la fenêtre Préférences… (`prefsui.rs`), retenu d'une séance à l'autre.
     #[serde(default, rename = "onglet_preferences", skip_serializing_if = "crate::prefsonglets::Onglet::est_defaut")]
     pub prefs_onglet: crate::prefsonglets::Onglet,
@@ -335,7 +339,8 @@ impl Default for Settings {
             cadre_format_couleur: default_cadre_format_couleur(),
             collage: Default::default(),
             equipe: Default::default(),
-            neutral_colors: crate::personnages::neutres_par_defaut(),
+            brosses_classiques: crate::personnages::classiques_par_defaut(),
+            brosses_decor: crate::personnages::decors_par_defaut(),
             prefs_onglet: Default::default(),
             conseils: Default::default(),
             echelle: crate::echelle::ECHELLE_DEFAUT,
@@ -376,10 +381,15 @@ impl Settings {
 
     /// Réglages enregistrés ; défauts si le fichier manque ou se lit mal.
     pub fn load() -> Settings {
-        let mut s: Settings = Self::path()
+        let s: Settings = Self::path()
             .and_then(|p| std::fs::read_to_string(p).ok())
             .and_then(|t| toml::from_str(&t).ok())
             .unwrap_or_default();
+        Self::apres_lecture(s)
+    }
+
+    /// Les réglages lus, ramenés dans leurs bornes et migrés (ce que fait `load` une fois le fichier lu).
+    pub(crate) fn apres_lecture(mut s: Settings) -> Settings {
         s.onion.migrate();
         s.framing = s.framing.sanitized();
         s.perf = s.perf.sanitized();
@@ -397,14 +407,30 @@ impl Settings {
         s.passe_partout = s.passe_partout.min(100);
         s.tremblement_defaut = s.tremblement_defaut.sanitized();
         s.equipe = std::mem::take(&mut s.equipe).nettoye();
-        s.neutral_colors = crate::personnages::neutres_nettoyees(std::mem::take(&mut s.neutral_colors));
+        s.brosses_classiques = crate::personnages::brosses_nettoyees(std::mem::take(&mut s.brosses_classiques), crate::personnages::MAX_CLASSIQUES);
+        s.brosses_decor = crate::personnages::brosses_nettoyees(std::mem::take(&mut s.brosses_decor), crate::personnages::MAX_DECORS);
         s.echelle = crate::echelle::echelle_valide(s.echelle);
         s.vignettes = std::mem::take(&mut s.vignettes).nettoyes();
+        s.reprendre_les_anciens_pinceaux_de_decor();
         s.new_plan_secs = crate::dureeplans::secondes_valides(s.new_plan_secs);
         // Mon panneau : une commande qui n'existe plus (réglages d'une autre version) est ignorée, sans rien casser.
         s.mon_panneau = std::mem::take(&mut s.mon_panneau).nettoye(crate::monpanneau::commande_connue);
         s.poser_le_panneau_vignettes();
         s
+    }
+
+    /// Brosses perso Décor (2026-10-29) : les anciens réglages (Préférences > Vignettes, tailles du crayon, du feutre et de l'aplat du décor) sont
+    /// repris par les trois brosses Décor d'origine, tant qu'elles n'ont pas été touchées ; la couleur unique du décor, elle, est abandonnée
+    /// (chaque brosse Décor a la sienne). Les anciennes clés sont lues, plus jamais écrites.
+    pub fn reprendre_les_anciens_pinceaux_de_decor(&mut self) {
+        let d = crate::vignettesreglages::ReglagesVignettes::default();
+        if self.brosses_decor == crate::personnages::decors_par_defaut() && self.vignettes.tailles_decor != d.tailles_decor {
+            for (b, t) in self.brosses_decor.iter_mut().zip(self.vignettes.tailles_decor) {
+                b.taille = t;
+            }
+        }
+        self.vignettes.tailles_decor = d.tailles_decor;
+        self.vignettes.couleur_decor = d.couleur_decor;
     }
 
     /// Une fois : le panneau « Vignettes » rejoint la disposition retenue de l'espace Vignettes si elle n'avait pas encore de panneau de ce
