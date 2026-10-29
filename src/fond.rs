@@ -149,38 +149,85 @@ pub(crate) struct Geometrie {
     pub outside: Vec<bool>,
 }
 
-/// La géométrie du trait `line` pour les réglages `r` ; rien s'il n'y a pas de trait.
+/// La géométrie du trait `line` pour les réglages `r` ; rien s'il n'y a pas de trait. Sur la feuille seulement (ce qui est
+/// hors d'elle n'y compte pas) : ce que lisent l'aplat intelligent et la peinture dans l'aplat.
 pub(crate) fn geometrie(line: &Raster, r: &FondReglages) -> Option<Geometrie> {
-    let (w, h) = (line.width, line.height);
-    // Le rectangle du trait, agrandi de la fermeture et du débord : on ne calcule que dedans.
-    let (mut x0, mut y0, mut x1, mut y1) = (usize::MAX, usize::MAX, 0usize, 0usize);
-    for (idx, t) in line.tiles.iter().enumerate() {
-        let Some(t) = t else { continue };
-        let (ox, oy, tw, th) = line.tile_bounds(idx);
+    let g = geometrie_dans(line, r, false)?;
+    Some(Geometrie { bx0: g.x0 as usize, by0: g.y0 as usize, bw: g.w, bh: g.h, wall: g.wall, outside: g.outside })
+}
+
+/// Le plus grand rectangle de travail d'une forme sur la toile infinie, en pixels (une forme qui demanderait plus se
+/// limite à la feuille : une grille de distances de 16 millions de pixels pèse déjà 130 Mo).
+const MAX_BOITE: i64 = 16 << 20;
+
+/// Comme `Geometrie`, en coordonnées du monde (la toile infinie : le rectangle de travail peut sortir de la feuille).
+pub(crate) struct GeometrieMonde {
+    pub x0: i64,
+    pub y0: i64,
+    pub w: usize,
+    pub h: usize,
+    pub wall: Vec<bool>,
+    pub outside: Vec<bool>,
+}
+
+/// Le rectangle des pixels du trait (opacité d'un trait, `LINE_ALPHA`) : (gauche, haut, droite, bas), bornes comprises.
+/// `monde` : tout le dessin, les tuiles hors de la feuille et la part des tuiles de bord qui la dépasse comprises ;
+/// sinon la feuille seule.
+fn rectangle_du_trait(line: &Raster, monde: bool) -> Option<(i64, i64, i64, i64)> {
+    let mut found: Option<(i64, i64, i64, i64)> = None;
+    let mut scan = |ox: i64, oy: i64, tw: usize, th: usize, t: &crate::raster::Tile| {
         for y in 0..th {
             for x in 0..tw {
                 if t[y * TILE + x].a() >= LINE_ALPHA {
-                    x0 = x0.min(ox + x);
-                    y0 = y0.min(oy + y);
-                    x1 = x1.max(ox + x);
-                    y1 = y1.max(oy + y);
+                    let (gx, gy) = (ox + x as i64, oy + y as i64);
+                    found = Some(match found {
+                        None => (gx, gy, gx, gy),
+                        Some((a, b, c, d)) => (a.min(gx), b.min(gy), c.max(gx), d.max(gy)),
+                    });
                 }
             }
         }
+    };
+    for (idx, t) in line.tiles.iter().enumerate() {
+        let Some(t) = t else { continue };
+        if monde {
+            let (tx, ty) = ((idx % line.tiles_x) as i64, (idx / line.tiles_x) as i64);
+            scan(tx * TILE as i64, ty * TILE as i64, TILE, TILE, t);
+        } else {
+            let (ox, oy, tw, th) = line.tile_bounds(idx);
+            scan(ox as i64, oy as i64, tw, th, t);
+        }
     }
-    if x0 == usize::MAX {
-        return None;
+    if monde {
+        for (&(tx, ty), t) in &line.outer {
+            scan(tx as i64 * TILE as i64, ty as i64 * TILE as i64, TILE, TILE, t);
+        }
     }
+    found
+}
+
+/// La géométrie du trait `line` pour les réglages `r`, sur la toile infinie si `monde` : le trait qui sort de la feuille
+/// compte, et le rectangle de travail déborde de la feuille de ce côté-là. Là où le trait ne sort pas, le rectangle
+/// s'arrête au bord de la feuille, comme avant (« le bord de l'image ferme la forme » : un personnage coupé par le cadre
+/// a son fond jusqu'au bord). Un trait si étalé que le rectangle dépasserait `MAX_BOITE` pixels se limite à la feuille.
+pub(crate) fn geometrie_dans(line: &Raster, r: &FondReglages, monde: bool) -> Option<GeometrieMonde> {
+    let (w, h) = (line.width as i64, line.height as i64);
+    // Le rectangle du trait, agrandi de la fermeture et du débord : on ne calcule que dedans.
+    let (x0, y0, x1, y1) = rectangle_du_trait(line, monde)?;
     let trous = r.trous as f64;
-    let pad = (r.trous.max(r.debord) as usize) + 3;
-    let (bx0, by0) = (x0.saturating_sub(pad), y0.saturating_sub(pad));
-    let (bx1, by1) = ((x1 + pad).min(w - 1), (y1 + pad).min(h - 1));
-    let (bw, bh) = (bx1 - bx0 + 1, by1 - by0 + 1);
+    let pad = (r.trous.max(r.debord) as i64) + 3;
+    let world = crate::raster::WORLD;
+    let (bx0, by0) = (if monde && x0 < 0 { (x0 - pad).max(-world) } else { (x0 - pad).max(0) }, if monde && y0 < 0 { (y0 - pad).max(-world) } else { (y0 - pad).max(0) });
+    let (bx1, by1) = (if monde && x1 > w - 1 { (x1 + pad).min(world) } else { (x1 + pad).min(w - 1) }, if monde && y1 > h - 1 { (y1 + pad).min(world) } else { (y1 + pad).min(h - 1) });
+    if monde && (bx1 - bx0 + 1) * (by1 - by0 + 1) > MAX_BOITE {
+        return geometrie_dans(line, r, false);
+    }
+    let (bw, bh) = ((bx1 - bx0 + 1) as usize, (by1 - by0 + 1) as usize);
     // Le trait dans la boîte.
     let mut solid = vec![false; bw * bh];
     for y in 0..bh {
         for x in 0..bw {
-            solid[y * bw + x] = line.get(bx0 + x, by0 + y).a() >= LINE_ALPHA;
+            solid[y * bw + x] = line.get_i(bx0 + x as i64, by0 + y as i64).a() >= LINE_ALPHA;
         }
     }
     // Les murs : le trait épaissi de `trous` pixels (ferme les trous).
@@ -191,8 +238,9 @@ pub(crate) fn geometrie(line: &Raster, r: &FondReglages) -> Option<Geometrie> {
     let mut outside = vec![false; bw * bh];
     let mut stack: Vec<usize> = Vec::new();
     let on_edge = |p: usize| {
-        let (x, y) = (bx0 + p % bw, by0 + p / bw);
-        x == 0 || y == 0 || x + 1 == w || y + 1 == h
+        let (x, y) = (bx0 + (p % bw) as i64, by0 + (p / bw) as i64);
+        // (Le bord de la feuille : ses pixels de bord, pas ce qui est hors d'elle.)
+        x >= 0 && y >= 0 && x < w && y < h && (x == 0 || y == 0 || x + 1 == w || y + 1 == h)
     };
     let seed = |p: usize, outside: &mut Vec<bool>, stack: &mut Vec<usize>| {
         if !wall[p] && !outside[p] && !(r.bord && on_edge(p)) {
@@ -218,34 +266,95 @@ pub(crate) fn geometrie(line: &Raster, r: &FondReglages) -> Option<Geometrie> {
             }
         }
     }
-    Some(Geometrie { bx0, by0, bw, bh, wall, outside })
+    Some(GeometrieMonde { x0: bx0, y0: by0, w: bw, h: bh, wall, outside })
 }
 
-/// La forme du fond d'après le trait `line` : une couverture de 0 à 255 par pixel du dessin
-/// (`width × height`), vide s'il n'y a pas de trait.
-pub fn silhouette(line: &Raster, r: &FondReglages) -> Vec<u8> {
-    let (w, h) = (line.width, line.height);
-    let mut out = vec![0u8; w * h];
-    let Some(Geometrie { bx0, by0, bw, bh, outside, .. }) = geometrie(line, r) else { return out };
+/// La couverture (0 à 255) de chaque pixel d'un rectangle de travail `bw × bh` dont `outside` dit le dehors.
+fn couverture_de_la_boite(outside: &[bool], bw: usize, bh: usize, r: &FondReglages) -> Vec<u8> {
     let trous = r.trous as f64;
     let debord = r.debord as f64;
     // La forme fermée, rendue à sa vraie taille : rongée de `trous - debord` (ou agrandie si le
     // débord est plus grand), au bord adouci d'un pixel.
     let grow = debord - trous;
     let cover: Vec<f64> = if grow <= 0.0 {
-        let d_out = edt(&outside, bw, bh);
-        d_out.iter().zip(&outside).map(|(&d, &o)| if o { 0.0 } else { (d.sqrt() - (-grow)).clamp(0.0, 1.0) }).collect()
+        let d_out = edt(outside, bw, bh);
+        d_out.iter().zip(outside).map(|(&d, &o)| if o { 0.0 } else { (d.sqrt() - (-grow)).clamp(0.0, 1.0) }).collect()
     } else {
         let inside: Vec<bool> = outside.iter().map(|&o| !o).collect();
         let d_in = edt(&inside, bw, bh);
         d_in.iter().map(|&d| (grow + 1.0 - d.sqrt()).clamp(0.0, 1.0)).collect()
     };
+    cover.iter().map(|&c| (c * 255.0).round() as u8).collect()
+}
+
+/// La forme du fond d'après le trait `line` : une couverture de 0 à 255 par pixel du dessin
+/// (`width × height`), vide s'il n'y a pas de trait. Sur la feuille seulement (le trait hors d'elle n'y compte pas) ;
+/// ce que le dessin montre est `silhouette_monde`.
+pub fn silhouette(line: &Raster, r: &FondReglages) -> Vec<u8> {
+    let (w, h) = (line.width, line.height);
+    let mut out = vec![0u8; w * h];
+    let Some(Geometrie { bx0, by0, bw, bh, outside, .. }) = geometrie(line, r) else { return out };
+    let cover = couverture_de_la_boite(&outside, bw, bh, r);
     for y in 0..bh {
         for x in 0..bw {
-            out[(by0 + y) * w + bx0 + x] = (cover[y * bw + x] * 255.0).round() as u8;
+            out[(by0 + y) * w + bx0 + x] = cover[y * bw + x];
         }
     }
     out
+}
+
+/// La forme du fond sur la toile infinie : une couverture de 0 à 255 pour chaque pixel du rectangle de travail, qui
+/// déborde de la feuille là où le trait en sort (toile infinie : l'aplat suit le trait partout où il est, et n'est pas
+/// coupé au bord de la feuille). Pour un trait qui reste dans la feuille, le résultat est celui de `silhouette`, pixel
+/// pour pixel.
+pub fn silhouette_monde(line: &Raster, r: &FondReglages) -> Couverture {
+    let Some(GeometrieMonde { x0, y0, w, h, outside, .. }) = geometrie_dans(line, r, true) else { return Couverture::default() };
+    Couverture { x0, y0, w, h, data: couverture_de_la_boite(&outside, w, h, r) }
+}
+
+/// La forme d'un fond sur la toile infinie : la couverture (0 à 255) des pixels du rectangle `x0, y0, w × h` du monde ;
+/// rien (0) partout ailleurs.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Couverture {
+    pub x0: i64,
+    pub y0: i64,
+    pub w: usize,
+    pub h: usize,
+    pub data: Vec<u8>,
+}
+
+impl Couverture {
+    /// La forme `data` d'une feuille `w × h` (ce que rend `silhouette`).
+    pub fn depuis_feuille(w: usize, h: usize, data: Vec<u8>) -> Couverture {
+        Couverture { x0: 0, y0: 0, w, h, data }
+    }
+
+    /// La couverture du pixel (`x`, `y`) du monde.
+    pub fn get(&self, x: i64, y: i64) -> u8 {
+        let (dx, dy) = (x - self.x0, y - self.y0);
+        if dx < 0 || dy < 0 || dx >= self.w as i64 || dy >= self.h as i64 {
+            return 0;
+        }
+        self.data.get(dy as usize * self.w + dx as usize).copied().unwrap_or(0)
+    }
+
+    /// Rien n'est couvert.
+    pub fn est_vide(&self) -> bool {
+        self.data.iter().all(|&c| c == 0)
+    }
+
+    /// La part qui est dans la feuille `w × h`, un octet par pixel (la forme de `silhouette`).
+    pub fn feuille(&self, w: usize, h: usize) -> Vec<u8> {
+        let mut out = vec![0u8; w * h];
+        let (x0, y0) = (self.x0.max(0) as usize, self.y0.max(0) as usize);
+        let (x1, y1) = (((self.x0 + self.w as i64).max(0) as usize).min(w), ((self.y0 + self.h as i64).max(0) as usize).min(h));
+        for y in y0..y1 {
+            for x in x0..x1 {
+                out[y * w + x] = self.data[(y as i64 - self.y0) as usize * self.w + (x as i64 - self.x0) as usize];
+            }
+        }
+        out
+    }
 }
 
 /// Pixels du trait que gagne une zone remplie ou coupée dans le fond (pas de liseré au bord du
@@ -458,6 +567,49 @@ pub fn compose(cover: &[u8], width: usize, height: usize, couleur: [u8; 3], pain
         compose_tile(&mut out, idx, cover, couleur, paint, cut);
     }
     out
+}
+
+/// Comme `compose`, sur la toile infinie : la forme `cover` peut sortir de la feuille, le fond aussi (ses tuiles hors de la
+/// feuille sont rangées à part dans le dessin, `Raster::outer`). Seules les tuiles que la forme touche sont refaites.
+pub fn compose_monde(cover: &Couverture, width: usize, height: usize, couleur: [u8; 3], paint: Option<&Raster>, cut: Option<&Raster>) -> Raster {
+    let mut out = Raster::new(width, height);
+    if cover.w == 0 || cover.h == 0 {
+        return out;
+    }
+    let t = TILE as i64;
+    for ty in cover.y0.div_euclid(t)..=(cover.y0 + cover.h as i64 - 1).div_euclid(t) {
+        for tx in cover.x0.div_euclid(t)..=(cover.x0 + cover.w as i64 - 1).div_euclid(t) {
+            let id = out.id_of(tx as i32, ty as i32);
+            compose_tuile_monde(&mut out, id, cover, couleur, paint, cut);
+        }
+    }
+    out
+}
+
+/// `compose_monde` sur la seule tuile `id` de `out` (de la feuille ou hors d'elle) : suivi en direct pendant qu'on peint
+/// dans le fond. La tuile entière est refaite (une tuile de bord garde sa part hors de la feuille).
+pub fn compose_tuile_monde(out: &mut Raster, id: usize, cover: &Couverture, couleur: [u8; 3], paint: Option<&Raster>, cut: Option<&Raster>) {
+    let (tx, ty) = out.key_of(id);
+    let (ox, oy) = (tx as i64 * TILE as i64, ty as i64 * TILE as i64);
+    let mut any = false;
+    let mut tile = [Color32::TRANSPARENT; TILE * TILE];
+    for y in 0..TILE {
+        for x in 0..TILE {
+            let (gx, gy) = (ox + x as i64, oy + y as i64);
+            let c = cover.get(gx, gy);
+            if c == 0 {
+                continue;
+            }
+            let k = cut.map_or(0, |r| r.get_i(gx, gy).a());
+            let s = paint.map_or(Color32::TRANSPARENT, |r| r.get_i(gx, gy));
+            let px = compose_px(c, k, couleur, s);
+            if px.a() != 0 {
+                tile[y * TILE + x] = px;
+                any = true;
+            }
+        }
+    }
+    out.replace_slot(id, any.then(|| crate::raster::Tile::new(tile)));
 }
 
 /// `compose` sur la seule tuile `idx` de `out` (suivi en direct pendant qu'on peint dans le fond).

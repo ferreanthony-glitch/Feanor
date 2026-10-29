@@ -2167,7 +2167,7 @@ impl App {
         };
         let (cel, prefix) = self.ensure_cel();
         let (w, h) = (self.doc.width, self.doc.height);
-        let Some(cover) = self.doc.cels.get(&cel).map(|c| crate::fond::silhouette(&c.raster, &r)) else { return };
+        let Some(cover) = self.doc.cels.get(&cel).map(|c| crate::fond::silhouette_monde(&c.raster, &r).feuille(w, h)) else { return };
         if cover.iter().all(|&c| c == 0) {
             self.status = "Aplat : dessine d'abord le trait, l'aplat se déduit de lui (clique sur le calque pour revenir au trait).".into();
             if let Some(p) = prefix {
@@ -2661,7 +2661,9 @@ impl App {
             for (e, exact) in d.elements.iter_mut().zip(&done.drawing.elements) {
                 e.adopt_cache(exact);
             }
-            let changed: Vec<usize> = (0..done.raster.tiles.len()).filter(|&i| c.raster.tiles.get(i).is_some_and(Option::is_some) || done.raster.tiles[i].is_some()).collect();
+            // (Toile infinie : les tuiles hors de la feuille comptent aussi, sinon l'écran garde l'image d'avant de tout ce qui
+            // est loin de la feuille, `Renderer::take_world_dirty`.)
+            let changed: Vec<usize> = c.raster.ids_either(&done.raster);
             // Le fichier du dessin dit la même chose (la géométrie n'a pas changé, les pixels en
             // cache ne s'enregistrent pas) : le premier enregistrement après l'ouverture ne le
             // réécrit pas.

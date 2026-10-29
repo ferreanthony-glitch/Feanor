@@ -2012,7 +2012,7 @@ sans bord, pas son détail.
   dessiné, sinon du papier. Rien n'est exporté hors du cadre.
 - **Limites** : les zones bitmap sélectionnées (lasso, baguette de couleur) et leur déplacement prennent les
   pixels de la feuille (on peut déplacer ce qu'on a pris vers l'extérieur) ; les effets de calque, les calques
-  d'ajustement, l'aplat sous le trait, les calques de couleur, l'enveloppe et la perspective, la propagation,
+  d'ajustement, les calques de couleur, l'enveloppe et la perspective, la propagation,
   l'import / export Storyboard Pro restent à la feuille. Le zoom arrière extrême (plus de 4 096 px de monde
   dessiné à l'écran) montre ce qui est hors de la feuille un peu plus flou (la texture est réduite).
   Au-delà de 32 768 px de la feuille, rien ne se pose.
@@ -2039,6 +2039,32 @@ sans bord, pas son détail.
 10. Un plan avec des effets de calque et du dessin hors de la feuille : les effets agissent dans la feuille, le
     dessin hors feuille est montré sans effet (limite connue).
 11. Les vignettes de la planche (storyboard) montrent le cadre, comme avant.
+
+### Correction du 2026-10-28 : dessin coupé loin de la feuille
+
+Constat d'Anthony (calque vectoriel « daniel » avec un aplat, dessiné en partie hors de la feuille) : le dessin était coupé net par un
+bord vertical, le trait et l'aplat, et déplacer la caméra dessus ne ramenait pas la partie coupée.
+
+- **Cause de l'aplat** : l'aplat sous le trait (`fond.rs`) se déduisait du trait **vu à travers la feuille seulement**. Hors de la feuille,
+  le calcul ne voyait rien : pas de forme, donc pas d'aplat, et une coupure droite exactement au bord de la feuille, à l'écran, dans les
+  vignettes, dans l'image que filme la caméra et dans les exports. Le trait lui-même (ses points, ses pixels) n'a jamais été coupé :
+  aller-retour enregistrer / ouvrir vérifié, en vectoriel comme en bitmap. Rien n'était perdu dans les données, c'était un défaut
+  d'affichage (et d'export) de l'aplat.
+- **Correction** : la forme de l'aplat se calcule maintenant sur la toile infinie (`fond::silhouette_monde`, `Couverture`) : un rectangle de
+  travail qui déborde de la feuille là où le trait en sort (et seulement là : un dessin qui reste dans la feuille donne exactement la forme
+  d'avant, essai pixel pour pixel), et l'aplat composé range ses tuiles hors de la feuille à part (`fond::compose_monde`, comme les
+  dessins). Le calcul reste en arrière-plan (`fondfil.rs`), l'écran garde l'aplat d'avant pendant qu'il se refait. Plus de bord vertical : on
+  compte les pixels de l'aplat et du trait de part et d'autre de l'ancien bord (essais `toile_coupee_tests.rs`).
+- **Autres coupures trouvées en route**, corrigées : le rendu exact d'un trait vectoriel ne prévenait pas l'écran des tuiles hors de la
+  feuille qu'il avait changées (l'écran gardait l'image d'avant de ce qui est loin) ; le rendu approché à l'ouverture d'un projet
+  (`render_quick`) coupait les traits texturés à la feuille ; et pendant qu'on déplace une sélection vectorielle, le reste du dessin
+  (`render_split_extended`) perdait ce qu'il a hors de la feuille.
+- **Limites** : un dessin si étalé que le rectangle de travail dépasserait 16 millions de pixels (par exemple 20 000 px de large sur
+  1 000 px de haut) n'a son aplat que sur la feuille ; le pot de peinture, la peinture et la gomme dans l'aplat, l'aplat intelligent
+  restent à la feuille. Pas de changement du format du projet (41).
+- **À vérifier à l'écran** : sur un calque vectoriel puis bitmap avec un aplat (une pastille de personnage), dessiner une forme fermée qui
+  sort de la feuille de plus de 2 000 px, zoom arrière : l'aplat et le trait sont entiers, sans bord à la feuille ; déplacer la caméra
+  dessus (outil Caméra) : le cadre filmé les montre, la vignette du plan aussi ; enregistrer, fermer, rouvrir : tout est là.
 
 ---------------------------------------------------------------------------------------------------
 

@@ -1555,8 +1555,16 @@ export, enregistrement) change pour les projets d'avant.
   pas tout le contenu : c'est le choix de SHOT, simple et prévisible ; le choix de Storyboard Pro est **à
   vérifier**.
 - **Reste borné à la feuille** : pot de peinture (`fill.rs` : image de la taille de la feuille), zones bitmap
-  (`PixelMask` : taille de la feuille), effets de calque et calques d'ajustement, aplat sous le trait, calque de
-  couleur, enveloppe / perspective, import et export Storyboard Pro, propagation (`synthese/`, intact).
+  (`PixelMask` : taille de la feuille), effets de calque et calques d'ajustement, peinture dans l'aplat et aplat
+  intelligent (`silhouette`, sur la feuille), calque de couleur, enveloppe / perspective, import et export Storyboard
+  Pro, propagation (`synthese/`, intact).
+- **Aplat sous le trait sur la toile infinie** (correction du 2026-10-28) : `fond::silhouette_monde` rend une
+  `Couverture` (rectangle du monde, octets 0 à 255) ; le rectangle de travail déborde de la feuille là où l'encre en
+  sort, sinon il s'arrête à son bord comme avant (le bord de la feuille ferme la forme) ; au-delà de `MAX_BOITE`
+  (16 millions de pixels) il se limite à la feuille. `fond::compose_monde` / `compose_tuile_monde` posent le fond
+  tuile par tuile, hors de la feuille aussi (`Raster::outer`). `fx::COVERS`, `fondfil.rs` et `fx::fond_patch` les
+  utilisent ; `render::plan_bounds` et `plan_world_tiles` comptent une tuile de plus autour d'un aplat dont le
+  trait sort de la feuille. `fond::silhouette` (octets de la feuille) reste pour ce qui est lié à la feuille.
 - **Essais** : `toile_tests.rs` (numéros de tuiles, mémoire, annuler / rétablir, enregistrer / relire, fichier
   abîmé, vecteur hors feuille, caméra, texture du monde pixel pour pixel contre `composite_area`, mise à jour
   par tuiles, texture réduite, vitesse loin de l'origine, images d'écran complètes en rotation / miroir / caméra),
