@@ -15,14 +15,14 @@ use crate::project;
 use crate::raster::{Raster, TILE};
 use crate::vector::{Affine, Element};
 
-const ROUGE: [u8; 3] = [255, 0, 0];
-const BLEU: [u8; 3] = [0, 0, 255];
+pub(crate) const ROUGE: [u8; 3] = [255, 0, 0];
+pub(crate) const BLEU: [u8; 3] = [0, 0, 255];
 
 fn proche(a: u8, b: i32, tol: i32) -> bool {
     (a as i32 - b).abs() <= tol
 }
 
-fn put(r: &mut Raster, x: usize, y: usize, c: Color32) {
+pub(crate) fn put(r: &mut Raster, x: usize, y: usize, c: Color32) {
     let idx = r.tile_index_of(x, y);
     r.tile_mut(idx)[(y % TILE) * TILE + x % TILE] = c;
 }
@@ -148,7 +148,7 @@ fn a_zone_replaces_inside_and_passes_under_the_line_in_the_edge() {
 
 // ------------------------------------------------------------------------------------ l'appli
 
-fn app(name: &str) -> App {
+pub(crate) fn app(name: &str) -> App {
     let dir = std::env::temp_dir().join(format!("shot-degrade-{name}-{}-{:?}", std::process::id(), std::thread::current().id()));
     let _ = std::fs::create_dir_all(&dir);
     crate::donnees::bac_a_sable(&dir);
@@ -165,7 +165,7 @@ fn app(name: &str) -> App {
 
 /// Un plan 400 × 300 à un calque de cette sorte, à l'écran (1280 × 720), outil Pinceau noir ; avant-plan rouge, arrière-plan
 /// bleu pour le dégradé.
-fn banc_degrade(kind: LayerKind) -> Banc {
+pub(crate) fn banc_degrade(kind: LayerKind) -> Banc {
     let mut doc = Document::new(400, 300, 24);
     doc.panels[0].layers = vec![Layer::new("Dessin", kind)];
     doc.panels[0].length = 4;
@@ -180,7 +180,7 @@ fn banc_degrade(kind: LayerKind) -> Banc {
     b
 }
 
-fn ecran(b: &Banc, x: f32, y: f32) -> Pos2 {
+pub(crate) fn ecran(b: &Banc, x: f32, y: f32) -> Pos2 {
     b.app.view.to_screen(b.app.canvas_rect, b.app.canvas_size(), pos2(x, y))
 }
 
@@ -189,7 +189,7 @@ fn bouton(pos: Pos2, pressed: bool, modifiers: Modifiers) -> Event {
 }
 
 /// Un glisser du pointeur sur les points `pts` de la feuille, une image d'écran par point, avec ces touches tenues.
-fn glisser(b: &mut Banc, pts: &[(f32, f32)], touches: Modifiers) {
+pub(crate) fn glisser(b: &mut Banc, pts: &[(f32, f32)], touches: Modifiers) {
     b.touches = touches;
     let p0 = ecran(b, pts[0].0, pts[0].1);
     b.image(vec![Event::PointerMoved(p0)], 1.0 / 60.0);
@@ -206,7 +206,7 @@ fn glisser(b: &mut Banc, pts: &[(f32, f32)], touches: Modifiers) {
 }
 
 /// Un anneau carré de (100, 100) à (300, 200), tracé au pinceau en noir.
-fn tracer_anneau(b: &mut Banc) {
+pub(crate) fn tracer_anneau(b: &mut Banc) {
     b.app.set_tool(Tool::Brush);
     b.app.color = [0, 0, 0];
     glisser(b, &[(100.0, 100.0), (200.0, 100.0), (300.0, 100.0), (300.0, 150.0), (300.0, 200.0), (200.0, 200.0), (100.0, 200.0), (100.0, 150.0), (100.0, 100.0)], Modifiers::NONE);
@@ -215,18 +215,18 @@ fn tracer_anneau(b: &mut Banc) {
     b.app.couleurs.prefs.back = BLEU;
 }
 
-fn cel_du_calque(b: &Banc) -> CelId {
+pub(crate) fn cel_du_calque(b: &Banc) -> CelId {
     b.app.layers()[0].frames[0].expect("un dessin")
 }
 
-fn pixel(b: &Banc, x: usize, y: usize) -> Color32 {
+pub(crate) fn pixel(b: &Banc, x: usize, y: usize) -> Color32 {
     match b.app.layers()[0].frames.first().copied().flatten() {
         Some(cel) => b.app.doc.cels[&cel].raster.get(x, y),
         None => Color32::TRANSPARENT,
     }
 }
 
-fn etapes(app: &App) -> Vec<String> {
+pub(crate) fn etapes(app: &App) -> Vec<String> {
     app.history.names().0.iter().map(|n| n.to_string()).collect()
 }
 
@@ -521,7 +521,7 @@ fn a_gradient_with_absurd_values_is_refused_at_reading() {
 // ------------------------------------------------------------------------------------ l'aplat et le calque de couleur
 
 /// Un anneau noir carré (de 4 px) de (60, 60) à (220, 200).
-fn anneau(w: usize, h: usize) -> Raster {
+pub(crate) fn anneau(w: usize, h: usize) -> Raster {
     let mut r = Raster::new(w, h);
     for y in 58..=62 {
         for x in 58..=222 {
