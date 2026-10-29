@@ -952,6 +952,7 @@ impl VectorDrawing {
         for e in &self.elements {
             render_element(&mut raster, e);
         }
+        raster.share_solid_tiles();
         raster
     }
 

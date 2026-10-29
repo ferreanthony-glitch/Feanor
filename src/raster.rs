@@ -57,6 +57,55 @@ impl std::fmt::Debug for Tile {
     }
 }
 
+/// Les tuiles d'une seule couleur (un aplat plein, du vide) d'un dessin rendu n'ont qu'une seule mémoire par couleur :
+/// une tuile se partage à la copie (`Tile`), la première écriture en fait une à soi. Un décor de Storyboard Pro rendu
+/// à la taille de la feuille a plus de la moitié de ses tuiles pleines : 17 Go de tuiles tombent à moins de 8 Go
+/// (docs/IMPORT-SBP.md, import 73). `None` pour la plupart des tuiles : rien à faire.
+fn tuile_pleine(couleur: Color32) -> Option<Tile> {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    /// Au plus ce nombre de couleurs pleines gardées (16 Ko chacune) : une couleur de plus reste une tuile à soi.
+    const MAX_COULEURS: usize = 256;
+    static POOL: OnceLock<Mutex<HashMap<u32, Tile>>> = OnceLock::new();
+    let mut pool = POOL.get_or_init(Default::default).lock().unwrap_or_else(|e| e.into_inner());
+    let cle = u32::from_le_bytes(couleur.to_array());
+    if let Some(t) = pool.get(&cle) {
+        return Some(t.clone());
+    }
+    if pool.len() >= MAX_COULEURS {
+        return None;
+    }
+    let t = Tile::new([couleur; TILE_PIXELS]);
+    pool.insert(cle, t.clone());
+    Some(t)
+}
+
+impl Raster {
+    /// Remplace chaque tuile d'une seule couleur par la tuile partagée de cette couleur (`tuile_pleine`). Ne change aucun
+    /// pixel. Rend le nombre de tuiles partagées.
+    pub fn share_solid_tiles(&mut self) -> usize {
+        let mut n = 0;
+        let mut partage = |t: &mut Tile| {
+            let first = t[0];
+            if t.iter().all(|p| *p == first) {
+                if let Some(s) = tuile_pleine(first) {
+                    if !s.same_as(t) {
+                        *t = s;
+                        n += 1;
+                    }
+                }
+            }
+        };
+        for t in self.tiles.iter_mut().flatten() {
+            partage(t);
+        }
+        for t in self.outer.values_mut() {
+            partage(t);
+        }
+        n
+    }
+}
+
 pub fn empty_tile() -> Tile {
     Tile::new([Color32::TRANSPARENT; TILE_PIXELS])
 }

@@ -5830,6 +5830,17 @@ verrou, opacité et placement. Une fenêtre de remarques dit ce qui n'est pas re
   animatic, plan 21 : éclair jaune sur décor gris, plus de bleu.
 - Essais : `tvg.rs` (un bloc de drapeau 2 est lu avec sa longueur) ; sondes ignorées `sonde_pertes`, `sonde_rendu`, `sonde_bitmaps`.---------------------------------------------------------------------------------------------------
 
+### Mise à jour (2026-10-29, branche `import-sbp-vitesse`) : la lenteur d'un projet importé
+
+Anthony : 7 plans de Storyboard Pro, une vingtaine de calques chacun, format carré 1920 × 1920 (cadres de contrôle 16:9 et 9:16, **le format est voulu**) : « le soft rame énormément ». Mesuré avec `sbperf_tests` (ci-dessous), sur les copies :
+
+- **La cause : la mémoire, pas l'image.** Chaque dessin vectoriel importé garde son rendu à la taille de la feuille (2 × le cadre : 3 840 × 3 840 pour son format). Les décors de Storyboard Pro sont des aplats immenses : la moitié ou plus des tuiles (64 × 64) de ces rendus sont d'**une seule couleur**, et la toile infinie en garde autant hors de la feuille. Sept plans de l'animatic au format carré : 17,4 Go de mémoire vive (15,4 Go de tuiles, dont 59 % pleines), 139 s d'import. L'animatic entier au format 16:9 : 20,7 Go, 181 s. Sur une machine de 32 Go, c'est le Windows qui range la mémoire sur le disque, d'où la lenteur de tout.
+- **Corrigé** : (1) les tuiles d'une seule couleur d'un dessin vectoriel rendu **partagent une seule mémoire par couleur** (`Raster::share_solid_tiles`, appelé par `VectorDrawing::render` : aucun pixel ne change, la première écriture dans une tuile partagée en fait une à soi, comme pour toute copie de tuile) ; ça vaut pour tout projet SHOT qui rouvre ses dessins vectoriels, pas seulement l'import. (2) L'import **lit et rend les dessins en parallèle** (un fil par cœur, `sbnative::precalculer`) : même résultat, ordre des calques inchangé.
+- **Avant / après** (machine : i7-10700K, RTX 2080 SUPER, 32 Go ; 7 plans de l'animatic en 1920 × 1920 : 139 s -> 14,6 s d'import, 17,4 Go -> 7,4 Go ; part2extract 20,8 s -> 2,4 s, 3,2 -> 2,7 Go ; animatic entier 181 s -> 16,9 s, 20,7 -> 10,8 Go ; temps par image à l'arrêt 2-11 ms -> 2 ms).
+- **Reste** : 6 Go de tuiles réellement différentes pour ces 7 plans (le rendu des dessins vectoriels est gardé pour chaque dessin, caché ou non) ; le premier affichage d'un dessin énorme (tête de lecture qui saute sur des dessins jamais vus) envoie ses tuiles à la carte graphique d'un coup (20 à 50 ms) : la lecture, elle, les envoie d'avance et reste sous les 5 ms par image. Un rendu des dessins vectoriels à la demande (comme pour les vignettes) serait la suite.
+- **Mesurer** : `SBP_ESSAI=<copie> [SBP_TAILLE=1920,1920] [SBP_SHOTS=2,7,34] cargo test --release --offline --target-dir target\msvc --lib sbperf_tests::projet_importe -- --ignored --nocapture --test-threads=1` (poids du projet, mémoire vive, images à l'arrêt, au défilement, en lecture, au dessin, en vue caméra, en lecture du montage, copie de secours) ; `SHOT_PROJET=<manifeste> ... sbperf_tests::projet_shot` pour un projet SHOT.
+- À vérifier à l'écran : ouvrir un projet de Storyboard Pro lourd : l'ouverture est plus courte, SHOT reste fluide quand on change de plan ; les dessins sont identiques à avant.
+
 ---------------------------------------------------------------------------------------------------
 
 ## 72. Clés d'opacité et calque « Couleur unie » (2026-10-29, branche `opacite-colorcard`)

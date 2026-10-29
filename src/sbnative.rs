@@ -117,6 +117,7 @@ pub fn build(sb: &SbProject, dir: &Path, progress: &dyn Fn(f32)) -> (Document, V
     let total: usize = sb.shots.iter().map(|s| s.panels.len()).sum();
     let mut notes = Notes::default();
     let mut cels: HashMap<u64, crate::document::CelId> = HashMap::new();
+    let mut pre = precalculer(sb, dir, place0, (doc.width, doc.height), progress, 0.7);
     let mut seq: Option<(String, u64)> = None;
     let mut done = 0;
     for shot in &sb.shots {
@@ -144,7 +145,7 @@ pub fn build(sb: &SbProject, dir: &Path, progress: &dyn Fn(f32)) -> (Document, V
             let mut layers = Vec::new();
             // Du fond au premier plan : l'ordre de SHOT.
             for l in p.layers.iter().rev() {
-                layers.push(layer(&mut doc, sb, dir, l, p.frames, place0, &mut cels, &mut notes, &shot.name));
+                layers.push(layer(&mut doc, sb, dir, l, p.frames, place0, &mut cels, &mut pre, &mut notes, &shot.name));
             }
             // Groupes de Storyboard Pro : un dossier de calques SHOT (nom, visibilité), au-dessus de ses calques.
             let mut groups: Vec<(String, bool)> = Vec::new();
@@ -176,7 +177,7 @@ pub fn build(sb: &SbProject, dir: &Path, progress: &dyn Fn(f32)) -> (Document, V
             }
             doc.panels.push(panel);
             done += 1;
-            progress(0.85 * done as f32 / total.max(1) as f32);
+            progress(0.7 + 0.15 * done as f32 / total.max(1) as f32);
         }
     }
     report(&notes, &mut warnings);
@@ -221,6 +222,7 @@ fn layer(
     frames: usize,
     base: Place,
     cels: &mut HashMap<u64, crate::document::CelId>,
+    pre: &mut HashMap<u64, Fait>,
     notes: &mut Notes,
     shot: &str,
 ) -> Layer {
@@ -249,48 +251,115 @@ fn layer(
     if l.drawing.is_empty() {
         return layer;
     }
+    let (path, place, key) = cible(sb, dir, l, base);
+    if let Some(&c) = cels.get(&key) {
+        layer.frames = vec![Some(c); frames];
+        return layer;
+    }
+    let (folder, name) = sb.elements.get(&l.element).cloned().unwrap_or_else(|| ("Draw".into(), "Draw".into()));
+    // Déjà fait en parallèle (`precalculer`) ; sinon ici.
+    let fait = pre.remove(&key).unwrap_or_else(|| faire(&path, place, l.vector, doc.width, doc.height));
+    let (cel, skipped, bitmap) = match fait {
+        Fait::Absent => {
+            notes.missing.push(format!("{folder}/{name}-{} (plan {shot})", l.drawing));
+            return layer;
+        }
+        Fait::Illisible(e) => {
+            notes.unreadable.push(format!("{name}-{} ({e})", l.drawing));
+            return layer;
+        }
+        Fait::Dessin { cel, skipped, bitmap, vide } => {
+            if vide {
+                notes.empty_vectors += 1;
+            }
+            (cel, skipped, bitmap)
+        }
+    };
+    notes.skipped_zones += skipped;
+    if bitmap {
+        layer.kind = LayerKind::Bitmap;
+        notes.bitmap_placed += 1;
+    } else {
+        layer.kind = LayerKind::Vector;
+    }
+    let id = doc.add_cel(cel);
+    cels.insert(key, id);
+    layer.frames = vec![Some(id); frames];
+    layer
+}
+
+/// Fichier, placement et clé d'un calque de Storyboard Pro (deux calques de même fichier et de même placement partagent
+/// un seul dessin).
+fn cible(sb: &SbProject, dir: &Path, l: &SbLayer, base: Place) -> (PathBuf, Place, u64) {
     let (folder, name) = sb.elements.get(&l.element).cloned().unwrap_or_else(|| ("Draw".into(), "Draw".into()));
     let path: PathBuf = dir.join("elements").join(&folder).join(format!("{name}-{}.tvg", l.drawing));
     let place = Place { offset: l.offset, scale: if l.scale == 0.0 { 1.0 } else { l.scale }, angle: l.angle, ..base };
     let mut h = std::collections::hash_map::DefaultHasher::new();
     (&path, place.key(), l.vector).hash(&mut h);
-    let key = h.finish();
-    if let Some(&c) = cels.get(&key) {
-        layer.frames = vec![Some(c); frames];
-        return layer;
-    }
-    let bytes = match std::fs::read(&path) {
-        Ok(b) => b,
-        Err(_) => {
-            notes.missing.push(format!("{folder}/{name}-{} (plan {shot})", l.drawing));
-            return layer;
-        }
-    };
+    (path, place, h.finish())
+}
+
+/// Un dessin lu, décodé et rendu à la taille de la feuille.
+enum Fait {
+    Absent,
+    Illisible(String),
+    Dessin { cel: Cel, skipped: usize, bitmap: bool, vide: bool },
+}
+
+/// Lit et rend un dessin (indépendant du projet : peut se faire sur n'importe quel fil).
+fn faire(path: &Path, place: Place, vector: bool, width: usize, height: usize) -> Fait {
+    let Ok(bytes) = std::fs::read(path) else { return Fait::Absent };
     let drawing = match tvg::read(&bytes) {
         Ok(d) => d,
-        Err(e) => {
-            notes.unreadable.push(format!("{name}-{} ({e})", l.drawing));
-            return layer;
-        }
+        Err(e) => return Fait::Illisible(e.to_string()),
     };
-    notes.skipped_zones += drawing.skipped;
-    let cel = if let (Some(bm), false) = (&drawing.bitmap, l.vector && !drawing.shapes.is_empty()) {
-        layer.kind = LayerKind::Bitmap;
-        notes.bitmap_placed += 1;
-        Cel::bitmap(bitmap_raster(doc, bm, &place))
-    } else {
-        layer.kind = LayerKind::Vector;
-        let mut cel = Cel { raster: Raster::new(doc.width, doc.height), vector: Some(vector_drawing(&drawing, &place)), version: 0, fond: None };
-        if cel.vector.as_ref().is_some_and(|v| v.elements.is_empty()) {
-            notes.empty_vectors += 1;
+    let skipped = drawing.skipped;
+    if let (Some(bm), false) = (&drawing.bitmap, vector && !drawing.shapes.is_empty()) {
+        return Fait::Dessin { cel: Cel::bitmap(bitmap_raster(width, height, bm, &place)), skipped, bitmap: true, vide: false };
+    }
+    let mut cel = Cel { raster: Raster::new(width, height), vector: Some(vector_drawing(&drawing, &place)), version: 0, fond: None };
+    let vide = cel.vector.as_ref().is_some_and(|v| v.elements.is_empty());
+    cel.rerender();
+    Fait::Dessin { cel, skipped, bitmap: false, vide }
+}
+
+/// Tous les dessins du projet, lus et rendus en parallèle (un fil par cœur) : c'est ce qui prend le temps de l'import
+/// (3 minutes pour 3 800 dessins sur un seul fil). Le résultat est le même qu'en série ; `progress` (0 à `part`) est appelé
+/// d'ici seulement.
+fn precalculer(sb: &SbProject, dir: &Path, base: Place, size: (usize, usize), progress: &dyn Fn(f32), part: f32) -> HashMap<u64, Fait> {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    let mut jobs: Vec<(u64, PathBuf, Place, bool)> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for shot in &sb.shots {
+        for p in &shot.panels {
+            for l in p.layers.iter().filter(|l| !l.drawing.is_empty()) {
+                let (path, place, key) = cible(sb, dir, l, base);
+                if seen.insert(key) {
+                    jobs.push((key, path, place, l.vector));
+                }
+            }
         }
-        cel.rerender();
-        cel
-    };
-    let id = doc.add_cel(cel);
-    cels.insert(key, id);
-    layer.frames = vec![Some(id); frames];
-    layer
+    }
+    let (next, done) = (AtomicUsize::new(0), AtomicUsize::new(0));
+    let out = std::sync::Mutex::new(HashMap::with_capacity(jobs.len()));
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).clamp(1, 16);
+    std::thread::scope(|s| {
+        let mut handles = Vec::new();
+        for _ in 0..threads {
+            handles.push(s.spawn(|| loop {
+                let i = next.fetch_add(1, Ordering::SeqCst);
+                let Some((key, path, place, vector)) = jobs.get(i) else { break };
+                let fait = faire(path, *place, *vector, size.0, size.1);
+                out.lock().unwrap_or_else(|e| e.into_inner()).insert(*key, fait);
+                done.fetch_add(1, Ordering::SeqCst);
+            }));
+        }
+        while !handles.iter().all(|h| h.is_finished()) {
+            progress(part * done.load(Ordering::SeqCst) as f32 / jobs.len().max(1) as f32);
+            std::thread::sleep(std::time::Duration::from_millis(40));
+        }
+    });
+    out.into_inner().unwrap_or_else(|e| e.into_inner())
 }
 
 /// Les zones d'un dessin : une zone remplie par suite de zones de même couleur dans un même calque
@@ -326,8 +395,8 @@ fn vector_drawing(d: &TvgDrawing, place: &Place) -> VectorDrawing {
     VectorDrawing { elements }
 }
 
-fn bitmap_raster(doc: &Document, bm: &tvg::TvgBitmap, place: &Place) -> Raster {
-    let mut out = Raster::new(doc.width, doc.height);
+fn bitmap_raster(width: usize, height: usize, bm: &tvg::TvgBitmap, place: &Place) -> Raster {
+    let mut out = Raster::new(width, height);
     let dx = (place.center[0] + place.offset[0] * place.field).round() as i64;
     let dy = (place.center[1] - place.offset[1] * place.field).round() as i64;
     for y in 0..bm.height {
