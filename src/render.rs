@@ -319,6 +319,10 @@ pub fn plan_bounds(doc: &Document, plan: &Plan) -> Area {
             }
             None => Area::around((x0, y0), (x1, y1)),
         };
+        // (L'aplat sous le trait déborde du trait de son débord : une tuile de plus autour, quand le trait sort de la feuille.
+        // Un trait qui reste dans la feuille a son aplat dans la feuille : rien de plus à composer.)
+        let sort = r.x0 < 0 || r.y0 < 0 || r.x1 > doc.width as i64 || r.y1 > doc.height as i64;
+        let r = if item.fond.is_some() && sort { Area { x0: r.x0 - t, y0: r.y0 - t, x1: r.x1 + t, y1: r.y1 + t } } else { r };
         area = area.union(&r);
     }
     area
@@ -363,10 +367,15 @@ pub fn plan_world_tiles(doc: &Document, plan: &Plan, area: Area) -> Vec<(i32, i3
                 }
             }
             None => {
+                // (L'aplat sous le trait déborde du trait de son débord : les tuiles voisines comptent aussi.)
+                let around = if item.fond.is_some() { 1 } else { 0 };
                 for id in cel.raster.drawn_ids() {
                     let (tx, ty) = cel.raster.key_of(id);
-                    if wanted(tx as i64, ty as i64) {
-                        set.insert((tx, ty));
+                    for (dx, dy) in (-around..=around).flat_map(|dy| (-around..=around).map(move |dx| (dx, dy))) {
+                        let (nx, ny) = (tx as i64 + dx, ty as i64 + dy);
+                        if wanted(nx, ny) {
+                            set.insert((nx as i32, ny as i32));
+                        }
                     }
                 }
             }

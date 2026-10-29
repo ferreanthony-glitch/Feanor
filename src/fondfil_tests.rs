@@ -95,7 +95,7 @@ fn a_known_shape_is_composed_without_the_line() {
     // Seule la strate Fond a changé : la forme déjà connue suffit.
     let r = FondReglages::default();
     let line = ring(100.0);
-    let forme = Arc::new(silhouette(&line, &r));
+    let forme = Arc::new(crate::fond::Couverture::depuis_feuille(400, 200, silhouette(&line, &r)));
     let d = Demande { id: 1, version: 1, src_version: 1, reglages: r, width: 400, height: 200, forme: Some(forme.clone()), trait_: None, peinture: None, coupe: None };
     let (f, raster) = calculer(&d);
     assert!(Arc::ptr_eq(&f, &forme));

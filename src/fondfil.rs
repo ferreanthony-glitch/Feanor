@@ -20,7 +20,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use crate::document::CelId;
-use crate::fond::FondReglages;
+use crate::fond::{Couverture, FondReglages};
 use crate::raster::Raster;
 
 /// Ce qu'il faut pour calculer un fond.
@@ -36,7 +36,7 @@ pub struct Demande {
     pub height: usize,
     /// La forme, si elle est déjà connue pour cette version du dessin (seule la strate Fond a
     /// changé) ; sinon on la tire de `trait_`.
-    pub forme: Option<Arc<Vec<u8>>>,
+    pub forme: Option<Arc<Couverture>>,
     pub trait_: Option<Raster>,
     pub peinture: Option<Raster>,
     pub coupe: Option<Raster>,
@@ -48,7 +48,7 @@ pub struct Fini {
     pub gen: u64,
     pub version: u64,
     pub src_version: u64,
-    pub forme: Arc<Vec<u8>>,
+    pub forme: Arc<Couverture>,
     pub raster: Raster,
     /// Durée du calcul, pour les mesures.
     #[allow(dead_code)]
@@ -56,15 +56,16 @@ pub struct Fini {
 }
 
 /// Le calcul lui-même (celui du direct : `fx::fond_shown`).
-pub fn calculer(d: &Demande) -> (Arc<Vec<u8>>, Raster) {
+pub fn calculer(d: &Demande) -> (Arc<Couverture>, Raster) {
     let forme = match &d.forme {
         Some(f) => f.clone(),
         None => match &d.trait_ {
-            Some(t) => Arc::new(crate::fond::silhouette(t, &d.reglages)),
-            None => Arc::new(vec![0u8; d.width * d.height]),
+            // (Toile infinie : la forme suit le trait partout où il est, hors de la feuille aussi.)
+            Some(t) => Arc::new(crate::fond::silhouette_monde(t, &d.reglages)),
+            None => Arc::new(Couverture::default()),
         },
     };
-    let raster = crate::fond::compose(&forme, d.width, d.height, d.reglages.couleur, d.peinture.as_ref(), d.coupe.as_ref());
+    let raster = crate::fond::compose_monde(&forme, d.width, d.height, d.reglages.couleur, d.peinture.as_ref(), d.coupe.as_ref());
     (forme, raster)
 }
 

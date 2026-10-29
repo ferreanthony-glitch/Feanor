@@ -430,6 +430,9 @@ mod monde_tests;
 // Toile infinie : tuiles hors de la feuille (essais).
 #[cfg(test)]
 mod toile_tests;
+// Toile infinie : un dessin fait loin de la feuille n'est coupé nulle part (essais).
+#[cfg(test)]
+mod toile_coupee_tests;
 mod historyui;
 #[cfg(test)]
 mod historyui_tests;

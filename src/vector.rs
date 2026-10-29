@@ -933,7 +933,21 @@ impl VectorDrawing {
             let (a, b): (Vec<_>, Vec<_>) = self.elements.iter().zip(&chosen).partition(|(_, &c)| c);
             (a.into_iter().map(|(e, _)| e).collect(), b.into_iter().map(|(e, _)| e).collect())
         };
-        let base = render_in_bands(&rest, width, height, (0, 0), (width, height));
+        // Le reste du dessin garde ce qu'il a hors de la feuille (toile infinie : sinon il disparaîtrait pendant le geste) ;
+        // les bandes de rendu (en parallèle) ne posent que la feuille, elles servent quand tout y est.
+        let sort = |e: &&Element| {
+            let b = e.bounds().expand(1.5);
+            !b.is_finite() || b.min.x < 0.0 || b.min.y < 0.0 || b.max.x > width as f32 || b.max.y > height as f32
+        };
+        let base = if rest.iter().any(sort) {
+            let mut base = Raster::new(width, height);
+            for e in &rest {
+                render_element(&mut base, e);
+            }
+            base
+        } else {
+            render_in_bands(&rest, width, height, (0, 0), (width, height))
+        };
         let sheet = render_in_bands(&picked, width + l + r, height + t + d, (l as i64, t as i64), (width, height));
         (base, sheet, (l, t))
     }
@@ -946,8 +960,10 @@ impl VectorDrawing {
         for e in &self.elements {
             match e {
                 Element::Stroke { points, color, opacity, hardness, brush: Some(_), trace } if e.cache_bytes() == 0 => {
-                    let (sheet, _) = render_stroke_alone(width, height, points, *color, *opacity, *hardness, None, trace, Rect::NOTHING, false);
-                    blit_sheet(&mut raster, &sheet, Rect::EVERYTHING, (0, 0), false);
+                    // (Toile infinie : le trait approché montre aussi ce qui sort de la feuille, comme le rendu exact qui le
+                    // remplacera.)
+                    let (sheet, off) = render_stroke_alone(width, height, points, *color, *opacity, *hardness, None, trace, e.bounds().expand(1.5), true);
+                    blit_sheet(&mut raster, &sheet, Rect::EVERYTHING, (-off.0, -off.1), true);
                 }
                 _ => render_element(&mut raster, e),
             }

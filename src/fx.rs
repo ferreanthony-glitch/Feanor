@@ -1503,14 +1503,14 @@ pub(crate) fn drafting() -> bool {
 
 /// Formes de fond gardées (`fond::silhouette`, pour refaire le fond tuile par tuile pendant qu'on
 /// peint dedans) : numéro du fond → version du dessin, forme, dernier usage.
-type Cover = (u64, Arc<Vec<u8>>, u64);
+type Cover = (u64, Arc<crate::fond::Couverture>, u64);
 static COVERS: Mutex<BTreeMap<CelId, Cover>> = Mutex::new(BTreeMap::new());
 const COVERS_MAX: usize = 16;
 
 /// Essais : pose une forme de fond gardée, comme celle qu'un dessin laisse après avoir été vu.
 #[cfg(test)]
 pub(crate) fn garder_une_forme_pour_essai(id: CelId, version: u64) {
-    COVERS.lock().unwrap_or_else(|e| e.into_inner()).insert(id, (version, Arc::new(vec![255; 16]), 0));
+    COVERS.lock().unwrap_or_else(|e| e.into_inner()).insert(id, (version, Arc::new(crate::fond::Couverture::depuis_feuille(4, 4, vec![255; 16])), 0));
 }
 
 /// Essais : combien de formes de fond sont gardées.
@@ -1520,13 +1520,14 @@ pub(crate) fn formes_de_fond_gardees() -> usize {
 }
 
 /// La forme du fond `id` du dessin `src` (calculée une fois par version du dessin).
-fn cover_of(id: CelId, src: &Cel, r: &crate::fond::FondReglages, tick: u64) -> Arc<Vec<u8>> {
+fn cover_of(id: CelId, src: &Cel, r: &crate::fond::FondReglages, tick: u64) -> Arc<crate::fond::Couverture> {
     let mut covers = COVERS.lock().unwrap_or_else(|e| e.into_inner());
     if let Some(e) = covers.get_mut(&id).filter(|e| e.0 == src.version) {
         e.2 = tick;
         return e.1.clone();
     }
-    let cover = Arc::new(crate::fond::silhouette(&src.raster, r));
+    // (Toile infinie : la forme suit le trait partout où il est, hors de la feuille aussi.)
+    let cover = Arc::new(crate::fond::silhouette_monde(&src.raster, r));
     covers.insert(id, (src.version, cover.clone(), tick));
     if covers.len() > COVERS_MAX {
         if let Some(old) = covers.iter().min_by_key(|(_, e)| e.2).map(|(k, _)| *k) {
@@ -1578,7 +1579,7 @@ fn fond_shown<'a>(doc: &'a Document, item: &crate::render::PlanItem, r: &crate::
         let (w, h) = (src.raster.width, src.raster.height);
         let cover = cover_of(id, src, r, tick);
         let strate = src.fond.as_deref();
-        let raster = crate::fond::compose(&cover, w, h, r.couleur, strate.map(|s| &s.peinture.raster), strate.map(|s| &s.coupe));
+        let raster = crate::fond::compose_monde(&cover, w, h, r.couleur, strate.map(|s| &s.peinture.raster), strate.map(|s| &s.coupe));
         Cel { raster, vector: None, version, fond: None }
     });
     Some(Shown::Fx(derived))
@@ -1716,8 +1717,10 @@ pub fn fond_patch(doc: &Document, cel: CelId, r: &crate::fond::FondReglages, til
         let mut raster = old.raster.clone();
         let strate = src.fond.as_deref();
         let n = raster.tiles.len();
-        for &idx in tiles.iter().filter(|&&i| i < n) {
-            crate::fond::compose_tile(&mut raster, idx, &cover, r.couleur, strate.map(|s| &s.peinture.raster), strate.map(|s| &s.coupe));
+        // (Les tuiles de la feuille par leur rang, celles d'hors de la feuille par leur numéro codé : on peint dans l'aplat
+        // partout.)
+        for &idx in tiles.iter().filter(|&&i| crate::raster::is_outer_id(i) || i < n) {
+            crate::fond::compose_tuile_monde(&mut raster, idx, &cover, r.couleur, strate.map(|s| &s.peinture.raster), strate.map(|s| &s.coupe));
         }
         Arc::new(Cel { raster, vector: None, version: old.version, fond: None })
     });

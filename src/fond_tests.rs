@@ -289,3 +289,79 @@ fn painting_a_mask_keeps_the_old_tiles() {
     assert_eq!(old.len(), 2);
     assert_eq!(r.get(5, 50).a(), 0, "effacé");
 }
+
+/// Pose le pixel (`x`, `y`) du monde (hors de la feuille aussi).
+fn put_i(r: &mut Raster, x: i64, y: i64, c: Color32) {
+    let id = r.id_of(x.div_euclid(TILE as i64) as i32, y.div_euclid(TILE as i64) as i32);
+    r.tile_mut(id)[(y.rem_euclid(TILE as i64) as usize) * TILE + x.rem_euclid(TILE as i64) as usize] = c;
+}
+
+#[test]
+fn the_world_shape_of_a_line_inside_the_sheet_is_the_sheet_shape() {
+    use crate::fond::silhouette_monde;
+    let r = FondReglages::default();
+    let u = line(200, 200, |x, y| {
+        let side = ((x - 60.0).abs() < 1.5 || (x - 140.0).abs() < 1.5) && y > 80.0;
+        let top = (y - 80.0).abs() < 1.5 && (60.0..=140.0).contains(&x);
+        side || top
+    });
+    let cas = [
+        ("anneau", ring(0.0), r),
+        ("trou de 8", ring(8.0), r),
+        ("trou de 40", ring(40.0), r),
+        ("U touchant le bord", u.clone(), r),
+        ("U sans le bord", u, FondReglages { bord: false, ..r }),
+        ("débord large", ring(0.0), FondReglages { debord: 12, ..r }),
+        ("rien", Raster::new(64, 64), r),
+    ];
+    for (nom, l, r) in cas {
+        assert_eq!(silhouette_monde(&l, &r).feuille(l.width, l.height), silhouette(&l, &r), "{nom} : un trait qui reste dans la feuille a la même forme qu'avant");
+    }
+}
+
+#[test]
+fn a_line_leaving_the_sheet_gets_its_shape_and_its_fond_outside_too() {
+    use crate::fond::{compose_monde, compose_tuile_monde, silhouette_monde};
+    // Un anneau de centre (0, 100), rayon 50 : la moitié est hors de la feuille.
+    let mut l = Raster::new(200, 200);
+    for y in 30i64..170 {
+        for x in -60i64..=60 {
+            let d = ((x as f32 + 0.5).powi(2) + (y as f32 + 0.5 - 100.0).powi(2)).sqrt();
+            if (48.5..=51.5).contains(&d) {
+                put_i(&mut l, x, y, Color32::BLACK);
+            }
+        }
+    }
+    let r = FondReglages::default();
+    let cover = silhouette_monde(&l, &r);
+    for (x, y) in [(0, 100), (-20, 100), (20, 100), (-45, 100), (45, 100)] {
+        assert_eq!(cover.get(x, y), 255, "le dedans ({x}, {y})");
+    }
+    assert_eq!(cover.get(-60, 100), 0, "au-delà du débord");
+    assert_eq!(cover.get(-20, 20), 0, "loin dehors");
+    // Pas de bord vertical à la limite de la feuille : la forme est symétrique de part et d'autre.
+    for y in 60..140 {
+        assert_eq!(cover.get(-3, y), cover.get(2, y), "y = {y}");
+    }
+    let couleur = [250, 240, 200];
+    let fond = compose_monde(&cover, 200, 200, couleur, None, None);
+    assert_eq!(fond.get_i(-20, 100), Color32::from_rgb(250, 240, 200), "le fond est aussi hors de la feuille");
+    assert_eq!(fond.get_i(20, 100), fond.get_i(-20, 100));
+    assert!(!fond.outer.is_empty(), "ses tuiles hors de la feuille sont rangées à part");
+    assert_eq!(fond.get_i(-60, 100).a(), 0);
+    // Ce qu'on peint dans le fond reste dans la forme, loin de la feuille aussi ; refait tuile par tuile = en entier.
+    let mut paint = Raster::new(200, 200);
+    put_i(&mut paint, -20, 100, Color32::from_rgb(0, 200, 0));
+    put_i(&mut paint, 20, 100, Color32::from_rgb(0, 200, 0));
+    put_i(&mut paint, -300, 100, Color32::from_rgb(0, 200, 0));
+    let whole = compose_monde(&cover, 200, 200, couleur, Some(&paint), None);
+    assert_eq!(whole.get_i(-20, 100), Color32::from_rgb(0, 200, 0));
+    assert_eq!(whole.get_i(-300, 100).a(), 0, "hors de la forme : rien, même peint");
+    let mut live = compose_monde(&cover, 200, 200, couleur, None, None);
+    for id in paint.drawn_ids() {
+        compose_tuile_monde(&mut live, id, &cover, couleur, Some(&paint), None);
+    }
+    for (x, y) in [(-20, 100), (20, 100), (-30, 100), (30, 100), (-300, 100)] {
+        assert_eq!(live.get_i(x, y), whole.get_i(x, y), "({x}, {y})");
+    }
+}
