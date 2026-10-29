@@ -10,7 +10,7 @@ use crate::app::{App, Tool};
 use crate::document::{Document, Layer, LayerKind};
 use crate::fond::{self, FondReglages};
 use crate::perf_tests::{banc, se_reposer, Banc};
-use crate::personnages::{self, Neutre};
+use crate::personnages::{self, Brosse};
 use crate::personnagesui::Choix;
 use crate::render;
 use crate::vtools::VSelection;
@@ -137,7 +137,7 @@ fn a_brush_without_aplat_colour_leaves_the_layer_colour_alone() {
     let (mut b, _) = banc_dessin();
     // Un calque d'aplat vert fluo (réglé à la main) : la pastille « classique » et une pastille sans aplat n'y touchent pas.
     b.app.layers_mut()[0].fond.as_mut().unwrap().couleur = VERT;
-    b.app.perso_classique();
+    b.app.perso_lacher();
     anneau(&mut b.app, 60.0, 60.0, 160.0, 160.0);
     assert_eq!(couleur_du_calque(&b.app), VERT, "la pastille classique ne change rien");
     let sans = b.app.perso_ajouter().expect("personnage sans aplat");
@@ -232,8 +232,8 @@ fn cutting_a_piece_that_sticks_out_leaves_no_white() {
 // ------------------------------------------------------------------------------------ une couleur neutre, dans le calque courant
 
 fn neutre_a_aplat(b: &Banc) -> (usize, [u8; 3]) {
-    let i = b.app.settings.neutral_colors.iter().position(|n| n.fill.is_some()).expect("une couleur neutre à aplat");
-    let fond = b.app.settings.neutral_colors[i].fill.expect("aplat");
+    let i = b.app.settings.brosses_classiques.iter().position(|n| n.fill.is_some()).expect("une couleur neutre à aplat");
+    let fond = b.app.settings.brosses_classiques[i].fill.expect("aplat");
     (i, fond)
 }
 
@@ -242,7 +242,7 @@ fn a_neutral_colour_with_an_aplat_gives_it_to_the_current_layer_and_leaves_no_wh
     let (mut b, _) = banc_dessin();
     let (i, gris) = neutre_a_aplat(&b);
     let couches = b.app.layers().len();
-    b.app.perso_choisir(Choix::Neutre(i));
+    b.app.perso_choisir(Choix::Classique(i));
     anneau(&mut b.app, 40.0, 60.0, 140.0, 160.0);
     anneau(&mut b.app, 200.0, 150.0, 300.0, 250.0);
     attendre(&mut b);
@@ -265,7 +265,7 @@ fn a_neutral_colour_on_a_layer_without_aplat_starts_it_in_its_own_colour() {
     let mut b = banc(doc, false);
     b.app.tool = Tool::Brush;
     let (i, gris) = neutre_a_aplat(&b);
-    b.app.perso_choisir(Choix::Neutre(i));
+    b.app.perso_choisir(Choix::Classique(i));
     anneau(&mut b.app, 40.0, 60.0, 140.0, 160.0);
     attendre(&mut b);
     assert_eq!(couleur_du_calque(&b.app), gris);
@@ -276,7 +276,7 @@ fn a_neutral_colour_on_a_layer_without_aplat_starts_it_in_its_own_colour() {
 
 #[test]
 fn the_original_neutral_colours_are_three_greys_darker_line_on_lighter_aplat_getting_lighter() {
-    let d = personnages::neutres_par_defaut();
+    let d = personnages::classiques_par_defaut();
     assert_eq!(d.iter().map(|n| n.name.as_str()).collect::<Vec<_>>(), ["Gris 1", "Gris 2", "Gris 3"]);
     assert_eq!(d[0].line, [0x1E; 3]);
     assert_eq!(d[0].fill, Some([0x8C; 3]));
@@ -293,11 +293,11 @@ fn the_original_neutral_colours_are_three_greys_darker_line_on_lighter_aplat_get
 #[test]
 fn the_reset_button_of_the_neutral_colours_gives_the_three_greys_and_leaves_the_project_alone() {
     let (mut b, lou) = banc_dessin();
-    b.app.settings.neutral_colors = vec![Neutre { name: "Sépia".into(), line: [100, 60, 30], fill: None }];
-    b.app.perso_choisir(Choix::Neutre(0));
+    b.app.settings.brosses_classiques = vec![Brosse::classique("Sépia", [100, 60, 30], None)];
+    b.app.perso_choisir(Choix::Classique(0));
     let personnages = b.app.doc.personnages.clone();
-    b.app.perso_neutres_d_origine();
-    assert_eq!(b.app.settings.neutral_colors, personnages::neutres_par_defaut());
+    b.app.perso_d_origine(crate::personnages::Type::Classique);
+    assert_eq!(b.app.settings.brosses_classiques, personnages::classiques_par_defaut());
     assert!(b.app.settings_a_ecrire, "le réglage de l'application s'écrit");
     assert_eq!(b.app.perso.actif, None, "la couleur choisie n'existe plus");
     assert_eq!(b.app.doc.personnages, personnages, "les personnages du projet ne bougent pas");

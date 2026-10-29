@@ -114,7 +114,7 @@ pub enum Groupe {
     Vignettes,
     /// Les cadres de caméra dessinés dans les cases : l'aimant et la couleur.
     CadresCamera,
-    /// Le décor partagé entre les cases d'un plan (`decor.rs`) : le report, la couleur et la taille des brosses.
+    /// Le décor partagé entre les cases d'un plan (`decor.rs`) : le report et la sorte du calque (les brosses Décor, elles, sont dans le panneau Brosses perso).
     Decor,
     Raccourcis,
     Programmes,
@@ -244,8 +244,7 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Vignettes, G::CadresCamera, "vignettes.couleur_cadre", "Couleur des cadres de caméra", "bleu lettres flèche empreinte export"),
     r(O::Vignettes, G::Decor, "vignettes.report_decor", "Report du décor", "continuité coupe plan suivant case réunir décor partagé"),
     r(O::Vignettes, G::Decor, "vignettes.calque_decor", "Calque Décor", "vectoriel bitmap pixels sorte créer brosses du décor pastilles"),
-    r(O::Vignettes, G::Decor, "vignettes.couleur_decor", "Couleur du décor", "gris bleu brosses pastilles"),
-    r(O::Vignettes, G::Decor, "vignettes.brosses_decor", "Taille des brosses du décor", "crayon feutre aplat pixels"),
+    r(O::Vignettes, G::Decor, "vignettes.brosses_decor", "Brosses Décor", "couleur trait aplat taille crayon feutre pinceau plein pixels panneau brosses perso pastilles"),
     // ---- Raccourcis
     r(O::Raccourcis, G::Raccourcis, "raccourcis.jeu", "Jeu de raccourcis", "clavier storyboard pro touches"),
     r(O::Raccourcis, G::Raccourcis, "raccourcis.liste", "Voir et changer les raccourcis", "assigner touche"),

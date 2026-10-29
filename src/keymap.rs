@@ -489,12 +489,14 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("references.filtre_plan", "Références : montrer seulement celles du plan courant (oui / non)", true, false),
     act("references.tout_voir", "Références : tout voir sur le tableau", true, false),
     // Brosse par personnage (`personnagesui.rs`).
-    act("vue.personnages", "Panneau Personnages (ouvrir / fermer)", true, false),
-    act("perso.barre", "Pastilles des personnages le long du dessin (montrer / cacher, dans cet espace de travail)", true, false),
-    act("perso.ajouter", "Nouveau personnage", true, false),
-    act("perso.suivant", "Personnage suivant (trait et aplat)", true, false),
-    act("perso.precedent", "Personnage précédent (trait et aplat)", true, false),
-    act("perso.aucun", "Ne plus dessiner en personnage (couleur libre)", true, false),
+    act("vue.personnages", "Panneau Brosses perso (ouvrir / fermer)", true, false),
+    act("perso.barre", "Pastilles des brosses perso dans la barre du haut (montrer / cacher, dans cet espace de travail)", true, false),
+    act("perso.ajouter", "Nouvelle brosse personnage", true, false),
+    act("perso.ajouter_classique", "Nouvelle brosse classique", true, false),
+    act("perso.ajouter_decor", "Nouvelle brosse décor", true, false),
+    act("perso.suivant", "Brosse perso suivante (trait et aplat)", true, false),
+    act("perso.precedent", "Brosse perso précédente (trait et aplat)", true, false),
+    act("perso.aucun", "Lâcher la brosse perso (couleur libre, dans le calque courant)", true, false),
     // Le panneau « Planche » : le sens de lecture de la planche et les textes à côté des cases (`vignettespanneau.rs`).
     act("vue.vignettes_panneau", "Panneau Planche (ouvrir / fermer)", true, false),
     act("vignettes.sens_lignes", "Vignettes : lire en lignes (de gauche à droite, le texte sous les cases)", true, false),
@@ -502,7 +504,6 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("vignettes.texte_action", "Vignettes : montrer l'action à côté des cases (oui / non)", true, false),
     act("vignettes.texte_dialogue", "Vignettes : montrer le dialogue à côté des cases (oui / non)", true, false),
     act("vignettes.texte_notes", "Vignettes : montrer les notes à côté des cases (oui / non)", true, false),
-    act("perso.classique", "Pastille classique : le pinceau de base, sans personnage ni décor", true, false),
     // Barre des panneaux (`barrepanneaux.rs`) : ouvrir, mettre devant ou fermer un panneau de côté.
     act("vue.reglages", "Panneau Réglages de l'outil (ouvrir / fermer)", true, false),
     // (L'ancien panneau Pinceaux : la liste des brosses est dans les réglages de l'outil ; le raccourci qu'on lui avait

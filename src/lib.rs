@@ -283,6 +283,8 @@ mod decorui;
 mod calquespastilles;
 #[cfg(test)]
 mod calques_pastilles_tests;
+#[cfg(test)]
+mod brosses_perso_tests;
 mod vignettesreglages;
 #[cfg(test)]
 mod vignettes_tests;

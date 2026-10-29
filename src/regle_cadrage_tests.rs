@@ -334,9 +334,9 @@ fn the_pastilles_are_a_row_at_the_right_end_of_the_top_bar_and_leave_the_drawing
     let barre = Rect::from_min_max(egui::pos2(dessin.left(), dessin.top() - crate::viewbar::VIEW_BAR_H), egui::pos2(dessin.right(), dessin.top()));
     // Aucun personnage au départ : « classique », les trois couleurs neutres, les brosses du décor, « + », l'icône du panneau.
     let cases: Vec<Case> = b.app.perso.cases.iter().map(|(_, c)| *c).collect();
-    assert_eq!(cases.first(), Some(&Case::Classique));
+    assert_eq!(cases.first(), Some(&Case::Choix(Choix::Classique(0))), "plus de pastille ⊘ en tête (2026-10-29)");
     assert!(cases.contains(&Case::Plus) && cases.contains(&Case::Panneau));
-    assert_eq!(cases.iter().filter(|c| matches!(c, Case::Choix(Choix::Neutre(_)))).count(), 3, "{cases:?}");
+    assert_eq!(cases.iter().filter(|c| matches!(c, Case::Choix(Choix::Classique(_)))).count(), 3, "{cases:?}");
     // Une rangée : toutes les cases l'une à côté de l'autre, dans la barre, à son extrémité droite.
     let rects: Vec<Rect> = b.app.perso.cases.iter().map(|(r, _)| *r).collect();
     for w in rects.windows(2) {
@@ -351,9 +351,9 @@ fn the_pastilles_are_a_row_at_the_right_end_of_the_top_bar_and_leave_the_drawing
     // À droite de tout ce que la barre a à gauche (les icônes des vues, la règle).
     assert!(gauche > barre.left() + 120.0, "après les icônes de la barre : {gauche}");
     // Même taille de case et mêmes écarts que les icônes de la barre : la hauteur d'une case de la barre, 2 points entre deux pastilles.
-    let classique = case(&b, Case::Classique);
+    let classique = case(&b, Case::Choix(Choix::Classique(0)));
     assert!((classique.height() - crate::barres::CASE[1]).abs() < 0.5, "la hauteur d'une icône de la barre : {classique:?}");
-    let neutres: Vec<Rect> = b.app.perso.cases.iter().filter(|(_, c)| matches!(c, Case::Choix(Choix::Neutre(_)))).map(|(r, _)| *r).collect();
+    let neutres: Vec<Rect> = b.app.perso.cases.iter().filter(|(_, c)| matches!(c, Case::Choix(Choix::Classique(_)))).map(|(r, _)| *r).collect();
     for w in neutres.windows(2) {
         assert!((w[1].left() - w[0].right() - crate::barres::ECART).abs() < 0.5, "l'écart des icônes de la barre : {w:?}");
     }
@@ -408,7 +408,7 @@ fn clicking_a_pastille_chooses_it_and_draws_nothing() {
     b.chauffer(2);
     let pas = pas.min(b.app.history.undo_len());
     // Une couleur neutre : un clic la choisit, rien n'est tracé, aucune étape d'annulation.
-    let neutre = case(&b, Case::Choix(Choix::Neutre(1)));
+    let neutre = case(&b, Case::Choix(Choix::Classique(1)));
     assert_eq!(b.app.perso.actif, None);
     appuyer(&mut b, neutre.center(), PointerButton::Primary);
     assert!(b.app.stroke.is_none(), "l'appui sur une pastille ne commence aucun trait");
@@ -417,17 +417,17 @@ fn clicking_a_pastille_chooses_it_and_draws_nothing() {
     assert!(b.app.stroke.is_none(), "glisser sur la colonne ne trace rien");
     relacher(&mut b, neutre.center() + vec2(0.0, 40.0), PointerButton::Primary);
     clic(&mut b, neutre.center());
-    assert_eq!(b.app.perso.actif, Some(Choix::Neutre(1)), "le clic choisit la pastille");
+    assert_eq!(b.app.perso.actif, Some(Choix::Classique(1)), "le clic choisit la pastille");
     assert!(b.app.stroke.is_none());
     assert_eq!(b.app.history.undo_len(), pas, "choisir n'est pas une étape d'annulation");
     assert_eq!(b.app.tool, Tool::Brush);
     let cel = b.app.cel_here();
     assert!(cel.is_none_or(|c| b.app.doc.cels.get(&c).is_none_or(|c| c.raster.is_blank())), "rien n'est dessiné");
     // Un clic sur la pastille choisie la lâche.
-    clic_case(&mut b, Case::Choix(Choix::Neutre(1)));
+    clic_case(&mut b, Case::Choix(Choix::Classique(1)));
     assert_eq!(b.app.perso.actif, None);
     // Un clic entre deux pastilles (sur la colonne) ne dessine pas non plus.
-    let entre = case(&b, Case::Classique).center() + vec2(-9.0, 0.0);
+    let entre = case(&b, Case::Choix(Choix::Classique(0))).center() + vec2(-9.0, 0.0);
     appuyer(&mut b, entre, PointerButton::Primary);
     assert!(b.app.stroke.is_none(), "les marges de la colonne ne dessinent pas");
     relacher(&mut b, entre, PointerButton::Primary);
@@ -437,8 +437,10 @@ fn clicking_a_pastille_chooses_it_and_draws_nothing() {
 fn the_plus_adds_a_character_and_the_empty_pastille_lets_go() {
     let mut b = banc();
     assert!(b.app.doc.personnages.is_empty());
+    // (Adapté 2026-10-29 : le « + » ouvre un menu à trois types ; « Brosse personnage » ajoute un personnage.)
     clic_case(&mut b, Case::Plus);
-    assert_eq!(b.app.doc.personnages.len(), 1, "le « + » ajoute un personnage");
+    clic_case(&mut b, Case::Ajouter(crate::personnages::Type::Personnage));
+    assert_eq!(b.app.doc.personnages.len(), 1, "« Brosse personnage » ajoute un personnage");
     let id = b.app.doc.personnages[0].id;
     assert_eq!(b.app.perso.actif, Some(Choix::Personnage(id)), "il est choisi tout de suite");
     assert_eq!(b.app.perso.edition, None, "sans fenêtre Modifier (Anthony, 2026-10-28)");
@@ -446,10 +448,10 @@ fn the_plus_adds_a_character_and_the_empty_pastille_lets_go() {
     // Sa pastille est dans la colonne, avant les couleurs neutres.
     let rangs: Vec<Case> = b.app.perso.cases.iter().map(|(_, c)| *c).collect();
     let p = rangs.iter().position(|c| *c == Case::Choix(Choix::Personnage(id))).expect("la pastille du personnage");
-    let n = rangs.iter().position(|c| *c == Case::Choix(Choix::Neutre(0))).unwrap();
+    let n = rangs.iter().position(|c| *c == Case::Choix(Choix::Classique(0))).unwrap();
     assert!(p < n, "les personnages d'abord : {rangs:?}");
-    // La pastille « classique » le lâche.
-    clic_case(&mut b, Case::Classique);
+    // Un clic sur la brosse choisie la lâche (plus de pastille « classique »).
+    clic_case(&mut b, Case::Choix(Choix::Personnage(id)));
     assert_eq!(b.app.perso.actif, None);
     // La pastille du personnage le choisit de nouveau.
     clic_case(&mut b, Case::Choix(Choix::Personnage(id)));
@@ -460,6 +462,7 @@ fn the_plus_adds_a_character_and_the_empty_pastille_lets_go() {
 fn right_click_on_a_pastille_opens_its_menu() {
     let mut b = banc();
     clic_case(&mut b, Case::Plus);
+    clic_case(&mut b, Case::Ajouter(crate::personnages::Type::Personnage));
     // (La fenêtre Modifier ouverte par le « + » est fermée : elle n'est pas le sujet.)
     b.app.perso.edition = None;
     b.chauffer(3);
@@ -487,13 +490,14 @@ fn the_pastilles_are_also_on_the_vignettes_board() {
     let panneaux = b.app.doc.panels.len();
     let pas = b.app.history.undo_len();
     // Un clic sur une pastille la choisit et ne touche pas à la planche : ni nouveau plan, ni trait, ni annulation.
-    let neutre = case(&b, Case::Choix(Choix::Neutre(2)));
+    let neutre = case(&b, Case::Choix(Choix::Classique(2)));
     clic(&mut b, neutre.center());
-    assert_eq!(b.app.perso.actif, Some(Choix::Neutre(2)));
+    assert_eq!(b.app.perso.actif, Some(Choix::Classique(2)));
     assert_eq!(b.app.doc.panels.len(), panneaux);
     assert_eq!(b.app.history.undo_len(), pas);
     assert!(b.app.stroke.is_none());
-    // Et le « + » y ajoute un personnage aussi.
+    // Et le « + » y ajoute un personnage aussi (par son menu).
     clic_case(&mut b, Case::Plus);
+    clic_case(&mut b, Case::Ajouter(crate::personnages::Type::Personnage));
     assert_eq!(b.app.doc.personnages.len(), 1);
 }

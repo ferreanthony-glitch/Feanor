@@ -2769,6 +2769,16 @@ touches = []
 source = "SHOT (sans touche)"
 
 [[raccourci]]
+action = "perso.ajouter_classique"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "perso.ajouter_decor"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
 action = "perso.suivant"
 touches = []
 source = "SHOT (sans touche)"
@@ -2811,11 +2821,6 @@ source = "SHOT (sans touche)"
 
 [[raccourci]]
 action = "vignettes.texte_notes"
-touches = []
-source = "SHOT (sans touche)"
-
-[[raccourci]]
-action = "perso.classique"
 touches = []
 source = "SHOT (sans touche)"
 

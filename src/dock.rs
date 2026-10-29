@@ -172,7 +172,7 @@ impl Pane {
             Pane::Bruitages => "Bruitages",
             Pane::SuggestionsSonores => "Suggestions sonores",
             Pane::References => "Références",
-            Pane::Personnages => "Personnages",
+            Pane::Personnages => "Brosses perso",
             Pane::Vignettes => "Planche",
             Pane::MonPanneau => "Mon panneau",
         }

@@ -1084,8 +1084,7 @@ main (panneau Couleur, pipette, nuancier) la lâche aussi.
 - La barre se montre ou se cache **par espace de travail** (Affichage > « Montrer / Cacher la barre des personnages »,
   Ctrl+K `perso.barre`) : visible d'office en Storyboard (et dans l'espace Vignettes, quand il viendra), cachée d'office en
   Animation et en Montage.
-- Commandes à mettre sur des touches (Ctrl+K) : `perso.suivant`, `perso.precedent`, `perso.aucun`, `perso.classique` (la pastille
-  « classique », en tête de colonne : le « Pinceau rond », sans personnage ni brosse du décor), `perso.ajouter`.
+- Commandes à mettre sur des touches (Ctrl+K) : `perso.suivant`, `perso.precedent`, `perso.aucun`, `perso.ajouter`, `perso.ajouter_classique`, `perso.ajouter_decor` (brosses perso : plus de pastille « classique » ⊘, recliquer la brosse choisie la lâche).
 - Les brosses du décor (crayon, feutre gris, aplat) sont dans la colonne du dessin du Storyboard comme sur la planche des Vignettes :
   leurs traits vont dans le calque Décor du plan.
 - Choisir un personnage pendant que la sous-ligne d'un aplat est la cible du dessin ramène au **trait** : un personnage dessine

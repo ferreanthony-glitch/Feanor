@@ -76,7 +76,7 @@ impl App {
     /// réglages de l'application (`Panneau::pinceau_vecto`, `pinceau_bitmap`).
     pub(crate) fn suivre_sorte_pinceau(&mut self) {
         // (Une brosse du décor a ses réglages, sur un calque bitmap : le pinceau de chaque sorte attend qu'on la lâche, `decorui.rs`.)
-        if self.perso.decor.is_some() {
+        if self.decor_actif().is_some() {
             return;
         }
         let Some(l) = self.layers().get(self.cur_layer) else { return };

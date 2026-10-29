@@ -45,37 +45,30 @@ pub enum Genre {
 impl Genre {
     pub const ALL: [Genre; 3] = [Genre::Crayon, Genre::Feutre, Genre::Aplat];
 
+    /// Le nom du pinceau d'une brosse Décor. (« Pinceau plein » et non « Aplat » : l'aplat est la couleur sous le trait.)
     pub fn nom(self) -> &'static str {
         match self {
-            Genre::Crayon => "Crayon du décor",
-            Genre::Feutre => "Feutre gris du décor",
-            Genre::Aplat => "Aplat du décor",
+            Genre::Crayon => "Crayon",
+            Genre::Feutre => "Feutre",
+            Genre::Aplat => "Pinceau plein",
         }
     }
 
+    /// Ce que fait le pinceau (bulles de la barre et du panneau).
     pub fn description(self) -> &'static str {
         match self {
-            Genre::Crayon => "Un crayon fin pour esquisser le décor. Ses traits vont toujours dans le calque Décor, partagé par les cases du plan.",
-            Genre::Feutre => "Un feutre large et translucide pour poser les valeurs du décor. Ses traits vont toujours dans le calque Décor, partagé par les cases du plan.",
-            Genre::Aplat => "Une grande brosse pleine pour les masses du décor. Ses traits vont toujours dans le calque Décor, partagé par les cases du plan.",
+            Genre::Crayon => "un crayon fin pour esquisser le décor",
+            Genre::Feutre => "un feutre large et translucide pour poser les valeurs du décor",
+            Genre::Aplat => "une grande brosse pleine pour les masses du décor",
         }
     }
 
-    /// La taille d'origine, en pixels du dessin (Préférences > Vignettes).
+    /// La taille d'origine, en pixels du dessin (brosses Décor d'origine, `personnages::decors_par_defaut`).
     pub fn taille_defaut(self) -> f32 {
         match self {
             Genre::Crayon => 5.0,
             Genre::Feutre => 24.0,
             Genre::Aplat => 90.0,
-        }
-    }
-
-    /// Le rang dans les réglages (`ReglagesVignettes::tailles_decor`).
-    pub fn rang(self) -> usize {
-        match self {
-            Genre::Crayon => 0,
-            Genre::Feutre => 1,
-            Genre::Aplat => 2,
         }
     }
 

@@ -625,6 +625,10 @@ fn photo_enregistrable(doc: &mut Document) -> String {
 impl Essai {
     pub(crate) fn new(doc: Document, nom: &str) -> Essai {
         let mut b = banc_taille(doc, false, 1600, 900);
+        // Adapté (2026-10-29) : les brosses Décor ont maintenant un aplat, que le fil de fond pose après coup, hors de l'étape du trait quand
+        // autre chose s'est passé entre-temps (`persofond.rs`, limite documentée). Ce hasard compare le projet avant/après chaque annulation :
+        // il dessine donc avec des brosses Décor sans aplat, comme avant. L'aplat des brosses est couvert par `brosses_perso_tests`.
+        b.app.settings.brosses_decor.iter_mut().for_each(|d| d.fill = None);
         b.app.board_view = BoardView::Panels;
         b.app.layout.board_columns = 4;
         b.app.layout.board_rows = 0;
@@ -845,7 +849,7 @@ impl Essai {
             }
             Decor { genre, case, x0, y0, dx, dy, lacher } => {
                 let Some((_, r)) = self.case(case) else { return };
-                self.b.app.decor_choisir(crate::decor::Genre::ALL[genre as usize % 3]);
+                self.b.app.decor_choisir(crate::decor_tests::rang(crate::decor::Genre::ALL[genre as usize % 3]));
                 self.b.chauffer(1);
                 let de = r.lerp_inside(vec2(x0, y0));
                 let a = self.b.app.vignettes.view.shrink(2.0).clamp(de + vec2(dx, dy) * r.width());
@@ -1007,7 +1011,7 @@ impl Essai {
                             2 => (pos2(r.left(), r.center().y), Modifiers::SHIFT, r.width()),
                             4 => (r.lerp_inside(vec2(0.2, 0.2)), CTRL, r.width()),
                             _ => {
-                                self.b.app.decor_choisir(crate::decor::Genre::Feutre);
+                                self.b.app.decor_choisir(crate::decor_tests::rang(crate::decor::Genre::Feutre));
                                 self.b.chauffer(1);
                                 (r.lerp_inside(vec2(0.5, 0.5)), Modifiers::NONE, r.width())
                             }

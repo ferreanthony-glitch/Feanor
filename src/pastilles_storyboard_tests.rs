@@ -6,10 +6,10 @@
 use eframe::egui::{vec2, Event, Modifiers, PointerButton, Pos2};
 
 use crate::app::Tool;
-use crate::brushtex::Target;
 use crate::decor::Genre;
 use crate::document::Document;
 use crate::perf_tests::{banc_taille, Banc};
+use crate::personnages::Type;
 use crate::personnagesui::{Case, Choix};
 use crate::workspace::Espace;
 
@@ -65,13 +65,13 @@ fn clicking_a_pastille_in_the_top_bar_picks_it_and_a_right_click_opens_its_menu_
     let avant = b.app.history.undo_len();
     // Les pastilles sont dans la barre du haut : un clic sur « classique » puis sur une couleur neutre les choisit, sans rien tracer.
     let dessin = b.app.canvas_rect;
-    assert!(case(&b, Case::Classique).y < dessin.top(), "au-dessus du dessin, dans la barre");
-    clic_case(&mut b, Case::Choix(Choix::Neutre(1)));
-    assert_eq!(b.app.perso.actif, Some(Choix::Neutre(1)));
+    assert!(case(&b, Case::Choix(Choix::Classique(0))).y < dessin.top(), "au-dessus du dessin, dans la barre");
+    clic_case(&mut b, Case::Choix(Choix::Classique(1)));
+    assert_eq!(b.app.perso.actif, Some(Choix::Classique(1)));
     assert!(b.app.stroke.is_none());
     assert_eq!(b.app.history.undo_len(), avant, "choisir n'est pas une étape d'annulation");
     // Clic droit : le menu de la pastille (modifier, dupliquer…).
-    let p = case(&b, Case::Choix(Choix::Neutre(1)));
+    let p = case(&b, Case::Choix(Choix::Classique(1)));
     b.image(vec![Event::PointerMoved(p)], 1.0 / 60.0);
     b.image(vec![Event::PointerButton { pos: p, button: PointerButton::Secondary, pressed: true, modifiers: Modifiers::NONE }], 1.0 / 60.0);
     b.image(vec![Event::PointerButton { pos: p, button: PointerButton::Secondary, pressed: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
@@ -82,22 +82,27 @@ fn clicking_a_pastille_in_the_top_bar_picks_it_and_a_right_click_opens_its_menu_
     b.image(vec![Event::PointerGone], 1.0 / 60.0);
     b.chauffer(3);
     let n = b.app.doc.personnages.len();
+    // Le « + » ouvre un petit menu à trois types ; « Brosse personnage » ajoute un personnage, sans fenêtre « Modifier ».
     clic_case(&mut b, Case::Plus);
-    assert_eq!(b.app.doc.personnages.len(), n + 1, "le « + » ajoute un personnage");
-    assert!(case(&b, Case::Classique).y < dessin.top(), "toujours dans la barre");
-    // La pastille du personnage neuf est dans la rangée, avant les couleurs neutres.
+    assert!(Type::ALL.iter().all(|t| b.app.perso.cases.iter().any(|(_, c)| *c == Case::Ajouter(*t))), "le menu a une ligne par type : {:?}", b.app.perso.cases);
+    assert_eq!(b.app.doc.personnages.len(), n, "ouvrir le menu n'ajoute rien");
+    clic_case(&mut b, Case::Ajouter(Type::Personnage));
+    assert_eq!(b.app.doc.personnages.len(), n + 1, "« Brosse personnage » ajoute un personnage");
+    assert!(case(&b, Case::Choix(Choix::Classique(0))).y < dessin.top(), "toujours dans la barre");
+    // La pastille du personnage neuf est dans la rangée, avant les classiques.
     let rangs: Vec<Case> = b.app.perso.cases.iter().map(|(_, c)| *c).collect();
-    assert!(matches!(rangs[1], Case::Choix(Choix::Personnage(_))), "{rangs:?}");
+    assert!(matches!(rangs[0], Case::Choix(Choix::Personnage(_))), "{rangs:?}");
 }
 
 #[test]
-fn the_storyboard_column_has_the_classic_pastille_first_and_the_decor_brushes() {
+fn the_storyboard_bar_has_the_personnages_then_the_classiques_then_the_decors() {
+    // Adapté (2026-10-29) : plus de pastille « classique » en tête ; trois groupes : Personnages, Classiques, Décors.
     let b = banc();
     let rangs: Vec<Case> = b.app.perso.cases.iter().map(|(_, c)| *c).collect();
-    assert_eq!(rangs.first(), Some(&Case::Classique), "la pastille classique en tête : {rangs:?}");
-    let decor: Vec<usize> = Genre::ALL.iter().map(|g| rangs.iter().position(|c| *c == Case::Decor(*g)).unwrap_or_else(|| panic!("{g:?} dans le Storyboard : {rangs:?}"))).collect();
-    let derniere_neutre = rangs.iter().rposition(|c| matches!(c, Case::Choix(_))).unwrap();
-    assert!(decor[0] > derniere_neutre && decor.windows(2).all(|w| w[1] == w[0] + 1), "après les couleurs neutres, ensemble : {rangs:?}");
+    assert_eq!(rangs.first(), Some(&Case::Choix(Choix::Classique(0))), "un projet sans personnage : les classiques en tête : {rangs:?}");
+    let decor: Vec<usize> = Genre::ALL.iter().map(|g| rangs.iter().position(|c| *c == crate::decor_tests::case_du_decor(*g)).unwrap_or_else(|| panic!("{g:?} dans le Storyboard : {rangs:?}"))).collect();
+    let derniere_classique = rangs.iter().rposition(|c| matches!(c, Case::Choix(Choix::Personnage(_) | Choix::Classique(_)))).unwrap();
+    assert!(decor[0] > derniere_classique && decor.windows(2).all(|w| w[1] == w[0] + 1), "après les classiques, ensemble : {rangs:?}");
     assert!(decor[2] < rangs.iter().position(|c| *c == Case::Plus).unwrap(), "avant le « + »");
 }
 
@@ -106,10 +111,10 @@ fn a_decor_brush_in_the_storyboard_draws_in_the_decor_layer_of_the_plan_in_one_u
     let mut b = banc();
     let (couches, avant) = (b.app.layers().len(), b.app.history.undo_len());
     let calque0 = b.app.layers()[b.app.cur_layer].id;
-    clic_case(&mut b, Case::Decor(Genre::Feutre));
-    assert_eq!(b.app.perso.decor, Some(Genre::Feutre));
-    assert_eq!(b.app.color, b.app.settings.vignettes.couleur_decor, "la couleur du décor (Préférences > Vignettes)");
-    assert_eq!(b.app.brush.size, b.app.settings.vignettes.taille_decor(Genre::Feutre));
+    clic_case(&mut b, crate::decor_tests::case_du_decor(Genre::Feutre));
+    assert_eq!(b.app.decor_actif(), Some(crate::decor_tests::rang(Genre::Feutre)));
+    assert_eq!(b.app.color, crate::personnages::decors_par_defaut()[1].line, "la couleur de trait de la brosse Décor 2");
+    assert_eq!(b.app.brush.size, crate::personnages::decors_par_defaut()[1].taille_decor());
     assert_eq!(b.app.doc.decor_de(b.app.cur_panel), None, "choisir ne crée rien");
     assert_eq!(b.app.history.undo_len(), avant, "choisir n'est pas une étape d'annulation");
     trait_au_milieu(&mut b);
@@ -126,8 +131,8 @@ fn a_decor_brush_in_the_storyboard_draws_in_the_decor_layer_of_the_plan_in_one_u
     assert_eq!(b.app.history.undo_len(), avant + 2);
     assert_eq!(b.app.layers().len(), couches + 1);
     // Lâcher le décor (sa pastille) : le calque d'avant revient.
-    clic_case(&mut b, Case::Decor(Genre::Feutre));
-    assert_eq!(b.app.perso.decor, None);
+    clic_case(&mut b, crate::decor_tests::case_du_decor(Genre::Feutre));
+    assert_eq!(b.app.decor_actif(), None);
     assert_eq!(b.app.layers()[b.app.cur_layer].id, calque0, "le calque d'avant redevient le calque courant");
     // Annuler les deux traits : plus de calque Décor.
     b.app.run_action("edition.annuler");
@@ -140,7 +145,7 @@ fn a_decor_brush_in_the_storyboard_draws_in_the_decor_layer_of_the_plan_in_one_u
 fn a_click_with_a_decor_brush_that_draws_nothing_leaves_no_decor_layer() {
     let mut b = banc();
     let avant = b.app.history.undo_len();
-    clic_case(&mut b, Case::Decor(Genre::Crayon));
+    clic_case(&mut b, crate::decor_tests::case_du_decor(Genre::Crayon));
     assert_eq!(b.app.tool, Tool::Pencil);
     // Un simple clic sur le dessin (le crayon pose un point) : soit un trait, soit rien, jamais un calque vide.
     let c = b.app.canvas_rect.center();
@@ -155,44 +160,44 @@ fn a_click_with_a_decor_brush_that_draws_nothing_leaves_no_decor_layer() {
 }
 
 #[test]
-fn the_classic_pastille_goes_back_to_the_round_brush_without_character_or_decor() {
+fn clicking_the_chosen_brush_lets_it_go_and_there_is_no_classic_pastille_any_more() {
+    // Adapté (2026-10-29) : la pastille « classique » ⊘ n'existe plus ; recliquer la brosse choisie la lâche, et la couleur est libre, dans le
+    // calque courant. Une brosse Décor lâchée rend l'outil et les pinceaux d'avant.
     let mut b = banc();
-    let rond = b.app.brushes.presets.iter().find(|p| p.target == Target::Brush && p.source == crate::pinceaux::PELURE && p.name == "Pinceau rond").expect("le Pinceau rond de SHOT").settings;
-    // Un personnage choisi, un pinceau retouché, puis la pastille classique.
-    clic_case(&mut b, Case::Choix(Choix::Neutre(1)));
-    assert_eq!(b.app.perso.actif, Some(Choix::Neutre(1)));
+    clic_case(&mut b, Case::Choix(Choix::Classique(1)));
+    assert_eq!(b.app.perso.actif, Some(Choix::Classique(1)));
+    let (calque, avant) = (b.app.cur_layer, b.app.history.undo_len());
+    clic_case(&mut b, Case::Choix(Choix::Classique(1)));
+    assert_eq!(b.app.perso.actif, None, "un clic sur la brosse choisie la lâche");
+    assert_eq!(b.app.decor_actif(), None);
+    assert_eq!(b.app.cur_layer, calque, "dans le calque courant");
+    assert_eq!(b.app.history.undo_len(), avant, "rien dans l'annulation");
+    // Une brosse Décor : lâchée, l'outil et le pinceau d'avant reviennent.
     b.app.brush.size = 42.0;
     b.app.brush.hardness = 0.2;
     b.app.set_tool(Tool::Eraser);
-    let avant = b.app.history.undo_len();
-    clic_case(&mut b, Case::Classique);
-    assert_eq!(b.app.perso.actif, None, "plus de personnage");
-    assert_eq!(b.app.perso.decor, None);
-    assert_eq!(b.app.tool, Tool::Brush, "le pinceau");
-    assert_eq!(b.app.brush, rond, "le réglage du Pinceau rond");
-    assert_eq!(b.app.history.undo_len(), avant, "rien dans l'annulation");
-    // Depuis une brosse du décor : le décor est lâché, le Pinceau rond revient.
-    clic_case(&mut b, Case::Decor(Genre::Aplat));
-    assert_eq!(b.app.perso.decor, Some(Genre::Aplat));
-    clic_case(&mut b, Case::Classique);
-    assert_eq!(b.app.perso.decor, None);
-    assert_eq!((b.app.tool, b.app.brush), (Tool::Brush, rond));
-    // L'action du clavier fait la même chose.
-    b.app.brush.size = 13.0;
-    b.app.run_action("perso.classique");
-    assert_eq!(b.app.brush, rond);
+    let (outil0, pinceau0) = (b.app.tool, b.app.brush);
+    clic_case(&mut b, crate::decor_tests::case_du_decor(Genre::Aplat));
+    assert_eq!(b.app.decor_actif(), Some(crate::decor_tests::rang(Genre::Aplat)));
+    clic_case(&mut b, crate::decor_tests::case_du_decor(Genre::Aplat));
+    assert_eq!(b.app.decor_actif(), None);
+    assert_eq!((b.app.tool, b.app.brush), (outil0, pinceau0));
+    // La commande « couleur libre » fait la même chose, d'une brosse Décor comme d'une Classique.
+    clic_case(&mut b, crate::decor_tests::case_du_decor(Genre::Feutre));
+    b.app.run_action("perso.aucun");
+    assert_eq!((b.app.perso.actif, b.app.tool, b.app.brush), (None, outil0, pinceau0));
 }
 
 #[test]
 fn the_decor_brushes_go_away_in_the_animation_and_come_back_in_the_storyboard() {
     let mut b = banc();
-    clic_case(&mut b, Case::Decor(Genre::Feutre));
-    assert_eq!(b.app.perso.decor, Some(Genre::Feutre));
+    clic_case(&mut b, crate::decor_tests::case_du_decor(Genre::Feutre));
+    assert_eq!(b.app.decor_actif(), Some(crate::decor_tests::rang(Genre::Feutre)));
     b.app.set_espace(Espace::Animation);
     b.chauffer(4);
-    assert_eq!(b.app.perso.decor, None, "le décor est lâché en animation");
-    assert!(b.app.perso.cases.iter().all(|(_, c)| !matches!(c, Case::Decor(_))), "pas de pastille de décor en animation");
+    assert_eq!(b.app.decor_actif(), None, "le décor est lâché en animation");
+    assert!(b.app.perso.cases.iter().all(|(_, c)| !matches!(c, Case::Choix(Choix::Decor(_)))), "pas de pastille de décor en animation");
     b.app.set_espace(Espace::Storyboard);
     b.chauffer(4);
-    assert!(b.app.perso.cases.iter().any(|(_, c)| matches!(c, Case::Decor(_))));
+    assert!(b.app.perso.cases.iter().any(|(_, c)| matches!(c, Case::Choix(Choix::Decor(_)))));
 }

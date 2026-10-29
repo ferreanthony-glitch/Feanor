@@ -3326,6 +3326,8 @@ de « Ajouter un effet », grisé sur un bitmap, projet avec tremblement enregis
 
 ## 32. Brosses par personnage (2026-10-21, branche `brosses-personnages`)
 
+> **Reprise le 2026-10-29 (partie 70) : les « personnages » sont les brosses perso de type Personnage ; les « couleurs neutres » sont les brosses Classique ; le panneau s'appelle « Brosses perso ».** Voir la partie 70.
+
 Demande d'Anthony : « On ajoute un personnage et on lui attribue une couleur de trait et une couleur de fond. Quand on sélectionne ce
 personnage, on dessine avec la couleur de trait et de fond immédiatement. Ça permet, même avec un dessin très rough, d'identifier le
 personnage. J'imagine une barre horizontale au-dessus du canevas avec juste des pastilles de couleurs qu'on sélectionne. Une pastille par
@@ -5187,6 +5189,8 @@ Rien d'autre. Un essai vérifie qu'il n'y a dans la fenêtre principale qu'un se
 
 ## 62. Les pastilles créent leurs calques : personnage et Décor (2026-10-28, branche `calques-pastilles`)
 
+> **Reprise le 2026-10-29 (partie 70) : les pastilles deviennent des « brosses perso » (Personnage, Classique, Décor).** La pastille « classique » ⊘ et les trois pinceaux fixes du décor n'existent plus comme ici ; le choix du calque d'une copie change aussi. Voir la partie 70.
+
 Demande d'Anthony : **la pastille dit dans quel calque on dessine, et le calque se crée tout seul.** Fichiers : `calquespastilles.rs` (le calque d'un personnage), `decor.rs` et `decorui.rs` (le calque Décor), `personnagesui.rs` (choisir, renommer), `vignettesreglages.rs` et `prefsui.rs` (le réglage), `document.rs` et `project.rs` (un champ de plus au calque), essais `calques_pastilles_tests.rs` (21).
 
 ### Une pastille de personnage dessine dans son calque
@@ -5689,3 +5693,81 @@ Une bande fine de 9 points garde ce qui se prend sans ambiguïté : **choisir un
 ### Essais
 
 `imagevec_tests.rs` (13) : image collée sur un calque vectoriel = un objet sélectionné, sans calque neuf, rendu, une étape d'annulation ; déplacer, agrandir, tourner, prendre, supprimer l'objet ; sur un calque bitmap, des pixels et pas d'objet ; grande image sur un fil de fond, posée là où le collage a été demandé ; **une image collée deux fois n'est écrite qu'une fois**, rouverte sans rien dans le magasin (pixels et rendu retrouvés), fichier effacé quand plus rien ne le cite ; format 42 et lecture d'un ancien dessin ; image ni prise par couleur ni recolorée ; calque copié depuis le panneau, collé dans un autre plan avec tout ce qu'il a (mode de fusion, opacité, effets, dessin à lui, image) en une étape ; noms « (2) » et « (3) » ; plusieurs calques ensemble, dans l'ordre, en une étape ; lien au personnage gardé dans le même projet, perdu dans un autre ou si le personnage n'existe plus ; Ctrl+C / Ctrl+V hors du panneau inchangés. `calquecouleur_tests` : la copie collée dans le même plan s'appelle « Trait (2) ».
+
+---------------------------------------------------------------------------------------------------
+
+## 70. Brosses perso : personnage, classique, décor (2026-10-29, branche `brosses-perso`)
+
+Demande d'Anthony : « Plutôt que personnages, on va appeler ça des **brosses personnalisées**. On peut créer des brosses **personnage**, **décor** ou **classique**. D'origine : 3 couleurs Personnages, 3 Classiques en niveaux de gris, 3 Décors en niveaux de gris. » Il l'avait annoté sur une capture de la barre du haut : « PERSONNAGE » autour des pastilles de couleur, « AUTRE » autour des petites pastilles grises, « DÉCORS » autour des trois carrés, la pastille ⊘ barrée, et l'onglet « Personnages » remplacé par « BROSSES PERSO ». Fichiers : `personnages.rs` (le modèle), `personnagesui.rs` (la barre, le panneau, les choix), `decorui.rs` (les brosses Décor), `calquespastilles.rs` (le calque d'un personnage), `settings.rs` et `vignettesreglages.rs` (les réglages), essais `brosses_perso_tests.rs` (11) et les essais d'avant adaptés. **Remplace** la pastille « classique » et les pinceaux de décor de la partie 62, les couleurs neutres de la partie 32 et le nom « Personnages » du panneau.
+
+### Un seul modèle : la brosse perso
+
+Une brosse perso a **un nom, un type (Personnage, Classique ou Décor), une couleur de trait et une couleur d'aplat** (ou pas d'aplat).
+
+| Type | Ce qu'elle fait | Où elle vit |
+|---|---|---|
+| **Personnage** | Son premier trait crée un calque vectoriel à son nom, avec son aplat (partie 62). La couleur d'aplat du calque vient d'elle et d'elle seule (`aplatperso.rs`). | **Le projet** (`personnages.json`, annulable) |
+| **Classique** | Dessine dans le calque courant, sans rien créer. Sa couleur d'aplat devient celle de l'aplat du calque courant ordinaire (partie 33). C'est l'ancienne « couleur neutre ». | **Le poste** (`reglages.toml`, `couleurs_neutres`) |
+| **Décor** | Dessine dans **le** calque Décor du plan, créé au premier trait (vectoriel d'origine, bitmap selon Préférences > Vignettes ; partage en continuité, report et reste de `decor.rs` inchangés). Sa couleur de trait et d'aplat est celle de la brosse. | **Le poste** (`reglages.toml`, `brosses_decor`) |
+
+**Valeurs d'origine** : trois Personnage, « Perso 1 », « Perso 2 », « Perso 3 » (les couleurs de `nouveau::build_document`, projets neufs seulement) ; trois Classique, « Gris 1 » #1E1E1E sur #8C8C8C, « Gris 2 » #4A4A4A sur #B4B4B4, « Gris 3 » #7A7A7A sur #DADADA ; trois Décor en niveaux de gris, plus clairs que les Classiques, le trait toujours plus foncé que l'aplat : « Décor 1 » #6E6E6E sur #C8C8C8, « Décor 2 » #8E8E8E sur #D8D8D8, « Décor 3 » #ABABAB sur #E6E6E6.
+
+### Ce qu'on voit
+
+- **La barre du haut** (Storyboard, Vignettes, Animation quand elle la montre) : trois groupes, séparés d'un petit trait, dans cet ordre : les **Personnages** (ronds de taille normale), les **Classiques** (petits ronds), les **Décors** (petits carrés arrondis, aux couleurs de leur brosse : le cadre est le trait, l'intérieur l'aplat, le signe est celui du pinceau). Puis le « + » et l'icône du panneau. **Plus de pastille ⊘.** Un clic choisit ; **recliquer la brosse choisie la lâche** : la couleur est libre, dans le calque courant (`perso_lacher`). Les bulles disent le type et ce que fait la brosse (« Brosse décor : dessine dans le calque Décor du plan, créé au premier trait. Trait #… · aplat #…. Pinceau : crayon… Clic : … »). Les brosses Décor ne sont proposées que là où le décor l'était (le côté storyboard ; pas l'animation ni l'Espace 3D).
+- **Le « + »** ouvre un petit menu **« Brosse personnage / classique / décor »**. Choisir une ligne ajoute la brosse (elle est choisie tout de suite), **sans fenêtre « Modifier »** ; son nom et ses couleurs se changent dans le panneau ou au clic droit sur sa pastille. Les commandes `perso.ajouter` (personnage), `perso.ajouter_classique` et `perso.ajouter_decor` y correspondent. La commande `perso.classique` est supprimée (plus de pastille ⊘) ; « Couleur libre » (`perso.aucun`) lâche la brosse.
+- **Le panneau « Brosses perso »** (titre, onglet, menu Affichage, palette Ctrl+K, barre des panneaux ; la commande reste `vue.personnages`, et `Pane::Personnages` garde son nom interne pour que les dispositions déjà rangées se relisent) a **trois sections, Personnages, Classiques et Décors**, chacune avec son « + », ses lignes (poignée pour ranger dans la section, pastille qui choisit, nom, couleur du trait, aplat oui ou non, couleur de l'aplat, supprimer ; **les Décors ont de plus leur pinceau et leur taille**) et son **« ↺ »**.
+- **« ↺ »** remet les valeurs d'origine **du type concerné** : Classique et Décor, la liste redevient les trois d'origine (réglage de SHOT, sans annulation) ; Personnage, **Perso 1, 2 et 3 retrouvent leurs couleurs d'origine** (ceux qu'on a retirés reviennent au bout de la liste), **une seule étape d'annulation**, **les autres personnages ne sont pas touchés** (les remplacer casserait le lien avec leurs calques).
+- Clic droit sur une pastille : modifier, dupliquer, monter, descendre, supprimer (dans sa section). Supprimer la brosse choisie la lâche (une brosse Décor rend l'outil, les pinceaux et le calque d'avant).
+
+### Où vivent les brosses (le choix)
+
+**Les Personnage dans le projet, les Classique et les Décor sur le poste.** Un personnage a des **calques liés** (par son numéro) : il doit voyager avec le projet, être annulable, et se partager avec l'équipe. Une Classique ou une Décor est un goût de la personne qui dessine (ses gris, son crayon de décor) : elle sert dans tous les projets, sans rien écrire dans le projet. Tout mettre dans le projet aurait obligé à copier les gris et les Décors d'origine dans chaque fichier (et à les retrouver à chaque ouverture d'un ancien projet), pour un bénéfice que personne n'a demandé ; le choix inverse (tout sur le poste) aurait cassé le lien calque-personnage. Les anciennes couleurs neutres (`couleurs_neutres`) sont lues telles quelles : ce sont maintenant des Classiques.
+
+### Les pinceaux de décor : ce qu'ils deviennent
+
+Les trois pinceaux fixes (Crayon, Feutre gris, Aplat, `decor::Genre`) sont **remplacés par les trois brosses Décor d'origine**. Le genre apportait un outil et une taille : **chaque brosse Décor garde un pinceau et une taille comme réglage de la brosse** (`Brosse::pinceau`, `Brosse::taille`). Décor 1 est un **crayon** de 5 px (outil Crayon), Décor 2 un **feutre** de 24 px, Décor 3 un **pinceau plein** de 90 px (outil Pinceau). On dit « pinceau plein » dans l'interface, pas « aplat », pour ne pas confondre avec l'aplat sous le trait. Une brosse Décor choisie suit ses réglages tout de suite quand le panneau les change (`decor_tick`).
+
+**Préférences > Vignettes > Décor** : la couleur du décor et les trois tailles sont **déplacées dans le panneau** (la couleur unique n'a plus de sens : chaque brosse a ses couleurs). Il reste « Report du décor », « Calque Décor : Vectoriel / Bitmap » et un renvoi « Ouvrir le panneau » vers la section Décors. Les anciennes clés `couleur_decor` et `tailles_decor` sont **lues, jamais plus écrites** : les anciennes tailles sont reprises par les trois Décors d'origine tant qu'ils n'ont pas été touchés (la couleur est abandonnée). « Rétablir les réglages des Vignettes » ne touche plus aux brosses.
+
+L'aplat d'une brosse Décor : le calque Décor **neuf** naît avec la sous-ligne Aplat allumée à la couleur d'aplat de la brosse, dans la même étape que le trait (comme le calque d'un personnage) ; sur un calque Décor qui existe déjà, la règle des Classiques (partie 33) s'applique (le premier trait allume l'aplat s'il manque, une étape à part ; la couleur d'aplat du calque suit la brosse).
+
+### La copie d'un calque de personnage
+
+- **Elle reste liée au personnage** : « Dupliquer le calque » garde le lien (comme le copier-coller dans le même projet, partie 69). Avant, une copie devenait un calque ordinaire.
+- **Choisir la brosse d'un personnage** : si le calque courant est de ce personnage (l'original ou une copie), **on y reste** ; sinon on va **au dernier calque de ce personnage utilisé dans le plan** (le plus récemment dessiné ou choisi) ; à défaut, **au plus haut dans la pile**. Un trait fait avec la brosse choisie suit la même règle ; le calque ne se crée que si le personnage n'en a aucun dans le plan.
+- La trace du dernier calque est **en mémoire** (par plan et par personnage, `Etat::dernier_calque`) : rien dans le fichier. Rouvert, le projet retombe sur « le plus haut ».
+
+### Changer le type d'une brosse : non
+
+Pas de petit menu « type » sur la ligne : passer de Personnage à Classique ou à Décor change **où vit** la brosse (projet ou poste), détache ses calques et sort de l'annulation du projet ; passer de Classique à Décor demande un pinceau et une taille. Trop de cas pour un geste qu'on n'attend pas : pour changer de type, on crée la brosse dans la bonne section (le « + » du menu) et on supprime l'autre.
+
+### Le fichier
+
+**Le format ne change pas** : `project::VERSION` reste 42. `personnages.json` (version 1) et le champ `personnage` du calque sont ceux d'avant : un ancien projet se relit tel quel, ses personnages sont des brosses Personnage. Les réglages (`reglages.toml`) : `couleurs_neutres` (même clé) devient la liste des Classiques ; `brosses_decor` est une clé de plus (absente d'un ancien fichier : les trois d'origine) ; `pinceau` et `taille` sont deux champs facultatifs d'une entrée.
+
+### Vocabulaire
+
+« Brosse perso », « Personnage », « Classique », « Décor », « Aplat » : textes visibles, bulles, barre d'état, Préférences, commandes de la palette. Jamais « Fond » ni « Remplissage ». Plus de « couleur neutre » à l'écran.
+
+### Ce qui a été interprété
+
+- Le menu « + » se déroule sous le bouton (un petit menu, pas une fenêtre) ; chaque ligne ajoute sans rien demander de plus.
+- Les brosses Décor restent cachées dans l'Animation (où le décor n'est pas proposé), même si la barre y est montrée.
+- Une nouvelle brosse Classique est un gris moyen (#505050 sur #C0C0C0), une nouvelle Décor un feutre gris (#808080 sur #D0D0D0, 24 px) ; la nouvelle Personnage garde ses teintes d'avant.
+- « ↺ » des Personnages : Perso 1 à 3 sont retrouvés **par leur nom** ; un personnage renommé n'est plus reconnu (il reste), et un « Perso 1 » neuf revient alors au bout de la liste.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Un projet neuf : la barre montre **3 ronds de couleur** (Perso 1 à 3), **3 petits ronds gris**, **3 petits carrés gris** (plus clairs), puis « + » et l'icône du panneau. **Pas de ⊘.** Le panneau s'appelle « Brosses perso ».
+2. Un trait avec une pastille de couleur : un calque à son nom naît avec son aplat. Avec un petit rond gris : le trait va dans le calque courant. Avec un carré : un calque **Décor** naît tout en bas, avec ses deux niveaux de gris ; Ctrl+Z défait calque et trait d'un coup.
+3. Reclique la brosse choisie : elle est lâchée, la couleur est libre.
+4. Clique « + » : un menu à trois lignes ; chaque ligne ajoute une brosse dans son groupe.
+5. Panneau Brosses perso : trois sections, un « + » et un « ↺ » chacune ; pour un Décor, un menu de pinceau et une taille. Change la taille d'un Décor choisi : le pinceau suit tout de suite.
+6. Duplique un calque de personnage, rechoisis sa brosse depuis un autre calque : tu retombes sur le dernier calque du personnage que tu as utilisé ; depuis la copie, tu y restes.
+
+### Essais
+
+`brosses_perso_tests.rs` (11) : projet neuf (trois de chaque type, dans l'ordre, aux bonnes couleurs, formes, pas de ⊘) ; Décor (calque vectoriel avec l'aplat de la brosse en une étape, un seul calque pour trois brosses, bitmap selon le réglage) ; pinceau, taille et couleur d'un Décor suivis, suppression qui lâche, rangs qui suivent ; recliquer lâche les trois types ; « + » à trois types ; panneau à trois sections et ↺ par type (Personnage : une étape, les autres intacts) ; bulles ; anciens réglages (couleurs neutres, tailles du décor, rien d'écrit en double) ; ancien fichier de personnages ; choix du calque d'une copie (rester, dernier utilisé, plus haut). **Adaptés** (avec un commentaire qui dit pourquoi) : `personnages_tests`, `calques_pastilles_tests` (la copie reste liée ; la classique devient une brosse), `decor_tests`, `pastilles_storyboard_tests`, `regle_cadrage_tests` (le « + » ouvre un menu), `aplatperso_tests`, `aplattrous_tests`, `cases_tests`, `hasard_tests`.
+
+---------------------------------------------------------------------------------------------------

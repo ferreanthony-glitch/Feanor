@@ -10,15 +10,16 @@
 //!   absent, il n'y a pas de personnage ; un fichier illisible ou d'une version plus récente n'empêche pas
 //!   d'ouvrir le projet et n'est jamais effacé, `project::write_sidecar`). Un projet partagé les écrit avec la
 //!   structure : les équipiers ont les mêmes personnages.
-//! - Les **couleurs neutres** sont un réglage de l'*application* (`reglages.toml`, `Settings::neutral_colors`) :
-//!   quelques entrées (trait et fond facultatif) qui servent dans tous les projets (noir sans fond, gris, rouge de
-//!   correction). Ce ne sont pas des personnages : elles n'ont ni numéro ni place dans le projet.
-//! - Choisir un personnage (ou une couleur neutre) règle la couleur du trait et allume le fond sous le trait :
-//!   voir `personnagesui.rs` (la barre et le panneau) et `persofond.rs` (comment le fond d'un trait prend la
-//!   couleur du personnage qui l'a dessiné).
+//! - **Depuis le 2026-10-29 (§70 de `docs/INTERFACE.md`) tout est une « brosse perso »**, de trois types (`Type`) : *Personnage* (celles
+//!   du projet, ci-dessus), *Classique* (l'ancienne « couleur neutre ») et *Décor* (les anciens pinceaux de décor, avec un pinceau et une
+//!   taille). Les Classiques et les Décors sont des réglages de l'*application* (`reglages.toml`, `Settings::brosses_classiques` et
+//!   `Settings::brosses_decor`, tous deux des listes de `Brosse`) : ils servent dans tous les projets, sans numéro ni place dans le projet.
+//! - Choisir une brosse règle la couleur du trait et allume l'aplat sous le trait : voir `personnagesui.rs` (la barre et le
+//!   panneau « Brosses perso ») et `persofond.rs` (comment l'aplat d'un trait prend la couleur de la brosse qui l'a dessiné).
 
 use serde::{Deserialize, Serialize};
 
+use crate::decor::Genre;
 use crate::document::Document;
 
 /// Nom du fichier, dans le dossier du projet.
@@ -27,7 +28,8 @@ const FORMAT: &str = "shot-personnages";
 const VERSION: u32 = 1;
 /// Bornes d'un fichier abîmé (ou d'une barre qui n'aurait plus de place) : au-delà, c'est coupé.
 pub const MAX_PERSONNAGES: usize = 48;
-pub const MAX_NEUTRES: usize = 8;
+pub const MAX_CLASSIQUES: usize = 8;
+pub const MAX_DECORS: usize = 8;
 /// Longueur d'un nom, en caractères.
 pub const NOM_MAX: usize = 40;
 
@@ -46,28 +48,116 @@ pub struct Personnage {
     pub fill: Option<[u8; 3]>,
 }
 
-/// Une couleur neutre (réglage de l'application).
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Neutre {
+/// Le type d'une brosse perso (Anthony, 2026-10-29 : « on peut créer des brosses personnage, décor ou classique »).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Type {
+    /// Dessine dans le calque de son personnage, créé au premier trait.
+    Personnage,
+    /// Dessine dans le calque courant, sans rien créer.
+    Classique,
+    /// Dessine dans le calque Décor du plan, créé au premier trait.
+    Decor,
+}
+
+impl Type {
+    pub const ALL: [Type; 3] = [Type::Personnage, Type::Classique, Type::Decor];
+
+    /// Le mot du type, au singulier.
+    pub fn nom(self) -> &'static str {
+        match self {
+            Type::Personnage => "Personnage",
+            Type::Classique => "Classique",
+            Type::Decor => "Décor",
+        }
+    }
+
+    /// Le titre d'une section du panneau.
+    pub fn titre(self) -> &'static str {
+        match self {
+            Type::Personnage => "Personnages",
+            Type::Classique => "Classiques",
+            Type::Decor => "Décors",
+        }
+    }
+
+    /// Ce que fait une brosse de ce type, en une phrase (bulles).
+    pub fn effet(self) -> &'static str {
+        match self {
+            Type::Personnage => "dessine dans un calque à son nom, créé au premier trait",
+            Type::Classique => "dessine dans le calque courant, sans rien créer",
+            Type::Decor => "dessine dans le calque Décor du plan, créé au premier trait",
+        }
+    }
+}
+
+/// Une brosse perso de **poste** (Classique ou Décor) : un réglage de l'application (`reglages.toml`), commun à tous les projets. Les
+/// brosses Personnage sont celles du projet (`Personnage`). Avant le 2026-10-29, les Classiques s'appelaient les « couleurs neutres ».
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Brosse {
     #[serde(rename = "nom")]
     pub name: String,
     #[serde(rename = "trait")]
     pub line: [u8; 3],
     #[serde(rename = "fond", default, skip_serializing_if = "Option::is_none")]
     pub fill: Option<[u8; 3]>,
+    /// Le pinceau d'une brosse Décor (crayon, feutre ou aplat) ; rien pour une Classique.
+    #[serde(rename = "pinceau", default, skip_serializing_if = "Option::is_none")]
+    pub pinceau: Option<Genre>,
+    /// Sa taille, en pixels du dessin (Décor) ; 0 : celle d'origine du pinceau.
+    #[serde(rename = "taille", default, skip_serializing_if = "taille_absente")]
+    pub taille: f32,
 }
 
-/// Les couleurs neutres d'un SHOT neuf (Anthony, 2026-10-28) : trois niveaux de gris, le trait toujours plus foncé que l'aplat, et
+fn taille_absente(t: &f32) -> bool {
+    *t == 0.0
+}
+
+impl Brosse {
+    /// Une brosse Classique.
+    pub fn classique(name: &str, line: [u8; 3], fill: Option<[u8; 3]>) -> Brosse {
+        Brosse { name: name.into(), line, fill, pinceau: None, taille: 0.0 }
+    }
+
+    /// Une brosse Décor.
+    pub fn decor(name: &str, line: [u8; 3], fill: Option<[u8; 3]>, pinceau: Genre, taille: f32) -> Brosse {
+        Brosse { name: name.into(), line, fill, pinceau: Some(pinceau), taille }
+    }
+
+    /// Le pinceau d'une brosse Décor (le feutre si le fichier n'en dit rien).
+    pub fn genre(&self) -> Genre {
+        self.pinceau.unwrap_or(Genre::Feutre)
+    }
+
+    /// La taille d'une brosse Décor, en pixels du dessin.
+    pub fn taille_decor(&self) -> f32 {
+        if self.taille.is_finite() && self.taille > 0.0 {
+            self.taille.clamp(0.5, 400.0)
+        } else {
+            self.genre().taille_defaut()
+        }
+    }
+}
+
+/// Les brosses Classique d'un SHOT neuf (Anthony, 2026-10-28) : trois niveaux de gris, le trait toujours plus foncé que l'aplat, et
 /// l'ensemble qui s'éclaircit à chaque niveau (#1E1E1E sur #8C8C8C, #4A4A4A sur #B4B4B4, #7A7A7A sur #DADADA). Avant : noir sans
 /// aplat, gris, rouge de correction sans aplat.
-pub fn neutres_par_defaut() -> Vec<Neutre> {
+pub fn classiques_par_defaut() -> Vec<Brosse> {
     vec![
-        Neutre { name: "Gris 1".into(), line: [0x1E, 0x1E, 0x1E], fill: Some([0x8C, 0x8C, 0x8C]) },
-        Neutre { name: "Gris 2".into(), line: [0x4A, 0x4A, 0x4A], fill: Some([0xB4, 0xB4, 0xB4]) },
-        Neutre { name: "Gris 3".into(), line: [0x7A, 0x7A, 0x7A], fill: Some([0xDA, 0xDA, 0xDA]) },
+        Brosse::classique("Gris 1", [0x1E, 0x1E, 0x1E], Some([0x8C, 0x8C, 0x8C])),
+        Brosse::classique("Gris 2", [0x4A, 0x4A, 0x4A], Some([0xB4, 0xB4, 0xB4])),
+        Brosse::classique("Gris 3", [0x7A, 0x7A, 0x7A], Some([0xDA, 0xDA, 0xDA])),
     ]
 }
 
+/// Les brosses Décor d'un SHOT neuf (Anthony, 2026-10-29) : trois niveaux de gris, plus clairs que les Classiques, le trait toujours plus
+/// foncé que l'aplat. Chacune garde le pinceau et la taille d'un des trois anciens pinceaux de décor (crayon 5, feutre 24, aplat 90).
+pub fn decors_par_defaut() -> Vec<Brosse> {
+    vec![
+        Brosse::decor("Décor 1", [0x6E, 0x6E, 0x6E], Some([0xC8, 0xC8, 0xC8]), Genre::Crayon, Genre::Crayon.taille_defaut()),
+        Brosse::decor("Décor 2", [0x8E, 0x8E, 0x8E], Some([0xD8, 0xD8, 0xD8]), Genre::Feutre, Genre::Feutre.taille_defaut()),
+        Brosse::decor("Décor 3", [0xAB, 0xAB, 0xAB], Some([0xE6, 0xE6, 0xE6]), Genre::Aplat, Genre::Aplat.taille_defaut()),
+    ]
+}
 /// Les personnages d'un projet neuf (Anthony, 2026-10-28) : « Perso 1 », « Perso 2 », « Perso 3 », avec le trait et l'aplat qu'il avait
 /// réglés sur ses trois premières pastilles d'origine (rouge foncé sur rose, bleu nuit sur bleu, vert foncé sur vert). Un projet
 /// qui existe déjà n'en reçoit pas : seuls les projets créés par « Nouveau projet » (`nouveau::build_document`) les ont.
@@ -79,13 +169,16 @@ pub fn personnages_d_origine() -> [(&'static str, [u8; 3], [u8; 3]); 3] {
     ]
 }
 
-/// Les couleurs neutres lues dans les réglages, ramenées à des bornes raisonnables (noms coupés, pas plus de
-/// `MAX_NEUTRES`). Une liste vide reste vide : on a le droit de n'en vouloir aucune.
-pub fn neutres_nettoyees(list: Vec<Neutre>) -> Vec<Neutre> {
+/// Les brosses de poste lues dans les réglages, ramenées à des bornes raisonnables (noms coupés, pas plus de `max`, tailles saines). Une
+/// liste vide reste vide : on a le droit de n'en vouloir aucune.
+pub fn brosses_nettoyees(list: Vec<Brosse>, max: usize) -> Vec<Brosse> {
     list.into_iter()
-        .take(MAX_NEUTRES)
+        .take(max)
         .map(|mut n| {
             n.name = nom_net(&n.name);
+            if !n.taille.is_finite() || n.taille < 0.0 {
+                n.taille = 0.0;
+            }
             n
         })
         .collect()
@@ -115,6 +208,18 @@ pub fn fond_assorti(line: [u8; 3]) -> [u8; 3] {
 fn mele(a: [u8; 3], b: [u8; 3], t: f32) -> [u8; 3] {
     let m = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round().clamp(0.0, 255.0) as u8;
     [m(a[0], b[0]), m(a[1], b[1]), m(a[2], b[2])]
+}
+
+/// Un nom « Classique N » ou « Décor N » que la liste de poste n'a pas encore.
+pub fn nom_neuf_poste(list: &[Brosse], t: Type) -> String {
+    let mut n = list.len() + 1;
+    loop {
+        let name = format!("{} {n}", t.nom());
+        if !list.iter().any(|p| p.name == name) {
+            return name;
+        }
+        n += 1;
+    }
 }
 
 /// Un nom « Personnage N » que la liste n'a pas encore.
