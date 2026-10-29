@@ -14,7 +14,9 @@ fn headless(name: &str) -> (egui::Context, App) {
     let _ = std::fs::create_dir_all(&dir);
     crate::donnees::bac_a_sable(&dir);
     let ctx = egui::Context::default();
-    let app = App::sans_fenetre(&ctx, None);
+    let mut app = App::sans_fenetre(&ctx, None);
+    // (Un projet est ouvert : sans projet, les commandes d'un projet ne partent pas, `sansprojet.rs`.)
+    app.welcome = false;
     (ctx, app)
 }
 

@@ -461,6 +461,10 @@ mod prefsui;
 #[cfg(test)]
 mod prefsui_tests;
 mod recents;
+// Démarrer sans projet ouvert : l'accueil sur un fond neutre, les commandes d'un projet sans effet (2026-10-29).
+mod sansprojet;
+#[cfg(test)]
+mod sansprojet_tests;
 #[cfg(test)]
 mod recents_tests;
 mod nouveau;

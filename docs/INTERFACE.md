@@ -5818,3 +5818,98 @@ verrou, opacité et placement. Une fenêtre de remarques dit ce qui n'est pas re
 `sbnative.rs` : feuille de la taille du projet et plafond `MAX_SHEET_SIDE` ; caméra (rotation, adoucis, recul), profondeur des calques, groupe en dossier, flou, trou de zone ;
 `tvg.rs` : zone fermée sans couleur = trou, ouverte = comptée.
 ---------------------------------------------------------------------------------------------------
+
+## 72. Démarrer sans projet ouvert, et un seul thème au premier lancement (2026-10-29, branche `demarrage-vide`)
+
+Demande d'Anthony, premier lancement de SHOT sur un poste neuf, au bureau : « le logiciel se lance toujours avec un projet nouveau déjà ouvert
+et propose en même temps de créer ou d'ouvrir un projet. Il faut arbitrer car si l'on choisit nouveau projet, alors on se retrouve avec deux
+nouveaux projets. Je propose de démarrer le logiciel sans projet ouvert. » Sur sa capture, l'interface mélangeait aussi des zones claires
+(menus, vignettes blanches, textes presque illisibles) et des panneaux sombres. Deux corrections, un même lancement.
+
+### Mots
+
+| Idée | Mot | À éviter |
+|---|---|---|
+| L'état de SHOT quand rien n'est ouvert | **Sans projet** (l'accueil) | projet vide, nouvel onglet |
+| Le projet qu'on crée | **Nouveau projet** (un seul) | |
+
+### 1. Sans projet ouvert
+
+L'application garde toujours un document en mémoire (des dizaines de milliers de lignes écrivent `self.doc`) : « sans projet » est un **état**,
+pas l'absence du document. Il se reconnaît à `App::sans_projet()` (`sansprojet.rs`) : l'onglet affiché est celui de l'accueil (`welcome`), sans
+fichier, sans changement et sans étape d'annulation. Un projet qui arrive (Nouveau, Ouvrir, récents, imports, copie de secours : tout passe par
+`charger_projet`, qui éteint `welcome`) prend la place de cet état ; il ne s'y ajoute jamais.
+
+**Ce qu'on voit** (Fichier et Aide servent, le reste attend) :
+
+- la barre de menus (les menus d'un projet : Édition, Storyboard, Son, Calques, Animation, Affichage, Labo sont grisés et ne s'ouvrent pas ; les
+  quatre espaces de travail à droite ne paraissent pas) ;
+- **aucune bande d'onglets** (elle ne paraît que s'il y a plusieurs onglets, par exemple un « Nouvel onglet » à côté de projets), ni barre de
+  commandes, d'outils ou de panneaux, ni panneaux ;
+- une zone de travail **vide et calme** : le fond « autour du dessin » du thème (`theme::fond()`), avec la carte d'accueil au centre ;
+- la barre d'état ne garde que son message (pas de format ni de zoom) ; le message de départ, qui parlait de dessiner un plan, n'y est pas ;
+- le titre de la fenêtre est « SHOT » (pas « Sans titre — SHOT »).
+
+**Ce qu'on peut faire**
+
+- **Nouveau projet** crée **UN** projet : la fenêtre de format ne retire plus l'accueil (c'était `welcome = false` à son ouverture : l'onglet
+  n'était plus « vierge », le projet créé s'ouvrait dans un onglet neuf et le projet vide restait à côté, d'où les deux projets). Annulée, la fenêtre
+  rend l'accueil.
+- **Ouvrir** (et les projets récents, un fichier lâché sur la fenêtre, un projet donné au lancement par la ligne de commande) prend la place de
+  l'état sans projet : aucun onglet vide en plus. Pendant l'ouverture l'accueil ne clignote plus (`welcome_shown` attend la fin de `open_job`, des
+  projets de la séance d'avant en route, de la question « le projet est-il encore là ? » et de la fenêtre de récupération).
+- **Fermer le dernier projet** (Fichier > Fermer l'onglet, Ctrl+W) ramène à cet état et à l'accueil ; aucun projet vide n'est créé. Le message
+  d'état est « Projet fermé. » Fermer sans projet ne fait rien.
+- **Rouvrir le dernier projet au lancement** (coché) : le projet s'ouvre, sans projet vide ni accueil. **Décoché** : l'accueil. Si la séance
+  d'avant s'est **finie sans projet** (Anthony avait fermé le dernier), le prochain lancement n'en rouvre aucun même coché (`Settings::session_vide`,
+  clé `sans_projet_a_la_fin` de `reglages.toml`, absente d'ordinaire) ; un projet ouvert plus tard rend le départ habituel.
+- **Récupération après plantage** (« SHOT s'est fermé sans enregistrer ») : toujours proposée. La copie ouverte prend la place de l'état sans projet.
+  L'accueil s'efface derrière la proposition, et revient si on répond « Plus tard ».
+- **Quitter** sans projet ne demande rien.
+
+**Ce qui ne part pas sans projet** : `App::run_action` laisse passer seulement `sansprojet::action_sans_projet` : Nouveau, Ouvrir, Préférences, les
+imports d'un scénario et de Storyboard Pro (qui font un projet neuf), les onglets (un onglet sans projet peut voisiner avec des projets), Quitter, et
+l'aide (palette, raccourcis, à propos, diagnostic, conseils, régler le stylet, plein écran, performance). Toute autre commande — qu'elle vienne d'un
+raccourci, d'une entrée de menu, de la palette Ctrl+K ou d'un bouton — répond « Crée ou ouvre d'abord un projet. » et ne touche à rien : le document
+caché ne change pas, l'onglet reste sans projet, fermer SHOT ne demande donc rien. Les entrées de menu qui y mènent sont grisées (`action_item`).
+Sans projet, les touches Entrée, Échap, Retour arrière et les flèches ne vont pas à l'outil ni à la sélection, et des fichiers lâchés sur la fenêtre :
+seuls les projets (`.shot`, `.pelure`, `.sboard`) s'ouvrent (une image ou un son n'a nulle part où se poser).
+
+### 2. Les couleurs étranges du poste neuf
+
+**Cause.** SHOT avait déjà son thème (« SHOT », gris sombre, par défaut, aucun réglage à lire), mais il ne posait ses couleurs que dans le **style actif
+d'egui**. egui garde deux styles (sombre, clair) et choisit lequel selon sa préférence de thème, « Système » au départ ; eframe lui donne le thème de
+Windows à la première image. Au lancement, le système n'était pas encore connu : egui prenait le sombre, SHOT y posait ses couleurs ; à la première image,
+Windows annonçait un thème clair (le poste du bureau) et egui passait au style **clair d'origine** (fonds blancs, textes noirs, textes discrets pâles),
+alors que les panneaux de SHOT, qui lisent la palette directement (`theme::panneau()`…), restaient sombres. D'où le mélange : tout ce que dessine egui
+(menus, boutons, champs, vignettes, fenêtres) en clair, tout ce que SHOT peint lui-même en sombre. Sur le poste d'Anthony, Windows est en thème sombre :
+on ne le voyait pas.
+
+**Correction** (`theme::appliquer`) : la préférence d'egui est **fixée** (`ThemePreference::Dark`, ou `Light` pour un thème clair de SHOT) et les **deux**
+styles reçoivent les mêmes couleurs et la même densité (`all_styles_mut`) ; l'animation des réglages de performance aussi
+(`diagnosticui.rs`). SHOT ne suit donc jamais le thème de Windows, ni au lancement ni quand Windows bascule en cours de route. Les thèmes de
+Préférences > Apparence se changent comme avant, et un thème clair (« Gris clair ») reçoit le style clair d'egui, aux couleurs de sa palette.
+
+**Reste** : le texte « discret » d'egui (`ui.weak`) est calculé par egui en fondant le texte dans le fond : 2,8:1 sur « Gris clair ». Le texte secondaire écrit par SHOT lui-même (`texte_doux`) est à 4,5:1 au moins dans tous les thèmes.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Lance SHOT sur un poste sans `reglages.toml` : menus, accueil, rien d'autre ; pas d'onglet ; aucun blanc ; le titre de la fenêtre dit « SHOT ».
+2. « Nouveau projet », OK : un seul onglet, « Sans titre » ; Ctrl+W le ferme et l'accueil revient, sans onglet.
+3. « Ouvrir un projet » : un seul onglet, celui du projet. Relance avec « Rouvrir le dernier projet » coché : le projet s'ouvre sans accueil
+   qui clignote. Ferme le dernier projet, quitte, relance : l'accueil.
+4. Sans projet : B, Ctrl+Z, Ctrl+V, Tab… ne font rien (la barre d'état le dit) ; les menus Édition à Labo sont grisés.
+5. Passe Windows en thème clair (Paramètres > Personnalisation > Couleurs), relance : SHOT reste sombre en entier ; Préférences > Apparence >
+   « Gris clair » : tout est clair en entier, lisible.
+
+### Essais ajoutés
+
+`sansprojet_tests.rs` (17) — **sans projet** : le lancement (pas d'onglet, pas de panneau, fond neutre, aucun fond clair) ; Nouveau projet crée un seul projet, annulé
+rend l'accueil ; Ouvrir, un projet donné au lancement et « Rouvrir le dernier projet » n'ont ni projet vide ni accueil qui clignote ; case décochée ou
+séance finie sans projet : l'accueil ; fermer le dernier projet (retenu, relu, levé par un projet ouvert) ; quitter sans question ; la récupération reste
+proposée ; **chaque commande** du fichier de raccourcis, **chaque raccourci** par défaut (touches libres, couper/copier/coller, souris) et **chaque entrée des menus
+Fichier et Aide** jouées sans projet ne changent rien (aucune étape d'annulation, rien de modifié, un seul onglet) ; les menus d'un projet ne s'ouvrent pas ;
+fichiers lâchés ; un onglet sans projet à côté de projets. **Thème** : poste neuf avec Windows en thème clair puis sombre (et la bascule en cours de route) :
+egui reste sombre, ses deux styles sont ceux de la palette, aucun fond clair ni texte sombre à l'écran ; les quatre thèmes livrés sous chacun des deux thèmes de
+Windows (couleurs de fond et de texte tirées de la palette, contrastes) ; changer de thème dans les Préférences change les deux styles ensemble.
+Les essais d'avant qui supposaient un projet ouvert dans l'état de départ en ont un maintenant (`welcome = false`).

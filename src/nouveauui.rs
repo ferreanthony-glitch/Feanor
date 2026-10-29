@@ -64,8 +64,9 @@ enum Pick {
 impl App {
     /// Ouvre la fenêtre « Nouveau projet ».
     pub(crate) fn open_new_project(&mut self) {
-        let from_welcome = self.welcome;
-        self.welcome = false;
+        // (L'onglet reste « sans projet » tant que rien n'est créé : le projet qui naît prend sa place, il ne s'ajoute pas à un
+        // projet vide ; annulée, la fenêtre laisse l'accueil, `sansprojet.rs`.)
+        let from_welcome = self.sans_projet();
         self.new_dialog = Some(NewDocDialog::open(&self.settings.new_project, from_welcome));
     }
 

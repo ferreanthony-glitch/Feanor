@@ -459,8 +459,7 @@ impl Palette {
         v.extreme_bg_color = self.champ;
         v.faint_bg_color = self.eleve;
         v.code_bg_color = self.entete;
-        v.hyperlink_color = self.accent_texte;
-        v.warn_fg_color = self.avertissement;
+        v.hyperlink_color = self.accent_texte;        v.warn_fg_color = self.avertissement;
         v.error_fg_color = self.erreur;
         v.selection.bg_fill = self.accent;
         v.selection.stroke = Stroke::new(1.0_f32, self.sur_accent);
@@ -806,7 +805,20 @@ pub fn souligner_actif(ui: &egui::Ui, etiquette: egui::Rect) {
 }
 /// Applique le thème courant à egui : couleurs, densité. À refaire quand le thème change
 /// (`installer` d'abord).
+///
+/// **Le thème d'egui est celui de SHOT, jamais celui de Windows** (2026-10-29). egui garde deux styles (sombre et
+/// clair) et prend celui du système tant que sa préférence est « Système » (c'est le départ) ; eframe donne le thème de
+/// Windows à la première image. Avant, on ne posait que le style actif au moment du lancement (le sombre, le système
+/// n'étant pas encore connu) : sur un poste dont Windows est en thème clair, egui passait au style clair d'origine à la
+/// première image, avec ses fonds blancs et ses textes pâles, pendant que les panneaux de SHOT, qui lisent la palette
+/// directement, restaient sombres. Maintenant la préférence est fixée (sombre, ou clair pour un thème clair) et les deux
+/// styles reçoivent les mêmes couleurs : quel que soit le thème que Windows annonce, l'interface est d'un seul thème.
 pub fn appliquer(ctx: &egui::Context) {
-    ctx.set_visuals(visuels());
-    ctx.style_mut(densifier);
+    let claire = palette().claire;
+    ctx.set_theme(if claire { egui::ThemePreference::Light } else { egui::ThemePreference::Dark });
+    let visuels = visuels();
+    ctx.all_styles_mut(|style| {
+        style.visuals = visuels.clone();
+        densifier(style);
+    });
 }

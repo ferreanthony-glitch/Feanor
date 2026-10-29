@@ -131,7 +131,7 @@ impl App {
         }
         let animation = if p.animations_coupees { 0.0 } else { self.diag.animation };
         if (ctx.style().animation_time - animation).abs() > f32::EPSILON {
-            ctx.style_mut(|s| s.animation_time = animation);
+            ctx.all_styles_mut(|s| s.animation_time = animation);
         }
     }
 

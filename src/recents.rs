@@ -128,7 +128,8 @@ impl App {
     /// Les onglets (`onglets.rs`) : ce sont ceux de la séance d'avant qui reviennent (tous les projets qui
     /// étaient ouverts, l'onglet affiché à la fin) ; une séance sans onglets retenus rouvre le dernier projet.
     pub(crate) fn reopen_last_project(&mut self) {
-        if !self.settings.reopen_last || !self.orphans.is_empty() {
+        // (La séance d'avant s'est finie sans projet ouvert : on démarre sur l'accueil, `sansprojet.rs`.)
+        if !self.settings.reopen_last || !self.orphans.is_empty() || self.settings.session_vide {
             return;
         }
         let mut candidats = self.settings.session_tabs.clone();
@@ -169,7 +170,7 @@ impl App {
                 let _ = candidats;
                 self.reopen_probe = None;
                 // (Anthony a déjà ouvert, créé ou dessiné quelque chose : on ne lui prend pas la main.)
-                if !presents.is_empty() && self.path.is_none() && !self.modified && self.open_job.is_none() && self.saving.is_none() && self.new_dialog.is_none() && self.welcome {
+                if !presents.is_empty() && self.path.is_none() && !self.modified && self.open_job.is_none() && self.saving.is_none() && self.new_dialog.is_none() && self.sans_projet() {
                     self.rouvrir_ces_projets(presents, affiche);
                 }
             }
