@@ -134,7 +134,7 @@ impl App {
     fn montage_layer_settings(&mut self, ui: &mut egui::Ui, li: usize) {
         let Some(l) = self.layers().get(li) else { return };
         let (visible, onion, keep_alpha, stencil, negative, fixed, opacity, blend, folder) =
-            (l.visible, l.onion, l.keep_alpha, l.stencil, l.stencil_negative, l.position_locked, l.opacity, l.blend, l.folder);
+            (l.visible, l.onion, l.keep_alpha, l.stencil, l.stencil_negative, l.position_locked, l.opacity_at(self.cur_frame), l.blend, l.folder);
         if ui.checkbox(&mut visible.clone(), "Afficher").clicked() {
             self.toggle_layer_visible(li);
         }
@@ -147,7 +147,8 @@ impl App {
             ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix(" %").fixed_decimals(0))
         });
         if self.edited(&resp.inner) {
-            self.layers_mut()[li].opacity = (pct / 100.0).clamp(0.0, 1.0);
+            let f = self.cur_frame;
+            self.layers_mut()[li].set_opacity_at(f, (pct / 100.0).clamp(0.0, 1.0));
             self.renderer.invalidate_params();
         }
         if !folder {
@@ -236,7 +237,7 @@ impl App {
             return;
         };
         let (visible, onion, keep_alpha, stencil, negative, fixed, opacity, blend, folder) =
-            (l.visible, l.onion, l.keep_alpha, l.stencil, l.stencil_negative, l.position_locked, l.opacity, l.blend, l.folder);
+            (l.visible, l.onion, l.keep_alpha, l.stencil, l.stencil_negative, l.position_locked, l.opacity_at(self.cur_frame), l.blend, l.folder);
         let video = l.video.is_some();
         // (Pas de titre « Calque « nom » » : une ligne de moins, le menu s'ouvre sur le calque cliqué ; ses entrées sont
         // la dizaine du clic droit, simplification des barres, 2026-10-21.)
@@ -287,7 +288,8 @@ impl App {
                 ui.add(egui::Slider::new(&mut pct, 0.0..=100.0).suffix(" %").fixed_decimals(0))
             });
             if self.edited(&resp.inner) {
-                self.layers_mut()[li].opacity = (pct / 100.0).clamp(0.0, 1.0);
+                let f = self.cur_frame;
+            self.layers_mut()[li].set_opacity_at(f, (pct / 100.0).clamp(0.0, 1.0));
                 self.renderer.invalidate_params();
             }
         }

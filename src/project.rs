@@ -206,7 +206,11 @@ pub const FORMAT: &str = "pelure-projet";
 /// (`vector::Element::Image` : empreinte du contenu, taille, placement, opacité), dont les pixels sont gardés une seule fois, en PNG,
 /// dans `images/<empreinte>.png` du dossier du projet. Une version précédente qui ouvrirait le projet ne saurait pas lire ces
 /// éléments (elle refuserait le dessin) : elle le refuse donc en entier. Un projet de version 41 ou moins s'ouvre tel quel.
-pub const VERSION: u32 = 42;
+/// 43 (2026-10-29, `docs/INTERFACE.md` partie 72) : **clés d'opacité et calque « Couleur unie »** — `cles_opacite` (l'opacité du calque
+/// à certaines images du plan) et `couleur_unie` (le fond d'une seule couleur d'un calque) dans le manifeste de chaque calque. Une version
+/// précédente qui ouvrirait le projet perdrait l'animation de l'opacité et le fond : elle le refuse donc. Un projet de version 42 ou
+/// moins s'ouvre tel quel (sans clé d'opacité ni couleur unie).
+pub const VERSION: u32 = 43;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -606,6 +610,12 @@ struct LayerEntry {
     /// l'animent ; absentes : le calque a sa pose fixe (`transformation`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     cles_position: Vec<crate::poskeys::Entree>,
+    /// Clés d'opacité (format 43, `opacitecles.rs`) : l'opacité du calque à certaines images du plan ; absentes : `opacite` fixe.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    cles_opacite: Vec<crate::opacitecles::Entree>,
+    /// Couleur unie du calque (format 43, `couleurunie.rs`) : le fond d'une seule couleur, sous les dessins du calque ; absente : calque ordinaire.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    couleur_unie: Option<[u8; 3]>,
     /// Profondeur multiplan (2c ; absent = 0, plan de référence).
     #[serde(default, skip_serializing_if = "is_zero")]
     profondeur: f32,
@@ -2216,6 +2226,8 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                     inclinaison_y: l.transform.tilt_y,
                 }),
                 cles_position: l.pos_keys.iter().map(crate::poskeys::Entree::from).collect(),
+                cles_opacite: l.opacity_keys.iter().map(crate::opacitecles::Entree::from).collect(),
+                couleur_unie: l.unie,
                 // (Un calque fixe n'a pas d'écart de profondeur : s'il en reste un, il est écrit dans la profondeur.)
                 profondeur: if l.pos_keys.is_empty() { l.depth + l.transform.dz } else { l.depth },
                 toute_la_scene: l.scene_wide.map(|w| w.key),
@@ -3007,6 +3019,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                             })
                             .unwrap_or_default(),
                         pos_keys: crate::poskeys::from_entries(l.cles_position),
+                        opacity_keys: crate::opacitecles::from_entries(l.cles_opacite),
+                        unie: l.couleur_unie,
                         depth: if l.profondeur.is_finite() {
                             l.profondeur.clamp(Layer::MIN_DEPTH, 1000.0)
                         } else {

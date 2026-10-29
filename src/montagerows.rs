@@ -418,6 +418,10 @@ impl App {
                     if !p.layers[k].pos_keys.is_empty() {
                         self.paint_pos_markers(painter, &p.layers[k], |f| x0 + f as f32 * ppf + ppf * 0.5, cell.center().y, p.frame_count(), visible);
                     }
+                    // Cles d'opacite (`opacitecleselui.rs`) : les losanges gris clair en bas de la piste.
+                    if !p.layers[k].opacity_keys.is_empty() {
+                        self.paint_op_markers(painter, &p.layers[k], |f| x0 + f as f32 * ppf + ppf * 0.5, cell.bottom() - 5.5, p.frame_count(), visible);
+                    }
                 }
                 // Clés qu'on glisse : leur fantôme suit la souris, un repère montre où elles se
                 // poseront (comme le repère de Storyboard Pro entre deux panneaux).
@@ -458,6 +462,16 @@ impl App {
             if key.frame < max && on_screen(x) {
                 let on = self.pos_ui.sel.contains(&(layer.id, key.frame)) || (key.frame == self.cur_frame && current_layer);
                 tick(x, middle, bottom, theme::POIGNEE_CALQUE, on);
+            }
+        }
+        // Les cles d'opacite : un trait court tout en bas (cachees par le filtre de la legende comme les autres).
+        if self.cle_vue(crate::legendecles::Sorte::Opacite) {
+            for key in &layer.opacity_keys {
+                let x = x_of(key.frame);
+                if key.frame < max && on_screen(x) {
+                    let on = self.op_ui.sel.contains(&(layer.id, key.frame)) || (key.frame == self.cur_frame && current_layer);
+                    tick(x, bottom - 3.0, bottom, theme::CLE_OPACITE, on);
+                }
             }
         }
     }
@@ -527,6 +541,33 @@ impl App {
             let panel = &self.doc.panels[i];
             let k = layer_in_row(&panel.layers, row)?;
             let keys = &panel.layers[k].pos_keys;
+            let x0 = b.left() - 1.0;
+            let shown = keys.iter().map(|key| key.frame).filter(|&f| f < panel.frame_count());
+            crate::poskeysui::marker_near(shown, p.x, |f| x0 + f as f32 * ppf + ppf * 0.5, tol).map(|f| (i, k, f))
+        })
+    }
+
+    /// Losange gris clair de clé d'opacité sous le point `p`, en bas d'une piste de calque dépliée : (plan, calque, image du plan).
+    /// Il passe avant les poignées et le dessin dessous (`opacitecleselui.rs`).
+    pub(crate) fn montage_op_key_at(&self, p: Pos2, top: f32, blocks: &[Rect], ppf: f32, rows: &Rows) -> Option<(usize, usize, usize)> {
+        let y = p.y - top;
+        if y < rows.layers_top() || !self.cle_vue(crate::legendecles::Sorte::Opacite) {
+            return None;
+        }
+        let lane = rows.lane_at(y - rows.layers_top())?;
+        if lane.folded || lane.is_more() {
+            return None;
+        }
+        let in_row = (y - rows.layers_top()) - lane.top;
+        if (in_row - (lane.h - 5.5)).abs() > crate::opacitecleselui::HIT_H {
+            return None;
+        }
+        let row = lane.row;
+        let tol = (ppf * 0.5).max(5.0);
+        blocks.iter().enumerate().filter(|(_, b)| p.x >= b.left() - 1.0 - tol && p.x <= b.right() + 1.0 + tol).find_map(|(i, b)| {
+            let panel = &self.doc.panels[i];
+            let k = layer_in_row(&panel.layers, row)?;
+            let keys = &panel.layers[k].opacity_keys;
             let x0 = b.left() - 1.0;
             let shown = keys.iter().map(|key| key.frame).filter(|&f| f < panel.frame_count());
             crate::poskeysui::marker_near(shown, p.x, |f| x0 + f as f32 * ppf + ppf * 0.5, tol).map(|f| (i, k, f))

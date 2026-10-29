@@ -1152,6 +1152,13 @@ pub fn shown_id(item: &crate::render::PlanItem) -> CelId {
         r.hash(&mut h);
         return h.finish() | (1 << 63);
     }
+    // Couleur unie (`couleurunie.rs`) : un numéro propre à la couleur.
+    if let Some(crate::render::FondPart::Unie(c)) = &item.fond {
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        "unie".hash(&mut h);
+        c.hash(&mut h);
+        return h.finish() | (1 << 63);
+    }
     match &item.ctg {
         None if item.fx.is_empty() => item.cel,
         None => fx_id(item.cel, &item.fx),
@@ -1195,7 +1202,29 @@ fn shown_blocking<'a>(doc: &'a Document, item: &crate::render::PlanItem) -> Opti
         Some(crate::render::FondPart::Forme(r)) => fond_shown(doc, item, r),
         // Le repère d'un calque d'effet non résolu (`calqueffet::resolve`) ne montre rien.
         Some(crate::render::FondPart::Reglage(_)) => None,
+        Some(crate::render::FondPart::Unie(c)) => Some(Shown::Fx(unie_cel(*c))),
     }
+}
+
+/// Le dessin d'une couleur unie (`couleurunie.rs`) : un seul pixel de cette couleur, que la composition étire sur toute la feuille (comme
+/// l'aperçu réduit d'un effet) ; gardé par couleur (les huit dernières). Aucun bitmap de la taille de la feuille.
+pub fn unie_cel(c: [u8; 3]) -> Arc<Cel> {
+    static GARDEES: Mutex<Vec<([u8; 3], Arc<Cel>)>> = Mutex::new(Vec::new());
+    let mut v = GARDEES.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(k) = v.iter().position(|(couleur, _)| *couleur == c) {
+        let e = v.remove(k);
+        let cel = e.1.clone();
+        v.push(e);
+        return cel;
+    }
+    let mut raster = Raster::new(1, 1);
+    raster.tile_mut(0).fill(Color32::from_rgb(c[0], c[1], c[2]));
+    let cel = Arc::new(Cel { raster, vector: None, version: 1, fond: None });
+    v.push((c, cel.clone()));
+    if v.len() > 8 {
+        v.remove(0);
+    }
+    cel
 }
 
 /// Un dessin pour l'affichage : ce qu'il faut montrer maintenant, sous quel numéro il est gardé

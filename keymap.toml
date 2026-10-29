@@ -3177,3 +3177,29 @@ source = "SHOT (sans touche)"
 action = "equipe.rendre_tout"
 touches = []
 source = "SHOT (sans touche)"
+
+# Clés d'opacité des calques et calque Couleur unie (2026-10-29) : sans touche par défaut.
+[[raccourci]]
+action = "calque.cle_opacite"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "calque.cle_opacite_lisser"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "calque.cle_opacite_supprimer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "calque.cles_opacite_supprimer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "calque.nouveau_couleur_unie"
+touches = []
+source = "SHOT (sans touche)"

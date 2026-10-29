@@ -202,7 +202,7 @@ fn the_kind_of_each_layer_has_its_own_icon() {
     let mut icones: Vec<&str> = Sorte::TOUTES.iter().map(|s| s.icone()).collect();
     icones.sort_unstable();
     icones.dedup();
-    assert_eq!(icones.len(), 7);
+    assert_eq!(icones.len(), 8, "huit sortes depuis la Couleur unie");
 }
 
 #[test]

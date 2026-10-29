@@ -329,6 +329,9 @@ pub struct Palette {
     /// Calque d'annotation (`calqueannot.rs`, et ceux de la planche) : rouge-rose, vif et sourd.
     pub dessin_annotation: Color32,
     pub calque_annotation: Color32,
+    /// Calque « Couleur unie » (`couleurunie.rs`) : vert citron, vif et sourd.
+    pub dessin_unie: Color32,
+    pub calque_unie: Color32,
     /// Calques de toute la scène (le décor) : la teinte « fond » des noms, et celle de leurs dessins
     /// sous les plans du montage.
     pub decor: Color32,
@@ -427,6 +430,8 @@ impl Palette {
             calque_cfx: if claire { Color32::from_rgb(120, 200, 224) } else { Color32::from_rgb(14, 130, 160) },
             dessin_annotation: jeu([226, 54, 80], [186, 24, 52]),
             calque_annotation: if claire { Color32::from_rgb(226, 130, 146) } else { Color32::from_rgb(168, 36, 62) },
+            dessin_unie: jeu([176, 206, 64], [100, 130, 14]),
+            calque_unie: if claire { Color32::from_rgb(196, 218, 120) } else { Color32::from_rgb(112, 140, 28) },
             decor: jeu([214, 170, 92], [140, 92, 10]),
             calque_decor: if claire { Color32::from_rgb(228, 196, 130) } else { Color32::from_rgb(214, 170, 92) },
             image_courante: jeu([252, 67, 46], [205, 30, 20]),
@@ -596,6 +601,9 @@ couleurs_courantes! {
     /// Calque d'annotation : rouge-rose, vif et sourd.
     dessin_annotation,
     calque_annotation,
+    /// Calque « Couleur unie » : vert citron, vif et sourd.
+    dessin_unie,
+    calque_unie,
     /// Calques de toute la scène (le décor) : le nom, puis les dessins sous les plans du montage.
     decor,
     calque_decor,
@@ -632,6 +640,8 @@ pub fn couleur_du_calque(l: &crate::document::Layer) -> Color32 {
         palette().dessin_cfx
     } else if l.annotation {
         palette().dessin_annotation
+    } else if l.unie.is_some() {
+        palette().dessin_unie
     } else {
         couleur_calque(l.kind, l.couleur.is_some())
     }
@@ -643,6 +653,8 @@ pub fn fond_du_calque(l: &crate::document::Layer) -> Color32 {
         palette().calque_cfx
     } else if l.annotation {
         palette().calque_annotation
+    } else if l.unie.is_some() {
+        palette().calque_unie
     } else {
         fond_calque(l.kind, l.couleur.is_some())
     }
@@ -710,6 +722,8 @@ pub const LASSO_POINTS: Color32 = Color32::from_rgb(192, 128, 0);
 pub const POIGNEE_DEFORMER: Color32 = Color32::from_rgb(255, 150, 60);
 /// Boîte de l'outil Transformer le calque.
 pub const POIGNEE_CALQUE: Color32 = Color32::from_rgb(120, 220, 140);
+/// Le losange d'une clé d'opacité (`opacitecles.rs`) : gris clair, comme un verre.
+pub const CLE_OPACITE: Color32 = Color32::from_rgb(214, 218, 228);
 /// Zones de sécurité (action, titres).
 pub const CADRAGE_SECURITE: Color32 = Color32::from_rgb(0, 165, 195);
 // (Le cadre d'un format de diffusion a sa couleur dans les réglages depuis le 2026-10-28 : `Settings::cadre_format_couleur`.)

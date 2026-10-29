@@ -653,6 +653,7 @@ fn content_signature(doc: &Document, r: &Reglage, lower: &[PlanItem], paper: Opt
         item.fond.as_ref().map(|f| match f {
             FondPart::Forme(r) => format!("{r:?}"),
             FondPart::Reglage(r) => format!("{r:?}"),
+            FondPart::Unie(c) => format!("unie {c:?}"),
         }).hash(&mut h);
     }
     h.finish()

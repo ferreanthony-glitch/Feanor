@@ -350,7 +350,7 @@ pub fn boxes_in(doc: &Document, layers: &[crate::document::Layer], panel: usize,
             (Quand::EcranSeulement, true) | (Quand::ExportSeulement, false) => continue,
             _ => {}
         }
-        let opacity = crate::folders::effect(layers, li).unwrap_or(1.0);
+        let opacity = crate::folders::effect_at(layers, li, frame).unwrap_or(1.0);
         let mut shown = inc.clone();
         shown.couleur[3] = (shown.couleur[3] as f32 * opacity).round() as u8;
         if let Some(f) = &mut shown.fond {

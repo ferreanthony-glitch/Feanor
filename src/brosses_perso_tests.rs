@@ -272,7 +272,7 @@ fn an_old_project_with_characters_reads_as_personnage_brushes_without_loss() {
     let mut doc = Document::new(64, 48, 24);
     doc.personnages = lus;
     assert_eq!(personnages::to_bytes(&doc).expect("écriture").map(|b| b.len() > 10), Some(true));
-    assert_eq!(crate::project::VERSION, 42, "pas de changement de format");
+    assert!(crate::project::VERSION >= 42, "les personnages n'ont pas changé le format (42 ; 43 vient des clés d'opacité)");
 }
 
 // ------------------------------------------------------------------------------------------ le calque d'un personnage

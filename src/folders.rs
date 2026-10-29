@@ -45,6 +45,20 @@ pub fn effect(layers: &[Layer], li: usize) -> Option<f32> {
     }
 }
 
+/// Comme `effect`, à l'image `frame` du plan : l'opacité du calque et celle de son dossier suivent leurs clés d'opacité
+/// (`opacitecles.rs`). Tout ce qui compose une image (écran, vignettes, lecture, exports, PDF) passe par ici.
+pub fn effect_at(layers: &[Layer], li: usize, frame: usize) -> Option<f32> {
+    let l = layers.get(li)?;
+    if l.folder || !l.visible {
+        return None;
+    }
+    match parent_index(layers, li).map(|fi| &layers[fi]) {
+        Some(f) if !f.visible => None,
+        Some(f) => Some(l.opacity_at(frame) * f.opacity_at(frame)),
+        None => Some(l.opacity_at(frame)),
+    }
+}
+
 /// Le calque `li` est verrouillé par son dossier.
 pub fn locked_by_folder(layers: &[Layer], li: usize) -> bool {
     parent_index(layers, li).is_some_and(|fi| layers[fi].locked)

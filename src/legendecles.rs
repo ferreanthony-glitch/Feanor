@@ -29,10 +29,12 @@ pub(crate) enum Sorte {
     Position,
     /// Une transition entre deux plans (fondu, volet, noir).
     Transition,
+    /// Le losange orange du bas de la piste d'un calque : un point de l'opacité du calque (`opacitecles.rs`).
+    Opacite,
 }
 
 impl Sorte {
-    pub(crate) const TOUTES: [Sorte; 5] = [Sorte::Dessin, Sorte::Camera, Sorte::Effet, Sorte::Position, Sorte::Transition];
+    pub(crate) const TOUTES: [Sorte; 6] = [Sorte::Dessin, Sorte::Camera, Sorte::Effet, Sorte::Position, Sorte::Opacite, Sorte::Transition];
 
     pub(crate) fn nom(self) -> &'static str {
         match self {
@@ -40,6 +42,7 @@ impl Sorte {
             Sorte::Camera => "Clé de caméra",
             Sorte::Effet => "Clé d'effet",
             Sorte::Position => "Clé de position",
+            Sorte::Opacite => "Clé d'opacité",
             Sorte::Transition => "Transition",
         }
     }
@@ -50,6 +53,7 @@ impl Sorte {
             Sorte::Camera => "Losange jaune de la piste Caméra : un point du mouvement de caméra.",
             Sorte::Effet => "Losange violet en haut de la piste du calque : un point de l'effet choisi.",
             Sorte::Position => "Losange vert au milieu de la piste : un point du déplacement du calque.",
+            Sorte::Opacite => "Losange orange en bas de la piste : un point de l'opacité du calque (il apparaît, s'efface).",
             Sorte::Transition => "Entre deux plans : fondu enchaîné, volet, fondu au noir.",
         }
     }
@@ -61,6 +65,7 @@ impl Sorte {
             Sorte::Camera => theme::camera(),
             Sorte::Effet => crate::fxkeys::color(),
             Sorte::Position => theme::POIGNEE_CALQUE,
+            Sorte::Opacite => theme::CLE_OPACITE,
             Sorte::Transition => theme::accent_texte(),
         }
     }
@@ -83,11 +88,13 @@ pub struct FiltreCles {
     pub positions: bool,
     #[serde(rename = "transitions")]
     pub transitions: bool,
+    #[serde(rename = "opacites")]
+    pub opacites: bool,
 }
 
 impl Default for FiltreCles {
     fn default() -> Self {
-        FiltreCles { camera: true, effets: true, positions: true, transitions: true }
+        FiltreCles { camera: true, effets: true, positions: true, transitions: true, opacites: true }
     }
 }
 
@@ -99,6 +106,7 @@ impl FiltreCles {
             Sorte::Camera => self.camera,
             Sorte::Effet => self.effets,
             Sorte::Position => self.positions,
+            Sorte::Opacite => self.opacites,
             Sorte::Transition => self.transitions,
         }
     }
@@ -110,6 +118,7 @@ impl FiltreCles {
             Sorte::Camera => self.camera = vue,
             Sorte::Effet => self.effets = vue,
             Sorte::Position => self.positions = vue,
+            Sorte::Opacite => self.opacites = vue,
             Sorte::Transition => self.transitions = vue,
         }
     }
