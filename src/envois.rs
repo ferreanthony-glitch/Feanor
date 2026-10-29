@@ -162,6 +162,8 @@ pub struct Instantane {
     pub octets: Vec<u8>,
     pub dessins: Vec<DessinInstantane>,
     pub textures: Vec<(TextureKind, u32)>,
+    /// Les images collées (`imagevec.rs`) que citent ces dessins : écrites dans `versions/images/` si elles manquent.
+    pub images: Vec<u64>,
 }
 
 /// Les envois d'un projet.
@@ -518,6 +520,13 @@ pub fn construire(demande: Demande) -> Result<Resultat, String> {
     }
     textures.sort_unstable();
     textures.dedup();
+    let images: Vec<u64> = dessins
+        .iter()
+        .filter_map(|d| if let Contenu::Vectoriel(v) = &d.donnees.contenu { Some(crate::imagevec::citees(&v.elements)) } else { None })
+        .flatten()
+        .collect::<std::collections::BTreeSet<u64>>()
+        .into_iter()
+        .collect();
     let fichier = format!("envoi-{}-{:08x}.json", nouveau.id, nouveau.unique);
     let octets = serde_json::to_vec_pretty(&FichierInstantane { format: FORMAT_INSTANTANE.into(), version: VERSION, id: nouveau.id, tete, plans: instantane_plans })
         .map_err(|e| e.to_string())?;
@@ -535,7 +544,7 @@ pub fn construire(demande: Demande) -> Result<Resultat, String> {
         // (Les variantes choisies : notées par l'appelant, qui a le document.)
         variantes: Vec::new(),
     };
-    Ok(Resultat { empreintes, plans: resultats, envoi: Some((envoi, Instantane { id: nouveau.id, fichier, octets, dessins, textures })) })
+    Ok(Resultat { empreintes, plans: resultats, envoi: Some((envoi, Instantane { id: nouveau.id, fichier, octets, dessins, textures, images })) })
 }
 
 // ---------------------------------------------------------------------------------- l'écriture
@@ -624,6 +633,17 @@ pub(crate) fn ecrire(dir: &Path, snaps: &[Arc<Instantane>], reuse: &HashMap<u64,
             }
             if let Some(img) = crate::brushtex::shared_image(kind, key) {
                 project::write_atomic(&f, &project::texture_png(&img)?)?;
+                n += 1;
+            }
+        }
+        for &key in &s.images {
+            let f = crate::imagevec::fichier(&racine, key);
+            if f.exists() {
+                continue;
+            }
+            if let Some(px) = crate::imagevec::obtenir(key) {
+                std::fs::create_dir_all(racine.join(crate::imagevec::DOSSIER)).map_err(|e| format!("{} : {e}", racine.display()))?;
+                project::write_atomic(&f, &crate::imagevec::png(&px)?)?;
                 n += 1;
             }
         }

@@ -475,7 +475,8 @@ fn copying_and_pasting_the_line_brings_its_colour() {
     let names: Vec<&str> = app.layers().iter().map(|l| l.name.as_str()).collect();
     assert_eq!(names.len(), 5, "{names:?}");
     let line = app.layers().iter().position(|l| l.id == app.layer().id).expect("courant");
-    assert_eq!(app.layers()[line].name, "Trait");
+    // Collé dans le même plan : le nom est pris, la copie s'appelle « Trait (2) » (2026-10-29).
+    assert_eq!(app.layers()[line].name, "Trait (2)");
     let colour = &app.layers()[line - 1];
     assert_eq!(colour.couleur.as_ref().map(|c| c.trait_id), Some(app.layers()[line].id), "sous la copie du trait");
     assert_eq!(shape(&colour.frames), shape(&app.layers()[line].frames));

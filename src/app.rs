@@ -317,6 +317,12 @@ pub(crate) struct LayerClip {
     /// D'où il vient (cadre, feuille, cadence) : le calque se colle aussi dans un autre onglet, adapté à sa feuille
     /// (`adaptation.rs`).
     pub origine: crate::adaptation::Origine,
+    /// D'où il vient : l'onglet et le fichier du projet. Collé dans le même projet, un calque de personnage garde son lien au
+    /// personnage ; dans un autre projet, il devient un calque ordinaire.
+    pub projet: (u64, Option<std::path::PathBuf>),
+    /// Les autres calques choisis avec lui (Ctrl ou Maj + clic dans le panneau Calques), du plus bas au plus haut : copiés et
+    /// collés ensemble, dans le même ordre.
+    pub extras: Vec<LayerClip>,
 }
 
 pub(crate) use crate::nouveauui::NewDocDialog;
@@ -3024,14 +3030,13 @@ impl App {
         );
     }
 
-    /// Copie le calque courant, avec ses dessins et sa timeline (W) ; un dossier, avec ses
-    /// calques (13b-5).
-    ///
-    /// Un calque de couleur lié à son trait ne se copie pas sans lui (retour d'Anthony, 2026-10-24 : collé dans un autre plan, il
-    /// aurait perdu son trait, et ses images ne suivaient plus rien) : c'est le trait qui est copié, avec tous ses calques de couleur.
-    pub(crate) fn copy_layer(&mut self) {
-        let li = crate::calquecouleur::trait_de(self.layers(), self.cur_layer).unwrap_or(self.cur_layer);
-        let avec_son_trait = li != self.cur_layer;
+    /// Le projet de ce moment : l'onglet et le fichier (`LayerClip::projet`).
+    fn projet_courant(&self) -> (u64, Option<std::path::PathBuf>) {
+        (self.onglets.get(self.actif).map_or(0, |o| o.id), self.path.clone())
+    }
+
+    /// La copie du calque `li` (un dossier : avec ses calques ; un calque de trait : avec ses calques de couleur), avec ses dessins.
+    fn layer_clip_of(&self, li: usize) -> LayerClip {
         let layer = self.layers()[li].clone();
         let children: Vec<Layer> = crate::folders::children_of(self.layers(), li).into_iter().map(|i| self.layers()[i].clone()).collect();
         let colours: Vec<Layer> = crate::calquecouleur::couleurs_de(self.layers(), li).into_iter().map(|i| self.layers()[i].clone()).collect();
@@ -3042,26 +3047,60 @@ impl App {
             .flat_map(|l| crate::calquecouleur::dessins_du_calque(l))
             .filter_map(|id| self.doc.cels.get(&id).map(|c| (id, c.clone())))
             .collect();
-        let what = if layer.folder { "Dossier" } else { "Calque" };
-        let avec = if avec_son_trait { " (le calque de couleur emmène son trait)" } else { "" };
-        self.status = format!("{what} « {} » copié{avec} : X (ou Ctrl+V dans le panneau Calques) pour le coller dans un autre plan.", layer.name);
-        // La dernière chose copiée : Ctrl+V depuis le panneau Calques le colle (`layer_clip_recent`).
-        self.layer_clip_recent = true;
-        self.layer_clipboard = Some(LayerClip {
+        LayerClip {
             layer,
             children,
             colours,
             cels,
             panel_len: self.frame_count(),
             origine: crate::adaptation::Origine::de(&self.doc),
-        });
+            projet: self.projet_courant(),
+            extras: Vec::new(),
+        }
     }
 
+    /// Copie les calques choisis (le calque courant seul, ou tous ceux qu'on a choisis par Ctrl ou Maj + clic), avec leurs dessins,
+    /// leur timeline, leur aplat, leurs effets, leur mode de fusion et leur opacité (W, ou Ctrl+C quand le panneau Calques a la
+    /// main) ; un dossier, avec ses calques (13b-5).
+    ///
+    /// Un calque de couleur lié à son trait ne se copie pas sans lui (retour d'Anthony, 2026-10-24 : collé dans un autre plan, il
+    /// aurait perdu son trait, et ses images ne suivaient plus rien) : c'est le trait qui est copié, avec tous ses calques de couleur.
+    /// Un calque dont le dossier est aussi choisi part avec le dossier.
+    pub(crate) fn copy_layer(&mut self) {
+        let choisis = self.chosen_layers();
+        let mut tops: Vec<usize> = choisis.iter().map(|&li| crate::calquecouleur::trait_de(self.layers(), li).unwrap_or(li)).collect();
+        if choisis.len() > 1 {
+            tops.retain(|&li| crate::folders::parent_index(self.layers(), li).is_none_or(|fi| !choisis.contains(&fi)));
+        }
+        tops.sort_unstable();
+        tops.dedup();
+        let avec_son_trait = tops.len() == 1 && tops[0] != self.cur_layer && choisis.len() == 1;
+        let mut clips: Vec<LayerClip> = tops.iter().map(|&li| self.layer_clip_of(li)).collect();
+        let n = clips.len();
+        let mut clip = clips.remove(0);
+        clip.extras = clips;
+        let what = if clip.layer.folder { "Dossier" } else { "Calque" };
+        let avec = if avec_son_trait { " (le calque de couleur emmène son trait)" } else { "" };
+        self.status = if n > 1 {
+            format!("{n} calques copiés : Ctrl+V dans le panneau Calques (ou X) pour les coller, ici ou dans un autre plan.")
+        } else {
+            format!("{what} « {} » copié{avec} : X (ou Ctrl+V dans le panneau Calques) pour le coller dans un autre plan.", clip.layer.name)
+        };
+        // La dernière chose copiée : Ctrl+V depuis le panneau Calques le colle (`layer_clip_recent`).
+        self.layer_clip_recent = true;
+        self.layer_clipboard = Some(clip);
+    }
     /// Calque collé : une copie de `source` avec ses propres copies des dessins (`copies` évite de
     /// copier deux fois un même dessin), à la durée du plan ; un dessin tenu jusqu'à la fin du plan
-    /// d'origine reste tenu jusqu'à la fin de celui-ci.
-    fn pasted_layer(&mut self, source: &Layer, clip: &LayerClip, copies: &mut HashMap<CelId, CelId>) -> Layer {
+    /// d'origine reste tenu jusqu'à la fin de celui-ci. `meme_projet` : la copie vient de ce projet-ci, un calque de personnage garde
+    /// alors son lien au personnage (s'il existe encore) ; ailleurs, c'est un calque ordinaire.
+    fn pasted_layer(&mut self, source: &Layer, clip: &LayerClip, copies: &mut HashMap<CelId, CelId>, meme_projet: bool) -> Layer {
         let mut layer = Layer { id: fresh_layer_id(), scene_wide: None, decor: false, ..source.clone() };
+        if let Some(pid) = layer.personnage {
+            if !(meme_projet && self.doc.personnages.iter().any(|p| p.id == pid)) {
+                layer.personnage = None;
+            }
+        }
         for f in layer.frames.iter_mut() {
             *f = f.and_then(|old| {
                 if let Some(&c) = copies.get(&old) {
@@ -3093,9 +3132,10 @@ impl App {
         layer
     }
 
-    /// Colle le calque copié au-dessus du calque courant (X), avec ses propres copies des dessins.
-    /// Dans le dossier du calque courant s'il y en a un ; un dossier copié se colle avec ses
-    /// calques, au-dessus du dossier courant (pas de dossier dans un dossier).
+    /// Colle le ou les calques copiés au-dessus du calque courant (X, ou Ctrl+V dans le panneau Calques), avec leurs propres copies
+    /// des dessins, **en une seule étape d'annulation**. Dans le dossier du calque courant s'il y en a un ; un dossier copié se
+    /// colle avec ses calques, au-dessus du dossier courant (pas de dossier dans un dossier). Un calque de même nom dans le plan
+    /// prend « Nom (2) », « Nom (3) »… (`layerops::nom_libre`).
     pub(crate) fn paste_layer(&mut self) {
         if self.content_refuses() {
             return;
@@ -3113,57 +3153,74 @@ impl App {
         self.end_stroke();
         self.drop_bitmap_selection();
         let snap = self.snapshot();
+        let meme_projet = clip.projet == self.projet_courant();
         let mut copies: HashMap<CelId, CelId> = HashMap::new();
-        let mut layer = self.pasted_layer(&clip.layer, &clip, &mut copies);
-        // Les numéros des calques collés, par ceux des calques copiés : les calques de couleur collés colorient les traits collés.
-        let mut ids: HashMap<u64, u64> = HashMap::from([(clip.layer.id, layer.id)]);
-        let mut children: Vec<Layer> = Vec::new();
-        for c in &clip.children {
-            let mut child = self.pasted_layer(c, &clip, &mut copies);
-            child.parent = Some(layer.id);
-            ids.insert(c.id, child.id);
-            children.push(child);
-        }
-        // Ses calques de couleur reviennent avec lui, sous la copie.
-        let mut colours: Vec<Layer> = Vec::new();
-        for c in &clip.colours {
-            let colour = self.pasted_layer(c, &clip, &mut copies);
-            ids.insert(c.id, colour.id);
-            colours.push(colour);
-        }
-        // Les liens des calques de couleur : leur trait collé (jamais celui du plan d'où ils viennent), et seulement les sources
-        // qui existent dans ce plan (celles d'un autre plan n'y sont pas : un lien qui pend).
-        let ici: std::collections::HashSet<u64> = self.layers().iter().map(|l| l.id).chain(ids.values().copied()).collect();
-        for l in std::iter::once(&mut layer).chain(children.iter_mut()).chain(colours.iter_mut()) {
-            if let Some(link) = l.couleur.as_mut() {
-                link.relink(&ids, &copies);
-                link.sources.retain(|s| ici.contains(s));
-            }
-        }
         let cur = self.cur_layer;
         let folder_of_current = crate::folders::parent_index(self.layers(), cur);
-        let at = match (layer.folder, folder_of_current) {
-            // Un dossier ne va pas dans un dossier : au-dessus du dossier du calque courant.
+        // Un dossier ne va pas dans un dossier : tout va au-dessus du dossier du calque courant.
+        let au_dessus_du_dossier = folder_of_current.is_some() && std::iter::once(&clip).chain(clip.extras.iter()).any(|c| c.layer.folder);
+        let at = match (au_dessus_du_dossier, folder_of_current) {
             (true, Some(fi)) => fi + 1,
             _ => cur + 1,
         };
-        layer.parent = if layer.folder { None } else { folder_of_current.map(|fi| self.layers()[fi].id) };
-        for c in colours.iter_mut() {
-            c.parent = layer.parent;
+        let parent_commun = if au_dessus_du_dossier { None } else { folder_of_current.map(|fi| self.layers()[fi].id) };
+        let mut block: Vec<Layer> = Vec::new();
+        let mut mains: Vec<(u64, String)> = Vec::new();
+        for c in std::iter::once(&clip).chain(clip.extras.iter()) {
+            let mut layer = self.pasted_layer(&c.layer, c, &mut copies, meme_projet);
+            // Les numéros des calques collés, par ceux des calques copiés : les calques de couleur collés colorient les traits collés.
+            let mut ids: HashMap<u64, u64> = HashMap::from([(c.layer.id, layer.id)]);
+            let mut children: Vec<Layer> = Vec::new();
+            for ch in &c.children {
+                let mut child = self.pasted_layer(ch, c, &mut copies, meme_projet);
+                child.parent = Some(layer.id);
+                ids.insert(ch.id, child.id);
+                children.push(child);
+            }
+            // Ses calques de couleur reviennent avec lui, sous la copie.
+            let mut colours: Vec<Layer> = Vec::new();
+            for co in &c.colours {
+                let colour = self.pasted_layer(co, c, &mut copies, meme_projet);
+                ids.insert(co.id, colour.id);
+                colours.push(colour);
+            }
+            // Les liens des calques de couleur : leur trait collé (jamais celui du plan d'où ils viennent), et seulement les sources
+            // qui existent dans ce plan (celles d'un autre plan n'y sont pas : un lien qui pend).
+            let ici: std::collections::HashSet<u64> = self.layers().iter().map(|l| l.id).chain(ids.values().copied()).collect();
+            for l in std::iter::once(&mut layer).chain(children.iter_mut()).chain(colours.iter_mut()) {
+                if let Some(link) = l.couleur.as_mut() {
+                    link.relink(&ids, &copies);
+                    link.sources.retain(|s| ici.contains(s));
+                }
+            }
+            layer.parent = if layer.folder { None } else { parent_commun };
+            for co in colours.iter_mut() {
+                co.parent = layer.parent;
+            }
+            mains.push((layer.id, layer.name.clone()));
+            block.extend(children.into_iter().chain(colours).chain(std::iter::once(layer)));
         }
-        let name = layer.name.clone();
-        let id = layer.id;
-        let block: Vec<Layer> = children.into_iter().chain(colours).chain(std::iter::once(layer)).collect();
+        // Des noms qui ne se répètent pas dans le plan : « Nom (2) » pour le collé.
+        let mut pris: std::collections::HashSet<String> = self.layers().iter().map(|l| l.name.clone()).collect();
+        for l in block.iter_mut() {
+            l.name = crate::layerops::nom_libre(&pris, &l.name);
+            pris.insert(l.name.clone());
+        }
+        let n = mains.len();
+        let ids_mains: Vec<u64> = mains.iter().map(|(id, _)| *id).collect();
+        let noms: Vec<String> = block.iter().filter(|l| ids_mains.contains(&l.id)).map(|l| l.name.clone()).collect();
         for (k, l) in block.into_iter().enumerate() {
             self.layers_mut().insert(at + k, l);
         }
         crate::folders::normalize(self.layers_mut());
-        self.cur_layer = self.layers().iter().position(|l| l.id == id).unwrap_or(at);
+        let courant = *ids_mains.last().unwrap_or(&0);
+        self.cur_layer = self.layers().iter().position(|l| l.id == courant).unwrap_or(at);
+        // Plusieurs calques collés : ils sont choisis ensemble (le dernier est le courant).
+        self.layer_sel = if n > 1 { ids_mains } else { Vec::new() };
         self.vsel = None;
         self.commit_structure(snap);
-        self.status = format!("« {name} » collé.");
+        self.status = if n > 1 { format!("{n} calques collés : {}.", noms.join(", ")) } else { format!("« {} » collé.", noms.first().map_or("", String::as_str)) };
     }
-
     /// Fusionne le calque courant avec celui du dessous (Ctrl+E).
     pub(crate) fn merge_layer_down(&mut self) {
         if self.content_refuses() {
@@ -3528,11 +3585,13 @@ impl App {
         let job = crate::export::ExportJob::still(&path, plan, cam, self.cur_panel, self.cur_frame, self.doc.frame);
         self.start_job(job);
     }
-    /// Pose une image (PNG/JPEG) au centre du dessin courant d'un calque bitmap.
+    /// Pose une image (PNG/JPEG) au centre du dessin courant d'un calque bitmap ; sur un calque vectoriel, elle devient un objet
+    /// du dessin (`imagevec.rs`).
     pub(crate) fn import_image(&mut self) {
         self.end_stroke();
-        if self.layer().kind != LayerKind::Bitmap || self.layer().folder {
-            self.status = "Choisis un calque bitmap pour importer une image.".into();
+        let vectoriel = self.layer().kind == LayerKind::Vector && !self.layer().folder;
+        if !vectoriel && (self.layer().kind != LayerKind::Bitmap || self.layer().folder) {
+            self.status = "Choisis un calque bitmap ou vectoriel pour importer une image.".into();
             return;
         }
         let Some(path) = rfd::FileDialog::new()
@@ -3548,6 +3607,11 @@ impl App {
                 return;
             }
         };
+        if vectoriel {
+            let (w, h) = (img.width() as usize, img.height() as usize);
+            self.paste_image_as_object((w, h, img.into_raw()));
+            return;
+        }
         if !self.layer_editable() {
             return;
         }
@@ -3749,7 +3813,10 @@ impl App {
         }
         // Une image copiée ailleurs (navigateur…) passe avant le presse-papiers de SHOT, dont
         // les copies écrivent « SHOT : … » dans celui de Windows (`pasteimage.rs`).
-        if action == "edition.coller" || action == "edition.coller_a_la_tete" {
+        // (Le panneau Calques a la main et un calque vient d'être copié : Ctrl+V colle ce calque, pas une image restée dans le
+        // presse-papiers de Windows.)
+        let calque_a_coller = self.layers_pane_focus && self.layer_clip_recent && self.layer_clipboard.is_some();
+        if (action == "edition.coller" || action == "edition.coller_a_la_tete") && !calque_a_coller {
             if let Some(image) = crate::pasteimage::clipboard_image() {
                 self.paste_clipboard_image(image);
                 return;

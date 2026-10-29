@@ -49,10 +49,14 @@ pub fn similar(src: &[Color32], w: usize, h: usize, sx: usize, sy: usize, tol: u
 /// Éléments du dessin de la même couleur que l'élément `i`, dans l'ordre du dessin.
 pub fn same_color(d: &VectorDrawing, i: usize) -> Vec<usize> {
     let Some(color) = d.elements.get(i).map(|e| e.color()) else { return Vec::new() };
+    // Une image collée n'a pas de couleur : elle ne se prend que seule, et jamais avec « les noirs ».
+    if !d.elements[i].has_color() {
+        return vec![i];
+    }
     d.elements
         .iter()
         .enumerate()
-        .filter(|(_, e)| e.color() == color)
+        .filter(|(_, e)| e.has_color() && e.color() == color)
         .map(|(k, _)| k)
         .collect()
 }

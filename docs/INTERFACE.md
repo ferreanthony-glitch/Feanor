@@ -5527,3 +5527,49 @@ Anthony croit que la fenêtre « s'est fermée toute seule ». Dans le code, la 
 ### Essais
 
 `remplacer_tests.rs` : la décision (existant, jumeau `.pelure`, dossier à `dessins/` : on demande ; nom libre : on écrit ; rien n'est écrit) ; projet ouvert dans un autre onglet refusé ; **la suite d'Anthony** (croix, « Enregistrer », projet existant : la fenêtre s'ouvre, rien n'est écrit, la croix reste retenue, même avec la fenêtre de remplacement ouverte) ; **Remplacer** (ancien dossier renommé avec tout son contenu intact, nouveau projet écrit et lisible, l'action « Quitter » suit) ; deux remplacements dans la même minute (rien n'est écrasé) ; **Annuler** (rien n'a changé, la boîte revient, l'onglet reste) ; **Remplacer puis Fermer l'onglet** ; **renommage impossible** (un fichier tenu sans partage) : erreur claire, rien d'écrit, l'ancien projet intact ; **échec d'écriture pendant Quitter et Fermer l'onglet** (disque plein simulé) : projet ouvert et modifié, fenêtre d'erreur, la croix retenue et la question qui revient ; fenêtre de fichiers fermée sans choisir : la question revient ; deux onglets modifiés et croix : une seule boîte ; **la copie de secours reste** quand la fenêtre se ferme sur un projet modifié non confirmé (et contient le travail), est effacée après « Ne pas enregistrer » ou un enregistrement réussi ; la copie finale attend la copie en cours ; le nom du dossier remplacé et ses collisions. `Banc::fermer_la_fenetre` (`perf_tests.rs`) simule la croix (`close_requested`) et dit si SHOT l'a retenue (`CancelClose`).
+
+---------------------------------------------------------------------------------------------------
+
+## 69. Coller une image en objet vectoriel ; copier-coller des calques (2026-10-29, branche `coller-image-calques`)
+
+**Demandes d'Anthony (2026-10-29).** « Une image collée est collée sur un calque vectoriel. L'image devient un objet vectoriel, sauf si elle est collée sur un calque bitmap. » Et : « On peut copier/coller un calque en le sélectionnant dans le panneau Calques. »
+
+### Une image collée devient un objet vectoriel
+
+- **Calque courant vectoriel** : Ctrl+V d'une image du presse-papiers de Windows (copiée d'un navigateur, d'une capture…), « Importer une image » (menu Fichier) et une image `png` / `jpg` lâchée depuis l'Explorateur sur la fenêtre posent un **objet image** dans le dessin de l'image courante : `Element::Image` (`vector.rs`), un rectangle texturé avec son placement (déplacement, échelle, rotation) et son opacité. L'image est centrée dans le cadre, réduite si elle ne tient pas (jamais agrandie), **sélectionnée** (outil Sélection) : on la déplace, on la transforme (poignées, rotation, miroirs, perspective, enveloppe), on la supprime, on la réordonne (monter / descendre dans le dessin), on la copie et on la colle comme les traits et les zones. **Aucun calque n'est créé**, une seule étape d'annulation. Un calque verrouillé, caché ou sans dessin (création automatique éteinte) refuse, avec la raison dans la barre d'état, et rien n'est collé nulle part.
+- **Calque courant bitmap modifiable** : comme avant, en pixels, dans une zone flottante à placer (poignées, flèches ; Échap ou un autre outil la pose).
+- **Dossier, calque vidéo, calque bitmap verrouillé** : comme avant, un nouveau calque bitmap « Image collée » au-dessus du calque courant.
+- **Le presse-papiers de Windows est lu à la demande** (Ctrl+V), comme avant ; les copies de SHOT n'y écrivent rien de plus. Quand le panneau Calques a la main et qu'un calque vient d'être copié, Ctrl+V colle ce calque, pas une image restée dans le presse-papiers de Windows.
+
+### Où sont les pixels (`imagevec.rs`)
+
+- L'objet ne porte que l'**empreinte** du contenu (64 bits, celle des pixels et de la taille), la taille et le placement. Les pixels sont dans un **magasin commun** à tous les onglets (comme les textures des pinceaux) : un même contenu collé dix fois n'y est qu'une fois. Plus grand côté gardé : 4096 pixels (au-delà, réduite au collage).
+- **Fichier** : chaque image est écrite **une seule fois**, en PNG, dans `images/<empreinte>.png` du dossier du projet (`project.rs`) ; un fichier ne change jamais sous la même empreinte, il n'est écrit que s'il manque, et effacé quand plus aucun dessin ne le cite (jamais dans un projet partagé, où l'équipier d'à côté peut en citer, ni quand des dessins étaient illisibles). Les envois (`versions/`) gardent leurs images dans `versions/images/`. À l'ouverture, `images/` est lu avec les textures ; une image dont le fichier manque ne se montre pas (son rectangle reste sélectionnable, sa place est gardée).
+- **Rendu** : le même que les autres objets (`render_element_in`), donc l'écran, les vignettes et les exports. Bilinéaire, bords fondus ; une image réduite de plus de moitié prend la moyenne de plusieurs points par pixel (pas de crénelage).
+- **Sans latence** : une image de plus d'un million de pixels est préparée (réduction, empreinte) sur un **fil de fond** (`pasteimage::TacheImage`, reprise par `tick_collage`) ; l'interface continue de vivre, l'objet se pose là où le collage a été demandé (plan, calque, image), et on ne change pas d'onglet pendant ce temps. L'encodage PNG se fait à l'enregistrement, sur le fil d'écriture.
+- **Format 42** (`project::VERSION`, était 41) : l'élément `Image` est inconnu des versions précédentes, qui refuseraient le dessin ; elles refusent donc le projet en entier plutôt que de perdre l'image. **Un projet de version 41 ou moins s'ouvre tel quel.**
+- Une image n'a pas de couleur : la sélection par couleur la prend seule et jamais avec « les noirs », recolorier n'y change rien. Le fondu entre deux images clés (tween) la fond en opacité.
+
+### Copier-coller des calques depuis le panneau Calques
+
+- Quand le panneau Calques a la main (le dernier clic était dedans), **Ctrl+C copie le calque entier** (clés, dessins, aplat, effets, mode de fusion, opacité, réglages) et **Ctrl+V le colle dans le plan courant, au-dessus du calque choisi, en une seule étape d'annulation**. Le calque suit sa copie d'un plan à l'autre, et d'un onglet à l'autre (adapté à la feuille d'arrivée, `adaptation.rs` / `collage.rs`). La machinerie existait (retour du 2026-10-24, W / X) ; ce chantier ajoute ce qui manquait.
+- **Plusieurs calques choisis** (Ctrl ou Maj + clic dans le panneau) : tous sont copiés (`LayerClip::extras`) et collés ensemble, dans le même ordre, en une seule étape ; ils restent choisis après le collage. Un dossier choisi emmène ses calques, un calque de trait emmène ses calques de couleur (une seule fois). Couper (X du menu) supprime tous les calques copiés.
+- **Nom unique** : un calque de même nom dans le plan d'arrivée donne « Nom (2) », puis « Nom (3) » (la copie de « Nom (2) » est « Nom (3) », pas « Nom (2) (2) »). « Coller à la place du calque courant » reprend le nom d'origine du calque remplacé.
+- **Calque de personnage** (`Layer::personnage`) : collé **dans le même projet** (même onglet, même fichier), il **garde son lien au personnage** (si le personnage existe encore) ; collé dans **un autre projet**, il devient un calque ordinaire.
+- **Hors du panneau Calques**, Ctrl+C et Ctrl+V gardent leur sens (sélection du dessin, plans du montage, clés de la timeline, effets du panneau Effets…) : même règle que le panneau Effets (`fxcopie.rs`).
+- **Clic droit sur un calque du panneau Calques** : « Copier, coller le calque » (un seul sous-menu : Copier le calque ou « Copier les N calques choisis », Coller le calque) ; le menu reste à dix entrées. Les mêmes commandes sont aussi dans « Presse-papiers » des autres commandes, et dans la palette (Ctrl+K).
+- Le presse-papiers interne de SHOT suffit : rien n'est écrit dans celui de Windows.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Sur un **calque vectoriel**, copie une image dans un navigateur, **Ctrl+V** : un cadre de sélection apparaît autour de l'image, centrée ; aucun calque neuf. Déplace-la, tourne-la, agrandis-la avec les poignées, **Suppr** l'enlève, **Ctrl+Z** la rend.
+2. Sur un **calque bitmap**, même chose : l'image est une zone flottante (pixels), comme avant.
+3. Colle une **grande capture** (4K) : l'interface ne se fige pas ; l'image arrive quelques instants après.
+4. Enregistre, rouvre : l'image est là, au même endroit ; le dossier du projet a un `images/` avec un PNG par image différente.
+5. Panneau Calques : clique un calque, **Ctrl+C**, clique un autre plan, clique un calque, **Ctrl+V** : le calque est là (nom « Nom (2) » s'il existait), un seul Ctrl+Z le retire. Même chose avec **Ctrl + clic** sur deux calques.
+6. Clic droit sur un calque : « Copier, coller le calque ».
+7. Un calque de personnage collé dans le même projet reste lié à son personnage ; collé dans un autre projet (autre onglet), il est ordinaire.
+
+### Essais
+
+`imagevec_tests.rs` (13) : image collée sur un calque vectoriel = un objet sélectionné, sans calque neuf, rendu, une étape d'annulation ; déplacer, agrandir, tourner, prendre, supprimer l'objet ; sur un calque bitmap, des pixels et pas d'objet ; grande image sur un fil de fond, posée là où le collage a été demandé ; **une image collée deux fois n'est écrite qu'une fois**, rouverte sans rien dans le magasin (pixels et rendu retrouvés), fichier effacé quand plus rien ne le cite ; format 42 et lecture d'un ancien dessin ; image ni prise par couleur ni recolorée ; calque copié depuis le panneau, collé dans un autre plan avec tout ce qu'il a (mode de fusion, opacité, effets, dessin à lui, image) en une étape ; noms « (2) » et « (3) » ; plusieurs calques ensemble, dans l'ordre, en une étape ; lien au personnage gardé dans le même projet, perdu dans un autre ou si le personnage n'existe plus ; Ctrl+C / Ctrl+V hors du panneau inchangés. `calquecouleur_tests` : la copie collée dans le même plan s'appelle « Trait (2) ».

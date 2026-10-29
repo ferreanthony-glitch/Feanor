@@ -736,6 +736,10 @@ pub(crate) fn preparer(doc: &Document, manifest_path: &Path, written: &mut HashM
         .filter(|(path, _, _)| !path.exists())
         .filter_map(|(path, kind, key)| crate::brushtex::shared_image(kind, key).map(|img| (path, img)))
         .collect();
+    // Les images collées : écrites si elles manquent (jamais effacées ici : un autre équipier peut en citer, `effacer_inutiles`
+    // ne passe pas par un enregistrement partagé).
+    let used_images = used_images(doc, &used);
+    let images = images_a_ecrire(dir, &used_images);
     let mut videos = Vec::new();
     for v in plans.iter().flat_map(|(_, d)| d.panel.layers.iter()).filter_map(|l| l.video.as_ref()) {
         let to = dir.join(VIDEOS).join(v.id.to_string());
@@ -748,6 +752,7 @@ pub(crate) fn preparer(doc: &Document, manifest_path: &Path, written: &mut HashM
     let mut job = SaveJob::vide(manifest_path);
     job.drawings = drawings;
     job.textures = textures;
+    job.images = images;
     job.videos = videos;
     job.fonds = fonds;
     job.hors = hors;
@@ -784,6 +789,8 @@ impl SaveJob {
             drawings: Vec::new(),
             sounds: Vec::new(),
             textures: Vec::new(),
+            images: Vec::new(),
+            used_images: BTreeSet::new(),
             videos: Vec::new(),
             manifest: Vec::new(),
             has_unreadable: false,
@@ -858,6 +865,13 @@ impl SaveJob {
         }
         for (path, img) in &self.textures {
             write_atomic(path, &texture_png(img)?)?;
+            count += 1;
+        }
+        if !self.images.is_empty() {
+            fs::create_dir_all(dir.join(crate::imagevec::DOSSIER)).map_err(|e| format!("{} : {e}", dir.display()))?;
+        }
+        for (path, px) in &self.images {
+            write_atomic(path, &crate::imagevec::png(px)?)?;
             count += 1;
         }
         for (clip, from, to) in &self.videos {

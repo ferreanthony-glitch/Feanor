@@ -470,6 +470,9 @@ mod flip;
 #[cfg(test)]
 mod flip_tests;
 mod pasteimage;
+mod imagevec;
+#[cfg(test)]
+mod imagevec_tests;
 mod plantage;
 #[cfg(test)]
 mod plantage_tests;

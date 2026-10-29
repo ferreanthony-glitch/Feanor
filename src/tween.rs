@@ -73,7 +73,7 @@ fn resample_contour(c: &[[f32; 2]], n: usize) -> Vec<[f32; 2]> {
 fn faded(e: &Element, k: f32) -> Element {
     let mut e = e.clone();
     match &mut e {
-        Element::Stroke { opacity, .. } | Element::Fill { opacity, .. } | Element::Text { opacity, .. } => *opacity *= k,
+        Element::Stroke { opacity, .. } | Element::Fill { opacity, .. } | Element::Text { opacity, .. } | Element::Image { opacity, .. } => *opacity *= k,
     }
     e
 }
@@ -154,7 +154,7 @@ pub fn tween_vector(a: &VectorDrawing, b: &VectorDrawing, t: f32) -> VectorDrawi
         }
     }
     elements.retain(|e| match e {
-        Element::Stroke { opacity, .. } | Element::Fill { opacity, .. } | Element::Text { opacity, .. } => *opacity > 0.001,
+        Element::Stroke { opacity, .. } | Element::Fill { opacity, .. } | Element::Text { opacity, .. } | Element::Image { opacity, .. } => *opacity > 0.001,
     });
     VectorDrawing { elements }
 }

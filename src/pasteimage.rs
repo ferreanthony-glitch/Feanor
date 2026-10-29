@@ -2,15 +2,24 @@
 //! de coller une image copiée dans le presse-papiers de Windows, issue d'internet ou autre »).
 //!
 //! Ctrl+V (ou Édition > Coller) : si le presse-papiers de Windows tient une image qui ne vient pas
-//! de SHOT (ses copies y écrivent « SHOT : … »), c'est elle qui est collée. Sur un calque
-//! bitmap modifiable : dans son dessin ; sinon sur un nouveau calque bitmap « Image collée »,
-//! au-dessus du calque courant. Centrée dans le cadre, réduite s'il le faut pour y tenir, et
-//! sélectionnée (poignées, flèches) : Échap ou un autre outil la pose.
+//! de SHOT (ses copies y écrivent « SHOT : … »), c'est elle qui est collée.
+//!
+//! - Sur un calque **vectoriel** (2026-10-29) : l'image devient un **objet vectoriel** du dessin de la clé (`Element::Image`,
+//!   `imagevec.rs`), centré dans le cadre, réduit s'il le faut pour y tenir, et sélectionné (outil Sélection : on le déplace,
+//!   on le transforme, on le supprime, on le réordonne comme les autres objets). Aucun calque n'est créé. Une grande image se
+//!   prépare sur un fil de fond (`TacheImage`, reprise par `tick_collage`).
+//! - Sur un calque **bitmap** modifiable : dans son dessin, en zone flottante (poignées, flèches ; Échap ou un autre outil la pose).
+//! - Sinon (dossier, calque vidéo, calque bitmap verrouillé…) : sur un nouveau calque bitmap « Image collée », au-dessus du
+//!   calque courant, comme avant.
 //!
 //! egui garde Ctrl+V pour lui quand le presse-papiers n'a pas de texte (une image copiée d'un
 //! navigateur) et n'envoie rien ; le relâché de V, lui, arrive (voir `handle_shortcuts`).
 
+use std::sync::mpsc::{channel, Receiver};
+use std::time::Instant;
+
 use crate::app::App;
+use crate::collage::Ancre;
 use crate::document::LayerKind;
 use crate::pixsel::Floating;
 use crate::raster::premultiply;
@@ -63,11 +72,23 @@ pub fn clipboard_image() -> Option<(usize, usize, Vec<u8>)> {
     (image.width > 0 && image.height > 0).then(|| (image.width, image.height, image.bytes.into_owned()))
 }
 
+/// Une grande image qu'un fil de fond prépare (réduction, empreinte) avant de la poser en objet vectoriel : où elle ira.
+pub(crate) struct TacheImage {
+    rx: Receiver<Option<(u64, usize, usize)>>,
+    ancre: Ancre,
+    debut: Instant,
+}
+
 impl App {
     /// Colle l'image (largeur, hauteur, RVBA) venue du presse-papiers de Windows.
     pub(crate) fn paste_clipboard_image(&mut self, (w, h, rgba): (usize, usize, Vec<u8>)) {
         self.end_stroke();
         self.drop_bitmap_selection();
+        // Un calque vectoriel : l'image devient un objet de son dessin, sans calque neuf.
+        if self.layer().kind == LayerKind::Vector && !self.layer().folder {
+            self.paste_image_as_object((w, h, rgba));
+            return;
+        }
         let l = self.layer();
         let here = l.kind == LayerKind::Bitmap && l.drawable() && !l.locked && !l.position_locked;
         if !here {
@@ -96,6 +117,90 @@ impl App {
         if self.paste_floating(to_floating(&rgba, tw, th, x0, y0)) {
             let reduced = if (tw, th) == (w, h) { String::new() } else { format!(", réduite à {tw}×{th} pour tenir dans le cadre") };
             self.status = format!("Image collée ({w}×{h}{reduced}) : déplace-la (flèches, poignées), puis Échap ou un autre outil pour la poser.");
+        }
+    }
+
+    /// L'image (largeur, hauteur, RVBA) devient un objet vectoriel du dessin de l'image courante du calque vectoriel courant.
+    /// Une grande image est préparée sur un fil de fond : l'interface continue de vivre, l'objet se pose à la fin (`tick_image`).
+    pub(crate) fn paste_image_as_object(&mut self, (w, h, rgba): (usize, usize, Vec<u8>)) {
+        if self.collage.images.is_some() {
+            self.status = "Une image est déjà en cours de préparation.".into();
+            return;
+        }
+        if !self.layer_editable() {
+            return;
+        }
+        if w * h <= crate::imagevec::GRANDE {
+            match crate::imagevec::preparer(w, h, rgba) {
+                Some((key, tw, th)) => self.place_image_object(key, tw, th, (w, h)),
+                None => self.status = "Image vide ou illisible : rien n'est collé.".into(),
+            }
+            return;
+        }
+        let (tx, rx) = channel();
+        let ok = std::thread::Builder::new().name("image-collee".into()).spawn(move || {
+            let _ = tx.send(crate::imagevec::preparer(w, h, rgba));
+        });
+        if ok.is_err() {
+            self.status = "Collage impossible : la préparation de l'image n'a pas pu démarrer.".into();
+            return;
+        }
+        let ancre = Ancre { panel: self.panel().id, layer: self.layer().id, frame: self.cur_frame };
+        self.collage.images = Some(TacheImage { rx, ancre, debut: Instant::now() });
+        self.status = format!("Image de {w}×{h} en préparation…");
+    }
+
+    /// Pose l'image d'empreinte `key` (déjà dans le magasin, `tw` × `th` pixels ; `origine` : sa taille avant réduction, pour le
+    /// message) comme un objet du dessin courant : centrée dans le cadre, réduite pour y tenir, sélectionnée. Une étape d'annulation.
+    pub(crate) fn place_image_object(&mut self, key: u64, tw: usize, th: usize, origine: (usize, usize)) {
+        if !self.layer_editable() {
+            return;
+        }
+        let frame = self.doc.frame_rect();
+        let (fw, fh) = fit_size(tw, th, frame.width() as usize, frame.height() as usize);
+        let s = fw as f32 / tw.max(1) as f32;
+        // Au centre du cadre, dans le dessin du calque (qui peut être transformé).
+        let c = self.to_layer(frame.center());
+        let place = crate::vector::Affine { a: s, b: 0.0, c: 0.0, d: s, tx: c.x - tw as f32 * s * 0.5, ty: c.y - th as f32 * s * 0.5 };
+        let element = crate::vector::Element::image(key, [tw as u32, th as u32], place);
+        let (cel, prefix) = self.ensure_cel();
+        let Some(d) = self.doc.cels.get_mut(&cel).and_then(|c| c.vector.as_mut()) else { return };
+        let before = d.clone();
+        let at = d.elements.len();
+        d.elements.push(element);
+        self.refresh_cel(cel);
+        self.push_vector(cel, before, prefix);
+        self.vsel = Some(crate::vtools::VSelection { cel, items: vec![at] });
+        self.tool = crate::app::Tool::Select;
+        let reduite = if (fw, fh) == (tw, th) { String::new() } else { format!(", réduite à {fw}×{fh} pour tenir dans le cadre") };
+        self.status = format!("Image collée en objet vectoriel ({}×{}{reduite}) : déplace-la, transforme-la ou supprime-la comme les autres objets.", origine.0, origine.1);
+    }
+
+    /// À chaque image d'écran : la grande image est-elle prête ? Elle se pose là où le collage a été demandé.
+    pub(crate) fn tick_image(&mut self) {
+        let Some(t) = &self.collage.images else { return };
+        match t.rx.try_recv() {
+            Ok(resultat) => {
+                let Some(t) = self.collage.images.take() else { return };
+                let Some((key, tw, th)) = resultat else {
+                    self.status = "Image vide ou illisible : rien n'est collé.".into();
+                    return;
+                };
+                if let Some(pi) = self.doc.panels.iter().position(|p| p.id == t.ancre.panel) {
+                    self.cur_panel = pi;
+                    if let Some(li) = self.layers().iter().position(|l| l.id == t.ancre.layer) {
+                        self.cur_layer = li;
+                    }
+                    self.cur_frame = t.ancre.frame.min(self.frame_count().saturating_sub(1));
+                }
+                let _ = t.debut;
+                self.place_image_object(key, tw, th, (tw, th));
+            }
+            Err(std::sync::mpsc::TryRecvError::Empty) => self.ctx.request_repaint_after(std::time::Duration::from_millis(30)),
+            Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                self.collage.images = None;
+                self.status = "Le collage de l'image a échoué : la préparation s'est arrêtée.".into();
+            }
         }
     }
 }

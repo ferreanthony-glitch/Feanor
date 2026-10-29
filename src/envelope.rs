@@ -359,7 +359,7 @@ pub fn warp_drawing(original: &VectorDrawing, items: Option<&[usize]>, src: Rect
                 opacity: *opacity,
                 gradient: *gradient,
             },
-            Element::Text { .. } => e.clone(),
+            Element::Text { .. } | Element::Image { .. } => e.clone(),
         };
         *e = persp::warp_element_with(&dense, &map, k);
     }

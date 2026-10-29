@@ -202,7 +202,11 @@ pub const FORMAT: &str = "pelure-projet";
 /// la peinture ordinaire dans la strate de l'aplat) : elle le refuse donc, au lieu de l'effacer sans le dire. Un projet de version
 /// 40 ou moins s'ouvre tel quel. (Le numéro 40 est réservé à une autre branche : la fusion garde le plus grand et réunit les
 /// descriptions.)
-pub const VERSION: u32 = 41;
+/// 42 (2026-10-29, `docs/INTERFACE.md` partie 69) : **images collées en objets vectoriels** — l'élément `Image` d'un dessin vectoriel
+/// (`vector::Element::Image` : empreinte du contenu, taille, placement, opacité), dont les pixels sont gardés une seule fois, en PNG,
+/// dans `images/<empreinte>.png` du dossier du projet. Une version précédente qui ouvrirait le projet ne saurait pas lire ces
+/// éléments (elle refuserait le dessin) : elle le refuse donc en entier. Un projet de version 41 ou moins s'ouvre tel quel.
+pub const VERSION: u32 = 42;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -1099,6 +1103,8 @@ pub(crate) struct MemoDessin {
     cle: (u64, usize, usize, bool),
     hors: bool,
     textures: Vec<(TextureKind, u32)>,
+    /// Les images collées que ses éléments citent (`imagevec.rs`).
+    images: Vec<u64>,
 }
 
 #[cfg(test)]
@@ -1154,7 +1160,8 @@ fn memo_de(cel: &Cel) -> MemoDessin {
             textures.extend(b.paper.map(|k| (TextureKind::Paper, k)));
         }
     }
-    MemoDessin { cle: cle_memo(cel), hors: cel.vector.is_none() && cel.raster.has_beyond(), textures: textures.into_iter().collect() }
+    let images = crate::imagevec::citees(cel.vector.iter().flat_map(|v| &v.elements));
+    MemoDessin { cle: cle_memo(cel), hors: cel.vector.is_none() && cel.raster.has_beyond(), textures: textures.into_iter().collect(), images: images.into_iter().collect() }
 }
 
 #[cfg(test)]
@@ -1211,6 +1218,27 @@ fn used_textures(doc: &Document, used: &BTreeSet<CelId>) -> BTreeSet<(TextureKin
         }
     }
     out
+}
+
+/// Images collées citées par les éléments des dessins vectoriels `used`.
+fn used_images(doc: &Document, used: &BTreeSet<CelId>) -> BTreeSet<u64> {
+    let mut memo = doc.memo_enregistrement.lock().unwrap_or_else(|e| e.into_inner());
+    let mut out = BTreeSet::new();
+    for &id in used {
+        if let Some(cel) = doc.cels.get(&id).filter(|c| c.vector.is_some()) {
+            out.extend(memo_a_jour(&mut memo, id, cel).images.iter().copied());
+        }
+    }
+    out
+}
+
+/// Les images citées qui manquent dans `images/` du dossier `dir` (et dont on a les pixels) : à écrire.
+pub(crate) fn images_a_ecrire(dir: &Path, used: &BTreeSet<u64>) -> Vec<(PathBuf, Arc<crate::imagevec::Pixels>)> {
+    used.iter()
+        .map(|&key| (crate::imagevec::fichier(dir, key), key))
+        .filter(|(path, _)| !path.exists())
+        .filter_map(|(path, key)| crate::imagevec::obtenir(key).map(|px| (path, px)))
+        .collect()
 }
 
 fn texture_file(dir: &Path, kind: TextureKind, key: u32) -> PathBuf {
@@ -1324,6 +1352,10 @@ pub struct SaveJob {
     drawings: Vec<(PathBuf, DrawingData)>,
     sounds: Vec<(PathBuf, Arc<Vec<u8>>)>,
     textures: Vec<(PathBuf, GrayImage)>,
+    /// Images collées dans des dessins vectoriels (`imagevec.rs`) qui manquent dans `images/` : leur PNG s'encode à l'écriture.
+    images: Vec<(PathBuf, Arc<crate::imagevec::Pixels>)>,
+    /// Images collées citées par les dessins du projet : celles de `images/` qui n'y sont pas ne servent plus.
+    used_images: BTreeSet<u64>,
     /// Images des calques vidéo à recopier dans le dossier du projet (13k) : d'où, vers où.
     videos: Vec<(crate::video::VideoClip, PathBuf, PathBuf)>,
     manifest: Vec<u8>,
@@ -1528,11 +1560,12 @@ fn cliche_dessins(
     used: &BTreeSet<CelId>,
     written: &mut HashMap<CelId, u64>,
     reuse: Option<&Reuse>,
-) -> (Vec<DessinCliche>, BTreeSet<(TextureKind, u32)>) {
+) -> (Vec<DessinCliche>, BTreeSet<(TextureKind, u32)>, BTreeSet<u64>) {
     let reuse_dir = reuse.and_then(|r| r.manifest_path.parent());
     let mut memo = doc.memo_enregistrement.lock().unwrap_or_else(|e| e.into_inner());
     let mut out = Vec::with_capacity(used.len());
     let mut textures = BTreeSet::new();
+    let mut images = BTreeSet::new();
     // (`written` ne retient que des dessins de `used` : s'ils y sont tous, rien à retirer.)
     let (avant, mut retenus) = (written.len(), 0);
     for &id in used {
@@ -1544,6 +1577,7 @@ fn cliche_dessins(
         let m = memo_a_jour(&mut memo, id, cel);
         let hors = !vector && m.hors;
         textures.extend(m.textures.iter().copied());
+        images.extend(m.images.iter().copied());
         let donnees = if deja == Some(cel.version) {
             None
         } else {
@@ -1560,7 +1594,7 @@ fn cliche_dessins(
     if retenus < avant {
         written.retain(|id, _| used.contains(id));
     }
-    (out, textures)
+    (out, textures, images)
 }
 
 /// Prépare l'enregistrement de `doc` dans `manifest_path`. `written` est mis à jour comme si
@@ -1581,9 +1615,10 @@ pub fn prepare_save(
     let dir = manifest_path.parent().ok_or("chemin de projet invalide")?;
     let used = doc.used_cels();
     // (Les textures citées par les traits : le mémo de chaque dessin les connaît ; écrites si elles manquent.)
-    let (dessins, used_textures) = cliche_dessins(doc, &used, written, reuse.as_ref());
+    let (dessins, used_textures, used_images) = cliche_dessins(doc, &used, written, reuse.as_ref());
     let mut job = SaveJob::vide(manifest_path);
     job.used_textures = used_textures;
+    job.used_images = used_images;
     // Images des calques vidéo : recopiées si elles ne sont pas déjà dans ce dossier.
     for v in doc.panels.iter().chain(doc.plans_ranges()).flat_map(|p| &p.layers).filter_map(|l| l.video.as_ref()) {
         let to = dir.join(VIDEOS).join(v.id.to_string());
@@ -1686,6 +1721,8 @@ impl SaveJob {
             .filter(|(path, _, _)| !path.exists())
             .filter_map(|(path, kind, key)| crate::brushtex::shared_image(kind, key).map(|img| (path, img)))
             .collect();
+        // Une image collée non plus : écrite seulement si elle manque.
+        self.images = images_a_ecrire(dir, &self.used_images);
         self.manifest = serde_json::to_vec_pretty(&manifest_de(&doc, true, &used, &hors)).map_err(|e| e.to_string())?;
         let unreadable = unreadable_in(dir);
         self.keep_drawings = crate::planvers::illisible(dir) || crate::variantes::illisible(dir);
@@ -1730,6 +1767,8 @@ pub(crate) fn prepare_save_avant(doc: &Document, manifest_path: &Path, written: 
         let mut job = SaveJob::vide(manifest_path);
         job.used_sounds = used_sounds(doc);
         job.sounds = job.used_sounds.iter().map(|id| &doc.sounds[id]).map(|s| (dir.join(SOUNDS).join(sound_file(s)), s.bytes.clone())).filter(|(path, _)| !path.exists()).collect();
+        job.used_images = used_images(doc, &used);
+        job.images = images_a_ecrire(dir, &job.used_images);
         job.used_textures = used_textures(doc, &used);
         job.textures = job
             .used_textures
@@ -2030,6 +2069,13 @@ impl SaveJob {
             write_atomic(path, &texture_png(img)?)?;
             count += 1;
         }
+        if !self.images.is_empty() {
+            fs::create_dir_all(dir.join(crate::imagevec::DOSSIER)).map_err(|e| format!("{} : {e}", dir.display()))?;
+        }
+        for (path, px) in &self.images {
+            write_atomic(path, &crate::imagevec::png(px)?)?;
+            count += 1;
+        }
         for (clip, from, to) in &self.videos {
             count += crate::video::copy_frames(clip, from, to)?;
         }
@@ -2073,7 +2119,7 @@ impl SaveJob {
         }
         let removed = if self.keep_drawings { 0 } else { remove_unused(dir, &self.used, &self.fonds, &self.hors) }
             + remove_unused_sounds(dir, &self.used_sounds, &self.kept)
-            + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) }
+            + if self.has_unreadable { 0 } else { remove_unused_textures(dir, &self.used_textures) + crate::imagevec::effacer_inutiles(dir, &self.used_images) }
             + self.references.cleanup(dir);
         Ok(SaveReport { written: count, removed, snapshots: self.snapshots.iter().map(|s| s.id).collect(), partage: None, manquants: std::mem::take(&mut self.manquants) })
     }
@@ -2678,6 +2724,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
     let mut warnings = Vec::new();
     // Les textures d'abord : les dessins vectoriels texturés en ont besoin pour leur rendu.
     load_textures(dir, &mut warnings, annexes.plans_seuls);
+    crate::imagevec::charger_dossier(dir, &mut warnings, annexes.plans_seuls);
     // Les autres versions des plans (`plans_versions.json`) : leurs plans passent par la même lecture que
     // les autres, dans une séquence à part qu'on retire ensuite du film (`planvers.rs`).
     let mut versions = if annexes.fournies { annexes.versions.take() } else { crate::planvers::lire(dir, &mut warnings) };
@@ -3435,6 +3482,7 @@ fn implausible(d: &VectorDrawing) -> Option<usize> {
             !contours.iter().flatten().all(|p| coord(p[0]) && coord(p[1])) || !opacity.is_finite() || gradient.as_ref().is_some_and(|g| !g.is_sane() || !g.depart.iter().chain(g.arrivee.iter()).all(|v| coord(*v)))
         }
         Element::Text { size, place, opacity, .. } => !(size.is_finite() && *size > 0.0 && *size <= MAX_RADIUS) || !place.iter().all(|v| v.is_finite() && v.abs() <= MAX_COORD * 10.0) || !opacity.is_finite(),
+        Element::Image { size, place, opacity, .. } => size[0] == 0 || size[1] == 0 || size[0] > 65_536 || size[1] > 65_536 || !place.iter().all(|v| v.is_finite() && v.abs() <= MAX_COORD * 10.0) || !opacity.is_finite(),
     })
 }
 
