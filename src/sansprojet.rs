@@ -5,9 +5,11 @@
 //! L'application garde toujours un document en mémoire (des dizaines de milliers de lignes écrivent `self.doc`) : « sans
 //! projet » est donc un état, pas l'absence du document. Il se reconnaît à `sans_projet` : l'onglet affiché est celui de
 //! l'accueil (`welcome`), sans fichier, sans changement, sans étape d'annulation. Dans cet état :
-//! - la zone de travail est un fond neutre, avec la carte d'accueil (Nouveau projet, Ouvrir un projet) au centre ;
-//! - ni onglet (la bande ne paraît que s'il y a plusieurs onglets), ni barre de commandes, d'outils ou de panneaux, ni
-//!   panneaux ; les menus qui parlent d'un projet sont grisés, la barre d'état ne garde que son message ;
+//! - la fenêtre est **l'accueil compact** (ccueilfenetre.rs, ccueil.rs) : une petite fenêtre qui ne montre que la page d'accueil
+//!   (bandeau, formulaire « Nouveau projet », projets récents), sans menus ni barre d'état ni panneaux. Pendant qu'un projet arrive
+//!   (ouverture, séance qui revient), un fond neutre ; avec plusieurs onglets, la bande des onglets et les menus restent, et la page
+//!   remplit la zone de travail ;
+//! - ni barre de commandes, d'outils ou de panneaux, ni panneaux ; les menus qui parlent d'un projet sont grisés (quand ils sont là) ;
 //! - **aucune commande qui vise un projet ne part** : `run_action` laisse passer seulement `action_sans_projet` (créer,
 //!   ouvrir, importer d'un scénario ou de Storyboard Pro, réglages, aide, onglets, quitter), qu'elle vienne d'un raccourci,
 //!   d'un menu, de la palette Ctrl+K ou d'un bouton. Le document caché ne change donc jamais, l'onglet reste « sans projet »,
@@ -92,7 +94,7 @@ impl App {
         }
     }
 
-    /// La zone de travail sans projet : un fond neutre et calme (la carte d'accueil se pose par-dessus, `accueil.rs`).
+    /// La zone de travail sans projet, le temps qu'un projet arrive : un fond neutre et calme (la page d'accueil, `accueil.rs`, la remplace sinon).
     pub(crate) fn zone_vide(&mut self, ctx: &egui::Context) {
         let cadre = egui::Frame::new().fill(crate::theme::fond());
         egui::CentralPanel::default().frame(cadre).show(ctx, |_| {});

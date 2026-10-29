@@ -5995,3 +5995,94 @@ fichiers lâchés ; un onglet sans projet à côté de projets. **Thème** : pos
 egui reste sombre, ses deux styles sont ceux de la palette, aucun fond clair ni texte sombre à l'écran ; les quatre thèmes livrés sous chacun des deux thèmes de
 Windows (couleurs de fond et de texte tirées de la palette, contrastes) ; changer de thème dans les Préférences change les deux styles ensemble.
 Les essais d'avant qui supposaient un projet ouvert dans l'état de départ en ont un maintenant (`welcome = false`).
+
+
+## 74. La fenêtre d'accueil compacte (2026-10-29, branche `accueil-fenetre`)
+
+Demande d'Anthony, sur sa capture de l'accueil de SHOT à côté de la fenêtre de démarrage d'un autre logiciel (qui sert de modèle de **mise en page**
+seulement : rien n'en est copié, ni code, ni texte, ni icône, ni graphisme) : « Voilà ce que je veux en page d'ouverture. Inutile d'afficher le
+logiciel vide derrière, juste cette fenêtre. »
+
+### Ce qui change
+
+Quand aucun projet n'est à rouvrir, **SHOT n'affiche qu'une petite fenêtre** (1000 × 620 points, centrée à l'écran, barre de titre normale de
+Windows, titre « SHOT », taille fixe) : ni menus, ni zone de travail vide, ni panneaux, ni barre d'état. Dès qu'un projet s'ouvre, la fenêtre passe
+à sa taille de travail ; quand on ferme le dernier projet, elle revient à l'accueil. Le code est dans `accueilfenetre.rs` (la fenêtre), `accueil.rs`
+(la page) et `nouveauui.rs` (le formulaire).
+
+### La page (`accueil.rs`)
+
+- **En haut, un bandeau** sur toute la largeur (168 points) : l'image d'accueil tirée au hasard dans le dossier des images d'accueil (Préférences >
+  Apparence > Images d'accueil, inchangé), **recadrée pour le remplir** sans la déformer (`recadrage` : le centre d'une image large, le haut un peu
+  favorisé pour une image haute, où se trouvent les visages). Le **logo de SHOT** est posé dessus à gauche, sur un voile sombre qui s'éteint vers le
+  milieu (il se lit sur n'importe quel dessin). Sans image : le logo seul, sur le fond du bandeau. Les images sont toujours celles de vrais
+  storyboarders, importées par l'utilisateur ; SHOT n'en fournit aucune. Un petit bouton « Préférences » (engrenage) en haut à droite du bandeau :
+  c'est là qu'on choisit les images, et la fenêtre n'a pas de menus.
+- **À gauche, le cadre « Nouveau projet »** : le formulaire, directement dans la fenêtre. **Nom du projet** et le bouton **Créer** (actif dès qu'un nom
+  est saisi, et si rien n'existe déjà là) ; **Dossier** (liste des derniers dossiers + « Parcourir… ») ; **Titre** et **Sous-titre**, facultatifs ;
+  **Format** (les préréglages d'avant : HD 1080, UHD 4K, Vertical 9:16, A4… et les tiens) ; **Taille** (largeur, hauteur, inversion de l'orientation,
+  proportions) ; **Cadence** ; et, sous « Plus d'options » (fermé ici), l'unité, la résolution, le papier, la couleur des aplats, la durée du premier
+  plan et l'aperçu du cadre. **Entrée dans le champ du nom crée.** Le curseur est dans le nom dès l'ouverture, et Ctrl+N l'y remet.
+- **À droite, le cadre « Projets récents »** : le nom de chaque projet (le chemin entier en bulle d'aide), **double-clic** ou **Entrée** (sur le projet
+  choisi par un clic) pour l'ouvrir ; **clic droit > « Retirer de la liste »** ; un projet **introuvable** est grisé, en italique, avec « introuvable »
+  (le double-clic le dit dans la barre de messages sans rien ouvrir). En bas, **« Ouvrir un projet… »** : un projet SHOT ou Storyboard Pro (.sboard),
+  comme avant. La **récupération après plantage** est en haut de ce cadre (même contenu que l'ancienne fenêtre : « Ouvrir la copie », « Supprimer »,
+  « Tout ouvrir », « Plus tard »), pas dans une fenêtre à part.
+- **En bas à gauche**, la case « Rouvrir le dernier projet au lancement ».
+- Pas d'espace colorimétrique, pas de champ de vision, pas de « structure de fichier compacte » : SHOT n'a rien de tel. Le **sous-titre** est gardé dans
+  les Propriétés du projet, au champ « Information » (SHOT n'a pas de champ « sous-titre » à part) ; le **titre** est celui des Propriétés (vide : le nom).
+
+### La fenêtre (`accueilfenetre.rs`)
+
+- **Au lancement**, `demarre_sur_l_accueil` devine avant de créer la fenêtre : un fichier donné en argument, ou « Rouvrir le dernier projet » avec une
+  séance à rouvrir, donnent la fenêtre de travail (maximisée, comme avant : l'accueil ne se voit jamais). Sinon la fenêtre naît compacte, centrée
+  (`centered`), de taille fixe. Une copie de secours à proposer donne l'accueil (elle s'y propose). Si la supposition était fausse (le projet à rouvrir
+  a disparu du disque), la fenêtre rétrécit à la première image.
+- **En route**, `regler_la_fenetre` (appelée par `App::frame`) compare chaque image le mode voulu (`accueil_compact` : l'accueil est montré et il n'y a
+  qu'un onglet) au mode de la fenêtre, et envoie les `ViewportCommand` des changements. *Agrandir* : taille minimale de travail, fenêtre redimensionnable,
+  puis maximisée, ou à la taille et à la place qu'elle avait avant d'être compacte si elle n'était pas maximisée. *Rétrécir* : en deux temps (sortir du
+  plein écran et de la maximisation, puis taille, taille fixe, position centrée sur le centre de la fenêtre qu'elle remplace : cela marche avec
+  plusieurs écrans).
+- **Mémoire de la taille** : eframe ne retient rien (la fonction `persistence` n'est pas activée ; `persist_window` est coupé aussi, pour que cela reste
+  vrai). SHOT ne garde, le temps de la séance, que la taille et la place de la fenêtre de travail. La taille compacte ne devient donc jamais celle du travail.
+- **Deux onglets ou plus** (Ctrl+T avec des projets ouverts) : la fenêtre garde sa taille de travail et sa bande d'onglets ; l'onglet sans projet montre
+  la même page, centrée, dans la zone de travail.
+- Pendant qu'un projet s'ouvre (clic sur un récent, argument, séance qui revient), l'accueil ne clignote pas : un fond neutre, et la fenêtre grandit. Si
+  l'ouverture échoue, l'accueil revient (et la fenêtre rétrécit), avec le message d'erreur.
+- **Fermer la fenêtre d'accueil quitte SHOT sans rien demander.** La proposition « Régler SHOT pour cette machine ? » ne paraît pas sur l'accueil
+  compact ; elle vient une fois un projet ouvert.
+
+### Un seul formulaire (`nouveauui.rs`)
+
+`NewDocDialog::formulaire` est le seul formulaire « Nouveau projet ». Il est posé dans le cadre de l'accueil, et dans la **fenêtre « Nouveau projet »**
+de Fichier > Nouveau (Ctrl+N) quand un projet est déjà ouvert. Différences d'emploi : sur l'accueil, « Créer » attend un nom et « Plus d'options » est
+fermé ; dans la fenêtre, un projet sans nom se crée (« Enregistrer » demandera où le ranger), « Plus d'options » est ouvert, et un bouton « Annuler »
+(Échap) ferme. L'ancien bouton « OK » est « Créer » dans les deux. Sans projet ouvert, Ctrl+N n'ouvre pas de fenêtre à part : il met le curseur dans le
+nom du formulaire de l'accueil.
+
+La liste des dossiers (`nouveau::dossiers_proposes`) : le dossier choisi, ceux des projets récents (le dossier qui contient le dossier du projet),
+Documents ; sans doublon, huit au plus, sans lire le disque.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Lance SHOT sans « Rouvrir le dernier projet » (ou après avoir fermé le dernier projet puis quitté) : une petite fenêtre centrée, barre de titre
+   « SHOT », ni menus ni barre d'état ; le bandeau avec ton image et le logo à gauche.
+2. Tape un nom, Entrée : le projet se crée, la fenêtre grandit (maximisée) sur la page Vignettes. Ctrl+W (fermer le projet) : la fenêtre redevient
+   petite, centrée.
+3. Un projet récent : double-clic, ou un clic puis Entrée. Un projet déplacé est grisé « introuvable » ; clic droit > Retirer de la liste.
+4. « Ouvrir un projet… » : le sélecteur accepte un projet SHOT ou un .sboard.
+5. Avec « Rouvrir le dernier projet » coché : SHOT s'ouvre directement sur le projet, sans passer par la petite fenêtre.
+6. Ouvre un projet, Fichier > Nouveau (Ctrl+N) : la fenêtre « Nouveau projet » a les mêmes champs, avec Annuler.
+7. Premier lancement d'un poste neuf : la proposition « Régler SHOT pour cette machine ? » n'est pas sur la petite fenêtre ; elle vient avec le premier projet.
+
+### Essais
+
+`accueil_tests.rs` (refait) : la page (cadres, champs, pas de menus, tout dans la fenêtre), pas de champs inventés, « Créer » actif avec un nom et Entrée
+crée un seul projet, titre et sous-titre, liste des dossiers, récents (nom seul, introuvable grisé, double-clic, Entrée, clic droit), la case ; la fenêtre
+(compacte sans projet, agrandie une seule fois à la création, rétrécie en deux temps à la fermeture, taille et place retrouvées, deux onglets, supposition
+du lancement, supposition fausse, aucune taille retenue par eframe, proposition de réglage retenue, fermeture sans question) ; le bandeau (recadrage, image
+ou logo) ; Fichier > Nouveau avec un projet ouvert (mêmes champs, Annuler). `Banc::commandes` garde les `ViewportCommand` envoyés pour ces essais. Les
+essais d'accueil d'avant (grandes entrées, logo qui rapetisse, fenêtre « Nouveau projet » depuis l'accueil) sont remplacés.
+
+**Reste** : le tirage de l'image d'accueil se fait à chaque apparition de l'accueil (inchangé). Les clics dans la vraie fenêtre (taille fixe, centrage sur
+plusieurs écrans, Windows à 150 %) ne sont vérifiés que par les captures de la branche, pas par les essais.

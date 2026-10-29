@@ -792,6 +792,10 @@ pub struct App {
     pub(crate) theme_unsaved: bool,
     /// Écran d'accueil à montrer tant qu'aucun projet n'est ouvert (`accueil.rs`).
     pub(crate) welcome: bool,
+    /// L'état de la fenêtre d'accueil : le formulaire « Nouveau projet », le récent choisi (`accueilfenetre.rs`, `accueil.rs`).
+    pub(crate) accueil_etat: crate::accueilfenetre::AccueilEtat,
+    /// La fenêtre native : compacte (l'accueil) ou de travail (`accueilfenetre.rs`).
+    pub(crate) fenetre: crate::accueilfenetre::Fenetre,
     /// Aplat sous le trait (`fond.rs`, `fondui.rs`) : le calque (son numéro) dont l'aplat est la cible du dessin, quand on a
     /// cliqué sur sa sous-ligne du panneau Calques ; le pinceau, la gomme et le pot de peinture travaillent alors l'aplat
     /// seul, sinon le trait. Propre à un projet (`onglets.rs`). Le dessin dont on peint l'aplat en ce moment (affiché en
@@ -1316,6 +1320,8 @@ impl App {
             theme_applied,
             theme_unsaved: false,
             welcome: true,
+            accueil_etat: Default::default(),
+            fenetre: Default::default(),
             aplat_cible: None,
             fond_stroke: None,
             fond_cut: None,
@@ -3694,7 +3700,10 @@ impl App {
             return;
         }
         // Pas de raccourci pendant une saisie ou un dialogue.
-        if ctx.wants_keyboard_input() || self.modal_open() {
+        // (Sur l'accueil, le curseur est d'office dans le nom du nouveau projet : les raccourcis qui ne s'écrivent pas, Ctrl+O,
+        // Ctrl+N, Ctrl+W, F1, F11…, passent quand même ; `accueilfenetre::raccourci_hors_saisie`.)
+        let saisie = ctx.wants_keyboard_input() && !(self.accueil_visible() && crate::accueilfenetre::raccourci_hors_saisie(ctx));
+        if saisie || self.modal_open() {
             self.pending_keys.clear();
             return;
         }
@@ -4949,6 +4958,8 @@ impl App {
         // Plein écran à l'ouverture (Anthony, 2026-10-18) : la fenêtre, créée cachée, perd la
         // consigne de `with_maximized` sous Windows : elle est marquée maximisée mais garde sa taille.
         // Une fois affichée, on la remet à sa taille, puis on la maximise vraiment.
+        // (Sans objet quand la fenêtre est l'accueil compact : elle n'est pas maximisée, `accueilfenetre.rs`.)
+        self.regler_la_fenetre(ctx);
         if self.maximized_once < 4 {
             self.maximized_once += 1;
             match self.maximized_once {
@@ -5063,7 +5074,9 @@ impl App {
         // Sans projet ouvert (`sansprojet.rs`) : les menus, la barre d'état et l'accueil sur un fond neutre, rien d'autre. La
         // bande des onglets ne paraît que s'il y en a plusieurs (un seul onglet sans projet n'est pas un onglet à montrer).
         let sans_projet = self.sans_projet();
-        if !concentre {
+        // L'accueil compact (`accueilfenetre.rs`) : une petite fenêtre qui ne montre que la page d'accueil, sans menus ni barre d'état.
+        let compact = self.accueil_compact();
+        if !concentre && !compact {
             let _t = crate::perf::section("barre de menus");
             egui::TopBottomPanel::top("menu").show(ctx, |ui| self.menu_bar(ui));
         }
@@ -5076,7 +5089,7 @@ impl App {
             let _t = crate::perf::section("barre de commandes");
             egui::TopBottomPanel::top("commandes").show(ctx, |ui| self.command_bar(ui));
         }
-        if !concentre {
+        if !concentre && !compact {
             let _t = crate::perf::section("barre d'état");
             egui::TopBottomPanel::bottom("statut").show(ctx, |ui| self.status_bar(ui));
         }
@@ -5103,7 +5116,12 @@ impl App {
             self.concentration_ui(ctx);
         } else if sans_projet {
             let _t = crate::perf::section("zone de travail vide");
-            self.zone_vide(ctx);
+            // (La page d'accueil ; un fond neutre le temps qu'un projet arrive.)
+            if self.accueil_visible() {
+                self.accueil_page(ctx);
+            } else {
+                self.zone_vide(ctx);
+            }
         } else {
             let _t = crate::perf::section("panneaux (dock, total)");
             self.show_dock(ctx);

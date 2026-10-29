@@ -119,14 +119,14 @@ fn a_valid_image_in_the_folder_replaces_the_logo_and_is_kept_as_a_texture() {
         _ => panic!("une image valide : elle remplace le logo"),
     }
     assert_eq!(b.app.confort.accueil.derniere.as_deref(), Some(d.join("plan.png").as_path()));
-    // Une grande image est réduite hors du fil de l'interface, à 900 pixels de large au plus.
+    // Une grande image est réduite hors du fil de l'interface, à 1600 pixels de large au plus.
     png(&d, "grande.png", 3200, 1800, [10, 10, 200]);
     std::fs::remove_file(d.join("plan.png")).unwrap();
     b.app.confort.accueil.oublier_le_tirage();
     b.chauffer(2);
     attendre(&mut b, tirage_fini);
     match &b.app.confort.accueil.tirage {
-        Tirage::Image(_, [l, h]) => assert!(*l <= 900 && *h <= 900 && (*l as f32 / *h as f32 - 16.0 / 9.0).abs() < 0.02, "{l}x{h}"),
+        Tirage::Image(_, [l, h]) => assert!(*l <= 1600 && *h <= 1600 && (*l as f32 / *h as f32 - 16.0 / 9.0).abs() < 0.02, "{l}x{h}"),
         _ => panic!("la grande image doit aussi s'afficher"),
     }
     std::fs::remove_dir_all(&d).ok();
@@ -187,13 +187,10 @@ fn the_image_is_drawn_once_per_appearance_not_at_every_frame() {
     }
     assert_eq!(b.app.confort.accueil.tirages, apres_tirage, "soixante images de plus : aucun nouveau tirage, aucun nouveau décodage");
     assert!(matches!(b.app.confort.accueil.tirage, Tirage::Image(..)));
-    // La fenêtre « Nouveau projet » passe par-dessus puis est annulée : l'image reste, rien n'est redécodé.
+    // « Nouveau projet » (Ctrl+N) met le curseur dans le formulaire de l'accueil : l'image reste, rien n'est redécodé.
     b.app.run_action("fichier.nouveau");
     b.chauffer(4);
-    assert!(b.app.new_dialog.is_some());
-    b.app.new_dialog = None;
-    b.app.welcome = true;
-    b.chauffer(4);
+    assert!(b.app.new_dialog.is_none(), "sans projet ouvert, pas de fenêtre à part : le formulaire est sur l'accueil");
     assert!(b.app.welcome_shown());
     assert_eq!(b.app.confort.accueil.tirages, apres_tirage);
     std::fs::remove_dir_all(&d).ok();

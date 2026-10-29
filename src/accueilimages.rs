@@ -28,9 +28,9 @@ use crate::theme;
 /// Les formats lus.
 pub(crate) const EXTENSIONS: [&str; 3] = ["png", "jpg", "jpeg"];
 
-/// Plus grande largeur gardée pour l'image de l'accueil, en pixels (le logo tient dans 400 points ; 900 pixels couvrent
-/// l'écran à 200 %).
-const LARGEUR_MAX: u32 = 900;
+/// Plus grande largeur gardée pour l'image de l'accueil, en pixels (le bandeau fait 1000 points de large : 1600 pixels le
+/// remplissent à 150 % sans le flou d'une image agrandie).
+const LARGEUR_MAX: u32 = 1600;
 
 /// Plus grand côté d'une miniature des Préférences, en pixels.
 const MINIATURE_MAX: u32 = 160;

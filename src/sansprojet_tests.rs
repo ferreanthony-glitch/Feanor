@@ -1,4 +1,4 @@
-﻿//! Démarrer sans projet ouvert (`sansprojet.rs`, demande d'Anthony du 2026-10-29) et un thème d'un seul tenant au premier
+//! Démarrer sans projet ouvert (`sansprojet.rs`, demande d'Anthony du 2026-10-29) et un thème d'un seul tenant au premier
 //! lancement (`theme::appliquer`).
 //!
 //! Sans projet : l'accueil sur un fond neutre, ni onglet « Sans titre » ni « Nouvel onglet », « Nouveau projet » crée UN
@@ -132,6 +132,14 @@ fn refermer_les_fenetres(b: &mut Banc) {
     b.chauffer(2);
 }
 
+/// Aucun champ ni bouton n'a le focus clavier : Tab, puis Entrée ou Espace, « cliqueraient » « Parcourir… » ou « Ouvrir un projet… »,
+/// qui ouvrent le sélecteur de fichiers de Windows (un essai ne peut pas y répondre).
+fn sans_focus(b: &mut Banc) {
+    if let Some(id) = b.ctx.memory(|m| m.focused()) {
+        b.ctx.memory_mut(|m| m.surrender_focus(id));
+    }
+}
+
 fn pomper(b: &mut Banc, limite: Duration, fini: impl Fn(&Banc) -> bool) -> bool {
     let t = Instant::now();
     while t.elapsed() < limite {
@@ -168,9 +176,12 @@ fn launching_shows_no_project_only_the_welcome_on_a_calm_neutral_background() {
     for absent in ["Sans titre", "Nouvel onglet"] {
         assert!(!est_la(&b, absent), "« {absent} » ne paraît pas : {:?}", tous_les_textes(&b));
     }
-    // Les deux entrées de l'accueil, et les menus (grisés sauf Fichier et Aide).
-    for present in ["Nouveau projet", "Ouvrir un projet", "Fichier", "Aide", "Édition"] {
+    // Les deux cadres de l'accueil (plus de menus : la fenêtre est l'accueil seul, `accueilfenetre.rs`).
+    for present in ["Nouveau projet", "Projets récents", "Ouvrir un projet…", "Créer"] {
         assert!(est_la(&b, present), "« {present} » est là : {:?}", tous_les_textes(&b));
+    }
+    for absent in ["Fichier", "Aide", "Édition"] {
+        assert!(!tous_les_textes(&b).iter().any(|t| t == absent), "« {absent} » : pas de menus sur l'accueil compact : {:?}", tous_les_textes(&b));
     }
     // Ni les quatre espaces de travail ni le moindre panneau (leur titre, leurs réglages).
     for absent in [" Storyboard ", " Animation ", " Montage ", " Vignettes ", "Planche", "Réglages", "Mon panneau", "Historique", "1920×1080", "100 %"] {
@@ -189,17 +200,24 @@ fn launching_shows_no_project_only_the_welcome_on_a_calm_neutral_background() {
 fn new_project_creates_exactly_one_project() {
     let mut b = lance();
     assert!(b.app.settings.open_in_new_tab, "le réglage d'origine : un projet qui arrive prend un onglet neuf s'il en faut un");
-    let p = centre(&b, "Nouveau projet");
-    clic(&mut b, p);
-    assert!(b.app.new_dialog.is_some());
-    // La fenêtre est ouverte : l'onglet est toujours « sans projet », il n'a pas été rendu à un projet vide.
-    assert!(b.app.sans_projet(), "la fenêtre ouverte ne crée rien");
+    // Le formulaire est sur l'accueil (pas de fenêtre à part) ; « Créer » attend un nom.
+    assert!(b.app.new_dialog.is_none());
+    assert!(b.app.sans_projet(), "le formulaire seul ne crée rien");
     assert_eq!(b.app.onglets.len(), 1);
-    let ok = centre(&b, "OK");
-    clic(&mut b, ok);
+    let cree = centre(&b, "Créer");
+    clic(&mut b, cree);
+    assert!(b.app.sans_projet(), "sans nom, « Créer » ne fait rien");
+    // Un nom (le curseur est déjà dans le champ), un dossier d'essai : « Créer ».
+    let form = b.app.accueil_etat.form.as_mut().unwrap();
+    form.folder = dossier("sansprojet-creer");
+    form.focus_nom = true; // (le clic sur « Créer » grisé a pris le curseur : Ctrl+N le remet dans le nom)
+    b.chauffer(2);
+    b.image(vec![Event::Text("Sans titre".into())], 1.0 / 60.0);
+    b.chauffer(2);
+    let cree = centre(&b, "Créer");
+    clic(&mut b, cree);
     b.chauffer(4);
-    assert!(b.app.new_dialog.is_none(), "le projet est créé");
-    assert!(!b.app.sans_projet() && !b.app.welcome_shown());
+    assert!(!b.app.sans_projet() && !b.app.welcome_shown(), "le projet est créé");
     assert_eq!(b.app.onglets.len(), 1, "UN seul projet, pas un projet vide à côté : {:?}", b.app.infos_onglets());
     assert_eq!(b.app.infos_onglets().iter().map(|i| i.nom.clone()).collect::<Vec<_>>(), ["Sans titre"]);
     // Le projet est le projet neuf : la bande des onglets paraît maintenant, avec lui seul.
@@ -208,16 +226,13 @@ fn new_project_creates_exactly_one_project() {
 }
 
 #[test]
-fn cancelling_the_new_project_window_gives_the_welcome_back_and_nothing_else() {
+fn ctrl_n_without_a_project_puts_the_cursor_in_the_name_field_and_opens_no_separate_window() {
     let mut b = lance();
-    let p = centre(&b, "Nouveau projet");
-    clic(&mut b, p);
-    assert!(b.app.new_dialog.is_some());
-    echap(&mut b);
-    b.chauffer(4);
-    assert!(b.app.new_dialog.is_none());
-    rien_n_a_change(&b, "fenêtre annulée");
-    assert!(b.app.welcome_shown(), "l'accueil revient");
+    b.app.run_action("fichier.nouveau");
+    b.chauffer(3);
+    assert!(b.app.new_dialog.is_none(), "le formulaire est sur l'accueil");
+    rien_n_a_change(&b, "Ctrl+N sans projet");
+    assert!(b.app.welcome_shown(), "l'accueil reste");
 }
 
 #[test]
@@ -368,8 +383,8 @@ fn the_crash_recovery_is_still_offered_and_opens_in_the_empty_state_without_a_se
     b.app.orphans = orphelins;
     b.chauffer(4);
     assert!(est_la(&b, "SHOT s'est fermé sans enregistrer"), "la proposition de récupération est à l'écran : {:?}", tous_les_textes(&b));
-    assert!(!b.app.welcome_shown(), "l'accueil s'efface devant elle (elle tient la main)");
-    // Les commandes permises restent sans effet sur le projet caché pendant qu'elle tient la main.
+    assert!(b.app.welcome_shown() && b.app.accueil_compact(), "la proposition est dans la petite fenêtre d'accueil, pas dans une fenêtre à part");
+    // Elle ne change rien au projet caché tant qu'on n'a pas répondu.
     rien_n_a_change(&b, "pendant la proposition");
     let o = b.app.orphans.remove(0);
     b.app.open_orphan(o);
@@ -432,6 +447,7 @@ fn every_default_shortcut_played_without_a_project_changes_nothing_and_does_not_
         if ["fichier.ouvrir", "fichier.quitter", "fichier.importer_scenario", "fichier.importer_sboard"].contains(&action.as_str()) {
             continue;
         }
+        sans_focus(&mut b);
         b.image(vec![Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers: m }], 1.0 / 60.0);
         b.image(vec![Event::Key { key, physical_key: Some(key), pressed: false, repeat: false, modifiers: m }], 1.0 / 60.0);
         b.chauffer(1);
@@ -443,6 +459,7 @@ fn every_default_shortcut_played_without_a_project_changes_nothing_and_does_not_
     // Des touches libres au milieu du vide : flèches, Échap, Entrée, Retour arrière, Suppr, Espace, lettres.
     for key in [Key::ArrowUp, Key::ArrowDown, Key::ArrowLeft, Key::ArrowRight, Key::Escape, Key::Enter, Key::Backspace, Key::Delete, Key::Space, Key::A, Key::Z, Key::Num1] {
         for m in [Modifiers::NONE, Modifiers::SHIFT, Modifiers::COMMAND, Modifiers::ALT] {
+            sans_focus(&mut b);
             b.image(vec![Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers: m }], 1.0 / 60.0);
             b.image(vec![Event::Key { key, physical_key: Some(key), pressed: false, repeat: false, modifiers: m }], 1.0 / 60.0);
             refermer_les_fenetres(&mut b);
@@ -458,71 +475,15 @@ fn every_default_shortcut_played_without_a_project_changes_nothing_and_does_not_
 }
 
 #[test]
-fn every_entry_of_the_menus_played_without_a_project_changes_nothing_and_does_not_crash() {
-    let mut b = lance();
-    // Les menus qui parlent d'un projet sont grisés : leur titre ne s'ouvre pas.
-    for menu in ["Édition", "Storyboard", "Son", "Calques", "Animation", "Affichage", "Labo"] {
-        let p = centre(&b, menu);
-        clic(&mut b, p);
-        assert!(!est_la(&b, "Annuler") && !est_la(&b, "Nouveau plan") && !est_la(&b, "Lecture / pause"), "« {menu} » ne s'ouvre pas : {:?}", tous_les_textes(&b));
-        rien_n_a_change(&b, menu);
+fn the_compact_welcome_has_no_menus_so_the_menu_entries_cannot_be_played_and_the_commands_behind_them_are_covered_elsewhere() {
+    // (Les entrées des menus Fichier et Aide sont des commandes du fichier de raccourcis : `every_command_played_without_a_project…`
+    // les joue toutes, sans projet, et rien ne change. La petite fenêtre d'accueil n'a pas de menus, `accueilfenetre.rs`.)
+    let b = lance();
+    for menu in ["Fichier", "Édition", "Storyboard", "Son", "Calques", "Animation", "Affichage", "Labo", "Aide"] {
+        assert!(!tous_les_textes(&b).iter().any(|t| t == menu), "« {menu} » : pas de menu sur l'accueil compact");
     }
-    // Fichier : chaque entrée est jouée (sauf Ouvrir, qui ouvre le sélecteur de fichiers de Windows, et Quitter).
-    let entrees = [
-        "Nouveau…",
-        "Enregistrer",
-        "Enregistrer sous…",
-        "Afficher le projet dans l'Explorateur",
-        "Nouvel onglet",
-        "Fermer l'onglet",
-        "Fermer les autres onglets",
-        "Exporter…",
-        "Réglages du projet…",
-        "Partager ce projet…",
-        "Préférences…",
-    ];
-    for entree in entrees {
-        let fichier = centre(&b, "Fichier");
-        clic(&mut b, fichier);
-        assert!(est_la(&b, "Enregistrer sous…"), "le menu Fichier est ouvert : {:?}", tous_les_textes(&b));
-        let p = centre(&b, entree);
-        clic(&mut b, p);
-        // (Une entrée grisée laisse le menu ouvert : Échap le ferme.)
-        refermer_les_fenetres(&mut b);
-        echap(&mut b);
-        b.chauffer(2);
-        rien_n_a_change(&b, entree);
-    }
-    // Fichier > Importer : une image, une vidéo, une séquence… (grisées ou sans effet : le projet caché ne change pas).
-    // (Storyboard Pro et scénario ouvrent le sélecteur de fichiers de Windows : pas jouées ici.)
-    let fichier = centre(&b, "Fichier");
-    clic(&mut b, fichier);
-    let importer = centre(&b, "Importer");
-    clic(&mut b, importer);
-    for entree in ["Une image (calque bitmap)…", "Une vidéo (calque vidéo)…", "Une séquence d'images (calque vidéo)…", "Des images comme références…", "Des notes de relecture (.json)…"] {
-        if est_la(&b, entree) {
-            let p = centre(&b, entree);
-            clic(&mut b, p);
-            rien_n_a_change(&b, entree);
-        }
-    }
-    refermer_les_fenetres(&mut b);
-    // Aide : chaque entrée s'ouvre sans toucher au projet caché.
-    for entree in ["Palette de commandes…", "Raccourcis clavier…", "Régler le stylet à ma main…", "À propos de SHOT…"] {
-        echap(&mut b);
-        b.chauffer(2);
-        let aide = centre(&b, "Aide");
-        clic(&mut b, aide);
-        if est_la(&b, entree) {
-            let p = centre(&b, entree);
-            clic(&mut b, p);
-        }
-        b.chauffer(3);
-        rien_n_a_change(&b, entree);
-        refermer_les_fenetres(&mut b);
-    }
+    assert!(b.app.accueil_compact());
 }
-
 #[test]
 fn files_dropped_without_a_project_only_open_projects() {
     use crate::sansprojet::est_un_projet_a_ouvrir;

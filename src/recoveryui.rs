@@ -8,6 +8,15 @@ use eframe::egui::{self, Color32, RichText};
 use crate::app::App;
 use crate::recovery::{now_secs, Orphan, Snapshot};
 
+/// Ce que la proposition de récupération a demandé : une copie à ouvrir, toutes, une à supprimer, « Plus tard ».
+#[derive(Default)]
+pub(crate) struct RecoveryChoix {
+    pub open: Option<usize>,
+    pub open_all: bool,
+    pub delete: Option<usize>,
+    pub later: bool,
+}
+
 fn warn() -> Color32 {
     crate::theme::avertissement()
 }
@@ -125,50 +134,58 @@ impl App {
         if self.orphans.is_empty() {
             return;
         }
-        let mut open = None;
-        let mut open_all = false;
-        let mut delete = None;
-        let mut later = false;
+        // (Sans projet ouvert, la proposition est dans la fenêtre d'accueil, en haut du cadre « Projets récents » : `accueil.rs`.)
+        if self.accueil_visible() {
+            return;
+        }
+        let mut choix = RecoveryChoix::default();
         egui::Modal::new(egui::Id::new("recuperation")).show(ctx, |ui| {
             ui.set_width(480.0);
             ui.heading("SHOT s'est fermé sans enregistrer");
-            ui.label(if self.orphans.len() > 1 { "Des copies de secours ont été trouvées, une par projet :" } else { "Une copie de secours a été trouvée :" });
-            ui.add_space(6.0);
-            for (i, o) in self.orphans.iter().enumerate() {
-                ui.group(|ui| {
-                    ui.set_width(ui.available_width());
-                    ui.label(RichText::new(&o.info.title).strong());
-                    let when = o.info.copied.map_or("date inconnue".to_string(), |c| format!("copie faite {}", ago(c)));
-                    let place = o
-                        .info
-                        .project
-                        .as_ref()
-                        .map_or("projet jamais enregistré".to_string(), |p| p.display().to_string());
-                    ui.label(RichText::new(format!("{when} · {place}")).small());
-                    if o.project_is_newer() {
-                        ui.colored_label(warn(),"Le projet a été enregistré après cette copie : elle n'apporte sans doute rien.");
-                    }
-                    ui.horizontal(|ui| {
-                        if ui.button("Ouvrir la copie").clicked() {
-                            open = Some(i);
-                        }
-                        if ui.button("Supprimer").clicked() {
-                            delete = Some(i);
-                        }
-                    });
-                });
-            }
-            ui.add_space(6.0);
-            ui.horizontal(|ui| {
-                if self.orphans.len() > 1 && ui.button("Tout ouvrir").on_hover_text("Chaque copie dans son onglet.").clicked() {
-                    open_all = true;
-                }
-                later = ui
-                    .button("Plus tard")
-                    .on_hover_text("Les copies restent ; SHOT les proposera au prochain démarrage.")
-                    .clicked();
-            });
+            choix = self.recovery_contenu(ui);
         });
+        self.recovery_appliquer(choix);
+    }
+
+    /// Les copies de secours trouvées, chacune avec « Ouvrir la copie » et « Supprimer », puis « Tout ouvrir » et « Plus tard ».
+    /// Le même contenu dans la fenêtre de récupération et dans la fenêtre d'accueil (rien n'est fait ici : le choix est rendu).
+    pub(crate) fn recovery_contenu(&self, ui: &mut egui::Ui) -> RecoveryChoix {
+        let mut c = RecoveryChoix::default();
+        ui.label(if self.orphans.len() > 1 { "Des copies de secours ont été trouvées, une par projet :" } else { "Une copie de secours a été trouvée :" });
+        ui.add_space(6.0);
+        for (i, o) in self.orphans.iter().enumerate() {
+            ui.group(|ui| {
+                ui.set_width(ui.available_width());
+                ui.label(RichText::new(&o.info.title).strong());
+                let when = o.info.copied.map_or("date inconnue".to_string(), |c| format!("copie faite {}", ago(c)));
+                let place = o.info.project.as_ref().map_or("projet jamais enregistré".to_string(), |p| p.display().to_string());
+                ui.add(egui::Label::new(RichText::new(format!("{when} · {place}")).small()).truncate()).on_hover_text(format!("{when} · {place}"));
+                if o.project_is_newer() {
+                    ui.colored_label(warn(), "Le projet a été enregistré après cette copie : elle n'apporte sans doute rien.");
+                }
+                ui.horizontal(|ui| {
+                    if ui.button("Ouvrir la copie").clicked() {
+                        c.open = Some(i);
+                    }
+                    if ui.button("Supprimer").clicked() {
+                        c.delete = Some(i);
+                    }
+                });
+            });
+        }
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            if self.orphans.len() > 1 && ui.button("Tout ouvrir").on_hover_text("Chaque copie dans son onglet.").clicked() {
+                c.open_all = true;
+            }
+            c.later = ui.button("Plus tard").on_hover_text("Les copies restent ; SHOT les proposera au prochain démarrage.").clicked();
+        });
+        c
+    }
+
+    /// Ce que `recovery_contenu` a demandé.
+    pub(crate) fn recovery_appliquer(&mut self, choix: RecoveryChoix) {
+        let RecoveryChoix { open, open_all, delete, later } = choix;
         if open_all {
             // Chaque copie dans son onglet.
             for o in std::mem::take(&mut self.orphans) {
