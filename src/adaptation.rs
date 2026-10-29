@@ -611,6 +611,10 @@ pub fn retemps_reglages_calque(l: &mut Layer, r: &dyn Fn(usize) -> usize) {
         k.frame = r(k.frame);
     }
     l.pos_keys.dedup_by_key(|k| k.frame);
+    for k in &mut l.opacity_keys {
+        k.frame = r(k.frame);
+    }
+    l.opacity_keys.dedup_by_key(|k| k.frame);
     if let Some(v) = &mut l.video {
         let n = |f: u64| r(f as usize) as i64;
         v.start = if v.start >= 0 { n(v.start as u64) } else { -n(v.start.unsigned_abs()) };

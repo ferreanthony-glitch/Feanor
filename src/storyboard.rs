@@ -987,11 +987,13 @@ impl App {
         // calque tenue (sur le plan courant) ou survolée s'éclaire (chantier 5).
         // Le losange vert (clé de position) sous la souris : il passe avant les poignées du dessin dessous.
         let hover_pos_key = resp.hover_pos().and_then(|p| self.montage_pos_key_at(p, r.top(), &blocks, ppf, rows));
+        // Le losange gris clair (cle d'opacite), en bas de la piste : meme regle (`opacitecleselui.rs`).
+        let hover_op_key = resp.hover_pos().and_then(|p| self.montage_op_key_at(p, r.top(), &blocks, ppf, rows));
         let lit = match &self.handle_drag {
             Some(d) => Some((self.cur_panel, d.handle, true)),
-            None if self.montage_drag.is_none() && self.cam_keys_drag.is_none() && self.keys_drag.is_none() && self.fx_keys_drag.is_none() && self.pos_ui.drag.is_none() => resp
+            None if self.montage_drag.is_none() && self.cam_keys_drag.is_none() && self.keys_drag.is_none() && self.fx_keys_drag.is_none() && self.pos_ui.drag.is_none() && self.op_ui.drag.is_none() => resp
                 .hover_pos()
-                .filter(|p| hover_pos_key.is_none() && self.montage_fx_key_at(*p, r.top(), &blocks, ppf, rows).is_none())
+                .filter(|p| hover_pos_key.is_none() && hover_op_key.is_none() && self.montage_fx_key_at(*p, r.top(), &blocks, ppf, rows).is_none())
                 .and_then(|p| self.montage_layer_handle_at(p, r.top(), &blocks, ppf, rows))
                 .map(|(i, _, h)| (i, h, false)),
             None => None,
@@ -1057,6 +1059,13 @@ impl App {
             if self.montage_fx_key_at(p, r.top(), &blocks, ppf, rows).is_some() {
                 ui.ctx().set_cursor_icon(CursorIcon::Grab);
             }
+            if let (Some((i, k, f)), None) = (hover_op_key, &self.op_ui.drag) {
+                ui.ctx().set_cursor_icon(CursorIcon::Grab);
+                let layer = self.doc.panels[i].layers[k].name.clone();
+                let name = format!("Cle d'opacite, image {} ({layer})", self.frame_label(f));
+                let tip = "Glisser pour la deplacer, avec les cles choisies du calque (Echap : abandonner) ; Ctrl + clic : ajouter ou retirer du choix ; Maj + clic : ajouter celles d'entre ; Suppr : la supprimer ; clic droit : lisser, supprimer.";
+                resp.clone().on_hover_ui_at_pointer(|ui| crate::bulles::contenu(ui, &name, tip, ""));
+            }
             // Un losange vert de clé de position se prend (`poskeysui.rs`) : sa bulle dit comment.
             if let (Some((i, k, f)), None) = (hover_pos_key, &self.pos_ui.drag) {
                 ui.ctx().set_cursor_icon(CursorIcon::Grab);
@@ -1113,6 +1122,10 @@ impl App {
             if pos_hit.is_none() && self.pos_ui.drag.is_none() {
                 self.pos_ui.sel.clear();
             }
+            let op_hit = self.montage_op_key_at(origin, r.top(), &blocks, ppf, rows);
+            if op_hit.is_none() && self.op_ui.drag.is_none() {
+                self.op_ui.sel.clear();
+            }
             // Un geste qui ne part pas d'un losange jaune lâche le choix des clés de caméra.
             let cam_hit = self.montage_camera_key_at(origin, r.top(), &blocks, ppf, rows).and_then(|(i, k)| Some((i, self.doc.panels[i].camera.get(k)?.frame)));
             // (Un geste qui part de la piste Caméra, hors d'un losange, trace un rectangle de choix.)
@@ -1139,6 +1152,11 @@ impl App {
                 self.key_focus = true;
                 let grab = free_frame_at(origin.x);
                 self.begin_fx_keys_drag(i, k, f, grab);
+            } else if let Some((i, k, f)) = op_hit {
+                // Une cle d'opacite : elle emmene toutes les cles choisies du calque, une etape d'annulation.
+                self.sel_clip = None;
+                let grab = (((origin.x - x_of(self.doc.panel_start(i))) / ppf).floor().max(0.0)) as usize;
+                self.begin_op_drag_in_montage(i, k, f, grab);
             } else if let Some((i, k, f)) = pos_hit {
                 // Une clé de position : elle emmène toutes les clés choisies du calque, une étape d'annulation.
                 self.sel_clip = None;
@@ -1301,7 +1319,17 @@ impl App {
                 self.end_pos_drag();
             }
         }
-        if resp.dragged() && !comment_ptr.busy && self.cam_keys_drag.is_none() && self.handle_drag.is_none() && self.keys_drag.is_none() && self.fx_keys_drag.is_none() && self.pos_ui.drag.is_none() && self.key_rect.is_none() {
+        if self.op_ui.drag.is_some() {
+            ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
+            if let (true, Some(p)) = (resp.dragged(), resp.interact_pointer_pos()) {
+                let at = (((p.x - x_of(self.doc.panel_start(self.cur_panel))) / ppf).floor().max(0.0)) as usize;
+                self.drag_op_keys(at);
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.end_op_drag();
+            }
+        }
+        if resp.dragged() && !comment_ptr.busy && self.cam_keys_drag.is_none() && self.handle_drag.is_none() && self.keys_drag.is_none() && self.fx_keys_drag.is_none() && self.pos_ui.drag.is_none() && self.op_ui.drag.is_none() && self.key_rect.is_none() {
             if let Some(p) = resp.interact_pointer_pos() {
                 match &mut self.montage_drag {
                     Some(MontageDrag::Scrub) => {
@@ -1359,6 +1387,10 @@ impl App {
                 if pos_hit.is_none() {
                     self.pos_ui.sel.clear();
                 }
+                let op_hit = self.montage_op_key_at(p, r.top(), &blocks, ppf, rows);
+                if op_hit.is_none() {
+                    self.op_ui.sel.clear();
+                }
                 let cam_hit = self.montage_camera_key_at(p, r.top(), &blocks, ppf, rows).and_then(|(i, k)| Some((i, self.doc.panels[i].camera.get(k)?.frame)));
                 if cam_hit.is_none() {
                     self.clear_cam_keys();
@@ -1375,6 +1407,11 @@ impl App {
                     self.sel_clip = None;
                     let mods = ui.input(|i| i.modifiers);
                     self.click_fx_marker(i, k, f, mods.command, mods.shift);
+                } else if let Some((i, k, f)) = op_hit {
+                    // Un losange gris clair de cle d'opacite : choisi comme les autres (`opacitecleselui.rs`).
+                    self.sel_clip = None;
+                    let mods = ui.input(|i| i.modifiers);
+                    self.click_op_marker_in_montage(i, k, f, mods.command, mods.shift && !mods.command);
                 } else if let Some((i, k, f)) = pos_hit {
                     // Un losange vert de clé de position : choisi (Ctrl : ajouté ou retiré ; Maj : ceux
                     // d'entre), la tête de lecture va dessus (`poskeysui.rs`).
@@ -1518,6 +1555,15 @@ impl App {
                         self.click_fx_marker(i, k, f, false, false);
                     }
                     Some(MenuTarget::FxKey)
+                } else if let Some((i, k, f)) = self.montage_op_key_at(p, r.top(), &blocks, ppf, rows) {
+                    // Un losange d'opacite : le menu des cles d'opacite (celui-ci seul s'il n'etait pas choisi).
+                    self.sel_clip = None;
+                    let id = self.doc.panels[i].layers[k].id;
+                    if i != self.cur_panel || !self.op_ui.sel.contains(&(id, f)) {
+                        self.click_op_marker_in_montage(i, k, f, false, false);
+                    }
+                    self.key_focus = true;
+                    Some(MenuTarget::OpKey)
                 } else if let Some((i, k, f)) = self.montage_pos_key_at(p, r.top(), &blocks, ppf, rows) {
                     // Un losange vert de clé de position : le menu des clés de position (celui-ci seul
                     // s'il n'était pas choisi).
@@ -1632,6 +1678,7 @@ impl App {
                 MenuTarget::Camera => self.grid_menu_ui(ui, crate::handles::GridMenu::Camera),
                 MenuTarget::FxKey => self.fx_key_menu(ui),
                 MenuTarget::PosKey => self.pos_key_menu(ui),
+                MenuTarget::OpKey => self.op_key_menu(ui),
                 MenuTarget::Sequence => {
                     self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
                     self.action_item(ui, "Nouveau plan", "panneau.nouveau");
@@ -1666,6 +1713,7 @@ impl App {
             || self.keys_drag.is_some()
             || self.fx_keys_drag.is_some()
             || self.pos_ui.drag.is_some()
+            || self.op_ui.drag.is_some()
             || self.key_rect.is_some()
             || self.cam_rect.is_some()
             || self.trans.drag.is_some();

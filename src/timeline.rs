@@ -613,6 +613,17 @@ impl App {
             }
         }
 
+        // Cles d'opacite (`opacitecleselui.rs`) : des losanges gris clair en bas de la ligne du calque dont l'opacite est animee.
+        {
+            let visible = (ui.clip_rect().left(), ui.clip_rect().right());
+            for row in &rows {
+                let layer = &self.layers()[row.li];
+                if !layer.opacity_keys.is_empty() {
+                    self.paint_op_markers(&painter, layer, |f| r.left() + (f as f32 + 0.5) * cell, grid_top + Self::op_marker_y(row.top, row.h), cols, visible);
+                }
+            }
+        }
+
         // Commentaires (`commentairesui.rs`) : leurs fanions dans la règle du plan, le mât au
         // milieu de l'image. Un fanion pris garde la souris : la grille ne fait rien d'autre.
         let ruler_rect = Rect::from_min_size(r.min, vec2(size.x, HEADER_H));
@@ -658,6 +669,12 @@ impl App {
                             self.click_fx_marker(self.cur_panel, layer, f, false, false);
                         }
                         self.grid_menu = Some(GridMenu::FxKey);
+                    } else if let Some((layer, f)) = self.op_marker_in_timeline(p, r, cell, &rows, grid_top) {
+                        // Un losange d'opacite qui n'etait pas choisi l'est seul ; le menu vise le choix.
+                        if !self.op_ui.sel.contains(&(self.layers()[layer].id, f)) {
+                            self.click_op_marker(layer, f, false, false);
+                        }
+                        self.grid_menu = Some(GridMenu::OpKey);
                     } else if let Some((layer, f)) = self.pos_marker_in_timeline(p, r, cell, &rows, grid_top) {
                         // Un losange vert qui n'était pas choisi l'est seul ; le menu vise le choix.
                         if !self.pos_ui.sel.contains(&(self.layers()[layer].id, f)) {
@@ -893,6 +910,20 @@ impl App {
                 self.fx_key_sel.clear();
             }
         }
+        // Les cles d'opacite (`opacitecleselui.rs`) : de meme, avec les losanges gris clair.
+        if (resp.clicked() || resp.drag_started()) && !self.op_ui.sel.is_empty() && self.op_ui.drag.is_none() {
+            let at = if resp.clicked() { resp.interact_pointer_pos() } else { ui.input(|i| i.pointer.press_origin()) };
+            if at.is_none_or(|p| self.op_marker_in_timeline(p, r, cell, &rows, grid_top).is_none()) {
+                self.op_ui.sel.clear();
+            }
+        }
+        if resp.drag_started() && !holding_key && !in_notes && !comment_busy {
+            if let Some(p) = ui.input(|i| i.pointer.press_origin()).filter(|p| !on_playhead(*p)) {
+                if let Some((li, f)) = self.op_marker_in_timeline(p, r, cell, &rows, grid_top) {
+                    self.begin_op_drag(li, f, ((p.x - r.left()) / cell).floor().max(0.0) as usize);
+                }
+            }
+        }
         // Les clés de position (`poskeysui.rs`) : un clic ou un geste qui ne part pas d'un losange vert lâche
         // le choix ; un glisser qui part d'un losange prend les clés choisies.
         if (resp.clicked() || resp.drag_started()) && !self.pos_ui.sel.is_empty() && self.pos_ui.drag.is_none() {
@@ -903,12 +934,12 @@ impl App {
         }
         if resp.drag_started() && !holding_key && !in_notes && !comment_busy {
             if let Some(p) = ui.input(|i| i.pointer.press_origin()).filter(|p| !on_playhead(*p)) {
-                if let Some((li, f)) = self.pos_marker_in_timeline(p, r, cell, &rows, grid_top) {
+                if let Some((li, f)) = self.pos_marker_in_timeline(p, r, cell, &rows, grid_top).filter(|_| self.op_ui.drag.is_none()) {
                     self.begin_pos_drag(li, f, ((p.x - r.left()) / cell).floor().max(0.0) as usize);
                 }
             }
         }
-        if resp.drag_started() && !holding_key && !in_notes && !comment_busy && self.pos_ui.drag.is_none() {
+        if resp.drag_started() && !holding_key && !in_notes && !comment_busy && self.pos_ui.drag.is_none() && self.op_ui.drag.is_none() {
             if let Some((p, h)) = ui
                 .input(|i| i.pointer.press_origin())
                 .filter(|p| !on_playhead(*p))
@@ -937,6 +968,15 @@ impl App {
                 self.end_fx_keys_drag();
             }
         }
+        if self.op_ui.drag.is_some() {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+            if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
+                self.drag_op_keys(((p.x - r.left()) / cell).floor().max(0.0) as usize);
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.end_op_drag();
+            }
+        }
         if self.pos_ui.drag.is_some() {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
             if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
@@ -962,15 +1002,15 @@ impl App {
             if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
                 self.end_handle_drag();
             }
-        } else if !holding_key && self.image_drag.is_none() && self.fx_keys_drag.is_none() && self.pos_ui.drag.is_none() {
+        } else if !holding_key && self.image_drag.is_none() && self.fx_keys_drag.is_none() && self.pos_ui.drag.is_none() && self.op_ui.drag.is_none() {
             // Un losange vert se prend (`poskeysui.rs`), comme dans le montage.
-            if resp.hover_pos().is_some_and(|p| !on_playhead(p) && self.pos_marker_in_timeline(p, r, cell, &rows, grid_top).is_some()) {
+            if resp.hover_pos().is_some_and(|p| !on_playhead(p) && (self.op_marker_in_timeline(p, r, cell, &rows, grid_top).is_some() || self.pos_marker_in_timeline(p, r, cell, &rows, grid_top).is_some())) {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
             } else if let Some(h) = resp.hover_pos().filter(|p| !on_playhead(*p)).and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top)) {
                 ui.ctx().set_cursor_icon(cursor_for(h, false));
             }
         }
-        let holding_key = holding_key || marquee || self.handle_drag.is_some() || self.fx_keys_drag.is_some() || self.pos_ui.drag.is_some() || comment_busy;
+        let holding_key = holding_key || marquee || self.handle_drag.is_some() || self.fx_keys_drag.is_some() || self.pos_ui.drag.is_some() || self.op_ui.drag.is_some() || comment_busy;
 
         // Clic et glisser : choisir l'image (et le calque au clic). Avec Maj : choisir les images
         // entre l'image courante et celle sous la souris, sur les calques choisis (13c-2).
@@ -1052,7 +1092,15 @@ impl App {
         // Clic sur un losange vert (clé de position) : il est choisi (Ctrl : ajouté ou retiré), la tête de
         // lecture va dessus (`poskeysui.rs`).
         let mut pos_clicked = false;
+        // Clic sur un losange d'opacite (`opacitecleselui.rs`) : comme les autres.
         if resp.clicked() && !holding_key && !in_notes {
+            if let Some((layer, f)) = resp.interact_pointer_pos().and_then(|p| self.op_marker_in_timeline(p, r, cell, &rows, grid_top)) {
+                let m = ui.input(|i| i.modifiers);
+                self.click_op_marker(layer, f, m.command, m.shift && !m.command);
+                pos_clicked = true;
+            }
+        }
+        if resp.clicked() && !holding_key && !in_notes && !pos_clicked {
             if let Some((layer, f)) = resp.interact_pointer_pos().and_then(|p| self.pos_marker_in_timeline(p, r, cell, &rows, grid_top)) {
                 let m = ui.input(|i| i.modifiers);
                 self.click_pos_marker_with(layer, f, m.command, m.shift && !m.command);

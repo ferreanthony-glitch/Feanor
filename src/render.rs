@@ -81,6 +81,19 @@ pub enum FondPart {
     /// Le repère d'un calque d'effet d'ajustement (`calqueffet.rs`) : il se résout, avec les éléments
     /// qu'il couvre, en un dessin dérivé (`calqueffet::resolve`). Jamais composé tel quel.
     Reglage(std::sync::Arc<crate::calqueffet::Reglage>),
+    /// La couleur unie d'un calque « Couleur unie » (`couleurunie.rs`) : toute la feuille de cette couleur, sous les dessins du calque.
+    /// Son dessin (un seul pixel, étiré sur la feuille) est fait à la demande et gardé par couleur : aucun bitmap de la taille de la feuille.
+    Unie([u8; 3]),
+}
+
+/// Le numéro d'élément de plan de la couleur unie : aucun dessin du projet n'a ce numéro.
+pub const UNIE_CEL: CelId = (1 << 62) | 0x554e_4945;
+
+/// L'élément de la couleur unie du calque `layer` (s'il en a une), à placer juste sous ses dessins. `opacity` : celle du calque à
+/// cette image, déjà multipliée par celle de son dossier.
+pub fn unie_item(layer: &crate::document::Layer, opacity: u8) -> Option<PlanItem> {
+    let c = layer.unie.filter(|_| !layer.folder)?;
+    Some(PlanItem { cel: UNIE_CEL, opacity, tint: None, transform: None, blend: layer.blend, fx: Vec::new(), ctg: None, fond: Some(FondPart::Unie(c)), pre: None })
 }
 
 /// L'élément du fond sous le trait du calque `layer` (s'il en a un), à placer juste sous `line`,
@@ -793,7 +806,7 @@ fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize,
         let l = &panel.layers[li];
         starts[li] = items.len();
         // Caché (lui ou son dossier, 13b-5) : rien ; l'opacité du dossier s'ajoute.
-        let Some(opacity) = crate::folders::effect(&panel.layers, li) else { continue };
+        let Some(opacity) = crate::folders::effect_at(&panel.layers, li, frame) else { continue };
         // Calque d'effet (`calqueffet.rs`) : son repère, ou rien (une incrustation se pose sur l'image
         // finale, `incrustation.rs`).
         if l.effet.is_some() {
@@ -803,6 +816,8 @@ fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize,
         // Derrière la caméra : rien. Sinon l'affinité d'avant (carte à plat) ou le maillage d'une carte inclinée
         // de l'Espace 3D (`espace3d::place`).
         let Some(placed) = crate::espace3d::place(world, l, frame, camera) else { continue };
+        // Couleur unie du calque (`couleurunie.rs`) : sous ses dessins, même s'il n'en a pas à cette image.
+        items.extend(unie_item(l, (opacity * 255.0).round() as u8));
         // Calque vidéo (13k) : l'image de la vidéo qui tombe là.
         let Some(cel) = crate::video::cel_at(l, frame, fps) else { continue };
         let line = PlanItem {

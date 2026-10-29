@@ -85,6 +85,8 @@ pub(crate) enum GridMenu {
     FxKey,
     /// Une clé de position d'un calque (`poskeysui.rs`).
     PosKey,
+    /// Une cle d'opacite d'un calque (`opacitecleselui.rs`).
+    OpKey,
     /// La ligne du son : la piste et l'extrait sous le clic, l'image du montage.
     Sound { track: usize, clip: Option<u64>, frame: usize },
     /// Le nom de la ligne du son.
@@ -1063,6 +1065,7 @@ impl App {
             }
             GridMenu::FxKey => self.fx_key_menu(ui),
             GridMenu::PosKey => self.pos_key_menu(ui),
+            GridMenu::OpKey => self.op_key_menu(ui),
             GridMenu::Sound { track, clip, frame } => self.lane_menu(ui, track, clip, frame),
             GridMenu::SoundHeader => {
                 self.action_item(ui, "Importer un son…", "son.importer");
@@ -1109,6 +1112,7 @@ impl App {
             || self.keys_drag.is_some()
             || self.fx_keys_drag.is_some()
             || self.pos_ui.drag.is_some()
+            || self.op_ui.drag.is_some()
             || self.key_rect.is_some()
             || self.comment_ui.drag.is_some()
     }
@@ -1120,6 +1124,7 @@ impl App {
         self.cancel_keys_drag();
         self.cancel_fx_keys_drag();
         self.cancel_pos_drag();
+        self.cancel_op_drag();
         self.cancel_cam_keys_drag();
         self.cancel_cam_rect();
         self.cancel_comment_drag();
@@ -1160,6 +1165,9 @@ impl App {
         }
         if self.pos_ui.drag.is_some() {
             self.end_pos_drag();
+        }
+        if self.op_ui.drag.is_some() {
+            self.end_op_drag();
         }
         if self.cam_keys_drag.is_some() {
             self.end_cam_keys_drag();

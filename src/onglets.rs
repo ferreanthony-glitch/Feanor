@@ -227,6 +227,7 @@ etat_projet! {
     // Le tracé droit en cours (Maj tenue) et les clés de position choisies sur la timeline.
     droit: crate::tracedroit::Droit = Default::default(),
     pos_ui: crate::poskeysui::PosUi = Default::default(),
+    op_ui: crate::opacitecleselui::OpUi = Default::default(),
     // La relecture : sa fenêtre, sa page en calcul et les notes lues visent ce projet.
     relecture: crate::relectureui::RelectureUi = Default::default(),
     // Le film partagé de ce projet : sa session (son fil de fond continue pour un onglet caché) et son interface.

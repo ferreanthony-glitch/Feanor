@@ -715,6 +715,13 @@ pub mod poskeys;
 mod poskeysui;
 #[cfg(test)]
 mod poskeysmontage_tests;
+pub mod opacitecles;
+mod opacitecleselui;
+#[cfg(test)]
+mod opacitecles_tests;
+pub mod couleurunie;
+#[cfg(test)]
+mod couleurunie_tests;
 #[cfg(test)]
 mod dessin_notes_tests;
 mod montagerows;

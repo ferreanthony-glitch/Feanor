@@ -22,13 +22,15 @@ pub(crate) enum Sorte {
     Effet,
     /// Des notes de réalisateur sur le plan, jamais dans un export (`calqueannot.rs`).
     Annotation,
+    /// Un fond d'une seule couleur sur toute la feuille, avec des dessins par-dessus (`couleurunie.rs`).
+    Unie,
     Video,
     Dossier,
 }
 
 impl Sorte {
     /// Dans l'ordre du menu du « + ».
-    pub(crate) const TOUTES: [Sorte; 7] = [Sorte::Vecto, Sorte::Bitmap, Sorte::Couleur, Sorte::Effet, Sorte::Annotation, Sorte::Video, Sorte::Dossier];
+    pub(crate) const TOUTES: [Sorte; 8] = [Sorte::Vecto, Sorte::Bitmap, Sorte::Couleur, Sorte::Unie, Sorte::Effet, Sorte::Annotation, Sorte::Video, Sorte::Dossier];
 
     /// La sorte d'un calque, telle que la ligne du panneau la montre : un dossier, un calque d'effet, un calque
     /// d'annotation, un calque de couleur ou une vidéo avant le vectoriel et le bitmap.
@@ -41,6 +43,8 @@ impl Sorte {
             Sorte::Annotation
         } else if l.couleur.is_some() {
             Sorte::Couleur
+        } else if l.unie.is_some() {
+            Sorte::Unie
         } else if l.video.is_some() {
             Sorte::Video
         } else if l.kind == LayerKind::Vector {
@@ -57,6 +61,7 @@ impl Sorte {
             Sorte::Couleur => ph::PALETTE,
             Sorte::Effet => ph::SPARKLE,
             Sorte::Annotation => ph::MARKER_CIRCLE,
+            Sorte::Unie => ph::SQUARE,
             Sorte::Video => ph::FILM_STRIP,
             Sorte::Dossier => ph::FOLDER_PLUS,
         }
@@ -79,6 +84,7 @@ impl Sorte {
             Sorte::Couleur => "Calque de couleur",
             Sorte::Effet => "Calque d'effet",
             Sorte::Annotation => "Calque d'annotation",
+            Sorte::Unie => "Couleur unie",
             Sorte::Video => "Vidéo",
             Sorte::Dossier => "Dossier",
         }
@@ -92,6 +98,7 @@ impl Sorte {
             Sorte::Couleur => "Pour colorier sous le trait, sans l'abîmer.",
             Sorte::Effet => "Un effet sur tout ce qui est dessous : lueur, flash, grain…",
             Sorte::Annotation => "Des notes par-dessus le plan, jamais dans les exports.",
+            Sorte::Unie => "Un fond d'une seule couleur sur toute la feuille ; on dessine par-dessus.",
             Sorte::Video => "Une vidéo posée comme calque, pour dessiner par-dessus.",
             Sorte::Dossier => "Pour ranger des calques ensemble.",
         }
@@ -105,6 +112,7 @@ impl Sorte {
             Sorte::Couleur => Some("calque.nouveau_couleur"),
             Sorte::Effet => None,
             Sorte::Annotation => Some("calque.nouveau_annotation"),
+            Sorte::Unie => Some("calque.nouveau_couleur_unie"),
             Sorte::Video => Some("fichier.importer_video"),
             Sorte::Dossier => Some("dossier.nouveau"),
         }
@@ -142,6 +150,7 @@ pub(crate) fn teinte(ui: &egui::Ui, s: Sorte) -> Color32 {
         Sorte::Couleur => crate::theme::couleur_calque(LayerKind::Bitmap, true),
         Sorte::Effet => crate::theme::palette().dessin_cfx,
         Sorte::Annotation => crate::theme::palette().dessin_annotation,
+        Sorte::Unie => crate::theme::palette().dessin_unie,
         Sorte::Dossier => ui.visuals().selection.bg_fill,
     }
 }

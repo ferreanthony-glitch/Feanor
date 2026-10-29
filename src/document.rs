@@ -293,6 +293,12 @@ pub struct Layer {
     /// Clés de position (`poskeys.rs`, Anthony 2026-10-20) : la pose du calque à certaines images du plan,
     /// triées par image ; entre deux clés elle va de l'une à l'autre. Vide : le calque a sa pose fixe.
     pub pos_keys: Vec<crate::poskeys::PosKey>,
+    /// Clés d'opacité (`opacitecles.rs`, Anthony 2026-10-29) : l'opacité du calque à certaines images du plan, triées par image ; entre
+    /// deux clés elle va de l'une à l'autre. Vide : le calque a son opacité fixe (`opacity`).
+    pub opacity_keys: Vec<crate::opacitecles::OpKey>,
+    /// Couleur unie du calque (`couleurunie.rs`, « Color card ») : un fond d'une seule couleur sur toute la feuille, rendu sous les
+    /// dessins du calque, sans pixels stockés. Aucune : calque ordinaire.
+    pub unie: Option<[u8; 3]>,
     /// Profondeur (multiplan) : 0 = plan de référence ; 1 = deux fois plus loin de la caméra
     /// (défile deux fois moins vite) ; négatif = premier plan (défile plus vite).
     pub depth: f32,
@@ -413,6 +419,8 @@ impl Layer {
             locked: false,
             transform: LayerTransform::default(),
             pos_keys: Vec::new(),
+            opacity_keys: Vec::new(),
+            unie: None,
             depth: 0.0,
             frames: Vec::new(),
             scene_wide: None,
@@ -642,6 +650,46 @@ impl Layer {
         crate::roles::shift(&mut self.roles, at, n, removed);
         crate::fx::shift_keys(&mut self.fx, at, n, removed);
         crate::poskeys::shift_keys(&mut self.pos_keys, at, n, removed);
+        crate::opacitecles::shift_keys(&mut self.opacity_keys, at, n, removed);
+    }
+
+    /// L'opacité du calque à l'image `frame` du plan : celle que donnent ses clés d'opacité, sinon son opacité fixe.
+    pub fn opacity_at(&self, frame: usize) -> f32 {
+        crate::opacitecles::value_at(&self.opacity_keys, frame, self.opacity).clamp(0.0, 1.0)
+    }
+
+    /// Le calque a des clés d'opacité : son opacité est animée.
+    pub fn is_opacity_animated(&self) -> bool {
+        !self.opacity_keys.is_empty()
+    }
+
+    /// Donne au calque l'opacité `v` à l'image `frame` : son opacité fixe s'il n'a pas de clé, sinon la clé de cette image (créée au
+    /// besoin, avec les adoucis de celle qu'elle remplace).
+    pub fn set_opacity_at(&mut self, frame: usize, v: f32) {
+        let v = crate::opacitecles::clamp(v);
+        if self.opacity_keys.is_empty() {
+            self.opacity = v;
+        } else {
+            crate::opacitecles::set_key(&mut self.opacity_keys, frame, v);
+        }
+    }
+
+    /// Pose une clé d'opacité à l'image `frame` avec la valeur `v` (la première clé rend le calque animé).
+    pub fn put_opacity_key(&mut self, frame: usize, v: f32) {
+        crate::opacitecles::set_key(&mut self.opacity_keys, frame, v);
+    }
+
+    /// Remplace toutes les clés d'opacité (import) : `keys` est une liste de (image, opacité) ; une clé par image, triées.
+    pub fn set_opacity_keys(&mut self, keys: &[(usize, f32)]) {
+        self.opacity_keys.clear();
+        for &(f, v) in keys {
+            crate::opacitecles::set_key(&mut self.opacity_keys, f, v);
+        }
+    }
+
+    /// Réunion de deux plans : les clés d'opacité du même calque de l'autre plan suivent les siennes, décalées de `a_len` images.
+    pub fn join_opacity_keys(&mut self, a_len: usize, keys: &[crate::opacitecles::OpKey], base: f32, b_len: usize) {
+        self.opacity_keys = crate::opacitecles::join_keys(&self.opacity_keys, a_len, self.opacity, keys, b_len, base);
     }
 
     /// Réunion de deux plans : les clés de position du même calque de l'autre plan (`keys`, `base` : sa
@@ -869,6 +917,9 @@ pub(crate) fn layers_same(x: &Layer, y: &Layer) -> bool {
         // (Un calque animé ne se réunit pas à un autre : il reste un calque à part.)
         && x.pos_keys.is_empty()
         && y.pos_keys.is_empty()
+        && x.opacity_keys.is_empty()
+        && y.opacity_keys.is_empty()
+        && x.unie == y.unie
         && x.depth == y.depth
         // (Un calque de couleur ne se réunit qu'à un calque de couleur, un calque d'effet, de vidéo ou de toute la scène qu'à
         // un calque de sa sorte : un calque bitmap ordinaire réuni à un calque de couleur voyait ses images refaites d'après le
@@ -2050,6 +2101,7 @@ impl Document {
                 fx: crate::fx::keys_from(&layer.fx, at),
                 // Les clés de position d'après la coupe passent au second (`poskeys::split_keys`).
                 pos_keys: crate::poskeys::split_keys(&layer.pos_keys, at, layer.transform).1,
+                opacity_keys: crate::opacitecles::split_keys(&layer.opacity_keys, at, layer.opacity).1,
                 ..layer.clone()
             };
             l.trim();
@@ -2085,6 +2137,7 @@ impl Document {
                 e.keys.retain(|k| k.frame < at);
             }
             l.pos_keys = crate::poskeys::split_keys(&l.pos_keys, at, l.transform).0;
+            l.opacity_keys = crate::opacitecles::split_keys(&l.opacity_keys, at, l.opacity).0;
             l.trim();
         }
         first.length = at;
@@ -2130,6 +2183,7 @@ impl Document {
                 }
                 la.append_at(a_len, lb.frames, &lb.roles);
                 la.join_pos_keys(a_len, &lb.pos_keys, lb.transform, next_len);
+                la.join_opacity_keys(a_len, &lb.opacity_keys, lb.opacity, next_len);
                 la.trim();
             } else {
                 let mut l = lb;
@@ -2210,6 +2264,10 @@ impl Document {
         }
         if above.effet.is_some() || below.effet.is_some() {
             return Err("Un calque d'effet ne se fusionne pas : il agit sur tout ce qui est dessous.".into());
+        }
+        // Un fond de couleur unie n'est pas du dessin : il ne se fond pas dans un autre calque.
+        if above.unie.is_some() || below.unie.is_some() {
+            return Err("Un calque Couleur unie ne se fusionne pas : son fond couvre toute la feuille et reste un calque à part.".into());
         }
         if !above.visible || !below.visible {
             return Err("Affiche les deux calques avant de les fusionner.".into());

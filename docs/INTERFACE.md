@@ -5818,3 +5818,70 @@ verrou, opacité et placement. Une fenêtre de remarques dit ce qui n'est pas re
 `sbnative.rs` : feuille de la taille du projet et plafond `MAX_SHEET_SIDE` ; caméra (rotation, adoucis, recul), profondeur des calques, groupe en dossier, flou, trou de zone ;
 `tvg.rs` : zone fermée sans couleur = trou, ouverte = comptée.
 ---------------------------------------------------------------------------------------------------
+
+## 72. Clés d'opacité et calque « Couleur unie » (2026-10-29, branche `opacite-colorcard`)
+
+Demande d'Anthony : « On doit rajouter des clés d'opacité à SHOT dans ce cas. Et un calque color card, qui applique une couleur unie sur
+toute l'image à la création du calque. La couleur est ajustable dans les paramètres du calque. » Puis : « On peut dessiner sur le calque
+color card, on peut tout faire dessus. » Format du projet : **43** (un projet de 42 ou moins s'ouvre tel quel).
+
+### Clés d'opacité (`opacitecles.rs`, `opacitecleselui.rs`)
+
+- **Même modèle que les clés de position** (`poskeys.rs`), pas un second système : les clés vivent sur le calque (`Layer::opacity_keys`), en
+  images du plan, triées ; avant la première et après la dernière l'opacité ne bouge pas ; entre deux clés elle va de l'une à l'autre en
+  ligne droite, ralentie par les mêmes adoucis (`lisse`, arrivée, départ ; `camera::ease`). Sans clé, c'est l'opacité fixe du calque.
+- **Où les poser** : le losange **« Créer une clé »** juste à droite du champ d'opacité du panneau Calques (plein quand une clé existe à
+  l'image courante), avec « Supprimer la clé d'ici » et « Supprimer toutes les clés » dès qu'il y a des clés. Une fois le calque animé, régler
+  son opacité à une image (champ du panneau, barre d'opacité de la timeline, réglages du montage) pose ou met à jour la clé de cette image.
+  Commandes : `calque.cle_opacite`, `calque.cle_opacite_lisser`, `calque.cle_opacite_supprimer`, `calque.cles_opacite_supprimer`.
+- **Timeline et montage** : un losange gris clair (`theme::CLE_OPACITE`) en bas de la ligne du calque ; rond quand la clé est adoucie. On
+  le choisit au clic (Ctrl ajoute, Maj prend celles d'entre), on le glisse (avec les autres clés choisies du calque ; Échap abandonne),
+  Suppr le supprime, clic droit : lisser, supprimer. Dans le montage, mêmes gestes sur la piste dépliée ; une bande fine montre un petit
+  trait en bas. La sorte « Clé d'opacité » est dans la légende des clés (le « ? ») et se cache comme les autres. Les clés comptent aussi
+  dans les traits du bloc de chaque plan (`clesplan.rs`).
+- **Partout où l'on compose** : `folders::effect_at(layers, li, frame)` (opacité du calque × celle de son dossier, toutes deux animables) est
+  utilisée par l'écran (`build_plan`), les vignettes, la lecture, les exports et le PDF (`render::panel_plan_at`) et la vue 3D. L'ancienne
+  `folders::effect` (sans image) reste pour ce qui demande seulement « visible ou non ».
+- **Suivi des images** : insérer ou retirer des images (`shift_frames`), couper un plan (chaque partie garde la courbe), réunir deux plans,
+  changer de cadence (`retemps_reglages_calque`).
+- **Annulation** : poser, lisser, supprimer, tout supprimer = une étape nommée chacune ; un glisser de clés = une seule étape.
+- **Sans latence** : l'opacité est un paramètre du plan (un `u8` par élément) ; glisser des clés ne renvoie aucune tuile à la carte graphique
+  (`invalidate_params`). Rien de lourd ne tourne sur le fil de l'interface.
+- **API pour un import** : `Layer::set_opacity_keys(&[(image, opacité)])` (remplace toutes les clés), `Layer::put_opacity_key(image, v)`,
+  `Layer::set_opacity_at(image, v)` (fixe ou clé selon que le calque est animé), `Layer::opacity_at(image)`.
+
+### Calque « Couleur unie » (`couleurunie.rs`)
+
+- **Nom** : « Couleur unie » (le mot « Aplat » reste le remplissage sous le trait, § vocabulaire ; « Fond » et « Remplissage » aussi pris).
+  Créé par le **« + » du panneau Calques**, le **menu Calques** (la même liste, `calquemenu::Sorte::Unie`) ou la commande
+  `calque.nouveau_couleur_unie` ; au-dessus du calque courant, devant le dossier de celui-ci s'il y est.
+- **Modèle** (la correction d'Anthony : « on peut tout faire dessus ») : un calque **bitmap ordinaire** (images, clés, effets, tous les
+  outils : pinceau, gomme, sélection, transformation…) qui porte en plus une couleur de fond, `Layer::unie`. Le fond couvre **toute la
+  feuille**, sous les dessins du calque, y compris sur les images sans dessin. La gomme efface le dessin, jamais le fond ; changer la
+  couleur recolore le fond sans toucher au dessin.
+- **Léger** : aucun pixel n'est gardé. Le plan pose un élément `FondPart::Unie(couleur)` (`render::unie_item`) dont le dessin
+  (`fx::unie_cel`) est un seul pixel, étiré sur la feuille par le chemin des dessins d'une autre taille (écran, carte graphique, vignettes,
+  lecture, exports, PDF). Le projet n'écrit que la couleur (`couleur_unie`).
+- **Réglages** : la couleur se change dans le panneau Calques, sous l'opacité, avec la case de couleur commune `champcouleur::srgb` (et sa
+  pipette). **Couleur d'origine : gris moyen** (128, 128, 128) — le blanc ne se verrait pas sur le papier blanc (on croirait que rien n'est
+  arrivé), le noir cacherait le trait ; un gris neutre laisse lire les deux.
+- **Se comporte comme un calque** : opacité (et clés d'opacité), mode de fusion, visibilité, verrou, dossier et ordre dans la pile ; copier,
+  coller et dupliquer le gardent. Il ne se fusionne pas avec un autre calque (son fond couvre toute la feuille).
+- **Couleur** (`theme.rs`) : vert citron (`dessin_unie` / `calque_unie`), distinct du rose du calque de couleur, du cyan de l'effet et du
+  rouge de l'annotation ; une icône carré sur sa ligne.
+- **API pour un import** : `Document::ajouter_couleur_unie(plan, [r, v, b], nom, rang) -> Option<id>` (sans historique) ;
+  `Layer::new_unie(nom, couleur)`.
+
+### À vérifier à l'écran
+
+1. « + » du panneau Calques > Couleur unie : toute la vue de dessin passe au gris ; la couleur se change sous l'opacité.
+2. Dessiner puis gommer sur ce calque : la gomme s'arrête au fond uni. Changer la couleur : le dessin reste.
+3. Un calque quelconque : le losange à côté de l'opacité, une clé à l'image 0 à 100 %, une à l'image 12 à 0 % : la lecture fond le calque.
+4. Les losanges gris clair sur la timeline et dans le montage : les glisser, les supprimer, Ctrl+Z.
+
+### Essais
+
+`opacitecles_tests.rs` (11 : interpolation et adoucis, suivi des images, coupe et réunion, déplacement, entrées du format, composition
+écran / image entière / vignette, étapes d'annulation, glisser, API, aller-retour du projet et projet de format 42) et
+`couleurunie_tests.rs` (10 : création, couverture de la feuille, opacité / fusion / visibilité / dossier, clés d'opacité, dessin et gomme,
+changement de couleur avec dessin, légèreté, vignette / image entière / tuile du monde, aller-retour avec un dessin, copies et fusion).

@@ -65,6 +65,9 @@ pub(crate) fn cles_du_plan(p: &Panel) -> Vec<Cle> {
         for k in &l.pos_keys {
             ajouter(k.frame);
         }
+        for k in &l.opacity_keys {
+            ajouter(k.frame);
+        }
         for e in &l.fx {
             for f in crate::fxkeys::marker_frames(e) {
                 ajouter(f);

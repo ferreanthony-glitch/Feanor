@@ -68,6 +68,8 @@ pub(crate) enum MenuTarget {
     FxKey,
     /// Un losange vert de clé de position de la piste d'un calque (`poskeysui.rs`).
     PosKey,
+    /// Un losange gris clair de cle d'opacite de la piste d'un calque (`opacitecleselui.rs`).
+    OpKey,
     Camera,
     Sequence,
     Ruler,

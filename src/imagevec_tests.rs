@@ -193,7 +193,7 @@ fn the_same_image_pasted_twice_is_kept_once_in_the_file_and_survives_a_round_tri
 
 #[test]
 fn the_project_format_is_42_for_image_objects_and_an_old_file_still_reads() {
-    assert_eq!(crate::project::VERSION, 42);
+    assert!(crate::project::VERSION >= 42, "le format des objets image (42) est toujours lu ; le suivant (43) ajoute les clés d'opacité");
     // Un dessin vectoriel d'avant (traits, zones) se lit toujours : le nouvel élément ne change rien aux autres.
     let ancien = r#"{"elements":[{"type":"Fill","contours":[[[0.0,0.0],[10.0,0.0],[10.0,10.0]]],"color":[1,2,3],"opacity":1.0}]}"#;
     let d: crate::vector::VectorDrawing = serde_json::from_str(ancien).expect("ancien dessin");

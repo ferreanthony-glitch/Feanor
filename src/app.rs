@@ -490,6 +490,8 @@ pub struct App {
     pub(crate) droit: crate::tracedroit::Droit,
     /// Clés de position choisies dans la timeline et clés en cours de glisser (`poskeysui.rs`).
     pub(crate) pos_ui: crate::poskeysui::PosUi,
+    /// Clés d'opacité choisies dans la timeline et clés en cours de glisser (`opacitecleselui.rs`).
+    pub(crate) op_ui: crate::opacitecleselui::OpUi,
     /// Choix de clés au rectangle en cours dans le montage.
     pub(crate) key_rect: Option<crate::montagekeys::KeyRect>,
     /// Une clé seule prise dans le montage (`Handle::Key`) : de combien d'images elle est glissée.
@@ -1150,6 +1152,7 @@ impl App {
             ctrl_lasso: None,
             droit: Default::default(),
             pos_ui: Default::default(),
+            op_ui: Default::default(),
             key_focus: false,
             comment_ui: Default::default(),
             refs: Default::default(),
@@ -1695,7 +1698,7 @@ impl App {
             let layer = &layers[li];
             starts[li] = items.len();
             // Caché (lui ou son dossier) : rien ; sinon son opacité, avec celle de son dossier.
-            let Some(mut opacity) = crate::folders::effect(layers, li) else { continue };
+            let Some(mut opacity) = crate::folders::effect_at(layers, li, frame) else { continue };
             // Calque d'effet (`calqueffet.rs`) : son repère, qui couvre ce qui est dessous.
             if layer.effet.is_some() {
                 items.extend(crate::calqueffet::marker(layers, li, frame, opacity, &starts));
@@ -1736,6 +1739,8 @@ impl App {
                     }
                 }
             }
+            // Couleur unie du calque (`couleurunie.rs`) : sous ses dessins et sa pelure d'oignon.
+            items.extend(crate::render::unie_item(layer, (opacity * 255.0).round() as u8));
             // Sous le dessin courant, ou devant (« Devant », 13f).
             let front = self.onion.front;
             if !front {
@@ -4035,6 +4040,13 @@ impl App {
             "calque.cle_position_lisser" => self.pos_key_smooth(),
             "calque.cle_position_supprimer" => self.pos_keys_delete(),
             "calque.cles_position_supprimer" => self.pos_keys_clear(),
+            // Les clés d'opacité (`opacitecleselui.rs`).
+            "edition.supprimer" if self.op_keys_have_focus() => self.op_keys_delete(),
+            "calque.cle_opacite" => self.op_key_here(),
+            "calque.cle_opacite_lisser" => self.op_key_smooth(),
+            "calque.cle_opacite_supprimer" => self.op_keys_delete(),
+            "calque.cles_opacite_supprimer" => self.op_keys_clear(),
+            "calque.nouveau_couleur_unie" => self.nouveau_calque_couleur_unie(),
             "edition.supprimer" if self.cam_keys_have_focus() => self.delete_cam_keys(),
             "camera.cles_copier" => self.copy_cam_keys(),
             "camera.cles_coller" => self.paste_cam_keys(),

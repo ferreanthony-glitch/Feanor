@@ -539,7 +539,7 @@ impl App {
             let layer = &self.layers()[li];
             let xf = world.card_xf(&layer.pose(frame), layer.depth_at(frame));
             let (id, name, cel) = (layer.id, layer.name.clone(), layer.shown_at(frame));
-            let opacity = (layer.opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
+            let opacity = (layer.opacity_at(frame) * 255.0).round() as u8;
             let selected = self.espace3d.sel.contains(&espace3d::card_selection(id));
             let mx = xf.matrix();
             let at = |u: f32, v: f32| m::point(&mx, [u - 0.5, 0.5 - v, 0.0]);

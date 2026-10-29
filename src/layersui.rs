@@ -212,7 +212,8 @@ impl App {
         // Mode de fusion et opacité : ceux du seul calque courant (comme en haut d'une liste de calques),
         // pas un par ligne.
         let li = self.cur_layer;
-        let mut opacity = self.layers()[li].opacity * 100.0;
+        // (L'opacité à l'image courante : celle que donnent les clés d'opacité du calque, `opacitecles.rs`.)
+        let mut opacity = self.layers()[li].opacity_at(self.cur_frame) * 100.0;
         let mut mode = self.layers()[li].blend;
         // (À la ligne si le panneau est étroit ; la liste se resserre.)
         let combo_w = (ui.available_width() - 90.0).clamp(60.0, 120.0);
@@ -236,9 +237,15 @@ impl App {
             let resp = ui.add(egui::DragValue::new(&mut opacity).range(0.0..=100.0).max_decimals(0).suffix(" %").speed(0.5));
             let resp = crate::bulles::bulle(resp, "Opacité du calque", "Glisser ou taper une valeur.", "");
             if self.edited(&resp) {
-                self.layers_mut()[li].opacity = opacity / 100.0;
+                // Sans clé : l'opacité fixe ; avec des clés : la clé de l'image courante (posée au besoin).
+                let f = self.cur_frame;
+                self.layers_mut()[li].set_opacity_at(f, opacity / 100.0);
             }
+            // « Créer une clé » : le losange des clés d'opacité, comme celui des effets.
+            self.op_keys_buttons(ui);
         });
+        // Calque Couleur unie : sa couleur, avec les réglages du calque.
+        self.couleur_unie_ui(ui);
         if mode != self.layers()[li].blend {
             self.record_step();
             self.layers_mut()[li].blend = mode;
@@ -365,6 +372,8 @@ impl App {
                 crate::theme::palette().dessin_cfx
             } else if self.layers()[li].annotation {
                 crate::theme::palette().dessin_annotation
+            } else if self.layers()[li].unie.is_some() {
+                crate::theme::palette().dessin_unie
             } else {
                 crate::theme::couleur_calque(kind, couleur)
             };
