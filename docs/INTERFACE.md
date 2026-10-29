@@ -5817,6 +5817,19 @@ verrou, opacité et placement. Une fenêtre de remarques dit ce qui n'est pas re
 
 `sbnative.rs` : feuille de la taille du projet et plafond `MAX_SHEET_SIDE` ; caméra (rotation, adoucis, recul), profondeur des calques, groupe en dossier, flou, trou de zone ;
 `tvg.rs` : zone fermée sans couleur = trou, ouverte = comptée.
+
+### Mise à jour (2026-10-29, branche `import-sbp-rendu`)
+
+- **Le « L » de BRAWL manquait** : les blocs `.tvg` dont le drapeau de longueur vaut 2 (longueur multiple de 256 écrite sur un octet) étaient
+  ignorés avec leur contenu. Corrigé dans `tvg.rs::block` : PART_1 retrouve 2 114 zones colorées (+ 7,8 %) ; 51 842 courbes dans l'animatic.
+- **Couleurs des bitmaps** : les tuiles sont rangées (rouge, vert, opacité, bleu), pas (rouge, vert, bleu, opacité). Les arcs jaunes et halos
+  bleus deviennent les halos blancs et vignettes sombres des vignettes de SBP (écart de luminance du plan 003 de PART_1 : 65 puis 33).
+- **Zones ouvertes sans couleur** : toujours non reprises (leurs 13 octets sont un numéro de ligne, ni épaisseur ni couleur) ; **papier** : le
+  .sboard n'en donne aucun, le blanc reste.
+- À vérifier à l'écran : copie de PART_1, plan 001 : la pancarte dit BRAWL STARR ; plan 003 : halo blanc et vignette sombre, plus de jaune ;
+  animatic, plan 21 : éclair jaune sur décor gris, plus de bleu.
+- Essais : `tvg.rs` (un bloc de drapeau 2 est lu avec sa longueur) ; sondes ignorées `sonde_pertes`, `sonde_rendu`, `sonde_bitmaps`.---------------------------------------------------------------------------------------------------
+
 ---------------------------------------------------------------------------------------------------
 
 ## 72. Clés d'opacité et calque « Couleur unie » (2026-10-29, branche `opacite-colorcard`)

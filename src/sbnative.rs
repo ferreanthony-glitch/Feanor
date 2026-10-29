@@ -750,6 +750,25 @@ mod tests {
         let plan: usize = std::env::var("SBP_PLAN").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
         let sboard = std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|x| x == "sboard")).unwrap();
         let sb = crate::sboard::read(&sboard).unwrap();
+        // SBP_CHERCHE=<dessin> : liste les plans (et panneaux) dont un calque utilise ce dessin (« 152 » ou « 152_3 »).
+        if let Ok(c) = std::env::var("SBP_CHERCHE") {
+            for (i, s) in sb.shots.iter().enumerate() {
+                for (k, p) in s.panels.iter().enumerate() {
+                    for l in &p.layers {
+                        let (folder, name) = sb.elements.get(&l.element).cloned().unwrap_or_default();
+                        let chemin = format!("{folder}/{name}-{}", l.drawing);
+                        if c == "?" && i == 7 && k == 0 {
+                            println!("exemple {chemin}");
+                        }
+                        if !(chemin.contains(&c) || (c == "bitmap" && !l.vector)) {
+                            continue;
+                        }
+                        println!("plan {i} panneau {k} ({} images) calque {} vecteur {} dessin {chemin}", p.frames, l.name, l.vector);
+                    }
+                }
+            }
+            return;
+        }
         for p in sb.shots[plan].panels.iter().take(2) {
             println!("panneau {} ({} images)", p.id, p.frames);
             for l in &p.layers {
