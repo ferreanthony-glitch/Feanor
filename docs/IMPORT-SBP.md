@@ -51,7 +51,7 @@ la fenêtre « Dessins à la main »).
 | Calque bitmap | Calque bitmap : tuiles assemblées, 1 pixel de toile = 1 pixel de la feuille (la feuille de SHOT a aussi 2× le cadre) **(à vérifier : l'échelle)** | fait |
 | Placement du calque (décalage en champs, échelle, rotation) | cuit dans les points (vecteur) ; décalage seul pour le bitmap | fait ; animé par courbe ou incliné : valeur fixe + remarque |
 | Traits de crayon à épaisseur | — | aucun trouvé dans les projets d'Anthony ; zones sans couleur : comptées, signalées |
-| Caméra (`PEG` « Camera… », chemin 3D de clés `lockedInTime`) | clés de caméra du Plan : x, y en champs → pixels, zoom = 12 / (12 + z) **(à vérifier)** | fait ; interpolation linéaire (la courbe de vitesse, les rotations quaternion, le Z-pivot ne sont pas repris) |
+| Caméra (`PEG` « Camera… », chemin 3D de clés `lockedInTime`) | clés de caméra du Plan : unités du chemin = 0,366 champ (x), 0,274 champ (y) ; zoom = 12 / (12 − 0,52·z) ; calées à l'œil sur deux vignettes de SBP (plan 1 de PART_1), **à confirmer** sur d'autres plans ; la feuille de SHOT est 6 fois le cadre (les décors font ±25 champs) ; la vue suit la caméra à l'ouverture | fait ; interpolation linéaire (la courbe de vitesse, les rotations quaternion, le Z-pivot ne sont pas repris) |
 | Son (pistes, extraits, volume, tempo, vitesse) | Pistes et extraits | fait (comme 14a) ; enveloppes et autres effets : signalés |
 | Légendes (Dialog, Action Notes, autres) | dialogue, action, notes | fait (comme 14a) |
 | Effets de calque (flou gaussien) | — | signalés (« non repris ») |

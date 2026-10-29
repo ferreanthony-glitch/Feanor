@@ -27,6 +27,11 @@ use crate::vector::{Element, VectorDrawing};
 pub const UNITS_PER_FIELD: f32 = 576.0;
 /// Distance de la caméra au plan du dessin, en champs.
 const CAMERA_Z: f64 = 12.0;
+/// Taille de la feuille, en cadres.
+const SHEET_FACTOR: usize = 6;
+/// Unités du chemin de la caméra, en champs (x, y, z) : calées sur les vignettes de Storyboard Pro
+/// (plan 1 de BRAWLIDAYS_CLEAN_PART_1, deux poses) ; à confirmer sur d'autres projets.
+const CAM_UNIT: [f64; 3] = [0.366, 0.274, 0.52];
 
 /// Placement d'un calque sur la feuille.
 #[derive(Clone, Copy)]
@@ -72,6 +77,8 @@ pub fn build(sb: &SbProject, dir: &Path, progress: &dyn Fn(f32)) -> (Document, V
     let mut warnings = sb.warnings.clone();
     let [w, h] = sb.size;
     let mut doc = Document::with_frame(w, h, sb.fps).created_now();
+    // Les décors de Storyboard Pro débordent largement le cadre (plusieurs dizaines de champs) : feuille 6 fois plus grande.
+    doc.enlarge_stage(w * SHEET_FACTOR, h * SHEET_FACTOR);
     doc.sequences.clear();
     doc.scenes.clear();
     doc.panels.clear();
@@ -285,8 +292,8 @@ fn cameras(doc: &mut Document, shots: &[SbShot], field: f32, warnings: &mut Vec<
         let n = panel.frame_count();
         let mut keys: Vec<CameraKey> = Vec::new();
         for k in &shot.camera {
-            let z = (CAMERA_Z / (CAMERA_Z + k.pos[2]).max(0.5)) as f32;
-            let cam = Camera { x: cx + k.pos[0] as f32 * field, y: cy - k.pos[1] as f32 * field, zoom: z, ..Camera::centered(doc_w(cx), doc_w(cy)) };
+            let z = (CAMERA_Z / (CAMERA_Z - k.pos[2] * CAM_UNIT[2]).max(1.0)) as f32;
+            let cam = Camera { x: cx + (k.pos[0] * CAM_UNIT[0]) as f32 * field, y: cy - (k.pos[1] * CAM_UNIT[1]) as f32 * field, zoom: z, ..Camera::centered(doc_w(cx), doc_w(cy)) };
             let frame = k.frame.min(n.saturating_sub(1));
             if keys.last().is_none_or(|l| l.frame < frame) {
                 keys.push(CameraKey::new(frame, cam));
@@ -357,9 +364,9 @@ mod tests {
         let (a, b) = (l.cel_at(0).unwrap(), l.cel_at(4).unwrap());
         assert_ne!(a, b, "une clé de dessin propre à chaque panneau");
         assert!(!doc.cels[&a].is_empty());
-        // Caméra : deux clés, x en pixels (2 champs de 12 pixels).
+        // Caméra : deux clés, x en pixels (2 unités de 0,366 champ de 12 pixels).
         assert_eq!(p.camera.len(), 2);
-        assert!((p.camera[1].cam.x - p.camera[0].cam.x - 24.0).abs() < 1e-3);
+        assert!((p.camera[1].cam.x - p.camera[0].cam.x - 2.0 * 0.366 * 12.0).abs() < 1e-2);
         assert_eq!(p.camera[1].frame, 9);
     }
 

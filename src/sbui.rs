@@ -178,6 +178,8 @@ impl App {
                 return;
             }
             self.modified = true;
+            // Les décors de Storyboard Pro débordent la feuille : la vue suit la caméra du plan, comme les vignettes de Storyboard Pro.
+            self.camera_view = self.doc.panels.first().is_some_and(|p| !p.camera.is_empty());
             self.status = format!(
                 "« {name} » ouvert : {plans} plan(s), {} image(s) de storyboard, {sounds} extrait(s) de son{}. « Enregistrer sous » pour le garder en projet SHOT.",
                 plans + marks,
