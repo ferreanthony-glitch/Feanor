@@ -9,7 +9,10 @@
 //! Underlay, Color, Line, Overlay), `TLAB` (calque bitmap), `TPAL` (palette du dessin).
 //!
 //! Dans une section, des blocs `balise(4) drapeau(1) longueur` : la longueur tient sur autant
-//! d'octets que le drapeau a de bits à 1 (1, 3, 7 → 1, 2, 3 octets), petit-boutiste.
+//! d'octets que le drapeau a de bits à 1 ; le bit i du drapeau dit que l'octet de poids i de la
+//! longueur est écrit (1, 3, 7 → 1, 2, 3 octets ; 2 → un seul octet, le poids 256, l'octet de poids
+//! faible étant nul : les blocs dont la longueur est un multiple de 256 sont ainsi plus courts).
+//! Avant cette règle (import 72), les blocs de drapeau 2 étaient ignorés avec tout ce qu'ils contenaient.
 //! - art : `TGLY` (calque plan) > `TGVS` (zone) > `TGSD` (attributs ; `TGCO` : 49 octets avant
 //!   l'identifiant de couleur, 64 bits) + `TGBP` (courbe : nombre de points u32, masque « point
 //!   sur la courbe » en bits de poids faible d'abord, puis des (x, y) f32). Trois points hors
@@ -70,15 +73,24 @@ fn block(b: &[u8], o: usize) -> Option<(&[u8], usize, usize)> {
     if o + 6 > b.len() || b[o] != b'T' || !b[o..o + 4].iter().all(u8::is_ascii_alphabetic) {
         return None;
     }
+    // Le drapeau dit quels octets de la longueur sont écrits : le bit i = l'octet de poids i (1 : 1 octet, 3 : 2 octets,
+    // 7 : 3 octets, 2 : un seul octet, celui de poids 256, l'octet de poids faible étant nul).
     let flag = b[o + 4];
-    if !matches!(flag, 1 | 3 | 7 | 15) {
+    if flag == 0 || flag > 15 {
         return None;
     }
     let n = flag.count_ones() as usize;
     if o + 5 + n > b.len() {
         return None;
     }
-    let len = le(&b[o + 5..o + 5 + n]) as usize;
+    let mut len = 0usize;
+    let mut k = 0;
+    for i in 0..4 {
+        if flag >> i & 1 == 1 {
+            len |= (b[o + 5 + k] as usize) << (8 * i);
+            k += 1;
+        }
+    }
     let start = o + 5 + n;
     (start + len <= b.len()).then(|| (&b[o..o + 4], start, start + len))
 }
@@ -209,6 +221,11 @@ fn shape(body: &[u8], d: &mut TvgDrawing, layer: usize) {
 }
 
 fn bezier(d: &[u8]) -> Option<Vec<[f32; 2]>> {
+    bezier_info(d).map(|x| x.0)
+}
+
+/// La courbe aplanie et le nombre de points non consommés (courbe tronquée).
+fn bezier_info(d: &[u8]) -> Option<(Vec<[f32; 2]>, usize)> {
     let n = le(d.get(..4)?) as usize;
     let mask = n.div_ceil(8);
     let f = |p: usize| d.get(p..p + 4).map(|s| f32::from_le_bytes([s[0], s[1], s[2], s[3]]));
@@ -237,7 +254,7 @@ fn bezier(d: &[u8]) -> Option<Vec<[f32; 2]>> {
             break;
         }
     }
-    Some(out)
+    Some((out, pts.len().saturating_sub(i)))
 }
 
 fn read_bitmap(raw: &[u8]) -> Option<TvgBitmap> {
@@ -411,6 +428,19 @@ mod tests {
     }
 
     #[test]
+    fn block_flag_two_has_a_length_in_units_of_256() {
+        // « TGBP 02 01 » : longueur 0x0100 écrite sur un seul octet (le poids faible est nul).
+        let mut v = b"TGBP".to_vec();
+        v.extend([2, 1]);
+        v.extend(vec![7u8; 256]);
+        v.extend(super::fabrique::blk(b"TGSD", &[1, 2, 3]));
+        let b = super::blocks(&v);
+        assert_eq!(b.len(), 2);
+        assert_eq!(b[0].1.len(), 256);
+        assert_eq!(b[1].0, b"TGSD");
+    }
+
+    #[test]
     fn refuses_other_files() {
         assert!(read(b"not a tvg at all, really").is_err());
     }
@@ -464,6 +494,235 @@ mod tests {
             let mut shown = 0;
             walk(&raw, 1, &mut shown);
         }
+    }
+    /// Sonde des pertes : `TVG_PERTES=<fichier ou dossier>` compte les zones perdues, par cause.
+    #[test]
+    #[ignore]
+    fn sonde_pertes() {
+        let Some(p) = std::env::var_os("TVG_PERTES") else { return };
+        let p = std::path::PathBuf::from(p);
+        let mut files = Vec::new();
+        fn walk_files(d: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+            if d.is_file() {
+                out.push(d.to_path_buf());
+                return;
+            }
+            for e in std::fs::read_dir(d).unwrap().flatten() {
+                walk_files(&e.path(), out);
+            }
+        }
+        walk_files(&p, &mut files);
+        files.retain(|f| f.extension().is_some_and(|x| x == "tvg"));
+        let mut c: std::collections::BTreeMap<String, usize> = Default::default();
+        let mut tags: std::collections::BTreeMap<String, usize> = Default::default();
+        for f in &files {
+            let Ok(bytes) = std::fs::read(f) else { continue };
+            let Ok(secs) = super::sections(&bytes) else { continue };
+            let mut pal = HashMap::new();
+            for (n, raw) in &secs {
+                if n == "TPAL" {
+                    super::read_palette(raw, &mut pal);
+                }
+            }
+            for (n, raw) in &secs {
+                if !n.starts_with('t') {
+                    continue;
+                }
+                fn walk(b: &[u8], pal: &HashMap<u64, [u8; 4]>, c: &mut std::collections::BTreeMap<String, usize>, tags: &mut std::collections::BTreeMap<String, usize>, f: &std::path::Path) {
+                    for (tag, body) in super::blocks(b) {
+                        if tag == b"TGVS" {
+                            *c.entry("zones".into()).or_default() += 1;
+                            let mut color = None;
+                            let mut ring = None;
+                            for (t, d) in super::blocks(body) {
+                                *tags.entry(format!("TGVS>{}", String::from_utf8_lossy(t))).or_default() += 1;
+                                if t == b"TGSD" {
+                                    for (t3, d3) in super::blocks(d) {
+                                        *tags.entry(format!("TGSD>{}", String::from_utf8_lossy(t3))).or_default() += 1;
+                                        if t3 == b"TGCO" && d3.len() >= 57 {
+                                            color = Some(super::le(&d3[49..57]));
+                                        }
+                                    }
+                                }
+                                if t == b"TGBP" {
+                                    ring = Some(super::bezier_info(d));
+                                }
+                            }
+                            let mut key = match (&color, &ring) {
+                                (_, None) => "pas de TGBP".to_string(),
+                                (_, Some(None)) => "TGBP illisible".to_string(),
+                                (Some(_), Some(Some((r, left)))) if r.len() < 3 => format!("colorée < 3 points (reste {left})"),
+                                (Some(col), Some(Some((_, left)))) => match pal.get(col) {
+                                    None => "couleur absente de la palette".to_string(),
+                                    Some(p) if p[3] == 0 => "couleur transparente".to_string(),
+                                    _ if *left > 0 => "colorée tronquée".to_string(),
+                                    _ => "colorée ok".to_string(),
+                                },
+                                (None, Some(Some((_, left)))) => if *left > 0 { "sans couleur tronquée".to_string() } else { "sans couleur".to_string() },
+                            };
+                            if key != "colorée ok" && key != "sans couleur" {
+                                if let Some(Some((r, _))) = &ring {
+                                    if c.get(&key).copied().unwrap_or(0) < 3 {
+                                        println!("{key} : {} ({} points, premier {:?})", f.display(), r.len(), r.first());
+                                    }
+                                }
+                            }
+                            if ring.is_none() && c.get(&key).copied().unwrap_or(0) < 4 {
+                                println!("{key} : {} TGVS {} octets", f.display(), body.len());
+                                let hexs = |d: &[u8]| d.iter().take(100).map(|x| format!("{x:02x}")).collect::<Vec<_>>().join(" ");
+                                println!("  brut {}", hexs(body));
+                                for (t, d) in super::blocks(body) {
+                                    println!("  {} ({}) {}", String::from_utf8_lossy(t), d.len(), hexs(d));
+                                }
+                            }
+                            key.insert_str(0, "");
+                            *c.entry(key).or_default() += 1;
+                        } else {
+                            *tags.entry(format!("bloc {}", String::from_utf8_lossy(tag))).or_default() += 1;
+                            if tag == b"TGRV" && tags["bloc TGRV"] < 4 {
+                                println!("TGRV ({}) {}", body.len(), body.iter().take(60).map(|x| format!("{x:02x}")).collect::<Vec<_>>().join(" "));
+                            }
+                            walk(body, pal, c, tags, f);
+                        }
+                    }
+                }
+                walk(raw, &pal, &mut c, &mut tags, f);
+            }
+        }
+        // Drapeaux de blocs inconnus : balises « TGxx » suivies d'un octet qui n'est pas 1, 3, 7 ou 15.
+        let mut inconnus: std::collections::BTreeMap<String, usize> = Default::default();
+        for f in &files {
+            let Ok(bytes) = std::fs::read(f) else { continue };
+            let Ok(secs) = super::sections(&bytes) else { continue };
+            for (n, raw) in &secs {
+                if !n.starts_with('t') {
+                    continue;
+                }
+                for o in 0..raw.len().saturating_sub(6) {
+                    if raw[o] == b'T' && raw[o + 1] == b'G' && raw[o + 2].is_ascii_uppercase() && raw[o + 3].is_ascii_uppercase() && raw[o + 4] != 0 && raw[o + 4] <= 15 && !matches!(raw[o + 4], 1 | 3 | 7 | 15) {
+                        *inconnus.entry(format!("{} drapeau {}", String::from_utf8_lossy(&raw[o..o + 4]), raw[o + 4])).or_default() += 1;
+                    }
+                }
+            }
+        }
+        let mut vus: std::collections::BTreeMap<String, usize> = Default::default();
+        for f in &files {
+            let Ok(bytes) = std::fs::read(f) else { continue };
+            let Ok(secs) = super::sections(&bytes) else { continue };
+            for (n, raw) in &secs {
+                if !n.starts_with('t') {
+                    continue;
+                }
+                for o in 16..raw.len().saturating_sub(100) {
+                    if raw[o] == b'T' && raw[o + 1] == b'G' && raw[o + 2].is_ascii_uppercase() && raw[o + 3].is_ascii_uppercase() && raw[o + 4] == 2 {
+                        let t = String::from_utf8_lossy(&raw[o..o + 4]).into_owned();
+                        let v = vus.entry(t.clone()).or_default();
+                        *v += 1;
+                        if *v <= 3 {
+                            let h = |s: &[u8]| s.iter().map(|x| format!("{x:02x}")).collect::<Vec<_>>().join(" ");
+                            println!("EX {t} {} section {n} avant : {} | apres : {}", f.file_name().unwrap().to_string_lossy(), h(&raw[o - 16..o]), h(&raw[o + 4..o + 100]));
+                        }
+                    }
+                }
+            }
+        }
+        for (k, v) in &inconnus {
+            println!("inconnu {k} : {v}");
+        }
+        println!("{} fichiers", files.len());
+        for (k, v) in &c {
+            println!("{k} : {v}");
+        }
+        for (k, v) in &tags {
+            println!("balise {k} : {v}");
+        }
+    }
+    /// Sonde à la main : `TVG_SONDE=<fichier>`, `TVG_SORTIE=<png>`, `TVG_ECHELLE` (pixels par unité, 0,4), `TVG_ZONE="x0,y0,x1,y1"` :
+    /// dessine les zones colorées (pair-impair par suite de même couleur), les trous en rouge, les lignes ouvertes en bleu.
+    #[test]
+    #[ignore]
+    fn sonde_rendu() {
+        let (Some(path), Some(out)) = (std::env::var_os("TVG_SONDE"), std::env::var_os("TVG_SORTIE")) else { return };
+        let d = super::read(&std::fs::read(path).unwrap()).unwrap();
+        let sc: f32 = std::env::var("TVG_ECHELLE").ok().and_then(|v| v.parse().ok()).unwrap_or(0.4);
+        let zone: Vec<f32> = std::env::var("TVG_ZONE").map(|s| s.split(',').filter_map(|v| v.trim().parse().ok()).collect()).unwrap_or_default();
+        let all: Vec<[f32; 2]> = d.shapes.iter().flat_map(|s| s.ring.iter().copied()).chain(d.open.iter().flat_map(|o| o.line.iter().copied())).collect();
+        let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+        for p in &all {
+            x0 = x0.min(p[0]);
+            y0 = y0.min(p[1]);
+            x1 = x1.max(p[0]);
+            y1 = y1.max(p[1]);
+        }
+        if zone.len() == 4 {
+            (x0, y0, x1, y1) = (zone[0], zone[1], zone[2], zone[3]);
+        }
+        let (w, h) = (((x1 - x0) * sc).ceil() as usize + 1, ((y1 - y0) * sc).ceil() as usize + 1);
+        println!("{} zones, {} lignes sans couleur, cadre {x0},{y0} -> {x1},{y1}, image {w}x{h}", d.shapes.len(), d.open.len());
+        let mut img = image::RgbaImage::from_pixel(w as u32, h as u32, image::Rgba([255, 255, 255, 255]));
+        let to = |p: [f32; 2]| [(p[0] - x0) * sc, (y1 - p[1]) * sc];
+        // Groupes de contours : (couleur, contours) comme `vector_drawing`.
+        let mut groups: Vec<(u64, Vec<Vec<[f32; 2]>>)> = Vec::new();
+        let mut last: Option<(usize, u64)> = None;
+        for s in &d.shapes {
+            let c: Vec<[f32; 2]> = s.ring.iter().map(|&p| to(p)).collect();
+            if s.hole {
+                if last.is_some_and(|l| l.0 == s.layer) {
+                    groups.last_mut().unwrap().1.push(c);
+                }
+                continue;
+            }
+            if last == Some((s.layer, s.color)) {
+                groups.last_mut().unwrap().1.push(c);
+            } else {
+                groups.push((s.color, vec![c]));
+                last = Some((s.layer, s.color));
+            }
+        }
+        for (col, contours) in &groups {
+            let c = d.palette.get(col).copied().unwrap_or([255, 0, 255, 255]);
+            for y in 0..h {
+                let yc = y as f32 + 0.5;
+                let mut xs: Vec<f32> = Vec::new();
+                for ring in contours {
+                    for i in 0..ring.len() {
+                        let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+                        if (a[1] <= yc) != (b[1] <= yc) {
+                            xs.push(a[0] + (yc - a[1]) / (b[1] - a[1]) * (b[0] - a[0]));
+                        }
+                    }
+                }
+                xs.sort_by(|a, b| a.total_cmp(b));
+                for pair in xs.chunks(2) {
+                    if pair.len() < 2 {
+                        continue;
+                    }
+                    for x in (pair[0].max(0.0).round() as usize)..(pair[1].min(w as f32).round() as usize) {
+                        img.put_pixel(x as u32, y as u32, image::Rgba([c[0], c[1], c[2], 255]));
+                    }
+                }
+            }
+        }
+        let mut line = |pts: &[[f32; 2]], rgb: [u8; 3]| {
+            for k in 1..pts.len() {
+                let (a, b) = (to(pts[k - 1]), to(pts[k]));
+                let n = ((b[0] - a[0]).abs().max((b[1] - a[1]).abs()) as usize + 1).max(1);
+                for t in 0..=n {
+                    let f = t as f32 / n as f32;
+                    let (px, py) = (a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f);
+                    if px >= 0.0 && py >= 0.0 && (px as usize) < w && (py as usize) < h {
+                        img.put_pixel(px as u32, py as u32, image::Rgba([rgb[0], rgb[1], rgb[2], 255]));
+                    }
+                }
+            }
+        };
+        if std::env::var_os("TVG_SANS_LIGNES").is_none() {
+            for o in &d.open {
+                let closed = o.line.len() >= 4 && (o.line[0][0] - o.line[o.line.len() - 1][0]).hypot(o.line[0][1] - o.line[o.line.len() - 1][1]) < 0.5;
+                line(&o.line, if closed { [255, 0, 0] } else { [0, 0, 255] });
+            }
+        }
+        img.save(out).unwrap();
     }
     /// Sonde à la main : `TVG_DOSSIER=<dossier elements>` compte, par section d'art, les zones avec et sans couleur.
     #[test]
