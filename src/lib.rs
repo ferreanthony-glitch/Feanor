@@ -234,6 +234,9 @@ mod fondui;
 mod aplatsur;
 mod aplatmulti;
 mod aplatcouleur;
+mod aplatperso;
+#[cfg(test)]
+mod aplatperso_tests;
 mod aplatregions;
 mod aplatintel;
 #[cfg(test)]

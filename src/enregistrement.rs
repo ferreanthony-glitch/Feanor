@@ -164,6 +164,8 @@ impl App {
         self.flush_bitmap_float();
         // (De même, l'aplat posé sur les autres clés en arrière-plan, `aplatmulti.rs` : quelques dixièmes de seconde au plus.)
         self.attendre_aplat_multi();
+        // (Et la couleur d'aplat d'un personnage sur ses calques, `aplatperso.rs`.)
+        self.attendre_aplat_perso();
         // Film partagé enregistré à sa place : seulement ce qu'on tient (`projet_partage.rs`). Ailleurs (« Enregistrer sous »), c'est
         // une copie à plat, comme un projet ordinaire.
         let partage_ici = self.partage.is_some() && self.path.as_ref() == Some(&manifest);

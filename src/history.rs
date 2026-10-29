@@ -131,6 +131,16 @@ impl Gesture {
     pub fn reset(&mut self) {
         self.current = None;
     }
+
+    /// L'historique a avancé de `avant` à `apres` par une prolongation de l'étape du geste (`History::extend_last`) : le geste en
+    /// cours, s'il en était à `avant`, reste le même geste (sinon son champ, encore ouvert, enregistrerait une étape de plus).
+    pub fn suivre(&mut self, avant: u64, apres: u64) {
+        if let Some((key, serial)) = self.current {
+            if serial == avant {
+                self.current = Some((key, apres));
+            }
+        }
+    }
 }
 
 /// Les étapes retirées d'un historique (`History::take_steps`), à lâcher ailleurs.

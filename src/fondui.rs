@@ -246,7 +246,8 @@ impl App {
         }
         self.end_stroke();
         let on = self.layers()[li].fond.is_some();
-        let fresh = self.new_fond();
+        // (Un calque de personnage a toujours la couleur d'aplat de son personnage : `aplatperso.rs`.)
+        let fresh = self.aplat_pour_calque(li, self.new_fond());
         // (Le nom posé par le trait d'un personnage, « Aplat du personnage », est gardé.)
         let nom = if on { "Aplat : retirer" } else { "Aplat : ajouter" };
         let garde = self.history.context.as_deref() == Some("Aplat du personnage");
@@ -326,7 +327,9 @@ impl App {
                 let fresh = self.layer().fond.unwrap_or_else(|| self.new_fond());
                 self.record_named_step(if remove { "Aplat : retirer" } else { "Aplat : ajouter" });
                 for &li in &targets {
-                    self.layers_mut()[li].fond = if remove { None } else { Some(fresh) };
+                    // (Un calque de personnage garde la couleur d'aplat de son personnage, `aplatperso.rs`.)
+                    let pose = self.aplat_pour_calque(li, fresh);
+                    self.layers_mut()[li].fond = if remove { None } else { Some(pose) };
                 }
                 self.tick_aplat();
                 self.renderer.invalidate_all();
@@ -341,15 +344,20 @@ impl App {
             // Couleur du projet donnée à tous les aplats déjà posés.
             "fond.couleur_partout" => {
                 let couleur = self.new_fond().couleur;
-                let n: usize = self.doc.panels.iter().flat_map(|p| &p.layers).filter(|l| l.fond.is_some_and(|f| f.couleur != couleur)).count();
+                // (Les calques de personnage en sont exclus : leur couleur vient du panneau Personnages, `aplatperso.rs`.)
+                let perso_connus: Vec<u64> = self.doc.personnages.iter().map(|p| p.id).collect();
+                let libre = |l: &crate::document::Layer| !l.personnage.is_some_and(|id| perso_connus.contains(&id));
+                let n: usize = self.doc.panels.iter().flat_map(|p| &p.layers).filter(|l| libre(l) && l.fond.is_some_and(|f| f.couleur != couleur)).count();
                 if n == 0 {
                     self.status = "Tous les aplats du projet ont déjà cette couleur.".into();
                     return true;
                 }
                 self.record_named_step("Aplat : couleur du projet");
                 for l in self.doc.panels.iter_mut().flat_map(|p| p.layers.iter_mut()) {
-                    if let Some(f) = l.fond.as_mut() {
-                        f.couleur = couleur;
+                    if !l.personnage.is_some_and(|id| perso_connus.contains(&id)) {
+                        if let Some(f) = l.fond.as_mut() {
+                            f.couleur = couleur;
+                        }
                     }
                 }
                 self.renderer.invalidate_all();
