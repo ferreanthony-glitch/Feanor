@@ -445,6 +445,31 @@ pub fn default_folder() -> PathBuf {
     }
 }
 
+/// Combien de dossiers la liste déroulante du formulaire « Nouveau projet » propose au plus.
+pub const DOSSIERS_PROPOSES: usize = 8;
+
+/// Les dossiers que la liste du formulaire « Nouveau projet » propose : celui qui est choisi, puis ceux où des projets
+/// récents ont été rangés (le dossier qui contient le dossier du projet : `<dossier>\<Nom>\<Nom>.shot`), puis Documents.
+/// Sans doublon (la casse ne compte pas, comme sous Windows), `DOSSIERS_PROPOSES` au plus. Rien n'est lu sur le disque :
+/// un dossier de serveur éteint ne fige pas l'écran.
+pub fn dossiers_proposes(choisi: &std::path::Path, recents: &[PathBuf]) -> Vec<PathBuf> {
+    let mut liste: Vec<PathBuf> = Vec::new();
+    let cle = |p: &std::path::Path| p.to_string_lossy().replace('/', "\\").trim_end_matches('\\').to_lowercase();
+    let mut ajouter = |p: PathBuf| {
+        if !p.as_os_str().is_empty() && !liste.iter().any(|d| cle(d) == cle(&p)) && liste.len() < DOSSIERS_PROPOSES {
+            liste.push(p);
+        }
+    };
+    ajouter(choisi.to_path_buf());
+    for projet in recents {
+        if let Some(dossier) = projet.parent().and_then(std::path::Path::parent) {
+            ajouter(dossier.to_path_buf());
+        }
+    }
+    ajouter(default_folder());
+    liste
+}
+
 /// Le projet neuf de ces valeurs : cadre, cadence, papier, couleur des fonds sous le trait, durée
 /// du premier plan et titre.
 pub fn build_document(v: &Values, title: &str) -> Document {

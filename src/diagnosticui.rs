@@ -477,6 +477,10 @@ impl App {
         if !self.diag.offre {
             return;
         }
+        // Pas sur la petite fenêtre d'accueil (`accueilfenetre.rs`) : la proposition attend qu'un projet soit ouvert.
+        if self.accueil_compact() {
+            return;
+        }
         let mut reponse = None;
         egui::Area::new(egui::Id::new("diagnostic_offre")).order(egui::Order::Foreground).anchor(Align2::RIGHT_BOTTOM, egui::vec2(-16.0, -120.0)).show(ctx, |ui| {
             egui::Frame::popup(ui.style()).fill(theme::eleve()).stroke(egui::Stroke::new(1.0_f32, theme::accent_texte())).show(ui, |ui| {

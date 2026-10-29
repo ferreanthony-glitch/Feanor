@@ -182,6 +182,9 @@ pub(crate) struct Banc {
     demander_fermeture: bool,
     /// L'application a répondu `CancelClose` à la dernière demande de fermeture : la fenêtre reste ouverte.
     pub fermeture_retenue: bool,
+    /// Les commandes de fenêtre (`ViewportCommand`) envoyées par l'application depuis le début, dans l'ordre : de quoi
+    /// vérifier la taille de la fenêtre d'accueil (`accueilfenetre.rs`).
+    pub commandes: Vec<egui::ViewportCommand>,
 }
 
 /// Efface les dossiers `shot-perf-bac-*` du dossier temporaire plus vieux que `age` (date de modification).
@@ -245,7 +248,7 @@ pub(crate) fn banc_taille(doc: Document, avec_gpu: bool, largeur: u32, hauteur: 
             view_formats: &[],
         })
     });
-    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false, formes: Vec::new(), garder_formes: false, curseur: egui::CursorIcon::Default, crochet: false, touches: Modifiers::NONE, reveils_recents: Default::default(), demander_fermeture: false, fermeture_retenue: false };
+    let mut b = Banc { ctx, app, rs, taille, t: 0.0, cible, textes: Vec::new(), garder_textes: false, formes: Vec::new(), garder_formes: false, curseur: egui::CursorIcon::Default, crochet: false, touches: Modifiers::NONE, reveils_recents: Default::default(), demander_fermeture: false, fermeture_retenue: false, commandes: Vec::new() };
     b.attendre_pinceaux();
     b.chauffer(8);
     b.attendre_vignettes();
@@ -327,6 +330,9 @@ impl Banc {
             eframe::App::raw_input_hook(app, &self.ctx, &mut input);
         }
         let out = self.ctx.run(input, |ctx| app.frame(ctx));
+        if let Some(v) = out.viewport_output.get(&ViewportId::ROOT) {
+            self.commandes.extend(v.commands.iter().cloned());
+        }
         if fermeture {
             self.fermeture_retenue = out.viewport_output.get(&ViewportId::ROOT).is_some_and(|v| v.commands.iter().any(|c| matches!(c, egui::ViewportCommand::CancelClose)));
         }

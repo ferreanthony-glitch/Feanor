@@ -851,8 +851,8 @@ impl App {
         // Diagnostic des performances et sa proposition du premier lancement (`diagnosticui.rs`).
         self.diagnostic_window(ctx);
         self.diagnostic_offer(ctx);
-        // Écran d'accueil, sans projet ouvert (`accueil.rs`).
-        self.welcome_ui(ctx);
+        // Écran d'accueil, sans projet ouvert : la page est la zone de travail (`accueil.rs`) ; ici, il se range quand un projet arrive.
+        self.accueil_suivi();
         self.new_layer_window(ctx);
         // Préréglages d'effets (`prereglagesui.rs`).
         self.effect_dialog_window(ctx);

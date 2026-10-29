@@ -6,7 +6,6 @@
 //! (essais ignorés) vont dans `SHOT_CAPTURE_DIR`.
 
 use eframe::egui::{self, epaint::Shape, Color32, Rect};
-use egui_phosphor::regular as ph;
 
 use crate::document::Document;
 use crate::logo::{self, Variante};
@@ -402,17 +401,13 @@ fn the_small_logotype_sits_first_in_the_menu_bar_without_crowding_it_at_150_perc
 }
 
 
-/// La couleur de l'icône `icone` posée à gauche du titre de la grande entrée dont `titre` est le texte (la barre d'outils
-/// a des icônes pareilles : on ne prend que celle qui est sur la même ligne, à gauche du titre).
-fn icone_de_l_entree(formes: &[&Shape], icone: &str, titre: Rect) -> Option<Color32> {
-    formes.iter().find_map(|s| match s {
-        Shape::Text(t) if t.galley.job.text == icone && (t.pos.y - titre.center().y).abs() < 30.0 && t.pos.x < titre.left() && titre.left() - t.pos.x < 80.0 => Some(t.fallback_color),
-        _ => None,
-    })
+/// La couleur du texte d'un `Label` : celle de sa section (`RichText::color`).
+fn couleur_du_texte(t: &egui::epaint::TextShape) -> Color32 {
+    t.galley.job.sections.first().map(|s| s.format.color).filter(|c| *c != Color32::PLACEHOLDER).unwrap_or(t.fallback_color)
 }
 
 fn accueil() -> Banc {
-    let mut b = banc_taille(Document::with_frame(160, 90, 24), false, 1600, 900);
+    let mut b = banc_taille(Document::with_frame(160, 90, 24), false, 1000, 620);
     b.garder_formes = true;
     b.app.welcome = true;
     b.chauffer(6);
@@ -420,47 +415,40 @@ fn accueil() -> Banc {
 }
 
 #[test]
-fn the_welcome_card_has_two_grey_buttons_and_only_the_new_project_icon_is_orange() {
+fn the_welcome_page_has_two_framed_panels_in_the_theme_colours_and_no_orange_fill() {
     let b = accueil();
     assert!(b.app.welcome_shown());
     let p = theme::palette();
     let formes = a_plat(&b.formes);
     let (titre, titre_rect) = texte_a(&formes, "Nouveau projet").expect("Nouveau projet");
-    let (autre, autre_rect) = texte_a(&formes, "Ouvrir un projet").expect("Ouvrir un projet");
-    // Deux boutons gris pareils, titre en texte fort.
-    assert_eq!((titre.fallback_color, autre.fallback_color), (p.texte_fort, p.texte_fort));
-    for rect in [titre_rect, autre_rect] {
-        assert!(formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == p.controle && r.rect.width() > 300.0 && r.rect.contains(rect.center()))), "bouton gris");
+    let (recents, recents_rect) = texte_a(&formes, "Projets récents").expect("Projets récents");
+    // Les titres des deux cadres sont en texte fort, le cadre de gauche est à gauche de celui de droite.
+    assert_eq!((couleur_du_texte(titre), couleur_du_texte(recents)), (p.texte_fort, p.texte_fort));
+    assert!(titre_rect.center().x < recents_rect.center().x);
+    // Chaque cadre est un rectangle de la couleur des panneaux du thème, autour de son titre.
+    for rect in [titre_rect, recents_rect] {
+        assert!(formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == p.panneau && r.rect.width() > 300.0 && r.rect.contains(rect.center()))), "cadre aux couleurs du thème");
     }
-    // Aucun remplissage orange sur la carte (le trait sous l'espace actif de la barre y est : mince).
-    let remplis: Vec<Rect> = formes.iter().filter_map(|s| if let Shape::Rect(r) = s { (r.fill == ORANGE).then_some(r.rect) } else { None }).collect();
-    assert!(remplis.iter().all(|r| r.height() <= 2.5), "pas de bouton orange : {remplis:?}");
-    // L'icône de « Nouveau projet » est orange ; celle de « Ouvrir un projet » est de l'accent ordinaire.
-    let nouveau = icone_de_l_entree(&formes, ph::FILE_PLUS, titre_rect).expect("icône de Nouveau projet");
-    let ouvrir = icone_de_l_entree(&formes, ph::FOLDER_OPEN, autre_rect).expect("icône de Ouvrir un projet");
-    assert_eq!(nouveau, ORANGE);
-    assert_eq!(ouvrir, p.accent_texte);
-    // La carte est du fond des fenêtres du thème.
-    assert!(formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == p.fenetre && r.rect.width() >= 460.0)), "la carte prend le fond des fenêtres");
+    // Le fond de la page est celui du thème ; aucun remplissage orange (le rehaut orange n'est que dans l'icône et le logotype).
+    assert!(formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == p.fond && r.rect.width() >= 999.0)), "le fond de la page");
+    assert!(!formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == ORANGE && r.rect.width() > 4.0 && r.rect.height() > 4.0)), "pas d'aplat orange sur l'accueil");
 }
 
 #[test]
-fn the_welcome_card_follows_a_light_theme_without_any_orange() {
+fn the_welcome_page_follows_a_light_theme_without_any_orange() {
     let mut b = accueil();
     b.app.settings.theme.choisir(ChoixTheme::GrisClair);
     b.chauffer(6);
     let p = theme::palette();
     assert!(p.claire && !p.identite);
     let formes = a_plat(&b.formes);
-    assert!(formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == p.fenetre && r.rect.width() >= 460.0)), "carte claire");
-    let (titre, titre_rect) = texte_a(&formes, "Nouveau projet").unwrap();
-    assert_eq!(titre.fallback_color, p.texte_fort);
-    assert_eq!(icone_de_l_entree(&formes, ph::FILE_PLUS, titre_rect), Some(p.accent_texte), "sans identité, pas d'orange");
+    assert!(formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == p.panneau && r.rect.width() > 300.0)), "cadres clairs");
+    let (titre, _) = texte_a(&formes, "Nouveau projet").unwrap();
+    assert_eq!(couleur_du_texte(titre), p.texte_fort);
     assert!(!formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == ORANGE)));
     assert!(crate::accueil::logo_texture(&b.ctx, 240.0).size()[0] > 0 && !crate::accueil::logo_sombre(), "le logo est celui des fonds clairs");
     theme::installer(&ReglageTheme::default());
 }
-
 // ---------------------------------------------------------------------------------------- captures (à regarder)
 
 fn dossier_de_captures() -> std::path::PathBuf {

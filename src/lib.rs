@@ -4,6 +4,7 @@
 //! `lancer`. La bibliothèque garde le nom `pelure` (les chemins `pelure::` ne changent pas).
 
 mod accueil;
+mod accueilfenetre;
 mod accueilimages;
 #[cfg(test)]
 mod accueilimages_tests;
@@ -980,15 +981,25 @@ pub fn lancer() -> eframe::Result<()> {
 }
 
 fn run(renderer: eframe::Renderer, initial: Option<std::path::PathBuf>) -> eframe::Result<()> {
+    // Sans projet à rouvrir : la petite fenêtre d'accueil, centrée (`accueilfenetre.rs`) ; sinon la fenêtre de travail.
+    let copies_de_secours = crate::recovery::root().is_some_and(|r| !crate::recovery::orphans(&r, None).is_empty());
+    let accueil = accueilfenetre::demarre_sur_l_accueil(initial.is_some(), &settings::Settings::load(), copies_de_secours);
+    demarrage::marque(if accueil { "fenêtre : l'accueil compact" } else { "fenêtre : la taille de travail" });
+    // Icône de la fenêtre : le « S » du logo entre deux angles (`logo::icone`).
+    let fenetre = eframe::egui::ViewportBuilder::default()
+        .with_title("SHOT")
+        .with_icon(std::sync::Arc::new(eframe::egui::IconData { rgba: logo::icone(64), width: 64, height: 64 }));
+    let fenetre = if accueil {
+        fenetre.with_inner_size(accueilfenetre::TAILLE_ACCUEIL).with_resizable(false)
+    } else {
+        // Ouverture en plein écran (Anthony, 2026-10-18), fenêtre maximisée comme Storyboard Pro.
+        fenetre.with_inner_size([1500.0, 920.0]).with_min_inner_size(accueilfenetre::TAILLE_MIN_TRAVAIL).with_maximized(true)
+    };
     let options = eframe::NativeOptions {
-        viewport: eframe::egui::ViewportBuilder::default()
-            .with_title("SHOT")
-            // Icône de la fenêtre : le « S » du logo entre deux angles (`logo::icone`).
-            .with_icon(std::sync::Arc::new(eframe::egui::IconData { rgba: logo::icone(64), width: 64, height: 64 }))
-            .with_inner_size([1500.0, 920.0])
-            .with_min_inner_size([960.0, 600.0])
-            // Ouverture en plein écran (Anthony, 2026-10-18), fenêtre maximisée comme Storyboard Pro.
-            .with_maximized(true),
+        viewport: fenetre,
+        centered: accueil,
+        // (Aucune taille de fenêtre retenue par eframe : la taille compacte ne doit jamais devenir celle du travail.)
+        persist_window: false,
         renderer,
         // Affichage sans attente de la synchro de l'écran, une seule image d'avance : chaque
         // mouvement du stylet est affiché aussitôt, pour que le cercle et le trait restent collés
@@ -1010,6 +1021,11 @@ fn run(renderer: eframe::Renderer, initial: Option<std::path::PathBuf>) -> efram
             demarrage::marque("fenêtre et carte graphique prêtes (eframe)");
             let mut app = app::App::new(cc);
             demarrage::marque("App::new");
+            // (La fenêtre est née dans le mode que `accueil` annonce : l'application le sait, `accueilfenetre.rs`.)
+            if accueil {
+                app.fenetre.mode = accueilfenetre::ModeFenetre::Accueil;
+                app.maximized_once = 4;
+            }
             match initial {
                 Some(path) => app.open_path(path),
                 // Sans projet demandé : le dernier ouvert (`recents.rs`), si son disque répond.
