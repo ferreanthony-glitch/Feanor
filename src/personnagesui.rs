@@ -97,6 +97,8 @@ pub(crate) struct Etat {
     pub(crate) decor_avant: Option<crate::decorui::Avant>,
     /// La couleur et la taille posées par le dernier choix (ou suivi) du décor, pour voir quand les Préférences changent.
     pub(crate) decor_posee: Option<([u8; 3], f32)>,
+    /// Le changement de couleur d'aplat d'un personnage, en attente ou en route sur ses calques (`aplatperso.rs`).
+    pub(crate) aplat: crate::aplatperso::Etat,
 }
 
 fn to_color(c: [u8; 3]) -> Color32 {
@@ -316,12 +318,21 @@ impl App {
         let nom = personnages::nom_net(&nom);
         match c {
             Choix::Personnage(id) => {
+                let mut fond_avant = None;
                 if let Some(p) = self.doc.personnages.iter_mut().find(|p| p.id == id) {
                     let ancien = std::mem::replace(&mut p.name, nom.clone());
+                    fond_avant = Some(p.fill);
                     (p.line, p.fill) = (ligne, fond);
                     self.modified = true;
                     // Renommer le personnage renomme ses calques (`calquespastilles.rs`).
                     self.doc.renommer_calques_de_personnage(id, &ancien, &nom);
+                }
+                // Une autre couleur d'aplat : tous ses calques, dans tous les plans et toutes les versions de plan, la prennent, avec
+                // la peinture de leur strate d'aplat (`aplatperso.rs`), à la fin du geste.
+                if let (Some(avant), Some(apres)) = (fond_avant, fond) {
+                    if avant != Some(apres) {
+                        self.aplat_perso_demander(id, avant, apres);
+                    }
                 }
             }
             Choix::Neutre(i) => {
@@ -516,6 +527,7 @@ impl App {
     /// est lâché si quelqu'un a pris une autre couleur à la main, ou si le personnage n'existe plus). Au repos, rien.
     pub(crate) fn tick_personnages(&mut self) {
         self.decor_tick();
+        self.tick_aplat_perso();
         if let Some(fil) = self.perso.fil.as_mut() {
             if fil.en_cours() > 0 {
                 for f in fil.recevoir() {
@@ -550,7 +562,11 @@ impl App {
             self.perso.actif = None;
             return;
         }
-        let Some((_, Some(_))) = self.perso_couleurs(c) else { return };
+        let Some((_, Some(fond_pastille))) = self.perso_couleurs(c) else { return };
+        // L'aplat que ce trait aura : celui du personnage du calque si c'est un calque de personnage (`aplatperso.rs` : rien d'autre ne
+        // change sa couleur), sinon celui de la pastille.
+        let fond_ici = if self.aplat_vient_du_personnage(self.cur_layer) { self.aplat_couleur_imposee(self.cur_layer) } else { Some(fond_pastille) };
+        let Some(fond_ici) = fond_ici else { return };
         if self.aplat_en_cible() || self.layer().fond.is_some() || self.griffonne_ici() {
             return;
         }
@@ -560,10 +576,8 @@ impl App {
         self.history.context = avant;
         // L'aplat du calque naît de la couleur d'aplat de la pastille (et non du blanc d'un aplat neuf) : les morceaux que
         // l'aplat gagnera plus tard, sans que la pastille y ait peint, ont la même couleur que le reste.
-        if let Some((_, Some(fond))) = self.perso_couleurs(c) {
-            if let Some(f) = self.layers_mut().get_mut(li).and_then(|l| l.fond.as_mut()) {
-                f.couleur = fond;
-            }
+        if let Some(f) = self.layers_mut().get_mut(li).and_then(|l| l.fond.as_mut()) {
+            f.couleur = fond_ici;
         }
         // Ce qui était déjà dessiné sur ce calque n'est pas à un personnage : il reste sans fond (le fond du calque
         // se pose sur tout son trait), coupé comme le ferait un personnage sans fond.
@@ -586,12 +600,22 @@ impl App {
     /// Le choix : la couleur du calque change, pas celle des pixels déjà peints (une peinture blanche volontaire, les yeux, ne
     /// devient pas brune) ; les clés du calque dont l'aplat n'était pas peint prennent la couleur, comme celles des autres
     /// traits de la pastille.
+    ///
+    /// **Jamais pour un calque de personnage** (Anthony, 2026-10-29 : « sur les calques personnages, l'aplat ne change de couleur que si
+    /// on modifie les paramètres de couleur de l'aplat dans le panneau Personnages ») : un trait fait là avec une autre pastille ne change
+    /// pas sa couleur d'aplat ; au plus, elle est remise à celle de son propre personnage si elle en avait une autre (`aplatperso.rs`).
     pub(crate) fn perso_aligner_couleur_aplat(&mut self) {
         if matches!(self.tool, Tool::Eraser | Tool::Mixer) || self.aplat_en_cible() || self.griffonne_ici() {
             return;
         }
-        let Some((_, Some(fond))) = self.perso_couleurs_actives() else { return };
         let li = self.cur_layer;
+        let fond = if self.aplat_vient_du_personnage(li) {
+            let Some(propre) = self.aplat_couleur_imposee(li) else { return };
+            propre
+        } else {
+            let Some((_, Some(fond))) = self.perso_couleurs_actives() else { return };
+            fond
+        };
         let Some(r) = self.layers().get(li).and_then(|l| l.fond) else { return };
         if r.couleur == fond {
             return;
@@ -618,6 +642,8 @@ impl App {
             return;
         }
         let Some((_, fond)) = self.perso_couleurs_actives() else { return };
+        // Sur un calque de personnage, l'aplat que le trait gagne est celui de ce personnage, quelle que soit la pastille.
+        let fond = if self.aplat_vient_du_personnage(self.cur_layer) { self.aplat_couleur_imposee(self.cur_layer) } else { fond };
         let Some(reglages) = self.layers().get(self.cur_layer).and_then(|l| l.fond) else { return };
         let Some(c) = self.doc.cels.get(&cel) else { return };
         let apres = c.raster.clone();
