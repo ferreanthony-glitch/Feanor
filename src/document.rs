@@ -2284,7 +2284,8 @@ impl Document {
                     match &mut e {
                         crate::vector::Element::Stroke { opacity, .. }
                         | crate::vector::Element::Fill { opacity, .. }
-                        | crate::vector::Element::Text { opacity, .. } => *opacity *= o,
+                        | crate::vector::Element::Text { opacity, .. }
+                        | crate::vector::Element::Image { opacity, .. } => *opacity *= o,
                     }
                     drawing.elements.push(e);
                 }

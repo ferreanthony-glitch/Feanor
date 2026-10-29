@@ -152,6 +152,8 @@ pub(crate) struct Etat {
     pub tache: Option<Tache>,
     /// La copie adaptée, que le collage rappelé prend à la place du presse-papiers.
     pub pret: Option<(Colle, Reprise)>,
+    /// Une grande image qu'un fil de fond prépare avant de la poser en objet vectoriel (`pasteimage.rs`).
+    pub images: Option<crate::pasteimage::TacheImage>,
 }
 
 impl Colle {
@@ -315,6 +317,7 @@ impl App {
 
     /// À chaque image d'écran : le calcul est-il fini ?
     pub(crate) fn tick_collage(&mut self, ctx: &egui::Context) {
+        self.tick_image();
         let Some(t) = &self.collage.tache else { return };
         match t.rx.try_recv() {
             Ok(resultat) => {
@@ -349,7 +352,7 @@ impl App {
 
     /// Un collage attend (question ou calcul) : on ne change pas d'onglet.
     pub(crate) fn collage_occupe(&self) -> bool {
-        self.collage.tache.is_some() || self.collage.dialogue.is_some()
+        self.collage.tache.is_some() || self.collage.dialogue.is_some() || self.collage.images.is_some()
     }
 
     /// « Coller » dans la fenêtre : les choix sont retenus, le calcul part.

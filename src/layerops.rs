@@ -46,6 +46,19 @@ pub(crate) fn choose(layers: &[Layer], cur: usize, how: Choose) -> Vec<u64> {
         .collect()
 }
 
+/// Un nom de calque qui n'est pas dans `pris` : `nom` s'il est libre, sinon « Base (2) », « Base (3) »… (`Base` : `nom` sans un
+/// « (n) » final, pour que la copie de « Trait (2) » soit « Trait (3) » et non « Trait (2) (2) »).
+pub(crate) fn nom_libre(pris: &std::collections::HashSet<String>, nom: &str) -> String {
+    if !pris.contains(nom) {
+        return nom.to_string();
+    }
+    let base = match nom.rsplit_once(" (") {
+        Some((b, fin)) if fin.ends_with(')') && fin[..fin.len() - 1].chars().all(|c| c.is_ascii_digit()) && fin.len() > 1 && !b.is_empty() => b,
+        _ => nom,
+    };
+    (2..).map(|n| format!("{base} ({n})")).find(|c| !pris.contains(c)).unwrap_or_else(|| nom.to_string())
+}
+
 /// Copie d'un calque avec ses propres copies des dessins (`copies` : un même dessin n'est copié
 /// qu'une fois).
 fn layer_copy(doc: &mut Document, source: &Layer, copies: &mut HashMap<CelId, CelId>) -> Layer {
@@ -509,9 +522,9 @@ impl App {
             self.status = "Il faut garder au moins un calque.".into();
             return;
         }
+        let choisis = self.chosen_layers();
         self.copy_layer();
-        let li = self.cur_layer;
-        self.delete_layers(&[li], "coupé");
+        self.delete_layers(&choisis, "coupé");
         self.status = "Calque coupé : X pour le coller.".into();
     }
 
@@ -522,6 +535,7 @@ impl App {
             return;
         }
         let old = self.layer().id;
+        let nom_voulu = self.layer_clipboard.as_ref().map(|c| c.layer.name.clone());
         self.paste_layer();
         // L'ancien courant (un dossier : avec ses calques) part, dans la même étape d'annulation.
         let pasted = self.layer().id;
@@ -537,6 +551,12 @@ impl App {
             self.layers_mut().remove(li);
         }
         crate::folders::normalize(self.layers_mut());
+        // Le calque remplacé n'est plus là : le collé reprend le nom d'origine (il avait pris « Nom (2) » à cause de lui).
+        if let Some(nom) = nom_voulu.filter(|n| !self.layers().iter().any(|l| &l.name == n)) {
+            if let Some(l) = self.layers_mut().iter_mut().find(|l| l.id == pasted) {
+                l.name = nom;
+            }
+        }
         self.cur_layer = self.layers().iter().position(|l| l.id == pasted).unwrap_or(0);
         self.renderer.invalidate_all();
         self.status = "Calque collé à la place du calque courant.".into();

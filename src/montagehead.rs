@@ -247,6 +247,16 @@ impl App {
         }
         // Aplat sous le trait (`fondui.rs`) : « Ajouter un aplat » / « Retirer l'aplat », partout où le menu s'ouvre.
         self.aplat_item(ui, li);
+        // Copier / coller le calque (ou les calques choisis) : dans le panneau Calques seulement ; Ctrl+C et Ctrl+V font de même
+        // quand le panneau a la main (2026-10-29).
+        if !in_montage {
+            let n = self.chosen_layers().len();
+            let (copier, titre) = if n > 1 { (format!("Copier les {n} calques choisis"), "Copier, coller les calques") } else { ("Copier le calque".to_string(), "Copier, coller le calque") };
+            ui.menu_button(titre, |ui| {
+                self.action_item(ui, &copier, "calque.copier");
+                self.action_item(ui, "Coller le calque", "calque.coller");
+            });
+        }
         // Plusieurs calques choisis (Ctrl ou Maj + clic) : les fusionner (Anthony, 2026-10-17). Dans
         // le panneau Calques, c'est son bouton Fusionner.
         let chosen = self.chosen_layers().len();

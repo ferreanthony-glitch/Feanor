@@ -561,6 +561,12 @@ pub fn fingerprint(cel: u64, version: u64, d: &VectorDrawing, items: &[usize]) -
                     put(bits(pair[0], pair[1]));
                 }
             }
+            Some(Element::Image { key, place, .. }) => {
+                put(*key);
+                for v in place {
+                    put(v.to_bits() as u64);
+                }
+            }
             None => put(u64::MAX),
         }
     }

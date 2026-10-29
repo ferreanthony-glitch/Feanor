@@ -588,6 +588,21 @@ pub enum Element {
         #[serde(rename = "placement")]
         place: [f32; 6],
     },
+    /// Image collée (format 42, `imagevec.rs`) : un rectangle texturé, comme un objet du dessin. Ses pixels ne sont pas dans le
+    /// dessin : ils sont dans le magasin d'images (`imagevec::obtenir`), désignés par leur empreinte, et dans `images/<empreinte>.png`
+    /// du dossier du projet. Elle se déplace, se transforme, se supprime et se réordonne comme les autres objets.
+    Image {
+        /// Empreinte du contenu (`imagevec::empreinte`).
+        #[serde(rename = "image")]
+        key: u64,
+        /// Taille de l'image en pixels (largeur, hauteur).
+        #[serde(rename = "taille")]
+        size: [u32; 2],
+        /// Placement (a, b, c, d, tx, ty) de l'image : le pixel (0, 0) de l'image est son coin haut-gauche.
+        #[serde(rename = "placement")]
+        place: [f32; 6],
+        opacity: f32,
+    },
 }
 
 impl Affine {
@@ -607,6 +622,19 @@ impl Element {
     }
 
     /// Texte : sa boîte (coins dans l'ordre) et les contours de chaque lettre, placés.
+    /// Une image collée, posée en `place`.
+    pub fn image(key: u64, size: [u32; 2], place: Affine) -> Element {
+        Element::Image { key, size, place: place.to_array(), opacity: 1.0 }
+    }
+
+    /// Image collée : ses quatre coins, dans le dessin (haut-gauche, haut-droit, bas-droit, bas-gauche).
+    pub fn image_corners(&self) -> Option<[Pos2; 4]> {
+        let Element::Image { size, place, .. } = self else { return None };
+        let a = Affine::from_array(*place);
+        let (w, h) = (size[0] as f32, size[1] as f32);
+        Some([pos2(0.0, 0.0), pos2(w, 0.0), pos2(w, h), pos2(0.0, h)].map(|p| a.apply(p)))
+    }
+
     pub fn text_shape(&self) -> Option<([Pos2; 4], Vec<Vec<Vec<[f32; 2]>>>)> {
         let Element::Text { text, font, size, place, .. } = self else { return None };
         let a = Affine::from_array(*place);
@@ -659,15 +687,27 @@ impl Element {
                     }
                 }
             }
+            Element::Image { .. } => {
+                if let Some(c) = self.image_corners() {
+                    r = Rect::from_points(&c);
+                }
+            }
         }
         r
     }
 
-    /// Couleur de l'élément (trait, zone ou texte).
+    /// Couleur de l'élément (trait, zone ou texte). Une image n'a pas de couleur : noir (la sélection par couleur et les pastilles
+    /// l'ignorent, voir `has_color`).
     pub fn color(&self) -> [u8; 3] {
         match self {
             Element::Stroke { color, .. } | Element::Fill { color, .. } | Element::Text { color, .. } => *color,
+            Element::Image { .. } => [0, 0, 0],
         }
+    }
+
+    /// L'élément a une couleur qu'on peut changer (tout sauf une image).
+    pub fn has_color(&self) -> bool {
+        !matches!(self, Element::Image { .. })
     }
 
     /// Une couleur choisie pour l'élément. Une zone en dégradé devient unie (le dégradé se refait avec l'outil Dégradé ;
@@ -679,6 +719,7 @@ impl Element {
                 *color = c;
                 *gradient = None;
             }
+            Element::Image { .. } => {}
         }
         self.invalidate_cache();
     }
@@ -827,6 +868,7 @@ impl Element {
                 opacity: *opacity,
                 place: Affine::from_array(*place).then(a).to_array(),
             },
+            Element::Image { key, size, place, opacity } => Element::Image { key: *key, size: *size, place: Affine::from_array(*place).then(a).to_array(), opacity: *opacity },
         }
     }
 
@@ -848,6 +890,8 @@ impl Element {
             Element::Fill { contours, .. } => inside_contours(p, contours),
             // Un texte se prend n'importe où dans sa boîte.
             Element::Text { .. } => self.text_shape().is_some_and(|(c, _)| point_in_polygon(p, &c)),
+            // Une image se prend n'importe où dans son rectangle.
+            Element::Image { .. } => self.image_corners().is_some_and(|c| point_in_polygon(p, &c)),
         }
     }
 
@@ -862,6 +906,11 @@ impl Element {
             Element::Text { .. } => self.text_shape().is_some_and(|(c, glyphs)| {
                 c.iter().any(|q| point_in_polygon(*q, lasso))
                     || glyphs.iter().flatten().flatten().any(|q| point_in_polygon(pos2(q[0], q[1]), lasso))
+            }),
+            // Un coin ou le centre de l'image dans le lasso.
+            Element::Image { .. } => self.image_corners().is_some_and(|c| {
+                let centre = pos2((c[0].x + c[2].x) * 0.5, (c[0].y + c[2].y) * 0.5);
+                c.iter().chain(std::iter::once(&centre)).any(|q| point_in_polygon(*q, lasso))
             }),
         }
     }
@@ -882,6 +931,10 @@ impl Element {
                 .collect(),
             Element::Text { .. } => match self.text_shape() {
                 Some((c, _)) => vec![vec![c[0], c[1], c[2], c[3], c[0]]],
+                None => Vec::new(),
+            },
+            Element::Image { .. } => match self.image_corners() {
+                Some(c) => vec![vec![c[0], c[1], c[2], c[3], c[0]]],
                 None => Vec::new(),
             },
         }
@@ -1396,6 +1449,11 @@ pub fn render_element_in(raster: &mut Raster, e: &Element, clip: Rect, place: Pl
                 }
             }
             mask.composite(raster, *color, *opacity);
+        }
+        Element::Image { key, place, opacity, .. } => {
+            if let Some(px) = crate::imagevec::obtenir(*key) {
+                crate::imagevec::poser(raster, &px, &Affine::from_array(*place), *opacity, (mask.x0, mask.y0, mask.w, mask.h));
+            }
         }
     }
 }
@@ -2067,7 +2125,7 @@ pub fn erase_circle(d: &mut VectorDrawing, c: Pos2, radius: f32, whole: bool) ->
                     })
                 }
             }
-            Element::Fill { .. } | Element::Text { .. } => (whole && e.hit(c, 0.0)).then(Vec::new),
+            Element::Fill { .. } | Element::Text { .. } | Element::Image { .. } => (whole && e.hit(c, 0.0)).then(Vec::new),
         };
         match cut {
             Some(parts) => {

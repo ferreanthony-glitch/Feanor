@@ -318,7 +318,7 @@ pub fn prendre(d: &VectorDrawing, centre: Pos2, rayon: f32, att: Attenuation) ->
                     }
                 }
             }
-            Element::Text { .. } => {}
+            Element::Text { .. } | Element::Image { .. } => {}
         }
     }
     out
@@ -344,7 +344,7 @@ pub fn grab_appliquer(d: &mut VectorDrawing, prises: &[Prise], delta: Vec2, forc
                     *pt = [q.x, q.y];
                 }
             }
-            Element::Text { .. } => {}
+            Element::Text { .. } | Element::Image { .. } => {}
         }
         if dernier != Some(p.at.element) {
             e.invalidate_cache();
@@ -371,7 +371,7 @@ fn boite(e: &Element) -> Rect {
                 r.extend_with(pos2(p[0], p[1]));
             }
         }
-        Element::Text { .. } => {}
+        Element::Text { .. } | Element::Image { .. } => {}
     }
     r
 }
@@ -420,7 +420,7 @@ pub fn pull_pas(d: &mut VectorDrawing, boites: &mut Boites, centre: Pos2, delta:
                     }
                 }
             }
-            Element::Text { .. } => {}
+            Element::Text { .. } | Element::Image { .. } => {}
         }
         if touched {
             e.invalidate_cache();

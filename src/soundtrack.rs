@@ -303,6 +303,10 @@ impl App {
             return;
         }
         for path in paths {
+            // Une image (png, jpeg) lâchée sur un calque vectoriel : elle devient un objet du dessin (`imagevec.rs`).
+            if self.import_dropped_image(&path) {
+                continue;
+            }
             // Un fichier de notes de relecture (`.json`) : la fenêtre d'import dit ce qu'il contient.
             if self.import_dropped_notes(&path) {
                 continue;
@@ -311,6 +315,24 @@ impl App {
                 self.import_sound_path(&path, None, None);
             }
         }
+    }
+
+    /// Une image lâchée sur la fenêtre quand le calque courant est vectoriel : un objet du dessin. Faux pour tout le reste (un
+    /// calque bitmap garde le comportement d'avant : « Importer une image » du menu).
+    fn import_dropped_image(&mut self, path: &std::path::Path) -> bool {
+        let est_image = path.extension().and_then(|e| e.to_str()).is_some_and(|e| ["png", "jpg", "jpeg"].contains(&e.to_ascii_lowercase().as_str()));
+        if !est_image || self.layer().kind != crate::document::LayerKind::Vector || self.layer().folder || self.content_refuses() {
+            return false;
+        }
+        match crate::io::load_image(path) {
+            Ok(img) => {
+                self.end_stroke();
+                let (w, h) = (img.width() as usize, img.height() as usize);
+                self.paste_image_as_object((w, h, img.into_raw()));
+            }
+            Err(e) => self.status = e,
+        }
+        true
     }
 
     pub(crate) fn new_audio_track(&mut self) {

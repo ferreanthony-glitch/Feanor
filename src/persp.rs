@@ -234,6 +234,19 @@ pub fn warp_element_with(e: &Element, f: &impl Fn(Pos2) -> Pos2, k: f32) -> Elem
             }
             out
         }
+        // Une image : ses coins haut-gauche, haut-droit et bas-gauche déformés, et l'affine qui les y envoie.
+        Element::Image { key, size, place, opacity } => {
+            let mut out = Element::Image { key: *key, size: *size, place: *place, opacity: *opacity };
+            if let Some(corners) = e.image_corners() {
+                let (o, x, y) = (f(corners[0]), f(corners[1]), f(corners[3]));
+                let (w, hh) = (size[0].max(1) as f32, size[1].max(1) as f32);
+                let fit = Affine { a: (x.x - o.x) / w, b: (y.x - o.x) / hh, c: (x.y - o.y) / w, d: (y.y - o.y) / hh, tx: o.x, ty: o.y };
+                if let Element::Image { place, .. } = &mut out {
+                    *place = fit.to_array();
+                }
+            }
+            out
+        }
     }
 }
 
