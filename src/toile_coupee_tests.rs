@@ -13,6 +13,11 @@ use crate::render;
 const ROSE: [u8; 3] = [240, 190, 200];
 
 fn app(name: &str) -> App {
+    // Ces essais dessinent tous le même plan (mêmes numéros de dessin, mêmes versions, même aplat rose) mais pas la même forme
+    // (« étalé » : un aplat limité à la feuille ; « bord » : toute la boucle). Les aplats gardés par `fx.rs` / `fxcache.rs` sont
+    // rangés par numéro et par version, communs à tous les essais du processus : lancés ensemble, l'un retrouvait l'aplat de
+    // l'autre (« 0 à gauche, 0 à droite », une fois sur vingt). Chacun prend donc l'état commun pour lui seul.
+    crate::fxcache::monde::ecrire();
     let dir = std::env::temp_dir().join(format!("shot-toile-coupee-{name}-{}-{:?}", std::process::id(), std::thread::current().id()));
     let _ = std::fs::create_dir_all(&dir);
     crate::donnees::bac_a_sable(&dir);
@@ -200,7 +205,13 @@ fn l_aplat_et_le_trait_ne_s_arretent_pas_au_bord_de_la_feuille() {
         attendre_rejeu(&mut app);
         // L'aplat, de part et d'autre de l'ancien bord (x = 0), sur toute la hauteur de la forme.
         let (gauche, droite) = ((330..670).filter(|&y| est_rose(pixel(&app, -3, y))).count(), (330..670).filter(|&y| est_rose(pixel(&app, 3, y))).count());
-        assert!(gauche > 300 && droite > 300, "{nom} : l'aplat des deux côtés du bord de la feuille ({gauche} à gauche, {droite} à droite)");
+        let diag = {
+            let cel = app.layers()[0].frames[0].expect("dessin");
+            let c = &app.doc.cels[&cel];
+            let trait_h = (-1900..400).filter(|&x| est_trait(c.raster.get_i(x, 300))).count();
+            format!("rejeu en attente {} / différé {} / à refaire {} ; version {} ; trait sur y=300 : {} px ; fond en calcul {} ; octets {}", app.rejeu.has_pending(), app.rejeu_deferred.len(), app.rejeu_again.len(), c.version, trait_h, crate::fx::fond_pending(), crate::fxcache::limit())
+        };
+        assert!(gauche > 300 && droite > 300, "{nom} : l'aplat des deux côtés du bord de la feuille ({gauche} à gauche, {droite} à droite) [{diag}]");
         assert!(gauche.abs_diff(droite) <= 4, "{nom} : pas de bord vertical ({gauche} contre {droite})");
         // Le trait, lui aussi : le haut de la boucle traverse le bord sans s'y arrêter.
         let (t_gauche, t_droite) = ((-80..0).filter(|&x| (298..=302).any(|y| est_trait(pixel(&app, x, y)))).count(), (0..80).filter(|&x| (298..=302).any(|y| est_trait(pixel(&app, x, y)))).count());

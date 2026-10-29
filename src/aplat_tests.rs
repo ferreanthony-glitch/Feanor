@@ -595,6 +595,9 @@ fn the_target_belongs_to_the_project_tab() {
 
 #[test]
 fn the_app_still_rests_with_the_aplat_selected() {
+    // (`fx::fond_poll` et `griffon_poll` sont communs à tous les essais : le fond ou le remplissage qu'un autre essai fait
+    // arriver pendant celui-ci réveille cette application (`request_repaint`, « dans 0 ns »). État commun pour elle seule.)
+    crate::fxcache::monde::ecrire();
     let mut b = banc_anneau();
     b.app.select_aplat(0);
     b.chauffer(4);

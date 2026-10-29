@@ -480,7 +480,9 @@ fn the_exact_fill_is_computed_at_once_for_export_and_save() {
 
 #[test]
 fn editing_the_line_layer_recomputes_the_fill_of_a_colour_layer() {
-    monde::lire();
+    // (Comme `on_screen_the_previous_background_stays_until_the_new_one_is_ready` : l'identité des dessins gardés (`Arc::ptr_eq`)
+    // tient à la réserve commune. État commun pour lui seul.)
+    monde::ecrire();
     let (mut app, a) = app_griffonne("recalcul", 0.0, 8_200_200);
     trace(&mut app, pos2(180.0, 150.0), pos2(190.0, 150.0));
     let plan = app.build_plan(0, false, false);

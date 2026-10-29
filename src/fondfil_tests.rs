@@ -148,7 +148,9 @@ fn wait_new(doc: &Document, item: &PlanItem, old: &Arc<Cel>) -> Arc<Cel> {
 
 #[test]
 fn on_screen_the_previous_background_stays_until_the_new_one_is_ready() {
-    monde::lire();
+    // (L'identité des dessins (`Arc::ptr_eq`) tient à la réserve commune : un autre essai qui ouvre un projet (`forget_all`) ou la
+    // remplit (éviction) la change sous ses pieds. État commun pour lui seul.)
+    monde::ecrire();
     let (mut doc, id, r) = doc_with(ring(100.0), [11, 22, 33]);
     let item = fond_item(id, r);
     // Premier affichage : rien d'avant, calculé tout de suite.
