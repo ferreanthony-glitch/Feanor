@@ -383,6 +383,8 @@ pub struct Rendu {
     graver: bool,
     /// Avec les calques d'annotation des plans (`render::panel_plan_at_avec`) ; non d'origine.
     annotations: bool,
+    /// Informations gravées dans l'image finale (`exportvideo::BurnSettings`), sans calque ajouté au projet.
+    infos: Option<crate::exportvideo::BurnSettings>,
     zones: Vec<Zone>,
     starts: Vec<usize>,
     /// Un seul plan, déjà fait (l'image courante exportée telle que l'écran l'a construit) : à la place de celui
@@ -398,7 +400,7 @@ impl Rendu {
     /// `cancel` : levé, les fils qui attendent une image en cours de calcul l'abandonnent.
     pub fn new(doc: Arc<Document>, papier: Papier, graver: bool, zones: Vec<Zone>, cancel: Arc<AtomicBool>) -> Rendu {
         let starts = if zones.is_empty() { Vec::new() } else { (0..doc.panels.len()).map(|i| doc.panel_start(i)).collect() };
-        Rendu { doc, papier, graver, annotations: false, zones, starts, explicite: None, store: ImageStore::new(fils_de_rendu().0 + 1), cancel, composees: AtomicUsize::new(0) }
+        Rendu { doc, papier, graver, annotations: false, infos: None, zones, starts, explicite: None, store: ImageStore::new(fils_de_rendu().0 + 1), cancel, composees: AtomicUsize::new(0) }
     }
 
     /// Combien d'images ont été vraiment composées jusqu'ici.
@@ -410,6 +412,12 @@ impl Rendu {
     /// Avec ou sans les calques d'annotation des plans (« Avec les annotations » des fenêtres d'export) : posés par-dessus tout le reste.
     pub fn avec_annotations(mut self, oui: bool) -> Rendu {
         self.annotations = oui;
+        self
+    }
+
+    /// Les informations gravées dans l'image finale (numéro de plan, time code, séquence, dialogues) ; `None` : rien.
+    pub fn avec_infos(mut self, infos: Option<crate::exportvideo::BurnSettings>) -> Rendu {
+        self.infos = infos.filter(|b| b.active());
         self
     }
 
@@ -448,6 +456,14 @@ impl Rendu {
 
     /// L'image finale (plan `p`, image `f`) : le plan, ou le mélange des deux plans d'une transition.
     pub fn image(&self, p: usize, f: usize) -> Option<Image> {
+        let img = self.image_sans_infos(p, f)?;
+        Some(match &self.infos {
+            Some(b) => Arc::new(crate::exportvideo::burn_into(&self.doc, p, f, b, &img)),
+            None => img,
+        })
+    }
+
+    fn image_sans_infos(&self, p: usize, f: usize) -> Option<Image> {
         let mix = match self.starts.get(p) {
             Some(&start) => crate::transitions::mix_in(&self.zones, start + f).map(|(_, m)| m),
             None => None,

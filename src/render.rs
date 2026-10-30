@@ -798,11 +798,41 @@ pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> O
 }
 
 fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32, annotations: bool) -> Plan {
+    plan_with_camera_layers(world, panel, frame, paper, camera, fps, annotations).0
+}
+
+/// Les calques d'un plan que l'export des calques séparés (`exportlayers.rs`) écrit chacun à part, du plus bas au plus haut : ni dossier, ni
+/// calque d'effet (il agit sur ce qui est dessous : il n'a pas d'image à lui), ni calque caché (lui ou son dossier), ni calque d'annotation
+/// sauf si `annotations`.
+pub fn separable_layers(panel: &Panel, annotations: bool) -> Vec<usize> {
+    crate::calqueannot::ordre(&panel.layers, annotations)
+        .into_iter()
+        .filter(|&li| {
+            let l = &panel.layers[li];
+            !l.folder && l.effet.is_none() && crate::folders::effect(&panel.layers, li).is_some()
+        })
+        .collect()
+}
+
+/// Chaque calque séparable du plan `index` (`separable_layers`) seul, à l'image `frame`, sur fond transparent : (rang du calque, son plan) ;
+/// un calque sans rien à cette image n'a pas de plan. Les éléments sont ceux de l'image entière (même caméra, mêmes réglages) : posés
+/// l'un sur l'autre dans l'ordre, en mode normal, ils redonnent l'image du plan.
+pub fn panel_layer_plans(doc: &Document, index: usize, frame: usize, annotations: bool) -> Vec<(usize, Plan)> {
+    let camera = doc.camera_seen(index, frame);
+    let panel = &doc.panels[index];
+    let (plan, ranges) = plan_with_camera_layers(&crate::espace3d::Monde::of(doc), panel, frame, None, &camera, doc.fps, annotations);
+    let keep = separable_layers(panel, annotations);
+    ranges.into_iter().filter(|(li, r)| keep.contains(li) && !r.is_empty()).map(|(li, r)| (li, Plan { paper: None, items: plan.items[r].to_vec() })).collect()
+}
+
+/// Comme `plan_with_camera`, avec pour chaque calque traité (dans l'ordre de pose) la plage de ses éléments dans `Plan::items`.
+fn plan_with_camera_layers(world: &crate::espace3d::Monde, panel: &Panel, frame: usize, paper: Option<[u8; 3]>, camera: &CameraSeen, fps: u32, annotations: bool) -> (Plan, Vec<(usize, std::ops::Range<usize>)>) {
     let mut items: Vec<PlanItem> = Vec::new();
     // Pour chaque calque, le nombre d'éléments posés avant lui (un calque d'effet couvre ceux d'en dessous).
     let mut starts: Vec<usize> = vec![0; panel.layers.len()];
+    let order = crate::calqueannot::ordre(&panel.layers, annotations);
     // Les calques d'annotation du plan (`calqueannot.rs`) : absents, ou, si on les veut, posés après tous les autres, par-dessus tout.
-    for li in crate::calqueannot::ordre(&panel.layers, annotations) {
+    for &li in &order {
         let l = &panel.layers[li];
         starts[li] = items.len();
         // Caché (lui ou son dossier, 13b-5) : rien ; l'opacité du dossier s'ajoute.
@@ -837,7 +867,8 @@ fn plan_with_camera(world: &crate::espace3d::Monde, panel: &Panel, frame: usize,
         items.extend(fond_item(l, &line));
         items.push(line);
     }
-    Plan { paper, items }
+    let ranges = order.iter().enumerate().map(|(k, &li)| (li, starts[li]..order.get(k + 1).map_or(items.len(), |&next| starts[next]))).collect();
+    (Plan { paper, items }, ranges)
 }
 
 /// Image réduite de ce que voit la caméra `cam` (moyenne de 4 échantillons par pixel).

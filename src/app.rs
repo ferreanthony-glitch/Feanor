@@ -3566,20 +3566,6 @@ impl App {
         rfd::FileDialog::new().set_title(title).pick_folder()
     }
 
-    /// Une planche par plan (première image) et une page HTML imprimable avec les indications. Les planches se
-    /// calculent sur d'autres fils, sur une copie du projet : SHOT reste libre pendant l'export.
-    pub(crate) fn export_storyboard(&mut self) {
-        self.end_stroke();
-        if !self.export_libre() {
-            return;
-        }
-        let Some(dir) = Self::pick_folder("Dossier où exporter le storyboard") else { return };
-        let all: Vec<usize> = (0..self.doc.panels.len()).collect();
-        let (frames, items) = crate::export::storyboard_items(&self.doc, &all);
-        let job = crate::export::ExportJob::storyboard_page(&dir, &self.base_name(), frames, items, self.doc.frame);
-        self.start_job(job);
-    }
-
     pub(crate) fn export_frame(&mut self) {
         self.end_stroke();
         if !self.export_libre() {
@@ -4022,6 +4008,10 @@ impl App {
             "vignettes.texte_notes" => self.vignettes_basculer_texte(crate::boardsens::Champ::Notes),
             "fichier.exporter_planche" => self.open_planche(),
             "fichier.exporter_colorscript" => self.open_colorscript(),
+            "fichier.exporter_images_par_plan" => self.open_export(crate::export::Format::Stills),
+            "fichier.exporter_son_par_piste" => self.open_export(crate::export::Format::Stems),
+            "fichier.exporter_calques" => self.open_export(crate::export::Format::Layers),
+            "fichier.exporter_camera" => self.open_export(crate::export::Format::Camera),
             "edition.annuler" => self.undo(),
             "edition.retablir" => self.redo(),
             // Le panneau Effets a la main (le dernier clic était dedans) : Ctrl+C copie l'effet

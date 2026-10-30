@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use eframe::egui::{self, vec2, Align2, RichText};
 
 use crate::app::App;
-use crate::editorial::{self, Media, Options, Plan};
+use crate::editorial::{self, Fcpxml, Media, Options, Plan};
 use crate::editorialjob::{self, EditorialJob, Report, Stage};
 
 /// L'état de la fenêtre.
@@ -162,7 +162,7 @@ impl App {
         let fps = self.doc.fps;
         ui.label(
             RichText::new(
-                "L'animatique découpée plan par plan, pour un monteur : un fichier vidéo par plan, et le montage en EDL (CMX 3600), Final Cut XML (Premiere Pro, DaVinci Resolve) ou OpenTimelineIO. Les clips portent les numéros des plans (SQ01_PL012A).",
+                "L'animatique découpée plan par plan, pour un monteur : un fichier vidéo par plan, et le montage en EDL (CMX 3600), Final Cut XML (xmeml, ou FCPXML), ou OpenTimelineIO. Les clips portent les numéros des plans (SQ01_PL012A).",
             )
             .weak()
             .small(),
@@ -173,8 +173,16 @@ impl App {
                 ui.label("Fichiers de montage");
                 ui.vertical(|ui| {
                     ui.checkbox(&mut w.opts.edl, "EDL CMX 3600 (.edl) : l'image seulement");
-                    ui.checkbox(&mut w.opts.xml, "Final Cut Pro 7 XML (.xml) : Premiere Pro, DaVinci Resolve");
+                    ui.checkbox(&mut w.opts.xml, "Final Cut Pro 7 XML (.xml)");
                     ui.checkbox(&mut w.opts.otio, "OpenTimelineIO (.otio)");
+                    ui.horizontal(|ui| {
+                        ui.checkbox(&mut w.opts.fcpxml, "Final Cut Pro X XML (.fcpxml)");
+                        ui.add_enabled_ui(w.opts.fcpxml, |ui| {
+                            for v in [Fcpxml::V1_10, Fcpxml::V1_9] {
+                                ui.radio_value(&mut w.opts.fcpxml_version, v, v.label());
+                            }
+                        });
+                    });
                 });
                 ui.end_row();
 
@@ -236,7 +244,11 @@ impl App {
                 ui.end_row();
 
                 ui.label("Son");
-                ui.checkbox(&mut w.opts.sound, "Avec les pistes son (XML et OTIO)");
+                ui.checkbox(&mut w.opts.sound, "Avec les pistes son (EDL, XML, FCPXML et OTIO)");
+                ui.end_row();
+
+                ui.label("Marqueurs");
+                ui.checkbox(&mut w.opts.markers, "Numéro de chaque plan et commentaires non résolus (XML, FCPXML, OTIO)");
                 ui.end_row();
 
                 ui.label("Chemins");
@@ -249,7 +261,7 @@ impl App {
         // Ce qui partirait.
         match &w.plan {
             Ok(plan) => {
-                let kinds = [w.opts.edl, w.opts.xml, w.opts.otio].iter().filter(|b| **b).count();
+                let kinds = [w.opts.edl, w.opts.xml, w.opts.otio, w.opts.fcpxml].iter().filter(|b| **b).count();
                 ui.label(format!(
                     "{} plan(s), {}, {} · {} · vidéos {}×{}",
                     plan.clips.len(),
@@ -361,7 +373,7 @@ impl App {
                 for f in &r.files {
                     ui.label(RichText::new(format!("• {}", f.file_name().map_or(String::new(), |n| n.to_string_lossy().into_owned()))).small());
                 }
-                ui.label(RichText::new("L'import dans Premiere Pro, DaVinci Resolve et Avid est à vérifier : LISEZ-MOI.txt dit quoi regarder.").small().weak());
+                ui.label(RichText::new("L'import dans ton logiciel de montage est à vérifier : LISEZ-MOI.txt dit quoi regarder.").small().weak());
                 if ui.button("Ouvrir le dossier").clicked() {
                     crate::exportui::reveal_in_explorer(&r.dir);
                 }

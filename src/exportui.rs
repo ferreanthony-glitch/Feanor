@@ -13,6 +13,12 @@ use crate::app::App;
 use crate::audio;
 use crate::bulles;
 use crate::export::{self, ExportJob, ExportSettings, Format, Progress, Range, SoundSpan};
+use crate::exportcamera;
+use crate::exportlayers;
+use crate::exportstems::{self, Container, Depth};
+use crate::exportstills::{self, StillFormat, StillsPer};
+use crate::exportvideo::{self, VideoRate, VideoSize, VideoSpec};
+use crate::pdfmise::{self, Paper};
 use crate::storyboard::duration_label;
 
 fn warn() -> Color32 {
@@ -32,6 +38,7 @@ impl App {
             return;
         }
         let mut s = self.export_last.clone();
+        self.settings.exports.apply(&mut s);
         s.format = format;
         s.transparent = self.export_transparent;
         s.annotations = self.settings.export_annotations;
@@ -98,7 +105,7 @@ impl App {
         let chosen = self.board_selection();
         // Les plans choisis ne se proposent que là où le son ne compte pas (des plans qui ne se suivent pas n'ont
         // pas un son d'un seul tenant) : le GIF, les images, le storyboard PDF.
-        let by_selection = matches!(s.format, Format::Gif | Format::Png | Format::Pdf);
+        let by_selection = matches!(s.format, Format::Gif | Format::Png | Format::Pdf | Format::Stills | Format::Layers | Format::Camera);
         if s.range == Range::Selection && !by_selection {
             s.range = Range::Panel;
         }
@@ -125,16 +132,31 @@ impl App {
             ui.heading("Exporter");
             ui.add_space(6.0);
             egui::Grid::new("grille_export").num_columns(2).spacing([12.0, 8.0]).show(ui, |ui| {
-                ui.label("Contenu");
-                ui.vertical(|ui| {
-                    ui.radio_value(&mut s.format, Format::Mp4, "Film MP4 (H.264) : pour regarder, envoyer");
-                    ui.radio_value(&mut s.format, Format::ProRes, "Film MOV (ProRes 422 HQ) : pour le montage");
-                    ui.radio_value(&mut s.format, Format::Gif, "GIF animé : pour montrer, partager (sans le son)");
-                    ui.radio_value(&mut s.format, Format::Png, "Images PNG (une par image)");
-                    ui.radio_value(&mut s.format, Format::Wav, "Son seul (WAV)");
-                    ui.radio_value(&mut s.format, Format::Pdf, "Storyboard PDF (A4 paysage, 6 images par page)");
-                });
-                ui.end_row();
+                // Le format : seulement ceux de la famille ouverte (le film en a quatre) ; un format que ce ffmpeg ne sait pas faire est
+                // grisé, avec la raison.
+                let family = family_of(s.format);
+                if family.len() == 1 {
+                    ui.label("Contenu");
+                    ui.label(RichText::new(format_label(s.format)).strong());
+                    ui.end_row();
+                }
+                if family.len() > 1 {
+                    let encoders = match &ffmpeg {
+                        Some((_, Ok(enc))) => Some(enc.clone()),
+                        _ => None,
+                    };
+                    ui.label("Format");
+                    ui.vertical(|ui| {
+                        for &f in family {
+                            let reason = encoders.as_ref().and_then(|e| exportvideo::missing_reason(f, e));
+                            ui.add_enabled_ui(reason.is_none(), |ui| ui.radio_value(&mut s.format, f, format_label(f)));
+                            if let Some(r) = reason {
+                                ui.label(RichText::new(format!("Grisé : {r}.")).small().color(warn()));
+                            }
+                        }
+                    });
+                    ui.end_row();
+                }
                 ui.label("Étendue");
                 ui.vertical(|ui| {
                     for (range, label, n) in ranges {
@@ -181,18 +203,233 @@ impl App {
                 if s.format.is_video() {
                     ui.label("Taille");
                     ui.vertical(|ui| {
-                        let [w, h] = export::video_size([fw, fh], false);
-                        let [hw, hh] = export::video_size([fw, fh], true);
-                        ui.radio_value(&mut s.half, false, format!("Image finale ({w}×{h})"));
-                        ui.radio_value(&mut s.half, true, format!("Moitié ({hw}×{hh}), fichier plus léger"));
+                        for size in VideoSize::CHOICES {
+                            let [w, h] = size.dimensions([fw, fh]);
+                            ui.radio_value(&mut s.size, size, format!("{} ({w}×{h})", size.label()));
+                        }
+                        let free = matches!(s.size, VideoSize::Width(_));
+                        ui.horizontal(|ui| {
+                            if ui.radio(free, "Largeur libre").clicked() && !free {
+                                s.size = VideoSize::Width(1280);
+                            }
+                            if let VideoSize::Width(w) = &mut s.size {
+                                ui.add(egui::DragValue::new(w).range(2..=16384).suffix(" px").speed(4.0));
+                                let [ow, oh] = VideoSize::Width(*w).dimensions([fw, fh]);
+                                ui.label(RichText::new(format!("{ow}×{oh}")).weak());
+                            }
+                        });
                     });
                     ui.end_row();
+                    let enc_ici = match &ffmpeg {
+                        Some((_, Ok(enc))) => Some(enc.clone()),
+                        _ => None,
+                    };
+                    if let Some(p) = exportvideo::size_problem_for(s.format, s.size.dimensions([fw, fh]), &enc_ici.unwrap_or_default()) {
+                        ui.label("");
+                        ui.colored_label(warn(), p);
+                        ui.end_row();
+                    }
+                    ui.label("Cadence");
+                    ui.horizontal(|ui| {
+                        egui::ComboBox::from_id_salt("film_cadence")
+                            .selected_text(if s.rate == VideoRate::Project { format!("{fps} images par seconde (le projet)") } else { s.rate.label().to_string() })
+                            .show_ui(ui, |ui| {
+                                for r in VideoRate::CHOICES {
+                                    let text = if r == VideoRate::Project { format!("{fps} images par seconde (le projet)") } else { r.label().to_string() };
+                                    ui.selectable_value(&mut s.rate, r, text);
+                                }
+                            })
+                            .response
+                            .on_hover_text("Le projet ne change pas : le film est converti à l'écriture, des images sont répétées ou sautées pour garder la durée.");
+                    });
+                    ui.end_row();
+                    if s.format == Format::DnxHr {
+                        ui.label("Fichier");
+                        ui.horizontal(|ui| {
+                            ui.radio_value(&mut s.mxf, false, "MOV");
+                            ui.radio_value(&mut s.mxf, true, "MXF");
+                        });
+                        ui.end_row();
+                    }
+                    ui.label("Infos");
+                    ui.vertical(|ui| {
+                        bulles::bulle(
+                            ui.checkbox(&mut s.burn.enabled, "Graver les informations dans l'image"),
+                            "Graver les informations",
+                            "Pose dans l'image du film le numéro du plan, le time code, le nom de la séquence et, si tu veux, l'action et le dialogue. Rien n'est ajouté au projet.",
+                            "",
+                        );
+                        ui.add_enabled_ui(s.burn.enabled, |ui| {
+                            ui.indent("film_infos", |ui| {
+                                ui.checkbox(&mut s.burn.plan, "Numéro du plan (en haut à gauche)");
+                                ui.checkbox(&mut s.burn.sequence, "Nom de la séquence (en haut à droite)");
+                                ui.checkbox(&mut s.burn.timecode, "Time code (en bas à droite)");
+                                ui.checkbox(&mut s.burn.texts, "Action et dialogue (en bas, sur plusieurs lignes)");
+                            });
+                        });
+                    });
+                    ui.end_row();
+                    if s.format.has_alpha() {
+                        ui.label("Fond");
+                        ui.label(RichText::new("Transparent : le papier du projet n'est pas dans le film.").small());
+                        ui.end_row();
+                    }
                     ui.label("Son");
                     if sound_here {
                         ui.checkbox(&mut s.sound, "Avec le son du montage");
                     } else {
                         ui.label(RichText::new("Aucun son dans cette étendue.").weak());
                     }
+                    ui.end_row();
+                }
+                // Le storyboard PDF à la carte : page, cases, textes, en-tête.
+                if s.format == Format::Pdf {
+                    ui.label("Page");
+                    ui.vertical(|ui| {
+                        ui.label(RichText::new(s.pdf.label()).small().weak());
+                        ui.horizontal(|ui| {
+                            for p in Paper::ALL {
+                                ui.radio_value(&mut s.pdf.paper, p, p.label());
+                            }
+                            ui.separator();
+                            ui.radio_value(&mut s.pdf.landscape, true, "Paysage");
+                            ui.radio_value(&mut s.pdf.landscape, false, "Portrait");
+                        });
+                        ui.horizontal(|ui| {
+                            ui.label("Cases par page");
+                            egui::ComboBox::from_id_salt("pdf_cases")
+                                .selected_text(s.pdf.per_page_ok().to_string())
+                                .show_ui(ui, |ui| {
+                                    for n in pdfmise::PER_PAGE_CHOICES {
+                                        let (c, r) = pdfmise::grid(n, s.pdf.landscape);
+                                        ui.selectable_value(&mut s.pdf.per_page, n, format!("{n}  ({c} × {r})"));
+                                    }
+                                });
+                        });
+                    });
+                    ui.end_row();
+                    ui.label("Textes");
+                    ui.vertical(|ui| {
+                        ui.checkbox(&mut s.pdf.number, "Numéro et titre du plan");
+                        ui.checkbox(&mut s.pdf.duration, "Durée");
+                        ui.checkbox(&mut s.pdf.action, "Action");
+                        ui.checkbox(&mut s.pdf.dialogue, "Dialogue");
+                        ui.checkbox(&mut s.pdf.notes, "Notes");
+                    });
+                    ui.end_row();
+                    ui.label("Pages");
+                    ui.vertical(|ui| {
+                        ui.checkbox(&mut s.pdf.header, "Titre du film et date en haut de chaque page");
+                        ui.checkbox(&mut s.pdf.page_numbers, "Numéros de page");
+                    });
+                    ui.end_row();
+                }
+                // Les calques séparés : avec ou sans caméra ; ce qui partirait.
+                if s.format == Format::Layers {
+                    ui.label("Caméra");
+                    ui.vertical(|ui| {
+                        ui.radio_value(&mut s.layers.with_camera, true, "Caméra appliquée (la taille de l'image finale, comme dans le film)");
+                        ui.radio_value(&mut s.layers.with_camera, false, "Sans caméra : la feuille entière de chaque calque");
+                    });
+                    ui.end_row();
+                    ui.label("Calques");
+                    let plans = export::panels_of(&frames);
+                    let info = exportlayers::plans_info(&self.doc, &plans, s.annotations);
+                    let files = exportlayers::file_count(&info, &frames);
+                    ui.vertical(|ui| {
+                        if files == 0 {
+                            ui.colored_label(warn(), "Aucun calque visible à exporter dans cette étendue.");
+                        } else {
+                            let layers: usize = info.iter().map(|i| i.layers.len()).sum();
+                            ui.label(format!("{} plan{}, {layers} calque{}, {files} images.", info.len(), if info.len() > 1 { "s" } else { "" }, if layers > 1 { "s" } else { "" }));
+                        }
+                        let effects = exportlayers::effect_layers(&self.doc, &plans);
+                        if effects > 0 {
+                            ui.label(RichText::new(format!("{effects} calque{} d'effet pas écrit{} : il agit sur ce qui est dessous, il n'a pas d'image à lui.", if effects > 1 { "s" } else { "" }, if effects > 1 { "s" } else { "" })).small().color(warn()));
+                        }
+                        ui.label(RichText::new("Un dossier par plan (SQ01_PL012A), une suite PNG par calque : 01_Fond_0001.png…").small().weak());
+                    });
+                    ui.end_row();
+                }
+                // Les clés de caméra : la caméra de chaque image, les CSV.
+                if s.format == Format::Camera {
+                    ui.label("Fichiers");
+                    ui.vertical(|ui| {
+                        ui.checkbox(&mut s.camera.per_frame, "Avec la caméra de chaque image (déjà interpolée)");
+                        ui.checkbox(&mut s.camera.csv, "Aussi en CSV (un tableur, un script)");
+                        ui.label(RichText::new("Le JSON et son format sont décrits dans docs/EXPORT_MONTAGE.md.").small().weak());
+                    });
+                    ui.end_row();
+                }
+                // Le son par piste : conteneur, profondeur, mixage ; les pistes qui partiraient.
+                if s.format == Format::Stems {
+                    ui.label("Fichiers");
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.radio_value(&mut s.stems.format.container, Container::Wav, "WAV");
+                            ui.radio_value(&mut s.stems.format.container, Container::Aiff, "AIFF");
+                        });
+                        ui.horizontal(|ui| {
+                            ui.radio_value(&mut s.stems.format.depth, Depth::Bits16, "16 bits");
+                            ui.radio_value(&mut s.stems.format.depth, Depth::Bits24, "24 bits");
+                            ui.label(RichText::new("48 kHz, stéréo").weak());
+                        });
+                        ui.checkbox(&mut s.stems.with_mix, "Avec le mixage de toutes les pistes");
+                    });
+                    ui.end_row();
+                    ui.label("Pistes");
+                    let files = exportstems::plan(&self.doc, first, frames.len(), &s.stems, &self.base_name());
+                    if files.is_empty() {
+                        ui.colored_label(warn(), "Aucune piste audible avec un extrait dans cette étendue (une piste muette n'est pas écrite).");
+                    } else {
+                        ui.vertical(|ui| {
+                            for f in &files {
+                                ui.label(RichText::new(format!("{}  ({})", f.file, f.name)).small());
+                            }
+                        });
+                    }
+                    ui.end_row();
+                }
+                // Une image par plan ou par case.
+                if s.format == Format::Stills {
+                    ui.label("Images");
+                    ui.vertical(|ui| {
+                        ui.radio_value(&mut s.stills.per, StillsPer::Plan, "Une par plan (sa première image)");
+                        ui.radio_value(&mut s.stills.per, StillsPer::Case, "Une par case (le plan et chacune de ses marques d'image)");
+                    });
+                    ui.end_row();
+                    ui.label("Fichier");
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.radio_value(&mut s.stills.format, StillFormat::Png, "PNG");
+                            ui.radio_value(&mut s.stills.format, StillFormat::Jpeg, "JPEG");
+                        });
+                        if s.stills.format == StillFormat::Png {
+                            ui.checkbox(&mut s.stills.transparent, "Sans le papier (fond transparent)");
+                        } else {
+                            ui.add(egui::Slider::new(&mut s.stills.quality, 50..=100).text("qualité"));
+                        }
+                    });
+                    ui.end_row();
+                    ui.label("Taille");
+                    ui.vertical(|ui| {
+                        for size in VideoSize::CHOICES {
+                            let [w, h] = exportstills::still_size(size, [fw, fh]);
+                            ui.radio_value(&mut s.stills.size, size, format!("{} ({w}×{h})", size.label()));
+                        }
+                        let free = matches!(s.stills.size, VideoSize::Width(_));
+                        ui.horizontal(|ui| {
+                            if ui.radio(free, "Largeur libre").clicked() && !free {
+                                s.stills.size = VideoSize::Width(1280);
+                            }
+                            if let VideoSize::Width(w) = &mut s.stills.size {
+                                ui.add(egui::DragValue::new(w).range(2..=16384).suffix(" px").speed(4.0));
+                            }
+                        });
+                    });
+                    ui.end_row();
+                    ui.label("Noms");
+                    ui.label(RichText::new("Comme l'export pour le montage : SQ01_PL012A (et _C02, _C03… pour les cases d'après).").small().weak());
                     ui.end_row();
                 }
                 // Les commentaires de la timeline, écrits sous l'image où ils tombent (`export::storyboard_of_with`).
@@ -209,7 +446,7 @@ impl App {
                     ui.end_row();
                 }
                 // Les calques d'annotation des plans (`calqueannot.rs`) : jamais dans le film d'office, posés par-dessus tout si on les veut.
-                if s.format != Format::Wav {
+                if s.format.has_images() {
                     ui.label("Annotations");
                     crate::bulles::bulle(
                         ui.checkbox(&mut s.annotations, "Avec les annotations"),
@@ -232,14 +469,15 @@ impl App {
                 ui.separator();
                 match &ffmpeg {
                     Some((path, Ok(enc))) => {
-                        let missing = match s.format {
-                            Format::Mp4 if enc.h264.is_none() => Some("ce ffmpeg ne sait pas encoder en H.264"),
-                            Format::ProRes if !enc.prores => Some("ce ffmpeg ne sait pas encoder en ProRes"),
-                            _ => None,
-                        };
                         ui.label(RichText::new(format!("ffmpeg : {}", path.display())).small());
-                        if let Some(m) = missing {
+                        if let Some(m) = exportvideo::missing_reason(s.format, enc) {
                             ui.colored_label(warn(), m);
+                        }
+                        // Pas de libx264 : le MP4 sort quand même, mais de moins bonne qualité.
+                        if s.format == Format::Mp4 {
+                            if let Some(w) = exportvideo::h264_warning(enc) {
+                                ui.colored_label(warn(), w);
+                            }
                         }
                     }
                     Some((path, Err(e))) => {
@@ -267,12 +505,18 @@ impl App {
             self.choose_ffmpeg();
         }
         // Le choix « Avec les annotations » est retenu par poste de travail, tout de suite (avec les réglages de l'application).
-        if s.format != Format::Wav && self.settings.export_annotations != s.annotations {
+        if s.format.has_images() && self.settings.export_annotations != s.annotations {
             self.settings.export_annotations = s.annotations;
             self.settings_a_ecrire = true;
         }
         if go {
             self.export_last = s.clone();
+            // Les choix de film, de PDF et d'images par plan sont retenus par poste de travail (réglages de l'application).
+            let prefs = export::ExportPrefs::of(&s);
+            if self.settings.exports != prefs {
+                self.settings.exports = prefs;
+                self.settings_a_ecrire = true;
+            }
             if s.format == Format::Png {
                 self.export_transparent = s.transparent;
             }
@@ -289,7 +533,7 @@ impl App {
         let fps = self.doc.fps;
         match s.format {
             Format::Wav => {
-                let Some(path) = save_dialog(&base, Format::Wav) else { return };
+                let Some(path) = save_dialog(&base, Format::Wav, false) else { return };
                 let (start, len) = export::sample_span(fps, first, frames.len());
                 // (Le son exporté attend l'égaliseur et l'écho : `mix_clips_blocking`, sur un fil à part.)
                 self.start_job(ExportJob::sound(&path, SoundSpan { start, len }));
@@ -300,16 +544,25 @@ impl App {
                 self.start_job(if s.transitions { job.with_transitions(&self.doc) } else { job });
             }
             Format::Pdf => {
-                let Some(out) = save_dialog(&base, Format::Pdf) else { return };
+                let Some(out) = save_dialog(&base, Format::Pdf, false) else { return };
                 let (shots, boards) = export::storyboard_of_with(&self.doc, &export::panels_of(&frames), s.comments);
-                self.start_job(ExportJob::pdf(&out, &base, shots, boards, self.doc.frame).avec_annotations(s.annotations));
+                self.start_job(ExportJob::pdf_layout(&out, &base, shots, boards, self.doc.frame, s.pdf).avec_annotations(s.annotations));
+            }
+            Format::Stills => {
+                let Some(dir) = Self::pick_folder("Dossier où exporter les images par plan") else { return };
+                let items = exportstills::items(&self.doc, &export::panels_of(&frames), s.stills.per);
+                if items.is_empty() {
+                    self.status = "Aucun plan dans cette étendue.".into();
+                    return;
+                }
+                self.start_job(exportstills::job(&dir, &items, self.doc.frame, &s.stills, s.annotations));
             }
             Format::Gif => {
                 let Some((ffmpeg, Ok(_))) = self.ffmpeg_info().cloned() else {
                     self.status = "Export impossible : ffmpeg introuvable ou inutilisable.".into();
                     return;
                 };
-                let Some(out) = save_dialog(&base, Format::Gif) else { return };
+                let Some(out) = save_dialog(&base, Format::Gif, false) else { return };
                 // Seules les images que le GIF garde sont calculées (à 12 images par seconde sur un film à 24, une sur deux).
                 let rate = export::gif_fps(s.gif.fps, fps);
                 let kept = export::gif_sample(&frames, fps, rate);
@@ -322,15 +575,25 @@ impl App {
                     Err(e) => self.status = format!("Export impossible : {e}"),
                 }
             }
-            Format::Mp4 | Format::ProRes => {
+            Format::Mp4 | Format::ProRes | Format::ProRes4444 | Format::DnxHr => {
                 let Some((ffmpeg, Ok(enc))) = self.ffmpeg_info().cloned() else {
                     self.status = "Export impossible : ffmpeg introuvable ou inutilisable.".into();
                     return;
                 };
-                let Some(out) = save_dialog(&base, s.format) else { return };
+                let mxf = s.format == Format::DnxHr && s.mxf;
+                if let Some(p) = exportvideo::size_problem_for(s.format, s.size.dimensions(self.doc.frame), &enc) {
+                    self.status = format!("Export impossible : {p}.");
+                    return;
+                }
+                let Some(out) = save_dialog(&base, s.format, mxf) else { return };
+                let frame = self.doc.frame;
+                let (format, size, rate_in, rate_out) = (s.format, s.size.dimensions(frame), fps.to_string(), s.rate.conversion(fps).map(str::to_string));
+                let spec_for = move |enc: &export::Encoders, wav: Option<&std::path::Path>, target: &std::path::Path| {
+                    exportvideo::video_args(&VideoSpec { format, enc, frame, out_size: size, rate_in: rate_in.clone(), rate_out: rate_out.clone(), audio: wav, target, mxf })
+                };
                 // Les arguments de ffmpeg sont vérifiés tout de suite (encodeur absent…) ; le son est mixé ensuite, sur un fil
                 // à part, dans un fichier temporaire que ffmpeg lit à côté des images.
-                if let Err(e) = export::video_args(s.format, &enc, self.doc.frame, fps, s.half, None, &out) {
+                if let Err(e) = spec_for(&enc, None, &out) {
                     self.status = format!("Export impossible : {e}");
                     return;
                 }
@@ -338,9 +601,42 @@ impl App {
                     let (start, len) = export::sample_span(fps, first, frames.len());
                     SoundSpan { start, len }
                 });
-                let (format, frame, half, target) = (s.format, self.doc.frame, s.half, out.clone());
-                let job = ExportJob::video_with_sound(&ffmpeg, move |wav| export::video_args(format, &enc, frame, fps, half, wav, &target), &out, frames, span).avec_annotations(s.annotations);
+                let target = out.clone();
+                let job = ExportJob::video_with_sound_alpha(&ffmpeg, move |wav| spec_for(&enc, wav, &target), &out, frames, span, s.format.has_alpha())
+                    .avec_annotations(s.annotations)
+                    .avec_infos(s.burn);
                 self.start_job(if s.transitions { job.with_transitions(&self.doc) } else { job });
+            }
+            Format::Stems => {
+                let files = exportstems::plan(&self.doc, first, frames.len(), &s.stems, &base);
+                if files.is_empty() {
+                    self.status = "Aucune piste audible avec un extrait dans cette étendue.".into();
+                    return;
+                }
+                let Some(dir) = Self::pick_folder("Dossier où exporter le son par piste") else { return };
+                let (start, len) = export::sample_span(fps, first, frames.len());
+                let (format, d) = (s.stems.format, dir.clone());
+                let message = format!("{} fichier{} son exporté{} : {}", files.len(), if files.len() > 1 { "s" } else { "" }, if files.len() > 1 { "s" } else { "" }, dir.display());
+                self.start_job(ExportJob::task("Export du son par piste".into(), &dir, message, move |snap, cancel| exportstems::write_all(snap, &d, &files, start, len, format, cancel).map(|_| ())));
+            }
+            Format::Layers => {
+                let info = exportlayers::plans_info(&self.doc, &export::panels_of(&frames), s.annotations);
+                if exportlayers::file_count(&info, &frames) == 0 {
+                    self.status = "Aucun calque visible à exporter dans cette étendue.".into();
+                    return;
+                }
+                let Some(dir) = Self::pick_folder("Dossier où exporter les calques séparés") else { return };
+                self.start_job(exportlayers::job(&dir, info, frames, &s.layers, s.annotations));
+            }
+            Format::Camera => {
+                let Some(out) = save_dialog(&base, Format::Camera, false) else { return };
+                let plans = export::panels_of(&frames);
+                let (title, settings, target) = (self.base_name_or("SHOT"), s.camera, out.clone());
+                let message = format!("Clés de caméra exportées ({} plan{}) : {}", plans.len(), if plans.len() > 1 { "s" } else { "" }, out.display());
+                self.start_job(ExportJob::task("Export des clés de caméra".into(), &out, message, move |snap, _| {
+                    let e = exportcamera::build(snap, &plans, &title, &settings);
+                    exportcamera::write(&e, &target, &settings).map(|_| ())
+                }));
             }
         }
     }
@@ -452,12 +748,48 @@ fn bouton_arreter(ui: &mut egui::Ui) -> bool {
     bulles::bulle(ui.button(format!("{} Arrêter", ph::X)), "Arrêter l'export", "Arrête l'export et efface ce qu'il a commencé d'écrire (un export fini plus tôt n'est pas touché).", "").clicked()
 }
 
-fn save_dialog(base: &str, format: Format) -> Option<PathBuf> {
-    let ext = format.extension();
+/// Les formats qu'une fenêtre d'export propose ensemble (celui qu'on a ouvert et ses voisins).
+fn family_of(format: Format) -> &'static [Format] {
+    match format {
+        Format::Mp4 | Format::ProRes | Format::ProRes4444 | Format::DnxHr => &[Format::Mp4, Format::ProRes, Format::ProRes4444, Format::DnxHr],
+        Format::Gif => &[Format::Gif],
+        Format::Png => &[Format::Png],
+        Format::Wav => &[Format::Wav],
+        Format::Pdf => &[Format::Pdf],
+        Format::Stills => &[Format::Stills],
+        Format::Stems => &[Format::Stems],
+        Format::Layers => &[Format::Layers],
+        Format::Camera => &[Format::Camera],
+    }
+}
+
+/// Le nom d'un format dans la liste de la fenêtre, avec à quoi il sert.
+fn format_label(format: Format) -> &'static str {
+    match format {
+        Format::Mp4 => "MP4 (H.264) : pour regarder, envoyer",
+        Format::ProRes => "MOV ProRes 422 HQ : pour le montage",
+        Format::ProRes4444 => "MOV ProRes 4444 : fond transparent, pour superposer le film",
+        Format::DnxHr => "DNxHR HQ (MOV ou MXF) : pour le montage",
+        Format::Gif => "GIF animé : pour montrer, partager (sans le son)",
+        Format::Png => "Images PNG (une par image)",
+        Format::Wav => "Son mixé (WAV)",
+        Format::Pdf => "Storyboard PDF",
+        Format::Stills => "Images par plan",
+        Format::Stems => "Son par piste",
+        Format::Layers => "Calques séparés",
+        Format::Camera => "Clés de caméra",
+    }
+}
+
+fn save_dialog(base: &str, format: Format, mxf: bool) -> Option<PathBuf> {
+    let ext = if mxf { "mxf" } else { format.extension() };
     let (title, filter) = match format {
         Format::Mp4 => ("Exporter le film", "Vidéo MP4"),
         Format::ProRes => ("Exporter le film", "Vidéo MOV (ProRes)"),
+        Format::ProRes4444 => ("Exporter le film", "Vidéo MOV (ProRes 4444)"),
+        Format::DnxHr => ("Exporter le film", if mxf { "Vidéo MXF (DNxHR)" } else { "Vidéo MOV (DNxHR)" }),
         Format::Pdf => ("Exporter le storyboard", "Document PDF"),
+        Format::Camera => ("Exporter les clés de caméra", "Données JSON"),
         Format::Gif => ("Exporter un GIF animé", "Image GIF animée"),
         _ => ("Exporter le son", "Son WAV"),
     };

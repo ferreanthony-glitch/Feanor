@@ -135,9 +135,9 @@ fn video_sizes_are_even() {
 #[test]
 fn encoders_are_read_from_ffmpeg_list() {
     let list = " V....D libopenh264          OpenH264 H.264\n V....D h264_mf              H264 via MediaFoundation\n \
-                VFS... prores_ks            Apple ProRes\n A....D aac                  AAC\n";
+                VFS... prores_ks            Apple ProRes\n VFS... dnxhd                VC3/DNxHD\n A....D aac                  AAC\n";
     let enc = export::parse_encoders(list);
-    assert_eq!(enc, Encoders { h264: Some("libopenh264"), prores: true, aac: true });
+    assert_eq!(enc, Encoders { h264: Some("h264_mf"), prores: true, openh264: true, dnxhd: true, aac: true }, "l'encodeur de Windows avant OpenH264");
     let enc = export::parse_encoders(" V....D libx264  x264\n V....D libopenh264  x\n");
     assert_eq!(enc.h264, Some("libx264"), "x264 d'abord");
     assert_eq!(export::parse_encoders("").h264, None);
@@ -145,7 +145,7 @@ fn encoders_are_read_from_ffmpeg_list() {
 
 #[test]
 fn ffmpeg_arguments() {
-    let enc = Encoders { h264: Some("libopenh264"), prores: true, aac: true };
+    let enc = Encoders { h264: Some("libopenh264"), prores: true, openh264: true, dnxhd: true, aac: true };
     let out = Path::new("C:/film/essai.mp4");
     let wav = Path::new("C:/temp/son.wav");
     let a = export::video_args(Format::Mp4, &enc, [1920, 1080], 24, false, Some(wav), out).unwrap();
