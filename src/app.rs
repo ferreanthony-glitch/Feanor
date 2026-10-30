@@ -3780,6 +3780,10 @@ impl App {
                 self.nudge_selection(d);
                 continue;
             }
+            // Ctrl+F, pointeur sur le panneau Scénario : c'est la recherche du panneau (`scenariorecherche.rs`), pas « Aller à un plan ».
+            if key == Key::F && m.command && !m.shift && !m.alt && self.scenario_ui.recherche_prise(ctx) {
+                continue;
+            }
             // Les raccourcis suivent le panneau qui a la main (montage, timeline ou dessin).
             let Some(action) = self.keymap.find(key, physical, m, self.key_mode()) else { continue };
             let action = action.to_string();

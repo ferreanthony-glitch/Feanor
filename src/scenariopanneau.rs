@@ -25,6 +25,7 @@ use egui_phosphor::regular as ph;
 use crate::app::App;
 use crate::scenario::{Element, Kind};
 use crate::scenariogarde::{Gardee, Taille};
+use crate::scenariorecherche::{Occurrence, Recherche};
 use crate::theme;
 
 /// Marge à gauche et à droite du texte, en points.
@@ -43,6 +44,8 @@ pub(crate) struct Etat {
     /// Haut et hauteur de ce qui se voyait à l'image d'avant.
     vue_haut: f32,
     vue_hauteur: f32,
+    /// La recherche (Ctrl+F dans le panneau), `scenariorecherche.rs`.
+    pub(crate) recherche: Recherche,
 }
 
 /// La hauteur estimée de chaque élément, pour le scénario, la largeur et la taille donnés.
@@ -233,12 +236,15 @@ struct Posee {
     x: f32,
     couleur: Color32,
     gras: bool,
+    /// Rang de la partie dans l'élément (voir `parties`) et largeur d'une lettre à son corps : pour surligner.
+    idx: usize,
+    cw: f32,
 }
 
 fn mettre_en_page(painter: &Painter, m: &Mesures, x0: f32, e: &Element) -> (Vec<Posee>, f32) {
     let mut out = Vec::new();
     let mut y = 0.0;
-    for p in parties(e) {
+    for (idx, p) in parties(e).into_iter().enumerate() {
         let echelle = Mesures::echelle(p.style);
         let colw = m.colonne(p.col);
         let couleur = if p.style == Style::Doux { theme::texte_doux() } else { theme::texte() };
@@ -263,10 +269,39 @@ fn mettre_en_page(painter: &Painter, m: &Mesures, x0: f32, e: &Element) -> (Vec<
             Al::Centre => gauche + colw / 2.0,
             Al::Droite => gauche + colw,
         };
-        out.push(Posee { galley, dy: y, x, couleur, gras: p.style == Style::Gras });
+        out.push(Posee { galley, dy: y, x, couleur, gras: p.style == Style::Gras, idx, cw: m.cw * echelle });
         y += h;
     }
     (out, y)
+}
+
+/// L'identifiant du champ de recherche.
+fn champ_id() -> egui::Id {
+    egui::Id::new("scenario_recherche_champ")
+}
+
+/// Surligne une occurrence (lettre par lettre : elle peut passer à la ligne). La courante est plus marquée.
+fn surligner(painter: &Painter, p: &Posee, pos: Pos2, o: &Occurrence, courante: bool) {
+    let (fond, trait_) = if courante {
+        (Color32::from_rgba_unmultiplied(255, 190, 40, 130), Some(egui::Stroke::new(1.0_f32, Color32::from_rgb(255, 190, 40))))
+    } else {
+        (Color32::from_rgba_unmultiplied(255, 200, 60, 55), None)
+    };
+    for k in o.debut..o.debut + o.len {
+        let r = p.galley.pos_from_cursor(&p.galley.from_ccursor(egui::text::CCursor { index: k, prefer_next_row: true }));
+        let rect = Rect::from_min_size(pos + r.min.to_vec2(), vec2(p.cw, r.height()));
+        painter.rect_filled(rect, 1.0, fond);
+        if let Some(t) = trait_ {
+            painter.rect_stroke(rect, 1.0, t, egui::StrokeKind::Inside);
+        }
+    }
+}
+
+impl Etat {
+    /// Le pointeur est sur le panneau (à cette image ou la précédente) : Ctrl+F y est la recherche, pas « Aller à un plan ».
+    pub(crate) fn recherche_prise(&self, ctx: &egui::Context) -> bool {
+        self.recherche.survol_image.is_some_and(|n| ctx.cumulative_pass_nr().saturating_sub(n) <= 1)
+    }
 }
 
 impl App {
@@ -276,9 +311,74 @@ impl App {
             self.scenario_vide(ui);
             return;
         };
+        self.scenario_recherche_touches(ui);
         self.scenario_entete(ui, &g);
         ui.separator();
+        self.scenario_ui.recherche.mettre_a_jour(&g);
         self.scenario_texte(ui, &g);
+    }
+
+    /// Ctrl+F (pointeur sur le panneau) ouvre la recherche ; Échap la ferme.
+    fn scenario_recherche_touches(&mut self, ui: &mut Ui) {
+        let ctx = ui.ctx().clone();
+        let survol = ui.rect_contains_pointer(ui.max_rect());
+        if survol {
+            self.scenario_ui.recherche.survol_image = Some(ctx.cumulative_pass_nr());
+        }
+        let champ = self.scenario_ui.recherche.ouverte && ctx.memory(|m| m.has_focus(champ_id()));
+        let (ctrl_f, echap) = ctx.input(|i| {
+            let touche = |k: egui::Key, ok: &dyn Fn(egui::Modifiers) -> bool| i.events.iter().any(|e| matches!(e, egui::Event::Key { key, pressed: true, modifiers, .. } if *key == k && ok(*modifiers)));
+            (touche(egui::Key::F, &|m| m.command && !m.shift && !m.alt), touche(egui::Key::Escape, &|m| !m.any()))
+        });
+        if ctrl_f && survol {
+            self.scenario_ui.recherche.ouvrir();
+        } else if echap && self.scenario_ui.recherche.ouverte && (champ || survol) {
+            self.scenario_ui.recherche.fermer();
+            ctx.memory_mut(|m| m.surrender_focus(champ_id()));
+        }
+        // Entrée : suivant ; Maj+Entrée : précédent (le champ garde la main).
+        if champ && self.scenario_ui.recherche.ouverte {
+            let (prec, suiv) = ui.input_mut(|i| (i.consume_key(egui::Modifiers::SHIFT, egui::Key::Enter), i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)));
+            if prec {
+                self.scenario_ui.recherche.precedent();
+            } else if suiv {
+                self.scenario_ui.recherche.suivant();
+            }
+        }
+    }
+
+    /// La barre de recherche : champ, compteur, précédent, suivant, fermer.
+    fn scenario_barre_recherche(&mut self, ui: &mut Ui) {
+        let ctx = ui.ctx().clone();
+        let r = &mut self.scenario_ui.recherche;
+        let mut ferme = false;
+        let (mut prec, mut suiv) = (false, false);
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(ph::MAGNIFYING_GLASS).weak());
+            let reserve = 150.0;
+            let sortie = egui::TextEdit::singleline(&mut r.terme).id(champ_id()).hint_text("Chercher dans le scénario").desired_width((ui.available_width() - reserve).max(60.0)).show(ui);
+            if r.focus {
+                r.focus = false;
+                ui.memory_mut(|m| m.request_focus(champ_id()));
+                let mut etat = sortie.state.clone();
+                etat.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(r.terme.chars().count()))));
+                etat.store(&ctx, champ_id());
+            }
+            let compteur = r.compteur();
+            ui.label(RichText::new(compteur).small().weak());
+            prec = crate::bulles::icone(ui, ph::CARET_UP, "Occurrence précédente", "Remonte à l'occurrence d'avant ; revient à la dernière après la première.", "Maj+Entrée").clicked();
+            suiv = crate::bulles::icone(ui, ph::CARET_DOWN, "Occurrence suivante", "Descend à l'occurrence d'après ; revient à la première après la dernière.", "Entrée").clicked();
+            ferme = crate::bulles::icone(ui, ph::X, "Fermer la recherche", "Ferme la barre et efface le surlignage.", "Échap").clicked();
+        });
+        if prec {
+            r.precedent();
+        }
+        if suiv {
+            r.suivant();
+        }
+        if ferme {
+            r.fermer();
+        }
     }
 
     /// Sans scénario : une phrase et le bouton qui lance l'import.
@@ -295,10 +395,14 @@ impl App {
 
     /// Le nom du scénario, les trois tailles, et « Créer les plans depuis le scénario… ».
     fn scenario_entete(&mut self, ui: &mut Ui, g: &Gardee) {
+        let mut bascule = false;
         ui.horizontal(|ui| {
             let titre = if g.script.title.trim().is_empty() { g.nom.clone() } else { g.script.title.trim().to_string() };
             ui.add(egui::Label::new(RichText::new(titre).strong()).truncate());
             ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                if crate::bulles::icone(ui, ph::MAGNIFYING_GLASS, "Chercher dans le scénario", "Ouvre la recherche : sans tenir compte des majuscules ni des accents, toutes les occurrences surlignées.", "Ctrl+F").clicked() {
+                    bascule = true;
+                }
                 for (t, taille_lettre) in [(Taille::Grand, 17.0), (Taille::Moyen, 13.0), (Taille::Petit, 10.0)] {
                     let sel = self.settings.scenario_taille == t;
                     let resp = ui.selectable_label(sel, RichText::new("A").size(taille_lettre));
@@ -312,6 +416,16 @@ impl App {
                 }
             });
         });
+        if bascule {
+            if self.scenario_ui.recherche.ouverte {
+                self.scenario_ui.recherche.fermer();
+            } else {
+                self.scenario_ui.recherche.ouvrir();
+            }
+        }
+        if self.scenario_ui.recherche.ouverte {
+            self.scenario_barre_recherche(ui);
+        }
         let resp = ui.button(format!("{}  Créer les plans depuis le scénario…", ph::FILM_STRIP));
         if self
             .aide(
@@ -376,6 +490,22 @@ impl App {
                 }
             }
         }
+        // La recherche : mener la vue à l'occurrence courante (sa ligne exacte, par une seule mise en page).
+        let rech = std::mem::take(&mut self.scenario_ui.recherche);
+        let mut rech = rech;
+        if rech.a_defiler {
+            rech.a_defiler = false;
+            if let Some(o) = rech.courante() {
+                let haut = cache.debuts.get(o.element).copied().unwrap_or(0.0);
+                let (posees, _) = mettre_en_page(ui.painter(), &m, 0.0, &g.script.elements[o.element]);
+                let dans = posees.iter().find(|p| p.idx == o.partie).map_or(0.0, |p| p.dy + p.galley.pos_from_cursor(&p.galley.from_ccursor(egui::text::CCursor { index: o.debut, prefer_next_row: true })).min.y);
+                let y = haut + dans;
+                let (vh, vue) = (self.scenario_ui.vue_haut, self.scenario_ui.vue_hauteur);
+                if vue <= 0.0 || y < vh + vue * 0.1 || y > vh + vue * 0.8 {
+                    self.scenario_ui.defiler_vers = Some((y - vue.max(120.0) * 0.3).max(0.0));
+                }
+            }
+        }
         let mut area = egui::ScrollArea::vertical().id_salt("panneau_scenario").auto_shrink([false, false]);
         if let Some(y) = self.scenario_ui.defiler_vers.take() {
             area = area.vertical_scroll_offset(y);
@@ -402,6 +532,13 @@ impl App {
                 } else if survol == Some(i) && g.lien_de_l_element(i).is_some() {
                     painter.rect_filled(bande, 0.0, theme::eleve());
                 }
+                if let Some((plage, occs)) = rech.de_l_element(i) {
+                    for (rang, o) in plage.zip(occs) {
+                        if let Some(p) = posees.iter().find(|p| p.idx == o.partie) {
+                            surligner(&painter, p, pos2(p.x, haut + p.dy), o, rang == rech.courant);
+                        }
+                    }
+                }
                 for p in posees {
                     let pos: Pos2 = pos2(p.x, haut + p.dy);
                     painter.galley(pos, p.galley.clone(), p.couleur);
@@ -422,6 +559,7 @@ impl App {
         self.scenario_ui.vue_haut = vue.0;
         self.scenario_ui.vue_hauteur = vue.1;
         self.scenario_ui.cache = Some(cache);
+        self.scenario_ui.recherche = rech;
         if let Some(i) = clic {
             if self.scenario_aller_a_l_element(g, i) {
                 // Le passage cliqué est déjà sous les yeux : le panneau ne saute pas.
