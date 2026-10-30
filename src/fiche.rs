@@ -436,13 +436,8 @@ pub struct Entree<'a> {
 
 /// La version qui part, avec le nom de clip de l'export pour le montage (« SQ01_PL012A_V2 »).
 pub fn reference(doc: &Document, p: usize) -> String {
-    let id = doc.panels[p].id;
-    let base = doc.plan_full_ref(p);
-    if doc.nombre_de_versions(id) > 1 {
-        format!("{base}_{}", crate::planvers::etiquette(doc.numero_de_version(id)))
-    } else {
-        base
-    }
+    doc.nom_de_plan(p)
+
 }
 
 /// Le nom du fichier de vignette d'une ligne : la référence, plus le rang de l'image après la première.

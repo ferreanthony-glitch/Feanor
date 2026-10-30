@@ -216,7 +216,10 @@ pub const FORMAT: &str = "pelure-projet";
 /// (ou refuserait la forme), le film changerait sans prévenir. Un projet de version 43 ou moins s'ouvre tel quel, à l'identique : un
 /// ancien dégradé (`couleur_depart`, `couleur_arrivee`, `opacite_depart`, `opacite_arrivee`) se lit comme deux pastilles de chaque, sans
 /// tramage. (Une autre branche peut aussi prendre le numéro 44 : la fusion garde le plus grand et réunit les descriptions.)
-pub const VERSION: u32 = 44;
+/// 45 (2026-10-30, `docs/INTERFACE.md` partie 87) : **production** — `serie`, `episode` et `modele_noms` dans `proprietes` (le modèle de noms des
+/// plans, `nommage.rs`). Une version précédente qui ouvrirait le projet perdrait le modèle de noms et le numéro d'épisode à l'enregistrement : elle
+/// le refuse donc. Un projet de version 44 ou moins s'ouvre tel quel, à l'identique (modèle de noms d'origine : « SQ01_PL012A »).
+pub const VERSION: u32 = 45;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -324,6 +327,13 @@ struct PropertiesEntry {
     /// Couleur des fonds sous le trait qu'on allume (format 23) ; absente : blanc.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     fond: Option<[u8; 3]>,
+    /// Production (format 45) : la série, l'épisode et le modèle de noms des plans (`nommage.rs`) ; absents : vides.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    serie: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    episode: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    modele_noms: String,
 }
 
 impl PropertiesEntry {
@@ -2570,6 +2580,9 @@ fn manifest_de(doc: &Document, avec_plans: bool, drawn: &BTreeSet<CelId>, hors: 
                 notes: p.notes.clone(),
                 copyright: p.copyright.clone(),
                 fond: p.fond,
+                serie: p.serie.clone(),
+                episode: p.episode.clone(),
+                modele_noms: p.modele_noms.clone(),
             }
         },
         dessins_hors: if avec_plans { hors.iter().filter(|id| drawn.contains(id)).copied().collect() } else { Vec::new() },
@@ -2958,6 +2971,9 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                 notes: p.notes,
                 copyright: p.copyright,
                 fond: p.fond,
+                serie: p.serie,
+                episode: p.episode,
+                modele_noms: p.modele_noms,
             }
         },
         // Les commentaires viennent de leur fichier, après les plans (`load_comments`).

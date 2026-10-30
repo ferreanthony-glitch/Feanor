@@ -75,11 +75,12 @@ pub fn items(doc: &Document, plans: &[usize], per: StillsPer) -> Vec<Still> {
         if p >= doc.panels.len() {
             continue;
         }
-        let base = crate::editorial::file_safe(&crate::editorial::clip_name(doc, p));
         let spans = crate::board::plan_boards(doc, p);
         let wanted = if per == StillsPer::Plan { 1 } else { spans.len() };
         for (k, (_, start, _)) in spans.into_iter().take(wanted).enumerate() {
-            let mut name = if k == 0 { base.clone() } else { format!("{base}_C{:02}", k + 1) };
+            // (Le modèle de noms du projet, `nommage.rs` ; d'origine « SQ01_PL012A », puis « _C02 »… pour les cases d'après la première.)
+            let base = crate::editorial::file_safe(&doc.nom_de_plan_avec(p, (per == StillsPer::Case).then_some(k + 1), None));
+            let mut name = base.clone();
             let mut n = 1;
             while out.iter().any(|s| s.name == name) {
                 n += 1;

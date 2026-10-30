@@ -52,16 +52,33 @@ pub struct PlanLayers {
 /// (`01_Fond`, `02_Personnage`…).
 pub fn plans_info(doc: &Document, plans: &[usize], annotations: bool) -> Vec<PlanLayers> {
     let mut used: Vec<String> = Vec::new();
+    // Un modèle de noms qui porte `{calque}` nomme lui-même les fichiers des calques (`nommage.rs`) ; sinon « 01_Fond ».
+    let modele = doc.modele_de_noms();
+    let par_modele = crate::nommage::contient(&modele, crate::nommage::Jeton::Calque);
     plans
         .iter()
         .filter(|&&p| p < doc.panels.len())
         .map(|&p| {
             let panel = &doc.panels[p];
+            let mut stems: Vec<String> = Vec::new();
             let layers = render::separable_layers(panel, annotations)
                 .into_iter()
                 .filter(|&li| panel.layers[li].frames.iter().any(Option::is_some) || panel.layers[li].unie.is_some())
                 .enumerate()
-                .map(|(rank, li)| (li, format!("{:02}_{}", rank + 1, crate::exportstems::file_name_of(&panel.layers[li].name, "Calque"))))
+                .map(|(rank, li)| {
+                    let stem = if par_modele {
+                        let base = crate::editorial::file_safe(&doc.nom_avec_modele(&modele, p, None, Some(&panel.layers[li].name)));
+                        if stems.contains(&base) {
+                            format!("{base}_{:02}", rank + 1)
+                        } else {
+                            base
+                        }
+                    } else {
+                        format!("{:02}_{}", rank + 1, crate::exportstems::file_name_of(&panel.layers[li].name, "Calque"))
+                    };
+                    stems.push(stem.clone());
+                    (li, stem)
+                })
                 .collect();
             // (Deux plans de même nom — deux cases d'une même scène — n'écrivent pas dans le même dossier.)
             let base = crate::editorial::file_safe(&crate::editorial::clip_name(doc, p));
