@@ -298,7 +298,7 @@ impl Espace {
                 panneaux: Some(DockLayout::pour_les_vignettes()),
                 ..standard
             },
-            Espace::Storyboard => standard,
+            Espace::Storyboard => Layout { panneaux: Some(DockLayout::pour_le_storyboard()), ..standard },
             Espace::Animation => Layout { montage_height: 340.0, sheet_width: 250.0, ..standard },
             Espace::Montage => Layout {
                 tools: false,

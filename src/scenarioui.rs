@@ -1,13 +1,20 @@
-//! Importer un scénario : la fenêtre (Fichier > Importer > Scénario…, action
-//! `fichier.importer_scenario`, donc aussi dans Ctrl+K). Le fichier est choisi, lu sur un autre fil
-//! (avec une barre d'avancement : un scénario de 120 pages est lu en une fraction de seconde, un
-//! très gros fichier ne bloque pas l'interface), puis la fenêtre montre ce qui va être créé : les
-//! séquences et leurs plans, la durée estimée, les personnages, et les choix (découpage en plans,
-//! rythme, destination). Rien n'est touché avant « Importer ».
+//! Importer un scénario, et en tirer des plans : deux fenêtres, la même (Anthony, 2026-10-30 : « garder la
+//! lecture du scénario par SHOT pour le traduire en plans comme une option disponible à partir du panneau,
+//! mais pas native à l'import »).
 //!
-//! Dans le projet ouvert (à la fin, ou après la séquence du plan courant), l'import est **une seule
-//! étape d'annulation**, « Importer un scénario ». Dans un nouveau projet, il remplace le projet
-//! ouvert après avoir proposé de l'enregistrer. Voir `scenario`, `scenarioplans`.
+//! - **Importer** (Fichier > Importer > Scénario…, action `fichier.importer_scenario`, donc aussi dans Ctrl+K) :
+//!   le fichier est choisi, lu sur un autre fil (avec une barre d'avancement : un scénario de 120 pages est lu en
+//!   une fraction de seconde, un très gros fichier ne bloque pas l'interface), puis la fenêtre dit ce qui a été
+//!   lu. « Importer » le **garde dans le projet** (`scenariogarde`) et ouvre le panneau Scénario ; aucun plan
+//!   n'est créé. Une seule étape d'annulation, « Importer un scénario ». Si le projet a déjà un scénario, la
+//!   fenêtre demande s'il est remplacé (l'ancien fichier est gardé à côté). Sans projet ouvert, un nouveau projet
+//!   le reçoit.
+//! - **Créer les plans depuis le scénario…** (bouton du panneau Scénario, action `scenario.creer_plans`) : la
+//!   fenêtre de découpage d'avant (choix du découpage, du rythme, de la destination), qui part du scénario déjà
+//!   gardé, sans redemander de fichier. Les plans s'ajoutent à la fin du projet ou après la séquence du plan
+//!   courant, sans toucher aux plans qui existent (seul un projet encore vierge est remplacé) ; une seule étape
+//!   d'annulation, « Créer les plans du scénario ». Ces plans sont liés au texte (surlignage et clic du panneau).
+//!   Voir `scenario`, `scenarioplans`, `scenariopanneau`.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -16,11 +23,22 @@ use std::sync::{Arc, Mutex};
 use eframe::egui::{self, vec2, Align2, RichText};
 
 use crate::app::{App, Pending};
+use crate::dock::Pane;
 use crate::scenario::Script;
+use crate::scenariogarde::Gardee;
 use crate::scenarioplans::{self, Dest, Options, Outline, Rhythm, Split};
 
-/// Le nom de l'étape d'annulation.
+/// Le nom de l'étape d'annulation de l'import (le scénario est gardé dans le projet).
 pub const STEP_NAME: &str = "Importer un scénario";
+/// Le nom de l'étape d'annulation de la création des plans.
+pub const PLANS_STEP_NAME: &str = "Créer les plans du scénario";
+
+/// Ce que la fenêtre fait : garder le scénario dans le projet, ou en créer les plans.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Mode {
+    Garder,
+    Plans,
+}
 
 type Reading = Arc<Mutex<Option<Result<Script, String>>>>;
 
@@ -40,10 +58,21 @@ pub(crate) struct ScenarioWindow {
     dest: Dest,
     /// Ce que les choix actuels donnent (recalculé quand ils changent).
     built: Option<(Options, Outline)>,
+    mode: Mode,
+    /// « Remplacer le scénario du projet ? » est posée.
+    confirm: bool,
 }
 
 #[cfg(test)]
 impl ScenarioWindow {
+    pub(crate) fn mode(&self) -> Mode {
+        self.mode
+    }
+
+    pub(crate) fn asks_to_replace(&self) -> bool {
+        self.confirm
+    }
+
     /// Le scénario est lu (et prêt à être importé).
     pub(crate) fn ready(&self) -> bool {
         matches!(self.load, Load::Ready(_))
@@ -101,47 +130,95 @@ impl App {
         });
         let (options, dest) = LAST.lock().unwrap_or_else(|e| e.into_inner()).clone().unwrap_or((Options::default(), if self.welcome { Dest::NewProject } else { Dest::End }));
         let name = path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned());
-        self.scenario_window = Some(ScenarioWindow { path, name, load: Load::Reading { progress, result }, options, dest, built: None });
+        self.scenario_window = Some(ScenarioWindow { path, name, load: Load::Reading { progress, result }, options, dest, built: None, mode: Mode::Garder, confirm: false });
     }
 
-    /// Un nouveau projet fait du scénario (après la proposition d'enregistrer le projet ouvert) :
-    /// il prend le format du dernier « Nouveau projet ».
+    /// « Créer les plans depuis le scénario… » : la fenêtre de découpage, à partir du scénario gardé dans le projet.
+    pub(crate) fn open_plans_window(&mut self) {
+        let Some(g) = self.doc.scenario.clone() else {
+            self.status = "Ce projet n'a pas de scénario : importe-en un d'abord (Fichier > Importer > Scénario).".into();
+            return;
+        };
+        if self.scenario_window.as_ref().is_some_and(|w| matches!(w.load, Load::Reading { .. })) {
+            return;
+        }
+        let (options, dest) = LAST.lock().unwrap_or_else(|e| e.into_inner()).clone().unwrap_or((Options::default(), Dest::End));
+        // (Les plans s'ajoutent au projet ouvert : jamais « dans un nouveau projet » depuis le panneau.)
+        let dest = if dest == Dest::NewProject { Dest::End } else { dest };
+        self.scenario_window = Some(ScenarioWindow {
+            path: PathBuf::from(&g.nom),
+            name: g.nom.clone(),
+            load: Load::Ready(Box::new(g.script.clone())),
+            options,
+            dest,
+            built: None,
+            mode: Mode::Plans,
+            confirm: false,
+        });
+    }
+
+    /// Un nouveau projet garde le scénario (après la proposition d'enregistrer le projet ouvert) : il prend le format du
+    /// dernier « Nouveau projet », le titre et l'auteur du scénario. Aucun plan n'est créé (un plan vide, comme tout projet neuf).
     pub(crate) fn scenario_new_project(&mut self) {
         let Some(w) = self.scenario_window.take() else { return };
         let Load::Ready(script) = &w.load else { return };
-        let outline = scenarioplans::build(script, &w.options);
-        if outline.plan_count() == 0 {
-            self.status = "Rien à importer : le scénario ne donne aucun plan.".into();
-            return;
-        }
         let stem = w.path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         let title = if script.title.trim().is_empty() { stem } else { script.title.clone() };
         let mut doc = crate::nouveau::build_document(&self.settings.new_project.values, &title);
-        let Some(applied) = scenarioplans::fill_new_project(&mut doc, &outline, &title, &script.author) else { return };
-        let (seqs, plans, seconds) = (applied.sequences, applied.plans, outline.seconds());
+        if !script.title.trim().is_empty() {
+            doc.properties.title = script.title.trim().to_string();
+        }
+        if !script.author.trim().is_empty() {
+            doc.properties.author = script.author.trim().to_string();
+        }
+        doc.scenario = Some(std::sync::Arc::new(Gardee::new(&w.name, (**script).clone(), Vec::new())));
         if !self.charger_projet(doc) {
             self.status = "Le scénario n'a pas pu s'ouvrir dans un nouvel onglet : un travail attend l'onglet affiché.".into();
             return;
         }
         self.welcome = false;
         self.modified = true;
-        self.status = format!("Scénario « {} » importé dans un nouveau projet : {seqs} séquence(s), {plans} plan(s), environ {}. « Enregistrer sous » pour le garder.", w.name, duration_text(seconds));
+        self.show_pane(Pane::Scenario);
+        self.status = format!("Scénario « {} » gardé dans un nouveau projet. « Enregistrer sous » pour le conserver.", w.name);
     }
 
-    /// L'import dans le projet ouvert : une étape d'annulation, « Importer un scénario ».
-    pub(crate) fn scenario_into_project(&mut self, outline: &Outline, dest: Dest, name: &str) -> bool {
+    /// L'import dans le projet ouvert : le scénario est gardé dans le projet (une étape d'annulation, « Importer un scénario »),
+    /// le panneau Scénario s'ouvre. Aucun plan n'est créé.
+    pub(crate) fn scenario_keep(&mut self, script: &Script, name: &str) -> bool {
+        let g = std::sync::Arc::new(Gardee::new(name, script.clone(), Vec::new()));
         let before = self.history.context.take();
         self.history.context = Some(STEP_NAME.to_string());
+        let ok = self.structure_op(|doc, current| {
+            doc.scenario = Some(g);
+            Some(current)
+        });
+        self.history.context = before;
+        if ok {
+            self.show_pane(Pane::Scenario);
+            self.status = format!("Scénario « {name} » gardé dans le projet : {} scène(s). Ctrl+Z pour annuler.", script.headings());
+        }
+        ok
+    }
+
+    /// La création des plans dans le projet ouvert : une étape d'annulation, « Créer les plans du scénario ». Les plans créés sont
+    /// liés au texte du scénario gardé (s'il est toujours celui d'où ils viennent).
+    pub(crate) fn scenario_into_project(&mut self, outline: &Outline, dest: Dest, name: &str, script: &Script) -> bool {
+        let before = self.history.context.take();
+        self.history.context = Some(PLANS_STEP_NAME.to_string());
         let mut made = None;
         let ok = self.structure_op(|doc, current| {
             let applied = scenarioplans::append_to_project(doc, outline, dest, current)?;
+            let first = applied.first;
+            if let Some(g) = doc.scenario.clone().filter(|g| g.script == *script) {
+                doc.scenario = Some(std::sync::Arc::new(g.avec_liens(applied.liens.clone())));
+            }
             made = Some(applied);
-            Some(applied.first)
+            Some(first)
         });
         self.history.context = before;
         if let (true, Some(a)) = (ok, made) {
             self.status = format!(
-                "Scénario « {name} » importé : {} séquence(s), {} plan(s), environ {}. Ctrl+Z pour annuler.",
+                "Plans du scénario « {name} » créés : {} séquence(s), {} plan(s), environ {}. Ctrl+Z pour annuler.",
                 a.sequences,
                 a.plans,
                 duration_text(outline.seconds())
@@ -182,7 +259,8 @@ impl App {
 
         let mut open = true;
         let mut action = Act::None;
-        egui::Window::new("Importer un scénario")
+        let title = if w.mode == Mode::Plans { "Créer les plans depuis le scénario" } else { "Importer un scénario" };
+        egui::Window::new(title)
             .open(&mut open)
             .resizable(true)
             .collapsible(false)
@@ -196,26 +274,45 @@ impl App {
                 open = false;
                 self.open_scenario_window();
             }
-            Act::Import => {
-                *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((w.options.clone(), w.dest));
-                let outline = w.built.as_ref().map(|(_, o)| o.clone());
-                if let Some(outline) = outline {
-                    match w.dest {
-                        Dest::NewProject => {
-                            // Le projet ouvert sera remplacé : la fenêtre reste jusque-là.
-                            self.scenario_window = Some(w);
-                            self.request(Pending::ScenarioNew);
-                            return;
-                        }
-                        dest => {
-                            let name = w.name.clone();
-                            if self.scenario_into_project(&outline, dest, &name) {
-                                open = false;
-                            }
+            // Garder le scénario dans le projet : s'il en a déjà un, la fenêtre demande d'abord s'il est remplacé.
+            Act::Keep | Act::KeepConfirmed => {
+                let script = match &w.load {
+                    Load::Ready(s) => Some((**s).clone()),
+                    _ => None,
+                };
+                if let Some(script) = script {
+                    if self.welcome {
+                        // Sans projet ouvert : un nouveau projet le garde (il remplace le projet vierge, après la proposition d'enregistrer).
+                        self.scenario_window = Some(w);
+                        self.request(Pending::ScenarioNew);
+                        return;
+                    }
+                    if matches!(action, Act::Keep) && self.doc.scenario.is_some() {
+                        w.confirm = true;
+                    } else {
+                        let name = w.name.clone();
+                        if self.scenario_keep(&script, &name) {
+                            open = false;
                         }
                     }
                 }
             }
+            Act::Create => {
+                *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some((w.options.clone(), w.dest));
+                let outline = w.built.as_ref().map(|(_, o)| o.clone());
+                let script = match &w.load {
+                    Load::Ready(s) => Some((**s).clone()),
+                    _ => None,
+                };
+                if let (Some(outline), Some(script)) = (outline, script) {
+                    let dest = if w.dest == Dest::NewProject { Dest::End } else { w.dest };
+                    let name = w.name.clone();
+                    if self.scenario_into_project(&outline, dest, &name, &script) {
+                        open = false;
+                    }
+                }
+            }
+            Act::Unconfirm => w.confirm = false,
         }
         // (Ouverte d'un autre fichier pendant ce temps : la nouvelle fenêtre est gardée.)
         if open && self.scenario_window.is_none() {
@@ -252,6 +349,9 @@ impl App {
                 return act;
             }
             Load::Ready(_) => {}
+        }
+        if w.mode == Mode::Garder {
+            return self.scenario_keep_body(ui, w);
         }
         let Load::Ready(script) = &w.load else { return act };
         let Some((_, outline)) = &w.built else { return act };
@@ -314,18 +414,18 @@ impl App {
         ui.separator();
 
         // ------------------------------------------------------------------ destination
-        ui.label("Destination");
-        let values = &self.settings.new_project.values;
-        for d in Dest::ALL {
+        ui.label("Où poser les plans");
+        for d in [Dest::End, Dest::AfterCurrent] {
             ui.radio_value(&mut w.dest, d, d.label());
         }
-        match w.dest {
-            Dest::NewProject => {
-                ui.label(RichText::new(format!("Format du dernier « Nouveau projet » : {}×{} à {} i/s. Le projet ouvert est remplacé (SHOT propose de l'enregistrer s'il a changé).", values.width, values.height, values.fps)).weak().small());
-            }
-            Dest::End | Dest::AfterCurrent => {
-                ui.label(RichText::new("Une seule étape d'annulation. Une séquence ne se coupe pas : après le plan courant, c'est à la fin de sa séquence.").weak().small());
-            }
+        ui.label(RichText::new("Une seule étape d'annulation. Une séquence ne se coupe pas : après le plan courant, c'est à la fin de sa séquence.").weak().small());
+        if scenarioplans::is_blank(&self.doc) {
+            ui.label(RichText::new("Le projet est encore vierge (un seul plan vide) : les plans du scénario le remplacent.").small());
+        } else {
+            ui.label(RichText::new(format!("Le projet a déjà {} plan(s) : ceux du scénario s'ajoutent, aucun plan existant n'est touché.", self.doc.panels.len())).small());
+        }
+        if self.doc.scenario.as_ref().is_some_and(|g| !g.liens.is_empty()) {
+            ui.label(RichText::new("Des plans ont déjà été créés depuis ce scénario : ils gardent leur place, mais le panneau Scénario ne les relie plus au texte (seuls les nouveaux le sont).").weak().small());
         }
         ui.separator();
 
@@ -367,8 +467,62 @@ impl App {
         ui.separator();
         ui.horizontal(|ui| {
             let can = outline.plan_count() > 0;
-            if ui.add_enabled(can, egui::Button::new("Importer")).clicked() {
-                act = Act::Import;
+            if ui.add_enabled(can, egui::Button::new("Créer les plans")).clicked() {
+                act = Act::Create;
+            }
+            if ui.button("Annuler").clicked() {
+                act = Act::Close;
+            }
+        });
+        act
+    }
+
+    /// La fenêtre d'import : ce qui a été lu, et « Importer » (garder dans le projet, sans créer de plan).
+    fn scenario_keep_body(&mut self, ui: &mut egui::Ui, w: &mut ScenarioWindow) -> Act {
+        let warn = crate::theme::avertissement();
+        let mut act = Act::None;
+        let Load::Ready(script) = &w.load else { return act };
+        let mut head = format!("{} : {} scène(s)", script.format.label(), script.headings());
+        if !script.title.is_empty() {
+            head = format!("« {} » — {head}", script.title);
+        }
+        if !script.author.is_empty() {
+            head.push_str(&format!(", de {}", script.author));
+        }
+        ui.label(head);
+        let speakers = crate::scenario::characters(&script.elements).len();
+        ui.label(format!("{} élément(s) lus, {speakers} personnage(s) qui parlent.", script.elements.len()));
+        ui.add_space(4.0);
+        ui.label(RichText::new("Le scénario est gardé dans le projet et se lit dans le panneau Scénario. Aucun plan n'est créé : le bouton « Créer les plans depuis le scénario… » de ce panneau le fait, quand tu le décides.").strong());
+        if self.welcome {
+            ui.label(RichText::new("Un nouveau projet le reçoit (SHOT propose d'abord d'enregistrer le projet ouvert s'il a changé).").weak().small());
+        }
+        if !script.warnings.is_empty() {
+            ui.add_space(4.0);
+            egui::CollapsingHeader::new(format!("Remarques ({})", script.warnings.len())).default_open(true).show(ui, |ui| {
+                for m in &script.warnings {
+                    ui.colored_label(warn, format!("• {m}"));
+                }
+            });
+        }
+        ui.separator();
+        if w.confirm {
+            let nom = self.doc.scenario.as_ref().map(|g| g.nom.clone()).unwrap_or_default();
+            ui.colored_label(warn, format!("Ce projet a déjà un scénario (« {nom} »). Le remplacer par celui-ci ?"));
+            ui.label(RichText::new("L'ancien fichier n'est pas effacé : il reste à côté, dans le dossier du projet (scenario.ancien-….json). Les plans déjà créés depuis l'ancien scénario ne sont pas touchés, mais ne sont plus reliés au texte.").weak().small());
+            ui.horizontal(|ui| {
+                if ui.button("Remplacer le scénario").clicked() {
+                    act = Act::KeepConfirmed;
+                }
+                if ui.button("Garder l'actuel").clicked() {
+                    act = Act::Unconfirm;
+                }
+            });
+            return act;
+        }
+        ui.horizontal(|ui| {
+            if ui.button("Importer").clicked() {
+                act = Act::Keep;
             }
             if ui.button("Annuler").clicked() {
                 act = Act::Close;
@@ -385,5 +539,10 @@ enum Act {
     None,
     Close,
     Another,
-    Import,
+    /// Importer : garder dans le projet (demande avant de remplacer un scénario).
+    Keep,
+    KeepConfirmed,
+    Unconfirm,
+    /// Créer les plans.
+    Create,
 }

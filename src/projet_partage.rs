@@ -504,7 +504,7 @@ pub(crate) fn structure_octets(m: &mut Manifest, revision: u64, signature: Optio
 /// répond (transitions, effets des sons, personnages). Ce qui changerait sans le jeton.
 pub(crate) fn empreinte_structure(doc: &Document, projet: &str) -> Result<u64, String> {
     let mut octets = serde_json::to_vec(&structure_manifest(doc, projet)).map_err(|e| e.to_string())?;
-    for annexe in [crate::transitions::to_bytes(doc)?, crate::audiofx::to_bytes(doc)?, crate::personnages::to_bytes(doc)?, crate::annotations::to_bytes(doc)?] {
+    for annexe in [crate::transitions::to_bytes(doc)?, crate::audiofx::to_bytes(doc)?, crate::personnages::to_bytes(doc)?, crate::annotations::to_bytes(doc)?, crate::scenariogarde::to_bytes(doc)?] {
         octets.extend(annexe.unwrap_or_default());
     }
     Ok(empreinte::de_octets(&octets))
@@ -769,6 +769,7 @@ pub(crate) fn preparer(doc: &Document, manifest_path: &Path, written: &mut HashM
         job.sound_fx = crate::audiofx::to_bytes(doc)?;
         job.personnages = crate::personnages::to_bytes(doc)?;
         job.annotations = crate::annotations::to_bytes(doc)?;
+        job.scenario = crate::scenariogarde::to_bytes(doc)?;
         job.sons_proposes = crate::indications::to_bytes(doc)?;
         job.variantes = if variantes { variantes_octets(doc)? } else { None };
         job.variantes_gardees = doc.variantes_partielles;
@@ -806,6 +807,7 @@ impl SaveJob {
             sound_fx: None,
             personnages: None,
             annotations: None,
+            scenario: None,
             sons_proposes: None,
             references: Default::default(),
             envois: None,
@@ -928,6 +930,19 @@ impl SaveJob {
             ecrire(dir.join(crate::audiofx::FILE), self.sound_fx.as_deref(), &|t| crate::audiofx::parse(t).is_ok())?;
             ecrire(dir.join(crate::personnages::FILE), self.personnages.as_deref(), &|t| crate::personnages::parse(t).is_ok())?;
             ecrire(dir.join(crate::annotations::FILE), self.annotations.as_deref(), &|t| crate::annotations::parse(t).is_ok())?;
+            {
+                // (Le scénario d'avant, s'il est d'un autre, passe à côté avant d'être remplacé.)
+                let chemin = dir.join(crate::scenariogarde::FILE);
+                let identique = match (self.scenario.as_deref(), fs::read(&chemin)) {
+                    (Some(b), Ok(actuel)) => actuel == b,
+                    (None, Err(e)) => e.kind() == std::io::ErrorKind::NotFound,
+                    _ => false,
+                };
+                if !identique {
+                    crate::scenariogarde::mettre_de_cote(&chemin, self.scenario.as_deref());
+                }
+            }
+            ecrire(dir.join(crate::scenariogarde::FILE), self.scenario.as_deref(), &|t| crate::scenariogarde::parse(t).is_ok())?;
             ecrire(dir.join(crate::indications::FILE), self.sons_proposes.as_deref(), &|t| crate::indications::parse(t).is_ok())?;
             ecrire(dir.join(crate::envois::FILE), self.envois.as_deref(), &|t| crate::envois::parse(t).is_ok())?;
             // Les variantes rangées (leurs dessins viennent d'être écrits) : le fichier n'est touché que si elles ont été lues en entier.

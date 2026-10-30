@@ -211,7 +211,7 @@ fn the_montage_layout_is_made_for_editing() {
     assert!(layout.montage_height > Espace::Animation.defaut().montage_height);
     assert!(layout.montage_height > Espace::Storyboard.defaut().montage_height);
     // Les deux autres espaces n'ont pas bougé.
-    assert_eq!(Espace::Storyboard.defaut(), Layout::default());
+    assert_eq!(Layout { panneaux: None, ..Espace::Storyboard.defaut() }, Layout::default());
     assert!(!Espace::Storyboard.defaut().dock_layout().contains(Pane::Comments));
     assert!(!Espace::Animation.defaut().dock_layout().contains(Pane::Bruitages));
 }

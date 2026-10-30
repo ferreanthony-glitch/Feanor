@@ -2408,6 +2408,18 @@ action = "vue.mon_panneau"
 touches = []
 source = "SHOT (sans touche)"
 
+# Panneau Scénario : le scénario importé, lisible comme un scénario (sans touche : à choisir).
+[[raccourci]]
+action = "vue.scenario"
+touches = []
+source = "SHOT (sans touche)"
+
+# Créer les plans depuis le scénario gardé dans le projet : le bouton du panneau Scénario (sans touche : à choisir).
+[[raccourci]]
+action = "scenario.creer_plans"
+touches = []
+source = "SHOT (sans touche : le bouton du panneau Scénario le lance aussi)"
+
 # Effets des extraits de son (sans touche : à choisir).
 [[raccourci]]
 action = "son.fondu_entree"

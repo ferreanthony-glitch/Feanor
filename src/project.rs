@@ -1396,6 +1396,8 @@ pub struct SaveJob {
     personnages: Option<Vec<u8>>,
     /// Le fichier des annotations de la vue Vignettes (`annotations.json`) ; rien : il n'y en a plus, le fichier part.
     annotations: Option<Vec<u8>>,
+    /// Le fichier du scénario gardé (`scenario.json`) ; rien : il n'y en a plus (un scénario lisible n'est jamais effacé : il passe à côté).
+    scenario: Option<Vec<u8>>,
     /// Le fichier des sons proposés (`sons_proposes.json`) ; rien : il n'y en a plus, le fichier part.
     sons_proposes: Option<Vec<u8>>,
     /// Les références visuelles : fichiers à recopier dans `references/`, `references.json`, et ce
@@ -1747,6 +1749,7 @@ impl SaveJob {
         self.sound_fx = crate::audiofx::to_bytes(&doc)?;
         self.personnages = crate::personnages::to_bytes(&doc)?;
         self.annotations = crate::annotations::to_bytes(&doc)?;
+        self.scenario = crate::scenariogarde::to_bytes(&doc)?;
         self.sons_proposes = crate::indications::to_bytes(&doc)?;
         self.references = crate::references::plan_save(&doc, dir)?;
         self.envois = crate::envois::to_bytes(&doc)?;
@@ -1814,6 +1817,7 @@ pub(crate) fn prepare_save_avant(doc: &Document, manifest_path: &Path, written: 
         job.sound_fx = crate::audiofx::to_bytes(doc)?;
         job.personnages = crate::personnages::to_bytes(doc)?;
         job.annotations = crate::annotations::to_bytes(doc)?;
+        job.scenario = crate::scenariogarde::to_bytes(doc)?;
         job.sons_proposes = crate::indications::to_bytes(doc)?;
         job.references = crate::references::plan_save(doc, dir)?;
         job.envois = crate::envois::to_bytes(doc)?;
@@ -2103,6 +2107,9 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::personnages::FILE), self.personnages.as_deref(), |t| crate::personnages::parse(t).is_ok())?;
         // Les annotations de la vue Vignettes, de même.
         write_sidecar(&dir.join(crate::annotations::FILE), self.annotations.as_deref(), |t| crate::annotations::parse(t).is_ok())?;
+        // Le scénario gardé : l'ancien (d'un autre scénario) passe à côté, jamais effacé.
+        crate::scenariogarde::mettre_de_cote(&dir.join(crate::scenariogarde::FILE), self.scenario.as_deref());
+        write_sidecar(&dir.join(crate::scenariogarde::FILE), self.scenario.as_deref(), |t| crate::scenariogarde::parse(t).is_ok())?;
         // Et les sons proposés par la lecture du storyboard.
         write_sidecar(&dir.join(crate::indications::FILE), self.sons_proposes.as_deref(), |t| crate::indications::parse(t).is_ok())?;
         // Les références visuelles : leurs fichiers dans `references/`, puis `references.json`.
@@ -2961,6 +2968,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         variantes: Default::default(),
         // Les annotations de la vue Vignettes : `annotations.json`, `load_annotations`.
         annotations: Default::default(),
+        // Le scénario gardé : `scenario.json`, `scenariogarde::load`.
+        scenario: None,
     };
     // Les calques CTG des projets d'avant : convertis en calques de couleur quand le document existe (`migrer_ctg`).
     let mut anciens_ctg: Vec<crate::griffonnage::AncienCtg> = Vec::new();
@@ -3201,6 +3210,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         structure.personnages = load_personnages(dir, &mut warnings);
         // Les annotations de la vue Vignettes (`annotations.json`, absent : aucune).
         structure.annotations = load_annotations(dir, &mut warnings);
+        // Le scénario gardé dans le projet (`scenario.json`, absent : aucun).
+        structure.scenario = crate::scenariogarde::load(dir, &mut warnings);
     }
     let frame = manifest.cadre;
     let mut written: HashMap<CelId, u64> = cels.keys().map(|&id| (id, 0)).collect();

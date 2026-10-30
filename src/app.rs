@@ -337,6 +337,8 @@ pub struct App {
     pub(crate) perso: crate::personnagesui::Etat,
     /// Mon panneau (essai du Labo, `monpanneauui.rs`) : la recherche du « + », le nom qu'on saisit, le bouton qu'on glisse.
     pub(crate) mon_panneau: crate::monpanneauui::Etat,
+    /// Le panneau Scénario (`scenariopanneau.rs`) : les hauteurs gardées, le plan montré, le défilement demandé.
+    pub(crate) scenario_ui: crate::scenariopanneau::Etat,
     pub(crate) cur_panel: usize,
     pub(crate) cur_layer: usize,
     pub(crate) cur_frame: usize,
@@ -1052,6 +1054,7 @@ impl App {
             vignettes: Default::default(),
             perso: Default::default(),
             mon_panneau: Default::default(),
+            scenario_ui: Default::default(),
             cur_panel: 0,
             cur_layer: 0,
             cur_frame: 0,
@@ -4574,6 +4577,7 @@ impl App {
             // Calque vidéo (13k, `videoui.rs`).
             "fichier.importer_video" => self.import_video(),
             "fichier.importer_scenario" => self.open_scenario_window(),
+            "scenario.creer_plans" => self.open_plans_window(),
             "pinceau.enregistrer_traits" => {
                 self.record_strokes = match self.record_strokes {
                     Some(_) => {

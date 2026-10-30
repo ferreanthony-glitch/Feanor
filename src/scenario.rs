@@ -19,6 +19,8 @@
 
 use std::path::Path;
 
+use serde::{Deserialize, Serialize};
+
 /// Plus gros fichier lu (un scénario de 120 pages pèse 200 Ko).
 pub const MAX_BYTES: u64 = 64 * 1024 * 1024;
 
@@ -26,9 +28,11 @@ pub const MAX_BYTES: u64 = 64 * 1024 * 1024;
 pub const OPENING: &str = "Ouverture";
 
 /// Le format dans lequel le fichier a été lu.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Format {
     Fountain,
+    #[default]
     Texte,
     Fdx,
     Docx,
@@ -46,7 +50,8 @@ impl Format {
 }
 
 /// Une réplique : un personnage, ses indications (`V.O.`), ses parenthèses de jeu, son texte.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Speech {
     pub name: String,
     /// Extensions du nom, sans parenthèses : `V.O.`, `O.S.` (« CONT'D » est retiré).
@@ -88,7 +93,8 @@ impl Speech {
 }
 
 /// Ce qu'un élément du scénario est.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Kind {
     /// Intitulé de scène : `INT. CUISINE – NUIT`.
     Heading(String),
@@ -105,9 +111,10 @@ pub enum Kind {
 }
 
 /// Un élément et les notes `[[ ]]` qui étaient dans son texte.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Element {
     pub kind: Kind,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<String>,
 }
 
@@ -118,7 +125,8 @@ impl Element {
 }
 
 /// Un scénario lu.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Script {
     pub format: Format,
     pub title: String,
@@ -126,6 +134,12 @@ pub struct Script {
     pub elements: Vec<Element>,
     /// Ce qui n'a pas pu être repris ou qui mérite un mot, en français.
     pub warnings: Vec<String>,
+}
+
+impl Default for Script {
+    fn default() -> Script {
+        Script::empty(Format::Texte)
+    }
 }
 
 impl Script {

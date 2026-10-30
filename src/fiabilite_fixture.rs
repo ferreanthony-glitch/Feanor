@@ -573,6 +573,13 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
         doc.annotations.traces.push(Trace::new(premier, Ancre { card: carte, after: 0, rank: 0 }, [220, 38, 38], vec![VPoint { x: 0.25, y: 0.125, r: 0.0625 }, VPoint { x: 0.5, y: 0.25, r: 0.0625 }]));
         doc.annotations.traces.push(Trace::new(reprises, Ancre { card: carte, after: 3, rank: 3 }, [30, 90, 200], vec![VPoint { x: 0.5, y: 0.5, r: 0.0625 }]));
     }
+    // Le scénario gardé dans le projet (`scenario.json`) : deux scènes, relié au premier et au dernier plan.
+    {
+        let script = crate::scenario::parse_fountain("INT. CUISINE - NUIT\n\nMarie cherche sa clé.\n\nMARIE (V.O.)\n(bas)\nOù est-elle ?\n\nEXT. RUE - JOUR\n\nIl pleut.\n", &|_| {});
+        let (premier, dernier) = (doc.panels[0].id, doc.panels[doc.panels.len() - 1].id);
+        let liens = vec![crate::scenariogarde::Lien { plan: premier, de: 0, a: 2 }, crate::scenariogarde::Lien { plan: dernier, de: 3, a: 4 }];
+        doc.scenario = Some(std::sync::Arc::new(crate::scenariogarde::Gardee::new("Le Réveil.fountain", script, liens)));
+    }
     // Sons proposés par la lecture du storyboard (`sons_proposes.json`) : un bruitage à générer, une
     // voix rejetée et modifiée à la main, une ambiance acceptée (son posé), et la confirmation d'envoi
     // en ligne du projet.
@@ -660,6 +667,8 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
     let _ = writeln!(s, "transitions {:?}", transitions);
     let _ = writeln!(s, "personnages {:?}", doc.personnages);
     let _ = writeln!(s, "annotations {:?}", doc.annotations);
+    // (Sans les index internes : un dictionnaire se dit dans un ordre qui change d'une lecture à l'autre.)
+    let _ = writeln!(s, "scenario {:?}", doc.scenario.as_ref().map(|g| (g.id, &g.nom, &g.script, &g.liens)));
     // (Le fichier des sons proposés les range dans l'ordre du film : leurs numéros sont gardés.)
     let mut proposes = doc.sons_proposes.clone();
     proposes.indications.sort_by_key(|i| i.id);

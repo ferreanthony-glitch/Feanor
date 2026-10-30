@@ -205,6 +205,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         versions: Default::default(),
         variantes: Default::default(),
         annotations: Default::default(),
+        scenario: None,
     };
     let mut shots = manifest.shots;
     if shots.is_empty() {

@@ -241,6 +241,9 @@ pub struct Settings {
     /// séparateurs) et « Afficher les noms ». Un réglage du poste : rien n'est écrit dans le projet. Absent : le panneau vide.
     #[serde(default, rename = "mon_panneau", skip_serializing_if = "crate::monpanneau::Reglage::est_vide")]
     pub mon_panneau: crate::monpanneau::Reglage,
+    /// La taille du texte du panneau Scénario (petit, moyen, grand ; `scenariogarde::Taille`). Un réglage du poste : moyen d'origine.
+    #[serde(default, rename = "scenario_taille", skip_serializing_if = "crate::scenariogarde::Taille::est_defaut")]
+    pub scenario_taille: crate::scenariogarde::Taille,
 }
 
 fn default_passe_partout() -> u8 {
@@ -339,6 +342,7 @@ impl Default for Settings {
             rotation_autour: Default::default(),
             new_plan_secs: crate::dureeplans::secondes_d_origine(),
             mon_panneau: Default::default(),
+            scenario_taille: Default::default(),
         }
     }
 }
