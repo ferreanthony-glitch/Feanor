@@ -222,6 +222,14 @@ pub struct Settings {
     /// Les conseils d'un seul passage déjà vus (`conseils.rs`) ; Préférences > Général > « Revoir les conseils » les oublie.
     #[serde(default, rename = "conseils", skip_serializing_if = "crate::conseils::ReglageConseils::est_vide")]
     pub conseils: crate::conseils::ReglageConseils,
+    /// Le parcours « Premier jour » (`premierjour.rs`) : la réponse à la proposition et l'étape où l'on en est. Un réglage du poste.
+    #[serde(default, rename = "premier_jour", skip_serializing_if = "crate::premierjour::Reglage::est_vide")]
+    pub premier_jour: crate::premierjour::Reglage,
+    /// « Afficher les fonctions expérimentales » (Préférences > Général) : le menu Labo et les panneaux à l'essai (suggestions sonores,
+    /// Mon panneau, banc d'essai du moteur de dessin) ne se montrent que si cette case est cochée. Rien n'est supprimé : les commandes
+    /// restent dans la palette (Ctrl+K). Décochée d'origine.
+    #[serde(default, rename = "fonctions_experimentales", skip_serializing_if = "std::ops::Not::not")]
+    pub experimental: bool,
     /// La taille de l'interface, en pour cent : 90, 100, 125 ou 150 (`echelle.rs`, Préférences > Apparence).
     #[serde(default = "crate::echelle::defaut", rename = "echelle_interface", skip_serializing_if = "crate::echelle::est_defaut")]
     pub echelle: u16,
@@ -364,6 +372,8 @@ impl Default for Settings {
             brosses_decor: crate::personnages::decors_par_defaut(),
             prefs_onglet: Default::default(),
             conseils: Default::default(),
+            premier_jour: Default::default(),
+            experimental: false,
             echelle: crate::echelle::ECHELLE_DEFAUT,
             dossier_accueil: String::new(),
             vignettes: Default::default(),

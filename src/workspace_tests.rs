@@ -90,7 +90,9 @@ fn the_three_spaces_have_their_own_starting_layouts() {
         assert!(!dock.contains(gone), "{gone:?} est replié dans l'espace Montage");
     }
     // Les panneaux de son (arrivés depuis) s'ouvrent dans le montage, pas dans les deux autres espaces.
-    assert!(dock.contains(Pane::Bruitages) && dock.contains(Pane::SuggestionsSonores));
+    assert!(dock.contains(Pane::Bruitages));
+    // (Les suggestions sonores sont expérimentales : plus d'office dans le montage, `premierjour_tests`.)
+    assert!(!dock.contains(Pane::SuggestionsSonores));
     for autre in [&storyboard, &animation] {
         for p in [Pane::Bruitages, Pane::SuggestionsSonores, Pane::References, Pane::XSheet] {
             assert!(!autre.dock_layout().contains(p), "{p:?} reste à la demande");

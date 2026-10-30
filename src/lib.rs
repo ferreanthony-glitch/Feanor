@@ -22,6 +22,10 @@ mod confort;
 mod conseils;
 #[cfg(test)]
 mod conseils_tests;
+// Premier contact (2026-10-30) : le parcours « Premier jour », le Labo rangé, le vocabulaire (partie 89).
+mod premierjour;
+#[cfg(test)]
+mod premierjour_tests;
 mod echelle;
 #[cfg(test)]
 mod echelle_tests;

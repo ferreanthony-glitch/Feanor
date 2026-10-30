@@ -287,6 +287,11 @@ touches = []
 source = "SHOT (sans touche ; aussi Préférences > Général)"
 
 [[raccourci]]
+action = "aide.visite"
+touches = []
+source = "SHOT (sans touche ; Aide, et Préférences > Général)"
+
+[[raccourci]]
 action = "aide.regler_stylet"
 touches = []
 source = "SHOT (sans touche ; aussi Préférences > Dessin)"

@@ -497,6 +497,11 @@ impl App {
                 ui.spacing_mut().button_padding = vec2(8.0, 5.0);
                 for o in Onglet::TOUS {
                     let n: usize = trouves.iter().filter(|t| t.onglet == o).map(|t| t.libelles.len()).sum();
+                    // La génération de sons est expérimentale : son onglet se montre avec la case « Afficher les fonctions expérimentales »
+                    // (ou tant qu'il est ouvert, ou s'il répond à la recherche).
+                    if o == Onglet::Generation && !self.settings.experimental && onglet != o && n == 0 {
+                        continue;
+                    }
                     let on = !cherche && onglet == o;
                     let mut nom = format!("{}  {}", o.icone(), o.nom());
                     if cherche && n > 0 {
@@ -695,7 +700,17 @@ impl App {
             }
             Groupe::Echelle => self.echelle_prefs_ui(ui),
             Groupe::ImagesAccueil => self.images_accueil_prefs_ui(ui),
-            Groupe::Conseils => self.conseils_prefs_ui(ui),
+            Groupe::Conseils => {
+                self.visite_prefs_ui(ui);
+                self.conseils_prefs_ui(ui);
+            }
+            Groupe::Experimental => {
+                let r = ui.checkbox(&mut self.settings.experimental, "Afficher les fonctions expérimentales");
+                if crate::bulles::bulle(r, "Fonctions expérimentales", "Montre le menu Labo : les suggestions sonores, Mon panneau et le banc d'essai du moteur de dessin. Elles sont à l'essai et peuvent changer. Décochée, elles restent dans la palette de commandes (Ctrl+K).", "").changed() {
+                    let _ = self.settings.save();
+                }
+                ui.label(RichText::new("Fonctions à l'essai : elles peuvent encore changer. Rien n'est supprimé quand la case est décochée.").small().weak());
+            }
             Groupe::StyletMain => {
                 let b = ui.button("Régler le stylet à ma main…");
                 if crate::bulles::bulle(b, "Régler le stylet à ma main", "Trace trois traits (léger, moyen, appuyé) : SHOT règle la courbe de pression du stylet sur ta main, après un aperçu et ta confirmation. Avec la souris, l'appui est toujours de 100 %.", &self.raccourci("aide.regler_stylet")).clicked() {

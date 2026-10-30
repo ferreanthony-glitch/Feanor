@@ -146,6 +146,12 @@ impl App {
                     let _ = self.settings.save();
                 }
             });
+            // La visite « Premier jour » (`premierjour.rs`) : une ligne discrète à droite de la case, pas une fenêtre.
+            if self.visite_offerte() || self.visite_en_cours() {
+                ui.scope_builder(UiBuilder::new().max_rect(case).layout(Layout::right_to_left(Align::Center)), |ui| {
+                    self.visite_ligne_accueil(ui);
+                });
+            }
         });
         if let Some(a) = action {
             self.run_action(a);

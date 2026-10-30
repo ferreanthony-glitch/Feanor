@@ -1,9 +1,9 @@
 //! Onglets du bas de la timeline (13e), comme ceux de TVPaint : Notes, Son, Groupes,
-//! Arrière-plan, Image de départ. Un clic sur un onglet ouvre sa bande de réglages au-dessus de
+//! Fond de la feuille, Image de départ. Un clic sur un onglet ouvre sa bande de réglages au-dessus de
 //! la barre ; un second clic la referme. Les notes dessinées ont aussi leur rangée dans la
 //! grille (alignée sur les images).
 //!
-//! L'arrière-plan se dessine ici aussi : aucun (noir à l'écran, transparent à l'export), la
+//! Le fond de la feuille se dessine ici aussi : aucun (noir à l'écran, transparent à l'export), la
 //! couleur du papier, ou un damier des couleurs A et B (transparent à l'export).
 
 use eframe::egui::{self, pos2, Color32, Rect, RichText, Shape, Stroke, TextureHandle, Vec2};
@@ -31,7 +31,7 @@ impl BottomTab {
             BottomTab::Notes => (ph::PENCIL_LINE, "Notes", "Notes dessinées sur la timeline, vues pendant la lecture, jamais exportées."),
             BottomTab::Sound => (ph::WAVEFORM, "Son", "Pistes son : volume, muette, verrou ; Ctrl + glisser l'onde pour la décaler."),
             BottomTab::Groups => (ph::SWATCHES, "Groupes", "Groupes de couleur des calques."),
-            BottomTab::Background => (ph::CHECKERBOARD, "Arrière-plan", "Aucun, couleur ou damier."),
+            BottomTab::Background => (ph::CHECKERBOARD, "Fond de la feuille", "Ce qu'on voit sous les calques : aucun (transparent), la couleur du papier ou un damier."),
             BottomTab::StartFrame => (ph::HASH, "Image de départ", "Numéro de la première image du projet."),
         }
     }
@@ -81,7 +81,7 @@ impl App {
             self.doc.background = kind;
             self.renderer.invalidate_all();
         }
-        self.status = format!("Arrière-plan : {}.", kind.label().to_lowercase());
+        self.status = format!("Fond de la feuille : {}.", kind.label().to_lowercase());
     }
 
     /// Onglet Son : volume général, son à la lecture et au défilement ; chaque piste (muette,

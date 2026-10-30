@@ -320,7 +320,7 @@ fn dragging_a_layer_in_the_planche_panel_reorders_it_one_undo_step_per_drop() {
     assert_eq!(ordre(&b), [c, d, a]);
     assert_eq!(pas_d_annulation(&b), avant, "aucune étape quand le calque ne change pas de place");
     // Un second dépôt, une seconde étape : « Sam » (le deuxième) tiré tout en bas, sous « Dessin ».
-    let (sam, dessin) = (texte_en(&b, "Sam").unwrap(), crate::annotations_calques_tests::texte_en(&b, "Dessin").unwrap());
+    let (sam, dessin) = (texte_en(&b, "Sam").unwrap(), crate::annotations_calques_tests::texte_en(&b, "Dessin de la case").unwrap());
     glisser_de_a(&mut b, sam, pos2(sam.x, dessin.y + 40.0));
     assert_eq!(ordre(&b), [d, c, a], "« Sam » est tout en bas des calques d'annotation");
     assert_eq!(pas_d_annulation(&b), avant + 1);

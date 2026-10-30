@@ -251,7 +251,7 @@ impl App {
                 if bulles::icone(ui, ph::FILE_PLUS, "Nouvelle version, plan vide", "Garde le plan tel qu'il est et repart d'un calque vide : même durée, même cadre, même caméra.", &r).clicked() {
                     vide = true;
                 }
-                if ailleurs && bulles::icone(ui, ph::GIT_MERGE, "Mettre à jour dans les autres versions de séquence", "Les autres versions de la séquence où ce plan apparaît (celles que vous cochez) montreront la version d'aujourd'hui.", &self.raccourci("variante.mettre_a_jour")).clicked() {
+                if ailleurs && bulles::icone(ui, ph::GIT_MERGE, "Mettre à jour dans les autres versions de séquence", "Les autres versions de la séquence où ce plan apparaît (celles que tu coches) montreront la version d'aujourd'hui.", &self.raccourci("variante.mettre_a_jour")).clicked() {
                     mettre_a_jour = true;
                 }
             });
@@ -358,7 +358,7 @@ impl App {
             }
             if ailleurs {
                 let b = ui.button("Mettre à jour dans les autres versions de séquence…");
-                if bulles::bulle(b, "Mettre à jour dans les autres versions de séquence", "Les autres versions de la séquence où ce plan apparaît montreront sa version d'aujourd'hui (celles que vous cochez).", "").clicked() {
+                if bulles::bulle(b, "Mettre à jour dans les autres versions de séquence", "Les autres versions de la séquence où ce plan apparaît montreront sa version d'aujourd'hui (celles que tu coches).", "").clicked() {
                     ui.close_menu();
                     self.mettre_a_jour_demander(index);
                 }

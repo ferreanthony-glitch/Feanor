@@ -25,6 +25,28 @@ pub fn fold(s: &str) -> String {
         .collect()
 }
 
+/// Les anciens noms des commandes renommées (passe « premier contact », 2026-10-30) et les mots de leur ancien endroit : on les
+/// tape encore, la palette trouve la commande. (`id`, anciens noms séparés par « | ».) On n'y retire jamais rien.
+pub const ANCIENS_NOMS: &[(&str, &str)] = &[
+    ("panneau.proprietes", "Propriétés du plan | Fiche"),
+    ("aide.diagnostic", "Diagnostic des performances | Diagnostic des performances de SHOT | régler SHOT pour cette machine"),
+    ("onglet.arriere_plan", "Onglet Arrière-plan de la timeline | arrière-plan"),
+    ("fond.aucun", "Arrière-plan : aucun (transparent)"),
+    ("fond.couleur", "Arrière-plan : couleur"),
+    ("fond.damier", "Arrière-plan : damier"),
+    ("calque.propager", "Labo | Propager la peinture du calque en suivant une vidéo ou une animation (façon EbSynth) | EbSynth"),
+    ("vue.suggestions_sonores", "Labo | Panneau Suggestions sonores (ouvrir / fermer)"),
+    ("suggestion.lire", "Labo | Lire le storyboard pour proposer des sons"),
+    ("vue.mon_panneau", "Labo | Panneau Mon panneau, essai du Labo (ouvrir / fermer) | Mon panneau (essai)"),
+    ("pinceau.enregistrer_traits", "Labo | Enregistrer mes traits (banc d'essai du moteur de dessin) | banc d'essai"),
+    ("aide.visite", "Premier jour | visite guidée | tutoriel | débuter | bienvenue"),
+];
+
+/// Les anciens noms d'une commande, pour la recherche (vide si elle n'a pas été renommée).
+pub fn anciens_noms(id: &str) -> &'static str {
+    ANCIENS_NOMS.iter().find(|(i, _)| *i == id).map_or("", |(_, n)| n)
+}
+
 /// Les commandes (`id`, nom) qui répondent à `query`, les meilleures d'abord : chaque mot tapé se
 /// trouve dans le nom ou l'identifiant. Devant : la commande elle-même (« persp » →
 /// `outil.perspective`), puis un nom dont un mot commence par ce qu'on a tapé, le plus tôt dans le
@@ -38,8 +60,9 @@ pub fn rank(commands: &[(&str, &str)], query: &str) -> Vec<usize> {
         .iter()
         .enumerate()
         .filter_map(|(i, (id, name))| {
+            let anciens = fold(anciens_noms(id));
             let (n, id) = (fold(name), fold(id));
-            if !words.iter().all(|w| n.contains(w.as_str()) || id.contains(w.as_str())) {
+            if !words.iter().all(|w| n.contains(w.as_str()) || id.contains(w.as_str()) || anciens.contains(w.as_str())) {
                 return None;
             }
             let last = id.rsplit('.').next().unwrap_or("");

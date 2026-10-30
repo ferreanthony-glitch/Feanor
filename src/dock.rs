@@ -591,7 +591,7 @@ impl DockLayout {
     /// La disposition d'origine de l'espace Montage (le troisième onglet, en haut à droite) : le
     /// lecteur du film en grand en haut à gauche (le dessin, vu à travers la caméra) ; à sa droite la
     /// fiche du plan (durée, textes) et, dessous, les panneaux du travail de montage en onglets
-    /// (bruitages, suggestions sonores, commentaires, historique) ; en bas, sur toute la largeur, la
+    /// (bruitages, commentaires, historique ; les suggestions sonores, expérimentales, n'y sont plus d'office depuis le 2026-10-30) ; en bas, sur toute la largeur, la
     /// bande du montage avec toutes ses pistes. Ni outils, ni couleur, ni pinceaux, ni calques, ni
     /// effets, ni guides : ceux-là restent à la demande (barre des panneaux, menu Affichage).
     /// `bande_hauteur` : hauteur de la bande, en points de la fenêtre de référence.
@@ -600,7 +600,7 @@ impl DockLayout {
         let cote = column(
             0.4,
             tabs(vec![Pane::Sheet]),
-            tabs(vec![Pane::Bruitages, Pane::SuggestionsSonores, Pane::Comments, Pane::History]),
+            tabs(vec![Pane::Bruitages, Pane::Comments, Pane::History]),
         );
         let haut = row(MONTAGE_LECTEUR_PART, lecteur, cote);
         let h = bande_hauteur.clamp(140.0, 1200.0);
