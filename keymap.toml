@@ -24,8 +24,7 @@
 # etat = "non implémenté" : gardé en réserve, la fonction n'existe pas encore dans SHOT.
 # etat = "désactivé" : le raccourci est ignoré.
 # source : d'où vient le raccourci.
-#   « Storyboard Pro 27 » = raccourci par défaut lu dans sb_shortcuts.xml de Storyboard Pro 27 ;
-#   « perso » = vos réglages (STB_Shortcuts.xml) ; « proposition » = proposé par SHOT, à valider ;
+#   « perso » = réglages d'Anthony ; « proposition » = proposé par SHOT, à valider ;
 #   « TVPaint 12 (perso) » = vos raccourcis TVPaint 12 (config.ini, section [keyboard]).
 
 version = 1
@@ -35,22 +34,19 @@ version = 1
 [[raccourci]]
 action = "fichier.nouveau"
 touches = ["Ctrl+N"]
-source = "Storyboard Pro 27 : NEW_KEY"
 
 [[raccourci]]
 action = "fichier.ouvrir"
 touches = ["Ctrl+O"]
-source = "Storyboard Pro 27 : OPEN_KEY"
 
 [[raccourci]]
 action = "fichier.enregistrer"
 touches = ["Ctrl+S"]
-source = "Storyboard Pro 27 : SAVE_ALL_KEY"
 
 [[raccourci]]
 action = "fichier.enregistrer_sous"
 touches = ["Ctrl+Maj+S"]
-source = "proposition (SAVE_AS_KEY n'a pas de touche par défaut)"
+source = "proposition"
 
 [[raccourci]]
 action = "fichier.afficher_explorateur"
@@ -60,12 +56,10 @@ source = "SHOT (sans touche)"
 [[raccourci]]
 action = "fichier.fermer"
 touches = ["Ctrl+W"]
-source = "Storyboard Pro 27 : CLOSE_KEY"
 
 [[raccourci]]
 action = "fichier.quitter"
 touches = ["Ctrl+Q"]
-source = "Storyboard Pro 27 : QUIT_KEY"
 
 # Onglets de projets (`onglets.rs`) : comme un navigateur. Ctrl+W (« fichier.fermer ») ferme l'onglet affiché.
 # Tab et Maj+Tab restent le passage storyboard / animation et la planche : Ctrl+Tab est libre.
@@ -89,43 +83,36 @@ action = "onglet.fermer_autres"
 touches = []
 source = "SHOT (sans touche)"
 
-# Exports : commandes de Storyboard Pro 27 sans touche par défaut (correspondance par le nom).
+# Exports : commandes sans touche par défaut.
 [[raccourci]]
 action = "fichier.exporter_film"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : MOVIE_EXPORT_KEY"
 
 [[raccourci]]
 action = "fichier.exporter_images"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : BITMAP_EXPORT_KEY"
 
 [[raccourci]]
 action = "fichier.exporter_son"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : SOUNDTRACK_EXPORT_KEY"
 
 [[raccourci]]
 action = "fichier.exporter_pdf"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : PDF_EXPORT_KEY"
 
 [[raccourci]]
 action = "fichier.exporter_image_courante"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : EXPORT_CURRENT_IMAGE_KEY"
 
 # ------------------------------------------------------------------------------------ Édition
 
 [[raccourci]]
 action = "edition.annuler"
 touches = ["Ctrl+Z"]
-source = "Storyboard Pro 27 : UNDO_KEY"
 
 [[raccourci]]
 action = "edition.retablir"
 touches = ["Ctrl+Maj+Z"]
-source = "Storyboard Pro 27 : REDO_KEY"
 
 [[raccourci]]
 action = "edition.retablir"
@@ -135,26 +122,22 @@ source = "proposition (second raccourci, habituel sous Windows)"
 [[raccourci]]
 action = "edition.couper"
 touches = ["Ctrl+X"]
-source = "Storyboard Pro 27 : CUT_KEY"
 
 [[raccourci]]
 action = "edition.copier"
 touches = ["Ctrl+C"]
-source = "Storyboard Pro 27 : COPY_KEY"
 
 [[raccourci]]
 action = "edition.coller"
 touches = ["Ctrl+V"]
-source = "Storyboard Pro 27 : PASTE_KEY"
 
-# Ctrl+Maj+V était « Coller sur place » (PASTE_IN_PLACE_KEY de Storyboard Pro 27), un simple alias de
+# Ctrl+Maj+V était « Coller sur place », un simple alias de
 # Ctrl+V dans SHOT (le collage pose déjà tout à sa place d'origine). Depuis le 2026-10-19 (demande
 # d'Anthony), Ctrl+Maj+V colle les clés « à la tête de lecture » ; hors clés, il garde son ancien
 # rôle (il colle comme Ctrl+V). « Coller sur place » reste une commande, sans touche par défaut.
 [[raccourci]]
 action = "edition.coller_sur_place"
 touches = []
-source = "Storyboard Pro 27 : PASTE_IN_PLACE_KEY (sa touche Ctrl+Maj+V va à edition.coller_a_la_tete)"
 
 [[raccourci]]
 action = "edition.coller_a_la_tete"
@@ -164,80 +147,67 @@ source = "choix d'Anthony, 2026-10-19 (clés : Ctrl+V insère après la clé de 
 [[raccourci]]
 action = "edition.supprimer"
 touches = ["Suppr"]
-source = "Storyboard Pro 27 : DELETE_KEY"
 
 [[raccourci]]
 action = "edition.supprimer"
 touches = ["Retour arrière"]
 source = "proposition (second raccourci)"
 
-# Maj+Suppr (DELETE_ALT_KEY, Ripple Delete) est pris par « Effacer ce qui est hors de la sélection »
-# (DRAWING_DELETE_NON_SELECTION_KEY, plus bas) : la touche de la commande en réserve est retirée
+# Maj+Suppr est pris par « Effacer ce qui est hors de la sélection »
+# (plus bas) : la touche de la commande en réserve est retirée
 # pour ne pas faire de conflit le jour où elle sera faite.
 [[raccourci]]
 action = "edition.supprimer_et_resserrer"
 touches = []
-source = "Storyboard Pro 27 : DELETE_ALT_KEY (Ripple Delete, Maj+Suppr, déjà pris)"
 etat = "non implémenté"
 
 [[raccourci]]
 action = "edition.tout_selectionner"
 touches = ["Ctrl+A"]
-source = "Storyboard Pro 27 : SELECT_ALL_KEY"
 
 [[raccourci]]
 action = "edition.selectionner_dessins_scene"
 touches = ["Ctrl+Maj+A"]
-source = "Storyboard Pro 27 : SELECT_ALL_DRAWING_IN_SHOT"
 etat = "non implémenté"
 
 [[raccourci]]
 action = "edition.tout_deselectionner"
 touches = ["Échap"]
-source = "Storyboard Pro 27 : DESELECT_ALL_KEY"
 
 # ------------------------------------------------------------------------------------ Vue
 
 [[raccourci]]
 action = "vue.outil_zoom"
 touches = ["Alt+Z"]
-source = "Storyboard Pro 27 : DRAWING_ZOOM_TOOL_KEY"
 etat = "non implémenté"
 
 [[raccourci]]
 action = "vue.zoom_arriere"
 touches = ["1"]
-source = "Storyboard Pro 27 : ZOOM_OUT_KEY"
 
 [[raccourci]]
 action = "vue.zoom_avant"
 touches = ["2"]
-source = "Storyboard Pro 27 : ZOOM_IN_KEY"
 
 [[raccourci]]
 action = "vue.plein_ecran"
 touches = ["Ctrl+Maj+Alt+F"]
-source = "Storyboard Pro 27 : TOGGLE_FULLSCREEN_KEY"
 
 [[raccourci]]
 action = "vue.rotation_horaire"
 touches = ["V"]
-source = "Storyboard Pro 27 : ROTATE_CW_KEY"
 
 [[raccourci]]
 action = "vue.rotation_antihoraire"
 touches = ["C"]
-source = "Storyboard Pro 27 : ROTATE_CCW_KEY"
 
 [[raccourci]]
 action = "vue.reinit_rotation"
 touches = ["Maj+X"]
-source = "Storyboard Pro 27 : DRAWING_RESET_ROTATION_KEY"
 
 [[raccourci]]
 action = "vue.reinit_zoom"
 touches = ["Maj+Z"]
-source = "Storyboard Pro 27 : RESET_ZOOM_KEY"
 
 [[raccourci]]
 action = "vue.ajuster"
@@ -247,36 +217,30 @@ source = "proposition"
 [[raccourci]]
 action = "vue.pan_libre"
 touches = ["Espace"]
-source = "Storyboard Pro 27 : FREE_PAN_AND_ZOOM_KEY (maintenir)"
 
 [[raccourci]]
 action = "vue.rotation_temporaire"
 touches = ["Ctrl+Alt"]
-source = "Storyboard Pro 27 : OVERRIDE_ROTATE (maintenir)"
 etat = "non implémenté"
 
 [[raccourci]]
 action = "vue.zoom_temporaire_avant"
 touches = ["Ctrl+Espace"]
-source = "Storyboard Pro 27 : OVERRIDE_ZOOM_IN (maintenir)"
 etat = "non implémenté"
 
 [[raccourci]]
 action = "vue.zoom_temporaire_arriere"
 touches = ["Alt+Espace"]
-source = "Storyboard Pro 27 : OVERRIDE_ZOOM_OUT (maintenir)"
 etat = "non implémenté"
 
 [[raccourci]]
 action = "vue.grille"
 touches = ["Ctrl+G"]
-source = "Storyboard Pro 27 : DRAWING_SHOW_GRID_KEY"
 etat = "non implémenté"
 
 [[raccourci]]
 action = "vue.pelure"
 touches = ["Alt+O"]
-source = "Storyboard Pro 27 : DRAWING_OS_TOGGLE_KEY"
 
 [[raccourci]]
 action = "vue.miroir"
@@ -298,8 +262,7 @@ action = "aide.palette"
 touches = ["Ctrl+K"]
 source = "proposition (palette de commandes)"
 
-# Accueil et confort (passe « simplicité » du 2026-10-21). Z et R étaient libres dans ce fichier, dans le jeu « Façon
-# Storyboard Pro » et dans le fichier personnel d'Anthony (B, E, L, Maj+1, Maj+2).
+# Accueil et confort (passe « simplicité » du 2026-10-21). Z et R étaient libres dans ce fichier et dans le fichier personnel d'Anthony (B, E, L, Maj+1, Maj+2).
 [[raccourci]]
 action = "vue.concentration"
 touches = ["F11"]
@@ -311,7 +274,7 @@ touches = ["R"]
 source = "proposition (R comme raccourcis : la carte reste tant que la touche est tenue)"
 
 # Tenir T dans les Vignettes (comme Espace pour la main) : tout glissé sur une case tire les cadres de la caméra, jamais un plan.
-# T comme travelling. T était libre dans ce fichier, dans le jeu « Façon Storyboard Pro », dans les raccourcis en dur (Alt+T est le
+# T comme travelling. T était libre dans ce fichier, dans les raccourcis en dur (Alt+T est le
 # cutter, Ctrl+T un nouvel onglet : d'autres modificateurs) et dans le fichier personnel d'Anthony (B, E, L, Maj+1, Maj+2).
 [[raccourci]]
 action = "vignettes.camera"
@@ -338,7 +301,6 @@ source = "proposition"
 [[raccourci]]
 action = "outil.pinceau"
 touches = ["Alt+B"]
-source = "Storyboard Pro 27 : DRAWING_BRUSH_TOOL_KEY"
 
 [[raccourci]]
 action = "outil.crayon"
@@ -348,12 +310,10 @@ source = "proposition"
 [[raccourci]]
 action = "outil.gomme"
 touches = ["Alt+E"]
-source = "Storyboard Pro 27 : DRAWING_ERASER_TOOL_KEY"
 
 [[raccourci]]
 action = "outil.remplissage"
 touches = ["Alt+I"]
-source = "Storyboard Pro 27 : DRAWING_PAINT_TOOL_KEY"
 
 [[raccourci]]
 action = "outil.degrade"
@@ -368,82 +328,67 @@ source = "SHOT (sans touche : aucune touche libre et évidente)"
 [[raccourci]]
 action = "outil.peindre_non_peint"
 touches = ["Alt+Y"]
-source = "Storyboard Pro 27 : DRAWING_PAINT_UNPAINTED_TOOL_KEY"
 etat = "non implémenté"
 
 [[raccourci]]
 action = "outil.pipette"
 touches = ["Alt+D"]
-source = "Storyboard Pro 27 : DRAWING_COLOR_DROPPER_TOOL_KEY"
 
 [[raccourci]]
 action = "outil.selection"
 touches = ["Alt+S"]
-source = "Storyboard Pro 27 : DRAWING_SELECT_TOOL_KEY"
 
 [[raccourci]]
 action = "outil.selection_couleur"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : DRAWING_SELECT_TOOL_BY_COLOR_KEY"
 
 [[raccourci]]
 action = "outil.cutter"
 touches = ["Alt+T"]
-source = "Storyboard Pro 27 : DRAWING_CUTTER_TOOL_KEY"
 
-# Pinceau pochoir (DRAWING_STENCIL_BRUSH_TOOL_KEY, Alt+X dans Storyboard Pro 27, retiré dans tes
-# réglages perso) : action retirée le 2026-10-18 (le pochoir de calque existe).
+# Pinceau pochoir : action retirée le 2026-10-18 (le pochoir de calque existe).
 
 [[raccourci]]
 action = "outil.formes"
 touches = ["Alt+R"]
 source = "proposition (dernier outil de forme utilisé)"
 
-# Formes en outils séparés (5c) : commandes de Storyboard Pro 27, sans touche par défaut.
+# Formes en outils séparés (5c) : sans touche par défaut.
 [[raccourci]]
 action = "outil.ligne"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : DRAWING_LINE_TOOL_KEY"
 
 [[raccourci]]
 action = "outil.ligne_droite"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : DRAWING_LINE_TOOL_NORMAL_MODE_KEY"
 
 [[raccourci]]
 action = "outil.ligne_courbe"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : DRAWING_LINE_TOOL_QUADRATIC_MODE_KEY"
 
 [[raccourci]]
 action = "outil.ligne_s"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : DRAWING_LINE_TOOL_CUBIC_MODE_KEY"
 
 [[raccourci]]
 action = "outil.rectangle"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : DRAWING_RECTANGLE_TOOL_KEY"
 
 [[raccourci]]
 action = "outil.ellipse"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : DRAWING_ELLIPSE_TOOL_KEY"
 
 [[raccourci]]
 action = "outil.polyligne"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : DRAWING_POLYLINE_TOOL_KEY"
 
 [[raccourci]]
 action = "outil.texte"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : DRAWING_TEXT_TOOL_KEY"
 
 [[raccourci]]
 action = "outil.perspective"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : DRAWING_PERSPECTIVE_TOOL_KEY"
 
 # Grab et Pull (`sculpt.rs`) : outils demandés par Anthony (2026-10-24), sans touche par défaut.
 [[raccourci]]
@@ -464,28 +409,25 @@ source = "proposition"
 [[raccourci]]
 action = "outil.epaisseur_crayon"
 touches = ["O"]
-source = "Storyboard Pro 27 : RESIZE_PEN_STYLE_TOOL_KEY"
 etat = "non implémenté"
 
 [[raccourci]]
 action = "outil.taille_plus"
 touches = ["]"]
-source = "Storyboard Pro 27 : DRAWING_INCREMENT_BRUSH_SIZE"
 
 [[raccourci]]
 action = "outil.taille_moins"
 touches = ["["]
-source = "Storyboard Pro 27 : DRAWING_DECREMENT_BRUSH_SIZE"
 
 # ------------------------------------------------------------------------------------ Couleur
 # Passe couleur (2026-10-16). Deux couleurs, avant-plan et arrière-plan, comme dans Photoshop.
 # Les touches de Photoshop n'y sont que si elles sont libres dans ce fichier, dans les deux modes :
-# D est libre ; X ne l'est pas (calque.coller, ton réglage perso PASTE_LAYERS_KEY).
+# D est libre ; X ne l'est pas (calque.coller).
 
 [[raccourci]]
 action = "couleur.intervertir"
 touches = []
-source = "proposition : aucune touche (X, celle de Photoshop, colle le calque : PASTE_LAYERS_KEY de tes réglages)"
+source = "proposition : aucune touche (X, celle de Photoshop, colle le calque)"
 
 [[raccourci]]
 action = "couleur.defaut"
@@ -563,7 +505,6 @@ source = "SHOT"
 [[raccourci]]
 action = "nuancier.ajouter"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : COLOR_ADD (« New Colour Swatch », correspondance par le nom)"
 
 [[raccourci]]
 action = "nuancier.nouveau"
@@ -610,26 +551,21 @@ source = "SHOT (sans touche)"
 [[raccourci]]
 action = "plan.retourner"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : HORIZONTAL_FLIP_KEY (Flip Selected Shots)"
 
 [[raccourci]]
 action = "selection.miroir_h"
 touches = ["Alt+H"]
-source = "Storyboard Pro 27 : DRAWING_FLIP_HORIZONTAL_KEY"
 
 [[raccourci]]
 action = "selection.miroir_v"
 touches = ["Alt+V"]
-source = "Storyboard Pro 27 : DRAWING_FLIP_VERTICAL_KEY"
 
-# Maj+Suppr : « Effacer ce qui est hors de la sélection » (DRAWING_DELETE_NON_SELECTION_KEY de Storyboard
-# Pro) cède Maj+Suppr à « Remplir la sélection » (choix d'Anthony, 2026-10-20) ; Maj+Retour arrière
-# (DRAWING_DELETE_NON_SELECTION_BACKSPACE_KEY) lui reste. Sans zone bitmap choisie, Maj+Suppr fait encore
+# Maj+Suppr : « Effacer ce qui est hors de la sélection » cède Maj+Suppr à « Remplir la sélection » (choix d'Anthony, 2026-10-20) ; Maj+Retour arrière
+# lui reste. Sans zone bitmap choisie, Maj+Suppr fait encore
 # « Effacer ce qui est hors de la sélection » (voir app.rs).
 [[raccourci]]
 action = "dessin.supprimer_hors_selection"
 touches = ["Maj+Retour arrière"]
-source = "Storyboard Pro 27 : DRAWING_DELETE_NON_SELECTION_BACKSPACE_KEY (sa touche Maj+Suppr va à selection.remplir)"
 
 [[raccourci]]
 action = "selection.remplir"
@@ -660,19 +596,16 @@ source = "SHOT (sans touche)"
 [[raccourci]]
 action = "dessin.aplatir"
 touches = ["Alt+Maj+F"]
-source = "Storyboard Pro 27 : DRAWING_FLATTEN"
 etat = "non implémenté"
 
 [[raccourci]]
 action = "dessin.aimanter_contour"
 touches = ["Ctrl+Alt+;"]
-source = "Storyboard Pro 27 : DRAWING_SNAP_TO_CONTOUR"
 etat = "non implémenté"
 
 [[raccourci]]
 action = "dessin.remplir_zones_auto"
 touches = ["Ctrl+Maj+R"]
-source = "Storyboard Pro 27 : DRAWING_AUTO_FILL_INSIDE_REGIONS"
 etat = "non implémenté"
 
 # ------------------------------------------------------------------------------------ Lecture et navigation
@@ -680,17 +613,15 @@ etat = "non implémenté"
 [[raccourci]]
 action = "lecture.basculer"
 touches = ["Entrée"]
-source = "perso : TOGGLE_PLAYBACK_ALL_KEY"
+source = "perso"
 
 [[raccourci]]
 action = "image.precedente"
 touches = [","]
-source = "Storyboard Pro 27 : PREV_FRAME_KEY"
 
 [[raccourci]]
 action = "image.suivante"
 touches = ["."]
-source = "Storyboard Pro 27 : NEXT_FRAME_KEY"
 
 [[raccourci]]
 action = "image.precedente"
@@ -705,12 +636,10 @@ source = "proposition (second raccourci)"
 [[raccourci]]
 action = "image.premiere"
 touches = ["Origine"]
-source = "Storyboard Pro 27 : FIRST_FRAME_KEY"
 
 [[raccourci]]
 action = "image.derniere"
 touches = ["Fin"]
-source = "Storyboard Pro 27 : LAST_FRAME_KEY"
 
 [[raccourci]]
 action = "montage.debut"
@@ -742,48 +671,46 @@ touches = ["Alt+3"]
 source = "proposition"
 
 # Choix d'Anthony (2026-10-17) : A / F vont de clé en clé, tous les calques compris ; « plan
-# précédent / suivant » (A / F dans Storyboard Pro) passe sur PgPréc / PgSuiv.
+# précédent / suivant » passe sur PgPréc / PgSuiv.
 [[raccourci]]
 action = "panneau.precedent"
 touches = ["PgPréc"]
-source = "choix d'Anthony (Storyboard Pro 27 : PREV_PANEL_KEY est A, donné à la clé précédente)"
+source = "choix d'Anthony (A est donné à la clé précédente)"
 
 [[raccourci]]
 action = "panneau.suivant"
 touches = ["PgSuiv"]
-source = "choix d'Anthony (Storyboard Pro 27 : NEXT_PANEL_KEY est F, donné à la clé suivante)"
+source = "choix d'Anthony (F est donné à la clé suivante)"
 
 [[raccourci]]
 action = "cle.precedente"
 touches = ["A"]
-source = "choix d'Anthony (A de Storyboard Pro et de son TVPaint 12 : plan / instance précédents)"
+source = "choix d'Anthony (A de son TVPaint 12 : plan / instance précédents)"
 
 [[raccourci]]
 action = "cle.suivante"
 touches = ["F"]
-source = "choix d'Anthony (F de Storyboard Pro et de son TVPaint 12 : plan / instance suivants)"
+source = "choix d'Anthony (F de son TVPaint 12 : plan / instance suivants)"
 
 [[raccourci]]
 action = "scene.precedente"
 touches = ["Ctrl+PgPréc"]
-source = "proposition validée (PREV_SHOT_KEY n'a pas de touche par défaut ; Maj+A est pris par le module Guides)"
+source = "proposition validée (Maj+A est pris par les guides)"
 
 [[raccourci]]
 action = "scene.suivante"
 touches = ["Ctrl+PgSuiv"]
-source = "proposition validée (NEXT_SHOT_KEY n'a pas de touche par défaut)"
+source = "proposition validée"
 
 [[raccourci]]
 action = "scene.aller_a"
 touches = ["Ctrl+F"]
-source = "Storyboard Pro 27 : GOTO_SHOT_KEY"
 
 # ------------------------------------------------------------------------------------ Panneaux
 
 [[raccourci]]
 action = "panneau.nouveau"
 touches = ["P"]
-source = "Storyboard Pro 27 : NEW_PANEL_KEY"
 
 [[raccourci]]
 action = "panneau.nouveau"
@@ -794,49 +721,44 @@ source = "proposition (second raccourci)"
 [[raccourci]]
 action = "panneau.dupliquer"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : DUPLICATE_PANEL_KEY"
 
 [[raccourci]]
 action = "scene.nouvelle"
 touches = ["Maj+P"]
-source = "proposition (NEW_SCENE_KEY n'a pas de touche par défaut)"
+source = "proposition"
 
 [[raccourci]]
 action = "scene.dupliquer"
 touches = []
-source = "SHOT (pas d'équivalent direct repéré dans Storyboard Pro 27)"
+source = "SHOT (sans touche)"
 
 [[raccourci]]
 action = "scene.supprimer"
 touches = []
-source = "SHOT (pas d'équivalent direct repéré dans Storyboard Pro 27)"
+source = "SHOT (sans touche)"
 
 [[raccourci]]
 action = "sequence.nouvelle"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : ADD_NEW_SEQUENCE_KEY"
 
 [[raccourci]]
 action = "panneau.ajouter_image"
 touches = ["+"]
-source = "Storyboard Pro 27 : ADD_FRAME_KEY"
 
 [[raccourci]]
 action = "panneau.retirer_image"
 touches = ["-"]
-source = "Storyboard Pro 27 : REMOVE_FRAME_KEY"
 
 [[raccourci]]
 action = "panneau.proprietes"
 touches = ["Alt+Entrée"]
-source = "Storyboard Pro 27 : SB_PROPERTIES_KEY"
 
 [[raccourci]]
 action = "panneau.couper"
 touches = ["F6"]
-# F5 dans son Storyboard Pro ; F6 dans SHOT depuis le 2026-10-17 (Anthony : « F5 pose une clé
+# F6 dans SHOT depuis le 2026-10-17 (Anthony : « F5 pose une clé
 # partout. F6 coupe le plan »).
-source = "perso : SPLIT_PANEL_KEY (F6 dans SHOT)"
+source = "perso"
 
 [[raccourci]]
 action = "dessin.nouvelle_cle"
@@ -852,17 +774,16 @@ source = "perso (Anthony, 2026-10-17 : « avec un autre raccourci comme F4 »)"
 [[raccourci]]
 action = "panneau.fusionner_suivant"
 touches = []
-source = "SHOT (inverse de « couper le panneau » ; pas de commande équivalente repérée dans Storyboard Pro 27)"
+source = "SHOT (inverse de « couper le panneau »)"
 
 [[raccourci]]
 action = "scene.couper"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : SPLIT_SHOT_KEY"
 
 [[raccourci]]
 action = "scene.joindre_precedente"
 touches = []
-source = "SHOT (Storyboard Pro 27 crée une scène à partir des panneaux sélectionnés : JOIN_PANEL_KEY, sans touche)"
+source = "SHOT (crée une scène à partir des panneaux sélectionnés, sans touche)"
 
 [[raccourci]]
 action = "panneau.supprimer"
@@ -916,7 +837,7 @@ source = "proposition"
 [[raccourci]]
 action = "calque.nouveau_vectoriel"
 touches = ["Maj+S"]
-source = "perso : ADD_VECTOR_LAYER_KEY"
+source = "perso"
 
 [[raccourci]]
 action = "calque.nouveau_bitmap"
@@ -926,37 +847,34 @@ source = "proposition"
 [[raccourci]]
 action = "calque.copier"
 touches = ["W"]
-source = "perso : COPY_LAYERS_KEY"
+source = "perso"
 
 [[raccourci]]
 action = "calque.coller"
 touches = ["X"]
-source = "perso : PASTE_LAYERS_KEY"
+source = "perso"
 
 [[raccourci]]
 action = "calque.supprimer"
 touches = ["Q"]
-source = "perso : DELETE_LAYER_KEY"
+source = "perso"
 
 [[raccourci]]
 action = "calque.flou"
 touches = ["Maj+D"]
-source = "perso : BLUR_BITMAP_LAYER_KEY"
+source = "perso"
 
 [[raccourci]]
 action = "calque.verrouiller"
 touches = ["Alt+L"]
-source = "Storyboard Pro 27 : LOCK_LAYER_KEY"
 
 [[raccourci]]
 action = "calque.fusionner_dessous"
 touches = ["Ctrl+E"]
-source = "Storyboard Pro 27 : MERGE_DOWN_LAYERS"
 
 [[raccourci]]
 action = "calque.reinit_transformation"
 touches = ["Ctrl+R"]
-source = "Storyboard Pro 27 : RESET_LAYER_TRANSFORM_KEY"
 
 [[raccourci]]
 action = "calque.dessus"
@@ -1673,7 +1591,7 @@ source = "TVPaint 12 sans touche"
 [[raccourci]]
 action = "calque.nouveau_couleur"
 touches = []
-source = "SHOT (calque de couleur sous le trait, choix d'Anthony 2026-10-20 ; la façon de faire de Storyboard Pro ou de Harmony n'est pas vérifiée : à vérifier)"
+source = "SHOT (calque de couleur sous le trait, choix d'Anthony 2026-10-20)"
 
 [[raccourci]]
 action = "calque.nouveau_annotation"
@@ -1771,62 +1689,52 @@ touches = []
 source = "TVPaint 12 sans touche"
 
 # ------------------------------------------------------------------------------------ Caméra
-# Storyboard Pro 27 a ces fonctions sans touche par défaut.
 
 [[raccourci]]
 action = "outil.camera"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : SP_CAMERA_TRANSFORM_TOOL_KEY"
 
 [[raccourci]]
 action = "outil.transformer"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : SP_LAYER_TRANSFORM_TOOL_KEY"
 
 [[raccourci]]
 action = "camera.vue"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : TOGGLE_CAMERA_KEY (aperçu caméra)"
 
 [[raccourci]]
 action = "camera.masque"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : TOGGLE_CAMERA_MASK_KEY"
 
 [[raccourci]]
 action = "camera.reinitialiser"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : RESET_CAMERA_KEY"
 
 [[raccourci]]
 action = "camera.cle_debut"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : ADD_CAMERA_KEY_AT_BEGIN"
 
 [[raccourci]]
 action = "camera.cle_ici"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : ADD_CAMERA_KEY_AT_CURRENT"
 
 [[raccourci]]
 action = "camera.cle_fin"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : ADD_CAMERA_KEY_AT_END"
 
 [[raccourci]]
 action = "camera.cle_supprimer"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : REMOVE_CAMERA_KEY_AT_CURRENT"
 
 [[raccourci]]
 action = "camera.cle_adoucir"
 touches = []
-source = "SHOT (adoucissement par clé ; Storyboard Pro règle les courbes autrement, non vérifié)"
+source = "SHOT (adoucissement par clé)"
 
 [[raccourci]]
 action = "vue.dessus"
 touches = []
-source = "SHOT (fenêtre Vue de dessus ; aucune commande équivalente dans sb_shortcuts.xml de Storyboard Pro 27)"
+source = "SHOT (fenêtre Vue de dessus)"
 
 [[raccourci]]
 action = "vue.cadres_securite"
@@ -1974,8 +1882,7 @@ touches = []
 source = "SHOT"
 
 # ------------------------------------------------------------------------------------ Espaces de travail
-# Les dispositions de SHOT reprennent par le nom les commandes de Storyboard Pro 27 (sans
-# touche) ; leur contenu est propre à SHOT.
+# Les dispositions de SHOT (sans touche par défaut).
 
 [[raccourci]]
 action = "espace.standard"
@@ -1985,22 +1892,19 @@ source = "SHOT (disposition par défaut)"
 [[raccourci]]
 action = "espace.dessin"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : VIEW_LAYOUT_DRAWING_KEY"
 
 [[raccourci]]
 action = "espace.timeline"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : VIEW_LAYOUT_TIMELINE_KEY"
 
 [[raccourci]]
 action = "espace.ensemble"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : VIEW_LAYOUT_OVERVIEW_KEY"
 
 [[raccourci]]
 action = "espace.enregistrer"
 touches = []
-source = "SHOT (Storyboard Pro 27 passe par WORKSPACE_MANAGER, sans touche)"
+source = "SHOT (sans touche)"
 
 # Les quatre espaces de travail (INTERFACE.md, 6.1, 11 et 14), un onglet chacun en haut à droite :
 # Vignettes, Storyboard, Animation et Montage retiennent chacun leur disposition. Tab passe déjà du storyboard
@@ -2052,89 +1956,74 @@ touches = []
 source = "SHOT (mesure de la performance, sans touche : la palette Ctrl+K ou le menu Affichage)"
 
 # ------------------------------------------------------------------------------------ Table lumineuse et guides
-# Les touches des guides viennent du module « Guides » de Storyboard Pro 27
-# (Plugins\GuideTool\resources\sb_shortcuts.xml, valeurs « Toon Boom Storyboard »).
+# Les touches des guides.
 
 [[raccourci]]
 action = "vue.table_lumineuse"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : DRAWING_AUTO_LIGHT_TABLE_KEY"
 
 [[raccourci]]
 action = "guide.activer"
 touches = ["G"]
-source = "Storyboard Pro 27 (module Guides) : GuideEnabled"
 
 [[raccourci]]
 action = "guide.aligner"
 touches = ["Maj+A"]
-source = "Storyboard Pro 27 (module Guides) : AlignEnabled"
 
 [[raccourci]]
 action = "guide.verrouiller"
 touches = ["Maj+L"]
-source = "Storyboard Pro 27 (module Guides) : LockEnabled"
 
 [[raccourci]]
 action = "guide.lignes_reference"
 touches = ["Maj+G"]
-source = "Storyboard Pro 27 (module Guides) : GridEnabled"
 
 [[raccourci]]
 action = "guide.gomme"
 touches = []
-source = "Storyboard Pro 27 (module Guides) sans touche par défaut : EraserEnabled"
 
 [[raccourci]]
 action = "guide.curseur_complet"
 touches = []
-source = "Storyboard Pro 27 (module Guides) sans touche par défaut : FullDisplayEnabled"
 
 # ------------------------------------------------------------------------------------ Son
-# Storyboard Pro 27 a ces fonctions sans touche par défaut : on n'en invente pas.
+# Sans touche par défaut : on n'en invente pas.
 
 [[raccourci]]
 action = "son.importer"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : IMPORT_SOUND_KEY"
 
 [[raccourci]]
 action = "son.nouvelle_piste"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : NEW_SOUND_TRACK_KEY"
 
 [[raccourci]]
 action = "son.couper"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : SPLIT_SOUND_KEY"
 
 [[raccourci]]
 action = "son.defilement"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : TOGGLE_SCRUBBING_SOUND_KEY"
 
 [[raccourci]]
 action = "son.lecture"
 touches = []
-source = "Storyboard Pro 27 sans touche par défaut : TOGGLE_SOUND_KEY"
 
 # ------------------------------------------------------------------------------------ Autres (en réserve)
 
-# Lier les clips au panneau (LINK_CLIP_AND_PANEL, Ctrl+L dans Storyboard Pro 27) : sans objet depuis
+# Lier les clips au panneau (Ctrl+L) : sans objet depuis
 # les plans ; action retirée le 2026-10-18. Ctrl+L reste à la pelure d'oignon du calque (13b).
 
-# Suppr (DRAWING_UNLOAD_MODEL_KEY dans la vue de référence) est la touche de « Supprimer » : retirée
+# Suppr (vue de référence) est la touche de « Supprimer » : retirée
 # de la commande en réserve pour ne pas faire de conflit.
 [[raccourci]]
 action = "reference.decharger"
 touches = []
-source = "Storyboard Pro 27 : DRAWING_UNLOAD_MODEL_KEY (vue de référence, Suppr, déjà pris)"
 etat = "non implémenté"
 
 [[raccourci]]
 action = "legende.chercher"
 touches = ["Ctrl+Maj+F"]
-source = "Storyboard Pro 27 : FIND_TEXT_KEY"
 etat = "non implémenté"
 
 # ------------------------------------------------------------------------------------ Sans touche par défaut
@@ -2156,17 +2045,7 @@ touches = []
 source = "SHOT (sans touche)"
 
 [[raccourci]]
-action = "fichier.importer_sboard"
-touches = []
-source = "SHOT (sans touche)"
-
-[[raccourci]]
 action = "fichier.importer_scenario"
-touches = []
-source = "SHOT (sans touche)"
-
-[[raccourci]]
-action = "fichier.exporter_sboard"
 touches = []
 source = "SHOT (sans touche)"
 

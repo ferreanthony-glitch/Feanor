@@ -11,10 +11,10 @@
 //!   remplit la zone de travail ;
 //! - ni barre de commandes, d'outils ou de panneaux, ni panneaux ; les menus qui parlent d'un projet sont grisés (quand ils sont là) ;
 //! - **aucune commande qui vise un projet ne part** : `run_action` laisse passer seulement `action_sans_projet` (créer,
-//!   ouvrir, importer d'un scénario ou de Storyboard Pro, réglages, aide, onglets, quitter), qu'elle vienne d'un raccourci,
+//!   ouvrir, importer d'un scénario, réglages, aide, onglets, quitter), qu'elle vienne d'un raccourci,
 //!   d'un menu, de la palette Ctrl+K ou d'un bouton. Le document caché ne change donc jamais, l'onglet reste « sans projet »,
 //!   et fermer SHOT ne demande rien ;
-//! - des fichiers lâchés sur la fenêtre : seuls les projets (`.shot`, `.pelure`, `.sboard`) sont pris.
+//! - des fichiers lâchés sur la fenêtre : seuls les projets (`.shot`, `.pelure`) sont pris.
 //!
 //! Un projet qui arrive (Nouveau, Ouvrir, récents, importé, argument de la ligne de commande, séance rouverte, copie de
 //! secours) prend la place de l'onglet sans projet (`Onglets::charger_projet`) : jamais deux projets. Fermer le dernier
@@ -40,7 +40,6 @@ pub(crate) fn action_sans_projet(action: &str) -> bool {
             | "fichier.quitter"
             | "fichier.preferences"
             | "fichier.importer_scenario"
-            | "fichier.importer_sboard"
             | "fichier.fermer"
             | "onglet.nouveau"
             | "onglet.suivant"
@@ -61,7 +60,7 @@ pub(crate) fn action_sans_projet(action: &str) -> bool {
 
 /// Un fichier qu'on peut lâcher sur SHOT quand aucun projet n'est ouvert : un projet, d'où qu'il vienne.
 pub(crate) fn est_un_projet_a_ouvrir(path: &Path) -> bool {
-    crate::project::est_un_projet(path) || path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("sboard"))
+    crate::project::est_un_projet(path)
 }
 
 impl App {
@@ -82,9 +81,7 @@ impl App {
         let mut ignores = 0;
         for path in paths {
             if est_un_projet_a_ouvrir(&path) {
-                if !self.import_dropped_sboard(&path) {
-                    self.import_dropped_project(&path);
-                }
+                self.import_dropped_project(&path);
             } else {
                 ignores += 1;
             }

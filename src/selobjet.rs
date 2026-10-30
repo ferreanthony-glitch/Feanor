@@ -10,7 +10,7 @@
 //!   Un glisser reste un lasso ou un rectangle : seul le clic sans glisser choisit un objet.
 //! - **Ctrl + Maj + clic** ajoute l'objet à la sélection, sur n'importe quel calque du plan, ou le
 //!   retire s'il y était déjà ; **Ctrl + Maj + lasso** ajoute tout ce qu'il prend, sur tous les calques
-//!   (c'est le geste « tous les calques » de Storyboard Pro, `multitools.rs`, qui jusqu'ici
+//!   (c'est le geste « tous les calques » de `multitools.rs`, qui jusqu'ici
 //!   remplaçait la sélection). Une sélection faite sur un seul calque (trait ou lasso vectoriel) est
 //!   reprise dans le cumul ; une zone bitmap soulevée est d'abord posée.
 //! - **Maj + clic** (sans Ctrl) fait la même chose sur les calques choisis, comme avant.

@@ -1,5 +1,5 @@
-//! Boîte de sélection façon Storyboard Pro (Anthony, 2026-10-18 : « revoir le système de
-//! transformation après sélection pour singer celui de Storyboard Pro ») : un cadre aux huit
+//! Boîte de sélection (Anthony, 2026-10-18 : « revoir le système de
+//! transformation après sélection ») : un cadre aux huit
 //! poignées carrées (quatre coins, quatre milieux de côtés) et un pivot rond au centre.
 //!
 //! - glisser dedans : déplacer ;
@@ -14,7 +14,7 @@
 //! d'un geste est une `Affine` (échelle, rotation, cisaillement, déplacement) : la feuille
 //! flottante (`flottante.rs`) la pose au zéro latence, comme un déplacement.
 //!
-//! Choix de touches, à vérifier avec le vrai Storyboard Pro (rien n'est tiré de son code) :
+//! Choix de touches :
 //! - Maj sur un coin ou un côté : proportions gardées ; Maj en déplaçant : un seul axe ; Maj en
 //!   tournant : par pas de 15° ;
 //! - le réglage « Garder les proportions » inverse l'effet de Maj sur les poignées.
@@ -472,7 +472,7 @@ pub fn resize_cursor_axis(dir: eframe::egui::Vec2) -> usize {
 }
 
 /// Côté des poignées carrées (coins et milieux de côtés) et rayon du cercle du pivot, en points
-/// d'écran : les mêmes à tout zoom (Storyboard Pro : carrés d'environ 7 px, pivot de 5 px de rayon).
+/// d'écran : les mêmes à tout zoom (carrés d'environ 7 px, pivot de 5 px de rayon).
 pub const HANDLE_SIDE: f32 = 7.0;
 pub const PIVOT_RADIUS: f32 = 5.0;
 

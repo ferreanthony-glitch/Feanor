@@ -653,8 +653,7 @@ impl Inputs {
 }
 
 /// Toucher du stylet (sensation des brosses, étude du 2026-10-18) : la réponse à la pression
-/// commune à tous les pinceaux, réglée une fois pour toutes (préférence, comme le « Pen Pressure
-/// Feel » de Storyboard Pro) et appliquée par le moteur avant les connexions de chaque brosse.
+/// commune à tous les pinceaux, réglée une fois pour toutes (préférence) et appliquée par le moteur avant les connexions de chaque brosse.
 /// `Toucher::ancien()` est le comportement d'avant, à portée de main pour comparer à la tablette.
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 #[serde(default)]

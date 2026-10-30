@@ -7,7 +7,7 @@
 //! l'on déplace, copie, supprime ou règle ensuite comme les autres. Il part de la caméra de
 //! chaque image (`base`, avec ses clés et ses adoucis) et lui ajoute un décalage : il ne remet
 //! rien à zéro. Les valeurs d'amplitude, de fréquence et de durée sont des choix de SHOT, à régler
-//! à l'œil ; aucun équivalent dans Storyboard Pro ni dans TVPaint n'a été vérifié (à vérifier).
+//! à l'œil.
 //!
 //! Tout est déterministe : même préréglage, mêmes réglages, même graine, mêmes clés. Le bruit est
 //! une somme de sinus aux phases tirées de la graine (lisse, borné par l'intensité) ; les

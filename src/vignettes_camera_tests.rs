@@ -1062,13 +1062,12 @@ fn the_camera_key_with_alt_adds_a_frame_and_the_key_is_free_in_every_keymap() {
     b.image(vec![t(false, Modifiers::NONE)], 1.0 / 60.0);
     b.image(Vec::new(), 1.0 / 60.0);
     assert_eq!(b.app.doc.panels[1].camera.len(), 3, "T + Alt : un cadre de plus : {}", b.app.status);
-    // T n'est prise par aucune autre action, dans les deux modes, ni dans le jeu « Façon Storyboard Pro ».
+    // T n'est prise par aucune autre action, dans les deux modes.
     for mode in [Mode::Storyboard, Mode::Animation] {
         assert_eq!(b.app.keymap.find(Key::T, Some(Key::T), Modifiers::NONE, mode), Some("vignettes.camera"));
     }
     assert!(b.app.keymap.warnings.iter().all(|w| !w.contains("vignettes.camera")), "{:?}", b.app.keymap.warnings);
-    let pro = crate::keymap::Keymap::from_layers(crate::keymap::DEFAULT_KEYMAP, Some((crate::keymap::PresetId::StoryboardPro, crate::keymap::STORYBOARD_PRO_KEYMAP)), None);
-    assert_eq!(pro.find(Key::T, Some(Key::T), Modifiers::NONE, Mode::Storyboard), Some("vignettes.camera"));
+
     assert!(crate::keymap::action_info("vignettes.camera").is_some_and(|a| a.implemented));
     let fois = crate::keymap::DEFAULT_KEYMAP.matches("touches = [\"T\"]").count();
     assert_eq!(fois, 1, "une seule action sur T dans keymap.toml");

@@ -1,12 +1,9 @@
 //! Retourner (Anthony, 2026-10-18 : « créer la possibilité de flipper un plan, flipper un calque et
-//! flipper une sélection »). La sélection : `selection.miroir_h` / `miroir_v` (Alt+H, Alt+V comme
-//! Storyboard Pro 27). Ici :
+//! flipper une sélection »). La sélection : `selection.miroir_h` / `miroir_v` (Alt+H, Alt+V). Ici :
 //! - un calque, de gauche à droite ou de haut en bas, sur place (autour du centre de son contenu),
 //!   par la transformation du calque (étirement négatif) : ses dessins ne changent pas ;
-//! - les plans choisis, de gauche à droite autour du milieu du cadre (« Flip Selected Shots » de
-//!   Storyboard Pro 27, HORIZONTAL_FLIP_KEY, sans touche par défaut ; son rendu exact est à
-//!   vérifier) : tous leurs calques et leur caméra, sauf les calques de toute la scène, partagés
-//!   avec les autres plans de la scène.
+//! - les plans choisis, de gauche à droite autour du milieu du cadre (sans touche par défaut) : tous leurs calques et leur caméra, sauf les calques de toute la scène,
+//!   partagés avec les autres plans de la scène.
 
 use eframe::egui::{pos2, Pos2};
 

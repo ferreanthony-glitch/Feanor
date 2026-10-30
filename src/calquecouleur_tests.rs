@@ -706,17 +706,6 @@ fn filling_a_big_sheet_is_fast_enough_to_click() {
 }
 
 #[test]
-fn the_export_to_storyboard_pro_carries_the_colour_as_an_ordinary_layer_and_says_so() {
-    let (mut app, _) = with_colour("sbp", 0.0);
-    app.fill_at(pos2(200.0, 150.0));
-    let out = crate::sbexport::prepare(&app.doc, "Film");
-    let layers = &out.scenes[0].panels[0].layers;
-    assert_eq!(layers.iter().map(|l| l.name.as_str()).collect::<Vec<_>>(), ["Trait couleur", "Trait", "Autre"], "du bas vers le haut, la couleur sous le trait");
-    assert!(layers[0].drawn && !layers[0].vector, "un calque bitmap avec un dessin");
-    assert!(out.notes.iter().any(|n| n.contains("Calques de couleur") && n.contains("à vérifier")), "{:?}", out.notes);
-}
-
-#[test]
 fn a_copy_of_a_line_drawing_takes_the_colour_of_the_original() {
     let (mut app, _) = with_colour("copie-dessin", 0.0);
     app.fill_at(pos2(200.0, 150.0));

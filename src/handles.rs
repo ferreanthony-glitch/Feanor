@@ -332,7 +332,7 @@ pub fn shift_runs(layer: &mut Layer, chosen: &[usize], delta: isize) -> Vec<usiz
 }
 
 /// Où se poseront les clés des expositions `chosen` glissées de `delta` images (`shift_runs`),
-/// vu dans le calque tel qu'il est (comme le repère de Storyboard Pro entre deux panneaux) :
+/// vu dans le calque tel qu'il est (un repère entre deux panneaux) :
 /// pour chaque bloc qui change de place, l'image de la limite entre deux autres expositions où
 /// il viendra (0 : tout au début, la fin du calque : tout au bout). Rien pour un bloc qui reste.
 pub fn drop_marks(layer: &Layer, chosen: &[usize], delta: isize) -> Vec<usize> {

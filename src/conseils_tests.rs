@@ -5,7 +5,7 @@ use eframe::egui::{epaint::Shape, Event, Modifiers, PointerButton, Pos2};
 
 use crate::conseils::{a_montrer, Conseil, ReglageConseils};
 use crate::document::Document;
-use crate::keymap::{Keymap, PresetId};
+use crate::keymap::Keymap;
 use crate::perf_tests::{banc_taille, Banc};
 use crate::settings::Settings;
 use crate::workspace::Espace;
@@ -75,12 +75,12 @@ fn the_shortcut_tip_reads_the_live_keymap() {
     assert!(t.contains("F11 masque") && t.contains("maintiens R"), "{t}");
     // Le fichier personnel les change : la phrase suit.
     let user = "version = 1\n[[raccourci]]\naction = \"vue.concentration\"\ntouches = [\"K\"]\n[[raccourci]]\naction = \"aide.aide_memoire\"\ntouches = [\"J\"]\n";
-    b.app.keymap = Keymap::build(PresetId::Shot, Some(user));
+    b.app.keymap = Keymap::build(Some(user));
     let t = b.app.conseil_texte(Conseil::Raccourcis);
     assert!(t.contains("K masque") && t.contains("maintiens J"), "{t}");
     // Plus de touche du tout : la phrase le dit sans inventer.
     let sans = "version = 1\n[[raccourci]]\naction = \"vue.concentration\"\ntouches = []\n[[raccourci]]\naction = \"aide.aide_memoire\"\ntouches = []\n";
-    b.app.keymap = Keymap::build(PresetId::Shot, Some(sans));
+    b.app.keymap = Keymap::build(Some(sans));
     assert!(b.app.conseil_texte(Conseil::Raccourcis).contains("menu Affichage"));
 }
 

@@ -416,7 +416,7 @@ fn the_scrubbed_sound_goes_through_the_same_mix() {
 }
 
 #[test]
-fn a_clip_exported_to_storyboard_pro_carries_its_effects() {
+fn a_baked_clip_carries_its_effects() {
     let (mut doc, sound) = doc_with_sound();
     let clip = doc.add_clip(0, sound, 0, 0, 24).unwrap();
     doc.audio_tracks[0].clips[0].fx.fade_out = 12;

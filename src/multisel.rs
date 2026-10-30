@@ -917,7 +917,7 @@ pub(crate) struct Multi {
     pub contours: std::cell::RefCell<Option<crate::contours::Contours>>,
     /// Les halos des dessins des autres clés (Part::live faux), plus pâles.
     pub ghosts: std::cell::RefCell<Option<crate::contours::Contours>>,
-    /// Ctrl+Maj tenus au début du geste (comme dans Storyboard Pro) : le lasso, le rectangle ou le
+    /// Ctrl+Maj tenus au début du geste le lasso, le rectangle ou le
     /// clic prennent sur TOUS les calques du plan à l'image courante, pas seulement les calques
     /// choisis. Une fois le geste fini, les calques touchés deviennent les calques choisis.
     pub all_layers: bool,

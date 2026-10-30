@@ -85,8 +85,8 @@ impl Onglet {
             Onglet::Dessin => "Le curseur du stylet, sa pression, le point fixe des poignées, le passe-partout autour de la caméra et le tremblement du trait par défaut.",
             Onglet::Montage => "Les pistes du montage et leur repliage, la durée d'un nouveau plan.",
             Onglet::Vignettes => "La planche : cases pâles, débord du trait, cadres de caméra, et le décor partagé entre les cases d'un plan.",
-            Onglet::Raccourcis => "Le jeu de raccourcis du clavier et ses fichiers.",
-            Onglet::Export => "Les programmes et les modèles dont les exports ont besoin.",
+            Onglet::Raccourcis => "Les raccourcis du clavier et leur fichier.",
+            Onglet::Export => "Les programmes dont les exports ont besoin.",
             Onglet::Equipe => "Ton nom, ta couleur et la façon de travailler à plusieurs.",
             Onglet::Generation => "Les fournisseurs des sons générés, le serveur local, les clés.",
             Onglet::Performance => "Les effets, les caches et les fils de calcul de cet ordinateur.",
@@ -152,7 +152,7 @@ impl Groupe {
             Groupe::CadresCamera => "Cadres de caméra",
             Groupe::Decor => "Décor",
             Groupe::Raccourcis => "Raccourcis clavier",
-            Groupe::Programmes => "Programmes et modèles",
+            Groupe::Programmes => "Programmes",
             Groupe::Commentaires => "Commentaires",
             Groupe::Equipe => "Travail à plusieurs",
             Groupe::Generation => "Génération sonore",
@@ -246,13 +246,11 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Vignettes, G::Decor, "vignettes.calque_decor", "Calque Décor", "vectoriel bitmap pixels sorte créer brosses du décor pastilles"),
     r(O::Vignettes, G::Decor, "vignettes.brosses_decor", "Brosses Décor", "couleur trait aplat taille crayon feutre pinceau plein pixels panneau brosses perso pastilles"),
     // ---- Raccourcis
-    r(O::Raccourcis, G::Raccourcis, "raccourcis.jeu", "Jeu de raccourcis", "clavier storyboard pro touches"),
     r(O::Raccourcis, G::Raccourcis, "raccourcis.liste", "Voir et changer les raccourcis", "assigner touche"),
     r(O::Raccourcis, G::Raccourcis, "raccourcis.fichier", "Modifier le fichier à la main", "toml perso"),
     r(O::Raccourcis, G::Raccourcis, "raccourcis.recharger", "Recharger", "fichier"),
     // ---- Export
     r(O::Export, G::Programmes, "export.ffmpeg", "ffmpeg", "vidéo gif encodeur film son"),
-    r(O::Export, G::Programmes, "export.modele_sbp", "Modèle Storyboard Pro", "sboard export projet vide"),
     r(O::Export, G::Programmes, "export.fenetre", "Ouvrir la fenêtre Exporter", "film pdf png gif"),
     // ---- Équipe
     r(O::Equipe, G::Commentaires, "equipe.signature", "Signer mes commentaires", "auteur nom timeline"),

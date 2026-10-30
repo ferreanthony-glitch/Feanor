@@ -2,7 +2,7 @@
 //! se fait plus petit quand SHOT approche de ce budget, et regrandit quand il y a de la place.
 //!
 //! Pourquoi (audit du 2026-10-23, point 5) : le cache visait un poids fixe (1 à 2 Go, choisi par le diagnostic), sans
-//! regarder ce que les autres logiciels prennent. Mémoire vidéo à 6,9 Go sur 8 (Storyboard Pro 3,5 Go, SHOT 1,5 Go,
+//! regarder ce que les autres logiciels prennent. Mémoire vidéo à 6,9 Go sur 8 (un autre logiciel 3,5 Go, SHOT 1,5 Go,
 //! le bureau de Windows), chaque image recomposée attendait la carte 25 à 46 ms au lieu de 2 ; à 5,4 Go, 1,4 à 2,5 ms.
 //! Sous Windows (WDDM), un processus qui dépasse son budget voit ses textures déplacées en mémoire centrale.
 //!

@@ -1,4 +1,4 @@
-//! Tests du geste Ctrl+Maj avec l'outil Sélection (comme dans Storyboard Pro : « sélectionner
+//! Tests du geste Ctrl+Maj avec l'outil Sélection (« sélectionner
 //! plusieurs images clés de plusieurs calques en même temps, en sélectionnant avec Ctrl+Maj + outil
 //! de sélection sur le canevas ») : le lasso prend sur TOUS les calques du plan à l'image courante,
 //! sauf les cachés, verrouillés, vides et vidéo ; les calques touchés deviennent les calques choisis

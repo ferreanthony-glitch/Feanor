@@ -518,9 +518,9 @@ pub fn build_mix(doc: &Document, wait: bool) -> Vec<MixClip> {
     out
 }
 
-/// Les échantillons d'un extrait avec ses effets, tels que Storyboard Pro les reçoit (export vers
-/// Storyboard Pro) : gain, fondus, clés, égaliseur et écho ; pas d'enchaîné (chaque extrait est écrit
-/// seul, sans recouvrement) ; le volume de la piste est à part.
+/// Les échantillons d'un extrait avec ses effets : gain, fondus, clés, égaliseur et écho ; pas
+/// d'enchaîné (chaque extrait est écrit seul, sans recouvrement) ; le volume de la piste est à part.
+#[cfg(test)]
 pub fn bake_clip(doc: &Document, clip: &SoundClip) -> Vec<[f32; 2]> {
     let Some(sound) = doc.sounds.get(&clip.sound) else { return Vec::new() };
     bake_sound(sound, doc.fps, clip)

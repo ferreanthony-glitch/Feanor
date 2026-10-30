@@ -1,8 +1,8 @@
 # Interface de SHOT : simplicité et cohérence (passe du 2026-10-19)
 
 Cette passe répond à la demande d'Anthony : « un logiciel qui réponde toujours très rapidement,
-sans latence et avec une interface simple et intuitive ». Un petit outil de storyboard façon
-Storyboard Pro, avec le dessin et l'animation façon TVPaint. En deux jours, beaucoup de fonctions sont
+sans latence et avec une interface simple et intuitive ». Un petit outil de storyboard,
+avec le dessin et l'animation façon TVPaint. En deux jours, beaucoup de fonctions sont
 arrivées vite, de plusieurs mains : cette passe relit l'interface d'un bloc, corrige ce qui peut l'être
 sans changer le comportement, et propose le reste (partie 6).
 
@@ -27,8 +27,8 @@ touches par défaut deux à deux, celles des commandes « en réserve » compris
 
 | Touche | Qui la prenait | Réglé |
 |---|---|---|
-| Suppr | `edition.supprimer` et `reference.decharger` (en réserve, Storyboard Pro `DRAWING_UNLOAD_MODEL_KEY`) | la commande en réserve perd sa touche (la source reste notée) |
-| Maj+Suppr | `dessin.supprimer_hors_selection` et `edition.supprimer_et_resserrer` (en réserve, `DELETE_ALT_KEY`) | idem |
+| Suppr | `edition.supprimer` et `reference.decharger` (en réserve) | la commande en réserve perd sa touche |
+| Maj+Suppr | `dessin.supprimer_hors_selection` et `edition.supprimer_et_resserrer` (en réserve) | idem |
 
 (**Mis à jour le 2026-10-20, partie 24** : à la demande d'Anthony, Maj+Suppr est passée à `selection.remplir`
 — remplir une zone bitmap de la couleur courante ; sans zone bitmap choisie elle fait encore « effacer hors de
@@ -96,7 +96,7 @@ et les calques » (c'est la colonne des calques).
 
 | Idée | Mot | À éviter |
 |---|---|---|
-| Unité du storyboard | **plan** (une séquence regroupe des plans) | scène, shot, panneau (le mot « panneau » reste dans les échanges avec Storyboard Pro : c'est le sien) |
+| Unité du storyboard | **plan** (une séquence regroupe des plans) | scène, shot, panneau |
 | Zone de l'interface | **panneau** (Calques, Effets…) ; colonne, barre | fenêtre (réservé aux vraies fenêtres) |
 | Début d'un dessin sur un calque | **clé** ; **clé de caméra** ; **clé d'effet** | « image clé » (une image est une image du film) |
 | Ce que montre une clé | **dessin** ; sa durée : **exposition** | |
@@ -112,7 +112,6 @@ et les calques » (c'est la colonne des calques).
 | Vue sur le film | **montage** (storyboard) ; **timeline** (animation) ; **bande** seulement pour les deux ensemble | |
 | Traits d'aide du cadre | **aides au cadrage** | repères (réservé aux repères de la timeline : signets, entrée, sortie) |
 | Menu ⋮ d'un calque ou d'un groupe | **Commandes du calque** / **du groupe** | options |
-| Importer un projet Storyboard Pro | **Importer** (l'accueil disait « Ouvrir ») | |
 | L'espace où l'on place les calques et la caméra | **Espace 3D** (le plateau en 3D et la scène 3D d'avant ne font plus qu'un, sans objets depuis le 2026-10-21) ; **carte** (un calque du plan posé dans l'espace) ; **caméra** (celle du plan, la seule) | maquette, set, scène 3D, plateau en 3D, caméra du plateau, objet 3D, repère 3D |
 | Basculer | « (montrer / cacher) » pour les barres et colonnes, « (ouvrir / fermer) » pour les panneaux, « (oui / non) » pour une option, « (allumer / éteindre) » pour la pelure et les pochoirs, « (poser / retirer) » pour les marques et signets | afficher / masquer |
 
@@ -127,11 +126,10 @@ et les calques » (c'est la colonne des calques).
 - Aides au cadrage : « Couleur / Opacité des repères », « Éteindre les repères » → « … des aides au cadrage ».
 - Effets : « Retirer l'effet » → « Supprimer l'effet » ; réglages rangés de la pelure : « Effacer »
   → « Supprimer ».
-- Accueil : « Ouvrir un projet Storyboard Pro » → « Importer un projet Storyboard Pro (.sboard)… ».
 - « Nouveau calque » (bouton du montage, qui fait un calque vectoriel) → « Nouveau calque vectoriel ».
 - Les doubles `scene.*` ne font plus qu'une ligne dans la palette.
 - Chemins de menu périmés dans les messages (« Aide > Recharger les raccourcis », « Calques > Nouveau
-  calque vectoriel », « Fichier > Exporter le film », « Fichier > Ouvrir un projet Storyboard Pro »).
+  calque vectoriel », « Fichier > Exporter le film »).
 
 ### Ajout du 2026-10-19 : « Colorier par zones… »
 
@@ -155,7 +153,7 @@ et les calques » (c'est la colonne des calques).
   ordinaire fait la même chose). L'aplat sous le trait (fonction du calque) ne s'appelle plus « fond » : c'est l'**« Aplat sous le trait »**
   (« Aplat » sur sa sous-ligne), depuis le 2026-10-21. Ne jamais écrire « Fond sous le trait » ni « Remplissage » dans un texte de l'interface
   pour cette fonction.
-- **« Propriétés du plan »** (action, Alt+Entrée, nom de Storyboard Pro) ouvre le panneau « Fiche du plan »
+- **« Propriétés du plan »** (action, Alt+Entrée) ouvre le panneau « Fiche du plan »
   (onglet « Fiche »). Trois noms pour une chose. Proposition : « Fiche du plan » partout.
 - « Image clé » reste dans les textes de la propagation (EbSynth : les images peintes à la main) ;
   fichiers `propager*.rs` non touchés à la demande d'Anthony.
@@ -306,7 +304,7 @@ choix de clés ; en animation, le montage est visible avec la timeline (chantier
 le rectangle prend la sorte de clé de la rangée où il PART (piste Caméra : caméra ; pistes de calques :
 dessins ; les clés d'effets sont en haut des pistes, elles se choisissent au clic).
 
-Dans le **dessin** (Storyboard Pro : « Ctrl+Maj + outil de sélection sur le canevas ») : avec l'outil
+Dans le **dessin** : avec l'outil
 Sélection, Ctrl+Maj tenus pendant le lasso, le rectangle ou le clic prennent sur TOUS les calques du
 plan à l'image courante (visibles, déverrouillés, non vidéo, avec un dessin ; les dossiers comptent par
 leurs calques). Les calques où quelque chose a été pris deviennent les calques choisis et leurs clés à
@@ -386,77 +384,26 @@ Aucune n'était faite dans cette passe : c'est la partie 6.3 (barre par défaut 
 - **Ce qu'Anthony voit** : passer en Animation ouvre les panneaux Calques, Effets et la timeline en grand ;
   revenir en Storyboard remet le montage et la fiche du plan. Sa disposition de chaque mode se retient.
 
-### 6.2 Jeu de raccourcis « Façon Storyboard Pro » (FAIT, branche `raccourcis-sbp`)
+### 6.2 Raccourcis : le fichier par défaut et le fichier personnel (FAIT)
 
-Seulement ce que `keymap.toml` documente (les 65 raccourcis de `sb_shortcuts.xml` de Storyboard Pro 27,
-leur identifiant est dans le champ `source`). Au départ, SHOT s'écartait de Storyboard Pro sur :
+Deux couches, chacune remplace la précédente *commande par commande* :
+`keymap.toml` (SHOT, intégré au programme) < fichier personnel (`%APPDATA%\SHOT\keymap.toml`).
 
-| Commande SHOT | Storyboard Pro 27 | SHOT aujourd'hui | Raison notée dans le fichier |
-|---|---|---|---|
-| plan précédent | `PREV_PANEL_KEY` : A | PgPréc | A / F vont à la clé précédente / suivante (choix d'Anthony) ; **gardé ainsi dans le jeu** (voir plus bas) |
-| plan suivant | `NEXT_PANEL_KEY` : F | PgSuiv | idem |
-| coller sur place | `PASTE_IN_PLACE_KEY` : Ctrl+Maj+V | pas de touche | Ctrl+Maj+V colle à la tête de lecture (choix d'Anthony) ; **gardé ainsi dans le jeu** |
-| couper le plan | `SPLIT_PANEL_KEY` : F5 (ses réglages perso) | F6 | F5 pose une clé ; **gardé ainsi dans le jeu** |
-| supprimer et resserrer | `DELETE_ALT_KEY` : Maj+Suppr | pas de touche | commande pas faite, touche prise |
-| décharger la référence | `DRAWING_UNLOAD_MODEL_KEY` : Suppr | pas de touche | commande pas faite, touche prise |
-| lier les clips au panneau | `LINK_CLIP_AND_PANEL` : Ctrl+L | retirée (Ctrl+L = pelure du calque) | sans objet depuis les plans |
-| pinceau pochoir | `DRAWING_STENCIL_BRUSH_TOOL_KEY` : Alt+X | retirée | le pochoir de calque existe |
-
-**Ce qui est fait.** Deux jeux, au choix dans **Fichier > Préférences… > Raccourcis clavier** et en tête
-de la liste **Fichier > Raccourcis clavier… (F1)** : « Jeu de raccourcis » = *SHOT (par défaut)* ou
-*Façon Storyboard Pro*. Le second est le fichier `keymap-storyboard-pro.toml` (intégré au programme, même
-format que `keymap.toml`, avec un champ `source` par bloc). **Pour l'instant il garde toutes les touches de
-SHOT** : il ne redéfinit aucune commande (aucun bloc `[[raccourci]]`, le format l'accepte) et se contente de
-noter des commandes « à vérifier » (plus bas). Anthony garde A / F, F5 et Ctrl+Maj+V comme il les a réglés ;
-les deux jeux donnent donc les mêmes touches à chaque commande. S'il décide un jour de reprendre une touche de
-Storyboard Pro, elle s'ajoutera au jeu par un bloc `[[raccourci]]` (avec son `source`).
-
-**Pas pris à Storyboard Pro, volontairement (choix d'Anthony, 2026-10-19).** « A et F ne servent plus à aller
-de clé en clé dans ce jeu ; F5 ne crée plus de nouvelle clé : je veux garder ces raccourcis comme je les ai
-mis en place. » Idem pour Ctrl+Maj+V. Le jeu ne touche donc pas à :
-
-- **Ctrl+Maj+V** : reste `edition.coller_a_la_tete` (« Coller les clés à la tête de lecture »), comme dans
-  SHOT ; `edition.coller_sur_place` (`PASTE_IN_PLACE_KEY` de Storyboard Pro, Ctrl+Maj+V chez lui) reste une
-  commande sans touche ;
-- **A / F** : restent `cle.precedente` / `cle.suivante` ; le plan précédent / suivant (`panneau.precedent` /
-  `panneau.suivant`) garde PgPréc / PgSuiv, au lieu du A / F de Storyboard Pro (`PREV_PANEL_KEY` /
-  `NEXT_PANEL_KEY`) ;
-- **F5** : reste `dessin.nouvelle_cle` (plus « à vérifier » : elle garde sa touche) ; `panneau.couper` garde F6,
-  au lieu du F5 de son Storyboard Pro (`SPLIT_PANEL_KEY`).
-
-Le fichier du jeu le dit en commentaire ; ne les y remettre qu'après une nouvelle décision d'Anthony.
-
-Quatre commandes **gardent la touche de SHOT** (elles ne changent pas) et sont notées « à vérifier »
-dans le jeu, parce que la touche de Storyboard Pro n'est établie nulle part : `mode.basculer` (Tab) et
-`vue.planches` (Maj+Tab), dont le rôle dans Storyboard Pro n'est pas vérifié ; `aide.palette` (Ctrl+K,
-proposition de SHOT) ; `dessin.nouvelle_cle_vide` (F4, réglage perso d'Anthony dans SHOT). Total : **4
-« à vérifier »**, toutes sur des touches de SHOT ; la liste F1 les marque d'une étiquette « à vérifier ».
-
-**Pas reprises (rien à poser, la commande n'existe pas dans SHOT)** : `DELETE_ALT_KEY` (Maj+Suppr, supprimer
-et resserrer : pas faite), `DRAWING_UNLOAD_MODEL_KEY` (Suppr, décharger la référence : pas faite),
-`LINK_CLIP_AND_PANEL` (Ctrl+L : sans objet depuis les plans), `DRAWING_STENCIL_BRUSH_TOOL_KEY` (Alt+X :
-retiré, le pochoir de calque existe). Suppr, Maj+Suppr et Ctrl+L gardent donc leur sens dans les deux jeux.
-Toutes les autres commandes de Storyboard Pro 27 que `keymap.toml` cite ont déjà la même touche dans SHOT,
-ou n'en ont pas dans Storyboard Pro (« sans touche par défaut » : on n'invente pas).
-
-**Règle de fusion** (trois couches, chacune remplace la précédente *commande par commande*) :
-`keymap.toml` (SHOT) < jeu choisi < fichier personnel (`%APPDATA%\SHOT\keymap.toml`).
-
-- Un jeu ne touche que ses commandes ; il écrit lui-même les retraits (une touche donnée à une commande est
-  retirée à celle qui la portait), donc il n'a aucun conflit en lui (essai
-  `keymap_jeux_tests::the_storyboard_pro_set_has_no_internal_conflict`, même contrôle que pour SHOT).
-- Les raccourcis de l'utilisateur sont **gardés par-dessus le jeu**, dans les deux sens : une commande qu'il
-  a changée garde sa touche quel que soit le jeu ; les autres prennent celles du jeu. Si sa touche est aussi
-  dans le jeu, la sienne joue et la liste (F1) signale le conflit.
+- Les raccourcis de l'utilisateur sont **gardés par-dessus le défaut** : une commande qu'il a changée garde sa
+  touche, les autres gardent celles de SHOT. Si sa touche est aussi dans le défaut, la sienne joue et la liste
+  (F1) signale le conflit.
 - Une copie du fichier par défaut, mot pour mot (ce que « Modifier le fichier à la main » crée), ne compte
-  pas comme personnelle : sinon elle cacherait le jeu en entier.
-- Limite : si l'utilisateur prend à une autre commande une touche du jeu (fenêtre « Assigner »), le retrait
-  est écrit dans son fichier ; il reste après un changement de jeu. « Par défaut » (liste F1) rend la touche.
-- Changer de jeu demande confirmation quand il y a des raccourcis personnels ; sinon c'est immédiat. Le choix
-  est dans les réglages (`jeu_raccourcis`, absent = SHOT : les anciens réglages se lisent comme avant).
-- La liste F1 dit, par commande, d'où vient sa touche (*SHOT*, *jeu* ou *perso*) ; la palette Ctrl+K montre
-  toutes les touches actives de la commande, avec *jeu* ou *perso* quand ce n'est pas SHOT.
-
+  pas comme personnelle. Seuls l'action, les touches et le contexte sont comparés : le champ `source`, un simple
+  commentaire, n'y compte pas (un ancien fichier copié avant un changement de commentaire reste une copie).
+- Une action qui n'existe plus dans SHOT (par exemple les anciennes actions d'import et d'export d'un
+  logiciel tiers, retirées le 2026-10-30) est **ignorée** avec une remarque dans la liste F1 : un ancien fichier personnel ne
+  plante ni ne bloque rien (essais `ancien_projet_tests`).
+- Un ancien réglage `jeu_raccourcis` dans `reglages.toml` (le choix d'un jeu de raccourcis, retiré le
+  2026-10-30) est ignoré à la lecture.
+- La liste F1 dit, par commande, d'où vient sa touche (*SHOT* ou *perso*) ; la palette Ctrl+K montre toutes les
+  touches actives de la commande.
+- Pas de touche en double : deux commandes ne peuvent pas porter la même touche dans le même contexte, même « en
+  réserve » (essai `keymap_tests::no_two_default_bindings_share_a_key_in_the_same_context`).
 ### 6.3 Barre par défaut plus mince — ✅ fait (partie 14)
 
 - **Quoi** : la barre de commandes du haut ne garde que Nouveau / Ouvrir / Enregistrer / Exporter,
@@ -625,8 +572,7 @@ les choix (découpage en plans, rythme, destination).
 - **Vocabulaire** : un intitulé de scène (« INT. CUISINE – NUIT ») devient une **séquence** ; l'action et les
   répliques deviennent des **plans** (jamais « scène » ni « panneau » dans les textes visibles) ; les
   paragraphes d'un plan « par scène » en sont les **images de storyboard** (marques d'image).
-- **Menu** : l'entrée est sous Importer, après « Un projet Storyboard Pro (.sboard)… » (qui ouvre aussi une
-  fenêtre de lecture avant d'importer).
+- **Menu** : l'entrée est sous Importer.
 - **Annuler** : un import dans le projet ouvert est une seule étape, « Importer un scénario » (panneau
   Historique) ; un import dans un nouveau projet remplace le projet ouvert après la question habituelle
   « Modifications non enregistrées ».
@@ -857,8 +803,7 @@ unique en « + », la case de mouvement qui prend un bloc de cases entières, le
     se répartissent si elles l'étaient. Une étape d'annulation nommée chaque fois (« Mouvement de caméra », « Cadre C », « Cadre B »,
     « Zoom du cadre B », « Retirer le cadre C »).
 - **T tenue** (`vignettes.camera`, comme Espace pour la main) : tant qu'elle est tenue, tout glissé sur une case est le geste de caméra, rien ne dessine,
-  l'outil n'a pas changé (il est donc « de retour » au relâché). Pourquoi T : **T comme travelling** ; libre dans `keymap.toml`, dans le jeu « Façon
-  Storyboard Pro », dans les touches écrites en dur (`Key::T` n'apparaît nulle part ; Alt+T est le cutter, Ctrl+T un nouvel onglet : d'autres
+  l'outil n'a pas changé (il est donc « de retour » au relâché). Pourquoi T : **T comme travelling** ; libre dans `keymap.toml`, dans les touches écrites en dur (`Key::T` n'apparaît nulle part ; Alt+T est le cutter, Ctrl+T un nouvel onglet : d'autres
   modificateurs) et dans le fichier personnel d'Anthony (B, E, L, Maj+1, Maj+2) ; C (rotation de la vue), Z (concentration) et R (aide-mémoire) sont pris.
   Le mécanisme de `springtools.rs` change d'outil au relâché ; ici l'outil ne change pas, on lit la touche à chaque image (`Keymap::held_any`,
   qui ignore les modificateurs, pour que T + Alt reste tenue). **Aucun bouton de plus.**
@@ -1286,8 +1231,7 @@ glows, tremblements de caméra effectifs, timecode ». Détail : README (section
 - Photoshop et After Effects : le calque de réglage agit sur tout ce qui est dessous, et dans un groupe seulement
   sur ce groupe ; SHOT l'a repris tel quel (**à vérifier** que les dossiers de SHOT se comportent comme les
   groupes de Photoshop — « passer à travers » n'existe pas ici).
-- Une incrustation suit le cadre de la caméra (texte à l'écran de l'export) : **à vérifier** dans Storyboard Pro
-  (calque d'incrustation / « burn-in » du timecode, nom du plan en surimpression).
+- Une incrustation suit le cadre de la caméra (texte à l'écran de l'export).
 - Les valeurs d'ampleur des préréglages (impact, lueur, flash, secousse, vignettage, grain, aberration) sont des choix
   de SHOT, à régler à l'œil.
 - Pas vu à l'écran dans cette séance (aucun lancement de SHOT, consigne) : fenêtre du préréglage (largeur, placement),
@@ -1793,9 +1737,7 @@ Règles et code : `src/numerotation.rs` (module en tête), interface `src/numero
 - **Un nom à soi** (fiche du plan) l'emporte toujours à l'écran ; le numéro reste disponible pour les noms de fichiers
   des exports pour le montage (« SQ01_PL012A »).
 - **Partout où un plan est nommé** : bande de montage, planche, titre du plan, fiche, fenêtre « Aller à », commentaires,
-  incrustations (nom du plan), PDF et page HTML du storyboard, lecture du storyboard pour les sons, export Storyboard
-  Pro (**le nom du plan SBP est le numéro ; la correspondance exacte avec un numéro de plan de Storyboard Pro est à
-  vérifier**, SHOT n'écrit que le nom).
+  incrustations (nom du plan), PDF et page HTML du storyboard, lecture du storyboard pour les sons).
 - **Fichier** : champs facultatifs du manifeste (`numerotation_verrouillee`, `numero` d'une séquence et d'un plan),
   absents tant que la numérotation est suivie : un ancien projet s'ouvre tel quel et un projet suivi s'enregistre
   exactement comme avant ; `VERSION` reste 27. Une version de SHOT d'avant ouvre un projet verrouillé mais perd les
@@ -1814,7 +1756,7 @@ Détail, formats et liste de contrôle : `docs/EXPORT_MONTAGE.md`. Code : `src/e
 
 - **Où** : Fichier > Exporter… > « Pour le montage (EDL / XML / OTIO) » (icône `FILM_REEL`), Ctrl+K « Exporter pour le
   montage », « Plus… » de la barre du montage ; action `fichier.exporter_montage` (un bloc dans `keymap.toml`, sans touche).
-- **La fenêtre** (comme celle de l'export vers Storyboard Pro) : formats (3 cases), dossier, titre, étendue (tout le film /
+- **La fenêtre** (comme celles des autres exports) : formats (3 cases), dossier, titre, étendue (tout le film /
   la séquence courante), time code de départ (rouge s'il est illisible), NTSC (pour 24, 30, 60 i/s), vidéos (ProRes /
   H.264, moitié de taille), son, chemins (relatifs / absolus). Dessous : le résumé de ce qui partirait (plans, durée,
   cadence, fondus écrits et poignées, extraits son), l'avertissement « la numérotation est suivie » (les noms des clips
@@ -1838,8 +1780,7 @@ Détail, formats et liste de contrôle : `docs/EXPORT_MONTAGE.md`. Code : `src/e
 ## 18. Calque de couleur (la couleur sous le trait, 2026-10-20, branche `canevas-couleur`)
 
 Demande d'Anthony : pouvoir colorier sous le trait sans l'abîmer, avec des images qui suivent celles du trait
-(l'idée « trait / couleur » de Toon Boom ; le comportement exact de Storyboard Pro ou de Harmony n'a pas été
-vérifié : **à vérifier**, rien n'est copié). Code : `src/calquecouleur.rs` (modèle, miroir, zones),
+(l'idée « trait / couleur »). Code : `src/calquecouleur.rs` (modèle, miroir, zones),
 `src/calquecouleurui.rs` (commandes, menu, pot de peinture, pinceau dans la zone).
 
 ### Vocabulaire et commandes
@@ -1885,8 +1826,7 @@ vérifié : **à vérifier**, rien n'est copié). Code : `src/calquecouleur.rs` 
   tel quel ; un projet enregistré en 30 n'est pas lisible par une version d'avant (même règle que 25 à 27). Les numéros
   28 et 29 sont ceux d'autres chantiers menés en parallèle. **Format 36** (« On fusionne », ci-dessous) : `griffonnages`,
   `remplissage`, `griffonner`, `sources`, et un calque libre (sans `trait`).
-- **Export, PDF, vignettes, montage, GPU** : la couleur est un calque bitmap ordinaire pour eux (rien n'a changé). Export
-  Storyboard Pro : calque bitmap sous le trait, avec une note dans la fenêtre d'export (le lien n'y existe pas : à vérifier).
+- **Export, PDF, vignettes, montage, GPU** : la couleur est un calque bitmap ordinaire pour eux (rien n'a changé)..
 - **Avec l'« Aplat sous le trait »** (`fond.rs`) : les deux coexistent, rien n'a changé dans l'un pour l'autre. L'aplat est
   une strate du même calque, déduite du trait (une forme, une couleur) ; le calque de couleur est un calque à part,
   colorié zone par zone, avec ses propres images. Ordre de composition : aplat du trait, couleur, trait.
@@ -1988,8 +1928,8 @@ griffonnage ; le calque CTG est retiré (commande « Nouveau calque CTG », menu
 
 ## 19. Toile infinie (dessiner hors de la feuille, 2026-10-20, branche `canevas-couleur`)
 
-Ce qui change à l'écran. Le fonctionnement de Storyboard Pro est **à vérifier** : SHOT reprend l'idée d'une toile
-sans bord, pas son détail.
+Ce qui change à l'écran. SHOT reprend l'idée d'une toile
+sans bord.
 
 - **Plus de page** : l'ombre sous la feuille a disparu. Le papier (ou le damier, ou le noir de l'arrière-plan,
   onglet « Arrière-plan » sous la timeline) remplit tout l'espace de dessin, à tout zoom (de 2 % à 6 400 %), et le défilement
@@ -2012,8 +1952,8 @@ sans bord, pas son détail.
   dessiné, sinon du papier. Rien n'est exporté hors du cadre.
 - **Limites** : les zones bitmap sélectionnées (lasso, baguette de couleur) et leur déplacement prennent les
   pixels de la feuille (on peut déplacer ce qu'on a pris vers l'extérieur) ; les effets de calque, les calques
-  d'ajustement, les calques de couleur, l'enveloppe et la perspective, la propagation,
-  l'import / export Storyboard Pro restent à la feuille. Le zoom arrière extrême (plus de 4 096 px de monde
+  d'ajustement, les calques de couleur, l'enveloppe et la perspective, la propagation
+  restent à la feuille. Le zoom arrière extrême (plus de 4 096 px de monde
   dessiné à l'écran) montre ce qui est hors de la feuille un peu plus flou (la texture est réduite).
   Au-delà de 32 768 px de la feuille, rien ne se pose.
 - Code : `src/monde.rs`, `src/raster.rs` (tuiles hors-feuille), `src/render.rs`, `src/canvas.rs`,
@@ -2105,8 +2045,7 @@ Demande d'Anthony : « le tremblement, j'adore » — d'autres effets qui agisse
 
 ### À vérifier
 
-- Aucune comparaison avec Storyboard Pro, TVPaint ou WigglyPaint n'a été vérifiée (**à vérifier** : l'ordre d'écriture
-  des traits dans Storyboard Pro pour son effet de tracé, s'il en a un).
+- Aucune comparaison avec TVPaint ou WigglyPaint n'a été vérifiée.
 - Les valeurs par défaut (écriture à 60 %, crayonné à 2 passes de 2,5 px, respiration 35 % sur 24 images, ondulation 4 px,
   pointillés 18 / 12 px, poussière 40 % avec 80 px de dispersion) sont des choix de SHOT, à régler à l'œil.
 
@@ -2303,7 +2242,7 @@ sur le premier calque choisi de même sorte (vectoriel pour des éléments, bitm
 ### À vérifier
 
 - Les largeurs de la bande (96 à 220 px) et sa hauteur (26 px) sont des choix de SHOT, à régler à l'œil.
-- Les raccourcis Ctrl+T / Ctrl+Tab sont ceux d'un navigateur (proposition, pas ceux de Storyboard Pro).
+- Les raccourcis Ctrl+T / Ctrl+Tab sont ceux d'un navigateur (proposition).
 - Les plans copiés dans un projet d'une autre taille sont adaptés (2026-10-20, branche `coller-adapter`) : voir la section
   suivante. Ses choix de départ — « contenir » plutôt que « remplir », « garder les images » plutôt que « garder les secondes » —
   sont à régler à l'œil.
@@ -2587,8 +2526,7 @@ les conflits contrôlés. Essais : `src/dessin_notes_tests.rs`.
 ### 24.2 Ctrl pour choisir un objet, Ctrl+Maj pour en cumuler
 
 - **Existait ?** En partie. Ctrl tenu seul prend l'outil Sélection (le « lasso temporaire », `springtools.rs`) : un
-  clic sur un trait vectoriel le choisit. Ctrl+Maj tenus avec l'outil Sélection : « tous les calques » (Storyboard
-  Pro), qui **remplaçait** la sélection. Sur un calque bitmap, un clic ne choisissait rien.
+  clic sur un trait vectoriel le choisit. Ctrl+Maj tenus avec l'outil Sélection : « tous les calques », qui **remplaçait** la sélection. Sur un calque bitmap, un clic ne choisissait rien.
 - **Règle finale.**
 
 | Geste | Résultat |
@@ -2653,11 +2591,10 @@ les conflits contrôlés. Essais : `src/dessin_notes_tests.rs`.
 ### 24.6 Remplir la sélection bitmap (Maj+Suppr)
 
 - **Existait ?** Pas le remplissage. **Maj+Suppr n'était pas libre** : elle était à « Effacer ce qui est hors de la
-  sélection » (`dessin.supprimer_hors_selection`, `DRAWING_DELETE_NON_SELECTION_KEY` de Storyboard Pro). Choix : la
+  sélection » (`dessin.supprimer_hors_selection`. Choix : la
   nouvelle commande `selection.remplir` prend Maj+Suppr ; **sans zone bitmap choisie, Maj+Suppr fait encore l'ancien
   geste** (vectoriel : garder seulement la sélection), et « effacer hors de la sélection » garde Maj+Retour arrière
-  (son second raccourci de Storyboard Pro). Seul le cas « zone bitmap + Maj+Suppr » change. Les deux jeux de
-  raccourcis (SHOT, façon Storyboard Pro) sont pareils.
+  (son second raccourci). Seul le cas « zone bitmap + Maj+Suppr » change.
 - **Règle.** La zone prend la couleur courante (bord anticrénelé mélangé), une étape d'annulation « Remplir la
   sélection ». Un calque verrouillé (lui, son dossier ou sa position) refuse avec son message ; « préserver la
   transparence » ne change que la couleur de ce qui est déjà dessiné (le vide reste vide, l'opacité reste) ; les
@@ -2923,7 +2860,7 @@ valeur au début et à la fin (« X : 960 → 1200 px ; Focale : 35 → 49 mm »
 ## 28. Exports : le projet reste libre pendant qu'ils tournent (2026-10-20, branche `exports-fond`)
 
 Demande d'Anthony : « un logiciel qui réponde toujours très rapidement, sans latence ». Avant, le film, les images, le GIF, le PDF,
-le montage, la relecture, la fiche et l'export vers Storyboard Pro calculaient leurs images sur le fil de l'interface (40 ms par
+le montage, la relecture, la fiche calculaient leurs images sur le fil de l'interface (40 ms par
 image d'écran, projet verrouillé) ; la page HTML, l'image courante et le son seul gelaient SHOT. Maintenant, aucune image ne se
 calcule sur le fil de l'interface (mesures : `docs/PERFORMANCE.md` § 17).
 
@@ -2938,8 +2875,7 @@ calcule sur le fil de l'interface (mesures : `docs/PERFORMANCE.md` § 17).
   et on ne change pas d'onglet (« Attends la fin de la copie du projet pour l'export »).
 - **Les onglets.** Un export qui tourne continue quand on change d'onglet ou qu'on ouvre un autre projet ; la fenêtre ajoute
   « · « nom du projet » » quand on regarde un autre onglet. Il en va de même pour l'export pour le montage, la fiche technique,
-  la page de relecture (suivie dans son onglet caché, sa fin est dite dans la barre d'état) et l'export vers Storyboard Pro.
-- **Un seul export à la fois** pour le film, les images, le GIF, le PDF, la page HTML, l'image courante et le son : une
+  la page de relecture (suivie dans son onglet caché, sa fin est dite dans la barre d'état) et . à la fois** pour le film, les images, le GIF, le PDF, la page HTML, l'image courante et le son : une
   deuxième demande dit « Un export est déjà en cours ».
 - **Quitter.** « Quitter » (ou la croix de la fenêtre) pendant un export le dit : « Quitter arrêterait l'export : attends sa
   fin, ou refais « Quitter » pour l'arrêter. » Un deuxième « Quitter » dans les quinze secondes quitte et arrête l'export (la
@@ -2965,7 +2901,7 @@ calcule sur le fil de l'interface (mesures : `docs/PERFORMANCE.md` § 17).
    « Montrer dans l'explorateur » ouvre le bon dossier.
 5. **Quitter pendant l'export** : le message de la barre d'état au premier « Quitter », la sortie au deuxième.
 6. **Image courante**, **page HTML** et **son seul** : plus de gel de SHOT ; un seul clic sur « Fermer » à la fin.
-7. **Montage, fiche technique, relecture, Storyboard Pro** : la même fenêtre qu'avant, mais l'interface répond pendant les
+7. **Montage, fiche technique, relecture** : la même fenêtre qu'avant, mais l'interface répond pendant les
    images ; changer d'onglet ne les arrête pas.
 8. **Mémoire** (Gestionnaire des tâches) : un film 4K ne fait pas grimper SHOT de plus d'un gigaoctet environ ; la mémoire
    redescend à la fin.
@@ -3196,17 +3132,17 @@ page est neuve, plus la clé `onglet_preferences` (l'onglet ouvert).
 | **Vignettes** (quatre carrés, 2026-10-22) | Planche des Vignettes | Rangées de cases pâles (venu de Montage) ; Cases par rangée ; Débord du trait hors des cases |
 | | Cadres de caméra | Aimant des cadres de caméra (0 : éteint) ; Couleur des cadres de caméra |
 | | Décor | Report du décor ; Couleur du décor ; Taille des brosses du décor ; Rétablir les réglages des Vignettes |
-| **Raccourcis** (clavier) | Raccourcis clavier | Jeu de raccourcis ; Voir et changer les raccourcis… ; Modifier le fichier à la main… ; Recharger |
-| **Export** (export) | Programmes et modèles | ffmpeg (Choisir…, Automatique) ; Modèle Storyboard Pro (Choisir…) ; Ouvrir la fenêtre Exporter… |
+| **Raccourcis** (clavier) | Raccourcis clavier | Voir et changer les raccourcis… ; Modifier le fichier à la main… ; Recharger |
+| **Export** (export) | Programmes | ffmpeg (Choisir…, Automatique) ; Ouvrir la fenêtre Exporter… |
 | **Équipe** (trois personnes) | Commentaires | Signer mes commentaires |
 | | Travail à plusieurs | Mon nom et ma couleur ; Une prise périme après N min ; Prendre le plan libre que je commence à modifier ; Dire dans la barre d'état ce que font les autres |
 | **Génération** (étincelle) | Génération sonore | Les trois rôles (lecture, bruitages et ambiances, voix) et leur fournisseur, les clés (inchangées), Dossier des modèles, Python du serveur, Démarrer le serveur tout seul, port, Démarrer / Arrêter / Tester |
 | **Performance** (jauge) | Réglages de performance | Les onze réglages du diagnostic (effets en aperçu réduit, traits texturés, tremblement, pelure, trois caches, fils, vignettes, animations, effets sur la carte graphique) ; Diagnostic des performances… ; Revenir comme avant ; Valeurs d'origine |
 | | Affichage | Le moteur de rendu et la carte graphique |
 
-« Export » est le seul onglet qui montre des réglages qu'on ne trouvait pas dans les Préférences : le chemin de ffmpeg et le
-projet modèle de Storyboard Pro existaient déjà (`ffmpeg`, `modele_storyboard_pro` dans `reglages.toml`) mais ne se
-choisissaient que dans les fenêtres d'export, qui gardent leurs boutons. Le dossier du dernier export, la fiche technique
+« Export » est le seul onglet qui montre des réglages qu'on ne trouvait pas dans les Préférences : le chemin de ffmpeg
+existait déjà (`ffmpeg` dans `reglages.toml`) mais ne se
+choisissait que dans les fenêtres d'export, qui gardent leurs boutons. Le dossier du dernier export, la fiche technique
 (colonnes, format) et les options propres à chaque export restent dans leur fenêtre.
 
 ### 30.3 La recherche
@@ -3815,20 +3751,19 @@ Plan, Case, Vignettes, Piste, Papier, Aplat : les mots de ce chantier sont ceux 
 
 | Touche | Commande | Pourquoi elle est libre |
 |---|---|---|
-| **Z** | `vue.concentration` — mode concentration (la même touche remet tout) | Aucune commande de `keymap.toml`, du jeu « Façon Storyboard Pro » ni du fichier personnel d'Anthony (B, E, L, Maj+1, Maj+2) ne porte Z seule. `Maj+Z` (Zoom 100 %) et `Ctrl+Z` (Annuler) gardent leur sens. Tab (mode) et X (coller les calques) sont pris. Z comme « zen ». |
+| **Z** | `vue.concentration` — mode concentration (la même touche remet tout) | Aucune commande de `keymap.toml` ni du fichier personnel d'Anthony (B, E, L, Maj+1, Maj+2) ne porte Z seule. `Maj+Z` (Zoom 100 %) et `Ctrl+Z` (Annuler) gardent leur sens. Tab (mode) et X (coller les calques) sont pris. Z comme « zen ». |
 | **R** (tenue) | `aide.aide_memoire` — l'aide-mémoire des raccourcis, tant que la touche est tenue | Idem : R seule est libre ; `Ctrl+R`, `Alt+R` (outil formes) et `Ctrl+Maj+R` sont d'autres combinaisons. R comme « raccourcis ». |
 
 Garde-fous : `keymap_tests::no_two_default_bindings_share_a_key_in_the_same_context` (déjà là) échouerait si l'une des deux touches était prise, et
-`concentration_tests::z_and_r_are_free_keys_with_no_conflict_in_either_key_set` vérifie, dans SHOT et dans le jeu Storyboard Pro, que Z et R vont bien à ces deux
+`concentration_tests::f11_and_r_are_free_keys_with_no_conflict` vérifie que F11 et R vont bien à ces deux
 commandes, en storyboard comme en animation, et que `Maj+Z` / `Ctrl+Z` n'ont pas bougé. Les touches se changent comme les autres (Préférences > Raccourcis, F1, clic droit >
 « Assigner un raccourci… », fichier personnel) ; la carte et les conseils lisent la touche du moment. `aide.conseils` et `aide.regler_stylet` n'ont pas de touche.
 
 ### 1. L'accueil
 Trois grandes entrées, et rien d'autre de grand : **Dessiner des vignettes** (un projet vide, tout de suite, dans l'onglet Vignettes ; c'est l'ancien « Commencer sans
-projet »), **Importer un scénario** (la fenêtre d'import existe, `scenarioui.rs` : depuis l'accueil elle part d'un nouveau projet) et **Ouvrir un projet** (SHOT ou Storyboard Pro :
-la fenêtre d'ouverture accepte les deux). Dessous, un petit « Nouveau projet… » (le choix du format), les projets récents, et « Rouvrir le dernier projet au lancement ». Les anciens
-boutons « Importer un projet Storyboard Pro » et « Commencer sans projet » ont disparu de la carte (ils sont dans Fichier > Importer et dans Ouvrir). L'accueil s'efface pendant
-que la fenêtre d'import d'un scénario ou d'un projet Storyboard Pro est ouverte, et revient si on la ferme sans rien importer.
+projet »), **Importer un scénario** (la fenêtre d'import existe, `scenarioui.rs` : depuis l'accueil elle part d'un nouveau projet) et **Ouvrir un projet** (un projet SHOT). Dessous, un petit « Nouveau projet… » (le choix du format), les projets récents, et « Rouvrir le dernier projet au lancement ». Les anciens
+bouton « Commencer sans projet » a disparu de la carte (ils sont dans Fichier > Importer et dans Ouvrir). L'accueil s'efface pendant
+que la fenêtre d'import d'un scénario est ouverte, et revient si on la ferme sans rien importer.
 **Déposer des images** (`deposer.rs`) marche dès la première entrée : l'onglet Vignettes montre la planche, qui prend les fichiers lâchés (essai
 `accueil_tests::images_dropped_on_the_board_work_right_after_the_welcome_entry`). Lâcher des images sur la carte d'accueil elle-même ne fait rien (il faut d'abord « Dessiner des vignettes »).
 
@@ -4336,7 +4271,7 @@ dans la vue Dessin un calque d'annotation du plan courant). Ils ne se transforme
   Vectoriel, son dessin **tenu sur tout le plan** (avant sa première image et après sa dernière) : une feuille de notes posée sur le plan. Pinceau, lasso, gomme, transformation, œil, cadenas, opacité : ceux de tous les calques.
 - **Reconnaissable** : l'icône du feutre et le rouge-rose dans le panneau Calques (la bande, l'icône de la ligne), dans la timeline (à la place de la lettre V) et dans le menu du « + ».
 - **Peint par-dessus tout à l'écran** (`App::build_plan`) : même tout au fond de la pile, même sous un calque d'effet.
-- **Jamais dans le film** : ni dans les exports (vidéo, images, PDF, GIF, montage, envois, export vers Storyboard Pro), ni dans les vignettes de la planche et de la timeline, ni dans la lecture de fond. Tout cela passe par
+- **Jamais dans le film** : ni dans les exports (vidéo, images, PDF, GIF, montage, envois), ni dans les vignettes de la planche et de la timeline, ni dans la lecture de fond. Tout cela passe par
   `render::panel_plan_at`, qui saute les calques d'annotation ; `render::panel_plan_at_avec(.., true)` les pose par-dessus tout quand on le demande expressément. **Seule la case « Avec les annotations » des
   fenêtres d'export le demande** (voir « Suites » plus bas) : décochée d'office, jamais dans le film sinon.
 - **Pas de clé de case** : une case de plus dans un plan (`cases.rs`) ne copie pas ses traits. **Fusionner** un calque d'annotation et un calque ordinaire est refusé (ses notes n'entreraient plus dans le dessin).
@@ -4365,7 +4300,7 @@ Trois suites que tu as approuvées. Fichiers : `export.rs` / `exportrender.rs` /
 **Décochée d'office** ; **retenue par poste de travail**, d'une séance à l'autre, dès qu'on la coche (`Settings::export_annotations`, clé `export_avec_annotations` de `reglages.toml`, absente tant qu'elle est décochée ; un
 seul choix pour les deux fenêtres). Cochée : l'export prend **les calques d'annotation des plans** (par-dessus tout, `render::panel_plan_at_avec(.., true)` : `ExportJob::avec_annotations` → `Rendu::avec_annotations`) ;
 pour la planche, **aussi ceux de la planche** (les traits d'annotation par-dessus la planche, comme avant la case « Annotations (n) » qu'elle remplace : plus de case propre à la planche). L'image courante exportée
-(`fichier.exporter_image_courante`) suit le même choix (`App::build_plan_avec`). **Pas dans cette suite** : l'export du color script, la page HTML du storyboard, l'export vers Storyboard Pro et celui du montage éditorial
+(`fichier.exporter_image_courante`) suit le même choix (`App::build_plan_avec`). **Pas dans cette suite** : l'export du color script, la page HTML du storyboard et celui du montage éditorial
 (ils ne prennent toujours aucune annotation) ; à dire si tu les veux.
 
 **(b) Suppr** efface les annotations choisies au lasso d'annotation : **une seule étape d'annulation** (« Supprimer des annotations »), le lasso reste pris, rien n'est choisi ensuite ; Ctrl+Z les rend toutes d'un coup.
@@ -4567,7 +4502,7 @@ Essais : `saccade_tests.rs` (9).
 - **Aucune clé n'est posée ni changée** : le réglage s'applique quand la caméra est évaluée (`Document::panel_camera`). Décocher rend le mouvement doux, **à l'identique** (la cadence reste, pour la retrouver en recochant).
 - **Où ça s'applique** : partout où la caméra est lue pour montrer ou sortir une image, puisque tout passe par `panel_camera` : la vue Dessin et la vue à travers la caméra, la lecture, la timeline et les vignettes, la planche, les
   exports (vidéo, suite de PNG, image seule, GIF, PDF, montage, FCPXML et EDL : tous rendent les images par `Rendu`), la toile infinie (le monde hors de la feuille suit la même caméra), la comparaison de versions, le plan d'une
-  version rangée (`camera_du_plan_range`). L'export vers Storyboard Pro n'embarque pas la caméra (il la signale seulement) : rien à changer.
+  version rangée (`camera_du_plan_range`).
 - **Quelle image** : à l'image `f` d'un plan, la caméra est celle de l'image `f - f % N`, **comptée depuis le début du plan** (images 0 à N-1 : la caméra de l'image 0 ; N à 2N-1 : celle de l'image N ; etc.). C'est la caméra douce
   *de l'image où commence le palier*, pas une moyenne.
 - **Un écart voulu** : à partir de la **dernière clé**, c'est l'image elle-même qui compte. Après la dernière clé la caméra ne bouge plus ; sans cette règle, un mouvement qui finit à l'image 10 avec N = 3 resterait
@@ -4905,7 +4840,7 @@ Demande d'Anthony : « À l'ouverture du logiciel : proposer "Nouveau projet", s
 
 - **Deux grandes entrées**, dans cet ordre :
   - **Nouveau projet** : la fenêtre « Nouveau projet… » existante, avec le choix du format, de la cadence et du dossier (c'était le petit lien en bas de la carte, qui disparaît). C'est la même fenêtre que **Fichier > Nouveau projet…**.
-  - **Ouvrir un projet** : inchangé (SHOT ou Storyboard Pro).
+  - **Ouvrir un projet** : inchangé.
 - **Disparaissent de l'accueil** : « Importer un scénario » (il reste dans **Fichier > Importer > Un scénario…**), « Dessiner des vignettes » et « Dessiner un storyboard » (aucune des deux n'existe plus : un projet se crée par « Nouveau projet »).
 - Les **projets récents** restent dessous, dans le même ordre, avec le même comportement ; la case « Rouvrir le dernier projet au lancement » reste tout en bas.
 - Quand on annule la fenêtre « Nouveau projet », l'accueil revient avec la **même image** (pas de nouveau tirage).
@@ -5156,7 +5091,7 @@ Demande d'Anthony : suivre la **planche de charte** (`Documents\SHOT\Identité\C
 
 Rien d'autre. Un essai vérifie qu'il n'y a dans la fenêtre principale qu'un seul rectangle plein orange (le trait, 2 points de haut), moins de 0,5 % de la fenêtre, et aucun contour ni trait orange, dans les quatre espaces de travail.
 
-**Ne devient pas orange** : la feuille et les pelures d'oignon (données du document), les couleurs des calques, les repères de caméra, l'image courante, les clés d'effets, le rouge des alertes. À savoir : deux repères de SHOT étaient déjà orange avant la charte et ne changent pas : les **marques d'image** de la timeline (`#F4810C`) et la **boîte de sélection** du dessin (`#E87810`, « comme Storyboard Pro »).
+**Ne devient pas orange** : la feuille et les pelures d'oignon (données du document), les couleurs des calques, les repères de caméra, l'image courante, les clés d'effets, le rouge des alertes. À savoir : deux repères de SHOT étaient déjà orange avant la charte et ne changent pas : les **marques d'image** de la timeline (`#F4810C`) et la **boîte de sélection** du dessin (`#E87810`).
 
 ### Le logo et l'icône
 
@@ -5773,76 +5708,23 @@ Pas de petit menu « type » sur la ligne : passer de Personnage à Classique ou
 ---------------------------------------------------------------------------------------------------
 
 
-## 71. Import Storyboard Pro : panels en clés, trait, caméras, son (2026-10-29, branche `import-sbp`)
+## 71. Plus d'import ni d'export d'un logiciel de storyboard tiers (2026-10-30)
 
-Détail complet : `docs/IMPORT-SBP.md`. **Fichier > Importer > Un projet Storyboard Pro** lit maintenant les dessins `.tvg` du projet
-**sans lancer Storyboard Pro** (`tvg.rs` : conteneur, zones vectorielles, tuiles bitmap, palette ; `sbnative.rs` : construction). Chaque
-panneau est une **clé de dessin** sur les calques de son Plan (avec sa marque d'image : une case par panneau dans les Vignettes), les
-caméras du plan deviennent des clés de caméra, le son et les légendes sont repris comme avant. Les calques gardent nom, ordre, visibilité,
-verrou, opacité et placement. Une fenêtre de remarques dit ce qui n'est pas repris (flou, groupes, animations par courbe, zones sans couleur).
+Décision d'Anthony (2026-10-30) : SHOT n'ouvre plus de fichiers d'un autre logiciel de storyboard et n'en écrit plus
+(« si je veux commercialiser SHOT, ça va me poser des problèmes ; ça va alléger le soft »). Sont partis : la lecture de
+leurs projets (XML, dessins vectoriels et bitmap, caméras, sons), le lancement du logiciel en arrière-plan, l'export
+vers lui, l'import de ses fichiers de pinceaux (XML), le jeu de raccourcis calqué sur lui, les menus, commandes,
+préférences, essais et documents qui s'y rapportent. Les projets SHOT qui en venaient **s'ouvrent exactement comme avant**
+(le format du projet ne change pas : `project::VERSION` reste 43). Les pinceaux déjà importés et gardés dans
+`%APPDATA%\SHOT` restent utilisables. Un ancien `reglages.toml` ou `keymap.toml` qui cite une fonction supprimée
+s'ouvre sans erreur : la clé inconnue ou l'action inconnue est ignorée (`ancien_projet_tests`).
 
-### À vérifier à l'écran
-
-1. Ouvre une copie de BRAWLIDAYS_CLEAN_PART_1 : 8 plans, 526 images, des dessins visibles dans chaque case des Vignettes.
-2. Sur un plan à plusieurs panneaux : une case par panneau, et chaque panneau est sa propre clé sur la timeline.
-3. Les caméras : l'ampleur du zoom (z de SBP) et la position sont à confirmer (déduites).
-4. Les calques bitmap (dégradés de fond) : taille et position.
-
-### Essais
-
-`tvg.rs` (3 : lecture d'un `.tvg` synthétique, Béziers aplanies, fichier refusé), `sbnative.rs` (2 : panneaux en clés + marques + caméra ; dessins manquants signalés ; 1 essai à la main `projet_reel`, ignoré).
-
-
-### Mise à jour (2026-10-29, branche `import-sbp-camera`)
-
-- **La vue de dessin blanche** après l'import venait de la feuille (6 fois le cadre, 11 520 px de large) plus grande que la texture
-  maximale de la carte graphique (8 192) : la feuille garde maintenant la taille du projet, et le décor qui la dépasse est sur la toile
-  infinie (§19). **Garde générale** : `Document::enlarge_stage` plafonne à 8 192 px, et une feuille que la carte ne peut pas montrer affiche
-  la raison sur le dessin et dans la barre d'état au lieu d'une vue blanche.
-- **Caméra** : sténopé à 12 champs (z des calques = profondeur multiplan de SHOT, z de la caméra = avancée négative, x et y en champs ×
-  0,366 / 0,2745), rotations (bascule, panoramique, roulis) et adoucis de la courbe de vitesse repris ; calés sur les vignettes de SBP.
-- **Groupes** de calques : dossiers de calques (nom, visibilité). **Flou gaussien** : effet « Flou gaussien » du calque (10 px par unité,
-  à confirmer). **Zones sans couleur** fermées : trous des zones colorées (la pastille « BRAWL STARR » retrouve son étoile) ; ouvertes : non reprises.
-- Reste : couleurs de certains bitmaps (PART_1 plan 003), courbes de vitesse libres, opacité animée (SHOT n'a pas de clés d'opacité).
-
-### À vérifier à l'écran (mise à jour)
-
-1. Ouvre une copie de PART_1 : la vue de dessin montre le plan 001 (même cadrage que sa vignette dans SBP), plus de feuille blanche ; zoomer
-   arrière montre le décor au-delà de la feuille.
-2. Plan 001 : la caméra va du coin gauche du décor vers le centre en ralentissant au départ et à l'arrivée (jouer le plan).
-3. Calques > un calque de groupe (par exemple dans le plan 004) est rangé dans un dossier du même nom.
-4. Les calques à flou (plan 001) ont un effet « Flou gaussien » dans les Effets.
-
-### Essais (mise à jour)
-
-`sbnative.rs` : feuille de la taille du projet et plafond `MAX_SHEET_SIDE` ; caméra (rotation, adoucis, recul), profondeur des calques, groupe en dossier, flou, trou de zone ;
-`tvg.rs` : zone fermée sans couleur = trou, ouverte = comptée.
-
-### Mise à jour (2026-10-29, branche `import-sbp-rendu`)
-
-- **Le « L » de BRAWL manquait** : les blocs `.tvg` dont le drapeau de longueur vaut 2 (longueur multiple de 256 écrite sur un octet) étaient
-  ignorés avec leur contenu. Corrigé dans `tvg.rs::block` : PART_1 retrouve 2 114 zones colorées (+ 7,8 %) ; 51 842 courbes dans l'animatic.
-- **Couleurs des bitmaps** : les tuiles sont rangées (rouge, vert, opacité, bleu), pas (rouge, vert, bleu, opacité). Les arcs jaunes et halos
-  bleus deviennent les halos blancs et vignettes sombres des vignettes de SBP (écart de luminance du plan 003 de PART_1 : 65 puis 33).
-- **Zones ouvertes sans couleur** : toujours non reprises (leurs 13 octets sont un numéro de ligne, ni épaisseur ni couleur) ; **papier** : le
-  .sboard n'en donne aucun, le blanc reste.
-- À vérifier à l'écran : copie de PART_1, plan 001 : la pancarte dit BRAWL STARR ; plan 003 : halo blanc et vignette sombre, plus de jaune ;
-  animatic, plan 21 : éclair jaune sur décor gris, plus de bleu.
-- Essais : `tvg.rs` (un bloc de drapeau 2 est lu avec sa longueur) ; sondes ignorées `sonde_pertes`, `sonde_rendu`, `sonde_bitmaps`.---------------------------------------------------------------------------------------------------
-
-### Mise à jour (2026-10-29, branche `import-sbp-vitesse`) : la lenteur d'un projet importé
-
-Anthony : 7 plans de Storyboard Pro, une vingtaine de calques chacun, format carré 1920 × 1920 (cadres de contrôle 16:9 et 9:16, **le format est voulu**) : « le soft rame énormément ». Mesuré avec `sbperf_tests` (ci-dessous), sur les copies :
-
-- **La cause : la mémoire, pas l'image.** Chaque dessin vectoriel importé garde son rendu à la taille de la feuille (2 × le cadre : 3 840 × 3 840 pour son format). Les décors de Storyboard Pro sont des aplats immenses : la moitié ou plus des tuiles (64 × 64) de ces rendus sont d'**une seule couleur**, et la toile infinie en garde autant hors de la feuille. Sept plans de l'animatic au format carré : 17,4 Go de mémoire vive (15,4 Go de tuiles, dont 59 % pleines), 139 s d'import. L'animatic entier au format 16:9 : 20,7 Go, 181 s. Sur une machine de 32 Go, c'est le Windows qui range la mémoire sur le disque, d'où la lenteur de tout.
-- **Corrigé** : (1) les tuiles d'une seule couleur d'un dessin vectoriel rendu **partagent une seule mémoire par couleur** (`Raster::share_solid_tiles`, appelé par `VectorDrawing::render` : aucun pixel ne change, la première écriture dans une tuile partagée en fait une à soi, comme pour toute copie de tuile) ; ça vaut pour tout projet SHOT qui rouvre ses dessins vectoriels, pas seulement l'import. (2) L'import **lit et rend les dessins en parallèle** (un fil par cœur, `sbnative::precalculer`) : même résultat, ordre des calques inchangé.
-- **Avant / après** (machine : i7-10700K, RTX 2080 SUPER, 32 Go ; 7 plans de l'animatic en 1920 × 1920 : 139 s -> 14,6 s d'import, 17,4 Go -> 7,4 Go ; part2extract 20,8 s -> 2,4 s, 3,2 -> 2,7 Go ; animatic entier 181 s -> 16,9 s, 20,7 -> 10,8 Go ; temps par image à l'arrêt 2-11 ms -> 2 ms).
-- **Reste** : 6 Go de tuiles réellement différentes pour ces 7 plans (le rendu des dessins vectoriels est gardé pour chaque dessin, caché ou non) ; le premier affichage d'un dessin énorme (tête de lecture qui saute sur des dessins jamais vus) envoie ses tuiles à la carte graphique d'un coup (20 à 50 ms) : la lecture, elle, les envoie d'avance et reste sous les 5 ms par image. Un rendu des dessins vectoriels à la demande (comme pour les vignettes) serait la suite.
-- **Mesurer** : `SBP_ESSAI=<copie> [SBP_TAILLE=1920,1920] [SBP_SHOTS=2,7,34] cargo test --release --offline --target-dir target\msvc --lib sbperf_tests::projet_importe -- --ignored --nocapture --test-threads=1` (poids du projet, mémoire vive, images à l'arrêt, au défilement, en lecture, au dessin, en vue caméra, en lecture du montage, copie de secours) ; `SHOT_PROJET=<manifeste> ... sbperf_tests::projet_shot` pour un projet SHOT.
-- À vérifier à l'écran : ouvrir un projet de Storyboard Pro lourd : l'ouverture est plus courte, SHOT reste fluide quand on change de plan ; les dessins sont identiques à avant.
+Ce qui reste de cette période et sert à tout projet : les tuiles d'une seule couleur d'un dessin vectoriel rendu
+**partagent une seule mémoire par couleur** (`Raster::share_solid_tiles`, appelé par `VectorDrawing::render` : aucun
+pixel ne change, la première écriture dans une tuile partagée en fait une à soi, comme pour toute copie de tuile) ;
+les décors faits d'aplats immenses passaient de 17,4 Go à 7,4 Go de mémoire vive.
 
 ---------------------------------------------------------------------------------------------------
-
 ## 72. Clés d'opacité et calque « Couleur unie » (2026-10-29, branche `opacite-colorcard`)
 
 Demande d'Anthony : « On doit rajouter des clés d'opacité à SHOT dans ce cas. Et un calque color card, qui applique une couleur unie sur
@@ -5961,12 +5843,12 @@ fichier, sans changement et sans étape d'annulation. Un projet qui arrive (Nouv
 - **Quitter** sans projet ne demande rien.
 
 **Ce qui ne part pas sans projet** : `App::run_action` laisse passer seulement `sansprojet::action_sans_projet` : Nouveau, Ouvrir, Préférences, les
-imports d'un scénario et de Storyboard Pro (qui font un projet neuf), les onglets (un onglet sans projet peut voisiner avec des projets), Quitter, et
+import d'un scénario (qui fait un projet neuf), les onglets (un onglet sans projet peut voisiner avec des projets), Quitter, et
 l'aide (palette, raccourcis, à propos, diagnostic, conseils, régler le stylet, plein écran, performance). Toute autre commande — qu'elle vienne d'un
 raccourci, d'une entrée de menu, de la palette Ctrl+K ou d'un bouton — répond « Crée ou ouvre d'abord un projet. » et ne touche à rien : le document
 caché ne change pas, l'onglet reste sans projet, fermer SHOT ne demande donc rien. Les entrées de menu qui y mènent sont grisées (`action_item`).
 Sans projet, les touches Entrée, Échap, Retour arrière et les flèches ne vont pas à l'outil ni à la sélection, et des fichiers lâchés sur la fenêtre :
-seuls les projets (`.shot`, `.pelure`, `.sboard`) s'ouvrent (une image ou un son n'a nulle part où se poser).
+seuls les projets (`.shot`, `.pelure`) s'ouvrent (une image ou un son n'a nulle part où se poser).
 
 ### 2. Les couleurs étranges du poste neuf
 
@@ -6036,7 +5918,7 @@ Windows, titre « SHOT », taille fixe) : ni menus, ni zone de travail vide, ni 
   plan et l'aperçu du cadre. **Entrée dans le champ du nom crée.** Le curseur est dans le nom dès l'ouverture, et Ctrl+N l'y remet.
 - **À droite, le cadre « Projets récents »** : le nom de chaque projet (le chemin entier en bulle d'aide), **double-clic** ou **Entrée** (sur le projet
   choisi par un clic) pour l'ouvrir ; **clic droit > « Retirer de la liste »** ; un projet **introuvable** est grisé, en italique, avec « introuvable »
-  (le double-clic le dit dans la barre de messages sans rien ouvrir). En bas, **« Ouvrir un projet… »** : un projet SHOT ou Storyboard Pro (.sboard),
+  (le double-clic le dit dans la barre de messages sans rien ouvrir). En bas, **« Ouvrir un projet… »** : un projet SHOT,
   comme avant. La **récupération après plantage** est en haut de ce cadre (même contenu que l'ancienne fenêtre : « Ouvrir la copie », « Supprimer »,
   « Tout ouvrir », « Plus tard »), pas dans une fenêtre à part.
 - **En bas à gauche**, la case « Rouvrir le dernier projet au lancement ».
@@ -6081,7 +5963,7 @@ Documents ; sans doublon, huit au plus, sans lire le disque.
 2. Tape un nom, Entrée : le projet se crée, la fenêtre grandit (maximisée) sur la page Vignettes. Ctrl+W (fermer le projet) : la fenêtre redevient
    petite, centrée.
 3. Un projet récent : double-clic, ou un clic puis Entrée. Un projet déplacé est grisé « introuvable » ; clic droit > Retirer de la liste.
-4. « Ouvrir un projet… » : le sélecteur accepte un projet SHOT ou un .sboard.
+4. « Ouvrir un projet… » : le sélecteur accepte un projet SHOT.
 5. Avec « Rouvrir le dernier projet » coché : SHOT s'ouvre directement sur le projet, sans passer par la petite fenêtre.
 6. Ouvre un projet, Fichier > Nouveau (Ctrl+N) : la fenêtre « Nouveau projet » a les mêmes champs, avec Annuler.
 7. Premier lancement d'un poste neuf : la proposition « Régler SHOT pour cette machine ? » n'est pas sur la petite fenêtre ; elle vient avec le premier projet.

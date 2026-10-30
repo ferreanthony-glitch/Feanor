@@ -1,4 +1,4 @@
-//! « Aller à un plan » (Ctrl+F, GOTO_SHOT_KEY de Storyboard Pro 27 ; Anthony, 2026-10-18 : « fais
+//! « Aller à un plan » (Ctrl+F ; Anthony, 2026-10-18 : « fais
 //! les 5 rapides ») : une petite fenêtre où l'on tape le nom d'un plan (« 3 », « 12A »), ou
 //! « séquence/plan » (« 2/3 ») si plusieurs séquences ont un plan de ce nom, ou à défaut son rang
 //! dans tout le storyboard. Entrée : on y va ; Échap : on ferme.

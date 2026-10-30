@@ -36,7 +36,7 @@
 //! - **Édition** : sur le calque courant, tant qu'un geste de dessin, de gomme, de sélection ou de
 //!   transformation est en cours (`App::boil_editing`), le dessin est montré sans tremblement, tel
 //!   qu'il est : on dessine et on prend ce qu'on voit. Les dessins ne changent jamais (les prises,
-//!   la sélection et l'export SBP lisent la vraie géométrie) ; l'export d'images et les vignettes
+//!   la sélection et les exports lisent la vraie géométrie) ; l'export d'images et les vignettes
 //!   montrent la variante de chaque image.
 
 use std::time::Duration;

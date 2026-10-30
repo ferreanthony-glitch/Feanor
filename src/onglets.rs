@@ -445,7 +445,7 @@ impl App {
         if self.coloriage.running() {
             return Some("le coloriage par zones");
         }
-        if self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::rendering) || self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::rendering) {
+        if self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::rendering) {
             return Some("l'export pour le montage");
         }
         if self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::rendering) {
@@ -495,11 +495,8 @@ impl App {
         self.layer_thumbs.abandonner();
         // Les sons proposés (choix, portée) visaient les plans de ce projet ; rien n'est en cours (`onglet_occupe`).
         self.reset_suggestions();
-        // Les fenêtres qui montrent un calcul fait sur ce projet (export pour le montage, vers Storyboard Pro,
+        // Les fenêtres qui montrent un calcul fait sur ce projet (export pour le montage,
         // scénario à importer) se ferment : elles se rouvrent sur le projet affiché.
-        if !self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::busy) {
-            self.sb_export = None;
-        }
         // (Un export qui tourne continue : il travaille sur sa copie du projet, sa fenêtre reste.)
         if !self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::busy) {
             self.editorial = None;

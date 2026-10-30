@@ -11,7 +11,7 @@
 //!   de sons par règles), **notes** (notes `[[ ]]`, transitions, synopsis, sections, et le décor
 //!   `Décor : INT. CUISINE – NUIT` sur le premier plan de la séquence) ;
 //! - en découpage « un plan par scène », les blocs d'une scène sont des **images de storyboard** du
-//!   plan (marques d'image, chacune avec ses textes), comme dans un projet Storyboard Pro importé ;
+//!   plan (marques d'image, chacune avec ses textes) ;
 //! - la **durée** est estimée du texte (`Rhythm`).
 //!
 //! Les personnages qui parlent sont écrits dans les notes du projet (Réglages du projet > Notes),

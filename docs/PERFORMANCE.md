@@ -31,7 +31,7 @@ réduite, risques, à regarder à l'écran).
 
 Mise à jour du 2026-10-20 (branche `exports-fond`, partie de `main` f8b9222) : **les exports ne calculent plus aucune image sur le fil de
 l'interface** et ne verrouillent plus le projet (film, GIF, images, image courante, PDF, page HTML, son, montage, relecture, fiche
-technique, Storyboard Pro) ; voir la section 17 (conception, mesures avant / après, garde-fous, risques, à regarder à l'écran).
+technique) ; voir la section 17 (conception, mesures avant / après, garde-fous, risques, à regarder à l'écran).
 
 Mise à jour du 2026-10-23 (branche `optim-rendu`, partie d'`integration-debug` 56e9d79) : réglages tirés sans renvoi à la carte
 graphique, numéros des plans en une passe, vignettes de la planche bornées en mémoire, disposition de la planche gardée ; voir
@@ -385,7 +385,7 @@ Fichier > Préférences… > Performance ; la valeur par défaut est le comporte
 | Effets sur la carte graphique | `GpuCanvas::set_effects_gpu` (`gpufx.rs`) | oui | oui (non sur un rendu logiciel) | oui seulement sur une carte dédiée | tout de suite |
 
 « Rapide partout » : le rendu exact des traits texturés ne vient que pour l'image affichée à l'arrêt
-(`warm_current_cel`) ; avant un export (images, film, PDF, image courante, Storyboard Pro) les autres
+(`warm_current_cel`) ; avant un export (images, film, PDF, image courante) les autres
 sont rendus exactement d'un coup, sur plusieurs cœurs (`App::exactify_idle`) : c'est le seul endroit où
 ce réglage fait attendre, à la demande de l'utilisateur.
 
@@ -469,7 +469,7 @@ Banc `perf_save_ui_thread` : 500 dessins de 8 × 5 tuiles (320 Mo), projet déj�
   postérieure au cliché que le fichier n'a pas, le projet reste « modifié ». Un échec le remet à vrai
   (et `written` est vidé : tout sera réécrit). `App::doc_epoch` (changé par `load_doc`) empêche
   qu'un enregistrement fini après l'ouverture d'un autre projet lui donne son chemin ou son état.
-- *Suites* : `App::request` (Quitter, Fermer, Nouveau, Ouvrir, projet récent, import SBP) retient la
+- *Suites* : `App::request` (Quitter, Fermer, Nouveau, Ouvrir, projet récent) retient la
   demande pendant l'écriture (`after_save`) et la refait à la fin : modifié depuis → boîte
   « Modifications non enregistrées », sinon l'action. Au-delà de 200 ms d'attente, une fenêtre montre
   l'avancement. Fermer la fenêtre pendant l'écriture est refusé de même ; `fermeture` attend le fil
@@ -1210,7 +1210,7 @@ Le fond de l'aperçu du trait (réglages du pinceau) est une couleur calculée, 
 ## 17. Exports hors du fil de l'interface (2026-10-20, branche `exports-fond`)
 
 Règle d'Anthony : « un logiciel qui réponde toujours très rapidement, sans latence ». Avant, le film, les images, le GIF, le PDF, le
-montage, la relecture, la fiche et l'export vers Storyboard Pro calculaient leurs images **sur le fil de l'interface**, 40 ms par
+montage, la relecture, la fiche calculaient leurs images **sur le fil de l'interface**, 40 ms par
 image d'écran (le test se fait entre deux images : une image de 4K finit toujours), derrière une fenêtre modale qui verrouillait le
 projet. La page HTML du storyboard, l'image courante et le son seul se calculaient d'un coup, en gelant SHOT.
 
@@ -1240,8 +1240,7 @@ projet. La page HTML du storyboard, l'image courante et le son seul se calculaie
   **continue quand on change d'onglet**, la fenêtre « Export en cours » (non modale) dit de quel projet il s'agit.
 - **Le son** (film, WAV) est mixé sur un fil à part, sur le cliché (`mix_clips_blocking` : égaliseur et écho compris), avant que
   ffmpeg parte ; le montage le fait déjà sur un fil. Les **traits texturés restés en rendu rapide** sont refaits exacts dans le
-  cliché, sur un autre fil (`SnapshotBuilder::with_exact`). **Storyboard Pro** : les images des calques se calculent par les mêmes fils
-  (`Pipeline::start_with`), les sons (égaliseur, écho) sur le fil de Storyboard Pro.
+  cliché, sur un autre fil (`SnapshotBuilder::with_exact`). `Pipeline::start_with` sert aux calculs d'images sur les mêmes fils.
 - **Annuler** : le drapeau arrête le passeur tout de suite (il rend la file d'écriture), ffmpeg est tué, les fils de rendu finissent
   leur image en cours et s'en vont sans qu'on les attende (annuler rend la main en quelques millisecondes, même en 4K) ; ce qui n'est
   pas fini est effacé ; le PDF, la page HTML, l'image courante et le son passent par un fichier `.part` renommé à la fin : un fichier
@@ -1312,7 +1311,7 @@ retiennent jamais l'interface plus de 9 ms d'un coup.
   plus grande mais les images sont quatre fois plus petites.
 - **Le film n'est pas plus rapide** (ffmpeg limite) et peut être 3 à 4 % plus long ; les exports d'images, de PDF, de pages, de fiches
   gagnent avec les cœurs.
-- **Un seul export** (film, images, GIF, PDF, page, image, son) à la fois ; le montage, la fiche, la relecture et Storyboard Pro ont
+- **Un seul export** (film, images, GIF, PDF, page, image, son) à la fois ; le montage, la fiche et la relecture ont
   chacun le leur.
 - **Ce qu'on retouche pendant l'export n'y entre pas** (c'est voulu, la fenêtre le dit). Si le projet est remplacé dans l'onglet pendant
   la copie (quelques images d'écran), la copie serait mélangée : `modal_open` suspend alors les raccourcis et `onglet_occupe` refuse le
@@ -1324,7 +1323,7 @@ retiennent jamais l'interface plus de 9 ms d'un coup.
 
 La liste de `docs/INTERFACE.md` § 28 : film 4K avec une interface qui répond, le film est celui du départ (un trait dessiné pendant
 l'export n'y est pas), annuler, deux projets, quitter pendant l'export, image courante / page HTML / son sans gel, montage / fiche /
-relecture / Storyboard Pro, mémoire.
+relecture, mémoire.
 
 ## 18. Coller depuis un projet d'une autre taille (2026-10-20, branche `coller-adapter`)
 
@@ -1787,7 +1786,7 @@ indépendante (rejeu, onglets fermés).
 ### 27.1 Le cache des textures suit le budget de mémoire vidéo du système (`memoirevideo.rs`)
 
 **Le constat de l'audit** : le cache des textures de dessin (`gpu.rs`) visait un poids fixe, 1 à 2 Go selon le diagnostic,
-sans regarder ce que prennent les autres logiciels. Mémoire vidéo à 6,9 Go sur 8 (Storyboard Pro 3,5 Go, SHOT 1,5 Go, le
+sans regarder ce que prennent les autres logiciels. Mémoire vidéo à 6,9 Go sur 8 (un autre logiciel 3,5 Go, SHOT 1,5 Go, le
 bureau), chaque image recomposée attendait la carte 25 à 46 ms au lieu de 2 ; à 5,4 Go, 1,4 à 2,5 ms (cause déduite, non
 prouvée : la pagination de WDDM).
 
@@ -1820,7 +1819,7 @@ tampons sur la carte (`SHOT_OCCUPER_MO=4000`). Le budget accordé à SHOT tombe 
 marche** : en 0,8 s le cache passe de 2,5 à 2,25 Go, la mémoire est bien rendue (SHOT 2,64 → 2,44 Go à la lecture suivante),
 puis le plafond remonte un peu (2,37 Go) et tient. **Le gain, lui, n'a pas pu être mesuré proprement** : à la première
 série, l'image recomposée passait de 6,3 ms (pire 11,7) avant à 2,6 ms (pire 4,1) après ; aux suivantes, la machine était
-prise par d'autres travaux (Storyboard Pro et un SHOT ouverts, d'autres agents : 22 à 35 ms par image même sans l'autre
+prise par d'autres travaux (un autre logiciel et un SHOT ouverts, d'autres agents : 22 à 35 ms par image même sans l'autre
 processus) et les deux passes se valaient dans le bruit. Une lecture « dont 0 Mo de dessins » au tout début d'une passe
 vient de l'essai (une carte neuve pendant que la mémoire de la précédente n'est pas encore rendue) ; dans SHOT, il n'y a
 qu'une carte.

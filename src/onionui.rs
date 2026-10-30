@@ -111,7 +111,7 @@ impl App {
             if ui.button("Désactiver tout").on_hover_text("Cacher toutes les images, avant et après.").clicked() {
                 self.onion.show_all(false);
             }
-            if ui.button("Réinitialiser").on_hover_text("3 avant en rouge, 3 après en vert, par dessin (tes préférences Storyboard Pro).").clicked() {
+            if ui.button("Réinitialiser").on_hover_text("3 avant en rouge, 3 après en vert, par dessin.").clicked() {
                 let (enabled, bin) = (self.onion.enabled, std::mem::take(&mut self.onion.bin));
                 self.onion = OnionSettings { enabled, bin, ..OnionSettings::default() };
             }

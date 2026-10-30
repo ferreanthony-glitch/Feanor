@@ -29,7 +29,7 @@ pub(crate) const MOUSE_GESTURES: [(&str, &str); 27] = [
     ("Montage : Ctrl ou Maj + clic sur des dessins", "choisir plusieurs clés (Ctrl : une de plus ou de moins, sur n'importe quel calque ; Maj : le rectangle entre la clé de départ et celle-ci, tous calques d'entre compris)"),
     ("Montage : glisser dans le vide des pistes", "choisir toutes les clés que le rectangle touche, sur toutes les rangées qu'il couvre (Ctrl ou Maj : les ajouter)"),
     ("Montage : prendre une clé choisie", "toutes les clés choisies glissent, calque par calque (Maj : seules celles-ci ; Alt : les dupliquer ; Ctrl+Maj : les réordonner)"),
-    ("Sélection : Ctrl+Maj + lasso, rectangle ou clic", "prendre sur tous les calques du plan à l'image courante (Storyboard Pro) ; leurs clés se choisissent aussi dans le montage"),
+    ("Sélection : Ctrl+Maj + lasso, rectangle ou clic", "prendre sur tous les calques du plan à l'image courante ; leurs clés se choisissent aussi dans le montage"),
     ("Timeline : prise au bout de la règle", "changer la durée du plan"),
     ("Échap ou Ctrl+Z pendant un glisser", "abandonner le geste"),
 ];
@@ -137,7 +137,6 @@ impl App {
                     self.action_item(ui, "Des images comme références…", "references.importer_image");
                     self.action_item(ui, "Une vidéo comme référence…", "references.importer_video");
                     ui.separator();
-                    self.action_item(ui, "Un projet Storyboard Pro (.sboard)…", "fichier.importer_sboard");
                     self.action_item(ui, "Un scénario (Fountain, Final Draft, Word, texte)…", "fichier.importer_scenario");
                     self.action_item(ui, "Des notes de relecture (.json)…", "fichier.importer_notes");
                 });
@@ -862,11 +861,9 @@ impl App {
         self.flips_window_ui(ctx);
 
         self.tween_window_ui(ctx);
-        self.sb_window_ui(ctx);
         // Importer un scénario (`scenarioui.rs`).
         self.scenario_window_ui(ctx);
         self.brush_import_window(ctx);
-        self.sb_export_ui(ctx);
         self.smart_rename_window(ctx);
         self.goto_window(ctx);
         self.duration_dialog_ui(ctx);

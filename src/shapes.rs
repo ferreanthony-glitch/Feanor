@@ -1,10 +1,8 @@
 //! Formes (5c) : géométrie des outils Ligne (droite, courbe, courbe en S), Rectangle, Ellipse et
 //! Polyligne, sans interface.
 //!
-//! Storyboard Pro 27 a ces outils (LINE, RECTANGLE, ELLIPSE, POLYLINE ; la ligne a trois modes :
-//! droite, courbe, courbe en S). Leur maniement exact n'a pas été vérifié : celui-ci est propre
-//! à Pelure. La ligne courbe se trace comme une ligne droite, puis chaque glisser la courbe : la
-//! courbe passe par le pointeur (à mi-chemin pour une courbe, aux deux tiers pour le second
+//! La ligne a trois modes : droite, courbe, courbe en S. La ligne courbe se trace comme une ligne droite,
+//! puis chaque glisser la courbe : la courbe passe par le pointeur (à mi-chemin pour une courbe, aux deux tiers pour le second
 //! glisser d'une courbe en S).
 
 use std::f32::consts::TAU;

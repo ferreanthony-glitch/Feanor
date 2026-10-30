@@ -13,21 +13,13 @@ pub struct Settings {
     /// ffmpeg choisi à la main (sinon : cherché automatiquement à chaque export).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ffmpeg: Option<PathBuf>,
-    /// Copie de secours toutes les N minutes (0 = jamais). 1 par défaut, comme
-    /// AUTO_SAVE_DELAY dans les préférences Storyboard Pro d'Anthony.
+    /// Copie de secours toutes les N minutes (0 = jamais). 1 par défaut.
     #[serde(default = "default_autosave", rename = "copie_secours_minutes")]
     pub autosave_minutes: u32,
     /// Croix du système sur le dessin, en plus du cercle du pinceau : Windows la déplace dès que
     /// le stylet bouge, sans attendre l'image suivante (le cercle, dessiné par SHOT, la suit).
     #[serde(default = "yes", rename = "curseur_systeme")]
     pub system_cursor: bool,
-    /// Projet modèle de Storyboard Pro (14b) : l'export vers Storyboard Pro part d'une copie de ce
-    /// projet vide (résolution, cadence, légendes, réglages), choisi une fois par Anthony.
-    #[serde(default, rename = "modele_storyboard_pro", skip_serializing_if = "Option::is_none")]
-    pub sboard_template: Option<PathBuf>,
-    /// Dossier du dernier export vers Storyboard Pro.
-    #[serde(default, rename = "dossier_export_storyboard_pro", skip_serializing_if = "Option::is_none")]
-    pub sboard_export_dir: Option<PathBuf>,
     /// Dossier du dernier export pour le montage (EDL, XML, OTIO : `editorialui.rs`).
     #[serde(default, rename = "dossier_export_montage", skip_serializing_if = "Option::is_none")]
     pub montage_export_dir: Option<PathBuf>,
@@ -172,11 +164,6 @@ pub struct Settings {
     /// appliqué et réglages d'avant (« Revenir comme avant »).
     #[serde(default, rename = "diagnostic")]
     pub diagnostic: crate::diagnostic::EtatDiagnostic,
-    /// Jeu de raccourcis (2026-10-19) : « SHOT » (par défaut) ou « Façon Storyboard Pro ». Le fichier
-    /// personnel de raccourcis joue par-dessus (`keymap.rs`, Fichier > Préférences…, liste des
-    /// raccourcis). Absent des anciens réglages : SHOT.
-    #[serde(default, rename = "jeu_raccourcis", skip_serializing_if = "crate::keymap::PresetId::is_default")]
-    pub keymap_preset: crate::keymap::PresetId,
     /// Les dossiers de sons de la bibliothèque de bruitages (`bruitages.rs`).
     #[serde(default, rename = "bruitages")]
     pub bruitages: crate::bruitages::BruitagesReglages,
@@ -293,8 +280,6 @@ impl Default for Settings {
             ffmpeg: None,
             autosave_minutes: default_autosave(),
             system_cursor: true,
-            sboard_template: None,
-            sboard_export_dir: None,
             montage_export_dir: None,
             fiche: Default::default(),
             onion: OnionSettings::default(),
@@ -334,7 +319,6 @@ impl Default for Settings {
             framing: Default::default(),
             perf: Default::default(),
             diagnostic: Default::default(),
-            keymap_preset: Default::default(),
             bruitages: Default::default(),
             generation_son: Default::default(),
             passe_partout: default_passe_partout(),

@@ -1,6 +1,5 @@
 //! Outil Sélection par couleur (Anthony, 2026-10-17 : « ajoute l'outil sélection au-dessus du
-//! pinceau. Dans le même groupe, l'outil de sélection par la couleur ») ; « Select By Colour Tool »
-//! de Storyboard Pro, dont le comportement exact est à vérifier.
+//! pinceau. Dans le même groupe, l'outil de sélection par la couleur »).
 //!
 //! - Calque bitmap : clic sur une couleur, la zone de cette couleur (d'un seul tenant autour du
 //!   clic, ou tous les pixels de cette couleur), à la tolérance près. Elle devient la zone choisie

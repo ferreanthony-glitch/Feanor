@@ -562,8 +562,7 @@ impl Pipeline {
     }
 
     /// Comme `start`, pour n'importe quels calculs : `make(rang)` rend l'image numéro `rang` (de 0 à `total`), ou `None`
-    /// si l'export est annulé ; `octets` : la taille d'une image (pour borner la mémoire). L'export vers Storyboard Pro
-    /// s'en sert pour les images de ses calques.
+    /// si l'export est annulé ; `octets` : la taille d'une image (pour borner la mémoire).
     pub fn start_with(make: Arc<Calcul>, total: usize, octets: usize, cancel: Arc<AtomicBool>, mut send: Box<dyn FnMut(usize, Image) -> Pose + Send>, echec: Arc<Mutex<Option<String>>>, file: usize) -> Pipeline {
         let (fils, coeurs) = fils_de_rendu();
         let avance = avance_permise(octets, fils, file);

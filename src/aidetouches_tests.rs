@@ -6,7 +6,7 @@ use eframe::egui::{epaint::Shape, Event, Key, Modifiers};
 use crate::aidetouches::{commandes_de_l_onglet, commandes_de_l_outil, sections, CHOISIR_L_OUTIL, PARTOUT};
 use crate::app::Tool;
 use crate::document::Document;
-use crate::keymap::{action_info, Keymap, PresetId};
+use crate::keymap::{action_info, Keymap};
 use crate::keymap_tests::default_map;
 use crate::perf_tests::{banc_taille, Banc};
 use crate::workspace::Espace;
@@ -95,7 +95,7 @@ fn the_card_lists_the_tool_the_tab_and_what_works_everywhere_with_their_keys() {
 #[test]
 fn a_command_without_a_key_has_no_line_and_a_changed_key_shows_changed() {
     let user = "version = 1\n[[raccourci]]\naction = \"outil.taille_plus\"\ntouches = [\"K\"]\n[[raccourci]]\naction = \"outil.taille_moins\"\ntouches = []\n";
-    let map = Keymap::build(PresetId::Shot, Some(user));
+    let map = Keymap::build(Some(user));
     let s = sections(&map, Tool::Brush, Espace::Vignettes);
     let outil = &s[0];
     assert_eq!(outil.lignes.iter().find(|l| l.nom == "Plus gros").map(|l| l.touches.as_str()), Some("K"), "la touche de l'utilisateur");
@@ -142,7 +142,7 @@ fn the_card_follows_the_tool_and_the_tab() {
 fn the_card_reads_a_key_changed_after_the_app_started() {
     let mut b = banc();
     let user = "version = 1\n[[raccourci]]\naction = \"outil.taille_plus\"\ntouches = [\"K\"]\n";
-    b.app.keymap = Keymap::build(PresetId::Shot, Some(user));
+    b.app.keymap = Keymap::build(Some(user));
     presser(&mut b, Key::R);
     b.chauffer(1);
     assert!(est_la(&b, "K"), "{:?}", tous_les_textes(&b));

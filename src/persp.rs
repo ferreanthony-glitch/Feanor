@@ -2,8 +2,7 @@
 //! quadrilatère (ses quatre coins déplacés), appliquée à une image (échantillonnage inverse,
 //! bilinéaire) ou aux points d'éléments vectoriels.
 //!
-//! Comme l'outil Perspective de Storyboard Pro 27 (DRAWING_PERSPECTIVE_TOOL_KEY) : on tire les
-//! quatre coins. Son rendu exact n'a pas été comparé.
+//! On tire les quatre coins.
 
 use eframe::egui::{pos2, Color32, Pos2, Rect};
 

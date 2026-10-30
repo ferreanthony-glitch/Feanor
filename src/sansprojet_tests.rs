@@ -90,9 +90,6 @@ fn clic(b: &mut Banc, p: Pos2) {
     b.chauffer(3);
 }
 
-fn echap(b: &mut Banc) {
-    b.image(vec![Event::Key { key: Key::Escape, physical_key: Some(Key::Escape), pressed: true, repeat: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
-}
 
 /// Rien n'est ouvert, rien n'a changé : l'état de SHOT juste après son lancement.
 fn rien_n_a_change(b: &Banc, quand: &str) {
@@ -111,7 +108,6 @@ fn refermer_les_fenetres(b: &mut Banc) {
         || b.app.prefs_window
         || b.app.about_window
         || b.app.scenario_window.is_some()
-        || b.app.sb_window.is_some()
         || b.app.show_help
         || b.app.assign.is_some()
         || b.app.confort.stylet.is_some()
@@ -124,7 +120,6 @@ fn refermer_les_fenetres(b: &mut Banc) {
     b.app.prefs_window = false;
     b.app.about_window = false;
     b.app.scenario_window = None;
-    b.app.sb_window = None;
     b.app.show_help = false;
     b.app.assign = None;
     b.app.confort.stylet = None;
@@ -403,8 +398,8 @@ fn the_crash_recovery_is_still_offered_and_opens_in_the_empty_state_without_a_se
 #[test]
 fn every_command_played_without_a_project_changes_nothing_and_does_not_crash() {
     let mut b = lance();
-    // (Ouvrir et les deux imports ouvrent le sélecteur de fichiers de Windows, Quitter ferme la fenêtre : ils ne se jouent pas ici.)
-    let a_part = ["fichier.ouvrir", "fichier.quitter", "fichier.importer_scenario", "fichier.importer_sboard"];
+    // (Ouvrir et l'import ouvrent le sélecteur de fichiers de Windows, Quitter ferme la fenêtre : ils ne se jouent pas ici.)
+    let a_part = ["fichier.ouvrir", "fichier.quitter", "fichier.importer_scenario"];
     let mut jouees = 0;
     let mut permises = 0;
     for info in crate::keymap::ACTIONS {
@@ -444,7 +439,7 @@ fn every_default_shortcut_played_without_a_project_changes_nothing_and_does_not_
     let mut vus = 0;
     for (key, m, action) in touches {
         // (Ouvrir et les imports ouvrent le sélecteur de fichiers de Windows ; Quitter ferme la fenêtre : jouées à part.)
-        if ["fichier.ouvrir", "fichier.quitter", "fichier.importer_scenario", "fichier.importer_sboard"].contains(&action.as_str()) {
+        if ["fichier.ouvrir", "fichier.quitter", "fichier.importer_scenario"].contains(&action.as_str()) {
             continue;
         }
         sans_focus(&mut b);
@@ -487,7 +482,7 @@ fn the_compact_welcome_has_no_menus_so_the_menu_entries_cannot_be_played_and_the
 #[test]
 fn files_dropped_without_a_project_only_open_projects() {
     use crate::sansprojet::est_un_projet_a_ouvrir;
-    for (nom, oui) in [("Film.shot", true), ("Film.pelure", true), ("Film.sboard", true), ("Film.SBOARD", true), ("photo.png", false), ("son.wav", false), ("film.mp4", false), ("notes.json", false)] {
+    for (nom, oui) in [("Film.shot", true), ("Film.pelure", true), ("Film.sboard", false), ("Film.SBOARD", false), ("photo.png", false), ("son.wav", false), ("film.mp4", false), ("notes.json", false)] {
         assert_eq!(est_un_projet_a_ouvrir(Path::new(nom)), oui, "{nom}");
     }
     let dir = dossier("sansprojet-depot");

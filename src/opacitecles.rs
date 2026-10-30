@@ -8,7 +8,7 @@
 //! Elles suivent les images quand on en insère ou en retire (`shift_keys`), la coupe d'un plan (`split_keys`) et la réunion de deux
 //! plans (`join_keys`), comme les clés de position et d'effets.
 //!
-//! API pour un import (Storyboard Pro) : `Layer::set_opacity_at` pose une clé, `Layer::set_opacity_keys` en pose plusieurs d'un coup.
+//! API pour un import : `Layer::set_opacity_at` pose une clé, `Layer::set_opacity_keys` en pose plusieurs d'un coup.
 
 use serde::{Deserialize, Serialize};
 
