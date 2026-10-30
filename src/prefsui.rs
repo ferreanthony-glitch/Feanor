@@ -1,9 +1,8 @@
 //! Menus plus courts (Anthony, 2026-10-18 : « certains menus contiennent trop de choses et noient
 //! les informations principales ») : deux fenêtres reprennent ce qui encombrait le menu Fichier et
 //! le menu Affichage.
-//! - Exporter… : les sept exports d'un coup d'œil, chacun avec une ligne d'explication, et la case
-//!   « PNG sans le papier » à côté d'eux ; chaque bouton lance l'export d'avant (rien ne change
-//!   dans les exports eux-mêmes).
+//! - Exporter… : les exports rangés en quatre familles (Vidéo, Images & PDF, Son, Montage & échange), chacun
+//!   avec son icône, sa bulle et une ligne qui dit à quoi il sert ; chaque bouton ouvre la fenêtre de l'export.
 //! - Préférences… : les réglages de l'application (pas du projet) qui étaient éparpillés dans les
 //!   menus : copie de secours, dernier projet rouvert, croix du système, panneaux ajustés,
 //!   raccourcis clavier ; et la section « Performance » (`diagnosticui.rs`), les onze réglages que
@@ -58,60 +57,93 @@ fn titre_groupe(ui: &mut egui::Ui, groupe: Groupe, premier: bool) {
     ui.separator();
 }
 
-/// Les exports proposés : icône, nom, explication, action (ou `None` : la page HTML, sans action).
-const EXPORTS: [(&str, &str, &str, Option<&str>); 12] = [
-    (ph::FILM_STRIP, "Le film (vidéo)", "Le montage ou le plan en vidéo, avec le son.", Some("fichier.exporter_film")),
-    (ph::GIF, "Un GIF animé", "Le film, le plan courant ou les plans choisis, en petit GIF à partager (sans le son).", Some("fichier.exporter_gif")),
-    (ph::IMAGES, "Des images (PNG)", "Une image PNG par image du film.", Some("fichier.exporter_images")),
-    (ph::IMAGE, "L'image courante (PNG)", "Seulement l'image affichée.", Some("fichier.exporter_image_courante")),
-    (ph::FILE_PDF, "Le storyboard (PDF)", "Les plans en planches, avec leurs textes.", Some("fichier.exporter_pdf")),
-    (ph::BROWSER, "Le storyboard (page HTML + planches)", "Une page à ouvrir dans un navigateur, et ses images.", None),
-    (ph::SPEAKER_HIGH, "Le son (WAV)", "Les pistes son mélangées.", Some("fichier.exporter_son")),
-    (ph::FILM_REEL, "Pour le montage (EDL / XML / OTIO)", "Un fichier vidéo par plan et le montage pour Premiere, DaVinci Resolve ou Avid.", Some("fichier.exporter_montage")),
-    (ph::TABLE, "Fiche technique (tableur)", "Un plan par ligne, en classeur XLSX ou en CSV : durées, time codes, cadrage, mouvement de caméra, textes, sons, vignettes.", Some("fichier.exporter_fiche")),
-    (ph::EYEGLASSES, "Pour relecture (page HTML)", "Une page sans internet à envoyer au réalisateur : il écrit ses notes et dessine dessus, SHOT les relit ensuite.", Some("fichier.exporter_relecture")),
-    (ph::SQUARES_FOUR, "Planche des vignettes (PNG, JPEG, PDF)", "Toute la planche des Vignettes en une grande image ou en PDF : numéros, notes, barres, cadres de caméra, annotations, marie-louise.", Some("fichier.exporter_planche")),
-    (ph::PALETTE, "Color script (PNG, PDF)", "Une petite image par plan, rangées par séquence sur un fond uni : la couleur du film d'un coup d'œil.", Some("fichier.exporter_colorscript")),
+/// Un export proposé : icône, nom, « pour quoi faire », action.
+pub(crate) type Export = (&'static str, &'static str, &'static str, &'static str);
+
+/// Les exports, rangés par usage : un titre par famille, puis les exports de la famille (Anthony, 2026-10-30).
+pub(crate) const FAMILLES: [(&str, &[Export]); 4] = [
+    (
+        "Vidéo",
+        &[
+            (ph::FILM_STRIP, "Film", "Le montage ou le plan en vidéo, avec le son : MP4 pour regarder, ProRes ou DNxHR pour le montage, ProRes 4444 pour un fond transparent.", "fichier.exporter_film"),
+            (ph::GIF, "GIF animé", "Le film, le plan courant ou les plans choisis, en petit GIF à partager (sans le son).", "fichier.exporter_gif"),
+        ],
+    ),
+    (
+        "Images & PDF",
+        &[
+            (ph::IMAGES, "Images", "Une image PNG par image du film, pour une suite d'images ou un autre logiciel.", "fichier.exporter_images"),
+            (ph::IMAGE, "Image courante", "Seulement l'image affichée, en PNG.", "fichier.exporter_image_courante"),
+            (ph::IMAGES_SQUARE, "Images par plan", "Une image par plan ou par case, nommée comme le plan (SQ01_PL012A), en PNG ou en JPEG, sur fond transparent si tu veux.", "fichier.exporter_images_par_plan"),
+            (ph::FILE_PDF, "Storyboard PDF", "Les plans en planches à imprimer ou à envoyer, avec leurs textes ; format de page et nombre de cases au choix.", "fichier.exporter_pdf"),
+            (ph::SQUARES_FOUR, "Planche des vignettes", "Toute la planche des Vignettes en une grande image ou en PDF : numéros, notes, barres, cadres de caméra, annotations, marie-louise.", "fichier.exporter_planche"),
+            (ph::PALETTE, "Color script", "Une petite image par plan, rangées par séquence sur un fond uni : la couleur du film d'un coup d'œil.", "fichier.exporter_colorscript"),
+            (ph::EYEGLASSES, "Relecture", "Une page sans internet à envoyer au réalisateur : il écrit ses notes et dessine dessus, SHOT les relit ensuite.", "fichier.exporter_relecture"),
+        ],
+    ),
+    (
+        "Son",
+        &[
+            (ph::SPEAKER_HIGH, "Son mixé", "Les pistes son mélangées en un seul fichier WAV.", "fichier.exporter_son"),
+            (ph::WAVEFORM, "Son par piste", "Un fichier son par piste (muet et solo respectés), en WAV 16 ou 24 bits ou en AIFF, pour le mixage ou le montage son.", "fichier.exporter_son_par_piste"),
+        ],
+    ),
+    (
+        "Montage & échange",
+        &[
+            (ph::FILM_REEL, "Pour le montage", "Un fichier vidéo par plan et le montage en EDL, XML Final Cut, FCPXML ou OpenTimelineIO, pour un logiciel de montage.", "fichier.exporter_montage"),
+            (ph::TABLE, "Fiche technique", "Un plan par ligne, en classeur XLSX ou en CSV : durées, time codes, cadrage, mouvement de caméra, textes, sons, vignettes.", "fichier.exporter_fiche"),
+            (ph::STACK, "Calques séparés", "Un dossier par plan et, dedans, une suite d'images transparentes par calque visible, pour reprendre les calques dans un logiciel de compositing.", "fichier.exporter_calques"),
+            (ph::VIDEO_CAMERA, "Caméra", "Les clés de la caméra de chaque plan (position, zoom, rotation, interpolation) en JSON et en CSV, pour un script de compositing ou de 3D.", "fichier.exporter_camera"),
+        ],
+    ),
 ];
 
 impl App {
-    /// La fenêtre Exporter… (menu Fichier).
+    /// La fenêtre Exporter… (menu Fichier) : les exports rangés par usage (vidéo, images et PDF, son, montage et échange), chacun
+    /// avec son icône, sa bulle et une phrase qui dit à quoi il sert.
     pub(crate) fn export_hub_window(&mut self, ctx: &egui::Context) {
         if !self.export_hub {
             return;
         }
         let mut open = true;
-        let mut run: Option<Option<&str>> = None;
+        let mut run: Option<&str> = None;
         egui::Window::new("Exporter")
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
-            .anchor(egui::Align2::CENTER_TOP, [0.0, 80.0])
+            .anchor(egui::Align2::CENTER_TOP, [0.0, 60.0])
             .show(ctx, |ui| {
-                ui.set_width(420.0);
-                for (icon, name, hint, action) in EXPORTS {
-                    let text = RichText::new(format!("{icon}  {name}")).strong();
-                    let resp = ui.add_sized([ui.available_width(), 26.0], egui::Button::new(text).frame(true));
-                    if resp.clicked() {
-                        run = Some(action);
+                ui.set_width(440.0);
+                // (Une petite fenêtre : la liste défile plutôt que de sortir de l'écran.)
+                let haut = (ctx.screen_rect().height() - 140.0).clamp(200.0, 800.0);
+                egui::ScrollArea::vertical().min_scrolled_height(haut).max_height(haut).auto_shrink([false, false]).show(ui, |ui| {
+                for (k, (titre, exports)) in FAMILLES.iter().enumerate() {
+                    if k > 0 {
+                        ui.add_space(8.0);
                     }
-                    ui.label(RichText::new(hint).small().weak());
-                    ui.add_space(4.0);
+                    ui.label(RichText::new(*titre).strong().size(14.0).color(theme::texte_fort()));
+                    ui.separator();
+                    for (icon, name, hint, action) in exports.iter() {
+                        let text = RichText::new(format!("{icon}  {name}")).strong();
+                        let resp = ui.add_sized([ui.available_width(), 26.0], egui::Button::new(text).frame(true));
+                        let resp = crate::bulles::bulle(resp, name, hint, &self.raccourci(action));
+                        if resp.clicked() {
+                            run = Some(action);
+                        }
+                        ui.label(RichText::new(*hint).small().weak());
+                        ui.add_space(3.0);
+                    }
                 }
-                ui.separator();
-                ui.checkbox(&mut self.export_transparent, "Images PNG sans le papier (fond transparent)");
+                });
             });
         if let Some(action) = run {
             self.export_hub = false;
-            match action {
-                Some(a) => self.run_action(a),
-                None => self.export_storyboard(),
-            }
+            self.run_action(action);
         } else {
             self.export_hub = open;
         }
     }
-
     /// Apparence : le thème (Gris sombre, Gris clair, Sombre, Personnalisé) et les neuf couleurs de
     /// l'interface. Tout change aussitôt ; modifier une couleur passe en « Personnalisé », en
     /// partant du thème courant. Le réglage est enregistré par `App::update` une fois le curseur

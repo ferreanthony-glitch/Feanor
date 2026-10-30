@@ -17,7 +17,7 @@ use crate::editorialjob::{self, EditorialJob, Stage};
 use crate::export;
 use crate::transitions::{Align, Kind};
 
-fn temp(name: &str) -> PathBuf {
+pub(crate) fn temp(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("shot-montage-{name}-{}-{:?}", std::process::id(), std::thread::current().id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
@@ -26,7 +26,7 @@ fn temp(name: &str) -> PathBuf {
 
 /// Quatre plans de 24, 12, 36 et 24 images, les deux premiers dans la séquence 1, le troisième aussi, le
 /// dernier dans la séquence 2. Numérotation verrouillée.
-fn film(fps: u32) -> Document {
+pub(crate) fn film(fps: u32) -> Document {
     let mut doc = Document::new(64, 36, fps);
     doc.panels[0].set_length(24);
     let i = doc.add_scene_after(0);
@@ -471,12 +471,12 @@ fn the_xml_can_carry_absolute_paths_instead() {
 
 // ------------------------------------------------------------------------------------ le son
 
-fn tone(frames: usize, level: i16) -> Arc<Pcm> {
+pub(crate) fn tone(frames: usize, level: i16) -> Arc<Pcm> {
     Arc::new(Pcm { data: vec![level; frames * 2], peaks: Vec::new() })
 }
 
 /// Un film de quatre plans avec deux pistes son : « Voix » (deux extraits) et « Musique ».
-fn film_with_sound(fps: u32) -> Document {
+pub(crate) fn film_with_sound(fps: u32) -> Document {
     let mut doc = film(fps);
     let voix = doc.add_sound("voix.wav".into(), "wav".into(), Arc::new(Vec::new()), tone(48_000 * 4, 8_000));
     let zik = doc.add_sound("musique.wav".into(), "wav".into(), Arc::new(Vec::new()), tone(48_000 * 6, 4_000));

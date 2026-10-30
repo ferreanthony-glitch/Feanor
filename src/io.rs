@@ -318,35 +318,8 @@ pub fn write_png(path: &Path, pixels: &[Color32], width: usize, height: usize) -
     fs::write(path, png).map_err(|e| e.to_string())
 }
 
-/// Comme `write_png`, réduite à `max_width` pixels de large au plus.
-pub fn write_png_scaled(
-    path: &Path,
-    pixels: &[Color32],
-    width: usize,
-    height: usize,
-    max_width: usize,
-) -> Result<(), String> {
-    if width <= max_width {
-        return write_png(path, pixels, width, height);
-    }
-    let rgba: Vec<u8> = pixels.iter().flat_map(|&c| unpremultiply(c)).collect();
-    let img = image::RgbaImage::from_raw(width as u32, height as u32, rgba).ok_or("image invalide")?;
-    let nh = ((height * max_width) as f32 / width as f32).round().max(1.0) as u32;
-    let small = image::imageops::resize(&img, max_width as u32, nh, image::imageops::FilterType::Triangle);
-    let png = encode_png(small.as_raw(), small.width() as usize, small.height() as usize)?;
-    fs::write(path, png).map_err(|e| e.to_string())
-}
-
 pub fn load_image(path: &Path) -> Result<image::RgbaImage, String> {
     image::open(path)
         .map(|i| i.to_rgba8())
         .map_err(|e| format!("impossible de lire l'image : {e}"))
-}
-
-pub fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\n', "<br>")
 }

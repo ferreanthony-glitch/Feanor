@@ -3295,3 +3295,23 @@ source = "SHOT (sans touche)"
 action = "calque.nouveau_couleur_unie"
 touches = []
 source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fichier.exporter_images_par_plan"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fichier.exporter_son_par_piste"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fichier.exporter_calques"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fichier.exporter_camera"
+touches = []
+source = "SHOT (sans touche)"

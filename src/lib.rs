@@ -514,6 +514,19 @@ mod sculpt_tests;
 mod document;
 mod export;
 mod exportrender;
+mod exportcamera;
+mod exportlayers;
+mod exportstems;
+mod exportstills;
+mod exportvideo;
+#[cfg(test)]
+mod exports_v1_tests;
+#[cfg(test)]
+mod exports_v1_montage_tests;
+#[cfg(test)]
+mod exports_v1_calques_tests;
+#[cfg(test)]
+mod exports_v1_exemples_tests;
 #[cfg(test)]
 mod export_tests;
 mod exportui;
@@ -806,6 +819,8 @@ pub mod projetui;
 mod panelclip_tests;
 mod panels;
 mod pdf;
+mod pdffont;
+mod pdfmise;
 #[cfg(test)]
 mod pdf_tests;
 mod persofond;

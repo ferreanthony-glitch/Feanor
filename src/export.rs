@@ -22,7 +22,13 @@ use crate::audio::{self, MixClip, MixState};
 use crate::camera::Camera;
 use crate::document::Document;
 use crate::exportrender::{self, Image, Papier, Pipeline, Pose, Rendu, SnapshotBuilder};
+use crate::exportcamera::CameraSettings;
+use crate::exportlayers::LayersSettings;
+use crate::exportstems::StemsSettings;
+use crate::exportstills::StillsSettings;
+use crate::exportvideo::{self, BurnSettings, VideoRate, VideoSize, VideoSpec};
 use crate::pdf;
+use crate::pdfmise::PdfLayout;
 use crate::render::Plan;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -31,6 +37,10 @@ pub enum Format {
     Mp4,
     /// MOV ProRes 422 HQ + PCM : pour un logiciel de montage.
     ProRes,
+    /// MOV ProRes 4444 avec transparence (fond transparent) : pour poser le film sur autre chose.
+    ProRes4444,
+    /// DNxHR HQ (MOV ou MXF) + PCM : pour les logiciels de montage qui préfèrent le DNx.
+    DnxHr,
     /// Suite d'images PNG numérotées.
     Png,
     /// Son seul, WAV 48 kHz 16 bits stéréo.
@@ -39,27 +49,48 @@ pub enum Format {
     Pdf,
     /// GIF animé (ffmpeg : palette calculée sur tout le film, puis appliquée) : pour montrer, partager. Sans son.
     Gif,
+    /// Une image par plan ou par case, nommée comme l'export pour le montage (`exportstills.rs`).
+    Stills,
+    /// Un fichier son par piste audible (`exportstems.rs`).
+    Stems,
+    /// Les calques séparés : un dossier par plan, une suite d'images transparentes par calque (`exportlayers.rs`).
+    Layers,
+    /// Les clés de caméra de chaque plan, en JSON et en CSV (`exportcamera.rs`).
+    Camera,
 }
 
 impl Format {
     pub fn extension(self) -> &'static str {
         match self {
             Format::Mp4 => "mp4",
-            Format::ProRes => "mov",
+            Format::ProRes | Format::ProRes4444 | Format::DnxHr => "mov",
             Format::Png => "png",
             Format::Wav => "wav",
             Format::Pdf => "pdf",
             Format::Gif => "gif",
+            Format::Camera => "json",
+            // Un dossier, pas un fichier.
+            Format::Stills | Format::Stems | Format::Layers => "",
         }
     }
 
     pub fn is_video(self) -> bool {
-        matches!(self, Format::Mp4 | Format::ProRes)
+        matches!(self, Format::Mp4 | Format::ProRes | Format::ProRes4444 | Format::DnxHr)
     }
 
     /// Les images passent par ffmpeg (les films et le GIF).
     pub fn uses_ffmpeg(self) -> bool {
-        matches!(self, Format::Mp4 | Format::ProRes | Format::Gif)
+        self.is_video() || self == Format::Gif
+    }
+
+    /// L'export montre des images du film (pas du son, pas des données).
+    pub fn has_images(self) -> bool {
+        !matches!(self, Format::Wav | Format::Stems | Format::Camera)
+    }
+
+    /// Le film garde la transparence du fond.
+    pub fn has_alpha(self) -> bool {
+        self == Format::ProRes4444
     }
 }
 
@@ -185,8 +216,15 @@ pub fn gif_args(frame: [usize; 2], fps: u32, s: &GifSettings, out: &Path) -> Vec
 pub struct ExportSettings {
     pub format: Format,
     pub range: Range,
-    /// Vidéo à moitié de la taille du cadre (fichier de travail plus léger).
-    pub half: bool,
+    /// La taille du film (`exportvideo.rs`) : celle du projet, 4K UHD, 1080p, 720p, la moitié, une largeur libre.
+    pub size: VideoSize,
+    /// La cadence du film : celle du projet, ou une conversion (ffmpeg `fps`).
+    pub rate: VideoRate,
+    /// DNxHR dans un fichier MXF (sinon MOV).
+    pub mxf: bool,
+    /// Les informations gravées dans l'image (numéro de plan, time code, séquence, dialogues).
+    pub burn: BurnSettings,
+    /// Le film garde la transparence du fond (ProRes 4444) : toujours vrai pour ce format, jamais pour les autres.
     pub sound: bool,
     /// Images PNG sans le papier.
     pub transparent: bool,
@@ -196,6 +234,16 @@ pub struct ExportSettings {
     pub comments: bool,
     /// Taille, cadence, boucle et tramage du GIF (`Format::Gif`).
     pub gif: GifSettings,
+    /// La mise en page du storyboard PDF (`pdfmise.rs`).
+    pub pdf: PdfLayout,
+    /// Les images par plan (`exportstills.rs`).
+    pub stills: StillsSettings,
+    /// Le son par piste (`exportstems.rs`).
+    pub stems: StemsSettings,
+    /// Les calques séparés (`exportlayers.rs`).
+    pub layers: LayersSettings,
+    /// Les clés de caméra (`exportcamera.rs`).
+    pub camera: CameraSettings,
     /// Avec les calques d'annotation des plans (« Avec les annotations ») : retenu par poste de travail (`Settings::export_annotations`).
     pub annotations: bool,
 }
@@ -206,13 +254,54 @@ impl Default for ExportSettings {
             annotations: false,
             format: Format::Mp4,
             range: Range::Montage,
-            half: false,
+            size: VideoSize::Project,
+            rate: VideoRate::Project,
+            mxf: false,
+            burn: BurnSettings::default(),
             sound: true,
             transparent: false,
             transitions: true,
             comments: false,
             gif: GifSettings::default(),
+            pdf: PdfLayout::default(),
+            stills: StillsSettings::default(),
+            stems: StemsSettings::default(),
+            layers: LayersSettings::default(),
+            camera: CameraSettings::default(),
         }
+    }
+}
+
+/// Les choix d'export retenus d'une séance à l'autre, par poste de travail (dans les réglages de l'application, jamais dans le projet).
+#[derive(Clone, Debug, PartialEq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct ExportPrefs {
+    pub size: VideoSize,
+    pub rate: VideoRate,
+    pub mxf: bool,
+    pub burn: BurnSettings,
+    pub pdf: PdfLayout,
+    pub stills: StillsSettings,
+    pub stems: StemsSettings,
+    pub layers: LayersSettings,
+    pub camera: CameraSettings,
+}
+
+impl ExportPrefs {
+    pub fn of(s: &ExportSettings) -> ExportPrefs {
+        ExportPrefs { size: s.size, rate: s.rate, mxf: s.mxf, burn: s.burn, pdf: s.pdf, stills: s.stills, stems: s.stems, layers: s.layers, camera: s.camera }
+    }
+
+    pub fn apply(&self, s: &mut ExportSettings) {
+        s.size = self.size;
+        s.rate = self.rate;
+        s.mxf = self.mxf;
+        s.burn = self.burn;
+        s.pdf = self.pdf;
+        s.stills = self.stills;
+        s.stems = self.stems;
+        s.layers = self.layers;
+        s.camera = self.camera;
     }
 }
 
@@ -289,6 +378,10 @@ pub struct Encoders {
     /// Le meilleur encodeur H.264 disponible.
     pub h264: Option<&'static str>,
     pub prores: bool,
+    /// OpenH264 est là aussi : l'encodeur de Windows (`h264_mf`) refuse les images plus petites que 64 × 36, OpenH264 les prend.
+    pub openh264: bool,
+    /// L'encodeur DNx (`dnxhd`), qui fait le DNxHR.
+    pub dnxhd: bool,
     pub aac: bool,
 }
 
@@ -296,8 +389,11 @@ pub struct Encoders {
 pub fn parse_encoders(list: &str) -> Encoders {
     let has = |name: &str| list.lines().any(|l| l.split_whitespace().nth(1) == Some(name));
     Encoders {
-        h264: ["libx264", "libopenh264", "h264_mf"].into_iter().find(|n| has(n)),
+        // libx264 d'abord ; sinon l'encodeur de Windows (h264_mf) avant OpenH264.
+        h264: ["libx264", "h264_mf", "libopenh264"].into_iter().find(|n| has(n)),
         prores: has("prores_ks"),
+        openh264: has("libopenh264"),
+        dnxhd: has("dnxhd"),
         aac: has("aac"),
     }
 }
@@ -326,6 +422,7 @@ pub fn probe(ffmpeg: &Path) -> Result<Encoders, String> {
 }
 
 /// Arguments de ffmpeg : images brutes RGBA sur l'entrée standard, son en WAV (facultatif).
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn video_args(
     format: Format,
     enc: &Encoders,
@@ -337,7 +434,6 @@ pub fn video_args(
 ) -> Result<Vec<String>, String> {
     video_args_rate(format, enc, frame, &fps.to_string(), half, audio, out)
 }
-
 /// Comme `video_args`, la cadence écrite comme ffmpeg la lit (`24`, `24000/1001` : les vidéos par plan
 /// de l'export pour le montage en NTSC, `editorial.rs`).
 pub fn video_args_rate(
@@ -349,74 +445,8 @@ pub fn video_args_rate(
     audio: Option<&Path>,
     out: &Path,
 ) -> Result<Vec<String>, String> {
-    let fps: f64 = match rate.split_once('/') {
-        Some((n, d)) => n.parse::<f64>().unwrap_or(24.0) / d.parse::<f64>().unwrap_or(1.0).max(1.0),
-        None => rate.parse().unwrap_or(24.0),
-    };
-    let [w, h] = frame;
-    let [ow, oh] = video_size(frame, half);
-    let s = |v: &str| v.to_string();
-    let mut a: Vec<String> = ["-hide_banner", "-loglevel", "error", "-nostats", "-y"].map(s).to_vec();
-    a.extend(["-f", "rawvideo", "-pix_fmt", "rgba"].map(s));
-    a.extend([s("-s"), format!("{w}x{h}"), s("-framerate"), rate.to_string(), s("-i"), s("-")]);
-    if let Some(wav) = audio {
-        a.extend([s("-i"), wav.to_string_lossy().into_owned()]);
-    }
-    a.extend(["-map", "0:v:0"].map(s));
-    if audio.is_some() {
-        a.extend(["-map", "1:a:0"].map(s));
-    }
-    let pix = match format {
-        Format::Mp4 => "yuv420p",
-        Format::ProRes => "yuv422p10le",
-        _ => return Err("format non vidéo".into()),
-    };
-    // Couleurs : conversion et étiquette BT.709 (la norme HD que supposent les lecteurs).
-    let resize = if half {
-        format!("scale={ow}:{oh}:flags=area:out_color_matrix=bt709:out_range=tv")
-    } else {
-        // Taille impaire : on retire la dernière ligne ou colonne plutôt que de rééchantillonner.
-        format!("crop={ow}:{oh}:0:0,scale=out_color_matrix=bt709:out_range=tv")
-    };
-    a.extend([s("-vf"), format!("{resize},format={pix}")]);
-    a.extend(["-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709"].map(s));
-    match format {
-        Format::Mp4 => {
-            match enc.h264 {
-                Some("libx264") => a.extend(["-c:v", "libx264", "-preset", "medium", "-crf", "18"].map(s)),
-                Some(name) => {
-                    // OpenH264 et Media Foundation se règlent au débit : ~0,25 bit par pixel.
-                    let bits = (ow * oh) as f64 * fps * 0.25;
-                    a.extend([s("-c:v"), s(name), s("-b:v"), format!("{}k", (bits / 1000.0).round())]);
-                    if name == "libopenh264" {
-                        a.extend(["-profile:v", "high"].map(s));
-                    }
-                }
-                None => return Err("ce ffmpeg ne sait pas encoder en H.264".into()),
-            }
-            if audio.is_some() {
-                if !enc.aac {
-                    return Err("ce ffmpeg ne sait pas encoder le son en AAC".into());
-                }
-                a.extend(["-c:a", "aac", "-b:a", "192k"].map(s));
-            }
-            a.extend(["-movflags", "+faststart"].map(s));
-        }
-        _ => {
-            if !enc.prores {
-                return Err("ce ffmpeg ne sait pas encoder en ProRes".into());
-            }
-            a.extend(["-c:v", "prores_ks", "-profile:v", "3"].map(s));
-            if audio.is_some() {
-                a.extend(["-c:a", "pcm_s16le"].map(s));
-            }
-        }
-    }
-    if audio.is_some() {
-        a.push(s("-shortest"));
-    }
-    a.push(out.to_string_lossy().into_owned());
-    Ok(a)
+    let size = if half { VideoSize::Half } else { VideoSize::Project };
+    exportvideo::video_args(&VideoSpec { format, enc, frame, out_size: size.dimensions(frame), rate_in: rate.to_string(), rate_out: None, audio, target: out, mxf: false })
 }
 
 // ---------------------------------------------------------------------------------------- son
@@ -502,7 +532,12 @@ const PDF_IMAGE_WIDTH: u32 = 800;
 
 /// Image d'un panneau pour le PDF : sur fond blanc, réduite, en JPEG.
 pub fn board_image(img: &[Color32], size: [usize; 2]) -> Result<pdf::BoardImage, String> {
-    let (width, height, jpeg) = jpeg_on_white(img, size, PDF_IMAGE_WIDTH, 88)?;
+    board_image_at(img, size, PDF_IMAGE_WIDTH)
+}
+
+/// Comme `board_image`, réduite à `max_width` pixels de large au plus (le storyboard à la carte : une case plus grande veut une image plus fine).
+pub fn board_image_at(img: &[Color32], size: [usize; 2], max_width: u32) -> Result<pdf::BoardImage, String> {
+    let (width, height, jpeg) = jpeg_on_white(img, size, max_width, 88)?;
     Ok(pdf::BoardImage { width, height, jpeg })
 }
 
@@ -799,6 +834,10 @@ pub enum Progress {
 /// Rend un fichier à effacer si l'export s'arrête (le son mixé que lit ffmpeg).
 type Prelude = Box<dyn FnOnce(&Document, &AtomicBool) -> Result<Option<PathBuf>, String> + Send>;
 
+/// Ce qui calcule (et écrit) lui-même l'image numéro `rang` d'un export à la place du rendu habituel (les calques séparés,
+/// `exportlayers.rs`) : reçoit le cliché du projet, l'annulation et la place où noter une erreur, et rend le calcul.
+pub type CalcMaker = Box<dyn FnOnce(Arc<Document>, Arc<AtomicBool>, Arc<Mutex<Option<String>>>) -> Arc<exportrender::Calcul> + Send>;
+
 /// Lance l'écriture (ffmpeg…) quand le son mixé est prêt (son chemin) ; rend le fil d'écriture et son entrée.
 type Launch = Box<dyn FnOnce(Option<PathBuf>) -> Result<(Sink, Tx), String> + Send>;
 
@@ -839,6 +878,10 @@ pub struct ExportJob {
     /// Avec les calques d'annotation des plans (« Avec les annotations » des fenêtres d'export, `avec_annotations`) : posés par-dessus tout
     /// (`render::panel_plan_at_avec`). Non d'origine : jamais dans le film.
     annotations: bool,
+    /// Les informations gravées dans les images (`avec_infos`).
+    infos: Option<BurnSettings>,
+    /// Un calcul à soi à la place du rendu habituel (`with_calc`).
+    calc: Option<CalcMaker>,
     explicite: Option<(Plan, Camera)>,
     /// Les zones des transitions du montage (`with_transitions`) ; vides : aucune transition.
     zones: Vec<crate::transitions::Zone>,
@@ -903,7 +946,7 @@ fn png_writers(dir: PathBuf, naming: Naming, size: [usize; 2], fail: Fail) -> (S
 }
 
 /// Lance ffmpeg (images brutes sur son entrée standard) et le fil qui les lui écrit.
-fn spawn_video(ffmpeg: &Path, args: &[String], wav: Option<PathBuf>) -> Result<(Sink, Tx), String> {
+fn spawn_video(ffmpeg: &Path, args: &[String], wav: Option<PathBuf>, straight_alpha: bool) -> Result<(Sink, Tx), String> {
     let mut child = command(ffmpeg)
         .args(args)
         .stdin(Stdio::piped())
@@ -921,10 +964,18 @@ fn spawn_video(ffmpeg: &Path, args: &[String], wav: Option<PathBuf>) -> Result<(
     let (tx, rx) = sync_channel::<Image>(QUEUE);
     let writer = std::thread::spawn(move || -> Result<(), String> {
         crate::parallele::baisser_la_priorite_ici();
+        let mut straight: Vec<u8> = Vec::new();
         for img in rx {
-            stdin
-                .write_all(bytemuck::cast_slice(&img[..]))
-                .map_err(|e| format!("ffmpeg ne reçoit plus les images ({e})"))?;
+            // ffmpeg lit du RGBA « droit » (non prémultiplié) : un film qui garde la transparence (ProRes 4444) reçoit les couleurs
+            // dé-prémultipliées, comme les PNG (`io::write_png`) ; un film sans transparence reçoit l'image telle quelle (opaque).
+            let bytes: &[u8] = if straight_alpha {
+                straight.clear();
+                straight.extend(img.iter().flat_map(|&c| crate::raster::unpremultiply(c)));
+                &straight
+            } else {
+                bytemuck::cast_slice(&img[..])
+            };
+            stdin.write_all(bytes).map_err(|e| format!("ffmpeg ne reçoit plus les images ({e})"))?;
         }
         Ok(())
     });
@@ -961,7 +1012,7 @@ impl ExportJob {
 
     /// Vidéo encodée par ffmpeg (`args` : voir `video_args`), avec le son `wav` s'il y en a (déjà écrit).
     pub fn video(ffmpeg: &Path, args: Vec<String>, out: &Path, frames: Vec<(usize, usize)>, wav: Option<PathBuf>) -> Result<ExportJob, String> {
-        let (sink, tx) = spawn_video(ffmpeg, &args, wav)?;
+        let (sink, tx) = spawn_video(ffmpeg, &args, wav, false)?;
         let mut job = ExportJob::new(format!("Export de la vidéo ({} images)", frames.len()), out.to_path_buf(), frames, true, sink, tx, Arc::default());
         job.erase = Erase::Fichier;
         Ok(job)
@@ -969,6 +1020,7 @@ impl ExportJob {
 
     /// Comme `video`, mais le son est mixé par l'export lui-même, sur un fil à part, avant que ffmpeg parte : `args(wav)`
     /// donne les arguments de ffmpeg une fois le chemin du son connu. Rien ne s'attend sur le fil de l'interface.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn video_with_sound(
         ffmpeg: &Path,
         args: impl FnOnce(Option<&Path>) -> Result<Vec<String>, String> + Send + 'static,
@@ -976,14 +1028,30 @@ impl ExportJob {
         frames: Vec<(usize, usize)>,
         sound: Option<SoundSpan>,
     ) -> ExportJob {
+        ExportJob::video_with_sound_alpha(ffmpeg, args, out, frames, sound, false)
+    }
+
+    /// Comme `video_with_sound` ; `alpha` : le film garde la transparence (les images partent à ffmpeg dé-prémultipliées, sur un fond
+    /// transparent : `sans_papier`).
+    pub fn video_with_sound_alpha(
+        ffmpeg: &Path,
+        args: impl FnOnce(Option<&Path>) -> Result<Vec<String>, String> + Send + 'static,
+        out: &Path,
+        frames: Vec<(usize, usize)>,
+        sound: Option<SoundSpan>,
+        alpha: bool,
+    ) -> ExportJob {
         let ffmpeg = ffmpeg.to_path_buf();
         let launch: Launch = Box::new(move |wav| {
             let a = args(wav.as_deref())?;
-            spawn_video(&ffmpeg, &a, wav)
+            spawn_video(&ffmpeg, &a, wav, alpha)
         });
         let mut job = ExportJob::new(format!("Export de la vidéo ({} images)", frames.len()), out.to_path_buf(), frames, true, Sink::Rien, Tx::Rien, Arc::default());
         job.launch = Some(launch);
         job.tx = None;
+        if alpha {
+            job.papier = Papier::Aucun;
+        }
         // (Le film n'est effacé à l'arrêt que si ffmpeg est parti : un ffmpeg qui ne démarre pas laisse le fichier d'avant.)
         job.erase = Erase::Rien;
         job.erase_after_launch = true;
@@ -1003,6 +1071,20 @@ impl ExportJob {
                 }
             }));
         }
+        job
+    }
+
+    /// Un travail sans image, fait sur un fil à part avec une copie du projet (le son par piste, les clés de caméra) : `work` écrit ce qu'il
+    /// a à écrire et efface lui-même ce qu'il a commencé d'écrire s'il est annulé (`cancel` levé) ou s'il échoue ; `message` est le message
+    /// de réussite, donné d'avance.
+    pub fn task(title: String, target: &Path, message: String, work: impl FnOnce(&Document, &AtomicBool) -> Result<(), String> + Send + 'static) -> ExportJob {
+        let mut job = ExportJob::new(title, target.to_path_buf(), Vec::new(), true, Sink::Rien, Tx::Rien, Arc::default());
+        job.erase = Erase::Rien;
+        job.done_text = Some(message);
+        job.prelude = Some(Box::new(move |snap, cancel| {
+            work(snap, cancel)?;
+            Ok(None)
+        }));
         job
     }
 
@@ -1049,11 +1131,13 @@ impl ExportJob {
 
     /// Storyboard PDF `out` : une planche par image de storyboard de `boards`, rendue à l'image
     /// `frames` correspondante (plan, image du plan ; voir `storyboard_of`).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn pdf(out: &Path, title: &str, frames: Vec<(usize, usize)>, boards: Vec<pdf::Board>, frame: [usize; 2]) -> ExportJob {
         ExportJob::pdf_with(out, title, frames, boards, frame, false)
     }
 
     /// Comme `pdf` ; `notes_area` : la version à imprimer pour relire (`pdf::storyboard_with`).
+    #[cfg_attr(not(test), allow(dead_code))]
     pub fn pdf_with(out: &Path, title: &str, frames: Vec<(usize, usize)>, boards: Vec<pdf::Board>, frame: [usize; 2], notes_area: bool) -> ExportJob {
         let n = boards.len();
         let (path, name) = (out.to_path_buf(), title.to_string());
@@ -1071,6 +1155,35 @@ impl ExportJob {
         );
         job.unit = "Image de storyboard";
         job
+    }
+
+    /// Storyboard PDF à la carte (`pdfmise.rs`) : format de page, nombre de cases, textes, en-tête, polices embarquées. Même tâche
+    /// de fond que `pdf` ; les images sont réduites d'après la taille d'une case.
+    pub fn pdf_layout(out: &Path, title: &str, frames: Vec<(usize, usize)>, boards: Vec<pdf::Board>, frame: [usize; 2], layout: PdfLayout) -> ExportJob {
+        let n = boards.len();
+        let (path, name) = (out.to_path_buf(), title.to_string());
+        let aspect = frame[0] as f32 / frame[1].max(1) as f32;
+        let date = crate::incrustation::date_text(crate::incrustation::now_secs());
+        let width = layout.image_width();
+        let mut job = ExportJob::collect(
+            format!("Export du storyboard ({n} images)"),
+            "Image de storyboard",
+            out,
+            frames,
+            move |_, img| board_image_at(img, frame, width),
+            move |images: Vec<pdf::BoardImage>| {
+                let bytes = crate::pdfmise::storyboard_layout(&name, &date, &boards, &images, aspect, &layout);
+                write_atomic(&path, &bytes)
+            },
+        );
+        job.unit = "Image de storyboard";
+        job
+    }
+
+    /// Le message de réussite, donné d'avance (à la place de « N images exportées »).
+    pub fn avec_message(mut self, message: String) -> ExportJob {
+        self.done_text = Some(message);
+        self
     }
 
     /// Un export qui garde chaque image calculée sous une autre forme et écrit le tout à la fin
@@ -1165,41 +1278,6 @@ impl ExportJob {
         job
     }
 
-    /// La page HTML du storyboard (une planche PNG par image de storyboard, 960 pixels de large, et `storyboard.html`
-    /// dans `dir`) : le papier est toujours celui du projet, sans transition ni incrustation (comme avant).
-    pub fn storyboard_page(dir: &Path, title: &str, frames: Vec<(usize, usize)>, items: Vec<PlancheHtml>, frame: [usize; 2]) -> ExportJob {
-        let n = items.len();
-        let (d_encode, d_finish, d_clean) = (dir.to_path_buf(), dir.to_path_buf(), dir.to_path_buf());
-        let name = title.to_string();
-        let written: Arc<Mutex<Vec<PathBuf>>> = Arc::default();
-        let (w_encode, w_clean) = (written.clone(), written.clone());
-        let page = dir.join("storyboard.html");
-        let mut job = ExportJob::collect_with(
-            format!("Export de la page du storyboard ({n} images)"),
-            "Image de storyboard",
-            &page,
-            frames,
-            move |k, img| {
-                let file = format!("planche_{:03}.png", k + 1);
-                let path = d_encode.join(&file);
-                w_encode.lock().unwrap_or_else(|e| e.into_inner()).push(path.clone());
-                crate::io::write_png_scaled(&path, img, frame[0], frame[1], 960).map_err(|e| format!("{} : {e}", path.display()))?;
-                Ok(file)
-            },
-            move |files: Vec<String>| write_atomic(&d_finish.join("storyboard.html"), storyboard_html(&name, &items, &files).as_bytes()),
-            move || {
-                for p in w_clean.lock().unwrap_or_else(|e| e.into_inner()).drain(..) {
-                    let _ = std::fs::remove_file(p);
-                }
-                let _ = std::fs::remove_file(part_of(&d_clean.join("storyboard.html")));
-            },
-        );
-        job.papier = Papier::Feuille;
-        job.graver = false;
-        job.done_text = Some(format!("Storyboard exporté : {}", dir.join("storyboard.html").display()));
-        job
-    }
-
     /// Les images d'une planche (vignettes, color script) : le papier du projet, sans incrustation (timecode…) gravée, et le message de
     /// réussite donné d'avance.
     pub fn pour_planche(mut self, message: String) -> ExportJob {
@@ -1217,6 +1295,8 @@ impl ExportJob {
             papier: if paper { Papier::Fond } else { Papier::Aucun },
             graver: true,
             annotations: false,
+            infos: None,
+            calc: None,
             explicite: None,
             zones: Vec::new(),
             snapshot: None,
@@ -1283,6 +1363,24 @@ impl ExportJob {
     /// « Avec les annotations » : les calques d'annotation des plans sont dans les images de cet export, par-dessus tout le reste.
     pub fn avec_annotations(mut self, oui: bool) -> ExportJob {
         self.annotations = oui;
+        self
+    }
+
+    /// Les images de cet export sont sur fond transparent (sans le papier du projet).
+    pub fn sans_papier(mut self) -> ExportJob {
+        self.papier = Papier::Aucun;
+        self
+    }
+
+    /// Un calcul à soi à la place du rendu habituel des images : voir `CalcMaker`. Les images se numérotent comme celles de `frames`.
+    pub fn with_calc(mut self, calc: CalcMaker) -> ExportJob {
+        self.calc = Some(calc);
+        self
+    }
+
+    /// Les informations gravées dans l'image (numéro de plan, time code, séquence, dialogues : `exportvideo.rs`), sans calque ajouté au projet.
+    pub fn avec_infos(mut self, burn: BurnSettings) -> ExportJob {
+        self.infos = burn.active().then_some(burn);
         self
     }
 
@@ -1390,12 +1488,18 @@ impl ExportJob {
         let Some(tx) = self.tx.take() else {
             return self.stop_with(Err("l'écriture n'a pas démarré".into()));
         };
-        let mut rendu = Rendu::new(snapshot, self.papier, self.graver, self.zones.clone(), self.cancel.clone()).avec_annotations(self.annotations);
-        if let Some((plan, cam)) = self.explicite.clone() {
-            rendu = rendu.avec_plan(plan, cam);
-        }
-        self.rendering_since = Some(Instant::now());
-        let pipeline = Pipeline::start(Arc::new(rendu), self.frames.clone(), Box::new(move |i, img| tx.send(i, img)), self.fail.clone(), QUEUE);
+        let pipeline = if let Some(maker) = self.calc.take() {
+            let make = maker(snapshot, self.cancel.clone(), self.fail.clone());
+            self.rendering_since = Some(Instant::now());
+            Pipeline::start_with(make, self.frames.len(), 4, self.cancel.clone(), Box::new(move |i, img| tx.send(i, img)), self.fail.clone(), QUEUE)
+        } else {
+            let mut rendu = Rendu::new(snapshot, self.papier, self.graver, self.zones.clone(), self.cancel.clone()).avec_annotations(self.annotations).avec_infos(self.infos);
+            if let Some((plan, cam)) = self.explicite.clone() {
+                rendu = rendu.avec_plan(plan, cam);
+            }
+            self.rendering_since = Some(Instant::now());
+            Pipeline::start(Arc::new(rendu), self.frames.clone(), Box::new(move |i, img| tx.send(i, img)), self.fail.clone(), QUEUE)
+        };
         self.stage = Stage::Rendu(pipeline);
     }
 
@@ -1475,67 +1579,3 @@ impl Drop for ExportJob {
 }
 
 static NEXT_WAV: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
-// ------------------------------------------------------------------------------ la page HTML
-
-/// Une planche de la page HTML du storyboard.
-#[derive(Clone, Debug, Default)]
-pub struct PlancheHtml {
-    /// L'intertitre qui ouvre une séquence (« Séquence 2 »), s'il y en a un avant cette planche.
-    pub sequence: Option<String>,
-    /// Ce qui précède l'intertitre : c'est la première séquence (pas de `</main>` à fermer).
-    pub premiere: bool,
-    pub title: String,
-    pub duration: String,
-    pub action: String,
-    pub dialogue: String,
-    pub notes: String,
-}
-
-/// Les planches de la page HTML : une par image de storyboard de `panels`, avec l'intertitre des séquences.
-pub fn storyboard_items(doc: &Document, panels: &[usize]) -> (Vec<(usize, usize)>, Vec<PlancheHtml>) {
-    let (frames, boards) = storyboard_of(doc, panels);
-    let items = frames
-        .iter()
-        .zip(boards)
-        .map(|(&(i, f), board)| {
-            // Intertitre au début de chaque séquence.
-            let sequence = (f == 0 && doc.sequence_run(i).0 == i).then(|| doc.sequence_label(doc.sequence_of(i)));
-            PlancheHtml { sequence, premiere: i == 0, title: board.title, duration: board.duration, action: board.action, dialogue: board.dialogue, notes: board.notes }
-        })
-        .collect();
-    (frames, items)
-}
-
-/// Le texte de la page HTML : `files` donne le fichier image de chaque planche.
-pub fn storyboard_html(title: &str, items: &[PlancheHtml], files: &[String]) -> String {
-    use crate::io::html_escape;
-    let title = html_escape(title);
-    let mut html = format!(
-        "<!doctype html><html lang=\"fr\"><head><meta charset=\"utf-8\"><title>{title}</title><style>\
-         body{{font-family:system-ui,sans-serif;margin:24px;color:#222}}\
-         h1{{font-size:20px}}main{{display:grid;grid-template-columns:repeat(2,1fr);gap:24px}}\
-         section{{border:1px solid #ccc;padding:10px;break-inside:avoid}}\
-         img{{width:100%;border:1px solid #999}}h2{{font-size:15px;margin:8px 0 2px}}\
-         .dur{{color:#777;font-size:12px;margin:0 0 6px}}p{{font-size:13px;margin:4px 0}}\
-         .label{{font-weight:600}}h2.seq{{font-size:18px;margin:28px 0 10px;break-after:avoid}}\
-         </style></head><body><h1>{title} — storyboard</h1>"
-    );
-    for (item, file) in items.iter().zip(files) {
-        if let Some(seq) = &item.sequence {
-            if !item.premiere {
-                html += "</main>";
-            }
-            html += &format!("<h2 class=\"seq\">Séquence {}</h2><main>", html_escape(seq));
-        }
-        html += &format!("<section><img src=\"{file}\"><h2>{}</h2><p class=\"dur\">{}</p>", html_escape(&item.title), item.duration);
-        for (label, text) in [("Action", &item.action), ("Dialogue", &item.dialogue), ("Notes", &item.notes)] {
-            if !text.trim().is_empty() {
-                html += &format!("<p><span class=\"label\">{label} :</span> {}</p>", html_escape(text));
-            }
-        }
-        html += "</section>";
-    }
-    html += "</main></body></html>";
-    html
-}

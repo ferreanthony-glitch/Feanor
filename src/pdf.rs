@@ -121,6 +121,11 @@ pub fn text_width(s: &str, bold: bool, size: f32) -> f32 {
 /// Coupe `text` en lignes de `width` points au plus ; la première commence après `indent` points.
 /// Les retours à la ligne du texte sont gardés ; un mot trop long est coupé.
 pub fn wrap(text: &str, bold: bool, size: f32, width: f32, indent: f32) -> Vec<String> {
+    wrap_with(&text_width, text, bold, size, width, indent)
+}
+
+/// Comme `wrap`, la largeur du texte étant mesurée par `text_width` (les polices embarquées ne mesurent pas comme Helvetica).
+pub fn wrap_with(text_width: &dyn Fn(&str, bool, f32) -> f32, text: &str, bold: bool, size: f32, width: f32, indent: f32) -> Vec<String> {
     let mut lines = Vec::new();
     let room = |lines: &Vec<String>| if lines.is_empty() { width - indent } else { width };
     for paragraph in text.split('\n') {
@@ -154,7 +159,7 @@ pub fn wrap(text: &str, bold: bool, size: f32, width: f32, indent: f32) -> Vec<S
 }
 
 /// Chaîne PDF littérale : parenthèses et barres échappées, octets hors ASCII en octal.
-fn pdf_string(bytes: &[u8]) -> String {
+pub(crate) fn pdf_string(bytes: &[u8]) -> String {
     let mut s = String::from("(");
     for &b in bytes {
         match b {
@@ -187,6 +192,8 @@ pub struct PdfFile {
     /// Objet n° i + 1. Les 4 premiers (catalogue, pages, deux polices) sont écrits à la fin.
     objects: Vec<Vec<u8>>,
     pages: Vec<usize>,
+    /// Polices ajoutées aux ressources de chaque page (les polices embarquées : « /F3 12 0 R /F4 17 0 R »).
+    extra_fonts: String,
 }
 
 impl Default for PdfFile {
@@ -200,7 +207,35 @@ impl PdfFile {
         PdfFile {
             objects: vec![Vec::new(); 4],
             pages: Vec::new(),
+            extra_fonts: String::new(),
         }
+    }
+
+    /// Réserve `n` objets de suite (à remplir plus tard avec `set_object`) ; rend le numéro du premier.
+    pub fn reserve(&mut self, n: usize) -> usize {
+        let first = self.objects.len() + 1;
+        self.objects.extend(std::iter::repeat_n(Vec::new(), n));
+        first
+    }
+
+    /// Remplit l'objet réservé `id`.
+    pub fn set_object(&mut self, id: usize, body: Vec<u8>) {
+        if let Some(slot) = self.objects.get_mut(id.wrapping_sub(1)) {
+            *slot = body;
+        }
+    }
+
+    /// Les polices en plus de Helvetica, dans les ressources des pages ajoutées ensuite.
+    pub fn set_extra_fonts(&mut self, fonts: String) {
+        self.extra_fonts = fonts;
+    }
+
+    /// Le corps d'un objet « flux » : `dict`, sa longueur, puis `data`.
+    pub fn stream_body(dict: &str, data: &[u8]) -> Vec<u8> {
+        let mut body = format!("<< {dict} /Length {} >>\nstream\n", data.len()).into_bytes();
+        body.extend_from_slice(data);
+        body.extend_from_slice(b"\nendstream");
+        body
     }
 
     fn add(&mut self, body: Vec<u8>) -> usize {
@@ -234,9 +269,10 @@ impl PdfFile {
     pub fn add_page_sized(&mut self, w: f32, h: f32, content: &[u8], images: &[usize]) {
         let contents = self.add_stream("", content);
         let xobjects: String = images.iter().map(|id| format!("/Im{id} {id} 0 R ")).collect();
+        let extra = self.extra_fonts.clone();
         let page = format!(
             "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {w:.2} {h:.2}] /Resources << /Font << /F1 3 0 R \
-             /F2 4 0 R >> /XObject << {xobjects}>> >> /Contents {contents} 0 R >>"
+             /F2 4 0 R {extra}>> /XObject << {xobjects}>> >> /Contents {contents} 0 R >>"
         );
         let id = self.add(page.into_bytes());
         self.pages.push(id);

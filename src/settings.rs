@@ -65,6 +65,10 @@ pub struct Settings {
     /// l'autre (`calqueannot.rs`).
     #[serde(default, rename = "export_avec_annotations", skip_serializing_if = "std::ops::Not::not")]
     pub export_annotations: bool,
+    /// Les choix d'export retenus d'une séance à l'autre : taille et cadence du film, informations gravées, mise en page du PDF, images par plan
+    /// (`export.rs`, `ExportPrefs`).
+    #[serde(default, rename = "exports_v1")]
+    pub exports: crate::export::ExportPrefs,
     #[serde(default, rename = "espace_storyboard")]
     pub storyboard_space: Espace,
     /// Commandes épinglées dans la barre de commandes, la barre du montage et celle de la timeline,
@@ -306,6 +310,7 @@ impl Default for Settings {
             vignettes_layout: None,
             panneau_vignettes_pose: false,
             export_annotations: false,
+            exports: Default::default(),
             storyboard_space: Espace::Storyboard,
             bars: ReglageBarres::default(),
             key_filter: Default::default(),

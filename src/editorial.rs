@@ -108,12 +108,34 @@ impl Media {
     }
 }
 
+/// La version du Final Cut Pro X XML (FCPXML) à écrire.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Fcpxml {
+    V1_9,
+    #[default]
+    V1_10,
+}
+
+impl Fcpxml {
+    pub fn label(self) -> &'static str {
+        match self {
+            Fcpxml::V1_9 => "1.9",
+            Fcpxml::V1_10 => "1.10",
+        }
+    }
+}
+
 /// Les choix de la fenêtre.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Options {
     pub edl: bool,
     pub xml: bool,
     pub otio: bool,
+    /// Final Cut Pro X (`.fcpxml`), en `fcpxml_version`.
+    pub fcpxml: bool,
+    pub fcpxml_version: Fcpxml,
+    /// Marqueurs : le numéro de chaque plan et les commentaires non résolus du projet (XML, FCPXML et OTIO).
+    pub markers: bool,
     /// Time code du début de la ligne de temps (`HH:MM:SS:FF`).
     pub start_tc: String,
     /// Cadence réelle × 1000/1001 (pour 24, 30 et 60 i/s).
@@ -135,6 +157,9 @@ impl Default for Options {
             edl: true,
             xml: true,
             otio: true,
+            fcpxml: false,
+            fcpxml_version: Fcpxml::default(),
+            markers: true,
             start_tc: "01:00:00:00".into(),
             ntsc: false,
             media: Media::ProRes,
@@ -341,6 +366,20 @@ pub struct AudioSource {
     pub clip: SoundClip,
     /// Volume de la piste × volume général.
     pub gain: f32,
+    /// Cadence NTSC (× 1000/1001) : le son est ralenti de 0,1 % pour rester synchrone avec les images (`slow_for_ntsc`).
+    pub ntsc: bool,
+}
+
+/// Un marqueur sur un clip : le numéro du plan (au début) ou un commentaire du projet.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlanMarker {
+    /// Le clip (rang dans `Plan::clips`).
+    pub clip: usize,
+    /// L'image dans le plan, depuis 0.
+    pub frame: usize,
+    pub name: String,
+    /// Le texte du commentaire (vide pour un numéro de plan).
+    pub note: String,
 }
 
 /// L'export décrit : tout ce que les écrivains et la tâche d'export ont à savoir.
@@ -365,6 +404,8 @@ pub struct Plan {
     pub silent_tracks: Vec<String>,
     /// Extraits dont le son manque.
     pub missing_sounds: usize,
+    /// Les marqueurs : numéro de chaque plan et commentaires non résolus (vide si l'option est décochée).
+    pub markers: Vec<PlanMarker>,
     /// Cadence qui n'est pas celle de l'EDL CMX 3600 (plus de 30 i/s, ou moins de 24 hors 12 et 15).
     pub odd_rate: bool,
 }
@@ -401,6 +442,14 @@ fn reel_name(plan_ref: &str, index: usize) -> String {
     }
 }
 
+/// Le nom d'un plan dans les exports (clip, fichier, image par plan) : « SQ01_PL012A » ; un plan qui a plusieurs versions y ajoute celle
+/// qui part (« SQ01_PL012A_V2 »).
+pub fn clip_name(doc: &Document, p: usize) -> String {
+    let versionne = doc.nombre_de_versions(doc.panels[p].id) > 1;
+    let suffixe = if versionne { format!("_{}", crate::planvers::etiquette(doc.numero_de_version(doc.panels[p].id))) } else { String::new() };
+    format!("{}{suffixe}", doc.plan_full_ref(p))
+}
+
 /// Décrit l'export des plans choisis. `cur_panel` : le plan courant (la « séquence courante » est
 /// celle de ce plan). Erreur si le time code de départ n'est pas lisible ou s'il n'y a rien à exporter.
 pub fn build_plan(doc: &Document, opts: &Options, cur_panel: usize, title: &str) -> Result<Plan, String> {
@@ -422,8 +471,7 @@ pub fn build_plan(doc: &Document, opts: &Options, cur_panel: usize, title: &str)
         // Un plan qui a plusieurs versions porte celle qui part dans son nom : « SQ01_PL012A_V2 » (la bobine de
         // l'EDL reste « PL012A » : 8 caractères au plus).
         let versionne = doc.nombre_de_versions(doc.panels[p].id) > 1;
-        let suffixe = if versionne { format!("_{}", crate::planvers::etiquette(doc.numero_de_version(doc.panels[p].id))) } else { String::new() };
-        let name = format!("{}{suffixe}", doc.plan_full_ref(p));
+        let name = clip_name(doc, p);
         let ref_only = doc.plan_ref(doc.panels[p].scene);
         let len = doc.panels[p].frame_count();
         clips.push(PlanClip {
@@ -527,7 +575,23 @@ pub fn build_plan(doc: &Document, opts: &Options, cur_panel: usize, title: &str)
                 }
                 let name = format!("A{}_{}_{:02}", out_track, file_safe(&track.name), k + 1);
                 audio.push(AudioOut { track: out_track, track_name: track.name.clone(), file: format!("audio/{name}.wav"), name, start: clip.start - f0, len: clip.length });
-                audio_sources.push(AudioSource { sound: sound.clone(), fps, clip, gain: track.volume * doc.master_volume });
+                audio_sources.push(AudioSource { sound: sound.clone(), fps, clip, gain: track.volume * doc.master_volume, ntsc: rate.ntsc });
+            }
+        }
+    }
+
+    // Les marqueurs : le numéro de chaque plan au début de son clip, puis les commentaires non résolus qui tombent dans le plan.
+    let mut markers: Vec<PlanMarker> = Vec::new();
+    if opts.markers {
+        for (k, c) in clips.iter().enumerate() {
+            markers.push(PlanMarker { clip: k, frame: 0, name: c.name.clone(), note: String::new() });
+            let id = doc.panels[c.panel].id;
+            let mut here: Vec<&crate::commentaires::Comment> = doc.comments.iter().filter(|m| m.panel == id && !m.done).collect();
+            here.sort_by_key(|m| (m.frame, m.id));
+            for m in here {
+                let who = m.author.trim();
+                let name = if who.is_empty() { "Commentaire".to_string() } else { format!("Commentaire ({who})") };
+                markers.push(PlanMarker { clip: k, frame: m.frame.min(c.len.saturating_sub(1)), name, note: m.text.trim().to_string() });
             }
         }
     }
@@ -549,14 +613,42 @@ pub fn build_plan(doc: &Document, opts: &Options, cur_panel: usize, title: &str)
         audio_sources,
         silent_tracks,
         missing_sounds,
+        markers,
         odd_rate: fps > 30 || (fps < 24 && fps != 12 && fps != 15),
     })
+}
+
+/// Le son ralenti de 0,1 % (sa durée × 1001/1000) : en NTSC, les images durent 1,001 fois plus longtemps (23,976 au lieu de 24 images par
+/// seconde) alors que les numéros d'images restent ceux du projet ; sans ce ralentissement, un son posé au bon endroit au début du film
+/// dériverait de 3,6 secondes par heure (la hauteur baisse de 1,7 centième de ton, comme le ralenti NTSC habituel). Interpolation cubique
+/// (Catmull-Rom) : un son qui varie lentement est rendu exactement, et les aigus ne sont pas mangés comme avec une interpolation linéaire.
+pub fn slow_for_ntsc(samples: &[[f32; 2]]) -> Vec<[f32; 2]> {
+    let n = samples.len();
+    if n < 2 {
+        return samples.to_vec();
+    }
+    let out_n = (n as f64 * 1001.0 / 1000.0).round() as usize;
+    let at = |i: i64, ch: usize| samples[i.clamp(0, n as i64 - 1) as usize][ch];
+    (0..out_n)
+        .map(|j| {
+            let t = j as f64 * 1000.0 / 1001.0;
+            let i = t.floor() as i64;
+            let u = (t - i as f64) as f32;
+            let mut px = [0f32; 2];
+            for (ch, v) in px.iter_mut().enumerate() {
+                let (p0, p1, p2, p3) = (at(i - 1, ch), at(i, ch), at(i + 1, ch), at(i + 2, ch));
+                *v = 0.5 * ((2.0 * p1) + (-p0 + p2) * u + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * u * u + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * u * u * u);
+            }
+            px
+        })
+        .collect()
 }
 
 /// Le son d'un extrait en 16 bits stéréo à 48 kHz, effets compris (`audiofx::bake_sound`), volume de la
 /// piste appliqué : l'en-tête WAV puis les échantillons.
 pub fn wav_bytes(src: &AudioSource) -> Vec<u8> {
     let samples = audiofx::bake_sound(&src.sound, src.fps, &src.clip);
+    let samples = if src.ntsc { slow_for_ntsc(&samples) } else { samples };
     let mut out = Vec::with_capacity(44 + samples.len() * 4);
     out.extend_from_slice(&crate::export::wav_header(samples.len() as u32));
     for s in &samples {
@@ -691,6 +783,31 @@ pub fn write_edl(plan: &Plan) -> String {
             let zero = cut_line(k, f.start, f.start);
             edl_line(plan, event, &zero, &mut s);
             edl_line(plan, event, &black_line(f.start, f.end - f.start, Some(f.end - f.start)), &mut s);
+        }
+    }
+    // Le son : un événement par extrait, après l'image, piste par piste. Le canal est A pour la piste 1, puis A2, A3… (l'EDL n'a pas
+    // de vraies pistes : le logiciel range chaque canal sur une piste son).
+    if !plan.audio.is_empty() {
+        const CHANNELS: [&str; 8] = ["A", "A2", "A3", "A4", "A5", "A6", "A7", "A8"];
+        s.push_str("\n* SON : un evenement par extrait, piste par piste (canal A, A2, A3...). Chaque extrait est un fichier a part, effets de SHOT compris.\n");
+        let tracks = plan.audio.iter().map(|a| a.track).max().unwrap_or(0);
+        for t in 1..=tracks {
+            let name = plan.audio.iter().find(|a| a.track == t).map_or(String::new(), |a| a.track_name.clone());
+            s.push_str(&format!("* PISTE {t} : {}\n", ascii_fold(&name)));
+            for (k, a) in plan.audio.iter().filter(|a| a.track == t).enumerate() {
+                event += 1;
+                let line = Line {
+                    reel: format!("A{t}_{:03}", k + 1),
+                    chan: CHANNELS[(t - 1).min(CHANNELS.len() - 1)],
+                    dissolve: None,
+                    src_in: 0,
+                    src_out: a.len,
+                    rec_in: a.start,
+                    rec_out: a.start + a.len,
+                    clip_name: a.name.clone(),
+                };
+                edl_line(plan, event, &line, &mut s);
+            }
         }
     }
     if plan.clips.is_empty() {
@@ -863,6 +980,16 @@ pub fn write_xml(plan: &Plan, abs: Option<&Path>) -> String {
         x.leaf("mediatype", "video");
         x.leaf("trackindex", 1);
         x.close("sourcetrack");
+        for m in plan.markers.iter().filter(|m| m.clip == k) {
+            x.open("marker");
+            x.leaf("name", &m.name);
+            if !m.note.is_empty() {
+                x.leaf("comment", &m.note);
+            }
+            x.leaf("in", c.head + m.frame);
+            x.leaf("out", -1);
+            x.close("marker");
+        }
         x.open("comments");
         x.leaf("mastercomment1", &c.title);
         x.close("comments");
@@ -946,6 +1073,117 @@ pub fn write_xml(plan: &Plan, abs: Option<&Path>) -> String {
     x.s
 }
 
+// ----------------------------------------------------------------------------------- Final Cut Pro X (FCPXML)
+
+/// `N/Ds` : `frames` images, en secondes rationnelles de la cadence (`0s` pour zéro).
+fn fcp_time(frames: i64, rate: Rate) -> String {
+    let (num, den) = if rate.ntsc { (1001, rate.fps as i64 * 1000) } else { (1, rate.fps as i64) };
+    if frames == 0 {
+        "0s".into()
+    } else {
+        format!("{}/{den}s", frames * num)
+    }
+}
+
+/// Un chemin comme l'écrit un FCPXML : `file:///C:/dossier/media/x.mov`, caractères à protéger en %XX.
+fn fcpxml_url(path: &Path) -> String {
+    let u = file_url(path);
+    format!("file:///{}", u.strip_prefix("file://localhost/").unwrap_or(&u))
+}
+
+/// Un média : en 1.9 l'adresse est un attribut de `asset`, en 1.10 un élément `media-rep`.
+fn fcp_asset(x: &mut Xml, version: Fcpxml, attrs: &str, src: &str) {
+    match version {
+        Fcpxml::V1_9 => x.empty("asset", &format!("{attrs} src=\"{}\"", escape(src))),
+        Fcpxml::V1_10 => {
+            x.open_attr("asset", attrs);
+            x.empty("media-rep", &format!("kind=\"original-media\" src=\"{}\"", escape(src)));
+            x.close("asset");
+        }
+    }
+}
+
+/// Le Final Cut Pro X XML (FCPXML 1.9 ou 1.10), du même plan d'export que l'EDL, le XML et l'OTIO : une piste image (les clips à la suite,
+/// avec les fondus enchaînés et les marqueurs), les extraits son accrochés au clip image sous lequel ils commencent. `dir` : le dossier de
+/// l'export : le FCPXML désigne toujours ses médias par des chemins absolus (Final Cut Pro X ne retrouve pas un média par un chemin relatif).
+pub fn write_fcpxml(plan: &Plan, dir: &Path, version: Fcpxml) -> String {
+    let rate = plan.rate;
+    let url = |rel: &str| fcpxml_url(&dir.join(rel));
+    let mut x = Xml::new();
+    x.s.push_str("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE fcpxml>\n");
+    x.open_attr("fcpxml", &format!("version=\"{}\"", version.label()));
+    // Ressources : le format, un média par plan, un par extrait son, l'effet du fondu enchaîné.
+    let (n_video, n_audio) = (plan.clips.len(), plan.audio.len());
+    let video_id = |k: usize| format!("r{}", 2 + k);
+    let audio_id = |k: usize| format!("r{}", 2 + n_video + k);
+    let effect_id = format!("r{}", 2 + n_video + n_audio);
+    let frame_duration = fcp_time(1, rate);
+    x.open("resources");
+    x.empty("format", &format!("id=\"r1\" frameDuration=\"{frame_duration}\" width=\"{}\" height=\"{}\" colorSpace=\"1-1-1 (Rec. 709)\"", plan.size[0], plan.size[1]));
+    for (k, c) in plan.clips.iter().enumerate() {
+        let attrs = format!("id=\"{}\" name=\"{}\" start=\"0s\" duration=\"{}\" hasVideo=\"1\" format=\"r1\" videoSources=\"1\"", video_id(k), escape(&c.name), fcp_time(c.file_frames() as i64, rate));
+        fcp_asset(&mut x, version, &attrs, &url(&c.file));
+    }
+    for (k, a) in plan.audio.iter().enumerate() {
+        let attrs = format!("id=\"{}\" name=\"{}\" start=\"0s\" duration=\"{}\" hasAudio=\"1\" audioSources=\"1\" audioChannels=\"2\" audioRate=\"{RATE}\"", audio_id(k), escape(&a.name), fcp_time(a.len as i64, rate));
+        fcp_asset(&mut x, version, &attrs, &url(&a.file));
+    }
+    if !plan.dissolves.is_empty() {
+        x.empty("effect", &format!("id=\"{effect_id}\" name=\"Cross Dissolve\" uid=\"FxPlug:4731E73A-8DAC-4113-9A30-AE85B1761265\""));
+    }
+    x.close("resources");
+    x.open("library");
+    x.open_attr("event", &format!("name=\"{}\"", escape(&plan.title)));
+    x.open_attr("project", &format!("name=\"{}\"", escape(&plan.title)));
+    x.open_attr("sequence", &format!("format=\"r1\" duration=\"{}\" tcStart=\"{}\" tcFormat=\"NDF\" audioLayout=\"stereo\" audioRate=\"48k\"", fcp_time(plan.total as i64, rate), fcp_time(plan.start_tc, rate)));
+    x.open("spine");
+    // Le clip image sous lequel un extrait son commence (le dernier s'il commence après la fin).
+    let anchor = |start: usize| plan.clips.iter().position(|c| start >= c.start && start < c.end()).unwrap_or(plan.clips.len().saturating_sub(1));
+    for (k, c) in plan.clips.iter().enumerate() {
+        let attrs = format!(
+            "ref=\"{}\" name=\"{}\" offset=\"{}\" start=\"{}\" duration=\"{}\" format=\"r1\" tcFormat=\"NDF\"",
+            video_id(k),
+            escape(&c.name),
+            fcp_time(plan.start_tc + c.start as i64, rate),
+            fcp_time(c.head as i64, rate),
+            fcp_time(c.len as i64, rate)
+        );
+        x.open_attr("asset-clip", &attrs);
+        for m in plan.markers.iter().filter(|m| m.clip == k) {
+            let note = if m.note.is_empty() { String::new() } else { format!(" note=\"{}\"", escape(&m.note)) };
+            let value = if m.note.is_empty() { m.name.clone() } else { format!("{} : {}", m.name, m.note) };
+            x.empty("marker", &format!("start=\"{}\" duration=\"{frame_duration}\" value=\"{}\"{note}", fcp_time((c.head + m.frame) as i64, rate), escape(&value)));
+        }
+        for (j, a) in plan.audio.iter().enumerate().filter(|(_, a)| anchor(a.start) == k) {
+            let delta = a.start as i64 - c.start as i64;
+            x.empty(
+                "asset-clip",
+                &format!(
+                    "ref=\"{}\" lane=\"-{}\" name=\"{}\" offset=\"{}\" start=\"0s\" duration=\"{}\" audioRole=\"dialogue\"",
+                    audio_id(j),
+                    a.track,
+                    escape(&a.name),
+                    fcp_time(c.head as i64 + delta, rate),
+                    fcp_time(a.len as i64, rate)
+                ),
+            );
+        }
+        x.close("asset-clip");
+        if let Some(d) = plan.dissolves.iter().find(|d| d.a == k) {
+            x.open_attr("transition", &format!("name=\"Cross Dissolve\" offset=\"{}\" duration=\"{}\"", fcp_time(plan.start_tc + d.start as i64, rate), fcp_time((d.end - d.start) as i64, rate)));
+            x.empty("filter-video", &format!("ref=\"{effect_id}\" name=\"Cross Dissolve\""));
+            x.close("transition");
+        }
+    }
+    x.close("spine");
+    x.close("sequence");
+    x.close("project");
+    x.close("event");
+    x.close("library");
+    x.close("fcpxml");
+    x.s
+}
+
 // ----------------------------------------------------------------------------------- OpenTimelineIO
 
 fn rt(value: f64, rate: f64) -> Value {
@@ -978,7 +1216,14 @@ pub fn write_otio(plan: &Plan, abs: Option<&Path>) -> String {
             "source_range": tr(c.head, c.len, rate),
             "media_reference": otio_reference(&c.file, c.file.rsplit('/').next().unwrap_or(&c.file), c.file_frames(), rate, abs, json!({})),
             "effects": [],
-            "markers": [],
+            "markers": plan.markers.iter().filter(|m| m.clip == k).map(|m| json!({
+                "OTIO_SCHEMA": "Marker.2",
+                "name": m.name,
+                "color": if m.note.is_empty() { "GREEN" } else { "RED" },
+                "comment": m.note,
+                "marked_range": tr(c.head + m.frame, 0, rate),
+                "metadata": {},
+            })).collect::<Vec<_>>(),
             "metadata": { "shot": { "plan": c.name, "titre": c.title, "debut_ligne_de_temps": c.start, "poignee_avant": c.head, "poignee_apres": c.tail } },
         }));
         if let Some(d) = plan.dissolves.iter().find(|d| d.a == k) {
@@ -1063,6 +1308,9 @@ pub fn readme(plan: &Plan, opts: &Options) -> String {
     if opts.otio {
         s.push_str("- *.otio : OpenTimelineIO (JSON), pour les logiciels et les outils qui le lisent (par exemple otioconvert).\n");
     }
+    if opts.fcpxml {
+        s.push_str(&format!("- *.fcpxml : Final Cut Pro X XML (FCPXML {}), à importer dans Final Cut Pro X ; ses médias sont désignés par des chemins absolus (là où l'export a été fait : refaire l'export si le dossier bouge).\n", opts.fcpxml_version.label()));
+    }
     s.push_str(&format!("- media/ : un fichier {} par plan, nommé comme le plan (SQ01_PL012A = séquence 1, plan 12A).\n", if plan.media == Media::ProRes { "ProRes 422 HQ (.mov)" } else { "H.264 (.mp4)" }));
     if !plan.audio.is_empty() {
         s.push_str("- audio/ : un fichier WAV 48 kHz stéréo par extrait son, effets de SHOT compris (XML et OTIO).\n");
@@ -1088,13 +1336,17 @@ pub fn readme(plan: &Plan, opts: &Options) -> String {
     if plan.missing_sounds > 0 {
         s.push_str(&format!("\n{} extrait(s) son sans fichier dans le projet : sautés.\n", plan.missing_sounds));
     }
+    if !plan.markers.is_empty() {
+        let comments = plan.markers.iter().filter(|m| !m.note.is_empty()).count();
+        s.push_str(&format!("\nMarqueurs : le numéro de chaque plan au début de son clip, et {comments} commentaire(s) non résolu(s) du projet (XML, FCPXML et OTIO ; l'EDL n'a pas de marqueurs).\n"));
+    }
     if plan.audio.is_empty() {
         s.push_str("\nSon : aucun extrait dans l'étendue exportée (ou « sans le son »).\n");
     } else {
-        s.push_str("\nSon : chaque extrait est écrit seul, avec son volume, ses fondus, ses clés de volume, son égaliseur et son écho ; les fondus enchaînés entre extraits ne sont pas écrits (l'EDL ne porte pas le son).\n");
+        s.push_str("\nSon : chaque extrait est écrit seul, avec son volume, ses fondus, ses clés de volume, son égaliseur et son écho ; les fondus enchaînés entre extraits ne sont pas écrits. L'EDL porte aussi le son : un événement par extrait, piste par piste (canal A pour la piste 1, puis A2, A3…).\n");
     }
     if plan.rate.ntsc {
-        s.push_str("\nNTSC : cadence réelle × 1000/1001. Les numéros d'images sont ceux du projet. Le son reste à 48 kHz, sans être ralenti de 0,1 % : à ajuster dans le logiciel de montage si le film est long.\n");
+        s.push_str("\nNTSC : cadence réelle × 1000/1001. Les numéros d'images sont ceux du projet. Chaque fichier son est ralenti de 0,1 % (sa durée × 1001/1000, toujours à 48 kHz) : il reste synchrone avec les images sur un film long (sans cela, 3,6 secondes de dérive par heure).\n");
     }
     if plan.odd_rate {
         s.push_str(&format!("\nCadence {} i/s : hors des cadences classiques de l'EDL (24, 25, 30) ; le XML et l'OTIO la portent sans difficulté connue, à vérifier.\n", plan.rate.fps));
@@ -1105,7 +1357,9 @@ pub fn readme(plan: &Plan, opts: &Options) -> String {
          - L'import de l'EDL, du XML et de l'OTIO : durées, coupes et noms des clips, time code de départ.\n\
          - Les chemins relatifs du XML et de l'OTIO (sinon : refaire l'export avec « chemins absolus »).\n\
          - Les fondus enchaînés : position (centrée, avant ou après la coupe) et durée.\n\
-         - Le son : un extrait stéréo apparaît-il sur deux pistes (XML) ? Les volumes ?\n",
+         - Le son : un extrait stéréo apparaît-il sur deux pistes (XML) ? Les volumes ? Les événements son de l'EDL (canaux A, A2…) ?\n\
+         - Les marqueurs (numéros de plan, commentaires) dans le XML, le FCPXML et l'OTIO.\n\
+         - Le FCPXML : les clips, les fondus enchaînés, le son accroché aux clips image, les marqueurs.\n",
     );
     s
 }

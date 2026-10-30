@@ -9,7 +9,7 @@
 //!    d'images met en cache (elles ne sont pas recalculées). Le projet reste libre pendant ce temps.
 //! 2. **Un fichier son par extrait**, sur un **fil à part** qui démarre en même temps (effets et
 //!    égaliseur compris), avec son compteur d'avancement.
-//! 3. À la fin, les **fichiers de montage** (EDL, XML, OTIO, `LISEZ-MOI.txt`) : quelques kilo-octets.
+//! 3. À la fin, les **fichiers de montage** (EDL, XML, FCPXML, OTIO, `LISEZ-MOI.txt`) : quelques kilo-octets.
 //!
 //! Annuler (ou fermer SHOT) arrête ffmpeg et le fil du son, et **efface les fichiers déjà écrits par
 //! cet export** (le dossier lui-même s'il l'a créé et qu'il est vide).
@@ -313,6 +313,11 @@ impl EditorialJob {
         }
         if self.opts.otio {
             put(format!("{base}.otio"), editorial::write_otio(&self.plan, abs.as_deref()), &mut files)?;
+        }
+        if self.opts.fcpxml {
+            // (Toujours des chemins absolus : Final Cut Pro X ne retrouve pas un média par un chemin relatif.)
+            let dir = self.dir.canonicalize().unwrap_or_else(|_| self.dir.clone());
+            put(format!("{base}.fcpxml"), editorial::write_fcpxml(&self.plan, &dir, self.opts.fcpxml_version), &mut files)?;
         }
         put("LISEZ-MOI.txt".into(), editorial::readme(&self.plan, &self.opts), &mut files)?;
         self.written.extend(files.iter().cloned());

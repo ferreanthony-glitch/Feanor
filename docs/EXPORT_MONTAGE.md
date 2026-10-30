@@ -1,6 +1,8 @@
-# Export pour le montage (EDL, Final Cut XML, OpenTimelineIO)
+# Export pour le montage (EDL, Final Cut XML, FCPXML, OpenTimelineIO) et échange (calques séparés, clés de caméra)
 
-Demandé par Anthony le 2026-10-20 (branche `numerotation-export`). Le code : `src/editorial.rs` (ce qu'on écrit, sans
+Demandé par Anthony le 2026-10-20 (branche `numerotation-export`) ; complété le 2026-10-30 (branche `exports-v1` : FCPXML, son dans
+l'EDL, marqueurs, son NTSC sans dérive, calques séparés, clés de caméra : voir les deux dernières sections de ce document et
+`docs/INTERFACE.md` §84). Le code : `src/editorial.rs` (ce qu'on écrit, sans
 interface), `src/editorialjob.rs` (la tâche), `src/editorialui.rs` (la fenêtre), `src/editorial_tests.rs`.
 Les numéros de plans qui nomment les clips : `src/numerotation.rs` (voir `docs/INTERFACE.md`, « Numérotation des plans »).
 
@@ -16,22 +18,24 @@ Fichier > Exporter… > **Pour le montage (EDL / XML / OTIO)**, ou Ctrl+K « Exp
 
 | Réglage de la fenêtre | Effet |
 |---|---|
-| Fichiers de montage | EDL CMX 3600, Final Cut Pro 7 XML, OpenTimelineIO : chacun se coche |
+| Fichiers de montage | EDL CMX 3600, Final Cut Pro 7 XML, Final Cut Pro X XML (FCPXML 1.9 ou 1.10), OpenTimelineIO : chacun se coche |
 | Dossier, titre | l'export crée `<dossier>/<Titre>_montage/` ; s'il existe, les fichiers du même nom sont remplacés |
 | Étendue | tout le film, ou la séquence courante (la ligne de temps commence alors à son premier plan) |
 | Time code de départ | `01:00:00:00` d'office ; refusé s'il n'est pas lisible (`HH:MM:SS:FF`, FF < cadence) |
 | NTSC | pour 24, 30 et 60 i/s : cadence réelle × 1000/1001 (23,976 / 29,97 / 59,94) |
 | Vidéos | ProRes 422 HQ (`.mov`, d'office si ffmpeg sait l'encoder) ou H.264 (`.mp4`) ; à moitié de la taille |
-| Son | les pistes son, un fichier par extrait (XML et OTIO) |
-| Chemins | relatifs au dossier (d'office), ou absolus (`file://localhost/…`) dans le XML et l'OTIO |
+| Son | les pistes son, un fichier par extrait (EDL, XML, FCPXML et OTIO) |
+| Marqueurs | le numéro de chaque plan et les commentaires non résolus du projet (XML, FCPXML et OTIO) ; coché d'office |
+| Chemins | relatifs au dossier (d'office), ou absolus (`file://localhost/…`) dans le XML et l'OTIO ; le FCPXML est toujours absolu |
 
 ## Ce qui est écrit
 
 ```text
 Mon_film_montage/
-  Mon_film.edl            EDL CMX 3600 (image seulement)
+  Mon_film.edl            EDL CMX 3600 (l'image, puis le son piste par piste)
   Mon_film.xml            Final Cut Pro 7 XML (xmeml 4)
   Mon_film.otio           OpenTimelineIO (JSON)
+  Mon_film.fcpxml         Final Cut Pro X XML (1.9 ou 1.10), si on le coche
   media/SQ01_PL001.mov    un fichier vidéo par plan
   media/SQ01_PL002A.mov
   audio/A1_Dialogues_01.wav   un fichier son par extrait (stéréo, 48 kHz, 16 bits)
@@ -81,7 +85,8 @@ chaque logiciel les nomme à sa façon, et on n'invente pas ce que Premiere ou R
 Un fichier WAV par extrait, avec ce que SHOT entend de cet extrait : volume de l'extrait et de la piste, volume général,
 fondus, clés de volume, égaliseur, écho (`audiofx::bake_sound`, sur un fil à part). Pas écrit : les fondus enchaînés **entre
 deux extraits** (chaque extrait est écrit seul), les pistes muettes ou exclues par un solo (dites dans `LISEZ-MOI.txt`).
-L'extrait coupé par l'étendue exportée (séquence courante) garde les fondus de l'extrait entier. L'EDL ne porte pas le son.
+L'extrait coupé par l'étendue exportée (séquence courante) garde les fondus de l'extrait entier. L'EDL porte le son depuis le
+2026-10-30 (voir « Le son dans l'EDL »).
 
 Dans le XML, chaque piste de SHOT devient **deux** pistes (voie gauche, voie droite) qui pointent le même fichier stéréo ; dans
 l'OTIO, une piste `Audio` par piste de SHOT, avec des `Gap.1` pour les vides.
@@ -93,10 +98,55 @@ l'OTIO, une piste `Audio` par piste de SHOT, avec des `Gap.1` pour les vides.
 - **NTSC** (option) : la cadence réelle est × 1000/1001. Les numéros d'images ne changent pas, seuls changent : `<ntsc>TRUE`
   du XML, la cadence de l'OTIO (`24000/1001` = 23,976…) et celle des vidéos. Le time code reste NDF. **Pas écrit** : le time
   code à sauts d'images (DF) du 29,97.
-- Le **son reste à 48 kHz** et n'est pas ralenti de 0,1 % : en NTSC la vidéo et le son dérivent de 0,1 % (3,6 s par heure) si
-  le monteur ne l'ajuste pas. À vérifier.
+- **Son et NTSC, sans dérive** (2026-10-30) : en NTSC les images durent 1,001 fois plus longtemps, alors que leurs numéros sont ceux
+  du projet ; un son écrit à sa durée exacte dériverait de 3,6 s par heure. Chaque fichier son est donc **ralenti de 0,1 %**
+  (`editorial::slow_for_ntsc` : durée × 1001/1000, interpolation cubique, toujours écrit à 48 kHz ; la hauteur baisse de 1,7 centième
+  de ton, comme le ralenti NTSC habituel). Un extrait de N images dure alors N × 1001/24000 s, comme ses N images : un essai le
+  vérifie à l'échantillon près. Hors NTSC, rien ne change. À vérifier dans le logiciel : le son d'un film long reste-t-il calé sur
+  l'image jusqu'à la fin ?
 - L'EDL CMX 3600 est définie pour 24, 25 et 30 i/s ; pour une autre cadence, l'arithmétique est la même (FF jusqu'à
   cadence - 1) et un commentaire de l'EDL le dit.
+
+### Le son dans l'EDL
+
+Après les événements image, **un événement par extrait son**, piste par piste : un commentaire `* PISTE 1 : Voix`, puis les
+extraits de la piste. Le canal est `A` pour la piste 1, `A2` pour la 2, puis `A3`… `A8` (une piste de SHOT est une paire
+stéréo ; l'EDL n'a pas de vraies pistes, le logiciel range chaque canal sur une piste son). Source : toujours `00:00:00:00` à la
+durée de l'extrait (le fichier son commence à zéro) ; enregistrement : sa place dans la ligne de temps ; bobine `A1_001`
+(8 caractères au plus) ; `* FROM CLIP NAME: A1_Voix_01`. Chaque extrait est un fichier à part (`audio/`), effets compris.
+**À vérifier** : un logiciel qui place tous les canaux `A` sur la même piste mélange-t-il les extraits qui se recouvrent ?
+
+### Les marqueurs
+
+Option « Marqueurs » (cochée d'office) : un marqueur au début de chaque clip, nommé comme le plan (`SQ01_PL012A`), et un marqueur
+par **commentaire non résolu** du projet, à l'image du plan où il tombe (nom « Commentaire (Auteur) », texte du commentaire). Les
+commentaires résolus ne sont pas écrits. Où :
+
+- **XML (xmeml)** : `marker` {`name`, `comment`, `in` en images du fichier (poignée comprise), `out` -1} dans le `clipitem` ;
+- **FCPXML** : `marker` {`start` en temps du média, `duration` une image, `value`, `note`} dans l'`asset-clip` ;
+- **OTIO** : `Marker.2` {`name`, `color` GREEN pour un numéro de plan et RED pour un commentaire, `comment`, `marked_range`} dans
+  le `markers` du clip ;
+- **EDL** : pas de marqueurs (le format n'en a pas).
+
+### Final Cut Pro X XML (FCPXML 1.9 ou 1.10)
+
+Écrit du **même plan d'export** (`editorial::Plan`) que l'EDL, le XML et l'OTIO : mêmes clips, mêmes entrées et sorties, mêmes
+poignées, mêmes fondus, même son. `fcpxml` > `resources` {`format` (taille, `frameDuration` `1/24s` ou `1001/24000s` en NTSC,
+Rec. 709), un `asset` par plan (`hasVideo`), un `asset` par extrait son (`hasAudio`, 2 voies, 48 kHz), l'`effect` « Cross
+Dissolve » s'il y a un fondu} > `library` > `event` > `project` > `sequence` {`duration`, `tcStart` = time code de départ, NDF} >
+`spine` > un `asset-clip` par plan (`offset` = time code de départ + place, `start` = poignée avant, `duration`) et un `transition`
+« Cross Dissolve » (`offset`, `duration`, `filter-video`) après le clip sortant. Les temps sont des fractions de seconde
+(`N/Ds`). Le son est **accroché au clip image sous lequel il commence** (`asset-clip` avec `lane` négatif = le rang de la piste,
+`audioRole` dialogue, `offset` en temps du média du clip parent). Les marqueurs sont dans le clip.
+
+- 1.9 : l'adresse du média est l'attribut `src` de l'`asset` ; 1.10 : un élément `media-rep` (`kind` `original-media`).
+- Les chemins sont **toujours absolus** (`file:///C:/…`, caractères protégés en `%XX`) : Final Cut Pro X ne retrouve pas un média par
+  un chemin relatif. Si le dossier de l'export bouge, refaire l'export.
+- Un essai relit le FCPXML avec un analyseur XML et le recoupe avec l'EDL (mêmes clips, mêmes entrées et sorties pour les coupes
+  franches), avec le plan (fondu, son, marqueurs) et dans les deux versions et en NTSC.
+- **Rien n'a été ouvert dans Final Cut Pro X.** À vérifier : l'import (un FCPXML dont une valeur déplaît est refusé en bloc), la
+  place du son accroché, l'effet « Cross Dissolve » (identifiant `FxPlug:4731E73A-8DAC-4113-9A30-AE85B1761265`, écrit de mémoire),
+  les marqueurs.
 
 ## Ce sur quoi on s'est appuyé, format par format
 
@@ -184,8 +234,72 @@ récentes le convertissent sans perte en `Clip.2` : à vérifier.
 ## Limites
 
 - L'export utilise le projet tel qu'il était au départ : ce qu'on retouche pendant qu'il tourne n'y est pas.
-- Pas de time code à sauts d'images (29,97 DF), pas d'AAF, pas de son dans l'EDL, pas de fondus enchaînés entre extraits son.
+- Pas de time code à sauts d'images (29,97 DF), pas d'AAF, pas de fondus enchaînés entre extraits son.
 - Transitions écrites : le fondu enchaîné entre deux plans (partout) et le fondu depuis / vers le noir (EDL). Le reste est une coupe, dite.
 - Les plans sont rendus sans leurs transitions, mais avec tout le reste de l'export du film (incrustations gravées, calques
   d'effets, caméra, papier).
 - Les contenus rognés (réserve de `rognage.rs`) ne sont pas lus pour les poignées : elles sont des images tenues.
+
+## Calques séparés (pour un logiciel de compositing)
+
+Fichier > Exporter… > **Calques séparés** (action `fichier.exporter_calques`). Pour l'étendue choisie (film, séquence, plan, plans
+choisis) : **un dossier par plan**, nommé comme le plan (`SQ01_PL012A`), et dedans **une suite d'images PNG transparentes par
+calque visible**, `01_Fond_0001.png`, `02_Personnage_0001.png`… (rang du calque de bas en haut, son nom, le numéro d'image du
+plan sur 4 chiffres, depuis 1). Code : `src/exportlayers.rs`, `render::panel_layer_plans`.
+
+- **Caméra appliquée** (d'office) : chaque image est ce que la caméra filme, à la taille de l'image finale, comme dans le film.
+  Posées l'une sur l'autre dans l'ordre des numéros, en mode normal, les images d'un plan **redonnent l'image du film pixel pour
+  pixel** (essai `separate_layers_recompose_the_mixed_image_pixel_for_pixel`, avec un calque transformé et à moitié transparent).
+  **Sans caméra** (« feuille entière ») : la feuille entière de chaque calque, à la taille de la feuille.
+- Un calque qui n'a rien à une image écrit une **image transparente** : la suite reste continue du début à la fin du plan.
+- **Pas écrits** : les dossiers de calques, les calques cachés (eux ou leur dossier), les **calques d'effet** (un calque d'effet agit
+  sur ce qui est dessous : il n'a pas d'image à lui, et son effet n'est donc pas dans les images des calques qu'il couvre ; la fenêtre
+  dit combien ont été laissés de côté). Les calques d'annotation ne le sont que si « Avec les annotations » est coché. Les
+  incrustations gravées (time code…) n'y sont pas.
+- Un calque en mode de fusion autre que Normal est écrit tel qu'il se verrait seul sur du transparent ; le recomposer en Normal ne
+  redonne pas le mode.
+- Tâche de fond comme tous les exports (une copie du projet, des fils de rendu à priorité basse) ; annuler efface les fichiers
+  écrits.
+
+## Clés de caméra (JSON et CSV)
+
+Fichier > Exporter… > **Caméra** (action `fichier.exporter_camera`). Pour chaque plan de l'étendue : les **clés** de la caméra et,
+au choix, la caméra de **chaque image** (déjà interpolée : un script n'a pas à refaire les adoucis). On donne le nom du `.json` ;
+les CSV s'écrivent à côté (`<nom>_cles.csv`, une ligne par clé ; `<nom>_images.csv`, une ligne par image). Code : `src/exportcamera.rs`.
+Aucun script d'un autre logiciel n'est livré : voici le format, à relire par un script After Effects, Blender ou autre.
+
+```json
+{
+  "format": "shot-camera", "version": 1, "projet": "Mon film", "cadence": 24,
+  "cadre":   { "largeur": 1920, "hauteur": 1080 },
+  "feuille": { "largeur": 3840, "hauteur": 2160 },
+  "unites":  { "x": "...", "zoom": "...", "rotation": "...", "interpolation": "..." },
+  "plans": [ {
+    "plan": "SQ01_PL012A", "titre": "Séquence 1 — plan 12A",
+    "image_debut": 0, "images": 24,
+    "cles": [
+      { "image": 0,  "x": 1920.0, "y": 1080.0, "zoom": 1.0, "rotation": 0.0, "avancee": 0.0, "bascule": 0.0, "panoramique": 0.0,
+        "interpolation": "lineaire", "adouci_entree": 0.0, "adouci_sortie": 0.0, "adouci_ancien": false },
+      { "image": 12, "x": 2020.0, "y": 1060.0, "zoom": 1.5, "rotation": 7.5, "avancee": 12.0, "bascule": -3.0, "panoramique": 4.0,
+        "interpolation": "adoucie", "adouci_entree": 4.0, "adouci_sortie": 2.0, "adouci_ancien": false }
+    ],
+    "par_image": [ { "image": 0, "x": 1920.0, "y": 1080.0, "zoom": 1.0, "rotation": 0.0, "avancee": 0.0, "bascule": 0.0, "panoramique": 0.0 } ]
+  } ]
+}
+```
+
+| Champ | Sens |
+|---|---|
+| `x`, `y` | centre du cadre, en **pixels de la feuille** ; origine en haut à gauche de la feuille, `y` vers le bas |
+| `zoom` | 1 : le cadre fait la taille de l'image finale ; 2 : deux fois plus serré (focale doublée) |
+| `rotation` | degrés, sens horaire à l'écran |
+| `avancee` | pixels, travelling avant (négatif : recul) |
+| `bascule` | degrés ; positif : la caméra regarde vers le haut |
+| `panoramique` | degrés ; positif : la caméra regarde vers la droite |
+| `image` | numéro d'image **depuis 0, dans le plan** (`image_debut` : rang de la première image du plan dans le film) |
+| `interpolation` | `lineaire` : vitesse constante jusqu'à la clé suivante ; `adoucie` : la caméra accélère et ralentit, sur `adouci_sortie` images après la clé et `adouci_entree` images avant la suivante (`adouci_ancien` : l'ancien réglage, un demi-intervalle de chaque côté) |
+
+Un plan sans clé est filmé par la caméra du projet : `cles` est vide, `par_image` (si demandé) la donne. Les clés d'un plan sont
+triées par image. Les nombres sont écrits avec un point décimal (le CSV aussi : les scripts, pas le tableur français). Le CSV des
+clés a pour colonnes `plan,titre,image,x,y,zoom,rotation,avancee,bascule,panoramique,interpolation,adouci_entree,adouci_sortie` ;
+celui des images `plan,image_du_plan,image_du_film,x,y,zoom,rotation,avancee,bascule,panoramique`.
