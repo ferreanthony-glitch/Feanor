@@ -289,8 +289,6 @@ pub fn racine_commune(chemins: &[PathBuf]) -> PathBuf {
 
 #[derive(Clone, Debug)]
 pub struct Rapport {
-    /// Le dossier choisi.
-    pub dossier: PathBuf,
     /// Le dossier du manifeste.
     pub racine: PathBuf,
     pub manifeste: PathBuf,
@@ -415,7 +413,7 @@ fn ranger(r: Rangement, annule: &AtomicBool, fait: &AtomicUsize) -> Result<Rappo
         defaire(&deplaces, &remplaces, &dossiers_faits);
         return Err(e);
     }
-    Ok(Rapport { dossier: r.dossier.clone(), racine: r.dossier.join(&racine_rel), manifeste, fichiers: r.items.len() + 1, octets })
+    Ok(Rapport { racine: r.dossier.join(&racine_rel), manifeste, fichiers: r.items.len() + 1, octets })
 }
 
 // ------------------------------------------------------------------------------------------------- la tâche
@@ -481,7 +479,6 @@ pub struct PaquetJob {
     global: PathBuf,
     dossiers: HashMap<usize, PathBuf>,
     etat: Etat,
-    pub started: Instant,
     pub outcome: Option<Result<Rapport, String>>,
 }
 
@@ -578,7 +575,6 @@ impl PaquetJob {
             global,
             dossiers,
             etat: Etat::Etapes,
-            started: Instant::now(),
             outcome: None,
         })
     }
