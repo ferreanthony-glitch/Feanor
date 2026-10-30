@@ -1719,49 +1719,6 @@ impl App {
         let chosen_more = !current && self.board_sel.iter().any(|id| *id != cur_id) && (plan_current || self.board_sel.contains(&place.plan));
         let accent = crate::theme::accent();
 
-        // Le numéro du plan, au-dessus de sa première image : rien d'autre (pas de pastille d'envoi ni de version : elles sont au montage).
-        if place.starts_plan() && card.height() > thumb.height() + 6.0 {
-            // Le numéro suit le zoom de la planche mais reste lisible de très loin comme de très près (Anthony, 2026-10-30) : la taille à
-            // l'écran est la taille d'origine (`LABEL_H` × `NUMERO_FRACTION`) multipliée par le zoom, bornée entre 15 et 72 points d'écran
-            // (avant : 9 minimum, illisible à six cases par rangée), le tout multiplié par le réglage « Taille des numéros »
-            // (Préférences > Vignettes). Un fond clair derrière (réglable) le garde lisible sur n'importe quel dessin qui déborde.
-            let reglages = &self.settings.vignettes;
-            let echelle = reglages.numeros_echelle();
-            let font = crate::vignettesprefs::taille_numero(xf.zoom, echelle);
-            let ink = Color32::from_gray(15);
-            let clip = painter.with_clip_rect(view);
-            let galley = clip.layout_no_wrap(numeros.scene_label(&self.doc, place.scene), FontId::proportional(font), ink);
-            let marge = (font * 0.18).max(2.0);
-            let pastille = Rect::from_min_size(pos2(thumb.left(), thumb.top() - galley.size().y - marge * 2.0 - 2.0), galley.size() + vec2(marge * 2.0, marge * 2.0));
-            if reglages.fond_numeros {
-                clip.rect_filled(pastille, marge, Color32::from_white_alpha(235));
-                clip.rect_stroke(pastille, marge, Stroke::new(1.0_f32, Color32::from_gray(190)), StrokeKind::Inside);
-            }
-            let at = pastille.min + vec2(marge, marge);
-            let gras = (font * 0.035).max(0.4);
-            for d in [vec2(0.0, 0.0), vec2(gras, 0.0), vec2(0.0, gras)] {
-                clip.galley(at + d, galley.clone(), ink);
-            }
-            let mut droite = pastille.right() + 4.0;
-            // La durée du plan, à côté du numéro (réglage), en petit.
-            if reglages.afficher_duree {
-                let n = self.doc.panels.get(i).map_or(0, |p| p.frame_count());
-                let fps = self.doc.fps.max(1) as usize;
-                let texte = format!("{}+{:02}", n / fps, n % fps);
-                let g = clip.layout_no_wrap(texte, FontId::proportional((font * 0.6).max(10.0)), Color32::from_gray(90));
-                clip.galley(pos2(droite, pastille.center().y - g.size().y * 0.5), g.clone(), Color32::from_gray(90));
-                droite += g.size().x + 6.0;
-            }
-            // L'étiquette de version (« V2 »), **hors du cadre**, juste à droite du numéro : jamais sur l'image. Rien pour un plan à une
-            // seule version, ni si le réglage est éteint.
-            if reglages.pastille_version {
-                let haut = (font * 0.75).clamp(14.0, 28.0);
-                if let Some(e) = self.peindre_etiquette_hors_cadre(&clip, pos2(droite, pastille.center().y), haut, i) {
-                    self.vignettes.etiquettes.push(e);
-                }
-            }
-        }
-
         // Le panneau courant : le dessin lui-même ; les autres : leur vignette.
         let live = current && !pan_mode;
         let clip = painter.with_clip_rect(view);
@@ -1826,6 +1783,49 @@ impl App {
         }
         self.paint_card_note(&clip, xf, place, note);
         self.paint_note_icone(ui, painter, view, place);
+        // Le numéro du plan, au-dessus de sa première image, peint après l'image : la marge du dessin de la case courante ne le recouvre pas (2026-10-30). : rien d'autre (pas de pastille d'envoi ni de version : elles sont au montage).
+        if place.starts_plan() && card.height() > thumb.height() + 6.0 {
+            // Le numéro suit le zoom de la planche mais reste lisible de très loin comme de très près (Anthony, 2026-10-30) : la taille à
+            // l'écran est la taille d'origine (`LABEL_H` × `NUMERO_FRACTION`) multipliée par le zoom, bornée entre 15 et 72 points d'écran
+            // (avant : 9 minimum, illisible à six cases par rangée), le tout multiplié par le réglage « Taille des numéros »
+            // (Préférences > Vignettes). Un fond clair derrière (réglable) le garde lisible sur n'importe quel dessin qui déborde.
+            let reglages = &self.settings.vignettes;
+            let echelle = reglages.numeros_echelle();
+            let font = crate::vignettesprefs::taille_numero(xf.zoom, echelle);
+            let ink = Color32::from_gray(15);
+            let clip = painter.with_clip_rect(view);
+            let galley = clip.layout_no_wrap(numeros.scene_label(&self.doc, place.scene), FontId::proportional(font), ink);
+            let marge = (font * 0.18).max(2.0);
+            let pastille = Rect::from_min_size(pos2(thumb.left(), thumb.top() - galley.size().y - marge * 2.0 - 2.0), galley.size() + vec2(marge * 2.0, marge * 2.0));
+            if reglages.fond_numeros {
+                clip.rect_filled(pastille, marge, Color32::from_white_alpha(235));
+                clip.rect_stroke(pastille, marge, Stroke::new(1.0_f32, Color32::from_gray(190)), StrokeKind::Inside);
+            }
+            let at = pastille.min + vec2(marge, marge);
+            let gras = (font * 0.035).max(0.4);
+            for d in [vec2(0.0, 0.0), vec2(gras, 0.0), vec2(0.0, gras)] {
+                clip.galley(at + d, galley.clone(), ink);
+            }
+            let mut droite = pastille.right() + 4.0;
+            // La durée du plan, à côté du numéro (réglage), en petit.
+            if reglages.afficher_duree {
+                let n = self.doc.panels.get(i).map_or(0, |p| p.frame_count());
+                let fps = self.doc.fps.max(1) as usize;
+                let texte = format!("{}+{:02}", n / fps, n % fps);
+                let g = clip.layout_no_wrap(texte, FontId::proportional((font * 0.6).max(10.0)), Color32::from_gray(90));
+                clip.galley(pos2(droite, pastille.center().y - g.size().y * 0.5), g.clone(), Color32::from_gray(90));
+                droite += g.size().x + 6.0;
+            }
+            // L'étiquette de version (« V2 »), **hors du cadre**, juste à droite du numéro : jamais sur l'image. Rien pour un plan à une
+            // seule version, ni si le réglage est éteint.
+            if reglages.pastille_version {
+                let haut = (font * 0.75).clamp(14.0, 28.0);
+                if let Some(e) = self.peindre_etiquette_hors_cadre(&clip, pos2(droite, pastille.center().y), haut, i) {
+                    self.vignettes.etiquettes.push(e);
+                }
+            }
+        }
+
         // (L'étiquette de version « V2 » est hors du cadre, à côté du numéro du plan : plus haut. La survoler ouvre la pile des versions,
         // `pile_versions_ui`, en fin d'image.)
     }

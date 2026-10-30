@@ -45,7 +45,9 @@ pub(crate) fn ouverture_cadre(layout: &BoardLayout, view: Rect, colonnes: usize,
         }
     }
     // Une petite marge de chaque côté ; en haut, huit points d'écran entre le haut de la vue et le numéro de la première rangée.
-    let zone = zone.expand2(vec2(8.0, 0.0));
+    // (Le dessin de la case courante déborde de 12 % de sa largeur : la marge le garde entier.)
+    let largeur_case = groupes.first().and_then(|g| g.first()).map_or(100.0, |c| c.0.width());
+    let zone = zone.expand2(vec2(0.13 * largeur_case + 6.0, 0.0));
     let haut = 8.0;
     let zoom = (view.width() / zone.width().max(1.0)).min((view.height() - haut) / zone.height().max(1.0)).clamp(zoom_min, zoom_max);
     // Marges égales à gauche et à droite ; le haut de la zone juste sous le haut de la vue.
