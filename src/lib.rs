@@ -1081,3 +1081,5 @@ fn run(renderer: eframe::Renderer, initial: Option<std::path::PathBuf>) -> efram
         }),
     )
 }
+#[cfg(test)]
+mod stabilite_audit_tests;

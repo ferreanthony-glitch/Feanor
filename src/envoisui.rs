@@ -376,7 +376,11 @@ impl App {
         self.envois_ui.signature = (self.doc.envois.list.len(), self.doc.envois.dernier().map_or(0, |e| e.id));
         self.envois_etats();
         self.modified = true;
-        if self.path.is_some() {
+        // Un projet encore à l'ancien nom (`.pelure`) : l'enregistrer le renommerait en `.shot` ; ce n'est pas à un simple marquage de
+        // le faire en silence. L'envoi reste dans le projet (modifié : Quitter le demandera), et le message dit de quoi il s'agit.
+        if self.path.as_deref().is_some_and(|p| self.partage.is_none() && crate::project::est_ancien_manifeste(p)) {
+            self.status = format!("Envoi « {titre} » marqué : {n} plan{} notés. Enregistre le projet (Ctrl+S) pour le garder : il passera alors au nouveau nom .shot.", if n > 1 { "s" } else { "" });
+        } else if self.path.is_some() {
             self.save();
             self.status = format!("Envoi « {titre} » marqué : {n} plan{} notés. Le projet s'enregistre.", if n > 1 { "s" } else { "" });
         } else {

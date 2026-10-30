@@ -137,6 +137,10 @@ impl App {
                 }
                 });
             });
+        // Échap ferme la fenêtre sans rien lancer (la fenêtre d'un export choisi, par-dessus, se ferme la première).
+        if self.export_dialog.is_none() && crate::exportui::echap_ferme(ctx) {
+            open = false;
+        }
         if let Some(action) = run {
             self.export_hub = false;
             self.run_action(action);

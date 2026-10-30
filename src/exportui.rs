@@ -21,6 +21,15 @@ use crate::exportvideo::{self, VideoRate, VideoSize, VideoSpec};
 use crate::pdfmise::{self, Paper};
 use crate::storyboard::duration_label;
 
+/// Échap ferme la fenêtre d'export sans rien lancer (sauf s'il ferme d'abord une liste déroulante ouverte). `Modal::should_close` le
+/// fait déjà quand la fenêtre est « la plus haute » ; ceci le garantit aussi quand une autre couche d'`egui` lui dispute ce titre.
+pub(crate) fn echap_ferme(ctx: &egui::Context) -> bool {
+    ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) && !ctx.memory(|m| m.any_popup_open())
+}
+
+/// Secondes pendant lesquelles la fenêtre d'un export réussi reste affichée (« Fermer » la ferme avant).
+const FINI_AFFICHE: f64 = 8.0;
+
 fn warn() -> Color32 {
     crate::theme::avertissement()
 }
@@ -521,7 +530,7 @@ impl App {
                 self.export_transparent = s.transparent;
             }
             self.start_export(&s, frames, first, sound_here && s.sound);
-        } else if !close && !modal.should_close() {
+        } else if !close && !modal.should_close() && !echap_ferme(ctx) {
             self.export_dialog = Some(s);
         }
     }
@@ -644,6 +653,7 @@ impl App {
     /// Démarre un export : il copie le projet affiché (les premières tranches tout de suite), puis tourne tout seul.
     pub(crate) fn start_job(&mut self, mut job: ExportJob) {
         // (Traits texturés restés en rendu rapide : l'export les veut exacts, il les refait dans sa copie, sur un autre fil.)
+        self.ctx.data_mut(|d| d.remove::<f64>(egui::Id::new("export_fini_le")));
         job.set_exact(self.rejeu_idle.clone());
         job.step(&self.doc, Duration::from_millis(8));
         self.export_projet = Some((self.onglets.get(self.actif).map_or(0, |t| t.id), self.base_name_or("Sans titre")));
@@ -714,12 +724,29 @@ impl App {
                             }
                             None => {}
                         }
+                        // Une réussite s'efface d'elle-même au bout de quelques secondes (le pointeur sur la fenêtre la garde) ;
+                        // une erreur reste jusqu'au clic. Le message et « Ouvrir le dossier » restent dans la barre d'état.
+                        if matches!(job.outcome, Some(Ok(_))) {
+                            let now = ui.ctx().input(|i| i.time);
+                            let id = egui::Id::new("export_fini_le");
+                            let depuis = if ui.rect_contains_pointer(ui.max_rect()) {
+                                ui.ctx().data_mut(|d| d.insert_temp(id, now));
+                                now
+                            } else {
+                                ui.ctx().data_mut(|d| *d.get_temp_mut_or_insert_with(id, || now))
+                            };
+                            if now - depuis >= FINI_AFFICHE {
+                                dismiss = true;
+                            } else {
+                                ui.ctx().request_repaint_after(Duration::from_millis(250));
+                            }
+                        }
                         ui.add_space(4.0);
                         ui.horizontal(|ui| {
                             if matches!(job.outcome, Some(Ok(_))) {
                                 reveal = bulles::bulle(ui.button(format!("{} Montrer dans l'explorateur", ph::FOLDER_OPEN)), "Montrer dans l'explorateur", "Ouvre le dossier du fichier exporté.", "").clicked();
                             }
-                            dismiss = bulles::bulle(ui.button(format!("{} Fermer", ph::CHECK)), "Fermer", "Ferme cette fenêtre (l'export est fini).", "").clicked();
+                            dismiss |= bulles::bulle(ui.button(format!("{} Fermer", ph::CHECK)), "Fermer", "Ferme cette fenêtre (l'export est fini).", "").clicked();
                         });
                     }
                 }
@@ -731,12 +758,13 @@ impl App {
             reveal_in_explorer(&job.target);
         }
         if dismiss {
+            ctx.data_mut(|d| d.remove::<f64>(egui::Id::new("export_fini_le")));
             if let Some(job) = self.export_job.take() {
-                self.status = match &job.outcome {
-                    Some(Ok(msg)) => msg.clone(),
-                    Some(Err(e)) => e.clone(),
-                    None => String::new(),
-                };
+                match &job.outcome {
+                    Some(Ok(msg)) => self.status_avec_action(msg.clone(), crate::messages::ActionMessage::MontrerDossier(job.target.clone())),
+                    Some(Err(e)) => self.status = e.clone(),
+                    None => self.status = String::new(),
+                }
             }
             self.export_projet = None;
         }

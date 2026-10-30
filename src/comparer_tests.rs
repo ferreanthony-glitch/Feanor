@@ -222,7 +222,8 @@ fn the_frame_asked_for_is_the_frame_shown_and_a_late_request_replaces_an_early_o
 
 fn banc_projet(nom: &str, n: usize) -> (Banc, PathBuf) {
     let travail = dossier(nom);
-    let m = travail.join("Film").join("Film.pelure");
+    // (Un projet `.shot` : marquer un envoi enregistre ; un `.pelure` attend « Enregistrer », `stabilite_audit_tests.rs`.)
+    let m = project::manifeste_shot(&travail.join("Film").join("Film.pelure"));
     let mut b = banc(film(n), false);
     b.app.path = Some(m.clone());
     b.app.modified = true;
