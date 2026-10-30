@@ -13,44 +13,44 @@ use eframe::egui::{pos2, vec2, Rect, Vec2};
 /// compris, cadrées sur le haut de la planche ou, si la case `courante` (rang dans l'ordre de lecture) est plus loin, sur sa rangée.
 /// Rend (zoom, décalage), au sens de `App::board_zoom` et `App::board_pan` (la planche est posée à `view.min + décalage`).
 pub(crate) fn ouverture_cadre(layout: &BoardLayout, view: Rect, colonnes: usize, rangees: usize, courante: usize, zoom_min: f32, zoom_max: f32, lignes_texte: usize) -> (f32, Vec2) {
-    let cases = crate::annotations::cases(layout);
+    // Chaque case : son image (pour ranger en rangées) et tout ce qu'elle occupe (numéro, tuile d'un mouvement, textes). Les cases vides, ensuite.
+    let sous = board::NOTE_LINE_H * lignes_texte as f32 + 6.0;
+    let mut cases: Vec<(Rect, Rect)> = layout.cards.iter().map(|c| (c.thumb, c.card.union(c.foot).union(c.thumb).union(c.note))).collect();
+    cases.extend(layout.empty.iter().map(|r| (*r, Rect::from_min_max(pos2(r.left(), r.top() - board::LABEL_H), pos2(r.right(), r.bottom() + sous)))));
     if cases.is_empty() || !(view.width() > 1.0 && view.height() > 1.0) {
         return (1.0, Vec2::ZERO);
     }
     let japonais = layout.sens.japonais();
     // Les cases groupées en rangées (en colonnes à la japonaise) : une nouvelle rangée quand la case recule sur l'axe d'avancée.
     let (axe, travers): (fn(&Rect) -> f32, fn(&Rect) -> f32) = if japonais { (|r| r.top(), |r| r.left()) } else { (|r| r.left(), |r| r.top()) };
-    let mut groupes: Vec<Vec<Rect>> = Vec::new();
+    let mut groupes: Vec<Vec<(Rect, Rect)>> = Vec::new();
     let mut prec = f32::NEG_INFINITY;
-    for r in &cases {
-        if groupes.is_empty() || axe(r) < prec - 0.5 || travers(r) > travers(&groupes[groupes.len() - 1][0]) + if japonais { r.width() } else { r.height() } * 0.5 {
+    for c in &cases {
+        let r = &c.0;
+        if groupes.is_empty() || axe(r) < prec - 0.5 || travers(r) > travers(&groupes[groupes.len() - 1][0].0) + if japonais { r.width() } else { r.height() } * 0.5 {
             groupes.push(Vec::new());
         }
         prec = axe(r);
-        groupes.last_mut().expect("un groupe").push(*r);
+        groupes.last_mut().expect("un groupe").push(*c);
     }
     let rangees = rangees.max(1);
     let colonnes = colonnes.max(1);
     // La rangée de la case courante : le cadrage commence là si elle est au-delà des premières rangées.
-    let rang_courant = cases.get(courante).and_then(|c| groupes.iter().position(|g| g.iter().any(|x| x == c))).unwrap_or(0);
+    let rang_courant = layout.cards.get(courante).and_then(|c| groupes.iter().position(|g| g.iter().any(|x| x.0 == c.thumb))).unwrap_or(0);
     let premiere = if rang_courant >= rangees { rang_courant } else { 0 };
     let mut zone = Rect::NOTHING;
     for g in groupes.iter().skip(premiere).take(rangees) {
-        for r in g.iter().take(colonnes) {
-            zone = zone.union(*r);
+        for c in g.iter().take(colonnes) {
+            zone = zone.union(c.1);
         }
     }
-    // Les textes (une ligne par champ montré) et la ligne du numéro : au-dessus et au-dessous des images.
-    let sous = board::NOTE_LINE_H * lignes_texte as f32 + 8.0;
-    let zone = if japonais {
-        Rect::from_min_max(pos2(zone.left() - 6.0, zone.top() - board::LABEL_H), pos2(zone.right() + 6.0 + sous * 3.0, zone.bottom() + 6.0))
-    } else {
-        Rect::from_min_max(pos2(zone.left() - 6.0, zone.top() - board::LABEL_H), pos2(zone.right() + 6.0, zone.bottom() + sous))
-    };
-    let zoom = (view.width() / zone.width().max(1.0)).min(view.height() / zone.height().max(1.0)).clamp(zoom_min, zoom_max);
-    // Centrée dans la vue (le haut de la zone au haut de la vue si elle est plus haute).
-    let reste = vec2((view.width() - zone.width() * zoom).max(0.0), (view.height() - zone.height() * zoom).max(0.0));
-    (zoom, vec2(-zone.min.x * zoom + reste.x * 0.5, -zone.min.y * zoom + reste.y * 0.5))
+    // Une petite marge de chaque côté ; en haut, huit points d'écran entre le haut de la vue et le numéro de la première rangée.
+    let zone = zone.expand2(vec2(8.0, 0.0));
+    let haut = 8.0;
+    let zoom = (view.width() / zone.width().max(1.0)).min((view.height() - haut) / zone.height().max(1.0)).clamp(zoom_min, zoom_max);
+    // Marges égales à gauche et à droite ; le haut de la zone juste sous le haut de la vue.
+    let reste_x = (view.width() - zone.width() * zoom).max(0.0);
+    (zoom, vec2(-zone.min.x * zoom + reste_x * 0.5, -zone.min.y * zoom + haut))
 }
 
 /// La taille (points d'écran) du numéro de plan au zoom zoom de la planche : proportionnelle au zoom, bornée entre 15 et 72 points (à
@@ -107,34 +107,20 @@ impl App {
         ui.add_space(crate::barres::MARGE_TRAIT);
         ui.separator();
         ui.add_space(crate::barres::MARGE_TRAIT);
-        // Le zoom : une icône, et au clic le pourcentage, plus et moins, cadrer tout et le zoom d'ouverture.
+        // Le zoom de la planche, la seule commande de zoom de la vue (Anthony, 2026-10-30) : moins, le pourcentage réel, plus.
         let (colonnes, rangees) = (self.settings.vignettes.ouverture_colonnes, self.settings.vignettes.ouverture_rangees);
-        let resp = self.case_icone(ui, ph::MAGNIFYING_GLASS, Some(false), "Zoom de la planche", "Le pourcentage de zoom, plus et moins, cadrer toute la planche, le zoom d'ouverture.", "");
-        self.panneau_de_case(ui, "zoom_planche", &resp, 200.0, |app, ui| {
-            ui.horizontal(|ui| {
-                if ui.button(ph::MAGNIFYING_GLASS_MINUS).on_hover_text("Zoom arrière").clicked() {
-                    app.board_zoom_step(1.0 / 1.25);
-                }
-                let mut p = (app.board_zoom * 100.0).clamp(20.0, 600.0);
-                let avant = p;
-                let r = ui.add(egui::DragValue::new(&mut p).range(20.0..=600.0).speed(1.0).max_decimals(0).suffix(" %"));
-                if bulle(r, "Zoom de la planche", "Glisser, ou double-clic pour taper un pourcentage. Ctrl + molette aussi.", "").changed() && avant > 0.0 {
-                    app.board_zoom_step(p / avant);
-                }
-                if ui.button(ph::MAGNIFYING_GLASS_PLUS).on_hover_text("Zoom avant").clicked() {
-                    app.board_zoom_step(1.25);
-                }
-            });
-            ui.horizontal(|ui| {
-                if ui.button("Cadrer tout").on_hover_text("La page à la largeur de la vue (à la hauteur, à la japonaise).").clicked() {
-                    app.board_fit();
-                }
-                if ui.button(format!("{colonnes} × {rangees}")).on_hover_text("Le zoom d'ouverture : ce nombre de cases par rangée, ce nombre de rangées (Préférences > Vignettes).").clicked() {
-                    app.board_zoom = 0.0;
-                    app.vignettes.ouverture_a_faire = true;
-                }
-            });
-        });
+        if ui.add(egui::Button::new(ph::MAGNIFYING_GLASS_MINUS).frame(false)).on_hover_text("Zoom arrière").clicked() {
+            self.board_zoom_step(1.0 / 1.25);
+        }
+        let mut p = (self.board_zoom * 100.0).clamp(20.0, 600.0);
+        let avant = p;
+        let r = ui.add(egui::DragValue::new(&mut p).range(20.0..=600.0).speed(1.0).max_decimals(0).suffix(" %"));
+        if bulle(r, "Zoom de la planche", "Le zoom réel de la planche. Glisser, ou double-clic pour taper un pourcentage. Ctrl + molette aussi.", "").changed() && avant > 0.0 {
+            self.board_zoom_step(p / avant);
+        }
+        if ui.add(egui::Button::new(ph::MAGNIFYING_GLASS_PLUS).frame(false)).on_hover_text("Zoom avant").clicked() {
+            self.board_zoom_step(1.25);
+        }
         let r = ui.button(format!("{} × {}", colonnes, rangees));
         if bulle(r, "Zoom d'ouverture", "Recadrer la planche comme à l'ouverture d'un projet : ce nombre de cases par rangée, ce nombre de rangées. Réglable dans Préférences > Vignettes.", "").clicked() {
             self.board_zoom = 0.0;

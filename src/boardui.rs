@@ -1515,11 +1515,7 @@ impl App {
                     etiquette(ui, ph::COLUMNS, nom, description);
                     let resp = ui.add(egui::DragValue::new(&mut self.layout.board_columns).range(1..=MAX_COLUMNS).speed(0.05));
                     bulle(resp, nom, description, "");
-                    let resp = ui.button(format!("{:.0} %", self.board_zoom * 100.0));
-                    let ajuste = if japonais { "Clic : la planche à la hauteur de la vue." } else { "Clic : la page à la largeur de la vue." };
-                    if bulle(resp, "Zoom de la planche", &format!("Ctrl + molette. {ajuste}"), "").clicked() {
-                        self.board_fit();
-                    }
+
                 });
             })
             .response

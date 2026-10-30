@@ -397,3 +397,64 @@ fn the_bottom_bar_is_under_the_board_and_the_cases_passe_partout_switch_and_opac
     b.app.run_action("vignettes.marie_louise");
     assert!(!b.app.settings.vignettes.passe_partout_cases);
 }
+
+#[test]
+fn the_opening_frame_has_equal_side_margins_whole_first_row_with_its_numbers_just_under_the_top_and_the_6_x_2_button_gives_the_same() {
+    let mut b = crate::perf_tests::banc_taille(beaucoup_de_plans(30), false, 1600, 900);
+    b.app.board_view = crate::app::BoardView::Panels;
+    b.app.vignettes.ouverture_a_faire = true;
+    b.app.layout.board_columns = 6;
+    b.app.layout.board_rows = 0;
+    b.chauffer(24);
+    let (view, xf) = (b.app.vignettes.view, b.app.vignettes.xf);
+    let layout = b.app.board_layout();
+    for k in 0..6 {
+        let (thumb, numero) = (xf.rect(layout.cards[k].thumb), xf.rect(layout.cards[k].label()));
+        assert!(view.contains_rect(thumb), "l'image {k} est entière dans la vue : {thumb:?} {view:?}");
+        assert!(view.contains_rect(numero), "le numéro {k} est entier dans la vue : {numero:?} {view:?}");
+    }
+    let gauche = xf.rect(layout.cards[0].thumb).left() - view.left();
+    let droite = view.right() - xf.rect(layout.cards[5].thumb).right();
+    assert!((gauche - droite).abs() < 12.0, "marges égales à gauche et à droite : {gauche} contre {droite}");
+    assert!(gauche > 2.0, "la première colonne ne touche pas le bord : {gauche}");
+    let haut = xf.rect(layout.cards[0].label()).top() - view.top();
+    assert!((0.0..=24.0).contains(&haut), "la première rangée, numéros compris, juste sous le haut : {haut}");
+    // Le bouton « 6 × 2 » donne exactement le même cadrage.
+    let (zoom, pan) = (b.app.board_zoom, b.app.board_pan);
+    b.app.board_zoom = 0.0;
+    b.app.board_pan = eframe::egui::vec2(300.0, 300.0);
+    b.app.vignettes.ouverture_a_faire = true;
+    b.chauffer(24);
+    assert!((b.app.board_zoom - zoom).abs() < 1e-3 && (b.app.board_pan - pan).length() < 1.0, "{} {:?} contre {zoom} {pan:?}", b.app.board_zoom, b.app.board_pan);
+}
+
+#[test]
+fn the_view_has_one_zoom_command_in_the_bottom_bar_showing_the_real_zoom() {
+    let mut b = ouvert(quatre_plans(), 4);
+    b.garder_textes = true;
+    b.app.board_zoom = 0.77;
+    b.chauffer(4);
+    let textes = b.textes.clone();
+    assert!(textes.iter().any(|t| t.contains("77")), "la barre du bas montre le vrai zoom : {textes:?}");
+    // Plus de pourcentage de zoom dans la barre du haut (la seule commande de zoom est en bas) : un seul « 77 % ».
+    assert_eq!(textes.iter().filter(|t| t.contains("77 %") || t.contains("77%")).count(), 1, "{textes:?}");
+}
+
+#[test]
+fn a_new_project_reads_the_default_text_lines_from_the_preferences_none_by_default() {
+    use crate::boardsens::Textes;
+    let mut b = ouvert(quatre_plans(), 4);
+    b.app.layout.board_textes = Textes { action: false, dialogue: true, notes: true };
+    let d = crate::nouveauui::NewDocDialog::open(&b.app.settings.new_project);
+    assert!(b.app.create_project(&d));
+    assert_eq!(b.app.layout.board_textes, Textes::aucun(), "d'origine : aucune ligne dans un projet neuf");
+    b.app.settings.vignettes.textes_defaut = Textes { action: true, dialogue: false, notes: true };
+    let d = crate::nouveauui::NewDocDialog::open(&b.app.settings.new_project);
+    assert!(b.app.create_project(&d));
+    assert_eq!(b.app.layout.board_textes, Textes { action: true, dialogue: false, notes: true });
+    // Ouvrir un projet existant ne touche pas au choix fait.
+    b.app.layout.board_textes = Textes { action: false, dialogue: false, notes: true };
+    let doc = quatre_plans();
+    assert!(b.app.charger_projet(doc));
+    assert_eq!(b.app.layout.board_textes, Textes { action: false, dialogue: false, notes: true });
+}

@@ -6055,6 +6055,11 @@ images). Changer d'espace et revenir ne recadre pas.
 - **Rotation du canevas : pas faite dans la vue Vignettes.** La planche est une grande mise en page à rectangles alignés (toucher des cases, barres, notes, cadrage, tuiles) ; la tourner demande de
   refaire tout le passage écran ↔ planche, ce qui touche chaque module de la vue. Plutôt qu'un bouton qui dessinerait de travers, rien n'a été ajouté. À décider avec toi.
 
+### Corrections après les premières captures (2026-10-30)
+
+- **Cadrage d'ouverture** : les 6 cases d'une rangée (numéros et tuile d'un mouvement de caméra comprises) sont entières dans la vue, avec la même marge à gauche et à droite ; le numéro de la première rangée est à huit points sous le haut de la vue (plus de vide en haut). Le bouton « 6 × 2 » passe par le même calcul (essai : mêmes zoom et décalage).
+- **Une seule commande de zoom** : celle de la barre du bas (moins, pourcentage réel, plus, « 6 × 2 », « Cadrer tout »). Le bouton de pourcentage de la barre du haut est retiré ; il y reste la taille des cases et le nombre de cases par rangée (bulles). Le « 100 % » à gauche de la barre du bas est l'opacité du passe-partout, pas le zoom.
+- **Lignes de texte d'un projet neuf** : le réglage de Préférences > Vignettes est lu à la création d'un projet (fenêtre Nouveau projet et formulaire de l'accueil : `create_project`) ; aucune ligne d'origine. Ouvrir un projet existant ne touche pas au choix fait.
 ### À vérifier à l'écran (par Anthony)
 
 1. Dessine dans la dernière case, puis clique la barre devant la première case vide : la case apparaît **aussitôt avec ton dessin**, sans trait ; la case vide d'après est toujours en coupe (barre noire).
