@@ -25,7 +25,7 @@ use crate::prefsonglets::{self as table, Groupe, Onglet};
 use crate::theme::{self, ChoixTheme};
 
 /// Taille de départ de la fenêtre (plus large que haute) et plus petite taille permise.
-pub(crate) const FENETRE: [f32; 2] = [800.0, 540.0];
+pub(crate) const FENETRE: [f32; 2] = [850.0, 770.0];
 const FENETRE_MIN: [f32; 2] = [560.0, 320.0];
 /// Largeur de la liste des onglets.
 const LISTE_L: f32 = 156.0;
@@ -615,6 +615,9 @@ impl App {
             Groupe::PlansNeufs => self.new_plan_duration_pref_ui(ui),
             Groupe::Vignettes => self.vignettes_prefs_ui(ui),
             Groupe::CadresCamera => self.cadres_camera_prefs_ui(ui),
+            Groupe::NumerosTextes => self.numeros_textes_prefs_ui(ui),
+            Groupe::AspectCases => self.aspect_cases_prefs_ui(ui),
+            Groupe::OuvertureCases => self.ouverture_cases_prefs_ui(ui),
             Groupe::Decor => self.decor_prefs_ui(ui),
             Groupe::Raccourcis => {
                 ui.horizontal_wrapped(|ui| {

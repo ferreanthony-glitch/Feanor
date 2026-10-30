@@ -145,7 +145,8 @@ fn the_stroke_overflows_its_box_while_drawing_and_the_box_clips_it_after_but_the
     assert!(debord(&b, case).is_empty(), "après le lâcher, rien ne déborde plus à l'écran");
     // … mais les données gardent tout le trait (toile infinie).
     assert!(encre(&b.app.doc, 0));
-    assert!(trait_hors_feuille(&b.app.doc, 0), "le trait entier est dans le dessin, hors de la feuille compris");
+    // (Depuis le 2026-10-30, ce qui est hors du champ de la case n'est plus dans son dessin : la part dans la case voisine est dans le plan voisin, le reste sur la planche, `horschamp_tests.rs`.)
+    // (La case voisine est du même plan : sa part est dans le dessin de son image.)
     assert!(b.app.vignettes.debord.is_none());
 }
 

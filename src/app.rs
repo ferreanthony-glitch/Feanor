@@ -1051,7 +1051,8 @@ impl App {
             doc: Document::with_frame(1920, 1080, 24).created_now(),
             mode: Mode::Storyboard,
             board_view: BoardView::Scene,
-            vignettes: Default::default(),
+            // (Le passe-partout des cases est retenu d'une séance à l'autre : ReglagesVignettes::passe_partout_cases.)
+            vignettes: crate::boardui::Vignettes::avec_passe_partout(settings.vignettes.passe_partout_cases),
             perso: Default::default(),
             mon_panneau: Default::default(),
             scenario_ui: Default::default(),
@@ -2312,6 +2313,8 @@ impl App {
                 }
             }
             let cel = stroke.cel;
+            // (Sa couleur et son opacité, pour la part du trait qui reste sur la planche : horschamp.rs.)
+            let paint = stroke.tip_paint();
             let mut dirty = Vec::new();
             // Un trait dans la strate Fond : fini dans son dessin, annulé par `FondTiles`.
             if self.fond_stroke.take() == Some(cel) {
@@ -2354,13 +2357,15 @@ impl App {
                             Some(Edit::Tiles { tiles, .. }) => Some(tiles),
                             _ => None,
                         };
-                        self.commit_vector_stroke(vs, std::mem::take(&mut stroke.path), std::mem::take(&mut stroke.path_pressure), std::mem::take(&mut stroke.path_time), preview)
+                        self.commit_vector_stroke(vs, std::mem::take(&mut stroke.path), std::mem::take(&mut stroke.path_pressure), std::mem::take(&mut stroke.path_time), preview);
+                        self.horschamp_noter_vecteur(cel)
                     }
                     None => {
                         if let Some(c) = self.doc.cels.get_mut(&cel) {
                             c.version += 1;
                         }
                         if let Some(edit) = edit {
+                            self.horschamp_noter_bitmap(cel, &edit, stroke.path.clone(), paint);
                             self.history.push(edit);
                         }
                     }
@@ -3455,6 +3460,10 @@ impl App {
         // (Les clés de caméra copiées restent : ce sont des valeurs, sans numéro de projet — elles se collent dans
         // l'autre onglet, `onglets.rs`.)
         self.comment_ui = Default::default();
+        // (Un projet qui s'ouvre : la planche des Vignettes se recadre sur ses 2 rangées de 6 cases, `vignettesprefs::ouverture_cadre`.)
+        self.board_zoom = 0.0;
+        self.board_pan = Vec2::ZERO;
+        self.vignettes.ouverture_a_faire = true;
         self.mode = Mode::Storyboard;
         self.cur_panel = 0;
         self.cur_layer = self.layers().len() - 1;

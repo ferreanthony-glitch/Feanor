@@ -154,6 +154,43 @@ impl Document {
         touchees
     }
 
+    /// `cles_de_case` pour une case **rendue continue** de la précédente (Anthony, 2026-10-30 : « elle doit s'afficher immédiatement à partir du
+    /// moment où on assigne la case comme continue ») : une case qui n'a rien dessiné sur un calque (pas de dessin, ou un dessin sans trait) reçoit
+    /// **une copie du dessin de la case d'avant**, pour que la vignette le montre tout de suite. Une case qui a déjà du dessin à elle le garde
+    /// (rien n'est perdu). Renvoie le nombre de clés posées ou remplacées.
+    pub fn cles_de_case_heritees(&mut self, index: usize, frame: usize) -> usize {
+        let mut posees = self.cles_de_case(index, frame);
+        let Some(p) = self.panels.get(index) else { return posees };
+        let n = p.frame_count();
+        if frame == 0 || frame >= n {
+            return posees;
+        }
+        for li in 0..self.panels[index].layers.len() {
+            let l = &self.panels[index].layers[li];
+            if !calque_de_case(l) {
+                continue;
+            }
+            let (Some(a), Some(ici)) = (l.cel_at(frame - 1), l.cel_at(frame)) else { continue };
+            if a == ici || !self.cel_a_du_trait(a) || self.cel_a_du_trait(ici) {
+                continue;
+            }
+            let copie = self.duplicate_cel(a);
+            let calque = &mut self.panels[index].layers[li];
+            let (debut, fin) = calque.run_bounds(frame);
+            for f in debut.max(frame)..fin {
+                calque.frames[f] = Some(copie);
+            }
+            crate::calquecouleur::noter_copie(self, index, li, a, copie);
+            posees += 1;
+        }
+        posees
+    }
+
+    /// Le dessin `id` a-t-il quelque chose de tracé (des pixels, ou des objets vectoriels) ?
+    pub(crate) fn cel_a_du_trait(&self, id: CelId) -> bool {
+        self.cels.get(&id).is_some_and(|c| !c.raster.is_blank() || c.vector.as_ref().is_some_and(|v| !v.elements.is_empty()))
+    }
+
     /// Pose, à l'image `frame` du plan `index`, la clé de la case qui commence là sur chacun de ses calques de dessin (voir plus haut).
     /// Renvoie le nombre de clés posées.
     pub fn cles_de_case(&mut self, index: usize, frame: usize) -> usize {

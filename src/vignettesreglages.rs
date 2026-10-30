@@ -45,7 +45,49 @@ pub struct ReglagesVignettes {
     /// change pas un calque Décor qui existe déjà (`Document::assurer_decor`).
     #[serde(rename = "calque_decor_bitmap")]
     pub decor_bitmap: bool,
+    /// Taille des numéros de plan, en pour cent de la taille d'origine (100 : celle d'origine).
+    #[serde(rename = "taille_numeros")]
+    pub taille_numeros: u16,
+    /// Un fond clair derrière les numéros de plan (lisibles sur n'importe quel dessin qui déborde).
+    #[serde(rename = "fond_numeros")]
+    pub fond_numeros: bool,
+    /// L'étiquette de version (« V2 ») se montre, à côté du numéro du plan, pour un plan qui a plusieurs versions.
+    #[serde(rename = "pastille_version")]
+    pub pastille_version: bool,
+    /// Afficher la durée du plan (en secondes et images) à côté de son numéro.
+    #[serde(rename = "afficher_duree")]
+    pub afficher_duree: bool,
+    /// Les champs de texte (action, dialogue, notes) montrés sous les cases d'un projet neuf : aucun d'origine.
+    #[serde(rename = "textes_par_defaut")]
+    pub textes_defaut: crate::boardsens::Textes,
+    /// La couleur de la ligne de chaque champ : action, dialogue, notes.
+    #[serde(rename = "couleurs_textes")]
+    pub couleurs_textes: [[u8; 3]; 3],
+    /// Le zoom d'ouverture : cases par rangée et rangées visibles quand on ouvre un projet (6 × 2 d'origine).
+    #[serde(rename = "ouverture_colonnes")]
+    pub ouverture_colonnes: u8,
+    #[serde(rename = "ouverture_rangees")]
+    pub ouverture_rangees: u8,
+    /// L'épaisseur du filet des cases, en points (1 d'origine), et sa couleur (gris d'origine, plus foncé pour la case courante).
+    #[serde(rename = "epaisseur_cadre")]
+    pub epaisseur_cadre: f32,
+    #[serde(rename = "couleur_filet")]
+    pub couleur_filet: Option<[u8; 3]>,
+    /// L'opacité (pour cent) du dessin hors des cases, sur la planche : 100, plein.
+    #[serde(rename = "opacite_hors_champ")]
+    pub opacite_hors_champ: u8,
+    /// Le passe-partout des cases : allumé ou non, et son opacité (pour cent). Retenus d'une séance à l'autre.
+    #[serde(rename = "passe_partout_cases")]
+    pub passe_partout_cases: bool,
+    #[serde(rename = "passe_partout_cases_opacite")]
+    pub passe_partout_cases_opacite: u8,
 }
+
+/// Les couleurs d'origine des lignes de texte : action, dialogue, notes.
+pub const COULEURS_TEXTES_DEFAUT: [[u8; 3]; 3] = [[48, 96, 160], [160, 88, 24], [92, 92, 92]];
+pub const NUMEROS_MIN: u16 = 50;
+pub const NUMEROS_MAX: u16 = 300;
+pub const OUVERTURE_MAX: u8 = 12;
 
 impl Default for ReglagesVignettes {
     fn default() -> Self {
@@ -57,6 +99,19 @@ impl Default for ReglagesVignettes {
             couleur_decor: decor::COULEUR_DEFAUT,
             tailles_decor: Genre::ALL.map(Genre::taille_defaut),
             decor_bitmap: false,
+            taille_numeros: 100,
+            fond_numeros: true,
+            pastille_version: true,
+            afficher_duree: false,
+            textes_defaut: crate::boardsens::Textes { action: false, dialogue: false, notes: false },
+            couleurs_textes: COULEURS_TEXTES_DEFAUT,
+            ouverture_colonnes: 6,
+            ouverture_rangees: 2,
+            epaisseur_cadre: 1.0,
+            couleur_filet: None,
+            opacite_hors_champ: 100,
+            passe_partout_cases: false,
+            passe_partout_cases_opacite: 100,
         }
     }
 }
@@ -66,6 +121,12 @@ impl ReglagesVignettes {
     pub fn nettoyes(mut self) -> Self {
         self.debord = self.debord.min(DEBORD_MAX);
         self.aimant = self.aimant.min(AIMANT_MAX);
+        self.taille_numeros = self.taille_numeros.clamp(NUMEROS_MIN, NUMEROS_MAX);
+        self.ouverture_colonnes = self.ouverture_colonnes.clamp(1, crate::board::MAX_COLUMNS as u8);
+        self.ouverture_rangees = self.ouverture_rangees.clamp(1, OUVERTURE_MAX);
+        self.epaisseur_cadre = if self.epaisseur_cadre.is_finite() { self.epaisseur_cadre.clamp(0.5, 6.0) } else { 1.0 };
+        self.opacite_hors_champ = self.opacite_hors_champ.min(100);
+        self.passe_partout_cases_opacite = self.passe_partout_cases_opacite.min(100);
         for (t, g) in self.tailles_decor.iter_mut().zip(Genre::ALL) {
             *t = if t.is_finite() { t.clamp(0.5, 400.0) } else { g.taille_defaut() };
         }
@@ -79,6 +140,21 @@ impl ReglagesVignettes {
     /// Le débord, en part de la largeur d'une case.
     pub fn debord_fraction(&self) -> f32 {
         f32::from(self.debord.min(DEBORD_MAX)) / 100.0
+    }
+
+    /// La taille des numéros de plan, en part de la taille d'origine.
+    pub fn numeros_echelle(&self) -> f32 {
+        f32::from(self.taille_numeros.clamp(NUMEROS_MIN, NUMEROS_MAX)) / 100.0
+    }
+
+    /// La couleur de la ligne du champ `c`.
+    pub fn couleur_texte(&self, c: crate::boardsens::Champ) -> [u8; 3] {
+        use crate::boardsens::Champ;
+        self.couleurs_textes[match c {
+            Champ::Action => 0,
+            Champ::Dialogue => 1,
+            Champ::Notes => 2,
+        }]
     }
 
     /// L'aimant des cadres de caméra, en points d'écran ; rien s'il est éteint.

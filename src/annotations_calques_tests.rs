@@ -47,7 +47,7 @@ fn boite(b: &Banc, ids: &[u64]) -> Rect {
 
 /// L'espace Vignettes (la planche et son panneau Planche à droite), `colonnes` cases par ligne, assez petites pour tenir à l'écran.
 pub(crate) fn ouvert_vignettes(doc: Document, colonnes: usize) -> Banc {
-    let mut b = banc_taille(doc, false, 1600, 900);
+    let mut b = banc_taille(doc, false, 1600, 940);
     b.garder_formes = true;
     b.app.set_espace(crate::workspace::Espace::Vignettes);
     b.app.layout.board_columns = colonnes;
@@ -169,7 +169,7 @@ fn a_click_picks_the_stroke_under_it_and_shift_adds_or_removes() {
     assert_eq!(b.app.vignettes.annot.selection, vec![id0]);
     b.touches = Modifiers::NONE;
     // Un clic dans le vide lève le choix.
-    let vide = b.app.vignettes.view.right_top() + vec2(-8.0, 420.0);
+    let vide = b.app.vignettes.view.right_bottom() - vec2(8.0, 3.0);
     clic(&mut b, vide);
     assert!(b.app.vignettes.annot.selection.is_empty());
     assert_eq!(pas_d_annulation(&b), etapes, "choisir ne laisse aucune étape");
@@ -247,7 +247,7 @@ fn escape_abandons_a_gesture_without_changing_anything_then_clears_the_selection
     assert_eq!(pas_d_annulation(&b), etapes, "aucune étape d'annulation");
     assert_eq!(b.app.vignettes.annot.selection, vec![id], "le trait est toujours choisi");
     // Un lasso en cours : Échap l'abandonne, la sélection d'avant reste.
-    let vide = b.app.vignettes.view.right_top() + vec2(-8.0, 420.0);
+    let vide = b.app.vignettes.view.right_bottom() - vec2(8.0, 3.0);
     b.image(vec![Event::PointerMoved(vide)], 1.0 / 60.0);
     b.image(vec![appui(vide, true, Modifiers::NONE)], 1.0 / 60.0);
     b.image(vec![Event::PointerMoved(vide + vec2(-60.0, 10.0))], 1.0 / 120.0);

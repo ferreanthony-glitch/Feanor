@@ -232,6 +232,10 @@ pub(crate) fn banc_taille(doc: Document, avec_gpu: bool, largeur: u32, hauteur: 
     let rs = if avec_gpu { headless() } else { None };
     let ctx = egui::Context::default();
     let mut app = App::sans_fenetre(&ctx, rs.as_ref());
+    // (Les essais d'avant le 2026-10-30 comptent sur les notes montrées d'origine ; l'application n'en montre plus d'office.)
+    app.layout.board_textes = crate::boardsens::Textes { action: false, dialogue: false, notes: true };
+    // (Et la page à la largeur de la vue : le zoom d'ouverture a ses essais, `horschamp_tests.rs`.)
+    app.vignettes.ouverture_a_faire = false;
     app.doc = doc;
     app.welcome = false;
     app.maximized_once = 4;

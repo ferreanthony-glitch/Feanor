@@ -405,7 +405,11 @@ impl App {
     pub(crate) fn marie_basculer(&mut self) {
         let a = &mut self.vignettes.annot;
         a.marie = !a.marie;
-        self.status = if a.marie { "Marie-louise : seules les vignettes se voient.".into() } else { "Marie-louise retirée.".into() };
+        let on = a.marie;
+        // (Retenu d'une séance à l'autre : le même réglage que Préférences > Vignettes.)
+        self.settings.vignettes.passe_partout_cases = on;
+        self.settings_a_ecrire = true;
+        self.status = if on { "Passe-partout des cases : seules les vignettes se voient.".into() } else { "Passe-partout des cases retiré.".into() };
     }
 
     /// Demande de confirmation avant d'effacer toutes les annotations.
@@ -772,8 +776,12 @@ impl App {
             let apercu = a.boite.as_ref().filter(|g| g.change && g.handle != Handle::Pivot).map(|g| g.aff);
             let traces = &self.doc.annotations.traces;
             for i in self.doc.annotations.ordre_de_peinture() {
-                let Some(points) = self.doc.annotations.points_planche(layout, i) else { continue };
                 let t = &traces[i];
+                // (Le calque du dessin hors des cases est peint sous les cases, hors_cadres_peindre.)
+                if self.doc.annotations.calque(t.calque).is_some_and(|c| c.planche) {
+                    continue;
+                }
+                let Some(points) = self.doc.annotations.points_planche(layout, i) else { continue };
                 match apercu {
                     Some(aff) if a.selection.contains(&t.id) => crate::boardui::paint_note(painter, view, xf, &ann::transformee(&points, &aff), t.color),
                     _ => crate::boardui::paint_note(painter, view, xf, &points, t.color),
@@ -881,7 +889,10 @@ impl App {
             return;
         }
         let holes: Vec<Rect> = layout.cards.iter().map(|c| xf.rect(c.thumb)).collect();
-        let color = couleur32(self.vignettes.annot.marie_couleur);
+        // L'opacité du passe-partout des cases (barre du bas de la planche, Préférences > Vignettes) : 100 %, opaque (Anthony, 2026-10-30).
+        let [r, g, b] = self.vignettes.annot.marie_couleur;
+        let alpha = (f32::from(self.settings.vignettes.passe_partout_cases_opacite.min(100)) * 2.55).round() as u8;
+        let color = Color32::from_rgba_unmultiplied(r, g, b, alpha);
         for r in crate::marie::hors_des_cases(view, &holes) {
             painter.rect_filled(r, 0.0, color);
         }

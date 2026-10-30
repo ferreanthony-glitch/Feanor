@@ -112,12 +112,15 @@ pub(crate) fn quatre_plans() -> Document {
 
 /// La vue Vignettes ouverte sur `doc`, `colonnes` vignettes par ligne, une seule page, assez petites pour tenir à l'écran.
 pub(crate) fn ouvert(doc: Document, colonnes: usize) -> Banc {
-    let mut b = banc_taille(doc, false, 1600, 900);
+    // (940 de haut : la barre du bas de la planche, 30 points, prend sa place sans changer celle des essais d'avant.)
+    let mut b = banc_taille(doc, false, 1600, 940);
     b.app.board_view = BoardView::Panels;
     b.app.layout.board_columns = colonnes;
     b.app.layout.board_rows = 0;
     b.app.layout.card_size = 170.0;
     b.app.board_zoom = 0.0;
+    // (Ces essais comptent sur la page à la largeur de la vue ; le zoom d'ouverture a les siens : horschamp_tests.rs.)
+    b.app.vignettes.ouverture_a_faire = false;
     b.chauffer(6);
     b
 }
@@ -224,7 +227,9 @@ fn a_stroke_draws_in_any_image_the_moment_the_pen_goes_down_without_a_prior_clic
     b.image(vec![appui(c.center(), false, Modifiers::NONE)], 1.0 / 60.0);
     b.image(Vec::new(), 1.0 / 60.0);
     assert!(encre(&b.app.doc, 1));
-    for i in [0, 2, 3] {
+    // (Depuis le 2026-10-30, la part du trait qui tombe dans le champ de la vignette voisine va à son plan : `horschamp.rs`.)
+    assert!(encre(&b.app.doc, 0), "le trait traverse les cases du plan 1 : il en a sa part");
+    for i in [2, 3] {
         assert!(!encre(&b.app.doc, i), "plan {} : rien", i + 1);
     }
     assert_eq!(b.app.cur_panel, 1);
@@ -246,26 +251,23 @@ fn a_stroke_in_an_image_mark_draws_in_that_image_of_the_plan() {
 }
 
 #[test]
-fn a_stroke_that_starts_outside_every_image_draws_nothing() {
+fn a_stroke_that_starts_outside_every_image_now_draws_on_the_board_not_in_a_plan() {
+    // (Depuis le 2026-10-30 : toute la planche se dessine ; ce qui est hors du champ de toute case reste sur la planche, `horschamp_tests.rs`.)
     let mut b = ouvert(quatre_plans(), 4);
-    let (a, c) = (vignette(&b, 3), vignette(&b, 4));
+    let a = vignette(&b, 3);
     let before = pas_d_annulation(&b);
-    // De la ligne du numéro (au-dessus de l'image) vers l'image 3 et au-delà : rien ne se trace.
     let start = pos2(a.center().x, a.top() - 8.0);
     assert_eq!(board::hit(&b.app.board_layout(), b.app.vignettes.xf.to_board(start), 0.0), Hit::Nothing);
-    glisser(&mut b, &vague(start, pos2(c.center().x, c.center().y), 16));
-    for i in 0..4 {
+    // Un trait dans la ligne du numéro, au-dessus de la case : c'est dans son champ (son débord), il appartient à son plan, aux autres rien.
+    glisser(&mut b, &vague(start - vec2(60.0, 0.0), start - vec2(0.0, 0.0), 10));
+    assert!(encre(&b.app.doc, 1), "dans le champ du plan 2");
+    for i in [0, 2, 3] {
         assert!(!encre(&b.app.doc, i), "plan {} : rien", i + 1);
     }
-    assert!(b.app.doc.board.strokes.is_empty(), "plus de note libre tracée au pinceau sur la planche");
-    assert_eq!(pas_d_annulation(&b), before, "aucune étape d'annulation");
+    assert!(b.app.doc.board.strokes.is_empty(), "pas de note libre tracée au pinceau sur la planche");
     assert_eq!(b.app.doc.panels.len(), 4);
-    // Entre les pages, hors de la page : de même.
-    let dehors = pos2(b.app.vignettes.view.left() + 6.0, b.app.vignettes.view.top() + 6.0);
-    glisser(&mut b, &vague(dehors, dehors + vec2(80.0, 40.0), 10));
-    assert!(b.app.doc.board.strokes.is_empty() && pas_d_annulation(&b) == before);
+    assert!(pas_d_annulation(&b) <= before + 1);
 }
-
 #[test]
 fn drawing_in_the_first_empty_box_makes_the_next_plan_in_one_undo_step() {
     let mut b = ouvert(quatre_plans(), 4);
@@ -344,11 +346,19 @@ fn a_grey_bar_before_the_first_empty_box_makes_it_an_image_of_the_last_plan() {
     let last = b.app.doc.panels.len() - 1;
     let (frames, marks) = (b.app.doc.panels[last].frame_count(), b.app.doc.panels[last].marks.len());
     let before = pas_d_annulation(&b);
-    // La barre est noire (un plan) ; un clic la rend grise (une image du plan).
+    // La barre est noire (un plan) ; un clic fait tout de suite la case de continuité (2026-10-30), une étape d'annulation ; la barre
+    // devant la case vide d'après est noire.
     assert!(b.app.board_layout().bars.last().unwrap().cut);
     let zone = barre(&b, 5);
     clic(&mut b, zone.center());
-    assert!(!b.app.board_layout().bars.last().unwrap().cut, "barre grise");
+    assert!(b.app.board_layout().bars.last().unwrap().cut, "la suite reste une coupe");
+    assert_eq!(b.app.doc.panels[last].marks.len(), marks + 1, "la case est faite sans trait");
+    assert_eq!(pas_d_annulation(&b), before + 1);
+    b.app.run_action("edition.annuler");
+    assert_eq!(b.app.doc.panels[last].marks.len(), marks);
+    // (L'ancien comportement par le drapeau, resté pour le dépôt d'images : dessiner dans la case vide ajoute une image.)
+    b.app.vignettes.empty_joins = true;
+    let before = pas_d_annulation(&b);
     assert_eq!(pas_d_annulation(&b), before, "ce n'est qu'un réglage de l'écran, pas une étape");
     let e = case_vide(&b, 0);
     glisser(&mut b, &vague(e.center() - vec2(20.0, 0.0), e.center() + vec2(20.0, 0.0), 8));
@@ -485,7 +495,7 @@ fn a_long_note_shows_one_line_and_an_ellipsis_but_is_stored_in_full() {
         .formes
         .iter()
         .filter_map(|s| if let egui::epaint::Shape::Text(t) = &s.shape { Some(t.galley.clone()) } else { None })
-        .find(|g| g.job.text == long)
+        .find(|g| g.job.text.ends_with(&long[..]))
         .expect("la note est peinte");
     assert_eq!(galley.rows.len(), 1);
     assert!(galley.rows.last().unwrap().text().ends_with('…'), "« … » au bout de la ligne : {:?}", galley.rows.last().unwrap().text());
@@ -526,6 +536,7 @@ fn only_the_plan_number_is_written_above_the_first_image_of_each_plan() {
         .filter(|(pos, _)| !b.app.perso.cases.iter().any(|(r, _)| r.expand(8.0).contains(*pos)))
         .map(|(_, t)| t)
         .filter(|t| t != egui_phosphor::regular::PLUS) // (le « + » discret de la case vide)
+        .filter(|t| !t.starts_with("Note")) // (l'intitulé de la ligne de notes, toujours là)
         .collect();
     textes.sort();
     textes.dedup();

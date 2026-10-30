@@ -477,6 +477,8 @@ impl App {
             return false;
         }
         self.welcome = false;
+        // Les lignes de texte sous les cases d'un projet neuf : celles de Préférences > Vignettes (aucune d'origine), 2026-10-30.
+        self.layout.board_textes = self.settings.vignettes.textes_defaut;
         // Le projet neuf s'ouvre sur la page choisie dans les Préférences (les Vignettes, d'origine).
         self.set_espace(self.settings.new_project.ouvre_sur.espace());
         self.settings.new_project.values = values.clone();

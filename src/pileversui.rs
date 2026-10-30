@@ -60,8 +60,15 @@ impl App {
 
     /// L'étiquette de version d'une case de la planche des Vignettes : la même, en haut à droite de l'image `case` (écran). Le survol
     /// ouvre la même pile (`pile_versions_ui`), un clic sur une de ses cartes passe le plan à cette version (`passer_a_la_version`).
+    #[allow(dead_code)]
     pub(crate) fn peindre_etiquette_case(&self, painter: &egui::Painter, case: Rect, index: usize) -> Option<EtiquetteBloc> {
         self.peindre_etiquette_placee(painter, index, |texte| pilevers::placer_etiquette_coin(case, texte))
+    }
+
+    /// L'étiquette de version d'une case de la planche, **hors du cadre** (Anthony, 2026-10-30) : posée à gauche-centre en `at`, juste à
+    /// droite du numéro de plan, jamais sur l'image. Hauteur `haut` (suit le zoom de la planche).
+    pub(crate) fn peindre_etiquette_hors_cadre(&self, painter: &egui::Painter, at: egui::Pos2, haut: f32, index: usize) -> Option<EtiquetteBloc> {
+        self.peindre_etiquette_placee(painter, index, |texte| Etiquette::Texte(Rect::from_min_size(pos2(at.x, at.y - haut / 2.0), vec2(texte + 10.0, haut))))
     }
 
     /// L'étiquette du plan `index` (rien s'il n'a qu'une version), posée là où `place` (largeur du texte « V2 ») la met.

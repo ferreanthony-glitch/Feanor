@@ -316,7 +316,8 @@ impl App {
                     let debut = d.panels.get(ia)?.frame_count();
                     let i = d.join_next_plan_with(ia, opts)?;
                     // La case de droite devient une clé de dessin de plus sur chaque calque du plan (`cases.rs`).
-                    d.cles_de_case(i, debut);
+                    // Une case sans dessin à elle montre tout de suite celui de la précédente (copie, `cles_de_case_heritees`).
+                    d.cles_de_case_heritees(i, debut);
                     Some(i)
                 });
                 if ok {

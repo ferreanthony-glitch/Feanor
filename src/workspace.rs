@@ -104,7 +104,8 @@ impl Default for Layout {
             board_scene_breaks: false,
             board_attach: false,
             board_sens: Default::default(),
-            board_textes: Default::default(),
+            // (Aucune ligne de texte d'origine, Anthony, 2026-10-30 ; le choix déjà enregistré dans le fichier des réglages reste.)
+            board_textes: crate::boardsens::Textes::aucun(),
             safe_frames: false,
             frame_format: None,
             character_bar: None,
