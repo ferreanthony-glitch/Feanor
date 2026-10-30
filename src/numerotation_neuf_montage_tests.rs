@@ -261,3 +261,33 @@ fn the_track_buttons_stay_legible_at_every_height() {
         assert!(m.top() >= lane.top() + 13.0, "{t:?} : sous le nom");
     }
 }
+
+/// Captures du montage agrandi et réduit (à regarder) :
+/// `SHOT_CAPTURE_DIR=… SHOT_CAPTURE_PROJET=<fichier .pelure d'une copie> cargo test --release --offline --target-dir target\msvc montage_capture -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn montage_capture() {
+    let dir = std::env::var_os("SHOT_CAPTURE_DIR").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
+    let doc = match std::env::var_os("SHOT_CAPTURE_PROJET") {
+        Some(p) => crate::project::load(std::path::Path::new(&p)).expect("projet").doc,
+        None => Document::new(400, 300, 24),
+    };
+    let mut b = crate::perf_tests::banc_taille(doc, true, 1920, 1080);
+    b.chauffer(8);
+    if b.app.doc.audio_tracks.len() < 2 {
+        b.app.new_audio_track();
+        b.app.new_audio_track();
+    }
+    for (nom, part) in [("montage-agrandi", 0.42_f32), ("montage-reduit", 0.80)] {
+        let mut l = b.app.dock_layout();
+        if let crate::dock::DockNode::Column { part: p, .. } = &mut l.principal {
+            *p = part;
+        }
+        b.app.set_dock_layout(l);
+        b.chauffer(12);
+        let Some(rgba) = b.capturer() else { return println!("pas de carte graphique") };
+        let f = dir.join(format!("{nom}.png"));
+        image::save_buffer(&f, &rgba, 1920, 1080, image::ColorType::Rgba8).expect("png");
+        println!("CAPTURE {}", f.display());
+    }
+}
