@@ -141,7 +141,10 @@ pub fn construire(doc: &Document, plans: &[usize], depart: i64, etats: Option<&H
             Ligne {
                 panel: p,
                 episode: doc.properties.episode.trim().to_string(),
-                sequence: doc.sequence_label(doc.sequence_of(p)),
+                sequence: match doc.sequences.iter().find(|s| s.id == doc.sequence_of(p)) {
+                    Some(s) if !s.name.trim().is_empty() => s.name.trim().to_string(),
+                    _ => doc.sequence_ref(doc.sequence_of(p)),
+                },
                 plan: nom,
                 description: panel.action.trim().to_string(),
                 dialogue: panel.dialogue.trim().to_string(),

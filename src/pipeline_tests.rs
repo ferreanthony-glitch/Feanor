@@ -493,3 +493,94 @@ fn an_old_project_is_read_identically_and_a_new_one_keeps_the_production_fields(
     assert_eq!(l.doc.nom_de_plan(0), "Brawlidays_001");
     std::fs::remove_dir_all(&dir).ok();
 }
+
+// ----------------------------------------------------------------------------------------------- fenêtres
+
+fn app_de(doc: Document, nom: &str) -> (eframe::egui::Context, crate::app::App, PathBuf) {
+    let dir = dossier_neuf(nom);
+    crate::donnees::bac_a_sable(&dir);
+    let ctx = eframe::egui::Context::default();
+    let mut app = crate::app::App::sans_fenetre(&ctx, None);
+    app.welcome = false;
+    app.doc = doc;
+    app.cur_panel = 0;
+    (ctx, app, dir)
+}
+
+fn image(ctx: &eframe::egui::Context, app: &mut crate::app::App) {
+    let input = eframe::egui::RawInput { screen_rect: Some(eframe::egui::Rect::from_min_size(eframe::egui::pos2(0.0, 0.0), eframe::egui::vec2(1280.0, 900.0))), time: Some(0.0), ..Default::default() };
+    let _ = ctx.run(input, |ctx| {
+        app.noms_window(ctx);
+        app.liste_plans_window(ctx);
+        app.paquet_window(ctx);
+        app.modele_episode_window(ctx);
+        app.export_hub_window(ctx);
+    });
+}
+
+#[test]
+fn the_four_new_windows_open_and_draw_from_their_commands() {
+    let (ctx, mut app, dir) = app_de(film_textes(), "fenetres");
+    for action in ["projet.noms_production", "fichier.exporter_liste_plans", "fichier.exporter_paquet", "projet.enregistrer_modele_episode"] {
+        app.run_action(action);
+    }
+    assert!(app.noms_fenetre.is_some() && app.liste_plans.is_some() && app.paquet.is_some() && app.modele_episode.is_some());
+    for _ in 0..3 {
+        image(&ctx, &mut app);
+    }
+    // Le modèle de noms se change aussi par la fenêtre : une étape d'annulation, et les exports suivent.
+    app.doc.properties.modele_noms = "{plan:03}".into();
+    image(&ctx, &mut app);
+    assert_eq!(crate::editorial::clip_name(&app.doc, 0), "001");
+    // Le hub montre les nouvelles entrées.
+    app.export_hub = true;
+    image(&ctx, &mut app);
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_new_episode_from_a_template_is_created_from_the_new_project_form() {
+    let (ctx, mut app, dir) = app_de(film_textes(), "nouvel-episode");
+    let _ = &ctx;
+    let m = modeleepisode::depuis(&app.doc, &app.settings, "Type");
+    modeleepisode::enregistrer(&m).unwrap();
+    let mut d = crate::nouveauui::NewDocDialog::open(&app.settings.new_project);
+    d.name = "EP3".into();
+    d.folder = dir.clone();
+    d.modele = Some(modeleepisode::charger("Type").unwrap());
+    d.episode = "3".into();
+    d.values = d.modele.as_ref().unwrap().valeurs(&d.values);
+    assert!(app.create_project(&d));
+    assert_eq!(app.doc.properties.episode, "3");
+    assert_eq!(app.doc.properties.serie, "Brawlidays");
+    assert_eq!(app.doc.frame, [64, 36]);
+    assert_eq!(app.doc.panels.len(), 1, "un seul plan vide : rien n'est repris des dessins");
+    assert!(app.doc.numbering_locked);
+    assert!(dir.join("EP3").is_dir() || dir.join("EP3").with_extension("shot").exists() || fichiers_de(&dir).iter().any(|p| p.extension().is_some_and(|e| e == "shot")));
+    std::fs::remove_dir_all(&dir).ok();
+}
+/// Produit les exemples du rapport (`SHOT_EXEMPLES` : dossier de sortie, `SHOT_PROJET_ESSAI` : le manifeste d'une copie du projet d'essai).
+#[test]
+#[ignore]
+fn exemples_pour_le_rapport() {
+    let (Some(out), Some(src)) = (std::env::var_os("SHOT_EXEMPLES"), std::env::var_os("SHOT_PROJET_ESSAI")) else { return };
+    let out = PathBuf::from(out);
+    let mut doc = crate::project::load(Path::new(&src)).expect("projet d'essai").doc;
+    doc.properties.serie = "Essai effets".into();
+    doc.properties.episode = "1".into();
+    doc.properties.modele_noms = crate::nommage::MODELES_PRETS[1].1.into();
+    let plans: Vec<usize> = (0..doc.panels.len()).collect();
+    for (profil, nom) in [(Profil::Kitsu, "kitsu"), (Profil::Generique, "generique")] {
+        let l = listeplans::construire(&doc, &plans, 1001, None, true);
+        std::fs::write(out.join(format!("liste_plans_{nom}.csv")), listeplans::csv(&l, profil, Separateur::Virgule)).unwrap();
+        std::fs::write(out.join(format!("liste_plans_{nom}.json")), listeplans::json(&doc, &l, profil, 1001)).unwrap();
+    }
+    let ff = ffmpeg_ou_saute("exemple de paquet");
+    let r = PaquetReglages { liste_json: true, videos: ff.is_some(), animatique: ff.is_some(), ..PaquetReglages::default() };
+    let dest = out.join("paquet");
+    std::fs::create_dir_all(&dest).unwrap();
+    let mut job = PaquetJob::start(&doc, &r, 0, ff, &dest, Vec::new()).unwrap();
+    courir(&mut job, &doc);
+    let rap = job.outcome.take().unwrap().expect("paquet");
+    println!("PAQUET {} ({} fichiers, {} octets)", rap.racine.display(), rap.fichiers, rap.octets);
+}
