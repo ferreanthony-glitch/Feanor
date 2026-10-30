@@ -63,6 +63,8 @@ pub const MAX_POINTS: usize = 3000;
 pub const MAX_CALQUES: usize = 64;
 /// Nom du premier calque d'annotation (et de celui que donne la lecture d'un ancien fichier).
 pub const NOM_PAR_DEFAUT: &str = "Annotations";
+/// Nom du calque du dessin hors des cases.
+pub const NOM_HORS_CADRES: &str = "Hors cadres";
 /// Rouge d'origine du stylo, et sa taille (points de la planche, pour une case de largeur normale).
 pub const COULEUR_PAR_DEFAUT: [u8; 3] = [220, 38, 38];
 pub const TAILLE_PAR_DEFAUT: f32 = 5.0;
@@ -97,25 +99,33 @@ pub struct Trace {
     pub calque: u64,
     pub anchor: Ancre,
     pub color: [u8; 3],
+    /// Opacité (255 : plein). Un trait d'annotation est plein ; un trait du dessin hors des cases garde l'opacité du pinceau.
+    pub alpha: u8,
     /// Points relatifs au coin haut gauche de l'image de la case, en largeurs d'image (rayon compris).
     pub points: Vec<VPoint>,
 }
 
 impl Trace {
     pub fn new(calque: u64, anchor: Ancre, color: [u8; 3], points: Vec<VPoint>) -> Trace {
-        Trace { id: PROCHAIN_TRAIT.fetch_add(1, Ordering::Relaxed), calque, anchor, color, points }
+        Trace { id: PROCHAIN_TRAIT.fetch_add(1, Ordering::Relaxed), calque, anchor, color, alpha: 255, points }
+    }
+
+    /// Le même trait, à l'opacité `alpha`.
+    pub fn avec_alpha(mut self, alpha: u8) -> Trace {
+        self.alpha = alpha;
+        self
     }
 }
 
 impl PartialEq for Trace {
     fn eq(&self, o: &Trace) -> bool {
-        self.calque == o.calque && self.anchor == o.anchor && self.color == o.color && self.points == o.points
+        self.calque == o.calque && self.anchor == o.anchor && self.color == o.color && self.alpha == o.alpha && self.points == o.points
     }
 }
 
 impl std::fmt::Debug for Trace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Trace").field("calque", &self.calque).field("anchor", &self.anchor).field("color", &self.color).field("points", &self.points).finish()
+        f.debug_struct("Trace").field("calque", &self.calque).field("anchor", &self.anchor).field("color", &self.color).field("alpha", &self.alpha).field("points", &self.points).finish()
     }
 }
 
@@ -128,6 +138,9 @@ pub struct Calque {
     pub nom: String,
     /// Montré ou caché (un affichage : rien n'est effacé).
     pub visible: bool,
+    /// Le calque du dessin hors des cases (Anthony, 2026-10-30) : ce qui est tracé sur la planche hors du champ de toute case et qui
+    /// n'appartient à aucun plan. Il sort dans l'export de la planche même sans l'option des annotations, et jamais ailleurs.
+    pub planche: bool,
 }
 
 /// Les annotations d'un projet.
@@ -201,7 +214,7 @@ impl Annotations {
 
     /// Ni trait, ni calque que l'utilisateur aurait nommé, caché ou multiplié : le projet n'a pas besoin de `annotations.json`.
     pub fn rien_a_ecrire(&self) -> bool {
-        self.traces.is_empty() && self.calques.iter().all(|c| c.nom == NOM_PAR_DEFAUT && c.visible) && self.calques.len() <= 1
+        self.traces.is_empty() && self.calques.iter().all(|c| c.nom == NOM_PAR_DEFAUT && c.visible && !c.planche) && self.calques.len() <= 1
     }
 
     // ------------------------------------------------------------------ les calques
@@ -231,8 +244,38 @@ impl Annotations {
         }
         let id = self.id_libre();
         let nom = self.nom_libre();
-        self.calques.push(Calque { id, nom, visible: true });
+        self.calques.push(Calque { id, nom, visible: true, planche: false });
         Some(id)
+    }
+
+    /// Le calque du dessin hors des cases (« Hors cadres »), créé au besoin, tout en bas de la liste (les annotations restent dessus).
+    pub fn calque_hors_cadres(&mut self) -> u64 {
+        if let Some(c) = self.calques.iter().find(|c| c.planche) {
+            return c.id;
+        }
+        let id = self.id_libre();
+        self.calques.insert(0, Calque { id, nom: NOM_HORS_CADRES.to_string(), visible: true, planche: true });
+        id
+    }
+
+    /// L'identifiant du calque du dessin hors des cases, s'il existe.
+    pub fn id_hors_cadres(&self) -> Option<u64> {
+        self.calques.iter().find(|c| c.planche).map(|c| c.id)
+    }
+
+    /// Ajoute un trait du dessin hors des cases : points en coordonnées de la planche, attaché à la case la plus proche de son centre,
+    /// avec sa couleur et son opacité. Vrai si le trait est gardé.
+    pub fn ajouter_hors_cadres(&mut self, layout: &BoardLayout, points: &[VPoint], color: [u8; 3], alpha: u8) -> bool {
+        if points.is_empty() || self.traces.len() >= MAX_TRACES || points.iter().any(|p| !(p.x.is_finite() && p.y.is_finite() && p.r.is_finite())) {
+            return false;
+        }
+        let Some(c) = centre(points) else { return false };
+        let Some((rank, r)) = case_proche(layout, c) else { return false };
+        let Some(anchor) = ancre_du_rang(layout, rank) else { return false };
+        let points: Vec<VPoint> = reduire(points, MAX_POINTS).iter().map(|p| relatif(p, r)).collect();
+        let calque = self.calque_hors_cadres();
+        self.traces.push(Trace::new(calque, anchor, color, points).avec_alpha(alpha));
+        true
     }
 
     /// Le calque `voulu` s'il existe ; sinon le premier ; sinon un calque « Annotations », créé.
@@ -611,11 +654,22 @@ pub fn epurer(points: &[VPoint], eps: f32) -> Vec<VPoint> {
 struct TraceFichier {
     ancre: Ancre,
     couleur: [u8; 3],
+    /// Opacité ; absente : pleine (les fichiers d'avant).
+    #[serde(default = "opaque", skip_serializing_if = "est_opaque")]
+    alpha: u8,
     points: Vec<[f32; 3]>,
 }
 
 fn vrai() -> bool {
     true
+}
+
+fn opaque() -> u8 {
+    255
+}
+
+fn est_opaque(a: &u8) -> bool {
+    *a == 255
 }
 
 /// Un calque dans le fichier (version 2) : son identifiant, son nom, son œil, ses traits dans l'ordre où ils ont été posés.
@@ -625,6 +679,9 @@ struct CalqueFichier {
     nom: String,
     #[serde(default = "vrai")]
     visible: bool,
+    /// Le calque du dessin hors des cases (absent : un calque d'annotation ordinaire).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    planche: bool,
     #[serde(default)]
     traces: Vec<TraceFichier>,
 }
@@ -672,10 +729,10 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
                 .iter()
                 .filter(|t| t.calque == c.id)
                 .take(restant)
-                .map(|t| TraceFichier { ancre: t.anchor, couleur: t.color, points: t.points.iter().take(MAX_POINTS).map(|p| [arrondi(p.x), arrondi(p.y), arrondi(p.r)]).collect() })
+                .map(|t| TraceFichier { ancre: t.anchor, couleur: t.color, alpha: t.alpha, points: t.points.iter().take(MAX_POINTS).map(|p| [arrondi(p.x), arrondi(p.y), arrondi(p.r)]).collect() })
                 .collect();
             restant -= traces.len();
-            CalqueFichier { id: c.id, nom: c.nom.clone(), visible: c.visible, traces }
+            CalqueFichier { id: c.id, nom: c.nom.clone(), visible: c.visible, planche: c.planche, traces }
         })
         .collect();
     let f = Fichier { format: FORMAT.into(), version: VERSION, traces: Vec::new(), calques };
@@ -685,7 +742,7 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
 /// Un trait lu dans le fichier : écarté s'il n'a aucun point ; un point qui n'est pas un nombre fini est écarté, le rayon est borné.
 fn trace_lue(t: TraceFichier, calque: u64) -> Option<Trace> {
     let points: Vec<VPoint> = t.points.into_iter().take(MAX_POINTS).filter(|p| p.iter().all(|v| v.is_finite())).map(|[x, y, r]| VPoint { x, y, r: r.clamp(1e-5, 50.0) }).collect();
-    (!points.is_empty()).then(|| Trace::new(calque, t.ancre, t.couleur, points))
+    (!points.is_empty()).then(|| Trace::new(calque, t.ancre, t.couleur, points).avec_alpha(t.alpha))
 }
 
 /// Les annotations lues dans le texte de `annotations.json` (version 1 : un seul calque, « Annotations » ; version 2 : ses calques). Les
@@ -717,7 +774,7 @@ pub(crate) fn parse(text: &str) -> Result<Annotations, String> {
             c.id
         };
         let nom = if c.nom.trim().is_empty() { NOM_PAR_DEFAUT.to_string() } else { c.nom.trim().chars().take(60).collect() };
-        a.calques.push(Calque { id, nom, visible: c.visible });
+        a.calques.push(Calque { id, nom, visible: c.visible, planche: c.planche && a.calques.iter().all(|k| !k.planche) });
         let room = MAX_TRACES.saturating_sub(a.traces.len());
         a.traces.extend(c.traces.into_iter().filter_map(|t| trace_lue(t, id)).take(room));
     }

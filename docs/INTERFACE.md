@@ -5979,3 +5979,92 @@ essais d'accueil d'avant (grandes entrées, logo qui rapetisse, fenêtre « Nouv
 
 **Reste** : le tirage de l'image d'accueil se fait à chaque apparition de l'accueil (inchangé). Les clics dans la vraie fenêtre (taille fixe, centrage sur
 plusieurs écrans, Windows à 150 %) ne sont vérifiés que par les captures de la branche, pas par les essais.
+
+## 76. Vignettes : continuité tout de suite, tout le papier dessinable, numéros lisibles, plus de réglages (2026-10-30, branche `vignettes-ajustements`)
+
+Demande d'Anthony du 2026-10-30, point par point. Fichiers : `horschamp.rs` (le champ d'une case, la répartition d'un trait), `vignettesprefs.rs` (les trois groupes des
+Préférences, le zoom d'ouverture, la barre du bas), `vignettesreglages.rs` (les réglages), `boardui.rs`, `cases.rs`, `fusionnoms.rs`, `annotations.rs`, `planche.rs`. Essais :
+`horschamp_tests.rs` (15) et ceux de `vignettes_tests.rs`, `cases_tests.rs`, `boardjapon_tests.rs`, `boardtextes_tests.rs` mis à jour.
+
+### 1 et 2. La continuité s'affiche tout de suite, et ne se propage pas
+
+- **Cause de la cascade** : la barre devant la première case vide ne faisait que lever un drapeau (`Vignettes::empty_joins`) ; il restait levé après le premier trait, si bien
+  que la case vide suivante se faisait aussi image du plan, et ainsi de suite. Et la case n'existait (et ne montrait le dessin d'avant) qu'au premier trait.
+- **Maintenant** : un clic sur cette barre **fait la case tout de suite** (« Continuité avec le plan précédent », une étape d'annulation) : une image de plus du dernier plan, avec
+  **la copie du dessin de l'image d'avant** sur chaque calque de dessin (décor compris). **Rien d'autre ne change** : la case vide d'après est une coupe, comme toute case vide ; dessiner
+  dedans fait un plan neuf. Le drapeau retombe dès qu'une case est faite (aussi par le trait dans la case vide), ce qui supprime la cascade.
+- **Réunir deux plans par la barre noire** : la case de droite qui n'a rien dessiné sur un calque (pas de dessin, ou un dessin sans trait) reçoit **une copie du dessin de la case
+  d'avant** (`Document::cles_de_case_heritees`) ; une case qui a déjà du dessin à elle le garde (rien n'est perdu). Décocher ou recocher une barre ne touche que cette barre
+  (déjà le cas pour les barres entre deux cases existantes ; essais dans les deux sens).
+- **À l'ouverture d'un projet et après annuler / rétablir** : l'image montrée vient des dessins du projet, pas d'un calcul à l'écran ; la copie est faite dans le projet à l'instant
+  de la continuité, donc elle est là à la réouverture et revient avec l'annulation. Un projet déjà enregistré dont une case de continuité est vide reste tel quel (ses pixels ne changent pas).
+  Le calcul est une copie de dessin (instantanée) : aucun fil de fond n'était nécessaire.
+
+### 3. Toute la planche se dessine
+
+- **Le champ d'une case** : son image plus le débord de Préférences > Vignettes (12 % de sa largeur) ; pour une case de mouvement de caméra, la tuile de son empreinte.
+- **Partir de n'importe où** : un trait de pinceau, de crayon, de ligne, de rectangle, d'ellipse, de courbe ou de polyligne peut commencer entre les cases, autour, sous une barre. Il se
+  trace dans le dessin de **la case la plus proche** (plan courant le temps du geste) ; pendant le geste l'aperçu est celui de toujours (le trait déborde, pâle). Aucune latence ajoutée :
+  le partage se fait **au lâcher** (`App::horschamp_partager`, en fin d'image d'écran).
+- **Au lâcher**, le trait est réparti : sa partie dans le champ de sa case reste dans le dessin ; sa partie dans le champ d'une autre case va au dessin de cette case (calque de même
+  nom, sinon de même sorte, ni verrouillé ni masqué ; même caméra et même taille de case, sinon la partie reste sur la planche) ; **le reste est sur la planche**, dans un calque
+  d'annotation de la planche qui porte la marque `planche` et le nom « **Hors cadres** » (`Annotations::calque_hors_cadres`, tout en bas de la liste des calques de la planche, avec son œil).
+  Là où deux champs se recouvrent (leurs marges), le point va à la case d'où le trait est parti, sinon à la première dans l'ordre de lecture : jamais deux fois. **Une seule étape
+  d'annulation** pour tout le trait. Un trait qui reste dans son champ ne coûte rien de plus.
+- **Ce que devient le trait hors champ** : un trait vectoriel de la planche (couleur, opacité et épaisseur du trait d'origine, **sans la texture du pinceau**), enregistré dans
+  `annotations.json` (le calque porte `"planche": true`, chaque trait son `alpha` ; un fichier d'avant se lit comme avant, une version d'avant l'ouvrirait comme un calque d'annotation
+  ordinaire sans rien perdre). Il est **dans l'export de la planche** (PNG, JPEG, PDF), même sans « Avec les annotations » ; **dans aucun plan** : ni la vignette, ni l'animatique, ni le film,
+  ni le storyboard en PDF. Il est peint **sous les cases** (ce qui déborde dans une case ne la recouvre pas).
+- **Calques bitmap** : le trait est coupé au pixel : ce qui sort du champ de la case est rendu au dessin tel qu'il était ; ce qui tombe dans le champ d'une case voisine est posé dans son
+  dessin (décalé de la distance entre les deux cases, au pixel près) ; le reste va sur la planche d'après la ligne médiane du trait. **Calques vectoriels** : le trait est coupé en
+  tronçons (chacun garde sa pression et ses instants) à la limite des champs. **Formes sur un calque bitmap** : non réparties (elles restent dans la case, comme avant). Un trait posé « sous
+  les autres » (« Peint sur l'aplat ») n'est pas réparti non plus.
+- **Gomme** : dans une case, elle agit sur le plan, dans son champ. Hors de toute case, elle efface les traits du calque « Hors cadres » qu'elle touche (le trait entier, comme la gomme
+  d'annotation). **Pot de peinture** : seulement dans une case. **Sélection, lasso, texte** : inchangés.
+
+### 4, 5 et 6. Numéros, pastille de version, lignes de texte
+
+- **Numéros de plan** : taille proportionnelle au zoom de la planche, **bornée entre 15 et 72 points d'écran** (à 100 %) : lisible de très loin (avant : 9 points à six cases par rangée) comme de
+  très près ; un fond clair arrondi derrière (réglable). Taille réglable : Préférences > Vignettes > Numéros et textes (50 à 300 %).
+- **Pastille de version** (« V2 ») : **hors du cadre**, juste à droite du numéro, jamais sur l'image ; elle ouvre la même pile des versions. Réglable (éteignable).
+- **Notes, Action, Dialogue** : décochés d'office (`Textes::default`), pour les nouveaux réglages ; le choix déjà enregistré dans `reglages.toml` n'est pas changé. Une ligne cochée est
+  **toujours visible, même vide** : son intitulé (« Note », « Action », « Dialogue ») dans sa couleur, et un filet de cette couleur dessous. Trois lignes si les trois sont cochées. (L'export de la
+  planche garde ses intitulés d'avant : seulement quand plusieurs champs sont montrés.)
+
+### 7. Nouveaux réglages (Préférences > Vignettes)
+
+Groupe **Numéros et textes** : taille des numéros (50 à 300 %), fond clair derrière les numéros, pastille de version, afficher la durée du plan (« 2+05 »), lignes de texte d'un projet neuf
+(aucune d'origine), couleur des trois lignes. Groupe **Aspect des cases** : épaisseur du filet (0,5 à 6 points), couleur du filet (gris d'origine), opacité du dessin hors des cases (100 %),
+passe-partout des cases (allumé, opacité). Groupe **À l'ouverture** : cases par rangée × rangées visibles (6 × 2). « Rétablir les réglages des Vignettes » les remet tous. (L'espacement entre cases
+n'a pas été ajouté : il dépend de la mise en page de `board.rs`, trop liée aux autres chantiers.)
+
+### 8. Zoom d'ouverture
+
+À l'ouverture ou à la création d'un projet (`App::load_doc`), la planche montre **6 cases par rangée sur 2 rangées**, textes compris, cadrées sur le haut de la planche ou sur la rangée du
+plan courant s'il est plus loin (`vignettesprefs::ouverture_cadre`). Tant que personne n'a touché au zoom ni au défilement, le cadrage suit la vue (les panneaux se rangent pendant les premières
+images). Changer d'espace et revenir ne recadre pas.
+
+### 10 et 11. Passe-partout des cases, barre du bas
+
+- **Barre du bas de la planche** (30 points, comme sous le dessin) : l'interrupteur du passe-partout des cases (icône du passe-partout de la caméra ; commande `vignettes.marie_louise`, avec son
+  raccourci assignable) et son **opacité** (curseur, 100 % d'origine) ; le zoom de la planche (icône de loupe : pourcentage, plus, moins, « Cadrer tout », « 6 × 2 ») et, à droite, les boutons
+  « 6 × 2 » et « Cadrer tout ». État et opacité sont retenus dans les réglages de l'application (Préférences > Vignettes > Aspect des cases les montre).
+- **Passe-partout des cases** : c'est la « marie-louise » d'avant (voile opaque hors des cases), maintenant avec opacité réglable. **Réservé à l'affichage** : il ne change ni le dessin ni les
+  plans ni les exports (l'export de la planche a toujours sa propre case « Marie-louise »). Il cache le dessin hors champ quand il est allumé. Comme le passe-partout de la caméra (§47),
+  l'état et l'opacité sont retenus ; sa couleur reste le noir d'origine (celle de la caméra est dans Préférences > Dessin).
+- **Rotation du canevas : pas faite dans la vue Vignettes.** La planche est une grande mise en page à rectangles alignés (toucher des cases, barres, notes, cadrage, tuiles) ; la tourner demande de
+  refaire tout le passage écran ↔ planche, ce qui touche chaque module de la vue. Plutôt qu'un bouton qui dessinerait de travers, rien n'a été ajouté. À décider avec toi.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Dessine dans la dernière case, puis clique la barre devant la première case vide : la case apparaît **aussitôt avec ton dessin**, sans trait ; la case vide d'après est toujours en coupe (barre noire).
+   Ctrl+Z défait la case. Réunis deux plans par la barre noire : la case de droite montre le dessin de gauche ; décoche / recoche : seule cette barre change.
+2. Dessine **hors des cases** (entre elles, autour, à gauche de la page) : le trait reste, pâle pendant le geste, puis plein, sous les cases. Il n'est dans aucun plan (ouvre le plan : rien).
+   Enregistre, ferme, rouvre : il est là. Exporte la planche : il y est. Exporte le film ou le PDF du storyboard : il n'y est pas.
+3. Un trait qui part d'une case et sort : sa part dans la case reste dans le plan, le reste est sur la planche ; **un seul Ctrl+Z** défait tout. Un trait qui traverse deux cases voisines : chaque plan a sa part.
+4. La gomme hors des cases efface le trait de la planche ; dans une case, elle efface le plan.
+5. Les numéros de plan sont gros et lisibles à six cases par rangée comme en zoomant ; Préférences > Vignettes > Numéros et textes règle leur taille. La pastille « V2 » est à côté du numéro, hors de l'image.
+6. Coche Note, Action, Dialogue (panneau Vignettes) : trois lignes sous chaque case, chacune avec son intitulé et sa couleur, même vides. Décochées d'origine pour un nouvel utilisateur.
+7. Ferme et rouvre un projet : la planche s'ouvre sur deux rangées de six cases (réglable). Reviens d'un autre espace : le zoom ne bouge pas. Le bouton « 6 × 2 » de la barre du bas recadre.
+8. Barre du bas : le passe-partout des cases (icône, opacité) cache tout ce qui est hors des cases ; l'état est retenu à la prochaine séance. Le zoom : pourcentage, cadrer tout.
+9. Ouvre un projet existant : les plans ont les mêmes pixels qu'avant.

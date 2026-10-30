@@ -99,13 +99,19 @@ pub struct Textes {
 }
 
 impl Default for Textes {
-    /// Les notes seules : ce qui se voyait avant le panneau.
+    /// Les notes seules : la valeur de la mise en page (`board::Options`, export) quand rien n'est demandé. Le réglage de l'application, lui,
+    /// n'a aucun champ coché d'origine depuis le 2026-10-30 (`Textes::aucun`, `Layout::default`).
     fn default() -> Self {
         Textes { action: false, dialogue: false, notes: true }
     }
 }
 
 impl Textes {
+    /// Aucun champ : la planche n'est que du dessin tant qu'on n'a pas coché Action, Dialogue ou Notes (Anthony, 2026-10-30).
+    pub fn aucun() -> Textes {
+        Textes { action: false, dialogue: false, notes: false }
+    }
+
     pub fn montre(self, c: Champ) -> bool {
         match c {
             Champ::Action => self.action,

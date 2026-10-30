@@ -243,8 +243,15 @@ pub fn construire(doc: &Document, plans: &[usize], s: &BoardSettings, opt: &Opti
         })
         .collect();
     let mut cadre = layout.pages.iter().fold(Rect::NOTHING, |r, p| r.union(*p));
-    let annotations = if opt.annotations { annotations.clone() } else { Annotations::default() };
-    if opt.annotations && !opt.marie {
+    // Le dessin hors des cases (calque « Hors cadres ») sort toujours dans la planche ; les autres annotations, si on le demande.
+    let annotations = if opt.annotations {
+        annotations.clone()
+    } else {
+        let planche: Vec<_> = annotations.calques.iter().filter(|c| c.planche).cloned().collect();
+        let traces = annotations.traces.iter().filter(|t| planche.iter().any(|c| c.id == t.calque)).cloned().collect();
+        Annotations { calques: planche, traces }
+    };
+    if (opt.annotations || !annotations.traces.is_empty()) && !opt.marie {
         if let Some(e) = annotations.etendue(&layout) {
             // (Ce qui déborde des pages se voit, dans une limite raisonnable.)
             cadre = cadre.union(e.expand(4.0).intersect(cadre.expand(cadre.width().max(cadre.height()) * 0.5)));
@@ -339,7 +346,12 @@ pub(crate) fn ecrire(pix: &mut Pixmap, texte: &str, x: f32, y: f32, taille: f32,
 
 /// Un trait d'annotation (points déjà en pixels, rayons compris) : des segments à bouts ronds.
 pub(crate) fn trait_rond(pix: &mut Pixmap, pts: &[(f32, f32, f32)], c: [u8; 3]) {
-    let paint = peinture(c, 255);
+    trait_rond_a(pix, pts, c, 255);
+}
+
+/// `trait_rond` à l'opacité `alpha` (le dessin hors des cases garde celle du pinceau).
+pub(crate) fn trait_rond_a(pix: &mut Pixmap, pts: &[(f32, f32, f32)], c: [u8; 3], alpha: u8) {
+    let paint = peinture(c, alpha);
     match pts {
         [] => {}
         [(x, y, r)] => {
@@ -390,6 +402,16 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
                 remplir(&mut pix, [cx - largeur / 2, r[1], cx - largeur / 2 + largeur, r[3]], couleur);
             }
         }
+    }
+    // Le dessin hors des cases, sous les cases (comme sur l'écran).
+    for i in p.annotations.ordre_de_peinture() {
+        let t = &p.annotations.traces[i];
+        if !p.annotations.calque(t.calque).is_some_and(|c| c.planche) {
+            continue;
+        }
+        let Some(pts) = p.annotations.points_planche(&p.layout, i) else { continue };
+        let px: Vec<(f32, f32, f32)> = pts.iter().map(|q| ((q.x - p.cadre.left()) * s, (q.y - p.cadre.top()) * s, q.r * s)).collect();
+        trait_rond_a(&mut pix, &px, t.color, t.alpha);
     }
     for (k, c) in p.cartes.iter().enumerate() {
         let r = rect_px(c.place.thumb, p.cadre, s);
@@ -474,6 +496,9 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
     // Les annotations, par-dessus tout : calque par calque, du plus bas au plus haut (un calque caché n'y est pas).
     if opt.annotations {
         for i in p.annotations.ordre_de_peinture() {
+            if p.annotations.calque(p.annotations.traces[i].calque).is_some_and(|c| c.planche) {
+                continue;
+            }
             let Some(pts) = p.annotations.points_planche(&p.layout, i) else { continue };
             let px: Vec<(f32, f32, f32)> = pts.iter().map(|q| ((q.x - p.cadre.left()) * s, (q.y - p.cadre.top()) * s, q.r * s)).collect();
             trait_rond(&mut pix, &px, p.annotations.traces[i].color);

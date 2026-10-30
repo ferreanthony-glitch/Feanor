@@ -158,7 +158,7 @@ fn uniting_two_plans_on_the_board_puts_a_key_at_the_start_of_the_right_case_and_
     let frames = dessin_de(&b, 0, &nom);
     let cle = frames[a_len].expect("une clé à l'image de la case de droite");
     assert_ne!(cle, x);
-    assert!(!a_de_l_encre(&b.app.doc, cle), "vide : la case de droite était vide");
+    assert!(a_de_l_encre(&b.app.doc, cle), "la case de droite était vide : elle montre tout de suite le dessin de la précédente (copie)");
     assert_eq!(frames[a_len - 1], Some(x));
     // Dessiner dans la case de droite ne change pas celle de gauche.
     let gauche_avant = b.app.doc.cels[&x].raster.clone();

@@ -226,6 +226,30 @@ pub(crate) struct Vignettes {
     /// Les étiquettes de version (« V2 ») posées à cette image d'écran sur les cases des plans qui ont plusieurs versions : leur zone
     /// et leur plan. La pile des versions s'y accroche (`pileversui.rs`, la même que celle du montage).
     pub etiquettes: Vec<crate::pileversui::EtiquetteBloc>,
+    /// Le prochain cadrage de la planche est celui d'ouverture (2 rangées de 6 cases) : vrai à l'ouverture et à la création d'un projet
+    /// (App::load_doc), jamais quand on revient sur l'onglet.
+    pub ouverture_a_faire: bool,
+    /// La barre du bas de la planche, à l'écran (`vignettesprefs::planche_barre_basse`).
+    pub barre_basse: Rect,
+    /// Le geste qui dure dans la case vive, et ce qu'il laisse à son lâcher (horschamp.rs) ; le trait qui déborde, gardé jusqu'à ce que
+    /// le trait soit réparti (pas de trou d'une image d'écran au lâcher).
+    pub suivi: Option<crate::horschamp::Suivi>,
+    pub fini: Option<crate::horschamp::Fini>,
+    pub debord_garde: Option<crate::debord::Debord>,
+    /// Le cadrage d'ouverture : la taille de la vue pour laquelle il a été calculé, son zoom, son décalage (une fois rangé), et s'il vient d'être
+    /// calculé. Vide dès que le zoom ou le défilement ont bougé.
+    pub ouverture_suivi: Option<(Vec2, f32, Vec2, bool)>,
+    /// Les images d'écran qu'il reste au cadrage d'ouverture pour suivre la vue.
+    pub ouverture_images: u8,
+}
+
+impl Vignettes {
+    /// L'état d'une séance qui commence, le passe-partout des cases allumé ou non (retenu dans les réglages).
+    pub(crate) fn avec_passe_partout(on: bool) -> Vignettes {
+        let mut v = Vignettes::default();
+        v.annot.marie = on;
+        v
+    }
 }
 
 impl Default for Vignettes {
@@ -253,6 +277,13 @@ impl Default for Vignettes {
             colorscript: Default::default(),
             disposition: Default::default(),
             etiquettes: Vec::new(),
+            ouverture_a_faire: true,
+            barre_basse: Rect::NOTHING,
+            suivi: None,
+            fini: None,
+            debord_garde: None,
+            ouverture_suivi: None,
+            ouverture_images: 0,
         }
     }
 }
@@ -261,13 +292,11 @@ impl Default for Vignettes {
 /// par « … » si le texte est plus long (Anthony, 2026-10-24). `etiquette` : plusieurs champs sont montrés, le texte est précédé de l'étiquette
 /// colorée de son champ (« Action », « Dialogue », « Note »), un peu plus petite ; un champ seul n'en a pas, comme avant le panneau
 /// « Vignettes ».
-fn champ_job(champ: Champ, text: &str, size: f32, width: f32, etiquette: bool) -> LayoutJob {
+fn champ_job(champ: Champ, text: &str, size: f32, width: f32, encre: Color32) -> LayoutJob {
     let mut job = LayoutJob::default();
     job.wrap.max_width = width.max(1.0);
-    if etiquette {
-        let [r, g, b] = champ.encre();
-        job.append(&format!("{}  ", champ.etiquette()), 0.0, egui::TextFormat::simple(FontId::proportional((size * 0.82).max(1.0)), Color32::from_rgb(r, g, b)));
-    }
+    // (L'intitulé est toujours là : une ligne vide se reconnaît à lui.)
+    job.append(&format!("{}  ", champ.etiquette()), 0.0, egui::TextFormat::simple(FontId::proportional((size * 0.82).max(1.0)), encre));
     job.append(text, 0.0, egui::TextFormat::simple(FontId::proportional(size.max(1.0)), NOTE_INK));
     job.wrap.max_rows = 1;
     job.wrap.overflow_character = Some('…');
@@ -745,7 +774,26 @@ impl App {
                 }
             }
             Hit::Nothing => {
-                // Dehors de toute image : les outils de dessin ne tracent rien ; le fond reçoit le reste.
+                // Hors de toute image, toute la planche se dessine (Anthony, 2026-10-30) : le trait part dans le dessin de la case la plus
+                // proche, et au lâcher la part qui n'est dans le champ d'aucune case reste sur la planche (horschamp.rs).
+                if !cam_mode && !lasso && !selecting && matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline) {
+                    let proche = layout.cards.iter().enumerate().min_by(|a, b| distance_rect(a.1.thumb, p).total_cmp(&distance_rect(b.1.thumb, p))).map(|(k, _)| k);
+                    if let Some(k) = proche {
+                        self.commit_note_text(layout);
+                        let c = layout.cards[k];
+                        self.vignettes.appui_bande = Some(pos);
+                        self.board_sel = vec![c.plan];
+                        self.board_notes.clear();
+                        let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
+                        if !(c.panel == self.cur_panel && (c.frame..c.end).contains(&f)) {
+                            self.select_board(c.panel, c.frame);
+                        }
+                        self.vignettes.press = Press::Card;
+                        self.draw_has_focus();
+                        self.pastille_avant_trait();
+                        return false;
+                    }
+                }
                 if matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline | Tool::Fill | Tool::Cutter) {
                     self.vignettes.press = Press::Dead;
                 }
@@ -777,13 +825,9 @@ impl App {
     pub(crate) fn board_toggle_cut(&mut self, layout: &BoardLayout, after: usize) -> bool {
         let Some(a) = layout.cards.get(after).copied() else { return false };
         let Some(b) = layout.cards.get(after + 1).copied() else {
-            self.vignettes.empty_joins = !self.vignettes.empty_joins;
-            self.status = if self.vignettes.empty_joins {
-                "La prochaine case vide fera une image de plus de ce plan (barre grise).".into()
-            } else {
-                "La prochaine case vide fera un nouveau plan (barre noire).".into()
-            };
-            return false;
+            // Devant la première case vide : un clic fait tout de suite la case de continuité (une image de plus du dernier plan, avec
+            // la copie de son dessin), et la case vide d'après reste une coupe (Anthony, 2026-10-30).
+            return self.board_continuite_immediate();
         };
         if b.plan == a.plan {
             // Couper : la marque de la vignette de droite devient le début d'un plan neuf.
@@ -806,6 +850,38 @@ impl App {
             let Some(a_id) = self.doc.panels.get(a.panel).map(|p| p.id) else { return false };
             self.jonction_demander(crate::fusionnoms::Jonction::Case { a: a_id, fin: a.end })
         }
+    }
+
+    /// Clic sur la barre qui précède la première case vide (Anthony, 2026-10-30) : la case devient tout de suite une image de plus du
+    /// dernier plan, avec **la copie du dessin de l'image d'avant** (décor compris), sans attendre un trait. Rien d'autre ne change : la
+    /// case vide d'après est une coupe, comme toute case vide. Une seule étape d'annulation, nommée.
+    pub(crate) fn board_continuite_immediate(&mut self) -> bool {
+        if self.storyboard_refuses() || self.doc.panels.is_empty() {
+            return false;
+        }
+        let mut frame_of_image = 0;
+        let ok = self.avec_etape("Continuité avec le plan précédent", |s| {
+            s.structure_op(|d, _| {
+                let last = d.panels.len() - 1;
+                let old = d.panels[last].frame_count();
+                let image = board::plan_boards(d, last).last().map_or(1, |b| b.2 - b.1).max(1);
+                d.set_duration(last, old + image);
+                d.toggle_mark(last, old)?;
+                d.decor_case_ajoutee(last, old);
+                d.cles_de_case(last, old);
+                frame_of_image = old;
+                Some(last)
+            })
+        });
+        self.vignettes.empty_joins = false;
+        if !ok {
+            return false;
+        }
+        self.cur_frame = frame_of_image;
+        self.follow_frame = true;
+        self.board_sel = vec![self.doc.panels[self.cur_panel].id];
+        self.status = "Continuité : la case montre déjà le dessin de la précédente.".into();
+        true
     }
 
     /// Dessiner dans la case vide `e` (0 : la première) fait un plan neuf, avec ceux qui la précèdent (des plans
@@ -841,6 +917,8 @@ impl App {
                 Some(last)
             })
         });
+        // La continuité ne vaut que pour cette case : la suivante est une coupe (pas de cascade, Anthony, 2026-10-30).
+        self.vignettes.empty_joins = false;
         if !ok {
             return false;
         }
@@ -903,8 +981,14 @@ impl App {
         self.ecarter_le_calque_d_annotation();
         self.board_toolbar(ui);
         self.variantes_barre(ui);
-        let view = ui.available_rect_before_wrap();
+        // La barre du bas (passe-partout des cases, zoom) prend le bas de la vue, comme sous le dessin (Anthony, 2026-10-30).
+        let plein = ui.available_rect_before_wrap();
+        let haut_barre = crate::vignettesprefs::BARRE_BASSE_H;
+        let barre = Rect::from_min_max(pos2(plein.left(), plein.bottom() - haut_barre), plein.max);
+        let view = Rect::from_min_max(plein.min, pos2(plein.right(), (plein.bottom() - haut_barre).max(plein.top() + 1.0)));
+        self.vignettes.barre_basse = barre;
         self.vignettes.view = view;
+        self.planche_barre_basse(ui, barre);
         self.vignettes.etiquettes.clear();
         let bg = ui.allocate_rect(view, Sense::click_and_drag());
         let painter = ui.painter_at(view);
@@ -920,9 +1004,25 @@ impl App {
         if self.board_zoom <= 0.0 {
             // En lignes la page tient à la largeur de la vue (les rangées s'ajoutent dessous) ; à la japonaise, à sa hauteur (les colonnes
             // s'ajoutent à droite).
-            let tient = if layout.sens.japonais() { view.height() / layout.size.y.max(1.0) } else { view.width() / layout.size.x.max(1.0) };
-            self.board_zoom = tient.clamp(ZOOM_MIN, 1.5);
-            self.board_pan = Vec2::ZERO;
+            if std::mem::take(&mut self.vignettes.ouverture_a_faire) {
+                // À l'ouverture d'un projet : 2 rangées de 6 cases (réglable), textes compris, cadrées sur le haut de la planche ou sur le plan
+                // courant s'il est plus loin (Anthony, 2026-10-30).
+                self.ouverture_cadrer(&layout, view);
+            } else {
+                let tient = if layout.sens.japonais() { view.height() / layout.size.y.max(1.0) } else { view.width() / layout.size.x.max(1.0) };
+                self.board_zoom = tient.clamp(ZOOM_MIN, 1.5);
+                self.board_pan = Vec2::ZERO;
+                self.vignettes.ouverture_suivi = None;
+            }
+        } else if let Some((taille, z, p, _)) = self.vignettes.ouverture_suivi {
+            // (Les panneaux se rangent pendant les premières images d'un projet qui s'ouvre : tant que personne n'a touché au zoom ni au défilement,
+            // le cadrage d'ouverture suit la vue, pendant une dizaine d'images seulement ; ensuite le zoom ne bouge plus.)
+            self.vignettes.ouverture_images = self.vignettes.ouverture_images.saturating_sub(1);
+            if self.board_zoom != z || self.board_pan != p || self.vignettes.ouverture_images == 0 {
+                self.vignettes.ouverture_suivi = None;
+            } else if (taille - view.size()).abs().max_elem() > 1.0 {
+                self.ouverture_cadrer(&layout, view);
+            }
         }
         // Les annotations d'une vignette qui a disparu passent à sa voisine (`annotationsui.rs`).
         self.annot_suivre(&layout);
@@ -966,6 +1066,10 @@ impl App {
             self.board_pan += bg.drag_delta();
         }
         self.clamp_board_pan(view, layout.size);
+        if let Some(s) = self.vignettes.ouverture_suivi.as_mut().filter(|s| s.3) {
+            s.2 = self.board_pan;
+            s.3 = false;
+        }
         let xf = Xf { origin: view.min + self.board_pan, zoom: self.board_zoom };
         self.vignettes.xf = xf;
 
@@ -1097,6 +1201,8 @@ impl App {
             // (La vignette courante, peinte après, remplace ce curseur par celui de son outil quand elle l'a sous la souris.)
             ui.ctx().set_cursor_icon(icon);
         }
+        // Le dessin hors des cases, sous les cases (ce qui déborde dans une case ne la recouvre pas) : sur la planche, enregistré, dans aucun plan.
+        self.hors_cadres_peindre(&painter, view, xf, &layout);
         let deadline = Instant::now() + crate::thumbs::THUMB_TIME;
         // Les tuiles des empreintes d'abord (leur rectangle déborde de leur enveloppe : les cases qui s'y trouvent se peignent par-dessus).
         // Le menu du clic droit de la case courante se montre pendant qu'on peint les tuiles et les cases : « Réunir avec le plan
@@ -1157,8 +1263,11 @@ impl App {
             }
         }
         // Le trait en cours qui sort de sa case, par-dessus tout ; puis le plan qu'on déplace (fantôme et repère).
-        if let Some(d) = self.vignettes.debord.take() {
+        // (Au lâcher d'un trait qui sort de sa case, le trait qui déborde reste peint jusqu'à ce qu'il soit réparti : horschamp_partager.)
+        let debord = self.vignettes.debord.take().or_else(|| self.vignettes.fini.as_ref().and_then(|_| self.vignettes.debord_garde.clone()));
+        if let Some(d) = debord {
             crate::debord::paint(&painter, view, &d);
+            self.vignettes.debord_garde = Some(d);
         }
         // Les annotations, par-dessus tout ; puis la marie-louise, si elle est allumée, qui masque ce qui déborde (`annotationsui.rs`).
         self.annot_peindre(&painter, view, xf, &layout, over);
@@ -1203,6 +1312,8 @@ impl App {
             self.finish_board_drag(&layout, &texts);
         }
         self.vignettes.appui_bande = None;
+        // Le trait qui vient de finir : sa part hors du champ de sa case est répartie (horschamp.rs), une seule étape d'annulation.
+        self.horschamp_partager(&layout);
         self.finish_creation(any_down);
         self.finish_plan_move(any_down);
         self.finish_cam_geste(&layout, any_down);
@@ -1250,11 +1361,7 @@ impl App {
             if hot {
                 let resp = ui.interact(board::zone_tactile(zone, layout.sens, BAR_TOUCH), ui.id().with(("planche_barre", b.after)), Sense::hover());
                 let (nom, texte) = if b.after + 1 >= layout.cards.len() {
-                    if self.vignettes.empty_joins {
-                        ("Prochaine case : image du plan", "Grise : la prochaine case vide fera une image de plus du dernier plan. Clic : en faire un nouveau plan.")
-                    } else {
-                        ("Prochaine case : nouveau plan", "Noire : la prochaine case vide fera un plan. Clic : en faire une image de plus du dernier plan.")
-                    }
+                    ("Prochaine case : nouveau plan", "Noire : dessiner dans la case vide fait un nouveau plan. Clic : en faire tout de suite une image de plus du dernier plan, avec son dessin.")
                 } else if b.cut {
                     ("Coupe", "Noire : les deux vignettes sont deux plans. Clic : les réunir en un seul plan.")
                 } else {
@@ -1449,6 +1556,17 @@ impl App {
                 self.board_notes.clear();
             }
         }
+        // Hors de toute case, la gomme efface aussi les traits du dessin hors des cases (le trait entier que touche le cercle).
+        if let (true, Some(id)) = (matches!(self.board_drag, Some(BoardDrag::Erase { .. })), self.doc.annotations.id_hors_cadres()) {
+            if self.doc.annotations.touche_calque(layout, id, p, radius) {
+                if !matches!(self.board_drag, Some(BoardDrag::Erase { recorded: true })) {
+                    self.record_step();
+                    self.board_drag = Some(BoardDrag::Erase { recorded: true });
+                }
+                self.doc.annotations.effacer_en_calque(layout, id, p, radius);
+                self.modified = true;
+            }
+        }
         if let Some(BoardDrag::MoveNotes { last, recorded }) = self.board_drag {
             let delta = p - last;
             if delta != Vec2::ZERO {
@@ -1529,7 +1647,7 @@ impl App {
             child.set_clip_rect(r.intersect(view));
             self.vignettes.zone = Some(mv.tuile.zone);
             self.vignettes.enveloppe = hull.clone();
-            self.card_canvas(&mut child, r);
+            self.card_canvas(&mut child, r, place.id);
             self.vignettes.zone = None;
             self.vignettes.enveloppe.clear();
             // (Le menu du clic droit du dessin a pu changer le film : comme dans `board_card`.)
@@ -1607,18 +1725,44 @@ impl App {
 
         // Le numéro du plan, au-dessus de sa première image : rien d'autre (pas de pastille d'envoi ni de version : elles sont au montage).
         if place.starts_plan() && card.height() > thumb.height() + 6.0 {
-            let label = Rect::from_min_max(card.min, pos2(card.right(), thumb.top()));
-            // Gros et gras, presque noir sur le papier blanc (retour d'Anthony, 2026-10-24 : « le numéro du plan doit se voir bien plus ») :
-            // une part fixe de la ligne du numéro, donc il suit le zoom de la planche. (Pas de police grasse dans SHOT : le gras est le
-            // même texte posé trois fois, à un demi-point d'écart.)
-            let font = (board::LABEL_H * board::NUMERO_FRACTION * xf.zoom).clamp(9.0, 60.0);
+            // Le numéro suit le zoom de la planche mais reste lisible de très loin comme de très près (Anthony, 2026-10-30) : la taille à
+            // l'écran est la taille d'origine (`LABEL_H` × `NUMERO_FRACTION`) multipliée par le zoom, bornée entre 15 et 72 points d'écran
+            // (avant : 9 minimum, illisible à six cases par rangée), le tout multiplié par le réglage « Taille des numéros »
+            // (Préférences > Vignettes). Un fond clair derrière (réglable) le garde lisible sur n'importe quel dessin qui déborde.
+            let reglages = &self.settings.vignettes;
+            let echelle = reglages.numeros_echelle();
+            let font = crate::vignettesprefs::taille_numero(xf.zoom, echelle);
             let ink = Color32::from_gray(15);
-            let clip = painter.with_clip_rect(label.intersect(view));
+            let clip = painter.with_clip_rect(view);
             let galley = clip.layout_no_wrap(numeros.scene_label(&self.doc, place.scene), FontId::proportional(font), ink);
-            let at = pos2(label.left() + 1.0, label.center().y - galley.size().y * 0.5);
+            let marge = (font * 0.18).max(2.0);
+            let pastille = Rect::from_min_size(pos2(thumb.left(), thumb.top() - galley.size().y - marge * 2.0 - 2.0), galley.size() + vec2(marge * 2.0, marge * 2.0));
+            if reglages.fond_numeros {
+                clip.rect_filled(pastille, marge, Color32::from_white_alpha(235));
+                clip.rect_stroke(pastille, marge, Stroke::new(1.0_f32, Color32::from_gray(190)), StrokeKind::Inside);
+            }
+            let at = pastille.min + vec2(marge, marge);
             let gras = (font * 0.035).max(0.4);
             for d in [vec2(0.0, 0.0), vec2(gras, 0.0), vec2(0.0, gras)] {
                 clip.galley(at + d, galley.clone(), ink);
+            }
+            let mut droite = pastille.right() + 4.0;
+            // La durée du plan, à côté du numéro (réglage), en petit.
+            if reglages.afficher_duree {
+                let n = self.doc.panels.get(i).map_or(0, |p| p.frame_count());
+                let fps = self.doc.fps.max(1) as usize;
+                let texte = format!("{}+{:02}", n / fps, n % fps);
+                let g = clip.layout_no_wrap(texte, FontId::proportional((font * 0.6).max(10.0)), Color32::from_gray(90));
+                clip.galley(pos2(droite, pastille.center().y - g.size().y * 0.5), g.clone(), Color32::from_gray(90));
+                droite += g.size().x + 6.0;
+            }
+            // L'étiquette de version (« V2 »), **hors du cadre**, juste à droite du numéro : jamais sur l'image. Rien pour un plan à une
+            // seule version, ni si le réglage est éteint.
+            if reglages.pastille_version {
+                let haut = (font * 0.75).clamp(14.0, 28.0);
+                if let Some(e) = self.peindre_etiquette_hors_cadre(&clip, pos2(droite, pastille.center().y), haut, i) {
+                    self.vignettes.etiquettes.push(e);
+                }
             }
         }
 
@@ -1642,7 +1786,7 @@ impl App {
                     let area = if self.tool == Tool::Camera { thumb } else { Rect::from_center_size(thumb.center(), thumb.size() / 0.96) };
                     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area).id_salt("planche_vive"));
                     child.set_clip_rect(thumb.intersect(view));
-                    self.card_canvas(&mut child, thumb);
+                    self.card_canvas(&mut child, thumb, place.id);
                     // Le menu du clic droit du dessin s'ouvre là-dedans (`canvas_panel`) : « Réunir avec le plan précédent », « Couper »…
                     // peuvent avoir changé le film. La suite de la case lit `place` et `i`, de la planche du début de l'image : s'ils ne
                     // désignent plus le même plan, la case s'arrête là (la planche se refait à l'image suivante).
@@ -1669,7 +1813,14 @@ impl App {
             }
         }
         // Le filet d'un point autour de l'image ; plus foncé pour l'image courante. Rien d'autre autour.
-        clip.rect_stroke(thumb, 0.0, Stroke::new(1.0_f32, if current { BORDER_CURRENT } else { BORDER }), StrokeKind::Outside);
+        // (Épaisseur et couleur du filet : Préférences > Vignettes ; la case courante est plus foncée.)
+        let filet = match self.settings.vignettes.couleur_filet {
+            Some([r, g, b]) => Color32::from_rgb(r, g, b),
+            None if current => BORDER_CURRENT,
+            None => BORDER,
+        };
+        let filet = if current && self.settings.vignettes.couleur_filet.is_some() { filet.gamma_multiply(0.7) } else { filet };
+        clip.rect_stroke(thumb, 0.0, Stroke::new(self.settings.vignettes.epaisseur_cadre, filet), StrokeKind::Outside);
         // Les cadres du mouvement de caméra (A, B, C…), le voile hors de A et ce qui les relie, fins, par-dessus.
         if let Some(mv) = mv {
             self.paint_empreinte(painter, view, xf, place, mv);
@@ -1679,13 +1830,8 @@ impl App {
         }
         self.paint_card_note(&clip, xf, place, note);
         self.paint_note_icone(ui, painter, view, place);
-        // L'étiquette de version (« V2 »), en haut à droite de la première case d'un plan qui a plusieurs versions : rien pour un plan à
-        // une seule version. La survoler ouvre la pile des versions (`pile_versions_ui`, en fin d'image).
-        if place.starts_plan() {
-            if let Some(e) = self.peindre_etiquette_case(&clip, thumb, i) {
-                self.vignettes.etiquettes.push(e);
-            }
-        }
+        // (L'étiquette de version « V2 » est hors du cadre, à côté du numéro du plan : plus haut. La survoler ouvre la pile des versions,
+        // `pile_versions_ui`, en fin d'image.)
     }
     /// Le texte sous l'image (à droite à la japonaise) : **une ligne par champ coché** (action, dialogue, notes, dans l'ordre de la fiche),
     /// chacune coupée par « … » si le texte est trop long, et un filet très pâle dessous. Aucun champ coché : rien du tout. Pendant la
@@ -1699,30 +1845,33 @@ impl App {
         let y = strip.bottom() - 1.0;
         painter.line_segment([pos2(strip.left(), y), pos2(strip.right(), y)], Stroke::new(1.0_f32, HAIRLINE));
         let textes = self.layout.board_textes;
-        let etiquette = textes.etiquettes();
         let edite = self.vignettes.note.as_ref().is_some_and(|e| e.id == place.id);
         let width = (place.note.width() - NOTE_PAD * 2.0) * xf.zoom;
         for (i, champ) in textes.champs().into_iter().enumerate() {
             if edite && champ == Champ::Notes {
                 continue;
             }
+            // Chaque ligne cochée est toujours visible, même vide (Anthony, 2026-10-30) : son intitulé (« Note », « Action », « Dialogue »)
+            // dans sa couleur propre (Préférences > Vignettes), puis le texte du champ.
             let text = crate::boardsens::texte_du_champ(&self.doc, place.panel, place.id, place.frame, champ);
-            if text.trim().is_empty() {
-                continue;
-            }
             let size = board::note_font_size(text.chars().count()) * xf.zoom;
             if size < 4.0 {
                 return;
             }
-            let galley = painter.layout_job(champ_job(champ, &crate::boardsens::une_ligne(text), size, width, etiquette));
-            painter.galley(pos2(strip.min.x + NOTE_PAD * xf.zoom, strip.min.y + i as f32 * board::NOTE_LINE_H * xf.zoom), galley, NOTE_INK);
+            let [r, g, b] = self.settings.vignettes.couleur_texte(champ);
+            let y = strip.min.y + i as f32 * board::NOTE_LINE_H * xf.zoom;
+            // Un filet pâle de sa couleur sous la ligne : on voit où elle est, même vide.
+            let ligne_y = y + board::NOTE_LINE_H * xf.zoom - 1.0;
+            painter.line_segment([pos2(strip.left(), ligne_y), pos2(strip.right(), ligne_y)], Stroke::new(1.0_f32, Color32::from_rgba_unmultiplied(r, g, b, 70)));
+            let galley = painter.layout_job(champ_job(champ, &crate::boardsens::une_ligne(text), size, width, Color32::from_rgb(r, g, b)));
+            painter.galley(pos2(strip.min.x + NOTE_PAD * xf.zoom, y), galley, NOTE_INK);
         }
     }
 
     /// Le dessin dans la vignette du panneau courant : vue à travers la caméra, cadrée sur la
     /// vignette ; avec l'outil Caméra, toute la feuille et le cadre, pour recadrer. La vue du
     /// dessin en grand est remise telle quelle ensuite.
-    fn card_canvas(&mut self, ui: &mut egui::Ui, thumb: Rect) {
+    fn card_canvas(&mut self, ui: &mut egui::Ui, thumb: Rect, carte: u64) {
         let (view, camera_view, canvas_rect) = (self.view, self.camera_view, self.canvas_rect);
         let reframe = self.tool == Tool::Camera;
         // (Une grande case de mouvement de caméra montre la feuille, pas la vue à travers la caméra : `vignettes.zone`.)
@@ -1733,6 +1882,8 @@ impl App {
         self.in_card = true;
         self.canvas_panel(ui);
         self.in_card = false;
+        // (Comment le geste se pose sur la planche, pour le répartir au lâcher : horschamp.rs.)
+        self.horschamp_suivre(carte);
         // Le trait qui déborde de la case, tant que la main est en bas : calculé ici, pendant que la vue du dessin est
         // celle de la vignette ; peint en dernier par la planche (`debord.rs`). Rien si le geste reste dans la case.
         let shift = ui.input(|i| i.modifiers.shift);
@@ -1950,10 +2101,22 @@ fn paint_ring(painter: &egui::Painter, thumb: Rect, c: &crate::thumbs::CaseTex) 
 /// Un trait de note à l'écran : des lignes continues par tronçons d'épaisseur presque égale
 /// (la pression fait varier l'épaisseur), bouts arrondis.
 pub(crate) fn paint_note(painter: &egui::Painter, view: Rect, xf: Xf, points: &[VPoint], color: [u8; 3]) {
+    paint_note_a(painter, view, xf, points, color, 255);
+}
+
+/// La distance d'un point à un rectangle (0 dedans).
+pub(crate) fn distance_rect(r: Rect, p: Pos2) -> f32 {
+    let dx = (r.left() - p.x).max(p.x - r.right()).max(0.0);
+    let dy = (r.top() - p.y).max(p.y - r.bottom()).max(0.0);
+    (dx * dx + dy * dy).sqrt()
+}
+
+/// `paint_note` à l'opacité `alpha` (le dessin hors des cases garde celle du pinceau).
+pub(crate) fn paint_note_a(painter: &egui::Painter, view: Rect, xf: Xf, points: &[VPoint], color: [u8; 3], alpha: u8) {
     if points.is_empty() || !xf.rect(board::points_bounds(points)).intersects(view) {
         return;
     }
-    let color = Color32::from_rgb(color[0], color[1], color[2]);
+    let color = Color32::from_rgba_unmultiplied(color[0], color[1], color[2], alpha);
     let mut run: Vec<Pos2> = Vec::new();
     let mut run_w = 0.0;
     let flush = |run: &[Pos2], w: f32| {

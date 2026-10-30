@@ -42,7 +42,7 @@ fn film(n: usize) -> Document {
 }
 
 pub(crate) fn banc_vignettes(doc: Document, sens: Sens, colonnes: usize) -> Banc {
-    let mut b = banc_taille(doc, false, 1600, 900);
+    let mut b = banc_taille(doc, false, 1600, 940);
     b.garder_textes = true;
     b.garder_formes = true;
     b.app.set_espace(Espace::Vignettes);
@@ -481,7 +481,7 @@ fn the_fields_toggles_change_what_is_laid_out_and_what_is_painted() {
     assert_eq!(b.app.layout.board_textes, Textes::default(), "d'origine : les notes seules, comme avant");
     let peint = |b: &Banc, morceau: &str| b.textes.iter().any(|t| t.contains(morceau));
     assert!(peint(&b, "La clé") && !peint(&b, "Il court") && !peint(&b, "Où vas-tu"), "{:?}", b.textes);
-    assert!(b.textes.iter().all(|t| !t.contains("Note  ")), "un champ seul n'a pas d'étiquette : {:?}", b.textes);
+    assert!(b.textes.iter().any(|t| t.contains("Note  ")), "l'intitulé est toujours là (2026-10-30) : {:?}", b.textes);
     let hauteur = |b: &Banc| b.app.board_layout().cards[3].note.height();
     assert!(eg(hauteur(&b), NOTE_LINE_H), "une ligne de notes");
     // Cocher l'action : deux champs, chacun son étiquette, deux lignes.
@@ -500,7 +500,7 @@ fn the_fields_toggles_change_what_is_laid_out_and_what_is_painted() {
     b.app.run_action("vignettes.texte_notes");
     b.app.run_action("vignettes.texte_action");
     b.chauffer(4);
-    assert!(b.textes.iter().any(|t| t == "Où vas-tu ?"), "{:?}", b.textes);
+    assert!(b.textes.iter().any(|t| t.ends_with("Où vas-tu ?")), "{:?}", b.textes);
     assert!(!peint(&b, "La clé") && !peint(&b, "Il court"));
     assert!(eg(hauteur(&b), NOTE_LINE_H));
     // Les champs d'une marque d'image sont ceux de la marque.
@@ -593,9 +593,9 @@ fn the_reading_and_the_fields_survive_save_and_reopen_old_files_get_the_defaults
     let relus: crate::settings::Settings = toml::from_str(&toml::to_string(&reglages).expect("toml")).expect("relus");
     let l = relus.layout_of(Espace::Vignettes).expect("la disposition retenue");
     assert_eq!((l.board_sens, l.board_textes), (Sens::Japonais, layout.board_textes));
-    // Un fichier d'avant le panneau : les valeurs d'origine (en lignes, les notes seules).
+    // Un fichier d'avant le panneau : les valeurs d'origine (en lignes, aucune ligne de texte depuis le 2026-10-30).
     let ancien: Layout = toml::from_str("colonnes_vignettes = 4\ntaille_vignettes = 200.0\n").expect("ancien fichier");
-    assert_eq!((ancien.board_sens, ancien.board_textes, ancien.board_columns), (Sens::Lignes, Textes::default(), 4));
+    assert_eq!((ancien.board_sens, ancien.board_textes, ancien.board_columns), (Sens::Lignes, Textes::aucun(), 4));
 }
 
 #[test]
@@ -729,9 +729,9 @@ fn the_version_badge_is_at_the_top_right_of_the_case_only_with_two_or_more_versi
         let plan = b.app.doc.panels[0].id;
         let zone = etiquette_du_plan(&b, plan).unwrap_or_else(|| panic!("{sens:?} : l'étiquette est posée sur la case du plan"));
         let case = ecran(&b, b.app.board_layout().cards[0].thumb);
-        assert!(case.contains_rect(zone), "{sens:?} : dans la case : {zone:?} {case:?}");
-        assert!(zone.center().x > case.center().x && zone.center().y < case.center().y, "{sens:?} : en haut à droite");
-        assert!(zone.right() >= case.right() - 8.0 && zone.top() <= case.top() + 8.0, "{sens:?} : tout près du coin");
+        // (Depuis le 2026-10-30 : hors du cadre, à côté du numéro du plan, au-dessus de l'image.)
+        assert!(!zone.intersects(case), "{sens:?} : hors de la case : {zone:?} {case:?}");
+        assert!(zone.bottom() <= case.top() + 1.0 && zone.left() >= case.left() - 1.0, "{sens:?} : au-dessus du cadre, près du numéro");
         assert!(b.textes.iter().any(|t| t == "V2"), "{sens:?} : « V2 » est écrit : {:?}", b.textes);
         // Les autres plans n'ont qu'une version : pas d'étiquette. La planche n'en pose qu'une.
         assert_eq!(b.app.pile_versions.etiquettes.len(), 1, "{sens:?}");

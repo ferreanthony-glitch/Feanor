@@ -61,7 +61,7 @@ fn a_move_takes_the_text_lines_of_the_checked_fields_too() {
 fn on_screen_a_field_is_one_clipped_line_with_a_label_only_when_two_or_more_are_shown() {
     let mut b = banc_vignettes(plan_avec_textes(), Sens::Lignes, 4);
     b.app.doc.panels[1].action = "mot ".repeat(200);
-    for (t, etiquettes) in [(textes(false, false, true), false), (textes(true, false, true), true), (textes(true, true, true), true)] {
+    for (t, etiquettes) in [(textes(false, false, true), true), (textes(true, false, true), true), (textes(true, true, true), true)] {
         b.app.layout.board_textes = t;
         b.chauffer(4);
         let galleys: Vec<_> = b.formes.iter().filter_map(|s| if let Shape::Text(x) = &s.shape { Some(x.galley.clone()) } else { None }).collect();
@@ -75,7 +75,7 @@ fn on_screen_a_field_is_one_clipped_line_with_a_label_only_when_two_or_more_are_
                 })
                 .unwrap_or_else(|| panic!("{champ:?} est peint : {:?}", b.textes));
             assert_eq!(g.rows.len(), 1, "{champ:?} : une seule ligne");
-            assert_eq!(g.job.text.starts_with(champ.etiquette()), etiquettes, "{champ:?} : l'étiquette seulement avec plusieurs champs : {:?}", g.job.text);
+            assert_eq!(g.job.text.starts_with(champ.etiquette()), etiquettes, "{champ:?} : l'intitulé est toujours là (2026-10-30) : {:?}", g.job.text);
         }
         let c = b.app.board_layout().cards[3];
         assert!(proche(c.note.height(), t.lignes() as f32 * NOTE_LINE_H));

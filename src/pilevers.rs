@@ -102,10 +102,12 @@ pub fn placer_etiquette(bloc: Rect, texte: f32, pastille: bool) -> Etiquette {
 }
 
 /// Marge de l'étiquette d'une case des Vignettes, au bord haut et au bord droit de l'image.
+#[allow(dead_code)]
 pub const COIN: f32 = 4.0;
 
 /// Place l'étiquette en **haut à droite** de la case `case` (une image de la planche des Vignettes) ; `texte` : la largeur du texte « V2 ».
 /// Une case trop étroite ne garde qu'un point ; trop petite, rien.
+#[allow(dead_code)]
 pub fn placer_etiquette_coin(case: Rect, texte: f32) -> Etiquette {
     if case.height() < 2.0 * COIN + ETIQ_H + 6.0 {
         return Etiquette::Aucune;

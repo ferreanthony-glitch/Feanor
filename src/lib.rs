@@ -289,6 +289,8 @@ mod calques_pastilles_tests;
 #[cfg(test)]
 mod brosses_perso_tests;
 mod vignettesreglages;
+mod vignettesprefs;
+mod horschamp;
 #[cfg(test)]
 mod vignettes_tests;
 #[cfg(test)]
@@ -935,6 +937,8 @@ mod vtools;
 mod workspace;
 #[cfg(test)]
 mod workspace_tests;
+#[cfg(test)]
+mod horschamp_tests;
 mod workspaceui;
 mod xsheet;
 #[cfg(test)]

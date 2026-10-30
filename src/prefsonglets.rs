@@ -114,6 +114,12 @@ pub enum Groupe {
     Vignettes,
     /// Les cadres de caméra dessinés dans les cases : l'aimant et la couleur.
     CadresCamera,
+    /// Les numéros de plan, la pastille de version, la durée et les lignes de texte sous les cases.
+    NumerosTextes,
+    /// L'aspect des cases : filet, dessin hors des cases, passe-partout.
+    AspectCases,
+    /// Le zoom d'ouverture de la planche (cases par rangée, rangées visibles).
+    OuvertureCases,
     /// Le décor partagé entre les cases d'un plan (`decor.rs`) : le report et la sorte du calque (les brosses Décor, elles, sont dans le panneau Brosses perso).
     Decor,
     Raccourcis,
@@ -150,6 +156,9 @@ impl Groupe {
             Groupe::PlansNeufs => "Plans neufs",
             Groupe::Vignettes => "Planche des Vignettes",
             Groupe::CadresCamera => "Cadres de caméra",
+            Groupe::NumerosTextes => "Numéros et textes",
+            Groupe::AspectCases => "Aspect des cases",
+            Groupe::OuvertureCases => "À l'ouverture",
             Groupe::Decor => "Décor",
             Groupe::Raccourcis => "Raccourcis clavier",
             Groupe::Programmes => "Programmes",
@@ -240,6 +249,15 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Vignettes, G::Vignettes, "vignettes.rangees_pales", "Rangées de cases pâles", "vignettes planche papier cases vides dessiner minimum lignes"),
     r(O::Vignettes, G::Vignettes, "vignettes.colonnes", "Cases par rangée", "vignettes planche colonnes largeur six"),
     r(O::Vignettes, G::Vignettes, "vignettes.debord", "Débord du trait hors des cases", "marge anneau déborde dépasse cadre pour cent"),
+    r(O::Vignettes, G::OuvertureCases, "vignettes.ouverture", "Zoom d'ouverture", "cases par rangée rangées visibles six deux ouvrir projet cadrer"),
+    r(O::Vignettes, G::NumerosTextes, "vignettes.taille_numeros", "Taille des numéros de plan", "numéro lisible gros petit pour cent zoom fond"),
+    r(O::Vignettes, G::NumerosTextes, "vignettes.pastille_version", "Pastille de version", "V2 étiquette versions numéro hors cadre"),
+    r(O::Vignettes, G::NumerosTextes, "vignettes.duree", "Afficher la durée du plan", "secondes images numéro"),
+    r(O::Vignettes, G::NumerosTextes, "vignettes.textes_defaut", "Lignes de texte d'un projet neuf", "notes action dialogue cocher défaut ligne intitulé"),
+    r(O::Vignettes, G::NumerosTextes, "vignettes.couleurs_textes", "Couleur des lignes de texte", "note action dialogue couleur intitulé"),
+    r(O::Vignettes, G::AspectCases, "vignettes.filet", "Épaisseur du filet", "cadre épaisseur couleur trait gris contour"),
+    r(O::Vignettes, G::AspectCases, "vignettes.hors_champ", "Dessin hors des cases", "opacité pâle planche débord hors champ"),
+    r(O::Vignettes, G::AspectCases, "vignettes.passe_partout", "Passe-partout des cases", "marie-louise voile cache hors cases opacité"),
     r(O::Vignettes, G::CadresCamera, "vignettes.aimant", "Aimant des cadres de caméra", "alignement colonnes rangées points magnétique éteindre zéro"),
     r(O::Vignettes, G::CadresCamera, "vignettes.couleur_cadre", "Couleur des cadres de caméra", "bleu lettres flèche empreinte export"),
     r(O::Vignettes, G::Decor, "vignettes.report_decor", "Report du décor", "continuité coupe plan suivant case réunir décor partagé"),
