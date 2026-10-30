@@ -74,7 +74,13 @@ fn layouts_are_kept_in_the_settings() {
 #[test]
 fn the_three_spaces_have_their_own_starting_layouts() {
     let (storyboard, animation, montage) = (Espace::Storyboard.defaut(), Espace::Animation.defaut(), Espace::Montage.defaut());
-    assert_eq!(storyboard, Layout::default(), "le storyboard : la disposition standard");
+    // Le storyboard : la disposition standard, avec en plus l'onglet Scénario à côté des calques (2026-10-30).
+    assert_eq!(Layout { panneaux: None, ..storyboard.clone() }, Layout::default(), "le storyboard : la disposition standard");
+    let (avec, sans) = (storyboard.dock_layout(), Layout::default().dock_layout());
+    assert!(avec.contains(Pane::Scenario) && !sans.contains(Pane::Scenario));
+    let mut retire = avec.clone();
+    retire.close(Pane::Scenario);
+    assert_eq!(retire.panes(), sans.panes(), "rien d'autre ne change");
     assert!(animation.montage_height > storyboard.montage_height, "l'animation : la bande (la timeline) plus haute");
     assert!(animation.sheet_width > storyboard.sheet_width, "et les calques plus larges");
     // Montage : la bande en grand, les panneaux de dessin repliés, la fiche du plan gardée.

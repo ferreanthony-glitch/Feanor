@@ -842,6 +842,11 @@ mod scenario;
 mod scenariofdx;
 mod scenarioplans;
 mod scenarioui;
+// Le scénario gardé dans le projet et son panneau (2026-10-30).
+mod scenariogarde;
+mod scenariopanneau;
+#[cfg(test)]
+mod scenariopanneau_tests;
 #[cfg(test)]
 mod scenario_tests;
 #[cfg(test)]

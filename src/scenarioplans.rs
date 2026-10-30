@@ -131,8 +131,6 @@ pub enum Dest {
 }
 
 impl Dest {
-    pub const ALL: [Dest; 3] = [Dest::NewProject, Dest::End, Dest::AfterCurrent];
-
     pub fn label(self) -> &'static str {
         match self {
             Dest::NewProject => "Dans un nouveau projet",
@@ -158,6 +156,8 @@ pub struct Beat {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlanDraft {
     pub beats: Vec<Beat>,
+    /// La tranche d'éléments du scénario dont le plan vient (de, à, compris) : le lien du panneau Scénario.
+    pub span: (usize, usize),
 }
 
 impl PlanDraft {
@@ -199,8 +199,17 @@ impl Outline {
 // ------------------------------------------------------------------------------------ découpage
 
 enum Block {
-    Action { text: String, notes: Vec<String> },
-    Speech { lines: Vec<String>, words: usize, notes: Vec<String> },
+    /// `first` : l'indice, dans le scénario, du premier élément du bloc.
+    Action { text: String, notes: Vec<String>, first: usize },
+    Speech { lines: Vec<String>, words: usize, notes: Vec<String>, first: usize },
+}
+
+impl Block {
+    fn first(&self) -> usize {
+        match self {
+            Block::Action { first, .. } | Block::Speech { first, .. } => *first,
+        }
+    }
 }
 
 impl Block {
@@ -218,11 +227,14 @@ struct SceneAcc {
     blocks: Vec<Block>,
     /// Notes du premier plan (sections qui précèdent, synopsis, notes avant tout bloc).
     first_notes: Vec<String>,
+    /// Premier et dernier éléments du scénario de la scène (l'intitulé compris).
+    start: usize,
+    end: usize,
 }
 
 impl SceneAcc {
-    fn new(name: String, slug: Option<String>, carry: &mut Vec<String>) -> SceneAcc {
-        SceneAcc { name, slug, blocks: Vec::new(), first_notes: std::mem::take(carry) }
+    fn new(name: String, slug: Option<String>, carry: &mut Vec<String>, start: usize) -> SceneAcc {
+        SceneAcc { name, slug, blocks: Vec::new(), first_notes: std::mem::take(carry), start, end: start }
     }
 
     /// Une note qui se rapporte à ce qui précède : le dernier bloc, ou le premier plan.
@@ -244,8 +256,8 @@ fn inline_notes(notes: &[String]) -> Vec<String> {
 
 fn beat_of(block: &Block, r: &Rhythm) -> Beat {
     match block {
-        Block::Action { text, notes } => Beat { action: text.clone(), dialogue: String::new(), notes: notes.clone(), seconds: 0.0, raw: r.action_seconds(text) },
-        Block::Speech { lines, words, notes } => {
+        Block::Action { text, notes, .. } => Beat { action: text.clone(), dialogue: String::new(), notes: notes.clone(), seconds: 0.0, raw: r.action_seconds(text) },
+        Block::Speech { lines, words, notes, .. } => {
             Beat { action: String::new(), dialogue: lines.join("\n"), notes: notes.clone(), seconds: 0.0, raw: r.speech_seconds(*words) }
         }
     }
@@ -277,10 +289,13 @@ fn finish(beats: &mut [Beat], r: &Rhythm) {
 fn plans_of(scene: &SceneAcc, opt: &Options) -> Vec<PlanDraft> {
     let r = &opt.rhythm;
     let mut plans: Vec<PlanDraft> = Vec::new();
+    // Où chaque plan commence dans le scénario (le premier, au début de la scène).
+    let mut starts: Vec<usize> = Vec::new();
     match opt.split {
         Split::Scene => {
             let beats: Vec<Beat> = scene.blocks.iter().map(|b| beat_of(b, r)).collect();
-            plans.push(PlanDraft { beats });
+            plans.push(PlanDraft { beats, span: (0, 0) });
+            starts.push(scene.start);
         }
         Split::Paragraph | Split::Line => {
             let mut last_was_speech = false;
@@ -289,14 +304,23 @@ fn plans_of(scene: &SceneAcc, opt: &Options) -> Vec<PlanDraft> {
                 let speech = matches!(b, Block::Speech { .. });
                 match plans.last_mut() {
                     Some(p) if speech && last_was_speech && opt.split == Split::Paragraph => merge_into(&mut p.beats[0], beat),
-                    _ => plans.push(PlanDraft { beats: vec![beat] }),
+                    _ => {
+                        plans.push(PlanDraft { beats: vec![beat], span: (0, 0) });
+                        starts.push(if starts.is_empty() { scene.start } else { b.first() });
+                    }
                 }
                 last_was_speech = speech;
             }
         }
     }
     if plans.iter().all(|p| p.beats.is_empty()) {
-        plans = vec![PlanDraft { beats: vec![Beat::default()] }];
+        plans = vec![PlanDraft { beats: vec![Beat::default()], span: (0, 0) }];
+        starts = vec![scene.start];
+    }
+    for k in 0..plans.len() {
+        let de = starts[k];
+        let a = if k + 1 < starts.len() { starts[k + 1].saturating_sub(1).max(de) } else { scene.end.max(de) };
+        plans[k].span = (de, a);
     }
     // Les notes de tête (décor, sections, synopsis) vont au premier plan, avant les siennes.
     let mut head: Vec<String> = Vec::new();
@@ -321,9 +345,9 @@ pub fn build(script: &Script, opt: &Options) -> Outline {
     let opt = Options { rhythm: opt.rhythm.sane(), ..opt.clone() };
     let mut scenes: Vec<SceneAcc> = Vec::new();
     let mut carry: Vec<String> = Vec::new();
-    for e in &script.elements {
+    for (ei, e) in script.elements.iter().enumerate() {
         if let Kind::Heading(h) = &e.kind {
-            let mut s = SceneAcc::new(h.clone(), Some(h.clone()), &mut carry);
+            let mut s = SceneAcc::new(h.clone(), Some(h.clone()), &mut carry, ei);
             s.first_notes.extend(inline_notes(&e.notes));
             scenes.push(s);
             continue;
@@ -346,23 +370,23 @@ pub fn build(script: &Script, opt: &Options) -> Outline {
                     carry.push(labelled("Note", t));
                     continue;
                 }
-                _ => scenes.push(SceneAcc::new(OPENING.to_string(), None, &mut carry)),
+                _ => scenes.push(SceneAcc::new(OPENING.to_string(), None, &mut carry, ei)),
             }
         }
         let Some(scene) = scenes.last_mut() else { continue };
         match &e.kind {
-            Kind::Action(text) => scene.blocks.push(Block::Action { text: text.clone(), notes: inline_notes(&e.notes) }),
+            Kind::Action(text) => scene.blocks.push(Block::Action { text: text.clone(), notes: inline_notes(&e.notes), first: ei }),
             Kind::Dialogue(sp) => {
                 let line = sp.line();
                 let words = sp.words();
                 match scene.blocks.last_mut() {
                     // Deux personnages qui parlent ensemble : les deux lignes d'un même bloc.
-                    Some(Block::Speech { lines, words: w, notes }) if sp.dual => {
+                    Some(Block::Speech { lines, words: w, notes, .. }) if sp.dual => {
                         lines.push(line);
                         *w += words;
                         notes.extend(inline_notes(&e.notes));
                     }
-                    _ => scene.blocks.push(Block::Speech { lines: vec![line], words, notes: inline_notes(&e.notes) }),
+                    _ => scene.blocks.push(Block::Speech { lines: vec![line], words, notes: inline_notes(&e.notes), first: ei }),
                 }
             }
             Kind::Transition(t) => {
@@ -389,6 +413,12 @@ pub fn build(script: &Script, opt: &Options) -> Outline {
             }
         }
     }
+    // Chaque scène court jusqu'à l'intitulé de la suivante ; la dernière, jusqu'à la fin du scénario.
+    let last = script.elements.len().saturating_sub(1);
+    let starts: Vec<usize> = scenes.iter().map(|s| s.start).collect();
+    for (k, s) in scenes.iter_mut().enumerate() {
+        s.end = starts.get(k + 1).map_or(last, |n| n.saturating_sub(1)).max(s.start);
+    }
     let sequences = scenes.iter().map(|s| SequenceDraft { name: s.name.clone(), plans: plans_of(s, &opt) }).collect();
     Outline { sequences, characters: scenario::characters(&script.elements) }
 }
@@ -396,12 +426,14 @@ pub fn build(script: &Script, opt: &Options) -> Outline {
 // ------------------------------------------------------------------------------------ dans le projet
 
 /// Ce qui a été créé.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Applied {
     /// Indice du premier plan créé.
     pub first: usize,
     pub plans: usize,
     pub sequences: usize,
+    /// Un lien par plan créé : son id et la tranche du scénario dont il vient (`scenariogarde`).
+    pub liens: Vec<crate::scenariogarde::Lien>,
 }
 
 /// Images d'une durée en secondes (une au moins).
@@ -439,6 +471,7 @@ pub fn insert(doc: &mut Document, outline: &Outline, at: usize) -> Option<Applie
     }
     let fps = doc.fps.max(1);
     let mut panels = Vec::with_capacity(outline.plan_count());
+    let mut liens = Vec::with_capacity(outline.plan_count());
     for seq in outline.sequences.iter().filter(|s| !s.plans.is_empty()) {
         let sid = doc.new_sequence();
         if let Some(s) = doc.sequence_mut(sid) {
@@ -461,6 +494,7 @@ pub fn insert(doc: &mut Document, outline: &Outline, at: usize) -> Option<Applie
                 cursor += frames_of(beat.seconds, fps);
             }
             panel.length = cursor.max(1);
+            liens.push(crate::scenariogarde::Lien { plan: panel.id, de: plan.span.0, a: plan.span.1 });
             panels.push(panel);
         }
     }
@@ -470,11 +504,12 @@ pub fn insert(doc: &mut Document, outline: &Outline, at: usize) -> Option<Applie
     doc.panels.splice(at..at, panels);
     doc.normalize();
     let first = doc.panels.iter().position(|p| p.id == first_id).unwrap_or(at);
-    Some(Applied { first, plans: count, sequences: outline.sequences.iter().filter(|s| !s.plans.is_empty()).count() })
+    Some(Applied { first, plans: count, sequences: outline.sequences.iter().filter(|s| !s.plans.is_empty()).count(), liens })
 }
 
 /// Un projet qui a déjà le format voulu (créé par « Nouveau projet ») reçoit le scénario : son plan
 /// vide est remplacé, le titre et l'auteur du scénario deviennent ceux du projet.
+#[cfg(test)]
 pub fn fill_new_project(doc: &mut Document, outline: &Outline, title: &str, author: &str) -> Option<Applied> {
     doc.sequences.clear();
     doc.scenes.clear();

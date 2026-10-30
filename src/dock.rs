@@ -100,6 +100,11 @@ pub enum Pane {
     /// l'utilisateur y a rangés. Fermé d'office ; s'ouvre depuis le menu Labo, et se place où l'on veut comme les autres.
     #[serde(rename = "mon_panneau")]
     MonPanneau,
+    /// Le panneau « Scénario » (`scenariopanneau.rs`, 2026-10-30) : le scénario importé, lisible comme un scénario, lié aux plans
+    /// qui en viennent. En onglet avec la couleur dans l'espace Vignettes, avec les calques dans le Storyboard ; fermé ailleurs
+    /// (il s'ouvre tout seul après un import).
+    #[serde(rename = "scenario")]
+    Scenario,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -117,7 +122,7 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 17] = [
+    pub const ALL: [Pane; 18] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
@@ -135,13 +140,14 @@ impl Pane {
         Pane::Personnages,
         Pane::Vignettes,
         Pane::MonPanneau,
+        Pane::Scenario,
     ];
 
     /// Les panneaux fermés dans la disposition par défaut, qui ne s'ouvrent qu'à la demande.
     pub fn on_demand(self) -> bool {
         matches!(
             self,
-            Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau
+            Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau | Pane::Scenario
         )
     }
 
@@ -175,6 +181,7 @@ impl Pane {
             Pane::Personnages => "Brosses perso",
             Pane::Vignettes => "Planche",
             Pane::MonPanneau => "Mon panneau",
+            Pane::Scenario => "Scénario",
         }
     }
 
@@ -213,6 +220,7 @@ impl Pane {
             Pane::Personnages => ph::USERS_THREE,
             Pane::Vignettes => ph::SQUARES_FOUR,
             Pane::MonPanneau => ph::STAR,
+            Pane::Scenario => ph::FILM_SCRIPT,
         }
     }
 
@@ -228,6 +236,7 @@ impl Pane {
             | Pane::Bruitages
             | Pane::SuggestionsSonores
             | Pane::MonPanneau
+            | Pane::Scenario
             | Pane::References => Group::Right,
             Pane::Montage | Pane::Timeline => Group::Bottom,
             Pane::Vignettes => Group::Planche,
@@ -597,9 +606,20 @@ impl DockLayout {
     /// demande (un clic dans la barre des panneaux) ; les personnages sont dans leur barre au-dessus de la planche.
     pub fn pour_les_vignettes() -> DockLayout {
         // Le panneau « Planche » (sens de lecture, textes) tout en haut : petit, il prend la hauteur de son contenu (`ajuste.rs`).
-        let reglages = column(0.5, tabs(vec![Pane::ToolOptions]), tabs(vec![Pane::Color]));
+        // Le scénario est un onglet de plus à côté de la couleur (il ne prend aucune place de plus).
+        let reglages = column(0.5, tabs(vec![Pane::ToolOptions]), tabs(vec![Pane::Color, Pane::Scenario]));
         let cote = column(0.2, tabs(vec![Pane::Vignettes]), reglages);
         DockLayout { principal: row(1.0 - TOOLS_WIDTH / REF_WIDTH, tabs(vec![Pane::Canvas]), cote), ..DockLayout::empty() }.sanitized()
+    }
+
+    /// La disposition d'origine de l'espace Storyboard : la disposition standard, avec le scénario en onglet à côté des calques
+    /// (fermé dans les autres espaces ; il s'ouvre tout seul après un import).
+    pub fn pour_le_storyboard() -> DockLayout {
+        let mut d = DockLayout::from_legacy(&Layout::default());
+        if let Some(t) = d.principal.tabs_with(&[Pane::Layers]) {
+            t.push(Pane::Scenario);
+        }
+        d.sanitized()
     }
 
     /// Une disposition enregistrée par une version précédente, mise à jour : avant 6a, le
@@ -846,6 +866,13 @@ impl DockLayout {
             let mut above = |n: DockNode| column(0.6, tabs(vec![Pane::Layers]), n);
             self.principal.wrap_tabs_of(Pane::Effects, &mut above);
             return;
+        }
+        // Le scénario, sans colonne de droite (l'espace Vignettes) : en onglet avec la couleur, dans la colonne des réglages.
+        if pane == Pane::Scenario && self.principal.tabs_of_group(Group::Right).is_none() {
+            if let Some(t) = self.principal.tabs_with(&[Pane::Color]) {
+                t.push(pane);
+                return;
+            }
         }
         if group != Group::Bottom {
             if let Some(t) = self.principal.tabs_of_group(group) {

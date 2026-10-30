@@ -761,15 +761,23 @@ fn the_import_is_one_undo_step_named_after_the_command() {
     // Un projet qui a déjà du contenu.
     app.doc.panels[0].action = "Plan existant.".into();
     let before = app.doc.panels.len();
+    // L'import garde le scénario : une étape, aucun plan.
+    let steps_start = step_names(&app).len();
+    assert!(app.scenario_keep(&script, "essai"));
+    assert_eq!(app.doc.panels.len(), before, "l'import ne crée aucun plan");
+    assert!(app.doc.scenario.is_some());
+    assert_eq!(step_names(&app).len(), steps_start + 1);
+    assert_eq!(step_names(&app).last().map(String::as_str), Some("Importer un scénario"));
     let steps_before = step_names(&app).len();
     for split in Split::ALL {
         let o = build(&script, &Options { split, ..Options::default() });
-        assert!(app.scenario_into_project(&o, Dest::End, "essai"));
+        assert!(app.scenario_into_project(&o, Dest::End, "essai", &script));
     }
     let after = app.doc.panels.len();
-    assert_eq!(after, before + 2 + 4 + 6, "trois imports : 2 + 4 + 6 plans");
-    assert_eq!(step_names(&app).len(), steps_before + 3, "une étape par import");
-    assert_eq!(step_names(&app).last().map(String::as_str), Some("Importer un scénario"));
+    assert_eq!(after, before + 2 + 4 + 6, "trois créations : 2 + 4 + 6 plans");
+    assert_eq!(step_names(&app).len(), steps_before + 3, "une étape par création");
+    assert_eq!(step_names(&app).last().map(String::as_str), Some("Créer les plans du scénario"));
+    assert_eq!(app.doc.scenario.as_ref().unwrap().liens.len(), 6, "les liens sont ceux de la dernière création");
 
     // Annuler défait le dernier import en entier, rétablir le refait.
     app.run_action("edition.annuler");
@@ -779,6 +787,11 @@ fn the_import_is_one_undo_step_named_after_the_command() {
     assert_eq!(app.doc.panels.len(), before);
     assert_eq!(app.doc.panels[0].action, "Plan existant.");
     assert_eq!(app.doc.properties.notes, "", "la liste des personnages est annulée avec le reste");
+    assert!(app.doc.scenario.as_ref().unwrap().liens.is_empty(), "le scénario gardé reste, sans lien");
+    app.run_action("edition.annuler");
+    assert!(app.doc.scenario.is_none(), "annuler l'import retire aussi le scénario");
+    app.run_action("edition.retablir");
+    assert!(app.doc.scenario.is_some());
     app.run_action("edition.retablir");
     assert_eq!(app.doc.panels.len(), before + 2);
     assert!(app.doc.properties.notes.contains("MARIE"));
@@ -800,14 +813,26 @@ fn the_window_reads_on_another_thread_then_imports_into_the_open_project_or_a_ne
         let _ = ctx.run(egui::RawInput::default(), |ctx| app.scenario_window_ui(ctx));
     }
 
-    // Dans un nouveau projet : le projet ouvert est remplacé, au titre du scénario.
+    // Dans un nouveau projet : le projet ouvert est remplacé, au titre du scénario ; le scénario est gardé, aucun plan créé.
+    assert_eq!(app.scenario_window.as_ref().unwrap().mode(), crate::scenarioui::Mode::Garder);
     app.scenario_new_project();
     assert!(app.scenario_window.is_none());
     assert_eq!(app.doc.properties.title, "Le Réveil");
     assert!(app.doc.is_plans());
-    assert_eq!(app.doc.panels.len(), 4);
+    assert_eq!(app.doc.panels.len(), 1, "un plan vierge, comme tout projet neuf");
+    assert!(app.doc.scenario.as_ref().is_some_and(|g| g.nom == "Le Réveil.fountain" && g.liens.is_empty()));
     assert!(app.modified && app.path.is_none());
     assert!(app.status.contains("nouveau projet"), "{}", app.status);
+
+    // « Créer les plans depuis le scénario… » : la fenêtre part du scénario gardé, sans fichier.
+    app.run_action("scenario.creer_plans");
+    let w = app.scenario_window.as_ref().expect("fenêtre de découpage");
+    assert_eq!(w.mode(), crate::scenarioui::Mode::Plans);
+    assert!(w.ready());
+    for _ in 0..3 {
+        let _ = ctx.run(egui::RawInput::default(), |ctx| app.scenario_window_ui(ctx));
+    }
+    app.scenario_window = None;
 
     // Un fichier introuvable : la fenêtre montre l'erreur.
     app.read_scenario(dir.join("absent.fountain"));

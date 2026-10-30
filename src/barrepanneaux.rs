@@ -59,6 +59,7 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
         entree(Pane::XSheet, "vue.feuille_exposition", "Feuille d'exposition", "Le plan image par image, calque par calque. Un clic l'ouvre ou le met devant, un autre le ferme."),
     ],
     &[
+        entree(Pane::Scenario, "vue.scenario", "Scénario", "Le scénario importé, lisible comme un scénario ; le passage du plan courant est surligné, un clic sur une ligne mène au plan. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Comments, "vue.commentaires", "Commentaires", "Les commentaires laissés sur la timeline : la liste, et le texte, l'auteur et la couleur du fanion choisi. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::History, "vue.historique", "Historique", "Les étapes d'annulation, par leur nom. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Bruitages, "vue.bruitages", "Bruitages", "Tes dossiers de sons : les chercher, les écouter et les poser dans le montage. Un clic l'ouvre ou le met devant, un autre le ferme."),
@@ -81,8 +82,8 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
 /// Les guides n'y sont plus : ils sont dans le menu de la règle, au-dessus du dessin (`cadrageui.rs`).
 pub(crate) fn panneaux_d_office(espace: Espace) -> &'static [Pane] {
     match espace {
-        Espace::Vignettes => &[Pane::Vignettes, Pane::ToolOptions, Pane::Color, Pane::References],
-        Espace::Storyboard => &[Pane::ToolOptions, Pane::Color, Pane::Personnages, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::References],
+        Espace::Vignettes => &[Pane::Vignettes, Pane::ToolOptions, Pane::Color, Pane::Scenario, Pane::References],
+        Espace::Storyboard => &[Pane::ToolOptions, Pane::Color, Pane::Personnages, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::Scenario, Pane::References],
         Espace::Animation => &[Pane::ToolOptions, Pane::Color, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::References],
         Espace::Montage => &[Pane::Sheet, Pane::Bruitages, Pane::Comments, Pane::History],
     }

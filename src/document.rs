@@ -1091,6 +1091,9 @@ pub struct Structure {
     pub variantes: crate::variantes::Variantes,
     /// Annotations de la vue Vignettes (`annotations.rs`) : tracer, effacer, tout effacer s'annulent avec le reste.
     pub annotations: crate::annotations::Annotations,
+    /// Le scénario gardé dans le projet (`scenariogarde.rs`) : importer et créer les plans depuis lui s'annulent avec le reste.
+    /// Partagé (`Arc`) : une étape d'annulation ne le recopie pas.
+    pub scenario: Option<std::sync::Arc<crate::scenariogarde::Gardee>>,
 }
 
 /// Plus grand côté de la feuille, en pixels : la texture minimale que toute carte graphique garantit (wgpu : 8 192).
@@ -1171,6 +1174,8 @@ pub struct Document {
     /// Les annotations de la vue Vignettes (`annotations.rs`) ; enregistrées à côté du manifeste, dans
     /// `annotations.json`. Dans `Structure` : l'annulation les rétablit avec le reste. Aucun export ne les lit.
     pub annotations: crate::annotations::Annotations,
+    /// Le scénario gardé dans le projet (`scenariogarde.rs`), enregistré à côté du manifeste dans `scenario.json`. Dans `Structure`.
+    pub scenario: Option<std::sync::Arc<crate::scenariogarde::Gardee>>,
     /// « Report du décor » (Préférences > Vignettes) : en réunissant deux plans, le décor du premier se tient sur la suite
     /// (`decor.rs`). Un réglage de l'application que `App::structure_op_porte` pose avant chaque opération : il n'est pas dans le projet.
     pub report_decor: bool,
@@ -1243,6 +1248,7 @@ impl Document {
             variantes: Default::default(),
             variantes_partielles: false,
             annotations: Default::default(),
+            scenario: None,
             report_decor: true,
             decor_bitmap: false,
             duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
@@ -1314,6 +1320,7 @@ impl Document {
             variantes: structure.variantes,
             variantes_partielles: false,
             annotations: structure.annotations,
+            scenario: structure.scenario,
             report_decor: true,
             decor_bitmap: false,
             duree_plan_neuf: crate::dureeplans::secondes_d_origine(),
@@ -1362,6 +1369,7 @@ impl Document {
             variantes: self.variantes.clone(),
             variantes_partielles: self.variantes_partielles,
             annotations: self.annotations.clone(),
+            scenario: self.scenario.clone(),
             report_decor: self.report_decor,
             decor_bitmap: self.decor_bitmap,
             duree_plan_neuf: self.duree_plan_neuf,
@@ -1569,6 +1577,7 @@ impl Document {
             versions: self.versions.clone(),
             variantes: self.variantes.clone(),
             annotations: self.annotations.clone(),
+            scenario: self.scenario.clone(),
         }
     }
 
@@ -1604,6 +1613,7 @@ impl Document {
             versions: std::mem::replace(&mut self.versions, s.versions),
             variantes: std::mem::replace(&mut self.variantes, s.variantes),
             annotations: std::mem::replace(&mut self.annotations, s.annotations),
+            scenario: std::mem::replace(&mut self.scenario, s.scenario),
         }
     }
 

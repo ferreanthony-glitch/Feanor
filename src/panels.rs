@@ -137,7 +137,7 @@ impl App {
                     self.action_item(ui, "Des images comme références…", "references.importer_image");
                     self.action_item(ui, "Une vidéo comme référence…", "references.importer_video");
                     ui.separator();
-                    self.action_item(ui, "Un scénario (Fountain, Final Draft, Word, texte)…", "fichier.importer_scenario");
+                    self.action_item(ui, "Un scénario, à garder dans le projet (Fountain, Final Draft, Word, texte)…", "fichier.importer_scenario");
                     self.action_item(ui, "Des notes de relecture (.json)…", "fichier.importer_notes");
                 });
                 self.action_item(ui, "Exporter…", "fichier.exporter");

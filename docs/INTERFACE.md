@@ -564,18 +564,25 @@ des panneaux et des dispositions (un panneau de plus). Le projet d'essai de fiab
 
 ## 10. Importer un scénario (2026-10-19, branche `import-scenario`)
 
-Fichier > Importer > « Un scénario (Fountain, Final Draft, Word, texte)… », commande `fichier.importer_scenario`
-(dans Ctrl+K, sans touche par défaut). Une fenêtre « Importer un scénario » montre, avant tout changement :
-le format lu, les séquences et leurs plans, la durée estimée, les personnages, les remarques de lecture, et
-les choix (découpage en plans, rythme, destination).
+> **Changé le 2026-10-30 (voir §75).** L'import ne crée plus de plans : il **garde le scénario dans le projet** et
+> l'affiche dans le panneau Scénario. La fenêtre de découpage décrite ici (découpage en plans, rythme, destination) est
+> la même, mais elle s'ouvre depuis le panneau, par « Créer les plans depuis le scénario… », à partir du scénario déjà
+> gardé. La destination « Dans un nouveau projet » n'y existe plus (les plans s'ajoutent au projet ouvert) ; la
+> question « ajouter à la suite ou remplacer ? » se règle seule (voir ci-dessous et §75).
+
+Fichier > Importer > « Un scénario, à garder dans le projet (Fountain, Final Draft, Word, texte)… », commande
+`fichier.importer_scenario` (dans Ctrl+K, sans touche par défaut). Une fenêtre « Importer un scénario » dit ce qui
+a été lu (format, scènes, personnages, remarques de lecture). C'est la fenêtre « Créer les plans depuis le scénario »
+qui montre, avant tout changement : les séquences et leurs plans, la durée estimée, les personnages, et les choix
+(découpage en plans, rythme, où poser les plans).
 
 - **Vocabulaire** : un intitulé de scène (« INT. CUISINE – NUIT ») devient une **séquence** ; l'action et les
   répliques deviennent des **plans** (jamais « scène » ni « panneau » dans les textes visibles) ; les
   paragraphes d'un plan « par scène » en sont les **images de storyboard** (marques d'image).
 - **Menu** : l'entrée est sous Importer.
-- **Annuler** : un import dans le projet ouvert est une seule étape, « Importer un scénario » (panneau
-  Historique) ; un import dans un nouveau projet remplace le projet ouvert après la question habituelle
-  « Modifications non enregistrées ».
+- **Annuler** : garder le scénario est une seule étape, « Importer un scénario » (panneau Historique) ; créer les
+  plans en est une autre, « Créer les plans du scénario ». Sans projet ouvert, l'import crée un nouveau projet qui
+  garde le scénario, après la question habituelle « Modifications non enregistrées ».
 - **À vérifier à l'écran** (rien lancé ici) : la fenêtre en thème clair et sombre (barre d'avancement d'un gros
   fichier, liste des séquences défilante, remarques en couleur d'avertissement), les plans créés dans le montage
   (titres, durées) et la fiche du plan (champs Action, Dialogue, Notes remplis ; notes « Décor : … »).
@@ -5979,3 +5986,95 @@ essais d'accueil d'avant (grandes entrées, logo qui rapetisse, fenêtre « Nouv
 
 **Reste** : le tirage de l'image d'accueil se fait à chaque apparition de l'accueil (inchangé). Les clics dans la vraie fenêtre (taille fixe, centrage sur
 plusieurs écrans, Windows à 150 %) ne sont vérifiés que par les captures de la branche, pas par les essais.
+
+---------------------------------------------------------------------------------------------------
+
+## 75. Le panneau Scénario (2026-10-30, branche `panneau-scenario`)
+
+Demande d'Anthony : « Pense à rajouter un panneau Scénario. C'est là qu'apparaît un scénario importé dans SHOT. Il est lisible à cet endroit. » Puis, le
+même jour : « garder la lecture du scénario par SHOT pour le traduire en plans comme une option disponible à partir de ce panneau, mais pas native à
+l'import ». Le code est dans `scenariogarde.rs` (le scénario gardé, son fichier, ses liens), `scenariopanneau.rs` (le panneau), `scenarioui.rs` (les deux
+fenêtres) et `scenarioplans.rs` (le découpage, qui note maintenant d'où vient chaque plan).
+
+### Ce que ça fait
+
+- **Importer** (Fichier > Importer > Un scénario…) : SHOT lit le fichier (Fountain, Final Draft, Word, texte : rien n'a changé de ce côté), dit ce qu'il a
+  lu, et « Importer » **garde le scénario dans le projet**. Aucun plan, aucune séquence n'est créé. Le panneau Scénario s'ouvre tout seul. Une seule étape
+  d'annulation, « Importer un scénario » : Ctrl+Z retire aussi le scénario du projet.
+- **Le panneau Scénario** (Affichage > Espaces de travail > Panneaux, ou l'icône en forme de scénario dans la barre des panneaux, action `vue.scenario`,
+  bulle avec son nom et sa description) : lecture seule, mis en page comme un scénario, dans une police à chasse fixe.
+  - intitulé de scène en **gras et en majuscules** ; action sur toute la largeur ; nom du personnage **centré** (avec « V.O. » s'il y en a) ; parenthèse
+    de jeu en *italique*, centrée, dans une colonne plus étroite encore ; réplique dans une **colonne étroite au milieu** ; transition **à droite** en
+    majuscules ; notes, synopsis et notes entre crochets en petit, gris, italique ; titre de section en gras.
+  - trois tailles de texte, **A** petit, moyen, grand, en haut à droite du panneau ; le choix est retenu pour la prochaine fois (réglage du poste, dans
+    `reglages.toml`, `scenario_taille`).
+  - **défilement sans latence** : la hauteur de chaque élément est estimée une fois (les lignes d'une police à chasse fixe se comptent) et gardée tant que
+    la largeur, la taille et le scénario ne changent pas ; seuls les éléments visibles sont mis en page et dessinés. Un scénario de 120 pages défile comme
+    un court.
+- **Créer les plans depuis le scénario…** (bouton du panneau, action `scenario.creer_plans`, dans Ctrl+K) : ouvre la fenêtre de découpage d'avant (découpage
+  par scène, par paragraphe ou par réplique ; rythme ; durée), à partir du scénario gardé, **sans redemander de fichier**. Les plans :
+  - s'ajoutent **à la fin du projet**, ou **après la séquence du plan courant** (au choix dans la fenêtre) ;
+  - ne touchent **jamais** aux plans qui existent : seul un projet encore vierge (un seul plan vide, sans texte ni dessin) est remplacé, et la fenêtre
+    le dit (« Le projet est encore vierge… » ou « Le projet a déjà N plan(s)… ») ;
+  - sont créés en **une seule étape d'annulation**, « Créer les plans du scénario » ;
+  - sont **reliés au texte** (voir plus bas).
+- **Sans scénario** : une phrase (« Aucun scénario dans ce projet. Importe un scénario… ») et le bouton « Importer un scénario… », qui lance l'import.
+- **Réimporter un autre scénario** : si le projet en a déjà un, la fenêtre demande s'il est remplacé (« Remplacer le scénario » / « Garder l'actuel »). Le
+  fichier de l'ancien n'est jamais effacé : il reste dans le dossier du projet sous le nom `scenario.ancien-<numéro>.json`. Les plans déjà créés depuis
+  l'ancien restent, mais ne sont plus reliés au texte.
+- **Où il se range** : en onglet à côté de la **couleur** dans l'espace **Vignettes**, en onglet à côté des **calques** dans le **Storyboard** (l'onglet qui
+  reste devant est l'autre : le panneau ne prend aucune place de plus) ; fermé en Animation et en Montage, où l'icône n'apparaît que s'il est ouvert. Les
+  dispositions déjà retenues par l'utilisateur ne changent pas : il y a l'icône de la barre (Vignettes et Storyboard) et l'import l'ouvre tout seul.
+
+### Le lien scène <-> plan
+
+- Pour chaque plan créé par le bouton, SHOT note son **numéro stable** (son identifiant, pas son rang) et la **tranche d'éléments du scénario** dont il vient.
+  L'intitulé de la scène appartient au premier plan de la scène ; une scène va jusqu'à l'intitulé de la suivante.
+- **Surlignage** : le passage du plan courant est surligné (bande de la couleur d'accent, trait à gauche) et le panneau le remet en vue quand on change de plan
+  (seulement s'il n'était pas déjà sous les yeux : le panneau ne saute pas pour rien). Un plan créé à la main, sans lien, montre le passage du plan lié qui le
+  précède.
+- **Clic** : un clic sur une ligne amène au plan qui en vient (la main devient une main qui montre, et la ligne s'éclaire au survol, quand il y a un plan).
+- **Changements de structure** : un plan supprimé, réuni, coupé, déplacé ou renommé ne casse rien, parce que le lien suit le numéro du plan. Si le plan visé
+  n'existe plus, le clic va au **plan lié le plus proche** dans le scénario (à égalité, celui d'avant) ; s'il n'y a plus aucun plan lié, rien ne se passe. Les
+  liens de plans disparus ne sont pas écrits dans le fichier.
+- **Sans plans créés par le bouton**, le panneau reste lisible, sans surlignage ni clic.
+
+### Le fichier
+
+`scenario.json` à côté du manifeste, **sans changer la version du projet** (43) : même principe que `commentaires.json`. Il contient les éléments lus (comme
+`scenario::Script`), le nom du fichier d'origine, un identifiant du texte, et les liens. Un ancien projet n'en a pas et s'ouvre comme avant ; une version plus
+ancienne de SHOT le laisse là. Lecture tolérante : fichier abîmé, trop gros, d'une version plus récente ou qui n'est pas un scénario : le projet s'ouvre sans
+scénario, un avertissement le dit, le fichier reste en place (un enregistrement sans scénario ne l'efface pas ; avec un scénario, il est mis de côté en
+`scenario.json.illisible`). Écriture atomique et sur le disque (`write_sidecar`), comme les autres annexes. Il suit « Enregistrer », « Enregistrer sous », la
+copie de secours, les onglets et les projets partagés (écrit par le poste qui tient le jeton du montage). Le scénario est dans le document (`Document::scenario`,
+partagé par `Arc`) et dans `Structure` : l'annulation le rétablit avec le reste.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Fichier > Importer > Un scénario… sur un `.fountain` : la fenêtre dit « Aucun plan n'est créé » ; « Importer » ferme la fenêtre, le panneau Scénario s'ouvre,
+   le storyboard est inchangé. Ctrl+Z : le scénario disparaît du panneau (phrase et bouton « Importer un scénario… »). Ctrl+Y le ramène.
+2. La mise en page : intitulés en gras majuscules, nom du personnage au centre, réplique en colonne étroite au milieu, parenthèse en italique, transition à droite,
+   notes en petit gris. Les trois **A** changent la taille ; ferme SHOT, rouvre-le : la taille est retenue.
+3. Fais défiler un scénario de 100 pages ou plus (molette, barre) : aucune saccade. Élargis, rétrécis le panneau, détache-le dans sa fenêtre : le texte se remet en page.
+4. « Créer les plans depuis le scénario… » : la fenêtre de découpage s'ouvre sans demander de fichier ; avec un projet qui a déjà des plans, elle dit qu'ils sont
+   gardés et que les nouveaux s'ajoutent ; « Créer les plans » : une seule étape d'annulation (Historique : « Créer les plans du scénario »).
+5. Change de plan (flèches, clic dans le montage) : le passage du plan est surligné et le panneau le remet en vue. Clique une ligne : tu vas au plan.
+6. Supprime un plan, réunis-en deux, déplace-en un : rien ne plante ; cliquer sur le passage d'un plan disparu mène au plan lié le plus proche.
+7. Enregistre, quitte, rouvre le projet : le scénario est là, les liens aussi. Regarde le dossier du projet : `scenario.json`.
+8. Réimporte un autre scénario : la question « Remplacer le scénario ? » ; après « Remplacer » puis un enregistrement, `scenario.ancien-….json` est à côté.
+9. Les espaces : le panneau est un onglet de plus dans Vignettes (avec la couleur) et dans Storyboard (avec les calques) ; en Animation et en Montage, il n'y est pas
+   (Affichage > Panneaux ou Ctrl+K l'ouvre).
+10. Thème clair et sombre : le texte, le surlignage et le gris des notes se lisent.
+
+### Essais
+
+`scenariopanneau_tests.rs` : les liens couvrent le scénario sans trou, l'intitulé va au premier plan de sa scène, liens après déplacement / suppression / réunion,
+clic vers le bon plan puis vers le plus proche, passage montré pour un plan sans lien, liens invalides écartés ; fichier : aller-retour (aussi « Enregistrer
+sous »), ancien projet sans scénario, fichier abîmé / plus récent / d'un autre format (le projet s'ouvre, le fichier n'est pas effacé), scénario remplacé gardé à
+côté ; annulation et copie de travail ; mise en page de chaque sorte d'élément, calcul des lignes, positions, 600 scènes (plus de 4 000 éléments) mises en
+page en moins de 150 ms ; le panneau dessiné (vide, avec scénario, trois tailles, plan supprimé, scénario vide) sans plantage ; dispositions (Vignettes et
+Storyboard l'ont, Animation et Montage non, il s'ouvre dans chaque espace) ; icône, action, bulle. `scenario_tests.rs` : l'import garde sans créer de plans (une
+étape), la création de plans est une étape à part, nouveau projet qui garde le scénario.
+
+**Reste / propositions** : pas d'édition du texte ni de recherche (non demandées). Une recherche dans le scénario (Ctrl+F dans le panneau) serait la première chose utile
+sur un long scénario ; à toi de dire. Les plans créés par une première passe perdent leur lien si on crée les plans une deuxième fois depuis le même scénario.

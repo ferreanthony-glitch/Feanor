@@ -337,6 +337,8 @@ pub struct App {
     pub(crate) perso: crate::personnagesui::Etat,
     /// Mon panneau (essai du Labo, `monpanneauui.rs`) : la recherche du « + », le nom qu'on saisit, le bouton qu'on glisse.
     pub(crate) mon_panneau: crate::monpanneauui::Etat,
+    /// Le panneau Scénario (`scenariopanneau.rs`) : les hauteurs gardées, le plan montré, le défilement demandé.
+    pub(crate) scenario_ui: crate::scenariopanneau::Etat,
     pub(crate) cur_panel: usize,
     pub(crate) cur_layer: usize,
     pub(crate) cur_frame: usize,
@@ -1052,6 +1054,7 @@ impl App {
             vignettes: Default::default(),
             perso: Default::default(),
             mon_panneau: Default::default(),
+            scenario_ui: Default::default(),
             cur_panel: 0,
             cur_layer: 0,
             cur_frame: 0,
@@ -1431,7 +1434,8 @@ impl App {
         // Storyboard. Les dispositions des autres espaces attendent qu'on y aille.
         app.espace = app.settings.storyboard_space;
         let saved = app.settings.layout_of(app.espace).cloned();
-        if saved.is_some() || app.espace != crate::workspace::Espace::Storyboard {
+        // (Sans disposition retenue, le Storyboard prend aussi la sienne d'origine, avec l'onglet Scénario.)
+        {
             // (Disposition d'avant 6a : la nouvelle disposition par défaut, `modernisee`.)
             let layout = saved.unwrap_or_else(|| app.espace.defaut()).modernisee();
             // (Les cadres de composition de la dernière fois aussi.)
@@ -4574,6 +4578,7 @@ impl App {
             // Calque vidéo (13k, `videoui.rs`).
             "fichier.importer_video" => self.import_video(),
             "fichier.importer_scenario" => self.open_scenario_window(),
+            "scenario.creer_plans" => self.open_plans_window(),
             "pinceau.enregistrer_traits" => {
                 self.record_strokes = match self.record_strokes {
                     Some(_) => {
