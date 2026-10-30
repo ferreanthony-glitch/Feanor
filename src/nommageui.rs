@@ -130,6 +130,10 @@ impl App {
         if !self.doc.numbering_locked {
             ui.label(RichText::new("La numérotation des plans est suivie : les noms changent si un plan s'ajoute ou se déplace. Verrouille-la (Propriétés du projet) pour un suivi de production.").small().color(avert));
         }
+        ui.separator();
+        if ui.button(format!("{}  Enregistrer comme modèle d'épisode…", ph::FLOPPY_DISK)).on_hover_text("Garde ces réglages (et le format, les calques, les personnages, les réglages d'export) pour créer les épisodes suivants en quelques clics.").clicked() {
+            self.run_action("projet.enregistrer_modele_episode");
+        }
     }
 
     /// Un changement posé sans passer par un champ de texte (modèle prêt, jeton) : une étape d'annulation.
