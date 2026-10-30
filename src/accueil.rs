@@ -16,9 +16,8 @@
 //! - **En bas à gauche**, « Rouvrir le dernier projet au lancement ».
 //!
 //! Le même contenu sert quand un onglet sans projet voisine avec des projets (Ctrl+T) : la page remplit alors la zone de
-//! travail, centrée. Ce fichier fabrique aussi le petit logotype (« SHOT » et ses deux angles) tout à gauche de la barre de menus.
-
-use eframe::egui::{self, pos2, vec2, Align, Color32, Layout, Rect, RichText, Sense, Stroke, UiBuilder};
+//! travail, centrée.
+use eframe::egui::{self, pos2, vec2, Align, Color32, Layout, Rect, RichText, Stroke, UiBuilder};
 use egui_phosphor::regular as ph;
 
 use crate::accueilimages::Visuel;
@@ -85,40 +84,6 @@ pub(crate) fn logo_texture_en(ctx: &egui::Context, largeur: f32, sombre: bool) -
     let texture = ctx.load_texture(format!("shot-logo-{}-{}", largeur as u32, sombre), image, egui::TextureOptions::LINEAR);
     ctx.data_mut(|d| d.insert_temp(id, (pixels, texture.clone())));
     texture
-}
-
-/// La texture du petit logotype (le mot « SHOT » et ses deux angles, sans la devise) de la barre de menus, à la taille
-/// exacte de l'écran (`hauteur` points × pixels par point). Les angles sont orange (`rehaut`) dans le thème SHOT ; les
-/// lettres, de la couleur du texte (blanc cassé ou noir cinéma). Rendu une fois et gardé : refait seulement si la taille
-/// en pixels, la variante ou la couleur des angles change.
-pub(crate) fn logotype_texture(ctx: &egui::Context, hauteur: f32) -> (egui::TextureHandle, egui::Vec2) {
-    let p = theme::palette();
-    let pixels = (hauteur * ctx.pixels_per_point()).round().max(8.0) as u32;
-    let angles = if p.identite { Some([p.rehaut.r(), p.rehaut.g(), p.rehaut.b()]) } else { None };
-    let cle = (pixels, !p.claire, angles);
-    let id = egui::Id::new("shot_logotype");
-    let taille = |w: u32, h: u32| vec2(w as f32 / ctx.pixels_per_point(), h as f32 / ctx.pixels_per_point());
-    if let Some((c, texture, w, h)) = ctx.data(|d| d.get_temp::<((u32, bool, Option<[u8; 3]>), egui::TextureHandle, u32, u32)>(id)) {
-        if c == cle {
-            return (texture, taille(w, h));
-        }
-    }
-    let variante = if p.claire { Variante::Clair } else { Variante::Sombre };
-    let (w, h, rgba) = logo::logotype(pixels, variante, angles);
-    let image = egui::ColorImage::from_rgba_premultiplied([w as usize, h as usize], &rgba);
-    let texture = ctx.load_texture("shot-logotype", image, egui::TextureOptions::LINEAR);
-    ctx.data_mut(|d| d.insert_temp(id, (cle, texture.clone(), w, h)));
-    (texture, taille(w, h))
-}
-
-/// Hauteur du petit logotype de la barre de menus, en points : celle de la barre (un peu moins, pour qu'il y respire).
-pub(crate) const LOGOTYPE_HAUTEUR: f32 = 20.0;
-
-/// Le petit logotype tout à gauche de la barre de menus : discret, sans bulle ni clic, suivi d'un petit espace.
-pub(crate) fn logotype_barre(ui: &mut egui::Ui) {
-    let (texture, taille) = logotype_texture(ui.ctx(), LOGOTYPE_HAUTEUR);
-    ui.add(egui::Image::new(egui::load::SizedTexture::new(texture.id(), taille)).sense(Sense::hover()));
-    ui.add_space(6.0);
 }
 
 /// Un cadre à titre : fond des panneaux, filet, titre en gras, puis `contenu`. Il occupe tout `rect` (les deux cadres de l'accueil

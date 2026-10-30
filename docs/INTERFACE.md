@@ -5104,12 +5104,12 @@ Rien d'autre. Un essai vérifie qu'il n'y a dans la fenêtre principale qu'un se
 
 - **Logo** (`logo.rs`, dessin de `assets/shot-logo.svg` inchangé) : variante sombre = `#F4F1EA` sur `#0E0E0E` (lettres, angles, devise « FRAME THE », barre ; « STORY » en creux `#0E0E0E`) ; variante claire = l'inverse. Sur l'accueil, il reste **tout blanc cassé** comme sur la planche.
 - **Icône de l'application** (`logo::icone`) : **orange** `#E76F3C`, coins arrondis à 22 % du côté, « S » et angles `#0E0E0E`. La variante sombre (`logo::icone_sombre` : carré `#0E0E0E`, « S » et angles `#F4F1EA`) existe, pas utilisée. PNG 256 px dans `Documents\SHOT\Identité\Charte\` : `icone-orange-256.png`, `icone-sombre-256.png`.
-- **Petit logotype** (`logo::logotype`, `accueil::logotype_barre`) : le mot « SHOT » et ses deux angles, sans la devise, 20 points de haut, tout à gauche de la barre de menus, rendu une fois (texture gardée, refaite seulement si la taille ou le thème change). Il décale les menus d'une quarantaine de points ; à 150 % (fenêtre de 1280 points) les menus et les quatre espaces de travail ne se touchent pas (essai). Dans un thème sans rehauts, ses angles sont de la couleur des lettres.
+- **Petit logotype** : **retiré de la barre de menus le 2026-10-30** (demande d'Anthony) ; Fichier est le premier menu (essai `the_menu_bar_starts_with_fichier_without_a_logotype`). Le dessin `logo::logotype` (le mot « SHOT » et ses deux angles, sans la devise) reste disponible.
 
 ### Limites connues
 
 - **La police** est toujours Segoe UI : la capitale condensée de la charte (« Shrink ») n'est pas fournie, rien n'a été ajouté. Pas de titres de section en capitales espacées : le gain de lisibilité n'est pas net avec cette police ; à décider avec la vraie police.
-- Si Anthony veut un peu plus ou un peu moins d'orange : tout est dans `Palette::rehaut` (la couleur), `theme::souligner_actif` (le trait), `accueil::entree` (l'icône) et `accueil::logotype_texture` (les angles).
+- Si Anthony veut un peu plus ou un peu moins d'orange : tout est dans `Palette::rehaut` (la couleur), `theme::souligner_actif` (le trait), `accueil::entree` (l'icône).
 
 ### À vérifier à l'écran (par Anthony)
 

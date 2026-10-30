@@ -107,8 +107,7 @@ impl App {
 
     pub(crate) fn menu_bar(&mut self, ui: &mut egui::Ui) {
         egui::menu::bar(ui, |ui| {
-            // Le petit logotype de la charte (SHOT, sans la devise), tout à gauche.
-            crate::accueil::logotype_barre(ui);
+            // (Plus de logotype à gauche de Fichier : retiré à la demande d'Anthony le 2026-10-30.)
             // Menus courts (Anthony, 2026-10-18 : « certains menus contiennent trop de choses et
             // noient les informations principales ») : l'essentiel en premier niveau, le reste dans
             // un sous-menu ou une fenêtre (Exporter, Préférences, `prefsui.rs`) ; ce qui a déjà un
