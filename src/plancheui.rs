@@ -91,13 +91,34 @@ impl App {
         }
     }
 
+    /// Les options de l'export posées sur celles de l'écran : le sens de lecture et les textes montrés, et l'opacité du passe-partout (celle de
+    /// la barre du bas de la planche). Que le passe-partout soit allumé à l'écran n'y change rien : c'est la case de la fenêtre qui décide.
+    pub(crate) fn planche_options(&self, opt: &Options) -> Options {
+        Options { sens: self.layout.board_sens, textes: self.layout.board_textes, marie_opacite: self.settings.vignettes.passe_partout_cases_opacite.min(100), ..opt.clone() }
+    }
+
+    /// Les options et l'étendue du bouton « Exporter » : celles de la fenêtre, avec les deux cases retenues dans les réglages de l'application
+    /// (« Avec les annotations », « Passe-partout »).
+    pub(crate) fn planche_options_de_depart(&self) -> (Options, Etendue) {
+        let e = &self.vignettes.planche;
+        let mut opt = e.opt.clone();
+        opt.resolution = e.resolution();
+        (Options { annotations: self.settings.export_annotations, marie: self.settings.vignettes.export_passe_partout, ..opt }, e.etendue)
+    }
+
+    /// La case « Passe-partout » de la fenêtre : retenue dans les réglages de l'application (pas dans le projet).
+    pub(crate) fn planche_regler_passe_partout(&mut self, oui: bool) {
+        self.settings.vignettes.export_passe_partout = oui;
+        self.settings_a_ecrire = true;
+    }
+
     /// La tâche d'export de la planche des plans `plans` vers `out` (rien n'est calculé ici).
     pub(crate) fn planche_job(&self, plans: &[usize], opt: &Options, out: &Path) -> Result<ExportJob, String> {
         if plans.is_empty() {
             return Err("Aucun plan dans cette étendue.".into());
         }
         // (Le sens de lecture et les textes montrés sont ceux de l'écran : l'export range les cases comme la planche.)
-        let opt = &Options { sens: self.layout.board_sens, textes: self.layout.board_textes, ..opt.clone() };
+        let opt = &self.planche_options(opt);
         let p = planche::construire(&self.doc, plans, &self.layout.board_settings(), opt, &self.doc.annotations);
         let (s, dims, reduit) = planche::dimensions(p.cadre, opt.resolution);
         let n = p.cartes.len();
@@ -141,13 +162,7 @@ impl App {
         if !self.export_libre() {
             return;
         }
-        let (opt, etendue) = {
-            let e = &self.vignettes.planche;
-            let mut opt = e.opt.clone();
-            opt.resolution = e.resolution();
-            (opt, e.etendue)
-        };
-        let opt = Options { annotations: self.settings.export_annotations, ..opt };
+        let (opt, etendue) = self.planche_options_de_depart();
         let plans = self.planche_plans(etendue);
         let ext = opt.sortie.extension();
         let base = self.base_name();
@@ -203,6 +218,8 @@ impl App {
         // (Les calques d'annotation cachés de la planche n'y sont pas.)
         let annotations = self.doc.annotations.ordre_de_peinture().len();
         let mut avec_annotations = self.settings.export_annotations;
+        let mut avec_passe_partout = self.settings.vignettes.export_passe_partout;
+        let opacite_passe_partout = self.settings.vignettes.passe_partout_cases_opacite.min(100);
         let mut e = std::mem::take(&mut self.vignettes.planche);
         egui::Grid::new("planche_grille").num_columns(2).spacing([10.0, 7.0]).show(ui, |ui| {
             ui.label("Plans");
@@ -249,9 +266,16 @@ impl App {
                     &format!("Les calques d'annotation de la planche ({annotations} annotation(s) visible(s)) et ceux des plans, par-dessus. Décochée d'office : elles ne font pas partie du storyboard. Retenu d'une séance à l'autre."),
                     "",
                 );
+                // Le passe-partout autour des cases : sa propre case, indépendante de l'interrupteur de l'écran ; seule son opacité est celle de
+                // l'écran (barre du bas de la planche). Décochée d'office, retenue d'une séance à l'autre.
                 ui.horizontal(|ui| {
-                    bulles::bulle(ui.checkbox(&mut o.marie, "Marie-louise"), "Marie-louise", "Un passe-partout couvre tout ce qui est hors de l'intérieur des vignettes : seules les images se voient, les traits qui débordent aussi sont masqués.", "");
-                    if o.marie {
+                    bulles::bulle(
+                        ui.checkbox(&mut avec_passe_partout, "Passe-partout"),
+                        "Passe-partout",
+                        &format!("Couvre tout ce qui est hors de l'intérieur des vignettes : seules les images se voient. Il a l'opacité réglée à l'écran ({opacite_passe_partout} %). Décoché d'office, indépendant du bouton de l'écran ; retenu d'une séance à l'autre."),
+                        "",
+                    );
+                    if avec_passe_partout {
                         crate::champcouleur::srgb(ui, &mut o.marie_couleur);
                     }
                 });
@@ -265,6 +289,11 @@ impl App {
             self.settings_a_ecrire = true;
         }
         e.opt.annotations = avec_annotations;
+        // « Passe-partout » : retenu dans les réglages de l'application (pas dans le projet).
+        if avec_passe_partout != self.settings.vignettes.export_passe_partout {
+            self.planche_regler_passe_partout(avec_passe_partout);
+        }
+        e.opt.marie = avec_passe_partout;
         // Ce qui partirait.
         let mut opt = e.opt.clone();
         opt.resolution = e.resolution();

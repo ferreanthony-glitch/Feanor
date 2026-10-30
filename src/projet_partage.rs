@@ -729,7 +729,9 @@ pub(crate) fn preparer(doc: &Document, manifest_path: &Path, written: &mut HashM
         used.extend(doc.cels_des_variantes());
     }
     let (drawings, fonds, hors, reecrits) = dessins_a_ecrire(doc, dir, &used, written, None)?;
-    let used_textures = used_textures(doc, &used);
+    let mut used_textures = used_textures(doc, &used);
+    // (Et celles des pinceaux du dessin hors des cases : `horschamptex.rs`.)
+    used_textures.extend(doc.annotations.textures_citees());
     let textures = used_textures
         .iter()
         .map(|&(kind, key)| (texture_file(dir, kind, key), kind, key))

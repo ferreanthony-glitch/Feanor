@@ -2365,7 +2365,9 @@ impl App {
                             c.version += 1;
                         }
                         if let Some(edit) = edit {
-                            self.horschamp_noter_bitmap(cel, &edit, stroke.path.clone(), paint);
+                            // (La recette du pinceau, pour la part du trait qui sort de la case : elle garde sa texture sur la planche.)
+                            let (recette, appui, instants) = self.horschamp_recette(&stroke);
+                            self.horschamp_noter_bitmap(cel, &edit, stroke.path.clone(), paint, recette, appui, instants);
                             self.history.push(edit);
                         }
                     }

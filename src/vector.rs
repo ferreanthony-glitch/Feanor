@@ -1524,11 +1524,18 @@ fn render_stroke_alone(w: usize, h: usize, points: &[VPoint], color: [u8; 3], op
         }
         return (sheet, (l, t));
     };
+    rejouer_trait(&mut sheet, points, color, opacity, b, trace, (l, t));
+    (sheet, (l, t))
+}
+
+/// Rejoue le moteur des pinceaux sur `sheet` : les `points` (déjà décalés de `grain`, le décalage de l'image par rapport à la
+/// feuille dont le grain du papier se lit) avec l'appui et l'instant de `trace`.
+fn rejouer_trait(sheet: &mut Raster, points: &[VPoint], color: [u8; 3], opacity: f32, b: &BrushSettings, trace: &Trace, grain: (i64, i64)) {
     let settings = BrushSettings { opacity, smoothing: 0.0, smooth_kind: crate::brush::SmoothKind::Follow, smooth_deferred: false, aliased: false, ..*b };
     let textures = crate::brushtex::shared_textures(&settings);
     let feel = trace.feel.unwrap_or_default();
     let feel = Toucher { pressure_curve: Curve::linear(), threshold: 0.0, ..feel };
-    let mut stroke = StrokeState::new(0, StrokeMode::Paint(color), settings, None, true).with_textures(textures).with_feel(feel).with_grain_offset((l, t));
+    let mut stroke = StrokeState::new(0, StrokeMode::Paint(color), settings, None, true).with_textures(textures).with_feel(feel).with_grain_offset(grain);
     if let Some(b) = trace.secondary {
         stroke = stroke.with_secondary(b);
     }
@@ -1541,12 +1548,44 @@ fn render_stroke_alone(w: usize, h: usize, points: &[VPoint], color: [u8; 3], op
             _ => pressure_for_radius(&settings, p.r),
         };
         match trace.time.get(i).filter(|_| timed) {
-            Some(&t) if t >= 0.0 => stroke.add_point_at(&mut sheet, p.pos(), pressure, t, &mut dirty),
-            _ => stroke.add_point(&mut sheet, p.pos(), pressure, &mut dirty),
+            Some(&t) if t >= 0.0 => stroke.add_point_at(sheet, p.pos(), pressure, t, &mut dirty),
+            _ => stroke.add_point(sheet, p.pos(), pressure, &mut dirty),
         }
     }
-    stroke.finish(&mut sheet, &mut dirty);
-    (sheet, (l, t))
+    stroke.finish(sheet, &mut dirty);
+}
+
+/// Le trait rendu seul sur une feuille à sa mesure (le dessin hors des cases, `horschamptex.rs`) : ses pixels, et la place du pixel (0, 0)
+/// de la feuille rendue dans le monde du trait (`origine`). Le trait est rendu comme dans une case : même moteur, même grain de papier
+/// (lu aux coordonnées du trait, pas à celles de la feuille rendue), mais le cadre est la boîte du trait, sans la feuille d'une case.
+/// Sans réglage : le trait lisse. `None` : trait vide ou démesuré.
+pub fn render_isole(points: &[VPoint], color: [u8; 3], opacity: f32, hardness: f32, brush: Option<&BrushSettings>, trace: &Trace) -> Option<(Raster, (i64, i64))> {
+    if points.is_empty() {
+        return None;
+    }
+    let probe = Element::Stroke { points: points.to_vec(), color, opacity, hardness, brush: brush.map(|b| Box::new(*b)), trace: Trace::default() };
+    let reach = probe.bounds().expand(1.5);
+    if !reach.is_finite() {
+        return None;
+    }
+    let t = TILE as f32;
+    let (x0, y0) = ((reach.min.x / t).floor() * t, (reach.min.y / t).floor() * t);
+    let (w, h) = (((reach.max.x - x0) / t).ceil() as usize * TILE, ((reach.max.y - y0) / t).ceil() as usize * TILE);
+    if w == 0 || h == 0 || w > MAX_SIDE * 2 || h > MAX_SIDE * 2 {
+        return None;
+    }
+    let shifted: Vec<VPoint> = points.iter().map(|p| VPoint { x: p.x - x0, y: p.y - y0, r: p.r }).collect();
+    let mut sheet = Raster::new(w, h);
+    match brush {
+        Some(b) => rejouer_trait(&mut sheet, &shifted, color, opacity, b, trace, (-(x0 as i64), -(y0 as i64))),
+        None => {
+            if let Some(mut mask) = Mask::new(path_bounds(&shifted), w, h) {
+                stamp_path(&mut mask, &shifted, hardness);
+                mask.composite(&mut sheet, color, opacity);
+            }
+        }
+    }
+    Some((sheet, (x0 as i64, y0 as i64)))
 }
 
 /// Bornes entières de `clip` dans une image `w`×`h` : (x0, y0, x1, y1), vides si rien. `open` : l'image
