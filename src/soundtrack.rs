@@ -1,7 +1,7 @@
 //! Pistes son dans l'interface : import, lecture calée sur la carte son, son au défilement,
 //! pistes de la bande de montage et formes d'onde.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, Sense, Stroke, StrokeKind};
@@ -296,13 +296,20 @@ impl App {
     /// (`.shot`, ou l'ancien `.pelure`) s'ouvre dans un onglet.
     pub(crate) fn handle_dropped_files(&mut self, ctx: &egui::Context) {
         let paths: Vec<_> = ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
+        let at = crate::deposer::curseur_fenetre(ctx);
+        self.deposer_chemins(ctx, paths, at);
+    }
+
+    /// Des fichiers déposés sur la fenêtre à `at` (point d'écran) : ceux de l'Explorateur de Windows, ou ceux qu'on glisse
+    /// depuis la bibliothèque (`biblioui.rs`) : le même résultat. Vrai si la planche des Vignettes ou le panneau Références les a pris.
+    pub(crate) fn deposer_chemins(&mut self, ctx: &egui::Context, paths: Vec<PathBuf>, at: Option<Pos2>) -> bool {
         // Lâchés sur la planche des Vignettes : ce sont ses images (`deposer.rs`).
-        if !paths.is_empty() && self.board_take_drop(&paths, crate::deposer::curseur_fenetre(ctx)) {
-            return;
+        if !paths.is_empty() && self.board_take_drop(&paths, at) {
+            return true;
         }
         // Lâchés sur le panneau Références : ce sont des références (`referencesui.rs`).
         if !paths.is_empty() && self.refs_take_drop(ctx, &paths) {
-            return;
+            return true;
         }
         for path in paths {
             // Une image (png, jpeg) lâchée sur un calque vectoriel : elle devient un objet du dessin (`imagevec.rs`).
@@ -317,6 +324,7 @@ impl App {
                 self.import_sound_path(&path, None, None);
             }
         }
+        false
     }
 
     /// Une image lâchée sur la fenêtre quand le calque courant est vectoriel : un objet du dessin. Faux pour tout le reste (un

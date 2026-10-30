@@ -651,6 +651,8 @@ pub struct App {
     pub(crate) sfx: crate::audiofxui::SoundFxUi,
     /// La bibliothèque de bruitages : liste, recherche, écoute, sons en cours de pose (`bruitagesui.rs`).
     pub(crate) brt: crate::bruitagesui::BruitagesUi,
+    /// Le panneau Bibliothèque : le dossier montré, ses vignettes, l'aperçu ouvert (`biblioui.rs`).
+    pub(crate) biblio: crate::biblioui::BiblioUi,
     /// Les suggestions sonores : portée, tâches en cours, fournisseurs (`suggestionsui.rs`).
     pub(crate) sug: crate::suggestionsui::SuggestionsUi,
     /// Ce qu'on a cliqué du bouton droit dans la bande de montage.
@@ -1242,6 +1244,7 @@ impl App {
             variantes_ui: Default::default(),
             sfx: Default::default(),
             brt: Default::default(),
+            biblio: Default::default(),
             sug: Default::default(),
             menu_target: None,
             history: History::default(),
@@ -3617,7 +3620,19 @@ impl App {
         else {
             return;
         };
-        let img = match io::load_image(&path) {
+        self.import_image_fichier(&path);
+    }
+
+    /// Pose l'image `path` (PNG/JPEG) sur le calque courant, comme « Importer une image » (le choix du fichier en moins) :
+    /// aussi pour une image de la bibliothèque (`biblioui.rs`).
+    pub(crate) fn import_image_fichier(&mut self, path: &std::path::Path) {
+        self.end_stroke();
+        let vectoriel = self.layer().kind == LayerKind::Vector && !self.layer().folder;
+        if !vectoriel && (self.layer().kind != LayerKind::Bitmap || self.layer().folder) {
+            self.status = "Choisis un calque bitmap ou vectoriel pour importer une image.".into();
+            return;
+        }
+        let img = match io::load_image(path) {
             Ok(i) => i,
             Err(e) => {
                 self.status = e;
@@ -3775,6 +3790,10 @@ impl App {
             self.keep_gesture(crate::nudge::GESTURE);
         }
         for (key, physical, m, repeat) in keys {
+            // Espace, flèches, Retour arrière et Entrée, la souris sur le panneau Bibliothèque : ce sont les siennes (`biblioui.rs`).
+            if self.biblio.touche_prise(ctx, key, m) {
+                continue;
+            }
             // Entrée, Échap, Retour arrière servent d'abord à l'outil en cours (forme à finir…).
             let sans_projet = self.sans_projet();
             if !sans_projet && !m.any() && self.tool_key(key) {
@@ -3927,6 +3946,14 @@ impl App {
         }
         // Bibliothèque de bruitages (`bruitagesui.rs`).
         if self.bruitage_action(action) {
+            return;
+        }
+        // Panneau Bibliothèque de fichiers (`biblioui.rs`) ; Retour arrière y remonte d'un dossier quand il a la main.
+        if self.bibliotheque_action(action) {
+            return;
+        }
+        if action == "edition.supprimer" && self.biblio.focus && self.pane_shown(crate::dock::Pane::Bibliotheque) {
+            // (Supprimer ne supprime rien dans la bibliothèque : elle est en lecture seule.)
             return;
         }
         // Suggestions sonores (`suggestionsui.rs`).
@@ -5039,6 +5066,8 @@ impl App {
             self.layers_pane_focus = false;
             // Et pour le panneau Références (`referencesui.rs`).
             self.refs.focus = false;
+            // Et la bibliothèque de fichiers (`biblioui.rs`) : elle le reprend si le clic est chez elle.
+            self.biblio.focus = false;
         }
         // Échap ferme la fenêtre des réglages du clic droit et ne fait rien d'autre (`reglagesdroit.rs`).
         self.reglages_droit_echap(ctx);
@@ -5166,6 +5195,7 @@ impl App {
             self.tick_reopen();
             self.poll_brushes();
             self.poll_bruitages(ctx);
+            self.poll_bibliotheque(ctx);
             self.poll_suggestions(ctx);
             self.tick_collage(ctx);
             self.collage_fenetre(ctx);

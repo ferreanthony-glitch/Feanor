@@ -156,6 +156,14 @@ mod audiofx_tests;
 mod audiofxui;
 // Bibliothèque de bruitages (panneau Bruitages) : dossiers, recherche, écoute, pose dans le montage.
 mod bruitages;
+// Panneau Bibliothèque : explorer les fichiers, aperçu intégré des images, vidéos et sons (lecture seule).
+mod biblio;
+mod biblioapercu;
+mod biblioui;
+mod bibliovideo;
+mod bibliovignettes;
+#[cfg(test)]
+mod biblio_tests;
 #[cfg(test)]
 mod bruitages_tests;
 mod bruitagesui;

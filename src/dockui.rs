@@ -77,6 +77,7 @@ impl egui_dock::TabViewer for Panes<'_> {
             | Pane::Bruitages
             | Pane::SuggestionsSonores
             | Pane::Scenario
+            | Pane::Bibliotheque
             | Pane::References => [false, false],
             _ => [false, true],
         }
@@ -180,6 +181,7 @@ impl App {
             Pane::Vignettes => self.vignettes_panneau(ui),
             Pane::MonPanneau => self.mon_panneau(ui),
             Pane::Scenario => self.scenario_panneau(ui),
+            Pane::Bibliotheque => self.bibliotheque_panel(ui),
         }
     }
 
@@ -281,6 +283,7 @@ impl App {
                             | Pane::Bruitages
                             | Pane::SuggestionsSonores
                             | Pane::Scenario
+                            | Pane::Bibliotheque
                             | Pane::References
                     ) {
                         self.pane_ui(ui, pane);

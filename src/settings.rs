@@ -167,6 +167,9 @@ pub struct Settings {
     /// Les dossiers de sons de la bibliothèque de bruitages (`bruitages.rs`).
     #[serde(default, rename = "bruitages")]
     pub bruitages: crate::bruitages::BruitagesReglages,
+    /// Le panneau Bibliothèque (`biblio.rs`) : favoris, dernier dossier, vue, taille des vignettes, volume de l'aperçu.
+    #[serde(default, rename = "bibliotheque")]
+    pub bibliotheque: crate::biblio::BiblioReglages,
     /// La génération sonore (`genreglages.rs`) : pour chaque rôle, local ou service en ligne. Jamais
     /// une clé : elles sont dans le Gestionnaire d'identifiants de Windows (`clessecretes.rs`).
     #[serde(default, rename = "generation_son")]
@@ -331,6 +334,7 @@ impl Default for Settings {
             perf: Default::default(),
             diagnostic: Default::default(),
             bruitages: Default::default(),
+            bibliotheque: Default::default(),
             generation_son: Default::default(),
             passe_partout: default_passe_partout(),
             tremblement_defaut: Default::default(),

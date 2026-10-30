@@ -11,7 +11,7 @@ fn panes() -> Vec<Pane> {
 }
 
 #[test]
-fn the_bar_has_the_eleven_side_panels_in_order() {
+fn the_bar_has_the_twelve_side_panels_in_order() {
     assert_eq!(
         panes(),
         vec![
@@ -27,11 +27,12 @@ fn the_bar_has_the_eleven_side_panels_in_order() {
             Pane::History,
             Pane::Bruitages,
             Pane::References,
+            Pane::Bibliotheque,
         ]
     );
-    // Trois groupes : le dessin, le plan, puis le scénario, les commentaires, l'historique, les bruitages et les
-    // références. (Les suggestions sonores sont dans le menu Labo, sans icône : HORS_BARRE.)
-    assert_eq!(GROUPES.iter().map(|g| g.len()).collect::<Vec<_>>(), vec![3, 4, 5]);
+    // Trois groupes : le dessin, le plan, puis le scénario, les commentaires, l'historique, les bruitages, les
+    // références et la bibliothèque de fichiers. (Les suggestions sonores sont dans le menu Labo, sans icône : HORS_BARRE.)
+    assert_eq!(GROUPES.iter().map(|g| g.len()).collect::<Vec<_>>(), vec![3, 4, 6]);
     assert_eq!(pane_de_action("vue.suggestions_sonores"), Some(Pane::SuggestionsSonores));
 }
 
@@ -87,7 +88,7 @@ fn the_exposure_sheet_icon_is_only_there_in_animation() {
     let panes = |animation: bool| icones(animation).into_iter().flatten().map(|e| e.pane).collect::<Vec<_>>();
     assert_eq!(panes(true), self::panes(), "en animation : les douze icônes");
     let storyboard = panes(false);
-    assert_eq!(storyboard.len(), 11);
+    assert_eq!(storyboard.len(), 12);
     assert!(!storyboard.contains(&Pane::XSheet), "pas de feuille d'exposition en storyboard");
     assert!(storyboard.contains(&Pane::Sheet) && storyboard.contains(&Pane::History) && storyboard.contains(&Pane::Comments));
     // Les trois groupes restent là (aucun ne s'est vidé).
@@ -108,10 +109,10 @@ fn each_workspace_shows_only_the_panels_useful_for_its_work() {
     // (Et le panneau « Planche », sens de lecture et textes, qui a son icône dans cet espace seulement, en tête.)
     assert_eq!(icones_de(Espace::Vignettes, false, &[]), vec![Pane::Vignettes, Pane::ToolOptions, Pane::Color, Pane::Scenario, Pane::References]);
     // Montage : la fiche du plan et ce qui sert à la relecture et au son.
-    assert_eq!(icones_de(Espace::Montage, false, &[]), vec![Pane::Sheet, Pane::Comments, Pane::History, Pane::Bruitages]);
+    assert_eq!(icones_de(Espace::Montage, false, &[]), vec![Pane::Sheet, Pane::Comments, Pane::History, Pane::Bruitages, Pane::Bibliotheque]);
     // Storyboard : le dessin, les calques, la fiche ; pas de feuille d'exposition, de commentaires ni d'historique.
     let storyboard = icones_de(Espace::Storyboard, false, &[]);
-    assert_eq!(storyboard.len(), 8, "{storyboard:?}");
+    assert_eq!(storyboard.len(), 9, "{storyboard:?}");
     for absent in [Pane::XSheet, Pane::Comments, Pane::History, Pane::Bruitages] {
         assert!(!storyboard.contains(&absent), "{absent:?} n'est pas dans la barre du storyboard");
     }
