@@ -357,7 +357,7 @@ pub fn warp_drawing(original: &VectorDrawing, items: Option<&[usize]>, src: Rect
                 contours: contours.iter().map(|c| densify_points(c, step, true)).collect(),
                 color: *color,
                 opacity: *opacity,
-                gradient: *gradient,
+                gradient: gradient.clone(),
             },
             Element::Text { .. } | Element::Image { .. } => e.clone(),
         };

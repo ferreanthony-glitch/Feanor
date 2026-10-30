@@ -358,6 +358,8 @@ pub struct App {
     pub(crate) fill: FillSettings,
     /// Réglages de l'outil Dégradé (`degrade.rs`) : forme, fin, opacité, inverser, tout le calque.
     pub(crate) degrade: crate::degrade::Reglages,
+    /// L'interface des Réglages du dégradé : pastille choisie, sélecteur de couleur, retouches déjà proposées (`degradeui.rs`).
+    pub(crate) degrade_ui: crate::degradeui::EtatUi,
     /// Le geste du dégradé en cours : l'axe tiré, ce qu'il remplit, son aperçu (`degradeui.rs`).
     pub(crate) degrade_geste: Option<crate::degradeui::Geste>,
     pub(crate) shape: ShapeSettings,
@@ -1070,6 +1072,7 @@ impl App {
             reopen_probe: None,
             fill: FillSettings::default(),
             degrade: crate::degrade::Reglages::default(),
+            degrade_ui: Default::default(),
             degrade_geste: None,
             shape: ShapeSettings {
                 filled: false,
@@ -2402,8 +2405,9 @@ impl App {
         self.finish_layer_drag();
         self.guides.stroke = None;
         self.shape_drag = None;
-        // (Le dégradé se pose au lâcher, `degrade_release`, avant ceci : ce qui reste est un geste abandonné.)
-        self.degrade_geste = None;
+        // (Le dégradé se pose au lâcher, `degrade_release`, avant ceci : ce qui reste est un tracé abandonné ; une retouche en cours
+        // s'écrit ; un dégradé posé reste retouchable jusqu'à ce qu'on change d'outil, de calque ou d'image.)
+        self.degrade_abandonner();
         // Aplat intelligent : le trait fini, l'aplat de la clé suit (en arrière-plan, platintel.rs).
         if trait_en_cours {
             self.intel_apres_trait();
@@ -4954,6 +4958,10 @@ impl App {
     /// `perf_tests.rs` l'appellent directement (sans fenêtre, sans sommeil).
     pub(crate) fn frame(&mut self, ctx: &egui::Context) {
         crate::perf::begin_frame(ctx);
+        // La fenêtre perd le focus : une retouche de dégradé en cours s'écrit d'abord (rien ne reste « défait »).
+        if ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::WindowFocused(false)))) {
+            self.degrade_abandonner();
+        }
         // Pipette d'un champ de couleur (`champcouleur.rs`) : sans capture d'écran, la couleur du dessin sous le curseur.
         if let Some(pos) = crate::champcouleur::surveiller(ctx) {
             let couleur = self.couleur_sous_le_curseur(pos);

@@ -858,7 +858,7 @@ impl Element {
                 color: *color,
                 opacity: *opacity,
                 // L'axe du dégradé suit la forme.
-                gradient: gradient.map(|g| g.transformed(a)),
+                gradient: gradient.as_ref().map(|g| g.transformed(a)),
             },
             Element::Text { text, font, size, color, opacity, place } => Element::Text {
                 text: text.clone(),
@@ -1278,12 +1278,12 @@ impl Mask {
                     continue;
                 }
                 let (x, y) = (self.x0 + lx as i64, self.y0 + ly as i64);
-                let (rgb, a) = g.couleur(x as f32 + 0.5, y as f32 + 0.5);
+                let (rgb, a) = g.couleur_pixel(x, y);
                 let t = TILE as i64;
                 let idx = raster.id_of(x.div_euclid(t) as i32, y.div_euclid(t) as i32);
                 let i = y.rem_euclid(t) as usize * TILE + x.rem_euclid(t) as usize;
                 let tile = raster.tile_mut(idx);
-                tile[i] = paint(tile[i], [rgb[0].round() as u8, rgb[1].round() as u8, rgb[2].round() as u8], m.min(1.0) * opacity * a);
+                tile[i] = paint(tile[i], rgb, m.min(1.0) * opacity * a);
             }
         }
     }

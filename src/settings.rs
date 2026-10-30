@@ -244,6 +244,10 @@ pub struct Settings {
     /// La taille du texte du panneau Scénario (petit, moyen, grand ; `scenariogarde::Taille`). Un réglage du poste : moyen d'origine.
     #[serde(default, rename = "scenario_taille", skip_serializing_if = "crate::scenariogarde::Taille::est_defaut")]
     pub scenario_taille: crate::scenariogarde::Taille,
+    /// Mes dégradés (`degrade::Enregistre`, Réglages de l'outil Dégradé) : un réglage du poste, jamais écrit dans le projet. Absent : les
+    /// dégradés de départ (`degrade::enregistres_d_origine`) ; la liste vidée à la main reste vide.
+    #[serde(default, rename = "degrades_enregistres", skip_serializing_if = "Option::is_none")]
+    pub degrades: Option<Vec<crate::degrade::Enregistre>>,
 }
 
 fn default_passe_partout() -> u8 {
@@ -343,6 +347,7 @@ impl Default for Settings {
             new_plan_secs: crate::dureeplans::secondes_d_origine(),
             mon_panneau: Default::default(),
             scenario_taille: Default::default(),
+            degrades: None,
         }
     }
 }
@@ -387,6 +392,10 @@ impl Settings {
         s.framing = s.framing.sanitized();
         s.perf = s.perf.sanitized();
         s.bars = s.bars.nettoyees();
+        // Un dégradé enregistré aux valeurs absurdes (fichier abîmé ou écrit à la main) est écarté, les autres restent.
+        if let Some(l) = s.degrades.as_mut() {
+            l.retain(|e| e.est_sain());
+        }
         // L'espace Montage a maintenant son propre agencement : l'ancienne disposition d'origine,
         // retenue sans que l'utilisateur y ait touché, cède la place à la nouvelle.
         if s.montage_layout.as_ref().is_some_and(crate::workspace::est_le_montage_d_avant) {

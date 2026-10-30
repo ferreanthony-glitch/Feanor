@@ -210,7 +210,13 @@ pub const FORMAT: &str = "pelure-projet";
 /// à certaines images du plan) et `couleur_unie` (le fond d'une seule couleur d'un calque) dans le manifeste de chaque calque. Une version
 /// précédente qui ouvrirait le projet perdrait l'animation de l'opacité et le fond : elle le refuse donc. Un projet de version 42 ou
 /// moins s'ouvre tel quel (sans clé d'opacité ni couleur unie).
-pub const VERSION: u32 = 43;
+/// 44 (2026-10-30, `docs/INTERFACE.md` partie 80) : **dégradés à plusieurs pastilles** — le champ `degrade` d'une zone vectorielle porte
+/// `pastilles` (couleurs : position, couleur, milieu), `transparence` (opacités : position, opacité, milieu), `tramage`, et les formes
+/// `angle`, `reflechi`, `losange` (`degrade.rs`). Une version précédente refuse le projet : elle lirait ces dégradés comme deux couleurs
+/// (ou refuserait la forme), le film changerait sans prévenir. Un projet de version 43 ou moins s'ouvre tel quel, à l'identique : un
+/// ancien dégradé (`couleur_depart`, `couleur_arrivee`, `opacite_depart`, `opacite_arrivee`) se lit comme deux pastilles de chaque, sans
+/// tramage. (Une autre branche peut aussi prendre le numéro 44 : la fusion garde le plus grand et réunit les descriptions.)
+pub const VERSION: u32 = 44;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se

@@ -206,7 +206,7 @@ pub fn warp_element_with(e: &Element, f: &impl Fn(Pos2) -> Pos2, k: f32) -> Elem
             color: *color,
             opacity: *opacity,
             // L'axe du dégradé suit la déformation (ses deux points sont déformés comme ceux du contour).
-            gradient: gradient.map(|g| g.mapped(f)),
+            gradient: gradient.as_ref().map(|g| g.mapped(f)),
         },
         Element::Text { text, font, size, color, opacity, place } => {
             let mut out = Element::Text { text: text.clone(), font: font.clone(), size: *size, color: *color, opacity: *opacity, place: *place };

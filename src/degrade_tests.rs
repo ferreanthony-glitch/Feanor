@@ -31,7 +31,8 @@ pub(crate) fn put(r: &mut Raster, x: usize, y: usize, c: Color32) {
 
 #[test]
 fn a_linear_gradient_has_the_front_colour_at_the_start_the_mix_in_the_middle_and_the_back_colour_at_the_end() {
-    let g = Reglages::default().degrade(ROUGE, BLEU, pos2(100.0, 0.0), pos2(300.0, 0.0));
+    // (Sans tramage : « même colonne, même couleur » ; avec, deux rangées voisines diffèrent d'un niveau au plus, essai plus bas.)
+    let g = Reglages { tramage: false, ..Reglages::default() }.degrade(ROUGE, BLEU, pos2(100.0, 0.0), pos2(300.0, 0.0));
     let mut r = Raster::new(400, 40);
     let tiles = crate::degrade::peindre(&mut r, &Portee::Tout, &g, false, None);
     assert!(!tiles.is_empty());
@@ -95,11 +96,11 @@ fn towards_transparent_is_an_alpha_ramp_of_the_front_colour() {
     }
     // L'opacité du réglage multiplie le tout ; inverser échange les bouts.
     let demi = Reglages { opacite: 0.5, ..Reglages::default() }.degrade(ROUGE, BLEU, pos2(0.0, 0.0), pos2(100.0, 0.0));
-    assert!((demi.a0 - 0.5).abs() < 1e-6 && (demi.a1 - 0.5).abs() < 1e-6);
+    assert!((demi.a0() - 0.5).abs() < 1e-6 && (demi.a1() - 0.5).abs() < 1e-6);
     let inverse = Reglages { inverse: true, ..Reglages::default() }.degrade(ROUGE, BLEU, pos2(0.0, 0.0), pos2(100.0, 0.0));
-    assert_eq!((inverse.c0, inverse.c1), (BLEU, ROUGE));
+    assert_eq!((inverse.c0(), inverse.c1()), (BLEU, ROUGE));
     let inv_transp = Reglages { inverse: true, fin: Fin::VersTransparent, ..Reglages::default() }.degrade(ROUGE, BLEU, pos2(0.0, 0.0), pos2(100.0, 0.0));
-    assert_eq!((inv_transp.a0, inv_transp.a1), (0.0, 1.0), "inversé : il apparaît");
+    assert_eq!((inv_transp.a0(), inv_transp.a1()), (0.0, 1.0), "inversé : il apparaît");
 }
 
 #[test]
@@ -336,7 +337,8 @@ fn the_preview_never_runs_the_brush_engine_and_writes_nothing_before_the_release
     let fin = ecran(&b, 265.0, 150.0);
     b.image(vec![bouton(fin, false, Modifiers::NONE)], 1.0 / 60.0);
     b.image(Vec::new(), 1.0 / 60.0);
-    assert!(b.app.degrade_geste.is_none());
+    // (Le dégradé est posé : la séance de retouche reste, sans tracé en cours.)
+    assert!(b.app.degrade_geste.as_ref().is_some_and(|g| g.phase == crate::degradeui::Phase::Pose));
     assert_eq!(b.app.drawing(cel).map(|d| d.elements.len()), Some(2));
     assert_eq!(crate::vector::replay_count(), rejeux, "pas de rejeu au lâcher non plus : les traits ont leurs pixels en cache");
 }
@@ -353,7 +355,7 @@ fn on_a_vector_layer_the_zone_keeps_a_gradient_instead_of_pixels() {
     let d = b.app.drawing(cel).expect("un dessin vectoriel");
     assert_eq!(d.elements.len(), 2, "le trait et une zone");
     let Element::Fill { gradient: Some(g), color, .. } = &d.elements[0] else { panic!("la zone passe sous le trait : {:?}", d.elements[0]) };
-    assert_eq!((g.genre, g.c0, g.c1), (Genre::Lineaire, ROUGE, BLEU));
+    assert_eq!((g.genre, g.c0(), g.c1()), (Genre::Lineaire, ROUGE, BLEU));
     assert_eq!(*color, ROUGE);
     assert!((g.depart[0] - 120.0).abs() < 1.0 && (g.arrivee[0] - 280.0).abs() < 1.0, "l'axe tiré : {g:?}");
     // Rendue par le rendu vectoriel : rouge au départ, bleu à l'arrivée, le trait par-dessus.
@@ -389,17 +391,17 @@ fn a_gradient_zone_moves_with_its_shape_and_the_axis_follows() {
     assert!(raster.get(158, 160).r() > 235, "{:?}", raster.get(158, 160));
     // Transformations de l'élément : déplacement, échelle, rotation, déformation par un point.
     let e = b.app.drawing(cel).unwrap().elements[0].clone();
-    let g0 = *e.gradient().unwrap();
+    let g0 = e.gradient().unwrap().clone();
     let t = e.transformed(&Affine::translate(vec2(-50.0, 5.0)));
-    let g1 = *t.gradient().unwrap();
+    let g1 = t.gradient().unwrap().clone();
     assert!((g1.depart[0] - (g0.depart[0] - 50.0)).abs() < 1e-3 && (g1.arrivee[1] - (g0.arrivee[1] + 5.0)).abs() < 1e-3);
     let s = Affine { a: 2.0, b: 0.0, c: 0.0, d: 2.0, tx: 0.0, ty: 0.0 };
-    let g2 = *e.transformed(&s).gradient().unwrap();
+    let g2 = e.transformed(&s).gradient().unwrap().clone();
     assert!((g2.depart[0] - 2.0 * g0.depart[0]).abs() < 1e-3 && (g2.arrivee[0] - 2.0 * g0.arrivee[0]).abs() < 1e-3, "le rayon suit l'échelle");
     // La forme déformée en enveloppe ou en perspective (`warp_element_with`) déplace l'axe comme ses points.
     let decale = |p: Pos2| pos2(p.x + 7.0, p.y * 1.5);
     let w = crate::persp::warp_element_with(&e, &decale, 1.0);
-    let gw = *w.gradient().unwrap();
+    let gw = w.gradient().unwrap().clone();
     assert!((gw.depart[0] - (g0.depart[0] + 7.0)).abs() < 1e-3 && (gw.depart[1] - g0.depart[1] * 1.5).abs() < 1e-3);
     // Choisir une couleur pour la zone la remet unie.
     let mut unie = e.clone();
@@ -424,7 +426,7 @@ fn a_selected_filled_zone_receives_the_gradient_without_adding_one() {
     glisser(&mut b, &[(120.0, 150.0), (280.0, 150.0)], Modifiers::NONE);
     let d = b.app.drawing(cel).unwrap();
     assert_eq!(d.elements.len(), n, "pas de zone de plus");
-    assert!(matches!(&d.elements[0], Element::Fill { gradient: Some(g), .. } if g.c0 == ROUGE && g.c1 == BLEU));
+    assert!(matches!(&d.elements[0], Element::Fill { gradient: Some(g), .. } if g.c0() == ROUGE && g.c1() == BLEU));
     // Avec une sélection de traits seuls : rien à remplir.
     b.app.vsel = Some(crate::vtools::VSelection { cel, items: vec![n - 1] });
     let avant = etapes(&b.app).len();
@@ -445,7 +447,7 @@ fn the_gradient_zone_is_saved_reloaded_exported_and_old_projects_open() {
     let cel = doc.new_cel(LayerKind::Vector);
     doc.panels[0].layers[0].frames = vec![Some(cel); 2];
     let g = Reglages { genre: Genre::Radial, fin: Fin::VersTransparent, opacite: 0.8, ..Reglages::default() }.degrade(ROUGE, BLEU, pos2(60.0, 60.0), pos2(110.0, 60.0));
-    let zone = Element::Fill { contours: vec![vec![[10.0, 10.0], [190.0, 10.0], [190.0, 110.0], [10.0, 110.0]]], color: ROUGE, opacity: 1.0, gradient: Some(g) };
+    let zone = Element::Fill { contours: vec![vec![[10.0, 10.0], [190.0, 10.0], [190.0, 110.0], [10.0, 110.0]]], color: ROUGE, opacity: 1.0, gradient: Some(g.clone()) };
     let unie = Element::Fill { contours: vec![vec![[0.0, 0.0], [5.0, 0.0], [5.0, 5.0]]], color: [1, 2, 3], opacity: 1.0, gradient: None };
     {
         let c = doc.cels.get_mut(&cel).unwrap();
@@ -466,7 +468,7 @@ fn the_gradient_zone_is_saved_reloaded_exported_and_old_projects_open() {
             } else if e.path().extension().is_some_and(|x| x == "json") {
                 let t = std::fs::read_to_string(e.path()).unwrap();
                 if t.contains("\"degrade\"") {
-                    assert!(t.contains("\"radial\"") && t.contains("couleur_arrivee") && t.contains("opacite_arrivee"), "{t}");
+                    assert!(t.contains("\"radial\"") && t.contains("pastilles") && t.contains("transparence") && t.contains("tramage"), "{t}");
                     assert_eq!(t.matches("\"degrade\"").count(), 1, "seule la zone en dégradé l'écrit");
                     dit += 1;
                 }
@@ -669,6 +671,7 @@ fn the_gradient_is_never_picked_by_alt_and_a_new_field_is_classified() {
     let app = app("champs");
     assert_eq!(app.degrade, Reglages::default());
     assert!(app.degrade_geste.is_none());
+    assert!(app.degrade.tramage, "le tramage est coché d'origine");
     let g: Degrade = Reglages::default().degrade(ROUGE, BLEU, pos2(0.0, 0.0), pos2(10.0, 0.0));
     assert!(g.is_sane());
 }

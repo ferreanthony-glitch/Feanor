@@ -155,6 +155,8 @@ impl App {
     /// Le cliché, sur le fil de l'interface, puis l'écriture sur un autre fil. Si un enregistrement
     /// dure encore, celui-ci le suit (un seul à la fois).
     pub(crate) fn start_save(&mut self, manifest: PathBuf, then: Option<Pending>) -> bool {
+        // Une retouche de dégradé en cours s'écrit d'abord : le fichier ne contient jamais l'état « défait ».
+        self.degrade_abandonner();
         if self.saving.is_some() {
             self.save_queue = Some((manifest, then));
             self.status = "Enregistrement en cours : le suivant partira à sa fin.".into();

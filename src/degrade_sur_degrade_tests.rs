@@ -178,8 +178,8 @@ fn on_a_vector_layer_a_gradient_over_a_gradient_in_a_closed_shape_stays_in_the_s
         let (n, premier) = faux_rouge_bleu(&b, 110, 290, 110, 190, x as usize, x as usize + 30);
         assert_eq!(n, 0, "appui {k} : tout l'intérieur est à B, {n} pixels faux, le premier {premier:?}");
         let cel = cel_du_calque(&b);
-        let g = crate::vector::Element::gradient(&b.app.drawing(cel).unwrap().elements[0]).copied().expect("un dégradé");
-        assert!((g.depart[0] - x).abs() < 1.5 && g.c0 == ROUGE && g.c1 == BLEU, "appui {k} : le dégradé de B : {g:?}");
+        let g = crate::vector::Element::gradient(&b.app.drawing(cel).unwrap().elements[0]).cloned().expect("un dégradé");
+        assert!((g.depart[0] - x).abs() < 1.5 && g.c0() == ROUGE && g.c1() == BLEU, "appui {k} : le dégradé de B : {g:?}");
     }
     for (x, y) in [(50, 150), (200, 50), (350, 150)] {
         assert_eq!(pixel(&b, x, y).a(), 0, "hors de l'anneau, rien en ({x}, {y})");
