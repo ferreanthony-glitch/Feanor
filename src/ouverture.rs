@@ -173,7 +173,7 @@ impl App {
                 self.status = if loaded.warnings.is_empty() {
                     format!("Ouvert : {}", path.display())
                 } else {
-                    format!("Ouvert avec {} problème(s) : {}", loaded.warnings.len(), loaded.warnings.join(" ; "))
+                    format!("Ouvert avec {} remarque{} : {}", loaded.warnings.len(), if loaded.warnings.len() > 1 { "s" } else { "" }, loaded.warnings.join(" ; "))
                 };
                 if loaded.converted {
                     // Rien n'est réécrit sur le disque avant « Enregistrer ».
@@ -188,6 +188,13 @@ impl App {
                     self.status = m;
                     self.modified = false;
                 } else {
+                    // L'ancien `crayonnes.json` signalé : un bouton le met de côté (`crayonnesheritage.rs`).
+                    if loaded.warnings.iter().any(|w| w.starts_with(crate::crayonnesheritage::FILE)) {
+                        if let Some(dir) = path.parent() {
+                            let msg = self.status.clone();
+                            self.status_avec_action(msg, crate::messages::ActionMessage::CrayonnesDeCote(dir.to_path_buf()));
+                        }
+                    }
                     self.path = Some(path);
                 }
             }

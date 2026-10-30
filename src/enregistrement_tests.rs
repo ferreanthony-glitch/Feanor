@@ -59,14 +59,17 @@ fn rouge_sur_disque(manifeste: &PathBuf) -> u8 {
 
 /// Des images jusqu'à la fin de l'écriture (l'interface continue de tourner pendant ce temps).
 fn pomper(b: &mut Banc) {
-    for _ in 0..600 {
+    // Une attente en temps (pas en nombre d'images) et large : l'écriture finit par un `fsync` du manifeste, que d'autres essais qui
+    // écrivent des séquences d'images en même temps (suite complète) peuvent retarder de plusieurs secondes. Elle reste finie.
+    let debut = std::time::Instant::now();
+    while debut.elapsed() < Duration::from_secs(90) {
         if !b.app.save_en_cours() {
             return;
         }
         b.image(Vec::new(), 0.016);
         std::thread::sleep(Duration::from_millis(5));
     }
-    panic!("l'enregistrement ne se termine pas");
+    panic!("l'enregistrement ne se termine pas en {:?}", debut.elapsed());
 }
 
 #[test]

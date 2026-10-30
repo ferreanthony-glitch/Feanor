@@ -16,7 +16,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 
 use eframe::egui::Color32;
 use serde::{Deserialize, Serialize};
@@ -87,11 +87,41 @@ pub fn effect_layers(doc: &Document, plans: &[usize]) -> usize {
     plans.iter().filter(|&&p| p < doc.panels.len()).map(|&p| doc.panels[p].layers.iter().filter(|l| l.effet.is_some() && !l.annotation).count()).sum()
 }
 
+/// Barrière entre les fils de rendu et le nettoyage : un fichier ne s'écrit que « porte ouverte » ; le nettoyage ferme la porte et attend
+/// les écritures en cours (quelques millisecondes), puis efface : plus aucun fichier ne peut apparaître après lui (règle « Arrêter efface »).
+#[derive(Default)]
+pub struct Porte {
+    etat: Mutex<(usize, bool)>,
+    change: Condvar,
+}
+
+impl Porte {
+    pub(crate) fn entrer(&self) -> bool {
+        let mut e = self.etat.lock().unwrap_or_else(|e| e.into_inner());
+        if e.1 {
+            return false;
+        }
+        e.0 += 1;
+        true
+    }
+    pub(crate) fn sortir(&self) {
+        let mut e = self.etat.lock().unwrap_or_else(|e| e.into_inner());
+        e.0 -= 1;
+        self.change.notify_all();
+    }
+    pub(crate) fn fermer_et_attendre(&self) {
+        let mut e = self.etat.lock().unwrap_or_else(|e| e.into_inner());
+        e.1 = true;
+        while e.0 > 0 {
+            e = self.change.wait(e).unwrap_or_else(|e| e.into_inner());
+        }
+    }
+}
+
 /// Écrit les images de tous les calques du plan `pl`, image `f` du plan, dans son dossier de `dir`.
 #[allow(clippy::too_many_arguments)]
-pub fn write_frame(doc: &Document, pl: &PlanLayers, f: usize, dir: &Path, with_camera: bool, annotations: bool, written: &Mutex<Vec<PathBuf>>, cancel: &AtomicBool) -> Result<(), String> {
+pub fn write_frame(doc: &Document, pl: &PlanLayers, f: usize, dir: &Path, with_camera: bool, annotations: bool, written: &Mutex<Vec<PathBuf>>, cancel: &AtomicBool, porte: &Porte) -> Result<(), String> {
     let folder = dir.join(&pl.folder);
-    std::fs::create_dir_all(&folder).map_err(|e| format!("{} : {e}", folder.display()))?;
     let plans = render::panel_layer_plans(doc, pl.panel, f, annotations);
     let (w, h) = if with_camera { (doc.frame[0], doc.frame[1]) } else { (doc.width, doc.height) };
     for (li, stem) in &pl.layers {
@@ -105,11 +135,20 @@ pub fn write_frame(doc: &Document, pl: &PlanLayers, f: usize, dir: &Path, with_c
         };
         let path = folder.join(format!("{stem}_{:04}.png", f + 1));
         let part = crate::export::part_of(&path);
-        written.lock().unwrap_or_else(|e| e.into_inner()).push(path.clone());
-        crate::io::write_png(&part, &pixels, w, h).and_then(|()| std::fs::rename(&part, &path).map_err(|e| e.to_string())).map_err(|e| {
-            let _ = std::fs::remove_file(&part);
-            format!("{} : {e}", path.display())
-        })?;
+        // Porte fermée (annulé ou raté pendant le calcul de l'image) : rien n'est écrit.
+        if !porte.entrer() {
+            return Ok(());
+        }
+        let res = (|| {
+            std::fs::create_dir_all(&folder).map_err(|e| format!("{} : {e}", folder.display()))?;
+            written.lock().unwrap_or_else(|e| e.into_inner()).push(path.clone());
+            crate::io::write_png(&part, &pixels, w, h).and_then(|()| std::fs::rename(&part, &path).map_err(|e| e.to_string())).map_err(|e| {
+                let _ = std::fs::remove_file(&part);
+                format!("{} : {e}", path.display())
+            })
+        })();
+        porte.sortir();
+        res?;
     }
     Ok(())
 }
@@ -121,6 +160,8 @@ pub fn job(dir: &Path, info: Vec<PlanLayers>, frames: Vec<(usize, usize)>, s: &L
     let message = format!("{files} image{} de calques exportée{} pour {plans} plan{} : {}", if files > 1 { "s" } else { "" }, if files > 1 { "s" } else { "" }, if plans > 1 { "s" } else { "" }, dir.display());
     let written: Arc<Mutex<Vec<PathBuf>>> = Arc::default();
     let (w_calc, w_clean) = (written.clone(), written);
+    let porte: Arc<Porte> = Arc::default();
+    let porte_nettoyage = porte.clone();
     let folders: Vec<PathBuf> = info.iter().map(|i| dir.join(&i.folder)).collect();
     let by_panel: Arc<HashMap<usize, PlanLayers>> = Arc::new(info.into_iter().map(|i| (i.panel, i)).collect());
     let list = Arc::new(frames.clone());
@@ -133,6 +174,7 @@ pub fn job(dir: &Path, info: Vec<PlanLayers>, frames: Vec<(usize, usize)>, s: &L
         |_, _| Ok(()),
         |_: Vec<()>| Ok(()),
         move || {
+            porte_nettoyage.fermer_et_attendre();
             for p in w_clean.lock().unwrap_or_else(|e| e.into_inner()).drain(..) {
                 let _ = std::fs::remove_file(&p);
                 let _ = std::fs::remove_file(crate::export::part_of(&p));
@@ -150,7 +192,7 @@ pub fn job(dir: &Path, info: Vec<PlanLayers>, frames: Vec<(usize, usize)>, s: &L
             }
             let (p, f) = list[i];
             if let Some(pl) = by_panel.get(&p) {
-                if let Err(e) = write_frame(&doc, pl, f, &d, with_camera, annotations, &w_calc, &cancel) {
+                if let Err(e) = write_frame(&doc, pl, f, &d, with_camera, annotations, &w_calc, &cancel, &porte) {
                     let mut slot = fail.lock().unwrap_or_else(|e| e.into_inner());
                     slot.get_or_insert(e);
                     return None;

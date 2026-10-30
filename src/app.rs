@@ -2060,7 +2060,10 @@ impl App {
             return false;
         }
         if self.layer().video.is_some() {
-            self.status = "Un calque vidéo ne se dessine pas : « Transformer en calque d'animation » d'abord (menu de sa ligne), ou dessine sur un calque au-dessus.".into();
+            self.status_avec_action(
+                "Un calque vidéo ne se dessine pas : transforme-le en calque d'animation (bouton ci-contre), ou dessine sur un calque au-dessus.".into(),
+                crate::messages::ActionMessage::VideoEnAnimation,
+            );
             return false;
         }
         if self.layer().locked {

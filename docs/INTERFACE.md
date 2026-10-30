@@ -6507,3 +6507,15 @@ La fusion existait (`calque.fusionner_dessous` sur **Ctrl+E**, « les choisis »
 7. Un calque caché : l'entrée est grisée, la bulle dit « est caché ». Pareil pour un calque vidéo, un calque d'effet, un calque verrouillé.
 8. Ctrl + clic sur trois calques : « Fusionner les 3 calques choisis ».
 9. Clic droit sur une entrée (« Dupliquer », « Fusionner vers le bas »…) : « Assigner un raccourci ».
+
+## 85. Stabilité et retouches de l'audit (2026-10-30, branche `stabilite-essais`)
+
+Deux instabilités de la suite complète et cinq retouches de l'audit pratique. **`project::VERSION` ne change pas (44).**
+
+- **Annuler les calques séparés** : les fils de rendu ne sont pas attendus à l'annulation (une image 4K peut durer des secondes) ; l'un d'eux pouvait finir d'écrire un PNG après le nettoyage. Une « porte » (`exportlayers::Porte`) encadre chaque écriture : le nettoyage la ferme, attend l'écriture en cours (quelques millisecondes), puis efface ; plus rien ne peut s'écrire après lui. Le rendu d'une image n'est jamais attendu.
+- **Enregistrement en tâche de fond** : pas d'interblocage trouvé ; l'écriture finit par un `fsync` du manifeste que d'autres essais qui écrivent des séquences d'images retardent sous charge. L'essai attend maintenant en temps (90 s au plus), plus en nombre d'images.
+- **Marquer l'envoi** : un projet encore en `.pelure` n'est plus enregistré (donc renommé en `.shot`) en silence ; l'envoi reste dans le projet (modifié), et le message dit d'enregistrer (Ctrl+S) et que le projet passera en `.shot`. Un projet `.shot` est enregistré comme avant.
+- **Calque vidéo** : le message « un calque vidéo ne se dessine pas » a un bouton **Transformer en calque d'animation** dans la barre d'état. Les boutons de message (`messages::ActionMessage`) ne valent que pour leur message.
+- **Échap** ferme la fenêtre Exporter et la fenêtre d'un export choisi, sans rien lancer.
+- **Fin d'export** : la fenêtre d'un export réussi s'efface seule après 8 s (le pointeur dessus la garde) ; le message reste dans la barre d'état avec **Ouvrir le dossier**. Une erreur reste jusqu'au clic.
+- **`crayonnes.json`** (ancienne planche de crayonnés) : l'avis d'ouverture devient « Ouvert avec N remarque(s) » et propose **Mettre de côté** : le fichier est renommé `crayonnes.json.ancien` (jamais lu, jamais effacé) et un bouton **Annuler** le remet. Sans ce choix, rien n'est touché.
