@@ -5,7 +5,7 @@ use image::{Rgb, RgbImage};
 
 use super::*;
 use crate::perf_tests::Banc;
-use crate::vignettes_tests::{ouvert, quatre_plans};
+use crate::vignettes_tests::{deux_sequences, ouvert, quatre_plans};
 
 fn tout(doc: &Document) -> Vec<usize> {
     (0..doc.panels.len()).collect()
@@ -18,7 +18,7 @@ fn dossier(nom: &str) -> std::path::PathBuf {
     dir
 }
 
-/// Un projet de `n` plans dans une séquence ; `quatre_plans` en a deux séquences.
+/// Un projet de `n` plans dans une séquence ; `deux_sequences` en a deux.
 fn plans(n: usize) -> Document {
     let mut doc = Document::with_frame(160, 90, 24);
     for _ in 1..n {
@@ -30,7 +30,7 @@ fn plans(n: usize) -> Document {
 
 #[test]
 fn one_image_per_plan_by_default_grouped_by_sequence() {
-    let doc = quatre_plans();
+    let doc = deux_sequences();
     let spec = construire(&doc, &tout(&doc), &Options::default());
     assert_eq!(spec.nombre(), 4, "une par plan, même si un plan a des marques d'image");
     assert_eq!(spec.blocs.len(), 2, "deux séquences");
@@ -43,7 +43,7 @@ fn one_image_per_plan_by_default_grouped_by_sequence() {
 
 #[test]
 fn one_image_per_case_on_request_and_first_or_middle_image() {
-    let doc = quatre_plans();
+    let doc = deux_sequences();
     let par_case = construire(&doc, &tout(&doc), &Options { par_case: true, ..Options::default() });
     assert_eq!(par_case.nombre(), 6, "le plan 0 a trois cases");
     let cases = crate::board::plan_boards(&doc, 0);
@@ -82,7 +82,7 @@ fn rows_are_tight_wrap_at_the_limit_and_sequences_have_a_title() {
     let petit = construire(&plans(5), &[0, 1, 2, 3, 4], &o);
     assert_eq!(petit.taille[0], petit.marge as u32 * 2 + 5 * 100 + 4 * 3);
     // Deux séquences : la seconde commence plus bas, sous son titre.
-    let doc = quatre_plans();
+    let doc = deux_sequences();
     let s = construire(&doc, &tout(&doc), &Options::default());
     assert!(s.blocs[1].titre_y > s.blocs[0].entrees[0].y + s.cellule[1] as i32, "la deuxième séquence est sous la première");
     assert!(s.blocs[1].entrees[0].y > s.blocs[1].titre_y, "ses images sont sous son titre");
@@ -94,7 +94,7 @@ fn rows_are_tight_wrap_at_the_limit_and_sequences_have_a_title() {
 
 #[test]
 fn plan_numbers_only_on_the_first_case_of_each_plan() {
-    let doc = quatre_plans();
+    let doc = deux_sequences();
     let o = Options { numeros: true, par_case: true, ..Options::default() };
     let spec = construire(&doc, &tout(&doc), &o);
     let e: Vec<&Entree> = spec.blocs.iter().flat_map(|b| &b.entrees).collect();
@@ -106,7 +106,7 @@ fn plan_numbers_only_on_the_first_case_of_each_plan() {
 
 #[test]
 fn the_dominant_colour_strip_is_off_by_default_and_adds_height_when_asked() {
-    let doc = quatre_plans();
+    let doc = deux_sequences();
     let sans = construire(&doc, &tout(&doc), &Options::default());
     let avec = construire(&doc, &tout(&doc), &Options { bande: true, ..Options::default() });
     assert_eq!(sans.bande_h, 0);
@@ -149,7 +149,7 @@ fn cellules(spec: &Spec, couleurs: &[[u8; 3]]) -> Vec<Cellule> {
 
 #[test]
 fn the_image_has_the_background_the_images_the_titles_and_optionally_the_strip() {
-    let doc = quatre_plans();
+    let doc = deux_sequences();
     let couleurs = [[200, 30, 30], [30, 200, 30], [30, 30, 200], [200, 200, 30]];
     let o = Options::default();
     let spec = construire(&doc, &tout(&doc), &o);
@@ -196,7 +196,7 @@ fn a_huge_script_is_reduced_to_the_bounds_and_says_so() {
 
 #[test]
 fn the_files_are_valid() {
-    let doc = quatre_plans();
+    let doc = deux_sequences();
     let spec = construire(&doc, &tout(&doc), &Options::default());
     let img = composer(&spec, &cellules(&spec, &[[120, 60, 200]])).unwrap();
     let png = encoder(&img, Sortie::Png, "T").unwrap();

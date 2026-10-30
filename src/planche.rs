@@ -144,6 +144,8 @@ pub struct Carte {
 pub struct Planche {
     pub layout: BoardLayout,
     pub cartes: Vec<Carte>,
+    /// Les titres des séquences (leur place sur la planche, leur nom) : rien quand les plans exportés sont dans une seule séquence.
+    pub titres: Vec<(Rect, String)>,
     pub annotations: Annotations,
     /// Ce qu'on exporte, en unités de la planche.
     pub cadre: Rect,
@@ -229,7 +231,9 @@ pub fn construire(doc: &Document, plans: &[usize], s: &BoardSettings, opt: &Opti
         }
     }
     // (Même rangement qu'à l'écran, sans les cases pâles : elles ne sont pas exportées.)
-    let layout = board::layout_with(&sub, s, &Default::default(), false, &board::Options { sens: opt.sens, textes, ..Default::default() });
+    // (Plusieurs séquences : chacune a son titre, sa rangée de départ ; `planchesequences.rs`.)
+    let layout = crate::planchesequences::layout_export(&sub, s, &board::Options { sens: opt.sens, textes, ..Default::default() });
+    let titres: Vec<(Rect, String)> = layout.groupes.iter().filter_map(|g| g.titre.map(|t| (t, doc.sequence_label(g.sequence)))).collect();
     let cartes: Vec<Carte> = layout
         .cards
         .iter()
@@ -249,7 +253,7 @@ pub fn construire(doc: &Document, plans: &[usize], s: &BoardSettings, opt: &Opti
     } else {
         let planche: Vec<_> = annotations.calques.iter().filter(|c| c.planche).cloned().collect();
         let traces = annotations.traces.iter().filter(|t| planche.iter().any(|c| c.id == t.calque)).cloned().collect();
-        Annotations { calques: planche, traces }
+        Annotations { calques: planche, traces, ..Default::default() }
     };
     if (opt.annotations || !annotations.traces.is_empty()) && !opt.marie {
         if let Some(e) = annotations.etendue(&layout) {
@@ -257,7 +261,7 @@ pub fn construire(doc: &Document, plans: &[usize], s: &BoardSettings, opt: &Opti
             cadre = cadre.union(e.expand(4.0).intersect(cadre.expand(cadre.width().max(cadre.height()) * 0.5)));
         }
     }
-    Planche { layout, cartes, annotations, cadre }
+    Planche { layout, cartes, titres, annotations, cadre }
 }
 
 /// L'échelle (pixels par unité de la planche), la taille de l'image, et ce qui a été réduit pour rester dans les bornes.
@@ -386,7 +390,8 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
     // Les barres de coupe, entre deux vignettes qui se suivent (pas devant la première case vide).
     if opt.barres {
         for b in &p.layout.bars {
-            if b.after + 1 >= p.layout.cards.len() {
+            // (Ni devant la première case vide, ni entre deux séquences : le titre les sépare.)
+            if p.layout.vers_pale(b.after) {
                 continue;
             }
             let r = rect_px(b.bar, p.cadre, s);
@@ -402,6 +407,17 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
                 remplir(&mut pix, [cx - largeur / 2, r[1], cx - largeur / 2 + largeur, r[3]], couleur);
             }
         }
+    }
+    // Les titres des séquences : le nom, gras, et un filet dessous.
+    for (t, nom) in &p.titres {
+        let r = rect_px(*t, p.cadre, s);
+        let taille = (22.0 * s).max(8.0);
+        let lay = crate::text::layout(nom, crate::text::FALLBACK, taille);
+        let y = r[3] as f32 - lay.bounds.height() - 2.0 * s;
+        for dx in [0.0, (taille * 0.035).max(0.6)] {
+            ecrire(&mut pix, nom, r[0] as f32 + dx, y, taille, [15, 15, 15]);
+        }
+        remplir(&mut pix, [r[0], r[3] + (2.0 * s) as i32, r[2], r[3] + (2.0 * s) as i32 + epais as i32], [200, 200, 200]);
     }
     // Le dessin hors des cases, sous les cases (comme sur l'écran).
     for i in p.annotations.ordre_de_peinture() {

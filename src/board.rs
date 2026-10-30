@@ -167,9 +167,12 @@ impl Reserve {
             None => Rect::from_min_size(Pos2::ZERO, c.thumb.size()),
         };
         let jap = layout.sens.japonais();
-        let pose_y = jap.then(|| c.thumb.top() - layout.origine_y);
+        // (Sur la planche par séquences, la rangée et la hauteur se comptent depuis le début de la séquence de la case : c'est ce que lit
+        // la mise en page de cette séquence.)
+        let (rang0, origine_y) = layout.groupe_de(k).map_or((0, layout.origine_y), |g| (g.rang0, g.origine_y));
+        let pose_y = jap.then(|| c.thumb.top() - origine_y);
         let dec = if jap { c.thumb.left() - c.ligne.left() } else { c.thumb.top() - c.ligne.top() };
-        Some(Reserve { plan: c.plan, rect, pose: Some((c.row, c.thumb.left() - layout.origine_x)), pose_y, pose_dec: Some(dec.max(0.0)) })
+        Some(Reserve { plan: c.plan, rect, pose: Some((c.row.saturating_sub(rang0), c.thumb.left() - layout.origine_x)), pose_y, pose_dec: Some(dec.max(0.0)) })
     }
 }
 
@@ -179,6 +182,9 @@ pub struct Options {
     /// Les cases pâles : au moins ce nombre de rangées en tout (plus une rangée après la dernière occupée). Rien : pas de case
     /// pâle (les exports). Lues à la japonaise : des colonnes.
     pub pale_rows: Option<usize>,
+    /// Au plus ce nombre de cases pâles en tout (la planche par séquences : une seule à la fin de chaque séquence sauf la dernière) ; la planche
+    /// ne garde alors que les rangées de ces cases. Rien : celles de `pale_rows`.
+    pub pale_max: Option<usize>,
     /// La place retenue pendant un geste de caméra.
     pub hold: Option<Reserve>,
     /// Le sens de lecture (`boardsens.rs`) : en lignes, ou à la japonaise (`boardjapon.rs`).
@@ -308,6 +314,28 @@ pub struct CutBar {
     pub zone: Rect,
 }
 
+/// Une séquence sur la planche par séquences (`planchesequences.rs`) : son titre au-dessus, ses cases (des rangs de `BoardLayout::cards`),
+/// ses cases pâles, et ce qu'il faut pour la retrouver dans le film. Aucune quand la planche n'a qu'une séquence (rien n'a changé).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct GroupeBoard {
+    /// L'identifiant de la séquence (stable : il ne change ni quand on la renomme, ni quand on la déplace dans le film).
+    pub sequence: u64,
+    /// Le titre, au-dessus de la première rangée ; rien quand la planche n'a qu'une séquence.
+    pub titre: Option<Rect>,
+    /// Les cases de la séquence : rangs dans `BoardLayout::cards` (et `bars`, une barre par case).
+    pub cartes: std::ops::Range<usize>,
+    /// Ses cases pâles : rangs dans `BoardLayout::empty`.
+    pub vides: std::ops::Range<usize>,
+    /// La première rangée de la séquence (`CardPlace::row` est compté depuis la première rangée de la planche entière).
+    pub rang0: usize,
+    /// Le haut des colonnes de la séquence (à la japonaise : le y des cases de la séquence est compté depuis lui, `Reserve::pose_y`).
+    pub origine_y: f32,
+    /// Le rang, dans le film, du dernier plan de la séquence : la case pâle ou la continuité fait un plan juste après lui, dans la séquence.
+    pub dernier_plan: usize,
+    /// Le plan qui suit la séquence dans le film (rien : elle est la dernière) : devant lui se pose un plan lâché à la fin de la séquence.
+    pub plan_suivant: Option<u64>,
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BoardLayout {
     pub cards: Vec<CardPlace>,
@@ -329,9 +357,39 @@ pub struct BoardLayout {
     pub sens: Sens,
     /// Le haut des colonnes (lue à la japonaise : le y des cases est compté depuis lui, `Reserve::pose_y`).
     pub origine_y: f32,
+    /// Les séquences de la planche, dans l'ordre où elles sont rangées ; vide : la planche entière est une seule séquence, sans titre.
+    pub groupes: Vec<GroupeBoard>,
+    /// Les vignettes (plans et marques d'image) des séquences que la planche ne montre pas : leurs annotations attendent, elles ne passent
+    /// pas à une voisine (`Annotations::rattacher_manquantes`).
+    pub masquees: Vec<u64>,
 }
 
 impl BoardLayout {
+    /// La séquence de la case `k` (rang dans `cards`), s'il y en a plusieurs sur la planche.
+    pub fn groupe_de(&self, k: usize) -> Option<&GroupeBoard> {
+        self.groupes.iter().find(|g| g.cartes.contains(&k))
+    }
+
+    /// La barre après la case `after` mène-t-elle à la première case pâle (de sa séquence) plutôt qu'à une case qui la suit ? Vrai pour la
+    /// dernière case de la planche et pour la dernière de chaque séquence.
+    pub fn vers_pale(&self, after: usize) -> bool {
+        after + 1 >= self.cards.len() || self.groupes.iter().any(|g| g.cartes.end == after + 1)
+    }
+
+    /// La case pâle `e` : le rang, dans le film, du dernier plan de sa séquence (le plan à continuer), et son rang parmi les cases pâles de
+    /// sa séquence (0 : la première). Sans séquences, le dernier plan du film.
+    pub fn vide_de(&self, e: usize, plans: usize) -> (usize, usize) {
+        match self.groupes.iter().find(|g| g.vides.contains(&e)) {
+            Some(g) => (g.dernier_plan, e - g.vides.start),
+            None => (plans.saturating_sub(1), e),
+        }
+    }
+
+    /// Le titre de séquence sous le point `p` (planche) : le rang de la séquence dans `groupes`.
+    pub fn titre_en(&self, p: Pos2) -> Option<usize> {
+        self.groupes.iter().position(|g| g.titre.is_some_and(|t| t.contains(p)))
+    }
+
     pub fn card_of(&self, id: u64) -> Option<&CardPlace> {
         self.cards.iter().find(|c| c.id == id)
     }
@@ -621,6 +679,9 @@ struct Cle {
     hold: Option<CleHold>,
     sens: Sens,
     textes: u8,
+    /// La planche par séquences : ce qu'elle montre, et la séquence de chaque plan (rien : une seule séquence, la planche d'avant).
+    vue: Option<VueSequences>,
+    sequences: Vec<u64>,
 }
 
 struct ClePlan {
@@ -648,18 +709,20 @@ fn bits_hold(opt: &Options) -> Option<CleHold> {
 }
 
 impl Cle {
-    fn de(doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options) -> Cle {
+    fn de(doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options, vue: Option<&VueSequences>) -> Cle {
         let plans = doc
             .panels
             .iter()
             .map(|p| ClePlan { id: p.id, scene: p.scene, n: p.frame_count(), marks: p.marks.iter().map(|m| (m.id, m.frame)).collect(), camera: p.camera.iter().map(bits_cam).collect() })
             .collect();
-        Cle { frame: doc.frame, plans, s: bits_reglages(s), last_joins, pale_rows: opt.pale_rows, hold: bits_hold(opt), sens: opt.sens, textes: opt.textes.bits() }
+        Cle { frame: doc.frame, plans, s: bits_reglages(s), last_joins, pale_rows: opt.pale_rows, hold: bits_hold(opt), sens: opt.sens, textes: opt.textes.bits(), vue: vue.cloned(), sequences: if vue.is_some() { doc.sequence_ids() } else { Vec::new() } }
     }
 
     /// La disposition de ces arguments serait-elle celle de cette clé ? (Un passage sur les plans, sans rien allouer.)
-    fn tient(&self, doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options) -> bool {
+    fn tient(&self, doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options, vue: Option<&VueSequences>) -> bool {
         self.frame == doc.frame
+            && self.vue.as_ref() == vue
+            && (vue.is_none() || self.sequences == doc.sequence_ids())
             && self.s == bits_reglages(s)
             && self.last_joins == last_joins
             && self.pale_rows == opt.pale_rows
@@ -680,10 +743,26 @@ impl Cle {
 }
 
 /// `layout_with`, gardée dans `cache` tant que rien de ce dont elle dépend ne change (`CacheDisposition`).
+#[cfg(test)]
 pub fn layout_cache(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options, cache: &mut CacheDisposition) -> BoardLayout {
-    if !cache.cle.as_ref().is_some_and(|k| k.tient(doc, s, last_joins, opt)) {
-        cache.layout = layout_with(doc, s, lines, last_joins, opt);
-        cache.cle = Some(Cle::de(doc, s, last_joins, opt));
+    layout_cache_sequences(doc, s, lines, last_joins, opt, None, cache)
+}
+
+/// Les séquences que la planche montre, dans l'ordre où elle les range, et si chacune a son titre (`planchesequences.rs`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct VueSequences {
+    pub sequences: Vec<u64>,
+    pub titres: bool,
+}
+
+/// `layout_cache`, pour la planche par séquences quand `vue` est donnée (`layout_sequences`) ; sans elle, la planche d'une seule séquence.
+pub fn layout_cache_sequences(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options, vue: Option<&VueSequences>, cache: &mut CacheDisposition) -> BoardLayout {
+    if !cache.cle.as_ref().is_some_and(|k| k.tient(doc, s, last_joins, opt, vue)) {
+        cache.layout = match vue {
+            Some(v) => crate::planchesequences::layout_sequences(doc, s, last_joins, opt, v),
+            None => layout_with(doc, s, lines, last_joins, opt),
+        };
+        cache.cle = Some(Cle::de(doc, s, last_joins, opt, vue));
         cache.calculs += 1;
     }
     cache.layout.clone()
@@ -695,9 +774,16 @@ pub fn layout_cache(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usiz
 /// image de plus du dernier plan (barre grise devant elle) et non un plan neuf (barre noire).
 /// Ne dépend pas de la taille de la vue : les notes libres restent à leur place quand la fenêtre change.
 pub fn layout_with(doc: &Document, s: &BoardSettings, _lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options) -> BoardLayout {
+    let tous: Vec<usize> = (0..doc.panels.len()).collect();
+    layout_indices(doc, s, last_joins, opt, &tous)
+}
+
+/// La planche des seuls plans `indices` (rangs dans le film, dans l'ordre où ils se rangent) : c'est `layout_with` pour tout le film, et
+/// pour une séquence de la planche par séquences (`planchesequences.rs`). Les cases gardent le vrai rang du plan (`CardPlace::panel`).
+pub fn layout_indices(doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options, indices: &[usize]) -> BoardLayout {
     // À la japonaise : les colonnes (`boardjapon.rs`), le même résultat (`BoardLayout`) rangé dans l'autre sens.
     if opt.sens.japonais() {
-        return crate::boardjapon::layout(doc, s, last_joins, opt);
+        return crate::boardjapon::layout(doc, s, last_joins, opt, indices);
     }
     let cols = s.columns.clamp(1, MAX_COLUMNS);
     // (Une largeur qui n'est pas un nombre, d'un fichier de réglages abîmé, passerait à travers `clamp` et rendrait toute la
@@ -705,7 +791,7 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, _lines: &HashMap<u64, usiz
     let card_w = if s.card_w.is_nan() { BoardSettings::default().card_w } else { s.card_w.clamp(CARD_MIN, CARD_MAX) };
     let thumb_h = card_w * doc.frame[1] as f32 / doc.frame[0].max(1) as f32;
     let mut boards: Vec<(usize, u64, usize, usize)> = Vec::new();
-    for i in 0..doc.panels.len() {
+    for &i in indices.iter().filter(|&&i| i < doc.panels.len()) {
         boards.extend(plan_boards(doc, i).into_iter().map(|(id, frame, end)| (i, id, frame, end)));
     }
     let n = boards.len();
@@ -831,6 +917,9 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, _lines: &HashMap<u64, usiz
             // (Une rangée tient au plus `cols` cases pâles : la borne ne coupe jamais une planche juste ; elle arrête une boucle sur un
             // nombre qui n'en est pas un, où `x` n'avancerait plus.)
             for _ in 0..total.saturating_mul(cols + 1).saturating_add(1) {
+                if opt.pale_max.is_some_and(|m| pale.len() >= m) {
+                    break;
+                }
                 let (r, x) = trouve(&occ, &unite, g_cut, row_w, usize::MAX, cur);
                 if r >= total || !x.is_finite() {
                     break;
@@ -839,7 +928,12 @@ pub fn layout_with(doc: &Document, s: &BoardSettings, _lines: &HashMap<u64, usiz
                 pale.push((r, x));
                 cur = (r, x + card_w + g_cut);
             }
-            total
+            // (Un nombre de cases pâles limité : la planche ne garde que les rangées des cases, et de ces cases.)
+            if opt.pale_max.is_some() {
+                bottom.max(cursor.0 + 1).max(pale.last().map_or(0, |p| p.0 + 1))
+            } else {
+                total
+            }
         }
         None => bottom.max(1),
     };
@@ -949,6 +1043,8 @@ pub enum Hit {
     Bar(usize),
     /// L'image de la vignette `k` (ou une tuile de son empreinte).
     Thumb(usize),
+    /// Le titre de la séquence `g` (rang dans `BoardLayout::groupes`), au-dessus de ses cases.
+    Titre(usize),
     /// La bande de note de la vignette `k`.
     Note(usize),
     /// La case pâle `e` (0 : la première, juste après la dernière vignette).
@@ -975,6 +1071,9 @@ pub fn hit(layout: &BoardLayout, p: Pos2, bar_min_w: f32) -> Hit {
     }
     if let Some(k) = layout.card_at(p) {
         return Hit::Thumb(k);
+    }
+    if let Some(g) = layout.titre_en(p) {
+        return Hit::Titre(g);
     }
     if let Some(k) = layout.cards.iter().position(|c| c.a_du_texte() && c.note.contains(p)) {
         return Hit::Note(k);
@@ -1034,15 +1133,23 @@ pub struct DropSlot {
     pub bottom: f32,
     pub a: Pos2,
     pub b: Pos2,
+    /// Sur la planche par séquences, le repère de la fin d'une séquence : le plan posé là rejoint cette séquence (et non celle du plan qui
+    /// suit dans le film, `before`).
+    pub sequence: Option<u64>,
 }
 
 impl DropSlot {
     fn verticale(before: Option<u64>, x: f32, top: f32, bottom: f32) -> DropSlot {
-        DropSlot { before, x, top, bottom, a: pos2(x, top), b: pos2(x, bottom) }
+        DropSlot { before, x, top, bottom, a: pos2(x, top), b: pos2(x, bottom), sequence: None }
     }
 
     fn horizontale(before: Option<u64>, y: f32, gauche: f32, droite: f32) -> DropSlot {
-        DropSlot { before, x: (gauche + droite) * 0.5, top: y, bottom: y, a: pos2(gauche, y), b: pos2(droite, y) }
+        DropSlot { before, x: (gauche + droite) * 0.5, top: y, bottom: y, a: pos2(gauche, y), b: pos2(droite, y), sequence: None }
+    }
+
+    fn de_la_sequence(mut self, sequence: Option<u64>) -> DropSlot {
+        self.sequence = sequence;
+        self
     }
 
     /// La distance du point `p` au repère.
@@ -1078,21 +1185,37 @@ pub fn drop_slots(layout: &BoardLayout) -> Vec<DropSlot> {
         };
         out.push(DropSlot::verticale(Some(c.plan), x, c.ligne.top(), c.ligne.bottom()));
     }
-    if let Some(last) = layout.cards.last() {
+    // La fin de la planche (ou de chaque séquence, sur la planche par séquences) : (rang de la dernière case, plan qui suit dans le film,
+    // séquence, première case pâle).
+    let fins: Vec<(usize, Option<u64>, Option<u64>, Option<Rect>)> = if layout.groupes.is_empty() {
+        match layout.cards.len() {
+            0 => Vec::new(),
+            n => vec![(n - 1, None, None, layout.empty.first().copied())],
+        }
+    } else {
+        layout
+            .groupes
+            .iter()
+            .filter(|g| !g.cartes.is_empty())
+            .map(|g| (g.cartes.end - 1, g.plan_suivant, Some(g.sequence), layout.empty.get(g.vides.start).copied().filter(|_| !g.vides.is_empty())))
+            .collect()
+    };
+    for (k, avant, sequence, vide) in fins {
+        let last = &layout.cards[k];
         if jap {
             // Après la dernière vignette : dans l'écart avant la première case pâle si elle est dans la même colonne.
-            let y = match (layout.empty.first(), layout.bars.last()) {
+            let y = match (vide, layout.bars.get(k)) {
                 (Some(e), Some(b)) if (e.left() - last.ligne.left()).abs() < 1.0 && e.top() > last.thumb.top() => b.zone.center().y,
                 _ => last.reach_y + PAGE_PAD * 0.5,
             };
-            out.push(DropSlot::horizontale(None, y, last.ligne.left(), last.ligne.right()));
+            out.push(DropSlot::horizontale(avant, y, last.ligne.left(), last.ligne.right()).de_la_sequence(sequence));
         } else {
             // Après la dernière vignette : dans l'écart avant la première case pâle si elle est sur la même ligne.
-            let x = match layout.empty.first() {
+            let x = match vide {
                 Some(e) if (e.top() - last.ligne.top()).abs() < 1.0 => (last.reach + e.left()) * 0.5,
                 _ => last.reach + PAGE_PAD * 0.5,
             };
-            out.push(DropSlot::verticale(None, x, last.ligne.top(), last.ligne.bottom()));
+            out.push(DropSlot::verticale(avant, x, last.ligne.top(), last.ligne.bottom()).de_la_sequence(sequence));
         }
     }
     out

@@ -61,6 +61,8 @@ const VERSION: u32 = 2;
 pub const MAX_TRACES: usize = 5000;
 pub const MAX_POINTS: usize = 3000;
 pub const MAX_CALQUES: usize = 64;
+/// Les séquences de l'affichage de la planche : au-delà, c'est coupé (un fichier abîmé).
+pub const MAX_SEQUENCES: usize = 5000;
 /// Nom du premier calque d'annotation (et de celui que donne la lecture d'un ancien fichier).
 pub const NOM_PAR_DEFAUT: &str = "Annotations";
 /// Nom du calque du dessin hors des cases.
@@ -150,6 +152,8 @@ pub struct Annotations {
     pub calques: Vec<Calque>,
     /// Tous les traits, à plat, dans l'ordre où ils ont été posés.
     pub traces: Vec<Trace>,
+    /// Les séquences que la planche montre, et dans quel ordre (`planchesequences.rs`) : enregistré ici, dans la clé `sequences` du fichier.
+    pub affichage: crate::planchesequences::Affichage,
 }
 
 // ------------------------------------------------------------------------------------ les cases
@@ -214,7 +218,7 @@ impl Annotations {
 
     /// Ni trait, ni calque que l'utilisateur aurait nommé, caché ou multiplié : le projet n'a pas besoin de `annotations.json`.
     pub fn rien_a_ecrire(&self) -> bool {
-        self.traces.is_empty() && self.calques.iter().all(|c| c.nom == NOM_PAR_DEFAUT && c.visible && !c.planche) && self.calques.len() <= 1
+        self.traces.is_empty() && self.calques.iter().all(|c| c.nom == NOM_PAR_DEFAUT && c.visible && !c.planche) && self.calques.len() <= 1 && self.affichage.est_par_defaut()
     }
 
     // ------------------------------------------------------------------ les calques
@@ -551,7 +555,8 @@ impl Annotations {
         }
         let mut changes = 0;
         for t in &mut self.traces {
-            if apres.cards.iter().any(|c| c.id == t.anchor.card) {
+            // (Une vignette dont la séquence est seulement masquée n'a pas disparu : son trait attend, il ne passe pas à une voisine.)
+            if apres.cards.iter().any(|c| c.id == t.anchor.card) || apres.masquees.contains(&t.anchor.card) {
                 continue;
             }
             // Là où le trait était sur l'ancienne planche, puis la vignette restante la plus proche de ce point.
@@ -696,6 +701,17 @@ struct Fichier {
     /// Version 2 : les calques, du plus bas au plus haut.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     calques: Vec<CalqueFichier>,
+    /// Les séquences que la planche montre, dans l'ordre de la planche (absent : toutes, dans l'ordre du film).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    sequences: Vec<SequenceFichier>,
+}
+
+/// Une séquence de l'affichage de la planche (`planchesequences::Affichage`).
+#[derive(Serialize, Deserialize)]
+struct SequenceFichier {
+    id: u64,
+    #[serde(default = "vrai")]
+    montree: bool,
 }
 
 fn arrondi(v: f32) -> f32 {
@@ -735,7 +751,8 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
             CalqueFichier { id: c.id, nom: c.nom.clone(), visible: c.visible, planche: c.planche, traces }
         })
         .collect();
-    let f = Fichier { format: FORMAT.into(), version: VERSION, traces: Vec::new(), calques };
+    let sequences = a.affichage.ordre.iter().take(MAX_SEQUENCES).map(|&(id, montree)| SequenceFichier { id, montree }).collect();
+    let f = Fichier { format: FORMAT.into(), version: VERSION, traces: Vec::new(), calques, sequences };
     serde_json::to_vec_pretty(&f).map(Some).map_err(|e| e.to_string())
 }
 
@@ -785,6 +802,9 @@ pub(crate) fn parse(text: &str) -> Result<Annotations, String> {
         let anciens: Vec<Trace> = f.traces.into_iter().filter_map(|t| trace_lue(t, id)).take(room).collect();
         a.traces.splice(0..0, anciens);
     }
+    // L'affichage de la planche : un identifiant à zéro ou répété est écarté (la lecture de l'affichage oublie ce qui n'existe plus).
+    let mut vus = std::collections::HashSet::new();
+    a.affichage.ordre = f.sequences.into_iter().take(MAX_SEQUENCES).filter(|s| s.id != 0 && vus.insert(s.id)).map(|s| (s.id, s.montree)).collect();
     a.normaliser();
     Ok(a)
 }

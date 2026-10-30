@@ -241,6 +241,9 @@ pub(crate) struct Vignettes {
     pub ouverture_suivi: Option<(Vec2, f32, Vec2, bool)>,
     /// Les images d'écran qu'il reste au cadrage d'ouverture pour suivre la vue.
     pub ouverture_images: u8,
+    /// Le titre de séquence en cours de renommage, et la séquence qu'on glisse dans la liste du panneau (`planchesequencesui.rs`).
+    pub titre_edit: Option<crate::planchesequencesui::TitreEdit>,
+    pub seq_glisse: Option<u64>,
 }
 
 impl Vignettes {
@@ -284,6 +287,8 @@ impl Default for Vignettes {
             debord_garde: None,
             ouverture_suivi: None,
             ouverture_images: 0,
+            titre_edit: None,
+            seq_glisse: None,
         }
     }
 }
@@ -317,11 +322,16 @@ impl App {
         let opt = board::Options { hold, sens: self.layout.board_sens, textes: self.layout.board_textes, ..board::Options::pale(self.layout.board_min_rows) };
         // (Gardée tant que rien de ce dont elle dépend ne change : `board::CacheDisposition`. Un essai de performance mesure aussi
         // l'ancien chemin, refaite à chaque appel : `perf::ancien`.)
+        // (Plusieurs séquences : la planche par séquences, `planchesequences.rs` ; une seule : la planche d'avant, sans titre.)
+        let vue = crate::planchesequences::vue(&self.doc);
         if crate::perf::ancien() {
-            return board::layout_with(&self.doc, &s, &HashMap::new(), self.vignettes.empty_joins, &opt);
+            return match &vue {
+                Some(v) => crate::planchesequences::layout_sequences(&self.doc, &s, self.vignettes.empty_joins, &opt, v),
+                None => board::layout_with(&self.doc, &s, &HashMap::new(), self.vignettes.empty_joins, &opt),
+            };
         }
         let mut cache = self.vignettes.disposition.borrow_mut();
-        board::layout_cache(&self.doc, &s, &HashMap::new(), self.vignettes.empty_joins, &opt, &mut cache)
+        board::layout_cache_sequences(&self.doc, &s, &HashMap::new(), self.vignettes.empty_joins, &opt, vue.as_ref(), &mut cache)
     }
 
     /// La planche a glissé (`BoardLayout::decalage` : une enveloppe de caméra dépasse la page à gauche ou en haut) : la vue défile
@@ -761,6 +771,12 @@ impl App {
                 }
                 false
             }
+            // Le titre d'une séquence : un double-clic le renomme (plus bas) ; un appui dessus ne dessine rien.
+            Hit::Titre(_) => {
+                self.commit_note_text(layout);
+                self.vignettes.press = Press::Dead;
+                false
+            }
             Hit::Empty(e) => {
                 self.commit_note_text(layout);
                 if !cam_mode && !lasso && self.tool_draws_in_empty() && self.board_create_from_empty(e) {
@@ -824,10 +840,10 @@ impl App {
     /// Une seule étape d'annulation, nommée. Vrai si le document a changé.
     pub(crate) fn board_toggle_cut(&mut self, layout: &BoardLayout, after: usize) -> bool {
         let Some(a) = layout.cards.get(after).copied() else { return false };
-        let Some(b) = layout.cards.get(after + 1).copied() else {
-            // Devant la première case vide : un clic fait tout de suite la case de continuité (une image de plus du dernier plan, avec
-            // la copie de son dessin), et la case vide d'après reste une coupe (Anthony, 2026-10-30).
-            return self.board_continuite_immediate();
+        let Some(b) = layout.cards.get(after + 1).copied().filter(|_| !layout.vers_pale(after)) else {
+            // Devant la première case vide (de la séquence) : un clic fait tout de suite la case de continuité (une image de plus du dernier
+            // plan, avec la copie de son dessin), et la case vide d'après reste une coupe (Anthony, 2026-10-30).
+            return self.board_continuite_de(Some(a.plan));
         };
         if b.plan == a.plan {
             // Couper : la marque de la vignette de droite devient le début d'un plan neuf.
@@ -855,14 +871,16 @@ impl App {
     /// Clic sur la barre qui précède la première case vide (Anthony, 2026-10-30) : la case devient tout de suite une image de plus du
     /// dernier plan, avec **la copie du dessin de l'image d'avant** (décor compris), sans attendre un trait. Rien d'autre ne change : la
     /// case vide d'après est une coupe, comme toute case vide. Une seule étape d'annulation, nommée.
-    pub(crate) fn board_continuite_immediate(&mut self) -> bool {
+    ///
+    /// Pour le plan `plan` (le dernier de sa séquence : la barre devant la case pâle d'une séquence) ; rien : le dernier plan du film.
+    pub(crate) fn board_continuite_de(&mut self, plan: Option<u64>) -> bool {
         if self.storyboard_refuses() || self.doc.panels.is_empty() {
             return false;
         }
         let mut frame_of_image = 0;
         let ok = self.avec_etape("Continuité avec le plan précédent", |s| {
             s.structure_op(|d, _| {
-                let last = d.panels.len() - 1;
+                let last = plan.and_then(|id| d.panels.iter().position(|p| p.id == id)).unwrap_or(d.panels.len() - 1);
                 let old = d.panels[last].frame_count();
                 let image = board::plan_boards(d, last).last().map_or(1, |b| b.2 - b.1).max(1);
                 d.set_duration(last, old + image);
@@ -892,11 +910,18 @@ impl App {
             return false;
         }
         let joins = self.vignettes.empty_joins;
+        // La case pâle de quelle séquence ? Le plan se fait juste après le dernier plan de sa séquence, dans la séquence ; `e` compte depuis la
+        // première case pâle de cette séquence (celles qui la précèdent deviennent des plans vides).
+        let (apres, e) = {
+            let layout = self.board_layout();
+            let (rang, e) = layout.vide_de(e, self.doc.panels.len());
+            (self.doc.panels.get(rang).map(|p| p.id), e)
+        };
         let made = e + 1;
         let mut frame_of_image = 0;
         let ok = self.avec_etape(if joins && e == 0 { "Nouvelle image dessinée" } else { "Nouveau plan dessiné" }, |s| {
             s.structure_op(|d, _| {
-                let mut last = d.panels.len() - 1;
+                let mut last = apres.and_then(|id| d.panels.iter().position(|p| p.id == id)).unwrap_or(d.panels.len() - 1);
                 let mut first_plan = 0;
                 if joins {
                     // Une image de plus au dernier plan : il s'allonge de la durée de sa dernière image.
@@ -1148,6 +1173,12 @@ impl App {
                 _ => BoardDrag::Rubber { start, now: start, add },
             });
         }
+        // Un double-clic sur le titre d'une séquence le renomme (`planchesequencesui.rs`).
+        if let Some(g) = bg.interact_pointer_pos().filter(|_| bg.double_clicked()).and_then(|p| layout.titre_en(xf.to_board(p))) {
+            self.commit_note_text(&layout);
+            let seq = layout.groupes[g].sequence;
+            self.titre_ouvrir(seq);
+        }
         if free {
             if let Some(p) = bg.interact_pointer_pos().filter(|_| bg.clicked()).map(|p| xf.to_board(p)) {
                 self.board_click(&layout, &texts, p, mods);
@@ -1232,6 +1263,8 @@ impl App {
             return;
         }
 
+        // Les titres des séquences, au-dessus de leur première rangée.
+        self.titres_peindre(&painter, view, xf, &layout);
         // Notes libres par-dessus, puis ce qui est choisi, puis les repères du geste.
         for i in 0..self.doc.board.strokes.len() {
             if let Some(points) = self.doc.board.stroke_points(&layout, i) {
@@ -1295,6 +1328,7 @@ impl App {
         });
         self.note_text_editor(ui, xf, &layout);
         self.card_note_editor(ui, xf, &layout);
+        self.titre_editeur(ui, xf, &layout);
         // Le curseur d'un cadre pris ou à prendre passe avant celui du dessin de la vignette courante (peint plus tôt).
         if self.vignettes.frame_hot {
             ui.ctx().set_cursor_icon(if self.vignettes.moving.as_ref().is_some_and(|m| m.active) { CursorIcon::Grabbing } else { CursorIcon::Grab });
@@ -1360,7 +1394,7 @@ impl App {
             painter.line_segment(trait_, Stroke::new(if hot { width + 1.0 } else { width }, color));
             if hot {
                 let resp = ui.interact(board::zone_tactile(zone, layout.sens, BAR_TOUCH), ui.id().with(("planche_barre", b.after)), Sense::hover());
-                let (nom, texte) = if b.after + 1 >= layout.cards.len() {
+                let (nom, texte) = if layout.vers_pale(b.after) {
                     ("Prochaine case : nouveau plan", "Noire : dessiner dans la case vide fait un nouveau plan. Clic : en faire tout de suite une image de plus du dernier plan, avec son dessin.")
                 } else if b.cut {
                     ("Coupe", "Noire : les deux vignettes sont deux plans. Clic : les réunir en un seul plan.")
@@ -1933,6 +1967,8 @@ impl App {
         // premier niveau, simplification des barres, 2026-10-21).
         self.version_menu(ui, i, true);
         ui.menu_button("Plus", |ui| {
+            // Les séquences (`planchesequencesui.rs`) : une neuve, avec les cases choisies, couper ici, renommer.
+            ui.menu_button("Séquence", |ui| self.sequence_menu_items(ui));
             self.plan_color_menu(ui);
             // Plusieurs plans choisis : une séquence à eux, une durée pour tous (`sequenceplans.rs`, `dureeplans.rs`).
             let n = self.board_selection().len();
@@ -2022,6 +2058,7 @@ impl App {
             ui.close_menu();
             self.new_panel();
         }
+        self.action_item(ui, "Nouvelle séquence à la fin du film", "sequence.nouvelle_fin");
         ui.checkbox(&mut self.layout.board_attach, "Attacher les nouvelles notes à la vignette la plus proche");
         ui.separator();
         // Annotations, marie-louise et export de la planche (`annotationsui.rs`).

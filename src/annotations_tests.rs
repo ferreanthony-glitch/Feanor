@@ -471,7 +471,7 @@ fn layers_can_be_added_renamed_hidden_reordered_and_deleted_with_their_strokes()
     // (Le fichier arrondit les points à quatre décimales, et range les traits calque par calque : les calques sont identiques, les traits proches
     // et peints dans le même ordre.)
     assert_eq!(relu.calques, d.annotations.calques);
-    let peint = |a: &Annotations| Annotations { calques: a.calques.clone(), traces: a.calques.iter().flat_map(|c| a.traces.iter().filter(move |t| t.calque == c.id).cloned()).collect() };
+    let peint = |a: &Annotations| Annotations { calques: a.calques.clone(), traces: a.calques.iter().flat_map(|c| a.traces.iter().filter(move |t| t.calque == c.id).cloned()).collect(), ..Default::default() };
     assert!(proche(&peint(&relu), &peint(&d.annotations)) && peint(&relu).traces.iter().zip(&peint(&d.annotations).traces).all(|(x, y)| x.calque == y.calque));
     assert_eq!(relu.calques.iter().map(|c| (c.nom.clone(), c.visible)).collect::<Vec<_>>(), d.annotations.calques.iter().map(|c| (c.nom.clone(), c.visible)).collect::<Vec<_>>());
 }

@@ -46,7 +46,7 @@ impl Default for Etat {
     }
 }
 
-type Cle = (Options, Etendue, u64, u64, (u32, usize, usize), Vec<u64>, usize);
+type Cle = (Options, Etendue, u64, u64, (u32, usize, usize), Vec<u64>, usize, Vec<(u64, bool)>);
 
 impl Etat {
     /// La résolution que dit la fenêtre.
@@ -129,6 +129,10 @@ impl App {
 
     /// Les plans de l'étendue choisie.
     fn planche_plans(&self, e: Etendue) -> Vec<usize> {
+        // « Tout » : ce que la planche montre, dans l'ordre où elle le range, avec les titres des séquences.
+        if e == Etendue::Film {
+            return crate::planchesequences::plans_affiches(&self.doc);
+        }
         self.plans_de(e, None)
     }
 
@@ -203,7 +207,12 @@ impl App {
         egui::Grid::new("planche_grille").num_columns(2).spacing([10.0, 7.0]).show(ui, |ui| {
             ui.label("Plans");
             ui.vertical(|ui| {
-                ui.radio_value(&mut e.etendue, Etendue::Film, format!("Tout le film ({n_plans})"));
+                let montres = crate::planchesequences::plans_affiches(&self.doc).len();
+                if montres == n_plans {
+                    ui.radio_value(&mut e.etendue, Etendue::Film, format!("Tout le film ({n_plans})"));
+                } else {
+                    ui.radio_value(&mut e.etendue, Etendue::Film, format!("Ce que la planche montre ({montres} plans sur {n_plans})"));
+                }
                 ui.radio_value(&mut e.etendue, Etendue::Sequence, format!("La séquence courante ({})", b - a));
                 ui.add_enabled_ui(choisis > 1, |ui| {
                     ui.radio_value(&mut e.etendue, Etendue::Choisis, format!("Les plans choisis ({choisis})"));
@@ -260,7 +269,7 @@ impl App {
         let mut opt = e.opt.clone();
         opt.resolution = e.resolution();
         (opt.sens, opt.textes) = (self.layout.board_sens, self.layout.board_textes);
-        let cle: Cle = (opt.clone(), e.etendue, self.history.serial(), self.doc_epoch, (self.layout.card_size.to_bits(), self.layout.board_columns, self.layout.board_rows), self.board_sel.clone(), self.cur_panel);
+        let cle: Cle = (opt.clone(), e.etendue, self.history.serial(), self.doc_epoch, (self.layout.card_size.to_bits(), self.layout.board_columns, self.layout.board_rows), self.board_sel.clone(), self.cur_panel, self.doc.annotations.affichage.ordre.clone());
         if e.resume.as_ref().map(|r| &r.0) != Some(&cle) {
             let plans = self.planche_plans(e.etendue);
             let p = planche::construire(&self.doc, &plans, &self.layout.board_settings(), &opt, &self.doc.annotations);

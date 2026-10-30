@@ -550,6 +550,11 @@ mod dureeplans_tests;
 mod fusionnoms;
 #[cfg(test)]
 mod fusionnoms_tests;
+// La planche des Vignettes par séquences : quelles séquences, dans quel ordre, leurs titres, créer / couper / renommer une séquence.
+mod planchesequences;
+mod planchesequencesui;
+#[cfg(test)]
+mod planchesequences_tests;
 // Nouvelle séquence avec les plans choisis.
 mod sequenceplans;
 #[cfg(test)]

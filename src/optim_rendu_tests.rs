@@ -430,7 +430,11 @@ fn board_thumbnails_stay_under_their_memory_bound_while_zooming() {
     for z in [0.5f32, 1.0, 2.0, 3.0, 4.0, 2.0, 1.0, 0.5] {
         b.app.board_zoom = z;
         for step in 0..10 {
-            b.app.board_pan = eframe::egui::vec2(0.0, -(step as f32) * 300.0 * z);
+            // (Dix endroits de la planche, du haut vers le bas, chacun au haut d'une case : la planche par séquences a des titres et des
+            // écarts entre ses séquences, une fenêtre de hasard pouvait tomber dans l'un d'eux.)
+            let l = b.app.board_layout();
+            let k = (step * l.cards.len() / 10).min(l.cards.len() - 1);
+            b.app.board_pan = eframe::egui::vec2(0.0, -(l.cards[k].card.top() - 10.0) * z);
             b.chauffer(2);
             b.attendre_vignettes();
             let pass = b.ctx.cumulative_pass_nr();

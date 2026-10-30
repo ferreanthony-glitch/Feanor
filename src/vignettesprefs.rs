@@ -15,8 +15,13 @@ use eframe::egui::{pos2, vec2, Rect, Vec2};
 pub(crate) fn ouverture_cadre(layout: &BoardLayout, view: Rect, colonnes: usize, rangees: usize, courante: usize, zoom_min: f32, zoom_max: f32, lignes_texte: usize) -> (f32, Vec2) {
     // Chaque case : son image (pour ranger en rangées) et tout ce qu'elle occupe (numéro, tuile d'un mouvement, textes). Les cases vides, ensuite.
     let sous = board::NOTE_LINE_H * lignes_texte as f32 + 6.0;
-    let mut cases: Vec<(Rect, Rect)> = layout.cards.iter().map(|c| (c.thumb, c.card.union(c.foot).union(c.thumb).union(c.note))).collect();
-    cases.extend(layout.empty.iter().map(|r| (*r, Rect::from_min_max(pos2(r.left(), r.top() - board::LABEL_H), pos2(r.right(), r.bottom() + sous)))));
+    // Sur la planche par séquences : la séquence de la case courante seule (et son titre), pas les autres.
+    let (cartes, vides, titre) = match layout.groupe_de(courante) {
+        Some(g) => (g.cartes.clone(), g.vides.clone(), g.titre),
+        None => (0..layout.cards.len(), 0..layout.empty.len(), None),
+    };
+    let mut cases: Vec<(Rect, Rect)> = layout.cards[cartes].iter().map(|c| (c.thumb, c.card.union(c.foot).union(c.thumb).union(c.note))).collect();
+    cases.extend(layout.empty[vides].iter().map(|r| (*r, Rect::from_min_max(pos2(r.left(), r.top() - board::LABEL_H), pos2(r.right(), r.bottom() + sous)))));
     if cases.is_empty() || !(view.width() > 1.0 && view.height() > 1.0) {
         return (1.0, Vec2::ZERO);
     }
@@ -39,6 +44,10 @@ pub(crate) fn ouverture_cadre(layout: &BoardLayout, view: Rect, colonnes: usize,
     let rang_courant = layout.cards.get(courante).and_then(|c| groupes.iter().position(|g| g.iter().any(|x| x.0 == c.thumb))).unwrap_or(0);
     let premiere = if rang_courant >= rangees { rang_courant } else { 0 };
     let mut zone = Rect::NOTHING;
+    // (Le titre de la séquence est dans la vue quand la première rangée l'est.)
+    if let (0, Some(t)) = (premiere, titre) {
+        zone = zone.union(t);
+    }
     for g in groupes.iter().skip(premiere).take(rangees) {
         for c in g.iter().take(colonnes) {
             zone = zone.union(c.1);
