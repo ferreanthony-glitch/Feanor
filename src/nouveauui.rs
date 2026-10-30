@@ -38,6 +38,9 @@ pub struct NewDocDialog {
     focused: bool,
     /// Le prochain passage met le curseur dans le champ du nom (Ctrl+N sur l'accueil).
     pub focus_nom: bool,
+    /// Le modèle d'épisode choisi (modeleepisode.rs) et l'épisode à créer ; rien : un projet neuf ordinaire.
+    pub modele: Option<crate::modeleepisode::ModeleEpisode>,
+    pub episode: String,
 }
 
 /// Ce que le formulaire a besoin de savoir de son entourage.
@@ -50,6 +53,8 @@ pub(crate) struct Contexte<'a> {
     pub nom_requis: bool,
     /// « Plus d'options » est ouvert au départ (la fenêtre) ou fermé (l'accueil, qui manque de place).
     pub options_ouvertes: bool,
+    /// Les noms des modèles d'épisode enregistrés (modeleepisode::lister).
+    pub modeles: &'a [String],
 }
 
 /// Ce que le formulaire demande à celui qui l'a posé.
@@ -80,6 +85,8 @@ impl NewDocDialog {
             note: None,
             focused: false,
             focus_nom: false,
+            modele: None,
+            episode: String::new(),
         }
     }
 
@@ -160,6 +167,45 @@ impl NewDocDialog {
                 }
             });
             ui.end_row();
+
+            // ------------------------------------------------------------- modèle d'épisode (pipeline, étape 1)
+            if !cx.modeles.is_empty() {
+                ui.label("Modèle d'épisode");
+                ui.horizontal(|ui| {
+                    let actuel = self.modele.as_ref().map_or("Aucun".to_string(), |m| m.nom.clone());
+                    let mut choisi: Option<Option<String>> = None;
+                    egui::ComboBox::from_id_salt("modele_episode_nouveau").selected_text(actuel.as_str()).width(champ - 56.0).show_ui(ui, |ui| {
+                        if ui.selectable_label(self.modele.is_none(), "Aucun").clicked() {
+                            choisi = Some(None);
+                        }
+                        for n in cx.modeles {
+                            if ui.selectable_label(*n == actuel, n.as_str()).clicked() {
+                                choisi = Some(Some(n.clone()));
+                            }
+                        }
+                    })
+                    .response
+                    .on_hover_text("Crée l'épisode avec les réglages d'un autre (format, numérotation, modèle de noms, calques, personnages, réglages d'export), sans aucun dessin.");
+                    match choisi {
+                        Some(None) => self.modele = None,
+                        Some(Some(n)) => match crate::modeleepisode::charger(&n) {
+                            Ok(m) => {
+                                self.values = m.valeurs(&self.values);
+                                self.episode = m.episode_suivant();
+                                self.modele = Some(m);
+                                self.note = None;
+                            }
+                            Err(e) => self.note = Some(e),
+                        },
+                        None => {}
+                    }
+                    if self.modele.is_some() {
+                        ui.label("Épisode");
+                        egui::TextEdit::singleline(&mut self.episode).desired_width(56.0).show(ui).response.on_hover_text("Le numéro du nouvel épisode (le suivant de celui du modèle).");
+                    }
+                });
+                ui.end_row();
+            }
 
             // ------------------------------------------------------------- titre et sous-titre
             ui.label("Titre");
@@ -429,13 +475,14 @@ impl App {
         let popup = ctx.memory(|m| m.any_popup_open());
         let (enter, escape) = ctx.input(|i| (i.key_pressed(Key::Enter), i.key_pressed(Key::Escape)));
         let user = self.settings.new_project.presets.clone();
+        let modeles = crate::modeleepisode::lister();
         let dossiers = self.dossiers_du_formulaire(&d.folder);
         let mut ok = enter && !editing && d.save_name.is_none();
         let mut cancel = false;
         let mut sortie = Sortie::default();
         egui::Window::new("Nouveau projet").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0]).show(ctx, |ui| {
             ui.set_width(600.0);
-            let cx = Contexte { prereglages: &user, dossiers: &dossiers, nom_requis: false, options_ouvertes: true };
+            let cx = Contexte { prereglages: &user, dossiers: &dossiers, nom_requis: false, options_ouvertes: true, modeles: &modeles };
             sortie = d.formulaire(ui, &cx);
             ui.add_space(6.0);
             ui.horizontal(|ui| {
@@ -473,6 +520,11 @@ impl App {
         let mut doc = build_document(&values, titre);
         doc.properties.info = d.sous_titre.trim().to_string();
         self.numerotation_du_projet_neuf(&mut doc);
+        // Nouvel épisode depuis un modèle : ses réglages (jamais ses dessins).
+        if let Some(m) = &d.modele {
+            m.appliquer_au_projet(&mut doc, &d.episode);
+            m.appliquer_aux_reglages(&mut self.settings);
+        }
         if !self.charger_projet(doc) {
             self.status = "Le projet n'a pas pu s'ouvrir dans un nouvel onglet : un travail attend l'onglet affiché.".into();
             return false;

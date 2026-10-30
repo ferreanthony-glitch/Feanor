@@ -359,6 +359,25 @@ impl App {
                 self.doc.properties.copyright = v;
             }
             ui.end_row();
+            // Production : la série et l'épisode ({projet} et {episode} du modèle de noms, nommage.rs).
+            ui.label("Série ou projet de production");
+            if let Some(v) = self.property_field(ui, &p.serie, 1) {
+                self.doc.properties.serie = v;
+            }
+            ui.end_row();
+            ui.label("Épisode");
+            if let Some(v) = self.property_field(ui, &p.episode, 1) {
+                self.doc.properties.episode = v;
+            }
+            ui.end_row();
+            ui.label("Noms des plans");
+            ui.horizontal(|ui| {
+                ui.label(self.doc.nom_de_plan(self.cur_panel.min(self.doc.panels.len().saturating_sub(1))));
+                if ui.button("Modèle de noms…").on_hover_text("Le modèle de noms des plans pour tous les exports (SQ01_PL012A, ou celui du studio).").clicked() {
+                    self.run_action("projet.noms_production");
+                }
+            });
+            ui.end_row();
             ui.label("Numéro de la première image");
             let mut first = self.doc.start_frame;
             let resp = ui.add(egui::DragValue::new(&mut first).range(0..=100_000));

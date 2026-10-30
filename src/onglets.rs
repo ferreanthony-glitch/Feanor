@@ -451,6 +451,9 @@ impl App {
         if self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::rendering) {
             return Some("la copie du projet pour la fiche technique");
         }
+        if self.paquet.as_ref().is_some_and(crate::paquetui::PaquetWindow::rendering) {
+            return Some("la copie du projet pour le paquet de livraison");
+        }
         if self.open_job.is_some() {
             return Some("l'ouverture du projet");
         }
@@ -504,6 +507,11 @@ impl App {
         if !self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::busy) {
             self.fiche = None;
         }
+        if !self.paquet.as_ref().is_some_and(crate::paquetui::PaquetWindow::busy) {
+            self.paquet = None;
+        }
+        self.liste_plans = None;
+        self.noms_fenetre = None;
         self.scenario_window = None;
         let reserve = crate::fx::mettre_de_cote();
         let textures = self.gpu.as_ref().map(|g| g.prendre_textures());

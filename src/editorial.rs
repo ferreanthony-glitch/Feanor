@@ -444,10 +444,10 @@ fn reel_name(plan_ref: &str, index: usize) -> String {
 
 /// Le nom d'un plan dans les exports (clip, fichier, image par plan) : « SQ01_PL012A » ; un plan qui a plusieurs versions y ajoute celle
 /// qui part (« SQ01_PL012A_V2 »).
+///
+/// Le nom suit le modèle de noms du projet (`nommage.rs`) ; d'origine, « SQ01_PL012A ».
 pub fn clip_name(doc: &Document, p: usize) -> String {
-    let versionne = doc.nombre_de_versions(doc.panels[p].id) > 1;
-    let suffixe = if versionne { format!("_{}", crate::planvers::etiquette(doc.numero_de_version(doc.panels[p].id))) } else { String::new() };
-    format!("{}{suffixe}", doc.plan_full_ref(p))
+    doc.nom_de_plan(p)
 }
 
 /// Décrit l'export des plans choisis. `cur_panel` : le plan courant (la « séquence courante » est

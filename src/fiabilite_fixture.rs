@@ -522,6 +522,9 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
         notes: "Notes — « importantes »".into(),
         copyright: "© 2026".into(),
         fond: Some([250, 250, 210]),
+        serie: "Course-poursuite".into(),
+        episode: "3".into(),
+        modele_noms: "{projet}_EP{episode:02}_SQ{sequence:03}_SH{plan:04}".into(),
     };
     // Un commentaire sur le plan 1 (visible, dans le plan non rogné) et un sur le dernier plan.
     let id = doc.add_comment(doc.panels[0].id, 9, "Léa", 1_760_000_500);

@@ -195,6 +195,7 @@ impl App {
 
     /// Le cadre « Nouveau projet » : le formulaire partagé avec la fenêtre de Fichier > Nouveau.
     fn cadre_nouveau(&mut self, ui: &mut egui::Ui, rect: Rect) {
+        let modeles = crate::modeleepisode::lister();
         let mut form = self.accueil_etat.form.take().unwrap_or_else(|| NewDocDialog::open(&self.settings.new_project));
         if std::mem::take(&mut self.accueil_etat.focus_nom) {
             form.focus_nom = true;
@@ -204,7 +205,7 @@ impl App {
         let mut sortie = Sortie::default();
         cadre(ui, rect, "Nouveau projet", |ui| {
             egui::ScrollArea::vertical().id_salt("accueil_formulaire").auto_shrink([false, false]).show(ui, |ui| {
-                let cx = Contexte { prereglages: &user, dossiers: &dossiers, nom_requis: true, options_ouvertes: false };
+                let cx = Contexte { prereglages: &user, dossiers: &dossiers, nom_requis: true, options_ouvertes: false, modeles: &modeles };
                 sortie = form.formulaire(ui, &cx);
             });
         });

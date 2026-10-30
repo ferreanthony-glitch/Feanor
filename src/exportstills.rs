@@ -75,11 +75,12 @@ pub fn items(doc: &Document, plans: &[usize], per: StillsPer) -> Vec<Still> {
         if p >= doc.panels.len() {
             continue;
         }
-        let base = crate::editorial::file_safe(&crate::editorial::clip_name(doc, p));
         let spans = crate::board::plan_boards(doc, p);
         let wanted = if per == StillsPer::Plan { 1 } else { spans.len() };
         for (k, (_, start, _)) in spans.into_iter().take(wanted).enumerate() {
-            let mut name = if k == 0 { base.clone() } else { format!("{base}_C{:02}", k + 1) };
+            // (Le modèle de noms du projet, `nommage.rs` ; d'origine « SQ01_PL012A », puis « _C02 »… pour les cases d'après la première.)
+            let base = crate::editorial::file_safe(&doc.nom_de_plan_avec(p, (per == StillsPer::Case).then_some(k + 1), None));
+            let mut name = base.clone();
             let mut n = 1;
             while out.iter().any(|s| s.name == name) {
                 n += 1;
@@ -136,6 +137,12 @@ pub fn encode_still(px: &[Color32], frame: [usize; 2], out: [usize; 2], s: &Stil
 
 /// La tâche d'export des images `items` dans le dossier `dir`.
 pub fn job(dir: &Path, items: &[Still], frame: [usize; 2], s: &StillsSettings, annotations: bool) -> ExportJob {
+    job_avec_fin(dir, items, frame, s, annotations, || Ok(()))
+}
+
+/// Comme job, et in s'exécute une fois toutes les images écrites (la liste des plans y écrit son fichier : annulé, ni les images ni le fichier ne restent ;
+/// si in échoue, les images sont effacées).
+pub fn job_avec_fin(dir: &Path, items: &[Still], frame: [usize; 2], s: &StillsSettings, annotations: bool, fin: impl FnOnce() -> Result<(), String> + Send + 'static) -> ExportJob {
     let n = items.len();
     let frames: Vec<(usize, usize)> = items.iter().map(|i| i.frame).collect();
     let names: Arc<Vec<String>> = Arc::new(items.iter().map(|i| i.name.clone()).collect());
@@ -157,7 +164,7 @@ pub fn job(dir: &Path, items: &[Still], frame: [usize; 2], s: &StillsSettings, a
             w_encode.lock().unwrap_or_else(|e| e.into_inner()).push(path.clone());
             crate::export::write_atomic(&path, &bytes)
         },
-        |_: Vec<()>| Ok(()),
+        move |_: Vec<()>| fin(),
         move || {
             for p in w_clean.lock().unwrap_or_else(|e| e.into_inner()).drain(..) {
                 let _ = std::fs::remove_file(p);

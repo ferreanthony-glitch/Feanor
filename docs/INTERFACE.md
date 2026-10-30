@@ -6688,3 +6688,45 @@ Corrigés : voir 89.3. **À décider** (non changés) :
 8. Menu Animation : « Propager la peinture du calque… » à côté de « Colorier par zones… ».
 9. Menu Storyboard : « Fiche du plan ». Bas de la timeline : onglet « Fond de la feuille ». Planche : « Calques d'annotation », « Dessin de la case », phrase d'attente cohérente. Nouveau calque vectoriel : « Vectoriel N ».
 10. Ctrl+K : « propriétés du plan », « labo », « arrière-plan », « diagnostic » trouvent les nouvelles commandes.
+
+
+## 87. Pipeline, étape 1 : noms, liste des plans, paquet de livraison, modèle d'épisode (2026-10-30, branche `pipeline-etape1`)
+
+Public visé : storyboarders d'animation, indépendants ou en studio. SHOT doit s'insérer dans un pipeline de production ; l'étape 2 sera un pont en ligne avec Kitsu (logiciel libre de suivi de production). Cette étape ne touche à aucun réseau.
+
+### Ce qui est fait
+
+- **Modèle de noms** (`src/nommage.rs`, fenêtre `nommageui.rs` : hub Exporter > « Noms et production », Propriétés du projet > « Modèle de noms… », Ctrl+K). Jetons `{projet}`, `{episode}`, `{sequence}`, `{plan}`, `{version}`, `{case}`, `{date}`, `{calque}`, largeur `{sequence:03}`, texte fixe, `{{` `}}`. Modèle d'origine `SQ{sequence:02}_PL{plan:03}` : mêmes noms qu'avant (essai sur toute la numérotation, suivie ou verrouillée). Un modèle sans `{version}` garde la règle « _V2 », sans `{case}` la règle « _C02 ». Modèles prêts (dont `{projet}_EP{episode:02}_SQ{sequence:03}_SH{plan:04}_v{version:03}`). Aperçu en direct (premier et dernier plan) et avertissements : noms en double (insensible à la casse), caractère interdit par Windows dans le modèle, nom réservé (CON, NUL…), nom trop long, modèle illisible (les exports gardent alors le modèle d'origine).
+- **Qui l'utilise** : `Document::nom_de_plan` ← `editorial::clip_name` (vidéos par plan, clips EDL/XML/OTIO, images par plan, calques séparés : dossier par plan, et fichiers de calque si le modèle porte `{calque}`), `fiche::reference` (fiche technique), gravure du nom du plan dans la vidéo (seulement si le projet a un modèle), liste des plans, paquet. Le son par piste est nommé par piste (`A1_Dialogues_01`), pas par plan : il n'est pas concerné.
+- **Champs de production** : série (ou projet de production), épisode, modèle de noms, dans `Properties` ; ils sont dans l'annulation avec le reste. **Format 45** : `proprietes.serie`, `proprietes.episode`, `proprietes.modele_noms`, absents quand ils sont vides ; un projet de version 44 ou moins s'ouvre à l'identique ; une version de SHOT d'avant refuse un projet 45 (elle perdrait le modèle de noms à l'enregistrement).
+- **Liste des plans** (`listeplans.rs`, `listeplansui.rs`, hub > « Liste des plans ») : CSV (UTF-8, `,` ou `;`) et JSON, une ligne par plan : épisode, séquence, plan (nom selon le modèle), description (action), dialogue, images, image d'entrée et de sortie (départ réglable 1001 / 1 / 0, sortie **incluse**), durée en secondes, cadence, statut (vide), version, vignette (chemin relatif), modifié depuis l'envoi. Option vignettes à côté (`vignettes/`, calculées en tâche de fond ; le fichier n'est écrit qu'à la fin, « Arrêter » efface les vignettes). Deux profils d'en-têtes (ci-dessous).
+- **Paquet de livraison** (`paquet.rs`, `paquetui.rs`, hub > « Paquet de livraison ») : dossier choisi, modèle de chemin (`{projet}/EP{episode:02}/storyboard/SQ{sequence:02}` d'origine ; jetons `{projet}`, `{episode}`, `{sequence}`, `{date}` ; un morceau au jeton vide est laissé de côté), contenu : une vidéo par plan, vignettes, PDF, animatique (MP4 avec le son), liste des plans (CSV et/ou JSON), `manifest.json` toujours. Aucune nouvelle tâche de rendu : `EditorialJob`, `exportstills::job`, `ExportJob::pdf_layout`, `ExportJob::video_with_sound_alpha`, sur **un seul cliché** du projet. Tout s'écrit dans `.shot-paquet-…` du dossier choisi ; à la fin un fil à part calcule les SHA-256 (`sha256.rs`, écrit ici : aucune crate de plus), range les fichiers (un renommage chacun, les fichiers remplacés mis de côté) et écrit le manifeste en dernier ; erreur, « Arrêter » ou fermeture de SHOT : tout est défait, rien ne reste. Refus tout de suite si deux fichiers ont le même chemin ; refus avant de ranger si un fichier existe (sauf « Remplacer »).
+- **Manifeste** : `format` « shot-paquet », `version_du_format` 1, `shot` (version), `date` (UTC), `projet`, `episode`, `cadence`, `envoi` (le dernier : id, nom, date), `fichiers[]` : `chemin` (relatif au dossier du manifeste, `/`), `sorte` (video, vignette, pdf, animatique, liste), `octets`, `sha256`.
+- **Modèle d'épisode** (`modeleepisode.rs`, `modeleepisodeui.rs`, `nouveauui.rs`) : « Enregistrer comme modèle d'épisode… » (hub > « Noms et production » ouvre la fenêtre de noms ; la commande `projet.enregistrer_modele_episode` est dans Ctrl+K) garde format, cadence, papier, couleur des aplats, numérotation, série, épisode, modèle de noms, auteur, copyright, calques du premier plan, personnages, réglages d'export du poste (exports, fiche, liste des plans, paquet sans son dossier). Fichier `%APPDATA%\SHOT\Modèles\<nom>.episode.json`, **sans dessin**. Nouveau projet (accueil et fenêtre) : « Modèle d'épisode » et « Épisode » (le suivant proposé : 1 → 2, 07 → 08). Les brosses importées sont des réglages du poste, déjà communes à tous les projets.
+- Commandes sans touche dans `keymap.toml` : `fichier.exporter_liste_plans`, `fichier.exporter_paquet`, `projet.noms_production`, `projet.enregistrer_modele_episode` ; bulles partout ; « Kitsu » n'apparaît que comme nom de profil.
+
+### En-têtes de la liste des plans
+
+- **Kitsu** : `Episode, Sequence, Name, Description, Nb Frames, Frame In, Frame Out, FPS` (`Nb Frames` = `Frame Out` − `Frame In` + 1 ; `Sequence` et `Name` obligatoires, `Episode` obligatoire pour une série).
+  Sources consultées : la documentation de Kitsu sur les actions par lot et l'import CSV (https://kitsu.cg-wire.com/batch-action/ : la page n'a pas pu être lue à la date du travail, erreur 404 ; la recherche en ligne confirme qu'elle décrit l'import de plans par CSV et la règle « colonne Episode seulement pour une série »), et le guide « shot management » d'un miroir de la doc cgwire (mintlify.com/cgwire/kitsu, page retirée, erreur 410 : colonnes Sequence, Name, Description, Nb Frames, Frame In, Frame Out, FPS, Resolution ; un export de Kitsu utilise « Frames » pour le nombre d'images). **À confirmer** sur une instance Kitsu : les noms exacts des colonnes et la casse ; l'aperçu de l'import de Kitsu permet de rattacher les colonnes une à une si un nom diffère.
+- **Générique** : `episode, sequence, shot, description, dialogue, frames, frame_in, frame_out, duration_seconds, fps, status, version, thumbnail, modified_since_send`.
+
+### À vérifier à l'écran
+
+1. Hub Exporter > famille « Montage & échange » : Liste des plans, Paquet de livraison, Noms et production, avec icônes et bulles.
+2. Noms et production : taper un modèle, voir l'aperçu changer, un modèle prêt, un modèle faux (message), un doublon (avertissement) ; annuler (Ctrl+Z) rend le modèle d'avant.
+3. Liste des plans : Kitsu/Générique, CSV/JSON, 1001/1/0, avec vignettes ; ouvrir le CSV dans un tableur (accents, guillemets).
+4. Paquet : cocher tout, choisir un dossier, lancer ; le projet reste libre ; « Arrêter » ne laisse rien ; refaire sans « Remplacer » → refus ; ouvrir `manifest.json`.
+5. Propriétés du projet : Série, Épisode, ligne « Noms des plans ».
+6. Fichier > Nouveau : « Modèle d'épisode » apparaît quand un modèle existe ; créer l'épisode 2 : mêmes calques, personnages, noms, un seul plan vide.
+
+### Pour le pont Kitsu (étape 2) : ce qui est prêt, ce qui manquera
+
+- Prêt : un nom de plan stable (modèle + numérotation verrouillée) à utiliser comme `Name`/code ; série, épisode, séquence, plan, images, entrée/sortie, cadence, statut, version par plan (`listeplans::Ligne`) ; le manifeste donne l'empreinte de chaque fichier (de quoi ne renvoyer que ce qui a changé) et l'envoi courant ; tout se fait en tâche de fond.
+- Manquera : l'identité en ligne (identifiants Kitsu d'un plan, d'un épisode, d'un projet : à garder dans le projet, sans doute un fichier à côté du manifeste) ; la connexion et les droits (jeton dans le gestionnaire d'identifiants du poste) ; la correspondance des statuts de tâche ; la vérification de la casse et des noms de colonnes de l'import CSV ; l'envoi des vignettes et des vidéos comme prévisualisations ; la lecture en retour des statuts. Rien de tout cela n'est écrit.
+
+### Limites
+
+- Le paquet prend la liste du film ou de la séquence courante (d'un seul tenant), pas une sélection de plans quelconques.
+- Le PDF du paquet a la mise en page d'origine (celle de la fenêtre PDF n'est pas reprise) ; la liste du paquet a les réglages d'origine de la liste (Kitsu, CSV à virgule, 1001).
+- Les textes du PDF et de la liste sont lus dans le projet au départ, les images dans le cliché pris juste après : une retouche faite entre les deux, pendant les toutes premières images d'écran, n'est pas protégée (la fenêtre garde la main sur le projet pendant la copie).

@@ -778,6 +778,11 @@ pub struct App {
     pub(crate) editorial: Option<crate::editorialui::EditorialWindow>,
     /// Fenêtre « Fiche technique » (tableur CSV / XLSX : `ficheui.rs`).
     pub(crate) fiche: Option<crate::ficheui::FicheWindow>,
+    /// Fenêtres du pipeline de production : liste des plans, paquet de livraison, noms et production, modèles d'épisode.
+    pub(crate) liste_plans: Option<crate::listeplansui::ListeWindow>,
+    pub(crate) paquet: Option<crate::paquetui::PaquetWindow>,
+    pub(crate) noms_fenetre: Option<crate::nommageui::NomsWindow>,
+    pub(crate) modele_episode: Option<crate::modeleepisodeui::ModeleWindow>,
     /// Relecture par le réalisateur : export de la page, import des notes, dessin du relecteur (`relectureui.rs`).
     pub(crate) relecture: crate::relectureui::RelectureUi,
     /// Travailler à plusieurs : la session du film partagé de ce projet (rien : projet classique) et l'état de son interface
@@ -1321,6 +1326,10 @@ impl App {
             renumber_confirm: false,
             editorial: None,
             fiche: None,
+            liste_plans: None,
+            paquet: None,
+            noms_fenetre: None,
+            modele_episode: None,
             relecture: Default::default(),
             partage: None,
             equipe_ui: Default::default(),
@@ -1584,6 +1593,7 @@ impl App {
             || self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::rendering)
             || self.relecture.rendering()
             || self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::rendering)
+            || self.paquet.as_ref().is_some_and(crate::paquetui::PaquetWindow::rendering)
             || self.vignettes.annot.confirmer
             || self.collage_occupe()
     }
@@ -4009,6 +4019,10 @@ impl App {
             "fichier.exporter_gif" => self.open_export(crate::export::Format::Gif),
             "fichier.exporter_montage" => self.open_editorial(),
             "fichier.exporter_fiche" => self.open_fiche(),
+            "fichier.exporter_liste_plans" => self.open_liste_plans(),
+            "fichier.exporter_paquet" => self.open_paquet(),
+            "projet.noms_production" => self.open_noms(),
+            "projet.enregistrer_modele_episode" => self.open_modele_episode(),
             "fichier.exporter_relecture" | "fichier.importer_notes" => {
                 self.relecture_action(action);
             }
@@ -4872,6 +4886,9 @@ impl App {
         }
         if self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::busy) {
             v.push("la fiche technique");
+        }
+        if self.paquet.as_ref().is_some_and(crate::paquetui::PaquetWindow::busy) {
+            v.push("le paquet de livraison");
         }
         if self.onglets.iter().enumerate().any(|(i, _)| if i == self.actif { self.relecture.export_en_cours() } else { self.onglets[i].etat.as_ref().is_some_and(|e| e.relecture.export_en_cours()) }) {
             v.push("la page de relecture");

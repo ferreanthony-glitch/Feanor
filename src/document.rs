@@ -789,6 +789,12 @@ pub struct Properties {
     pub copyright: String,
     /// Couleur que prend un fond sous le trait qu'on allume (`fond.rs`) ; rien : blanc.
     pub fond: Option<[u8; 3]>,
+    /// Le nom de la série ou du projet de production (`{projet}` du modèle de noms, colonnes de la liste des plans) ; vide : le titre.
+    pub serie: String,
+    /// Le numéro (ou le nom) de l'épisode (`{episode}`) ; vide : aucun.
+    pub episode: String,
+    /// Le modèle de noms des plans (`nommage.rs`) ; vide : le modèle d'origine (« SQ01_PL012A »).
+    pub modele_noms: String,
 }
 
 /// Couleur B du damier d'un projet neuf.

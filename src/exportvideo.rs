@@ -400,7 +400,8 @@ pub fn boxes(doc: &Document, p: usize, f: usize, s: &BurnSettings) -> Vec<Boite>
     };
     if s.plan {
         let inc = preset(Source::NomPlan, Ancre::HautGauche);
-        put(&inc, doc.plan_full_ref(p));
+        // (Le nom du modèle de noms du projet s'il en a un, `nommage.rs` ; sinon « SQ01_PL012A » comme toujours.)
+        put(&inc, if doc.properties.modele_noms.trim().is_empty() { doc.plan_full_ref(p) } else { doc.nom_de_plan(p) });
     }
     if s.sequence {
         let inc = preset(Source::NomSequence, Ancre::HautDroite);

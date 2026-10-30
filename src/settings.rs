@@ -27,6 +27,12 @@ pub struct Settings {
     /// code de départ, dernier dossier.
     #[serde(default, rename = "fiche_technique")]
     pub fiche: crate::fiche::Reglages,
+    /// La liste des plans pour le suivi de production (listeplans.rs) : profil, format, séparateur, image d'entrée, vignettes.
+    #[serde(default, rename = "liste_des_plans")]
+    pub liste_plans: crate::listeplans::Reglages,
+    /// Le paquet de livraison (paquet.rs) : ce qu'il contient, le modèle de chemin, le dernier dossier.
+    #[serde(default, rename = "paquet_de_livraison")]
+    pub paquet: crate::paquet::Reglages,
     /// Pelure d'oignon.
     #[serde(default, rename = "pelure")]
     pub onion: OnionSettings,
@@ -320,6 +326,8 @@ impl Default for Settings {
             system_cursor: true,
             montage_export_dir: None,
             fiche: Default::default(),
+            liste_plans: Default::default(),
+            paquet: Default::default(),
             onion: OnionSettings::default(),
             xsheet: Default::default(),
             flips: Default::default(),
