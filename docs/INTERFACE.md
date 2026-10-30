@@ -146,18 +146,18 @@ et les calques » (c'est la colonne des calques).
 
 ### Restes à décider (non changés)
 
-- **« Arrière-plan »** désigne à la fois la couleur de la feuille (onglet Arrière-plan, `fond.*`) ET la
+- **(Décidé le 2026-10-30, partie 89 : la feuille est « Fond de la feuille ».)** **« Arrière-plan »** désignait à la fois la couleur de la feuille (onglet Arrière-plan, `fond.*`) ET la
   deuxième couleur du couple de couleurs (avant-plan / arrière-plan). Proposition : la feuille devient
   « Fond de la feuille ».
 - **« Fond »** : fond de la feuille, fond du thème (le « calque de fond » du panneau Calques a disparu le 2026-10-21 : un calque bitmap
   ordinaire fait la même chose). L'aplat sous le trait (fonction du calque) ne s'appelle plus « fond » : c'est l'**« Aplat sous le trait »**
   (« Aplat » sur sa sous-ligne), depuis le 2026-10-21. Ne jamais écrire « Fond sous le trait » ni « Remplissage » dans un texte de l'interface
   pour cette fonction.
-- **« Propriétés du plan »** (action, Alt+Entrée) ouvre le panneau « Fiche du plan »
+- **(Décidé le 2026-10-30, partie 89 : « Fiche du plan » partout.)** **« Propriétés du plan »** (action, Alt+Entrée) ouvrait le panneau « Fiche du plan »
   (onglet « Fiche »). Trois noms pour une chose. Proposition : « Fiche du plan » partout.
 - « Image clé » reste dans les textes de la propagation (EbSynth : les images peintes à la main) ;
   fichiers `propager*.rs` non touchés à la demande d'Anthony.
-- Le tutoiement (« Clique », « Choisis ») est partout, sauf une phrase de `diagnosticui.rs` (vouvoiement,
+- **(Fait le 2026-10-30, partie 89.)** Le tutoiement (« Clique », « Choisis ») est partout, sauf une phrase de `diagnosticui.rs` (vouvoiement,
   « votre matériel »). À uniformiser avec la voix de l'application.
 - Le texte posé sur un dessin de décor (ocre) dans les thèmes sombres n'a que 1,9:1 de contraste. Comme
   avant ; à voir à l'écran.
@@ -6534,3 +6534,87 @@ Code : `src/montagehauteur.rs` (montage), `src/numerotationui.rs` (projets neufs
 2. Ouvrir un ancien projet suivi : il reste suivi.
 3. Tirer le bord entre le dessin et le montage : la pastille s'allume, la bande ne passe pas sous 200 points ; changer d'espace de travail et revenir : la hauteur est gardée.
 4. Réduire la bande : la barre de défilement apparaît, la piste Son 1 s'atteint ; M, S et le verrou se lisent et se cliquent. Bouton de hauteur sous le montage : petite, moyenne, grande.
+
+## 89. Premier contact : visite, Labo, vocabulaire (2026-10-30, branche `premier-contact`)
+
+Code : `src/premierjour.rs` (la visite), `src/conseils.rs` (au compte-gouttes), `src/panels.rs` (menus), `src/palette.rs` (anciens noms), `src/prefsui.rs` (Préférences > Général), `src/settings.rs`. Essais : `src/premierjour_tests.rs`. **`project::VERSION` ne change pas (44)** : tout est réglage de l'application, rien n'entre dans un projet.
+
+### 89.1 La visite « Premier jour » (à la place de la pluie de bulles)
+
+Avant : au premier lancement, trois bulles se succédaient sur le projet (« Régler SHOT pour cette machine ? », puis « Les Vignettes », « Le Montage », « Concentration et raccourcis »… au fil des onglets). Après : **une seule proposition**, optionnelle.
+
+| Avant | Après |
+|---|---|
+| « Régler SHOT pour cette machine ? » : bulle au lancement, dès qu'un projet est ouvert | Plus de bulle au lancement. La proposition est **la dernière étape de la visite** et le menu **Aide > Régler SHOT pour cette machine…** (le diagnostic des performances, mêmes mesures, rien n'est appliqué sans accord) |
+| Cinq bulles de conseils, une à chaque nouvel endroit (onglets, Espace 3D, première modification) | Toujours une phrase, un « Compris », « Revoir les conseils » : mais **une seule par séance**, et **aucune tant que la visite est proposée ou en cours**. Jamais par-dessus une fenêtre ou une boîte de dialogue |
+| Rien pour guider le premier projet | **Visite rapide (2 min)** : cinq étapes |
+
+- **Proposée une fois, sans bruit** : sur la page d'accueil, une ligne à droite de la case « Rouvrir le dernier projet » : « Première fois sur SHOT ? · Visite rapide (2 min) · Plus tard · Ne plus proposer ». Si un projet s'ouvre tout seul au lancement, la même chose en petite carte en bas à droite. Elle ne vient que sur une **machine neuve** (aucun conseil vu, aucun diagnostic fait), jamais dans les essais.
+- **Les réponses** : *Visite rapide* lance le parcours ; *Plus tard* la rend au lancement suivant (deux propositions au plus en tout) ; *Ne plus proposer* l'éteint pour de bon. Retenu dans `reglages.toml`, clé `[premier_jour]` (`etat` : `inconnu`, `plus_tard`, `ne_plus_proposer`, `en_cours`, `fini` ; `etape` ; `propositions`). Rien n'est écrit tant qu'on n'a rien répondu.
+- **Les cinq étapes** (une carte en bas à droite ; chaque étape a un bouton qui ouvre l'endroit, puis « Suivant ») :
+
+| # | Étape | Bouton | Commande |
+|---|---|---|---|
+| 1 | Créer un projet (se coche toute seule quand un projet est ouvert ; sur l'accueil, la ligne du bas la rappelle) | Nouveau projet… | `fichier.nouveau` |
+| 2 | Dessiner des vignettes | Ouvrir les Vignettes | `espace.vignettes` |
+| 3 | Mettre une durée (tirer le bord d'un plan, ou la Fiche du plan) | Ouvrir le Montage | `espace.montage` |
+| 4 | Écouter l'animatique | Lecture / pause | `lecture.basculer` |
+| 5 | Exporter, puis « Régler SHOT pour cette machine… » | Exporter… | `fichier.exporter` |
+
+  « Précédent », « Quitter la visite » (jamais renvoyée d'office ensuite) et « Terminer » complètent la carte. Elle disparaît quand une fenêtre ou une boîte de dialogue est ouverte et revient après. Le parcours reprend à son étape après un redémarrage.
+- **Toujours réactivable** : **Aide > Visite rapide « Premier jour »…** (`aide.visite`, aussi par Ctrl+K), **Aide > Revoir les conseils**, Préférences > Général > « Conseils et visite » (« Refaire la visite rapide », « Revoir les conseils »).
+
+### 89.2 Le Labo : inventaire, avant / après
+
+Il contenait quatre entrées. Le menu **Labo n'est plus visible d'origine** ; il ne paraît qu'avec **Préférences > Général > Fonctions expérimentales > « Afficher les fonctions expérimentales »** (réglage de l'application, `fonctions_experimentales`). Rien n'est supprimé du code ; chaque commande reste dans la palette (Ctrl+K), ancien nom « Labo » compris.
+
+| Fonction | État d'après la doc | Avant | Après |
+|---|---|---|---|
+| Propager la peinture du calque… (`calque.propager`) | **Mûre** : fusionnée le 2026-10-16, guide, tests, `docs/PROPAGATION.md` ; déjà au clic droit d'un calque peint | Menu Labo | **Menu Animation** (sous « Colorier par zones… »), clic droit des calques, Ctrl+K |
+| Suggestions sonores… (`vue.suggestions_sonores`) + Lire le storyboard (`suggestion.lire`) | **Inachevée** : phase 1 (génération de sons, sources locales ou en ligne, `docs/GENERATION_SON.md`), à vérifier à l'écran | Menu Labo ; onglet du panneau Montage d'origine ; case dans Affichage > Panneaux ; onglet « Génération » des Préférences | **Expérimentale** : menu Labo (avec la case) ; plus d'onglet d'origine dans le Montage (les dispositions déjà enregistrées gardent le leur) ; Affichage > Panneaux ne la liste qu'avec la case ou panneau ouvert ; onglet « Génération » des Préférences caché sans la case (visible s'il est ouvert ou répond à la recherche) ; Ctrl+K |
+| Mon panneau (essai) (`vue.mon_panneau`) | **À l'essai** : le Labo en décidera (§ 64) | Menu Labo | **Expérimentale** : menu Labo (avec la case) ; Ctrl+K (anciens noms « Labo », « Mon panneau (essai) ») |
+| Enregistrer mes traits (`pinceau.enregistrer_traits`) | **Outil d'essai du moteur** (banc de traits, `docs/SENSATION-BROSSES.md`) | Menu Labo | **Expérimentale** : menu Labo (avec la case) ; Ctrl+K |
+
+Un menu Labo ouvert dit « Fonctions expérimentales : elles peuvent encore changer. » (« Fonctions à l'essai » avant). Sans projet, comme les autres menus de projet, il est grisé quand il est visible.
+
+### 89.3 Vocabulaire : renommages
+
+| Avant | Après | Où |
+|---|---|---|
+| Propriétés du plan (menu Storyboard, commande `panneau.proprietes`) · panneau « Fiche du plan » · onglet « Fiche » | **Fiche du plan** partout (« Fiche » reste l'abréviation de l'onglet, où la place manque) | menu Storyboard, palette |
+| Arrière-plan (onglet de la timeline, commandes `fond.*`, `onglet.arriere_plan`) pour la **feuille** | **Fond de la feuille** (onglet, bulle, barre d'état, commandes de la palette, bulles de Nouveau projet) | bas de la timeline, Ctrl+K |
+| Arrière-plan (le deuxième carré du couple de couleurs) | **inchangé**, et dit : « Couleur d'arrière-plan », « les deux carrés du panneau Couleur » | panneau Couleur, Dégradé |
+| Panneau Planche : « Calques » + « Dessin » + « Aucun calque d'annotation : le premier trait en crée un » en même temps | « **Calques d'annotation** », « **Dessin de la case** », « Aucune annotation pour l'instant : le premier trait d'annotation crée son calque. » | panneau Planche (Vignettes) |
+| Nouveau calque vectoriel : « Vecto 3 » | « **Vectoriel 3** » (les calques qui existent ne sont **jamais** renommés) | `add_layer` |
+| Menu Aide : « Diagnostic des performances… » ; bulle « Régler SHOT pour cette machine ? » | « **Régler SHOT pour cette machine…** » (la fenêtre garde son titre « Diagnostic des performances ») | Aide, palette |
+| « Revoir les conseils » seul | + « **Visite rapide « Premier jour »…** » | Aide |
+| Remplissage (de la couleur sous le trait, trois messages de calque de couleur et de fusion) | **Aplat** (le mot est définitif) | calque de couleur, fusion, ouverture d'un ancien projet |
+| « façon EbSynth » (nom de commande) | « de clé en clé » (aucun nom de logiciel commercial) | palette |
+| Vouvoiement : `diagnosticui.rs` (« Votre machine », « décochez »), le nom du plan, les colonnes de la fiche, les versions de séquence, le PDF de scénario | **Tutoiement**, comme tout le reste de l'application | 8 phrases |
+
+**Les anciens noms restent trouvables par Ctrl+K** (`palette::ANCIENS_NOMS`, un synonyme par commande renommée ; on n'y retire rien) : « Propriétés du plan », « Diagnostic des performances », « Arrière-plan : damier »…, « Labo », « Mon panneau (essai) », « banc d'essai »…, et pour la visite « premier jour », « tutoriel », « visite guidée ». `keymap.toml` a un bloc pour `aide.visite` (sans touche) ; `every_action_has_a_block_in_the_file` reste vert, et chaque commande se retrouve en tapant son nom entier.
+
+### 89.4 Doublons : ce qui a été corrigé, ce qui reste à décider
+
+Corrigés : voir 89.3. **À décider** (non changés) :
+
+- **« Papier »** (Nouveau projet) et **« Fond de la feuille »** (timeline) sont la même chose sous deux noms : proposition, « Papier » dans Nouveau projet, et « Fond de la feuille » ailleurs avec « (le papier) » dans la bulle.
+- **« Dessin »** a trois sens : le calque par défaut d'un plan, le dessin d'une case (panneau Planche, maintenant « Dessin de la case »), le titre du panneau central (l'image). Proposition : « Image » pour le panneau central.
+- **« Variantes », « Versions du plan », « Versions de séquence »** : trois mots voisins dans le menu Storyboard (sous-menus « Versions du plan » et « Variantes »). Proposition : un seul mot (« Versions »), la séquence ayant ses propres versions.
+- **Noms de logiciels du commerce dans les bulles et messages** : formats d'import et d'export (brosses, nuanciers, scénarios, tableur de la fiche, montage externe) et comparaisons (« comme TVPaint », « le Power de TVPaint », « Excel en français »). Les formats ont besoin d'un nom de fichier (`.abr`, `.fdx`) ; les comparaisons et les noms de programmes dans les messages peuvent partir. Fichiers : `brushui.rs`, `dynui.rs`, `pinceauxui.rs`, `procreate.rs`, `kritabrush.rs`, `tvpbrush.rs`, `nuancierui.rs`, `scenario*.rs`, `ficheui.rs`, `fichejob.rs`, `editorialui.rs`, `barres.rs`, `keymap.rs` (nuancier). À faire dans une passe à part (les exports sont dans une autre branche).
+- **Vouvoiement qui reste volontairement** : la page de relecture (`relecture.rs`, `relectureui.rs`, `barres.rs` : le texte s'adresse à un relecteur extérieur, pas à l'utilisateur de SHOT).
+- « Exposition » (feuille d'exposition) et « durée » pour la même chose ; « Séquence » et « Plans » dans « Nouvelle séquence avec les plans choisis ».
+- Un calque d'annotation et un « calque » du panneau Calques : le mot « calque » désigne deux objets qui ne se mélangent pas (§ 21) ; « annotation » seul en gras dans les listes éviterait la confusion.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Lancer SHOT avec un dossier de réglages vide : l'accueil montre, en bas à droite de la case « Rouvrir le dernier projet », « Première fois sur SHOT ? Visite rapide (2 min) · Plus tard · Ne plus proposer » ; aucune autre bulle.
+2. « Plus tard » : relancer, la ligne revient une fois ; « Plus tard » encore : elle ne revient plus (Aide la relance). « Ne plus proposer » : elle ne revient jamais.
+3. « Visite rapide » : l'accueil dit « étape 1 sur 5 » ; créer le projet : la carte passe à l'étape 2 ; les boutons ouvrent Vignettes, Montage, la lecture, la fenêtre Exporter ; la dernière étape propose « Régler SHOT pour cette machine… ».
+4. Ouvrir une fenêtre (Préférences) pendant la visite : la carte s'efface, revient à la fermeture.
+5. Aucun conseil de lieu pendant la visite ; après, un seul par séance ; Aide > Revoir les conseils les rend.
+6. Aide > Visite rapide « Premier jour »… relance à tout moment, même sans projet.
+7. Pas de menu Labo. Préférences > Général > « Afficher les fonctions expérimentales » : il apparaît (suggestions sonores, Mon panneau, Enregistrer mes traits) ; l'onglet « Génération » des Préférences aussi.
+8. Menu Animation : « Propager la peinture du calque… » à côté de « Colorier par zones… ».
+9. Menu Storyboard : « Fiche du plan ». Bas de la timeline : onglet « Fond de la feuille ». Planche : « Calques d'annotation », « Dessin de la case », phrase d'attente cohérente. Nouveau calque vectoriel : « Vectoriel N ».
+10. Ctrl+K : « propriétés du plan », « labo », « arrière-plan », « diagnostic » trouvent les nouvelles commandes.
