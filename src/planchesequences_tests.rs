@@ -564,3 +564,32 @@ fn the_export_follows_the_displayed_sequences_in_their_order_with_titles() {
     assert!(p.layout.groupes.is_empty());
     let _ = doc.panels.len();
 }
+
+/// Prépare une copie d'un vrai projet pour une capture à l'écran (`SHOT_SEQ_COPIE` : le fichier du projet copié) : trois séquences par deux
+/// coupures, des noms, la deuxième cachée, la troisième montrée en premier. Lancé à la main : `cargo test ... prepare_une_copie -- --ignored`.
+#[test]
+#[ignore]
+fn prepare_une_copie_pour_une_capture() {
+    let Ok(chemin) = std::env::var("SHOT_SEQ_COPIE") else { return };
+    let manifest = std::path::PathBuf::from(chemin);
+    let mut charge = crate::project::load(&manifest).expect("le projet s'ouvre");
+    let doc = &mut charge.doc;
+    // (Le projet d'essai n'a que quatre plans : des plans vides de plus, pour avoir de quoi couper.)
+    while doc.panels.len() < 11 {
+        let dernier = doc.panels.len() - 1;
+        doc.add_scene_after(dernier);
+    }
+    let n = doc.panels.len();
+    println!("plans : {n}, séquences : {}", doc.sequences.len());
+    doc.couper_sequence_avant(n / 3).expect("première coupure");
+    let i = (2 * n) / 3;
+    doc.couper_sequence_avant(i).expect("deuxième coupure");
+    let seqs = doc.sequence_order();
+    assert_eq!(seqs.len(), 3);
+    for (q, nom) in seqs.iter().zip(["Ouverture", "Poursuite", "Final"]) {
+        doc.sequence_mut(*q).expect("séquence").name = nom.into();
+    }
+    doc.annotations.affichage.ordre = vec![(seqs[2], true), (seqs[0], true), (seqs[1], false)];
+    crate::project::save(doc, &manifest, &mut charge.written).expect("enregistrement");
+    println!("séquences : {:?}", seqs.iter().map(|q| doc.sequence_label(*q)).collect::<Vec<_>>());
+}
