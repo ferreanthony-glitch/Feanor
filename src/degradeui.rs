@@ -499,13 +499,24 @@ impl App {
         self.degrade_synchroniser();
         let Some(mut g) = self.degrade_geste.take() else { return };
         let premiere = g.phase == Phase::Trace;
-        // Une retouche ne s'écrit que là où le dégradé a été posé (l'écriture était défaite : sans cela, elle serait perdue).
-        if g.phase == Phase::Retouche && g.contexte != (self.cur_panel, self.cur_layer, self.cur_frame) {
-            return;
+        // Une retouche se réécrit là où le dégradé a été posé (plan, calque, image d'origine), même si l'on est ailleurs maintenant :
+        // l'écriture était défaite, rien ne doit se perdre. On y va le temps de l'écrire, puis on revient.
+        let actuel = (self.cur_panel, self.cur_layer, self.cur_frame);
+        let ailleurs = g.contexte != actuel;
+        if ailleurs {
+            let (p, l, _) = g.contexte;
+            if self.doc.panels.get(p).is_none_or(|pl| l >= pl.layers.len()) {
+                return;
+            }
+            (self.cur_panel, self.cur_layer, self.cur_frame) = g.contexte;
         }
         let rebase = premiere || g.poignee.is_some();
         g.poignee = None;
-        if self.degrade_appliquer(&g, premiere) {
+        let ecrit = self.degrade_appliquer(&g, premiere);
+        if ailleurs {
+            (self.cur_panel, self.cur_layer, self.cur_frame) = actuel;
+        }
+        if ecrit {
             g.phase = Phase::Pose;
             g.etape = Some(self.history.serial());
             g.applique = Some(g.degrade());
@@ -514,6 +525,11 @@ impl App {
             }
             self.degrade_geste = Some(g);
         }
+    }
+
+    /// Une retouche est en cours : l'écriture du dégradé est défaite, le document n'est pas dans un état à enregistrer ni à copier.
+    pub(crate) fn degrade_en_retouche(&self) -> bool {
+        self.degrade_geste.as_ref().is_some_and(|g| g.phase == Phase::Retouche)
     }
 
     /// Défait l'écriture du dégradé posé (l'étape du dégradé, sans la garder pour « Rétablir ») : l'aperçu la remplace pendant la retouche.

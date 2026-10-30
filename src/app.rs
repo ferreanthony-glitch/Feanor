@@ -4956,6 +4956,10 @@ impl App {
     /// `perf_tests.rs` l'appellent directement (sans fenêtre, sans sommeil).
     pub(crate) fn frame(&mut self, ctx: &egui::Context) {
         crate::perf::begin_frame(ctx);
+        // La fenêtre perd le focus : une retouche de dégradé en cours s'écrit d'abord (rien ne reste « défait »).
+        if ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::WindowFocused(false)))) {
+            self.degrade_abandonner();
+        }
         // Pipette d'un champ de couleur (`champcouleur.rs`) : sans capture d'écran, la couleur du dessin sous le curseur.
         if let Some(pos) = crate::champcouleur::surveiller(ctx) {
             let couleur = self.couleur_sous_le_curseur(pos);

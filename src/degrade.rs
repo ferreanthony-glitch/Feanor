@@ -624,11 +624,12 @@ impl Reglages {
         self.transparence = e.transparence.clone();
         self.fin = if e.vers_transparent { Fin::VersTransparent } else { Fin::VersFond };
         self.inverse = false;
+        self.genre = e.forme;
     }
 
     /// Le dégradé courant, à enregistrer sous le nom `nom` (les couleurs liées le restent : « avant-plan vers transparent »).
     pub fn enregistrer(&self, nom: &str) -> Enregistre {
-        Enregistre { nom: nom.to_string(), couleurs: self.couleurs.clone(), transparence: self.transparence.clone(), vers_transparent: self.fin == Fin::VersTransparent }
+        Enregistre { nom: nom.to_string(), couleurs: self.couleurs.clone(), transparence: self.transparence.clone(), vers_transparent: self.fin == Fin::VersTransparent, forme: self.genre }
     }
 }
 
@@ -644,6 +645,13 @@ pub struct Enregistre {
     /// Liées aux carrés : l'avant-plan devient transparent au lieu d'aller vers l'arrière-plan.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub vers_transparent: bool,
+    /// La forme (linéaire, radial, angle, réfléchi, losange) ; absente d'un ancien fichier : linéaire.
+    #[serde(default, skip_serializing_if = "est_lineaire")]
+    pub forme: Genre,
+}
+
+fn est_lineaire(g: &Genre) -> bool {
+    *g == Genre::Lineaire
 }
 
 impl Enregistre {
@@ -669,26 +677,29 @@ fn c(rgb: [u8; 3], pos: f32) -> PastilleCouleur {
 /// Les dégradés du départ : simples, de quoi voir comment ça marche (et ils se rangent ou se suppriment comme les autres).
 pub fn enregistres_d_origine() -> Vec<Enregistre> {
     vec![
-        Enregistre { nom: "Noir vers blanc".into(), couleurs: Some(vec![c([0, 0, 0], 0.0), c([255, 255, 255], 1.0)]), transparence: None, vers_transparent: false },
-        Enregistre { nom: "Avant-plan vers arrière-plan".into(), couleurs: None, transparence: None, vers_transparent: false },
-        Enregistre { nom: "Avant-plan vers transparent".into(), couleurs: None, transparence: None, vers_transparent: true },
+        Enregistre { nom: "Noir vers blanc".into(), couleurs: Some(vec![c([0, 0, 0], 0.0), c([255, 255, 255], 1.0)]), transparence: None, vers_transparent: false, forme: Genre::Lineaire },
+        Enregistre { nom: "Avant-plan vers arrière-plan".into(), couleurs: None, transparence: None, vers_transparent: false, forme: Genre::Lineaire },
+        Enregistre { nom: "Avant-plan vers transparent".into(), couleurs: None, transparence: None, vers_transparent: true, forme: Genre::Lineaire },
         Enregistre {
             nom: "Ciel".into(),
             couleurs: Some(vec![c([28, 58, 128], 0.0), c([92, 154, 224], 0.55), c([214, 232, 245], 1.0)]),
             transparence: None,
             vers_transparent: false,
+            forme: Genre::Lineaire,
         },
         Enregistre {
             nom: "Soleil couchant".into(),
             couleurs: Some(vec![c([52, 40, 96], 0.0), c([200, 84, 92], 0.5), c([250, 176, 80], 1.0)]),
             transparence: None,
             vers_transparent: false,
+            forme: Genre::Lineaire,
         },
         Enregistre {
             nom: "Ombre douce".into(),
             couleurs: Some(vec![c([0, 0, 0], 0.0), c([0, 0, 0], 1.0)]),
             transparence: Some(vec![PastilleOpacite::new(0.0, 0.7), PastilleOpacite::new(1.0, 0.0)]),
             vers_transparent: false,
+            forme: Genre::Lineaire,
         },
     ]
 }

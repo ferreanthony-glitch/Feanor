@@ -817,9 +817,154 @@ fn the_default_gradient_is_still_front_to_back_linked_to_the_colour_squares() {
     let g = r.degrade(VERT, ROUGE, pos2(0.0, 0.0), pos2(10.0, 0.0));
     assert_eq!((g.c0(), g.c1()), (VERT, ROUGE));
     let _ = vec2(0.0, 0.0);
-    let _ = Enregistre { nom: String::new(), couleurs: None, transparence: None, vers_transparent: false };
+    let _ = Enregistre { nom: String::new(), couleurs: None, transparence: None, vers_transparent: false, forme: Genre::Lineaire };
 }
 
+// ------------------------------------------------------------------------------------ rien de perdu : tout ce qui fige réécrit d'abord
+
+/// Un plan 400 × 300 à deux calques bitmap, outil Dégradé.
+fn banc_deux_calques() -> Banc {
+    let mut doc = Document::new(400, 300, 24);
+    doc.panels[0].layers = vec![Layer::new("Dessin", LayerKind::Bitmap), Layer::new("Autre", LayerKind::Bitmap)];
+    doc.panels[0].length = 4;
+    let mut b = crate::perf_tests::banc_taille(doc, false, 1280, 720);
+    b.app.set_mode(crate::app::Mode::Animation);
+    (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
+    b.app.tool = Tool::Brush;
+    b.app.color = [0, 0, 0];
+    b.app.brush.size = 8.0;
+    b.chauffer(10);
+    tracer_anneau(&mut b);
+    b
+}
+
+/// Un dégradé posé dans l'anneau du calque 0, puis une retouche en cours (pointeur tenu sur la poignée d'arrivée, déplacée).
+fn retouche_tenue(b: &mut Banc) -> (usize, Pos2) {
+    poser_axe(b, (120.0, 150.0), (280.0, 150.0));
+    let n = etapes(&b.app).len();
+    let p0 = ecran(b, 280.0, 150.0);
+    b.image(vec![Event::PointerMoved(p0)], 1.0 / 60.0);
+    b.image(vec![bouton(p0, true, PointerButton::Primary)], 1.0 / 60.0);
+    let p1 = ecran(b, 200.0, 150.0);
+    b.image(vec![Event::PointerMoved(p1)], 1.0 / 60.0);
+    assert_eq!(phase(b), Some(Phase::Retouche));
+    assert_eq!(pixel(b, 150, 150).a(), 0, "pendant la retouche l'écriture est défaite");
+    (n, p1)
+}
+
+/// Le dégradé retouché (bleu dès x = 200) est écrit sur le calque 0, une seule étape « Dégradé », et rien sur le calque 1.
+fn verifier_ecrit(b: &Banc, nom: &str) {
+    let c0 = b.app.doc.panels[0].layers[0].frames[0].expect("le dessin du calque 0");
+    let m = b.app.doc.cels[&c0].raster.get(200, 150);
+    assert!(m.a() == 255 && m.b() > 240, "{nom} : le dégradé retouché est écrit sur le calque d'origine : {m:?}");
+    let autre = b.app.doc.panels[0].layers[1].frames.first().copied().flatten();
+    assert!(autre.is_none_or(|c| b.app.doc.cels[&c].raster.get(200, 150).a() == 0), "{nom} : rien sur l'autre calque");
+    assert_eq!(etapes(&b.app).iter().filter(|e| e.as_str() == "Dégradé").count(), 1, "{nom} : une seule étape « Dégradé » : {:?}", etapes(&b.app));
+}
+
+#[test]
+fn a_retouch_in_progress_is_written_on_its_own_layer_when_the_layer_changes() {
+    let mut b = banc_deux_calques();
+    retouche_tenue(&mut b);
+    b.app.cur_layer = 1;
+    b.image(Vec::new(), 1.0 / 60.0);
+    assert!(b.app.degrade_geste.is_none());
+    b.app.cur_layer = 0;
+    verifier_ecrit(&b, "calque");
+}
+
+#[test]
+fn a_retouch_in_progress_is_written_on_its_own_frame_when_the_frame_changes() {
+    let mut b = banc_deux_calques();
+    retouche_tenue(&mut b);
+    b.app.goto_frame(2);
+    b.image(Vec::new(), 1.0 / 60.0);
+    assert!(b.app.degrade_geste.is_none());
+    b.app.goto_frame(0);
+    verifier_ecrit(&b, "image");
+}
+
+#[test]
+fn a_retouch_in_progress_is_written_when_the_tool_changes() {
+    let mut b = banc_deux_calques();
+    retouche_tenue(&mut b);
+    b.app.set_tool(Tool::Brush);
+    assert!(!b.app.degrade_en_retouche(), "la retouche est écrite tout de suite");
+    verifier_ecrit(&b, "outil");
+    b.image(Vec::new(), 1.0 / 60.0);
+    assert!(b.app.degrade_geste.is_none(), "puis le dégradé est figé");
+}
+
+#[test]
+fn a_retouch_in_progress_is_written_when_another_undo_step_slips_in_and_when_the_window_loses_focus() {
+    let mut b = banc_deux_calques();
+    retouche_tenue(&mut b);
+    b.app.history.push(crate::history::Edit::Group(Vec::new()));
+    let fin = ecran(&b, 200.0, 150.0);
+    b.image(vec![bouton(fin, false, PointerButton::Primary)], 1.0 / 60.0);
+    b.image(Vec::new(), 1.0 / 60.0);
+    verifier_ecrit(&b, "autre étape");
+    // La fenêtre perd le focus pendant la retouche.
+    let mut b = banc_deux_calques();
+    retouche_tenue(&mut b);
+    b.image(vec![Event::WindowFocused(false)], 1.0 / 60.0);
+    assert!(!b.app.degrade_en_retouche(), "la retouche est écrite");
+    verifier_ecrit(&b, "focus");
+}
+
+#[test]
+fn saving_in_the_middle_of_a_retouch_writes_the_gradient_never_the_undone_state() {
+    let mut b = banc_deux_calques();
+    retouche_tenue(&mut b);
+    let dir = std::env::temp_dir().join(format!("shot-degrade-retouche-{}-{:?}", std::process::id(), std::thread::current().id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifest = dir.join("R.shot");
+    assert!(b.app.save_to_blocking(manifest.clone()));
+    let relu = project::load(&manifest).unwrap().doc;
+    let c0 = relu.panels[0].layers[0].frames[0].expect("dessin");
+    let m = relu.cels[&c0].raster.get(200, 150);
+    assert!(m.a() == 255 && m.b() > 240, "le fichier contient le dégradé, pas l'état défait : {m:?}");
+    std::fs::remove_dir_all(&dir).ok();
+    // L'enregistrement par la commande (avec ses suites) aussi : « Enregistrer sous » passe par le même chemin.
+    let mut b = banc_deux_calques();
+    retouche_tenue(&mut b);
+    b.app.request(crate::app::Pending::Quit);
+    assert!(!b.app.degrade_en_retouche(), "fermer ou quitter écrit d'abord la retouche");
+    verifier_ecrit(&b, "fermeture");
+}
+
+#[test]
+fn a_retouch_in_progress_is_written_before_leaving_the_tab() {
+    let mut b = banc_deux_calques();
+    retouche_tenue(&mut b);
+    assert!(b.app.nouvel_onglet());
+    assert!(b.app.activer_onglet(0));
+    verifier_ecrit(&b, "onglet");
+}
+
+#[test]
+fn the_saved_gradients_remember_the_shape_and_an_old_settings_file_reads_linear() {
+    let mut r = Reglages { genre: Genre::Losange, ..Reglages::default() };
+    r.couleurs = Some(vec![p(0.0, ROUGE), p(1.0, BLEU)]);
+    let e = r.enregistrer("Pointe");
+    assert_eq!(e.forme, Genre::Losange);
+    let mut autre = Reglages { genre: Genre::Radial, ..Reglages::default() };
+    autre.appliquer(&e);
+    assert_eq!(autre.genre, Genre::Losange, "le rappel reprend la forme");
+    for g in Genre::TOUS {
+        let e = Reglages { genre: g, ..Reglages::default() }.enregistrer("x");
+        let s = crate::settings::Settings { degrades: Some(vec![e.clone()]), ..Default::default() };
+        let relu = crate::settings::Settings::apres_lecture(toml::from_str(&toml::to_string(&s).unwrap()).unwrap());
+        assert_eq!(relu.degrades, Some(vec![e]), "{g:?}");
+    }
+    // Un ancien fichier de réglages : pas de forme, donc linéaire.
+    let vieux = "[[degrades_enregistres]]\nnom = \"Ancien\"\n[[degrades_enregistres.couleurs]]\nposition = 0.0\ncouleur = [1, 2, 3]\n[[degrades_enregistres.couleurs]]\nposition = 1.0\ncouleur = [4, 5, 6]\n";
+    let s = crate::settings::Settings::apres_lecture(toml::from_str(vieux).unwrap());
+    let l = s.degrades.expect("la liste");
+    assert_eq!((l.len(), l[0].forme), (1, Genre::Lineaire));
+    assert!(degrade::enregistres_d_origine().iter().all(|e| e.forme == Genre::Lineaire));
+}
 /// Capture du panneau Réglages de l'outil Dégradé (à regarder) :
 /// `SHOT_CAPTURE_DIR=… SHOT_CAPTURE_PROJET=<fichier .pelure d'une copie> cargo test --release --offline --target-dir target\msvc degrade_capture -- --ignored --nocapture`
 #[test]

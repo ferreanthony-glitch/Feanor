@@ -48,7 +48,7 @@ impl App {
         // Pas au milieu d'un geste : le document n'est pas dans un état stable.
         // (Ni pendant un enregistrement : la copie recopierait des dessins que le dossier du projet n'a
         // pas encore, `enregistrement.rs`.)
-        let hold = self.stroke.is_some() || ctx.input(|i| i.pointer.any_down()) || self.export_job.is_some() || self.save_en_cours();
+        let hold = self.stroke.is_some() || self.degrade_en_retouche() || ctx.input(|i| i.pointer.any_down()) || self.export_job.is_some() || self.save_en_cours();
         let Some(rec) = &mut self.recovery else { return };
         let snap = Snapshot {
             doc: &self.doc,

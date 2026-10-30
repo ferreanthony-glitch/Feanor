@@ -6282,7 +6282,8 @@ Le champ `degrade` d'une zone vectorielle s'écrit avec `pastilles` (position, c
 - Un dégradé **bitmap** n'est retouchable que tant qu'on n'a pas changé d'outil (ensuite ce sont des pixels). Sur un dégradé vectoriel **retrouvé** (pas posé à l'instant), l'aperçu de retouche se pose par-dessus l'ancien : un dégradé translucide laisse voir l'ancien dessous pendant la retouche seulement.
 - L'aperçu est un maillage de 56 × 56 cases (96 × 96 pour angle, réfléchi, losange) : une pastille très serrée est un peu adoucie à l'aperçu, pas à l'écriture.
 - L'**échelle** de l'axe compte 100 % pour la longueur tracée (ou celle de la dernière poignée tirée).
-- Question : les dégradés enregistrés rappellent aussi la forme ? Pour l'instant non : ils gardent couleurs, opacités et « vers transparent ».
+- Les dégradés enregistrés retiennent aussi la **forme** (un ancien `reglages.toml` sans forme se lit en linéaire).
+- **Rien de perdu** : tout ce qui fige (autre calque, image, outil, onglet, enregistrement, fermeture, autre étape d'annulation, fenêtre qui perd le focus) réécrit d'abord la retouche en cours **sur le plan, le calque et l'image d'origine**, en une seule étape « Dégradé » ; le fichier enregistré ne contient jamais l'état défait, et la copie de secours attend la fin de la retouche.
 
 ### À vérifier à l'écran (par Anthony)
 1. Outil Dégradé, Réglages : cinq formes, la bande avec les pastilles dessous (couleurs) et dessus (opacité), Angle et Échelle, Inverser, Tramage, Mes dégradés.
