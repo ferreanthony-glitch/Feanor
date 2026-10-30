@@ -6345,3 +6345,54 @@ Le panneau Références devient une vraie planche, infinie, où l'on pose des im
 ### Pour le travail en équipe, plus tard
 
 Rien n'est fait pour le partage, mais le stockage est prêt : chaque élément porte un **identifiant unique au monde** (`uid`, posé à la création ou à la première modification d'un ancien élément), son **auteur**, sa date de **création** et de **dernière modification** (secondes depuis 1970). Il restera : choisir un fichier par élément (`references/<uid>.json`) ou un journal fusionnable dans le dossier partagé (`Depot`, voir `docs/COOPERATION.md`) ; fusionner par `uid` et `modified` (le plus récent gagne, une suppression laisse une trace) ; verrouiller un cadre ou un élément pendant qu'on le déplace ; donner un `uid` à tous les anciens éléments en une passe ; montrer qui a posé quoi.
+
+## 84. Exports V1 (2026-10-30, branche `exports-v1`)
+
+Le menu **Fichier > Exporter…** range les exports par usage (quatre titres, une icône, une bulle et une phrase « pour quoi faire »
+par entrée, une action sans touche dans `keymap.toml` et dans Ctrl+K). L'ancienne « page HTML + planches » (doublon du PDF et de la
+relecture) est retirée, avec la case « PNG sans le papier » du menu : elle reste dans la fenêtre des images. Détails du montage, des
+calques séparés et du format de la caméra : `docs/EXPORT_MONTAGE.md`.
+
+| Famille | Export | Action | Ce qu'il fait |
+|---|---|---|---|
+| Vidéo | Film | `fichier.exporter_film` | MP4 H.264, MOV ProRes 422 HQ, **MOV ProRes 4444 avec transparence**, **DNxHR HQ (MOV ou MXF)** ; taille (projet, 4K UHD, 1080p, 720p, 50 %, largeur libre, toujours paire) ; cadence (celle du projet, 23,976, 24, 25, 29,97, 30, 50, 60 : conversion par ffmpeg, le projet ne change pas) ; **« Graver les informations »** (numéro de plan, time code, séquence, action et dialogue, sans calque ajouté) ; format grisé avec sa raison quand ce ffmpeg n'a pas l'encodeur ; avertissement « qualité H.264 réduite » sans libx264 |
+| Vidéo | GIF animé | `fichier.exporter_gif` | comme avant |
+| Images & PDF | Images | `fichier.exporter_images` | une PNG par image (avec ou sans le papier) |
+| Images & PDF | Image courante | `fichier.exporter_image_courante` | comme avant |
+| Images & PDF | **Images par plan** | `fichier.exporter_images_par_plan` | une image par plan (sa première image) ou par case (début et marques), PNG ou JPEG, nommées `SQ01_PL012A` (`_C02` pour les cases d'après), fond transparent possible (PNG), taille au choix |
+| Images & PDF | **Storyboard PDF** | `fichier.exporter_pdf` | A4, A3 ou Lettre, portrait ou paysage, 1, 2, 3, 4, 6, 8 ou 9 cases par page (grille calculée), textes au choix (numéro et titre, durée, action, dialogue, notes), titre et date en en-tête, numéros de page ; **police TrueType embarquée** (Segoe UI, sinon Arial…, lue dans `C:\Windows\Fonts`, licence d'incorporation vérifiée) : accents et caractères de la police écrits tels quels, aucun « ? » |
+| Images & PDF | Planche des vignettes, Color script, Relecture | `fichier.exporter_planche`, `…_colorscript`, `…_relecture` | comme avant |
+| Son | Son mixé | `fichier.exporter_son` | comme avant (WAV 16 bits) |
+| Son | **Son par piste** | `fichier.exporter_son_par_piste` | un fichier par piste audible (muet et solo respectés ; une piste sans extrait dans l'étendue n'est pas écrite), nommé comme la piste, avec son volume et ses effets ; WAV 16 ou 24 bits ou AIFF (écrit à la main), 48 kHz ; le mixage en plus si on le veut |
+| Montage & échange | Pour le montage | `fichier.exporter_montage` | EDL (**avec le son**), XML Final Cut 7, **FCPXML 1.9 ou 1.10**, OpenTimelineIO, **marqueurs** (numéros de plan, commentaires non résolus), **son NTSC sans dérive** |
+| Montage & échange | Fiche technique | `fichier.exporter_fiche` | comme avant |
+| Montage & échange | **Calques séparés** | `fichier.exporter_calques` | un dossier par plan, une suite PNG transparente par calque visible, caméra appliquée ou feuille entière |
+| Montage & échange | **Caméra** | `fichier.exporter_camera` | clés de caméra de chaque plan (et caméra de chaque image) en JSON et CSV |
+
+Les choix (taille et cadence du film, informations gravées, mise en page du PDF, images par plan, son par piste, calques, caméra)
+sont retenus par poste de travail dans les réglages de l'application (`reglages.toml`, table `exports_v1`) : le format du projet n'a
+pas changé (`project::VERSION` 44). Tout se calcule en tâche de fond sur une copie du projet, comme avant (§28) : la progression est la
+même, annuler efface ce qui a été écrit. Pas de nouvelle dépendance ; aucun téléchargement ; aucune police copiée dans le dépôt.
+
+### À vérifier à l'écran
+
+1. Fichier > Exporter… : quatre titres, quinze entrées, chacune avec son icône ; la bulle au bout d'une seconde ; chaque entrée ouvre sa fenêtre.
+2. Film : les quatre formats ; un format dont l'encodeur manque est grisé avec la raison ; la taille et la cadence choisies se retrouvent dans le fichier (clic droit > propriétés, ou un lecteur) ; « Graver les informations » pose bien le numéro de plan, le time code, la séquence et le texte du plan sans toucher aux calques du projet ; ProRes 4444 : le fond est transparent dans le logiciel de montage.
+3. Images par plan : les noms (`SQ01_PL012A`), une par case, JPEG, fond transparent.
+4. Storyboard PDF : changer le format, le nombre de cases, décocher des textes ; ouvrir le PDF dans un lecteur : accents, œ, €, guillemets, tirets ; le texte se sélectionne et se cherche.
+5. Son par piste : les fichiers portent le nom des pistes ; une piste muette n'y est pas ; le WAV 24 bits et l'AIFF s'ouvrent dans un logiciel de son.
+6. Pour le montage : la case FCPXML et son choix 1.9 / 1.10, les marqueurs, le son dans l'EDL.
+7. Calques séparés : le dossier de chaque plan, les suites ; Caméra : le JSON s'ouvre et se lit.
+8. Pendant un export, le projet reste libre (rien ne rame) ; Arrêter efface ce qui a été écrit.
+
+### À vérifier dans les logiciels de montage
+
+Rien de ce qui suit n'a pu être ouvert dans un vrai logiciel de montage ici (voir la liste détaillée dans `docs/EXPORT_MONTAGE.md`) :
+
+- l'import de l'EDL **avec ses événements son** (canaux `A`, `A2`…) : les extraits qui se recouvrent sur des pistes différentes ;
+- l'import du **FCPXML** (1.9 puis 1.10) dans Final Cut Pro X : clips, fondus, son accroché, marqueurs ; l'effet « Cross Dissolve » ;
+- les **marqueurs** du XML Final Cut 7, du FCPXML et de l'OTIO (`Marker.2`) : noms, positions, commentaires ;
+- le **son NTSC** (ralenti de 0,1 %) sur un film long : reste-t-il calé sur l'image ?
+- ProRes 4444 : la **transparence** à l'import ; DNxHR HQ en MOV et en MXF ;
+- les **calques séparés** dans un logiciel de compositing : suites d'images reconnues, ordre des calques, transparence ;
+- un script qui relit le JSON de la **caméra** (unités et sens des angles : voir le tableau de `docs/EXPORT_MONTAGE.md`).
