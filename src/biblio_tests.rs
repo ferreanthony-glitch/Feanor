@@ -1287,3 +1287,42 @@ fn the_panel_draws_the_folder_in_both_views_with_the_preview_and_never_reads_on_
     assert!(t.elapsed() < Duration::from_secs(60));
     std::fs::remove_dir_all(&racine).ok();
 }
+
+/// Capture du panneau ouvert sur la copie d'un projet, avec un aperçu (`BIBLIO_CAPTURES=dossier cargo test … -- --ignored`).
+#[test]
+#[ignore]
+fn biblio_capture() {
+    let Some(sortie) = std::env::var_os("BIBLIO_CAPTURES").map(PathBuf::from) else { return };
+    fn copier(de: &Path, vers: &Path) {
+        std::fs::create_dir_all(vers).unwrap();
+        for e in std::fs::read_dir(de).unwrap().flatten() {
+            let (a, b) = (e.path(), vers.join(e.file_name()));
+            if a.is_dir() {
+                copier(&a, &b);
+            } else {
+                std::fs::copy(&a, &b).unwrap();
+            }
+        }
+    }
+    let projet = temp("capture-projet");
+    copier(Path::new(r"C:\Users\ferre\Documents\SHOT\Tests\TEST PELURE_effets"), &projet);
+    // (Un son et une vidéo factices à côté, pour voir leurs cases.)
+    std::fs::write(projet.join("dessins").join("ambiance.wav"), wav(96_000)).unwrap();
+    let mut b = crate::perf_tests::banc(crate::document::Document::with_frame(320, 180, 24), true);
+    b.app.audio_tried = true;
+    b.app.settings.bibliotheque.dernier = Some(projet.join("dessins"));
+    b.app.show_pane(Pane::Bibliotheque);
+    for _ in 0..40 {
+        b.image(Vec::new(), 1.0 / 60.0);
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let png = std::fs::read_dir(projet.join("dessins")).unwrap().flatten().map(|e| e.path()).find(|p| p.extension().is_some_and(|e| e == "png")).unwrap();
+    b.app.biblio_commande(Commande::Choisir(png));
+    for _ in 0..40 {
+        b.image(Vec::new(), 1.0 / 60.0);
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let rgba = b.capturer().expect("carte graphique");
+    std::fs::create_dir_all(&sortie).unwrap();
+    image::save_buffer(sortie.join("bibliotheque.png"), &rgba, 1920, 1080, image::ColorType::Rgba8).unwrap();
+}
