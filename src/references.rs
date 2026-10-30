@@ -40,7 +40,11 @@ pub(crate) const FILE: &str = "references.json";
 /// Le dossier des fichiers, dans le dossier du projet.
 pub(crate) const DIR: &str = "references";
 const FORMAT: &str = "shot-references";
+/// Le format de `references.json` quand rien de nouveau n'y est ; la planche (post-it, textes, titres, cadres,
+/// recadrage, opacité) l'écrit en `VERSION_PLANCHE` : une ancienne version de SHOT, qui perdrait ces éléments en
+/// réécrivant le fichier, le met de côté sans le toucher (`parse` refuse un format plus récent).
 const VERSION: u32 = 1;
+const VERSION_PLANCHE: u32 = 2;
 /// Formats d'image acceptés (ceux que le programme sait lire).
 pub(crate) const IMAGE_EXTS: [&str; 3] = ["png", "jpg", "jpeg"];
 /// Côté le plus long d'une référence neuve sur le tableau, en unités du tableau.
@@ -61,6 +65,46 @@ pub(crate) const SPEED_MAX: f32 = 4.0;
 
 fn one() -> f32 {
     1.0
+}
+
+fn is_zero_u8(n: &u8) -> bool {
+    *n == 0
+}
+
+fn is_zero_u64(n: &u64) -> bool {
+    *n == 0
+}
+
+fn is_one(v: &f32) -> bool {
+    *v >= 1.0
+}
+
+/// Ce qu'un élément du tableau est.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Kind {
+    /// Une image ou une vidéo (un fichier dans `references/`).
+    #[default]
+    #[serde(rename = "image")]
+    Image,
+    #[serde(rename = "note")]
+    Note,
+    #[serde(rename = "texte")]
+    Text,
+    #[serde(rename = "titre")]
+    Title,
+    #[serde(rename = "cadre")]
+    Frame,
+}
+
+impl Kind {
+    pub fn is_image(&self) -> bool {
+        *self == Kind::Image
+    }
+
+    /// Un élément fait de texte : post-it, texte, titre.
+    pub fn has_text(&self) -> bool {
+        matches!(self, Kind::Note | Kind::Text | Kind::Title | Kind::Frame)
+    }
 }
 
 fn is_false(b: &bool) -> bool {
@@ -101,7 +145,37 @@ pub struct Reference {
     pub plans: Vec<u64>,
     #[serde(rename = "video", default, skip_serializing_if = "Option::is_none")]
     pub video: Option<Clip>,
-    /// Le dossier où est `file` en ce moment : celui du projet (`references/`), ou un dossier
+    /// Ce que c'est : une image (ou une vidéo), un post-it, un texte, un titre ou un cadre (`planchref.rs`).
+    /// Les éléments qui ne sont pas des images n'ont pas de fichier : `size` est leur taille sur le tableau
+    /// (à l'échelle 1) et `scale` les agrandit avec leur texte.
+    #[serde(rename = "type", default, skip_serializing_if = "Kind::is_image")]
+    pub kind: Kind,
+    /// Le texte d'un post-it, d'un texte, d'un titre, ou le nom affiché d'un cadre (le nom de la référence
+    /// sert aux images).
+    #[serde(rename = "texte", default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
+    /// La couleur (numéro dans `planchref::NOTE_COLORS`) d'un post-it, d'un texte ou d'un cadre.
+    #[serde(rename = "couleur", default, skip_serializing_if = "is_zero_u8")]
+    pub color: u8,
+    /// Opacité de l'élément, de 0 à 1 (1 : opaque).
+    #[serde(rename = "opacite", default = "one", skip_serializing_if = "is_one")]
+    pub opacity: f32,
+    /// Recadrage non destructif d'une image : le rectangle visible, de 0 à 1 dans l'image entière
+    /// (gauche, haut, droite, bas, avant miroirs). Rien : l'image entière.
+    #[serde(rename = "recadrage", default, skip_serializing_if = "Option::is_none")]
+    pub crop: Option<[f32; 4]>,
+    /// Identifiant unique au monde de l'élément (travail en équipe, plus tard : deux planches se fusionnent
+    /// par ces identifiants, jamais par `id`, qui n'est unique que dans un projet).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub uid: String,
+    /// Qui l'a posé, et quand (secondes depuis 1970) ; `modified` : la dernière modification.
+    #[serde(rename = "auteur", default, skip_serializing_if = "String::is_empty")]
+    pub author: String,
+    #[serde(rename = "cree", default, skip_serializing_if = "is_zero_u64")]
+    pub created: u64,
+    #[serde(rename = "modifie", default, skip_serializing_if = "is_zero_u64")]
+    pub modified: u64,
+    /// Le dossier où est ``file`` en ce moment : celui du projet (`references/`), ou un dossier
     /// temporaire avant le premier enregistrement. Pas dans le fichier.
     #[serde(skip)]
     pub home: Option<PathBuf>,
@@ -219,12 +293,31 @@ impl Reference {
             grey: false,
             plans: Vec::new(),
             video: None,
+            kind: Kind::Image,
+            text: String::new(),
+            color: 0,
+            opacity: 1.0,
+            crop: None,
+            uid: String::new(),
+            author: String::new(),
+            created: 0,
+            modified: 0,
             home: None,
         }
     }
 
+    /// Quelque chose que seule la planche (format 2 du fichier) sait écrire.
+    pub(crate) fn uses_board_features(&self) -> bool {
+        self.kind != Kind::Image || self.crop.is_some() || self.opacity < 1.0
+    }
+
     pub fn is_video(&self) -> bool {
         self.video.is_some()
+    }
+
+    /// Le rectangle visible de l'image, de 0 à 1 (gauche, haut, droite, bas) : l'image entière sans recadrage.
+    pub fn crop_rect(&self) -> [f32; 4] {
+        self.crop.unwrap_or([0.0, 0.0, 1.0, 1.0])
     }
 
     pub fn center(&self) -> Pos2 {
@@ -233,7 +326,8 @@ impl Reference {
 
     /// Moitié de la taille sur le tableau (avant rotation).
     pub fn half(&self) -> Vec2 {
-        vec2(self.size[0].max(1) as f32, self.size[1].max(1) as f32) * self.scale * 0.5
+        let c = self.crop_rect();
+        vec2(self.size[0].max(1) as f32 * (c[2] - c[0]), self.size[1].max(1) as f32 * (c[3] - c[1])) * self.scale * 0.5
     }
 
     fn angle(&self) -> f32 {
@@ -288,7 +382,50 @@ impl Reference {
         if self.flip_v {
             v = 1.0 - v;
         }
+        // Le recadrage : le point est dans la partie visible, on le replace dans l'image entière.
+        let c = self.crop_rect();
+        let (u, v) = (c[0] + u.clamp(0.0, 1.0) * (c[2] - c[0]), c[1] + v.clamp(0.0, 1.0) * (c[3] - c[1]));
         Some((u.clamp(0.0, 1.0), v.clamp(0.0, 1.0)))
+    }
+
+    /// Le point du tableau est-il sur ce qu'on peut attraper de l'élément ? Une image, un post-it, un texte :
+    /// toute sa surface. Un cadre : son bandeau de titre et son bord seulement (le reste laisse passer le clic,
+    /// pour se déplacer ou choisir ce qu'il contient).
+    pub fn hit(&self, p: Pos2) -> bool {
+        if self.kind != Kind::Frame {
+            return self.contains(p);
+        }
+        let (l, h) = (self.to_local(p), self.half());
+        if l.x.abs() > h.x || l.y.abs() > h.y {
+            return false;
+        }
+        let strip = crate::planchref::FRAME_STRIP * self.scale;
+        let edge = 10.0 * self.scale.max(0.2);
+        l.y < -h.y + strip || l.x.abs() > h.x - edge || l.y > h.y - edge
+    }
+
+    /// Le rectangle de l'image entière, dans le repère de la référence (centre du visible en 0) : sert à
+    /// montrer ce que le recadrage cache.
+    pub fn full_local(&self) -> Rect {
+        let c = self.crop_rect();
+        let (w, h) = (self.size[0].max(1) as f32 * self.scale, self.size[1].max(1) as f32 * self.scale);
+        let (cx, cy) = ((c[0] + c[2]) * 0.5, (c[1] + c[3]) * 0.5);
+        let sx = if self.flip_h { -1.0 } else { 1.0 };
+        let sy = if self.flip_v { -1.0 } else { 1.0 };
+        let center = vec2(sx * (0.5 - cx) * w, sy * (0.5 - cy) * h);
+        Rect::from_center_size(center.to_pos2(), vec2(w, h))
+    }
+
+    /// Change le recadrage sans que ce qu'on voit ne bouge : le centre suit.
+    pub fn set_crop(&mut self, crop: Option<[f32; 4]>) {
+        let (old, new) = (self.crop_rect(), crop.unwrap_or([0.0, 0.0, 1.0, 1.0]));
+        let (w, h) = (self.size[0].max(1) as f32 * self.scale, self.size[1].max(1) as f32 * self.scale);
+        let sx = if self.flip_h { -1.0 } else { 1.0 };
+        let sy = if self.flip_v { -1.0 } else { 1.0 };
+        let d = vec2(sx * ((new[0] + new[2]) - (old[0] + old[2])) * 0.5 * w, sy * ((new[1] + new[3]) - (old[1] + old[3])) * 0.5 * h);
+        let c = self.from_local(d);
+        (self.x, self.y) = (c.x, c.y);
+        self.crop = crop.filter(|c| *c != [0.0, 0.0, 1.0, 1.0]);
     }
 
     /// Le pixel de l'image sous un point du tableau (`size` : la taille de l'image décodée, qui peut
@@ -330,6 +467,10 @@ impl Reference {
     /// Le texte où chercher : le nom et les étiquettes.
     fn haystack(&self) -> String {
         let mut s = fold(&self.name);
+        if !self.text.is_empty() {
+            s.push(' ');
+            s.push_str(&fold(&self.text));
+        }
         for t in &self.tags {
             s.push(' ');
             s.push_str(&fold(t));
@@ -448,9 +589,11 @@ pub(crate) fn bounds_of<'a>(refs: impl IntoIterator<Item = &'a Reference>) -> Op
     out
 }
 
-/// La référence la plus haute (la dernière de la liste) sous le point du tableau.
-pub(crate) fn hit_test<'a>(refs: impl DoubleEndedIterator<Item = &'a Reference>, p: Pos2) -> Option<u64> {
-    refs.rev().find(|r| r.contains(p)).map(|r| r.id)
+/// L'élément le plus haut sous le point du tableau : ceux qui ne sont pas des cadres d'abord (le dernier de
+/// la liste est le plus haut), puis les cadres (leur bandeau et leur bord).
+pub(crate) fn hit_test<'a>(refs: impl DoubleEndedIterator<Item = &'a Reference> + Clone, p: Pos2) -> Option<u64> {
+    let found = refs.clone().rev().find(|r| r.kind != Kind::Frame && r.hit(p));
+    found.or_else(|| refs.rev().find(|r| r.kind == Kind::Frame && r.hit(p))).map(|r| r.id)
 }
 
 /// Une grille de cellules carrées de `cell` points dans `width` points : le rectangle de la cellule
@@ -557,7 +700,13 @@ impl Document {
     /// Pose la référence en haut de la pile.
     pub(crate) fn add_reference(&mut self, r: Reference) {
         touch(&r.file);
-        self.references.push(r);
+        // Un cadre se pose au fond : il reste derrière ce qu'on y range.
+        if r.kind == Kind::Frame {
+            let at = self.references.iter().take_while(|x| x.kind == Kind::Frame).count();
+            self.references.insert(at, r);
+        } else {
+            self.references.push(r);
+        }
     }
 
     pub(crate) fn remove_reference(&mut self, id: u64) -> bool {
@@ -567,10 +716,24 @@ impl Document {
         true
     }
 
-    /// Met la référence devant les autres.
+    /// Met la référence derrière les autres (un cadre est déjà au fond).
+    pub(crate) fn lower_reference(&mut self, id: u64) -> bool {
+        match self.references.iter().position(|r| r.id == id) {
+            Some(i) if i > 0 && self.references[i].kind != Kind::Frame => {
+                let r = self.references.remove(i);
+                // (Après les cadres, qui restent au fond.)
+                let at = self.references.iter().take_while(|x| x.kind == Kind::Frame).count();
+                self.references.insert(at, r);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    /// Met la référence devant les autres (un cadre reste derrière ce qu'il contient : il ne monte pas).
     pub(crate) fn raise_reference(&mut self, id: u64) -> bool {
         match self.references.iter().position(|r| r.id == id) {
-            Some(i) if i + 1 < self.references.len() => {
+            Some(i) if i + 1 < self.references.len() && self.references[i].kind != Kind::Frame => {
                 let r = self.references.remove(i);
                 self.references.push(r);
                 true
@@ -631,7 +794,8 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
     if doc.references.is_empty() {
         return Ok(None);
     }
-    let sidecar = Sidecar { format: FORMAT.into(), version: VERSION, references: doc.references.clone() };
+    let version = if doc.references.iter().any(Reference::uses_board_features) { VERSION_PLANCHE } else { VERSION };
+    let sidecar = Sidecar { format: FORMAT.into(), version, references: doc.references.clone() };
     serde_json::to_vec_pretty(&sidecar).map(Some).map_err(|e| e.to_string())
 }
 
@@ -643,7 +807,7 @@ pub(crate) fn parse(text: &str) -> Result<Vec<Reference>, String> {
     if sidecar.format != FORMAT {
         return Err("ce n'est pas un fichier de références".into());
     }
-    if sidecar.version > VERSION {
+    if sidecar.version > VERSION_PLANCHE {
         return Err(format!("écrit par une version plus récente (format {})", sidecar.version));
     }
     let mut next = sidecar.references.iter().map(|r| r.id).max().unwrap_or(0) + 1;
@@ -675,6 +839,26 @@ fn sanitize(r: &mut Reference) {
     // Un nom de fichier, jamais un chemin (« .. », « C:\… »).
     r.file = Path::new(&r.file.replace('\\', "/")).file_name().map(|n| n.to_string_lossy().into_owned()).filter(|n| n != ".." && n != ".").unwrap_or_default();
     r.tags = parse_tags(&r.tags.join(","));
+    r.opacity = if r.opacity.is_finite() { r.opacity.clamp(0.05, 1.0) } else { 1.0 };
+    r.crop = r.crop.and_then(|c| {
+        let c = c.map(|v| if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 });
+        (c[2] - c[0] >= 0.01 && c[3] - c[1] >= 0.01 && c != [0.0, 0.0, 1.0, 1.0]).then_some(c)
+    });
+    r.color = r.color.min(crate::planchref::NOTE_COLORS.len() as u8 - 1);
+    if r.text.chars().count() > crate::planchref::TEXT_MAX {
+        r.text = r.text.chars().take(crate::planchref::TEXT_MAX).collect();
+    }
+    if r.kind != Kind::Image {
+        // Pas de fichier, pas de vidéo, pas de recadrage : la taille est celle du bloc sur le tableau.
+        r.file.clear();
+        r.video = None;
+        r.crop = None;
+        r.flip_h = false;
+        r.flip_v = false;
+        r.grey = false;
+        r.size = [r.size[0].clamp(8, 1 << 16), r.size[1].clamp(8, 1 << 16)];
+    }
+    r.author = r.author.chars().take(NAME_MAX).collect();
     let mut seen = HashSet::new();
     r.plans.retain(|p| seen.insert(*p));
     if let Some(c) = &mut r.video {
@@ -767,7 +951,7 @@ fn copy_atomic(from: &Path, to: &Path) -> Result<(), String> {
 
 /// Recopie un fichier, ou les images d'un dossier, là où elles manquent. Renvoie le nombre de
 /// fichiers écrits.
-fn copy_entry(from: &Path, to: &Path) -> Result<usize, String> {
+pub(crate) fn copy_entry(from: &Path, to: &Path) -> Result<usize, String> {
     if from.is_dir() {
         std::fs::create_dir_all(to).map_err(|e| format!("{} : {e}", to.display()))?;
         let mut n = 0;

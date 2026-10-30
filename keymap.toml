@@ -2683,6 +2683,101 @@ action = "references.tout_voir"
 touches = []
 source = "SHOT (sans touche)"
 
+[[raccourci]]
+action = "references.postit"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.texte"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.titre"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.cadre"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.ranger"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.recadrer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.retourner_h"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.retourner_v"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.noir_blanc"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.devant"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.derriere"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.tout_selectionner"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.importer_planche"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.rectangle"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.detacher"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.plein_ecran"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.ecran_2"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.transparente"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "references.toujours_dessus"
+touches = []
+source = "SHOT (sans touche)"
+
 # Brosse par personnage (sans touche : à choisir).
 [[raccourci]]
 action = "vue.personnages"

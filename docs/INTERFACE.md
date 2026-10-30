@@ -6245,3 +6245,29 @@ Une recherche de texte dans le panneau Scénario (`scenariorecherche.rs`, branch
 - **Inchangé** : le surlignage du passage du plan courant et le clic sur une scène (aller au plan) fonctionnent comme avant.
 - **Vitesse** : le texte normalisé de tout le scénario est calculé une fois par scénario ; la liste des occurrences une fois par frappe ; chaque image ne dessine que les éléments visibles. Rien n'est enregistré dans le projet (aucun nouveau format).
 - **Limites** : une occurrence ne traverse pas deux parties (ex. nom du personnage et réplique) ; le pointeur doit être sur le panneau pour que Ctrl+F y soit la recherche.
+
+
+## 81. Planche de références (2026-10-30, branche `planche-references`)
+
+Le panneau Références devient une vraie planche, infinie, où l'on pose des images, des vidéos, des post-it, des textes, des titres et des cadres (`planchref.rs`, `planchrefui.rs`, `referencesui.rs`). Rien n'est repris d'un autre logiciel.
+
+- **Dans Vignettes** : l'icône Références de la barre de droite l'ouvre (onglet avec Couleur et Scénario). Glisser une image de la planche sur une case de la planche des Vignettes marche (« 1 image déposée sur la planche », Ctrl+Z la retire) ; les post-it, textes et cadres ne se déposent pas (pas d'image).
+- **Détacher** : l'icône « Détacher » (fenêtre) de l'en-tête met la planche dans sa fenêtre ; la fermer la remet à sa place. Dans la fenêtre : **Plein écran** (icône, F11 ; Échap en sort), un choix **Écran** (« Cet écran (1) », Écran 1, Écran 2…, listé par Windows) qui y envoie la fenêtre puis la met en plein écran, **Toujours au-dessus**, **Fenêtre transparente** (+ opacité 20 à 100 %). Tout cela est retenu dans les réglages du poste (`Settings::references_fenetre`) : détachée, plein écran, écran, transparence, niveau.
+- **Planche** : molette = zoom autour du pointeur ; glisser le fond ou bouton du milieu = déplacer la vue ; **Tout voir** (la vue suit la taille du panneau tant qu'on n'y a pas touché). Sélection : clic, Maj+clic, **rectangle** (Maj ou Ctrl + glisser le fond, ou l'icône « Rectangle de sélection » : glisser le fond suffit ; espace = déplacer la vue), Ctrl+A. Déplacer, agrandir (coins), tourner (rond, Maj : 15°).
+- **Images** : **Ranger** (empile serré la sélection, ou tout, sans changer les tailles), **Recadrer** (non destructif : poignées, image entière pâle derrière, Échap/Entrée pour finir, « Rétablir l'image entière »), **Retourner** (deux icônes), **Noir et blanc**, **Opacité**, **devant / derrière**. Lien à un plan, filtre par plan, pipette (Alt+clic) et vidéo sont inchangés.
+- **Notes et textes** : **post-it** (6 couleurs, texte dans la barre du bas, double-clic pour écrire), **texte** libre, **titre**, **cadre** nommé. Déplacer un cadre emporte ce dont le centre est dedans ; ses coins changent sa taille ; « Ranger » sur un cadre range son contenu et le referme dessus ; « Cadre » avec des éléments choisis se pose autour d'eux.
+- **Outils** : petite barre d'icônes avec bulles (nom, raccourci, description), clic droit sur un élément ou sur le fond (post-it ici, cadre ici, ranger tout…), et 19 commandes dans la palette Ctrl+K (`references.postit`, `texte`, `titre`, `cadre`, `ranger`, `recadrer`, `retourner_h`, `retourner_v`, `noir_blanc`, `devant`, `derriere`, `tout_selectionner`, `importer_planche`, `rectangle`, `detacher`, `plein_ecran`, `ecran_2`, `transparente`, `toujours_dessus`), sans touche. **Une étape d'annulation par geste**, nommée en français.
+- **Rangement** : dans le projet (`references.json` + `references/`), les images copiées comme avant. « ... > Importer la planche d'un autre projet… » copie ses éléments (numéros et identifiants neufs, plans oubliés) à droite de ceux qui existent et ses images (sur un autre fil), en une étape.
+- **Format** : additif. Le fichier reste en **format 1** tant qu'il ne contient rien de nouveau (ancien projet relu et réécrit à l'identique, sans identifiant inventé) ; dès qu'il y a un post-it, un texte, un titre, un cadre, un recadrage ou une opacité, il passe en **format 2** (une ancienne version de SHOT le met alors de côté sans le toucher au lieu de perdre les éléments). **`project::VERSION` ne change pas (43).**
+
+### À vérifier à l'écran
+
+1. Vignettes > icône Références : l'onglet s'ouvre ; déposer une image de la planche sur une case.
+2. « Détacher », puis « Plein écran » (et F11, Échap), puis le choix « Écran 2 » avec deux écrans ; fermer la fenêtre : la planche revient dans son onglet. Relancer SHOT : la fenêtre revient comme elle était.
+3. « Fenêtre transparente » : le fond devient transparent (non vérifié à l'écran sous Windows : si le fond reste gris, dis-le).
+4. Post-it, texte, titre, cadre ; un cadre déplacé emporte son contenu ; ranger ; recadrer une image ; rectangle de sélection.
+5. « ... > Importer la planche d'un autre projet… ».
+
+### Pour le travail en équipe, plus tard
+
+Rien n'est fait pour le partage, mais le stockage est prêt : chaque élément porte un **identifiant unique au monde** (`uid`, posé à la création ou à la première modification d'un ancien élément), son **auteur**, sa date de **création** et de **dernière modification** (secondes depuis 1970). Il restera : choisir un fichier par élément (`references/<uid>.json`) ou un journal fusionnable dans le dossier partagé (`Depot`, voir `docs/COOPERATION.md`) ; fusionner par `uid` et `modified` (le plus récent gagne, une suppression laisse une trace) ; verrouiller un cadre ou un élément pendant qu'on le déplace ; donner un `uid` à tous les anciens éléments en une passe ; montrer qui a posé quoi.

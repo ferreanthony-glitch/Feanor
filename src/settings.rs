@@ -244,6 +244,10 @@ pub struct Settings {
     /// La taille du texte du panneau Scénario (petit, moyen, grand ; `scenariogarde::Taille`). Un réglage du poste : moyen d'origine.
     #[serde(default, rename = "scenario_taille", skip_serializing_if = "crate::scenariogarde::Taille::est_defaut")]
     pub scenario_taille: crate::scenariogarde::Taille,
+    /// La fenêtre à part de la planche de références (détachée, plein écran, écran, transparente, toujours au-dessus ;
+    /// `planchref::FenetreReglage`). Un réglage du poste : rien n'est écrit dans le projet.
+    #[serde(default, rename = "references_fenetre", skip_serializing_if = "crate::planchref::FenetreReglage::est_defaut")]
+    pub references_fenetre: crate::planchref::FenetreReglage,
 }
 
 fn default_passe_partout() -> u8 {
@@ -343,6 +347,7 @@ impl Default for Settings {
             new_plan_secs: crate::dureeplans::secondes_d_origine(),
             mon_panneau: Default::default(),
             scenario_taille: Default::default(),
+            references_fenetre: Default::default(),
         }
     }
 }

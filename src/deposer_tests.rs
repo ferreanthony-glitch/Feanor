@@ -220,23 +220,7 @@ fn dropped_references_use_their_files_and_other_files_are_ignored() {
     let dir = dossier("refs");
     let mut b = ouvert(quatre_plans(), 3);
     let f = png(&dir, "ref.png", 200, 100, [0, 180, 180]);
-    let r = crate::references::Reference {
-        id: 9001,
-        name: "ref".into(),
-        file: "ref.png".into(),
-        size: [200, 100],
-        tags: Vec::new(),
-        x: 0.0,
-        y: 0.0,
-        scale: 1.0,
-        rotation: 0.0,
-        flip_h: false,
-        flip_v: false,
-        grey: false,
-        plans: Vec::new(),
-        video: None,
-        home: Some(dir.clone()),
-    };
+    let r = crate::references::Reference { scale: 1.0, home: Some(dir.clone()), ..crate::references::Reference::image(9001, "ref", "ref.png", [200, 100], eframe::egui::pos2(0.0, 0.0)) };
     b.app.doc.references.push(r);
     let at = vignette(&b, 2).center();
     assert!(b.app.board_take_refs(&[9001], at));

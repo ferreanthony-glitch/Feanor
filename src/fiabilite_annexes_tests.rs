@@ -18,7 +18,7 @@ fn sidecars_from_a_newer_version_are_reported_and_survive_a_save() {
     let dir = racine(&manifeste).to_path_buf();
     for fichier in ANNEXES {
         let mut v = lire_json(&dir.join(fichier));
-        v["version"] = Value::from(2);
+        v["version"] = Value::from(3);
         v["champ_inconnu_d_une_version_future"] = Value::from("à garder");
         ecrire_json(&dir.join(fichier), &v);
     }
@@ -105,7 +105,7 @@ pub(crate) fn abimer_les_annexes(dir: &std::path::Path) -> (std::collections::BT
     let c = std::fs::read(dir.join(crate::commentaires::FILE)).expect("commentaires");
     std::fs::write(dir.join(crate::commentaires::FILE), &c[..c.len() / 2]).expect("écriture");
     let mut v = lire_json(&dir.join(crate::rognage::FILE));
-    v["version"] = Value::from(2);
+    v["version"] = Value::from(3);
     v["champ_inconnu_d_une_version_future"] = Value::from("à garder");
     ecrire_json(&dir.join(crate::rognage::FILE), &v);
     std::fs::write(dir.join(&son), b"RIFF mais pas un son").expect("écriture");
@@ -184,7 +184,7 @@ fn references_sidecar_and_files_survive_a_save_when_unreadable() {
 
     // Une version plus récente écrit son fichier ; une image inconnue traîne dans references/.
     let mut v = lire_json(&dir.join(crate::references::FILE));
-    v["version"] = Value::from(2);
+    v["version"] = Value::from(3);
     v["champ_inconnu_d_une_version_future"] = Value::from("à garder");
     ecrire_json(&dir.join(crate::references::FILE), &v);
     std::fs::write(dir.join("references").join("900202.png"), b"image que cette version ne cite pas").expect("écriture");

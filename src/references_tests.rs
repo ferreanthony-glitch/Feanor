@@ -217,7 +217,7 @@ fn a_damaged_entry_is_made_safe_on_reading() {
     assert_eq!(list[2].file, "6.png");
     // Pas le bon fichier.
     assert!(references::parse(r#"{"format":"autre","version":1}"#).is_err());
-    assert!(references::parse(r#"{"format":"shot-references","version":2}"#).is_err());
+    assert!(references::parse(r#"{"format":"shot-references","version":3}"#).is_err());
 }
 
 // ---------------------------------------------------------------------- l'import

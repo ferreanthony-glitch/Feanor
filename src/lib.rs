@@ -686,6 +686,10 @@ mod keymap_tests;
 mod ops_tests;
 mod montagekeys;
 mod references;
+// La planche de références (post-it, textes, cadres, ranger, recadrer, fenêtre à part) : voir `planchref.rs`.
+mod planchref;
+#[cfg(test)]
+mod planchref_tests;
 #[cfg(test)]
 mod references_tests;
 mod referencesui;
