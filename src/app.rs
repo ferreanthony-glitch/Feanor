@@ -1434,7 +1434,8 @@ impl App {
         // Storyboard. Les dispositions des autres espaces attendent qu'on y aille.
         app.espace = app.settings.storyboard_space;
         let saved = app.settings.layout_of(app.espace).cloned();
-        if saved.is_some() || app.espace != crate::workspace::Espace::Storyboard {
+        // (Sans disposition retenue, le Storyboard prend aussi la sienne d'origine, avec l'onglet Scénario.)
+        {
             // (Disposition d'avant 6a : la nouvelle disposition par défaut, `modernisee`.)
             let layout = saved.unwrap_or_else(|| app.espace.defaut()).modernisee();
             // (Les cadres de composition de la dernière fois aussi.)

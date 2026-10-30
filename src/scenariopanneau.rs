@@ -256,7 +256,14 @@ fn mettre_en_page(painter: &Painter, m: &Mesures, x0: f32, e: &Element) -> (Vec<
         let galley = painter.layout_job(job);
         y += p.avant * m.lh;
         let h = galley.size().y;
-        out.push(Posee { galley, dy: y, x: x0 + (m.w - colw) / 2.0, couleur, gras: p.style == Style::Gras });
+        // (Avec un alignement au centre ou à droite, la position du texte est son point d'ancrage : le milieu ou le bord droit de la colonne.)
+        let gauche = x0 + (m.w - colw) / 2.0;
+        let x = match p.al {
+            Al::Gauche => gauche,
+            Al::Centre => gauche + colw / 2.0,
+            Al::Droite => gauche + colw,
+        };
+        out.push(Posee { galley, dy: y, x, couleur, gras: p.style == Style::Gras });
         y += h;
     }
     (out, y)
