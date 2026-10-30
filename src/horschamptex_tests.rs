@@ -445,6 +445,13 @@ fn prepare_une_copie_pour_une_capture() {
         lancer(&mut b, job);
         let fin = b.app.export_job.as_ref().and_then(|j| j.outcome.clone()).expect("fini");
         println!("planche exportée : {fin:?}");
+        // Le même export sans aucune annotation ni trait hors cadres (rien de cette branche ne peut y jouer) et sans passe-partout.
+        if let Ok(sans) = std::env::var("SHOT_HC_PNG_SANS") {
+            b.app.export_job = None;
+            b.app.doc.annotations = Default::default();
+            let job = b.app.planche_job(&tous, &Options::default(), std::path::Path::new(&sans)).expect("tâche");
+            lancer(&mut b, job);
+        }
     }
 }
 
