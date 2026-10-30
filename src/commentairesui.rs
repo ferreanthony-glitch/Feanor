@@ -3,12 +3,13 @@
 //! souris, le panneau Commentaires, et les commandes (ajouter, résoudre, supprimer, aller au
 //! suivant). Chaque modification est une étape d'annulation qui porte son nom.
 
-use eframe::egui::{self, pos2, vec2, Align2, Color32, FontId, Painter, Pos2, Rect, RichText, Sense, Stroke, StrokeKind};
+use eframe::egui::{self, pos2, vec2, Color32, FontId, Painter, Pos2, Rect, RichText, Sense, Stroke, StrokeKind};
 use egui_phosphor::regular as ph;
 
 use crate::app::App;
 use crate::commentaires::{self, Comment, Placed, Scope, FLAG_HEAD};
 use crate::dock::Pane;
+use crate::fildecision::Status;
 use crate::theme;
 
 /// Hauteur d'une ligne de la liste du panneau.
@@ -87,7 +88,7 @@ pub(crate) fn paint_flags(painter: &Painter, ruler: Rect, placed: &[Placed], pol
         }
         let lit = Some(p.id) == sel || Some(p.id) == hover;
         let base = rgb(p.color);
-        let c = if p.done { base.gamma_multiply(0.35) } else { base };
+        let c = if !p.status.is_open() { base.gamma_multiply(0.35) } else { base };
         painter.line_segment([pos2(x, top), pos2(x, ruler.bottom() - 1.0)], Stroke::new(if lit { 2.0_f32 } else { 1.5_f32 }, c));
         let flag = vec![pos2(x, top), pos2(x + 9.0, top + 4.5), pos2(x, top + 9.0)];
         let outline = if lit { Stroke::new(1.5_f32, theme::contour()) } else { Stroke::new(1.0_f32, Color32::from_black_alpha(140)) };
@@ -130,7 +131,9 @@ struct Tip {
     date: String,
     place: String,
     text: String,
-    done: bool,
+    status: Status,
+    reason: String,
+    retake: bool,
 }
 
 fn show_tip(ui: &mut egui::Ui, tip: &Tip) {
@@ -147,8 +150,12 @@ fn show_tip(ui: &mut egui::Ui, tip: &Tip) {
     } else {
         ui.label(&tip.text);
     }
-    if tip.done {
-        ui.label(RichText::new(format!("{} Résolu", ph::CHECK_CIRCLE)).small().weak());
+    if tip.status != Status::Todo {
+        let reason = if tip.reason.is_empty() { String::new() } else { format!(" : {}", tip.reason) };
+        ui.label(RichText::new(format!("{} {}{reason}", crate::fildecisionui::status_icon(tip.status), tip.status.label())).small().weak());
+    }
+    if tip.retake {
+        ui.label(RichText::new(format!("{} Retake", ph::ARROW_COUNTER_CLOCKWISE)).small().weak());
     }
 }
 
@@ -164,7 +171,7 @@ impl App {
     }
 
     /// `App::edited` avec un nom d'étape : la saisie dans un champ de l'éditeur.
-    fn edited_as(&mut self, resp: &egui::Response, name: &str) -> bool {
+    pub(crate) fn edited_as(&mut self, resp: &egui::Response, name: &str) -> bool {
         let before = self.history.context.replace(name.to_string());
         let changed = self.edited(resp);
         self.history.context = before;
@@ -186,7 +193,9 @@ impl App {
             date: if c.created == 0 { String::new() } else { crate::projetui::date_label(c.created) },
             place: self.comment_place(c),
             text: commentaires::preview(&c.text, 5, 70),
-            done: c.done,
+            status: c.status(),
+            reason: commentaires::first_line(&c.follow.reason, 70),
+            retake: c.follow.retake.is_some(),
         }
     }
 
@@ -263,14 +272,9 @@ impl App {
         }
     }
 
+    /// « Fait » (ou « À faire » pour rouvrir) : la case de la liste et le menu.
     pub(crate) fn set_comment_done(&mut self, id: u64, done: bool) {
-        if self.doc.comment(id).is_none_or(|c| c.done == done) {
-            return;
-        }
-        self.comment_step(if done { "Commentaire résolu" } else { "Commentaire rouvert" });
-        if let Some(c) = self.doc.comment_mut(id) {
-            c.done = done;
-        }
+        self.set_note_status(id, if done { Status::Done } else { Status::Todo }, "");
     }
 
     pub(crate) fn set_comment_color(&mut self, id: u64, color: [u8; 3]) {
@@ -285,7 +289,7 @@ impl App {
 
     /// Va au commentaire d'après ou d'avant la tête de lecture.
     fn step_to_comment(&mut self, forward: bool) {
-        let list = self.doc.comments_in_order(self.comment_ui.show_done);
+        let list = self.doc.comments_in_order(&self.comment_ui.filter);
         match commentaires::step_comment(&list, self.global_frame(), forward) {
             Some(id) => {
                 self.select_comment(id, true);
@@ -295,7 +299,7 @@ impl App {
         }
     }
 
-    fn comment_status(&mut self, id: u64) {
+    pub(crate) fn comment_status(&mut self, id: u64) {
         if let Some(c) = self.doc.comment(id) {
             let who = if c.author.is_empty() { "Sans nom".to_string() } else { c.author.clone() };
             let line = commentaires::first_line(&c.text, 80);
@@ -308,13 +312,14 @@ impl App {
     pub(crate) fn comment_action(&mut self, action: &str) -> bool {
         match action {
             "commentaire.ajouter" => self.add_comment_here(),
-            "commentaire.resoudre" => match self.comment_ui.sel.and_then(|id| self.doc.comment(id).map(|c| (id, c.done))) {
+            "commentaire.resoudre" => match self.comment_ui.sel.and_then(|id| self.doc.comment(id).map(|c| (id, c.status() == Status::Done))) {
                 Some((id, done)) => self.set_comment_done(id, !done),
                 None => self.status = "Aucun commentaire choisi.".into(),
             },
             "commentaire.supprimer" => self.delete_selected_comment(),
             "commentaire.precedent" => self.step_to_comment(false),
             "commentaire.suivant" => self.step_to_comment(true),
+            a if self.notes_action(a) => {}
             _ => return false,
         }
         true
@@ -450,7 +455,7 @@ impl App {
     /// Le menu d'un commentaire (clic droit sur son repère ou sur sa ligne) : Modifier, Couleur,
     /// Marquer résolu, Supprimer.
     pub(crate) fn comment_menu(&mut self, ui: &mut egui::Ui, id: u64) {
-        let Some((done, color)) = self.doc.comment(id).map(|c| (c.done, c.color)) else {
+        let Some((status, color, retake)) = self.doc.comment(id).map(|c| (c.status(), c.color, c.follow.retake.is_some())) else {
             ui.label(RichText::new("Ce commentaire n'existe plus.").weak());
             return;
         };
@@ -464,9 +469,18 @@ impl App {
                 self.set_comment_color(id, c);
             }
         });
-        if ui.button(if done { "Rouvrir (non résolu)" } else { "Marquer résolu" }).clicked() {
+        ui.menu_button("Statut", |ui| {
+            for s in Status::ALL {
+                let label = format!("{}  {}", crate::fildecisionui::status_icon(s), s.label());
+                if ui.add(egui::SelectableLabel::new(s == status, label)).clicked() {
+                    ui.close_menu();
+                    self.ask_note_status(id, s);
+                }
+            }
+        });
+        if ui.button(if retake { "Retirer le retake" } else { "Marquer comme retake" }).clicked() {
             ui.close_menu();
-            self.set_comment_done(id, !done);
+            self.toggle_retake(id);
         }
         ui.separator();
         if ui.button("Supprimer").clicked() {
@@ -487,13 +501,9 @@ impl App {
             }
             self.command_button(ui, ph::CARET_LEFT, "commentaire.precedent", "Commentaire précédent", "Aller au commentaire d'avant la tête de lecture.", None);
             self.command_button(ui, ph::CARET_RIGHT, "commentaire.suivant", "Commentaire suivant", "Aller au commentaire d'après la tête de lecture.", None);
+            self.notes_commands(ui);
         });
-        ui.horizontal(|ui| {
-            let resp = ui.checkbox(&mut self.comment_ui.show_done, "Montrer les résolus");
-            bulle(resp, "Montrer les résolus", "Décoché : les commentaires résolus quittent la liste et les règles.", "");
-            let (all, shown) = (self.doc.comments_in_order(true).len(), self.doc.comments_in_order(self.comment_ui.show_done).len());
-            ui.label(RichText::new(format!("{shown} / {all}")).small().weak());
-        });
+        self.notes_overview(ui);
         ui.separator();
         // La liste (son cadre et son défilement) puis l'éditeur dessous, l'un après l'autre : la
         // liste prend la place qui reste au-dessus de l'éditeur, jamais moins de trois lignes ; si
@@ -502,7 +512,10 @@ impl App {
         // gardait au moins 64 points : dans un panneau court, elle passait sous l'éditeur.
         let avail = ui.available_height();
         egui::ScrollArea::vertical().id_salt("panneau_commentaires").auto_shrink([false, false]).show(ui, |ui| {
-            self.comment_list(ui, avail);
+            match self.comment_ui.view {
+                crate::commentaires::View::Liste => self.comment_list(ui, avail),
+                crate::commentaires::View::Fil => self.thread_view(ui),
+            }
             ui.add_space(GAP * 0.5);
             ui.separator();
             let editor = ui.scope(|ui| self.comment_editor(ui)).response.rect.height();
@@ -520,10 +533,11 @@ impl App {
     /// La liste, dans l'ordre du film, dans un cadre qui a son propre défilement ; `avail` : la
     /// hauteur du panneau sous son en-tête. Seules les lignes visibles sont dessinées.
     fn comment_list(&mut self, ui: &mut egui::Ui, avail: f32) {
-        let list = self.doc.comments_in_order(self.comment_ui.show_done);
+        let list = self.doc.comments_in_order(&self.comment_ui.filter);
         if list.is_empty() {
             ui.add_space(6.0);
-            ui.label(RichText::new("Aucun commentaire. Double-clic dans la règle du montage ou de la timeline, ou « Nouveau commentaire ».").small().weak());
+            let text = if self.doc.comments.is_empty() { "Aucun commentaire. Double-clic dans la règle du montage ou de la timeline, ou « Nouveau commentaire »." } else { "Aucune note avec ce filtre." };
+            ui.label(RichText::new(text).small().weak());
             return;
         }
         let pitch = ROW_H + ui.spacing().item_spacing.y;
@@ -549,7 +563,8 @@ impl App {
                 } else if resp.hovered() {
                     painter.rect_filled(rect.shrink2(vec2(0.0, 1.0)), 3.0, theme::eleve());
                 }
-                let dim = if c.done { 0.45 } else { 1.0 };
+                let status = c.status();
+                let dim = if status.is_open() { 1.0 } else { 0.45 };
                 painter.circle_filled(pos2(rect.left() + 11.0, rect.top() + 13.0), 5.0, rgb(c.color).gamma_multiply(dim));
                 let check = Rect::from_center_size(pos2(rect.right() - 14.0, rect.top() + 13.0), vec2(20.0, 20.0));
                 // Chaque ligne de texte tient sur une seule ligne, coupée par « … » avant la case
@@ -568,14 +583,11 @@ impl App {
                 painter.galley(pos2(rect.left() + 22.0, rect.top() + 21.0), first, color);
                 // La case « résolu ».
                 let box_resp = ui.interact(check, resp.id.with("resolu"), Sense::click());
-                let frame = Rect::from_center_size(check.center(), vec2(14.0, 14.0));
-                painter.rect_stroke(frame, 3.0, Stroke::new(1.0_f32, if box_resp.hovered() { theme::texte() } else { theme::texte_doux() }), StrokeKind::Inside);
-                if c.done {
-                    painter.text(frame.center(), Align2::CENTER_CENTER, ph::CHECK, FontId::proportional(12.0), theme::texte());
-                }
-                crate::bulles::bulle(box_resp.clone(), "Résolu", if c.done { "Cliquer pour rouvrir ce commentaire." } else { "Cliquer pour marquer ce commentaire résolu." }, "");
+                crate::fildecisionui::paint_status_box(&painter, check, status, box_resp.hovered());
+                crate::fildecisionui::paint_row_marks(&painter, check, &c, &self.doc);
+                crate::bulles::bulle(box_resp.clone(), status.label(), if status == Status::Done { "Cliquer pour rouvrir cette note (à faire). Clic droit sur la ligne : tous les statuts." } else { "Cliquer pour marquer cette note faite. Clic droit sur la ligne : refusée, en discussion…" }, "");
                 if box_resp.clicked() {
-                    toggled = Some((id, !c.done));
+                    toggled = Some((id, status != Status::Done));
                 } else if resp.clicked() {
                     clicked = Some(id);
                 }
@@ -649,15 +661,7 @@ impl App {
                 }
             }
         });
-        ui.horizontal(|ui| {
-            let mut done = c.done;
-            if ui.checkbox(&mut done, "Résolu").changed() {
-                self.set_comment_done(id, done);
-            }
-            if c.created != 0 {
-                ui.label(RichText::new(format!("Créé le {}", crate::projetui::date_label(c.created))).small().weak());
-            }
-        });
+        self.follow_editor(ui, &c);
         // Une note de relecture avec son dessin : l'interrupteur qui le montre sur l'image (`relectureui.rs`).
         if c.annotation.is_some() {
             self.relecture_drawing_row(ui, id);

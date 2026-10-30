@@ -3,6 +3,7 @@
 
 use crate::commentaires::{self, marker_hits, step_comment, Comment, Scope, DEFAULT_COLOR, FILE};
 use crate::document::Document;
+use crate::fildecision::Filter;
 use crate::history::{Edit, History, Nav};
 use crate::project;
 
@@ -175,7 +176,7 @@ fn a_comment_of_a_removed_plan_is_not_written() {
     let mut doc = film();
     let c = doc.panels[2].id;
     let id = doc.add_comment(c, 3, "A", 1);
-    doc.comments.push(Comment { id: 999, panel: 123_456, frame: 0, text: "orphelin".into(), author: String::new(), color: DEFAULT_COLOR, created: 0, done: false, note: None, annotation: None });
+    doc.comments.push(Comment { id: 999, panel: 123_456, frame: 0, text: "orphelin".into(), author: String::new(), color: DEFAULT_COLOR, created: 0, done: false, note: None, annotation: None, follow: Default::default() });
     let bytes = commentaires::to_bytes(&doc).unwrap().unwrap();
     let list = commentaires::parse(std::str::from_utf8(&bytes).unwrap()).unwrap();
     assert_eq!(list.iter().map(|c| c.id).collect::<Vec<_>>(), vec![id]);
@@ -309,17 +310,17 @@ fn positions_per_ruler_scope_filter_and_selection() {
     let z = doc.add_comment(b, 9, "A", 1);
     doc.comment_mut(z).unwrap().done = true;
     // Le montage : tout le film, dans l'ordre.
-    let film_view = doc.comment_positions(Scope::Film, true, None);
+    let film_view = doc.comment_positions(Scope::Film, &Filter::all(), None);
     assert_eq!(film_view.iter().map(|p| (p.id, p.pos)).collect::<Vec<_>>(), vec![(x, 8), (y, 12), (z, 19)]);
     // La timeline du plan 2 : ses commentaires seuls, à l'image du plan.
-    let plan_view = doc.comment_positions(Scope::Plan(b), true, None);
+    let plan_view = doc.comment_positions(Scope::Plan(b), &Filter::all(), None);
     assert_eq!(plan_view.iter().map(|p| (p.id, p.pos)).collect::<Vec<_>>(), vec![(y, 2), (z, 9)]);
-    assert!(plan_view[1].done);
+    assert_eq!(plan_view[1].status, crate::fildecision::Status::Done);
     // Les résolus peuvent se cacher.
-    assert_eq!(doc.comment_positions(Scope::Film, false, None).len(), 2);
-    assert_eq!(doc.comments_in_order(false).len(), 2);
+    assert_eq!(doc.comment_positions(Scope::Film, &Filter::open_only(), None).len(), 2);
+    assert_eq!(doc.comments_in_order(&Filter::open_only()).len(), 2);
     // Le choisi se dessine en dernier (dessus).
-    assert_eq!(doc.comment_positions(Scope::Film, true, Some(x)).last().map(|p| p.id), Some(x));
+    assert_eq!(doc.comment_positions(Scope::Film, &Filter::all(), Some(x)).last().map(|p| p.id), Some(x));
 }
 
 #[test]

@@ -418,6 +418,16 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("commentaire.supprimer", "Supprimer le commentaire choisi", true, false),
     act("commentaire.precedent", "Aller au commentaire précédent", true, false),
     act("commentaire.suivant", "Aller au commentaire suivant", true, false),
+    // Fil de décision par plan (`fildecisionui.rs`).
+    act("notes.suivante_a_traiter", "Aller à la note suivante à traiter (à faire ou en discussion)", true, false),
+    act("notes.fil", "Fil du plan courant (panneau Commentaires)", true, false),
+    act("notes.statut_a_faire", "Note choisie : à faire", true, false),
+    act("notes.statut_fait", "Note choisie : fait", true, false),
+    act("notes.statut_refuse", "Note choisie : refusé (la raison est demandée)", true, false),
+    act("notes.statut_discussion", "Note choisie : en discussion", true, false),
+    act("notes.retake", "Note choisie : retake (oui / non)", true, false),
+    act("notes.conflit", "Note choisie : marquer en conflit avec une autre note", true, false),
+    act("notes.retakes_exporter", "Exporter la liste des retakes (CSV)", true, false),
     // Références visuelles (`referencesui.rs`).
     act("vue.references", "Panneau Références (ouvrir / fermer)", true, false),
     act("references.importer_image", "Importer des images dans les références", true, false),

@@ -2415,6 +2415,52 @@ action = "commentaire.suivant"
 touches = []
 source = "SHOT (sans touche)"
 
+# Fil de décision par plan.
+[[raccourci]]
+action = "notes.suivante_a_traiter"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "notes.fil"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "notes.statut_a_faire"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "notes.statut_fait"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "notes.statut_refuse"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "notes.statut_discussion"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "notes.retake"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "notes.conflit"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "notes.retakes_exporter"
+touches = []
+source = "SHOT (sans touche)"
+
 # Bibliothèque de bruitages (sans touche : à choisir).
 [[raccourci]]
 action = "vue.bruitages"

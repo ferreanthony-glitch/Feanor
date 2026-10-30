@@ -45,6 +45,19 @@ main{max-width:1100px;margin:0 auto;padding:16px}
 .existants{background:#f1efe9;border-radius:8px;padding:8px 10px;margin:8px 0;font-size:.9rem}
 .existants h4{margin:0 0 4px;font-size:.85rem;color:var(--doux);font-weight:600}
 .existants p{white-space:pre-line;overflow-wrap:anywhere;margin:2px 0}
+.modifie{padding:0 8px;border-radius:999px;background:#fff1cc;color:#7a4b00;font-size:.85rem;font-weight:700}
+.precedentes{background:#f1efe9;border-radius:8px;padding:8px 10px;margin:8px 0;font-size:.9rem}
+.precedentes h4{margin:0 0 4px;font-size:.85rem;color:var(--doux);font-weight:600}
+.prec{border-left:4px solid var(--trait);padding:4px 0 4px 8px;margin:6px 0}
+.prec p{white-space:pre-line;overflow-wrap:anywhere;margin:2px 0}
+.prec .badge{display:inline-block;padding:0 8px;border-radius:999px;background:#e4e2db;font-size:.8rem;font-weight:700}
+.prec.fait{border-left-color:#1a8a3c}.prec.fait .badge{background:#dff3e5;color:#13692d}
+.prec.refuse{border-left-color:var(--alerte)}.prec.refuse .badge{background:#fbe2e0;color:var(--alerte)}
+.prec.discussion{border-left-color:var(--accent)}.prec.discussion .badge{background:var(--accent-fond);color:var(--accent)}
+.prec.afaire .badge{color:var(--doux)}
+.prec .raison{font-style:italic;color:var(--alerte)}
+.suite{display:block;width:100%;margin-top:4px;padding:6px 8px;border:1px solid var(--trait);border-radius:8px;background:#fff}
+.suite:focus{outline:2px solid var(--accent)}
 .outils{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:8px 0 4px}
 .outils .sep{width:1px;height:24px;background:var(--trait);margin:0 4px}
 .couleur{width:36px;height:36px;border-radius:50%;border:3px solid #fff;box-shadow:0 0 0 1px var(--trait);cursor:pointer;padding:0}

@@ -796,6 +796,9 @@ impl App {
         let mut reperes: Vec<(Rect, u64)> = Vec::new();
         // Les pastilles de prise (film partagé) de ce coup-ci : la zone et le plan, pour la bulle.
         let mut prises_zones: Vec<(Rect, u64)> = Vec::new();
+        // Les notes à traiter de chaque plan (`fildecisionui.rs`) : un seul passage sur les commentaires, et la zone de chaque pastille.
+        let notes_marques = self.doc.plan_marks();
+        let mut notes_zones: Vec<(Rect, crate::fildecision::PlanMark)> = Vec::new();
         // Les étiquettes de version « V2 » posées ce coup-ci (`pileversui.rs`).
         let mut etiquettes: Vec<crate::pileversui::EtiquetteBloc> = Vec::new();
         let mut start = 0;
@@ -852,6 +855,12 @@ impl App {
             // ambre sur un bloc étroit).
             if let Some(etat) = self.envois_ui.etat(self.doc.panels[i].id) {
                 reperes.push((crate::envoisui::peindre_repere_du_bloc(&clip, rect, etat), self.doc.panels[i].id));
+            }
+            // Des notes encore à traiter : une petite pastille sous celle-là (`fildecisionui.rs`).
+            if let Some(m) = notes_marques.get(&self.doc.panels[i].id).filter(|m| m.counts.open() > 0) {
+                if let Some(zone) = crate::fildecisionui::peindre_marque_du_bloc(&clip, rect, m) {
+                    notes_zones.push((zone, *m));
+                }
             }
             // Film partagé : qui tient le plan (pastille à sa couleur, en haut à gauche) et qui le regarde.
             if let Some(zone) = self.peindre_pastille(&clip, rect, self.doc.panels[i].id, 1.0) {
@@ -1030,7 +1039,7 @@ impl App {
         // Commentaires (`commentairesui.rs`) : leurs fanions dans la règle, le mât au milieu de
         // l'image du film. Un fanion pris garde la souris : la bande ne fait rien d'autre.
         let ruler_rect = Rect::from_min_max(r.min, pos2(r.right(), bands_top));
-        let comments = self.doc.comment_positions(crate::commentaires::Scope::Film, self.comment_ui.show_done, self.comment_ui.sel);
+        let comments = self.doc.comment_positions(crate::commentaires::Scope::Film, &self.comment_ui.filter, self.comment_ui.sel);
         let comment_pole = |g: usize| x_of(g) + ppf * 0.5;
         let comment_ptr = self.comment_pointer(
             ui,
@@ -1044,6 +1053,9 @@ impl App {
             }
             if let Some(phrase) = prises_zones.iter().find(|(z, _)| z.contains(p)).and_then(|(_, plan)| self.pastille_phrase(*plan)) {
                 resp.clone().on_hover_text_at_pointer(phrase);
+            }
+            if let Some((_, m)) = notes_zones.iter().find(|(z, _)| z.contains(p)) {
+                resp.clone().on_hover_text_at_pointer(crate::fildecisionui::marque_phrase(m));
             }
             let clip_edge = matches!(
                 self.lane_hit(p, left, ppf, lanes_top),

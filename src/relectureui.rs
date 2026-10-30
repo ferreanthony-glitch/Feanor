@@ -205,6 +205,15 @@ impl App {
         true
     }
 
+    /// L'envoi dont la page de relecture rend compte des notes : celui d'avant `envoi` (le dernier marqué avant lui) ;
+    /// sans envoi choisi, le dernier envoi du projet. Rien s'il n'y en a pas.
+    pub(crate) fn envoi_precedent(&self, envoi: Option<u64>) -> Option<u64> {
+        match envoi {
+            Some(m) => self.doc.envois.list.iter().map(|e| e.id).filter(|id| *id < m).max(),
+            None => self.doc.envois.dernier().map(|e| e.id),
+        }
+    }
+
     /// Les plans (rangs) qui ont changé depuis l'envoi `envoi`, d'après le dernier relevé des plans.
     pub(crate) fn plans_modifies_depuis(&self, envoi: u64) -> Vec<usize> {
         let Some(e) = self.doc.envois.trouve(envoi) else { return Vec::new() };
@@ -468,6 +477,9 @@ impl App {
             now: crate::recovery::now_secs(),
             nonce: relecture::random_hex(24),
             file_stem: format!("notes-{stem}"),
+            send_id: w.envoi.filter(|e| self.doc.envois.trouve(*e).is_some()),
+            prior_send: self.envoi_precedent(w.envoi),
+            changed: w.envoi.map(|e| self.plans_modifies_depuis(e).into_iter().filter_map(|i| self.doc.panels.get(i).map(|p| p.id)).collect()).unwrap_or_default(),
         };
         w.result = None;
         match RelectureJob::start(&self.doc, &panels, &w.opts, meta, &path) {
@@ -524,6 +536,9 @@ impl App {
                     if sum.by_number > 0 {
                         ui.label(RichText::new(format!("{} retrouvée{} par son numéro de plan (l'identifiant n'existe plus).", relecture::plural(sum.by_number, "note", "notes"), if sum.by_number > 1 { "s" } else { "" })).small().color(theme::texte_doux()));
                     }
+                    if sum.replies > 0 {
+                        ui.label(RichText::new(format!("{} aux notes de l'envoi d'avant : elles rejoignent le fil de leur note.", relecture::plural(sum.replies, "réponse", "réponses"))).small().color(theme::texte_doux()));
+                    }
                     if sum.already > 0 {
                         ui.label(RichText::new(format!("{} déjà importée{} : pas de doublon.", relecture::plural(sum.already, "note", "notes"), if sum.already > 1 { "s" } else { "" })).small().color(theme::texte_doux()));
                     }
@@ -547,10 +562,10 @@ impl App {
                         ui.checkbox(&mut w.autre_projet_ok, "Importer quand même");
                     }
                     ui.add_space(6.0);
-                    let ready = sum.imported > 0 && (!other || w.autre_projet_ok);
+                    let ready = sum.new_things() > 0 && (!other || w.autre_projet_ok);
                     ui.horizontal(|ui| {
                         apply = ui.add_enabled(ready, egui::Button::new(format!("{}  Importer", ph::CHATS))).clicked();
-                        if sum.imported == 0 && sum.already > 0 {
+                        if sum.new_things() == 0 && sum.already > 0 {
                             ui.label(RichText::new("Rien de nouveau.").color(theme::texte_doux()));
                         }
                     });
@@ -574,7 +589,7 @@ impl App {
         self.playing = false;
         let places: Vec<Placement> = relecture::place(&self.doc, notes);
         let loose = loose_here.then_some(self.cur_panel);
-        if relecture::preview(&self.doc, notes, &places, loose).imported == 0 {
+        if relecture::preview(&self.doc, notes, &places, loose).new_things() == 0 {
             return "Rien à importer : toutes ces notes sont déjà dans le projet.".into();
         }
         self.comment_step("Importer les notes de relecture");

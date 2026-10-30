@@ -17,7 +17,7 @@ fn avec_fondu(doc: &mut Document, cut: usize, frames: usize) {
 }
 
 fn commentaire(doc: &Document, plan: usize, frame: usize, text: &str, author: &str, done: bool) -> crate::commentaires::Comment {
-    crate::commentaires::Comment { id: 100 + frame as u64, panel: doc.panels[plan].id, frame, text: text.into(), author: author.into(), color: [255, 0, 0], created: 0, done, note: None, annotation: None }
+    crate::commentaires::Comment { id: 100 + frame as u64, panel: doc.panels[plan].id, frame, text: text.into(), author: author.into(), color: [255, 0, 0], created: 0, done, note: None, annotation: None, follow: Default::default() }
 }
 
 /// Un événement d'une EDL : (canal, bobine, entrée source, sortie source, entrée ligne de temps, sortie ligne de temps).

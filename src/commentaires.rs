@@ -23,6 +23,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::document::Document;
+use crate::fildecision::{Filter, Follow};
 use crate::history::Edit;
 
 /// Nom du fichier, dans le dossier du projet.
@@ -69,6 +70,10 @@ pub struct Comment {
     /// Le dessin du relecteur par-dessus l'image du plan.
     #[serde(rename = "dessin", default, skip_serializing_if = "Option::is_none", with = "annotation_serde")]
     pub annotation: Option<Annotation>,
+    /// Le fil de décision (`fildecision.rs`) : statut, origine, envoi, réponses, conflits, retake. Absent du
+    /// fichier d'un projet d'avant.
+    #[serde(rename = "suivi", default, skip_serializing_if = "crate::fildecision::Follow::is_empty")]
+    pub follow: crate::fildecision::Follow,
 }
 
 /// Le dessin qu'un relecteur a fait par-dessus l'image d'un plan : un PNG transparent de la taille du
@@ -163,7 +168,13 @@ pub(crate) fn parse(text: &str) -> Result<Vec<Comment>, String> {
         }
         // (Une clé de note trop longue n'est pas une clé que SHOT a écrite.)
         c.note = c.note.filter(|n| !n.is_empty() && n.len() <= 120);
+        c.normalize_follow();
         out.push(c);
+    }
+    // Un conflit avec une note qui n'est pas dans le fichier n'a plus de sens.
+    let ids: HashSet<u64> = out.iter().map(|c| c.id).collect();
+    for c in &mut out {
+        c.follow.conflicts.retain(|o| ids.contains(o));
     }
     Ok(out)
 }
@@ -219,7 +230,7 @@ pub(crate) struct Placed {
     /// Image du film (montage) ou du plan (timeline).
     pub pos: usize,
     pub color: [u8; 3],
-    pub done: bool,
+    pub status: crate::fildecision::Status,
 }
 
 /// Ce que montre une règle : tout le film, ou les commentaires d'un plan.
@@ -269,7 +280,7 @@ impl Document {
     }
 
     /// Début et durée de chaque plan, par id.
-    fn plan_spans(&self) -> HashMap<u64, (usize, usize)> {
+    pub(crate) fn plan_spans(&self) -> HashMap<u64, (usize, usize)> {
         let mut start = 0;
         self.panels
             .iter()
@@ -294,8 +305,8 @@ impl Document {
         Some((i, c.frame.min(self.panels[i].frame_count().saturating_sub(1))))
     }
 
-    /// Les commentaires dans l'ordre du film : (image du film, id).
-    pub(crate) fn comments_in_order(&self, show_done: bool) -> Vec<(usize, u64)> {
+    /// Les commentaires dans l'ordre du film : (image du film, id). `filter` : les statuts et l'envoi montrés.
+    pub(crate) fn comments_in_order(&self, filter: &Filter) -> Vec<(usize, u64)> {
         if self.comments.is_empty() {
             return Vec::new();
         }
@@ -303,7 +314,7 @@ impl Document {
         let mut list: Vec<(usize, u64)> = self
             .comments
             .iter()
-            .filter(|c| show_done || !c.done)
+            .filter(|c| filter.matches(c))
             .filter_map(|c| spans.get(&c.panel).map(|&(start, len)| (start + c.frame.min(len.saturating_sub(1)), c.id)))
             .collect();
         list.sort_unstable();
@@ -311,8 +322,8 @@ impl Document {
     }
 
     /// Les repères d'une règle, dans l'ordre où les dessiner : par image, puis le commentaire
-    /// choisi en dernier (dessus). `show_done` : montrer aussi les résolus.
-    pub(crate) fn comment_positions(&self, scope: Scope, show_done: bool, selected: Option<u64>) -> Vec<Placed> {
+    /// choisi en dernier (dessus). `filter` : les statuts et l'envoi montrés.
+    pub(crate) fn comment_positions(&self, scope: Scope, filter: &Filter, selected: Option<u64>) -> Vec<Placed> {
         // Sans commentaire (le cas courant), rien à calculer à chaque image.
         if self.comments.is_empty() {
             return Vec::new();
@@ -321,7 +332,7 @@ impl Document {
         let mut list: Vec<Placed> = self
             .comments
             .iter()
-            .filter(|c| show_done || !c.done)
+            .filter(|c| filter.matches(c))
             .filter_map(|c| {
                 let &(start, len) = spans.get(&c.panel)?;
                 let local = c.frame.min(len.saturating_sub(1));
@@ -330,7 +341,7 @@ impl Document {
                     Scope::Plan(id) if id == c.panel => local,
                     Scope::Plan(_) => return None,
                 };
-                Some(Placed { id: c.id, pos, color: c.color, done: c.done })
+                Some(Placed { id: c.id, pos, color: c.color, status: c.status() })
             })
             .collect();
         list.sort_by_key(|p| (Some(p.id) == selected, p.pos, p.id));
@@ -340,7 +351,10 @@ impl Document {
     /// Nouveau commentaire à l'image `frame` du plan `panel`.
     pub(crate) fn add_comment(&mut self, panel: u64, frame: usize, author: &str, created: u64) -> u64 {
         let id = self.alloc();
-        self.comments.push(Comment { id, panel, frame, text: String::new(), author: author.to_string(), color: DEFAULT_COLOR, created, done: false, note: None, annotation: None });
+        // L'envoi et la version du plan que la note concerne : le dernier envoi, la version affichée.
+        let (send, plan_version) = self.stamp_follow(panel);
+        let follow = Follow { send, plan_version, ..Follow::default() };
+        self.comments.push(Comment { id, panel, frame, text: String::new(), author: author.to_string(), color: DEFAULT_COLOR, created, done: false, note: None, annotation: None, follow });
         id
     }
 
@@ -369,7 +383,11 @@ impl Document {
     pub(crate) fn remove_comment(&mut self, id: u64) -> bool {
         let before = self.comments.len();
         self.comments.retain(|c| c.id != id);
-        self.comments.len() != before
+        let gone = self.comments.len() != before;
+        if gone {
+            self.forget_conflicts_of(id);
+        }
+        gone
     }
 
     /// Retire les commentaires dont le plan n'existe plus.
@@ -378,7 +396,14 @@ impl Document {
             return;
         }
         let ids: HashSet<u64> = self.panels.iter().map(|p| p.id).collect();
+        let before = self.comments.len();
         self.comments.retain(|c| ids.contains(&c.panel));
+        if self.comments.len() != before {
+            let alive: HashSet<u64> = self.comments.iter().map(|c| c.id).collect();
+            for c in self.comments.iter_mut() {
+                c.follow.conflicts.retain(|o| alive.contains(o));
+            }
+        }
     }
 
     /// Les commentaires du plan `from` (de `len` images) passent au plan `to`, `offset` images plus
@@ -408,8 +433,18 @@ pub(crate) struct CommentUi {
     pub focus: bool,
     /// Repère pris à la souris.
     pub drag: Option<CommentDrag>,
-    /// Montrer aussi les commentaires résolus (liste et règles).
-    pub show_done: bool,
+    /// Les statuts et l'envoi montrés (liste et règles).
+    pub filter: Filter,
+    /// La liste du film, ou le fil du plan courant.
+    pub view: View,
+    /// « Refusé » demandé : la raison s'écrit avant que le statut change (note, raison en cours).
+    pub refusing: Option<(u64, String)>,
+    /// La réponse en cours d'écriture dans le fil.
+    pub reply: String,
+    /// Le choix « en conflit avec… » est ouvert.
+    pub conflict_pick: bool,
+    /// Le champ du motif (retake) ou de la raison (refus) prend la main à sa prochaine image.
+    pub focus_motive: bool,
     /// Le champ de texte de l'éditeur prend la main à sa prochaine image (commentaire neuf,
     /// « Modifier »).
     pub focus_text: bool,
@@ -421,8 +456,30 @@ pub(crate) struct CommentUi {
 
 impl Default for CommentUi {
     fn default() -> Self {
-        CommentUi { sel: None, focus: false, drag: None, show_done: true, focus_text: false, scroll_to: None, editor_h: 0.0 }
+        CommentUi {
+            sel: None,
+            focus: false,
+            drag: None,
+            filter: Filter::all(),
+            view: View::Liste,
+            refusing: None,
+            reply: String::new(),
+            conflict_pick: false,
+            focus_motive: false,
+            focus_text: false,
+            scroll_to: None,
+            editor_h: 0.0,
+        }
     }
+}
+
+/// Ce que montre le panneau Commentaires.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum View {
+    /// Les notes de tout le film, dans l'ordre du film.
+    Liste,
+    /// Les notes du plan courant, dans l'ordre où elles sont venues, à travers ses versions.
+    Fil,
 }
 
 /// Un repère pris à la souris : l'étape d'annulation de tout le geste (prise avant que rien ne

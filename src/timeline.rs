@@ -632,7 +632,7 @@ impl App {
         // milieu de l'image. Un fanion pris garde la souris : la grille ne fait rien d'autre.
         let ruler_rect = Rect::from_min_size(r.min, vec2(size.x, HEADER_H));
         let plan_id = self.panel().id;
-        let comments = self.doc.comment_positions(crate::commentaires::Scope::Plan(plan_id), self.comment_ui.show_done, self.comment_ui.sel);
+        let comments = self.doc.comment_positions(crate::commentaires::Scope::Plan(plan_id), &self.comment_ui.filter, self.comment_ui.sel);
         let comment_pole = |f: usize| r.left() + (f as f32 + 0.5) * cell;
         let comment_frame = |x: f32| ((x - r.left()) / cell).floor().max(0.0) as usize;
         let plain_ruler = resp.interact_pointer_pos().is_none_or(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top).is_none());
