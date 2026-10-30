@@ -244,6 +244,8 @@ pub(crate) struct Vignettes {
     /// Le titre de séquence en cours de renommage, et la séquence qu'on glisse dans la liste du panneau (`planchesequencesui.rs`).
     pub titre_edit: Option<crate::planchesequencesui::TitreEdit>,
     pub seq_glisse: Option<u64>,
+    /// Les textures du dessin hors des cases, à la carte graphique (`horschamptex.rs`).
+    pub hc_tex: std::cell::RefCell<crate::horschamptex::Textures>,
 }
 
 impl Vignettes {
@@ -289,6 +291,7 @@ impl Default for Vignettes {
             ouverture_images: 0,
             titre_edit: None,
             seq_glisse: None,
+            hc_tex: Default::default(),
         }
     }
 }

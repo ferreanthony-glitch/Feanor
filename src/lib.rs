@@ -291,6 +291,7 @@ mod brosses_perso_tests;
 mod vignettesreglages;
 mod vignettesprefs;
 mod horschamp;
+mod horschamptex;
 #[cfg(test)]
 mod vignettes_tests;
 #[cfg(test)]
@@ -953,6 +954,8 @@ mod workspace;
 mod workspace_tests;
 #[cfg(test)]
 mod horschamp_tests;
+#[cfg(test)]
+mod horschamptex_tests;
 mod workspaceui;
 mod xsheet;
 #[cfg(test)]

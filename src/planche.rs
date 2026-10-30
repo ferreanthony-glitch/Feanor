@@ -84,8 +84,11 @@ pub struct Options {
     pub cadres: bool,
     /// Les annotations de la planche : décochées d'office.
     pub annotations: bool,
+    /// Le passe-partout autour des cases (case « Passe-partout » de la fenêtre, décochée d'origine) : sa couleur, et son opacité (pour cent),
+    /// celle de l'écran (posée par `App::planche_job`) ; 100 : opaque.
     pub marie: bool,
     pub marie_couleur: [u8; 3],
+    pub marie_opacite: u8,
     /// La couleur des cadres de caméra : celle de l'écran (Préférences > Vignettes), posée par `App::planche_job`.
     pub couleur_cadre: [u8; 3],
     /// Le sens de lecture de la planche et les champs de texte montrés à côté des cases : ceux de l'écran (panneau « Vignettes »), posés
@@ -106,6 +109,7 @@ impl Default for Options {
             annotations: false,
             marie: false,
             marie_couleur: crate::marie::COULEUR_PAR_DEFAUT,
+            marie_opacite: 100,
             couleur_cadre: crate::vignettesreglages::CADRE_DEFAUT,
             sens: Sens::default(),
             textes: Textes::default(),
@@ -309,6 +313,18 @@ pub(crate) fn remplir(pix: &mut Pixmap, r: [i32; 4], c: [u8; 3]) {
     }
 }
 
+/// `remplir` à l'opacité `alpha` (0 à 255), par-dessus ce qui est déjà là.
+pub(crate) fn remplir_a(pix: &mut Pixmap, r: [i32; 4], c: [u8; 3], alpha: u8) {
+    if r[2] <= r[0] || r[3] <= r[1] || alpha == 0 {
+        return;
+    }
+    if let Some(rect) = tiny_skia::Rect::from_xywh(r[0] as f32, r[1] as f32, (r[2] - r[0]) as f32, (r[3] - r[1]) as f32) {
+        let mut paint = peinture(c, alpha);
+        paint.anti_alias = false;
+        pix.fill_rect(rect, &paint, Transform::identity(), None);
+    }
+}
+
 pub(crate) fn contour(pix: &mut Pixmap, r: [i32; 4], c: [u8; 3], epaisseur: f32) {
     let mut pb = PathBuilder::new();
     let (x0, y0, x1, y1) = (r[0] as f32, r[1] as f32, r[2] as f32, r[3] as f32);
@@ -425,6 +441,12 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
         if !p.annotations.calque(t.calque).is_some_and(|c| c.planche) {
             continue;
         }
+        // Un trait au pinceau : ses pixels, rendus par le moteur comme dans une case (la texture du pinceau) ; sinon la ligne vectorielle.
+        if let (Some(b), Some((_, case))) = (&t.brosse, crate::annotations::case_de(&p.layout, &t.anchor)) {
+            if b.peindre_pixmap(&mut pix, &t.points, t.color, case, p.cadre, s) {
+                continue;
+            }
+        }
         let Some(pts) = p.annotations.points_planche(&p.layout, i) else { continue };
         let px: Vec<(f32, f32, f32)> = pts.iter().map(|q| ((q.x - p.cadre.left()) * s, (q.y - p.cadre.top()) * s, q.r * s)).collect();
         trait_rond_a(&mut pix, &px, t.color, t.alpha);
@@ -528,8 +550,10 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
             Rect::from_min_max(pos2(q[0] as f32, q[1] as f32), pos2(q[2] as f32, q[3] as f32))
         };
         let trous: Vec<Rect> = p.cartes.iter().flat_map(|c| std::iter::once(en_pixels(c.place.thumb)).chain(c.mouvement.iter().flat_map(|m| std::iter::once(en_pixels(m.tuile.rect))).collect::<Vec<_>>())).collect();
+        // (L'opacité est celle du passe-partout de l'écran : avec moins de 100 %, ce qui déborde se voit à travers.)
+        let alpha = (f32::from(opt.marie_opacite.min(100)) * 2.55).round() as u8;
         for r in crate::marie::hors_des_cases(Rect::from_min_size(Pos2::ZERO, vec2(w as f32, h as f32)), &trous) {
-            remplir(&mut pix, [r.left().round() as i32, r.top().round() as i32, r.right().round() as i32, r.bottom().round() as i32], opt.marie_couleur);
+            remplir_a(&mut pix, [r.left().round() as i32, r.top().round() as i32, r.right().round() as i32, r.bottom().round() as i32], opt.marie_couleur, alpha);
         }
         // (Le filet de chaque vignette reste : il est dans la vignette.)
         for c in &p.cartes {

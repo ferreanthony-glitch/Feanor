@@ -1627,7 +1627,9 @@ pub fn prepare_save(
     let dir = manifest_path.parent().ok_or("chemin de projet invalide")?;
     let used = doc.used_cels();
     // (Les textures citées par les traits : le mémo de chaque dessin les connaît ; écrites si elles manquent.)
-    let (dessins, used_textures, used_images) = cliche_dessins(doc, &used, written, reuse.as_ref());
+    let (dessins, mut used_textures, used_images) = cliche_dessins(doc, &used, written, reuse.as_ref());
+    // (Et celles des pinceaux du dessin hors des cases, dans les annotations de la planche : `horschamptex.rs`.)
+    used_textures.extend(doc.annotations.textures_citees());
     let mut job = SaveJob::vide(manifest_path);
     job.used_textures = used_textures;
     job.used_images = used_images;

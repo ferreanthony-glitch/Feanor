@@ -44,12 +44,16 @@
 //!   version 2. Un projet sans annotation ni calque particulier n'écrit toujours aucun fichier.
 
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 
 use eframe::egui::{pos2, Pos2, Rect};
 use serde::{Deserialize, Serialize};
 
 use crate::board::{self, BoardLayout};
+use crate::brush::BrushSettings;
+use crate::brushtex::TextureKind;
 use crate::document::Document;
+use crate::horschamptex::{Brosse, Recette};
 use crate::vector::{Affine, VPoint};
 
 /// Nom du fichier, dans le dossier du projet.
@@ -105,11 +109,14 @@ pub struct Trace {
     pub alpha: u8,
     /// Points relatifs au coin haut gauche de l'image de la case, en largeurs d'image (rayon compris).
     pub points: Vec<VPoint>,
+    /// La recette du pinceau d'un trait du dessin hors des cases (`horschamptex.rs`) : avec elle, le trait a la texture du pinceau, comme dans
+    /// une case ; sans elle (annotations, fichiers d'avant), c'est une ligne vectorielle.
+    pub brosse: Option<Arc<Brosse>>,
 }
 
 impl Trace {
     pub fn new(calque: u64, anchor: Ancre, color: [u8; 3], points: Vec<VPoint>) -> Trace {
-        Trace { id: PROCHAIN_TRAIT.fetch_add(1, Ordering::Relaxed), calque, anchor, color, alpha: 255, points }
+        Trace { id: PROCHAIN_TRAIT.fetch_add(1, Ordering::Relaxed), calque, anchor, color, alpha: 255, points, brosse: None }
     }
 
     /// Le même trait, à l'opacité `alpha`.
@@ -117,17 +124,23 @@ impl Trace {
         self.alpha = alpha;
         self
     }
+
+    /// Le même trait, avec la recette de son pinceau.
+    pub fn avec_brosse(mut self, brosse: Option<Brosse>) -> Trace {
+        self.brosse = brosse.map(Arc::new);
+        self
+    }
 }
 
 impl PartialEq for Trace {
     fn eq(&self, o: &Trace) -> bool {
-        self.calque == o.calque && self.anchor == o.anchor && self.color == o.color && self.alpha == o.alpha && self.points == o.points
+        self.calque == o.calque && self.anchor == o.anchor && self.color == o.color && self.alpha == o.alpha && self.points == o.points && self.brosse == o.brosse
     }
 }
 
 impl std::fmt::Debug for Trace {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Trace").field("calque", &self.calque).field("anchor", &self.anchor).field("color", &self.color).field("alpha", &self.alpha).field("points", &self.points).finish()
+        f.debug_struct("Trace").field("calque", &self.calque).field("anchor", &self.anchor).field("color", &self.color).field("alpha", &self.alpha).field("points", &self.points).field("brosse", &self.brosse.is_some()).finish()
     }
 }
 
@@ -270,16 +283,39 @@ impl Annotations {
     /// Ajoute un trait du dessin hors des cases : points en coordonnées de la planche, attaché à la case la plus proche de son centre,
     /// avec sa couleur et son opacité. Vrai si le trait est gardé.
     pub fn ajouter_hors_cadres(&mut self, layout: &BoardLayout, points: &[VPoint], color: [u8; 3], alpha: u8) -> bool {
+        self.ajouter_hors_cadres_brosse(layout, points, color, alpha, None)
+    }
+
+    /// Comme `ajouter_hors_cadres`, avec la recette du pinceau du trait : `brosse` = (la recette, l'appui et l'instant de chaque point, vides
+    /// s'ils ne correspondent pas aux points, l'échelle de la case d'origine : unités de la planche par pixel du dessin). Le trait a alors la
+    /// texture du pinceau, comme dans une case (`horschamptex.rs`).
+    pub fn ajouter_hors_cadres_brosse(&mut self, layout: &BoardLayout, points: &[VPoint], color: [u8; 3], alpha: u8, brosse: Option<(Recette, Vec<f32>, Vec<f64>, f32)>) -> bool {
         if points.is_empty() || self.traces.len() >= MAX_TRACES || points.iter().any(|p| !(p.x.is_finite() && p.y.is_finite() && p.r.is_finite())) {
             return false;
         }
         let Some(c) = centre(points) else { return false };
         let Some((rank, r)) = case_proche(layout, c) else { return false };
         let Some(anchor) = ancre_du_rang(layout, rank) else { return false };
-        let points: Vec<VPoint> = reduire(points, MAX_POINTS).iter().map(|p| relatif(p, r)).collect();
+        // (Un trait trop long est réduit : l'appui et l'instant de chaque point suivent les mêmes indices.)
+        let gardes = crate::horschamptex::indices_reduits(points.len(), MAX_POINTS);
+        let relatifs: Vec<VPoint> = gardes.iter().map(|&i| relatif(&points[i], r)).collect();
+        let brosse = brosse.filter(|(_, _, _, a)| a.is_finite() && *a > 1e-6).map(|(recette, appui, instants, a)| {
+            let choisir = |n: usize| appui.len() == n;
+            let (appui, instants) = if choisir(points.len()) && instants.len() == points.len() {
+                (gardes.iter().map(|&i| appui[i]).collect(), gardes.iter().map(|&i| instants[i]).collect())
+            } else {
+                (Vec::new(), Vec::new())
+            };
+            Brosse::nouvelle(recette, appui, instants, r.width() / a)
+        });
         let calque = self.calque_hors_cadres();
-        self.traces.push(Trace::new(calque, anchor, color, points).avec_alpha(alpha));
+        self.traces.push(Trace::new(calque, anchor, color, relatifs).avec_alpha(alpha).avec_brosse(brosse));
         true
+    }
+
+    /// Les textures (pointe, papier) que citent les pinceaux des traits : à écrire avec le projet, comme celles des traits des plans.
+    pub fn textures_citees(&self) -> Vec<(TextureKind, u32)> {
+        self.traces.iter().filter_map(|t| t.brosse.as_ref()).flat_map(|b| b.textures()).collect()
     }
 
     /// Le calque `voulu` s'il existe ; sinon le premier ; sinon un calque « Annotations », créé.
@@ -542,6 +578,8 @@ impl Annotations {
                 })
                 .collect();
             t.anchor = anchor;
+            // (Un trait au pinceau : la taille du pinceau suit l'échelle, et son rendu est à refaire à sa nouvelle place.)
+            t.brosse = t.brosse.as_ref().map(|b| Arc::new(b.mise_a_l_echelle(aff.width_factor())));
             n += 1;
         }
         n
@@ -575,6 +613,7 @@ impl Annotations {
                 Some((anchor, points)) => {
                     t.anchor = anchor;
                     t.points = points;
+                    t.brosse = t.brosse.as_ref().map(|b| Arc::new(b.refaite()));
                 }
                 None => {
                     // Pas d'ancienne planche : la vignette de même rang, au même décalage.
@@ -663,6 +702,68 @@ struct TraceFichier {
     #[serde(default = "opaque", skip_serializing_if = "est_opaque")]
     alpha: u8,
     points: Vec<[f32; 3]>,
+    /// La recette du pinceau d'un trait du dessin hors des cases (absente : une ligne vectorielle, comme les fichiers d'avant).
+    #[serde(default, rename = "pinceau", skip_serializing_if = "Option::is_none")]
+    pinceau: Option<PinceauFichier>,
+}
+
+/// La recette d'un trait au pinceau (`horschamptex::Brosse`) : le réglage complet (pointe et papier par clé de contenu, comme un trait
+/// vectoriel d'un plan), l'opacité, la dureté, la trace (appuis, instants, toucher, couleur B : le format d'un trait vectoriel) et la largeur de
+/// la case en pixels du dessin.
+#[derive(Serialize, Deserialize)]
+struct PinceauFichier {
+    #[serde(default, rename = "reglage", skip_serializing_if = "Option::is_none")]
+    reglage: Option<BrushSettings>,
+    #[serde(default = "un")]
+    opacite: f32,
+    #[serde(default = "un")]
+    durete: f32,
+    #[serde(default)]
+    trace: crate::vector::Trace,
+    #[serde(rename = "largeur")]
+    largeur_px: f32,
+    /// La taille du pinceau multipliée depuis (absente : 1).
+    #[serde(default = "un", skip_serializing_if = "est_un")]
+    taille: f32,
+}
+
+fn un() -> f32 {
+    1.0
+}
+
+fn est_un(v: &f32) -> bool {
+    (*v - 1.0).abs() < 1e-6
+}
+
+fn pinceau_fichier(b: &Brosse, n: usize) -> PinceauFichier {
+    let aligne = b.appui.len() == n && b.instants.len() == n;
+    PinceauFichier {
+        reglage: b.recette.reglage,
+        opacite: b.recette.opacite,
+        durete: b.recette.durete,
+        trace: crate::vector::Trace {
+            pressure: if aligne { b.appui.clone() } else { Vec::new() },
+            time: if aligne { b.instants.clone() } else { Vec::new() },
+            feel: b.recette.toucher,
+            secondary: b.recette.couleur_b,
+            cache: Default::default(),
+        },
+        largeur_px: b.largeur_px,
+        taille: b.taille,
+    }
+}
+
+/// La recette lue : écartée si elle est absurde (largeur nulle, nombre qui n'en est pas un) ; le trait reste alors une ligne.
+fn brosse_lue(p: PinceauFichier, n: usize) -> Option<Brosse> {
+    let ok = |v: f32| v.is_finite() && v > 0.0;
+    if !ok(p.largeur_px) || !ok(p.taille) || !p.opacite.is_finite() || !p.durete.is_finite() {
+        return None;
+    }
+    let aligne = p.trace.pressure.len() == n && p.trace.time.len() == n && p.trace.pressure.iter().all(|v| v.is_finite()) && p.trace.time.iter().all(|v| v.is_finite());
+    let recette = Recette { reglage: p.reglage, opacite: p.opacite.clamp(0.0, 1.0), durete: p.durete.clamp(0.0, 1.0), toucher: p.trace.feel, couleur_b: p.trace.secondary };
+    let mut b = Brosse::nouvelle(recette, if aligne { p.trace.pressure } else { Vec::new() }, if aligne { p.trace.time } else { Vec::new() }, p.largeur_px);
+    b.taille = p.taille;
+    Some(b)
 }
 
 fn vrai() -> bool {
@@ -745,7 +846,21 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
                 .iter()
                 .filter(|t| t.calque == c.id)
                 .take(restant)
-                .map(|t| TraceFichier { ancre: t.anchor, couleur: t.color, alpha: t.alpha, points: t.points.iter().take(MAX_POINTS).map(|p| [arrondi(p.x), arrondi(p.y), arrondi(p.r)]).collect() })
+                .map(|t| {
+                    let n = t.points.len().min(MAX_POINTS);
+                    TraceFichier {
+                        ancre: t.anchor,
+                        couleur: t.color,
+                        alpha: t.alpha,
+                        points: t.points.iter().take(MAX_POINTS).map(|p| [arrondi(p.x), arrondi(p.y), arrondi(p.r)]).collect(),
+                        pinceau: t.brosse.as_ref().map(|b| pinceau_fichier(b, t.points.len())).map(|mut p| {
+                            // (Un trait de plus de `MAX_POINTS` points est coupé : les appuis suivent.)
+                            p.trace.pressure.truncate(n);
+                            p.trace.time.truncate(n);
+                            p
+                        }),
+                    }
+                })
                 .collect();
             restant -= traces.len();
             CalqueFichier { id: c.id, nom: c.nom.clone(), visible: c.visible, planche: c.planche, traces }
@@ -758,8 +873,11 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
 
 /// Un trait lu dans le fichier : écarté s'il n'a aucun point ; un point qui n'est pas un nombre fini est écarté, le rayon est borné.
 fn trace_lue(t: TraceFichier, calque: u64) -> Option<Trace> {
+    let lus = t.points.len().min(MAX_POINTS);
     let points: Vec<VPoint> = t.points.into_iter().take(MAX_POINTS).filter(|p| p.iter().all(|v| v.is_finite())).map(|[x, y, r]| VPoint { x, y, r: r.clamp(1e-5, 50.0) }).collect();
-    (!points.is_empty()).then(|| Trace::new(calque, t.ancre, t.couleur, points).avec_alpha(t.alpha))
+    // (Un point écarté défait l'alignement des appuis : la recette reste, sans appuis, ils se retrouvent d'après les rayons.)
+    let brosse = t.pinceau.and_then(|p| brosse_lue(p, if points.len() == lus { points.len() } else { usize::MAX }));
+    (!points.is_empty()).then(|| Trace::new(calque, t.ancre, t.couleur, points).avec_alpha(t.alpha).avec_brosse(brosse))
 }
 
 /// Les annotations lues dans le texte de `annotations.json` (version 1 : un seul calque, « Annotations » ; version 2 : ses calques). Les

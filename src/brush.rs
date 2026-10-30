@@ -1295,6 +1295,11 @@ impl StrokeState {
         self.feel
     }
 
+    /// La couleur B du trait, s'il en a une.
+    pub fn secondary_color(&self) -> Option<[u8; 3]> {
+        self.secondary
+    }
+
     /// Part de la taille à une empreinte, avec le plancher du toucher.
     fn size_factor(&self, inp: &Inputs) -> f32 {
         self.settings.size_factor(inp, self.feel.size_floor)

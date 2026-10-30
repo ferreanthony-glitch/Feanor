@@ -15,7 +15,8 @@
 //!     commencé, sinon à la première dans l'ordre de lecture : jamais deux fois ;
 //!   - **le reste est sur la planche, dans le calque « Hors cadres »** (`Annotations::calque_hors_cadres`, un calque d'annotation de la
 //!     planche marqué `planche`) : visible, enregistré, relu, dans l'export de la planche, et dans aucun plan, ni l'animatique, ni le film, ni le
-//!     storyboard en PDF. Un trait de ce calque est un trait vectoriel (couleur, opacité, épaisseur du trait d'origine, sans la texture du pinceau).
+//!     storyboard en PDF. Un trait de ce calque garde la recette de son pinceau (`horschamptex.rs`) : il a la texture du pinceau, comme dans
+//!     une case (la ligne vectorielle ne sert que le temps que le rendu arrive, et aux fichiers d'avant).
 //!   - **Une seule étape d'annulation** pour tout le trait.
 //! - Un trait qui reste dans le champ de sa case ne coûte rien de plus (un parcours de ses points).
 //!
@@ -28,12 +29,13 @@
 //!   qu'elle touche (le trait entier, comme la gomme d'annotation). **Pot de peinture** : seulement dans une case (une zone fermée de la feuille).
 //!   **Sélection, lasso, texte** : inchangés (les notes de la planche et le lasso d'annotation).
 
-use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
+use eframe::egui::{pos2, vec2, Color32, Pos2, Rect, Vec2};
 
 use crate::app::App;
 use crate::board::BoardLayout;
 use crate::document::{CelId, LayerKind};
 use crate::history::Edit;
+use crate::horschamptex::Recette;
 use crate::raster::Tile;
 use crate::vector::{Element, Trace as VTrace, VPoint};
 
@@ -76,8 +78,10 @@ pub(crate) struct Suivi {
 pub(crate) enum Matiere {
     /// Un calque vectoriel : le dernier élément du dessin.
     Vecteur,
-    /// Un calque bitmap : les tuiles d'avant le trait, et son tracé (ligne médiane, rayon), sa couleur, son opacité.
-    Bitmap { avant: Vec<(usize, Option<Tile>)>, path: Vec<VPoint>, couleur: [u8; 3], alpha: f32 },
+    /// Un calque bitmap : les tuiles d'avant le trait, et son tracé (ligne médiane, rayon), sa couleur, son opacité ; la recette du pinceau
+    /// (son réglage, et l'appui et l'instant de chaque point du tracé, vides s'ils ne le suivent pas) pour que la part qui sort de la case
+    /// garde la texture du pinceau sur la planche (`horschamptex.rs`).
+    Bitmap { avant: Vec<(usize, Option<Tile>)>, path: Vec<VPoint>, couleur: [u8; 3], alpha: f32, recette: Option<Recette>, appui: Vec<f32>, instants: Vec<f64> },
 }
 
 #[derive(Debug)]
@@ -85,6 +89,26 @@ pub(crate) struct Fini {
     pub suivi: Suivi,
     pub cel: CelId,
     pub matiere: Matiere,
+}
+
+/// Un tronçon du trait qui reste sur la planche : ses points (planche, rayon compris), et l'appui et l'instant de chacun (vides s'ils ne
+/// suivent pas les points).
+#[derive(Clone, Debug)]
+pub(crate) struct Course {
+    pub points: Vec<VPoint>,
+    pub appui: Vec<f32>,
+    pub instants: Vec<f64>,
+}
+
+impl Course {
+    /// Le tronçon `run`, `a` : unités de la planche par pixel du dessin ; `suit` : les appuis et les instants sont ceux du tracé.
+    pub fn de(run: &[Pt], a: f32, suit: bool) -> Course {
+        Course {
+            points: run.iter().map(|p| VPoint { x: p.board.x, y: p.board.y, r: p.layer.r * a }).collect(),
+            appui: if suit { run.iter().map(|p| p.pressure).collect() } else { Vec::new() },
+            instants: if suit { run.iter().map(|p| p.time).collect() } else { Vec::new() },
+        }
+    }
 }
 
 /// Le champ de chaque case de la planche (même rang que `layout.cards`) : son image, ou la tuile de son empreinte, plus le débord.
@@ -171,14 +195,35 @@ impl App {
     /// Le dessin hors des cases, peint sous les cases : calque « Hors cadres » (s'il est montré), à l'opacité du réglage.
     pub(crate) fn hors_cadres_peindre(&self, painter: &eframe::egui::Painter, view: Rect, xf: crate::boardui::Xf, layout: &BoardLayout) {
         let a = &self.doc.annotations;
+        let mut textures = self.vignettes.hc_tex.borrow_mut();
         if a.id_hors_cadres().is_none() {
+            if textures.nombre() > 0 {
+                *textures = Default::default();
+            }
             return;
         }
         let opacite = f32::from(self.settings.vignettes.opacite_hors_champ.min(100)) / 100.0;
+        let teinte = Color32::from_white_alpha((opacite * 255.0).round() as u8);
+        textures.debut();
         for i in a.ordre_de_peinture() {
             let t = &a.traces[i];
             if !a.calque(t.calque).is_some_and(|c| c.planche) {
                 continue;
+            }
+            // Un trait au pinceau : ses pixels rendus par le moteur (sur un fil de fond), peints par blocs ; tant qu'ils ne sont pas prêts (ou
+            // si le rendu est perdu), la ligne vectorielle d'avant. Un trait qu'on ne voit pas ne coûte qu'un rectangle.
+            if let Some(b) = t.brosse.as_ref().filter(|b| !b.perdu()) {
+                let Some((_, case)) = crate::annotations::case_de(layout, &t.anchor) else { continue };
+                let k = case.width();
+                let rel = t.points.iter().fold(Rect::NOTHING, |r, p| r.union(Rect::from_center_size(pos2(p.x, p.y), Vec2::splat(p.r * 2.0))));
+                let zone = Rect::from_min_max(case.min + rel.min.to_vec2() * k, case.min + rel.max.to_vec2() * k);
+                if !xf.rect(zone).expand(8.0).intersects(view) {
+                    continue;
+                }
+                if textures.peindre(painter, view, xf, b, &t.points, case, teinte) {
+                    continue;
+                }
+                b.demander(&t.points, t.color, painter.ctx());
             }
             let Some(points) = a.points_planche(layout, i) else { continue };
             crate::boardui::paint_note_a(painter, view, xf, &points, t.color, (f32::from(t.alpha) * opacite).round() as u8);
@@ -203,7 +248,8 @@ impl App {
     }
 
     /// Le trait bitmap qui vient de finir (`end_stroke`) : ce qu'il faut pour le répartir à la fin de l'image d'écran.
-    pub(crate) fn horschamp_noter_bitmap(&mut self, cel: CelId, edit: &Edit, path: Vec<VPoint>, paint: Option<([u8; 3], f32)>) {
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn horschamp_noter_bitmap(&mut self, cel: CelId, edit: &Edit, path: Vec<VPoint>, paint: Option<([u8; 3], f32)>, recette: Option<Recette>, appui: Vec<f32>, instants: Vec<f64>) {
         // (Le premier trait sur un calque vide crée son dessin : l'étape est alors un groupe, les tuiles d'avant y sont.)
         fn tuiles(e: &Edit) -> Option<&Vec<(usize, Option<Tile>)>> {
             match e {
@@ -216,7 +262,24 @@ impl App {
         if !self.board_shown() || self.tool == crate::app::Tool::Eraser || path.is_empty() {
             return;
         }
-        self.vignettes.fini = Some(Fini { suivi, cel, matiere: Matiere::Bitmap { avant: tiles.clone(), path, couleur, alpha } });
+        // (Les appuis et les instants ne valent que s'ils suivent le tracé point par point.)
+        let suit = appui.len() == path.len() && instants.len() == path.len();
+        let (appui, instants) = if suit { (appui, instants) } else { (Vec::new(), Vec::new()) };
+        self.vignettes.fini = Some(Fini { suivi, cel, matiere: Matiere::Bitmap { avant: tiles.clone(), path, couleur, alpha, recette, appui, instants } });
+    }
+
+    /// La recette du pinceau d'un trait bitmap qui finit, avec l'appui et l'instant de chaque point de son tracé : rien hors de la planche
+    /// des Vignettes (un trait ordinaire ne coûte rien de plus). Le trait vectoriel d'un plan se rejoue ainsi : sans mélange de couleurs (il
+    /// lit des pixels), sans pixels crénelés.
+    pub(crate) fn horschamp_recette(&self, stroke: &crate::brush::StrokeState) -> (Option<Recette>, Vec<f32>, Vec<f64>) {
+        if !self.board_shown() || self.vignettes.suivi.is_none() {
+            return (None, Vec::new(), Vec::new());
+        }
+        let mut s = stroke.settings();
+        s.mix_off = true;
+        s.aliased = false;
+        let recette = Recette { reglage: self.brushes.for_vector(&s), opacite: s.opacity, durete: s.hardness, toucher: Some(stroke.feel()), couleur_b: stroke.secondary_color() };
+        (Some(recette), stroke.path_pressure.clone(), stroke.path_time.clone())
     }
 
     /// Le trait ou la forme vectoriels qui viennent d'être posés dans le dessin `cel` : à répartir à la fin de l'image d'écran.
@@ -351,7 +414,7 @@ impl App {
             },
         };
         let o = layout.cards[origine];
-        let mut sur_la_planche: Vec<Vec<VPoint>> = Vec::new();
+        let mut sur_la_planche: Vec<Course> = Vec::new();
         let mut chez_les_autres: Vec<(usize, Vec<Element>)> = Vec::new();
         let mut chez_elle: Vec<Element> = Vec::new();
         for (qui, run) in &runs {
@@ -365,7 +428,7 @@ impl App {
                         None => chez_les_autres.push((*k, vec![el])),
                     }
                 }
-                None => sur_la_planche.push(run.iter().map(|p| VPoint { x: p.board.x, y: p.board.y, r: p.layer.r * a }).collect()),
+                None => sur_la_planche.push(Course::de(run, a, aligne)),
             }
         }
         // Le dessin de la case d'origine : le trait entier est remplacé par ses tronçons du champ.
@@ -403,7 +466,9 @@ impl App {
         for (cel, drawing) in avant {
             self.history.push(Edit::Vector { cel, drawing });
         }
-        let planche = self.poser_hors_cadres(layout, sur_la_planche, color, (opacity.clamp(0.0, 1.0) * 255.0).round() as u8);
+        // (La part sur la planche garde la recette du pinceau : même réglage, même opacité, mêmes appuis que dans la case.)
+        let recette = Recette { reglage: brush.as_deref().copied(), opacite: opacity, durete: hardness, toucher: trace.feel, couleur_b: trace.secondary };
+        let planche = self.poser_hors_cadres(layout, sur_la_planche, color, (opacity.clamp(0.0, 1.0) * 255.0).round() as u8, Some(recette), a);
         // La structure (calques créés, images de dessin, planche) : l'état d'avant, rangé dans l'étape du trait.
         self.history.push(snap);
         let _ = planche;
@@ -411,10 +476,12 @@ impl App {
     }
 
     /// Pose sur la planche, dans le calque « Hors cadres », les tracés `traces` (points de la planche, rayon compris).
-    fn poser_hors_cadres(&mut self, layout: &BoardLayout, traces: Vec<Vec<VPoint>>, couleur: [u8; 3], alpha: u8) -> usize {
+    /// `recette` : le pinceau du trait, qui donne sa texture à la part posée sur la planche ; `a` : unités de la planche par pixel du dessin.
+    fn poser_hors_cadres(&mut self, layout: &BoardLayout, traces: Vec<Course>, couleur: [u8; 3], alpha: u8, recette: Option<Recette>, a: f32) -> usize {
         let mut n = 0;
         for t in traces {
-            if self.doc.annotations.ajouter_hors_cadres(layout, &t, couleur, alpha) {
+            let brosse = recette.map(|r| (r, t.appui, t.instants, a));
+            if self.doc.annotations.ajouter_hors_cadres_brosse(layout, &t.points, couleur, alpha, brosse) {
                 n += 1;
             }
         }
@@ -422,11 +489,16 @@ impl App {
     }
 
     fn partager_bitmap(&mut self, layout: &BoardLayout, fini: &Fini, origine: usize, a: f32, champs: &[Rect]) -> bool {
-        let Matiere::Bitmap { avant, path, couleur, alpha } = &fini.matiere else { return false };
+        let Matiere::Bitmap { avant, path, couleur, alpha, recette, appui, instants } = &fini.matiere else { return false };
         let aff = fini.suivi.aff;
         let cibles = self.cases_qui_recoivent(layout, origine, LayerKind::Bitmap);
         let recoit: Vec<bool> = cibles.iter().map(Option::is_some).collect();
-        let pts: Vec<Pt> = path.iter().map(|p| Pt { layer: *p, board: aff.applique(p.pos()), pressure: 1.0, time: 0.0 }).collect();
+        let suit = appui.len() == path.len() && instants.len() == path.len();
+        let pts: Vec<Pt> = path
+            .iter()
+            .enumerate()
+            .map(|(i, p)| Pt { layer: *p, board: aff.applique(p.pos()), pressure: if suit { appui[i] } else { 1.0 }, time: if suit { instants[i] } else { 0.0 } })
+            .collect();
         // Tout le trait dans le champ, rayon compris : rien à répartir.
         if pts.iter().all(|p| champs[origine].shrink((p.layer.r + 1.5) * a).contains(p.board)) {
             return false;
@@ -507,12 +579,8 @@ impl App {
         }
         // 3. Ce qui est hors de tout champ : sur la planche (le tracé, rayon et couleur du trait).
         let runs = trancher(&pts, &|p| proprietaire(champs, &recoit, origine, p));
-        let traces: Vec<Vec<VPoint>> = runs
-            .into_iter()
-            .filter(|(q, _)| q.is_none())
-            .map(|(_, run)| run.iter().map(|p| VPoint { x: p.board.x, y: p.board.y, r: p.layer.r * a }).collect())
-            .collect();
-        self.poser_hors_cadres(layout, traces, *couleur, (alpha.clamp(0.0, 1.0) * 255.0).round() as u8);
+        let traces: Vec<Course> = runs.into_iter().filter(|(q, _)| q.is_none()).map(|(_, run)| Course::de(&run, a, suit)).collect();
+        self.poser_hors_cadres(layout, traces, *couleur, (alpha.clamp(0.0, 1.0) * 255.0).round() as u8, *recette, a);
         self.history.push(snap);
         true
     }

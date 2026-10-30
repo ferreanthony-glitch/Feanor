@@ -81,6 +81,10 @@ pub struct ReglagesVignettes {
     pub passe_partout_cases: bool,
     #[serde(rename = "passe_partout_cases_opacite")]
     pub passe_partout_cases_opacite: u8,
+    /// La case « Passe-partout » de la fenêtre d'export de la planche : décochée d'origine, retenue d'une séance à l'autre. Indépendante de
+    /// l'interrupteur de l'écran (`passe_partout_cases`) ; seule l'opacité est celle de l'écran.
+    #[serde(rename = "export_passe_partout")]
+    pub export_passe_partout: bool,
 }
 
 /// Les couleurs d'origine des lignes de texte : action, dialogue, notes.
@@ -112,6 +116,7 @@ impl Default for ReglagesVignettes {
             opacite_hors_champ: 100,
             passe_partout_cases: false,
             passe_partout_cases_opacite: 100,
+            export_passe_partout: false,
         }
     }
 }
