@@ -112,14 +112,23 @@ fn ecrire_des_exemples_de_chaque_export() {
         let dir = sortie.join(nom);
         std::fs::create_dir_all(&dir).unwrap();
         let s = StemsSettings { format, with_mix: true };
-        let files = exportstems::plan(&doc, first, frames.len(), &s, &base);
+        // (Le projet d'essai n'a pas de son : sans piste, l'exemple vient d'un petit film avec deux pistes.)
+        let (sdoc, sfirst, sframes) = if exportstems::plan(&doc, first, frames.len(), &s, &base).is_empty() {
+            let d = crate::editorial_tests::film_with_sound(24);
+            let n = d.total_frames();
+            (d, 0, n)
+        } else {
+            (crate::project::load(&projet).expect("projet").doc, first, frames.len())
+        };
+        let (sstart, slen) = export::sample_span(sdoc.fps, sfirst, sframes);
+        let files = exportstems::plan(&sdoc, sfirst, sframes, &s, &base);
         println!("{nom} : {} fichiers {:?}", files.len(), files.iter().map(|f| f.file.as_str()).collect::<Vec<_>>());
         if files.is_empty() {
             continue;
         }
         let d = dir.clone();
-        let mut job = ExportJob::task(nom.into(), &dir, "ok".into(), move |snap, cancel| exportstems::write_all(snap, &d, &files, start, len, format, cancel).map(|_| ()));
-        court(&mut job, &doc);
+        let mut job = ExportJob::task(nom.into(), &dir, "ok".into(), move |snap, cancel| exportstems::write_all(snap, &d, &files, sstart, slen, format, cancel).map(|_| ()));
+        court(&mut job, &sdoc);
         dire(nom, &dir, &job.outcome);
     }
 

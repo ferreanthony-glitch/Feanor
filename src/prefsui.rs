@@ -115,6 +115,9 @@ impl App {
             .anchor(egui::Align2::CENTER_TOP, [0.0, 60.0])
             .show(ctx, |ui| {
                 ui.set_width(440.0);
+                // (Une petite fenêtre : la liste défile plutôt que de sortir de l'écran.)
+                let haut = (ctx.screen_rect().height() - 140.0).clamp(200.0, 800.0);
+                egui::ScrollArea::vertical().min_scrolled_height(haut).max_height(haut).auto_shrink([false, false]).show(ui, |ui| {
                 for (k, (titre, exports)) in FAMILLES.iter().enumerate() {
                     if k > 0 {
                         ui.add_space(8.0);
@@ -132,6 +135,7 @@ impl App {
                         ui.add_space(3.0);
                     }
                 }
+                });
             });
         if let Some(action) = run {
             self.export_hub = false;
