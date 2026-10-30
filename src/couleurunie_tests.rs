@@ -210,7 +210,8 @@ fn the_project_keeps_only_the_color_and_the_drawing_and_old_projects_open() {
     let encore = crate::project::load(&manifeste).unwrap();
     assert_eq!(encore.doc.panels[0].layers[1].unie, Some([200, 100, 50]));
     std::fs::remove_dir_all(&dir).ok();
-    assert_eq!(crate::project::VERSION, 43);
+    // (43 : le format des couleurs unies ; 44 : dégradés à pastilles, partie 80.)
+    assert!(crate::project::VERSION >= 43);
 }
 
 #[test]

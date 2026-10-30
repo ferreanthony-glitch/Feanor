@@ -127,7 +127,7 @@ fn morph(a: &Element, b: &Element, t: f32) -> Option<Element> {
             let gradient = match (ga, gb) {
                 (Some(x), Some(y)) if x.genre == y.genre => Some(crate::degrade::Degrade::entre(x, y, t)),
                 (None, None) => None,
-                _ => *(if t < 0.5 { ga } else { gb }),
+                _ => (if t < 0.5 { ga } else { gb }).clone(),
             };
             Some(Element::Fill { contours, color: lerp_rgb(*ca, *cb, t), opacity: lerp(*oa, *ob, t), gradient })
         }

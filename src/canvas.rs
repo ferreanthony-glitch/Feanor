@@ -565,6 +565,8 @@ impl App {
         self.last_frame_time = now;
         // Grab et Pull : les pas du pointeur de cette image, posés une seule fois.
         self.sculpt_tick();
+        // Le dégradé posé : retouche, fige, ou remontre l'axe d'une zone vectorielle choisie.
+        self.degrade_tick();
         // Relâchement manqué (perte de focus…) : on clôt le geste quand même.
         if !primary_down {
             self.degrade_release();

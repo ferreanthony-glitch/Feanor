@@ -6245,3 +6245,50 @@ Une recherche de texte dans le panneau Scénario (`scenariorecherche.rs`, branch
 - **Inchangé** : le surlignage du passage du plan courant et le clic sur une scène (aller au plan) fonctionnent comme avant.
 - **Vitesse** : le texte normalisé de tout le scénario est calculé une fois par scénario ; la liste des occurrences une fois par frappe ; chaque image ne dessine que les éléments visibles. Rien n'est enregistré dans le projet (aucun nouveau format).
 - **Limites** : une occurrence ne traverse pas deux parties (ex. nom du personnage et réplique) ; le pointeur doit être sur le panneau pour que Ctrl+F y soit la recherche.
+
+
+---------------------------------------------------------------------------------------------------
+
+## 80. Dégradé : plusieurs couleurs, opacité, formes, dégradés enregistrés, retouche après coup (2026-10-30, branche `degrade-avance`)
+
+Demande d'Anthony, cinq points. Format du projet : **44** (voir plus bas). Fichiers : `degrade.rs` (le noyau : pastilles, formes, tramage, réglages, dégradés enregistrés), `degradeui.rs` (le geste, la séance de retouche, Réglages), `vector.rs` (rendu tramé), `project.rs` (format 44), `settings.rs` (Mes dégradés), `tween.rs` (interpolation), `canvas.rs` et `app.rs` (branchements).
+Essais : `degrade_pastilles_tests.rs` (21 essais ; les 33 de la partie 53 restent verts, quelques lignes adaptées : les champs `c0`… sont devenus `c0()`…, et le tracé laisse maintenant une séance après le lâcher).
+
+### 1. Plusieurs couleurs
+- Dans Réglages (outil Dégradé), une **bande** montre le dégradé sur un damier (le transparent se voit). Sous la bande, les **pastilles de couleur** : clic sous la bande = en ajouter une (couleur prise du dégradé à cet endroit) ; glisser = la déplacer (entre ses voisines) ; la tirer loin vers le bas, ou la corbeille de la ligne de détail = la supprimer (deux au moins, seize au plus) ; clic = la choisir (la couleur choisie dans le panneau Couleur va alors à cette pastille) ; double-clic = le sélecteur de couleur ; **Position** en % dans la ligne de détail.
+- Entre deux pastilles, un **losange de milieu** : où l'on est à 50/50 (double-clic : au centre).
+- Par défaut le dégradé reste « avant-plan → arrière-plan » : deux pastilles **liées** aux carrés du panneau Couleur, tant qu'on n'y touche pas (un petit texte le dit). Les deux boutons « Vers la couleur de fond » et « Vers le transparent » (l'ancien réglage « Fin ») remettent les pastilles liées.
+- Les carrés avant-plan et arrière-plan d'un dégradé déjà posé sont ceux du moment du tracé : choisir une autre couleur pour le dégradé suivant ne change pas celui-ci.
+
+### 2. Opacité à part
+Une seconde série de pastilles **au-dessus** de la bande (opacité en % et position), avec ses losanges. « Vers le transparent » en est le raccourci (la bande d'opacité descend de 100 % à 0 %). L'ancien curseur Opacité reste : il multiplie le tout.
+
+### 3. Formes
+Linéaire, Radial, **Angle** (en éventail autour de l'appui, l'axe donne la direction de départ), **Réfléchi** (miroir de part et d'autre de l'appui), **Losange** (l'arrivée est une pointe) : cinq icônes à bulle. **Angle** (degrés ; 0 vers la droite, sens horaire) et **Échelle** (% de la longueur tracée) se tapent en chiffres et modifient l'axe du dégradé posé (grisés tant qu'il n'y en a pas). **Inverser** retourne toutes les pastilles (couleurs et opacités, milieux compris).
+
+### 4. Mes dégradés et tramage
+- « Mes dégradés » : des vignettes de bande ; « + » enregistre le dégradé courant ; clic : le rappeler ; clic droit : renommer ou supprimer. Rangés dans les **réglages de l'application** (`reglages.toml`, champ `degrades_enregistres`), jamais dans le projet. Au départ : Noir vers blanc, Avant-plan vers arrière-plan, Avant-plan vers transparent (liés au panneau Couleur), Ciel, Soleil couchant, Ombre douce. Un dégradé enregistré aux valeurs absurdes est écarté à la lecture.
+- **Tramage** (coché d'origine) : un bruit de gradient entrelacé qui ne dépend que du pixel (`degrade::seuil`) : jamais plus d'un niveau d'écart, même résultat à chaque rendu (rien ne scintille à la lecture). Il s'écrit en bitmap, dans le rendu vectoriel et donc à l'export. Décoché, ou pour un ancien dégradé : exactement le rendu d'avant.
+
+### 5. Retouche après coup
+- Après le lâcher, l'axe reste affiché avec ses poignées (rond plein : départ ; rond vide : arrivée ; en radial le cercle, en réfléchi le miroir, en losange le losange). Tirer une poignée, changer pastilles, forme, angle, échelle, opacité dans Réglages : l'écriture est **défaite** pour la durée de la retouche (l'aperçu par maillage reprend, jamais le moteur de pinceaux), puis **réécrite au relâché** (sur le fil de l'interface, par tuiles réparties sur les cœurs). **Une seule étape d'annulation « Dégradé »** quelle que soit la quantité de retouches : Ctrl+Z l'enlève en entier (même en pleine retouche).
+- **Figer** : changer d'outil, de calque, d'image, toute autre étape d'annulation, **Entrée ou Échap**. Échap fige, il n'annule pas.
+- **Sur un calque vectoriel**, la zone garde son dégradé complet pour toujours : la choisir (Sélection) puis reprendre l'outil Dégradé remontre l'axe et permet de la retoucher (une étape de plus, une seule pour toutes les retouches de cette reprise). Une seule proposition par choix : après Échap, elle ne revient pas tant qu'on ne rechoisit pas.
+
+### Format du projet : 44
+Le champ `degrade` d'une zone vectorielle s'écrit avec `pastilles` (position, couleur, milieu), `transparence` (position, opacité, milieu), `tramage`, et les formes `angle`, `reflechi`, `losange`. **Une version précédente refuse le projet** (comme pour le 38). **Un projet de version 43 ou moins s'ouvre à l'identique** : un ancien dégradé (`couleur_depart`, `couleur_arrivee`, `opacite_depart`, `opacite_arrivee`) se lit comme deux pastilles de chaque, sans tramage (un essai compare le rendu pixel pour pixel à l'ancienne formule). Les valeurs absurdes (positions hors de 0 à 1 ou en désordre, milieu au bord, opacité hors de 0 à 1, moins de deux ou plus de seize pastilles) sont refusées comme un dessin abîmé. **Le numéro de version a changé (43 → 44)** ; deux essais qui exigeaient « = 43 » demandent maintenant « ≥ 43 ».
+
+### Limites et à trancher
+- Un dégradé **bitmap** n'est retouchable que tant qu'on n'a pas changé d'outil (ensuite ce sont des pixels). Sur un dégradé vectoriel **retrouvé** (pas posé à l'instant), l'aperçu de retouche se pose par-dessus l'ancien : un dégradé translucide laisse voir l'ancien dessous pendant la retouche seulement.
+- L'aperçu est un maillage de 56 × 56 cases (96 × 96 pour angle, réfléchi, losange) : une pastille très serrée est un peu adoucie à l'aperçu, pas à l'écriture.
+- L'**échelle** de l'axe compte 100 % pour la longueur tracée (ou celle de la dernière poignée tirée).
+- Question : les dégradés enregistrés rappellent aussi la forme ? Pour l'instant non : ils gardent couleurs, opacités et « vers transparent ».
+
+### À vérifier à l'écran (par Anthony)
+1. Outil Dégradé, Réglages : cinq formes, la bande avec les pastilles dessous (couleurs) et dessus (opacité), Angle et Échelle, Inverser, Tramage, Mes dégradés.
+2. Trace un dégradé dans un anneau : l'axe reste avec ses deux ronds. Tire le rond d'arrivée : le dégradé suit, sans retard, et au relâché il est écrit. Ctrl+Z : tout part d'un coup.
+3. Clic sous la bande : une pastille de plus ; glisse-la ; tire-la vers le bas : elle disparaît. Losange : le milieu. Clic au-dessus : une pastille d'opacité (descends-la à 0 % : le dégradé devient transparent là).
+4. Tape un Angle puis une Échelle : l'axe tourne et s'allonge. Change la forme : angle, réfléchi, losange.
+5. « + » : enregistre ; clic sur la vignette : rappelle ; clic droit : renommer, supprimer. Ferme et rouvre SHOT : ils sont là.
+6. Échap (ou autre outil) : l'axe disparaît, rien n'est annulé. Calque vectoriel : choisis la zone avec la Sélection, reprends le Dégradé : l'axe revient.
+7. Dégradé noir → gris très doux sur une grande zone : plus de marches (tramage coché) ; décoche : les marches reviennent.
