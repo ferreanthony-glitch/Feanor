@@ -130,6 +130,11 @@ pub(crate) fn duplicate_layer(doc: &mut Document, index: usize, li: usize) -> us
 /// rang. Rien ne change si l'une des fusions est refusée (calque caché, verrouillé, vidéo…) : tout est vérifié avant
 /// (`fusioncalques::blocker_list`), et les dessins faits en route sont retirés si la fusion échoue quand même.
 pub(crate) fn merge_layers(doc: &mut Document, index: usize, lis: &[usize]) -> Result<usize, String> {
+    merge_layers_ctl(doc, index, lis, None)
+}
+
+/// `merge_layers`, qui regarde `ctl` à chaque image (la tâche de fond : « Arrêter » et la progression).
+pub(crate) fn merge_layers_ctl(doc: &mut Document, index: usize, lis: &[usize], ctl: Option<&crate::fusioncalques::Controle>) -> Result<usize, String> {
     // Un dossier choisi compte pour ses calques ; un dossier ne se fusionne pas lui-même.
     let layers = doc.panels.get(index).map_or(&[][..], |p| &p.layers[..]);
     let lis = crate::fusioncalques::rangs_a_fusionner(layers, lis);
@@ -147,7 +152,7 @@ pub(crate) fn merge_layers(doc: &mut Document, index: usize, lis: &[usize]) -> R
         layers.insert(low + k, l);
     }
     for _ in 1..count {
-        if let Err(e) = doc.merge_layer_down(index, low + 1) {
+        if let Err(e) = crate::fusioncalques::merge_down_ctl(doc, index, low + 1, ctl) {
             doc.panels[index].layers = before;
             doc.cels.retain(|id, _| cels_avant.contains(id));
             return Err(e);
@@ -311,11 +316,30 @@ impl App {
 
     /// Fusionne des calques du plan en un seul.
     pub(crate) fn merge_layer_list(&mut self, lis: Vec<usize>) {
+        self.fusionner(lis);
+    }
+
+    /// Fusionne des calques du plan courant en un seul. Ce qui se calcule en moins d'une image d'écran (peu de dessins, ni effet
+    /// ni aplat) se pose tout de suite ; le reste part en tâche de fond (`fusiontache.rs`) : l'interface reste fluide, la barre
+    /// d'état montre l'avancement et « Arrêter », le résultat est posé en une seule étape d'annulation.
+    pub(crate) fn fusionner(&mut self, lis: Vec<usize>) {
         if self.content_refuses() {
+            return;
+        }
+        if self.fusion.is_some() {
+            self.status = "Une fusion de calques est déjà en cours : attends sa fin, ou arrête-la (barre d'état).".into();
             return;
         }
         self.end_stroke();
         self.drop_bitmap_selection();
+        if let Some(raison) = crate::fusioncalques::blocker_list(&self.doc, self.cur_panel, &lis) {
+            self.status = raison;
+            return;
+        }
+        if !crate::fusioncalques::est_rapide(&self.doc, self.cur_panel, &lis) {
+            self.lancer_fusion(lis);
+            return;
+        }
         let snap = self.snapshot();
         let nombre = crate::fusioncalques::rangs_a_fusionner(self.layers(), &lis).len();
         let resultat = crate::fusioncalques::resultat_de(&self.doc, self.cur_panel, &lis);
@@ -330,7 +354,6 @@ impl App {
             Err(e) => self.status = e,
         }
     }
-
     pub(crate) fn merge_chosen_layers(&mut self) {
         let chosen = self.chosen_layers();
         self.merge_layer_list(chosen);

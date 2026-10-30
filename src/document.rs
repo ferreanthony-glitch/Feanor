@@ -2262,7 +2262,28 @@ impl Document {
     pub fn merge_layer_down(&mut self, index: usize, layer: usize) -> Result<(), String> {
         crate::fusioncalques::merge_down(self, index, layer)
     }
-    /// Ajoute un dessin existant (collage) sous un nouvel identifiant.
+
+    /// Un petit document pour fusionner en tâche de fond (`fusiontache.rs`) : la feuille, et un plan qui n'a que les calques
+    /// `lis` du plan `index` avec leurs dessins (partagés à la copie). Ses numéros neufs continuent ceux de ce document.
+    pub(crate) fn mini_pour_fusion(&self, index: usize, lis: &[usize]) -> Document {
+        let mut mini = Document::new(self.width, self.height, self.fps);
+        mini.frame = self.frame;
+        mini.paper = self.paper;
+        mini.next_id = self.next_id;
+        mini.id_prefix = self.id_prefix;
+        let source = &self.panels[index];
+        let layers: Vec<Layer> = lis.iter().map(|&l| source.layers[l].clone()).collect();
+        for l in &layers {
+            for id in l.frames.iter().flatten() {
+                if let Some(c) = self.cels.get(id) {
+                    mini.cels.insert(*id, c.clone());
+                }
+            }
+        }
+        mini.panels[0].length = source.length;
+        mini.panels[0].layers = layers;
+        mini
+    }    /// Ajoute un dessin existant (collage) sous un nouvel identifiant.
     pub fn add_cel(&mut self, mut cel: Cel) -> CelId {
         cel.version = 0;
         let id = self.alloc();

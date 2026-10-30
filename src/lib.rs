@@ -670,6 +670,9 @@ mod layerheads;
 mod layerops;
 // Fusionner des calques : le résultat est ce que l'écran montrait ; le menu clic droit des calques, le même partout (§82).
 mod fusioncalques;
+mod fusiontache;
+#[cfg(test)]
+mod fusiontache_tests;
 #[cfg(test)]
 mod fusioncalques_tests;
 mod menucalque;

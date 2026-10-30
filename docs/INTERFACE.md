@@ -6397,7 +6397,7 @@ La fusion existait (`calque.fusionner_dessous` sur **Ctrl+E**, « les choisis »
 ### Limites et à trancher
 
 - **Le mode de fusion du dessus agit sur le dessous, pas sur le papier ni sur les calques d'en dessous.** Un « Produit » ou un « Écran » sur un fond qui n'est pas le calque du dessous peut donc différer un peu à l'écran. Le calque obtenu garde le mode de fusion du calque du dessous.
-- **Un effet lourd** (flou sur une longue animation) se calcule à la fusion, sur le fil de l'interface : la commande peut prendre un instant ; ce n'est pas un geste de dessin.
+- **Un calcul long ne bloque jamais l'interface** (`fusiontache.rs`) : une fusion avec effet, aplat, transformation, ou beaucoup de tuiles à composer (plus de 100) part **en tâche de fond** (copie du nécessaire, calcul sur un autre fil, résultat posé en **une étape d'annulation** à la fin). La barre d'état montre « Fusion de N calques », la progression et **Arrêter** (rien ne change). Si les calques ou leurs dessins changent entre-temps (dessin, suppression, réglage, annulation), la fusion est **abandonnée avec un message** et rien n'est écrasé. Une seconde fusion attend la première. Les fusions légères (sans effet, 100 tuiles au plus : ~7 ms mesurés au seuil, ~0,1 ms pour un dessin ordinaire) restent immédiates.
 - **Un calque Couleur unie** ne se fusionne toujours pas (décision d'Anthony, conservée) ; il suffirait de cuire un fond plein (les tuiles pleines sont partagées).
 - **Les calques non choisis qui étaient entre des calques choisis passent au-dessus** (comme avant) : si l'un d'eux a un mode de fusion, l'écran peut changer.
 - Les anciens dessins restent en mémoire tant qu'une annulation peut y revenir (comme avant cette partie).

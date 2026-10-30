@@ -799,6 +799,7 @@ impl App {
             }
             ui.separator();
             ui.label(format!("{:.0} %", self.view.zoom * self.ppp * 100.0)).on_hover_text("Zoom de la vue (la loupe, sous le dessin, le règle).");
+            self.fusion_status_ui(ui);
             self.save_status_ui(ui);
             self.recovery_status_ui(ui);
             self.cooperation_status_ui(ui);

@@ -175,6 +175,23 @@ pub(crate) fn resultat_de(doc: &Document, index: usize, lis: &[usize]) -> &'stat
 /// Fusionne le calque `layer` du plan `index` dans celui du dessous. Les dessins fusionnés sont de nouveaux dessins : ceux
 /// d'avant restent intacts. Rien ne change si la fusion est refusée (`blocker_down`).
 pub(crate) fn merge_down(doc: &mut Document, index: usize, layer: usize) -> Result<(), String> {
+    merge_down_ctl(doc, index, layer, None)
+}
+
+/// Ce que la fusion en tâche de fond partage avec l'interface (`fusiontache.rs`) : le bouton « Arrêter » et la progression.
+#[derive(Default)]
+pub(crate) struct Controle {
+    pub arret: std::sync::atomic::AtomicBool,
+    pub fait: std::sync::atomic::AtomicUsize,
+    pub total: std::sync::atomic::AtomicUsize,
+}
+
+/// Le message d'une fusion arrêtée.
+pub(crate) const ARRETEE: &str = "Fusion arrêtée.";
+
+/// `merge_down`, qui regarde `ctl` à chaque image : arrêtée, elle s'interrompt (`ARRETEE`) et fait avancer la progression.
+pub(crate) fn merge_down_ctl(doc: &mut Document, index: usize, layer: usize, ctl: Option<&Controle>) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
     if let Some(raison) = blocker_down(doc, index, layer) {
         return Err(raison);
     }
@@ -188,6 +205,12 @@ pub(crate) fn merge_down(doc: &mut Document, index: usize, layer: usize) -> Resu
     let mut vus_vecto: HashMap<(Option<CelId>, Option<CelId>), Option<CelId>> = HashMap::new();
     let mut vus_plans: Vec<(Plan, Option<CelId>)> = Vec::new();
     for f in 0..n {
+        if let Some(c) = ctl {
+            if c.arret.load(Ordering::Relaxed) {
+                return Err(ARRETEE.into());
+            }
+            c.fait.fetch_add(1, Ordering::Relaxed);
+        }
         let (cb, ca) = (below.shown_at(f), above.shown_at(f));
         let cel = if cb.is_none() && ca.is_none() {
             None
@@ -303,6 +326,28 @@ fn merged_vector(doc: &mut Document, (below, above): (Option<CelId>, Option<CelI
 pub(crate) fn rendre(doc: &Document, plan: &Plan) -> Cel {
     let mut raster = Raster::new(doc.width, doc.height);
     let t = TILE as i64;
+    // Une composition simple (ni effet, ni aplat, ni transformation) ne touche que les tuiles où un dessin a quelque chose :
+    // tuile par tuile, proportionnel à ce qui est dessiné (une fusion de dessins légers prend quelques millisecondes).
+    let simple = plan.items.iter().all(|i| i.fx.is_empty() && i.fond.is_none() && i.transform.is_none() && i.pre.is_none() && i.ctg.is_none());
+    if simple {
+        let mut tuiles: std::collections::BTreeSet<(i32, i32)> = std::collections::BTreeSet::new();
+        for item in &plan.items {
+            if let Some(cel) = doc.cels.get(&item.cel) {
+                tuiles.extend(cel.raster.drawn_ids().into_iter().map(|id| cel.raster.key_of(id)));
+            }
+        }
+        for (tx, ty) in tuiles {
+            let mut buf = vec![Color32::TRANSPARENT; TILE_PIXELS];
+            render::composite_world_tile(doc, plan, tx, ty, &mut buf, TILE, (tx as i64 * t, ty as i64 * t));
+            if buf.iter().any(|c| c.a() != 0) {
+                let mut px = [Color32::TRANSPARENT; TILE_PIXELS];
+                px.copy_from_slice(&buf);
+                raster.replace_slot(raster.id_of(tx, ty), Some(Tile::new(px)));
+            }
+        }
+        raster.share_solid_tiles();
+        return Cel::bitmap(raster);
+    }
     let sheet = Area::sheet(doc).tile_aligned();
     let aw = sheet.width();
     let pixels = render::composite_area(doc, plan, sheet);
@@ -339,4 +384,49 @@ pub(crate) fn rendre(doc: &Document, plan: &Plan) -> Cel {
     }
     raster.share_solid_tiles();
     Cel::bitmap(raster)
+}
+
+/// Ce que coûterait la fusion de `lis` : `(poids, lourd)`. Le poids compte les tuiles à composer (une composition simple coûte ce
+/// qu'il y a de dessiné, pas la feuille), `lourd` dit qu'un calque a des effets, un aplat ou une transformation (clés de
+/// position comprises) : la composition touche alors toute la feuille.
+pub(crate) fn travail_de(doc: &Document, index: usize, lis: &[usize]) -> (usize, bool) {
+    let Some(panel) = doc.panels.get(index) else { return (0, false) };
+    let lis = rangs_a_fusionner(&panel.layers, lis);
+    let layers: Vec<&Layer> = lis.iter().map(|&l| &panel.layers[l]).collect();
+    let mut n = layers.iter().map(|l| l.frames.len()).max().unwrap_or(0);
+    if layers.iter().any(|l| l.pre != Behaviour::Nothing || l.post != Behaviour::Nothing) {
+        n = n.max(panel.frame_count());
+    }
+    let lourd = layers.iter().any(|l| !l.fx.is_empty() || l.fond.is_some() || !l.transform.is_identity() || !l.pos_keys.is_empty());
+    let anime = layers.iter().any(|l| !l.opacity_keys.is_empty());
+    let tuiles = |l: &Layer, f: usize| l.shown_at(f).and_then(|c| doc.cels.get(&c)).map_or(0, |c| c.raster.drawn_ids().len().max(1));
+    let poids = if anime {
+        (0..n).map(|f| layers.iter().map(|l| tuiles(l, f)).sum::<usize>()).sum()
+    } else {
+        let mut vus: std::collections::HashSet<Vec<Option<CelId>>> = std::collections::HashSet::new();
+        (0..n).filter(|&f| vus.insert(layers.iter().map(|l| l.shown_at(f)).collect())).map(|f| layers.iter().map(|l| tuiles(l, f)).sum::<usize>()).sum()
+    };
+    (poids, lourd)
+}
+
+/// La fusion se fait tout de suite, sur le fil de l'interface : moins d'une image d'écran (~16 ms, mesuré dans
+/// `fusiontache_tests.rs` : une fusion de dessins légers prend moins d'une milliseconde, 100 tuiles pleines une dizaine), c'est-à-dire pas d'effet, d'aplat ni de
+/// transformation, et peu de tuiles à composer. Sinon elle part en tâche de fond.
+pub(crate) fn est_rapide(doc: &Document, index: usize, lis: &[usize]) -> bool {
+    let (poids, lourd) = travail_de(doc, index, lis);
+    !lourd && poids <= RAPIDE_MAX
+}
+
+/// Au plus ce nombre de tuiles (de 64 × 64 pixels) à composer pour une fusion immédiate.
+pub(crate) const RAPIDE_MAX: usize = 100;
+/// Le nombre d'images du plan que la fusion de `lis` parcourt (la progression de la tâche de fond).
+pub(crate) fn images_a_calculer(doc: &Document, index: usize, lis: &[usize]) -> usize {
+    let Some(panel) = doc.panels.get(index) else { return 1 };
+    let lis = rangs_a_fusionner(&panel.layers, lis);
+    let layers: Vec<&Layer> = lis.iter().map(|&l| &panel.layers[l]).collect();
+    let mut n = layers.iter().map(|l| l.frames.len()).max().unwrap_or(1);
+    if layers.iter().any(|l| l.pre != Behaviour::Nothing || l.post != Behaviour::Nothing) {
+        n = n.max(panel.frame_count());
+    }
+    n.max(1)
 }

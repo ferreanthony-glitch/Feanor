@@ -441,6 +441,8 @@ pub struct App {
     pub(crate) propagation: crate::propagerui::Propagation,
     /// Coloriage par zones : propager des aplats de couleur d'une image à l'autre (`coloriageui.rs`).
     pub(crate) coloriage: crate::coloriageui::Coloriage,
+    /// La fusion de calques en tâche de fond, quand elle est longue (`fusiontache.rs`).
+    pub(crate) fusion: Option<crate::fusiontache::Tache>,
     /// Fenêtre « Importer un scénario » (`scenarioui.rs`).
     pub(crate) scenario_window: Option<crate::scenarioui::ScenarioWindow>,
     /// Fenêtre d'interpolation ouverte (13l, `tweenui.rs`).
@@ -1127,6 +1129,7 @@ impl App {
             video_import: None,
             propagation: crate::propagerui::Propagation::new(wgpu_render_state),
             coloriage: crate::coloriageui::Coloriage::new(),
+            fusion: None,
             scenario_window: None,
             tween_dialog: None,
             light_table: false,
@@ -3250,26 +3253,13 @@ impl App {
     }
     /// Fusionne le calque courant avec celui du dessous (Ctrl+E).
     pub(crate) fn merge_layer_down(&mut self) {
-        if self.content_refuses() {
+        let li = self.cur_layer;
+        if li == 0 {
+            self.status = "Il n'y a pas de calque en dessous.".into();
             return;
         }
-        self.end_stroke();
-        self.drop_bitmap_selection();
-        let li = self.cur_layer;
-        let resultat = crate::fusioncalques::resultat_de(&self.doc, self.cur_panel, &[li.wrapping_sub(1), li]);
-        let snap = self.snapshot();
-        match self.doc.merge_layer_down(self.cur_panel, li) {
-            Ok(()) => {
-                self.cur_layer = li - 1;
-                self.layer_sel.clear();
-                self.vsel = None;
-                self.commit_structure(snap);
-                self.status = format!("Calques fusionnés. {resultat} Ctrl+Z les rend comme avant.");
-            }
-            Err(e) => self.status = e,
-        }
+        self.fusionner(vec![li - 1, li]);
     }
-
     pub(crate) fn undo(&mut self) {
         self.cancel_montage_drag();
         // Une durée rendue par l'annulation n'est pas signalée.
@@ -5167,6 +5157,7 @@ impl App {
             self.tick_collage(ctx);
             self.collage_fenetre(ctx);
             self.tick_save(ctx);
+            self.fusion_tick(ctx);
             // Travailler à plusieurs : ce que la session a préparé est posé (`cooperationui.rs`).
             self.cooperation_tick(ctx);
             // Les onglets cachés : une écriture finie est adoptée, rien d'autre ne tourne pour eux.
