@@ -91,7 +91,7 @@ pub(crate) const FAMILLES: [(&str, &[Export]); 4] = [
     (
         "Montage & échange",
         &[
-            (ph::FILM_REEL, "Pour le montage", "Un fichier vidéo par plan et le montage en EDL, XML Final Cut, FCPXML ou OpenTimelineIO, pour un logiciel de montage.", "fichier.exporter_montage"),
+            (ph::FILM_REEL, "Pour le montage", "Un fichier vidéo par plan et le montage en EDL, XML de montage, FCPXML ou OpenTimelineIO, pour un logiciel de montage.", "fichier.exporter_montage"),
             (ph::LIST_NUMBERS, "Liste des plans", "Un plan par ligne en CSV ou en JSON pour le suivi de production : épisode, séquence, plan, description, images, image d'entrée et de sortie ; en-têtes Kitsu ou génériques.", "fichier.exporter_liste_plans"),
             (ph::PACKAGE, "Paquet de livraison", "En un clic, dans un dossier rangé selon ton modèle : une vidéo par plan, les vignettes, le PDF, l'animatique, la liste des plans et un manifeste avec les empreintes des fichiers.", "fichier.exporter_paquet"),
             (ph::TEXTBOX, "Noms et production", "Le modèle de noms des plans (SQ01_PL012A ou celui du studio), la série et l'épisode : tous les exports s'en servent.", "projet.noms_production"),

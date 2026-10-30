@@ -1073,7 +1073,7 @@ fn a_file_locked_during_the_export_fails_cleanly_at_the_last_step() {
 fn explained_errors_tell_a_locked_file_from_another_failure() {
     let p = Path::new("C:/x/fiche.xlsx");
     let verrou = std::io::Error::from_raw_os_error(32);
-    assert!(fichejob::explique(p, &verrou).contains("Excel"));
+    assert!(fichejob::explique(p, &verrou).contains("tableur"));
     let acces = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
     assert!(fichejob::explique(p, &acces).contains("ouvert dans un autre programme"));
     let autre = std::io::Error::from(std::io::ErrorKind::NotFound);

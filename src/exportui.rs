@@ -496,7 +496,7 @@ impl App {
                         ui.colored_label(
                             warn(),
                             "ffmpeg introuvable. C'est lui qui fabrique la vidéo : installe-le (il vient par \
-                             exemple avec Krita), ou indique où il est.",
+                             exemple avec un logiciel de dessin), ou indique où il est.",
                         );
                     }
                 }

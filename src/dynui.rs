@@ -95,7 +95,7 @@ pub(crate) fn wet_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool, mix
         }
         MixKind::Smudge => smudge_slider(ui, s),
     }
-    ui.label(egui::RichText::new("Modèle de SHOT (la formule de TVPaint n'est pas publiée) : à comparer avec tes outils de peinture.").small().weak());
+    ui.label(egui::RichText::new("Modèle propre à SHOT : à comparer avec tes outils de peinture.").small().weak());
 }
 
 /// Le curseur d'entraînement du doigt (type « Lisser » et outil Mélangeur).
@@ -109,7 +109,7 @@ fn smudge_slider(ui: &mut egui::Ui, s: &mut BrushSettings) {
 /// calque vectoriel, où le trait gardé ne retient que la taille.
 pub(crate) fn dynamics_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool, color: bool) {
     ui.label(
-        egui::RichText::new("Chaque réglage peut suivre l'appui, la vitesse, la direction du trait, un fondu ou le hasard, par une courbe (comme les connexions de TVPaint).")
+        egui::RichText::new("Chaque réglage peut suivre l'appui, la vitesse, la direction du trait, un fondu ou le hasard, par une courbe (par exemple un réglage qui varie avec la pression ou la vitesse).")
             .small()
             .weak(),
     );

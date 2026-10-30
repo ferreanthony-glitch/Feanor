@@ -162,7 +162,7 @@ impl App {
         let fps = self.doc.fps;
         ui.label(
             RichText::new(
-                "L'animatique découpée plan par plan, pour un monteur : un fichier vidéo par plan, et le montage en EDL (CMX 3600), Final Cut XML (xmeml, ou FCPXML), ou OpenTimelineIO. Les clips portent les numéros des plans (SQ01_PL012A).",
+                "L'animatique découpée plan par plan, pour un monteur : un fichier vidéo par plan, et le montage en EDL (CMX 3600), XML de montage (xmeml, ou FCPXML), ou OpenTimelineIO. Les clips portent les numéros des plans (SQ01_PL012A).",
             )
             .weak()
             .small(),
@@ -173,10 +173,10 @@ impl App {
                 ui.label("Fichiers de montage");
                 ui.vertical(|ui| {
                     ui.checkbox(&mut w.opts.edl, "EDL CMX 3600 (.edl) : l'image seulement");
-                    ui.checkbox(&mut w.opts.xml, "Final Cut Pro 7 XML (.xml)");
+                    ui.checkbox(&mut w.opts.xml, "XML de montage xmeml (.xml)");
                     ui.checkbox(&mut w.opts.otio, "OpenTimelineIO (.otio)");
                     ui.horizontal(|ui| {
-                        ui.checkbox(&mut w.opts.fcpxml, "Final Cut Pro X XML (.fcpxml)");
+                        ui.checkbox(&mut w.opts.fcpxml, "FCPXML (.fcpxml)");
                         ui.add_enabled_ui(w.opts.fcpxml, |ui| {
                             for v in [Fcpxml::V1_10, Fcpxml::V1_9] {
                                 ui.radio_value(&mut w.opts.fcpxml_version, v, v.label());
@@ -332,7 +332,7 @@ impl App {
                 ui.colored_label(warn, format!("{} : {e}", path.display()));
             }
             None => {
-                ui.colored_label(warn, "ffmpeg introuvable. C'est lui qui fabrique les vidéos : installe-le (il vient par exemple avec Krita), ou indique où il est.");
+                ui.colored_label(warn, "ffmpeg introuvable. C'est lui qui fabrique les vidéos : installe-le ou indique où il est.");
             }
         }
         if !busy && ui.small_button("Choisir un autre ffmpeg…").clicked() {

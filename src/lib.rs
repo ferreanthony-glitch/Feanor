@@ -26,6 +26,8 @@ mod conseils_tests;
 mod premierjour;
 #[cfg(test)]
 mod premierjour_tests;
+#[cfg(test)]
+mod sans_marques_tests;
 mod echelle;
 #[cfg(test)]
 mod echelle_tests;

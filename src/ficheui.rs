@@ -182,7 +182,7 @@ impl App {
         let ext = w.format.extension();
         let mut dialogue = rfd::FileDialog::new().set_title("Enregistrer la fiche technique").set_file_name(format!("{}_fiche.{ext}", editorial::file_safe(&w.titre)));
         dialogue = match w.format {
-            Format::Xlsx => dialogue.add_filter("Classeur Excel (.xlsx)", &["xlsx"]),
+            Format::Xlsx => dialogue.add_filter("Classeur (.xlsx)", &["xlsx"]),
             Format::Csv => dialogue.add_filter("CSV (.csv)", &["csv"]),
         };
         let dir = self.settings.fiche.dossier.clone().or_else(|| self.path.as_ref().or(self.import_source.as_ref()).and_then(|p| p.parent()).map(Path::to_path_buf));
@@ -352,13 +352,13 @@ impl App {
 
                 ui.label("Format");
                 ui.horizontal(|ui| {
-                    bulles::choix(ui, &mut w.format, Format::Xlsx, ph::FILE_XLS, "Classeur Excel (.xlsx)", "Un classeur avec un en-tête figé, des colonnes à la bonne largeur et les vignettes dans les cellules. S'ouvre dans Excel, LibreOffice et Google Sheets.", "");
+                    bulles::choix(ui, &mut w.format, Format::Xlsx, ph::FILE_XLS, "Classeur (.xlsx)", "Un classeur avec un en-tête figé, des colonnes à la bonne largeur et les vignettes dans les cellules. S'ouvre dans n'importe quel tableur.", "");
                     bulles::choix(ui, &mut w.format, Format::Csv, ph::FILE_CSV, "Texte CSV (.csv)", "Un fichier texte (UTF-8) que tous les tableurs lisent. Les vignettes sont des chemins vers des images.", "");
                     if w.format == Format::Csv {
                         ui.add_space(8.0);
                         ui.label("Séparateur");
-                        ui.radio_value(&mut w.sep, Separateur::PointVirgule, "point-virgule").on_hover_text("Excel en français.");
-                        ui.radio_value(&mut w.sep, Separateur::Virgule, "virgule").on_hover_text("Excel en anglais, Google Sheets, LibreOffice.");
+                        ui.radio_value(&mut w.sep, Separateur::PointVirgule, "point-virgule").on_hover_text("Pour un tableur en français.");
+                        ui.radio_value(&mut w.sep, Separateur::Virgule, "virgule").on_hover_text("Pour un tableur en anglais.");
                     }
                 });
                 ui.end_row();

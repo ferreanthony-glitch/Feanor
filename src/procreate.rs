@@ -253,7 +253,7 @@ pub fn import(bytes: &[u8], source: &str, lib: &mut BrushLibrary) -> Result<(usi
         };
         let name = match keys.get("name") {
             Some(Plist::Str(s)) if !s.is_empty() => s.clone(),
-            _ => format!("Brosse Procreate {}", n + 1),
+            _ => format!("Brosse importée {}", n + 1),
         };
         let mut brush_notes = Vec::new();
         let mut s = brush_settings(&keys, &mut brush_notes);
@@ -262,7 +262,7 @@ pub fn import(bytes: &[u8], source: &str, lib: &mut BrushLibrary) -> Result<(usi
                 s.tip = Some(lib.add_tip(&name, g));
                 tips += 1;
             }
-            None if keys.get("bundledShapePath").is_some_and(|v| *v != Plist::Null) => brush_notes.push("pointe intégrée à Procreate, absente du fichier : pointe ronde".into()),
+            None if keys.get("bundledShapePath").is_some_and(|v| *v != Plist::Null) => brush_notes.push("pointe intégrée au logiciel d'origine, absente du fichier : pointe ronde".into()),
             None => {}
         }
         match zip.read(&format!("{dir}Grain.png")).and_then(|b| gray(&b)) {
@@ -279,7 +279,7 @@ pub fn import(bytes: &[u8], source: &str, lib: &mut BrushLibrary) -> Result<(usi
         }
     }
     if n > 0 {
-        notes.insert(0, "Échelles de taille et d'espacement devinées (aucune documentation de Procreate) : à comparer dans Procreate.".into());
+        notes.insert(0, "Échelles de taille et d'espacement devinées (aucune documentation) : à comparer dans le logiciel d'origine.".into());
     }
     Ok((n, tips, papers, notes))
 }

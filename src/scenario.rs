@@ -43,8 +43,8 @@ impl Format {
         match self {
             Format::Fountain => "Fountain",
             Format::Texte => "Texte brut",
-            Format::Fdx => "Final Draft (.fdx)",
-            Format::Docx => "Word (.docx)",
+            Format::Fdx => "Scénario (.fdx)",
+            Format::Docx => "Document (.docx)",
         }
     }
 }
@@ -221,7 +221,7 @@ fn parse_bytes_inner(bytes: &[u8], ext: &str, progress: &dyn Fn(f32)) -> Result<
         return Err(PDF_MESSAGE.into());
     }
     match ext {
-        "doc" => return Err("Le format .doc (Word ancien) n'est pas lu : enregistrez le scénario en .docx, .fountain ou .txt.".into()),
+        "doc" => return Err("Le format .doc (ancien) n'est pas lu : enregistrez le scénario en .docx, .fountain ou .txt.".into()),
         "rtf" => return Err("Le format .rtf n'est pas lu : enregistrez le scénario en .docx, .fountain ou .txt.".into()),
         "odt" | "pages" => return Err(format!("Le format .{ext} n'est pas lu : enregistrez le scénario en .docx, .fountain ou .txt.")),
         _ => {}

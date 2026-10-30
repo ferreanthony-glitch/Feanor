@@ -455,7 +455,7 @@ pub fn import_panel(panel: &Panel, source: &str, lib: &mut BrushLibrary, res: Op
                     if let (Some(order), true) = (order, frames > 1) {
                         s.tip_cells = frames as u32;
                         s.tip_order = order;
-                        notes.push(format!("pointe animée de {frames} images (mode TVPaint {anim} pris comme « {} », à vérifier)", order.label()));
+                        notes.push(format!("pointe animée de {frames} images (mode {anim} pris comme « {} », à vérifier)", order.label()));
                     }
                 } else {
                     notes.push("image de la pointe absente : pointe ronde".into());

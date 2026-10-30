@@ -155,9 +155,9 @@ impl App {
     fn import_palette(&mut self) {
         let Some(path) = rfd::FileDialog::new()
             .set_title("Importer un nuancier")
-            .add_filter("Nuancier GIMP ou Photoshop", &["gpl", "aco"])
-            .add_filter("GIMP (.gpl)", &["gpl"])
-            .add_filter("Photoshop (.aco)", &["aco"])
+            .add_filter("Nuancier (.gpl ou .aco)", &["gpl", "aco"])
+            .add_filter("Nuancier (.gpl)", &["gpl"])
+            .add_filter("Nuancier (.aco)", &["aco"])
             .pick_file()
         else {
             return;
@@ -184,8 +184,8 @@ impl App {
         let palette = self.shown_palette().clone();
         let Some(path) = rfd::FileDialog::new()
             .set_title("Exporter le nuancier (l'extension choisit le format)")
-            .add_filter("GIMP (.gpl)", &["gpl"])
-            .add_filter("Photoshop (.aco)", &["aco"])
+            .add_filter("Nuancier (.gpl)", &["gpl"])
+            .add_filter("Nuancier (.aco)", &["aco"])
             .set_file_name(format!("{}.gpl", nuancier::file_name(&palette)))
             .save_file()
         else {
@@ -206,8 +206,8 @@ impl App {
         self.action_item(ui, "Dupliquer le nuancier", "nuancier.dupliquer");
         self.action_item(ui, "Supprimer le nuancier…", "nuancier.supprimer");
         ui.separator();
-        self.action_item(ui, "Importer un nuancier (GIMP .gpl, Photoshop .aco)…", "nuancier.importer");
-        self.action_item(ui, "Exporter le nuancier (GIMP .gpl, Photoshop .aco)…", "nuancier.exporter");
+        self.action_item(ui, "Importer un nuancier (.gpl, .aco)…", "nuancier.importer");
+        self.action_item(ui, "Exporter le nuancier (.gpl, .aco)…", "nuancier.exporter");
     }
 
     /// Menu d'une pastille du nuancier (après les commandes communes à toutes les pastilles).

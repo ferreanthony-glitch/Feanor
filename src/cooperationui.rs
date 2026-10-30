@@ -648,7 +648,7 @@ impl App {
             if !vue.copies.is_empty() {
                 ui.separator();
                 ui.label(RichText::new(format!("{} Copies en conflit ({})", ph::WARNING, vue.copies.len())).strong());
-                ui.label(RichText::new("Un client de synchronisation (Dropbox, Drive…) a gardé deux versions d'un fichier.").small().weak());
+                ui.label(RichText::new("Un client de synchronisation de fichiers a gardé deux versions d'un fichier.").small().weak());
                 for c in &vue.copies {
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(c.nom()).small());
@@ -859,7 +859,7 @@ impl App {
             format!("{}.{}", self.base_name_or(if t.is_empty() { "Mon film" } else { &t }), project::EXTENSION)
         };
         let Some(choisi) = rfd::FileDialog::new()
-            .set_title("Partager ce projet : choisis le dossier partagé (Drive, Dropbox, réseau) ; un dossier à ce nom y sera créé")
+            .set_title("Partager ce projet : choisis le dossier partagé (synchronisé ou réseau) ; un dossier à ce nom y sera créé")
             .add_filter("Projet SHOT", &[project::EXTENSION])
             .set_file_name(nom_defaut)
             .save_file()

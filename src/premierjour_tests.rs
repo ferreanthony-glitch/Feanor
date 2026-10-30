@@ -284,6 +284,8 @@ fn the_old_names_are_synonyms_in_ctrl_k() {
     trouve("Arrière-plan aucun", "fond.aucun");
     trouve("arrière-plan damier", "fond.damier");
     trouve("Onglet Arrière-plan", "onglet.arriere_plan");
+    trouve("Fond de la feuille damier", "fond.damier");
+    trouve("Fond de la feuille", "onglet.arriere_plan");
     trouve("Labo", "vue.mon_panneau");
     trouve("Labo", "vue.suggestions_sonores");
     trouve("Labo", "pinceau.enregistrer_traits");
@@ -304,14 +306,14 @@ fn the_plan_sheet_has_one_name_and_the_sheet_background_another_than_the_colour_
         assert!(!a.label.contains("Propriétés du plan"), "{} : « Fiche du plan » partout", a.id);
         // « Arrière-plan » ne désigne plus que le second carré du couple de couleurs, jamais la feuille.
         if a.label.contains("Arrière-plan") {
-            panic!("{} : « Fond de la feuille » pour la feuille, « couleur d'arrière-plan » pour le couple de couleurs : {}", a.id, a.label);
+            panic!("{} : « Papier » pour la feuille, « couleur d'arrière-plan » pour le couple de couleurs : {}", a.id, a.label);
         }
     }
     assert_eq!(crate::keymap::action_info("panneau.proprietes").unwrap().label.split(' ').take(3).collect::<Vec<_>>(), ["Fiche", "du", "plan"]);
-    assert!(crate::keymap::action_info("fond.damier").unwrap().label.starts_with("Fond de la feuille"));
+    assert!(crate::keymap::action_info("fond.damier").unwrap().label.starts_with("Papier"));
     assert!(crate::keymap::action_info("pastille.arriere_plan").unwrap().label.contains("arrière-plan"), "le sens « couleur » reste clair");
     // L'onglet de la timeline.
-    assert!(crate::keymap::action_info("onglet.arriere_plan").unwrap().label.contains("Fond de la feuille"));
+    assert!(crate::keymap::action_info("onglet.arriere_plan").unwrap().label.contains("Papier"));
 }
 
 #[test]

@@ -6730,3 +6730,32 @@ Public visé : storyboarders d'animation, indépendants ou en studio. SHOT doit 
 - Le paquet prend la liste du film ou de la séquence courante (d'un seul tenant), pas une sélection de plans quelconques.
 - Le PDF du paquet a la mise en page d'origine (celle de la fenêtre PDF n'est pas reprise) ; la liste du paquet a les réglages d'origine de la liste (Kitsu, CSV à virgule, 1001).
 - Les textes du PDF et de la liste sont lus dans le projet au départ, les images dans le cliché pris juste après : une retouche faite entre les deux, pendant les toutes premières images d'écran, n'est pas protégée (la fenêtre garde la main sur le projet pendant la copie).
+
+## 90. Noms de marques et Papier (2026-10-30, branche `noms-papier`)
+
+Deux petites passes de vocabulaire, décidées par Anthony.
+
+**1. Plus aucun nom de logiciel du commerce dans ce qu'on lit** (bulles, messages, étiquettes, filtres des fenêtres de fichiers, commandes de Ctrl+K, « Origine » des raccourcis, texte du fichier LISEZMOI de l'export de montage). Les noms de **formats** restent : .abr, .kpp, .bundle, .brush, .brushset, .myb, .tvpx, .aco, .gpl, .fdx, .fountain, .docx, .xlsx, .csv, EDL, FCPXML, xmeml, OpenTimelineIO, Kitsu (profil d'export).
+
+| Avant | Après | Où |
+|---|---|---|
+| Importer des brosses Photoshop / Procreate / Krita / MyPaint / TVPaint | « Brosses (.abr, .brush, .kpp, .myb, …) » ; filtres « Brosses (.abr) », « Brosses (.brush, .brushset) », « Réglages et paquets de brosses (.kpp, .bundle, .myb) », « Panneaux et réglages de brosses (.tvpx, .bin, .ini) » | fenêtre des brosses |
+| « 3 brosses Photoshop importées » | « 3 brosses .abr importées » (messages d'import et notes d'import sans nom de logiciel) | barre d'état |
+| Nuancier GIMP / Photoshop | « Nuancier (.gpl, .aco) » | menu du nuancier, Ctrl+K |
+| Scénario : Final Draft, Word | « Fountain, .fdx, .docx, texte » ; messages d'erreur « Fichier .fdx illisible », « Document .docx illisible » | panneau Scénario, Ctrl+K |
+| Classeur Excel, « S'ouvre dans Excel, LibreOffice et Google Sheets » | « Classeur (.xlsx) », « S'ouvre dans n'importe quel tableur » ; séparateurs « pour un tableur en français / en anglais » | fiche de plan |
+| « (Excel ?) » (fichier ouvert ailleurs) | « (un tableur ?) » | message d'écriture |
+| Montage : « Final Cut XML (Premiere, DaVinci Resolve) », « Final Cut Pro 7 XML » | « XML de montage », « FCPXML » ; LISEZMOI de l'export : « ton logiciel de montage » | Exporter pour le montage, Préférences |
+| ffmpeg « vient avec Krita » | « ou indique où il est » (la recherche automatique dans le dossier de Krita reste, sans le dire) | fenêtres d'export |
+| « Dropbox, Drive… » | « synchronisé ou réseau », « un client de synchronisation de fichiers » | Partager le projet |
+| « la formule de TVPaint », « le Power de TVPaint », « TVPaint : Line Smoothing » | phrases reformulées sans le nom | bulles des pinceaux et de la dynamique |
+| « Réglages d'EbSynth » | « Réglages par défaut » | panneau Propager |
+| `keymap.toml`, champ `source` (« Origine : … » dans Raccourcis) | « réglage perso d'origine : LayerUp », « sans touche à l'origine » | fenêtre Raccourcis |
+
+**Gardé volontairement** : les commentaires du code, les noms de fichiers et de modules (`kritabrush.rs`, `tvpbrush.rs`…), les analyseurs de formats, la variable `PELURE_TVPAINT` et les chemins d'installation (recherche des ressources de brosses), l'en-tête « GIMP Palette » du format .gpl, « Kitsu » (profil d'export), les commentaires de `keymap.toml` (ligne qui commence par `#`, jamais montrée) et les synonymes de Ctrl+K : taper « EbSynth » trouve toujours « Propager la peinture… » (`palette::ANCIENS_NOMS`, jamais affichés).
+
+**2. Un seul mot pour la feuille : « Papier »** (Nouveau projet le disait déjà). « Fond de la feuille » devient « Papier » : onglet « Papier » sous la timeline, barre d'état « Papier : damier. », commandes « Papier : aucun / couleur / damier » et « Onglet Papier de la timeline », bulles de Nouveau projet (« la couleur du papier »). « Couleur d'arrière-plan » (le second carré du couple de couleurs) ne change pas. Les anciens noms (« Fond de la feuille… », « Arrière-plan… ») restent des synonymes de Ctrl+K (`ANCIENS_NOMS`). Identifiants de commandes (`fond.*`, `onglet.arriere_plan`) et réglages enregistrés inchangés.
+
+**Tests** (`src/sans_marques_tests.rs`) : noms de toutes les commandes de Ctrl+K et libellés des actions ; champs `source` de `keymap.toml` ; tous les littéraux de chaîne (hors commentaires, sur plusieurs lignes) de 26 fichiers d'interface, d'import et d'export ; les anciens noms trouvent encore leurs commandes ; « Papier » partout, « Couleur d'arrière-plan » intacte. Un fichier d'interface neuf n'est pas lu automatiquement : l'ajouter à la liste du test.
+
+**À vérifier à l'écran (par Anthony)** : onglet « Papier » sous la timeline ; Ctrl+K « fond de la feuille » trouve « Papier : … » ; fenêtre d'import des brosses et du nuancier sans nom de logiciel ; fenêtre Raccourcis, survol d'un raccourci : « Origine : réglage perso d'origine … ».

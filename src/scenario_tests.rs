@@ -364,13 +364,13 @@ fn damaged_input_gives_a_french_error_never_a_panic() {
     assert!(err(b"   \n\n \t\n", "fountain").contains("Aucun scénario reconnu"));
     assert!(err(b"# Seulement une section\n\n= et un synopsis\n", "fountain").contains("Aucun scénario reconnu"));
     assert!(err(b"<FinalDraft><Content><Paragraph Type=\"Action\"><Text>Salut", "fdx").contains("illisible"));
-    assert!(err(b"<?xml version=\"1.0\"?><html><body/></html>", "fdx").contains("n'est pas un scénario Final Draft"));
+    assert!(err(b"<?xml version=\"1.0\"?><html><body/></html>", "fdx").contains("n'est pas un scénario .fdx"));
     assert!(err(b"<FinalDraft></FinalDraft>", "fdx").contains("aucun paragraphe"));
-    assert!(err(b"PK\x03\x04 pas un vrai zip", "docx").contains("Word"));
+    assert!(err(b"PK\x03\x04 pas un vrai zip", "docx").contains(".docx"));
     let no_text = zip_store("word/styles.xml", b"<w:styles/>");
     assert!(err(&no_text, "docx").contains("word/document.xml"));
     let broken = zip_store("word/document.xml", b"<w:document><w:body><w:p><w:t>Salut</w:p></w:body></w:document>");
-    assert!(err(&broken, "docx").contains("Word illisible"));
+    assert!(err(&broken, "docx").contains(".docx illisible"));
     assert!(err(b"x", "doc").contains(".docx"));
     assert!(err(b"{\\rtf1 abc}", "rtf").contains(".rtf"));
 }
