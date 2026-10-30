@@ -196,6 +196,10 @@ pub(crate) struct RefUi {
     pub crop_mode: Option<u64>,
     /// Le texte de cet élément prend la saisie (double-clic, ou élément neuf).
     pub text_focus: Option<u64>,
+    /// Le texte qu'on écrit sur place, dans le bloc (`planchrefui.rs`).
+    pub(crate) edit: Option<planchrefui::EnPlace>,
+    /// Échap ou Ctrl+Entrée ont été tapés pendant l'écriture (retirés des touches avant egui) : le texte est posé.
+    pub(crate) edit_end: bool,
     /// Où le dernier clic droit a eu lieu sur le tableau (pour poser un post-it ou un cadre là).
     pub menu_at: Option<Pos2>,
     /// Images d'écran à attendre avant d'envoyer le plein écran (la fenêtre doit d'abord changer d'écran).
@@ -250,6 +254,7 @@ impl RefUi {
         self.failed.clear();
         self.crop_mode = None;
         self.text_focus = None;
+        self.edit = None;
         self.board_import = None;
     }
 
@@ -691,6 +696,8 @@ impl App {
         self.refs.poll(&ctx);
         let alive = self.refs_selected();
         self.refs.sel.retain(|id| alive.contains(id));
+        // Un clic ailleurs, un autre affichage ou une fenêtre qui perd la main : le texte écrit sur place est posé.
+        self.refs_edit_leave(&ctx, detached);
         if detached {
             self.refs_detached_input(&ctx);
         }
@@ -937,7 +944,14 @@ impl App {
         let ppp = ctx.pixels_per_point();
         // Fenêtre à part transparente : tout ce que le tableau peint prend l'opacité choisie.
         let win_alpha = if ctx.viewport_id() != egui::ViewportId::ROOT { self.settings.references_fenetre.alpha() } else { 1.0 };
-        let items = self.refs_filtered();
+        let mut items = self.refs_filtered();
+        // Écrire sur place : ce qu'on demande (double-clic, Entrée, élément neuf), et ce qu'on écrit en ce moment.
+        self.refs_edit_start(ctx, &items);
+        let editing = self.refs_editing();
+        if let Some(r) = items.iter_mut().find(|r| Some(r.id) == editing) {
+            // (Le texte qu'on écrit est droit : le bloc se redresse le temps de l'écriture, sans que rien ne change dans le fichier.)
+            r.rotation = 0.0;
+        }
         // Tant que personne n'a touché à la vue, elle suit la taille du panneau et ce qu'il contient (« tout voir »).
         let auto_view = self.refs.view.is_none();
         let mut view = match self.refs.view {
@@ -983,8 +997,10 @@ impl App {
         }
 
         // Un appui : la pipette (Alt), une poignée, une référence, ou le fond.
+        let edit_rect = self.refs.edit.as_ref().and_then(|e| e.rect);
         if pressed && self.refs.drag.is_none() && !self.refs.picking {
-            if let Some(p) = hover {
+            // (Un appui sur le bloc qu'on écrit est pour son texte.)
+            if let Some(p) = hover.filter(|p| !edit_rect.is_some_and(|r| r.contains(*p))) {
                 self.refs.focus = true;
                 if mods.alt {
                     self.refs.picking = true;
@@ -1054,7 +1070,7 @@ impl App {
                 }
                 let alpha = (r.opacity * win_alpha).clamp(0.0, 1.0);
                 if r.kind != Kind::Image {
-                    paint_block(&painter, r, &corners, view.zoom, alpha);
+                    paint_block(&painter, r, &corners, view.zoom, alpha, editing != Some(r.id));
                     continue;
                 }
                 let frame = self.refs_shown_frame(r, now);
@@ -1096,7 +1112,7 @@ impl App {
                 painter.add(Shape::closed_line(corners.to_vec(), Stroke::new(2.0_f32, theme::contour())));
             }
         }
-        if let (&[id], true) = (selected.as_slice(), self.refs.drag.as_ref().is_none_or(|d| matches!(d.grab, Grab::Scale { .. } | Grab::Rotate { .. } | Grab::FrameSize { .. } | Grab::Crop { .. } | Grab::Move(..)))) {
+        if let (&[id], true) = (selected.as_slice(), editing.is_none() && self.refs.drag.as_ref().is_none_or(|d| matches!(d.grab, Grab::Scale { .. } | Grab::Rotate { .. } | Grab::FrameSize { .. } | Grab::Crop { .. } | Grab::Move(..)))) {
             if let Some(r) = items.iter().find(|r| r.id == id) {
                 let moving = self.refs.drag.as_ref().is_some_and(|d| matches!(d.grab, Grab::Move(..)));
                 if !moving {
@@ -1125,6 +1141,10 @@ impl App {
                     }
                 }
             }
+        }
+        // Le texte qu'on écrit, par-dessus le bloc.
+        if let Some(r) = items.iter().find(|r| Some(r.id) == editing) {
+            self.refs_edit_widget(ui, ctx, r, &view, rect, (r.opacity * win_alpha).clamp(0.0, 1.0));
         }
         // Le rectangle de sélection.
         if let (Some(Drag { grab: Grab::Marquee { .. }, press, moved: true, .. }), Some(cur)) = (self.refs.drag.as_ref(), latest) {
@@ -1156,8 +1176,8 @@ impl App {
             self.refs.view = Some(view);
         }
 
-        // Double-clic : sur un texte, le modifier ; sur une image, la cadrer ; sur le fond, tout voir.
-        if resp.double_clicked() {
+        // Double-clic : sur un texte, l'écrire sur place ; sur une image, la cadrer ; sur le fond, tout voir.
+        if resp.double_clicked() && !edit_rect.zip(hover).is_some_and(|(r, p)| r.contains(p)) {
             match hovered_id {
                 Some(id) if self.doc.reference(id).is_some_and(|r| r.kind.has_text()) => self.refs.text_focus = Some(id),
                 Some(id) => self.refs_zoom_to(id, false, ppp),
@@ -1176,7 +1196,7 @@ impl App {
         }
         resp.context_menu(|ui| self.refs_menu(ui, ppp));
         // La bulle d'une référence : son nom, ses étiquettes, ses plans.
-        if let (Some(id), None) = (hovered_id, self.refs.drag.as_ref()) {
+        if let (Some(id), None, None) = (hovered_id, self.refs.drag.as_ref(), editing) {
             if let Some(r) = self.doc.reference(id) {
                 let tip = reference_tip(r);
                 let title = r.title();
@@ -1380,7 +1400,7 @@ impl App {
             let (shown, broken) = self.refs_texture(ctx, r, frame, shown_px);
             paint_quad(painter, &upright, &corners, shown.as_ref().map(|s| s.id), broken, r.opacity, c);
         } else {
-            paint_block(painter, &upright, &corners, fit / r.scale.max(1e-3), 1.0);
+            paint_block(painter, &upright, &corners, fit / r.scale.max(1e-3), 1.0, true);
         }
     }
 
@@ -1607,7 +1627,7 @@ fn paint_quad(painter: &egui::Painter, r: &Reference, corners: &[Pos2; 4], tex: 
 
 /// Dessine un post-it, un texte, un titre ou un cadre sur le quadrilatère `corners`, à l'opacité `alpha` ; `zoom` : les points
 /// d'écran par unité du tableau. Le texte tourne avec l'élément ; il n'est pas dessiné quand il serait illisible.
-fn paint_block(painter: &egui::Painter, r: &Reference, corners: &[Pos2; 4], zoom: f32, alpha: f32) {
+fn paint_block(painter: &egui::Painter, r: &Reference, corners: &[Pos2; 4], zoom: f32, alpha: f32, show_text: bool) {
     let a = alpha.clamp(0.0, 1.0);
     let tint = r.tint();
     let paint = |c: [u8; 3], op: f32| Color32::from_rgba_unmultiplied(c[0], c[1], c[2], (op * a * 255.0).round() as u8);
@@ -1616,40 +1636,56 @@ fn paint_block(painter: &egui::Painter, r: &Reference, corners: &[Pos2; 4], zoom
     let v = (corners[3] - corners[0]).normalized();
     let (u, v) = if u.is_finite() && v.is_finite() { (u, v) } else { (vec2(1.0, 0.0), vec2(0.0, 1.0)) };
     let bounds = screen_bounds(corners);
-    let ink = |c: Color32| c.gamma_multiply(a);
-    let (text_color, hint) = match r.kind {
+    let (text_color, hint) = block_text_look(r, a);
+    match r.kind {
         Kind::Note => {
             let shadow = corners.map(|c| c + vec2(3.0, 4.0) * s.clamp(0.25, 1.5));
             painter.add(Shape::convex_polygon(shadow.to_vec(), Color32::from_black_alpha((70.0 * a) as u8), Stroke::NONE));
             painter.add(Shape::convex_polygon(corners.to_vec(), paint(tint, 1.0), Stroke::NONE));
-            (ink(Color32::from_rgb(38, 34, 26)), "Double-clic pour écrire")
         }
         Kind::Frame => {
             painter.add(Shape::convex_polygon(corners.to_vec(), paint(tint, 0.09), Stroke::new(1.5_f32, paint(tint, 0.75))));
             let h = crate::planchref::FRAME_STRIP * s;
             let strip = [corners[0], corners[1], corners[1] + v * h, corners[0] + v * h];
             painter.add(Shape::convex_polygon(strip.to_vec(), paint(tint, 0.85), Stroke::NONE));
-            (ink(Color32::from_rgb(38, 34, 26)), "Cadre")
         }
-        Kind::Title => (if r.color == 0 { ink(theme::texte()) } else { paint(tint, 1.0) }, "Titre"),
-        _ => (if r.color == 0 { ink(theme::texte()) } else { paint(tint, 1.0) }, "Texte"),
-    };
-    let px = crate::planchref::font_size(r.kind) * s;
-    if px < 3.0 || bounds.width() < 8.0 {
+        _ => {}
+    }
+    let px = block_font_px(r, s);
+    if !show_text || px < 3.0 || bounds.width() < 8.0 {
         return;
     }
-    let pad = 10.0 * s;
+    let pad = crate::planchref::TEXT_PAD * s;
     let (text, color) = if r.text.is_empty() { (hint.to_string(), text_color.gamma_multiply(0.45)) } else { (r.text.clone(), text_color) };
     let font = FontId::proportional(px);
     let (origin, galley) = if r.kind == Kind::Frame {
         let h = crate::planchref::FRAME_STRIP * s;
         (corners[0] + u * pad * 0.8 + v * ((h - px * 1.25) * 0.5).max(0.0), painter.layout_no_wrap(text, font, color))
     } else {
-        let wrap = ((r.size[0] as f32 - 20.0) * s).max(px);
+        let wrap = ((r.size[0] as f32 - 2.0 * crate::planchref::TEXT_PAD) * s).max(px);
         (corners[0] + u * pad + v * pad, painter.layout(text, font, color, wrap))
     };
     let clipped = painter.with_clip_rect(bounds.intersect(painter.clip_rect()).expand(1.0));
     clipped.add(egui::epaint::TextShape::new(origin, galley, color).with_angle(r.rotation.to_radians()));
+}
+
+/// La couleur du texte d'un bloc (à l'opacité `a`) et ce que dit son champ vide ; la même pour le texte dessiné et pour le
+/// texte qu'on écrit sur place.
+pub(crate) fn block_text_look(r: &Reference, a: f32) -> (Color32, &'static str) {
+    let ink = |c: Color32| c.gamma_multiply(a);
+    let tint = r.tint();
+    let own = || Color32::from_rgba_unmultiplied(tint[0], tint[1], tint[2], (a * 255.0).round() as u8);
+    match r.kind {
+        Kind::Note => (ink(Color32::from_rgb(38, 34, 26)), "Double-clic pour écrire"),
+        Kind::Frame => (ink(Color32::from_rgb(38, 34, 26)), "Cadre"),
+        Kind::Title => (if r.color == 0 { ink(theme::texte()) } else { own() }, "Titre"),
+        _ => (if r.color == 0 { ink(theme::texte()) } else { own() }, "Texte"),
+    }
+}
+
+/// La taille de lettre d'un bloc à l'écran, `s` : points d'écran par unité du tableau (échelle de l'élément comprise).
+pub(crate) fn block_font_px(r: &Reference, s: f32) -> f32 {
+    crate::planchref::font_size(r.kind) * if r.kind == Kind::Frame { 1.0 } else { r.text_fit } * s
 }
 
 /// Le texte d'une bulle : taille, étiquettes, plans, auteur et date.
@@ -1671,3 +1707,4 @@ fn reference_tip(r: &Reference) -> String {
     }
     s
 }
+

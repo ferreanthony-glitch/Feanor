@@ -102,6 +102,80 @@ pub(crate) fn font_size(kind: Kind) -> f32 {
     }
 }
 
+/// Marge du texte dans son bloc, en unités du tableau (à l'échelle 1) : en haut, en bas, à gauche et à droite.
+pub(crate) const TEXT_PAD: f32 = 10.0;
+/// Le plus petit facteur de taille qu'un post-it donne à son texte pour tout y faire tenir : en dessous, il s'allonge.
+pub(crate) const FIT_MIN: f32 = 0.6;
+/// Nombre de crans entre la taille d'origine (1) et `FIT_MIN`.
+const FIT_STEPS: u32 = 16;
+/// Les mesures se font sur une ligne un peu plus étroite que la vraie : à un autre zoom, les lettres tombent un peu
+/// autrement, et le texte ne doit jamais déborder du bas du bloc.
+const FIT_SLACK: f32 = 0.98;
+/// Marge de sécurité sous le texte, en unités du tableau.
+const FIT_BOTTOM: f32 = 2.0;
+
+/// Fait tenir le texte de `r` dans son bloc, d'après le bloc `before` d'avant l'écriture (le même résultat pour le même
+/// texte, quoi qu'on ait tapé avant) : un post-it réduit la taille de ses lettres jusqu'à `FIT_MIN`, puis s'allonge vers le
+/// bas ; un texte ou un titre s'allonge vers le bas ; tous s'élargissent si un seul mot ne tient pas. Le haut et la gauche
+/// du bloc ne bougent pas. `measure(texte, taille de lettre, largeur de ligne)` rend la largeur et la hauteur du texte
+/// posé. Un cadre n'est pas touché.
+pub(crate) fn autofit(r: &mut Reference, before: &Reference, measure: &mut dyn FnMut(&str, f32, f32) -> (f32, f32)) {
+    if !matches!(r.kind, Kind::Note | Kind::Text | Kind::Title) {
+        return;
+    }
+    let base = font_size(r.kind);
+    let pads = 2.0 * TEXT_PAD;
+    let (w0, h0) = (before.size[0] as f32, before.size[1] as f32);
+    let text = r.text.clone();
+    let mut fit = 1.0_f32;
+    if r.kind == Kind::Note {
+        let avail = h0 - pads - FIT_BOTTOM;
+        let step = (1.0 - FIT_MIN) / FIT_STEPS as f32;
+        let mut tenable = |i: u32| {
+            let (mw, mh) = measure(&text, base * (1.0 - i as f32 * step), (w0 - pads) * FIT_SLACK);
+            mw <= w0 - pads + 0.5 && mh <= avail
+        };
+        // Le plus petit cran qui tient (la taille ne fait que diminuer quand on grossit le texte : recherche par moitiés).
+        let i = if tenable(0) {
+            0
+        } else if !tenable(FIT_STEPS) {
+            FIT_STEPS
+        } else {
+            let (mut lo, mut hi) = (0, FIT_STEPS);
+            while hi - lo > 1 {
+                let mid = (lo + hi) / 2;
+                if tenable(mid) {
+                    hi = mid;
+                } else {
+                    lo = mid;
+                }
+            }
+            hi
+        };
+        fit = 1.0 - i as f32 * step;
+    }
+    let px = base * fit;
+    let mut w = w0;
+    let (mut mw, mut mh) = measure(&text, px, (w - pads) * FIT_SLACK);
+    if mw > w - pads + 0.5 {
+        // Un mot plus large que le bloc : le bloc s'élargit.
+        w = (mw / FIT_SLACK + pads).ceil();
+        (mw, mh) = measure(&text, px, (w - pads) * FIT_SLACK);
+        let _ = mw;
+    }
+    let h = h0.max((mh + pads + FIT_BOTTOM).ceil());
+    let size = [(w.round() as u32).clamp(8, 1 << 16), (h.round() as u32).clamp(8, 1 << 16)];
+    // Le haut et la gauche restent en place : le centre glisse de la moitié de ce que le bloc a gagné.
+    let s = r.scale;
+    let shift = vec2((size[0] as f32 - r.size[0] as f32) * s * 0.5, (size[1] as f32 - r.size[1] as f32) * s * 0.5);
+    if shift != Vec2::ZERO {
+        let c = r.from_local(shift);
+        (r.x, r.y) = (c.x, c.y);
+    }
+    r.size = size;
+    r.text_fit = fit;
+}
+
 /// Le nom d'un genre d'élément, au singulier.
 pub(crate) fn kind_name(kind: Kind) -> &'static str {
     match kind {

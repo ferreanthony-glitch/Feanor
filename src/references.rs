@@ -164,6 +164,10 @@ pub struct Reference {
     /// (gauche, haut, droite, bas, avant miroirs). Rien : l'image entière.
     #[serde(rename = "recadrage", default, skip_serializing_if = "Option::is_none")]
     pub crop: Option<[f32; 4]>,
+    /// Part de la taille de lettre d'origine que prend le texte d'un post-it (de 0,6 à 1) : elle diminue seule quand le
+    /// texte écrit sur place ne tient plus dans le bloc (`planchref::autofit`). Rien : taille d'origine.
+    #[serde(rename = "taille_texte", default = "one", skip_serializing_if = "is_one")]
+    pub text_fit: f32,
     /// Identifiant unique au monde de l'élément (travail en équipe, plus tard : deux planches se fusionnent
     /// par ces identifiants, jamais par `id`, qui n'est unique que dans un projet).
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -298,6 +302,7 @@ impl Reference {
             color: 0,
             opacity: 1.0,
             crop: None,
+            text_fit: 1.0,
             uid: String::new(),
             author: String::new(),
             created: 0,
@@ -845,6 +850,7 @@ fn sanitize(r: &mut Reference) {
         (c[2] - c[0] >= 0.01 && c[3] - c[1] >= 0.01 && c != [0.0, 0.0, 1.0, 1.0]).then_some(c)
     });
     r.color = r.color.min(crate::planchref::NOTE_COLORS.len() as u8 - 1);
+    r.text_fit = if r.text_fit.is_finite() { r.text_fit.clamp(crate::planchref::FIT_MIN, 1.0) } else { 1.0 };
     if r.text.chars().count() > crate::planchref::TEXT_MAX {
         r.text = r.text.chars().take(crate::planchref::TEXT_MAX).collect();
     }

@@ -886,3 +886,499 @@ fn generate_a_board_demo_project_for_the_screen() {
     project::save(doc, &manifest, &mut loaded.written).unwrap();
     println!("PROJET DE DÉMONSTRATION : {}", manifest.display());
 }
+// ---------------------------------------------------------------------- écrire sur la planche, dans le bloc
+
+fn key(k: egui::Key, mods: egui::Modifiers) -> egui::Event {
+    egui::Event::Key { key: k, physical_key: Some(k), pressed: true, repeat: false, modifiers: mods }
+}
+
+fn typed(s: &str) -> egui::Event {
+    egui::Event::Text(s.to_string())
+}
+
+/// Un post-it (texte `text`) sur une planche dessinée une fois ; rend aussi son centre à l'écran.
+fn app_with_note(name: &str, kind: Kind, text: &str) -> (egui::Context, App, f64, u64) {
+    let (ctx, mut app) = headless(name);
+    let id = block(&mut app.doc, kind, pos2(0.0, 0.0), text);
+    // Un deuxième élément, loin : de quoi cliquer ailleurs sur le fond sans que la vue se recadre.
+    let _ = img(&mut app.doc, "Loin", [100, 100], pos2(1500.0, 900.0), 1.0);
+    let mut t = 0.0;
+    step(&ctx, &mut app, &mut t, egui::Modifiers::NONE, vec![]);
+    step(&ctx, &mut app, &mut t, egui::Modifiers::NONE, vec![]);
+    (ctx, app, t, id)
+}
+
+fn screen_center(app: &App, id: u64) -> egui::Pos2 {
+    let (rect, view) = app.refs.geometry().expect("dessiné");
+    view.to_screen(rect, app.doc.reference(id).unwrap().center())
+}
+
+/// Un double-clic sur l'élément `id` : un premier clic le choisit (la barre de réglages paraît et décale le tableau), puis le
+/// double-clic, là où il est maintenant. `at` dit où cliquer sur lui (`screen_center` par défaut).
+fn double_click_at(ctx: &egui::Context, app: &mut App, t: &mut f64, id: u64, at: &dyn Fn(&App, u64) -> egui::Pos2) {
+    let none = egui::Modifiers::NONE;
+    let p = at(app, id);
+    step(ctx, app, t, none, vec![moved(p)]);
+    step(ctx, app, t, none, vec![button(p, true, none)]);
+    step(ctx, app, t, none, vec![button(p, false, none)]);
+    // (La vue se recadre sur la place que la barre a laissée.)
+    app.refs.view = None;
+    step(ctx, app, t, none, vec![]);
+    step(ctx, app, t, none, vec![]);
+    let p = at(app, id);
+    step(ctx, app, t, none, vec![moved(p)]);
+    for _ in 0..2 {
+        step(ctx, app, t, none, vec![button(p, true, none)]);
+        step(ctx, app, t, none, vec![button(p, false, none)]);
+    }
+    step(ctx, app, t, none, vec![]);
+}
+
+fn double_click(ctx: &egui::Context, app: &mut App, t: &mut f64, id: u64) {
+    double_click_at(ctx, app, t, id, &screen_center);
+}
+
+fn steps(app: &App) -> usize {
+    app.history.names().0.len()
+}
+
+#[test]
+fn double_clicking_a_note_writes_in_place_and_one_undo_step_covers_the_whole_edit() {
+    let (ctx, mut app, mut t, id) = app_with_note("en-place-double", Kind::Note, "idée");
+    let n = steps(&app);
+    double_click(&ctx, &mut app, &mut t, id);
+    assert_eq!(app.refs_editing(), Some(id), "le curseur est dans le bloc");
+    assert!(ctx.wants_keyboard_input(), "les touches vont au texte : les raccourcis ne s'appliquent pas");
+    let none = egui::Modifiers::NONE;
+    // Des accents, des majuscules, des caractères spéciaux du clavier français, puis des lignes.
+    step(&ctx, &mut app, &mut t, none, vec![typed(" é à ç ù È Œ € œ ² « »")]);
+    step(&ctx, &mut app, &mut t, none, vec![key(egui::Key::Enter, none)]);
+    step(&ctx, &mut app, &mut t, none, vec![typed("ligne 2 ~ # { [ | @ ] }")]);
+    assert_eq!(app.doc.reference(id).unwrap().text, "idée é à ç ù È Œ € œ ² « »\nligne 2 ~ # { [ | @ ] }", "Entrée seule : une nouvelle ligne dans le post-it");
+    assert_eq!(steps(&app), n, "pas d'étape tant que le texte s'écrit");
+    // Ctrl+Entrée pose le texte.
+    step(&ctx, &mut app, &mut t, ctrl(), vec![key(egui::Key::Enter, ctrl())]);
+    assert_eq!(app.refs_editing(), None);
+    assert_eq!(steps(&app), n + 1, "une seule étape pour toute l'écriture");
+    assert_eq!(app.history.names().0.last().copied(), Some("Texte du post-it"));
+    assert!(app.modified);
+    app.run_action("edition.annuler");
+    assert_eq!(app.doc.reference(id).unwrap().text, "idée", "tout le texte d'un coup");
+    assert_eq!(app.doc.reference(id).unwrap().size, planchref::block_size(Kind::Note));
+    app.run_action("edition.retablir");
+    assert!(app.doc.reference(id).unwrap().text.ends_with("{ [ | @ ] }"));
+}
+
+#[test]
+fn enter_on_one_chosen_item_starts_writing_and_escape_posts_without_losing_a_letter() {
+    let (ctx, mut app, mut t, id) = app_with_note("en-place-entree", Kind::Text, "début");
+    let none = egui::Modifiers::NONE;
+    app.refs.sel = vec![id];
+    app.refs.focus = true;
+    let n = steps(&app);
+    step(&ctx, &mut app, &mut t, none, vec![key(egui::Key::Enter, none)]);
+    assert_eq!(app.refs_editing(), Some(id), "Entrée avec un seul élément choisi");
+    assert_eq!(app.doc.reference(id).unwrap().text, "début", "l'Entrée qui ouvre n'est pas écrite");
+    step(&ctx, &mut app, &mut t, none, vec![typed(" et suite")]);
+    step(&ctx, &mut app, &mut t, none, vec![key(egui::Key::Escape, none)]);
+    assert_eq!(app.refs_editing(), None);
+    assert_eq!(app.doc.reference(id).unwrap().text, "début et suite", "Échap valide : rien n'est perdu");
+    assert_eq!(steps(&app), n + 1);
+    assert_eq!(app.history.names().0.last().copied(), Some("Texte de la planche"));
+    assert!(!ctx.wants_keyboard_input(), "les touches reviennent à l'application");
+    // Plusieurs éléments choisis : Entrée ne fait rien.
+    let other = app.doc.references.iter().find(|r| r.kind == Kind::Image).unwrap().id;
+    app.refs.sel = vec![id, other];
+    step(&ctx, &mut app, &mut t, none, vec![key(egui::Key::Enter, none)]);
+    assert_eq!(app.refs_editing(), None);
+}
+
+#[test]
+fn leaving_without_typing_leaves_no_undo_step_and_changes_nothing() {
+    let (ctx, mut app, mut t, id) = app_with_note("en-place-rien", Kind::Note, "idée");
+    let none = egui::Modifiers::NONE;
+    app.modified = false;
+    let (before, n) = (app.doc.references.clone(), steps(&app));
+    app.refs.sel = vec![id];
+    app.refs.focus = true;
+    step(&ctx, &mut app, &mut t, none, vec![key(egui::Key::Enter, none)]);
+    assert_eq!(app.refs_editing(), Some(id));
+    step(&ctx, &mut app, &mut t, none, vec![key(egui::Key::Escape, none)]);
+    assert_eq!(app.refs_editing(), None);
+    assert_eq!(steps(&app), n, "aucune étape si rien n'a changé");
+    assert_eq!(app.doc.references, before, "ni le texte, ni la taille, ni la place");
+    assert!(!app.modified, "le projet n'est pas devenu « modifié »");
+    // Écrire puis tout remettre comme c'était : pas d'étape non plus, et le bloc reprend sa taille.
+    app.refs.focus = true;
+    step(&ctx, &mut app, &mut t, none, vec![key(egui::Key::Enter, none)]);
+    step(&ctx, &mut app, &mut t, none, vec![typed(" avec une très longue suite de mots qui ne tiendra jamais dans un si petit post-it sans le faire rapetisser")]);
+    assert_ne!(app.doc.reference(id).unwrap().text, "idée");
+    for _ in 0..200 {
+        step(&ctx, &mut app, &mut t, none, vec![key(egui::Key::Backspace, none)]);
+        if app.doc.reference(id).unwrap().text == "idée" {
+            break;
+        }
+    }
+    step(&ctx, &mut app, &mut t, ctrl(), vec![key(egui::Key::Enter, ctrl())]);
+    assert_eq!(steps(&app), n);
+    assert_eq!(app.doc.references, before);
+}
+
+#[test]
+fn a_click_elsewhere_posts_the_text_and_chooses_what_it_hits() {
+    let (ctx, mut app, mut t, id) = app_with_note("en-place-ailleurs", Kind::Title, "Forêt");
+    let none = egui::Modifiers::NONE;
+    let n = steps(&app);
+    double_click(&ctx, &mut app, &mut t, id);
+    assert_eq!(app.refs_editing(), Some(id));
+    step(&ctx, &mut app, &mut t, none, vec![typed(" profonde")]);
+    // Un clic dans le bloc ne le quitte pas.
+    let p = screen_center(&app, id);
+    step(&ctx, &mut app, &mut t, none, vec![moved(p), button(p, true, none)]);
+    step(&ctx, &mut app, &mut t, none, vec![button(p, false, none)]);
+    assert_eq!(app.refs_editing(), Some(id), "le clic dans le bloc place le curseur");
+    // Un clic sur l'autre élément.
+    let other = app.doc.references.iter().find(|r| r.kind == Kind::Image).unwrap().id;
+    let q = screen_center(&app, other);
+    step(&ctx, &mut app, &mut t, none, vec![moved(q)]);
+    step(&ctx, &mut app, &mut t, none, vec![button(q, true, none)]);
+    step(&ctx, &mut app, &mut t, none, vec![button(q, false, none)]);
+    assert_eq!(app.refs_editing(), None);
+    assert_eq!(app.doc.reference(id).unwrap().text, "Forêt profonde");
+    assert_eq!(app.refs.sel, vec![other]);
+    assert_eq!(steps(&app), n + 1, "l'étape du texte, rien d'autre (le clic ne déplace rien)");
+    assert_eq!(app.history.names().0.last().copied(), Some("Titre de la planche"));
+}
+
+#[test]
+fn a_new_note_is_written_at_once_and_stays_when_left_empty() {
+    let (ctx, mut app) = headless("en-place-neuf");
+    let none = egui::Modifiers::NONE;
+    let mut t = 0.0;
+    step(&ctx, &mut app, &mut t, none, vec![]);
+    app.run_action("references.postit");
+    let id = app.refs.sel[0];
+    let n = steps(&app);
+    step(&ctx, &mut app, &mut t, none, vec![]);
+    step(&ctx, &mut app, &mut t, none, vec![]);
+    assert_eq!(app.refs_editing(), Some(id), "il apparaît et passe aussitôt en écriture");
+    assert!(ctx.wants_keyboard_input());
+    step(&ctx, &mut app, &mut t, none, vec![key(egui::Key::Escape, none)]);
+    assert_eq!(app.refs_editing(), None);
+    assert_eq!(app.doc.references.len(), 1, "un post-it laissé vide reste");
+    assert_eq!(steps(&app), n, "et il n'y a pas d'étape de texte");
+    // Un texte neuf, un titre neuf : pareil.
+    app.run_action("references.texte");
+    step(&ctx, &mut app, &mut t, none, vec![]);
+    assert!(app.refs_editing().is_some());
+    step(&ctx, &mut app, &mut t, none, vec![typed("à voir")]);
+    step(&ctx, &mut app, &mut t, none, vec![key(egui::Key::Escape, none)]);
+    assert!(app.doc.references.iter().any(|r| r.kind == Kind::Text && r.text == "à voir"));
+}
+
+#[test]
+fn the_key_that_creates_a_note_is_not_written_into_it() {
+    let (ctx, mut app) = headless("en-place-touche");
+    let none = egui::Modifiers::NONE;
+    let mut t = 0.0;
+    step(&ctx, &mut app, &mut t, none, vec![]);
+    // (La commande part avant le dessin de l'image, avec les touches de cette image : la lettre ne doit pas s'écrire.)
+    app.run_action("references.postit");
+    step(&ctx, &mut app, &mut t, none, vec![typed("n")]);
+    let id = app.refs.sel[0];
+    assert_eq!(app.doc.reference(id).unwrap().text, "");
+}
+
+#[test]
+fn a_text_that_is_too_long_shrinks_then_lengthens_the_note_and_is_never_cut() {
+    let ctx = egui::Context::default();
+    let mut ran = false;
+    let _ = ctx.run(egui::RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(800.0, 600.0))), ..Default::default() }, |ctx| {
+        ran = true;
+        let mut measure = |t: &str, size: f32, wrap: f32| {
+            let g = ctx.fonts(|f| f.layout(t.to_owned(), egui::FontId::proportional(size), egui::Color32::WHITE, wrap));
+            (g.size().x, g.size().y)
+        };
+        let words = "Lumière rasante sur la clairière, brume au sol, personnages en contre-jour";
+        let base = Reference::block(Kind::Note, 1, pos2(100.0, 50.0), "", 0);
+        let (w0, h0) = (base.size[0] as f32, base.size[1] as f32);
+        let top = |r: &Reference| r.from_local(vec2(0.0, -r.half().y)).y;
+        let left = |r: &Reference| r.from_local(vec2(-r.half().x, 0.0)).x;
+        // Court : rien ne change.
+        let mut r = base.clone();
+        r.text = "idée".into();
+        planchref::autofit(&mut r, &base, &mut measure);
+        assert_eq!((r.text_fit, r.size), (1.0, base.size));
+        assert_eq!(r.center(), base.center());
+        // Un peu long : les lettres rapetissent, le bloc ne bouge pas.
+        r.text = words.repeat(2);
+        planchref::autofit(&mut r, &base, &mut measure);
+        assert!(r.text_fit < 1.0 && r.text_fit >= planchref::FIT_MIN, "{}", r.text_fit);
+        assert_eq!(r.size, base.size, "le bloc garde sa taille tant que la réduction suffit");
+        // Très long : taille minimale, puis le post-it s'allonge vers le bas (le haut et la gauche ne bougent pas).
+        let long = words.repeat(6);
+        r.text = long.clone();
+        planchref::autofit(&mut r, &base, &mut measure);
+        assert!((r.text_fit - planchref::FIT_MIN).abs() < 1e-4, "taille minimale : {}", r.text_fit);
+        assert!(r.size[1] as f32 > h0 && r.size[0] as f32 == w0, "{:?}", r.size);
+        assert!((top(&r) - top(&base)).abs() < 0.01 && (left(&r) - left(&base)).abs() < 0.01, "le haut et la gauche ne bougent pas");
+        // Jamais coupé, à aucun zoom : le texte posé tient dans le bloc dessiné.
+        for text in [words.to_string(), long.clone(), "mot ".repeat(40), "Anticonstitutionnellement".repeat(10), "Penser à la pluie\n\n\nlumière froide\nencore\nencore\nencore".to_string()] {
+            let mut r = base.clone();
+            r.text = text.clone();
+            planchref::autofit(&mut r, &base, &mut measure);
+            for zoom in [0.5_f32, 0.8, 1.0, 1.7, 2.5, 4.0] {
+                let s = r.scale * zoom;
+                let size = planchref::font_size(Kind::Note) * r.text_fit * s;
+                let wrap = (r.size[0] as f32 - 2.0 * planchref::TEXT_PAD) * s;
+                let g = ctx.fonts(|f| f.layout(text.clone(), egui::FontId::proportional(size), egui::Color32::WHITE, wrap));
+                assert!(g.size().y <= (r.size[1] as f32 - planchref::TEXT_PAD) * s + 0.5, "coupé à {zoom} : {} contre {} ({text:?})", g.size().y, (r.size[1] as f32 - planchref::TEXT_PAD) * s);
+            }
+        }
+        // Le même texte donne le même bloc, quoi qu'on ait écrit avant ; en effaçant, tout revient comme au début.
+        let mut a = base.clone();
+        a.text = long.clone();
+        planchref::autofit(&mut a, &base, &mut measure);
+        let mut b = base.clone();
+        b.text = long.repeat(2);
+        planchref::autofit(&mut b, &base, &mut measure);
+        b.text = long.clone();
+        planchref::autofit(&mut b, &base, &mut measure);
+        assert_eq!((a.size, a.text_fit, a.center()), (b.size, b.text_fit, b.center()));
+        b.text = "idée".into();
+        planchref::autofit(&mut b, &base, &mut measure);
+        assert_eq!((b.size, b.text_fit, b.center()), (base.size, 1.0, base.center()));
+        // Un mot plus long que la ligne est coupé par la mise en page : le bloc ne s'élargit pas, il s'allonge.
+        let mut r = base.clone();
+        r.text = "Anticonstitutionnellement".repeat(10);
+        planchref::autofit(&mut r, &base, &mut measure);
+        assert!(r.size[0] as f32 == w0 && r.text_fit < 1.0, "{:?} {}", r.size, r.text_fit);
+        // Un texte ou un titre s'allonge avec son texte, au corps d'origine.
+        for kind in [Kind::Text, Kind::Title] {
+            let base = Reference::block(kind, 2, pos2(0.0, 0.0), "", 0);
+            let mut r = base.clone();
+            r.text = words.repeat(5);
+            planchref::autofit(&mut r, &base, &mut measure);
+            assert_eq!(r.text_fit, 1.0);
+            assert!(r.size[1] > base.size[1] && r.size[0] == base.size[0], "{kind:?} {:?}", r.size);
+            assert!((top(&r) - top(&base)).abs() < 0.01);
+        }
+        // Tourné : le bloc s'allonge dans son propre sens « vers le bas ».
+        let mut turned = Reference::block(Kind::Note, 3, pos2(0.0, 0.0), "", 0);
+        turned.rotation = 90.0;
+        let mut r = turned.clone();
+        r.text = long.clone();
+        planchref::autofit(&mut r, &turned, &mut measure);
+        let low_before = turned.from_local(vec2(0.0, turned.half().y));
+        let top_now = r.from_local(vec2(0.0, -r.half().y));
+        let top_before = turned.from_local(vec2(0.0, -turned.half().y));
+        assert!((top_now - top_before).length() < 0.01 && (low_before - r.from_local(vec2(0.0, r.half().y))).length() > 5.0);
+    });
+    assert!(ran);
+}
+
+#[test]
+fn the_text_size_is_stored_only_when_it_shrank_and_old_files_read_the_same() {
+    let work = temp("taille-texte");
+    let mut doc = Document::new(32, 32, 24);
+    let a = block(&mut doc, Kind::Note, pos2(0.0, 0.0), "court");
+    let b = block(&mut doc, Kind::Note, pos2(300.0, 0.0), "un texte qui a dû rapetisser");
+    {
+        let r = doc.reference_mut(b).unwrap();
+        r.text_fit = 0.75;
+        r.size = [220, 260];
+    }
+    let manifest = work.join("Film").join("Film.pelure");
+    project::save(&doc, &manifest, &mut Default::default()).unwrap();
+    let text = std::fs::read_to_string(work.join("Film").join(FILE)).unwrap();
+    assert_eq!(text.matches("taille_texte").count(), 1, "écrit seulement là où il sert : {text}");
+    assert!(text.contains("\"version\": 2"));
+    let loaded = project::load(&manifest).unwrap();
+    assert_eq!(without_home(&loaded.doc.references), without_home(&doc.references), "aller-retour à l'identique");
+    assert_eq!(loaded.doc.reference(b).unwrap().text_fit, 0.75);
+    assert_eq!(loaded.doc.reference(a).unwrap().text_fit, 1.0);
+    // Un fichier d'avant (post-it au texte trop long, sans taille de texte) se lit tel quel et se réécrit tel quel.
+    let old = r#"{ "format": "shot-references", "version": 2, "references": [
+      { "id": 1, "type": "note", "texte": "Un très long texte écrit dans l'ancienne barre du bas, qui dépassait déjà du post-it et qu'on ne doit surtout pas toucher à la lecture",
+        "taille": [220, 190], "x": 0, "y": 0 } ] }"#;
+    let list = references::parse(old).unwrap();
+    assert_eq!((list[0].text_fit, list[0].size), (1.0, [220, 190]), "rien n'est inventé à la lecture");
+    let mut d = Document::new(32, 32, 24);
+    d.references = list;
+    let again = String::from_utf8(references::to_bytes(&d).unwrap().unwrap()).unwrap();
+    assert!(!again.contains("taille_texte"), "{again}");
+    // Une valeur abîmée est ramenée à du lisible.
+    let bad = old.replace("\"x\": 0", "\"taille_texte\": -3.0, \"x\": 0");
+    assert_eq!(references::parse(&bad).unwrap()[0].text_fit, planchref::FIT_MIN);
+    std::fs::remove_dir_all(&work).ok();
+}
+
+#[test]
+fn writing_in_a_long_note_in_the_panel_fits_it_and_the_file_keeps_it() {
+    let (ctx, mut app, mut t, id) = app_with_note("en-place-long", Kind::Note, "");
+    let none = egui::Modifiers::NONE;
+    double_click(&ctx, &mut app, &mut t, id);
+    assert_eq!(app.refs_editing(), Some(id));
+    let base = app.doc.reference(id).unwrap().clone();
+    for _ in 0..6 {
+        step(&ctx, &mut app, &mut t, none, vec![typed("Lumière rasante sur la clairière, brume au sol. ")]);
+    }
+    step(&ctx, &mut app, &mut t, none, vec![]);
+    let r = app.doc.reference(id).unwrap().clone();
+    assert!(r.text_fit < 1.0, "les lettres ont rapetissé : {}", r.text_fit);
+    assert!(r.size[1] >= base.size[1]);
+    step(&ctx, &mut app, &mut t, none, vec![key(egui::Key::Escape, none)]);
+    // L'écran suit : le bloc dessiné a la taille du document (rien ne saute en sortant).
+    step(&ctx, &mut app, &mut t, none, vec![]);
+    assert_eq!(app.doc.reference(id).unwrap().text.matches("Lumière").count(), 6);
+    let work = temp("en-place-long");
+    let manifest = work.join("Film").join("Film.pelure");
+    project::save(&app.doc, &manifest, &mut Default::default()).unwrap();
+    let loaded = project::load(&manifest).unwrap();
+    assert_eq!(without_home(&loaded.doc.references), without_home(&app.doc.references));
+    std::fs::remove_dir_all(&work).ok();
+}
+
+#[test]
+fn a_frame_name_is_written_in_its_strip_and_enter_posts_it() {
+    let (ctx, mut app, mut t, id) = app_with_note("en-place-cadre", Kind::Frame, "Décor");
+    let none = egui::Modifiers::NONE;
+    double_click_at(&ctx, &mut app, &mut t, id, &|app, id| {
+        let (rect, view) = app.refs.geometry().unwrap();
+        let fr = app.doc.reference(id).unwrap();
+        view.to_screen(rect, pos2(fr.bounds().min.x + fr.bounds().width() * 0.3, fr.bounds().min.y + 12.0))
+    });
+    assert_eq!(app.refs_editing(), Some(id));
+    step(&ctx, &mut app, &mut t, none, vec![typed(" forêt")]);
+    step(&ctx, &mut app, &mut t, none, vec![key(egui::Key::Enter, none)]);
+    assert_eq!(app.refs_editing(), None, "Entrée pose le nom d'un cadre (une seule ligne)");
+    let r = app.doc.reference(id).unwrap();
+    assert_eq!((r.text.as_str(), r.size), ("Décor forêt", planchref::block_size(Kind::Frame)));
+    assert_eq!(app.history.names().0.last().copied(), Some("Nom du cadre"));
+}
+
+#[test]
+fn a_tilted_block_is_written_straight_and_comes_back_tilted() {
+    let (ctx, mut app, mut t, id) = app_with_note("en-place-incline", Kind::Note, "idée");
+    let none = egui::Modifiers::NONE;
+    app.doc.reference_mut(id).unwrap().rotation = 12.0;
+    step(&ctx, &mut app, &mut t, none, vec![]);
+    app.refs.sel = vec![id];
+    app.refs.focus = true;
+    step(&ctx, &mut app, &mut t, none, vec![key(egui::Key::Enter, none)]);
+    step(&ctx, &mut app, &mut t, none, vec![typed("!")]);
+    assert_eq!(app.doc.reference(id).unwrap().rotation, 12.0, "le fichier garde l'angle");
+    step(&ctx, &mut app, &mut t, ctrl(), vec![key(egui::Key::Enter, ctrl())]);
+    assert_eq!((app.doc.reference(id).unwrap().text.as_str(), app.doc.reference(id).unwrap().rotation), ("idée!", 12.0));
+}
+
+#[test]
+fn another_project_or_a_removed_block_ends_the_writing_without_a_crash() {
+    let (ctx, mut app, mut t, id) = app_with_note("en-place-autre", Kind::Note, "idée");
+    let none = egui::Modifiers::NONE;
+    double_click(&ctx, &mut app, &mut t, id);
+    step(&ctx, &mut app, &mut t, none, vec![typed("!")]);
+    app.doc.remove_reference(id);
+    step(&ctx, &mut app, &mut t, none, vec![]);
+    assert_eq!(app.refs_editing(), None);
+    step(&ctx, &mut app, &mut t, none, vec![key(egui::Key::Escape, none)]);
+    assert!(app.refs.edit.is_none());
+    // Autre projet ouvert pendant l'écriture.
+    let id = block(&mut app.doc, Kind::Note, pos2(0.0, 0.0), "x");
+    app.refs.text_focus = Some(id);
+    step(&ctx, &mut app, &mut t, none, vec![]);
+    assert_eq!(app.refs_editing(), Some(id));
+    app.doc_epoch += 1;
+    app.tick_references(&ctx);
+    assert!(app.refs.edit.is_none());
+}
+
+
+#[test]
+fn while_writing_on_the_board_no_shortcut_of_the_application_applies() {
+    use crate::dock::Pane;
+    let mut b = crate::perf_tests::banc_taille(Document::with_frame(160, 90, 24), false, 1280, 800);
+    b.crochet = true;
+    b.app.show_pane(Pane::References);
+    b.chauffer(6);
+    assert!(b.app.refs.geometry().is_some(), "la planche est à l'écran");
+    let none = egui::Modifiers::NONE;
+    b.app.run_action("references.postit");
+    b.chauffer(4);
+    let id = b.app.refs.sel[0];
+    assert_eq!(b.app.refs_editing(), Some(id), "le post-it neuf passe en écriture");
+    let (tool, steps_before, playing) = (b.app.tool, steps(&b.app), b.app.playing);
+    // Des lettres d'outils, Suppr, Retour arrière, Espace, Ctrl+Z, Ctrl+A, Ctrl+Y : tout va au texte.
+    for (k, text) in [(egui::Key::B, "b"), (egui::Key::E, "e"), (egui::Key::P, "p"), (egui::Key::G, "g"), (egui::Key::Space, " "), (egui::Key::K, "k")] {
+        b.image(vec![key(k, none), typed(text)], 1.0 / 60.0);
+    }
+    b.image(vec![key(egui::Key::Delete, none)], 1.0 / 60.0);
+    b.image(vec![key(egui::Key::Z, ctrl())], 1.0 / 60.0);
+    b.image(vec![key(egui::Key::Y, ctrl())], 1.0 / 60.0);
+    b.image(vec![key(egui::Key::A, ctrl())], 1.0 / 60.0);
+    b.chauffer(2);
+    assert!(b.app.doc.reference(id).is_some(), "Suppr n'a pas supprimé le post-it");
+    assert_eq!(b.app.tool, tool, "les lettres n'ont pas changé d'outil");
+    assert_eq!(b.app.playing, playing, "Espace n'a pas lancé la lecture");
+    assert_eq!(steps(&b.app), steps_before, "ni Ctrl+Z ni Ctrl+Y n'ont défait ou refait quoi que ce soit dans l'application");
+    assert!(b.app.refs_editing().is_some(), "et on écrit toujours");
+    // Ctrl+A choisit tout le texte du champ : la lettre suivante le remplace.
+    b.image(vec![typed("é")], 1.0 / 60.0);
+    b.chauffer(2);
+    assert_eq!(b.app.doc.reference(id).unwrap().text, "é");
+    // Échap pose le texte ; ensuite les touches redeviennent des raccourcis.
+    b.image(vec![key(egui::Key::Escape, none)], 1.0 / 60.0);
+    b.chauffer(2);
+    assert_eq!(b.app.refs_editing(), None);
+    assert_eq!(b.app.doc.reference(id).unwrap().text, "é");
+    assert!(!b.ctx.wants_keyboard_input());
+}
+
+#[test]
+fn in_the_detached_window_the_keys_go_to_the_text_too() {
+    let (ctx, mut app) = headless("en-place-fenetre");
+    let vid = crate::referencesui::planchrefui::refs_viewport(false);
+    let mut t = 0.0;
+    let mut frame = |app: &mut App, events: Vec<egui::Event>, mods: egui::Modifiers| {
+        t += 0.05;
+        let mut info = egui::ViewportInfo::default();
+        info.focused = Some(true);
+        let mut viewports = egui::ViewportIdMap::default();
+        viewports.insert(vid, info);
+        let mut input = egui::RawInput { viewport_id: vid, viewports, screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(800.0, 600.0))), time: Some(t), events, modifiers: mods, ..Default::default() };
+        // (Comme la vraie fenêtre : les touches passent d'abord par le crochet de l'application.)
+        eframe::App::raw_input_hook(app, &ctx, &mut input);
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| app.references_panel(ui));
+        });
+    };
+    let none = egui::Modifiers::NONE;
+    let other = img(&mut app.doc, "I", [100, 100], pos2(900.0, 0.0), 1.0);
+    app.run_action("references.postit");
+    let id = app.refs.sel[0];
+    for _ in 0..3 {
+        frame(&mut app, vec![], none);
+    }
+    assert_eq!(app.refs_editing(), Some(id), "écriture dans la fenêtre à part");
+    let n = steps(&app);
+    frame(&mut app, vec![key(egui::Key::Delete, none)], none);
+    frame(&mut app, vec![key(egui::Key::Z, ctrl())], ctrl());
+    frame(&mut app, vec![typed("é"), key(egui::Key::Backspace, none)], none);
+    frame(&mut app, vec![typed("à ç")], none);
+    assert!(app.doc.reference(id).is_some() && app.doc.reference(other).is_some(), "Suppr n'a rien supprimé");
+    assert_eq!(steps(&app), n, "Ctrl+Z n'a rien défait");
+    assert_eq!(app.doc.reference(id).unwrap().text, "à ç");
+    // Échap pose le texte sans quitter le plein écran.
+    app.settings.references_fenetre.fullscreen = true;
+    frame(&mut app, vec![key(egui::Key::Escape, none)], none);
+    assert_eq!(app.refs_editing(), None);
+    assert!(app.settings.references_fenetre.fullscreen, "le premier Échap pose le texte, il ne ferme pas le plein écran");
+    assert_eq!(app.doc.reference(id).unwrap().text, "à ç");
+    // Ensuite Échap quitte le plein écran, comme avant.
+    frame(&mut app, vec![key(egui::Key::Escape, none)], none);
+    assert!(!app.settings.references_fenetre.fullscreen);
+    // Suppr supprime de nouveau l'élément choisi.
+    app.refs.sel = vec![other];
+    frame(&mut app, vec![key(egui::Key::Delete, none)], none);
+    assert!(app.doc.reference(other).is_none());
+}
