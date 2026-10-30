@@ -64,6 +64,7 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
         entree(Pane::History, "vue.historique", "Historique", "Les étapes d'annulation, par leur nom. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::Bruitages, "vue.bruitages", "Bruitages", "Tes dossiers de sons : les chercher, les écouter et les poser dans le montage. Un clic l'ouvre ou le met devant, un autre le ferme."),
         entree(Pane::References, "vue.references", "Références", "Un tableau d'images et de vidéos à regarder en dessinant ; se détache dans sa fenêtre pour un deuxième écran. Un clic l'ouvre ou le met devant, un autre le ferme."),
+        entree(Pane::Bibliotheque, "vue.bibliotheque", "Bibliothèque", "Explorer tes dossiers et voir, lire ou écouter tes images, vidéos et sons dans un aperçu ; les glisser dans le projet. Un clic l'ouvre ou le met devant, un autre le ferme."),
     ],
 ];
 
@@ -78,14 +79,15 @@ pub(crate) const GROUPES: &[&[Entree]] = &[
 ///   fiche du plan, les références.
 /// - Animation : comme le storyboard, sans les personnages, avec la feuille d'exposition.
 /// - Montage : la fiche du plan, les bruitages, les commentaires et l'historique.
+/// - Storyboard, Animation et Montage : la bibliothèque de fichiers (explorer, aperçu des images, vidéos et sons).
 ///
 /// Les guides n'y sont plus : ils sont dans le menu de la règle, au-dessus du dessin (`cadrageui.rs`).
 pub(crate) fn panneaux_d_office(espace: Espace) -> &'static [Pane] {
     match espace {
         Espace::Vignettes => &[Pane::Vignettes, Pane::ToolOptions, Pane::Color, Pane::Scenario, Pane::References],
-        Espace::Storyboard => &[Pane::ToolOptions, Pane::Color, Pane::Personnages, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::Scenario, Pane::References],
-        Espace::Animation => &[Pane::ToolOptions, Pane::Color, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::References],
-        Espace::Montage => &[Pane::Sheet, Pane::Bruitages, Pane::Comments, Pane::History],
+        Espace::Storyboard => &[Pane::ToolOptions, Pane::Color, Pane::Personnages, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::Scenario, Pane::References, Pane::Bibliotheque],
+        Espace::Animation => &[Pane::ToolOptions, Pane::Color, Pane::Layers, Pane::Effects, Pane::Sheet, Pane::XSheet, Pane::References, Pane::Bibliotheque],
+        Espace::Montage => &[Pane::Sheet, Pane::Bruitages, Pane::Comments, Pane::History, Pane::Bibliotheque],
     }
 }
 

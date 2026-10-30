@@ -188,6 +188,8 @@ const PARTAGES: &[&str] = &[
     "mon_panneau",
     // Le panneau Scénario : hauteurs gardées par scénario et largeur, plan montré : rien qui ne vaille que pour un projet.
     "scenario_ui",
+    // Le panneau Bibliothèque de fichiers : un réglage du poste et un explorateur, les mêmes dans tous les onglets.
+    "biblio",
 ];
 
 /// Les noms des champs de `pub struct App`, lus dans `app.rs`.

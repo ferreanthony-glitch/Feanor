@@ -105,6 +105,10 @@ pub enum Pane {
     /// (il s'ouvre tout seul après un import).
     #[serde(rename = "scenario")]
     Scenario,
+    /// Le panneau « Bibliothèque » (`biblio.rs`, `biblioui.rs`, 2026-10-30) : explorer les fichiers de l'ordinateur, et lire les
+    /// images, vidéos et sons dans un aperçu intégré. Lecture seule ; fermé d'office, il s'ouvre dans la colonne de droite.
+    #[serde(rename = "bibliotheque")]
+    Bibliotheque,
 }
 
 /// Où un panneau se range quand on le rouvre.
@@ -122,7 +126,7 @@ pub enum Group {
 }
 
 impl Pane {
-    pub const ALL: [Pane; 18] = [
+    pub const ALL: [Pane; 19] = [
         Pane::Canvas,
         Pane::Tools,
         Pane::Color,
@@ -141,13 +145,14 @@ impl Pane {
         Pane::Vignettes,
         Pane::MonPanneau,
         Pane::Scenario,
+        Pane::Bibliotheque,
     ];
 
     /// Les panneaux fermés dans la disposition par défaut, qui ne s'ouvrent qu'à la demande.
     pub fn on_demand(self) -> bool {
         matches!(
             self,
-            Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau | Pane::Scenario
+            Pane::XSheet | Pane::History | Pane::Comments | Pane::Bruitages | Pane::SuggestionsSonores | Pane::References | Pane::Vignettes | Pane::MonPanneau | Pane::Scenario | Pane::Bibliotheque
         )
     }
 
@@ -182,6 +187,7 @@ impl Pane {
             Pane::Vignettes => "Planche",
             Pane::MonPanneau => "Mon panneau",
             Pane::Scenario => "Scénario",
+            Pane::Bibliotheque => "Bibliothèque",
         }
     }
 
@@ -221,6 +227,7 @@ impl Pane {
             Pane::Vignettes => ph::SQUARES_FOUR,
             Pane::MonPanneau => ph::STAR,
             Pane::Scenario => ph::FILM_SCRIPT,
+            Pane::Bibliotheque => ph::BOOKS,
         }
     }
 
@@ -237,6 +244,7 @@ impl Pane {
             | Pane::SuggestionsSonores
             | Pane::MonPanneau
             | Pane::Scenario
+            | Pane::Bibliotheque
             | Pane::References => Group::Right,
             Pane::Montage | Pane::Timeline => Group::Bottom,
             Pane::Vignettes => Group::Planche,

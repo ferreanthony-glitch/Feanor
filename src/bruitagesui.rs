@@ -355,7 +355,9 @@ impl App {
     pub(crate) fn bruitage_drop(&mut self, ui: &egui::Ui, resp: &egui::Response, left: f32, ppf: f32, lanes_top: f32) {
         let tracks = self.doc.audio_tracks.len();
         let top = resp.rect.top();
-        if resp.dnd_hover_payload::<SoundDrag>().is_some() {
+        // Un son glissé depuis la bibliothèque de fichiers (`biblioui.rs`) se pose comme un bruitage.
+        let de_la_bibliotheque = resp.dnd_hover_payload::<crate::biblioui::BiblioDrag>().is_some_and(|d| d.est_un_son());
+        if resp.dnd_hover_payload::<SoundDrag>().is_some() || de_la_bibliotheque {
             if let Some(p) = ui.input(|i| i.pointer.hover_pos()) {
                 let (track, frame) = drop_target(p, left, ppf, lanes_top, tracks);
                 let x = left + frame as f32 * ppf;
@@ -374,13 +376,23 @@ impl App {
                 self.insert_bruitage(drag.path.clone(), track, Some(frame));
             }
         }
+        if de_la_bibliotheque {
+            if let Some(drag) = resp.dnd_release_payload::<crate::biblioui::BiblioDrag>() {
+                if let Some(p) = ui.input(|i| i.pointer.interact_pos().or(i.pointer.hover_pos())) {
+                    let (track, frame) = drop_target(p, left, ppf, lanes_top, tracks);
+                    self.insert_bruitage(drag.chemin.clone(), track, Some(frame));
+                }
+            }
+        }
     }
 
     /// Le même dépôt sur la ligne du son de la timeline (en animation) : `left` est l'abscisse de
     /// l'image 0 du montage, `cell` la largeur d'une image.
     pub(crate) fn bruitage_drop_row(&mut self, ui: &egui::Ui, area: Rect, left: f32, cell: f32) {
         let ctx = ui.ctx();
-        if !egui::DragAndDrop::has_payload_of_type::<SoundDrag>(ctx) {
+        // (Un son glissé depuis la bibliothèque de fichiers se pose de la même façon : `biblioui.rs`.)
+        let de_la_bibliotheque = egui::DragAndDrop::payload::<crate::biblioui::BiblioDrag>(ctx).is_some_and(|d| d.est_un_son());
+        if !egui::DragAndDrop::has_payload_of_type::<SoundDrag>(ctx) && !de_la_bibliotheque {
             return;
         }
         let Some(p) = ui.input(|i| i.pointer.hover_pos()) else { return };
@@ -393,6 +405,10 @@ impl App {
         if ui.input(|i| i.pointer.any_released()) {
             if let Some(drag) = egui::DragAndDrop::take_payload::<SoundDrag>(ctx) {
                 self.insert_bruitage(drag.path.clone(), None, Some(frame));
+            } else if de_la_bibliotheque {
+                if let Some(drag) = egui::DragAndDrop::take_payload::<crate::biblioui::BiblioDrag>(ctx) {
+                    self.insert_bruitage(drag.chemin.clone(), None, Some(frame));
+                }
             }
         }
     }

@@ -2454,6 +2454,72 @@ action = "vue.scenario"
 touches = []
 source = "SHOT (sans touche)"
 
+# Panneau Bibliothèque : explorer les fichiers, voir, lire et écouter les images, vidéos et sons (sans touche : à choisir).
+[[raccourci]]
+action = "vue.bibliotheque"
+touches = []
+source = "SHOT (sans touche)"
+
+# Bibliothèque : revenir au dossier d'avant (le bouton du panneau le fait aussi).
+[[raccourci]]
+action = "bibliotheque.retour"
+touches = []
+source = "SHOT (sans touche)"
+
+# Bibliothèque : remonter d'un dossier (Retour arrière, la souris sur le panneau ; le bouton aussi).
+[[raccourci]]
+action = "bibliotheque.dossier_parent"
+touches = []
+source = "SHOT (sans touche)"
+
+# Bibliothèque : relire le dossier et refaire les vignettes.
+[[raccourci]]
+action = "bibliotheque.actualiser"
+touches = []
+source = "SHOT (sans touche)"
+
+# Bibliothèque : ajouter (ou retirer) le dossier courant des favoris.
+[[raccourci]]
+action = "bibliotheque.favori"
+touches = []
+source = "SHOT (sans touche)"
+
+# Bibliothèque : lire ou mettre en pause l'aperçu (Espace, la souris sur le panneau ; sans autre touche).
+[[raccourci]]
+action = "bibliotheque.lecture"
+touches = []
+source = "SHOT (sans touche)"
+
+# Bibliothèque : importer le fichier choisi dans le plan (clic droit sur le fichier).
+[[raccourci]]
+action = "bibliotheque.importer_plan"
+touches = []
+source = "SHOT (sans touche)"
+
+# Bibliothèque : ajouter le fichier choisi aux références (clic droit sur le fichier).
+[[raccourci]]
+action = "bibliotheque.ajouter_references"
+touches = []
+source = "SHOT (sans touche)"
+
+# Bibliothèque : ajouter le fichier choisi au montage (clic droit sur le fichier).
+[[raccourci]]
+action = "bibliotheque.ajouter_montage"
+touches = []
+source = "SHOT (sans touche)"
+
+# Bibliothèque : ouvrir le dossier du fichier choisi dans l'Explorateur de Windows (clic droit sur le fichier).
+[[raccourci]]
+action = "bibliotheque.afficher_explorateur"
+touches = []
+source = "SHOT (sans touche)"
+
+# Bibliothèque : copier le chemin du fichier choisi dans le presse-papiers (clic droit sur le fichier ; seul endroit où le panneau le touche).
+[[raccourci]]
+action = "bibliotheque.copier_chemin"
+touches = []
+source = "SHOT (sans touche)"
+
 # Créer les plans depuis le scénario gardé dans le projet : le bouton du panneau Scénario (sans touche : à choisir).
 [[raccourci]]
 action = "scenario.creer_plans"
