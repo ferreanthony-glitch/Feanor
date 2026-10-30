@@ -60,6 +60,11 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 - Audit extérieur (storyboard série / long) rangé dans suivi/AUDIT-2026-10-30.md : 3/10 série, 4/10 long, 6/10
   indépendant ; priorités : valider les exports montage, PDF de studio, endurance sur un vrai épisode, équipe, modèle d'épisode.
 - À retenir pour après la V1 (demande d'Anthony) : retravailler la partie collaborative (travail en équipe).
+- Fusionnés (6040504) : fil de décision par plan (statut des notes, fil du plan, conflits, compteurs, note suivante,
+  pastille, relecture n+1 avec réponses du relecteur, retakes + CSV) et premier contact (visite « Premier jour »
+  en 5 étapes, Labo caché derrière « Afficher les fonctions expérimentales », Propager rangé dans Animation,
+  vocabulaire : Fiche du plan, Fond de la feuille, Vectoriel, tutoiement). 3596 essais passent, shot.exe reconstruit,
+  projet d'essai rouvert sans plantage. Format du projet inchangé (44).
 
 ## 2026-10-29
 
