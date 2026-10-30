@@ -1303,13 +1303,13 @@ pub fn readme(plan: &Plan, opts: &Options) -> String {
         s.push_str("- *.edl : EDL CMX 3600, l'image seulement (une bobine par plan, noms de clips en commentaire).\n");
     }
     if opts.xml {
-        s.push_str("- *.xml : Final Cut Pro 7 XML (xmeml), à importer comme une timeline dans Premiere Pro ou DaVinci Resolve.\n");
+        s.push_str("- *.xml : XML de montage (xmeml), à importer comme une timeline dans ton logiciel de montage.\n");
     }
     if opts.otio {
         s.push_str("- *.otio : OpenTimelineIO (JSON), pour les logiciels et les outils qui le lisent (par exemple otioconvert).\n");
     }
     if opts.fcpxml {
-        s.push_str(&format!("- *.fcpxml : Final Cut Pro X XML (FCPXML {}), à importer dans Final Cut Pro X ; ses médias sont désignés par des chemins absolus (là où l'export a été fait : refaire l'export si le dossier bouge).\n", opts.fcpxml_version.label()));
+        s.push_str(&format!("- *.fcpxml : FCPXML {}, à importer dans ton logiciel de montage ; ses médias sont désignés par des chemins absolus (là où l'export a été fait : refaire l'export si le dossier bouge).\n", opts.fcpxml_version.label()));
     }
     s.push_str(&format!("- media/ : un fichier {} par plan, nommé comme le plan (SQ01_PL012A = séquence 1, plan 12A).\n", if plan.media == Media::ProRes { "ProRes 422 HQ (.mov)" } else { "H.264 (.mp4)" }));
     if !plan.audio.is_empty() {
@@ -1352,7 +1352,7 @@ pub fn readme(plan: &Plan, opts: &Options) -> String {
         s.push_str(&format!("\nCadence {} i/s : hors des cadences classiques de l'EDL (24, 25, 30) ; le XML et l'OTIO la portent sans difficulté connue, à vérifier.\n", plan.rate.fps));
     }
     s.push_str(
-        "\nÀ vérifier par Anthony (rien de cela n'a été ouvert dans Premiere Pro, DaVinci Resolve ni Avid)\n\
+        "\nÀ vérifier par Anthony (rien de cela n'a été ouvert dans un vrai logiciel de montage)\n\
          ------------------------------------------------------------------------------------------\n\
          - L'import de l'EDL, du XML et de l'OTIO : durées, coupes et noms des clips, time code de départ.\n\
          - Les chemins relatifs du XML et de l'OTIO (sinon : refaire l'export avec « chemins absolus »).\n\

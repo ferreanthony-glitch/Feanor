@@ -15,7 +15,7 @@ const TILE: Vec2 = vec2(58.0, 48.0);
 const PREVIEW: Vec2 = vec2(54.0, 30.0);
 
 /// Bulle du bouton « Importer des pinceaux » (panneau Pinceaux).
-pub(crate) const IMPORT_HINT: &str = "Brosses TVPaint (.tvpx, .bin, .ini), Photoshop (.abr), Procreate (.brush, .brushset), Krita (.kpp, .bundle) ou MyPaint (.myb), plusieurs fichiers à la fois ; elles restent pour les fois suivantes.";
+pub(crate) const IMPORT_HINT: &str = "Brosses (.tvpx, .bin, .ini, .abr, .brush, .brushset, .kpp, .bundle, .myb), plusieurs fichiers à la fois ; elles restent pour les fois suivantes.";
 
 /// Nom d'un réglage en cours de saisie (moteur de dessin, étape 9) : enregistrer le réglage
 /// courant dans « Mes brosses », ou renommer le réglage `rename`.
@@ -373,7 +373,7 @@ impl App {
                 self.brush_previews = BrushPreviews::default();
                 let saved = self.save_brushes();
                 self.status = format!(
-                    "{} brosse(s) TVPaint importée(s) ({} pointe(s), {} papier(s)){}{}",
+                    "{} brosse(s) importée(s) ({} pointe(s), {} papier(s)){}{}",
                     r.presets,
                     r.tips,
                     r.papers,
@@ -447,11 +447,11 @@ impl App {
         }
         let Some(paths) = rfd::FileDialog::new()
             .set_title("Brosses à importer")
-            .add_filter("Brosses (TVPaint, Photoshop, Procreate, Krita, MyPaint)", &["tvpx", "bin", "ini", "abr", "brush", "brushset", "kpp", "bundle", "myb"])
-            .add_filter("Photoshop (.abr)", &["abr"])
-            .add_filter("Procreate (.brush, .brushset)", &["brush", "brushset"])
-            .add_filter("TVPaint (export de panneau, panneau, réglage)", &["tvpx", "bin", "ini"])
-            .add_filter("Krita (réglage, paquet) et MyPaint", &["kpp", "bundle", "myb"])
+            .add_filter("Toutes les brosses (.tvpx, .bin, .ini, .abr, .brush, .brushset, .kpp, .bundle, .myb)", &["tvpx", "bin", "ini", "abr", "brush", "brushset", "kpp", "bundle", "myb"])
+            .add_filter("Brosses (.abr)", &["abr"])
+            .add_filter("Brosses (.brush, .brushset)", &["brush", "brushset"])
+            .add_filter("Panneaux et réglages de brosses (.tvpx, .bin, .ini)", &["tvpx", "bin", "ini"])
+            .add_filter("Réglages et paquets de brosses (.kpp, .bundle, .myb)", &["kpp", "bundle", "myb"])
             .pick_files()
         else {
             return;
@@ -494,7 +494,7 @@ impl App {
             } else if ext == "bundle" {
                 std::fs::read(path).map_err(|e| format!("lecture impossible : {e}")).and_then(|b| crate::kritabrush::import_bundle(&b, &source, &mut self.brushes))
             } else {
-                let name = path.file_stem().map_or("Brosse MyPaint".into(), |n| n.to_string_lossy().into_owned());
+                let name = path.file_stem().map_or("Brosse importée".into(), |n| n.to_string_lossy().into_owned());
                 std::fs::read_to_string(path).map_err(|e| format!("lecture impossible : {e}")).and_then(|t| crate::kritabrush::import_myb(&t, &name, &source, &mut self.brushes))
             };
             match result {
@@ -511,7 +511,7 @@ impl App {
         let saved = self.save_brushes();
         notes.extend(errors.iter().map(|e| format!("non importé — {e}")));
         self.status = format!(
-            "{presets} réglage(s) Krita / MyPaint importé(s) ({tips} pointe(s)){}{}",
+            "{presets} réglage(s) importé(s) ({tips} pointe(s)){}{}",
             if notes.is_empty() { String::new() } else { format!(" ; {} remarque(s) dans la fenêtre d'import", notes.len()) },
             saved.map_or(String::new(), |e| format!(" ; non gardés pour la prochaine fois : {e}")),
         );
@@ -536,7 +536,7 @@ impl App {
             } else {
                 read.and_then(|b| crate::procreate::import(&b, &source, &mut self.brushes)).map(|(n, t, _, notes)| (n, t, notes))
             };
-            let what = if ext == "abr" { "Photoshop" } else { "Procreate" };
+            let what = if ext == "abr" { ".abr" } else { ".brush" };
             match result {
                 Ok((n, tips, notes)) => {
                     self.brushes.share();

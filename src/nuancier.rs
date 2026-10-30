@@ -184,7 +184,7 @@ pub struct Imported {
 pub fn parse_gpl(text: &str) -> Result<Imported, String> {
     let mut lines = text.trim_start_matches('\u{feff}').lines().map(str::trim_end).filter(|l| !l.trim().is_empty());
     if !lines.next().is_some_and(|l| l.trim().starts_with("GIMP Palette")) {
-        return Err("ce n'est pas un nuancier GIMP (il manque « GIMP Palette » en tête)".into());
+        return Err("ce n'est pas un nuancier .gpl (il manque « GIMP Palette » en tête)".into());
     }
     let mut out = Imported { palette: Palette::new(""), skipped: 0 };
     for line in lines {

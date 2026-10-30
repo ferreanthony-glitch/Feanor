@@ -340,10 +340,10 @@ impl NewDocDialog {
                 ui.label(RichText::new(format!("({}×{} px)", self.values.width, self.values.height)).weak());
             }
             ui.horizontal(|ui| {
-                ui.checkbox(&mut self.values.paper_on, "Papier").on_hover_text("Le fond de la feuille, qui sort à l'export. Décoché : transparent.");
+                ui.checkbox(&mut self.values.paper_on, "Papier").on_hover_text("Le papier, la feuille qui sort à l'export. Décoché : transparent.");
                 ui.add_enabled_ui(self.values.paper_on, |ui| {
                     let resp = crate::champcouleur::srgb(ui, &mut self.values.paper);
-                    crate::bulles::bulle(resp, "Couleur du papier", "La couleur du fond de la feuille.", "");
+                    crate::bulles::bulle(resp, "Couleur du papier", "La couleur du papier.", "");
                 });
                 ui.add_space(14.0);
                 ui.label("Aplat sous le trait");

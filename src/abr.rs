@@ -339,7 +339,7 @@ pub fn read(bytes: &[u8], notes: &mut Vec<String>) -> Result<Vec<AbrBrush>, Stri
         }
         v => return Err(format!("version {v} de .abr non lue")),
     };
-    list.ok_or_else(|| "brosse Photoshop illisible (fichier tronqué ou d'une forme inconnue)".into())
+    list.ok_or_else(|| "brosse .abr illisible (fichier tronqué ou d'une forme inconnue)".into())
 }
 
 /// Importe un `.abr` dans la bibliothèque. Renvoie (brosses, pointes, remarques).

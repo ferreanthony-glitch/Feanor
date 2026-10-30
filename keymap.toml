@@ -432,12 +432,12 @@ touches = ["["]
 [[raccourci]]
 action = "couleur.intervertir"
 touches = []
-source = "proposition : aucune touche (X, celle de Photoshop, colle le calque)"
+source = "proposition : aucune touche (X colle le calque)"
 
 [[raccourci]]
 action = "couleur.defaut"
 touches = ["D"]
-source = "proposition (D, la touche de Photoshop, libre dans SHOT)"
+source = "proposition (D, libre dans SHOT)"
 
 [[raccourci]]
 action = "couleur.copier_code"
@@ -690,12 +690,12 @@ source = "choix d'Anthony (F est donné à la clé suivante)"
 [[raccourci]]
 action = "cle.precedente"
 touches = ["A"]
-source = "choix d'Anthony (A de son TVPaint 12 : plan / instance précédents)"
+source = "choix d'Anthony (A de sa configuration : plan / instance précédents)"
 
 [[raccourci]]
 action = "cle.suivante"
 touches = ["F"]
-source = "choix d'Anthony (F de son TVPaint 12 : plan / instance suivants)"
+source = "choix d'Anthony (F de sa configuration : plan / instance suivants)"
 
 [[raccourci]]
 action = "scene.precedente"
@@ -884,12 +884,12 @@ touches = ["Ctrl+R"]
 [[raccourci]]
 action = "calque.dessus"
 touches = ["Flèche haut"]
-source = "TVPaint 12 (perso) : LayerUp"
+source = "réglage perso d'origine : LayerUp"
 
 [[raccourci]]
 action = "calque.dessous"
 touches = ["Flèche bas"]
-source = "TVPaint 12 (perso) : LayerDown"
+source = "réglage perso d'origine : LayerDown"
 
 # Calques choisis et opérations sur plusieurs calques (13b). Les touches TVPaint qui prendraient
 # celle d'une autre fonction de SHOT sont proposées dans docs/ROADMAP.md, pas posées ici.
@@ -897,701 +897,701 @@ source = "TVPaint 12 (perso) : LayerDown"
 [[raccourci]]
 action = "calque.choisir_dessus"
 touches = ["Maj+Flèche haut"]
-source = "TVPaint 12 (perso) : LayerUpSelection"
+source = "réglage perso d'origine : LayerUpSelection"
 
 [[raccourci]]
 action = "calque.choisir_dessous"
 touches = ["Maj+Flèche bas"]
-source = "TVPaint 12 (perso) : LayerDownSelection"
+source = "réglage perso d'origine : LayerDownSelection"
 
 [[raccourci]]
 action = "calque.monter"
 touches = ["Ctrl+Flèche haut"]
-source = "TVPaint 12 (perso) : LayerMoveUp"
+source = "réglage perso d'origine : LayerMoveUp"
 
 [[raccourci]]
 action = "calque.descendre"
 touches = ["Ctrl+Flèche bas"]
-source = "TVPaint 12 (perso) : LayerMoveDown"
+source = "réglage perso d'origine : LayerMoveDown"
 
 [[raccourci]]
 action = "calque.premier"
 touches = ["Ctrl+Origine"]
-source = "TVPaint 12 (perso) : FirstLayer"
+source = "réglage perso d'origine : FirstLayer"
 contexte = "animation"
 
 [[raccourci]]
 action = "calque.dernier"
 touches = ["Ctrl+Fin"]
-source = "TVPaint 12 (perso) : LastLayer"
+source = "réglage perso d'origine : LastLayer"
 contexte = "animation"
 
 [[raccourci]]
 action = "calque.tous_visibles"
 touches = []
-source = "TVPaint 12 (perso) : DisplayAllLayer = « = », déjà pris par panneau.ajouter_image (+)"
+source = "réglage perso d'origine : DisplayAllLayer = « = », déjà pris par panneau.ajouter_image (+)"
 
 [[raccourci]]
 action = "calque.pelure"
 touches = ["Ctrl+L"]
-source = "TVPaint 12 (perso) : LayerTogglePelureMode"
+source = "réglage perso d'origine : LayerTogglePelureMode"
 
 [[raccourci]]
 action = "calque.nouveau"
 touches = []
-source = "TVPaint 12 (perso) : nouveau calque d'animation = Ctrl+N, déjà pris par fichier.nouveau"
+source = "réglage perso d'origine : nouveau calque d'animation = Ctrl+N, déjà pris par fichier.nouveau"
 
 [[raccourci]]
 action = "calque.dupliquer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.supprimer_vides"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.supprimer_caches"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.fusionner_choisis"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.fusionner_visibles"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.fusionner_tout"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.choisir_tout"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.choisir_visibles"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.choisir_groupe"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.choisir_autres_groupes"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.choisir_aucun"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.tous_caches"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.courant_seul"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.pochoirs_eteindre"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.pochoirs_inverser"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.couper"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.coller_remplacer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.ajouter"
 touches = ["I"]
-source = "TVPaint 12 (perso) : UserAppendImageProject"
+source = "réglage perso d'origine : UserAppendImageProject"
 contexte = "animation"
 
 [[raccourci]]
 action = "images.inserer"
 touches = ["Maj+I"]
-source = "TVPaint 12 (perso) : UserInsertImageProject"
+source = "réglage perso d'origine : UserInsertImageProject"
 contexte = "animation"
 
 [[raccourci]]
 action = "images.supprimer_plan"
 touches = ["Maj+F5"]
-source = "TVPaint 12 (perso) : DeleteImageProject"
+source = "réglage perso d'origine : DeleteImageProject"
 contexte = "animation"
 
 [[raccourci]]
 action = "images.supprimer"
 # Suppr (et Ctrl+X / C / V) visent les images choisies après un Maj + clic dans la timeline.
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.couper"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.copier"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.coller"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.coller_remplacer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.dupliquer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.inverser"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.inserer_avant_calques"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.inserer_apres_calques"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.tout_choisir"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "instance.precedente"
 # Tes touches TVPaint « a » / « f » vont à la clé précédente / suivante, tous les calques.
 touches = ["Ctrl+Flèche gauche"]
-source = "TVPaint 12 (perso) : PrevInstance"
+source = "réglage perso d'origine : PrevInstance"
 contexte = "animation"
 
 [[raccourci]]
 action = "instance.suivante"
 touches = ["Ctrl+Flèche droite"]
-source = "TVPaint 12 (perso) : NextInstance"
+source = "réglage perso d'origine : NextInstance"
 contexte = "animation"
 
 [[raccourci]]
 action = "instance.tete"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "instance.queue"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "instance.casser"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "instance.ajouter_avant"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "instance.exposition_plus"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "instance.exposition_moins"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.faux_fixe_boucle"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.faux_fixe_va_et_vient"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.faux_fixe_hasard"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.etirer_tenir"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.etirer_boucle"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.etirer_va_et_vient"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.couper_apres"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.retourner_h"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.retourner_v"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.retourner_hv"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "instance.renommer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "instance.effacer_noms"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "instance.tout_renommer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "instance.renommer_intelligemment"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "signet.basculer"
 touches = ["Ctrl+Maj+Flèche haut"]
-source = "TVPaint 12 (perso) : BookmarkToggle"
+source = "réglage perso d'origine : BookmarkToggle"
 
 [[raccourci]]
 action = "signet.precedent"
 touches = ["Ctrl+Maj+Flèche gauche"]
-source = "TVPaint 12 (perso) : BookmarkPrev"
+source = "réglage perso d'origine : BookmarkPrev"
 
 [[raccourci]]
 action = "signet.suivant"
 touches = ["Ctrl+Maj+Flèche droite"]
-source = "TVPaint 12 (perso) : BookmarkNext"
+source = "réglage perso d'origine : BookmarkNext"
 
 [[raccourci]]
 action = "signets.enlever_choisis"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "signets.tout_enlever"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "entree.poser"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "entree.basculer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "sortie.poser"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "sortie.basculer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "entree_sortie.enlever"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "boucle.limites_choisies"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "boucle.images_choisies"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "timeline.adapter_plan"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "timeline.adapter_calque"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "timeline.adapter_choix"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "timeline.adapter_image"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "timeline.adapter_cles"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "timeline.tout_voir"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "marque_couleur.basculer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "marque_couleur.retirer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "marque_couleur.toutes"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "marque_couleur.non_marquees"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "marque_couleur.effacer_calque"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "marque_couleur.effacer_plan"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "marque_couleur.precedente"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "marque_couleur.suivante"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "marque_couleur.precedente_couleur"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "marque_couleur.suivante_couleur"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "onglet.notes"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "onglet.son"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "onglet.groupes"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "onglet.arriere_plan"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "onglet.image_depart"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "fond.aucun"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "fond.couleur"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "fond.damier"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "plan.nouveau_avant"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "storyboard.verrouiller"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "projet.proprietes"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "projet.nouveau_depuis_plans"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "pelure.panneau"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "pelure.devant"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "pelure.lier"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "pelure.activer_tout"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "pelure.desactiver_tout"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "pelure.mode_instance"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "pelure.mode_image"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "pelure.mode_signet"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "pelure.mode_marque"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "pelure.decaler"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "pelure.remettre"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "vue.feuille_exposition"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "role.cle"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "role.breakdown"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "role.intervalle"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "role.intervalle_complete"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "role.intervalle_special"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "role.intervalle_special_complete"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "role.aucun"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "role.timeline"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "role.calque_courant"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "flip.panneau"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "flip.jouer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "flip.precedent"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "flip.suivant"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "flip.changer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "flip.cles"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "flip.breakdowns"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "flip.intervalles"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "flip.intervalles_completes"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "flip.speciaux"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "flip.speciaux_completes"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "fx.panneau"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "fx.cle_creer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "fx.cle_supprimer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "fx.cle_auto"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "fx.cles_timeline"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.nouveau_couleur"
@@ -1616,82 +1616,82 @@ source = "SHOT (calque de couleur : griffonner, choix d'Anthony 2026-10-21 « On
 [[raccourci]]
 action = "fichier.importer_video"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "fichier.importer_sequence"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "calque.video_en_animation"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.intermediaire"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.intermediaires"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.intervalles"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "images.etirer_interpoler"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "projet.changer_cadence"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "dossier.nouveau"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "dossier.ranger"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "dossier.deposer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "dossier.sortir"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "dossier.supprimer_seul"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "dossier.joindre"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "groupes.editer"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 [[raccourci]]
 action = "groupes.focus"
 touches = []
-source = "TVPaint 12 sans touche"
+source = "sans touche à l'origine"
 
 # ------------------------------------------------------------------------------------ Caméra
 

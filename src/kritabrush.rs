@@ -31,7 +31,7 @@ pub struct KritaImport {
 /// Le texte du bloc `preset` d'un `.kpp` (bloc PNG `zTXt`, `iTXt` ou `tEXt`).
 pub fn kpp_text(bytes: &[u8]) -> Result<String, String> {
     if bytes.len() < 8 || &bytes[..8] != b"\x89PNG\r\n\x1a\n" {
-        return Err("ce n'est pas un réglage Krita (PNG)".into());
+        return Err("ce n'est pas un réglage de brosse .kpp (PNG)".into());
     }
     let mut i = 8;
     while i + 12 <= bytes.len() {
@@ -76,7 +76,7 @@ pub struct KritaPreset {
 
 pub fn parse_preset(xml: &str) -> Result<KritaPreset, String> {
     let root = crate::xml::parse(xml)?;
-    let name = root.attr("name").unwrap_or("Brosse Krita").to_string();
+    let name = root.attr("name").unwrap_or("Brosse importée").to_string();
     let paintop = root.attr("paintopid").unwrap_or("").to_string();
     let params = root.children_named("param").filter_map(|p| Some((p.attr("name")?.to_string(), p.text.clone()))).collect();
     let mut resources = HashMap::new();
@@ -281,7 +281,7 @@ pub fn import_kpp_with(bytes: &[u8], source: &str, lib: &mut BrushLibrary, find_
     let p = parse_preset(&kpp_text(bytes)?)?;
     let mut report = KritaImport::default();
     if p.paintop != "paintbrush" {
-        report.notes.push(format!("{} : moteur Krita « {} » non repris", p.name, p.paintop));
+        report.notes.push(format!("{} : moteur « {} » non repris", p.name, p.paintop));
         return Ok(report);
     }
     // La pointe en image : jointe au réglage, sinon dans le dossier des brosses de Krita.
@@ -311,7 +311,7 @@ pub fn import_kpp_with(bytes: &[u8], source: &str, lib: &mut BrushLibrary, find_
 
 /// Un réglage MyPaint (`.myb`).
 pub fn myb_settings(json: &serde_json::Value, notes: &mut Vec<String>) -> Result<BrushSettings, String> {
-    let set = json.get("settings").ok_or("pas de réglages MyPaint")?;
+    let set = json.get("settings").ok_or("pas de réglages de brosse .myb")?;
     let base = |k: &str, d: f64| set.get(k).and_then(|v| v.get("base_value")).and_then(|v| v.as_f64()).unwrap_or(d) as f32;
     let input = |k: &str, src: &str| -> Option<Vec<[f32; 2]>> {
         let pts = set.get(k)?.get("inputs")?.get(src)?.as_array()?;
@@ -371,7 +371,7 @@ pub fn myb_settings(json: &serde_json::Value, notes: &mut Vec<String>) -> Result
 
 /// Importe un `.myb` (nom : celui du fichier).
 pub fn import_myb(text: &str, name: &str, source: &str, lib: &mut BrushLibrary) -> Result<KritaImport, String> {
-    let json: serde_json::Value = serde_json::from_str(text).map_err(|e| format!("réglage MyPaint illisible ({e})"))?;
+    let json: serde_json::Value = serde_json::from_str(text).map_err(|e| format!("réglage .myb illisible ({e})"))?;
     let mut notes = Vec::new();
     let s = myb_settings(&json, &mut notes)?;
     let eraser = json.get("settings").and_then(|v| v.get("eraser")).and_then(|v| v.get("base_value")).and_then(|v| v.as_f64()).unwrap_or(0.0) > 0.5;

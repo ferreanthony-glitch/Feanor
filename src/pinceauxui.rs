@@ -690,10 +690,10 @@ impl App {
                     ui.selectable_value(&mut b.pencil_grain, g, g.label());
                 }
             });
-            bulle(resp.response, "Grain du crayon", "Un grain fin collé à la feuille, même sans papier : le « Grain » Soie / Doux / Moyen / Dur du crayon de TVPaint, refait par SHOT.", "");
+            bulle(resp.response, "Grain du crayon", "Un grain fin collé à la feuille, même sans papier : Soie, Doux, Moyen ou Dur.", "");
         });
         if b.paper.is_some() || b.pencil_grain != crate::brush::PencilGrain::None {
-            ui.checkbox(&mut b.paper_follow, "Le grain suit le trait").on_hover_text("Le relief est lu depuis le début du trait au lieu de rester collé à la feuille (collé, comme TVPaint : repasser retrouve les mêmes creux).");
+            ui.checkbox(&mut b.paper_follow, "Le grain suit le trait").on_hover_text("Le relief est lu depuis le début du trait au lieu de rester collé à la feuille (collé : repasser retrouve les mêmes creux).");
         }
         if import {
             self.import_paper();
@@ -882,7 +882,7 @@ fn size_and_pressure_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool) 
     }
     ui.horizontal(|ui| {
         let resp = ui.add(egui::Slider::new(&mut s.power, 0.01..=1.0).text("Débit"));
-        bulle(resp, "Débit", "Peinture déposée à chaque empreinte (le « Power » de TVPaint) ; l'opacité en reste le plafond.", "");
+        bulle(resp, "Débit", "Peinture déposée à chaque empreinte ; l'opacité en reste le plafond.", "");
         interrupteur(ui, &mut s.build_up, ph::STACK, "Accumuler", "Repasser dans le même trait fonce, jusqu'à l'opacité. Éteint : le trait reste uniforme.", "");
     });
     ui.add_space(4.0);
@@ -919,7 +919,7 @@ fn smoothing_ui(ui: &mut egui::Ui, s: &mut BrushSettings) {
     if Categorie::Lissage.allumee(s) {
         ui.horizontal_wrapped(|ui| {
             ui.checkbox(&mut s.smooth_deferred, "Après le trait")
-                .on_hover_text("Pendant le geste, le trait brut suit la pointe sans retard ; au levé, il est rejoué lissé (TVPaint : Line Smoothing sans Real Time, ton réglage).");
+                .on_hover_text("Pendant le geste, le trait brut suit la pointe sans retard ; au levé, il est rejoué lissé (le lissage « sans temps réel », ton réglage).");
             if s.smooth_kind == SmoothKind::Follow {
                 ui.checkbox(&mut s.smooth_time, "Selon le temps")
                     .on_hover_text("Le Suivi rattrape la pointe selon le temps écoulé, non le nombre d'échantillons : la même douceur quelle que soit la cadence du stylet et de l'image (décoché : comme avant).");

@@ -91,7 +91,7 @@ pub(crate) const FAMILLES: [(&str, &[Export]); 4] = [
     (
         "Montage & échange",
         &[
-            (ph::FILM_REEL, "Pour le montage", "Un fichier vidéo par plan et le montage en EDL, XML Final Cut, FCPXML ou OpenTimelineIO, pour un logiciel de montage.", "fichier.exporter_montage"),
+            (ph::FILM_REEL, "Pour le montage", "Un fichier vidéo par plan et le montage en EDL, XML de montage, FCPXML ou OpenTimelineIO, pour un logiciel de montage.", "fichier.exporter_montage"),
             (ph::TABLE, "Fiche technique", "Un plan par ligne, en classeur XLSX ou en CSV : durées, time codes, cadrage, mouvement de caméra, textes, sons, vignettes.", "fichier.exporter_fiche"),
             (ph::STACK, "Calques séparés", "Un dossier par plan et, dedans, une suite d'images transparentes par calque visible, pour reprendre les calques dans un logiciel de compositing.", "fichier.exporter_calques"),
             (ph::VIDEO_CAMERA, "Caméra", "Les clés de la caméra de chaque plan (position, zoom, rotation, interpolation) en JSON et en CSV, pour un script de compositing ou de 3D.", "fichier.exporter_camera"),

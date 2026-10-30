@@ -31,7 +31,7 @@ impl BottomTab {
             BottomTab::Notes => (ph::PENCIL_LINE, "Notes", "Notes dessinées sur la timeline, vues pendant la lecture, jamais exportées."),
             BottomTab::Sound => (ph::WAVEFORM, "Son", "Pistes son : volume, muette, verrou ; Ctrl + glisser l'onde pour la décaler."),
             BottomTab::Groups => (ph::SWATCHES, "Groupes", "Groupes de couleur des calques."),
-            BottomTab::Background => (ph::CHECKERBOARD, "Fond de la feuille", "Ce qu'on voit sous les calques : aucun (transparent), la couleur du papier ou un damier."),
+            BottomTab::Background => (ph::CHECKERBOARD, "Papier", "Ce qu'on voit sous les calques : aucun (transparent), la couleur du papier ou un damier."),
             BottomTab::StartFrame => (ph::HASH, "Image de départ", "Numéro de la première image du projet."),
         }
     }
@@ -81,7 +81,7 @@ impl App {
             self.doc.background = kind;
             self.renderer.invalidate_all();
         }
-        self.status = format!("Fond de la feuille : {}.", kind.label().to_lowercase());
+        self.status = format!("Papier : {}.", kind.label().to_lowercase());
     }
 
     /// Onglet Son : volume général, son à la lecture et au défilement ; chaque piste (muette,

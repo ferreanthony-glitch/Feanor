@@ -630,7 +630,7 @@ fn the_readme_says_what_was_written_and_what_to_check() {
     let o = Options { sound: true, ..Options::default() };
     let plan = editorial::build_plan(&doc, &o, 0, "Mon film").unwrap();
     let r = editorial::readme(&plan, &o);
-    for needle in ["*.edl", "*.xml", "*.otio", "media/", "audio/", "Poignées", "relatifs", "SQ01_PL012A", "vérifier par Anthony", "Premiere Pro", "DaVinci Resolve", "Avid", "01:00:00:00"] {
+    for needle in ["*.edl", "*.xml", "*.otio", "media/", "audio/", "Poignées", "relatifs", "SQ01_PL012A", "vérifier par Anthony", "logiciel de montage", "01:00:00:00"] {
         assert!(r.contains(needle), "« {needle} » manque :\n{r}");
     }
 }

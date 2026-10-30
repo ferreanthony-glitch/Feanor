@@ -385,10 +385,10 @@ impl App {
     fn scenario_vide(&mut self, ui: &mut Ui) {
         ui.add_space(8.0);
         ui.label("Aucun scénario dans ce projet.");
-        ui.label(RichText::new("Importe un scénario (Fountain, Final Draft, Word ou texte) : il se lit ici, mis en page comme un scénario.").small().weak());
+        ui.label(RichText::new("Importe un scénario (Fountain, .fdx, .docx ou texte) : il se lit ici, mis en page comme un scénario.").small().weak());
         ui.add_space(6.0);
         let resp = ui.button(format!("{}  Importer un scénario…", ph::FILE_ARROW_DOWN));
-        if self.aide(resp, "Importer un scénario", "Choisir un fichier Fountain, Final Draft, Word ou texte : SHOT le garde dans le projet et l'affiche ici. Aucun plan n'est créé.", "fichier.importer_scenario").clicked() {
+        if self.aide(resp, "Importer un scénario", "Choisir un fichier Fountain, .fdx, .docx ou texte : SHOT le garde dans le projet et l'affiche ici. Aucun plan n'est créé.", "fichier.importer_scenario").clicked() {
             self.run_action("fichier.importer_scenario");
         }
     }

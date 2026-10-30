@@ -327,7 +327,7 @@ impl App {
                     ui.add(egui::Slider::new(&mut w.temporal, 0.0..=5.0).text("Anti-scintillement"));
                     ui.add(egui::Slider::new(&mut params.synth.uniformity, 500.0..=15000.0).text("Diversité"));
                     ui.add(egui::Slider::new(&mut params.blend.softness, 0.0..=1.0).text("Douceur du passage d'une clé à l'autre"));
-                    if ui.button("Réglages d'EbSynth").clicked() {
+                    if ui.button("Réglages par défaut").clicked() {
                         params = PropagateParams::default();
                     }
                 });

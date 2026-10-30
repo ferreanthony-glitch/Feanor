@@ -341,9 +341,9 @@ fn build_typed(paras: &[RawPara]) -> Vec<Element> {
 
 /// Lit un fichier Final Draft (`.fdx`).
 pub fn parse_fdx(src: &str, progress: &dyn Fn(f32)) -> Result<Script, String> {
-    let (paras, root) = read_paragraphs(src, Flavor::Fdx, progress).map_err(|e| format!("Fichier Final Draft illisible : {e}"))?;
+    let (paras, root) = read_paragraphs(src, Flavor::Fdx, progress).map_err(|e| format!("Fichier .fdx illisible : {e}"))?;
     if root != "FinalDraft" {
-        return Err(format!("Ce fichier XML n'est pas un scénario Final Draft (il commence par « {root} » au lieu de « FinalDraft »)."));
+        return Err(format!("Ce fichier XML n'est pas un scénario .fdx (il commence par « {root} » au lieu de « FinalDraft »)."));
     }
     let mut script = Script::empty(Format::Fdx);
     let title_texts: Vec<String> = paras.iter().filter(|p| p.title_page).map(|p| lines_of(&p.text).replace('\n', " ")).filter(|t| !t.is_empty()).collect();
@@ -353,7 +353,7 @@ pub fn parse_fdx(src: &str, progress: &dyn Fn(f32)) -> Result<Script, String> {
     }
     let body: Vec<RawPara> = paras.into_iter().filter(|p| !p.title_page).collect();
     if body.is_empty() {
-        return Err("Ce fichier Final Draft ne contient aucun paragraphe de scénario.".into());
+        return Err("Ce fichier .fdx ne contient aucun paragraphe de scénario.".into());
     }
     script.elements = build_typed(&body);
     Ok(script)
@@ -363,10 +363,10 @@ pub fn parse_fdx(src: &str, progress: &dyn Fn(f32)) -> Result<Script, String> {
 
 /// Lit un document Word (`.docx`).
 pub fn parse_docx(bytes: &[u8], progress: &dyn Fn(f32)) -> Result<Script, String> {
-    let zip = crate::zipread::Zip::open(bytes).map_err(|e| format!("Ce n'est pas un document Word (.docx) lisible : {e}."))?;
-    let data = zip.read("word/document.xml").ok_or("Ce document Word ne contient pas de texte (word/document.xml est absent ou illisible).")?;
+    let zip = crate::zipread::Zip::open(bytes).map_err(|e| format!("Ce n'est pas un document .docx lisible : {e}."))?;
+    let data = zip.read("word/document.xml").ok_or("Ce document .docx ne contient pas de texte (word/document.xml est absent ou illisible).")?;
     let src = scenario::decode_text(&data);
-    let (paras, _) = read_paragraphs(&src, Flavor::Docx, progress).map_err(|e| format!("Document Word illisible : {e}"))?;
+    let (paras, _) = read_paragraphs(&src, Flavor::Docx, progress).map_err(|e| format!("Document .docx illisible : {e}"))?;
     let typed = paras
         .iter()
         .filter(|p| matches!(kind_of(&p.style), Some(ParaKind::Heading | ParaKind::Character | ParaKind::Dialogue | ParaKind::Parenthetical | ParaKind::Transition)))

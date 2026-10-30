@@ -63,7 +63,7 @@ pub fn explique(path: &Path, e: &io::Error) -> String {
     let nom = path.file_name().map_or_else(|| path.display().to_string(), |n| n.to_string_lossy().into_owned());
     // 5 : accès refusé, 32 : violation de partage, 33 : verrouillé (Windows).
     if matches!(e.raw_os_error(), Some(5 | 32 | 33)) || e.kind() == io::ErrorKind::PermissionDenied {
-        format!("« {nom} » est ouvert dans un autre programme (Excel ?) ou protégé en écriture : ferme-le puis recommence. Rien n'a été modifié.")
+        format!("« {nom} » est ouvert dans un autre programme (un tableur ?) ou protégé en écriture : ferme-le puis recommence. Rien n'a été modifié.")
     } else {
         format!("{} : {e}", path.display())
     }
