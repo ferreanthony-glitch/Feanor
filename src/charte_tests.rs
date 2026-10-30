@@ -367,37 +367,21 @@ fn the_small_logotype_is_the_word_and_two_corners_without_the_tagline() {
 
 // ---------------------------------------------------------------------------------------- la fenêtre
 
-/// L'image du logotype de la barre, à l'écran : le rectangle de l'image dont la texture est celle du logotype.
-fn logotype_a_l_ecran(b: &Banc) -> Option<Rect> {
-    let (texture, _, _): (egui::TextureHandle, u32, u32) = b.ctx.data(|d| d.get_temp::<((u32, bool, Option<[u8; 3]>), egui::TextureHandle, u32, u32)>(egui::Id::new("shot_logotype"))).map(|(_, t, w, h)| (t, w, h))?;
-    a_plat(&b.formes).into_iter().find_map(|s| match s {
-        Shape::Rect(r) if r.brush.as_ref().is_some_and(|br| br.fill_texture_id == texture.id()) => Some(r.rect),
-        _ => None,
-    })
-}
-
 #[test]
-fn the_small_logotype_sits_first_in_the_menu_bar_without_crowding_it_at_150_percent() {
-    // 1280 points de large : la fenêtre d'un écran de 1920 pixels à 150 %.
+fn the_menu_bar_starts_with_fichier_without_a_logotype() {
+    // Anthony, 2026-10-30 : plus de logo à côté de Fichier. 1280 points de large : un écran de 1920 pixels à 150 %.
     let mut b = banc_taille(Document::with_frame(160, 90, 24), false, 1280, 720);
     b.garder_formes = true;
     b.chauffer(6);
-    let logotype = logotype_a_l_ecran(&b).expect("le logotype est peint dans la barre de menus");
     let formes = a_plat(&b.formes);
     let (_, fichier) = texte_a(&formes, "Fichier").expect("menu Fichier");
     let (_, aide) = texte_a(&formes, "Aide").expect("menu Aide");
     let (_, vignettes) = texte_a(&formes, " Vignettes ").expect("onglet Vignettes");
-    assert!(logotype.right() < fichier.left(), "le logotype est à gauche des menus : {logotype:?} {fichier:?}");
-    assert!(logotype.left() < 12.0, "tout à gauche de la barre : {logotype:?}");
-    assert!(logotype.height() <= 22.0 && logotype.top() >= 0.0 && logotype.bottom() <= 30.0, "à la hauteur de la barre : {logotype:?}");
-    // Il ne pousse pas les menus plus qu'une cinquantaine de points, et les espaces de travail restent à droite des menus.
-    assert!(fichier.left() < logotype.width() + 30.0, "Fichier à {} pt", fichier.left());
+    assert!(fichier.left() < 16.0, "Fichier est le premier de la barre : {fichier:?}");
     assert!(aide.right() + 20.0 < vignettes.left(), "les menus et les espaces de travail ne se touchent pas : {aide:?} {vignettes:?}");
-    // Rendu une fois et gardé : la même texture d'une image à l'autre.
-    let avant: egui::TextureId = b.ctx.data(|d| d.get_temp::<((u32, bool, Option<[u8; 3]>), egui::TextureHandle, u32, u32)>(egui::Id::new("shot_logotype"))).unwrap().1.id();
-    b.chauffer(5);
-    let apres: egui::TextureId = b.ctx.data(|d| d.get_temp::<((u32, bool, Option<[u8; 3]>), egui::TextureHandle, u32, u32)>(egui::Id::new("shot_logotype"))).unwrap().1.id();
-    assert_eq!(avant, apres);
+    // Aucune image dans la barre de menus (au-dessus de 30 points) avant Fichier.
+    let image_avant = formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.brush.is_some() && r.rect.bottom() <= 30.0 && r.rect.right() <= fichier.left()));
+    assert!(!image_avant, "pas de logotype à gauche de Fichier");
 }
 
 
