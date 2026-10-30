@@ -1,0 +1,29 @@
+# Notes d'Anthony
+
+Une ligne par note, la plus récente en bas. Écris seulement le type et le texte ; Claude remplit le statut et la réponse.
+
+Format :
+- (bug | changement | idée) texte — statut : nouveau | proposé | résolu — réponse de Claude : …
+
+Statuts :
+- nouveau : écrite par Anthony, pas encore lue par Claude.
+- proposé : Claude a répondu (solution, question ou estimation), en attente de ton accord.
+- résolu : fait, fusionné dans le logiciel et testé (ou abandonné, la réponse dit pourquoi).
+
+## Notes
+
+- (changement) Ajouter un panneau Scénario : le scénario importé y apparaît et y est lisible — statut : proposé (fusionné 32dd5f5, en attente de ton test) — réponse de Claude : chantier lancé le 2026-10-30 (branche `panneau-scenario`) ; texte gardé dans le projet, mise en page de scénario, partie du plan courant surlignée, clic sur une scène = aller au plan. Précision d'Anthony : l'import ne crée plus de plans ; « Créer les plans depuis le scénario… » devient une option du panneau.
+- (changement) Vignettes : continuité affichée dès qu'on l'assigne ; pas de continuité en cascade ; toute la planche dessinable, seul le champ d'une case appartient au plan ; numéros lisibles qui suivent le zoom ; pastille de version hors du cadre près du numéro ; Notes / Action / Dialogue décochés par défaut, une ligne colorée chacun quand activé ; plus de réglages ; ouverture en 2 rangées de 6 — statut : proposé — réponse de Claude : chantier lancé le 2026-10-30 (branche `vignettes-ajustements`), fusionné 5335c60, en attente de ton test ; pas de rotation du canevas (décision d'Anthony).
+- (changement) Hors-cadres avec la texture du pinceau ; passe-partout dans l'export de la planche avec sa propre case à cocher — statut : proposé (fusionné e546fc7, en attente de ton test) — réponse de Claude : chantier fait sur la branche `vignettes-texture-export`. Séquences : choix validés par Anthony (une seule case pâle, pas de titre avec une seule séquence, pas de barre entre séquences).
+- (changement) Outil Dégradé plus complet (sur le modèle d'un panneau de réglage de dégradé envoyé en image) — statut : proposé (fusionné 3774514, en attente de ton test) — réponse de Claude : chantier lancé le 2026-10-30 (branche `degrade-avance`) : plusieurs couleurs avec pastilles et milieux, bande d'opacité séparée, formes Angle / Réfléchi / Losange, angle et échelle en chiffres, dégradés enregistrés, tramage, retouche après coup tant qu'on ne change pas d'outil.
+- (changement) Références dans Vignettes, panneau détachable et plein écran sur un second écran ; planche de références inspirée de PureRef et Miro ; partie références dans le travail en équipe — statut : proposé (planche fusionnée 1df74a1, en attente de ton test ; équipe après la V1) — réponse de Claude : chantier lancé le 2026-10-30 (branche `planche-references`). Choix d'Anthony : planche maintenant (images façon PureRef + post-it, textes, cadres façon Miro), rangée dans le projet ; partage en équipe après la V1, avec la reprise du travail en équipe.
+- (changement) Enlever le logo SHOT à côté de Fichier — statut : proposé — réponse de Claude : fait sur la branche `sans-logo-barre` (9c1d1d1), à fusionner avec le prochain lot.
+- (changement) Travailler les types et formats d'export (vidéo, son, image, XML) — statut : proposé — réponse de Claude : inventaire de l'existant et des manques en cours, puis choix avec Anthony.
+- (changement) Panneau Bibliothèque : explorer les fichiers, aperçu intégré son / image / vidéo — statut : proposé — réponse de Claude : chantier lancé le 2026-10-30 (branche `panneau-bibliotheque`).
+- (changement) Fusionner des calques ; menu clic droit des calques trop complexe — statut : proposé — réponse de Claude : la fusion existe déjà (4 commandes) mais n'est pas trouvable ; chantier lancé le 2026-10-30 (branche `calques-menu`) : fusion évidente dans tous les cas, menu réorganisé avec un tableau avant / après.
+- (changement) Point global : ce qui marche bien, ce qui peut être amélioré — statut : proposé — réponse de Claude : relevé en cours.
+- (idée) Connecter la fenêtre Références à Miro — statut : proposé — réponse de Claude : possible (import / envoi à la demande d'abord, synchronisation plus tard) ; demande une connexion Internet optionnelle, un compte développeur Miro créé par Anthony, et une lecture des conditions de Miro pour un logiciel commercial. Choix d'Anthony : après la V1.
+- (idée) Version portable pour Mac — statut : proposé — réponse de Claude : après la V1 ; il faut un Mac (ou un service de compilation en ligne) ; relevé et adaptation du code propre à Windows d'abord ; sans compte développeur Apple, message « développeur non identifié » au premier lancement. Choix d'Anthony : service de compilation en ligne.
+- (changement) Recherche Ctrl+F dans le panneau Scénario — statut : proposé (fusionné 4d8677d, en attente de ton test) — réponse de Claude : chantier lancé le 2026-10-30 (branche `scenario-recherche`) : insensible aux accents et à la casse, toutes les occurrences surlignées, compteur, suivant/précédent, Échap pour fermer.
+- (changement) Vignettes : passe-partout autour des cases, dans la barre du bas comme celui de la caméra, avec le zoom et la rotation du canevas — statut : proposé — réponse de Claude : ajouté au chantier `vignettes-ajustements` (affichage seulement, opacité réglable, retenu).
+- (changement) Vignettes par séquences : créer des séquences depuis les vignettes ; afficher une séquence, certaines (dans l'ordre choisi) ou toutes sur le canevas — statut : proposé (fusionné 7e3f7e8, en attente de ton test) — réponse de Claude : fait sur la branche `vignettes-sequences`. Choix proposés : chaque séquence commence sur une nouvelle rangée avec son titre ; l'ordre choisi ne change que l'affichage, pas l'ordre du film ; le choix est retenu dans le projet.

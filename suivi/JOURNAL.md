@@ -1,0 +1,63 @@
+# Journal de Claude
+
+Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
+Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
+
+## 2026-10-30
+
+- Créé le dossier suivi/ : ETAT.md (état réel du projet), NOTES.md (ta boîte de notes), JOURNAL.md (ce fichier).
+- Lancé cargo check et cargo test sur main (b201dc1) : résultats dans ETAT.md, section 1.
+- Aucun fichier source modifié, aucun commit.
+- Décision d'Anthony : SHOT abandonne tout lien avec Storyboard Pro et Toon Boom (import, export, import de
+  pinceaux, raccourcis, références), pour pouvoir le commercialiser. Chantier lancé sur la branche `sans-sbp`.
+- Engrenage de l'accueil gardé (choix d'Anthony). Dossier de travail `demarrage` supprimé ; `importsbp2` le sera
+  après le chantier `sans-sbp`, qui l'utilise.
+- Fusionné 17dda2a : SHOT sans Storyboard Pro ni Toon Boom. 3288 essais passent, shot.exe reconstruit
+  (40,08 → 39,21 Mo, ~7 600 lignes de code en moins). Projet d'essai rouvert sans problème. Dossier `importsbp2` supprimé.
+- Lancé : panneau « Scénario » (le scénario importé est gardé dans le projet et lisible, lié aux plans),
+  branche `panneau-scenario`.
+- Fusionné 32dd5f5 : panneau Scénario (3308 essais passent, shot.exe reconstruit, projet d'essai rouvert).
+- Fusionné 5335c60 : ajustements des vignettes (3326 essais passent, shot.exe reconstruit, projet d'essai rouvert).
+  Lancé : vignettes par séquences (branche `vignettes-sequences`).
+- `vignettes-ajustements` rendu ; renvoyé pour 3 défauts vus sur capture (cadrage d'ouverture, zoom affiché
+  deux fois, réglage « lignes d'un projet neuf » sans effet). Rotation du canevas des vignettes non faite : question à Anthony.
+- Avant : `vignettes-ajustements` (continuité, planche dessinable, numéros, lignes de texte, réglages,
+  passe-partout des cases, barre du bas). Suivant : vignettes par séquences.
+- Décisions d'Anthony : pas de rotation du canevas des vignettes ; dossier de travail `scenario` supprimé ;
+  recherche (Ctrl+F) dans le panneau Scénario lancée (branche `scenario-recherche`, dossier `Chantiers\recherche`).
+- Fusionné 7e3f7e8 : vignettes par séquences (titres, choix et ordre des séquences affichées, export qui suit
+  l'affichage ; 3350 essais passent sur la branche).
+- Fusionné 4d8677d : recherche Ctrl+F dans le panneau Scénario (3360 essais passent, shot.exe reconstruit, projet
+  d'essai rouvert). Ctrl+F reste « Aller à un plan » hors du panneau Scénario.
+- Dossier de travail `recherche` supprimé (accord d'Anthony).
+- Lancé : hors-cadres texturé + passe-partout à l'export (branche `vignettes-texture-export`).
+- Fusionné e546fc7 : hors-cadres texturé + passe-partout à l'export avec sa propre case (3372 essais passent,
+  shot.exe reconstruit, projet d'essai rouvert). À vérifier : l'export de la planche ne montre, pour une case à
+  mouvement de caméra, que le cadre A (le dessin hors de A n'y est pas) ; préexistant, pas dû à ce chantier.
+- Fusionné 3774514 : outil Dégradé plus complet (format du projet 43 → 44 ; 3400 essais passent). Renvoyé une fois
+  avant fusion : un changement de calque en pleine retouche pouvait perdre le dégradé (corrigé, essais ajoutés).
+- Fusionné 1df74a1 : planche de références (3425 essais passent, shot.exe reconstruit, projet d'essai rouvert).
+- Décisions d'Anthony : post-it écrits directement sur la planche (chantier lancé, branche `postit-en-place`, dossier
+  `Chantiers\references` réutilisé) ; cadre autour des éléments choisis : OK ; dossier `degrade` supprimé.
+- Lancé : planche de références (branche `planche-references`, dossier `Chantiers\references`).
+- Lancé : outil Dégradé plus complet (branche `degrade-avance`, dossier `Chantiers\degrade`).
+- Point global (relevé en lecture seule) : solide = tests (3425), enregistrement sûr, compatibilité des projets,
+  exports en fond, aucun plantage depuis le 22 oct. À améliorer, dans l'ordre : sept chantiers jamais vus à l'écran
+  par Anthony ; ffmpeg non livré ; exports montage jamais ouverts dans un logiciel de montage ; limites d'export
+  (cadre A seul, « ? » du PDF, son NTSC) ; menu Exporter chargé ; vocabulaire (Fiche / Propriétés du plan, Arrière-plan).
+- Décisions d'Anthony : exports — les 4 familles (vidéo pro, images par plan + PDF, son par piste, montage +
+  compositing), menu Exporter regroupé par usage (chantier `exports-v1` lancé) ; ffmpeg livré avec SHOT après
+  vérification de la licence ; `memoire-dessins` abandonnée (étiquette `archive/memoire-dessins`).
+- Lancé : panneau Bibliothèque (`panneau-bibliotheque`), fusion et menu des calques (`calques-menu`). Fait : logo
+  retiré de la barre de menus (`sans-logo-barre`, 9c1d1d1, à fusionner).
+- À retenir pour après la V1 (demande d'Anthony) : retravailler la partie collaborative (travail en équipe).
+
+## 2026-10-29
+
+- Fusionné dans main : import Storyboard Pro (dessins, caméras, son, puis rendu et vitesse), clés d'opacité et calque
+  « Couleur unie », démarrage sans projet ouvert, fenêtre d'accueil compacte.
+- Projet Storyboard Pro lourd : la mémoire d'un animatic importé passe de 20,7 à 10,8 Go, l'import de 181 s à 17 s
+  (mesures de l'agent, banc sans fenêtre). À confirmer par ton test sur ton fichier de 7 plans.
+- Version portable SHOT-portable-2026-10-29b.
+- En attente de toi : garder ou retirer l'engrenage de l'accueil ; suppression des dossiers de travail `demarrage`
+  et `importsbp2`.
