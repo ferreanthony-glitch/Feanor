@@ -6232,3 +6232,16 @@ Demande d'Anthony du 2026-10-30 : « afficher les vignettes par séquences, pouv
 8. Fichier > Exporter > Planche des vignettes avec une séquence cachée : « Ce que la planche montre », les titres, l'ordre de l'écran.
 9. Supprime une séquence affichée (tous ses plans), réunis-en deux, annule, rétablis : la planche reste cohérente, aucun plan perdu.
 10. Ouvre un projet : la planche s'ouvre sur 2 rangées de 6 cases de la séquence du plan courant, son titre en haut.
+
+
+## 78. Recherche dans le panneau Scénario (2026-10-30, branche `scenario-recherche`)
+
+Une recherche de texte dans le panneau Scénario (`scenariorecherche.rs`, branchée dans `scenariopanneau.rs`).
+
+- **Ouvrir** : Ctrl+F **quand le pointeur est sur le panneau Scénario**, ou la petite loupe à droite de son en-tête. Une barre apparaît sous le titre, le curseur est dans le champ (le dernier terme de la séance est repris et sélectionné).
+- **Ctrl+F reste « Aller à un plan » partout ailleurs** : c'est déjà son raccourci (`scene.aller_a`). Le panneau ne le prend que tant que le pointeur est dessus (`Etat::recherche_prise`, lue par `handle_shortcuts`) ; le clavier n'est pas modifié, rien n'est à réassigner.
+- **Recherche** : sans tenir compte des majuscules ni des accents (« ete » trouve « Été »), à chaque frappe. Elle porte sur ce que le panneau affiche (intitulés, noms de personnages, parenthèses, répliques, actions, notes), partie par partie.
+- **Résultats** : toutes les occurrences sont surlignées en jaune discret, la courante plus marquée (fond plus vif, liseré) ; la vue défile d'elle-même vers la courante. Compteur « 3 / 12 », ou « Aucun résultat ». Précédent et suivant : deux icônes avec bulle ; **Entrée** = suivant, **Maj+Entrée** = précédent (ça boucle) ; **Échap** (ou la croix) ferme la barre et efface le surlignage.
+- **Inchangé** : le surlignage du passage du plan courant et le clic sur une scène (aller au plan) fonctionnent comme avant.
+- **Vitesse** : le texte normalisé de tout le scénario est calculé une fois par scénario ; la liste des occurrences une fois par frappe ; chaque image ne dessine que les éléments visibles. Rien n'est enregistré dans le projet (aucun nouveau format).
+- **Limites** : une occurrence ne traverse pas deux parties (ex. nom du personnage et réplique) ; le pointeur doit être sur le panneau pour que Ctrl+F y soit la recherche.

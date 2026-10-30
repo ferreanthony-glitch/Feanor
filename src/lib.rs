@@ -852,6 +852,10 @@ mod scenarioui;
 // Le scénario gardé dans le projet et son panneau (2026-10-30).
 mod scenariogarde;
 mod scenariopanneau;
+// La recherche (Ctrl+F) du panneau Scénario.
+mod scenariorecherche;
+#[cfg(test)]
+mod scenariorecherche_tests;
 #[cfg(test)]
 mod scenariopanneau_tests;
 #[cfg(test)]
