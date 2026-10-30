@@ -8,8 +8,6 @@
 
 use std::collections::HashMap;
 
-use eframe::egui;
-
 use crate::app::App;
 use crate::document::{fresh_layer_id, CelId, Document, Layer};
 
@@ -129,23 +127,17 @@ pub(crate) fn duplicate_layer(doc: &mut Document, index: usize, li: usize) -> us
 
 /// Fusionne les calques `lis` du plan `index` en un seul, à la place du plus bas, dans l'ordre
 /// de la pile (les calques non choisis qui étaient entre eux passent au-dessus) ; renvoie son
-/// rang. Rien ne change si l'une des fusions est refusée (calque caché, verrouillé, transformé…).
+/// rang. Rien ne change si l'une des fusions est refusée (calque caché, verrouillé, vidéo…) : tout est vérifié avant
+/// (`fusioncalques::blocker_list`), et les dessins faits en route sont retirés si la fusion échoue quand même.
 pub(crate) fn merge_layers(doc: &mut Document, index: usize, lis: &[usize]) -> Result<usize, String> {
-    let n = doc.panels.get(index).map_or(0, |p| p.layers.len());
     // Un dossier choisi compte pour ses calques ; un dossier ne se fusionne pas lui-même.
     let layers = doc.panels.get(index).map_or(&[][..], |p| &p.layers[..]);
-    let mut lis: Vec<usize> = lis
-        .iter()
-        .copied()
-        .filter(|&l| l < n)
-        .flat_map(|l| if layers[l].folder { crate::folders::children_of(layers, l) } else { vec![l] })
-        .collect();
-    lis.sort_unstable();
-    lis.dedup();
-    if lis.len() < 2 {
-        return Err("Il faut au moins deux calques à fusionner (Ctrl + clic dans la timeline pour en choisir).".into());
+    let lis = crate::fusioncalques::rangs_a_fusionner(layers, lis);
+    if let Some(raison) = crate::fusioncalques::blocker_list(doc, index, &lis) {
+        return Err(raison);
     }
     let before = doc.panels[index].layers.clone();
+    let cels_avant: std::collections::HashSet<CelId> = doc.cels.keys().copied().collect();
     let low = lis[0];
     let layers = &mut doc.panels[index].layers;
     let mut picked: Vec<Layer> = lis.iter().rev().map(|&l| layers.remove(l)).collect();
@@ -157,122 +149,14 @@ pub(crate) fn merge_layers(doc: &mut Document, index: usize, lis: &[usize]) -> R
     for _ in 1..count {
         if let Err(e) = doc.merge_layer_down(index, low + 1) {
             doc.panels[index].layers = before;
+            doc.cels.retain(|id, _| cels_avant.contains(id));
             return Err(e);
         }
     }
     Ok(low)
 }
 
-/// D'où s'ouvrent les commandes des calques : ce qui s'y voit déjà n'est pas répété (Anthony,
-/// 2026-10-17 : le clic droit « ne doit pas faire doublon avec les options déjà disponibles dans
-/// la fenêtre de calques »).
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum OpsFrom {
-    /// Menu Calques de la barre, ☰ de la timeline : tout.
-    Everywhere,
-    /// Sous-menu du menu d'un calque, qui a déjà dupliquer, supprimer, verrouiller, pelure.
-    LayerMenu,
-    /// Menu « … » du panneau Calques et sous-menu de son clic droit : sans non plus ce que font ses cinq
-    /// icônes (le « + » des nouveaux calques, dupliquer, supprimer, monter, descendre) et son verrou ;
-    /// copier, coller et fusionner n'ont plus d'icône : ils sont ici.
-    LayersPanel,
-}
-
 impl App {
-    /// Menu des opérations sur les calques (menu Calques, et bouton ☰ de l'en-tête de la timeline).
-    pub(crate) fn layer_ops_menu(&mut self, ui: &mut egui::Ui) {
-        self.layer_ops_menu_from(ui, OpsFrom::Everywhere);
-    }
-
-    /// `layer_ops_menu`, sans ce que l'endroit `from` montre déjà.
-    pub(crate) fn layer_ops_menu_from(&mut self, ui: &mut egui::Ui, from: OpsFrom) {
-        // Menu court (Anthony, 2026-10-18 : « certains menus contiennent trop de choses ») : ce qui
-        // sert souvent en premier niveau, le reste sous « Plus ». Verrou et pelure d'oignon ont leur
-        // icône sur chaque ligne de calque (et Alt+L, Ctrl+L).
-        let n = self.chosen_layers().len();
-        let (all, panel) = (from == OpsFrom::Everywhere, from == OpsFrom::LayersPanel);
-        // Les nouveaux calques : le menu du « + » (`calquemenu.rs`). Le panneau Calques a son « + » : pas de doublon.
-        if !panel {
-            ui.menu_button("Nouveau calque", |ui| self.layer_new_menu(ui));
-        }
-        let many = |one: &str, several: &str| if n > 1 { format!("{several} ({n})") } else { one.to_string() };
-        if all {
-            self.action_item(ui, &many("Dupliquer le calque", "Dupliquer les calques choisis"), "calque.dupliquer");
-            self.action_item(ui, &many("Supprimer le calque", "Supprimer les calques choisis"), "calque.supprimer");
-        }
-        ui.menu_button("Presse-papiers", |ui| {
-            self.action_item(ui, "Couper le calque", "calque.couper");
-            self.action_item(ui, "Copier le calque", "calque.copier");
-            self.action_item(ui, "Coller le calque", "calque.coller");
-            self.action_item(ui, "Coller à la place du calque courant", "calque.coller_remplacer");
-        });
-        ui.menu_button("Retourner le calque", |ui| {
-            self.action_item(ui, "De gauche à droite", "calque.miroir_h");
-            self.action_item(ui, "De haut en bas", "calque.miroir_v");
-        });
-        ui.menu_button("Fusionner", |ui| {
-            self.action_item(ui, "Avec le calque du dessous", "calque.fusionner_dessous");
-            self.action_item(ui, &format!("Les calques choisis ({n})"), "calque.fusionner_choisis");
-            self.action_item(ui, "Les calques visibles", "calque.fusionner_visibles");
-            self.action_item(ui, "Tous les calques", "calque.fusionner_tout");
-        });
-        // Aplat sous le trait (`fondui.rs`) : un calque, les calques choisis, tout le plan.
-        ui.menu_button("Aplat sous le trait", |ui| self.fond_menu(ui, all));
-        if all {
-            // La propagation (façon EbSynth) du calque courant, aussi dans le menu Calques.
-            self.propagation_item(ui, self.cur_layer);
-            self.coloriage_item(ui, self.cur_layer);
-        }
-        ui.separator();
-        ui.menu_button("Ordre", |ui| {
-            if !panel {
-                self.action_item(ui, "Monter le calque", "calque.monter");
-                self.action_item(ui, "Descendre le calque", "calque.descendre");
-                ui.separator();
-            }
-            self.action_item(ui, "Aller au calque du dessus", "calque.dessus");
-            self.action_item(ui, "Aller au calque du dessous", "calque.dessous");
-            self.action_item(ui, "Aller au premier calque", "calque.premier");
-            self.action_item(ui, "Aller au dernier calque", "calque.dernier");
-        });
-        ui.menu_button("Groupes", |ui| self.groups_menu(ui));
-        ui.menu_button("Dossiers", |ui| {
-            self.action_item(ui, "Nouveau dossier", "dossier.nouveau");
-            self.action_item(ui, "Placer les calques choisis dans un dossier", "dossier.ranger");
-            self.action_item(ui, "Déposer les calques choisis dans le dossier", "dossier.deposer");
-            self.action_item(ui, "Sortir les calques choisis de leur dossier", "dossier.sortir");
-            ui.separator();
-            self.action_item(ui, "Joindre les dossiers choisis dans le dossier courant", "dossier.joindre");
-            self.action_item(ui, "Supprimer uniquement le dossier", "dossier.supprimer_seul");
-            self.action_item(ui, "Supprimer le dossier et ses calques", "calque.supprimer");
-        });
-        ui.menu_button("Plus", |ui| {
-            ui.menu_button("Choisir", |ui| {
-                self.action_item(ui, "Tous les calques", "calque.choisir_tout");
-                self.action_item(ui, "Les calques visibles", "calque.choisir_visibles");
-                self.action_item(ui, "Les calques du même groupe", "calque.choisir_groupe");
-                self.action_item(ui, "Les calques des autres groupes", "calque.choisir_autres_groupes");
-                self.action_item(ui, "Aucun (le calque courant seul)", "calque.choisir_aucun");
-            });
-            ui.menu_button("Afficher", |ui| {
-                self.action_item(ui, "Tous les calques", "calque.tous_visibles");
-                self.action_item(ui, "Aucun calque", "calque.tous_caches");
-                self.action_item(ui, "Le calque courant seul", "calque.courant_seul");
-            });
-            ui.menu_button("Pochoirs", |ui| {
-                self.action_item(ui, "Éteindre tous les pochoirs", "calque.pochoirs_eteindre");
-                self.action_item(ui, "Inverser tous les pochoirs", "calque.pochoirs_inverser");
-            });
-            ui.menu_button("Nettoyer", |ui| {
-                self.action_item(ui, "Supprimer les calques vides", "calque.supprimer_vides");
-                self.action_item(ui, "Supprimer les calques cachés", "calque.supprimer_caches");
-            });
-            // Calque de couleur : ses réglages (griffonner, fermeture des trous, sources).
-            let cur = self.cur_layer;
-            ui.menu_button("Calque de couleur", |ui| self.couleur_menu(ui, cur));
-        });
-    }
-
     /// Rangs des calques choisis du plan, du plus bas au plus haut ; le calque courant en est.
     pub(crate) fn chosen_layers(&self) -> Vec<usize> {
         let mut out: Vec<usize> = self
@@ -433,13 +317,15 @@ impl App {
         self.end_stroke();
         self.drop_bitmap_selection();
         let snap = self.snapshot();
+        let nombre = crate::fusioncalques::rangs_a_fusionner(self.layers(), &lis).len();
+        let resultat = crate::fusioncalques::resultat_de(&self.doc, self.cur_panel, &lis);
         match merge_layers(&mut self.doc, self.cur_panel, &lis) {
             Ok(at) => {
                 self.cur_layer = at;
                 self.layer_sel.clear();
                 self.vsel = None;
                 self.commit_structure(snap);
-                self.status = format!("{} calques fusionnés en un.", lis.len());
+                self.status = format!("{nombre} calques fusionnés en un. {resultat} Ctrl+Z les rend comme avant.");
             }
             Err(e) => self.status = e,
         }

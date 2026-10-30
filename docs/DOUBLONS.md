@@ -88,9 +88,7 @@ sous-menu (« Plus », « Couper et réunir », « Version du plan »…), rien 
 | Plan, dans le montage | 18 | 9 : animer, nouveau, dupliquer, copier / coller / supprimer, Couper et réunir ▸, Version du plan ▸, Plus ▸ (couleur, transitions, rogner, son) |
 | Vignette (clic droit) | 11 | 8 : mêmes gestes ; Version du plan ▸ ; Plus ▸ (couleur, recadrer, réinitialiser le cadrage) |
 | Fond de la planche des vignettes | 11 (19 avec des notes choisies) | 7 : Annotations ▸, Notes choisies ▸ |
-| Calque, montage | 19 | 10 : renommer, dupliquer, verrouiller, supprimer, aplat, effets, Réglages ▸, Animation ▸, Plus ▸ (le titre « Calque « nom » » n'y est plus) |
-| Calque, en-tête de la timeline | 12 | 8 : renommer, dupliquer, verrouiller, supprimer, effets, Animation ▸, Plus ▸ (profondeur, taille de la ligne, groupe, vidéo, propager, colorier) |
-| Calque, panneau Calques | 12 | 9 (propager et colorier sont sous « Autres commandes des calques ») |
+| Calque (montage, en-tête de la timeline, panneau Calques, « … », menu Calques : le même menu, `menucalque.rs`) | 19, 12, 12 | 11 (§82) : Nouveau calque ▸, Dupliquer, Renommer, Supprimer ; Fusionner vers le bas, Fusionner les choisis ; Organiser ▸, Apparence ▸, Effets ▸, Aplat ; Plus ▸ |
 | Images (case de la timeline) | 14 | 10 |
 | Ligne de la caméra | 14 | 9 (« ici », « adoucir » et « supprimer » : seulement ce qui s'applique) |
 | Règle de la timeline | 11 | 9 |

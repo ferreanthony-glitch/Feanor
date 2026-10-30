@@ -300,16 +300,6 @@ impl App {
         );
     }
 
-    /// Le menu « … » : d'abord ce qui touche au calque courant (son aplat, ses effets), puis toutes les commandes des
-    /// calques que le panneau ne montre pas déjà par une icône.
-    pub(crate) fn layer_more_menu(&mut self, ui: &mut egui::Ui) {
-        let li = self.cur_layer;
-        self.aplat_item(ui, li);
-        self.fx_switch_item(ui, li);
-        ui.separator();
-        self.layer_ops_menu_from(ui, crate::layerops::OpsFrom::LayersPanel);
-    }
-
     /// La liste : un rang par calque, le plus haut en premier. Clic sur le rang : il devient
     /// courant ; glisser : il monte ou descend ; clic droit : tout ce qui touche au calque
     /// (`layer_full_menu`) ; double-clic sur le nom : renommer.
@@ -654,7 +644,7 @@ impl App {
     /// « Renommer… » (le champ vient dans la timeline, la colonne du montage ou le panneau).
     pub(crate) fn rename_item(&mut self, ui: &mut egui::Ui, li: usize, in_timeline: bool, in_montage: bool) {
         let Some((id, name)) = self.layers().get(li).map(|l| (l.id, l.name.clone())) else { return };
-        if ui.button("Renommer…").clicked() {
+        if ui.button(format!("{}  Renommer…", egui_phosphor::regular::PENCIL_SIMPLE)).on_hover_text("Double-clic sur le nom du calque : la même chose.").clicked() {
             ui.close_menu();
             self.layer_rename = Some(LayerRename { in_montage, ..LayerRename::new(id, &name, in_timeline) });
         }
@@ -681,27 +671,6 @@ impl App {
             );
         if self.edited(&resp) {
             self.layers_mut()[li].depth = depth;
-        }
-    }
-
-    /// Dupliquer, verrouiller (ou déverrouiller), supprimer le calque `li`.
-    pub(crate) fn duplicate_lock_delete_items(&mut self, ui: &mut egui::Ui, li: usize) {
-        let Some(locked) = self.layers().get(li).map(|l| l.locked) else { return };
-        if ui.button("Dupliquer").clicked() {
-            ui.close_menu();
-            self.select_layer(li);
-            self.duplicate_layer();
-        }
-        if ui.button(if locked { "Déverrouiller" } else { "Verrouiller" }).clicked() {
-            ui.close_menu();
-            self.toggle_layer_lock(li);
-        }
-        if ui.button("Supprimer").clicked() {
-            ui.close_menu();
-            // Ce calque seul, même si d'autres sont choisis.
-            self.layer_sel.clear();
-            self.select_layer(li);
-            self.delete_chosen_layers();
         }
     }
 }

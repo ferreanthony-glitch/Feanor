@@ -271,7 +271,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("calque.supprimer", "Supprimer les calques choisis", true, false),
     act("calque.flou", "Flou sur le calque (effet Flou gaussien, cocher / décocher)", true, false),
     act("calque.verrouiller", "Verrouiller le calque", true, false),
-    act("calque.fusionner_dessous", "Fusionner avec le calque du dessous", true, false),
+    act("calque.fusionner_dessous", "Fusionner vers le bas (avec le calque du dessous)", true, false),
     act("calque.reinit_transformation", "Annuler la transformation du calque", true, false),
     act("calque.dessus", "Calque du dessus", true, true),
     act("calque.dessous", "Calque du dessous", true, true),

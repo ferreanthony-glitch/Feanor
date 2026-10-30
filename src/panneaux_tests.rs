@@ -275,12 +275,12 @@ fn every_command_removed_from_the_layers_toolbar_is_still_reachable() {
     }
     // Et un menu les porte : le « + » (créer), le « … » ou le clic droit d'un calque (le reste). On lit le texte des
     // menus : chaque identifiant y figure.
-    let menus = [include_str!("calquemenu.rs"), include_str!("layerops.rs"), include_str!("layersui.rs"), include_str!("fondui.rs"), include_str!("fxui.rs"), include_str!("prereglagesui.rs"), include_str!("folders.rs")].join("\n");
-    // (« calque.effets » est l'interrupteur « fx » : sa case est dans le « … » par `fx_switch_item`.)
+    let menus = [include_str!("calquemenu.rs"), include_str!("layerops.rs"), include_str!("layersui.rs"), include_str!("fondui.rs"), include_str!("fxui.rs"), include_str!("prereglagesui.rs"), include_str!("folders.rs"), include_str!("menucalque.rs")].join("\n");
+    // (« calque.effets » est l'interrupteur « fx » : sa case est dans « Effets » du menu d'un calque par `fx_switch_item`.)
     for id in ["calque.nouveau_vectoriel", "calque.nouveau_bitmap", "dossier.nouveau", "calque.nouveau_couleur", "effet.vide", "calque.copier", "calque.coller", "calque.fusionner_choisis", "calque.fusionner_dessous", "dossier.ranger", "pinceau.fond"] {
         assert!(menus.contains(&format!("\"{id}\"")), "{id} est dans un menu");
     }
-    assert!(include_str!("layersui.rs").contains("fx_switch_item") && include_str!("layersui.rs").contains("aplat_item"));
+    assert!(include_str!("menucalque.rs").contains("fx_switch_item") && include_str!("menucalque.rs").contains("aplat_item"));
 }
 
 /// Ouvre le menu « … » du panneau Calques et rend tous les textes que ses sous-menus montrent au survol.
@@ -288,7 +288,7 @@ fn textes_du_menu_plus(app: &mut App) -> Vec<String> {
     let mut ui_calques = |a: &mut App, ui: &mut egui::Ui| a.layers_panel(ui);
     let mut vus: Vec<String> = Vec::new();
     // (Un écran neuf par sous-menu : le survol d'un second sous-menu n'ouvre rien tant que le premier est ouvert.)
-    for sous in ["Presse-papiers", "Fusionner", "Dossiers", "Aplat sous le trait", "Ordre", "Groupes"] {
+    for sous in ["Organiser", "Apparence", "Plus"] {
         let mut ecran = Ecran::new();
         let textes = ecran.chauffer(app, 4, &mut ui_calques);
         let (_, plus) = trouver(&textes, ph::DOTS_THREE).unwrap().clone();
@@ -303,16 +303,17 @@ fn textes_du_menu_plus(app: &mut App) -> Vec<String> {
 }
 
 #[test]
-fn the_more_menu_carries_copy_paste_merge_folders_and_the_background() {
+fn the_more_menu_is_the_layer_menu_with_merge_organise_and_the_background() {
     let mut app = app_layers("plus-menu", &[LayerKind::Bitmap, LayerKind::Vector]);
     let vus = textes_du_menu_plus(&mut app);
     let a = |morceau: &str| vus.iter().any(|t| t.contains(morceau));
-    assert!(a("Copier le calque") && a("Coller le calque"), "copier et coller : {vus:?}");
-    assert!(a("Avec le calque du dessous"), "fusionner : {vus:?}");
-    assert!(a("Placer les calques choisis dans un dossier") && a("Nouveau dossier"), "dossiers : {vus:?}");
+    // (§82 : le « … » ouvre le même menu que le clic droit d'un calque ; ses groupes sont à un sous-menu.)
+    assert!(a("Fusionner vers le bas") && a("Fusionner les calques choisis"), "fusionner : {vus:?}");
+    assert!(a("Nouveau calque") && a("Dupliquer") && a("Renommer") && a("Supprimer"), "les gestes : {vus:?}");
+    assert!(a("Organiser") && a("Apparence") && a("Plus"), "les groupes : {vus:?}");
+    assert!(a("Monter le calque") && a("Descendre le calque") && a("Dossiers"), "organiser : {vus:?}");
+    assert!(a("Afficher le calque") && a("Mode de fusion") && a("Couleur d'étiquette"), "apparence : {vus:?}");
     assert!(a("Ajouter un aplat"), "l'aplat du calque courant : {vus:?}");
-    // Le « + » est dans la barre : le menu « … » ne répète ni les nouveaux calques ni dupliquer, supprimer, monter, descendre.
-    assert!(!a("Nouveau calque") && !a("Monter le calque") && !a("Supprimer le calque"), "{vus:?}");
 }
 
 #[test]

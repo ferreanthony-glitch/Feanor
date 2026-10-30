@@ -69,7 +69,8 @@ fn the_right_click_menus_have_about_ten_entries_at_most() {
             vus.push(format!("{nom} : {n}"));
             // Le menu d'un plan du montage a jusqu'à douze entrées : la couleur et les deux transitions sont au premier niveau,
             // sans sous-menu « Plus » (choix d'Anthony, 2026-10-28, copie d'écran annotée).
-            let max = if nom == "plan (montage)" { MAX_ENTREES + 2 } else { MAX_ENTREES };
+            // Le menu d'un calque a onze entrées au premier niveau, en groupes (§82 : « pas plus d'une douzaine »).
+            let max = if nom == "plan (montage)" || nom.starts_with("calque") { MAX_ENTREES + 2 } else { MAX_ENTREES };
             if n > max {
                 trop.push(format!("{nom} : {n}"));
             }

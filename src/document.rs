@@ -6,7 +6,6 @@ use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
 use serde::{Deserialize, Serialize};
 
 use crate::audio::Pcm;
-use crate::blend::BlendMode;
 use crate::camera::{self, Camera, CameraKey};
 use crate::fusionnoms::JoinOpts;
 use crate::guides::Guide;
@@ -2256,136 +2255,13 @@ impl Document {
         Some(self.normalize_keeping(id))
     }
 
-    /// Fusionne le calque `layer` du panneau `index` dans celui du dessous. Les dessins fusionnés
-    /// sont de nouveaux dessins : ceux d'avant restent intacts (l'annulation y revient). Deux
-    /// calques vectoriels donnent un calque vectoriel ; sinon le résultat est bitmap. Les
-    /// opacités des deux calques sont appliquées aux dessins, le résultat est à 100 %.
+    /// Fusionne le calque `layer` du panneau `index` dans celui du dessous (`fusioncalques.rs`) : le résultat est ce que
+    /// l'écran montrait des deux calques (mode de fusion, opacité, effets, aplat, transformation), image par image. Les
+    /// dessins fusionnés sont de nouveaux dessins : ceux d'avant restent intacts (l'annulation y revient). Deux calques
+    /// vectoriels sans rien à cuire donnent un calque vectoriel ; sinon le résultat est bitmap, à 100 %.
     pub fn merge_layer_down(&mut self, index: usize, layer: usize) -> Result<(), String> {
-        let panel = self.panels.get(index).ok_or("panneau introuvable")?;
-        if layer == 0 || layer >= panel.layers.len() {
-            return Err("Il n'y a pas de calque en dessous.".into());
-        }
-        let (above, below) = (panel.layers[layer].clone(), panel.layers[layer - 1].clone());
-        if above.folder || below.folder {
-            return Err("Un dossier ne se fusionne pas : fusionne ses calques.".into());
-        }
-        // Le remplissage au griffonnage d'un calque de couleur se calcule d'après les traits (`griffonnage.rs`) : il ne se
-        // fige pas dans un dessin de la fusion.
-        let griffonne = |l: &Layer| l.couleur.as_ref().is_some_and(|c| c.dessins_griffonnages().any(|g| self.cels.get(&g).is_some_and(|c| !c.is_empty())));
-        if griffonne(&above) || griffonne(&below) {
-            return Err("Un calque de couleur qui a des griffonnages ne se fusionne pas : son remplissage suit les traits. Gomme ses griffonnages d'abord, ou garde le calque.".into());
-        }
-        if above.effet.is_some() || below.effet.is_some() {
-            return Err("Un calque d'effet ne se fusionne pas : il agit sur tout ce qui est dessous.".into());
-        }
-        // Un fond de couleur unie n'est pas du dessin : il ne se fond pas dans un autre calque.
-        if above.unie.is_some() || below.unie.is_some() {
-            return Err("Un calque Couleur unie ne se fusionne pas : son fond couvre toute la feuille et reste un calque à part.".into());
-        }
-        if !above.visible || !below.visible {
-            return Err("Affiche les deux calques avant de les fusionner.".into());
-        }
-        if above.locked || below.locked {
-            return Err("Un des deux calques est verrouillé (Alt+L).".into());
-        }
-        if !above.transform.is_identity() || !below.transform.is_identity() {
-            return Err("Un des deux calques est transformé : annule la transformation (Ctrl+R) avant de fusionner.".into());
-        }
-        if above.is_animated() || below.is_animated() {
-            return Err("Un des deux calques est animé (clés de position) : supprime ses clés de position avant de fusionner.".into());
-        }
-        if above.depth != below.depth {
-            return Err("Les deux calques ne sont pas à la même profondeur.".into());
-        }
-        if above.scene_wide.is_some() || below.scene_wide.is_some() {
-            return Err("Un calque de toute la scène ne se fusionne pas avec un autre.".into());
-        }
-        // (Les notes ne se fondent pas dans le dessin du film : un calque d'annotation ne se fusionne qu'avec un autre.)
-        if above.annotation != below.annotation {
-            return Err("Un calque d'annotation ne se fusionne qu'avec un autre calque d'annotation : ses notes n'entrent pas dans le dessin.".into());
-        }
-        // Un calque du dessus en mode de fusion se fond dans les pixels : le résultat est bitmap.
-        let vector = above.kind == LayerKind::Vector && below.kind == LayerKind::Vector && above.blend == BlendMode::Normal;
-        let n = above.frames.len().max(below.frames.len());
-        let mut made: HashMap<(Option<CelId>, Option<CelId>), Option<CelId>> = HashMap::new();
-        let mut frames = Vec::with_capacity(n);
-        for f in 0..n {
-            let key = (below.cel_at(f), above.cel_at(f));
-            let cel = match made.get(&key) {
-                Some(&c) => c,
-                None => {
-                    let c = self.merged_cel(key, below.opacity, above.opacity, vector, above.blend);
-                    made.insert(key, c);
-                    c
-                }
-            };
-            frames.push(cel);
-        }
-        let mut merged = Layer {
-            kind: if vector { LayerKind::Vector } else { LayerKind::Bitmap },
-            opacity: 1.0,
-            frames,
-            ..below
-        };
-        merged.trim();
-        let p = &mut self.panels[index];
-        p.layers[layer - 1] = merged;
-        p.layers.remove(layer);
-        Ok(())
+        crate::fusioncalques::merge_down(self, index, layer)
     }
-
-    /// Nouveau dessin : `below` puis `above` par-dessus (selon `mode`), chacun avec son opacité.
-    fn merged_cel(
-        &mut self,
-        (below, above): (Option<CelId>, Option<CelId>),
-        ob: f32,
-        oa: f32,
-        vector: bool,
-        mode: BlendMode,
-    ) -> Option<CelId> {
-        if below.is_none() && above.is_none() {
-            return None;
-        }
-        let sources: Vec<(Cel, f32, BlendMode)> = [(below, ob, BlendMode::Normal), (above, oa, mode)]
-            .into_iter()
-            .filter_map(|(c, o, m)| c.and_then(|c| self.cels.get(&c)).map(|cel| (cel.clone(), o.clamp(0.0, 1.0), m)))
-            .collect();
-        let kind = if vector { LayerKind::Vector } else { LayerKind::Bitmap };
-        let id = self.new_cel(kind);
-        let cel = self.cels.get_mut(&id).expect("dessin créé juste avant");
-        if vector {
-            let drawing = cel.vector.get_or_insert_with(VectorDrawing::default);
-            for (src, o, _) in sources {
-                for mut e in src.vector.map(|d| d.elements).unwrap_or_default() {
-                    match &mut e {
-                        crate::vector::Element::Stroke { opacity, .. }
-                        | crate::vector::Element::Fill { opacity, .. }
-                        | crate::vector::Element::Text { opacity, .. }
-                        | crate::vector::Element::Image { opacity, .. } => *opacity *= o,
-                    }
-                    drawing.elements.push(e);
-                }
-            }
-            cel.rerender();
-        } else {
-            let opacity = |o: f32| (o * 255.0).round() as u8;
-            for (src, o, m) in sources {
-                for (idx, tile) in src.raster.tiles.iter().enumerate() {
-                    let Some(tile) = tile else { continue };
-                    let (ox, oy, _, _) = cel.raster.tile_bounds(idx);
-                    let dst = cel.raster.tile_mut(idx);
-                    for (i, (d, &s)) in dst.iter_mut().zip(tile.iter()).enumerate() {
-                        if s.a() != 0 {
-                            let at = (ox + i % crate::raster::TILE, oy + i / crate::raster::TILE);
-                            *d = crate::blend::blend_over(*d, s, opacity(o), None, m, at);
-                        }
-                    }
-                }
-            }
-        }
-        Some(id)
-    }
-
     /// Ajoute un dessin existant (collage) sous un nouvel identifiant.
     pub fn add_cel(&mut self, mut cel: Cel) -> CelId {
         cel.version = 0;

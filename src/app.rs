@@ -3004,7 +3004,9 @@ impl App {
         self.commit_structure(snap);
     }
 
-    /// Duplique le calque courant ; la copie, juste au-dessus, devient le calque courant.
+    /// Duplique le calque courant ; la copie, juste au-dessus, devient le calque courant. (Les menus passent par
+    /// `duplicate_chosen_layers`, qui copie aussi les calques choisis.)
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn duplicate_layer(&mut self) {
         if self.content_refuses() {
             return;
@@ -3253,18 +3255,16 @@ impl App {
         }
         self.end_stroke();
         self.drop_bitmap_selection();
-        let (li, kinds) = (self.cur_layer, self.layers().get(self.cur_layer.wrapping_sub(1)).map(|b| (b.kind, self.layer().kind)));
+        let li = self.cur_layer;
+        let resultat = crate::fusioncalques::resultat_de(&self.doc, self.cur_panel, &[li.wrapping_sub(1), li]);
         let snap = self.snapshot();
         match self.doc.merge_layer_down(self.cur_panel, li) {
             Ok(()) => {
                 self.cur_layer = li - 1;
+                self.layer_sel.clear();
                 self.vsel = None;
                 self.commit_structure(snap);
-                self.status = match kinds {
-                    Some((LayerKind::Vector, LayerKind::Vector)) => "Calques fusionnés (vectoriel).".into(),
-                    Some((LayerKind::Bitmap, LayerKind::Bitmap)) => "Calques fusionnés.".into(),
-                    _ => "Calques fusionnés en un calque bitmap : les traits vectoriels ne sont plus modifiables.".into(),
-                };
+                self.status = format!("Calques fusionnés. {resultat} Ctrl+Z les rend comme avant.");
             }
             Err(e) => self.status = e,
         }
