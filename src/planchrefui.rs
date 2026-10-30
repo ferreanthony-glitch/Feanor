@@ -157,6 +157,7 @@ impl App {
                 self.refs_set_window(|w| w.detached = now);
             }
         }
+        self.refs_edit_tick(ctx);
         // Les images d'écran qu'on attend avant le plein écran.
         if self.refs.fs_delay > 0 {
             self.refs.fs_delay -= 1;
@@ -225,9 +226,9 @@ impl App {
         self.refs.sel = vec![id];
         self.refs.text_focus = Some(id);
         self.status = match kind {
-            Kind::Note => "Post-it posé : écris dedans (en bas), change sa couleur, déplace-le.",
-            Kind::Text => "Texte posé : écris-le (en bas).",
-            Kind::Title => "Titre posé : écris-le (en bas).",
+            Kind::Note => "Post-it posé : écris dedans (Échap ou un clic ailleurs pour finir, Entrée pour une nouvelle ligne).",
+            Kind::Text => "Texte posé : écris-le (Échap ou un clic ailleurs pour finir).",
+            Kind::Title => "Titre posé : écris-le (Échap ou un clic ailleurs pour finir).",
             _ => "Cadre posé : donne-lui un nom, tire ses coins ; il emporte ce qu'il contient quand on le déplace.",
         }
         .into();
@@ -404,7 +405,7 @@ impl App {
 
     /// Poser un post-it, un texte, un titre, un cadre.
     pub(crate) fn refs_add_icons(&mut self, ui: &mut egui::Ui) {
-        if self.bouton(ui, ph::NOTE, "Post-it", "Pose un post-it de couleur au centre de la planche, pour une idée, un rappel, une consigne. Le texte s'écrit dans la barre du bas.", "references.postit").clicked() {
+        if self.bouton(ui, ph::NOTE, "Post-it", "Pose un post-it de couleur au centre de la planche, pour une idée, un rappel, une consigne. Le texte s'écrit directement dessus (double-clic pour le modifier).", "references.postit").clicked() {
             self.run_action("references.postit");
         }
         if self.bouton(ui, ph::TEXT_T, "Texte", "Pose un texte libre, sans fond, sur la planche.", "references.texte").clicked() {
@@ -552,29 +553,7 @@ impl App {
                 self.run_action("references.supprimer");
             }
         });
-        // Texte ou nom.
-        if r.kind.has_text() {
-            let mut text = r.text.clone();
-            let eid = egui::Id::new(("texte_reference", id));
-            let hint = match r.kind {
-                Kind::Frame => "Nom du cadre (Décor forêt, Perso Léa…)",
-                Kind::Title => "Le titre",
-                Kind::Text => "Le texte",
-                _ => "Écris dans le post-it",
-            };
-            let rows = if r.kind == Kind::Note { 3 } else { 2 };
-            let resp = ui.add(egui::TextEdit::multiline(&mut text).id(eid).hint_text(hint).desired_rows(rows).desired_width(ui.available_width()));
-            if self.refs.text_focus == Some(id) {
-                resp.request_focus();
-                self.refs.text_focus = None;
-            }
-            if self.refs_edited(&resp, "Écrire dans l'élément") {
-                if let Some(x) = self.doc.reference_mut(id) {
-                    x.text = text.chars().take(planchref::TEXT_MAX).collect();
-                    x.touch(planchref::now_secs());
-                }
-            }
-        }
+        // (Le texte d'un post-it, d'un texte, d'un titre et le nom d'un cadre s'écrivent sur la planche, dans le bloc.)
         // Nom (images), échelle, rotation, opacité.
         ui.horizontal_wrapped(|ui| {
             if is_image {
@@ -690,7 +669,7 @@ impl App {
                 self.refs_zoom_to(id, true, ppp);
                 ui.close_menu();
             }
-            if r.kind.has_text() && ui.button("Modifier le texte").clicked() {
+            if r.kind.has_text() && ui.button("Écrire dans le bloc").clicked() {
                 self.refs.text_focus = Some(id);
                 ui.close_menu();
             }
@@ -819,6 +798,238 @@ impl App {
                 ui.close_menu();
                 self.run_action("references.importer_planche");
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------- écrire sur place
+
+static SESSION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+/// Le texte d'un post-it, d'un texte, d'un titre ou d'un cadre qu'on écrit directement dans son bloc sur la planche
+/// (`refs.edit`). Le texte s'écrit dans le document au fil des touches (rien ne se perd si l'application s'arrête) ; l'étape
+/// d'annulation, prise avant, n'est posée qu'à la fin, et seulement si le texte a changé.
+pub(crate) struct EnPlace {
+    pub(crate) id: u64,
+    /// L'étape d'annulation, prise avant la première touche.
+    snap: Edit,
+    /// L'élément tel qu'il était avant (rien d'autre n'a changé si le texte revient comme il était).
+    before: Reference,
+    was_modified: bool,
+    buf: String,
+    serial: u64,
+    epoch: u64,
+    session: u64,
+    /// Le bloc à l'écran à la dernière image : un appui dedans est pour le texte, un appui dehors le pose.
+    pub(crate) rect: Option<Rect>,
+    /// La dernière fois que le bloc a été dessiné (secondes).
+    seen: f64,
+    asked_focus: bool,
+    /// La fenêtre où il est dessiné.
+    host: egui::ViewportId,
+}
+
+impl EnPlace {
+    fn egui_id(&self) -> egui::Id {
+        egui::Id::new(("texte_en_place", self.id, self.session))
+    }
+}
+
+impl App {
+    /// L'élément dont on écrit le texte, s'il existe encore.
+    pub(crate) fn refs_editing(&self) -> Option<u64> {
+        self.refs.edit.as_ref().map(|e| e.id).filter(|id| self.doc.reference(*id).is_some())
+    }
+
+    /// Début d'image du tableau : ce qui demande d'écrire (double-clic, élément neuf, menu), puis Entrée quand un seul
+    /// élément à texte est choisi.
+    pub(crate) fn refs_edit_start(&mut self, ctx: &egui::Context, items: &[Reference]) {
+        // Le bloc a disparu (supprimé, annulé, autre projet) : il n'y a plus rien à écrire.
+        if let Some(e) = self.refs.edit.as_ref().filter(|e| self.doc.reference(e.id).is_none()) {
+            ctx.memory_mut(|m| m.surrender_focus(e.egui_id()));
+            self.refs.edit = None;
+        }
+        if let Some(id) = self.refs.text_focus.take() {
+            if items.iter().any(|r| r.id == id) {
+                self.refs_begin_edit(id);
+            }
+        }
+        if self.refs.edit.is_none() && self.refs.focus && self.refs.crop_mode.is_none() && self.refs.drag.is_none() && !ctx.wants_keyboard_input() {
+            let ids = self.refs_selected();
+            if let [id] = ids.as_slice() {
+                if items.iter().any(|r| r.id == *id && r.kind.has_text()) && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, Key::Enter)) {
+                    self.refs_begin_edit(*id);
+                }
+            }
+        }
+    }
+
+    /// Le curseur entre dans le bloc `id` (celui qu'on écrivait déjà est posé avant).
+    pub(crate) fn refs_begin_edit(&mut self, id: u64) {
+        if self.refs.edit.as_ref().is_some_and(|e| e.id == id) {
+            return;
+        }
+        self.refs_end_edit();
+        let Some(before) = self.doc.reference(id).filter(|r| r.kind.has_text()).cloned() else { return };
+        self.refs.layout = Layout::Board;
+        self.refs.edit_end = false;
+        // (La touche qui a posé l'élément ne doit pas s'écrire dedans.)
+        self.ctx.input_mut(|i| i.events.retain(|e| !matches!(e, egui::Event::Text(_))));
+        self.refs.sel = vec![id];
+        let seen = self.ctx.input(|i| i.time);
+        self.refs.edit = Some(EnPlace {
+            id,
+            snap: self.snapshot(),
+            buf: before.text.clone(),
+            was_modified: self.modified,
+            before,
+            serial: self.history.serial(),
+            epoch: self.doc_epoch,
+            session: SESSION.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            rect: None,
+            seen,
+            asked_focus: false,
+            host: self.ctx.viewport_id(),
+        });
+    }
+
+    /// Le texte est posé : une étape d'annulation (« Texte du post-it ») si le texte a changé, aucune sinon.
+    pub(crate) fn refs_end_edit(&mut self) {
+        let Some(e) = self.refs.edit.take() else { return };
+        self.ctx.memory_mut(|m| m.surrender_focus(e.egui_id()));
+        let Some(cur) = self.doc.reference(e.id).cloned() else { return };
+        if cur.text == e.before.text {
+            // Rien n'a changé (ou le texte est revenu comme il était) : l'élément reprend sa taille et sa place d'avant.
+            if let Some(x) = self.doc.reference_mut(e.id) {
+                *x = e.before.clone();
+            }
+            self.modified = e.was_modified;
+            return;
+        }
+        let name = match cur.kind {
+            Kind::Note => "Texte du post-it",
+            Kind::Text => "Texte de la planche",
+            Kind::Title => "Titre de la planche",
+            _ => "Nom du cadre",
+        };
+        if e.epoch == self.doc_epoch && e.serial == self.history.serial() {
+            self.refs_push(e.snap, name);
+        } else {
+            // (Autre chose a été fait pendant ce temps : le texte reste, sans étape à lui, plutôt que de défaire autre chose.)
+            self.modified = true;
+        }
+        if let Some(x) = self.doc.reference_mut(e.id) {
+            x.touch(planchref::now_secs());
+        }
+    }
+
+    /// Avant egui, pour la fenêtre qui montre la planche : pendant qu'on écrit, Échap et Ctrl+Entrée sont retirés des touches
+    /// et notés (`edit_end`) ; le champ pose alors le texte à l'image qui vient.
+    pub(crate) fn refs_filter_input(&mut self, raw: &mut egui::RawInput) {
+        // (Seule la fenêtre où le champ a été dessiné en dernier : la principale, ou la fenêtre à part.)
+        if !self.refs.edit.as_ref().is_some_and(|e| e.host == raw.viewport_id) {
+            return;
+        }
+        let mut end = false;
+        raw.events.retain(|e| match e {
+            egui::Event::Key { key: Key::Escape, modifiers, .. } if !modifiers.any() => {
+                end = true;
+                false
+            }
+            egui::Event::Key { key: Key::Enter, modifiers, .. } if modifiers.command && !modifiers.shift && !modifiers.alt => {
+                end = true;
+                false
+            }
+            _ => true,
+        });
+        self.refs.edit_end |= end;
+    }
+
+    /// Un clic ailleurs, un autre affichage ou la fenêtre à part qui perd la main : le texte est posé.
+    pub(crate) fn refs_edit_leave(&mut self, ctx: &egui::Context, detached: bool) {
+        let Some(e) = &self.refs.edit else { return };
+        let pressed_outside = ctx.input(|i| i.pointer.any_pressed()) && ctx.input(|i| i.pointer.latest_pos()).is_some_and(|p| e.rect.is_some_and(|r| !r.contains(p)));
+        let unfocused = detached && ctx.input(|i| i.viewport().focused == Some(false));
+        if pressed_outside || unfocused || self.refs.layout != Layout::Board {
+            self.refs_end_edit();
+        }
+    }
+
+    /// À chaque image d'écran : un texte dont le bloc n'est plus dessiné depuis un moment (panneau caché) est posé.
+    pub(crate) fn refs_edit_tick(&mut self, ctx: &egui::Context) {
+        if self.refs.edit.as_ref().is_some_and(|e| ctx.input(|i| i.time) - e.seen > 3.0) {
+            self.refs_end_edit();
+        }
+    }
+
+    /// Le champ de texte, par-dessus le bloc `r` (dessiné droit, sans son texte) : même police, même taille, même couleur,
+    /// même retour à la ligne que le texte dessiné, au zoom courant.
+    pub(crate) fn refs_edit_widget(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, r: &Reference, view: &View, rect: Rect, alpha: f32) {
+        let Some(mut e) = self.refs.edit.take() else { return };
+        // Échap et Ctrl+Entrée posent le texte (avant que le champ ne les voie : Échap ne perd rien).
+        let (esc, ctrl_enter) = ctx.input_mut(|i| (i.consume_key(egui::Modifiers::NONE, Key::Escape), i.consume_key(egui::Modifiers::COMMAND, Key::Enter)));
+        if esc || ctrl_enter || std::mem::take(&mut self.refs.edit_end) {
+            self.refs.edit = Some(e);
+            self.refs_end_edit();
+            return;
+        }
+        let eid = e.egui_id();
+        let corners = r.corners().map(|c| view.to_screen(rect, c));
+        let block = Rect::from_min_max(corners[0], corners[2]);
+        let s = r.scale * view.zoom;
+        let px = block_font_px(r, s).max(1.0);
+        let (color, hint) = block_text_look(r, alpha);
+        let pad = planchref::TEXT_PAD * s;
+        let frame = r.kind == Kind::Frame;
+        let text_rect = if frame {
+            let h = planchref::FRAME_STRIP * s;
+            Rect::from_min_size(block.min + vec2(pad * 0.8, ((h - px * 1.25) * 0.5).max(0.0)), vec2((block.width() - pad * 1.6).max(24.0), px * 1.25))
+        } else {
+            Rect::from_min_max(block.min + vec2(pad, pad), pos2((block.max.x - pad).max(block.min.x + pad + 24.0), (block.max.y - pad).max(block.min.y + pad + px * 1.25)))
+        };
+        let font = egui::FontId::proportional(px);
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(text_rect).layout(egui::Layout::top_down(egui::Align::Min)));
+        child.spacing_mut().item_spacing = Vec2::ZERO;
+        child.visuals_mut().selection.bg_fill = theme::accent().gamma_multiply(0.45);
+        child.visuals_mut().text_cursor.stroke = Stroke::new(1.5_f32, color);
+        let hint = RichText::new(hint).font(font.clone()).color(color.gamma_multiply(0.45));
+        let edit = if frame { egui::TextEdit::singleline(&mut e.buf) } else { egui::TextEdit::multiline(&mut e.buf).desired_rows(1).min_size(text_rect.size()) };
+        let edit = edit.id(eid).font(font).text_color(color).frame(false).margin(egui::Margin::ZERO).desired_width(text_rect.width()).hint_text(hint).char_limit(planchref::TEXT_MAX);
+        if !e.asked_focus {
+            ctx.memory_mut(|m| m.request_focus(eid));
+            e.asked_focus = true;
+        }
+        let resp = edit.show(&mut child).response;
+        let mut done = false;
+        if !resp.has_focus() {
+            if frame && resp.lost_focus() && ctx.input(|i| i.key_pressed(Key::Enter)) {
+                // Le nom d'un cadre tient sur une ligne : Entrée le pose.
+                done = true;
+            } else {
+                // (Un clic dans la marge du bloc ou la touche Tab ne font pas sortir : seuls Échap, Ctrl+Entrée ou un clic ailleurs.)
+                ctx.memory_mut(|m| m.request_focus(eid));
+            }
+        }
+        if resp.changed() {
+            let text: String = e.buf.chars().take(planchref::TEXT_MAX).collect();
+            let before = e.before.clone();
+            let mut measure = |t: &str, size: f32, wrap: f32| {
+                let galley = ctx.fonts(|f| f.layout(t.to_owned(), egui::FontId::proportional(size), Color32::WHITE, wrap));
+                (galley.size().x, galley.size().y)
+            };
+            if let Some(x) = self.doc.reference_mut(e.id) {
+                x.text = text;
+                planchref::autofit(x, &before, &mut measure);
+            }
+            self.modified = true;
+            ctx.request_repaint();
+        }
+        e.rect = Some(block);
+        e.seen = ctx.input(|i| i.time);
+        e.host = ctx.viewport_id();
+        self.refs.edit = Some(e);
+        if done {
+            self.refs_end_edit();
         }
     }
 }

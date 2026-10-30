@@ -4909,6 +4909,9 @@ impl eframe::App for App {
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         // Pipette d'un champ de couleur armée : les clics et Échap sont pour elle seule (`champcouleur.rs`).
         crate::champcouleur::filtrer_entree(ctx, raw_input);
+        // Texte écrit sur la planche : Échap et Ctrl+Entrée le posent, et ne vont à rien d'autre (egui ôterait le curseur
+        // dès Échap, et le raccourci de l'application le verrait).
+        self.refs_filter_input(raw_input);
         if ctx.wants_keyboard_input() {
             return;
         }
