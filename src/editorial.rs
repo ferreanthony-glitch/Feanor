@@ -586,7 +586,7 @@ pub fn build_plan(doc: &Document, opts: &Options, cur_panel: usize, title: &str)
         for (k, c) in clips.iter().enumerate() {
             markers.push(PlanMarker { clip: k, frame: 0, name: c.name.clone(), note: String::new() });
             let id = doc.panels[c.panel].id;
-            let mut here: Vec<&crate::commentaires::Comment> = doc.comments.iter().filter(|m| m.panel == id && !m.done).collect();
+            let mut here: Vec<&crate::commentaires::Comment> = doc.comments.iter().filter(|m| m.panel == id && m.is_open()).collect();
             here.sort_by_key(|m| (m.frame, m.id));
             for m in here {
                 let who = m.author.trim();

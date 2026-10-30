@@ -65,7 +65,7 @@ pub fn entree_plan(doc: &Document, index: usize) -> EntreePlan {
         // (Au bord du film, la transition part du noir ou y va : le plan voisin est « rien ».)
         transition_entrante: transition_texte(doc, index.checked_sub(1).map(|k| doc.panels[k].id), Some(p.id)),
         transition_sortante: transition_texte(doc, Some(p.id), doc.panels.get(index + 1).map(|n| n.id)),
-        commentaires: doc.comments.iter().filter(|c| c.panel == p.id && !c.done).map(|c| c.text.trim().to_string()).filter(|t| !t.is_empty()).collect(),
+        commentaires: doc.comments.iter().filter(|c| c.panel == p.id && c.is_open()).map(|c| c.text.trim().to_string()).filter(|t| !t.is_empty()).collect(),
         vignette_png: None,
     }
 }

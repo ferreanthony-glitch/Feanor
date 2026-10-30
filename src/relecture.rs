@@ -34,6 +34,7 @@ use serde::Deserialize;
 
 use crate::commentaires::{Annotation, Comment, ANNOTATION_B64_MAX, TEXT_MAX};
 use crate::document::Document;
+use crate::fildecision::Status;
 
 // ------------------------------------------------------------------------------------- limites
 
@@ -160,7 +161,7 @@ impl Default for Options {
 }
 
 /// Ce que SHOT sait du paquet qu'il fabrique.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Meta {
     /// Le titre de la page.
     pub title: String,
@@ -176,6 +177,14 @@ pub struct Meta {
     pub nonce: String,
     /// Début du nom des fichiers de notes que la page fait télécharger.
     pub file_stem: String,
+    /// Le numéro de l'envoi dont c'est la relecture : le fichier de notes le porte, et les notes qui reviennent
+    /// sont posées sur cet envoi (`fildecision.rs`).
+    pub send_id: Option<u64>,
+    /// L'envoi dont la page rend compte des notes (celui d'avant `send_id`, sinon le dernier) : pour chaque plan, ses notes
+    /// avec leur statut (fait, refusé et pourquoi) ; rien : pas de rappel.
+    pub prior_send: Option<u64>,
+    /// Les plans (identifiants) qui ont changé depuis l'envoi : la page les met en avant.
+    pub changed: HashSet<u64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -185,6 +194,21 @@ pub struct CommentPage {
     pub date: String,
     /// « image 3 ».
     pub place: String,
+}
+
+/// Une note de l'envoi d'avant, avec ce qu'on en a fait : le relecteur la retrouve sur la page suivante.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PriorPage {
+    /// Le numéro de la note dans SHOT : la page le garde pour que la réponse du relecteur retrouve sa note.
+    pub id: u64,
+    pub author: String,
+    pub text: String,
+    pub date: String,
+    /// « image 3 ».
+    pub place: String,
+    pub status: Status,
+    /// La raison d'un refus.
+    pub reason: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -216,6 +240,10 @@ pub struct PlanPage {
     pub frames: usize,
     pub boards: Vec<BoardPage>,
     pub comments: Vec<CommentPage>,
+    /// Les notes de l'envoi d'avant (relecteur, pas les notes internes), avec leur statut.
+    pub prior: Vec<PriorPage>,
+    /// Le plan a changé depuis l'envoi de référence.
+    pub changed: bool,
     /// La lecture animée : (rang de l'image dans la liste des images, images tenues).
     pub play: Vec<(usize, u32)>,
 }
@@ -263,8 +291,24 @@ pub fn build(doc: &Document, panels: &[usize], opts: &Options, meta: Meta) -> (P
             boards.push(BoardPage { id, caption, start, end, action, dialogue, notes, image: frames.len() });
             frames.push((i, start));
         }
+        // Les notes de l'envoi d'avant, avec leur statut (celles du relecteur : les notes internes ne sortent pas).
+        let in_prior = |c: &Comment| meta.prior_send.is_some() && c.follow.send == meta.prior_send && c.source() != crate::fildecision::Source::Shot;
+        let mut prior: Vec<&Comment> = doc.comments.iter().filter(|c| c.panel == p.id && in_prior(c)).collect();
+        prior.sort_by_key(|c| (c.frame, c.id));
+        let prior: Vec<PriorPage> = prior
+            .into_iter()
+            .map(|c| PriorPage {
+                id: c.id,
+                author: c.author.clone(),
+                text: c.text.clone(),
+                date: date_of(c.created),
+                place: format!("image {}", c.frame.min(len.saturating_sub(1)) + 1),
+                status: c.status(),
+                reason: c.follow.reason.clone(),
+            })
+            .collect();
         let comments = if opts.comments {
-            let mut here: Vec<&Comment> = doc.comments.iter().filter(|c| c.panel == p.id && !c.done).collect();
+            let mut here: Vec<&Comment> = doc.comments.iter().filter(|c| c.panel == p.id && c.is_open() && !in_prior(c)).collect();
             here.sort_by_key(|c| (c.frame, c.id));
             here.into_iter()
                 .map(|c| CommentPage {
@@ -288,6 +332,8 @@ pub fn build(doc: &Document, panels: &[usize], opts: &Options, meta: Meta) -> (P
             frames: len,
             boards,
             comments,
+            prior,
+            changed: meta.changed.contains(&p.id),
             play: Vec::new(),
         });
     }
@@ -359,10 +405,11 @@ pub fn page(pkg: &Package, images: &[Vec<u8>]) -> String {
     ));
     h.push_str(&format!("<title>{}</title>\n<style>\n{PAGE_CSS}</style>\n</head>\n", esc(&format!("Relecture · {}", m.title))));
     h.push_str(&format!(
-        "<body data-paquet=\"{}\" data-projet=\"{}\" data-fichier=\"{}\">\n",
+        "<body data-paquet=\"{}\" data-projet=\"{}\" data-fichier=\"{}\"{}>\n",
         esc(&m.paquet),
         esc(&m.project),
-        esc(&m.file_stem)
+        esc(&m.file_stem),
+        m.send_id.map_or(String::new(), |e| format!(" data-envoi=\"{e}\""))
     ));
     // En-tête collant : le titre, le nom du relecteur, le nombre de notes, le bouton.
     h.push_str("<header class=\"haut\"><div class=\"haut-in\">");
@@ -405,7 +452,11 @@ pub fn page(pkg: &Package, images: &[Vec<u8>]) -> String {
         if let Some(v) = p.version {
             h.push_str(&format!(" <span class=\"version\">V{v}</span>"));
         }
-        h.push_str(&format!("</h3><span class=\"duree\">{}</span></div>\n", esc(&p.duration)));
+        h.push_str(&format!("</h3><span class=\"duree\">{}</span>", esc(&p.duration)));
+        if p.changed {
+            h.push_str("<span class=\"modifie\">Modifié depuis l\u{2019}envoi précédent</span>");
+        }
+        h.push_str("</div>\n");
         // La lecture animée.
         if p.play.len() > 1 {
             h.push_str(&format!("<div class=\"lecteur\" data-fps=\"{}\"><div class=\"pile\">", pkg.fps.max(1)));
@@ -445,6 +496,28 @@ pub fn page(pkg: &Package, images: &[Vec<u8>]) -> String {
                 }
                 h.push_str("</div>");
             }
+            // Les notes de l'envoi d'avant et ce qu'on en a fait : la page fait voir ce qui a été traité.
+            let before: Vec<&PriorPage> = p.prior.iter().filter(|c| place_on_board(&c.place, b, p)).collect();
+            if !before.is_empty() {
+                h.push_str("<div class=\"precedentes\"><h4>Vos notes de l\u{2019}envoi précédent</h4>");
+                for c in before {
+                    let (class, label) = match c.status {
+                        Status::Done => ("fait", "Fait"),
+                        Status::Refused => ("refuse", "Refusé"),
+                        Status::Discussion => ("discussion", "En discussion"),
+                        Status::Todo => ("afaire", "Pas encore traitée"),
+                    };
+                    let who = if c.author.trim().is_empty() { "Vous".to_string() } else { c.author.clone() };
+                    let when = if c.date.is_empty() { String::new() } else { format!(" · {}", c.date) };
+                    h.push_str(&format!("<div class=\"prec {class}\" data-note=\"{}\"><p><span class=\"badge\">{label}</span> <b>{}</b> ({}{}) : {}</p>", c.id, esc(&who), esc(&c.place), esc(&when), esc(&c.text)));
+                    if c.status == Status::Refused {
+                        let why = if c.reason.trim().is_empty() { "aucune raison donnée".to_string() } else { c.reason.clone() };
+                        h.push_str(&format!("<p class=\"raison\">Raison du refus\u{a0}: {}</p>", esc(&why)));
+                    }
+                    h.push_str(&format!("<input class=\"suite\" type=\"text\" maxlength=\"2000\" data-note=\"{}\" placeholder=\"Votre réponse (facultatif)\" aria-label=\"Votre réponse à cette note\"></div>", c.id));
+                }
+                h.push_str("</div>");
+            }
             h.push_str("<div class=\"outils\"></div>");
             h.push_str(&format!("<textarea class=\"note\" rows=\"3\" maxlength=\"{TEXT_MAX}\" placeholder=\"Votre note sur cette image…\" aria-label=\"Votre note sur {}\"></textarea>", esc(&p.title)));
             h.push_str("</section>\n");
@@ -467,7 +540,12 @@ pub fn page(pkg: &Package, images: &[Vec<u8>]) -> String {
 
 /// Le commentaire `c` (« image 3 ») tombe-t-il sur l'image de storyboard `b` du plan `p` ?
 fn comment_on_board(c: &CommentPage, b: &BoardPage, p: &PlanPage) -> bool {
-    let n: usize = c.place.trim_start_matches("image ").parse().unwrap_or(1);
+    place_on_board(&c.place, b, p)
+}
+
+/// Un repère « image 3 » tombe-t-il sur l'image de storyboard `b` du plan `p` ?
+fn place_on_board(place: &str, b: &BoardPage, p: &PlanPage) -> bool {
+    let n: usize = place.trim_start_matches("image ").parse().unwrap_or(1);
     let at = n.saturating_sub(1);
     let last = p.boards.last().map(|l| l.id);
     at >= b.start && (at < b.end || Some(b.id) == last)
@@ -491,9 +569,22 @@ pub struct Note {
     pub general: bool,
 }
 
+/// Une réponse du relecteur à une note de l'envoi d'avant (le numéro de la note dans SHOT : la page le garde).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Suite {
+    pub note: u64,
+    pub text: String,
+}
+
 /// Un fichier de notes lu.
 #[derive(Clone, Debug)]
 pub struct Notes {
+    /// Le numéro du paquet (la page dont elles viennent).
+    pub paquet: String,
+    /// L'envoi dont la page était la relecture ; rien : la page n'en disait pas.
+    pub send: Option<u64>,
+    /// Les réponses aux notes de l'envoi d'avant.
+    pub suites: Vec<Suite>,
     pub project: String,
     pub reviewer: String,
     pub created: u64,
@@ -542,9 +633,21 @@ struct RawNote {
 }
 
 #[derive(Deserialize)]
+struct RawSuite {
+    #[serde(default)]
+    note: Option<RawId>,
+    #[serde(default)]
+    texte: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct RawFile {
     format: String,
     version: u32,
+    #[serde(default)]
+    envoi: Option<RawId>,
+    #[serde(default)]
+    suites: Vec<RawSuite>,
     #[serde(default)]
     paquet: Option<String>,
     #[serde(default)]
@@ -673,7 +776,20 @@ pub fn parse_notes(bytes: &[u8]) -> Result<Notes, String> {
             general: false,
         });
     }
+    let suites: Vec<Suite> = raw
+        .suites
+        .iter()
+        .take(NOTES_MAX)
+        .filter_map(|s| {
+            let note = s.note.as_ref().and_then(RawId::value)?;
+            let text = clean_text(s.texte.as_deref().unwrap_or(""), TEXT_MAX);
+            (!text.is_empty()).then_some(Suite { note, text })
+        })
+        .collect();
     Ok(Notes {
+        paquet,
+        send: raw.envoi.as_ref().and_then(RawId::value),
+        suites,
         project: clean_text(raw.projet.as_deref().unwrap_or(""), NAME_MAX),
         reviewer: if reviewer.is_empty() { "Relecteur".into() } else { reviewer },
         created: file_created,
@@ -777,14 +893,24 @@ pub struct Summary {
     pub with_drawing: usize,
     pub ignored: usize,
     pub drawings_refused: usize,
+    /// Réponses aux notes de l'envoi d'avant qui rejoignent le fil de leur note.
+    pub replies: usize,
 }
 
 impl Summary {
+    /// Ce que l'importation apporterait de neuf : des notes, ou des réponses.
+    pub fn new_things(&self) -> usize {
+        self.imported + self.replies
+    }
+
     /// « 12 notes importées sur 9 plans, 1 note sans plan (plan supprimé) ».
     pub fn message(&self) -> String {
         let mut parts = vec![format!("{} importée{} sur {}", plural(self.imported, "note", "notes"), if self.imported > 1 { "s" } else { "" }, plural(self.plans, "plan", "plans"))];
         if self.already > 0 {
             parts.push(format!("{} déjà importée{}", plural(self.already, "note", "notes"), if self.already > 1 { "s" } else { "" }));
+        }
+        if self.replies > 0 {
+            parts.push(format!("{} au fil des notes d'avant", plural(self.replies, "réponse", "réponses")));
         }
         if !self.unmatched.is_empty() {
             parts.push(format!("{} sans plan (plan supprimé)", plural(self.unmatched.len(), "note", "notes")));
@@ -822,7 +948,20 @@ pub fn preview(doc: &Document, notes: &Notes, places: &[Placement], unmatched_to
         }
     }
     sum.plans = plans.len();
+    sum.replies = notes.suites.iter().filter(|s| suite_target(doc, notes, s).is_some()).count();
     sum
+}
+
+/// La clé d'une réponse du relecteur (la même pour un même fichier : un second import ne la double pas).
+fn suite_key(notes: &Notes, s: &Suite) -> String {
+    format!("{}-{}", if notes.paquet.is_empty() { "sans-paquet" } else { &notes.paquet }, s.note)
+}
+
+/// La note de SHOT à qui la réponse s'adresse, si elle existe encore et si cette réponse n'y est pas déjà.
+fn suite_target(doc: &Document, notes: &Notes, s: &Suite) -> Option<u64> {
+    let c = doc.comment(s.note)?;
+    let key = suite_key(notes, s);
+    (!c.follow.replies.iter().any(|r| r.external.as_deref() == Some(key.as_str()))).then_some(c.id)
 }
 
 /// Pose les notes en commentaires de la timeline : auteur = le relecteur, date de la note, texte, dessin ; la clé
@@ -853,6 +992,10 @@ pub fn apply(doc: &mut Document, notes: &Notes, places: &[Placement], unmatched_
         }
         let created = [n.created, notes.created].into_iter().find(|&c| c > 0 && c <= now + 86_400).unwrap_or(now);
         let id = doc.alloc();
+        // L'envoi que la page relisait (sinon le dernier) et la version affichée du plan.
+        let (last, plan_version) = doc.stamp_follow(panel);
+        let send = notes.send.filter(|s| doc.envois.trouve(*s).is_some()).or(last);
+        let follow = crate::fildecision::Follow { source: crate::fildecision::Source::Relecture, send, plan_version, ..Default::default() };
         doc.comments.push(Comment {
             id,
             panel,
@@ -864,7 +1007,19 @@ pub fn apply(doc: &mut Document, notes: &Notes, places: &[Placement], unmatched_
             done: false,
             note: Some(n.id.clone()),
             annotation: n.drawing.clone(),
+            follow,
         });
+    }
+    // Les réponses aux notes de l'envoi d'avant rejoignent le fil de leur note.
+    for s in &notes.suites {
+        if let Some(id) = suite_target(doc, notes, s) {
+            let created = if notes.created > 0 && notes.created <= now + 86_400 { notes.created } else { now };
+            if let Some(c) = doc.comment_mut(id) {
+                if c.follow.replies.len() < crate::fildecision::REPLIES_MAX {
+                    c.follow.replies.push(crate::fildecision::Reply { author: notes.reviewer.clone(), text: s.text.clone(), created, source: crate::fildecision::Source::Relecture, external: Some(suite_key(notes, s)) });
+                }
+            }
+        }
     }
     sum
 }

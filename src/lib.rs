@@ -412,6 +412,10 @@ mod commentaires;
 #[cfg(test)]
 mod commentaires_tests;
 mod commentairesui;
+mod fildecision;
+#[cfg(test)]
+mod fildecision_tests;
+mod fildecisionui;
 mod colorsel;
 #[cfg(test)]
 mod colorsel_tests;

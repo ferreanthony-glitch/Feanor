@@ -730,7 +730,7 @@ fn comments_of_two_people_merge_and_anyone_can_resolve_or_delete_any_comment() {
 fn comments_merge_the_same_way_whatever_the_order_files_arrive_in() {
     use crate::commentaires::Comment;
     use crate::partagecom::{fusionner, Enregistrement};
-    let base = |id, texte: &str, done| Comment { id, panel: 5, frame: 0, text: texte.into(), author: "x".into(), color: [1, 2, 3], created: 0, done, note: None, annotation: None };
+    let base = |id, texte: &str, done| Comment { id, panel: 5, frame: 0, text: texte.into(), author: "x".into(), color: [1, 2, 3], created: 0, done, note: None, annotation: None, follow: Default::default() };
     let a = vec![
         Enregistrement { at: 10, supprime: false, commentaire: base(1, "v1", false) },
         Enregistrement { at: 30, supprime: false, commentaire: base(2, "de a", false) },

@@ -6,6 +6,7 @@
   var PAQUET = body.getAttribute('data-paquet') || '';
   var PROJET = body.getAttribute('data-projet') || '';
   var FICHIER = body.getAttribute('data-fichier') || 'notes';
+  var ENVOI = parseInt(body.getAttribute('data-envoi') || '', 10);
   var CLE = 'shot-relecture-' + PAQUET;
   var COULEURS = { rouge: '#d6261c', bleu: '#1f64d8', vert: '#1a8a3c' };
   var NOMS_COULEURS = { rouge: 'Rouge', bleu: 'Bleu', vert: 'Vert' };
@@ -202,6 +203,17 @@
     return notes;
   }
 
+  /* Les réponses aux notes de l’envoi précédent (un champ par note, facultatif). */
+  function collecterSuites() {
+    var suites = [];
+    Array.prototype.forEach.call(document.querySelectorAll('input.suite'), function (champ) {
+      var t = champ.value.trim();
+      var n = parseInt(champ.getAttribute('data-note'), 10);
+      if (t && n === n) { suites.push({ note: n, texte: t }); }
+    });
+    return suites;
+  }
+
   function nombre() {
     var n = 0;
     cartes.forEach(function (c) { if (c.texte.value.trim() || c.dessin.traits.some(function (t) { return !t.g; })) { n++; } });
@@ -223,7 +235,8 @@
   /* Brouillon dans ce navigateur seulement (si le navigateur le permet) : on retrouve son travail en rouvrant la page. */
   function brouillon() {
     try {
-      var o = { nom: nomChamp.value, general: general.value, cartes: {} };
+      var o = { nom: nomChamp.value, general: general.value, cartes: {}, suites: {} };
+      Array.prototype.forEach.call(document.querySelectorAll('input.suite'), function (champ) { if (champ.value) { o.suites[champ.getAttribute('data-note')] = champ.value; } });
       cartes.forEach(function (c) {
         var t = c.texte.value;
         if (t || c.dessin.traits.length) { o.cartes[c.cle] = { t: t, s: c.dessin.traits }; }
@@ -239,6 +252,10 @@
       var o = JSON.parse(brut);
       if (typeof o.nom === 'string') { nomChamp.value = o.nom; }
       if (typeof o.general === 'string') { general.value = o.general; }
+      Array.prototype.forEach.call(document.querySelectorAll('input.suite'), function (champ) {
+        var v = o.suites && o.suites[champ.getAttribute('data-note')];
+        if (typeof v === 'string') { champ.value = v; }
+      });
       cartes.forEach(function (c) {
         var x = o.cartes && o.cartes[c.cle];
         if (x) {
@@ -261,7 +278,8 @@
       return;
     }
     var notes = collecter();
-    if (!notes.length && !general.value.trim()) {
+    var suites = collecterSuites();
+    if (!notes.length && !suites.length && !general.value.trim()) {
       dire('Il n’y a encore aucune note à enregistrer.', true);
       return;
     }
@@ -277,6 +295,8 @@
       general: general.value.trim(),
       notes: notes
     };
+    if (ENVOI === ENVOI) { donnees.envoi = ENVOI; }
+    if (suites.length) { donnees.suites = suites; }
     var json = JSON.stringify(donnees);
     var jour = maintenant.getFullYear() + '-' + date2(maintenant.getMonth() + 1) + '-' + date2(maintenant.getDate());
     var fichier = FICHIER + '-' + jour + '.json';
@@ -341,6 +361,7 @@
   Array.prototype.forEach.call(document.querySelectorAll('.carte'), function (s) { cartes.push(Carte(s)); });
   Array.prototype.forEach.call(document.querySelectorAll('.lecteur'), Lecteur);
   nomChamp.addEventListener('input', function () { nomChamp.classList.remove('manque'); planifier(); });
+  Array.prototype.forEach.call(document.querySelectorAll('input.suite'), function (champ) { champ.addEventListener('input', planifier); });
   general.addEventListener('input', planifier);
   document.getElementById('enregistrer').addEventListener('click', enregistrer);
   restaurer();

@@ -77,6 +77,7 @@ pub enum Colonne {
     Sons,
     Commentaires,
     CommentairesTexte,
+    Retake,
     Modifie,
     Envoi,
     Couleur,
@@ -95,7 +96,7 @@ pub enum Sorte {
 
 impl Colonne {
     /// Toutes les colonnes, dans l'ordre où la fenêtre les propose.
-    pub const TOUTES: [Colonne; 29] = [
+    pub const TOUTES: [Colonne; 30] = [
         Colonne::Sequence,
         Colonne::Numero,
         Colonne::Reference,
@@ -120,6 +121,7 @@ impl Colonne {
         Colonne::Sons,
         Colonne::Commentaires,
         Colonne::CommentairesTexte,
+        Colonne::Retake,
         Colonne::Modifie,
         Colonne::Envoi,
         Colonne::Couleur,
@@ -153,6 +155,7 @@ impl Colonne {
             Colonne::Sons => "sons",
             Colonne::Commentaires => "commentaires",
             Colonne::CommentairesTexte => "commentaires_texte",
+            Colonne::Retake => "retake",
             Colonne::Modifie => "modifie",
             Colonne::Envoi => "envoi",
             Colonne::Couleur => "couleur",
@@ -192,6 +195,7 @@ impl Colonne {
             Colonne::Sons => "Sons",
             Colonne::Commentaires => "Commentaires ouverts",
             Colonne::CommentairesTexte => "Texte des commentaires",
+            Colonne::Retake => "Retake",
             Colonne::Modifie => "Modifié depuis l'envoi",
             Colonne::Envoi => "Dernier envoi",
             Colonne::Couleur => "Couleur du plan",
@@ -227,6 +231,7 @@ impl Colonne {
             Colonne::Sons => "Les noms des sons posés sur les pistes pendant le plan.",
             Colonne::Commentaires => "Le nombre de commentaires pas encore résolus sur le plan.",
             Colonne::CommentairesTexte => "Le texte des commentaires pas encore résolus, avec leur auteur.",
+            Colonne::Retake => "Les notes de retake encore à traiter sur le plan : le motif, et qui l'a demandé.",
             Colonne::Modifie => "Modifié ou ajouté depuis l'envoi de référence (vide : inchangé ou aucun envoi).",
             Colonne::Envoi => "Le nom de l'envoi de référence : le dernier, ou celui choisi pour l'étendue.",
             Colonne::Couleur => "La couleur de repère du plan.",
@@ -260,6 +265,7 @@ impl Colonne {
             Colonne::TransitionEntree | Colonne::TransitionSortie => 20.0,
             Colonne::Sons => 28.0,
             Colonne::CommentairesTexte => 44.0,
+            Colonne::Retake => 34.0,
             Colonne::Modifie => 14.0,
             Colonne::Effets => 28.0,
             Colonne::Vignette => VIGNETTE_COLONNE,
@@ -281,13 +287,14 @@ impl Colonne {
                 | Colonne::TransitionSortie
                 | Colonne::Sons
                 | Colonne::CommentairesTexte
+                | Colonne::Retake
                 | Colonne::Effets
         )
     }
 
     /// Cochée d'office.
     pub fn par_defaut(self) -> bool {
-        !matches!(self, Colonne::Reference | Colonne::Image | Colonne::DureeTc | Colonne::MouvementDetail | Colonne::ImagesStoryboard | Colonne::CommentairesTexte | Colonne::Envoi | Colonne::Couleur | Colonne::Calques | Colonne::Effets)
+        !matches!(self, Colonne::Reference | Colonne::Image | Colonne::DureeTc | Colonne::MouvementDetail | Colonne::ImagesStoryboard | Colonne::CommentairesTexte | Colonne::Retake | Colonne::Envoi | Colonne::Couleur | Colonne::Calques | Colonne::Effets)
     }
 }
 
@@ -556,6 +563,22 @@ fn ligne_du_plan(doc: &Document, e: &Entree, i: usize, (k, a, b): (usize, usize,
             Colonne::Couleur => Cellule::texte(panel.color.and_then(|k| crate::marks::COLORS.get(k as usize)).map_or("", |c| c.0)),
             Colonne::Calques => Cellule::Entier(panel.layers.iter().filter(|l| !l.folder).count() as i64),
             Colonne::Effets => Cellule::texte(effets(panel).join("; ")),
+            Colonne::Retake => Cellule::texte(
+                commentaires(doc, i, a, b, derniere)
+                    .iter()
+                    .filter_map(|c| c.follow.retake.as_ref().map(|m| (c, m)))
+                    .map(|(c, m)| {
+                        let who = c.author.trim();
+                        match (m.is_empty(), who.is_empty()) {
+                            (true, true) => "Retake".to_string(),
+                            (true, false) => format!("Retake ({who})"),
+                            (false, true) => m.clone(),
+                            (false, false) => format!("{m} ({who})"),
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            ),
             Colonne::Vignette => {
                 let fichier = nom_vignette(reference, if e.par_image { k } else { 0 });
                 let chemin = format!("{DOSSIER_VIGNETTES}/{fichier}");
@@ -835,7 +858,7 @@ fn commentaires(doc: &Document, i: usize, a: usize, b: usize, derniere: bool) ->
     let mut v: Vec<&crate::commentaires::Comment> = doc
         .comments
         .iter()
-        .filter(|c| c.panel == p.id && !c.done)
+        .filter(|c| c.panel == p.id && c.is_open())
         .filter(|c| {
             let at = c.frame.min(len.saturating_sub(1));
             at >= a && (at < b || derniere)

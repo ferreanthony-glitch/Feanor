@@ -6534,3 +6534,72 @@ Code : `src/montagehauteur.rs` (montage), `src/numerotationui.rs` (projets neufs
 2. Ouvrir un ancien projet suivi : il reste suivi.
 3. Tirer le bord entre le dessin et le montage : la pastille s'allume, la bande ne passe pas sous 200 points ; changer d'espace de travail et revenir : la hauteur est gardée.
 4. Réduire la bande : la barre de défilement apparaît, la piste Son 1 s'atteint ; M, S et le verrou se lisent et se cliquent. Bouton de hauteur sous le montage : petite, moyenne, grande.
+## 88. Fil de décision par plan (2026-10-30, branche `fil-decision`)
+
+Recommandation de l'audit (idée ★1) : le client ou le réalisateur renvoie beaucoup de notes, parfois contradictoires ; il faut savoir laquelle compte et ce qui a été traité. Code : `src/fildecision.rs` (modèle, sans interface), `src/fildecisionui.rs` (panneau, pastille, commandes), `src/fildecision_tests.rs`. Une note est un **commentaire** de la timeline : tout vit dans le panneau Commentaires, rien de nouveau à ouvrir.
+
+### Mots
+
+| Mot | Sens |
+|---|---|
+| **Note** | un commentaire, avec un statut |
+| **Statut** | À faire, En discussion, Fait, Refusé (la raison est obligatoire) |
+| **À traiter** | À faire ou En discussion |
+| **Fil du plan** | les notes d'un plan, de la plus ancienne à la plus récente, à travers toutes ses versions, avec les réponses |
+| **En conflit avec…** | deux notes marquées contradictoires à la main (aucune analyse du texte) |
+| **Retake** | une note qui demande de refaire le plan (avec son motif) |
+
+### Où et quels gestes
+
+| Commande | Où | Raccourci |
+|---|---|---|
+| Note suivante à traiter (`notes.suivante_a_traiter`) | panneau Commentaires (icône « saut en avant »), Ctrl+K | aucun |
+| Fil du plan (`notes.fil`) | panneau Commentaires (onglet « Fil du plan »), Ctrl+K | aucun |
+| À faire / Fait / Refusé / En discussion (`notes.statut_*`) | éditeur de la note (liste « Statut »), clic droit sur une note ou son fanion > Statut, clic sur la case de la ligne (fait / à faire), Ctrl+K | aucun |
+| Retake (`notes.retake`) | case « Retake » de l'éditeur, clic droit > Marquer comme retake, Ctrl+K | aucun |
+| En conflit avec… (`notes.conflit`) | éditeur de la note, Ctrl+K | aucun |
+| Liste des retakes (CSV) (`notes.retakes_exporter`) | panneau Commentaires (icône tableur), Ctrl+K | aucun |
+
+Un bloc sans touche par action dans `keymap.toml` ; icônes et bulles d'une seconde (`bulles.rs`) ; couleurs de `theme::` (avertissement : à faire, accent : en discussion, succès : fait, erreur : refusé).
+
+### Ce que voit l'utilisateur
+
+- **Panneau Commentaires** : la ligne d'icônes (nouveau, précédent, suivant, **note suivante à traiter**, **retakes en CSV**) ; « Tout le film » / « Fil du plan » ; la liste des envois (si le projet en a) ; **les quatre compteurs** (« À faire 4 », « Fait 12 »…) qui sont aussi le filtre (clic : montrer ou cacher ces notes dans la liste *et* dans les règles ; clic droit : seulement celles-là ; « Tout » remet) et se limitent à l'envoi choisi.
+- **Liste** : la case de la ligne montre le statut (case vide, coche verte, croix rouge, bulle bleue) ; un éclair rouge dit un conflit, une flèche circulaire un retake.
+- **Fil du plan** : une carte par note (statut en couleur, auteur, date, source, « V2 », envoi, image, texte, raison d'un refus, retake, conflits, réponses). Un clic choisit la note et va à son image ; clic droit : le menu.
+- **Éditeur** : Statut (liste), raison d'un refus (champ à remplir avant que le statut change, « Refuser la note » grisé tant qu'elle est vide), source, envoi (modifiable), version du plan, Retake et son motif, « En conflit avec… » (choisir la note ; une croix défait), réponses et champ « Répondre dans le fil… » (Entrée).
+- **Pastille de notes** : un rond de 7 points (le nombre de notes à traiter) sous la pastille « modifié depuis l'envoi » sur le bloc du plan dans le montage, et dans l'en-tête de la vignette (entre la durée et « V2 ») dans la vue Vignettes ; rouge quand deux notes à traiter sont en conflit. Rien quand il ne reste rien à traiter, rien sur un bloc étroit ou bas (comme la pastille d'envoi). Bulle : « 2 notes à traiter (1 à faire, 1 en discussion) ».
+- **Historique** : une étape par changement (« Note faite », « Note refusée », « Réponse à une note », « Deux notes en conflit »…) ; Ctrl+Z défait un refus d'un coup.
+
+### Format
+
+**`project::VERSION` ne change pas (44)**, ni la version de `commentaires.json` (1) : tout est additif.
+- `resolu` (d'avant) reste le « Fait » ; une note résolue devient « fait », les autres « à faire » à la lecture, **à l'identique**.
+- Un objet `suivi`, absent quand il est vide : `statut` (« refuse » ou « discussion »), `raison`, `statut_le`, `source` (« relecture », « kitsu » ; absent : SHOT), `externe`, `envoi`, `version`, `reponses` (`auteur`, `texte`, `cree`, `source`, `externe`), `conflits` (des deux côtés), `retake` (le motif).
+- Un SHOT d'avant lit le fichier sans broncher : il ignore `suivi` ; une note refusée ou en discussion y paraît « pas résolue ». L'enregistrement d'un projet sans note n'écrit rien de plus qu'avant.
+- À la lecture : « fait » gagne sur « refusé » ; la raison ne se garde que pour un refus ; textes bornés ; conflits avec soi-même, en double ou avec une note absente retirés.
+- **Relecture** (`shot-relecture`, version 1, additif) : la page porte `data-envoi`, le fichier de notes `envoi` (le numéro de l'envoi relu) et `suites` (`{ "note": n°, "texte": … }`, les réponses aux notes de l'envoi d'avant).
+- Un autre chantier peut aussi monter `project::VERSION` : celui-ci ne le fait pas.
+
+### Fermer la boucle avec le relecteur
+
+La page de relecture d'un envoi M montre, pour chaque plan et sous l'image visée, **« Vos notes de l'envoi précédent »** : les notes du relecteur (source relecture ou Kitsu : **jamais** les notes internes de l'équipe) dont l'envoi est celui d'avant M (sans envoi choisi : le dernier). Chacune avec un badge **Fait** (vert), **Refusé** et « Raison du refus : … » (rouge), **En discussion** ou « Pas encore traitée », et un champ « Votre réponse (facultatif) ». Un plan modifié depuis l'envoi porte « Modifié depuis l'envoi précédent ». Au retour, la réponse rejoint le fil de **sa** note (identifiant gardé dans la page), une seule fois même si on réimporte ; elle ne change pas le statut (c'est à l'équipe de décider). Les notes importées prennent l'envoi du fichier (sinon le dernier envoi) et la version du plan.
+
+### Retakes
+
+« Liste des retakes (CSV) » : Excel en français (point-virgule, BOM), une ligne par note de retake dans l'ordre du film : séquence, n° de plan, version, TC entrée, image, motif, note, auteur, source, envoi, statut, raison du refus, date, réponses ; une cellule qui commencerait par `=`, `+`, `-` ou `@` reçoit une apostrophe. La fiche technique (§26) a une colonne **Retake** (motif et demandeur des retakes encore à traiter), décochée d'office : les fiches d'avant restent identiques.
+
+### Pour le pont Kitsu
+
+Le modèle reçoit déjà des notes d'ailleurs : `suivi.source = "kitsu"`, `suivi.externe` (l'identifiant Kitsu de la note ; `externe` d'une réponse pour son commentaire), auteur et date de la note, statut (À faire / Fait / Refusé / En discussion se mappent sur les statuts de tâche et les commentaires), `envoi` et `version`. Une importation depuis Kitsu devra : chercher d'abord une note de même `externe` (pas de doublon), poser `source`, garder le texte, les réponses et la date, ne jamais écraser le statut décidé dans SHOT. Rien de cela n'est branché ici.
+
+### À vérifier à l'écran
+
+1. Panneau Commentaires : les compteurs affichent les bons nombres ; un clic cache les notes d'un statut dans la liste et dans les fanions de la règle ; « Tout » remet.
+2. Choisir « Refusé » : un champ de raison apparaît, le statut ne change qu'avec « Refuser la note » ; Ctrl+Z retire le refus d'un coup.
+3. « Fil du plan » : les notes d'un plan à plusieurs versions s'enchaînent, « V1 » / « V2 » se lit sur chacune ; répondre (Entrée) ; clic droit > Statut.
+4. Marquer deux notes « En conflit avec… » : l'éclair rouge est sur les deux lignes, la pastille du plan passe au rouge tant que les deux sont à traiter.
+5. Pastille ronde sous celle de « modifié depuis l'envoi » (montage) et dans l'en-tête des vignettes ; la bulle donne les nombres ; elle disparaît quand tout est traité.
+6. Note suivante à traiter (Ctrl+K) : va au plan, se met sur la note, revient au début en fin de film, dit « Plus aucune note à traiter » à la fin.
+7. Exporter pour relecture après avoir traité des notes d'une relecture : la page montre Fait / Refusé et les raisons, jamais une note interne ; ouvrir la page, répondre à une note, enregistrer, importer : la réponse est dans le fil de la note.
+8. Retake sur deux notes, CSV ouvert dans Excel : accents, retours à la ligne, colonnes ; la colonne « Retake » de la fiche technique.

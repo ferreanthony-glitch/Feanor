@@ -1853,6 +1853,21 @@ impl App {
                 clip.galley(pos2(droite, pastille.center().y - g.size().y * 0.5), g.clone(), Color32::from_gray(90));
                 droite += g.size().x + 6.0;
             }
+            // Des notes encore à traiter sur ce plan : la même petite pastille qu'au montage, hors du cadre, entre la durée et la
+            // version (`fildecisionui.rs`). Rien sans note à traiter.
+            if !self.doc.comments.is_empty() {
+                if let Some(m) = self.doc.plan_mark(place.plan).filter(|m| m.counts.open() > 0) {
+                    let r = (font * 0.42).clamp(7.0, 12.0);
+                    let centre = pos2(droite + r + 1.0, pastille.center().y);
+                    crate::fildecisionui::peindre_marque(&clip, centre, &m, r);
+                    if ui.rect_contains_pointer(Rect::from_center_size(centre, vec2(r * 2.0 + 2.0, r * 2.0 + 2.0)).intersect(view)) {
+                        egui::show_tooltip_at_pointer(ui.ctx(), ui.layer_id(), egui::Id::new(("note_marque", place.plan)), |ui| {
+                            ui.label(crate::fildecisionui::marque_phrase(&m));
+                        });
+                    }
+                    droite += r * 2.0 + 6.0;
+                }
+            }
             // L'étiquette de version (« V2 »), **hors du cadre**, juste à droite du numéro : jamais sur l'image. Rien pour un plan à une
             // seule version, ni si le réglage est éteint.
             if reglages.pastille_version {

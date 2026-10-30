@@ -608,7 +608,7 @@ pub fn storyboard_of_with(doc: &Document, panels: &[usize], with_comments: bool)
                 let mut here: Vec<&crate::commentaires::Comment> = doc
                     .comments
                     .iter()
-                    .filter(|c| c.panel == p.id && !c.done)
+                    .filter(|c| c.panel == p.id && c.is_open())
                     .filter(|c| {
                         let at = c.frame.min(len.saturating_sub(1));
                         at >= start && (at < end || k == last)

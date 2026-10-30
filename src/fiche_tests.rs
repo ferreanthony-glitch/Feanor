@@ -93,7 +93,7 @@ fn every_column_has_a_stable_id_a_title_and_a_help() {
         assert_eq!(Colonne::depuis_id(c.id()), Some(c));
         assert!(!c.aide().is_empty() && c.largeur() > 5.0);
     }
-    assert_eq!(Colonne::TOUTES.len(), 29);
+    assert_eq!(Colonne::TOUTES.len(), 30);
     assert_eq!(Colonne::depuis_id("n_importe_quoi"), None);
     // Les colonnes d'origine : sans doublon, dans l'ordre de la fenêtre.
     let d = fiche::colonnes_par_defaut();
@@ -409,7 +409,7 @@ fn sounds_comments_and_effects_details() {
     doc.add_clip(0, voix, 20, 0, 10).expect("voix");
     let plan = doc.panels[1].id;
     for (n, (t, auteur, fini, image)) in [("À refaire", "Anthony", false, 3usize), ("Fait", "Léa", true, 4), ("Le décor est trop vide", "", false, 99)].iter().enumerate() {
-        doc.comments.push(crate::commentaires::Comment { id: n as u64 + 1, panel: plan, frame: *image, text: t.to_string(), author: auteur.to_string(), color: [60, 200, 215], created: 0, done: *fini, note: None, annotation: None });
+        doc.comments.push(crate::commentaires::Comment { id: n as u64 + 1, panel: plan, frame: *image, text: t.to_string(), author: auteur.to_string(), color: [60, 200, 215], created: 0, done: *fini, note: None, annotation: None, follow: Default::default() });
     }
     doc.panels[0].layers.push(crate::document::Layer::new("Fond", crate::document::LayerKind::Vector));
     for _ in 0..2 {
@@ -441,7 +441,7 @@ fn comments_of_a_storyboard_image_are_those_that_fall_on_it() {
     doc.toggle_mark(2, 10).expect("marque");
     let plan = doc.panels[2].id;
     for (n, image) in [2usize, 12, 99].iter().enumerate() {
-        doc.comments.push(crate::commentaires::Comment { id: n as u64 + 1, panel: plan, frame: *image, text: format!("c{n}"), author: String::new(), color: [1, 2, 3], created: 0, done: false, note: None, annotation: None });
+        doc.comments.push(crate::commentaires::Comment { id: n as u64 + 1, panel: plan, frame: *image, text: format!("c{n}"), author: String::new(), color: [1, 2, 3], created: 0, done: false, note: None, annotation: None, follow: Default::default() });
     }
     let f = fiche_de(&doc, &[2], &[Colonne::Commentaires], true);
     // Image 1 : le commentaire de l'image 2 ; image 2 : celui de l'image 12 et, sur la dernière image, celui qui dépasse le plan.
@@ -1291,7 +1291,7 @@ fn echantillons_pour_ouvrir_dans_un_tableur() {
     doc.add_audio_track();
     doc.add_clip(0, voix, 20, 0, 10).expect("voix");
     let plan = doc.panels[1].id;
-    doc.comments.push(crate::commentaires::Comment { id: 1, panel: plan, frame: 3, text: "À refaire".into(), author: "Anthony".into(), color: [1, 2, 3], created: 0, done: false, note: None, annotation: None });
+    doc.comments.push(crate::commentaires::Comment { id: 1, panel: plan, frame: 3, text: "À refaire".into(), author: "Anthony".into(), color: [1, 2, 3], created: 0, done: false, note: None, annotation: None, follow: Default::default() });
     let mut etats = HashMap::new();
     etats.insert(doc.panels[1].id, Etat::Modifie);
     let toutes: Vec<Colonne> = Colonne::TOUTES.to_vec();

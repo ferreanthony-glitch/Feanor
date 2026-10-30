@@ -36,7 +36,7 @@ fn film() -> Document {
 }
 
 fn meta() -> Meta {
-    Meta { title: "Mon film".into(), project: "Mon film".into(), paquet: "abc123".into(), envoi: Some("v2 au réal".into()), now: 1_760_000_000, nonce: "nonce0123456789".into(), file_stem: "notes-Mon_film".into() }
+    Meta { title: "Mon film".into(), project: "Mon film".into(), paquet: "abc123".into(), envoi: Some("v2 au réal".into()), now: 1_760_000_000, nonce: "nonce0123456789".into(), file_stem: "notes-Mon_film".into(), ..Default::default() }
 }
 
 /// Un faux JPEG distinct par rang (la page ne le décode pas).
