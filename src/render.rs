@@ -770,13 +770,13 @@ pub fn stored_panel_plan(doc: &Document, panel: &Panel, frame: usize, paper: Opt
 }
 
 /// Le calque `li` du plan `index` seul, à l'image `frame`, tel que la caméra au centre le voit
-/// (export vers Storyboard Pro, 14b) : en mode normal, à pleine opacité et même caché (sa
-/// visibilité et son opacité sont reprises à part), effets compris. Aucun : un dossier, ou rien
-/// à cette image.
+/// (essais) : en mode normal, à pleine opacité et même caché (sa visibilité et son opacité sont
+/// reprises à part), effets compris. Aucun : un dossier, ou rien à cette image.
+#[cfg(test)]
 pub fn layer_plan_at(doc: &Document, index: usize, li: usize, frame: usize) -> Option<Plan> {
     let panel = doc.panels.get(index)?;
     let l = panel.layers.get(li)?;
-    // (Un calque d'annotation n'est pas un dessin du film : l'export vers Storyboard Pro ne le prend pas.)
+    // (Un calque d'annotation n'est pas un dessin du film : il n'entre pas dans ce plan.)
     if l.folder || l.effet.is_some() || l.annotation {
         return None;
     }

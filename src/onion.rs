@@ -1,6 +1,5 @@
 //! Pelure d'oignon (3d-1) : les dessins voisins du calque courant, sous le dessin courant, de plus
-//! en plus pâles avec la distance. Valeurs par défaut reprises des préférences Storyboard Pro
-//! d'Anthony (`docs/reference/sbpro_presets/STB_Preferences.xml`) : 3 avant, 3 après, rouge avant,
+//! en plus pâles avec la distance. Valeurs par défaut : 3 avant, 3 après, rouge avant,
 //! vert après, teinté, sous le dessin. Réglages de l'application, retenus d'une séance à l'autre.
 //!
 //! 13f : tout ce que le panneau « Table lumineuse » de TVPaint 12 décrit (textes 000050050–124) :

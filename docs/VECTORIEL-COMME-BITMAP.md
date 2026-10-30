@@ -195,21 +195,12 @@ qui doit tomber à 0 ; 0,0 pour la même image).
   d'après `r`, `t` = −1 → vitesse nulle) ; `brush` toujours écrit (les anciens fichiers l'ont en
   option : absent → rendu d'avant, pas de changement d'aspect des vieux dessins) ; `seed`,
   `feel`, `secondary`, `behind` en `#[serde(default)]`. `project::VERSION` → 24, avec la ligne de
-  journal d'usage dans `project.rs`. Le `Cel` bitmap, le fond, les exports SBP (`sbexport.rs`,
-  qui lit `points` et la couleur) ne changent pas.
+  journal d'usage dans `project.rs`. Le `Cel` bitmap, le fond et les exports ne changent pas.
 - Option de migration : « Moderniser les traits » (menu) qui donne aux anciens traits ronds le
   `brush` du Pinceau rond — à ne faire que sur demande, puisque ça change le bord (`12_vecto_bord`).
 
 ### P9. Les autres logiciels (public, « à vérifier » partout)
 
-- **Toon Boom Storyboard Pro / Harmony** : la « textured vector brush » est un contour vectoriel
-  rempli d'une **texture bitmap** à densité fixe (« the vector shapes your brush creates will be
-  filled with a bitmap texture ») ; la densité se règle par calque (100 % par défaut, « set the
-  pixel density of that layer to at least 400% before you start drawing ») ; modifier ou agrandir
-  le trait **rééchantillonne** la texture (« Storyboard Pro will need to resample the textures,
-  which will make it lose quality ») ; chaque trait texturé est stocké et composé à part, plus lourd
-  qu'un bitmap ; le crayon texturé garde sa netteté à la transformation. C'est P2 (cache par trait)
-  sans P1 (pas de rejeu exact) — et c'est ce qu'Anthony connaît dans SBP.
 - **Clip Studio Paint** : le calque vectoriel garde des courbes (« recognizes each line you draw
   as a little equation ») ; l'outil Objet change après coup « the brush shape, color, size,
   texture, and blending mode » (donc le rendu est **rejoué** depuis le chemin avec la brosse, comme
@@ -220,7 +211,7 @@ qui doit tomber à 0 ; 0,0 pour la même image).
   les « art / pattern brushes » répètent un motif vectoriel le long du chemin, pas de texture
   bitmap par empreinte.
 - Conclusion : personne ne fait « trait pour trait » par magie ; ceux qui approchent (Clip Studio)
-  rejouent la brosse sur le chemin, ceux qui cachent (Toon Boom) acceptent le rééchantillonnage.
+  rejouent la brosse sur le chemin, ceux qui cachent acceptent le rééchantillonnage.
   P1 + P2 fait les deux.
 
 ### Tableau
@@ -303,7 +294,7 @@ Anthony : « ensuite, l'étape 5 », avec en priorité le déplacement d'une sé
 - Gomme vectorielle, cutter, enveloppe, interpolation : les morceaux et les traits refaits
   **gardent leurs appuis et leurs instants, interpolés** aux coupes et aux points ajoutés
   (`Trace::sample`, `densify_traced`, `piece_traced`) ; les traits non touchés ne bougent pas d'un
-  point. Perspective, export Storyboard Pro : la trace suit (`without_cache`). Copier-coller et
+  point. Perspective, exports : la trace suit (`without_cache`). Copier-coller et
   enregistrement : la trace suit.
 
 ### Mesures (`vecto_tests::vector_selection_drag_is_fast_with_the_pixel_cache`, essai ignoré)

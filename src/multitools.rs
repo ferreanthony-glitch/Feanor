@@ -31,7 +31,7 @@ const PIVOT_SNAP: f32 = 6.0;
 /// Geste d'annulation des flèches : une flèche tenue = une étape.
 const NUDGE_GESTURE: u64 = 0x6d75_6c74_696e_7564;
 
-/// Les touches tenues font-elles le geste « tous les calques » (Storyboard Pro : Ctrl+Maj avec
+/// Les touches tenues font-elles le geste « tous les calques » (Ctrl+Maj avec
 /// l'outil Sélection) ? Ctrl seul garde le lasso temporaire et la boîte autour du pivot, Maj seul
 /// ajoute ou retire ; Alt est la pipette.
 pub(crate) fn is_all_layers_gesture(m: &egui::Modifiers) -> bool {
@@ -170,7 +170,7 @@ impl App {
 
     /// Un appui avec l'outil Sélection et plusieurs calques choisis : une poignée de la boîte, un
     /// trait, ou le début d'un lasso (ou d'un rectangle).
-    /// `all` : Ctrl+Maj tenus (comme dans Storyboard Pro) : le geste prend sur tous les calques du
+    /// `all` : Ctrl+Maj tenus : le geste prend sur tous les calques du
     /// plan à l'image courante, comme une nouvelle sélection (Maj seul garde son sens : ajouter ou
     /// retirer ; Ctrl seul, celui de la boîte, autour du pivot).
     pub(crate) fn multi_press(&mut self, stage: Pos2, screen: Pos2, shift: bool, all: bool) {

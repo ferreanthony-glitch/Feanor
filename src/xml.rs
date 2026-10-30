@@ -1,4 +1,4 @@
-//! Lecture d'un fichier XML en arbre (14a, projets Storyboard Pro) : chaque élément garde son
+//! Lecture d'un fichier XML en arbre (14a) : chaque élément garde son
 //! nom, ses attributs (déjà décodés : `&lt;` devient `<`) et ses enfants. Le texte entre les
 //! balises est gardé aussi, mais les fichiers lus s'en servent peu.
 

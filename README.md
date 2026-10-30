@@ -129,7 +129,7 @@ dans `...\Pelure` y est copié (jamais déplacé ni supprimé) s'il n'y a pas en
 
 Chaque plan a ses calques, de deux sortes :
 
-- **Vectoriel** (Maj+S pour en créer un, par défaut, façon Storyboard Pro) : les traits restent des objets modifiables.
+- **Vectoriel** (Maj+S pour en créer un, par défaut) : les traits restent des objets modifiables.
   - Pinceau et crayon tracent des traits à épaisseur variable (pression du stylet comprise).
     Deux interrupteurs sous l'aperçu du trait, au-dessus de « Plus de réglages », aussi sur un calque
     bitmap : **Peint sur l'aplat** (pour l'instant : la peinture passe sous ce qui est déjà dessiné)
@@ -139,13 +139,12 @@ Chaque plan a ses calques, de deux sortes :
   - Le pot de peinture crée une zone remplie qui passe sous les traits. Sur un trait ou une zone
     déjà peinte, il en change la couleur.
   - Les formes (ligne, rectangle, ellipse, pleines ou non) se tracent avec l'outil Formes (Alt+R).
-  - L'outil Sélection (Alt+S) prend au clic ou au lasso (Maj pour ajouter) et montre une **boîte façon
-    Storyboard Pro** : un cadre, huit petites poignées carrées (coins et milieux des côtés) et un point
+  - L'outil Sélection (Alt+S) prend au clic ou au lasso (Maj pour ajouter) et montre une **boîte de sélection** : un cadre, huit petites poignées carrées (coins et milieux des côtés) et un point
     rond de pivot au centre. Glisser dedans déplace ; un coin met à l'échelle dans les deux sens, le
     milieu d'un côté dans un seul ; juste à l'extérieur d'un coin, on tourne autour du pivot ; sur un
     bord, entre les poignées, on incline ; le point rond se tire ailleurs pour changer le pivot. Maj :
     proportions (échelle), un seul axe (déplacement), pas de 15° (rotation) ; Ctrl : autour du pivot au
-    lieu du côté opposé (*touches à vérifier avec le vrai Storyboard Pro*). Le panneau Réglages donne
+    lieu du côté opposé. Le panneau Réglages donne
     les mêmes valeurs en chiffres (position, largeur, hauteur, angle, inclinaison), « Garder les
     proportions » et « Réinitialiser le pivot ». Chaque geste est une étape d'annulation à son nom
     (« Déplacer », « Mettre à l'échelle », « Tourner », « Incliner »). On peut aussi appliquer la couleur
@@ -777,8 +776,7 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   - Les brosses MyPaint et Krita importées (`opaque`, Flow) déposent maintenant une part par
     empreinte qui s'accumule dans le trait, au lieu d'un plafond d'opacité.
 - **Pinceaux texturés** (panneau Réglages) : « Papier » et « Grain » donnent un grain fixe sur le
-  dessin, que la couleur remplit quand on appuie. L'icône d'import lit un fichier de pinceaux Toon
-  Boom (`.xml`, par exemple `STB_TextureBrushes_preset.xml`) : ses pinceaux, pointes et papiers
+  dessin, que la couleur remplit quand on appuie. Les pinceaux importés (voir les formats ci-dessous), avec leurs pointes et leurs papiers,
   s'ajoutent à la liste et restent pour les fois suivantes.
 - **Brosses Procreate** (même bouton) : `.brush`, `.brushset`. Arrivent la forme (pointe), le
   grain (papier), la taille, l'opacité, l'espacement, la dispersion et l'appui. Pas encore
@@ -946,8 +944,7 @@ Pelure. Lancer : `cd src-frontend` puis `npm run tauri dev`. Détails : `docs/CO
 
 ## Raccourcis clavier
 
-Ils sont repris de Storyboard Pro 27 (raccourcis par défaut) et de tes réglages personnels, et
-rangés dans `keymap.toml`. Pour en changer un :
+Ils sont rangés dans `keymap.toml`. Pour en changer un :
 - **clic droit** sur une icône ou une entrée de menu, « Assigner un raccourci… », puis taper la
   combinaison ;
 - Pelure dit si elle sert déjà (l'autre commande la perd), puis propose « Remplacer » ou « Ajouter » ;
@@ -956,17 +953,9 @@ rangés dans `keymap.toml`. Pour en changer un :
 Fichier > Raccourcis clavier… (ou F1) liste toutes les commandes. On y trouve une recherche, les
 mêmes boutons, et l'origine de chaque raccourci en bulle.
 
-**Jeu de raccourcis** (Fichier > Préférences… ou en tête de la liste F1) : « SHOT (par défaut) » ou
-« Façon Storyboard Pro ». Ce dernier ne change que ce que `keymap.toml` documente (Ctrl+Maj+V colle sur
-place) ; A / F (clé précédente / suivante), F5 (nouvelle clé) et F6 (couper le plan) restent à tes
-réglages, voulu ainsi ; le reste garde les touches de SHOT, et tes
-raccourcis personnels restent par-dessus le jeu. La liste dit d'où vient chaque touche (SHOT, jeu, perso).
-Tableau et sources : `docs/INTERFACE.md`, 6.2.
-
 Les choix vont dans un fichier personnel (`%APPDATA%\SHOT\keymap.toml`), qui remplace, action par
-action, le fichier par défaut (et le jeu choisi). On peut aussi l'écrire à la main (« Aide > Modifier le fichier de
-raccourcis à la main », puis « Recharger »). Détails et choix pour le clavier AZERTY :
-`docs/reference/sbpro_presets/README.md`.
+action, le fichier par défaut. Une action qui n'existe plus dans SHOT (un ancien fichier) est ignorée, avec une remarque dans la liste F1. On peut aussi l'écrire à la main (« Aide > Modifier le fichier de
+raccourcis à la main », puis « Recharger »). Détails et choix pour le clavier AZERTY : `docs/INTERFACE.md`, 6.2.
 
 Documentation technique : `docs/ARCHITECTURE.md` ; avancement : `docs/ROADMAP.md` ; mesures et
 leviers de performance (superposition « Performance », banc `perf_tests.rs`, diagnostic des
@@ -1098,8 +1087,7 @@ contrôle : `docs/INTERFACE.md` § 32.
 ## Calque de couleur (la couleur sous le trait)
 
 Pour colorier sans abîmer le trait : un **calque de couleur** est lié à un calque de dessin (le
-« trait »), posé juste dessous, et il en suit les images. C'est l'idée « trait / couleur » de
-Toon Boom ; la façon exacte de Storyboard Pro ou de Harmony n'a pas été vérifiée (à vérifier).
+« trait »), posé juste dessous, et il en suit les images. C'est l'idée « trait / couleur ».
 
 - **Créer** : l'icône palette du panneau Calques (« Nouveau calque de couleur »), Calques > Nouveau
   calque > « De couleur », clic droit sur un calque > « Calque de couleur » > « Ajouter… », ou Ctrl+K.
@@ -1161,8 +1149,7 @@ Toon Boom ; la façon exacte de Storyboard Pro ou de Harmony n'a pas été véri
   personnage** (trait + couleur d'aplat) s'appuie sur l'aplat sous le trait et reste
   telle quelle ; rien dans l'un ne dépend de l'autre. Sur un même calque, l'ordre est : le remplissage au griffonnage,
   l'aplat, la peinture libre, puis le trait.
-- Export, PDF, vignettes, montage, export Storyboard Pro : la couleur est un calque bitmap de plus
-  (l'export Storyboard Pro le dit : le lien trait / couleur n'y existe pas, à vérifier).
+- Export, PDF, vignettes, montage : la couleur est un calque bitmap de plus.
 - Projets : format **36** depuis « On fusionne » (griffonnages, sources, calque libre ; un projet enregistré ainsi n'est
   pas lisible par une version d'avant) ; un projet d'avant s'ouvre tel quel (le format **30** a introduit le calque
   de couleur). Détails : `src/calquecouleur.rs`, `src/griffonnage.rs`, `docs/INTERFACE.md` partie 18.
@@ -1170,7 +1157,7 @@ Toon Boom ; la façon exacte de Storyboard Pro ou de Harmony n'a pas été véri
 ## Toile infinie (dessiner hors de la feuille)
 
 La feuille n'est plus une page cernée d'une ombre : on peut dessiner **n'importe où autour d'elle**, comme
-dans Storyboard Pro (le fonctionnement exact de Storyboard Pro est **à vérifier**, SHOT reprend l'idée).
+sur une toile.
 
 - **À l'écran** : le papier (ou le damier, ou le noir de l'arrière-plan) couvre tout ce que la vue regarde,
   plus d'ombre ni de zone hachurée autour de la feuille. Le **cadre de la caméra** est un trait fin et
@@ -1187,12 +1174,11 @@ dans Storyboard Pro (le fonctionnement exact de Storyboard Pro est **à vérifie
   exportée le montre ; une caméra qui regarde un endroit vide donne du papier.
 - **Pipette** : prend aussi hors de la feuille.
 - **Ajuster à la fenêtre** (bouton de la barre sous le dessin) : cadre toujours la **caméra** (la feuille, pour un nouveau plan), avec
-  un peu d'air autour, et non « tout ce qui est dessiné » (choix de SHOT ; le comportement de Storyboard Pro
-  est à vérifier). Le zoom va de 2 % à 6 400 %, le défilement n'a pas de bord.
+  un peu d'air autour, et non « tout ce qui est dessiné » (choix de SHOT). Le zoom va de 2 % à 6 400 %, le défilement n'a pas de bord.
 - **Limites connues** (à la feuille seulement) : le pot de peinture (il cherche ses contours sur la feuille ;
   hors d'elle il le dit et ne fait rien) ; les zones bitmap sélectionnées (lasso, baguette) ; les effets de
   calque, les calques d'ajustement, l'aplat sous le trait, les calques de couleur, les déformations
-  (enveloppe, perspective) ; l'import et l'export Storyboard Pro ; la propagation. Ce qui est dessiné hors de
+  (enveloppe, perspective) ; la propagation. Ce qui est dessiné hors de
   la feuille s'y voit, s'y exporte, mais ces fonctions ne le touchent pas.
 - **En dessous** : la feuille se compose comme avant (carte graphique) ; le reste du monde visible est une
   texture composée par le processeur (`src/monde.rs`), seulement là où il y a du dessin, par petits morceaux
@@ -1211,7 +1197,7 @@ nouveau projet. Ctrl+Z l'annule.
 
 Les menus montrent l'essentiel ; le reste est rangé dans un sous-menu (« Plans », « Importer »,
 « Ordre », « Plus »…) ou une fenêtre :
-- Fichier > Exporter… : film, images, image courante, PDF, page HTML, son, Storyboard Pro, et la
+- Fichier > Exporter… : film, images, image courante, PDF, page HTML, son, et la
   case « PNG sans le papier » ;
 - Fichier > Préférences… : une fenêtre à onglets (voir « Préférences en onglets » ci-dessous) ;
 - Aide > À propos de SHOT… : le logo, la version et le nom d'avant (Échap ferme la fenêtre).
@@ -1236,8 +1222,8 @@ trait, les réglages). La fenêtre rouvre sur le dernier onglet utilisé (clé `
 | **Apparence** | Thème et couleurs (le thème, les neuf couleurs, « Rétablir ») ; Panneaux (ajuster à leur contenu, « Réajuster ») |
 | **Dessin** | Stylet et pinceau (croix du système) ; Caméra (opacité du passe-partout, « Rétablir ») |
 | **Montage** | Pistes du montage (repliage commun ou par plan, déplier le calque courant tout seul) |
-| **Raccourcis** | Jeu de raccourcis (SHOT ou façon Storyboard Pro), voir et changer les raccourcis, modifier le fichier à la main, recharger |
-| **Export** | Programmes et modèles : ffmpeg (« Choisir… », « Automatique »), modèle Storyboard Pro ; accès à la fenêtre Exporter… |
+| **Raccourcis** | Voir et changer les raccourcis, modifier le fichier à la main, recharger |
+| **Export** | Programmes : ffmpeg (« Choisir… », « Automatique ») ; accès à la fenêtre Exporter… |
 | **Équipe** | Commentaires (signature) ; Travail à plusieurs (mon nom et ma couleur, durée d'une prise, prise automatique, notifications) |
 | **Génération** | Génération sonore : le fournisseur de chaque rôle, les clés (Gestionnaire d'identifiants, inchangé), le serveur local |
 | **Performance** | Les onze réglages du diagnostic, « Diagnostic des performances… », « Valeurs d'origine » ; Affichage (le moteur de rendu) |
@@ -1248,8 +1234,7 @@ trait, les réglages). La fenêtre rouvre sur le dernier onglet utilisé (clé `
   (les autres sont grisés). La croix efface la recherche.
 - Tous les contrôles ont leur bulle au bout d'une seconde. Le petit engrenage du panneau Suggestions sonores ouvre
   les Préférences directement sur l'onglet **Génération**.
-- **Nouveau, sans nouveau réglage** : l'onglet Export montre deux réglages qui existaient déjà (le chemin de ffmpeg et le
-  projet modèle de Storyboard Pro, choisis jusque-là dans les fenêtres d'export, qui gardent leurs boutons).
+- **Nouveau, sans nouveau réglage** : l'onglet Export montre un réglage qui existait déjà (le chemin de ffmpeg, choisi jusque-là dans les fenêtres d'export, qui gardent leur bouton).
 - Le code : `src/prefsonglets.rs` est **la table des réglages** (onglet, groupe, étiquette lue à l'écran, mots de
   recherche) ; `src/prefsui.rs` dessine un onglet en la parcourant ; `src/prefsui_tests.rs` vérifie que chaque réglage de
   l'ancienne fenêtre est dans un seul onglet, que chaque onglet montre les siens et pas ceux des autres, la mémoire de
@@ -1271,8 +1256,7 @@ trait, les réglages). La fenêtre rouvre sur le dernier onglet utilisé (clé `
 ### Apparence
 
 Fichier > Préférences… > Apparence : le **thème** de l'interface, qui change tout de suite.
-- **Gris sombre** (par défaut) : gris neutres moyens, plus proches de Storyboard Pro ou de Clip
-  Studio Paint que du noir ; **Gris clair** (texte sombre, logo clair) ; **Sombre**, l'ancien thème
+- **Gris sombre** (par défaut) : gris neutres moyens, plus doux que le noir ; **Gris clair** (texte sombre, logo clair) ; **Sombre**, l'ancien thème
   presque noir ; **Personnalisé**.
 - Neuf couleurs se règlent : fond des panneaux, barres, fenêtres et menus, boutons et curseurs,
   texte, accent et sélection, fond autour du dessin, timeline et montage, bordures. Changer l'une
@@ -1542,7 +1526,7 @@ qu'il reste du contenu caché de ce côté).
   `montage.debut_a_tete`, `montage.fin_a_tete`, `montage.rognage_retablir`,
   `montage.rognage_oublier`, `montage.aimanter`), sans touche par défaut : clic droit sur l'entrée d'un
   menu pour leur en donner une, ou Ctrl+K.
-- À vérifier face à Storyboard Pro et aux logiciels de montage : la touche Alt pour le roll et le
+- À vérifier face aux logiciels de montage : la touche Alt pour le roll et le
   glisser, la coupe « au trait de la tête de lecture » (l'image sous la tête sort de la fin), et le
   premier dessin tenu quand on rallonge au-delà de la réserve. Ce sont des choix de SHOT.
 - Enregistré dans `rognages.json`, à côté du manifeste (le format du projet ne change pas ; une
@@ -1737,9 +1721,7 @@ sur la coupe (papillon pour le fondu enchaîné, losange pour le noir ou le blan
 - **Lecture et export** : la carte graphique pose le plan entrant sur le plan sortant pendant la lecture
   (chaque plan vu par sa propre caméra en vue caméra) ; à l'arrêt, le mélange se voit aussi
   (`transition.apercu` pour le couper si l'on dessine dans la zone). Le film et les images exportés
-  contiennent les transitions, image par image (case « Avec les transitions du montage »). L'export vers
-  Storyboard Pro ne les reprend pas (comment Storyboard Pro range les siennes : à vérifier) ; le compte
-  rendu de l'export le signale.
+  contiennent les transitions, image par image (case « Avec les transitions du montage »).
 - Enregistrées dans `transitions.json`, à côté du manifeste (le format du projet ne change pas) ; un
   fichier illisible ou d'une version plus récente ne bloque pas l'ouverture et n'est jamais effacé.
   Chaque changement est une étape d'annulation nommée (« Ajouter une transition : fondu enchaîné »,
@@ -1765,8 +1747,7 @@ Sur les extraits de la bande de montage (l'extrait doit être choisi) :
 - **Égaliseur** à trois bandes (graves, médiums, aigus, ±12 dB) et **écho** (niveau, délai, retour) : dans
   le menu du clic droit sur l'extrait > « Effets du son ». Sans nouvelle bibliothèque : filtres du second
   ordre et ligne à retard. Ils se calculent sur un fil à part ; en attendant, on entend le son tel quel.
-- Lecture, son au défilement, WAV du film, son des vidéos exportées et fichiers son de l'export vers
-  Storyboard Pro passent tous par le même calcul (`audiofx::build_mix`) : ce qu'on entend est ce qu'on exporte.
+- Lecture, son au défilement, WAV du film, son des vidéos exportées passent tous par le même calcul (`audiofx::build_mix`) : ce qu'on entend est ce qu'on exporte.
 - Enregistrés dans `effets_son.json` (même principe que `transitions.json`) ; une étape d'annulation nommée par réglage et par geste.
 
 ## Bruitages
@@ -1906,8 +1887,7 @@ s'il est rangé dans un dossier). « Calque d'effet vide » couvre tout le plan,
 
 Les sept effets nouveaux (famille **Cinéma** de « Ajouter un effet ») sont des effets ordinaires de la pile
 (`src/fxcine.rs`) : ils servent aussi sur un calque de dessin. Valeurs en pixels proportionnelles à la hauteur du
-cadre ; l'ampleur du tremblement est celle de `camfx.rs`, à régler à l'œil — aucun équivalent dans Storyboard Pro ni
-dans TVPaint n'a été vérifié (à vérifier).
+cadre ; l'ampleur du tremblement est celle de `camfx.rs`, à régler à l'œil.
 
 **Rendu** (`src/calqueffet.rs`) : un calque d'ajustement actif pose dans le plan un repère ; l'écran le remplace, avec ce
 qu'il couvre, par UN dessin dérivé (la composition d'en dessous passée par les effets, puis fondue avec l'opacité
@@ -1942,7 +1922,7 @@ Détail et propositions : `docs/INTERFACE.md`.
   calque courant, les autres dessous, calques créés au besoin) ; la barre d'état dit « 12 clés sur 3
   calques ».
 - **Ctrl+Maj + outil Sélection** (lasso, rectangle ou clic sur le dessin) : prend sur **tous** les calques
-  du plan à l'image courante (visibles, déverrouillés, non vidéo), comme dans Storyboard Pro ; leurs clés se
+  du plan à l'image courante (visibles, déverrouillés, non vidéo); leurs clés se
   choisissent aussi dans le montage. Ctrl seul et Maj seul gardent leur sens. **Depuis le 2026-10-20, Ctrl+Maj
   cumule** : un objet s'ajoute à la sélection (ou en est retiré s'il y était), un lasso ajoute ce qu'il prend
   (avant : la sélection était remplacée).
@@ -1960,7 +1940,7 @@ d'être récupérée ; une case du même menu le désactive.
 
 Sans projet ouvert (au lancement, ou après « Fermer le projet »), un écran d'accueil propose :
 - un nouveau projet ;
-- d'ouvrir un projet Pelure ou Storyboard Pro ;
+- d'ouvrir un projet SHOT ;
 - les projets récents.
 
 Il s'en va dès qu'un projet s'ouvre ou se crée, au premier trait, ou par « Commencer sans projet ».
@@ -1991,7 +1971,7 @@ onglet par projet, avec son nom, une pastille « • » orange s'il n'est pas en
 annulation, sa tête de lecture, sa sélection, sa vue (zoom, mode storyboard / animation) et ses caches ; passer de l'un à
 l'autre est instantané (aucune relecture du disque : 7 à 14 µs, l'image d'écran suivante ne coûte pas plus qu'une autre).
 
-- **Ouvrir** : Fichier > Ouvrir, Nouveau, un projet récent, un import Storyboard Pro ou de scénario, « nouveau projet à partir
+- **Ouvrir** : Fichier > Ouvrir, Nouveau, un projet récent, un import de scénario, « nouveau projet à partir
   des plans choisis », ou un `.shot` (ou un ancien `.pelure`) lâché sur la fenêtre prennent un **nouvel onglet** (Préférences > Général > « Ouvrir dans un nouvel
   onglet », allumé ; éteint, ils remplacent le projet affiché après la question habituelle). Un projet déjà ouvert : son onglet
   passe à l'écran. L'accueil (un onglet « Nouvel onglet ») est réutilisé par le premier projet qu'on y ouvre.
@@ -2293,32 +2273,6 @@ s'annule pas : l'historique est vidé.
 Une nouvelle cadence garde les durées en secondes (comme « Changer la cadence », avec ou sans
 intervalles) ou garde les images.
 
-**Projet Storyboard Pro** : Fichier > Ouvrir (le choix accepte les `.sboard`), « Ouvrir un projet
-Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est seulement lu.
-- Ce qui arrive tel quel : plans, séquences, panneaux (devenus les images de storyboard de chaque
-  plan, avec leurs légendes), durées, cadence, taille, calques (vectoriels ou bitmap) et son. La
-  caméra n'est pas reprise.
-- Les dessins, si Storyboard Pro est installé : Pelure le lance tout seul, sans fenêtre, sur une
-  copie du projet (l'original n'est jamais touché). Il exporte chaque calque de chaque panneau, en
-  image et, pour un calque vectoriel, en traits ; l'ouverture suit.
-- Un calque vectoriel revient vectoriel (zones et traits modifiables) quand ses traits ont pu être
-  lus et recouvrent bien son image. Sinon il garde l'image, et le compte rendu le dit.
-- « Arrêter » ouvre le projet sans les dessins.
-- À la main : « Dessins à la main » écrit le script à coller dans Storyboard Pro (vue Script
-  Editor, Sandbox, Run).
-
-**Exporter vers Storyboard Pro** : Fichier > « Exporter vers Storyboard Pro… ».
-- Choisir une fois le projet modèle : un projet Storyboard Pro vide, à tes réglages (résolution,
-  cadence, légendes). Puis choisir le dossier et le titre, et « Exporter ».
-- Pelure lance Storyboard Pro tout seul, sans fenêtre, sur une copie du modèle (le modèle n'est
-  pas touché). Il y construit le projet, l'enregistre dans le dossier sous le titre, et rend un
-  compte rendu.
-- Chaque plan devient un plan. Chaque image de storyboard devient un panneau (durée, légendes).
-  Chaque calque devient un calque : son dessin en image, son nom, sa visibilité, son opacité.
-  Les séquences et le son suivent.
-- Pas encore : les calques vectoriels en traits (ils arrivent en images), la caméra, l'animation
-  dans un panneau (premier dessin seulement).
-
 **Exporter pour le montage** : Fichier > Exporter… > « Pour le montage (EDL / XML / OTIO) ».
 - L'animatique découpée plan par plan pour un monteur : un fichier vidéo par plan (ProRes ou H.264)
   dans `<Titre>_montage/media/`, et le montage en **EDL CMX 3600**, **Final Cut Pro 7 XML**
@@ -2350,7 +2304,6 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `guides.rs` | Guides de perspective : géométrie, affichage, traits alignés |
 | `brush.rs` | Moteur de pinceau : empreintes, pression, lissage, pointe en image, grain |
 | `brushtex.rs`, `brushui.rs` | Pointes, papiers, réglages nommés ; leur panneau |
-| `tbbrush.rs` | Import des pinceaux Toon Boom (XML) |
 | `tracedroit.rs` | Tracé droit (Maj pendant un trait) : segment en attente, aperçu, pose par le moteur au relâché |
 | `selobjet.rs`, `remplirsel.rs` | Choisir un objet au clic (forme d'un seul tenant, Ctrl / Ctrl+Maj, cumul) ; remplir la zone bitmap (Maj+Suppr) |
 | `poskeys.rs`, `poskeysui.rs` | Clés de position des calques : pose entre les clés, adoucis, coupe et réunion des plans, enregistrement ; réglages de l'outil Transformer, losanges de la timeline et du montage |
@@ -2372,9 +2325,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `calquecouleur.rs`, `calquecouleurui.rs` | Calque de couleur sous le trait : lien, miroir des images du trait, murs et zones fermées (pot de peinture, pinceau dans la zone), mode Griffonner, commandes et menu |
 | `video.rs`, `videoui.rs` | Calque vidéo : import par ffmpeg, images lues à la demande (13k) |
 | `tween.rs`, `tweenui.rs` | Interpolation : intervalles vectoriels, fondus, étirement, cadence (13l) |
-| `xml.rs`, `sboard.rs` | Lecture d'un XML en arbre ; lecture d'un projet Storyboard Pro (14a) |
-| `sbscript.rs`, `sbimport.rs`, `sbui.rs` | Script d'export des dessins et sa liste ; projet Pelure construit ; fenêtre d'ouverture (14a) |
-| `sbbatch.rs`, `sbvector.rs` | Storyboard Pro lancé en batch sur une copie du projet ; ses dessins vectoriels refaits en éléments Pelure (14a-2) |
+| `xml.rs` | Lecture d'un XML en arbre |
 | `scenario.rs`, `scenariofdx.rs` | Importer un scénario : lecture de Fountain et de texte brut ; de Final Draft (`.fdx`) et de Word (`.docx`) |
 | `scenarioplans.rs`, `scenarioui.rs` | Importer un scénario : séquences, plans, durées et personnages ; la fenêtre d'aperçu et l'étape d'annulation |
 | `procreate.rs` | Import des brosses Procreate (`.brush`, `.brushset`) : listes de propriétés binaires d'Apple |
@@ -2383,7 +2334,6 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `dip.rs`, `tvpbrush.rs` | Images `.dip` de TVPaint ; import de ses brosses (`.tvpx`, `.bin`, `.ini`) |
 | `banc.rs` | Banc de traits : enregistrer les traits tels que reçus, les rejouer dans le moteur |
 | `dynui.rs` | Connexions d'un pinceau : sources, courbes de réponse (moteur de dessin, étape 2) |
-| `sbexport.rs`, `sbexportui.rs` | Export vers Storyboard Pro : images des calques, sons, script de construction ; sa fenêtre (14b-1) |
 | `stretch.rs` | Vitesse d'un son : rééchantillonnage, tempo sans changer la hauteur (WSOLA) (14a) |
 | `fill.rs` | Remplissage par zone et débord |
 | `render.rs` | Composition sur processeur (export, vignettes, secours), image filmée par la caméra, tuiles du monde (toile infinie) |
@@ -2402,7 +2352,7 @@ Storyboard Pro… », ou glisser le `.sboard` sur la fenêtre. Le fichier est se
 | `espace3dmath.rs`, `espace3dgizmo.rs` | Maths (matrices, rayons, vue, caméra d'orbite de la vue d'édition) ; manipulateurs et aimantation |
 | `espace3dui.rs`, `espace3dview.rs` | Commandes, barre d'outils, Réglages (cartes, caméra) ; la vue (souris, poignées, cartes, tracé) |
 | `layertools.rs` | Outil Transformer (calque entier) |
-| `selbox.rs`, `seltools.rs` | Boîte de sélection façon Storyboard Pro : parties sous le pointeur, gestes (échelle, rotation, inclinaison, pivot), valeurs chiffrées ; sa place dans l'application |
+| `selbox.rs`, `seltools.rs` | Boîte de sélection : parties sous le pointeur, gestes (échelle, rotation, inclinaison, pivot), valeurs chiffrées ; sa place dans l'application |
 | `multisel.rs`, `multitools.rs` | Sélection sur plusieurs calques choisis : parts par calque, boîte commune sur la feuille, geste appliqué à chaque calque (`T⁻¹·A·T`), une feuille flottante par calque, une étape d'annulation ; souris, commandes, écran |
 | `envelopetools.rs` | Outil Déformer : mode Enveloppe de Bézier (la perspective : `perstools.rs`) |
 | `topview.rs` | Vue de dessus (profondeur des calques) |

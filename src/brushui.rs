@@ -15,7 +15,7 @@ const TILE: Vec2 = vec2(58.0, 48.0);
 const PREVIEW: Vec2 = vec2(54.0, 30.0);
 
 /// Bulle du bouton « Importer des pinceaux » (panneau Pinceaux).
-pub(crate) const IMPORT_HINT: &str = "Brosses TVPaint (.tvpx, .bin, .ini), Photoshop (.abr), Procreate (.brush, .brushset), Krita (.kpp, .bundle), MyPaint (.myb) ou Toon Boom (.xml), plusieurs fichiers à la fois ; elles restent pour les fois suivantes.";
+pub(crate) const IMPORT_HINT: &str = "Brosses TVPaint (.tvpx, .bin, .ini), Photoshop (.abr), Procreate (.brush, .brushset), Krita (.kpp, .bundle) ou MyPaint (.myb), plusieurs fichiers à la fois ; elles restent pour les fois suivantes.";
 
 /// Nom d'un réglage en cours de saisie (moteur de dessin, étape 9) : enregistrer le réglage
 /// courant dans « Mes brosses », ou renommer le réglage `rename`.
@@ -440,19 +440,18 @@ impl App {
     }
 
     /// Importe un fichier de brosses : TVPaint (`.tvpx`, `.bin`, `.ini`, moteur de dessin,
-    /// étape 10) ou Toon Boom (`.xml`) ; réimporter le même fichier remplace ses pinceaux.
+    /// étape 10) Photoshop, Procreate, Krita ou MyPaint ; réimporter le même fichier remplace ses pinceaux.
     pub(crate) fn import_brushes(&mut self) {
         if self.brushes_busy() {
             return;
         }
         let Some(paths) = rfd::FileDialog::new()
             .set_title("Brosses à importer")
-            .add_filter("Brosses (TVPaint, Photoshop, Procreate, Krita, MyPaint, Toon Boom)", &["tvpx", "bin", "ini", "abr", "brush", "brushset", "kpp", "bundle", "myb", "xml"])
+            .add_filter("Brosses (TVPaint, Photoshop, Procreate, Krita, MyPaint)", &["tvpx", "bin", "ini", "abr", "brush", "brushset", "kpp", "bundle", "myb"])
             .add_filter("Photoshop (.abr)", &["abr"])
             .add_filter("Procreate (.brush, .brushset)", &["brush", "brushset"])
             .add_filter("TVPaint (export de panneau, panneau, réglage)", &["tvpx", "bin", "ini"])
             .add_filter("Krita (réglage, paquet) et MyPaint", &["kpp", "bundle", "myb"])
-            .add_filter("Préréglages Toon Boom (XML)", &["xml"])
             .pick_files()
         else {
             return;
@@ -520,7 +519,7 @@ impl App {
         self.brush_import_notes = (!notes.is_empty()).then_some((title, notes));
     }
 
-    /// Importe un fichier de brosses TVPaint ou Toon Boom.
+    /// Importe un fichier de brosses (TVPaint, Photoshop, Procreate).
     fn import_brush_file(&mut self, path: &std::path::Path) {
         let path = path.to_path_buf();
         let ext = path.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
@@ -554,32 +553,6 @@ impl App {
             }
             return;
         }
-        let text = match std::fs::read_to_string(&path) {
-            Ok(t) => t,
-            Err(e) => {
-                self.status = format!("Lecture impossible : {e}");
-                return;
-            }
-        };
-        let source = path.file_name().map_or("import".into(), |n| n.to_string_lossy().into_owned());
-        self.brushes.presets.retain(|p| p.source != source);
-        match crate::tbbrush::import(&text, &source, &mut self.brushes) {
-            Ok(r) => {
-                self.brushes.share();
-                let saved = match BrushLibrary::user_dir() {
-                    Some(dir) => self.brushes.save(&dir).err(),
-                    None => Some("dossier %APPDATA% introuvable".into()),
-                };
-                self.status = format!(
-                    "{} pinceaux importés ({} pointes, {} papiers){}{}",
-                    r.presets,
-                    r.tips,
-                    r.papers,
-                    if r.skipped.is_empty() { String::new() } else { format!(" ; textures ignorées : {}", r.skipped.join(", ")) },
-                    saved.map_or(String::new(), |e| format!(" ; non gardés pour la prochaine fois : {e}")),
-                );
-            }
-            Err(e) => self.status = format!("Import impossible : {e}"),
-        }
+        self.status = format!("Import impossible : le format de « {} » n'est pas reconnu.", path.file_name().map_or(String::new(), |n| n.to_string_lossy().into_owned()));
     }
 }

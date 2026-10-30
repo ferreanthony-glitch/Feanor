@@ -82,7 +82,7 @@ pub enum Tool {
     Fill,
     /// Dégradé (`degrade.rs`, `degradeui.rs`) : glisser trace l'axe, de la couleur d'avant-plan à celle d'arrière-plan.
     Gradient,
-    /// Formes (5c) : outils séparés, comme dans Storyboard Pro.
+    /// Formes (5c) : outils séparés, comme des outils à part.
     Line,
     Rect,
     Ellipse,
@@ -294,8 +294,6 @@ pub enum Pending {
     Quit,
     /// Nouveau projet fait des plans choisis (13e).
     FromChosen,
-    /// Import d'un projet Storyboard Pro (14a), qui remplace le projet ouvert.
-    SbImport,
     /// Fermer le projet (Ctrl+W) : un projet vide du même format le remplace.
     Close,
     /// Ouvrir un projet récent (`App::recent_to_open`).
@@ -439,12 +437,8 @@ pub struct App {
     pub(crate) propagation: crate::propagerui::Propagation,
     /// Coloriage par zones : propager des aplats de couleur d'une image à l'autre (`coloriageui.rs`).
     pub(crate) coloriage: crate::coloriageui::Coloriage,
-    /// Fenêtre d'import d'un projet Storyboard Pro et import en cours (14a, `sbui.rs`).
-    pub(crate) sb_window: Option<crate::sbui::SbWindow>,
     /// Fenêtre « Importer un scénario » (`scenarioui.rs`).
     pub(crate) scenario_window: Option<crate::scenarioui::ScenarioWindow>,
-    /// Fenêtre « Exporter vers Storyboard Pro » (14b, `sbexportui.rs`).
-    pub(crate) sb_export: Option<crate::sbexportui::SbExportWindow>,
     /// Fenêtre d'interpolation ouverte (13l, `tweenui.rs`).
     pub(crate) tween_dialog: Option<crate::tweenui::TweenDialog>,
     /// Table lumineuse : les calques autres que le calque courant sont estompés.
@@ -1045,7 +1039,7 @@ impl App {
             }
         });
         crate::demarrage::marque("pinceaux importés : lecture lancée sur un autre fil");
-        let keymap = Keymap::load(settings.keymap_preset);
+        let keymap = Keymap::load();
         crate::demarrage::marque("raccourcis (Keymap::load)");
         let orphans = crate::recovery::root().filter(|_| reel).map(|r| crate::recovery::orphans(&r, None)).unwrap_or_default();
         let recovery = crate::recovery::root().filter(|_| reel).and_then(|r| crate::recovery::Recovery::start(&r).ok());
@@ -1126,9 +1120,7 @@ impl App {
             video_import: None,
             propagation: crate::propagerui::Propagation::new(wgpu_render_state),
             coloriage: crate::coloriageui::Coloriage::new(),
-            sb_window: None,
             scenario_window: None,
-            sb_export: None,
             tween_dialog: None,
             light_table: false,
             light_table_strength: 0.3,
@@ -1571,7 +1563,6 @@ impl App {
             || self.assign.is_some()
             || self.propagation.running()
             || self.coloriage.running()
-            || self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::rendering)
             || self.editorial.as_ref().is_some_and(crate::editorialui::EditorialWindow::rendering)
             || self.relecture.rendering()
             || self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::rendering)
@@ -3338,7 +3329,7 @@ impl App {
         // Un projet qui arrive dans un onglet à lui (ou dans l'onglet vierge) n'écrase rien : pas de question.
         let nouveau_projet = matches!(
             action,
-            Pending::New | Pending::Open | Pending::OpenRecent | Pending::FromChosen | Pending::SbImport | Pending::ScenarioNew
+            Pending::New | Pending::Open | Pending::OpenRecent | Pending::FromChosen | Pending::ScenarioNew
         );
         if nouveau_projet && !self.remplace_le_projet() {
             self.perform(action);
@@ -3361,8 +3352,6 @@ impl App {
             Pending::New => self.open_new_project(),
             Pending::Open => self.open_dialog(),
             Pending::FromChosen => self.new_project_from_chosen(),
-            // (L'onglet reste « sans projet » tant que l'import n'est pas fait : fermée sans rien importer, la fenêtre rend l'accueil.)
-            Pending::SbImport => self.start_sb_import(),
             Pending::OpenRecent => {
                 if let Some(path) = self.recent_to_open.take() {
                     self.open_path(path);
@@ -3387,9 +3376,7 @@ impl App {
 
     fn open_dialog(&mut self) {
         let Some(path) = rfd::FileDialog::new()
-            .add_filter("Projet SHOT ou Storyboard Pro", &[crate::project::EXTENSION, crate::project::ANCIENNE_EXTENSION, "sboard"])
             .add_filter("Projet SHOT", &crate::project::EXTENSIONS)
-            .add_filter("Projet Storyboard Pro", &["sboard"])
             .pick_file()
         else {
             return;
@@ -3398,11 +3385,8 @@ impl App {
     }
 
     /// Ouvre un projet en dossier (`.shot`, ou l'ancien nom `.pelure`), ou importe un ancien fichier `.pelure` d'un seul
-    /// tenant. Un projet Storyboard Pro (`.sboard`) ouvre la fenêtre d'import avec lui (14a).
+    /// tenant.
     pub(crate) fn open_path(&mut self, path: PathBuf) {
-        if self.import_dropped_sboard(&path) {
-            return;
-        }
         // Un projet converti depuis (`Bus.pelure` devenu `Bus.shot`), ou les deux noms après un plantage au milieu de la
         // conversion : le manifeste à ouvrir (le plus récent, `project::manifeste_a_ouvrir`).
         let path = crate::project::manifeste_a_ouvrir(&path);
@@ -4589,9 +4573,7 @@ impl App {
             "calque.griffonner" => self.toggle_griffonner(),
             // Calque vidéo (13k, `videoui.rs`).
             "fichier.importer_video" => self.import_video(),
-            "fichier.importer_sboard" => self.open_sb_window(),
             "fichier.importer_scenario" => self.open_scenario_window(),
-            "fichier.exporter_sboard" => self.open_sb_export(),
             "pinceau.enregistrer_traits" => {
                 self.record_strokes = match self.record_strokes {
                     Some(_) => {
@@ -4779,13 +4761,12 @@ impl App {
 
     /// Recharge les raccourcis (après modification du fichier).
     pub(crate) fn reload_keymap(&mut self) {
-        self.keymap = Keymap::load(self.settings.keymap_preset);
-        let jeu = if self.keymap.preset.is_default() { String::new() } else { format!(" Jeu « {} ».", self.keymap.preset.label()) };
+        self.keymap = Keymap::load();
         self.status = match (&self.keymap.user_file, self.keymap.warnings.len()) {
-            (Some(p), 0) => format!("Raccourcis rechargés depuis {}.{jeu}", p.display()),
-            (Some(p), n) => format!("Raccourcis rechargés depuis {} ({n} remarque(s), voir F1).{jeu}", p.display()),
-            (None, 0) => format!("Raccourcis par défaut.{jeu}"),
-            (None, n) => format!("Raccourcis par défaut ({n} remarque(s), voir F1).{jeu}"),
+            (Some(p), 0) => format!("Raccourcis rechargés depuis {}.", p.display()),
+            (Some(p), n) => format!("Raccourcis rechargés depuis {} ({n} remarque(s), voir F1).", p.display()),
+            (None, 0) => "Raccourcis par défaut.".to_string(),
+            (None, n) => format!("Raccourcis par défaut ({n} remarque(s), voir F1)."),
         };
     }
 
@@ -4833,7 +4814,7 @@ impl App {
         }
     }
 
-    /// Les exports qui tournent encore (le film, le montage, la fiche, la page de relecture, Storyboard Pro), par leur nom.
+    /// Les exports qui tournent encore (le film, le montage, la fiche, la page de relecture), par leur nom.
     pub(crate) fn exports_en_cours(&self) -> Vec<&'static str> {
         let mut v = Vec::new();
         if self.export_job.as_ref().is_some_and(|j| j.outcome.is_none()) {
@@ -4844,9 +4825,6 @@ impl App {
         }
         if self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::busy) {
             v.push("la fiche technique");
-        }
-        if self.sb_export.as_ref().is_some_and(crate::sbexportui::SbExportWindow::busy) {
-            v.push("l'export vers Storyboard Pro");
         }
         if self.onglets.iter().enumerate().any(|(i, _)| if i == self.actif { self.relecture.export_en_cours() } else { self.onglets[i].etat.as_ref().is_some_and(|e| e.relecture.export_en_cours()) }) {
             v.push("la page de relecture");

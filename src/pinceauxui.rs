@@ -711,7 +711,7 @@ impl App {
         }
         ui.horizontal_wrapped(|ui| {
             let resp = crate::dynui::curve_editor(ui, &mut t.pressure_curve, "toucher");
-            bulle(resp, "Courbe de pression", "L'appui du stylet passe par cette courbe avant tout le reste (le « Pen Pressure Feel » de Storyboard Pro). Glisser un point ; double-clic : ajouter ; clic droit : retirer.", "");
+            bulle(resp, "Courbe de pression", "L'appui du stylet passe par cette courbe avant tout le reste. Glisser un point ; double-clic : ajouter ; clic droit : retirer.", "");
             ui.vertical(|ui| {
                 if ui.small_button("Droite").on_hover_text("L'appui tel quel.").clicked() {
                     t.pressure_curve = Curve::linear();

@@ -1,12 +1,11 @@
 //! Calque de couleur : la couleur **sous le trait** (choix d'Anthony, 2026-10-20 : « le trait / la
-//! couleur », à la façon de Toon Boom — le comportement exact de Storyboard Pro ou de Harmony est
-//! à vérifier, SHOT n'en copie rien).
+//! couleur »).
 //!
 //! Un calque de couleur est lié à un calque de trait, dont il est le sous-sol : posé juste dessous
 //! dans la pile, il suit ses images, et l'on y colorie sans jamais toucher au trait.
 //!
 //! - **Modèle** : un calque bitmap ordinaire (`Layer::couleur` en plus). Rien dans la composition,
-//!   les vignettes, l'export, le PDF, le montage ou l'export Storyboard Pro n'a changé : pour eux, c'est
+//!   les vignettes, l'export, le PDF, ou le montage n'a changé : pour eux, c'est
 //!   un calque bitmap de plus. Le trait peut être vectoriel : la couleur, elle, est en pixels (un
 //!   aplat n'a pas besoin d'être modifiable point par point, et le pot de peinture lit les pixels
 //!   rendus du trait, `Cel::raster`, que le calque soit vectoriel ou bitmap).

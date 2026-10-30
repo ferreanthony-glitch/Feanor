@@ -1,6 +1,5 @@
 //! Outil Cutter (Anthony, 2026-10-17 : « ajoute l'outil cutter qui coupe les lignes vectorielles
-//! qui se croisent ») ; « Cutter Tool » de Storyboard Pro (Alt+T), dont le comportement exact est
-//! à vérifier.
+//! qui se croisent »), raccourci Alt+T.
 //!
 //! Sur un calque vectoriel, on glisse en travers des bouts de traits à enlever (ou on clique sur
 //! l'un d'eux) : chaque trait touché est coupé là où il croise les autres traits (et lui-même),

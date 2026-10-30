@@ -1,4 +1,4 @@
-# Pelure — pourquoi les brosses « sentent » moins bien que TVPaint 12 / Storyboard Pro
+# Pelure — pourquoi les brosses « sentent » moins bien que TVPaint 12
 
 Étude en lecture seule (2026-10-18). Code lu : `src/brush.rs`, `canvas.rs`, `app.rs`, `vector.rs`, `vtools.rs`, `gpu.rs`, `banc.rs`, `brushtex.rs`, `lib.rs`, sources de winit 0.30.13 et egui-winit 0.31.1. Côté TVPaint : `%APPDATA%\TVPaint Animation 12 Pro\default\config.ini` (tes réglages réels) et `english.tvpaint.loc`. Chaque affirmation est **observée** (fichier:ligne ou URL), **déduite** ou **à vérifier**.
 
@@ -15,8 +15,8 @@
 ### 2.1 Réponse à la pression nue : taille mini 0, plancher 3 %, pas de courbe de « toucher »
 - **Preuve (observé)** : `brush.rs:444-483` — « Pinceau rond » : `size 6`, `pressure_size true`, `min_size 0.0`, `pressure_opacity false`. `brush.rs:504-507` — `size_factor` plancher à 3 %. `brush.rs:1039-1045` — sous 0,75 px de rayon, on **éclaircit** le débit au lieu d'amincir. `Connection::response` (`brush.rs:351-356`) est linéaire par défaut.
 - **Effet ressenti** : au posé et au levé (pression Windows Ink à 2–10 %), le trait devient un fil à 0,18 px de rayon, affiché gris clair : « début fantôme », « bouts en pointe d'aiguille », trait qui semble maigre et sans corps à pression moyenne.
-- **Ce que font les autres** : ton outil TVPaint courant a `consize2=10;2 0 1 0 0 1 1` (`config.ini:8980`) : taille connectée avec un **minimum 10 %** et une courbe linéaire (interprétation du format **déduite**, voir §3). SBP : Minimum Size en % de Maximum Size, courbe « Pen Pressure Feel » globale, linéaire par défaut (observé, docs Toon Boom).
-- **Correction** : taille mini par défaut 15–20 % pour le pinceau rond ; une **courbe de pression globale** (préférence, comme SBP) appliquée avant les connexions ; plancher du facteur à ~0,1 au lieu de 0,03 ; au-dessous d'un pixel, garder un rayon ≥ 0,5 et une couverture pleine plutôt que d'éclaircir.
+- **Ce que font les autres** : ton outil TVPaint courant a `consize2=10;2 0 1 0 0 1 1` (`config.ini:8980`) : taille connectée avec un **minimum 10 %** et une courbe linéaire (interprétation du format **déduite**, voir §3).
+- **Correction** : taille mini par défaut 15–20 % pour le pinceau rond ; une **courbe de pression globale** (préférence) appliquée avant les connexions ; plancher du facteur à ~0,1 au lieu de 0,03 ; au-dessous d'un pixel, garder un rayon ≥ 0,5 et une couverture pleine plutôt que d'éclaircir.
 - **Coût/risque** : faible (valeurs + une courbe), migration `#[serde(default)]`.
 
 ### 2.2 Crayon crénelé et nu par défaut
@@ -57,7 +57,7 @@
 - Entrée : winit lit la pression 0–1024 (`event_loop.rs:2087-2099`), la position sous-pixel (`2103-2104`), **tout l'historique** d'une image (`1999-2030`) et renvoie 0 sans `DefWindowProc` (`2129`) : pas de doublons souris. egui-winit émet un `PointerMoved` par échantillon juste après son `Touch` (`egui-winit lib.rs:625-669`), que `canvas.rs:255-264`, `326-337` apparient. Pression 0 → `None` (`event_loop.rs:994-999`) : bénin.
 - Moteur : position **et pression** interpolées entre deux événements (`brush.rs:970-1001`), pas 8 % du diamètre (`:454`) ; masque f32 recalculé depuis `before` (`:1255-1272`), pas d'accumulation d'arrondis u8 ; affichage sur-échantillonné au dézoom (`gpu.rs:258-274`).
 
-## 3. Ce que font TVPaint et Storyboard Pro
+## 3. Ce que fait TVPaint
 
 **TVPaint 12 (tes réglages, `config.ini`, observé)**
 - `[system] wintab=0` (`:8932`) ; la loc offre « Wintab / Ink » (`english.tvpaint.loc:5790-5797`) → TVPaint lit **Windows Ink** chez toi (déduit), même source que Pelure : la différence n'est pas dans la tablette.
@@ -65,12 +65,6 @@
 - Lissage (doc.tvpaint.com/docs/drawing-basic-tools/main-panel-tools/line-smoothing) : modes Average (Distance) / Pulled string / Average (Points) ; Real Time off = lissage **après** le trait ; HUD = assistant visible ; Catch Up (Average Points) rattrape l'assistant au levé (loc `:6557`).
 - Moteur (doc.tvpaint.com, *Settings Cheat Sheet*) : Power = quantité de couleur déposée, Opacity = plafond de transparence, Step = distance entre répétitions, Profile = forme de la pointe, Aliasing on/off (algorithmes TVPaint 11 conservés), Drying. La formule Power/Opacité au chevauchement **n'est pas publiée** : garder celle de Pelure et la comparer sur des traits enregistrés.
 - `[main]` `displaymode=Best`, `aapreviewquality=1`, `displaybrushdraw=off` (`:2887`, `2904-2906`) — sens **à vérifier**.
-
-**Storyboard Pro (docs Toon Boom version 24 ; la page 27 n'est pas en ligne — à vérifier pour la 27)**
-- Brush et Pencil (observé, *Brush/Pencil Tool Properties*) : Maximum/Minimum Size (% du max), **Centerline Smoothing** (moins de points de contrôle = ligne plus lisse) et **Contour Smoothing** (contour externe, utile avec la pression), brosses vectorielles pleines ou texturées, **anticrénelage activé par défaut**, Flow cumulatif / Opacity plafond sur bitmap, **Taper** début/fin du crayon, « Realistic Preview » pendant le geste.
-- Pression (observé, *About Pen Pressure Curve Customization*) : courbe globale « Pen Pressure Feel », linéaire par défaut, appliquée **entre** Minimum et Maximum Size.
-- Stabilisation (observé, *About Pen Stabilization*) : Average ou Pulled String, paramètre Distance, en direct après une longueur initiale ; distinct du lissage par défaut, appliqué **après** le trait.
-- Pourquoi ça glisse (déduit) : trait = **courbe de Bézier ajustée** après coup, rendue à la résolution écran — nette à tout zoom, débarrassée du tremblé, bouts effilés.
 
 **Références libres (observé)**
 - libmypaint (`brushsettings.json`, `mypaint-brush.c`) : sous-pas entre événements (x, y, pression, temps interpolés) ; 2 empreintes par rayon par défaut ; `slow_tracking` pondéré par le **temps écoulé** ; vitesse filtrée puis **log** ; `pressure_gain_log` ; `opaque_linearize 0.9` (ce que fait déjà `brush.rs:1053-1057`) ; `anti_aliasing` = largeur de fondu minimale à rayon optique conservé ; `stroke_threshold`.

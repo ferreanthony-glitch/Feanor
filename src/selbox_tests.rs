@@ -1,4 +1,4 @@
-//! La boîte de sélection façon Storyboard Pro (`selbox.rs`) : les parties sous le pointeur à tout
+//! La boîte de sélection (`selbox.rs`) : les parties sous le pointeur à tout
 //! zoom, les transformations des gestes (échelle et rotation autour du pivot, inclinaison,
 //! proportions), les valeurs chiffrées et l'annulation de chaque geste.
 

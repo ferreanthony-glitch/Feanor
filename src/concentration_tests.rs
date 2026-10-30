@@ -1,7 +1,7 @@
 //! Le mode concentration (`concentration.rs`) : la touche F11 (Z jusqu'au 2026-10-28) cache tous les panneaux et toutes les barres et ne laisse que le
 //! dessin et une barre minimale ; la même touche remet tout, exactement comme avant, sans toucher à aucune disposition.
-//! Et les touches choisies pour ce chantier (Z, R) sont libres : aucun conflit, dans SHOT comme dans le jeu « Façon
-//! Storyboard Pro », et le fichier personnel les remplace comme les autres.
+//! Et les touches choisies pour ce chantier (Z, R) sont libres : aucun conflit, et le fichier
+//! personnel les remplace comme les autres.
 
 use eframe::egui::{epaint::Shape, Event, Key, Modifiers, PointerButton, Pos2};
 use egui_phosphor::regular as ph;
@@ -9,7 +9,7 @@ use egui_phosphor::regular as ph;
 use crate::app::Mode;
 use crate::document::Document;
 use crate::dock::Pane;
-use crate::keymap::{Keymap, PresetId};
+use crate::keymap::Keymap;
 use crate::keymap_tests::{default_map, shared_keys};
 use crate::perf_tests::{banc_taille, Banc};
 use crate::workspace::Espace;
@@ -67,8 +67,8 @@ fn clic(b: &mut Banc, p: Pos2) {
 // ------------------------------------------------------------------------------------ les touches
 
 #[test]
-fn f11_and_r_are_free_keys_with_no_conflict_in_either_key_set() {
-    for map in [default_map(), Keymap::build(PresetId::Shot, None), Keymap::build(PresetId::StoryboardPro, None)] {
+fn f11_and_r_are_free_keys_with_no_conflict() {
+    for map in [default_map(), Keymap::build(None)] {
         assert!(map.warnings.is_empty(), "{:#?}", map.warnings);
         assert!(shared_keys(&map).is_empty(), "aucune touche n'est donnée à deux commandes : {:#?}", shared_keys(&map));
         for mode in [Mode::Storyboard, Mode::Animation] {
@@ -97,7 +97,7 @@ fn a_personal_keymap_moves_the_two_keys_like_any_other() {
         action = "aide.aide_memoire"
         touches = ["J"]
     "#;
-    let map = Keymap::build(PresetId::Shot, Some(user));
+    let map = Keymap::build(Some(user));
     assert!(map.warnings.is_empty(), "{:?}", map.warnings);
     assert_eq!(map.find(Key::K, Some(Key::K), NONE, Mode::Storyboard), Some("vue.concentration"));
     assert_eq!(map.find(Key::J, Some(Key::J), NONE, Mode::Storyboard), Some("aide.aide_memoire"));

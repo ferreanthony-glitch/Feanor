@@ -1,4 +1,4 @@
-//! Dessin vectoriel façon Storyboard Pro : des traits à épaisseur variable et des zones remplies
+//! Dessin vectoriel : des traits à épaisseur variable et des zones remplies
 //! qui restent modifiables (sélection, déplacement, rotation, couleur, gomme qui coupe les traits).
 
 use std::collections::HashMap;

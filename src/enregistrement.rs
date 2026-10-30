@@ -272,7 +272,7 @@ impl App {
         match result {
             Ok(mut report) => {
                 let manquants = std::mem::take(&mut report.manquants);
-                // Le projet est un dossier à son nom (comme un projet Storyboard Pro) : on le dit, le
+                // Le projet est un dossier à son nom : on le dit, le
                 // fichier n'est pas là où l'on pensait l'avoir mis (Anthony, 2026-10-17 : « quand
                 // j'enregistre un fichier Pelure, il n'apparaît pas dans l'explorateur »).
                 self.status = format!(

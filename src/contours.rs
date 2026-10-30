@@ -237,7 +237,7 @@ fn ribbon(mesh: &mut Mesh, line: &[Pos2], color: Color32) -> usize {
 
 // ------------------------------------------------------------------- le halo des traits choisis
 
-/// Largeur du halo autour d'un trait choisi, en points d'écran (Storyboard Pro : 1 à 2 px de
+/// Largeur du halo autour d'un trait choisi, en points d'écran (1 à 2 px de
 /// chaque côté), et jusqu'où il pénètre sous le bord du trait pour ne pas laisser de jour.
 /// (Anthony, 2026-10-22 : 2,8 était trop épais ; un liseré fin suffit.)
 const HALO_WIDTH: f32 = 1.3;
@@ -417,7 +417,7 @@ const LASSO_MAX_POINTS: usize = 2000;
 const LASSO_DOT_STEP: f32 = 7.0;
 const LASSO_DOT_HALF: f32 = 0.8;
 
-/// Le lasso en cours (points d'écran) comme Storyboard Pro le montre : une ligne très fine, beige,
+/// Le lasso en cours (points d'écran) comme on le montre : une ligne très fine, beige,
 /// ouverte (aucun trait ne revient au point de départ), semée de petits points ambrés à
 /// intervalles réguliers ; ni remplissage ni gros trait. Un seul maillage, des points finis
 /// seulement : un point perdu (NaN, infini) ne trace rien. `None` : moins de deux points utiles.

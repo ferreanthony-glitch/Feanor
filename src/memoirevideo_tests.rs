@@ -19,7 +19,7 @@ fn the_cache_target_keeps_shot_under_the_system_budget_with_a_margin() {
     let large = cible_cache(7 * GO, GO + 200 * MO, 800 * MO);
     assert!(large > 2 * GO, "{} Mo", large / MO);
     assert_eq!(effectif(GO, Some(large)), GO);
-    // La situation de l'audit : 8 Go, Storyboard Pro en prend 3,5 ; le système n'accorde plus que 2,5 Go à SHOT, qui en
+    // La situation de l'audit : 8 Go, un autre logiciel en prend 3,5 ; le système n'accorde plus que 2,5 Go à SHOT, qui en
     // utilise 1,5 dont 1 Go de dessins. SHOT hors cache (0,5 Go) + cache ≤ 2,5 Go − 256 Mo.
     let serre = cible_cache(2560 * MO, 1536 * MO, GO);
     assert_eq!(serre, 2560 * MO - 512 * MO - 256 * MO);

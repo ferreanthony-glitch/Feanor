@@ -1,4 +1,4 @@
-//! Vitesse d'un son (14a, sons des projets Storyboard Pro) : changer la vitesse et la hauteur
+//! Vitesse d'un son (14a, sons importés) : changer la vitesse et la hauteur
 //! ensemble (rééchantillonnage), ou la vitesse seule (WSOLA : des morceaux du son, recollés en
 //! fondu là où ils se ressemblent le plus, gardent leur hauteur).
 

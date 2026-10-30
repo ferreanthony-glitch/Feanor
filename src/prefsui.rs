@@ -30,11 +30,10 @@ const FENETRE_MIN: [f32; 2] = [560.0, 320.0];
 /// Largeur de la liste des onglets.
 const LISTE_L: f32 = 156.0;
 
-/// Ce qu'un groupe demande à la fenêtre une fois dessiné : une action à lancer, un jeu de raccourcis à proposer.
+/// Ce qu'un groupe demande à la fenêtre une fois dessiné : une action à lancer.
 #[derive(Default)]
 struct Sortie {
     action: Option<&'static str>,
-    jeu: Option<crate::keymap::PresetId>,
 }
 
 /// Le texte de la recherche, gardé dans la mémoire d'egui (il ne vaut que pour la fenêtre ouverte).
@@ -60,7 +59,7 @@ fn titre_groupe(ui: &mut egui::Ui, groupe: Groupe, premier: bool) {
 }
 
 /// Les exports proposés : icône, nom, explication, action (ou `None` : la page HTML, sans action).
-const EXPORTS: [(&str, &str, &str, Option<&str>); 13] = [
+const EXPORTS: [(&str, &str, &str, Option<&str>); 12] = [
     (ph::FILM_STRIP, "Le film (vidéo)", "Le montage ou le plan en vidéo, avec le son.", Some("fichier.exporter_film")),
     (ph::GIF, "Un GIF animé", "Le film, le plan courant ou les plans choisis, en petit GIF à partager (sans le son).", Some("fichier.exporter_gif")),
     (ph::IMAGES, "Des images (PNG)", "Une image PNG par image du film.", Some("fichier.exporter_images")),
@@ -68,7 +67,6 @@ const EXPORTS: [(&str, &str, &str, Option<&str>); 13] = [
     (ph::FILE_PDF, "Le storyboard (PDF)", "Les plans en planches, avec leurs textes.", Some("fichier.exporter_pdf")),
     (ph::BROWSER, "Le storyboard (page HTML + planches)", "Une page à ouvrir dans un navigateur, et ses images.", None),
     (ph::SPEAKER_HIGH, "Le son (WAV)", "Les pistes son mélangées.", Some("fichier.exporter_son")),
-    (ph::EXPORT, "Vers Storyboard Pro", "Un projet .sboard fait à partir du modèle choisi.", Some("fichier.exporter_sboard")),
     (ph::FILM_REEL, "Pour le montage (EDL / XML / OTIO)", "Un fichier vidéo par plan et le montage pour Premiere, DaVinci Resolve ou Avid.", Some("fichier.exporter_montage")),
     (ph::TABLE, "Fiche technique (tableur)", "Un plan par ligne, en classeur XLSX ou en CSV : durées, time codes, cadrage, mouvement de caméra, textes, sons, vignettes.", Some("fichier.exporter_fiche")),
     (ph::EYEGLASSES, "Pour relecture (page HTML)", "Une page sans internet à envoyer au réalisateur : il écrit ses notes et dessine dessus, SHOT les relit ensuite.", Some("fichier.exporter_relecture")),
@@ -432,9 +430,6 @@ impl App {
             .default_pos(egui::pos2(ecran.center().x, ecran.top() + 60.0))
             .show(ctx, |ui| self.preferences_contenu(ui, &mut sortie));
         self.prefs_window = open;
-        if let Some(p) = sortie.jeu {
-            self.request_preset(ctx, p);
-        }
         if let Some(a) = sortie.action {
             self.run_action(a);
         }
@@ -622,8 +617,6 @@ impl App {
             Groupe::CadresCamera => self.cadres_camera_prefs_ui(ui),
             Groupe::Decor => self.decor_prefs_ui(ui),
             Groupe::Raccourcis => {
-                sortie.jeu = crate::raccourcisui::preset_combo(ui, "jeu_raccourcis_prefs", self.settings.keymap_preset);
-                ui.label(RichText::new(crate::raccourcisui::MERGE_RULE).small().weak());
                 ui.horizontal_wrapped(|ui| {
                     let b = ui.button("Voir et changer les raccourcis…");
                     if crate::bulles::bulle(b, "Voir et changer les raccourcis", "La liste de toutes les commandes, avec une recherche et l'assignation d'une touche.", &self.raccourci("aide.raccourcis")).clicked() {
@@ -670,11 +663,10 @@ impl App {
         }
     }
 
-    /// Export > Programmes et modèles : ffmpeg et le projet modèle de Storyboard Pro, choisis une fois (ils se
-    /// choisissaient aussi dans les fenêtres d'export, qui gardent leur bouton), et l'accès à la fenêtre Exporter.
+    /// Export > Programmes : ffmpeg, choisi une fois (il se
+    /// choisit aussi dans les fenêtres d'export, qui gardent leur bouton), et l'accès à la fenêtre Exporter.
     fn programmes_prefs_ui(&mut self, ui: &mut egui::Ui, sortie: &mut Sortie) {
         let ffmpeg = self.settings.ffmpeg.clone();
-        let modele = self.settings.sboard_template.clone();
         egui::Grid::new("prefs_programmes").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
             let l = ui.label("ffmpeg (vidéo, GIF, son)");
             crate::bulles::bulle(l, "ffmpeg", "Le programme qui fabrique les vidéos, les GIF et le son des exports. Par défaut SHOT le cherche tout seul à chaque export.", "");
@@ -692,26 +684,6 @@ impl App {
                     if crate::bulles::bulle(b, "Chercher tout seul", "Oublie le choix fait à la main : SHOT cherche ffmpeg à chaque export.", "").clicked() {
                         self.settings.ffmpeg = None;
                         self.ffmpeg = None;
-                        let _ = self.settings.save();
-                    }
-                }
-            });
-            ui.end_row();
-            let l = ui.label("Modèle Storyboard Pro");
-            crate::bulles::bulle(l, "Modèle Storyboard Pro", "Un projet Storyboard Pro vide, à tes réglages (résolution, cadence, légendes) : l'export vers Storyboard Pro part d'une copie. Choisi une fois, gardé.", "");
-            ui.horizontal(|ui| {
-                match &modele {
-                    Some(t) => ui.label(t.file_stem().map_or_else(String::new, |s| s.to_string_lossy().into_owned())).on_hover_text(t.display().to_string()),
-                    None => ui.label(RichText::new("à choisir").weak()),
-                };
-                let b = ui.button("Choisir…");
-                if crate::bulles::bulle(b, "Choisir le modèle", "Choisis le fichier .sboard vide qui sert de modèle.", "").clicked() {
-                    let mut d = rfd::FileDialog::new().set_title("Projet modèle de Storyboard Pro").add_filter("Projet Storyboard Pro", &["sboard"]);
-                    if let Some(dir) = modele.as_ref().and_then(|t| t.parent()).and_then(|p| p.parent()) {
-                        d = d.set_directory(dir);
-                    }
-                    if let Some(p) = d.pick_file() {
-                        self.settings.sboard_template = Some(p);
                         let _ = self.settings.save();
                     }
                 }

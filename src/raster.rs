@@ -58,9 +58,9 @@ impl std::fmt::Debug for Tile {
 }
 
 /// Les tuiles d'une seule couleur (un aplat plein, du vide) d'un dessin rendu n'ont qu'une seule mémoire par couleur :
-/// une tuile se partage à la copie (`Tile`), la première écriture en fait une à soi. Un décor de Storyboard Pro rendu
-/// à la taille de la feuille a plus de la moitié de ses tuiles pleines : 17 Go de tuiles tombent à moins de 8 Go
-/// (docs/IMPORT-SBP.md, import 73). `None` pour la plupart des tuiles : rien à faire.
+/// une tuile se partage à la copie (`Tile`), la première écriture en fait une à soi. Un décor importé rendu
+/// à la taille de la feuille a plus de la moitié de ses tuiles pleines : 17 Go de tuiles tombent à moins de 8 Go.
+/// `None` pour la plupart des tuiles : rien à faire.
 fn tuile_pleine(couleur: Color32) -> Option<Tile> {
     use std::collections::HashMap;
     use std::sync::{Mutex, OnceLock};

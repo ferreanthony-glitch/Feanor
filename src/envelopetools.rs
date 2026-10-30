@@ -1,8 +1,7 @@
 //! Enveloppe de Bézier (Anthony, 2026-10-18 : « maintenir Ctrl permet de saisir une poignée de
 //! Bézier des coins pour transformer la forme » ; choix B, « comme l'outil Perspective »).
 //!
-//! Depuis la refonte de la boîte de sélection (2026-10-18, « singer le système de Storyboard Pro »,
-//! `selbox.rs`), l'enveloppe n'est plus ce que fait Ctrl + un coin après une sélection : c'est un
+//! Depuis la refonte de la boîte de sélection (2026-10-18, `selbox.rs`), l'enveloppe n'est plus ce que fait Ctrl + un coin après une sélection : c'est un
 //! mode de l'outil **Déformer** (Enveloppe | Perspective, choisi dans Réglages ou par les actions
 //! `deformer.enveloppe` et `deformer.perspective`). Un clic sur le dessin ouvre l'enveloppe : ses
 //! coins, et deux poignées par coin (rondes) qui courbent les côtés ; l'intérieur la déplace.
@@ -11,8 +10,7 @@
 //! ou une autre image terminent. Sur un calque vectoriel avec des éléments choisis, l'enveloppe ne
 //! déforme qu'eux (Anthony, 2026-10-18 : « l'enveloppe doit aussi pouvoir ne déformer que la
 //! sélection, comme l'outil Perspective le fait en vectoriel ») ; sur une zone bitmap choisie, que
-//! ses pixels, bords adoucis compris ; sans sélection, tout le dessin. Comportement exact de
-//! Storyboard Pro à vérifier. Géométrie dans `envelope.rs`.
+//! ses pixels, bords adoucis compris ; sans sélection, tout le dessin. Géométrie dans `envelope.rs`.
 
 use eframe::egui::{self, vec2, Color32, Key, Pos2, Rect, Shape, Stroke, StrokeKind};
 

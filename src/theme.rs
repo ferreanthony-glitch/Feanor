@@ -8,8 +8,7 @@
 //! l'accueil, les angles du petit logotype. Rien d'autre n'est orange : la sélection, les éléments
 //! choisis et les boutons gardent leurs gris (Anthony, après avoir vu la première version, plus
 //! chargée : « l'orange est trop présent, le noir trop lourd »). Puis trois thèmes de gris neutres
-//! (Anthony, 2026-10-18 : « un gris sombre/clair plus proche de Storyboard Pro ou Clip Studio
-//! Paint ») : **Gris sombre**, **Gris clair** et **Sombre** (l'ancien presque noir). Un dernier,
+//! (Anthony, 2026-10-18 : « un gris sombre/clair ») : **Gris sombre**, **Gris clair** et **Sombre** (l'ancien presque noir). Un dernier,
 //! **Personnalisé**, part du thème courant et se
 //! règle dans Fichier > Préférences… avec neuf couleurs ; tout le reste de la palette (survol,
 //! onglet actif, texte secondaire, couleur des dessins sur la timeline…) en est déduit, et choisi
@@ -705,7 +704,7 @@ pub fn barre(sequence: bool, impaire: bool) -> Color32 {
 
 /// Poignées, contours et lasso de la sélection, de la boîte de transformation et de la 3D.
 pub const POIGNEE_SELECTION: Color32 = Color32::from_rgb(70, 165, 255);
-// Sélection, comme Storyboard Pro la montre (captures d'Anthony, 2026-10-22). Tout le style de la
+// Sélection (captures d'Anthony, 2026-10-22). Tout le style de la
 // sélection est ici : pour le changer, on ne touche qu'à ces constantes (couleurs) et à
 // `selbox::HANDLE_SIDE` (taille des poignées).
 /// La boîte (1 px, pleine), le bord des poignées, le pivot, le halo des traits choisis.

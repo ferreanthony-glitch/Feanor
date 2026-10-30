@@ -5,8 +5,8 @@ use crate::onion::{neighbours, OnionMode, OnionSettings};
 use crate::settings::Settings;
 
 #[test]
-fn defaults_follow_the_storyboard_pro_preferences() {
-    // STB_Preferences.xml : 3 dessins avant / 3 après, rouge avant, vert après, teinté.
+fn defaults_are_three_red_before_and_three_green_after() {
+    // 3 dessins avant / 3 après, rouge avant, vert après, teinté.
     let s = OnionSettings::default();
     assert_eq!((s.before, s.after), (3, 3));
     assert_eq!((s.before_color, s.after_color), ([255, 0, 0], [0, 255, 0]));

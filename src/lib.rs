@@ -72,6 +72,8 @@ mod enregistrement_cliche_tests;
 #[cfg(test)]
 mod extension_tests;
 #[cfg(test)]
+mod ancien_projet_tests;
+#[cfg(test)]
 mod enregistrement_identique_tests;
 // Travailler à plusieurs sur un film (`docs/COOPERATION.md`) : l'équipier (`equipe`), les prises (`verrous`, pur), le
 // stockage (`depot`), les commentaires de chacun (`partagecom`), la session (`cooperation`) et son interface
@@ -129,8 +131,6 @@ mod parallele_tests;
 mod perf;
 #[cfg(test)]
 mod perf_tests;
-#[cfg(test)]
-mod sbperf_tests;
 #[cfg(test)]
 mod optim_rendu_tests;
 // Projets lourds (300 plans et plus) : générateur et bancs, tous `#[ignore]` (`docs/PERFORMANCE.md`, section 25).
@@ -676,8 +676,6 @@ mod revue_tests;
 #[cfg(test)]
 mod keymap_tests;
 #[cfg(test)]
-mod keymap_jeux_tests;
-#[cfg(test)]
 mod ops_tests;
 mod montagekeys;
 mod references;
@@ -831,22 +829,6 @@ mod render;
 mod rendu_audit_tests;
 #[cfg(test)]
 mod resize_tests;
-pub mod sbbatch;
-pub mod sbexport;
-#[cfg(test)]
-mod sbexport_tests;
-mod sbexportui;
-pub mod sboard;
-#[cfg(test)]
-mod sboard_tests;
-mod sbimport;
-mod sbnative;
-pub mod sbscript;
-mod sbui;
-pub mod sbvector;
-pub mod tvg;
-#[cfg(test)]
-mod sbvector_tests;
 pub mod stretch;
 pub mod xml;
 pub mod roles;
@@ -921,7 +903,6 @@ mod espace3d_tests;
 #[cfg(test)]
 mod stage_tests;
 mod storyboard;
-mod tbbrush;
 #[cfg(test)]
 mod tests;
 mod theme;
@@ -992,7 +973,7 @@ fn run(renderer: eframe::Renderer, initial: Option<std::path::PathBuf>) -> efram
     let fenetre = if accueil {
         fenetre.with_inner_size(accueilfenetre::TAILLE_ACCUEIL).with_resizable(false)
     } else {
-        // Ouverture en plein écran (Anthony, 2026-10-18), fenêtre maximisée comme Storyboard Pro.
+        // Ouverture en plein écran (Anthony, 2026-10-18).
         fenetre.with_inner_size([1500.0, 920.0]).with_min_inner_size(accueilfenetre::TAILLE_MIN_TRAVAIL).with_maximized(true)
     };
     let options = eframe::NativeOptions {

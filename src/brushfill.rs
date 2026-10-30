@@ -6,8 +6,6 @@
 //!   son bout revient près de son début, ou il se recoupe (une boucle qui dépasse) ; c'est alors
 //!   la boucle qui se remplit (`closed_outline`). Le remplissage est sous le trait et par-dessus
 //!   ce qui était dessiné avant (`fill_under_stroke`) ; avec « peint derrière », sous tout.
-//!   (Dans Storyboard Pro, l'outil Pinceau a « Draw Behind » et « Auto Fill » : le détail de leur
-//!   comportement est à vérifier.)
 //!
 //! 2026-10-23 (Anthony) : « Peint derrière » s'appelle **« Peint sur l'aplat »** (même effet pour l'instant, la clé
 //! `peint_derriere` des réglages et l'action `pinceau.derriere` gardent leur nom) ; « Remplir la forme » n'est plus

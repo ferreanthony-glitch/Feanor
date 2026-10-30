@@ -3,7 +3,7 @@
 //! - **Durée d'un nouveau plan** (Préférences > Montage) : en secondes dans les réglages (2 s d'origine, ce que SHOT donnait déjà), montrée
 //!   aussi en images à la cadence du projet ouvert. Tout plan créé ensuite (nouveau plan, plan avant, nouvelle séquence, case dessinée dans
 //!   une case vide de la planche) la reçoit : `Document::make_panel` la lit dans `Document::duree_plan_neuf`, que `App` pose avant ses
-//!   commandes. Les plans qui existent gardent leur durée ; ce qu'un import ou un projet Storyboard Pro donne à ses plans ne change pas.
+//!   commandes. Les plans qui existent gardent leur durée ; ce qu'un import donne à ses plans ne change pas.
 //! - **Changer la durée des plans choisis…** (clic droit sur un plan du montage ou une vignette, menu « Plans », action `montage.duree_plans`
 //!   sans touche) : une petite fenêtre, un champ qui part de la durée d'un nouveau plan, et tous les plans choisis prennent cette durée d'un
 //!   coup. C'est « Durée… » (`rognageui.rs`) pour plusieurs plans : la même règle (`Document::set_duration`), donc la fin de chaque plan est

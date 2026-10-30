@@ -11,8 +11,8 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
 ## Phase 0 — Préparation ✅
 
 - ✅ Suivi de versions (git, MinGit portable).
-- ✅ `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/reference/sbpro_presets/`.
-- ✅ `keymap.toml` : 65 raccourcis par défaut de Storyboard Pro 27 + 8 perso, réserve « non
+- ✅ `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`.
+- ✅ `keymap.toml` : raccourcis par défaut + 8 perso, réserve « non
   implémenté », propositions marquées ; plus aucun raccourci codé en dur ; menus et aide (F1)
   générés depuis le fichier ; « Aide > Modifier / Recharger les raccourcis ».
 - ✅ Nouvelles petites actions pour coller au preset : zoom par pas (1/2), plein écran, rotation
@@ -35,7 +35,7 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
 - ✅ 1c. Sélection bitmap (lasso / rectangle, déplacer, échelle, rotation, miroir, effacer dedans /
   autour, copier / couper / coller) ; Maj+Suppr (effacer hors sélection) aussi en vectoriel ; table
   lumineuse (autres calques estompés) ; guides de perspective à 1, 2 ou 3 points (G, Maj+A, Maj+L,
-  Maj+G, comme le module Guides de Storyboard Pro 27), enregistrés dans le projet.
+  Maj+G), enregistrés dans le projet.
   Reste pour plus tard : peinture limitée à la sélection, déformation en perspective d'une
   sélection (outil Perspective), autres types de guides, annulation des réglages de guide.
 - ✅ 1d. Annuler / rétablir sur tout le document : textes des panneaux, noms de séquence, de scène,
@@ -47,7 +47,7 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
   une scène au panneau courant et la joindre à la précédente ; copier / coller un calque d'un
   panneau à l'autre (W / X) ; verrouiller un calque (Alt+L) ; fusionner avec le calque du dessous
   (Ctrl+E). « Réunir des panneaux » et « joindre à la scène précédente » sont des commandes de
-  Pelure (Storyboard Pro 27 passe par une sélection de plusieurs panneaux, pas encore possible
+  Pelure (la sélection de plusieurs panneaux n'est pas encore possible
   ici). Reste : sélection de plusieurs panneaux ou calques à la fois.
 
 ## Phase 2 — Caméra et 3D ✅
@@ -72,14 +72,13 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
     hors-champ estompé (désactivable) ; export, vignettes et planches à travers la caméra ; la
     caméra suit la coupe et la réunion de panneaux. Modèle d'images clés déjà en place.
   - ✅ 2b-3. Mouvements de caméra par images clés : clé au début / ici / à la fin, retirer
-    (commandes de Storyboard Pro 27, sans touche), adoucir le mouvement à une clé (Pelure) ; clés
+    (sans touche), adoucir le mouvement à une clé (Pelure) ; clés
     visibles dans la timeline d'animation (ligne « Caméra ») et dans la bande de montage ; lecture,
     vue caméra et export suivent le mouvement. Reste : déplacer une clé à la souris dans la
     timeline, copier la caméra d'un panneau à l'autre, chemin de caméra affiché sur la feuille.
 - ✅ 2c. Profondeur Z des calques (multiplan), vue de contrôle (vue de dessus).
   - ✅ 2c-1. Transformer un calque entier : outil Transformer (déplacer, échelle par un coin,
-    rotation par la poignée), valeurs exactes, Ctrl+R pour annuler (raccourci de Storyboard Pro 27,
-    jusque-là en réserve) ; on dessine normalement sur un calque transformé ; affichage, export et
+    rotation par la poignée), valeurs exactes, Ctrl+R pour annuler (jusque-là en réserve) ; on dessine normalement sur un calque transformé ; affichage, export et
     vignettes en tiennent compte. Pas encore : transformation animée, miroir, fusion d'un calque
     transformé (refusée avec un message).
   - ✅ 2c-2. Profondeur des calques : réglage « Profondeur » dans les calques (0 = plan de
@@ -125,20 +124,16 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
   le poste (Krita, PATH, winget) ou choisi à la main (retenu dans les réglages). Image filmée
   4 à 8 fois plus rapide (zone filmée seulement, plusieurs cœurs) et images tenues pas
   recalculées : montage lourd de 960 images 1080p exporté en 23 s (avant : ~85 s de calcul,
-  fenêtre figée). Couleurs vérifiées (BT.709). Commandes de Storyboard Pro 27 reprises sans
-  touche : MOVIE_EXPORT_KEY, BITMAP_EXPORT_KEY, SOUNDTRACK_EXPORT_KEY, EXPORT_CURRENT_IMAGE_KEY.
-  Pas encore : choix de la qualité, images JPEG, export EDL/AAF/XML.
+  fenêtre figée). Couleurs vérifiées (BT.709). Pas encore : choix de la qualité, images JPEG, export EDL/AAF/XML.
 - ✅ 3c. PDF de storyboard (Fichier > Exporter le storyboard (PDF), ou dans la fenêtre
   d'export) : A4 paysage, 6 panneaux par page (2 rangées de 3), image de début de panneau vue
   par la caméra, titre et durée, puis action, dialogue, notes sous l'image (« … » si le texte
   ne tient pas) ; nouvelle page à chaque séquence ; en-tête : projet, séquence, page n / N.
   Montage, scène ou panneau. Fabriqué sans bibliothèque (police standard Helvetica, accents
-  français ; images JPEG) ; vérifié avec un lecteur PDF tiers (PDF.js). Commande de Storyboard
-  Pro 27 reprise sans touche : PDF_EXPORT_KEY. Pas encore : autres mises en page, police au
+  français ; images JPEG) ; vérifié avec un lecteur PDF tiers (PDF.js). Pas encore : autres mises en page, police au
   choix, caractères hors de l'alphabet latin (remplacés par « ? »).
-- ✅ 3d. Animation à la TVPaint (rendu visé : TVPaint, pas Storyboard Pro — choix d'Anthony).
-  - ✅ 3d-1. Pelure d'oignon : valeurs par défaut reprises des préférences Storyboard Pro
-    d'Anthony (3 avant en rouge, 3 après en vert, teintées, sous le dessin) ; compter par dessin
+- ✅ 3d. Animation à la TVPaint (rendu visé : TVPaint — choix d'Anthony).
+  - ✅ 3d-1. Pelure d'oignon : valeurs par défaut (3 avant en rouge, 3 après en vert, teintées, sous le dessin) ; compter par dessin
     ou par image ; jusqu'à 12 de chaque côté ; opacité du plus proche, puis de plus en plus pâle ;
     teinte ou vraies couleurs ; couleurs au choix ; réglages retenus d'une séance à l'autre.
     Pas encore : pelure à travers les panneaux, sur tous les calques.
@@ -146,13 +141,11 @@ gomme qui coupe, remplissage), annuler/rétablir, fichier `.pelure`, exports PNG
     pointes en image (avec réductions pour les petites tailles), pointe aplatie / tournée,
     variations au hasard (angle, taille), taille et opacité mini sous la pression. Réglages
     nommés dans le panneau Outils : 6 de Pelure (pinceau rond, crayon à papier, craie grasse,
-    encre, gomme, gomme à grain) et import d'un fichier de pinceaux Toon Boom (XML
-    `penstyles`) : les 9 pinceaux perso d'Anthony passent (3 pointes, 3 papiers), gardés dans
-    %APPDATA%\Pelure\pinceaux. Rendu de Pelure (visé : TVPaint), pas celui de Storyboard Pro.
-    Hypothèses d'échelle non vérifiées (dureté sur 0–5, taille en pixels) : voir `tbbrush.rs`.
+    encre, gomme, gomme à grain) ; les pinceaux importés sont gardés dans
+    %APPDATA%\Pelure\pinceaux. Rendu de Pelure (visé : TVPaint).
     Pas encore : mélange des couleurs (peinture humide), double pointe, inclinaison du stylet,
     grain sur les calques vectoriels.
-- ⏸ Export XML Toon Boom : non prévu (format propriétaire non documenté).
+
 
 ## Correctif — latence du dessin ✅
 
@@ -183,17 +176,15 @@ n'est plus bridée quand la fenêtre est derrière une autre.
 ## Phase 4 — Confort ✅
 
 - ✅ 4a. Copie de secours et récupération après plantage : toutes les minutes par défaut
-  (AUTO_SAVE_DELAY = 1 dans les préférences Storyboard Pro d'Anthony ; réglable dans le menu
+  (réglable dans le menu
   Fichier, 0 = jamais), si le projet a changé, sans figer la fenêtre (écriture sur un autre
   fil). La copie va dans `%LOCALAPPDATA%\Pelure\secours`, jamais dans le projet lui-même : seul
-  « Enregistrer » l'écrit (choix prudent ; comment Storyboard Pro fait exactement n'est pas
-  vérifié). Fermeture normale : copie effacée. Après un plantage : fenêtre « Pelure s'est fermé
+  « Enregistrer » l'écrit (choix prudent). Fermeture normale : copie effacée. Après un plantage : fenêtre « Pelure s'est fermé
   sans enregistrer » (ouvrir la copie, la supprimer, ou plus tard), avec un avertissement si le
   projet a été enregistré après la copie. Barre d'état : « Secours il y a … ». Vérifié par un
   vrai plantage (processus tué) : copie retrouvée et rouverte, traits compris.
 - ✅ 4b. Espaces de travail (Affichage > Espaces de travail) : quatre dispositions de Pelure
-  (Standard ; Dessin, Timeline et Vue d'ensemble, qui reprennent par le nom les commandes
-  VIEW_LAYOUT_DRAWING / TIMELINE / OVERVIEW de Storyboard Pro 27, sans touche, avec un contenu
+  (Standard ; Dessin, Timeline et Vue d'ensemble, sans touche, avec un contenu
   propre à Pelure) ; « Enregistrer la disposition… » sous un nom, et supprimer ; panneaux
   Outils, fiche et calques, montage / timeline à afficher ou masquer (Affichage > Panneaux) ;
   la disposition est retenue d'une séance à l'autre (AUTO_SAVE_LAYOUT = Y dans les préférences
@@ -203,8 +194,8 @@ n'est plus bridée quand la fenêtre est derrière une autre.
 ## Phase 5 — Interface et nouveaux outils ✅
 
 Demandée par Anthony après la phase 4. Choix faits : icônes Phosphor, fenêtres modulables dans
-la fenêtre de Pelure (egui_dock), tampon comme Storyboard Pro **et** tampon de duplication,
-perspective = déformer en perspective (outil Perspective de Storyboard Pro).
+la fenêtre de Pelure (egui_dock), tampon **et** tampon de duplication,
+perspective = déformer en perspective.
 
 - ✅ 5a. Icônes des outils (jeu d'icônes Phosphor, licence MIT) : une icône par outil, nom et
   raccourci au survol ; icônes aussi dans les onglets des panneaux.
@@ -216,32 +207,30 @@ perspective = déformer en perspective (outil Perspective de Storyboard Pro).
   espaces de travail enregistrent tout cela (y compris les panneaux flottants et leur place) ;
   les anciennes dispositions sont converties. Le dessin ne se ferme pas et ne flotte pas.
 - ✅ 5c. Formes en outils séparés : Ligne (droite, courbe, courbe en S), Rectangle, Ellipse,
-  Polyligne (outils LINE / RECTANGLE / ELLIPSE / POLYLINE de Storyboard Pro 27, sans touche ; leur
-  maniement exact n'est pas vérifié, celui-ci est propre à Pelure). Courbe : tracer, puis glisser
+  Polyligne (sans touche). Courbe : tracer, puis glisser
   pour courber (la courbe passe par le pointeur) ; en S, deux glissers. Polyligne : un clic par
   point, double-clic ou Entrée pour finir, clic sur le premier point pour fermer.
-- ✅ 5d. Texte (TEXT_TOOL de Storyboard Pro 27) : polices du poste, taille, couleur ; sur un calque
+- ✅ 5d. Texte : polices du poste, taille, couleur ; sur un calque
   vectoriel le texte reste modifiable (clic dessus), la Sélection le déplace, l'agrandit, le
   tourne ; sur un calque bitmap il devient des pixels. Police absente : celle de Pelure (signalé).
   Pas encore : crénage, alignement centré / à droite, gras ou italique autrement que par la police.
   Format de projet 6.
-- ✅ 5e. Tampon comme Storyboard Pro (STAMP_TOOL, d'après ses réglages : taille max et min,
+- ✅ 5e. Tampon (taille max et min,
   espacement, angle, rondeur, variations au hasard, miroirs, plusieurs images en cycle) avec six
   tampons de Pelure et les images importées ; tampon de duplication (Ctrl + clic pour la source,
   aligné ou non, calque courant ou tous les calques). Calques bitmap.
-- ✅ 5f. Déformer en perspective (PERSPECTIVE_TOOL de Storyboard Pro 27) : les 4 coins du dessin
+- ✅ 5f. Déformer en perspective : les 4 coins du dessin
   (ou de la sélection vectorielle), grille de perspective ; chaque geste repart du dessin d'origine.
   Pas encore : sur une sélection bitmap.
 - ✅ 5g. Panneau dans une fenêtre Windows à part (clic droit sur son onglet), à poser sur un autre
   écran ; la fermer le remet à sa place ; sa place est retenue. Les raccourcis clavier restent ceux
   de la fenêtre principale.
 
-## Phase 6 — Une interface proche de Storyboard Pro ✅
+## Phase 6 — Une interface de storyboard ✅
 
-Demandée par Anthony (capture annotée de Pelure et capture de Storyboard Pro) : barre d'outils
+Demandée par Anthony (capture annotée de Pelure) : barre d'outils
 verticale, dessiner directement dans la vignette, replier les textes des cartes, calques dans le
-montage, calque de fond étendu à toute la scène, et la disposition générale de Storyboard Pro
-(inspiration fonctionnelle seulement : ni nom ni image de Toon Boom).
+montage, calque de fond étendu à toute la scène, et la disposition générale.
 
 - ✅ 6a. Barre de commandes en haut (fichier, édition, panneaux, vue, lecture) et barre d'outils
   verticale à gauche, outils groupés ; nouvelle disposition : dessin | Calques et Fiche | Réglages,
@@ -288,8 +277,7 @@ textures pour les pinceaux vectoriels. Choix : tout le fond de la planche est un
 
 ## Phase 8 — Planche en pages, notes souples, modes de fusion ✅
 
-Demandée par Anthony (capture d'une page de vignettes de Storyboard Pro, en inspiration
-fonctionnelle) : des plans qui se suivent sur la même ligne, un nombre de vignettes réglable
+Demandée par Anthony (capture d'une page de vignettes) : des plans qui se suivent sur la même ligne, un nombre de vignettes réglable
 (6 au plus par ligne) ; choisir, déplacer, écrire et attacher les notes ; des modes de fusion
 pour les calques, comme dans les logiciels de retouche.
 
@@ -706,119 +694,12 @@ Le faux-fixe n'a que son nom dans les textes de TVPaint : à faire décrire par 
 l'implanter (le pochoir, la transparence préservée et la position verrouillée ont été décrits
 le 2026-10-15, voir `docs/TIMELINE-TVPAINT.md`).
 
-## Phase 14 — Échange avec Storyboard Pro (après la phase 13)
+## Phase 14 — Échange avec un logiciel de storyboard tiers : abandonnée (2026-10-30)
 
-Demandé par Anthony (2026-10-15) : ouvrir un projet Storyboard Pro dans Pelure et en ressortir
-quelque chose que Storyboard Pro ouvre. Constat (projet `BRAWLIDAYS_predec PART 1`, lu sans le
-modifier) : le `.sboard` est du XML lisible (séquences, plans, panneaux, durées, calques, textes,
-caméra, son) ; les dessins sont des `.tvg`, format de Toon Boom non documenté, compressé et marqué
-d'un certificat de licence Toon Boom : ni leur lecture ni une écriture acceptée par Storyboard Pro
-ne sont garanties.
-
-Choix d'Anthony : passer par les imports officiels de Storyboard Pro.
-- Vers Pelure : lire le `.sboard` (structure, durées, textes, caméra, son) ; les dessins, à partir
-  des images que Storyboard Pro exporte (« Export: Bitmap »).
-- Vers Storyboard Pro : un dossier que ses propres commandes réimportent — images par plan et par
-  calque (« Import Images as Shots », « Import Images as Layers »), textes (« Update Captions from
-  CSV »), son (« Import AudioTracks »), montage (EDL / AAF / XML, « Conformation: Import Animatic
-  Project ») — à vérifier commande par commande dans Storyboard Pro 27 avant d'écrire le code.
-
-Relevé dans Storyboard Pro 27 (lu, jamais lancé) : le format CSV des légendes et les règles de
-nommage de « Images as Shots » ne sont pas décrits ; son interface de script (Qt Script,
-ECMAScript 3), elle, est documentée (aide `help/storyboard`). Choix d'Anthony (2026-10-16) :
-- vers Storyboard Pro : un script Storyboard Pro écrit par Pelure (plans, panneaux, durées, un
-  calque par calque, légendes, sons) ;
-- depuis Storyboard Pro : un script d'export des dessins écrit par Pelure ; Pelure lit le
-  `.sboard` pour le reste ;
-- d'abord le sens Storyboard Pro → Pelure ; la caméra plus tard (unités Toon Boom à convertir).
-
-- ✅ 14a. Importer un projet Storyboard Pro (Fichier, ou glisser le `.sboard` sur la fenêtre).
-  - Le `.sboard` est lu (jamais modifié) : chaque plan devient un plan, dans une séquence du même
-    nom ; ses panneaux, mis bout à bout, deviennent ses images de storyboard avec leurs légendes
-    (Dialog → dialogue, Action Notes → action, les autres → notes, préfixées de leur nom) ;
-    cadence et taille du projet ; calques par leur nom, du fond au premier plan.
-  - Dessins : « Créer le script… » écrit `export_pelure.js` dans un dossier choisi et le copie ;
-    dans Storyboard Pro (vue Script Editor, Sandbox, coller, Run), il ne laisse voir qu'un calque
-    à la fois, exporte chaque panneau en PNG transparent, remet les calques comme avant (et annule
-    tout à la fin), puis écrit la liste `pelure.txt`. Pelure range ces images sur les calques
-    (deux images identiques ne font qu'un dessin ; une image à une autre résolution, de mêmes
-    proportions, est remise à la taille du cadre). L'opacité des calques est dans les images.
-  - Son : les pistes et leurs extraits (début, fin, découpe) ; un extrait au volume, au tempo
-    (« WSOLATempo », vitesse sans changer la hauteur) ou à la vitesse (« Resample ») changés
-    devient son propre son, calculé à l'import. Enveloppes de volume, réverbération et changement
-    de hauteur ne sont pas repris (signalés dans le compte rendu).
-  - Vérifié sur les projets BRAWLIDAYS (partie 1 : 12 plans, 39 panneaux, 834 images ; partie 2 :
-    45 plans, 322 panneaux, 3 323 images, lue en 0,2 s). Le script n'a pas pu être essayé ici
-    (Storyboard Pro n'est jamais lancé par Claude) : à essayer par Anthony.
-- ✅ 14a-2. Ouvrir sans rien demander (Anthony : « il faut automatiser le script à l'ouverture du
-  fichier… c'est induit ») et garder les calques vectoriels.
-  - **Ouverture** : Fichier > Ouvrir accepte les `.sboard`, avec une entrée dédiée sous « Ouvrir… ».
-  - **Export automatique** : Pelure copie le projet dans un dossier temporaire (sans `logs/` ni
-    verrous), y lance Storyboard Pro en batch avec le script (syntaxe de sa documentation), suit
-    l'avancement, puis ouvre le projet. « Arrêter » ouvre sans les dessins.
-  - **Traits vectoriels** : le script lit ceux de chaque calque vectoriel avec l'interface de
-    script étendue de Storyboard Pro (`Drawing.query.getStrokes`, couleurs par
-    `ColorManager.getColorDataWithId`) et les écrit en JSON.
-  - **Reconstruction** : Pelure refait les zones colorées (bordées par les traits qui n'ont la
-    couleur que d'un côté) et les traits de crayon, puis les cale sur l'image du même calque.
-    Le calque reste vectoriel si le recouvrement atteint 60 % ; sinon il garde l'image.
-  - **Calques vides** : un calque vectoriel sans dessin reste vectoriel.
-  - **Non vérifié ici** : le mode batch et la lecture des traits n'ont pas pu l'être (Claude ne
-    lance jamais Storyboard Pro). La façon de désigner le dessin d'un calque n'est décrite que pour
-    Harmony : le script en essaie plusieurs et note dans la liste celle qui marche.
-  - **Corrigé après l'essai d'Anthony (2026-10-17)**, avec un script d'essai lancé par lui sur
-    son projet NAJI (`Documents\Work\analyse-sbpro`, analyse statique de Storyboard Pro faite
-    par un agent, sans le lancer) :
-    - le dessin d'un calque se désigne par l'élément du calque et le nom de son dessin
-      (« 27_1 »), en `exposure`, traduit par `Drawing.Key`. En `drawingId`, le nom désigne un
-      autre dessin (l'identifiant interne) : le script ne l'essaie plus, il aurait pu importer
-      le mauvais dessin sans rien dire ;
-    - le dessin est lu d'un coup par `Drawing.query.getData` : zones (une boucle fermée et sa
-      couleur), traits de crayon. Les dessins d'Anthony sont faits de zones (traits de brosse),
-      presque toutes d'une couleur texture ;
-    - les couleurs vont une fois dans `couleurs.json` ; une texture donne sa couleur moyenne
-      (pondérée par l'opacité de ses pixels, et pour opacité leur couverture) ;
-    - le `sequenceName` « 0 » des plans n'est plus une séquence quand la méta du projet
-      `sequenceExists` est vide (projets NAJI, BRAWLIDAYS partie 1) ;
-    - vérifié : les dessins lus par l'essai sont refaits en zones et rendus justes (essai ignoré
-      `real_getdata_drawings_from_the_test_script`, images avec `PELURE_SB_PNG`).
-  - **Essai d'Anthony de l'ouverture automatique (2026-10-17) : échoue.** Storyboard Pro démarre
-    en batch (son journal s'arrête après l'initialisation de ses greffons) mais le script ne
-    tourne pas : `pelure.txt` n'est jamais écrit. Mis de côté à sa demande (« laisse tomber »).
-    Pistes, non vérifiées : la ligne de commande batch, ou un script qu'on ne peut pas lancer
-    ainsi. Le script à la main (Script Editor, Sandbox, coller, puis le bouton Run, une icône
-    « ƒ » sans texte) a marché pour l'essai de lecture.
-- ✅ 14b-1. Exporter vers Storyboard Pro (Fichier > « Exporter vers Storyboard Pro… »). Choix
-  d'Anthony : partir de son projet modèle (choisi une fois, gardé dans les réglages), dessins en
-  vecteurs si possible ; 14b-1 les envoie en images, les vecteurs viennent en 14b-2.
-  - **Pelure prépare** dans un dossier temporaire une image PNG par calque et par image de
-    storyboard : le cadre vu par la caméra au centre, à la première image de l'image de
-    storyboard, à pleine opacité. Deux images identiques ne font qu'un fichier. Il écrit aussi un
-    WAV par extrait de son, au volume de sa piste, et le script de construction, données
-    comprises.
-  - **Storyboard Pro construit** (batch, sur une copie du modèle) :
-    - un plan par plan, un panneau par image de storyboard (durée, légendes Dialog / Action Notes
-      / Notes, ajoutées si le modèle ne les a pas) ;
-    - les calques, du fond au premier plan : image importée, ou calque vide du même genre ;
-      nom, visibilité, opacité ; les calques vides du panneau neuf sont enlevés ;
-    - les séquences (s'il y en a plusieurs, ou une qui a un nom) et les sons ;
-    - puis il enlève les plans et les pistes du modèle et enregistre le projet (« Enregistrer
-      sous » dans le dossier choisi ; à défaut, Pelure y copie le projet enregistré sur place).
-  - **Compte rendu** de ce qui n'est pas repris tel quel : l'animation dans une image de
-    storyboard (premier dessin seulement), la caméra, les modes de fusion, les dossiers (mis à
-    plat), les pistes coupées (exportées quand même).
-  - **Vérifié** : la préparation (tests) ; le script, exécuté sous Node contre une imitation de
-    l'interface de script écrite d'après sa documentation ; sa syntaxe ES3 (JScript) ; la fenêtre
-    avec un faux Storyboard Pro. **Non vérifié** : Storyboard Pro lui-même (jamais lancé par
-    Claude) — à essayer par Anthony. Points incertains, documentation muette : taille donnée par
-    Storyboard Pro à une image importée, nom des légendes en HTML ou en texte, nom du `.sboard`
-    après « Enregistrer sous ».
-  - L'import note maintenant la mesure du calage des vecteurs (pixels par unité, sens de l'axe,
-    origine) : elle servira à 14b-2.
-- 14b-2. Les calques vectoriels en vecteurs (`DrawingTools.createLayers`), quand l'essai de
-  l'import aura dit quelle façon de désigner un dessin marche et l'échelle mesurée.
-- Caméra de Storyboard Pro (plus tard).
-
+Décision d'Anthony (2026-10-30) : SHOT n'ouvre plus de fichiers d'un autre logiciel de storyboard, n'en écrit plus et
+n'importe plus ses fichiers de pinceaux (« si je veux commercialiser SHOT, ça va me poser des problèmes ; ça va alléger
+le soft »). Le code, les menus, les préférences, les essais et les documents correspondants sont supprimés ; l'historique git garde les anciens états. Les projets SHOT déjà importés s'ouvrent comme avant et les
+pinceaux déjà gardés restent utilisables. Voir `docs/INTERFACE.md`, partie 71.
 ## Propagation façon EbSynth (menée dans une session parallèle)
 
 - ✅ Étapes a à d : la caisse `synthese/` (synthèse par l'exemple, flux optique, mélange des clés,
@@ -1020,7 +901,7 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         plusieurs calques et plusieurs plans, chacun dans son calque. Échap pendant le geste rend
         tout comme avant.
       - **repère de pose** (Anthony : « quand on déplace une clé, on ne voit rien à l'écran qui
-        indique où elle va venir se déposer. Un système sur Storyboard Pro indique avant ou
+        indique où elle va venir se déposer. Un repère indique avant ou
         après quelle clé elle vient se déposer ») : pendant qu'on glisse une ou plusieurs clés,
         rien ne bouge ; un fantôme suit la souris et un repère (trait blanc à deux pointes) montre
         la limite entre deux clés où elles se poseront ; elles se posent au lâcher ;
@@ -1036,7 +917,7 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         visent le montage en storyboard, la timeline en animation ;
       - **F5 : nouveau dessin clé** à l'image courante du calque courant, partout (Anthony :
         « pour moi F5 », puis « F5 pose une clé partout. F6 coupe le plan ») ; « couper le plan »
-        passe de F5 (son raccourci de Storyboard Pro) à F6. Puis (Anthony : « quand une clé est
+        passe de F5 à F6. Puis (Anthony : « quand une clé est
         créée avec F5 sur un calque déjà dessiné, la clé ne doit pas être vide » ; « l'option
         d'une clé vide doit cependant exister, […] comme F4 ») : F5 et le double-clic sur une
         piste copient le dessin montré à l'image (sinon le dernier d'avant, mon choix) ; F4 pose
@@ -1074,7 +955,7 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         animation, toujours « en N » images à la tête de lecture, comme TVPaint (mon choix) ;
       - **clé précédente / suivante, tous les calques** (Anthony : « passer d'une clé à une
         autre, tous calques compris ») : A / F (choix d'Anthony ; d'abord proposés sur PgPréc /
-        PgSuiv, qui passent à « plan précédent / suivant », A / F de Storyboard Pro). En
+        PgSuiv, qui passent à « plan précédent / suivant »). En
         storyboard, dans tout le montage ; en animation, dans le plan. Aussi dans le menu des
         instances ;
       - **tête de lecture de la timeline** (Anthony : « elle s'arrête quand je la fais glisser
@@ -1151,10 +1032,9 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         barre d'outils montre le dernier outil pris parmi les siens (mon choix, comme dans les
         logiciels de dessin ; au début le rectangle, la sélection), un petit coin, et la liste au
         clic maintenu (0,35 s ; pas au clic droit, qui sert à donner un raccourci). Outil
-        Sélection par couleur (`outil.selection_couleur`, sans touche comme dans Storyboard
-        Pro 27 : DRAWING_SELECT_TOOL_BY_COLOR_KEY) : bitmap, zone de la couleur cliquée (pixels
+        Sélection par couleur (`outil.selection_couleur`, sans touche) : bitmap, zone de la couleur cliquée (pixels
         voisins ou toute l'image, tolérance) ; vectoriel, tous les éléments de cette couleur ;
-        comportement exact de Storyboard Pro à vérifier. Pour déplacer à la souris la zone choisie :
+        Pour déplacer à la souris la zone choisie :
         flèches, poignées ou outil Sélection ;
       - **enregistrement « introuvable », propagation « disparue »** (Anthony : « quand
         j'enregistre un fichier Pelure, il n'apparaît pas dans l'explorateur Windows » ; « je ne
@@ -1166,12 +1046,11 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         calque, menu Calques), grisée avec la raison ; le fichier `propagerui.rs` (autre session)
         n'est pas touché ;
       - **cutter** (Anthony : « ajoute l'outil cutter qui coupe les lignes vectorielles qui se
-        croisent ») : `outil.cutter`, Alt+T (touche de Storyboard Pro 27, déjà réservée), case
+        croisent ») : `outil.cutter`, Alt+T, case
         après la gomme. Glisser en travers des bouts de traits (ou un clic) : chaque trait touché
         est coupé à ses croisements avec les autres traits et avec lui-même, les morceaux touchés
         partent ; un trait qui ne croise rien part en entier (mon choix) ; zones et textes ne
-        bougent pas. Comportement exact du Cutter de Storyboard Pro (lasso, rectangle…) à
-        vérifier. Vérifié en essai (dépassement d'un T coupé net) ;
+        bougent pas. Vérifié en essai (dépassement d'un T coupé net) ;
       - **coller une image du presse-papiers de Windows** (Anthony : « ajoute la possibilité de
         coller une image copiée [dans] le presse-papiers de Windows, issue d'internet ou autre ») :
         Ctrl+V / Édition > Coller prend l'image du presse-papiers si elle ne vient pas de Pelure
@@ -1187,8 +1066,7 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         courant (ou choisi) teinté de sa couleur au lieu du bleu d'accent, une bande à gauche de
         chaque rang, « bitmap / vectoriel / CTG » écrit dans sa couleur ; en-tête du montage : la
         même bande ; dessins et barres du montage et de la timeline, lettre de la sorte dans
-        l'en-tête de la timeline. Projet enregistré en dossier : gardé (choix d'Anthony, comme
-        Storyboard Pro) ;
+        l'en-tête de la timeline. Projet enregistré en dossier : gardé (choix d'Anthony) ;
       - **journal de plantage** (Anthony : « le logiciel crashe très vite lors de l'utilisation de
         l'outil de propagation de la couleur ») : rien dans le journal de Windows, donc des erreurs
         de programme (panic) qui fermaient Pelure sans trace. `plantage.rs` : le message, l'endroit
@@ -1226,26 +1104,24 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         ne baisse pas (1,7 Go, 456 Mo au repos) ; il vient du calcul de chaque image (environ 0,8 Go
         dès la première, puis +0,4 Go en cours de route, dans les deux versions). Prochaine piste :
         la mémoire de travail de la synthèse (tampons refaits à chaque image) ;
-      - **ouverture en plein écran** (Anthony, 2026-10-18) : fenêtre maximisée à l'ouverture,
-        comme Storyboard Pro (F11 / `vue.plein_ecran` reste le vrai plein écran). Sous Windows, la
+      - **ouverture en plein écran** (Anthony, 2026-10-18) : fenêtre maximisée à l'ouverture
+        (F11 / `vue.plein_ecran` reste le vrai plein écran). Sous Windows, la
         fenêtre créée cachée était marquée maximisée sans en prendre la taille : on la remet à sa
         taille puis on la maximise, quelques images après l'ouverture ;
-      - **Transformer : étirement** (Anthony : « que l'outil de transformation ressemble plus à celui
-        de Storyboard Pro qui permet beaucoup plus de transformations comme l'étirement latéral ») :
+      - **Transformer : étirement** (Anthony : « beaucoup plus de transformations comme l'étirement latéral ») :
         poignées au milieu des côtés (étirer dans un seul sens, le côté opposé reste en place),
         coins en échelle libre (Maj : proportions), largeur et hauteur en chiffres.
-        `LayerTransform::stretch_x` / `stretch_y`, format de projet 22. Comportement exact de
-        l'outil de Storyboard Pro à vérifier. Reste : les poignées de Bézier des coins avec Ctrl ;
+        `LayerTransform::stretch_x` / `stretch_y`, format de projet 22. Reste : les poignées de Bézier des coins avec Ctrl ;
       - **retourner** (Anthony : « créer la possibilité de flipper un plan, flipper un calque et
         flipper une sélection ») : la sélection l'était déjà (Alt+H / Alt+V, maintenant aussi dans
         Édition) ; le calque, sur place, par un étirement négatif (`calque.miroir_h` / `_v`, menu
         Calques) ; les plans choisis de gauche à droite autour du milieu du cadre, calques et
-        caméra (`plan.retourner`, « Flip Selected Shots » de Storyboard Pro 27, sans touche ;
+        caméra (`plan.retourner`, sans touche ;
         menus Storyboard et « … »). Mes choix : le calque autour du milieu de son contenu ; les
         calques de toute la scène pas retournés (partagés avec les autres plans) ;
       - **passe sur les raccourcis** (Anthony : « regarde s'il existe des raccourcis prévus pour des
         fonctions qui n'existent pas dans Pelure ») : 22 actions sans fonction, dont 19 avec une
-        touche (presque toutes de Storyboard Pro 27, gardées en réserve). Puis (« retire ce qui
+        touche (presque toutes gardées en réserve). Puis (« retire ce qui
         est devenu inutile et fais les 5 rapides ») : retirées, pinceau pochoir, calque de toute la
         scène, lier les clips au panneau ; faites, Ctrl+W fermer le projet (un projet vide du même
         format, après « Enregistrer ? »), Ctrl+Maj+V coller sur place (le collage pose déjà à la
@@ -1267,7 +1143,7 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         timeline ; le dessin, plus discret) au lieu d'un fin trait blanc en haut ; 6, une zone bitmap
         choisie survit au passage sur Transformer, qui la déplace (glisser dedans), l'agrandit ou
         la tourne (ses poignées), l'enveloppe (Ctrl + coin, **remplacé le 2026-10-18 par l'outil
-        Déformer** : voir « Boîte de sélection façon Storyboard Pro ») ; les flèches la poussent (`Tool::keeps_zone`) ;
+        Déformer** : voir « Boîte de sélection ») ; les flèches la poussent (`Tool::keeps_zone`) ;
         8, panneaux qui s'ajustent (Anthony : « que les panneaux s'adaptent d'eux-mêmes en fonction
         de ce qu'ils affichent ») : quand deux panneaux sont l'un sur l'autre, les réglages de
         l'outil, les guides, la fiche, les effets et les icônes des outils prennent la hauteur de
@@ -1307,8 +1183,7 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         remplit la zone fermée par le trait (`fond::zone` : trous fermés comme le fond, bande
         regagnée, `UNDER` pixels sous le trait, une zone qui fuit rejoint le dehors) de la couleur
         courante et y recoud le fond ; un clic du cutter retire la zone du fond (sur un calque
-        bitmap aussi) ; une étape d'annulation ; aide des touches adaptée. Reste : l'export vers
-        Storyboard Pro du fond (à vérifier) ;
+        bitmap aussi) ; une étape d'annulation ; aide des touches adaptée. ;
       - **couleur de repère des plans** (Anthony : « changer la couleur des shots dans la timeline,
         pour les utiliser comme repère », par le clic droit seulement) : `Panel::color` (rang dans
         `marks::COLORS`), clic droit sur un plan du montage ou une vignette > « Couleur du plan »
@@ -1317,7 +1192,7 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         montage, liseré dans la vignette ; copiée avec le plan (duplication, copier-coller, nouveau
         projet des plans choisis, coupe) ; format 24 (`couleur`). Sans touche ni action ;
       - **écran d'accueil** (sa suggestion 1 retenue) : sans projet ouvert (lancement, « Fermer le
-        projet »), une carte au milieu : nouveau projet, ouvrir (Pelure, Storyboard Pro), projets
+        projet »), une carte au milieu : nouveau projet, ouvrir, projets
         récents (huit), rouvrir le dernier au lancement, « Commencer sans projet ». Elle part dès
         qu'un projet s'ouvre ou se crée, ou au premier trait (`accueil.rs`, `App::welcome`) ;
       - **fenêtre « Nouveau projet »** (Anthony, d'après l'organisation d'une fenêtre « Nouveau »
@@ -1412,7 +1287,7 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         du sujet au plan de référence reste à 0,1 % près (la distance se mêle en ligne droite, le
         zoom en proportion). Plafond de 1000 clés par effet (au-delà, les clés s'espacent). Action
         `camera.effet_appliquer`. Les valeurs sont des choix de SHOT, à régler à l'œil ; rien de
-        Storyboard Pro ni de TVPaint n'est copié (équivalents non vérifiés). (3) Focales
+        TVPaint n'est copié. (3) Focales
         (`camera::FOCAL_PRESETS`) : 14, 24, 35, 50, 85, 135, 200 mm et anamorphique (40 mm + cadre
         2,39:1 d'affichage, sans déformer le dessin) ; angle de champ horizontal, capteur de 36 mm.
         (4) Aides au cadrage (`cadrage.rs`, `cadrageui.rs`) : tiers, grille d'or (lignes à
@@ -1448,7 +1323,7 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         action `edition.coller_a_la_tete` : la première clé exactement sur la tête, sans rien
         repousser, remplace ce qu'elle rencontre (c'est l'ancien Ctrl+V) ; hors clés, il fait ce
         que faisait Ctrl+Maj+V avant. Conflit : Ctrl+Maj+V était `edition.coller_sur_place`
-        (PASTE_IN_PLACE_KEY de Storyboard Pro, alias de Ctrl+V dans SHOT) : la touche passe à
+        (alias de Ctrl+V dans SHOT) : la touche passe à
         `edition.coller_a_la_tete`, « Coller sur place » reste une commande sans touche par défaut
         (la ligne du `keymap.toml` garde sa source). (4) Plan : jamais allongé. Glisser des dessins :
         un calque tenu jusqu'à la fin du plan le reste (sa dernière exposition absorbe, avec une image
@@ -1461,7 +1336,7 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         avant (`content_refuses`). Étapes d'annulation nommées « Décaler les clés », « Déplacer une
         clé », « Insérer des clés », « Coller les clés à la tête de lecture » (« … de caméra », « …
         d'effet »). Les règles (cascade par défaut, Maj = seule, insertion après la clé de la tête)
-        sont des choix d'Anthony ; leurs équivalents dans Storyboard Pro et TVPaint sont à vérifier.
+        sont des choix d'Anthony ; leurs équivalents dans TVPaint sont à vérifier.
         Fonctions pures testées (`camkeys_tests.rs`, `fxkeys_tests.rs`, `handles_tests.rs`,
         `keymap_tests.rs`) ;
       - **clés d'effets : seulement celles de l'effet choisi** (Anthony : « elles n'apparaissent
@@ -1477,14 +1352,13 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         le choix des clés ; le rang suit un échange ou un retrait de la pile (`rank_after_swap`,
         `rank_after_remove`, `shown`, testées) ;
       - **enveloppe de Bézier** (**depuis le 2026-10-18, c'est un mode de l'outil Déformer, plus un
-        Ctrl + coin** : voir « Boîte de sélection façon Storyboard Pro ») (Anthony : « maintenir Ctrl
+        Ctrl + coin** : voir « Boîte de sélection ») (Anthony : « maintenir Ctrl
         permet de saisir une poignée de Bézier
         des coins pour transformer la forme » ; son choix : « B, comme l'outil Perspective ») : dans
         l'outil Transformer, Ctrl + glisser un coin du cadre ouvre une enveloppe sur le dessin
         courant (4 coins, 2 poignées par coin ; surface de Coons), appliquée à chaque lâcher depuis
         le dessin d'origine (une étape d'annulation par geste), bitmap ou vectoriel (traits rendus
-        plus denses pour se courber). Avec cet outil, Ctrl ne prend plus le lasso. Comportement
-        exact de Storyboard Pro à vérifier. Puis (« l'enveloppe doit aussi pouvoir ne déformer que
+        plus denses pour se courber). Avec cet outil, Ctrl ne prend plus le lasso. Puis (« l'enveloppe doit aussi pouvoir ne déformer que
         la sélection, comme l'outil Perspective le fait en vectoriel ») : Ctrl + un coin du cadre de
         la sélection vectorielle ne déforme que les éléments choisis. Puis (« Ajoute ») : une zone
         bitmap choisie aussi (seuls ses pixels, bords adoucis compris, `warp_raster_masked`) ;
@@ -1497,8 +1371,7 @@ allonger tient le dernier dessin ; une poignée de calque s'arrête à la fin du
         recoupe (sa boucle se remplit). Le remplissage est sous le trait, par-dessus le dessin
         d'avant (sous tout s'il peint derrière). Ils valent aussi pour le crayon et sont retenus
         d'une séance à l'autre (choix d'Anthony, `reglages.toml` : `peint_derriere`,
-        `remplir_la_forme`) ; « Draw Behind » / « Auto Fill » de Storyboard
-        Pro : comportement exact à vérifier ;
+        `remplir_la_forme`) ; ;
       - **fusionner les plans choisis, les calques choisis** (Anthony : « quand deux plans ou
         plus sont sélectionnés, l'option de fusionner les plans doit être possible. De même pour
         les calques ») : plans choisis par Ctrl ou Maj + clic dans le montage, qui se suivent
@@ -1685,7 +1558,7 @@ Choix d'Anthony :
   « règle le point 10 en suivant ses recommandations ») :
   - **Toucher du stylet**, commun à tous les pinceaux (section repliée au bas des réglages du
     pinceau, du crayon et de la gomme ; gardé dans `reglages.toml`) : courbe de pression globale
-    (le « Pen Pressure Feel » de Storyboard Pro : Droite, Douce, Ferme ou à la main), plancher de
+    (Droite, Douce, Ferme ou à la main), plancher de
     taille 10 % (avant 3 %), seuil d'appui 3 % sous lequel le stylet ne pose rien (ni début
     fantôme ni pointe au levé), traits plus fins qu'un pixel gardés pleins (avant : éclaircis,
     gris), bord des empreintes en une seule chute douce d'au moins un pixel (le « pixel feather »
@@ -1886,7 +1759,7 @@ mise en avant ».
 Le logiciel s'appelle SHOT, « Frame the story » ; son logo (`assets/shot-logo.svg`) est celui
 d'Anthony.
 - Nom visible : titre de fenêtre (« Sans titre — SHOT »), accueil, boîtes de dialogue, messages,
-  bulles, rapports d'erreur, textes écrits dans les scripts Storyboard Pro. La « pelure d'oignon »
+  bulles, rapports d'erreur, La « pelure d'oignon »
   garde son nom (terme de dessin).
 - Accueil : le logo remplace le titre en texte (`logo.rs` le trace en vecteur avec tiny-skia, une
   fois, à la taille de l'écran ; la devise est dans le dessin). Icône de fenêtre : le « S » entre
@@ -1900,13 +1773,11 @@ d'Anthony.
 - Projets : rien ne change (dossier du projet, fichier `.pelure`, format `pelure-projet`,
   version du format, modèles 3D `.pelure3d`) ; les anciens s'ouvrent comme avant.
 - Gardés sous l'ancien nom, sans effet pour l'utilisateur : les variables `PELURE_*`, l'étiquette
-  interne des brosses livrées, les noms de fichiers échangés avec Storyboard Pro (`pelure.txt`,
-  `construit_pelure.js`…), les dossiers temporaires `pelure-*`.
+  interne des brosses livrées, les dossiers temporaires `pelure-*`.
 
 ## Thème gris et couleurs réglables (2026-10-18) ✅
 
-Demande d'Anthony : « changer l'interface vers un gris sombre/clair plus proche de Storyboard Pro
-ou Clip Studio Paint », couleurs « paramétrables dans les préférences » (seulement l'idée de gris
+Demande d'Anthony : « changer l'interface vers un gris sombre/clair », couleurs « paramétrables dans les préférences » (seulement l'idée de gris
 moyens, rien de copié).
 - `theme.rs` : une palette centrale (`Palette`), déduite de neuf couleurs (`Couleurs`), lue à chaque
   image par de petites fonctions (`theme::fond()`, `theme::texte()`…) ; les `Visuals` d'egui ne sont
@@ -2155,16 +2026,16 @@ ajustements de performances qui vont jusqu'à éteindre certaines fonctions gour
 
 ## Raccourcis proposés, à valider
 
-Ces raccourcis ne viennent pas de Storyboard Pro (source « proposition » dans `keymap.toml`) :
+Raccourcis proposés par SHOT (source « proposition » dans `keymap.toml`) :
 
 | Action | Proposé | Note |
 |---|---|---|
-| Enregistrer sous | Ctrl+Maj+S | aucune touche par défaut dans Storyboard Pro |
+| Enregistrer sous | Ctrl+Maj+S | aucune touche d'origine |
 | Rétablir (second) | Ctrl+Y | habituel sous Windows |
 | Supprimer (second) | Retour arrière | |
 | Ajuster à la fenêtre | Ctrl+0 | changé en 1a : Maj+F sert désormais à « scène suivante » |
-| Nouvelle scène | Maj+P | NEW_SCENE_KEY n'a pas de touche par défaut ; P = nouveau panneau (preset) |
-| Scène précédente / suivante | Ctrl+Pg préc. / Ctrl+Pg suiv. | ✅ validé (1d). PREV_SHOT_KEY / NEXT_SHOT_KEY sans touche ; Maj+A appartient au module Guides de Storyboard Pro (« aligner sur le guide ») |
+| Nouvelle scène | Maj+P | P = nouveau panneau (preset) |
+| Scène précédente / suivante | Ctrl+Pg préc. / Ctrl+Pg suiv. | ✅ validé (1d). Maj+A appartient aux guides (« aligner sur le guide ») |
 | Miroir de la vue | M | |
 | Storyboard ⇄ animation | Tab | |
 | Vue dessin / vignettes | Maj+Tab | |
@@ -2253,7 +2124,7 @@ curseur, etc. Le curseur sur la timeline est déplaçable. » Menée sur la bran
   réunis, retirés, zone de prise d'un fanion, Suppr sans focus). Pas vu à l'écran dans cette séance :
   à essayer par Anthony.
 - Pas faits : longueur d'un commentaire (une plage dans la règle) ; réponses à un commentaire ; les
-  commentaires ne sont pas exportés vers Storyboard Pro ni copiés avec des plans copiés ou dupliqués. (Le **PDF** les écrit
+  commentaires ne sont pas copiés avec des plans copiés ou dupliqués. (Le **PDF** les écrit
   depuis la relecture par le réalisateur, 2026-10-20 : option « Avec les commentaires ».)
 
 ## Références visuelles (fenêtre « Références », 2026-10-19) ✅
@@ -2304,16 +2175,12 @@ Menée sur la branche `references`.
   donne pas pendant le glisser, les boutons restent) ; l'extraction d'une vidéo longue garde toutes
   ses images (de l'espace disque).
 
-## Boîte de sélection façon Storyboard Pro (demandée par Anthony le 2026-10-18) ✅
+## Boîte de sélection (demandée par Anthony le 2026-10-18) ✅
 
-La demande : « revoir le système de transformation après sélection pour singer le système de
-Storyboard Pro. On peut enlever dans SHOT notre système de transformation avec poignées de Bézier
-(ou en faire un outil spécifique) pour rester plus proche de la version SBP. » Menée sur la branche
-`transfo-sbp`. Il s'appuyait sur une capture de l'outil Sélection de Storyboard Pro : un cadre aux
+La demande : « revoir le système de transformation après sélection. On peut enlever dans SHOT notre système de
+transformation avec poignées de Bézier (ou en faire un outil spécifique). » Elle s'appuyait sur une capture : un cadre aux
 petites poignées carrées (coins et milieux des côtés), un point rond de pivot au centre, et des
-flèches rouges qui montrent les gestes. **Ce qui est repris, c'est ce que montre cette capture ;
-tout le reste (touches, détails) est un choix de SHOT, à vérifier avec le vrai logiciel** (rien
-n'est tiré de son code, de ses images ni de ses textes).
+flèches rouges qui montrent les gestes. **Tout le reste (touches, détails) est un choix de SHOT.**
 
 - ✅ **La boîte** (`selbox.rs`, géométrie pure ; `seltools.rs`, dans l'application) : après un choix
   (traits vectoriels, zone bitmap), l'outil Sélection montre le cadre, huit poignées carrées et le
@@ -2420,7 +2287,7 @@ par Anthony.
 - ✅ **Édition** : sur le calque courant, un geste de dessin, de gomme, de sélection (tant qu'un choix
   existe) ou de transformation éteint son tremblement (`App::boil_editing`) : on voit et on prend les
   traits à leur vraie place. Les dessins ne changent jamais : la prise, la sélection, le cutter et
-  l'export SBP lisent la vraie géométrie. L'export d'images, de film, de PDF et les vignettes montrent
+  les exports lisent la vraie géométrie. L'export d'images, de film, de PDF et les vignettes montrent
   la variante de chaque image.
 - ✅ **Format** : `project::VERSION` 25 → 26 (la sorte d'effet `tremblement` est inconnue des versions
   d'avant, qui refusent le projet au lieu de le montrer sans son tremblement).
@@ -2633,7 +2500,7 @@ Anthony.
   « Durée… » (images, `1:12`, `1s12`, `+n`, `-n`), « Raccourcir le début / la fin jusqu'à la tête de
   lecture », « Rétablir » et « Oublier le contenu rogné ». Mêmes commandes dans le menu Storyboard >
   Plans et dans la règle de la timeline, dont la poignée de fin ne détruit plus rien.
-- ✅ **À vérifier** (conventions supposées, pas relevées dans Storyboard Pro) : Alt pour le roll et le
+- ✅ **À vérifier** (conventions supposées) : Alt pour le roll et le
   glisser ; la coupe « jusqu'à la tête de lecture » au trait de la tête (le bord gauche de l'image
   courante : l'image sous la tête sort de la fin) ; le premier dessin tenu quand on rallonge le début
   au-delà de la réserve. Le son ne bouge pas (la barre d'état prévient du décalage des plans).
@@ -2715,11 +2582,10 @@ tableaux et les propositions sont dans **`docs/INTERFACE.md`**. Pas vu à l'écr
   (Ctrl bascule, Maj ajoute), Maj + clic en rectangle entre la clé de départ et celle cliquée, collage relatif
   au calque courant (le plus haut calque copié va sur le calque courant, les autres dessous, calques créés
   si besoin), « 12 clés sur 3 calques » dans la barre d'état. **Ctrl+Maj + outil Sélection** sur le canevas :
-  prend sur tous les calques du plan (Storyboard Pro) et choisit leurs clés dans le montage.
+  prend sur tous les calques du plan et choisit leurs clés dans le montage.
 - ✅ **Zoom de la bande sur la tête de lecture** (`zoombande.rs`) : curseur, boutons, raccourcis et Ctrl +
   molette gardent la tête de lecture au même endroit de l'écran (hors vue : d'abord au milieu).
-- Proposé (INTERFACE.md, partie 6) : les espaces de travail par tâche (6.1), le jeu de raccourcis façon
-  Storyboard Pro (6.2) et les barres par défaut plus minces (6.3) sont **faits** (voir « Espaces de travail
+- Proposé (INTERFACE.md, partie 6) : les espaces de travail par tâche (6.1), les raccourcis (6.2) et les barres par défaut plus minces (6.3) sont **faits** (voir « Espaces de travail
   liés aux modes et barres minces » et le jeu de raccourcis, plus bas). Reste aussi : choisir des clés au rectangle sur la timeline
   de l'animation (l'unité y est l'image), un rectangle pour les clés d'effets, les 150 infobulles d'egui
   restantes, « Arrière-plan » / « Fond » / « Propriétés du plan ».
@@ -2769,24 +2635,11 @@ feuille entière) alors que 768 essais passaient ; et sur une machine chargée, 
   `BrushLibrary::builtin()` (74 ms) reste avant la première image ; un son ou un modèle illisible sort du projet et ses
   extraits avec lui à l'enregistrement.
 
-## Jeu de raccourcis « Façon Storyboard Pro » (2026-10-19, branche `raccourcis-sbp`) ✅
+## Raccourcis : un seul jeu (2026-10-19, simplifié le 2026-10-30)
 
-Proposition 6.2 de `docs/INTERFACE.md`, faite ; le tableau des touches, leurs sources et la règle de fusion y sont.
-
-- ✅ **Deux jeux** au choix (Fichier > Préférences… et liste des raccourcis F1, « Jeu de raccourcis ») : *SHOT (par
-  défaut)* et *Façon Storyboard Pro* (`keymap-storyboard-pro.toml`). Le second ne redéfinit que deux commandes, documentées
-  dans `keymap.toml` : Ctrl+Maj+V colle sur place (à confirmer avec Anthony). **A / F et F5 ne sont pas pris** (choix
-  d'Anthony, 2026-10-19) : A / F restent clé précédente / suivante, F5 reste nouvelle clé, F6 coupe le plan.
-- ✅ **Aucune touche inventée** : chaque bloc cite son identifiant Storyboard Pro 27 ou les réglages perso d'Anthony ;
-  4 points « à vérifier » (Tab, Maj+Tab, Ctrl+K, F4) sont marqués dans le jeu et dans la liste F1.
-- ✅ **Les raccourcis d'Anthony restent par-dessus le jeu**, commande par commande ; changer de jeu demande
-  confirmation s'il en a ; revenir à SHOT redonne exactement les touches d'avant.
-- ✅ **D'où vient la touche** : la liste F1 dit SHOT / jeu / perso pour chaque commande ; la palette Ctrl+K montre
-  toutes les touches actives. Choix retenu dans les réglages (`jeu_raccourcis`, absent = SHOT).
-- ✅ **Dix essais** (`keymap_jeux_tests.rs`) : pas de conflit dans le jeu, que des commandes faites, aller-retour exact,
-  raccourcis personnels gardés, anciens réglages lus.
-- Pas fait / limites : Suppr, Maj+Suppr, Ctrl+L, Alt+X de Storyboard Pro n'ont pas de commande dans SHOT (rien à poser) ;
-  une touche prise à une autre commande sous un jeu y reste retirée après le changement de jeu ; pas vu à l'écran.
+Le choix entre deux jeux de raccourcis (SHOT et un jeu calqué sur un autre logiciel) a existé du 2026-10-19 au
+2026-10-30 ; il est retiré (`docs/INTERFACE.md`, 6.2). Il reste `keymap.toml` (SHOT) et le fichier personnel, qui
+joue par-dessus commande par commande ; un ancien réglage `jeu_raccourcis` est ignoré à la lecture.
 
 ## Transitions, effets sonores et bruitages (demandés par Anthony le 2026-10-19, branche `transitions-son`) ✅
 
@@ -2804,7 +2657,7 @@ cette séance** (consigne : aucun lancement de SHOT) ; la liste « à vérifier 
   enchaîné de deux extraits qui se touchent (puissance égale, poignées de son de part et d'autre de la coupe),
   volume par extrait et par piste, solo, clés de volume (double-clic, glisser, Suppr), égaliseur trois bandes et
   écho, sans nouvelle bibliothèque. Un seul calcul (`build_mix`) pour la lecture, le défilement, le WAV, la vidéo
-  et l'export vers Storyboard Pro ; le travail lourd hors des fils de l'interface et de la carte son.
+  ; le travail lourd hors des fils de l'interface et de la carte son.
   `effets_son.json`, sans nouvelle version du projet.
 - ✅ **Bruitages** (`bruitages.rs`, `bruitagesui.rs`) : panneau fermé par défaut (`Pane::Bruitages`, icône de la
   barre des panneaux, `vue.bruitages`), dossiers de l'utilisateur dans `reglages.toml`, parcours et durées sur
@@ -2813,10 +2666,10 @@ cette séance** (consigne : aucun lancement de SHOT) ; la liste « à vérifier 
 - Pas fait / limites : les poignées du rognage (la réserve) ne fournissent pas d'images vivantes aux transitions
   (images tenues) ; pas d'aperçu des transitions sans carte graphique (l'export, lui, les contient) ; le volet de
   l'écran avance sur la largeur du cadre par défaut, pas du cadre d'une caméra qui bouge (l'export est exact) ;
-  les fondus enchaînés entre extraits ne partent pas vers Storyboard Pro ; l'égaliseur et l'écho refont le son
+  les fondus enchaînés entre extraits ne partent pas ailleurs ; l'égaliseur et l'écho refont le son
   de l'extrait entier (un son très long a un petit délai avant d'être entendu avec ses effets) ; un chevauchement
   d'extraits sur une même piste reste refusé (le fondu enchaîné passe par les poignées de son).
-- À vérifier face à Storyboard Pro et aux logiciels de montage : le calage centré par défaut, le fondu au noir
+- À vérifier face aux logiciels de montage : le calage centré par défaut, le fondu au noir
   qui passe par la couleur sur une coupe, la courbe linéaire des fondus d'entrée et de sortie, la puissance
   égale du fondu enchaîné, le solo qui l'emporte sur le muet.
 
@@ -3031,7 +2884,7 @@ l'écran dans cette séance.
 - ✅ **Essais** : 23 nouveaux (`barres_tests.rs`, `workspace_tests.rs`), la suite complète passe (1511 essais,
   `scripts\verifier.ps1 -Repetitions 2` : OK, compilation sans avertissement).
 - Pas fait : un réglage « barres complètes » (épingler tout y revient) ; miroir et table lumineuse sous « Plus… » dans
-  la barre sous le dessin (proposition 4 de la partie 5) ; préréglage de raccourcis façon Storyboard Pro (6.2).
+  la barre sous le dessin (proposition 4 de la partie 5).
 
 ## Le troisième onglet Montage (demandé par Anthony le 2026-10-21, branche `espace-montage`) ✅
 
@@ -3099,8 +2952,7 @@ Le plus grand souci d'un storyboardeur : savoir ce qui a changé entre deux livr
   rogné (réserve) reste attaché au plan, pas à la version ; un envoi ne note que la version active ; un envoi ne se renomme
   pas (il se retire de la liste) ; changer la résolution du projet rend les anciens instantanés illisibles (leurs dessins ont
   l'ancienne taille : la comparaison le dit) ; les versions rangées se lisent toutes à l'ouverture (comme le contenu rogné) ;
-  aucune touche par défaut ; l'export vers Storyboard Pro ne reprend ni les envois ni les versions (comment Storyboard Pro range
-  les révisions d'un panneau : à vérifier).
+  aucune touche par défaut.
 
 ## Numérotation robuste des plans (demandée par Anthony le 2026-10-20, branche `numerotation-export`) ✅
 
@@ -3117,8 +2969,7 @@ Détail des règles dans `docs/INTERFACE.md` (« Numérotation des plans : suivi
   insertion / suppression / déplacement / duplication / coupe / collage / réunion dans les deux modes, renuméroter et
   annuler, aller-retour d'enregistrement, ancien manifeste, projet suivi écrit comme avant) ; le projet d'essai de
   fiabilité est maintenant verrouillé (un plan 2A, un trou, une séquence 1A).
-- Pas fait / à vérifier : la correspondance avec la numérotation de plan de Storyboard Pro (SHOT n'écrit que le nom du
-  plan) ; pas de numérotation de plan automatique par séquence (SQ01 → PL001…) : un seul compte pour tout le film.
+- Pas fait : pas de numérotation de plan automatique par séquence (SQ01 → PL001…) : un seul compte pour tout le film.
 ## Export pour le montage : EDL, Final Cut XML, OpenTimelineIO (demandé par Anthony le 2026-10-20, branche `numerotation-export`) ✅
 
 Détail dans `docs/EXPORT_MONTAGE.md`. **Jamais ouvert dans Premiere Pro, DaVinci Resolve ni Avid** (à vérifier par Anthony).
@@ -3146,14 +2997,13 @@ Détail dans `docs/EXPORT_MONTAGE.md`. **Jamais ouvert dans Premiere Pro, DaVinc
   (trous fermés comme l'aplat sous le trait et le calque CTG), pinceau dans la zone fermée (réglable). Créer, déplacer,
   cacher, supprimer, dupliquer, copier / coller avec le trait ; une annulation par commande ; format 30. Détails et
   vérifications : `docs/INTERFACE.md` partie 18, `README.md` « Calque de couleur ».
-- Comparaison avec Toon Boom (Storyboard Pro, Harmony) : **à vérifier** — SHOT reprend l'idée « trait / couleur », pas le
-  fonctionnement exact.
+- SHOT reprend l'idée « trait / couleur ».
 - Reste : réglage de la fermeture des trous par zone (aujourd'hui par calque) ; une couleur qui suit le tremblement du
   trait ; remettre sa couleur à une clé du trait coupée / collée ; un panneau de palette de couleurs par personnage.
 
 ## Toile infinie : dessiner hors de la feuille (demandé par Anthony le 2026-10-20, branche `canevas-couleur`) ✅
 
-- Dessiner partout autour de la feuille (jusqu'à 32 768 px), comme Storyboard Pro (**à vérifier**) : tuiles
+- Dessiner partout autour de la feuille (jusqu'à 32 768 px) : tuiles
   éparses à coordonnées signées (`Raster::outer`), numéros de tuiles stables pour l'historique, trait vectoriel
   sans limite de feuille, composition par tuiles du monde, caméra qui regarde hors de la feuille, papier partout,
   plus d'ombre sous la feuille, cadre de caméra discret. Enregistrement : fichiers `<n>_hors.png / .json`
@@ -3163,7 +3013,7 @@ Détail dans `docs/EXPORT_MONTAGE.md`. **Jamais ouvert dans Premiere Pro, DaVinc
   de l'origine : 2,4 ms. Détails : `docs/ARCHITECTURE.md` « Toile infinie », vérifications : `docs/INTERFACE.md`
   partie 19.
 - Reste : pot de peinture, zones bitmap sélectionnées, effets de calque et d'ajustement, aplat sous le trait,
-  calque de couleur, déformations (enveloppe, perspective), import / export Storyboard Pro et propagation à la
+  calque de couleur, déformations (enveloppe, perspective) et propagation à la
   feuille seulement ; effets de la carte graphique sur le hors-feuille ; « Tout voir » (cadrer tout ce qui est
   dessiné) en plus de « Ajuster à la fenêtre » ; zoom arrière extrême plus net (tuiles réduites par niveaux).
 
@@ -3322,7 +3172,7 @@ projet** (`VERSION` reste 33).
 ## Exports hors du fil de l'interface (2026-10-20, branche `exports-fond`)
 
 Priorité d'Anthony : « un logiciel qui réponde toujours très rapidement, sans latence ». Avant, le film, les images, le GIF, le
-PDF, le montage, la relecture, la fiche et Storyboard Pro calculaient leurs images sur le fil de l'interface (40 ms par image
+PDF, le montage, la relecture, la fiche calculaient leurs images sur le fil de l'interface (40 ms par image
 d'écran, projet verrouillé) ; la page HTML, l'image courante et le son seul gelaient SHOT.
 
 - ✅ **Cliché du projet** (`exportrender.rs`, `SnapshotBuilder`) : structure copiée, dessins par tranches de 8 ms, tuiles partagées
@@ -3333,7 +3183,7 @@ d'écran, projet verrouillé) ; la page HTML, l'image courante et le son seul ge
   un passeur qui range les images dans l'ordre, mémoire bornée, priorité sous celle de l'interface (ffmpeg aussi), deux cœurs
   laissés à l'interface. Annuler rend la main en quelques millisecondes.
 - ✅ **Tous les exports** : film, GIF, images PNG, image courante, PDF, page HTML, son seul, montage, relecture, fiche
-  technique, Storyboard Pro. Le son est mixé sur un fil à part. Les traits texturés restés en rendu rapide sont refaits exacts dans
+  technique. Le son est mixé sur un fil à part. Les traits texturés restés en rendu rapide sont refaits exacts dans
   la copie (sur un autre fil).
 - ✅ **Le projet est libre** : fenêtre « Export en cours » non modale ; on change d'onglet, l'export suit son projet ;
   « Quitter » prévient. PDF, page, image, son : `.part` puis renommage (annuler ne détruit pas le fichier d'avant).
@@ -3414,8 +3264,7 @@ Fait (conception : `docs/ESPACE3D.md` ; interface et liste de contrôle : `docs/
 - ✅ Pinceau sur une carte inclinée ; « Ordonner la pile selon la profondeur » ; budget 10 cartes + 20 objets ≈ 2 ms par image.
 - Pas encore (détail et raisons : `docs/ESPACE3D.md`, 11) : objet devant une carte (tampon de profondeur partagé), tri des cartes par
   profondeur, cartes inclinées au-delà de la feuille, effets et fusions dans la vue d'édition, objets animés, préchargement des
-  objets en lecture, outils 2D sur une carte inclinée, inclinaison au-delà de 85°, dossiers comme groupes dans l'espace, comparaison
-  avec Storyboard Pro / Harmony (à vérifier), et **tout ce qui se voit à l'écran** (aucun lancement de SHOT dans cette séance).
+  objets en lecture, outils 2D sur une carte inclinée, inclinaison au-delà de 85°, dossiers comme groupes dans l'espace, et **tout ce qui se voit à l'écran** (aucun lancement de SHOT dans cette séance).
 
 À vérifier à l'écran : voir § 29.7. Pas fait : une touche par défaut (aucune de libre sans conflit), « Replier / Déplier » pour les pistes son.
 

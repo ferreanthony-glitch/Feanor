@@ -475,7 +475,7 @@ impl App {
                         // La boîte de la sélection : déplacer, échelle, rotation, inclinaison, pivot
                         // (`seltools.rs`). Avec plusieurs calques choisis, le lasso prend sur tous
                         // et la boîte les entoure (`multitools.rs`).
-                        // Ctrl+Maj : tous les calques du plan, comme dans Storyboard Pro.
+                        // Ctrl+Maj : tous les calques du plan.
                         Tool::Select if self.multi_wanted() || crate::multitools::is_all_layers_gesture(modifiers) => {
                             self.multi_press(stage, *pos, modifiers.shift, crate::multitools::is_all_layers_gesture(modifiers))
                         }

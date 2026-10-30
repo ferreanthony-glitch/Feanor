@@ -292,7 +292,7 @@ impl App {
     }
 
     /// Fichiers son lâchés sur la fenêtre : importés à l'image courante ; une vidéo devient un
-    /// calque vidéo (13k) ; un projet Storyboard Pro ouvre la fenêtre d'import (14a) ; un projet SHOT
+    /// calque vidéo (13k) ; un projet SHOT
     /// (`.shot`, ou l'ancien `.pelure`) s'ouvre dans un onglet.
     pub(crate) fn handle_dropped_files(&mut self, ctx: &egui::Context) {
         let paths: Vec<_> = ctx.input(|i| i.raw.dropped_files.iter().filter_map(|f| f.path.clone()).collect());
@@ -313,7 +313,7 @@ impl App {
             if self.import_dropped_notes(&path) {
                 continue;
             }
-            if !self.import_dropped_sboard(&path) && !self.import_dropped_project(&path) && !self.import_dropped_video(&path) {
+            if !self.import_dropped_project(&path) && !self.import_dropped_video(&path) {
                 self.import_sound_path(&path, None, None);
             }
         }

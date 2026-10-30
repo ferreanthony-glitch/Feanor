@@ -5,40 +5,18 @@ use eframe::egui::{Key, Modifiers};
 use crate::app::Mode;
 use crate::keymap::{contexts_overlap, is_alias, parse_combo, KeyMatch, Keymap, ALIASES, ACTIONS, DEFAULT_KEYMAP};
 
-/// Les 65 raccourcis par défaut avec touche de sb_shortcuts.xml (Storyboard Pro 27).
-pub(crate) const SBP27_IDS: [&str; 65] = [
-    "NEW_KEY", "SAVE_ALL_KEY", "OPEN_KEY", "QUIT_KEY", "CLOSE_KEY",
-    "UNDO_KEY", "REDO_KEY", "CUT_KEY", "COPY_KEY", "PASTE_KEY", "PASTE_IN_PLACE_KEY", "DELETE_KEY",
-    "DELETE_ALT_KEY", "SELECT_ALL_KEY", "SELECT_ALL_DRAWING_IN_SHOT", "DESELECT_ALL_KEY",
-    "DRAWING_ZOOM_TOOL_KEY", "ZOOM_OUT_KEY", "ZOOM_IN_KEY", "TOGGLE_FULLSCREEN_KEY", "ROTATE_CW_KEY",
-    "ROTATE_CCW_KEY", "DRAWING_RESET_ROTATION_KEY", "RESET_ZOOM_KEY", "FREE_PAN_AND_ZOOM_KEY",
-    "OVERRIDE_ROTATE", "OVERRIDE_ZOOM_IN", "OVERRIDE_ZOOM_OUT", "DRAWING_SHOW_GRID_KEY",
-    "DRAWING_OS_TOGGLE_KEY", "LOCK_LAYER_KEY", "MERGE_DOWN_LAYERS", "RESET_LAYER_TRANSFORM_KEY",
-    "LINK_CLIP_AND_PANEL", "DRAWING_UNLOAD_MODEL_KEY", "FIND_TEXT_KEY",
-    "DRAWING_DELETE_NON_SELECTION_KEY", "DRAWING_DELETE_NON_SELECTION_BACKSPACE_KEY",
-    "DRAWING_PAINT_TOOL_KEY", "DRAWING_PAINT_UNPAINTED_TOOL_KEY", "DRAWING_COLOR_DROPPER_TOOL_KEY",
-    "DRAWING_ERASER_TOOL_KEY", "DRAWING_CUTTER_TOOL_KEY", "DRAWING_BRUSH_TOOL_KEY",
-    "DRAWING_STENCIL_BRUSH_TOOL_KEY", "DRAWING_SELECT_TOOL_KEY", "RESIZE_PEN_STYLE_TOOL_KEY",
-    "DRAWING_FLATTEN", "DRAWING_FLIP_HORIZONTAL_KEY", "DRAWING_FLIP_VERTICAL_KEY",
-    "DRAWING_SNAP_TO_CONTOUR", "DRAWING_AUTO_FILL_INSIDE_REGIONS", "DRAWING_INCREMENT_BRUSH_SIZE",
-    "DRAWING_DECREMENT_BRUSH_SIZE", "GOTO_SHOT_KEY", "PREV_PANEL_KEY", "FIRST_FRAME_KEY",
-    "PREV_FRAME_KEY", "NEXT_FRAME_KEY", "LAST_FRAME_KEY", "NEXT_PANEL_KEY", "NEW_PANEL_KEY",
-    "ADD_FRAME_KEY", "REMOVE_FRAME_KEY", "SB_PROPERTIES_KEY",
+/// Les réglages personnels d'Anthony, gardés tels quels (le huitième, le pinceau pochoir, n'a plus d'action
+/// depuis le 2026-10-18).
+const PERSO: [(&str, &[&str]); 7] = [
+    ("lecture.basculer", &["Entrée"]),
+    // F6 dans SHOT depuis le 2026-10-17 (F5 pose une clé).
+    ("panneau.couper", &["F6"]),
+    ("calque.nouveau_vectoriel", &["Maj+S"]),
+    ("calque.copier", &["W"]),
+    ("calque.coller", &["X"]),
+    ("calque.supprimer", &["Q"]),
+    ("calque.flou", &["Maj+D"]),
 ];
-
-/// Tes réglages personnels (STB_Shortcuts.xml) ; le huitième, le pinceau pochoir
-/// (DRAWING_STENCIL_BRUSH_TOOL_KEY, retiré chez toi), n'a plus d'action depuis le 2026-10-18.
-const PERSO: [(&str, &str, &[&str]); 7] = [
-    ("TOGGLE_PLAYBACK_ALL_KEY", "lecture.basculer", &["Entrée"]),
-    // F5 dans son Storyboard Pro ; F6 dans Pelure depuis le 2026-10-17 (F5 pose une clé).
-    ("SPLIT_PANEL_KEY", "panneau.couper", &["F6"]),
-    ("ADD_VECTOR_LAYER_KEY", "calque.nouveau_vectoriel", &["Maj+S"]),
-    ("COPY_LAYERS_KEY", "calque.copier", &["W"]),
-    ("PASTE_LAYERS_KEY", "calque.coller", &["X"]),
-    ("DELETE_LAYER_KEY", "calque.supprimer", &["Q"]),
-    ("BLUR_BITMAP_LAYER_KEY", "calque.flou", &["Maj+D"]),
-];
-
 pub(crate) fn default_map() -> Keymap {
     Keymap::from_texts(DEFAULT_KEYMAP, None)
 }
@@ -62,7 +40,7 @@ fn default_file_is_clean() {
 
 /// Les touches que deux commandes se partagent dans un même contexte (storyboard / animation /
 /// partout qui se recouvrent), celles des commandes « en réserve » comprises. Sert aux raccourcis
-/// par défaut et à chaque jeu de raccourcis (`keymap_jeux_tests`).
+/// par défaut.
 pub(crate) fn shared_keys(map: &Keymap) -> Vec<String> {
     let mut conflicts = Vec::new();
     for (i, a) in map.bindings.iter().enumerate() {
@@ -196,46 +174,14 @@ fn ctrl_shift_v_pastes_at_the_playhead_and_ctrl_v_keeps_its_meaning() {
 }
 
 #[test]
-fn storyboard_pro_sources_are_exact() {
-    // Chaque raccourci qui se dit « Storyboard Pro 27 » cite un identifiant du fichier d'origine,
-    // et les 65 y sont tous.
-    let map = default_map();
-    let mut cited = BTreeSet::new();
-    for b in &map.bindings {
-        if let Some(rest) = b.source.strip_prefix("Storyboard Pro 27 : ") {
-            for id in rest.split(|c: char| c == ',' || c == ' ' || c == '(').filter(|s| !s.is_empty()) {
-                if id.chars().all(|c| c.is_ascii_uppercase() || c == '_') && id.len() > 3 {
-                    assert!(SBP27_IDS.contains(&id), "{id} n'est pas un raccourci par défaut de Storyboard Pro 27");
-                    cited.insert(id);
-                }
-            }
-        }
-    }
-    // Le pinceau pochoir (retiré dans tes réglages perso) et « lier les clips au panneau » (sans
-    // objet depuis les plans) n'ont plus d'action (2026-10-18) : cités en commentaire du fichier.
-    cited.insert("DRAWING_STENCIL_BRUSH_TOOL_KEY");
-    cited.insert("LINK_CLIP_AND_PANEL");
-    // A / F (plan précédent / suivant dans Storyboard Pro) vont à la clé précédente / suivante,
-    // tous les calques (choix d'Anthony, 2026-10-17) ; les plans passent sur PgPréc / PgSuiv.
-    cited.insert("PREV_PANEL_KEY");
-    cited.insert("NEXT_PANEL_KEY");
-    // Maj+Suppr (DRAWING_DELETE_NON_SELECTION_KEY) remplit la zone bitmap (choix d'Anthony, 2026-10-20) ;
-    // « Effacer ce qui est hors de la sélection » garde Maj+Retour arrière (…_BACKSPACE_KEY).
-    cited.insert("DRAWING_DELETE_NON_SELECTION_KEY");
-    let missing: Vec<_> = SBP27_IDS.iter().filter(|id| !cited.contains(*id)).collect();
-    assert!(missing.is_empty(), "raccourcis Storyboard Pro 27 oubliés : {missing:?}");
-}
-
-#[test]
 fn personal_shortcuts_are_kept_as_is() {
     let map = default_map();
-    for (sbp_id, action, keys) in PERSO {
+    for (action, keys) in PERSO {
         let b = map
             .bindings
             .iter()
             .find(|b| b.action == action && b.source.starts_with("perso"))
             .unwrap_or_else(|| panic!("{action} absent"));
-        assert!(b.source.contains(sbp_id), "{action} : source {}", b.source);
         assert_eq!(b.keys, keys.iter().map(|k| k.to_string()).collect::<Vec<_>>(), "{action}");
     }
 }
@@ -280,7 +226,7 @@ fn azerty_letters_follow_the_printed_letter() {
 #[test]
 fn azerty_punctuation_follows_the_position() {
     let map = default_map();
-    // « , » de Storyboard Pro = la touche ; en AZERTY (même place que la virgule QWERTY).
+    // « , » du QWERTY = la touche ; en AZERTY (même place que la virgule QWERTY).
     assert_eq!(press(&map, Key::Semicolon, Key::Comma, NONE, Mode::Animation).as_deref(), Some("image.precedente"));
     assert_eq!(press(&map, Key::Colon, Key::Period, NONE, Mode::Animation).as_deref(), Some("image.suivante"));
     // La vraie virgule AZERTY (touche à côté du N) ne déclenche rien.
@@ -317,7 +263,7 @@ fn modifiers_and_contexts() {
     assert_eq!(press(&map, Key::G, Key::G, ctrl, Mode::Storyboard), None);
     // Alt+Entrée : les propriétés du plan (la fiche), faites le 2026-10-18.
     assert_eq!(press(&map, Key::Enter, Key::Enter, Modifiers::ALT, Mode::Storyboard).as_deref(), Some("panneau.proprietes"));
-    // Ctrl+L (« lier les clips au panneau » de Storyboard Pro, sans objet) va à la pelure du calque (13b).
+    // Ctrl+L va à la pelure du calque (13b).
     assert_eq!(press(&map, Key::L, Key::L, ctrl, Mode::Storyboard).as_deref(), Some("calque.pelure"));
     // Réglages perso devenus actifs en 1e.
     assert_eq!(press(&map, Key::F6, Key::F6, NONE, Mode::Storyboard).as_deref(), Some("panneau.couper"));
@@ -403,18 +349,18 @@ fn typed_shortcut_is_written_like_the_file() {
 #[test]
 fn assigned_shortcut_replaces_frees_and_returns_to_default() {
     let map = default_map();
-    assert!(map.conflicts("F6", "fichier.importer_sboard").contains(&"panneau.couper".to_string()));
-    let changes = map.assign_changes("fichier.importer_sboard", "F6", false);
+    assert!(map.conflicts("F6", "fichier.importer_scenario").contains(&"panneau.couper".to_string()));
+    let changes = map.assign_changes("fichier.importer_scenario", "F6", false);
     let text = map.edited_user_file(None, &changes).unwrap();
     let map2 = Keymap::from_texts(DEFAULT_KEYMAP, Some(&text));
     assert!(map2.warnings.is_empty(), "{:#?}", map2.warnings);
-    assert_eq!(press(&map2, Key::F6, Key::F6, NONE, Mode::Storyboard).as_deref(), Some("fichier.importer_sboard"));
+    assert_eq!(press(&map2, Key::F6, Key::F6, NONE, Mode::Storyboard).as_deref(), Some("fichier.importer_scenario"));
     assert!(map2.labels_of("panneau.couper").is_empty(), "F6 est retiré de l'action qui l'avait");
-    assert!(map2.is_user("fichier.importer_sboard") && map2.is_user("panneau.couper"));
+    assert!(map2.is_user("fichier.importer_scenario") && map2.is_user("panneau.couper"));
     // Ajouter une deuxième touche garde la première.
-    let text2 = map2.edited_user_file(Some(&text), &map2.assign_changes("fichier.importer_sboard", "Alt+F12", true)).unwrap();
+    let text2 = map2.edited_user_file(Some(&text), &map2.assign_changes("fichier.importer_scenario", "Alt+F12", true)).unwrap();
     let map3 = Keymap::from_texts(DEFAULT_KEYMAP, Some(&text2));
-    assert_eq!(map3.labels_of("fichier.importer_sboard"), vec!["F6".to_string(), "Alt+F12".to_string()]);
+    assert_eq!(map3.labels_of("fichier.importer_scenario"), vec!["F6".to_string(), "Alt+F12".to_string()]);
     // Retour au défaut : la découpe retrouve F6 (et le conflit est signalé).
     let text3 = map3.edited_user_file(Some(&text2), &[("panneau.couper".into(), None)]).unwrap();
     let map4 = Keymap::from_texts(DEFAULT_KEYMAP, Some(&text3));
@@ -422,8 +368,8 @@ fn assigned_shortcut_replaces_frees_and_returns_to_default() {
     assert!(!map4.is_user("panneau.couper"));
     assert!(map4.warnings.iter().any(|w| w.contains("conflit")));
     // Plus de raccourci du tout.
-    let text4 = map4.edited_user_file(Some(&text3), &[("fichier.importer_sboard".into(), Some(Vec::new()))]).unwrap();
-    assert!(Keymap::from_texts(DEFAULT_KEYMAP, Some(&text4)).labels_of("fichier.importer_sboard").is_empty());
+    let text4 = map4.edited_user_file(Some(&text3), &[("fichier.importer_scenario".into(), Some(Vec::new()))]).unwrap();
+    assert!(Keymap::from_texts(DEFAULT_KEYMAP, Some(&text4)).labels_of("fichier.importer_scenario").is_empty());
     // Un fichier personnel illisible n'est pas écrasé.
     assert!(map.edited_user_file(Some("ceci n'est pas du toml ["), &changes).is_err());
 }

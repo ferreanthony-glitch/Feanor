@@ -424,7 +424,7 @@ impl App {
                     }
                 }
                 // Clés qu'on glisse : leur fantôme suit la souris, un repère montre où elles se
-                // poseront (comme le repère de Storyboard Pro entre deux panneaux).
+                // poseront (un repère entre deux panneaux).
                 if let Some(d) = drops.iter().find(|d| d.panel == p.id && d.layer == p.layers[k].id) {
                     paint_drop(painter, cell, ppf, d);
                 }

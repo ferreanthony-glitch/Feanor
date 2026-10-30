@@ -128,7 +128,6 @@ const D_AVANT: &[&str] = &[
     "Python du serveur",
     "Démarrer le serveur tout seul",
     "Adresse 127.0.0.1, port",
-    "Jeu de raccourcis",
     "Voir et changer les raccourcis",
     "Modifier le fichier à la main",
     "Recharger",

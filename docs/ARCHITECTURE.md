@@ -29,8 +29,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - **Opérations de montage** (`Document::add_panel_after`, `add_scene_after`, `add_sequence_after`,
   `move_panel`, `remove_scene`…) : dans le modèle, testées sans interface. Un panneau déplacé garde sa
   scène s'il reste à côté d'un panneau de sa scène ; sinon il rejoint celle du panneau devant lequel
-  on le pose. Comportement de Storyboard Pro non vérifié : c'est une interprétation.
-  Couper un panneau (`split_panel`) duplique les dessins de la seconde partie (chaque panneau
+  on le pose. Couper un panneau (`split_panel`) duplique les dessins de la seconde partie (chaque panneau
   possède ses dessins) ; le réunir (`merge_with_next`) met les calques bout à bout par rang et par
   sorte. Fusionner deux calques (`merge_layer_down`) crée de **nouveaux** dessins : les anciens
   restent intacts, et l'annulation (copie de la structure) y revient sans rien recalculer.
@@ -1132,23 +1131,6 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     quelles. Risque : deux plans dont les calques ont des noms différents donnent des pistes
     distinctes (c'est voulu). Réversible : l'ordre des pistes n'est pas enregistré, il se
     recalcule.
-- Import Storyboard Pro corrigé après l'essai d'Anthony (2026-10-17).
-  - `sbscript.rs` : `pelureTraits` désigne le dessin par `{elementId, exposure: nom}` passé par
-    `Drawing.Key`, jamais par `drawingId` ; il lit `Drawing.query.getData` et écrit
-    `{"format": "getData", box, arts}`. Les couleurs vont une fois dans `couleurs.json`
-    (`COLORS`), relu par `read_manifest` dans `Drawings::palette`.
-  - `sbvector.rs` : `palette` lit les couleurs simples (`[r,g,b,a]` ou `{r,g,b,a}`) et les
-    textures (`texture_color` : PNG en base64 décodé par `kritabrush::base64`, moyenne pondérée
-    par l'alpha, opacité = couverture). `raw_elements(json, palette)` lit les deux formats ; en
-    `getData`, les zones d'un calque sont rassemblées par couleur en un remplissage pair-impair
-    (calques plans), puis les traits de crayon (`pencil`, partagé avec l'ancien format).
-  - `sboard.rs` : `sequences_exist` lit la méta `sequenceExists` ; vide, `sequenceName` est
-    ignoré ; absente, il est gardé.
-
-    Décision : coût — un seul appel `getData` par dessin au lieu de quatre `getStrokes` et d'une
-    lecture de couleur par identifiant. Risque : la couleur moyenne d'une texture n'est qu'une
-    approche du grain (l'image du calque reste exacte s'il n'est pas gardé en vecteurs).
-    Réversible : l'ancien format se lit toujours.
 - Timeline et montage ensemble (chantier 6).
   - `Pane::Strip` est devenu `Pane::Montage` (nom enregistré inchangé, « bande »). Une
     `Pane::Timeline` à part a existé le 2026-10-17 (versions 4 et 5 de la disposition : l'un sous
@@ -1213,74 +1195,6 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   images d'un calque vidéo (lues à la taille de l'import), le rayon des flous et la fermeture des
   trous des calques de couleur (en pixels). Réversible : on peut revenir à l'ancienne taille, au prix d'un
   rééchantillonnage.
-- Export vers Storyboard Pro (14b-1).
-  - `sbexport::prepare` décrit ce qui part (`SbOut`) : plans → plans, images de storyboard
-    (`board::plan_boards`) → panneaux avec leurs textes, calques sans les dossiers (visibilité et
-    opacité du dossier reportées), extraits de son. Il note ce qui n'est pas repris.
-  - `SbExportJob` calcule les images comme l'export d'images : sur le cliché du projet, par les fils de rendu
-    (`Pipeline::start_with`), PNG écrits par des fils ; le projet n'est retenu que le temps de la copie. Chaque image est
-    `render::layer_plan_at` (le calque seul, mode normal, pleine opacité, même caché) vu par
-    `doc.default_camera()`. Les images vides sont sautées ; deux images identiques (même hachage)
-    ne font qu'un fichier.
-  - Le script : les données en littéral JavaScript (`serde_json`, U+2028/2029 échappés pour
-    ECMAScript 3), puis des fonctions documentées seulement. Chaque calque créé prend d'abord un
-    nom provisoire (`pelure~rang`), retrouvé en comparant les listes de noms avant et après.
-    Ainsi rien ne suppose où Storyboard Pro range un calque neuf. Les calques vides d'origine du
-    panneau sont enlevés ensuite. Un nom de plan déjà pris par le modèle passe par un nom
-    provisoire, rétabli après la suppression des plans du modèle.
-  - `sbbatch` est devenu générique : `Batch<T>::spawn` (travail sur un autre fil) et `launch`
-    (Storyboard Pro en batch, journal, arrêt). L'avancement vient de `avancement.txt`, le
-    résultat de `resultat.txt` (`parse_result`).
-  - Réglages : `modele_storyboard_pro` et `dossier_export_storyboard_pro` dans `reglages.toml`.
-    `sboard::read_template` lit un modèle sans panneau (l'import le refuse toujours).
-
-    Décision : coût — des images plutôt que des vecteurs pour commencer, parce que l'import d'image
-    est documenté et que l'écriture de traits ne l'est que pour Harmony. Risque : calques non
-    modifiables en traits dans Storyboard Pro. Réversible : 14b-2 remplacera l'image par les
-    traits, calque par calque, sans changer le reste.
-- Ouverture automatique et dessins vectoriels de Storyboard Pro (14a-2).
-  - `sbbatch` : `find_storyboard_pro` cherche l'installation la plus récente. `copy_project`
-    copie le projet sans `logs/` ni `.lock`. `Batch::start` lance, sur un autre fil,
-    `StoryboardPro -scene … -batch -compile …` dans un dossier temporaire, avec le journal
-    (sortie) et l'arrêt possible.
-  - `PELURE_SANS_STORYBOARD_PRO` le désactive (essais), `PELURE_STORYBOARD_PRO` désigne
-    l'exécutable.
-  - `sbvector` lit le JSON des traits. Bézier : 0, 1 ou 2 points de contrôle par segment. Une
-    zone = les traits dont un seul côté porte sa couleur, mis bout à bout par leurs jointures ; en
-    pair-impair, l'appariement aux jointures ne change pas la zone.
-  - Calage (`fit_to_image`) : boîtes du dessin et des pixels opaques de l'image, échelle commune
-    (proportions à 20 % près), axe vertical essayé dans les deux sens. On garde le sens au meilleur
-    recouvrement (intersection sur union), et les vecteurs seulement à 60 % ou plus.
-
-    Décision : coût — caler sur l'image plutôt que convertir les unités Toon Boom (caméra du
-    panneau, placement du calque, champs) qu'on ne peut pas vérifier ici. Risque : un calque
-    tourné ou très déformé reste en image. Réversible : on pourra ajouter la conversion exacte
-    plus tard.
-- Import Storyboard Pro (14a) :
-  - `xml.rs` lit un document XML en arbre (`Element` : nom, attributs décodés, enfants), avec
-    quick-xml. quick-xml était déjà dans `Cargo.lock`, par wayland : rien n'est téléchargé.
-  - `sboard.rs` en tire un `SbProject`. Plans dans l'ordre du film (colonne de type 0 de la
-    scène racine, `warpSeq`), panneaux, légendes (`caption_text` : le HTML de Qt devient du texte),
-    modules `READ` = calques, pistes son (`soundSequence`, effets `WSOLATempo` et `Resample`).
-  - `sbscript.rs` écrit le script d'export (ECMAScript 3, fonctions documentées de l'interface de
-    script de Storyboard Pro seulement) et relit sa liste `pelure.txt`, en lignes à tabulations :
-    le moteur de script n'a pas de JSON.
-  - `sbimport::build` construit des panneaux à l'ancienne (un par panneau de Storyboard Pro, plan
-    = scène), puis appelle `Document::into_plans` (13a). Les panneaux mis bout à bout, les marques
-    avec leurs textes et les calques réunis par nom viennent ainsi du code déjà testé de 13a.
-  - Panneaux du script ↔ panneaux du `.sboard` : par identifiant, sinon par rang.
-  - Une image identique (même contenu) ne fait qu'un dessin. Un calque de fond répété d'un panneau
-    à l'autre est donc tenu, pas copié.
-  - Son : un extrait simple garde le son d'origine (début arrondi à l'image). Un extrait à effet
-    ou à volume devient son propre son, en WAV : `stretch::resample` (vitesse et hauteur), puis
-    `stretch::wsola` (tempo seul), puis `stretch::gain`.
-
-    Décision : coût — calculer une fois à l'import plutôt qu'ajouter vitesse et volume par
-    extrait au modèle, au mixeur et au format. Risque : ces extraits ne se rallongent plus au-delà
-    de ce qui a été calculé. Réversible : un vrai réglage par extrait pourra venir ensuite.
-  - `sbui.rs` : la fenêtre d'import. L'import tourne sur un autre fil (`Document` est `Send`) et
-    passe par `Pending::SbImport` (« enregistrer ? »). Un `.sboard` ou un `pelure.txt` lâché sur la
-    fenêtre y est pris.
 - Vue Projet (`projetui.rs`, 13e-4) : `Document::storyboard_locked` est dans `Structure` (une
   annulation le rétablit avec le reste ; le basculer est une étape). `App::storyboard_refuses`
   garde `structure_op` et les autres chemins qui changent l'ordre, le nombre ou la durée des
@@ -1369,9 +1283,8 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     c'est la lecture de GIMP). Les nuanciers de fabricants (Pantone…) sont comptés et laissés de
     côté. Écrit en version 1 puis 2, en RVB, comme Photoshop.
 - Raccourcis : D = `couleur.defaut` (touche de Photoshop, libre dans les deux modes, source
-  « proposition ») ; X, la touche d'échange de Photoshop, est `calque.coller` (réglage perso
-  PASTE_LAYERS_KEY) : `couleur.intervertir` n'a pas de touche. `nuancier.ajouter` correspond
-  par le nom à COLOR_ADD (« New Colour Swatch ») de Storyboard Pro 27, qui n'a pas de touche.
+  « proposition ») ; X, la touche d'échange de Photoshop, est `calque.coller` (réglage perso) : `couleur.intervertir` n'a pas de touche. `nuancier.ajouter`
+  est sans touche.
   Les autres commandes sont de Pelure, sans touche. Un test vérifie que chaque commande des
   couleurs citée dans `colorui.rs` et `nuancierui.rs` est déclarée et traitée.
 
@@ -1388,11 +1301,6 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   reste lisse. `BrushLibrary` : textures et réglages nommés ; les importés sont gardés dans
   `%APPDATA%\Pelure\pinceaux` (`pinceaux.json` + textures PNG en gris). Les réglages
   (`BrushSettings`, sérialisés en français) ne citent les textures que par numéro.
-- `tbbrush.rs` : lecture des préréglages Toon Boom — petit lecteur XML maison (le format n'a que
-  des balises et des attributs `value`), textures `bundledFile` en hexadécimal (en-tête de
-  18 octets, gris 8 bits, lignes alignées sur 4 octets). Correspondance des réglages et
-  hypothèses en tête du fichier. Coût d'un vrai lecteur XML : une bibliothèque à télécharger,
-  inutile ici ; réversible.
 
 ## Pelure d'oignon (3d-1)
 
@@ -1414,7 +1322,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   tuiles qui diffèrent de `before`.
 - **Table lumineuse** : dans l'affichage de travail seulement (pas à l'export ni dans les
   vignettes), les calques autres que le calque courant sont composés avec une opacité réduite.
-  C'est notre lecture de la « Light Table » de Storyboard Pro (autres calques estompés) ; la table
+  Les autres calques sont estompés ; la table
   lumineuse de TVPaint, qui montre d'autres images, correspond plutôt à notre pelure d'oignon.
 - **Pelure d'oignon complète** (13f, `onion.rs`, `onionui.rs`) : `OnionSettings` reste un
   réglage de l'application (`reglages.toml`, table `[pelure]`), pas du projet, comme TVPaint
@@ -1433,7 +1341,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   verrouillé, lignes de référence) gardés dans l'application, pas dans le projet. Trait aligné : au départ du trait on
   attend 6 pixels d'écran de mouvement, puis on choisit la direction du guide la plus proche (vers un
   point de fuite, verticale, horizontale) et chaque point du trait est projeté sur cette droite.
-  Les types de guides de Storyboard Pro autres que la perspective à 1, 2 ou 3 points (lignes,
+  Les types de guides autres que la perspective à 1, 2 ou 3 points (lignes,
   isométrique…) ne sont pas faits.
 
 ## Son
@@ -1445,7 +1353,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   dessins) et `Document.audio_tracks` (pistes, chacune avec des extraits qui ne se chevauchent pas).
   Un extrait = un son, une image de départ dans le montage, un décalage dans le son, une durée.
   Les pistes sont en **temps de montage** : elles ne suivent pas les panneaux (le lien
-  extrait-panneau de Storyboard Pro, `LINK_CLIP_AND_PANEL`, reste en réserve).
+  extrait-panneau reste en réserve).
 - **Lecture** : la sortie audio (bibliothèque cpal, WASAPI) est ouverte à la première lecture avec
   du son. Le mixage tourne dans le fil de la carte son ; **sa position sert d'horloge** à l'image,
   qui ne peut donc pas dériver. Sans sortie audio, ou si elle tombe en panne, la lecture continue à
@@ -1453,7 +1361,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
 - **Son au défilement** : quand l'image courante change hors lecture, une image de son est jouée.
 - Le mixage (`MixState`) se teste sans carte son.
 - **Effets** (`audiofx.rs`, 2026-10-19) : `build_mix(doc, wait)` est le seul endroit où les pistes deviennent des
-  `MixClip` (lecture, défilement, WAV, export vidéo, export vers Storyboard Pro). Un `MixClip` porte un gain fixe
+  `MixClip` (lecture, défilement, WAV, export vidéo). Un `MixClip` porte un gain fixe
   (piste × général × extrait) et, s'il y a lieu, un `ClipEnv` (fondus, fondu enchaîné en puissance égale, clés de
   volume) que le fil de la carte son évalue échantillon par échantillon ; l'égaliseur (étagères à 200 Hz et 4 kHz,
   cloche à 1 kHz) et l'écho refont le son de l'extrait sur un fil à part (`processed`, 24 résultats gardés), jamais
@@ -1552,12 +1460,10 @@ export, enregistrement) change pour les projets d'avant.
   dessin vectoriel ne garde rien à part (ses traits se rendent hors de la feuille aussi). Un projet sans dessin
   hors feuille s'écrit comme avant, aux fichiers hors près (aucun).
 - **Ajuster à la fenêtre** : cadre la caméra du plan (`View::fit` sur `doc.frame`, 1,12 de marge hors caméra),
-  pas tout le contenu : c'est le choix de SHOT, simple et prévisible ; le choix de Storyboard Pro est **à
-  vérifier**.
+  pas tout le contenu : c'est le choix de SHOT, simple et prévisible.
 - **Reste borné à la feuille** : pot de peinture (`fill.rs` : image de la taille de la feuille), zones bitmap
   (`PixelMask` : taille de la feuille), effets de calque et calques d'ajustement, peinture dans l'aplat et aplat
-  intelligent (`silhouette`, sur la feuille), calque de couleur, enveloppe / perspective, import et export Storyboard
-  Pro, propagation (`synthese/`, intact).
+  intelligent (`silhouette`, sur la feuille), calque de couleur, enveloppe / perspective, propagation (`synthese/`, intact).
 - **Aplat sous le trait sur la toile infinie** (correction du 2026-10-28) : `fond::silhouette_monde` rend une
   `Couverture` (rectangle du monde, octets 0 à 255) ; le rectangle de travail déborde de la feuille là où l'encre en
   sort, sinon il s'arrête à son bord comme avant (le bord de la feuille ferme la forme) ; au-delà de `MAX_BOITE`
@@ -1624,8 +1530,7 @@ export, enregistrement) change pour les projets d'avant.
   depuis le format 10, absents si nuls).
 - **Courbes** (2b-3) : entre deux clés, l'avancement suit une courbe de Hermite dont la pente
   vaut 0 au départ et/ou à l'arrivée si la clé correspondante est « adoucie », 1 sinon (deux clés
-  non adoucies = mouvement régulier). C'est un choix de Pelure : la façon dont Storyboard Pro règle
-  les vitesses de caméra n'a pas été vérifiée.
+  non adoucies = mouvement régulier). C'est un choix de Pelure.
 
 ## Repère 3D (2d) — retiré le 2026-10-21
 
@@ -1764,16 +1669,13 @@ Un projet sans envoi ni version n'a ni ces fichiers ni travail de fond de plus.
   personnel (à côté de l'exécutable, sinon `%APPDATA%\Pelure\keymap.toml`) remplace action par action
   ce qu'il redéfinit ; si une de ses touches est aussi prise par le fichier par défaut, la sienne
   l'emporte (et l'aide signale le conflit). Menu « Aide > Modifier / Recharger les raccourcis ».
-- Trois couches (`Keymap::from_layers`) : `keymap.toml` < jeu choisi (`PresetId`, `keymap-storyboard-pro.toml`,
-  réglage `jeu_raccourcis`) < fichier personnel. Chaque couche remplace la précédente action par action ; une copie
-  mot pour mot du fichier par défaut dans le fichier personnel est ignorée. `Keymap::origin_of` dit d'où vient la
-  touche d'une action (SHOT, jeu, perso). Détails : `docs/INTERFACE.md`, 6.2.
-- Les raccourcis viennent de Storyboard Pro 27 (65 par défaut, plus 4 du module Guides) et des
-  réglages perso (8). Ceux dont
+- Deux couches (`Keymap::from_texts`) : `keymap.toml` < fichier personnel. La seconde remplace la première action par action ; une copie
+  mot pour mot du fichier par défaut dans le fichier personnel (la source, un simple commentaire, n'y compte pas) est ignorée. `Keymap::origin_of` dit d'où vient la
+  touche d'une action (SHOT, perso). Un ancien réglage `jeu_raccourcis` ou `modele_storyboard_pro` de `reglages.toml` est ignoré à la lecture. Détails : `docs/INTERFACE.md`, 6.2.
+- Les raccourcis par défaut sont dans `keymap.toml`. Ceux dont
   la fonction n'existe pas encore sont gardés avec `etat = "non implémenté"`. Les ajouts de Pelure
   sont marqués `source = "proposition"`.
 - Lettres = caractère tapé ; chiffres et ponctuation = position physique (clavier AZERTY).
-  Détails : `docs/reference/sbpro_presets/README.md`.
 - Un fichier illisible ou une action inconnue ne bloque rien : remarques affichées dans l'aide (F1).
 - Raccourcis choisis dans Pelure (`raccourcisui.rs`, passe interface).
   - Les boutons liés à une action (`App::bouton*`, `App::aide`) ont un menu au clic droit.
@@ -1810,14 +1712,13 @@ L'ancienne toolchain `x86_64-pc-windows-gnu` reste utilisable en secours (suppri
 | Moteur d'affichage egui : wgpu par défaut, OpenGL en secours (fait en 2a-1) | wgpu permet nos propres passes de rendu (calques, caméra, 3D) | ≈ 1 min de compilation en plus ; mémoire 112 → 335 Mo au démarrage (pilote) | faible : repli automatique sur OpenGL | oui : une option au lancement |
 | Toolchain GNU → **outils Microsoft (MSVC)** (validé, fait au début de la phase 2) | plus de contournements à chaque bibliothèque | 5–7 Go, une fois ; exécutable 20,5 → 8,8 Mo | faible | oui : supprimer `rust-toolchain.toml` |
 | **Projet = dossier** (validé, fait en 1a) | sons, 3D, sauvegarde auto incrémentale | lecture des anciens `.pelure` gardée | moyen | format versionné : les évolutions futures se font par ajout de champs |
-| **Séquence > Scène > Panneau** (validé, fait en 1a) | vocabulaire de Storyboard Pro | refonte du modèle | moyen | l'arbre du fichier est stable ; la liste à plat en mémoire peut changer sans toucher au fichier |
+| **Séquence > Scène > Panneau** (validé, fait en 1a) | vocabulaire du métier | refonte du modèle | moyen | l'arbre du fichier est stable ; la liste à plat en mémoire peut changer sans toucher au fichier |
 | Raccourcis en TOML, identifiants stables | modifiables sans recompiler | faible | faible | oui |
 | Son : **symphonia** (décodage) + **cpal** (sortie) (fait en 1b) | en Rust pur, sans DLL à fournir ; formats courants (WAV, MP3, FLAC, OGG) ; compilent avec la toolchain actuelle sans toucher aux versions figées | ≈ 3,5 Mo d'exécutable en plus (17 → 20,5 Mo) | faible (bibliothèques très utilisées) ; pas d'AAC/M4A | oui : tout passe par `audio.rs` |
 | Son décodé entier en mémoire, 16 bits | simple, lecture et défilement instantanés | ≈ 11 Mo par minute de son | élevé seulement pour des heures de son | oui : lecture par morceaux possible plus tard sans changer le format |
 | Horloge de lecture = position du son | l'image ne peut pas dériver du son | nul | faible (repli sur l'horloge si pas de sortie) | oui |
 | Sons en temps de montage (pas liés aux panneaux) | comportement le plus simple et prévisible | nul | moyen : un panneau rallongé décale l'image par rapport au son | oui : le lien extrait-panneau pourra s'ajouter (champ en plus) |
 | Export vidéo via ffmpeg installé à part (phase 3) | seule voie fiable sans souci de licence ni de compilation | dépendance externe | faible | oui |
-| Pas d'export XML Toon Boom | format propriétaire non documenté | — | — | — |
 | Icônes Phosphor (egui-phosphor, MIT) (5a, choix d'Anthony) | jeu complet et cohérent, dans la police de l'interface | ≈ 1 Mo d'exécutable | faible | oui : `Tool::icon`, `Pane::icon` |
 | Panneaux par egui_dock 0.16 (MIT), disposition dans un format de Pelure (5b) | aimantation, onglets, panneaux flottants déjà faits et éprouvés ; format à nous pour ne pas dépendre de la version | refonte de l'affichage des panneaux | moyen : accessibilité coupée (plantage d'accesskit) | oui : le format `DockLayout` ne dépend pas de la bibliothèque |
 | Calque de toute la scène = un exemplaire par panneau, accordés à chaque image (6f) | rendu, export, vignettes, outils et annulation inchangés | une passe sur les calques à chaque image (négligeable) ; règles à suivre dans les opérations de scène | moyen : une opération de montage oubliée pourrait mélanger deux fonds (couvert par `scenelayer_tests.rs`) | oui : le fichier ne garde qu'un numéro par calque ; un vrai calque de scène pourrait le remplacer |
@@ -1888,7 +1789,7 @@ Aucun appel existant ne change : `self.doc` est toujours le projet affiché.
 | tête de lecture (`cur_panel`, `cur_layer`, `cur_frame`, `mode`), lecture (`playing`, `play_*`), `view` (zoom, rotation, miroir), zoom du montage et de la timeline, planche (`board_*`) | outil, pinceaux, couleurs, options du pinceau, bibliothèque de pinceaux, pelure d'oignon et feuille d'exposition (réglages), textes (police) |
 | sélections (calques, images, clés de caméra / d'effets / de montage, sélection bitmap / vectorielle, `multi`), gestes en cours (`stroke`, `vdrag`, `bdrag`, `cam_drag`…), boîte de sélection | **presse-papiers** : plans, calques, images, clés de montage, de caméra et d'effets, effets d'un calque, pixels, éléments vectoriels, sélection sur plusieurs calques (`multi_clip`) : ils voyagent entre les onglets |
 | caches : `renderer`, `monde` (hors de la feuille), `thumbs`, `layer_thumbs`, `murs`, `rejeu` (et ses files), textures de l'Espace 3D, références, effets calculés (`fxcache`), textures de la carte graphique | carte graphique (`gpu`, pipelines), `audio` (moteur de sortie), `ffmpeg`, `diag`, messages et barre d'état, suggestions sonores (`sug`, remises à zéro à chaque changement) |
-| travaux : `saving` / `save_queue` / `after_save` / `save_error` (enregistrement), `open_job`, `video_import`, `recovery` (copie de secours), suivi des envois, comparaison | fenêtres qui demandent un projet entier (propagation, coloriage, import Storyboard Pro) : **modales ou refusées** pendant qu'elles travaillent (`onglet_occupe`). **Les exports** (film, images, PDF, page, montage, fiche, relecture, Storyboard Pro) ne retiennent le projet que le temps de la copie : ils continuent quand on change d'onglet (`App::export_projet` dit à quel projet ils parlent ; la page de relecture, rangée dans l'état de son onglet, est suivie par `tick_onglets`) |
+| travaux : `saving` / `save_queue` / `after_save` / `save_error` (enregistrement), `open_job`, `video_import`, `recovery` (copie de secours), suivi des envois, comparaison | fenêtres qui demandent un projet entier (propagation, coloriage) : **modales ou refusées** pendant qu'elles travaillent (`onglet_occupe`). **Les exports** (film, images, PDF, page, montage, fiche, relecture) ne retiennent le projet que le temps de la copie : ils continuent quand on change d'onglet (`App::export_projet` dit à quel projet ils parlent ; la page de relecture, rangée dans l'état de son onglet, est suivie par `tick_onglets`) |
 
 `doc_epoch` (le numéro du projet que les tâches de fond recopient pour savoir à qui elles répondent) vient d'un compteur
 global : deux onglets n'ont jamais la même époque, et une époque ne revient pas (0 est celle du premier projet au démarrage,
@@ -1948,7 +1849,7 @@ Raccourcis : **Ctrl+T** (nouvel onglet), **Ctrl+W** (fermer l'onglet — il exis
 planche : Ctrl+Tab était libre (vérifié par `keymap_tests::no_two_default_bindings_share_a_key_in_the_same_context`,
 et `raw_input_hook` le retire à egui comme Tab, sinon egui y verrait un changement de champ).
 
-Fichier > Ouvrir, Nouveau, projets récents, import Storyboard Pro / scénario, « nouveau projet à partir des plans choisis » et
+Fichier > Ouvrir, Nouveau, projets récents, import de scénario, « nouveau projet à partir des plans choisis » et
 un `.pelure` lâché sur la fenêtre créent un **nouvel onglet** (Préférences > « Ouvrir dans un nouvel onglet », allumé), sauf si
 l'onglet affiché est vierge (il est alors réutilisé). Éteint : le projet remplace celui qui est affiché, après la question
 habituelle. Pas de question quand le projet arrive dans un onglet à lui : rien n'est écrasé.

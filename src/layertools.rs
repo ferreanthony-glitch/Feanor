@@ -1,9 +1,9 @@
 //! Outil Transformer : déplacer, mettre à l'échelle, étirer et tourner un calque entier (tous ses
 //! dessins). La transformation est enregistrée à part (`Layer::transform`) : les dessins ne sont
-//! pas recalculés, et Ctrl+R la retire. Comme l'outil de transformation de Storyboard Pro (Anthony,
+//! pas recalculés, et Ctrl+R la retire. (Anthony,
 //! 2026-10-18 : « beaucoup plus de transformations comme l'étirement latéral ») : un coin agrandit
 //! librement (Maj : en gardant les proportions), le milieu d'un côté étire dans un seul sens, le
-//! côté opposé restant en place ; comportement exact de Storyboard Pro à vérifier.
+//! côté opposé restant en place.
 //!
 //! Le point fixe suit les réglages de l'application, comme la boîte de la Sélection (`selbox.rs`, Anthony,
 //! 2026-10-23) : « Point fixe des poignées » (la poignée opposée d'office, ou le centre de la boîte ; Ctrl tenu donne

@@ -54,7 +54,7 @@ X positive : le haut de la carte vient vers la caméra. Inclinaison Y positive :
 Les champs du calque (`LayerTransform` : x, y, échelle, angle, étirements, `tilt_x`, `tilt_y`, `dz` ; `Layer::depth`) restent
 la seule source. La pose 3D est *calculée* à partir d'eux (`Monde::card_xf`), et les poignées *écrivent* ces champs
 (`Monde::card_from_xf`, `apply_card_xf`). Tout l'existant (outil Transformer, multisélection, clés de position, vue de
-dessus, export Storyboard Pro, propagation) lit les mêmes champs ; un projet d'avant a inclinaison 0 et écart 0, et son rendu
+dessus, propagation) lit les mêmes champs ; un projet d'avant a inclinaison 0 et écart 0, et son rendu
 passe par **le même code** qu'avant.
 
 Avec `d` la profondeur du calque (`depth` + `dz`, au plus −0,9), `s = 1 + d`, `W×H` la feuille en pixels :
@@ -199,8 +199,8 @@ Aucun changement de format (`project::VERSION` reste 35) : les objets et le rep�
 2. Cartes inclinées plus grandes que la feuille (toile infinie) : coupées aux bords de la feuille.
 3. Vue d'édition : les effets, modes de fusion et opacités des calques n'y sont pas montrés (le dessin brut).
 4. Outils 2D sur une carte inclinée : le pinceau suit l'inclinaison, pas la boîte de sélection, le Transformer ni la
-   multisélection ; l'export vers Storyboard Pro ignore l'inclinaison.
+   multisélection .
 5. Inclinaison limitée à ±85° ; la pose est donnée en angles d'Euler (ordre Y · X · Z), la poignée de rotation peut sembler
    sauter près de ±90°.
 6. Dossiers : un dossier n'est pas une carte ; sa pose ne place pas ses calques dans l'espace.
-7. Comparaison avec Storyboard Pro / Harmony : non faite (à vérifier).
+

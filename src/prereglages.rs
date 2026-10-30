@@ -11,8 +11,7 @@
 //! clés) ; `prereglagesui.rs` les branche sur le document, l'historique et la fenêtre de réglage.
 //! Les valeurs en pixels sont proportionnelles à la hauteur du cadre (réglées pour 1080 points) ;
 //! l'ampleur des tremblements vient de `camfx.rs` (mêmes générateurs de bruit que les effets de
-//! caméra), à régler à l'œil — aucun équivalent dans Storyboard Pro ni dans TVPaint n'a été
-//! vérifié (à vérifier).
+//! caméra), à régler à l'œil.
 
 use crate::blend::BlendMode;
 use crate::calqueffet::CalqueEffet;

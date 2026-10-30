@@ -12,7 +12,7 @@
 //!   format, cadence, « Plus d'options »). Entrée dans le nom crée.
 //! - **À droite**, le cadre « Projets récents » : le nom de chaque projet (le chemin entier en bulle), double-clic ou Entrée
 //!   pour l'ouvrir, clic droit « Retirer de la liste » ; un projet introuvable est grisé. En bas, « Ouvrir un projet… » (un projet
-//!   SHOT ou Storyboard Pro). La proposition de récupération après un plantage est en haut de ce cadre.
+//!   SHOT). La proposition de récupération après un plantage est en haut de ce cadre.
 //! - **En bas à gauche**, « Rouvrir le dernier projet au lancement ».
 //!
 //! Le même contenu sert quand un onglet sans projet voisine avec des projets (Ctrl+T) : la page remplit alors la zone de
@@ -300,7 +300,7 @@ impl App {
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let b = ui.add(egui::Button::new("Ouvrir un projet…").min_size(vec2(150.0, 28.0)));
-                if crate::bulles::bulle(b, "Ouvrir un projet", "Un projet SHOT ou un projet Storyboard Pro (.sboard).", "Ctrl+O").clicked() {
+                if crate::bulles::bulle(b, "Ouvrir un projet", "Un projet SHOT (.shot).", "Ctrl+O").clicked() {
                     action = Some("fichier.ouvrir");
                 }
             });

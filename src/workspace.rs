@@ -1,5 +1,5 @@
 //! Espaces de travail (4b) : quels panneaux sont affichés et à quelle taille. Quatre dispositions
-//! de Pelure (leurs commandes reprennent par le nom celles de Storyboard Pro 27, sans touche ;
+//! de Pelure (leurs commandes sont sans touche ;
 //! leur contenu est propre à Pelure), les espaces enregistrés par l'utilisateur, et la
 //! disposition en cours, retenue à la fermeture (AUTO_SAVE_LAYOUT = Y chez Anthony).
 //!

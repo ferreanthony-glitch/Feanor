@@ -23,7 +23,7 @@
 //!   tient dès l'appui ; Ctrl et Maj, tenus dès l'appui, tracent un rectangle de choix : on les presse
 //!   donc en cours de geste (les touches se lisent à chaque image d'écran). La durée du plan ne change
 //!   jamais : un calque tenu jusqu'à la fin du plan le reste (sa dernière exposition absorbe le
-//!   décalage), sinon le contenu s'arrête à la fin du plan. Comme dans Storyboard Pro, rien ne
+//!   décalage), sinon le contenu s'arrête à la fin du plan. Rien ne
 //!   bouge pendant le geste : des fantômes suivent la souris et un repère montre où se pose la clé
 //!   (`drop_view`, aussi pour une clé seule) ; elles se posent au lâcher. Échap rend tout comme
 //!   avant ; une étape d'annulation. Refusé sous le verrou du storyboard.
