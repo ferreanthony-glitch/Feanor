@@ -452,26 +452,34 @@ impl App {
         self.pistes_follow_current(pointer_down);
         // Hauteur des panneaux : ce qui reste une fois la règle, les barres et les pistes placées.
         let rows = self.montage_rows(ui.available_height());
-        egui::ScrollArea::vertical()
-            .id_salt("montage_v")
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.horizontal_top(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    let headers = self.track_headers(ui, rows.lanes_top());
-                    // La colonne dans une zone à elle : ses boutons, en nombre variable selon les
-                    // calques du plan courant, ne changent pas l'identité de la bande qui suit
-                    // (sinon un glisser de la tête de lecture se perdait en entrant dans un plan
-                    // qui n'a pas autant de calques, 2026-10-17).
-                    let mut column = ui.new_child(egui::UiBuilder::new().max_rect(headers).id_salt("colonne_montage"));
-                    self.row_headers(&mut column, headers, &rows);
-                    self.head_width_grip(&mut column, headers);
-                    egui::ScrollArea::horizontal()
-                        .id_salt("montage_h")
-                        .auto_shrink([false, true])
-                        .show(ui, |ui| self.montage_strip(ui, &rows));
+        // Quand la bande est trop basse pour toutes les pistes, elle défile : aucune piste ni bouton coupé, et la barre de
+        // défilement se voit tout de suite (pas seulement au survol, `montagehauteur.rs`).
+        ui.scope(|ui| {
+            ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+            #[allow(unused_variables)]
+            let sortie = egui::ScrollArea::vertical()
+                .id_salt("montage_v")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.horizontal_top(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        let headers = self.track_headers(ui, rows.lanes_top());
+                        // La colonne dans une zone à elle : ses boutons, en nombre variable selon les
+                        // calques du plan courant, ne changent pas l'identité de la bande qui suit
+                        // (sinon un glisser de la tête de lecture se perdait en entrant dans un plan
+                        // qui n'a pas autant de calques, 2026-10-17).
+                        let mut column = ui.new_child(egui::UiBuilder::new().max_rect(headers).id_salt("colonne_montage"));
+                        self.row_headers(&mut column, headers, &rows);
+                        self.head_width_grip(&mut column, headers);
+                        egui::ScrollArea::horizontal()
+                            .id_salt("montage_h")
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| self.montage_strip(ui, &rows));
+                    });
                 });
-            });
+            #[cfg(test)]
+            crate::montagehauteur::DEFILEMENT.with(|c| c.set((sortie.content_size.y, sortie.inner_rect.height())));
+        });
     }
 
     /// La position dans le film et sa durée (affichage fixe de la barre du montage).
@@ -535,6 +543,8 @@ impl App {
             if bulle(ui.add(small(ph::ARROWS_OUT_LINE_HORIZONTAL)), "Tout voir", "Tout le film dans la largeur de la bande.", &all).clicked() {
                 self.run_action("bande.tout_voir");
             }
+            // La hauteur des pistes son : petite, moyenne, grande (`montagehauteur.rs`).
+            self.hauteur_pistes_bouton(ui);
         });
     }
 

@@ -472,6 +472,7 @@ impl App {
         let titre = if d.titre.trim().is_empty() { d.name.as_str() } else { d.titre.as_str() };
         let mut doc = build_document(&values, titre);
         doc.properties.info = d.sous_titre.trim().to_string();
+        self.numerotation_du_projet_neuf(&mut doc);
         if !self.charger_projet(doc) {
             self.status = "Le projet n'a pas pu s'ouvrir dans un nouvel onglet : un travail attend l'onglet affiché.".into();
             return false;

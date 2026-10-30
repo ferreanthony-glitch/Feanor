@@ -21,7 +21,7 @@ use crate::app::App;
 use crate::document::{Behaviour, Layer};
 use crate::handles::{content_bounds, Handle};
 use crate::pistes::Lane;
-use crate::soundtrack::{LANE_GAP, TRACK_H};
+use crate::soundtrack::LANE_GAP;
 use crate::storyboard::{BANDS_H, RULER_H};
 use crate::theme;
 
@@ -107,7 +107,7 @@ impl Rows {
     }
     /// Hauteur totale, pistes son comprises.
     pub fn height(&self, sound_tracks: usize) -> f32 {
-        self.lanes_top() + sound_tracks as f32 * TRACK_H + 2.0
+        self.lanes_top() + sound_tracks as f32 * crate::montagehauteur::piste_son() + 2.0
     }
 }
 
@@ -115,6 +115,8 @@ impl Rows {
 impl App {
     /// Rangées pour une bande haute de `available` : les panneaux prennent la place qui reste.
     pub(crate) fn montage_rows(&self, available: f32) -> Rows {
+        // (La hauteur des pistes son : celle du réglage, montagehauteur.rs.)
+        self.poser_hauteur_pistes();
         let count = self.doc.panels.iter().map(|p| row_count(&p.layers)).max().unwrap_or(0);
         let lanes = crate::pistes::lanes_in(&self.doc.panels, self.cur_panel, self.cur_layer, count, self.pistes_auto_open(), &self.pistes_replis());
         let mut rows = Rows { block_h: 0.0, lanes };

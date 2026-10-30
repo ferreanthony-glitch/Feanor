@@ -773,7 +773,10 @@ pub fn dock(mut s: egui_dock::Style) -> egui_dock::Style {
     let p = palette();
     s.main_surface_border_stroke = Stroke::NONE;
     s.separator.width = 4.0;
-    s.separator.color_idle = p.fond;
+    // Le bord entre deux panneaux se voit sans le survol (la poignée du montage, `montagehauteur.rs`) : un peu plus clair que
+    // le fond, et large à saisir.
+    s.separator.color_idle = melange(p.fond, p.texte_fort, 0.14);
+    s.separator.extra_interact_width = 6.0;
     s.separator.color_hovered = p.accent_texte;
     s.separator.color_dragged = p.accent_texte;
     s.tab_bar.bg_fill = p.entete;

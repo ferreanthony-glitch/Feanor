@@ -11,6 +11,31 @@ use eframe::egui::{self, RichText};
 use crate::app::App;
 
 impl App {
+    /// Un projet qui naît (Nouveau projet, accueil, scénario, plans choisis) : numérotation verrouillée si le réglage des
+    /// Préférences le veut (coché d'origine), suivie sinon. Ne sert jamais à un projet qui existe déjà.
+    pub(crate) fn numerotation_du_projet_neuf(&self, doc: &mut crate::document::Document) {
+        if self.settings.numbering_locked_new {
+            doc.lock_numbering();
+        } else {
+            doc.unlock_numbering();
+        }
+    }
+
+    /// Préférences > Montage > Plans neufs : « Verrouiller la numérotation des projets neufs ».
+    pub(crate) fn numerotation_neufs_pref_ui(&mut self, ui: &mut egui::Ui) {
+        let avant = self.settings.numbering_locked_new;
+        let resp = ui.checkbox(&mut self.settings.numbering_locked_new, "Verrouiller la numérotation des projets neufs");
+        crate::bulles::bulle(
+            resp,
+            "Numérotation des projets neufs",
+            "Coché : un plan inséré entre le 2 et le 3 devient le 2A, comme en studio (les autres gardent leur numéro). Décoché : les plans se renumérotent dans l'ordre du film. Ne change pas les projets qui existent ; « Renuméroter les plans… » (menu Storyboard) repart de 1 quand tu veux.",
+            "",
+        );
+        if avant != self.settings.numbering_locked_new {
+            let _ = self.settings.save();
+        }
+    }
+
     /// Verrouille la numérotation (les numéros d'aujourd'hui deviennent ceux des plans) ou la rend
     /// suivie. Une étape d'annulation.
     pub(crate) fn toggle_numbering_lock(&mut self) {

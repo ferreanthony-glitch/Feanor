@@ -379,7 +379,7 @@ impl App {
     /// Ctrl + glisser l'onde dans la timeline (13e) : l'extrait de la piste `track` sous la
     /// souris se décale ; `lanes_top` suit la souris pour que la piste ne change pas.
     pub(crate) fn drag_timeline_sound(&mut self, track: usize, p: Pos2, ppf: f32) {
-        let lanes_top = p.y - (track as f32 + 0.5) * TRACK_H;
+        let lanes_top = p.y - (track as f32 + 0.5) * crate::montagehauteur::piste_son();
         self.update_clip_drag(p, ppf, lanes_top);
     }
 
@@ -440,7 +440,7 @@ impl App {
         if p.y < lanes_top {
             return None;
         }
-        let t = ((p.y - lanes_top) / TRACK_H) as usize;
+        let t = ((p.y - lanes_top) / crate::montagehauteur::piste_son()) as usize;
         let track = self.doc.audio_tracks.get(t)?;
         let hit = track.clips.iter().enumerate().find_map(|(ci, c)| {
             let (x0, x1) = (left + c.start as f32 * ppf, left + c.end() as f32 * ppf);
@@ -511,7 +511,7 @@ impl App {
         let delta = ((p.x - origin.x) / ppf).round() as i64;
         let (track, start, end, keep) = match edge {
             ClipEdge::Move => {
-                let t = (((p.y - lanes_top) / TRACK_H).floor().max(0.0) as usize).min(before.len() - 1);
+                let t = (((p.y - lanes_top) / crate::montagehauteur::piste_son()).floor().max(0.0) as usize).min(before.len() - 1);
                 let s = (orig.start as i64 + delta).max(0) as usize;
                 (t, s, s + orig.length, true)
             }
@@ -563,8 +563,8 @@ impl App {
     pub(crate) fn paint_lanes(&self, painter: &Painter, r: Rect, left: f32, ppf: f32, lanes_top: f32, select: Color32) {
         let fps = self.doc.fps;
         for (t, track) in self.doc.audio_tracks.iter().enumerate() {
-            let y = lanes_top + t as f32 * TRACK_H;
-            let lane = Rect::from_min_max(pos2(r.left(), y + 1.0), pos2(r.right(), y + TRACK_H - 1.0));
+            let y = lanes_top + t as f32 * crate::montagehauteur::piste_son();
+            let lane = Rect::from_min_max(pos2(r.left(), y + 1.0), pos2(r.right(), y + crate::montagehauteur::piste_son() - 1.0));
             painter.rect_filled(lane, 0.0, theme::rangee_sombre());
             for (ci, clip) in track.clips.iter().enumerate() {
                 let cr = Rect::from_min_max(
@@ -617,11 +617,12 @@ impl App {
         let n = self.doc.audio_tracks.len();
         // Large comme on l'a étirée (`montagehead.rs`).
         let width = self.montage_head_w;
-        let (rect, _) = ui.allocate_exact_size(vec2(width, lanes_top + n as f32 * TRACK_H), Sense::hover());
+        let (rect, _) = ui.allocate_exact_size(vec2(width, lanes_top + n as f32 * crate::montagehauteur::piste_son()), Sense::hover());
         let visuals = ui.visuals().clone();
         let painter = ui.painter_at(rect);
         let mut toggle = None;
         let mut toggle_solo = None;
+        let mut toggle_lock = None;
         // Le menu du clic droit d'une piste se montre au milieu des noms : « Supprimer la piste », « Dupliquer la piste »…
         // changent les pistes, et les noms d'après se peignaient à un rang qui n'existait plus (passe de débogage, 2026-10-22).
         // On s'arrête là ; l'image suivante refait la colonne.
@@ -633,11 +634,13 @@ impl App {
                 return rect;
             }
             let track = &self.doc.audio_tracks[t];
+            let h = crate::montagehauteur::piste_son();
             let lane = Rect::from_min_size(
-                pos2(rect.left() + 2.0, rect.top() + lanes_top + t as f32 * TRACK_H + 1.0),
-                vec2(width - 8.0, TRACK_H - 2.0),
+                pos2(rect.left() + 2.0, rect.top() + lanes_top + t as f32 * h + 1.0),
+                vec2(width - 8.0, h - 2.0),
             );
-            let mute = Rect::from_min_size(pos2(lane.left() + 5.0, lane.bottom() - 18.0), vec2(20.0, 15.0));
+            // Trois boutons lisibles à toute hauteur (M, S, verrou), sur la ligne du bas ; le nom au-dessus.
+            let [mute, solo, lock] = crate::montagehauteur::boutons_piste(lane);
             painter.rect_filled(lane, 3.0, theme::etiquette());
             let text = if track.muted {
                 visuals.weak_text_color()
@@ -645,44 +648,52 @@ impl App {
                 visuals.text_color()
             };
             painter.with_clip_rect(lane.shrink(2.0)).text(
-                pos2(lane.left() + 6.0, lane.top() + 3.0),
+                pos2(lane.left() + 6.0, lane.top() + 2.0),
                 Align2::LEFT_TOP,
                 &track.name,
-                FontId::proportional(12.0),
+                FontId::proportional(if h < 40.0 { 11.0 } else { 12.0 }),
                 text,
             );
+            let font = FontId::proportional(12.0);
             painter.rect_filled(
                 mute,
-                2.0,
+                3.0,
                 if track.muted {
                     theme::son_muet()
                 } else {
                     theme::controle_survol()
                 },
             );
-            painter.text(mute.center(), Align2::CENTER_CENTER, "M", FontId::monospace(10.0), if track.muted { Color32::WHITE } else { theme::texte_fort() });
+            painter.text(mute.center(), Align2::CENTER_CENTER, "M", font.clone(), if track.muted { Color32::WHITE } else { theme::texte_fort() });
             // Solo : seules les pistes en solo s'entendent (`audiofx::audible`).
-            let solo = Rect::from_min_size(pos2(mute.right() + 3.0, mute.top()), vec2(18.0, 15.0));
-            painter.rect_filled(solo, 2.0, if track.solo { theme::avertissement() } else { theme::controle_survol() });
-            painter.text(solo.center(), Align2::CENTER_CENTER, "S", FontId::monospace(10.0), if track.solo { Color32::BLACK } else { theme::texte_fort() });
-            if track.locked {
-                painter.text(pos2(lane.right() - 6.0, lane.top() + 3.0), Align2::RIGHT_TOP, "🔒", FontId::proportional(11.0), visuals.text_color());
+            painter.rect_filled(solo, 3.0, if track.solo { theme::avertissement() } else { theme::controle_survol() });
+            painter.text(solo.center(), Align2::CENTER_CENTER, "S", font.clone(), if track.solo { Color32::BLACK } else { theme::texte_fort() });
+            // Verrou : ses extraits ne bougent plus.
+            painter.rect_filled(lock, 3.0, if track.locked { theme::avertissement() } else { theme::controle_survol() });
+            let icone = if track.locked { egui_phosphor::regular::LOCK_SIMPLE } else { egui_phosphor::regular::LOCK_SIMPLE_OPEN };
+            painter.text(lock.center(), Align2::CENTER_CENTER, icone, font, if track.locked { Color32::BLACK } else { theme::texte_fort() });
+            // Le volume, quand la colonne est assez large pour le dire à droite des boutons.
+            if lane.right() - lock.right() > 40.0 {
+                painter.text(
+                    pos2(lock.right() + 6.0, mute.center().y),
+                    Align2::LEFT_CENTER,
+                    format!("{:.0} %", track.volume * 100.0),
+                    FontId::monospace(10.0),
+                    visuals.weak_text_color(),
+                );
             }
-            painter.text(
-                pos2(solo.right() + 6.0, mute.center().y),
-                Align2::LEFT_CENTER,
-                format!("{:.0} %", track.volume * 100.0),
-                FontId::monospace(10.0),
-                visuals.weak_text_color(),
-            );
             let resp = ui
                 .interact(lane, ui.id().with(("piste_son", track.id)), Sense::click())
-                .on_hover_text("M : rendre la piste muette. S : solo (seules les pistes en solo s'entendent). Clic droit : nom, volume, import, suppression.");
-            if resp.clicked() && resp.interact_pointer_pos().is_some_and(|p| mute.expand(2.0).contains(p)) {
+                .on_hover_text("M : rendre la piste muette. S : solo (seules les pistes en solo s'entendent). Verrou : ses extraits ne bougent plus. Clic droit : nom, volume, import, suppression.");
+            let clic = resp.clicked().then(|| resp.interact_pointer_pos()).flatten();
+            if clic.is_some_and(|p| mute.expand(2.0).contains(p)) {
                 toggle = Some(t);
             }
-            if resp.clicked() && resp.interact_pointer_pos().is_some_and(|p| solo.expand(2.0).contains(p)) {
+            if clic.is_some_and(|p| solo.expand(2.0).contains(p)) {
                 toggle_solo = Some(t);
+            }
+            if clic.is_some_and(|p| lock.expand(2.0).contains(p)) {
+                toggle_lock = Some(t);
             }
             resp.context_menu(|ui| self.track_menu(ui, t));
         }
@@ -697,6 +708,11 @@ impl App {
         }
         if let Some(t) = toggle_solo {
             self.toggle_solo(t);
+        }
+        if let Some(t) = toggle_lock {
+            self.record_step();
+            let track = &mut self.doc.audio_tracks[t];
+            track.locked = !track.locked;
         }
         rect
     }

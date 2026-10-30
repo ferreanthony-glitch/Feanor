@@ -209,7 +209,10 @@ fn the_visuals_use_the_palette() {
         assert_eq!(v.widgets.noninteractive.fg_stroke.color, p.texte);
         assert_eq!(v.widgets.inactive.weak_bg_fill, p.controle);
         let d = theme::dock(egui_dock::Style::default());
-        assert_eq!((d.tab_bar.bg_fill, d.tab.active.bg_fill, d.separator.color_idle), (p.entete, p.panneau, p.fond));
+        assert_eq!((d.tab_bar.bg_fill, d.tab.active.bg_fill), (p.entete, p.panneau));
+        // Le bord entre deux panneaux se voit sans le survol (poignée du montage) : plus clair que le fond, autre que l'accent.
+        assert_ne!(d.separator.color_idle, p.fond, "{choix:?}");
+        assert_ne!(d.separator.color_idle, d.separator.color_hovered, "{choix:?}");
         // Les fonctions de lecture donnent la palette installée.
         assert_eq!((theme::panneau(), theme::fond(), theme::texte(), theme::accent()), (p.panneau, p.fond, p.texte, p.accent));
     }

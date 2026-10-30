@@ -14,7 +14,6 @@ use egui_phosphor::regular as ph;
 use crate::app::App;
 use crate::audio::{AudioEngine, Pcm};
 use crate::bruitages::{duration_text, Bibliotheque, Sortie};
-use crate::soundtrack::TRACK_H;
 use crate::theme;
 
 /// Hauteur d'une ligne de la liste, en points.
@@ -84,7 +83,7 @@ fn short(p: &std::path::Path) -> String {
 /// piste son si le point est dans les pistes (sinon la première piste libre sera prise).
 pub(crate) fn drop_target(p: egui::Pos2, left: f32, ppf: f32, lanes_top: f32, tracks: usize) -> (Option<usize>, usize) {
     let frame = ((p.x - left) / ppf).floor().max(0.0) as usize;
-    let track = (p.y >= lanes_top).then(|| ((p.y - lanes_top) / TRACK_H) as usize).filter(|t| *t < tracks);
+    let track = (p.y >= lanes_top).then(|| ((p.y - lanes_top) / crate::montagehauteur::piste_son()) as usize).filter(|t| *t < tracks);
     (track, frame)
 }
 
@@ -365,8 +364,8 @@ impl App {
                 let painter = ui.painter_at(resp.rect);
                 painter.line_segment([pos2(x, top), pos2(x, resp.rect.bottom())], stroke);
                 if let Some(t) = track {
-                    let y = lanes_top + t as f32 * TRACK_H;
-                    painter.rect_stroke(Rect::from_min_max(pos2(x, y + 1.0), pos2(x + 8.0 * ppf, y + TRACK_H - 1.0)), 3.0, stroke, egui::StrokeKind::Inside);
+                    let y = lanes_top + t as f32 * crate::montagehauteur::piste_son();
+                    painter.rect_stroke(Rect::from_min_max(pos2(x, y + 1.0), pos2(x + 8.0 * ppf, y + crate::montagehauteur::piste_son() - 1.0)), 3.0, stroke, egui::StrokeKind::Inside);
                 }
             }
         }

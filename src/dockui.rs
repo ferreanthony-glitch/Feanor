@@ -219,6 +219,7 @@ impl App {
             .show(ctx, &mut Panes { app: self });
         // (Un panneau peut avoir remplacé la disposition pendant l'affichage : on la garde.)
         if self.dock.is_none() {
+            self.poignee_du_montage(ctx, &mut state);
             self.fit_panes(ctx, &mut state, sep, body_margin);
             self.dock = Some(state);
         }

@@ -10,7 +10,7 @@ use eframe::egui::{self, pos2, vec2, Color32, Painter, Pos2, Rect, Shape, Stroke
 use crate::app::App;
 use crate::audiofx::{ClipFx, EQ_RANGE, MAX_GAIN};
 use crate::document::{AudioTrack, SoundClip};
-use crate::soundtrack::{ClipEdge, TRACK_H};
+use crate::soundtrack::ClipEdge;
 use crate::theme;
 
 /// Le gain tout en haut de l'extrait (le milieu est le gain 1 : pas de changement).
@@ -33,8 +33,8 @@ pub(crate) struct SoundFxUi {
 
 /// Le rectangle d'un extrait dans la bande de montage (voir `App::paint_lanes`).
 pub(crate) fn clip_rect(track: usize, clip: &SoundClip, left: f32, ppf: f32, lanes_top: f32) -> Rect {
-    let y = lanes_top + track as f32 * TRACK_H;
-    Rect::from_min_max(pos2(left + clip.start as f32 * ppf + 0.5, y + 2.0), pos2(left + clip.end() as f32 * ppf - 0.5, y + TRACK_H - 2.0))
+    let y = lanes_top + track as f32 * crate::montagehauteur::piste_son();
+    Rect::from_min_max(pos2(left + clip.start as f32 * ppf + 0.5, y + 2.0), pos2(left + clip.end() as f32 * ppf - 0.5, y + crate::montagehauteur::piste_son() - 2.0))
 }
 
 /// L'ordonnée du gain `v` dans l'extrait `cr` (le gain 1 au milieu, `GAIN_TOP` en haut, 0 en bas).
