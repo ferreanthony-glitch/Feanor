@@ -21,6 +21,13 @@
 //!   performances, la définition suit le réglage « vignettes ». Au repos, rien ne repeint l'écran.
 //! - **Annulation** : ajouter, retirer, déplacer, redimensionner, tourner, lier… sont des étapes de
 //!   l'historique, avec un nom en français (`Edit::Structure`).
+//! - **Planche** (2026-10-30, `planchref.rs`) : en plus des images, des post-it, des textes, des titres et des
+//!   cadres ; un rectangle de sélection (Maj ou Ctrl+glisser sur le fond, ou l'icône « Rectangle »), ranger,
+//!   recadrer, opacité, devant / derrière. Les commandes, les menus, l'import d'une autre planche et la fenêtre à part
+//!   (plein écran, écran, transparence) sont dans `planchrefui.rs`.
+
+#[path = "planchrefui.rs"]
+pub(crate) mod planchrefui;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -34,7 +41,7 @@ use egui_phosphor::regular as ph;
 
 use crate::app::App;
 use crate::history::Edit;
-use crate::references::{self, Clip, Filter, Imported, Lru, Reference, View};
+use crate::references::{self, Clip, Filter, Imported, Kind, Lru, Reference, View};
 use crate::theme;
 use crate::video;
 
@@ -121,6 +128,12 @@ enum Grab {
     Move(Vec<(u64, Pos2)>, u64),
     Scale { id: u64, start: f32, center: Pos2, dist: f32 },
     Rotate { id: u64, start: f32, center: Pos2, angle: f32 },
+    /// Un coin de cadre tiré : le cadre change de taille (son contenu ne change pas), `(hx, hy)` : le coin.
+    FrameSize { id: u64, start: Reference, hx: i8, hy: i8 },
+    /// Une poignée du recadrage tirée.
+    Crop { id: u64, start: Reference, hx: i8, hy: i8 },
+    /// Un rectangle de sélection : ce qui était choisi avant (si Maj), et si on y ajoute.
+    Marquee { base: Vec<u64>, add: bool },
 }
 
 struct Drag {
@@ -176,11 +189,31 @@ pub(crate) struct RefUi {
     pub sel: Vec<u64>,
     /// Le dernier clic était dans le panneau : Ctrl+V colle une image, Suppr supprime.
     pub focus: bool,
-    pub always_on_top: bool,
+    /// Le fond du tableau, tiré, dessine un rectangle de sélection (sinon il déplace la vue ; Maj ou Ctrl le font
+    /// aussi, et l'espace ou le bouton du milieu déplacent toujours la vue).
+    pub marquee_default: bool,
+    /// L'image dont on règle le recadrage.
+    pub crop_mode: Option<u64>,
+    /// Le texte de cet élément prend la saisie (double-clic, ou élément neuf).
+    pub text_focus: Option<u64>,
+    /// Où le dernier clic droit a eu lieu sur le tableau (pour poser un post-it ou un cadre là).
+    pub menu_at: Option<Pos2>,
+    /// Images d'écran à attendre avant d'envoyer le plein écran (la fenêtre doit d'abord changer d'écran).
+    pub fs_delay: u8,
+    /// Les écrans connus, et quand on les a lus (secondes).
+    pub screens: (f64, Vec<crate::planchref::Ecran>),
+    /// Une planche d'un autre projet qu'un fil copie dans celui-ci.
+    pub board_import: Option<planchrefui::BoardImport>,
+    /// Les commandes de la fenêtre à part ont été reprises des réglages (une fois au démarrage).
+    pub window_restored: bool,
+    /// Images d'écran à attendre avant de relire si la planche est détachée (au démarrage, la fenêtre se refait).
+    pub sync_wait: u8,
     /// La place du panneau dans la fenêtre principale si la dernière image l'y a dessiné : les
     /// fichiers lâchés dessus sont des références.
     pub pane_rect: Option<Rect>,
-    view: Option<View>,
+    pub(crate) view: Option<View>,
+    /// La vue de la dernière image d'écran (celle de `view`, ou le cadrage automatique).
+    pub(crate) shown_view: Option<View>,
     /// La place du tableau à la dernière image (pour cadrer une référence).
     board: Option<Rect>,
     drag: Option<Drag>,
@@ -215,6 +248,9 @@ impl RefUi {
         self.video_job = None;
         self.tags_buf = (0, String::new());
         self.failed.clear();
+        self.crop_mode = None;
+        self.text_focus = None;
+        self.board_import = None;
     }
 
     /// Demande l'image `path` à la définition `level` ; rend la meilleure qui soit déjà en mémoire
@@ -289,7 +325,7 @@ impl RefUi {
     /// La place du tableau à l'écran et sa vue, pour les essais qui visent à la souris.
     #[cfg(test)]
     pub(crate) fn geometry(&self) -> Option<(Rect, View)> {
-        self.board.zip(self.view)
+        self.board.zip(self.shown_view)
     }
 }
 
@@ -303,7 +339,7 @@ pub(crate) fn budget_bytes(cache_carte_mo: u32) -> usize {
 
 impl App {
     /// Une étape d'annulation nommée, à prendre AVANT le changement.
-    fn refs_step(&mut self, name: &str) {
+    pub(crate) fn refs_step(&mut self, name: &str) {
         let before = self.history.context.replace(name.to_string());
         self.record_step();
         self.history.context = before;
@@ -457,7 +493,7 @@ impl App {
                 self.refs.layout = Layout::Board;
                 self.refs.view = None;
             }
-            _ => return false,
+            _ => return self.planchref_action(action),
         }
         true
     }
@@ -484,6 +520,7 @@ impl App {
             self.refs.reset_for_project();
             self.refs.epoch = self.doc_epoch;
         }
+        self.planchref_tick(ctx);
         let mut i = 0;
         while i < self.refs.batches.len() {
             if self.refs.batches[i].handle.is_finished() {
@@ -536,6 +573,7 @@ impl App {
                     let mut r = Reference::image(id, &imp.name, &imp.file, imp.size, spot);
                     r.home = Some(b.dest.clone());
                     r.plans.extend(b.link);
+                    r.stamp(&crate::commentaires::author_name(&self.settings.comment_author));
                     added.push(r);
                 }
                 Err(e) => errors.push(e),
@@ -578,6 +616,7 @@ impl App {
                 r.video = Some(Clip::new(imp.clip.frames, imp.clip.fps, &imp.clip.ext));
                 r.home = dir.parent().map(std::path::Path::to_path_buf);
                 r.plans.extend(v.link);
+                r.stamp(&crate::commentaires::author_name(&self.settings.comment_author));
                 self.refs_step("Ajouter une vidéo de référence");
                 self.refs.sel = vec![id];
                 self.doc.add_reference(r);
@@ -603,16 +642,18 @@ impl App {
     }
 
     /// Change les références choisies (une étape d'annulation nommée) ; faux s'il n'y en a pas.
-    fn refs_apply(&mut self, name: &str, mut f: impl FnMut(&mut Reference)) -> bool {
+    pub(crate) fn refs_apply(&mut self, name: &str, mut f: impl FnMut(&mut Reference)) -> bool {
         let ids = self.refs_selected();
         if ids.is_empty() {
             self.status = "Aucune référence choisie.".into();
             return false;
         }
         self.refs_step(name);
+        let now = crate::planchref::now_secs();
         for id in ids {
             if let Some(r) = self.doc.reference_mut(id) {
                 f(r);
+                r.touch(now);
             }
         }
         true
@@ -653,8 +694,15 @@ impl App {
         if detached {
             self.refs_detached_input(&ctx);
         }
+        // Fenêtre transparente : la barre d'outils garde un fond, pour rester lisible.
+        let backdrop = (detached && self.settings.references_fenetre.transparent).then(|| ui.painter().add(Shape::Noop));
+        let top = ui.max_rect().top();
         self.refs_toolbar(ui, detached);
         self.refs_selection_bar(ui, &ctx);
+        if let Some(i) = backdrop {
+            let bar = Rect::from_min_max(pos2(ui.max_rect().left(), top), pos2(ui.max_rect().right(), ui.cursor().top() + 2.0));
+            ui.painter().set(i, Shape::rect_filled(bar, 0.0, theme::fond()));
+        }
         ui.add_space(2.0);
         match self.refs.layout {
             Layout::Board => self.refs_board(ui, &ctx),
@@ -676,6 +724,7 @@ impl App {
     /// servent aux références.
     fn refs_detached_input(&mut self, ctx: &egui::Context) {
         let focused = ctx.input(|i| i.viewport().focused.unwrap_or(false));
+        self.refs_window_keys(ctx, focused);
         if !focused || ctx.wants_keyboard_input() {
             return;
         }
@@ -721,6 +770,8 @@ impl App {
                 self.run_action("references.coller");
             }
             ui.separator();
+            self.refs_add_icons(ui);
+            ui.separator();
             let mut layout = self.refs.layout;
             bulles::choix(ui, &mut layout, Layout::Board, ph::FRAME_CORNERS, "Tableau", "Les références disposées librement : on les déplace, on les agrandit, on les tourne.", "");
             bulles::choix(ui, &mut layout, Layout::Grid, ph::SQUARES_FOUR, "Grille", "Toutes les références côte à côte, à la même taille.", "");
@@ -750,113 +801,13 @@ impl App {
             if self.bouton(ui, ph::CORNERS_OUT, "Tout voir", "Cadre le tableau sur toutes les références visibles.", "references.tout_voir").clicked() {
                 self.run_action("references.tout_voir");
             }
-            if detached {
-                let mut top = self.refs.always_on_top;
-                if bulles::interrupteur(ui, &mut top, ph::PICTURE_IN_PICTURE, "Toujours au-dessus", "Garde cette fenêtre devant les autres, pour la lire en dessinant.", "").changed() {
-                    self.refs.always_on_top = top;
-                    let level = if top { egui::WindowLevel::AlwaysOnTop } else { egui::WindowLevel::Normal };
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::WindowLevel(level));
-                }
-            }
+            self.refs_board_icons(ui);
+            self.refs_window_icons(ui, detached);
             let (shown, all) = (self.refs_filtered().len(), self.doc.references.len());
             let (used, budget) = (self.refs.cache_bytes() >> 20, budget_bytes(self.settings.perf.cache_carte_mo) >> 20);
             ui.label(RichText::new(if shown == all { format!("{all}") } else { format!("{shown} / {all}") }).small().weak())
                 .on_hover_text(format!("Références montrées / en tout. Images gardées en mémoire graphique : {used} Mo sur {budget} Mo (une part du réglage « cache de la carte graphique » du diagnostic des performances)."));
         });
-    }
-
-    /// Les réglages de la référence choisie : vue (ajuster, 100 %, miroirs, gris), plan, nom, échelle,
-    /// rotation, étiquettes, et la lecture d'une vidéo.
-    fn refs_selection_bar(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        use crate::bulles;
-        let ids = self.refs_selected();
-        let Some(&id) = ids.last() else { return };
-        let Some(r) = self.doc.reference(id).cloned() else { return };
-        let ppp = ctx.pixels_per_point();
-        let plan = self.refs_plan_id();
-        let linked = plan.is_some_and(|p| ids.iter().all(|i| self.doc.reference(*i).is_some_and(|x| x.plans.contains(&p))));
-        ui.separator();
-        ui.horizontal_wrapped(|ui| {
-            if bulles::icone(ui, ph::ARROWS_IN, "Ajuster", "Cadre le tableau sur cette référence.", "").clicked() {
-                self.refs_zoom_to(id, false, ppp);
-            }
-            if bulles::icone(ui, ph::MAGNIFYING_GLASS, "100 %", "Un pixel de l'image fait un pixel de l'écran.", "").clicked() {
-                self.refs_zoom_to(id, true, ppp);
-            }
-            if bulles::etat(ui, r.flip_h, ph::FLIP_HORIZONTAL, "Retourner de gauche à droite", "Un miroir, pour juger un dessin d'un œil neuf.", "").clicked() {
-                let on = !r.flip_h;
-                self.refs_apply("Retourner la référence", |x| x.flip_h = on);
-            }
-            if bulles::etat(ui, r.flip_v, ph::FLIP_VERTICAL, "Retourner de haut en bas", "Un miroir vertical.", "").clicked() {
-                let on = !r.flip_v;
-                self.refs_apply("Retourner la référence", |x| x.flip_v = on);
-            }
-            if bulles::etat(ui, r.grey, ph::CIRCLE_HALF, "Niveaux de gris", "Vérifier les valeurs : la luminosité de chaque point (Rec. 709), sans la couleur.", "").clicked() {
-                let on = !r.grey;
-                self.refs_apply("Références en niveaux de gris", |x| x.grey = on);
-            }
-            if self.bouton_etat(ui, linked, ph::PUSH_PIN, "Lier au plan courant", "La référence suit ce plan : le filtre « références du plan courant » ne montre qu'elles. Un autre clic la délie.", "references.lier_plan").clicked() {
-                self.run_action("references.lier_plan");
-            }
-            if self.bouton(ui, ph::TRASH, "Supprimer", "Retire la référence du tableau (Ctrl+Z la rétablit).", "references.supprimer").clicked() {
-                self.run_action("references.supprimer");
-            }
-        });
-        // Nom, échelle, rotation (de la référence choisie en dernier).
-        ui.horizontal_wrapped(|ui| {
-            let mut name = r.name.clone();
-            let resp = ui.add(egui::TextEdit::singleline(&mut name).id(egui::Id::new(("nom_reference", id))).hint_text("Nom").desired_width(120.0));
-            if self.refs_edited(&resp, "Renommer la référence") {
-                if let Some(x) = self.doc.reference_mut(id) {
-                    x.name = name.chars().take(200).collect();
-                }
-            }
-            let mut percent = r.scale * 100.0;
-            let resp = ui.add(egui::DragValue::new(&mut percent).speed(1.0).range(references::SCALE_MIN * 100.0..=references::SCALE_MAX * 100.0).suffix(" %").max_decimals(1));
-            bulles::bulle(resp.clone(), "Échelle", "La taille sur le tableau, en pour cent des pixels de l'image.", "");
-            if self.refs_edited(&resp, "Redimensionner la référence") {
-                for i in &ids {
-                    if let Some(x) = self.doc.reference_mut(*i) {
-                        x.scale = (percent / 100.0).clamp(references::SCALE_MIN, references::SCALE_MAX);
-                    }
-                }
-            }
-            let mut degrees = r.rotation;
-            let resp = ui.add(egui::DragValue::new(&mut degrees).speed(0.5).range(-180.0..=180.0).suffix("°").max_decimals(1));
-            bulles::bulle(resp.clone(), "Rotation", "En degrés, dans le sens des aiguilles d'une montre.", "");
-            if self.refs_edited(&resp, "Tourner la référence") {
-                for i in &ids {
-                    if let Some(x) = self.doc.reference_mut(*i) {
-                        x.rotation = references::normalize_degrees(degrees);
-                    }
-                }
-            }
-            if ids.len() > 1 {
-                ui.label(RichText::new(format!("{} choisies", ids.len())).small().weak());
-            }
-        });
-        // Étiquettes : validées en quittant le champ.
-        ui.horizontal(|ui| {
-            ui.label(RichText::new(ph::TAG).size(bulles::TAILLE).color(theme::texte_doux()));
-            if self.refs.tags_buf.0 != id {
-                self.refs.tags_buf = (id, r.tags.join(", "));
-            }
-            let resp = ui.add(egui::TextEdit::singleline(&mut self.refs.tags_buf.1).id(egui::Id::new(("etiquettes_reference", id))).hint_text("Étiquettes : décor, lumière, rue…").desired_width(ui.available_width()));
-            if resp.lost_focus() {
-                let tags = references::parse_tags(&self.refs.tags_buf.1);
-                if tags != r.tags {
-                    self.refs_step("Étiquettes de la référence");
-                    if let Some(x) = self.doc.reference_mut(id) {
-                        x.tags = tags.clone();
-                    }
-                }
-                self.refs.tags_buf.1 = tags.join(", ");
-            }
-        });
-        if r.is_video() {
-            self.refs_transport(ui, ctx, &r);
-        }
-        ui.separator();
     }
 
     /// Réglage d'une vidéo (sans changer la lecture), en une étape d'annulation nommée.
@@ -984,7 +935,11 @@ impl App {
         let (rect, resp) = ui.allocate_exact_size(size, Sense::click_and_drag());
         self.refs.board = Some(rect);
         let ppp = ctx.pixels_per_point();
+        // Fenêtre à part transparente : tout ce que le tableau peint prend l'opacité choisie.
+        let win_alpha = if ctx.viewport_id() != egui::ViewportId::ROOT { self.settings.references_fenetre.alpha() } else { 1.0 };
         let items = self.refs_filtered();
+        // Tant que personne n'a touché à la vue, elle suit la taille du panneau et ce qu'il contient (« tout voir »).
+        let auto_view = self.refs.view.is_none();
         let mut view = match self.refs.view {
             Some(v) => v,
             None => match references::bounds_of(&items) {
@@ -992,8 +947,9 @@ impl App {
                 None => View::default(),
             },
         };
+        let initial_view = view;
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 0.0, theme::fond());
+        painter.rect_filled(rect, 0.0, theme::fond().gamma_multiply(win_alpha));
 
         // Fichiers lâchés sur la fenêtre à part, et leur repère.
         if ctx.viewport_id() != egui::ViewportId::ROOT {
@@ -1005,6 +961,7 @@ impl App {
         let hover = hover.filter(|p| rect.contains(*p) && resp.hovered());
         let (pressed, down, mods) = ctx.input(|i| (i.pointer.primary_pressed(), i.pointer.primary_down(), i.modifiers));
         let escape = ctx.input(|i| i.key_pressed(Key::Escape));
+        let space = ctx.input(|i| i.key_down(Key::Space)) && !ctx.wants_keyboard_input();
 
         // Zoom à la molette, autour de la souris ; le bouton du milieu déplace le tableau.
         if let Some(p) = hover {
@@ -1013,9 +970,16 @@ impl App {
             if (f - 1.0).abs() > 1e-5 {
                 view.zoom_about(rect, p, f);
             }
+            if space {
+                ctx.set_cursor_icon(egui::CursorIcon::Grab);
+            }
         }
         if resp.dragged_by(PointerButton::Middle) {
             view.pan(resp.drag_delta());
+        }
+        // Tout sélectionner (Ctrl+A) quand le panneau a la main.
+        if self.refs.focus && !ctx.wants_keyboard_input() && ctx.input(|i| i.modifiers.command && i.key_pressed(Key::A)) {
+            self.refs.sel = items.iter().map(|r| r.id).collect();
         }
 
         // Un appui : la pipette (Alt), une poignée, une référence, ou le fond.
@@ -1025,7 +989,7 @@ impl App {
                 if mods.alt {
                     self.refs.picking = true;
                 } else {
-                    self.refs_press(&items, &view, rect, p, mods.shift);
+                    self.refs_press(&items, &view, rect, p, mods, space);
                 }
             }
         }
@@ -1041,6 +1005,10 @@ impl App {
                 self.color_used(c);
             }
         }
+        // Échap ou Entrée ferment le recadrage.
+        if self.refs.drag.is_none() && self.refs.crop_mode.is_some() && (escape || (self.refs.focus && ctx.input(|i| i.key_pressed(Key::Enter)) && !ctx.wants_keyboard_input())) {
+            self.refs.crop_mode = None;
+        }
         // Le geste en cours.
         if let Some(mut d) = self.refs.drag.take() {
             let valid = d.epoch == self.doc_epoch && d.serial == self.history.serial();
@@ -1054,7 +1022,7 @@ impl App {
                     self.refs_drag_to(&mut d, &mut view, rect, cur, mods.shift, ctx.input(|i| i.pointer.delta()));
                     // Une référence qu'on sort du tableau se glisse vers la planche des Vignettes : rien ne bouge ici (`deposer.rs`).
                     if let Grab::Move(starts, _) = &d.grab {
-                        if !rect.contains(cur) {
+                        if !rect.contains(cur) && starts.iter().any(|s| self.doc.reference(s.0).is_some_and(|r| !r.file.is_empty())) {
                             self.doc.references = d.before.clone();
                             let ids = starts.iter().map(|s| s.0).collect();
                             egui::DragAndDrop::set_payload(ctx, crate::deposer::RefsDrag { ids });
@@ -1067,37 +1035,57 @@ impl App {
             }
         }
 
-        // Les références.
+        // Les éléments : les cadres au fond, le reste dans l'ordre de la pile.
         let now = ctx.input(|i| i.time);
         let hovered_id = hover.and_then(|p| references::hit_test(items.iter(), view.to_board(rect, p)));
-        for r in &items {
-            let corners = r.corners().map(|c| view.to_screen(rect, c));
-            let bounds = screen_bounds(&corners);
-            if !bounds.intersects(rect) {
-                continue;
-            }
-            let frame = self.refs_shown_frame(r, now);
-            let shown_px = r.size[0].max(r.size[1]) as f32 * r.scale * view.zoom * ppp;
-            let (shown, broken) = self.refs_texture(ctx, r, frame, shown_px);
-            paint_quad(&painter, r, &corners, shown.as_ref().map(|s| s.id), broken);
-            if let (Some(c), true) = (&r.video, self.refs.vids.get(&r.id).is_some_and(|v| v.playing)) {
-                // Les deux images d'après, pour que la lecture ne bute pas sur le décodage.
-                for ahead in 1..=2 {
-                    let next = c.index_of(self.refs.vids.get(&r.id).map_or(0.0, |v| v.pos) + ahead as f64);
-                    let _ = self.refs_texture(ctx, r, next, shown_px);
+        let crop_id = self.refs.crop_mode.filter(|id| self.refs.sel == [*id]);
+        if crop_id.is_none() {
+            self.refs.crop_mode = None;
+        }
+        for pass in 0..2 {
+            for r in &items {
+                if (r.kind == Kind::Frame) != (pass == 0) {
+                    continue;
                 }
-            }
-            if r.is_video() {
-                let badge = Rect::from_min_size(bounds.left_top() + vec2(4.0, 4.0), vec2(18.0, 16.0));
-                if badge.width() < bounds.width() {
-                    painter.rect_filled(badge, 3.0, Color32::from_black_alpha(150));
-                    painter.text(badge.center(), Align2::CENTER_CENTER, ph::FILM_STRIP, FontId::proportional(12.0), Color32::WHITE);
+                let corners = r.corners().map(|c| view.to_screen(rect, c));
+                let bounds = screen_bounds(&corners);
+                if !bounds.intersects(rect) {
+                    continue;
                 }
-            }
-            if !r.plans.is_empty() && bounds.width() > 36.0 {
-                let pin = Rect::from_min_size(bounds.right_top() + vec2(-22.0, 4.0), vec2(18.0, 16.0));
-                painter.rect_filled(pin, 3.0, Color32::from_black_alpha(150));
-                painter.text(pin.center(), Align2::CENTER_CENTER, ph::PUSH_PIN, FontId::proportional(12.0), Color32::WHITE);
+                let alpha = (r.opacity * win_alpha).clamp(0.0, 1.0);
+                if r.kind != Kind::Image {
+                    paint_block(&painter, r, &corners, view.zoom, alpha);
+                    continue;
+                }
+                let frame = self.refs_shown_frame(r, now);
+                let shown_px = r.size[0].max(r.size[1]) as f32 * r.scale * view.zoom * ppp;
+                let (shown, broken) = self.refs_texture(ctx, r, frame, shown_px);
+                if crop_id == Some(r.id) {
+                    // Le recadrage : l'image entière, pâle, derrière ce qui reste visible.
+                    let full = r.full_local();
+                    let fc = [full.left_top(), full.right_top(), full.right_bottom(), full.left_bottom()].map(|p| view.to_screen(rect, r.from_local(p.to_vec2())));
+                    paint_quad(&painter, r, &fc, shown.as_ref().map(|s| s.id), broken, 0.32 * win_alpha, [0.0, 0.0, 1.0, 1.0]);
+                }
+                paint_quad(&painter, r, &corners, shown.as_ref().map(|s| s.id), broken, alpha, r.crop_rect());
+                if let (Some(c), true) = (&r.video, self.refs.vids.get(&r.id).is_some_and(|v| v.playing)) {
+                    // Les deux images d'après, pour que la lecture ne bute pas sur le décodage.
+                    for ahead in 1..=2 {
+                        let next = c.index_of(self.refs.vids.get(&r.id).map_or(0.0, |v| v.pos) + ahead as f64);
+                        let _ = self.refs_texture(ctx, r, next, shown_px);
+                    }
+                }
+                if r.is_video() {
+                    let badge = Rect::from_min_size(bounds.left_top() + vec2(4.0, 4.0), vec2(18.0, 16.0));
+                    if badge.width() < bounds.width() {
+                        painter.rect_filled(badge, 3.0, Color32::from_black_alpha(150));
+                        painter.text(badge.center(), Align2::CENTER_CENTER, ph::FILM_STRIP, FontId::proportional(12.0), Color32::WHITE);
+                    }
+                }
+                if !r.plans.is_empty() && bounds.width() > 36.0 {
+                    let pin = Rect::from_min_size(bounds.right_top() + vec2(-22.0, 4.0), vec2(18.0, 16.0));
+                    painter.rect_filled(pin, 3.0, Color32::from_black_alpha(150));
+                    painter.text(pin.center(), Align2::CENTER_CENTER, ph::PUSH_PIN, FontId::proportional(12.0), Color32::WHITE);
+                }
             }
         }
         // La sélection et ses poignées.
@@ -1108,28 +1096,46 @@ impl App {
                 painter.add(Shape::closed_line(corners.to_vec(), Stroke::new(2.0_f32, theme::contour())));
             }
         }
-        if let (&[id], true) = (selected.as_slice(), self.refs.drag.as_ref().is_none_or(|d| !matches!(d.grab, Grab::Pan))) {
+        if let (&[id], true) = (selected.as_slice(), self.refs.drag.as_ref().is_none_or(|d| matches!(d.grab, Grab::Scale { .. } | Grab::Rotate { .. } | Grab::FrameSize { .. } | Grab::Crop { .. } | Grab::Move(..)))) {
             if let Some(r) = items.iter().find(|r| r.id == id) {
-                for h in handles(r, &view, rect) {
-                    // Le curseur dit ce que la poignée fait.
-                    if hover.is_some_and(|p| (p - h.0).length() <= 8.0) {
-                        ctx.set_cursor_icon(if h.1 { egui::CursorIcon::Grab } else { egui::CursorIcon::ResizeNwSe });
-                    }
-                    let r = Rect::from_center_size(h.0, vec2(9.0, 9.0));
-                    if h.1 {
-                        painter.circle_filled(h.0, 5.5, theme::contour());
-                        painter.circle_stroke(h.0, 5.5, Stroke::new(1.0_f32, theme::fond()));
-                    } else {
-                        painter.rect_filled(r, 1.5, theme::contour());
-                        painter.rect_stroke(r, 1.5, Stroke::new(1.0_f32, theme::fond()), StrokeKind::Inside);
+                let moving = self.refs.drag.as_ref().is_some_and(|d| matches!(d.grab, Grab::Move(..)));
+                if !moving {
+                    for h in handles_for(r, &view, rect, crop_id == Some(id)) {
+                        // Le curseur dit ce que la poignée fait.
+                        if hover.is_some_and(|p| (p - h.pos).length() <= 8.0) {
+                            ctx.set_cursor_icon(match h.kind {
+                                Handle::Rotate => egui::CursorIcon::Grab,
+                                Handle::Scale => egui::CursorIcon::ResizeNwSe,
+                                Handle::Frame(hx, hy) | Handle::Crop(hx, hy) => match (hx, hy) {
+                                    (0, _) => egui::CursorIcon::ResizeVertical,
+                                    (_, 0) => egui::CursorIcon::ResizeHorizontal,
+                                    (a, b) if a == b => egui::CursorIcon::ResizeNwSe,
+                                    _ => egui::CursorIcon::ResizeNeSw,
+                                },
+                            });
+                        }
+                        let sq = Rect::from_center_size(h.pos, vec2(9.0, 9.0));
+                        if matches!(h.kind, Handle::Rotate) {
+                            painter.circle_filled(h.pos, 5.5, theme::contour());
+                            painter.circle_stroke(h.pos, 5.5, Stroke::new(1.0_f32, theme::fond()));
+                        } else {
+                            painter.rect_filled(sq, 1.5, theme::contour());
+                            painter.rect_stroke(sq, 1.5, Stroke::new(1.0_f32, theme::fond()), StrokeKind::Inside);
+                        }
                     }
                 }
             }
         }
+        // Le rectangle de sélection.
+        if let (Some(Drag { grab: Grab::Marquee { .. }, press, moved: true, .. }), Some(cur)) = (self.refs.drag.as_ref(), latest) {
+            let area = Rect::from_two_pos(*press, cur);
+            painter.rect_filled(area, 0.0, theme::accent().gamma_multiply(0.14));
+            painter.rect_stroke(area, 0.0, Stroke::new(1.0_f32, theme::accent()), StrokeKind::Inside);
+        }
         // Le texte d'accueil, ou celui d'un filtre qui ne laisse rien.
         if items.is_empty() {
             let text = if self.doc.references.is_empty() {
-                "Aucune référence.\nDépose des images ou une vidéo ici, colle une image (Ctrl+V)\nou utilise les boutons du haut."
+                "Planche vide.\nDépose des images ou une vidéo ici, colle une image (Ctrl+V),\nposes-y un post-it, un texte ou un cadre avec les boutons du haut."
             } else {
                 "Aucune référence ne correspond au filtre."
             };
@@ -1145,11 +1151,15 @@ impl App {
             painter.rect_stroke(rect.shrink(3.0), 6.0, Stroke::new(2.5_f32, theme::accent()), StrokeKind::Inside);
             painter.text(rect.center_top() + vec2(0.0, 18.0), Align2::CENTER_CENTER, "Déposer pour ajouter aux références", FontId::proportional(14.0), theme::accent_texte());
         }
-        self.refs.view = Some(view);
+        self.refs.shown_view = Some(view);
+        if !(auto_view && view == initial_view) {
+            self.refs.view = Some(view);
+        }
 
-        // Double-clic : sur une référence, la cadrer ; sur le fond, tout voir.
+        // Double-clic : sur un texte, le modifier ; sur une image, la cadrer ; sur le fond, tout voir.
         if resp.double_clicked() {
             match hovered_id {
+                Some(id) if self.doc.reference(id).is_some_and(|r| r.kind.has_text()) => self.refs.text_focus = Some(id),
                 Some(id) => self.refs_zoom_to(id, false, ppp),
                 None => self.refs.view = None,
             }
@@ -1157,6 +1167,7 @@ impl App {
         // Clic droit : le menu de la référence dessous (qui devient choisie), ou du fond.
         if resp.secondary_clicked() {
             self.refs.menu_target = hovered_id;
+            self.refs.menu_at = hover.map(|p| view.to_board(rect, p));
             if let Some(id) = hovered_id {
                 if !self.refs.sel.contains(&id) {
                     self.refs.sel = vec![id];
@@ -1168,34 +1179,40 @@ impl App {
         if let (Some(id), None) = (hovered_id, self.refs.drag.as_ref()) {
             if let Some(r) = self.doc.reference(id) {
                 let tip = reference_tip(r);
+                let title = r.title();
                 resp.on_hover_ui_at_pointer(|ui| {
-                    ui.label(RichText::new(&r.name).strong());
+                    ui.label(RichText::new(title).strong());
                     ui.label(RichText::new(tip).small().color(theme::texte_doux()));
                 });
             }
         }
     }
 
-    /// Un appui sur le tableau (hors pipette) : une poignée de la référence choisie, une référence, ou
-    /// le fond (qui lâche la sélection et déplace le tableau).
-    fn refs_press(&mut self, items: &[Reference], view: &View, rect: Rect, p: Pos2, shift: bool) {
+    /// Un appui sur le tableau (hors pipette) : une poignée de l'élément choisi, un élément, ou le fond (qui lâche
+    /// la sélection et déplace la vue, ou dessine un rectangle de sélection).
+    fn refs_press(&mut self, items: &[Reference], view: &View, rect: Rect, p: Pos2, mods: egui::Modifiers, space: bool) {
+        let shift = mods.shift;
         let ids = self.refs_selected();
         if let [id] = ids.as_slice() {
             if let Some(r) = items.iter().find(|r| r.id == *id) {
-                let hs = handles(r, view, rect);
-                if let Some(k) = hs.iter().position(|h| (h.0 - p).length() <= 8.0) {
+                let crop = self.refs.crop_mode == Some(*id);
+                let hs = handles_for(r, view, rect, crop);
+                if let Some(h) = hs.iter().find(|h| (h.pos - p).length() <= 8.0) {
                     let center = r.center();
                     let board_p = view.to_board(rect, p);
-                    let grab = if hs[k].1 {
-                        Grab::Rotate { id: *id, start: r.rotation, center, angle: (board_p - center).angle() }
-                    } else {
-                        Grab::Scale { id: *id, start: r.scale, center, dist: (board_p - center).length().max(1e-3) }
+                    let grab = match h.kind {
+                        Handle::Rotate => Grab::Rotate { id: *id, start: r.rotation, center, angle: (board_p - center).angle() },
+                        Handle::Scale => Grab::Scale { id: *id, start: r.scale, center, dist: (board_p - center).length().max(1e-3) },
+                        Handle::Frame(hx, hy) => Grab::FrameSize { id: *id, start: r.clone(), hx, hy },
+                        Handle::Crop(hx, hy) => Grab::Crop { id: *id, start: r.clone(), hx, hy },
                     };
                     self.refs_begin_drag(grab, p);
                     return;
                 }
             }
         }
+        // (Un appui ailleurs referme le recadrage.)
+        self.refs.crop_mode = None;
         let board_p = view.to_board(rect, p);
         match references::hit_test(items.iter(), board_p) {
             Some(id) => {
@@ -1208,24 +1225,38 @@ impl App {
                 } else if !self.refs.sel.contains(&id) {
                     self.refs.sel = vec![id];
                 }
-                let starts: Vec<(u64, Pos2)> = self.refs_selected().into_iter().filter_map(|i| self.doc.reference(i).map(|r| (i, r.center()))).collect();
+                // Un cadre emporte ce qu'il contient.
+                let moving = self.doc.with_frame_contents(&self.refs_selected());
+                let starts: Vec<(u64, Pos2)> = moving.into_iter().filter_map(|i| self.doc.reference(i).map(|r| (i, r.center()))).collect();
                 self.refs_begin_drag(Grab::Move(starts, id), p);
             }
             None => {
-                if !shift {
-                    self.refs.sel.clear();
+                if !space && (self.refs.marquee_default || shift || mods.command || mods.ctrl) {
+                    let base = if shift { self.refs_selected() } else { Vec::new() };
+                    if !shift {
+                        self.refs.sel.clear();
+                    }
+                    self.refs_begin_drag(Grab::Marquee { base, add: shift }, p);
+                } else {
+                    if !shift {
+                        self.refs.sel.clear();
+                    }
+                    self.refs_begin_drag(Grab::Pan, p);
                 }
-                self.refs_begin_drag(Grab::Pan, p);
             }
         }
     }
 
     fn refs_begin_drag(&mut self, grab: Grab, press: Pos2) {
-        let pan = matches!(grab, Grab::Pan);
+        // (Un geste fige la vue : elle ne doit pas se recadrer pendant qu'on déplace.)
+        if self.refs.view.is_none() {
+            self.refs.view = self.refs.shown_view;
+        }
+        let no_step = matches!(grab, Grab::Pan | Grab::Marquee { .. });
         self.refs.drag = Some(Drag {
             grab,
             press,
-            snap: (!pan).then(|| self.snapshot()),
+            snap: (!no_step).then(|| self.snapshot()),
             before: self.doc.references.clone(),
             serial: self.history.serial(),
             epoch: self.doc_epoch,
@@ -1262,21 +1293,56 @@ impl App {
                     r.rotation = references::dragged_rotation(*start, *center, *angle, at, shift);
                 }
             }
+            Grab::FrameSize { id, start, hx, hy } => {
+                let at = view.to_board(rect, cur);
+                let (c, size) = start.frame_resized(*hx, *hy, at);
+                if let Some(r) = self.doc.reference_mut(*id) {
+                    (r.x, r.y, r.size) = (c.x, c.y, size);
+                }
+            }
+            Grab::Crop { id, start, hx, hy } => {
+                let at = view.to_board(rect, cur);
+                let mut n = start.clone();
+                n.set_crop(Some(start.crop_from_drag(*hx, *hy, at)));
+                if let Some(r) = self.doc.reference_mut(*id) {
+                    (r.x, r.y, r.crop) = (n.x, n.y, n.crop);
+                }
+            }
+            Grab::Marquee { base, add } => {
+                let area = Rect::from_two_pos(view.to_board(rect, d.press), view.to_board(rect, cur));
+                let visible: Vec<u64> = self.refs_filtered().iter().map(|r| r.id).collect();
+                let mut sel = if *add { base.clone() } else { Vec::new() };
+                for id in self.doc.references_in(area, &visible) {
+                    if !sel.contains(&id) {
+                        sel.push(id);
+                    }
+                }
+                self.refs.sel = sel;
+            }
         }
     }
 
     /// Le bouton est lâché : une étape d'annulation si quelque chose a bougé.
     fn refs_end_drag(&mut self, d: Drag) {
         let name = match d.grab {
-            Grab::Pan => return,
+            Grab::Pan | Grab::Marquee { .. } => return,
             Grab::Move(ref s, _) if s.len() > 1 => "Déplacer les références",
             Grab::Move(..) => "Déplacer la référence",
             Grab::Scale { .. } => "Redimensionner la référence",
             Grab::Rotate { .. } => "Tourner la référence",
+            Grab::FrameSize { .. } => "Redimensionner le cadre",
+            Grab::Crop { .. } => "Recadrer l'image",
         };
         if d.moved && self.doc.references != d.before {
             if let Some(snap) = d.snap {
                 self.refs_push(snap, name);
+            }
+            let now = crate::planchref::now_secs();
+            let before = d.before;
+            for r in &mut self.doc.references {
+                if before.iter().find(|b| b.id == r.id).is_some_and(|b| b != r) {
+                    r.touch(now);
+                }
             }
         }
     }
@@ -1299,70 +1365,24 @@ impl App {
         }
     }
 
-    /// Le menu d'un clic droit sur le tableau, la grille ou la liste.
-    fn refs_menu(&mut self, ui: &mut egui::Ui, ppp: f32) {
-        let target = self.refs.menu_target.filter(|id| self.doc.reference(*id).is_some());
-        if let Some(id) = target {
-            if ui.button("Ajuster à l'écran").clicked() {
-                self.refs_zoom_to(id, false, ppp);
-                ui.close_menu();
-            }
-            if ui.button("Taille réelle (100 %)").clicked() {
-                self.refs_zoom_to(id, true, ppp);
-                ui.close_menu();
-            }
-            if ui.button("Mettre devant").clicked() {
-                self.refs_step("Mettre la référence devant");
-                self.doc.raise_reference(id);
-                ui.close_menu();
-            }
-            ui.separator();
-            if ui.button("Retourner de gauche à droite").clicked() {
-                self.refs_apply("Retourner la référence", |r| r.flip_h = !r.flip_h);
-                ui.close_menu();
-            }
-            if ui.button("Retourner de haut en bas").clicked() {
-                self.refs_apply("Retourner la référence", |r| r.flip_v = !r.flip_v);
-                ui.close_menu();
-            }
-            if ui.button("Niveaux de gris (oui / non)").clicked() {
-                self.refs_apply("Références en niveaux de gris", |r| r.grey = !r.grey);
-                ui.close_menu();
-            }
-            if ui.button("Remettre droite").clicked() {
-                self.refs_apply("Tourner la référence", |r| r.rotation = 0.0);
-                ui.close_menu();
-            }
-            ui.separator();
-            if ui.button("Lier au plan courant (ou délier)").clicked() {
-                self.refs_toggle_link();
-                ui.close_menu();
-            }
-            if ui.button("Supprimer").clicked() {
-                self.refs_delete_selected();
-                ui.close_menu();
-            }
+    // ------------------------------------------------------------------ la grille et la liste
+
+    /// La vignette d'un élément dans la grille ou la liste : l'image (recadrée, à son opacité) ou le bloc de texte, dans `pic`.
+    fn refs_paint_thumb(&mut self, ctx: &egui::Context, painter: &egui::Painter, r: &Reference, pic: Rect, shown_px: f32, now: f64) {
+        let c = r.crop_rect();
+        let (w, h) = (r.size[0].max(1) as f32 * (c[2] - c[0]), r.size[1].max(1) as f32 * (c[3] - c[1]));
+        let fit = (pic.width() / w).min(pic.height() / h);
+        let quad = Rect::from_center_size(pic.center(), vec2(w, h) * fit);
+        let corners = [quad.left_top(), quad.right_top(), quad.right_bottom(), quad.left_bottom()];
+        let upright = Reference { rotation: 0.0, ..r.clone() };
+        if r.kind == Kind::Image {
+            let frame = self.refs_shown_frame(r, now);
+            let (shown, broken) = self.refs_texture(ctx, r, frame, shown_px);
+            paint_quad(painter, &upright, &corners, shown.as_ref().map(|s| s.id), broken, r.opacity, c);
         } else {
-            if ui.button("Tout voir").clicked() {
-                self.run_action("references.tout_voir");
-                ui.close_menu();
-            }
-            if ui.button("Importer des images…").clicked() {
-                ui.close_menu();
-                self.run_action("references.importer_image");
-            }
-            if ui.button("Importer une vidéo…").clicked() {
-                ui.close_menu();
-                self.run_action("references.importer_video");
-            }
-            if ui.button("Coller une image").clicked() {
-                ui.close_menu();
-                self.run_action("references.coller");
-            }
+            paint_block(painter, &upright, &corners, fit / r.scale.max(1e-3), 1.0);
         }
     }
-
-    // ------------------------------------------------------------------ la grille et la liste
 
     /// Une référence de la grille ou de la liste qu'on prend pour la glisser vers la planche des Vignettes (celles qui sont choisies
     /// avec elle partent ensemble).
@@ -1412,14 +1432,8 @@ impl App {
                 let on = self.refs.sel.contains(&r.id);
                 painter.rect_filled(rect, 4.0, if on { theme::eleve() } else { theme::champ() });
                 let pic = Rect::from_min_max(rect.min + vec2(4.0, 4.0), rect.max - vec2(4.0, label_h));
-                let frame = self.refs_shown_frame(r, now);
-                let (shown, broken) = self.refs_texture(ctx, r, frame, cell * ppp);
-                let fit = (pic.width() / r.size[0].max(1) as f32).min(pic.height() / r.size[1].max(1) as f32);
-                let quad = Rect::from_center_size(pic.center(), vec2(r.size[0] as f32, r.size[1] as f32) * fit);
-                let corners = [quad.left_top(), quad.right_top(), quad.right_bottom(), quad.left_bottom()];
-                let upright = Reference { rotation: 0.0, ..r.clone() };
-                paint_quad(&painter, &upright, &corners, shown.as_ref().map(|s| s.id), broken);
-                painter.text(rect.left_bottom() + vec2(6.0, -label_h * 0.5), Align2::LEFT_CENTER, &r.name, FontId::proportional(11.0), theme::texte());
+                self.refs_paint_thumb(ctx, &painter, r, pic, cell * ppp, now);
+                painter.text(rect.left_bottom() + vec2(6.0, -label_h * 0.5), Align2::LEFT_CENTER, r.title(), FontId::proportional(11.0), theme::texte());
                 if r.is_video() {
                     painter.text(rect.right_bottom() + vec2(-6.0, -label_h * 0.5), Align2::RIGHT_CENTER, ph::FILM_STRIP, FontId::proportional(12.0), theme::texte_doux());
                 }
@@ -1469,15 +1483,10 @@ impl App {
                     painter.rect_filled(rect, 3.0, theme::champ());
                 }
                 let pic = Rect::from_min_size(rect.min + vec2(3.0, 3.0), vec2(56.0, rect.height() - 6.0));
-                let frame = self.refs_shown_frame(r, now);
-                let (shown, broken) = self.refs_texture(ctx, r, frame, 56.0 * ppp);
-                let fit = (pic.width() / r.size[0].max(1) as f32).min(pic.height() / r.size[1].max(1) as f32);
-                let quad = Rect::from_center_size(pic.center(), vec2(r.size[0] as f32, r.size[1] as f32) * fit);
-                let corners = [quad.left_top(), quad.right_top(), quad.right_bottom(), quad.left_bottom()];
-                paint_quad(&painter, &Reference { rotation: 0.0, ..r.clone() }, &corners, shown.as_ref().map(|s| s.id), broken);
+                self.refs_paint_thumb(ctx, &painter, r, pic, 56.0 * ppp, now);
                 let x = pic.right() + 8.0;
-                painter.text(pos2(x, rect.top() + 12.0), Align2::LEFT_CENTER, &r.name, FontId::proportional(12.5), theme::texte());
-                let mut sub = format!("{}×{}", r.size[0], r.size[1]);
+                painter.text(pos2(x, rect.top() + 12.0), Align2::LEFT_CENTER, r.title(), FontId::proportional(12.5), theme::texte());
+                let mut sub = if r.kind == Kind::Image { format!("{}×{}", r.size[0], r.size[1]) } else { crate::planchref::kind_name(r.kind).to_string() };
                 if let Some(c) = &r.video {
                     sub.push_str(&format!("  ·  vidéo, {} images", c.frames));
                 }
@@ -1524,29 +1533,63 @@ fn screen_bounds(c: &[Pos2; 4]) -> Rect {
     r
 }
 
-/// Les poignées de la référence choisie, en points d'écran : les quatre coins (agrandir) puis le rond
-/// au-dessus du bord haut (tourner, `true`).
-fn handles(r: &Reference, view: &View, rect: Rect) -> Vec<(Pos2, bool)> {
-    let mut out: Vec<(Pos2, bool)> = r.corners().iter().map(|c| (view.to_screen(rect, *c), false)).collect();
+/// Ce qu'une poignée fait.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Handle {
+    Scale,
+    Rotate,
+    /// Un coin de cadre (changer sa taille), `(hx, hy)` de -1 à 1.
+    Frame(i8, i8),
+    /// Un coin ou un milieu de côté du recadrage.
+    Crop(i8, i8),
+}
+
+struct HandleAt {
+    pos: Pos2,
+    kind: Handle,
+}
+
+/// Les poignées de l'élément choisi, en points d'écran. Image ou texte : les quatre coins (agrandir) puis le rond au-dessus
+/// du bord haut (tourner). Cadre : ses quatre coins (changer sa taille), pas de rotation. Recadrage en cours : les huit
+/// poignées du rectangle visible.
+fn handles_for(r: &Reference, view: &View, rect: Rect, crop: bool) -> Vec<HandleAt> {
+    let at = |v: Vec2| view.to_screen(rect, r.from_local(v));
+    if crop {
+        let mut out = Vec::new();
+        for hy in -1..=1_i8 {
+            for hx in -1..=1_i8 {
+                if hx != 0 || hy != 0 {
+                    out.push(HandleAt { pos: at(r.crop_handle_local(hx, hy)), kind: Handle::Crop(hx, hy) });
+                }
+            }
+        }
+        return out;
+    }
+    if r.kind == Kind::Frame {
+        return [(-1, -1), (1, -1), (1, 1), (-1, 1)].into_iter().map(|(hx, hy)| HandleAt { pos: at(r.crop_handle_local(hx, hy)), kind: Handle::Frame(hx, hy) }).collect();
+    }
+    let mut out: Vec<HandleAt> = r.corners().iter().map(|c| HandleAt { pos: view.to_screen(rect, *c), kind: Handle::Scale }).collect();
     let top = view.to_screen(rect, r.from_local(vec2(0.0, -r.half().y)));
     let center = view.to_screen(rect, r.center());
     let away = (top - center).normalized();
     let away = if away.is_finite() { away } else { vec2(0.0, -1.0) };
-    out.push((top + away * 22.0, true));
+    out.push(HandleAt { pos: top + away * 22.0, kind: Handle::Rotate });
     out
 }
 
 /// Dessine la texture sur le quadrilatère `corners` (haut-gauche, haut-droite, bas-droite,
-/// bas-gauche), miroirs compris ; à défaut, un cadre qui attend (ou signale l'image illisible).
-fn paint_quad(painter: &egui::Painter, r: &Reference, corners: &[Pos2; 4], tex: Option<TextureId>, broken: bool) {
+/// bas-gauche), miroirs compris, à l'opacité `alpha` ; `crop` : la part visible de l'image (0 à 1) ; à défaut de texture,
+/// un cadre qui attend (ou signale l'image illisible).
+fn paint_quad(painter: &egui::Painter, r: &Reference, corners: &[Pos2; 4], tex: Option<TextureId>, broken: bool, alpha: f32, crop: [f32; 4]) {
     match tex {
         Some(id) => {
-            let (u0, u1) = if r.flip_h { (1.0, 0.0) } else { (0.0, 1.0) };
-            let (v0, v1) = if r.flip_v { (1.0, 0.0) } else { (0.0, 1.0) };
+            let (u0, u1) = if r.flip_h { (crop[2], crop[0]) } else { (crop[0], crop[2]) };
+            let (v0, v1) = if r.flip_v { (crop[3], crop[1]) } else { (crop[1], crop[3]) };
             let uvs = [pos2(u0, v0), pos2(u1, v0), pos2(u1, v1), pos2(u0, v1)];
+            let tint = Color32::from_white_alpha((alpha.clamp(0.0, 1.0) * 255.0).round() as u8);
             let mut mesh = egui::Mesh::with_texture(id);
             for (p, uv) in corners.iter().zip(uvs) {
-                mesh.vertices.push(egui::epaint::Vertex { pos: *p, uv, color: Color32::WHITE });
+                mesh.vertices.push(egui::epaint::Vertex { pos: *p, uv, color: tint });
             }
             mesh.indices.extend([0, 1, 2, 0, 2, 3]);
             painter.add(Shape::mesh(mesh));
@@ -1562,9 +1605,56 @@ fn paint_quad(painter: &egui::Painter, r: &Reference, corners: &[Pos2; 4], tex: 
     }
 }
 
-/// Le texte d'une bulle : taille, étiquettes, plans.
+/// Dessine un post-it, un texte, un titre ou un cadre sur le quadrilatère `corners`, à l'opacité `alpha` ; `zoom` : les points
+/// d'écran par unité du tableau. Le texte tourne avec l'élément ; il n'est pas dessiné quand il serait illisible.
+fn paint_block(painter: &egui::Painter, r: &Reference, corners: &[Pos2; 4], zoom: f32, alpha: f32) {
+    let a = alpha.clamp(0.0, 1.0);
+    let tint = r.tint();
+    let paint = |c: [u8; 3], op: f32| Color32::from_rgba_unmultiplied(c[0], c[1], c[2], (op * a * 255.0).round() as u8);
+    let s = r.scale * zoom;
+    let u = (corners[1] - corners[0]).normalized();
+    let v = (corners[3] - corners[0]).normalized();
+    let (u, v) = if u.is_finite() && v.is_finite() { (u, v) } else { (vec2(1.0, 0.0), vec2(0.0, 1.0)) };
+    let bounds = screen_bounds(corners);
+    let ink = |c: Color32| c.gamma_multiply(a);
+    let (text_color, hint) = match r.kind {
+        Kind::Note => {
+            let shadow = corners.map(|c| c + vec2(3.0, 4.0) * s.clamp(0.25, 1.5));
+            painter.add(Shape::convex_polygon(shadow.to_vec(), Color32::from_black_alpha((70.0 * a) as u8), Stroke::NONE));
+            painter.add(Shape::convex_polygon(corners.to_vec(), paint(tint, 1.0), Stroke::NONE));
+            (ink(Color32::from_rgb(38, 34, 26)), "Double-clic pour écrire")
+        }
+        Kind::Frame => {
+            painter.add(Shape::convex_polygon(corners.to_vec(), paint(tint, 0.09), Stroke::new(1.5_f32, paint(tint, 0.75))));
+            let h = crate::planchref::FRAME_STRIP * s;
+            let strip = [corners[0], corners[1], corners[1] + v * h, corners[0] + v * h];
+            painter.add(Shape::convex_polygon(strip.to_vec(), paint(tint, 0.85), Stroke::NONE));
+            (ink(Color32::from_rgb(38, 34, 26)), "Cadre")
+        }
+        Kind::Title => (if r.color == 0 { ink(theme::texte()) } else { paint(tint, 1.0) }, "Titre"),
+        _ => (if r.color == 0 { ink(theme::texte()) } else { paint(tint, 1.0) }, "Texte"),
+    };
+    let px = crate::planchref::font_size(r.kind) * s;
+    if px < 3.0 || bounds.width() < 8.0 {
+        return;
+    }
+    let pad = 10.0 * s;
+    let (text, color) = if r.text.is_empty() { (hint.to_string(), text_color.gamma_multiply(0.45)) } else { (r.text.clone(), text_color) };
+    let font = FontId::proportional(px);
+    let (origin, galley) = if r.kind == Kind::Frame {
+        let h = crate::planchref::FRAME_STRIP * s;
+        (corners[0] + u * pad * 0.8 + v * ((h - px * 1.25) * 0.5).max(0.0), painter.layout_no_wrap(text, font, color))
+    } else {
+        let wrap = ((r.size[0] as f32 - 20.0) * s).max(px);
+        (corners[0] + u * pad + v * pad, painter.layout(text, font, color, wrap))
+    };
+    let clipped = painter.with_clip_rect(bounds.intersect(painter.clip_rect()).expand(1.0));
+    clipped.add(egui::epaint::TextShape::new(origin, galley, color).with_angle(r.rotation.to_radians()));
+}
+
+/// Le texte d'une bulle : taille, étiquettes, plans, auteur et date.
 fn reference_tip(r: &Reference) -> String {
-    let mut s = format!("{}×{} pixels", r.size[0], r.size[1]);
+    let mut s = if r.kind == Kind::Image { format!("{}×{} pixels", r.size[0], r.size[1]) } else { crate::planchref::kind_name(r.kind).to_string() };
     if let Some(c) = &r.video {
         s.push_str(&format!(", vidéo de {} images à {:.3} i/s", c.frames, c.fps));
     }
@@ -1573,6 +1663,11 @@ fn reference_tip(r: &Reference) -> String {
     }
     if !r.plans.is_empty() {
         s.push_str(&format!("\nLiée à {} plan(s)", r.plans.len()));
+    }
+    if !r.author.is_empty() || r.created > 0 {
+        let who = if r.author.is_empty() { String::new() } else { format!(" par {}", r.author) };
+        let when = if r.created > 0 { format!(", le {}", crate::planchref::date_fr(r.created)) } else { String::new() };
+        s.push_str(&format!("\nPosé{who}{when}"));
     }
     s
 }

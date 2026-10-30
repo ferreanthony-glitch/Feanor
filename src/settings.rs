@@ -248,6 +248,10 @@ pub struct Settings {
     /// dégradés de départ (`degrade::enregistres_d_origine`) ; la liste vidée à la main reste vide.
     #[serde(default, rename = "degrades_enregistres", skip_serializing_if = "Option::is_none")]
     pub degrades: Option<Vec<crate::degrade::Enregistre>>,
+    /// La fenêtre à part de la planche de références (détachée, plein écran, écran, transparente, toujours au-dessus ;
+    /// `planchref::FenetreReglage`). Un réglage du poste : rien n'est écrit dans le projet.
+    #[serde(default, rename = "references_fenetre", skip_serializing_if = "crate::planchref::FenetreReglage::est_defaut")]
+    pub references_fenetre: crate::planchref::FenetreReglage,
 }
 
 fn default_passe_partout() -> u8 {
@@ -348,6 +352,7 @@ impl Default for Settings {
             mon_panneau: Default::default(),
             scenario_taille: Default::default(),
             degrades: None,
+            references_fenetre: Default::default(),
         }
     }
 }

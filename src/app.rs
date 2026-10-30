@@ -4930,6 +4930,15 @@ impl eframe::App for App {
         });
     }
 
+    /// Le fond derrière tout ce que l'interface peint : celui d'eframe, sauf quand la fenêtre à part de la planche de
+    /// références est transparente (`planchref.rs`) : alors rien ne le remplit.
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        if self.settings.references_fenetre.transparent && self.detached.iter().any(|d| d.panneau == crate::dock::Pane::References) {
+            return [0.0, 0.0, 0.0, 0.0];
+        }
+        egui::Color32::from_rgba_unmultiplied(12, 12, 12, 180).to_normalized_gamma_f32()
+    }
+
     /// Fermeture normale (même sans enregistrer) : voir `App::fermeture`.
     fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
         self.fermeture();

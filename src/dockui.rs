@@ -241,14 +241,36 @@ impl App {
             } else {
                 builder = builder.with_inner_size([300.0, 420.0]);
             }
-            // Références : « toujours au-dessus » pour la garder à l'œil sur un autre écran.
-            if d.panneau == Pane::References && self.refs.always_on_top {
-                builder = builder.with_always_on_top();
+            // Références : « toujours au-dessus », plein écran (sur l'écran choisi), fenêtre transparente (`planchref.rs`).
+            let refs_window = (d.panneau == Pane::References).then(|| self.settings.references_fenetre.clone().nettoye());
+            let mut fullscreen_now = false;
+            if let Some(rf) = &refs_window {
+                if rf.on_top {
+                    builder = builder.with_always_on_top();
+                }
+                if rf.transparent {
+                    builder = builder.with_transparent(true);
+                }
+                // (Le plein écran attend, quelques images, que la fenêtre soit arrivée sur son écran.)
+                fullscreen_now = rf.fullscreen && self.refs.fs_delay == 0;
+                builder = builder.with_fullscreen(fullscreen_now);
+                if rf.fullscreen && d.largeur <= 0.0 {
+                    // Une fenêtre qui s'ouvre en plein écran : sur l'écran choisi.
+                    if let Some(e) = crate::planchref::ecran_numero(&crate::planchref::ecrans(), rf.screen) {
+                        let ppp = ctx.pixels_per_point().max(0.25);
+                        builder = builder.with_position([(e.x + 40) as f32 / ppp, (e.y + 40) as f32 / ppp]);
+                    }
+                }
             }
-            let id = egui::ViewportId::from_hash_of(("panneau détaché", d.panneau));
+            let id = match &refs_window {
+                Some(rf) => crate::referencesui::planchrefui::refs_viewport(rf.transparent),
+                None => egui::ViewportId::from_hash_of(("panneau détaché", d.panneau)),
+            };
+            let transparent = refs_window.as_ref().is_some_and(|rf| rf.transparent);
             let pane = d.panneau;
             let (closed, rect) = ctx.show_viewport_immediate(id, builder, |ctx, _class| {
-                egui::CentralPanel::default().show(ctx, |ui| {
+                let panel = if transparent { egui::CentralPanel::default().frame(egui::Frame::NONE) } else { egui::CentralPanel::default() };
+                panel.show(ctx, |ui| {
                     if matches!(
                         pane,
                         Pane::Montage
@@ -275,7 +297,8 @@ impl App {
                     (v.close_requested(), rect)
                 })
             });
-            if let Some((pos, size)) = rect {
+            // (En plein écran, la fenêtre prend tout l'écran : on ne retient pas cette place, mais celle d'avant.)
+            if let (Some((pos, size)), false) = (rect, fullscreen_now) {
                 let d = &mut self.detached[i];
                 (d.x, d.y, d.largeur, d.hauteur) = (pos.x, pos.y, size.x, size.y);
             }
