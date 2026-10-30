@@ -941,6 +941,16 @@ mod zipwrite;
 mod nommage;
 #[cfg(test)]
 mod nommage_tests;
+mod nommageui;
+mod sha256;
+mod listeplans;
+mod listeplansui;
+mod paquet;
+mod paquetui;
+mod modeleepisode;
+mod modeleepisodeui;
+#[cfg(test)]
+mod pipeline_tests;
 // Transitions du montage (fondus, volet, noir) : modèle, rendu, interface.
 mod transitions;
 #[cfg(test)]

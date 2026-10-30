@@ -2062,6 +2062,27 @@ action = "fichier.exporter_fiche"
 touches = []
 source = "SHOT (sans touche)"
 
+# Pipeline de production (étape 1) : liste des plans pour le suivi, paquet de livraison, modèle de noms, modèle d'épisode.
+[[raccourci]]
+action = "fichier.exporter_liste_plans"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fichier.exporter_paquet"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "projet.noms_production"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "projet.enregistrer_modele_episode"
+touches = []
+source = "SHOT (sans touche)"
+
 # Relecture par le réalisateur : exporter la page HTML, importer les notes qui reviennent.
 [[raccourci]]
 action = "fichier.exporter_relecture"

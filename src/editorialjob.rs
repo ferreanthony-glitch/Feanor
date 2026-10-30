@@ -209,6 +209,17 @@ impl EditorialJob {
         self
     }
 
+    /// Le cliché du projet, déjà pris (le paquet de livraison en prend un seul pour toutes ses tâches).
+    pub fn with_snapshot(mut self, snapshot: Arc<Document>) -> EditorialJob {
+        self.snapshot = Some(snapshot);
+        self
+    }
+
+    /// Le cliché de l'export, quand il est pris.
+    pub fn snapshot(&self) -> Option<Arc<Document>> {
+        self.snapshot.clone()
+    }
+
     /// Fait avancer l'export. Le projet n'est lu que pour le copier au départ (par tranches de quelques
     /// millisecondes) ; ensuite les images se calculent sur d'autres fils et cet appel ne fait que regarder.
     pub fn step(&mut self, doc: &Document, budget: Duration) {

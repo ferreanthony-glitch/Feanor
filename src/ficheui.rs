@@ -136,7 +136,7 @@ impl App {
     }
 
     /// L'envoi de référence et l'état des plans à son égard (rien : le relevé n'est pas prêt).
-    fn fiche_etats(&self, envoi: Option<u64>) -> (Option<String>, Option<HashMap<u64, Etat>>) {
+    pub(crate) fn fiche_etats(&self, envoi: Option<u64>) -> (Option<String>, Option<HashMap<u64, Etat>>) {
         let Some(e) = envoi.and_then(|i| self.doc.envois.trouve(i)).or_else(|| self.doc.envois.dernier()) else { return (None, None) };
         if self.envois_ui.empreintes_vides() {
             return (Some(e.nom.clone()), None);

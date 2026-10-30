@@ -1396,8 +1396,7 @@ impl ExportJob {
         self
     }
 
-    /// Le cliché de l'export, quand il est pris.
-    #[cfg(test)]
+    /// Le cliché de l'export, quand il est pris (le paquet de livraison le donne aux tâches suivantes : un seul cliché pour tout le paquet).
     pub fn snapshot(&self) -> Option<Arc<Document>> {
         self.snapshot.clone()
     }

@@ -834,6 +834,11 @@ impl App {
         self.editorial_window(ctx);
         // Fiche technique (tableur) : sa fenêtre (`ficheui.rs`).
         self.fiche_window(ctx);
+        // Pipeline de production : liste des plans, paquet de livraison, noms et production, modèles d'épisode.
+        self.liste_plans_window(ctx);
+        self.paquet_window(ctx);
+        self.noms_window(ctx);
+        self.modele_episode_window(ctx);
         // Vignettes : « Effacer les annotations ? » (`annotationsui.rs`).
         self.annot_fenetre(ctx);
         // Vignettes : les images déposées sur la planche (`deposer.rs`).
