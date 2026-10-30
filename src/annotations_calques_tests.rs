@@ -419,8 +419,8 @@ fn the_planche_panel_lists_the_layers_with_the_drawing_below_and_one_click_switc
     b.chauffer(3);
     let reprises = texte_en(&b, "Reprises").expect("le calque « Reprises » est listé");
     let annotations = texte_en(&b, "Annotations").expect("le calque « Annotations » est listé");
-    let dessin = texte_pres_de(&b, "Dessin", annotations.x).expect("« Dessin » est listé");
-    assert!(texte_en(&b, "Calques").is_some());
+    let dessin = texte_pres_de(&b, "Dessin de la case", annotations.x).expect("« Dessin de la case » est listé");
+    assert!(texte_en(&b, "Calques d'annotation").is_some());
     assert!(reprises.y < annotations.y && annotations.y < dessin.y, "le dernier calque est dessus, « Dessin » tout en bas");
     // Au départ aucun outil d'annotation : le dessin de la case est visé.
     assert!(!b.app.annot_actif());
@@ -437,7 +437,7 @@ fn the_planche_panel_lists_the_layers_with_the_drawing_below_and_one_click_switc
     assert_eq!(b.app.vignettes.annot.outil, Some(crate::annotationsui::Outil::Lasso));
     // Un clic sur « Dessin » range les outils d'annotation.
     let ax = texte_en(&b, "Annotations").unwrap().x;
-    let dessin = texte_pres_de(&b, "Dessin", ax).unwrap();
+    let dessin = texte_pres_de(&b, "Dessin de la case", ax).unwrap();
     clic(&mut b, dessin);
     assert!(!b.app.annot_actif());
     // L'œil d'un calque : le premier œil de la liste est celui du calque du dessus.

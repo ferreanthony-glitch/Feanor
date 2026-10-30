@@ -468,7 +468,7 @@ impl App {
             if bulles::icone(ui, ph::CHECKS, "Tout cocher", "Toutes les colonnes.", "").clicked() {
                 w.ordre.iter_mut().for_each(|c| c.1 = true);
             }
-            if bulles::icone(ui, ph::SQUARE, "Tout décocher", "Aucune colonne : à vous de choisir.", "").clicked() {
+            if bulles::icone(ui, ph::SQUARE, "Tout décocher", "Aucune colonne : à toi de choisir.", "").clicked() {
                 w.ordre.iter_mut().for_each(|c| c.1 = false);
             }
             if bulles::icone(ui, ph::ARROW_COUNTER_CLOCKWISE, "Colonnes d'origine", "Les colonnes et leur ordre proposés d'office.", "").clicked() {

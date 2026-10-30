@@ -179,7 +179,7 @@ impl App {
                 ui.separator();
                 ui.separator();
                 self.action_item(ui, "Aller à un plan…", "scene.aller_a");
-                self.action_item(ui, "Propriétés du plan", "panneau.proprietes");
+                self.action_item(ui, "Fiche du plan", "panneau.proprietes");
                 ui.menu_button("Plans", |ui| self.plans_menu(ui));
                 self.action_item(ui, "Marque d'image ici (ajouter / retirer)", "marque.basculer");
                 self.action_item(ui, "Nouveau commentaire ici", "commentaire.ajouter");
@@ -235,6 +235,7 @@ impl App {
                 ui.menu_button("Images", |ui| self.images_menu(ui));
                 ui.separator();
                 self.action_item(ui, "Colorier par zones…", "calque.colorier_zones");
+                self.action_item(ui, "Propager la peinture du calque…", "calque.propager");
             }); }
             if menu_actif(ui, sans_projet, "Affichage") { ui.menu_button("Affichage", |ui| {
                 // Zoom, rotation, miroir, pelure, table lumineuse : boutons sous le dessin.
@@ -267,14 +268,14 @@ impl App {
                 self.action_item(ui, "Plein écran", "vue.plein_ecran");
                 self.action_item(ui, "Performance (temps de l'interface)", "vue.performance");
             }); }
-            // Les fonctions à l'essai, rangées ensemble (Anthony, 2026-10-20) : elles peuvent changer.
-            if menu_actif(ui, sans_projet, "Labo") { ui.menu_button("Labo", |ui| {
-                ui.label(RichText::new("Fonctions à l'essai : elles peuvent encore changer.").weak());
+            // Les fonctions à l'essai, rangées ensemble (Anthony, 2026-10-20), cachées d'origine (premier contact, 2026-10-30) : le menu
+            // Labo ne paraît qu'avec Préférences > Général > « Afficher les fonctions expérimentales ». Ce qui était mûr (la propagation
+            // de la peinture) est sorti à sa place, dans le menu Animation.
+            if self.settings.experimental && menu_actif(ui, sans_projet, "Labo") { ui.menu_button("Labo", |ui| {
+                ui.label(RichText::new("Fonctions expérimentales : elles peuvent encore changer.").weak());
                 ui.separator();
                 self.action_item(ui, "Suggestions sonores…", "vue.suggestions_sonores");
                 self.action_item(ui, "Lire le storyboard (proposer des sons)", "suggestion.lire");
-                ui.separator();
-                self.action_item(ui, "Propager la peinture du calque…", "calque.propager");
                 ui.separator();
                 // Mon panneau : l'essai d'un panneau à soi (commandes, brosses, outils perso ; `monpanneau.rs`).
                 self.action_item(ui, "Mon panneau (essai)", crate::monpanneau::ACTION);
@@ -286,10 +287,11 @@ impl App {
                 self.action_item(ui, "Palette de commandes…", "aide.palette");
                 self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
                 self.action_item(ui, "Régler le stylet à ma main…", "aide.regler_stylet");
+                self.action_item(ui, "Visite rapide « Premier jour »…", "aide.visite");
                 self.action_item(ui, "Revoir les conseils", "aide.conseils");
+                self.action_item(ui, "Régler SHOT pour cette machine…", "aide.diagnostic");
                 ui.separator();
                 self.action_item(ui, "À propos de SHOT…", "aide.a_propos");
-                self.action_item(ui, "Diagnostic des performances…", "aide.diagnostic");
             });
 
             // (Sans projet, il n'y a pas d'espace de travail à choisir : les quatre mots ne paraissent pas.)

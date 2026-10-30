@@ -56,7 +56,7 @@ pub(crate) fn raison_calque(doc: &Document, l: &Layer) -> Option<String> {
     // dans un dessin de la fusion.
     if l.couleur.as_ref().is_some_and(|c| c.dessins_griffonnages().any(|g| doc.cels.get(&g).is_some_and(|c| !c.is_empty()))) {
         return Some(format!(
-            "« {nom} » est un calque de couleur qui a des griffonnages : son remplissage suit les traits. Gomme ses griffonnages d'abord, ou garde le calque."
+            "« {nom} » est un calque de couleur qui a des griffonnages : son aplat suit les traits. Gomme ses griffonnages d'abord, ou garde le calque."
         ));
     }
     if !l.visible {

@@ -67,7 +67,7 @@ impl App {
     /// ses autres réglages, et chaque disposition de fenêtre déjà enregistrée le montre sans avoir à le chercher.
     fn vignettes_calques(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Calques").small().weak());
+            ui.label(RichText::new("Calques d'annotation").small().weak());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let resp = ui.add(egui::Button::new(RichText::new(ph::PLUS)).min_size(egui::vec2(22.0, 0.0)));
                 let action = "vignettes.annotation_calque_nouveau";
@@ -81,7 +81,7 @@ impl App {
         let haut = calques.first().map(|c| c.0);
         let bas = calques.last().map(|c| c.0);
         if calques.is_empty() {
-            ui.label(RichText::new("Aucun calque d'annotation : le premier trait en crée un.").small().weak());
+            ui.label(RichText::new("Aucune annotation pour l'instant : le premier trait d'annotation crée son calque.").small().weak());
         }
         // Le glissé d'un calque (Anthony, 2026-10-24) : on tient un calque par son nom et on le dépose entre deux autres ; le dépôt est une
         // seule étape d'annulation. Les rectangles des lignes, du haut vers le bas, disent où il tombe (`annotationsui::depot_du_calque`).
@@ -152,8 +152,8 @@ impl App {
             ui.spacing_mut().item_spacing.x = 3.0;
             ui.add_space(25.0);
             let largeur = (ui.available_width() - 26.0).max(40.0);
-            let resp = ui.add(egui::Button::new(crate::bulles::encre_etat(RichText::new("Dessin"), on)).selected(on).min_size(egui::vec2(largeur, 0.0)));
-            let resp = crate::bulles::bulle(resp, "Dessin", &format!("Le dessin de la case : le pinceau, la gomme et le lasso de la barre d'outils y agissent (calque « {courant} »). Un clic range les outils d'annotation."), "");
+            let resp = ui.add(egui::Button::new(crate::bulles::encre_etat(RichText::new("Dessin de la case"), on)).selected(on).min_size(egui::vec2(largeur, 0.0)));
+            let resp = crate::bulles::bulle(resp, "Dessin de la case", &format!("Le dessin de la case : le pinceau, la gomme et le lasso de la barre d'outils y agissent (calque « {courant} »). Un clic range les outils d'annotation."), "");
             if resp.clicked() {
                 self.annot_viser_le_dessin();
             }

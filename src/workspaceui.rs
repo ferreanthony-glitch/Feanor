@@ -196,7 +196,9 @@ impl App {
             // Un par un…
             let animation = self.mode == Mode::Animation;
             // (Mon panneau, l'essai du Labo, ne s'ouvre que par le menu Labo : rien ne change ici.)
-            for pane in Pane::ALL.into_iter().filter(|p| *p != Pane::Canvas && *p != Pane::MonPanneau && (animation || !p.animation_only())) {
+            // (Les suggestions sonores sont expérimentales : Affichage > Panneaux ne les montre qu'avec la case des Préférences, ou ouvertes.)
+            let experimental = self.settings.experimental;
+            for pane in Pane::ALL.into_iter().filter(|p| *p != Pane::Canvas && *p != Pane::MonPanneau && (animation || !p.animation_only()) && (experimental || *p != Pane::SuggestionsSonores || panes.contains(*p))) {
                 let mut on = panes.contains(pane);
                 let apart = if detached.iter().any(|d| d.panneau == pane) { " (fenêtre à part)" } else { "" };
                 if ui.checkbox(&mut on, format!("{}  {}{apart}", pane.icon(), pane.name())).changed() {

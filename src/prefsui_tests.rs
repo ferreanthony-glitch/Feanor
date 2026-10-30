@@ -204,7 +204,11 @@ fn the_window_opens_from_its_action_wider_than_tall_with_the_tab_list_on_the_lef
     assert!(fen.width() >= 700.0 && fen.height() >= 400.0 && fen.height() <= 900.0, "{fen:?}");
     let ecran = Rect::from_min_size(pos2(0.0, 0.0), vec2(1400.0, 900.0));
     assert!(ecran.contains_rect(fen), "dans l'écran : {fen:?}");
-    // La liste des onglets : neuf noms l'un sous l'autre, à gauche ; le contenu à droite.
+    // La génération de sons est expérimentale : son onglet ne se montre qu'avec la case « Afficher les fonctions expérimentales ».
+    assert!(!textes_de_la_fenetre(&b).iter().any(|(t, _)| t.ends_with(Onglet::Generation.nom()) && t.contains("  ")), "onglet Génération caché d'origine");
+    b.app.settings.experimental = true;
+    b.chauffer(3);
+    // La liste des onglets : les noms l'un sous l'autre, à gauche ; le contenu à droite.
     let textes = textes_de_la_fenetre(&b);
     let mut pos = Vec::new();
     for o in Onglet::TOUS {

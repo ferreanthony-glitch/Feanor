@@ -50,6 +50,7 @@ pub(crate) fn action_sans_projet(action: &str) -> bool {
             | "aide.a_propos"
             | "aide.diagnostic"
             | "aide.conseils"
+            | "aide.visite"
             | "aide.regler_stylet"
             | "vue.plein_ecran"
             | "vue.performance"

@@ -188,11 +188,11 @@ fn the_montage_layout_is_made_for_editing() {
     let layout = Espace::Montage.defaut();
     let dock = layout.dock_layout();
     // Le lecteur et la bande, la fiche du plan, et les panneaux du travail de montage.
-    for p in [Pane::Canvas, Pane::Montage, Pane::Sheet, Pane::Bruitages, Pane::SuggestionsSonores, Pane::Comments, Pane::History] {
+    for p in [Pane::Canvas, Pane::Montage, Pane::Sheet, Pane::Bruitages, Pane::Comments, Pane::History] {
         assert!(dock.contains(p), "{p:?} est dans l'espace Montage");
     }
     // Pas de panneaux de dessin, ni de feuille d'exposition, ni de références (à la demande).
-    for p in [Pane::Tools, Pane::Color, Pane::Brushes, Pane::ToolOptions, Pane::Guides, Pane::Layers, Pane::Effects, Pane::XSheet, Pane::References] {
+    for p in [Pane::Tools, Pane::Color, Pane::Brushes, Pane::ToolOptions, Pane::Guides, Pane::Layers, Pane::Effects, Pane::XSheet, Pane::References, Pane::SuggestionsSonores] {
         assert!(!dock.contains(p), "{p:?} n'est pas dans l'espace Montage");
     }
     assert!(!layout.tool_bar, "pas de barre d'outils verticale");

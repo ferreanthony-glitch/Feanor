@@ -326,7 +326,7 @@ impl App {
                 let mut griffonne = link.griffonner;
                 let key = self.raccourci("calque.griffonner");
                 let resp = ui.checkbox(&mut griffonne, "Griffonner (remplir les zones d'un coup)").on_hover_text(format!(
-                    "Les couleurs que tu poses (pinceau, crayon, gomme, pot) remplissent d'un coup la zone fermée par le trait où elles tombent, sous le trait ; le remplissage se refait tout seul quand le trait change. La gomme efface alors les griffonnages.{}",
+                    "Les couleurs que tu poses (pinceau, crayon, gomme, pot) remplissent d'un coup la zone fermée par le trait où elles tombent, sous le trait ; l'aplat se refait tout seul quand le trait change. La gomme efface alors les griffonnages.{}",
                     if key.is_empty() { String::new() } else { format!(" ({key})") }
                 ));
                 if resp.changed() {

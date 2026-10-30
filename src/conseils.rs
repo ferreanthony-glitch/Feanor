@@ -158,15 +158,19 @@ impl App {
             self.confort.conseil = None;
         }
         // Un seul à la fois, et seulement quand rien d'autre ne demande l'attention.
-        let libre = self.confort.conseil.is_none() && !self.welcome_shown() && !self.diag.offre && !self.modal_open();
+        // Au compte-gouttes (premier contact, 2026-10-30) : la visite « Premier jour » passe d'abord, et une séance ne montre qu'un seul
+        // conseil de plus (« Revoir les conseils » les rend tous, un par séance).
+        let place = self.confort.conseils_vus_seance < self.confort.conseils_max_seance && !self.visite_occupe();
+        let libre = place && self.confort.conseil.is_none() && !self.welcome_shown() && !self.diag.offre && !self.modal_open() && !self.fenetre_ouverte();
         if let Some(c) = a_montrer(endroit, &self.settings.conseils, libre) {
             self.confort.conseil = Some(c);
+            self.confort.conseils_vus_seance += 1;
             if self.settings.conseils.marquer(c) {
                 let _ = self.settings.save();
             }
         }
         let Some(c) = self.confort.conseil else { return };
-        if self.welcome_shown() || self.diag.offre || self.modal_open() {
+        if self.welcome_shown() || self.diag.offre || self.modal_open() || self.fenetre_ouverte() {
             return;
         }
         let texte = self.conseil_texte(c);
@@ -194,7 +198,7 @@ impl App {
     pub(crate) fn conseils_prefs_ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             let b = ui.button("Revoir les conseils");
-            if crate::bulles::bulle(b, "Revoir les conseils", "Les petites bulles qui expliquent un endroit de SHOT la première fois reviennent, une par endroit.", &self.raccourci("aide.conseils")).clicked() {
+            if crate::bulles::bulle(b, "Revoir les conseils", "Les petites bulles qui expliquent un endroit de SHOT la première fois reviennent, une par endroit et une par séance.", &self.raccourci("aide.conseils")).clicked() {
                 self.revoir_les_conseils();
             }
             ui.label(RichText::new(format!("{} conseil(s) vu(s) sur {}.", self.settings.conseils.nombre_vus(), Conseil::TOUS.len())).small().weak());
@@ -205,6 +209,8 @@ impl App {
     pub(crate) fn revoir_les_conseils(&mut self) {
         self.settings.conseils.tout_oublier();
         self.confort.conseil = None;
+        // (Demandé à la main : le conseil de l'endroit où l'on est revient tout de suite, comme avant.)
+        self.confort.conseils_vus_seance = 0;
         let _ = self.settings.save();
         self.status = "Les conseils reviendront, un par endroit, la prochaine fois que tu y passes.".into();
     }

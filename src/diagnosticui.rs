@@ -303,16 +303,16 @@ impl App {
                 let zone = if pied { (ui.available_height() - 84.0).max(160.0) } else { ui.available_height().max(120.0) };
                 egui::ScrollArea::vertical().max_height(zone).auto_shrink([false, !pied]).show(ui, |ui| {
                     ui.set_min_width(590.0);
-                    ui.label(RichText::new("SHOT détecte votre machine, la mesure une quinzaine de secondes, puis propose des réglages. Rien n'est appliqué sans votre accord.").color(theme::texte_doux()));
+                    ui.label(RichText::new("SHOT détecte ta machine, la mesure une quinzaine de secondes, puis propose des réglages. Rien n'est appliqué sans ton accord.").color(theme::texte_doux()));
                     ui.add_space(6.0);
                     let resultats = self.diag.fait.is_some() && self.diag.banc.is_none();
                     if let Some(m) = &self.diag.fait.as_ref().map(|t| &t.materiel).or(self.diag.materiel.as_ref()) {
                         if resultats {
                             // (Les résultats d'abord : la machine se déplie, sa ligne reste lue.)
-                            egui::CollapsingHeader::new(RichText::new("Votre machine").strong()).default_open(false).show(ui, |ui| machine_grille(ui, m));
+                            egui::CollapsingHeader::new(RichText::new("Ta machine").strong()).default_open(false).show(ui, |ui| machine_grille(ui, m));
                             ui.label(RichText::new(m.resume()).small().color(theme::texte_doux()));
                         } else {
-                            ui.label(RichText::new("Votre machine").strong());
+                            ui.label(RichText::new("Ta machine").strong());
                             machine_grille(ui, m);
                         }
                     }
@@ -382,7 +382,7 @@ impl App {
                     ui.add_space(6.0);
                     // Les réglages du profil, un par un.
                     let cible = d::reglages_du_profil(self.diag.profil, &t.materiel);
-                    ui.label(RichText::new("Réglages à poser (décochez ceux que vous ne voulez pas)").strong());
+                    ui.label(RichText::new("Réglages à poser (décoche ceux dont tu ne veux pas)").strong());
                     let courant = self.settings.perf;
                     egui::Grid::new("diag_reglages").num_columns(3).spacing([10.0, 4.0]).show(ui, |ui| {
                         for (k, i) in Interrupteur::TOUS.iter().enumerate() {
@@ -486,7 +486,7 @@ impl App {
             egui::Frame::popup(ui.style()).fill(theme::eleve()).stroke(egui::Stroke::new(1.0_f32, theme::accent_texte())).show(ui, |ui| {
                 ui.set_max_width(400.0);
                 ui.label(RichText::new("Régler SHOT pour cette machine ?").strong().color(theme::texte_fort()));
-                ui.add(egui::Label::new(RichText::new("SHOT peut détecter votre matériel, le mesurer une quinzaine de secondes et proposer des réglages de performance. Rien n'est appliqué sans votre accord. Plus tard : Aide > Diagnostic des performances.").color(theme::texte_doux())).wrap());
+                ui.add(egui::Label::new(RichText::new("SHOT peut détecter ton matériel, le mesurer une quinzaine de secondes et proposer des réglages de performance. Rien n'est appliqué sans ton accord. Plus tard : Aide > Régler SHOT pour cette machine.").color(theme::texte_doux())).wrap());
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     if crate::bulles::bulle(ui.button(RichText::new("Lancer le diagnostic").strong()), "Lancer le diagnostic", "Ouvre le diagnostic et démarre les mesures.", "").clicked() {

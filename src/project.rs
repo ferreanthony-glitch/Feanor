@@ -3255,7 +3255,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
     let convertis = crate::griffonnage::migrer_ctg_document(&mut doc, &anciens_ctg);
     if convertis > 0 {
         warnings.push(format!(
-            "{convertis} calque{} CTG converti{} en calque de couleur : même image, griffonnages gardés (le remplissage se refait tout seul quand les traits changent).",
+            "{convertis} calque{} CTG converti{} en calque de couleur : même image, griffonnages gardés (l'aplat se refait tout seul quand les traits changent).",
             if convertis > 1 { "s" } else { "" },
             if convertis > 1 { "s" } else { "" }
         ));

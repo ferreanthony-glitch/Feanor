@@ -14,6 +14,8 @@ fn banc() -> Banc {
     let mut b = banc_taille(Document::with_frame(64, 48, 24), false, 1600, 900);
     b.garder_formes = true;
     b.app.confort.conseils_actifs = true;
+    // (Ces essais passent d'un endroit à l'autre dans la même séance ; le compte-gouttes — un conseil par séance — est dans `premierjour_tests`.)
+    b.app.confort.conseils_max_seance = usize::MAX;
     b.chauffer(6);
     b
 }

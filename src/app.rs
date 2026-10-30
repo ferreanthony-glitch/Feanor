@@ -1030,7 +1030,11 @@ impl App {
         let paint_on_aplat = settings.paint_on_aplat && !paint_behind;
         // Diagnostic des performances : proposé une fois, sur une machine qui n'en a jamais eu
         // (jamais dans les essais).
-        let diag_offer = reel && settings.diagnostic.a_proposer();
+        // (Plus au lancement : « Régler SHOT pour cette machine ? » est la dernière étape de la visite « Premier jour », et dans le menu
+        // Aide ; `premierjour.rs`.)
+        let diag_offer = false;
+        // La visite « Premier jour » : proposée sur une machine neuve (aucun conseil vu, aucun diagnostic), jamais dans les essais.
+        let visite_offre = reel && settings.premier_jour.a_proposer(settings.conseils.est_vide() && settings.diagnostic.a_proposer());
         // La bibliothèque de pinceaux : les pinceaux de SHOT tout de suite ; les importés (des
         // centaines : plusieurs secondes de calcul sur une machine chargée) se lisent sur un autre fil
         // et arrivent à une image d'écran quelconque (`poll_brushes`). La lire ici retardait la
@@ -1267,7 +1271,7 @@ impl App {
             activity: 0.0,
             perf_applied: Default::default(),
             diag: crate::diagnosticui::DiagnosticUi::new(diag_offer, wgpu_render_state),
-            confort: crate::confort::Confort::new(reel),
+            confort: crate::confort::Confort { visite_offre, ..crate::confort::Confort::new(reel) },
             bsel: None,
             bdrag: None,
             sel_box: None,
@@ -3000,7 +3004,7 @@ impl App {
         let snap = self.snapshot();
         let n = self.layers().len() + 1;
         let name = match kind {
-            LayerKind::Vector => format!("Vecto {n}"),
+            LayerKind::Vector => format!("Vectoriel {n}"),
             LayerKind::Bitmap => format!("Calque {n}"),
         };
         let at = self.cur_layer + 1;
@@ -5170,6 +5174,7 @@ impl App {
             let _t = crate::perf::section("fenêtres et dialogues");
             self.dialogs(ctx);
             // Conseils d'un seul passage, aide-mémoire des raccourcis (tenu), réglage du stylet (`confort.rs`).
+            self.visite_ui(ctx);
             self.conseils_ui(ctx);
             self.aide_touches_tick(ctx);
             self.reglage_stylet_ui(ctx);

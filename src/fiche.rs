@@ -212,7 +212,7 @@ impl Colonne {
             Colonne::Numero => "Le numéro du plan, tel que la numérotation le donne (12A pour un plan inséré).",
             Colonne::Reference => "Le nom du clip de l'export pour le montage : SQ01_PL012A, avec _V2 si le plan a plusieurs versions.",
             Colonne::Version => "V2 quand le plan a plusieurs versions (la version affichée) ; vide sinon.",
-            Colonne::Nom => "Le nom que vous avez donné au plan, s'il en a un.",
+            Colonne::Nom => "Le nom que tu as donné au plan, s'il en a un.",
             Colonne::Image => "En mode « une ligne par image de storyboard » : le rang de l'image dans le plan (2 / 3).",
             Colonne::DureeImages => "La durée en images (un nombre, pour calculer dessus).",
             Colonne::DureeSecondes => "La durée en secondes (un nombre).",

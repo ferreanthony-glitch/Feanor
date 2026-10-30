@@ -80,7 +80,7 @@ impl Onglet {
     /// Une phrase sous le titre de l'onglet, et dans la bulle de son entrée.
     pub fn resume(self) -> &'static str {
         match self {
-            Onglet::General => "Ouvrir et rouvrir les projets, copies de secours, collage entre projets, conseils.",
+            Onglet::General => "Ouvrir et rouvrir les projets, copies de secours, collage entre projets, conseils et visite, fonctions expérimentales.",
             Onglet::Apparence => "Le thème et ses couleurs, la taille de l'interface, la hauteur des panneaux, les images de l'accueil.",
             Onglet::Dessin => "Le curseur du stylet, sa pression, le point fixe des poignées, le passe-partout autour de la caméra et le tremblement du trait par défaut.",
             Onglet::Montage => "Les pistes du montage et leur repliage, la durée d'un nouveau plan.",
@@ -133,8 +133,10 @@ pub enum Groupe {
     Echelle,
     /// Les images de l'écran d'accueil : le dossier, l'import, la liste (`accueilimages.rs`).
     ImagesAccueil,
-    /// Conseils d'un seul passage (`conseils.rs`).
+    /// Conseils d'un seul passage (`conseils.rs`) et visite « Premier jour » (`premierjour.rs`).
     Conseils,
+    /// Les fonctions à l'essai, cachées d'origine : le menu Labo et les panneaux expérimentaux (`settings.experimental`).
+    Experimental,
     /// Régler le stylet à sa main (`reglagestylet.rs`).
     StyletMain,
     /// Les poignées des boîtes de la Sélection et du Transformer : point fixe et centre des rotations (`selbox.rs`).
@@ -169,7 +171,8 @@ impl Groupe {
             Groupe::Affichage => "Affichage",
             Groupe::Echelle => "Taille de l'interface",
             Groupe::ImagesAccueil => "Images d'accueil",
-            Groupe::Conseils => "Conseils",
+            Groupe::Conseils => "Conseils et visite",
+            Groupe::Experimental => "Fonctions expérimentales",
             Groupe::StyletMain => "Stylet à ma main",
             Groupe::Poignees => "Poignées de la Sélection et du Transformer",
         }
@@ -208,6 +211,8 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::General, G::Collage, "collage.cadence", "Cadence différente", "images secondes durée fps"),
     r(O::General, G::Collage, "collage.demander", "Demander à chaque collage", "question fenêtre"),
     r(O::General, G::Conseils, "general.conseils", "Revoir les conseils", "bulles aide premiers pas astuces"),
+    r(O::General, G::Conseils, "general.visite", "Refaire la visite rapide", "premier jour parcours guide découverte débuter tutoriel"),
+    r(O::General, G::Experimental, "general.experimental", "Afficher les fonctions expérimentales", "labo essai suggestions sonores mon panneau banc d'essai moteur de dessin"),
     // ---- Apparence
     r(O::Apparence, G::Theme, "theme.choix", "Thème", "gris sombre clair personnalisé rétablir"),
     r(O::Apparence, G::Theme, "theme.panneau", "Fond des panneaux", "couleur"),

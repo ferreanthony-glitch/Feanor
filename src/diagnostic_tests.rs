@@ -397,7 +397,7 @@ fn the_offer_is_shown_once_never_applies_anything_and_never_in_the_tests() {
     b.image(Vec::new(), 1.0 / 60.0);
     let joint = b.textes.join("\n");
     assert!(joint.contains("Lancer le diagnostic") && joint.contains("Plus tard"), "{joint}");
-    assert!(joint.contains("Rien n'est appliqué sans votre accord"), "{joint}");
+    assert!(joint.contains("Rien n'est appliqué sans ton accord"), "{joint}");
     // Le message est fixe : visible, il ne fait pas repeindre l'application en continu.
     assert!(crate::perf_tests::se_reposer(&mut b, 3000) < 3000, "SHOT se repose, message affiché");
     let reveils: Vec<_> = (0..6).map(|_| b.image(Vec::new(), 0.5).reveil).collect();
@@ -429,7 +429,7 @@ fn the_action_opens_the_window_with_the_detected_machine() {
     b.image(Vec::new(), 1.0 / 60.0);
     b.image(Vec::new(), 1.0 / 60.0);
     let joint = b.textes.join("\n");
-    for attendu in ["Diagnostic des performances", "Votre machine", "Processeur", "Mémoire vive", "Lancer le diagnostic", "Écran"] {
+    for attendu in ["Diagnostic des performances", "Ta machine", "Processeur", "Mémoire vive", "Lancer le diagnostic", "Écran"] {
         assert!(joint.contains(attendu), "« {attendu} » manque :\n{joint}");
     }
     // Rien n'a été lancé ni changé.

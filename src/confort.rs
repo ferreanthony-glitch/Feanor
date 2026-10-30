@@ -18,6 +18,12 @@ pub(crate) struct Confort {
     pub conseils_actifs: bool,
     /// Le conseil à l'écran (jamais deux à la fois).
     pub conseil: Option<Conseil>,
+    /// Combien de conseils ont été montrés depuis le lancement, et combien une séance en montre au plus (un seul : les conseils
+    /// arrivent au compte-gouttes, pas tous le premier jour ; `premierjour.rs`).
+    pub conseils_vus_seance: usize,
+    pub conseils_max_seance: usize,
+    /// La visite « Premier jour » est à proposer dans cette séance (machine neuve, ou « Plus tard » d'avant) et n'a pas encore reçu de réponse.
+    pub visite_offre: bool,
     /// L'aide-mémoire des raccourcis est montrée : sa touche est tenue.
     pub aide_touches: bool,
     /// La fenêtre « Régler le stylet à ma main ».
@@ -35,7 +41,7 @@ pub(crate) struct Confort {
 
 impl Confort {
     pub(crate) fn new(reel: bool) -> Self {
-        Confort { conseils_actifs: reel, ..Default::default() }
+        Confort { conseils_actifs: reel, conseils_max_seance: 1, ..Default::default() }
     }
 }
 
@@ -47,6 +53,7 @@ impl crate::app::App {
             // Tenue : la carte est dessinée tant que la touche est enfoncée (`aidetouches.rs`), l'appui lui-même ne fait rien.
             "aide.aide_memoire" => {}
             "aide.conseils" => self.revoir_les_conseils(),
+            "aide.visite" => self.visite_lancer(),
             "aide.regler_stylet" => self.ouvrir_reglage_stylet(),
             _ => return false,
         }
