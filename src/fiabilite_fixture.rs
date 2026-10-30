@@ -666,7 +666,13 @@ pub(crate) fn instantane(doc: &Document, sans_pixels: &BTreeSet<CelId>) -> Strin
     transitions.sort_by_key(|t| t.id);
     let _ = writeln!(s, "transitions {:?}", transitions);
     let _ = writeln!(s, "personnages {:?}", doc.personnages);
-    let _ = writeln!(s, "annotations {:?}", doc.annotations);
+    // (Le rang de secours d'un trait n'est pas une modification du projet : `Annotations::noter_rangs` le met à jour quand la planche est
+    // à l'écran, sans étape d'annulation. Il n'est pas dans la photo.)
+    let mut annotations = doc.annotations.clone();
+    for t in &mut annotations.traces {
+        t.anchor.rank = 0;
+    }
+    let _ = writeln!(s, "annotations {:?}", annotations);
     // (Sans les index internes : un dictionnaire se dit dans un ordre qui change d'une lecture à l'autre.)
     let _ = writeln!(s, "scenario {:?}", doc.scenario.as_ref().map(|g| (g.id, &g.nom, &g.script, &g.liens)));
     // (Le fichier des sons proposés les range dans l'ordre du film : leurs numéros sont gardés.)

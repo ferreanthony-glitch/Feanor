@@ -2259,6 +2259,46 @@ touches = []
 source = "SHOT (sans touche)"
 
 [[raccourci]]
+action = "sequence.nouvelle_fin"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "sequence.nouvelle_avec_cases"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "sequence.couper_ici"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "sequence.renommer"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "sequence.afficher_toutes"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "sequence.afficher_courante"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "sequence.afficher_aucune_autre"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "sequence.afficher_ordre_film"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
 action = "montage.debut_a_tete"
 touches = []
 source = "SHOT (sans touche)"

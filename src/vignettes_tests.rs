@@ -97,16 +97,30 @@ fn an_unreadable_or_empty_crayonnes_file_is_silent_and_untouched() {
 // ------------------------------------------------------------------------------------ à l'écran
 
 /// Quatre plans, six vignettes : le plan 1 et ses deux marques d'image (cartes 0, 1, 2), les plans 2, 3 (cartes 3, 4)
-/// dans la première séquence, le plan 4 (carte 5) dans une deuxième.
+/// et le plan 4 (carte 5), tous dans la même séquence. (Avant la planche par séquences, le plan 4 était dans une deuxième séquence ; la planche
+/// n'aurait plus la même forme : un titre entre les deux. Les essais qui veulent deux séquences les font eux-mêmes, `deux_sequences`.)
 pub(crate) fn quatre_plans() -> Document {
     let mut doc = Document::with_frame(160, 90, 24);
     doc.add_panel_after(0);
     doc.add_panel_after(1);
     let p2 = doc.add_scene_after(2);
     let p3 = doc.add_scene_after(p2);
-    doc.add_sequence_after(p3);
+    doc.add_scene_after(p3);
     doc.into_plans();
     assert_eq!((doc.panels.len(), doc.panels[0].marks.len()), (4, 2));
+    doc
+}
+
+/// Quatre plans en deux séquences : les trois premiers plans, puis le plan 4 seul (`quatre_plans` d'avant la planche par séquences).
+pub(crate) fn deux_sequences() -> Document {
+    let mut doc = quatre_plans();
+    let dernier = doc.panels.len() - 1;
+    let q = doc.new_sequence();
+    let scene = doc.panels[dernier].scene;
+    if let Some(s) = doc.scene_mut(scene) {
+        s.sequence = q;
+    }
+    doc.normalize();
     doc
 }
 
@@ -404,12 +418,7 @@ fn clicking_a_grey_bar_cuts_the_plan_and_a_black_bar_joins_two_plans_each_one_na
     b.app.run_action("edition.annuler");
     assert_eq!(b.app.doc.panels.len(), plans);
     assert_eq!(b.app.doc.panels[0].marks.len(), 2);
-    // Deux plans de séquences différentes ne se réunissent pas : un message, pas d'étape.
-    let n = pas_d_annulation(&b);
-    { let p = barre(&b, 4).center(); clic(&mut b, p); }
-    assert_eq!(b.app.doc.panels.len(), plans);
-    assert_eq!(pas_d_annulation(&b), n);
-    assert!(b.app.status.contains("séquence"), "{}", b.app.status);
+    // (Deux plans de séquences différentes n'ont plus de barre entre eux : le titre de la séquence les sépare, planchesequences_tests.rs.)
 }
 
 #[test]

@@ -53,9 +53,11 @@ pub(crate) enum Cible {
 pub(crate) fn cible_en(layout: &BoardLayout, p: Pos2, bar_min_w: f32) -> Option<Cible> {
     match board::hit(layout, p, bar_min_w) {
         Hit::Thumb(k) | Hit::Note(k) => Some(Cible::Case(layout.cards[k].id)),
-        Hit::Bar(after) if after + 1 >= layout.cards.len() => Some(Cible::Vide(0)),
+        // (La barre devant la première case vide d'une séquence : cette case-là.)
+        Hit::Bar(after) if layout.vers_pale(after) => Some(Cible::Vide(layout.groupe_de(after).map_or(0, |g| g.vides.start))),
         Hit::Bar(after) => Some(Cible::Entre(layout.cards[after].id)),
         Hit::Empty(e) => Some(Cible::Vide(e)),
+        Hit::Titre(_) => None,
         Hit::Nothing => layout.cards.iter().find(|c| c.card.contains(p)).map(|c| Cible::Case(c.id)),
     }
 }
@@ -286,9 +288,15 @@ impl App {
                     }
                     _ => None,
                 }
+                .or_else(|| match cible {
+                    // Une case vide : à la fin de sa séquence, qui est la dernière du film quand la planche n'en a qu'une.
+                    Cible::Vide(e) => layout.groupes.iter().find(|g| g.vides.contains(&e)).map(|g| g.dernier_plan.min(d.panels.len() - 1)),
+                    _ => None,
+                })
                 .unwrap_or(d.panels.len() - 1);
                 let mut vides = match cible {
-                    Cible::Vide(e) => e,
+                    // (Les cases vides qui précèdent celle-ci dans sa séquence deviennent des plans vides.)
+                    Cible::Vide(e) => layout.groupes.iter().find(|g| g.vides.contains(&e)).map_or(e, |g| e - g.vides.start),
                     _ => 0,
                 };
                 if let (Cible::Vide(0), true) = (cible, joins) {

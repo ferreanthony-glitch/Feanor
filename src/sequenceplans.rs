@@ -84,8 +84,18 @@ impl Document {
 impl App {
     /// « Nouvelle séquence avec les plans choisis » : une étape d'annulation. Rien si aucun plan n'est choisi en plus du courant.
     pub(crate) fn new_sequence_from_chosen(&mut self) {
+        self.new_sequence_from_ids(2);
+    }
+
+    /// « Nouvelle séquence avec les cases choisies » (les vignettes) : comme `new_sequence_from_chosen`, mais un seul plan (celui de la case
+    /// courante) suffit : il quitte sa séquence et en forme une neuve (Anthony, 2026-10-30).
+    pub(crate) fn new_sequence_from_cases(&mut self) {
+        self.new_sequence_from_ids(1);
+    }
+
+    fn new_sequence_from_ids(&mut self, au_moins: usize) {
         let ids = self.board_selection();
-        if ids.len() < 2 {
+        if ids.len() < au_moins {
             self.status = "Choisis au moins deux plans (Ctrl ou Maj + clic dans le montage) pour en faire une séquence.".into();
             return;
         }
@@ -97,7 +107,7 @@ impl App {
         if self.structure_op_dessins(|d, _| d.new_sequence_from_plans(&ids)) {
             self.board_sel = ids.clone();
             let seq = self.doc.sequence_of(self.cur_panel);
-            let mut msg = format!("{} plans forment la séquence {}.", ids.len(), self.doc.sequence_label(seq));
+            let mut msg = if ids.len() == 1 { format!("Ce plan forme la séquence {}.", self.doc.sequence_label(seq)) } else { format!("{} plans forment la séquence {}.", ids.len(), self.doc.sequence_label(seq)) };
             // Une séquence qui n'a plus aucun plan disparaît (comme en déplaçant ses derniers plans) : on le dit, Ctrl+Z la rend.
             let perdues: Vec<String> = avant.iter().filter(|q| !self.doc.sequences.iter().any(|s| s.id == **q)).filter_map(|q| nom_avant.get(q).cloned()).collect();
             if !perdues.is_empty() {
@@ -105,7 +115,7 @@ impl App {
             }
             self.status = msg;
         } else {
-            self.status = "Ces plans forment déjà une séquence entière : rien à changer.".into();
+            self.status = if ids.len() == 1 { "Ce plan est déjà seul dans sa séquence : rien à changer.".into() } else { "Ces plans forment déjà une séquence entière : rien à changer.".into() };
         }
     }
 }

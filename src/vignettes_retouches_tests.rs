@@ -464,7 +464,11 @@ fn a_plan_dropped_where_it_already_is_does_not_move_and_leaves_no_undo_step() {
 
 #[test]
 fn a_plan_can_move_to_another_sequence_like_in_the_montage_and_a_locked_storyboard_refuses() {
-    let mut b = ouvert(quatre_plans(), 4);
+    let mut b = ouvert(crate::vignettes_tests::deux_sequences(), 4);
+    // (Deux séquences l'une sous l'autre : le zoom les montre toutes les deux dans la vue.)
+    b.app.board_zoom = 0.6;
+    b.app.board_pan = eframe::egui::Vec2::ZERO;
+    b.chauffer(3);
     let ordre = plans(&b);
     let sequences: Vec<u64> = (0..4).map(|i| b.app.doc.sequence_of(i)).collect();
     assert_ne!(sequences[0], sequences[3]);

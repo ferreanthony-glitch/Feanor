@@ -207,6 +207,8 @@ impl App {
     pub(crate) fn vignettes_panneau(&mut self, ui: &mut egui::Ui) {
         ui.spacing_mut().item_spacing = egui::vec2(crate::barres::ECART, crate::barres::ECART);
         self.vignettes_calques(ui);
+        // Les séquences : lesquelles la planche montre, dans quel ordre (`planchesequencesui.rs`).
+        self.vignettes_sequences(ui);
         ui.label(RichText::new("Sens de lecture").small().weak());
         ui.horizontal_wrapped(|ui| {
             for sens in Sens::TOUS {

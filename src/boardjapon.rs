@@ -60,12 +60,12 @@ struct Etendue {
 }
 
 /// La planche lue à la japonaise (voir le début du fichier). Mêmes arguments que `board::layout_with`.
-pub fn layout(doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options) -> BoardLayout {
+pub fn layout(doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options, indices: &[usize]) -> BoardLayout {
     let cols = s.columns.clamp(1, MAX_COLUMNS);
     let card_w = if s.card_w.is_nan() { BoardSettings::default().card_w } else { s.card_w.clamp(CARD_MIN, CARD_MAX) };
     let thumb_h = card_w * doc.frame[1] as f32 / doc.frame[0].max(1) as f32;
     let mut boards: Vec<(usize, u64, usize, usize)> = Vec::new();
-    for i in 0..doc.panels.len() {
+    for &i in indices.iter().filter(|&&i| i < doc.panels.len()) {
         boards.extend(plan_boards(doc, i).into_iter().map(|(id, frame, end)| (i, id, frame, end)));
     }
     let n = boards.len();
@@ -187,6 +187,9 @@ pub fn layout(doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options
             let total = min_colonnes.max(occupees + 1).max(col + 1);
             let (mut c, mut yy, mut cnt, mut slack) = (col, y, compte, marge);
             for _ in 0..total.saturating_mul(cols + 1).saturating_add(1) {
+                if opt.pale_max.is_some_and(|m| pale.len() >= m) {
+                    break;
+                }
                 if cnt >= cols || (cnt > 0 && yy + bloc > col_h + slack + 1e-3) {
                     c += 1;
                     yy = 0.0;
@@ -200,7 +203,12 @@ pub fn layout(doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options
                 cnt += 1;
                 yy += bloc + g_cut;
             }
-            total
+            // (Un nombre de cases pâles limité : seules les colonnes des cases comptent.)
+            if opt.pale_max.is_some() {
+                occupees.max(col + 1).max(pale.last().map_or(0, |p| p.0 + 1))
+            } else {
+                total
+            }
         }
         None => occupees,
     };

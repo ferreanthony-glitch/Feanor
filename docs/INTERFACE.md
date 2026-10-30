@@ -6172,3 +6172,63 @@ images). Changer d'espace et revenir ne recadre pas.
 7. Ferme et rouvre un projet : la planche s'ouvre sur deux rangées de six cases (réglable). Reviens d'un autre espace : le zoom ne bouge pas. Le bouton « 6 × 2 » de la barre du bas recadre.
 8. Barre du bas : le passe-partout des cases (icône, opacité) cache tout ce qui est hors des cases ; l'état est retenu à la prochaine séance. Le zoom : pourcentage, cadrer tout.
 9. Ouvre un projet existant : les plans ont les mêmes pixels qu'avant.
+
+## 77. Vignettes par séquences : créer des séquences, choisir lesquelles s'affichent et dans quel ordre (2026-10-30, branche `vignettes-sequences`)
+
+Demande d'Anthony du 2026-10-30 : « afficher les vignettes par séquences, pouvoir donc créer des séquences de vignettes, choisir d'afficher une séquence, certaines séquences (et choisir l'ordre) ou toutes les séquences sur le canevas ». Fichiers : `planchesequences.rs` (le modèle de l'affichage, la mise en page par séquences, les opérations sur le film), `planchesequencesui.rs` (titres, liste du panneau, commandes), et des retouches de `board.rs`, `boardjapon.rs`, `boardui.rs`, `deposer.rs`, `planche.rs`, `plancheui.rs`, `annotations.rs`, `vignettesprefs.rs`, `vignettespanneau.rs`. Essais : `planchesequences_tests.rs` (24).
+
+### Ce qui change à l'écran
+
+- **Chaque séquence commence sur une nouvelle rangée, avec son titre au-dessus** (son nom, ou « Séquence 2 » ; en petit, le nombre de ses plans ; un filet dessous). Le titre est de la taille des numéros de plan, un peu plus grand, et suit le zoom comme eux (réglage « Taille des numéros »). **Double-clic sur le titre : le renommer** (Entrée valide, Échap abandonne, une étape d'annulation « Renommer la séquence »).
+- **Avec une seule séquence dans le projet, rien ne change** : pas de titre, pas de décalage, les cases sont exactement où elles étaient (un essai le vérifie contre `board::layout_with`). Un projet d'avant s'ouvre donc comme avant ; s'il a plusieurs séquences, il s'ouvre avec toutes, dans l'ordre du film, chacune sous son titre.
+- **Le panneau « Planche » a un bloc « Séquences »** (sous les calques d'annotation) : une case à cocher par séquence (montrée ou non), son nom (clic : va à la séquence et rend courant son premier plan ; **glisser : choisir son rang sur la planche**, un trait d'accent montre où elle tombe), le nombre de ses plans. Trois raccourcis : **Toutes**, **Seulement la courante** (ne montre que la séquence du plan courant et cadre la planche dessus), **Aucune autre** (décoche tout sauf la séquence courante, sans recadrer). Le « + » crée une séquence. Les mêmes commandes sont dans Ctrl+K (`sequence.afficher_toutes`, `sequence.afficher_courante`, `sequence.afficher_aucune_autre`, et `sequence.afficher_ordre_film` qui range les séquences dans l'ordre du film).
+- **Créer, couper, renommer depuis les vignettes** (une étape d'annulation chacune, nommée) : clic droit sur une case > Plus > **Séquence** (Nouvelle séquence à la fin du film ; Nouvelle séquence avec les cases choisies ; Couper la séquence ici ; Renommer la séquence), clic droit sur le fond (Nouvelle séquence à la fin du film), le « + » du panneau, et Ctrl+K (`sequence.nouvelle_fin`, `sequence.nouvelle_avec_cases`, `sequence.couper_ici`, `sequence.renommer`, sans touche : à toi de les assigner).
+  - **Nouvelle séquence** : à la fin du film, avec un plan vide ; elle se montre aussitôt et la vue va à son titre.
+  - **Nouvelle séquence avec les cases choisies** : la commande de la partie 55, qui accepte maintenant **une seule case** (le plan courant) : il quitte sa séquence et en forme une neuve ; les plans non contigus se rejoignent comme avant.
+  - **Couper la séquence ici** : le plan de la case courante et tous ceux qui le suivent dans sa séquence forment une séquence neuve (sans nom : son numéro automatique). La première garde son nom, son numéro et ses versions. Rien si la case est déjà la première de sa séquence (la barre d'état le dit, aucune étape).
+
+### Ce que la planche montre, et dans quel ordre
+
+- **`Affichage`** : la liste des séquences avec « montrée » ou non, dans l'ordre de la planche. Rien d'enregistré : toutes, dans l'ordre du film. Une séquence ajoutée plus tard (créée, coupée, ou venue d'un plan déplacé) **se montre, cochée, à sa place du film** (juste après la séquence qui la précède dans le film) ; une séquence qui n'existe plus est oubliée.
+- **L'ordre d'affichage ne change que la planche** : le montage, la lecture, la numérotation et les exports gardent l'ordre du film. **La planche montre toujours au moins une séquence** : décocher la dernière est refusé, avec un message.
+- **Enregistré dans le projet**, dans `annotations.json` (clé `sequences`, une liste `{ id, montree }`) : ce fichier est déjà écrit et lu partout (enregistrer, enregistrer par-dessus, film partagé) avec tolérance ; un fichier d'avant sans la clé s'ouvre avec toutes les séquences dans l'ordre du film ; une clé abîmée (identifiant à zéro, doublon, séquence qui n'existe pas) est écartée sans avertissement. **`project::VERSION` ne change pas** (43). « Toutes, dans l'ordre du film » ne s'écrit pas (aucun fichier pour un projet qui n'a que des réglages par défaut).
+- **Annuler / rétablir ne touchent pas à l'affichage** : c'est un affichage, pas une étape du film (`Document::replace_structure` garde l'affichage du moment). Le projet est marqué modifié, pour qu'il soit enregistré.
+
+### La mise en page
+
+- Chaque séquence est rangée par `board::layout_indices`, qui range ses plans exactement comme `board::layout_with` rangeait tout le film : **sens de lecture (en lignes / à la japonaise) et cases par ligne s'appliquent dans chaque séquence**, ainsi que les textes et les mouvements de caméra. `planchesequences::layout_sequences` empile ces planches de haut en bas, dans l'ordre de l'affichage, alignées à gauche. Les cases sont des `CardPlace` comme avant (mêmes identifiants, même rang de plan dans le film : `CardPlace::panel`) ; leurs rangées se comptent d'un bout à l'autre de la planche.
+- **Les cases pâles « nouvelle case » sont à la fin de chaque séquence** : **une seule** case pâle à la fin de chaque séquence (celle qui suit la dernière case), et, pour la dernière séquence seulement, les rangées pâles du réglage (celles de la planche d'avant). Dessiner dans une case pâle fait un plan **dans cette séquence**, juste après son dernier plan (ceux qui la précèdent dans la séquence deviennent des plans vides, comme avant) ; la barre devant la case pâle de chaque séquence fait tout de suite la case de continuité du dernier plan de cette séquence.
+- **Continuité entre deux séquences : pas de barre.** Une barre de coupe n'a pas de sens à travers un titre : les deux séquences sont séparées par le titre de la seconde. (Une barre existe toujours entre deux cases d'une même séquence, grise dans un plan, noire à une coupe.)
+- **Le geste d'un mouvement de caméra** (A reste en place pendant le geste, retraits, enveloppe) marche dans chaque séquence comme avant : la mise en page de la séquence reçoit la réserve du geste, avec la rangée et la hauteur comptées depuis le début de la séquence (`GroupeBoard::rang0`, `origine_y`).
+- **Glisser un plan (Maj + cadre)** : les repères de pose sont ceux de chaque plan ; un repère de plus **à la fin de chaque séquence**. D'une séquence à l'autre, comme au montage : le plan rejoint la séquence du plan devant lequel on le pose ; au repère de fin d'une séquence, il rejoint cette séquence (`DropSlot::sequence`).
+
+### Tout le reste suit la mise en page
+
+- **Dessin dans les cases, passe-partout, ouverture** : les cases sont les mêmes qu'avant, seules leurs places changent. Dessiner dans la case d'une séquence réordonnée va au bon plan (essai). Le zoom d'ouverture (6 × 2) cadre **la séquence du plan courant** (son titre et ses deux premières rangées), pas toute la planche.
+- **Dessin hors des cases et annotations (§76, §46)** : un trait est attaché à **la case la plus proche** au moment où on le trace (comme avant) : ses points sont relatifs à cette case. La règle qui en découle : **il suit sa case quand on réordonne les séquences** (même place dans sa case, vérifié) ; **si sa séquence est masquée, il n'est pas peint, mais il n'est ni perdu ni passé à une voisine** (`BoardLayout::masquees` : la réattache des annotations d'une vignette qui disparaît ne vaut que pour une vignette qui n'est plus dans le film) ; il revient où il était quand la séquence se remontre. Il reste hors de tout plan, et il est dans l'export de la planche quand sa séquence y est.
+- **Export de la planche** (PNG, JPEG, PDF) : « Tout le film » devient « **Ce que la planche montre** (N plans sur M) » dès qu'une séquence est cachée : l'export suit l'affichage, **dans son ordre, avec les titres** (un titre au-dessus de chaque séquence, un filet dessous ; pas de barre entre séquences). La séquence courante ou les plans choisis s'exportent comme avant (avec des titres si ces plans sont dans plusieurs séquences). Avec une seule séquence : l'export d'avant.
+- **Sélection, copier / coller, menus** : les cases se choisissent comme avant ; Maj + clic prend les plans entre deux cases dans l'ordre du **film**. Les plans choisis dans plusieurs séquences se copient, se collent et se suppriment comme au montage.
+
+### Choix faits (dits à Anthony avant le travail, sans objection)
+
+- Le titre est au-dessus de la première rangée de chaque séquence ; l'ordre d'affichage ne change pas l'ordre du film ; le choix d'affichage est retenu dans le projet.
+- Pas de barre entre deux séquences ; une seule case pâle par séquence (sauf la dernière) pour ne pas laisser de grands vides entre elles.
+- Un trait hors cadres est attaché à la case la plus proche, donc à sa séquence ; masqué avec elle, jamais déplacé.
+- Fichier : `annotations.json` plutôt qu'un fichier de plus ou un champ du projet : il est déjà lu et écrit partout avec tolérance, et `project::VERSION` ne bouge pas.
+
+### Fixtures d'essai
+
+`vignettes_tests::quatre_plans()` met maintenant ses quatre plans dans **une seule séquence** (avant, le plan 4 en avait une à lui : la planche aurait un titre de plus) ; `deux_sequences()` est l'ancienne. Le rang de secours des annotations (`Ancre::rank`) n'est plus dans la photo du projet des essais de hasard : il est documenté comme n'étant pas une modification du projet (mis à jour quand la planche est à l'écran), et un hasard qui réordonnait des plans juste avant le défilement de la planche le faisait voir. Un essai d'optimisation (`board_thumbnails_stay_under_their_memory_bound_while_zooming`) défile maintenant de case en case plutôt que par pas fixes : les titres et les écarts entre séquences laissent des endroits de la planche sans case.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Un projet de plusieurs séquences : chaque séquence est sous son titre, sur une nouvelle rangée ; une seule case pâle (filet léger) à la fin de chaque séquence. Un projet d'une seule séquence : aucun titre, rien n'a bougé.
+2. Double-clic sur un titre : il s'écrit, Entrée valide ; Ctrl+Z rend l'ancien nom. Le titre suit le zoom comme les numéros de plan.
+3. Panneau Planche > Séquences : cocher / décocher une séquence la montre / la cache ; la dernière ne se décoche pas. Glisser une séquence dans la liste : elle change de place sur la planche, **pas dans le montage** (regarde la timeline). « Seulement la courante », « Aucune autre », « Toutes ».
+4. Clic droit sur une case > Plus > Séquence : « Nouvelle séquence à la fin du film », « Couper la séquence ici », « Nouvelle séquence avec cette case / les cases choisies », « Renommer la séquence » ; chacun s'annule en un seul Ctrl+Z.
+5. Dessine dans une case d'une séquence qu'on a remontée en tête : le trait est dans le bon plan (ouvre-le dans l'espace Animation). Dessine hors des cases : il reste attaché à la case la plus proche ; masque sa séquence, remontre-la : il est revenu à sa place.
+6. Dessine dans la case pâle d'une séquence du milieu : le plan naît dans cette séquence, à sa fin, pas à la fin du film.
+7. Enregistre, ferme, rouvre : les séquences montrées et leur ordre sont ceux que tu avais laissés. Ouvre un projet d'avant : toutes les séquences, dans l'ordre du film.
+8. Fichier > Exporter > Planche des vignettes avec une séquence cachée : « Ce que la planche montre », les titres, l'ordre de l'écran.
+9. Supprime une séquence affichée (tous ses plans), réunis-en deux, annule, rétablis : la planche reste cohérente, aucun plan perdu.
+10. Ouvre un projet : la planche s'ouvre sur 2 rangées de 6 cases de la séquence du plan courant, son titre en haut.

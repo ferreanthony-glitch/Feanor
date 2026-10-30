@@ -1587,7 +1587,10 @@ impl Document {
         (self.background == BackgroundKind::Color).then_some(self.paper)
     }
 
-    pub fn replace_structure(&mut self, s: Structure) -> Structure {
+    pub fn replace_structure(&mut self, mut s: Structure) -> Structure {
+        // Les séquences que la planche montre sont un affichage, pas une étape du film : annuler ou rétablir ne les change pas
+        // (`planchesequences.rs`).
+        s.annotations.affichage = self.annotations.affichage.clone();
         Structure {
             sequences: std::mem::replace(&mut self.sequences, s.sequences),
             scenes: std::mem::replace(&mut self.scenes, s.scenes),
