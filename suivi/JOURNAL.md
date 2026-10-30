@@ -65,6 +65,11 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   en 5 étapes, Labo caché derrière « Afficher les fonctions expérimentales », Propager rangé dans Animation,
   vocabulaire : Fiche du plan, Fond de la feuille, Vectoriel, tutoiement). 3596 essais passent, shot.exe reconstruit,
   projet d'essai rouvert sans plantage. Format du projet inchangé (44).
+- Fusionné 3cd07b7 : pipeline étape 1 (modèle de noms, série / épisode, liste des plans CSV/JSON profil Kitsu,
+  paquet de livraison avec manifeste et empreintes, modèle d'épisode). Format du projet 44 → 45. 3627 essais passent,
+  shot.exe reconstruit, projet d'essai rouvert. En-têtes Kitsu à confirmer sur une vraie instance.
+- Lancés : petits livrables (`petits-livrables`), journal des différences entre envois (`journal-differences`),
+  noms de marques retirés + « Papier » (`noms-papier`).
 
 ## 2026-10-29
 
