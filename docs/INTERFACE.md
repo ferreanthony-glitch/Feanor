@@ -6519,3 +6519,18 @@ Deux instabilités de la suite complète et cinq retouches de l'audit pratique. 
 - **Échap** ferme la fenêtre Exporter et la fenêtre d'un export choisi, sans rien lancer.
 - **Fin d'export** : la fenêtre d'un export réussi s'efface seule après 8 s (le pointeur dessus la garde) ; le message reste dans la barre d'état avec **Ouvrir le dossier**. Une erreur reste jusqu'au clic.
 - **`crayonnes.json`** (ancienne planche de crayonnés) : l'avis d'ouverture devient « Ouvert avec N remarque(s) » et propose **Mettre de côté** : le fichier est renommé `crayonnes.json.ancien` (jamais lu, jamais effacé) et un bouton **Annuler** le remet. Sans ce choix, rien n'est touché.
+## 86. Numérotation verrouillée d'origine et montage redimensionnable (2026-10-30, branche `numerotation-montage`)
+
+Code : `src/montagehauteur.rs` (montage), `src/numerotationui.rs` (projets neufs), réglages `src/settings.rs`. `project::VERSION` ne change pas (44).
+
+- **Projets neufs verrouillés** : Nouveau projet, accueil, scénario (nouveau projet), nouveau projet depuis des plans choisis et le noyau sans fenêtre naissent avec la numérotation verrouillée : un plan inséré entre le 2 et le 3 est le **2A** (§16). Préférences > Montage > Plans neufs : « Verrouiller la numérotation des projets neufs », coché d'origine, retenu dans les réglages de l'application (`numerotation_neufs_verrouillee`). Décochée, un projet neuf est en numérotation suivie. **Un projet qui existe n'est jamais touché à l'ouverture.** « Renuméroter les plans… » (menu Storyboard, Ctrl+K) reste disponible et repart de 1.
+- **Poignée entre le dessin et le montage** : le bord est un peu plus clair que le fond, large à saisir, avec une pastille au milieu qui s'allume au survol ; la hauteur choisie est celle de la disposition de l'espace de travail (retenue par espace). La bande garde au moins 200 points, le dessin aussi.
+- **Dans le montage et la timeline** : la bande défile verticalement quand elle est trop basse (aucune piste coupée) et sa barre de défilement se voit sans survol. Hauteur des pistes son : petite, moyenne (d'origine), grande, par le bouton de la barre du zoom (un clic passe à la suivante) ou Préférences > Montage > Pistes. Les boutons M, S et verrou (cliquable) font 16 points de haut au moins, sous le nom, à toute hauteur.
+- Limites : la hauteur des pistes de calques n'est pas réglable (elles se déplient et se replient) ; un double-clic sur le bord remet la bande à la moitié (comportement d'egui_dock).
+
+### À vérifier à l'écran (numérotation verrouillée et montage)
+
+1. Nouveau projet, trois plans, « Nouveau plan » après le 2 : « Plan 2A ». Réglages du projet : « Verrouillée ». Décocher la préférence : un projet neuf est « Suivie ».
+2. Ouvrir un ancien projet suivi : il reste suivi.
+3. Tirer le bord entre le dessin et le montage : la pastille s'allume, la bande ne passe pas sous 200 points ; changer d'espace de travail et revenir : la hauteur est gardée.
+4. Réduire la bande : la barre de défilement apparaît, la piste Son 1 s'atteint ; M, S et le verrou se lisent et se cliquent. Bouton de hauteur sous le montage : petite, moyenne, grande.

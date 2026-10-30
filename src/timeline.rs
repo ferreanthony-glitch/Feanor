@@ -75,20 +75,24 @@ impl App {
             .resizable(false)
             .frame(egui::Frame::new().inner_margin(egui::Margin::symmetric(0, 2)))
             .show_inside(ui, |ui| self.bottom_tabs(ui));
-        egui::ScrollArea::vertical()
-            .id_salt("timeline_v")
-            .auto_shrink([false, false])
-            .show(ui, |ui| {
-                ui.horizontal_top(|ui| {
-                    ui.spacing_mut().item_spacing.x = 0.0;
-                    self.timeline_names(ui);
-                    ui.add_space(2.0);
-                    egui::ScrollArea::horizontal()
-                        .id_salt("timeline_h")
-                        .auto_shrink([false, true])
-                        .show(ui, |ui| self.timeline_grid(ui));
+        // Trop basse pour tous les calques : elle défile, et la barre se voit sans le survol (`montagehauteur.rs`).
+        ui.scope(|ui| {
+            ui.spacing_mut().scroll = egui::style::ScrollStyle::solid();
+            egui::ScrollArea::vertical()
+                .id_salt("timeline_v")
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.horizontal_top(|ui| {
+                        ui.spacing_mut().item_spacing.x = 0.0;
+                        self.timeline_names(ui);
+                        ui.add_space(2.0);
+                        egui::ScrollArea::horizontal()
+                            .id_salt("timeline_h")
+                            .auto_shrink([false, true])
+                            .show(ui, |ui| self.timeline_grid(ui));
+                    });
                 });
-            });
+        });
     }
 
     /// Barre de la timeline, sur une seule ligne qui ne défile pas (`barres.rs`) : le plan, le

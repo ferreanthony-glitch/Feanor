@@ -157,7 +157,8 @@ impl App {
             self.status = "Aucun plan choisi.".into();
             return;
         };
-        let doc = doc.created_now();
+        let mut doc = doc.created_now();
+        self.numerotation_du_projet_neuf(&mut doc);
         let n = doc.panels.len();
         if !self.charger_projet(doc) {
             self.status = "Le projet n'a pas pu s'ouvrir dans un nouvel onglet : un travail attend l'onglet affiché.".into();

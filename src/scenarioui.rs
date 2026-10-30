@@ -172,6 +172,7 @@ impl App {
             doc.properties.author = script.author.trim().to_string();
         }
         doc.scenario = Some(std::sync::Arc::new(Gardee::new(&w.name, (**script).clone(), Vec::new())));
+        self.numerotation_du_projet_neuf(&mut doc);
         if !self.charger_projet(doc) {
             self.status = "Le scénario n'a pas pu s'ouvrir dans un nouvel onglet : un travail attend l'onglet affiché.".into();
             return;

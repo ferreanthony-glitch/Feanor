@@ -74,7 +74,10 @@ impl Projet {
     /// Projet neuf : cadre `largeur`×`hauteur`, `fps` images par seconde.
     pub fn nouveau(largeur: usize, hauteur: usize, fps: u32) -> Projet {
         let (w, h) = (largeur.clamp(16, 4096), hauteur.clamp(16, 4096));
-        Projet { doc: Document::with_frame(w, h, fps.clamp(1, 120)), chemin: None, written: HashMap::new(), modifie: false }
+        // (Un projet neuf naît avec la numérotation verrouillée, comme dans l'application.)
+        let mut doc = Document::with_frame(w, h, fps.clamp(1, 120));
+        doc.lock_numbering();
+        Projet { doc, chemin: None, written: HashMap::new(), modifie: false }
     }
 
     /// Ouvre le projet dont `manifeste` est le fichier `.shot` (ou l'ancien `.pelure`) ; les problèmes non bloquants

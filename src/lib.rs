@@ -777,6 +777,9 @@ mod dessin_notes_tests;
 mod montagerows;
 #[cfg(test)]
 mod montagerows_tests;
+mod montagehauteur;
+#[cfg(test)]
+mod numerotation_neuf_montage_tests;
 mod montagehead;
 #[cfg(test)]
 mod montagehead_tests;

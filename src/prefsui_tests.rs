@@ -312,7 +312,7 @@ fn the_search_ignores_case_and_accents_and_needs_every_word() {
     // Le titre d'un groupe répond pour tous ses réglages.
     let r = chercher("pistes du montage");
     let g = r.iter().find(|t| t.groupe == Groupe::Pistes).expect("le groupe Pistes");
-    assert_eq!(g.libelles.len(), 2);
+    assert_eq!(g.libelles.len(), 3);
     // Chaque étiquette se retrouve en la cherchant.
     for reg in REGLAGES {
         let r = chercher(reg.libelle);

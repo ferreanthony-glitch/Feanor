@@ -259,6 +259,18 @@ pub struct Settings {
     /// `planchref::FenetreReglage`). Un réglage du poste : rien n'est écrit dans le projet.
     #[serde(default, rename = "references_fenetre", skip_serializing_if = "crate::planchref::FenetreReglage::est_defaut")]
     pub references_fenetre: crate::planchref::FenetreReglage,
+    /// Les projets neufs naissent avec la numérotation des plans verrouillée (un plan inséré reçoit 2A, comme en studio) :
+    /// coché d'origine (`numerotation.rs`, Préférences > Montage > Plans neufs). Ne touche jamais un projet qui existe.
+    #[serde(default = "yes", rename = "numerotation_neufs_verrouillee", skip_serializing_if = "is_true")]
+    pub numbering_locked_new: bool,
+    /// Les hauteurs du montage retenues par espace de travail (`montagehauteur.rs`) : la hauteur d'une piste et le réglage
+    /// petite / moyenne / grande.
+    #[serde(default, rename = "pistes_hauteur", skip_serializing_if = "crate::montagehauteur::Reglage::est_defaut")]
+    pub track_height: crate::montagehauteur::Reglage,
+}
+
+fn is_true(b: &bool) -> bool {
+    *b
 }
 
 fn default_passe_partout() -> u8 {
@@ -362,6 +374,8 @@ impl Default for Settings {
             scenario_taille: Default::default(),
             degrades: None,
             references_fenetre: Default::default(),
+            numbering_locked_new: true,
+            track_height: Default::default(),
         }
     }
 }

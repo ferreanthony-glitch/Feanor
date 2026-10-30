@@ -456,6 +456,7 @@ impl App {
         if resp.clicked() {
             self.run_action("piste.auto_deplier");
         }
+        self.hauteur_pistes_pref_ui(ui);
     }
 }
 
