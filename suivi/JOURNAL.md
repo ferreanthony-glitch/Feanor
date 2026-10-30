@@ -50,6 +50,10 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   vérification de la licence ; `memoire-dessins` abandonnée (étiquette `archive/memoire-dessins`).
 - Lancé : panneau Bibliothèque (`panneau-bibliotheque`), fusion et menu des calques (`calques-menu`). Fait : logo
   retiré de la barre de menus (`sans-logo-barre`, 9c1d1d1, à fusionner).
+- Fusionné 012c17a (post-it : écrire directement sur la planche) et 1c5a102 (logo retiré de la barre de menus) :
+  3439 essais passent, shot.exe reconstruit, projet d'essai rouvert (Fichier est bien le premier menu).
+- Audit extérieur (storyboard série / long) rangé dans suivi/AUDIT-2026-10-30.md : 3/10 série, 4/10 long, 6/10
+  indépendant ; priorités : valider les exports montage, PDF de studio, endurance sur un vrai épisode, équipe, modèle d'épisode.
 - À retenir pour après la V1 (demande d'Anthony) : retravailler la partie collaborative (travail en équipe).
 
 ## 2026-10-29
