@@ -6439,3 +6439,71 @@ Rien de ce qui suit n'a pu être ouvert dans un vrai logiciel de montage ici (vo
 - ProRes 4444 : la **transparence** à l'import ; DNxHR HQ en MOV et en MXF ;
 - les **calques séparés** dans un logiciel de compositing : suites d'images reconnues, ordre des calques, transparence ;
 - un script qui relit le JSON de la **caméra** (unités et sens des angles : voir le tableau de `docs/EXPORT_MONTAGE.md`).
+
+
+## 82. Fusionner des calques et menu clic droit des calques (2026-10-30, branche `calques-menu`)
+
+Deux demandes d'Anthony : « Ajoute la possibilité de fusionner des calques » et « Revois l'organisation du menu clic droit des calques, trop complexe et mal organisée ». Code : `src/fusioncalques.rs` (la fusion), `src/menucalque.rs` (le menu). Rien n'est repris d'un autre logiciel. **`project::VERSION` ne change pas (44).**
+
+### Le menu, avant / après
+
+Le même menu s'ouvre partout : clic droit d'une ligne du panneau Calques, de la timeline, de la colonne du montage ; le « … » du panneau, le ⋮ des lignes, le menu **Calques** de la barre et le ☰ de la timeline. Avant, il y en avait quatre, différents, sans la fusion dans deux d'entre eux.
+
+| | Avant (clic droit d'un calque du panneau) | Après (le même partout) |
+|---|---|---|
+| 1 | Renommer… | Nouveau calque ▸ (une entrée par sorte) |
+| 2 | Ajouter un aplat | Dupliquer (Dupliquer les calques choisis (N)) |
+| 3 | Copier, coller le calque ▸ | Renommer… |
+| 4 | ─ | Supprimer |
+| 5 | Pelure d'oignon du calque | ─ |
+| 6 | Effets ▸ | **Fusionner vers le bas** (Ctrl+E) |
+| 7 | Effets du calque allumés | **Fusionner les calques choisis** (N) |
+| 8 | Tremblement du trait | ─ |
+| 9 | ─ | Organiser ▸ (monter, descendre, aller au calque, dossiers, groupes) |
+| 10 | Réglages du calque ▸ | Apparence ▸ (afficher, verrouiller, opacité, mode de fusion, couleur d'étiquette, pelure d'oignon) |
+| 11 | Animation (avant, après, automatismes) ▸ | Effets ▸ (effets, interrupteur « fx », tremblement du trait) |
+| 12 | Calque vidéo ▸ / Calque de couleur ▸ | Ajouter un aplat (ou Retirer l'aplat ; rien sur un dossier) |
+| 13 | Autres commandes des calques ▸ (propager, colorier, Nouveau calque ▸, Presse-papiers ▸, Retourner ▸, **Fusionner ▸**, Aplat sous le trait ▸, Ordre ▸, Groupes ▸, Dossiers ▸, Plus ▸) | ─ |
+| 14 | | Plus ▸ |
+
+- **Avant** : treize lignes dont trois séparateurs, et la fusion **à trois niveaux** (clic droit > Autres commandes des calques > Fusionner > Avec le calque du dessous). Dans la timeline : renommer, dupliquer, verrouiller, supprimer, effets, animation, Plus (profondeur, groupe…) : **aucune fusion**. Dans le montage : encore un autre ordre (« Réglages du calque »), la fusion seulement si plusieurs calques étaient choisis.
+- **Après** : onze entrées au premier niveau, en quatre groupes séparés (les gestes, la fusion, l'organisation et le réglage, le reste). Chaque entrée qui lance une commande montre son **icône et son raccourci** ; **clic droit sur une entrée : « Assigner un raccourci… »** (le mécanisme d'avant, `action_item`).
+- **Plus ▸** : Copier, coller ▸ · Retourner le calque ▸ · Réglages avancés ▸ (préserver la transparence, pochoir, position verrouillée, profondeur) · Animation (avant, après, automatismes) ▸ · Calque vidéo ▸ (vidéo seulement) · Calque de couleur ▸ · Propager la peinture… · Colorier par zones… · Choisir ▸ · Afficher ▸ · Fusionner plus de calques ▸ (les visibles, tous) · Pochoirs ▸ · Nettoyer ▸ · Aplat sur plusieurs calques ▸ ; dans la timeline « Agrandir / Réduire la ligne », dans le montage les pistes.
+- **Rien n'est perdu** : chaque commande de l'ancien menu est dans le nouveau, un sous-menu plus loin (essai `every_command_of_the_old_menus_is_still_reachable`) et dans la palette Ctrl+K. Le menu Calques de la barre ne change plus de forme : c'est le menu du calque courant.
+
+### Pourquoi Anthony pensait que ce n'était pas faisable
+
+La fusion existait (`calque.fusionner_dessous` sur **Ctrl+E**, « les choisis », « les visibles », « tous »), mais :
+1. **Elle était introuvable** : trois niveaux de menus au clic droit, absente de la timeline.
+2. **Elle refusait des cas courants, sans que l'entrée le dise** : un calque transformé ou animé (clés de position), tout calque dont l'opacité varie dans le plan, un calque avec effets ou aplat. La barre d'état donnait la raison un instant, après le clic.
+3. **Elle perdait des choses en silence** (corrigé) : les **effets du calque du dessus**, l'**aplat** (aplat « Fond »), les **clés d'opacité** (seule l'opacité fixe comptait), ce qui était dessiné **hors de la feuille** (toile infinie), les images **avant / après** (boucle, va-et-vient), le **papier** pour les modes de fusion. Un calque **vidéo** donnait un calque vide.
+
+### Ce que fait la fusion maintenant
+
+- **Le résultat est ce que l'écran montrait** : pour chaque image, les deux calques sont composés avec la même composition que l'écran et l'export (mode de fusion du dessus, opacité du jour, effets cuits, aplat, transformation, même animée, dessins hors de la feuille). Essais : mêmes pixels avant et après, papier transparent ; sur du papier blanc quand les calques sont opaques ; à deux niveaux près sur des bords semi-transparents superposés (l'arrondi n'est pas associatif).
+- **Image par image** : l'union des expositions. Chaque combinaison de dessins donne un dessin neuf, tenu aussi longtemps qu'elle dure (deux images qui montrent les mêmes dessins, réglés pareil, partagent le même dessin fusionné). Les noms d'instance et les marques de couleur suivent. Boucle, va-et-vient, maintien : cuits sur tout le plan.
+- **Vectoriel / bitmap** : deux calques vectoriels **sans rien à cuire** (ni effet, ni aplat, ni transformation, ni mode de fusion, ni opacité animée) restent un calque **vectoriel** ; tout autre cas donne un calque **bitmap**. La **bulle de l'entrée** le dit avant de cliquer, la barre d'état après (« Le résultat est un calque bitmap : les traits vectoriels ne seront plus modifiables (Ctrl+Z les rend) »).
+- **Une seule étape d'annulation** ; Ctrl+Z rend les calques exactement comme avant (les anciens dessins n'ont jamais été touchés) ; « Rétablir » refait la fusion.
+- **Les calques choisis** (Ctrl + clic, Maj + clic) : tout est vérifié **avant** ; si un seul refuse, rien ne change.
+- **Grisé avec la raison en bulle** (jamais un refus muet) : calque **vidéo** (« transforme-le en calque d'animation »), calque d'**effet**, **Couleur unie**, calque **Décor**, calque de **toute la scène**, calque de couleur qui a des **griffonnages**, calque **caché** ou **verrouillé**, **profondeurs** ou **dossiers** différents, **carte inclinée** de l'Espace 3D, calque d'annotation avec un calque de dessin. Pas de calque en dessous : « Il n'y a pas de calque en dessous ».
+- **Un trait avec sa couleur** : comme avant, un seul calque ordinaire (le lien est oublié, les autres calques de couleur du trait deviennent ordinaires, avec leurs dessins).
+
+### Limites et à trancher
+
+- **Le mode de fusion du dessus agit sur le dessous, pas sur le papier ni sur les calques d'en dessous.** Un « Produit » ou un « Écran » sur un fond qui n'est pas le calque du dessous peut donc différer un peu à l'écran. Le calque obtenu garde le mode de fusion du calque du dessous.
+- **Un calcul long ne bloque jamais l'interface** (`fusiontache.rs`) : une fusion avec effet, aplat, transformation, ou beaucoup de tuiles à composer (plus de 100) part **en tâche de fond** (copie du nécessaire, calcul sur un autre fil, résultat posé en **une étape d'annulation** à la fin). La barre d'état montre « Fusion de N calques », la progression et **Arrêter** (rien ne change). Si les calques ou leurs dessins changent entre-temps (dessin, suppression, réglage, annulation), la fusion est **abandonnée avec un message** et rien n'est écrasé. Une seconde fusion attend la première. Les fusions légères (sans effet, 100 tuiles au plus : ~7 ms mesurés au seuil, ~0,1 ms pour un dessin ordinaire) restent immédiates.
+- **Un calque Couleur unie** ne se fusionne toujours pas (décision d'Anthony, conservée) ; il suffirait de cuire un fond plein (les tuiles pleines sont partagées).
+- **Les calques non choisis qui étaient entre des calques choisis passent au-dessus** (comme avant) : si l'un d'eux a un mode de fusion, l'écran peut changer.
+- Les anciens dessins restent en mémoire tant qu'une annulation peut y revenir (comme avant cette partie).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Clic droit sur un calque du panneau Calques : onze entrées en quatre groupes ; « Fusionner vers le bas » avec **Ctrl+E** écrit à droite.
+2. Même menu au clic droit d'une ligne de la timeline, dans la colonne du montage, au « … » du panneau, au ⋮ d'une ligne, au menu Calques de la barre.
+3. Deux calques bitmap, l'un à 50 % : « Fusionner vers le bas » ; l'image ne bouge pas d'un pixel ; Ctrl+Z.
+4. Un calque vectoriel sous un calque bitmap : survole l'entrée (« le résultat est un calque bitmap… ») ; clique ; Ctrl+Z rend le trait modifiable.
+5. Deux calques vectoriels : la bulle dit « reste vectoriel » ; après la fusion, le trait se sélectionne encore.
+6. Un calque avec un flou, un autre avec un mode « Produit », un calque animé (clés de position ou d'opacité) : la fusion cuit tout, image par image (rejoue le plan).
+7. Un calque caché : l'entrée est grisée, la bulle dit « est caché ». Pareil pour un calque vidéo, un calque d'effet, un calque verrouillé.
+8. Ctrl + clic sur trois calques : « Fusionner les 3 calques choisis ».
+9. Clic droit sur une entrée (« Dupliquer », « Fusionner vers le bas »…) : « Assigner un raccourci ».

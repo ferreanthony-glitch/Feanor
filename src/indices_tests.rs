@@ -1,4 +1,4 @@
-﻿//! Passe de débogage (Anthony, 2026-10-22 : « tu peux me faire une passe de débogage ? ») : les rangs périmés après un
+//! Passe de débogage (Anthony, 2026-10-22 : « tu peux me faire une passe de débogage ? ») : les rangs périmés après un
 //! changement de structure. Deux plantages du même jour venaient de là (supprimer le dernier plan, réunir un plan à
 //! mouvement depuis son clic droit) : un rang de plan, de calque ou de case gardé d'avant un changement du film, puis lu
 //! sur le film d'après. Chaque essai rejoue le geste qui plantait (ou qui visait le mauvais plan).
@@ -66,7 +66,9 @@ fn menu(b: &mut Banc, p: Pos2, entree: &str) -> Pos2 {
     b.image(vec![Event::PointerButton { pos: p, button: PointerButton::Secondary, pressed: false, modifiers: Modifiers::NONE }], DT);
     b.image(Vec::new(), DT);
     let t = textes_a_l_ecran(b);
-    t.iter().find(|(s, _)| s == entree).map(|(_, p)| *p).unwrap_or_else(|| panic!("« {entree} » n'est pas dans le menu : {:?}", t.iter().map(|(s, _)| s).collect::<Vec<_>>()))
+    // (Une entrée du menu d'un calque porte son icône devant son nom : « <icône>  Supprimer », §82.)
+    let avec_icone = format!("  {entree}");
+    t.iter().find(|(s, _)| s == entree || s.ends_with(&avec_icone)).map(|(_, p)| *p).unwrap_or_else(|| panic!("« {entree} » n'est pas dans le menu : {:?}", t.iter().map(|(s, _)| s).collect::<Vec<_>>()))
 }
 
 fn clic(b: &mut Banc, p: Pos2) {

@@ -54,7 +54,7 @@ fn transformed_layers_are_composited_where_they_go() {
 }
 
 #[test]
-fn transforms_are_saved_and_block_merging() {
+fn transforms_are_saved_and_are_baked_by_merging() {
     let dir = std::env::temp_dir().join(format!("pelure-test-transfo-{}", std::process::id()));
     std::fs::remove_dir_all(&dir).ok();
     std::fs::create_dir_all(&dir).unwrap();
@@ -67,8 +67,10 @@ fn transforms_are_saved_and_block_merging() {
     let back = project::load(&manifest).unwrap().doc;
     assert_eq!(back.panels[0].layers[1].transform, t);
     assert!(back.panels[0].layers[0].transform.is_identity());
+    // (Depuis §82, un calque transformé se fusionne : sa transformation est cuite dans les pixels, `fusioncalques_tests.rs`.)
     let mut d = back;
-    assert!(d.merge_layer_down(0, 1).is_err(), "pas de fusion d'un calque transformé");
+    d.merge_layer_down(0, 1).expect("un calque transformé se fusionne");
+    assert!(d.panels[0].layers[0].transform.is_identity(), "la transformation est cuite");
     std::fs::remove_dir_all(&dir).ok();
 }
 

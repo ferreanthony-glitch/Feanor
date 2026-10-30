@@ -241,17 +241,7 @@ impl App {
         self.fx_clip_menu(ui, li, None, false);
     }
 
-    /// Le sous-menu « Effets » d'un calque, puis son tremblement du trait à découvert : les menus
-    /// d'un calque (panneau Calques, montage, timeline) ont tous ces deux entrées.
-    pub(crate) fn layer_fx_items(&mut self, ui: &mut egui::Ui, li: usize) {
-        if self.layers().get(li).is_none_or(|l| l.folder) {
-            return;
-        }
-        ui.menu_button("Effets", |ui| self.fx_menu_items(ui, li));
-        // L'interrupteur « fx » de la ligne du calque, aussi ici (la colonne du montage n'a pas la place de son bouton).
-        self.fx_switch_item(ui, li);
-        self.boil_menu_items(ui, li);
-    }
+    // (Le sous-menu « Effets » d'un calque, avec l'interrupteur « fx » et le tremblement du trait, est dans `menucalque.rs`.)
 
     /// « Effets du calque allumés » : la case de l'interrupteur « fx » du calque `li`, dans un menu (rien si le calque
     /// n'a pas d'effets, `fx_switch_shown`). Le menu « … » du panneau Calques et le clic droit d'un calque l'ont.

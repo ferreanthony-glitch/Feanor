@@ -224,7 +224,7 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   glissable (`glisser_calque`, rectangle de l'image d'écran d'avant, en mémoire egui) avant ses
   boutons : posée après, elle prenait le dessus dans le test d'egui (un widget du dessus qui ne
   sent que le glisser annule les clics de ceux du dessous) et rendait l'œil, le verrou et le
-  clic droit muets. Menus : `layer_full_menu(…, in_montage = false)`.
+  clic droit muets. Menus : `layer_full_menu(…, in_montage = false)` (un renvoi vers `menucalque::layer_menu`, §82).
 - `brushui.rs` + `brush::stroke_preview` : l'aperçu d'un réglage est un vrai trait du moteur dans
   une petite image (taille ramenée à la hauteur), en cache par réglage et échelle d'écran.
 - Vue Vignettes (`storyboard::panels_view`) : la vignette du panneau choisi appelle `canvas_panel`
@@ -490,10 +490,17 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
   pour les menus et le mode). Glisser : `App::head_drag`, `drop_index`, `move_layer_to` (une
   étape). Renommage partagé avec le panneau Calques (`LayerRename::in_timeline`).
 - Opérations (`layerops.rs`) : `App::layer_sel` (ids) + le calque courant = calques choisis
-  (`chosen_layers`) ; fonctions sur le document `duplicate_layer`, `merge_layers` (rassemble les
-  choisis au-dessus du plus bas puis `merge_layer_down` en chaîne ; tout est remis si une fusion
-  est refusée), `choose`, `is_empty_layer` ; `layer_ops_menu` sert au menu Calques et au ☰ de
-  l'en-tête. `newlayer.rs` : fenêtre « Nouveau calque… » et `insert_index` (place choisie).
+  (`chosen_layers`) ; fonctions sur le document `duplicate_layer`, `merge_layers` (vérifie tout
+  d'abord par `fusioncalques::blocker_list`, rassemble les choisis au-dessus du plus bas puis
+  `merge_layer_down` en chaîne ; tout est remis si une fusion échoue quand même), `choose`,
+  `is_empty_layer`. **Fusion** (`fusioncalques.rs`, §82) : `merge_down` compose les deux calques
+  image par image avec `render::composite_area` (même composition que l'écran : mode de fusion,
+  opacité du jour, effets, aplat, transformation, hors-feuille) et en fait un dessin bitmap ; deux
+  calques vectoriels sans rien à cuire restent vectoriels ; `blocker_down` / `blocker_list` donnent
+  la raison d'un refus (entrées grisées du menu). **Menu d'un calque** (`menucalque.rs`) : un seul
+  `layer_menu(ui, li, Origine)` pour le panneau, la timeline, le montage, le « … » et le menu
+  Calques (`layer_ops_menu`, `layer_head_menu`, `montage_layer_menu` n'en sont plus que des
+  renvois). `newlayer.rs` : fenêtre « Nouveau calque… » et `insert_index` (place choisie).
 - Groupes (`groupsui.rs`) : `LayerGroup::shown` est un filtre de la timeline seulement
   (`rows_of` saute ces calques ; `drop_index` pose un calque glissé juste au-dessus du calque de
   la ligne d'en dessous, les calques sans ligne ne bougent pas). Commandes en masse par
@@ -1006,8 +1013,8 @@ Cel = image en tuiles 64×64 (+ éléments vectoriels si calque vectoriel, rendu
     bande recouvre la fin de la colonne. Il réutilise `layerheads` : `opacity_bar` (identifiée par
     un `egui::Id`), `eye_button`, `lock_button`, `icon_at`, `blend_combo` (sorti de `layer_head`).
   - Clic droit sur la rangée, ⋮, ou « Calque » au clic droit d'une piste : `montage_layer_menu`
-    (réglages, opacité, mode, `behaviour_items` sorti de `layer_head_menu`, groupe,
-    `layer_menu_where(…, in_montage)`, calque de couleur, vidéo, propagation, puis `layer_ops_menu`).
+    (depuis §82, le menu commun `menucalque::layer_menu(…, Origine::Montage)` : seules les pistes du
+    montage s'y ajoutent, sous « Plus »).
     `LayerRename::in_montage` : le renommage se fait dans la colonne (double-clic sur le nom).
   - `paint_layer_cell` montre le pré / post-comportement (boucle, va-et-vient, maintenir) en
     pâle avant le premier dessin et après le dernier, avec `behaviour_icon`.
