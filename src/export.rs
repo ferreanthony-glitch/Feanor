@@ -1160,6 +1160,12 @@ impl ExportJob {
     /// Storyboard PDF à la carte (`pdfmise.rs`) : format de page, nombre de cases, textes, en-tête, polices embarquées. Même tâche
     /// de fond que `pdf` ; les images sont réduites d'après la taille d'une case.
     pub fn pdf_layout(out: &Path, title: &str, frames: Vec<(usize, usize)>, boards: Vec<pdf::Board>, frame: [usize; 2], layout: PdfLayout) -> ExportJob {
+        ExportJob::pdf_layout_studio(out, title, frames, boards, frame, layout, None)
+    }
+
+    /// Comme `pdf_layout`, avec l'en-tête de studio, les plans modifiés et la page de révision (`entetepdf.rs`) que `layout` demande. Tout est calculé d'avance
+    /// (sur le projet, par l'appelant) : la tâche de fond ne lit pas le projet.
+    pub fn pdf_layout_studio(out: &Path, title: &str, frames: Vec<(usize, usize)>, boards: Vec<pdf::Board>, frame: [usize; 2], layout: PdfLayout, studio: Option<crate::entetepdf::Studio>) -> ExportJob {
         let n = boards.len();
         let (path, name) = (out.to_path_buf(), title.to_string());
         let aspect = frame[0] as f32 / frame[1].max(1) as f32;
@@ -1172,7 +1178,7 @@ impl ExportJob {
             frames,
             move |_, img| board_image_at(img, frame, width),
             move |images: Vec<pdf::BoardImage>| {
-                let bytes = crate::pdfmise::storyboard_layout(&name, &date, &boards, &images, aspect, &layout);
+                let bytes = crate::pdfmise::storyboard_layout_studio(&name, &date, &boards, &images, aspect, &layout, studio.as_ref());
                 write_atomic(&path, &bytes)
             },
         );

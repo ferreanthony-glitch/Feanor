@@ -130,6 +130,7 @@ impl App {
         let ffmpeg_ok = matches!(self.ffmpeg_info(), Some((_, Ok(_))));
         let n = self.doc.panels.len();
         let (a, b) = self.doc.sequence_run(self.cur_panel.min(n.saturating_sub(1)));
+        let projet_dossier = self.dossier_du_projet();
         let r = &mut self.settings.paquet;
         ui.add_enabled_ui(!occupe, |ui| {
             egui::Grid::new("paquet_grille").num_columns(2).spacing([10.0, 7.0]).show(ui, |ui| {
@@ -164,11 +165,7 @@ impl App {
                         None => ui.colored_label(avert, "à choisir"),
                     };
                     if ui.button("Choisir…").clicked() {
-                        let mut d = rfd::FileDialog::new().set_title("Dossier où ranger le paquet de livraison");
-                        if let Some(dir) = &r.dossier {
-                            d = d.set_directory(dir);
-                        }
-                        if let Some(p) = d.pick_folder() {
+                        if let Some(p) = crate::dialogues::choisir_dossier("paquet", "Dossier où ranger le paquet de livraison", projet_dossier.as_deref(), r.dossier.as_deref()) {
                             r.dossier = Some(p);
                         }
                     }

@@ -62,7 +62,8 @@
 //! - **EDL CMX 3600** : `TITLE:`, `FCM: NON-DROP FRAME`, événements `NNN  REEL  V  C  src_in src_out
 //!   rec_in rec_out` (champs séparés par des blancs), `D nnn` pour un fondu enchaîné de nnn images
 //!   (événement à deux lignes : le plan sortant à longueur nulle, `C`, puis le plan entrant, `D nnn`),
-//!   `BL` pour le noir, `* FROM CLIP NAME:` pour le nom du clip. Noms de bobine de 8 caractères au plus.
+//!   `BL` pour le noir, `* FROM CLIP NAME:` pour le nom du clip. Noms de bobine de 8 caractères au plus :
+//!   `S01P012A` (séquence et plan, `reel_name`) ; la séquence y est pour que deux séquences exportées à part ne partagent pas « PL001 ».
 //! - **Final Cut Pro 7 XML (xmeml, version 4)** : `sequence` > `media` > `video` / `audio` > `track` >
 //!   `clipitem` (`start` / `end` dans la séquence, `in` / `out` dans le fichier, en images) et
 //!   `transitionitem` (`start`, `end`, `alignment`, `effect`), `file` (`pathurl`, `duration`,
@@ -432,13 +433,18 @@ impl Plan {
     }
 }
 
-/// Nom de bobine de l'EDL : « PL012A », au plus 8 caractères de A-Z, 0-9 et `_` ; à défaut « R00001 ».
-fn reel_name(plan_ref: &str, index: usize) -> String {
-    let r: String = plan_ref.chars().map(|c| if c == '.' { '_' } else { c.to_ascii_uppercase() }).collect();
+/// Nom de bobine de l'EDL pour le plan p du film : la **séquence et le plan** (« S01P012A »), au plus 8 caractères de A-Z, 0-9 et `_` (la limite du
+/// CMX 3600) ; à défaut (numéro trop long : « S01P012AB ») « R00012 », le rang du plan dans le film. Avec la séquence dans la bobine, deux séquences
+/// exportées à part (ou deux épisodes montés ensemble) ne partagent jamais « PL001 » ; le nom complet du plan, avec l'épisode si le modèle de noms le
+/// porte, est dans le commentaire `* FROM CLIP NAME:` de chaque événement.
+fn reel_name(doc: &Document, p: usize) -> String {
+    let sequence = doc.sequence_num(doc.sequence_of(p)).padded(2);
+    let plan = doc.plan_num(doc.panels[p].scene).padded(3);
+    let r: String = format!("S{sequence}P{plan}").chars().map(|c| if c == '.' { '_' } else { c.to_ascii_uppercase() }).collect();
     if r.len() <= 8 && r.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_') {
         r
     } else {
-        format!("R{:05}", index + 1)
+        format!("R{:05}", p + 1)
     }
 }
 
@@ -469,15 +475,14 @@ pub fn build_plan(doc: &Document, opts: &Options, cur_panel: usize, title: &str)
     let mut at = 0;
     for p in a..b {
         // Un plan qui a plusieurs versions porte celle qui part dans son nom : « SQ01_PL012A_V2 » (la bobine de
-        // l'EDL reste « PL012A » : 8 caractères au plus).
+        // l'EDL reste « S01P012A » : 8 caractères au plus).
         let versionne = doc.nombre_de_versions(doc.panels[p].id) > 1;
         let name = clip_name(doc, p);
-        let ref_only = doc.plan_ref(doc.panels[p].scene);
         let len = doc.panels[p].frame_count();
         clips.push(PlanClip {
             panel: p,
             file: format!("media/{}.{}", file_safe(&name), opts.media.extension()),
-            reel: reel_name(&ref_only, clips.len()),
+            reel: reel_name(doc, p),
             name,
             start: at,
             len,
@@ -486,6 +491,14 @@ pub fn build_plan(doc: &Document, opts: &Options, cur_panel: usize, title: &str)
             title: if versionne { format!("{} · {}", crate::storyboard::panel_long_title(doc, p), crate::planvers::etiquette(doc.numero_de_version(doc.panels[p].id))) } else { crate::storyboard::panel_long_title(doc, p) },
         });
         at += len;
+    }
+    // Jamais deux événements sur la même bobine : un doublon (deux plans qui se ressembleraient une fois raccourcis) prend la bobine de secours « R00012 ».
+    let mut vues: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for c in &mut clips {
+        if !vues.insert(c.reel.clone()) {
+            c.reel = format!("R{:05}", c.panel + 1);
+            vues.insert(c.reel.clone());
+        }
     }
     let total = at;
     let end_film = b == doc.panels.len();

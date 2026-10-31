@@ -102,6 +102,12 @@ pub struct PlanEnvoye {
     pub version: u32,
     #[serde(default)]
     pub images: usize,
+    /// Le nom du plan d'alors, selon le modèle de noms (« SQ01_PL012A ») ; vide pour un envoi d'avant « petits livrables » (`renumerotation.rs`).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub nom: String,
+    /// Le nom ou numéro de sa séquence d'alors (« 2 », « Poursuite ») ; vide : inconnu.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub sequence: String,
 }
 
 /// La variante choisie d'une séquence quand l'envoi est parti (`variantes.rs`) : seulement pour les séquences qui en
@@ -410,6 +416,9 @@ pub struct PlanCopie {
     pub panel: Panel,
     pub titre: String,
     pub version: u32,
+    /// Le nom du plan selon le modèle de noms, et sa séquence, au moment de la copie (gardés dans l'envoi).
+    pub nom: String,
+    pub sequence: String,
 }
 
 /// Un dessin copié, avec la version qu'il avait.
@@ -539,7 +548,7 @@ pub fn construire(demande: Demande) -> Result<Resultat, String> {
         plans: plans
             .iter()
             .zip(&resultats)
-            .map(|(p, (_, e))| PlanEnvoye { plan: p.panel.id, titre: p.titre.clone(), empreinte: *e, version: p.version.max(1), images: p.panel.frame_count() })
+            .map(|(p, (_, e))| PlanEnvoye { plan: p.panel.id, titre: p.titre.clone(), empreinte: *e, version: p.version.max(1), images: p.panel.frame_count(), nom: p.nom.clone(), sequence: p.sequence.clone() })
             .collect(),
         // (Les variantes choisies : notées par l'appelant, qui a le document.)
         variantes: Vec::new(),

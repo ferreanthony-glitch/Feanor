@@ -62,6 +62,8 @@ pub enum Colonne {
     Image,
     DureeImages,
     DureeSecondes,
+    /// L'écart cumulé aux durées cibles (`budget.rs`), sur le dernier plan de chaque séquence.
+    EcartCumule,
     DureeTc,
     TcEntree,
     TcSortie,
@@ -96,7 +98,7 @@ pub enum Sorte {
 
 impl Colonne {
     /// Toutes les colonnes, dans l'ordre où la fenêtre les propose.
-    pub const TOUTES: [Colonne; 30] = [
+    pub const TOUTES: [Colonne; 31] = [
         Colonne::Sequence,
         Colonne::Numero,
         Colonne::Reference,
@@ -106,6 +108,7 @@ impl Colonne {
         Colonne::Vignette,
         Colonne::DureeImages,
         Colonne::DureeSecondes,
+        Colonne::EcartCumule,
         Colonne::DureeTc,
         Colonne::TcEntree,
         Colonne::TcSortie,
@@ -140,6 +143,7 @@ impl Colonne {
             Colonne::Image => "image",
             Colonne::DureeImages => "duree_images",
             Colonne::DureeSecondes => "duree_secondes",
+            Colonne::EcartCumule => "ecart_cumule",
             Colonne::DureeTc => "duree_tc",
             Colonne::TcEntree => "tc_entree",
             Colonne::TcSortie => "tc_sortie",
@@ -180,6 +184,7 @@ impl Colonne {
             Colonne::Image => "Image",
             Colonne::DureeImages => "Durée (images)",
             Colonne::DureeSecondes => "Durée (s)",
+            Colonne::EcartCumule => "Écart cumulé (s)",
             Colonne::DureeTc => "Durée (TC)",
             Colonne::TcEntree => "TC entrée",
             Colonne::TcSortie => "TC sortie",
@@ -216,6 +221,7 @@ impl Colonne {
             Colonne::Image => "En mode « une ligne par image de storyboard » : le rang de l'image dans le plan (2 / 3).",
             Colonne::DureeImages => "La durée en images (un nombre, pour calculer dessus).",
             Colonne::DureeSecondes => "La durée en secondes (un nombre).",
+            Colonne::EcartCumule => "Sur le dernier plan de chaque séquence : de combien le film dépasse (+) ou n'atteint pas (-) les durées cibles, en secondes, cumulé jusque-là. Rien sans durée cible (Propriétés du projet).",
             Colonne::DureeTc => "La durée en time code HH:MM:SS:FF.",
             Colonne::TcEntree => "Le time code de la première image du plan dans le film.",
             Colonne::TcSortie => "Le time code de l'image qui suit le plan.",
@@ -244,7 +250,7 @@ impl Colonne {
     pub fn sorte(self) -> Sorte {
         match self {
             Colonne::DureeImages | Colonne::ImagesStoryboard | Colonne::Commentaires | Colonne::Calques => Sorte::Entier,
-            Colonne::DureeSecondes => Sorte::Decimal,
+            Colonne::DureeSecondes | Colonne::EcartCumule => Sorte::Decimal,
             _ => Sorte::Texte,
         }
     }
@@ -257,6 +263,7 @@ impl Colonne {
             Colonne::Reference => 20.0,
             Colonne::Nom => 22.0,
             Colonne::DureeImages | Colonne::DureeSecondes => 10.0,
+            Colonne::EcartCumule => 14.0,
             Colonne::DureeTc | Colonne::TcEntree | Colonne::TcSortie => 13.0,
             Colonne::Cadrage => 20.0,
             Colonne::Mouvement => 26.0,
@@ -294,7 +301,7 @@ impl Colonne {
 
     /// Cochée d'office.
     pub fn par_defaut(self) -> bool {
-        !matches!(self, Colonne::Reference | Colonne::Image | Colonne::DureeTc | Colonne::MouvementDetail | Colonne::ImagesStoryboard | Colonne::CommentairesTexte | Colonne::Retake | Colonne::Envoi | Colonne::Couleur | Colonne::Calques | Colonne::Effets)
+        !matches!(self, Colonne::EcartCumule | Colonne::Reference | Colonne::Image | Colonne::DureeTc | Colonne::MouvementDetail | Colonne::ImagesStoryboard | Colonne::CommentairesTexte | Colonne::Retake | Colonne::Envoi | Colonne::Couleur | Colonne::Calques | Colonne::Effets)
     }
 }
 
@@ -480,6 +487,8 @@ pub fn build(doc: &Document, e: &Entree) -> Result<Fiche, String> {
     if e.colonnes.contains(&Colonne::Modifie) && e.envoi.is_some() && e.etats.is_none() {
         avertissements.push("Le relevé des plans depuis l'envoi n'est pas prêt : la colonne « Modifié depuis l'envoi » est vide. Réessaie dans un instant.".into());
     }
+    // L'écart aux durées cibles (`budget.rs`), seulement si la colonne est demandée.
+    let ecarts = if e.colonnes.contains(&Colonne::EcartCumule) { crate::budget::ecarts_cumules(doc) } else { Vec::new() };
     let mut lignes = Vec::with_capacity(plans.len());
     for &i in &plans {
         let panel = &doc.panels[i];
@@ -492,7 +501,7 @@ pub fn build(doc: &Document, e: &Entree) -> Result<Fiche, String> {
         };
         let reference = reference(doc, i);
         for (k, a, b) in spans {
-            let ligne = ligne_du_plan(doc, e, i, (k, a, b), &boards, &reference, &debuts, fps);
+            let ligne = ligne_du_plan(doc, e, i, (k, a, b), &boards, &reference, &debuts, fps, &ecarts);
             lignes.push(ligne);
         }
     }
@@ -500,7 +509,7 @@ pub fn build(doc: &Document, e: &Entree) -> Result<Fiche, String> {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn ligne_du_plan(doc: &Document, e: &Entree, i: usize, (k, a, b): (usize, usize, usize), boards: &[(u64, usize, usize)], reference: &str, debuts: &[usize], fps: u32) -> Ligne {
+fn ligne_du_plan(doc: &Document, e: &Entree, i: usize, (k, a, b): (usize, usize, usize), boards: &[(u64, usize, usize)], reference: &str, debuts: &[usize], fps: u32, ecarts: &[Option<i64>]) -> Ligne {
     let panel = &doc.panels[i];
     let nb_images = boards.len();
     let len = b - a;
@@ -531,6 +540,11 @@ fn ligne_du_plan(doc: &Document, e: &Entree, i: usize, (k, a, b): (usize, usize,
             Colonne::Image => Cellule::texte(if e.par_image { format!("{} / {}", k + 1, nb_images) } else { String::new() }),
             Colonne::DureeImages => Cellule::Entier(len as i64),
             Colonne::DureeSecondes => Cellule::Decimal((len as f64 / fps as f64 * 1000.0).round() / 1000.0),
+            // (Sur la dernière ligne du plan seulement : une ligne par image de storyboard ne répète pas l'écart.)
+            Colonne::EcartCumule => match ecarts.get(i).copied().flatten() {
+                Some(g) if derniere => Cellule::Decimal(crate::budget::ecart_en_secondes(g, fps)),
+                _ => Cellule::Vide,
+            },
             Colonne::DureeTc => Cellule::texte(editorial::timecode(len as i64, fps)),
             Colonne::TcEntree => Cellule::texte(editorial::timecode(e.start_tc + abs_a as i64, fps)),
             Colonne::TcSortie => Cellule::texte(editorial::timecode(e.start_tc + abs_b as i64, fps)),

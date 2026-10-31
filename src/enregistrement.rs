@@ -128,7 +128,8 @@ impl App {
             .set_title("Enregistrer le projet (un dossier à ce nom sera créé)")
             .add_filter("Projet SHOT", &[project::EXTENSION])
             .set_file_name(name);
-        if let Some(dir) = self.import_source.as_ref().and_then(|p| p.parent()) {
+        // À côté du dossier du projet ouvert (un dossier à ce nom sera créé : pas dedans), sinon à côté du fichier importé.
+        if let Some(dir) = self.dossier_pour_enregistrer_sous().or_else(|| self.import_source.as_ref().and_then(|p| p.parent()).map(std::path::Path::to_path_buf)) {
             dialog = dialog.set_directory(dir);
         }
         let Some(chosen) = dialog.save_file() else {

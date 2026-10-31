@@ -525,6 +525,8 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
         serie: "Course-poursuite".into(),
         episode: "3".into(),
         modele_noms: "{projet}_EP{episode:02}_SQ{sequence:03}_SH{plan:04}".into(),
+        budget_ms: 0,
+        budgets_sequences: Default::default(),
     };
     // Un commentaire sur le plan 1 (visible, dans le plan non rogné) et un sur le dernier plan.
     let id = doc.add_comment(doc.panels[0].id, 9, "Léa", 1_760_000_500);

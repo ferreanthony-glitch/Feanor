@@ -2079,6 +2079,11 @@ touches = []
 source = "SHOT (sans touche)"
 
 [[raccourci]]
+action = "fichier.exporter_renumerotation"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
 action = "projet.noms_production"
 touches = []
 source = "SHOT (sans touche)"

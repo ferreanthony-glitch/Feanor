@@ -170,11 +170,21 @@ impl App {
 
     /// Les plans à examiner, copiés : leur titre et leur version d'aujourd'hui.
     fn envois_plans(&self) -> Vec<PlanCopie> {
+        // (Les noms et les titres de tous les plans en une passe : pas le carré du nombre de plans.)
+        let numeros = crate::numerotation::Numeros::of(&self.doc);
+        let noms = self.doc.noms_de_tous_les_plans();
+        let sequences = self.doc.sequence_ids();
         self.doc
             .panels
             .iter()
             .enumerate()
-            .map(|(i, p)| PlanCopie { panel: p.clone(), titre: crate::storyboard::panel_title(&self.doc, i), version: self.doc.numero_de_version(p.id) })
+            .map(|(i, p)| PlanCopie {
+                panel: p.clone(),
+                titre: crate::storyboard::panel_title_n(&self.doc, &numeros, i),
+                version: self.doc.numero_de_version(p.id),
+                nom: noms[i].clone(),
+                sequence: numeros.sequence_label(&self.doc, sequences[i]),
+            })
             .collect()
     }
 

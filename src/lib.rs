@@ -959,6 +959,14 @@ mod modeleepisode;
 mod modeleepisodeui;
 #[cfg(test)]
 mod pipeline_tests;
+// Petits livrables : budget de durée, rapport de numérotation, en-têtes de PDF, fenêtres de fichiers dans le projet (`docs/INTERFACE.md` partie 91).
+mod budget;
+mod dialogues;
+mod entetepdf;
+mod renumerotation;
+mod renumerotationui;
+#[cfg(test)]
+mod petits_livrables_tests;
 // Transitions du montage (fondus, volet, noir) : modèle, rendu, interface.
 mod transitions;
 #[cfg(test)]

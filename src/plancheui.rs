@@ -42,7 +42,7 @@ pub(crate) struct Etat {
 
 impl Default for Etat {
     fn default() -> Self {
-        Etat { ouverte: false, opt: Options::default(), etendue: Etendue::Film, choix: ChoixResolution::Dpi150, largeur: 4000, message: None, resume: None }
+        Etat { ouverte: false, opt: Options { legendes: true, bloc_titre: true, ..Options::default() }, etendue: Etendue::Film, choix: ChoixResolution::Dpi150, largeur: 4000, message: None, resume: None }
     }
 }
 
@@ -112,13 +112,27 @@ impl App {
         self.settings_a_ecrire = true;
     }
 
+    /// Le bloc de titre de la planche des plans `plans` (`entetepdf.rs`) : la série, l'épisode, la version (le dernier envoi), la date ; la séquence quand
+    /// tous les plans sont de la même.
+    pub(crate) fn planche_entete(&self, plans: &[usize]) -> crate::entetepdf::Entete {
+        let base = crate::entetepdf::Entete::de_projet(&self.doc, self.doc.envois.dernier(), &crate::incrustation::date_text(crate::incrustation::now_secs()));
+        let ids = self.doc.sequence_ids();
+        let mut seqs: Vec<u64> = plans.iter().filter_map(|&p| ids.get(p).copied()).collect();
+        seqs.sort_unstable();
+        seqs.dedup();
+        match seqs.as_slice() {
+            [seq] => base.pour_sequence(&self.doc.sequence_label(*seq)),
+            _ => base,
+        }
+    }
+
     /// La tâche d'export de la planche des plans `plans` vers `out` (rien n'est calculé ici).
     pub(crate) fn planche_job(&self, plans: &[usize], opt: &Options, out: &Path) -> Result<ExportJob, String> {
         if plans.is_empty() {
             return Err("Aucun plan dans cette étendue.".into());
         }
         // (Le sens de lecture et les textes montrés sont ceux de l'écran : l'export range les cases comme la planche.)
-        let opt = &self.planche_options(opt);
+        let opt = &Options { entete: self.planche_entete(plans), ..self.planche_options(opt) };
         let p = planche::construire(&self.doc, plans, &self.layout.board_settings(), opt, &self.doc.annotations);
         let (s, dims, reduit) = planche::dimensions(p.cadre, opt.resolution);
         let n = p.cartes.len();
@@ -138,7 +152,7 @@ impl App {
             move |imgs: Vec<image::RgbImage>| {
                 let img = planche::composer(&p2, &imgs, &opt2, s)?;
                 drop(imgs);
-                let bytes = planche::encoder(&p2, &img, opt2.sortie, &titre, s)?;
+                let bytes = planche::encoder_avec(&p2, &img, opt2.sortie, &titre, s, opt2.bloc_titre.then_some(&opt2.entete))?;
                 crate::export::write_atomic(&chemin, &bytes)
             },
             || {},
@@ -166,13 +180,12 @@ impl App {
         let plans = self.planche_plans(etendue);
         let ext = opt.sortie.extension();
         let base = self.base_name();
-        let mut dialogue = rfd::FileDialog::new().set_title("Exporter la planche des vignettes").set_file_name(format!("{base}_planche.{ext}"));
-        dialogue = match opt.sortie {
-            Sortie::Png => dialogue.add_filter("Image PNG", &["png"]),
-            Sortie::Jpeg => dialogue.add_filter("Image JPEG", &["jpg", "jpeg"]),
-            _ => dialogue.add_filter("Document PDF", &["pdf"]),
+        let (nom_filtre, exts): (&str, &[&str]) = match opt.sortie {
+            Sortie::Png => ("Image PNG", &["png"]),
+            Sortie::Jpeg => ("Image JPEG", &["jpg", "jpeg"]),
+            _ => ("Document PDF", &["pdf"]),
         };
-        let Some(mut path) = dialogue.save_file() else { return };
+        let Some(mut path) = self.dialogue_enregistrer("planche", "Exporter la planche des vignettes", (nom_filtre, exts), &format!("{base}_planche.{ext}")) else { return };
         if path.extension().is_none() {
             path.set_extension(ext);
         }
@@ -256,6 +269,18 @@ impl App {
                 let o = &mut e.opt;
                 bulles::bulle(ui.checkbox(&mut o.numeros, "Numéros de plan"), "Numéros de plan", "Le numéro du plan, au-dessus de sa première vignette.", "");
                 bulles::bulle(ui.checkbox(&mut o.notes, "Notes"), "Notes", "Les textes sous les images : une ligne par champ coché dans le panneau Planche, coupée par « … » si elle est trop longue.", "");
+                bulles::bulle(
+                    ui.checkbox(&mut o.legendes, "Légendes : nom du plan et durée"),
+                    "Légendes",
+                    "Au-dessus de chaque vignette : le nom du plan selon le modèle de noms du projet (SQ01_PL012A, _C02 pour les cases d'après) et sa durée. Elles tiennent lieu du numéro seul.",
+                    "",
+                );
+                bulles::bulle(
+                    ui.checkbox(&mut o.bloc_titre, "Bloc de titre en haut des pages du PDF"),
+                    "Bloc de titre",
+                    "En haut de chaque page d'un PDF : la série, l'épisode, la séquence, la version (le nom du dernier envoi), la date et la page n / N. Sans effet pour une image.",
+                    "",
+                );
                 bulles::bulle(ui.checkbox(&mut o.barres, "Barres de coupe"), "Barres de coupe", "Les barres entre deux vignettes : grises dans un même plan, noires à une coupe.", "");
                 bulles::bulle(ui.checkbox(&mut o.cadres, "Cadres de caméra"), "Cadres de caméra", "Là où la caméra bouge : les cadres A, B, C… en bleu fin, avec leurs lettres, la flèche ou les coins qui les relient.", "");
                 // Une seule case pour la planche et les plans (comme dans la fenêtre d'export du film) : les calques d'annotation de la planche

@@ -7,6 +7,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::entetepdf::{Entete, Revision, Studio};
 use crate::pdf::{self, Board, BoardImage, PdfFile};
 use crate::pdffont::Fonts;
 
@@ -59,11 +60,32 @@ pub struct PdfLayout {
     /// Le titre du film et la date en haut de chaque page.
     pub header: bool,
     pub page_numbers: bool,
+    /// L'en-tête de studio (`entetepdf.rs`) : la série, l'épisode, la séquence, la version (le nom du dernier envoi), la date, et « Page n / N » ; il remplace le
+    /// titre et la date du haut de page. Décoché d'origine : la page garde l'en-tête d'avant.
+    pub studio: bool,
+    /// Marquer les plans modifiés ou ajoutés depuis le dernier envoi (un cadre et « MODIFIÉ » sur l'image). Sans envoi, rien n'est marqué.
+    pub marquer_modifies: bool,
+    /// Une page « Notes de révision » à la fin : les plans modifiés et les notes traitées depuis le dernier envoi. Décochée d'origine.
+    pub notes_revision: bool,
 }
 
 impl Default for PdfLayout {
     fn default() -> Self {
-        PdfLayout { paper: Paper::A4, landscape: true, per_page: 6, action: true, dialogue: true, notes: true, duration: true, number: true, header: true, page_numbers: true }
+        PdfLayout {
+            paper: Paper::A4,
+            landscape: true,
+            per_page: 6,
+            action: true,
+            dialogue: true,
+            notes: true,
+            duration: true,
+            number: true,
+            header: true,
+            page_numbers: true,
+            studio: false,
+            marquer_modifies: true,
+            notes_revision: false,
+        }
     }
 }
 
@@ -154,6 +176,16 @@ impl Canvas {
     fn image(&mut self, id: usize, x: f32, top: f32, w: f32, h: f32) {
         self.ops += &pdf::op_image(self.h, id, x, top, w, h);
     }
+
+    /// Une couleur pour le trait et le remplissage (0 à 1) ; `gray` y revient.
+    fn rgb(&mut self, r: f32, g: f32, b: f32) {
+        self.ops += &format!("{r:.2} {g:.2} {b:.2} rg {r:.2} {g:.2} {b:.2} RG\n");
+    }
+
+    /// Un rectangle plein de la couleur courante.
+    fn fill(&mut self, x: f32, top: f32, w: f32, h: f32) {
+        self.ops += &format!("{x:.2} {:.2} {w:.2} {h:.2} re f\n", self.h - top - h);
+    }
 }
 
 /// Une ligne de texte d'une case : un libellé en gras au début (« Action : ») ou non, et la place qu'il prend.
@@ -225,26 +257,59 @@ pub(crate) fn tout_le_texte(title: &str, date: &str, boards: &[Board]) -> String
     s
 }
 
-/// Le storyboard : les polices sont choisies d'après le texte (`Fonts::choose`).
-pub fn storyboard_layout(title: &str, date: &str, boards: &[Board], images: &[BoardImage], aspect: f32, layout: &PdfLayout) -> Vec<u8> {
-    let fonts = Fonts::choose(&tout_le_texte(title, date, boards));
-    storyboard_layout_with(title, date, boards, images, aspect, layout, fonts)
+/// Le storyboard : les polices sont choisies d'après le texte (`Fonts::choose`) ; avec l'en-tête de studio, les plans modifiés et la page de révision de `studio` (`entetepdf.rs`) selon les choix de `layout`.
+pub fn storyboard_layout_studio(title: &str, date: &str, boards: &[Board], images: &[BoardImage], aspect: f32, layout: &PdfLayout, studio: Option<&Studio>) -> Vec<u8> {
+    let texte = format!("{} {}", tout_le_texte(title, date, boards), studio.map(Studio::tout_le_texte).unwrap_or_default());
+    let fonts = Fonts::choose(&texte);
+    storyboard_layout_studio_with(title, date, boards, images, aspect, layout, fonts, studio)
 }
 
 /// Le storyboard écrit avec les polices `fonts`. `aspect` : largeur / hauteur du cadre.
-pub fn storyboard_layout_with(title: &str, date: &str, boards: &[Board], images: &[BoardImage], aspect: f32, layout: &PdfLayout, mut fonts: Fonts) -> Vec<u8> {
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn storyboard_layout_with(title: &str, date: &str, boards: &[Board], images: &[BoardImage], aspect: f32, layout: &PdfLayout, fonts: Fonts) -> Vec<u8> {
+    storyboard_layout_studio_with(title, date, boards, images, aspect, layout, fonts, None)
+}
+
+/// Les lignes de la page « Notes de révision » coupées à `largeur` : (gras ?, retrait, texte), une ligne vide pour un blanc.
+fn lignes_de_revision(rev: &Revision, fonts: &Fonts, size: f32, largeur: f32) -> Vec<(bool, f32, String)> {
+    let mesure = |s: &str, bold: bool, sz: f32| fonts.width(s, bold, sz);
+    let mut out = Vec::new();
+    for (bold, retrait, texte) in rev.lignes() {
+        if texte.trim().is_empty() {
+            out.push((false, 0.0, String::new()));
+            continue;
+        }
+        for l in pdf::wrap_with(&mesure, &texte, bold, size, (largeur - retrait).max(40.0), 0.0) {
+            out.push((bold, retrait, l));
+        }
+    }
+    out
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn storyboard_layout_studio_with(title: &str, date: &str, boards: &[Board], images: &[BoardImage], aspect: f32, layout: &PdfLayout, mut fonts: Fonts, studio: Option<&Studio>) -> Vec<u8> {
     let mut pdf = PdfFile::new();
     fonts.attach(&mut pdf);
     let (pw, ph) = layout.page_size();
     let per = layout.per_page_ok();
     let (cols, rows) = grid(per, layout.landscape);
     let pages = pdf::paginate_n(boards, per);
-    let total = pages.len();
+    // L'en-tête de studio : seulement si l'on a de quoi l'écrire.
+    let studio_on = layout.studio && studio.is_some();
+    let revision = studio.filter(|_| layout.notes_revision).and_then(|s| s.revision.as_ref());
     // Les marges et les écarts suivent la taille de la page ; le texte, la largeur des cases.
     let k = (pw.min(ph) / 595.0).clamp(1.0, 1.4);
     let (margin, gap_x, gap_y) = (28.0 * k, 16.0 * k, 14.0 * k);
-    let header_h = if layout.header { 26.0 * k } else { 0.0 };
-    let footer_h = if layout.page_numbers { 18.0 * k } else { 0.0 };
+    let header_h = if studio_on { 38.0 * k } else if layout.header { 26.0 * k } else { 0.0 };
+    // (« Page n / N » est dans l'en-tête de studio : pas de second numéro en bas.)
+    let footer_h = if layout.page_numbers && !studio_on { 18.0 * k } else { 0.0 };
+    // La page de révision : ses lignes, et le nombre de pages qu'elle prend (leur nombre fait partie du « N » de chaque page).
+    let (rev_size, rev_leading) = (9.5 * k, 13.0 * k);
+    let rev_lignes = revision.map(|r| lignes_de_revision(r, &fonts, rev_size, pw - 2.0 * margin)).unwrap_or_default();
+    let rev_top = margin + header_h + 22.0 * k;
+    let rev_par_page = (((ph - margin - rev_top) / rev_leading).floor() as usize).max(1);
+    let rev_pages = if revision.is_some() { rev_lignes.len().div_ceil(rev_par_page).max(1) } else { 0 };
+    let total = pages.len() + rev_pages;
     let grid_top = margin + header_h;
     let cell_w = (pw - 2.0 * margin - (cols as f32 - 1.0) * gap_x) / cols as f32;
     let row_h = (ph - grid_top - margin - footer_h - gap_y * (rows as f32 - 1.0)) / rows as f32;
@@ -263,7 +328,9 @@ pub fn storyboard_layout_with(title: &str, date: &str, boards: &[Board], images:
     for (n, page) in pages.iter().enumerate() {
         let mut c = Canvas { ops: String::new(), h: ph };
         let mut used = Vec::new();
-        if layout.header {
+        if let (true, Some(s)) = (studio_on, studio) {
+            en_tete_de_studio(&mut c, &mut fonts, &s.entete.pour_sequence(&boards[page[0]].sequence), (pw, margin, k), &format!("Page {} / {total}", n + 1));
+        } else if layout.header {
             c.gray(0.1);
             c.text(&mut fonts, margin, margin + 12.0 * k, title, true, 13.0 * k);
             c.gray(0.35);
@@ -284,6 +351,16 @@ pub fn storyboard_layout_with(title: &str, date: &str, boards: &[Board], images:
             }
             c.gray(0.55);
             c.rect(ix, top, img_w, img_h, 0.5);
+            // Un plan modifié ou ajouté depuis le dernier envoi : un cadre rouge et une étiquette « MODIFIÉ » dans le coin.
+            if layout.marquer_modifies && studio.is_some_and(|s| s.modifies.get(i).copied().unwrap_or(false)) {
+                c.rgb(0.85, 0.12, 0.12);
+                c.rect(ix, top, img_w, img_h, 2.0);
+                let (tag_size, tag) = (7.5 * scale, "MODIFIÉ");
+                let tag_w = fonts.width(tag, true, tag_size) + 6.0 * scale;
+                c.fill(ix, top, tag_w, tag_size + 4.0 * scale);
+                c.gray(1.0);
+                c.text(&mut fonts, ix + 3.0 * scale, top + tag_size + 1.0 * scale, tag, true, tag_size);
+            }
             let b = &boards[i];
             let mut y = top + img_h + if info_line { 11.0 * scale } else { 4.0 * scale };
             if info_line {
@@ -307,7 +384,7 @@ pub fn storyboard_layout_with(title: &str, date: &str, boards: &[Board], images:
                 y += leading;
             }
         }
-        if layout.page_numbers {
+        if layout.page_numbers && !studio_on {
             c.gray(0.35);
             let label = format!("Page {} / {total}", n + 1);
             let w = fonts.width(&label, false, 8.5 * k);
@@ -315,6 +392,59 @@ pub fn storyboard_layout_with(title: &str, date: &str, boards: &[Board], images:
         }
         pdf.add_page_sized(pw, ph, c.ops.as_bytes(), &used);
     }
+    // La page finale « Notes de révision » (une ou plusieurs pages), avec le même en-tête.
+    if let (Some(_), Some(s)) = (revision, studio) {
+        let paquets: Vec<&[(bool, f32, String)]> = if rev_lignes.is_empty() { vec![&rev_lignes[..]] } else { rev_lignes.chunks(rev_par_page).collect() };
+        for (r, lignes) in paquets.into_iter().enumerate() {
+            let mut c = Canvas { ops: String::new(), h: ph };
+            let numero = pages.len() + r + 1;
+            if studio_on {
+                en_tete_de_studio(&mut c, &mut fonts, &s.entete, (pw, margin, k), &format!("Page {numero} / {total}"));
+            } else {
+                c.gray(0.1);
+                c.text(&mut fonts, margin, margin + 12.0 * k, title, true, 13.0 * k);
+                c.gray(0.35);
+                c.text_right(&mut fonts, pw - margin, margin + 12.0 * k, &format!("Page {numero} / {total}"), false, 9.0 * k);
+                c.gray(0.75);
+                c.line(margin, pw - margin, margin + 19.0 * k, 0.6);
+            }
+            c.gray(0.1);
+            c.text(&mut fonts, margin, margin + header_h + 12.0 * k, if r == 0 { "Notes de révision" } else { "Notes de révision (suite)" }, true, 12.0 * k);
+            let mut y = rev_top + rev_leading;
+            for (bold, retrait, texte) in lignes {
+                if !texte.is_empty() {
+                    c.gray(if *bold { 0.1 } else { 0.2 });
+                    c.text(&mut fonts, margin + retrait, y, texte, *bold, rev_size);
+                }
+                y += rev_leading;
+            }
+            pdf.add_page_sized(pw, ph, c.ops.as_bytes(), &[]);
+        }
+    }
     fonts.write(&mut pdf);
     pdf.finish(title)
+}
+
+/// Le texte `s` à (`x`, `top`) d'une page de hauteur `page_h` (origine en haut à gauche), en `gray` (0 noir, 1 blanc) : les commandes d'une page de PDF.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn op_texte(fonts: &mut Fonts, page_h: f32, x: f32, top: f32, s: &str, bold: bool, size: f32, gray: f32) -> String {
+    let (font, operand) = (fonts.resource(bold), fonts.show(s, bold));
+    format!("{gray:.2} g BT /{font} {size:.2} Tf {x:.2} {:.2} Td {operand} Tj ET\n", page_h - top)
+}
+
+/// Un filet horizontal de `x0` à `x1` à la hauteur `top`.
+pub(crate) fn op_filet(page_h: f32, x0: f32, x1: f32, top: f32, width: f32, gray: f32) -> String {
+    let y = page_h - top;
+    format!("{gray:.2} G {width} w {x0:.2} {y:.2} m {x1:.2} {y:.2} l S\n")
+}
+
+/// L'en-tête de studio : le titre et « Page n / N » sur une ligne, la ligne « Épisode · Séquence · Version · date » dessous, un filet. `(largeur de la page, marge, k)`.
+fn en_tete_de_studio(c: &mut Canvas, fonts: &mut Fonts, e: &Entete, (pw, margin, k): (f32, f32, f32), page: &str) {
+    c.gray(0.1);
+    c.text(fonts, margin, margin + 12.0 * k, &e.ligne1(), true, 13.0 * k);
+    c.gray(0.35);
+    c.text_right(fonts, pw - margin, margin + 12.0 * k, page, false, 9.0 * k);
+    c.text(fonts, margin, margin + 25.0 * k, &e.ligne2(), false, 9.0 * k);
+    c.gray(0.75);
+    c.line(margin, pw - margin, margin + 31.0 * k, 0.6);
 }

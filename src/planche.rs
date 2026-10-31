@@ -95,6 +95,13 @@ pub struct Options {
     /// par `App::planche_job`. D'origine : en lignes, les notes seules.
     pub sens: Sens,
     pub textes: Textes,
+    /// Une légende sous le numéro de chaque case : le nom du plan selon le modèle de noms (`SQ01_PL012A`, `_C02` pour les cases d'après) et sa durée. Elle remplace le
+    /// numéro seul. Décochée d'origine (la fenêtre la coche).
+    pub legendes: bool,
+    /// Le bloc de titre en haut de chaque page du PDF (série, épisode, séquence, version, date, page n / N) ; sans effet pour une image.
+    pub bloc_titre: bool,
+    /// Ce que dit le bloc de titre : posé par `App::planche_job` d'après le projet.
+    pub entete: crate::entetepdf::Entete,
 }
 
 impl Default for Options {
@@ -113,6 +120,9 @@ impl Default for Options {
             couleur_cadre: crate::vignettesreglages::CADRE_DEFAUT,
             sens: Sens::default(),
             textes: Textes::default(),
+            legendes: false,
+            bloc_titre: false,
+            entete: Default::default(),
         }
     }
 }
@@ -127,6 +137,20 @@ const BARRE_GRISE: [u8; 3] = [188, 188, 188];
 const BARRE_NOIRE: [u8; 3] = [22, 22, 22];
 const ENCRE_NUMERO: [u8; 3] = [96, 96, 96];
 const ENCRE_NOTE: [u8; 3] = [70, 70, 70];
+const ENCRE_LEGENDE: [u8; 3] = [30, 30, 30];
+
+/// Le texte `t`, coupé par « … » pour tenir dans `largeur` à la taille `taille`.
+pub(crate) fn tronquer(t: &str, taille: f32, largeur: f32) -> String {
+    let mesure = |s: &str| crate::text::layout(s, crate::text::FALLBACK, taille.max(1.0)).bounds.width();
+    if mesure(t) <= largeur {
+        return t.to_string();
+    }
+    let mut s: String = t.to_string();
+    while !s.is_empty() && mesure(&format!("{s}…")) > largeur {
+        s.pop();
+    }
+    format!("{}…", s.trim_end())
+}
 
 /// Une vignette à exporter.
 #[derive(Clone, Debug)]
@@ -141,6 +165,8 @@ pub struct Carte {
     pub champs: Vec<(Champ, f32, Vec<String>)>,
     /// L'empreinte du mouvement de caméra (cadres A, B, C…, à l'échelle des cases), si la caméra bouge et que les cadres sont demandés.
     pub mouvement: Option<board::MoveBoard>,
+    /// La légende (`Options::legendes`) : le nom du plan ou de la case, et sa durée (`12s 04`).
+    pub legende: Option<(String, String)>,
 }
 
 /// Tout ce qu'il faut pour dessiner la planche, sans pixel.
@@ -238,6 +264,20 @@ pub fn construire(doc: &Document, plans: &[usize], s: &BoardSettings, opt: &Opti
     // (Plusieurs séquences : chacune a son titre, sa rangée de départ ; `planchesequences.rs`.)
     let layout = crate::planchesequences::layout_export(&sub, s, &board::Options { sens: opt.sens, textes, ..Default::default() });
     let titres: Vec<(Rect, String)> = layout.groupes.iter().filter_map(|g| g.titre.map(|t| (t, doc.sequence_label(g.sequence)))).collect();
+    // Les légendes : le nom de chaque plan (ou case) selon le modèle de noms du projet, et sa durée. (Les noms de tous les plans d'un coup : pas le carré du nombre de plans.)
+    let legendes: Option<std::collections::HashMap<u64, (String, String)>> = opt.legendes.then(|| {
+        let noms = doc.noms_de_tous_les_plans();
+        let mut m = std::collections::HashMap::new();
+        for c in &layout.cards {
+            let plan_reel = plans[c.panel];
+            let spans = board::plan_boards(doc, plan_reel);
+            let Some(rang) = spans.iter().position(|s| s.0 == c.id) else { continue };
+            let (_, a, b) = spans[rang];
+            let nom = if rang == 0 { noms[plan_reel].clone() } else { doc.nom_de_plan_avec(plan_reel, Some(rang + 1), None) };
+            m.insert(c.id, (nom, crate::storyboard::duration_label(b - a, doc.fps)));
+        }
+        m
+    });
     let cartes: Vec<Carte> = layout
         .cards
         .iter()
@@ -247,7 +287,7 @@ pub fn construire(doc: &Document, plans: &[usize], s: &BoardSettings, opt: &Opti
             let champs = notes.get(&c.id).cloned().unwrap_or_default();
             let etiquette = (c.starts_plan() && opt.numeros).then(|| doc.scene_label(c.scene));
             let mouvement = if opt.cadres { layout.move_of(k).cloned() } else { None };
-            Carte { place: *c, plan_reel, etiquette, champs, mouvement }
+            Carte { place: *c, plan_reel, etiquette, champs, mouvement, legende: legendes.as_ref().and_then(|l| l.get(&c.id).cloned()) }
         })
         .collect();
     let mut cadre = layout.pages.iter().fold(Rect::NOTHING, |r, p| r.union(*p));
@@ -503,8 +543,19 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
                 }
             }
         }
-        // Le numéro du plan, au-dessus de sa première vignette.
-        if let Some(e) = c.etiquette.as_ref().filter(|_| opt.numeros) {
+        // La légende, au-dessus de la vignette : le nom du plan (ou de la case) à gauche, sa durée à droite ; elle tient lieu du numéro seul.
+        if let Some((nom, duree)) = c.legende.as_ref().filter(|_| opt.legendes) {
+            let l = c.place.label();
+            let taille = (10.0 * s).max(6.0);
+            let largeur = (l.width() - 2.0) * s;
+            let mesure = |t: &str, tl: f32| crate::text::layout(t, crate::text::FALLBACK, tl.max(1.0)).bounds.width();
+            let duree_w = mesure(duree, taille) + 6.0 * s;
+            let nom = tronquer(nom, taille, (largeur - duree_w).max(10.0));
+            let y = (l.bottom() - p.cadre.top()) * s - taille * 1.45;
+            let x = (l.left() + 1.0 - p.cadre.left()) * s;
+            ecrire(&mut pix, &nom, x, y, taille, ENCRE_LEGENDE);
+            ecrire(&mut pix, duree, x + largeur - mesure(duree, taille), y, taille, ENCRE_NUMERO);
+        } else if let Some(e) = c.etiquette.as_ref().filter(|_| opt.numeros) {
             let l = c.place.label();
             let taille = 12.0 * s;
             let lay = crate::text::layout(e, crate::text::FALLBACK, taille.max(2.0));
@@ -606,29 +657,57 @@ pub fn coupures(haut: f32, bas: f32, pages: &[Rect], hauteur: f32) -> Vec<(f32, 
 }
 
 /// Les octets du fichier de sortie pour l'image `img` (échelle `s`) de la planche `p`.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn encoder(p: &Planche, img: &RgbImage, sortie: Sortie, titre: &str, s: f32) -> Result<Vec<u8>, String> {
+    encoder_avec(p, img, sortie, titre, s, None)
+}
+
+/// Comme `encoder` ; `bloc` : le bloc de titre à écrire en haut de chaque page d'un PDF (sans effet pour une image).
+pub fn encoder_avec(p: &Planche, img: &RgbImage, sortie: Sortie, titre: &str, s: f32, bloc: Option<&crate::entetepdf::Entete>) -> Result<Vec<u8>, String> {
+    // Les polices du bloc : d'après tout ce qu'il écrira.
+    let fonts_pour = |b: &crate::entetepdf::Entete| crate::pdffont::Fonts::choose(&format!("{} {titre}", b.tout_le_texte()));
     match sortie {
         Sortie::Png => png(img),
         Sortie::Jpeg => jpeg(img, 92),
         Sortie::PdfUnePage => {
             // 1 unité de la planche = 1/96 de pouce = 0,75 point ; une page de PDF va jusqu'à 14 400 points.
             let k = (0.75_f32).min(14_400.0 / p.cadre.width().max(p.cadre.height()).max(1.0));
-            let (pw, ph) = (p.cadre.width() * k, p.cadre.height() * k);
+            let (pw, ph_image) = (p.cadre.width() * k, p.cadre.height() * k);
             let mut pdf = crate::pdf::PdfFile::new();
             let id = pdf.add_jpeg(img.width(), img.height(), &jpeg(img, 88)?);
-            pdf.add_page_sized(pw, ph, crate::pdf::op_image(ph, id, 0.0, 0.0, pw, ph).as_bytes(), &[id]);
+            let Some(b) = bloc else {
+                pdf.add_page_sized(pw, ph_image, crate::pdf::op_image(ph_image, id, 0.0, 0.0, pw, ph_image).as_bytes(), &[id]);
+                return Ok(pdf.finish(titre));
+            };
+            // Le bloc de titre au-dessus de la planche, à une taille qui suit celle de la page.
+            let kb = (pw / 842.0).clamp(1.0, 6.0);
+            let haut = 40.0 * kb;
+            let ph = ph_image + haut;
+            let mut fonts = fonts_pour(b);
+            fonts.attach(&mut pdf);
+            let mut ops = crate::pdf::op_image(ph, id, 0.0, haut, pw, ph_image);
+            ops += &bloc_de_titre(&mut fonts, ph, pw, (20.0 * kb, 4.0 * kb), kb, b, "Page 1 / 1");
+            pdf.add_page_sized(pw, ph, ops.as_bytes(), &[id]);
+            fonts.write(&mut pdf);
             Ok(pdf.finish(titre))
         }
         Sortie::PdfA4 | Sortie::PdfA3 => {
             let (pw, ph) = if sortie == Sortie::PdfA4 { (842.0_f32, 595.0_f32) } else { (1191.0, 842.0) };
             let (marge, pied) = (20.0_f32, 16.0_f32);
-            let (zone_w, zone_h) = (pw - 2.0 * marge, ph - 2.0 * marge - pied);
+            // (Le bloc de titre prend la hauteur de ses deux lignes en haut de chaque page.)
+            let kb = (pw / 842.0).clamp(1.0, 2.0);
+            let haut = if bloc.is_some() { 40.0 * kb } else { 0.0 };
+            let (zone_w, zone_h) = (pw - 2.0 * marge, ph - 2.0 * marge - pied - haut);
             // La planche à la largeur de la page (sans jamais être agrandie de plus d'un tiers).
             let k = (zone_w / p.cadre.width().max(1.0)).min(1.0);
             let feuille = zone_h / k;
             let morceaux = coupures(p.cadre.top(), p.cadre.bottom(), &p.layout.pages, feuille);
             let mut pdf = crate::pdf::PdfFile::new();
             let n = morceaux.len();
+            let mut fonts = bloc.map(fonts_pour);
+            if let Some(f) = &mut fonts {
+                f.attach(&mut pdf);
+            }
             for (i, (y0, y1)) in morceaux.iter().enumerate() {
                 let (r0, r1) = ((((y0 - p.cadre.top()) * s).round() as u32).min(img.height().saturating_sub(1)), (((y1 - p.cadre.top()) * s).round() as u32).min(img.height()));
                 let (r0, r1) = (r0, r1.max(r0 + 1));
@@ -636,13 +715,32 @@ pub fn encoder(p: &Planche, img: &RgbImage, sortie: Sortie, titre: &str, s: f32)
                 let id = pdf.add_jpeg(tuile.width(), tuile.height(), &jpeg(&tuile, 88)?);
                 let (w_pt, h_pt) = (p.cadre.width() * k, (y1 - y0) * k);
                 let x = marge + (zone_w - w_pt) * 0.5;
-                let mut ops = crate::pdf::op_image(ph, id, x, marge, w_pt, h_pt);
+                let mut ops = crate::pdf::op_image(ph, id, x, marge + haut, w_pt, h_pt);
                 ops += &crate::pdf::op_text(ph, marge, ph - marge * 0.5, &format!("{titre} · page {} / {n}", i + 1), 8.0, false, 0.4);
+                if let (Some(f), Some(b)) = (&mut fonts, bloc) {
+                    ops += &bloc_de_titre(f, ph, pw, (marge, marge), kb, b, &format!("Page {} / {n}", i + 1));
+                }
                 pdf.add_page_sized(pw, ph, ops.as_bytes(), &[id]);
+            }
+            if let Some(f) = &fonts {
+                f.write(&mut pdf);
             }
             Ok(pdf.finish(titre))
         }
     }
+}
+
+/// Le bloc de titre d'une page : la série en gras et « Page n / N » à droite, puis « Épisode · Séquence · Version · date », et un filet. marge_x : la marge
+/// gauche et droite ; kb : l'échelle du texte (la page est plus grande qu'une feuille A4).
+pub(crate) fn bloc_de_titre(fonts: &mut crate::pdffont::Fonts, page_h: f32, pw: f32, (marge_x, haut): (f32, f32), kb: f32, e: &crate::entetepdf::Entete, page: &str) -> String {
+    use crate::pdfmise::{op_filet, op_texte};
+    let droite = pw - marge_x;
+    let mut ops = op_texte(fonts, page_h, marge_x, haut + 14.0 * kb, &e.ligne1(), true, 13.0 * kb, 0.1);
+    let largeur = fonts.width(page, false, 9.0 * kb);
+    ops += &op_texte(fonts, page_h, droite - largeur, haut + 14.0 * kb, page, false, 9.0 * kb, 0.35);
+    ops += &op_texte(fonts, page_h, marge_x, haut + 27.0 * kb, &e.ligne2(), false, 9.0 * kb, 0.35);
+    ops += &op_filet(page_h, marge_x, droite, haut + 33.0 * kb, 0.6, 0.75);
+    ops
 }
 
 /// Le compte rendu d'un export réussi.

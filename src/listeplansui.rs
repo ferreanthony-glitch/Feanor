@@ -84,15 +84,11 @@ impl App {
             let r = self.settings.liste_plans.clone();
             let base = self.base_name_or("SHOT");
             let nom = listeplans::nom_de_fichier(&self.doc, &base, r.format);
-            let mut d = rfd::FileDialog::new().set_title("Enregistrer la liste des plans").set_file_name(nom);
-            d = match r.format {
-                Format::Csv => d.add_filter("CSV (.csv)", &["csv"]),
-                Format::Json => d.add_filter("JSON (.json)", &["json"]),
+            let filtre = match r.format {
+                Format::Csv => ("CSV (.csv)", ["csv"]),
+                Format::Json => ("JSON (.json)", ["json"]),
             };
-            if let Some(dir) = self.path.as_ref().or(self.import_source.as_ref()).and_then(|p| p.parent()).filter(|d| d.is_dir()) {
-                d = d.set_directory(dir);
-            }
-            if let Some(mut path) = d.save_file() {
+            if let Some(mut path) = self.dialogue_enregistrer("liste_plans", "Enregistrer la liste des plans", (filtre.0, &filtre.1), &nom) {
                 if path.extension().is_none() {
                     path.set_extension(r.format.extension());
                 }

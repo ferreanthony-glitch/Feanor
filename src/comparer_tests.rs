@@ -166,7 +166,7 @@ fn the_engine_reads_an_envoi_back_as_it_was() {
     let mut doc = film(2);
     let avant = image_de(&doc, 1, 160);
     // L'envoi (comme l'application le marque), puis le plan change.
-    let plans: Vec<PlanCopie> = doc.panels.iter().enumerate().map(|(i, p)| PlanCopie { panel: p.clone(), titre: format!("Plan {}", i + 1), version: 1 }).collect();
+    let plans: Vec<PlanCopie> = doc.panels.iter().enumerate().map(|(i, p)| PlanCopie { panel: p.clone(), titre: format!("Plan {}", i + 1), version: 1, nom: String::new(), sequence: String::new() }).collect();
     let mut cels = std::collections::HashMap::new();
     for p in &doc.panels {
         for id in crate::empreinte::dessins_du_plan(p) {

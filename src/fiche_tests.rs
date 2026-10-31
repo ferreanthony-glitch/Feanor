@@ -93,7 +93,7 @@ fn every_column_has_a_stable_id_a_title_and_a_help() {
         assert_eq!(Colonne::depuis_id(c.id()), Some(c));
         assert!(!c.aide().is_empty() && c.largeur() > 5.0);
     }
-    assert_eq!(Colonne::TOUTES.len(), 30);
+    assert_eq!(Colonne::TOUTES.len(), 31);
     assert_eq!(Colonne::depuis_id("n_importe_quoi"), None);
     // Les colonnes d'origine : sans doublon, dans l'ordre de la fenêtre.
     let d = fiche::colonnes_par_defaut();

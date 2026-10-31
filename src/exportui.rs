@@ -332,6 +332,20 @@ impl App {
                         ui.checkbox(&mut s.pdf.page_numbers, "Numéros de page");
                     });
                     ui.end_row();
+                    // Pour la production (`entetepdf.rs`) : l'en-tête de studio, les plans modifiés, la page de révision.
+                    ui.label("Production");
+                    ui.vertical(|ui| {
+                        ui.checkbox(&mut s.pdf.studio, "En-tête de studio : série, épisode, séquence, version, date, page n / N")
+                            .on_hover_text("Remplace le titre et la date du haut de page. La version est le nom du dernier envoi.");
+                        ui.checkbox(&mut s.pdf.marquer_modifies, "Marquer les plans modifiés depuis le dernier envoi")
+                            .on_hover_text("Un cadre rouge et « MODIFIÉ » sur l'image des plans changés ou ajoutés depuis le dernier envoi.");
+                        ui.checkbox(&mut s.pdf.notes_revision, "Page finale « Notes de révision »")
+                            .on_hover_text("Les plans modifiés et les notes du fil de décision traitées (faites ou refusées) depuis le dernier envoi.");
+                        if self.doc.envois.is_empty() && (s.pdf.marquer_modifies || s.pdf.notes_revision) {
+                            ui.label(RichText::new("Aucun envoi pour l'instant : rien à marquer ni à lister (« Marquer un envoi… » d'abord).").small().weak());
+                        }
+                    });
+                    ui.end_row();
                 }
                 // Les calques séparés : avec ou sans caméra ; ce qui partirait.
                 if s.format == Format::Layers {
@@ -542,23 +556,31 @@ impl App {
         let fps = self.doc.fps;
         match s.format {
             Format::Wav => {
-                let Some(path) = save_dialog(&base, Format::Wav, false) else { return };
+                let Some(path) = save_dialog(self, &base, Format::Wav, false) else { return };
                 let (start, len) = export::sample_span(fps, first, frames.len());
                 // (Le son exporté attend l'égaliseur et l'écho : `mix_clips_blocking`, sur un fil à part.)
                 self.start_job(ExportJob::sound(&path, SoundSpan { start, len }));
             }
             Format::Png => {
-                let Some(dir) = Self::pick_folder("Dossier où exporter les images") else { return };
+                let Some(dir) = self.dialogue_dossier("images", "Dossier où exporter les images", None) else { return };
                 let job = ExportJob::images(&dir, &base, frames, self.doc.frame, !s.transparent).avec_annotations(s.annotations);
                 self.start_job(if s.transitions { job.with_transitions(&self.doc) } else { job });
             }
             Format::Pdf => {
-                let Some(out) = save_dialog(&base, Format::Pdf, false) else { return };
+                let Some(out) = save_dialog(self, &base, Format::Pdf, false) else { return };
                 let (shots, boards) = export::storyboard_of_with(&self.doc, &export::panels_of(&frames), s.comments);
-                self.start_job(ExportJob::pdf_layout(&out, &base, shots, boards, self.doc.frame, s.pdf).avec_annotations(s.annotations));
+                // En-tête de studio, plans modifiés, notes de révision : calculés ici, sur le projet (des textes et des états, aucune image).
+                let studio = if self.doc.envois.is_empty() && !s.pdf.studio {
+                    None
+                } else {
+                    let (_, etats) = self.fiche_etats(None);
+                    let panels: Vec<usize> = shots.iter().map(|f| f.0).collect();
+                    Some(crate::entetepdf::studio(&self.doc, &panels, etats.as_ref(), s.pdf.notes_revision, &crate::incrustation::date_text(crate::incrustation::now_secs())))
+                };
+                self.start_job(ExportJob::pdf_layout_studio(&out, &base, shots, boards, self.doc.frame, s.pdf, studio).avec_annotations(s.annotations));
             }
             Format::Stills => {
-                let Some(dir) = Self::pick_folder("Dossier où exporter les images par plan") else { return };
+                let Some(dir) = self.dialogue_dossier("images_par_plan", "Dossier où exporter les images par plan", None) else { return };
                 let items = exportstills::items(&self.doc, &export::panels_of(&frames), s.stills.per);
                 if items.is_empty() {
                     self.status = "Aucun plan dans cette étendue.".into();
@@ -571,7 +593,7 @@ impl App {
                     self.status = "Export impossible : ffmpeg introuvable ou inutilisable.".into();
                     return;
                 };
-                let Some(out) = save_dialog(&base, Format::Gif, false) else { return };
+                let Some(out) = save_dialog(self, &base, Format::Gif, false) else { return };
                 // Seules les images que le GIF garde sont calculées (à 12 images par seconde sur un film à 24, une sur deux).
                 let rate = export::gif_fps(s.gif.fps, fps);
                 let kept = export::gif_sample(&frames, fps, rate);
@@ -594,7 +616,7 @@ impl App {
                     self.status = format!("Export impossible : {p}.");
                     return;
                 }
-                let Some(out) = save_dialog(&base, s.format, mxf) else { return };
+                let Some(out) = save_dialog(self, &base, s.format, mxf) else { return };
                 let frame = self.doc.frame;
                 let (format, size, rate_in, rate_out) = (s.format, s.size.dimensions(frame), fps.to_string(), s.rate.conversion(fps).map(str::to_string));
                 let spec_for = move |enc: &export::Encoders, wav: Option<&std::path::Path>, target: &std::path::Path| {
@@ -622,7 +644,7 @@ impl App {
                     self.status = "Aucune piste audible avec un extrait dans cette étendue.".into();
                     return;
                 }
-                let Some(dir) = Self::pick_folder("Dossier où exporter le son par piste") else { return };
+                let Some(dir) = self.dialogue_dossier("son_par_piste", "Dossier où exporter le son par piste", None) else { return };
                 let (start, len) = export::sample_span(fps, first, frames.len());
                 let (format, d) = (s.stems.format, dir.clone());
                 let message = format!("{} fichier{} son exporté{} : {}", files.len(), if files.len() > 1 { "s" } else { "" }, if files.len() > 1 { "s" } else { "" }, dir.display());
@@ -634,11 +656,11 @@ impl App {
                     self.status = "Aucun calque visible à exporter dans cette étendue.".into();
                     return;
                 }
-                let Some(dir) = Self::pick_folder("Dossier où exporter les calques séparés") else { return };
+                let Some(dir) = self.dialogue_dossier("calques", "Dossier où exporter les calques séparés", None) else { return };
                 self.start_job(exportlayers::job(&dir, info, frames, &s.layers, s.annotations));
             }
             Format::Camera => {
-                let Some(out) = save_dialog(&base, Format::Camera, false) else { return };
+                let Some(out) = save_dialog(self, &base, Format::Camera, false) else { return };
                 let plans = export::panels_of(&frames);
                 let (title, settings, target) = (self.base_name_or("SHOT"), s.camera, out.clone());
                 let message = format!("Clés de caméra exportées ({} plan{}) : {}", plans.len(), if plans.len() > 1 { "s" } else { "" }, out.display());
@@ -809,7 +831,8 @@ fn format_label(format: Format) -> &'static str {
     }
 }
 
-fn save_dialog(base: &str, format: Format, mxf: bool) -> Option<PathBuf> {
+/// La fenêtre « où écrire » d'un export : elle s'ouvre dans le dossier du projet (`dialogues.rs`).
+fn save_dialog(app: &App, base: &str, format: Format, mxf: bool) -> Option<PathBuf> {
     let ext = if mxf { "mxf" } else { format.extension() };
     let (title, filter) = match format {
         Format::Mp4 => ("Exporter le film", "Vidéo MP4"),
@@ -821,11 +844,14 @@ fn save_dialog(base: &str, format: Format, mxf: bool) -> Option<PathBuf> {
         Format::Gif => ("Exporter un GIF animé", "Image GIF animée"),
         _ => ("Exporter le son", "Son WAV"),
     };
-    let mut path = rfd::FileDialog::new()
-        .set_title(title)
-        .add_filter(filter, &[ext])
-        .set_file_name(format!("{base}.{ext}"))
-        .save_file()?;
+    let sorte = match format {
+        Format::Pdf => "pdf",
+        Format::Camera => "camera",
+        Format::Gif => "gif",
+        Format::Wav => "son",
+        _ => "film",
+    };
+    let mut path = app.dialogue_enregistrer(sorte, title, (filter, &[ext]), &format!("{base}.{ext}"))?;
     if path.extension().is_none() {
         path.set_extension(ext);
     }

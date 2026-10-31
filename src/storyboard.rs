@@ -940,6 +940,8 @@ impl App {
         let seqs = self.doc.sequence_ids();
         let clip_bar = painter.clip_rect();
         let ancien_ordre = crate::perf::ancien().then(|| self.doc.sequence_order());
+        // Durées cibles des séquences (`budget.rs`) : rien à calculer quand aucune n'est posée.
+        let budgets = crate::budget::budgets_des_sequences(&self.doc);
         for (band, y0, h) in [(0, bands_top, SEQ_H)] {
             let mut i = 0;
             while i < self.doc.panels.len() {
@@ -962,6 +964,7 @@ impl App {
                     i = end;
                     continue;
                 }
+                let mut depasse = false;
                 let (label, number) = if band == 0 {
                     let seq = seqs[start];
                     // (Essai de performance du code d'avant : le rang dans l'ordre trouvé une fois, comme il l'était.)
@@ -970,7 +973,12 @@ impl App {
                         None => numeros.sequence_number(&self.doc, seq),
                     };
                     let label = numeros.sequence_label(&self.doc, seq);
-                    (format!("Séquence {label}{}", crate::variantesui::suffixe_barre(&self.doc, seq)), number)
+                    let mut texte = format!("Séquence {label}{}", crate::variantesui::suffixe_barre(&self.doc, seq));
+                    if let Some(b) = budgets.get(&seq) {
+                        texte += &format!(" · {}", b.texte(self.doc.fps));
+                        depasse = b.depasse();
+                    }
+                    (texte, number)
                 } else {
                     let scene = self.doc.panels[start].scene;
                     (format!("Scène {}", self.doc.scene_label(scene)), self.doc.scene_number(scene))
@@ -987,7 +995,7 @@ impl App {
                     Align2::LEFT_CENTER,
                     label,
                     FontId::proportional(if band == 0 { 10.0 } else { 11.0 }),
-                    visuals.text_color(),
+                    if depasse { visuals.error_fg_color } else { visuals.text_color() },
                 );
                 runs.push((rect, start));
                 i = end;
@@ -1850,6 +1858,18 @@ impl App {
             ui.label("Version");
             self.version_ligne(ui);
             ui.end_row();
+            // Durées cibles (`budget.rs`) : la séquence du plan et le film, l'écart en rouge quand ça dépasse.
+            let fps_budget = self.doc.fps;
+            for (nom, budget) in [("Séquence", self.doc.budget_de_sequence(self.doc.sequence_of(i))), ("Film", self.doc.budget_du_film())] {
+                let Some(b) = budget else { continue };
+                ui.label(format!("Cible {}", nom.to_lowercase()));
+                if b.depasse() {
+                    ui.colored_label(ui.visuals().error_fg_color, format!("{} : trop long", b.texte(fps_budget)));
+                } else {
+                    ui.label(RichText::new(b.texte(fps_budget)).weak());
+                }
+                ui.end_row();
+            }
         });
         ui.label("Caméra").on_hover_text("Décalage du centre, zoom, rotation (outil Caméra pour la régler à la souris)");
         self.camera_fields(ui);

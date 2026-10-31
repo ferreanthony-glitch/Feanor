@@ -6730,3 +6730,59 @@ Public visé : storyboarders d'animation, indépendants ou en studio. SHOT doit 
 - Le paquet prend la liste du film ou de la séquence courante (d'un seul tenant), pas une sélection de plans quelconques.
 - Le PDF du paquet a la mise en page d'origine (celle de la fenêtre PDF n'est pas reprise) ; la liste du paquet a les réglages d'origine de la liste (Kitsu, CSV à virgule, 1001).
 - Les textes du PDF et de la liste sont lus dans le projet au départ, les images dans le cliché pris juste après : une retouche faite entre les deux, pendant les toutes premières images d'écran, n'est pas protégée (la fenêtre garde la main sur le projet pendant la copie).
+
+## 91. Petits livrables : budget de durée, rapport de numérotation, PDF de studio, planche légendée (2026-10-31, branche `petits-livrables`)
+
+Six petits livrables de l'audit du 2026-10-30 (H4, solutions 5 et 7, planche PDF « plate », nom de bobine de l'EDL). Code : `src/budget.rs`, `src/renumerotation.rs` et `renumerotationui.rs`, `src/entetepdf.rs`, `src/dialogues.rs` ; retouches de `pdfmise.rs`, `planche.rs`, `fiche.rs`, `editorial.rs`. **`project::VERSION` passe à 46** (budget de durée, voir plus bas) ; `envois.json` garde sa version 1 (champs ajoutés, absents quand ils sont vides).
+
+### 1. Budget de durée
+
+- **Une durée cible** pour le film (l'épisode) et pour chaque séquence : Réglages du projet > Réglages, « Durée cible du film » et, sous la grille, « Durée cible par séquence ». On tape `11:30` (minutes:secondes), `690` (secondes), `1:02:30`, avec une fraction si l'on veut (`12,5`) ; vide ou 0 enlève la cible. Une étape d'annulation par geste.
+- **L'écart en direct**, en images du projet (durée réelle − cible ; positif = trop long, en rouge) : dans la **barre des séquences du montage** (« Séquence 1 · 0:42 / 0:40 (+2s 00) »), dans la **fiche du plan** (lignes « Cible séquence » et « Cible film »), dans les réglages du projet.
+- **Colonne « Écart cumulé (s) » de la fiche technique**, décochée d'office : la fiche d'avant est identique. Elle porte, sur le dernier plan de chaque séquence, de combien le film dépasse (+) ou n'atteint pas (−) les cibles, cumulé jusque-là ; une séquence sans cible compte pour sa durée réelle ; avec seulement une cible du film, l'écart est sur le dernier plan du film ; sans cible, la colonne est vide.
+- **Format 46** : `proprietes.budget_ms` et `proprietes.budgets_sequences` (liste `{sequence, ms}`), absents quand ils sont vides. Une version de SHOT d'avant refuse un projet 46 (elle perdrait les cibles) ; un projet de version 45 ou moins s'ouvre à l'identique, sans cible. (Une autre branche peut aussi prendre le numéro 46 : la fusion garde le plus grand et réunit les descriptions.)
+
+### 2. Rapport de numérotation pour le monteur (« contrat de numérotation »)
+
+- **Ce qu'il dit**, depuis le dernier envoi : les plans **ajoutés**, **supprimés**, **déplacés**, **renumérotés**, avec le tableau « ancien numéro → nouveau numéro ». Les plans se reconnaissent par leur identité interne (qui survit aux déplacements et aux renumérotations). *Déplacé* = hors de la plus longue suite de plans qui gardent leur ordre : un plan envoyé loin de sa place ne fait pas dire que tous les suivants ont bougé. *Renuméroté* = le numéro de plan a changé, ou (si l'envoi l'a gardée) la séquence.
+- **Les fichiers** : `Titre_renumerotation.csv` (UTF-8 avec marque d'ordre, séparateur `;`, une ligne par plan concerné : statut, anciens et nouveaux numéros, noms, séquences, places, images avant et après) et `Titre_renumerotation.txt` (une page lisible, par groupes, à envoyer telle quelle).
+- **Où** : dans le dossier de **Fichier > Exporter > Pour le montage** (case « Rapport de numérotation… », cochée d'office ; sans envoi elle est grisée et dit quoi faire) ; ou à part, **Fichier > Exporter > Rapport de numérotation** (`fichier.exporter_renumerotation`) : on choisit le CSV, la page lisible s'écrit à côté.
+- **Les envois** gardent désormais, pour chaque plan, son **nom d'alors** (selon le modèle de noms) et sa **séquence** (`nom`, `sequence` dans `envois.json`, absents quand ils sont vides). Un envoi d'avant n'a que le numéro de plan : le rapport ne compare alors que les numéros, et le dit. Les noms de tous les plans se calculent en une passe (`Document::noms_de_tous_les_plans`) : marquer ou suivre un envoi ne coûte plus le carré du nombre de plans.
+
+### 3. Planche des vignettes en PDF avec titre et légendes
+
+- **Légendes** (case « Légendes : nom du plan et durée ») : au-dessus de chaque vignette, le nom du plan selon le modèle de noms (`SQ01_PL012A` ; `_C02` pour les cases d'après) et sa durée ; elles tiennent lieu du numéro seul, sans changer la disposition. Les textes d'action et de dialogue sous les images sont les « Notes » d'avant (champs cochés dans le panneau Planche).
+- **Bloc de titre** (case « Bloc de titre en haut des pages du PDF ») : série, épisode, séquence (si la planche n'en montre qu'une), version (le nom du dernier envoi), date, et « Page n / N », en haut de chaque page des trois PDF (une grande page, A4, A3). Polices embarquées comme le storyboard PDF. Sans effet pour PNG et JPEG.
+- Les deux cases sont cochées dans la fenêtre ; la bibliothèque (`planche::Options::default()`) ne les coche pas : un PDF sans bloc est octet pour octet celui d'avant.
+
+### 4. En-tête de studio du storyboard PDF
+
+- Trois cases dans **Exporter > Storyboard PDF > Production** : **En-tête de studio** (décochée d'office : série, épisode, séquence de la page, version = nom du dernier envoi, date, « Page n / N » — il remplace le titre et la date d'avant, et le numéro de page du bas) ; **Marquer les plans modifiés depuis le dernier envoi** (cochée ; un cadre rouge et « MODIFIÉ » sur l'image ; sans envoi, rien n'est marqué) ; **Page finale « Notes de révision »** (décochée d'office : les plans modifiés ou ajoutés, et les notes du fil de décision traitées — « Fait » ou « Refusé », avec la raison du refus — depuis la date où l'envoi a été noté ; la page se prolonge s'il y en a beaucoup).
+- Avec les choix d'origine, un projet sans envoi donne le même PDF qu'avant (essai octet pour octet) ; avec un envoi, seuls les plans modifiés se marquent.
+
+### 5. Les fenêtres de fichiers s'ouvrent dans le projet
+
+Toutes les fenêtres « où écrire » des exports (film, images, image courante, PDF, GIF, son, calques, caméra, fiche, liste des plans, planche, color script, relecture, dossier du montage, dossier du paquet, rapport de numérotation) passent par `dialogues.rs` : quand un projet est ouvert, elles s'ouvrent dans **son dossier**, ou dans **le dernier dossier choisi pour cette sorte d'export** s'il est dedans ; sans projet enregistré, le système choisit comme avant (un réglage de dossier gardé par une fenêtre sert alors de repli). **Enregistrer sous** s'ouvre **à côté** du dossier du projet (il y crée un dossier à ce nom : pas dedans). Un essai vérifie qu'aucune de ces fenêtres ne ressort du dispositif.
+
+### 6. Nom de bobine de l'EDL
+
+L'audit lisait « PL001 » sans la séquence. Vérifié : dans un même projet la bobine était unique (les numéros de plan le sont), mais deux séquences exportées à part, ou deux épisodes montés ensemble, partageaient « PL001 ». La bobine est maintenant **`S01P012A`** (séquence et plan : 8 caractères au plus, la limite du CMX 3600) ; un numéro trop long (`S01P012AB`, négatif, point…) prend la bobine de secours **`R00012`** (le rang du plan dans le **film**, stable d'un export à l'autre) ; un doublon éventuel passe aussi à la bobine de secours. Le **nom du clip** (`* FROM CLIP NAME:`) est celui du modèle de noms, donc avec l'épisode si le modèle le porte (`Course_EP03_SQ001_SH0001`) : l'EDL garde les deux. **Les bobines changent** par rapport aux EDL déjà livrés (`PL012A` devient `S01P012A`) : à dire au monteur avant de remplacer un montage.
+
+### Limites
+
+- Le rapport compare le projet à **un envoi** (le dernier) ; un envoi sans instantané de noms (d'avant) ne compare que les numéros de plan.
+- La colonne « Écart cumulé » n'écrit que le dernier plan de chaque séquence (pas d'écart au plan près) ; une séquence coupée en deux morceaux ne compte sa cible qu'une fois.
+- Le bloc de titre de la planche ne s'écrit pas dans les images (PNG, JPEG) ; la page « Notes de révision » n'existe que pour le storyboard PDF (pas pour la planche).
+- Les notes du fil de décision traitées avant que le fil ait une date de statut (anciennes notes résolues) ne figurent pas dans la page de révision.
+- Aucun de ces fichiers n'a été ouvert dans un logiciel de montage ni un lecteur de PDF autre que celui des essais ici : voir « À vérifier ».
+
+### À vérifier à l'écran
+
+1. Réglages du projet : « Durée cible du film » et une cible par séquence (taper 11:30, 90, vider) ; Ctrl+Z rend l'ancienne valeur ; l'écart passe au rouge quand la séquence ou le film dépasse.
+2. Le montage : la barre de la séquence dit « 0:42 / 0:40 (+2s 00) », en rouge si elle dépasse, et suit quand on allonge un plan ; la fiche du plan montre « Cible séquence » et « Cible film ».
+3. Exporter > Fiche technique : la colonne « Écart cumulé (s) » (non cochée d'abord) ; cochée, elle n'est écrite que sur le dernier plan de chaque séquence.
+4. Marquer un envoi, puis ajouter un plan, en supprimer un, en déplacer un, renuméroter : Exporter > Rapport de numérotation : le CSV s'ouvre dans le tableur avec ses accents, la page `.txt` se lit seule.
+5. Exporter > Pour le montage : la case « Rapport de numérotation » ; les deux fichiers sont dans le dossier de l'export ; l'EDL porte les bobines `S01P012A`.
+6. Exporter > Storyboard PDF > Production : en-tête de studio (série, épisode, version, date, page n / N), plans modifiés marqués en rouge, page « Notes de révision » à la fin (marquer un envoi, modifier un plan, marquer une note « Fait » et une autre « Refusé » avant).
+7. Exporter > Planche des vignettes > PDF : légendes au-dessus des cases (nom du plan, durée), bloc de titre sur chaque page (une grande page, A4, A3).
+8. Fichier > Exporter… (n'importe quel export) avec un projet ouvert : la fenêtre « Enregistrer » s'ouvre dans le dossier du projet, et, la fois suivante, dans le dernier sous-dossier choisi pour cet export ; Fichier > Enregistrer sous s'ouvre à côté du dossier du projet.
