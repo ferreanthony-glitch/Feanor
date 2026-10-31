@@ -253,6 +253,7 @@ pub(crate) const MONTAGE: &[Cmd] = &[
         1,
     ),
     etat("envoi.liste", ph::GIT_DIFF, "Envois", "La liste des envois et des plans modifiés depuis le dernier.", false, 1),
+    bouton("envoi.journal", ph::ARROWS_LEFT_RIGHT, "Journal des différences", "Ce qui a changé entre deux envois : les plans modifiés avant / après, ajoutés, retirés, déplacés, et les notes traitées. En PDF et en page HTML.", false, 1),
     bouton("envoi.modifie_precedent", ph::ARROW_FAT_LEFT, "Plan modifié précédent", "Aller au plan modifié avant le plan courant, depuis le dernier envoi.", false, 1),
     bouton("envoi.modifie_suivant", ph::ARROW_FAT_RIGHT, "Plan modifié suivant", "Aller au plan modifié après le plan courant, depuis le dernier envoi.", false, 1),
     // Les versions du plan courant (`planversui.rs`).

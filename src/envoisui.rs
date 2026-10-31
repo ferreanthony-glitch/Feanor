@@ -130,6 +130,16 @@ impl EnvoisUi {
         self.digests.is_empty()
     }
 
+    /// Le dernier relevé que le suivi a analysé (le journal des différences veut des empreintes à jour).
+    pub(crate) fn fait_pour(&self) -> Option<Releve> {
+        self.fait_pour
+    }
+
+    /// Aucun plan n'est repéré modifié ou ajouté depuis le dernier envoi.
+    pub(crate) fn etats_vides(&self) -> bool {
+        self.etats.is_empty()
+    }
+
     /// Rien à faire : le dernier relevé est analysé et le projet n'a pas bougé depuis.
     #[cfg(test)]
     pub(crate) fn au_repos(&self) -> bool {
@@ -461,6 +471,7 @@ impl App {
             "envoi.modifie_suivant" => self.plan_modifie(1),
             "envoi.modifie_precedent" => self.plan_modifie(-1),
             "envoi.modifies_choisir" => self.choisir_plans_modifies(),
+            "envoi.journal" => self.journal_ouvrir(None),
             _ => return false,
         }
         true
@@ -472,6 +483,7 @@ impl App {
     pub(crate) fn envois_windows(&mut self, ctx: &egui::Context) {
         self.envois_fenetre_marquage(ctx);
         self.envois_fenetre_liste(ctx);
+        self.journal_fenetre(ctx);
     }
 
     fn envois_fenetre_marquage(&mut self, ctx: &egui::Context) {
@@ -550,6 +562,7 @@ impl App {
         let mut retirer: Option<u64> = None;
         let mut comparer: Option<u64> = None;
         let mut relire: Option<u64> = None;
+        let mut journal: Option<u64> = None;
         egui::Window::new("Envois").open(&mut ouverte).default_width(420.0).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 if bulles::icone(ui, ph::PAPER_PLANE_TILT, "Marquer un envoi…", "Noter l'état de tous les plans : ce qui change ensuite sera repéré.", &self.raccourci("envoi.marquer")).clicked() {
@@ -622,6 +635,10 @@ impl App {
                         if r.clicked() {
                             comparer = Some(e.id);
                         }
+                        // Le journal des différences depuis cet envoi jusqu'à aujourd'hui (`journalui.rs`).
+                        if bulles::icone(ui, ph::ARROWS_LEFT_RIGHT, "Journal des différences depuis cet envoi", "Ce qui a changé depuis cet envoi : les plans modifiés avant / après, ajoutés, retirés, déplacés, et les notes traitées. PDF et page HTML.", &self.raccourci("envoi.journal")).clicked() {
+                            journal = Some(e.id);
+                        }
                         // La page de relecture de cet envoi : les plans qui ont changé depuis, à envoyer au réalisateur.
                         if bulles::icone(ui, ph::EYEGLASSES, "Exporter pour relecture", "Une page à envoyer au réalisateur (qui n'a pas SHOT) pour qu'il écrive ses notes dessus ; proposée avec les plans modifiés depuis cet envoi.", &self.raccourci("fichier.exporter_relecture")).clicked() {
                             relire = Some(e.id);
@@ -654,6 +671,9 @@ impl App {
         }
         if let Some(id) = relire {
             self.open_relecture_export(Some(id));
+        }
+        if let Some(id) = journal {
+            self.journal_ouvrir(Some(id));
         }
         if let Some(id) = comparer {
             self.comparer_ouvrir(self.cur_panel, Some(crate::comparer::Source::Envoi(id)), Some(crate::comparer::Source::Actuelle));

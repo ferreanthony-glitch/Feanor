@@ -183,7 +183,7 @@ fn the_export_hub_is_grouped_by_use_with_an_action_for_every_entry() {
     assert_eq!(titres, ["Vidéo", "Images & PDF", "Son", "Montage & échange"]);
     let noms = |k: usize| familles[k].1.iter().map(|e| e.1).collect::<Vec<_>>();
     assert_eq!(noms(0), ["Film", "GIF animé"]);
-    assert_eq!(noms(1), ["Images", "Image courante", "Images par plan", "Storyboard PDF", "Planche des vignettes", "Color script", "Relecture"]);
+    assert_eq!(noms(1), ["Images", "Image courante", "Images par plan", "Storyboard PDF", "Planche des vignettes", "Color script", "Relecture", "Journal des différences"]);
     assert_eq!(noms(2), ["Son mixé", "Son par piste"]);
     assert_eq!(noms(3), ["Pour le montage", "Liste des plans", "Paquet de livraison", "Noms et production", "Fiche technique", "Calques séparés", "Caméra"]);
     let mut actions = Vec::new();
@@ -198,7 +198,7 @@ fn the_export_hub_is_grouped_by_use_with_an_action_for_every_entry() {
             actions.push(*action);
         }
     }
-    assert_eq!(actions.len(), 18);
+    assert_eq!(actions.len(), 19);
     let n = actions.len();
     actions.sort_unstable();
     actions.dedup();

@@ -103,6 +103,12 @@ mod envois;
 #[cfg(test)]
 mod envois_tests;
 mod envoisui;
+// Journal des différences entre deux envois : le modèle et les formats (`journal`), la tâche (`journaljob`), la fenêtre (`journalui`).
+mod journal;
+mod journaljob;
+mod journalui;
+#[cfg(test)]
+mod journal_tests;
 // Versions d'un plan (V1, V2, V3…) : le modèle et le fichier (`planvers`), l'interface (`planversui`).
 mod planvers;
 #[cfg(test)]

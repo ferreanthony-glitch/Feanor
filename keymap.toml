@@ -2697,6 +2697,12 @@ action = "envoi.modifies_choisir"
 touches = []
 source = "SHOT (sans touche)"
 
+# Journal des différences entre deux envois (sans touche : à choisir).
+[[raccourci]]
+action = "envoi.journal"
+touches = []
+source = "SHOT (sans touche)"
+
 # Versions d'un plan (V1, V2, V3…) : sans touche, à choisir.
 [[raccourci]]
 action = "version.nouvelle"

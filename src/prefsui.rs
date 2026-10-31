@@ -79,6 +79,7 @@ pub(crate) const FAMILLES: [(&str, &[Export]); 4] = [
             (ph::SQUARES_FOUR, "Planche des vignettes", "Toute la planche des Vignettes en une grande image ou en PDF : numéros, notes, barres, cadres de caméra, annotations, marie-louise.", "fichier.exporter_planche"),
             (ph::PALETTE, "Color script", "Une petite image par plan, rangées par séquence sur un fond uni : la couleur du film d'un coup d'œil.", "fichier.exporter_colorscript"),
             (ph::EYEGLASSES, "Relecture", "Une page sans internet à envoyer au réalisateur : il écrit ses notes et dessine dessus, SHOT les relit ensuite.", "fichier.exporter_relecture"),
+            (ph::ARROWS_LEFT_RIGHT, "Journal des différences", "Ce qui a changé entre deux envois : seulement les plans modifiés (avant / après, part de l'image qui diffère, durée), les plans ajoutés, retirés ou déplacés, les notes traitées. PDF et page HTML à joindre à l'envoi.", "envoi.journal"),
         ],
     ),
     (

@@ -68,6 +68,15 @@ impl App {
         }
         self.playing = false;
         match PaquetJob::start(&self.doc, &r, self.cur_panel, ffmpeg, &dossier, self.rejeu_idle.clone()) {
+            Ok(job) if r.journal => {
+                // Le journal des différences : les deux côtés proposés d'origine (`journalui.rs`), préparés ici, calculés sur un autre fil.
+                let (a, b) = self.journal_defauts();
+                match a.ok_or_else(|| "Il n'y a pas encore d'envoi : le journal des différences n'a rien à comparer.".to_string()).and_then(|a| self.journal_demande(a, b, None, None)) {
+                    Ok(d) => w.job = Some(job.avec_journal(d)),
+                    // (Le paquet abandonné efface son dossier de travail en se fermant.)
+                    Err(e) => w.result = Some(Err(e)),
+                }
+            }
             Ok(job) => w.job = Some(job),
             Err(e) => w.result = Some(Err(e)),
         }
@@ -130,7 +139,11 @@ impl App {
         let ffmpeg_ok = matches!(self.ffmpeg_info(), Some((_, Ok(_))));
         let n = self.doc.panels.len();
         let (a, b) = self.doc.sequence_run(self.cur_panel.min(n.saturating_sub(1)));
+        let journal_possible = !self.doc.envois.is_empty();
         let r = &mut self.settings.paquet;
+        if !journal_possible {
+            r.journal = false;
+        }
         ui.add_enabled_ui(!occupe, |ui| {
             egui::Grid::new("paquet_grille").num_columns(2).spacing([10.0, 7.0]).show(ui, |ui| {
                 ui.label("Contenu");
@@ -145,6 +158,10 @@ impl App {
                     ui.horizontal(|ui| {
                         ui.checkbox(&mut r.liste_csv, "La liste des plans : CSV");
                         ui.checkbox(&mut r.liste_json, "JSON");
+                    });
+                    ui.add_enabled_ui(journal_possible, |ui| {
+                        ui.checkbox(&mut r.journal, "Le journal des différences (PDF et page HTML)")
+                            .on_hover_text("Ce qui a changé depuis le dernier envoi (ou entre les deux derniers s'il n'y a rien de neuf) : les plans modifiés avant / après, ajoutés, retirés, déplacés, et les notes traitées. Demande au moins un envoi.");
                     });
                     ui.label(RichText::new("Le manifeste est toujours écrit.").small().weak());
                 });
