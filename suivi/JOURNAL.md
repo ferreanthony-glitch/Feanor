@@ -86,6 +86,15 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   plans supprimés gardés jusqu'à la réouverture ; envoi 90–110 ms sur le fil de l'interface ; MP4 lourd (2,7 Go / 15 min).
 - Lancé (accord d'Anthony) : chantier mémoire des longs épisodes (branche `memoire-episode`, dossier
   `Chantiers\exports` réutilisé) ; but : 300 plans sous ~4 Go, sans perte ni latence.
+- Fusionné 5f8c27a : mémoire des longs épisodes (dessins non regardés rangés en mémoire sans perte, aussi
+  l'historique, les caches de traits, les plans supprimés, les onglets cachés ; marquer un envoi par morceaux).
+  200 plans : 6,9 → 2,0 Go à l'ouverture, 10,1 → 5,7 Go après 2 000 gestes ; 300 plans : 9,0 → 2,3 Go à l'ouverture.
+  Relecture ciblée (second agent) : aucune perte de dessin ; 4 remarques corrigées avant fusion (38528d9). Format
+  inchangé (46). 3719 essais passent, shot.exe reconstruit, projet d'essai rouvert (même écran qu'avant).
+  Essai intermittent `fermeture_tests::a_rich_project_opened_and_left_idle…` : panique audio (cpal, COM) quand la
+  machine manque de mémoire, pas un défaut des dessins.
+- À décider avec l'œil d'Anthony : affichage Direct3D 12 au lieu de Vulkan (−2,6 Go, lecture 3× plus rapide selon
+  l'agent ; `WGPU_BACKEND=dx12`), jamais vérifié à l'écran.
 
 ## 2026-10-29
 
