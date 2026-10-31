@@ -855,6 +855,8 @@ pub struct App {
     /// Le monde hors de la feuille à l'écran (toile infinie, `monde.rs`).
     pub(crate) monde: crate::monde::Monde,
     pub(crate) thumbs: Thumbs,
+    /// La tenue des dessins en mémoire : les pixels des dessins qu'on ne regarde pas se rangent (`gel.rs`).
+    pub(crate) gel: crate::gel::Gel,
     pub(crate) montage_zoom: f32,
     /// Pistes repliables du montage : le calque qui s'est déplié tout seul (`pistes.rs`).
     pub(crate) pistes: crate::pistes::PistesUi,
@@ -1368,6 +1370,7 @@ impl App {
             renderer: Renderer::new(),
             monde: crate::monde::Monde::new(),
             thumbs: Thumbs::default(),
+            gel: Default::default(),
             montage_zoom: 4.0,
             pistes: Default::default(),
             cles_blocs: Default::default(),
@@ -2656,6 +2659,30 @@ impl App {
         for cel in crate::rejeu::outdated(&self.rejeu, |c| self.doc.cels.get(&c).map(|c| c.version)) {
             self.rejeu.cancel(cel);
             self.rejeu_again.insert(cel);
+        }
+    }
+
+    /// Le tour de la tenue des dessins (`gel.rs`) : les pixels des dessins qu'on ne regarde pas se rangent en tampons exacts. Au plus une
+    /// demi-milliseconde par image d'écran ; rien à faire quand tout est rangé.
+    pub(crate) fn tenir_les_dessins(&mut self, ctx: &egui::Context) {
+        let _t = crate::perf::section("dessins rangés (tour)");
+        if let Some(p) = self.doc.panels.get(self.cur_panel) {
+            self.gel.visite(p.id);
+        }
+        let lecture = self.playing.then_some(self.doc.fps);
+        self.gel.tenir(&mut self.doc, self.cur_panel, lecture);
+        self.gel.tenir_l_historique(&mut self.history);
+        let mut occupe = self.gel.occupe();
+        // Les projets des autres onglets : leurs dessins se rangent aussi (le plan qu'on y regardait en dernier reste ouvert).
+        for o in &mut self.onglets {
+            if let Some(e) = o.etat.as_mut() {
+                e.gel.tenir(&mut e.doc, e.cur_panel, None);
+                e.gel.tenir_l_historique(&mut e.history);
+                occupe |= e.gel.occupe();
+            }
+        }
+        if occupe {
+            ctx.request_repaint_after(std::time::Duration::from_millis(30));
         }
     }
 
@@ -5127,6 +5154,7 @@ impl App {
             self.poll_bitmap_settle();
             self.rejeu_idle_tick(ctx);
             self.warm_current_cel();
+            self.tenir_les_dessins(ctx);
         }
         self.update_title(ctx);
         {

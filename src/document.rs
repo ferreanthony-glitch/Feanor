@@ -85,6 +85,66 @@ impl Cel {
         }
     }
 
+    /// Les images du dessin : sa feuille, et la peinture et la coupe de sa strate Fond.
+    fn rasters(&self) -> impl Iterator<Item = &Raster> {
+        std::iter::once(&self.raster).chain(self.fond.iter().flat_map(|f| [&f.peinture.raster, &f.coupe]))
+    }
+
+    fn rasters_mut(&mut self) -> impl Iterator<Item = &mut Raster> {
+        std::iter::once(&mut self.raster).chain(self.fond.iter_mut().flat_map(|f| [&mut f.peinture.raster, &mut f.coupe]))
+    }
+
+    /// Range les pixels du dessin et les lâche tout de suite (un dessin qu'on vient de lire : `Tile`, pixels rangés). Sans effet sur ce
+    /// que le dessin montre : la première lecture rouvre les tuiles.
+    pub fn geler(&mut self) -> usize {
+        self.rasters_mut().map(Raster::geler).sum()
+    }
+
+    /// Fait les tampons des tuiles ouvertes du dessin (d'un fil de fond, sur une copie du dessin) ; rend le nombre de tuiles faites.
+    pub fn ranger_les_tuiles(&self) -> usize {
+        self.rasters().map(Raster::ranger_les_tuiles).sum()
+    }
+
+    /// Lâche les pixels des tuiles dont le tampon est fait et que le dessin est seul à tenir ; rend leur nombre.
+    pub fn lacher_les_pixels(&mut self) -> usize {
+        self.rasters_mut().map(Raster::lacher_les_pixels).sum()
+    }
+
+    /// Rouvre les pixels de toutes les tuiles du dessin (d'un fil de fond, sur une copie : il sera prêt quand on le regardera).
+    pub fn rouvrir(&self) {
+        self.rasters().for_each(Raster::rouvrir);
+    }
+
+    /// Reste-t-il des tuiles dont les pixels sont en mémoire ?
+    pub fn a_des_tuiles_ouvertes(&self) -> bool {
+        self.rasters().any(Raster::a_des_tuiles_ouvertes)
+    }
+
+    /// Reste-t-il des tuiles dont le tampon est à faire ?
+    pub fn a_des_tuiles_a_ranger(&self) -> bool {
+        self.rasters().any(Raster::a_des_tuiles_a_ranger)
+    }
+
+    /// Reste-t-il des tuiles dont les pixels pourraient partir tout de suite ?
+    pub fn a_des_tuiles_lachables(&self) -> bool {
+        self.rasters().any(Raster::a_des_tuiles_lachables)
+    }
+
+    /// Des copies des images du dessin (les tuiles se partagent : rien n'est recopié) pour qu'un fil de fond en fasse les tampons.
+    pub fn copies_des_images(&self) -> Vec<Raster> {
+        self.rasters().cloned().collect()
+    }
+
+    /// Octets que les tuiles du dessin tiennent en mémoire (pixels ouverts et tampons).
+    pub fn octets_en_memoire(&self) -> usize {
+        self.rasters().map(Raster::octets_en_memoire).sum()
+    }
+
+    /// (tuiles de la feuille dont les pixels sont en mémoire, tuiles de la feuille en tout) ; la strate Fond compte aussi.
+    pub fn tuiles_ouvertes(&self) -> (usize, usize) {
+        self.rasters().map(Raster::tuiles_ouvertes).fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1))
+    }
+
     /// Refait l'image d'un dessin vectoriel. Renvoie les tuiles qui ont pu changer.
     pub fn rerender(&mut self) -> Vec<usize> {
         let Some(v) = &self.vector else {

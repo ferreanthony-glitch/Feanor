@@ -19,9 +19,10 @@
 //!   nombre). Un plan qui revient à son état d'envoi (annuler) perd son repère.
 //! - Au repos (rien n'a changé depuis le dernier relevé analysé), aucune repeinte n'est demandée.
 //!
-//! **Marquer un envoi** est une commande explicite, pas un geste : elle copie d'un coup tous les plans et
-//! tous les dessins (quelques millisecondes, mesurées dans `envois_tests`), le fil fait le reste, et le
-//! projet est enregistré dès que l'instantané est prêt.
+//! **Marquer un envoi** est une commande explicite, pas un geste : elle copie tous les plans d'un coup, puis les
+//! dessins par morceaux de trois millisecondes au plus, image d'écran après image d'écran (un épisode de 200 plans
+//! en demandait 90 à 110 d'un seul coup) ; le fil fait le reste, et le projet est enregistré dès que l'instantané
+//! est prêt. Si le projet change pendant la copie, elle recommence : l'instantané montre le film d'un seul instant.
 
 use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, TryRecvError};
@@ -41,6 +42,25 @@ use crate::theme;
 const CALME: f64 = 0.6;
 /// Temps accordé par image d'écran à la copie des dessins d'un relevé.
 const BUDGET: Duration = Duration::from_micros(1_500);
+/// Temps accordé par image d'écran à la copie d'un marquage d'envoi (une commande explicite : l'écran ne doit pas saccader, pas non plus
+/// attendre plus d'une ou deux secondes pour 4 000 dessins).
+const BUDGET_MARQUAGE: Duration = Duration::from_millis(3);
+// Essais : la copie d'un marquage ne prend qu'un dessin par image d'écran, sur ce fil-ci (de quoi changer le projet pendant qu'elle dure).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static MARQUAGE_UN_DESSIN_PAR_IMAGE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn budget_marquage() -> Duration {
+    #[cfg(test)]
+    if MARQUAGE_UN_DESSIN_PAR_IMAGE.with(|c| c.get()) {
+        return Duration::ZERO;
+    }
+    BUDGET_MARQUAGE
+}
+/// Combien de fois la copie d'un marquage recommence (le projet change pendant qu'elle dure) avant qu'on y renonce.
+const MARQUAGE_REPRISES_MAX: u32 = 5;
+
 /// Rayon du repère « modifié » dans la bande et sur la planche.
 pub(crate) const REPERE: f32 = 7.0;
 
@@ -59,6 +79,27 @@ struct Preparation {
     plans: Vec<PlanCopie>,
     cels: HashMap<CelId, Copie>,
     restants: Vec<CelId>,
+}
+
+/// La copie en cours d'un marquage d'envoi (`App::envois_marquer_copier`).
+struct PrepMarquage {
+    releve: Releve,
+    /// Les plans déjà copiés (les plans.len() premiers) ; la numérotation, les noms et les séquences de tous, pris d'un coup au début.
+    plans: Vec<PlanCopie>,
+    numeros: crate::numerotation::Numeros,
+    noms: Vec<String>,
+    sequences: Vec<u64>,
+    cels: HashMap<CelId, Copie>,
+    restants: Vec<CelId>,
+    nom: String,
+    date: u64,
+    /// La variante choisie de chaque séquence au moment du marquage (`variantes.rs`).
+    variantes: Vec<envois::VarianteEnvoyee>,
+    /// Combien de fois le projet a changé pendant la copie (elle a recommencé).
+    #[allow(dead_code)]
+    reprises: u32,
+    /// Le plus long morceau de copie sur le fil de l'interface.
+    pire: Duration,
 }
 
 /// Le fil qui hache.
@@ -105,6 +146,8 @@ pub(crate) struct EnvoisUi {
     prep: Option<Preparation>,
     travail: Option<Travail>,
     marquage: Option<Marquage>,
+    /// La copie d'un marquage, en cours (elle précède `marquage`).
+    marquage_prep: Option<PrepMarquage>,
     generation: u64,
     pub(crate) nouveau: Option<NouveauEnvoi>,
     pub(crate) liste: bool,
@@ -143,13 +186,19 @@ impl EnvoisUi {
     /// Rien à faire : le dernier relevé est analysé et le projet n'a pas bougé depuis.
     #[cfg(test)]
     pub(crate) fn au_repos(&self) -> bool {
-        self.travail.is_none() && self.marquage.is_none() && self.prep.is_none() && self.releve == self.fait_pour
+        self.travail.is_none() && self.marquage.is_none() && self.marquage_prep.is_none() && self.prep.is_none() && self.releve == self.fait_pour
     }
 
     /// Un fil travaille (essais : attendre).
     #[cfg(test)]
     pub(crate) fn occupe(&self) -> bool {
-        self.travail.is_some() || self.marquage.is_some() || self.prep.is_some()
+        self.travail.is_some() || self.marquage.is_some() || self.marquage_prep.is_some() || self.prep.is_some()
+    }
+
+    /// Essais : (dessins déjà copiés, dessins à copier) de la copie d'un marquage en cours.
+    #[cfg(test)]
+    pub(crate) fn marquage_avancement(&self) -> Option<(usize, usize)> {
+        self.marquage_prep.as_ref().map(|p| (p.cels.len(), p.restants.len()))
     }
 
     /// Un relevé des plans a été analysé (essais).
@@ -215,6 +264,12 @@ impl App {
             self.envois_ui = EnvoisUi { epoch: self.doc_epoch, ..Default::default() };
         }
         self.envois_poll(ctx);
+        // Un marquage dont les dessins se copient : un morceau par image d'écran, rien d'autre ne se fait pendant.
+        if self.envois_ui.marquage_prep.is_some() {
+            self.envois_marquer_copier(ctx, budget_marquage());
+            ctx.request_repaint();
+            return;
+        }
         // La liste a changé (envoi ajouté ou retiré) : les états se recomparent.
         let signature = (self.doc.envois.list.len(), self.doc.envois.dernier().map_or(0, |e| e.id));
         if self.envois_ui.signature != signature {
@@ -346,29 +401,125 @@ impl App {
 
     // ------------------------------------------------------------------ marquer un envoi
 
-    /// Marque un envoi : l'état de chaque plan, tout de suite (copie), puis l'instantané sur un fil.
+    /// Marque un envoi : l'état de chaque plan est copié par petits morceaux, image d'écran après image d'écran (`envois_marquer_copier` :
+    /// copier d'un coup les 4 400 dessins d'un épisode de 200 plans coûtait 90 à 110 ms au fil de l'interface, surtout les traits des
+    /// dessins vectoriels), puis l'instantané se bâtit sur un fil.
     pub(crate) fn envois_marquer(&mut self, ctx: &egui::Context, nom: &str, date: u64) {
         // Film partagé : un envoi est une décision sur tout le film, il demande le jeton du montage.
         if self.partage_refuse_montage() {
             return;
         }
-        if self.envois_ui.marquage.is_some() {
+        if self.envois_ui.marquage.is_some() || self.envois_ui.marquage_prep.is_some() {
             self.status = "Un envoi est déjà en préparation.".into();
             return;
         }
         self.end_stroke();
+        self.envois_marquer_commencer(nom, date, 0);
+        self.status = format!("Envoi « {} » : état des plans en cours de relevé…", nom.trim());
+        self.envois_marquer_copier(ctx, budget_marquage());
+    }
+
+    /// Commence (ou recommence, `reprises` fois déjà) la copie d'un marquage : la liste des dessins à copier et ce qu'il faut de tout le film
+    /// pour nommer les plans ; les plans et les dessins se copient ensuite par morceaux.
+    fn envois_marquer_commencer(&mut self, nom: &str, date: u64, reprises: u32) {
         let start = Instant::now();
-        let plans = self.envois_plans();
-        let mut cels = HashMap::new();
+        let numeros = crate::numerotation::Numeros::of(&self.doc);
+        let noms = self.doc.noms_de_tous_les_plans();
+        let sequences = self.doc.sequence_ids();
+        let mut restants = Vec::new();
+        let mut vus = std::collections::HashSet::new();
         for p in &self.doc.panels {
             for id in crate::empreinte::dessins_du_plan(p) {
-                if let Some(c) = self.doc.cels.get(&id) {
-                    cels.entry(id).or_insert_with(|| Copie { version: c.version, donnees: Donnees::de(c) });
+                if vus.insert(id) && self.doc.cels.contains_key(&id) {
+                    restants.push(id);
                 }
             }
         }
+        // Un relevé en cours ne vaut plus rien : le marquage donne un résultat plus récent.
+        self.envois_ui.generation += 1;
+        self.envois_ui.prep = None;
+        self.envois_ui.travail = None;
+        self.envois_ui.marquage_prep = Some(PrepMarquage {
+            releve: self.envois_releve(),
+            plans: Vec::with_capacity(self.doc.panels.len()),
+            numeros,
+            noms,
+            sequences,
+            cels: HashMap::new(),
+            restants,
+            nom: nom.trim().to_string(),
+            date,
+            variantes: self.doc.variantes_pour_envoi(),
+            reprises,
+            pire: start.elapsed(),
+        });
+    }
+
+    /// Copie des dessins d'un marquage pendant au plus `budget` ; la dernière copie lance le fil. Si le projet change pendant la copie,
+    /// elle recommence (l'instantané montre le film d'un seul instant).
+    fn envois_marquer_copier(&mut self, ctx: &egui::Context, budget: Duration) {
+        let start = Instant::now();
+        if self.envois_ui.marquage_prep.is_none() {
+            return;
+        }
+        // Rien ne se copie (ni ne se valide) pendant un geste : un trait en cours ne bouge ni la version du dessin ni l'historique avant son
+        // dernier point, la copie en garderait la moitié. Même attente pour un rendu exact en route (il change la version du dessin à son
+        // arrivée, et la copie recommencerait à chaque dessin).
+        if ctx.input(|i| i.pointer.any_down())
+            || self.cel_here().is_some_and(|c| self.cel_busy(c))
+            || self.rejeu.has_pending()
+            || !self.rejeu_deferred.is_empty()
+            || !self.rejeu_again.is_empty()
+        {
+            ctx.request_repaint_after(Duration::from_millis(50));
+            return;
+        }
+        let releve = self.envois_releve();
+        let Some(prep) = &mut self.envois_ui.marquage_prep else { return };
+        if prep.releve != releve {
+            let (nom, date, reprises) = (prep.nom.clone(), prep.date, prep.reprises + 1);
+            if reprises > MARQUAGE_REPRISES_MAX {
+                // Le projet n'arrête pas de changer : pas d'envoi fait d'un film à moitié copié.
+                self.envois_ui.marquage_prep = None;
+                self.status = format!("Envoi « {nom} » abandonné : le projet changeait pendant le relevé. Recommence quand plus rien ne bouge.");
+                return;
+            }
+            self.envois_marquer_commencer(&nom, date, reprises);
+            ctx.request_repaint();
+            return;
+        }
+        // Les plans d'abord (au moins un par morceau), puis les dessins.
+        while prep.plans.len() < self.doc.panels.len() {
+            let i = prep.plans.len();
+            let p = &self.doc.panels[i];
+            prep.plans.push(PlanCopie {
+                panel: p.clone(),
+                titre: crate::storyboard::panel_title_n(&self.doc, &prep.numeros, i),
+                version: self.doc.numero_de_version(p.id),
+                nom: prep.noms.get(i).cloned().unwrap_or_default(),
+                sequence: prep.sequences.get(i).map(|&s| prep.numeros.sequence_label(&self.doc, s)).unwrap_or_default(),
+            });
+            if start.elapsed() >= budget {
+                break;
+            }
+        }
+        while prep.plans.len() >= self.doc.panels.len() {
+            let Some(id) = prep.restants.pop() else { break };
+            if let Some(c) = self.doc.cels.get(&id) {
+                prep.cels.insert(id, Copie { version: c.version, donnees: Donnees::de(c) });
+            }
+            if start.elapsed() >= budget {
+                break;
+            }
+        }
+        prep.pire = prep.pire.max(start.elapsed());
+        if prep.plans.len() < self.doc.panels.len() || !prep.restants.is_empty() {
+            ctx.request_repaint();
+            return;
+        }
+        let Some(prep) = self.envois_ui.marquage_prep.take() else { return };
+        let (nom, date, variantes, plans, cels, releve) = (prep.nom, prep.date, prep.variantes, prep.plans, prep.cels, prep.releve);
         let note_le = crate::recovery::now_secs();
-        let variantes = self.doc.variantes_pour_envoi();
         let demande = Demande {
             plans,
             cels,
@@ -376,12 +527,8 @@ impl App {
             tete: crate::project::Tete::de(&self.doc),
             envoi: Some(NouvelEnvoi { id: self.doc.envois.prochain_numero(), nom: nom.trim().to_string(), date, note_le, unique: unique() }),
         };
-        self.envois_ui.derniere_copie = Some(start.elapsed());
-        // Un relevé en cours ne vaut plus rien : le marquage donne un résultat plus récent.
-        self.envois_ui.generation += 1;
-        self.envois_ui.prep = None;
-        self.envois_ui.travail = None;
-        let releve = self.envois_releve();
+        // (Le plus long morceau de copie sur le fil de l'interface : c'est lui que l'utilisateur sent.)
+        self.envois_ui.derniere_copie = Some(prep.pire);
         let (tx, rx) = std::sync::mpsc::channel();
         let wake = ctx.clone();
         let started = std::thread::Builder::new().name("envoi".into()).spawn(move || {

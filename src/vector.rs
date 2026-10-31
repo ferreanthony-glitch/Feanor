@@ -302,6 +302,11 @@ impl CachedPixels {
         self.tiles.len() * TILE_PIXELS * 4
     }
 
+    /// Range les tuiles du cache (`Tile::geler`) : leurs pixels partent s'ils ne servent qu'à lui ; rend le nombre de tuiles rangées.
+    fn geler(&mut self) -> usize {
+        self.tiles.iter_mut().map(Tile::geler).filter(|&g| g).count()
+    }
+
     fn is_empty(&self) -> bool {
         self.tiles.is_empty()
     }
@@ -368,7 +373,9 @@ pub const CACHE_BUDGET_BYTES: usize = 512 << 20;
 
 /// Le registre des caches vivants : octets et dernier usage de chacun, pour tenir le budget.
 struct Registry {
-    entries: HashMap<u64, (Weak<RwLock<Option<Rendered>>>, usize, u64)>,
+    /// Pour chaque cache : sa cellule, ses octets (nominaux : 16 Ko par tuile), son dernier usage (`clock`), et l'usage qu'il avait quand ses
+    /// tuiles ont été rangées pour la dernière fois (`ranger_les_caches_au_repos` ; 0 : jamais).
+    entries: HashMap<u64, (Weak<RwLock<Option<Rendered>>>, usize, u64, u64)>,
     total: usize,
     clock: u64,
     next_id: u64,
@@ -382,7 +389,7 @@ impl Registry {
         let id = self.next_id;
         self.next_id += 1;
         self.clock += 1;
-        self.entries.insert(id, (Arc::downgrade(cell), bytes, self.clock));
+        self.entries.insert(id, (Arc::downgrade(cell), bytes, self.clock, 0));
         self.total += bytes;
         id
     }
@@ -395,7 +402,7 @@ impl Registry {
     }
 
     fn remove(&mut self, id: u64) {
-        if let Some((_, bytes, _)) = self.entries.remove(&id) {
+        if let Some((_, bytes, _, _)) = self.entries.remove(&id) {
             self.total = self.total.saturating_sub(bytes);
         }
     }
@@ -421,7 +428,7 @@ impl Registry {
             if self.total <= target {
                 break;
             }
-            let Some((weak, bytes, _)) = self.entries.remove(&id) else { continue };
+            let Some((weak, bytes, _, _)) = self.entries.remove(&id) else { continue };
             self.total = self.total.saturating_sub(bytes);
             if let Some(cell) = weak.upgrade() {
                 if let Ok(mut w) = cell.try_write() {
@@ -461,6 +468,51 @@ pub fn set_cache_budget(bytes: usize) {
 #[allow(dead_code)]
 pub fn cache_total_bytes() -> usize {
     REGISTRY.lock().map(|r| r.total).unwrap_or(0)
+}
+
+/// Range les pixels des caches de traits qu'aucun rendu n'a touchés depuis au moins `repos` usages (chantier « mémoire d'un épisode » :
+/// 52 000 traits d'un épisode gardaient 531 Mo de tuiles dont presque aucune n'était regardée). Les tuiles de ces caches se rouvrent toutes
+/// seules à la lecture (`Tile`) : un cache rangé se lit comme un autre. Le budget (`CACHE_BUDGET_BYTES`) compte toujours 16 Ko par tuile : rien
+/// d'autre ne change. À lancer d'un fil de fond ; traite au plus `max` caches par appel. Rend (caches traités, tuiles rangées).
+pub fn ranger_les_caches_au_repos(repos: u64, max: usize) -> (usize, usize) {
+    // Les candidats, d'un coup sous le verrou du registre (qui sert aussi aux rendus) ; le reste se fait hors de lui.
+    let candidats: Vec<(u64, Weak<RwLock<Option<Rendered>>>, u64)> = match REGISTRY.lock() {
+        Ok(r) => {
+            let horloge = r.clock;
+            r.entries.iter().filter(|(_, e)| e.2 > e.3 && horloge.saturating_sub(e.2) >= repos).take(max).map(|(id, e)| (*id, e.0.clone(), e.2)).collect()
+        }
+        Err(_) => return (0, 0),
+    };
+    let mut rangees = 0;
+    let mut faits: Vec<(u64, u64)> = Vec::with_capacity(candidats.len());
+    for (id, cellule, usage) in candidats {
+        let Some(cellule) = cellule.upgrade() else {
+            faits.push((id, usage));
+            continue;
+        };
+        // (Un rendu en cours tient la cellule : on ne l'attend pas, le cache sera pris à un prochain passage.)
+        let pris = match cellule.try_write() {
+            Ok(mut w) => {
+                if let Some(p) = w.as_mut().and_then(|r| r.pixels.as_mut()) {
+                    rangees += p.geler();
+                }
+                true
+            }
+            Err(_) => false,
+        };
+        if pris {
+            faits.push((id, usage));
+        }
+    }
+    let traites = faits.len();
+    if let Ok(mut r) = REGISTRY.lock() {
+        for (id, usage) in faits {
+            if let Some(e) = r.entries.get_mut(&id) {
+                e.3 = usage;
+            }
+        }
+    }
+    (traites, rangees)
 }
 
 /// Le cache des pixels d'un trait : partagé entre les copies du trait (annulation, aperçu d'un

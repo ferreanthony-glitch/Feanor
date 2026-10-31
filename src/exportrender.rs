@@ -725,7 +725,8 @@ fn passer(part: &Partage, total: usize, send: &mut dyn FnMut(usize, Image) -> Po
 #[cfg(test)]
 pub(crate) fn meme_dessin(a: &crate::document::Cel, b: &crate::document::Cel) -> bool {
     a.version == b.version && a.raster.width == b.raster.width && a.raster.tiles.len() == b.raster.tiles.len() && a.raster.tiles.iter().zip(&b.raster.tiles).all(|(x, y)| match (x, y) {
-        (Some(x), Some(y)) => x.same_as(y),
+        // (Une tuile que la tenue des dessins a rangée n'est plus la même mémoire que sa copie : on compare alors les pixels.)
+        (Some(x), Some(y)) => x.same_as(y) || ((x.est_rangee() || y.est_rangee()) && x[..] == y[..]),
         (None, None) => true,
         _ => false,
     })

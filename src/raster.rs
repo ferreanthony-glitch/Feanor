@@ -10,13 +10,53 @@ pub const TILE_PIXELS: usize = TILE * TILE;
 /// d'un `Box` : ce que l'un écrit, l'autre ne le voit jamais. Ce qui change : le cliché d'un
 /// enregistrement (`enregistrement.rs`) et les étapes d'annulation ne coûtent plus une copie des
 /// pixels, seulement l'écriture qui suit sur une tuile encore partagée.
+///
+/// **Pixels rangés** (`tuilepack.rs`, chantier « mémoire d'un épisode ») : une tuile peut n'être tenue que par un petit
+/// tampon, copie exacte de ses pixels (un dixième de leur taille pour du trait). Elle se rouvre toute seule à la
+/// première lecture (`Deref`, une microseconde) : aucun lecteur n'a rien à savoir. Les tuiles des dessins qu'on ne regarde
+/// plus sont rangées (`App::tenir_les_dessins`), celles d'un projet qui s'ouvre le sont dès leur lecture ; une écriture
+/// (`DerefMut`) remet les pixels et oublie le tampon. Rien ne se perd : le tampon est toujours exactement les pixels.
 #[derive(Clone)]
-pub struct Tile(std::sync::Arc<[Color32; TILE_PIXELS]>);
+pub struct Tile(std::sync::Arc<Donnees>);
+
+/// Ce que partagent toutes les copies d'une tuile : ses pixels s'ils sont en mémoire, son tampon s'il est fait.
+/// Au moins l'un des deux existe toujours ; quand les deux y sont, ils disent la même chose.
+struct Donnees {
+    px: std::sync::OnceLock<Box<[Color32; TILE_PIXELS]>>,
+    /// `Some(octets)` : les pixels rangés ; `None` : ils ne se rangent pas (trop de couleurs différentes, `tuilepack::MAX_OCTETS`).
+    rangee: std::sync::OnceLock<Option<Box<[u8]>>>,
+}
+
+impl Donnees {
+    fn pixels(&self) -> &[Color32; TILE_PIXELS] {
+        self.px.get_or_init(|| {
+            RETOURS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let octets = self.rangee.get().and_then(Option::as_ref).expect("une tuile a ses pixels ou son tampon");
+            crate::tuilepack::unpack(octets)
+        })
+    }
+}
+
+impl Clone for Donnees {
+    /// La copie qu'`Arc::make_mut` fait avant une écriture : les pixels, sans tampon (il serait faux dès l'écriture).
+    fn clone(&self) -> Self {
+        Donnees { px: std::sync::OnceLock::from(Box::new(*self.pixels())), rangee: std::sync::OnceLock::new() }
+    }
+}
+
+/// Combien de fois une tuile rangée a été rouverte par une lecture (diagnostic et essais).
+static RETOURS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Les tuiles rouvertes depuis le début du processus (essais et bancs).
+#[cfg(test)]
+pub fn tuiles_rouvertes() -> u64 {
+    RETOURS.load(std::sync::atomic::Ordering::Relaxed)
+}
 
 impl Tile {
     /// Une tuile des pixels `pixels`.
     pub fn new(pixels: [Color32; TILE_PIXELS]) -> Self {
-        Tile(std::sync::Arc::new(pixels))
+        Tile(std::sync::Arc::new(Donnees { px: std::sync::OnceLock::from(Box::new(pixels)), rangee: std::sync::OnceLock::new() }))
     }
 
     /// Les deux tuiles sont la même mémoire (rien n'a été écrit depuis la copie).
@@ -30,24 +70,86 @@ impl Tile {
     pub fn partages(&self) -> usize {
         std::sync::Arc::strong_count(&self.0)
     }
+
+    /// Fait le tampon de la tuile (une fois : il reste tant qu'on n'écrit pas dans la tuile). Utilisable de n'importe quel fil sur une
+    /// copie de la tuile : toutes les copies voient le tampon. Rend vrai si la tuile se range (sinon elle garde ses pixels).
+    pub fn ranger(&self) -> bool {
+        self.0.rangee.get_or_init(|| crate::tuilepack::pack(self.0.px.get().expect("une tuile a ses pixels ou son tampon"))).is_some()
+    }
+
+    /// La tuile est rangée et ses pixels ne sont pas en mémoire.
+    pub fn est_rangee(&self) -> bool {
+        self.0.px.get().is_none()
+    }
+
+    /// Les pixels sont en mémoire et le tampon n'est pas encore fait (ni refusé : `ranger` n'a pas encore été demandé).
+    pub fn est_a_ranger(&self) -> bool {
+        self.0.px.get().is_some() && self.0.rangee.get().is_none()
+    }
+
+    /// Les pixels sont en mémoire et le tampon est fait : lâcher les pixels ne coûterait rien.
+    pub fn est_lachable(&self) -> bool {
+        self.0.px.get().is_some() && matches!(self.0.rangee.get(), Some(Some(_)))
+    }
+
+    /// Lâche les pixels de cette copie d'une tuile dont le tampon est fait (`ranger`). Seule à la tenir, elle rend ses pixels. Tenue aussi par
+    /// un autre dessin (un plan copié, une version, une variante partagent leurs tuiles), une étape d'annulation, un cliché ou un fil de fond,
+    /// elle passe à une tuile à elle, faite du seul tampon (un millier d'octets) : les pixels partent avec le dernier qui les tient, et
+    /// rien n'est lu ni écrit chez les autres. (Sans cela, les tuiles que se partagent des dessins copiés ne partiraient jamais : 60 % des
+    /// tuiles d'un épisode resté ouvert une séance.) Rend vrai si cette copie n'a plus les pixels en mémoire.
+    pub fn lacher_les_pixels(&mut self) -> bool {
+        if !self.est_lachable() {
+            return false;
+        }
+        match std::sync::Arc::get_mut(&mut self.0) {
+            Some(d) => d.px.take().is_some(),
+            None => {
+                let Some(Some(octets)) = self.0.rangee.get() else { return false };
+                let propre = Donnees { px: std::sync::OnceLock::new(), rangee: std::sync::OnceLock::from(Some(octets.clone())) };
+                self.0 = std::sync::Arc::new(propre);
+                true
+            }
+        }
+    }
+
+    /// Range la tuile et lâche ses pixels, tout de suite (une tuile qu'on vient de lire, que personne d'autre ne tient).
+    pub fn geler(&mut self) -> bool {
+        self.ranger() && self.lacher_les_pixels()
+    }
+
+    /// Les pixels sont en mémoire (la tuile n'est pas rangée) : 16 Ko de plus que son tampon.
+    pub fn octets_en_memoire(&self) -> usize {
+        let px = if self.0.px.get().is_some() { std::mem::size_of::<[Color32; TILE_PIXELS]>() } else { 0 };
+        px + self.0.rangee.get().and_then(Option::as_ref).map_or(0, |o| o.len())
+    }
+
+    /// Rouvre les pixels d'une tuile rangée (un fil de fond qui prépare un plan avant qu'on le regarde, sur une copie de la tuile : les
+    /// pixels rouverts servent à toutes les copies).
+    pub fn rouvrir(&self) {
+        let _ = self.0.pixels();
+    }
 }
 
 impl std::ops::Deref for Tile {
     type Target = [Color32; TILE_PIXELS];
     fn deref(&self) -> &Self::Target {
-        &self.0
+        self.0.pixels()
     }
 }
 
 impl std::ops::DerefMut for Tile {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        std::sync::Arc::make_mut(&mut self.0)
+        let d = std::sync::Arc::make_mut(&mut self.0);
+        d.pixels();
+        // L'écriture qui vient rend le tampon faux : il sera refait quand on rangera de nouveau.
+        d.rangee = std::sync::OnceLock::new();
+        d.px.get_mut().expect("les pixels viennent d'être rouverts")
     }
 }
 
 impl PartialEq for Tile {
     fn eq(&self, other: &Self) -> bool {
-        self.same_as(other) || self.0[..] == other.0[..]
+        self.same_as(other) || self.0.pixels()[..] == other.0.pixels()[..]
     }
 }
 
@@ -103,6 +205,69 @@ impl Raster {
             partage(t);
         }
         n
+    }
+}
+
+impl Raster {
+    /// Toutes les tuiles du dessin, de la feuille et d'au-delà.
+    fn toutes_les_tuiles(&self) -> impl Iterator<Item = &Tile> {
+        self.tiles.iter().flatten().chain(self.outer.values())
+    }
+
+    fn toutes_les_tuiles_mut(&mut self) -> impl Iterator<Item = &mut Tile> {
+        self.tiles.iter_mut().flatten().chain(self.outer.values_mut())
+    }
+
+    /// Fait le tampon de chaque tuile en mémoire (`Tile::ranger`) ; rend le nombre de tuiles dont les pixels pourront partir.
+    /// Ne change rien au dessin : à lancer d'un fil de fond sur une copie du dessin (les tuiles se partagent).
+    pub fn ranger_les_tuiles(&self) -> usize {
+        self.toutes_les_tuiles().filter(|t| !t.est_rangee()).filter(|t| t.ranger()).count()
+    }
+
+    /// Lâche les pixels des tuiles dont le tampon est fait et que personne d'autre ne tient (`Tile::lacher_les_pixels`) ; rend leur nombre.
+    pub fn lacher_les_pixels(&mut self) -> usize {
+        self.toutes_les_tuiles_mut().map(|t| t.lacher_les_pixels()).filter(|&parti| parti).count()
+    }
+
+    /// Range et lâche tout de suite (un dessin qu'on vient de lire et que personne ne tient encore) ; rend le nombre de tuiles rangées.
+    pub fn geler(&mut self) -> usize {
+        if !crate::tuilepack::actif() {
+            return 0;
+        }
+        self.toutes_les_tuiles_mut().map(|t| t.geler()).filter(|&gele| gele).count()
+    }
+
+    /// Rouvre les pixels de toutes les tuiles rangées (sur une copie du dessin : les pixels servent à toutes les copies).
+    pub fn rouvrir(&self) {
+        for t in self.toutes_les_tuiles().filter(|t| t.est_rangee()) {
+            t.rouvrir();
+        }
+    }
+
+    /// Octets que les tuiles tiennent en mémoire (pixels et tampons), les tuiles partagées comptées pour chaque dessin qui les tient.
+    pub fn octets_en_memoire(&self) -> usize {
+        self.toutes_les_tuiles().map(Tile::octets_en_memoire).sum()
+    }
+
+    /// (tuiles dont les pixels sont en mémoire, tuiles en tout).
+    pub fn tuiles_ouvertes(&self) -> (usize, usize) {
+        let tout = self.toutes_les_tuiles().count();
+        (self.toutes_les_tuiles().filter(|t| !t.est_rangee()).count(), tout)
+    }
+
+    /// Reste-t-il des tuiles dont les pixels sont en mémoire ?
+    pub fn a_des_tuiles_ouvertes(&self) -> bool {
+        self.toutes_les_tuiles().any(|t| !t.est_rangee())
+    }
+
+    /// Reste-t-il des tuiles dont le tampon est à faire (`Tile::est_a_ranger`) ?
+    pub fn a_des_tuiles_a_ranger(&self) -> bool {
+        self.toutes_les_tuiles().any(Tile::est_a_ranger)
+    }
+
+    /// Reste-t-il des tuiles dont les pixels pourraient partir tout de suite (`Tile::est_lachable`) ?
+    pub fn a_des_tuiles_lachables(&self) -> bool {
+        self.toutes_les_tuiles().any(Tile::est_lachable)
     }
 }
 

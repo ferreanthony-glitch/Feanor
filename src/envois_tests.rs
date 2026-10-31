@@ -584,6 +584,67 @@ fn marking_an_envoi_in_the_application_notes_every_plan_and_saves() {
 }
 
 #[test]
+fn a_marking_copies_by_slices_and_starts_again_when_the_project_changes() {
+    let (mut b, m) = banc_projet("envois-tranches", 3);
+    crate::envoisui::MARQUAGE_UN_DESSIN_PAR_IMAGE.with(|c| c.set(true));
+    let ctx = b.ctx.clone();
+    b.app.envois_marquer(&ctx, "v1 au réal", envois::lire_date("20/10/2026").unwrap());
+    // Un seul dessin est copié : le marquage attend les images suivantes, aucun envoi n'est encore dans le projet.
+    assert!(b.app.envois_ui.occupe(), "la copie continue d'image en image");
+    assert!(b.app.doc.envois.list.is_empty());
+    // Le projet change pendant la copie (un plan de plus) : elle recommence, l'instantané montre le film d'un seul instant.
+    b.app.structure_op(|d, cur| Some(d.add_scene_after(cur)));
+    pomper(&mut b);
+    crate::envoisui::MARQUAGE_UN_DESSIN_PAR_IMAGE.with(|c| c.set(false));
+    assert_eq!(b.app.doc.envois.list.len(), 1);
+    assert_eq!(b.app.doc.envois.list[0].plans.len(), 4, "l'envoi note le film d'après le changement : quatre plans");
+    assert!(b.app.doc.envois.pending.is_empty(), "l'enregistrement a libéré l'instantané");
+    assert!(m.parent().unwrap().join("envois.json").exists());
+}
+
+#[test]
+fn a_marking_copies_nothing_while_a_gesture_is_going_on() {
+    use eframe::egui::{Event, Modifiers, PointerButton};
+    let (mut b, _m) = banc_projet("envois-geste", 3);
+    crate::envoisui::MARQUAGE_UN_DESSIN_PAR_IMAGE.with(|c| c.set(true));
+    let ctx = b.ctx.clone();
+    b.app.envois_marquer(&ctx, "v1", envois::lire_date("20/10/2026").unwrap());
+    assert!(b.app.envois_ui.marquage_avancement().is_some(), "copie en cours");
+    // Le bouton de la souris est tenu (un trait est en cours) : la copie attend, pas un dessin de plus.
+    let pos = eframe::egui::pos2(5.0, 5.0);
+    b.image(vec![Event::PointerMoved(pos), Event::PointerButton { pos, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    let tenu = b.app.envois_ui.marquage_avancement().expect("copie en cours").1;
+    for _ in 0..10 {
+        b.image(Vec::new(), 1.0 / 60.0);
+    }
+    assert_eq!(b.app.envois_ui.marquage_avancement().map(|a| a.1), Some(tenu), "rien n'avance pendant le geste");
+    // Le geste fini, la copie reprend et l'envoi se fait.
+    b.image(vec![Event::PointerButton { pos, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    pomper(&mut b);
+    crate::envoisui::MARQUAGE_UN_DESSIN_PAR_IMAGE.with(|c| c.set(false));
+    assert_eq!(b.app.doc.envois.list.len(), 1);
+}
+
+#[test]
+fn a_marking_gives_up_with_a_message_when_the_project_never_stops_changing() {
+    let (mut b, _m) = banc_projet("envois-sans-fin", 3);
+    crate::envoisui::MARQUAGE_UN_DESSIN_PAR_IMAGE.with(|c| c.set(true));
+    let ctx = b.ctx.clone();
+    b.app.envois_marquer(&ctx, "v1", envois::lire_date("20/10/2026").unwrap());
+    for _ in 0..30 {
+        b.app.structure_op(|d, cur| Some(d.add_scene_after(cur)));
+        b.image(Vec::new(), 1.0 / 60.0);
+        if b.app.envois_ui.marquage_avancement().is_none() {
+            break;
+        }
+    }
+    crate::envoisui::MARQUAGE_UN_DESSIN_PAR_IMAGE.with(|c| c.set(false));
+    assert!(b.app.envois_ui.marquage_avancement().is_none(), "la copie a renoncé");
+    assert!(b.app.status.contains("abandonné"), "{}", b.app.status);
+    assert!(b.app.doc.envois.list.is_empty(), "aucun envoi fait d'un film à moitié copié");
+}
+
+#[test]
 fn changed_plans_are_flagged_after_a_calm_moment_and_unflagged_when_undone() {
     let (mut b, _m) = banc_projet("envois-suivi", 3);
     marquer_dans_l_appli(&mut b, "v1 au réal");
@@ -707,6 +768,13 @@ fn the_per_frame_stamp_and_the_marking_copy_stay_cheap_on_a_big_film() {
     assert!(par_image < Duration::from_millis(1), "le relevé coûte {par_image:?} par image d'écran");
     let ctx = b.ctx.clone();
     b.app.envois_marquer(&ctx, "v1", 1_760_000_000);
+    // La copie des dessins se fait par morceaux, image d'écran après image d'écran.
+    for _ in 0..400 {
+        if b.app.envois_ui.derniere_copie.is_some() {
+            break;
+        }
+        b.image(Vec::new(), 1.0 / 60.0);
+    }
     let copie = b.app.envois_ui.derniere_copie.expect("mesure");
     eprintln!("envois : relevé par image d'écran {par_image:?} ; copie d'un marquage (600 plans, 1 200 dessins) {copie:?}");
     assert!(copie < Duration::from_millis(400), "la copie d'un marquage coûte {copie:?}");

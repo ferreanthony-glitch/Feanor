@@ -36,10 +36,16 @@ fn block_on<F: Future>(f: F) -> F::Output {
 
 /// Un périphérique wgpu sans fenêtre, ou `None` (aucune carte graphique).
 pub(crate) fn headless() -> Option<RenderState> {
-    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
+    // (`WGPU_BACKEND` = vulkan | dx12 et `ESSAI_MEMOIRE_CARTE` = usage choisissent l'API et les conseils de mémoire : mesures de mémoire seulement.)
+    let backends = wgpu::Backends::from_env().unwrap_or_default();
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor { backends, ..Default::default() });
     let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
+    let hints = if std::env::var("ESSAI_MEMOIRE_CARTE").is_ok_and(|v| v == "usage") { wgpu::MemoryHints::MemoryUsage } else { wgpu::MemoryHints::Performance };
+    if std::env::var_os("ESSAI_MEMOIRE_CARTE").is_some() || std::env::var_os("WGPU_BACKEND").is_some() {
+        println!("     carte graphique des essais : {:?}, {}", adapter.get_info().backend, adapter.get_info().name);
+    }
     let (device, queue) = block_on(adapter.request_device(
-        &wgpu::DeviceDescriptor { label: Some("essai"), required_features: wgpu::Features::empty(), required_limits: adapter.limits(), memory_hints: wgpu::MemoryHints::Performance },
+        &wgpu::DeviceDescriptor { label: Some("essai"), required_features: wgpu::Features::empty(), required_limits: adapter.limits(), memory_hints: hints },
         None,
     ))
     .ok()?;
