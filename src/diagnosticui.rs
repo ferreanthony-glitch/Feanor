@@ -325,6 +325,19 @@ impl App {
                     for ligne in crate::memoirevideo::journal().iter().rev().take(3) {
                         ui.label(RichText::new(ligne).small().color(theme::texte_doux()));
                     }
+                    // Les pixels des dessins : ceux qu'on ne regarde pas sont rangés en tampons exacts (`gel.rs`).
+                    {
+                        let (ouvertes, total, octets) = crate::gel::Gel::bilan(&self.doc);
+                        let nominal = total * crate::raster::TILE_PIXELS * 4;
+                        let texte = format!(
+                            "Dessins en mémoire : {} Mo (sans rangement : {} Mo) ; {} tuiles sur {} ont leurs pixels ouverts.",
+                            octets >> 20,
+                            nominal >> 20,
+                            ouvertes,
+                            total
+                        );
+                        ui.label(RichText::new(texte).small().color(theme::texte_doux()));
+                    }
                     ui.add_space(8.0);
                     ui.separator();
                     // Le banc en cours.

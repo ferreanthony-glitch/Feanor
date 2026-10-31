@@ -16,6 +16,13 @@ use eframe::egui::Color32;
 
 use crate::raster::TILE_PIXELS;
 
+/// Le rangement des tuiles est en marche (sauf `SHOT_SANS_GEL=1` dans l'environnement : tout reste en pixels, comme avant le chantier « mémoire
+/// d'un épisode » ; pour comparer des mesures, ou si un cas pose un jour problème).
+pub fn actif() -> bool {
+    static ACTIF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ACTIF.get_or_init(|| std::env::var_os("SHOT_SANS_GEL").is_none())
+}
+
 /// Un tampon plus gros que cela ne gagne presque rien sur les 16 384 octets d'une tuile : elle reste en pixels.
 pub const MAX_OCTETS: usize = 12 * 1024;
 

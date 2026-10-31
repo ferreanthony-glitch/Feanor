@@ -2671,6 +2671,7 @@ impl App {
         }
         let lecture = self.playing.then_some(self.doc.fps);
         self.gel.tenir(&mut self.doc, self.cur_panel, lecture);
+        self.gel.tenir_l_historique(&mut self.history);
         if self.gel.occupe() {
             ctx.request_repaint_after(std::time::Duration::from_millis(30));
         }

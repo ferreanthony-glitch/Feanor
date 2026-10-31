@@ -193,6 +193,42 @@ fn a_drawing_modified_after_being_ranged_is_never_lost() {
 }
 
 #[test]
+fn old_undo_steps_are_ranged_and_undo_and_redo_stay_exact() {
+    use crate::history::{Edit, History, Nav};
+    let (mut doc, ids) = doc_de_plans(2);
+    let id = ids[0];
+    let mut h = History::default();
+    let mut nav = Nav { panel: 0, layer: 0 };
+    let mut etats = vec![a_plat(&doc, id)];
+    for k in 0..24u8 {
+        // Un geste : la tuile 5 est sauvée dans l'étape, puis modifiée (la tuile de l'étape est alors seule à tenir les anciens pixels).
+        let cel = doc.cels.get_mut(&id).unwrap();
+        let avant = cel.raster.slot(5).cloned();
+        h.push(Edit::Tiles { cel: id, tiles: vec![(5, avant)] });
+        cel.raster.tile_mut(5)[k as usize] = Color32::from_rgba_premultiplied(k, 200, 3, 255);
+        cel.version += 1;
+        etats.push(a_plat(&doc, id));
+    }
+    let (ouvertes, total, octets) = h.tuiles();
+    assert_eq!((ouvertes, total), (24, 24), "toutes les étapes sont en pixels au départ");
+    let rangees = h.geler_les_vieilles_etapes(8, 1000);
+    assert_eq!(rangees, 16, "les 16 plus vieilles étapes se rangent, les 8 dernières restent en pixels");
+    let (ouvertes_apres, _, octets_apres) = h.tuiles();
+    assert_eq!(ouvertes_apres, 8);
+    assert!(octets_apres < octets / 2, "{octets} -> {octets_apres} octets");
+    assert_eq!(h.geler_les_vieilles_etapes(8, 1000), 0, "rien de plus à ranger");
+    // Tout s'annule, étape après étape, jusqu'au dessin d'origine ; puis tout se rétablit : chaque état est celui d'avant, au pixel près.
+    for k in (0..24).rev() {
+        assert!(h.undo(&mut doc, &mut nav));
+        assert_eq!(a_plat(&doc, id), etats[k], "après avoir annulé jusqu'à l'état {k}");
+    }
+    for k in 1..=24 {
+        assert!(h.redo(&mut doc, &mut nav));
+        assert_eq!(a_plat(&doc, id), etats[k], "après avoir rétabli jusqu'à l'état {k}");
+    }
+}
+
+#[test]
 fn undoing_the_removal_of_a_plan_after_its_drawings_were_ranged_gives_the_exact_drawings() {
     use crate::perf_tests::banc;
     let (doc, ids) = doc_de_plans(8);

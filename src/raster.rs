@@ -224,6 +224,9 @@ impl Raster {
 
     /// Range et lâche tout de suite (un dessin qu'on vient de lire et que personne ne tient encore) ; rend le nombre de tuiles rangées.
     pub fn geler(&mut self) -> usize {
+        if !crate::tuilepack::actif() {
+            return 0;
+        }
         self.toutes_les_tuiles_mut().map(|t| t.geler()).filter(|&gele| gele).count()
     }
 

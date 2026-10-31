@@ -46,6 +46,13 @@ struct Lot {
 
 /// Un cache de trait qu'aucun rendu n'a touché depuis ce nombre d'usages est rangé (`vector::ranger_les_caches_au_repos`).
 const CACHES_AU_REPOS: u64 = 3000;
+/// Étapes d'annulation récentes gardées en pixels (Ctrl+Z reste instantané) ; les plus anciennes se rangent.
+const ETAPES_GARDEES: usize = 8;
+/// Tuiles d'historique rangées par passage, au plus (3 microsecondes chacune : un demi-milliseconde ou un peu plus).
+const TUILES_D_HISTORIQUE: usize = 150;
+/// Le passage sur l'historique revient au plus toutes ces millisecondes quand il n'y avait plus rien à ranger.
+const HISTORIQUE_TOUTES_LES: Duration = Duration::from_millis(400);
+
 /// Numéro qui ne désigne aucun dessin : la réponse du fil de fond à un passage sur les caches de traits qui a rangé quelque chose.
 const REPONSE_CACHES: CelId = u64::MAX;
 /// Caches de traits rangés d'un coup, au plus.
@@ -75,13 +82,16 @@ pub struct Gel {
     caches_le: Option<Instant>,
     /// Le dernier passage sur les caches a rangé des tuiles : un autre suivra.
     caches_a_trouve: bool,
+    /// Le dernier passage sur l'historique d'annulation, et s'il reste des tuiles à y ranger.
+    historique_le: Option<Instant>,
+    historique_a_trouve: bool,
 }
 
 impl Default for Gel {
     fn default() -> Self {
         Gel {
-            // `SHOT_SANS_GEL=1` : comme avant (mesures avant / après, ou si un jour un cas pose problème).
-            actif: std::env::var_os("SHOT_SANS_GEL").is_none(),
+            // `SHOT_SANS_GEL=1` : comme avant (mesures avant / après, ou si un jour un cas pose problème : `tuilepack::actif`).
+            actif: crate::tuilepack::actif(),
             envoi: None,
             retour: None,
             en_route: HashSet::new(),
@@ -95,6 +105,8 @@ impl Default for Gel {
             caches_en_route: false,
             caches_le: None,
             caches_a_trouve: false,
+            historique_le: None,
+            historique_a_trouve: false,
         }
     }
 }
@@ -108,7 +120,7 @@ impl Gel {
 
     /// Reste-t-il du travail en route (le caller redemande une image d'écran bientôt) ?
     pub fn occupe(&self) -> bool {
-        self.actif && (!self.en_route.is_empty() || self.caches_en_route || self.caches_a_trouve || (self.repos_jusqu.is_none() && (self.curseur < self.ids.len() || self.a_trouve)))
+        self.actif && (!self.en_route.is_empty() || self.caches_en_route || self.caches_a_trouve || self.historique_a_trouve || (self.repos_jusqu.is_none() && (self.curseur < self.ids.len() || self.a_trouve)))
     }
 
     fn fil(&mut self) -> &Sender<Lot> {
@@ -152,6 +164,34 @@ impl Gel {
             self.retour = Some(rx_retour);
         }
         self.envoi.as_ref().expect("le fil vient d'être lancé")
+    }
+
+    /// Range les tuiles des vieilles étapes d'annulation (History::geler_les_vieilles_etapes) : un peu à chaque passage, sur le fil de l'interface
+    /// (3 microsecondes par tuile ; ce sont les tuiles d'avant les gestes, que l'historique est seul à tenir).
+    pub fn tenir_l_historique(&mut self, h: &mut crate::history::History) {
+        if !self.actif {
+            return;
+        }
+        if !(self.historique_a_trouve || self.historique_le.is_none_or(|t| t.elapsed() >= HISTORIQUE_TOUTES_LES)) {
+            return;
+        }
+        self.historique_le = Some(Instant::now());
+        let n = h.geler_les_vieilles_etapes(ETAPES_GARDEES, TUILES_D_HISTORIQUE);
+        self.lachees += n as u64;
+        self.historique_a_trouve = n >= TUILES_D_HISTORIQUE;
+    }
+
+    /// Le bilan des tuiles du projet : (tuiles dont les pixels sont en mémoire, tuiles en tout, octets que les tuiles tiennent vraiment).
+    /// Parcourt toutes les tuiles (une milliseconde pour un épisode de 200 plans) : pour une fenêtre de diagnostic, pas pour chaque image.
+    pub fn bilan(doc: &Document) -> (usize, usize, usize) {
+        let (mut ouvertes, mut total, mut octets) = (0, 0, 0);
+        for c in doc.cels.values() {
+            let (o, t) = c.tuiles_ouvertes();
+            ouvertes += o;
+            total += t;
+            octets += c.octets_en_memoire();
+        }
+        (ouvertes, total, octets)
     }
 
     /// Note que le plan de numéro `plan` est regardé (les plans visités en dernier restent chauds).

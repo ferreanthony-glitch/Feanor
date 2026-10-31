@@ -45,6 +45,19 @@ const BUDGET: Duration = Duration::from_micros(1_500);
 /// Temps accordé par image d'écran à la copie d'un marquage d'envoi (une commande explicite : l'écran ne doit pas saccader, pas non plus
 /// attendre plus d'une ou deux secondes pour 4 000 dessins).
 const BUDGET_MARQUAGE: Duration = Duration::from_millis(3);
+/// Essais : la copie d'un marquage ne prend qu'un dessin par image d'écran, sur ce fil-ci (de quoi changer le projet pendant qu'elle dure).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static MARQUAGE_UN_DESSIN_PAR_IMAGE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+fn budget_marquage() -> Duration {
+    #[cfg(test)]
+    if MARQUAGE_UN_DESSIN_PAR_IMAGE.with(|c| c.get()) {
+        return Duration::ZERO;
+    }
+    BUDGET_MARQUAGE
+}
 /// Rayon du repère « modifié » dans la bande et sur la planche.
 pub(crate) const REPERE: f32 = 7.0;
 
@@ -240,7 +253,7 @@ impl App {
         self.envois_poll(ctx);
         // Un marquage dont les dessins se copient : un morceau par image d'écran, rien d'autre ne se fait pendant.
         if self.envois_ui.marquage_prep.is_some() {
-            self.envois_marquer_copier(ctx, BUDGET_MARQUAGE);
+            self.envois_marquer_copier(ctx, budget_marquage());
             ctx.request_repaint();
             return;
         }
@@ -390,7 +403,7 @@ impl App {
         self.end_stroke();
         self.envois_marquer_commencer(nom, date, 0);
         self.status = format!("Envoi « {} » : état des plans en cours de relevé…", nom.trim());
-        self.envois_marquer_copier(ctx, BUDGET_MARQUAGE);
+        self.envois_marquer_copier(ctx, budget_marquage());
     }
 
     /// Commence (ou recommence, `reprises` fois déjà) la copie d'un marquage : les plans d'un coup, les dessins à copier en liste.

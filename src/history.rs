@@ -287,4 +287,80 @@ impl History {
     pub fn is_empty(&self) -> bool {
         self.undo.is_empty() && self.redo.is_empty()
     }
+
+    /// Tuiles que tiennent les étapes : (dont les pixels sont en mémoire, en tout, octets tenus).
+    pub fn tuiles(&self) -> (usize, usize, usize) {
+        let mut r = (0, 0, 0);
+        for e in self.undo.iter().chain(self.redo.iter()) {
+            e.compter(&mut r);
+        }
+        r
+    }
+
+    /// Range les tuiles des étapes les plus anciennes, au plus `max` tuiles (une étape de 3 000 tuiles ne se range pas d'un coup) :
+    /// les `garder` dernières étapes à annuler et la prochaine à rétablir restent en pixels (Ctrl+Z reste instantané) ; les autres se
+    /// rangent en tampons exacts et se rouvrent quand on les applique. Rend le nombre de tuiles rangées.
+    pub fn geler_les_vieilles_etapes(&mut self, garder: usize, max: usize) -> usize {
+        let mut fait = 0;
+        let n_undo = self.undo.len().saturating_sub(garder);
+        for e in self.undo[..n_undo].iter_mut() {
+            if fait >= max {
+                return fait;
+            }
+            fait += e.geler(max - fait);
+        }
+        // (Les étapes à rétablir : la prochaine, la dernière du vecteur, reste ouverte.)
+        let n_redo = self.redo.len().saturating_sub(1);
+        for e in self.redo[..n_redo].iter_mut() {
+            if fait >= max {
+                return fait;
+            }
+            fait += e.geler(max - fait);
+        }
+        fait
+    }
+}
+
+impl Edit {
+    fn compter(&self, r: &mut (usize, usize, usize)) {
+        match self {
+            Edit::Tiles { tiles, .. } | Edit::FondTiles { tiles, .. } => {
+                for t in tiles.iter().filter_map(|(_, t)| t.as_ref()) {
+                    r.0 += usize::from(!t.est_rangee());
+                    r.1 += 1;
+                    r.2 += t.octets_en_memoire();
+                }
+            }
+            Edit::Group(edits) => edits.iter().for_each(|e| e.compter(r)),
+            Edit::Vector { .. } | Edit::Structure { .. } => {}
+        }
+    }
+
+    /// Range au plus `max` tuiles de cette étape (celles qui ne sont pas déjà rangées et que l'étape est seule à tenir) ; rend le nombre rangé.
+    fn geler(&mut self, max: usize) -> usize {
+        let mut fait = 0;
+        match self {
+            Edit::Tiles { tiles, .. } | Edit::FondTiles { tiles, .. } => {
+                for t in tiles.iter_mut().filter_map(|(_, t)| t.as_mut()) {
+                    if fait >= max {
+                        break;
+                    }
+                    // (`geler` : fait le tampon s'il manque, puis lâche les pixels si l'étape est seule à tenir la tuile.)
+                    if t.geler() {
+                        fait += 1;
+                    }
+                }
+            }
+            Edit::Group(edits) => {
+                for e in edits.iter_mut() {
+                    if fait >= max {
+                        break;
+                    }
+                    fait += e.geler(max - fait);
+                }
+            }
+            Edit::Vector { .. } | Edit::Structure { .. } => {}
+        }
+        fait
+    }
 }

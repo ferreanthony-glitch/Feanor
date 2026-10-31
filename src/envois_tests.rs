@@ -584,6 +584,25 @@ fn marking_an_envoi_in_the_application_notes_every_plan_and_saves() {
 }
 
 #[test]
+fn a_marking_copies_by_slices_and_starts_again_when_the_project_changes() {
+    let (mut b, m) = banc_projet("envois-tranches", 3);
+    crate::envoisui::MARQUAGE_UN_DESSIN_PAR_IMAGE.with(|c| c.set(true));
+    let ctx = b.ctx.clone();
+    b.app.envois_marquer(&ctx, "v1 au réal", envois::lire_date("20/10/2026").unwrap());
+    // Un seul dessin est copié : le marquage attend les images suivantes, aucun envoi n'est encore dans le projet.
+    assert!(b.app.envois_ui.occupe(), "la copie continue d'image en image");
+    assert!(b.app.doc.envois.list.is_empty());
+    // Le projet change pendant la copie (un plan de plus) : elle recommence, l'instantané montre le film d'un seul instant.
+    b.app.structure_op(|d, cur| Some(d.add_scene_after(cur)));
+    pomper(&mut b);
+    crate::envoisui::MARQUAGE_UN_DESSIN_PAR_IMAGE.with(|c| c.set(false));
+    assert_eq!(b.app.doc.envois.list.len(), 1);
+    assert_eq!(b.app.doc.envois.list[0].plans.len(), 4, "l'envoi note le film d'après le changement : quatre plans");
+    assert!(b.app.doc.envois.pending.is_empty(), "l'enregistrement a libéré l'instantané");
+    assert!(m.parent().unwrap().join("envois.json").exists());
+}
+
+#[test]
 fn changed_plans_are_flagged_after_a_calm_moment_and_unflagged_when_undone() {
     let (mut b, _m) = banc_projet("envois-suivi", 3);
     marquer_dans_l_appli(&mut b, "v1 au réal");

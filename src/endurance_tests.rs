@@ -717,6 +717,7 @@ fn endurance_editer() {
     endu!("rétablir {etapes} étapes : {:.1} s en tout, par étape moy {moy:.1} ms, p95 {p95:.1}, pire {max:.1} ; incohérences : {}", t.elapsed().as_secs_f64(), incoherences(&b).len());
     jusqu_au_calme(&mut b, 120.0);
     mem_ligne("après la séance");
+    repartition_memoire(&b, "après la séance");
 
     // --- Enregistrer
     println!("--- Enregistrer");
@@ -1076,6 +1077,8 @@ fn repartition_memoire(b: &Banc, titre: &str) {
         g.textures,
         g.bytes as f64 / 1e6
     );
+    let (ho, ht, hb) = b.app.history.tuiles();
+    endu!("historique ({titre}) : {} étapes à annuler, {ho} tuiles ouvertes sur {ht}, tiennent {:.0} Mo", b.app.history.undo_len(), hb as f64 / 1e6);
 }
 
 /// Où va la mémoire après une séance de changements de plan, et ce qui la rend : le tas de Windows (compactage), la carte graphique (cache

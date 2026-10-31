@@ -140,6 +140,11 @@ impl Cel {
         self.rasters().map(Raster::octets_en_memoire).sum()
     }
 
+    /// (tuiles de la feuille dont les pixels sont en mémoire, tuiles de la feuille en tout) ; la strate Fond compte aussi.
+    pub fn tuiles_ouvertes(&self) -> (usize, usize) {
+        self.rasters().map(Raster::tuiles_ouvertes).fold((0, 0), |a, b| (a.0 + b.0, a.1 + b.1))
+    }
+
     /// Refait l'image d'un dessin vectoriel. Renvoie les tuiles qui ont pu changer.
     pub fn rerender(&mut self) -> Vec<usize> {
         let Some(v) = &self.vector else {
