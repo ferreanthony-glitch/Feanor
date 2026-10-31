@@ -211,6 +211,11 @@ impl App {
         let progress = Arc::new(Progress::default());
         let (q, wake) = (progress.clone(), self.ctx.clone());
         let handle = std::thread::spawn(move || {
+            // Sous la priorité de l'interface, comme les exports : l'écriture (et ses fils) ne prend le processeur que s'il reste (essai d'endurance :
+            // des images de 40 ms et des pointes de 200 ms pendant l'écriture d'un épisode de 200 plans).
+            crate::parallele::fil_et_ses_fils_sous_la_normale();
+            #[cfg(test)]
+            crate::parallele::PRIORITE_ECRITURE.store(crate::parallele::priorite_du_fil(), std::sync::atomic::Ordering::Relaxed);
             let result = job.run_with(Some(&q), threads());
             wake.request_repaint();
             result

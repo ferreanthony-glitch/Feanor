@@ -6730,3 +6730,7 @@ Public visé : storyboarders d'animation, indépendants ou en studio. SHOT doit 
 - Le paquet prend la liste du film ou de la séquence courante (d'un seul tenant), pas une sélection de plans quelconques.
 - Le PDF du paquet a la mise en page d'origine (celle de la fenêtre PDF n'est pas reprise) ; la liste du paquet a les réglages d'origine de la liste (Kitsu, CSV à virgule, 1001).
 - Les textes du PDF et de la liste sont lus dans le projet au départ, les images dans le cliché pris juste après : une retouche faite entre les deux, pendant les toutes premières images d'écran, n'est pas protégée (la fenêtre garde la main sur le projet pendant la copie).
+
+## 94. Endurance d'un épisode (2026-10-31, branche `endurance`)
+
+Un épisode d'essai de 200 plans (15,5 min, 4 429 dessins) est généré et mesuré par des essais `#[ignore]` (`src/endurance_tests.rs`) ; rien n'est ajouté à l'interface. Seul changement visible : l'enregistrement, la copie de secours et les envois travaillent sous la priorité de l'interface (images de 15 ms au lieu de 40 ms pendant une copie de secours). Méthode, chiffres avant / après, ce qui reste (mémoire, dessins supprimés gardés, copie des envois) : `docs/ENDURANCE.md`.

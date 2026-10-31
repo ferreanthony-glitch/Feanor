@@ -25,6 +25,9 @@ use crate::vector::{Element, Trace, VPoint, VectorDrawing};
 
 // ------------------------------------------------------------------ hasard
 
+/// Allongement des plans (en pour cent) pour `fabriquer_plan` ; 100 : les plans d'origine du film lourd.
+pub(crate) static DUREE_PCT: AtomicUsize = AtomicUsize::new(100);
+
 pub(crate) struct Hasard(u64);
 
 impl Hasard {
@@ -277,7 +280,10 @@ fn fabriquer_plan(seed: u64, lib: &BrushLibrary, feuille: (usize, usize), cadre:
     let (w, hh) = feuille;
     let n_cases = h.n(2, 5);
     let anime = h.chance(0.08);
-    let longueurs: Vec<usize> = if anime { vec![h.n(24, 48)] } else { (0..n_cases).map(|_| h.n(8, 18)).collect() };
+    // (DUREE_PCT : 100 d'office ; l'essai d'endurance allonge les plans pour faire un épisode de 11 à 22 minutes.)
+    let pct = DUREE_PCT.load(Ordering::Relaxed);
+    let long = |n: usize| (n * pct / 100).max(1);
+    let longueurs: Vec<usize> = if anime { vec![long(h.n(24, 48))] } else { (0..n_cases).map(|_| long(h.n(8, 18))).collect() };
     let len: usize = longueurs.iter().sum();
     let mut debuts = vec![0];
     for l in &longueurs[..longueurs.len() - 1] {
@@ -486,7 +492,7 @@ fn fabriquer_plan(seed: u64, lib: &BrushLibrary, feuille: (usize, usize), cadre:
 // ------------------------------------------------------------------ le film
 
 /// Un son WAV mono 16 bits à 48 kHz de `secondes` : quelques notes et un souffle (une musique témoin).
-fn wav(secondes: f32, seed: u64) -> Vec<u8> {
+pub(crate) fn wav(secondes: f32, seed: u64) -> Vec<u8> {
     let n = (secondes * 48_000.0) as usize;
     let data_len = (n * 2) as u32;
     let mut b = Vec::with_capacity(44 + n * 2);
@@ -702,7 +708,7 @@ pub(crate) fn film_lourd(plans: usize, seed: u64) -> (Document, Stats) {
     (doc, st)
 }
 
-fn taille_dossier(d: &Path) -> (u64, usize) {
+pub(crate) fn taille_dossier(d: &Path) -> (u64, usize) {
     let mut total = 0;
     let mut n = 0;
     for e in std::fs::read_dir(d).into_iter().flatten().flatten() {
@@ -824,6 +830,18 @@ pub(crate) fn memoire() -> (f64, f64) {
     (p.ws as f64 / 1e6, p.private as f64 / 1e6)
 }
 
+/// Pic de l'ensemble de travail du processus depuis son départ, en Mo.
+pub(crate) fn memoire_pic() -> f64 {
+    let mut p = Pmc { cb: std::mem::size_of::<Pmc>() as u32, ..Default::default() };
+    unsafe { GetProcessMemoryInfo(GetCurrentProcess(), &mut p, p.cb) };
+    p.peak_ws as f64 / 1e6
+}
+
+/// Nombre de plantages notés par le crochet de installer_crochet.
+pub(crate) fn nb_plantages() -> usize {
+    PLANTAGES.lock().unwrap_or_else(|e| e.into_inner()).len()
+}
+
 /// Temps de processeur du processus (noyau + utilisateur), en secondes.
 pub(crate) fn cpu() -> f64 {
     let (mut c, mut e, mut k, mut u) = (FileTime::default(), FileTime::default(), FileTime::default(), FileTime::default());
@@ -832,7 +850,7 @@ pub(crate) fn cpu() -> f64 {
     s(k) + s(u)
 }
 
-fn mem(titre: &str, b: &crate::perf_tests::Banc) {
+pub(crate) fn mem(titre: &str, b: &crate::perf_tests::Banc) {
     let (ws, pv) = memoire();
     let g = b.app.gpu.as_ref().map(|g| g.stats()).unwrap_or_default();
     println!("MEM {titre:<44} RSS {ws:>7.0} Mo, privée {pv:>7.0} Mo | carte : {} textures de dessin, {:.0} Mo", g.textures, g.bytes as f64 / 1e6);
@@ -841,7 +859,7 @@ fn mem(titre: &str, b: &crate::perf_tests::Banc) {
 use crate::perf_tests::{Banc, Mesure};
 use eframe::egui::{self, Event, Modifiers, PointerButton};
 
-fn tri(mut v: Vec<f64>) -> (f64, f64, f64) {
+pub(crate) fn tri(mut v: Vec<f64>) -> (f64, f64, f64) {
     if v.is_empty() {
         return (0.0, 0.0, 0.0);
     }
@@ -849,7 +867,7 @@ fn tri(mut v: Vec<f64>) -> (f64, f64, f64) {
     (v.iter().sum::<f64>() / v.len() as f64, v[v.len() * 95 / 100], *v.last().unwrap())
 }
 
-fn rapport(titre: &str, m: &[Mesure]) {
+pub(crate) fn rapport(titre: &str, m: &[Mesure]) {
     let (moy, p95, max) = tri(m.iter().map(Mesure::total).collect());
     let (c, _, cmax) = tri(m.iter().map(|x| x.construction).collect());
     let (att, _, attmax) = tri(m.iter().map(|x| x.detail[3]).collect());
@@ -863,7 +881,7 @@ fn rapport(titre: &str, m: &[Mesure]) {
     );
 }
 
-fn scene<F: FnMut(&mut Banc, usize) -> Vec<Event>>(titre: &str, b: &mut Banc, n: usize, dt: f64, mut f: F) -> Vec<Mesure> {
+pub(crate) fn scene<F: FnMut(&mut Banc, usize) -> Vec<Event>>(titre: &str, b: &mut Banc, n: usize, dt: f64, mut f: F) -> Vec<Mesure> {
     crate::perf::activer(true);
     let m: Vec<Mesure> = (0..n)
         .map(|k| {
@@ -879,16 +897,16 @@ fn scene<F: FnMut(&mut Banc, usize) -> Vec<Event>>(titre: &str, b: &mut Banc, n:
     m
 }
 
-fn bouge(k: usize, r: Rect) -> Vec<Event> {
+pub(crate) fn bouge(k: usize, r: Rect) -> Vec<Event> {
     (0..4).map(|j| Event::PointerMoved(pos2(r.left() + r.width() * (0.2 + 0.6 * (((k * 4 + j) % 97) as f32 / 97.0)), r.center().y))).collect()
 }
 
-fn appui(p: Pos2, down: bool, m: Modifiers) -> Event {
+pub(crate) fn appui(p: Pos2, down: bool, m: Modifiers) -> Event {
     Event::PointerButton { pos: p, button: PointerButton::Primary, pressed: down, modifiers: m }
 }
 
 /// Un glissé de `de` à `a` en `n` images (avec `m` tenus), mesuré image par image.
-fn glisse(b: &mut Banc, titre: &str, de: Pos2, a: Pos2, n: usize, m: Modifiers) -> Vec<Mesure> {
+pub(crate) fn glisse(b: &mut Banc, titre: &str, de: Pos2, a: Pos2, n: usize, m: Modifiers) -> Vec<Mesure> {
     b.touches = m;
     b.image(vec![Event::PointerMoved(de)], 1.0 / 60.0);
     let r = scene(titre, b, n + 2, 1.0 / 60.0, |_, k| {
@@ -908,7 +926,7 @@ fn glisse(b: &mut Banc, titre: &str, de: Pos2, a: Pos2, n: usize, m: Modifiers) 
 
 /// Images jusqu'à ce que plus rien ne travaille en arrière-plan (vignettes, rejeux) et que l'écran ne demande plus rien ;
 /// rend (images, ms, pire image ms).
-fn jusqu_au_calme(b: &mut Banc, max_s: f64) -> (usize, f64, f64) {
+pub(crate) fn jusqu_au_calme(b: &mut Banc, max_s: f64) -> (usize, f64, f64) {
     let t = Instant::now();
     let mut calmes = 0;
     let mut pire = 0.0f64;
@@ -1010,7 +1028,7 @@ pub(crate) fn ouvrir_mesure(espace: crate::workspace::Espace) -> Banc {
 }
 
 /// Le plan le plus lourd (dessins × calques).
-fn plan_lourd(doc: &Document) -> usize {
+pub(crate) fn plan_lourd(doc: &Document) -> usize {
     (0..doc.panels.len()).max_by_key(|&i| doc.panels[i].layers.iter().map(|l| l.frames.iter().flatten().count()).sum::<usize>() * doc.panels[i].layers.len()).unwrap_or(0)
 }
 
@@ -1370,7 +1388,7 @@ fn lourd_fermer_onglet() {
 
 static PLANTAGES: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
-fn installer_crochet() {
+pub(crate) fn installer_crochet() {
     std::panic::set_hook(Box::new(|info| {
         let bt = std::backtrace::Backtrace::force_capture().to_string();
         // Les 40 premières lignes utiles (on saute la machinerie du panic).
@@ -1382,7 +1400,7 @@ fn installer_crochet() {
 }
 
 /// Ce qui ne doit jamais arriver : un plan courant hors du film, un plan sans calque, un dessin montré qui n'existe pas.
-fn incoherences(b: &Banc) -> Vec<String> {
+pub(crate) fn incoherences(b: &Banc) -> Vec<String> {
     let d = &b.app.doc;
     let mut v = Vec::new();
     if d.panels.is_empty() {

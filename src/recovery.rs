@@ -277,7 +277,13 @@ impl Recovery {
         match project::prepare_save(snap.doc, &manifest, &mut self.written, reuse) {
             Ok(job) => {
                 self.copied_serial = Some(snap.serial);
-                self.job = Some(std::thread::spawn(move || job.run()));
+                self.job = Some(std::thread::spawn(move || {
+                    // Une copie de secours passe après l'interface (comme l'enregistrement et les exports).
+                    crate::parallele::fil_et_ses_fils_sous_la_normale();
+                    #[cfg(test)]
+                    crate::parallele::PRIORITE_SECOURS.store(crate::parallele::priorite_du_fil(), std::sync::atomic::Ordering::Relaxed);
+                    job.run()
+                }));
             }
             Err(e) => self.error = Some(e),
         }
