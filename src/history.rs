@@ -288,6 +288,7 @@ impl History {
         self.undo.is_empty() && self.redo.is_empty()
     }
 
+    #[cfg(test)]
     /// Tuiles que tiennent les étapes : (dont les pixels sont en mémoire, en tout, octets tenus).
     pub fn tuiles(&self) -> (usize, usize, usize) {
         let mut r = (0, 0, 0);
@@ -322,6 +323,7 @@ impl History {
 }
 
 impl Edit {
+    #[cfg(test)]
     fn compter(&self, r: &mut (usize, usize, usize)) {
         match self {
             Edit::Tiles { tiles, .. } | Edit::FondTiles { tiles, .. } => {

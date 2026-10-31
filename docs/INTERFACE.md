@@ -6943,3 +6943,50 @@ Il faut **un compte Kitsu à toi** sur l'instance du studio ou sur une instance 
 ## 94. Endurance d'un épisode (2026-10-31, branche `endurance`)
 
 Un épisode d'essai de 200 plans (15,5 min, 4 429 dessins) est généré et mesuré par des essais `#[ignore]` (`src/endurance_tests.rs`) ; rien n'est ajouté à l'interface. Seul changement visible : l'enregistrement, la copie de secours et les envois travaillent sous la priorité de l'interface (images de 15 ms au lieu de 40 ms pendant une copie de secours). Méthode, chiffres avant / après, ce qui reste (mémoire, dessins supprimés gardés, copie des envois) : `docs/ENDURANCE.md`.
+
+## 95. Un épisode de 300 plans dans la mémoire d'un ordinateur (2026-10-31, branche `memoire-episode`)
+
+**Le problème.** Un épisode de 200 plans prenait 6,8 Go de mémoire vive à l'ouverture, et 9 à 10 Go après une séance de travail. Plus de la moitié, c'étaient les pixels des dessins que personne ne regardait à ce moment-là.
+
+**Ce qui change, en deux mots.** SHOT garde en mémoire, pour les dessins qu'on ne regarde pas, une **copie compacte et exacte** de leurs pixels (dix fois plus petite pour du trait au crayon), et ne tient en pixels que ce qu'on regarde : le plan courant et ses voisins, les derniers plans visités, ce que la lecture va montrer. Quand on revient sur un plan, ses pixels se rouvrent tout seuls (une milliseconde pour un plan entier). **Rien n'est jeté, rien n'est écrit sur le disque, rien n'est recalculé** : c'est la même image, au pixel près, rangée plus petit. Un dessin que tu viens de modifier et que tu n'as pas enregistré reste exact lui aussi (il est rangé comme les autres, sans perte). Le format du projet ne change pas (toujours 46) : un projet enregistré avant s'ouvre, un projet enregistré maintenant s'ouvre avec la version d'avant.
+
+| Épisode d'essai | Avant | Maintenant |
+|---|---|---|
+| 200 plans, à l'ouverture | 6,9 Go | 2,0 Go |
+| 200 plans, après avoir parcouru et lu tout l'épisode | 9,5 Go | 4,7 Go |
+| 200 plans, après 2 000 gestes d'édition | 10,1 Go | 5,7 Go |
+| 300 plans, à l'ouverture | 9,0 Go | 2,3 Go |
+| 300 plans, après avoir parcouru et lu tout l'épisode | 11,9 Go | 5,3 Go |
+
+(Mémoire « privée » du processus d'essai, qui compte aussi la carte graphique : environ 2,6 Go de ces chiffres viennent du pilote Vulkan de la carte, pas des dessins. Voir « Si la mémoire reste trop haute » plus bas. Détail et méthode : `docs/ENDURANCE.md` §6.)
+
+### Ce que SHOT fait maintenant, sans que tu aies rien à faire
+
+- **À l'ouverture**, les dessins se rangent dès leur lecture : le projet n'occupe plus 7 Go un instant avant de redescendre.
+- **Pendant le travail**, un petit tour à chaque image (une demi-milliseconde au plus) range les dessins qu'on ne regarde plus, sur un fil de fond qui passe après l'interface. Les dessins des **plans supprimés**, des anciennes **versions**, des **variantes**, et ceux des **autres onglets** se rangent comme les autres (ceux d'un plan supprimé restent dans le projet tant que l'annulation peut les rendre, mais ne pèsent plus qu'un dixième).
+- **L'historique d'annulation** range ses vieilles étapes (au-delà des 8 dernières) : Ctrl+Z reste instantané pour les gestes récents, et les plus anciens se rouvrent à l'application, au pixel près.
+- **Les caches de traits** (les pixels exacts des traits à texture) se rangent quand le trait n'a pas servi depuis un moment.
+- **Marquer un envoi** ne fige plus la fenêtre : la copie de l'état des plans se fait par morceaux de trois millisecondes, image après image (90 à 110 ms d'un coup avant ; 5 à 6 ms maintenant pour 200 plans). Si tu modifies le projet pendant ces quelques secondes, la copie recommence (l'envoi montre le film d'un seul instant). La barre d'état dit « état des plans en cours de relevé… ».
+- **Le diagnostic des performances** (Aide > Régler SHOT pour cette machine…) a une nouvelle ligne : « Dessins en mémoire : … Mo (sans rangement : … Mo) ; … tuiles sur … ont leurs pixels ouverts ».
+
+### Ce qui ne change pas
+
+Enregistrer, Enregistrer sous, la copie de secours, les exports (vidéo, PDF, vignettes, EDL), les envois, le pont Kitsu : ils lisent les dessins comme avant, et les voient exactement comme avant. L'annulation et le rétablissement aussi. Les vignettes et la lecture du montage ne saccadent pas plus qu'avant (images de lecture : 8,1 ms en moyenne, comme avant).
+
+### Si la mémoire reste trop haute
+
+- `SHOT_SANS_GEL=1` (variable d'environnement, avant de lancer SHOT) : tout reste en pixels, comme avant ce chantier. Pour comparer, ou si un cas pose problème : écris-moi lequel.
+- **Le pilote Vulkan de la carte graphique** (NVIDIA GeForce RTX 2080 SUPER sur la machine d'essai) garde environ 2,6 Go de mémoire vive de plus que le pilote Direct3D 12. SHOT choisit le pilote par défaut (Vulkan ici). Pour essayer Direct3D 12 : lancer SHOT avec `WGPU_BACKEND=dx12` (variable d'environnement). **Non fait par défaut** : l'affichage n'a pas été vérifié à l'écran avec Direct3D 12 (voir ENDURANCE.md §6.5).
+
+### À vérifier à l'écran
+
+1. Ouvre une **copie** d'un gros projet (ou l'épisode d'essai de 200 plans) : il s'ouvre aussi vite qu'avant, tous les plans ont leurs vignettes et leurs dessins ; regarde la mémoire de SHOT dans le Gestionnaire des tâches (onglet Détails, colonne « Mémoire (jeu de travail privé) ») : autour de 2 Go à l'ouverture pour 200 plans, au lieu de 6 à 7.
+2. **Passe d'un plan à l'autre**, en sautant loin, dans le Storyboard, le Montage et l'Animation : rien ne doit apparaître vide, même une fraction de seconde ; aucune saccade que tu ne voyais pas avant. Fais défiler la lecture de tout le montage.
+3. **Dessine** dans un plan, va dans un autre, reviens, annule (Ctrl+Z) plusieurs fois, rétablis : les traits sont exactement ceux d'avant. Fais-le aussi avec un dessin **non enregistré**, puis enregistre, ferme, rouvre : rien n'a changé.
+4. **Supprime un plan**, attends dix secondes, annule la suppression : le plan revient avec tous ses dessins.
+5. **Copie un plan** (Dupliquer, Copier-coller, nouvelle version), modifie la copie : l'original est intact, et inversement.
+6. **Marque un envoi** sur un gros film : la fenêtre reste utilisable pendant que l'état se relève (la barre d'état le dit), l'envoi apparaît ensuite dans la liste.
+7. **Exporte** une vidéo et un storyboard PDF d'un projet que tu viens d'ouvrir sans le toucher : images et pages identiques à celles d'avant.
+8. Ouvre **deux projets** dans deux onglets, travaille dans l'un, reviens sur l'autre : dessins intacts, et la mémoire ne double pas.
+9. Aide > Régler SHOT pour cette machine… (fenêtre du diagnostic, sans lancer la mesure) : la ligne « Dessins en mémoire » est là et plausible.
+10. Optionnel : lance SHOT avec `WGPU_BACKEND=dx12` et compare l'affichage et la mémoire.
