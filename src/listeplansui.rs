@@ -147,8 +147,8 @@ impl App {
                 if r.format == Format::Csv {
                     ui.add_space(8.0);
                     ui.label("Séparateur");
-                    ui.radio_value(&mut r.separateur, Separateur::Virgule, "virgule").on_hover_text("Kitsu, Google Sheets, Excel en anglais.");
-                    ui.radio_value(&mut r.separateur, Separateur::PointVirgule, "point-virgule").on_hover_text("Excel en français.");
+                    ui.radio_value(&mut r.separateur, Separateur::Virgule, "virgule").on_hover_text("Kitsu, tableurs en anglais.");
+                    ui.radio_value(&mut r.separateur, Separateur::PointVirgule, "point-virgule").on_hover_text("Tableurs en français.");
                 }
             });
             ui.end_row();

@@ -139,6 +139,12 @@ fn no_trademark_in_the_texts_of_the_ui_and_import_export_sources() {
         ("tvpbrush.rs", include_str!("tvpbrush.rs")),
         ("bottomtabs.rs", include_str!("bottomtabs.rs")),
         ("nouveauui.rs", include_str!("nouveauui.rs")),
+        ("listeplansui.rs", include_str!("listeplansui.rs")),
+        ("paquetui.rs", include_str!("paquetui.rs")),
+        ("nommageui.rs", include_str!("nommageui.rs")),
+        ("modeleepisodeui.rs", include_str!("modeleepisodeui.rs")),
+        ("fildecisionui.rs", include_str!("fildecisionui.rs")),
+        ("premierjour.rs", include_str!("premierjour.rs")),
     ];
     let mut fautes = Vec::new();
     for (nom, source) in fichiers {
