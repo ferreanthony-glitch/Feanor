@@ -963,6 +963,11 @@ mod listeplans;
 mod listeplansui;
 mod paquet;
 mod paquetui;
+// Pont Kitsu (pipeline, étape 2) : protocole sans interface, fenêtre, essais.
+mod kitsu;
+#[cfg(test)]
+mod kitsu_tests;
+mod kitsuui;
 mod modeleepisode;
 mod modeleepisodeui;
 #[cfg(test)]

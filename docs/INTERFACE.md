@@ -6880,3 +6880,62 @@ Demande d'Anthony : « qu'est-ce qui a changé entre l'envoi 3 et l'envoi 4 ? »
 ### Essais ajoutés (`journal_tests.rs`)
 
 Plans modifiés ou non, ajoutés, retirés, déplacés (un plan qui saute seul, deux plans échangés, modifié et déplacé), textes du résumé, notes dans l'intervalle (bornes, statut, date d'avant le fil), deux vrais envois enregistrés sur disque (liste, durées, noms), page HTML et PDF écrits (part de pixels ≈ 6 %, durées, images, notes, plan intact absent, structure du PDF), un seul format, aucun format refusé, instantané manquant, arrêt avant / pendant / en lâchant la tâche, échec d'écriture sans fichier ni perte de l'ancien, échantillon d'images, fenêtre dans l'application (côtés proposés, état actuel, export sans bloquer, statut), pas d'envoi, commande dans Ctrl+K / barre / hub / fichier de raccourcis, paquet (décoché d'origine, sans préparation = erreur claire, avec = fichiers rangés et manifeste, arrêt = rien).
+
+
+## 93. Pont Kitsu (pipeline, étape 2) (2026-10-31, branche `pont-kitsu`)
+
+Publier les plans de SHOT dans Kitsu (suivi de production libre de CGWire) et en lire les retours. Code : `src/kitsu.rs` (protocole, sans interface), `src/kitsuui.rs` (fenêtre), `src/kitsu_tests.rs`. **Éteint d'origine** : rien ne part sur Internet tant que l'on n'a pas coché « Activer le pont Kitsu » *et* cliqué sur un bouton. Aucun essai ne contacte un vrai serveur (faux serveur HTTP local, `127.0.0.1`).
+
+### Où et quels gestes
+
+| Commande | Où |
+|---|---|
+| `fichier.kitsu_publier` | Exporter > « Montage & échange » > Kitsu, Ctrl+K (ouvre la fenêtre sur « Publier ») |
+| `fichier.kitsu_retours` | Ctrl+K (ouvre la fenêtre sur « Retours de Kitsu ») |
+
+Blocs sans touche dans `keymap.toml`. Fenêtre : **Connexion** (serveur, e-mail, mot de passe masqué, « Rester connecté », « Tester la connexion », « Se déconnecter »), **Production** (lire les listes ; projet, tâche du storyboard, statut à la publication, correspondance des statuts Kitsu → note de SHOT), **Publier** (film ou séquence, vignettes, vidéos MP4, « Aperçu », « Publier », « Arrêter »), **Retours** (« Lire les retours », statuts lus).
+
+### Choix techniques
+
+- **HTTP par `curl.exe`** (livré avec Windows 10/11, `System32`), pas WinHTTP par FFI : même HTTPS réel (certificats du système, Schannel), mais ni code `unsafe` de plus ni dépendance, délais, arrêt immédiat (curl est tué), multipart par `form`. Le mot de passe, le jeton et le corps passent par l'**entrée standard** de curl (`-K -`) : jamais sur la ligne de commande. Pas de redirection suivie ; `http://` n'est accepté que pour la machine elle-même (le mot de passe ne part jamais en clair sur le réseau) ; seuls `http` et `https` sont permis.
+- **Mot de passe** : en mémoire, vidé dès que la connexion réussit. **Jeton** : gardé seulement si « Rester connecté », chiffré par **DPAPI** (`CryptProtectData`, FFI direct vers `crypt32`, aucune caisse), dans `%APPDATA%\SHOT\kitsu.jeton`, lié au serveur ; jamais dans le projet ni dans `reglages.toml` (qui ne garde que serveur, e-mail, projet, statuts).
+- **Adresses de l'API** : toutes dans `kitsu::ep`, **À CONFIRMER sur une instance** (écrites de mémoire d'après la doc publique de Zou) : `POST /auth/login`, `GET /auth/authenticated`, `GET /data/projects`, `/data/task-types`, `/data/task-status`, `GET|POST /data/projects/{id}/episodes|sequences|shots` (séquence : `name`, `episode_id` ; plan : `name`, `sequence_id`, `nb_frames`, `description`, `data{frame_in,frame_out,fps}`), `PUT /data/shots/{id}`, `GET /data/shots/{id}/tasks`, `POST /actions/projects/{p}/task-types/{tt}/shots/create-tasks` (corps `[id du plan]`), `GET /data/tasks/{id}/comments`, `POST /actions/tasks/{id}/comment` (`task_status_id`, `comment`), `POST /actions/tasks/{t}/comments/{c}/add-preview`, `POST /api/pictures/preview-files/{id}` (multipart `file`). Champs lus avec tolérance : `parent_id` ou `sequence_id`/`episode_id`, `person.full_name`, `replies[]`, `created_at`.
+
+### Publier
+
+1. **Aperçu** (ne fait que lire) : compare le projet à ce que Kitsu contient et dit « 12 plans à créer, 5 à mettre à jour, 3 prévisualisations » (plus épisode et séquences à créer), avec le détail plan par plan.
+2. **Publier** : crée l'épisode (nom `EP02` pour l'épisode 2 du projet ; aucun épisode si le projet n'en a pas), les séquences, les plans (nom = modèle de noms de §87, images d'entrée/sortie comme la liste des plans, 1001 d'origine) ; met à jour `nb_frames`, `frame_in/out`, `fps`, description quand Kitsu diffère ; puis, **pour les seuls plans dont l'empreinte du contenu a changé** depuis la dernière prévisualisation (les empreintes de `envoisui`, calculées en tâche de fond tant que la fenêtre est ouverte), fabrique la vignette PNG (`exportstills::job`) et/ou le MP4 du plan (`EditorialJob`, H.264 demi-taille) dans un dossier temporaire, poste un commentaire (« [SHOT] Plan … ») au statut choisi sur la **tâche storyboard** (créée si elle manque) et y attache les fichiers. Dossier temporaire effacé à la fin.
+3. **Sans doublon** : on retrouve d'abord ce qui existe (identifiant gardé, sinon **par nom** dans Kitsu), puis on ne compare qu'à ce que Kitsu montre. Republier sans rien changer n'écrit rien. Un échec à mi-chemin (envoi du fichier refusé) est repris : le commentaire et la prévisualisation déjà créés sont réutilisés, pas republiés. « Arrêter » tue la requête en cours ; ce qui est fait reste connu.
+4. **`kitsu.json`**, dans le dossier du projet, absent tant qu'on n'a rien publié, sans changement de format du projet : serveur, projet Kitsu, épisodes par nom, séquences par identifiant de séquence de SHOT, plans par identifiant stable de plan (id Kitsu, tâche, empreinte de la dernière prévisualisation, publication en cours, commentaires publiés, dernier statut lu). Les identifiants ne valent que pour ce serveur et ce projet Kitsu. Un fichier abîmé n'est jamais écrasé en silence. « Enregistrer sous » ne le copie pas (les plans seraient retrouvés par leur nom).
+5. Fil à part, progression, « Arrêter » ; l'écran ne gèle pas ; le projet n'est copié que quelques images d'écran pour les prévisualisations. Un résultat qui arrive après un changement de projet est laissé de côté.
+
+### Lire les retours
+
+Pour chaque plan déjà publié : statut de la tâche storyboard (affiché dans la **Fiche du plan** et la liste « Statuts lus ») et commentaires. Chaque commentaire devient une note du fil de décision : `source = kitsu`, `externe` = id du commentaire, auteur et date de Kitsu, envoi et version courants, réponses reprises (`externe` de la réponse). Le statut de la note vient de la tâche à ce moment-là via la correspondance (Retake → Refusé avec la raison « Statut Kitsu : à refaire »). **Une note déjà dans SHOT n'est jamais modifiée** (son statut décidé reste) ; seules ses réponses manquantes s'ajoutent. Les commentaires publiés par SHOT sont ignorés. **Une seule étape d'annulation** (« Importer les notes de Kitsu »), aucune si rien n'est nouveau.
+
+### Pour que Kitsu retrouve ses plans
+
+Verrouiller la numérotation (sinon les noms bougent quand un plan s'ajoute ; la fenêtre le rappelle). Enregistrer le projet avant de publier.
+
+### Tests (`kitsu_tests.rs`, 19)
+
+Adresse du serveur et refus de `http://` distant ; jeton DPAPI (illisible dans le fichier, par serveur) ; connexion, mauvais mot de passe, listes ; 401 ; serveur injoignable ; première publication complète (épisode, séquences, plans, tâches, commentaires, envois multipart) ; republication sans écriture, mise à jour ciblée ; `kitsu.json` perdu (retrouvé par nom) ; reprise après échec d'envoi sans second commentaire ; arrêt immédiat ; aperçu sans écriture ; retours sans doublon ni écrasement ; dates ; `kitsu.json` absent/abîmé ; réglages éteints et sans secret ; fenêtre de bout en bout (vraies vignettes, aperçu, publication, lecture, une étape d'annulation) ; pont éteint.
+
+### À vérifier sur une vraie instance (par Anthony)
+
+Il faut **un compte Kitsu à toi** sur l'instance du studio ou sur une instance de test (une version Docker locale de Kitsu suffit : adresse `http://localhost`), avec le droit de créer des plans dans un **projet de test** qui a une tâche « Storyboard » pour les plans. Aucun jeton à créer : SHOT se connecte avec l'e-mail et le mot de passe que **tu tapes toi-même** dans la fenêtre.
+
+1. Ouvre un copie d'un projet de test, enregistre-le, verrouille la numérotation, mets la série et l'épisode (Noms et production).
+2. Exporter > Montage & échange > Kitsu : coche « Activer le pont Kitsu », tape l'adresse (`https://…`), l'e-mail, le mot de passe ; « Tester la connexion » (voir « Connecté à… »). Coche « Rester connecté » si tu veux.
+3. Production : « Lire les listes », choisis le projet de test, la tâche Storyboard, le statut « en attente de validation » et vérifie la correspondance des statuts.
+4. Publier : « Aperçu » (les nombres sont-ils justes ?), puis « Publier ». Dans Kitsu : épisode, séquences, plans (noms, images d'entrée/sortie, cadence) ; sur la tâche storyboard : un commentaire « [SHOT] … » avec la vignette (et le MP4).
+5. Republie : « Aperçu » doit dire 0 partout. Change un dessin et la durée d'un plan : une mise à jour et une prévisualisation seulement.
+6. Dans Kitsu, commente une tâche et change son statut ; « Lire les retours » : la note arrive dans le panneau Commentaires (source Kitsu), le statut dans la Fiche du plan ; relis : pas de doublon ; Ctrl+Z retire les notes.
+7. Si une étape échoue avec « Réponse de Kitsu inattendue » ou 404 : une adresse de `kitsu::ep` est à corriger (note le message). Points les plus incertains : la création d'une séquence dans un épisode (`episode_id`), la mise à jour d'un plan (`PUT /data/shots/{id}`), la création de tâche (`create-tasks`), `add-preview` puis l'envoi du fichier, la lecture des commentaires d'une tâche (auteur, réponses), l'envoi d'un MP4 par la même adresse que l'image.
+
+### Limites
+
+- Pas de ShotGrid (après la V1). Pas de renommage ni de suppression dans Kitsu (un plan supprimé ou renommé dans SHOT ne l'est pas côté Kitsu : un renommage crée un autre plan, sauf identifiant gardé). Un seul type de tâche. Pas de rafraîchissement automatique du jeton (session expirée : se reconnecter). Les listes de Kitsu sont lues d'un bloc (pas de pagination).
+- Les prévisualisations d'un plan sont une vignette de sa première image et/ou un MP4 sans transitions ni son.
+- Un plan dont l'empreinte n'est pas encore calculée n'est jamais publié « à moitié » : l'aperçu attend les empreintes.
+- Hooks hors du pont : `envoisui.rs` (calcule les empreintes aussi quand la fenêtre Kitsu est ouverte), `storyboard.rs` (une ligne de statut dans la Fiche du plan), `app.rs`/`panels.rs`/`onglets.rs` (fenêtre, garde de « Quitter » et de changement d'onglet), `prefsui.rs` (entrée du hub), `settings.rs` (réglages).

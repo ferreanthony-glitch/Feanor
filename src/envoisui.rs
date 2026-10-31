@@ -169,6 +169,16 @@ fn unique() -> u32 {
 impl App {
     // ------------------------------------------------------------------ le suivi
 
+    /// Les empreintes des plans sont celles du projet tel qu'il est (le pont Kitsu s'en sert).
+    pub(crate) fn envois_empreintes_a_jour(&self) -> bool {
+        self.envois_ui.epoch == self.doc_epoch && self.envois_ui.travail.is_none() && self.envois_ui.prep.is_none() && self.envois_ui.fait_pour == Some(self.envois_releve())
+    }
+
+    /// Plan (identifiant) → empreinte de son contenu, au dernier relevé analysé.
+    pub(crate) fn envois_empreintes(&self) -> &HashMap<u64, u64> {
+        &self.envois_ui.digests
+    }
+
     pub(crate) fn envois_releve(&self) -> Releve {
         Releve {
             serial: self.history.serial(),
@@ -211,7 +221,9 @@ impl App {
             self.envois_ui.signature = signature;
             self.envois_etats();
         }
-        if self.doc.envois.is_empty() && self.envois_ui.marquage.is_none() {
+        // Le pont Kitsu (fenêtre ouverte) a aussi besoin des empreintes des plans : il n'envoie que ce qui a changé.
+        let veut = !self.doc.envois.is_empty() || self.kitsu.ouvert;
+        if !veut && self.envois_ui.marquage.is_none() {
             return;
         }
         let now = ctx.input(|i| i.time);
@@ -224,7 +236,7 @@ impl App {
             }
         }
         let a_faire = self.envois_ui.fait_pour != Some(releve);
-        if a_faire && self.envois_ui.travail.is_none() && self.envois_ui.marquage.is_none() && !self.doc.envois.is_empty() {
+        if a_faire && self.envois_ui.travail.is_none() && self.envois_ui.marquage.is_none() && veut {
             if self.envois_ui.prep.is_some() {
                 self.envois_copier(ctx, BUDGET);
             } else if now - self.envois_ui.calme_depuis >= CALME && !self.playing && !ctx.input(|i| i.pointer.any_down()) {

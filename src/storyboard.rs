@@ -1810,6 +1810,7 @@ impl App {
         let seq_number = self.doc.sequence_code(seq);
         ui.add_space(4.0);
         ui.heading(crate::planversui::titre_long_avec_version(&self.doc, i));
+        self.kitsu_etiquette(ui, i);
         // Chaque champ modifie une copie ; `edited` enregistre l'étape d'annulation avant qu'on
         // reporte la valeur (une étape par saisie).
         egui::Grid::new("fiche_panneau").num_columns(2).show(ui, |ui| {

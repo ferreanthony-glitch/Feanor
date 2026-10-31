@@ -33,6 +33,9 @@ pub struct Settings {
     /// Le paquet de livraison (paquet.rs) : ce qu'il contient, le modèle de chemin, le dernier dossier.
     #[serde(default, rename = "paquet_de_livraison")]
     pub paquet: crate::paquet::Reglages,
+    /// Le pont Kitsu (kitsu.rs) : éteint d'origine ; serveur, e-mail, projet, type de tâche, statuts. Ni mot de passe ni jeton ici.
+    #[serde(default, rename = "kitsu")]
+    pub kitsu: crate::kitsu::Reglages,
     /// Pelure d'oignon.
     #[serde(default, rename = "pelure")]
     pub onion: OnionSettings,
@@ -328,6 +331,7 @@ impl Default for Settings {
             fiche: Default::default(),
             liste_plans: Default::default(),
             paquet: Default::default(),
+            kitsu: Default::default(),
             onion: OnionSettings::default(),
             xsheet: Default::default(),
             flips: Default::default(),
