@@ -454,6 +454,9 @@ impl App {
         if self.paquet.as_ref().is_some_and(crate::paquetui::PaquetWindow::rendering) {
             return Some("la copie du projet pour le paquet de livraison");
         }
+        if self.kitsu.rendering() {
+            return Some("la copie du projet pour les prévisualisations Kitsu");
+        }
         if self.open_job.is_some() {
             return Some("l'ouverture du projet");
         }

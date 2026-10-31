@@ -839,6 +839,7 @@ impl App {
         // Pipeline de production : liste des plans, paquet de livraison, noms et production, modèles d'épisode.
         self.liste_plans_window(ctx);
         self.paquet_window(ctx);
+        self.kitsu_window(ctx);
         self.noms_window(ctx);
         self.modele_episode_window(ctx);
         // Vignettes : « Effacer les annotations ? » (`annotationsui.rs`).

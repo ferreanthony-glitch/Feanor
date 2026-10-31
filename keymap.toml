@@ -2079,6 +2079,16 @@ touches = []
 source = "SHOT (sans touche)"
 
 [[raccourci]]
+action = "fichier.kitsu_publier"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
+action = "fichier.kitsu_retours"
+touches = []
+source = "SHOT (sans touche)"
+
+[[raccourci]]
 action = "projet.noms_production"
 touches = []
 source = "SHOT (sans touche)"

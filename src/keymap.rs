@@ -75,6 +75,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fichier.exporter_fiche", "Exporter la fiche technique (tableur CSV ou XLSX, un plan par ligne)", true, false),
     act("fichier.exporter_liste_plans", "Exporter la liste des plans pour le suivi de production (CSV ou JSON, profil Kitsu ou générique)", true, false),
     act("fichier.exporter_paquet", "Exporter le paquet de livraison (vidéos par plan, vignettes, PDF, animatique, liste des plans et manifeste, rangés dans un dossier)", true, false),
+    act("fichier.kitsu_publier", "Pont Kitsu : publier les plans dans Kitsu (créer, mettre à jour, prévisualiser)", true, false),
+    act("fichier.kitsu_retours", "Pont Kitsu : lire les statuts et les commentaires de Kitsu (notes du fil de décision)", true, false),
     act("projet.noms_production", "Noms des plans et production (modèle de noms, série, épisode)", true, false),
     act("projet.enregistrer_modele_episode", "Enregistrer comme modèle d'épisode…", true, false),
     act("fichier.exporter_relecture", "Exporter pour relecture (page HTML à envoyer au réalisateur)", true, false),    act("fichier.exporter_planche", "Exporter la planche des vignettes (PNG, JPEG ou PDF)", true, false),

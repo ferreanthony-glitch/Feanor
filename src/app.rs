@@ -781,6 +781,8 @@ pub struct App {
     /// Fenêtres du pipeline de production : liste des plans, paquet de livraison, noms et production, modèles d'épisode.
     pub(crate) liste_plans: Option<crate::listeplansui::ListeWindow>,
     pub(crate) paquet: Option<crate::paquetui::PaquetWindow>,
+    /// Le pont Kitsu (kitsu.rs, kitsuui.rs) : éteint d'origine.
+    pub(crate) kitsu: crate::kitsuui::Kitsu,
     pub(crate) noms_fenetre: Option<crate::nommageui::NomsWindow>,
     pub(crate) modele_episode: Option<crate::modeleepisodeui::ModeleWindow>,
     /// Relecture par le réalisateur : export de la page, import des notes, dessin du relecteur (`relectureui.rs`).
@@ -1328,6 +1330,7 @@ impl App {
             fiche: None,
             liste_plans: None,
             paquet: None,
+            kitsu: Default::default(),
             noms_fenetre: None,
             modele_episode: None,
             relecture: Default::default(),
@@ -1594,6 +1597,7 @@ impl App {
             || self.relecture.rendering()
             || self.fiche.as_ref().is_some_and(crate::ficheui::FicheWindow::rendering)
             || self.paquet.as_ref().is_some_and(crate::paquetui::PaquetWindow::rendering)
+            || self.kitsu.rendering()
             || self.vignettes.annot.confirmer
             || self.collage_occupe()
     }
@@ -4021,6 +4025,8 @@ impl App {
             "fichier.exporter_fiche" => self.open_fiche(),
             "fichier.exporter_liste_plans" => self.open_liste_plans(),
             "fichier.exporter_paquet" => self.open_paquet(),
+        "fichier.kitsu_publier" => self.open_kitsu(crate::kitsuui::Section::Publier),
+        "fichier.kitsu_retours" => self.open_kitsu(crate::kitsuui::Section::Retours),
             "projet.noms_production" => self.open_noms(),
             "projet.enregistrer_modele_episode" => self.open_modele_episode(),
             "fichier.exporter_relecture" | "fichier.importer_notes" => {
@@ -4889,6 +4895,9 @@ impl App {
         }
         if self.paquet.as_ref().is_some_and(crate::paquetui::PaquetWindow::busy) {
             v.push("le paquet de livraison");
+        }
+        if self.kitsu.busy() {
+            v.push("le pont Kitsu");
         }
         if self.onglets.iter().enumerate().any(|(i, _)| if i == self.actif { self.relecture.export_en_cours() } else { self.onglets[i].etat.as_ref().is_some_and(|e| e.relecture.export_en_cours()) }) {
             v.push("la page de relecture");
