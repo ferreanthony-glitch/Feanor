@@ -79,6 +79,29 @@ pub(crate) fn fil_et_ses_fils_sous_la_normale() {
     os::sous_la_normale();
 }
 
+/// Essais : la priorité (Win32) du fil appelant, et celle qu'avaient le dernier fil d'écriture et la dernière copie de secours.
+#[cfg(test)]
+pub(crate) fn priorite_du_fil() -> i32 {
+    #[cfg(windows)]
+    {
+        extern "system" {
+            fn GetCurrentThread() -> isize;
+            fn GetThreadPriority(thread: isize) -> i32;
+        }
+        // SAFETY : deux appels Win32 sans pointeur.
+        unsafe { GetThreadPriority(GetCurrentThread()) }
+    }
+    #[cfg(not(windows))]
+    {
+        -1
+    }
+}
+
+#[cfg(test)]
+pub(crate) static PRIORITE_ECRITURE: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(i32::MIN);
+#[cfg(test)]
+pub(crate) static PRIORITE_SECOURS: std::sync::atomic::AtomicI32 = std::sync::atomic::AtomicI32::new(i32::MIN);
+
 /// Les exports travaillent-ils sous la priorité de l'interface ? Oui, toujours ; seules les mesures le coupent, pour
 /// voir ce que la priorité change.
 static PRIORITE_EXPORT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);

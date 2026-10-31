@@ -6939,3 +6939,7 @@ Il faut **un compte Kitsu à toi** sur l'instance du studio ou sur une instance 
 - Les prévisualisations d'un plan sont une vignette de sa première image et/ou un MP4 sans transitions ni son.
 - Un plan dont l'empreinte n'est pas encore calculée n'est jamais publié « à moitié » : l'aperçu attend les empreintes.
 - Hooks hors du pont : `envoisui.rs` (calcule les empreintes aussi quand la fenêtre Kitsu est ouverte), `storyboard.rs` (une ligne de statut dans la Fiche du plan), `app.rs`/`panels.rs`/`onglets.rs` (fenêtre, garde de « Quitter » et de changement d'onglet), `prefsui.rs` (entrée du hub), `settings.rs` (réglages).
+
+## 94. Endurance d'un épisode (2026-10-31, branche `endurance`)
+
+Un épisode d'essai de 200 plans (15,5 min, 4 429 dessins) est généré et mesuré par des essais `#[ignore]` (`src/endurance_tests.rs`) ; rien n'est ajouté à l'interface. Seul changement visible : l'enregistrement, la copie de secours et les envois travaillent sous la priorité de l'interface (images de 15 ms au lieu de 40 ms pendant une copie de secours). Méthode, chiffres avant / après, ce qui reste (mémoire, dessins supprimés gardés, copie des envois) : `docs/ENDURANCE.md`.

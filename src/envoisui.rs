@@ -287,6 +287,8 @@ impl App {
         let (tx, rx) = std::sync::mpsc::channel();
         let wake = ctx.clone();
         let started = std::thread::Builder::new().name("envois".into()).spawn(move || {
+            // (Le hachage des plans passe après l'interface.)
+            crate::parallele::fil_et_ses_fils_sous_la_normale();
             let r = envois::construire(demande);
             let _ = tx.send(r);
             wake.request_repaint();
@@ -383,6 +385,8 @@ impl App {
         let (tx, rx) = std::sync::mpsc::channel();
         let wake = ctx.clone();
         let started = std::thread::Builder::new().name("envoi".into()).spawn(move || {
+            // (Le hachage des plans passe après l'interface.)
+            crate::parallele::fil_et_ses_fils_sous_la_normale();
             let r = envois::construire(demande);
             let _ = tx.send(r);
             wake.request_repaint();

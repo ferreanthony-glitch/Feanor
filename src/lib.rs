@@ -148,6 +148,9 @@ mod optim_rendu_tests;
 // Projets lourds (300 plans et plus) : générateur et bancs, tous `#[ignore]` (`docs/PERFORMANCE.md`, section 25).
 #[cfg(test)]
 mod lourd_tests;
+// Endurance d'un épisode (150 à 250 plans) : générateur et bancs, tous `#[ignore]` (`docs/ENDURANCE.md`).
+#[cfg(test)]
+mod endurance_tests;
 mod lacher;
 #[cfg(test)]
 mod lacher_tests;
