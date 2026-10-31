@@ -682,6 +682,9 @@ mod folders_tests;
 mod frames;
 #[cfg(test)]
 mod frames_tests;
+mod gel;
+#[cfg(test)]
+mod gel_tests;
 mod gpu;
 mod gpufx;
 #[cfg(test)]
@@ -888,6 +891,9 @@ mod propager_cadence_tests;
 mod propagerui;
 mod raccourcisui;
 mod raster;
+mod tuilepack;
+#[cfg(test)]
+mod tuilepack_tests;
 mod rejeu;
 mod recovery;
 #[cfg(test)]

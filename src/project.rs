@@ -3532,6 +3532,9 @@ fn load_drawing(dir: &Path, id: CelId, w: usize, h: usize, quick: bool, hors: bo
         }
         cel.fond = Some(Box::new(s));
     }
+    // Les pixels se rangent dès la lecture (`Tile`, chantier « mémoire d'un épisode ») : un film de 300 plans ne passe pas par
+    // 10 Go de tuiles à l'ouverture. La première lecture d'un dessin rouvre ses tuiles.
+    cel.geler();
     Ok((cel, approximate, warning))
 }
 

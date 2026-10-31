@@ -278,7 +278,14 @@ fn spawn_worker(boite: Boite, done_tx: Sender<Msg>, render: Renderer, chargement
                 let t = Instant::now();
                 let (cel, gen, version) = (job.cel, job.gen, job.version);
                 let msg = match catch_unwind(AssertUnwindSafe(|| render(&job.drawing, job.w, job.h))) {
-                    Ok(raster) => Msg::Done(Done { cel, gen, version, drawing: job.drawing, raster, took: t.elapsed() }),
+                    Ok(mut raster) => {
+                        // Le rendu exact d'un film qui s'ouvre arrive pour des milliers de dessins qu'on ne regarde pas : ses tuiles
+                        // se rangent ici, sur le fil du chargement (`Tile`, chantier « mémoire d'un épisode »), et se rouvrent à la lecture.
+                        if chargement {
+                            raster.geler();
+                        }
+                        Msg::Done(Done { cel, gen, version, drawing: job.drawing, raster, took: t.elapsed() })
+                    }
                     Err(_) => Msg::Failed { cel, gen },
                 };
                 if done_tx.send(msg).is_err() {

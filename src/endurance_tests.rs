@@ -1035,6 +1035,48 @@ fn endurance_profil() {
     std::process::exit(0);
 }
 
+/// Combien le rangement des tuiles gagne sur les vrais dessins de l'épisode (`tuilepack.rs`) : taille et temps, une tuile sur `ENDU_PAS`.
+#[test]
+#[ignore]
+fn endurance_tuiles() {
+    let manifeste = manifeste_de(&dossier_endurance());
+    assert!(manifeste.exists(), "pas d'épisode : lance d'abord endurance_generer");
+    let l = crate::project::load(&manifeste).expect("ouverture");
+    let pas = env_usize("ENDU_PAS", 4);
+    for (nom, vecteur) in [("bitmap", false), ("vectoriel", true)] {
+        let (mut n, mut ok, mut brut, mut rle, mut tp, mut td, mut vides) = (0usize, 0usize, 0usize, 0usize, 0f64, 0f64, 0usize);
+        let mut k = 0usize;
+        for c in l.doc.cels.values().filter(|c| c.vector.is_some() == vecteur) {
+            for t in c.raster.tiles.iter().flatten() {
+                k += 1;
+                if k % pas != 0 {
+                    continue;
+                }
+                n += 1;
+                brut += 16384;
+                if t.iter().all(|p| *p == egui::Color32::TRANSPARENT) {
+                    vides += 1;
+                }
+                let t0 = Instant::now();
+                let p = crate::tuilepack::pack(t);
+                tp += t0.elapsed().as_secs_f64();
+                if let Some(o) = p {
+                    ok += 1;
+                    rle += o.len();
+                    let t1 = Instant::now();
+                    let r = crate::tuilepack::unpack(&o);
+                    td += t1.elapsed().as_secs_f64();
+                    assert!(r[..] == t[..]);
+                } else {
+                    rle += 16384;
+                }
+            }
+        }
+        endu!("tuiles {nom} (1 sur {pas}) : {n} tuiles, {vides} transparentes, {ok} rangées ; {:.0} Mo -> {:.0} Mo (×{:.1}) ; rangement {:.1} µs/tuile, retour {:.1} µs/tuile", brut as f64 / 1e6, rle as f64 / 1e6, brut as f64 / rle.max(1) as f64, tp / n.max(1) as f64 * 1e6, td / ok.max(1) as f64 * 1e6);
+    }
+    std::process::exit(0);
+}
+
 // ------------------------------------------------------------------ fuites : une séance qui ne change rien au bout du compte
 
 /// Des cycles qui laissent le projet comme il était (un plan neuf, un trait dedans, une clé de caméra, une copie, puis tout supprimé), pour
