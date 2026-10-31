@@ -171,7 +171,7 @@ fn noircir(doc: &mut Document, rang: usize) {
     rectangle(doc, id, 400..460, 190..250, Color32::from_rgba_premultiplied(0, 0, 0, 255));
 }
 fn demande_envois(doc: &Document, envoi: Option<NouvelEnvoi>) -> Demande {
-    let plans: Vec<PlanCopie> = doc.panels.iter().enumerate().map(|(i, p)| PlanCopie { panel: p.clone(), titre: format!("Plan {}", i + 1), version: 1 }).collect();
+    let plans: Vec<PlanCopie> = doc.panels.iter().enumerate().map(|(i, p)| PlanCopie { panel: p.clone(), titre: format!("Plan {}", i + 1), version: 1, nom: String::new(), sequence: String::new() }).collect();
     let mut cels = HashMap::new();
     for p in &doc.panels {
         for id in crate::empreinte::dessins_du_plan(p) {
