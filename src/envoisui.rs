@@ -81,7 +81,11 @@ struct Preparation {
 /// La copie en cours d'un marquage d'envoi (`App::envois_marquer_copier`).
 struct PrepMarquage {
     releve: Releve,
+    /// Les plans déjà copiés (les plans.len() premiers) ; la numérotation, les noms et les séquences de tous, pris d'un coup au début.
     plans: Vec<PlanCopie>,
+    numeros: crate::numerotation::Numeros,
+    noms: Vec<String>,
+    sequences: Vec<u64>,
     cels: HashMap<CelId, Copie>,
     restants: Vec<CelId>,
     nom: String,
@@ -406,10 +410,13 @@ impl App {
         self.envois_marquer_copier(ctx, budget_marquage());
     }
 
-    /// Commence (ou recommence, `reprises` fois déjà) la copie d'un marquage : les plans d'un coup, les dessins à copier en liste.
+    /// Commence (ou recommence, `reprises` fois déjà) la copie d'un marquage : la liste des dessins à copier et ce qu'il faut de tout le film
+    /// pour nommer les plans ; les plans et les dessins se copient ensuite par morceaux.
     fn envois_marquer_commencer(&mut self, nom: &str, date: u64, reprises: u32) {
         let start = Instant::now();
-        let plans = self.envois_plans();
+        let numeros = crate::numerotation::Numeros::of(&self.doc);
+        let noms = self.doc.noms_de_tous_les_plans();
+        let sequences = self.doc.sequence_ids();
         let mut restants = Vec::new();
         let mut vus = std::collections::HashSet::new();
         for p in &self.doc.panels {
@@ -425,7 +432,10 @@ impl App {
         self.envois_ui.travail = None;
         self.envois_ui.marquage_prep = Some(PrepMarquage {
             releve: self.envois_releve(),
-            plans,
+            plans: Vec::with_capacity(self.doc.panels.len()),
+            numeros,
+            noms,
+            sequences,
             cels: HashMap::new(),
             restants,
             nom: nom.trim().to_string(),
@@ -448,7 +458,23 @@ impl App {
             ctx.request_repaint();
             return;
         }
-        while let Some(id) = prep.restants.pop() {
+        // Les plans d'abord (au moins un par morceau), puis les dessins.
+        while prep.plans.len() < self.doc.panels.len() {
+            let i = prep.plans.len();
+            let p = &self.doc.panels[i];
+            prep.plans.push(PlanCopie {
+                panel: p.clone(),
+                titre: crate::storyboard::panel_title_n(&self.doc, &prep.numeros, i),
+                version: self.doc.numero_de_version(p.id),
+                nom: prep.noms.get(i).cloned().unwrap_or_default(),
+                sequence: prep.sequences.get(i).map(|&s| prep.numeros.sequence_label(&self.doc, s)).unwrap_or_default(),
+            });
+            if start.elapsed() >= budget {
+                break;
+            }
+        }
+        while prep.plans.len() >= self.doc.panels.len() {
+            let Some(id) = prep.restants.pop() else { break };
             if let Some(c) = self.doc.cels.get(&id) {
                 prep.cels.insert(id, Copie { version: c.version, donnees: Donnees::de(c) });
             }
@@ -457,7 +483,7 @@ impl App {
             }
         }
         prep.pire = prep.pire.max(start.elapsed());
-        if !prep.restants.is_empty() {
+        if prep.plans.len() < self.doc.panels.len() || !prep.restants.is_empty() {
             ctx.request_repaint();
             return;
         }

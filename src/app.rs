@@ -2672,7 +2672,16 @@ impl App {
         let lecture = self.playing.then_some(self.doc.fps);
         self.gel.tenir(&mut self.doc, self.cur_panel, lecture);
         self.gel.tenir_l_historique(&mut self.history);
-        if self.gel.occupe() {
+        let mut occupe = self.gel.occupe();
+        // Les projets des autres onglets : leurs dessins se rangent aussi (le plan qu'on y regardait en dernier reste ouvert).
+        for o in &mut self.onglets {
+            if let Some(e) = o.etat.as_mut() {
+                e.gel.tenir(&mut e.doc, e.cur_panel, None);
+                e.gel.tenir_l_historique(&mut e.history);
+                occupe |= e.gel.occupe();
+            }
+        }
+        if occupe {
             ctx.request_repaint_after(std::time::Duration::from_millis(30));
         }
     }

@@ -802,7 +802,6 @@ fn endurance_editer() {
         let t = Instant::now();
         b.app.envois_marquer(&ctx, nom, 1_761_900_000);
         let appel = ms(t);
-        let cp = b.app.envois_ui.derniere_copie.map_or(0.0, |d| d.as_secs_f64() * 1e3);
         let mut v = Vec::new();
         while b.app.envois_ui.occupe() || b.app.save_en_cours() {
             v.push(b.image(Vec::new(), 1.0 / 60.0));
@@ -811,7 +810,9 @@ fn endurance_editer() {
                 break;
             }
         }
-        endu!("envoi « {nom} » : appel {appel:.1} ms (copie des plans {cp:.1} ms), fini en {:.1} s, statut : {}", t.elapsed().as_secs_f64(), b.app.status);
+        // (Le plus long morceau de la copie sur le fil de l'interface, connu une fois la copie finie.)
+        let cp = b.app.envois_ui.derniere_copie.map_or(0.0, |d| d.as_secs_f64() * 1e3);
+        endu!("envoi « {nom} » : appel {appel:.1} ms (plus long morceau de la copie {cp:.1} ms), fini en {:.1} s, statut : {}", t.elapsed().as_secs_f64(), b.app.status);
         resume_images(&format!("images pendant l'envoi « {nom} »"), &v);
     }
     // Le suivi qui suit un envoi (relevé des plans modifiés).

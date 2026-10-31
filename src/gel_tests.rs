@@ -280,6 +280,31 @@ fn undoing_the_removal_of_a_plan_after_its_drawings_were_ranged_gives_the_exact_
 }
 
 #[test]
+fn the_drawings_of_a_project_in_another_tab_are_ranged_too() {
+    use crate::perf_tests::banc;
+    let (doc, ids) = doc_de_plans(8);
+    let avant: HashMap<CelId, Vec<Color32>> = ids.iter().map(|&id| (id, a_plat(&doc, id))).collect();
+    let mut b = banc(doc, false);
+    assert!(b.app.nouvel_onglet(), "{}", b.app.status);
+    b.app.welcome = false;
+    let t = Instant::now();
+    loop {
+        b.chauffer(2);
+        let range = b.app.onglets[0].etat.as_ref().expect("rangé");
+        // (Le plan courant de l'onglet et ses voisins restent ouverts ; les plans éloignés se rangent.)
+        if ids.iter().skip(4).all(|id| !range.doc.cels[id].a_des_tuiles_ouvertes()) {
+            break;
+        }
+        assert!(t.elapsed() < Duration::from_secs(10), "les dessins de l'autre onglet ne se rangent pas");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(b.app.activer_onglet(0));
+    for &id in &ids {
+        assert_eq!(a_plat(&b.app.doc, id), avant[&id], "dessin {id} après être revenu sur l'onglet");
+    }
+}
+
+#[test]
 fn a_project_with_ranged_drawings_saves_the_same_bytes_and_reloads_identical() {
     use crate::enregistrement_cliche_tests::projet_riche;
     use crate::fiabilite_fixture::{arbre, dossier};
