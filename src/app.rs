@@ -783,7 +783,6 @@ pub struct App {
     pub(crate) paquet: Option<crate::paquetui::PaquetWindow>,
     /// Fenêtre « Journal des différences » entre deux envois (`journalui.rs`).
     pub(crate) journal: Option<crate::journalui::JournalFenetre>,
-        }
     /// Le pont Kitsu (kitsu.rs, kitsuui.rs) : éteint d'origine.
     pub(crate) kitsu: crate::kitsuui::Kitsu,
     pub(crate) noms_fenetre: Option<crate::nommageui::NomsWindow>,
