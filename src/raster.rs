@@ -92,16 +92,23 @@ impl Tile {
         self.0.px.get().is_some() && matches!(self.0.rangee.get(), Some(Some(_)))
     }
 
-    /// Lâche les pixels d'une tuile dont le tampon est fait (`ranger`). Seulement si cette copie est la seule : une tuile que tient
-    /// aussi une étape d'annulation, un cliché ou un fil de fond garde ses pixels (elle sera lâchée quand elle sera seule).
-    /// Rend vrai si les pixels sont partis.
+    /// Lâche les pixels de cette copie d'une tuile dont le tampon est fait (`ranger`). Seule à la tenir, elle rend ses pixels. Tenue aussi par
+    /// un autre dessin (un plan copié, une version, une variante partagent leurs tuiles), une étape d'annulation, un cliché ou un fil de fond,
+    /// elle passe à une tuile à elle, faite du seul tampon (un millier d'octets) : les pixels partent avec le dernier qui les tient, et
+    /// rien n'est lu ni écrit chez les autres. (Sans cela, les tuiles que se partagent des dessins copiés ne partiraient jamais : 60 % des
+    /// tuiles d'un épisode resté ouvert une séance.) Rend vrai si cette copie n'a plus les pixels en mémoire.
     pub fn lacher_les_pixels(&mut self) -> bool {
         if !self.est_lachable() {
             return false;
         }
         match std::sync::Arc::get_mut(&mut self.0) {
             Some(d) => d.px.take().is_some(),
-            None => false,
+            None => {
+                let Some(Some(octets)) = self.0.rangee.get() else { return false };
+                let propre = Donnees { px: std::sync::OnceLock::new(), rangee: std::sync::OnceLock::from(Some(octets.clone())) };
+                self.0 = std::sync::Arc::new(propre);
+                true
+            }
         }
     }
 

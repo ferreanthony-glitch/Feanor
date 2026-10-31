@@ -1,4 +1,4 @@
-﻿//! Essais des pixels rangés (`Tile`, `tuilepack.rs`) et de la tenue des dessins (`gel.rs`) : un dessin rangé puis rouvert est identique au
+//! Essais des pixels rangés (`Tile`, `tuilepack.rs`) et de la tenue des dessins (`gel.rs`) : un dessin rangé puis rouvert est identique au
 //! pixel près, un dessin modifié ne perd rien, l'annulation, l'enregistrement, la copie de secours et la relecture voient les mêmes pixels.
 
 use std::collections::HashMap;
@@ -44,8 +44,9 @@ fn doc_de_plans(n: usize) -> (Document, Vec<CelId>) {
         let c = doc.new_cel(LayerKind::Bitmap);
         {
             let cel = doc.cels.get_mut(&c).unwrap();
-            for t in 0..12 {
-                let tile = cel.raster.tile_mut((t + i) % 12);
+            // (Un nombre de tuiles différent d'un plan à l'autre : les images des plans ne sont pas toutes pareilles.)
+            for t in 0..(3 + i % 8) {
+                let tile = cel.raster.tile_mut(t);
                 for k in 0..TILE_PIXELS {
                     let p = pixel(k);
                     if p != Color32::TRANSPARENT {
@@ -85,22 +86,41 @@ fn a_frozen_tile_comes_back_exact_and_a_write_forgets_the_buffer() {
 }
 
 #[test]
-fn a_shared_tile_keeps_its_pixels_until_it_is_alone() {
+fn a_shared_tile_lets_each_holder_go_and_the_pixels_leave_with_the_last() {
     let mut a = tuile_a_trait();
-    let b = a.clone();
+    let mut b = a.clone();
     let avant: Vec<Color32> = a.to_vec();
     assert!(a.ranger());
-    assert!(!a.lacher_les_pixels(), "une tuile que tient aussi une étape d'annulation ou un cliché ne part pas");
-    assert!(!a.est_rangee());
-    drop(b);
-    assert!(a.lacher_les_pixels(), "seule, elle part");
-    assert_eq!(a[..], avant[..]);
+    // Deux dessins (un plan copié) tiennent la même tuile : le premier passe à une tuile à lui, faite du seul tampon ; l'autre garde les pixels.
+    assert!(a.lacher_les_pixels());
+    assert!(a.est_rangee(), "ce dessin-ci n'a plus les pixels en mémoire");
+    assert!(!b.est_rangee(), "l'autre les a encore");
+    assert_eq!(b[..], avant[..]);
+    assert_eq!(a[..], avant[..], "et les deux voient les mêmes pixels");
+    // Seul à tenir l'ancienne tuile, le second la rend sur place.
+    assert!(b.lacher_les_pixels());
+    assert!(b.est_rangee());
+    assert_eq!(b[..], avant[..]);
     // Une copie qu'on écrit ne change pas l'original rangé (copie à l'écriture).
     let mut copie = a.clone();
     copie[0] = Color32::GREEN;
     assert_eq!(a[0], avant[0]);
     assert_eq!(copie[0], Color32::GREEN);
     assert_eq!(copie[1..], avant[1..]);
+}
+
+#[test]
+fn a_clone_in_flight_keeps_its_pixels_while_the_drawing_lets_go() {
+    // Un fil de fond (vignette, export, enregistrement) tient une copie de la tuile pendant que le dessin la range : le fil lit ses pixels, intacts.
+    let mut dessin = tuile_a_trait();
+    let en_vol = dessin.clone();
+    let avant: Vec<Color32> = dessin.to_vec();
+    dessin.geler();
+    assert!(dessin.est_rangee());
+    assert!(!en_vol.est_rangee(), "la copie en vol a toujours ses pixels");
+    assert_eq!(en_vol[..], avant[..]);
+    drop(en_vol);
+    assert_eq!(dessin[..], avant[..]);
 }
 
 #[test]
@@ -113,9 +133,13 @@ fn a_background_thread_makes_the_buffers_and_the_tiles_then_leave() {
         copie
     });
     let copie = fil.join().unwrap();
-    assert!(!t.lacher_les_pixels(), "la copie du fil est encore là");
+    // Le tampon fait par le fil sert à toutes les copies ; la copie du fil garde ses pixels, la tuile du dessin passe à une tuile à elle.
+    assert!(t.est_lachable(), "le tampon fait sur la copie est celui de la tuile");
+    assert!(t.lacher_les_pixels());
+    assert!(t.est_rangee());
+    assert!(!copie.est_rangee(), "la copie du fil lit toujours ses pixels");
+    assert_eq!(copie[..], avant[..]);
     drop(copie);
-    assert!(t.lacher_les_pixels(), "le fil a fini : la tuile est seule, son tampon est fait");
     // Un fil de fond qui rouvre les pixels sur une copie : l'original les voit rouverts.
     let c2 = t.clone();
     std::thread::spawn(move || c2.rouvrir()).join().unwrap();
@@ -201,11 +225,11 @@ fn old_undo_steps_are_ranged_and_undo_and_redo_stay_exact() {
     let mut nav = Nav { panel: 0, layer: 0 };
     let mut etats = vec![a_plat(&doc, id)];
     for k in 0..24u8 {
-        // Un geste : la tuile 5 est sauvée dans l'étape, puis modifiée (la tuile de l'étape est alors seule à tenir les anciens pixels).
+        // Un geste : la tuile 1 est sauvée dans l'étape, puis modifiée (la tuile de l'étape est alors seule à tenir les anciens pixels).
         let cel = doc.cels.get_mut(&id).unwrap();
-        let avant = cel.raster.slot(5).cloned();
-        h.push(Edit::Tiles { cel: id, tiles: vec![(5, avant)] });
-        cel.raster.tile_mut(5)[k as usize] = Color32::from_rgba_premultiplied(k, 200, 3, 255);
+        let avant = cel.raster.slot(1).cloned();
+        h.push(Edit::Tiles { cel: id, tiles: vec![(1, avant)] });
+        cel.raster.tile_mut(1)[k as usize] = Color32::from_rgba_premultiplied(k, 200, 3, 255);
         cel.version += 1;
         etats.push(a_plat(&doc, id));
     }
@@ -293,6 +317,37 @@ fn a_project_with_ranged_drawings_saves_the_same_bytes_and_reloads_identical() {
         }
     }
     let _ = std::fs::remove_dir_all(&travail);
+}
+
+/// L'image finale d'un export (plan `p`, image 0), composée comme le film.
+fn image_exportee(doc: &Document, p: usize) -> Vec<Color32> {
+    use crate::exportrender::{snapshot_of, Papier, Rendu};
+    let snap = snapshot_of(doc, &[p]);
+    let rendu = Rendu::new(snap, Papier::Fond, false, Vec::new(), std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)));
+    (*rendu.image(p, 0).expect("image")).clone()
+}
+
+#[test]
+fn an_export_of_ranged_drawings_is_the_same_image() {
+    let (mut doc, ids) = doc_de_plans(6);
+    let avant: Vec<Vec<Color32>> = (0..6).map(|p| image_exportee(&doc, p)).collect();
+    assert!(avant[0] != avant[1], "les images des plans ne sont pas toutes la même page blanche");
+    let mut rangees = 0;
+    for &id in &ids {
+        rangees += doc.cels.get_mut(&id).unwrap().geler();
+    }
+    assert!(rangees > 0);
+    assert!(ids.iter().all(|id| !doc.cels[id].a_des_tuiles_ouvertes()), "tous les dessins sont rangés avant l'export");
+    for p in 0..6 {
+        assert_eq!(image_exportee(&doc, p), avant[p], "image exportée du plan {p}");
+    }
+    // Et la vignette du plan (les fils de fond la composent sur un cliché).
+    let cam = doc.panel_camera(2, 0);
+    let apres = crate::render::thumbnail(&doc, &crate::render::panel_plan_at(&doc, 2, 0, doc.render_paper()), &cam, 96, 54);
+    // (Les mêmes dessins, jamais rangés : un projet neuf de même fabrication.)
+    let (neuf, _) = doc_de_plans(6);
+    let vignette = crate::render::thumbnail(&neuf, &crate::render::panel_plan_at(&neuf, 2, 0, neuf.render_paper()), &neuf.panel_camera(2, 0), 96, 54);
+    assert_eq!(vignette.pixels, apres.pixels, "la vignette d'un plan rangé est la même");
 }
 
 #[test]
