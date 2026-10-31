@@ -95,6 +95,8 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   machine manque de mémoire, pas un défaut des dessins.
 - À décider avec l'œil d'Anthony : affichage Direct3D 12 au lieu de Vulkan (−2,6 Go, lecture 3× plus rapide selon
   l'agent ; `WGPU_BACKEND=dx12`), jamais vérifié à l'écran.
+- Dossiers de travail vignettes, bibliotheque, calques, references, exports supprimés et leurs 6 branches fusionnées
+  effacées (accord d'Anthony).
 
 ## 2026-10-29
 
