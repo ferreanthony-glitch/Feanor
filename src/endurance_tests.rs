@@ -32,6 +32,51 @@ use crate::lourd_tests::{
 use crate::perf_tests::{Banc, Mesure};
 use crate::workspace::Espace;
 
+/// Le tas vivant du processus d'essais (octets alloués et pas encore rendus) : distingue ce que SHOT tient de ce que Windows garde (tas
+/// fragmenté, mémoire de la carte graphique comptée dans la mémoire privée). Un compteur autour de l'allocateur du système ; il ne change
+/// ni le tas segmenté ni les décisions de SHOT.
+struct TasCompte;
+
+static TAS_VIVANT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+// SAFETY : chaque appel est transmis tel quel à l'allocateur du système ; le compteur n'est qu'une addition.
+unsafe impl std::alloc::GlobalAlloc for TasCompte {
+    unsafe fn alloc(&self, l: std::alloc::Layout) -> *mut u8 {
+        let p = std::alloc::System.alloc(l);
+        if !p.is_null() {
+            TAS_VIVANT.fetch_add(l.size(), Ordering::Relaxed);
+        }
+        p
+    }
+    unsafe fn dealloc(&self, p: *mut u8, l: std::alloc::Layout) {
+        std::alloc::System.dealloc(p, l);
+        TAS_VIVANT.fetch_sub(l.size(), Ordering::Relaxed);
+    }
+    unsafe fn alloc_zeroed(&self, l: std::alloc::Layout) -> *mut u8 {
+        let p = std::alloc::System.alloc_zeroed(l);
+        if !p.is_null() {
+            TAS_VIVANT.fetch_add(l.size(), Ordering::Relaxed);
+        }
+        p
+    }
+    unsafe fn realloc(&self, p: *mut u8, l: std::alloc::Layout, n: usize) -> *mut u8 {
+        let q = std::alloc::System.realloc(p, l, n);
+        if !q.is_null() {
+            TAS_VIVANT.fetch_add(n, Ordering::Relaxed);
+            TAS_VIVANT.fetch_sub(l.size(), Ordering::Relaxed);
+        }
+        q
+    }
+}
+
+#[global_allocator]
+static TAS: TasCompte = TasCompte;
+
+/// Octets du tas vivant, en Mo.
+pub(crate) fn tas_vivant_mo() -> f64 {
+    TAS_VIVANT.load(Ordering::Relaxed) as f64 / 1e6
+}
+
 fn env_usize(nom: &str, defaut: usize) -> usize {
     std::env::var(nom).ok().and_then(|v| v.parse().ok()).unwrap_or(defaut)
 }
@@ -137,9 +182,60 @@ fn endurance_generer() {
     std::process::exit(0);
 }
 
+/// Les plages de mémoire engagée du processus, par sorte (privée, projetée, image) et les plus grosses (diagnostic : d'où vient ce que le
+/// tas vivant ne compte pas).
+fn plages_memoire(titre: &str) {
+    #[repr(C)]
+    struct Mbi {
+        base: usize,
+        alloc_base: usize,
+        alloc_protect: u32,
+        _p1: u32,
+        taille: usize,
+        etat: u32,
+        protection: u32,
+        sorte: u32,
+        _p2: u32,
+    }
+    extern "system" {
+        fn VirtualQuery(addr: usize, mbi: *mut Mbi, len: usize) -> usize;
+    }
+    let (mut privee, mut projetee, mut image) = (0usize, 0usize, 0usize);
+    let mut grosses: Vec<(usize, u32, u32)> = Vec::new();
+    let mut adresse = 0usize;
+    loop {
+        let mut m = Mbi { base: 0, alloc_base: 0, alloc_protect: 0, _p1: 0, taille: 0, etat: 0, protection: 0, sorte: 0, _p2: 0 };
+        // SAFETY : VirtualQuery remplit la structure fournie, de la taille annoncée.
+        let n = unsafe { VirtualQuery(adresse, &mut m, std::mem::size_of::<Mbi>()) };
+        if n == 0 {
+            break;
+        }
+        if m.etat == 0x1000 {
+            match m.sorte {
+                0x20000 => privee += m.taille,
+                0x40000 => projetee += m.taille,
+                0x1000000 => image += m.taille,
+                _ => {}
+            }
+            if m.taille >= 32 << 20 {
+                grosses.push((m.taille, m.sorte, m.protection));
+            }
+        }
+        let suite = m.base.wrapping_add(m.taille);
+        if suite <= adresse {
+            break;
+        }
+        adresse = suite;
+    }
+    grosses.sort_unstable_by(|a, b| b.cmp(a));
+    let g: Vec<String> = grosses.iter().take(8).map(|(t, s, p)| format!("{:.0} Mo (sorte {s:#x}, protection {p:#x})", *t as f64 / 1e6)).collect();
+    endu!("plages {titre} : privée {:.0} Mo, projetée {:.0} Mo, image {:.0} Mo ; plus grosses : {}", privee as f64 / 1e6, projetee as f64 / 1e6, image as f64 / 1e6, g.join(" ; "));
+}
+
 fn mem_ligne(titre: &str) {
+    plages_memoire(titre);
     let (ws, pv) = memoire();
-    endu!("mémoire {titre} : ensemble de travail {ws:.0} Mo, privée {pv:.0} Mo, pic {:.0} Mo", memoire_pic());
+    endu!("mémoire {titre} : ensemble de travail {ws:.0} Mo, privée {pv:.0} Mo, pic {:.0} Mo, tas vivant {:.0} Mo", memoire_pic(), tas_vivant_mo());
 }
 
 /// Copie le dossier de l'épisode (`ENDU_DIR\Episode`) dans `ENDU_DIR\<nom>` : les bancs qui enregistrent ne touchent pas à l'original.
@@ -932,44 +1028,110 @@ fn images_avec_pointes(b: &mut Banc, titre: &str, n: usize, seuil: f64, mut avan
 }
 
 /// Où va la mémoire : les tuiles des dessins bitmap, celles des dessins vectoriels (leur rendu), ce que la carte graphique garde.
+/// Où va la mémoire : les tuiles des dessins bitmap, celles des dessins vectoriels (leur rendu), ce que la carte graphique garde, les
+/// caches. Ne lit aucun pixel (lire une tuile rangée la rouvrirait et fausserait la mesure).
 fn repartition_memoire(b: &Banc, titre: &str) {
     let (mut bt, mut vt, mut bn, mut vn, mut elems, mut pts) = (0usize, 0usize, 0usize, 0usize, 0usize, 0usize);
-    let mut uniques = std::collections::HashSet::new();
+    let (mut ouvertes, mut en_tout, mut octets, mut octets_b, mut octets_v) = (0usize, 0usize, 0usize, 0usize, 0usize);
     for c in b.app.doc.cels.values() {
-        let n = c.raster.tiles.iter().flatten().count();
-        for t in c.raster.tiles.iter().flatten() {
-            uniques.insert(t.as_ptr() as usize);
-        }
+        let (o, n) = c.raster.tuiles_ouvertes();
+        ouvertes += o;
+        en_tout += n;
+        octets += c.octets_en_memoire();
         match &c.vector {
             Some(v) => {
                 vt += n;
                 vn += 1;
+                octets_v += c.octets_en_memoire();
                 elems += v.elements.len();
                 for e in &v.elements {
-                    if let crate::vector::Element::Stroke { points, trace, .. } = e {
+                    if let crate::vector::Element::Stroke { points, .. } = e {
                         pts += points.len();
-                        let _ = trace;
                     }
                 }
             }
             None => {
                 bt += n;
                 bn += 1;
+                octets_b += c.octets_en_memoire();
             }
         }
     }
     let g = b.app.gpu.as_ref().map(|g| g.stats()).unwrap_or_default();
+    let (vignettes_gpu, _) = b.app.thumbs.octets();
     endu!(
-        "répartition ({titre}) : {bn} dessins bitmap = {bt} tuiles ({:.0} Mo) ; {vn} dessins vectoriels = {vt} tuiles de rendu ({:.0} Mo), {elems} éléments, {pts} points ; tuiles distinctes {} ({:.0} Mo) ; carte : {} textures, {:.0} Mo",
-        bt as f64 * 16.384 / 1e3,
-        vt as f64 * 16.384 / 1e3,
-        uniques.len(),
-        uniques.len() as f64 * 16.384 / 1e3,
+        "répartition ({titre}) : {bn} dessins bitmap = {bt} tuiles, tiennent {:.0} Mo ; {vn} dessins vectoriels = {vt} tuiles de rendu, tiennent {:.0} Mo ({elems} éléments, {pts} points) ; au total {ouvertes} tuiles ouvertes sur {en_tout}, {:.0} Mo (nominal sans rangement : {:.0} Mo) ; tuiles rouvertes depuis le début : {} ; tenue : {} tuiles lâchées, {} dessins confiés au fil de fond",
+        octets_b as f64 / 1e6,
+        octets_v as f64 / 1e6,
+        octets as f64 / 1e6,
+        en_tout as f64 * 16.384 / 1e3,
+        crate::raster::tuiles_rouvertes(),
+        b.app.gel.lachees,
+        b.app.gel.confies
+    );
+    endu!(
+        "caches ({titre}) : traits {:.0} Mo, vignettes {:.0} Mo, carte : {} textures, {:.0} Mo",
+        crate::vector::cache_total_bytes() as f64 / 1e6,
+        vignettes_gpu as f64 / 1e6,
         g.textures,
         g.bytes as f64 / 1e6
     );
 }
 
+/// Où va la mémoire après une séance de changements de plan, et ce qui la rend : le tas de Windows (compactage), la carte graphique (cache
+/// ramené à 64 Mo), les caches de traits (budget à zéro). Court : ouvrir, parcourir 120 plans, mesurer, expérimenter.
+#[test]
+#[ignore]
+fn endurance_memoire() {
+    installer_crochet();
+    let manifeste = manifeste_de(&dossier_endurance());
+    assert!(manifeste.exists(), "pas d'épisode : lance d'abord endurance_generer");
+    let mut b = ouvrir(&manifeste, Espace::Storyboard);
+    let n = b.app.doc.panels.len();
+    mem_ligne("épisode ouvert (Storyboard)");
+    repartition_memoire(&b, "après l'ouverture");
+    jusqu_au_calme(&mut b, 120.0);
+    mem_ligne("après le calme");
+    b.chauffer(5);
+    let v = images_avec_pointes(&mut b, "storyboard : un changement de plan par image", 120, 1e9, |b, k| {
+        b.app.select_panel((k * 7) % n);
+        Vec::new()
+    });
+    let _ = v;
+    jusqu_au_calme(&mut b, 60.0);
+    mem_ligne("après les changements de plan");
+    repartition_memoire(&b, "après les changements de plan");
+    // Expérience : le tas de Windows garde-t-il de la mémoire rendue (fragmentation) ? On lui demande de se compacter, on remesure.
+    {
+        extern "system" {
+            fn GetProcessHeap() -> isize;
+            fn HeapCompact(heap: isize, flags: u32) -> usize;
+        }
+        std::thread::sleep(Duration::from_secs(3));
+        mem_ligne("avant le compactage du tas");
+        // SAFETY : deux appels Win32 sur le tas du processus ; HeapCompact ne touche aucun bloc vivant.
+        let plus_grand = unsafe { HeapCompact(GetProcessHeap(), 0) };
+        mem_ligne(&format!("après le compactage du tas (plus grand bloc libre {plus_grand})"));
+    }
+    // Expérience : la mémoire privée compte-t-elle la carte graphique ? On réduit son cache, on laisse passer des images, on remesure.
+    if let Some(avant) = b.app.gpu.as_ref().map(|g| g.cache_limit()) {
+        b.app.gpu.as_ref().map(|g| g.set_cache_bytes(64 << 20));
+        b.chauffer(30);
+        std::thread::sleep(Duration::from_secs(2));
+        b.chauffer(10);
+        mem_ligne("cache de la carte ramené à 64 Mo");
+        repartition_memoire(&b, "cache de la carte ramené à 64 Mo");
+        b.app.gpu.as_ref().map(|g| g.set_cache_bytes(avant));
+    }
+
+
+    // Expérience : les caches de traits à zéro.
+    crate::vector::set_cache_budget(0);
+    b.chauffer(5);
+    mem_ligne("budget des caches de traits à zéro");
+    repartition_memoire(&b, "budget des caches de traits à zéro");
+    std::process::exit(0);
+}
 #[test]
 #[ignore]
 fn endurance_profil() {
@@ -992,7 +1154,6 @@ fn endurance_profil() {
     jusqu_au_calme(&mut b, 60.0);
     mem_ligne("après les changements de plan");
     repartition_memoire(&b, "après les changements de plan");
-
     println!("--- Changer la durée d'un plan");
     b.app.select_panel(4);
     b.chauffer(5);

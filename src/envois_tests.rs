@@ -707,6 +707,13 @@ fn the_per_frame_stamp_and_the_marking_copy_stay_cheap_on_a_big_film() {
     assert!(par_image < Duration::from_millis(1), "le relevé coûte {par_image:?} par image d'écran");
     let ctx = b.ctx.clone();
     b.app.envois_marquer(&ctx, "v1", 1_760_000_000);
+    // La copie des dessins se fait par morceaux, image d'écran après image d'écran.
+    for _ in 0..400 {
+        if b.app.envois_ui.derniere_copie.is_some() {
+            break;
+        }
+        b.image(Vec::new(), 1.0 / 60.0);
+    }
     let copie = b.app.envois_ui.derniere_copie.expect("mesure");
     eprintln!("envois : relevé par image d'écran {par_image:?} ; copie d'un marquage (600 plans, 1 200 dessins) {copie:?}");
     assert!(copie < Duration::from_millis(400), "la copie d'un marquage coûte {copie:?}");

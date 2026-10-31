@@ -67,6 +67,13 @@ pub fn pack(pixels: &[Color32; TILE_PIXELS]) -> Option<Box<[u8]>> {
 /// ce qui ne remplit pas la tuile est transparent.
 pub fn unpack(octets: &[u8]) -> Box<[Color32; TILE_PIXELS]> {
     let mut out: Box<[Color32; TILE_PIXELS]> = vec![Color32::TRANSPARENT; TILE_PIXELS].into_boxed_slice().try_into().expect("taille d'une tuile");
+    unpack_into(octets, &mut out);
+    out
+}
+
+/// Comme `unpack`, dans un tampon de pixels qu'on fournit (il est d'abord vidé).
+pub fn unpack_into(octets: &[u8], out: &mut [Color32; TILE_PIXELS]) {
+    out.fill(Color32::TRANSPARENT);
     let dst: &mut [u32] = bytemuck::cast_slice_mut(&mut out[..]);
     let (mut p, mut k) = (0usize, 0usize);
     while p + 2 <= octets.len() && k < dst.len() {
@@ -87,5 +94,4 @@ pub fn unpack(octets: &[u8]) -> Box<[Color32; TILE_PIXELS]> {
         }
         k += n;
     }
-    out
 }

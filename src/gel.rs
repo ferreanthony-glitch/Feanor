@@ -38,9 +38,20 @@ const VOISINS: usize = 2;
 /// Secondes de lecture gardées chaudes devant la tête de lecture.
 const LECTURE_S: usize = 3;
 
+/// Ce qu'on confie au fil de fond : des dessins dont il fait les tampons, ou un passage sur les caches de traits.
 struct Lot {
     dessins: Vec<(CelId, Vec<Raster>)>,
+    caches: bool,
 }
+
+/// Un cache de trait qu'aucun rendu n'a touché depuis ce nombre d'usages est rangé (`vector::ranger_les_caches_au_repos`).
+const CACHES_AU_REPOS: u64 = 3000;
+/// Numéro qui ne désigne aucun dessin : la réponse du fil de fond à un passage sur les caches de traits qui a rangé quelque chose.
+const REPONSE_CACHES: CelId = u64::MAX;
+/// Caches de traits rangés d'un coup, au plus.
+const CACHES_PAR_PASSE: usize = 512;
+/// Le fil de fond passe sur les caches de traits au plus toutes ces secondes.
+const CACHES_TOUTES_LES: Duration = Duration::from_millis(1500);
 
 /// L'état de la tenue des dessins d'un projet (un par application).
 pub struct Gel {
@@ -59,6 +70,11 @@ pub struct Gel {
     pub lachees: u64,
     /// Dessins confiés au fil de fond depuis le début.
     pub confies: u64,
+    /// Un passage sur les caches de traits est en cours chez le fil de fond, et quand le dernier a été demandé.
+    caches_en_route: bool,
+    caches_le: Option<Instant>,
+    /// Le dernier passage sur les caches a rangé des tuiles : un autre suivra.
+    caches_a_trouve: bool,
 }
 
 impl Default for Gel {
@@ -76,6 +92,9 @@ impl Default for Gel {
             recents: VecDeque::new(),
             lachees: 0,
             confies: 0,
+            caches_en_route: false,
+            caches_le: None,
+            caches_a_trouve: false,
         }
     }
 }
@@ -87,13 +106,9 @@ impl Gel {
         self.actif = oui;
     }
 
-    pub fn est_actif(&self) -> bool {
-        self.actif
-    }
-
     /// Reste-t-il du travail en route (le caller redemande une image d'écran bientôt) ?
     pub fn occupe(&self) -> bool {
-        self.actif && (!self.en_route.is_empty() || (self.repos_jusqu.is_none() && (self.curseur < self.ids.len() || self.a_trouve)))
+        self.actif && (!self.en_route.is_empty() || self.caches_en_route || self.caches_a_trouve || (self.repos_jusqu.is_none() && (self.curseur < self.ids.len() || self.a_trouve)))
     }
 
     fn fil(&mut self) -> &Sender<Lot> {
@@ -103,6 +118,22 @@ impl Gel {
             let _ = std::thread::Builder::new().name("tuiles-rangees".into()).spawn(move || {
                 crate::parallele::fil_sous_la_normale();
                 while let Ok(lot) = rx.recv() {
+                    if lot.caches {
+                        // (Un cache dont la cellule est tenue par un rendu est repris au passage suivant : au plus 200 tours.)
+                        let mut rangees = 0;
+                        for _ in 0..200 {
+                            let (traites, tuiles) = crate::vector::ranger_les_caches_au_repos(CACHES_AU_REPOS, CACHES_PAR_PASSE);
+                            rangees += tuiles;
+                            if traites == 0 {
+                                break;
+                            }
+                        }
+                        // (La réponse d'un passage sur les caches : vide s'il n'a rien rangé, sinon REPONSE_CACHES, pour qu'un autre passage suive.)
+                        if tx_retour.send(if rangees > 0 { vec![REPONSE_CACHES] } else { Vec::new() }).is_err() {
+                            return;
+                        }
+                        continue;
+                    }
                     let mut faits = Vec::with_capacity(lot.dessins.len());
                     for (id, rasters) in lot.dessins {
                         for r in &rasters {
@@ -179,6 +210,12 @@ impl Gel {
             loop {
                 match rx.try_recv() {
                     Ok(ids) => {
+                        if ids.is_empty() || ids == [REPONSE_CACHES] {
+                            // (La réponse d'un passage sur les caches de traits.)
+                            self.caches_en_route = false;
+                            self.caches_a_trouve = !ids.is_empty();
+                            continue;
+                        }
                         for id in ids {
                             self.en_route.remove(&id);
                             if !chauds.contains(&id) {
@@ -196,6 +233,19 @@ impl Gel {
                         self.en_route.clear();
                         break;
                     }
+                }
+            }
+        }
+        // Les caches de traits (531 Mo pour un épisode de 200 plans) : un passage du fil de fond de temps en temps.
+        if !self.caches_en_route && self.caches_le.is_none_or(|t| t.elapsed() >= CACHES_TOUTES_LES) {
+            self.caches_le = Some(Instant::now());
+            if crate::vector::cache_total_bytes() > 0 {
+                let envoi = self.fil().send(Lot { dessins: Vec::new(), caches: true });
+                if envoi.is_ok() {
+                    self.caches_en_route = true;
+                } else {
+                    self.envoi = None;
+                    self.retour = None;
                 }
             }
         }
@@ -259,7 +309,7 @@ impl Gel {
     fn envoyer(&mut self, lot: Vec<(CelId, Vec<Raster>)>) {
         let ids: Vec<CelId> = lot.iter().map(|(id, _)| *id).collect();
         self.confies += ids.len() as u64;
-        let envoi = self.fil().send(Lot { dessins: lot });
+        let envoi = self.fil().send(Lot { dessins: lot, caches: false });
         if envoi.is_ok() {
             self.en_route.extend(ids);
         } else {

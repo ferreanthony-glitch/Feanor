@@ -47,7 +47,8 @@ impl Clone for Donnees {
 /// Combien de fois une tuile rangée a été rouverte par une lecture (diagnostic et essais).
 static RETOURS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
-/// Les tuiles rouvertes depuis le début du processus.
+/// Les tuiles rouvertes depuis le début du processus (essais et bancs).
+#[cfg(test)]
 pub fn tuiles_rouvertes() -> u64 {
     RETOURS.load(std::sync::atomic::Ordering::Relaxed)
 }
