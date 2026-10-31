@@ -70,6 +70,9 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   shot.exe reconstruit, projet d'essai rouvert. En-têtes Kitsu à confirmer sur une vraie instance.
 - Lancés : petits livrables (`petits-livrables`), journal des différences entre envois (`journal-differences`),
   noms de marques retirés + « Papier » (`noms-papier`).
+- Fusionné c442f0e + 46d46c4 : plus aucun nom de marque dans l'interface (noms de formats gardés), « Papier » partout
+  (anciens noms trouvés par Ctrl+K). 3633 essais passent, shot.exe reconstruit, projet d'essai rouvert.
+- Lancés (choix d'Anthony) : pont Kitsu étape 2 (`pont-kitsu`, faux serveur local) et test d'endurance (`endurance`).
 
 ## 2026-10-29
 
