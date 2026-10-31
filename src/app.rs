@@ -3581,11 +3581,7 @@ impl App {
         if !self.export_libre() {
             return;
         }
-        let Some(mut path) = rfd::FileDialog::new()
-            .add_filter("Image PNG", &["png"])
-            .set_file_name(format!("image_{:04}.png", self.global_frame() + 1))
-            .save_file()
-        else {
+        let Some(mut path) = self.dialogue_enregistrer("image", "Exporter l'image courante", ("Image PNG", &["png"]), &format!("image_{:04}.png", self.global_frame() + 1)) else {
             return;
         };
         if path.extension().is_none() {
@@ -4021,6 +4017,7 @@ impl App {
             "fichier.exporter_fiche" => self.open_fiche(),
             "fichier.exporter_liste_plans" => self.open_liste_plans(),
             "fichier.exporter_paquet" => self.open_paquet(),
+            "fichier.exporter_renumerotation" => self.exporter_renumerotation(),
             "projet.noms_production" => self.open_noms(),
             "projet.enregistrer_modele_episode" => self.open_modele_episode(),
             "fichier.exporter_relecture" | "fichier.importer_notes" => {

@@ -325,6 +325,52 @@ impl App {
         self.edited(&resp).then_some(text)
     }
 
+    /// Un champ de durée cible (« 1:30 », « 90 » : des secondes) ; la nouvelle valeur en millisecondes s'il a changé (une étape d'annulation par geste).
+    fn champ_cible(&mut self, ui: &mut egui::Ui, ms: u32) -> Option<u32> {
+        let mut secondes = ms as f64 / 1000.0;
+        let resp = ui.add(
+            egui::DragValue::new(&mut secondes)
+                .speed(1.0)
+                .range(0.0..=crate::budget::MAX_MS as f64 / 1000.0)
+                .custom_formatter(|n, _| crate::budget::texte_duree((n * 1000.0).round() as u32))
+                .custom_parser(|s| crate::budget::lire_duree(s).map(|ms| ms as f64 / 1000.0)),
+        );
+        let resp = crate::bulles::bulle(resp, "Durée cible", "La durée voulue, en minutes:secondes (11:30) ou en secondes (690). Glisser pour l'ajuster, double-clic pour taper, 0 pour l'enlever.", "");
+        self.edited(&resp).then(|| (secondes * 1000.0).round() as u32)
+    }
+
+    /// Une cible de durée par séquence, avec l'écart en direct.
+    fn budget_sequences_section(&mut self, ui: &mut egui::Ui) {
+        ui.label(RichText::new("Durée cible par séquence").strong());
+        let ordre = self.doc.sequence_order();
+        if ordre.is_empty() {
+            ui.label(RichText::new("Aucune séquence.").weak());
+            return;
+        }
+        let budgets = crate::budget::budgets_des_sequences(&self.doc);
+        egui::Grid::new("budget_sequences").num_columns(3).spacing([10.0, 4.0]).show(ui, |ui| {
+            for seq in ordre {
+                ui.label(format!("Séquence {}", self.doc.sequence_label(seq)));
+                let courante = self.doc.properties.budgets_sequences.get(&seq).copied().unwrap_or(0);
+                if let Some(v) = self.champ_cible(ui, courante) {
+                    self.doc.poser_cible_de_sequence(seq, v);
+                }
+                match budgets.get(&seq) {
+                    Some(b) if b.depasse() => {
+                        ui.colored_label(ui.visuals().error_fg_color, format!("{} : trop long", b.texte(self.doc.fps)));
+                    }
+                    Some(b) => {
+                        ui.label(RichText::new(b.texte(self.doc.fps)).weak());
+                    }
+                    None => {
+                        ui.label(RichText::new(crate::budget::duree_courte(self.doc.panels.iter().zip(self.doc.sequence_ids()).filter(|(_, s)| *s == seq).map(|(p, _)| p.frame_count()).sum(), self.doc.fps)).weak());
+                    }
+                }
+                ui.end_row();
+            }
+        });
+    }
+
     fn properties_ui(&mut self, ui: &mut egui::Ui) {
         let p = self.doc.properties.clone();
         egui::Grid::new("proprietes_projet").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
@@ -370,6 +416,27 @@ impl App {
                 self.doc.properties.episode = v;
             }
             ui.end_row();
+            // Budget de durée (`budget.rs`) : la cible du film, et l'écart en direct (rouge quand il dépasse).
+            ui.label("Durée cible du film");
+            ui.horizontal(|ui| {
+                if let Some(v) = self.champ_cible(ui, p.budget_ms) {
+                    self.doc.properties.budget_ms = v;
+                }
+                match self.doc.budget_du_film() {
+                    Some(b) => {
+                        let texte = b.texte(self.doc.fps);
+                        if b.depasse() {
+                            ui.colored_label(ui.visuals().error_fg_color, format!("{texte} : trop long"));
+                        } else {
+                            ui.label(RichText::new(texte).weak());
+                        }
+                    }
+                    None => {
+                        ui.label(RichText::new("aucune : tape 11:30 ou 690").weak());
+                    }
+                }
+            });
+            ui.end_row();
             ui.label("Noms des plans");
             ui.horizontal(|ui| {
                 ui.label(self.doc.nom_de_plan(self.cur_panel.min(self.doc.panels.len().saturating_sub(1))));
@@ -401,6 +468,8 @@ impl App {
             });
             ui.end_row();
         });
+        ui.separator();
+        self.budget_sequences_section(ui);
         ui.separator();
         self.numbering_section(ui);
         ui.separator();

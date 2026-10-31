@@ -460,7 +460,7 @@ impl App {
             return;
         }
         let stem = crate::editorial::file_safe(&w.title);
-        let Some(mut path) = rfd::FileDialog::new().set_title("Exporter pour relecture").add_filter("Page HTML", &["html"]).set_file_name(format!("{stem}_relecture.html")).save_file() else { return };
+        let Some(mut path) = self.dialogue_enregistrer("relecture", "Exporter pour relecture", ("Page HTML", &["html"]), &format!("{stem}_relecture.html")) else { return };
         if path.extension().is_none() {
             path.set_extension("html");
         }

@@ -27,6 +27,10 @@ pub(crate) struct EditorialWindow {
     key: Option<(Options, usize, u64, u64, String)>,
     job: Option<EditorialJob>,
     result: Option<Result<Report, String>>,
+    /// Écrire aussi le rapport de numérotation (ce qui a changé depuis le dernier envoi), dans le dossier de l'export (`renumerotation.rs`).
+    contrat: bool,
+    /// Le rapport calculé au départ de l'export (le projet reste libre pendant qu'il tourne), écrit à la fin s'il réussit.
+    rapport: Option<crate::renumerotation::Rapport>,
 }
 
 impl EditorialWindow {
@@ -71,7 +75,7 @@ impl App {
             t => t.to_string(),
         };
         let parent = self.settings.montage_export_dir.clone().or_else(|| self.path.as_ref().or(self.import_source.as_ref()).and_then(|p| p.parent()).map(Path::to_path_buf));
-        self.editorial = Some(EditorialWindow { opts, parent, title, plan: Err(String::new()), key: None, job: None, result: None });
+        self.editorial = Some(EditorialWindow { opts, parent, title, plan: Err(String::new()), key: None, job: None, result: None, contrat: true, rapport: None });
     }
 
     fn start_editorial(&mut self, w: &mut EditorialWindow) {
@@ -82,6 +86,7 @@ impl App {
             return;
         };
         w.result = None;
+        w.rapport = if w.contrat { crate::renumerotation::depuis_le_dernier_envoi(&self.doc).ok() } else { None };
         match EditorialJob::start(plan, w.opts.clone(), ffmpeg, enc, &parent) {
             Ok(job) => {
                 w.job = Some(job.with_exact(self.rejeu_idle.clone()));
@@ -116,7 +121,14 @@ impl App {
         if w.job.as_ref().is_some_and(|j| !j.running()) {
             // (Le compte rendu est copié, pas retiré : l'abandon d'un export sans compte rendu l'annule.)
             let job = w.job.take().expect("export");
-            let outcome = job.outcome.clone().unwrap_or_else(|| Err("Export annulé.".into()));
+            let mut outcome = job.outcome.clone().unwrap_or_else(|| Err("Export annulé.".into()));
+            // Le rapport de numérotation, à côté des fichiers de montage (deux petits fichiers de texte).
+            if let (Ok(r), Some(rapport)) = (&mut outcome, w.rapport.take()) {
+                match crate::renumerotation::ecrire(&rapport, &self.doc, &r.dir, &w.title) {
+                    Ok((c, t)) => r.files.extend([c, t]),
+                    Err(e) => self.status = format!("Rapport de numérotation pas écrit : {e}"),
+                }
+            }
             self.status = match &outcome {
                 Ok(r) => format!("Exporté pour le montage : {}", r.dir.display()),
                 Err(e) => format!("Export pour le montage : {e}"),
@@ -193,11 +205,7 @@ impl App {
                         None => ui.colored_label(warn, "à choisir"),
                     };
                     if ui.button("Choisir…").clicked() {
-                        let mut d = rfd::FileDialog::new().set_title("Dossier où créer l'export pour le montage");
-                        if let Some(dir) = &w.parent {
-                            d = d.set_directory(dir);
-                        }
-                        if let Some(p) = d.pick_folder() {
+                        if let Some(p) = self.dialogue_dossier("montage", "Dossier où créer l'export pour le montage", w.parent.as_deref()) {
                             self.settings.montage_export_dir = Some(p.clone());
                             if let Err(e) = self.settings.save() {
                                 self.status = format!("Réglages non enregistrés : {e}");
@@ -249,6 +257,16 @@ impl App {
 
                 ui.label("Marqueurs");
                 ui.checkbox(&mut w.opts.markers, "Numéro de chaque plan et commentaires non résolus (XML, FCPXML, OTIO)");
+                ui.end_row();
+
+                ui.label("Numérotation");
+                ui.vertical(|ui| {
+                    let a_un_envoi = !self.doc.envois.is_empty();
+                    ui.add_enabled(a_un_envoi, egui::Checkbox::new(&mut w.contrat, "Rapport de numérotation pour le monteur (CSV et page lisible) : plans ajoutés, supprimés, déplacés, renumérotés depuis le dernier envoi"));
+                    if !a_un_envoi {
+                        ui.label(RichText::new("Aucun envoi pour l'instant : « Marquer un envoi… » d'abord, pour que le rapport sache de quel état partir.").small().weak());
+                    }
+                });
                 ui.end_row();
 
                 ui.label("Chemins");

@@ -154,7 +154,7 @@ Dissolve » s'il y a un fondu} > `library` > `event` > `project` > `sequence` {`
 
 **EDL CMX 3600** (`write_edl`) : en-tête `TITLE:` et `FCM: NON-DROP FRAME` ; un événement par ligne :
 `NNN  BOBINE   V     C        src_in src_out rec_in rec_out`, champs séparés par des blancs ; nom de bobine de 8 caractères au
-plus (`PL012A`, `PL001_5`, ou `R00001` à défaut) ; ligne `* FROM CLIP NAME: SQ01_PL012A` après chaque événement.
+plus : la séquence et le plan (`S01P012A` ; `R00012`, le rang du plan dans le film, quand le numéro est trop long, ex. `S01P001_5`) ; ligne `* FROM CLIP NAME: SQ01_PL012A` après chaque événement.
 Fondu enchaîné : deux lignes de **même numéro d'événement** : le plan sortant à longueur nulle (`C`, source et enregistrement
 à l'image où le fondu commence), puis le plan entrant avec `D nnn` (`D    012`), son entrée en source reculée dans sa poignée.
 Fondu depuis / vers le noir : la même chose avec la bobine `BL`.

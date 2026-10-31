@@ -251,7 +251,7 @@ fn the_edl_layout_is_the_cmx3600_columns() {
     let doc = film(24);
     let text = editorial::write_edl(&plan_of(&doc, &opts()));
     let first = text.lines().find(|l| l.starts_with("001")).expect("événement 1");
-    assert_eq!(first, "001  PL001    V     C        00:00:00:00 00:00:01:00 01:00:00:00 01:00:01:00");
+    assert_eq!(first, "001  S01P001  V     C        00:00:00:00 00:00:01:00 01:00:00:00 01:00:01:00");
     assert!(text.contains("* FROM CLIP NAME: SQ01_PL001\n"));
 }
 

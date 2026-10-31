@@ -180,16 +180,11 @@ impl App {
             return;
         }
         let ext = w.format.extension();
-        let mut dialogue = rfd::FileDialog::new().set_title("Enregistrer la fiche technique").set_file_name(format!("{}_fiche.{ext}", editorial::file_safe(&w.titre)));
-        dialogue = match w.format {
-            Format::Xlsx => dialogue.add_filter("Classeur (.xlsx)", &["xlsx"]),
-            Format::Csv => dialogue.add_filter("CSV (.csv)", &["csv"]),
+        let filtre = match w.format {
+            Format::Xlsx => ("Classeur (.xlsx)", ["xlsx"]),
+            Format::Csv => ("CSV (.csv)", ["csv"]),
         };
-        let dir = self.settings.fiche.dossier.clone().or_else(|| self.path.as_ref().or(self.import_source.as_ref()).and_then(|p| p.parent()).map(Path::to_path_buf));
-        if let Some(d) = dir.filter(|d| d.is_dir()) {
-            dialogue = dialogue.set_directory(d);
-        }
-        let Some(mut path) = dialogue.save_file() else { return };
+        let Some(mut path) = self.dialogue_enregistrer("fiche", "Enregistrer la fiche technique", (filtre.0, &filtre.1), &format!("{}_fiche.{ext}", editorial::file_safe(&w.titre))) else { return };
         if path.extension().is_none() {
             path.set_extension(ext);
         }

@@ -795,6 +795,10 @@ pub struct Properties {
     pub episode: String,
     /// Le modèle de noms des plans (`nommage.rs`) ; vide : le modèle d'origine (« SQ01_PL012A »).
     pub modele_noms: String,
+    /// La durée cible du film (de l'épisode), en millisecondes ; 0 : aucune (`budget.rs`).
+    pub budget_ms: u32,
+    /// La durée cible de chaque séquence (numéro de la séquence → millisecondes) ; aucune entrée : pas de cible.
+    pub budgets_sequences: std::collections::BTreeMap<u64, u32>,
 }
 
 /// Couleur B du damier d'un projet neuf.

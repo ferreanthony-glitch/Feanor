@@ -44,7 +44,7 @@ fn film(n: usize) -> Document {
 
 /// Ce que `construire` reçoit pour tout `doc` (et pour un envoi, si `envoi`).
 fn demande(doc: &Document, envoi: Option<NouvelEnvoi>) -> Demande {
-    let plans: Vec<PlanCopie> = doc.panels.iter().enumerate().map(|(i, p)| PlanCopie { panel: p.clone(), titre: format!("Plan {}", i + 1), version: 1 }).collect();
+    let plans: Vec<PlanCopie> = doc.panels.iter().enumerate().map(|(i, p)| PlanCopie { panel: p.clone(), titre: format!("Plan {}", i + 1), version: 1, nom: String::new(), sequence: String::new() }).collect();
     let mut cels = HashMap::new();
     for p in &doc.panels {
         for id in crate::empreinte::dessins_du_plan(p) {
@@ -115,7 +115,7 @@ fn exemple() -> Vec<Envoi> {
             date: 1_759_000_000,
             note_le: 1_759_000_050,
             fichier: "envoi-1-0000abcd.json".into(),
-            plans: vec![PlanEnvoye { plan: 4, titre: "Plan 1".into(), empreinte: u64::MAX - 5, version: 1, images: 24 }, PlanEnvoye { plan: 9, titre: "Plan 2".into(), empreinte: 0x1234_5678_9abc_def0, version: 3, images: 12 }],
+            plans: vec![PlanEnvoye { plan: 4, titre: "Plan 1".into(), empreinte: u64::MAX - 5, version: 1, images: 24, nom: String::new(), sequence: String::new() }, PlanEnvoye { plan: 9, titre: "Plan 2".into(), empreinte: 0x1234_5678_9abc_def0, version: 3, images: 12, nom: String::new(), sequence: String::new() }],
             variantes: vec![],
         },
         Envoi { id: 2, nom: "v2 au réal".into(), date: 1_760_000_000, note_le: 0, fichier: String::new(), plans: vec![], variantes: vec![crate::envois::VarianteEnvoyee { sequence: 3, numero: 2, nom: "serré".into() }] },

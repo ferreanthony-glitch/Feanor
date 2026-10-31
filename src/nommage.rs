@@ -265,7 +265,52 @@ impl Document {
         let mut cx = self.contexte_de_nom(p);
         cx.case = case;
         cx.calque = calque.map(str::to_string);
-        let mut nom = remplir(pieces, &cx);
+        self.nom_avec_contexte(pieces, p, cx)
+    }
+
+    /// Les noms de tous les plans du film (`nom_de_plan(p)` pour chaque `p`), trouvés en une passe : `nom_de_plan` refait l'ordre du film à chaque appel
+    /// (le carré du nombre de plans), ce qui se sent quand on nomme tout le film d'un coup (envoi, rapport de numérotation).
+    pub fn noms_de_tous_les_plans(&self) -> Vec<String> {
+        let pieces = self.modele_de_noms();
+        let scene_rang: std::collections::HashMap<u64, usize> = self.scene_order().into_iter().enumerate().map(|(k, s)| (s, k + 1)).collect();
+        let seq_rang: std::collections::HashMap<u64, usize> = self.sequence_order().into_iter().enumerate().map(|(k, s)| (s, k + 1)).collect();
+        let mut scenes: std::collections::HashMap<u64, &crate::document::Scene> = std::collections::HashMap::new();
+        for s in &self.scenes {
+            scenes.entry(s.id).or_insert(s);
+        }
+        let mut sequences: std::collections::HashMap<u64, &crate::document::Sequence> = std::collections::HashMap::new();
+        for s in &self.sequences {
+            sequences.entry(s.id).or_insert(s);
+        }
+        let ids = self.sequence_ids();
+        let projet = match self.properties.serie.trim() {
+            "" => self.properties.title.trim().to_string(),
+            s => s.to_string(),
+        };
+        let date = date_du_jour();
+        (0..self.panels.len())
+            .map(|p| {
+                let scene = self.panels[p].scene;
+                let plan_num = scenes.get(&scene).filter(|_| self.numbering_locked).and_then(|s| Num::parse(&s.number)).unwrap_or_else(|| Num::new(scene_rang.get(&scene).copied().unwrap_or(0) as i64));
+                let sequence_num = sequences.get(&ids[p]).filter(|_| self.numbering_locked).and_then(|s| Num::parse(&s.number)).unwrap_or_else(|| Num::new(seq_rang.get(&ids[p]).copied().unwrap_or(0) as i64));
+                let cx = Contexte {
+                    projet: projet.clone(),
+                    episode: self.properties.episode.clone(),
+                    sequence: String::new(),
+                    sequence_num: Some(sequence_num),
+                    plan_num: Some(plan_num),
+                    version: self.numero_de_version(self.panels[p].id),
+                    case: None,
+                    calque: None,
+                    date: date.clone(),
+                };
+                self.nom_avec_contexte(&pieces, p, cx)
+            })
+            .collect()
+    }
+
+    fn nom_avec_contexte(&self, pieces: &[Piece], p: usize, cx: Contexte) -> String {
+        let (case, mut nom) = (cx.case, remplir(pieces, &cx));
         if !contient(pieces, Jeton::Version) && self.nombre_de_versions(self.panels[p].id) > 1 {
             nom = format!("{nom}_{}", crate::planvers::etiquette(cx.version));
         }

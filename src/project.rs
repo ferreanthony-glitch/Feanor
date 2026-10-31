@@ -219,7 +219,10 @@ pub const FORMAT: &str = "pelure-projet";
 /// 45 (2026-10-30, `docs/INTERFACE.md` partie 87) : **production** — `serie`, `episode` et `modele_noms` dans `proprietes` (le modèle de noms des
 /// plans, `nommage.rs`). Une version précédente qui ouvrirait le projet perdrait le modèle de noms et le numéro d'épisode à l'enregistrement : elle
 /// le refuse donc. Un projet de version 44 ou moins s'ouvre tel quel, à l'identique (modèle de noms d'origine : « SQ01_PL012A »).
-pub const VERSION: u32 = 45;
+/// 46 (2026-10-30, `docs/INTERFACE.md` partie 91) : **budget de durée** — `budget_ms` (la cible du film) et `budgets_sequences` (la cible de chaque
+/// séquence) dans `proprietes` (`budget.rs`). Une version précédente qui ouvrirait le projet perdrait les cibles à l'enregistrement : elle le refuse
+/// donc. Un projet de version 45 ou moins s'ouvre tel quel, à l'identique (aucune cible).
+pub const VERSION: u32 = 46;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -334,6 +337,22 @@ struct PropertiesEntry {
     episode: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     modele_noms: String,
+    /// Budget de durée (format 46, `budget.rs`) : la cible du film et celle de chaque séquence, en millisecondes ; absentes : aucune.
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    budget_ms: u32,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    budgets_sequences: Vec<BudgetSequenceEntry>,
+}
+
+/// La cible de durée d'une séquence (format 46).
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
+struct BudgetSequenceEntry {
+    sequence: u64,
+    ms: u32,
+}
+
+fn is_zero_u32(v: &u32) -> bool {
+    *v == 0
 }
 
 impl PropertiesEntry {
@@ -2583,6 +2602,8 @@ fn manifest_de(doc: &Document, avec_plans: bool, drawn: &BTreeSet<CelId>, hors: 
                 serie: p.serie.clone(),
                 episode: p.episode.clone(),
                 modele_noms: p.modele_noms.clone(),
+                budget_ms: p.budget_ms,
+                budgets_sequences: p.budgets_sequences.iter().filter(|(_, ms)| **ms > 0).map(|(s, ms)| BudgetSequenceEntry { sequence: *s, ms: *ms }).collect(),
             }
         },
         dessins_hors: if avec_plans { hors.iter().filter(|id| drawn.contains(id)).copied().collect() } else { Vec::new() },
@@ -2974,6 +2995,9 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                 serie: p.serie,
                 episode: p.episode,
                 modele_noms: p.modele_noms,
+                budget_ms: p.budget_ms.min(crate::budget::MAX_MS),
+                // (Une cible d'une séquence qui n'existe plus est lue comme les autres, `Document::cible_de_sequence` l'ignore.)
+                budgets_sequences: p.budgets_sequences.into_iter().filter(|e| e.ms > 0).map(|e| (e.sequence, e.ms.min(crate::budget::MAX_MS))).collect(),
             }
         },
         // Les commentaires viennent de leur fichier, après les plans (`load_comments`).

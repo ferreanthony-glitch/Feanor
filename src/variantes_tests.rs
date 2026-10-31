@@ -539,7 +539,7 @@ fn envoi_de(doc: &Document, seq: u64) -> Envoi {
         .iter()
         .map(|id| {
             let p = doc.panels.iter().find(|p| p.id == *id).unwrap();
-            PlanEnvoye { plan: *id, titre: "Plan".into(), empreinte: contenu(doc, p), version: 1, images: p.frame_count() }
+            PlanEnvoye { plan: *id, titre: "Plan".into(), empreinte: contenu(doc, p), version: 1, images: p.frame_count(), nom: String::new(), sequence: String::new() }
         })
         .collect();
     Envoi { id: 1, nom: "v1 au réal".into(), date: 1, note_le: 1, fichier: String::new(), plans, variantes: doc.variantes_pour_envoi() }

@@ -94,12 +94,11 @@ impl App {
         let plans = self.plans_de(etendue, None);
         let ext = opt.sortie.extension();
         let base = self.base_name();
-        let dialogue = rfd::FileDialog::new().set_title("Exporter le color script").set_file_name(format!("{base}_colorscript.{ext}"));
-        let dialogue = match opt.sortie {
-            Sortie::Png => dialogue.add_filter("Image PNG", &["png"]),
-            Sortie::Pdf => dialogue.add_filter("Document PDF", &["pdf"]),
+        let (nom_filtre, exts): (&str, &[&str]) = match opt.sortie {
+            Sortie::Png => ("Image PNG", &["png"]),
+            Sortie::Pdf => ("Document PDF", &["pdf"]),
         };
-        let Some(mut path) = dialogue.save_file() else { return };
+        let Some(mut path) = self.dialogue_enregistrer("colorscript", "Exporter le color script", (nom_filtre, exts), &format!("{base}_colorscript.{ext}")) else { return };
         if path.extension().is_none() {
             path.set_extension(ext);
         }
