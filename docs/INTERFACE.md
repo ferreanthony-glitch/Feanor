@@ -6815,3 +6815,68 @@ L'audit lisait « PL001 » sans la séquence. Vérifié : dans un même projet l
 6. Exporter > Storyboard PDF > Production : en-tête de studio (série, épisode, version, date, page n / N), plans modifiés marqués en rouge, page « Notes de révision » à la fin (marquer un envoi, modifier un plan, marquer une note « Fait » et une autre « Refusé » avant).
 7. Exporter > Planche des vignettes > PDF : légendes au-dessus des cases (nom du plan, durée), bloc de titre sur chaque page (une grande page, A4, A3).
 8. Fichier > Exporter… (n'importe quel export) avec un projet ouvert : la fenêtre « Enregistrer » s'ouvre dans le dossier du projet, et, la fois suivante, dans le dernier sous-dossier choisi pour cet export ; Fichier > Enregistrer sous s'ouvre à côté du dossier du projet.
+
+
+## 92. Journal des différences entre deux envois (2026-10-31, branche `journal-differences`)
+
+Demande d'Anthony : « qu'est-ce qui a changé entre l'envoi 3 et l'envoi 4 ? » en un document qu'on peut joindre à l'envoi. **Aucun changement du format du projet** (`project::VERSION` reste 45) : tout se lit dans `envois.json`, les instantanés de `versions/` et les notes (`commentaires.json`) qui existent déjà. Code : `journal.rs` (comparaison et formats, sans interface), `journaljob.rs` (la tâche de fond), `journalui.rs` (fenêtre et commandes), essais `journal_tests.rs`.
+
+### Mots
+
+| Mot | Sens |
+|---|---|
+| **Journal des différences** | le document qui dit ce qui a changé d'un envoi à l'autre |
+| **De / À** | les deux côtés : « De » est toujours un envoi ; « À » est un autre envoi ou « État actuel » |
+| **Modifié** | un plan dont l'empreinte n'est plus la même (la même que pour la pastille ambre) |
+| **Ajouté / Retiré** | un plan qui n'est que d'un côté |
+| **Déplacé** | un plan qui n'est plus à sa place dans le film |
+
+### Où et quels gestes
+
+| Commande | Où | Raccourci |
+|---|---|---|
+| Journal des différences… (`envoi.journal`) | Ctrl+K ; Storyboard > Envois ; barre du montage > Plus… ; fenêtre Exporter > famille « Images & PDF » ; | aucun (bloc dans `keymap.toml`) |
+| icône « Journal des différences depuis cet envoi » | chaque ligne de la fenêtre « Envois » (de cet envoi jusqu'à aujourd'hui) | |
+| case « Le journal des différences (PDF et page HTML) » | fenêtre « Paquet de livraison » (décochée d'origine ; grisée sans envoi) | |
+
+### Ce que voit l'utilisateur
+
+- **La fenêtre** : deux listes (« De » : les envois, du plus récent au plus ancien ; « À » : « État actuel » puis les envois), le résumé (« 2 plans modifiés, 1 ajouté, 1 retiré, 1 déplacé, 1 inchangé. », « 3 notes traitées entre les deux : 1 faite, 1 refusée, 1 en discussion. »), la liste des plans qui ont changé (un clic va au plan), les cases PDF / Page HTML, « Exporter le journal… » (une seule boîte « Enregistrer sous » : le PDF et la page HTML ont le même nom, deux extensions), puis une barre « Images 3 sur 8 » et « Arrêter », et le résultat avec « Montrer dans l'explorateur ».
+- **Côtés proposés d'origine** : le dernier envoi et l'état actuel s'il y a des plans modifiés depuis ; sinon l'avant-dernier envoi et le dernier. Deux envois choisis dans le désordre sont remis dans l'ordre ; le même envoi des deux côtés est refusé en clair.
+- **La page HTML** (`journal.html`, un seul fichier, images dans la page, aucune connexion) : titre, les deux côtés, résumé, puis **Plans modifiés** (une carte par plan : nom selon le modèle de noms, « 6,2 % de l'image diffère » ou « image identique : le changement est dans la durée, la caméra ou les réglages », durée avant → après et écart, version V1 → V2, étiquette « déplacé », les deux images côte à côte, les notes traitées du plan), **ajoutés** (image d'après), **retirés** (image d'avant), **déplacés** (tableau des places), **notes traitées** (statut, plan, origine, auteur, texte, raison d'un refus). Mêmes couleurs que la page de relecture ; s'imprime sans les boutons.
+- **Le PDF** (`journal.pdf`, A4 paysage, mêmes polices que les autres PDF) : une page de résumé (comptes, listes des ajoutés / retirés / déplacés), une carte par plan avec images (avant à gauche, après à droite, durée, part de l'image, notes), la liste des notes traitées, un pied de page « page 2 / 5 ».
+- **Les images** : la première image, celle du milieu et la dernière de chaque côté sont composées (même calcul que les vignettes et « Comparer », effets compris) ; SHOT garde le couple qui diffère le plus, et la part des pixels qui diffèrent est celle de ce couple (même calcul que la fenêtre « Comparer », seuil de 8 par couleur).
+- **Notes traitées** : celles du fil de décision (§88) dont le statut est Fait, Refusé ou En discussion, datées après le moment où le premier envoi a été noté et au plus tard au second (jusqu'à aujourd'hui si « État actuel »), et seulement pour les plans que le journal liste. La date est celle du dernier changement de statut (celle de la note pour un projet d'avant le fil). Une note « À faire » ne compte jamais.
+- **Paquet de livraison** : la case ajoute `<nom du film>_journal.pdf` et `.html` au dossier du film (sorte « journal » dans `manifest.json`), avec les côtés proposés d'origine. Arrêter le paquet pendant le journal efface tout.
+
+### Zéro latence et fiabilité
+
+- L'interface ne compose aucune image : elle compare des listes de nombres (cache de la fenêtre, recalculé seulement quand l'historique, le relevé des plans, la liste des envois ou les notes changent) et, au clic sur « Exporter », copie les plans à montrer pour l'état actuel (`comparer::petit_projet` : les tuiles sont partagées). Un fil lit les instantanés **une seule fois** (`envois::lire_instantane`), compose les images de trois plans à la fois et écrit.
+- « Arrêter » (ou fermer SHOT) : le fil s'arrête à la prochaine image, rien n'est écrit. Les fichiers s'écrivent sous `.part` puis se renomment ensemble ; erreur d'écriture ou arrêt : aucun `.part`, aucun fichier neuf (un fichier du même nom qui existait avant n'est pas touché par un échec). Un journal fini avant l'arrêt reste complet (les deux fichiers).
+- Un instantané introuvable (dossier `versions/` déplacé) ne bloque pas : le journal est écrit sans les images de ce côté, avec l'avertissement « Pas d'images pour l'envoi… ».
+- Quitter SHOT pendant un journal le dit comme pour les autres exports.
+
+### Limites
+
+- Les noms de plans sont ceux du modèle de noms d'aujourd'hui (un plan retiré garde « Plan 5 »).
+- Une copie de variante de séquence (§36) compte comme un plan ajouté (la fenêtre « Envois », elle, la rapproche du plan d'origine).
+- Le nombre d'images vient de l'envoi ; la cadence est celle d'aujourd'hui (un envoi ne la garde pas).
+- Les notes viennent du projet d'aujourd'hui : une note supprimée depuis n'apparaît plus.
+- Pour l'état actuel, il faut que le suivi des plans ait fini son relevé (une demi-seconde de calme après la dernière retouche) : sinon « Le relevé des plans est en cours : réessaie dans un instant. »
+- Pas d'aperçu des images dans la fenêtre : la liste et les comptes suffisent, les images sont dans les fichiers.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Sur une copie d'un vrai projet avec au moins deux envois : Ctrl+K « journal » ; la fenêtre propose les bons côtés ; changer « De » et « À » met le résumé et la liste à jour tout de suite, sans à-coup.
+2. Retoucher un plan (un trait), attendre une demi-seconde : « État actuel » le liste en « modifié » ; ajouter, supprimer, déplacer un plan : ajouté / retiré / déplacé, et un seul plan « déplacé » quand un plan saute loin.
+3. Exporter : choisir un nom ; la barre avance ; on peut dessiner pendant ce temps ; « Arrêter » ne laisse rien dans le dossier ; recommencer et laisser finir.
+4. Ouvrir la page HTML dans le navigateur (téléphone aussi) : cartes lisibles, images avant / après côte à côte, notes avec raison du refus ; l'imprimer.
+5. Ouvrir le PDF : la page de résumé, une carte par plan, les pieds de page ; les accents.
+6. Avec des notes traitées entre les deux envois : elles sont sous le bon plan et dans la liste finale ; celles d'un plan qui n'a pas changé n'y sont pas.
+7. Fenêtre « Envois » : l'icône de chaque ligne ouvre le journal de cet envoi à aujourd'hui.
+8. Paquet de livraison : la case est décochée d'origine, grisée sans envoi ; cochée, le PDF et la page sont rangés avec le reste et cités dans `manifest.json`.
+9. Dire si l'ordre des cartes (celui du film d'aujourd'hui, retirés à la fin), le choix de la première / milieu / dernière image et les mots (« Modifiés », « Déplacés ») conviennent.
+
+### Essais ajoutés (`journal_tests.rs`)
+
+Plans modifiés ou non, ajoutés, retirés, déplacés (un plan qui saute seul, deux plans échangés, modifié et déplacé), textes du résumé, notes dans l'intervalle (bornes, statut, date d'avant le fil), deux vrais envois enregistrés sur disque (liste, durées, noms), page HTML et PDF écrits (part de pixels ≈ 6 %, durées, images, notes, plan intact absent, structure du PDF), un seul format, aucun format refusé, instantané manquant, arrêt avant / pendant / en lâchant la tâche, échec d'écriture sans fichier ni perte de l'ancien, échantillon d'images, fenêtre dans l'application (côtés proposés, état actuel, export sans bloquer, statut), pas d'envoi, commande dans Ctrl+K / barre / hub / fichier de raccourcis, paquet (décoché d'origine, sans préparation = erreur claire, avec = fichiers rangés et manifeste, arrêt = rien).

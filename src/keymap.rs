@@ -702,6 +702,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("envoi.modifie_suivant", "Aller au plan modifié suivant (depuis le dernier envoi)", true, false),
     act("envoi.modifie_precedent", "Aller au plan modifié précédent (depuis le dernier envoi)", true, false),
     act("envoi.modifies_choisir", "Choisir les plans modifiés depuis le dernier envoi", true, false),
+    act("envoi.journal", "Journal des différences entre deux envois (plans modifiés avant / après, notes traitées ; PDF et page HTML)", true, false),
     act("version.nouvelle", "Nouvelle version du plan, en dupliquant la version en cours", true, false),
     act("version.vide", "Nouvelle version du plan, en partant d'un plan vide", true, false),
     act("version.purger", "Supprimer les versions non affichées (tous les plans)", true, false),

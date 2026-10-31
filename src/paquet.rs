@@ -56,6 +56,8 @@ pub struct Reglages {
     pub animatique: bool,
     pub liste_csv: bool,
     pub liste_json: bool,
+    /// Le journal des différences entre deux envois (PDF et page HTML, `journal.rs`) : décoché d'origine.
+    pub journal: bool,
     /// Les vidéos par plan en ProRes (sinon H.264, plus léger).
     pub prores: bool,
     pub modele_chemin: String,
@@ -68,13 +70,13 @@ pub struct Reglages {
 
 impl Default for Reglages {
     fn default() -> Self {
-        Reglages { videos: true, vignettes: true, pdf: true, animatique: true, liste_csv: true, liste_json: false, prores: false, modele_chemin: CHEMIN_DEFAUT.into(), remplacer: false, film_entier: true, dossier: None }
+        Reglages { videos: true, vignettes: true, pdf: true, animatique: true, liste_csv: true, liste_json: false, journal: false, prores: false, modele_chemin: CHEMIN_DEFAUT.into(), remplacer: false, film_entier: true, dossier: None }
     }
 }
 
 impl Reglages {
     pub fn vide(&self) -> bool {
-        !(self.videos || self.vignettes || self.pdf || self.animatique || self.liste_csv || self.liste_json)
+        !(self.videos || self.vignettes || self.pdf || self.animatique || self.liste_csv || self.liste_json || self.journal)
     }
 
     pub fn a_besoin_de_ffmpeg(&self) -> bool {
@@ -99,6 +101,7 @@ pub enum Sorte {
     Pdf,
     Animatique,
     Liste,
+    Journal,
 }
 
 /// Un fichier produit dans le dossier de travail, et le nom qu'il aura.
@@ -429,6 +432,8 @@ struct Preparation {
     fps: u32,
     listes: Vec<(String, String)>,
     base: String,
+    /// Le journal des différences, préparé par l'appelant (`PaquetJob::avec_journal`).
+    journal: Option<crate::journaljob::Demande>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -438,6 +443,7 @@ enum Etape {
     Pdf,
     Animatique,
     Listes,
+    Journal,
 }
 
 impl Etape {
@@ -448,6 +454,7 @@ impl Etape {
             Etape::Pdf => "PDF du storyboard",
             Etape::Animatique => "animatique",
             Etape::Listes => "liste des plans",
+            Etape::Journal => "journal des différences",
         }
     }
 }
@@ -455,6 +462,7 @@ impl Etape {
 enum Courant {
     Montage(EditorialJob),
     Export(ExportJob, Etape),
+    Journal(crate::journaljob::JournalJob),
 }
 
 enum Etat {
@@ -510,7 +518,7 @@ impl PaquetJob {
             t => t.to_string(),
         };
         let mut etapes = VecDeque::new();
-        let mut prep = Preparation { plan_videos: None, vignettes: Vec::new(), frame: doc.frame, pdf: None, pdf_layout: Default::default(), animatique: None, fps: doc.fps, listes: Vec::new(), base: base.clone() };
+        let mut prep = Preparation { plan_videos: None, vignettes: Vec::new(), frame: doc.frame, pdf: None, pdf_layout: Default::default(), animatique: None, fps: doc.fps, listes: Vec::new(), base: base.clone(), journal: None };
         if r.videos {
             let (ff, enc) = ffmpeg.as_ref().ok_or("ffmpeg manquant")?;
             let _ = ff;
@@ -550,6 +558,9 @@ impl PaquetJob {
             }
             etapes.push_back(Etape::Listes);
         }
+        if r.journal {
+            etapes.push_back(Etape::Journal);
+        }
         // Les dossiers de chaque plan et du film : décidés maintenant, d'après le projet tel qu'il est au départ.
         let global = dossier_de(doc, r.chemin(), None)?;
         let mut dossiers = HashMap::new();
@@ -579,6 +590,12 @@ impl PaquetJob {
         })
     }
 
+    /// Le journal des différences à ranger dans le paquet (`Reglages::journal`) : préparé par l'appelant, qui a le suivi des plans.
+    pub fn avec_journal(mut self, demande: crate::journaljob::Demande) -> PaquetJob {
+        self.prep.journal = Some(demande);
+        self
+    }
+
     pub fn running(&self) -> bool {
         self.outcome.is_none()
     }
@@ -590,6 +607,7 @@ impl PaquetJob {
             && match &self.courant {
                 Some((Courant::Montage(j), _)) => j.needs_project(),
                 Some((Courant::Export(j, _), _)) => j.needs_project(),
+                Some((Courant::Journal(_), _)) => false,
                 None => matches!(self.etat, Etat::Etapes) && !self.etapes.is_empty(),
             }
     }
@@ -610,6 +628,10 @@ impl PaquetJob {
                         Progress::Running(d, t) => (e.nom(), d as f32 / t.max(1) as f32),
                         _ => (e.nom(), 0.99),
                     },
+                    Some((Courant::Journal(j), e)) => {
+                        let (d, t) = j.progress();
+                        (e.nom(), d as f32 / t.max(1) as f32)
+                    }
                     None => ("préparation", 0.0),
                 };
                 let tot = self.total_etapes.max(1) as f32;
@@ -637,6 +659,8 @@ impl PaquetJob {
             match c {
                 Courant::Montage(mut j) => j.cancel(),
                 Courant::Export(mut j, _) => j.cancel(),
+                // (Le fil du journal écrit dans le dossier de travail : on l'attend avant de l'effacer.)
+                Courant::Journal(mut j) => j.cancel_and_wait(),
             }
         }
         if let Etat::Rangement { handle, annule, .. } = &mut self.etat {
@@ -701,6 +725,12 @@ impl PaquetJob {
                         if self.snapshot.is_none() {
                             self.snapshot = j.snapshot();
                         }
+                        if let Some(o) = &j.outcome {
+                            fini = Some(o.clone().map(|_| ()));
+                        }
+                    }
+                    Courant::Journal(j) => {
+                        j.poll();
                         if let Some(o) = &j.outcome {
                             fini = Some(o.clone().map(|_| ()));
                         }
@@ -788,12 +818,26 @@ impl PaquetJob {
                 }
                 Ok(None)
             }
+            Etape::Journal => {
+                let mut demande = self.prep.journal.take().ok_or("Le journal des différences n'a pas pu être préparé (il faut au moins un envoi).")?;
+                let dir = self.staging.join("journal");
+                fs::create_dir_all(&dir).map_err(|e| format!("{} : {e}", dir.display()))?;
+                demande.html = Some(dir.join(format!("{}_journal.html", self.prep.base)));
+                demande.pdf = Some(dir.join(format!("{}_journal.pdf", self.prep.base)));
+                Ok(Some(Courant::Journal(crate::journaljob::JournalJob::start(demande, None)?)))
+            }
         }
     }
 
     /// Note les fichiers que l'étape `e` vient d'écrire.
     fn recolter(&mut self, c: &Courant, e: Etape) {
         match (c, e) {
+            (Courant::Journal(_), _) => {
+                for ext in ["pdf", "html"] {
+                    let nom = format!("{}_journal.{ext}", self.prep.base);
+                    self.prevus.push(Prevu { sorte: Sorte::Journal, panel: None, source: self.staging.join("journal").join(&nom), nom });
+                }
+            }
             (Courant::Montage(j), _) => {
                 for clip in &j.plan.clips {
                     let nom = Path::new(&clip.file).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| clip.file.clone());

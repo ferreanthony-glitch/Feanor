@@ -190,6 +190,7 @@ impl App {
                     self.action_item(ui, "Plan modifié suivant", "envoi.modifie_suivant");
                     self.action_item(ui, "Plan modifié précédent", "envoi.modifie_precedent");
                     self.action_item(ui, "Choisir les plans modifiés", "envoi.modifies_choisir");
+                    self.action_item(ui, "Journal des différences…", "envoi.journal");
                 });
                 ui.menu_button("Versions du plan", |ui| {
                     self.action_item(ui, "Nouvelle version, en dupliquant la version en cours", "version.nouvelle");

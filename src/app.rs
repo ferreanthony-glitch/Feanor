@@ -781,6 +781,8 @@ pub struct App {
     /// Fenêtres du pipeline de production : liste des plans, paquet de livraison, noms et production, modèles d'épisode.
     pub(crate) liste_plans: Option<crate::listeplansui::ListeWindow>,
     pub(crate) paquet: Option<crate::paquetui::PaquetWindow>,
+    /// Fenêtre « Journal des différences » entre deux envois (`journalui.rs`).
+    pub(crate) journal: Option<crate::journalui::JournalFenetre>,
     pub(crate) noms_fenetre: Option<crate::nommageui::NomsWindow>,
     pub(crate) modele_episode: Option<crate::modeleepisodeui::ModeleWindow>,
     /// Relecture par le réalisateur : export de la page, import des notes, dessin du relecteur (`relectureui.rs`).
@@ -1328,6 +1330,7 @@ impl App {
             fiche: None,
             liste_plans: None,
             paquet: None,
+            journal: None,
             noms_fenetre: None,
             modele_episode: None,
             relecture: Default::default(),
@@ -4886,6 +4889,9 @@ impl App {
         }
         if self.paquet.as_ref().is_some_and(crate::paquetui::PaquetWindow::busy) {
             v.push("le paquet de livraison");
+        }
+        if self.journal.as_ref().is_some_and(crate::journalui::JournalFenetre::busy) {
+            v.push("le journal des différences");
         }
         if self.onglets.iter().enumerate().any(|(i, _)| if i == self.actif { self.relecture.export_en_cours() } else { self.onglets[i].etat.as_ref().is_some_and(|e| e.relecture.export_en_cours()) }) {
             v.push("la page de relecture");

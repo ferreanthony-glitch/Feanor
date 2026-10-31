@@ -386,6 +386,27 @@ struct PlanInstantane {
 /// Le plan `plan` de `envoi`, relu dans son instantané : un petit projet à un plan, dont les dessins sont
 /// ceux de `dossier/versions/dessins/`. Lecture complète (disque et rendu des traits) : sur un autre fil.
 pub fn charger_plan(dossier: &Path, envoi: &Envoi, plan: u64) -> Result<project::Loaded, String> {
+    lire_instantane(dossier, envoi)?.plan(plan)
+}
+
+/// L'instantané d'un envoi, lu une fois : de quoi relire plusieurs plans sans reparser le fichier (le journal des différences).
+pub struct InstantaneLu {
+    dossier: PathBuf,
+    nom: String,
+    tete: Tete,
+    plans: HashMap<u64, (u64, serde_json::Value)>,
+}
+
+impl InstantaneLu {
+    /// Le plan `plan`, relu comme `charger_plan` le fait.
+    pub fn plan(&self, plan: u64) -> Result<project::Loaded, String> {
+        let (scene, entree) = self.plans.get(&plan).ok_or_else(|| format!("le plan n'était pas dans l'envoi « {} »", self.nom))?;
+        project::charger_plans(&self.dossier.join(DIR), &self.tete, *scene, vec![entree.clone()], false)
+    }
+}
+
+/// Lit le fichier de l'instantané de `envoi` (avec les mêmes protections que `charger_plan`).
+pub fn lire_instantane(dossier: &Path, envoi: &Envoi) -> Result<InstantaneLu, String> {
     if envoi.fichier.is_empty() {
         return Err(format!("l'envoi « {} » n'a pas d'instantané : rien à comparer.", envoi.nom));
     }
@@ -405,8 +426,8 @@ pub fn charger_plan(dossier: &Path, envoi: &Envoi, plan: u64) -> Result<project:
     if f.version > VERSION {
         return Err(format!("l'instantané de l'envoi « {} » vient d'une version plus récente de SHOT", envoi.nom));
     }
-    let p = f.plans.into_iter().find(|p| p.plan == plan).ok_or_else(|| format!("le plan n'était pas dans l'envoi « {} »", envoi.nom))?;
-    project::charger_plans(&dossier.join(DIR), &f.tete, p.scene, vec![p.entree], false)
+    let plans = f.plans.into_iter().map(|p| (p.plan, (p.scene, p.entree))).collect();
+    Ok(InstantaneLu { dossier: dossier.to_path_buf(), nom: envoi.nom.clone(), tete: f.tete, plans })
 }
 
 // ---------------------------------------------------------------------------------- le calcul
