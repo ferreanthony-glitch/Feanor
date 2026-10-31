@@ -31,7 +31,9 @@ const MAX_MORCEAU: usize = 1 << 15;
 
 /// Les octets de `pixels`, ou `None` si le résultat dépasserait `MAX_OCTETS` (une tuile qui ne se range pas).
 pub fn pack(pixels: &[Color32; TILE_PIXELS]) -> Option<Box<[u8]>> {
-    let px: &[u32] = bytemuck::cast_slice(&pixels[..]);
+    // (Aucun transtypage de tranche : l'alignement d'un `[Color32]` est celui d'un octet, pas celui d'un `u32`. Chaque pixel est lu par ses
+    // quatre octets.)
+    let px = &pixels[..];
     let mut out: Vec<u8> = Vec::with_capacity(2048);
     let mut i = 0;
     let mut lit_debut = 0usize; // début du morceau littéral en cours
@@ -40,7 +42,9 @@ pub fn pack(pixels: &[Color32; TILE_PIXELS]) -> Option<Box<[u8]>> {
         while a < to {
             let n = (to - a).min(MAX_MORCEAU);
             out.extend_from_slice(&((n - 1) as u16).to_le_bytes());
-            out.extend_from_slice(bytemuck::cast_slice(&px[a..a + n]));
+            for c in &px[a..a + n] {
+                out.extend_from_slice(&c.to_array());
+            }
             a += n;
         }
     };
@@ -56,7 +60,7 @@ pub fn pack(pixels: &[Color32; TILE_PIXELS]) -> Option<Box<[u8]>> {
             while a < j {
                 let n = (j - a).min(MAX_MORCEAU);
                 out.extend_from_slice(&(0x8000u16 | (n - 1) as u16).to_le_bytes());
-                out.extend_from_slice(&v.to_le_bytes());
+                out.extend_from_slice(&v.to_array());
                 a += n;
             }
             lit_debut = j;
@@ -81,7 +85,7 @@ pub fn unpack(octets: &[u8]) -> Box<[Color32; TILE_PIXELS]> {
 /// Comme `unpack`, dans un tampon de pixels qu'on fournit (il est d'abord vidé).
 pub fn unpack_into(octets: &[u8], out: &mut [Color32; TILE_PIXELS]) {
     out.fill(Color32::TRANSPARENT);
-    let dst: &mut [u32] = bytemuck::cast_slice_mut(&mut out[..]);
+    let dst = &mut out[..];
     let (mut p, mut k) = (0usize, 0usize);
     while p + 2 <= octets.len() && k < dst.len() {
         let h = u16::from_le_bytes([octets[p], octets[p + 1]]);
@@ -89,16 +93,17 @@ pub fn unpack_into(octets: &[u8], out: &mut [Color32; TILE_PIXELS]) {
         let n = ((h & 0x7FFF) as usize + 1).min(dst.len() - k);
         if h & 0x8000 != 0 {
             let Some(b) = octets.get(p..p + 4) else { break };
-            let v = u32::from_le_bytes([b[0], b[1], b[2], b[3]]);
             p += 4;
-            dst[k..k + n].fill(v);
+            dst[k..k + n].fill(Color32::from_rgba_premultiplied(b[0], b[1], b[2], b[3]));
         } else {
             let Some(b) = octets.get(p..p + 4 * n) else { break };
             for (d, c) in dst[k..k + n].iter_mut().zip(b.chunks_exact(4)) {
-                *d = u32::from_le_bytes([c[0], c[1], c[2], c[3]]);
+                *d = Color32::from_rgba_premultiplied(c[0], c[1], c[2], c[3]);
             }
             p += 4 * n;
         }
         k += n;
     }
+    // Un tampon fait par `pack` remplit toujours la tuile : un tampon tronqué serait un défaut de programme, que les essais doivent voir.
+    debug_assert!(k == TILE_PIXELS, "tampon de tuile tronqué : {k} pixels sur {TILE_PIXELS}");
 }

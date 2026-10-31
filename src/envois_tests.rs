@@ -603,6 +603,48 @@ fn a_marking_copies_by_slices_and_starts_again_when_the_project_changes() {
 }
 
 #[test]
+fn a_marking_copies_nothing_while_a_gesture_is_going_on() {
+    use eframe::egui::{Event, Modifiers, PointerButton};
+    let (mut b, _m) = banc_projet("envois-geste", 3);
+    crate::envoisui::MARQUAGE_UN_DESSIN_PAR_IMAGE.with(|c| c.set(true));
+    let ctx = b.ctx.clone();
+    b.app.envois_marquer(&ctx, "v1", envois::lire_date("20/10/2026").unwrap());
+    assert!(b.app.envois_ui.marquage_avancement().is_some(), "copie en cours");
+    // Le bouton de la souris est tenu (un trait est en cours) : la copie attend, pas un dessin de plus.
+    let pos = eframe::egui::pos2(5.0, 5.0);
+    b.image(vec![Event::PointerMoved(pos), Event::PointerButton { pos, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    let tenu = b.app.envois_ui.marquage_avancement().expect("copie en cours").1;
+    for _ in 0..10 {
+        b.image(Vec::new(), 1.0 / 60.0);
+    }
+    assert_eq!(b.app.envois_ui.marquage_avancement().map(|a| a.1), Some(tenu), "rien n'avance pendant le geste");
+    // Le geste fini, la copie reprend et l'envoi se fait.
+    b.image(vec![Event::PointerButton { pos, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    pomper(&mut b);
+    crate::envoisui::MARQUAGE_UN_DESSIN_PAR_IMAGE.with(|c| c.set(false));
+    assert_eq!(b.app.doc.envois.list.len(), 1);
+}
+
+#[test]
+fn a_marking_gives_up_with_a_message_when_the_project_never_stops_changing() {
+    let (mut b, _m) = banc_projet("envois-sans-fin", 3);
+    crate::envoisui::MARQUAGE_UN_DESSIN_PAR_IMAGE.with(|c| c.set(true));
+    let ctx = b.ctx.clone();
+    b.app.envois_marquer(&ctx, "v1", envois::lire_date("20/10/2026").unwrap());
+    for _ in 0..30 {
+        b.app.structure_op(|d, cur| Some(d.add_scene_after(cur)));
+        b.image(Vec::new(), 1.0 / 60.0);
+        if b.app.envois_ui.marquage_avancement().is_none() {
+            break;
+        }
+    }
+    crate::envoisui::MARQUAGE_UN_DESSIN_PAR_IMAGE.with(|c| c.set(false));
+    assert!(b.app.envois_ui.marquage_avancement().is_none(), "la copie a renoncé");
+    assert!(b.app.status.contains("abandonné"), "{}", b.app.status);
+    assert!(b.app.doc.envois.list.is_empty(), "aucun envoi fait d'un film à moitié copié");
+}
+
+#[test]
 fn changed_plans_are_flagged_after_a_calm_moment_and_unflagged_when_undone() {
     let (mut b, _m) = banc_projet("envois-suivi", 3);
     marquer_dans_l_appli(&mut b, "v1 au réal");

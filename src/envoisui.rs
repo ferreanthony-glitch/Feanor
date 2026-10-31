@@ -45,7 +45,7 @@ const BUDGET: Duration = Duration::from_micros(1_500);
 /// Temps accordé par image d'écran à la copie d'un marquage d'envoi (une commande explicite : l'écran ne doit pas saccader, pas non plus
 /// attendre plus d'une ou deux secondes pour 4 000 dessins).
 const BUDGET_MARQUAGE: Duration = Duration::from_millis(3);
-/// Essais : la copie d'un marquage ne prend qu'un dessin par image d'écran, sur ce fil-ci (de quoi changer le projet pendant qu'elle dure).
+// Essais : la copie d'un marquage ne prend qu'un dessin par image d'écran, sur ce fil-ci (de quoi changer le projet pendant qu'elle dure).
 #[cfg(test)]
 thread_local! {
     pub(crate) static MARQUAGE_UN_DESSIN_PAR_IMAGE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
@@ -58,6 +58,9 @@ fn budget_marquage() -> Duration {
     }
     BUDGET_MARQUAGE
 }
+/// Combien de fois la copie d'un marquage recommence (le projet change pendant qu'elle dure) avant qu'on y renonce.
+const MARQUAGE_REPRISES_MAX: u32 = 5;
+
 /// Rayon du repère « modifié » dans la bande et sur la planche.
 pub(crate) const REPERE: f32 = 7.0;
 
@@ -190,6 +193,12 @@ impl EnvoisUi {
     #[cfg(test)]
     pub(crate) fn occupe(&self) -> bool {
         self.travail.is_some() || self.marquage.is_some() || self.marquage_prep.is_some() || self.prep.is_some()
+    }
+
+    /// Essais : (dessins déjà copiés, dessins à copier) de la copie d'un marquage en cours.
+    #[cfg(test)]
+    pub(crate) fn marquage_avancement(&self) -> Option<(usize, usize)> {
+        self.marquage_prep.as_ref().map(|p| (p.cels.len(), p.restants.len()))
     }
 
     /// Un relevé des plans a été analysé (essais).
@@ -450,10 +459,31 @@ impl App {
     /// elle recommence (l'instantané montre le film d'un seul instant).
     fn envois_marquer_copier(&mut self, ctx: &egui::Context, budget: Duration) {
         let start = Instant::now();
+        if self.envois_ui.marquage_prep.is_none() {
+            return;
+        }
+        // Rien ne se copie (ni ne se valide) pendant un geste : un trait en cours ne bouge ni la version du dessin ni l'historique avant son
+        // dernier point, la copie en garderait la moitié. Même attente pour un rendu exact en route (il change la version du dessin à son
+        // arrivée, et la copie recommencerait à chaque dessin).
+        if ctx.input(|i| i.pointer.any_down())
+            || self.cel_here().is_some_and(|c| self.cel_busy(c))
+            || self.rejeu.has_pending()
+            || !self.rejeu_deferred.is_empty()
+            || !self.rejeu_again.is_empty()
+        {
+            ctx.request_repaint_after(Duration::from_millis(50));
+            return;
+        }
         let releve = self.envois_releve();
         let Some(prep) = &mut self.envois_ui.marquage_prep else { return };
         if prep.releve != releve {
             let (nom, date, reprises) = (prep.nom.clone(), prep.date, prep.reprises + 1);
+            if reprises > MARQUAGE_REPRISES_MAX {
+                // Le projet n'arrête pas de changer : pas d'envoi fait d'un film à moitié copié.
+                self.envois_ui.marquage_prep = None;
+                self.status = format!("Envoi « {nom} » abandonné : le projet changeait pendant le relevé. Recommence quand plus rien ne bouge.");
+                return;
+            }
             self.envois_marquer_commencer(&nom, date, reprises);
             ctx.request_repaint();
             return;
