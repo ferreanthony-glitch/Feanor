@@ -110,6 +110,7 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 - Vraie mesure sur l'épisode de 200 plans, après 120 changements de plan : 3,6 Go avec Direct3D 12, 3,9 Go avec Vulkan. Direct3D 12
   est un peu moins fluide. Vulkan reste par défaut ; Direct3D 12 sert de repli avant OpenGL.
 - Fusionné 0bc89a7 : 3719 essais passent, shot.exe reconstruit, projet d'essai rouvert (même écran, Vulkan).
+- Avec l'accord d'Anthony : dossier Chantiers\dx12 et branche affichage-dx12 supprimés.
 
 ## 2026-10-29
 
