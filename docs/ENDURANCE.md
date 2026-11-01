@@ -225,6 +225,12 @@ synchro verticale) n'a pas été éprouvé avec Direct3D 12 ; c'est la décision
 pour l'essayer, sans recompiler). Avec lui, 300 plans passent sous 4 Go partout ; sans lui, on y est à l'ouverture (2,3 Go) mais pas
 après une longue navigation (5,3 Go dont 3,1 de pilote).
 
+**Correction (2026-11-01).** Ces chiffres « Direct3D 12 » ne sont pas fiables. La fonction `dx12` de wgpu n'est pas compilée
+(Cargo.toml : eframe sans fonctions par défaut, et les crates `gpu-allocator` et `range-alloc` absents du registre hors ligne). Avec
+`WGPU_BACKEND=dx12`, le vrai `shot.exe` écrit « Failed to create surface for any enabled backend: {} » et se rabat sur OpenGL (glow).
+Les 1 630 Mo mesurés « en Direct3D 12 » sont donc ceux d'OpenGL. Le banc hors fenêtre reste à revérifier. Pour essayer vraiment
+Direct3D 12, il faut activer la fonction `dx12` de wgpu, ce qui demande de télécharger ces crates, avec l'accord d'Anthony.
+
 ### 6.6 Ce qui reste
 
 - Pilote Vulkan (ci-dessus). Marquer un envoi laisse une image de 70 à 160 ms à la fin (l'enregistrement qui suit copie 3 000 dessins modifiés

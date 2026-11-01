@@ -6989,4 +6989,4 @@ Enregistrer, Enregistrer sous, la copie de secours, les exports (vidéo, PDF, vi
 7. **Exporte** une vidéo et un storyboard PDF d'un projet que tu viens d'ouvrir sans le toucher : images et pages identiques à celles d'avant.
 8. Ouvre **deux projets** dans deux onglets, travaille dans l'un, reviens sur l'autre : dessins intacts, et la mémoire ne double pas.
 9. Aide > Régler SHOT pour cette machine… (fenêtre du diagnostic, sans lancer la mesure) : la ligne « Dessins en mémoire » est là et plausible.
-10. Optionnel : lance SHOT avec `WGPU_BACKEND=dx12` et compare l'affichage et la mémoire.
+10. ~~Optionnel : lance SHOT avec `WGPU_BACKEND=dx12`~~. Retiré le 2026-11-01 : Direct3D 12 n'est pas compilé dans SHOT, et ce réglage le fait passer à l'affichage de secours OpenGL (voir ENDURANCE.md §6.5, correction).

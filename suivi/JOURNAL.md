@@ -98,6 +98,14 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 - Dossiers de travail vignettes, bibliotheque, calques, references, exports supprimés et leurs 6 branches fusionnées
   effacées (accord d'Anthony).
 
+## 2026-11-01
+
+- Storyboard Pro fermé sans enregistrer (accord d'Anthony) : il occupait 14 Go, et Windows refusait d'ouvrir de nouvelles
+  fenêtres SHOT.
+- Affichage Direct3D 12 : il n'est pas compilé dans SHOT. `WGPU_BACKEND=dx12` fait passer à OpenGL, donc les chiffres
+  « Direct3D 12 » du chantier mémoire n'étaient pas ceux de Direct3D 12. Docs corrigées. Les raccourcis de comparaison ont été
+  retirés. Activer Direct3D 12 demanderait de télécharger deux crates.
+
 ## 2026-10-29
 
 - Fusionné dans main : import Storyboard Pro (dessins, caméras, son, puis rendu et vitesse), clés d'opacité et calque
