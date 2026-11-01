@@ -22,6 +22,9 @@ path = "src/main.rs"
 # secours. Fonctions par défaut d'eframe, sauf l'accessibilité (accesskit) : elle plante quand un
 # panneau devient flottant (5b, `Option::unwrap` dans accesskit_consumer 0.26).
 eframe = { version = "0.31", default-features = false, features = ["default_fonts", "glow", "wgpu", "x11", "wayland"] }
+# Direct3D 12 sous Windows, en plus de Vulkan (même wgpu qu'eframe) : eframe sans fonctions par
+# défaut ne l'active pas. Le pilote Vulkan garde ~2,6 Go de mémoire vive de plus (ENDURANCE.md §6.5).
+wgpu = { version = "24", default-features = false, features = ["dx12"] }
 # Fonctions par défaut de winit, qu'eframe active d'ordinaire avec les siennes (même version).
 winit = "0.30"
 rfd = "0.15"

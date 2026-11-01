@@ -231,6 +231,21 @@ après une longue navigation (5,3 Go dont 3,1 de pilote).
 Les 1 630 Mo mesurés « en Direct3D 12 » sont donc ceux d'OpenGL. Le banc hors fenêtre reste à revérifier. Pour essayer vraiment
 Direct3D 12, il faut activer la fonction `dx12` de wgpu, ce qui demande de télécharger ces crates, avec l'accord d'Anthony.
 
+**Vraie mesure (2026-11-01, branche `affichage-dx12`, fonction `dx12` activée).** Les crates ont été téléchargés avec l'accord
+d'Anthony. Banc `endurance_memoire`, 200 plans, même machine :
+
+| | Vulkan | Direct3D 12 |
+|---|---|---|
+| Après le calme de l'ouverture (privée) | 1 771 Mo | 1 879 Mo |
+| Après 120 changements de plan (privée) | 3 917 Mo | 3 610 Mo |
+| Pic | 4 828 Mo | 4 598 Mo |
+| Lecture pendant l'ouverture, moyenne / pire | 6,4 / 28 ms | 7,5 / 61 ms |
+| Changement de plan, moyenne / p95 | 40,4 / 64,6 ms | 41,5 / 82,1 ms |
+
+Direct3D 12 ne fait gagner qu'environ 0,3 Go après navigation, et il est un peu moins fluide. Vulkan reste l'affichage par défaut ;
+le vrai `shot.exe` le choisit toujours sur cette machine sans `WGPU_BACKEND`. Direct3D 12 sert de repli quand Vulkan manque, avant
+OpenGL.
+
 ### 6.6 Ce qui reste
 
 - Pilote Vulkan (ci-dessus). Marquer un envoi laisse une image de 70 à 160 ms à la fin (l'enregistrement qui suit copie 3 000 dessins modifiés
