@@ -377,7 +377,7 @@ fn the_crash_recovery_is_still_offered_and_opens_in_the_empty_state_without_a_se
     let mut b = lance();
     b.app.orphans = orphelins;
     b.chauffer(4);
-    assert!(est_la(&b, "SHOT s'est fermé sans enregistrer"), "la proposition de récupération est à l'écran : {:?}", tous_les_textes(&b));
+    assert!(est_la(&b, "FEANOR s'est fermé sans enregistrer"), "la proposition de récupération est à l'écran : {:?}", tous_les_textes(&b));
     assert!(b.app.welcome_shown() && b.app.accueil_compact(), "la proposition est dans la petite fenêtre d'accueil, pas dans une fenêtre à part");
     // Elle ne change rien au projet caché tant qu'on n'a pas répondu.
     rien_n_a_change(&b, "pendant la proposition");

@@ -590,7 +590,7 @@ fn the_report_gathers_the_machine_the_measures_and_the_switches() {
     let c = d::choisir_profil(&m, &x);
     let cible = d::reglages_du_profil(Profil::Equilibre, &m);
     let r = d::rapport(&m, &x, &c, &PerfReglages::default(), &cible, 1_760_000_000);
-    assert!(r.starts_with("SHOT — Rapport du diagnostic des performances"));
+    assert!(r.starts_with("FEANOR — Rapport du diagnostic des performances"));
     for attendu in ["MATÉRIEL", "MESURES", "PROFIL PROPOSÉ : Qualité", "RÉGLAGES (actuel -> proposé)", "Carte d'essai", "Lecture d'un plan chargé", "2025-10-09"] {
         assert!(r.contains(attendu), "« {attendu} » manque :\n{r}");
     }

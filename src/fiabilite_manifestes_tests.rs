@@ -25,7 +25,7 @@ fn damaged_manifests_give_a_clear_message_and_never_touch_the_folder() {
         ("coupé au premier octet", original[..1].to_vec(), "manifeste illisible"),
         ("octets quelconques", (0..400u32).map(|i| (i * 37 % 251) as u8).collect(), "manifeste illisible"),
         ("objet vide", b"{}".to_vec(), "manifeste illisible"),
-        ("pas un projet SHOT", valeur(&|m| m["format"] = Value::from("autre-chose")), "n'est pas un projet SHOT"),
+        ("pas un projet SHOT", valeur(&|m| m["format"] = Value::from("autre-chose")), "n'est pas un projet FEANOR"),
         ("version plus récente", valeur(&|m| m["version"] = Value::from(project::VERSION + 5)), "plus récente"),
         ("feuille de taille nulle", valeur(&|m| m["largeur"] = Value::from(0)), "taille d'image invalide"),
         ("feuille démesurée", valeur(&|m| m["hauteur"] = Value::from(4_000_000_000u64)), "démesurée"),

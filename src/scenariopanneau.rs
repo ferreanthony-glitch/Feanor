@@ -283,9 +283,9 @@ fn champ_id() -> egui::Id {
 /// Surligne une occurrence (lettre par lettre : elle peut passer à la ligne). La courante est plus marquée.
 fn surligner(painter: &Painter, p: &Posee, pos: Pos2, o: &Occurrence, courante: bool) {
     let (fond, trait_) = if courante {
-        (Color32::from_rgba_unmultiplied(255, 190, 40, 130), Some(egui::Stroke::new(1.0_f32, Color32::from_rgb(255, 190, 40))))
+        (Color32::from_rgba_unmultiplied(theme::JADE[0], theme::JADE[1], theme::JADE[2], 130), Some(egui::Stroke::new(1.0_f32, Color32::from_rgb(theme::JADE[0], theme::JADE[1], theme::JADE[2]))))
     } else {
-        (Color32::from_rgba_unmultiplied(255, 200, 60, 55), None)
+        (Color32::from_rgba_unmultiplied(theme::JADE[0], theme::JADE[1], theme::JADE[2], 55), None)
     };
     for k in o.debut..o.debut + o.len {
         let r = p.galley.pos_from_cursor(&p.galley.from_ccursor(egui::text::CCursor { index: k, prefer_next_row: true }));
@@ -388,7 +388,7 @@ impl App {
         ui.label(RichText::new("Importe un scénario (Fountain, .fdx, .docx ou texte) : il se lit ici, mis en page comme un scénario.").small().weak());
         ui.add_space(6.0);
         let resp = ui.button(format!("{}  Importer un scénario…", ph::FILE_ARROW_DOWN));
-        if self.aide(resp, "Importer un scénario", "Choisir un fichier Fountain, .fdx, .docx ou texte : SHOT le garde dans le projet et l'affiche ici. Aucun plan n'est créé.", "fichier.importer_scenario").clicked() {
+        if self.aide(resp, "Importer un scénario", "Choisir un fichier Fountain, .fdx, .docx ou texte : FEANOR le garde dans le projet et l'affiche ici. Aucun plan n'est créé.", "fichier.importer_scenario").clicked() {
             self.run_action("fichier.importer_scenario");
         }
     }
@@ -431,7 +431,7 @@ impl App {
             .aide(
                 resp,
                 "Créer les plans depuis le scénario",
-                "SHOT lit le scénario et propose des séquences et des plans : tu choisis le découpage et le rythme, puis une seule étape d'annulation les crée à la suite des plans qui existent. Les plans créés sont reliés au texte.",
+                "FEANOR lit le scénario et propose des séquences et des plans : tu choisis le découpage et le rythme, puis une seule étape d'annulation les crée à la suite des plans qui existent. Les plans créés sont reliés au texte.",
                 "scenario.creer_plans",
             )
             .clicked()

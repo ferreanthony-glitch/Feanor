@@ -119,13 +119,13 @@ fn there_are_five_steps_in_the_order_of_the_work_and_every_button_is_a_command()
 fn at_the_first_launch_there_is_one_proposal_and_no_pile_of_bubbles() {
     let mut b = banc();
     // Un seul message, discret, avec ses trois réponses ; ni « Régler SHOT… ? », ni conseil.
-    assert!(est_la(&b, "Première fois sur SHOT ?"));
-    let n = tous_les_textes(&b).iter().filter(|(t, _)| t.contains("Première fois sur SHOT ?")).count();
+    assert!(est_la(&b, "Première fois sur FEANOR ?"));
+    let n = tous_les_textes(&b).iter().filter(|(t, _)| t.contains("Première fois sur FEANOR ?")).count();
     assert_eq!(n, 1, "une seule proposition");
     for r in ["Visite rapide (2 min)", "Plus tard", "Ne plus proposer"] {
         assert!(est_la(&b, r), "{r}");
     }
-    assert!(!est_la(&b, "Régler SHOT pour cette machine ?"));
+    assert!(!est_la(&b, "Régler FEANOR pour cette machine ?"));
     assert_eq!(bulles(&b), 0);
     // On change d'endroit : les conseils attendent que la proposition ait sa réponse.
     for espace in [Espace::Montage, Espace::Vignettes, Espace::Animation] {
@@ -146,7 +146,7 @@ fn ne_plus_proposer_is_remembered_and_the_tips_then_come_one_per_session() {
     clic(&mut b, p);
     assert_eq!(b.app.settings.premier_jour.etat, Etat::NePlusProposer);
     assert!(!b.app.confort.visite_offre);
-    assert!(!est_la(&b, "Première fois sur SHOT ?"));
+    assert!(!est_la(&b, "Première fois sur FEANOR ?"));
     assert!(disque().contains("ne_plus_proposer"), "{}", disque());
     // Sur une machine neuve, une séance suivante ne repropose rien.
     assert!(!b.app.settings.premier_jour.a_proposer(true));
@@ -174,7 +174,7 @@ fn plus_tard_counts_and_the_tour_can_always_be_started_from_aide() {
     clic(&mut b, p);
     assert_eq!((b.app.settings.premier_jour.etat, b.app.settings.premier_jour.propositions), (Etat::PlusTard, 1));
     assert!(b.app.settings.premier_jour.a_proposer(false), "elle revient au prochain lancement");
-    assert!(!est_la(&b, "Première fois sur SHOT ?"));
+    assert!(!est_la(&b, "Première fois sur FEANOR ?"));
     // Aide > Visite rapide : le parcours part, la carte de l'étape se montre (un projet est là : l'étape 1 est faite).
     assert!(crate::keymap::action_info("aide.visite").is_some_and(|a| a.implemented));
     b.app.run_action("aide.visite");
@@ -193,7 +193,7 @@ fn plus_tard_counts_and_the_tour_can_always_be_started_from_aide() {
         clic(&mut b, suivant);
         assert!(est_la(&b, attendu), "{attendu}");
     }
-    assert!(est_la(&b, "Régler SHOT pour cette machine…"));
+    assert!(est_la(&b, "Régler FEANOR pour cette machine…"));
     assert!(disque().contains("en_cours"));
     let fin = place(&b, "Terminer");
     clic(&mut b, fin);
@@ -235,7 +235,7 @@ fn nothing_is_proposed_in_the_tests_or_when_the_app_is_not_the_users() {
     let mut b = banc_taille(Document::with_frame(64, 48, 24), false, 1200, 800);
     assert!(!b.app.confort.visite_offre && !b.app.confort.conseils_actifs);
     b.chauffer(6);
-    assert!(!est_la(&b, "Première fois sur SHOT ?"));
+    assert!(!est_la(&b, "Première fois sur FEANOR ?"));
     assert!(b.app.settings.premier_jour.est_vide());
 }
 

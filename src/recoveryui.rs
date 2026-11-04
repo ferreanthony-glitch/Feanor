@@ -99,8 +99,8 @@ impl App {
                 self.tick_secours_cache(i, Some(Duration::ZERO));
             }
         }
-        self.status = "La carte graphique ne répond plus (pilote réinitialisé ?) : SHOT risque de se fermer. Une copie de secours \
-                       part maintenant ; enregistre, puis relance SHOT."
+        self.status = "La carte graphique ne répond plus (pilote réinitialisé ?) : FEANOR risque de se fermer. Une copie de secours \
+                       part maintenant ; enregistre, puis relance FEANOR."
             .into();
     }
 
@@ -115,8 +115,8 @@ impl App {
         })
         .response
         .on_hover_text(
-            "SHOT copie le projet à part (dans %LOCALAPPDATA%\\SHOT\\secours), sans toucher au projet \
-             lui-même : seul « Enregistrer » l'écrit. Après un plantage, SHOT propose d'ouvrir la copie. \
+            "FEANOR copie le projet à part (dans %LOCALAPPDATA%\\SHOT\\secours), sans toucher au projet \
+             lui-même : seul « Enregistrer » l'écrit. Après un plantage, FEANOR propose d'ouvrir la copie. \
              0 = jamais.",
         );
     }
@@ -141,7 +141,7 @@ impl App {
         let mut choix = RecoveryChoix::default();
         egui::Modal::new(egui::Id::new("recuperation")).show(ctx, |ui| {
             ui.set_width(480.0);
-            ui.heading("SHOT s'est fermé sans enregistrer");
+            ui.heading("FEANOR s'est fermé sans enregistrer");
             choix = self.recovery_contenu(ui);
         });
         self.recovery_appliquer(choix);
@@ -178,7 +178,7 @@ impl App {
             if self.orphans.len() > 1 && ui.button("Tout ouvrir").on_hover_text("Chaque copie dans son onglet.").clicked() {
                 c.open_all = true;
             }
-            c.later = ui.button("Plus tard").on_hover_text("Les copies restent ; SHOT les proposera au prochain démarrage.").clicked();
+            c.later = ui.button("Plus tard").on_hover_text("Les copies restent ; FEANOR les proposera au prochain démarrage.").clicked();
         });
         c
     }

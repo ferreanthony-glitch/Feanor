@@ -473,7 +473,7 @@ impl App {
                 self.import_dropped_video(p);
             }
             Some(Genre::Son) => self.insert_bruitage(p.to_path_buf(), None, None),
-            None => self.status = format!("« {} » : format non géré par SHOT.", p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()),
+            None => self.status = format!("« {} » : format non géré par FEANOR.", p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()),
         }
     }
 
@@ -757,7 +757,7 @@ impl App {
             }
             let mut tout = r.tout_montrer;
             let icone_tout = if tout { ph::EYE } else { ph::EYE_SLASH };
-            if crate::bulles::interrupteur(ui, &mut tout, icone_tout, "Tout montrer", "Montre aussi les fichiers que SHOT ne sait pas lire (grisés).", "").changed() {
+            if crate::bulles::interrupteur(ui, &mut tout, icone_tout, "Tout montrer", "Montre aussi les fichiers que FEANOR ne sait pas lire (grisés).", "").changed() {
                 self.settings.bibliotheque.tout_montrer = tout;
                 self.settings_a_ecrire = true;
             }
@@ -978,7 +978,7 @@ fn survol_texte(e: &Entree, meta: Option<Meta>) -> String {
             }
         }
         if e.genre.is_none() {
-            t.push_str("\nSHOT ne sait pas lire ce fichier.");
+            t.push_str("\nFEANOR ne sait pas lire ce fichier.");
         }
     }
     t
@@ -1075,7 +1075,7 @@ fn cellule(ui: &mut egui::Ui, e: &Entree, cote: f32, texture: Option<&TextureHan
             peintre.text(pastille.center(), Align2::CENTER_CENTER, t, galerie, Color32::WHITE);
         }
         if meta.is_some_and(|m| m.illisible) {
-            peintre.text(zone.left_top() + vec2(6.0, 4.0), Align2::LEFT_TOP, ph::WARNING, FontId::proportional(13.0), Color32::from_rgb(230, 170, 60));
+            peintre.text(zone.left_top() + vec2(6.0, 4.0), Align2::LEFT_TOP, ph::WARNING, FontId::proportional(13.0), theme::braise());
         }
     }
     if ouvert {
