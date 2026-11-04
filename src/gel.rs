@@ -55,6 +55,8 @@ const HISTORIQUE_TOUTES_LES: Duration = Duration::from_millis(400);
 
 /// Numéro qui ne désigne aucun dessin : la réponse du fil de fond à un passage sur les caches de traits qui a rangé quelque chose.
 const REPONSE_CACHES: CelId = u64::MAX;
+/// Un dessin dérivé des effets que personne n'a demandé depuis ce nombre d'usages du cache est rangé (`fxcache::ranger_les_inactifs`).
+const FX_AU_REPOS: u64 = 600;
 /// Caches de traits rangés d'un coup, au plus.
 const CACHES_PAR_PASSE: usize = 512;
 /// Le fil de fond passe sur les caches de traits au plus toutes ces secondes.
@@ -135,6 +137,14 @@ impl Gel {
                         let mut rangees = 0;
                         for _ in 0..200 {
                             let (traites, tuiles) = crate::vector::ranger_les_caches_au_repos(CACHES_AU_REPOS, CACHES_PAR_PASSE);
+                            rangees += tuiles;
+                            if traites == 0 {
+                                break;
+                            }
+                        }
+                        // Les dessins dérivés des effets que personne n'a demandés depuis un moment (790 Mo après une longue séance).
+                        for _ in 0..50 {
+                            let (traites, tuiles) = crate::fxcache::ranger_les_inactifs(FX_AU_REPOS, 4);
                             rangees += tuiles;
                             if traites == 0 {
                                 break;
@@ -279,7 +289,7 @@ impl Gel {
         // Les caches de traits (531 Mo pour un épisode de 200 plans) : un passage du fil de fond de temps en temps.
         if !self.caches_en_route && self.caches_le.is_none_or(|t| t.elapsed() >= CACHES_TOUTES_LES) {
             self.caches_le = Some(Instant::now());
-            if crate::vector::cache_total_bytes() > 0 {
+            if crate::vector::cache_total_bytes() > 0 || crate::fxcache::non_vide() {
                 let envoi = self.fil().send(Lot { dessins: Vec::new(), caches: true });
                 if envoi.is_ok() {
                     self.caches_en_route = true;

@@ -499,3 +499,36 @@ fn level_zero_noise_is_the_old_noise() {
     });
     assert_eq!(differing(&crate::fxfilters::noise_scaled(&r, 33.0, 0), &old), 0);
 }
+
+#[test]
+fn an_idle_derived_drawing_is_ranged_and_reads_back_exact_and_a_busy_one_is_left_alone() {
+    monde::ecrire();
+    clear();
+    let mut c = Cel::new(64 * 8, 64, LayerKind::Bitmap);
+    for i in 0..5 {
+        let t = c.raster.tile_mut(i);
+        for k in 0..TILE_PIXELS {
+            t[k] = if k % 7 == 0 { Color32::from_rgb(10 + i as u8, 20, 30) } else { Color32::TRANSPARENT };
+        }
+    }
+    let attendu = c.raster.to_flat();
+    // Un dessin dérivé avec son « dernier résultat », un autre que quelqu'un lit encore.
+    get_or_compute(9101, 3, Some(9100), move || c);
+    let lu = get_or_compute(9102, 1, None, || (*cel_of_tiles(2)).clone());
+    // Pas encore au repos : rien ne bouge.
+    assert_eq!(ranger_les_inactifs(600, 8).0, 0);
+    for _ in 0..700 {
+        tick();
+    }
+    let (traites, tuiles) = ranger_les_inactifs(600, 8);
+    assert_eq!(traites, 1, "le dessin lu par ailleurs est laissé tel quel");
+    assert_eq!(tuiles, 5);
+    let revenu = get(9101, 3).expect("toujours dans le cache");
+    assert!(!revenu.a_des_tuiles_ouvertes(), "les pixels sont partis");
+    assert!(fallback(9100).is_some(), "son dernier résultat est remis aussi");
+    assert_eq!(lock().bytes, 7 * TILE_BYTES, "le compte des octets du cache ne change pas");
+    assert_eq!(revenu.raster.to_flat(), attendu, "relu exactement");
+    drop(lu);
+    assert_eq!(ranger_les_inactifs(600, 8).0, 1, "une fois lâché, l'autre se range à son tour");
+    clear();
+}

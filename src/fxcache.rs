@@ -209,6 +209,80 @@ fn tick() -> u64 {
     TICK.fetch_add(1, Ordering::Relaxed)
 }
 
+/// Le cache garde-t-il des dessins dérivés ?
+pub(crate) fn non_vide() -> bool {
+    !lock().cache.is_empty()
+}
+
+/// Range les pixels des dessins dérivés que personne n'a demandés depuis au moins `repos` usages (chantier « mémoire d'une séance » : 41
+/// dessins dérivés de la taille de la feuille tenaient 790 Mo de pixels après une longue séance, presque tous inutiles à l'écran). Les
+/// tuiles se rouvrent toutes seules à la lecture (`Tile`) : un dessin dérivé rangé se lit comme un autre. Pour avoir un `&mut` sur un
+/// dessin que le cache est seul à tenir, on le sort du cache le temps du rangement (hors verrou : l'interface ne l'attend jamais) ; un
+/// dessin que quelqu'un lit encore (un rendu, un export) n'est pas touché. À lancer d'un fil de fond ; traite au plus `max` dessins.
+/// Rend (dessins traités, tuiles rangées).
+pub(crate) fn ranger_les_inactifs(repos: u64, max: usize) -> (usize, usize) {
+    // 1. Les candidats, sortis du cache avec les références qui les doublent (`last`), sous le verrou, sans rien calculer.
+    let mut sortis: Vec<(CelId, u64, usize, u64, Arc<Cel>, Vec<CelId>)> = Vec::new();
+    {
+        let mut st = lock();
+        let maintenant = TICK.load(Ordering::Relaxed);
+        let ids: Vec<CelId> = st
+            .cache
+            .iter()
+            .filter(|(_, e)| maintenant.saturating_sub(e.used) >= repos && (e.cel.a_des_tuiles_a_ranger() || e.cel.a_des_tuiles_lachables()))
+            .map(|(id, _)| *id)
+            .take(max)
+            .collect();
+        for id in ids {
+            let Some(e) = st.cache.remove(&id) else { continue };
+            // (Les « derniers résultats » qui tiennent le même dessin : sortis aussi, remis avec lui.)
+            let origines: Vec<CelId> = st.last.iter().filter(|(_, l)| Arc::ptr_eq(&l.cel, &e.cel)).map(|(o, _)| *o).collect();
+            let mut lasts = Vec::new();
+            for o in origines {
+                if let Some(l) = st.last.remove(&o) {
+                    lasts.push((o, l));
+                }
+            }
+            // Un lecteur tient encore le dessin (en dehors du cache) : on le laisse tel quel.
+            if Arc::strong_count(&e.cel) != 1 + lasts.len() {
+                st.cache.insert(id, e);
+                for (o, l) in lasts {
+                    st.last.insert(o, l);
+                }
+                continue;
+            }
+            let ids_last: Vec<CelId> = lasts.iter().map(|(o, _)| *o).collect();
+            drop(lasts);
+            sortis.push((id, e.version, e.bytes, e.used, e.cel, ids_last));
+        }
+    }
+    // 2. Le rangement, hors verrou : le cache n'a plus d'autre référence que la nôtre.
+    let mut tuiles = 0;
+    let traites = sortis.len();
+    let mut a_remettre = Vec::with_capacity(traites);
+    for (id, version, bytes, used, mut cel, origines) in sortis {
+        if let Some(c) = Arc::get_mut(&mut cel) {
+            tuiles += c.geler();
+        }
+        a_remettre.push((id, version, bytes, used, cel, origines));
+    }
+    // 3. On remet tout, sauf ce qu'un calcul plus récent a remplacé entre-temps.
+    let mut st = lock();
+    for (id, version, bytes, used, cel, origines) in a_remettre {
+        if st.cache.contains_key(&id) {
+            st.bytes = st.bytes.saturating_sub(bytes);
+            continue;
+        }
+        for o in origines {
+            if !st.last.contains_key(&o) {
+                st.last.insert(o, Last { id, cel: cel.clone(), used, bytes });
+            }
+        }
+        st.cache.insert(id, Entry { version, cel, used, bytes });
+    }
+    (traites, tuiles)
+}
+
 /// Mesures : (dessins dérivés distincts gardés, octets réellement tenus en mémoire par leurs tuiles, copies d'origine gardées pour le fil de
 /// fond, octets de ces copies).
 #[cfg(test)]
