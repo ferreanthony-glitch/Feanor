@@ -209,6 +209,9 @@ fn tick() -> u64 {
     TICK.fetch_add(1, Ordering::Relaxed)
 }
 
+/// Le dernier usage de chaque dessin dérivé tel que le passage de rangement précédent l'a vu (`ranger_les_inactifs`).
+static VUS_AU_PASSAGE: Mutex<BTreeMap<CelId, u64>> = Mutex::new(BTreeMap::new());
+
 /// Le cache garde-t-il des dessins dérivés ?
 pub(crate) fn non_vide() -> bool {
     !lock().cache.is_empty()
@@ -225,14 +228,19 @@ pub(crate) fn ranger_les_inactifs(repos: u64, max: usize) -> (usize, usize) {
     let mut sortis: Vec<(CelId, u64, usize, u64, Arc<Cel>, Vec<CelId>)> = Vec::new();
     {
         let mut st = lock();
+        // Au repos : le dessin n'a pas été touché entre ce passage et le précédent (l'horloge d'usage ne bouge pas à chaque image : elle
+        // ne dit pas le temps, deux passages éloignés de plusieurs secondes le disent), et son dernier usage date d'au moins `repos` usages.
         let maintenant = TICK.load(Ordering::Relaxed);
-        let ids: Vec<CelId> = st
-            .cache
-            .iter()
-            .filter(|(_, e)| maintenant.saturating_sub(e.used) >= repos && (e.cel.a_des_tuiles_a_ranger() || e.cel.a_des_tuiles_lachables()))
-            .map(|(id, _)| *id)
-            .take(max)
-            .collect();
+        let mut vus = VUS_AU_PASSAGE.lock().unwrap_or_else(|e| e.into_inner());
+        let precedent = std::mem::take(&mut *vus);
+        let mut ids: Vec<CelId> = Vec::new();
+        for (id, e) in st.cache.iter() {
+            vus.insert(*id, e.used);
+            if ids.len() < max && precedent.get(id) == Some(&e.used) && maintenant.saturating_sub(e.used) >= repos && (e.cel.a_des_tuiles_a_ranger() || e.cel.a_des_tuiles_lachables()) {
+                ids.push(*id);
+            }
+        }
+        drop(vus);
         for id in ids {
             let Some(e) = st.cache.remove(&id) else { continue };
             // (Les « derniers résultats » qui tiennent le même dessin : sortis aussi, remis avec lui.)
@@ -294,6 +302,23 @@ pub(crate) fn octets_en_memoire() -> (usize, usize, usize, usize) {
         if vus.insert(Arc::as_ptr(c)) {
             octets += c.octets_en_memoire();
         }
+    }
+    if std::env::var_os("ENDU_FX").is_some() {
+        let (mut lus, mut a_ranger, mut lachables, mut ouvertes, mut total) = (0, 0, 0, 0, 0);
+        let mut vus2: std::collections::HashSet<*const Cel> = std::collections::HashSet::new();
+        for (id, e) in st.cache.iter() {
+            if !vus2.insert(Arc::as_ptr(&e.cel)) {
+                continue;
+            }
+            let (o, t) = e.cel.tuiles_ouvertes();
+            lus += usize::from(Arc::strong_count(&e.cel) > 1 + st.last.values().filter(|l| Arc::ptr_eq(&l.cel, &e.cel)).count());
+            a_ranger += usize::from(e.cel.a_des_tuiles_a_ranger());
+            lachables += usize::from(e.cel.a_des_tuiles_lachables());
+            ouvertes += o;
+            total += t;
+            println!("ENDU fx dérivé {id} : {o}/{t} tuiles ouvertes, âge {}, lecteurs {}", TICK.load(Ordering::Relaxed).saturating_sub(e.used), Arc::strong_count(&e.cel));
+        }
+        println!("ENDU fx : lus ailleurs {lus}, à ranger {a_ranger}, lâchables {lachables}, tuiles ouvertes {ouvertes}/{total}");
     }
     let sources = st.sources.len() + st.small.len();
     let oct_sources = st.sources.values().map(|s| s.1.octets_en_memoire()).sum::<usize>() + st.small.values().map(|s| s.1.octets_en_memoire()).sum::<usize>();

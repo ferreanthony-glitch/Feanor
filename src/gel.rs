@@ -55,8 +55,8 @@ const HISTORIQUE_TOUTES_LES: Duration = Duration::from_millis(400);
 
 /// Numéro qui ne désigne aucun dessin : la réponse du fil de fond à un passage sur les caches de traits qui a rangé quelque chose.
 const REPONSE_CACHES: CelId = u64::MAX;
-/// Un dessin dérivé des effets que personne n'a demandé depuis ce nombre d'usages du cache est rangé (`fxcache::ranger_les_inactifs`).
-const FX_AU_REPOS: u64 = 600;
+/// Un dessin dérivé des effets que personne n'a demandé entre deux passages, depuis au moins ce nombre d'usages du cache, est rangé (`fxcache::ranger_les_inactifs`).
+const FX_AU_REPOS: u64 = 30;
 /// Caches de traits rangés d'un coup, au plus.
 const CACHES_PAR_PASSE: usize = 512;
 /// Le fil de fond passe sur les caches de traits au plus toutes ces secondes.
@@ -143,13 +143,8 @@ impl Gel {
                             }
                         }
                         // Les dessins dérivés des effets que personne n'a demandés depuis un moment (790 Mo après une longue séance).
-                        for _ in 0..50 {
-                            let (traites, tuiles) = crate::fxcache::ranger_les_inactifs(FX_AU_REPOS, 4);
-                            rangees += tuiles;
-                            if traites == 0 {
-                                break;
-                            }
-                        }
+                        // (Un seul appel par passage : « au repos » veut dire intouché depuis le passage d'avant.)
+                        rangees += crate::fxcache::ranger_les_inactifs(FX_AU_REPOS, 64).1;
                         // (La réponse d'un passage sur les caches : vide s'il n'a rien rangé, sinon REPONSE_CACHES, pour qu'un autre passage suive.)
                         if tx_retour.send(if rangees > 0 { vec![REPONSE_CACHES] } else { Vec::new() }).is_err() {
                             return;

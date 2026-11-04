@@ -515,11 +515,14 @@ fn an_idle_derived_drawing_is_ranged_and_reads_back_exact_and_a_busy_one_is_left
     // Un dessin dérivé avec son « dernier résultat », un autre que quelqu'un lit encore.
     get_or_compute(9101, 3, Some(9100), move || c);
     let lu = get_or_compute(9102, 1, None, || (*cel_of_tiles(2)).clone());
-    // Pas encore au repos : rien ne bouge.
+    // Un premier passage ne fait que noter les derniers usages : rien ne bouge.
     assert_eq!(ranger_les_inactifs(600, 8).0, 0);
     for _ in 0..700 {
         tick();
     }
+    // Un dessin touché entre les deux passages n'est pas au repos.
+    let touche = get(9102, 1).expect("gardé");
+    drop(touche);
     let (traites, tuiles) = ranger_les_inactifs(600, 8);
     assert_eq!(traites, 1, "le dessin lu par ailleurs est laissé tel quel");
     assert_eq!(tuiles, 5);
@@ -529,6 +532,6 @@ fn an_idle_derived_drawing_is_ranged_and_reads_back_exact_and_a_busy_one_is_left
     assert_eq!(lock().bytes, 7 * TILE_BYTES, "le compte des octets du cache ne change pas");
     assert_eq!(revenu.raster.to_flat(), attendu, "relu exactement");
     drop(lu);
-    assert_eq!(ranger_les_inactifs(600, 8).0, 1, "une fois lâché, l'autre se range à son tour");
+    assert_eq!(ranger_les_inactifs(0, 8).0, 1, "une fois lâché et laissé tranquille, l'autre se range à son tour");
     clear();
 }
