@@ -180,6 +180,14 @@ pub fn ajuster(ctx: &egui::Context, largeur: f32, capitales: f32, mise: Mise) ->
         // (Le Joyau seul : sa largeur est `cote_joyau(c)`.)
         c = c.min(largeur.max(1.0) * 39.0 / 64.0);
     }
+    // (Les tailles de police sont arrondies : on resserre jusqu'à ce que ça tienne.)
+    for _ in 0..12 {
+        let l = disposer(ctx, pos2(0.0, 0.0), c, false, mise);
+        if l.rect.width() <= largeur || c <= 1.0 {
+            break;
+        }
+        c *= 0.97;
+    }
     c.max(1.0)
 }
 

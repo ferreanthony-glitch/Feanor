@@ -289,7 +289,10 @@ fn the_welcome_page_has_two_framed_panels_in_the_theme_colours_the_lockup_and_no
     let (_, r) = texte_a(&formes, "R").expect("le R");
     let (_, devise) = texte_a(&formes, marque::DEVISE).expect("la devise");
     let joyau = formes.iter().find_map(|s| match s {
-        Shape::Rect(rc) if rc.brush.is_some() && rc.rect.left() > fean.left() && rc.rect.width() > 40.0 && rc.rect.height() < 120.0 => Some(rc.rect),
+        Shape::Mesh(m) if m.texture_id != egui::TextureId::default() && !m.vertices.is_empty() => {
+            let rc = Rect::from_points(&m.vertices.iter().map(|v| v.pos).collect::<Vec<_>>());
+            (rc.left() > fean.left() && rc.width() > 40.0 && rc.height() < 120.0).then_some(rc)
+        }
         _ => None,
     });
     let joyau = joyau.expect("le Joyau entre FEAN et R");
@@ -323,7 +326,7 @@ fn the_brand_fonts_are_embedded_and_the_joyau_is_sized_on_the_real_cap_height() 
     assert!((taille * m.hauteur_capitales / m.unites_par_em - 50.0).abs() < 1e-3);
     // Le Joyau : la pierre (39 unités sur 64) a la hauteur des capitales.
     let cote = marque::cote_joyau(50.0);
-    assert!((cote * 37.0 / 64.0 - 50.0).abs() < 1e-3);
+    assert!((cote * 39.0 / 64.0 - 50.0).abs() < 1e-3);
     // Les licences sont livrées avec les polices.
     for f in ["OFL-BigShoulders.txt", "OFL-IBMPlexSans.txt", "OFL-IBMPlexMono.txt"] {
         let chemin = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets").join("polices").join(f);
@@ -396,7 +399,9 @@ fn the_opening_animation_plays_once_asks_for_frames_only_while_running_then_none
     assert_eq!(dernier.get(), logo::etat_animation(0.0));
     assert!(image(10.5), "elle court : encore une image");
     assert_eq!(dernier.get(), logo::etat_animation(0.5));
-    assert!(!image(10.0 + logo::DUREE_ANIMATION as f64 + 0.01), "fin : plus aucune image demandée");
+    // (egui donne une image de plus après une demande : on regarde la deuxième image calme.)
+    let _ = image(10.0 + logo::DUREE_ANIMATION as f64 + 0.01);
+    assert!(!image(10.0 + logo::DUREE_ANIMATION as f64 + 0.05), "fin : plus aucune image demandée");
     assert_eq!(dernier.get(), logo::etat_repos());
     // Figée : ni mouvement ni image demandée, même des heures plus tard ; et elle ne se rejoue pas.
     for t in [20.0, 99.0, 5000.0] {
@@ -426,7 +431,14 @@ fn the_welcome_page_keeps_clicks_working_during_the_animation_and_rests_after_it
     let _ = ctx;
     std::thread::sleep(std::time::Duration::from_millis((logo::DUREE_ANIMATION * 1000.0) as u64 + 150));
     b.chauffer(3);
-    assert!(crate::perf_tests::se_reposer(&mut b, 3000) < 3000, "FEANOR se repose sur l'accueil une fois le Joyau ouvert");
+    // (Le curseur clignotant du champ « Nom du projet », qui a le focus à l'ouverture, demande des images : ce n'est pas le Joyau.)
+    b.ctx.memory_mut(|m| {
+        if let Some(id) = m.focused() {
+            m.surrender_focus(id);
+        }
+    });
+    let n = crate::perf_tests::se_reposer(&mut b, 3000);
+    assert!(n < 3000, "FEANOR se repose sur l'accueil une fois le Joyau ouvert : {}", b.raison_du_reveil());
 }
 
 // ---------------------------------------------------------------------------------------- captures (à regarder)

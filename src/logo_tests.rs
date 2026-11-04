@@ -70,11 +70,11 @@ fn the_small_joyau_has_thicker_arms_and_is_used_under_24_pixels_and_for_the_16_p
     assert_ne!(logo::image(32, Joyau::Jade, None), logo::image(32, Joyau::JadePetit, None));
     // L'icône de 16 px utilise le petit Joyau, celle de 32 px le grand.
     assert_ne!(logo::icone(16), logo::icone(32)[..16 * 16 * 4].to_vec());
-    // Un point que seul le gros bras épaissi couvre : (33.5, 31) du petit Joyau (la pointe du grand est plus fine).
+    // Un point que seul le gros bras épaissi couvre : (34.4, 20) du petit Joyau (la pointe du grand est plus fine).
     let px = logo::image(256, Joyau::JadePetit, None);
     let grand = logo::image(256, Joyau::Jade, None);
-    assert_eq!(pixel_au(&px, 256, 36.5, 31.0), [0xF6, 0xFF, 0xFD, 255]);
-    assert_ne!(pixel_au(&grand, 256, 36.5, 31.0), [0xF6, 0xFF, 0xFD, 255]);
+    assert_eq!(pixel_au(&px, 256, 34.4, 20.0), [0xF6, 0xFF, 0xFD, 255]);
+    assert_ne!(pixel_au(&grand, 256, 34.4, 20.0), [0xF6, 0xFF, 0xFD, 255]);
 }
 
 #[test]

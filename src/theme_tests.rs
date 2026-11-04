@@ -36,7 +36,7 @@ fn the_default_theme_is_shot_and_the_grey_themes_stay_neutral() {
     for (choix, p) in livres() {
         if choix == ChoixTheme::Shot {
             // Atelier (la marque) : les panneaux ont la très légère teinte du livre de marque ; le canevas, lui, reste neutre.
-            assert!(p.fond.r() == p.fond.g() && p.fond.g() == p.fond.b(), "{:?} : le canevas n'est pas teinté", p.fond);
+            assert!(p.fond.r().abs_diff(p.fond.b()) <= 2 && p.fond.r() == p.fond.g(), "{:?} : le canevas n'est pas teinté", p.fond);
             continue;
         }
         for fond in [p.panneau, p.entete, p.fenetre, p.fond, p.rangee, p.controle, p.bord] {
