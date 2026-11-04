@@ -256,7 +256,7 @@ impl App {
         match &mut w.job {
             Some(job) => {
                 let (texte, part) = job.status();
-                ui.add(egui::ProgressBar::new(part).text(texte));
+                ui.add(crate::barre::Barre::new(part).text(texte));
                 if bulles::icone(ui, ph::X, "Arrêter", "Arrête le paquet et efface tout ce qu'il a commencé d'écrire : rien ne reste dans le dossier choisi.", "").clicked() {
                     job.cancel();
                 }

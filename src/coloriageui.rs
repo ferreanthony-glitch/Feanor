@@ -605,7 +605,7 @@ impl App {
                 ui.set_width(420.0);
                 ui.heading("Coloriage par zones");
                 ui.add_space(6.0);
-                ui.add(egui::ProgressBar::new(done as f32 / total as f32).show_percentage());
+                ui.add(crate::barre::Barre::new(done as f32 / total as f32).show_percentage());
                 let mut text = format!("{} images à colorier, {} clés", job.plan.targets, job.plan.keys.len());
                 if done > 0 && done < total {
                     let rest = job.started.elapsed().as_secs_f32() / done as f32 * (total - done) as f32;

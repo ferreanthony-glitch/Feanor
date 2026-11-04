@@ -906,7 +906,7 @@ impl App {
             egui::Window::new("Partage").title_bar(false).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
                 ui.label(format!("Création du film partagé « {nom} »…"));
                 let fraction = if total == 0 { 0.0 } else { fait as f32 / total as f32 };
-                ui.add(egui::ProgressBar::new(fraction).desired_width(280.0).text(if total == 0 { "préparation".to_string() } else { format!("{fait} / {total} dessins") }));
+                ui.add(crate::barre::Barre::new(fraction).desired_width(280.0).text(if total == 0 { "préparation".to_string() } else { format!("{fait} / {total} dessins") }));
                 ui.label(RichText::new("Le projet ouvert n'est pas touché. Le film partagé s'ouvrira dans un nouvel onglet.").small().weak());
             });
             ctx.request_repaint_after(std::time::Duration::from_millis(100));

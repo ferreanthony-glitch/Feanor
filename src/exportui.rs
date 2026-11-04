@@ -715,7 +715,7 @@ impl App {
                     Progress::Running(done, total) => {
                         let phase = job.phase();
                         let progress = if done == 0 && !phase.starts_with("Calcul") { 0.0 } else { done as f32 / total.max(1) as f32 };
-                        ui.add(egui::ProgressBar::new(progress).show_percentage());
+                        ui.add(crate::barre::Barre::new(progress).show_percentage());
                         let mut text = if done == 0 && !phase.is_empty() && !phase.starts_with("Calcul") { phase.to_string() } else { format!("{} {done} sur {total}", job.unit) };
                         if let Some(rest) = job.remaining() {
                             let s = rest.as_secs();

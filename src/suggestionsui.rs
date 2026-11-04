@@ -760,7 +760,7 @@ impl App {
         }
         for (titre, part, texte) in lignes {
             ui.label(RichText::new(titre).small());
-            ui.add(egui::ProgressBar::new(part).text(RichText::new(texte).small()).desired_height(14.0));
+            ui.add(crate::barre::Barre::new(part).text(RichText::new(texte).small()).desired_height(14.0));
         }
     }
 

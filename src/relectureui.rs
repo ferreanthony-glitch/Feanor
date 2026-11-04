@@ -406,7 +406,7 @@ impl App {
             Some(job) => {
                 match job.progress() {
                     Progress::Running(done, total) => {
-                        ui.add(egui::ProgressBar::new(done as f32 / total.max(1) as f32).text(format!("image {done} / {total}")));
+                        ui.add(crate::barre::Barre::new(done as f32 / total.max(1) as f32).text(format!("image {done} / {total}")));
                         if let Some(rest) = job.remaining() {
                             let s = rest.as_secs();
                             ui.label(RichText::new(format!("reste environ {}:{:02}", s / 60, s % 60)).small().weak());

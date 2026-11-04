@@ -365,10 +365,10 @@ impl App {
             Some(job) => {
                 let (done, total) = job.frames();
                 ui.label(RichText::new(job.status()).strong());
-                ui.add(egui::ProgressBar::new(if total > 0 { done as f32 / total as f32 } else { 0.0 }).text(format!("images {done} / {total}")));
+                ui.add(crate::barre::Barre::new(if total > 0 { done as f32 / total as f32 } else { 0.0 }).text(format!("images {done} / {total}")));
                 let (sd, st) = job.sounds();
                 if st > 0 {
-                    ui.add(egui::ProgressBar::new(sd as f32 / st as f32).text(format!("son {sd} / {st}")));
+                    ui.add(crate::barre::Barre::new(sd as f32 / st as f32).text(format!("son {sd} / {st}")));
                 }
                 if let Some(rest) = job_remaining(job) {
                     ui.label(RichText::new(format!("reste environ {}:{:02}", rest / 60, rest % 60)).small().weak());

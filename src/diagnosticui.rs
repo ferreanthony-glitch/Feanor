@@ -344,7 +344,7 @@ impl App {
                     if let Some(banc) = &self.diag.banc {
                         let fraction = banc.avancement.fraction();
                         ui.label(RichText::new("Mesures en cours").strong());
-                        ui.add(egui::ProgressBar::new(fraction).desired_width(ui.available_width()).text(format!("{} — {} %", banc.avancement.etape(), (fraction * 100.0).round())));
+                        ui.add(crate::barre::Barre::new(fraction).desired_width(ui.available_width()).text(format!("{} — {} %", banc.avancement.etape(), (fraction * 100.0).round())));
                         ui.label(RichText::new("L'interface reste utilisable. Les mesures n'ouvrent aucun projet.").small().color(theme::texte_doux()));
                         annuler = crate::bulles::bulle(ui.button("Annuler"), "Annuler", "Arrête les mesures. Rien n'est changé.", "").clicked();
                         ctx.request_repaint_after(Duration::from_millis(100));

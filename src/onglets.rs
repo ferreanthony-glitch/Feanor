@@ -1086,7 +1086,7 @@ impl App {
                 .anchor(egui::Align2::CENTER_CENTER, egui::Vec2::ZERO)
                 .show(ctx, |ui| {
                     ui.label(format!("Enregistrement de {}…", noms.join(", ")));
-                    ui.add(egui::ProgressBar::new(0.0).desired_width(280.0).animate(true));
+                    ui.add(crate::barre::Barre::new(0.0).desired_width(280.0).animate(true));
                 });
             ctx.request_repaint_after(Duration::from_millis(100));
             self.groupe = Some(g);

@@ -330,7 +330,7 @@ impl App {
         match &w.load {
             Load::Reading { progress, .. } => {
                 ui.label("Lecture du scénario…");
-                ui.add(egui::ProgressBar::new(f32::from_bits(progress.load(Ordering::Relaxed))).show_percentage());
+                ui.add(crate::barre::Barre::new(f32::from_bits(progress.load(Ordering::Relaxed))).show_percentage());
                 if ui.button("Annuler").clicked() {
                     act = Act::Close;
                 }

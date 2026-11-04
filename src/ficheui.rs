@@ -398,7 +398,7 @@ impl App {
             Some(job) => {
                 match job.progress() {
                     Progress::Running(fait, total) => {
-                        ui.add(egui::ProgressBar::new(fait as f32 / total.max(1) as f32).text(format!("vignette {fait} / {total}")));
+                        ui.add(crate::barre::Barre::new(fait as f32 / total.max(1) as f32).text(format!("vignette {fait} / {total}")));
                         if let Some(reste) = job.remaining() {
                             let s = reste.as_secs();
                             ui.label(RichText::new(format!("reste environ {}:{:02}", s / 60, s % 60)).small().weak());

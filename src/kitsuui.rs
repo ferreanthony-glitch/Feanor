@@ -1031,11 +1031,11 @@ impl App {
         // ---- l'état
         if let Some(r) = &k.rendu {
             let (t, p) = r.status();
-            ui.add(egui::ProgressBar::new(p).text(t));
+            ui.add(crate::barre::Barre::new(p).text(t));
         } else if let Some(t) = &k.travail {
             let (texte, part) = t.prog.etat();
             if t.genre == Genre::Publication || t.genre == Genre::Retours {
-                ui.add(egui::ProgressBar::new(part).text(texte));
+                ui.add(crate::barre::Barre::new(part).text(texte));
             } else {
                 ui.horizontal(|ui| {
                     ui.spinner();

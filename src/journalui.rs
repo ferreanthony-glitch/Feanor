@@ -307,7 +307,7 @@ impl App {
             Some(job) => {
                 let (fait, total) = job.progress();
                 let texte = if job.running() { format!("Images {fait} sur {total}") } else { "Écriture…".to_string() };
-                ui.add(egui::ProgressBar::new(if total == 0 { 0.0 } else { fait as f32 / total as f32 }).text(texte));
+                ui.add(crate::barre::Barre::new(if total == 0 { 0.0 } else { fait as f32 / total as f32 }).text(texte));
                 if bulles::icone(ui, ph::X, "Arrêter", "Arrête le journal : aucun fichier ne reste.", "").clicked() {
                     job.cancel();
                 }
