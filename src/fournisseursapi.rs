@@ -78,7 +78,7 @@ pub trait Transport: Send + Sync {
 /// Le transport de cette version : aucun. Chaque appel dit pourquoi.
 pub struct TransportABrancher;
 
-pub const MESSAGE_A_BRANCHER: &str = "cette version de SHOT ne sait pas encore envoyer de requête aux services en ligne (aucun module TLS \
+pub const MESSAGE_A_BRANCHER: &str = "cette version de FEANOR ne sait pas encore envoyer de requête aux services en ligne (aucun module TLS \
 dans la compilation hors ligne). Les requêtes sont prêtes ; en attendant, utilise le serveur local ou la lecture par règles.";
 
 impl Transport for TransportABrancher {

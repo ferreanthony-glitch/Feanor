@@ -288,8 +288,8 @@ impl App {
                             // D'où vient la touche : SHOT ou l'utilisateur.
                             ui.horizontal(|ui| {
                                 let (text, hint) = match origin {
-                                    Origin::Default => (RichText::new(origin.label()).small().weak(), "Raccourci de SHOT (keymap.toml).".to_string()),
-                                    Origin::User => (RichText::new(origin.label()).small().strong(), "Ton raccourci : il remplace celui de SHOT.".to_string()),
+                                    Origin::Default => (RichText::new(origin.label()).small().weak(), "Raccourci de FEANOR (keymap.toml).".to_string()),
+                                    Origin::User => (RichText::new(origin.label()).small().strong(), "Ton raccourci : il remplace celui de FEANOR.".to_string()),
                                 };
                                 ui.label(text).on_hover_text(hint);
                             });
@@ -301,7 +301,7 @@ impl App {
                                     changes.push((info.id.to_string(), Some(Vec::new())));
                                 }
                                 if self.keymap.is_user(info.id)
-                                    && crate::bulles::icone(ui, ph::ARROW_COUNTER_CLOCKWISE, "Par défaut", "Revenir au raccourci de SHOT.", "").clicked()
+                                    && crate::bulles::icone(ui, ph::ARROW_COUNTER_CLOCKWISE, "Par défaut", "Revenir au raccourci de FEANOR.", "").clicked()
                                 {
                                     changes.push((info.id.to_string(), None));
                                 }

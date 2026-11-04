@@ -424,7 +424,7 @@ pub fn lire_instantane(dossier: &Path, envoi: &Envoi) -> Result<InstantaneLu, St
         return Err(format!("« {} » n'est pas un instantané d'envoi", envoi.fichier));
     }
     if f.version > VERSION {
-        return Err(format!("l'instantané de l'envoi « {} » vient d'une version plus récente de SHOT", envoi.nom));
+        return Err(format!("l'instantané de l'envoi « {} » vient d'une version plus récente de FEANOR", envoi.nom));
     }
     let plans = f.plans.into_iter().map(|p| (p.plan, (p.scene, p.entree))).collect();
     Ok(InstantaneLu { dossier: dossier.to_path_buf(), nom: envoi.nom.clone(), tete: f.tete, plans })

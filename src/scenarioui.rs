@@ -496,7 +496,7 @@ impl App {
         ui.add_space(4.0);
         ui.label(RichText::new("Le scénario est gardé dans le projet et se lit dans le panneau Scénario. Aucun plan n'est créé : le bouton « Créer les plans depuis le scénario… » de ce panneau le fait, quand tu le décides.").strong());
         if self.welcome {
-            ui.label(RichText::new("Un nouveau projet le reçoit (SHOT propose d'abord d'enregistrer le projet ouvert s'il a changé).").weak().small());
+            ui.label(RichText::new("Un nouveau projet le reçoit (FEANOR propose d'abord d'enregistrer le projet ouvert s'il a changé).").weak().small());
         }
         if !script.warnings.is_empty() {
             ui.add_space(4.0);

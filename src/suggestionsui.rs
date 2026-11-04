@@ -642,7 +642,7 @@ impl App {
             let lecture = self.sug.lecture_en_cours();
             let bouton = egui::Button::new(format!("{}  Lire le storyboard", ph::BOOK_OPEN_TEXT));
             let resp = ui.add_enabled(!lecture, bouton);
-            if crate::bulles::bulle(resp, "Lire le storyboard", "SHOT lit les textes (et les vignettes, si tu l'as choisi) des plans de la portée et propose des bruitages, des ambiances et des voix. Rien n'est posé dans le montage avant que tu acceptes.", &self.raccourci("suggestion.lire")).clicked() {
+            if crate::bulles::bulle(resp, "Lire le storyboard", "FEANOR lit les textes (et les vignettes, si tu l'as choisi) des plans de la portée et propose des bruitages, des ambiances et des voix. Rien n'est posé dans le montage avant que tu acceptes.", &self.raccourci("suggestion.lire")).clicked() {
                 let portee = self.portee_choisie();
                 self.lire_storyboard(portee);
             }

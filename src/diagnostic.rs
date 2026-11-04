@@ -526,7 +526,7 @@ pub fn constats(m: &Materiel, x: &Mesures) -> Vec<Constat> {
         let go = r.totale as f64 / (1u64 << 30) as f64;
         let dispo = r.disponible as f64 / (1u64 << 30) as f64;
         if go < 8.0 {
-            v.push(c(2, format!("Mémoire vive : {} Go seulement (SHOT garde des dessins en mémoire).", virgule(go, 1))));
+            v.push(c(2, format!("Mémoire vive : {} Go seulement (FEANOR garde des dessins en mémoire).", virgule(go, 1))));
         } else if go < 16.0 {
             v.push(c(1, format!("Mémoire vive : {} Go, juste pour de gros projets.", virgule(go, 1))));
         }
@@ -544,7 +544,7 @@ pub fn constats(m: &Materiel, x: &Mesures) -> Vec<Constat> {
         v.push(c(1, format!("Processeur : {n} fils, les effets et les rendus de fond laissent peu de marge à l'interface.")));
     }
     if !m.processeur.x86_64_v3() {
-        v.push(c(0, "Le processeur n'a pas toutes les instructions x86-64-v3 (AVX2, FMA, BMI2) pour lesquelles SHOT est compilé.".into()));
+        v.push(c(0, "Le processeur n'a pas toutes les instructions x86-64-v3 (AVX2, FMA, BMI2) pour lesquelles FEANOR est compilé.".into()));
     }
     // Carte graphique.
     match &m.carte {
@@ -789,7 +789,7 @@ pub fn lignes_mesures(x: &Mesures) -> Vec<String> {
 /// Le rapport en texte brut, à copier ou à enregistrer.
 pub fn rapport(m: &Materiel, x: &Mesures, choix: &Choix, courant: &PerfReglages, cible: &PerfReglages, date: u64) -> String {
     let mut s = String::new();
-    s.push_str("SHOT — Rapport du diagnostic des performances\n");
+    s.push_str("FEANOR — Rapport du diagnostic des performances\n");
     s.push_str(&format!("Version {} — {}\n\n", env!("CARGO_PKG_VERSION"), date_texte(date)));
     s.push_str("MATÉRIEL\n");
     for (nom, valeur) in m.lignes() {

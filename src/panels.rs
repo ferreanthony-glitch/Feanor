@@ -290,9 +290,9 @@ impl App {
                 self.action_item(ui, "Régler le stylet à ma main…", "aide.regler_stylet");
                 self.action_item(ui, "Visite rapide « Premier jour »…", "aide.visite");
                 self.action_item(ui, "Revoir les conseils", "aide.conseils");
-                self.action_item(ui, "Régler SHOT pour cette machine…", "aide.diagnostic");
+                self.action_item(ui, "Régler FEANOR pour cette machine…", "aide.diagnostic");
                 ui.separator();
-                self.action_item(ui, "À propos de SHOT…", "aide.a_propos");
+                self.action_item(ui, "À propos de FEANOR…", "aide.a_propos");
             });
 
             // (Sans projet, il n'y a pas d'espace de travail à choisir : les quatre mots ne paraissent pas.)

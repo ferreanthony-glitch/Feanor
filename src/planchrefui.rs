@@ -312,7 +312,7 @@ impl App {
     }
 
     fn refs_import_board_dialog(&mut self) {
-        let Some(path) = rfd::FileDialog::new().set_title("Importer la planche d'un autre projet").add_filter("Projet SHOT", &crate::project::EXTENSIONS).pick_file() else { return };
+        let Some(path) = rfd::FileDialog::new().set_title("Importer la planche d'un autre projet").add_filter("Projet FEANOR", &crate::project::EXTENSIONS).pick_file() else { return };
         self.refs_import_board(path);
     }
 

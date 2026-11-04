@@ -172,7 +172,7 @@ impl App {
             return;
         }
         let title = match self.doc.properties.title.trim() {
-            "" => self.base_name_or("SHOT"),
+            "" => self.base_name_or("FEANOR"),
             t => t.to_string(),
         };
         let scope = if envoi.is_some() { Etendue::Modifies } else { Etendue::Film };
@@ -325,7 +325,7 @@ impl App {
         let busy = w.job.is_some();
         ui.label(
             RichText::new(
-                "Une page à envoyer à quelqu'un qui n'a pas SHOT : il lit le storyboard plan par plan, écrit ses notes et dessine dessus, puis vous renvoie un petit fichier. \
+                "Une page à envoyer à quelqu'un qui n'a pas FEANOR : il lit le storyboard plan par plan, écrit ses notes et dessine dessus, puis vous renvoie un petit fichier. \
                  Fichier > Importer > Notes de relecture les pose en commentaires sur les bons plans.",
             )
             .small()

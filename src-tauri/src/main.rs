@@ -57,7 +57,7 @@ fn nouveau_projet(etat: State<Etat>, largeur: usize, hauteur: usize, fps: u32) -
 async fn ouvrir_projet(etat: State<'_, Etat>, chemin: Option<String>) -> Result<Option<Ouverture>, String> {
     let chemin = match chemin {
         Some(c) => PathBuf::from(c),
-        None => match rfd::AsyncFileDialog::new().add_filter("Projet SHOT", &["shot", "pelure"]).pick_file().await {
+        None => match rfd::AsyncFileDialog::new().add_filter("Projet FEANOR", &["shot", "pelure"]).pick_file().await {
             Some(f) => f.path().to_path_buf(),
             None => return Ok(None),
         },

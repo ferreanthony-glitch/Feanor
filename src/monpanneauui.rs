@@ -465,7 +465,7 @@ impl App {
             let plus = Vue {
                 icone: ph::PLUS.to_string(),
                 nom: "Ajouter une commande".into(),
-                description: "Chercher une commande par son nom, comme Ctrl+K. Clic droit sur n'importe quelle icône de SHOT : « Ajouter à Mon panneau ».".into(),
+                description: "Chercher une commande par son nom, comme Ctrl+K. Clic droit sur n'importe quelle icône de FEANOR : « Ajouter à Mon panneau ».".into(),
                 raccourci: String::new(),
                 allume: ouverte,
                 actif: true,
@@ -490,7 +490,7 @@ impl App {
             ui.add_space(4.0);
             ui.label(
                 RichText::new(
-                    "Rien ici pour l'instant. « Enregistrer l'outil actuel ici » garde l'outil, sa brosse et sa couleur. Clic droit sur une icône de SHOT : \
+                    "Rien ici pour l'instant. « Enregistrer l'outil actuel ici » garde l'outil, sa brosse et sa couleur. Clic droit sur une icône de FEANOR : \
                      « Ajouter à Mon panneau ». Le + cherche une commande.",
                 )
                 .small()

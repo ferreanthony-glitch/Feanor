@@ -669,7 +669,7 @@ impl App {
             ui.set_max_width(380.0);
             let dernier = self.doc.envois.dernier().map(|e| e.libelle());
             ui.label(format!(
-                "SHOT note l'état des {} plans du film tel qu'il est maintenant. Les plans qui changeront ensuite seront repérés dans le montage et sur la planche.",
+                "FEANOR note l'état des {} plans du film tel qu'il est maintenant. Les plans qui changeront ensuite seront repérés dans le montage et sur la planche.",
                 self.doc.panels.len()
             ));
             if let Some(d) = dernier {
@@ -813,7 +813,7 @@ impl App {
                             journal = Some(e.id);
                         }
                         // La page de relecture de cet envoi : les plans qui ont changé depuis, à envoyer au réalisateur.
-                        if bulles::icone(ui, ph::EYEGLASSES, "Exporter pour relecture", "Une page à envoyer au réalisateur (qui n'a pas SHOT) pour qu'il écrive ses notes dessus ; proposée avec les plans modifiés depuis cet envoi.", &self.raccourci("fichier.exporter_relecture")).clicked() {
+                        if bulles::icone(ui, ph::EYEGLASSES, "Exporter pour relecture", "Une page à envoyer au réalisateur (qui n'a pas FEANOR) pour qu'il écrive ses notes dessus ; proposée avec les plans modifiés depuis cet envoi.", &self.raccourci("fichier.exporter_relecture")).clicked() {
                             relire = Some(e.id);
                         }
                         if bulles::icone(ui, ph::TRASH, "Retirer de la liste", "L'envoi sort de la liste. Ses fichiers dans « versions » ne sont jamais effacés.", "").clicked() {

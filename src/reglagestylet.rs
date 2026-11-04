@@ -233,7 +233,7 @@ impl App {
         let actuelle = self.toucher.pressure_curve;
         egui::Window::new("Régler le stylet à ma main").open(&mut ouverte).collapsible(false).resizable(false).anchor(Align2::CENTER_TOP, [0.0, 90.0]).show(ctx, |ui| {
             ui.set_width(ZONE[0] + 8.0);
-            ui.add(egui::Label::new(RichText::new("Trace trois traits dans le cadre, comme tu écris : un trait léger, un trait moyen, puis un trait appuyé. SHOT règle la courbe de pression sur ta main.").color(theme::texte_doux())).wrap());
+            ui.add(egui::Label::new(RichText::new("Trace trois traits dans le cadre, comme tu écris : un trait léger, un trait moyen, puis un trait appuyé. FEANOR règle la courbe de pression sur ta main.").color(theme::texte_doux())).wrap());
             ui.add_space(4.0);
             match r.etape() {
                 Some(i) => ui.label(RichText::new(format!("{}/3  ·  un trait {}", i + 1, SORTES[i])).strong().size(15.0).color(theme::texte_fort())),
@@ -328,7 +328,7 @@ impl App {
                     retablir = true;
                 }
                 let b = ui.add_enabled(!r.traits.is_empty() || r.souris_vue, egui::Button::new("Recommencer"));
-                if crate::bulles::bulle(b, "Recommencer", "Efface les traits pour en tracer trois autres. Rien n'est changé dans SHOT.", "").clicked() {
+                if crate::bulles::bulle(b, "Recommencer", "Efface les traits pour en tracer trois autres. Rien n'est changé dans FEANOR.", "").clicked() {
                     recommencer = true;
                 }
             });

@@ -1,4 +1,4 @@
-# Raccourcis clavier de SHOT
+# Raccourcis clavier de FEANOR
 #
 # Chaque bloc [[raccourci]] associe une ou plusieurs touches à une action (identifiant stable).
 #
@@ -6,7 +6,7 @@
 # (ou l'icône crayon de la liste « Aide > Raccourcis clavier… », F1) crée une copie de ce fichier dans
 # %APPDATA%\SHOT\keymap.toml et l'ouvre. Ne gardez-y que les actions que vous changez si vous
 # voulez : chaque action redéfinie remplace celle d'ici, les autres restent par défaut.
-# Puis « Recharger » (même endroit, ou relancez SHOT). touches = [] retire un raccourci.
+# Puis « Recharger » (même endroit, ou relancez FEANOR). touches = [] retire un raccourci.
 # Le plus simple reste le clic droit sur une icône ou une entrée de menu : « Assigner un raccourci… ».
 #
 # Deux actions ne peuvent pas avoir la même touche dans le même contexte, même « en réserve » :
@@ -21,10 +21,10 @@
 #   Pour forcer : "car:," (le caractère virgule) ou "pos:A" (la position du A d'un QWERTY).
 #
 # contexte = "storyboard" ou "animation" : le raccourci ne vaut que dans ce mode.
-# etat = "non implémenté" : gardé en réserve, la fonction n'existe pas encore dans SHOT.
+# etat = "non implémenté" : gardé en réserve, la fonction n'existe pas encore dans FEANOR.
 # etat = "désactivé" : le raccourci est ignoré.
 # source : d'où vient le raccourci.
-#   « perso » = réglages d'Anthony ; « proposition » = proposé par SHOT, à valider ;
+#   « perso » = réglages d'Anthony ; « proposition » = proposé par FEANOR, à valider ;
 #   « TVPaint 12 (perso) » = vos raccourcis TVPaint 12 (config.ini, section [keyboard]).
 
 version = 1
@@ -51,7 +51,7 @@ source = "proposition"
 [[raccourci]]
 action = "fichier.afficher_explorateur"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fichier.fermer"
@@ -81,7 +81,7 @@ source = "proposition (comme un navigateur)"
 [[raccourci]]
 action = "onglet.fermer_autres"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Exports : commandes sans touche par défaut.
 [[raccourci]]
@@ -132,7 +132,7 @@ action = "edition.coller"
 touches = ["Ctrl+V"]
 
 # Ctrl+Maj+V était « Coller sur place », un simple alias de
-# Ctrl+V dans SHOT (le collage pose déjà tout à sa place d'origine). Depuis le 2026-10-19 (demande
+# Ctrl+V dans FEANOR (le collage pose déjà tout à sa place d'origine). Depuis le 2026-10-19 (demande
 # d'Anthony), Ctrl+Maj+V colle les clés « à la tête de lecture » ; hors clés, il garde son ancien
 # rôle (il colle comme Ctrl+V). « Coller sur place » reste une commande, sans touche par défaut.
 [[raccourci]]
@@ -284,17 +284,17 @@ source = "proposition (T comme travelling : tenue, tout glissé sur une case tir
 [[raccourci]]
 action = "aide.conseils"
 touches = []
-source = "SHOT (sans touche ; aussi Préférences > Général)"
+source = "FEANOR (sans touche ; aussi Préférences > Général)"
 
 [[raccourci]]
 action = "aide.visite"
 touches = []
-source = "SHOT (sans touche ; Aide, et Préférences > Général)"
+source = "FEANOR (sans touche ; Aide, et Préférences > Général)"
 
 [[raccourci]]
 action = "aide.regler_stylet"
 touches = []
-source = "SHOT (sans touche ; aussi Préférences > Dessin)"
+source = "FEANOR (sans touche ; aussi Préférences > Dessin)"
 
 [[raccourci]]
 action = "aide.raccourcis"
@@ -328,7 +328,7 @@ source = "proposition (Alt + G : le G du dégradé ; libre)"
 [[raccourci]]
 action = "outil.melangeur"
 touches = []
-source = "SHOT (sans touche : aucune touche libre et évidente)"
+source = "FEANOR (sans touche : aucune touche libre et évidente)"
 
 [[raccourci]]
 action = "outil.peindre_non_peint"
@@ -437,74 +437,74 @@ source = "proposition : aucune touche (X colle le calque)"
 [[raccourci]]
 action = "couleur.defaut"
 touches = ["D"]
-source = "proposition (D, libre dans SHOT)"
+source = "proposition (D, libre dans FEANOR)"
 
 [[raccourci]]
 action = "couleur.copier_code"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "couleur.roue"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "couleur.roue_carre"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "couleur.roue_triangle"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "couleur.curseurs_tsv"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "couleur.curseurs_rvb"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "couleur.curseurs_tsl"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "couleur.recentes_effacer"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 # Les commandes « pastille » visent la pastille dont le menu est ouvert, sinon celle sous la
 # souris (nuancier ou couleurs récentes).
 [[raccourci]]
 action = "pastille.avant_plan"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "pastille.arriere_plan"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "pastille.renommer"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "pastille.remplacer"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "pastille.retirer"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 # Nuanciers personnels.
 [[raccourci]]
@@ -514,44 +514,44 @@ touches = []
 [[raccourci]]
 action = "nuancier.nouveau"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "nuancier.renommer"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "nuancier.dupliquer"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "nuancier.supprimer"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "nuancier.importer"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "nuancier.exporter"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 # ------------------------------------------------------------------------------------ Dessin
 
 [[raccourci]]
 action = "calque.miroir_h"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "calque.miroir_v"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "plan.retourner"
@@ -581,22 +581,22 @@ source = "choix d'Anthony, 2026-10-20 (zone bitmap : remplie de la couleur coura
 [[raccourci]]
 action = "calque.cle_position"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "calque.cle_position_lisser"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "calque.cle_position_supprimer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "calque.cles_position_supprimer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "dessin.aplatir"
@@ -735,12 +735,12 @@ source = "proposition"
 [[raccourci]]
 action = "scene.dupliquer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "scene.supprimer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "sequence.nouvelle"
@@ -761,7 +761,7 @@ touches = ["Alt+Entrée"]
 [[raccourci]]
 action = "panneau.couper"
 touches = ["F6"]
-# F6 dans SHOT depuis le 2026-10-17 (Anthony : « F5 pose une clé
+# F6 dans FEANOR depuis le 2026-10-17 (Anthony : « F5 pose une clé
 # partout. F6 coupe le plan »).
 source = "perso"
 
@@ -779,7 +779,7 @@ source = "perso (Anthony, 2026-10-17 : « avec un autre raccourci comme F4 »)"
 [[raccourci]]
 action = "panneau.fusionner_suivant"
 touches = []
-source = "SHOT (inverse de « couper le panneau »)"
+source = "FEANOR (inverse de « couper le panneau »)"
 
 [[raccourci]]
 action = "scene.couper"
@@ -788,7 +788,7 @@ touches = []
 [[raccourci]]
 action = "scene.joindre_precedente"
 touches = []
-source = "SHOT (crée une scène à partir des panneaux sélectionnés, sans touche)"
+source = "FEANOR (crée une scène à partir des panneaux sélectionnés, sans touche)"
 
 [[raccourci]]
 action = "panneau.supprimer"
@@ -801,12 +801,12 @@ source = "proposition"
 [[raccourci]]
 action = "panneau.copier"
 touches = []
-source = "SHOT (Ctrl+C après un clic dans le montage)"
+source = "FEANOR (Ctrl+C après un clic dans le montage)"
 
 [[raccourci]]
 action = "panneau.coller"
 touches = []
-source = "SHOT (Ctrl+V après un clic dans le montage)"
+source = "FEANOR (Ctrl+V après un clic dans le montage)"
 
 # ------------------------------------------------------------------------------------ Animation
 
@@ -892,7 +892,7 @@ touches = ["Flèche bas"]
 source = "réglage perso d'origine : LayerDown"
 
 # Calques choisis et opérations sur plusieurs calques (13b). Les touches TVPaint qui prendraient
-# celle d'une autre fonction de SHOT sont proposées dans docs/ROADMAP.md, pas posées ici.
+# celle d'une autre fonction de FEANOR sont proposées dans docs/ROADMAP.md, pas posées ici.
 
 [[raccourci]]
 action = "calque.choisir_dessus"
@@ -1596,22 +1596,22 @@ source = "sans touche à l'origine"
 [[raccourci]]
 action = "calque.nouveau_couleur"
 touches = []
-source = "SHOT (calque de couleur sous le trait, choix d'Anthony 2026-10-20)"
+source = "FEANOR (calque de couleur sous le trait, choix d'Anthony 2026-10-20)"
 
 [[raccourci]]
 action = "calque.nouveau_annotation"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "calque.detacher_couleur"
 touches = []
-source = "SHOT (calque de couleur sous le trait)"
+source = "FEANOR (calque de couleur sous le trait)"
 
 [[raccourci]]
 action = "calque.griffonner"
 touches = []
-source = "SHOT (calque de couleur : griffonner, choix d'Anthony 2026-10-21 « On fusionne » ; sans touche par défaut)"
+source = "FEANOR (calque de couleur : griffonner, choix d'Anthony 2026-10-21 « On fusionne » ; sans touche par défaut)"
 
 [[raccourci]]
 action = "fichier.importer_video"
@@ -1734,17 +1734,17 @@ touches = []
 [[raccourci]]
 action = "camera.cle_adoucir"
 touches = []
-source = "SHOT (adoucissement par clé)"
+source = "FEANOR (adoucissement par clé)"
 
 [[raccourci]]
 action = "vue.dessus"
 touches = []
-source = "SHOT (fenêtre Vue de dessus)"
+source = "FEANOR (fenêtre Vue de dessus)"
 
 [[raccourci]]
 action = "vue.cadres_securite"
 touches = []
-source = "SHOT (zones de sécurité EBU R 95 ; aucune touche choisie)"
+source = "FEANOR (zones de sécurité EBU R 95 ; aucune touche choisie)"
 
 # ------------------------------------------------------------------------------------ Espace 3D (calques en cartes + caméra du plan)
 # Aucune touche par défaut (à choisir par Anthony). Les objets 3D (cube, mannequin, modèle glTF…) et le repère 3D
@@ -1753,146 +1753,146 @@ source = "SHOT (zones de sécurité EBU R 95 ; aucune touche choisie)"
 [[raccourci]]
 action = "espace3d.basculer"
 touches = []
-source = "SHOT (Espace 3D ; aucune touche choisie)"
+source = "FEANOR (Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.outil_choisir"
 touches = []
-source = "SHOT (Espace 3D, outil choisir ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, outil choisir ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.outil_deplacer"
 touches = []
-source = "SHOT (Espace 3D, outil déplacer ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, outil déplacer ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.outil_tourner"
 touches = []
-source = "SHOT (Espace 3D, outil tourner ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, outil tourner ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.outil_echelle"
 touches = []
-source = "SHOT (Espace 3D, outil échelle ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, outil échelle ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.outil_camera"
 touches = []
-source = "SHOT (Espace 3D, choisir la caméra du plan ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, choisir la caméra du plan ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.cadrer"
 touches = []
-source = "SHOT (Espace 3D, recadrer la vue ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, recadrer la vue ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.vue_camera"
 touches = []
-source = "SHOT (Espace 3D, regarder par la caméra ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, regarder par la caméra ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.ordonner_profondeur"
 touches = []
-source = "SHOT (Espace 3D, ordre des calques selon la profondeur ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, ordre des calques selon la profondeur ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.aimanter"
 touches = []
-source = "SHOT (Espace 3D, aimantation ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, aimantation ; aucune touche choisie)"
 
 [[raccourci]]
 action = "espace3d.grille"
 touches = []
-source = "SHOT (Espace 3D, grille du sol ; aucune touche choisie)"
+source = "FEANOR (Espace 3D, grille du sol ; aucune touche choisie)"
 
 [[raccourci]]
 action = "vue.3d"
 touches = []
-source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "scene3d.basculer"
 touches = []
-source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "vue3d.recadrer"
 touches = []
-source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "scene3d.cadrer"
 touches = []
-source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "outil3d.orbite"
 touches = []
-source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "outil3d.glisser"
 touches = []
-source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "outil3d.avancer"
 touches = []
-source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "outil3d.deplacer"
 touches = []
-source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "scene3d.outil_choisir"
 touches = []
-source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "scene3d.outil_deplacer"
 touches = []
-source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "scene3d.outil_tourner"
 touches = []
-source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "scene3d.outil_echelle"
 touches = []
-source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "scene3d.vue_camera"
 touches = []
-source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "scene3d.aimanter"
 touches = []
-source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 [[raccourci]]
 action = "scene3d.grille"
 touches = []
-source = "SHOT (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
+source = "FEANOR (ancien nom, double d'une commande de l'Espace 3D ; aucune touche choisie)"
 
 # Marque d'image (13a) : une image de storyboard de plus dans le plan ; pas de touche à elle.
 [[raccourci]]
 action = "marque.basculer"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 # ------------------------------------------------------------------------------------ Espaces de travail
-# Les dispositions de SHOT (sans touche par défaut).
+# Les dispositions de FEANOR (sans touche par défaut).
 
 [[raccourci]]
 action = "espace.standard"
 touches = []
-source = "SHOT (disposition par défaut)"
+source = "FEANOR (disposition par défaut)"
 
 [[raccourci]]
 action = "espace.dessin"
@@ -1909,7 +1909,7 @@ touches = []
 [[raccourci]]
 action = "espace.enregistrer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Les quatre espaces de travail (INTERFACE.md, 6.1, 11 et 14), un onglet chacun en haut à droite :
 # Vignettes, Storyboard, Animation et Montage retiennent chacun leur disposition. Tab passe déjà du storyboard
@@ -1923,12 +1923,12 @@ source = "proposition (V comme Vignettes ; Alt+V est pris par le miroir vertical
 [[raccourci]]
 action = "espace.storyboard"
 touches = []
-source = "SHOT (espace de travail lié au mode Storyboard)"
+source = "FEANOR (espace de travail lié au mode Storyboard)"
 
 [[raccourci]]
 action = "espace.animation"
 touches = []
-source = "SHOT (espace de travail lié au mode Animation)"
+source = "FEANOR (espace de travail lié au mode Animation)"
 
 [[raccourci]]
 action = "espace.montage"
@@ -1938,27 +1938,27 @@ source = "proposition (M comme Montage ; troisième onglet en haut à droite)"
 [[raccourci]]
 action = "espace.retablir"
 touches = []
-source = "SHOT (remet la disposition d'origine de l'espace en cours)"
+source = "FEANOR (remet la disposition d'origine de l'espace en cours)"
 
 [[raccourci]]
 action = "vue.panneau_outils"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "vue.panneau_fiche"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "vue.panneau_bande"
 touches = []
-source = "SHOT"
+source = "FEANOR"
 
 [[raccourci]]
 action = "vue.performance"
 touches = []
-source = "SHOT (mesure de la performance, sans touche : la palette Ctrl+K ou le menu Affichage)"
+source = "FEANOR (mesure de la performance, sans touche : la palette Ctrl+K ou le menu Affichage)"
 
 # ------------------------------------------------------------------------------------ Table lumineuse et guides
 # Les touches des guides.
@@ -2032,7 +2032,7 @@ touches = ["Ctrl+Maj+F"]
 etat = "non implémenté"
 
 # ------------------------------------------------------------------------------------ Sans touche par défaut
-# Commandes de SHOT qui n'ont pas de touche : elles sont ici pour que le fichier les nomme toutes
+# Commandes de FEANOR qui n'ont pas de touche : elles sont ici pour que le fichier les nomme toutes
 # (liste F1, fichier personnel). On y pose une touche par le clic droit sur la commande, ou en
 # remplissant « touches » dans le fichier personnel. Palette de commandes : Ctrl+K.
 # (Passe d'interface du 2026-10-19 : l'essai keymap_tests::every_action_has_a_block_in_the_file
@@ -2042,1369 +2042,1369 @@ etat = "non implémenté"
 [[raccourci]]
 action = "fichier.exporter"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fichier.preferences"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fichier.importer_scenario"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Export pour le montage (EDL, Final Cut XML, OpenTimelineIO) et numérotation des plans (suivie ou
 # verrouillée).
 [[raccourci]]
 action = "fichier.exporter_montage"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Fiche technique : le découpage du film en tableau (CSV ou classeur XLSX), un plan par ligne.
 [[raccourci]]
 action = "fichier.exporter_fiche"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Pipeline de production (étape 1) : liste des plans pour le suivi, paquet de livraison, modèle de noms, modèle d'épisode.
 [[raccourci]]
 action = "fichier.exporter_liste_plans"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fichier.exporter_paquet"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fichier.exporter_renumerotation"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fichier.kitsu_publier"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fichier.kitsu_retours"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "projet.noms_production"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "projet.enregistrer_modele_episode"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Relecture par le réalisateur : exporter la page HTML, importer les notes qui reviennent.
 [[raccourci]]
 action = "fichier.exporter_relecture"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 # Vignettes : annotations (stylo et gomme par-dessus la planche, sans effet sur le storyboard), marie-louise, et les deux
 # exports de la planche (aucune touche par défaut : à toi de les régler dans Préférences > Raccourcis).
 
 [[raccourci]]
 action = "fichier.exporter_planche"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fichier.exporter_colorscript"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vignettes.annotation_stylo"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vignettes.annotation_gomme"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vignettes.annotation_lasso"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vignettes.annotation_calque_nouveau"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vignettes.annotations_afficher"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vignettes.annotations_effacer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vignettes.marie_louise"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vignettes.note"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 
 [[raccourci]]
 action = "fichier.importer_notes"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "numerotation.verrouiller"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "numerotation.renumeroter"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "aide.a_propos"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "aide.diagnostic"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "pinceau.enregistrer_traits"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Dessin, pinceaux, fond sous le trait, sélection.
 [[raccourci]]
 action = "dessin.vider"
 touches = []
-source = "SHOT (sans touche : Suppr n'efface rien sans sélection)"
+source = "FEANOR (sans touche : Suppr n'efface rien sans sélection)"
 
 [[raccourci]]
 action = "pinceau.derriere"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "pinceau.sur_aplat"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "pinceau.fond"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "pinceau.remplir"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fond.calques_choisis"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fond.tout_le_plan"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fond.retirer_choisis"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fond.couleur_partout"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "aplat.colorier_comme_precedente"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "deformer.enveloppe"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "deformer.perspective"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "selection.reinit_pivot"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "selection.proportions"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Plans, montage, rognage.
 [[raccourci]]
 action = "panneau.fusionner_choisis"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "plan.avancer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "plan.reculer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "lecture.boucle"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "montage.duree"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "montage.duree_plans"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "sequence.nouvelle_avec_plans"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "sequence.nouvelle_fin"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "sequence.nouvelle_avec_cases"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "sequence.couper_ici"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "sequence.renommer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "sequence.afficher_toutes"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "sequence.afficher_courante"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "sequence.afficher_aucune_autre"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "sequence.afficher_ordre_film"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "montage.debut_a_tete"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "montage.fin_a_tete"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "montage.rognage_retablir"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "montage.rognage_oublier"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "montage.aimanter"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "piste.basculer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "piste.replier_tout"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "piste.deplier_tout"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "piste.auto_deplier"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Panneaux et barre des panneaux.
 [[raccourci]]
 action = "vue.historique"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vue.commentaires"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vue.reglages"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vue.pinceaux"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vue.couleur"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vue.calques"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vue.fiche"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vue.barre_panneaux"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vue.reajuster_panneaux"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Commentaires.
 [[raccourci]]
 action = "commentaire.ajouter"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "commentaire.resoudre"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "commentaire.supprimer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "commentaire.precedent"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "commentaire.suivant"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Fil de décision par plan.
 [[raccourci]]
 action = "notes.suivante_a_traiter"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "notes.fil"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "notes.statut_a_faire"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "notes.statut_fait"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "notes.statut_refuse"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "notes.statut_discussion"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "notes.retake"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "notes.conflit"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "notes.retakes_exporter"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Bibliothèque de bruitages (sans touche : à choisir).
 [[raccourci]]
 action = "vue.bruitages"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "bruitage.inserer"
 touches = []
-source = "SHOT (sans touche : un double-clic sur le son le pose aussi)"
+source = "FEANOR (sans touche : un double-clic sur le son le pose aussi)"
 
 [[raccourci]]
 action = "bruitage.ecouter"
 touches = []
-source = "SHOT (sans touche : le bouton de la ligne l'écoute aussi)"
+source = "FEANOR (sans touche : le bouton de la ligne l'écoute aussi)"
 
-# Suggestions sonores : SHOT lit le storyboard et propose des sons témoins (sans touche : à choisir).
+# Suggestions sonores : FEANOR lit le storyboard et propose des sons témoins (sans touche : à choisir).
 [[raccourci]]
 action = "vue.suggestions_sonores"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "suggestion.lire"
 touches = []
-source = "SHOT (sans touche : le bouton « Lire le storyboard » du panneau le lance aussi)"
+source = "FEANOR (sans touche : le bouton « Lire le storyboard » du panneau le lance aussi)"
 
 # Mon panneau (essai du menu Labo) : tes commandes, tes brosses et tes outils perso en un panneau (sans touche : à choisir).
 [[raccourci]]
 action = "vue.mon_panneau"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Panneau Scénario : le scénario importé, lisible comme un scénario (sans touche : à choisir).
 [[raccourci]]
 action = "vue.scenario"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Panneau Bibliothèque : explorer les fichiers, voir, lire et écouter les images, vidéos et sons (sans touche : à choisir).
 [[raccourci]]
 action = "vue.bibliotheque"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Bibliothèque : revenir au dossier d'avant (le bouton du panneau le fait aussi).
 [[raccourci]]
 action = "bibliotheque.retour"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Bibliothèque : remonter d'un dossier (Retour arrière, la souris sur le panneau ; le bouton aussi).
 [[raccourci]]
 action = "bibliotheque.dossier_parent"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Bibliothèque : relire le dossier et refaire les vignettes.
 [[raccourci]]
 action = "bibliotheque.actualiser"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Bibliothèque : ajouter (ou retirer) le dossier courant des favoris.
 [[raccourci]]
 action = "bibliotheque.favori"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Bibliothèque : lire ou mettre en pause l'aperçu (Espace, la souris sur le panneau ; sans autre touche).
 [[raccourci]]
 action = "bibliotheque.lecture"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Bibliothèque : importer le fichier choisi dans le plan (clic droit sur le fichier).
 [[raccourci]]
 action = "bibliotheque.importer_plan"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Bibliothèque : ajouter le fichier choisi aux références (clic droit sur le fichier).
 [[raccourci]]
 action = "bibliotheque.ajouter_references"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Bibliothèque : ajouter le fichier choisi au montage (clic droit sur le fichier).
 [[raccourci]]
 action = "bibliotheque.ajouter_montage"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Bibliothèque : ouvrir le dossier du fichier choisi dans l'Explorateur de Windows (clic droit sur le fichier).
 [[raccourci]]
 action = "bibliotheque.afficher_explorateur"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Bibliothèque : copier le chemin du fichier choisi dans le presse-papiers (clic droit sur le fichier ; seul endroit où le panneau le touche).
 [[raccourci]]
 action = "bibliotheque.copier_chemin"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Créer les plans depuis le scénario gardé dans le projet : le bouton du panneau Scénario (sans touche : à choisir).
 [[raccourci]]
 action = "scenario.creer_plans"
 touches = []
-source = "SHOT (sans touche : le bouton du panneau Scénario le lance aussi)"
+source = "FEANOR (sans touche : le bouton du panneau Scénario le lance aussi)"
 
 # Effets des extraits de son (sans touche : à choisir).
 [[raccourci]]
 action = "son.fondu_entree"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "son.fondu_sortie"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "son.enchaine"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "son.cle_volume"
 touches = []
-source = "SHOT (sans touche : un double-clic sur l'extrait pose aussi une clé)"
+source = "FEANOR (sans touche : un double-clic sur l'extrait pose aussi une clé)"
 
 [[raccourci]]
 action = "son.solo"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "son.effets_reinit"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Transitions du montage (sans touche : à choisir).
 [[raccourci]]
 action = "transition.ajouter"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "transition.supprimer"
 touches = []
-source = "SHOT (sans touche : Suppr supprime la transition choisie dans le montage)"
+source = "FEANOR (sans touche : Suppr supprime la transition choisie dans le montage)"
 
 [[raccourci]]
 action = "transition.fondu_enchaine"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "transition.fondu_noir"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "transition.fondu_blanc"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "transition.volet"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "transition.noir"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "transition.apercu"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Envois : l'état de chaque plan quand le film part chez le réalisateur, et les plans qui ont changé
 # depuis (sans touche : à choisir).
 [[raccourci]]
 action = "envoi.marquer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "envoi.liste"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "envoi.modifie_suivant"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "envoi.modifie_precedent"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "envoi.modifies_choisir"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Journal des différences entre deux envois (sans touche : à choisir).
 [[raccourci]]
 action = "envoi.journal"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Versions d'un plan (V1, V2, V3…) : sans touche, à choisir.
 [[raccourci]]
 action = "version.nouvelle"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "version.vide"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "version.purger"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "version.purger_plan"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "version.precedente"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "version.suivante"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Versions d'une séquence (A · B · C) : sans touche, à choisir.
 [[raccourci]]
 action = "variante.nouvelle"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "variante.copie"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "variante.mettre_a_jour"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "variante.vide"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "variante.precedente"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "variante.suivante"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "variante.renommer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "variante.supprimer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "variante.comparer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Comparer un plan avec lui-même : deux versions, ou aujourd'hui et un envoi (sans touche : à choisir).
 [[raccourci]]
 action = "comparer.ouvrir"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Références visuelles (sans touche : à choisir).
 [[raccourci]]
 action = "vue.references"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.importer_image"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.importer_video"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.coller"
 touches = []
-source = "SHOT (sans touche : Ctrl+V dans le panneau Références colle l'image du presse-papiers)"
+source = "FEANOR (sans touche : Ctrl+V dans le panneau Références colle l'image du presse-papiers)"
 
 [[raccourci]]
 action = "references.supprimer"
 touches = []
-source = "SHOT (sans touche : Suppr dans le panneau Références supprime les références choisies)"
+source = "FEANOR (sans touche : Suppr dans le panneau Références supprime les références choisies)"
 
 [[raccourci]]
 action = "references.lier_plan"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.filtre_plan"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.tout_voir"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.postit"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.texte"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.titre"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.cadre"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.ranger"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.recadrer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.retourner_h"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.retourner_v"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.noir_blanc"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.devant"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.derriere"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.tout_selectionner"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.importer_planche"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.rectangle"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.detacher"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.plein_ecran"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.ecran_2"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.transparente"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "references.toujours_dessus"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Brosse par personnage (sans touche : à choisir).
 [[raccourci]]
 action = "vue.personnages"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "perso.barre"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "perso.ajouter"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "perso.ajouter_classique"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "perso.ajouter_decor"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "perso.suivant"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "perso.precedent"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "perso.aucun"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Panneau Vignettes : sens de lecture de la planche et textes à côté des cases (sans touche : à choisir).
 [[raccourci]]
 action = "vue.vignettes_panneau"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vignettes.sens_lignes"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vignettes.sens_japonais"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vignettes.texte_action"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vignettes.texte_dialogue"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "vignettes.texte_notes"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Effets, propagation, caméra, aides au cadrage.
 [[raccourci]]
 action = "fx.choisir_aucun"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.cles_copier"
 touches = []
-source = "SHOT (sans touche : Ctrl+C copie les clés d'effets choisies)"
+source = "FEANOR (sans touche : Ctrl+C copie les clés d'effets choisies)"
 
 [[raccourci]]
 action = "fx.copier"
 touches = []
-source = "SHOT (sans touche : Ctrl+C dans le panneau Effets copie l'effet choisi)"
+source = "FEANOR (sans touche : Ctrl+C dans le panneau Effets copie l'effet choisi)"
 
 [[raccourci]]
 action = "fx.copier_tout"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.coller"
 touches = []
-source = "SHOT (sans touche : Ctrl+V dans le panneau Effets colle les effets copiés)"
+source = "FEANOR (sans touche : Ctrl+V dans le panneau Effets colle les effets copiés)"
 
 [[raccourci]]
 action = "fx.remplacer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.cles_coller"
 touches = []
-source = "SHOT (sans touche : Ctrl+V colle les clés d'effets copiées)"
+source = "FEANOR (sans touche : Ctrl+V colle les clés d'effets copiées)"
 
 [[raccourci]]
 action = "fx.cles_supprimer"
 touches = []
-source = "SHOT (sans touche : Suppr supprime les clés d'effets choisies)"
+source = "FEANOR (sans touche : Suppr supprime les clés d'effets choisies)"
 
 [[raccourci]]
 action = "fx.tremblement"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.tremblement_repos"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Effets du trait (fxtrait.rs) et leurs préréglages : sans touche par défaut, comme le tremblement du
 # trait ; Ctrl+K les trouve par leur nom, et « Assigner un raccourci… » au clic droit leur en donne un.
 [[raccourci]]
 action = "fx.ecriture"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.crayonne"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.respiration"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.ondulation_trait"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.pointilles"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.desagregation"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.preset_apparition"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.preset_croquis"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.preset_poussiere"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Effets de matière du trait (fxmatiere.rs), « Appliquer pour de bon » de la plume et leurs préréglages :
 # sans touche par défaut, comme les effets du trait.
 [[raccourci]]
 action = "fx.lisere"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.trait_sec"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.encre_bave"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.degrade_trait"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.plume"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.plume_appliquer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.preset_encre_chine"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.preset_feutre_use"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.preset_contour_blanc"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.preset_arc_en_ciel"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fx.preset_plume_calligraphique"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "calque.propager"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "calque.colorier_zones"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "camera.cles_copier"
 touches = []
-source = "SHOT (sans touche : Ctrl+C copie les clés de caméra choisies)"
+source = "FEANOR (sans touche : Ctrl+C copie les clés de caméra choisies)"
 
 [[raccourci]]
 action = "camera.cles_coller"
 touches = []
-source = "SHOT (sans touche : Ctrl+V colle les clés de caméra copiées)"
+source = "FEANOR (sans touche : Ctrl+V colle les clés de caméra copiées)"
 
 [[raccourci]]
 action = "camera.cles_supprimer"
 touches = []
-source = "SHOT (sans touche : Suppr supprime les clés de caméra choisies)"
+source = "FEANOR (sans touche : Suppr supprime les clés de caméra choisies)"
 
 [[raccourci]]
 action = "camera.cles_tout_choisir"
 touches = []
-source = "SHOT (sans touche : Ctrl+A choisit toutes les clés de caméra du plan)"
+source = "FEANOR (sans touche : Ctrl+A choisit toutes les clés de caméra du plan)"
 
 [[raccourci]]
 action = "camera.effet_appliquer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Préréglages d'effets et calques d'effets (effet.*) : sans touche par défaut, comme les effets de
 # caméra ; Ctrl+K les trouve par leur nom, et « Assigner un raccourci… » au clic droit leur en donne un.
 [[raccourci]]
 action = "effet.impact"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "effet.lueur"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "effet.flash_blanc"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "effet.flash_couleur"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "effet.tremblement"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "effet.vignettage"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "effet.grain"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "effet.aberration"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "effet.flou_vitesse"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "effet.timecode"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "effet.appliquer"
 touches = []
-source = "SHOT (sans touche : le bouton Appliquer de la fenêtre du préréglage)"
+source = "FEANOR (sans touche : le bouton Appliquer de la fenêtre du préréglage)"
 
 [[raccourci]]
 action = "effet.fermer"
 touches = []
-source = "SHOT (sans touche : Échap ferme la fenêtre du préréglage)"
+source = "FEANOR (sans touche : Échap ferme la fenêtre du préréglage)"
 
 [[raccourci]]
 action = "effet.vide"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "cadrage.tiers"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "cadrage.grille_or"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "cadrage.spirale"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "cadrage.spirale_orientation"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "cadrage.diagonales"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "cadrage.croix"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "cadrage.aucune"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "cadrage.format_suivant"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "calque.effets"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fichier.exporter_gif"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Travailler à plusieurs sur un film partagé : prendre et rendre des plans, le jeton du montage, la fenêtre Équipe
 # (sans touche : à choisir).
 [[raccourci]]
 action = "fichier.partager"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "equipe.fenetre"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "equipe.prendre_plan"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "equipe.rendre_plan"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "equipe.prendre_sequence"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "equipe.rendre_sequence"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "equipe.prendre_montage"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "equipe.rendre_montage"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "equipe.rendre_tout"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 # Clés d'opacité des calques et calque Couleur unie (2026-10-29) : sans touche par défaut.
 [[raccourci]]
 action = "calque.cle_opacite"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "calque.cle_opacite_lisser"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "calque.cle_opacite_supprimer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "calque.cles_opacite_supprimer"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "calque.nouveau_couleur_unie"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fichier.exporter_images_par_plan"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fichier.exporter_son_par_piste"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fichier.exporter_calques"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fichier.exporter_camera"
 touches = []
-source = "SHOT (sans touche)"
+source = "FEANOR (sans touche)"

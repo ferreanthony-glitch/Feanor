@@ -211,7 +211,7 @@ pub fn parse_bytes(bytes: &[u8], ext: &str, progress: &dyn Fn(f32)) -> Result<Sc
     }
 }
 
-const PDF_MESSAGE: &str = "Les fichiers PDF ne sont pas lus (SHOT n'a pas de lecteur de PDF hors connexion). Exporte le scénario en .fountain ou .txt depuis ton logiciel d'écriture, ou copiez le texte du PDF dans un fichier .txt.";
+const PDF_MESSAGE: &str = "Les fichiers PDF ne sont pas lus (FEANOR n'a pas de lecteur de PDF hors connexion). Exporte le scénario en .fountain ou .txt depuis ton logiciel d'écriture, ou copiez le texte du PDF dans un fichier .txt.";
 
 fn parse_bytes_inner(bytes: &[u8], ext: &str, progress: &dyn Fn(f32)) -> Result<Script, String> {
     if bytes.is_empty() {

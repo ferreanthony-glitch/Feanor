@@ -616,7 +616,7 @@ pub fn page(j: &Journal, rendus: &[Option<Rendu>]) -> String {
         }
         h.push_str("</div></section>");
     }
-    h.push_str(&format!("</main><footer>Journal des différences fait par SHOT le {}. Les noms des plans sont ceux d'aujourd'hui.</footer></body></html>", esc(&j.le)));
+    h.push_str(&format!("</main><footer>Journal des différences fait par FEANOR le {}. Les noms des plans sont ceux d'aujourd'hui.</footer></body></html>", esc(&j.le)));
     h
 }
 

@@ -82,7 +82,7 @@ impl App {
         if exporter {
             w.result = None;
             let r = self.settings.liste_plans.clone();
-            let base = self.base_name_or("SHOT");
+            let base = self.base_name_or("FEANOR");
             let nom = listeplans::nom_de_fichier(&self.doc, &base, r.format);
             let filtre = match r.format {
                 Format::Csv => ("CSV (.csv)", ["csv"]),

@@ -296,8 +296,8 @@ pub fn size_problem_for(format: Format, size: [usize; 2], enc: &Encoders) -> Opt
 pub fn h264_warning(enc: &Encoders) -> Option<String> {
     match enc.h264 {
         Some("libx264") | None => None,
-        Some("h264_mf") => Some("qualité H.264 réduite : ce ffmpeg n'a pas libx264, SHOT utilise l'encodeur H.264 de Windows (réglé au débit : fichier plus lourd à qualité égale). Pour la meilleure qualité, choisis un ffmpeg complet (ffmpeg.org).".into()),
-        Some(other) => Some(format!("qualité H.264 réduite : ce ffmpeg n'a pas libx264, SHOT utilise {other} (réglé au débit : fichier plus lourd à qualité égale). Pour la meilleure qualité, choisis un ffmpeg complet (ffmpeg.org).")),
+        Some("h264_mf") => Some("qualité H.264 réduite : ce ffmpeg n'a pas libx264, FEANOR utilise l'encodeur H.264 de Windows (réglé au débit : fichier plus lourd à qualité égale). Pour la meilleure qualité, choisis un ffmpeg complet (ffmpeg.org).".into()),
+        Some(other) => Some(format!("qualité H.264 réduite : ce ffmpeg n'a pas libx264, FEANOR utilise {other} (réglé au débit : fichier plus lourd à qualité égale). Pour la meilleure qualité, choisis un ffmpeg complet (ffmpeg.org).")),
     }
 }
 

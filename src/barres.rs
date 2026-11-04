@@ -152,7 +152,7 @@ const fn fixe(id: &'static str, groupe: u8) -> Cmd {
 /// (`docs/DOUBLONS.md`).
 pub(crate) const COMMANDES: &[Cmd] = &[
     bouton("fichier.nouveau", ph::FILE_PLUS, "Nouveau projet", "Commencer un projet vide.", true, 0),
-    bouton("fichier.ouvrir", ph::FOLDER_OPEN, "Ouvrir", "Ouvrir un projet SHOT.", true, 0),
+    bouton("fichier.ouvrir", ph::FOLDER_OPEN, "Ouvrir", "Ouvrir un projet FEANOR.", true, 0),
     bouton("fichier.enregistrer", ph::FLOPPY_DISK, "Enregistrer", "Enregistrer le projet.", true, 0),
     bouton("fichier.exporter_film", ph::EXPORT, "Exporter le film", "Exporter le montage.", true, 0),
     bouton("edition.annuler", ph::ARROW_COUNTER_CLOCKWISE, "Annuler", "Défaire la dernière opération.", true, 1),

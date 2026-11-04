@@ -662,7 +662,7 @@ impl App {
             Format::Camera => {
                 let Some(out) = save_dialog(self, &base, Format::Camera, false) else { return };
                 let plans = export::panels_of(&frames);
-                let (title, settings, target) = (self.base_name_or("SHOT"), s.camera, out.clone());
+                let (title, settings, target) = (self.base_name_or("FEANOR"), s.camera, out.clone());
                 let message = format!("Clés de caméra exportées ({} plan{}) : {}", plans.len(), if plans.len() > 1 { "s" } else { "" }, out.display());
                 self.start_job(ExportJob::task("Export des clés de caméra".into(), &out, message, move |snap, _| {
                     let e = exportcamera::build(snap, &plans, &title, &settings);

@@ -63,7 +63,7 @@ pub fn dir() -> Option<PathBuf> {
 /// Texte du rapport.
 pub fn report_text(message: &str, location: &str, thread: &str, backtrace: &str) -> String {
     format!(
-        "SHOT {} : une erreur de programme (une erreur rattrapée, par exemple dans la propagation, ne ferme pas SHOT).\n\nErreur : {message}\nEndroit : {location}\nFil : {thread}\nQuand : {} s (horloge Unix)\nDernières actions : {}\n\nPile :\n{backtrace}\n",
+        "FEANOR {} : une erreur de programme (une erreur rattrapée, par exemple dans la propagation, ne ferme pas FEANOR).\n\nErreur : {message}\nEndroit : {location}\nFil : {thread}\nQuand : {} s (horloge Unix)\nDernières actions : {}\n\nPile :\n{backtrace}\n",
         env!("CARGO_PKG_VERSION"),
         crate::recovery::now_secs(),
         dernieres_actions(),

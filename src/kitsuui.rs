@@ -914,8 +914,8 @@ impl App {
                 ui.end_row();
             });
             ui.add_space(2.0);
-            ui.label(RichText::new("Correspondance des statuts (Kitsu → note de SHOT)").small().strong());
-            ui.label(RichText::new("Un commentaire lu dans Kitsu devient une note dont le statut vient de la tâche à ce moment-là. Une note déjà dans SHOT n'est jamais modifiée.").small().color(theme::texte_doux()));
+            ui.label(RichText::new("Correspondance des statuts (Kitsu → note de FEANOR)").small().strong());
+            ui.label(RichText::new("Un commentaire lu dans Kitsu devient une note dont le statut vient de la tâche à ce moment-là. Une note déjà dans FEANOR n'est jamais modifiée.").small().color(theme::texte_doux()));
             egui::Grid::new("kitsu_statuts").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
                 for (s, nom) in [(crate::fildecision::Status::Todo, "À faire"), (crate::fildecision::Status::Discussion, "En discussion"), (crate::fildecision::Status::Done, "Fait"), (crate::fildecision::Status::Refused, "Refusé")] {
                     ui.label(nom);

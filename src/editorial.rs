@@ -610,7 +610,7 @@ pub fn build_plan(doc: &Document, opts: &Options, cur_panel: usize, title: &str)
     }
 
     Ok(Plan {
-        title: if title.trim().is_empty() { "SHOT".into() } else { title.trim().to_string() },
+        title: if title.trim().is_empty() { "FEANOR".into() } else { title.trim().to_string() },
         rate,
         start_tc,
         size,
@@ -713,7 +713,7 @@ pub fn write_edl(plan: &Plan) -> String {
     let mut s = String::new();
     s.push_str(&format!("TITLE: {}\n", ascii_fold(&plan.title)));
     s.push_str("FCM: NON-DROP FRAME\n\n");
-    s.push_str(&format!("* SHOT : {} plan(s), {} images, {}.\n", plan.clips.len(), plan.total, plan.rate.label()));
+    s.push_str(&format!("* FEANOR : {} plan(s), {} images, {}.\n", plan.clips.len(), plan.total, plan.rate.label()));
     if plan.rate.ntsc {
         s.push_str("* Cadence NTSC : les numeros d'images sont ceux du projet, time code sans saut d'images.\n");
     }
@@ -802,7 +802,7 @@ pub fn write_edl(plan: &Plan) -> String {
     // de vraies pistes : le logiciel range chaque canal sur une piste son).
     if !plan.audio.is_empty() {
         const CHANNELS: [&str; 8] = ["A", "A2", "A3", "A4", "A5", "A6", "A7", "A8"];
-        s.push_str("\n* SON : un evenement par extrait, piste par piste (canal A, A2, A3...). Chaque extrait est un fichier a part, effets de SHOT compris.\n");
+        s.push_str("\n* SON : un evenement par extrait, piste par piste (canal A, A2, A3...). Chaque extrait est un fichier a part, effets de FEANOR compris.\n");
         let tracks = plan.audio.iter().map(|a| a.track).max().unwrap_or(0);
         for t in 1..=tracks {
             let name = plan.audio.iter().find(|a| a.track == t).map_or(String::new(), |a| a.track_name.clone());
@@ -1299,7 +1299,7 @@ pub fn write_otio(plan: &Plan, abs: Option<&Path>) -> String {
 /// vérifier.
 pub fn readme(plan: &Plan, opts: &Options) -> String {
     let mut s = String::new();
-    s.push_str(&format!("{} : export pour le montage (SHOT)\n", plan.title));
+    s.push_str(&format!("{} : export pour le montage (FEANOR)\n", plan.title));
     s.push_str(&"=".repeat(40));
     s.push_str("\n\n");
     s.push_str(&format!(
@@ -1326,7 +1326,7 @@ pub fn readme(plan: &Plan, opts: &Options) -> String {
     }
     s.push_str(&format!("- media/ : un fichier {} par plan, nommé comme le plan (SQ01_PL012A = séquence 1, plan 12A).\n", if plan.media == Media::ProRes { "ProRes 422 HQ (.mov)" } else { "H.264 (.mp4)" }));
     if !plan.audio.is_empty() {
-        s.push_str("- audio/ : un fichier WAV 48 kHz stéréo par extrait son, effets de SHOT compris (XML et OTIO).\n");
+        s.push_str("- audio/ : un fichier WAV 48 kHz stéréo par extrait son, effets de FEANOR compris (XML et OTIO).\n");
     }
     s.push_str("\nLes chemins des médias sont ");
     s.push_str(if opts.absolute { "absolus (là où l'export a été fait).\n" } else { "relatifs : gardez les fichiers de montage à côté de media/ et audio/.\n" });

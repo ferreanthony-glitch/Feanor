@@ -126,7 +126,7 @@ impl App {
         let name = format!("{}.{}", self.base_name_or(if title.is_empty() { "Mon film" } else { &title }), project::EXTENSION);
         let mut dialog = rfd::FileDialog::new()
             .set_title("Enregistrer le projet (un dossier à ce nom sera créé)")
-            .add_filter("Projet SHOT", &[project::EXTENSION])
+            .add_filter("Projet FEANOR", &[project::EXTENSION])
             .set_file_name(name);
         // À côté du dossier du projet ouvert (un dossier à ce nom sera créé : pas dedans), sinon à côté du fichier importé.
         if let Some(dir) = self.dossier_pour_enregistrer_sous().or_else(|| self.import_source.as_ref().and_then(|p| p.parent()).map(std::path::Path::to_path_buf)) {
@@ -378,7 +378,7 @@ impl App {
                 ui.label("Le projet n'a pas pu être enregistré :");
                 ui.label(egui::RichText::new(&error).strong());
                 ui.add_space(4.0);
-                ui.label("Il reste marqué comme modifié et rien n'est perdu dans SHOT. Libère de la place, vérifie les droits d'écriture du dossier, puis enregistre à nouveau.");
+                ui.label("Il reste marqué comme modifié et rien n'est perdu dans FEANOR. Libère de la place, vérifie les droits d'écriture du dossier, puis enregistre à nouveau.");
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     retry = ui.button("Réessayer").clicked();
@@ -401,7 +401,7 @@ impl App {
         // (Pas de roue qui tourne : elle repeindrait l'écran à chaque image ; le compte se rafraîchit
         // dix fois par seconde, `tick_save`.)
         let text = if total == 0 { "Enregistrement…".to_string() } else { format!("Enregistrement… {done} / {total}") };
-        ui.label(egui::RichText::new(text).small()).on_hover_text("SHOT écrit le projet pendant que tu continues : rien ne se fige. Fermer attend la fin de l'écriture.");
+        ui.label(egui::RichText::new(text).small()).on_hover_text("FEANOR écrit le projet pendant que tu continues : rien ne se fige. Fermer attend la fin de l'écriture.");
     }
 
     /// `fermeture` : au cas où une écriture dure encore, on l'attend (on ne perd jamais un projet).

@@ -445,7 +445,7 @@ fn rangee_pipette(ui: &mut Ui, cible: Id) {
             armee,
             ph::EYEDROPPER,
             "Pipette",
-            "Prendre la couleur d'un pixel de l'écran : clique ensuite n'importe où dans SHOT. Échap ou clic droit : annuler. Le dessin et la couleur de dessin ne changent pas.",
+            "Prendre la couleur d'un pixel de l'écran : clique ensuite n'importe où dans FEANOR. Échap ou clic droit : annuler. Le dessin et la couleur de dessin ne changent pas.",
             "",
         );
         #[cfg(test)]

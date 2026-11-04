@@ -86,7 +86,7 @@ pub struct Etape {
 pub const ETAPES: [Etape; 5] = [
     Etape {
         titre: "Créer un projet",
-        texte: "Donne un nom à ton projet puis « Créer » : SHOT te propose un format, une cadence et un dossier.",
+        texte: "Donne un nom à ton projet puis « Créer » : FEANOR te propose un format, une cadence et un dossier.",
         bouton: "Nouveau projet…",
         icone: ph::FILE_PLUS,
         action: "fichier.nouveau",
@@ -223,7 +223,7 @@ impl App {
             if crate::bulles::bulle(ui.button(RichText::new("Visite rapide (2 min)").strong()), "Visite rapide", "Cinq étapes : créer un projet, dessiner des vignettes, mettre une durée, écouter l'animatique, exporter.", "").clicked() {
                 reponse = Some(Reponse::Visite);
             }
-            ui.label(RichText::new(format!("{}  Première fois sur SHOT ?", ph::COMPASS)).color(theme::texte_doux()));
+            ui.label(RichText::new(format!("{}  Première fois sur FEANOR ?", ph::COMPASS)).color(theme::texte_doux()));
         } else if self.visite_en_cours() {
             let e = &ETAPES[0];
             let mut quitter = false;
@@ -260,7 +260,7 @@ impl App {
                 if offre {
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(ph::COMPASS).size(16.0).color(theme::accent_texte()));
-                        ui.label(RichText::new("Première fois sur SHOT ?").strong().color(theme::texte_fort()));
+                        ui.label(RichText::new("Première fois sur FEANOR ?").strong().color(theme::texte_fort()));
                     });
                     ui.add(egui::Label::new(RichText::new("Une visite rapide de deux minutes : créer un projet, dessiner des vignettes, mettre une durée, écouter l'animatique, exporter.").color(theme::texte_doux())).wrap());
                     ui.add_space(4.0);
@@ -301,8 +301,8 @@ impl App {
                 });
                 if etape + 1 == ETAPES.len() {
                     ui.add_space(2.0);
-                    ui.label(RichText::new("Pour finir : SHOT peut régler ses performances sur cet ordinateur.").small().color(theme::texte_doux()));
-                    if crate::bulles::bulle(ui.button("Régler SHOT pour cette machine…"), "Régler SHOT pour cette machine", "Détecte le matériel, le mesure une quinzaine de secondes et propose des réglages de performance. Rien n'est appliqué sans ton accord. Aussi dans Aide.", "").clicked() {
+                    ui.label(RichText::new("Pour finir : FEANOR peut régler ses performances sur cet ordinateur.").small().color(theme::texte_doux()));
+                    if crate::bulles::bulle(ui.button("Régler FEANOR pour cette machine…"), "Régler FEANOR pour cette machine", "Détecte le matériel, le mesure une quinzaine de secondes et propose des réglages de performance. Rien n'est appliqué sans ton accord. Aussi dans Aide.", "").clicked() {
                         regler = true;
                     }
                 }

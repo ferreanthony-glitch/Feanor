@@ -399,7 +399,7 @@ impl App {
         let shortcut = self.keymap.label("calque.colorier_zones");
         let resp = ui.add_enabled(usable, egui::Button::new("Colorier par zones…").shortcut_text(&shortcut));
         if !usable {
-            resp.on_disabled_hover_text("Choisis un calque de dessin (le trait) : SHOT reporte les couleurs des clés sur les autres images.");
+            resp.on_disabled_hover_text("Choisis un calque de dessin (le trait) : FEANOR reporte les couleurs des clés sur les autres images.");
         } else if resp.clicked() {
             ui.close_menu();
             self.select_layer(li);
@@ -458,7 +458,7 @@ impl App {
                 ui.set_width(480.0);
                 ui.label(
                     egui::RichText::new(
-                        "Colorie quelques images clés (des aplats sous le trait, dans les zones fermées) : SHOT retrouve les mêmes zones \
+                        "Colorie quelques images clés (des aplats sous le trait, dans les zones fermées) : FEANOR retrouve les mêmes zones \
                          sur les autres images et y pose les mêmes aplats, nets et modifiables.",
                     )
                     .weak()

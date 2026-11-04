@@ -197,7 +197,7 @@ pub(crate) fn decision(l: Lecture, propre: u64, regle: u64, cible: u64) -> Strin
     let vise = effectif(regle, Some(cible));
     if vise < regle {
         format!(
-            "Mémoire vidéo : budget {} Mo, SHOT en utilise {} Mo (dont {} Mo de dessins) : cache des dessins ramené à {} Mo (réglé : {} Mo).",
+            "Mémoire vidéo : budget {} Mo, FEANOR en utilise {} Mo (dont {} Mo de dessins) : cache des dessins ramené à {} Mo (réglé : {} Mo).",
             mo(l.budget),
             mo(l.utilise),
             mo(propre),
@@ -205,7 +205,7 @@ pub(crate) fn decision(l: Lecture, propre: u64, regle: u64, cible: u64) -> Strin
             mo(regle)
         )
     } else {
-        format!("Mémoire vidéo : budget {} Mo, SHOT en utilise {} Mo : cache des dessins à son poids réglé ({} Mo).", mo(l.budget), mo(l.utilise), mo(regle))
+        format!("Mémoire vidéo : budget {} Mo, FEANOR en utilise {} Mo : cache des dessins à son poids réglé ({} Mo).", mo(l.budget), mo(l.utilise), mo(regle))
     }
 }
 

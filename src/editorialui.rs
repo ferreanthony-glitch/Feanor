@@ -71,7 +71,7 @@ impl App {
             }
         }
         let title = match self.doc.properties.title.trim() {
-            "" => self.base_name_or("SHOT"),
+            "" => self.base_name_or("FEANOR"),
             t => t.to_string(),
         };
         let parent = self.settings.montage_export_dir.clone().or_else(|| self.path.as_ref().or(self.import_source.as_ref()).and_then(|p| p.parent()).map(Path::to_path_buf));

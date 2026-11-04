@@ -115,7 +115,7 @@ impl App {
         }
         let r = self.settings.fiche.clone();
         let titre = match self.doc.properties.title.trim() {
-            "" => self.base_name_or("SHOT"),
+            "" => self.base_name_or("FEANOR"),
             t => t.to_string(),
         };
         let start_tc = if editorial::parse_timecode(&r.start_tc, self.doc.fps).is_some() { r.start_tc.clone() } else { "01:00:00:00".to_string() };

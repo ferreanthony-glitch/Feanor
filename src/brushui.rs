@@ -138,7 +138,7 @@ impl App {
                 crate::demarrage::marque("pinceaux importés arrivés");
             }
             // (La lecture a planté : les pinceaux de SHOT restent ; rien n'est modifié sur le disque.)
-            Err(_) => self.status = "Les pinceaux importés n'ont pas pu être lus ; ceux de SHOT restent disponibles.".into(),
+            Err(_) => self.status = "Les pinceaux importés n'ont pas pu être lus ; ceux de FEANOR restent disponibles.".into(),
         }
     }
 

@@ -198,7 +198,7 @@ impl App {
     pub(crate) fn conseils_prefs_ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             let b = ui.button("Revoir les conseils");
-            if crate::bulles::bulle(b, "Revoir les conseils", "Les petites bulles qui expliquent un endroit de SHOT la première fois reviennent, une par endroit et une par séance.", &self.raccourci("aide.conseils")).clicked() {
+            if crate::bulles::bulle(b, "Revoir les conseils", "Les petites bulles qui expliquent un endroit de FEANOR la première fois reviennent, une par endroit et une par séance.", &self.raccourci("aide.conseils")).clicked() {
                 self.revoir_les_conseils();
             }
             ui.label(RichText::new(format!("{} conseil(s) vu(s) sur {}.", self.settings.conseils.nombre_vus(), Conseil::TOUS.len())).small().weak());

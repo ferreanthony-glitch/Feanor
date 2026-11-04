@@ -1,5 +1,5 @@
 // Le dessin de l'icône est celui de l'application (`src/logo.rs`, sans autre dépendance que
-// tiny-skia) : il sert ici à fabriquer l'icône de `shot.exe`.
+// tiny-skia) : il sert ici à fabriquer l'icône de `feanor.exe`.
 #[allow(dead_code)]
 #[path = "src/logo.rs"]
 mod logo;
@@ -24,13 +24,13 @@ fn main() {
     println!("cargo:rerun-if-env-changed=SHOT_TAS_STANDARD");
 }
 
-/// Le manifeste de l'application, mis dans `shot.exe` (et dans les exécutables des essais, qui mesurent ainsi ce que SHOT
+/// Le manifeste de l'application, mis dans `feanor.exe` (et dans les exécutables des essais, qui mesurent ainsi ce que FEANOR
 /// fait vraiment) par l'éditeur de liens de MSVC, sans autre outil : `/MANIFEST:EMBED` + `/MANIFESTINPUT`.
 ///
 /// Il ne dit qu'une chose : le **tas segmenté** de Windows 10 2004 et plus (`heapType` = `SegmentHeap`) au lieu du tas
 /// par défaut. Le tas par défaut rend les blocs de 16 Ko des tuiles (`Arc<[u32; 4096]>`) en un temps qui grandit comme
 /// le carré de leur nombre : 160 000 tuiles (un film de 300 plans) se rendaient en 8 min 14 s dans un programme à part,
-/// et SHOT mettait un quart d'heure à se fermer ou à remplacer le projet, fenêtre « ne répond pas » ; avec le tas
+/// et FEANOR mettait un quart d'heure à se fermer ou à remplacer le projet, fenêtre « ne répond pas » ; avec le tas
 /// segmenté, 0,7 s (`docs/PERFORMANCE.md`, section 25). Un Windows plus ancien ignore la ligne.
 ///
 /// Rien d'autre n'y est : il n'y avait pas de manifeste avant (winit règle la mise à l'échelle de l'écran au démarrage,
@@ -41,7 +41,7 @@ fn embarquer_manifeste() {
         return;
     }
     let out = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
-    let manifeste = out.join("shot.manifest");
+    let manifeste = out.join("feanor.manifest");
     std::fs::write(
         &manifeste,
         "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n\
@@ -53,22 +53,22 @@ fn embarquer_manifeste() {
          \x20 </application>\n\
          </assembly>\n",
     )
-    .expect("écrire shot.manifest");
+    .expect("écrire feanor.manifest");
     // (Pour tout ce que le paquet lie : l'exécutable, et les exécutables d'essais de la bibliothèque.)
     println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
     println!("cargo:rustc-link-arg=/MANIFESTUAC:NO");
     println!("cargo:rustc-link-arg=/MANIFESTINPUT:{}", manifeste.display());
 }
 
-/// Met l'icône de SHOT et les informations de version dans `shot.exe` : un fichier de ressources
+/// Met l'icône de FEANOR et les informations de version dans `feanor.exe` : un fichier de ressources
 /// Windows compilé par `rc.exe` (Windows SDK) et passé à l'éditeur de liens. Sans `rc.exe` (SDK
 /// absent), l'exécutable se construit quand même, sans icône dans l'Explorateur : la fenêtre,
 /// elle, a son icône (`ViewportBuilder::with_icon`).
 fn embarquer_icone() {
     let Some(rc) = trouver_rc() else { return };
     let out = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
-    let ico = out.join("shot.ico");
-    std::fs::write(&ico, logo::ico(&[16, 24, 32, 48, 64, 128, 256])).expect("écrire shot.ico");
+    let ico = out.join("feanor.ico");
+    std::fs::write(&ico, logo::ico(&[16, 24, 32, 48, 64, 128, 256])).expect("écrire feanor.ico");
     let version = std::env::var("CARGO_PKG_VERSION").unwrap_or_else(|_| "0.1.0".into());
     let mut n = version.split('.').map(|p| p.parse::<u32>().unwrap_or(0));
     let (a, b, c) = (n.next().unwrap_or(0), n.next().unwrap_or(0), n.next().unwrap_or(0));
@@ -85,10 +85,10 @@ fn embarquer_icone() {
          BEGIN\n\
          BLOCK \"040C04B0\"\n\
          BEGIN\n\
-         VALUE \"FileDescription\", \"SHOT - Frame the story\"\n\
-         VALUE \"ProductName\", \"SHOT\"\n\
-         VALUE \"InternalName\", \"shot\"\n\
-         VALUE \"OriginalFilename\", \"shot.exe\"\n\
+         VALUE \"FileDescription\", \"FEANOR - Forge your story\"\n\
+         VALUE \"ProductName\", \"FEANOR\"\n\
+         VALUE \"InternalName\", \"feanor\"\n\
+         VALUE \"OriginalFilename\", \"feanor.exe\"\n\
          VALUE \"FileVersion\", \"{version}\"\n\
          VALUE \"ProductVersion\", \"{version}\"\n\
          END\n\
@@ -100,13 +100,13 @@ fn embarquer_icone() {
          END\n",
         ico = ico.display().to_string().replace('\\', "/"),
     );
-    let rc_file = out.join("shot.rc");
-    std::fs::write(&rc_file, script).expect("écrire shot.rc");
-    let res = out.join("shot.res");
+    let rc_file = out.join("feanor.rc");
+    std::fs::write(&rc_file, script).expect("écrire feanor.rc");
+    let res = out.join("feanor.res");
     match std::process::Command::new(&rc).arg("/nologo").arg("/fo").arg(&res).arg(&rc_file).output() {
         Ok(o) if o.status.success() => println!("cargo:rustc-link-arg-bins={}", res.display()),
-        Ok(o) => println!("cargo:warning=rc.exe a échoué, pas d'icône dans shot.exe : {}", String::from_utf8_lossy(&o.stdout).trim()),
-        Err(e) => println!("cargo:warning=rc.exe n'a pas pu démarrer, pas d'icône dans shot.exe : {e}"),
+        Ok(o) => println!("cargo:warning=rc.exe a échoué, pas d'icône dans feanor.exe : {}", String::from_utf8_lossy(&o.stdout).trim()),
+        Err(e) => println!("cargo:warning=rc.exe n'a pas pu démarrer, pas d'icône dans feanor.exe : {e}"),
     }
 }
 

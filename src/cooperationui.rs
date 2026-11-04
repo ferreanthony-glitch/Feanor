@@ -333,7 +333,7 @@ impl App {
         }
         self.status = match (pris, refus.first()) {
             (0, Some(p)) => p.clone(),
-            (1, None) => "Plan pris : il est à toi tant que SHOT est ouvert (ou que tu le rends).".into(),
+            (1, None) => "Plan pris : il est à toi tant que FEANOR est ouvert (ou que tu le rends).".into(),
             (n, None) if n > 1 => format!("{n} plans pris."),
             (n, Some(p)) => format!("{n} plan(s) pris ; {p}"),
             _ => self.status.clone(),
@@ -860,7 +860,7 @@ impl App {
         };
         let Some(choisi) = rfd::FileDialog::new()
             .set_title("Partager ce projet : choisis le dossier partagé (synchronisé ou réseau) ; un dossier à ce nom y sera créé")
-            .add_filter("Projet SHOT", &[project::EXTENSION])
+            .add_filter("Projet FEANOR", &[project::EXTENSION])
             .set_file_name(nom_defaut)
             .save_file()
         else {
