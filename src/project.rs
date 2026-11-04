@@ -3018,6 +3018,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         annotations: Default::default(),
         // Le scénario gardé : `scenario.json`, `scenariogarde::load`.
         scenario: None,
+        frames_rangees: None,
     };
     // Les calques CTG des projets d'avant : convertis en calques de couleur quand le document existe (`migrer_ctg`).
     let mut anciens_ctg: Vec<crate::griffonnage::AncienCtg> = Vec::new();

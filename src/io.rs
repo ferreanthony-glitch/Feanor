@@ -206,6 +206,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         variantes: Default::default(),
         annotations: Default::default(),
         scenario: None,
+        frames_rangees: None,
     };
     let mut shots = manifest.shots;
     if shots.is_empty() {

@@ -252,6 +252,82 @@ fn old_undo_steps_are_ranged_and_undo_and_redo_stay_exact() {
     }
 }
 
+/// Les expositions de tous les calques de tous les plans (ce qu'un instantané de structure doit rendre tel quel).
+fn expositions(doc: &Document) -> Vec<(u64, Vec<Vec<Option<CelId>>>)> {
+    doc.panels.iter().map(|p| (p.id, p.layers.iter().map(|l| l.frames.clone()).collect())).collect()
+}
+
+#[test]
+fn old_structure_steps_keep_their_exposures_in_runs_and_undo_and_redo_stay_exact() {
+    use crate::history::{Edit, History, Nav};
+    let (mut doc, ids) = doc_de_plans(6);
+    // Des expositions variées : tenues, vides, un seul dessin, plusieurs calques.
+    doc.panels[0].layers[0].frames = vec![Some(ids[0]), Some(ids[0]), None, Some(ids[1]), Some(ids[1]), Some(ids[1])];
+    doc.panels[1].layers.push(Layer::new("C", LayerKind::Bitmap));
+    doc.panels[1].layers[1].frames = vec![None, None, Some(ids[2]), None];
+    doc.panels[2].layers[0].frames = Vec::new();
+    let mut h = History::default();
+    let mut nav = Nav { panel: 0, layer: 0 };
+    let mut etats = vec![expositions(&doc)];
+    for k in 0..12usize {
+        h.push(Edit::Structure { structure: doc.structure(), nav });
+        match k % 3 {
+            0 => {
+                let cur = k % doc.panels.len();
+                doc.add_scene_after(cur);
+            }
+            1 => doc.panels[k % 2].layers[0].frames.push(Some(ids[k % ids.len()])),
+            _ => {
+                let id = doc.panels[0].id;
+                doc.remove_panels(&[id]);
+            }
+        }
+        etats.push(expositions(&doc));
+    }
+    let avant = h.etapes().filter(|e| matches!(e, Edit::Structure { structure, .. } if structure.frames_rangees.is_some())).count();
+    assert_eq!(avant, 0, "rien n'est rangé au départ");
+    let rangees = h.geler_les_vieilles_etapes(4, 1000);
+    assert!(rangees > 0);
+    let apres = h.etapes().filter(|e| matches!(e, Edit::Structure { structure, .. } if structure.frames_rangees.is_some())).count();
+    assert_eq!(apres, 8, "les 8 plus vieilles étapes sont rangées, les 4 dernières restent telles quelles");
+    // (Un instantané rangé n'a plus d'expositions en place, mais il dit toujours les mêmes dessins.)
+    for e in h.etapes() {
+        if let Edit::Structure { structure, .. } = e {
+            if structure.frames_rangees.is_some() {
+                assert!(structure.panels.iter().flat_map(|p| p.layers.iter()).all(|l| l.frames.is_empty()));
+            }
+        }
+    }
+    assert_eq!(h.geler_les_vieilles_etapes(4, 1000), 0, "rien de plus à ranger");
+    for k in (0..12).rev() {
+        assert!(h.undo(&mut doc, &mut nav));
+        assert_eq!(expositions(&doc), etats[k], "après avoir annulé jusqu'à l'état {k}");
+    }
+    for k in 1..=12 {
+        assert!(h.redo(&mut doc, &mut nav));
+        assert_eq!(expositions(&doc), etats[k], "après avoir rétabli jusqu'à l'état {k}");
+    }
+}
+
+#[test]
+fn a_packed_structure_names_the_same_drawings_as_the_unpacked_one() {
+    let (mut doc, ids) = doc_de_plans(4);
+    doc.panels[1].layers[0].frames = vec![Some(ids[1]), Some(ids[1]), Some(ids[2]), None, Some(ids[1])];
+    let mut s = doc.structure();
+    let mut avant = s.dessins_des_plans();
+    assert!(s.ranger_les_expositions());
+    assert!(!s.ranger_les_expositions(), "déjà rangé");
+    let mut rangee = s.dessins_des_plans();
+    avant.sort();
+    rangee.sort();
+    // (Les suites : une exposition tenue ne compte qu'une fois, comme `used_cels` ; les ensembles de dessins sont les mêmes.)
+    avant.dedup();
+    rangee.dedup();
+    assert_eq!(avant, rangee);
+    s.rouvrir_les_expositions();
+    assert_eq!(s.panels[1].layers[0].frames, vec![Some(ids[1]), Some(ids[1]), Some(ids[2]), None, Some(ids[1])]);
+}
+
 #[test]
 fn undoing_the_removal_of_a_plan_after_its_drawings_were_ranged_gives_the_exact_drawings() {
     use crate::perf_tests::banc;

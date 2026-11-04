@@ -1099,7 +1099,7 @@ fn ventilation_tas(b: &Banc, titre: &str) {
     // Les dessins que plus rien ne montre : ni le document vivant, ni un instantané de l'historique.
     let utilises = b.app.doc.used_cels();
     let mut par_historique: std::collections::BTreeSet<u64> = Default::default();
-    fn parcourir(e: &Edit, out: &mut std::collections::BTreeSet<u64>, n: &mut (usize, usize, usize, usize, usize), vect: &mut Vec<crate::vector::VectorDrawing>, structure: &mut Option<crate::document::Structure>) {
+    fn parcourir(e: &Edit, out: &mut std::collections::BTreeSet<u64>, n: &mut (usize, usize, usize, usize, usize), vect: &mut Vec<crate::vector::VectorDrawing>, structure: &mut Vec<crate::document::Structure>) {
         match e {
             Edit::Tiles { tiles, .. } => {
                 n.0 += 1;
@@ -1115,12 +1115,8 @@ fn ventilation_tas(b: &Banc, titre: &str) {
             }
             Edit::Structure { structure: s, .. } => {
                 n.2 += 1;
-                for l in s.panels.iter().flat_map(|p| p.layers.iter()) {
-                    out.extend(l.frames.iter().flatten().copied());
-                }
-                if structure.is_none() {
-                    *structure = Some(s.clone());
-                }
+                out.extend(s.dessins_des_plans());
+                structure.push(s.clone());
             }
             Edit::Group(g) => {
                 n.3 += 1;
@@ -1132,19 +1128,21 @@ fn ventilation_tas(b: &Banc, titre: &str) {
     }
     let mut n = (0, 0, 0, 0, 0);
     let mut vect: Vec<crate::vector::VectorDrawing> = Vec::new();
-    let mut une_structure: Option<crate::document::Structure> = None;
+    let mut des_structures: Vec<crate::document::Structure> = Vec::new();
     for e in b.app.history.etapes() {
-        parcourir(e, &mut par_historique, &mut n, &mut vect, &mut une_structure);
+        parcourir(e, &mut par_historique, &mut n, &mut vect, &mut des_structures);
     }
     // Poids d'un instantané de structure (copie profonde mesurée) et des dessins vectoriels des étapes.
     let tas1 = TAS_VIVANT.load(Ordering::Relaxed);
-    let vect_octets = tas1.saturating_sub(tas0);
+    let tous = tas1.saturating_sub(tas0);
+    drop(des_structures);
+    let structures_octets = tous.saturating_sub(TAS_VIVANT.load(Ordering::Relaxed).saturating_sub(tas0));
+    let vect_octets = tous.saturating_sub(structures_octets);
     drop(vect);
     let a = TAS_VIVANT.load(Ordering::Relaxed);
     let copie = b.app.doc.structure();
     let structure_octets = TAS_VIVANT.load(Ordering::Relaxed).saturating_sub(a);
     drop(copie);
-    drop(une_structure);
     let (mut morts, mut morts_hist, mut morts_octets, mut morts_hist_octets, mut vivants, mut vivants_octets) = (0usize, 0usize, 0usize, 0usize, 0usize, 0usize);
     let (mut pts_vivants, mut pts_morts, mut el_vivants, mut el_morts) = (0usize, 0usize, 0usize, 0usize);
     for (id, c) in b.app.doc.cels.iter() {
@@ -1175,15 +1173,15 @@ fn ventilation_tas(b: &Banc, titre: &str) {
     );
     let (ho, ht, hb) = b.app.history.tuiles();
     endu!(
-        "ventilation ({titre}) : historique : {} étapes de tuiles ({:.0} Mo, {ho}/{ht} ouvertes, {:.0} Mo comptés), {} étapes de dessin vectoriel ({:.0} Mo en copie profonde), {} instantanés de structure de {:.2} Mo chacun (copie profonde ; ≈ {:.0} Mo en tout si rien n'est partagé), {} groupes",
+        "ventilation ({titre}) : historique : {} étapes de tuiles ({:.0} Mo, {ho}/{ht} ouvertes, {:.0} Mo comptés), {} étapes de dessin vectoriel ({:.0} Mo en copie profonde), {} instantanés de structure : {:.0} Mo en copie profonde (un instantané frais du document : {:.2} Mo), {} groupes",
         n.0,
         mo(n.4),
         mo(hb),
         n.1,
         mo(vect_octets),
         n.2,
+        mo(structures_octets),
         mo(structure_octets),
-        mo(structure_octets * n.2),
         n.3
     );
     let (nc, tc, oc) = crate::vector::caches_en_memoire();
