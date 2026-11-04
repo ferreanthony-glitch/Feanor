@@ -288,6 +288,12 @@ impl History {
         self.undo.is_empty() && self.redo.is_empty()
     }
 
+    /// Les étapes à annuler puis celles à rétablir (mesures de mémoire, essais).
+    #[cfg(test)]
+    pub fn etapes(&self) -> impl Iterator<Item = &Edit> {
+        self.undo.iter().chain(self.redo.iter())
+    }
+
     #[cfg(test)]
     /// Tuiles que tiennent les étapes : (dont les pixels sont en mémoire, en tout, octets tenus).
     pub fn tuiles(&self) -> (usize, usize, usize) {

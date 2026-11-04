@@ -209,6 +209,23 @@ fn tick() -> u64 {
     TICK.fetch_add(1, Ordering::Relaxed)
 }
 
+/// Mesures : (dessins dérivés distincts gardés, octets réellement tenus en mémoire par leurs tuiles, copies d'origine gardées pour le fil de
+/// fond, octets de ces copies).
+#[cfg(test)]
+pub(crate) fn octets_en_memoire() -> (usize, usize, usize, usize) {
+    let st = lock();
+    let mut vus: std::collections::HashSet<*const Cel> = std::collections::HashSet::new();
+    let mut octets = 0;
+    for c in st.cache.values().map(|e| &e.cel).chain(st.last.values().map(|l| &l.cel)) {
+        if vus.insert(Arc::as_ptr(c)) {
+            octets += c.octets_en_memoire();
+        }
+    }
+    let sources = st.sources.len() + st.small.len();
+    let oct_sources = st.sources.values().map(|s| s.1.octets_en_memoire()).sum::<usize>() + st.small.values().map(|s| s.1.octets_en_memoire()).sum::<usize>();
+    (vus.len(), octets, sources, oct_sources)
+}
+
 /// Octets de pixels d'un dessin (les tuiles dessinées seulement).
 pub(crate) fn cel_bytes(c: &Cel) -> usize {
     c.raster.tiles.iter().flatten().count() * TILE_PIXELS * 4
