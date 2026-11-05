@@ -3,6 +3,18 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-05
+
+- Le logiciel s'appelle FEANOR : fusion fbd6a98 (nom, couleurs Atelier et Papier, Joyau, animation d'ouverture une fois,
+  polices Big Shoulders et IBM Plex, barres irisées, rouge réservé aux erreurs bloquantes, point ambre pour les avertissements).
+  L'exécutable devient `target\release\feanor.exe`. L'extension `.shot` et les dossiers `SHOT` restent.
+- Mémoire d'une longue séance : fusion 9c3e516. 300 plans après 2000 gestes : de 6,5 à 5,8 Go (mesure de banc).
+  Les dessins que plus rien n'utilise quittent la mémoire ; une relecture n'a trouvé aucun scénario de perte.
+- Essais : 3743 réussis, 0 échec, deux passages sur la branche dont la fusion est identique. Projet d'essai rouvert avec feanor.exe.
+- En attente de toi : tests à l'écran (INTERFACE parties 96 et 97), suppression des dossiers de travail `feanor` et `memoire-seance`,
+  et ce qui reste écrit SHOT (nom de palette, texte copié, « Anciennement SHOT » dans À propos).
+- Pas fait : focus clavier jade sur les boutons. Inexpliqué : 2,6 à 3 Go hors du tas, sans doute le pilote graphique.
+
 ## 2026-10-30
 
 - Créé le dossier suivi/ : ETAT.md (état réel du projet), NOTES.md (ta boîte de notes), JOURNAL.md (ce fichier).
