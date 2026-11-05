@@ -1,6 +1,10 @@
 # FEANOR (ex-SHOT) — état réel du projet (relevé du 2026-10-30, mise à jour du 2026-11-05 ci-dessous)
 
-## Mise à jour du 2026-11-05 (main 9c3e516) — elle prime sur la suite
+## Mise à jour du 2026-11-05 au soir (main 80738d2) — elle prime sur la suite
+- Essais : **3751 réussis, 0 échec**, deux passages. Contenu de la V1 et écarts : `suivi/V1.md`.
+- Gris sombre est le thème de base. L'animation n'a plus d'onglet (partie 100). ffmpeg allégé dans `Logiciel\ffmpeg\allege`.
+
+## Mise à jour du 2026-11-05 (main 9c3e516)
 - Nom : **FEANOR** ; exécutable `target\release\feanor.exe`. Essais : **3744 réussis, 0 échec**. Format de projet : 46.
 - Fusionnés, en attente du test d'Anthony : identité FEANOR (INTERFACE partie 96), mémoire d'une longue séance (partie 97), sortes de calques en couleurs FEANOR (partie 98).
 
