@@ -137,6 +137,18 @@ pub const ATELIER_ALERTE: Rvb = [0xFF, 0x6B, 0x6B];
 pub const PAPIER_ALERTE: Rvb = [0xB3, 0x26, 0x1E];
 /// L'étincelle, le point d'enregistrement : quelques pixels, jamais une surface.
 pub const BRAISE: Rvb = [0xF2, 0xA3, 0x3A];
+/// Sortes de calques dans les thèmes de la marque (Anthony, 2026-11-05) : le vectoriel est en jade sombre, les autres viennent
+/// de l'irisation et de la braise. Chacune a sa version profonde, sur laquelle un nom clair se lit.
+pub const IRIS_LILAS: Rvb = [0xC7, 0xB5, 0xFF];
+pub const IRIS_LILAS_PROFOND: Rvb = [0x6A, 0x55, 0xB8];
+pub const IRIS_ROSE: Rvb = [0xFF, 0xB3, 0xD1];
+pub const IRIS_ROSE_PROFOND: Rvb = [0xA8, 0x43, 0x7A];
+pub const IRIS_PALE: Rvb = [0xFF, 0xF1, 0xA8];
+pub const IRIS_PALE_PROFOND: Rvb = [0x6B, 0x70, 0x28];
+pub const BRAISE_PROFONDE: Rvb = [0x9A, 0x5F, 0x12];
+/// Mélange du jade et du lilas : la sixième sorte (couleur unie).
+pub const CIEL: Rvb = [0x7F, 0xC4, 0xE0];
+pub const CIEL_PROFOND: Rvb = [0x3A, 0x62, 0x9E];
 impl Default for Couleurs {
     fn default() -> Self {
         Couleurs::shot()
@@ -381,6 +393,9 @@ pub struct Palette {
     /// Texte écrit sur les blocs sourds du montage et les extraits son : clair sur les blocs
     /// foncés des thèmes sombres, foncé sur les blocs pâles des thèmes clairs.
     pub sur_calque: Color32,
+    /// Nom écrit sur le fond sourd d'une sorte de calque (`calque_vectoriel`…) : clair sur les fonds
+    /// profonds des thèmes de la marque, `sur_calque` ailleurs.
+    pub sur_sorte: Color32,
     // Sortes de calques et repères.
     pub dessin_vectoriel: Color32,
     pub dessin_bitmap: Color32,
@@ -470,7 +485,8 @@ impl Palette {
         let controle_survol = vers_texte(0.07);
         let controle_actif = vers_texte(0.32);
         let palier = |t: f32| melange(rangee, texte, t);
-        Palette {
+        let sur_calque = if claire { gris(20) } else { gris(242) };
+        let mut palette = Palette {
             claire,
             fond,
             entete,
@@ -507,7 +523,8 @@ impl Palette {
             apercu_trait: melange(panneau, Color32::WHITE, if claire { 0.55 } else { 0.12 }),
             contour: if claire { gris(15) } else { Color32::WHITE },
             encre: if claire { Color32::WHITE } else { melange(rangee, Color32::BLACK, 0.6) },
-            sur_calque: if claire { gris(20) } else { gris(242) },
+            sur_calque,
+            sur_sorte: sur_calque,
             // Vectoriel : l'orange de SHOT (#E76F3C, assombri pour que les noms se lisent dessus) ; bitmap : le bleu qu'avait le
             // vectoriel (Anthony, 2026-10-28). Le vert d'avant du bitmap n'est plus utilisé.
             dessin_vectoriel: jeu([238, 124, 76], [200, 84, 36]),
@@ -539,7 +556,26 @@ impl Palette {
             erreur: if c.identite { alerte } else if claire { Color32::from_rgb(190, 30, 20) } else { Color32::from_rgb(247, 92, 70) },
             alerte,
             braise: couleur(BRAISE),
+        };
+        // Atelier et Papier : les sortes de calques prennent les couleurs de la marque. Le fond du vectoriel est le jade sombre de la
+        // sélection d'Atelier ; dans Papier, le même jade profond, juste assez foncé pour qu'un nom clair s'y lise.
+        if c.identite {
+            palette.sur_sorte = gris(242);
+            // (Le jade profond, à peine éclairci s'il le faut pour garder 3:1 sur les rangées.)
+            palette.dessin_vectoriel = assurer(couleur(JADE_PROFOND), &[rangee, rangee_sombre], 3.0, anti_de(claire));
+            palette.calque_vectoriel = if claire { melange(couleur(JADE_PROFOND), Color32::BLACK, 0.06) } else { selection };
+            palette.dessin_bitmap = jeu(IRIS_LILAS, IRIS_LILAS_PROFOND);
+            palette.calque_bitmap = couleur(IRIS_LILAS_PROFOND);
+            palette.dessin_couleur = jeu(IRIS_ROSE, IRIS_ROSE_PROFOND);
+            palette.calque_couleur = couleur(IRIS_ROSE_PROFOND);
+            palette.dessin_cfx = jeu(IRIS_PALE, IRIS_PALE_PROFOND);
+            palette.calque_cfx = couleur(IRIS_PALE_PROFOND);
+            palette.dessin_annotation = jeu(BRAISE, BRAISE_PROFONDE);
+            palette.calque_annotation = couleur(BRAISE_PROFONDE);
+            palette.dessin_unie = jeu(CIEL, CIEL_PROFOND);
+            palette.calque_unie = couleur(CIEL_PROFOND);
         }
+        palette
     }
 
     /// Les `Visuals` d'egui de cette palette.
@@ -693,6 +729,8 @@ couleurs_courantes! {
     encre,
     /// Texte écrit sur les blocs sourds et les extraits son.
     sur_calque,
+    /// Nom écrit sur le fond sourd d'une sorte de calque.
+    sur_sorte,
     /// Dessins exposés (timeline) : vectoriel, bitmap, vide.
     dessin_vectoriel,
     dessin_bitmap,
@@ -734,8 +772,7 @@ couleurs_courantes! {
     braise,
 }
 
-/// Couleur vive d'une sorte de calque (repères, barres, étiquettes) : bitmap vert, vectoriel
-/// bleu, calque de couleur rose (`couleur` : le calque est un calque de couleur).
+/// Couleur vive d'une sorte de calque (repères, barres, étiquettes) ; `couleur` : le calque est un calque de couleur.
 pub fn couleur_calque(kind: LayerKind, couleur: bool) -> Color32 {
     let p = palette();
     match (couleur, kind) {

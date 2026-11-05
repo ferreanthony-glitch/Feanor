@@ -787,7 +787,13 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, stack: &[Layer
         }
     }
     if cell.width() > 28.0 && show_name && !folded {
-        let text = if layer.visible { theme::sur_calque() } else { theme::texte_doux() };
+        let text = if !layer.visible {
+            theme::texte_doux()
+        } else if layer.scene_wide.is_some() {
+            theme::sur_calque()
+        } else {
+            theme::sur_sorte()
+        };
         painter.with_clip_rect(cell.shrink(1.0)).text(
             pos2(cell.left() + 4.0, (cell.top() + pad + cell.bottom() - seg_off) * 0.5),
             Align2::LEFT_CENTER,

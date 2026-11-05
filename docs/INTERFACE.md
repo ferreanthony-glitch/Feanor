@@ -7042,3 +7042,36 @@ Le reste de la mémoire privée (2,6 à 3 Go) est le pilote Vulkan de la carte g
 6. Sur un plan avec un **aplat** (ou un effet) : reviens dessus après avoir visité beaucoup d'autres plans : l'aplat est là tout de suite (pas de flash sans couleur). Retouche le trait : l'aplat suit.
 7. **Duplique un plan, une nouvelle version, une variante de séquence** puis supprime l'original et fais une pause : la copie, la version et la variante gardent tous leurs dessins ; enregistre, ferme, rouvre : tout y est.
 8. **Enregistre** (Ctrl+S) après tout ça et rouvre le projet : mêmes plans, mêmes dessins, mêmes durées. Un projet à plusieurs (dossier partagé) ne perd rien non plus : l'élagage n'y fait rien.
+
+## 98. Les sortes de calques en couleurs FEANOR, derniers « SHOT » visibles (2026-11-05)
+
+**Demande d'Anthony.** Redonner aux sortes de calques des couleurs différentes, prises dans la palette FEANOR, le vectoriel en jade sombre ; renommer le nuancier de départ ; retirer « Anciennement » de l'À propos.
+
+**Couleurs (Atelier et Papier seulement ; les thèmes de gris gardent les leurs).** Chaque sorte a une couleur vive (bandes, dessins de la timeline) et un fond profond (calque courant, blocs du montage), sur lequel le nom s'écrit en clair (`theme::sur_sorte`, 4,5:1).
+
+| Sorte | Vive (Atelier) | Fond profond et vive (Papier) |
+| --- | --- | --- |
+| Vectoriel | jade profond #0E7C7B, éclairci d'un cran pour garder 3:1 sur les rangées | jade sombre : la sélection dans Atelier, #0E7C7B à 6 % de noir dans Papier |
+| Bitmap | lilas #C7B5FF | #6A55B8 |
+| Calque de couleur | rose #FFB3D1 | #A8437A |
+| Effet | jaune pâle #FFF1A8 | #6B7028 |
+| Annotation | braise #F2A33A | #9A5F12 |
+| Couleur unie | ciel #7FC4E0 (mélange jade et lilas, hors charte) | #3A629E |
+
+Le rouge d'alerte n'en fait pas partie. Le décor garde son ocre. Dans le panneau Calques, le calque courant a un fond plein, plus un voile ; un dossier courant prend la sélection.
+
+**Nuancier.** « FEANOR » ; un nuancier gardé sous « SHOT » ou « Pelure » est renommé à la lecture, sauf si « FEANOR » existe déjà.
+
+**Presse-papiers.** Les copies écrivent « FEANOR : … » ; celles de « SHOT : » et « Pelure : » restent reconnues.
+
+**À propos.** La ligne des anciens noms est retirée. Les dossiers `SHOT` ne changent pas.
+
+**Essais.** `the_brand_themes_colour_the_kinds_of_layers_from_the_feanor_palette` (couleurs distinctes deux à deux, contrastes), `the_palette_kept_under_the_old_name_is_renamed_on_read`, `shot_marks_its_own_copies`.
+
+**Comment tester.**
+1. Atelier, panneau Calques : clique un calque vectoriel (fond jade sombre, texte clair), puis un bitmap (fond lilas profond).
+2. Timeline et Montage : chaque sorte a sa couleur ; les noms se lisent.
+3. Refais-le en Papier.
+4. Panneau Couleur : le nuancier s'appelle FEANOR.
+5. Aide > À propos : plus de ligne « Anciennement ».
+6. Copie une zone, colle : c'est bien ta zone qui revient.

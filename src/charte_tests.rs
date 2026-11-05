@@ -185,14 +185,10 @@ fn no_brand_red_or_orange_is_left_in_the_chrome_palette() {
 
 #[test]
 fn the_drawing_and_meaning_colours_are_unchanged_by_the_brand() {
-    // Calques, repères de caméra, marques d'image… sont des couleurs qui disent quelque chose : mêmes dans les thèmes de gris et dans Atelier.
+    // Repères de caméra, marques d'image… sont des couleurs qui disent quelque chose : mêmes dans les thèmes de gris et dans Atelier.
+    // (Les sortes de calques ont leurs couleurs de marque depuis le 2026-11-05 : `theme_tests.rs`.)
     let (atelier, gris) = (palette(Couleurs::shot()), palette(Couleurs::gris_sombre()));
     for (nom, a, b) in [
-        ("dessin vectoriel", atelier.dessin_vectoriel, gris.dessin_vectoriel),
-        ("dessin bitmap", atelier.dessin_bitmap, gris.dessin_bitmap),
-        ("calque de couleur", atelier.dessin_couleur, gris.dessin_couleur),
-        ("calque d'effet", atelier.dessin_cfx, gris.dessin_cfx),
-        ("annotation", atelier.dessin_annotation, gris.dessin_annotation),
         ("calques de décor", atelier.decor, gris.decor),
         ("clés de caméra", atelier.camera, gris.camera),
         ("marques d'image", atelier.marque, gris.marque),

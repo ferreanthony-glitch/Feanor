@@ -354,7 +354,7 @@ impl App {
             // couleurs qu'il porte (`calquecouleur.rs`).
             let colour_of = crate::calquecouleur::trait_de(self.layers(), li).map(|ti| self.layers()[ti].name.clone());
             let colours = crate::calquecouleur::couleurs_de(self.layers(), li).len();
-            // Code couleur de sa sorte (bitmap vert, vectoriel bleu, calque de couleur rose ; Anthony, 2026-10-17).
+            // Code couleur de sa sorte (`theme.rs`).
             let cfx = self.layers()[li].effet.is_some();
             let hue = if folder {
                 accent
@@ -370,6 +370,15 @@ impl App {
             let current = li == self.cur_layer;
             let chosen = !current && self.is_chosen_layer(li);
             let aplat_vise = current && self.aplat_en_cible();
+            // Atelier et Papier : le calque courant prend le fond plein de sa sorte (jade sombre pour le vectoriel), avec un texte qui s'y lit.
+            let marque = crate::theme::palette();
+            let plein = (marque.identite && current && !aplat_vise).then(|| {
+                if folder {
+                    (marque.selection, marque.sur_selection)
+                } else {
+                    (crate::theme::fond_du_calque(&self.layers()[li]), marque.sur_sorte)
+                }
+            });
             let thumb =cel.and_then(|c| self.layer_thumb(ui.ctx(), c));
             // Le rang entier, posé avant ses boutons (à sa place de l'image d'écran d'avant) : les
             // boutons restent au-dessus et gardent leurs clics (posé après eux, ce fond qui se
@@ -379,6 +388,7 @@ impl App {
             let shown = egui::Frame::new()
                 .fill(match (current, chosen) {
                     // (Quand la sous-ligne de l'aplat est la cible du dessin, c'est elle qui est surlignée en plein.)
+                    _ if plein.is_some() => plein.map_or(Color32::TRANSPARENT, |p| p.0),
                     (true, _) if aplat_vise => hue.gamma_multiply(0.25),
                     (true, _) => hue.gamma_multiply(0.55),
                     (false, true) => hue.gamma_multiply(0.25),
@@ -387,6 +397,15 @@ impl App {
                 .corner_radius(3.0)
                 .inner_margin(egui::Margin::symmetric(3, 2))
                 .show(ui, |ui| {
+                    if let Some((fond, encre)) = plein {
+                        let v = ui.visuals_mut();
+                        v.override_text_color = Some(encre);
+                        // (Le texte « faible » se mêle à ce fond-là, pas à celui du panneau.)
+                        v.widgets.noninteractive.weak_bg_fill = fond;
+                        for etat in [&mut v.widgets.inactive, &mut v.widgets.hovered, &mut v.widgets.active, &mut v.widgets.open] {
+                            etat.fg_stroke.color = encre;
+                        }
+                    }
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(3.0, 0.0);
                         if colour_of.is_some() {

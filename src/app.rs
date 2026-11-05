@@ -3894,7 +3894,7 @@ impl App {
             return;
         }
         // Une image copiée ailleurs (navigateur…) passe avant le presse-papiers de SHOT, dont
-        // les copies écrivent « SHOT : … » dans celui de Windows (`pasteimage.rs`).
+        // les copies écrivent « FEANOR : … » dans celui de Windows (`pasteimage.rs`).
         // (Le panneau Calques a la main et un calque vient d'être copié : Ctrl+V colle ce calque, pas une image restée dans le
         // presse-papiers de Windows.)
         let calque_a_coller = self.layers_pane_focus && self.layer_clip_recent && self.layer_clipboard.is_some();

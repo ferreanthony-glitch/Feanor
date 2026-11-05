@@ -415,7 +415,7 @@ fn the_colour_panel_unfolds_with_one_picker_at_a_time() {
     let textes = ecran.cliquer(&mut app, titre.center(), &mut ui_couleur);
     assert!(app.couleurs.prefs.more_open, "{textes:?}");
     // La roue (réglage d'origine) : le code, les récentes et les nuanciers, mais pas les curseurs.
-    assert!(contient(&textes, "#18181C") && contient(&textes, "SHOT") && contient(&textes, ph::CARET_DOWN), "{textes:?}");
+    assert!(contient(&textes, "#18181C") && contient(&textes, "FEANOR") && contient(&textes, ph::CARET_DOWN), "{textes:?}");
     assert!(!contient(&textes, "RVB") && !contient(&textes, "TSL"), "pas les curseurs avec la roue : {textes:?}");
     // Les curseurs à la place : plus de carré ni de triangle de la roue.
     app.couleurs.prefs.wheel_shown = false;

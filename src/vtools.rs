@@ -650,7 +650,7 @@ impl App {
         self.status = format!("{} élément(s) copié(s).", items.len());
         // Un texte dans le presse-papiers du système : sans lui, Ctrl+V n'arrive pas jusqu'à nous.
         self.ctx
-            .copy_text(format!("SHOT : {} élément(s) vectoriel(s)", items.len()));
+            .copy_text(format!("{}{} élément(s) vectoriel(s)", crate::pasteimage::MARK, items.len()));
         self.clipboard = items;
         self.collage.origines.elements = Some(crate::adaptation::Origine::de(&self.doc));
         // (La dernière copie est celle-ci : plus celle d'une sélection sur plusieurs calques.)

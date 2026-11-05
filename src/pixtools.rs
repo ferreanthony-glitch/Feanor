@@ -563,7 +563,7 @@ impl App {
         };
         self.status = format!("Zone de {}×{} pixels copiée.", f.w, f.h);
         // Un texte dans le presse-papiers du système : sans lui, Ctrl+V n'arrive pas jusqu'à nous.
-        self.ctx.copy_text(format!("SHOT : zone bitmap {}×{}", f.w, f.h));
+        self.ctx.copy_text(format!("{}zone bitmap {}×{}", crate::pasteimage::MARK, f.w, f.h));
         self.pixel_clipboard = Some(f);
         self.collage.origines.zone = Some(crate::adaptation::Origine::de(&self.doc));
         self.multi_clip = None;

@@ -1,5 +1,5 @@
 //! Aide > À propos de FEANOR… (`aide.a_propos`) : une petite fenêtre modale avec le lockup de la marque (le mot, le Joyau
-//! jade devant le mot, la devise « Forge your story » alignée sur le R), la version, les noms d'avant et les polices de marque. Échap, un
+//! jade devant le mot, la devise « Forge your story » alignée sur le R), la version et les polices de marque. Échap, un
 //! clic à côté ou « Fermer » la ferment.
 //!
 //! La date de fabrication n'y est pas : la compilation ne l'écrit nulle part sans coûter une
@@ -16,17 +16,9 @@ const CAPITALES: f32 = 40.0;
 /// Largeur de la fenêtre, en points.
 const LARGEUR: f32 = 320.0;
 
-/// Les noms d'avant le logiciel.
-const ANCIENS_NOMS: &str = "SHOT, Pelure";
-
 /// « Version 0.1.0 », d'après Cargo.toml.
 pub(crate) fn version_text() -> String {
     format!("Version {}", env!("CARGO_PKG_VERSION"))
-}
-
-/// La ligne sur les noms d'avant.
-pub(crate) fn ancien_nom_text() -> String {
-    format!("Anciennement {ANCIENS_NOMS}")
 }
 
 /// La ligne sur les polices de marque (licence SIL OFL 1.1, fichiers dans `assets/polices/`).
@@ -55,7 +47,6 @@ impl App {
                 marque::peindre(ui.painter(), ctx, &texture, origine, capitales, p.texte_fort, Some(p.texte_doux), Mise::Devant);
                 ui.add_space(14.0);
                 ui.label(RichText::new(version_text()).strong());
-                ui.label(RichText::new(ancien_nom_text()).weak());
                 ui.label(RichText::new(polices_text()).small().weak());
                 ui.add_space(10.0);
             });

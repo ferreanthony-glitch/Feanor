@@ -14,14 +14,14 @@ fn palette(name: &str, colors: &[([u8; 3], &str)]) -> Palette {
 fn palettes_are_created_renamed_duplicated_and_deleted() {
     let mut list = vec![Palette::pelure()];
     assert_eq!(list[0].swatches.len(), 10, "l'ancien nuancier de SHOT");
-    assert_eq!(list[0].name, "SHOT");
+    assert_eq!(list[0].name, "FEANOR");
     let i = nuancier::create(&mut list, 0);
     assert_eq!((i, list[1].name.as_str()), (1, "Nouveau nuancier"));
     let j = nuancier::create(&mut list, 0);
     assert_eq!((j, list[1].name.as_str()), (1, "Nouveau nuancier 2"), "juste après, sous un nom libre");
     assert!(nuancier::rename(&mut list, 1, "  Décors  ").is_ok());
     assert_eq!(list[1].name, "Décors", "sans les espaces autour");
-    assert!(nuancier::rename(&mut list, 1, "SHOT").is_err(), "nom déjà pris");
+    assert!(nuancier::rename(&mut list, 1, "FEANOR").is_err(), "nom déjà pris");
     assert!(nuancier::rename(&mut list, 1, "   ").is_err(), "nom vide");
     assert!(nuancier::rename(&mut list, 1, "Décors").is_ok(), "son propre nom");
     list[1].add([1, 2, 3], "Ciel").unwrap();
@@ -95,17 +95,25 @@ fn palettes_are_kept_in_the_settings_file() {
 
 #[test]
 fn the_palette_kept_under_the_old_name_is_renamed_on_read() {
-    // Réglages écrits avant que le logiciel ne s'appelle SHOT : le nuancier de départ s'appelait « Pelure ».
+    // Réglages écrits sous les anciens noms du logiciel : le nuancier de départ s'appelait « SHOT », et « Pelure » avant.
+    for ancien in ["SHOT", "Pelure"] {
+        let mut old = Palette::pelure();
+        old.name = ancien.into();
+        let s = ColorSettings { palettes: vec![old, palette("Décors", &[([1, 2, 3], "Ciel")])], ..Default::default() }.sanitized();
+        assert_eq!(s.palettes[0].name, "FEANOR");
+        assert_eq!(s.palettes[1].name, "Décors");
+    }
+    // Un nuancier « FEANOR » déjà là : l'ancien garde son nom, pas de doublon.
     let mut old = Palette::pelure();
-    old.name = "Pelure".into();
-    let s = ColorSettings { palettes: vec![old, palette("Décors", &[([1, 2, 3], "Ciel")])], ..Default::default() }.sanitized();
-    assert_eq!(s.palettes[0].name, "SHOT");
-    assert_eq!(s.palettes[1].name, "Décors");
-    // Un nuancier « SHOT » déjà là : l'ancien garde son nom, pas de doublon.
-    let mut old = Palette::pelure();
-    old.name = "Pelure".into();
+    old.name = "SHOT".into();
     let s = ColorSettings { palettes: vec![old, Palette::pelure()], ..Default::default() }.sanitized();
-    assert_eq!(s.palettes.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Pelure", "SHOT"]);
+    assert_eq!(s.palettes.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["SHOT", "FEANOR"]);
+    // Les deux anciens : seul le plus récent devient « FEANOR ».
+    let (mut a, mut b) = (Palette::pelure(), Palette::pelure());
+    a.name = "Pelure".into();
+    b.name = "SHOT".into();
+    let s = ColorSettings { palettes: vec![a, b], ..Default::default() }.sanitized();
+    assert_eq!(s.palettes.iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), ["Pelure", "FEANOR"]);
 }
 
 // ------------------------------------------------------------ GIMP

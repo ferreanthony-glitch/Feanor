@@ -12,10 +12,10 @@ use serde::{Deserialize, Serialize};
 use crate::couleur::{hsv_to_rgb, lab_to_rgb};
 
 /// Nom du nuancier d'un premier lancement.
-pub const NOM_DEFAUT: &str = "SHOT";
-/// Son nom avant que le logiciel ne s'appelle SHOT : un nuancier gardé sous ce nom dans les
+pub const NOM_DEFAUT: &str = "FEANOR";
+/// Ses noms d'avant, du plus récent au plus ancien : un nuancier gardé sous l'un d'eux dans les
 /// réglages est renommé à la lecture (`ColorSettings::sanitized`).
-pub const NOM_ANCIEN: &str = "Pelure";
+pub const NOMS_ANCIENS: [&str; 2] = ["SHOT", "Pelure"];
 
 /// Une pastille : une couleur, et un nom facultatif (montré dans sa bulle).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -48,8 +48,7 @@ impl Palette {
 
     /// Le nuancier d'un premier lancement : les couleurs de l'ancien nuancier de SHOT (6b), sans le blanc et le gris
     /// (depuis le 2026-10-21, la rangée des neutres du panneau Couleur les porte : noir, cinq gris, blanc), avec un
-    /// rose et un brun à la place. Il s'appelait « Pelure » avant le changement de nom du logiciel (voir
-    /// `NOM_ANCIEN`).
+    /// rose et un brun à la place. Il a porté les noms d'avant du logiciel (voir `NOMS_ANCIENS`).
     pub fn pelure() -> Palette {
         let colors: [([u8; 3], &str); 10] = [
             ([24, 24, 28], "Encre"),

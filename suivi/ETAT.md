@@ -1,8 +1,8 @@
 # FEANOR (ex-SHOT) — état réel du projet (relevé du 2026-10-30, mise à jour du 2026-11-05 ci-dessous)
 
 ## Mise à jour du 2026-11-05 (main 9c3e516) — elle prime sur la suite
-- Nom : **FEANOR** ; exécutable `target\release\feanor.exe`. Essais : **3743 réussis, 0 échec**. Format de projet : 46.
-- Fusionnés, en attente du test d'Anthony : identité FEANOR (INTERFACE partie 96), mémoire d'une longue séance (partie 97).
+- Nom : **FEANOR** ; exécutable `target\release\feanor.exe`. Essais : **3744 réussis, 0 échec**. Format de projet : 46.
+- Fusionnés, en attente du test d'Anthony : identité FEANOR (INTERFACE partie 96), mémoire d'une longue séance (partie 97), sortes de calques en couleurs FEANOR (partie 98).
 
 ## Mise à jour du 2026-10-30 au soir (main 1df74a1) — elle prime sur la suite
 

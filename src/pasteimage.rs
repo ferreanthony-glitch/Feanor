@@ -2,7 +2,7 @@
 //! de coller une image copiée dans le presse-papiers de Windows, issue d'internet ou autre »).
 //!
 //! Ctrl+V (ou Édition > Coller) : si le presse-papiers de Windows tient une image qui ne vient pas
-//! de SHOT (ses copies y écrivent « SHOT : … »), c'est elle qui est collée.
+//! de FEANOR (ses copies y écrivent « FEANOR : … »), c'est elle qui est collée.
 //!
 //! - Sur un calque **vectoriel** (2026-10-29) : l'image devient un **objet vectoriel** du dessin de la clé (`Element::Image`,
 //!   `imagevec.rs`), centré dans le cadre, réduit s'il le faut pour y tenir, et sélectionné (outil Sélection : on le déplace,
@@ -24,16 +24,16 @@ use crate::document::LayerKind;
 use crate::pixsel::Floating;
 use crate::raster::premultiply;
 
-/// Début du texte qu'écrivent les copies de SHOT dans le presse-papiers de Windows.
-pub const MARK: &str = "SHOT : ";
+/// Début du texte qu'écrivent les copies de FEANOR dans le presse-papiers de Windows.
+pub const MARK: &str = "FEANOR : ";
 
-/// Le même début chez l'ancien nom du logiciel (Pelure) : un presse-papiers rempli par l'ancienne
+/// Le même début sous les anciens noms du logiciel : un presse-papiers rempli par une ancienne
 /// version est encore reconnu.
-pub const ANCIEN_MARK: &str = "Pelure : ";
+pub const ANCIENNES_MARKS: [&str; 2] = ["SHOT : ", "Pelure : "];
 
-/// Ce texte du presse-papiers est-il une copie interne de SHOT (ou de Pelure) ?
+/// Ce texte du presse-papiers est-il une copie interne de FEANOR (ou d'une ancienne version) ?
 pub fn est_copie_interne(texte: &str) -> bool {
-    texte.starts_with(MARK) || texte.starts_with(ANCIEN_MARK)
+    texte.starts_with(MARK) || ANCIENNES_MARKS.iter().any(|m| texte.starts_with(m))
 }
 
 /// Taille qui tient dans `max_w` × `max_h` sans déformer ; jamais agrandie.

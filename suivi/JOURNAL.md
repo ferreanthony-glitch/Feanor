@@ -11,9 +11,10 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 - Mémoire d'une longue séance : fusion 9c3e516. 300 plans après 2000 gestes : de 6,5 à 5,8 Go (mesure de banc).
   Les dessins que plus rien n'utilise quittent la mémoire ; une relecture n'a trouvé aucun scénario de perte.
 - Essais : 3743 réussis, 0 échec, deux passages sur la branche dont la fusion est identique. Projet d'essai rouvert avec feanor.exe.
-- En attente de toi : tests à l'écran (INTERFACE parties 96 et 97), suppression des dossiers de travail `feanor` et `memoire-seance`,
-  et ce qui reste écrit SHOT (nom de palette, texte copié, « Anciennement SHOT » dans À propos).
+- En attente de toi : tests à l'écran (INTERFACE parties 96, 97 et 98).
 - Pas fait : focus clavier jade sur les boutons. Inexpliqué : 2,6 à 3 Go hors du tas, sans doute le pilote graphique.
+- Sortes de calques en couleurs FEANOR, vectoriel en jade sombre (INTERFACE partie 98). Nuancier « FEANOR », texte copié « FEANOR : », ligne « Anciennement » retirée.
+- Dossiers de travail `feanor` et `memoire-seance` et leurs branches supprimés, avec ton accord.
 
 ## 2026-10-30
 

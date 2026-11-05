@@ -105,8 +105,11 @@ fn selections_stay_visible_in_every_theme() {
 fn timeline_and_montage_stay_readable_in_every_theme() {
     for (choix, p) in livres() {
         // Noms écrits sur les extraits son et les calques sous les panneaux : 4,5:1.
-        for fond in [p.son_extrait, p.son_choisi, p.calque_vectoriel, p.calque_bitmap, p.calque_couleur] {
+        for fond in [p.son_extrait, p.son_choisi] {
             assert!(contraste(p.sur_calque, fond) >= 4.5, "{choix:?} : nom sur {fond:?} : {}", contraste(p.sur_calque, fond));
+        }
+        for fond in [p.calque_vectoriel, p.calque_bitmap, p.calque_couleur] {
+            assert!(contraste(p.sur_sorte, fond) >= 4.5, "{choix:?} : nom sur {fond:?} : {}", contraste(p.sur_sorte, fond));
         }
         // Piste muette : le « M » blanc.
         assert!(contraste(Color32::WHITE, p.son_muet) >= 4.5, "{choix:?} : M sur la piste muette");
@@ -140,16 +143,56 @@ fn each_kind_of_layer_has_its_colour() {
     use crate::document::LayerKind;
     for (choix, p) in livres() {
         theme::installer(&ReglageTheme { choix, perso: Couleurs::default() });
-        // Anthony (2026-10-28) : vectoriel orange (celui de SHOT), bitmap bleu (l'ancien bleu du vectoriel), calque de couleur
-        // rose (ex-CTG) ; trois couleurs distinctes.
+        // Anthony (2026-10-28), thèmes de gris : vectoriel orange, bitmap bleu, calque de couleur rose ; trois couleurs distinctes.
+        // (Atelier et Papier ont leurs couleurs à eux : essai suivant.)
         let (b, v, c) = (theme::couleur_calque(LayerKind::Bitmap, false), theme::couleur_calque(LayerKind::Vector, false), theme::couleur_calque(LayerKind::Bitmap, true));
-        assert!(b.b() > b.r() && b.b() > b.g(), "{choix:?} : bitmap bleu");
-        assert!(v.r() > v.g() && v.g() > v.b(), "{choix:?} : vectoriel orange");
-        assert!(c.r() > c.g() && c.b() > c.g(), "{choix:?} : calque de couleur rose");
-        assert_eq!(theme::couleur_calque(LayerKind::Vector, true), c, "un calque de couleur reste rose, quelle que soit sa sorte");
+        if !p.identite {
+            assert!(b.b() > b.r() && b.b() > b.g(), "{choix:?} : bitmap bleu");
+            assert!(v.r() > v.g() && v.g() > v.b(), "{choix:?} : vectoriel orange");
+            assert!(c.r() > c.g() && c.b() > c.g(), "{choix:?} : calque de couleur rose");
+        }
+        assert_eq!(theme::couleur_calque(LayerKind::Vector, true), c, "un calque de couleur garde sa couleur, quelle que soit sa sorte");
         assert_eq!(theme::fond_calque(LayerKind::Vector, false), p.calque_vectoriel);
     }
     theme::installer(&ReglageTheme::default());
+}
+
+#[test]
+fn the_brand_themes_colour_the_kinds_of_layers_from_the_feanor_palette() {
+    // Anthony (2026-11-05) : les sortes de calques redeviennent différentes, en couleurs FEANOR, le vectoriel en jade sombre.
+    let c = |r: [u8; 3]| Color32::from_rgb(r[0], r[1], r[2]);
+    for (choix, p) in livres().into_iter().filter(|(_, p)| p.identite) {
+        // Le jade sombre : le même que la sélection dans Atelier ; un jade à peine plus foncé dans Papier.
+        if p.claire {
+            assert!(p.calque_vectoriel.g() > p.calque_vectoriel.r() && p.calque_vectoriel.g().abs_diff(p.calque_vectoriel.b()) <= 2, "{choix:?} : jade");
+        } else {
+            assert_eq!(p.calque_vectoriel, p.selection, "{choix:?} : le jade sombre de la sélection");
+        }
+        let ecart = |a: Color32, b: Color32| a.r().abs_diff(b.r()).max(a.g().abs_diff(b.g())).max(a.b().abs_diff(b.b()));
+        assert!(ecart(p.dessin_vectoriel, c(theme::JADE_PROFOND)) <= 16, "{choix:?} : le jade profond, à peine éclairci : {:?}", p.dessin_vectoriel);
+        // Les bandes vives et les fonds se distinguent deux à deux, et aucun n'est le rouge d'alerte.
+        let vives = [p.dessin_vectoriel, p.dessin_bitmap, p.dessin_couleur, p.dessin_cfx, p.dessin_annotation, p.dessin_unie];
+        let fonds = [p.calque_vectoriel, p.calque_bitmap, p.calque_couleur, p.calque_cfx, p.calque_annotation, p.calque_unie];
+        for jeu in [vives, fonds] {
+            for (i, a) in jeu.iter().enumerate() {
+                assert!(ecart(*a, p.alerte) >= 40, "{choix:?} : {a:?} trop près de l'alerte");
+                for b in &jeu[i + 1..] {
+                    assert!(ecart(*a, *b) >= 40, "{choix:?} : {a:?} et {b:?} se confondent");
+                }
+            }
+        }
+        // Les noms se lisent sur tous les fonds, les repères sur les rangées, le contour du choix sur les fonds.
+        for fond in fonds {
+            assert!(contraste(p.sur_sorte, fond) >= 4.5, "{choix:?} : nom sur {fond:?} : {:.1}", contraste(p.sur_sorte, fond));
+            assert!(contraste(p.contour, fond) >= 3.0, "{choix:?} : contour sur {fond:?} : {:.1}", contraste(p.contour, fond));
+        }
+        for vive in vives {
+            assert!(contraste(p.encre, vive) >= 3.0, "{choix:?} : encre sur {vive:?} : {:.1}", contraste(p.encre, vive));
+            for rangee in [p.rangee, p.rangee_sombre] {
+                assert!(contraste(vive, rangee) >= 3.0, "{choix:?} : {vive:?} sur {rangee:?} : {:.1}", contraste(vive, rangee));
+            }
+        }
+    }
 }
 
 #[test]

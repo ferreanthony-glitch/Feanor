@@ -226,11 +226,12 @@ impl ColorSettings {
         if self.palettes.is_empty() {
             self.palettes.push(Palette::pelure());
         }
-        // Le nuancier d'avant le changement de nom du logiciel : « Pelure » devient « SHOT »,
-        // sauf si le nom est déjà pris.
+        // Le nuancier d'avant le changement de nom du logiciel (« SHOT », « Pelure ») prend le nom d'aujourd'hui,
+        // sauf si ce nom est déjà pris.
         if !self.palettes.iter().any(|p| p.name == crate::nuancier::NOM_DEFAUT) {
-            if let Some(p) = self.palettes.iter_mut().find(|p| p.name == crate::nuancier::NOM_ANCIEN) {
-                p.name = crate::nuancier::NOM_DEFAUT.to_string();
+            let ancien = crate::nuancier::NOMS_ANCIENS.iter().find_map(|nom| self.palettes.iter().position(|p| p.name == *nom));
+            if let Some(i) = ancien {
+                self.palettes[i].name = crate::nuancier::NOM_DEFAUT.to_string();
             }
         }
         self.shown = self.shown.min(self.palettes.len() - 1);
