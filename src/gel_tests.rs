@@ -486,3 +486,26 @@ fn the_recovery_copy_of_a_project_with_ranged_drawings_is_complete() {
     let _ = std::fs::remove_dir_all(&racine);
     let _ = std::fs::remove_dir_all(&travail);
 }
+
+#[test]
+fn only_the_gel_of_the_shown_project_asks_for_a_pass_on_the_common_caches() {
+    crate::fxcache::monde::ecrire();
+    crate::fxcache::clear();
+    let (mut doc, _) = doc_de_plans(2);
+    let mut c = crate::document::Cel::new(64 * 8, 64, LayerKind::Bitmap);
+    c.raster.tile_mut(0)[0] = Color32::BLACK;
+    crate::fxcache::get_or_compute(9301, 1, None, move || c);
+    assert!(crate::fxcache::a_examiner());
+    // Le gel d'un onglet caché : rien ne part.
+    let mut cache = Gel::default();
+    cache.activer(true);
+    cache.caches_communs = false;
+    cache.tenir(&mut doc, 0, None);
+    assert!(!cache.passe_sur_les_caches_en_route(), "un onglet caché ne passe pas sur les caches communs");
+    // Celui du projet affiché : le passage part.
+    let mut affiche = Gel::default();
+    affiche.activer(true);
+    affiche.tenir(&mut doc, 0, None);
+    assert!(affiche.passe_sur_les_caches_en_route());
+    crate::fxcache::clear();
+}

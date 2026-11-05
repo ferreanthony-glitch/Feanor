@@ -88,6 +88,10 @@ pub struct Gel {
     caches_le: Option<Instant>,
     /// Le dernier passage sur les caches a rangé des tuiles : un autre suivra.
     caches_a_trouve: bool,
+    /// Ce gel est celui du projet affiché : lui seul passe sur les caches communs (traits, dessins dérivés des effets), qui sont ceux du projet
+    /// affiché. Les gels des onglets cachés ne les touchent pas (ils les parcourraient en plus, et le « au repos » des dessins dérivés
+    /// se mesure entre deux passages).
+    pub caches_communs: bool,
     /// Le dernier passage sur l'historique d'annulation, et s'il reste des tuiles à y ranger.
     historique_le: Option<Instant>,
     historique_a_trouve: bool,
@@ -120,6 +124,7 @@ impl Default for Gel {
             caches_en_route: false,
             caches_le: None,
             caches_a_trouve: false,
+            caches_communs: true,
             historique_le: None,
             historique_a_trouve: false,
             vus_montres: HashSet::new(),
@@ -204,6 +209,20 @@ impl Gel {
         let n = h.geler_les_vieilles_etapes(ETAPES_GARDEES, TUILES_D_HISTORIQUE);
         self.lachees += n as u64;
         self.historique_a_trouve = n >= TUILES_D_HISTORIQUE;
+    }
+
+    /// Un autre projet prend la place de celui-ci (`App::load_doc`) : ses dessins portent les mêmes numéros que ceux de l'ancien. Ce que
+    /// l'élagage avait noté (dessins sans attache, parcours en cours) ne le concerne pas : il repart de zéro, avec son délai de grâce.
+    pub fn oublier_le_projet(&mut self) {
+        self.vus_montres.clear();
+        self.balayage = None;
+        self.elagage_le = Some(Instant::now());
+    }
+
+    /// Essais : un passage sur les caches communs est parti et n'a pas encore répondu.
+    #[cfg(test)]
+    pub fn passe_sur_les_caches_en_route(&self) -> bool {
+        self.caches_en_route
     }
 
     /// Essais : le prochain élagage n'attend pas son délai.
@@ -344,7 +363,7 @@ impl Gel {
             }
         }
         // Les caches de traits (531 Mo pour un épisode de 200 plans) : un passage du fil de fond de temps en temps.
-        if !self.caches_en_route && self.caches_le.is_none_or(|t| t.elapsed() >= CACHES_TOUTES_LES) {
+        if self.caches_communs && !self.caches_en_route && self.caches_le.is_none_or(|t| t.elapsed() >= CACHES_TOUTES_LES) {
             self.caches_le = Some(Instant::now());
             if crate::vector::cache_total_bytes() > 0 || crate::fxcache::a_examiner() {
                 let envoi = self.fil().send(Lot { dessins: Vec::new(), caches: true });
