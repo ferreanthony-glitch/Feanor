@@ -1763,6 +1763,11 @@ impl Document {
         }
     }
 
+    /// Le projet est partagé avec d'autres équipiers (numérotation à préfixe).
+    pub(crate) fn est_partage(&self) -> bool {
+        self.id_prefix != 0
+    }
+
     /// Le préfixe des numéros neufs (0 : projet classique).
     #[cfg(test)]
     pub(crate) fn id_prefix(&self) -> u64 {

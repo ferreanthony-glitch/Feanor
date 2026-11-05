@@ -682,6 +682,9 @@ mod folders_tests;
 mod frames;
 #[cfg(test)]
 mod frames_tests;
+mod elagage;
+#[cfg(test)]
+mod elagage_tests;
 mod gel;
 #[cfg(test)]
 mod gel_tests;

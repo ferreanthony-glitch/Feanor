@@ -720,6 +720,26 @@ fn endurance_editer() {
     mem_ligne("après la séance");
     repartition_memoire(&b, "après la séance");
     ventilation_tas(&b, "après la séance, annulée puis rétablie");
+    if env_usize("ENDU_EXPERIENCES", 0) == 1 {
+        // Où est le hors-tas ? Cache de la carte ramené à 64 Mo, puis dessins dérivés des effets oubliés, puis vignettes.
+        if let Some(avant) = b.app.gpu.as_ref().map(|g| g.cache_limit()) {
+            b.app.gpu.as_ref().map(|g| g.set_cache_bytes(64 << 20));
+            b.chauffer(30);
+            std::thread::sleep(Duration::from_secs(2));
+            b.chauffer(10);
+            mem_ligne("EXP cache de la carte à 64 Mo");
+            let g = b.app.gpu.as_ref().map(|g| g.stats()).unwrap_or_default();
+            endu!("EXP carte : {} textures, {:.0} Mo", g.textures, g.bytes as f64 / 1e6);
+            b.app.gpu.as_ref().map(|g| g.set_cache_bytes(avant));
+        }
+        crate::fxcache::forget_all();
+        b.chauffer(10);
+        std::thread::sleep(Duration::from_secs(2));
+        mem_ligne("EXP effets oubliés");
+        crate::vector::set_cache_budget(0);
+        b.chauffer(10);
+        mem_ligne("EXP caches de traits à zéro");
+    }
     if env_usize("ENDU_COURT", 0) == 1 {
         // (Mesure de mémoire seule : ni enregistrement, ni copie de secours, ni envois.)
         std::process::exit(0);

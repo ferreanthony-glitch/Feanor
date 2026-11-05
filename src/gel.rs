@@ -55,6 +55,8 @@ const HISTORIQUE_TOUTES_LES: Duration = Duration::from_millis(400);
 
 /// Numéro qui ne désigne aucun dessin : la réponse du fil de fond à un passage sur les caches de traits qui a rangé quelque chose.
 const REPONSE_CACHES: CelId = u64::MAX;
+/// L'élagage des dessins que plus rien ne retient revient au plus toutes ces secondes (`Gel::elaguer`).
+const ELAGAGE_TOUTES_LES: Duration = Duration::from_secs(15);
 /// Un dessin dérivé des effets que personne n'a demandé entre deux passages, depuis au moins ce nombre d'usages du cache, est rangé (`fxcache::ranger_les_inactifs`).
 const FX_AU_REPOS: u64 = 30;
 /// Caches de traits rangés d'un coup, au plus.
@@ -87,6 +89,11 @@ pub struct Gel {
     /// Le dernier passage sur l'historique d'annulation, et s'il reste des tuiles à y ranger.
     historique_le: Option<Instant>,
     historique_a_trouve: bool,
+    /// Les dessins qu'on a vu montrés par le projet (`elagage.rs` n'élague que ceux-là), et le dernier élagage.
+    vus_montres: HashSet<CelId>,
+    elagage_le: Option<Instant>,
+    /// Dessins retirés du projet depuis le début (diagnostic et essais).
+    pub elagues: u64,
 }
 
 impl Default for Gel {
@@ -109,6 +116,9 @@ impl Default for Gel {
             caches_a_trouve: false,
             historique_le: None,
             historique_a_trouve: false,
+            vus_montres: HashSet::new(),
+            elagage_le: None,
+            elagues: 0,
         }
     }
 }
@@ -184,6 +194,27 @@ impl Gel {
         let n = h.geler_les_vieilles_etapes(ETAPES_GARDEES, TUILES_D_HISTORIQUE);
         self.lachees += n as u64;
         self.historique_a_trouve = n >= TUILES_D_HISTORIQUE;
+    }
+
+    /// Essais : le prochain élagage n'attend pas son délai.
+    #[cfg(test)]
+    pub fn elagage_a_zero(&mut self) {
+        self.elagage_le = None;
+    }
+
+    /// Retire du projet les dessins que plus rien ne retient (`elagage.rs`), de temps en temps et jamais pendant un geste, une lecture ou
+    /// dans un projet partagé. `calme` : rien ne se passe (ni trait, ni lecture). Rend le nombre de dessins retirés.
+    pub fn elaguer(&mut self, doc: &mut Document, h: &crate::history::History, calme: bool) -> usize {
+        if !self.actif || !calme || doc.est_partage() {
+            return 0;
+        }
+        if self.elagage_le.is_some_and(|t| t.elapsed() < ELAGAGE_TOUTES_LES) {
+            return 0;
+        }
+        self.elagage_le = Some(Instant::now());
+        let n = crate::elagage::elaguer(doc, h, &mut self.vus_montres);
+        self.elagues += n as u64;
+        n
     }
 
     /// Le bilan des tuiles du projet : (tuiles dont les pixels sont en mémoire, tuiles en tout, octets que les tuiles tiennent vraiment).

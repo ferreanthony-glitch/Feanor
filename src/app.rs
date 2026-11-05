@@ -2672,6 +2672,9 @@ impl App {
         let lecture = self.playing.then_some(self.doc.fps);
         self.gel.tenir(&mut self.doc, self.cur_panel, lecture);
         self.gel.tenir_l_historique(&mut self.history);
+        // (Pas pendant un geste ni une lecture : le pointeur est relâché, rien ne joue, aucun trait ne se rejoue.)
+        let calme = !self.playing && !ctx.input(|i| i.pointer.any_down()) && self.rejeu_again.is_empty();
+        self.gel.elaguer(&mut self.doc, &self.history, calme);
         let mut occupe = self.gel.occupe();
         // Les projets des autres onglets : leurs dessins se rangent aussi (le plan qu'on y regardait en dernier reste ouvert).
         for o in &mut self.onglets {

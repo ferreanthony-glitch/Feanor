@@ -288,8 +288,7 @@ impl History {
         self.undo.is_empty() && self.redo.is_empty()
     }
 
-    /// Les étapes à annuler puis celles à rétablir (mesures de mémoire, essais).
-    #[cfg(test)]
+    /// Les étapes à annuler puis celles à rétablir (élagage des dessins, mesures de mémoire, essais).
     pub fn etapes(&self) -> impl Iterator<Item = &Edit> {
         self.undo.iter().chain(self.redo.iter())
     }
