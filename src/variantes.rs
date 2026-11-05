@@ -294,6 +294,22 @@ pub fn nom_propre(texte: &str) -> String {
     texte.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(MAX_NOM).collect()
 }
 
+thread_local! {
+    /// Pourquoi la dernière opération de montage a été refusée pour ne pas perdre de versions (vide : rien à dire). Le document
+    /// n'a pas de canal vers la ligne d'état : l'interface le lit une fois par image d'écran (`App::dire_le_refus_des_versions`).
+    static REFUS: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Note la raison d'un refus (la dernière gagne).
+pub(crate) fn noter_refus(message: String) {
+    REFUS.with(|r| *r.borrow_mut() = Some(message));
+}
+
+/// Reprend la raison du dernier refus, s'il y en a une.
+pub(crate) fn prendre_refus() -> Option<String> {
+    REFUS.with(|r| r.borrow_mut().take())
+}
+
 /// Un jeu de plans qui sort du film ou y entre : tout ce qui tient à lui dans les tables du film.
 #[derive(Default)]
 struct Jeu {
@@ -760,9 +776,11 @@ impl Document {
         let Some(entrante) = v.rangee(numero).filter(|r| !r.contenu.slots.is_empty()) else { return false };
         let Some((a, b)) = self.course_de_sequence(sequence) else { return false };
         let dans_le_film: HashSet<u64> = self.panels[a..b].iter().map(|p| p.id).collect();
-        if !entrante.contenu.slots.iter().any(|s| dans_le_film.contains(&s.plan) || v.garage.contains_key(&s.plan)) {
+        // (Un plan que le film a déplacé dans une autre séquence existe encore : `accorder_au_film` lui en fait une copie.)
+        if !entrante.contenu.slots.iter().any(|s| dans_le_film.contains(&s.plan) || v.garage.contains_key(&s.plan) || self.panels.iter().any(|p| p.id == s.plan)) {
             return false;
         }
+        self.accorder_au_film(sequence, numero);
         let slots_sortants = self.emplacements_du_film(sequence);
         let bords = self.bords_de(&dans_le_film);
         let Some((start, mut sorti)) = self.sortir(sequence) else { return false };
@@ -798,6 +816,156 @@ impl Document {
         self.poser(start, Jeu { scenes: c.scenes, plans, transitions: c.transitions, references: c.references });
         self.refixer_bords(bords, premier, dernier);
         self.normalize();
+        true
+    }
+
+    /// Une copie du plan du film `index` pour le garage : numéros neufs, dessins dupliqués (les tuiles restent partagées jusqu'à la
+    /// première retouche), mêmes versions sous les mêmes numéros, commentaires copiés ; le contenu rogné ne l'est pas (comme pour
+    /// `Nouvelle::Copier`). `scene` : la scène où une version de séquence le montre.
+    fn parque_de_copie(&mut self, index: usize, scene: u64) -> Parque {
+        let plan = self.panels[index].id;
+        let source = self.panels[index].clone();
+        let mut panel = self.copie_de(&source);
+        self.adopt_scene_layers(std::slice::from_mut(&mut panel), scene);
+        panel.scene = scene;
+        let versions = match self.versions.get(&plan).cloned() {
+            Some(v) => {
+                let mut autres = Vec::with_capacity(v.autres.len());
+                for r in &v.autres {
+                    let mut p = self.copie_de(&r.panel);
+                    self.adopt_scene_layers(std::slice::from_mut(&mut p), scene);
+                    p.scene = scene;
+                    autres.push(Rangee { numero: r.numero, date: r.date, panel: p });
+                }
+                Some(VersionsDuPlan { actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres })
+            }
+            None => None,
+        };
+        let mut comments: Vec<Comment> = self.comments.iter().filter(|c| c.panel == plan).cloned().collect();
+        for c in &mut comments {
+            c.id = self.alloc();
+            c.panel = panel.id;
+        }
+        Parque { panel, versions, reserve: None, comments }
+    }
+
+    /// Avant que la version rangée `numero` ne devienne celle du film : ce qu'elle cite doit exister à l'endroit où elle va entrer.
+    /// - Un plan qu'elle montre et que le film a déplacé dans une **autre séquence** (`move_plans`, « Nouvelle séquence avec les
+    ///   plans choisis »…) reste là où il est : la version en garde **une copie** au garage (même contenu, mêmes versions du plan),
+    ///   sous un numéro neuf que toutes les versions rangées de la séquence se mettent à citer. Rien n'est enlevé de la version, rien
+    ///   n'est pris à l'autre séquence.
+    /// - Une scène qu'elle cite et que le film utilise ailleurs (la scène a changé de séquence avec ses plans) reçoit un numéro neuf :
+    ///   deux scènes de même numéro dans le film casseraient l'ordre des plans.
+    /// Sans effet quand tout est à sa place (le cas ordinaire).
+    fn accorder_au_film(&mut self, sequence: u64, numero: u32) {
+        let Some((a, b)) = self.course_de_sequence(sequence) else { return };
+        let Some(v) = self.variantes.get(&sequence) else { return };
+        let Some(entrante) = v.rangee(numero) else { return };
+        let film: HashSet<u64> = self.panels[a..b].iter().map(|p| p.id).collect();
+        let scenes_du_film: HashSet<u64> = self.panels[a..b].iter().map(|p| p.scene).collect();
+        let scenes_prises: HashSet<u64> = self.scenes.iter().map(|s| s.id).collect();
+        let conflits: Vec<u64> = entrante.contenu.scenes.iter().map(|s| s.id).filter(|id| !scenes_du_film.contains(id) && scenes_prises.contains(id)).collect();
+        let mut plans: Vec<(u64, u64)> = Vec::new();
+        for e in &entrante.contenu.slots {
+            if !film.contains(&e.plan) && !v.garage.contains_key(&e.plan) && self.panels.iter().any(|p| p.id == e.plan) && plans.iter().all(|(p, _)| *p != e.plan) {
+                plans.push((e.plan, e.scene));
+            }
+        }
+        if conflits.is_empty() && plans.is_empty() {
+            return;
+        }
+        let scenes_neuves: HashMap<u64, u64> = conflits.into_iter().map(|id| (id, self.alloc())).collect();
+        let mut copies: Vec<(u64, Parque)> = Vec::new();
+        for (plan, scene) in plans {
+            let scene = scenes_neuves.get(&scene).copied().unwrap_or(scene);
+            if let Some(i) = self.panels.iter().position(|p| p.id == plan) {
+                let parque = self.parque_de_copie(i, scene);
+                copies.push((plan, parque));
+            }
+        }
+        let v = self.variantes_mut().get_mut(&sequence).expect("variantes lues juste avant");
+        if let Some(r) = v.autres.iter_mut().find(|r| r.numero == numero) {
+            for s in &mut r.contenu.scenes {
+                if let Some(n) = scenes_neuves.get(&s.id) {
+                    s.id = *n;
+                }
+            }
+            for e in &mut r.contenu.slots {
+                if let Some(n) = scenes_neuves.get(&e.scene) {
+                    e.scene = *n;
+                }
+            }
+        }
+        let neuf_de: HashMap<u64, u64> = copies.iter().map(|(ancien, p)| (*ancien, p.panel.id)).collect();
+        for r in &mut v.autres {
+            let c = &mut r.contenu;
+            for e in &mut c.slots {
+                if let Some(n) = neuf_de.get(&e.plan) {
+                    e.plan = *n;
+                }
+            }
+            for t in &mut c.transitions {
+                t.out = t.out.map(|o| neuf_de.get(&o).copied().unwrap_or(o));
+                t.inn = t.inn.map(|i| neuf_de.get(&i).copied().unwrap_or(i));
+            }
+            for (_, liens) in &mut c.references {
+                for l in liens.iter_mut() {
+                    if let Some(n) = neuf_de.get(l) {
+                        *l = *n;
+                    }
+                }
+            }
+        }
+        for (ancien, p) in copies {
+            v.origines.insert(p.panel.id, ancien);
+            v.garage.insert(p.panel.id, p);
+        }
+    }
+
+    /// Les séquences qui ont d'autres versions de séquence et dont **tous** les plans du film `partent` : leur retirer ce dernier
+    /// plan ferait disparaître la séquence, et avec elle ses versions rangées et son garage (`elaguer_variantes`).
+    pub(crate) fn sequences_videes_avec_versions(&self, partent: impl Fn(u64) -> bool) -> Vec<u64> {
+        let mut out = Vec::new();
+        for (sequence, v) in self.variantes.iter() {
+            if v.autres.is_empty() {
+                continue;
+            }
+            if let Some((a, b)) = self.course_de_sequence(*sequence) {
+                if self.panels[a..b].iter().all(|p| partent(p.id)) {
+                    out.push(*sequence);
+                }
+            }
+        }
+        out
+    }
+
+    /// Refuse (et dit pourquoi, `noter_refus`) une opération qui retirerait du film tous les plans d'une séquence qui a d'autres
+    /// versions de séquence. Vrai s'il faut refuser. Rien à calculer tant que le projet n'a aucune version de séquence.
+    pub(crate) fn refuser_si_sequence_videe(&self, partent: impl Fn(u64) -> bool) -> bool {
+        if self.variantes.is_empty() {
+            return false;
+        }
+        let videes = self.sequences_videes_avec_versions(partent);
+        let Some(&sequence) = videes.first() else { return false };
+        let noms: Vec<String> = self.variantes[&sequence].autres.iter().map(|r| self.etiquette_de_variante(sequence, r.numero)).collect();
+        noter_refus(format!(
+            "La séquence {} a d'autres versions de séquence ({}) : lui retirer son dernier plan les ferait disparaître. Supprime-les d'abord (Versions de la séquence), ou garde un plan.",
+            self.sequence_label(sequence),
+            noms.join(", ")
+        ));
+        true
+    }
+
+    /// Refuse (et dit pourquoi) de couper ou de réunir un plan qui a plusieurs versions : l'opération ne toucherait que la version
+    /// affichée ; les autres garderaient le plan entier (une version rangée de plus qu'un plan, ou sous un numéro de plan qui n'existe
+    /// plus). Vrai s'il faut refuser.
+    pub(crate) fn refuser_si_versions_de_plan(&self, plans: &[u64], geste: &str) -> bool {
+        let Some(&plan) = plans.iter().find(|p| self.nombre_de_versions(**p) > 1) else { return false };
+        let noms: Vec<String> = self.versions.get(&plan).map(|v| v.numeros().into_iter().map(crate::planvers::etiquette).collect()).unwrap_or_default();
+        noter_refus(format!(
+            "Ce plan a plusieurs versions ({}) : {geste} ne toucherait que la version affichée, les autres garderaient le plan d'avant. Supprime les versions dont tu n'as plus besoin, puis recommence.",
+            noms.join(", ")
+        ));
         true
     }
 

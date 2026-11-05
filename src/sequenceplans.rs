@@ -37,6 +37,10 @@ impl Document {
         }
         let first_id = self.panels[first].id;
         let chosen: HashSet<u64> = at.iter().map(|&i| self.panels[i].id).collect();
+        // Les plans choisis qui seraient les derniers d'une séquence qui a d'autres versions de séquence : elles disparaîtraient.
+        if self.refuser_si_sequence_videe(|p| chosen.contains(&p)) {
+            return None;
+        }
         let seq = self.new_sequence();
         // Les plans choisis se suivent, à la place du premier.
         let (moved, mut kept): (Vec<_>, Vec<_>) = std::mem::take(&mut self.panels).into_iter().partition(|p| chosen.contains(&p.id));

@@ -251,6 +251,16 @@ impl App {
         } else if self.storyboard_refuses() {
             return;
         }
+        // Entre deux images d'un plan qui a plusieurs versions : couper le plan est refusé (`refuser_si_versions_de_plan`), les images ne
+        // se posent pas ailleurs à la place.
+        if let Cible::Entre(id) = cible {
+            if let Some(c) = layout.cards.iter().find(|c| c.id == id) {
+                let coupe = self.doc.panels.iter().find(|p| p.id == c.plan).is_some_and(|p| c.end < p.frame_count());
+                if coupe && self.doc.refuser_si_versions_de_plan(&[c.plan], "couper") {
+                    return;
+                }
+            }
+        }
         let joins = self.vignettes.empty_joins;
         let mut rasters = rasters.into_iter();
         let mut first: Option<u64> = None;

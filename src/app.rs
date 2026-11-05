@@ -5294,6 +5294,7 @@ impl App {
         self.personnages_fenetre(ctx);
         self.scrub_audio();
         self.drop_stale_drags(ctx.input(|i| i.pointer.any_down()));
+        self.dire_le_refus_des_versions();
         self.suivre_sorte_pinceau();
         self.watch_plan_length();
         if self.thumbs.pending {

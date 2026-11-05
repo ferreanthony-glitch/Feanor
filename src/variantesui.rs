@@ -51,6 +51,14 @@ pub(crate) fn montree_par(doc: &Document, sequence: u64, plan: u64, version: u32
 }
 
 impl App {
+    /// Une fois par image d'écran : si une opération de montage a été refusée pour ne pas perdre de versions (le dernier plan d'une
+    /// séquence qui a d'autres versions, couper ou réunir un plan qui a plusieurs versions), la ligne d'état le dit.
+    pub(crate) fn dire_le_refus_des_versions(&mut self) {
+        if let Some(message) = crate::variantes::prendre_refus() {
+            self.status = message;
+        }
+    }
+
     /// La séquence du plan courant.
     fn sequence_courante(&self) -> Option<u64> {
         self.doc.panels.get(self.cur_panel)?;
@@ -74,6 +82,11 @@ impl App {
                 return false;
             }
         }
+        // Un glisser du montage en cours (durée, place d'un plan…) tient une copie du document d'avant : il s'abandonne d'abord, tout
+        // revient comme avant le geste (comme Ctrl+Z, `cancel_drags`), sinon son retour ou sa fin écraserait les plans échangés.
+        if self.dragging() {
+            self.cancel_drags();
+        }
         self.end_stroke();
         self.poser_les_selections();
         self.playing = false;
@@ -92,7 +105,8 @@ impl App {
             }
         }
         self.cur_panel = self.cur_panel.min(self.doc.panels.len() - 1);
-        self.cur_layer = self.cur_layer.min(self.layers().len() - 1);
+        // (Un plan sans calque — un plan lu d'un fichier abîmé — ne fait pas tomber le calcul : `len() - 1` serait négatif.)
+        self.cur_layer = self.cur_layer.min(self.layers().len().saturating_sub(1));
         let avant = std::mem::replace(&mut self.history.context, Some(nom.to_string()));
         self.commit_structure(snap);
         self.history.context = avant;
