@@ -678,6 +678,17 @@ fn endurance_editer() {
         endu!("séance {l}");
     }
     jusqu_au_calme(&mut b, 120.0);
+    // Une pause de l'utilisateur (il regarde, il réfléchit : plus de geste, mais l'écran vit) : l'élagage a besoin de quelques secondes sans
+    // changement de l'historique, et de deux passages à quinze secondes d'écart.
+    let pause = env_usize("ENDU_PAUSE", 0);
+    if pause > 0 {
+        let t = Instant::now();
+        while t.elapsed().as_secs() < pause as u64 {
+            b.image(Vec::new(), 1.0 / 60.0);
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        jusqu_au_calme(&mut b, 120.0);
+    }
     let (ws1, pv1) = memoire();
     ventilation_tas(&b, "fin de la séance");
     endu!("séance de {ops} gestes en {:.0} s ; mémoire {ws0:.0} -> {ws1:.0} Mo (ensemble de travail), {pv0:.0} -> {pv1:.0} Mo (privée) ; {} dessins, {} plans", t0.elapsed().as_secs_f64(), b.app.doc.cels.len(), b.app.doc.panels.len());
@@ -1208,8 +1219,9 @@ fn ventilation_tas(b: &Banc, titre: &str) {
     let (nf, of, ns, os) = crate::fxcache::octets_en_memoire();
     let (vignettes_gpu, nv) = b.app.thumbs.octets();
     endu!(
-        "ventilation ({titre}) : {} dessins élagués depuis le début ; caches de traits {nc} ({tc} tuiles, {:.0} Mo réels) ; effets : {nf} dessins dérivés {:.0} Mo, {ns} copies d'origine {:.0} Mo ; vignettes {nv} ({:.0} Mo carte) ; tas vivant {:.0} Mo",
+        "ventilation ({titre}) : {} dessins élagués depuis le début (passage le plus long sur le fil de l'interface : {:.1} ms) ; caches de traits {nc} ({tc} tuiles, {:.0} Mo réels) ; effets : {nf} dessins dérivés {:.0} Mo, {ns} copies d'origine {:.0} Mo ; vignettes {nv} ({:.0} Mo carte) ; tas vivant {:.0} Mo",
         b.app.gel.elagues,
+        b.app.gel.elagage_pire.as_secs_f64() * 1e3,
         mo(oc),
         mo(of),
         mo(os),

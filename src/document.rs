@@ -1173,6 +1173,13 @@ pub struct Structure {
 #[derive(Clone)]
 pub struct FramesRangees(Vec<Vec<Vec<(Option<CelId>, u32)>>>);
 
+impl FramesRangees {
+    /// Les dessins cités (un par suite, avec des répétitions d'un calque à l'autre).
+    pub fn dessins(&self) -> impl Iterator<Item = CelId> + '_ {
+        self.0.iter().flatten().flatten().filter_map(|(id, _)| *id)
+    }
+}
+
 impl Structure {
     /// Range les expositions des calques en suites (rien ne se perd : `rouvrir_les_expositions` les rend telles quelles). Faux si elles
     /// l'étaient déjà.
@@ -1210,10 +1217,11 @@ impl Structure {
         }
     }
 
-    /// Les dessins que montrent les plans de cet état (rangé ou non).
+    /// Les dessins que montrent les plans de cet état (rangé ou non) (essais).
+    #[cfg(test)]
     pub fn dessins_des_plans(&self) -> Vec<CelId> {
         match &self.frames_rangees {
-            Some(r) => r.0.iter().flatten().flatten().filter_map(|(id, _)| *id).collect(),
+            Some(r) => r.dessins().collect(),
             None => self.panels.iter().flat_map(|p| p.layers.iter()).flat_map(|l| l.frames.iter().flatten().copied()).collect(),
         }
     }

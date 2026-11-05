@@ -18,15 +18,25 @@
 //! dizaines de millisecondes.
 
 use std::collections::{BTreeSet, HashSet};
+use std::time::{Duration, Instant};
 
 use crate::document::{CelId, Document, Structure};
 use crate::history::{Edit, History};
 
 impl Structure {
-    /// Tous les dessins que cet état (un instantané d'annulation) remettrait dans le projet : ceux des plans (rangés ou non), leurs
-    /// griffonnages, le contenu rogné, les versions des plans et les variantes rangées.
-    pub fn dessins_retenus(&self) -> BTreeSet<CelId> {
-        let mut out: BTreeSet<CelId> = self.dessins_des_plans().into_iter().collect();
+    /// Ajoute à `out` tous les dessins que cet état (un instantané d'annulation) remettrait dans le projet : ceux des plans (rangés ou non),
+    /// leurs griffonnages, le contenu rogné, les versions des plans et les variantes rangées.
+    pub fn dessins_retenus_dans(&self, out: &mut HashSet<CelId>) {
+        match &self.frames_rangees {
+            Some(r) => out.extend(r.dessins()),
+            None => {
+                for p in &self.panels {
+                    for l in &p.layers {
+                        out.extend(l.frames.iter().flatten().copied());
+                    }
+                }
+            }
+        }
         for p in &self.panels {
             for l in &p.layers {
                 out.extend(l.couleur.iter().flat_map(|c| c.griffonnages.values().copied()));
@@ -53,27 +63,25 @@ impl Structure {
                 }
             }
         }
-        out
+    }
+
+    /// Les dessins que cet état remettrait (essais).
+    #[cfg(test)]
+    pub fn dessins_retenus(&self) -> BTreeSet<CelId> {
+        let mut out = HashSet::new();
+        self.dessins_retenus_dans(&mut out);
+        out.into_iter().collect()
     }
 }
 
-fn de_l_etape(e: &Edit, out: &mut BTreeSet<CelId>) {
+fn de_l_etape(e: &Edit, out: &mut HashSet<CelId>) {
     match e {
         Edit::Tiles { cel, .. } | Edit::FondTiles { cel, .. } | Edit::Vector { cel, .. } => {
             out.insert(*cel);
         }
-        Edit::Structure { structure, .. } => out.extend(structure.dessins_retenus()),
+        Edit::Structure { structure, .. } => structure.dessins_retenus_dans(out),
         Edit::Group(g) => g.iter().for_each(|e| de_l_etape(e, out)),
     }
-}
-
-/// Les dessins que l'historique (étapes à annuler et à rétablir) peut encore demander.
-pub fn retenus_par_l_historique(h: &History) -> BTreeSet<CelId> {
-    let mut out = BTreeSet::new();
-    for e in h.etapes() {
-        de_l_etape(e, &mut out);
-    }
-    out
 }
 
 /// Les dessins du document vivant que rien ne cite.
@@ -87,17 +95,46 @@ fn retenus_du_document(doc: &Document) -> BTreeSet<CelId> {
     out
 }
 
-/// Retire de `doc.cels` les dessins que ni le document ni l'historique ne retiennent, et qui ne sont pas retenus non plus depuis le passage
-/// précédent (`precedents` : ceux du dernier passage ; un dessin tout juste créé et pas encore posé dans un plan a ainsi au moins un passage,
-/// quinze secondes, pour l'être). Les numéros réservés aux dessins temporaires (`flottante::BASE_CEL` et au-dessus : la feuille flottante
-/// d'une sélection) ne sont jamais touchés. Rend le nombre de dessins retirés, lâchés sur un fil de fond.
-pub fn elaguer(doc: &mut Document, h: &History, precedents: &mut HashSet<CelId>) -> usize {
-    let mut retenus = retenus_du_document(doc);
-    if doc.cels.len() <= retenus.len() {
-        precedents.clear();
-        return 0;
+/// Un parcours de l'historique en cours, par tranches : les dessins que ses étapes peuvent encore demander.
+pub struct Balayage {
+    /// Le numéro de l'historique au départ : s'il change, les étapes ne sont plus celles qu'on a lues.
+    serial: u64,
+    prochaine: usize,
+    retenus: HashSet<CelId>,
+}
+
+impl Balayage {
+    pub fn commencer(h: &History) -> Balayage {
+        Balayage { serial: h.serial(), prochaine: 0, retenus: HashSet::new() }
     }
-    retenus.extend(retenus_par_l_historique(h));
+
+    /// Lit des étapes pendant au plus `budget` ; vrai quand toutes sont lues. Faux aussi (et `perime`) si l'historique a changé.
+    pub fn avancer(&mut self, h: &History, budget: Duration) -> bool {
+        let debut = Instant::now();
+        loop {
+            let Some(e) = h.etapes().nth(self.prochaine) else { return true };
+            de_l_etape(e, &mut self.retenus);
+            self.prochaine += 1;
+            if debut.elapsed() >= budget {
+                return h.etapes().nth(self.prochaine).is_none();
+            }
+        }
+    }
+
+    /// L'historique n'est plus celui qu'on parcourait.
+    pub fn est_perime(&self, h: &History) -> bool {
+        h.serial() != self.serial
+    }
+}
+
+/// La fin d'un parcours (`b` entièrement lu, l'historique inchangé) : retire de `doc.cels` les dessins que ni le document ni l'historique ne
+/// retiennent, et qui ne l'étaient pas non plus au passage précédent (`precedents` : ceux du dernier passage ; un dessin tout juste créé et
+/// pas encore posé dans un plan a ainsi au moins un passage, quinze secondes, pour l'être). Le document vivant est relu ici, d'un coup, au
+/// moment de retirer. Les numéros réservés aux dessins temporaires (`flottante::BASE_CEL` et au-dessus : la feuille flottante d'une
+/// sélection) ne sont jamais touchés. Rend le nombre de dessins retirés, lâchés sur un fil de fond.
+pub fn conclure(doc: &mut Document, b: Balayage, precedents: &mut HashSet<CelId>) -> usize {
+    let mut retenus = b.retenus;
+    retenus.extend(retenus_du_document(doc));
     let orphelins: HashSet<CelId> = doc.cels.keys().copied().filter(|id| *id < crate::flottante::BASE_CEL && !retenus.contains(id)).collect();
     let a_retirer: Vec<CelId> = orphelins.iter().copied().filter(|id| precedents.contains(id)).collect();
     *precedents = orphelins;

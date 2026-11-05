@@ -156,3 +156,24 @@ fn no_pruning_while_something_is_going_on() {
     assert!(b.app.doc.cels.contains_key(&ids[1]));
     assert_eq!(passes(&mut b), 1, "au calme, il part");
 }
+
+#[test]
+fn a_scan_cut_by_a_change_of_the_history_is_dropped_and_starts_again_later() {
+    let (doc, ids) = doc_de_plans(4);
+    let mut b = banc(doc, false);
+    b.app.gel.activer(true);
+    // Une histoire de plusieurs étapes, lues une à une (budget nul : une étape par appel).
+    for i in 0..3 {
+        b.app.select_panel(i);
+        b.app.structure_op(|d, cur| Some(d.add_scene_after(cur)));
+    }
+    let mut balayage = crate::elagage::Balayage::commencer(&b.app.history);
+    assert!(!balayage.avancer(&b.app.history, std::time::Duration::ZERO), "une seule étape lue sur trois");
+    assert!(!balayage.est_perime(&b.app.history));
+    b.app.undo();
+    assert!(balayage.est_perime(&b.app.history), "l'historique a changé : ce qu'on a lu n'est plus sûr");
+    // Par le Gel : un parcours coupé ne retire rien, et un autre repart plus tard.
+    b.app.history.clear();
+    assert_eq!(passes(&mut b), 0);
+    assert!(b.app.doc.cels.contains_key(&ids[0]));
+}
