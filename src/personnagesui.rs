@@ -1016,8 +1016,8 @@ impl App {
             for t in Type::ALL {
                 let (nom, aide) = match t {
                     Type::Personnage => ("Brosse personnage", "Une brosse qui dessine dans un calque à son nom, créé au premier trait (du projet)."),
-                    Type::Classique => ("Brosse classique", "Une brosse qui dessine dans le calque courant, sans rien créer (réglage de SHOT, pour tous les projets)."),
-                    Type::Decor => ("Brosse décor", "Une brosse qui dessine dans le calque Décor du plan, créé au premier trait (réglage de SHOT, pour tous les projets)."),
+                    Type::Classique => ("Brosse classique", "Une brosse qui dessine dans le calque courant, sans rien créer (réglage de FEANOR, pour tous les projets)."),
+                    Type::Decor => ("Brosse décor", "Une brosse qui dessine dans le calque Décor du plan, créé au premier trait (réglage de FEANOR, pour tous les projets)."),
                 };
                 let r = ui.button(nom).on_hover_text(aide);
                 cases.push((r.rect, Case::Ajouter(t)));
@@ -1146,7 +1146,7 @@ impl App {
                 self.perso_ligne(ui, c);
             });
             if c.type_() != Type::Personnage {
-                ui.label(RichText::new("Une brosse Classique ou Décor est un réglage de SHOT : elle sert dans tous les projets.").small().weak());
+                ui.label(RichText::new("Une brosse Classique ou Décor est un réglage de FEANOR : elle sert dans tous les projets.").small().weak());
             }
         });
         if !ouverte {

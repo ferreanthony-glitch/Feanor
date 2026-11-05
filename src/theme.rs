@@ -2,17 +2,15 @@
 //! `Visuals` d'egui posés une seule fois quand le thème change. Seulement des couleurs et des
 //! tailles : aucun élément ni ressource graphique repris.
 //!
-//! Cinq choix. **SHOT** (par défaut depuis la charte graphique d'Anthony, 2026-10-28) est le gris sombre
-//! d'avant, avec seulement quelques rehauts orange (`#E76F3C`, l'orange de la charte) pour rappeler
-//! l'identité : un mince trait sous l'espace de travail actif, l'icône de « Nouveau projet » sur
-//! l'accueil, les angles du petit logotype. Rien d'autre n'est orange : la sélection, les éléments
-//! choisis et les boutons gardent leurs gris (Anthony, après avoir vu la première version, plus
-//! chargée : « l'orange est trop présent, le noir trop lourd »). Puis trois thèmes de gris neutres
-//! (Anthony, 2026-10-18 : « un gris sombre/clair ») : **Gris sombre**, **Gris clair** et **Sombre** (l'ancien presque noir). Un dernier,
-//! **Personnalisé**, part du thème courant et se
-//! règle dans Fichier > Préférences… avec neuf couleurs ; tout le reste de la palette (survol,
-//! onglet actif, texte secondaire, couleur des dessins sur la timeline…) en est déduit, et choisi
-//! pour rester lisible sur le thème (contraste WCAG, `contraste`).
+//! Six choix. **Atelier** (par défaut, la marque FEANOR en sombre) et **Papier** (la marque en clair) suivent le livre de marque :
+//! les jetons `sol`, `panneau`, `canevas`, `ligne`, `ligne forte`, `encre`, `encre douce`, `jade`, `jade texte` et `sur jade`
+//! (constantes `ATELIER_*`, `PAPIER_*`, `JADE`, `SUR_JADE` plus bas). Le jade est l'accent (sélection, onglet actif, curseurs) avec
+//! l'encre `sur jade` écrite dessus ; les bordures des champs et des boutons sont en `ligne forte` (3:1 au moins) ; pas d'ombres
+//! portées. Puis trois thèmes de gris neutres (Anthony, 2026-10-18 : « un gris sombre/clair ») : **Gris sombre**, **Gris clair** et
+//! **Sombre** (l'ancien presque noir) ; ils gardent leurs couleurs d'avant la marque. Un dernier, **Personnalisé**, part du thème
+//! courant et se règle dans Fichier > Préférences… avec neuf couleurs ; tout le reste de la palette (survol, onglet actif, texte
+//! secondaire, couleur des dessins sur la timeline…) en est déduit, et choisi pour rester lisible sur le thème (contraste WCAG,
+//! `contraste`).
 //!
 //! La palette courante vit dans le fil de l'interface (`installer`) ; chaque couleur se lit par une
 //! petite fonction (`theme::fond()`, `theme::texte()`…) qui copie quatre octets.
@@ -45,9 +43,11 @@ fn couleur(c: Rvb) -> Color32 {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChoixTheme {
-    /// Le gris sombre avec les rehauts orange de la charte : le thème d'une installation neuve.
+    /// « Atelier », la marque FEANOR en sombre : le thème d'une installation neuve.
     #[default]
     Shot,
+    /// Le thème clair de la marque : « Papier ».
+    Papier,
     GrisSombre,
     GrisClair,
     Sombre,
@@ -55,11 +55,12 @@ pub enum ChoixTheme {
 }
 
 impl ChoixTheme {
-    pub const TOUS: [ChoixTheme; 5] = [ChoixTheme::Shot, ChoixTheme::GrisSombre, ChoixTheme::GrisClair, ChoixTheme::Sombre, ChoixTheme::Personnalise];
+    pub const TOUS: [ChoixTheme; 6] = [ChoixTheme::Shot, ChoixTheme::Papier, ChoixTheme::GrisSombre, ChoixTheme::GrisClair, ChoixTheme::Sombre, ChoixTheme::Personnalise];
 
     pub fn nom(self) -> &'static str {
         match self {
-            ChoixTheme::Shot => "SHOT",
+            ChoixTheme::Shot => "Atelier",
+            ChoixTheme::Papier => "Papier",
             ChoixTheme::GrisSombre => "Gris sombre",
             ChoixTheme::GrisClair => "Gris clair",
             ChoixTheme::Sombre => "Sombre",
@@ -92,18 +93,50 @@ pub struct Couleurs {
     pub timeline: Rvb,
     /// Traits de séparation, bordures.
     pub bordure: Rvb,
-    /// Vrai pour le thème de la charte : quelques rehauts orange (`Palette::rehaut`) rappellent l'identité
-    /// de SHOT (trait sous l'espace actif, icône de « Nouveau projet », angles du petit logotype). Pas réglé
+    /// Vrai pour les thèmes de la marque (Atelier, Papier) : la palette prend alors les jetons exacts du livre de marque
+    /// (texte secondaire, texte d'accent, bordures fortes, rehaut jade, pas d'ombres). Pas réglé
     /// dans les préférences ; absent d'un fichier de réglages, il vaut « non ».
     #[serde(default)]
     pub identite: bool,
 }
 
-/// Les couleurs de la charte utilisées par l'interface.
-/// (Elles sont écrites dans `logo.rs`, qui sert aussi à `build.rs`.)
-pub const BLANC_CASSE: Rvb = crate::logo::BLANC_CASSE;
-pub const ORANGE_SHOT: Rvb = crate::logo::ORANGE_SHOT;
-
+// Les jetons de couleur du livre de marque FEANOR (sombre « Atelier » / clair « Papier »).
+/// Fond de l'application.
+pub const ATELIER_SOL: Rvb = [0x12, 0x12, 0x14];
+pub const PAPIER_SOL: Rvb = [0xF5, 0xF1, 0xE8];
+/// Panneaux, barres d'outils, cartes.
+pub const ATELIER_PANNEAU: Rvb = [0x1C, 0x1C, 0x1F];
+pub const PAPIER_PANNEAU: Rvb = [0xFF, 0xFF, 0xFF];
+/// Le pourtour de la zone de dessin : neutre, jamais teinté.
+pub const ATELIER_CANEVAS: Rvb = [0x2C, 0x2C, 0x2E];
+pub const PAPIER_CANEVAS: Rvb = [0xE4, 0xE4, 0xE0];
+/// Séparateurs décoratifs.
+pub const ATELIER_LIGNE: Rvb = [0x2E, 0x2E, 0x32];
+pub const PAPIER_LIGNE: Rvb = [0xD6, 0xD6, 0xD1];
+/// Bordures des champs et des commandes (3:1 au moins).
+pub const ATELIER_LIGNE_FORTE: Rvb = [0x6B, 0x6B, 0x72];
+pub const PAPIER_LIGNE_FORTE: Rvb = [0x8A, 0x8A, 0x86];
+/// Texte principal.
+pub const ATELIER_ENCRE: Rvb = [0xED, 0xED, 0xEF];
+pub const PAPIER_ENCRE: Rvb = [0x12, 0x12, 0x14];
+/// Texte secondaire, légendes, timecodes.
+pub const ATELIER_ENCRE_DOUCE: Rvb = [0x9A, 0x9A, 0xA3];
+pub const PAPIER_ENCRE_DOUCE: Rvb = [0x5C, 0x5C, 0x63];
+/// L'identité : un aplat, jamais un texte sur fond clair.
+pub const JADE: Rvb = crate::logo::JADE;
+#[allow(dead_code)] // (jeton du livre de marque, pas encore utilisé par l'interface)
+pub const JADE_PROFOND: Rvb = crate::logo::JADE_PROFOND;
+/// Liens et texte d'accent (et anneau de focus de 2 px).
+pub const ATELIER_JADE_TEXTE: Rvb = [0x2F, 0xD4, 0xC0];
+pub const PAPIER_JADE_TEXTE: Rvb = [0x0A, 0x6A, 0x69];
+/// Texte et icônes posés sur un aplat jade.
+pub const SUR_JADE: Rvb = [0x06, 0x2B, 0x2A];
+/// Erreurs bloquantes et actions irréversibles : une couleur fonctionnelle, pas de la marque. Texte, icône ou mince
+/// contour seulement, jamais un aplat, et toujours avec un mot ou une icône.
+pub const ATELIER_ALERTE: Rvb = [0xFF, 0x6B, 0x6B];
+pub const PAPIER_ALERTE: Rvb = [0xB3, 0x26, 0x1E];
+/// L'étincelle, le point d'enregistrement : quelques pixels, jamais une surface.
+pub const BRAISE: Rvb = [0xF2, 0xA3, 0x3A];
 impl Default for Couleurs {
     fn default() -> Self {
         Couleurs::shot()
@@ -111,13 +144,37 @@ impl Default for Couleurs {
 }
 
 impl Couleurs {
-    /// Le thème de la charte : les gris de « Gris sombre » (mêmes fonds, même sélection grise, mêmes
-    /// boutons), le texte en blanc cassé `#F4F1EA` (à peine plus chaud que le gris clair d'avant), et les
-    /// rehauts orange (`identite`).
+    /// « Atelier », la marque en sombre : sol, panneaux, canevas, lignes et encres du livre de marque, jade en accent.
     pub const fn shot() -> Couleurs {
-        Couleurs { texte: BLANC_CASSE, identite: true, ..Couleurs::gris_sombre() }
+        Couleurs {
+            panneau: ATELIER_PANNEAU,
+            entete: ATELIER_SOL,
+            fenetre: ATELIER_PANNEAU,
+            widgets: ATELIER_CANEVAS,
+            texte: ATELIER_ENCRE,
+            accent: JADE,
+            fond: ATELIER_CANEVAS,
+            timeline: ATELIER_CANEVAS,
+            bordure: ATELIER_LIGNE,
+            identite: true,
+        }
     }
 
+    /// « Papier », la marque en clair.
+    pub const fn papier() -> Couleurs {
+        Couleurs {
+            panneau: PAPIER_PANNEAU,
+            entete: PAPIER_SOL,
+            fenetre: PAPIER_PANNEAU,
+            widgets: PAPIER_SOL,
+            texte: PAPIER_ENCRE,
+            accent: JADE,
+            fond: PAPIER_CANEVAS,
+            timeline: PAPIER_SOL,
+            bordure: PAPIER_LIGNE,
+            identite: true,
+        }
+    }
     pub const fn gris_sombre() -> Couleurs {
         Couleurs {
             panneau: [64, 64, 64],
@@ -198,6 +255,7 @@ impl ReglageTheme {
     pub fn couleurs(&self) -> Couleurs {
         match self.choix {
             ChoixTheme::Shot => Couleurs::shot(),
+            ChoixTheme::Papier => Couleurs::papier(),
             ChoixTheme::GrisSombre => Couleurs::gris_sombre(),
             ChoixTheme::GrisClair => Couleurs::gris_clair(),
             ChoixTheme::Sombre => Couleurs::sombre(),
@@ -274,6 +332,10 @@ pub struct Palette {
     pub fenetre: Color32,
     pub eleve: Color32,
     pub bord: Color32,
+    /// Bordure des champs et des commandes (3:1 au moins sur les panneaux) ; ligne forte de la marque.
+    pub bord_fort: Color32,
+    /// Anneau de focus clavier (2 px).
+    pub focus: Color32,
     pub champ: Color32,
     // Boutons.
     pub controle: Color32,
@@ -287,11 +349,17 @@ pub struct Palette {
     // les textes sur un panneau.
     pub accent: Color32,
     pub sur_accent: Color32,
+    /// Fond de la sélection des textes et des lignes choisies d'egui (`Visuals::selection`) : l'accent, ou, dans un thème de la marque
+    /// où l'encre ne s'y lit pas (Atelier : 1,6:1 sur le jade), du jade profond assombri jusqu'à 4,5:1 avec le texte.
+    pub selection: Color32,
+    /// L'encre des textes et des icônes posés sur `selection` (lignes choisies, boutons allumés) : l'encre du thème dans la marque,
+    /// `sur_accent` ailleurs.
+    pub sur_selection: Color32,
     pub accent_texte: Color32,
-    /// Thème de la charte (`Couleurs::identite`) : quelques rehauts orange.
+    /// Thème de la marque (`Couleurs::identite`) : jetons exacts, bordures fortes, pas d'ombres.
     pub identite: bool,
-    /// Le rehaut : l'orange de la charte, poussé si besoin jusqu'à 3:1 sur les panneaux et les barres ; dans
-    /// un thème sans identité, l'accent des traits (`accent_texte`). Trait sous l'espace de travail actif,
+    /// Le rehaut : le jade de la marque (sa version « texte » sur fond clair) ; dans un autre thème, l'accent des
+    /// traits (`accent_texte`). Trait sous l'espace de travail actif,
     /// icône de « Nouveau projet », angles du petit logotype : rien d'autre.
     pub rehaut: Color32,
     // Timeline et montage.
@@ -347,8 +415,13 @@ pub struct Palette {
     /// Barres des séquences et des scènes : séquence paire, impaire, scène paire, impaire.
     pub barres: [Color32; 4],
     // Messages.
+    /// Avertissement non bloquant. Thèmes de la marque : le texte neutre (la braise n'est qu'une pastille, `braise`).
     pub avertissement: Color32,
+    /// Erreur : thèmes de la marque, le jeton `alerte`.
     pub erreur: Color32,
+    /// `alerte` de la marque (erreurs bloquantes, actions irréversibles) et `braise` (pastille d'avertissement, point d'enregistrement).
+    pub alerte: Color32,
+    pub braise: Color32,
     pub succes: Color32,
 }
 
@@ -363,15 +436,30 @@ impl Palette {
 
         let eleve = melange(panneau, texte, 0.06);
         let champ = if claire { melange(panneau, Color32::WHITE, 0.55) } else { melange(panneau, Color32::BLACK, 0.35) };
-        let rangee_sombre = melange(rangee, Color32::BLACK, if claire { 0.12 } else { 0.25 });
+        let rangee_sombre = melange(rangee, Color32::BLACK, if claire && c.identite { 0.06 } else if claire { 0.12 } else { 0.25 });
         let texte_fort = melange(texte, pole, 0.55);
         // Le texte secondaire est le plus doux qui reste lisible (4,5:1) sur les fonds d'interface.
         let lisibles = [panneau, entete, fenetre, rangee, rangee_sombre];
         let texte_doux = (0..=9).map(|k| melange(texte, panneau, 0.45 - 0.05 * k as f32)).find(|x| lisibles.iter().all(|f| contraste(*x, *f) >= 4.5)).unwrap_or(texte);
         let accent_texte = (0..=20).map(|k| melange(accent, texte_fort, k as f32 * 0.05)).find(|x| contraste(*x, panneau) >= 4.5).unwrap_or(texte_fort);
         let sur_accent = if contraste(Color32::WHITE, accent) >= 4.5 || contraste(Color32::WHITE, accent) >= contraste(gris(15), accent) { Color32::WHITE } else { gris(15) };
-        // Le rehaut orange de la charte (thème avec identité) : jamais sous 3:1 sur les panneaux et les barres.
-        let rehaut = if c.identite { assurer(couleur(ORANGE_SHOT), &[panneau, entete], 3.0, texte_fort) } else { accent_texte };
+                // Les thèmes de la marque posent les jetons exacts du livre de marque.
+        let (texte_doux, accent_texte, sur_accent) = if c.identite {
+            (couleur(if claire { PAPIER_ENCRE_DOUCE } else { ATELIER_ENCRE_DOUCE }), couleur(if claire { PAPIER_JADE_TEXTE } else { ATELIER_JADE_TEXTE }), couleur(SUR_JADE))
+        } else {
+            (texte_doux, accent_texte, sur_accent)
+        };
+        let bord_fort = if c.identite { couleur(if claire { PAPIER_LIGNE_FORTE } else { ATELIER_LIGNE_FORTE }) } else { assurer(bord, &[panneau, entete, fenetre], 3.0, texte_fort) };
+        let focus = accent_texte;
+        let selection = if c.identite && contraste(texte, accent) < 4.5 {
+            let base = couleur(JADE_PROFOND);
+            (0..=20).map(|k| melange(base, panneau, k as f32 * 0.05)).find(|x| contraste(texte, *x) >= 4.5).unwrap_or(base)
+        } else {
+            accent
+        };
+        let alerte = if c.identite { couleur(if claire { PAPIER_ALERTE } else { ATELIER_ALERTE }) } else if claire { Color32::from_rgb(190, 30, 20) } else { Color32::from_rgb(247, 92, 70) };
+        // Le rehaut est l'accent des traits : le jade de la marque (sa version « texte » sur fond clair).
+        let rehaut = accent_texte;
         // Couleurs des repères : un jeu vif pour les fonds sombres, un jeu plus profond pour les
         // clairs ; chacune est poussée si besoin jusqu'à 3,2:1 sur les rangées.
         let jeu = |sombre: [u8; 3], clair: [u8; 3]| assurer(couleur(if claire { clair } else { sombre }), &[rangee, rangee_sombre], 3.2, anti_de(claire));
@@ -390,6 +478,8 @@ impl Palette {
             fenetre,
             eleve,
             bord,
+            bord_fort,
+            focus,
             champ,
             controle,
             controle_survol,
@@ -399,6 +489,8 @@ impl Palette {
             texte_fort,
             accent,
             sur_accent,
+            selection,
+            sur_selection: if c.identite { texte } else { sur_accent },
             accent_texte,
             identite: c.identite,
             rehaut,
@@ -406,7 +498,7 @@ impl Palette {
             rangee,
             rangee_sombre,
             etiquette: eleve,
-            graduation: bord,
+            graduation: if c.identite { melange(rangee, bord_fort, 0.55) } else { bord },
             graduation_seconde: palier(0.23),
             bloc: controle,
             poignee: texte_doux,
@@ -443,8 +535,10 @@ impl Palette {
             son_muet: if claire { Color32::from_rgb(200, 40, 30) } else { Color32::from_rgb(223, 52, 34) },
             barres: [rangee, palier(0.07), palier(0.07), palier(0.13)],
             succes: if claire { Color32::from_rgb(20, 120, 50) } else { Color32::from_rgb(120, 210, 130) },
-            avertissement: if claire { Color32::from_rgb(176, 100, 0) } else { Color32::from_rgb(232, 153, 34) },
-            erreur: if claire { Color32::from_rgb(190, 30, 20) } else { Color32::from_rgb(247, 92, 70) },
+            avertissement: if c.identite { texte_fort } else if claire { Color32::from_rgb(176, 100, 0) } else { Color32::from_rgb(232, 153, 34) },
+            erreur: if c.identite { alerte } else if claire { Color32::from_rgb(190, 30, 20) } else { Color32::from_rgb(247, 92, 70) },
+            alerte,
+            braise: couleur(BRAISE),
         }
     }
 
@@ -454,19 +548,23 @@ impl Palette {
         let arrondi = CornerRadius::same(4);
         v.panel_fill = self.panneau;
         v.window_fill = self.fenetre;
-        v.window_stroke = Stroke::new(1.0_f32, self.bord);
-        v.window_corner_radius = CornerRadius::same(6);
-        v.menu_corner_radius = CornerRadius::same(5);
-        let (ombre_fenetre, ombre_menu) = if self.claire { (60, 50) } else { (120, 110) };
+        v.window_stroke = Stroke::new(1.0_f32, if self.identite { self.bord_fort } else { self.bord });
+        // Marque : panneaux et fenêtres à 8 px, sans ombre portée.
+        v.window_corner_radius = CornerRadius::same(if self.identite { 8 } else { 6 });
+        v.menu_corner_radius = CornerRadius::same(if self.identite { 8 } else { 5 });
+        let (ombre_fenetre, ombre_menu) = if self.identite { (0, 0) } else if self.claire { (60, 50) } else { (120, 110) };
         v.window_shadow = Shadow { offset: [0, 6], blur: 18, spread: 0, color: Color32::from_black_alpha(ombre_fenetre) };
         v.popup_shadow = Shadow { offset: [0, 4], blur: 12, spread: 0, color: Color32::from_black_alpha(ombre_menu) };
         v.extreme_bg_color = self.champ;
         v.faint_bg_color = self.eleve;
         v.code_bg_color = self.entete;
-        v.hyperlink_color = self.accent_texte;        v.warn_fg_color = self.avertissement;
+        v.hyperlink_color = self.accent_texte;
+        v.warn_fg_color = self.avertissement;
         v.error_fg_color = self.erreur;
-        v.selection.bg_fill = self.accent;
-        v.selection.stroke = Stroke::new(1.0_f32, self.sur_accent);
+        // Marque : le texte choisi et les lignes choisies ont le fond `selection` ; leur encre (et le cadre d'un champ actif, 2 px) est
+        // l'encre du thème, lisible sur ce fond et sur le panneau. Les accents jade passent par `accent()`, pas par ici.
+        v.selection.bg_fill = self.selection;
+        v.selection.stroke = if self.identite { Stroke::new(2.0_f32, self.sur_selection) } else { Stroke::new(1.0_f32, self.sur_accent) };
         let w = &mut v.widgets;
         // Textes et cadres qui ne réagissent pas.
         w.noninteractive.bg_fill = self.panneau;
@@ -493,6 +591,13 @@ impl Palette {
             w.inactive.bg_stroke = Stroke::new(1.0_f32, self.bord);
         }
         w.hovered.bg_stroke = Stroke::new(1.0_f32, self.controle_actif);
+        // Marque : les commandes ont une bordure `ligne forte` (3:1), jade au survol et à l'appui.
+        if self.identite {
+            w.inactive.bg_stroke = Stroke::new(1.0_f32, self.bord_fort);
+            for etat in [&mut w.hovered, &mut w.active, &mut w.open] {
+                etat.bg_stroke = Stroke::new(1.0_f32, self.accent_texte);
+            }
+        }
 
         v
     }
@@ -546,6 +651,9 @@ couleurs_courantes! {
     eleve,
     /// Traits de séparation.
     bord,
+    /// Bordures des champs et des commandes, anneau de focus.
+    bord_fort,
+    focus,
     /// Champs de saisie.
     champ,
     /// Boutons au repos, survolés, enfoncés.
@@ -559,8 +667,10 @@ couleurs_courantes! {
     /// Accent (fonds), ce qui s'écrit dessus, accent des traits et des textes.
     accent,
     sur_accent,
+    selection,
+    sur_selection,
     accent_texte,
-    /// Le rehaut orange de la charte (thème SHOT) : trait sous l'espace actif, icône de « Nouveau projet ».
+    /// Le rehaut jade de la marque : trait sous l'espace actif, icône de « Nouveau projet ».
     rehaut,
     /// Règle des images (au-dessus des rangées).
     regle,
@@ -619,6 +729,9 @@ couleurs_courantes! {
     avertissement,
     erreur,
     succes,
+    /// Jeton `alerte` de la marque, pastille `braise`.
+    alerte,
+    braise,
 }
 
 /// Couleur vive d'une sorte de calque (repères, barres, étiquettes) : bitmap vert, vectoriel
@@ -734,7 +847,14 @@ pub fn visuels() -> egui::Visuals {
 }
 
 /// Interface dense : espacements serrés, textes un peu plus petits qu'egui par défaut.
+#[allow(dead_code)] // (les essais d'une fenêtre seule, sans polices Plex)
 pub fn densifier(style: &mut egui::Style) {
+    densifier_avec(style, false);
+}
+
+/// Comme `densifier` ; `plex` : les polices d'IBM Plex sont chargées dans ce contexte (`marque::polices_pretes`), donc les
+/// boutons et les titres peuvent prendre leurs familles Medium et SemiBold (sans elles, egui refuserait la famille).
+pub fn densifier_avec(style: &mut egui::Style, plex: bool) {
     let s = &mut style.spacing;
     s.item_spacing = Vec2::new(6.0, 3.0);
     s.button_padding = Vec2::new(7.0, 2.0);
@@ -750,8 +870,8 @@ pub fn densifier(style: &mut egui::Style) {
     style.text_styles = [
         (TextStyle::Small, FontId::new(10.5, p.clone())),
         (TextStyle::Body, FontId::new(12.5, p.clone())),
-        (TextStyle::Button, FontId::new(12.5, p.clone())),
-        (TextStyle::Heading, FontId::new(16.0, p)),
+        (TextStyle::Button, FontId::new(12.5, if plex { FontFamily::Name(crate::marque::FAMILLE_MEDIUM.into()) } else { p.clone() })),
+        (TextStyle::Heading, FontId::new(16.0, if plex { FontFamily::Name(crate::marque::FAMILLE_SEMIBOLD.into()) } else { p })),
         (TextStyle::Monospace, FontId::new(11.5, FontFamily::Monospace)),
     ]
     .into();
@@ -810,8 +930,8 @@ pub fn dock(mut s: egui_dock::Style) -> egui_dock::Style {
     s
 }
 
-/// Le trait orange sous l'espace de travail actif (Vignettes, Storyboard, Animation, Montage) : deux points de
-/// haut, juste sous son étiquette (sans toucher le mot), seulement dans un thème avec identité (le thème SHOT) ; les autres n'ont rien.
+/// Le trait jade sous l'espace de travail actif (Vignettes, Storyboard, Animation, Montage) : deux points de
+/// haut, juste sous son étiquette (sans toucher le mot), seulement dans un thème de la marque (Atelier, Papier) ; les autres n'ont rien.
 pub fn souligner_actif(ui: &egui::Ui, etiquette: egui::Rect) {
     let p = palette();
     if p.identite {
@@ -833,8 +953,52 @@ pub fn appliquer(ctx: &egui::Context) {
     let claire = palette().claire;
     ctx.set_theme(if claire { egui::ThemePreference::Light } else { egui::ThemePreference::Dark });
     let visuels = visuels();
+    let plex = crate::marque::polices_pretes(ctx);
     ctx.all_styles_mut(|style| {
         style.visuals = visuels.clone();
-        densifier(style);
+        densifier_avec(style, plex);
     });
+}
+
+/// Un avertissement non bloquant. Thèmes de la marque : une petite pastille braise puis le texte, en encre neutre (jamais
+/// de texte braise). Autres thèmes : le texte coloré d'avant.
+pub fn avertir(ui: &mut egui::Ui, texte: impl Into<String>) -> egui::Response {
+    avertir_en(ui, texte.into(), false)
+}
+
+/// Comme `avertir`, en petit.
+pub fn avertir_petit(ui: &mut egui::Ui, texte: impl Into<String>) -> egui::Response {
+    avertir_en(ui, texte.into(), true)
+}
+
+fn avertir_en(ui: &mut egui::Ui, texte: String, petit: bool) -> egui::Response {
+    let p = palette();
+    let corps = |t: String, c: Color32| {
+        let r = egui::RichText::new(t).color(c);
+        if petit { r.small() } else { r }
+    };
+    if !p.identite {
+        return ui.label(corps(texte, p.avertissement));
+    }
+    // La pastille est posée à la première ligne ; le texte passe à la ligne dans la place qui reste.
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = 5.0;
+        let (r, _) = ui.allocate_exact_size(Vec2::new(8.0, 13.0), egui::Sense::hover());
+        ui.painter().circle_filled(egui::pos2(r.center().x, r.top() + 7.0), 3.5, p.braise);
+        ui.add(egui::Label::new(corps(texte, p.texte_fort)).wrap());
+    })
+    .response
+}
+
+/// Le fond d'une grande surface active (bloc d'un plan du montage, rangée choisie de la timeline, bande de séquence) :
+/// `selection` (le jade) à la force `force` (0 à 1) dans les thèmes qui n'ont pas la marque ; dans Atelier et Papier, pas de
+/// grand aplat jade près du dessin : le panneau tirant vers `ligne forte` (le jade ne reste que sur les petits éléments et
+/// sur le bord).
+pub fn surface_active(selection: Color32, force: f32) -> Color32 {
+    let p = palette();
+    if p.identite {
+        melange(p.panneau, p.bord_fort, (force * 0.9).clamp(0.0, 1.0))
+    } else {
+        selection.gamma_multiply(force)
+    }
 }

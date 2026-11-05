@@ -318,9 +318,9 @@ impl App {
             let li = row.li;
             let rect = Rect::from_min_size(pos2(r.left(), grid_top + row.top), vec2(size.x, row.h)).shrink2(vec2(0.0, 1.0));
             let bg = if li == self.cur_layer {
-                visuals.selection.bg_fill.gamma_multiply(0.35)
+                theme::surface_active(crate::theme::accent(), 0.35)
             } else if self.is_chosen_layer(li) {
-                visuals.selection.bg_fill.gamma_multiply(0.18)
+                theme::surface_active(crate::theme::accent(), 0.18)
             } else if self.layers()[li].folder {
                 // Dossier (13b-5) : pas de dessin, une rangée plus sombre.
                 theme::rangee_sombre()

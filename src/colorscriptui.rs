@@ -135,7 +135,6 @@ impl App {
     }
 
     fn colorscript_corps(&mut self, ui: &mut egui::Ui) -> bool {
-        let avert = theme::avertissement();
         ui.label(RichText::new("Une petite image par plan, rangées par séquence en rangées serrées sur un fond uni : la couleur du film d'un coup d'œil.").small().color(theme::texte_doux()));
         ui.separator();
         let n_plans = self.doc.panels.len();
@@ -206,13 +205,13 @@ impl App {
         if pret {
             ui.label(format!("{n} image{}, image de {} × {} pixels.", if n > 1 { "s" } else { "" }, dims[0], dims[1]));
         } else {
-            ui.colored_label(avert, "Aucun plan dans cette étendue.");
+            crate::theme::avertir(ui, "Aucun plan dans cette étendue.");
         }
         if let Some(r) = reduit {
-            ui.colored_label(avert, r);
+            crate::theme::avertir(ui, r);
         }
         if let Some(m) = &e.message {
-            ui.colored_label(avert, m);
+            crate::theme::avertir(ui, m);
         }
         let libre = !matches!(&self.export_job, Some(j) if j.outcome.is_none());
         let mut lancer = false;
@@ -222,7 +221,7 @@ impl App {
                 lancer = true;
             }
             if !libre {
-                ui.label(RichText::new("Un export est déjà en cours.").small().color(avert));
+                crate::theme::avertir_petit(ui, "Un export est déjà en cours.");
             }
         });
         self.vignettes.colorscript = e;

@@ -30,7 +30,7 @@ pub const MODELE_DEFAUT: &str = "SQ{sequence:02}_PL{plan:03}";
 
 /// Les modèles prêts (Préférences et fenêtre « Noms et production ») : nom, modèle, ce que ça donne.
 pub const MODELES_PRETS: &[(&str, &str)] = &[
-    ("SHOT (d'origine)", MODELE_DEFAUT),
+    ("FEANOR (d'origine)", MODELE_DEFAUT),
     ("Studio : épisode, séquence, plan, version", "{projet}_EP{episode:02}_SQ{sequence:03}_SH{plan:04}_v{version:03}"),
     ("Studio sans version", "{projet}_EP{episode:02}_SQ{sequence:03}_SH{plan:04}"),
     ("Séquence et plan", "{sequence:02}_{plan:03}"),

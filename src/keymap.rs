@@ -29,7 +29,7 @@ pub enum Origin {
 impl Origin {
     pub fn label(self) -> &'static str {
         match self {
-            Origin::Default => "SHOT",
+            Origin::Default => "FEANOR",
             Origin::User => "perso",
         }
     }
@@ -100,7 +100,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("numerotation.renumeroter", "Renuméroter les plans (1, 2, 3… dans l'ordre du film)", true, false),
     act("fichier.exporter_image_courante", "Exporter l'image courante (PNG)", true, false),
     act("fichier.exporter", "Exporter (choisir le format : film, images, PDF, son…)", true, false),
-    act("fichier.preferences", "Préférences de SHOT (copie de secours, curseur, panneaux, raccourcis)", true, false),
+    act("fichier.preferences", "Préférences de FEANOR (copie de secours, curseur, panneaux, raccourcis)", true, false),
     act("edition.annuler", "Annuler", true, true),
     act("edition.retablir", "Rétablir", true, true),
     act("edition.couper", "Couper", true, false),
@@ -133,8 +133,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("vue.planches", "Storyboard : vue dessin / vue vignettes", true, false),
     act("mode.basculer", "Passer du storyboard à l'animation, et retour", true, false),
     act("aide.raccourcis", "Liste des raccourcis", true, false),
-    act("aide.a_propos", "À propos de SHOT (version, logo)", true, false),
-    act("aide.diagnostic", "Régler SHOT pour cette machine (Diagnostic des performances : détecter le matériel, mesurer, proposer des réglages)", true, false),
+    act("aide.a_propos", "À propos de FEANOR (version, logo)", true, false),
+    act("aide.diagnostic", "Régler FEANOR pour cette machine (Diagnostic des performances : détecter le matériel, mesurer, proposer des réglages)", true, false),
     act("aide.palette","Palette de commandes : chercher une commande par son nom", true, false),
     // Accueil et confort (passe « simplicité » du 2026-10-21, `confort.rs`).
     act("vue.concentration", "Mode concentration : ne garder que le dessin (la même touche remet tout)", true, false),
@@ -1381,7 +1381,7 @@ impl Keymap {
                 entries.push(Entry {
                     action: action.clone(),
                     touches: keys.clone(),
-                    source: "choisi dans SHOT".into(),
+                    source: "choisi dans FEANOR".into(),
                     contexte,
                     etat: None,
                 });
@@ -1394,8 +1394,8 @@ impl Keymap {
         }
         let body = toml::to_string(&Out { version: 1, raccourci: &entries }).map_err(|e| e.to_string())?;
         Ok(format!(
-            "# Raccourcis personnels de SHOT : chacun remplace, action par action, celui du fichier\n\
-             # par défaut. Écrit par SHOT (clic droit sur une commande > « Assigner un raccourci »,\n\
+            "# Raccourcis personnels de FEANOR : chacun remplace, action par action, celui du fichier\n\
+             # par défaut. Écrit par FEANOR (clic droit sur une commande > « Assigner un raccourci »,\n\
              # ou Fichier > Raccourcis clavier) ; on peut aussi le modifier à la main.\n\n{body}"
         ))
     }

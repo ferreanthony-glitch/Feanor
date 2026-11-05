@@ -84,7 +84,7 @@ pub fn premiere_image() {
     if std::env::var_os("SHOT_DEMARRAGE").is_some() {
         if let Some(dir) = crate::donnees::local() {
             let _ = std::fs::create_dir_all(&dir);
-            let texte = format!("--- démarrage de SHOT ({} s depuis 1970) : {:.0} ms jusqu'à la première interface\n{}", crate::recovery::now_secs(), duree_ms(), rapport());
+            let texte = format!("--- démarrage de FEANOR ({} s depuis 1970) : {:.0} ms jusqu'à la première interface\n{}", crate::recovery::now_secs(), duree_ms(), rapport());
             use std::io::Write;
             if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(dir.join("demarrage.log")) {
                 let _ = f.write_all(texte.as_bytes());

@@ -95,7 +95,7 @@ impl Projet {
         // La structure d'un film partagé ne s'écrit que par SHOT (`projet_partage.rs`) : un manifeste classique par-dessus
         // casserait le film pour toute l'équipe.
         if project::est_une_structure_partagee(&chemin) {
-            return Err("Film partagé : enregistre-le depuis SHOT.".into());
+            return Err("Film partagé : enregistre-le depuis FEANOR.".into());
         }
         // Un projet à l'ancien nom (`Bus.pelure`) passe à `Bus.shot`, comme dans SHOT (`enregistrement.rs`).
         let cible = if project::est_ancien_manifeste(&chemin) { project::manifeste_shot(&chemin) } else { chemin.clone() };

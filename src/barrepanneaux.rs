@@ -115,7 +115,7 @@ pub(crate) const HORS_BARRE: &[Entree] = &[
         Pane::SuggestionsSonores,
         "vue.suggestions_sonores",
         "Suggestions sonores",
-        "SHOT lit le storyboard et propose des bruitages, des ambiances et des voix témoins, que tu écoutes, acceptes ou supprimes. Un clic l'ouvre ou le met devant, un autre le ferme.",
+        "FEANOR lit le storyboard et propose des bruitages, des ambiances et des voix témoins, que tu écoutes, acceptes ou supprimes. Un clic l'ouvre ou le met devant, un autre le ferme.",
     ),
     // Le panneau « Planche » a son icône dans l'espace Vignettes seulement (`icones_de`), pas dans les douze de la barre.
     entree(

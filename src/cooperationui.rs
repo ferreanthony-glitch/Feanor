@@ -333,7 +333,7 @@ impl App {
         }
         self.status = match (pris, refus.first()) {
             (0, Some(p)) => p.clone(),
-            (1, None) => "Plan pris : il est à toi tant que SHOT est ouvert (ou que tu le rends).".into(),
+            (1, None) => "Plan pris : il est à toi tant que FEANOR est ouvert (ou que tu le rends).".into(),
             (n, None) if n > 1 => format!("{n} plans pris."),
             (n, Some(p)) => format!("{n} plan(s) pris ; {p}"),
             _ => self.status.clone(),
@@ -600,7 +600,7 @@ impl App {
             ui.label(RichText::new(depot_nom.as_str()).small().weak());
             let en_attente = vue.plans.values().filter(|i| i.attente.is_some()).count();
             if en_attente > 0 {
-                ui.label(RichText::new(format!("{} {en_attente} plan(s) pas encore arrivé(s) : un export les montrerait vides.", ph::HOURGLASS_MEDIUM)).small().color(theme::avertissement()));
+                crate::theme::avertir_petit(ui, format!("{} {en_attente} plan(s) pas encore arrivé(s) : un export les montrerait vides.", ph::HOURGLASS_MEDIUM));
             }
             if let Some(h) = &vue.hors_ligne {
                 ui.add_space(4.0);
@@ -860,7 +860,7 @@ impl App {
         };
         let Some(choisi) = rfd::FileDialog::new()
             .set_title("Partager ce projet : choisis le dossier partagé (synchronisé ou réseau) ; un dossier à ce nom y sera créé")
-            .add_filter("Projet SHOT", &[project::EXTENSION])
+            .add_filter("Projet FEANOR", &[project::EXTENSION])
             .set_file_name(nom_defaut)
             .save_file()
         else {
@@ -906,7 +906,7 @@ impl App {
             egui::Window::new("Partage").title_bar(false).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
                 ui.label(format!("Création du film partagé « {nom} »…"));
                 let fraction = if total == 0 { 0.0 } else { fait as f32 / total as f32 };
-                ui.add(egui::ProgressBar::new(fraction).desired_width(280.0).text(if total == 0 { "préparation".to_string() } else { format!("{fait} / {total} dessins") }));
+                ui.add(crate::barre::Barre::new(fraction).desired_width(280.0).text(if total == 0 { "préparation".to_string() } else { format!("{fait} / {total} dessins") }));
                 ui.label(RichText::new("Le projet ouvert n'est pas touché. Le film partagé s'ouvrira dans un nouvel onglet.").small().weak());
             });
             ctx.request_repaint_after(std::time::Duration::from_millis(100));

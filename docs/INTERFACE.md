@@ -6991,11 +6991,31 @@ Enregistrer, Enregistrer sous, la copie de secours, les exports (vidéo, PDF, vi
 9. Aide > Régler SHOT pour cette machine… (fenêtre du diagnostic, sans lancer la mesure) : la ligne « Dessins en mémoire » est là et plausible.
 10. ~~Optionnel : lance SHOT avec `WGPU_BACKEND=dx12`~~. Retiré le 2026-11-01 : Direct3D 12 n'est pas compilé dans SHOT, et ce réglage le fait passer à l'affichage de secours OpenGL (voir ENDURANCE.md §6.5, correction).
 
-## 96. Mémoire d'une longue séance (2026-11-05, branche `memoire-seance`)
+## 96. FEANOR : le nouveau nom, les couleurs et le logo de la marque (2026-11-05, branche `feanor`)
+
+**Note de lecture : « SHOT » dans les commentaires du code et dans les documents d'avant ce paragraphe veut dire FEANOR.** Le logiciel s'appelle FEANOR (capitales, sans tréma), devise « Forge your story » ; les anciens noms sont SHOT puis Pelure. L'historique de `docs/` et de `suivi/` n'est pas réécrit.
+
+**Ce qui change à l'écran.** Le nom partout où l'utilisateur le lit (titre de fenêtre, menus, bulles, messages, crédits des documents exportés, page de relecture, README) ; l'exécutable est `feanor.exe`. **Ce qui ne change pas**, par compatibilité : la bibliothèque `pelure`, le dossier des réglages `%LOCALAPPDATA%\SHOT` et `%APPDATA%\SHOT` (les préférences survivent), les variables `SHOT_*`, les extensions `.shot` et `.pelure`, le format (46), la marque du presse-papiers interne, les clés Kitsu et le coffre d'identifiants, le nom de la palette d'origine « SHOT », et le mot « shot » quand il désigne un plan de production (Kitsu, CSV, JSON).
+
+**Couleurs** (`theme.rs`, jetons du livre de marque) : deux thèmes, **Atelier** (sombre, par défaut ; l'ancien choix « shot » des réglages) et **Papier** (clair). Le jade est l'accent (sélection, onglet actif, petits interrupteurs) avec l'encre « sur jade » dessus ; pas de grand aplat jade près du dessin (`theme::surface_active` : panneau tiré vers « ligne forte »). Les commandes ont une bordure « ligne forte » (3:1 au moins), pas d'ombres portées, panneaux à 8 px, commandes à 4 px. Les thèmes de gris d'avant ne changent pas. **Rouge** : le jeton `alerte` ne sert qu'aux erreurs bloquantes et aux actions irréversibles ; un avertissement non bloquant est une pastille braise (`theme::avertir`) à côté d'un texte neutre ; la braise est aussi le point d'enregistrement (il n'y en a pas encore dans l'application). Les couleurs qui disent quelque chose (calques, pelures d'oignon, annotations, palettes, axes 3D, exports) ne changent pas.
+
+**Logo** (`logo.rs`, `marque.rs`, `assets/feanor-viseur-*.svg`) : le Joyau (jade, petit sous 24 px, irisé, mono) et l'icône de l'application. Le lockup principal met le Joyau jade devant le mot ; l'accueil, seul moment fort, met le Joyau irisé à la place du O et joue une fois l'animation d'ouverture (1,15 s, sans bloquer, zéro image ensuite, immobile en mouvement réduit). Le lockup rétrécit plutôt que d'être coupé. Polices de marque : Big Shoulders Display (le mot) et IBM Plex Sans Medium (la devise), SIL OFL 1.1, `assets/polices/`, embarquées.
+
+**Barres de chargement** (`barre.rs`) : toutes les barres d'avancement passent par `Barre` (dégradé jade, lilas, rose, jaune pâle ancré sur la largeur, glissement lent tant que ça charge, aucune image demandée quand rien ne charge).
+
+### À vérifier à l'écran
+
+1. Lance FEANOR sans projet : la fenêtre d'accueil montre le mot FEANOR, le Joyau coloré à la place du O qui « s'ouvre » une seule fois puis reste figé, et la devise dessous.
+2. Aide > À propos de FEANOR… : le Joyau vert devant le mot, la devise alignée à droite sur le R, la version.
+3. Ouvre un projet : tout est lisible, rien n'est rouge ou orange sauf les erreurs ; l'onglet actif et la sélection sont verts, les gros blocs du montage sont gris.
+4. Préférences > Apparence > Thème : « Atelier » et « Papier » ; les deux se lisent bien.
+5. Exporte un film ou ouvre un gros projet : la barre d'avancement est fine, colorée, et glisse doucement ; elle s'arrête quand c'est fini.
+
+## 97. Mémoire d'une longue séance (2026-11-05, branche `memoire-seance`)
 
 **Le problème.** Après §95, un épisode de 300 plans s'ouvre à 2,3 Go. Mais après une longue séance de travail (naviguer, dessiner, annuler, dupliquer, supprimer des plans), la mémoire remontait à 6,5 Go.
 
-**Ce qui change, en deux mots.** Trois choses que SHOT gardait pour rien sont maintenant rangées plus petit ou libérées, sans rien perdre et sans que tu aies rien à faire :
+**Ce qui change, en deux mots.** Trois choses que FEANOR gardait pour rien sont maintenant rangées plus petit ou libérées, sans rien perdre et sans que tu aies rien à faire :
 
 - **L'historique d'annulation** range les expositions (quelle image montre quel dessin) de ses vieilles étapes : 830 Mo → 440 Mo pour 183 étapes sur 450 plans. Ctrl+Z reste exact, même pour la plus vieille étape.
 - **Les dessins que plus rien ne retient** quittent la mémoire : un plan supprimé dont tu ne peux plus annuler la suppression, une version effacée, un dessin d'une étape défaite que tu as remplacée. Avant, ils restaient jusqu'à la fermeture du projet (40 % des dessins après une longue séance). Tant que Ctrl+Z ou Ctrl+Maj+Z peut les rendre, ou qu'une version, une variante ou le contenu rogné d'un plan les garde, ils restent. Ça se fait quand tu fais une pause de deux ou trois secondes, jamais pendant que tu dessines ou que la lecture tourne.
@@ -7004,17 +7024,17 @@ Enregistrer, Enregistrer sous, la copie de secours, les exports (vidéo, PDF, vi
 | Séance de 2 000 gestes puis une pause | Avant | Maintenant |
 |---|---|---|
 | 300 plans (451 à la fin), mémoire privée | 6,5 Go | 5,6 à 5,8 Go |
-| 300 plans, mémoire propre à SHOT (hors pilote de la carte) | 3,9 Go | 2,7 à 3,0 Go |
+| 300 plans, mémoire propre à FEANOR (hors pilote de la carte) | 3,9 Go | 2,7 à 3,0 Go |
 | 200 plans (302 à la fin), mémoire privée | 5,7 Go | 5,2 à 5,5 Go |
-| 200 plans, mémoire propre à SHOT | 3,1 Go | 2,2 à 2,3 Go |
+| 200 plans, mémoire propre à FEANOR | 3,1 Go | 2,2 à 2,3 Go |
 
 Le reste de la mémoire privée (2,6 à 3 Go) est le pilote Vulkan de la carte graphique : il ne baisse ni quand on vide le cache de textures, ni avec Direct3D 12 (gain mesuré : 0,3 Go). Détail, causes et chiffres : `docs/ENDURANCE.md` §7.
 
-**Si un cas pose problème** : `SHOT_SANS_SEANCE=1` (variable d'environnement, avant de lancer SHOT) désactive ces trois économies ; `SHOT_SANS_GEL=1` désactive tout rangement (§95). Le format du projet ne change pas (toujours 46).
+**Si un cas pose problème** : `SHOT_SANS_SEANCE=1` (variable d'environnement, avant de lancer FEANOR) désactive ces trois économies ; `SHOT_SANS_GEL=1` désactive tout rangement (§95). Le format du projet ne change pas (toujours 46).
 
 ### À vérifier à l'écran
 
-1. Ouvre une **copie** d'un gros projet (ou l'épisode d'essai de 300 plans). Dans le Gestionnaire des tâches (onglet Détails, colonne « Mémoire (jeu de travail privé) »), note la mémoire de SHOT à l'ouverture.
+1. Ouvre une **copie** d'un gros projet (ou l'épisode d'essai de 300 plans). Dans le Gestionnaire des tâches (onglet Détails, colonne « Mémoire (jeu de travail privé) »), note la mémoire de FEANOR à l'ouverture.
 2. **Travaille longtemps** : passe d'un plan à l'autre (Storyboard, Montage, Vignettes), dessine dans une dizaine de plans, supprime quelques plans, duplique-en d'autres, annule et rétablis plusieurs fois. Rien ne doit changer à ce que tu vois : aucun plan vide, aucune saccade nouvelle, Ctrl+Z et Ctrl+Maj+Z restent instantanés.
 3. **Supprime un plan, puis annule la suppression** tout de suite, et aussi après avoir fait une vingtaine d'autres gestes : le plan revient avec tous ses dessins, comme avant. Fais-le aussi avec un plan que tu viens de dessiner et que tu n'as pas enregistré.
 4. **Annule très loin en arrière** (une cinquantaine de fois d'un coup, ou plus loin que ce que tu as fait aujourd'hui) : chaque étape remet exactement l'état d'avant (plans, durées, noms, calques). Rétablis tout : exactement l'état de départ.

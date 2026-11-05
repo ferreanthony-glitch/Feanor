@@ -364,7 +364,7 @@ impl App {
                 ui.label(RichText::new("Lecture seule : cette vue ne change pas le plan.").color(theme::texte_doux()));
             });
             for n in &c.notes {
-                ui.label(RichText::new(n).small().color(theme::avertissement()));
+                crate::theme::avertir_petit(ui, n);
             }
         });
         c.ouverte = ouverte;

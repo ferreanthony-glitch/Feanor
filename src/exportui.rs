@@ -30,10 +30,6 @@ pub(crate) fn echap_ferme(ctx: &egui::Context) -> bool {
 /// Secondes pendant lesquelles la fenêtre d'un export réussi reste affichée (« Fermer » la ferme avant).
 const FINI_AFFICHE: f64 = 8.0;
 
-fn warn() -> Color32 {
-    crate::theme::avertissement()
-}
-
 fn good() -> Color32 {
     crate::theme::succes()
 }
@@ -160,7 +156,7 @@ impl App {
                             let reason = encoders.as_ref().and_then(|e| exportvideo::missing_reason(f, e));
                             ui.add_enabled_ui(reason.is_none(), |ui| ui.radio_value(&mut s.format, f, format_label(f)));
                             if let Some(r) = reason {
-                                ui.label(RichText::new(format!("Grisé : {r}.")).small().color(warn()));
+                                crate::theme::avertir_petit(ui, format!("Grisé : {r}."));
                             }
                         }
                     });
@@ -235,7 +231,7 @@ impl App {
                     };
                     if let Some(p) = exportvideo::size_problem_for(s.format, s.size.dimensions([fw, fh]), &enc_ici.unwrap_or_default()) {
                         ui.label("");
-                        ui.colored_label(warn(), p);
+                        crate::theme::avertir(ui, p);
                         ui.end_row();
                     }
                     ui.label("Cadence");
@@ -361,14 +357,14 @@ impl App {
                     let files = exportlayers::file_count(&info, &frames);
                     ui.vertical(|ui| {
                         if files == 0 {
-                            ui.colored_label(warn(), "Aucun calque visible à exporter dans cette étendue.");
+                            crate::theme::avertir(ui, "Aucun calque visible à exporter dans cette étendue.");
                         } else {
                             let layers: usize = info.iter().map(|i| i.layers.len()).sum();
                             ui.label(format!("{} plan{}, {layers} calque{}, {files} images.", info.len(), if info.len() > 1 { "s" } else { "" }, if layers > 1 { "s" } else { "" }));
                         }
                         let effects = exportlayers::effect_layers(&self.doc, &plans);
                         if effects > 0 {
-                            ui.label(RichText::new(format!("{effects} calque{} d'effet pas écrit{} : il agit sur ce qui est dessous, il n'a pas d'image à lui.", if effects > 1 { "s" } else { "" }, if effects > 1 { "s" } else { "" })).small().color(warn()));
+                            crate::theme::avertir_petit(ui, format!("{effects} calque{} d'effet pas écrit{} : il agit sur ce qui est dessous, il n'a pas d'image à lui.", if effects > 1 { "s" } else { "" }, if effects > 1 { "s" } else { "" }));
                         }
                         ui.label(RichText::new("Un dossier par plan (SQ01_PL012A), une suite PNG par calque : 01_Fond_0001.png…").small().weak());
                     });
@@ -403,7 +399,7 @@ impl App {
                     ui.label("Pistes");
                     let files = exportstems::plan(&self.doc, first, frames.len(), &s.stems, &self.base_name());
                     if files.is_empty() {
-                        ui.colored_label(warn(), "Aucune piste audible avec un extrait dans cette étendue (une piste muette n'est pas écrite).");
+                        crate::theme::avertir(ui, "Aucune piste audible avec un extrait dans cette étendue (une piste muette n'est pas écrite).");
                     } else {
                         ui.vertical(|ui| {
                             for f in &files {
@@ -494,21 +490,21 @@ impl App {
                     Some((path, Ok(enc))) => {
                         ui.label(RichText::new(format!("ffmpeg : {}", path.display())).small());
                         if let Some(m) = exportvideo::missing_reason(s.format, enc) {
-                            ui.colored_label(warn(), m);
+                            crate::theme::avertir(ui, m);
                         }
                         // Pas de libx264 : le MP4 sort quand même, mais de moins bonne qualité.
                         if s.format == Format::Mp4 {
                             if let Some(w) = exportvideo::h264_warning(enc) {
-                                ui.colored_label(warn(), w);
+                                crate::theme::avertir(ui, w);
                             }
                         }
                     }
                     Some((path, Err(e))) => {
-                        ui.colored_label(warn(), format!("{} : {e}", path.display()));
+                        crate::theme::avertir(ui, format!("{} : {e}", path.display()));
                     }
                     None => {
-                        ui.colored_label(
-                            warn(),
+                        crate::theme::avertir(
+                            ui,
                             "ffmpeg introuvable. C'est lui qui fabrique la vidéo : installe-le (il vient par \
                              exemple avec un logiciel de dessin), ou indique où il est.",
                         );
@@ -662,7 +658,7 @@ impl App {
             Format::Camera => {
                 let Some(out) = save_dialog(self, &base, Format::Camera, false) else { return };
                 let plans = export::panels_of(&frames);
-                let (title, settings, target) = (self.base_name_or("SHOT"), s.camera, out.clone());
+                let (title, settings, target) = (self.base_name_or("FEANOR"), s.camera, out.clone());
                 let message = format!("Clés de caméra exportées ({} plan{}) : {}", plans.len(), if plans.len() > 1 { "s" } else { "" }, out.display());
                 self.start_job(ExportJob::task("Export des clés de caméra".into(), &out, message, move |snap, _| {
                     let e = exportcamera::build(snap, &plans, &title, &settings);
@@ -715,7 +711,7 @@ impl App {
                     Progress::Running(done, total) => {
                         let phase = job.phase();
                         let progress = if done == 0 && !phase.starts_with("Calcul") { 0.0 } else { done as f32 / total.max(1) as f32 };
-                        ui.add(egui::ProgressBar::new(progress).show_percentage());
+                        ui.add(crate::barre::Barre::new(progress).show_percentage());
                         let mut text = if done == 0 && !phase.is_empty() && !phase.starts_with("Calcul") { phase.to_string() } else { format!("{} {done} sur {total}", job.unit) };
                         if let Some(rest) = job.remaining() {
                             let s = rest.as_secs();
@@ -742,7 +738,7 @@ impl App {
                                 ui.label(msg);
                             }
                             Some(Err(e)) => {
-                                ui.colored_label(warn(), e);
+                                crate::theme::avertir(ui, e);
                             }
                             None => {}
                         }

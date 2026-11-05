@@ -115,7 +115,7 @@ impl App {
         }
         let r = self.settings.fiche.clone();
         let titre = match self.doc.properties.title.trim() {
-            "" => self.base_name_or("SHOT"),
+            "" => self.base_name_or("FEANOR"),
             t => t.to_string(),
         };
         let start_tc = if editorial::parse_timecode(&r.start_tc, self.doc.fps).is_some() { r.start_tc.clone() } else { "01:00:00:00".to_string() };
@@ -280,7 +280,6 @@ impl App {
     }
 
     fn fiche_body(&mut self, ui: &mut egui::Ui, w: &mut FicheWindow) -> Demande {
-        let avert = theme::avertissement();
         let occupe = w.job.is_some();
         let fps = self.doc.fps;
         ui.label(
@@ -340,7 +339,7 @@ impl App {
                 ui.horizontal(|ui| {
                     let valide = editorial::parse_timecode(&w.start_tc, fps).is_some();
                     let edit = egui::TextEdit::singleline(&mut w.start_tc).desired_width(100.0).hint_text("01:00:00:00");
-                    let edit = if valide { edit } else { edit.text_color(avert) };
+                    let edit = if valide { edit } else { edit.text_color(crate::theme::erreur()) };
                     ui.add(edit).on_hover_text(format!("Le time code de la première image du film : HH:MM:SS:FF, FF de 0 à {} (sans saut d'images). Un plan garde son time code même si l'on n'écrit que quelques plans.", fps.max(1) - 1));
                 });
                 ui.end_row();
@@ -373,22 +372,22 @@ impl App {
         let (plans, lignes) = w.resume.as_ref().map_or((0, 0), |r| (r.1, r.2));
         if plans == 0 {
             let pourquoi = if w.scope == Etendue::Modifies && self.envois_ui.empreintes_vides() { "Le relevé des plans est en cours : réessaie dans un instant." } else { "Aucun plan dans cette étendue." };
-            ui.colored_label(avert, pourquoi);
+            crate::theme::avertir(ui, pourquoi);
         } else {
             let vignettes = if cle.7 { format!(", {lignes} vignette(s) à dessiner") } else { String::new() };
             ui.label(format!("{plans} plan(s), {lignes} ligne(s), {} colonne(s){vignettes}.", w.colonnes().len()));
         }
         if w.colonnes().is_empty() {
-            ui.colored_label(avert, "Coche au moins une colonne.");
+            crate::theme::avertir(ui, "Coche au moins une colonne.");
         }
         if editorial::parse_timecode(&w.start_tc, fps).is_none() {
-            ui.colored_label(avert, "Le time code de départ est illisible (HH:MM:SS:FF).");
+            crate::theme::avertir(ui, "Le time code de départ est illisible (HH:MM:SS:FF).");
         }
         if !self.doc.numbering_locked {
-            ui.label(RichText::new("La numérotation des plans est suivie : les numéros et les références de la fiche changent si un plan s'ajoute ou se déplace. Réglages du projet > Numérotation des plans > Verrouillée les fige.").small().color(avert));
+            crate::theme::avertir_petit(ui, "La numérotation des plans est suivie : les numéros et les références de la fiche changent si un plan s'ajoute ou se déplace. Réglages du projet > Numérotation des plans > Verrouillée les fige.");
         }
         if w.colonnes().contains(&Colonne::Modifie) && !self.doc.envois.is_empty() && self.envois_ui.empreintes_vides() {
-            ui.label(RichText::new("Le relevé des plans depuis l'envoi n'est pas prêt : la colonne « Modifié depuis l'envoi » serait vide.").small().color(avert));
+            crate::theme::avertir_petit(ui, "Le relevé des plans depuis l'envoi n'est pas prêt : la colonne « Modifié depuis l'envoi » serait vide.");
         }
         ui.add_space(4.0);
 
@@ -398,7 +397,7 @@ impl App {
             Some(job) => {
                 match job.progress() {
                     Progress::Running(fait, total) => {
-                        ui.add(egui::ProgressBar::new(fait as f32 / total.max(1) as f32).text(format!("vignette {fait} / {total}")));
+                        ui.add(crate::barre::Barre::new(fait as f32 / total.max(1) as f32).text(format!("vignette {fait} / {total}")));
                         if let Some(reste) = job.remaining() {
                             let s = reste.as_secs();
                             ui.label(RichText::new(format!("reste environ {}:{:02}", s / 60, s % 60)).small().weak());
@@ -439,7 +438,7 @@ impl App {
                     ui.label(RichText::new(format!("Vignettes : {}", court(d))).small()).on_hover_text(d.display().to_string());
                 }
                 for a in &r.avertissements {
-                    ui.colored_label(avert, a);
+                    crate::theme::avertir(ui, a);
                 }
                 if bulles::icone(ui, ph::FOLDER_OPEN, "Montrer dans l'explorateur", "Ouvre le dossier de la fiche.", "").clicked() {
                     crate::exportui::reveal_in_explorer(&r.fichier);
@@ -447,7 +446,7 @@ impl App {
             }
             Some(Err(e)) => {
                 ui.separator();
-                ui.colored_label(avert, e);
+                crate::theme::avertir(ui, e);
             }
             None => {}
         }

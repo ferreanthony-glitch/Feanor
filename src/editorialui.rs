@@ -71,7 +71,7 @@ impl App {
             }
         }
         let title = match self.doc.properties.title.trim() {
-            "" => self.base_name_or("SHOT"),
+            "" => self.base_name_or("FEANOR"),
             t => t.to_string(),
         };
         let parent = self.settings.montage_export_dir.clone().or_else(|| self.path.as_ref().or(self.import_source.as_ref()).and_then(|p| p.parent()).map(Path::to_path_buf));
@@ -169,7 +169,6 @@ impl App {
 
     /// Le contenu de la fenêtre ; vrai si l'on demande l'export.
     fn editorial_body(&mut self, ui: &mut egui::Ui, w: &mut EditorialWindow) -> bool {
-        let warn = crate::theme::avertissement();
         let busy = w.busy();
         let fps = self.doc.fps;
         ui.label(
@@ -202,7 +201,7 @@ impl App {
                 ui.horizontal(|ui| {
                     match &w.parent {
                         Some(d) => ui.label(short_path(d)).on_hover_text(d.display().to_string()),
-                        None => ui.colored_label(warn, "à choisir"),
+                        None => crate::theme::avertir(ui, "à choisir"),
                     };
                     if ui.button("Choisir…").clicked() {
                         if let Some(p) = self.dialogue_dossier("montage", "Dossier où créer l'export pour le montage", w.parent.as_deref()) {
@@ -232,7 +231,7 @@ impl App {
                 ui.horizontal(|ui| {
                     let valid = editorial::parse_timecode(&w.opts.start_tc, fps).is_some();
                     let edit = egui::TextEdit::singleline(&mut w.opts.start_tc).desired_width(100.0).hint_text("01:00:00:00");
-                    let edit = if valid { edit } else { edit.text_color(warn) };
+                    let edit = if valid { edit } else { edit.text_color(crate::theme::erreur()) };
                     ui.add(edit).on_hover_text(format!("HH:MM:SS:FF, FF de 0 à {} (sans saut d'images). 01:00:00:00 est l'usage pour une ligne de temps de montage.", fps - 1));
                     if editorial::ntsc_possible(fps) {
                         ui.checkbox(&mut w.opts.ntsc, "NTSC").on_hover_text(format!(
@@ -300,7 +299,7 @@ impl App {
                     ui.label(RichText::new(extra.join(" · ")).small());
                 }
                 if !self.doc.numbering_locked {
-                    ui.colored_label(warn, "La numérotation des plans est suivie : les noms des clips changent si un plan s'ajoute ou se déplace. Réglages du projet > Numérotation des plans > Verrouillée les fige.");
+                    crate::theme::avertir(ui, "La numérotation des plans est suivie : les noms des clips changent si un plan s'ajoute ou se déplace. Réglages du projet > Numérotation des plans > Verrouillée les fige.");
                 }
                 if !plan.skipped.is_empty() {
                     egui::CollapsingHeader::new(format!("Transitions pas écrites telles quelles ({})", plan.skipped.len())).default_open(false).show(ui, |ui| {
@@ -310,21 +309,21 @@ impl App {
                     });
                 }
                 if kinds == 0 {
-                    ui.colored_label(warn, "Aucun format de montage coché : seuls les fichiers vidéo (et LISEZ-MOI.txt) seront écrits.");
+                    crate::theme::avertir(ui, "Aucun format de montage coché : seuls les fichiers vidéo (et LISEZ-MOI.txt) seront écrits.");
                 }
                 if plan.odd_rate {
-                    ui.colored_label(warn, format!("{} i/s n'est pas une cadence classique de l'EDL (24, 25, 30).", plan.rate.fps));
+                    crate::theme::avertir(ui, format!("{} i/s n'est pas une cadence classique de l'EDL (24, 25, 30).", plan.rate.fps));
                 }
             }
             Err(e) if e.is_empty() => {}
             Err(e) => {
-                ui.colored_label(warn, e);
+                crate::theme::avertir(ui, e);
             }
         }
         if let Some(parent) = &w.parent {
             let dir = editorialjob::export_dir_for(parent, &w.title);
             if dir.exists() && !busy && w.job.is_none() {
-                ui.colored_label(warn, format!("« {} » existe déjà : les fichiers du même nom seront remplacés.", short_path(&dir))).on_hover_text(dir.display().to_string());
+                crate::theme::avertir(ui, format!("« {} » existe déjà : les fichiers du même nom seront remplacés.", short_path(&dir))).on_hover_text(dir.display().to_string());
             } else {
                 ui.label(RichText::new(format!("Tout sera écrit dans « {} ».", short_path(&dir))).small()).on_hover_text(dir.display().to_string());
             }
@@ -343,14 +342,14 @@ impl App {
                 ffmpeg_ok = missing.is_none();
                 ui.label(RichText::new(format!("ffmpeg : {}", short_path(path))).small()).on_hover_text(path.display().to_string());
                 if let Some(m) = missing {
-                    ui.colored_label(warn, m);
+                    crate::theme::avertir(ui, m);
                 }
             }
             Some((path, Err(e))) => {
-                ui.colored_label(warn, format!("{} : {e}", path.display()));
+                crate::theme::avertir(ui, format!("{} : {e}", path.display()));
             }
             None => {
-                ui.colored_label(warn, "ffmpeg introuvable. C'est lui qui fabrique les vidéos : installe-le ou indique où il est.");
+                crate::theme::avertir(ui, "ffmpeg introuvable. C'est lui qui fabrique les vidéos : installe-le ou indique où il est.");
             }
         }
         if !busy && ui.small_button("Choisir un autre ffmpeg…").clicked() {
@@ -365,10 +364,10 @@ impl App {
             Some(job) => {
                 let (done, total) = job.frames();
                 ui.label(RichText::new(job.status()).strong());
-                ui.add(egui::ProgressBar::new(if total > 0 { done as f32 / total as f32 } else { 0.0 }).text(format!("images {done} / {total}")));
+                ui.add(crate::barre::Barre::new(if total > 0 { done as f32 / total as f32 } else { 0.0 }).text(format!("images {done} / {total}")));
                 let (sd, st) = job.sounds();
                 if st > 0 {
-                    ui.add(egui::ProgressBar::new(sd as f32 / st as f32).text(format!("son {sd} / {st}")));
+                    ui.add(crate::barre::Barre::new(sd as f32 / st as f32).text(format!("son {sd} / {st}")));
                 }
                 if let Some(rest) = job_remaining(job) {
                     ui.label(RichText::new(format!("reste environ {}:{:02}", rest / 60, rest % 60)).small().weak());
@@ -398,7 +397,7 @@ impl App {
             }
             Some(Err(e)) => {
                 ui.separator();
-                ui.colored_label(warn, e);
+                crate::theme::avertir(ui, e);
             }
             None => {}
         }

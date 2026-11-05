@@ -98,7 +98,7 @@ impl App {
         let (tx, rx) = channel();
         let serveur = self.sug.serveur.clone();
         std::thread::spawn(move || {
-            let texte = if serveur.arreter() { "Serveur local arrêté. La mémoire graphique est rendue.".to_string() } else { "SHOT n'a pas lancé de serveur local (un serveur lancé à la main s'arrête dans sa fenêtre).".to_string() };
+            let texte = if serveur.arreter() { "Serveur local arrêté. La mémoire graphique est rendue.".to_string() } else { "FEANOR n'a pas lancé de serveur local (un serveur lancé à la main s'arrête dans sa fenêtre).".to_string() };
             let _ = tx.send(texte);
         });
         self.sug.prefs.resultats.insert(None, "Arrêt du serveur local…".into());
@@ -234,7 +234,7 @@ impl App {
         });
         let r = ui
             .checkbox(&mut self.settings.generation_son.demarrage_auto, "Démarrer le serveur tout seul quand une génération locale en a besoin")
-            .on_hover_text("SHOT lance le serveur en arrière-plan, sans fenêtre, au premier « Générer » local, et l'arrête en se fermant. Sans cette case, lance-le ici (ou à la main avec sidecar/lancer.ps1).");
+            .on_hover_text("FEANOR lance le serveur en arrière-plan, sans fenêtre, au premier « Générer » local, et l'arrête en se fermant. Sans cette case, lance-le ici (ou à la main avec sidecar/lancer.ps1).");
         change |= r.changed();
         let (occupe, en_marche) = (self.sug.prefs.essai_en_cours(), self.sug.serveur.en_marche());
         ui.horizontal(|ui| {
@@ -246,15 +246,15 @@ impl App {
             if ui.add_enabled(!occupe && !en_marche, egui::Button::new("Démarrer le serveur local")).on_hover_text("Lance le serveur, sans fenêtre, et attend qu'il réponde. Les modèles ne se chargent qu'à la première demande.").clicked() {
                 self.lancer_demarrage_serveur();
             }
-            if ui.add_enabled(!occupe && en_marche, egui::Button::new("Arrêter")).on_hover_text("Arrête le serveur lancé par SHOT et rend la mémoire graphique.").clicked() {
+            if ui.add_enabled(!occupe && en_marche, egui::Button::new("Arrêter")).on_hover_text("Arrête le serveur lancé par FEANOR et rend la mémoire graphique.").clicked() {
                 self.lancer_arret_serveur();
             }
             if ui.add_enabled(!occupe, egui::Button::new("Tester")).on_hover_text("Demande au serveur local s'il répond et quels modèles il a (rien n'est lancé).").clicked() {
                 self.lancer_essai(None);
             }
             let etat = match self.sug.serveur.pid() {
-                Some(pid) => format!("lancé par SHOT (processus {pid})"),
-                None => "pas lancé par SHOT".to_string(),
+                Some(pid) => format!("lancé par FEANOR (processus {pid})"),
+                None => "pas lancé par FEANOR".to_string(),
             };
             ui.label(RichText::new(etat).small().weak());
         });
@@ -295,7 +295,7 @@ impl App {
         let service = self.settings.generation_son.service(role);
         let presente = self.cle_presente(service);
         ui.horizontal(|ui| {
-            if ui.button(format!("{}  Saisir la clé…", ph::KEY)).on_hover_text("La clé est rangée dans le Gestionnaire d'identifiants de Windows, jamais dans un fichier de SHOT.").clicked() {
+            if ui.button(format!("{}  Saisir la clé…", ph::KEY)).on_hover_text("La clé est rangée dans le Gestionnaire d'identifiants de Windows, jamais dans un fichier de FEANOR.").clicked() {
                 self.sug.prefs.cle_pour = Some(service);
                 self.sug.prefs.message_cle.clear();
             }
@@ -319,7 +319,7 @@ impl App {
         let mut action: Option<u8> = None;
         egui::Window::new(format!("Clé de {}", service.nom())).open(&mut ouvert).collapsible(false).resizable(false).anchor(Align2::CENTER_CENTER, [0.0, 0.0]).show(ctx, |ui| {
             ui.set_width(400.0);
-            ui.label("Colle la clé (le « API key » de ton compte). Elle est rangée dans le Gestionnaire d'identifiants de Windows ; SHOT ne l'écrit dans aucun fichier et ne l'affiche plus.");
+            ui.label("Colle la clé (le « API key » de ton compte). Elle est rangée dans le Gestionnaire d'identifiants de Windows ; FEANOR ne l'écrit dans aucun fichier et ne l'affiche plus.");
             let r = ui.add(egui::TextEdit::singleline(&mut self.sug.prefs.saisie).password(true).hint_text("clé").desired_width(f32::INFINITY));
             if r.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 action = Some(0);

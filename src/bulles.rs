@@ -44,13 +44,13 @@ fn texte(symbole: &str) -> RichText {
 }
 
 /// L'encre d'un bouton qui montre un état : quand il est allumé (`on`), la couleur lisible sur
-/// l'accent (`theme::sur_accent`), dans tous les thèmes. egui dessine un `Button::selected` avec la
+/// le fond de sélection (`theme::sur_selection`), dans tous les thèmes. egui dessine un `Button::selected` avec la
 /// couleur de texte du survol, pas celle de la sélection : sur l'accent clair du thème Gris sombre,
 /// l'icône restait claire sur clair. Tout bouton fait à la main avec `.selected(on)` passe par ici
 /// (les `SelectableLabel` d'egui prennent déjà la bonne couleur).
 pub(crate) fn encre_etat(texte: RichText, on: bool) -> RichText {
     if on {
-        texte.color(theme::sur_accent())
+        texte.color(theme::sur_selection())
     } else {
         texte
     }

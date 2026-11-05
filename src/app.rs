@@ -1021,8 +1021,11 @@ impl App {
         crate::demarrage::debut();
         let mut fonts = egui::FontDefinitions::default();
         crate::theme::polices(&mut fonts);
+        crate::marque::polices(&mut fonts);
         egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+        crate::marque::polices_interface(&mut fonts);
         egui_ctx.set_fonts(fonts);
+        crate::marque::marquer_polices(egui_ctx);
         crate::demarrage::marque("polices (Segoe UI, icônes)");
         let settings = crate::settings::Settings::load();
         crate::demarrage::marque("réglages (Settings::load)");
@@ -1051,7 +1054,7 @@ impl App {
         // et arrivent à une image d'écran quelconque (`poll_brushes`). La lire ici retardait la
         // première image de tout ce temps.
         let brushes = crate::brushtex::BrushLibrary::builtin();
-        crate::demarrage::marque("pinceaux de SHOT (BrushLibrary::builtin)");
+        crate::demarrage::marque("pinceaux de FEANOR (BrushLibrary::builtin)");
         let user_dir = crate::brushtex::BrushLibrary::user_dir();
         let brushes_job = std::thread::Builder::new().name("pinceaux".into()).spawn({
             let ctx = egui_ctx.clone();
@@ -3441,7 +3444,7 @@ impl App {
 
     fn open_dialog(&mut self) {
         let Some(path) = rfd::FileDialog::new()
-            .add_filter("Projet SHOT", &crate::project::EXTENSIONS)
+            .add_filter("Projet FEANOR", &crate::project::EXTENSIONS)
             .pick_file()
         else {
             return;
@@ -4960,9 +4963,9 @@ impl App {
     fn update_title(&mut self, ctx: &egui::Context) {
         // Sans projet ouvert : le titre est celui du logiciel (`sansprojet.rs`).
         if self.sans_projet() {
-            if self.title != "SHOT" {
-                ctx.send_viewport_cmd(egui::ViewportCommand::Title("SHOT".into()));
-                self.title = "SHOT".into();
+            if self.title != "FEANOR" {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Title("FEANOR".into()));
+                self.title = "FEANOR".into();
             }
             return;
         }
@@ -4972,7 +4975,7 @@ impl App {
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned())
             .unwrap_or_else(|| "Sans titre".into());
-        let title = format!("{name}{} — SHOT", if self.modified || self.saving.is_some() { " •" } else { "" });
+        let title = format!("{name}{} — FEANOR", if self.modified || self.saving.is_some() { " •" } else { "" });
         if title != self.title {
             ctx.send_viewport_cmd(egui::ViewportCommand::Title(title.clone()));
             self.title = title;
@@ -5015,6 +5018,12 @@ impl eframe::App for App {
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
         if self.settings.references_fenetre.transparent && self.detached.iter().any(|d| d.panneau == crate::dock::Pane::References) {
             return [0.0, 0.0, 0.0, 0.0];
+        }
+        // Thèmes de la marque : la marge entre la barre d'outils et les panneaux prend la couleur des panneaux,
+        // sinon elle ferait une bande noire dans le thème clair.
+        let p = crate::theme::palette();
+        if p.identite {
+            return p.panneau.to_normalized_gamma_f32();
         }
         egui::Color32::from_rgba_unmultiplied(12, 12, 12, 180).to_normalized_gamma_f32()
     }

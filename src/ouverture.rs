@@ -89,7 +89,7 @@ impl App {
                 .show(ctx, |ui| {
                     ui.label(format!("Ouverture de « {name} »…"));
                     let fraction = if total == 0 { 0.0 } else { done as f32 / total as f32 };
-                    ui.add(egui::ProgressBar::new(fraction).desired_width(280.0).text(if total == 0 { "lecture du manifeste".to_string() } else { format!("{done} / {total} dessins") }));
+                    ui.add(crate::barre::Barre::new(fraction).desired_width(280.0).text(if total == 0 { "lecture du manifeste".to_string() } else { format!("{done} / {total} dessins") }));
                 });
             ctx.request_repaint_after(std::time::Duration::from_millis(100));
             return;

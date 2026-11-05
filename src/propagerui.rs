@@ -475,7 +475,7 @@ impl App {
                 ui.set_width(480.0);
                 ui.heading("Propagation de la peinture");
                 ui.add_space(6.0);
-                ui.add(egui::ProgressBar::new(done as f32 / total as f32).show_percentage());
+                ui.add(crate::barre::Barre::new(done as f32 / total as f32).show_percentage());
                 let mut text = format!("{done} images sur {total}");
                 if done > 0 {
                     let rest = job.started.elapsed().as_secs_f32() / done as f32 * (total - done.min(total)) as f32;

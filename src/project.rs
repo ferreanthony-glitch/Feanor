@@ -2726,11 +2726,11 @@ fn load_with(manifest_path: &Path, quick: bool, progress: Option<&Progress>) -> 
     let manifest: Manifest =
         serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("manifeste illisible : {e}"))?;
     if manifest.format != FORMAT {
-        return Err("ce fichier n'est pas un projet SHOT".into());
+        return Err("ce fichier n'est pas un projet FEANOR".into());
     }
     if manifest.version > version_partage_ecrite() || (manifest.version > VERSION && manifest.partage.is_none()) {
         return Err(format!(
-            "projet créé par une version plus récente de SHOT (format {})",
+            "projet créé par une version plus récente de FEANOR (format {})",
             manifest.version
         ));
     }

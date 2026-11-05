@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 
 use crate::app::App;
 use crate::recovery::{now_secs, Orphan, Snapshot};
@@ -15,10 +15,6 @@ pub(crate) struct RecoveryChoix {
     pub open_all: bool,
     pub delete: Option<usize>,
     pub later: bool,
-}
-
-fn warn() -> Color32 {
-    crate::theme::avertissement()
 }
 
 /// « il y a 3 min », « il y a 2 h », « il y a 4 jours ».
@@ -99,8 +95,8 @@ impl App {
                 self.tick_secours_cache(i, Some(Duration::ZERO));
             }
         }
-        self.status = "La carte graphique ne répond plus (pilote réinitialisé ?) : SHOT risque de se fermer. Une copie de secours \
-                       part maintenant ; enregistre, puis relance SHOT."
+        self.status = "La carte graphique ne répond plus (pilote réinitialisé ?) : FEANOR risque de se fermer. Une copie de secours \
+                       part maintenant ; enregistre, puis relance FEANOR."
             .into();
     }
 
@@ -115,8 +111,8 @@ impl App {
         })
         .response
         .on_hover_text(
-            "SHOT copie le projet à part (dans %LOCALAPPDATA%\\SHOT\\secours), sans toucher au projet \
-             lui-même : seul « Enregistrer » l'écrit. Après un plantage, SHOT propose d'ouvrir la copie. \
+            "FEANOR copie le projet à part (dans %LOCALAPPDATA%\\SHOT\\secours), sans toucher au projet \
+             lui-même : seul « Enregistrer » l'écrit. Après un plantage, FEANOR propose d'ouvrir la copie. \
              0 = jamais.",
         );
     }
@@ -141,7 +137,7 @@ impl App {
         let mut choix = RecoveryChoix::default();
         egui::Modal::new(egui::Id::new("recuperation")).show(ctx, |ui| {
             ui.set_width(480.0);
-            ui.heading("SHOT s'est fermé sans enregistrer");
+            ui.heading("FEANOR s'est fermé sans enregistrer");
             choix = self.recovery_contenu(ui);
         });
         self.recovery_appliquer(choix);
@@ -161,7 +157,7 @@ impl App {
                 let place = o.info.project.as_ref().map_or("projet jamais enregistré".to_string(), |p| p.display().to_string());
                 ui.add(egui::Label::new(RichText::new(format!("{when} · {place}")).small()).truncate()).on_hover_text(format!("{when} · {place}"));
                 if o.project_is_newer() {
-                    ui.colored_label(warn(), "Le projet a été enregistré après cette copie : elle n'apporte sans doute rien.");
+                    crate::theme::avertir(ui, "Le projet a été enregistré après cette copie : elle n'apporte sans doute rien.");
                 }
                 ui.horizontal(|ui| {
                     if ui.button("Ouvrir la copie").clicked() {
@@ -178,7 +174,7 @@ impl App {
             if self.orphans.len() > 1 && ui.button("Tout ouvrir").on_hover_text("Chaque copie dans son onglet.").clicked() {
                 c.open_all = true;
             }
-            c.later = ui.button("Plus tard").on_hover_text("Les copies restent ; SHOT les proposera au prochain démarrage.").clicked();
+            c.later = ui.button("Plus tard").on_hover_text("Les copies restent ; FEANOR les proposera au prochain démarrage.").clicked();
         });
         c
     }

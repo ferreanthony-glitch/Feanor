@@ -174,7 +174,7 @@ pub fn base_du_film(doc: &Document) -> String {
         "" => doc.properties.title.trim(),
         s => s,
     };
-    let projet = if projet.is_empty() { "SHOT" } else { projet };
+    let projet = if projet.is_empty() { "FEANOR" } else { projet };
     let ep = doc.properties.episode.trim();
     if ep.is_empty() {
         editorial::file_safe(projet)

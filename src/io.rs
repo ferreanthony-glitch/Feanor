@@ -96,7 +96,7 @@ pub fn is_legacy_file(path: &Path) -> bool {
 pub fn load_legacy(path: &Path) -> Result<Document, String> {
     let data = fs::read(path).map_err(|e| e.to_string())?;
     if data.len() < HEADER || &data[..8] != LEGACY_MAGIC {
-        return Err("ce fichier n'est pas un projet SHOT".into());
+        return Err("ce fichier n'est pas un projet FEANOR".into());
     }
     let version = u32::from_le_bytes(data[8..12].try_into().unwrap());
     if version > LEGACY_VERSION {

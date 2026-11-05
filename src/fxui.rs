@@ -588,7 +588,7 @@ impl App {
         // L'interrupteur « fx » de la ligne du calque est éteint : on le dit ici, et on le rallume.
         if !self.layers()[li].fx_enabled {
             ui.horizontal(|ui| {
-                ui.colored_label(crate::theme::avertissement(), "Les effets de ce calque sont éteints (bouton fx).");
+                crate::theme::avertir(ui, "Les effets de ce calque sont éteints (bouton fx).");
                 if crate::bulles::bulle(ui.small_button("Rallumer"), "Rallumer les effets", "La pile du calque joue de nouveau.", &self.raccourci("calque.effets")).clicked() {
                     self.toggle_layer_fx(li);
                 }
@@ -695,10 +695,9 @@ impl App {
             let chosen = picked.contains(&i);
             let opened = self.effets_ui.open.get(&layer_id).and_then(|v| v.get(i)).copied().unwrap_or(true);
             // L'effet choisi se voit : cadre et fond de la couleur de sélection.
-            let sel = ui.visuals().selection;
             let mut frame = egui::Frame::group(ui.style());
             if chosen {
-                frame = frame.stroke(egui::Stroke::new(1.5_f32,sel.stroke.color)).fill(sel.bg_fill.gamma_multiply(0.35));
+                frame = frame.stroke(egui::Stroke::new(1.5_f32,crate::theme::accent())).fill(crate::theme::accent().gamma_multiply(0.35));
             }
             frame.show(ui, |ui| {
                 ui.horizontal(|ui| {

@@ -282,7 +282,7 @@ impl App {
         ui.horizontal(|ui| {
             import = icone(ui, ph::FILE_ARROW_DOWN, "Importer des pinceaux", IMPORT_HINT, "").clicked();
             nouvelle = icone(ui, ph::PLUS, "Nouvelle brosse", "Garder le réglage courant sous un nom, dans « Mes brosses » (clic droit sur un pinceau : renommer, dupliquer, remplacer, supprimer).", "").clicked();
-            supprimer = icone_si(ui, can_delete, ph::TRASH, "Supprimer la brosse", "Supprimer la brosse choisie (celles de SHOT restent).", "").clicked();
+            supprimer = icone_si(ui, can_delete, ph::TRASH, "Supprimer la brosse", "Supprimer la brosse choisie (celles de FEANOR restent).", "").clicked();
         });
 
         if let Some(i) = pick {
@@ -347,13 +347,13 @@ impl App {
             let chosen = settings == current;
             let v = ui.visuals();
             let bg = if chosen {
-                v.selection.bg_fill
+                crate::theme::accent()
             } else if resp.hovered() {
                 v.widgets.hovered.weak_bg_fill
             } else {
                 Color32::TRANSPARENT
             };
-            let ink = if chosen { v.selection.stroke.color } else { v.text_color() };
+            let ink = if chosen { crate::theme::sur_accent() } else { v.text_color() };
             let weak = if chosen { ink } else { v.weak_text_color() };
             ui.painter().rect_filled(rect, 3.0, bg);
             let cy = rect.center().y;
@@ -588,7 +588,7 @@ impl App {
                         ouverte,
                         ph::BOOKS,
                         "Liste des pinceaux",
-                        "Les brosses de SHOT, « Mes brosses » et celles importées : en choisir une, en importer, garder le réglage courant, renommer, supprimer. Un clic déplie la liste sous l'aperçu, un autre la replie.",
+                        "Les brosses de FEANOR, « Mes brosses » et celles importées : en choisir une, en importer, garder le réglage courant, renommer, supprimer. Un clic déplie la liste sous l'aperçu, un autre la replie.",
                         "vue.pinceaux",
                     )
                     .clicked();
@@ -680,7 +680,7 @@ impl App {
             });
             // Rendu des brosses, étape 2 : un grain qui répond en douceur.
             let resp = ui.add(egui::Slider::new(&mut b.paper_softness, 0.05..=0.5).text("Douceur du grain"));
-            bulle(resp, "Douceur du grain", "Largeur de la transition entre un creux vide et un sommet plein : petit = grain net et dur (0,12 : les anciens réglages), grand = grain qui répond en douceur (0,3 : les brosses de SHOT).", "");
+            bulle(resp, "Douceur du grain", "Largeur de la transition entre un creux vide et un sommet plein : petit = grain net et dur (0,12 : les anciens réglages), grand = grain qui répond en douceur (0,3 : les brosses de FEANOR).", "");
         }
         // Rendu des brosses, étape 3 : le grain propre du crayon, même sans papier.
         ui.horizontal(|ui| {
@@ -795,7 +795,7 @@ impl App {
             let hint = if over.is_some() {
                 "Remplace le réglage de cette brosse par le réglage courant (on peut le rétablir juste après)."
             } else {
-                "Choisis d'abord une brosse de « Mes brosses » ou importée : celles de SHOT ne se remplacent pas (utilise « comme nouvelle brosse »)."
+                "Choisis d'abord une brosse de « Mes brosses » ou importée : celles de FEANOR ne se remplacent pas (utilise « comme nouvelle brosse »)."
             };
             if ui.add_enabled(over.is_some() && differs, egui::Button::new(label)).on_hover_text(hint).on_disabled_hover_text(if over.is_some() { "Rien à enregistrer : la brosse a déjà ce réglage." } else { hint }).clicked() {
                 action = Some(0);

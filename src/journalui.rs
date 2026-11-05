@@ -246,7 +246,6 @@ impl App {
     }
 
     fn journal_corps(&mut self, ui: &mut egui::Ui, w: &mut JournalFenetre, aller: &mut Option<u64>) -> bool {
-        let avert = theme::avertissement();
         let occupe = w.job.is_some();
         ui.label(
             RichText::new("Ce qui a changé entre deux envois : seulement les plans modifiés, côte à côte (avant / après), avec la part de l'image qui diffère et la durée ; les plans ajoutés, retirés ou déplacés ; les notes traitées entre les deux. En PDF et en page HTML à joindre à l'envoi.")
@@ -290,7 +289,7 @@ impl App {
                 self.journal_liste(ui, &j.diff, aller);
             }
             Some(Err(e)) => {
-                ui.colored_label(avert, e);
+                crate::theme::avertir(ui, e);
             }
             None => {}
         }
@@ -307,7 +306,7 @@ impl App {
             Some(job) => {
                 let (fait, total) = job.progress();
                 let texte = if job.running() { format!("Images {fait} sur {total}") } else { "Écriture…".to_string() };
-                ui.add(egui::ProgressBar::new(if total == 0 { 0.0 } else { fait as f32 / total as f32 }).text(texte));
+                ui.add(crate::barre::Barre::new(if total == 0 { 0.0 } else { fait as f32 / total as f32 }).text(texte));
                 if bulles::icone(ui, ph::X, "Arrêter", "Arrête le journal : aucun fichier ne reste.", "").clicked() {
                     job.cancel();
                 }
@@ -335,7 +334,7 @@ impl App {
             }
             Some(Err(e)) => {
                 ui.separator();
-                ui.colored_label(avert, e);
+                crate::theme::avertir(ui, e);
             }
             None => {}
         }

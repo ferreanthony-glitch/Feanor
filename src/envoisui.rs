@@ -669,7 +669,7 @@ impl App {
             ui.set_max_width(380.0);
             let dernier = self.doc.envois.dernier().map(|e| e.libelle());
             ui.label(format!(
-                "SHOT note l'état des {} plans du film tel qu'il est maintenant. Les plans qui changeront ensuite seront repérés dans le montage et sur la planche.",
+                "FEANOR note l'état des {} plans du film tel qu'il est maintenant. Les plans qui changeront ensuite seront repérés dans le montage et sur la planche.",
                 self.doc.panels.len()
             ));
             if let Some(d) = dernier {
@@ -813,7 +813,7 @@ impl App {
                             journal = Some(e.id);
                         }
                         // La page de relecture de cet envoi : les plans qui ont changé depuis, à envoyer au réalisateur.
-                        if bulles::icone(ui, ph::EYEGLASSES, "Exporter pour relecture", "Une page à envoyer au réalisateur (qui n'a pas SHOT) pour qu'il écrive ses notes dessus ; proposée avec les plans modifiés depuis cet envoi.", &self.raccourci("fichier.exporter_relecture")).clicked() {
+                        if bulles::icone(ui, ph::EYEGLASSES, "Exporter pour relecture", "Une page à envoyer au réalisateur (qui n'a pas FEANOR) pour qu'il écrive ses notes dessus ; proposée avec les plans modifiés depuis cet envoi.", &self.raccourci("fichier.exporter_relecture")).clicked() {
                             relire = Some(e.id);
                         }
                         if bulles::icone(ui, ph::TRASH, "Retirer de la liste", "L'envoi sort de la liste. Ses fichiers dans « versions » ne sont jamais effacés.", "").clicked() {
@@ -862,7 +862,7 @@ impl App {
 /// Dessine le repère « modifié depuis l'envoi » centré en `centre` : une pastille d'avertissement du thème avec
 /// un crayon (modifié) ou un plus (ajouté).
 pub(crate) fn peindre_repere(painter: &egui::Painter, centre: egui::Pos2, etat: Etat, rayon: f32) {
-    painter.circle_filled(centre, rayon, theme::avertissement());
+    painter.circle_filled(centre, rayon, theme::braise());
     painter.circle_stroke(centre, rayon, Stroke::new(1.0_f32, theme::encre()));
     let glyphe = if etat == Etat::Nouveau { ph::PLUS } else { ph::PENCIL_SIMPLE };
     painter.text(centre, Align2::CENTER_CENTER, glyphe, FontId::proportional(rayon * 1.25), theme::encre());
@@ -889,7 +889,7 @@ pub(crate) fn peindre_repere_du_bloc(painter: &egui::Painter, bloc: Rect, etat: 
         zone
     } else {
         let bande = Rect::from_min_max(bloc.min, pos2(bloc.right(), bloc.top() + BANDE));
-        painter.rect_filled(bande, 1.0, theme::avertissement());
+        painter.rect_filled(bande, 1.0, theme::braise());
         bande.expand2(vec2(0.0, 2.0))
     }
 }

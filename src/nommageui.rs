@@ -38,7 +38,6 @@ impl App {
     }
 
     fn noms_body(&mut self, ui: &mut egui::Ui, w: &mut NomsWindow) {
-        let avert = theme::avertissement();
         ui.label(
             RichText::new("Le nom que prend chaque plan dans les fichiers : vidéos par plan, images, calques séparés, fiche, liste des plans, paquet de livraison. Le modèle est un réglage du projet ; d'origine, il donne les noms de toujours (SQ01_PL012A).")
                 .small()
@@ -115,7 +114,7 @@ impl App {
         let v = w.cache.as_ref().map(|c| c.1.clone()).unwrap_or_default();
         match &v.erreur {
             Some(e) => {
-                ui.colored_label(avert, format!("Le modèle ne se lit pas : {e}. Les exports gardent le modèle d'origine tant qu'il n'est pas corrigé."));
+                crate::theme::avertir(ui, format!("Le modèle ne se lit pas : {e}. Les exports gardent le modèle d'origine tant qu'il n'est pas corrigé."));
             }
             None => {
                 ui.label(RichText::new("Aperçu").strong());
@@ -125,10 +124,10 @@ impl App {
             }
         }
         for a in &v.avertissements {
-            ui.label(RichText::new(format!("{}  {a}", ph::WARNING)).small().color(avert));
+            crate::theme::avertir_petit(ui, format!("{}  {a}", ph::WARNING));
         }
         if !self.doc.numbering_locked {
-            ui.label(RichText::new("La numérotation des plans est suivie : les noms changent si un plan s'ajoute ou se déplace. Verrouille-la (Propriétés du projet) pour un suivi de production.").small().color(avert));
+            crate::theme::avertir_petit(ui, "La numérotation des plans est suivie : les noms changent si un plan s'ajoute ou se déplace. Verrouille-la (Propriétés du projet) pour un suivi de production.");
         }
         ui.separator();
         if ui.button(format!("{}  Enregistrer comme modèle d'épisode…", ph::FLOPPY_DISK)).on_hover_text("Garde ces réglages (et le format, les calques, les personnages, les réglages d'export) pour créer les épisodes suivants en quelques clics.").clicked() {

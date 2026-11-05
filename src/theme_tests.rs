@@ -34,6 +34,11 @@ fn the_default_theme_is_shot_and_the_grey_themes_stay_neutral() {
     assert_eq!(ReglageTheme::default().couleurs(), Couleurs::shot());
     // Des gris neutres, pas du bleu-noir : rouge, vert et bleu égaux aux fonds.
     for (choix, p) in livres() {
+        if choix == ChoixTheme::Shot {
+            // Atelier (la marque) : les panneaux ont la très légère teinte du livre de marque ; le canevas, lui, reste neutre.
+            assert!(p.fond.r().abs_diff(p.fond.b()) <= 2 && p.fond.r() == p.fond.g(), "{:?} : le canevas n'est pas teinté", p.fond);
+            continue;
+        }
         for fond in [p.panneau, p.entete, p.fenetre, p.fond, p.rangee, p.controle, p.bord] {
             assert!(fond.r() == fond.g() && fond.g() == fond.b(), "{choix:?} : {fond:?} n'est pas un gris neutre");
         }
@@ -86,8 +91,13 @@ fn selections_stay_visible_in_every_theme() {
         assert!(contraste(p.accent, p.rangee) >= 1.4 || contraste(p.accent_texte, p.rangee) >= 3.0, "{choix:?} : accent sur la timeline");
         // La sélection d'egui est l'accent, son texte est celui qui lit sur lui.
         let v = p.visuels();
-        assert_eq!(v.selection.bg_fill, p.accent);
-        assert_eq!(v.selection.stroke.color, p.sur_accent);
+        if p.identite {
+            // (Thèmes de la marque : voir `charte_tests.rs`.)
+            assert_eq!(v.selection.bg_fill, p.selection);
+        } else {
+            assert_eq!(v.selection.bg_fill, p.accent);
+            assert_eq!(v.selection.stroke.color, p.sur_accent);
+        }
     }
 }
 

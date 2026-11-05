@@ -29,7 +29,7 @@ pub fn fold(s: &str) -> String {
 /// tape encore, la palette trouve la commande. (`id`, anciens noms séparés par « | ».) On n'y retire jamais rien.
 pub const ANCIENS_NOMS: &[(&str, &str)] = &[
     ("panneau.proprietes", "Propriétés du plan | Fiche"),
-    ("aide.diagnostic", "Diagnostic des performances | Diagnostic des performances de SHOT | régler SHOT pour cette machine"),
+    ("aide.diagnostic", "Diagnostic des performances | Diagnostic des performances de FEANOR | régler FEANOR pour cette machine | régler SHOT pour cette machine"),
     ("onglet.arriere_plan", "Onglet Arrière-plan de la timeline | arrière-plan | Onglet Fond de la feuille de la timeline | Fond de la feuille"),
     ("fond.aucun", "Arrière-plan : aucun (transparent) | Fond de la feuille : aucun (transparent)"),
     ("fond.couleur", "Arrière-plan : couleur | Fond de la feuille : couleur"),

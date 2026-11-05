@@ -95,7 +95,7 @@ pub(crate) fn wet_ui(ui: &mut egui::Ui, s: &mut BrushSettings, vector: bool, mix
         }
         MixKind::Smudge => smudge_slider(ui, s),
     }
-    ui.label(egui::RichText::new("Modèle propre à SHOT : à comparer avec tes outils de peinture.").small().weak());
+    ui.label(egui::RichText::new("Modèle propre à FEANOR : à comparer avec tes outils de peinture.").small().weak());
 }
 
 /// Le curseur d'entraînement du doigt (type « Lisser » et outil Mélangeur).

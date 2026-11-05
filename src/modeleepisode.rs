@@ -197,10 +197,10 @@ impl ModeleEpisode {
     pub fn lire(texte: &str) -> Result<ModeleEpisode, String> {
         let m: ModeleEpisode = serde_json::from_str(texte).map_err(|e| format!("modèle d'épisode illisible : {e}"))?;
         if m.format != FORMAT {
-            return Err("ce fichier n'est pas un modèle d'épisode de SHOT".into());
+            return Err("ce fichier n'est pas un modèle d'épisode de FEANOR".into());
         }
         if m.version > 1 {
-            return Err("modèle d'épisode d'une version plus récente de SHOT".into());
+            return Err("modèle d'épisode d'une version plus récente de FEANOR".into());
         }
         Ok(m)
     }

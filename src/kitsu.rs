@@ -803,7 +803,7 @@ impl Ids {
         };
         let ids: Ids = serde_json::from_str(&t).map_err(|e| format!("{} : {e}", p.display()))?;
         if ids.format != FORMAT {
-            return Err(format!("{} n'est pas un fichier d'identités Kitsu de SHOT.", p.display()));
+            return Err(format!("{} n'est pas un fichier d'identités Kitsu de FEANOR.", p.display()));
         }
         Ok(Some(ids))
     }
@@ -1302,7 +1302,7 @@ pub fn executer(client: &Client<'_>, rg: &Reglages, plan: &Plan, fichiers: &Fich
         let mut etat = match reprise {
             Some(e) => e,
             None => {
-                let texte = format!("{MARQUE} Plan {} : {} image(s) ({}–{}), mis à jour depuis SHOT.", cible.nom, cible.images, cible.entree, cible.sortie);
+                let texte = format!("{MARQUE} Plan {} : {} image(s) ({}–{}), mis à jour depuis FEANOR.", cible.nom, cible.images, cible.entree, cible.sortie);
                 let com = client.commenter(&tache, &rg.statut_publication, &texte)?;
                 let e = EnCours { empreinte: empreinte.clone(), commentaire: com.clone(), ..Default::default() };
                 let entree = ids.plans.entry(cle.clone()).or_default();

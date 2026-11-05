@@ -326,10 +326,18 @@ La privée baisse moins que le tas : elle garde 2,6 à 3,0 Go hors tas, qui ne b
 
 - **Hors tas, 2,6 à 3,0 Go** (0,7 à l'ouverture, 2,7 après la séance), pilote Vulkan et carte graphique. Expériences : cache de textures de la carte
   ramené à 64 Mo (8 textures, 66 Mo) : −70 Mo seulement ; dessins dérivés oubliés : −870 Mo de privée pour −630 Mo de tas ; caches de traits à zéro : 
-  −6 Mo. Ce n'est donc ni le cache de textures de dessins ni le tas de SHOT ; une piste non vérifiée est la mémoire que le pilote réserve aux
+  −6 Mo. Ce n'est donc ni le cache de textures de dessins ni le tas de FEANOR ; une piste non vérifiée est la mémoire que le pilote réserve aux
   textures des effets et aux images composées. Direct3D 12 (§6.5) n'en rend que 0,3 Go. Non résolu.
-- Dessins dérivés des effets incompressibles : réserve de 768 Mo (réglable dans Aide > Régler SHOT pour cette machine…).
+- Dessins dérivés des effets incompressibles : réserve de 768 Mo (réglable dans Aide > Régler FEANOR pour cette machine…).
 - Instantanés de structure : 2,4 Mo chacun, 441 Mo pour 183 étapes. Il faudrait partager les plans entre instantanés (`Arc<Panel>`) : refonte
   de `Document::panels`, non faite.
 - Dessins vectoriels : 11,3 M de points au début, 5 M après élagage ; pas de rangement des points.
 - L'élagage ne touche pas aux projets des autres onglets ni aux projets partagés.
+### 7.5 Corrections après relecture (2026-11-05)
+
+- Le rangement des dessins dérivés ignorait les changements de projet : il pouvait remettre un dessin de l'ancien projet dans le cache du nouveau
+  (octets mal comptés, effet d'un autre projet servi si les numéros coïncident). Les octets quittent le compte pendant le rangement, un compteur
+  de changements (`forget_all`, `mettre_de_cote`, `rendre`) fait tout jeter, et un dessin visé par `update`, `put` ou un calcul pendant le
+  rangement n'est pas remis tel qu'il était. Essais qui échouent sans le correctif.
+- `load_doc` vide les notes de l'élagage ; seul le gel du projet affiché passe sur les caches communs (les onglets cachés le faisaient aussi).
+- L'élagage retient `CalqueCouleur::dessins` (couleur d'un trait) même quand aucune image de couleur ne le montre.

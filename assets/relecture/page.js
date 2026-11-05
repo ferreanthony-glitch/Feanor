@@ -1,6 +1,6 @@
 (function () {
   'use strict';
-  /* Page de relecture SHOT : aucune requête, aucun script ni service du dehors. Le texte du projet n'est
+  /* Page de relecture FEANOR : aucune requête, aucun script ni service du dehors. Le texte du projet n'est
      jamais écrit dans ce script : il est lu dans la page (attributs data-*). */
   var body = document.body;
   var PAQUET = body.getAttribute('data-paquet') || '';

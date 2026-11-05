@@ -78,7 +78,7 @@ pub(crate) const FAMILLES: [(&str, &[Export]); 4] = [
             (ph::FILE_PDF, "Storyboard PDF", "Les plans en planches à imprimer ou à envoyer, avec leurs textes ; format de page et nombre de cases au choix.", "fichier.exporter_pdf"),
             (ph::SQUARES_FOUR, "Planche des vignettes", "Toute la planche des Vignettes en une grande image ou en PDF : numéros, notes, barres, cadres de caméra, annotations, marie-louise.", "fichier.exporter_planche"),
             (ph::PALETTE, "Color script", "Une petite image par plan, rangées par séquence sur un fond uni : la couleur du film d'un coup d'œil.", "fichier.exporter_colorscript"),
-            (ph::EYEGLASSES, "Relecture", "Une page sans internet à envoyer au réalisateur : il écrit ses notes et dessine dessus, SHOT les relit ensuite.", "fichier.exporter_relecture"),
+            (ph::EYEGLASSES, "Relecture", "Une page sans internet à envoyer au réalisateur : il écrit ses notes et dessine dessus, FEANOR les relit ensuite.", "fichier.exporter_relecture"),
             (ph::ARROWS_LEFT_RIGHT, "Journal des différences", "Ce qui a changé entre deux envois : seulement les plans modifiés (avant / après, part de l'image qui diffère, durée), les plans ajoutés, retirés ou déplacés, les notes traitées. PDF et page HTML à joindre à l'envoi.", "envoi.journal"),
         ],
     ),
@@ -627,7 +627,7 @@ impl App {
             Groupe::Stylet => {
                 let resp = ui.checkbox(&mut self.settings.system_cursor, "Croix du système sur le pinceau").on_hover_text(
                     "Affiche la croix de Windows à la pointe, en plus du cercle du pinceau : elle suit le \
-                     stylet sans retard (le cercle, dessiné par SHOT, arrive une image plus tard).",
+                     stylet sans retard (le cercle, dessiné par FEANOR, arrive une image plus tard).",
                 );
                 if resp.changed() {
                     let _ = self.settings.save();
@@ -719,7 +719,7 @@ impl App {
             }
             Groupe::StyletMain => {
                 let b = ui.button("Régler le stylet à ma main…");
-                if crate::bulles::bulle(b, "Régler le stylet à ma main", "Trace trois traits (léger, moyen, appuyé) : SHOT règle la courbe de pression du stylet sur ta main, après un aperçu et ta confirmation. Avec la souris, l'appui est toujours de 100 %.", &self.raccourci("aide.regler_stylet")).clicked() {
+                if crate::bulles::bulle(b, "Régler le stylet à ma main", "Trace trois traits (léger, moyen, appuyé) : FEANOR règle la courbe de pression du stylet sur ta main, après un aperçu et ta confirmation. Avec la souris, l'appui est toujours de 100 %.", &self.raccourci("aide.regler_stylet")).clicked() {
                     sortie.action = Some("aide.regler_stylet");
                 }
             }
@@ -732,19 +732,19 @@ impl App {
         let ffmpeg = self.settings.ffmpeg.clone();
         egui::Grid::new("prefs_programmes").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
             let l = ui.label("ffmpeg (vidéo, GIF, son)");
-            crate::bulles::bulle(l, "ffmpeg", "Le programme qui fabrique les vidéos, les GIF et le son des exports. Par défaut SHOT le cherche tout seul à chaque export.", "");
+            crate::bulles::bulle(l, "ffmpeg", "Le programme qui fabrique les vidéos, les GIF et le son des exports. Par défaut FEANOR le cherche tout seul à chaque export.", "");
             ui.horizontal(|ui| {
                 match &ffmpeg {
                     Some(p) => ui.label(p.file_name().map_or_else(String::new, |n| n.to_string_lossy().into_owned())).on_hover_text(p.display().to_string()),
                     None => ui.label(RichText::new("cherché tout seul").weak()),
                 };
                 let b = ui.button("Choisir…");
-                if crate::bulles::bulle(b, "Choisir ffmpeg", "Indique où est ffmpeg.exe si SHOT ne le trouve pas.", "").clicked() {
+                if crate::bulles::bulle(b, "Choisir ffmpeg", "Indique où est ffmpeg.exe si FEANOR ne le trouve pas.", "").clicked() {
                     self.choose_ffmpeg();
                 }
                 if ffmpeg.is_some() {
                     let b = ui.button("Automatique");
-                    if crate::bulles::bulle(b, "Chercher tout seul", "Oublie le choix fait à la main : SHOT cherche ffmpeg à chaque export.", "").clicked() {
+                    if crate::bulles::bulle(b, "Chercher tout seul", "Oublie le choix fait à la main : FEANOR cherche ffmpeg à chaque export.", "").clicked() {
                         self.settings.ffmpeg = None;
                         self.ffmpeg = None;
                         let _ = self.settings.save();
@@ -755,7 +755,7 @@ impl App {
         });
         ui.add_space(4.0);
         let b = ui.button(format!("{}  Ouvrir la fenêtre Exporter…", ph::EXPORT));
-        if crate::bulles::bulle(b, "Ouvrir la fenêtre Exporter", "Les exports (film, GIF, images, PDF, son…) : le dossier, le format et les colonnes se choisissent dans chaque fenêtre d'export, et SHOT les retient.", &self.raccourci("fichier.exporter")).clicked() {
+        if crate::bulles::bulle(b, "Ouvrir la fenêtre Exporter", "Les exports (film, GIF, images, PDF, son…) : le dossier, le format et les colonnes se choisissent dans chaque fenêtre d'export, et FEANOR les retient.", &self.raccourci("fichier.exporter")).clicked() {
             sortie.action = Some("fichier.exporter");
         }
     }

@@ -66,7 +66,7 @@ impl App {
                 ui.label(RichText::new(m).small().color(theme::succes()));
             }
             Some(Err(e)) => {
-                ui.colored_label(theme::avertissement(), e);
+                crate::theme::avertir(ui, e);
             }
             None => {}
         }

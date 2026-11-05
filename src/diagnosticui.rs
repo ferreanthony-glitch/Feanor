@@ -303,7 +303,7 @@ impl App {
                 let zone = if pied { (ui.available_height() - 84.0).max(160.0) } else { ui.available_height().max(120.0) };
                 egui::ScrollArea::vertical().max_height(zone).auto_shrink([false, !pied]).show(ui, |ui| {
                     ui.set_min_width(590.0);
-                    ui.label(RichText::new("SHOT détecte ta machine, la mesure une quinzaine de secondes, puis propose des réglages. Rien n'est appliqué sans ton accord.").color(theme::texte_doux()));
+                    ui.label(RichText::new("FEANOR détecte ta machine, la mesure une quinzaine de secondes, puis propose des réglages. Rien n'est appliqué sans ton accord.").color(theme::texte_doux()));
                     ui.add_space(6.0);
                     let resultats = self.diag.fait.is_some() && self.diag.banc.is_none();
                     if let Some(m) = &self.diag.fait.as_ref().map(|t| &t.materiel).or(self.diag.materiel.as_ref()) {
@@ -319,7 +319,7 @@ impl App {
                     // Le budget de mémoire vidéo du système et ce que le cache des dessins en fait (`memoirevideo.rs`).
                     if let Some(l) = crate::memoirevideo::lecture() {
                         let vise = self.gpu.as_ref().map_or(0, |g| g.limite_octets());
-                        let texte = format!("Mémoire vidéo de SHOT : {} Mo utilisés, budget du système {} Mo ; cache des dessins visé : {} Mo.", l.utilise >> 20, l.budget >> 20, vise >> 20);
+                        let texte = format!("Mémoire vidéo de FEANOR : {} Mo utilisés, budget du système {} Mo ; cache des dessins visé : {} Mo.", l.utilise >> 20, l.budget >> 20, vise >> 20);
                         ui.label(RichText::new(texte).small().color(theme::texte_doux()));
                     }
                     for ligne in crate::memoirevideo::journal().iter().rev().take(3) {
@@ -344,7 +344,7 @@ impl App {
                     if let Some(banc) = &self.diag.banc {
                         let fraction = banc.avancement.fraction();
                         ui.label(RichText::new("Mesures en cours").strong());
-                        ui.add(egui::ProgressBar::new(fraction).desired_width(ui.available_width()).text(format!("{} — {} %", banc.avancement.etape(), (fraction * 100.0).round())));
+                        ui.add(crate::barre::Barre::new(fraction).desired_width(ui.available_width()).text(format!("{} — {} %", banc.avancement.etape(), (fraction * 100.0).round())));
                         ui.label(RichText::new("L'interface reste utilisable. Les mesures n'ouvrent aucun projet.").small().color(theme::texte_doux()));
                         annuler = crate::bulles::bulle(ui.button("Annuler"), "Annuler", "Arrête les mesures. Rien n'est changé.", "").clicked();
                         ctx.request_repaint_after(Duration::from_millis(100));
@@ -354,7 +354,7 @@ impl App {
                         ui.add_space(4.0);
                         ui.horizontal(|ui| {
                             let go = ui.button(RichText::new("Lancer le diagnostic").strong());
-                            lancer = crate::bulles::bulle(go, "Lancer le diagnostic", "Détecte le matériel et mesure SHOT pendant une quinzaine de secondes, sur un autre fil.", "").clicked();
+                            lancer = crate::bulles::bulle(go, "Lancer le diagnostic", "Détecte le matériel et mesure FEANOR pendant une quinzaine de secondes, sur un autre fil.", "").clicked();
                             if self.settings.diagnostic.peut_revenir() {
                                 revenir = crate::bulles::bulle(ui.button("Revenir comme avant"), "Revenir comme avant", "Remet les réglages de performance d'avant le dernier profil appliqué.", "").clicked();
                             }
@@ -498,8 +498,8 @@ impl App {
         egui::Area::new(egui::Id::new("diagnostic_offre")).order(egui::Order::Foreground).anchor(Align2::RIGHT_BOTTOM, egui::vec2(-16.0, -120.0)).show(ctx, |ui| {
             egui::Frame::popup(ui.style()).fill(theme::eleve()).stroke(egui::Stroke::new(1.0_f32, theme::accent_texte())).show(ui, |ui| {
                 ui.set_max_width(400.0);
-                ui.label(RichText::new("Régler SHOT pour cette machine ?").strong().color(theme::texte_fort()));
-                ui.add(egui::Label::new(RichText::new("SHOT peut détecter ton matériel, le mesurer une quinzaine de secondes et proposer des réglages de performance. Rien n'est appliqué sans ton accord. Plus tard : Aide > Régler SHOT pour cette machine.").color(theme::texte_doux())).wrap());
+                ui.label(RichText::new("Régler FEANOR pour cette machine ?").strong().color(theme::texte_fort()));
+                ui.add(egui::Label::new(RichText::new("FEANOR peut détecter ton matériel, le mesurer une quinzaine de secondes et proposer des réglages de performance. Rien n'est appliqué sans ton accord. Plus tard : Aide > Régler FEANOR pour cette machine.").color(theme::texte_doux())).wrap());
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     if crate::bulles::bulle(ui.button(RichText::new("Lancer le diagnostic").strong()), "Lancer le diagnostic", "Ouvre le diagnostic et démarre les mesures.", "").clicked() {

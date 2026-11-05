@@ -57,7 +57,7 @@ pub const ANAMORPHIC_FORMAT: [f32; 2] = [2.39, 1.0];
 pub const FOCAL_PRESETS: [FocalPreset; 8] = [
     FocalPreset { name: "Très grand angle", mm: 14.0, note: "Champ très large, perspective exagérée.", anamorphic: false },
     FocalPreset { name: "Grand angle (courte)", mm: 24.0, note: "Large, profondeur marquée : décors, espaces.", anamorphic: false },
-    FocalPreset { name: "Normale", mm: 35.0, note: "Le zoom 100 % de SHOT : le cadre vu tel quel.", anamorphic: false },
+    FocalPreset { name: "Normale", mm: 35.0, note: "Le zoom 100 % de FEANOR : le cadre vu tel quel.", anamorphic: false },
     FocalPreset { name: "Standard", mm: 50.0, note: "Proche du regard : champ sans exagération.", anamorphic: false },
     FocalPreset { name: "Portrait", mm: 85.0, note: "Resserré, fonds aplatis : visages.", anamorphic: false },
     FocalPreset { name: "Téléobjectif (longue)", mm: 135.0, note: "Étroit, plans écrasés les uns sur les autres.", anamorphic: false },
@@ -66,7 +66,7 @@ pub const FOCAL_PRESETS: [FocalPreset; 8] = [
         name: "Anamorphique",
         mm: 40.0,
         note: "40 mm et cadre 2,39:1 posé en repère. Un vrai objectif anamorphique comprime l'image en largeur (×2 en général) \
-               et on la redresse ensuite : SHOT ne déforme pas le dessin, il montre seulement le cadre.",
+               et on la redresse ensuite : FEANOR ne déforme pas le dessin, il montre seulement le cadre.",
         anamorphic: true,
     },
 ];

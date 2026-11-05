@@ -206,7 +206,7 @@ pub fn brush_settings(keys: &HashMap<String, Plist>, notes: &mut Vec<String>) ->
     }
     if let Some(m) = num("dynamicsMix").filter(|m| *m > 0.0) {
         s.mix = m.clamp(0.0, 1.0);
-        notes.push("mélange humide (Wet Mix) pris comme le mélange de SHOT, à comparer".into());
+        notes.push("mélange humide (Wet Mix) pris comme le mélange de FEANOR, à comparer".into());
     }
     if let Some(l) = num("dynamicsLoad").filter(|l| *l > 0.0 && *l < 1.0) {
         s.charge = l.clamp(0.0, 1.0);

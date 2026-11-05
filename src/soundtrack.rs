@@ -666,10 +666,10 @@ impl App {
             );
             painter.text(mute.center(), Align2::CENTER_CENTER, "M", font.clone(), if track.muted { Color32::WHITE } else { theme::texte_fort() });
             // Solo : seules les pistes en solo s'entendent (`audiofx::audible`).
-            painter.rect_filled(solo, 3.0, if track.solo { theme::avertissement() } else { theme::controle_survol() });
+            painter.rect_filled(solo, 3.0, if track.solo { theme::accent() } else { theme::controle_survol() });
             painter.text(solo.center(), Align2::CENTER_CENTER, "S", font.clone(), if track.solo { Color32::BLACK } else { theme::texte_fort() });
             // Verrou : ses extraits ne bougent plus.
-            painter.rect_filled(lock, 3.0, if track.locked { theme::avertissement() } else { theme::controle_survol() });
+            painter.rect_filled(lock, 3.0, if track.locked { theme::accent() } else { theme::controle_survol() });
             let icone = if track.locked { egui_phosphor::regular::LOCK_SIMPLE } else { egui_phosphor::regular::LOCK_SIMPLE_OPEN };
             painter.text(lock.center(), Align2::CENTER_CENTER, icone, font, if track.locked { Color32::BLACK } else { theme::texte_fort() });
             // Le volume, quand la colonne est assez large pour le dire à droite des boutons.

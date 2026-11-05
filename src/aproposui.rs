@@ -1,47 +1,62 @@
-//! Aide > À propos de SHOT… (`aide.a_propos`) : une petite fenêtre modale avec le logo (celui des
-//! fonds sombres ou celui des fonds clairs, selon le thème ; la devise « Frame the story » est
-//! dans le dessin), la version, et le nom d'avant. Échap, un clic à côté ou « Fermer » la ferment.
+//! Aide > À propos de FEANOR… (`aide.a_propos`) : une petite fenêtre modale avec le lockup de la marque (le mot, le Joyau
+//! jade devant le mot, la devise « Forge your story » alignée sur le R), la version, les noms d'avant et les polices de marque. Échap, un
+//! clic à côté ou « Fermer » la ferment.
 //!
 //! La date de fabrication n'y est pas : la compilation ne l'écrit nulle part sans coûter une
 //! recompilation à chaque fois.
 
-use eframe::egui::{self, Align, Layout, RichText};
+use eframe::egui::{self, pos2, vec2, Align, Layout, RichText, Sense};
 
 use crate::app::App;
-use crate::logo::{VUE_H, VUE_L};
+use crate::logo::Joyau;
+use crate::marque::{self, Mise};
 
-/// Largeur du logo dans la fenêtre, en points.
-const LOGO_LARGEUR: f32 = 280.0;
+/// Hauteur des capitales du mot dans la fenêtre, en points (le Joyau fait alors plus de 32 points).
+const CAPITALES: f32 = 40.0;
+/// Largeur de la fenêtre, en points.
+const LARGEUR: f32 = 320.0;
 
-/// Le nom d'avant le logiciel.
-const ANCIEN_NOM: &str = "Pelure";
+/// Les noms d'avant le logiciel.
+const ANCIENS_NOMS: &str = "SHOT, Pelure";
 
 /// « Version 0.1.0 », d'après Cargo.toml.
 pub(crate) fn version_text() -> String {
     format!("Version {}", env!("CARGO_PKG_VERSION"))
 }
 
-/// La ligne sur le nom d'avant.
+/// La ligne sur les noms d'avant.
 pub(crate) fn ancien_nom_text() -> String {
-    format!("Anciennement {ANCIEN_NOM}")
+    format!("Anciennement {ANCIENS_NOMS}")
+}
+
+/// La ligne sur les polices de marque (licence SIL OFL 1.1, fichiers dans `assets/polices/`).
+pub(crate) fn polices_text() -> &'static str {
+    "Polices : Big Shoulders Display, IBM Plex (licence SIL OFL 1.1)"
 }
 
 impl App {
-    /// La fenêtre « À propos de SHOT ».
+    /// La fenêtre « À propos de FEANOR ».
     pub(crate) fn about_window_ui(&mut self, ctx: &egui::Context) {
         if !self.about_window {
             return;
         }
         let mut close = false;
-        let modal = egui::Modal::new(egui::Id::new("a_propos_shot")).show(ctx, |ui| {
-            ui.set_width(LOGO_LARGEUR + 40.0);
+        let modal = egui::Modal::new(egui::Id::new("a_propos_feanor")).show(ctx, |ui| {
+            ui.set_width(LARGEUR);
             ui.vertical_centered(|ui| {
                 ui.add_space(8.0);
-                let texture = crate::accueil::logo_texture(ctx, LOGO_LARGEUR);
-                ui.image(egui::load::SizedTexture::new(texture.id(), egui::vec2(LOGO_LARGEUR, LOGO_LARGEUR * VUE_H / VUE_L)));
-                ui.add_space(10.0);
+                let p = crate::theme::palette();
+                // (Le lockup rétrécit plutôt que d'être coupé.)
+                let capitales = marque::ajuster(ctx, ui.available_width() - 8.0, CAPITALES, Mise::Devant);
+                let mesure = marque::disposer(ctx, pos2(0.0, 0.0), capitales, true, Mise::Devant).rect;
+                let (zone, _) = ui.allocate_exact_size(vec2(mesure.width(), mesure.height()), Sense::hover());
+                let texture = marque::texture_joyau(ctx, "apropos", marque::cote_joyau(capitales), Joyau::Jade, None);
+                let origine = pos2(zone.left() - mesure.min.x, zone.top() - mesure.min.y);
+                marque::peindre(ui.painter(), ctx, &texture, origine, capitales, p.texte_fort, Some(p.texte_doux), Mise::Devant);
+                ui.add_space(14.0);
                 ui.label(RichText::new(version_text()).strong());
                 ui.label(RichText::new(ancien_nom_text()).weak());
+                ui.label(RichText::new(polices_text()).small().weak());
                 ui.add_space(10.0);
             });
             ui.separator();
