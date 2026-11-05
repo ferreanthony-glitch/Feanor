@@ -30,12 +30,12 @@ fn rougeatre(c: Color32) -> bool {
 // ---------------------------------------------------------------------------------------- choix du thème
 
 #[test]
-fn a_fresh_install_gets_atelier_the_dark_brand_theme() {
-    assert_eq!(Settings::default().theme.choix, ChoixTheme::Shot);
-    assert_eq!(toml::from_str::<Settings>("").unwrap().theme.choix, ChoixTheme::Shot);
-    assert_eq!(ChoixTheme::default().nom(), "Atelier");
-    assert_eq!(ChoixTheme::TOUS.map(ChoixTheme::nom), ["Atelier", "Papier", "Gris sombre", "Gris clair", "Sombre", "Personnalisé"]);
-    assert_eq!(ReglageTheme::default().couleurs(), Couleurs::shot());
+fn a_fresh_install_gets_the_dark_grey_theme_with_touches_of_jade() {
+    assert_eq!(Settings::default().theme.choix, ChoixTheme::GrisSombre);
+    assert_eq!(toml::from_str::<Settings>("").unwrap().theme.choix, ChoixTheme::GrisSombre);
+    assert_eq!(ChoixTheme::default().nom(), "Gris sombre");
+    assert_eq!(ChoixTheme::TOUS.map(ChoixTheme::nom), ["Gris sombre", "Atelier", "Papier", "Gris clair", "Sombre", "Personnalisé"]);
+    assert_eq!(ReglageTheme::default().couleurs(), Couleurs::gris_sombre());
 }
 
 #[test]
@@ -61,6 +61,7 @@ fn a_computer_that_already_chose_a_theme_keeps_it() {
     assert!(!Palette::depuis(&s.theme.couleurs()).identite, "les thèmes d'avant la marque n'ont pas ses jetons");
     // Un thème personnalisé qui part d'Atelier garde les jetons de la marque (et les relit).
     let mut r = ReglageTheme::default();
+    r.choisir(ChoixTheme::Shot);
     let mut co = r.couleurs();
     co.fond = [30, 10, 10];
     r.modifier(co);
@@ -70,6 +71,12 @@ fn a_computer_that_already_chose_a_theme_keeps_it() {
     let relu: Settings = toml::from_str(&toml::to_string(&s).unwrap()).unwrap();
     assert_eq!(relu.theme, r);
     assert!(relu.theme.couleurs().identite);
+    // Un thème personnalisé écrit avant ce réglage ne change pas d'aspect ; celui qui part de Gris sombre en garde les touches de jade.
+    let ancien: Settings = toml::from_str("[theme]\nchoix = \"personnalise\"\n[theme.perso]\naccent = [10, 20, 30]\n").unwrap();
+    assert!(!ancien.theme.couleurs().jade_discret);
+    let mut r = ReglageTheme::default();
+    r.choisir(ChoixTheme::Personnalise);
+    assert!(r.couleurs().jade_discret);
 }
 
 // ---------------------------------------------------------------------------------------- jetons et contrastes
@@ -134,6 +141,17 @@ fn brand_texts_borders_and_alerts_meet_their_contrast_in_both_themes() {
         }
         assert_eq!(p.accent, c(theme::JADE), "{nom} : l'accent reste le jade");
     }
+}
+
+#[test]
+fn dark_grey_stays_grey_and_uses_jade_only_in_small_touches() {
+    // Anthony (2026-11-05) : l'interface est grise, le jade reste un petit rehaut ; les sortes de calques gardent leurs couleurs FEANOR.
+    let p = palette(Couleurs::gris_sombre());
+    assert!(p.jade_discret && !p.identite);
+    assert_eq!((p.accent, p.selection), (Color32::from_gray(200), Color32::from_gray(200)), "la sélection reste en gris clair");
+    assert_eq!(p.rehaut, c(theme::JADE));
+    assert_eq!(p.calque_vectoriel, palette(Couleurs::shot()).selection, "le même jade sombre que dans Atelier");
+    assert_eq!((p.calque_bitmap, p.calque_couleur), (c(theme::IRIS_LILAS_PROFOND), c(theme::IRIS_ROSE_PROFOND)));
 }
 
 #[test]
@@ -236,10 +254,10 @@ fn the_active_workspace_is_a_selected_tab_with_readable_ink_and_a_thin_jade_line
         let formes = a_plat(&b.formes);
         let (t, mot) = texte_a(&formes, &format!(" {} ", espace.nom())).unwrap_or_else(|| panic!("onglet {}", espace.nom()));
         assert_eq!(t.galley.job.sections[0].format.color, theme::sur_selection(), "{} : encre sur le fond de sélection", espace.nom());
-        assert_eq!(theme::sur_accent(), c(theme::SUR_JADE));
         assert!(formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == theme::selection() && r.rect.intersects(mot))), "{} : fond de sélection (jade profond dans Atelier)", espace.nom());
         // Le mince trait jade sous le mot actif.
         let traits: Vec<Rect> = formes.iter().filter_map(|s| if let Shape::Rect(r) = s { (r.fill == theme::rehaut() && r.rect.height() <= 2.5 && r.rect.width() < 120.0 && r.rect.width() > 8.0).then_some(r.rect) } else { None }).collect();
+        assert_eq!(theme::rehaut(), c(theme::JADE), "Gris sombre : un trait de jade");
         assert!(traits.iter().any(|tr| tr.center().x > mot.left() && tr.center().x < mot.right() && tr.center().y > mot.center().y), "{} : un trait sous le mot : {traits:?}", espace.nom());
     }
 }

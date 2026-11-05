@@ -121,11 +121,11 @@ impl App {
                                 } else {
                                     painter.line_segment([rect.left_top() + vec2(0.0, 5.0), rect.left_bottom() - vec2(0.0, 5.0)], Stroke::new(1.0_f32, pal.bord));
                                 }
-                                // La pastille d'un projet pas enregistré, puis le nom.
+                                // La pastille d'un projet pas enregistré (jade dans Gris sombre), puis le nom.
                                 let encre = if info.actif { pal.texte_fort } else { pal.texte_doux };
                                 let mut x = rect.left() + 9.0;
                                 if info.a_perdre() {
-                                    painter.circle_filled(pos2(x + 3.0, rect.center().y), 3.0, pal.avertissement);
+                                    painter.circle_filled(pos2(x + 3.0, rect.center().y), 3.0, if pal.jade_discret { pal.rehaut } else { pal.avertissement });
                                     x += 12.0;
                                 }
                                 let texte_max = (croix_rect.left() - 4.0 - x).max(10.0);

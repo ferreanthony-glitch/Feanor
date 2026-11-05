@@ -1,6 +1,6 @@
 //! Tests du thème : les textes restent lisibles sur leurs fonds dans chacun des quatre thèmes
-//! livrés (SHOT et les trois gris), l'accent marque la sélection, le thème « Personnalisé »
-//! naît d'une couleur changée, les réglages se relisent (une installation neuve donne SHOT, un poste
+//! livrés (Atelier et les trois gris), l'accent marque la sélection, le thème « Personnalisé »
+//! naît d'une couleur changée, les réglages se relisent (une installation neuve donne Gris sombre, un poste
 //! qui a déjà choisi un thème le garde), la police de Windows passe devant celles d'egui sans les
 //! remplacer. La charte (couleurs, contrastes, ce que l'accent touche) est dans `charte_tests.rs`.
 
@@ -29,9 +29,9 @@ fn contrast_is_computed_like_wcag() {
 }
 
 #[test]
-fn the_default_theme_is_shot_and_the_grey_themes_stay_neutral() {
-    assert_eq!(ReglageTheme::default().choix, ChoixTheme::Shot);
-    assert_eq!(ReglageTheme::default().couleurs(), Couleurs::shot());
+fn the_default_theme_is_dark_grey_and_the_grey_themes_stay_neutral() {
+    assert_eq!(ReglageTheme::default().choix, ChoixTheme::GrisSombre);
+    assert_eq!(ReglageTheme::default().couleurs(), Couleurs::gris_sombre());
     // Des gris neutres, pas du bleu-noir : rouge, vert et bleu égaux aux fonds.
     for (choix, p) in livres() {
         if choix == ChoixTheme::Shot {
@@ -143,10 +143,10 @@ fn each_kind_of_layer_has_its_colour() {
     use crate::document::LayerKind;
     for (choix, p) in livres() {
         theme::installer(&ReglageTheme { choix, perso: Couleurs::default() });
-        // Anthony (2026-10-28), thèmes de gris : vectoriel orange, bitmap bleu, calque de couleur rose ; trois couleurs distinctes.
-        // (Atelier et Papier ont leurs couleurs à eux : essai suivant.)
+        // Anthony (2026-10-28), Gris clair et Sombre : vectoriel orange, bitmap bleu, calque de couleur rose ; trois couleurs distinctes.
+        // (Atelier, Papier et Gris sombre ont les couleurs FEANOR : essai suivant.)
         let (b, v, c) = (theme::couleur_calque(LayerKind::Bitmap, false), theme::couleur_calque(LayerKind::Vector, false), theme::couleur_calque(LayerKind::Bitmap, true));
-        if !p.identite {
+        if !p.identite && !p.jade_discret {
             assert!(b.b() > b.r() && b.b() > b.g(), "{choix:?} : bitmap bleu");
             assert!(v.r() > v.g() && v.g() > v.b(), "{choix:?} : vectoriel orange");
             assert!(c.r() > c.g() && c.b() > c.g(), "{choix:?} : calque de couleur rose");
@@ -158,18 +158,21 @@ fn each_kind_of_layer_has_its_colour() {
 }
 
 #[test]
-fn the_brand_themes_colour_the_kinds_of_layers_from_the_feanor_palette() {
+fn the_feanor_themes_colour_the_kinds_of_layers_from_the_feanor_palette() {
     // Anthony (2026-11-05) : les sortes de calques redeviennent différentes, en couleurs FEANOR, le vectoriel en jade sombre.
     let c = |r: [u8; 3]| Color32::from_rgb(r[0], r[1], r[2]);
-    for (choix, p) in livres().into_iter().filter(|(_, p)| p.identite) {
+    for (choix, p) in livres().into_iter().filter(|(_, p)| p.identite || p.jade_discret) {
         // Le jade sombre : le même que la sélection dans Atelier ; un jade à peine plus foncé dans Papier.
         if p.claire {
             assert!(p.calque_vectoriel.g() > p.calque_vectoriel.r() && p.calque_vectoriel.g().abs_diff(p.calque_vectoriel.b()) <= 2, "{choix:?} : jade");
-        } else {
+        } else if p.identite {
             assert_eq!(p.calque_vectoriel, p.selection, "{choix:?} : le jade sombre de la sélection");
         }
         let ecart = |a: Color32, b: Color32| a.r().abs_diff(b.r()).max(a.g().abs_diff(b.g())).max(a.b().abs_diff(b.b()));
-        assert!(ecart(p.dessin_vectoriel, c(theme::JADE_PROFOND)) <= 16, "{choix:?} : le jade profond, à peine éclairci : {:?}", p.dessin_vectoriel);
+        if p.identite {
+            assert!(ecart(p.dessin_vectoriel, c(theme::JADE_PROFOND)) <= 16, "{choix:?} : le jade profond, à peine éclairci : {:?}", p.dessin_vectoriel);
+        }
+        assert!(p.dessin_vectoriel.g() > p.dessin_vectoriel.r() && p.calque_vectoriel.g() > p.calque_vectoriel.r(), "{choix:?} : le vectoriel reste jade");
         // Les bandes vives et les fonds se distinguent deux à deux, et aucun n'est le rouge d'alerte.
         let vives = [p.dessin_vectoriel, p.dessin_bitmap, p.dessin_couleur, p.dessin_cfx, p.dessin_annotation, p.dessin_unie];
         let fonds = [p.calque_vectoriel, p.calque_bitmap, p.calque_couleur, p.calque_cfx, p.calque_annotation, p.calque_unie];
@@ -307,7 +310,7 @@ fn editing_a_colour_switches_to_custom_starting_from_the_current_theme() {
 }
 
 #[test]
-fn restore_goes_back_to_shot() {
+fn restore_goes_back_to_dark_grey() {
     let mut r = ReglageTheme::default();
     r.choisir(ChoixTheme::Personnalise);
     let mut c = r.couleurs();
@@ -315,7 +318,7 @@ fn restore_goes_back_to_shot() {
     r.modifier(c);
     r.retablir();
     assert_eq!(r, ReglageTheme::default());
-    assert_eq!(r.choix, ChoixTheme::Shot);
+    assert_eq!(r.choix, ChoixTheme::GrisSombre);
 }
 
 #[test]
@@ -338,13 +341,13 @@ fn a_custom_theme_derives_a_readable_palette() {
 
 #[test]
 fn settings_round_trip_and_old_files_get_the_default_theme() {
-    // Un vieux fichier, sans section [theme] (une installation neuve) : SHOT.
+    // Un vieux fichier, sans section [theme] (une installation neuve) : Gris sombre.
     let old: Settings = toml::from_str("copie_secours_minutes = 3\nrouvrir_dernier_projet = false\n").unwrap();
     assert_eq!(old.theme, ReglageTheme::default());
-    assert_eq!(old.theme.choix, ChoixTheme::Shot);
+    assert_eq!(old.theme.choix, ChoixTheme::GrisSombre);
     assert_eq!(old.autosave_minutes, 3);
     // Un fichier vide aussi.
-    assert_eq!(toml::from_str::<Settings>("").unwrap().theme.choix, ChoixTheme::Shot);
+    assert_eq!(toml::from_str::<Settings>("").unwrap().theme.choix, ChoixTheme::GrisSombre);
     // Une section incomplète complète ses trous.
     let partial: Settings = toml::from_str("[theme]\nchoix = \"gris_clair\"\n").unwrap();
     assert_eq!(partial.theme.choix, ChoixTheme::GrisClair);

@@ -2,11 +2,12 @@
 //! `Visuals` d'egui posés une seule fois quand le thème change. Seulement des couleurs et des
 //! tailles : aucun élément ni ressource graphique repris.
 //!
-//! Six choix. **Atelier** (par défaut, la marque FEANOR en sombre) et **Papier** (la marque en clair) suivent le livre de marque :
+//! Six choix. **Gris sombre** est le thème de base (Anthony, 2026-11-05) : l'interface reste grise, avec les couleurs FEANOR des sortes de
+//! calques et deux petits rehauts jade (Couleurs::jade_discret). **Atelier** (la marque FEANOR en sombre) et **Papier** (la marque en clair) suivent le livre de marque :
 //! les jetons `sol`, `panneau`, `canevas`, `ligne`, `ligne forte`, `encre`, `encre douce`, `jade`, `jade texte` et `sur jade`
 //! (constantes `ATELIER_*`, `PAPIER_*`, `JADE`, `SUR_JADE` plus bas). Le jade est l'accent (sélection, onglet actif, curseurs) avec
 //! l'encre `sur jade` écrite dessus ; les bordures des champs et des boutons sont en `ligne forte` (3:1 au moins) ; pas d'ombres
-//! portées. Puis trois thèmes de gris neutres (Anthony, 2026-10-18 : « un gris sombre/clair ») : **Gris sombre**, **Gris clair** et
+//! portées. Puis trois thèmes de gris neutres (Anthony, 2026-10-18 : « un gris sombre/clair ») : **Gris clair** et
 //! **Sombre** (l'ancien presque noir) ; ils gardent leurs couleurs d'avant la marque. Un dernier, **Personnalisé**, part du thème
 //! courant et se règle dans Fichier > Préférences… avec neuf couleurs ; tout le reste de la palette (survol, onglet actif, texte
 //! secondaire, couleur des dessins sur la timeline…) en est déduit, et choisi pour rester lisible sur le thème (contraste WCAG,
@@ -43,11 +44,12 @@ fn couleur(c: Rvb) -> Color32 {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ChoixTheme {
-    /// « Atelier », la marque FEANOR en sombre : le thème d'une installation neuve.
-    #[default]
+    /// « Atelier », la marque FEANOR en sombre.
     Shot,
     /// Le thème clair de la marque : « Papier ».
     Papier,
+    /// Le thème d'une installation neuve (Anthony, 2026-11-05).
+    #[default]
     GrisSombre,
     GrisClair,
     Sombre,
@@ -55,7 +57,7 @@ pub enum ChoixTheme {
 }
 
 impl ChoixTheme {
-    pub const TOUS: [ChoixTheme; 6] = [ChoixTheme::Shot, ChoixTheme::Papier, ChoixTheme::GrisSombre, ChoixTheme::GrisClair, ChoixTheme::Sombre, ChoixTheme::Personnalise];
+    pub const TOUS: [ChoixTheme; 6] = [ChoixTheme::GrisSombre, ChoixTheme::Shot, ChoixTheme::Papier, ChoixTheme::GrisClair, ChoixTheme::Sombre, ChoixTheme::Personnalise];
 
     pub fn nom(self) -> &'static str {
         match self {
@@ -98,6 +100,10 @@ pub struct Couleurs {
     /// dans les préférences ; absent d'un fichier de réglages, il vaut « non ».
     #[serde(default)]
     pub identite: bool,
+    /// Vrai pour Gris sombre : une interface grise avec les couleurs FEANOR des sortes de calques, et le jade en petites touches
+    /// seulement (trait sous l'espace actif, pastille de l'onglet). Pas réglé dans les préférences ; absent d'un fichier de réglages, il vaut « non ».
+    #[serde(default)]
+    pub jade_discret: bool,
 }
 
 // Les jetons de couleur du livre de marque FEANOR (sombre « Atelier » / clair « Papier »).
@@ -151,7 +157,7 @@ pub const CIEL: Rvb = [0x7F, 0xC4, 0xE0];
 pub const CIEL_PROFOND: Rvb = [0x3A, 0x62, 0x9E];
 impl Default for Couleurs {
     fn default() -> Self {
-        Couleurs::shot()
+        Couleurs::gris_sombre()
     }
 }
 
@@ -169,6 +175,7 @@ impl Couleurs {
             timeline: ATELIER_CANEVAS,
             bordure: ATELIER_LIGNE,
             identite: true,
+            jade_discret: false,
         }
     }
 
@@ -185,6 +192,7 @@ impl Couleurs {
             timeline: PAPIER_SOL,
             bordure: PAPIER_LIGNE,
             identite: true,
+            jade_discret: false,
         }
     }
     pub const fn gris_sombre() -> Couleurs {
@@ -201,6 +209,7 @@ impl Couleurs {
             timeline: [72, 72, 72],
             bordure: [80, 80, 80],
             identite: false,
+            jade_discret: true,
         }
     }
 
@@ -217,6 +226,7 @@ impl Couleurs {
             timeline: [205, 205, 205],
             bordure: [150, 150, 150],
             identite: false,
+            jade_discret: false,
         }
     }
 
@@ -233,6 +243,7 @@ impl Couleurs {
             timeline: [40, 40, 40],
             bordure: [50, 50, 50],
             identite: false,
+            jade_discret: false,
         }
     }
 
@@ -254,7 +265,7 @@ impl Couleurs {
 
 /// Le réglage de l'application (`reglages.toml`, `[theme]`) : le thème choisi et, gardées à part,
 /// les couleurs du thème personnalisé. Un fichier sans cette section (une installation neuve) donne
-/// SHOT ; un poste qui a déjà choisi un thème le garde (son choix est écrit dans le fichier).
+/// Gris sombre ; un poste qui a déjà choisi un thème le garde (son choix est écrit dans le fichier).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ReglageTheme {
@@ -292,7 +303,7 @@ impl ReglageTheme {
         }
     }
 
-    /// « Rétablir » : le thème par défaut, SHOT (les couleurs personnalisées sont aussi remises à
+    /// « Rétablir » : le thème par défaut, Gris sombre (les couleurs personnalisées sont aussi remises à
     /// celles de ce thème).
     pub fn retablir(&mut self) {
         *self = ReglageTheme::default();
@@ -370,6 +381,8 @@ pub struct Palette {
     pub accent_texte: Color32,
     /// Thème de la marque (`Couleurs::identite`) : jetons exacts, bordures fortes, pas d'ombres.
     pub identite: bool,
+    /// Gris sombre (Couleurs::jade_discret) : couleurs FEANOR des sortes de calques et petites touches de jade.
+    pub jade_discret: bool,
     /// Le rehaut : le jade de la marque (sa version « texte » sur fond clair) ; dans un autre thème, l'accent des
     /// traits (`accent_texte`). Trait sous l'espace de travail actif,
     /// icône de « Nouveau projet », angles du petit logotype : rien d'autre.
@@ -474,7 +487,7 @@ impl Palette {
         };
         let alerte = if c.identite { couleur(if claire { PAPIER_ALERTE } else { ATELIER_ALERTE }) } else if claire { Color32::from_rgb(190, 30, 20) } else { Color32::from_rgb(247, 92, 70) };
         // Le rehaut est l'accent des traits : le jade de la marque (sa version « texte » sur fond clair).
-        let rehaut = accent_texte;
+        let rehaut = if c.jade_discret { couleur(JADE) } else { accent_texte };
         // Couleurs des repères : un jeu vif pour les fonds sombres, un jeu plus profond pour les
         // clairs ; chacune est poussée si besoin jusqu'à 3,2:1 sur les rangées.
         let jeu = |sombre: [u8; 3], clair: [u8; 3]| assurer(couleur(if claire { clair } else { sombre }), &[rangee, rangee_sombre], 3.2, anti_de(claire));
@@ -509,6 +522,7 @@ impl Palette {
             sur_selection: if c.identite { texte } else { sur_accent },
             accent_texte,
             identite: c.identite,
+            jade_discret: c.jade_discret,
             rehaut,
             regle: entete,
             rangee,
@@ -557,13 +571,13 @@ impl Palette {
             alerte,
             braise: couleur(BRAISE),
         };
-        // Atelier et Papier : les sortes de calques prennent les couleurs de la marque. Le fond du vectoriel est le jade sombre de la
-        // sélection d'Atelier ; dans Papier, le même jade profond, juste assez foncé pour qu'un nom clair s'y lise.
-        if c.identite {
+        // Atelier, Papier et Gris sombre : les sortes de calques prennent les couleurs de la marque. Le fond du vectoriel est le jade sombre
+        // de la sélection d'Atelier ; dans Papier, le même jade profond, juste assez foncé pour qu'un nom clair s'y lise.
+        if c.identite || c.jade_discret {
             palette.sur_sorte = gris(242);
             // (Le jade profond, à peine éclairci s'il le faut pour garder 3:1 sur les rangées.)
             palette.dessin_vectoriel = assurer(couleur(JADE_PROFOND), &[rangee, rangee_sombre], 3.0, anti_de(claire));
-            palette.calque_vectoriel = if claire { melange(couleur(JADE_PROFOND), Color32::BLACK, 0.06) } else { selection };
+            palette.calque_vectoriel = if claire { melange(couleur(JADE_PROFOND), Color32::BLACK, 0.06) } else { jade_sombre() };
             palette.dessin_bitmap = jeu(IRIS_LILAS, IRIS_LILAS_PROFOND);
             palette.calque_bitmap = couleur(IRIS_LILAS_PROFOND);
             palette.dessin_couleur = jeu(IRIS_ROSE, IRIS_ROSE_PROFOND);
@@ -637,6 +651,12 @@ impl Palette {
 
         v
     }
+}
+
+/// Le jade sombre d'Atelier : le jade profond, éclairci vers le panneau d'Atelier jusqu'à ce que l'encre s'y lise (4,5:1).
+fn jade_sombre() -> Color32 {
+    let base = couleur(JADE_PROFOND);
+    (0..=20).map(|k| melange(base, couleur(ATELIER_PANNEAU), k as f32 * 0.05)).find(|x| contraste(couleur(ATELIER_ENCRE), *x) >= 4.5).unwrap_or(base)
 }
 
 /// Vers quoi pousser une couleur de repère pour la rendre plus visible : le blanc sur un thème
@@ -968,10 +988,10 @@ pub fn dock(mut s: egui_dock::Style) -> egui_dock::Style {
 }
 
 /// Le trait jade sous l'espace de travail actif (Vignettes, Storyboard, Animation, Montage) : deux points de
-/// haut, juste sous son étiquette (sans toucher le mot), seulement dans un thème de la marque (Atelier, Papier) ; les autres n'ont rien.
+/// haut, juste sous son étiquette (sans toucher le mot), dans un thème de la marque (Atelier, Papier) et dans Gris sombre ; les autres n'ont rien.
 pub fn souligner_actif(ui: &egui::Ui, etiquette: egui::Rect) {
     let p = palette();
-    if p.identite {
+    if p.identite || p.jade_discret {
         let trait_ = egui::Rect::from_min_max(egui::pos2(etiquette.left() + 3.0, etiquette.bottom() - 0.5), egui::pos2(etiquette.right() - 3.0, etiquette.bottom() + 1.5));
         ui.painter().rect_filled(trait_, 0.0, p.rehaut);
     }

@@ -16,6 +16,7 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 - Sortes de calques en couleurs FEANOR, vectoriel en jade sombre (INTERFACE partie 98). Nuancier « FEANOR », texte copié « FEANOR : », ligne « Anciennement » retirée.
 - Dossiers de travail `feanor` et `memoire-seance` et leurs branches supprimés, avec ton accord.
 - Version portable FEANOR-portable-2026-11-05 (52a25c9), sans ffmpeg ; zip rouvert et lancé ici sur une copie du projet d'essai.
+- Gris sombre redevient le thème de base, avec un trait jade sous l'espace actif, une pastille jade sur l'onglet non enregistré et les couleurs FEANOR des calques (INTERFACE partie 99). 3745 essais réussis, un passage complet. Portable FEANOR-portable-2026-11-05b.
 
 ## 2026-10-30
 

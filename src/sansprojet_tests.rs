@@ -585,7 +585,7 @@ fn on_a_fresh_install_whatever_windows_says_every_background_and_text_comes_from
         for _ in 0..8 {
             formes = image_theme(&ctx, &mut app, &mut t, systeme);
         }
-        assert_eq!(app.settings.theme.choix, ChoixTheme::Shot, "sans réglages : le thème de SHOT");
+        assert_eq!(app.settings.theme.choix, ChoixTheme::GrisSombre, "sans réglages : Gris sombre");
         let p = theme::palette();
         assert!(!p.claire, "le thème par défaut est sombre");
         assert_eq!(ctx.theme(), Theme::Dark, "Windows en thème {systeme:?} : egui reste sombre, comme SHOT");

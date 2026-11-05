@@ -370,9 +370,9 @@ impl App {
             let current = li == self.cur_layer;
             let chosen = !current && self.is_chosen_layer(li);
             let aplat_vise = current && self.aplat_en_cible();
-            // Atelier et Papier : le calque courant prend le fond plein de sa sorte (jade sombre pour le vectoriel), avec un texte qui s'y lit.
+            // Atelier, Papier et Gris sombre : le calque courant prend le fond plein de sa sorte (jade sombre pour le vectoriel), avec un texte qui s'y lit.
             let marque = crate::theme::palette();
-            let plein = (marque.identite && current && !aplat_vise).then(|| {
+            let plein = ((marque.identite || marque.jade_discret) && current && !aplat_vise).then(|| {
                 if folder {
                     (marque.selection, marque.sur_selection)
                 } else {

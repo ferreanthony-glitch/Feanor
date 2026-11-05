@@ -7075,3 +7075,15 @@ Le rouge d'alerte n'en fait pas partie. Le décor garde son ocre. Dans le pannea
 4. Panneau Couleur : le nuancier s'appelle FEANOR.
 5. Aide > À propos : plus de ligne « Anciennement ».
 6. Copie une zone, colle : c'est bien ta zone qui revient.
+
+## 99. Gris sombre, thème de base, avec des rehauts jade (2026-11-05)
+
+Demande d'Anthony, avec une capture annotée : retour au gris sombre comme interface de base, petits rehauts jade, nouvelles couleurs de calques gardées.
+
+- **Thème d'une installation neuve et de « Rétablir » :** Gris sombre, premier de la liste. Atelier et Papier restent au choix. Un poste qui a déjà un thème écrit dans ses réglages le garde.
+- **Les neuf couleurs de Gris sombre ne changent pas :** l'accent et la sélection restent en gris clair.
+- **Deux rehauts jade (`Couleurs::jade_discret`) :** le trait sous l'espace de travail actif et la pastille d'un projet pas enregistré dans son onglet. Les deux endroits viennent de la capture annotée.
+- **Sortes de calques :** les couleurs de la partie 98, et le fond plein du calque courant, valent aussi pour Gris sombre. Un dossier courant prend le gris clair de la sélection avec une encre sombre.
+- **Thème personnalisé :** celui qui part de Gris sombre garde ces touches ; un thème personnalisé déjà écrit ne change pas. Gris clair et Sombre gardent leurs couleurs d'avant.
+
+À tester : lancer sans réglages ou choisir Gris sombre dans Fichier > Préférences > Apparence ; regarder le trait sous l'espace actif ; dessiner un trait pour voir la pastille jade de l'onglet ; cliquer chaque sorte de calque.
