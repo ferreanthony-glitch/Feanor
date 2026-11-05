@@ -7010,3 +7010,35 @@ Enregistrer, Enregistrer sous, la copie de secours, les exports (vidéo, PDF, vi
 3. Ouvre un projet : tout est lisible, rien n'est rouge ou orange sauf les erreurs ; l'onglet actif et la sélection sont verts, les gros blocs du montage sont gris.
 4. Préférences > Apparence > Thème : « Atelier » et « Papier » ; les deux se lisent bien.
 5. Exporte un film ou ouvre un gros projet : la barre d'avancement est fine, colorée, et glisse doucement ; elle s'arrête quand c'est fini.
+
+## 97. Mémoire d'une longue séance (2026-11-05, branche `memoire-seance`)
+
+**Le problème.** Après §95, un épisode de 300 plans s'ouvre à 2,3 Go. Mais après une longue séance de travail (naviguer, dessiner, annuler, dupliquer, supprimer des plans), la mémoire remontait à 6,5 Go.
+
+**Ce qui change, en deux mots.** Trois choses que FEANOR gardait pour rien sont maintenant rangées plus petit ou libérées, sans rien perdre et sans que tu aies rien à faire :
+
+- **L'historique d'annulation** range les expositions (quelle image montre quel dessin) de ses vieilles étapes : 830 Mo → 440 Mo pour 183 étapes sur 450 plans. Ctrl+Z reste exact, même pour la plus vieille étape.
+- **Les dessins que plus rien ne retient** quittent la mémoire : un plan supprimé dont tu ne peux plus annuler la suppression, une version effacée, un dessin d'une étape défaite que tu as remplacée. Avant, ils restaient jusqu'à la fermeture du projet (40 % des dessins après une longue séance). Tant que Ctrl+Z ou Ctrl+Maj+Z peut les rendre, ou qu'une version, une variante ou le contenu rogné d'un plan les garde, ils restent. Ça se fait quand tu fais une pause de deux ou trois secondes, jamais pendant que tu dessines ou que la lecture tourne.
+- **Les résultats d'effets** (aplats, flous, grains) qu'on ne regarde plus se rangent quand c'est possible (les aplats unis oui, le flou ou le grain à peine).
+
+| Séance de 2 000 gestes puis une pause | Avant | Maintenant |
+|---|---|---|
+| 300 plans (451 à la fin), mémoire privée | 6,5 Go | 5,6 à 5,8 Go |
+| 300 plans, mémoire propre à FEANOR (hors pilote de la carte) | 3,9 Go | 2,7 à 3,0 Go |
+| 200 plans (302 à la fin), mémoire privée | 5,7 Go | 5,2 à 5,5 Go |
+| 200 plans, mémoire propre à FEANOR | 3,1 Go | 2,2 à 2,3 Go |
+
+Le reste de la mémoire privée (2,6 à 3 Go) est le pilote Vulkan de la carte graphique : il ne baisse ni quand on vide le cache de textures, ni avec Direct3D 12 (gain mesuré : 0,3 Go). Détail, causes et chiffres : `docs/ENDURANCE.md` §7.
+
+**Si un cas pose problème** : `SHOT_SANS_SEANCE=1` (variable d'environnement, avant de lancer FEANOR) désactive ces trois économies ; `SHOT_SANS_GEL=1` désactive tout rangement (§95). Le format du projet ne change pas (toujours 46).
+
+### À vérifier à l'écran
+
+1. Ouvre une **copie** d'un gros projet (ou l'épisode d'essai de 300 plans). Dans le Gestionnaire des tâches (onglet Détails, colonne « Mémoire (jeu de travail privé) »), note la mémoire de FEANOR à l'ouverture.
+2. **Travaille longtemps** : passe d'un plan à l'autre (Storyboard, Montage, Vignettes), dessine dans une dizaine de plans, supprime quelques plans, duplique-en d'autres, annule et rétablis plusieurs fois. Rien ne doit changer à ce que tu vois : aucun plan vide, aucune saccade nouvelle, Ctrl+Z et Ctrl+Maj+Z restent instantanés.
+3. **Supprime un plan, puis annule la suppression** tout de suite, et aussi après avoir fait une vingtaine d'autres gestes : le plan revient avec tous ses dessins, comme avant. Fais-le aussi avec un plan que tu viens de dessiner et que tu n'as pas enregistré.
+4. **Annule très loin en arrière** (une cinquantaine de fois d'un coup, ou plus loin que ce que tu as fait aujourd'hui) : chaque étape remet exactement l'état d'avant (plans, durées, noms, calques). Rétablis tout : exactement l'état de départ.
+5. Fais une **pause de dix secondes** à l'écran (ne touche à rien, souris immobile, ou balade-la seulement), puis regarde de nouveau la mémoire dans le Gestionnaire des tâches : elle ne doit pas être plus haute qu'avant la pause, et elle doit être plus basse que ce qu'elle aurait été sans élagage (la différence se voit surtout après des suppressions de plans). Rien ne doit disparaître de l'écran pendant ou après la pause.
+6. Sur un plan avec un **aplat** (ou un effet) : reviens dessus après avoir visité beaucoup d'autres plans : l'aplat est là tout de suite (pas de flash sans couleur). Retouche le trait : l'aplat suit.
+7. **Duplique un plan, une nouvelle version, une variante de séquence** puis supprime l'original et fais une pause : la copie, la version et la variante gardent tous leurs dessins ; enregistre, ferme, rouvre : tout y est.
+8. **Enregistre** (Ctrl+S) après tout ça et rouvre le projet : mêmes plans, mêmes dessins, mêmes durées. Un projet à plusieurs (dossier partagé) ne perd rien non plus : l'élagage n'y fait rien.

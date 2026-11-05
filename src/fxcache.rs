@@ -134,6 +134,10 @@ struct State {
     /// dessin sert à toutes les images d'une animation d'effet.
     small: BTreeMap<(CelId, u8), (u64, Arc<Raster>, u64)>,
     seq: u64,
+    /// Un rangement a sorti des dessins du cache (`sortir`) : les dessins que `put`, `update` ou un calcul visent pendant ce temps sont notés
+    /// dans `touches`, et ne sont pas remplacés par l'ancien à la remise.
+    en_rangement: bool,
+    touches: std::collections::BTreeSet<CelId>,
 }
 
 impl State {
@@ -148,6 +152,8 @@ impl State {
             vsources: BTreeMap::new(),
             small: BTreeMap::new(),
             seq: 0,
+            en_rangement: false,
+            touches: std::collections::BTreeSet::new(),
         }
     }
 
@@ -207,6 +213,183 @@ fn lock() -> MutexGuard<'static, State> {
 
 fn tick() -> u64 {
     TICK.fetch_add(1, Ordering::Relaxed)
+}
+
+/// Le dernier usage de chaque dessin dérivé tel que le passage de rangement précédent l'a vu (`ranger_les_inactifs`).
+static VUS_AU_PASSAGE: Mutex<BTreeMap<CelId, u64>> = Mutex::new(BTreeMap::new());
+
+/// Les dessins dérivés dont le dernier passage de rangement n'avait plus rien à faire, avec le dernier usage qu'ils avaient alors.
+static CALMES: Mutex<BTreeMap<CelId, u64>> = Mutex::new(BTreeMap::new());
+
+/// Reste-t-il un dessin dérivé que le rangement n'a pas encore examiné depuis son dernier usage ? (Sans cela, un cache plein de dessins
+/// incompressibles réveillerait l'interface toutes les secondes et demie pour rien.)
+pub(crate) fn a_examiner() -> bool {
+    let st = lock();
+    let calmes = CALMES.lock().unwrap_or_else(|e| e.into_inner());
+    st.cache.iter().any(|(id, e)| calmes.get(id) != Some(&e.used))
+}
+
+/// Range les pixels des dessins dérivés que personne n'a demandés depuis au moins `repos` usages (chantier « mémoire d'une séance » : 41
+/// dessins dérivés de la taille de la feuille tenaient 790 Mo de pixels après une longue séance, presque tous inutiles à l'écran). Les
+/// tuiles se rouvrent toutes seules à la lecture (`Tile`) : un dessin dérivé rangé se lit comme un autre. Pour avoir un `&mut` sur un
+/// dessin que le cache est seul à tenir, on le sort du cache le temps du rangement (hors verrou : l'interface ne l'attend jamais) ; un
+/// dessin que quelqu'un lit encore (un rendu, un export) n'est pas touché. À lancer d'un fil de fond ; traite au plus `max` dessins.
+/// Rend (dessins traités, tuiles rangées).
+/// Le nombre de fois que le cache a changé de projet (`forget_all`, `mettre_de_cote`, `rendre`) : un rangement commencé avant ne remet rien
+/// dans le cache d'après (ses dessins sont ceux d'un autre projet, ou d'un autre onglet).
+static CHANGEMENTS: AtomicU64 = AtomicU64::new(0);
+
+/// Des dessins sortis du cache pour être rangés (`sortir`, `ranger`, `remettre`).
+struct Sortis {
+    changements: u64,
+    dessins: Vec<(CelId, u64, usize, u64, Arc<Cel>, Vec<CelId>)>,
+}
+
+/// Oublie ce que le rangement a noté des dessins (ils sont d'un autre projet : les numéros se retrouvent d'un projet à l'autre). À appeler
+/// sous le verrou du cache, dans l'ordre cache, puis notes.
+fn oublier_les_notes() {
+    CHANGEMENTS.fetch_add(1, Ordering::Relaxed);
+    VUS_AU_PASSAGE.lock().unwrap_or_else(|e| e.into_inner()).clear();
+    CALMES.lock().unwrap_or_else(|e| e.into_inner()).clear();
+}
+
+/// 1. Sort du cache, sous le verrou et sans rien calculer, les dessins au repos (avec les références qui les doublent, `last`). Leurs octets
+/// quittent le compte du cache le temps du rangement.
+fn sortir(repos: u64, max: usize) -> Sortis {
+    let mut st = lock();
+    let changements = CHANGEMENTS.load(Ordering::Relaxed);
+    // Au repos : le dessin n'a pas été touché entre ce passage et le précédent (l'horloge d'usage ne bouge pas à chaque image : elle
+    // ne dit pas le temps, deux passages éloignés de plusieurs secondes le disent), et son dernier usage date d'au moins `repos` usages.
+    let maintenant = TICK.load(Ordering::Relaxed);
+    let mut vus = VUS_AU_PASSAGE.lock().unwrap_or_else(|e| e.into_inner());
+    let precedent = std::mem::take(&mut *vus);
+    let mut ids: Vec<CelId> = Vec::new();
+    let mut calmes = CALMES.lock().unwrap_or_else(|e| e.into_inner());
+    calmes.retain(|id, _| st.cache.contains_key(id));
+    for (id, e) in st.cache.iter() {
+        vus.insert(*id, e.used);
+        if calmes.get(id) == Some(&e.used) || precedent.get(id) != Some(&e.used) {
+            continue;
+        }
+        if e.cel.a_des_tuiles_a_ranger() || e.cel.a_des_tuiles_lachables() {
+            if ids.len() < max && maintenant.saturating_sub(e.used) >= repos {
+                ids.push(*id);
+            }
+        } else {
+            // Rien à ranger (déjà rangé, ou incompressible) : inutile d'y revenir tant que personne n'y touche.
+            calmes.insert(*id, e.used);
+        }
+    }
+    drop(vus);
+    drop(calmes);
+    let mut dessins = Vec::new();
+    for id in ids {
+        let Some(e) = st.cache.remove(&id) else { continue };
+        // (Les « derniers résultats » qui tiennent le même dessin : sortis aussi, remis avec lui.)
+        let origines: Vec<CelId> = st.last.iter().filter(|(_, l)| Arc::ptr_eq(&l.cel, &e.cel)).map(|(o, _)| *o).collect();
+        let mut lasts = Vec::new();
+        for o in origines {
+            if let Some(l) = st.last.remove(&o) {
+                lasts.push((o, l));
+            }
+        }
+        // Un lecteur tient encore le dessin (en dehors du cache) : on le laisse tel quel.
+        if Arc::strong_count(&e.cel) != 1 + lasts.len() {
+            st.cache.insert(id, e);
+            for (o, l) in lasts {
+                st.last.insert(o, l);
+            }
+            continue;
+        }
+        let ids_last: Vec<CelId> = lasts.iter().map(|(o, _)| *o).collect();
+        drop(lasts);
+        st.bytes = st.bytes.saturating_sub(e.bytes);
+        dessins.push((id, e.version, e.bytes, e.used, e.cel, ids_last));
+    }
+    st.en_rangement = !dessins.is_empty();
+    st.touches.clear();
+    Sortis { changements, dessins }
+}
+
+/// 2. Le rangement, hors verrou : le cache n'a plus d'autre référence que la nôtre. Rend le nombre de tuiles rangées.
+fn ranger(s: &mut Sortis) -> usize {
+    let mut tuiles = 0;
+    for (_, _, _, _, cel, _) in s.dessins.iter_mut() {
+        if let Some(c) = Arc::get_mut(cel) {
+            tuiles += c.geler();
+        }
+    }
+    tuiles
+}
+
+/// 3. On remet tout, sauf ce qu'un calcul, une retouche (`put`, `update`) ou un nouveau dessin a visé entre-temps, et tout si le cache a changé
+/// de projet.
+fn remettre(s: Sortis) {
+    let mut st = lock();
+    let meme_projet = s.changements == CHANGEMENTS.load(Ordering::Relaxed);
+    if meme_projet {
+        for (id, version, bytes, used, cel, origines) in s.dessins {
+            if st.touches.contains(&id) || st.cache.contains_key(&id) {
+                continue;
+            }
+            for o in origines {
+                if !st.last.contains_key(&o) {
+                    st.last.insert(o, Last { id, cel: cel.clone(), used, bytes });
+                }
+            }
+            st.bytes += bytes;
+            st.cache.insert(id, Entry { version, cel, used, bytes });
+        }
+    }
+    st.en_rangement = false;
+    st.touches.clear();
+}
+
+/// Range les pixels des dessins dérivés que personne n'a demandés depuis au moins `repos` usages (chantier « mémoire d'une séance » : 41
+/// dessins dérivés de la taille de la feuille tenaient 790 Mo de pixels après une longue séance, presque tous inutiles à l'écran). Les
+/// tuiles se rouvrent toutes seules à la lecture (`Tile`) : un dessin dérivé rangé se lit comme un autre. Pour avoir un `&mut` sur un
+/// dessin que le cache est seul à tenir, on le sort du cache le temps du rangement (hors verrou : l'interface ne l'attend jamais) ; un
+/// dessin que quelqu'un lit encore (un rendu, un export) n'est pas touché. À lancer d'un fil de fond ; traite au plus `max` dessins.
+/// Rend (dessins traités, tuiles rangées).
+pub(crate) fn ranger_les_inactifs(repos: u64, max: usize) -> (usize, usize) {
+    let mut sortis = sortir(repos, max);
+    let traites = sortis.dessins.len();
+    let tuiles = ranger(&mut sortis);
+    remettre(sortis);
+    (traites, tuiles)
+}
+/// Mesures : (dessins dérivés distincts gardés, octets réellement tenus en mémoire par leurs tuiles, copies d'origine gardées pour le fil de
+/// fond, octets de ces copies).
+#[cfg(test)]
+pub(crate) fn octets_en_memoire() -> (usize, usize, usize, usize) {
+    let st = lock();
+    let mut vus: std::collections::HashSet<*const Cel> = std::collections::HashSet::new();
+    let mut octets = 0;
+    for c in st.cache.values().map(|e| &e.cel).chain(st.last.values().map(|l| &l.cel)) {
+        if vus.insert(Arc::as_ptr(c)) {
+            octets += c.octets_en_memoire();
+        }
+    }
+    if std::env::var_os("ENDU_FX").is_some() {
+        let (mut lus, mut a_ranger, mut lachables, mut ouvertes, mut total) = (0, 0, 0, 0, 0);
+        let mut vus2: std::collections::HashSet<*const Cel> = std::collections::HashSet::new();
+        for (id, e) in st.cache.iter() {
+            if !vus2.insert(Arc::as_ptr(&e.cel)) {
+                continue;
+            }
+            let (o, t) = e.cel.tuiles_ouvertes();
+            lus += usize::from(Arc::strong_count(&e.cel) > 1 + st.last.values().filter(|l| Arc::ptr_eq(&l.cel, &e.cel)).count());
+            a_ranger += usize::from(e.cel.a_des_tuiles_a_ranger());
+            lachables += usize::from(e.cel.a_des_tuiles_lachables());
+            ouvertes += o;
+            total += t;
+            println!("ENDU fx dérivé {id} : {o}/{t} tuiles ouvertes, âge {}, lecteurs {}", TICK.load(Ordering::Relaxed).saturating_sub(e.used), Arc::strong_count(&e.cel));
+        }
+        println!("ENDU fx : lus ailleurs {lus}, à ranger {a_ranger}, lâchables {lachables}, tuiles ouvertes {ouvertes}/{total}");
+    }
+    let sources = st.sources.len() + st.small.len();
+    let oct_sources = st.sources.values().map(|s| s.1.octets_en_memoire()).sum::<usize>() + st.small.values().map(|s| s.1.octets_en_memoire()).sum::<usize>();
+    (vus.len(), octets, sources, oct_sources)
 }
 
 /// Octets de pixels d'un dessin (les tuiles dessinées seulement).
@@ -374,6 +557,9 @@ fn insert_within(st: &mut State, id: CelId, version: u64, cel: Arc<Cel>, origin:
     let mut dropped = Vec::new();
     let used = tick();
     let bytes = cel_bytes(&cel);
+    if st.en_rangement {
+        st.touches.insert(id);
+    }
     if let Some(old) = st.cache.insert(id, Entry { version, cel: cel.clone(), used, bytes }) {
         st.bytes -= old.bytes;
         dropped.push(old.cel);
@@ -462,6 +648,10 @@ pub(crate) fn update(id: CelId, f: impl FnOnce(&Arc<Cel>) -> Arc<Cel>) {
         return;
     }
     let mut st = lock();
+    if st.en_rangement {
+        // (Le dessin est peut-être sorti du cache pour être rangé : il ne sera pas remis tel qu'il était.)
+        st.touches.insert(id);
+    }
     let Some(e) = st.cache.get_mut(&id) else { return };
     let new = f(&e.cel);
     let bytes = cel_bytes(&new);
@@ -783,6 +973,7 @@ pub(crate) fn forget_all() {
     );
     st.bytes = 0;
     st.queue.clear();
+    oublier_les_notes();
     drop(st);
     drop(old);
 }
@@ -820,6 +1011,7 @@ pub(crate) fn mettre_de_cote() -> Reserve {
         bytes: std::mem::take(&mut st.bytes),
     };
     st.queue.clear();
+    oublier_les_notes();
     r
 }
 
@@ -836,6 +1028,7 @@ pub(crate) fn rendre(r: Reserve) {
     );
     st.bytes = r.bytes;
     st.queue.clear();
+    oublier_les_notes();
     drop(st);
     drop(old);
 }

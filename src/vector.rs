@@ -470,6 +470,26 @@ pub fn cache_total_bytes() -> usize {
     REGISTRY.lock().map(|r| r.total).unwrap_or(0)
 }
 
+/// Mesures : (caches qui ont des pixels, leurs tuiles, octets réellement tenus en mémoire : pixels ouverts et tampons).
+#[cfg(test)]
+pub fn caches_en_memoire() -> (usize, usize, usize) {
+    let cellules: Vec<Cell> = match REGISTRY.lock() {
+        Ok(r) => r.entries.values().filter_map(|e| e.0.upgrade()).collect(),
+        Err(_) => return (0, 0, 0),
+    };
+    let (mut n, mut tuiles, mut octets) = (0, 0, 0);
+    for c in cellules {
+        if let Ok(r) = c.try_read() {
+            if let Some(p) = r.as_ref().and_then(|r| r.pixels.as_ref()) {
+                n += 1;
+                tuiles += p.tiles.len();
+                octets += p.tiles.iter().map(Tile::octets_en_memoire).sum::<usize>();
+            }
+        }
+    }
+    (n, tuiles, octets)
+}
+
 /// Range les pixels des caches de traits qu'aucun rendu n'a touchés depuis au moins `repos` usages (chantier « mémoire d'un épisode » :
 /// 52 000 traits d'un épisode gardaient 531 Mo de tuiles dont presque aucune n'était regardée). Les tuiles de ces caches se rouvrent toutes
 /// seules à la lecture (`Tile`) : un cache rangé se lit comme un autre. Le budget (`CACHE_BUDGET_BYTES`) compte toujours 16 Ko par tuile : rien

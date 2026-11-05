@@ -288,6 +288,11 @@ impl History {
         self.undo.is_empty() && self.redo.is_empty()
     }
 
+    /// Les étapes à annuler puis celles à rétablir (élagage des dessins, mesures de mémoire, essais).
+    pub fn etapes(&self) -> impl Iterator<Item = &Edit> {
+        self.undo.iter().chain(self.redo.iter())
+    }
+
     #[cfg(test)]
     /// Tuiles que tiennent les étapes : (dont les pixels sont en mémoire, en tout, octets tenus).
     pub fn tuiles(&self) -> (usize, usize, usize) {
@@ -361,7 +366,14 @@ impl Edit {
                     fait += e.geler(max - fait);
                 }
             }
-            Edit::Vector { .. } | Edit::Structure { .. } => {}
+            // Un instantané de structure : les expositions des calques passent en suites (le plus gros : une entrée par image et par
+            // calque). Compte pour 30 tuiles (un millier de plans, un peu plus d'une demi-milliseconde).
+            Edit::Structure { structure, .. } => {
+                if max > 0 && crate::tuilepack::seance_active() && structure.ranger_les_expositions() {
+                    fait += 30.min(max);
+                }
+            }
+            Edit::Vector { .. } => {}
         }
         fait
     }

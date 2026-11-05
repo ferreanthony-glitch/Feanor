@@ -1163,6 +1163,68 @@ pub struct Structure {
     /// Le scénario gardé dans le projet (`scenariogarde.rs`) : importer et créer les plans depuis lui s'annulent avec le reste.
     /// Partagé (`Arc`) : une étape d'annulation ne le recopie pas.
     pub scenario: Option<std::sync::Arc<crate::scenariogarde::Gardee>>,
+    /// Les expositions des calques des plans, rangées en suites (`ranger_les_expositions`) : un instantané d'une vieille étape
+    /// d'annulation les tient ainsi (une entrée par image et par calque pesait 16 octets : 4,5 Mo pour 450 plans, 830 Mo pour
+    /// 183 étapes). Hors de cet état, `None` et les `frames` des calques sont en place.
+    pub frames_rangees: Option<Box<FramesRangees>>,
+}
+
+/// Les `frames` de chaque calque de chaque plan d'une `Structure`, en suites (dessin ou rien, nombre d'images de suite).
+#[derive(Clone)]
+pub struct FramesRangees(Vec<Vec<Vec<(Option<CelId>, u32)>>>);
+
+impl FramesRangees {
+    /// Les dessins cités (un par suite, avec des répétitions d'un calque à l'autre).
+    pub fn dessins(&self) -> impl Iterator<Item = CelId> + '_ {
+        self.0.iter().flatten().flatten().filter_map(|(id, _)| *id)
+    }
+}
+
+impl Structure {
+    /// Range les expositions des calques en suites (rien ne se perd : `rouvrir_les_expositions` les rend telles quelles). Faux si elles
+    /// l'étaient déjà.
+    pub fn ranger_les_expositions(&mut self) -> bool {
+        if self.frames_rangees.is_some() {
+            return false;
+        }
+        let mut tout = Vec::with_capacity(self.panels.len());
+        for p in &mut self.panels {
+            let mut calques = Vec::with_capacity(p.layers.len());
+            for l in &mut p.layers {
+                let mut suites: Vec<(Option<CelId>, u32)> = Vec::new();
+                for f in std::mem::take(&mut l.frames) {
+                    match suites.last_mut() {
+                        Some((id, n)) if *id == f && *n < u32::MAX => *n += 1,
+                        _ => suites.push((f, 1)),
+                    }
+                }
+                suites.shrink_to_fit();
+                calques.push(suites);
+            }
+            tout.push(calques);
+        }
+        self.frames_rangees = Some(Box::new(FramesRangees(tout)));
+        true
+    }
+
+    /// Rend leurs `frames` aux calques (sans effet si elles y sont).
+    pub fn rouvrir_les_expositions(&mut self) {
+        let Some(r) = self.frames_rangees.take() else { return };
+        for (p, calques) in self.panels.iter_mut().zip(r.0) {
+            for (l, suites) in p.layers.iter_mut().zip(calques) {
+                l.frames = suites.into_iter().flat_map(|(id, n)| std::iter::repeat_n(id, n as usize)).collect();
+            }
+        }
+    }
+
+    /// Les dessins que montrent les plans de cet état (rangé ou non) (essais).
+    #[cfg(test)]
+    pub fn dessins_des_plans(&self) -> Vec<CelId> {
+        match &self.frames_rangees {
+            Some(r) => r.dessins().collect(),
+            None => self.panels.iter().flat_map(|p| p.layers.iter()).flat_map(|l| l.frames.iter().flatten().copied()).collect(),
+        }
+    }
 }
 
 /// Plus grand côté de la feuille, en pixels : la texture minimale que toute carte graphique garantit (wgpu : 8 192).
@@ -1647,6 +1709,7 @@ impl Document {
             variantes: self.variantes.clone(),
             annotations: self.annotations.clone(),
             scenario: self.scenario.clone(),
+            frames_rangees: None,
         }
     }
 
@@ -1660,6 +1723,8 @@ impl Document {
         // Les séquences que la planche montre sont un affichage, pas une étape du film : annuler ou rétablir ne les change pas
         // (`planchesequences.rs`).
         s.annotations.affichage = self.annotations.affichage.clone();
+        // (Une vieille étape d'annulation a rangé les expositions de ses calques.)
+        s.rouvrir_les_expositions();
         Structure {
             sequences: std::mem::replace(&mut self.sequences, s.sequences),
             scenes: std::mem::replace(&mut self.scenes, s.scenes),
@@ -1686,6 +1751,7 @@ impl Document {
             variantes: std::mem::replace(&mut self.variantes, s.variantes),
             annotations: std::mem::replace(&mut self.annotations, s.annotations),
             scenario: std::mem::replace(&mut self.scenario, s.scenario),
+            frames_rangees: None,
         }
     }
 
@@ -1703,6 +1769,11 @@ impl Document {
         } else if id & !ID_LOW == self.id_prefix {
             self.next_id = self.next_id.max((id & ID_LOW) + 1);
         }
+    }
+
+    /// Le projet est partagé avec d'autres équipiers (numérotation à préfixe).
+    pub(crate) fn est_partage(&self) -> bool {
+        self.id_prefix != 0
     }
 
     /// Le préfixe des numéros neufs (0 : projet classique).

@@ -678,7 +678,19 @@ fn endurance_editer() {
         endu!("séance {l}");
     }
     jusqu_au_calme(&mut b, 120.0);
+    // Une pause de l'utilisateur (il regarde, il réfléchit : plus de geste, mais l'écran vit) : l'élagage a besoin de quelques secondes sans
+    // changement de l'historique, et de deux passages à quinze secondes d'écart.
+    let pause = env_usize("ENDU_PAUSE", 0);
+    if pause > 0 {
+        let t = Instant::now();
+        while t.elapsed().as_secs() < pause as u64 {
+            b.image(Vec::new(), 1.0 / 60.0);
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        jusqu_au_calme(&mut b, 120.0);
+    }
     let (ws1, pv1) = memoire();
+    ventilation_tas(&b, "fin de la séance");
     endu!("séance de {ops} gestes en {:.0} s ; mémoire {ws0:.0} -> {ws1:.0} Mo (ensemble de travail), {pv0:.0} -> {pv1:.0} Mo (privée) ; {} dessins, {} plans", t0.elapsed().as_secs_f64(), b.app.doc.cels.len(), b.app.doc.panels.len());
     lents.sort_by(|a, c| c.1.max(c.2).total_cmp(&a.1.max(a.2)));
     endu!("{} gestes dépassent 50 ms (le geste ou la pire des 3 images d'après), les pires :", lents.len());
@@ -718,6 +730,31 @@ fn endurance_editer() {
     jusqu_au_calme(&mut b, 120.0);
     mem_ligne("après la séance");
     repartition_memoire(&b, "après la séance");
+    ventilation_tas(&b, "après la séance, annulée puis rétablie");
+    if env_usize("ENDU_EXPERIENCES", 0) == 1 {
+        // Où est le hors-tas ? Cache de la carte ramené à 64 Mo, puis dessins dérivés des effets oubliés, puis vignettes.
+        if let Some(avant) = b.app.gpu.as_ref().map(|g| g.cache_limit()) {
+            b.app.gpu.as_ref().map(|g| g.set_cache_bytes(64 << 20));
+            b.chauffer(30);
+            std::thread::sleep(Duration::from_secs(2));
+            b.chauffer(10);
+            mem_ligne("EXP cache de la carte à 64 Mo");
+            let g = b.app.gpu.as_ref().map(|g| g.stats()).unwrap_or_default();
+            endu!("EXP carte : {} textures, {:.0} Mo", g.textures, g.bytes as f64 / 1e6);
+            b.app.gpu.as_ref().map(|g| g.set_cache_bytes(avant));
+        }
+        crate::fxcache::forget_all();
+        b.chauffer(10);
+        std::thread::sleep(Duration::from_secs(2));
+        mem_ligne("EXP effets oubliés");
+        crate::vector::set_cache_budget(0);
+        b.chauffer(10);
+        mem_ligne("EXP caches de traits à zéro");
+    }
+    if env_usize("ENDU_COURT", 0) == 1 {
+        // (Mesure de mémoire seule : ni enregistrement, ni copie de secours, ni envois.)
+        std::process::exit(0);
+    }
 
     // --- Enregistrer
     println!("--- Enregistrer");
@@ -1080,6 +1117,117 @@ fn repartition_memoire(b: &Banc, titre: &str) {
     );
     let (ho, ht, hb) = b.app.history.tuiles();
     endu!("historique ({titre}) : {} étapes à annuler, {ho} tuiles ouvertes sur {ht}, tiennent {:.0} Mo", b.app.history.undo_len(), hb as f64 / 1e6);
+}
+
+/// Ventilation du tas vivant poste par poste (chantier « mémoire d'une séance ») : dessins utilisés et dessins que plus aucun plan ne montre
+/// (plans supprimés, anciennes versions), historique d'annulation (tuiles, dessins vectoriels, instantanés de structure), caches de traits,
+/// dessins dérivés des effets, vignettes ; le reste du tas est ce que rien de tout cela n'explique. Mesure les objets par la différence du
+/// compteur du tas (copie profonde, aussitôt lâchée) : ne lit aucun pixel.
+fn ventilation_tas(b: &Banc, titre: &str) {
+    use crate::history::Edit;
+    let mo = |o: usize| o as f64 / 1e6;
+    let tas0 = TAS_VIVANT.load(Ordering::Relaxed);
+    // Les dessins que plus rien ne montre : ni le document vivant, ni un instantané de l'historique.
+    let utilises = b.app.doc.used_cels();
+    let mut par_historique: std::collections::BTreeSet<u64> = Default::default();
+    fn parcourir(e: &Edit, out: &mut std::collections::BTreeSet<u64>, n: &mut (usize, usize, usize, usize, usize), vect: &mut Vec<crate::vector::VectorDrawing>, structure: &mut Vec<crate::document::Structure>) {
+        match e {
+            Edit::Tiles { tiles, .. } => {
+                n.0 += 1;
+                n.4 += tiles.iter().filter_map(|t| t.1.as_ref()).map(|t| t.octets_en_memoire()).sum::<usize>();
+            }
+            Edit::FondTiles { tiles, .. } => {
+                n.0 += 1;
+                n.4 += tiles.iter().filter_map(|t| t.1.as_ref()).map(|t| t.octets_en_memoire()).sum::<usize>();
+            }
+            Edit::Vector { drawing, .. } => {
+                n.1 += 1;
+                vect.push(drawing.clone());
+            }
+            Edit::Structure { structure: s, .. } => {
+                n.2 += 1;
+                out.extend(s.dessins_des_plans());
+                structure.push(s.clone());
+            }
+            Edit::Group(g) => {
+                n.3 += 1;
+                for e in g {
+                    parcourir(e, out, n, vect, structure);
+                }
+            }
+        }
+    }
+    let mut n = (0, 0, 0, 0, 0);
+    let mut vect: Vec<crate::vector::VectorDrawing> = Vec::new();
+    let mut des_structures: Vec<crate::document::Structure> = Vec::new();
+    for e in b.app.history.etapes() {
+        parcourir(e, &mut par_historique, &mut n, &mut vect, &mut des_structures);
+    }
+    // Poids d'un instantané de structure (copie profonde mesurée) et des dessins vectoriels des étapes.
+    let tas1 = TAS_VIVANT.load(Ordering::Relaxed);
+    let tous = tas1.saturating_sub(tas0);
+    drop(des_structures);
+    let structures_octets = tous.saturating_sub(TAS_VIVANT.load(Ordering::Relaxed).saturating_sub(tas0));
+    let vect_octets = tous.saturating_sub(structures_octets);
+    drop(vect);
+    let a = TAS_VIVANT.load(Ordering::Relaxed);
+    let copie = b.app.doc.structure();
+    let structure_octets = TAS_VIVANT.load(Ordering::Relaxed).saturating_sub(a);
+    drop(copie);
+    let (mut morts, mut morts_hist, mut morts_octets, mut morts_hist_octets, mut vivants, mut vivants_octets) = (0usize, 0usize, 0usize, 0usize, 0usize, 0usize);
+    let (mut pts_vivants, mut pts_morts, mut el_vivants, mut el_morts) = (0usize, 0usize, 0usize, 0usize);
+    for (id, c) in b.app.doc.cels.iter() {
+        let o = c.octets_en_memoire();
+        let (p, e) = c.vector.as_ref().map_or((0, 0), |v| (v.elements.iter().map(|e| if let crate::vector::Element::Stroke { points, .. } = e { points.len() } else { 0 }).sum(), v.elements.len()));
+        if utilises.contains(id) {
+            vivants += 1;
+            vivants_octets += o;
+            pts_vivants += p;
+            el_vivants += e;
+        } else if par_historique.contains(id) {
+            morts_hist += 1;
+            morts_hist_octets += o;
+            pts_morts += p;
+            el_morts += e;
+        } else {
+            morts += 1;
+            morts_octets += o;
+            pts_morts += p;
+            el_morts += e;
+        }
+    }
+    endu!(
+        "ventilation ({titre}) : dessins montrés {vivants} ({:.0} Mo de tuiles, {el_vivants} éléments, {pts_vivants} points) ; dessins que seule l'annulation retient {morts_hist} ({:.0} Mo) ; dessins orphelins {morts} ({:.0} Mo) ; éléments des morts {el_morts}, points {pts_morts}",
+        mo(vivants_octets),
+        mo(morts_hist_octets),
+        mo(morts_octets)
+    );
+    let (ho, ht, hb) = b.app.history.tuiles();
+    endu!(
+        "ventilation ({titre}) : historique : {} étapes de tuiles ({:.0} Mo, {ho}/{ht} ouvertes, {:.0} Mo comptés), {} étapes de dessin vectoriel ({:.0} Mo en copie profonde), {} instantanés de structure : {:.0} Mo en copie profonde (un instantané frais du document : {:.2} Mo), {} groupes",
+        n.0,
+        mo(n.4),
+        mo(hb),
+        n.1,
+        mo(vect_octets),
+        n.2,
+        mo(structures_octets),
+        mo(structure_octets),
+        n.3
+    );
+    let (nc, tc, oc) = crate::vector::caches_en_memoire();
+    let (nf, of, ns, os) = crate::fxcache::octets_en_memoire();
+    let (vignettes_gpu, nv) = b.app.thumbs.octets();
+    endu!(
+        "ventilation ({titre}) : {} dessins élagués depuis le début (passage le plus long sur le fil de l'interface : {:.1} ms) ; caches de traits {nc} ({tc} tuiles, {:.0} Mo réels) ; effets : {nf} dessins dérivés {:.0} Mo, {ns} copies d'origine {:.0} Mo ; vignettes {nv} ({:.0} Mo carte) ; tas vivant {:.0} Mo",
+        b.app.gel.elagues,
+        b.app.gel.elagage_pire.as_secs_f64() * 1e3,
+        mo(oc),
+        mo(of),
+        mo(os),
+        vignettes_gpu as f64 / 1e6,
+        tas_vivant_mo()
+    );
 }
 
 /// Où va la mémoire après une séance de changements de plan, et ce qui la rend : le tas de Windows (compactage), la carte graphique (cache

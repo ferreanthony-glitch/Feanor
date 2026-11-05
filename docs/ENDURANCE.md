@@ -258,3 +258,86 @@ OpenGL.
 - Non mesuré : exports complets (vidéo, PDF, paquet) après ce chantier : ils rouvrent les tuiles qu'ils lisent, que la tenue range ensuite.
 - Un projet qui reste ouvert très longtemps avec beaucoup de gestes sur des plans copiés peut voir des tuiles redevenir partagées puis
   se re-séparer (un millier d'octets par copie) : sans effet visible.
+
+## 7. Mémoire d'une longue séance (2026-11-05, branche `memoire-seance`, partie de `main` 3acb470)
+
+Constat : un épisode de 300 plans s'ouvre à 2,3 Go (§6) mais, après 2 000 gestes d'édition (naviguer, dessiner, annuler, dupliquer, supprimer,
+copier-coller, lecture), la mémoire privée monte à 6,5 Go (tas vivant 3,9 Go). Banc : `endurance_editer` (voir §5), avec `ENDU_COURT=1` (s'arrête
+après les mesures de mémoire), `ENDU_PAUSE=45` (45 s de pause de l'utilisateur après la séance : l'écran vit, plus aucun geste),
+`ENDU_EXPERIENCES=1` (cache de la carte à 64 Mo, effets oubliés, caches de traits à zéro) et `ENDU_FX=1` (détail des dessins dérivés). Le banc
+affiche maintenant une **ventilation du tas** poste par poste (`ventilation_tas`, `endurance_tests.rs`) ; `SHOT_SANS_SEANCE=1` remet le
+comportement d'avant dans le même exécutable (colonne A ci-dessous), sur la même machine et dans la même heure que la colonne B.
+
+### 7.1 Où allait la mémoire (300 plans, fin de séance, tas vivant 3 885 Mo ; privée 6 514 Mo)
+
+| Poste | Mo | Cause |
+|---|---|---|
+| Tuiles des dessins montrés par les plans (6 878 dessins) | 615 | normal (rangées sauf les chauds) |
+| Tuiles de dessins que seule l'annulation retient (2 157) | 161 | normal |
+| Tuiles de **dessins sans attache** (6 073, 40 % du projet) | 514 | `doc.cels` ne se vidait jamais : plans supprimés dont l'annulation a été jetée, versions effacées, étapes défaites |
+| Points de traits des dessins sans attache (6,1 M sur 11,3 M) | ≈ 200 | idem |
+| **Instantanés de structure de l'historique** (183 étapes × 4,5 Mo) | 831 | une entrée de 16 octets par image et par calque, copiée à chaque étape |
+| **Dessins dérivés des effets** (41, de la taille de la feuille) | 791 | cache de 768 Mo, pixels jamais rangés |
+| Caches de traits (pixels exacts, réels) | 237 | le budget compte 16 Ko la tuile : 504 Mo nominaux |
+| Vignettes (copies processeur) | ≈ 100 | normal |
+| Hors tas (pilote Vulkan, exécutable, piles) | ≈ 2 600 | voir 7.4 |
+
+Pistes écartées après mesure : l'historique d'annulation (les tuiles sont déjà rangées : 1 Mo), les plans visités qui ne se rangeraient plus
+(1,97 million de tuiles lâchées, 19 300 ouvertes sur 922 000 à la fin), les tampons de l'enregistrement (`prepare_save` : Ctrl+S après séance 23 ms,
+rien de gardé), les vignettes sur la carte (≤ 130 Mo).
+
+### 7.2 Ce qui a été fait
+
+1. **Instantanés de structure** (`Structure::ranger_les_expositions`, `history.rs`, `document.rs`) : au-delà des 8 dernières étapes, les
+   expositions des calques (`Layer::frames`) d'un instantané passent en suites (dessin, nombre d'images) ; `replace_structure` les rend telles
+   quelles à l'annulation. Un instantané de 4,5 Mo tombe à 2,4 Mo (le reste : réglages des calques, textes, caméras). 831 → 441 Mo.
+2. **Dessins dérivés des effets** (`fxcache::ranger_les_inactifs`, appelé par le fil « tuiles-rangees » toutes les 1,5 s) : un dessin intouché
+   entre deux passages et vieux d'au moins 30 usages est sorti du cache le temps de son rangement (hors verrou), jamais s'il est lu ailleurs.
+   Gain limité : ces dessins (flou, grain) sont presque tous incompressibles par `tuilepack` (plus de 12 Ko la tuile), ils ne se rangent pas ;
+   les fonds plats, eux, se rangent. 790 → 625 à 700 Mo. Le reste est la réserve réglée par l'utilisateur (768 Mo) : la baisser est la seule
+   suite possible, au prix d'un recalcul (et d'un aplat qui disparaît une fraction de seconde en revenant sur un plan : non fait).
+3. **Élagage des dessins sans attache** (`elagage.rs`, `Gel::elaguer`) : un dessin que ni le document vivant (plans, versions, variantes,
+   rognage, griffonnages : `Document::used_cels`, ce que l'enregistrement écrit), ni **aucun** instantané ou étape de l'historique ne retient,
+   et qui était déjà sans attache au passage précédent (15 s plus tôt), quitte `doc.cels` ; il est libéré sur un fil de fond (`lacher::en_fond`).
+   Jamais : pendant un geste, une lecture ou un rejeu ; dans un projet partagé ; pour un numéro réservé (feuille flottante) ; pour les autres onglets.
+   Le parcours de l'historique (200 instantanés : 200 ms d'un coup au premier essai) se fait par tranches d'une milliseconde et est abandonné si
+   l'historique change ; le document vivant est relu d'un coup au moment de retirer. Passage le plus long sur le fil de l'interface : 9 à 12 ms,
+   tous les 15 s, au calme. Conséquence : l'élagage se fait quand l'utilisateur fait une pause d'environ deux secondes sans geste (la navigation
+   n'est pas un geste) ; pendant une rafale ininterrompue de gestes il attend.
+4. `SHOT_SANS_SEANCE=1` : désactive 1, 2 et 3.
+
+### 7.3 Chiffres avant (A) / après (B), séance de 2 000 gestes puis 45 s de pause (privée / tas vivant, Mo, fin de séance)
+
+| Épisode | A (`SHOT_SANS_SEANCE=1`) | B | Gain |
+|---|---|---|---|
+| 300 plans (451 en fin de séance) | 6 529 / 3 859 | 5 772 / 2 735 (autres passages : 5 606 / 2 819, 5 710 / 2 954) | −0,8 Go privée, −1,1 Go tas |
+| 200 plans (302 en fin de séance) | 5 733 / 3 080 | 5 235 / 2 224 (autre passage : 5 466 / 2 335) | −0,3 à −0,5 Go privée, −0,8 Go tas |
+| Ouverture, 300 / 200 plans | 2 308 / 2 162 | 2 292 à 2 331 / 2 030 à 2 055 | inchangé |
+
+Dessins du projet à la fin (300 plans) : 15 108 (A) contre 10 075 (B). Latence : les gestes de la séance (temps par sorte de geste, images
+d'après) sont les mêmes que sans les économies, à la précision des mesures (la machine compile d'autres choses en même temps : les écarts entre
+deux passages identiques atteignent ±30 %). Le premier essai d'élagage (parcours de l'historique d'un coup, 202 ms sur le fil de l'interface) a donné
+une image de lecture du montage de 210 ms ; avec les tranches, la pire image de lecture est de 14 à 27 ms (300 plans) et le passage d'élagage le plus long
+de 9 à 12 ms.
+
+La privée baisse moins que le tas : elle garde 2,6 à 3,0 Go hors tas, qui ne bougent pas (7.4).
+
+### 7.4 Ce qui reste
+
+- **Hors tas, 2,6 à 3,0 Go** (0,7 à l'ouverture, 2,7 après la séance), pilote Vulkan et carte graphique. Expériences : cache de textures de la carte
+  ramené à 64 Mo (8 textures, 66 Mo) : −70 Mo seulement ; dessins dérivés oubliés : −870 Mo de privée pour −630 Mo de tas ; caches de traits à zéro : 
+  −6 Mo. Ce n'est donc ni le cache de textures de dessins ni le tas de FEANOR ; une piste non vérifiée est la mémoire que le pilote réserve aux
+  textures des effets et aux images composées. Direct3D 12 (§6.5) n'en rend que 0,3 Go. Non résolu.
+- Dessins dérivés des effets incompressibles : réserve de 768 Mo (réglable dans Aide > Régler FEANOR pour cette machine…).
+- Instantanés de structure : 2,4 Mo chacun, 441 Mo pour 183 étapes. Il faudrait partager les plans entre instantanés (`Arc<Panel>`) : refonte
+  de `Document::panels`, non faite.
+- Dessins vectoriels : 11,3 M de points au début, 5 M après élagage ; pas de rangement des points.
+- L'élagage ne touche pas aux projets des autres onglets ni aux projets partagés.
+### 7.5 Corrections après relecture (2026-11-05)
+
+- Le rangement des dessins dérivés ignorait les changements de projet : il pouvait remettre un dessin de l'ancien projet dans le cache du nouveau
+  (octets mal comptés, effet d'un autre projet servi si les numéros coïncident). Les octets quittent le compte pendant le rangement, un compteur
+  de changements (`forget_all`, `mettre_de_cote`, `rendre`) fait tout jeter, et un dessin visé par `update`, `put` ou un calcul pendant le
+  rangement n'est pas remis tel qu'il était. Essais qui échouent sans le correctif.
+- `load_doc` vide les notes de l'élagage ; seul le gel du projet affiché passe sur les caches communs (les onglets cachés le faisaient aussi).
+- L'élagage retient `CalqueCouleur::dessins` (couleur d'un trait) même quand aucune image de couleur ne le montre.

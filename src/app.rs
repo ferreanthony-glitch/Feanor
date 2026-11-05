@@ -2672,13 +2672,19 @@ impl App {
         if let Some(p) = self.doc.panels.get(self.cur_panel) {
             self.gel.visite(p.id);
         }
+        self.gel.caches_communs = true;
         let lecture = self.playing.then_some(self.doc.fps);
         self.gel.tenir(&mut self.doc, self.cur_panel, lecture);
         self.gel.tenir_l_historique(&mut self.history);
+        // (Pas pendant un geste ni une lecture : le pointeur est relâché, rien ne joue, aucun trait ne se rejoue.)
+        let calme = !self.playing && !ctx.input(|i| i.pointer.any_down()) && self.rejeu_again.is_empty();
+        self.gel.elaguer(&mut self.doc, &self.history, calme);
         let mut occupe = self.gel.occupe();
         // Les projets des autres onglets : leurs dessins se rangent aussi (le plan qu'on y regardait en dernier reste ouvert).
         for o in &mut self.onglets {
             if let Some(e) = o.etat.as_mut() {
+                // (Les caches communs sont ceux du projet affiché : pas de passage depuis un onglet caché.)
+                e.gel.caches_communs = false;
                 e.gel.tenir(&mut e.doc, e.cur_panel, None);
                 e.gel.tenir_l_historique(&mut e.history);
                 occupe |= e.gel.occupe();
@@ -3540,6 +3546,7 @@ impl App {
         self.montage_drag = None;
         self.heard_frame = Some(0);
         let etapes = self.history.take_steps();
+        self.gel.oublier_le_projet();
         self.thumbs.clear();
         self.layer_thumbs.clear();
         self.renderer.invalidate_all();

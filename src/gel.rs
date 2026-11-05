@@ -55,6 +55,12 @@ const HISTORIQUE_TOUTES_LES: Duration = Duration::from_millis(400);
 
 /// Numéro qui ne désigne aucun dessin : la réponse du fil de fond à un passage sur les caches de traits qui a rangé quelque chose.
 const REPONSE_CACHES: CelId = u64::MAX;
+/// L'élagage des dessins que plus rien ne retient revient au plus toutes ces secondes (`Gel::elaguer`).
+const ELAGAGE_TOUTES_LES: Duration = Duration::from_secs(15);
+/// Temps accordé, par image d'écran, au parcours de l'historique de l'élagage.
+const TRANCHE_D_ELAGAGE: Duration = Duration::from_millis(1);
+/// Un dessin dérivé des effets que personne n'a demandé entre deux passages, depuis au moins ce nombre d'usages du cache, est rangé (`fxcache::ranger_les_inactifs`).
+const FX_AU_REPOS: u64 = 30;
 /// Caches de traits rangés d'un coup, au plus.
 const CACHES_PAR_PASSE: usize = 512;
 /// Le fil de fond passe sur les caches de traits au plus toutes ces secondes.
@@ -82,9 +88,22 @@ pub struct Gel {
     caches_le: Option<Instant>,
     /// Le dernier passage sur les caches a rangé des tuiles : un autre suivra.
     caches_a_trouve: bool,
+    /// Ce gel est celui du projet affiché : lui seul passe sur les caches communs (traits, dessins dérivés des effets), qui sont ceux du projet
+    /// affiché. Les gels des onglets cachés ne les touchent pas (ils les parcourraient en plus, et le « au repos » des dessins dérivés
+    /// se mesure entre deux passages).
+    pub caches_communs: bool,
     /// Le dernier passage sur l'historique d'annulation, et s'il reste des tuiles à y ranger.
     historique_le: Option<Instant>,
     historique_a_trouve: bool,
+    /// Les dessins sans attache au dernier passage de l'élagage (`elagage.rs`), et quand il a eu lieu.
+    vus_montres: HashSet<CelId>,
+    elagage_le: Option<Instant>,
+    /// Le parcours de l'historique en cours (par tranches).
+    balayage: Option<crate::elagage::Balayage>,
+    /// Dessins retirés du projet depuis le début (diagnostic et essais).
+    pub elagues: u64,
+    /// Le plus long passage d'élagage sur le fil de l'interface (diagnostic).
+    pub elagage_pire: Duration,
 }
 
 impl Default for Gel {
@@ -105,8 +124,14 @@ impl Default for Gel {
             caches_en_route: false,
             caches_le: None,
             caches_a_trouve: false,
+            caches_communs: true,
             historique_le: None,
             historique_a_trouve: false,
+            vus_montres: HashSet::new(),
+            elagage_le: None,
+            balayage: None,
+            elagues: 0,
+            elagage_pire: Duration::ZERO,
         }
     }
 }
@@ -120,7 +145,7 @@ impl Gel {
 
     /// Reste-t-il du travail en route (le caller redemande une image d'écran bientôt) ?
     pub fn occupe(&self) -> bool {
-        self.actif && (!self.en_route.is_empty() || self.caches_en_route || self.caches_a_trouve || self.historique_a_trouve || (self.repos_jusqu.is_none() && (self.curseur < self.ids.len() || self.a_trouve)))
+        self.actif && (!self.en_route.is_empty() || self.caches_en_route || self.caches_a_trouve || self.historique_a_trouve || self.balayage.is_some() || (self.repos_jusqu.is_none() && (self.curseur < self.ids.len() || self.a_trouve)))
     }
 
     fn fil(&mut self) -> &Sender<Lot> {
@@ -139,6 +164,11 @@ impl Gel {
                             if traites == 0 {
                                 break;
                             }
+                        }
+                        // Les dessins dérivés des effets que personne n'a demandés depuis un moment (790 Mo après une longue séance).
+                        // (Un seul appel par passage : « au repos » veut dire intouché depuis le passage d'avant.)
+                        if crate::tuilepack::seance_active() {
+                            rangees += crate::fxcache::ranger_les_inactifs(FX_AU_REPOS, 64).1;
                         }
                         // (La réponse d'un passage sur les caches : vide s'il n'a rien rangé, sinon REPONSE_CACHES, pour qu'un autre passage suive.)
                         if tx_retour.send(if rangees > 0 { vec![REPONSE_CACHES] } else { Vec::new() }).is_err() {
@@ -181,6 +211,62 @@ impl Gel {
         self.historique_a_trouve = n >= TUILES_D_HISTORIQUE;
     }
 
+    /// Un autre projet prend la place de celui-ci (`App::load_doc`) : ses dessins portent les mêmes numéros que ceux de l'ancien. Ce que
+    /// l'élagage avait noté (dessins sans attache, parcours en cours) ne le concerne pas : il repart de zéro, avec son délai de grâce.
+    pub fn oublier_le_projet(&mut self) {
+        self.vus_montres.clear();
+        self.balayage = None;
+        self.elagage_le = Some(Instant::now());
+    }
+
+    /// Essais : un passage sur les caches communs est parti et n'a pas encore répondu.
+    #[cfg(test)]
+    pub fn passe_sur_les_caches_en_route(&self) -> bool {
+        self.caches_en_route
+    }
+
+    /// Essais : le prochain élagage n'attend pas son délai.
+    #[cfg(test)]
+    pub fn elagage_a_zero(&mut self) {
+        self.elagage_le = None;
+    }
+
+    /// Retire du projet les dessins que plus rien ne retient (`elagage.rs`), de temps en temps et jamais pendant un geste, une lecture ou
+    /// dans un projet partagé. `calme` : rien ne se passe (ni trait, ni lecture). Le parcours de l'historique se fait par tranches d'une
+    /// milliseconde, image après image ; si l'historique change pendant ce temps (un geste, Ctrl+Z), il est abandonné et recommencera
+    /// quinze secondes plus tard. Rend le nombre de dessins retirés.
+    pub fn elaguer(&mut self, doc: &mut Document, h: &crate::history::History, calme: bool) -> usize {
+        if !self.actif || doc.est_partage() || !crate::tuilepack::seance_active() {
+            self.balayage = None;
+            return 0;
+        }
+        if !calme {
+            return 0;
+        }
+        if self.balayage.is_none() {
+            if self.elagage_le.is_some_and(|t| t.elapsed() < ELAGAGE_TOUTES_LES) {
+                return 0;
+            }
+            self.balayage = Some(crate::elagage::Balayage::commencer(h));
+        }
+        let debut = Instant::now();
+        let Some(b) = self.balayage.as_mut() else { return 0 };
+        if b.est_perime(h) {
+            self.balayage = None;
+            self.elagage_le = Some(Instant::now());
+            return 0;
+        }
+        let mut n = 0;
+        if b.avancer(h, TRANCHE_D_ELAGAGE) {
+            if let Some(b) = self.balayage.take() {
+                self.elagage_le = Some(Instant::now());
+                n = crate::elagage::conclure(doc, b, &mut self.vus_montres);
+            }
+        }
+        self.elagage_pire = self.elagage_pire.max(debut.elapsed());
+        self.elagues += n as u64;
+        n
+    }
     /// Le bilan des tuiles du projet : (tuiles dont les pixels sont en mémoire, tuiles en tout, octets que les tuiles tiennent vraiment).
     /// Parcourt toutes les tuiles (une milliseconde pour un épisode de 200 plans) : pour une fenêtre de diagnostic, pas pour chaque image.
     pub fn bilan(doc: &Document) -> (usize, usize, usize) {
@@ -277,9 +363,9 @@ impl Gel {
             }
         }
         // Les caches de traits (531 Mo pour un épisode de 200 plans) : un passage du fil de fond de temps en temps.
-        if !self.caches_en_route && self.caches_le.is_none_or(|t| t.elapsed() >= CACHES_TOUTES_LES) {
+        if self.caches_communs && !self.caches_en_route && self.caches_le.is_none_or(|t| t.elapsed() >= CACHES_TOUTES_LES) {
             self.caches_le = Some(Instant::now());
-            if crate::vector::cache_total_bytes() > 0 {
+            if crate::vector::cache_total_bytes() > 0 || crate::fxcache::a_examiner() {
                 let envoi = self.fil().send(Lot { dessins: Vec::new(), caches: true });
                 if envoi.is_ok() {
                     self.caches_en_route = true;
