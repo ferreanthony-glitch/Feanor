@@ -10,8 +10,8 @@
 //!   (`Document::used_cels`, que l'enregistrement utilise déjà) ;
 //! - tout l'historique d'annulation et de rétablissement : chaque instantané de structure (les mêmes sources, pour ce qu'il remettrait),
 //!   et les dessins que citent les étapes de tuiles, de fond ou de dessin vectoriel ;
-//! - rien qui n'ait pas été vu montré une fois : les dessins temporaires (feuille flottante d'une sélection, numéros réservés) ne sont
-//!   jamais des dessins du projet, on n'y touche pas ;
+//! - rien qui n'ait déjà été sans attache au passage précédent (quinze secondes plus tôt) ; les dessins temporaires (feuille flottante d'une
+//!   sélection : numéros réservés) ne sont jamais touchés ;
 //! - rien dans un projet partagé (autres équipiers) ni dans un autre onglet.
 //!
 //! Un dessin retiré est lâché sur un fil de fond (`lacher::en_fond`) : libérer 6 000 dessins sur le fil de l'interface coûterait des
@@ -87,26 +87,29 @@ fn retenus_du_document(doc: &Document) -> BTreeSet<CelId> {
     out
 }
 
-/// Retire de `doc.cels` les dessins déjà « vus montrés » (`vus`) que ni le document ni l'historique ne retiennent ; rend le nombre retiré.
-/// `vus` est mis à jour d'abord (les dessins montrés maintenant). Les dessins retirés sont lâchés sur un fil de fond.
-pub fn elaguer(doc: &mut Document, h: &History, vus: &mut HashSet<CelId>) -> usize {
-    let vivants = retenus_du_document(doc);
-    vus.extend(vivants.iter().copied());
-    if vus.len() <= vivants.len() {
+/// Retire de `doc.cels` les dessins que ni le document ni l'historique ne retiennent, et qui ne sont pas retenus non plus depuis le passage
+/// précédent (`precedents` : ceux du dernier passage ; un dessin tout juste créé et pas encore posé dans un plan a ainsi au moins un passage,
+/// quinze secondes, pour l'être). Les numéros réservés aux dessins temporaires (`flottante::BASE_CEL` et au-dessus : la feuille flottante
+/// d'une sélection) ne sont jamais touchés. Rend le nombre de dessins retirés, lâchés sur un fil de fond.
+pub fn elaguer(doc: &mut Document, h: &History, precedents: &mut HashSet<CelId>) -> usize {
+    let mut retenus = retenus_du_document(doc);
+    if doc.cels.len() <= retenus.len() {
+        precedents.clear();
         return 0;
     }
-    let mut retenus = vivants;
     retenus.extend(retenus_par_l_historique(h));
-    let perdus: Vec<CelId> = doc.cels.keys().copied().filter(|id| vus.contains(id) && !retenus.contains(id)).collect();
-    if perdus.is_empty() {
+    let orphelins: HashSet<CelId> = doc.cels.keys().copied().filter(|id| *id < crate::flottante::BASE_CEL && !retenus.contains(id)).collect();
+    let a_retirer: Vec<CelId> = orphelins.iter().copied().filter(|id| precedents.contains(id)).collect();
+    *precedents = orphelins;
+    if a_retirer.is_empty() {
         return 0;
     }
-    let mut sortis = Vec::with_capacity(perdus.len());
-    for id in &perdus {
+    let mut sortis = Vec::with_capacity(a_retirer.len());
+    for id in &a_retirer {
         if let Some(c) = doc.cels.remove(id) {
             sortis.push(c);
         }
-        vus.remove(id);
+        precedents.remove(id);
     }
     let n = sortis.len();
     crate::lacher::en_fond(sortis);

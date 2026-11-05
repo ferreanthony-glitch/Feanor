@@ -1208,7 +1208,8 @@ fn ventilation_tas(b: &Banc, titre: &str) {
     let (nf, of, ns, os) = crate::fxcache::octets_en_memoire();
     let (vignettes_gpu, nv) = b.app.thumbs.octets();
     endu!(
-        "ventilation ({titre}) : caches de traits {nc} ({tc} tuiles, {:.0} Mo réels) ; effets : {nf} dessins dérivés {:.0} Mo, {ns} copies d'origine {:.0} Mo ; vignettes {nv} ({:.0} Mo carte) ; tas vivant {:.0} Mo",
+        "ventilation ({titre}) : {} dessins élagués depuis le début ; caches de traits {nc} ({tc} tuiles, {:.0} Mo réels) ; effets : {nf} dessins dérivés {:.0} Mo, {ns} copies d'origine {:.0} Mo ; vignettes {nv} ({:.0} Mo carte) ; tas vivant {:.0} Mo",
+        b.app.gel.elagues,
         mo(oc),
         mo(of),
         mo(os),

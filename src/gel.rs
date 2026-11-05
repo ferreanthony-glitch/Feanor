@@ -89,7 +89,7 @@ pub struct Gel {
     /// Le dernier passage sur l'historique d'annulation, et s'il reste des tuiles à y ranger.
     historique_le: Option<Instant>,
     historique_a_trouve: bool,
-    /// Les dessins qu'on a vu montrés par le projet (`elagage.rs` n'élague que ceux-là), et le dernier élagage.
+    /// Les dessins sans attache au dernier passage de l'élagage (`elagage.rs`), et quand il a eu lieu.
     vus_montres: HashSet<CelId>,
     elagage_le: Option<Instant>,
     /// Dessins retirés du projet depuis le début (diagnostic et essais).

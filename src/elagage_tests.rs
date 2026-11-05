@@ -42,11 +42,17 @@ fn a_plat(doc: &Document, id: CelId) -> Vec<Color32> {
     doc.cels[&id].raster.to_flat()
 }
 
-/// Deux passes : la première voit les dessins montrés, la seconde élague ce qui ne l'est plus.
-fn passes(b: &mut crate::perf_tests::Banc) -> usize {
+/// Un passage d'élagage (sans attendre le délai) ; il faut deux passages de suite pour qu'un dessin sans attache parte.
+fn passe(b: &mut crate::perf_tests::Banc) -> usize {
+    b.app.gel.elagage_a_zero();
     let a = b.app.gel.elaguer(&mut b.app.doc, &b.app.history, true);
     crate::lacher::attendre(std::time::Duration::from_secs(10));
     a
+}
+
+/// Deux passages : ce que le second retire.
+fn passes(b: &mut crate::perf_tests::Banc) -> usize {
+    passe(b) + passe(b)
 }
 
 #[test]
@@ -55,15 +61,11 @@ fn a_removed_plan_stays_while_undo_can_bring_it_back_and_goes_when_nothing_holds
     let avant: HashMap<CelId, Vec<Color32>> = ids.iter().map(|&id| (id, a_plat(&doc, id))).collect();
     let mut b = banc(doc, false);
     b.app.gel.activer(true);
-    // Un premier passage : tous les dessins sont vus montrés.
     assert_eq!(passes(&mut b), 0);
     let cible = b.app.doc.panels[2].id;
     b.app.select_panel(2);
     b.app.structure_op(|d, _| d.remove_panels(&[cible]));
     assert!(b.app.doc.panels.iter().all(|p| p.id != cible));
-    b.app.gel.activer(true);
-    // (Le délai entre deux élagages n'est pas à attendre : essai.)
-    b.app.gel.elagage_a_zero();
     assert_eq!(passes(&mut b), 0, "l'annulation peut rendre le plan : son dessin reste");
     assert!(b.app.doc.cels.contains_key(&ids[2]));
     // Annuler après l'élagage : le plan est revenu, ses pixels sont exacts.
@@ -76,8 +78,8 @@ fn a_removed_plan_stays_while_undo_can_bring_it_back_and_goes_when_nothing_holds
     b.app.redo();
     assert!(b.app.doc.panels.iter().all(|p| p.id != cible));
     b.app.history.clear();
-    b.app.gel.elagage_a_zero();
-    assert_eq!(passes(&mut b), 1);
+    assert_eq!(passe(&mut b), 0, "premier passage : le dessin est noté sans attache");
+    assert_eq!(passe(&mut b), 1, "second passage : il part");
     assert!(!b.app.doc.cels.contains_key(&ids[2]));
     for (i, &id) in ids.iter().enumerate() {
         if i != 2 {
@@ -88,7 +90,7 @@ fn a_removed_plan_stays_while_undo_can_bring_it_back_and_goes_when_nothing_holds
 }
 
 #[test]
-fn a_drawing_never_seen_shown_is_never_pruned() {
+fn a_temporary_drawing_is_never_pruned_and_an_orphan_waits_one_pass() {
     let (doc, _) = doc_de_plans(3);
     let mut b = banc(doc, false);
     b.app.gel.activer(true);
@@ -97,9 +99,13 @@ fn a_drawing_never_seen_shown_is_never_pruned() {
     let temporaire = crate::flottante::BASE_CEL;
     let c = crate::document::Cel::new(256, 192, LayerKind::Bitmap);
     b.app.doc.cels.insert(temporaire, c);
-    b.app.gel.elagage_a_zero();
-    assert_eq!(passes(&mut b), 0);
-    assert!(b.app.doc.cels.contains_key(&temporaire));
+    // Un dessin neuf pas encore posé dans un plan : il attend un passage, puis part.
+    let orphelin = b.app.doc.new_cel(LayerKind::Bitmap);
+    assert_eq!(passe(&mut b), 0);
+    assert!(b.app.doc.cels.contains_key(&orphelin), "un passage ne suffit pas");
+    assert_eq!(passe(&mut b), 1);
+    assert!(!b.app.doc.cels.contains_key(&orphelin));
+    assert!(b.app.doc.cels.contains_key(&temporaire), "le dessin temporaire reste");
 }
 
 #[test]
@@ -114,7 +120,6 @@ fn an_older_version_of_a_plan_keeps_its_drawings() {
         Some(1)
     });
     b.app.history.clear();
-    b.app.gel.elagage_a_zero();
     passes(&mut b);
     assert!(b.app.doc.cels.contains_key(&ids[1]), "le dessin de la version rangée reste");
     let rangee = b.app.doc.plans_ranges().count();
@@ -131,7 +136,6 @@ fn a_shared_project_is_never_pruned() {
     let cible = b.app.doc.panels[1].id;
     b.app.structure_op(|d, _| d.remove_panels(&[cible]));
     b.app.history.clear();
-    b.app.gel.elagage_a_zero();
     assert_eq!(passes(&mut b), 0);
     assert!(b.app.doc.cels.contains_key(&ids[1]));
 }
@@ -145,8 +149,10 @@ fn no_pruning_while_something_is_going_on() {
     let cible = b.app.doc.panels[1].id;
     b.app.structure_op(|d, _| d.remove_panels(&[cible]));
     b.app.history.clear();
-    b.app.gel.elagage_a_zero();
-    assert_eq!(b.app.gel.elaguer(&mut b.app.doc, &b.app.history, false), 0, "geste ou lecture en cours");
+    for _ in 0..2 {
+        b.app.gel.elagage_a_zero();
+        assert_eq!(b.app.gel.elaguer(&mut b.app.doc, &b.app.history, false), 0, "geste ou lecture en cours");
+    }
     assert!(b.app.doc.cels.contains_key(&ids[1]));
     assert_eq!(passes(&mut b), 1, "au calme, il part");
 }
