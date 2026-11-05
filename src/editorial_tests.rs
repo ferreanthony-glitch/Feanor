@@ -734,6 +734,18 @@ fn percent_decode(s: &str) -> String {
 }
 
 #[test]
+fn a_size_the_windows_encoder_refuses_is_explained_before_anything_is_written() {
+    let doc = film_with_sound(30);
+    let o = Options { sound: false, media: Media::H264, half: true, ..Options::default() };
+    let plan = editorial::build_plan(&doc, &o, 0, "Petit").unwrap();
+    let parent = temp("petit");
+    let enc = export::Encoders { h264: Some("h264_mf"), openh264: false, ..Default::default() };
+    let erreur = EditorialJob::start(plan, o, std::path::PathBuf::from("ffmpeg-inutilise.exe"), enc, &parent).err().expect("refusé");
+    assert!(erreur.contains("au moins 64 × 36"), "{erreur}");
+    assert!(!parent.join("Petit").exists(), "rien n'est écrit");
+}
+
+#[test]
 fn a_real_h264_export_at_30_ntsc_with_absolute_paths() {
     let Some((ffmpeg, enc)) = ffmpeg_and_encoders() else {
         eprintln!("ffmpeg absent : export H.264 sauté");
@@ -744,7 +756,9 @@ fn a_real_h264_export_at_30_ntsc_with_absolute_paths() {
     }
     let mut doc = film_with_sound(30);
     dissolve(&mut doc, 2, 10, Align::After);
-    let o = Options { sound: true, media: Media::H264, ntsc: true, absolute: true, half: true, edl: false, otio: true, xml: true, start_tc: "00:59:50:00".into(), ..Options::default() };
+    // (Le film d'essai fait 64 × 36 : sa moitié passerait sous le minimum de l'encodeur de Windows, seul H.264 du ffmpeg livré.)
+    let half = !(enc.h264 == Some("h264_mf") && !enc.openh264);
+    let o = Options { sound: true, media: Media::H264, ntsc: true, absolute: true, half, edl: false, otio: true, xml: true, start_tc: "00:59:50:00".into(), ..Options::default() };
     let plan = editorial::build_plan(&doc, &o, 0, "Trente").unwrap();
     assert_eq!(plan.rate.ffmpeg(), "30000/1001");
     let parent = temp("h264");

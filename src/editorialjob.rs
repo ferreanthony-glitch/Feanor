@@ -149,6 +149,11 @@ impl EditorialJob {
             editorial::Media::H264 if enc.h264.is_none() => return Err("Ce ffmpeg ne sait pas encoder en H.264.".into()),
             _ => {}
         }
+        // Une taille que l'encodeur refuserait : le dire tout de suite, plutôt que l'erreur brute de ffmpeg au premier plan.
+        let taille = if plan.half { crate::exportvideo::VideoSize::Half } else { crate::exportvideo::VideoSize::Project }.dimensions(plan.frame);
+        if let Some(p) = crate::exportvideo::size_problem_for(plan.media.format(), taille, &enc) {
+            return Err(format!("Export impossible : {p}."));
+        }
         let dir = export_dir_for(parent, &plan.title);
         let made_dir = !dir.exists();
         fs::create_dir_all(dir.join("media")).map_err(|e| format!("{} : {e}", dir.display()))?;
