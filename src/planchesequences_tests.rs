@@ -325,8 +325,8 @@ fn renaming_a_sequence_is_one_undo_step_and_the_title_shows_the_name() {
     // Un nom vide revient au numéro automatique ; un nom trop long est coupé.
     b.app.sequence_renommer(q, "");
     assert_ne!(b.app.doc.sequence_label(q), "Course");
-    b.app.sequence_renommer(q, &"x".repeat(200));
-    assert_eq!(b.app.doc.sequence_label(q).chars().count(), 60);
+    b.app.sequence_renommer(q, &"x".repeat(300));
+    assert_eq!(b.app.doc.sequence_label(q).chars().count(), crate::planchesequencesui::NOM_MAX);
 }
 
 // ------------------------------------------------------------------------------ ce qui suit la mise en page

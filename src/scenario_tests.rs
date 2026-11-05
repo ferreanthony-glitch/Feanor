@@ -428,7 +428,7 @@ fn the_three_splits_give_the_documented_plans() {
 
     // Un plan par scène : les blocs sont ses images de storyboard.
     let by_scene = build(&script, &Options { split: Split::Scene, ..Options::default() });
-    assert_eq!(titles(&by_scene), vec!["INT. CUISINE – NUIT", "EXT. RUE – JOUR"]);
+    assert_eq!(titles(&by_scene), vec!["1. INT. CUISINE - NUIT", "2. EXT. RUE - JOUR"]);
     assert_eq!(counts(&by_scene), vec![1, 1]);
     assert_eq!(by_scene.sequences[0].plans[0].beats.len(), 5);
 
@@ -468,7 +468,7 @@ fn sections_synopses_and_stray_notes_find_a_plan() {
     let script = fountain("# Acte I\n\n[[avant tout]]\n\nINT. CUISINE - NUIT\n\n= Marie cherche sa clé\n\nMarie entre.\n\nEXT. RUE - JOUR\n\nIl pleut.\n\n# Acte II\n");
     let o = build(&script, &Options { split: Split::Paragraph, ..Options::default() });
     // Rien avant le premier intitulé ne fait une séquence : section et note vont à sa scène.
-    assert_eq!(o.sequences.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), vec!["INT. CUISINE – NUIT", "EXT. RUE – JOUR"]);
+    assert_eq!(o.sequences.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), vec!["1. INT. CUISINE - NUIT", "2. EXT. RUE - JOUR"]);
     let notes_of = |s: usize, p: usize| o.sequences[s].plans[p].beats[0].notes.clone();
     let expected: Vec<String> = ["Décor : INT. CUISINE – NUIT", "Section : Acte I", "Note : avant tout", "Synopsis : Marie cherche sa clé"].map(String::from).to_vec();
     assert_eq!(notes_of(0, 0), expected);
@@ -478,7 +478,7 @@ fn sections_synopses_and_stray_notes_find_a_plan() {
     // De l'action avant le premier intitulé fait la séquence « Ouverture ».
     let opening = fountain("Un long plan sur la mer.\n\nINT. CUISINE - NUIT\n\nMarie entre.\n");
     let o = build(&opening, &Options::default());
-    assert_eq!(o.sequences.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), vec!["Ouverture", "INT. CUISINE – NUIT"]);
+    assert_eq!(o.sequences.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), vec!["Ouverture", "1. INT. CUISINE - NUIT"]);
     assert!(o.sequences[0].plans[0].beats[0].notes.is_empty(), "pas de décor à noter pour Ouverture");
 }
 
@@ -489,7 +489,7 @@ fn the_sample_script_of_the_docs_imports_into_the_expected_structure() {
     assert_eq!(script.author, "Anthony F.");
     assert!(script.warnings.is_empty(), "{:?}", script.warnings);
     let o = build(&script, &Options::default());
-    assert_eq!(o.sequences.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), vec!["INT. CUISINE – NUIT", "EXT. RUE – AUBE", "INT. CUISINE – JOUR"]);
+    assert_eq!(o.sequences.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), vec!["1. INT. CUISINE - NUIT", "2. EXT. RUE - AUBE", "3. INT. CUISINE - JOUR"]);
     let names: Vec<&str> = o.characters.iter().map(|c| c.name.as_str()).collect();
     assert_eq!(names, vec!["MARIE", "PAUL"]);
     let mut doc = blank_project();
@@ -563,8 +563,8 @@ fn a_new_project_receives_sequences_plans_texts_and_durations() {
     assert_eq!(doc.properties.title, "Le Réveil");
     assert_eq!(doc.properties.author, "Anthony F.");
     assert_eq!(doc.sequence_order().len(), 2);
-    assert_eq!(doc.sequence_label(doc.sequence_order()[0]), "INT. CUISINE – NUIT");
-    assert_eq!(doc.sequence_label(doc.sequence_order()[1]), "EXT. RUE – JOUR");
+    assert_eq!(doc.sequence_label(doc.sequence_order()[0]), "1. INT. CUISINE - NUIT");
+    assert_eq!(doc.sequence_label(doc.sequence_order()[1]), "2. EXT. RUE - JOUR");
     let p = &doc.panels;
     assert_eq!(p[0].action, "Marie cherche sa clé.");
     assert_eq!(p[0].notes, "Décor : INT. CUISINE – NUIT");
@@ -631,13 +631,13 @@ fn appending_replaces_a_blank_project_and_otherwise_goes_after_the_sequence_of_t
     let mut at_end = doc_clone(&doc);
     let a = scenarioplans::append_to_project(&mut at_end, &small, Dest::End, 0).unwrap();
     assert_eq!((a.first, at_end.panels.len()), (4, 5));
-    assert_eq!(names(&at_end), vec!["INT. CUISINE – NUIT", "EXT. RUE – JOUR", "INT. SALON – JOUR"]);
+    assert_eq!(names(&at_end), vec!["1. INT. CUISINE - NUIT", "2. EXT. RUE - JOUR", "1. INT. SALON - JOUR"]);
 
     let mut after = doc_clone(&doc);
     // Le plan 1 est au milieu de la première séquence (3 plans) : l'import va après ses trois plans.
     let a = scenarioplans::append_to_project(&mut after, &small, Dest::AfterCurrent, 1).unwrap();
     assert_eq!(a.first, 3);
-    assert_eq!(names(&after), vec!["INT. CUISINE – NUIT", "INT. SALON – JOUR", "EXT. RUE – JOUR"]);
+    assert_eq!(names(&after), vec!["1. INT. CUISINE - NUIT", "1. INT. SALON - JOUR", "2. EXT. RUE - JOUR"]);
     assert_eq!(after.panels[3].action, "Texte.");
     assert!(after.is_plans());
     let ids: std::collections::HashSet<u64> = after.panels.iter().map(|p| p.id).collect();
@@ -852,4 +852,94 @@ fn the_command_exists_in_the_palette_and_the_file_menu_action_list() {
     assert_eq!(crate::scenarioui::duration_text(0.0), "0 s");
     assert_eq!(crate::scenarioui::duration_text(125.0), "2 min 05 s");
     assert_eq!(crate::scenarioui::duration_text(3725.0), "1 h 02 min");
+}
+
+// ------------------------------------------------------------------------------------ numéros et intitulés des séquences (partie 106)
+
+fn noms_des_sequences(script: &Script) -> Vec<String> {
+    build(script, &Options::default()).sequences.iter().map(|s| s.name.clone()).collect()
+}
+
+#[test]
+fn sequences_take_the_scene_number_and_the_heading_as_the_file_writes_them() {
+    // Fountain : numéro entre dièses, en tête, ou après des espaces ; sans numéro, le rang de la scène. L'écriture d'origine est gardée.
+    let f = fountain("INT. JOUR - CUISINE #12#\n\nMarie entre.\n\n.EXT. RUE -- NUIT\n\nIl pleut.\n\n14. INT. SALON - SOIR\n\nTexte.\n\nINT. CAFÉ - AUBE    7\n\nOiseaux.\n");
+    assert_eq!(noms_des_sequences(&f), vec!["12. INT. JOUR - CUISINE", "2. EXT. RUE -- NUIT", "14. INT. SALON - SOIR", "7. INT. CAFÉ - AUBE"]);
+    // L'élément garde le numéro et l'écriture ; le nom aux tirets longs reste celui du panneau Scénario.
+    let h = &f.elements[0];
+    assert_eq!((h.numero.as_str(), h.ecriture.as_str()), ("12", "INT. JOUR - CUISINE"));
+    assert!(matches!(&h.kind, Kind::Heading(n) if n == "INT. JOUR – CUISINE"));
+    // Une lettre de bis.
+    let g = fountain("12A INT. SALON - JOUR\n\nTexte.\n");
+    assert_eq!(noms_des_sequences(&g), vec!["12A. INT. SALON - JOUR"]);
+    // Texte brut.
+    let t = text("INT. SALON - JOUR\n\nTexte.\n\n5. EXT. RUE - NUIT\n\nPluie.\n");
+    assert_eq!(noms_des_sequences(&t), vec!["1. INT. SALON - JOUR", "5. EXT. RUE - NUIT"]);
+    // Rien avant le premier intitulé ne prend de numéro : « Ouverture » reste telle quelle, le rang compte les intitulés.
+    let o = fountain("Un long plan sur la mer.\n\nINT. CUISINE - NUIT\n\nMarie entre.\n");
+    assert_eq!(noms_des_sequences(&o), vec!["Ouverture", "1. INT. CUISINE - NUIT"]);
+}
+
+#[test]
+fn a_final_draft_scene_number_is_the_sequence_number() {
+    let fdx = r#"<?xml version="1.0" encoding="UTF-8" standalone="no" ?>
+<FinalDraft DocumentType="Script" Template="No" Version="2">
+  <Content>
+    <Paragraph Number="3" Type="Scene Heading"><Text>INT. JOUR - CUISINE</Text></Paragraph>
+    <Paragraph Type="Action"><Text>Marie entre.</Text></Paragraph>
+    <Paragraph Type="Scene Heading"><Text>EXT. RUE - NUIT</Text></Paragraph>
+    <Paragraph Type="Action"><Text>Il pleut.</Text></Paragraph>
+  </Content>
+</FinalDraft>"#;
+    let s = scenario::parse_bytes(fdx.as_bytes(), "fdx", &quiet).unwrap();
+    assert_eq!(noms_des_sequences(&s), vec!["3. INT. JOUR - CUISINE", "2. EXT. RUE - NUIT"]);
+}
+
+#[test]
+fn a_kept_script_without_the_new_fields_still_reads_and_the_fields_are_not_written_when_empty() {
+    // Un scénario gardé avant ce champ : aucun numéro ni écriture d'origine, on retombe sur le rang et le nom aux tirets longs.
+    let f = fountain("INT. CUISINE - NUIT\n\nMarie entre.\n");
+    let mut v = serde_json::to_value(&f).unwrap();
+    for e in v["elements"].as_array_mut().unwrap() {
+        let o = e.as_object_mut().unwrap();
+        o.remove("numero");
+        o.remove("ecriture");
+    }
+    let s: Script = serde_json::from_value(v).expect("un ancien scénario se lit");
+    assert_eq!(noms_des_sequences(&s), vec!["1. INT. CUISINE – NUIT"]);    let texte = serde_json::to_string(&s).unwrap();
+    assert!(!texte.contains("numero") && !texte.contains("ecriture"), "rien d'écrit pour un champ vide : {texte}");
+    // Un scénario neuf garde ce qu'il a lu, et le relit pareil.
+    let f = fountain("INT. JOUR - CUISINE #12#\n\nMarie entre.\n");
+    let relu: Script = serde_json::from_str(&serde_json::to_string(&f).unwrap()).unwrap();
+    assert_eq!(relu, f);
+    assert_eq!(noms_des_sequences(&relu), vec!["12. INT. JOUR - CUISINE"]);
+}
+
+#[test]
+fn creating_plans_names_the_new_sequences_and_leaves_the_existing_ones_and_locked_numbers_alone() {
+    let script = fountain("INT. JOUR - CUISINE #12#\n\nMarie entre.\n\nEXT. RUE - NUIT\n\nIl pleut.\n");
+    let o = build(&script, &Options::default());
+    let mut doc = blank_project();
+    scenarioplans::append_to_project(&mut doc, &o, Dest::End, 0).unwrap();
+    doc.numbering_locked = true;
+    let seqs = doc.sequence_order();
+    // La numérotation verrouillée garde ses propres numéros : l'import n'y touche pas.
+    assert!(seqs.iter().all(|q| doc.sequences.iter().find(|s| s.id == *q).unwrap().number.is_empty()));
+    assert_eq!(doc.sequence_label(seqs[0]), "12. INT. JOUR - CUISINE");
+    // Un projet déjà importé ne change pas quand on crée d'autres plans depuis le même scénario.
+    let avant: Vec<String> = seqs.iter().map(|q| doc.sequence_label(*q)).collect();
+    scenarioplans::append_to_project(&mut doc, &o, Dest::End, 0).unwrap();
+    let apres: Vec<String> = doc.sequence_order().iter().map(|q| doc.sequence_label(*q)).collect();
+    assert_eq!(apres[..2], avant[..], "les séquences d'avant gardent leur nom");
+    assert_eq!(apres.len(), 4);
+}
+
+#[test]
+fn a_very_long_heading_gives_a_name_no_longer_than_a_sequence_name_may_be() {
+    let long = format!("INT. {} - JOUR", "SALLE DES MACHINES DU GRAND PALAIS ".repeat(5).trim());
+    assert!(long.chars().count() <= 200);
+    let s = fountain(&format!("{long}\n\nTexte.\n"));
+    let noms = noms_des_sequences(&s);
+    assert_eq!(noms.len(), 1);
+    assert!(noms[0].starts_with("1. INT. SALLE DES MACHINES") && noms[0].chars().count() <= crate::planchesequencesui::NOM_MAX, "{}", noms[0].chars().count());
 }

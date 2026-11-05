@@ -674,6 +674,8 @@ impl App {
             return false;
         }
         self.load_doc(doc);
+        // (Un projet qui a des textes d'action, de dialogue ou de notes : leurs lignes se cochent, pour qu'ils se voient sous les cases.)
+        self.vignettes_montrer_les_textes_saisis();
         // (Un projet est là, même sans nom et sans changement : plus d'accueil, `sansprojet.rs`.)
         self.welcome = false;
         self.session_a_ecrire = true;

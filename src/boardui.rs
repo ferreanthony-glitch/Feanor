@@ -160,6 +160,8 @@ pub(crate) enum MenuTarget {
     /// le rang du plan à un autre (« Animer cette image » animait le plan voisin, Anthony 2026-10-22). `cadre` : le cadre de
     /// caméra sous le clic droit, s'il y en a un (« Retirer ce cadre »).
     Card { plan: u64, case: u64, cadre: Option<usize> },
+    /// Le titre de la séquence `0` (« Renommer la séquence… »).
+    Titre(u64),
     Background,
 }
 
@@ -671,7 +673,10 @@ impl App {
                     let cadre = if simple { None } else { crate::vignettecam::cadre_sous(&quads, p) };
                     MenuTarget::Card { plan: c.plan, case: c.id, cadre }
                 }
-                _ => MenuTarget::Background,
+                _ => match layout.titre_en(p) {
+                    Some(g) => MenuTarget::Titre(layout.groupes[g].sequence),
+                    None => MenuTarget::Background,
+                },
             });
             return false;
         }
@@ -1327,6 +1332,10 @@ impl App {
                     ui.close_menu();
                 }
             },
+            Some(MenuTarget::Titre(seq)) => {
+                self.titre_menu(ui, seq);
+                self.board_menu(ui, &layout, &texts);
+            }
             _ => self.board_menu(ui, &layout, &texts),
         });
         self.note_text_editor(ui, xf, &layout);

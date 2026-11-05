@@ -602,6 +602,8 @@ mod planchesequences;
 mod planchesequencesui;
 #[cfg(test)]
 mod planchesequences_tests;
+#[cfg(test)]
+mod sequencesnoms_tests;
 // Nouvelle séquence avec les plans choisis.
 mod sequenceplans;
 #[cfg(test)]

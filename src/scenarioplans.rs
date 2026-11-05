@@ -347,7 +347,14 @@ pub fn build(script: &Script, opt: &Options) -> Outline {
     let mut carry: Vec<String> = Vec::new();
     for (ei, e) in script.elements.iter().enumerate() {
         if let Kind::Heading(h) = &e.kind {
-            let mut s = SceneAcc::new(h.clone(), Some(h.clone()), &mut carry, ei);
+            // La séquence porte le numéro et l'intitulé de sa scène, comme le fichier les écrit : « 12. INT. JOUR - CUISINE ». Le numéro de
+            // scène du scénario s'il en a un, sinon le rang de la scène (les scènes qui ont un intitulé, depuis 1). Un scénario gardé avant
+            // l'écriture d'origine (`Element::ecriture` vide) donne le nom aux tirets longs.
+            let rang = scenes.iter().filter(|s| s.slug.is_some()).count() + 1;
+            let ecriture = if e.ecriture.trim().is_empty() { h.as_str() } else { e.ecriture.as_str() };
+            let numero = if e.numero.trim().is_empty() { rang.to_string() } else { e.numero.trim().to_string() };
+            let nom: String = format!("{numero}. {ecriture}").chars().take(crate::planchesequencesui::NOM_MAX).collect();
+            let mut s = SceneAcc::new(nom, Some(h.clone()), &mut carry, ei);
             s.first_notes.extend(inline_notes(&e.notes));
             scenes.push(s);
             continue;

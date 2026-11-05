@@ -5273,6 +5273,8 @@ impl App {
             self.comparer_fenetre(ctx);
             self.purge_versions_fenetre(ctx);
             self.variantes_fenetres(ctx);
+            // Le nom d'une séquence qu'on renomme depuis le montage ou la liste du panneau Planche (`planchesequencesui.rs`).
+            self.sequence_fenetre(ctx);
             // Clic droit dans le dessin : les réglages de l'outil sous le curseur, par-dessus tout (`reglagesdroit.rs`).
             self.reglages_droit_fenetre(ctx);
         }

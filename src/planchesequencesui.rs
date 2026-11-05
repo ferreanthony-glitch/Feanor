@@ -18,10 +18,13 @@ pub(crate) struct TitreEdit {
     pub buffer: String,
     pub focused: bool,
     pub had_focus: bool,
+    /// Le nom s'écrit dans une petite fenêtre (le montage, la liste du panneau, ou un titre que la planche ne montre pas) et non sur le
+    /// titre de la planche.
+    pub fenetre: bool,
 }
 
-/// Longueur la plus grande du nom d'une séquence.
-const NOM_MAX: usize = 60;
+/// Longueur la plus grande du nom d'une séquence (un intitulé de scénario de 200 signes tient, avec son numéro).
+pub(crate) const NOM_MAX: usize = 200;
 
 impl App {
     // ------------------------------------------------------------------ ce qu'on affiche
@@ -134,8 +137,12 @@ impl App {
 
     /// Renomme la séquence `id` (une étape d'annulation, seulement si le nom change). Vide : son numéro automatique.
     pub(crate) fn sequence_renommer(&mut self, id: u64, nom: &str) {
-        let nom: String = nom.trim().chars().filter(|c| !c.is_control()).take(NOM_MAX).collect();
         let Some(courant) = self.doc.sequences.iter().find(|s| s.id == id).map(|s| s.name.clone()) else { return };
+        // (Le même nom, tel quel : rien, même s'il dépasse la longueur permise à la frappe.)
+        if courant.trim() == nom.trim() {
+            return;
+        }
+        let nom: String = nom.trim().chars().filter(|c| !c.is_control()).take(NOM_MAX).collect();
         if courant == nom || self.storyboard_refuses() {
             return;
         }
@@ -146,30 +153,45 @@ impl App {
         self.status = format!("Séquence renommée : {}.", self.doc.sequence_label(id));
     }
 
-    /// « Renommer la séquence » (commande) : le titre de la séquence du plan courant s'ouvre à l'écriture, sur la planche.
+    /// « Renommer la séquence » (commande) : la séquence du plan courant se renomme.
     pub(crate) fn sequence_renommer_courante(&mut self) {
         let seq = self.doc.sequence_of(self.cur_panel);
-        if !self.board_shown() {
-            self.status = "Les titres des séquences se renomment dans les Vignettes (double-clic sur le titre).".into();
+        self.sequence_renommer_ouvrir(seq);
+    }
+
+    /// Ouvre le nom de la séquence `seq` à l'écriture : sur son titre, dans la planche, quand la planche est à l'écran et montre ce titre ;
+    /// sinon (le montage, la liste du panneau, une séquence seule dans le film, cachée de la planche) dans une petite fenêtre. Dans les deux
+    /// cas : Entrée valide, Échap abandonne, une seule étape d'annulation, « Renommer la séquence ».
+    pub(crate) fn sequence_renommer_ouvrir(&mut self, seq: u64) {
+        if self.storyboard_refuses() {
             return;
         }
-        let layout = self.board_layout();
-        if layout.groupes.iter().any(|g| g.sequence == seq && g.titre.is_some()) {
+        let sur_la_planche = self.board_shown() && self.board_layout().groupes.iter().any(|g| g.sequence == seq && g.titre.is_some());
+        if sur_la_planche {
             self.titre_ouvrir(seq);
             self.planche_aller_a_la_sequence(seq);
         } else {
-            self.status = "Cette séquence n'a pas de titre sur la planche (elle est cachée, ou c'est la seule du film).".into();
+            self.titre_ouvrir_fenetre(seq);
         }
     }
 
-    /// Ouvre le titre de la séquence `id` à l'écriture.
+    /// Ouvre le titre de la séquence `id` à l'écriture, sur la planche.
     pub(crate) fn titre_ouvrir(&mut self, id: u64) {
+        self.titre_ouvrir_comme(id, false);
+    }
+
+    /// Ouvre le nom de la séquence `id` à l'écriture, dans une petite fenêtre.
+    pub(crate) fn titre_ouvrir_fenetre(&mut self, id: u64) {
+        self.titre_ouvrir_comme(id, true);
+    }
+
+    fn titre_ouvrir_comme(&mut self, id: u64, fenetre: bool) {
         if self.storyboard_refuses() {
             return;
         }
         let nom = self.doc.sequences.iter().find(|s| s.id == id).map(|s| s.name.clone()).unwrap_or_default();
         // (Le nom écrit, ou vide : le numéro automatique est alors gardé comme indication.)
-        self.vignettes.titre_edit = Some(TitreEdit { sequence: id, buffer: nom, focused: false, had_focus: false });
+        self.vignettes.titre_edit = Some(TitreEdit { sequence: id, buffer: nom, focused: false, had_focus: false, fenetre });
     }
 
     /// Pose le titre en cours d'écriture : une étape d'annulation, nommée, si le nom a changé.
@@ -209,21 +231,98 @@ impl App {
                 continue;
             }
             let nom = self.doc.sequence_label(g.sequence);
-            let galley = clip.layout_no_wrap(nom, FontId::proportional(font), encre);
+            let n = ids.iter().filter(|&&q| q == g.sequence).count();
+            let petit = clip.layout_no_wrap(format!("{n} plan{}", if n > 1 { "s" } else { "" }), FontId::proportional((font * 0.5).max(10.0)), Color32::from_gray(120));
+            // Un titre trop long pour la largeur de la séquence est coupé net par « … » (le nombre de plans garde sa place à sa droite) ;
+            // le nom entier est dans la bulle du titre et dans l'éditeur.
+            let place = (r.width() - petit.size().x - font * 0.5 - 4.0).max(font * 2.0);
+            let mut job = egui::text::LayoutJob::simple(nom, FontId::proportional(font), encre, place);
+            job.wrap.max_rows = 1;
+            job.wrap.overflow_character = Some('…');
+            let galley = clip.layout_job(job);
             let at = pos2(r.left(), r.bottom() - galley.size().y);
             let gras = (font * 0.035).max(0.4);
             for d in [vec2(0.0, 0.0), vec2(gras, 0.0), vec2(0.0, gras)] {
                 clip.galley(at + d, galley.clone(), encre);
             }
-            let n = ids.iter().filter(|&&q| q == g.sequence).count();
-            let petit = clip.layout_no_wrap(format!("{n} plan{}", if n > 1 { "s" } else { "" }), FontId::proportional((font * 0.5).max(10.0)), Color32::from_gray(120));
             clip.galley(pos2(r.left() + galley.size().x + font * 0.5, r.bottom() - petit.size().y - 1.0), petit, Color32::from_gray(120));
+        }
+    }
+
+    /// La bulle d'un titre (un titre visible, pas en cours d'écriture) : le nom entier (il peut être coupé par « … » sur la planche) et
+    /// comment le renommer. Sans la bulle, personne ne savait que le titre se renomme.
+    fn titres_bulles(&self, ui: &mut egui::Ui, xf: Xf, layout: &BoardLayout) {
+        if layout.groupes.is_empty() {
+            return;
+        }
+        let Some(p) = ui.input(|i| i.pointer.hover_pos()) else { return };
+        let Some(g) = layout.titre_en(xf.to_board(p)) else { return };
+        let seq = layout.groupes[g].sequence;
+        if self.vignettes.titre_edit.as_ref().is_some_and(|e| e.sequence == seq && !e.fenetre) {
+            return;
+        }
+        let Some(t) = layout.groupes[g].titre else { return };
+        let nom = self.doc.sequence_label(seq);
+        let resp = ui.interact(xf.rect(t).intersect(ui.clip_rect()), egui::Id::new(("titre_sequence", seq)), egui::Sense::hover());
+        let _ = crate::bulles::bulle(resp, &nom, "Double-clic sur le titre, ou clic droit > Renommer la séquence : Entrée valide, Échap abandonne, Ctrl+Z rend l'ancien nom.", "");
+    }
+
+    /// Le menu du clic droit sur le titre d'une séquence : la renommer, puis le menu du fond de la planche.
+    pub(crate) fn titre_menu(&mut self, ui: &mut egui::Ui, seq: u64) {
+        let nom = self.doc.sequence_label(seq);
+        ui.label(RichText::new(format!("Séquence {nom}")).weak().small());
+        if ui.button("Renommer la séquence…").clicked() {
+            ui.close_menu();
+            self.sequence_renommer_ouvrir(seq);
+        }
+        ui.separator();
+    }
+
+    /// La petite fenêtre du nom d'une séquence (le montage, la liste du panneau, une séquence que la planche ne titre pas) : Entrée ou
+    /// « Renommer » valide, Échap ou « Annuler » abandonne. Une seule étape d'annulation.
+    pub(crate) fn sequence_fenetre(&mut self, ctx: &egui::Context) {
+        let Some(ed) = self.vignettes.titre_edit.as_ref().filter(|e| e.fenetre) else { return };
+        let id = ed.sequence;
+        if !self.doc.sequences.iter().any(|s| s.id == id) {
+            self.vignettes.titre_edit = None;
+            return;
+        }
+        let indication = self.doc.sequence_label(id);
+        let (mut ok, mut annuler) = (false, false);
+        let Some(ed) = self.vignettes.titre_edit.as_mut() else { return };
+        egui::Window::new("Renommer la séquence").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0)).show(ctx, |ui| {
+            ui.label("Le nom de la séquence (son titre sur la planche). Vide : son numéro automatique.");
+            let champ = ui.add(egui::TextEdit::singleline(&mut ed.buffer).hint_text(indication).char_limit(NOM_MAX).desired_width(340.0));
+            if !ed.focused {
+                champ.request_focus();
+                ed.focused = true;
+            }
+            if champ.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                ok = true;
+            }
+            ui.horizontal(|ui| {
+                if ui.button("Renommer").clicked() {
+                    ok = true;
+                }
+                if ui.button("Annuler").clicked() {
+                    annuler = true;
+                }
+            });
+        });
+        if ctx.input(|i| i.key_pressed(Key::Escape)) {
+            annuler = true;
+        }
+        if ok {
+            self.titre_valider();
+        } else if annuler {
+            self.vignettes.titre_edit = None;
         }
     }
 
     /// L'éditeur du titre en cours de renommage : Entrée (ou un clic ailleurs) valide, Échap abandonne.
     pub(crate) fn titre_editeur(&mut self, ui: &mut egui::Ui, xf: Xf, layout: &BoardLayout) {
-        let Some(id) = self.vignettes.titre_edit.as_ref().map(|e| e.sequence) else { return };
+        self.titres_bulles(ui, xf, layout);
+        let Some(id) = self.vignettes.titre_edit.as_ref().filter(|e| !e.fenetre).map(|e| e.sequence) else { return };
         let Some(t) = layout.groupes.iter().find(|g| g.sequence == id).and_then(|g| g.titre) else {
             self.vignettes.titre_edit = None;
             return;
@@ -303,6 +402,7 @@ impl App {
         let mut lache: Option<u64> = None;
         let mut va_a: Option<u64> = None;
         let mut a_basculer: Option<u64> = None;
+        let mut a_renommer: Option<u64> = None;
         for &(id, montree) in &liste {
             let n = ids.iter().filter(|&&q| q == id).count();
             let nom = self.doc.sequence_label(id);
@@ -318,10 +418,19 @@ impl App {
                     let largeur = (ui.available_width() - 56.0).max(40.0);
                     let actuelle = id == courante;
                     let resp = ui.add(egui::Button::new(crate::bulles::encre_etat(texte, actuelle)).selected(actuelle).min_size(vec2(largeur, 0.0)).sense(egui::Sense::click_and_drag()));
-                    let resp = crate::bulles::bulle(resp, &nom, "Un clic va à cette séquence. Glisse-la pour choisir son rang sur la planche (l'ordre du film ne change pas).", "");
+                    let resp = crate::bulles::bulle(resp, &nom, "Un clic va à cette séquence ; double-clic ou clic droit : la renommer. Glisse-la pour choisir son rang sur la planche (l'ordre du film ne change pas).", "");
                     if resp.clicked() {
                         va_a = Some(id);
                     }
+                    if resp.double_clicked() {
+                        a_renommer = Some(id);
+                    }
+                    resp.context_menu(|ui| {
+                        if ui.button("Renommer la séquence…").clicked() {
+                            ui.close_menu();
+                            a_renommer = Some(id);
+                        }
+                    });
                     if resp.dragged() {
                         self.vignettes.seq_glisse = Some(id);
                         ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
@@ -339,6 +448,9 @@ impl App {
         self.sequences_glisser(ui, &lignes, lache);
         if let Some(id) = a_basculer {
             self.affichage_basculer(id);
+        }
+        if let Some(id) = a_renommer {
+            self.titre_ouvrir_fenetre(id);
         }
         if let Some(id) = va_a {
             if let Some(i) = ids.iter().position(|&q| q == id) {
@@ -378,6 +490,6 @@ impl App {
         let texte = if n > 1 { format!("Nouvelle séquence avec les {n} cases choisies") } else { "Nouvelle séquence avec cette case".to_string() };
         self.action_item(ui, &texte, "sequence.nouvelle_avec_cases");
         self.action_item(ui, "Couper la séquence ici", "sequence.couper_ici");
-        self.action_item(ui, "Renommer la séquence", "sequence.renommer");
+        self.action_item(ui, "Renommer la séquence…", "sequence.renommer");
     }
 }
