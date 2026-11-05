@@ -121,7 +121,7 @@ fn only_the_selected_tab_is_lit() {
         }
         panic!("{texte}");
     };
-    let sur_accent = crate::theme::sur_accent();
+    let sur_accent = crate::theme::sur_selection();
     for (espace, allume) in [(Espace::Storyboard, " Storyboard "), (Espace::Animation, " Animation "), (Espace::Montage, " Montage ")] {
         b.app.set_espace(espace);
         b.chauffer(3);

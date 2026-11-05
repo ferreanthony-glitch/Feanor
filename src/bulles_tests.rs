@@ -257,7 +257,7 @@ fn the_ink_of_a_toggle_only_changes_when_it_is_on() {
     let on = bulles::encre_etat(egui::RichText::new("x"), true);
     assert_eq!(off, egui::RichText::new("x"), "éteint : l'encre du widget reste");
     assert_ne!(on, egui::RichText::new("x"), "allumé : l'encre est posée");
-    assert_eq!(on, egui::RichText::new("x").color(theme::sur_accent()));
+    assert_eq!(on, egui::RichText::new("x").color(theme::sur_selection()));
 }
 
 #[test]
