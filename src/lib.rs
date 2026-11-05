@@ -158,6 +158,8 @@ pub mod logo;
 mod marque;
 mod barre;
 #[cfg(test)]
+mod police_tests;
+#[cfg(test)]
 mod barre_tests;
 #[cfg(test)]
 mod logo_tests;

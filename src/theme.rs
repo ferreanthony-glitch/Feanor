@@ -827,7 +827,14 @@ pub fn visuels() -> egui::Visuals {
 }
 
 /// Interface dense : espacements serrés, textes un peu plus petits qu'egui par défaut.
+#[allow(dead_code)] // (les essais d'une fenêtre seule, sans polices Plex)
 pub fn densifier(style: &mut egui::Style) {
+    densifier_avec(style, false);
+}
+
+/// Comme `densifier` ; `plex` : les polices d'IBM Plex sont chargées dans ce contexte (`marque::polices_pretes`), donc les
+/// boutons et les titres peuvent prendre leurs familles Medium et SemiBold (sans elles, egui refuserait la famille).
+pub fn densifier_avec(style: &mut egui::Style, plex: bool) {
     let s = &mut style.spacing;
     s.item_spacing = Vec2::new(6.0, 3.0);
     s.button_padding = Vec2::new(7.0, 2.0);
@@ -843,8 +850,8 @@ pub fn densifier(style: &mut egui::Style) {
     style.text_styles = [
         (TextStyle::Small, FontId::new(10.5, p.clone())),
         (TextStyle::Body, FontId::new(12.5, p.clone())),
-        (TextStyle::Button, FontId::new(12.5, p.clone())),
-        (TextStyle::Heading, FontId::new(16.0, p)),
+        (TextStyle::Button, FontId::new(12.5, if plex { FontFamily::Name(crate::marque::FAMILLE_MEDIUM.into()) } else { p.clone() })),
+        (TextStyle::Heading, FontId::new(16.0, if plex { FontFamily::Name(crate::marque::FAMILLE_SEMIBOLD.into()) } else { p })),
         (TextStyle::Monospace, FontId::new(11.5, FontFamily::Monospace)),
     ]
     .into();
@@ -926,9 +933,10 @@ pub fn appliquer(ctx: &egui::Context) {
     let claire = palette().claire;
     ctx.set_theme(if claire { egui::ThemePreference::Light } else { egui::ThemePreference::Dark });
     let visuels = visuels();
+    let plex = crate::marque::polices_pretes(ctx);
     ctx.all_styles_mut(|style| {
         style.visuals = visuels.clone();
-        densifier(style);
+        densifier_avec(style, plex);
     });
 }
 

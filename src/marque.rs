@@ -50,6 +50,45 @@ pub fn polices(fonts: &mut FontDefinitions) {
     fonts.families.insert(FontFamily::Name(DEVISE_FAMILLE.into()), vec![DEVISE_FAMILLE.into()]);
 }
 
+// ------------------------------------------------------------------------------------------- police de l'interface
+
+/// La police du texte de l'interface : IBM Plex Sans (Regular pour le texte, Medium pour les boutons et les étiquettes,
+/// SemiBold pour les titres) et IBM Plex Mono pour les timecodes et les numéros d'image (SIL OFL 1.1, `assets/polices/`).
+/// Les polices d'avant (Segoe UI s'il est là, celles d'egui) et les icônes restent derrière : aucun caractère ne manque.
+pub const PLEX_REGULAR: &[u8] = include_bytes!("../assets/polices/IBMPlexSans-Regular.ttf");
+pub const PLEX_MEDIUM: &[u8] = include_bytes!("../assets/polices/IBMPlexSans-Medium.ttf");
+pub const PLEX_SEMIBOLD: &[u8] = include_bytes!("../assets/polices/IBMPlexSans-SemiBold.ttf");
+pub const PLEX_MONO: &[u8] = include_bytes!("../assets/polices/IBMPlexMono-Regular.ttf");
+/// Les familles nommées des poids intermédiaires (egui n'a pas de graisse : une famille par graisse).
+pub const FAMILLE_MEDIUM: &str = "plex-medium";
+pub const FAMILLE_SEMIBOLD: &str = "plex-semibold";
+
+/// Note, dans la mémoire du contexte, que les polices Plex y sont chargées (`set_fonts` fait) : `theme::appliquer` peut alors
+/// donner leurs familles aux boutons et aux titres.
+pub fn marquer_polices(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("feanor_polices_plex"), true));
+}
+
+/// Les polices Plex sont-elles chargées dans ce contexte ?
+pub fn polices_pretes(ctx: &egui::Context) -> bool {
+    ctx.data(|d| d.get_temp::<bool>(egui::Id::new("feanor_polices_plex"))).unwrap_or(false)
+}
+
+/// Met IBM Plex en tête des familles de l'interface. À appeler APRÈS l'ajout des icônes, pour que les familles nommées
+/// reprennent aussi les polices de secours et les icônes.
+pub fn polices_interface(fonts: &mut FontDefinitions) {
+    for (nom, octets) in [("plex-regular", PLEX_REGULAR), (FAMILLE_MEDIUM, PLEX_MEDIUM), (FAMILLE_SEMIBOLD, PLEX_SEMIBOLD), ("plex-mono", PLEX_MONO)] {
+        fonts.font_data.insert(nom.into(), Arc::new(FontData::from_static(octets)));
+    }
+    let derriere = fonts.families.get(&FontFamily::Proportional).cloned().unwrap_or_default();
+    for nom in [FAMILLE_MEDIUM, FAMILLE_SEMIBOLD] {
+        let mut v = vec![nom.to_string()];
+        v.extend(derriere.iter().cloned());
+        fonts.families.insert(FontFamily::Name(nom.into()), v);
+    }
+    fonts.families.entry(FontFamily::Proportional).or_default().insert(0, "plex-regular".into());
+    fonts.families.entry(FontFamily::Monospace).or_default().insert(0, "plex-mono".into());
+}
 /// Mesures d'une police (en unités de la grille de la police).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Metriques {

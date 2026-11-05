@@ -1023,7 +1023,9 @@ impl App {
         crate::theme::polices(&mut fonts);
         crate::marque::polices(&mut fonts);
         egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+        crate::marque::polices_interface(&mut fonts);
         egui_ctx.set_fonts(fonts);
+        crate::marque::marquer_polices(egui_ctx);
         crate::demarrage::marque("polices (Segoe UI, icônes)");
         let settings = crate::settings::Settings::load();
         crate::demarrage::marque("réglages (Settings::load)");
