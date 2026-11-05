@@ -338,11 +338,15 @@ impl App {
         let painter = ui.painter_at(r);
         // Calque courant : l'accent ; calques choisis en plus (Ctrl + clic) : l'accent atténué.
         let bg = match (current, self.is_chosen_layer(li)) {
-            (true, _) => visuals.selection.bg_fill,
-            (false, true) => visuals.selection.bg_fill.gamma_multiply(0.45),
+            (true, _) => theme::surface_active(visuals.selection.bg_fill, 1.0),
+            (false, true) => theme::surface_active(visuals.selection.bg_fill, 0.45),
             (false, false) => theme::etiquette(),
         };
         painter.rect_filled(r, 2.0, bg);
+        // (Thèmes de la marque : le calque courant est un panneau teinté avec un bord jade, pas un grand aplat jade.)
+        if current && theme::palette().identite {
+            painter.rect_stroke(r, 2.0, Stroke::new(1.5_f32, visuals.selection.bg_fill), egui::StrokeKind::Inside);
+        }
         // Plusieurs calques choisis : un cadre à chacun, plus épais au courant (qui garde le plein).
         if !self.layer_sel.is_empty() && self.is_chosen_layer(li) {
             let width = if current { 2.0_f32 } else { 1.25_f32 };
@@ -350,6 +354,7 @@ impl App {
         }
         // Sur le bleu du calque courant, tout passe en blanc (le seul lisible sur l'accent).
         let fg = match (current, h.visible) {
+            (true, _) if theme::palette().identite => theme::texte_fort(),
             (true, _) => visuals.selection.stroke.color,
             (false, true) => visuals.text_color(),
             (false, false) => visuals.weak_text_color(),
