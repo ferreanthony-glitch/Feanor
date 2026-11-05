@@ -532,6 +532,14 @@ fn an_idle_derived_drawing_is_ranged_and_reads_back_exact_and_a_busy_one_is_left
     assert_eq!(lock().bytes, 7 * TILE_BYTES, "le compte des octets du cache ne change pas");
     assert_eq!(revenu.raster.to_flat(), attendu, "relu exactement");
     drop(lu);
+    drop(revenu);
     assert_eq!(ranger_les_inactifs(0, 8).0, 1, "une fois lâché et laissé tranquille, l'autre se range à son tour");
+    // Plus rien à faire : le rangement n'a plus de raison de réveiller l'interface.
+    ranger_les_inactifs(0, 8);
+    ranger_les_inactifs(0, 8);
+    assert!(!a_examiner(), "tout est examiné et calme");
+    // Un dessin touché de nouveau est à examiner de nouveau.
+    let _ = get(9101, 3);
+    assert!(a_examiner());
     clear();
 }

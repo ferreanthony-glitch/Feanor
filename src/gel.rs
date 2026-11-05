@@ -346,7 +346,7 @@ impl Gel {
         // Les caches de traits (531 Mo pour un épisode de 200 plans) : un passage du fil de fond de temps en temps.
         if !self.caches_en_route && self.caches_le.is_none_or(|t| t.elapsed() >= CACHES_TOUTES_LES) {
             self.caches_le = Some(Instant::now());
-            if crate::vector::cache_total_bytes() > 0 || crate::fxcache::non_vide() {
+            if crate::vector::cache_total_bytes() > 0 || crate::fxcache::a_examiner() {
                 let envoi = self.fil().send(Lot { dessins: Vec::new(), caches: true });
                 if envoi.is_ok() {
                     self.caches_en_route = true;

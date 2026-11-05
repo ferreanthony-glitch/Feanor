@@ -212,9 +212,15 @@ fn tick() -> u64 {
 /// Le dernier usage de chaque dessin dérivé tel que le passage de rangement précédent l'a vu (`ranger_les_inactifs`).
 static VUS_AU_PASSAGE: Mutex<BTreeMap<CelId, u64>> = Mutex::new(BTreeMap::new());
 
-/// Le cache garde-t-il des dessins dérivés ?
-pub(crate) fn non_vide() -> bool {
-    !lock().cache.is_empty()
+/// Les dessins dérivés dont le dernier passage de rangement n'avait plus rien à faire, avec le dernier usage qu'ils avaient alors.
+static CALMES: Mutex<BTreeMap<CelId, u64>> = Mutex::new(BTreeMap::new());
+
+/// Reste-t-il un dessin dérivé que le rangement n'a pas encore examiné depuis son dernier usage ? (Sans cela, un cache plein de dessins
+/// incompressibles réveillerait l'interface toutes les secondes et demie pour rien.)
+pub(crate) fn a_examiner() -> bool {
+    let st = lock();
+    let calmes = CALMES.lock().unwrap_or_else(|e| e.into_inner());
+    st.cache.iter().any(|(id, e)| calmes.get(id) != Some(&e.used))
 }
 
 /// Range les pixels des dessins dérivés que personne n'a demandés depuis au moins `repos` usages (chantier « mémoire d'une séance » : 41
@@ -234,13 +240,24 @@ pub(crate) fn ranger_les_inactifs(repos: u64, max: usize) -> (usize, usize) {
         let mut vus = VUS_AU_PASSAGE.lock().unwrap_or_else(|e| e.into_inner());
         let precedent = std::mem::take(&mut *vus);
         let mut ids: Vec<CelId> = Vec::new();
+        let mut calmes = CALMES.lock().unwrap_or_else(|e| e.into_inner());
+        calmes.retain(|id, _| st.cache.contains_key(id));
         for (id, e) in st.cache.iter() {
             vus.insert(*id, e.used);
-            if ids.len() < max && precedent.get(id) == Some(&e.used) && maintenant.saturating_sub(e.used) >= repos && (e.cel.a_des_tuiles_a_ranger() || e.cel.a_des_tuiles_lachables()) {
-                ids.push(*id);
+            if calmes.get(id) == Some(&e.used) || precedent.get(id) != Some(&e.used) {
+                continue;
+            }
+            if e.cel.a_des_tuiles_a_ranger() || e.cel.a_des_tuiles_lachables() {
+                if ids.len() < max && maintenant.saturating_sub(e.used) >= repos {
+                    ids.push(*id);
+                }
+            } else {
+                // Rien à ranger (déjà rangé, ou incompressible) : inutile d'y revenir tant que personne n'y touche.
+                calmes.insert(*id, e.used);
             }
         }
         drop(vus);
+        drop(calmes);
         for id in ids {
             let Some(e) = st.cache.remove(&id) else { continue };
             // (Les « derniers résultats » qui tiennent le même dessin : sortis aussi, remis avec lui.)
