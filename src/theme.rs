@@ -352,6 +352,9 @@ pub struct Palette {
     /// Fond de la sélection des textes et des lignes choisies d'egui (`Visuals::selection`) : l'accent, ou, dans un thème de la marque
     /// où l'encre ne s'y lit pas (Atelier : 1,6:1 sur le jade), du jade profond assombri jusqu'à 4,5:1 avec le texte.
     pub selection: Color32,
+    /// L'encre des textes et des icônes posés sur `selection` (lignes choisies, boutons allumés) : l'encre du thème dans la marque,
+    /// `sur_accent` ailleurs.
+    pub sur_selection: Color32,
     pub accent_texte: Color32,
     /// Thème de la marque (`Couleurs::identite`) : jetons exacts, bordures fortes, pas d'ombres.
     pub identite: bool,
@@ -487,6 +490,7 @@ impl Palette {
             accent,
             sur_accent,
             selection,
+            sur_selection: if c.identite { texte } else { sur_accent },
             accent_texte,
             identite: c.identite,
             rehaut,
@@ -560,7 +564,7 @@ impl Palette {
         // Marque : le texte choisi et les lignes choisies ont le fond `selection` ; leur encre (et le cadre d'un champ actif, 2 px) est
         // l'encre du thème, lisible sur ce fond et sur le panneau. Les accents jade passent par `accent()`, pas par ici.
         v.selection.bg_fill = self.selection;
-        v.selection.stroke = if self.identite { Stroke::new(2.0_f32, self.texte) } else { Stroke::new(1.0_f32, self.sur_accent) };
+        v.selection.stroke = if self.identite { Stroke::new(2.0_f32, self.sur_selection) } else { Stroke::new(1.0_f32, self.sur_accent) };
         let w = &mut v.widgets;
         // Textes et cadres qui ne réagissent pas.
         w.noninteractive.bg_fill = self.panneau;
@@ -664,6 +668,7 @@ couleurs_courantes! {
     accent,
     sur_accent,
     selection,
+    sur_selection,
     accent_texte,
     /// Le rehaut jade de la marque : trait sous l'espace actif, icône de « Nouveau projet ».
     rehaut,

@@ -125,7 +125,7 @@ fn brand_texts_borders_and_alerts_meet_their_contrast_in_both_themes() {
         assert_eq!(v.widgets.inactive.corner_radius, egui::CornerRadius::same(4), "{nom} : commandes à 4 px");
         // Texte choisi et lignes choisies : un fond assez sombre (ou assez clair) pour que l'encre du thème s'y lise à 4,5:1 ;
         // cette même encre, sur 2 px, est le cadre d'un champ actif : il se voit sur le panneau et sur le champ. L'accent reste le jade.
-        assert_eq!((v.selection.bg_fill, v.selection.stroke.color), (p.selection, p.texte), "{nom}");
+        assert_eq!((v.selection.bg_fill, v.selection.stroke.color), (p.selection, p.sur_selection), "{nom}");
         assert!(contraste(p.texte, p.selection) >= 4.5, "{nom} : texte sélectionné : {:.2}", contraste(p.texte, p.selection));
         assert!(contraste(p.texte_fort, p.selection) >= 4.5, "{nom} : texte fort sélectionné");
         assert!(v.selection.stroke.width >= 2.0, "{nom} : cadre du champ actif de 2 px");
@@ -231,7 +231,7 @@ fn texte_a<'a>(formes: &'a [&'a Shape], texte: &str) -> Option<(&'a egui::epaint
 }
 
 #[test]
-fn the_active_workspace_is_a_jade_tab_with_on_jade_text_and_a_thin_jade_line() {
+fn the_active_workspace_is_a_selected_tab_with_readable_ink_and_a_thin_jade_line() {
     let mut b = banc_taille(crate::vignettes_tests::quatre_plans(), false, 1600, 900);
     b.garder_formes = true;
     for espace in [Espace::Vignettes, Espace::Storyboard, Espace::Animation, Espace::Montage] {
@@ -239,9 +239,9 @@ fn the_active_workspace_is_a_jade_tab_with_on_jade_text_and_a_thin_jade_line() {
         b.chauffer(6);
         let formes = a_plat(&b.formes);
         let (t, mot) = texte_a(&formes, &format!(" {} ", espace.nom())).unwrap_or_else(|| panic!("onglet {}", espace.nom()));
-        assert_eq!(t.galley.job.sections[0].format.color, theme::sur_accent(), "{} : encre sur jade", espace.nom());
+        assert_eq!(t.galley.job.sections[0].format.color, theme::sur_selection(), "{} : encre sur le fond de sélection", espace.nom());
         assert_eq!(theme::sur_accent(), c(theme::SUR_JADE));
-        assert!(formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == theme::accent() && r.rect.intersects(mot))), "{} : fond jade", espace.nom());
+        assert!(formes.iter().any(|s| matches!(s, Shape::Rect(r) if r.fill == theme::selection() && r.rect.intersects(mot))), "{} : fond de sélection (jade profond dans Atelier)", espace.nom());
         // Le mince trait jade sous le mot actif.
         let traits: Vec<Rect> = formes.iter().filter_map(|s| if let Shape::Rect(r) = s { (r.fill == theme::rehaut() && r.rect.height() <= 2.5 && r.rect.width() < 120.0 && r.rect.width() > 8.0).then_some(r.rect) } else { None }).collect();
         assert!(traits.iter().any(|tr| tr.center().x > mot.left() && tr.center().x < mot.right() && tr.center().y > mot.center().y), "{} : un trait sous le mot : {traits:?}", espace.nom());
