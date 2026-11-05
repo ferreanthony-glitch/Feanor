@@ -543,3 +543,88 @@ fn an_idle_derived_drawing_is_ranged_and_reads_back_exact_and_a_busy_one_is_left
     assert!(a_examiner());
     clear();
 }
+
+/// Un dessin dérivé compressible de quelques tuiles (pixels clairsemés).
+fn cel_clairseme(n: usize, v: u8) -> Cel {
+    let mut c = Cel::new(64 * 8, 64, LayerKind::Bitmap);
+    for i in 0..n {
+        let t = c.raster.tile_mut(i);
+        for k in 0..TILE_PIXELS {
+            t[k] = if k % 11 == 0 { Color32::from_rgb(v, 20, 30) } else { Color32::TRANSPARENT };
+        }
+    }
+    c
+}
+
+/// Deux passages de `sortir` : le premier note, le second sort les dessins au repos.
+fn sortir_au_repos() -> Sortis {
+    assert_eq!(sortir(0, 8).dessins.len(), 0, "le premier passage ne fait que noter");
+    sortir(0, 8)
+}
+
+#[test]
+fn a_ranging_cut_by_a_change_of_project_puts_nothing_back_and_the_byte_count_stays_right() {
+    monde::ecrire();
+    for ecart in ["mettre de côté", "tout oublier"] {
+        clear();
+        get_or_compute(9201, 1, Some(9200), || cel_clairseme(4, 10));
+        let mut s = sortir_au_repos();
+        assert_eq!(s.dessins.len(), 1);
+        assert_eq!(lock().bytes, 0, "ses octets ont quitté le compte du cache le temps du rangement");
+        // L'utilisateur change d'onglet (ou de projet) pendant le rangement.
+        let reserve = if ecart == "mettre de côté" { Some(mettre_de_cote()) } else { None };
+        if reserve.is_none() {
+            forget_all();
+        }
+        // (Le nouveau projet reprend les mêmes numéros de dessin : un résultat de l'ancien lui servirait à tort.)
+        ranger(&mut s);
+        remettre(s);
+        let st = lock();
+        assert_eq!(st.bytes, 0, "{ecart} : le compte des octets ne bouge pas (il aurait dépassé le contenu du cache)");
+        assert!(st.cache.is_empty(), "{ecart} : rien de l'ancien projet n'est remis");
+        assert!(st.cache.values().map(|e| e.bytes).sum::<usize>() == st.bytes);
+        assert!(st.last.is_empty(), "{ecart} : ni son dernier résultat");
+        drop(st);
+        if let Some(r) = reserve {
+            rendre(r);
+            let st = lock();
+            assert_eq!(st.cache.values().map(|e| e.bytes).sum::<usize>(), st.bytes, "après le retour de l'onglet");
+        }
+    }
+    clear();
+}
+
+#[test]
+fn a_drawing_patched_or_computed_during_its_ranging_is_not_put_back_as_it_was() {
+    monde::ecrire();
+    clear();
+    // Retouché (`update`) pendant le rangement : l'ancien n'est pas remis à sa place.
+    get_or_compute(9211, 1, None, || cel_clairseme(3, 10));
+    let mut s = sortir_au_repos();
+    assert_eq!(s.dessins.len(), 1);
+    update(9211, |c| c.clone());
+    ranger(&mut s);
+    remettre(s);
+    assert!(get(9211, 1).is_none(), "l'ancien dessin n'est pas remis tel qu'il était : il se recalcule");
+    assert_eq!(lock().bytes, 0);
+    // Remplacé (`put`) pendant le rangement : c'est le neuf qui reste.
+    clear();
+    get_or_compute(9212, 1, None, || cel_clairseme(3, 10));
+    let mut s = sortir_au_repos();
+    let neuf = Arc::new(cel_clairseme(3, 77));
+    put(9212, 1, neuf.clone());
+    ranger(&mut s);
+    remettre(s);
+    let la = get(9212, 1).expect("le neuf est là");
+    assert!(Arc::ptr_eq(&la, &neuf), "le dessin neuf n'est pas écrasé par l'ancien");
+    assert_eq!(lock().bytes, 3 * TILE_BYTES);
+    // Sans rien de tel : il est remis, rangé.
+    clear();
+    get_or_compute(9213, 1, None, || cel_clairseme(3, 10));
+    let mut s = sortir_au_repos();
+    ranger(&mut s);
+    remettre(s);
+    assert!(get(9213, 1).is_some_and(|c| !c.a_des_tuiles_ouvertes()));
+    assert_eq!(lock().bytes, 3 * TILE_BYTES);
+    clear();
+}
