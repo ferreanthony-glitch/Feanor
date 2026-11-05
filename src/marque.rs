@@ -273,23 +273,23 @@ pub fn peindre(painter: &egui::Painter, ctx: &egui::Context, texture: &TextureHa
 
 // ------------------------------------------------------------------------------------------- textures du Joyau
 
-/// La texture du Joyau, carrée de `cote` points (à la résolution de l'écran). Les états fixes sont gardés ; un état
-/// d'animation est refait seulement quand il change.
+/// La texture du Joyau, carrée de `cote` points (à la résolution de l'écran). Une seule texture par clé (et variante), gardée
+/// dans la mémoire du contexte et **remplacée** quand la taille ou l'état d'animation change : la précédente est libérée avec
+/// son dernier handle.
 pub fn texture_joyau(ctx: &egui::Context, cle: &str, cote: f32, v: Joyau, anim: Option<EtatAnim>) -> TextureHandle {
     let pixels = (cote * ctx.pixels_per_point()).round().max(8.0) as u32;
-    let id = egui::Id::new(("feanor_joyau", cle, pixels, format!("{v:?}")));
-    if let Some((etat, texture)) = ctx.data(|d| d.get_temp::<(Option<EtatAnim>, TextureHandle)>(id)) {
-        if etat == anim {
+    let id = egui::Id::new(("feanor_joyau", cle, format!("{v:?}")));
+    if let Some((px, etat, texture)) = ctx.data(|d| d.get_temp::<(u32, Option<EtatAnim>, TextureHandle)>(id)) {
+        if px == pixels && etat == anim {
             return texture;
         }
     }
     let rgba = logo::image(pixels, v, anim.as_ref());
     let image = egui::ColorImage::from_rgba_premultiplied([pixels as usize; 2], &rgba);
-    let texture = ctx.load_texture(format!("feanor-joyau-{cle}-{pixels}"), image, egui::TextureOptions::LINEAR);
-    ctx.data_mut(|d| d.insert_temp(id, (anim, texture.clone())));
+    let texture = ctx.load_texture(format!("feanor-joyau-{cle}"), image, egui::TextureOptions::LINEAR);
+    ctx.data_mut(|d| d.insert_temp(id, (pixels, anim, texture.clone())));
     texture
 }
-
 // ------------------------------------------------------------------------------------------- animation d'ouverture
 
 /// L'état de l'animation dans la mémoire (temporaire) du contexte egui : un contexte par lancement, donc « une fois par

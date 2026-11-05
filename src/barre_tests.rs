@@ -124,6 +124,30 @@ fn the_bar_repaints_only_while_something_loads_and_never_faster_than_needed() {
     assert_eq!(image(&calme, 1.0, || Barre::new(0.4)), None, "mouvement réduit : immobile");
 }
 
+#[test]
+fn in_a_row_the_bar_keeps_its_old_width_and_the_text_stays_on_one_line() {
+    let ctx = egui::Context::default();
+    for k in 0..4 {
+        let _ = ctx.run(egui::RawInput { time: Some(k as f64 * 0.01), ..Default::default() }, |_| {});
+    }
+    let mesures = std::cell::RefCell::new(Vec::new());
+    let _ = ctx.run(egui::RawInput { time: Some(1.0), screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(600.0, 200.0))), ..Default::default() }, |ctx| {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            // Une ligne large : la barre prend la place qui reste, le texte tient sur la ligne.
+            let r = ui.horizontal(|ui| ui.add(Barre::new(0.5).text("186 / 300 dessins"))).response;
+            mesures.borrow_mut().push((r.rect.width(), r.rect.height()));
+            // Une ligne étroite : la barre ne descend pas sous 96 points.
+            ui.allocate_ui(vec2(150.0, 40.0), |ui| {
+                let r = ui.horizontal(|ui| ui.add(Barre::new(0.5).text("186 / 300 dessins"))).response;
+                mesures.borrow_mut().push((r.rect.width(), r.rect.height()));
+            });
+        });
+    });
+    let m = mesures.into_inner();
+    assert!(m[0].0 > 400.0, "la barre prend la place de la ligne : {:?}", m[0]);
+    assert!(m[0].1 < 30.0, "le texte reste sur une ligne : {:?}", m[0]);
+    assert!(m[1].1 < 30.0, "même étroite, une seule ligne : {:?}", m[1]);
+}
 /// Planche pour regarder une barre (essai ignoré) : `FEANOR_CAPTURE_DIR=… cargo test … barre_planche -- --ignored`.
 #[test]
 #[ignore]

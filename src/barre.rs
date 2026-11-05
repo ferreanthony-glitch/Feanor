@@ -167,7 +167,13 @@ impl Widget for Barre {
         let texte = self.texte.or_else(|| self.pourcentage.then(|| WidgetText::from(format!("{} %", (fraction * 100.0).round() as i32))));
         let epaisseur = self.hauteur.map_or(EPAISSEUR, |h| h.clamp(6.0, 10.0));
         let horizontale = ui.layout().main_dir().is_horizontal();
-        let largeur = self.largeur.unwrap_or_else(|| if horizontale { 120.0 } else { ui.available_width().max(96.0) });
+        // Largeur d'avant (`ProgressBar`) : toute la place, 96 points au moins. Dans une ligne, le texte (sur une seule ligne, sans
+        // retour) passe d'abord : la barre prend ce qui reste.
+        let largeur_texte = match (&texte, horizontale) {
+            (Some(t), true) => t.clone().into_galley(ui, Some(egui::TextWrapMode::Extend), f32::INFINITY, egui::TextStyle::Body).size().x + ui.spacing().item_spacing.x,
+            _ => 0.0,
+        };
+        let largeur = self.largeur.unwrap_or_else(|| (ui.available_width() - largeur_texte).max(96.0));
         let mouvement = en_cours && ui.ctx().style().animation_time > 0.0;
         let decalage = if mouvement { derive(ui.input(|i| i.time)) } else { 0.0 };
         if mouvement {
@@ -191,7 +197,7 @@ impl Widget for Barre {
             ui.horizontal(|ui| {
                 let r = dessiner(ui);
                 if let Some(t) = texte {
-                    ui.label(t);
+                    ui.add(egui::Label::new(t).wrap_mode(egui::TextWrapMode::Extend));
                 }
                 r
             })
