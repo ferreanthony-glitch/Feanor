@@ -159,6 +159,8 @@ impl App {
                         ui.checkbox(&mut r.liste_csv, "La liste des plans : CSV");
                         ui.checkbox(&mut r.liste_json, "JSON");
                     });
+                    ui.checkbox(&mut r.color_script, "Le color script (PNG et couleurs en CSV)")
+                        .on_hover_text("L'image d'ensemble du color script (une planche d'images par séquence, avec les numéros de plan et la bande des couleurs dominantes) et un CSV des couleurs de chaque plan. Décoché d'origine ; pour d'autres présentations, Fichier > Exporter > Color script.");
                     ui.add_enabled_ui(journal_possible, |ui| {
                         ui.checkbox(&mut r.journal, "Le journal des différences (PDF et page HTML)")
                             .on_hover_text("Ce qui a changé depuis le dernier envoi (ou entre les deux derniers s'il n'y a rien de neuf) : les plans modifiés avant / après, ajoutés, retirés, déplacés, et les notes traitées. Demande au moins un envoi.");

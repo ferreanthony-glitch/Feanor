@@ -7,11 +7,11 @@ use super::*;
 use crate::perf_tests::Banc;
 use crate::vignettes_tests::{deux_sequences, ouvert, quatre_plans};
 
-fn tout(doc: &Document) -> Vec<usize> {
+pub(super) fn tout(doc: &Document) -> Vec<usize> {
     (0..doc.panels.len()).collect()
 }
 
-fn dossier(nom: &str) -> std::path::PathBuf {
+pub(super) fn dossier(nom: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("shot-test-colorscript-{nom}-{}-{:?}", std::process::id(), std::thread::current().id()));
     std::fs::remove_dir_all(&dir).ok();
     std::fs::create_dir_all(&dir).expect("dossier d'essai");
@@ -19,7 +19,7 @@ fn dossier(nom: &str) -> std::path::PathBuf {
 }
 
 /// Un projet de `n` plans dans une séquence ; `deux_sequences` en a deux.
-fn plans(n: usize) -> Document {
+pub(super) fn plans(n: usize) -> Document {
     let mut doc = Document::with_frame(160, 90, 24);
     for _ in 1..n {
         let last = doc.panels.len() - 1;
@@ -199,13 +199,14 @@ fn the_files_are_valid() {
     let doc = deux_sequences();
     let spec = construire(&doc, &tout(&doc), &Options::default());
     let img = composer(&spec, &cellules(&spec, &[[120, 60, 200]])).unwrap();
-    let png = encoder(&img, Sortie::Png, "T").unwrap();
+    let meta = Meta { titre: "T".into(), episode: String::new(), version: String::new(), date: "2026-11-05".into(), papier: Papier::A4 };
+    let png = encoder(&img, Sortie::Png, &meta).unwrap();
     assert_eq!(image::load_from_memory(&png).unwrap().to_rgb8(), img);
-    let pdf = String::from_utf8_lossy(&encoder(&img, Sortie::Pdf, "T").unwrap()).to_string();
+    let pdf = String::from_utf8_lossy(&encoder(&img, Sortie::Pdf, &meta).unwrap()).to_string();
     assert!(pdf.starts_with("%PDF") && pdf.contains("/Count 1") && pdf.contains("/DCTDecode"));
 }
 
-fn lancer(b: &mut Banc, job: crate::export::ExportJob) {
+pub(super) fn lancer(b: &mut Banc, job: crate::export::ExportJob) {
     b.app.start_job(job);
     let debut = std::time::Instant::now();
     while b.app.export_job.as_ref().is_some_and(|j| j.outcome.is_none()) && debut.elapsed() < std::time::Duration::from_secs(60) {
