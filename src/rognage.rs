@@ -29,6 +29,21 @@ use crate::document::{CelId, Document, ImageMark, Panel};
 use crate::fx::{Effect, FxKey};
 use crate::roles::Roles;
 
+thread_local! {
+    /// Les images rognées qu'une jonction de plans vient d'oublier (`forget_joint_reserves`).
+    static OUBLIEES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Les images rognées oubliées par les jonctions depuis le dernier appel (le compteur repart de zéro).
+pub(crate) fn images_oubliees() -> usize {
+    OUBLIEES.with(|c| c.replace(0))
+}
+
+/// « 1 dessin », « 5 dessins » (la barre d'état dit ce qu'une suppression emporte).
+pub(crate) fn dessins_texte(n: usize) -> String {
+    if n == 1 { "1 dessin".into() } else { format!("{n} dessins") }
+}
+
 /// Durée la plus longue d'un plan (comme le champ Durée).
 pub const MAX_PLAN: usize = 100_000;
 
@@ -677,11 +692,40 @@ impl Document {
         }
     }
 
-    /// Les plans `a` et `b` (qui le suit) sont réunis : la fin rognée de `a` et tout ce que `b`
-    /// avait de rogné ne se rattachent plus à rien ; le début rogné de `a` reste.
+    /// Les plans `a` et `b` (qui le suit) sont réunis : la fin rognée de `a` et le début rogné de `b` se retrouveraient au
+    /// milieu du plan réuni, où rien ne les tient (la réserve n'a qu'un début et une fin) : ils sont oubliés, et leur nombre
+    /// d'images est compté pour que le geste le dise (`images_oubliees`). Le début rogné de `a` et la fin rognée de `b` (qui
+    /// deviennent ceux du plan réuni : `move_tail_reserve`) restent.
     pub(crate) fn forget_joint_reserves(&mut self, a: u64, b: u64) {
-        self.reserves.remove(&b);
+        let perdu = self.reserves.get(&a).map_or(0, |r| r.tail.len) + self.reserves.get(&b).map_or(0, |r| r.head.len);
+        OUBLIEES.with(|c| c.set(c.get() + perdu));
         self.forget_tail_reserve(a);
+        if let Some(r) = self.reserves.get_mut(&b) {
+            r.head = Piece::default();
+        }
+    }
+
+    /// La fin rognée du plan `from` devient celle du plan `to` (la seconde moitié d'un plan coupé, le plan réuni) : ses calques
+    /// changent de numéro d'après `rename` (ancien numéro, nouveau), ses commentaires de plan. Un calque que `rename` ne
+    /// connaît pas garde son numéro.
+    pub(crate) fn move_tail_reserve(&mut self, from: u64, to: u64, rename: &std::collections::HashMap<u64, u64>) {
+        let Some(r) = self.reserves.get_mut(&from) else { return };
+        let mut tail = std::mem::take(&mut r.tail);
+        if r.is_empty() {
+            self.reserves.remove(&from);
+        }
+        if tail.len == 0 {
+            return;
+        }
+        for lp in &mut tail.layers {
+            if let Some(n) = rename.get(&lp.layer) {
+                lp.layer = *n;
+            }
+        }
+        for c in &mut tail.comments {
+            c.panel = to;
+        }
+        self.reserves.entry(to).or_default().tail = tail;
     }
 
     /// Change la caméra de chaque clé rangée en réserve (la feuille change de taille).

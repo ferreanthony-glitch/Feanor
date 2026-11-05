@@ -283,6 +283,15 @@ impl App {
         }
         let snap = self.snapshot();
         let cur = self.cur_layer;
+        // Les dessins que la suppression emporte (dits dans la barre d'état ; seul Ctrl+Z les rend).
+        let dessins = {
+            let layers = self.layers();
+            let mut vus = std::collections::BTreeSet::new();
+            for &li in lis {
+                vus.extend(layers[li].frames.iter().flatten().copied());
+            }
+            vus.len()
+        };
         for &li in lis.iter().rev() {
             self.layers_mut().remove(li);
         }
@@ -293,7 +302,13 @@ impl App {
         self.vsel = None;
         self.commit_structure(snap);
         let n = lis.len();
-        self.status = if n == 1 { "Calque supprimé.".into() } else { format!("{n} calques supprimés.") };
+        let perte = if dessins == 0 { String::new() } else { format!(" ({}). Ctrl+Z {} rend", crate::rognage::dessins_texte(dessins), if n == 1 { "le" } else { "les" }) };
+        self.status = match (n, perte.is_empty()) {
+            (1, true) => "Calque supprimé.".into(),
+            (n, true) => format!("{n} calques supprimés."),
+            (1, false) => format!("Calque supprimé{perte}."),
+            (n, false) => format!("{n} calques supprimés{perte}."),
+        };
     }
 
     /// Supprime les calques choisis (Q).

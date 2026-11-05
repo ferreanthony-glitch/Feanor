@@ -260,6 +260,9 @@ impl App {
                                 Some(Mode::Animation) => label += " (animation)",
                                 None => {}
                             }
+                            if self.keymap.montage_only(info.id) {
+                                label += " (montage)";
+                            }
                             let keys_text = keys.join("  ou  ");
                             let origin = self.keymap.origin_of(info.id);
 

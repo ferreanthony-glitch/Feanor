@@ -467,6 +467,9 @@ impl App {
         let mut sel = Vec::new();
         let mut changed = false;
         let several = d.layers.iter().map(|l| l.starts.len()).sum::<usize>() > 1;
+        // Les dessins qu'un geste de clés fait sortir de leur calque (posés par-dessus, ou poussés hors du plan) : dits dans la barre
+        // d'état, car seule l'annulation les rend (règle du montage : rien ne se perd sans qu'on le voie).
+        let mut remplaces = 0usize;
         for dl in d.layers {
             let Some(pi) = self.doc.panels.iter().position(|p| p.id == dl.panel) else { continue };
             let Some(li) = self.doc.panels[pi].layers.iter().position(|x| x.id == dl.layer) else { continue };
@@ -479,6 +482,11 @@ impl App {
                 apply_key_move(&mut self.doc.panels[pi].layers[li], &dl.starts, d.delta, d.mode, dl.plan_len)
             };
             changed |= self.doc.panels[pi].layers[li].frames != dl.before.frames;
+            {
+                let apres: std::collections::BTreeSet<CelId> = self.doc.panels[pi].layers[li].frames.iter().flatten().copied().collect();
+                let avant: std::collections::BTreeSet<CelId> = dl.before.frames.iter().flatten().copied().collect();
+                remplaces += avant.difference(&apres).count();
+            }
             let p = &mut self.doc.panels[pi];
             // La durée du plan reste celle d'avant le geste.
             if p.frame_count() < dl.plan_len {
@@ -497,6 +505,14 @@ impl App {
         }
         if changed {
             self.commit_as(d.snap, key_move_name(d.mode, several));
+            if remplaces > 0 {
+                let m = format!("Attention : {} sorti{} du calque, Ctrl+Z {} rend.", crate::rognage::dessins_texte(remplaces), if remplaces > 1 { "s" } else { "" }, if remplaces > 1 { "les" } else { "le" });
+                if d.mode == KeyMove::Copy {
+                    self.status = format!("{} {m}", self.status);
+                } else {
+                    self.status = m;
+                }
+            }
         }
     }
 

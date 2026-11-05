@@ -45,7 +45,7 @@ pub(crate) fn shared_keys(map: &Keymap) -> Vec<String> {
     let mut conflicts = Vec::new();
     for (i, a) in map.bindings.iter().enumerate() {
         for b in &map.bindings[i + 1..] {
-            if a.action == b.action || !contexts_overlap(a.context, b.context) {
+            if a.action == b.action || a.montage != b.montage || !contexts_overlap(a.context, b.context) {
                 continue;
             }
             if let Some(c) = a.combos.iter().find(|c| b.combos.contains(c)) {

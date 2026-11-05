@@ -420,6 +420,15 @@ impl App {
         self.end_stroke();
         let snap = self.snapshot();
         let before = self.board_layout();
+        // Ce que la suppression emporte, dit après coup : les dessins des plans (et ce que leur rognage garde en réserve).
+        let dessins = {
+            let mut vus = std::collections::BTreeSet::new();
+            for p in self.doc.panels.iter().filter(|p| ids.contains(&p.id)) {
+                vus.extend(p.layers.iter().filter(|l| l.scene_wide.is_none()).flat_map(|l| l.frames.iter().flatten().copied()));
+                vus.extend(self.doc.reserves.get(&p.id).into_iter().flat_map(|r| r.cels()));
+            }
+            vus.len()
+        };
         match self.doc.remove_panels(ids) {
             Some(i) => {
                 self.release_removed_notes(&before);
@@ -430,9 +439,12 @@ impl App {
                 self.commit_structure(snap);
                 self.board_sel.clear();
                 self.thumbs.prune(&self.doc);
-                self.status = match ids.len() {
-                    1 => "Plan supprimé.".into(),
-                    n => format!("{n} plans supprimés."),
+                // (Des plans supprimés ne se retrouvent que par Ctrl+Z : la phrase le dit, avec ce qui part.)
+                self.status = match (ids.len(), dessins) {
+                    (1, 0) => "Plan supprimé.".into(),
+                    (n, 0) => format!("{n} plans supprimés."),
+                    (1, d) => format!("Plan supprimé ({}). Ctrl+Z le rend.", crate::rognage::dessins_texte(d)),
+                    (n, d) => format!("{n} plans supprimés ({}). Ctrl+Z les rend.", crate::rognage::dessins_texte(d)),
                 };
             }
             None => self.status = "Il faut garder au moins un plan.".into(),

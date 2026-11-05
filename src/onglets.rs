@@ -102,6 +102,7 @@ etat_projet! {
     playing: bool = false,
     play_montage: bool = false,
     play_accum: f64 = 0.0,
+    play_speed: f32 = 1.0,
     last_time: Option<f64> = None,
     // --- vue
     view: View = View::default(),

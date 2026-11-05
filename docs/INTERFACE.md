@@ -7106,3 +7106,47 @@ Demande du réalisateur : enlever la partie animation du sélecteur d'espaces ; 
 4. Double-clic sur un libellé de plan, une transition, une clé d'effet : le geste d'avant, sans entrer en animation.
 5. Affichage > Espaces de travail : trois entrées. Ctrl+K « Animation » : plus d'espace du même nom.
 6. Ferme et rouvre un projet laissé en animation : il s'ouvre avec le bouton de retour.
+
+## 104. Un montage qui ne casse rien ; J, K, L pour lire (2026-11-05, branche `montage-sans-casse`)
+
+Règle du réalisateur pour la V1 : « les outils de montage ne doivent pas permettre de casser le travail fait en storyboard et vignettes. C'est le risque en multipliant les outils. » Un outil de montage change le temps et l'ordre, pas les dessins ; ce qu'il retire du film reste récupérable ; chaque geste s'annule en une seule étape ; un essai le vérifie (`src/montage_sans_casse_tests.rs`, qui compare l'empreinte du contenu des dessins, celle des envois, avant, après et après l'annulation).
+
+### 104.1 Ce que chaque geste fait des dessins
+
+| Geste | Peut-il perdre un dessin ? | Récupération |
+|---|---|---|
+| Rogner le début ou la fin, ripple, durée tapée, glisser le contenu (`rognage.rs`) | Non : ce qui sort du plan va dans sa **réserve** (enregistrée avec le projet, `rognages.json`) | Rallonger rend exactement les images coupées ; « Rétablir le contenu rogné » ; Ctrl+Z (une étape) |
+| Roll (déplacer la coupe entre deux plans) | Non, même réserve des deux côtés | idem |
+| Déplacer des plans (glisser, boutons) | Non : seul l'ordre change | Ctrl+Z (une étape) |
+| Transitions (ajouter, durée, supprimer) | Non : elles ne touchent aucun dessin | Suppr, Ctrl+Z |
+| Couper le plan (lame, F6, entre deux vignettes) | Non : la suite a ses copies. **Corrigé** : la fin rognée du plan (en réserve) était oubliée à la coupe ; elle suit maintenant la seconde moitié, qui finit où le plan finissait | Rallonger la seconde moitié ; Ctrl+Z |
+| Réunir deux plans, fusionner en glissant l'un sur l'autre | Pas pour les images visibles. **Corrigé** : la fin rognée du second plan était oubliée à la jonction ; elle devient la fin rognée du plan réuni (le début rogné du premier reste le sien). **Reste** : la fin rognée du premier et le début rogné du second se retrouveraient au milieu du plan réuni, où la réserve (un début, une fin) ne peut pas les tenir : ils sont oubliés (les rendre au film allongerait le plan réuni de ce qu'on avait coupé). **La barre d'état le dit maintenant** : « Attention : 5 images rognées au bord de la jonction ne sont plus gardées ; Ctrl+Z les rend. » | Ctrl+Z (une étape) pour ces images-là |
+| Alt + glisser (dupliquer des clés), glisser ou décaler des clés dans les pistes (`montagekeys.rs`) ; le collage de clés n'a pas été relu | Un dessin que la copie ou le déplacement **recouvre**, ou que le décalage pousse hors du plan, sort du calque (geste voulu : la copie se pose « par-dessus ») | **Ctrl+Z seulement.** La barre d'état le dit maintenant : « Attention : 1 dessin sorti du calque, Ctrl+Z le rend » |
+| Supprimer des clés | La clé supprimée sort du calque (la voisine la remplace, ou un vide) | Ctrl+Z ; la barre d'état le disait déjà |
+| Supprimer un plan, ou plusieurs | Oui : ses dessins quittent le projet | **Ctrl+Z seulement** (le nombre d'étapes est limité, `history.rs`) ; **la barre d'état dit maintenant ce qui part** : « 2 plans supprimés (10 dessins). Ctrl+Z les rend. » |
+| Supprimer un calque | Oui | **Ctrl+Z seulement** ; même phrase : « Calque supprimé (4 dessins). Ctrl+Z le rend. » |
+
+**Ce qui n'est pas corrigé, et pourquoi.** Un plan ou un calque supprimé n'a pas de corbeille : en faire une qui se range avec le projet demande un nouveau fichier ou une nouvelle entrée du format (un plan supprimé disparaît du projet à l'enregistrement : `dessins/` est nettoyé). Le format de projet n'a pas changé ; la corbeille est une décision à prendre (la suppression d'un plan montré par une autre version de séquence passe déjà au garage de `variantes.rs`). En attendant, le choix le plus sûr sans toucher au format est de dire la perte.
+
+**Ce que je vois du côté des versions (non touché).** `variantes.rs` : `remove_panel`, `remove_panels`, `merge_with_next` et la jonction appellent `ranger_plan_partage` avant de retirer un plan, qui range au garage un plan que montre une autre version de séquence ; un plan que personne d'autre ne montre n'est pas gardé. `split_panel` : la seconde moitié n'a pas de versions de plan (`versions` reste au premier plan, mesurées sur sa durée d'avant la coupe). Un plan avalé par une jonction laisse ses versions rangées (`versions[b]`) sous son ancien numéro : je n'ai pas lu ce qu'elles deviennent à l'enregistrement. Ma seule ligne dans `split_panel` remplace l'oubli de la fin rognée par `move_tail_reserve`.
+
+### 104.2 J, K, L : lire à vitesse variable dans le montage
+
+- **L** lit en avant, un nouvel appui accélère (x1, x2, x4, x8). **J** lit en arrière, de même. **K** arrête. **K tenue + L** (ou **J**) : une image en avant (en arrière) à chaque appui. L pendant une lecture arrière la ralentit d'un cran, puis l'arrête ; J de même pendant une lecture avant.
+- **Ce que ces touches remplacent.** Dans `keymap.toml` par défaut, ni J, K ni L (seules) n'étaient prises : elles n'enlèvent rien. Dans le fichier personnel (`%APPDATA%\SHOT\keymap.toml`), **L est « Sélection »** (`outil.selection`, choisi dans Pelure) : dans l'espace **Montage seulement**, L lit à la place ; dans le Storyboard, les Vignettes et l'animation, L reste la sélection. Pour garder la sélection aussi dans le Montage, ou pour changer les touches de lecture : clic droit sur l'icône de lecture ou Préférences > Raccourcis (« Montage : lire en avant »…).
+- **Trois actions** : `montage.lecture_avant`, `montage.lecture_arriere`, `montage.lecture_arret`, dans `keymap.toml` (`contexte = "montage"`, nouveau : le raccourci ne joue que dans l'espace Montage et y passe avant les autres ; une réaffectation le garde). Rien de codé en dur ; `keymap_tests` vérifie toujours que chaque action a un bloc et qu'aucune touche n'est partagée.
+- **Le son** suit à la vitesse normale (x1 en avant). À toute autre vitesse il est coupé net (l'image suit l'horloge de l'ordinateur) et revient, à l'image où l'on est, quand on repasse à x1. Les touches n'agissent pas pendant la saisie d'un texte ni dans un dialogue (même garde que tous les raccourcis, `handle_shortcuts`).
+- **Le film ne bouge pas** : lire, c'est déplacer la tête de lecture ; aucune étape d'annulation. En arrière, la lecture passe au plan d'avant et s'arrête au début du film (ou boucle si la boucle est allumée).
+- Code : `src/jkl.rs` (vitesses, touches), `App::play_speed` et `tick_playback` (`app.rs`), `Keymap::find_in` (`keymap.rs`). Essais : `src/jkl_tests.rs`.
+
+### À vérifier à l'écran
+
+1. Montage : L lance la lecture, un 2e appui l'accélère (barre d'état « Lecture en avant, x2. »), K l'arrête ; J lit à l'envers, repasse d'un plan à l'autre et s'arrête au tout début.
+2. Avec une piste de son : x1 avec son, x2 sans son, retour à x1 : le son reprend sans à-coup ni retard marqué ; en arrière, silence.
+3. K tenue puis L, L, L, puis J : une image par appui, tête de lecture et lecteur qui suivent.
+4. Taper un nom de plan ou un commentaire avec des J, K, L : rien ne se lance.
+5. Storyboard et Vignettes : L = Sélection comme avant ; J et K ne font rien.
+6. Rogner la fin d'un plan, le couper : la seconde moitié peut être rallongée, les images rognées reviennent.
+7. Réunir deux plans dont la fin du premier (ou le début du second) était rognée : la durée du plan réuni est celle que montrait le montage, la barre d'état annonce les images rognées qui ne sont plus gardées ; Ctrl+Z rend les deux plans.
+8. Supprimer un plan, puis un calque : la barre d'état annonce les dessins qui partent ; Ctrl+Z les rend. Alt + glisser une clé sur un autre dessin : la barre d'état le dit.
+9. Préférences > Raccourcis : « Montage : lire en avant » etc. portent la mention « (montage) ».

@@ -621,6 +621,8 @@ pub struct App {
     pub(crate) play_montage: bool,
     pub(crate) looping: bool,
     pub(crate) play_accum: f64,
+    /// Vitesse de la lecture, signée (J, K, L du montage, jkl.rs) : 1 = la cadence du film, négative = en arrière.
+    pub(crate) play_speed: f32,
     pub(crate) last_time: Option<f64>,
     /// Sortie audio (ouverte à la première lecture avec du son).
     pub(crate) audio: Option<AudioEngine>,
@@ -1249,6 +1251,7 @@ impl App {
             play_montage: false,
             looping: true,
             play_accum: 0.0,
+            play_speed: 1.0,
             last_time: None,
             audio: None,
             audio_tried: false,
@@ -1970,9 +1973,11 @@ impl App {
         if self.playing {
             self.playing = false;
             self.stop_audio();
+            self.play_speed = 1.0;
             return;
         }
         self.end_stroke();
+        self.play_speed = 1.0;
         self.play_montage = montage;
         // Dans le plan : entre les points d'entrée et de sortie (13d).
         let (start, end) = self.plan_play_range();
@@ -1995,10 +2000,11 @@ impl App {
         self.start_audio_playback();
     }
 
-    fn tick_playback(&mut self, ctx: &egui::Context) {
+    pub(crate) fn tick_playback(&mut self, ctx: &egui::Context) {
         if !self.playing {
             // La lecture a pu être arrêtée par n'importe quelle action : le son s'arrête avec.
             self.stop_audio();
+            self.play_speed = 1.0;
             return;
         }
         if self.tick_audio_clock() {
@@ -2007,12 +2013,33 @@ impl App {
         }
         let now = ctx.input(|i| i.time);
         let last = self.last_time.replace(now).unwrap_or(now);
-        self.play_accum += (now - last).min(0.25);
+        let vitesse = self.play_speed;
+        self.play_accum += (now - last).min(0.25) * vitesse.abs() as f64;
         let frame_duration = 1.0 / self.doc.fps.max(1) as f64;
         while self.play_accum >= frame_duration {
             self.play_accum -= frame_duration;
             let (start, end) = if self.play_montage { (0, self.frame_count()) } else { self.plan_play_range() };
-            if self.cur_frame + 1 < end {
+            if vitesse < 0.0 {
+                // En arrière (J) : image par image jusqu'au début du plan, puis le plan d'avant.
+                if self.cur_frame > start {
+                    self.cur_frame -= 1;
+                } else if self.play_montage && self.cur_panel > 0 {
+                    let prev = self.cur_panel - 1;
+                    self.set_panel(prev);
+                    self.cur_frame = self.frame_count().saturating_sub(1);
+                } else if self.looping {
+                    if self.play_montage {
+                        let last = self.doc.panels.len() - 1;
+                        self.set_panel(last);
+                        self.cur_frame = self.frame_count().saturating_sub(1);
+                    } else {
+                        self.cur_frame = end.max(1) - 1;
+                    }
+                } else {
+                    self.playing = false;
+                    break;
+                }
+            } else if self.cur_frame + 1 < end {
                 self.cur_frame += 1;
             } else if self.play_montage && self.cur_panel + 1 < self.doc.panels.len() {
                 let next = self.cur_panel + 1;
@@ -3843,7 +3870,7 @@ impl App {
                 continue;
             }
             // Les raccourcis suivent le panneau qui a la main (montage, timeline ou dessin).
-            let Some(action) = self.keymap.find(key, physical, m, self.key_mode()) else { continue };
+            let Some(action) = self.keymap.find_in(key, physical, m, self.key_mode(), self.espace == crate::workspace::Espace::Montage) else { continue };
             let action = action.to_string();
             if repeat && !keymap::action_info(&action).is_some_and(|a| a.repeat) {
                 continue;
@@ -4390,6 +4417,9 @@ impl App {
             "image.premiere" => self.goto_panel_frame(0),
             "image.derniere" => self.goto_panel_frame(self.frame_count() - 1),
             "montage.debut" => self.goto_global(0),
+            "montage.lecture_avant" => self.lecture_touche(crate::jkl::Touche::L),
+            "montage.lecture_arriere" => self.lecture_touche(crate::jkl::Touche::J),
+            "montage.lecture_arret" => self.lecture_touche(crate::jkl::Touche::K),
             "montage.fin" => self.goto_global(self.doc.total_frames() - 1),
             "panneau.precedent" => self.select_panel(self.cur_panel.saturating_sub(1)),
             "panneau.suivant" => self.select_panel(self.cur_panel + 1),

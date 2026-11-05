@@ -769,6 +769,11 @@ mod rognage;
 #[cfg(test)]
 mod rognage_tests;
 mod rognageui;
+mod jkl;
+#[cfg(test)]
+mod jkl_tests;
+#[cfg(test)]
+mod montage_sans_casse_tests;
 mod springtools;
 #[cfg(test)]
 mod springtools_tests;

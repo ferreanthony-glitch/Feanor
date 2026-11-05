@@ -2280,8 +2280,10 @@ impl Document {
             cues: Cues { bookmarks: source.cues.bookmarks.iter().filter(|&&b| b >= at).map(|b| b - at).collect(), ..Cues::default() },
             color: source.color,
         };
-        // Le contenu rogné à la fin du plan ne se rattache plus à rien (le second a ses copies).
-        self.forget_tail_reserve(source.id);
+        // Le contenu rogné à la fin du plan est celui de la fin du second (qui finit où le plan finissait) : il lui passe, avec
+        // les numéros de ses calques. Rien n'est oublié.
+        let rename: HashMap<u64, u64> = old_ids.iter().copied().zip(second.layers.iter().map(|l| l.id)).collect();
+        self.move_tail_reserve(source.id, second.id, &rename);
         let first = &mut self.panels[index];
         for l in &mut first.layers {
             l.frames.truncate(at);
@@ -2309,6 +2311,7 @@ impl Document {
         if index + 1 >= self.panels.len() || self.panels[index].scene != self.panels[index + 1].scene {
             return None;
         }
+
         // Caméras qu'ils montraient (un panneau sans clé hérite de ses voisins) : gardées.
         let (cam_a, cam_b) = (self.panel_camera(index, 0), self.panel_camera(index + 1, 0));
         // (Le plan réuni, qu'une autre version de sa séquence montre, en garde une copie : `variantes.rs`.)
@@ -2325,8 +2328,10 @@ impl Document {
         // Les calques de toute la scène sont déjà dans le premier : seuls les autres se suivent,
         // rang pour rang parmi les calques propres au panneau.
         let own: Vec<usize> = (0..a.layers.len()).filter(|&k| a.layers[k].scene_wide.is_none()).collect();
+        let mut renum: HashMap<u64, u64> = HashMap::new();
         for (i, lb) in next.layers.into_iter().filter(|l| l.scene_wide.is_none()).enumerate() {
             if let Some(&k) = own.get(i).filter(|&&k| a.layers[k].kind == lb.kind) {
+                renum.insert(lb.id, a.layers[k].id);
                 let la = &mut a.layers[k];
                 // Deux calques de couleur qui se suivent : les couleurs du second gardent leur trait.
                 if let (Some(ca), Some(cb)) = (la.couleur.as_mut(), lb.couleur.as_ref()) {
@@ -2359,6 +2364,8 @@ impl Document {
             }
         }
         let id = a.id;
+        // La fin rognée du second est celle du panneau réuni.
+        self.move_tail_reserve(next.id, id, &renum);
         Some(self.normalize_keeping(id))
     }
 
@@ -2810,7 +2817,10 @@ impl Document {
         a.marks.push(ImageMark { id: mark_id, frame: a_len, color: 0, action: b.action, dialogue: b.dialogue, notes: b.notes });
         a.marks.extend(b.marks.into_iter().map(|m| ImageMark { frame: m.frame + a_len, ..m }));
         a.length = a_len + b_len;
+        let a_id = a.id;
         self.reanchor_notes(b.id, mark_id);
+        // La fin rognée de `b` est celle du plan réuni (ses calques ont changé de numéro en se joignant à ceux de `a`).
+        self.move_tail_reserve(b.id, a_id, &vers);
         None
     }
 
@@ -2918,6 +2928,7 @@ impl Document {
         if index + 1 >= self.panels.len() || self.sequence_of(index) != self.sequence_of(index + 1) {
             return None;
         }
+
         // (Le décor du premier plan se tient sur la suite, ou la suite repart d'un décor vide : `decor.rs`.)
         self.join_with_decor_with(index, opts);
         let id = self.panels[index].id;

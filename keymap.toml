@@ -659,6 +659,28 @@ touches = ["Ctrl+Fin"]
 source = "proposition"
 contexte = "storyboard"
 
+# J, K, L du montage (partie 104 de docs/INTERFACE.md) : les gestes habituels des monteurs. Ils ne jouent que dans l'espace
+# Montage (contexte = "montage") et y passent avant les autres raccourcis ; dans les autres espaces ces touches gardent leur sens
+# (L est la sélection dans le fichier personnel d'Anthony : elle le reste partout sauf dans le Montage). Aucune de ces trois
+# touches n'était prise dans ce fichier.
+[[raccourci]]
+action = "montage.lecture_arriere"
+touches = ["J"]
+source = "proposition (J lit en arrière ; un nouvel appui accélère ; tenir K et appuyer sur J recule d'une image)"
+contexte = "montage"
+
+[[raccourci]]
+action = "montage.lecture_arret"
+touches = ["K"]
+source = "proposition (K arrête la lecture ; tenue, J et L avancent image par image)"
+contexte = "montage"
+
+[[raccourci]]
+action = "montage.lecture_avant"
+touches = ["L"]
+source = "proposition (L lit en avant ; un nouvel appui accélère, x2 puis x4 puis x8 ; tenir K et appuyer sur L avance d'une image)"
+contexte = "montage"
+
 # Zoom de la bande du bas (le montage, ou la timeline en animation), comme 1 et 2 pour le dessin.
 [[raccourci]]
 action = "bande.zoom_arriere"
