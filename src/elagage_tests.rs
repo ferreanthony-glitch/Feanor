@@ -177,3 +177,33 @@ fn a_scan_cut_by_a_change_of_the_history_is_dropped_and_starts_again_later() {
     assert_eq!(passes(&mut b), 0);
     assert!(b.app.doc.cels.contains_key(&ids[0]));
 }
+
+#[test]
+fn what_the_pruning_noted_does_not_follow_a_new_project() {
+    let (doc, _) = doc_de_plans(3);
+    let mut b = banc(doc, false);
+    b.app.gel.activer(true);
+    let orphelin = b.app.doc.new_cel(LayerKind::Bitmap);
+    assert_eq!(passe(&mut b), 0, "noté sans attache");
+    // Un autre projet prend la place (`load_doc`) : ses dessins reprennent les mêmes numéros, le délai de grâce repart.
+    b.app.gel.oublier_le_projet();
+    assert_eq!(passe(&mut b), 0, "le numéro est noté de nouveau, pas retiré");
+    assert!(b.app.doc.cels.contains_key(&orphelin));
+    assert_eq!(passe(&mut b), 1, "au passage suivant, il part");
+}
+
+#[test]
+fn the_colour_drawings_of_a_colour_layer_are_kept_even_when_no_frame_shows_them() {
+    let (doc, ids) = doc_de_plans(2);
+    let mut b = banc(doc, false);
+    b.app.gel.activer(true);
+    let couleur = b.app.doc.new_cel(LayerKind::Bitmap);
+    let orphelin = b.app.doc.new_cel(LayerKind::Bitmap);
+    let l = &mut b.app.doc.panels[0].layers[0];
+    let mut c = crate::calquecouleur::CalqueCouleur::new(l.id);
+    c.dessins.insert(ids[0], couleur);
+    l.couleur = Some(c);
+    assert_eq!(passes(&mut b), 1, "seul le vrai orphelin part");
+    assert!(b.app.doc.cels.contains_key(&couleur), "le dessin de couleur reste");
+    assert!(!b.app.doc.cels.contains_key(&orphelin));
+}

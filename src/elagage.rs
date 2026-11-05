@@ -20,8 +20,25 @@
 use std::collections::{BTreeSet, HashSet};
 use std::time::{Duration, Instant};
 
-use crate::document::{CelId, Document, Structure};
+use crate::document::{CelId, Document, Panel, Structure};
 use crate::history::{Edit, History};
+
+/// Les dessins de couleur d'un plan (`CalqueCouleur::dessins`, trait → couleur) et ses griffonnages : ils sont retenus même si les images du
+/// calque de couleur ne les montrent pas pour l'instant (`calquecouleur::refleter` remplace en silence une couleur absente par un dessin vide).
+fn de_la_couleur(p: &Panel, out: &mut HashSet<CelId>) {
+    for l in &p.layers {
+        if let Some(c) = &l.couleur {
+            out.extend(c.dessins.values().copied());
+            out.extend(c.griffonnages.values().copied());
+        }
+    }
+}
+
+/// Tous les dessins qu'un plan cite (images, griffonnages, dessins de couleur).
+fn dessins_du_plan_retenus(p: &Panel, out: &mut HashSet<CelId>) {
+    out.extend(crate::empreinte::dessins_du_plan(p));
+    de_la_couleur(p, out);
+}
 
 impl Structure {
     /// Ajoute à `out` tous les dessins que cet état (un instantané d'annulation) remettrait dans le projet : ceux des plans (rangés ou non),
@@ -38,24 +55,22 @@ impl Structure {
             }
         }
         for p in &self.panels {
-            for l in &p.layers {
-                out.extend(l.couleur.iter().flat_map(|c| c.griffonnages.values().copied()));
-            }
+            de_la_couleur(p, out);
         }
         for r in self.reserves.values() {
             out.extend(r.cels());
         }
         for v in self.versions.values() {
             for r in &v.autres {
-                out.extend(crate::empreinte::dessins_du_plan(&r.panel));
+                dessins_du_plan_retenus(&r.panel, out);
             }
         }
         for v in self.variantes.values() {
             for p in v.garage.values() {
-                out.extend(crate::empreinte::dessins_du_plan(&p.panel));
+                dessins_du_plan_retenus(&p.panel, out);
                 if let Some(vers) = &p.versions {
                     for r in &vers.autres {
-                        out.extend(crate::empreinte::dessins_du_plan(&r.panel));
+                        dessins_du_plan_retenus(&r.panel, out);
                     }
                 }
                 if let Some(r) = &p.reserve {
@@ -87,11 +102,14 @@ fn de_l_etape(e: &Edit, out: &mut HashSet<CelId>) {
 /// Les dessins du document vivant que rien ne cite.
 fn retenus_du_document(doc: &Document) -> BTreeSet<CelId> {
     let mut out = doc.used_cels();
+    let mut en_plus = HashSet::new();
     for p in doc.panels.iter().chain(doc.plans_ranges()) {
         for l in &p.layers {
             out.extend(crate::calquecouleur::dessins_du_calque(l));
         }
+        de_la_couleur(p, &mut en_plus);
     }
+    out.extend(en_plus);
     out
 }
 
