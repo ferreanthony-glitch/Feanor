@@ -128,7 +128,6 @@ impl App {
     }
 
     fn paquet_body(&mut self, ui: &mut egui::Ui, w: &mut PaquetWindow) -> bool {
-        let avert = theme::avertissement();
         let occupe = w.job.is_some();
         ui.label(
             RichText::new("Tout ce qu'il faut livrer, en un clic : une vidéo par plan, les vignettes, le PDF du storyboard, l'animatique, la liste des plans, et un manifeste (manifest.json) avec l'empreinte de chaque fichier. Les fichiers sont rangés selon ton modèle de chemin ; tout est écrit à l'écart puis rangé d'un coup : si tu arrêtes, rien ne reste.")
@@ -179,7 +178,7 @@ impl App {
                 ui.horizontal(|ui| {
                     match &r.dossier {
                         Some(d) => ui.label(court(d)).on_hover_text(d.display().to_string()),
-                        None => ui.colored_label(avert, "à choisir"),
+                        None => crate::theme::avertir(ui, "à choisir"),
                     };
                     if ui.button("Choisir…").clicked() {
                         if let Some(p) = crate::dialogues::choisir_dossier("paquet", "Dossier où ranger le paquet de livraison", projet_dossier.as_deref(), r.dossier.as_deref()) {
@@ -230,17 +229,17 @@ impl App {
                 ui.label(RichText::new(format!("{}\\{}.mp4", if p.is_empty() { "." } else { p }, self.doc.nom_de_plan(self.cur_panel.min(self.doc.panels.len().saturating_sub(1))))).monospace().small());
             }
             Err(e) => {
-                ui.colored_label(avert, e);
+                crate::theme::avertir(ui, e);
             }
         }
         if r.vide() {
-            ui.colored_label(avert, "Coche au moins un contenu.");
+            crate::theme::avertir(ui, "Coche au moins un contenu.");
         }
         if r.a_besoin_de_ffmpeg() && !ffmpeg_ok {
-            ui.colored_label(avert, "ffmpeg est introuvable ou inutilisable : il fabrique les vidéos et l'animatique (Préférences, ou décoche-les).");
+            crate::theme::avertir(ui, "ffmpeg est introuvable ou inutilisable : il fabrique les vidéos et l'animatique (Préférences, ou décoche-les).");
         }
         if !self.doc.numbering_locked {
-            ui.label(RichText::new("La numérotation des plans est suivie : les noms changent si un plan s'ajoute ou se déplace.").small().color(avert));
+            crate::theme::avertir_petit(ui, "La numérotation des plans est suivie : les noms changent si un plan s'ajoute ou se déplace.");
         }
         let cle = (self.history.serial(), self.doc_epoch, self.doc.properties.modele_noms.clone());
         if w.cache.as_ref().map(|c| &c.0) != Some(&cle) {
@@ -248,7 +247,7 @@ impl App {
         }
         let v = w.cache.as_ref().map(|c| c.1.clone()).unwrap_or_default();
         for a in &v.avertissements {
-            ui.label(RichText::new(a).small().color(avert));
+            crate::theme::avertir_petit(ui, a);
         }
         ui.add_space(4.0);
 
@@ -279,7 +278,7 @@ impl App {
             }
             Some(Err(e)) => {
                 ui.separator();
-                ui.colored_label(avert, e);
+                crate::theme::avertir(ui, e);
             }
             None => {}
         }

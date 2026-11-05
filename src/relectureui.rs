@@ -393,7 +393,7 @@ impl App {
         let boards: usize = panels.iter().map(|&i| crate::board::plan_boards(&self.doc, i).len()).sum();
         if panels.is_empty() {
             let why = if w.scope == Etendue::Modifies && self.envois_ui.empreintes_vides() { "Le relevé des plans est en cours : réessayez dans un instant." } else { "Aucun plan dans cette étendue." };
-            ui.colored_label(theme::avertissement(), why);
+            crate::theme::avertir(ui, why);
         } else {
             ui.label(format!("{}, {} de storyboard.", relecture::plural(panels.len(), "plan", "plans"), relecture::plural(boards, "image", "images")));
         }
@@ -437,7 +437,7 @@ impl App {
                     ui.label(RichText::new(short_path(p)).small()).on_hover_text(p.display().to_string());
                 }
                 if mo > 20.0 {
-                    ui.colored_label(theme::avertissement(), "Cette page est lourde pour un e-mail : envoyez-la par un lien de partage, ou refaites-la sans la lecture animée.");
+                    crate::theme::avertir(ui, "Cette page est lourde pour un e-mail : envoyez-la par un lien de partage, ou refaites-la sans la lecture animée.");
                 }
                 ui.label(RichText::new("Envoyez le fichier HTML : il s'ouvre dans n'importe quel navigateur, sur ordinateur ou sur téléphone, sans internet.").small().weak());
                 if ui.button("Montrer dans l'explorateur").clicked() {
@@ -446,7 +446,7 @@ impl App {
             }
             Some(Err(e)) => {
                 ui.separator();
-                ui.colored_label(theme::avertissement(), e);
+                crate::theme::avertir(ui, e);
             }
             None => {}
         }
@@ -543,10 +543,10 @@ impl App {
                         ui.label(RichText::new(format!("{} déjà importée{} : pas de doublon.", relecture::plural(sum.already, "note", "notes"), if sum.already > 1 { "s" } else { "" })).small().color(theme::texte_doux()));
                     }
                     if notes.ignored > 0 || notes.drawings_refused > 0 {
-                        ui.colored_label(theme::avertissement(), format!("{} ignorée(s), {} refusé(s) dans le fichier.", notes.ignored, relecture::plural(notes.drawings_refused, "dessin", "dessins")));
+                        crate::theme::avertir(ui, format!("{} ignorée(s), {} refusé(s) dans le fichier.", notes.ignored, relecture::plural(notes.drawings_refused, "dessin", "dessins")));
                     }
                     if !sum.unmatched.is_empty() {
-                        ui.colored_label(theme::avertissement(), format!("{} sans plan (plan supprimé ou inconnu) :", relecture::plural(sum.unmatched.len(), "note", "notes")));
+                        crate::theme::avertir(ui, format!("{} sans plan (plan supprimé ou inconnu) :", relecture::plural(sum.unmatched.len(), "note", "notes")));
                         egui::ScrollArea::vertical().max_height(110.0).id_salt("relecture_sans_plan").show(ui, |ui| {
                             for &k in &sum.unmatched {
                                 let n = &notes.notes[k];
@@ -558,7 +558,7 @@ impl App {
                     }
                     if other {
                         ui.separator();
-                        ui.colored_label(theme::avertissement(), format!("Ces notes viennent du projet « {} », pas de « {here} ». Les plans sont cherchés par leur identifiant : sur un autre projet, elles tomberaient au mauvais endroit.", notes.project));
+                        crate::theme::avertir(ui, format!("Ces notes viennent du projet « {} », pas de « {here} ». Les plans sont cherchés par leur identifiant : sur un autre projet, elles tomberaient au mauvais endroit.", notes.project));
                         ui.checkbox(&mut w.autre_projet_ok, "Importer quand même");
                     }
                     ui.add_space(6.0);

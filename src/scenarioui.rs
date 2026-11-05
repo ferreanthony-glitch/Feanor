@@ -322,7 +322,6 @@ impl App {
     }
 
     fn scenario_body(&mut self, ui: &mut egui::Ui, w: &mut ScenarioWindow) -> Act {
-        let warn = crate::theme::avertissement();
         let mut act = Act::None;
         ui.label(RichText::new(&w.name).strong());
         ui.label(RichText::new(w.path.display().to_string()).small().weak());
@@ -337,7 +336,7 @@ impl App {
                 return act;
             }
             Load::Failed(e) => {
-                ui.colored_label(warn, e.as_str());
+                crate::theme::avertir(ui, e.as_str());
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     if ui.button("Choisir un autre fichier…").clicked() {
@@ -461,7 +460,7 @@ impl App {
             ui.add_space(4.0);
             egui::CollapsingHeader::new(format!("Remarques ({})", script.warnings.len())).default_open(true).show(ui, |ui| {
                 for m in &script.warnings {
-                    ui.colored_label(warn, format!("• {m}"));
+                    crate::theme::avertir(ui, format!("• {m}"));
                 }
             });
         }
@@ -480,7 +479,6 @@ impl App {
 
     /// La fenêtre d'import : ce qui a été lu, et « Importer » (garder dans le projet, sans créer de plan).
     fn scenario_keep_body(&mut self, ui: &mut egui::Ui, w: &mut ScenarioWindow) -> Act {
-        let warn = crate::theme::avertissement();
         let mut act = Act::None;
         let Load::Ready(script) = &w.load else { return act };
         let mut head = format!("{} : {} scène(s)", script.format.label(), script.headings());
@@ -502,14 +500,14 @@ impl App {
             ui.add_space(4.0);
             egui::CollapsingHeader::new(format!("Remarques ({})", script.warnings.len())).default_open(true).show(ui, |ui| {
                 for m in &script.warnings {
-                    ui.colored_label(warn, format!("• {m}"));
+                    crate::theme::avertir(ui, format!("• {m}"));
                 }
             });
         }
         ui.separator();
         if w.confirm {
             let nom = self.doc.scenario.as_ref().map(|g| g.nom.clone()).unwrap_or_default();
-            ui.colored_label(warn, format!("Ce projet a déjà un scénario (« {nom} »). Le remplacer par celui-ci ?"));
+            crate::theme::avertir(ui, format!("Ce projet a déjà un scénario (« {nom} »). Le remplacer par celui-ci ?"));
             ui.label(RichText::new("L'ancien fichier n'est pas effacé : il reste à côté, dans le dossier du projet (scenario.ancien-….json). Les plans déjà créés depuis l'ancien scénario ne sont pas touchés, mais ne sont plus reliés au texte.").weak().small());
             ui.horizontal(|ui| {
                 if ui.button("Remplacer le scénario").clicked() {

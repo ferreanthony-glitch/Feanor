@@ -207,7 +207,6 @@ impl App {
         let (frame, fps) = (self.doc.frame, self.doc.fps);
         let current = ResolutionEdit { w: frame[0], h: frame[1], fps, linked: true, scale: true, keep_seconds: true, interpolate: false };
         let mut e = self.res_edit.unwrap_or(current);
-        let warn = crate::theme::avertissement();
         ui.set_width(440.0);
         ui.label(RichText::new("Préréglages").strong());
         egui::ScrollArea::vertical().max_height(160.0).id_salt("prereglages_resolution").show(ui, |ui| {
@@ -264,7 +263,7 @@ impl App {
         }
         if resized {
             ui.add_space(4.0);
-            ui.colored_label(warn, "Changer la taille ne s'annule pas (Ctrl+Z) : l'historique d'annulation est vidé.");
+            crate::theme::avertir(ui, "Changer la taille ne s'annule pas (Ctrl+Z) : l'historique d'annulation est vidé.");
         }
         let mut apply = false;
         ui.horizontal(|ui| {

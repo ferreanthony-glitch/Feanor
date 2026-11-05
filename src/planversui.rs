@@ -431,7 +431,7 @@ impl App {
             ui.label("La version affichée de chaque plan reste telle quelle. Les états gardés par les envois (dossier versions/) ne sont pas touchés. Ctrl+Z ramène les versions supprimées.");
             ui.add_space(6.0);
             ui.horizontal(|ui| {
-                if ui.button(RichText::new("Supprimer").color(theme::erreur())).clicked() {
+                if ui.add(egui::Button::new(RichText::new("Supprimer").color(theme::erreur())).stroke(egui::Stroke::new(1.0_f32, theme::erreur()))).clicked() {
                     faire = true;
                 }
                 if ui.button("Annuler").clicked() {

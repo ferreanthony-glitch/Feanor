@@ -600,7 +600,7 @@ impl App {
             ui.label(RichText::new(depot_nom.as_str()).small().weak());
             let en_attente = vue.plans.values().filter(|i| i.attente.is_some()).count();
             if en_attente > 0 {
-                ui.label(RichText::new(format!("{} {en_attente} plan(s) pas encore arrivé(s) : un export les montrerait vides.", ph::HOURGLASS_MEDIUM)).small().color(theme::avertissement()));
+                crate::theme::avertir_petit(ui, format!("{} {en_attente} plan(s) pas encore arrivé(s) : un export les montrerait vides.", ph::HOURGLASS_MEDIUM));
             }
             if let Some(h) = &vue.hors_ligne {
                 ui.add_space(4.0);

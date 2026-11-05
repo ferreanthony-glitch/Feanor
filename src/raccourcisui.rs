@@ -124,7 +124,6 @@ impl App {
         let (action, captured) = (a.action.clone(), a.captured.clone());
         let label = label_of(&action);
         let current = self.keymap.labels_of(&action);
-        let warn = crate::theme::avertissement();
         let mut open = true;
         let mut choice: Option<&str> = None;
         egui::Window::new("Assigner un raccourci")
@@ -151,7 +150,7 @@ impl App {
                             ui.label(RichText::new("Libre.").weak());
                         } else {
                             let names: Vec<String> = others.iter().map(|o| format!("« {} »", label_of(o))).collect();
-                            ui.colored_label(warn, format!("Déjà pris par {} : il le perdra.", names.join(", ")));
+                            crate::theme::avertir(ui, format!("Déjà pris par {} : il le perdra.", names.join(", ")));
                         }
                         ui.horizontal(|ui| {
                             if ui.button("Remplacer").on_hover_text("Ce raccourci devient le seul de la commande.").clicked() {
@@ -240,7 +239,7 @@ impl App {
                         .weak(),
                 );
                 for w in &self.keymap.warnings {
-                    ui.colored_label(crate::theme::avertissement(), format!("⚠ {w}"));
+                    crate::theme::avertir(ui, format!("⚠ {w}"));
                 }
                 ui.horizontal(|ui| {
                     ui.label(ph::MAGNIFYING_GLASS);

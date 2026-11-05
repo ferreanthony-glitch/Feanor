@@ -862,7 +862,7 @@ impl App {
 /// Dessine le repère « modifié depuis l'envoi » centré en `centre` : une pastille d'avertissement du thème avec
 /// un crayon (modifié) ou un plus (ajouté).
 pub(crate) fn peindre_repere(painter: &egui::Painter, centre: egui::Pos2, etat: Etat, rayon: f32) {
-    painter.circle_filled(centre, rayon, theme::avertissement());
+    painter.circle_filled(centre, rayon, theme::braise());
     painter.circle_stroke(centre, rayon, Stroke::new(1.0_f32, theme::encre()));
     let glyphe = if etat == Etat::Nouveau { ph::PLUS } else { ph::PENCIL_SIMPLE };
     painter.text(centre, Align2::CENTER_CENTER, glyphe, FontId::proportional(rayon * 1.25), theme::encre());
@@ -889,7 +889,7 @@ pub(crate) fn peindre_repere_du_bloc(painter: &egui::Painter, bloc: Rect, etat: 
         zone
     } else {
         let bande = Rect::from_min_max(bloc.min, pos2(bloc.right(), bloc.top() + BANDE));
-        painter.rect_filled(bande, 1.0, theme::avertissement());
+        painter.rect_filled(bande, 1.0, theme::braise());
         bande.expand2(vec2(0.0, 2.0))
     }
 }

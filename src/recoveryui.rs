@@ -3,7 +3,7 @@
 
 use std::time::Duration;
 
-use eframe::egui::{self, Color32, RichText};
+use eframe::egui::{self, RichText};
 
 use crate::app::App;
 use crate::recovery::{now_secs, Orphan, Snapshot};
@@ -15,10 +15,6 @@ pub(crate) struct RecoveryChoix {
     pub open_all: bool,
     pub delete: Option<usize>,
     pub later: bool,
-}
-
-fn warn() -> Color32 {
-    crate::theme::avertissement()
 }
 
 /// « il y a 3 min », « il y a 2 h », « il y a 4 jours ».
@@ -161,7 +157,7 @@ impl App {
                 let place = o.info.project.as_ref().map_or("projet jamais enregistré".to_string(), |p| p.display().to_string());
                 ui.add(egui::Label::new(RichText::new(format!("{when} · {place}")).small()).truncate()).on_hover_text(format!("{when} · {place}"));
                 if o.project_is_newer() {
-                    ui.colored_label(warn(), "Le projet a été enregistré après cette copie : elle n'apporte sans doute rien.");
+                    crate::theme::avertir(ui, "Le projet a été enregistré après cette copie : elle n'apporte sans doute rien.");
                 }
                 ui.horizontal(|ui| {
                     if ui.button("Ouvrir la copie").clicked() {

@@ -107,7 +107,6 @@ impl App {
     }
 
     fn liste_body(&mut self, ui: &mut egui::Ui, w: &mut ListeWindow) -> bool {
-        let avert = theme::avertissement();
         ui.label(
             RichText::new("Une ligne par plan pour le suivi de production : épisode, séquence, nom du plan (selon le modèle de noms), description, dialogue, images, image d'entrée et de sortie, durée, cadence, version, vignette. Pour importer les plans dans Kitsu ou un tableur de production.")
                 .small()
@@ -171,13 +170,13 @@ impl App {
         let (lignes, v) = w.cache.as_ref().map(|c| (c.1.len(), c.2.clone())).unwrap_or_default();
         ui.label(format!("{lignes} plan(s), {} colonne(s).", self.settings.liste_plans.profil.en_tetes().len()));
         if self.settings.liste_plans.profil == Profil::Kitsu && self.settings.liste_plans.vignettes {
-            ui.label(RichText::new("Le profil Kitsu n'a pas de colonne pour les vignettes : elles sont écrites à côté, sans être citées.").small().color(avert));
+            crate::theme::avertir_petit(ui, "Le profil Kitsu n'a pas de colonne pour les vignettes : elles sont écrites à côté, sans être citées.");
         }
         for a in &v.avertissements {
-            ui.label(RichText::new(a).small().color(avert));
+            crate::theme::avertir_petit(ui, a);
         }
         if !self.doc.numbering_locked {
-            ui.label(RichText::new("La numérotation des plans est suivie : les noms changent si un plan s'ajoute ou se déplace. Verrouille-la pour un suivi de production.").small().color(avert));
+            crate::theme::avertir_petit(ui, "La numérotation des plans est suivie : les noms changent si un plan s'ajoute ou se déplace. Verrouille-la pour un suivi de production.");
         }
         let mut go = false;
         ui.horizontal(|ui| {
@@ -188,7 +187,7 @@ impl App {
                 ui.label(RichText::new(m).small().color(theme::succes()));
             }
             Some(Err(e)) => {
-                ui.colored_label(avert, e);
+                crate::theme::avertir(ui, e);
             }
             None => {}
         }
