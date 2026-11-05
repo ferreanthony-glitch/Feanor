@@ -762,7 +762,7 @@ impl App {
         let Some(c) = self.doc.cels.get(&cel).filter(|c| !c.raster.is_blank()) else { return };
         let apres = c.raster.clone();
         let avant = crate::raster::Raster::new(apres.width, apres.height);
-        self.perso_envoyer(Travail { cel, serial: u64::MAX, reglages, couleur: None, avant, apres });
+        self.perso_envoyer(Travail { cel, serial: u64::MAX, etape: 0, reglages, couleur: None, avant, apres, suivre: None });
     }
 
     /// La couleur d'aplat de la pastille qui dessine devient la « Couleur de l'aplat » du calque (Anthony, 2026-10-28 : « la couleur
@@ -817,18 +817,33 @@ impl App {
         if self.tool == Tool::Eraser || self.aplat_en_cible() || self.griffonne_ici() {
             return;
         }
-        let Some((_, fond)) = self.perso_couleurs_actives() else { return };
+        let (fond, sans_pastille) = match self.perso_couleurs_actives() {
+            Some((_, fond)) => (fond, false),
+            // Sans pastille sur un calque ordinaire : le trait suit la teinte de la clé du dessin, s'il en a une (`suivre`).
+            None if !self.aplat_vient_du_personnage(self.cur_layer) => (None, true),
+            None => return,
+        };
         // Sur un calque de personnage, l'aplat que le trait gagne est celui de ce personnage, quelle que soit la pastille.
         let fond = if self.aplat_vient_du_personnage(self.cur_layer) { self.aplat_couleur_imposee(self.cur_layer) } else { fond };
         let Some(reglages) = self.layers().get(self.cur_layer).and_then(|l| l.fond) else { return };
         let Some(c) = self.doc.cels.get(&cel) else { return };
+        // (Un dessin sans peinture d'aplat n'a pas de teinte à suivre : rien n'est envoyé, le cas courant.)
+        let suivre = if sans_pastille {
+            match c.fond.as_deref().map(|s| s.peinture.raster.clone()).filter(|r| !r.is_blank()) {
+                Some(r) => Some(r),
+                None => return,
+            }
+        } else {
+            None
+        };
         let apres = c.raster.clone();
         let mut avant = apres.clone();
         for (i, t) in tiles {
             avant.replace_slot(i, t);
         }
         let serial = self.history.serial();
-        self.perso_envoyer(Travail { cel, serial, reglages, couleur: fond, avant, apres });
+        let etape = self.history.last_id();
+        self.perso_envoyer(Travail { cel, serial, etape, reglages, couleur: fond, avant, apres, suivre });
     }
 
     /// Pose le fond d'un trait de personnage : les pixels gagnés prennent la couleur de fond du personnage dans la
@@ -843,6 +858,7 @@ impl App {
         if f.masque.len() != w * h {
             return;
         }
+        let existait = c.fond.is_some();
         let s = c.fond.get_or_insert_with(|| Box::new(Strate::new(w, h)));
         let mut edits = Vec::new();
         let mut note = |old: Vec<(usize, Option<Tile>)>, coupe: bool| {
@@ -862,8 +878,32 @@ impl App {
         }
         s.peinture.version += 1;
         c.version += 1;
-        if !edits.is_empty() && self.history.serial() == f.serial {
-            self.history.extend_last(Edit::Group(edits));
+        if !edits.is_empty() {
+            if self.history.serial() == f.serial {
+                self.history.extend_last(Edit::Group(edits));
+            } else {
+                match self.history.etat_de_l_etape(f.etape) {
+                    // L'étape du trait est encore à annuler : le fond la rejoint, les autres étapes ne bougent pas.
+                    Some(true) => {
+                        self.history.extend_step(f.etape, Edit::Group(edits));
+                    }
+                    // Le trait a été défait entre-temps : son fond est rangé avec son étape (il revient en la rétablissant) et
+                    // l'écran reste comme il est (la forme du trait n'y est plus).
+                    Some(false) => {
+                        // (Les éditions de fond ne touchent pas à la navigation.)
+                        let mut nav = crate::history::Nav { panel: self.cur_panel, layer: self.cur_layer };
+                        let retour = Edit::Group(edits).apply(&mut self.doc, &mut nav);
+                        self.history.extend_step(f.etape, retour);
+                        // (Le dessin n'avait pas de strate : elle n'a pas à rester, vide.)
+                        if let Some(c) = self.doc.cels.get_mut(&f.cel).filter(|_| !existait) {
+                            if c.fond.as_deref().is_some_and(|s| s.peinture.raster.is_blank() && s.coupe.is_blank()) {
+                                c.fond = None;
+                            }
+                        }
+                    }
+                    None => {}
+                }
+            }
         }
         self.modified = true;
         self.renderer.invalidate_all();
@@ -874,6 +914,20 @@ impl App {
     pub(crate) fn perso_attendre(&mut self) {
         let Some(fil) = self.perso.fil.as_mut() else { return };
         for f in fil.attendre(std::time::Duration::from_secs(20)) {
+            self.perso_poser(f);
+        }
+    }
+
+    /// Avant de copier des dessins (couper, réunir, dupliquer, ranger une version, copier des clés ou un calque) ou d'enregistrer : le
+    /// fond que leur dernier trait de personnage vient de gagner se pose d'abord, pour que la copie et le fichier l'aient. Au repos, rien
+    /// (un seul test). Sinon on attend au plus 2 secondes un calcul qui tient en général en quelques images : jamais pendant un geste de
+    /// dessin, seulement au moment d'une commande.
+    pub(crate) fn attendre_fonds_de_traits(&mut self) {
+        let Some(fil) = self.perso.fil.as_mut() else { return };
+        if fil.en_cours() == 0 {
+            return;
+        }
+        for f in fil.attendre(std::time::Duration::from_secs(2)) {
             self.perso_poser(f);
         }
     }

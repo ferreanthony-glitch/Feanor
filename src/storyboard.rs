@@ -112,6 +112,8 @@ impl App {
             return false;
         }
         self.end_stroke();
+        // (Couper, réunir, dupliquer, ranger une version : les dessins copiés partent avec le fond de leur dernier trait.)
+        self.attendre_fonds_de_traits();
         if poser {
             self.poser_les_selections();
         }

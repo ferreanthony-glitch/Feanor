@@ -1837,8 +1837,8 @@ Demande d'Anthony : pouvoir colorier sous le trait sans l'abîmer, avec des imag
 - **Avec l'« Aplat sous le trait »** (`fond.rs`) : les deux coexistent, rien n'a changé dans l'un pour l'autre. L'aplat est
   une strate du même calque, déduite du trait (une forme, une couleur) ; le calque de couleur est un calque à part,
   colorié zone par zone, avec ses propres images. Ordre de composition : aplat du trait, couleur, trait.
-- **Limites connues** : couper / coller une clé du trait (même calque) ne remet pas sa couleur (elle reste dans le
-  dessin d'origine : glisser la clé la garde) ; un effet du trait (tremblement) ne bouge pas la couleur ; le trait
+- **Limites connues** : couper / coller une clé du trait (même calque) garde sa couleur depuis la partie 103 (avant, elle restait dans le
+  dessin d'origine : glisser la clé la gardait) ; un effet du trait (tremblement) ne bouge pas la couleur ; le trait
   doit exister à l'image pour colorier (sinon, un pinceau en pose un vide) ; un calque de toute la scène, un dossier,
   un calque d'effet ou vidéo ne portent pas de couleur.
 
@@ -3523,7 +3523,7 @@ La **portée** (« La clé / Le plan / Tout le storyboard ») des Réglages de l
 
 **Constats vérifiés qui ne sont pas la cause** : l'aplat est bien recalculé après chaque geste (gomme vectorielle, déplacement, Cutter) ; le débord de 3 px couvre le trait vectoriel (aucun pixel d'aplat « vide » à côté du trait dans l'essai) ; les caches (formes de l'aplat, rendus) suivent la version du dessin.
 
-**Limite connue** : l'option « La clé » du changement de couleur manuel peint la forme de l'aplat de ce dessin (`aplatmulti.rs`, `teinter`) ; si le trait de cette clé change ensuite, ce qui est gagné retombe sur la couleur du calque (§56, « Limite »). Pour un aplat brun sur plusieurs clés, régler la couleur du calque (portée « Le plan ») ou dessiner avec la pastille. **Projets existants** : un aplat déjà en deux couleurs ne se répare pas tout seul ; le prochain trait au pinceau de la pastille aligne la couleur du calque. (Réparation possible à l'ouverture, **non faite** : pour un calque dont l'aplat est blanc et dont la strate est brune d'un bout à l'autre, mettre la couleur du calque à la couleur dominante de la strate.)
+**Limite connue** : l'option « La clé » du changement de couleur manuel peint la forme de l'aplat de ce dessin (`aplatmulti.rs`, `teinter`) ; si le trait de cette clé change ensuite, ce qui est gagné suit la couleur de la clé quand toute sa forme en est peinte (partie 103 ; avant, il retombait sur la couleur du calque, §56, « Limite »). Pour un aplat brun sur plusieurs clés, régler la couleur du calque (portée « Le plan ») ou dessiner avec la pastille. **Projets existants** : un aplat déjà en deux couleurs ne se répare pas tout seul ; le prochain trait au pinceau de la pastille aligne la couleur du calque. (Réparation possible à l'ouverture, **non faite** : pour un calque dont l'aplat est blanc et dont la strate est brune d'un bout à l'autre, mettre la couleur du calque à la couleur dominante de la strate.)
 
 **Essais ajoutés** (`aplattrous_tests.rs`, 11) : un trait de pastille aligne la couleur du calque en une étape (annuler la rend, rétablir la remet) ; pastille classique, personnage sans aplat et gomme ne la changent pas ; après un lobe au pinceau, après gomme puis trait refait, après le déplacement d'une partie sélectionnée, après le Cutter : aucun pixel d'aplat qui ne soit pas de la couleur de la pastille (compté sur le rendu final, `composite_pixel`, comme à l'écran et à l'export) ; couleur neutre à aplat (calque avec et sans aplat) ; les préréglages d'origine (partie 62).
 
@@ -4815,8 +4815,8 @@ l'aplat se fait sur plusieurs clés d'un coup ; la couleur de l'aplat se change 
   opacité gardée : les pixels peints dans l'aplat (strate) et les calques de couleur ; pour le plan et le storyboard, la couleur de chaque calque qui était
   l'ancienne aussi. **La clé** : la forme de l'aplat de ce dessin est peinte de la nouvelle couleur (sur un fil de travail) sans changer la couleur du calque, donc
   sans changer les autres clés. Une étape « Aplat : couleur » ; la barre d'état dit « couleur changée sur N dessins (la clé / le plan / tout le storyboard) ».
-- Limite : pour « la clé », la nouvelle forme est peinte dans l'aplat du dessin ; si le trait change plus tard, la peinture ne suit pas (la couleur du calque
-  s'applique à ce qui n'est pas peint).
+- Limite : pour « la clé », la nouvelle forme est peinte dans l'aplat du dessin ; si le trait change plus tard, un trait sans pastille suit la couleur de la clé quand toute
+  la forme en est peinte (partie 103) ; sinon la couleur du calque s'applique à ce qui n'est pas peint.
 
 ### Essais ajoutés (`aplatsur_tests.rs`, 26)
 
@@ -7106,3 +7106,33 @@ Demande du réalisateur : enlever la partie animation du sélecteur d'espaces ; 
 4. Double-clic sur un libellé de plan, une transition, une clé d'effet : le geste d'avant, sans entrer en animation.
 5. Affichage > Espaces de travail : trois entrées. Ctrl+K « Animation » : plus d'espace du même nom.
 6. Ferme et rouvre un projet laissé en animation : il s'ouvre avec le bouton de retour.
+
+
+## 103. L'aplat fiable : annuler, copier, enregistrer, versions (2026-11-05, branche `aplat-fiable`)
+
+Demande du réalisateur pour la V1 : le calque aplat « fonctionne parfaitement sans créer de problèmes ». Relecture du code, puis recherche de combinaisons qui cassent. Chaque défaut a d'abord été reproduit dans un essai (`src/aplatfiable_tests.rs`, 14 essais), puis corrigé (pour les points 1 et 2, les essais échouent sans la correction : vérifié en la désactivant ; le point 3 est une précaution, voir plus bas). Le format de projet ne change pas.
+
+### Ce qui change
+
+1. **Le fond d'un trait de personnage qui arrive tard rejoint l'étape de son trait.** Avant : un trait sur un gros dessin, un autre geste, et le fond du premier (calculé en arrière-plan, `persofond.rs`) était posé sans étape d'annulation ; défaire le trait cachait son fond sans le retirer, et un trait suivant sans pastille retrouvait ce reste. Maintenant : chaque étape de l'historique a un numéro propre (`History::last_id`, `extend_step`, `etat_de_l_etape`, qui ne change ni en annulant ni en rétablissant) ; le fond rejoint l'étape de son trait où qu'elle soit. Si le trait a été défait entre-temps, le fond est rangé avec l'étape (rien ne change à l'écran) et revient quand on rétablit. Les étapes regroupées par `merge_last` (un trait dans une case vide : le dessin naît avec son trait) gardent la trace de leurs anciens numéros (`regroupes`). Une étape qui n'existe plus (plus de 200 étapes) laisse le fond posé sans étape, comme avant. Prolonger une étape avancée fait avancer le numéro de l'historique (`serial`), comme toute modification. L'exclusion du hasard `hasard_tests.rs` (brosses Décor sans aplat) est retirée : le hasard attend maintenant le fond de chaque geste (`perso_attendre`), l'arrivée tardive étant couverte par les essais de cette partie.
+2. **« La clé » suit le trait.** (a) Un trait fait sans pastille sur un dessin dont toute la forme est peinte d'une même couleur (90 % au moins de la forme, 200 pixels au moins, couleur différente de celle du calque : le cas de « La clé » du changement de couleur manuel) gagne cette couleur au lieu de retomber sur celle du calque ; le calcul est fait sur le fil de fond (`persofond::teinte_de_la_cle`). Une zone peinte à la main (blanc d'œil, pot dans une zone) ne fait pas une teinte et n'est pas suivie. (b) Couper / copier / coller une clé du trait emporte désormais les dessins de couleur des calques de couleur liés (`ClipKey::couleurs`) : la clé collée garde sa couleur. Une clé collée dans un autre projet de feuille différente ne les emporte pas (non adaptés).
+3. **Une commande juste après un trait prend son fond avec elle (précaution).** Couper un plan, réunir, ranger une version de séquence, dupliquer une image ou un calque, copier un calque ou des clés, enregistrer : par la lecture du code, la copie ou le fichier pouvait partir sans le fond du dernier trait (le fond arrive après et ne se pose que dans l'original). **Non reproduit** : les essais `a_command_right_after_a_stroke_takes_the_aplat_of_that_stroke_along` et `saving_right_after_a_stroke_writes_the_aplat_of_that_stroke` réussissent aussi sans l'attente (une autre voie pose le fond avant la copie ; non élucidée). L'attente reste, comme garde-fou. Maintenant ces commandes attendent d'abord le fond en route (`App::attendre_fonds_de_traits`, au plus 2 s, rien au repos) : jamais pendant un geste de dessin, seulement au moment de la commande.
+
+### Constats vérifiés qui ne sont pas des défauts
+
+Aplat puis changement de version de séquence (copie, retour à la version rangée, nouveau trait), enregistrement, réouverture : les deux versions gardent leur aplat (essai `an_aplat_survives_a_sequence_version_switch_and_a_save_then_reopen`). Aucune cause trouvée dans `variantes.rs` ni `planvers.rs` : rien à y corriger. Fusion d'un calque aplat vers le bas (image gardée, annuler, rétablir), calque aplat copié-collé (la copie a sa strate à elle), plan coupé puis réuni (un trait d'une moitié reste dans cette moitié), annuler et rétablir dans le désordre sur trois traits dont un tardif : sans écart.
+
+### Limites restantes
+
+- « La clé » sur un dessin dont une partie de la forme a été repeinte à la main (moins de 90 % de la même couleur) : un trait sans pastille retombe sur la couleur du calque.
+- Le fond d'un trait attend jusqu'à 2 s au plus avant une commande qui copie ; au-delà, il se pose dans l'original seulement (très gros dessin, machine chargée).
+
+### À vérifier à l'écran
+
+1. Calque à aplat, pastille de personnage : tracer un très gros trait, tout de suite un autre trait ailleurs, puis Ctrl+Z deux fois : plus aucun aplat de ces traits ; Ctrl+Maj+Z deux fois : les deux reviennent avec leur couleur.
+2. Tracer un trait et appuyer sur Ctrl+Z tout de suite : le trait disparaît ; Ctrl+Maj+Z : il revient avec son aplat.
+3. « La clé » : changer la couleur de l'aplat d'une clé (option « La clé »), puis la retoucher au pinceau sans pastille : le trait ajouté prend la même couleur.
+4. Calque de couleur : copier une clé du trait, la coller plus loin (Ctrl+V) : la couleur de la clé est là ; annuler / rétablir.
+5. Tracer un trait avec une pastille et, tout de suite, couper le plan (ou « Nouvelle version de séquence », ou Ctrl+S) : l'aplat du dernier trait est dans les deux plans, dans la version rangée, dans le fichier rouvert.
+6. Aplat + version de séquence : créer une version, dessiner dans l'une, revenir à l'autre, enregistrer, rouvrir : les deux gardent leur aplat.
+7. Fusionner le calque aplat vers le bas, annuler, rétablir : image identique.

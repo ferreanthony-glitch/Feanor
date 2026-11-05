@@ -625,10 +625,7 @@ fn photo_enregistrable(doc: &mut Document) -> String {
 impl Essai {
     pub(crate) fn new(doc: Document, nom: &str) -> Essai {
         let mut b = banc_taille(doc, false, 1600, 900);
-        // Adapté (2026-10-29) : les brosses Décor ont maintenant un aplat, que le fil de fond pose après coup, hors de l'étape du trait quand
-        // autre chose s'est passé entre-temps (`persofond.rs`, limite documentée). Ce hasard compare le projet avant/après chaque annulation :
-        // il dessine donc avec des brosses Décor sans aplat, comme avant. L'aplat des brosses est couvert par `brosses_perso_tests`.
-        b.app.settings.brosses_decor.iter_mut().for_each(|d| d.fill = None);
+        // (Les brosses Décor gardent leur aplat : le fil de fond le pose dans l'étape de son trait, `persofond.rs`, partie 103.)
         b.app.board_view = BoardView::Panels;
         b.app.layout.board_columns = 4;
         b.app.layout.board_rows = 0;
@@ -1298,6 +1295,10 @@ impl Essai {
         let s0_net = self.b.app.bsel.as_ref().is_none_or(|s| s.lifted.is_none()) && self.b.app.multi.sel.is_none();
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             self.jouer(g);
+            // Le fond d'un trait de personnage (brosses Décor comprises) se calcule en arrière-plan : on attend qu'il soit posé, pour que
+            // l'état d'après le geste soit celui que garde l'étape (un fond qui arrive tard rejoint bien l'étape de son trait, mais il
+            // changerait le projet entre deux vérifications : `aplatfiable_tests.rs` couvre l'arrivée tardive).
+            self.b.app.perso_attendre();
             // Un déplacement de sélection lâché attend son rendu exact : la prochaine action de la main le termine (le dessin
             // prend alors la géométrie de ses pixels, au pixel près, `flush_flottante_on_input`). On la devance, pour que l'état
             // d'après soit celui que garde l'étape.

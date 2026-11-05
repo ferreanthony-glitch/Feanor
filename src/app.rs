@@ -2385,10 +2385,9 @@ impl App {
                     None => None,
                 };
                 self.renderer.invalidate_tiles(&dirty);
-                if self.perso.actif.is_some() {
-                    trait_de_personnage = crate::personnagesui::tuiles_de(edit.as_ref()).map(|t| (cel, t));
-                    trait_de_pastille = true;
-                }
+                // (Sans pastille, le trait suit tout de même la teinte de la clé de son dessin, s'il en a une : `persofond::teinte_de_la_cle`.)
+                trait_de_personnage = crate::personnagesui::tuiles_de(edit.as_ref()).map(|t| (cel, t));
+                trait_de_pastille = self.perso.actif.is_some();
                 match self.vstroke.take() {
                     Some(vs) => {
                         // Les pixels d'avant l'aperçu servent à poser le trait définitif sans tout redessiner.
@@ -2914,6 +2913,8 @@ impl App {
             return;
         }
         self.end_stroke();
+        // (Une copie du dessin part avec le fond que son dernier trait vient de gagner : `attendre_fonds_de_traits`.)
+        self.attendre_fonds_de_traits();
         self.playing = false;
         let (li, f) = (self.cur_layer, self.cur_frame);
         let current = self.cel_here();
@@ -3078,6 +3079,7 @@ impl App {
             return;
         }
         self.end_stroke();
+        self.attendre_fonds_de_traits();
         let snap = self.snapshot();
         self.cur_layer = crate::layerops::duplicate_layer(&mut self.doc, self.cur_panel, self.cur_layer);
         self.layer_sel.clear();
@@ -3160,6 +3162,8 @@ impl App {
     /// aurait perdu son trait, et ses images ne suivaient plus rien) : c'est le trait qui est copié, avec tous ses calques de couleur.
     /// Un calque dont le dossier est aussi choisi part avec le dossier.
     pub(crate) fn copy_layer(&mut self) {
+        self.end_stroke();
+        self.attendre_fonds_de_traits();
         let choisis = self.chosen_layers();
         let mut tops: Vec<usize> = choisis.iter().map(|&li| crate::calquecouleur::trait_de(self.layers(), li).unwrap_or(li)).collect();
         if choisis.len() > 1 {
