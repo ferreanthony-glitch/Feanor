@@ -5012,6 +5012,12 @@ impl eframe::App for App {
         if self.settings.references_fenetre.transparent && self.detached.iter().any(|d| d.panneau == crate::dock::Pane::References) {
             return [0.0, 0.0, 0.0, 0.0];
         }
+        // Thèmes de la marque : la marge entre la barre d'outils et les panneaux prend la couleur des panneaux,
+        // sinon elle ferait une bande noire dans le thème clair.
+        let p = crate::theme::palette();
+        if p.identite {
+            return p.panneau.to_normalized_gamma_f32();
+        }
         egui::Color32::from_rgba_unmultiplied(12, 12, 12, 180).to_normalized_gamma_f32()
     }
 
