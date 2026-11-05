@@ -7087,3 +7087,22 @@ Demande d'Anthony, avec une capture annotée : retour au gris sombre comme inter
 - **Thème personnalisé :** celui qui part de Gris sombre garde ces touches ; un thème personnalisé déjà écrit ne change pas. Gris clair et Sombre gardent leurs couleurs d'avant.
 
 À tester : lancer sans réglages ou choisir Gris sombre dans Fichier > Préférences > Apparence ; regarder le trait sous l'espace actif ; dessiner un trait pour voir la pastille jade de l'onglet ; cliquer chaque sorte de calque.
+
+## 100. L'animation n'est plus un onglet (2026-11-05, branche `sans-onglet-animation`)
+
+Demande du réalisateur : enlever la partie animation du sélecteur d'espaces ; garder le double-clic sur un plan pour entrer en animation, avec un bouton pour revenir au storyboard.
+
+- **Onglet retiré.** En haut à droite il reste Vignettes, Storyboard, Montage. L'espace `Espace::Animation`, sa disposition, la timeline et tout le code d'animation restent : seul le moyen d'y aller par un onglet disparaît. Le format de projet ne change pas.
+- **Entrer.** Double-clic sur un plan, dans la bande du Storyboard comme dans celle du Montage (c'était déjà le geste de la bande, `storyboard.rs`) ; « Animer ce plan » dans la barre du montage, le clic droit sur un plan et Tab (inchangé) y mènent aussi. « Animer cette image » (clic droit d'une case des Vignettes) reste.
+- **Sortir.** Bouton « Retour au storyboard » (flèche + mot), à gauche des onglets, visible en animation seulement. Il ramène à l'espace Storyboard sur le même plan, même si l'on était venu du Montage ; Tab, lui, revient toujours à l'espace d'où l'on vient.
+- **Doubles clics qui gardent leur rôle.** Sur un libellé de plan : le renommer. Sur une transition, un losange de clé d'effet ou de position, une piste de calque (pose d'une clé), un extrait de son (clé de volume), un fanion de commentaire : leur geste, sans entrer en animation. Dans les pistes du Montage (`montagerows.rs`) : renommer ou replier le calque. Dans la timeline d'animation : renommer l'instance d'un dessin. Les doubles clics des Vignettes ne changent pas.
+- **Ailleurs.** Menu Affichage > Espaces de travail : trois entrées (`Espace::VISIBLES`). L'action `espace.animation` est retirée de `keymap.toml`, de la liste des actions, de la palette Ctrl+K et de l'éditeur de raccourcis. Un ancien réglage qui retenait l'animation comme côté storyboard retombe sur Storyboard (`settings.rs`). Un projet rouvert ou un onglet restauré en animation s'ouvre normalement, avec le bouton de retour. Le menu « Animation » de la barre de menus (lecture, aller à, images) reste : c'est un menu de commandes, pas un espace. L'aide des touches garde sa section « Animation » et le conseil de première entrée garde son texte : ils décrivent le mode, pas un onglet.
+- **Essais.** `src/sansonglet_tests.rs` : onglet absent et ordre des trois autres, double-clic dans les deux bandes (bon plan), bouton de retour (visible en animation seulement, retour sur le même plan), ancien réglage. Adaptés : `montageonglet_tests`, `vignettes_camera_tests`, `workspace_tests`, `fermeture_tests`.
+
+À vérifier à l'écran :
+1. En haut à droite : Vignettes, Storyboard, Montage, sans Animation, dans chaque thème (Gris sombre d'abord).
+2. Storyboard : double-clic sur un plan de la bande : on entre en animation sur ce plan ; refais-le dans le Montage.
+3. En animation : le bouton « Retour au storyboard » est bien lisible à gauche des onglets ; survol 1 s : la bulle ; clic : retour au Storyboard sur le même plan.
+4. Double-clic sur un libellé de plan, une transition, une clé d'effet : le geste d'avant, sans entrer en animation.
+5. Affichage > Espaces de travail : trois entrées. Ctrl+K « Animation » : plus d'espace du même nom.
+6. Ferme et rouvre un projet laissé en animation : il s'ouvre avec le bouton de retour.

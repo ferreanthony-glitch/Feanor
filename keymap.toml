@@ -1911,8 +1911,9 @@ action = "espace.enregistrer"
 touches = []
 source = "FEANOR (sans touche)"
 
-# Les quatre espaces de travail (INTERFACE.md, 6.1, 11 et 14), un onglet chacun en haut à droite :
-# Vignettes, Storyboard, Animation et Montage retiennent chacun leur disposition. Tab passe déjà du storyboard
+# Les trois espaces de travail (INTERFACE.md, 6.1, 11 et 14), un onglet chacun en haut à droite :
+# Vignettes, Storyboard et Montage retiennent chacun leur disposition. L'animation n'est plus un onglet (double-clic
+# sur un plan pour y entrer, bouton « Retour au storyboard » pour en sortir). Tab passe encore du storyboard
 # à l'animation et retour (du Montage et des Vignettes, il revient au storyboard) ; le Montage a Alt+M, les
 # Vignettes Alt+Maj+V (Alt+V est le miroir vertical de la sélection).
 [[raccourci]]
@@ -1924,11 +1925,6 @@ source = "proposition (V comme Vignettes ; Alt+V est pris par le miroir vertical
 action = "espace.storyboard"
 touches = []
 source = "FEANOR (espace de travail lié au mode Storyboard)"
-
-[[raccourci]]
-action = "espace.animation"
-touches = []
-source = "FEANOR (espace de travail lié au mode Animation)"
 
 [[raccourci]]
 action = "espace.montage"

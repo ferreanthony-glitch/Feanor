@@ -282,7 +282,7 @@ pub(crate) const MONTAGE: &[Cmd] = &[
         false,
         3,
     ),
-    // (L'onglet Animation, en haut à droite, fait la même chose : sous « Plus… », comme le double-clic sur le plan.)
+    // (Le double-clic sur le plan fait la même chose ; il n'y a plus d'onglet Animation.)
     bouton("mode.basculer", ph::FILM_SLATE, "Animer ce plan", "Entrer dans le plan courant pour l'animer (ou double-clic sur le plan).", false, 4),
 ];
 
@@ -412,7 +412,7 @@ fn montage_edition() -> &'static [Cmd] {
         reprend(&mut v, "fichier.importer_notes", true, 5);
         reprend(&mut v, "fichier.exporter_montage", true, 5);
         reprend(&mut v, "fichier.exporter_fiche", true, 5);
-        // 6. Entrer dans le plan : l'onglet Animation le fait aussi, la commande est sous « Plus… ».
+        // 6. Entrer dans le plan : le double-clic sur le plan le fait aussi, la commande est sous « Plus… ».
         reprend(&mut v, "mode.basculer", false, 6);
         // 7. Le reste de la barre du montage, sous « Plus… ».
         for c in MONTAGE {

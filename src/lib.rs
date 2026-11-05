@@ -611,6 +611,8 @@ mod fusionglisse;
 #[cfg(test)]
 mod fusionglisse_tests;
 #[cfg(test)]
+mod sansonglet_tests;
+#[cfg(test)]
 mod fiabilite_aller_retour_tests;
 #[cfg(test)]
 mod fiabilite_entrees_tests;

@@ -295,10 +295,10 @@ impl App {
                 self.action_item(ui, "À propos de FEANOR…", "aide.a_propos");
             });
 
-            // (Sans projet, il n'y a pas d'espace de travail à choisir : les quatre mots ne paraissent pas.)
+            // (Sans projet, il n'y a pas d'espace de travail à choisir : les trois mots ne paraissent pas.)
             if !sans_projet { ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                // Les quatre espaces de travail restent écrits en toutes lettres, dans l'ordre du
-                // travail (de gauche à droite : Vignettes, Storyboard, Animation, Montage) : on voit d'un coup
+                // Les trois espaces de travail restent écrits en toutes lettres, dans l'ordre du
+                // travail (de gauche à droite : Vignettes, Storyboard, Montage) : on voit d'un coup
                 // d'œil où l'on est. Passer de l'un à l'autre est instantané : le plan, l'image, la
                 // sélection et le projet ne changent pas, seule la disposition change.
                 // (Ce panneau se remplit de droite à gauche : le dernier posé est le premier à gauche.)
@@ -311,15 +311,6 @@ impl App {
                 }
                 if montage.clicked() && !on {
                     self.set_espace(Espace::Montage);
-                }
-                let on = self.espace == Espace::Animation;
-                let animation = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Animation ").strong(), on));
-                let animation = self.aide(animation, "Animation", "Animer le plan courant, image par image. Tab : retour au storyboard.", "mode.basculer");
-                if on {
-                    crate::theme::souligner_actif(ui, animation.rect);
-                }
-                if animation.clicked() && !on {
-                    self.set_espace(Espace::Animation);
                 }
                 let on = self.espace == Espace::Storyboard;
                 let board = ui.selectable_label(on, crate::bulles::encre_etat(RichText::new(" Storyboard ").strong(), on));
@@ -339,8 +330,24 @@ impl App {
                 if vignettes.clicked() && !on {
                     self.set_espace(Espace::Vignettes);
                 }
+                // En animation (on y entre par un double-clic sur un plan), il n'y a pas d'onglet : ce bouton, à gauche des
+                // onglets, ramène au storyboard, sur le même plan.
+                if self.espace == Espace::Animation {
+                    self.bouton_retour_storyboard(ui);
+                }
             }); }
         });
+    }
+
+    /// Le bouton « Retour au storyboard » de la barre du haut, en animation : l'espace Storyboard, sur le même plan.
+    pub(crate) fn bouton_retour_storyboard(&mut self, ui: &mut egui::Ui) -> egui::Response {
+        use egui_phosphor::regular as ph;
+        let resp = ui.button(RichText::new(format!("{} Retour au storyboard", ph::ARROW_BEND_UP_LEFT)).strong());
+        let resp = self.aide(resp, "Retour au storyboard", "Quitter l'animation et revenir au storyboard, sur ce plan.", "mode.basculer");
+        if resp.clicked() {
+            self.set_espace(crate::workspace::Espace::Storyboard);
+        }
+        resp
     }
 
     /// Panneau Outils : une icône par outil ; nom, raccourci et description dans la bulle.

@@ -1,4 +1,4 @@
-//! Le troisième onglet « Montage » (en haut à droite, à côté de Storyboard et d'Animation) : les trois
+//! Le troisième onglet « Montage » (en haut à droite, à côté de Vignettes et de Storyboard ; l'animation n'est plus un onglet) : les trois
 //! onglets passent d'un espace de travail à l'autre sans rien changer au projet, la disposition de
 //! l'espace Montage (le film en haut, toutes les pistes en bas), sa barre, Tab, Alt+M, la disposition
 //! retenue, et le repos de l'application.
@@ -65,15 +65,17 @@ fn touche(b: &mut Banc, key: Key, modifiers: Modifiers) {
 #[test]
 fn the_three_tabs_are_drawn_in_the_work_order_and_switch_spaces_by_clicks() {
     let mut b = banc();
-    // Dans l'ordre du travail, de gauche à droite : Storyboard, Animation, Montage.
-    let (s, a, m) = (centre_du_texte(&b, " Storyboard "), centre_du_texte(&b, " Animation "), centre_du_texte(&b, " Montage "));
-    assert!(s.x < a.x && a.x < m.x, "Storyboard, Animation, Montage : {s:?} {a:?} {m:?}");
-    assert!(s.y < 40.0 && a.y < 40.0 && m.y < 40.0, "dans la barre de menus, en haut");
+    // Dans l'ordre du travail, de gauche à droite : Storyboard, Montage (l'animation n'a plus d'onglet).
+    let (s, m) = (centre_du_texte(&b, " Storyboard "), centre_du_texte(&b, " Montage "));
+    assert!(s.x < m.x, "Storyboard, Montage : {s:?} {m:?}");
+    assert!(s.y < 40.0 && m.y < 40.0, "dans la barre de menus, en haut");
     assert_eq!((b.app.espace, b.app.mode), (Espace::Storyboard, Mode::Storyboard));
     clic(&mut b, m);
     assert_eq!((b.app.espace, b.app.mode), (Espace::Montage, Mode::Storyboard), "Montage : l'espace Montage, côté storyboard");
-    let (s, a, m) = (centre_du_texte(&b, " Storyboard "), centre_du_texte(&b, " Animation "), centre_du_texte(&b, " Montage "));
-    clic(&mut b, a);
+    let (s, m) = (centre_du_texte(&b, " Storyboard "), centre_du_texte(&b, " Montage "));
+    // (L'animation s'ouvre par un double-clic sur un plan : les onglets, eux, restent à leur place.)
+    b.app.enter_animation(0);
+    b.chauffer(2);
     assert_eq!((b.app.espace, b.app.mode), (Espace::Animation, Mode::Animation));
     let (s2, m2) = (centre_du_texte(&b, " Storyboard "), centre_du_texte(&b, " Montage "));
     assert_eq!((s.x, m.x), (s2.x, m2.x), "les onglets ne bougent pas d'un espace à l'autre");
@@ -122,10 +124,11 @@ fn only_the_selected_tab_is_lit() {
         panic!("{texte}");
     };
     let sur_accent = crate::theme::sur_selection();
-    for (espace, allume) in [(Espace::Storyboard, " Storyboard "), (Espace::Animation, " Animation "), (Espace::Montage, " Montage ")] {
+    for (espace, allume) in [(Espace::Storyboard, " Storyboard "), (Espace::Animation, ""), (Espace::Montage, " Montage ")] {
         b.app.set_espace(espace);
         b.chauffer(3);
-        for texte in [" Storyboard ", " Animation ", " Montage "] {
+        // (En animation, aucun des onglets n'est allumé.)
+        for texte in [" Storyboard ", " Montage "] {
             assert_eq!(couleur(&b, texte) == sur_accent, texte == allume, "{} allumé, {texte}", espace.nom());
         }
     }
