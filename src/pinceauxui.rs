@@ -347,13 +347,13 @@ impl App {
             let chosen = settings == current;
             let v = ui.visuals();
             let bg = if chosen {
-                v.selection.bg_fill
+                crate::theme::accent()
             } else if resp.hovered() {
                 v.widgets.hovered.weak_bg_fill
             } else {
                 Color32::TRANSPARENT
             };
-            let ink = if chosen { v.selection.stroke.color } else { v.text_color() };
+            let ink = if chosen { crate::theme::sur_accent() } else { v.text_color() };
             let weak = if chosen { ink } else { v.weak_text_color() };
             ui.painter().rect_filled(rect, 3.0, bg);
             let cy = rect.center().y;

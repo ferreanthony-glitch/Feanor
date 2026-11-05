@@ -559,7 +559,7 @@ impl App {
                 let selected = self.comment_ui.sel == Some(id);
                 let painter = ui.painter_at(rect);
                 if selected {
-                    painter.rect_filled(rect.shrink2(vec2(0.0, 1.0)), 3.0, ui.visuals().selection.bg_fill.gamma_multiply(0.45));
+                    painter.rect_filled(rect.shrink2(vec2(0.0, 1.0)), 3.0, crate::theme::accent().gamma_multiply(0.45));
                 } else if resp.hovered() {
                     painter.rect_filled(rect.shrink2(vec2(0.0, 1.0)), 3.0, theme::eleve());
                 }

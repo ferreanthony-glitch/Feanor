@@ -407,6 +407,19 @@ impl Banc {
         Some(out)
     }
 
+    /// Une image d'écran d'une interface à part (pas celle de l'application) : `f` la construit sur le contexte de l'application
+    /// (mêmes polices, même thème), et l'image est peinte sur la cible comme les autres : de quoi capturer un état (champ actif,
+    /// texte choisi, barre d'état, avertissement, alerte) sans les chercher dans la fenêtre.
+    pub(crate) fn image_avec(&mut self, f: impl FnMut(&egui::Context)) {
+        self.t += 1.0 / 60.0;
+        let mut input = RawInput { screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), self.taille)), time: Some(self.t), ..RawInput::default() };
+        input.viewports.entry(ViewportId::ROOT).or_default().native_pixels_per_point = Some(1.0);
+        let out = self.ctx.run(input, f);
+        let prims = self.ctx.tessellate(out.shapes, 1.0);
+        if let (Some(rs), Some(cible)) = (&self.rs, &self.cible) {
+            peindre(rs, cible, &out.textures_delta, &prims, [self.taille.x as u32, self.taille.y as u32]);
+        }
+    }
     pub fn souris(&mut self, x: f32, y: f32) -> Vec<Event> {
         vec![Event::PointerMoved(pos2(x, y))]
     }

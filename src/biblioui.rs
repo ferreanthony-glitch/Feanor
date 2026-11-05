@@ -1037,7 +1037,7 @@ fn cellule(ui: &mut egui::Ui, e: &Entree, cote: f32, texture: Option<&TextureHan
     let zone = Rect::from_min_size(rect.min, vec2(cote, cote));
     let grise = e.genre.is_none() && !e.dossier;
     if choisi {
-        peintre.rect_filled(rect.expand(1.0), 5.0, ui.visuals().selection.bg_fill.gamma_multiply(0.55));
+        peintre.rect_filled(rect.expand(1.0), 5.0, crate::theme::accent().gamma_multiply(0.55));
     } else if resp.hovered() {
         peintre.rect_filled(rect.expand(1.0), 5.0, theme::eleve());
     }
@@ -1099,7 +1099,7 @@ fn ligne(ui: &mut egui::Ui, e: &Entree, meta: Option<Meta>, choisi: bool, colonn
     }
     let peintre = ui.painter_at(rect);
     if choisi {
-        peintre.rect_filled(rect, 3.0, ui.visuals().selection.bg_fill.gamma_multiply(0.55));
+        peintre.rect_filled(rect, 3.0, crate::theme::accent().gamma_multiply(0.55));
     } else if resp.hovered() {
         peintre.rect_filled(rect, 3.0, theme::eleve());
     }

@@ -282,13 +282,13 @@ impl App {
         let v = ui.visuals();
         let chosen = settings == current;
         let bg = if chosen {
-            v.selection.bg_fill
+            crate::theme::accent()
         } else if resp.hovered() {
             v.widgets.hovered.weak_bg_fill
         } else {
             v.extreme_bg_color
         };
-        let ink = if chosen { v.selection.stroke.color } else { v.text_color() };
+        let ink = if chosen { crate::theme::sur_accent() } else { v.text_color() };
         let painter = ui.painter();
         painter.rect_filled(rect, 4.0, bg);
         let image = egui::Rect::from_min_size(rect.min + vec2((TILE.x - PREVIEW.x) * 0.5, 2.0), PREVIEW);

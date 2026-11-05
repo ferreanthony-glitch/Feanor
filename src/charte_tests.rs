@@ -4,7 +4,7 @@
 //! (une fois, sans bloquer, zéro image ensuite) et l'accueil. Les captures d'écran (essais ignorés) vont dans
 //! `FEANOR_CAPTURE_DIR` (ou `SHOT_CAPTURE_DIR`).
 
-use eframe::egui::{self, epaint::Shape, Color32, Rect};
+use eframe::egui::{self, epaint::Shape, Color32, Rect, RichText};
 
 use crate::document::Document;
 use crate::logo;
@@ -123,8 +123,16 @@ fn brand_texts_borders_and_alerts_meet_their_contrast_in_both_themes() {
         assert_eq!((v.window_shadow.color.a(), v.popup_shadow.color.a()), (0, 0), "{nom} : pas d'ombre portée");
         assert_eq!(v.window_corner_radius, egui::CornerRadius::same(8), "{nom}");
         assert_eq!(v.widgets.inactive.corner_radius, egui::CornerRadius::same(4), "{nom} : commandes à 4 px");
-        // La sélection est un aplat jade, l'encre sur jade dessus.
-        assert_eq!((v.selection.bg_fill, v.selection.stroke.color), (c(theme::JADE), c(theme::SUR_JADE)), "{nom}");
+        // Texte choisi et lignes choisies : un fond assez sombre (ou assez clair) pour que l'encre du thème s'y lise à 4,5:1 ;
+        // cette même encre, sur 2 px, est le cadre d'un champ actif : il se voit sur le panneau et sur le champ. L'accent reste le jade.
+        assert_eq!((v.selection.bg_fill, v.selection.stroke.color), (p.selection, p.texte), "{nom}");
+        assert!(contraste(p.texte, p.selection) >= 4.5, "{nom} : texte sélectionné : {:.2}", contraste(p.texte, p.selection));
+        assert!(contraste(p.texte_fort, p.selection) >= 4.5, "{nom} : texte fort sélectionné");
+        assert!(v.selection.stroke.width >= 2.0, "{nom} : cadre du champ actif de 2 px");
+        for fond in [p.panneau, p.fenetre, p.champ] {
+            assert!(contraste(v.selection.stroke.color, fond) >= 3.0, "{nom} : cadre du champ actif sur {fond:?} : {:.2}", contraste(v.selection.stroke.color, fond));
+        }
+        assert_eq!(p.accent, c(theme::JADE), "{nom} : l'accent reste le jade");
     }
 }
 
@@ -485,5 +493,118 @@ fn charte_captures() {
     c.app.welcome = true;
     c.chauffer(8);
     sauver(&c, "accueil-papier.png");
+    theme::installer(&ReglageTheme::default());
+}
+
+/// Les états à regarder, dans Atelier puis Papier : champ actif (cadre de 2 px), texte choisi, ligne choisie, barre d'état (texte
+/// d'accent), avertissement (pastille braise), alerte, bouton destructif (contour fin), barre de chargement. Un PNG par état :
+/// `FEANOR_CAPTURE_DIR=… cargo test --release --offline --target-dir target\msvc charte_etats -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn charte_etats() {
+    use egui_phosphor::regular as ph;
+    let dir = dossier_de_captures();
+    let mut b = crate::perf_tests::banc(Document::with_frame(160, 90, 24), true);
+    for (theme_choisi, nom) in [(ChoixTheme::Shot, "atelier"), (ChoixTheme::Papier, "papier")] {
+        b.app.settings.theme.choisir(theme_choisi);
+        b.chauffer(3);
+        for (etat, foyer) in [("champ", 1u8), ("selection", 2u8)] {
+            let (id1, id2) = (egui::Id::new("etat_champ_1"), egui::Id::new("etat_champ_2"));
+            let mut texte1 = "Nom du plan : 0120".to_string();
+            let mut texte2 = "Un texte choisi dans un champ".to_string();
+            for k in 0..4 {
+                b.image_avec(|ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        ui.add_space(8.0);
+                        ui.heading(format!("États : {nom}"));
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            ui.label("Champ :");
+                            let r = ui.add(egui::TextEdit::singleline(&mut texte1).id(id1).desired_width(280.0));
+                            if k == 0 && foyer == 1 {
+                                r.request_focus();
+                            }
+                            ui.label("Autre champ (inactif) :");
+                            let r2 = ui.add(egui::TextEdit::singleline(&mut texte2).id(id2).desired_width(280.0));
+                            if k == 0 && foyer == 2 {
+                                r2.request_focus();
+                            }
+                        });
+                        if foyer == 2 && k >= 1 {
+                            let mut st = egui::TextEdit::load_state(ui.ctx(), id2).unwrap_or_default();
+                            st.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(3), egui::text::CCursor::new(20))));
+                            st.store(ui.ctx(), id2);
+                        }
+                        ui.add_space(10.0);
+                        ui.horizontal(|ui| {
+                            ui.selectable_label(true, "Ligne choisie");
+                            ui.selectable_label(false, "Ligne non choisie");
+                            ui.button("Bouton");
+                            ui.add(egui::Button::new(RichText::new(format!("{} Supprimer définitivement", ph::TRASH)).color(theme::erreur())).stroke(egui::Stroke::new(1.0_f32, theme::erreur())));
+                        });
+                        ui.add_space(10.0);
+                        ui.horizontal(|ui| {
+                            ui.label("Barre d'état :");
+                            ui.label(RichText::new("Main droite").color(theme::accent_texte()));
+                            ui.separator();
+                            ui.label(RichText::new("Pas de sélection").color(theme::accent_texte()));
+                        });
+                        ui.add_space(10.0);
+                        theme::avertir(ui, "Fichier manquant : le dessin de ce plan est introuvable.");
+                        ui.add_space(6.0);
+                        ui.label(RichText::new(format!("{} Échec de l'enregistrement : le disque est plein.", ph::WARNING)).color(theme::erreur()));
+                        ui.add_space(10.0);
+                        ui.add(crate::barre::Barre::new(0.62).desired_width(420.0).text("Ouverture : 186 / 300 dessins"));
+                        ui.add_space(6.0);
+                        ui.add(crate::barre::Barre::new(1.0).desired_width(420.0).text("Terminé"));
+                    });
+                });
+            }
+            let Some(rgba) = b.capturer() else { return println!("CHARTE pas de carte graphique : états ignorés") };
+            let fichier = format!("etat-{nom}-{etat}.png");
+            // (Le haut gauche seulement : le reste est vide.)
+            let (l, h) = (1100usize, 420usize);
+            let mut rogne = Vec::with_capacity(l * h * 4);
+            for y in 0..h {
+                rogne.extend_from_slice(&rgba[y * 1920 * 4..y * 1920 * 4 + l * 4]);
+            }
+            image::save_buffer(dir.join(&fichier), &rogne, l as u32, h as u32, image::ColorType::Rgba8).expect("png");
+            println!("CHARTE {fichier}");
+        }
+    }
+    theme::installer(&ReglageTheme::default());
+}
+
+/// Les fenêtres les plus chargées de texte, avec la police Plex, en PNG (une par commande) : d'export (film, images, PDF, montage,
+/// fiche, liste des plans, paquet), de Kitsu, de relecture, et les Préférences. À regarder pour les débordements :
+/// `FEANOR_CAPTURE_DIR=… cargo test --release --offline --target-dir target\msvc charte_fenetres_plex -- --ignored --nocapture`
+#[test]
+#[ignore]
+fn charte_fenetres_plex() {
+    let dir = dossier_de_captures();
+    let theme_choisi = if std::env::var_os("FEANOR_THEME_PAPIER").is_some() { ChoixTheme::Papier } else { ChoixTheme::Shot };
+    let nom_theme = if theme_choisi == ChoixTheme::Papier { "papier" } else { "atelier" };
+    for action in [
+        "fichier.exporter_film",
+        "fichier.exporter_images",
+        "fichier.exporter_pdf",
+        "fichier.exporter_montage",
+        "fichier.exporter_fiche",
+        "fichier.exporter_liste_plans",
+        "fichier.exporter_paquet",
+        "fichier.kitsu_publier",
+        "fichier.exporter_relecture",
+        "fichier.preferences",
+    ] {
+        let mut b = crate::perf_tests::banc(crate::vignettes_tests::quatre_plans(), true);
+        b.app.settings.theme.choisir(theme_choisi);
+        b.chauffer(3);
+        b.app.run_action(action);
+        b.chauffer(8);
+        let Some(rgba) = b.capturer() else { return println!("CHARTE pas de carte graphique : fenêtres ignorées") };
+        let fichier = format!("fenetre-{nom_theme}-{}.png", action.replace('.', "-"));
+        image::save_buffer(dir.join(&fichier), &rgba, 1920, 1080, image::ColorType::Rgba8).expect("png");
+        println!("CHARTE {fichier}");
+    }
     theme::installer(&ReglageTheme::default());
 }

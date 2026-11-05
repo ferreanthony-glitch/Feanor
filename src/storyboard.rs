@@ -822,9 +822,9 @@ impl App {
             // Choisi avec lui (Ctrl ou Maj + clic) : un ton d'accent plus léger.
             let chosen = !selected && self.board_sel.contains(&self.doc.panels[i].id);
             let bg = if selected {
-                theme::surface_active(visuals.selection.bg_fill, 0.55)
+                theme::surface_active(crate::theme::accent(), 0.55)
             } else if chosen {
-                theme::surface_active(visuals.selection.bg_fill, 0.3)
+                theme::surface_active(crate::theme::accent(), 0.3)
             } else {
                 theme::bloc()
             };
@@ -834,7 +834,7 @@ impl App {
                 let c = crate::marks::color(tag);
                 painter.rect_filled(rect, 4.0, theme::bloc().lerp_to_gamma(c, 0.42));
                 if selected || chosen {
-                    painter.rect_filled(rect, 4.0, theme::surface_active(visuals.selection.bg_fill, if selected { 0.4 } else { 0.2 }));
+                    painter.rect_filled(rect, 4.0, theme::surface_active(crate::theme::accent(), if selected { 0.4 } else { 0.2 }));
                 }
                 let band = Rect::from_min_max(rect.min, pos2(rect.right(), rect.top() + 6.0));
                 painter.rect_filled(band, CornerRadius { nw: 4, ne: 4, sw: 0, se: 0 }, c);
@@ -985,7 +985,7 @@ impl App {
                 };
                 let current = (start..end).contains(&self.cur_panel);
                 let fill = if current {
-                    theme::surface_active(visuals.selection.bg_fill, if band == 0 { 0.45 } else { 0.7 })
+                    theme::surface_active(crate::theme::accent(), if band == 0 { 0.45 } else { 0.7 })
                 } else {
                     theme::barre(band == 0, number % 2 == 1)
                 };

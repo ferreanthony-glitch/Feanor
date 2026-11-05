@@ -654,7 +654,7 @@ impl App {
 fn dessiner_case(ui: &Ui, rect: Rect, resp: &egui::Response, v: &Vue, noms: bool, fantome: bool) {
     let visuals = ui.visuals();
     let fond = if v.allume {
-        visuals.selection.bg_fill
+        crate::theme::accent()
     } else if resp.hovered() && v.actif {
         visuals.widgets.hovered.weak_bg_fill
     } else {

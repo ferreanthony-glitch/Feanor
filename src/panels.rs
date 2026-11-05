@@ -783,7 +783,7 @@ impl App {
                 None
             };
             if let Some(hand) = hand {
-                ui.label(RichText::new(hand).color(ui.visuals().selection.stroke.color)).on_hover_text(
+                ui.label(RichText::new(hand).color(crate::theme::accent_texte())).on_hover_text(
                     "Ce panneau a la main (encadré en bleu) : les raccourcis, copier, coller et supprimer le visent. Un clic dans le dessin la rend au dessin.",
                 );
                 ui.separator();
@@ -795,7 +795,7 @@ impl App {
             // Sélection sur plusieurs calques : « 3 calques, 42 éléments ».
             if let Some(summary) = self.multi_summary() {
                 ui.separator();
-                ui.label(RichText::new(summary).color(ui.visuals().selection.stroke.color)).on_hover_text(
+                ui.label(RichText::new(summary).color(crate::theme::accent_texte())).on_hover_text(
                     "Ce qui est choisi sur les calques choisis : une seule boîte, un seul geste, une seule étape d'annulation.",
                 );
             }
@@ -814,8 +814,12 @@ impl App {
                     text += &format!(" · {skipped} image{s} sautée{s}");
                 }
                 let slow = skipped > 0 || rate < self.doc.fps as f32 * 0.95;
-                let color = if slow { crate::theme::avertissement() } else { ui.visuals().text_color() };
-                ui.label(RichText::new(text).color(color)).on_hover_text(
+                // (Pastille braise devant un texte neutre quand la machine ne suit pas.)
+                if slow {
+                    let (r, _) = ui.allocate_exact_size(egui::vec2(8.0, 8.0), egui::Sense::hover());
+                    ui.painter().circle_filled(r.center(), 3.5, crate::theme::braise());
+                }
+                ui.label(RichText::new(text)).on_hover_text(
                     "Images réellement affichées pendant la dernière seconde de lecture. Si la machine \
                      ne suit pas, des images sont sautées pour rester calé sur le son.",
                 );

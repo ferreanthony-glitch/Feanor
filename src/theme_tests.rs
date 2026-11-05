@@ -91,8 +91,13 @@ fn selections_stay_visible_in_every_theme() {
         assert!(contraste(p.accent, p.rangee) >= 1.4 || contraste(p.accent_texte, p.rangee) >= 3.0, "{choix:?} : accent sur la timeline");
         // La sélection d'egui est l'accent, son texte est celui qui lit sur lui.
         let v = p.visuels();
-        assert_eq!(v.selection.bg_fill, p.accent);
-        assert_eq!(v.selection.stroke.color, p.sur_accent);
+        if p.identite {
+            // (Thèmes de la marque : voir `charte_tests.rs`.)
+            assert_eq!(v.selection.bg_fill, p.selection);
+        } else {
+            assert_eq!(v.selection.bg_fill, p.accent);
+            assert_eq!(v.selection.stroke.color, p.sur_accent);
+        }
     }
 }
 

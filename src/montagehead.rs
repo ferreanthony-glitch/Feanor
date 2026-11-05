@@ -54,7 +54,7 @@ impl App {
         let grip = Rect::from_min_max(pos2(column.right() - GRIP_W, column.top()), pos2(column.right(), column.bottom()));
         let resp = ui.interact(grip, ui.id().with("etirer_colonne_montage"), Sense::click_and_drag());
         let hot = resp.hovered() || resp.dragged();
-        let color = if hot { ui.visuals().selection.stroke.color } else { ui.visuals().widgets.noninteractive.bg_stroke.color };
+        let color = if hot { crate::theme::accent_texte() } else { ui.visuals().widgets.noninteractive.bg_stroke.color };
         let x = column.right() - GRIP_W * 0.5;
         ui.painter().line_segment([pos2(x, column.top()), pos2(x, column.bottom())], Stroke::new(if hot { 2.0_f32 } else { 1.0 }, color));
         if hot {

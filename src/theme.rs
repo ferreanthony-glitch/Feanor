@@ -11,7 +11,8 @@
 //! courant et se règle dans Fichier > Préférences… avec neuf couleurs ; tout le reste de la palette (survol, onglet actif, texte
 //! secondaire, couleur des dessins sur la timeline…) en est déduit, et choisi pour rester lisible sur le thème (contraste WCAG,
 //! `contraste`).
-//!//! La palette courante vit dans le fil de l'interface (`installer`) ; chaque couleur se lit par une
+//!
+//! La palette courante vit dans le fil de l'interface (`installer`) ; chaque couleur se lit par une
 //! petite fonction (`theme::fond()`, `theme::texte()`…) qui copie quatre octets.
 //!
 //! La police est Segoe UI si Windows l'a (sinon celle d'egui). Les couleurs du dessin (papier,
@@ -348,6 +349,9 @@ pub struct Palette {
     // les textes sur un panneau.
     pub accent: Color32,
     pub sur_accent: Color32,
+    /// Fond de la sélection des textes et des lignes choisies d'egui (`Visuals::selection`) : l'accent, ou, dans un thème de la marque
+    /// où l'encre ne s'y lit pas (Atelier : 1,6:1 sur le jade), du jade profond assombri jusqu'à 4,5:1 avec le texte.
+    pub selection: Color32,
     pub accent_texte: Color32,
     /// Thème de la marque (`Couleurs::identite`) : jetons exacts, bordures fortes, pas d'ombres.
     pub identite: bool,
@@ -408,11 +412,11 @@ pub struct Palette {
     /// Barres des séquences et des scènes : séquence paire, impaire, scène paire, impaire.
     pub barres: [Color32; 4],
     // Messages.
-    /// Avertissement non bloquant. Thèmes de la marque : le texte neutre (la braise n'est qu'une pastille, raise).
+    /// Avertissement non bloquant. Thèmes de la marque : le texte neutre (la braise n'est qu'une pastille, `braise`).
     pub avertissement: Color32,
-    /// Erreur : thèmes de la marque, le jeton lerte.
+    /// Erreur : thèmes de la marque, le jeton `alerte`.
     pub erreur: Color32,
-    /// lerte de la marque (erreurs bloquantes, actions irréversibles) et raise (pastille d'avertissement, point d'enregistrement).
+    /// `alerte` de la marque (erreurs bloquantes, actions irréversibles) et `braise` (pastille d'avertissement, point d'enregistrement).
     pub alerte: Color32,
     pub braise: Color32,
     pub succes: Color32,
@@ -444,6 +448,12 @@ impl Palette {
         };
         let bord_fort = if c.identite { couleur(if claire { PAPIER_LIGNE_FORTE } else { ATELIER_LIGNE_FORTE }) } else { assurer(bord, &[panneau, entete, fenetre], 3.0, texte_fort) };
         let focus = accent_texte;
+        let selection = if c.identite && contraste(texte, accent) < 4.5 {
+            let base = couleur(JADE_PROFOND);
+            (0..=20).map(|k| melange(base, panneau, k as f32 * 0.05)).find(|x| contraste(texte, *x) >= 4.5).unwrap_or(base)
+        } else {
+            accent
+        };
         let alerte = if c.identite { couleur(if claire { PAPIER_ALERTE } else { ATELIER_ALERTE }) } else if claire { Color32::from_rgb(190, 30, 20) } else { Color32::from_rgb(247, 92, 70) };
         // Le rehaut est l'accent des traits : le jade de la marque (sa version « texte » sur fond clair).
         let rehaut = accent_texte;
@@ -476,6 +486,7 @@ impl Palette {
             texte_fort,
             accent,
             sur_accent,
+            selection,
             accent_texte,
             identite: c.identite,
             rehaut,
@@ -543,10 +554,13 @@ impl Palette {
         v.extreme_bg_color = self.champ;
         v.faint_bg_color = self.eleve;
         v.code_bg_color = self.entete;
-        v.hyperlink_color = self.accent_texte;        v.warn_fg_color = self.avertissement;
+        v.hyperlink_color = self.accent_texte;
+        v.warn_fg_color = self.avertissement;
         v.error_fg_color = self.erreur;
-        v.selection.bg_fill = self.accent;
-        v.selection.stroke = Stroke::new(1.0_f32, self.sur_accent);
+        // Marque : le texte choisi et les lignes choisies ont le fond `selection` ; leur encre (et le cadre d'un champ actif, 2 px) est
+        // l'encre du thème, lisible sur ce fond et sur le panneau. Les accents jade passent par `accent()`, pas par ici.
+        v.selection.bg_fill = self.selection;
+        v.selection.stroke = if self.identite { Stroke::new(2.0_f32, self.texte) } else { Stroke::new(1.0_f32, self.sur_accent) };
         let w = &mut v.widgets;
         // Textes et cadres qui ne réagissent pas.
         w.noninteractive.bg_fill = self.panneau;
@@ -649,6 +663,7 @@ couleurs_courantes! {
     /// Accent (fonds), ce qui s'écrit dessus, accent des traits et des textes.
     accent,
     sur_accent,
+    selection,
     accent_texte,
     /// Le rehaut jade de la marque : trait sous l'espace actif, icône de « Nouveau projet ».
     rehaut,
@@ -709,7 +724,7 @@ couleurs_courantes! {
     avertissement,
     erreur,
     succes,
-    /// Jeton lerte de la marque, pastille raise.
+    /// Jeton `alerte` de la marque, pastille `braise`.
     alerte,
     braise,
 }
@@ -943,18 +958,33 @@ pub fn appliquer(ctx: &egui::Context) {
 /// Un avertissement non bloquant. Thèmes de la marque : une petite pastille braise puis le texte, en encre neutre (jamais
 /// de texte braise). Autres thèmes : le texte coloré d'avant.
 pub fn avertir(ui: &mut egui::Ui, texte: impl Into<String>) -> egui::Response {
+    avertir_en(ui, texte.into(), false)
+}
+
+/// Comme `avertir`, en petit.
+pub fn avertir_petit(ui: &mut egui::Ui, texte: impl Into<String>) -> egui::Response {
+    avertir_en(ui, texte.into(), true)
+}
+
+fn avertir_en(ui: &mut egui::Ui, texte: String, petit: bool) -> egui::Response {
     let p = palette();
-    let texte: String = texte.into();
+    let corps = |t: String, c: Color32| {
+        let r = egui::RichText::new(t).color(c);
+        if petit { r.small() } else { r }
+    };
     if !p.identite {
-        return ui.label(egui::RichText::new(texte).strong().color(p.avertissement));
+        return ui.label(corps(texte, p.avertissement));
     }
-    ui.horizontal(|ui| {
-        let (r, _) = ui.allocate_exact_size(Vec2::splat(8.0), egui::Sense::hover());
-        ui.painter().circle_filled(r.center(), 3.5, p.braise);
-        ui.label(egui::RichText::new(texte).strong().color(p.texte_fort));
+    // La pastille est posée à la première ligne ; le texte passe à la ligne dans la place qui reste.
+    ui.horizontal_top(|ui| {
+        ui.spacing_mut().item_spacing.x = 5.0;
+        let (r, _) = ui.allocate_exact_size(Vec2::new(8.0, 13.0), egui::Sense::hover());
+        ui.painter().circle_filled(egui::pos2(r.center().x, r.top() + 7.0), 3.5, p.braise);
+        ui.add(egui::Label::new(corps(texte, p.texte_fort)).wrap());
     })
     .response
 }
+
 /// Le fond d'une grande surface active (bloc d'un plan du montage, rangée choisie de la timeline, bande de séquence) :
 /// `selection` (le jade) à la force `force` (0 à 1) dans les thèmes qui n'ont pas la marque ; dans Atelier et Papier, pas de
 /// grand aplat jade près du dessin : le panneau tirant vers `ligne forte` (le jade ne reste que sur les petits éléments et
