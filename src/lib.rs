@@ -125,6 +125,10 @@ mod versions_sequence_tests;
 #[cfg(test)]
 mod versions_fiables_tests;
 mod variantesui;
+// Couper un plan qui a des versions rangées : la question « avec quelle partie ? » (`coupeversions`).
+mod coupeversions;
+#[cfg(test)]
+mod coupeversions_tests;
 // La pile des versions au survol de « V2 » sur le bloc d'un plan : la logique sans interface (`pilevers`) et son
 // dessin (`pileversui`).
 mod pilevers;

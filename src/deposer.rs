@@ -251,12 +251,12 @@ impl App {
         } else if self.storyboard_refuses() {
             return;
         }
-        // Entre deux images d'un plan qui a plusieurs versions : couper le plan est refusé (`refuser_si_versions_de_plan`), les images ne
-        // se posent pas ailleurs à la place.
+        // Entre deux images d'un plan qui a des versions rangées : couper le plan pose d'abord la question « les versions vont avec quelle
+        // partie ? » (`coupeversions.rs`) ; les images attendent la réponse, rien n'est fait en attendant.
         if let Cible::Entre(id) = cible {
-            if let Some(c) = layout.cards.iter().find(|c| c.id == id) {
-                let coupe = self.doc.panels.iter().find(|p| p.id == c.plan).is_some_and(|p| c.end < p.frame_count());
-                if coupe && self.doc.refuser_si_versions_de_plan(&[c.plan], "couper") {
+            if let Some(c) = layout.cards.iter().find(|c| c.id == id).copied() {
+                if self.coupe_versions_necessaire(c.plan, c.end) {
+                    self.coupe_versions_ouvrir(c.plan, c.end, crate::coupeversions::Refaire::Depot { cible, rasters });
                     return;
                 }
             }

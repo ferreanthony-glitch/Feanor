@@ -222,47 +222,148 @@ fn deleting_the_last_plan_from_the_application_says_why_and_changes_nothing() {
     assert!(!b.app.modified);
 }
 
-// ------------------------------------------------------------------------------------ 3. couper et réunir un plan à plusieurs versions
+// ------------------------------------------------------------------------------------ 3. réunir des plans à plusieurs versions
 
-#[test]
-fn a_plan_with_several_versions_is_neither_cut_nor_joined_and_the_reason_is_given() {
+/// Trois plans : le premier a une version rangée (V1, le courant est V2), le deuxième deux (V1, V2, le courant est V3), le troisième aucune.
+fn film_a_versions() -> Document {
     let mut doc = film(3);
-    let ids = ids_film(&doc);
-    assert_eq!(doc.nouvelle_version(1, 5), Some(2));
-    let contenus: Vec<u64> = doc.panels.iter().map(|p| contenu(&doc, p)).collect();
-    prendre_refus();
-    assert_eq!(doc.split_plan(1, 10), None);
-    assert!(prendre_refus().is_some_and(|m| m.contains("couper") && m.contains("V1") && m.contains("V2")));
-    assert_eq!(doc.split_panel(1, 10), None);
-    assert!(prendre_refus().is_some());
-    // Le premier plan est seul, mais son suivant a des versions : réunir les perdrait.
-    assert_eq!(doc.join_next_plan(0), None);
-    assert!(prendre_refus().is_some_and(|m| m.contains("réunir")));
-    assert_eq!(doc.join_next_plan_without_mark(0), None);
-    assert!(prendre_refus().is_some());
-    assert_eq!(ids_film(&doc), ids);
-    assert_eq!(doc.panels.iter().map(|p| contenu(&doc, p)).collect::<Vec<_>>(), contenus, "aucun plan n'a changé, marques comprises");
-    assert_eq!(doc.nombre_de_versions(ids[1]), 2);
-    // Une fois la version en trop supprimée, le plan se coupe comme avant.
-    assert!(doc.supprimer_version(ids[1], 1));
-    assert!(doc.split_plan(1, 10).is_some());
-    assert_eq!(doc.panels.len(), 4);
+    assert_eq!(doc.nouvelle_version(0, 1), Some(2));
+    crate::variantes_tests::retoucher(&mut doc, 0, 90);
+    assert_eq!(doc.nouvelle_version(1, 2), Some(2));
+    crate::variantes_tests::retoucher(&mut doc, 1, 110);
+    assert_eq!(doc.nouvelle_version(1, 3), Some(3));
+    crate::variantes_tests::retoucher(&mut doc, 1, 130);
+    doc
+}
+
+/// Les contenus des versions rangées du plan `plan`, triés (de quoi dire qu'aucune n'a changé ni disparu).
+fn rangees(doc: &Document, plan: u64) -> Vec<u64> {
+    let mut v: Vec<u64> = doc.versions_du_plan(plan).map(|v| v.autres.iter().map(|r| contenu(doc, &r.panel)).collect()).unwrap_or_default();
+    v.sort_unstable();
+    v
+}
+
+fn numeros_uniques(doc: &Document, plan: u64) -> bool {
+    let v = doc.versions_du_plan(plan).expect("versions");
+    let mut vus = HashSet::new();
+    v.numeros().iter().all(|n| vus.insert(*n)) && v.prochaine > *v.numeros().last().unwrap()
 }
 
 #[test]
-fn cutting_a_plan_from_the_application_keeps_its_marks_when_the_versions_refuse() {
-    let mut b = banc_projet(2);
-    b.app.doc.nouvelle_version(0, 1);
-    let plan = b.app.doc.panels[0].id;
-    let id = b.app.doc.alloc();
-    b.app.doc.panels[0].marks.push(crate::document::ImageMark { id, frame: 20, ..Default::default() });
-    let ok = b.app.structure_op_dessins(|d, i| d.split_plan(i, 10));
-    assert!(!ok);
-    assert_eq!(b.app.doc.panels[0].marks.len(), 1, "la marque est toujours là");
-    assert_eq!(b.app.doc.panels[0].id, plan);
-    b.app.dire_le_refus_des_versions();
-    assert!(b.app.status.contains("plusieurs versions"), "{}", b.app.status);
+fn joining_two_plans_keeps_the_stored_versions_of_both_under_numbers_that_do_not_collide() {
+    let mut doc = film_a_versions();
+    let ids = ids_film(&doc);
+    let mut attendues = rangees(&doc, ids[0]);
+    attendues.extend(rangees(&doc, ids[1]));
+    attendues.sort_unstable();
+    assert_eq!(attendues.len(), 3);
+    assert!(doc.join_next_plan(0).is_some());
+    assert_eq!(doc.panels.len(), 2);
+    assert_eq!(rangees(&doc, ids[0]), attendues, "les trois versions rangées sont au plan réuni, intactes");
+    assert_eq!(doc.nombre_de_versions(ids[0]), 4, "la version courante et trois rangées");
+    assert!(numeros_uniques(&doc, ids[0]));
+    assert!(doc.versions_du_plan(ids[1]).is_none(), "plus d'entrée sous le numéro du plan absorbé");
+    assert!(doc.versions.keys().all(|p| doc.panels.iter().any(|q| q.id == *p)), "aucune version sous un numéro de plan mort");
+    // Les versions rangées du plan absorbé se rouvrent comme versions du plan réuni.
+    let dernier = *doc.versions_du_plan(ids[0]).unwrap().numeros().last().unwrap();
+    assert!(doc.changer_de_version(0, dernier));
+    assert!(numeros_uniques(&doc, ids[0]));
 }
+
+#[test]
+fn joining_a_plan_without_versions_to_one_that_has_some_gives_it_an_entry() {
+    let mut doc = film_a_versions();
+    let ids = ids_film(&doc);
+    // Le premier plan n'a plus de versions : on en garde une seule (V2) ; le suivant en a deux rangées.
+    assert!(doc.supprimer_version(ids[0], 1));
+    assert!(doc.versions_du_plan(ids[0]).is_none());
+    let attendues = rangees(&doc, ids[1]);
+    assert!(doc.join_next_plan(0).is_some());
+    assert_eq!(rangees(&doc, ids[0]), attendues);
+    assert!(numeros_uniques(&doc, ids[0]));
+}
+
+#[test]
+fn serial_joins_and_the_drag_merge_follow_the_same_rule() {
+    let mut doc = film_a_versions();
+    let ids = ids_film(&doc);
+    let mut tout: Vec<u64> = ids.iter().flat_map(|p| rangees(&doc, *p)).collect();
+    tout.sort_unstable();
+    assert!(doc.join_plans(&ids).is_some());
+    assert_eq!(doc.panels.len(), 1);
+    assert_eq!(rangees(&doc, ids[0]), tout, "les trois plans réunis gardent toutes leurs versions rangées");
+    assert!(numeros_uniques(&doc, ids[0]));
+    // Par glisser : le premier plan lâché sur le deuxième.
+    let mut doc = film_a_versions();
+    let mut deux: Vec<u64> = rangees(&doc, ids[0]).into_iter().chain(rangees(&doc, ids[1])).collect();
+    deux.sort_unstable();
+    assert!(doc.merge_plan_into(ids[0], ids[1]).is_some());
+    assert_eq!(doc.panels.len(), 2);
+    assert_eq!(rangees(&doc, ids[0]), deux);
+    assert!(numeros_uniques(&doc, ids[0]));
+}
+
+#[test]
+fn joining_from_the_application_is_one_undo_step_and_survives_a_save() {
+    let mut b = banc(film_a_versions(), false);
+    b.app.modified = false;
+    let ids = ids_film(&b.app.doc);
+    let mut attendues = rangees(&b.app.doc, ids[0]);
+    attendues.extend(rangees(&b.app.doc, ids[1]));
+    attendues.sort_unstable();
+    b.app.cur_panel = 0;
+    b.app.merge_next_panel();
+    assert_eq!(b.app.doc.panels.len(), 2, "{}", b.app.status);
+    assert_eq!(rangees(&b.app.doc, ids[0]), attendues);
+    // Une seule étape : annuler remet les deux plans et leurs versions, rétablir les réunit de nouveau.
+    b.app.run_action("edition.annuler");
+    assert_eq!(b.app.doc.panels.len(), 3);
+    assert_eq!((rangees(&b.app.doc, ids[0]).len(), rangees(&b.app.doc, ids[1]).len()), (1, 2));
+    b.app.run_action("edition.retablir");
+    assert_eq!(b.app.doc.panels.len(), 2);
+    assert_eq!(rangees(&b.app.doc, ids[0]), attendues);
+    // Enregistré puis rouvert : les trois versions rangées sont revenues, dessins compris.
+    let racine = dossier("versions-fiables-reunir");
+    let m = manifeste(&racine);
+    enregistrer(&b.app.doc, &m);
+    let Loaded { doc: relu, warnings, .. } = project::load(&m).expect("réouverture");
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(rangees(&relu, ids[0]), attendues);
+    assert!(numeros_uniques(&relu, ids[0]));
+}
+
+#[test]
+fn a_plan_another_sequence_version_shows_keeps_its_own_versions_and_the_merged_plan_gets_them_too() {
+    let mut doc = film_a_versions();
+    let ids = ids_film(&doc);
+    let seq = doc.sequence_of(0);
+    assert_eq!(doc.nouvelle_variante(seq, Nouvelle::Partager, 1), Some(2));
+    let propres = rangees(&doc, ids[1]);
+    assert!(doc.join_next_plan(0).is_some());
+    // La version de séquence A montre toujours le plan absorbé, avec ses versions à lui (au garage) ; le plan réuni a les siennes.
+    let g = &doc.variantes_de(seq).unwrap().garage[&ids[1]];
+    assert_eq!(g.versions.as_ref().map(|v| v.autres.len()), Some(2));
+    assert!(rangees(&doc, ids[0]).len() >= 3);
+    assert!(propres.iter().all(|c| rangees(&doc, ids[0]).contains(c)));
+    assert!(doc.changer_de_variante(seq, 1));
+    assert_eq!(doc.plans_de_sequence(seq).len(), 3, "la A retrouve ses trois plans");
+}
+
+#[test]
+fn joining_plans_whose_versions_together_exceed_the_maximum_is_refused_with_the_reason() {
+    let mut doc = film(2);
+    for _ in 0..50 {
+        doc.nouvelle_version(0, 1);
+        doc.nouvelle_version(1, 1);
+    }
+    let avant = ids_film(&doc);
+    prendre_refus();
+    assert_eq!(doc.join_next_plan(0), None);
+    assert!(prendre_refus().is_some_and(|m| m.contains("versions")));
+    assert_eq!(ids_film(&doc), avant);
+    assert_eq!(doc.nombre_de_versions(avant[1]), 51, "aucune version perdue");
+}
+
 
 // ------------------------------------------------------------------------------------ 4. échanger, glisser, calque
 
@@ -340,5 +441,6 @@ fn a_sequence_version_whose_plans_have_no_layer_does_not_break_the_switch() {
     b.app.cur_layer = 3;
     b.app.passer_a_la_variante(seq, 1);
     assert_eq!(b.app.doc.numero_de_variante(seq), 1, "{}", b.app.status);
-    assert!(b.app.cur_layer <= b.app.layers().len().max(1), "le calque choisi reste dans les bornes");
+    assert!(b.app.layers().is_empty(), "le plan entré n'a aucun calque");
+    assert_eq!(b.app.cur_layer, 0, "le calque choisi retombe sur le premier rang, il ne reste pas à 3");
 }

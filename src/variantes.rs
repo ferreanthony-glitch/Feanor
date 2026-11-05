@@ -191,7 +191,7 @@ fn appliquer_duree(p: &mut Panel, duree: usize) {
 }
 
 /// La scène réelle d'un plan : ses calques de toute la scène la citent.
-fn poser_scene(panel: &mut Panel, scene: u64) {
+pub(crate) fn poser_scene(panel: &mut Panel, scene: u64) {
     panel.scene = scene;
     for l in &mut panel.layers {
         if let Some(w) = l.scene_wide.as_mut() {
@@ -298,6 +298,33 @@ thread_local! {
     /// Pourquoi la dernière opération de montage a été refusée pour ne pas perdre de versions (vide : rien à dire). Le document
     /// n'a pas de canal vers la ligne d'état : l'interface le lit une fois par image d'écran (`App::dire_le_refus_des_versions`).
     static REFUS: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Où vont les versions rangées d'un plan qu'on coupe : avec la première partie (le plan qui garde son numéro) ou avec la seconde
+/// (le plan neuf). La version courante, elle, est toujours coupée en deux.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Cote {
+    Premiere,
+    Seconde,
+}
+
+thread_local! {
+    /// La réponse à la question « les versions vont avec quelle partie ? » pendant le geste de coupe qui la pose
+    /// (`App::coupe_versions_repondre`) ; vide : la première partie, sans question (les coupes qui ne peuvent pas demander).
+    static COTE: std::cell::Cell<Option<Cote>> = const { std::cell::Cell::new(None) };
+}
+
+/// Fait `f` avec la réponse `cote` posée (`Document::split_plan` la lit), puis la reprend.
+pub(crate) fn avec_cote<R>(cote: Cote, f: impl FnOnce() -> R) -> R {
+    let avant = COTE.with(|c| c.replace(Some(cote)));
+    let r = f();
+    COTE.with(|c| c.set(avant));
+    r
+}
+
+/// La réponse posée par `avec_cote`, s'il y en a une.
+pub(crate) fn cote_choisi() -> Option<Cote> {
+    COTE.with(std::cell::Cell::get)
 }
 
 /// Note la raison d'un refus (la dernière gagne).
@@ -819,6 +846,92 @@ impl Document {
         true
     }
 
+    /// Une copie des versions du plan `plan` (mêmes numéros, panneaux et dessins neufs : les tuiles restent partagées jusqu'à la
+    /// première retouche), posées dans la scène `scene`. Rien si le plan n'a aucune entrée de versions.
+    fn copie_des_versions(&mut self, plan: u64, scene: u64) -> Option<VersionsDuPlan> {
+        let v = self.versions.get(&plan).cloned()?;
+        let mut autres = Vec::with_capacity(v.autres.len());
+        for r in &v.autres {
+            let mut p = self.copie_de(&r.panel);
+            self.adopt_scene_layers(std::slice::from_mut(&mut p), scene);
+            p.scene = scene;
+            autres.push(Rangee { numero: r.numero, date: r.date, panel: p });
+        }
+        Some(VersionsDuPlan { actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres })
+    }
+
+    /// Le plan `premier` vient d'être coupé, `second` est la suite (scène `scene`) : les versions **rangées** de `premier`, restées
+    /// entières, vont avec la suite (le choix « la seconde partie »). Rien n'est copié : les panneaux changent de plan.
+    /// - `premier` garde une entrée sans autre version quand une version de séquence montre sa version courante sous son numéro ;
+    /// - les emplacements des versions de séquence rangées qui montraient une de ces versions rangées montrent maintenant `second`
+    ///   (même numéro de version), ainsi que leurs transitions et liens de références.
+    pub(crate) fn confier_versions_a_la_suite(&mut self, premier: u64, second: u64, scene: u64) {
+        let Some(mut v) = self.versions.remove(&premier) else { return };
+        if v.autres.is_empty() {
+            self.versions.insert(premier, v);
+            return;
+        }
+        if self.versions_protegees().contains(&(premier, v.actuelle)) {
+            self.versions.insert(premier, VersionsDuPlan { actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres: Vec::new() });
+        }
+        let numeros: HashSet<u32> = v.autres.iter().map(|r| r.numero).collect();
+        for r in &mut v.autres {
+            poser_scene(&mut r.panel, scene);
+        }
+        self.versions.insert(second, v);
+        if self.variantes.is_empty() {
+            return;
+        }
+        for var in self.variantes_mut().values_mut() {
+            for r in &mut var.autres {
+                let c = &mut r.contenu;
+                if !c.slots.iter().any(|e| e.plan == premier && numeros.contains(&e.version)) {
+                    continue;
+                }
+                for e in c.slots.iter_mut().filter(|e| e.plan == premier && numeros.contains(&e.version)) {
+                    e.plan = second;
+                }
+                for t in &mut c.transitions {
+                    t.out = t.out.map(|o| if o == premier { second } else { o });
+                    t.inn = t.inn.map(|i| if i == premier { second } else { i });
+                }
+                for (_, liens) in &mut c.references {
+                    for l in liens.iter_mut().filter(|l| **l == premier) {
+                        *l = second;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Le plan `hote` vient d'absorber le plan suivant (réunion) : les versions **rangées** de celui-ci deviennent des versions
+    /// rangées de `hote`, sous des numéros neufs (au-dessus de tous ceux de `hote` : aucune collision), avec leur date et leurs
+    /// dessins ; aucune n'est perdue. La version courante du plan absorbé, elle, est dans le plan réuni.
+    pub(crate) fn absorber_versions(&mut self, hote: u64, absorbees: Option<VersionsDuPlan>) {
+        let Some(mut absorbees) = absorbees.filter(|v| !v.autres.is_empty()) else { return };
+        let scene = self.panels.iter().find(|p| p.id == hote).map_or(0, |p| p.scene);
+        let v = self.versions.entry(hote).or_insert(VersionsDuPlan { actuelle: 1, date_actuelle: 0, prochaine: 2, autres: Vec::new() });
+        absorbees.autres.sort_by_key(|r| r.numero);
+        for mut r in absorbees.autres {
+            poser_scene(&mut r.panel, scene);
+            let numero = v.prochaine.max(v.actuelle + 1).max(v.autres.iter().map(|x| x.numero + 1).max().unwrap_or(0));
+            v.prochaine = numero + 1;
+            v.autres.push(Rangee { numero, date: r.date, panel: r.panel });
+        }
+        v.autres.sort_by_key(|r| r.numero);
+    }
+
+    /// Refuse (et dit pourquoi) de réunir des plans dont les versions rangées, mises ensemble, dépasseraient `MAX_VERSIONS` : le
+    /// fichier n'en relirait qu'une partie. Vrai s'il faut refuser. Rare : il faut près de cent versions.
+    pub(crate) fn refuser_si_trop_de_versions(&self, plans: &[u64]) -> bool {
+        let total: usize = plans.iter().map(|p| self.versions.get(p).map_or(0, |v| v.autres.len())).sum::<usize>() + 1;
+        if total <= crate::planvers::MAX_VERSIONS {
+            return false;
+        }
+        noter_refus(format!("Ces plans ont ensemble {total} versions : le plan réuni n'en garde pas plus de {}. Supprime-en d'abord.", crate::planvers::MAX_VERSIONS));
+        true
+    }
+
     /// Une copie du plan du film `index` pour le garage : numéros neufs, dessins dupliqués (les tuiles restent partagées jusqu'à la
     /// première retouche), mêmes versions sous les mêmes numéros, commentaires copiés ; le contenu rogné ne l'est pas (comme pour
     /// `Nouvelle::Copier`). `scene` : la scène où une version de séquence le montre.
@@ -828,19 +941,7 @@ impl Document {
         let mut panel = self.copie_de(&source);
         self.adopt_scene_layers(std::slice::from_mut(&mut panel), scene);
         panel.scene = scene;
-        let versions = match self.versions.get(&plan).cloned() {
-            Some(v) => {
-                let mut autres = Vec::with_capacity(v.autres.len());
-                for r in &v.autres {
-                    let mut p = self.copie_de(&r.panel);
-                    self.adopt_scene_layers(std::slice::from_mut(&mut p), scene);
-                    p.scene = scene;
-                    autres.push(Rangee { numero: r.numero, date: r.date, panel: p });
-                }
-                Some(VersionsDuPlan { actuelle: v.actuelle, date_actuelle: v.date_actuelle, prochaine: v.prochaine, autres })
-            }
-            None => None,
-        };
+        let versions = self.copie_des_versions(plan, scene);
         let mut comments: Vec<Comment> = self.comments.iter().filter(|c| c.panel == plan).cloned().collect();
         for c in &mut comments {
             c.id = self.alloc();
@@ -956,17 +1057,12 @@ impl Document {
         true
     }
 
-    /// Refuse (et dit pourquoi) de couper ou de réunir un plan qui a plusieurs versions : l'opération ne toucherait que la version
-    /// affichée ; les autres garderaient le plan entier (une version rangée de plus qu'un plan, ou sous un numéro de plan qui n'existe
-    /// plus). Vrai s'il faut refuser.
-    pub(crate) fn refuser_si_versions_de_plan(&self, plans: &[u64], geste: &str) -> bool {
-        let Some(&plan) = plans.iter().find(|p| self.nombre_de_versions(**p) > 1) else { return false };
-        let noms: Vec<String> = self.versions.get(&plan).map(|v| v.numeros().into_iter().map(crate::planvers::etiquette).collect()).unwrap_or_default();
-        noter_refus(format!(
-            "Ce plan a plusieurs versions ({}) : {geste} ne toucherait que la version affichée, les autres garderaient le plan d'avant. Supprime les versions dont tu n'as plus besoin, puis recommence.",
-            noms.join(", ")
-        ));
-        true
+    /// Couper le plan `plan` à l'image `at` pose-t-il la question « les versions vont avec quelle partie ? » : rend le nombre de ses
+    /// versions rangées si la coupe aura lieu (`0 < at <` durée) et que le plan en a, sinon rien.
+    pub(crate) fn coupe_a_demander(&self, plan: u64, at: usize) -> Option<usize> {
+        let p = self.panels.iter().find(|p| p.id == plan)?;
+        let n = self.versions.get(&plan).map_or(0, |v| v.autres.len());
+        (n > 0 && at > 0 && at < p.frame_count()).then_some(n)
     }
 
     /// Supprime la version de séquence `numero` (jamais la dernière). Si c'est la version choisie, la séquence passe d'abord à
@@ -1113,7 +1209,8 @@ impl Document {
         } else {
             source
         };
-        let versions = self.versions.remove(&plan);
+        // (Une copie pour le garage garde ses versions à elle ; celles du plan restent, la réunion (`absorber_versions`) les reprend.)
+        let versions = if copier { self.copie_des_versions(plan, panel.scene) } else { self.versions.remove(&plan) };
         let reserve = if copier {
             // (La copie a des numéros de calques neufs : le contenu rogné, rangé par numéro de calque, les suit calque pour calque.)
             let rang: HashMap<u64, u64> = anciens.iter().copied().zip(panel.layers.iter().map(|l| l.id)).collect();

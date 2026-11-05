@@ -2260,11 +2260,6 @@ impl Document {
         if at == 0 || at >= n {
             return None;
         }
-        // (Un plan qui a plusieurs versions ne se coupe pas : les autres versions garderaient le plan entier.)
-        let plan = self.panels[index].id;
-        if self.refuser_si_versions_de_plan(&[plan], "couper") {
-            return None;
-        }
         let source = self.panels[index].clone();
         let mut copies: HashMap<CelId, CelId> = HashMap::new();
         let mut layers = Vec::with_capacity(source.layers.len());
@@ -2348,8 +2343,8 @@ impl Document {
         if index + 1 >= self.panels.len() || self.panels[index].scene != self.panels[index + 1].scene {
             return None;
         }
-        // (Un plan qui a plusieurs versions ne se réunit pas : les autres versions seraient perdues, ou garderaient le plan d'avant.)
-        if self.refuser_si_versions_de_plan(&[self.panels[index].id, self.panels[index + 1].id], "réunir") {
+        // (Les versions rangées des deux plans se gardent : celles du suivant deviennent des versions du plan réuni.)
+        if self.refuser_si_trop_de_versions(&[self.panels[index].id, self.panels[index + 1].id]) {
             return None;
         }
         // Caméras qu'ils montraient (un panneau sans clé hérite de ses voisins) : gardées.
@@ -2357,6 +2352,8 @@ impl Document {
         // (Le plan réuni, qu'une autre version de sa séquence montre, en garde une copie : `variantes.rs`.)
         self.ranger_plan_partage(self.panels[index + 1].id, true);
         let next = self.panels.remove(index + 1);
+        let versions_suivant = self.versions.remove(&next.id);
+        self.absorber_versions(self.panels[index].id, versions_suivant);
         self.forget_joint_reserves(self.panels[index].id, next.id);
         let next_len = next.frame_count();
         let a_len = self.panels[index].frame_count();
@@ -2719,7 +2716,12 @@ impl Document {
         let cams_b = (self.panel_camera_douce(index + 1, 0), self.panel_camera_douce(index + 1, last(self, index + 1)));
         self.ranger_plan_partage(self.panels[index + 1].id, true);
         let b = self.panels.remove(index + 1);
-        self.append_plan(index, b, cams_a, cams_b, opts)
+        // Les versions rangées du plan absorbé restent au plan réuni, sous des numéros neufs (rien n'est perdu).
+        let versions_b = self.versions.remove(&b.id);
+        let hote = self.panels[index].id;
+        let r = self.append_plan(index, b, cams_a, cams_b, opts);
+        self.absorber_versions(hote, versions_b);
+        r
     }
 
     /// Met le plan `b` (déjà retiré du document) au bout du plan `index`.
@@ -2895,9 +2897,10 @@ impl Document {
             return None;
         }
         let first = self.panels[at[0]].id;
-        // (Avant de réunir le premier couple : un refus au milieu laisserait des plans déjà réunis, sans étape d'annulation.)
+        // (Avant de réunir le premier couple : un refus au milieu laisserait des plans déjà réunis, sans étape d'annulation. Les versions
+        // rangées de tous ces plans se retrouvent au plan réuni : leur total ne dépasse pas le maximum.)
         let tous: Vec<u64> = at.iter().map(|&i| self.panels[i].id).collect();
-        if self.refuser_si_versions_de_plan(&tous, "réunir") {
+        if self.refuser_si_trop_de_versions(&tous) {
             return None;
         }
         for _ in 1..at.len() {
@@ -2966,8 +2969,8 @@ impl Document {
         if index + 1 >= self.panels.len() || self.sequence_of(index) != self.sequence_of(index + 1) {
             return None;
         }
-        // (Un plan qui a plusieurs versions ne se réunit pas : les versions du plan absorbé seraient perdues, celles du premier garderaient le plan d'avant.)
-        if self.refuser_si_versions_de_plan(&[self.panels[index].id, self.panels[index + 1].id], "réunir") {
+        // (Les versions rangées du plan absorbé deviennent des versions du plan réuni : `absorber_versions`.)
+        if self.refuser_si_trop_de_versions(&[self.panels[index].id, self.panels[index + 1].id]) {
             return None;
         }
         // (Le décor du premier plan se tient sur la suite, ou la suite repart d'un décor vide : `decor.rs`.)
@@ -2986,10 +2989,8 @@ impl Document {
             return None;
         }
         let first_id = self.panels[index].id;
-        // (Avant de toucher aux marques : `split_panel` refuserait aussi, et les marques ne reviendraient pas.)
-        if self.refuser_si_versions_de_plan(&[first_id], "couper") {
-            return None;
-        }
+        // Les versions rangées du plan vont avec la première partie, ou avec la seconde si la coupe l'a demandé (`variantes::avec_cote`).
+        let cote = crate::variantes::cote_choisi().unwrap_or(crate::variantes::Cote::Premiere);
         let marks = std::mem::take(&mut self.panels[index].marks);
         let second = self.split_panel(index, at)?;
         let scene = self.new_scene(self.sequence_of(second));
@@ -3011,6 +3012,9 @@ impl Document {
         let id = p.id;
         if let Some(mark) = start {
             self.reanchor_notes(mark, id);
+        }
+        if cote == crate::variantes::Cote::Seconde {
+            self.confier_versions_a_la_suite(first_id, id, scene);
         }
         Some(self.normalize_keeping(id))
     }

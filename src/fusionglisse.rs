@@ -58,7 +58,7 @@ impl Document {
             return None;
         }
         // (Avant de déplacer le plan glissé : un refus après le déplacement le laisserait déplacé, sans étape d'annulation.)
-        if self.refuser_si_versions_de_plan(&[x, y], "réunir") {
+        if self.refuser_si_trop_de_versions(&[x, y]) {
             return None;
         }
         if px + 1 != py && py + 1 != px {
