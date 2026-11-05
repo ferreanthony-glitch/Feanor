@@ -222,7 +222,7 @@ fn a_toggled_on_icon_button_is_drawn_in_the_colour_that_reads_on_the_accent_in_e
     use crate::theme::{self, ChoixTheme, ReglageTheme};
     for choix in ChoixTheme::TOUS {
         theme::installer(&ReglageTheme { choix, ..ReglageTheme::default() });
-        let ink = theme::sur_accent();
+        let ink = theme::sur_selection();
         let ctx = egui::Context::default();
         theme::appliquer(&ctx);
         let (mut on, mut pick) = (true, 1);
@@ -244,7 +244,7 @@ fn a_toggled_on_icon_button_is_drawn_in_the_colour_that_reads_on_the_accent_in_e
         let colors = text_colors(&output);
         assert_eq!(colors.len(), 6, "{choix:?} : un texte par bouton");
         for c in colors {
-            assert_eq!(c, ink, "{choix:?} : l'icône d'un bouton allumé doit avoir la couleur de `sur_accent`");
+            assert_eq!(c, ink, "{choix:?} : l'icône d'un bouton allumé doit avoir la couleur de `sur_selection`");
         }
     }
     theme::installer(&ReglageTheme::default());
@@ -257,7 +257,7 @@ fn the_ink_of_a_toggle_only_changes_when_it_is_on() {
     let on = bulles::encre_etat(egui::RichText::new("x"), true);
     assert_eq!(off, egui::RichText::new("x"), "éteint : l'encre du widget reste");
     assert_ne!(on, egui::RichText::new("x"), "allumé : l'encre est posée");
-    assert_eq!(on, egui::RichText::new("x").color(theme::sur_accent()));
+    assert_eq!(on, egui::RichText::new("x").color(theme::sur_selection()));
 }
 
 #[test]

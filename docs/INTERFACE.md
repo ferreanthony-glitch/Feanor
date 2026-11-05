@@ -6990,3 +6990,23 @@ Enregistrer, Enregistrer sous, la copie de secours, les exports (vidéo, PDF, vi
 8. Ouvre **deux projets** dans deux onglets, travaille dans l'un, reviens sur l'autre : dessins intacts, et la mémoire ne double pas.
 9. Aide > Régler SHOT pour cette machine… (fenêtre du diagnostic, sans lancer la mesure) : la ligne « Dessins en mémoire » est là et plausible.
 10. ~~Optionnel : lance SHOT avec `WGPU_BACKEND=dx12`~~. Retiré le 2026-11-01 : Direct3D 12 n'est pas compilé dans SHOT, et ce réglage le fait passer à l'affichage de secours OpenGL (voir ENDURANCE.md §6.5, correction).
+
+## 96. FEANOR : le nouveau nom, les couleurs et le logo de la marque (2026-11-05, branche `feanor`)
+
+**Note de lecture : « SHOT » dans les commentaires du code et dans les documents d'avant ce paragraphe veut dire FEANOR.** Le logiciel s'appelle FEANOR (capitales, sans tréma), devise « Forge your story » ; les anciens noms sont SHOT puis Pelure. L'historique de `docs/` et de `suivi/` n'est pas réécrit.
+
+**Ce qui change à l'écran.** Le nom partout où l'utilisateur le lit (titre de fenêtre, menus, bulles, messages, crédits des documents exportés, page de relecture, README) ; l'exécutable est `feanor.exe`. **Ce qui ne change pas**, par compatibilité : la bibliothèque `pelure`, le dossier des réglages `%LOCALAPPDATA%\SHOT` et `%APPDATA%\SHOT` (les préférences survivent), les variables `SHOT_*`, les extensions `.shot` et `.pelure`, le format (46), la marque du presse-papiers interne, les clés Kitsu et le coffre d'identifiants, le nom de la palette d'origine « SHOT », et le mot « shot » quand il désigne un plan de production (Kitsu, CSV, JSON).
+
+**Couleurs** (`theme.rs`, jetons du livre de marque) : deux thèmes, **Atelier** (sombre, par défaut ; l'ancien choix « shot » des réglages) et **Papier** (clair). Le jade est l'accent (sélection, onglet actif, petits interrupteurs) avec l'encre « sur jade » dessus ; pas de grand aplat jade près du dessin (`theme::surface_active` : panneau tiré vers « ligne forte »). Les commandes ont une bordure « ligne forte » (3:1 au moins), pas d'ombres portées, panneaux à 8 px, commandes à 4 px. Les thèmes de gris d'avant ne changent pas. **Rouge** : le jeton `alerte` ne sert qu'aux erreurs bloquantes et aux actions irréversibles ; un avertissement non bloquant est une pastille braise (`theme::avertir`) à côté d'un texte neutre ; la braise est aussi le point d'enregistrement (il n'y en a pas encore dans l'application). Les couleurs qui disent quelque chose (calques, pelures d'oignon, annotations, palettes, axes 3D, exports) ne changent pas.
+
+**Logo** (`logo.rs`, `marque.rs`, `assets/feanor-viseur-*.svg`) : le Joyau (jade, petit sous 24 px, irisé, mono) et l'icône de l'application. Le lockup principal met le Joyau jade devant le mot ; l'accueil, seul moment fort, met le Joyau irisé à la place du O et joue une fois l'animation d'ouverture (1,15 s, sans bloquer, zéro image ensuite, immobile en mouvement réduit). Le lockup rétrécit plutôt que d'être coupé. Polices de marque : Big Shoulders Display (le mot) et IBM Plex Sans Medium (la devise), SIL OFL 1.1, `assets/polices/`, embarquées.
+
+**Barres de chargement** (`barre.rs`) : toutes les barres d'avancement passent par `Barre` (dégradé jade, lilas, rose, jaune pâle ancré sur la largeur, glissement lent tant que ça charge, aucune image demandée quand rien ne charge).
+
+### À vérifier à l'écran
+
+1. Lance FEANOR sans projet : la fenêtre d'accueil montre le mot FEANOR, le Joyau coloré à la place du O qui « s'ouvre » une seule fois puis reste figé, et la devise dessous.
+2. Aide > À propos de FEANOR… : le Joyau vert devant le mot, la devise alignée à droite sur le R, la version.
+3. Ouvre un projet : tout est lisible, rien n'est rouge ou orange sauf les erreurs ; l'onglet actif et la sélection sont verts, les gros blocs du montage sont gris.
+4. Préférences > Apparence > Thème : « Atelier » et « Papier » ; les deux se lisent bien.
+5. Exporte un film ou ouvre un gros projet : la barre d'avancement est fine, colorée, et glisse doucement ; elle s'arrête quand c'est fini.

@@ -104,7 +104,7 @@ pub fn config_des_reglages(r: &GenerationSonReglages) -> Result<ConfigServeur, S
             python.display()
         ));
     }
-    let script = script_serveur().ok_or_else(|| "le script du serveur local (sidecar/serveur.py) est introuvable à côté de SHOT.".to_string())?;
+    let script = script_serveur().ok_or_else(|| "le script du serveur local (sidecar/serveur.py) est introuvable à côté de FEANOR.".to_string())?;
     Ok(ConfigServeur { python, racine: racine_des_reglages(r), script, port: r.port_local })
 }
 
@@ -275,7 +275,7 @@ impl std::fmt::Debug for Demarrage {
 impl Demarrage {
     /// Appelé quand la connexion est refusée : lance le serveur et attend qu'il soit prêt.
     pub fn assurer(&self, client: &ClientSidecar, controle: &Controle) -> Result<(), ErreurGen> {
-        let config = self.config.as_ref().map_err(|m| ErreurGen::NonInstalle(format!("aucun serveur local ne répond, et SHOT ne peut pas le lancer : {m}")))?;
+        let config = self.config.as_ref().map_err(|m| ErreurGen::NonInstalle(format!("aucun serveur local ne répond, et FEANOR ne peut pas le lancer : {m}")))?;
         let (fait, total, _) = controle.lire();
         controle.avancer(fait, total, "Démarrage du serveur local…");
         self.gestionnaire.demarrer(config).map_err(|m| ErreurGen::NonInstalle(format!("le serveur local ne répond pas et n'a pas pu être lancé : {m}")))?;

@@ -21,12 +21,12 @@ pub(crate) fn status_icon(s: Status) -> &'static str {
     }
 }
 
-/// La couleur d'un statut (celles du thème : avertissement, succès, erreur, accent).
+/// La couleur d'un statut (celles du thème : encre, succès, accent ; le refus se lit à son icône, le rouge `alerte` est réservé aux erreurs bloquantes).
 pub(crate) fn status_color(s: Status) -> Color32 {
     match s {
         Status::Todo => theme::avertissement(),
         Status::Done => theme::succes(),
-        Status::Refused => theme::erreur(),
+        Status::Refused => theme::texte_fort(),
         Status::Discussion => theme::accent_texte(),
     }
 }
@@ -49,7 +49,7 @@ pub(crate) fn paint_row_marks(painter: &Painter, check: Rect, c: &Comment, doc: 
     let mut x = check.right() - 4.0;
     let y = check.bottom() + 8.0;
     if !doc.conflicts_of(c.id).is_empty() {
-        painter.text(pos2(x, y), Align2::RIGHT_CENTER, ph::LIGHTNING, FontId::proportional(12.0), theme::erreur());
+        painter.text(pos2(x, y), Align2::RIGHT_CENTER, ph::LIGHTNING, FontId::proportional(12.0), theme::braise());
         x -= 14.0;
     }
     if c.follow.retake.is_some() {
@@ -61,9 +61,9 @@ pub(crate) fn paint_row_marks(painter: &Painter, check: Rect, c: &Comment, doc: 
 /// la couleur d'erreur quand deux notes à traiter sont en conflit. Même forme que la pastille « modifié depuis
 /// l'envoi » (`envoisui::peindre_repere`).
 pub(crate) fn peindre_marque(painter: &Painter, centre: Pos2, m: &PlanMark, rayon: f32) {
-    let fond = if m.conflict { theme::erreur() } else { theme::accent_texte() };
-    painter.circle_filled(centre, rayon, fond);
-    painter.circle_stroke(centre, rayon, Stroke::new(1.0_f32, theme::encre()));
+    // (Un conflit n'est pas une erreur : même pastille, avec un anneau braise, jamais un aplat rouge ni braise.)
+    painter.circle_filled(centre, rayon, theme::accent_texte());
+    painter.circle_stroke(centre, rayon, if m.conflict { Stroke::new(2.0_f32, theme::braise()) } else { Stroke::new(1.0_f32, theme::encre()) });
     let n = m.counts.open();
     let texte = if n > 9 { "9+".to_string() } else { n.to_string() };
     painter.text(centre, Align2::CENTER_CENTER, texte, FontId::proportional(rayon * 1.2), theme::encre());
@@ -347,7 +347,7 @@ impl App {
         let id = c.id;
         let status = c.status();
         let selected = self.comment_ui.sel == Some(id);
-        let fill = if selected { ui.visuals().selection.bg_fill.gamma_multiply(0.45) } else { theme::eleve() };
+        let fill = if selected { crate::theme::accent().gamma_multiply(0.45) } else { theme::eleve() };
         let dim = if status.is_open() { 1.0 } else { 0.7 };
         let inner = egui::Frame::new().fill(fill).corner_radius(4).inner_margin(egui::Margin::same(6)).show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -377,16 +377,16 @@ impl App {
             }
             if status == Status::Refused {
                 let raison = if c.follow.reason.is_empty() { "(sans raison)".to_string() } else { c.follow.reason.clone() };
-                ui.label(RichText::new(format!("Raison du refus : {raison}")).italics().color(theme::erreur()));
+                ui.label(RichText::new(format!("Raison du refus : {raison}")).italics().color(theme::texte_doux()));
             }
             if let Some(m) = &c.follow.retake {
                 let motif = if m.is_empty() { String::new() } else { format!(" : {m}") };
-                ui.label(RichText::new(format!("{} Retake{motif}", ph::ARROW_COUNTER_CLOCKWISE)).small().color(theme::avertissement()));
+                crate::theme::avertir_petit(ui, format!("{} Retake{motif}", ph::ARROW_COUNTER_CLOCKWISE));
             }
             for o in self.doc.conflicts_of(id) {
                 if let Some(other) = self.doc.comment(o) {
                     let line = crate::commentaires::first_line(&other.text, 60);
-                    ui.label(RichText::new(format!("{} En conflit avec {} ({}) : {line}", ph::LIGHTNING, who(other), other.status().label().to_lowercase())).small().color(theme::erreur()));
+                    crate::theme::avertir_petit(ui, format!("{} En conflit avec {} ({}) : {line}", ph::LIGHTNING, who(other), other.status().label().to_lowercase()));
                 }
             }
             for r in &c.follow.replies {
@@ -442,7 +442,7 @@ impl App {
         if let Some((rid, mut reason)) = self.comment_ui.refusing.take() {
             if rid == id {
                 let mut keep = true;
-                ui.label(RichText::new("Raison du refus (obligatoire)").small().color(theme::erreur()));
+                ui.label(RichText::new("Raison du refus (obligatoire)").small().color(theme::texte_fort()));
                 let resp = ui.add(egui::TextEdit::multiline(&mut reason).id(egui::Id::new(("raison_refus", id))).desired_rows(2).desired_width(f32::INFINITY).hint_text("Pourquoi cette note est refusée…"));
                 if self.comment_ui.focus_motive {
                     resp.request_focus();
@@ -463,7 +463,7 @@ impl App {
             }
         } else if status == Status::Refused {
             let raison = if c.follow.reason.is_empty() { "(sans raison)".to_string() } else { c.follow.reason.clone() };
-            ui.label(RichText::new(format!("Raison : {raison}")).small().italics().color(theme::erreur()));
+            ui.label(RichText::new(format!("Raison : {raison}")).small().italics().color(theme::texte_doux()));
         }
         // D'où elle vient, l'envoi et la version qu'elle concerne.
         let mut origine = vec![format!("Source : {}", c.source().label())];
@@ -516,7 +516,7 @@ impl App {
         for o in &conflicts {
             let Some(other) = self.doc.comment(*o).cloned() else { continue };
             ui.horizontal(|ui| {
-                ui.label(RichText::new(ph::LIGHTNING).color(theme::erreur()));
+                ui.label(RichText::new(ph::LIGHTNING).color(theme::braise()));
                 let line = crate::commentaires::first_line(&other.text, 40);
                 let label = format!("En conflit avec {} ({}) : {line}", who(&other), other.status().label().to_lowercase());
                 if ui.add(egui::Label::new(RichText::new(label).small()).sense(Sense::click())).clicked() {

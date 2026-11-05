@@ -103,7 +103,7 @@ impl App {
         let arret = t.ctl.arret.load(Ordering::Relaxed);
         ui.separator();
         ui.label(format!("Fusion de {} calques", t.nombre));
-        ui.add(egui::ProgressBar::new((fait as f32 / total as f32).min(1.0)).desired_width(120.0).show_percentage());
+        ui.add(crate::barre::Barre::new((fait as f32 / total as f32).min(1.0)).desired_width(120.0).show_percentage());
         let bouton = ui.add_enabled(!arret, egui::Button::new(if arret { "Arrêt…" } else { "Arrêter" }));
         if bouton.on_hover_text("Arrête la fusion : rien ne change.").clicked() {
             self.arreter_fusion();

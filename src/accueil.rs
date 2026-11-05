@@ -22,7 +22,8 @@ use egui_phosphor::regular as ph;
 
 use crate::accueilimages::Visuel;
 use crate::app::{App, Pending};
-use crate::logo::{self, Variante, VUE_H, VUE_L};
+use crate::logo::{self, Joyau};
+use crate::marque;
 use crate::nouveauui::{Contexte, NewDocDialog, Sortie};
 use crate::recoveryui::RecoveryChoix;
 use crate::theme;
@@ -30,8 +31,8 @@ use crate::theme;
 /// Hauteur du bandeau, en points.
 pub(crate) const BANDEAU_H: f32 = 168.0;
 
-/// Largeur du logo sur le bandeau, en points.
-const LOGO_LARGEUR: f32 = 230.0;
+/// Hauteur des capitales du mot FEANOR sur le bandeau, en points.
+const LOGO_CAPITALES: f32 = 50.0;
 
 /// Marge autour des deux cadres, et entre eux, en points.
 const MARGE: f32 = 16.0;
@@ -55,35 +56,6 @@ pub(crate) fn recadrage(pixels: [usize; 2], zone: egui::Vec2) -> Rect {
         let haut = (1.0 - v) * 0.35;
         Rect::from_min_max(pos2(0.0, haut), pos2(1.0, haut + v))
     }
-}
-
-/// Le logo à montrer est-il celui des fonds sombres ? Non quand le fond des panneaux est clair
-/// (thème clair : `Palette::claire`, `Visuals::light`).
-pub(crate) fn logo_sombre() -> bool {
-    !crate::theme::palette().claire
-}
-
-/// La texture du logo, à la taille exacte de l'écran (points × pixels par point), dans la variante
-/// qui va avec le thème. Refaite seulement si l'un des trois change.
-pub(crate) fn logo_texture(ctx: &egui::Context, largeur: f32) -> egui::TextureHandle {
-    logo_texture_en(ctx, largeur, logo_sombre())
-}
-
-/// La texture du logo dans la variante demandée (`sombre` : lettres claires pour un fond sombre).
-pub(crate) fn logo_texture_en(ctx: &egui::Context, largeur: f32, sombre: bool) -> egui::TextureHandle {
-    let pixels = (largeur * ctx.pixels_per_point()).round().max(8.0) as u32;
-    let id = egui::Id::new(("shot_logo", largeur as u32, sombre));
-    if let Some((cle, texture)) = ctx.data(|d| d.get_temp::<(u32, egui::TextureHandle)>(id)) {
-        if cle == pixels {
-            return texture;
-        }
-    }
-    let variante = if sombre { Variante::Sombre } else { Variante::Clair };
-    let (w, h, rgba) = logo::image(pixels, variante);
-    let image = egui::ColorImage::from_rgba_premultiplied([w as usize, h as usize], &rgba);
-    let texture = ctx.load_texture(format!("shot-logo-{}-{}", largeur as u32, sombre), image, egui::TextureOptions::LINEAR);
-    ctx.data_mut(|d| d.insert_temp(id, (pixels, texture.clone())));
-    texture
 }
 
 /// Un cadre à titre : fond des panneaux, filet, titre en gras, puis `contenu`. Il occupe tout `rect` (les deux cadres de l'accueil
@@ -178,16 +150,27 @@ impl App {
             voile.add_triangle(0, 2, 3);
             peintre.add(egui::Shape::mesh(voile));
         }
-        // Le logo : lettres claires sur l'image (voile sombre), de la variante du thème sur le fond du bandeau.
-        let texture = logo_texture_en(ctx, LOGO_LARGEUR, if sur_image { true } else { logo_sombre() });
-        let hauteur = LOGO_LARGEUR * VUE_H / VUE_L;
-        let place = Rect::from_min_size(pos2(rect.left() + 28.0, rect.center().y - hauteur / 2.0), vec2(LOGO_LARGEUR, hauteur));
-        peintre.image(texture.id(), place, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
+        // Le lockup (le mot, le Joyau irisé à la place du O, la devise) : encre claire sur l'image (voile sombre), encre du
+        // thème sur le fond du bandeau. Le Joyau s'ouvre une fois par lancement (`marque::animation_accueil`), puis reste figé.
+        let anim = marque::animation_accueil(ctx);
+        // (Jamais coupé dans une fenêtre étroite : le lockup rétrécit, puis il ne reste que le Joyau.)
+        let capitales = marque::ajuster(ctx, rect.width() - 28.0 - 70.0, LOGO_CAPITALES, marque::Mise::RemplaceLeO);
+        let cote = marque::cote_joyau(capitales);
+        let texture = marque::texture_joyau(ctx, "accueil", cote, Joyau::Iris, Some(anim));
+        let (encre, devise) = if sur_image {
+            let c = logo::ENCRE_SOMBRE;
+            (Color32::from_rgb(c[0], c[1], c[2]), Color32::from_rgb(0xC8, 0xC8, 0xD0))
+        } else {
+            (p.texte_fort, p.texte_doux)
+        };
+        let mesure = marque::disposer(ctx, pos2(0.0, 0.0), capitales, true, marque::Mise::RemplaceLeO).rect;
+        let origine = pos2(rect.left() + 28.0 - mesure.min.x, rect.center().y - mesure.center().y);
+        marque::peindre(&peintre, ctx, &texture, origine, capitales, encre, Some(devise), marque::Mise::RemplaceLeO);
         // Les Préférences (c'est là qu'on choisit les images d'accueil) : un petit bouton en haut à droite.
         let bouton = Rect::from_min_size(rect.right_top() + vec2(-44.0, 10.0), vec2(34.0, 30.0));
         peintre.rect_filled(bouton, 6.0, Color32::from_black_alpha(120));
         ui.scope_builder(UiBuilder::new().max_rect(bouton), |ui| {
-            let resp = crate::bulles::icone(ui, ph::GEAR, "Préférences", "Les réglages de SHOT, dont les images d'accueil (Apparence).", "");
+            let resp = crate::bulles::icone(ui, ph::GEAR, "Préférences", "Les réglages de FEANOR, dont les images d'accueil (Apparence).", "");
             resp.clicked()
         })
         .inner
@@ -234,7 +217,7 @@ impl App {
         cadre(ui, rect, "Projets récents", |ui| {
             if orphelins {
                 ui.scope(|ui| {
-                    ui.label(RichText::new("SHOT s'est fermé sans enregistrer").strong().color(theme::avertissement()));
+                    theme::avertir(ui, "FEANOR s'est fermé sans enregistrer");
                     egui::ScrollArea::vertical().id_salt("accueil_secours").max_height(190.0).auto_shrink([false, true]).show(ui, |ui| {
                         secours = self.recovery_contenu(ui);
                     });
@@ -272,7 +255,7 @@ impl App {
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let b = ui.add(egui::Button::new("Ouvrir un projet…").min_size(vec2(150.0, 28.0)));
-                if crate::bulles::bulle(b, "Ouvrir un projet", "Un projet SHOT (.shot).", "Ctrl+O").clicked() {
+                if crate::bulles::bulle(b, "Ouvrir un projet", "Un projet FEANOR (.shot).", "Ctrl+O").clicked() {
                     action = Some("fichier.ouvrir");
                 }
             });

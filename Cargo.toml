@@ -2,7 +2,7 @@
 name = "pelure"
 version = "0.1.0"
 edition = "2021"
-description = "SHOT — Frame the story. Storyboard et animation 2D image par image (anciennement Pelure)"
+description = "FEANOR — Forge your story. Storyboard et animation 2D image par image (anciennement Pelure)"
 
 # 10a : Pelure est aussi une bibliothèque, utilisée par l'appli compagnon Tauri (src-tauri/) ;
 # l'exécutable (src/main.rs) ne fait que la lancer. src-tauri/ est un projet Cargo à part (son
@@ -11,10 +11,10 @@ description = "SHOT — Frame the story. Storyboard et animation 2D image par im
 name = "pelure"
 path = "src/lib.rs"
 
-# Le logiciel s'appelle SHOT (ancien nom : Pelure, gardé pour la bibliothèque `pelure::`) :
-# l'exécutable est `shot.exe`.
+# Le logiciel s'appelle FEANOR (anciens noms : SHOT, Pelure ; `pelure::` reste le nom de la bibliothèque) :
+# l'exécutable est `feanor.exe`.
 [[bin]]
-name = "shot"
+name = "feanor"
 path = "src/main.rs"
 
 [dependencies]
@@ -53,11 +53,11 @@ arboard = { version = "3.6", default-features = false, features = ["image-data"]
 # Propagation façon EbSynth : la caisse synthese/ (projet Cargo à part), synthèse sur la carte
 # graphique avec wgpu 24, celui d'eframe : elle tourne sur le périphérique de l'affichage.
 synthese = { path = "synthese", features = ["gpu"] }
-# Logo et icône de SHOT (`logo.rs`) : le dessin du logo, tracé en vecteur, est rasterisé une fois.
+# Logo et icône de FEANOR (`logo.rs`) : le dessin du logo, tracé en vecteur, est rasterisé une fois.
 # Sans le format PNG (inutile ici) : seules des caisses déjà en cache sont tirées.
 tiny-skia = { version = "0.11", default-features = false, features = ["std"] }
 
-# `build.rs` dessine l'icône de shot.exe avec le même code que l'application (src/logo.rs).
+# `build.rs` dessine l'icône de feanor.exe avec le même code que l'application (src/logo.rs).
 [build-dependencies]
 tiny-skia = { version = "0.11", default-features = false, features = ["std"] }
 

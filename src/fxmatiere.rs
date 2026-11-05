@@ -466,7 +466,7 @@ pub fn param_hint(kind: EffectKind, k: usize) -> &'static str {
         (EffectKind::StrokeGradient, GRAD_SCROLL) => "Part du dégradé parcourue à chaque image : le dégradé défile le long des traits. Négatif : dans l'autre sens.",
         (EffectKind::StrokeGradient, GRAD_LOOP) => "Coché, le dégradé revient à sa première couleur au bout (utile avec le défilement). Décoché : les bouts gardent la première et la dernière couleur.",
         (EffectKind::StrokeGradient, k) if (GRAD_COLOR..GRAD_COLOR + 12).contains(&k) => "Couleur de cet arrêt du dégradé.",
-        (EffectKind::Nib, NIB_ID) => "Le réglage de pinceau qui redessine les traits : un des réglages de la bibliothèque, ou la plume calligraphique de SHOT.",
+        (EffectKind::Nib, NIB_ID) => "Le réglage de pinceau qui redessine les traits : un des réglages de la bibliothèque, ou la plume calligraphique de FEANOR.",
         (EffectKind::Nib, NIB_SIZE) => "Taille de la plume, en pourcentage de celle du réglage. La pression des traits d'origine règle l'épaisseur, comme à la main.",
         _ => "",
     }

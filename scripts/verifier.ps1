@@ -1,7 +1,7 @@
 # Verification apres integration (docs/FIABILITE.md).
 #
 # Ce que fait ce script :
-#   1. cargo check --release : la compilation de SHOT ne donne aucun avertissement ;
+#   1. cargo check --release : la compilation de FEANOR ne donne aucun avertissement ;
 #   2. toute la suite d'essais (cargo test --release) ;
 #   3. les essais de fiabilite, un par un, par leur nom : aller-retour des projets, fumee de toute
 #      l'application, fichiers abimes, demarrage, travail a plusieurs ;
@@ -10,8 +10,8 @@
 # Puis il affiche un resume OK / ECHEC (avec le E accent aigu majuscule) et sort avec le code 0 (tout est OK)
 # ou 1.
 #
-# Il ne lance PAS shot.exe : les lancements visuels sont faits a part, par la session principale.
-# (cargo check ne produit pas d'executable : le script marche aussi pendant que shot.exe tourne.)
+# Il ne lance PAS feanor.exe : les lancements visuels sont faits a part, par la session principale.
+# (cargo check ne produit pas d'executable : le script marche aussi pendant que feanor.exe tourne.)
 #
 # Utilisation (PowerShell 5.1, depuis n'importe ou) :
 #   .\scripts\verifier.ps1

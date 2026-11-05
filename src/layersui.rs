@@ -316,7 +316,7 @@ impl App {
         let mut aplat_choisi: Option<usize> = None;
         let lock_key = self.raccourci("calque.verrouiller");
         let frame = self.cur_frame;
-        let accent = ui.visuals().selection.bg_fill;
+        let accent = crate::theme::accent();
         // Vignette plus petite dans un panneau étroit : le nom reste lisible.
         let thumb_w = (ui.available_width() * 0.3).clamp(32.0, THUMB[0] as f32);
         let thumb_size = vec2(thumb_w, thumb_w * THUMB[1] as f32 / THUMB[0] as f32);

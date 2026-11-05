@@ -500,10 +500,10 @@ fn the_performance_offer_does_not_appear_on_the_compact_welcome_but_waits_for_a_
     let mut b = accueil();
     b.app.diag.offre = true;
     b.chauffer(3);
-    assert!(!est_la(&b, "Régler SHOT pour cette machine ?"), "pas sur l'accueil compact");
+    assert!(!est_la(&b, "Régler FEANOR pour cette machine ?"), "pas sur l'accueil compact");
     creer_un_projet(&mut b, "Offre");
     b.chauffer(3);
-    assert!(est_la(&b, "Régler SHOT pour cette machine ?"), "elle vient une fois un projet ouvert");
+    assert!(est_la(&b, "Régler FEANOR pour cette machine ?"), "elle vient une fois un projet ouvert");
 }
 
 #[test]
@@ -575,8 +575,8 @@ fn the_banner_shows_the_chosen_image_or_else_the_logo_alone() {
     let large = images.iter().find(|r| r.width() >= 999.0).expect("l'image du bandeau couvre toute la largeur");
     assert!((large.height() - crate::accueil::BANDEAU_H).abs() < 0.5 && large.min.y.abs() < 0.5, "en haut de la fenêtre : {large:?}");
     // Le logo est posé dessus, à gauche.
-    let logo = images.iter().find(|r| r.width() < 400.0 && r.width() > 100.0).expect("le logo");
-    assert!(logo.min.x < 60.0 && logo.min.y >= 0.0 && logo.max.y <= crate::accueil::BANDEAU_H, "{logo:?}");
+    let logo = images.iter().find(|r| r.width() < 400.0 && r.width() > 40.0).expect("le logo");
+    assert!(logo.min.x < 300.0 && logo.min.y >= 0.0 && logo.max.y <= crate::accueil::BANDEAU_H, "{logo:?}");
     std::fs::remove_dir_all(&vide).ok();
     std::fs::remove_dir_all(&dir).ok();
 }

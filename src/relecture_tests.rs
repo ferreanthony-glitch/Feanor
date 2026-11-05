@@ -186,10 +186,10 @@ fn existing_comments_are_context_in_the_page_only_when_asked() {
     doc.comment_mut(resolved).unwrap().text = "Déjà réglé".into();
     doc.comment_mut(resolved).unwrap().done = true;
     let with = page_of(&doc, &Options { comments: true, ..Options::default() });
-    assert!(with.contains("Couper deux images") && with.contains("Anthony") && with.contains("Déjà noté dans SHOT"));
+    assert!(with.contains("Couper deux images") && with.contains("Anthony") && with.contains("Déjà noté dans FEANOR"));
     assert!(!with.contains("Déjà réglé"), "un commentaire résolu n'est pas du contexte");
     let without = page_of(&doc, &Options { comments: false, ..Options::default() });
-    assert!(!without.contains("Couper deux images") && !without.contains("Déjà noté dans SHOT"));
+    assert!(!without.contains("Couper deux images") && !without.contains("Déjà noté dans FEANOR"));
 }
 
 #[test]

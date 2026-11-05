@@ -143,7 +143,7 @@ fn entree(ui: &egui::Ui, icone: &str, teinte: Color32, nom: &str, phrase: &str) 
 }
 
 /// La couleur d'une sorte : celle de la bande de ses lignes dans le panneau.
-pub(crate) fn teinte(ui: &egui::Ui, s: Sorte) -> Color32 {
+pub(crate) fn teinte(_ui: &egui::Ui, s: Sorte) -> Color32 {
     match s {
         Sorte::Vecto => crate::theme::couleur_calque(LayerKind::Vector, false),
         Sorte::Bitmap | Sorte::Video => crate::theme::couleur_calque(LayerKind::Bitmap, false),
@@ -151,7 +151,7 @@ pub(crate) fn teinte(ui: &egui::Ui, s: Sorte) -> Color32 {
         Sorte::Effet => crate::theme::palette().dessin_cfx,
         Sorte::Annotation => crate::theme::palette().dessin_annotation,
         Sorte::Unie => crate::theme::palette().dessin_unie,
-        Sorte::Dossier => ui.visuals().selection.bg_fill,
+        Sorte::Dossier => crate::theme::accent(),
     }
 }
 

@@ -1,359 +1,260 @@
-//! Logo et icône de SHOT, dessinés en vecteur puis rasterisés (tiny-skia, sans bibliothèque SVG).
+//! Logo et icône de FEANOR : le « Joyau » (une pierre taillée avec une étoile de lumière, qui est aussi la croix de
+//! centrage d'un cadre), dessiné en vecteur sur une grille de 64 × 64 puis rasterisé (tiny-skia, sans bibliothèque SVG).
 //!
-//! Les formes viennent de `assets/shot-logo.svg` (le logo d'Anthony, fichier de 960 × 720) :
-//! rectangles, le « S » (un chemin M/Q/H/V/L/Z), l'anneau du « O » (un chemin à arcs, règle
-//! pair-impair) et la ligne « FRAME THE STORY » en petits traits. Les chemins sont recopiés tels
-//! quels dans ce fichier (`chemin` lit les commandes M L H V Q A Z), pour ne pas risquer une faute
-//! de recopie des coordonnées. « STORY » est en couleur du fond parce que, dans le logo, il est
-//! écrit en creux dans la barre claire en bas à droite.
+//! Les formes et les couleurs sont celles du livre de marque (`assets/feanor-*.svg` en sont la copie lisible ; un essai
+//! vérifie que les points sont les mêmes). Quatre variantes :
+//! - **Jade** (référence, partout, dès 16 px, sur fond sombre) : pierre jade, facette basse jade profond, étoile blanche.
+//! - **Irisé** (moments forts, jamais sous 32 px : accueil, À propos) : pierre en dégradé jade, lilas, rose, jaune pâle ;
+//!   facette basse jade profond à 42 %. Une animation d'ouverture (`etat_animation`) le fait apparaître une fois.
+//! - **Mono** : une seule encre, où la pierre et l'étoile s'échangent le plein et le vide (pair-impair) ; pas de facette.
+//! - **Icône** : carré arrondi sombre, filet intérieur, Joyau jade réduit à 70 %.
 //!
-//! Ce fichier ne dépend que de tiny-skia : `build.rs` l'inclut pour fabriquer l'icône de
-//! l'exécutable (`shot.ico`) sans copier le dessin.
+//! Ce fichier ne dépend que de tiny-skia : `build.rs` l'inclut pour fabriquer l'icône de l'exécutable (`feanor.ico`).
 
-use tiny_skia::{FillRule, LineJoin, Paint, Path, PathBuilder, Pixmap, Rect, Stroke, Transform};
+use tiny_skia::{Color, FillRule, GradientStop, LinearGradient, Paint, Path, PathBuilder, Pixmap, Point, SpreadMode, Stroke, Transform};
 
-/// Cadre du logo dans le fichier SVG (le logo seul, avec un peu d'air), en unités du SVG.
-pub const VUE_X: f32 = 234.0;
-pub const VUE_Y: f32 = 196.0;
-pub const VUE_L: f32 = 474.0;
-pub const VUE_H: f32 = 266.0;
-
-/// Les couleurs de la charte graphique de SHOT (planche d'Anthony, 2026-10-28).
-pub const NOIR_CINEMA: [u8; 3] = [0x0E, 0x0E, 0x0E];
-pub const BLANC_CASSE: [u8; 3] = [0xF4, 0xF1, 0xEA];
-pub const ORANGE_SHOT: [u8; 3] = [0xE7, 0x6F, 0x3C];
-
-/// Logo clair sur fond sombre (l'original) ou sombre sur fond clair.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Hash)]
-pub enum Variante {
-    Sombre,
-    Clair,
-}
-
-/// Couleurs du logo : lettres, angles et ligne « FRAME THE STORY », puis le fond de la barre pour
-/// « STORY », qui y est écrit en creux.
-struct Couleurs {
-    logo: [u8; 3],
-    creux: [u8; 3],
-}
-
-impl Variante {
-    fn couleurs(self) -> Couleurs {
-        match self {
-            // Blanc cassé sur noir cinéma (la charte).
-            Variante::Sombre => Couleurs { logo: BLANC_CASSE, creux: NOIR_CINEMA },
-            // Le même dessin en négatif, pour un thème clair : noir cinéma sur blanc cassé.
-            Variante::Clair => Couleurs { logo: NOIR_CINEMA, creux: BLANC_CASSE },
-        }
-    }
-}
+/// Côté de la grille du logo.
+pub const GRILLE: f32 = 64.0;
 
 // ---------------------------------------------------------------------------------------------
-// Formes du logo (coordonnées du SVG).
+// Couleurs du livre de marque (le logo ; celles de l'interface sont dans `theme.rs`).
 
-/// Rectangles pleins : x, y, largeur, hauteur (angle haut gauche, H, T, angle bas droite).
-const RECTS: [[f32; 4]; 9] = [
-    [242.6, 204.0, 97.0, 23.0],  // corner-tl-bar
-    [242.6, 204.0, 20.0, 66.0],  // corner-tl-stem
-    [393.0, 242.0, 28.0, 176.0], // h-stem-left
-    [446.0, 242.0, 28.0, 176.0], // h-stem-right
-    [393.0, 316.0, 81.0, 25.0],  // h-bar
-    [610.0, 242.0, 82.0, 25.0],  // t-bar
-    [637.0, 242.0, 28.0, 176.0], // t-stem
-    [680.0, 388.0, 20.0, 66.0],  // corner-br-stem
-    [603.0, 431.0, 97.0, 23.0],  // corner-br-box
-];
-
-/// Le « S » de la typo.
-pub const S_GLYPHE: &str = "M322 420Q299.3 420 289.3 410.7Q279.2 401.5 278.3 379.9Q278.2 375.6 278.2 371Q278.2 366.4 278.4 361.8Q278.7 357.2 279.1 352.7H305.7Q305.3 361.2 305.2 369.4Q305.2 377.6 305.7 384.9Q306.3 390.9 310.2 393.9Q314.2 396.8 321.9 396.8Q329.3 396.8 333.1 393.9Q336.9 390.9 337.5 384.9Q337.9 380.8 338.1 376.6Q338.2 372.4 338 368.1Q337.8 363.9 337.5 359.8Q337.1 354 333.7 350Q330.4 345.9 324.4 344.5L306.7 340.4Q295.9 337.9 289.7 332.8Q283.5 327.6 280.8 319.5Q278 311.5 277.7 300.5Q277.6 295 277.6 290Q277.6 285 277.7 279.8Q278.2 265.5 282.9 256.8Q287.6 248.1 297.1 244Q306.6 240 321.9 240Q344.2 240 354.2 249.2Q364.2 258.4 365 279.8Q365.2 285.2 365.1 292.5Q365 299.8 364.7 306.5H337.5Q337.8 298.2 338 290.4Q338.1 282.6 337.7 274.9Q337.5 268.9 333.6 266.1Q329.6 263.2 321.9 263.2Q314.4 263.2 310.5 266.1Q306.6 268.9 305.9 274.9Q305.4 281.4 305.4 287.7Q305.4 294 305.9 300.5Q306.4 306.5 308.9 310.4Q311.4 314.4 317.2 315.6L333 319Q344.7 321.6 351.8 327Q358.9 332.3 362.1 340.5Q365.4 348.7 365.9 359.8Q366 363 366 366.5Q366 369.9 365.9 373.3Q365.9 376.8 365.7 379.9Q364.8 401.5 354.7 410.7Q344.6 420 322 420Z";
-
-/// L'anneau du « O » (règle pair-impair : le trou intérieur reste vide).
-const O_ANNEAU: &str = "M541 241H554A36 30 0 0 1 590 271V388A36 30 0 0 1 554 418H541A36 30 0 0 1 505 388V271A36 30 0 0 1 541 241Z M547 263A14 9 0 0 1 561 272V387A14 9 0 0 1 547 396A14 9 0 0 1 533 387V272A14 9 0 0 1 547 263Z";
-
-/// Un trait de la ligne « FRAME THE STORY » : décalage (translate du SVG) et chemin. Tracés avec un
-/// trait de 2, jointures biseautées.
-type Trait = (f32, f32, &'static str);
-
-/// « FRAME » (de la couleur du logo).
-const FRAME: [Trait; 5] = [
-    (411.0, 437.0, "M1 0V12M1 1H8M1 6H7"),
-    (430.0, 437.0, "M1 0V12M1 1H5.8Q8 1 8 3.5Q8 6 5.8 6H1M4.6 6.4L8.2 12"),
-    (448.0, 437.0, "M0.9 12L5 1L9.1 12M2.5 9H7.5"),
-    (467.0, 437.0, "M1 12V1L5 7L9 1V12"),
-    (487.0, 437.0, "M1 0V12M1 1H8M1 6H7.2M1 11H8"),
-];
-/// « THE » (de la couleur du logo).
-const THE: [Trait; 3] = [
-    (529.0, 437.0, "M0 1H8M4 0V12"),
-    (547.0, 437.0, "M1 0V12M9 0V12M1 6H9"),
-    (567.0, 437.0, "M1 0V12M1 1H8M1 6H7.2M1 11H8"),
-];
-/// « STORY » (couleur du fond, dans la barre claire). Le « O » est un rectangle arrondi.
-const STORY: [Trait; 5] = [
-    (609.0, 437.0, "M8 3.2Q8 1 4.5 1Q1 1 1 3.3Q1 5.4 4.5 6Q8 6.6 8 8.8Q8 11 4.5 11Q1 11 1 8.8"),
-    (628.0, 437.0, "M0 1H10M5 0V12"),
-    (646.0, 437.0, "M5.5 1H6.5A4.5 4.5 0 0 1 11 5.5V6.5A4.5 4.5 0 0 1 6.5 11H5.5A4.5 4.5 0 0 1 1 6.5V5.5A4.5 4.5 0 0 1 5.5 1Z"),
-    (665.0, 437.0, "M1 0V12M1 1H6.4Q8.6 1 8.6 3.5Q8.6 6 6.4 6H1M5 6.4L8.8 12"),
-    (684.0, 437.0, "M0.6 0L5.5 6.5L10.4 0M5.5 6V12"),
-];
+pub const SOL: [u8; 3] = [0x12, 0x12, 0x14];
+pub const CANEVAS: [u8; 3] = [0x2C, 0x2C, 0x2E];
+pub const ENCRE_SOMBRE: [u8; 3] = [0xED, 0xED, 0xEF];
+pub const ENCRE_CLAIRE: [u8; 3] = [0x12, 0x12, 0x14];
+pub const JADE: [u8; 3] = [0x2F, 0xD4, 0xC0];
+pub const JADE_PROFOND: [u8; 3] = [0x0E, 0x7C, 0x7B];
+pub const ETOILE_BLANCHE: [u8; 3] = [0xF6, 0xFF, 0xFD];
+pub const IRIS_LILAS: [u8; 3] = [0xC7, 0xB5, 0xFF];
+pub const IRIS_ROSE: [u8; 3] = [0xFF, 0xB3, 0xD1];
+pub const IRIS_PALE: [u8; 3] = [0xFF, 0xF1, 0xA8];
 
 // ---------------------------------------------------------------------------------------------
-// Lecture des chemins SVG (M L H V Q A Z, coordonnées absolues).
+// Formes (grille 64 × 64).
 
-enum Jeton {
-    Cmd(char),
-    Nombre(f32),
+/// La pierre.
+pub const PIERRE: [(f32, f32); 5] = [(18.0, 17.0), (44.0, 13.0), (53.0, 35.0), (39.0, 52.0), (14.0, 43.0)];
+/// La facette basse.
+pub const FACETTE: [(f32, f32); 4] = [(53.0, 35.0), (39.0, 52.0), (14.0, 43.0), (32.0, 32.0)];
+/// L'étoile de lumière.
+pub const ETOILE: [(f32, f32); 8] = [(32.0, 2.0), (35.0, 29.0), (60.0, 32.0), (35.0, 35.0), (32.0, 62.0), (29.0, 35.0), (4.0, 32.0), (29.0, 29.0)];
+/// L'étoile du petit Joyau (sous 24 pixels : bras plus épais pour tenir à 16 px).
+pub const ETOILE_PETITE: [(f32, f32); 8] = [(32.0, 2.0), (36.0, 28.0), (60.0, 32.0), (36.0, 36.0), (32.0, 62.0), (28.0, 36.0), (4.0, 32.0), (28.0, 28.0)];
+/// Taille (pixels) en dessous de laquelle on dessine le petit Joyau.
+pub const PETIT_SOUS: u32 = 24;
+/// La seconde étoile, petite, de l'animation d'ouverture.
+pub const ETOILE_SECONDE: [(f32, f32); 8] = [(32.0, 14.0), (33.6, 30.4), (50.0, 32.0), (33.6, 33.6), (32.0, 50.0), (30.4, 33.6), (14.0, 32.0), (30.4, 30.4)];
+
+/// Les quatre variantes du Joyau.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Joyau {
+    Jade,
+    /// Le Joyau jade du dessous de 24 pixels : même pierre et même facette, étoile aux bras plus épais, sans dégradé.
+    JadePetit,
+    Iris,
+    /// Une seule encre (clair sur fond sombre : `ENCRE_SOMBRE` ; sombre sur fond clair : `ENCRE_CLAIRE`).
+    Mono([u8; 3]),
 }
 
-fn jetons(d: &str) -> Vec<Jeton> {
-    let c: Vec<char> = d.chars().collect();
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < c.len() {
-        if c[i].is_ascii_alphabetic() {
-            out.push(Jeton::Cmd(c[i]));
-            i += 1;
-        } else if c[i].is_ascii_digit() || c[i] == '-' || c[i] == '.' {
-            let debut = i;
-            i += 1;
-            let mut point = c[debut] == '.';
-            while i < c.len() && (c[i].is_ascii_digit() || (c[i] == '.' && !point)) {
-                point |= c[i] == '.';
-                i += 1;
-            }
-            out.push(Jeton::Nombre(c[debut..i].iter().collect::<String>().parse().expect("nombre du chemin")));
-        } else {
-            i += 1;
-        }
-    }
-    out
-}
-
-/// Le chemin décrit par `d`. Les données sont celles du logo : une commande inconnue est une
-/// faute de programme, pas d'entrée utilisateur.
-pub fn chemin(d: &str) -> Path {
-    let t = jetons(d);
+fn polygone(points: &[(f32, f32)]) -> Path {
     let mut pb = PathBuilder::new();
-    let (mut x, mut y, mut debut_x, mut debut_y) = (0.0_f32, 0.0_f32, 0.0_f32, 0.0_f32);
-    let mut cmd = ' ';
-    let mut i = 0;
-    let nombres = |i: &mut usize, n: usize| -> Vec<f32> {
-        (0..n)
-            .map(|_| {
-                let v = match t.get(*i) {
-                    Some(Jeton::Nombre(v)) => *v,
-                    _ => panic!("chemin SVG incomplet : {d}"),
-                };
-                *i += 1;
-                v
-            })
-            .collect()
-    };
-    while i < t.len() {
-        if let Jeton::Cmd(c) = t[i] {
-            cmd = c;
-            i += 1;
-            if c == 'Z' {
-                pb.close();
-                x = debut_x;
-                y = debut_y;
-                continue;
-            }
-        }
-        match cmd {
-            'M' => {
-                let v = nombres(&mut i, 2);
-                (x, y, debut_x, debut_y) = (v[0], v[1], v[0], v[1]);
-                pb.move_to(x, y);
-                cmd = 'L'; // les paires suivantes sont des lignes
-            }
-            'L' => {
-                let v = nombres(&mut i, 2);
-                (x, y) = (v[0], v[1]);
-                pb.line_to(x, y);
-            }
-            'H' => {
-                x = nombres(&mut i, 1)[0];
-                pb.line_to(x, y);
-            }
-            'V' => {
-                y = nombres(&mut i, 1)[0];
-                pb.line_to(x, y);
-            }
-            'Q' => {
-                let v = nombres(&mut i, 4);
-                pb.quad_to(v[0], v[1], v[2], v[3]);
-                (x, y) = (v[2], v[3]);
-            }
-            'A' => {
-                let v = nombres(&mut i, 7);
-                arc(&mut pb, (x, y), (v[0], v[1]), v[2], v[3] != 0.0, v[4] != 0.0, (v[5], v[6]));
-                (x, y) = (v[5], v[6]);
-            }
-            autre => panic!("commande de chemin SVG non prise en charge : {autre}"),
-        }
+    pb.move_to(points[0].0, points[0].1);
+    for p in &points[1..] {
+        pb.line_to(p.0, p.1);
     }
-    pb.finish().expect("chemin du logo non vide")
+    pb.close();
+    pb.finish().expect("polygone du logo")
 }
 
-/// Arc elliptique SVG (annexe F.6 de la spécification) en courbes de Bézier cubiques, une par
-/// quart de tour au plus.
-fn arc(pb: &mut PathBuilder, (x1, y1): (f32, f32), (rx, ry): (f32, f32), degres: f32, grand: bool, sens: bool, (x2, y2): (f32, f32)) {
-    let (mut rx, mut ry) = (rx.abs() as f64, ry.abs() as f64);
-    if rx == 0.0 || ry == 0.0 || (x1 == x2 && y1 == y2) {
-        pb.line_to(x2, y2);
-        return;
+fn peinture(c: [u8; 3], alpha: f32) -> Paint<'static> {
+    let mut p = Paint::default();
+    p.set_color(Color::from_rgba8(c[0], c[1], c[2], (alpha.clamp(0.0, 1.0) * 255.0).round() as u8));
+    p.anti_alias = true;
+    p
+}
+
+/// Pierre irisée : dégradé linéaire (12, 12) → (54, 52), réfléchi, jade / lilas / rose / jaune pâle.
+fn degrade_iris(debut: (f32, f32), fin: (f32, f32), alpha: f32) -> Paint<'static> {
+    let a = (alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let arret = |p: f32, c: [u8; 3]| GradientStop::new(p, Color::from_rgba8(c[0], c[1], c[2], a));
+    let shader = LinearGradient::new(
+        Point::from_xy(debut.0, debut.1),
+        Point::from_xy(fin.0, fin.1),
+        vec![arret(0.0, JADE), arret(0.38, IRIS_LILAS), arret(0.66, IRIS_ROSE), arret(1.0, IRIS_PALE)],
+        SpreadMode::Reflect,
+        Transform::identity(),
+    )
+    .expect("dégradé du logo");
+    let mut p = Paint::default();
+    p.shader = shader;
+    p.anti_alias = true;
+    p
+}
+
+// ---------------------------------------------------------------------------------------------
+// Animation d'ouverture (jouée une fois sur le Joyau irisé, puis figée) : 1,15 s.
+
+/// Durée de l'animation d'ouverture, en secondes.
+pub const DUREE_ANIMATION: f32 = 1.15;
+
+/// L'état des deux étoiles à un instant de l'animation. Les angles sont ceux du livre de marque (CSS : -180° est la
+/// pose de repos de l'étoile).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EtatAnim {
+    pub etoile_angle: f32,
+    pub etoile_echelle: f32,
+    pub seconde_angle: f32,
+    pub seconde_echelle: f32,
+    pub seconde_opacite: f32,
+}
+
+/// Courbe de Bézier cubique CSS `cubic-bezier(x1, y1, x2, y2)` : la progression pour un avancement `t` (0 à 1).
+pub fn bezier(x1: f32, y1: f32, x2: f32, y2: f32, t: f32) -> f32 {
+    let t = t.clamp(0.0, 1.0);
+    let coord = |a: f32, b: f32, u: f32| 3.0 * a * u * (1.0 - u) * (1.0 - u) + 3.0 * b * u * u * (1.0 - u) + u * u * u;
+    let (mut bas, mut haut) = (0.0_f32, 1.0_f32);
+    let mut u = t;
+    for _ in 0..32 {
+        let x = coord(x1, x2, u);
+        if (x - t).abs() < 1e-5 {
+            break;
+        }
+        if x < t {
+            bas = u;
+        } else {
+            haut = u;
+        }
+        u = (bas + haut) / 2.0;
     }
-    let (x1, y1, x2, y2) = (x1 as f64, y1 as f64, x2 as f64, y2 as f64);
-    let phi = (degres as f64).to_radians();
-    let (cos, sin) = (phi.cos(), phi.sin());
-    let (dx, dy) = ((x1 - x2) / 2.0, (y1 - y2) / 2.0);
-    let (x1p, y1p) = (cos * dx + sin * dy, -sin * dx + cos * dy);
-    let trop = x1p * x1p / (rx * rx) + y1p * y1p / (ry * ry);
-    if trop > 1.0 {
-        rx *= trop.sqrt();
-        ry *= trop.sqrt();
+    coord(y1, y2, u)
+}
+
+/// Une valeur le long de segments de clés : `(part, valeur)` croissants, `facile[k]` est la courbe du segment k.
+fn le_long(p: f32, cles: &[(f32, f32)], faciles: &[(f32, f32, f32, f32)]) -> f32 {
+    for k in 0..cles.len() - 1 {
+        let ((p0, v0), (p1, v1)) = (cles[k], cles[k + 1]);
+        if p <= p1 {
+            let t = if p1 > p0 { (p - p0) / (p1 - p0) } else { 1.0 };
+            let (a, b, c, d) = faciles[k];
+            return v0 + (v1 - v0) * bezier(a, b, c, d, t);
+        }
     }
-    let num = rx * rx * ry * ry - rx * rx * y1p * y1p - ry * ry * x1p * x1p;
-    let den = rx * rx * y1p * y1p + ry * ry * x1p * x1p;
-    let coef = if grand == sens { -1.0 } else { 1.0 } * (num / den).max(0.0).sqrt();
-    let (cxp, cyp) = (coef * rx * y1p / ry, -coef * ry * x1p / rx);
-    let (cx, cy) = (cos * cxp - sin * cyp + (x1 + x2) / 2.0, sin * cxp + cos * cyp + (y1 + y2) / 2.0);
-    let theta1 = ((y1p - cyp) / ry).atan2((x1p - cxp) / rx);
-    let theta2 = ((-y1p - cyp) / ry).atan2((-x1p - cxp) / rx);
-    let mut delta = theta2 - theta1;
-    if sens && delta < 0.0 {
-        delta += std::f64::consts::TAU;
-    } else if !sens && delta > 0.0 {
-        delta -= std::f64::consts::TAU;
-    }
-    let n = (delta.abs() / std::f64::consts::FRAC_PI_2).ceil().max(1.0);
-    let pas = delta / n;
-    let k = 4.0 / 3.0 * (pas / 4.0).tan();
-    let point = |u: f64, v: f64| ((cx + rx * cos * u - ry * sin * v) as f32, (cy + rx * sin * u + ry * cos * v) as f32);
-    for j in 0..n as usize {
-        let (a, b) = (theta1 + pas * j as f64, theta1 + pas * (j + 1) as f64);
-        let (c1x, c1y) = point(a.cos() - k * a.sin(), a.sin() + k * a.cos());
-        let (c2x, c2y) = point(b.cos() + k * b.sin(), b.sin() - k * b.cos());
-        let (ex, ey) = if j + 1 == n as usize { (x2 as f32, y2 as f32) } else { point(b.cos(), b.sin()) };
-        pb.cubic_to(c1x, c1y, c2x, c2y, ex, ey);
-    }
+    cles[cles.len() - 1].1
+}
+
+/// L'état de l'animation à `t` secondes (au-delà de `DUREE_ANIMATION` : l'état final, qui est la pose de repos).
+pub fn etat_animation(t: f32) -> EtatAnim {
+    let p = (t / DUREE_ANIMATION).clamp(0.0, 1.0);
+    let premiere = (0.15, 0.6, 0.3, 1.0);
+    let autres = (0.45, 0.0, 0.25, 1.0);
+    let etoile_angle = le_long(p, &[(0.0, -200.0), (0.34, -180.0), (0.72, -180.0), (1.0, -180.0)], &[premiere, autres, autres]);
+    let etoile_echelle = le_long(p, &[(0.0, 0.0), (0.34, 1.25), (0.72, 0.96), (1.0, 1.0)], &[premiere, autres, autres]);
+    let seconde_angle = le_long(p, &[(0.0, -155.0), (0.34, -135.0), (0.8, -135.0), (1.0, -135.0)], &[premiere, autres, autres]);
+    let seconde_echelle = le_long(p, &[(0.0, 0.0), (0.34, 1.15), (0.8, 0.45), (1.0, 0.45)], &[premiere, autres, autres]);
+    let seconde_opacite = le_long(p, &[(0.0, 0.9), (0.34, 0.9), (0.8, 0.0), (1.0, 0.0)], &[premiere, autres, autres]);
+    EtatAnim { etoile_angle, etoile_echelle, seconde_angle, seconde_echelle, seconde_opacite }
+}
+
+/// Le Joyau au repos vu comme un état d'animation : l'étoile à -180° à l'échelle 1, la seconde étoile invisible.
+pub fn etat_repos() -> EtatAnim {
+    etat_animation(DUREE_ANIMATION)
 }
 
 // ---------------------------------------------------------------------------------------------
 // Dessin.
 
-fn peinture(c: [u8; 3]) -> Paint<'static> {
-    let mut p = Paint::default();
-    p.set_color_rgba8(c[0], c[1], c[2], 255);
-    p.anti_alias = true;
-    p
+/// Transformation d'une étoile autour du centre (32, 32).
+fn autour_du_centre(global: Transform, degres: f32, echelle: f32) -> Transform {
+    global.pre_translate(32.0, 32.0).pre_rotate(degres).pre_scale(echelle, echelle).pre_translate(-32.0, -32.0)
 }
 
-fn rect(r: [f32; 4]) -> Option<Path> {
-    Rect::from_xywh(r[0], r[1], r[2], r[3]).map(PathBuilder::from_rect)
-}
-
-/// Dessine le logo (sans fond) dans `pm`, `global` envoyant les unités du SVG sur les pixels.
-fn dessiner_logo(pm: &mut Pixmap, global: Transform, v: Variante) {
-    let c = v.couleurs();
-    let encre = peinture(c.logo);
-    for r in RECTS {
-        if let Some(p) = rect(r) {
-            pm.fill_path(&p, &encre, FillRule::Winding, global, None);
+/// Dessine le Joyau (sans fond) dans `pm`, `global` envoyant la grille de 64 sur les pixels. `anim` : l'état de
+/// l'animation d'ouverture (variante irisée).
+pub fn dessiner(pm: &mut Pixmap, global: Transform, v: Joyau, anim: Option<&EtatAnim>) {
+    match v {
+        Joyau::Mono(encre) => {
+            // Pair-impair de la pierre et de l'étoile : là où elles se recouvrent, c'est vide ; la facette n'existe pas.
+            let mut pb = PathBuilder::new();
+            for poly in [&PIERRE[..], &ETOILE[..]] {
+                pb.move_to(poly[0].0, poly[0].1);
+                for p in &poly[1..] {
+                    pb.line_to(p.0, p.1);
+                }
+                pb.close();
+            }
+            pm.fill_path(&pb.finish().expect("mono"), &peinture(encre, 1.0), FillRule::EvenOdd, global, None);
+        }
+        Joyau::Jade | Joyau::JadePetit | Joyau::Iris => {
+            let forme_etoile: &[(f32, f32)] = if v == Joyau::JadePetit { &ETOILE_PETITE } else { &ETOILE };
+            let (pierre, facette) = if v == Joyau::Iris {
+                // (La facette basse reste #0E7C7B à 42 %, au repos comme pendant l'animation.)
+                (degrade_iris((12.0, 12.0), (54.0, 52.0), 1.0), peinture(JADE_PROFOND, 0.42))
+            } else {
+                (peinture(JADE, 1.0), peinture(JADE_PROFOND, 1.0))
+            };
+            pm.fill_path(&polygone(&PIERRE), &pierre, FillRule::Winding, global, None);
+            pm.fill_path(&polygone(&FACETTE), &facette, FillRule::Winding, global, None);
+            let blanc = peinture(ETOILE_BLANCHE, 1.0);
+            match anim {
+                None => pm.fill_path(&polygone(forme_etoile), &blanc, FillRule::Winding, global, None),
+                Some(a) => {
+                    // (L'étoile à -180° est sa pose de repos : on tourne depuis le repos, de `angle + 180`.)
+                    if a.etoile_echelle > 0.001 {
+                        pm.fill_path(&polygone(forme_etoile), &blanc, FillRule::Winding, autour_du_centre(global, a.etoile_angle + 180.0, a.etoile_echelle), None);
+                    }
+                    if a.seconde_echelle > 0.001 && a.seconde_opacite > 0.002 {
+                        pm.fill_path(&polygone(&ETOILE_SECONDE), &peinture(ETOILE_BLANCHE, a.seconde_opacite), FillRule::Winding, autour_du_centre(global, a.seconde_angle, a.seconde_echelle), None);
+                    }
+                }
+            }
         }
     }
-    pm.fill_path(&chemin(S_GLYPHE), &encre, FillRule::Winding, global, None);
-    pm.fill_path(&chemin(O_ANNEAU), &encre, FillRule::EvenOdd, global, None);
-    let trait_ = Stroke { width: 2.0, line_join: LineJoin::Bevel, ..Stroke::default() };
-    for (couleur, traits) in [(c.logo, &FRAME[..]), (c.logo, &THE[..]), (c.creux, &STORY[..])] {
-        let p = peinture(couleur);
-        for &(tx, ty, d) in traits {
-            pm.stroke_path(&chemin(d), &p, &trait_, global.pre_translate(tx, ty), None);
-        }
-    }
 }
 
-/// Le logo seul (fond transparent), `largeur` pixels de large ; la hauteur suit le cadre du logo.
-/// Pixels RVBA **prémultipliés** (la forme qu'attend `ColorImage::from_rgba_premultiplied`).
-/// Renvoie (largeur, hauteur, pixels).
-pub fn image(largeur: u32, v: Variante) -> (u32, u32, Vec<u8>) {
-    let largeur = largeur.max(8);
-    let hauteur = ((largeur as f32 * VUE_H / VUE_L).round() as u32).max(1);
-    let mut pm = Pixmap::new(largeur, hauteur).expect("taille du logo");
-    let s = largeur as f32 / VUE_L;
-    dessiner_logo(&mut pm, Transform::from_row(s, 0.0, 0.0, s, -VUE_X * s, -VUE_Y * s), v);
-    (largeur, hauteur, pm.take())
+/// Le Joyau seul (fond transparent), carré de `taille` pixels. Pixels RVBA **prémultipliés** (la forme qu'attend
+/// `ColorImage::from_rgba_premultiplied`).
+pub fn image(taille: u32, v: Joyau, anim: Option<&EtatAnim>) -> Vec<u8> {
+    let taille = taille.max(8);
+    // Sous 24 pixels, le Joyau jade est le petit.
+    let v = if v == Joyau::Jade && taille < PETIT_SOUS { Joyau::JadePetit } else { v };
+    let mut pm = Pixmap::new(taille, taille).expect("taille du logo");
+    let s = taille as f32 / GRILLE;
+    dessiner(&mut pm, Transform::from_scale(s, s), v, anim);
+    pm.take()
 }
 
-/// Cadre du petit logotype (le mot « SHOT » et ses deux angles, sans la devise), en unités du SVG :
-/// de l'angle haut gauche (242,6 ; 204) au coin bas droit de l'angle bas droit (700 ; 454).
-pub const LOGOTYPE_X: f32 = 242.6;
-pub const LOGOTYPE_Y: f32 = 204.0;
-pub const LOGOTYPE_L: f32 = 457.4;
-pub const LOGOTYPE_H: f32 = 250.0;
-
-/// Le petit logotype : « SHOT » avec ses deux angles, sans « FRAME THE STORY », `hauteur` pixels de
-/// haut ; la largeur suit le cadre. Les lettres sont de la couleur de la variante ; les deux angles,
-/// de `angles` si elle est donnée (l'orange de l'identité), sinon des lettres. Fond transparent,
-/// pixels RVBA **prémultipliés**. Renvoie (largeur, hauteur, pixels).
-pub fn logotype(hauteur: u32, v: Variante, angles: Option<[u8; 3]>) -> (u32, u32, Vec<u8>) {
-    let hauteur = hauteur.max(8);
-    let largeur = ((hauteur as f32 * LOGOTYPE_L / LOGOTYPE_H).round() as u32).max(1);
-    let mut pm = Pixmap::new(largeur, hauteur).expect("taille du logotype");
-    let s = hauteur as f32 / LOGOTYPE_H;
-    let global = Transform::from_row(s, 0.0, 0.0, s, -LOGOTYPE_X * s, -LOGOTYPE_Y * s);
-    let c = v.couleurs();
-    let (lettres, coins) = (peinture(c.logo), peinture(angles.unwrap_or(c.logo)));
-    // (Les rectangles 0 et 1 sont l'angle haut gauche, 7 et 8 l'angle bas droit.)
-    for (i, r) in RECTS.iter().enumerate() {
-        if let Some(p) = rect(*r) {
-            pm.fill_path(&p, if matches!(i, 0 | 1 | 7 | 8) { &coins } else { &lettres }, FillRule::Winding, global, None);
-        }
-    }
-    pm.fill_path(&chemin(S_GLYPHE), &lettres, FillRule::Winding, global, None);
-    pm.fill_path(&chemin(O_ANNEAU), &lettres, FillRule::EvenOdd, global, None);
-    (largeur, hauteur, pm.take())
+/// Un rectangle arrondi (courbes de Bézier cubiques).
+fn rect_arrondi(x: f32, y: f32, l: f32, h: f32, r: f32) -> Path {
+    let k = r * 0.552_284_75;
+    let (d, b) = (x + l, y + h);
+    let mut pb = PathBuilder::new();
+    pb.move_to(x + r, y);
+    pb.line_to(d - r, y);
+    pb.cubic_to(d - r + k, y, d, y + r - k, d, y + r);
+    pb.line_to(d, b - r);
+    pb.cubic_to(d, b - r + k, d - r + k, b, d - r, b);
+    pb.line_to(x + r, b);
+    pb.cubic_to(x + r - k, b, x, b - r + k, x, b - r);
+    pb.line_to(x, y + r);
+    pb.cubic_to(x, y + r - k, x + r - k, y, x + r, y);
+    pb.close();
+    pb.finish().expect("rectangle arrondi")
 }
 
-/// L'icône de l'application, carrée, de `taille` pixels, en RVBA **non prémultipliés** (`IconData`,
-/// `.ico`) : la variante **orange** de la charte (l'orange est l'identité du logiciel, Anthony,
-/// 2026-10-28). Elle sert à l'exécutable, à la barre des tâches et à la fenêtre.
+/// L'icône de l'application, carrée, de `taille` pixels, en RVBA **non prémultipliés** (`IconData`, `.ico`) : carré
+/// arrondi `SOL` (rayon 14 sur 64, soit 22 %), filet intérieur `CANEVAS`, puis le Joyau jade à 80 %, centré.
 pub fn icone(taille: u32) -> Vec<u8> {
-    icone_en(taille, ORANGE_SHOT, NOIR_CINEMA)
-}
-
-/// La variante sombre de l'icône (carré noir cinéma, « S » et angles blanc cassé) : disponible,
-/// pas utilisée pour l'instant.
-#[allow(dead_code)]
-pub fn icone_sombre(taille: u32) -> Vec<u8> {
-    icone_en(taille, NOIR_CINEMA, BLANC_CASSE)
-}
-
-/// Une icône : un carré arrondi de la couleur `fond`, le « S » du logo entre deux angles de la couleur
-/// `encre` (haut gauche et bas droit, ceux du logo).
-///
-/// Le choix : un mot entier ne se lit plus à 16 ou 32 pixels ; le « S » et ses deux angles, si, et
-/// c'est la silhouette la plus reconnaissable du logo. Coins arrondis à 22 % du côté (la planche).
-fn icone_en(taille: u32, fond: [u8; 3], encre: [u8; 3]) -> Vec<u8> {
     let taille = taille.max(8);
     let mut pm = Pixmap::new(taille, taille).expect("taille de l'icône");
-    let g = taille as f32 / 100.0;
-    // Fond : carré arrondi (rayon 22 sur 100).
-    let forme = chemin("M22 0H78A22 22 0 0 1 100 22V78A22 22 0 0 1 78 100H22A22 22 0 0 1 0 78V22A22 22 0 0 1 22 0Z");
-    pm.fill_path(&forme, &peinture(fond), FillRule::Winding, Transform::from_scale(g, g), None);
-    let encre = peinture(encre);
-    // Angles du logo (barre de 8, bras de 32), à 12 du bord.
-    for r in [[12.0, 12.0, 32.0, 8.0], [12.0, 12.0, 8.0, 32.0], [80.0, 56.0, 8.0, 32.0], [56.0, 80.0, 32.0, 8.0]] {
-        if let Some(p) = rect(r) {
-            pm.fill_path(&p, &encre, FillRule::Winding, Transform::from_scale(g, g), None);
-        }
-    }
-    // Le « S » : 52 de haut (sur 100), centré. Il occupe x 277,6..366 et y 240..420 dans le SVG.
-    let k = 52.0 / 180.0;
-    let (cx, cy) = ((277.6 + 366.0) / 2.0, (240.0 + 420.0) / 2.0);
-    let placer = Transform::from_row(k, 0.0, 0.0, k, 50.0 - cx * k, 50.0 - cy * k).post_scale(g, g);
-    pm.fill_path(&chemin(S_GLYPHE), &encre, FillRule::Winding, placer, None);
+    let s = taille as f32 / GRILLE;
+    let g = Transform::from_scale(s, s);
+    pm.fill_path(&rect_arrondi(0.0, 0.0, 64.0, 64.0, 14.0), &peinture(SOL, 1.0), FillRule::Winding, g, None);
+    let filet = Stroke { width: 1.0, ..Stroke::default() };
+    pm.stroke_path(&rect_arrondi(0.5, 0.5, 63.0, 63.0, 13.5), &peinture(CANEVAS, 1.0), &filet, g, None);
+    // (À 16 pixels, le petit Joyau.)
+    let joyau = if taille < PETIT_SOUS { Joyau::JadePetit } else { Joyau::Jade };
+    dessiner(&mut pm, g.pre_translate(6.4, 6.4).pre_scale(0.8, 0.8), joyau, None);
     // Pixmap prémultiplié -> non prémultiplié.
     let mut px = pm.take();
     for p in px.chunks_exact_mut(4) {

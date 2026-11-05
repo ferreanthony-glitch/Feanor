@@ -237,7 +237,7 @@ impl App {
         let mut back = Vec::new();
         for i in 0..self.detached.len() {
             let d = self.detached[i].clone();
-            let title = format!("SHOT — {}", d.panneau.name());
+            let title = format!("FEANOR — {}", d.panneau.name());
             let mut builder = egui::ViewportBuilder::default().with_title(title).with_min_inner_size([180.0, 120.0]);
             if d.largeur > 0.0 && d.hauteur > 0.0 {
                 builder = builder.with_inner_size([d.largeur, d.hauteur]).with_position([d.x, d.y]);

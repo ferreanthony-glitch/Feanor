@@ -1,7 +1,7 @@
-# SHOT — Frame the story
+# FEANOR — Forge your story
 
-*Anciennement Pelure.* Le logiciel s'appelle SHOT depuis le 2026-10-18 ; son logo est dans
-`assets/shot-logo.svg`.
+*Anciennement Pelure.* Le logiciel s'appelle FEANOR depuis le 2026-10-18 ; son logo est dans
+`assets/feanor-viseur-*.svg` (le Joyau). « SHOT » dans les commentaires du code et dans les anciens documents (`docs/`, `suivi/`) veut dire FEANOR : voir `docs/INTERFACE.md`, partie 96.
 
 Logiciel d'animation 2D écrit en Rust avec egui : storyboard en séquences et plans (chaque plan,
 une timeline de calques façon TVPaint, ses images de storyboard marquées), animation image par
@@ -22,14 +22,14 @@ dessin, pas l'ancien nom du logiciel.
 cargo run --release
 ```
 
-L'exécutable est ensuite dans `target\release\shot.exe`. On peut lui passer un projet :
-`shot.exe "C:\Films\Bus\Bus.shot"` (un ancien `Bus.pelure` aussi). SHOT n'associe pas lui-même
+L'exécutable est ensuite dans `target\release\feanor.exe`. On peut lui passer un projet :
+`feanor.exe "C:\Films\Bus\Bus.shot"` (un ancien `Bus.pelure` aussi). FEANOR n'associe pas lui-même
 l'extension `.shot` à Windows : ce sera le travail d'un futur installateur (en attendant, « Ouvrir
-avec » sur un `.shot` et choisir `shot.exe`).
+avec » sur un `.shot` et choisir `feanor.exe`).
 
 Les réglages, raccourcis, brosses importées, rapports d'erreur et copies de secours sont dans
 `%APPDATA%\SHOT` et `%LOCALAPPDATA%\SHOT`. Au premier lancement, ce que l'ancien nom avait rangé
-dans `...\Pelure` y est copié (jamais déplacé ni supprimé) s'il n'y a pas encore de dossier SHOT.
+dans `...\Pelure` y est copié (jamais déplacé ni supprimé) s'il n'y a pas encore de dossier FEANOR.
 
 ## Deux niveaux : storyboard et animation
 
@@ -454,7 +454,7 @@ on les coche et décoche, le dessin reste tel quel).
     couleurs du début à la fin de chaque trait, ou **sur tout le dessin dans l'ordre des traits** ; mélange avec la couleur
     d'origine, **défilement** animable (en % du dégradé par image), boucle. La forme et la texture ne changent pas.
   - **Changer de plume** (icône plume, vectoriel) : les traits sont redessinés avec **un autre réglage de pinceau** de la
-    bibliothèque (encre, feutre, fusain, craie, gouache, un réglage importé…) ou la **plume calligraphique** de SHOT, en
+    bibliothèque (encre, feutre, fusain, craie, gouache, un réglage importé…) ou la **plume calligraphique** de FEANOR, en
     gardant leur tracé et leur pression ; taille de la plume en %. **Rien n'est modifié** : c'est un effet. Le bouton
     **« Appliquer pour de bon »** (et l'action `fx.plume_appliquer`) remplace vraiment les traits de tous les dessins du
     calque, en **une étape d'annulation nommée** « Plume appliquée pour de bon », et retire l'effet. Un trait sans appui
@@ -705,7 +705,7 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   gomme), Mes brosses, puis un dossier par fichier importé (les importés démarrent repliés). Clic :
   choisir ; clic droit : renommer, dupliquer, remplacer, supprimer. En bas, trois icônes :
   importer des pinceaux, nouvelle brosse (garde le réglage courant dans Mes brosses), supprimer la
-  brosse choisie (celles de SHOT restent). Les **réglages du pinceau** sont dans le panneau
+  brosse choisie (celles de FEANOR restent). Les **réglages du pinceau** sont dans le panneau
   **Réglages** de l'outil (pinceau, crayon, gomme) : en premier la **taille** en grand curseur et
   en champ px (la même valeur que les touches ^ et $), l'opacité, le nom du réglage, l'aperçu du
   trait courant, puis à gauche les catégories (Forme de la pointe, Taille et appui, Dispersion,
@@ -901,7 +901,7 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
   posée. Un ancien fichier de réglages garde sa disposition unique comme celle du Storyboard.
   Les quatre dispositions d'avant (Standard, Dessin, Timeline, Vue d'ensemble) s'appliquent à
   l'espace en cours ; « Enregistrer la disposition… » garde la tienne sous un nom (panneaux aimantés
-  et flottants compris). Affichage > Panneaux masque ou affiche chaque panneau. SHOT rouvre dans
+  et flottants compris). Affichage > Panneaux masque ou affiche chaque panneau. FEANOR rouvre dans
   l'espace du côté storyboard et la disposition de la dernière fois.
 - **Barres minces et « Plus… »** : la barre de commandes du haut ne garde que 9 icônes (Nouveau,
   Ouvrir, Enregistrer, Exporter ; Annuler, Rétablir ; Couper, Copier, Coller) ; la barre du montage en
@@ -933,7 +933,7 @@ aussi être lâchée sur la fenêtre) : une référence pour la rotoscopie ou l'
     début de chaque plan, puis ses marques d'image), avec titre, durée, action, dialogue et notes ;
     une nouvelle page à chaque séquence.
   - Image courante (PNG), et storyboard en page HTML (une planche par image de storyboard) : comme le film, ils se calculent
-    sur d'autres fils, sans geler SHOT. Le PDF, la page, l'image et le son s'écrivent sous un nom en `.part` puis sont
+    sur d'autres fils, sans geler FEANOR. Le PDF, la page, l'image et le son s'écrivent sous un nom en `.part` puis sont
     renommés : annuler ne détruit jamais un fichier d'avant.
 
 ## Appli compagnon (Tauri)
@@ -954,20 +954,20 @@ Fichier > Raccourcis clavier… (ou F1) liste toutes les commandes. On y trouve 
 mêmes boutons, et l'origine de chaque raccourci en bulle.
 
 Les choix vont dans un fichier personnel (`%APPDATA%\SHOT\keymap.toml`), qui remplace, action par
-action, le fichier par défaut. Une action qui n'existe plus dans SHOT (un ancien fichier) est ignorée, avec une remarque dans la liste F1. On peut aussi l'écrire à la main (« Aide > Modifier le fichier de
+action, le fichier par défaut. Une action qui n'existe plus dans FEANOR (un ancien fichier) est ignorée, avec une remarque dans la liste F1. On peut aussi l'écrire à la main (« Aide > Modifier le fichier de
 raccourcis à la main », puis « Recharger »). Détails et choix pour le clavier AZERTY : `docs/INTERFACE.md`, 6.2.
 
 Documentation technique : `docs/ARCHITECTURE.md` ; avancement : `docs/ROADMAP.md` ; mesures et
 leviers de performance (superposition « Performance », banc `perf_tests.rs`, diagnostic des
 performances) : `docs/PERFORMANCE.md`.
 
-**Les vignettes ne ralentissent plus SHOT.** Les vignettes du montage et de la planche, et les
+**Les vignettes ne ralentissent plus FEANOR.** Les vignettes du montage et de la planche, et les
 miniatures des dessins dans la timeline et le panneau Calques, se composent sur des fils de fond : en
 défilant un montage de 600 plans ou en sautant de plan en plan, l'interface ne compose plus rien (chaque
 image d'écran passe de 7–11 ms à 2–3 ms). Une vignette qui change garde son ancienne image jusqu'à
 l'arrivée de la neuve ; celles qu'on voit passent d'abord, celles qu'on a quittées sont abandonnées.
 
-**Enregistrer ne fige plus SHOT.** `Ctrl+S` (et Enregistrer sous) écrit le projet sur un autre fil :
+**Enregistrer ne fige plus FEANOR.** `Ctrl+S` (et Enregistrer sous) écrit le projet sur un autre fil :
 la barre d'état dit « Enregistrement… n / N », le point • du titre reste jusqu'à la fin, et ce que tu
 modifies pendant l'écriture reste « non enregistré ». Quitter, Fermer, Nouveau et Ouvrir attendent la
 fin de l'écriture (une petite fenêtre montre l'avancement si elle dure) ; si l'enregistrement échoue
@@ -975,7 +975,7 @@ fin de l'écriture (une petite fenêtre montre l'avancement si elle dure) ; si l
 
 ## Diagnostic des performances
 
-**Aide > Diagnostic des performances…** (ou `Ctrl+K`, « Diagnostic ») règle SHOT pour la machine sur
+**Aide > Diagnostic des performances…** (ou `Ctrl+K`, « Diagnostic ») règle FEANOR pour la machine sur
 laquelle il tourne, sans rien appliquer sans ton accord :
 
 1. **Il détecte** le processeur (nom, cœurs, AVX2 / FMA / BMI2), la mémoire vive (totale et
@@ -994,7 +994,7 @@ laquelle il tourne, sans rien appliquer sans ton accord :
 Au premier lancement sur une machine sans diagnostic, un petit message le propose une fois
 (« Lancer le diagnostic » / « Plus tard ») ; il ne bloque rien et n'applique rien.
 
-Les onze réglages sont de vrais réglages de SHOT, tous dans **Fichier > Préférences… > Performance**, et jouent tout de suite (sauf le rendu des traits texturés, à l'ouverture d'un projet) :
+Les onze réglages sont de vrais réglages de FEANOR, tous dans **Fichier > Préférences… > Performance**, et jouent tout de suite (sauf le rendu des traits texturés, à l'ouverture d'un projet) :
 effets en aperçu réduit pendant la lecture et les gestes ; traits vectoriels texturés (rendu exact
 aussitôt, rapide jusqu'au repos, ou rapide partout) ; tremblement du trait sans « Animer à l'arrêt » ;
 pelure d'oignon plafonnée ; caches de la carte graphique, des traits et des effets ; fils de calcul ;
@@ -1174,7 +1174,7 @@ sur une toile.
   exportée le montre ; une caméra qui regarde un endroit vide donne du papier.
 - **Pipette** : prend aussi hors de la feuille.
 - **Ajuster à la fenêtre** (bouton de la barre sous le dessin) : cadre toujours la **caméra** (la feuille, pour un nouveau plan), avec
-  un peu d'air autour, et non « tout ce qui est dessiné » (choix de SHOT). Le zoom va de 2 % à 6 400 %, le défilement n'a pas de bord.
+  un peu d'air autour, et non « tout ce qui est dessiné » (choix de FEANOR). Le zoom va de 2 % à 6 400 %, le défilement n'a pas de bord.
 - **Limites connues** (à la feuille seulement) : le pot de peinture (il cherche ses contours sur la feuille ;
   hors d'elle il le dit et ne fait rien) ; les zones bitmap sélectionnées (lasso, baguette) ; les effets de
   calque, les calques d'ajustement, l'aplat sous le trait, les calques de couleur, les déformations
@@ -1200,7 +1200,7 @@ Les menus montrent l'essentiel ; le reste est rangé dans un sous-menu (« Plans
 - Fichier > Exporter… : film, images, image courante, PDF, page HTML, son, et la
   case « PNG sans le papier » ;
 - Fichier > Préférences… : une fenêtre à onglets (voir « Préférences en onglets » ci-dessous) ;
-- Aide > À propos de SHOT… : le logo, la version et le nom d'avant (Échap ferme la fenêtre).
+- Aide > À propos de FEANOR… : le logo, la version et le nom d'avant (Échap ferme la fenêtre).
 - **Labo** (2026-10-20, demande d'Anthony) : les fonctions à l'essai, rangées ensemble — Suggestions sonores…,
   Lire le storyboard (proposer des sons), Propager la peinture du calque…, Enregistrer mes traits (banc
   d'essai du moteur). Le panneau Suggestions sonores n'a plus d'icône dans la barre des panneaux ni
@@ -1245,7 +1245,7 @@ trait, les réglages). La fenêtre rouvre sur le dernier onglet utilisé (clé `
    « Chercher un réglage… » en haut. Elle se redimensionne en tirant un bord, et se déplace par sa barre de titre.
 2. Cliquer chaque onglet : un titre, une phrase, des groupes à titre court ; rien de coupé en largeur, un
    ascenseur à droite seulement si le contenu dépasse (Génération).
-3. Fermer, rouvrir : le dernier onglet est celui ouvert. Quitter SHOT, relancer, rouvrir : encore le même.
+3. Fermer, rouvrir : le dernier onglet est celui ouvert. Quitter FEANOR, relancer, rouvrir : encore le même.
 4. Apparence : changer le thème, modifier une couleur (« Personnalisé »), « Rétablir » ; Dessin : l'opacité du
    passe-partout se voit tout de suite dans la caméra ; Performance : cocher « Animations » coupe les animations.
 5. Chercher « couleur » : les neuf couleurs et l'onglet Équipe (ma couleur) répondent ; « Apparence › » ouvre l'onglet ;
@@ -1330,7 +1330,7 @@ ou le réunit à un autre.
 
 ## Relecture par le réalisateur
 
-Le réalisateur ou le client **n'a pas SHOT**. SHOT lui fabrique une page, il renvoie ses notes, SHOT les pose en
+Le réalisateur ou le client **n'a pas FEANOR**. FEANOR lui fabrique une page, il renvoie ses notes, FEANOR les pose en
 commentaires sur les bons plans. Détail et liste de vérifications : `docs/INTERFACE.md` partie 22.
 
 **Aller** : Fichier > Exporter > « Pour relecture (page HTML) » (`fichier.exporter_relecture`), l'icône « lunettes » de
@@ -1426,13 +1426,13 @@ dans `docs/INTERFACE.md`, partie 24.
   tenant** (pixels dessinés qui se touchent, huit voisins ; un trait fin se vise à quatre pixels d'écran près).
   **Ctrl+Maj + clic** ajoute un autre objet à la sélection, sur n'importe quel calque, ou le retire s'il y était ;
   Ctrl+Maj + lasso ajoute tout ce qu'il prend. Un clic dans le vide désélectionne ; un glisser reste un lasso.
-- **Un pinceau par sorte de calque** : SHOT retient le dernier pinceau utilisé sur un calque vectoriel et le
+- **Un pinceau par sorte de calque** : FEANOR retient le dernier pinceau utilisé sur un calque vectoriel et le
   dernier sur un calque bitmap, et rend celui de la sorte du calque quand on change de calque. Retenus dans les
   réglages de l'application, ils reviennent au lancement suivant.
 - **Enregistrer la brosse** : une icône disquette à côté du nom du réglage (panneau Réglages de l'outil) :
   « Enregistrer dans la brosse » (remplace la brosse d'où vient le réglage ; rétablissable aussitôt),
   « Enregistrer comme nouvelle brosse… » (nom demandé sur place). Retouché à la main, le nom devient
-  « (réglé à la main) d'après « Encre » ». Les brosses de SHOT ne se remplacent pas.
+  « (réglé à la main) d'après « Encre » ». Les brosses de FEANOR ne se remplacent pas.
 - **Réglages repliés** : tout ce qui est sous l'aperçu du trait (catégories et réglages) est replié derrière une
   petite flèche, l'état est retenu. **Fond de l'aperçu** : un gris un peu plus clair que le panneau (les trois
   thèmes), poussé vers le blanc ou le noir si le trait lui ressemble.
@@ -1469,9 +1469,9 @@ au-dessus » y garde la fenêtre devant les autres).
   parcourir : tableau, grille, liste. La recherche trouve les mots du nom ou des étiquettes sans tenir
   compte des accents.
 - **Couleur** : Alt+clic (ou Alt+glisser) sur une référence prend la couleur vue sous la souris et en
-  fait la couleur courante de SHOT, comme la pipette du dessin (en gris, la valeur du gris).
+  fait la couleur courante de FEANOR, comme la pipette du dessin (en gris, la valeur du gris).
 - **Vidéo** : lecture / pause, image par image, curseur, entrée et sortie, boucle, vitesse ; « suivre
-  la tête de lecture » montre l'image de la vidéo qui tombe sur l'image courante de SHOT, avec un
+  la tête de lecture » montre l'image de la vidéo qui tombe sur l'image courante de FEANOR, avec un
   décalage en images.
 - **Plans** : « Lier au plan courant » (une référence peut aller avec plusieurs plans) ; le bouton en
   entonnoir ne montre que les références du plan courant (ce qu'on ajoute alors est lié d'office).
@@ -1528,7 +1528,7 @@ qu'il reste du contenu caché de ce côté).
   menu pour leur en donner une, ou Ctrl+K.
 - À vérifier face aux logiciels de montage : la touche Alt pour le roll et le
   glisser, la coupe « au trait de la tête de lecture » (l'image sous la tête sort de la fin), et le
-  premier dessin tenu quand on rallonge au-delà de la réserve. Ce sont des choix de SHOT.
+  premier dessin tenu quand on rallonge au-delà de la réserve. Ce sont des choix de FEANOR.
 - Enregistré dans `rognages.json`, à côté du manifeste (le format du projet ne change pas ; une
   version qui ne le connaît pas ne voit que les plans, et peut effacer les dessins cachés). Les
   noms d'instance et marques de couleur d'un dessin caché ne sont pas gardés à l'enregistrement.
@@ -1542,7 +1542,7 @@ et les regarder l'une contre l'autre. Rien de tout cela ne change le format du p
 version est exactement celui d'avant (aucun fichier, aucun dossier, aucun calcul de plus).
 
 **Marquer un envoi** : barre du montage > « Plus… » > « Marquer un envoi… » (icône avion en papier), menu Storyboard >
-Envois, ou Ctrl+K `envoi.marquer`. On donne un nom (« v2 au réal ») et une date (celle du jour) ; SHOT note l'état de
+Envois, ou Ctrl+K `envoi.marquer`. On donne un nom (« v2 au réal ») et une date (celle du jour) ; FEANOR note l'état de
 **chaque plan**, garde de quoi le revoir (dossier `versions/`) et enregistre le projet. Un dessin qui n'a pas changé entre
 deux envois n'est écrit qu'une fois. La fenêtre « Envois » (icône `GIT_DIFF` sous « Plus… », `envoi.liste`) liste les
 envois, combien de plans diffèrent de chacun, et permet de retirer un envoi de la liste (ses fichiers restent).
@@ -1711,7 +1711,7 @@ sur la coupe (papillon pour le fondu enchaîné, losange pour le noir ou le blan
   `transition.apercu`, sans touche par défaut (clic droit sur l'entrée d'un menu pour leur en donner une).
 - **Durée** : 12 images par défaut. On tire l'un des bords du nœud, ou on tape la durée dans le menu du
   clic droit sur la transition (avec la sorte et le calage). Clic : la choisit, Suppr : la supprime.
-- **Temps** (choix de SHOT, à confirmer à l'écran) : **le film ne change jamais de durée**. La transition est
+- **Temps** (choix de FEANOR, à confirmer à l'écran) : **le film ne change jamais de durée**. La transition est
   centrée sur la coupe (calage « Finit à la coupe » ou « Commence à la coupe » aussi) et utilise les images
   des deux plans autour d'elle ; l'image qui manque d'un côté est **tenue** (le plan sortant garde sa
   dernière image, l'entrant sa première). Elle ne sort jamais des deux plans qu'elle relie. Les poignées du
@@ -1784,7 +1784,7 @@ sans accord. Le détail, le contrat du serveur local, comment le lancer et ce qu
 - **Trois rôles, un fournisseur chacun** (Fichier > Préférences… > Génération) : lecture (règles, Qwen2.5-VL
   local ou Claude en ligne), bruitages et ambiances (Stable Audio Open local, ElevenLabs ou Stable Audio en ligne), voix
   (Kokoro-82M local, ElevenLabs en ligne). Le **serveur local** (`sidecar/serveur.py`, Python, 127.0.0.1, port
-  réglable) est écrit : SHOT le lance tout seul (sans fenêtre) au premier « Générer » local et l'arrête en se
+  réglable) est écrit : FEANOR le lance tout seul (sans fenêtre) au premier « Générer » local et l'arrête en se
   fermant, ou « Démarrer le serveur local » / « Arrêter » / « Tester » dans les Préférences (dossier `SHOT-modeles`
   et Python réglables ; par défaut `Documents\SHOT\Modèles\SHOT-modeles`, ou l'ancien `Documents\Work\SHOT-modeles` s'il
   est le seul des deux à exister). **Les voix (Kokoro) et la lecture par Qwen2.5-VL marchent** ; les bruitages attendent
@@ -1903,7 +1903,7 @@ ci-dessus sert pour un calque dans un dossier, avec le réglage éteint, sans ca
 (voir `docs/PERFORMANCE.md`).
 
 **Format 27** : champ `calque_effet` d'un calque (`ajustement` ou `incrustation` et ses réglages) et sept sortes d'effets
-de plus ; un projet plus ancien s'ouvre tel quel, SHOT d'avant refuse un projet 27 (le film changerait sans prévenir).
+de plus ; un projet plus ancien s'ouvre tel quel, FEANOR d'avant refuse un projet 27 (le film changerait sans prévenir).
 
 ## Passe d'interface (2026-10-19) : un mot par idée, les mêmes gestes pour les trois sortes de clés
 
@@ -1933,14 +1933,14 @@ Détail et propositions : `docs/INTERFACE.md`.
 
 ## Projets récents
 
-Fichier > Projets récents : les dix derniers projets ouverts ou enregistrés. Au lancement, SHOT
+Fichier > Projets récents : les dix derniers projets ouverts ou enregistrés. Au lancement, FEANOR
 rouvre le dernier — et, si plusieurs onglets étaient ouverts à la fermeture, tous (voir « Onglets de projets »),
 l'onglet affiché à la fin en dernier — sauf si tu en ouvres un autre, ou si une séance interrompue attend
 d'être récupérée ; une case du même menu le désactive.
 
 Sans projet ouvert (au lancement, ou après « Fermer le projet »), un écran d'accueil propose :
 - un nouveau projet ;
-- d'ouvrir un projet SHOT ;
+- d'ouvrir un projet FEANOR ;
 - les projets récents.
 
 Il s'en va dès qu'un projet s'ouvre ou se crée, au premier trait, ou par « Commencer sans projet ».
@@ -2022,12 +2022,12 @@ Détails : `src/adaptation.rs` (la règle), `src/collage.rs` (le parcours), `doc
 
 Plusieurs personnes sur un seul film, par un **dossier partagé** (Dropbox, Google Drive, un serveur ou NAS du studio) : chacun **prend** les plans qu'il travaille, un
 seul à la fois par plan (demande d'Anthony, 2026-10-20 ; conception : `docs/COOPERATION.md`). Aujourd'hui deux personnes, au bureau ou à distance ;
-le stockage est derrière une couture (`Depot`) pour passer plus tard à un serveur SHOT.
+le stockage est derrière une couture (`Depot`) pour passer plus tard à un serveur FEANOR.
 
 - **Partager** : Fichier > **Partager ce projet…** crée le film partagé dans le dossier choisi (le projet ouvert n'est pas touché), puis
-  l'ouvre dans un nouvel onglet. Le fichier `.pelure` du film partagé ne contient que la structure (format 34) : un SHOT sans le
+  l'ouvre dans un nouvel onglet. Le fichier `.pelure` du film partagé ne contient que la structure (format 34) : un FEANOR sans le
   partage le refuse. Un projet classique ne change pas du tout. Ce fichier garde le nom `.pelure` (pas `.shot`, même pour un film
-  partagé après le 2026-10-23) : un équipier qui a une version de SHOT d'avant le cherche sous ce nom.
+  partagé après le 2026-10-23) : un équipier qui a une version de FEANOR d'avant le cherche sous ce nom.
 - **Prendre / rendre** : clic droit sur un plan (montage ou planche) > **Prendre ce plan**, **Prendre la séquence**, **Rendre ce plan**,
   **Prendre le montage**. Sans prise, un plan se regarde, se joue et se **commente** ; le dessin, les calques, la caméra, les textes sont refusés
   avec la raison dans la barre d'état (« Plan 3 est à Léa… »). Le **montage** (ordre, nombre, durée, noms des plans, son, transitions…) demande
@@ -2050,7 +2050,7 @@ le stockage est derrière une couture (`Depot`) pour passer plus tard à un serv
   `equipe.prendre_sequence`, `equipe.rendre_sequence`, `equipe.prendre_montage`, `equipe.rendre_montage`, `equipe.rendre_tout`.
 - **Préférences > Équipe** : mon nom, ma couleur, la durée d'une prise sans nouvelles, la prise automatique du plan libre qu'on modifie, les notifications.
 
-Limites et reste à faire : `docs/COOPERATION.md` (fin) — en particulier le serveur SHOT, l'enregistrement automatique dans le dossier partagé et le
+Limites et reste à faire : `docs/COOPERATION.md` (fin) — en particulier le serveur FEANOR, l'enregistrement automatique dans le dossier partagé et le
 nettoyage du dossier. À regarder à l'écran : la liste de `docs/INTERFACE.md`, partie 27.
 ## Pistes repliables du montage
 
@@ -2068,7 +2068,7 @@ Détail, ce que chaque geste écrit et listes de contrôle à l'écran : `docs/I
 ## Importer un scénario
 
 Fichier > Importer > « Un scénario… » (action `fichier.importer_scenario`, donc aussi dans Ctrl+K) : on
-choisit un fichier, SHOT le lit sur un autre fil (barre d'avancement), puis une fenêtre montre ce qui va
+choisit un fichier, FEANOR le lit sur un autre fil (barre d'avancement), puis une fenêtre montre ce qui va
 être créé avant que rien ne soit touché. Exemple prêt à essayer : `docs/exemples/Le-Reveil.fountain`.
 
 **Formats lus** : Fountain (`.fountain`, `.spmd` : intitulés INT./EXT., personnages en majuscules,
@@ -2077,7 +2077,7 @@ synopsis `=`, centré `> <`, éléments forcés `.` `!` `@` `>` `~`, page de tit
 le reste : mêmes repères déduits de la forme, « NOM : réplique », indentation, numéros de page et
 « (SUITE) » d'un texte copié d'un PDF retirés) ; Final Draft (`.fdx`) ; Word (`.docx`, avec les styles
 d'un logiciel de scénario si le document en a, sinon un paragraphe = une ligne). **Pas lus** : le PDF
-(aucun lecteur de PDF hors connexion dans SHOT ; le message propose d'exporter en `.fountain` ou `.txt`
+(aucun lecteur de PDF hors connexion dans FEANOR ; le message propose d'exporter en `.fountain` ou `.txt`
 ou de copier le texte dans un `.txt`), l'ancien `.doc`, le `.rtf`, l'`.odt`.
 
 **Ce qui est créé** :
@@ -2098,14 +2098,14 @@ ou de copier le texte dans un `.txt`), l'ancien `.doc`, le `.rtf`, l'`.odt`.
   import s'ajoute à la liste. Les voix provisoires la liront.
 
 **Destination** : un nouveau projet (au format du dernier « Nouveau projet », titre et auteur de la page de
-titre ; SHOT propose d'enregistrer le projet ouvert), ou le projet ouvert, à la fin ou après la séquence du
+titre ; FEANOR propose d'enregistrer le projet ouvert), ou le projet ouvert, à la fin ou après la séquence du
 plan courant (une séquence ne se coupe pas). Dans le projet ouvert, l'import est **une seule étape
 d'annulation**, « Importer un scénario » ; un projet encore vierge (un seul plan vide) est remplacé. Les
 derniers choix sont gardés le temps de la séance.
 
 ## Fiabilité
 
-Un filet de sécurité contre « tous les essais passent mais SHOT ne s'ouvre plus » (`docs/FIABILITE.md`) :
+Un filet de sécurité contre « tous les essais passent mais FEANOR ne s'ouvre plus » (`docs/FIABILITE.md`) :
 
 - un **projet d'essai complet** fabriqué par le code (séquences, plans, calques bitmap / vectoriel / vidéo / couleur
   avec griffonnages / dossier, traits texturés avec leur trace, aplat sous le trait, effets à clés, caméra et effet de caméra,
@@ -2119,7 +2119,7 @@ Un filet de sécurité contre « tous les essais passent mais SHOT ne s'ouvre pl
 - un **démarrage** minuté (`SHOT_DEMARRAGE=1` écrit `%LOCALAPPDATA%\SHOT\demarrage.log`) : les pinceaux importés et la
   présence du dernier projet ne retardent plus la première image ;
 - `.\scripts\verifier.ps1 [-Repetitions N]` : tout cela, la suite complète (N fois, pour débusquer un essai
-  intermittent) et le contrôle des avertissements, avec un résumé OK / ÉCHEC. Il ne lance pas `shot.exe`.
+  intermittent) et le contrôle des avertissements, avec un résumé OK / ÉCHEC. Il ne lance pas `feanor.exe`.
 
 ## Plantage
 
@@ -2161,7 +2161,7 @@ version précédente.
 glisser-déposer, ligne de commande). Le premier « Enregistrer » écrit `Bus\Bus.shot`, attend qu'il soit
 sur le disque, puis efface `Bus.pelure` ; la barre d'état le dit. Rien d'autre ne bouge (dossier,
 dessins, sons, fichiers à côté), et les projets récents, la séance rouverte au lancement et les
-copies de secours suivent le nouveau nom. Un plantage entre les deux laisse les deux fichiers : SHOT
+copies de secours suivent le nouveau nom. Un plantage entre les deux laisse les deux fichiers : FEANOR
 ouvre le plus récent (le `.shot`), et l'enregistrement suivant efface l'autre. Un film partagé, lui,
 garde son `.pelure`. Les très anciens fichiers `.pelure` (un seul fichier) s'ouvrent toujours : chaque
 ancien « plan » devient un plan, et le premier « Enregistrer » crée le dossier (avec un `.shot`).
@@ -2223,7 +2223,7 @@ repère 3D. Les réglages sont dans le panneau Réglages ; conception : `docs/ES
 - **Dessiner dessus** : en vue normale, on dessine sur la carte (sa texture), même inclinée : le pinceau suit l'inclinaison.
 - **Anciens projets** : un calque « Fond 3D » (rendu des objets d'avant) est un calque bitmap ordinaire, mêmes pixels ;
   `scenes3d.json`, le champ `repere3d` et les fichiers de `modeles/` ne sont plus lus ni écrits, et jamais effacés.
-- Enregistré : poses et clés dans le projet (**format 35** : un SHOT d'avant refuse ce projet). Détails et limites :
+- Enregistré : poses et clés dans le projet (**format 35** : un FEANOR d'avant refuse ce projet). Détails et limites :
   `docs/ESPACE3D.md`, `docs/INTERFACE.md` (partie « Espace 3D »).
 **Propager une peinture sur une vidéo** (façon EbSynth) : on peint quelques images clés sur un
 calque **bitmap** posé au-dessus d'un calque vidéo (ou d'une animation), puis clic droit sur ce
@@ -2235,7 +2235,7 @@ dit pourquoi. Les autres images suivent le mouvement de la vidéo. Détails :
 **Colorier par zones** (animation « cel » à aplats) : on dessine le trait sur un calque, on pose les
 aplats de couleur dans les zones fermées d'un calque de couleur **sous le trait**, sur quelques clés
 (les images où ce calque est peint) ; menu Animation > « Colorier par zones… » ou clic droit sur le
-calque de trait (montage, timeline, Calques), ou Ctrl+K. SHOT retrouve les mêmes zones d'un dessin
+calque de trait (montage, timeline, Calques), ou Ctrl+K. FEANOR retrouve les mêmes zones d'un dessin
 au suivant (centre, aire, recouvrement, forme, voisines ; une zone peut se couper ou se réunir),
 depuis la clé d'avant et celle d'après (la plus sûre l'emporte), et écrit de **vrais aplats** : des
 formes pleines vectorielles sur un calque vectoriel, des pixels unis sur un calque bitmap, un peu sous

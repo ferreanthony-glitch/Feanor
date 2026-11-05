@@ -292,7 +292,7 @@ impl App {
             egui::RichText::new(
                 "Clic : nouveau texte (sur un texte d'un calque vectoriel : le modifier). Ctrl+Entrée : \
                  poser ; Échap : annuler. Sur un calque vectoriel, le texte reste modifiable (Sélection : \
-                 déplacer, agrandir, tourner). Une police absente du poste est remplacée par celle de SHOT.",
+                 déplacer, agrandir, tourner). Une police absente du poste est remplacée par celle de FEANOR.",
             )
             .small()
             .weak(),

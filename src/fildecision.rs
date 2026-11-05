@@ -85,7 +85,7 @@ pub enum Source {
 impl Source {
     pub fn label(self) -> &'static str {
         match self {
-            Source::Shot => "SHOT",
+            Source::Shot => "FEANOR",
             Source::Relecture => "Relecture",
             Source::Kitsu => "Kitsu",
         }

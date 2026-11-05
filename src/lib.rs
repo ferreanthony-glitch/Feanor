@@ -155,6 +155,12 @@ mod lacher;
 #[cfg(test)]
 mod lacher_tests;
 pub mod logo;
+mod marque;
+mod barre;
+#[cfg(test)]
+mod police_tests;
+#[cfg(test)]
+mod barre_tests;
 #[cfg(test)]
 mod logo_tests;
 mod ajuste;
@@ -1083,7 +1089,7 @@ fn run(renderer: eframe::Renderer, initial: Option<std::path::PathBuf>) -> efram
     demarrage::marque(if accueil { "fenêtre : l'accueil compact" } else { "fenêtre : la taille de travail" });
     // Icône de la fenêtre : le « S » du logo entre deux angles (`logo::icone`).
     let fenetre = eframe::egui::ViewportBuilder::default()
-        .with_title("SHOT")
+        .with_title("FEANOR")
         .with_icon(std::sync::Arc::new(eframe::egui::IconData { rgba: logo::icone(64), width: 64, height: 64 }));
     let fenetre = if accueil {
         fenetre.with_inner_size(accueilfenetre::TAILLE_ACCUEIL).with_resizable(false)
@@ -1110,7 +1116,7 @@ fn run(renderer: eframe::Renderer, initial: Option<std::path::PathBuf>) -> efram
         ..Default::default()
     };
     eframe::run_native(
-        "SHOT",
+        "FEANOR",
         options,
         Box::new(move |cc| {
             // (Fenêtre créée, carte graphique choisie et initialisée par eframe : ce temps-là n'est pas à nous.)

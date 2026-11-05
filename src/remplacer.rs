@@ -173,7 +173,7 @@ impl App {
         let meme_dossier = |chemin: &Path| chemin.parent().is_some_and(|d| est_dans(d, &dir));
         for (i, info) in self.infos_onglets().into_iter().enumerate() {
             if i != self.actif && info.chemin.as_deref().is_some_and(meme_dossier) {
-                return Decision::Refuser(format!("« {nom} » est ouvert dans un autre onglet de SHOT : ferme cet onglet avant de le remplacer, ou choisis un autre nom."));
+                return Decision::Refuser(format!("« {nom} » est ouvert dans un autre onglet de FEANOR : ferme cet onglet avant de le remplacer, ou choisis un autre nom."));
             }
         }
         let date = [Some(manifest.clone()), project::manifeste_jumeau(&manifest)]

@@ -889,7 +889,7 @@ impl App {
                     x.speed = speed.clamp(references::SPEED_MIN, references::SPEED_MAX);
                 }
             }
-            if bulles::etat(ui, c.follow, ph::LINK, "Suivre la tête de lecture", "L'image montrée est celle de la vidéo qui tombe sur l'image courante de SHOT (avec le décalage, la vitesse, l'entrée, la sortie et la boucle).", "").clicked() {
+            if bulles::etat(ui, c.follow, ph::LINK, "Suivre la tête de lecture", "L'image montrée est celle de la vidéo qui tombe sur l'image courante de FEANOR (avec le décalage, la vitesse, l'entrée, la sortie et la boucle).", "").clicked() {
                 let on = !c.follow;
                 self.refs_set_clip(id, "Vidéo : suivre la tête de lecture", |c| c.follow = on);
             }

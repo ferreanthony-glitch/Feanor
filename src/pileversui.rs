@@ -216,7 +216,7 @@ impl App {
                 let fond = if c.actuelle {
                     theme::accent()
                 } else if en_confirmation {
-                    theme::erreur().gamma_multiply(0.3)
+                    theme::controle()
                 } else if survol {
                     theme::controle_survol()
                 } else {
@@ -248,7 +248,7 @@ impl App {
                     let bas = rect.bottom() - 4.0;
                     let oui = Rect::from_min_max(pos2(x, bas - 18.0), pos2(x + 62.0, bas));
                     let non = Rect::from_min_max(pos2(oui.right() + 4.0, bas - 18.0), pos2(oui.right() + 4.0 + 50.0, bas));
-                    if ui.put(oui, egui::Button::new(RichText::new("Supprimer").size(11.0).color(theme::erreur()))).clicked() {
+                    if ui.put(oui, egui::Button::new(RichText::new("Supprimer").size(11.0).color(theme::erreur())).stroke(Stroke::new(1.0_f32, theme::erreur()))).clicked() {
                         geste = Some(Geste::Supprimer(c.numero));
                     }
                     if ui.put(non, egui::Button::new(RichText::new("Garder").size(11.0))).clicked() {

@@ -88,7 +88,7 @@ impl App {
             }
         }
         if ignores > 0 {
-            self.status = "Crée ou ouvre d'abord un projet : SHOT n'a rien où poser ce fichier.".into();
+            self.status = "Crée ou ouvre d'abord un projet : FEANOR n'a rien où poser ce fichier.".into();
         }
     }
 

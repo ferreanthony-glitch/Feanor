@@ -432,7 +432,7 @@ fn row(ui: &mut egui::Ui, entry: &crate::bruitages::Entry, seconds: Option<Optio
     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click_and_drag());
     let painter = ui.painter_at(rect);
     if selected {
-        painter.rect_filled(rect, 3.0, ui.visuals().selection.bg_fill.gamma_multiply(0.55));
+        painter.rect_filled(rect, 3.0, crate::theme::accent().gamma_multiply(0.55));
     } else if resp.hovered() {
         painter.rect_filled(rect, 3.0, theme::eleve());
     }

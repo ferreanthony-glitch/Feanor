@@ -409,7 +409,7 @@ impl App {
         });
         ui.horizontal(|ui| {
             let b = ui.button("Changer…");
-            if crate::bulles::bulle(b, "Changer le dossier", "Choisis le dossier où SHOT prend les images de l'accueil.", "").clicked() {
+            if crate::bulles::bulle(b, "Changer le dossier", "Choisis le dossier où FEANOR prend les images de l'accueil.", "").clicked() {
                 choisir = true;
             }
             let b = ui.add_enabled(!par_defaut, egui::Button::new("Dossier d'origine"));
@@ -417,7 +417,7 @@ impl App {
                 remettre = true;
             }
             let b = ui.button("Importer des images…");
-            if crate::bulles::bulle(b, "Importer des images", "Choisis des images png ou jpeg : SHOT les copie dans ce dossier (le dossier est créé s'il manque). Tes fichiers d'origine ne bougent pas.", "").clicked() {
+            if crate::bulles::bulle(b, "Importer des images", "Choisis des images png ou jpeg : FEANOR les copie dans ce dossier (le dossier est créé s'il manque). Tes fichiers d'origine ne bougent pas.", "").clicked() {
                 importer_des = true;
             }
         });

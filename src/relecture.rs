@@ -488,7 +488,7 @@ pub fn page(pkg: &Package, images: &[Vec<u8>]) -> String {
             // Les commentaires déjà posés : sur la première carte du plan ou sur celle où ils tombent.
             let here: Vec<&CommentPage> = p.comments.iter().filter(|c| comment_on_board(c, b, p)).collect();
             if !here.is_empty() {
-                h.push_str("<div class=\"existants\"><h4>Déjà noté dans SHOT</h4>");
+                h.push_str("<div class=\"existants\"><h4>Déjà noté dans FEANOR</h4>");
                 for c in here {
                     let who = if c.author.trim().is_empty() { "Sans nom".to_string() } else { c.author.clone() };
                     let when = if c.date.is_empty() { String::new() } else { format!(" · {}", c.date) };
@@ -532,7 +532,7 @@ pub fn page(pkg: &Package, images: &[Vec<u8>]) -> String {
          placeholder=\"Une remarque sur l\u{2019}ensemble…\" aria-label=\"Note générale\"></textarea></section>\n",
     );
     h.push_str("<details class=\"secours\" id=\"secours\" hidden><summary>Le fichier ne s\u{2019}est pas téléchargé\u{a0}?</summary><p>Copiez ce texte dans un fichier de nom «\u{a0}notes.json\u{a0}» et envoyez-le.</p><textarea readonly></textarea></details>\n");
-    h.push_str("<p class=\"pied\">Page fabriquée par SHOT. Elle ne contient aucune connexion : vos notes restent sur votre appareil jusqu\u{2019}à l\u{2019}envoi du fichier.</p>\n");
+    h.push_str("<p class=\"pied\">Page fabriquée par FEANOR. Elle ne contient aucune connexion : vos notes restent sur votre appareil jusqu\u{2019}à l\u{2019}envoi du fichier.</p>\n");
     h.push_str("</main>\n");
     h.push_str(&format!("<script nonce=\"{}\">\n{PAGE_JS}</script>\n</body>\n</html>\n", esc(&m.nonce)));
     h

@@ -506,7 +506,7 @@ impl App {
             self.status = "Rien à copier dans la sélection.".into();
             return false;
         }
-        let text = format!("SHOT : {}", sel.summary());
+        let text = format!("SHOT : {}", sel.summary()); // (marque du presse-papiers interne : `pasteimage::MARK`, inchangée)
         self.status = format!("{} ({}).", clip.summary(), sel.summary());
         // Un texte dans le presse-papiers du système : sans lui, Ctrl+V n'arrive pas jusqu'à nous.
         self.ctx.copy_text(text);

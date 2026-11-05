@@ -88,7 +88,7 @@ impl App {
             let msg = format!("La feuille ({}×{} px) dépasse la taille maximale de l'affichage ({limit} px de côté) : elle ne peut pas être montrée. Réduire la feuille ou le projet.", self.doc.width, self.doc.height);
             self.status = msg.clone();
             ui.painter_at(rect).rect_filled(rect, 0.0, Color32::from_gray(30));
-            ui.painter_at(rect).text(rect.center(), egui::Align2::CENTER_CENTER, msg, egui::FontId::proportional(15.0), Color32::from_rgb(255, 190, 120));
+            ui.painter_at(rect).text(rect.center(), egui::Align2::CENTER_CENTER, msg, egui::FontId::proportional(15.0), crate::theme::texte_fort());
             return;
         }
         let plan = self.build_plan(self.cur_frame, true, true);

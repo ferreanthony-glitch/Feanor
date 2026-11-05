@@ -817,7 +817,6 @@ impl App {
     // ------------------------------------------------------------------------------------------------ l'écran
 
     fn kitsu_body(&mut self, ui: &mut egui::Ui, k: &mut Kitsu, ctx: &egui::Context) {
-        let avert = theme::avertissement();
         if !k.jeton_cherche {
             k.jeton_cherche = true;
             if self.settings.kitsu.rester_connecte && k.jeton.is_none() {
@@ -859,7 +858,7 @@ impl App {
             });
             if !self.settings.kitsu.serveur.trim().is_empty() {
                 if let Err(e) = kitsu::serveur_valide(&self.settings.kitsu.serveur) {
-                    ui.colored_label(avert, e);
+                    crate::theme::avertir(ui, e);
                 }
             }
             let avant = self.settings.kitsu.rester_connecte;
@@ -914,8 +913,8 @@ impl App {
                 ui.end_row();
             });
             ui.add_space(2.0);
-            ui.label(RichText::new("Correspondance des statuts (Kitsu → note de SHOT)").small().strong());
-            ui.label(RichText::new("Un commentaire lu dans Kitsu devient une note dont le statut vient de la tâche à ce moment-là. Une note déjà dans SHOT n'est jamais modifiée.").small().color(theme::texte_doux()));
+            ui.label(RichText::new("Correspondance des statuts (Kitsu → note de FEANOR)").small().strong());
+            ui.label(RichText::new("Un commentaire lu dans Kitsu devient une note dont le statut vient de la tâche à ce moment-là. Une note déjà dans FEANOR n'est jamais modifiée.").small().color(theme::texte_doux()));
             egui::Grid::new("kitsu_statuts").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
                 for (s, nom) in [(crate::fildecision::Status::Todo, "À faire"), (crate::fildecision::Status::Discussion, "En discussion"), (crate::fildecision::Status::Done, "Fait"), (crate::fildecision::Status::Refused, "Refusé")] {
                     ui.label(nom);
@@ -948,10 +947,10 @@ impl App {
                 }
             });
             if self.kitsu_dossier().is_none() {
-                ui.colored_label(avert, "Enregistre le projet : les identifiants Kitsu sont gardés dans son dossier (kitsu.json).");
+                crate::theme::avertir(ui, "Enregistre le projet : les identifiants Kitsu sont gardés dans son dossier (kitsu.json).");
             }
             if !self.doc.numbering_locked {
-                ui.label(RichText::new("La numérotation des plans est suivie : les noms changent si un plan s'ajoute ou se déplace. Verrouille-la avant de publier, pour que Kitsu retrouve ses plans.").small().color(avert));
+                crate::theme::avertir_petit(ui, "La numérotation des plans est suivie : les noms changent si un plan s'ajoute ou se déplace. Verrouille-la avant de publier, pour que Kitsu retrouve ses plans.");
             }
             let empreintes = self.envois_empreintes_a_jour();
             if !empreintes && (self.settings.kitsu.vignettes || self.settings.kitsu.videos) {
@@ -998,7 +997,7 @@ impl App {
                     });
                 }
                 Some(_) => {
-                    ui.label(RichText::new("Le projet ou les choix ont changé depuis l'aperçu : refais l'aperçu.").small().color(avert));
+                    crate::theme::avertir_petit(ui, "Le projet ou les choix ont changé depuis l'aperçu : refais l'aperçu.");
                 }
                 None => {}
             }
@@ -1031,11 +1030,11 @@ impl App {
         // ---- l'état
         if let Some(r) = &k.rendu {
             let (t, p) = r.status();
-            ui.add(egui::ProgressBar::new(p).text(t));
+            ui.add(crate::barre::Barre::new(p).text(t));
         } else if let Some(t) = &k.travail {
             let (texte, part) = t.prog.etat();
             if t.genre == Genre::Publication || t.genre == Genre::Retours {
-                ui.add(egui::ProgressBar::new(part).text(texte));
+                ui.add(crate::barre::Barre::new(part).text(texte));
             } else {
                 ui.horizontal(|ui| {
                     ui.spinner();
@@ -1051,7 +1050,7 @@ impl App {
                 ui.label(RichText::new(m).color(theme::succes()));
             }
             Some(Err(e)) => {
-                ui.colored_label(avert, e);
+                crate::theme::avertir(ui, e);
             }
             None => {}
         }
