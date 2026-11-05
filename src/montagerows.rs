@@ -205,7 +205,7 @@ impl App {
             }
             // Choisi avec d'autres (Ctrl ou Maj + clic) : surligné plus légèrement.
             if !current && self.is_chosen_layer(k) {
-                painter.rect_filled(r, 3.0, visuals.selection.bg_fill.gamma_multiply(0.3));
+                painter.rect_filled(r, 3.0, crate::theme::surface_active(visuals.selection.bg_fill, 0.3));
                 painter.rect_stroke(r, 3.0, Stroke::new(1.0_f32, visuals.selection.bg_fill), StrokeKind::Inside);
             }
             let resp = ui.interact(r, ui.id().with(("piste_calque", row)), Sense::click_and_drag());

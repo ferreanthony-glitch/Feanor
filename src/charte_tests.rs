@@ -470,4 +470,20 @@ fn charte_captures() {
         b.chauffer(8);
         sauver(&b, nom);
     }
+    // À propos (lockup principal : Joyau jade devant le mot).
+    b.app.set_espace(Espace::Storyboard);
+    b.app.about_window = true;
+    b.chauffer(8);
+    sauver(&b, "a-propos.png");
+    b.app.about_window = false;
+    // Le thème clair « Papier » : l'accueil et la fenêtre principale.
+    b.app.settings.theme.choisir(ChoixTheme::Papier);
+    b.chauffer(8);
+    sauver(&b, "fenetre-principale-papier.png");
+    let mut c = crate::perf_tests::banc(Document::with_frame(160, 90, 24), true);
+    c.app.settings.theme.choisir(ChoixTheme::Papier);
+    c.app.welcome = true;
+    c.chauffer(8);
+    sauver(&c, "accueil-papier.png");
+    theme::installer(&ReglageTheme::default());
 }

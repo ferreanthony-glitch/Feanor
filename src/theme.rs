@@ -947,3 +947,15 @@ pub fn avertir(ui: &mut egui::Ui, texte: impl Into<String>) -> egui::Response {
     })
     .response
 }
+/// Le fond d'une grande surface active (bloc d'un plan du montage, rangée choisie de la timeline, bande de séquence) :
+/// `selection` (le jade) à la force `force` (0 à 1) dans les thèmes qui n'ont pas la marque ; dans Atelier et Papier, pas de
+/// grand aplat jade près du dessin : le panneau tirant vers `ligne forte` (le jade ne reste que sur les petits éléments et
+/// sur le bord).
+pub fn surface_active(selection: Color32, force: f32) -> Color32 {
+    let p = palette();
+    if p.identite {
+        melange(p.panneau, p.bord_fort, (force * 0.9).clamp(0.0, 1.0))
+    } else {
+        selection.gamma_multiply(force)
+    }
+}
