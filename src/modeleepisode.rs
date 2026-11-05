@@ -156,7 +156,7 @@ impl ModeleEpisode {
         doc.personnages.clear();
         for p in &self.personnages {
             let id = doc.alloc();
-            doc.personnages.push(crate::personnages::Personnage { id, name: p.nom.clone(), line: p.trait_, fill: p.aplat });
+            doc.personnages.push(crate::personnages::Personnage { id, name: p.nom.clone(), line: p.trait_, fill: p.aplat, brosse: None });
         }
         if !self.calques.is_empty() {
             let calques: Vec<Layer> = self

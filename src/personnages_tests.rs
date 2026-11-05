@@ -150,10 +150,10 @@ fn characters_can_be_added_edited_deleted_and_reordered_with_undo() {
 fn a_character_name_is_clean_and_limited() {
     assert_eq!(personnages::nom_net("  Un nom  "), "Un nom");
     assert_eq!(personnages::nom_net(&"x".repeat(100)).chars().count(), personnages::NOM_MAX);
-    let liste = vec![Personnage { id: 1, name: "Personnage 2".into(), line: [0; 3], fill: None }];
+    let liste = vec![Personnage { id: 1, name: "Personnage 2".into(), line: [0; 3], fill: None, brosse: None }];
     assert_eq!(personnages::nom_neuf(&liste), "Personnage 3", "pas deux fois le même nom");
     assert_eq!(personnages::nom_de_copie(&liste, "Léa"), "Léa (copie)");
-    let deux = vec![Personnage { id: 1, name: "Léa".into(), line: [0; 3], fill: None }, Personnage { id: 2, name: "Léa (copie)".into(), line: [0; 3], fill: None }];
+    let deux = vec![Personnage { id: 1, name: "Léa".into(), line: [0; 3], fill: None, brosse: None }, Personnage { id: 2, name: "Léa (copie)".into(), line: [0; 3], fill: None, brosse: None }];
     assert_eq!(personnages::nom_de_copie(&deux, "Léa (copie)"), "Léa (copie 2)");
     let mut v = vec![1, 2, 3];
     assert_eq!(personnages::deplacer(&mut v, 0, 1), Some(1));
@@ -509,7 +509,10 @@ fn the_bar_is_shown_per_workspace_with_the_chosen_defaults() {
 #[test]
 fn the_bar_and_the_panel_are_drawn_and_the_application_rests() {
     crate::fxcache::monde::ecrire();
-    let mut b = banc_dessin();
+    // (Adapté au §107 : chaque ligne du panneau a de plus son mode « Suit le pinceau » et passe à la ligne : une fenêtre plus haute, pour que les trois
+    // sections restent à l'écran.)
+    let mut b = crate::perf_tests::banc_taille(Document::new(400, 300, 24), false, 1600, 2400);
+    b.app.tool = Tool::Brush;
     deux_personnages(&mut b.app);
     b.app.perso_choisir(Choix::Classique(1));
     b.garder_textes = true;
@@ -568,7 +571,7 @@ fn doc_avec_personnages() -> Document {
     let mut doc = Document::new(64, 48, 24);
     for (k, (nom, fond)) in [("Lou", Some(ROSE)), ("Max", None)].into_iter().enumerate() {
         let id = doc.alloc();
-        doc.personnages.push(Personnage { id, name: nom.into(), line: if k == 0 { ROUGE } else { BLEU }, fill: fond });
+        doc.personnages.push(Personnage { id, name: nom.into(), line: if k == 0 { ROUGE } else { BLEU }, fill: fond, brosse: None });
     }
     doc
 }
@@ -638,7 +641,7 @@ fn an_unreadable_or_newer_characters_file_is_reported_and_never_destroyed() {
         assert_eq!(arbre(&dir).get(personnages::FILE), avant.get(personnages::FILE), "le fichier illisible a été effacé ou réécrit");
         // Un personnage neuf : son fichier est écrit, l'ancien est mis de côté.
         let id = l.doc.alloc();
-        l.doc.personnages.push(Personnage { id, name: "Neuf".into(), line: ROUGE, fill: None });
+        l.doc.personnages.push(Personnage { id, name: "Neuf".into(), line: ROUGE, fill: None, brosse: None });
         project::save(&l.doc, &manifeste, &mut l.written).expect("enregistrement");
         let relu = project::load(&manifeste).expect("relecture");
         assert!(relu.warnings.is_empty(), "{:?}", relu.warnings);

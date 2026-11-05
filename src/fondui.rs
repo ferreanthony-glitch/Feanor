@@ -344,7 +344,7 @@ impl App {
             // Couleur du projet donnée à tous les aplats déjà posés.
             "fond.couleur_partout" => {
                 let couleur = self.new_fond().couleur;
-                // (Les calques de personnage en sont exclus : leur couleur vient du panneau Personnages, `aplatperso.rs`.)
+                // (Les calques de personnage en sont exclus : leur couleur vient du panneau Brosses dédiées, `aplatperso.rs`.)
                 let perso_connus: Vec<u64> = self.doc.personnages.iter().map(|p| p.id).collect();
                 let libre = |l: &crate::document::Layer| !l.personnage.is_some_and(|id| perso_connus.contains(&id));
                 let n: usize = self.doc.panels.iter().flat_map(|p| &p.layers).filter(|l| libre(l) && l.fond.is_some_and(|f| f.couleur != couleur)).count();

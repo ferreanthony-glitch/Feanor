@@ -3269,7 +3269,7 @@ de « Ajouter un effet », grisé sur un bitmap, projet avec tremblement enregis
 
 ## 32. Brosses par personnage (2026-10-21, branche `brosses-personnages`)
 
-> **Reprise le 2026-10-29 (partie 70) : les « personnages » sont les brosses perso de type Personnage ; les « couleurs neutres » sont les brosses Classique ; le panneau s'appelle « Brosses perso ».** Voir la partie 70.
+> **Reprise le 2026-10-29 (partie 70) : les « personnages » sont les brosses perso de type Personnage ; les « couleurs neutres » sont les brosses Classique ; le panneau s'appelait « Brosses perso » (partie 107 : « Brosses dédiées »).** Voir la partie 70.
 
 Demande d'Anthony : « On ajoute un personnage et on lui attribue une couleur de trait et une couleur de fond. Quand on sélectionne ce
 personnage, on dessine avec la couleur de trait et de fond immédiatement. Ça permet, même avec un dessin très rough, d'identifier le
@@ -5131,7 +5131,7 @@ Rien d'autre. Un essai vérifie qu'il n'y a dans la fenêtre principale qu'un se
 
 ## 62. Les pastilles créent leurs calques : personnage et Décor (2026-10-28, branche `calques-pastilles`)
 
-> **Reprise le 2026-10-29 (partie 70) : les pastilles deviennent des « brosses perso » (Personnage, Classique, Décor).** La pastille « classique » ⊘ et les trois pinceaux fixes du décor n'existent plus comme ici ; le choix du calque d'une copie change aussi. Voir la partie 70.
+> **Reprise le 2026-10-29 (partie 70) : les pastilles deviennent des « brosses perso » (Personnage, Classique, Décor).** La pastille « classique » ⊘ et les trois pinceaux fixes du décor n'existent plus comme ici ; le choix du calque d'une copie change aussi. Voir la partie 70. (Partie 107 : « brosses perso » s'appelle maintenant « brosses dédiées ».)
 
 Demande d'Anthony : **la pastille dit dans quel calque on dessine, et le calque se crée tout seul.** Fichiers : `calquespastilles.rs` (le calque d'un personnage), `decor.rs` et `decorui.rs` (le calque Décor), `personnagesui.rs` (choisir, renommer), `vignettesreglages.rs` et `prefsui.rs` (le réglage), `document.rs` et `project.rs` (un champ de plus au calque), essais `calques_pastilles_tests.rs` (21).
 
@@ -5639,6 +5639,8 @@ Une bande fine de 9 points garde ce qui se prend sans ambiguïté : **choisir un
 ---------------------------------------------------------------------------------------------------
 
 ## 70. Brosses perso : personnage, classique, décor (2026-10-29, branche `brosses-perso`)
+
+> **Reprise le 2026-11-05 (partie 107) : le nom « Brosses perso » devient « Brosses dédiées » partout à l'écran ; les brosses Décor, Classique et Personnage suivent le pinceau de l'utilisateur d'origine, et peuvent avoir leur propre brosse.** Ce qui est dit ici des pinceaux de décor fixes (crayon 5 px, feutre 24 px, pinceau plein 90 px) n'est plus vrai. Voir la partie 107.
 
 Demande d'Anthony : « Plutôt que personnages, on va appeler ça des **brosses personnalisées**. On peut créer des brosses **personnage**, **décor** ou **classique**. D'origine : 3 couleurs Personnages, 3 Classiques en niveaux de gris, 3 Décors en niveaux de gris. » Il l'avait annoté sur une capture de la barre du haut : « PERSONNAGE » autour des pastilles de couleur, « AUTRE » autour des petites pastilles grises, « DÉCORS » autour des trois carrés, la pastille ⊘ barrée, et l'onglet « Personnages » remplacé par « BROSSES PERSO ». Fichiers : `personnages.rs` (le modèle), `personnagesui.rs` (la barre, le panneau, les choix), `decorui.rs` (les brosses Décor), `calquespastilles.rs` (le calque d'un personnage), `settings.rs` et `vignettesreglages.rs` (les réglages), essais `brosses_perso_tests.rs` (11) et les essais d'avant adaptés. **Remplace** la pastille « classique » et les pinceaux de décor de la partie 62, les couleurs neutres de la partie 32 et le nom « Personnages » du panneau.
 
@@ -7106,3 +7108,63 @@ Demande du réalisateur : enlever la partie animation du sélecteur d'espaces ; 
 4. Double-clic sur un libellé de plan, une transition, une clé d'effet : le geste d'avant, sans entrer en animation.
 5. Affichage > Espaces de travail : trois entrées. Ctrl+K « Animation » : plus d'espace du même nom.
 6. Ferme et rouvre un projet laissé en animation : il s'ouvre avec le bouton de retour.
+
+---------------------------------------------------------------------------------------------------
+
+## 107. Brosses dédiées : le nom, et avec quoi elles dessinent (2026-11-05, branche `brosses-dediees`)
+
+Demande d'Anthony : « Les brosses perso peuvent avoir un nom plus évident pour parler de leur fonction. Brosses assignées par exemple, mais je te laisse trouver un meilleur nom. Elles doivent toutes par défaut être alignées sur la brosse d'origine (pinceau). Les options permettent d'assigner une brosse spécifique (pinceau, crayon, feutre, taille, texture...) ». Fichiers : `brossesdediees.rs` (nouveau : le pinceau d'une brosse dédiée), `personnages.rs` (`Specifique`, champ `brosse`), `personnagesui.rs`, `decorui.rs`, `pinceauxui.rs`, `settings.rs`, essais `brosses_perso_tests.rs`.
+
+### Le nom : « Brosses dédiées »
+
+Le choix : **« Brosses dédiées »**, parce que chaque brosse est dédiée à quelque chose : **un personnage, un décor, ou rien de particulier (classique)**. « Assignées » disait ce qu'on fait, pas ce que la brosse est ; « perso » se confondait avec « personnage ». Changé partout où ça se voit : onglet et titre du panneau, menu Affichage, palette Ctrl+K (« Panneau Brosses dédiées », « Brosse dédiée suivante / précédente », « Lâcher la brosse dédiée », « Nouvelle brosse dédiée »), barre des panneaux, bulles du « + » et du bouton du panneau, messages de la barre d'état, Préférences > Vignettes, renvois des calques de personnage (« se change dans le panneau Brosses dédiées »). Les trois types gardent leurs noms : Personnage, Classique, Décor. **Les identifiants internes ne bougent pas** (`Pane::Personnages`, `vue.personnages`, `perso.*`, `Settings::brosses_classiques` et `brosses_decor`, `couleurs_neutres`) : les dispositions et les réglages déjà rangés se relisent.
+
+### Deux modes, pour les trois types
+
+Chaque brosse dédiée garde **son rôle et ses couleurs** (trait, aplat) ; **avec quoi elle dessine** est un choix à part :
+
+| Mode | Ce qui dessine | D'origine |
+|---|---|---|
+| **Suit le pinceau** | le pinceau courant de l'utilisateur, tel qu'il l'a réglé (forme, taille, texture, opacité). S'il change de pinceau ou de taille, la brosse suit. | **oui, pour toutes** |
+| **Brosse spécifique** | sa propre brosse : un outil (pinceau ou crayon) et un réglage complet (`BrushSettings`, le même que toute brosse enregistrée), avec un nom si elle vient d'une brosse de la bibliothèque. | non |
+
+- **Choisir ou lâcher une brosse qui suit le pinceau ne change rien** au réglage du pinceau : il n'y a rien à prendre ni à rendre. Avant, une brosse Décor imposait son outil et sa taille (crayon 5 px, feutre 24 px, pinceau plein 90 px) et les rendait au lâcher.
+- **Une brosse spécifique prend son pinceau** (ou son crayon) à la place de celui de l'utilisateur, qui est mis de côté (`Pris`, en mémoire seulement) ; **lâchée, elle le rend tel qu'il était, bit pour bit**, ainsi que l'outil si c'est encore celui qu'elle avait pris. Entre deux brosses spécifiques, ou en passant d'une brosse qui suit à une spécifique et retour, le pinceau de l'utilisateur reste intact : jamais le réglage d'une autre brosse. Si on passe de « pinceau » à « crayon » dans l'éditeur pendant qu'elle est choisie, le pinceau qu'elle tenait est rendu à l'instant.
+- **Pas de second éditeur.** Pendant qu'une brosse spécifique est choisie, ce que l'utilisateur règle avec les outils habituels (crochets pour la taille, panneau Réglages de l'outil, choix d'une brosse enregistrée dans la liste) **est gardé pour elle**, pas pour son pinceau (`dediee_suivre`, comparaison une fois par image). Le pinceau retenu par sorte de calque (`suivre_sorte_pinceau`) attend qu'elle soit lâchée : son réglage n'y fuit pas, et celui de l'utilisateur ne s'y perd pas.
+- **Sans latence.** Rien ne se calcule : une copie de réglage au choix, une comparaison par image ; aucun aperçu de trait n'est rendu pour les pastilles (un petit signe suffit).
+
+### Où se règle le mode
+
+Dans la ligne de chaque brosse du panneau et dans la fenêtre « Modifier » du clic droit (la même ligne : `perso_ligne`, `dediee_reglages`), après le nom et les couleurs : un menu **« Suit le pinceau » / « Brosse spécifique »** ; sur « Brosse spécifique », **Pinceau | Crayon**, un menu des **brosses de la bibliothèque** (rangées par dossier : Mes brosses, Crayons, Encres et feutres, Peinture, Craie et fusain, importées ; choisir en prend tout le réglage), la **taille** (px) et la **texture** (force du grain, 0 à 1). Passer à « Brosse spécifique » part du pinceau courant de l'utilisateur (le vrai, jamais celui d'une autre brosse spécifique) : rien ne change tant qu'on ne règle rien. Le reste de la pointe et du papier se règle comme d'habitude, la brosse étant choisie (voir plus haut).
+
+### Ce qu'on voit
+
+- **Les pastilles.** Une brosse qui suit le pinceau n'a aucun signe. Une brosse spécifique a un **petit signe** : un petit rond au coin bas droit des ronds (personnages, classiques), le trait tracé dans le carré d'un décor ; **fin pour un crayon, épais pour un pinceau**.
+- **La bulle** dit ce qui dessine : « Dessine avec : Suit le pinceau. » ou « Dessine avec : Feutre, 40 px, pinceau. » (`App::dediee_etiquette` : le nom de la brosse de la bibliothèque, « (modifiée) » si on a réglé depuis, « Réglage propre » sinon ; puis la taille et l'outil). Le panneau montre le mode de chaque ligne ; ses phrases de section le disent aussi.
+- **Où vit le réglage.** Un Personnage : dans le projet, avec ses couleurs (`personnages.json`, champ facultatif `brosse`) ; l'annulation le rétablit (une étape « Modifier la brosse du personnage » par changement, un glisser de taille ou de texture = une étape). Une Classique ou un Décor : dans les réglages de l'application (champ facultatif `brosse` de l'entrée).
+
+### Anciens réglages et projets : rien ne se perd
+
+- **Le format du projet ne change pas** (`project::VERSION` reste 43). `personnages.json` reste en version 1 : le champ `brosse` est facultatif (`#[serde(default)]`) ; un ancien fichier se relit tel quel, ses personnages **suivent le pinceau** ; un personnage qui suit n'écrit rien de plus.
+- **Anciens réglages de l'application** (`brosses_decor` avec `pinceau` et `taille`, ou les anciennes `tailles_decor` des Préférences > Vignettes) : au premier démarrage, **un Décor resté à son pinceau et à sa taille d'origine (crayon 5, feutre 24, pinceau plein 90) suit maintenant le pinceau** ; **un Décor réglé à la main (autre taille) devient « Brosse spécifique »** et garde son pinceau (crayon ou pinceau) et sa taille. Les anciens champs sont vidés (`Brosse::reprendre_ancien_pinceau`) : le fichier ne s'écrit plus que dans la forme nouvelle, relire ne change plus rien. Les Classiques n'avaient pas de pinceau : elles suivent.
+- **Les trois Décors d'origine** (Décor 1 à 3) gardent leurs couleurs et suivent le pinceau ; « ↺ » les remet ainsi.
+
+### Ce qui a été interprété
+
+- Le mode « Brosse spécifique » ne propose que le pinceau et le crayon (pas la gomme, pas le mélangeur) : c'est « avec quoi on dessine » ; les trois anciens pinceaux de décor ne sont plus des réglages à part, ils sont des brosses spécifiques de départ pour les anciens fichiers.
+- Si l'utilisateur change d'outil (gomme, ligne…) pendant qu'une brosse spécifique est choisie, la brosse reste choisie mais ce qu'il règle n'est gardé pour elle que s'il est sur l'outil de la brosse (pinceau ou crayon) ; l'outil d'avant revient au lâcher seulement s'il est encore celui que la brosse avait pris.
+- Une brosse Décor qui suit le pinceau ne force plus d'outil, sauf si l'outil courant ne dessine pas (elle prend alors le pinceau, comme les autres types).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Le panneau, l'onglet, le menu Affichage, Ctrl+K : « Brosses dédiées » ; plus de « perso » nulle part. Survole le « + » : la bulle dit « à un personnage, à un décor, ou classique ».
+2. Un projet neuf : règle ton pinceau (feutre, 30 px), choisis Perso 1, un petit rond gris, un carré de décor : **le pinceau reste le même** et la taille que tu changes ensuite est suivie. Lâche la brosse : ton pinceau est intact.
+3. Panneau : chaque ligne montre « Suit le pinceau ». Mets un décor sur « Brosse spécifique » : un menu de brosses, Pinceau|Crayon, une taille, une texture ; un petit signe apparaît sur sa pastille ; survole : « Dessine avec : … ».
+4. Choisis ce décor : le pinceau change ; dessine ; lâche-le (reclique) : **ton pinceau d'avant est revenu tel quel**, même taille, même texture. Passe de ce décor à un personnage qui suit, puis à un autre décor spécifique, puis lâche : toujours ton pinceau.
+5. Avec le décor spécifique choisi, change sa taille aux crochets : à la prochaine fois, il a gardé cette taille ; ton pinceau, lui, n'a pas bougé.
+6. Mets un personnage en « Brosse spécifique », enregistre, rouvre : la brosse est là. Ctrl+Z défait le changement de mode.
+7. Un ancien `reglages.toml` : tes décors réglés à la main (autre taille) sont des brosses spécifiques ; ceux d'origine suivent le pinceau.
+
+### Essais
+
+`brosses_perso_tests.rs` (8 de plus, 19 en tout) : chaque type suit le pinceau de l'utilisateur et ne le touche jamais (changement de taille et de pinceau suivis) ; chaque type en mode spécifique, pinceau et crayon, prend son réglage et rend celui de l'utilisateur à l'identique ; allers-retours entre brosses (qui suit, spécifique, spécifique, qui suit) sans changer le pinceau de l'utilisateur ; ce que l'utilisateur règle pendant qu'une spécifique est choisie reste pour elle, sans fuite dans un sens ni dans l'autre (ni dans le pinceau retenu par sorte de calque) ; l'éditeur change l'outil ou revient à « suit » pendant le choix ; un personnage spécifique, enregistré avec le projet, annulé, et un ancien fichier lu comme « suit » ; anciens réglages de décor (resté d'origine : suit ; réglé à la main : spécifique ; écrit puis relu à l'identique) ; la bulle, le panneau et le nom du panneau. **Adaptés** (avec un commentaire) : `decor_tests`, `pastilles_storyboard_tests`, `brosses_perso_tests` (anciens réglages, bulles, suppression).

@@ -75,8 +75,9 @@ impl App {
     /// calque (Anthony, 2026-10-20 : « encre » en vectoriel, « gouache » en bitmap). Retenu dans les
     /// réglages de l'application (`Panneau::pinceau_vecto`, `pinceau_bitmap`).
     pub(crate) fn suivre_sorte_pinceau(&mut self) {
-        // (Une brosse du décor a ses réglages, sur un calque bitmap : le pinceau de chaque sorte attend qu'on la lâche, `decorui.rs`.)
-        if self.decor_actif().is_some() {
+        // (Une brosse spécifique a ses réglages à elle : le pinceau de chaque sorte attend qu'on la lâche, `brossesdediees.rs`. Une brosse qui suit
+        // le pinceau, elle, laisse faire : c'est le pinceau de l'utilisateur.)
+        if self.perso.pris.is_some() {
             return;
         }
         let Some(l) = self.layers().get(self.cur_layer) else { return };

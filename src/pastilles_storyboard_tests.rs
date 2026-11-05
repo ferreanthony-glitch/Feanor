@@ -111,10 +111,11 @@ fn a_decor_brush_in_the_storyboard_draws_in_the_decor_layer_of_the_plan_in_one_u
     let mut b = banc();
     let (couches, avant) = (b.app.layers().len(), b.app.history.undo_len());
     let calque0 = b.app.layers()[b.app.cur_layer].id;
+    let brosse_avant = b.app.brush;
     clic_case(&mut b, crate::decor_tests::case_du_decor(Genre::Feutre));
     assert_eq!(b.app.decor_actif(), Some(crate::decor_tests::rang(Genre::Feutre)));
     assert_eq!(b.app.color, crate::personnages::decors_par_defaut()[1].line, "la couleur de trait de la brosse Décor 2");
-    assert_eq!(b.app.brush.size, crate::personnages::decors_par_defaut()[1].taille_decor());
+    assert_eq!(b.app.brush.size, brosse_avant.size, "la brosse Décor suit le pinceau : sa taille ne change pas");
     assert_eq!(b.app.doc.decor_de(b.app.cur_panel), None, "choisir ne crée rien");
     assert_eq!(b.app.history.undo_len(), avant, "choisir n'est pas une étape d'annulation");
     trait_au_milieu(&mut b);
@@ -145,6 +146,8 @@ fn a_decor_brush_in_the_storyboard_draws_in_the_decor_layer_of_the_plan_in_one_u
 fn a_click_with_a_decor_brush_that_draws_nothing_leaves_no_decor_layer() {
     let mut b = banc();
     let avant = b.app.history.undo_len();
+    // (§107 : la brosse Décor suit le pinceau de l'utilisateur, ici le crayon, au lieu d'imposer le sien.)
+    b.app.set_tool(Tool::Pencil);
     clic_case(&mut b, crate::decor_tests::case_du_decor(Genre::Crayon));
     assert_eq!(b.app.tool, Tool::Pencil);
     // Un simple clic sur le dessin (le crayon pose un point) : soit un trait, soit rien, jamais un calque vide.

@@ -378,7 +378,7 @@ fn the_pastilles_scroll_instead_of_wrapping_when_the_bar_is_too_narrow() {
     b.app.tool = Tool::Brush;
     // Beaucoup de personnages : la rangée ne tient plus dans la barre.
     for k in 0..14 {
-        b.app.doc.personnages.push(Personnage { id: 900 + k, name: format!("P{k}"), line: [20 * k as u8, 40, 90], fill: Some([200, 200, 200]) });
+        b.app.doc.personnages.push(Personnage { id: 900 + k, name: format!("P{k}"), line: [20 * k as u8, 40, 90], fill: Some([200, 200, 200]), brosse: None });
     }
     b.chauffer(6);
     let dessin = b.app.canvas_rect;

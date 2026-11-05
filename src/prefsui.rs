@@ -299,14 +299,14 @@ impl App {
             }
         });
         ui.label(RichText::new("Ne change pas le calque Décor d'un plan qui en a déjà un : il garde sa sorte et reçoit toujours les traits du décor.").small().weak());
-        // (2026-10-29 : la couleur et les tailles des trois pinceaux du décor sont celles des brosses perso Décor, réglées dans leur panneau.)
+        // (2026-10-29 : la couleur et les tailles des trois pinceaux du décor sont celles des brosses dédiées Décor, réglées dans leur panneau.)
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Brosses Décor : couleurs, pinceau et taille se règlent dans le panneau Brosses perso.").small().weak());
-            if ui.small_button("Ouvrir le panneau").on_hover_text("Ouvre le panneau Brosses perso, section Décors : nom, couleur du trait, aplat, pinceau (crayon, feutre ou aplat) et taille de chaque brosse Décor.").clicked() {
+            ui.label(RichText::new("Brosses Décor : couleurs, pinceau et taille se règlent dans le panneau Brosses dédiées.").small().weak());
+            if ui.small_button("Ouvrir le panneau").on_hover_text("Ouvre le panneau Brosses dédiées, section Décors : nom, couleur du trait, aplat, pinceau (crayon, feutre ou aplat) et taille de chaque brosse Décor.").clicked() {
                 self.show_pane(crate::dock::Pane::Personnages);
             }
         });
-        if ui.small_button("Rétablir les réglages des Vignettes").on_hover_text("Remet le débord, l'aimant, la couleur des cadres, le report et la sorte du calque Décor à leurs valeurs d'origine (pas les rangées ni les cases par rangée ; les brosses Décor se remettent dans le panneau Brosses perso).").clicked() {
+        if ui.small_button("Rétablir les réglages des Vignettes").on_hover_text("Remet le débord, l'aimant, la couleur des cadres, le report et la sorte du calque Décor à leurs valeurs d'origine (pas les rangées ni les cases par rangée ; les brosses Décor se remettent dans le panneau Brosses dédiées).").clicked() {
             self.settings.vignettes = Default::default();
             self.settings_a_ecrire = true;
         }
