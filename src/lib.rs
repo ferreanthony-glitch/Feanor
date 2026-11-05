@@ -543,6 +543,8 @@ mod exportcamera;
 mod exportlayers;
 mod exportstems;
 mod exportstills;
+mod exportcles;
+mod exportsonplan;
 mod exportvideo;
 #[cfg(test)]
 mod exports_v1_tests;
@@ -552,6 +554,8 @@ mod exports_v1_montage_tests;
 mod exports_v1_calques_tests;
 #[cfg(test)]
 mod exports_v1_exemples_tests;
+#[cfg(test)]
+mod exports_cle_son_tests;
 #[cfg(test)]
 mod export_tests;
 mod exportui;

@@ -7106,3 +7106,36 @@ Demande du réalisateur : enlever la partie animation du sélecteur d'espaces ; 
 4. Double-clic sur un libellé de plan, une transition, une clé d'effet : le geste d'avant, sans entrer en animation.
 5. Affichage > Espaces de travail : trois entrées. Ctrl+K « Animation » : plus d'espace du même nom.
 6. Ferme et rouvre un projet laissé en animation : il s'ouvre avec le bouton de retour.
+
+## 105. Images à la clé et son par plan (2026-11-05, branche `exports-cle-son`)
+
+Deux sorties de la partie 84 qui manquaient pour la V1, dans Fichier > Exporter. Le format de projet ne change pas ; les choix de ces fenêtres sont retenus par poste de travail, comme les autres exports (`ExportPrefs`). Aucun export ne modifie le projet : tout se calcule sur une copie, sur d'autres fils, et le projet reste libre.
+
+**Images à la clé** (famille Images & PDF, action `fichier.exporter_images_cles`, icône losange). C'est la fenêtre « Images par plan » avec le mode `StillsPer::Cle` (« Une par clé »), ouverte directement sur lui ; « Images par plan » s'ouvre sur « Une par plan » même si le dernier choix retenu était « par clé ».
+- **Une clé = un dessin à l'image où il commence** (`src/exportcles.rs`). Un dessin tenu sur 6 images donne une seule image ; le même dessin qui revient après un vide recommence une clé ; la boucle ou le maintien d'un calque (pré / post-comportement) ne font pas de clé.
+- **Quels calques font des clés** : ceux que l'export des calques séparés écrirait (`render::separable_layers`) et qui ont des dessins. Pas de clé pour les calques cachés (eux ou leur dossier), les dossiers, les calques d'effet, les calques vidéo (sans dessin à eux : leur image est dans l'image composée, elle ne fait pas naître de clé) ni les calques d'annotation, sauf si « Avec les annotations » est coché. Un plan sans aucune clé n'écrit rien ; la fenêtre le dit.
+- **Numéro** : `K01`, `K02`… = rang, dans le plan, de l'image où au moins un calque commence un dessin. Le nombre de chiffres est le même pour tout l'export (au moins deux, trois dès 100 clés dans un plan). Nom : le modèle de noms du projet (partie 87) puis `_K01` : `SQ01_PL012A_K03`. L'ordre alphabétique est plan, puis clé.
+- **Sans l'option par calque** : l'image composée (ce que la caméra filme) à chaque image où une clé commence. PNG ou JPEG, fond transparent si on le veut, taille au choix : comme les autres images par plan.
+- **Avec l'option par calque** (case « Une image par calque ») : pour chaque clé, un fichier par calque qui y commence un dessin, le calque seul, fond transparent, PNG, caméra appliquée, taille au choix : `SQ01_PL012A_K03_Personnage.png`. Un seul dossier (un suffixe, pas un dossier par calque : le tri donne plan, clé, calque). Le numéro est celui de la clé du plan, pas du calque : le calque seul `K03` et l'image composée `K03` sont de la même image ; un calque qui ne change pas à `K03` n'a pas de fichier `K03`. Si le modèle de noms a `{calque}`, c'est lui qui place le nom du calque. Deux noms jamais identiques (suffixe `_2`). Le choix JPEG est grisé dans ce mode.
+- **Étendue** : celle de la fenêtre (film, séquence, plan courant, plans choisis).
+
+**Son par plan** (famille Son, action `fichier.exporter_son_par_plan`, icône notes de musique, `src/exportsonplan.rs`). Un fichier par plan de l'étendue, le mixage de ce qui s'entend pendant ce plan.
+- Format : WAV ou AIFF, 16 ou 24 bits, 48 kHz stéréo, écrits par le même code que « Son par piste ».
+- **Bornes exactes** : début et durée du plan en échantillons par `export::sample_span`, la règle du son du film. Les fichiers de plans qui se suivent se touchent sans trou ni recouvrement, et mis bout à bout redonnent le son du film échantillon pour échantillon (vérifié à 24 et à 29 images par seconde, où une image ne tombe pas sur un nombre entier d'échantillons).
+- **Ce qu'on entend** : volumes, fondus, clés de volume, égaliseur, écho ; pistes muettes retirées, solo respecté. Un son qui passe une coupe est coupé au bord du plan : chaque fichier en garde sa part.
+- **Transitions** : ici elles ne déplacent aucun plan et ne touchent pas au son (partie `transitions.rs` : la durée du film ne change pas). L'export ne fait donc ni poignée, ni débordement sur le plan voisin, ni fondu sonore ; la fenêtre le rappelle quand le montage a des transitions.
+- **Un plan où rien ne s'entend n'est pas écrit** (comme une piste sans extrait dans « Son par piste »). La fenêtre compte les plans avec du son.
+- **Noms** : ceux des images par plan : `SQ01_PL012A.wav`. **Étendue** : celle de la fenêtre, y compris « Plans choisis » (proposé ici puisque chaque plan a son fichier).
+
+**Tâche de fond.** Les images à la clé passent par la tâche des images par plan (composées) ou par une tâche à calcul propre, comme les calques séparés (par calque) ; le son par plan par `ExportJob::task`. Annuler (« Arrêter ») efface ce qui a été écrit, sans reste `.part` ; un échec laisse un message qui reste affiché, sans fichier trompeur.
+
+**Essais** : `src/exports_cle_son_tests.rs` relit les fichiers écrits (nombre, noms, tri, taille, pixels comparés à l'image du film et au calque seul, transparence, durées au dernier échantillon, en-têtes WAV et AIFF, annulation, échec, projet intact). Adaptés : `exports_v1_calques_tests` (le menu a 23 entrées), `exports_v1_exemples_tests`.
+
+À vérifier à l'écran :
+1. Fichier > Exporter… : « Images à la clé » sous « Images par plan » (icône losange), « Son par plan » sous « Son par piste » ; bulle au bout d'une seconde sur chacune.
+2. Images à la clé sur un plan animé avec des dessins tenus : le compte annoncé (« N clés dans M plans ») est celui des dessins qui commencent, pas des images ; fais l'export et regarde les fichiers `…_K01`, `…_K02`.
+3. Coche « Une image par calque » : le compte d'images de calque, le choix JPEG grisé, les fichiers `…_K03_Calque.png` ouverts dans un logiciel d'image : fond transparent, le calque seul.
+4. Cache un calque, ajoute une annotation, un calque d'effet : aucune clé ne vient d'eux ; coche « Avec les annotations » : celles de l'annotation arrivent.
+5. « Plans choisis » avec deux plans : seulement ces plans.
+6. Son par plan : le compte « N plans avec du son sur M » ; WAV puis AIFF 24 bits ; ouvre deux fichiers voisins dans un éditeur son et pose-les bout à bout : pas de coupure ni de recouvrement à la coupe ; coupe le son d'une piste (muet) : le compte change.
+7. « Arrêter » en route : le dossier ne garde aucun fichier ; la fenêtre de fin reste lisible huit secondes (réussite) ou jusqu'au clic (échec).

@@ -23,6 +23,8 @@ pub enum StillsPer {
     Plan,
     /// Le début du plan et chacune de ses marques d'image.
     Case,
+    /// Chaque dessin clé, à l'image où il commence (`exportcles.rs`).
+    Cle,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
@@ -52,11 +54,13 @@ pub struct StillsSettings {
     pub size: VideoSize,
     /// Qualité du JPEG, de 50 à 100.
     pub quality: u8,
+    /// À la clé seulement : chaque calque seul (PNG, fond transparent) au lieu de l'image composée (`exportcles.rs`).
+    pub par_calque: bool,
 }
 
 impl Default for StillsSettings {
     fn default() -> Self {
-        StillsSettings { per: StillsPer::Plan, format: StillFormat::Png, transparent: false, size: VideoSize::Project, quality: 92 }
+        StillsSettings { per: StillsPer::Plan, format: StillFormat::Png, transparent: false, size: VideoSize::Project, quality: 92, par_calque: false }
     }
 }
 
@@ -70,6 +74,14 @@ pub struct Still {
 /// Les images des plans `plans` : le nom de chacune est celui de l'export pour le montage (« SQ01_PL012A », avec « _V2 » pour un plan à
 /// plusieurs versions), plus « _C02 », « _C03 »… pour les cases d'après la première ; deux noms jamais identiques.
 pub fn items(doc: &Document, plans: &[usize], per: StillsPer) -> Vec<Still> {
+    items_avec(doc, plans, per, false)
+}
+
+/// Comme `items` ; `annotations` : les calques d'annotation comptent pour les clés (`StillsPer::Cle`, `exportcles.rs`).
+pub fn items_avec(doc: &Document, plans: &[usize], per: StillsPer, annotations: bool) -> Vec<Still> {
+    if per == StillsPer::Cle {
+        return crate::exportcles::items(doc, plans, annotations);
+    }
     let mut out: Vec<Still> = Vec::new();
     for &p in plans {
         if p >= doc.panels.len() {

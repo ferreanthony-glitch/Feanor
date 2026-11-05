@@ -4089,8 +4089,21 @@ impl App {
             "vignettes.texte_notes" => self.vignettes_basculer_texte(crate::boardsens::Champ::Notes),
             "fichier.exporter_planche" => self.open_planche(),
             "fichier.exporter_colorscript" => self.open_colorscript(),
-            "fichier.exporter_images_par_plan" => self.open_export(crate::export::Format::Stills),
+            "fichier.exporter_images_par_plan" => {
+                self.open_export(crate::export::Format::Stills);
+                // (Cette entrée est « par plan » : un choix « par clé » retenu d'une séance à l'autre ne s'y invite pas.)
+                if let Some(d) = self.export_dialog.as_mut().filter(|d| d.stills.per == crate::exportstills::StillsPer::Cle) {
+                    d.stills.per = crate::exportstills::StillsPer::Plan;
+                }
+            }
+            "fichier.exporter_images_cles" => {
+                self.open_export(crate::export::Format::Stills);
+                if let Some(d) = self.export_dialog.as_mut() {
+                    d.stills.per = crate::exportstills::StillsPer::Cle;
+                }
+            }
             "fichier.exporter_son_par_piste" => self.open_export(crate::export::Format::Stems),
+            "fichier.exporter_son_par_plan" => self.open_export(crate::export::Format::SonPlans),
             "fichier.exporter_calques" => self.open_export(crate::export::Format::Layers),
             "fichier.exporter_camera" => self.open_export(crate::export::Format::Camera),
             "edition.annuler" => self.undo(),

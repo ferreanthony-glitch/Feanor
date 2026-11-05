@@ -14,7 +14,9 @@ use crate::audio;
 use crate::bulles;
 use crate::export::{self, ExportJob, ExportSettings, Format, Progress, Range, SoundSpan};
 use crate::exportcamera;
+use crate::exportcles;
 use crate::exportlayers;
+use crate::exportsonplan;
 use crate::exportstems::{self, Container, Depth};
 use crate::exportstills::{self, StillFormat, StillsPer};
 use crate::exportvideo::{self, VideoRate, VideoSize, VideoSpec};
@@ -110,7 +112,7 @@ impl App {
         let chosen = self.board_selection();
         // Les plans choisis ne se proposent que là où le son ne compte pas (des plans qui ne se suivent pas n'ont
         // pas un son d'un seul tenant) : le GIF, les images, le storyboard PDF.
-        let by_selection = matches!(s.format, Format::Gif | Format::Png | Format::Pdf | Format::Stills | Format::Layers | Format::Camera);
+        let by_selection = matches!(s.format, Format::Gif | Format::Png | Format::Pdf | Format::Stills | Format::SonPlans | Format::Layers | Format::Camera);
         if s.range == Range::Selection && !by_selection {
             s.range = Range::Panel;
         }
@@ -409,21 +411,91 @@ impl App {
                     }
                     ui.end_row();
                 }
-                // Une image par plan ou par case.
+                // Le son par plan : conteneur, profondeur ; les plans qui partiraient.
+                if s.format == Format::SonPlans {
+                    ui.label("Fichiers");
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui| {
+                            ui.radio_value(&mut s.plan_sound.container, Container::Wav, "WAV");
+                            ui.radio_value(&mut s.plan_sound.container, Container::Aiff, "AIFF");
+                        });
+                        ui.horizontal(|ui| {
+                            ui.radio_value(&mut s.plan_sound.depth, Depth::Bits16, "16 bits");
+                            ui.radio_value(&mut s.plan_sound.depth, Depth::Bits24, "24 bits");
+                            ui.label(RichText::new("48 kHz, stéréo").weak());
+                        });
+                    });
+                    ui.end_row();
+                    ui.label("Plans");
+                    let plans = export::panels_of(&frames);
+                    let avec_son = exportsonplan::compter(&self.doc, &plans);
+                    ui.vertical(|ui| {
+                        if avec_son == 0 {
+                            crate::theme::avertir(ui, "Rien ne s'entend dans cette étendue (une piste muette n'est pas écrite).");
+                        } else {
+                            ui.label(format!("{avec_son} plan{} avec du son sur {}.", if avec_son > 1 { "s" } else { "" }, plans.len()));
+                            if avec_son < plans.len() {
+                                crate::theme::avertir_petit(ui, "Un plan où rien ne s'entend n'a pas de fichier.");
+                            }
+                        }
+                        ui.label(RichText::new("Le mixage du montage (volumes, fondus, égaliseur, écho ; muets et solo respectés), de la première à la dernière image du plan, à l'échantillon près. Un son qui passe une coupe est coupé au bord du plan.").small().weak());
+                        if has_transitions {
+                            ui.label(RichText::new("Les transitions ne changent rien au son : aucun fondu sonore, aucune poignée.").small().weak());
+                        }
+                    });
+                    ui.end_row();
+                    ui.label("Noms");
+                    ui.label(RichText::new("Comme les images par plan : SQ01_PL012A.wav (le modèle de noms du projet).").small().weak());
+                    ui.end_row();
+                }
+                // Une image par plan, par case ou par clé.
                 if s.format == Format::Stills {
                     ui.label("Images");
                     ui.vertical(|ui| {
                         ui.radio_value(&mut s.stills.per, StillsPer::Plan, "Une par plan (sa première image)");
                         ui.radio_value(&mut s.stills.per, StillsPer::Case, "Une par case (le plan et chacune de ses marques d'image)");
+                        ui.radio_value(&mut s.stills.per, StillsPer::Cle, "Une par clé (chaque dessin, à l'image où il commence)");
                     });
                     ui.end_row();
-                    ui.label("Fichier");
-                    ui.vertical(|ui| {
-                        ui.horizontal(|ui| {
-                            ui.radio_value(&mut s.stills.format, StillFormat::Png, "PNG");
-                            ui.radio_value(&mut s.stills.format, StillFormat::Jpeg, "JPEG");
+                    if s.stills.per == StillsPer::Cle {
+                        ui.label("Clés");
+                        let plans = export::panels_of(&frames);
+                        let par_calque = s.stills.par_calque;
+                        let (cles, sans) = exportcles::compter(&self.doc, &plans, s.annotations);
+                        ui.vertical(|ui| {
+                            bulles::bulle(
+                                ui.checkbox(&mut s.stills.par_calque, "Une image par calque (le calque seul, fond transparent, en PNG)"),
+                                "Une image par calque",
+                                "Au lieu de l'image composée, un fichier par calque qui commence un dessin à cette clé : le calque seul, sur fond transparent, caméra appliquée. Le nom du calque termine le nom du fichier.",
+                                "",
+                            );
+                            if cles == 0 {
+                                crate::theme::avertir(ui, "Aucune clé dans cette étendue : aucun dessin sur un calque visible.");
+                            } else if par_calque {
+                                let fichiers = exportcles::compter_calques(&self.doc, &plans, s.annotations);
+                                ui.label(format!("{cles} clé{} dans {} plan{}, {fichiers} image{} de calque.", if cles > 1 { "s" } else { "" }, plans.len() - sans, if plans.len() - sans > 1 { "s" } else { "" }, if fichiers > 1 { "s" } else { "" }));
+                            } else {
+                                ui.label(format!("{cles} clé{} dans {} plan{}.", if cles > 1 { "s" } else { "" }, plans.len() - sans, if plans.len() - sans > 1 { "s" } else { "" }));
+                            }
+                            if sans > 0 && cles > 0 {
+                                crate::theme::avertir_petit(ui, format!("{sans} plan{} sans clé (rien de dessiné sur un calque visible) : pas d'image.", if sans > 1 { "s" } else { "" }));
+                            }
+                            ui.label(RichText::new("Les calques cachés, les calques d'effet et les calques vidéo ne font pas de clé ; les annotations seulement avec « Avec les annotations ».").small().weak());
                         });
-                        if s.stills.format == StillFormat::Png {
+                        ui.end_row();
+                    }
+                    ui.label("Fichier");
+                    let seul = s.stills.per == StillsPer::Cle && s.stills.par_calque;
+                    ui.vertical(|ui| {
+                        ui.add_enabled_ui(!seul, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.radio_value(&mut s.stills.format, StillFormat::Png, "PNG");
+                                ui.radio_value(&mut s.stills.format, StillFormat::Jpeg, "JPEG");
+                            });
+                        });
+                        if seul {
+                            ui.label(RichText::new("Un calque seul est toujours un PNG sur fond transparent.").small().weak());
+                        } else if s.stills.format == StillFormat::Png {
                             ui.checkbox(&mut s.stills.transparent, "Sans le papier (fond transparent)");
                         } else {
                             ui.add(egui::Slider::new(&mut s.stills.quality, 50..=100).text("qualité"));
@@ -448,7 +520,11 @@ impl App {
                     });
                     ui.end_row();
                     ui.label("Noms");
-                    ui.label(RichText::new("Comme l'export pour le montage : SQ01_PL012A (et _C02, _C03… pour les cases d'après).").small().weak());
+                    ui.label(RichText::new(if s.stills.per == StillsPer::Cle {
+                        "Le nom du plan et le numéro de clé : SQ01_PL012A_K01, _K02… Un calque seul : SQ01_PL012A_K03_Personnage."
+                    } else {
+                        "Comme l'export pour le montage : SQ01_PL012A (et _C02, _C03… pour les cases d'après)."
+                    }).small().weak());
                     ui.end_row();
                 }
                 // Les commentaires de la timeline, écrits sous l'image où ils tombent (`export::storyboard_of_with`).
@@ -577,12 +653,22 @@ impl App {
             }
             Format::Stills => {
                 let Some(dir) = self.dialogue_dossier("images_par_plan", "Dossier où exporter les images par plan", None) else { return };
-                let items = exportstills::items(&self.doc, &export::panels_of(&frames), s.stills.per);
-                if items.is_empty() {
-                    self.status = "Aucun plan dans cette étendue.".into();
+                let plans = export::panels_of(&frames);
+                if s.stills.per == StillsPer::Cle && s.stills.par_calque {
+                    let items = exportcles::items_calques(&self.doc, &plans, s.annotations);
+                    if items.is_empty() {
+                        self.status = "Aucune clé dans cette étendue : aucun dessin sur un calque visible.".into();
+                        return;
+                    }
+                    self.start_job(exportcles::job_calques(&dir, items, self.doc.frame, &s.stills, s.annotations));
                     return;
                 }
-                self.start_job(exportstills::job(&dir, &items, self.doc.frame, &s.stills, s.annotations));
+                let items = exportstills::items_avec(&self.doc, &plans, s.stills.per, s.annotations);
+                if items.is_empty() {
+                    self.status = if s.stills.per == StillsPer::Cle { "Aucune clé dans cette étendue : aucun dessin sur un calque visible." } else { "Aucun plan dans cette étendue." }.into();
+                    return;
+                }
+                self.start_job(if s.stills.per == StillsPer::Cle { exportcles::job(&dir, &items, self.doc.frame, &s.stills, s.annotations) } else { exportstills::job(&dir, &items, self.doc.frame, &s.stills, s.annotations) });
             }
             Format::Gif => {
                 let Some((ffmpeg, Ok(_))) = self.ffmpeg_info().cloned() else {
@@ -645,6 +731,17 @@ impl App {
                 let (format, d) = (s.stems.format, dir.clone());
                 let message = format!("{} fichier{} son exporté{} : {}", files.len(), if files.len() > 1 { "s" } else { "" }, if files.len() > 1 { "s" } else { "" }, dir.display());
                 self.start_job(ExportJob::task("Export du son par piste".into(), &dir, message, move |snap, cancel| exportstems::write_all(snap, &d, &files, start, len, format, cancel).map(|_| ())));
+            }
+            Format::SonPlans => {
+                let files = exportsonplan::plan(&self.doc, &export::panels_of(&frames), s.plan_sound);
+                if files.is_empty() {
+                    self.status = "Rien ne s'entend dans cette étendue : aucun fichier à écrire.".into();
+                    return;
+                }
+                let Some(dir) = self.dialogue_dossier("son_par_plan", "Dossier où exporter le son par plan", None) else { return };
+                let (format, d) = (s.plan_sound, dir.clone());
+                let message = format!("{} fichier{} son exporté{} (un par plan) : {}", files.len(), if files.len() > 1 { "s" } else { "" }, if files.len() > 1 { "s" } else { "" }, dir.display());
+                self.start_job(ExportJob::task("Export du son par plan".into(), &dir, message, move |snap, cancel| exportsonplan::write_all(snap, &d, &files, format, cancel).map(|_| ())));
             }
             Format::Layers => {
                 let info = exportlayers::plans_info(&self.doc, &export::panels_of(&frames), s.annotations);
@@ -804,6 +901,7 @@ fn family_of(format: Format) -> &'static [Format] {
         Format::Pdf => &[Format::Pdf],
         Format::Stills => &[Format::Stills],
         Format::Stems => &[Format::Stems],
+        Format::SonPlans => &[Format::SonPlans],
         Format::Layers => &[Format::Layers],
         Format::Camera => &[Format::Camera],
     }
@@ -822,6 +920,7 @@ fn format_label(format: Format) -> &'static str {
         Format::Pdf => "Storyboard PDF",
         Format::Stills => "Images par plan",
         Format::Stems => "Son par piste",
+        Format::SonPlans => "Son par plan",
         Format::Layers => "Calques séparés",
         Format::Camera => "Clés de caméra",
     }

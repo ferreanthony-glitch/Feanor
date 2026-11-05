@@ -183,8 +183,8 @@ fn the_export_hub_is_grouped_by_use_with_an_action_for_every_entry() {
     assert_eq!(titres, ["Vidéo", "Images & PDF", "Son", "Montage & échange"]);
     let noms = |k: usize| familles[k].1.iter().map(|e| e.1).collect::<Vec<_>>();
     assert_eq!(noms(0), ["Film", "GIF animé"]);
-    assert_eq!(noms(1), ["Images", "Image courante", "Images par plan", "Storyboard PDF", "Planche des vignettes", "Color script", "Relecture", "Journal des différences"]);
-    assert_eq!(noms(2), ["Son mixé", "Son par piste"]);
+    assert_eq!(noms(1), ["Images", "Image courante", "Images par plan", "Images à la clé", "Storyboard PDF", "Planche des vignettes", "Color script", "Relecture", "Journal des différences"]);
+    assert_eq!(noms(2), ["Son mixé", "Son par piste", "Son par plan"]);
     assert_eq!(noms(3), ["Pour le montage", "Liste des plans", "Kitsu", "Paquet de livraison", "Rapport de numérotation", "Noms et production", "Fiche technique", "Calques séparés", "Caméra"]);
     let mut actions = Vec::new();
     for (_, exports) in familles {
@@ -198,7 +198,7 @@ fn the_export_hub_is_grouped_by_use_with_an_action_for_every_entry() {
             actions.push(*action);
         }
     }
-    assert_eq!(actions.len(), 21);
+    assert_eq!(actions.len(), 23);
     let n = actions.len();
     actions.sort_unstable();
     actions.dedup();
@@ -208,7 +208,7 @@ fn the_export_hub_is_grouped_by_use_with_an_action_for_every_entry() {
     for a in &actions {
         assert!(map.bindings.iter().any(|b| b.action == *a), "{a} : un bloc dans keymap.toml");
     }
-    for a in ["fichier.exporter_images_par_plan", "fichier.exporter_son_par_piste", "fichier.exporter_calques", "fichier.exporter_camera"] {
+    for a in ["fichier.exporter_images_par_plan", "fichier.exporter_images_cles", "fichier.exporter_son_par_piste", "fichier.exporter_son_par_plan", "fichier.exporter_calques", "fichier.exporter_camera"] {
         assert!(map.bindings.iter().filter(|b| b.action == a).all(|b| b.keys.is_empty()), "{a} : sans touche");
     }
 }
@@ -224,7 +224,9 @@ fn every_export_action_opens_its_window_and_the_windows_draw() {
         ("fichier.exporter_images_par_plan", Format::Stills),
         ("fichier.exporter_pdf", Format::Pdf),
         ("fichier.exporter_son", Format::Wav),
+        ("fichier.exporter_images_cles", Format::Stills),
         ("fichier.exporter_son_par_piste", Format::Stems),
+        ("fichier.exporter_son_par_plan", Format::SonPlans),
         ("fichier.exporter_calques", Format::Layers),
         ("fichier.exporter_camera", Format::Camera),
     ];
