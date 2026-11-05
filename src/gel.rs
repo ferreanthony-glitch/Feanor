@@ -154,7 +154,9 @@ impl Gel {
                         }
                         // Les dessins dérivés des effets que personne n'a demandés depuis un moment (790 Mo après une longue séance).
                         // (Un seul appel par passage : « au repos » veut dire intouché depuis le passage d'avant.)
-                        rangees += crate::fxcache::ranger_les_inactifs(FX_AU_REPOS, 64).1;
+                        if crate::tuilepack::seance_active() {
+                            rangees += crate::fxcache::ranger_les_inactifs(FX_AU_REPOS, 64).1;
+                        }
                         // (La réponse d'un passage sur les caches : vide s'il n'a rien rangé, sinon REPONSE_CACHES, pour qu'un autre passage suive.)
                         if tx_retour.send(if rangees > 0 { vec![REPONSE_CACHES] } else { Vec::new() }).is_err() {
                             return;
@@ -205,7 +207,7 @@ impl Gel {
     /// Retire du projet les dessins que plus rien ne retient (`elagage.rs`), de temps en temps et jamais pendant un geste, une lecture ou
     /// dans un projet partagé. `calme` : rien ne se passe (ni trait, ni lecture). Rend le nombre de dessins retirés.
     pub fn elaguer(&mut self, doc: &mut Document, h: &crate::history::History, calme: bool) -> usize {
-        if !self.actif || !calme || doc.est_partage() {
+        if !self.actif || !calme || doc.est_partage() || !crate::tuilepack::seance_active() {
             return 0;
         }
         if self.elagage_le.is_some_and(|t| t.elapsed() < ELAGAGE_TOUTES_LES) {

@@ -369,7 +369,7 @@ impl Edit {
             // Un instantané de structure : les expositions des calques passent en suites (le plus gros : une entrée par image et par
             // calque). Compte pour 30 tuiles (un millier de plans, un peu plus d'une demi-milliseconde).
             Edit::Structure { structure, .. } => {
-                if max > 0 && structure.ranger_les_expositions() {
+                if max > 0 && crate::tuilepack::seance_active() && structure.ranger_les_expositions() {
                     fait += 30.min(max);
                 }
             }

@@ -23,6 +23,13 @@ pub fn actif() -> bool {
     *ACTIF.get_or_init(|| std::env::var_os("SHOT_SANS_GEL").is_none())
 }
 
+/// Les économies de mémoire d'une longue séance sont en marche (sauf `SHOT_SANS_SEANCE=1` : historique, dessins dérivés des effets et dessins
+/// sans attache comme avant le chantier « mémoire d'une séance » ; pour comparer des mesures, ou si un cas pose un jour problème).
+pub fn seance_active() -> bool {
+    static ACTIF: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ACTIF.get_or_init(|| actif() && std::env::var_os("SHOT_SANS_SEANCE").is_none())
+}
+
 /// Un tampon plus gros que cela ne gagne presque rien sur les 16 384 octets d'une tuile : elle reste en pixels.
 pub const MAX_OCTETS: usize = 12 * 1024;
 
