@@ -112,12 +112,14 @@ fn the_three_spaces_have_their_own_starting_layouts() {
 #[test]
 fn every_space_has_a_registered_action() {
     let map = crate::keymap::Keymap::from_texts(crate::keymap::DEFAULT_KEYMAP, None);
-    for e in Espace::TOUS {
+    for e in Espace::VISIBLES {
         let info = crate::keymap::action_info(e.action()).unwrap_or_else(|| panic!("{} n'est pas dans keymap::ACTIONS", e.action()));
         assert!(info.implemented);
         assert_eq!(Espace::de_action(e.action()), Some(e));
         assert!(map.warnings.iter().all(|w| !w.contains(e.action())));
     }
+    // L'animation n'est plus un espace à choisir : plus d'action, ni de touche, ni d'entrée de palette.
+    assert!(crate::keymap::action_info(Espace::Animation.action()).is_none());
     assert!(crate::keymap::action_info("espace.retablir").is_some_and(|a| a.implemented));
     assert_eq!(Espace::de_action("espace.retablir"), None);
 }

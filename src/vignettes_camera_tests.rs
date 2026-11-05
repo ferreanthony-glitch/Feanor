@@ -64,17 +64,17 @@ fn has(app: &App, pane: Pane) -> bool {
     app.dock_layout().contains(pane)
 }
 
-// ------------------------------------------------------------------------------ les quatre onglets
+// ------------------------------------------------------------------------------ les trois onglets (l'animation n'en est plus un)
 
 #[test]
-fn the_four_tabs_are_drawn_vignettes_first_and_switch_spaces_by_clicks() {
+fn the_three_tabs_are_drawn_vignettes_first_and_switch_spaces_by_clicks() {
     let mut b = banc();
-    let tous = [" Vignettes ", " Storyboard ", " Animation ", " Montage "];
+    let tous = [" Vignettes ", " Storyboard ", " Montage "];
     let xs: Vec<f32> = tous.iter().map(|t| centre_du_texte(&b, t).x).collect();
-    assert!(xs.windows(2).all(|w| w[0] < w[1]), "Vignettes, Storyboard, Animation, Montage : {xs:?}");
+    assert!(xs.windows(2).all(|w| w[0] < w[1]), "Vignettes, Storyboard, Montage : {xs:?}");
     assert!(tous.iter().all(|t| centre_du_texte(&b, t).y < 40.0), "dans la barre de menus, en haut");
-    assert_eq!(Espace::TOUS.map(Espace::nom), ["Vignettes", "Storyboard", "Animation", "Montage"]);
-    for (espace, mode) in [(Espace::Vignettes, Mode::Storyboard), (Espace::Animation, Mode::Animation), (Espace::Montage, Mode::Storyboard), (Espace::Storyboard, Mode::Storyboard), (Espace::Vignettes, Mode::Storyboard)] {
+    assert_eq!(Espace::VISIBLES.map(Espace::nom), ["Vignettes", "Storyboard", "Montage"]);
+    for (espace, mode) in [(Espace::Vignettes, Mode::Storyboard), (Espace::Montage, Mode::Storyboard), (Espace::Storyboard, Mode::Storyboard), (Espace::Vignettes, Mode::Storyboard)] {
         let texte = format!(" {} ", espace.nom());
         let p = centre_du_texte(&b, &texte);
         clic(&mut b, p);
@@ -119,10 +119,10 @@ fn only_the_selected_tab_is_lit() {
         panic!("{texte}");
     };
     let sur_accent = crate::theme::sur_selection();
-    for espace in Espace::TOUS {
+    for espace in Espace::VISIBLES {
         b.app.set_espace(espace);
         b.chauffer(3);
-        for autre in Espace::TOUS {
+        for autre in Espace::VISIBLES {
             let texte = format!(" {} ", autre.nom());
             assert_eq!(couleur(&b, &texte) == sur_accent, autre == espace, "{} allumé, {texte}", espace.nom());
         }

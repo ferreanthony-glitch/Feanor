@@ -143,7 +143,6 @@ const SANS_EFFET_SUR_LE_PROJET: &[&str] = &[
     "cadrage.aucune",
     "cadrage.format_suivant",
     "espace.storyboard",
-    "espace.animation",
     "espace.montage",
     "espace.vignettes",
     "espace.standard",

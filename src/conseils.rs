@@ -4,7 +4,7 @@
 //! Préférences > Général > Conseils : « Revoir les conseils » les oublie tous.
 //!
 //! Cinq conseils au plus, un par endroit :
-//! - l'onglet Vignettes, l'onglet Montage, l'onglet Animation (la première fois qu'on y entre) ;
+//! - l'onglet Vignettes, l'onglet Montage, et l'animation (la première fois qu'on y entre par un double-clic sur un plan) ;
 //! - l'Espace 3D (la première fois qu'on y entre) ;
 //! - le mode concentration et l'aide-mémoire des raccourcis (la première fois qu'on a modifié un projet dans l'onglet
 //!   Storyboard : c'est le moment où l'on a les mains sur le dessin).

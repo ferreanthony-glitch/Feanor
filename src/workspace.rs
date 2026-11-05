@@ -230,6 +230,11 @@ impl Espace {
     /// Dans l'ordre des onglets, de gauche à droite.
     pub const TOUS: [Espace; 4] = [Espace::Vignettes, Espace::Storyboard, Espace::Animation, Espace::Montage];
 
+    /// Ceux qui se proposent comme un espace (onglets, menu Affichage, palette) : l'Animation n'y est plus, on y entre par
+    /// un double-clic sur un plan et un bouton « Retour au storyboard » en sort. Elle reste un espace en interne (disposition,
+    /// projets rouverts, onglets restaurés).
+    pub const VISIBLES: [Espace; 3] = [Espace::Vignettes, Espace::Storyboard, Espace::Montage];
+
     pub fn nom(self) -> &'static str {
         match self {
             Espace::Vignettes => "Vignettes",

@@ -647,7 +647,6 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("espace.ensemble", "Espace de travail : Vue d'ensemble", true, false),
     act("espace.enregistrer", "Enregistrer la disposition comme espace de travail", true, false),
     act("espace.storyboard", "Espace de travail : Storyboard (sa disposition retenue)", true, false),
-    act("espace.animation", "Espace de travail : Animation (sa disposition retenue)", true, false),
     act("espace.montage", "Espace de travail : Montage (le film en haut, toutes les pistes en bas)", true, false),
     act("espace.vignettes", "Espace de travail : Vignettes (la planche seule, pour dessiner dans les cases)", true, false),
     act("espace.retablir", "Rétablir la disposition de l'espace de travail en cours", true, false),

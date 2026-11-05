@@ -248,7 +248,7 @@ fn texte_a<'a>(formes: &'a [&'a Shape], texte: &str) -> Option<(&'a egui::epaint
 fn the_active_workspace_is_a_selected_tab_with_readable_ink_and_a_thin_jade_line() {
     let mut b = banc_taille(crate::vignettes_tests::quatre_plans(), false, 1600, 900);
     b.garder_formes = true;
-    for espace in [Espace::Vignettes, Espace::Storyboard, Espace::Animation, Espace::Montage] {
+    for espace in Espace::VISIBLES {
         b.app.set_espace(espace);
         b.chauffer(6);
         let formes = a_plat(&b.formes);
@@ -259,6 +259,15 @@ fn the_active_workspace_is_a_selected_tab_with_readable_ink_and_a_thin_jade_line
         let traits: Vec<Rect> = formes.iter().filter_map(|s| if let Shape::Rect(r) = s { (r.fill == theme::rehaut() && r.rect.height() <= 2.5 && r.rect.width() < 120.0 && r.rect.width() > 8.0).then_some(r.rect) } else { None }).collect();
         assert_eq!(theme::rehaut(), c(theme::JADE), "Gris sombre : un trait de jade");
         assert!(traits.iter().any(|tr| tr.center().x > mot.left() && tr.center().x < mot.right() && tr.center().y > mot.center().y), "{} : un trait sous le mot : {traits:?}", espace.nom());
+    }
+    // En animation (plus d'onglet) : le bouton « Retour au storyboard » est peint, lisible, et aucun onglet n'est allumé.
+    b.app.set_espace(Espace::Animation);
+    b.chauffer(6);
+    let formes = a_plat(&b.formes);
+    assert!(formes.iter().any(|s| matches!(s, Shape::Text(t) if t.galley.job.text.contains("Retour au storyboard") && t.pos.y < 40.0)), "le bouton de retour, en haut");
+    for espace in Espace::VISIBLES {
+        let (t, _) = texte_a(&formes, &format!(" {} ", espace.nom())).unwrap_or_else(|| panic!("onglet {}", espace.nom()));
+        assert_ne!(t.galley.job.sections[0].format.color, theme::sur_selection(), "{} n'est pas allumé en animation", espace.nom());
     }
 }
 
