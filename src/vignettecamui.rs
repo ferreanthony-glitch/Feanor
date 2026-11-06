@@ -400,7 +400,7 @@ impl App {
         let scinde = avant == 0 && self.scinder_derriere_le_mouvement(pi, &orig);
         self.etape_camera(snap, &nom);
         let n = self.doc.panels[pi].camera.len();
-        self.status = format!("Cadre {} ajouté : tire-le avec Ctrl + Maj (ou T).", vignettecam::lettre(n - 1));
+        self.status = format!("Cadre {} ajouté : Maj tenue, glisse-le par son bord.", vignettecam::lettre(n - 1));
         if scinde {
             self.status += " Les cases qui suivaient forment un plan à part (une coupe après celle-ci).";
         }

@@ -7819,3 +7819,62 @@ reste une étape d'annulation au plus, et aucun ne touche un dessin hors de son 
 10. Sur un long projet, « Cadrer tout » (barre du bas, à droite) : toute la planche dans la vue (jusqu'à 20 %) ; « Page à la largeur de la vue »
     (clic droit sur le fond) : la largeur seule, comme avant.
 11. Rien n'a bougé : un trait, Ctrl+Z, un trait entre deux cases, enregistrer, rouvrir : comme avant ; au repos, rien ne se repeint.
+
+## 115. Un cadre de plus sans le clic droit : le « + » de la peau de Maj (2026-11-06, branche `cadre-plus`)
+
+Demande du réalisateur : créer un cadre C (ou D, ou B) en Vignettes avec Maj, le plus simplement possible, sans le clic droit. Fichiers :
+`src/cadreplus.rs` (tout le geste), `boardui.rs` (sept appels courts, voir plus bas), `vignettecamui.rs` (un message). Essais :
+`src/cadreplus_tests.rs` (18 par `Banc`, avec de vrais appuis, glissés et lâchers ; `cadre_plus_captures` est ignoré et écrit six captures).
+**Rien ne change dans le projet** (format 47), ni dans `keymap.toml`.
+
+### Le geste
+
+- **Le « + ».** Maj tenue (ou T tenue, ou l'outil Caméra en main), un petit « + » apparaît juste à côté du **dernier cadre** du plan survolé,
+  ou, pointeur loin des cases, du plan choisi. Un disque blanc de 16 points cerclé de la couleur des poignées, avec un plus de cette couleur ;
+  sous le pointeur il se remplit et la ligne d'état dit ce qu'il fait. La cible, elle, fait 24 points (rayon 12) : confortable au stylet.
+  Sans Maj ni caméra : rien, la planche reste du papier. Ctrl + Maj (le geste de caméra) ne le montre pas.
+- **Un clic** sur le « + » : un cadre de plus, posé à côté du dernier, par `cam_ajouter_cadre` (exactement le clic droit « Ajouter un cadre » :
+  mêmes refus, mêmes étapes). Sur une case sans mouvement, il crée B (« Mouvement de caméra ») ; puis C, D… (« Cadre C », « Cadre D »).
+- **Glisser** depuis le « + » : au-delà du seuil de 5 points le nouveau cadre naît **centré sur le pointeur** et le suit, posé où l'on lâche. C'est le
+  geste de caméra ordinaire (`CamGeste`, `Prise::Nouveau`), donc avec son aimant doux, la place de la case A tenue, Échap qui abandonne
+  (rien n'est ajouté), et l'étape d'annulation prise au lâcher, nommée comme avant. Un glissé qui **revient au point de départ** reste un clic :
+  les clés d'avant sont remises et `cam_ajouter_cadre` pose le cadre (l'essai compare les deux : mêmes clés).
+- **Une seule étape d'annulation**, dans les deux cas.
+
+### Où il se pose, ce qu'il ne gêne pas
+
+- À **droite** du cadre, sinon **dessous**, **dessus**, **à gauche** (un cadre B, C… a son voisin à gauche : la gauche passe en dernier), enfin **dans** le cadre contre son bord droit : la première place où sa cible tient
+  dans la vue, **ne mord pas sur la vignette d'un autre plan** (ni sur une autre case du même plan), et **n'est pas sur une barre** (Maj + clic sur
+  une barre coupe ou réunit : elle garde son geste). Sur une planche serrée il passe donc dessous ou dessus plutôt que dans l'écart.
+- Dans sa zone il **passe avant** les autres gestes de Maj (le bord de B, un coin, le plan, la barre). Hors de sa zone, un appui se comporte
+  **exactement comme avant** : glisser dans B déplace B, Maj + glisser ailleurs déplace le plan, le coin tire la caméra, le bord de B ou C déplace ce
+  cadre, Maj + clic choisit au lâcher, Ctrl lasso. Le clic droit reste.
+- **Pendant un appui, il n'y est pas** : sa place n'est calculée qu'à une image sans bouton tenu, sans geste de caméra, sans déplacement de plan
+  ni geste de « + » en cours ; Maj pressée en plein trait n'en montre pas. L'appui lit la place **vue à l'image d'avant** (ce que l'œil a vu).
+- Les refus sont ceux de `cam_ajouter_cadre` (`content_refuses`, `partage_peut_toucher`, `storyboard_refuses`, plan trop court) : ils parlent dans
+  la ligne d'état au clic. Le « + » reste visible, pour qu'on voie pourquoi rien ne se passe (même principe qu'à la partie 113). Il ne prend aucun
+  verrou en le montrant : les verrous ne sont demandés qu'au clic ou au premier mouvement du glissé.
+
+### Plan à plusieurs cases
+
+`card_menu` ne propose « Ajouter un cadre » que si `frame == 0 || camera.len() < 2`. Avec Maj, le « + » est accessible **de toutes les cases** du plan :
+- plan qui ne bouge pas encore, survolé par une de ses **autres cases** (une marque d'image) : le « + » est à côté de cette case (B naît de la caméra
+  du plan, comme au clic droit sur cette case) ;
+- plan qui bouge déjà : ses cadres vivent sur la **première** case, le « + » est à côté du **dernier cadre** de cette case, quelle que soit la case survolée ;
+  si cette place n'est pas dans la vue, il se met à côté de la case survolée (le clic et le glissé agissent alors sur le même plan, au même cadre).
+
+### Ce que j'ai touché dans `boardui.rs` (compact, pour la fusion avec `plan-annule`)
+
+Un champ `Vignettes::plus` (un seul, de type `cadreplus::Etat`) et sa ligne dans `Default` ; `board_press` : `if self.plus_appui(layout, pos) { return false; }`
+juste après le test du bouton principal ; avant la peau : le calcul de `plus_voulu` et `plus_mettre_a_jour` ; `plus_suivre` avant `update_cam_geste` ;
+`plus_peindre` après la peau ; une branche de curseur (main) ; `plus_lacher` avant `finish_cam_geste`. La phrase dite une fois par séance quand on tient Maj
+dit aussi « le + ajoute un cadre ». Dans `vignettecamui.rs`, le message après « Ajouter un cadre » ne parle plus de Ctrl + Maj mais de Maj et du bord du cadre.
+Aucun champ ajouté à `App` (rien pour `onglets_tests`).
+
+### À vérifier à l'écran (par Anthony, au stylet)
+
+1. Tiens Maj sur une case : un petit « + » à côté de la case (ou du dernier cadre) ; relâche : plus rien. Pareil avec T tenue et l'outil Caméra.
+2. Clic sur le « + » : B (ou C, D…) à côté du dernier ; Ctrl+Z le retire, une seule étape.
+3. Glisse depuis le « + » : le cadre naît sous le pointeur et le suit ; lâche où tu veux ; Échap abandonne ; reviens au départ : un clic.
+4. Au stylet, la cible de 24 points est-elle assez large ? Sur une planche serrée, la place dessous ou dessus te convient-elle ?
+5. Rien d'autre ne change : glisser dans B déplace B, Maj + glisser une case déplace le plan, Maj + clic sur une barre coupe.

@@ -856,6 +856,9 @@ mod montagehead_tests;
 mod montageonglet_tests;
 mod vignettecam;
 mod vignettecamui;
+mod cadreplus;
+#[cfg(test)]
+mod cadreplus_tests;
 #[cfg(test)]
 mod vignettes_camera_tests;
 mod pistes;

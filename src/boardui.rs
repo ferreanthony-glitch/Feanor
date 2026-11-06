@@ -269,6 +269,8 @@ pub(crate) struct Vignettes {
     pub barre_attente: Option<BarreAttente>,
     /// Ce que Maj permet sur la planche a été dit une fois dans la ligne d'état (partie 113, proposition A).
     pub maj_dit: bool,
+    /// Le « + » de la peau de Maj : un cadre de caméra de plus (partie 115, `cadreplus.rs`).
+    pub plus: crate::cadreplus::Etat,
 }
 
 /// Un appui sur une barre, en attente de son lâcher (partie 113, décision 11).
@@ -335,6 +337,7 @@ impl Default for Vignettes {
             cadrer_tout: false,
             barre_attente: None,
             maj_dit: false,
+            plus: Default::default(),
         }
     }
 }
@@ -795,6 +798,10 @@ impl App {
             return false;
         }
         if button != PointerButton::Primary {
+            return false;
+        }
+        // Le « + » de Maj (partie 115) passe avant tout : il n'est là que tenu par Maj, T ou l'outil Caméra, et jamais pendant un appui.
+        if self.plus_appui(layout, pos) {
             return false;
         }
         // L'étiquette de version (« V2 ») d'une case : un appui dessus épingle la pile des versions (pour un stylet qui ne survole pas), comme
@@ -1474,8 +1481,16 @@ impl App {
         // Ce que Maj permet, dit une fois par séance, la première fois qu'on la tient sur la planche.
         if maj_seule && over.is_some() && !any_down && !self.vignettes.maj_dit {
             self.vignettes.maj_dit = true;
-            self.status = "Maj tenue : glisser une case déplace le plan, un clic le choisit, un coin tire la caméra, un clic sur une barre coupe ou réunit.".into();
+            self.status = "Maj tenue : glisser une case déplace le plan, un clic le choisit, un coin tire la caméra, un clic sur une barre coupe ou réunit, le + ajoute un cadre.".into();
         }
+        // Le « + » d'un cadre de plus : Maj, T ou l'outil Caméra, pas pendant un appui ni un geste (partie 115).
+        let plus_voulu = (maj_seule || (!pan_mode && !self.modal_open() && !writing && !mods.ctrl && !mods.command && (self.vignettes.camera_tenue || self.tool == Tool::Camera)))
+            && !any_down
+            && self.vignettes.cam.is_none()
+            && self.vignettes.moving.is_none()
+            && self.vignettes.plus.geste.is_none()
+            && !self.annot_actif();
+        self.plus_mettre_a_jour(&layout, xf, view, over, plus_voulu);
 
         let texts = self.text_rects(&painter, &layout);
         let tol = 5.0 / xf.zoom;
@@ -1536,6 +1551,7 @@ impl App {
         let pointer = latest.map(|p| xf.to_board(p));
         self.update_board_drag(&layout, pointer, xf.zoom);
         self.update_plan_move(&layout, xf, latest, escape);
+        self.plus_suivre(&layout, xf, latest);
         self.update_cam_geste(latest, escape);
         self.cam_garder_la_place(&layout);
         // Le geste du stylo ou de la gomme d'annotation, point après point (`annotationsui.rs`).
@@ -1670,6 +1686,7 @@ impl App {
         if peau_maj {
             self.peindre_peau_maj(&painter, view, xf, &layout);
         }
+        self.plus_peindre(&painter, over);
         if let (Some(p), Tool::Eraser, false) = (over, self.tool, pan_mode) {
             if matches!(hovered, Some(Hit::Nothing)) || matches!(self.board_drag, Some(BoardDrag::Erase { .. })) {
                 let r = self.note_eraser_radius(xf.zoom) * xf.zoom;
@@ -1695,7 +1712,9 @@ impl App {
         self.card_note_editor(ui, xf, &layout);
         self.titre_editeur(ui, xf, &layout);
         // Le curseur d'un cadre pris ou à prendre passe avant celui du dessin de la vignette courante (peint plus tôt).
-        if self.vignettes.frame_hot {
+        if self.vignettes.plus.survole {
+            ui.ctx().set_cursor_icon(CursorIcon::PointingHand);
+        } else if self.vignettes.frame_hot {
             ui.ctx().set_cursor_icon(if self.vignettes.moving.as_ref().is_some_and(|m| m.active) { CursorIcon::Grabbing } else { CursorIcon::Grab });
         } else if let (Some(p), true) = (over, ((mods.ctrl || mods.command) && mods.shift) || self.vignettes.camera_tenue || self.tool == Tool::Camera) {
             // Ctrl + Maj (ou T) tenue sur une case : un cadre de caméra à prendre (une petite caméra suit le pointeur).
@@ -1719,6 +1738,7 @@ impl App {
         self.horschamp_partager(&layout);
         self.finish_creation(any_down);
         self.finish_plan_move(any_down);
+        self.plus_lacher(latest, any_down);
         self.finish_cam_geste(&layout, any_down);
         // Choisir des plans (Ctrl ou Maj + clic) donne la main aux plans : copier, coller, supprimer (12e).
         if self.vignettes.press == Press::Select {
