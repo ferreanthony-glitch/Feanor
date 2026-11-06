@@ -805,6 +805,8 @@ pub struct App {
     pub(crate) usage: crate::usageui::Etat,
     /// Noter une friction sans quitter le dessin : la note en cours (`frictionui.rs`).
     pub(crate) friction: crate::frictionui::Etat,
+    /// Le banc du stylet : la fenêtre de Windows où écouter, et ce que FEANOR reçoit pendant l'essai (`styletui.rs`).
+    pub(crate) stylet: crate::styletui::Etat,
     /// Le thème dont les couleurs sont posées dans egui : quand le réglage change, tout est
     /// reposé une fois (`theme.rs`).
     pub(crate) theme_applied: crate::theme::ReglageTheme,
@@ -1015,7 +1017,11 @@ impl App {
                 }
             });
         }
-        Self::construire(&cc.egui_ctx, cc.wgpu_render_state.as_ref(), true)
+        let mut app = Self::construire(&cc.egui_ctx, cc.wgpu_render_state.as_ref(), true);
+        // La fenêtre de Windows, pour le banc du stylet (`stylet.rs`). Rien n'y est posé ici : l'écoute ne l'est qu'à
+        // la première ouverture du banc.
+        app.stylet.hwnd = crate::stylet::fenetre_de(cc);
+        app
     }
 
     /// Le logiciel sans fenêtre (mesures et essais de `perf_tests.rs`) : même état et mêmes
@@ -1366,6 +1372,7 @@ impl App {
             anneau: Default::default(),
             usage: crate::usageui::Etat::avec(Self::usage_lire()),
             friction: Default::default(),
+            stylet: Default::default(),
             theme_applied,
             theme_unsaved: false,
             welcome: true,
@@ -4113,6 +4120,7 @@ impl App {
             "aide.diagnostic" => self.open_diagnostic(),
             // Le compteur d'usage et les notes de friction (`usageui.rs`, `frictionui.rs`).
             "aide.habitudes" => self.usage.fenetre = !self.usage.fenetre,
+            "aide.stylet_transmet" => self.stylet_basculer(),
             "aide.noter_friction" => self.friction_commencer(),
             "aide.ouvrir_frictions" => self.friction_ouvrir_le_dossier(),
             // Le collage pose déjà les éléments et les zones à leur place d'origine.
@@ -5375,6 +5383,8 @@ impl App {
             // « Mes habitudes » et la note de friction en cours (`usageui.rs`, `frictionui.rs`).
             self.habitudes_fenetre(ctx);
             self.friction_fenetre(ctx);
+            // Le banc du stylet : ce que Windows en dit, à côté de ce que FEANOR reçoit (`styletui.rs`).
+            self.stylet_fenetre(ctx);
             // L'anneau sous le stylet (`anneauui.rs`) : avant la fenêtre des réglages, que son clic bref ouvre dans la même image.
             self.anneau_fenetre(ctx);
             // Clic droit dans le dessin : les réglages de l'outil sous le curseur, par-dessus tout (`reglagesdroit.rs`).

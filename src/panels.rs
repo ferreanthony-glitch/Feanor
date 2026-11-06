@@ -291,6 +291,7 @@ impl App {
                 self.action_item(ui, "Palette de commandes…", "aide.palette");
                 self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
                 self.action_item(ui, "Régler le stylet à ma main…", "aide.regler_stylet");
+                self.action_item(ui, "Ce que le stylet transmet…", crate::styletui::ACTION);
                 self.action_item(ui, "Visite rapide « Premier jour »…", "aide.visite");
                 self.action_item(ui, "Revoir les conseils", "aide.conseils");
                 self.action_item(ui, "Régler FEANOR pour cette machine…", "aide.diagnostic");

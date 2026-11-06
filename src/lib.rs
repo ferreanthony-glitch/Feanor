@@ -447,6 +447,11 @@ mod friction;
 #[cfg(test)]
 mod friction_tests;
 mod frictionui;
+// Le stylet lu auprès de Windows : l'écoute (rien n'est changé au dessin) et son banc, « Ce que le stylet transmet ».
+mod stylet;
+#[cfg(test)]
+mod stylet_tests;
+mod styletui;
 mod crayonnesheritage;
 #[cfg(test)]
 mod color_tests;

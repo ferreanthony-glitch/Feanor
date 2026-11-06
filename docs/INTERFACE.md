@@ -7730,3 +7730,72 @@ Le geste : **F9**, une ligne si on veut, **Entrée**. On reste dans le dessin.
 7. Aide > Mes frictions notées… : le fichier et l'image. L'image ne montre pas le champ de saisie. La ligne « Juste avant » est juste.
 8. F9 puis Échap : rien de plus dans le dossier.
 9. F9 puis Entrée sans rien taper : une note « (sans texte) », avec sa capture.
+
+## 113. Le banc du stylet : « Ce que le stylet transmet » (2026-11-06, branche `stylet-entier`)
+
+Anthony : « Le stylet en entier. Aujourd'hui Feanor ne reçoit que la pression. Lire le stylet directement auprès de Windows donnerait la gomme
+au dos du stylet, l'inclinaison, et le bouton pendant que la pointe touche. C'est le chantier le plus risqué, à faire avec toi devant la
+tablette. »
+Code : `src/stylet.rs` (la lecture, les jalons, l'écoute chez Windows), `src/styletui.rs` (la fenêtre), essais `src/stylet_tests.rs` (6, et une
+capture hors de la suite).
+
+**Premier pas : écouter, rien d'autre.** Avant de brancher la gomme, l'inclinaison ou le bouton, il faut savoir ce que la tablette d'Anthony
+envoie vraiment. Ce chantier ne change RIEN au dessin : il lit et il montre.
+
+### Pourquoi FEANOR ne reçoit que l'appui
+
+winit traite lui-même les messages `WM_POINTER*` de Windows. Il lit `GetPointerPenInfo`, garde `pressure`, et jette le reste : le bouton du
+fût (`PEN_FLAG_BARREL`), le stylet retourné (`PEN_FLAG_INVERTED`), la gomme qui touche (`PEN_FLAG_ERASER`), l'inclinaison (`tiltX`, `tiltY`) et
+la rotation. egui ne reçoit donc qu'un toucher avec sa force, et un bouton principal ou secondaire.
+
+### L'écoute
+
+- À la **première ouverture du banc**, FEANOR remplace la procédure de sa fenêtre par la sienne (`SetWindowLongPtrW`, `GWLP_WNDPROC`). Elle lit le
+  stylet pendant le message (le seul moment où Windows le donne), range la lecture dans des atomiques, puis rend le message **tel quel** à la
+  procédure d'origine, celle de winit (`CallWindowProcW`). Aucun message n'est retenu ni modifié.
+- **Une séance où l'on n'ouvre pas le banc est la même qu'avant** : rien n'est posé sur la fenêtre au démarrage (seule son adresse est lue).
+- L'écoute n'est posée que si la fenêtre existe et appartient au fil de l'interface ; sinon le banc dit que Windows a refusé. À la fin de la
+  fenêtre (`WM_NCDESTROY`), la procédure d'origine reprend sa place.
+- Elle ne peut pas paniquer : des atomiques et des appels à Windows. Les deux structures de Windows sont recopiées à la main (pas de nouvelle
+  dépendance) et leur taille est vérifiée à la compilation.
+- Elle note aussi les **clics de souris** arrivés à la fenêtre, et si Windows les marque comme venant d'un stylet (`GetMessageExtraInfo`) : c'est
+  ce qui dira par quel chemin le bouton du stylet devient aujourd'hui un clic droit.
+
+### La fenêtre : Aide > Ce que le stylet transmet… (`aide.stylet_transmet`, sans touche)
+
+- **Un cadre** où faire les gestes sans rien dessiner dans le projet. Un rond suit le stylet : creux en l'air, plein et plus gros quand on
+  appuie ; un trait part du côté où le stylet est couché ; un cercle l'entoure quand le bouton est enfoncé ; la teinte change pour la gomme.
+- **En direct** : pointe posée, en l'air ou hors de portée (ou gomme), appui, bouton, les deux inclinaisons, la rotation.
+- **À essayer** : huit gestes, chacun se coche dès qu'il est vu : approcher sans toucher ; appuyer ; coucher le stylet ; bouton, pointe en
+  l'air ; **bouton, pointe posée** ; retourner le stylet ; poser la gomme ; tourner le stylet sur lui-même.
+- **Ce que FEANOR reçoit aujourd'hui** : les événements de stylet et leur appui, les boutons principal, secondaire et du milieu arrivés à egui ;
+  et les clics de souris vus par Windows, avec ceux venus du stylet.
+- **« Enregistrer le relevé »** : le résultat en clair dans `%LOCALAPPDATA%\SHOT\stylet-releve.txt` et dans le presse-papiers.
+  **« Recommencer »** décoche tout.
+- Si aucun message de stylet n'arrive, la fenêtre dit que le pilote n'envoie peut-être pas le stylet par Windows Ink.
+
+### Ce que le relevé décidera
+
+| Ce que le relevé montre | Ce qu'on pourra brancher |
+|---|---|
+| « stylet retourné » et « gomme posée » vus | gommer en retournant le stylet, sans changer d'outil |
+| « inclinaison » vue, avec son maximum | l'entrée « inclinaison » des pinceaux (`brush.rs`, prévue de longue date) |
+| « bouton, pointe posée » vu | des gestes « bouton tenu » : pipette, déplacer la vue, taille du pinceau |
+| clic droit « venu du stylet » | le chemin actuel de l'anneau ; à garder quand le bouton sera lu directement |
+
+### Limites de ce premier pas
+
+- Une lecture par message. winit, lui, lit tout l'historique d'une trame : il faudra en faire autant pour donner l'inclinaison à chaque point
+  d'un trait.
+- La fenêtre principale seulement.
+- Windows 64 bits. Ailleurs, le banc s'ouvre et dit que l'écoute est refusée.
+- L'écoute elle-même n'est pas essayée par la suite (il faut une vraie fenêtre et un vrai stylet) : la lecture, les jalons, le relevé et la
+  fenêtre le sont, l'écoute se vérifie devant la tablette.
+
+### À regarder à l'écran, devant la tablette
+
+1. Aide > Ce que le stylet transmet… : la fenêtre s'ouvre, sans la phrase « Windows n'a pas laissé FEANOR écouter ».
+2. Approcher le stylet du cadre : la première ligne se coche, le rond creux suit le stylet.
+3. Faire les sept autres gestes de la liste, dans le cadre. Peu importe que certains ne se cochent pas : c'est la réponse qu'on cherche.
+4. « Enregistrer le relevé ».
+5. Fermer le banc et dessiner comme d'habitude quelques minutes : le trait, l'appui, le clic droit et l'anneau sont comme avant.
