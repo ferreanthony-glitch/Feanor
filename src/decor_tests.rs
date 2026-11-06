@@ -755,6 +755,8 @@ fn the_export_of_the_board_uses_the_same_frame_colour() {
 fn ouvrir_preferences(b: &mut Banc, onglet: Onglet) {
     b.garder_formes = true;
     b.app.settings.prefs_onglet = onglet;
+    // (« Plus de réglages » des Vignettes est replié d'origine, partie 113 : déplié ici pour lire tous les libellés.)
+    b.app.prefs_plus_vignettes = true;
     b.app.run_action("fichier.preferences");
     b.chauffer(6);
 }
@@ -780,11 +782,12 @@ fn the_vignettes_tab_holds_only_the_vignettes_settings_and_the_pale_rows_moved_o
     ouvrir_preferences(&mut b, Onglet::Vignettes);
     let vus = textes(&b);
     let contient = |vus: &[String], m: &str| vus.iter().any(|t| t.contains(m));
-    for r in REGLAGES.iter().filter(|r| r.onglet == Onglet::Vignettes) {
+    // (Les réglages de « Plus de réglages » sont sous la fenêtre sur cette image d'écran ; `prefsui_tests` les parcourt en défilant.)
+    for r in REGLAGES.iter().filter(|r| r.onglet == Onglet::Vignettes && r.groupe != crate::prefsonglets::Groupe::VignettesPlus) {
         assert!(contient(&vus, r.libelle), "« {} » manque dans l'onglet Vignettes :\n{vus:#?}", r.libelle);
     }
-    // Ce qui y est : les rangées pâles, les colonnes, le débord, l'aimant, la couleur des cadres, le report, le décor.
-    for m in ["Rangées de cases pâles", "Cases par rangée", "Débord du trait hors des cases", "Aimant des cadres de caméra", "Couleur des cadres de caméra", "Report du décor", "Brosses Décor"] {
+    // Ce qui y est : les rangées pâles, les colonnes, la taille des cases, le débord, et « Plus de réglages » (partie 113).
+    for m in ["Rangées de cases pâles", "Cases par rangée", "Taille des cases", "Débord du trait hors des cases", "Plus de réglages"] {
         assert!(contient(&vus, m), "{m}");
     }
     // Ce qui n'y est pas : rien du montage, du dessin ou de l'équipe.

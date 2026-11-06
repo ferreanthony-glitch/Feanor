@@ -589,6 +589,12 @@ impl App {
                     );
                 });
             }
+            // Sur la planche des Vignettes, l'outil Caméra ne règle que les cadres A, B, C… : rien du panneau complet (clés, adoucis,
+            // focale…), qui reste au Storyboard (partie 113, décision 9).
+            Tool::Camera if self.espace == crate::workspace::Espace::Vignettes => {
+                ui.label("Sur la planche : survole une case, ses cadres se montrent.");
+                note(ui, "Glisser un cadre le déplace ; un coin le redimensionne (le zoom). Clic droit sur la case : ajouter ou retirer un cadre. Les réglages fins de la caméra (clés, adoucis, focale) sont dans le Storyboard.");
+            }
             Tool::Camera => self.camera_panel(ui),
         }
         // (Un mode d'emploi de plus : seulement quand « Plus de réglages » est déplié.)
