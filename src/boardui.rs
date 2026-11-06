@@ -873,6 +873,19 @@ impl App {
         }
     }
 
+    /// Coupe le plan `plan` à l'image `frame` (la barre entre deux vignettes d'un même plan) : une étape d'annulation, nommée. Vrai si
+    /// le document a changé.
+    pub(crate) fn couper_entre_vignettes(&mut self, plan: u64, frame: usize) -> bool {
+        let Some(index) = self.doc.panels.iter().position(|p| p.id == plan) else { return false };
+        let ok = self.avec_etape("Couper le plan entre deux vignettes", |s| s.structure_op_dessins(|d, _| d.split_plan(index, frame)));
+        if ok {
+            self.cur_frame = 0;
+            self.board_sel = vec![self.doc.panels[self.cur_panel].id];
+            self.status = format!("Plan coupé : la vignette de droite commence le {}.", crate::storyboard::panel_title(&self.doc, self.cur_panel).to_lowercase());
+        }
+        ok
+    }
+
     /// Bascule la barre après l'image `after` : grise → noire coupe le plan là (l'image de droite commence un
     /// plan neuf), noire → grise réunit les deux plans (l'image de droite devient une image du plan de gauche).
     /// La dernière barre, devant la première case vide, dit ce que fera cette case : un plan ou une image.
@@ -889,13 +902,11 @@ impl App {
             if self.storyboard_refuses() || !self.partage_peut_toucher(&[a.plan]) {
                 return false;
             }
-            let ok = self.avec_etape("Couper le plan entre deux vignettes", |s| s.structure_op_dessins(|d, _| d.split_plan(a.panel, b.frame)));
-            if ok {
-                self.cur_frame = 0;
-                self.board_sel = vec![self.doc.panels[self.cur_panel].id];
-                self.status = format!("Plan coupé : la vignette de droite commence le {}.", crate::storyboard::panel_title(&self.doc, self.cur_panel).to_lowercase());
+            // Un plan qui a des versions rangées : la question « avec quelle partie ? » d'abord (`coupeversions.rs`).
+            if self.coupe_versions_necessaire(a.plan, b.frame) {
+                return self.coupe_versions_ouvrir(a.plan, b.frame, crate::coupeversions::Refaire::Vignettes { plan: a.plan, frame: b.frame });
             }
-            ok
+            self.couper_entre_vignettes(a.plan, b.frame)
         } else {
             // Réunir : le début du plan de droite devient une marque d'image du plan de gauche.
             if self.storyboard_refuses() || !self.partage_peut_toucher(&[a.plan, b.plan]) {

@@ -247,7 +247,8 @@ pub(crate) enum Geste {
     /// Les versions de séquence qui partagent leurs plans (`variantes.rs`, partie 59) : `quoi` % 9, 0 à 2 une nouvelle version de
     /// séquence (en gardant les plans, en les copiant, vide), 3 et 4 passer à l'une des autres (la `k`-ième), 5 une nouvelle version
     /// du plan courant, 6 mettre le plan courant à jour dans les autres versions de séquence qui le montrent, 7 supprimer la
-    /// `k`-ième version de séquence, 8 passer le plan courant à sa version suivante.
+    /// `k`-ième version de séquence, 8 passer le plan courant à sa version suivante (quand `k` est multiple de 4 : le plan courant
+    /// forme une séquence neuve ; quand `k % 4 == 1` : il est supprimé).
     Versions { quoi: u8, k: u8 },
 }
 
@@ -1057,7 +1058,14 @@ impl Essai {
                     2 => app.nouvelle_variante_de_sequence(seq, Nouvelle::Vide),
                     3 | 4 => {
                         if !autres.is_empty() {
-                            app.passer_a_la_variante(seq, autres[k as usize % autres.len()]);
+                            let cible = autres[k as usize % autres.len()];
+                            let attendus = app.doc.variantes_de(seq).and_then(|v| v.rangee(cible)).map_or(0, |r| r.contenu.slots.len());
+                            app.passer_a_la_variante(seq, cible);
+                            // Passer à une version de séquence ne lui retire aucun plan (un plan sorti de la séquence y reste : partie 102).
+                            if app.doc.numero_de_variante(seq) == cible {
+                                let montres = app.doc.plans_de_sequence(seq).len();
+                                assert_eq!(montres, attendus, "la version de séquence {cible} avait {attendus} plans, le film en montre {montres}");
+                            }
                         }
                     }
                     5 => app.nouvelle_version_du_plan(cur),
@@ -1072,6 +1080,13 @@ impl Essai {
                         if numeros.len() > 1 {
                             app.supprimer_la_variante(seq, numeros[k as usize % numeros.len()]);
                         }
+                    }
+                    // (Les gestes qui font quitter son plan à une séquence qui a des versions, partie 102 : le plan courant forme une séquence
+                    // neuve, ou est supprimé ; l'invariant des versions de séquence est vérifié après chacun.)
+                    _ if k % 4 == 0 => app.new_sequence_from_cases(),
+                    _ if k % 4 == 1 => {
+                        let plan = app.doc.panels[cur].id;
+                        app.delete_panels(&[plan]);
                     }
                     _ => app.run_action("version.suivante"),
                 }

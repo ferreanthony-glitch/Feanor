@@ -273,6 +273,12 @@ impl App {
             return;
         }
         let at = self.cur_frame;
+        // Un plan qui a des versions rangées : la question « avec quelle partie ? » d'abord (`coupeversions.rs`).
+        let plan = self.panel().id;
+        if self.coupe_versions_necessaire(plan, at) {
+            self.coupe_versions_ouvrir(plan, at, crate::coupeversions::Refaire::Courant);
+            return;
+        }
         if self.structure_op_dessins(|d, i| d.split_plan(i, at)) {
             self.status = format!("Plan coupé : la suite est le {}.", panel_title(&self.doc, self.cur_panel).to_lowercase());
         } else {

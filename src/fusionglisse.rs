@@ -57,6 +57,10 @@ impl Document {
         if px == py || self.sequence_of(px) != self.sequence_of(py) {
             return None;
         }
+        // (Avant de déplacer le plan glissé : un refus après le déplacement le laisserait déplacé, sans étape d'annulation.)
+        if self.refuser_si_trop_de_versions(&[x, y]) {
+            return None;
+        }
         if px + 1 != py && py + 1 != px {
             // Pas voisins : le plan glissé vient se poser contre le plan visé, du côté d'où il venait.
             let devant = if px < py { Some(y) } else { self.panels.get(py + 1).map(|p| p.id) };

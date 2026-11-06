@@ -883,6 +883,10 @@ pub struct App {
     pub(crate) duree_plans: Option<crate::dureeplans::DureePlans>,
     /// La question posée avant de réunir deux plans qui ont un calque de même nom (`fusionnoms.rs`).
     pub(crate) fusion_noms: Option<crate::fusionnoms::FusionNoms>,
+    /// La question posée avant de couper un plan qui a des versions rangées (`coupeversions.rs`), et sa réponse d'avance (les essais et
+    /// le hasard : sans elle, chaque coupe attendrait un clic ; `None` : la fenêtre se montre, comme pour l'utilisateur).
+    pub(crate) coupe_versions: Option<crate::coupeversions::CoupeEnAttente>,
+    pub(crate) coupe_versions_auto: Option<crate::variantes::Cote>,
     /// Réponse d'avance à cette question (les essais et le hasard : sans elle, chaque jonction attendrait un clic).
     /// `None` : la fenêtre se montre, comme pour l'utilisateur.
     pub(crate) fusion_noms_auto: Option<crate::fusionnoms::Reponse>,
@@ -1387,6 +1391,9 @@ impl App {
             duration_dialog: None,
             duree_plans: None,
             fusion_noms: None,
+            coupe_versions: None,
+            // (Les essais coupent d'un geste, les versions avec la première partie ; ceux de `coupeversions` retirent cette réponse.)
+            coupe_versions_auto: if cfg!(test) { Some(crate::variantes::Cote::Premiere) } else { None },
             // (Les essais répondent d'avance « Fusionner » : leurs jonctions se font d'un seul geste, comme avant la question.)
             fusion_noms_auto: if cfg!(test) { Some(crate::fusionnoms::Reponse::Fusionner) } else { None },
             trim_menu: None,
@@ -1609,6 +1616,7 @@ impl App {
             || self.kitsu.rendering()
             || self.vignettes.annot.confirmer
             || self.collage_occupe()
+            || self.coupe_versions.is_some()
     }
 
     /// Les réglages de la brosse de l'outil courant. Le Mélangeur prend ceux du pinceau, en « Lisser »
@@ -5304,6 +5312,7 @@ impl App {
         self.personnages_fenetre(ctx);
         self.scrub_audio();
         self.drop_stale_drags(ctx.input(|i| i.pointer.any_down()));
+        self.dire_le_refus_des_versions();
         self.suivre_sorte_pinceau();
         self.watch_plan_length();
         if self.thumbs.pending {

@@ -251,6 +251,16 @@ impl App {
         } else if self.storyboard_refuses() {
             return;
         }
+        // Entre deux images d'un plan qui a des versions rangées : couper le plan pose d'abord la question « les versions vont avec quelle
+        // partie ? » (`coupeversions.rs`) ; les images attendent la réponse, rien n'est fait en attendant.
+        if let Cible::Entre(id) = cible {
+            if let Some(c) = layout.cards.iter().find(|c| c.id == id).copied() {
+                if self.coupe_versions_necessaire(c.plan, c.end) {
+                    self.coupe_versions_ouvrir(c.plan, c.end, crate::coupeversions::Refaire::Depot { cible, rasters });
+                    return;
+                }
+            }
+        }
         let joins = self.vignettes.empty_joins;
         let mut rasters = rasters.into_iter();
         let mut first: Option<u64> = None;

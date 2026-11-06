@@ -2114,6 +2114,11 @@ impl Document {
         if self.panels.len() <= 1 {
             return None;
         }
+        // (Le dernier plan d'une séquence qui a d'autres versions de séquence ne se retire pas : elles disparaîtraient.)
+        let retire = self.panels[index].id;
+        if self.refuser_si_sequence_videe(|p| p == retire) {
+            return None;
+        }
         // (Un plan qu'une autre version de sa séquence montre est gardé : `variantes.rs`.)
         self.ranger_plan_partage(self.panels[index].id, false);
         self.panels.remove(index);
@@ -2128,6 +2133,9 @@ impl Document {
             return None;
         }
         let retires: Vec<u64> = self.panels[start..end].iter().map(|p| p.id).collect();
+        if self.refuser_si_sequence_videe(|p| retires.contains(&p)) {
+            return None;
+        }
         self.ranger_plans_partages(&retires, false);
         self.panels.drain(start..end);
         let next = self.panels[start.min(self.panels.len() - 1)].id;
@@ -2141,6 +2149,19 @@ impl Document {
         let n = self.panels.len();
         if from >= n || slot > n || slot == from || slot == from + 1 {
             return None;
+        }
+        // (Le dernier plan d'une séquence qui a d'autres versions de séquence ne la quitte pas : elles disparaîtraient.)
+        if !self.variantes.is_empty() {
+            let at = if slot > from { slot - 1 } else { slot };
+            let autres: Vec<&Panel> = self.panels.iter().enumerate().filter(|(i, _)| *i != from).map(|(_, p)| p).collect();
+            let (left, right) = (at.checked_sub(1).map(|i| autres[i].scene), autres.get(at).map(|p| p.scene));
+            let own = self.panels[from].scene;
+            let cible = if left != Some(own) && right != Some(own) { right.or(left).unwrap_or(own) } else { own };
+            let sequence = |scene: u64| self.scene(scene).map(|s| s.sequence);
+            let id = self.panels[from].id;
+            if sequence(cible) != sequence(own) && self.refuser_si_sequence_videe(|p| p == id) {
+                return None;
+            }
         }
         let mut moved = self.panels.remove(from);
         let at = if slot > from { slot - 1 } else { slot };
@@ -2165,6 +2186,15 @@ impl Document {
             return None;
         }
         let moving = |p: &Panel| ids.contains(&p.id);
+        // Les plans qui quittent leur séquence : le dernier plan d'une séquence qui a d'autres versions de séquence ne la quitte pas.
+        if !self.variantes.is_empty() {
+            let cible = self.scene(scene).map(|s| s.sequence);
+            let seqs = self.sequence_ids();
+            let partent: std::collections::HashSet<u64> = self.panels.iter().zip(&seqs).filter(|(p, s)| moving(p) && Some(**s) != cible).map(|(p, _)| p.id).collect();
+            if self.refuser_si_sequence_videe(|p| partent.contains(&p)) {
+                return None;
+            }
+        }
         // Panneau devant lequel poser le groupe (aucun : tout à la fin du film).
         let anchor = match before.and_then(|b| self.panels.iter().position(|p| p.id == b)) {
             Some(i) => self.panels[i..].iter().find(|p| !moving(p)).map(|p| p.id),
@@ -2208,6 +2238,10 @@ impl Document {
         let before = self.panels.len();
         if !self.variantes.is_empty() {
             let retires: Vec<u64> = self.panels.iter().filter(|p| ids.contains(&p.id) && Some(p.id) != spared).map(|p| p.id).collect();
+            let partent: std::collections::HashSet<u64> = retires.iter().copied().collect();
+            if self.refuser_si_sequence_videe(|p| partent.contains(&p)) {
+                return None;
+            }
             self.ranger_plans_partages(&retires, false);
         }
         self.panels.retain(|p| !ids.contains(&p.id) || Some(p.id) == spared);
@@ -2309,11 +2343,17 @@ impl Document {
         if index + 1 >= self.panels.len() || self.panels[index].scene != self.panels[index + 1].scene {
             return None;
         }
+        // (Les versions rangées des deux plans se gardent : celles du suivant deviennent des versions du plan réuni.)
+        if self.refuser_si_trop_de_versions(&[self.panels[index].id, self.panels[index + 1].id]) {
+            return None;
+        }
         // Caméras qu'ils montraient (un panneau sans clé hérite de ses voisins) : gardées.
         let (cam_a, cam_b) = (self.panel_camera(index, 0), self.panel_camera(index + 1, 0));
         // (Le plan réuni, qu'une autre version de sa séquence montre, en garde une copie : `variantes.rs`.)
         self.ranger_plan_partage(self.panels[index + 1].id, true);
         let next = self.panels.remove(index + 1);
+        let versions_suivant = self.versions.remove(&next.id);
+        self.absorber_versions(self.panels[index].id, versions_suivant);
         self.forget_joint_reserves(self.panels[index].id, next.id);
         let next_len = next.frame_count();
         let a_len = self.panels[index].frame_count();
@@ -2676,7 +2716,12 @@ impl Document {
         let cams_b = (self.panel_camera_douce(index + 1, 0), self.panel_camera_douce(index + 1, last(self, index + 1)));
         self.ranger_plan_partage(self.panels[index + 1].id, true);
         let b = self.panels.remove(index + 1);
-        self.append_plan(index, b, cams_a, cams_b, opts)
+        // Les versions rangées du plan absorbé restent au plan réuni, sous des numéros neufs (rien n'est perdu).
+        let versions_b = self.versions.remove(&b.id);
+        let hote = self.panels[index].id;
+        let r = self.append_plan(index, b, cams_a, cams_b, opts);
+        self.absorber_versions(hote, versions_b);
+        r
     }
 
     /// Met le plan `b` (déjà retiré du document) au bout du plan `index`.
@@ -2852,6 +2897,12 @@ impl Document {
             return None;
         }
         let first = self.panels[at[0]].id;
+        // (Avant de réunir le premier couple : un refus au milieu laisserait des plans déjà réunis, sans étape d'annulation. Les versions
+        // rangées de tous ces plans se retrouvent au plan réuni : leur total ne dépasse pas le maximum.)
+        let tous: Vec<u64> = at.iter().map(|&i| self.panels[i].id).collect();
+        if self.refuser_si_trop_de_versions(&tous) {
+            return None;
+        }
         for _ in 1..at.len() {
             let i = self.panels.iter().position(|p| p.id == first)?;
             self.join_next_plan_without_mark_with(i, opts)?;
@@ -2918,6 +2969,10 @@ impl Document {
         if index + 1 >= self.panels.len() || self.sequence_of(index) != self.sequence_of(index + 1) {
             return None;
         }
+        // (Les versions rangées du plan absorbé deviennent des versions du plan réuni : `absorber_versions`.)
+        if self.refuser_si_trop_de_versions(&[self.panels[index].id, self.panels[index + 1].id]) {
+            return None;
+        }
         // (Le décor du premier plan se tient sur la suite, ou la suite repart d'un décor vide : `decor.rs`.)
         self.join_with_decor_with(index, opts);
         let id = self.panels[index].id;
@@ -2934,6 +2989,8 @@ impl Document {
             return None;
         }
         let first_id = self.panels[index].id;
+        // Les versions rangées du plan vont avec la première partie, ou avec la seconde si la coupe l'a demandé (`variantes::avec_cote`).
+        let cote = crate::variantes::cote_choisi().unwrap_or(crate::variantes::Cote::Premiere);
         let marks = std::mem::take(&mut self.panels[index].marks);
         let second = self.split_panel(index, at)?;
         let scene = self.new_scene(self.sequence_of(second));
@@ -2956,6 +3013,9 @@ impl Document {
         if let Some(mark) = start {
             self.reanchor_notes(mark, id);
         }
+        if cote == crate::variantes::Cote::Seconde {
+            self.confier_versions_a_la_suite(first_id, id, scene);
+        }
         Some(self.normalize_keeping(id))
     }
 
@@ -2971,6 +3031,27 @@ impl Document {
             let i = self.panels.iter().position(|p| p.id == b)?;
             self.panels[i..].iter().find(|p| !ids.contains(&p.id)).map(|p| p.id)
         });
+        // Le dernier plan d'une séquence qui a d'autres versions de séquence ne la quitte pas (elles disparaîtraient).
+        if !self.variantes.is_empty() {
+            let kept: Vec<&Panel> = self.panels.iter().filter(|p| !ids.contains(&p.id)).collect();
+            let at = anchor.and_then(|b| kept.iter().position(|p| p.id == b)).unwrap_or(kept.len());
+            let sequence = |p: Option<&&Panel>| p.and_then(|p| self.scene(p.scene)).map(|s| s.sequence);
+            let (left, right) = (sequence(at.checked_sub(1).and_then(|i| kept.get(i))), sequence(kept.get(at)));
+            let partent: std::collections::HashSet<u64> = self
+                .panels
+                .iter()
+                .filter(|p| ids.contains(&p.id))
+                .filter(|p| {
+                    let own = self.scene(p.scene).map(|s| s.sequence);
+                    let cible = if own.is_some() && (own == left || own == right) { own } else { right.or(left) };
+                    cible.is_some() && cible != own
+                })
+                .map(|p| p.id)
+                .collect();
+            if self.refuser_si_sequence_videe(|p| partent.contains(&p)) {
+                return None;
+            }
+        }
         let (moved, mut kept): (Vec<Panel>, Vec<Panel>) = std::mem::take(&mut self.panels).into_iter().partition(|p| ids.contains(&p.id));
         if moved.is_empty() {
             self.panels = kept;
