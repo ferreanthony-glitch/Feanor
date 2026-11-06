@@ -218,7 +218,25 @@ verts) et à l'écran (capture 02 : un trait du papier à travers une case jusqu
 
 ---
 
-## Décisions à prendre (avec ma recommandation)
+## Réponse d'Anthony (même jour) et ce qui en est fait
+
+Décisions **1, 2, 3, 4, 5, 7, 8, 9, 10, 11** validées et faites ; propositions **A, B, C** validées et faites ; **D** non retenue (le voile
+pâlirait les traits rendus continus) ; **E** plus tard ; **6** en attente de sa réponse (le geste de l'outil Caméra ne change pas). Le détail de
+ce qui change, point par point, est dans la partie 113 de `docs/INTERFACE.md` (points 7 à 18) avec sa liste à vérifier à l'écran. Les
+décisions ci-dessous sont gardées telles qu'elles ont été posées, pour mémoire.
+
+Choix faits en chemin, à savoir :
+- **2, les formes** : refusées dans les Vignettes comme les autres outils (la planche est le croquis à main levée ; une forme posée sur une case
+  pâle y faisait naître un plan sans trait). Le lasso de Ctrl et la main restent.
+- **8** : un bout de trait ne crée que la case suivante (la première case pâle de sa séquence) ; plus loin, il reste sur la planche, visible,
+  sans plan. La variante « un plan à la fin, sans plans vides » aurait déplacé le dessin loin du stylet. Dessiner dans une case pâle lointaine
+  garde sa place, et la ligne d'état compte les plans vides.
+- **11** : le trait part dès le premier point (rien n'est gardé en attente, rien n'est perdu) ; au lâcher sans mouvement, le point de trait est
+  retiré et la barre bascule. Essai en pixels avec la planche rendue.
+- **A** : Maj + glisser déplace le plan depuis n'importe où dans la case ; un coin tire la caméra ; le bord de B, C… déplace ce cadre ; Maj +
+  clic choisit ; la peau (filets d'accent, poignées, barres entières) ne se montre que sans appui, et ne se peint pas pendant un trait.
+
+## Décisions à prendre (avec ma recommandation), telles que posées
 
 1. **Tab depuis le Storyboard.** Aujourd'hui : Storyboard → Animation, et retour. Les Vignettes ne sont qu'à l'aller (Vignettes → Storyboard).
    Deux choix : (a) laisser Tab à l'animation et donner **Maj+Tab** au couple Vignettes ↔ Storyboard (aujourd'hui Maj+Tab, dans le
