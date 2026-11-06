@@ -1,6 +1,10 @@
 # FEANOR (ex-SHOT) — état réel du projet (relevé du 2026-10-30, mise à jour du 2026-11-05 ci-dessous)
 
-## Mise à jour du 2026-11-05 au soir (main 80738d2) — elle prime sur la suite
+## Mise à jour du 2026-11-06 (main 7a0c6ad) — elle prime sur la suite
+- Format de projet : **47** (corbeille). Essais : **3927 réussis, 0 échec**, deux passages. Parties 101 à 110 d'INTERFACE en attente du test d'Anthony.
+- Traits coupés des captures 102 et 103 : non reproduits, à confirmer à l'écran.
+
+## Mise à jour du 2026-11-05 au soir (main 80738d2)
 - Essais : **3751 réussis, 0 échec**, deux passages. Contenu de la V1 et écarts : `suivi/V1.md`.
 - Gris sombre est le thème de base. L'animation n'a plus d'onglet (partie 100). ffmpeg allégé dans `Logiciel\ffmpeg\allege`.
 
