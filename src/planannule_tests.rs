@@ -85,6 +85,8 @@ fn dossier(nom: &str) -> PathBuf {
 
 #[test]
 fn a_click_on_the_number_cancels_the_plan_in_place_and_a_second_click_restores_it_all() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut b = dans_les_vignettes(film());
     let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
     let cible = ids[1];
@@ -130,6 +132,8 @@ fn a_click_on_the_number_cancels_the_plan_in_place_and_a_second_click_restores_i
 
 #[test]
 fn ctrl_z_undoes_each_gesture_in_one_step() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut b = dans_les_vignettes(film());
     let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
     b.app.select_panel(1);
@@ -150,6 +154,8 @@ fn ctrl_z_undoes_each_gesture_in_one_step() {
 
 #[test]
 fn hidden_numbers_show_while_shift_is_held_and_shift_click_cancels_instead_of_choosing() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut b = dans_les_vignettes(film());
     let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
     b.app.run_action("vignettes.numeros");
@@ -204,6 +210,8 @@ fn hidden_numbers_show_while_shift_is_held_and_shift_click_cancels_instead_of_ch
 
 #[test]
 fn shift_dragging_from_a_number_moves_the_plan_and_cancels_nothing() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut b = dans_les_vignettes(film());
     let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
     b.touches = Modifiers::SHIFT;
@@ -225,6 +233,8 @@ fn shift_dragging_from_a_number_moves_the_plan_and_cancels_nothing() {
 
 #[test]
 fn a_stroke_from_a_number_is_a_stroke_and_cuts_nothing() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     use crate::traits_continus_tests::{planche, relever, repos, tracer};
     let Some(mut b) = planche(film(), 4, 1.0) else { return };
     b.app.set_espace(Espace::Vignettes);
@@ -257,6 +267,8 @@ fn a_stroke_from_a_number_is_a_stroke_and_cuts_nothing() {
 
 #[test]
 fn the_right_click_menu_is_the_second_way() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut b = dans_les_vignettes(film());
     let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
     b.garder_formes = true;
@@ -299,6 +311,8 @@ fn the_right_click_menu_is_the_second_way() {
 
 #[test]
 fn drawing_in_a_cancelled_case_is_refused_and_says_so() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut b = dans_les_vignettes(film());
     let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
     clic_numero(&mut b, ids[1]);
@@ -317,6 +331,8 @@ fn drawing_in_a_cancelled_case_is_refused_and_says_so() {
 
 #[test]
 fn a_stroke_crossing_a_cancelled_case_is_not_cut() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     use crate::traits_continus_tests::{planche, relever, repos, tracer};
     let Some(mut b) = planche(film(), 4, 1.0) else { return };
     b.app.set_espace(Espace::Vignettes);
@@ -360,6 +376,8 @@ fn faire_le_tour(b: &mut Banc) {
 
 #[test]
 fn cancelling_the_current_plan_goes_to_a_neighbour_on_every_screen() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut b = dans_les_vignettes(film());
     let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
     b.app.select_panel(3);
@@ -374,6 +392,8 @@ fn cancelling_the_current_plan_goes_to_a_neighbour_on_every_screen() {
 
 #[test]
 fn when_everything_is_cancelled_the_storyboard_says_so_and_exports_refuse() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut b = dans_les_vignettes(film());
     let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
     let contenus: Vec<String> = ids.iter().map(|&i| contenu(&b.app.doc, &plan_de(&b.app.doc, i))).collect();
@@ -420,6 +440,8 @@ fn when_everything_is_cancelled_the_storyboard_says_so_and_exports_refuse() {
 
 #[test]
 fn a_film_of_one_plan_can_be_cancelled_undone_and_a_new_plan_replaces_the_placeholder() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut doc = Document::with_frame(160, 90, 24);
     doc.panels[0].action = "SEUL".into();
     let seul = doc.panels[0].id;
@@ -451,6 +473,8 @@ fn a_film_of_one_plan_can_be_cancelled_undone_and_a_new_plan_replaces_the_placeh
 
 #[test]
 fn drawing_in_a_pale_case_when_everything_is_cancelled_makes_a_real_plan() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut doc = Document::with_frame(160, 90, 24);
     doc.add_scene_after(0);
     let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
@@ -485,6 +509,8 @@ fn ordre(doc: &Document) -> Vec<u64> {
 
 #[test]
 fn cutting_joining_moving_and_duplicating_neighbours_keep_the_cancelled_plan_in_place() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut doc = film();
     let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
     doc.annuler_plan(ids[2]).unwrap();
@@ -525,6 +551,8 @@ fn cutting_joining_moving_and_duplicating_neighbours_keep_the_cancelled_plan_in_
 
 #[test]
 fn the_plan_before_it_deleted_or_in_the_bin_leaves_it_on_the_board_and_nothing_is_lost() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut doc = film();
     let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
     doc.annuler_plan(ids[1]).unwrap();
@@ -556,6 +584,8 @@ fn the_plan_before_it_deleted_or_in_the_bin_leaves_it_on_the_board_and_nothing_i
 
 #[test]
 fn a_cancelled_plan_keeps_its_transitions_comments_crop_versions_and_references() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut app = crate::montage_sans_casse_tests::appli("annule-tout");
     let ids: Vec<u64> = app.doc.panels.iter().map(|p| p.id).collect();
     app.rogner_plan(1, crate::rognage::Rogner::Tail(-3), "Rogner");
@@ -589,6 +619,8 @@ fn a_cancelled_plan_keeps_its_transitions_comments_crop_versions_and_references(
 
 #[test]
 fn a_cancellation_belongs_to_its_sequence_version_and_the_last_plan_of_a_versioned_sequence_is_refused() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     use crate::variantes::Nouvelle;
     let mut doc = film();
     let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
@@ -625,6 +657,8 @@ fn a_cancellation_belongs_to_its_sequence_version_and_the_last_plan_of_a_version
 
 #[test]
 fn a_sequence_whose_plans_are_all_cancelled_stays_on_the_board_with_its_name_and_comes_back() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut doc = crate::vignettes_tests::deux_sequences();
     let dernier = doc.panels.len() - 1;
     let id = doc.panels[dernier].id;
@@ -665,6 +699,8 @@ fn a_sequence_whose_plans_are_all_cancelled_stays_on_the_board_with_its_name_and
 
 #[test]
 fn the_sound_neither_moves_nor_disappears_and_the_status_line_says_so() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut doc = film();
     let pcm = crate::audio::Pcm::from_interleaved(&vec![0.2; 48_000 * 2], 2, crate::audio::RATE);
     let son = doc.add_sound("essai.wav".into(), "wav".into(), std::sync::Arc::new(Vec::new()), std::sync::Arc::new(pcm));
@@ -692,6 +728,8 @@ fn enregistrer(doc: &Document, nom: &str) -> (PathBuf, PathBuf) {
 
 #[test]
 fn everything_survives_saving_and_reopening_and_nothing_is_written_when_no_plan_is_cancelled() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut app = crate::montage_sans_casse_tests::appli("annule-fichier");
     let doc = &mut app.doc;
     assert_eq!(project::VERSION, 48);
@@ -758,6 +796,8 @@ fn everything_survives_saving_and_reopening_and_nothing_is_written_when_no_plan_
 #[test]
 #[ignore = "demande une copie d'un vrai projet : FEANOR_ESSAI_PROJET"]
 fn on_a_copy_of_a_real_project() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let Some(m) = std::env::var_os("FEANOR_ESSAI_PROJET").map(PathBuf::from) else { return };
     let mut lu = project::load(&m).expect("le projet s'ouvre");
     let n = lu.doc.panels.len();
@@ -786,6 +826,8 @@ fn on_a_copy_of_a_real_project() {
 
 #[test]
 fn a_plan_cancelled_here_and_shown_by_another_sequence_version_reopens_without_being_renumbered() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     use crate::variantes::Nouvelle;
     let mut doc = film();
     let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
@@ -809,6 +851,8 @@ fn a_plan_cancelled_here_and_shown_by_another_sequence_version_reopens_without_b
 
 #[test]
 fn what_a_cancelled_plan_has_off_the_sheet_survives_a_reopen() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut doc = film();
     let id = doc.panels[1].id;
     let c = doc.panels[1].layers[0].frames[0].unwrap();
@@ -828,6 +872,8 @@ fn what_a_cancelled_plan_has_off_the_sheet_survives_a_reopen() {
 
 #[test]
 fn the_bar_before_a_cancelled_case_joins_nothing() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut b = dans_les_vignettes(film());
     let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
     clic_numero(&mut b, ids[1]);
@@ -844,6 +890,8 @@ fn the_bar_before_a_cancelled_case_joins_nothing() {
 
 #[test]
 fn all_cancelled_survives_a_reopen_too() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut doc = film();
     let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
     for &i in &ids {
@@ -865,6 +913,8 @@ fn all_cancelled_survives_a_reopen_too() {
 
 #[test]
 fn an_older_project_opens_as_is_and_an_unreadable_file_is_never_overwritten() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let doc = film();
     let (dir, manifest) = enregistrer(&doc, "ancien");
     // Un projet 47 : aucun fichier, le numéro d'avant.
@@ -900,6 +950,8 @@ fn an_older_project_opens_as_is_and_an_unreadable_file_is_never_overwritten() {
 
 #[test]
 fn a_shared_film_refuses_the_gesture_and_a_film_with_cancelled_plans_refuses_to_be_shared() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut b = dans_les_vignettes(film());
     let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
     clic_numero(&mut b, ids[1]);
@@ -911,6 +963,8 @@ fn a_shared_film_refuses_the_gesture_and_a_film_with_cancelled_plans_refuses_to_
 
 #[test]
 fn locked_numbers_are_kept_and_not_given_away() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let mut doc = film();
     doc.lock_numbering();
     let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
@@ -968,6 +1022,8 @@ fn courir(job: &mut crate::export::ExportJob, doc: &Document) {
 
 #[test]
 fn export_video_and_image_sequence() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     use crate::export::{self, ExportJob, Range};
     let (doc, _) = film_sans_le_plan_2();
     let frames = export::frames_for(&doc, Range::Montage, 0);
@@ -999,6 +1055,8 @@ fn export_video_and_image_sequence() {
 
 #[test]
 fn export_images_by_plan_and_by_key() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let (doc, _) = film_sans_le_plan_2();
     let plans = tout(&doc);
     let par_plan = crate::exportstills::items(&doc, &plans, crate::exportstills::StillsPer::Plan);
@@ -1013,6 +1071,8 @@ fn export_images_by_plan_and_by_key() {
 
 #[test]
 fn export_sound_by_plan() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let (mut doc, _) = film_sans_le_plan_2();
     let pcm = crate::audio::Pcm::from_interleaved(&vec![0.2; 48_000 * 2 * 3], 2, crate::audio::RATE);
     let son = doc.add_sound("essai.wav".into(), "wav".into(), std::sync::Arc::new(Vec::new()), std::sync::Arc::new(pcm));
@@ -1023,6 +1083,8 @@ fn export_sound_by_plan() {
 
 #[test]
 fn export_color_script_board_and_layers() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let (doc, id) = film_sans_le_plan_2();
     let plans = tout(&doc);
     let spec = crate::colorscript::construire(&doc, &plans, &crate::colorscript::Options::default());
@@ -1039,6 +1101,8 @@ fn export_color_script_board_and_layers() {
 
 #[test]
 fn export_for_editing_sheet_and_shot_list() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let (doc, _) = film_sans_le_plan_2();
     let plan = crate::editorial::build_plan(&doc, &crate::editorial::Options::default(), 0, "essai").expect("le montage");
     assert_eq!(plan.clips.len(), 3, "les clips du montage");
@@ -1054,6 +1118,8 @@ fn export_for_editing_sheet_and_shot_list() {
 
 #[test]
 fn delivery_package_and_kitsu_leave_the_cancelled_plan_out_and_delete_nothing() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     let (doc, id) = film_sans_le_plan_2();
     let cibles = crate::kitsu::cibles(&doc, &tout(&doc), 0, &Default::default());
     assert_eq!(cibles.len(), 3, "Kitsu : on n'envoie pas le plan");
@@ -1071,6 +1137,8 @@ fn delivery_package_and_kitsu_leave_the_cancelled_plan_out_and_delete_nothing() 
 #[test]
 #[ignore = "écrit une capture : FEANOR_CAPTURE_DIR"]
 fn plan_annule_captures() {
+    // (Ces essais calculent, exportent et enregistrent : ils tiennent le « monde » partagé des effets, `fxcache::monde`.)
+    crate::fxcache::monde::lire();
     use crate::traits_continus_tests::{planche, repos};
     let Some(dir) = std::env::var_os("FEANOR_CAPTURE_DIR").map(PathBuf::from) else {
         eprintln!("FEANOR_CAPTURE_DIR absent");
