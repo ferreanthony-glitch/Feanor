@@ -240,35 +240,35 @@ fn the_frame_is_the_border_of_a_box_with_a_few_points_of_tolerance_on_both_sides
 }
 
 #[test]
-fn shift_click_on_the_frame_takes_the_plan_but_shift_click_inside_still_chooses_plans() {
+fn shift_press_anywhere_in_a_case_takes_the_plan_and_a_shift_click_chooses_it() {
     let mut b = ouvert(quatre_plans(), 4);
     let ids = plans(&b);
     let avant = pas_d_annulation(&b);
-    // Dedans (au-delà de la bande) : choisir, comme avant ; aucun déplacement.
+    // Dedans (au-delà de la bande) : le plan est pris (partie 113, proposition A), et un clic sans mouvement le choisit, au lâcher.
     let v = vignette(&b, 4);
     let dedans = pos2(v.left() + 30.0, v.center().y);
     b.touches = Modifiers::SHIFT;
     b.image(vec![Event::PointerMoved(dedans)], 1.0 / 60.0);
     b.image(vec![appui(dedans, true, Modifiers::SHIFT)], 1.0 / 60.0);
-    assert!(b.app.vignettes.moving.is_none() && b.app.vignettes.press == Press::Select);
+    assert!(b.app.vignettes.moving.is_some() && b.app.vignettes.press == Press::Move);
     b.image(vec![appui(dedans, false, Modifiers::SHIFT)], 1.0 / 60.0);
     b.touches = Modifiers::NONE;
     b.image(Vec::new(), 1.0 / 60.0);
     assert!(b.app.board_selection().contains(&ids[2]), "Maj + clic dedans choisit le plan");
-    // Sur le cadre : le plan est pris, rien n'est choisi ni dessiné.
+    assert!(b.app.vignettes.moving.is_none());
+    // Sur le cadre : pareil, le plan est pris ; un clic sans glissement ne déplace rien.
     b.app.board_sel.clear();
+    b.app.vignettes.libre = true;
     let cadre = cadre(&b, 4);
     b.touches = Modifiers::SHIFT;
     b.image(vec![Event::PointerMoved(cadre)], 1.0 / 60.0);
     b.image(vec![appui(cadre, true, Modifiers::SHIFT)], 1.0 / 60.0);
     assert_eq!(b.app.vignettes.press, Press::Move);
     assert_eq!(b.app.vignettes.moving.as_ref().map(|m| m.ids.clone()), Some(vec![ids[2]]));
-    assert!(!b.app.board_sel.contains(&ids[2]), "le cadre ne choisit pas");
     b.image(vec![appui(cadre, false, Modifiers::SHIFT)], 1.0 / 60.0);
     b.touches = Modifiers::NONE;
     b.image(Vec::new(), 1.0 / 60.0);
-    // Un simple clic sur le cadre (aucun glissement) ne change rien.
-    assert_eq!(plans(&b), ids);
+    assert_eq!(plans(&b), ids, "un simple clic sur le cadre (aucun glissement) ne déplace rien");
     assert_eq!(pas_d_annulation(&b), avant);
     assert!(b.app.vignettes.moving.is_none());
     for i in 0..4 {
@@ -301,12 +301,15 @@ fn the_cursor_is_a_hand_on_the_frame_with_shift_held_even_on_the_current_box() {
     b.image(Vec::new(), 1.0 / 60.0);
     assert_eq!(b.app.cur_panel, 0);
     assert_eq!(b.curseur, CursorIcon::Grab, "cadre de la vignette courante");
-    // Dedans, avec Maj : pas de main.
+    // Dedans, avec Maj : la main aussi (partie 113, proposition A : Maj prend la case n'importe où) ; à un coin, la caméra (pas de main).
     let v = vignette(&b, 4);
     b.image(vec![Event::PointerMoved(v.center())], 1.0 / 60.0);
     b.image(Vec::new(), 1.0 / 60.0);
-    assert_ne!(b.curseur, CursorIcon::Grab);
-    assert!(!b.app.vignettes.frame_hot);
+    assert_eq!(b.curseur, CursorIcon::Grab, "dedans aussi");
+    assert!(b.app.vignettes.frame_hot);
+    b.image(vec![Event::PointerMoved(v.right_bottom() - vec2(1.0, 1.0))], 1.0 / 60.0);
+    b.image(Vec::new(), 1.0 / 60.0);
+    assert!(!b.app.vignettes.frame_hot, "un coin : la caméra, pas la main");
     b.touches = Modifiers::NONE;
     b.chauffer(2);
 }

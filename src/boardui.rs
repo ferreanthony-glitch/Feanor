@@ -38,7 +38,7 @@ use eframe::egui::{
 };
 
 use crate::app::{App, BoardView, Mode, Tool};
-use crate::board::{self, BoardLayout, BoardSettings, CardPlace, Hit, NoteRef, CARD_MAX, CARD_MIN, MAX_COLUMNS, NOTE_TEXT_SIZE};
+use crate::board::{self, BoardLayout, BoardSettings, CardPlace, Hit, NoteRef, MAX_COLUMNS, NOTE_TEXT_SIZE};
 use crate::boardsens::Champ;
 use crate::history::Nav;
 use crate::vector::VPoint;
@@ -54,6 +54,8 @@ const GHOST_HOT: Color32 = Color32::from_gray(150);
 /// Barre de continuité (même plan : un trait très pâle) et de coupe (noire).
 const BAR_JOINED: Color32 = Color32::from_gray(230);
 const BAR_CUT: Color32 = Color32::from_gray(26);
+/// Le point entre deux cases d'un même plan (partie 113, proposition B) : visible sur le papier, discret.
+pub(crate) const BAR_POINT: Color32 = Color32::from_gray(185);
 /// Texte d'une note (gris discret), et le filet très pâle sous chaque bande.
 const NOTE_INK: Color32 = Color32::from_gray(100);
 const HAIRLINE: Color32 = Color32::from_gray(236);
@@ -127,19 +129,20 @@ pub(crate) struct PlanMove {
     pub cancelled: bool,
     /// Où le plan se poserait si l'on lâchait ici.
     pub target: Option<board::DropSlot>,
-    /// Maj + Alt : on glisse la copie du plan ; l'original reste où il est, la copie se pose à l'endroit du lâcher (n'importe où entre
-    /// deux plans, y compris juste devant ou juste après l'original).
+    /// On glisse la copie du plan ; l'original reste où il est, la copie se pose à l'endroit du lâcher. (Plus aucun geste ne le demande
+    /// depuis la partie 113 : Maj + Alt est retiré ; « Dupliquer le plan » reste au clic droit, à l'anneau et à sa touche.)
     pub copie: bool,
+    /// L'appui a pris la case `k` avec ces touches : un lâcher sans mouvement est un clic, qui choisit le plan (partie 113, proposition A).
+    pub clic: Option<(usize, Modifiers)>,
 }
 
 /// Distance (points d'écran) dont il faut glisser un cadre avant que ce soit un déplacement.
 pub(crate) const MOVE_THRESHOLD: f32 = 5.0;
-/// Tolérance (points d'écran) de part et d'autre du filet d'une vignette pour la prendre par son cadre.
-const FRAME_TOUCH: f32 = 5.0;
 
-/// La bande de note en cours d'écriture : celle de l'image `id` (le plan, ou sa marque d'image).
+/// La ligne de texte en cours d'écriture : le champ `champ` (action, dialogue ou notes) de l'image `id` (le plan, ou sa marque d'image).
 pub(crate) struct NoteEdit {
     pub id: u64,
+    pub champ: Champ,
     pub buffer: String,
     focused: bool,
     had_focus: bool,
@@ -261,6 +264,24 @@ pub(crate) struct Vignettes {
     pub montrer_courante: bool,
     /// « Cadrer tout » vient d'être demandé (partie 113) : le prochain zoom nul met toute la planche dans la vue, en hauteur aussi.
     pub cadrer_tout: bool,
+    /// Un appui est tombé sur une barre (partie 113, décision 11) : la barre ne répond qu'au lâcher d'un clic qui n'a pas bougé ; un appui
+    /// qui bouge est un trait, parti dès son premier point.
+    pub barre_attente: Option<BarreAttente>,
+    /// Ce que Maj permet sur la planche a été dit une fois dans la ligne d'état (partie 113, proposition A).
+    pub maj_dit: bool,
+}
+
+/// Un appui sur une barre, en attente de son lâcher (partie 113, décision 11).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BarreAttente {
+    /// La barre : après la case `after`.
+    pub after: usize,
+    /// Le point d'appui (écran).
+    pub origine: Pos2,
+    /// Le nombre d'étapes d'annulation avant l'appui.
+    pub base_len: usize,
+    /// L'appui a aussi lancé un trait dans la case la plus proche (un outil de dessin) : au lâcher d'un clic, ce point de trait est retiré.
+    pub dessine: bool,
 }
 
 impl Vignettes {
@@ -312,6 +333,8 @@ impl Default for Vignettes {
             camera_choisie: None,
             montrer_courante: false,
             cadrer_tout: false,
+            barre_attente: None,
+            maj_dit: false,
         }
     }
 }
@@ -526,6 +549,7 @@ impl App {
     // ------------------------------------------------------------------ notes sous les images
 
     /// Le texte de la bande de note de l'image `place` : les notes du plan (première image) ou de sa marque.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub(crate) fn card_notes(&self, place: &CardPlace) -> &str {
         // (Une case d'une planche faite avant un changement du film peut désigner un plan qui n'est plus là : rien.)
         let Some(p) = self.doc.panels.get(place.panel) else { return "" };
@@ -543,10 +567,21 @@ impl App {
         Rect::from_min_size(pos2(strip.right() - NOTE_ICONE - 1.0, strip.top()), vec2(NOTE_ICONE, NOTE_ICONE))
     }
 
-    /// La ligne Notes de la case `place`, sur la planche, quand le champ Notes est coché : un clic dessus écrit la note, comme l'icône.
-    pub(crate) fn ligne_notes(&self, place: &CardPlace) -> Option<Rect> {
-        let i = self.layout.board_textes.ligne_du(Champ::Notes)?;
+    /// La ligne du champ `champ` de la case `place`, sur la planche, quand ce champ est coché : un clic dessus l'écrit en place (Action et
+    /// Dialogue depuis la partie 113, proposition C : raconter sans quitter la planche).
+    pub(crate) fn ligne_du_champ(&self, place: &CardPlace, champ: Champ) -> Option<Rect> {
+        let i = self.layout.board_textes.ligne_du(champ)?;
         place.a_du_texte().then(|| place.ligne_de_texte(i))
+    }
+
+    /// Le champ dont la ligne, sous la case `place`, est sous le point `p` (planche).
+    pub(crate) fn champ_sous(&self, place: &CardPlace, p: Pos2) -> Option<Champ> {
+        Champ::TOUS.into_iter().find(|c| self.ligne_du_champ(place, *c).is_some_and(|r| r.contains(p)))
+    }
+
+    /// Le texte du champ `champ` de la case `place` (le plan, ou sa marque d'image).
+    fn texte_de_la_case(&self, place: &CardPlace, champ: Champ) -> &str {
+        crate::boardsens::texte_du_champ(&self.doc, place.panel, place.id, place.frame, champ)
     }
 
     /// L'icône d'écriture, discrète : seulement quand le pointeur est sur la case ou sa bande (pas pendant un geste), et toujours sur la case dont
@@ -593,34 +628,70 @@ impl App {
 
     /// Ouvre la bande de note de l'image `place` pour l'écrire.
     fn open_card_note(&mut self, place: &CardPlace) {
+        self.open_card_champ(place, Champ::Notes);
+    }
+
+    /// Ouvre la ligne du champ `champ` de l'image `place` pour l'écrire en place (partie 113, proposition C).
+    fn open_card_champ(&mut self, place: &CardPlace, champ: Champ) {
         if self.content_refuses() {
             return;
         }
-        let buffer = self.card_notes(place).to_string();
-        self.vignettes.note = Some(NoteEdit { id: place.id, buffer, focused: false, had_focus: false });
+        let buffer = self.texte_de_la_case(place, champ).to_string();
+        self.vignettes.note = Some(NoteEdit { id: place.id, champ, buffer, focused: false, had_focus: false });
     }
 
-    /// Pose la note en cours d'écriture dans le plan (ou la marque d'image). Une étape d'annulation, nommée,
-    /// seulement si le texte a changé.
+    /// Pose le texte en cours d'écriture dans le plan (ou la marque d'image) : son champ (action, dialogue, notes). Une étape
+    /// d'annulation, nommée, seulement si le texte a changé.
     pub(crate) fn commit_card_note(&mut self) {
         let Some(ed) = self.vignettes.note.take() else { return };
         let text = ed.buffer.trim_end().to_string();
         let Some(pi) = self.doc.panels.iter().position(|p| p.id == ed.id || p.marks.iter().any(|m| m.id == ed.id)) else { return };
         let on_plan = self.doc.panels[pi].id == ed.id;
-        let now = if on_plan { self.doc.panels[pi].notes.as_str() } else { self.doc.panels[pi].marks.iter().find(|m| m.id == ed.id).map_or("", |m| m.notes.as_str()) };
+        let champ = ed.champ;
+        let lire = |p: &crate::document::Panel| -> String {
+            if on_plan {
+                match champ {
+                    Champ::Action => p.action.clone(),
+                    Champ::Dialogue => p.dialogue.clone(),
+                    Champ::Notes => p.notes.clone(),
+                }
+            } else {
+                p.marks.iter().find(|m| m.id == ed.id).map_or(String::new(), |m| match champ {
+                    Champ::Action => m.action.clone(),
+                    Champ::Dialogue => m.dialogue.clone(),
+                    Champ::Notes => m.notes.clone(),
+                })
+            }
+        };
+        let now = lire(&self.doc.panels[pi]);
         if now == text || (now.trim().is_empty() && text.trim().is_empty()) {
             return;
         }
         if self.content_refuses() {
             return;
         }
-        self.avec_etape("Note de vignette", |a| a.record_step());
+        let nom = match champ {
+            Champ::Action => "Action de vignette",
+            Champ::Dialogue => "Dialogue de vignette",
+            Champ::Notes => "Note de vignette",
+        };
+        self.avec_etape(nom, |a| a.record_step());
+        let ecrire = |s: &mut String| *s = text.clone();
+        let p = &mut self.doc.panels[pi];
         if on_plan {
-            self.doc.panels[pi].notes = text;
-        } else if let Some(m) = self.doc.panels[pi].marks.iter_mut().find(|m| m.id == ed.id) {
-            m.notes = text;
+            match champ {
+                Champ::Action => ecrire(&mut p.action),
+                Champ::Dialogue => ecrire(&mut p.dialogue),
+                Champ::Notes => ecrire(&mut p.notes),
+            }
+        } else if let Some(m) = p.marks.iter_mut().find(|m| m.id == ed.id) {
+            match champ {
+                Champ::Action => ecrire(&mut m.action),
+                Champ::Dialogue => ecrire(&mut m.dialogue),
+                Champ::Notes => ecrire(&mut m.notes),
+            }
         }
-        self.status = "Note de la vignette enregistrée.".into();
+        self.status = format!("{} de la vignette enregistré{}.", champ.nom(), if champ == Champ::Notes { "es" } else { "" });
     }
 
     /// Exécute `f` en nommant les étapes d'annulation qu'elle enregistre.
@@ -638,8 +709,9 @@ impl App {
             self.vignettes.note = None;
             return;
         };
-        // L'éditeur remplace la ligne Notes (la bande entière si ce champ n'est pas coché : l'icône écrit quand même les notes).
-        let strip = xf.rect(self.ligne_notes(&place).unwrap_or(place.note));
+        // L'éditeur remplace la ligne du champ qu'on écrit (la bande entière si ce champ n'est pas coché : l'icône écrit quand même les notes).
+        let champ = self.vignettes.note.as_ref().map_or(Champ::Notes, |e| e.champ);
+        let strip = xf.rect(self.ligne_du_champ(&place, champ).unwrap_or(place.note));
         let icone = self.note_icone_rect(&place);
         let Some(ed) = self.vignettes.note.as_mut() else { return };
         let font = FontId::proportional((board::note_font_size(ed.buffer.chars().count()) * xf.zoom).clamp(9.0, 40.0));
@@ -739,16 +811,29 @@ impl App {
         // La ligne Notes de la case, quand ce champ est coché, ouvre la note de même (Anthony, 2026-10-24 : « un clic sur la ligne Notes
         // l'écrit ») ; sans modificateur ni touche de caméra tenue : Maj, Ctrl et T gardent leur geste. Les lignes Action et Dialogue, elles,
         // dessinent dans la case comme le reste de la bande.
+        // (Depuis la partie 113, proposition C, les lignes Action et Dialogue s'écrivent en place de même.)
         let simple = !m.shift && !m.ctrl && !m.command && !m.alt && !self.vignettes.camera_tenue;
-        let ouvre = |c: &CardPlace| c.a_du_texte() && (self.note_icone_rect(c).contains(pos) || (simple && self.ligne_notes(c).is_some_and(|r| r.contains(p))));
-        if let Some(k) = layout.cards.iter().position(ouvre) {
+        let ouvre = |c: &CardPlace| -> Option<Champ> {
+            if !c.a_du_texte() {
+                return None;
+            }
+            if self.note_icone_rect(c).contains(pos) {
+                return Some(Champ::Notes);
+            }
+            if simple {
+                self.champ_sous(c, p)
+            } else {
+                None
+            }
+        };
+        if let Some((k, champ)) = layout.cards.iter().enumerate().find_map(|(k, c)| ouvre(c).map(|ch| (k, ch))) {
             self.commit_note_text(layout);
             self.commit_card_note();
             let c = layout.cards[k];
             self.board_sel = vec![c.plan];
             self.board_notes.clear();
             self.select_board(c.panel, c.frame);
-            self.open_card_note(&c);
+            self.open_card_champ(&c, champ);
             self.vignettes.press = Press::Note;
             return false;
         }
@@ -762,24 +847,33 @@ impl App {
             self.vignettes.libre = true;
             self.vignettes.camera_choisie = None;
         }
-        // Maj + appui sur le CADRE d'une vignette (son filet, à quelques points près) : on prend son plan pour le
-        // déplacer ; Maj + Alt : on prend sa copie (le plan se duplique, la copie se pose où l'on lâche). Maj + appui dedans garde son
-        // sens : choisir des plans.
+        // Maj seule (partie 113, proposition A) : la planche change de peau, et tout ce qui n'est pas dessiner se fait avec Maj. Sur une
+        // case : un coin (de la case ou d'un cadre de caméra) tire la caméra ; le bord d'un cadre B, C… déplace ce cadre ; partout
+        // ailleurs dans la case, glisser déplace le plan, et un clic sans mouvement le choisit (au lâcher). Maj + Alt (la copie) est retiré
+        // (décision 5) : « Dupliquer le plan » reste au clic droit, à l'anneau et à sa touche.
         if m.shift && !m.ctrl && !m.command {
-            if let Some(k) = board::frame_hit(layout, p, FRAME_TOUCH / xf.zoom.max(1e-3)) {
+            if let Some(k) = layout.card_near(p, self.marge_camera()) {
                 self.commit_note_text(layout);
-                self.start_plan_move(layout, k, pos, m.alt);
+                if self.maj_prend_la_camera(layout, xf, k, p) {
+                    self.vignettes.press = if self.cam_press(layout, xf, k, pos, false) { Press::Select } else { Press::Dead };
+                    return false;
+                }
+                self.start_plan_move(layout, k, pos, false);
+                if let Some(mv) = self.vignettes.moving.as_mut() {
+                    mv.clic = Some((k, m));
+                }
                 return false;
             }
         }
         // Ctrl + Maj, ou T tenue : un appui sur une case, son empreinte ou sa marge est TOUJOURS un geste de caméra (jamais un
         // plan qu'on déplace, ni le dessin, ni le lasso). Un appui qui rate un cadre en prend quand même un (`vignettecam::choisit`).
-        // (Ctrl seul est le lasso, comme partout : plus bas.)
+        // (Ctrl seul est le lasso, comme partout : plus bas. Ctrl + Alt, « un cadre de plus », est retiré depuis la partie 113, décision 5 :
+        // « Ajouter un cadre » est au clic droit de la case.)
         let cam_mode = ((m.command || m.ctrl) && m.shift) || self.vignettes.camera_tenue || outil_camera;
         if cam_mode {
             if let Some(k) = layout.card_near(p, self.marge_camera()) {
                 self.commit_note_text(layout);
-                let ajoute = m.alt;
+                let ajoute = false;
                 // L'outil Caméra : un clic choisit la caméra de la case et rend son plan courant, sans autre appui ; un glissé qui part du
                 // premier appui déplace le cadre (le geste de caméra ordinaire, une étape d'annulation).
                 if outil_camera {
@@ -806,10 +900,32 @@ impl App {
         let lasso = (m.command || m.ctrl) && !m.shift && !m.alt;
         let selecting = m.shift;
         match hit {
+            // Une barre ne répond qu'au lâcher d'un clic qui n'a pas bougé (partie 113, décision 11) : un appui qui bouge est un trait,
+            // parti dès son premier point dans la case la plus proche, comme depuis le papier (`appui_bande`) ; au lâcher sans
+            // mouvement, ce point de trait est retiré et la barre bascule (`barre_au_lacher`).
             Hit::Bar(after) => {
                 self.commit_note_text(layout);
+                let dessine = !cam_mode && !lasso && !selecting && matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline);
+                self.vignettes.barre_attente = Some(BarreAttente { after, origine: pos, base_len: self.history.undo_len(), dessine });
+                if dessine {
+                    let proche = layout.cards.iter().enumerate().min_by(|a, b| distance_rect(a.1.thumb, p).total_cmp(&distance_rect(b.1.thumb, p))).map(|(k, _)| k);
+                    if let Some(k) = proche {
+                        let c = layout.cards[k];
+                        self.vignettes.appui_bande = Some(pos);
+                        self.board_sel = vec![c.plan];
+                        self.board_notes.clear();
+                        let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
+                        if !(c.panel == self.cur_panel && (c.frame..c.end).contains(&f)) {
+                            self.select_board(c.panel, c.frame);
+                        }
+                        self.vignettes.press = Press::Card;
+                        self.draw_has_focus();
+                        self.pastille_avant_trait();
+                        return false;
+                    }
+                }
                 self.vignettes.press = Press::Bar;
-                self.board_toggle_cut(layout, after)
+                false
             }
             // Une bande de note n'est plus une zone d'écriture : un appui dessus dessine dans sa case, comme n'importe où près d'elle (le
             // trait qui part de la marge sous la case n'ouvre rien, `note_icone_rect` écrit la note).
@@ -907,6 +1023,65 @@ impl App {
         } else {
             format!("{outil} {fait} dans une case : clique dans une case.")
         };
+    }
+
+    /// Maj tenue, sans appui en cours (partie 113, proposition A) : la planche change de peau. Chaque case visible prend un filet d'accent
+    /// et une poignée à chaque coin (le coin tire la caméra) ; les cadres B, C… d'un mouvement ont les leurs. Rien n'est lu ni changé dans
+    /// le projet ; Maj relâchée, tout redevient du papier.
+    fn peindre_peau_maj(&self, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout) {
+        let accent = crate::theme::accent();
+        let clip = painter.with_clip_rect(view);
+        for (k, place) in layout.cards.iter().enumerate() {
+            if !xf.rect(place.foot).expand(20.0).intersects(view) {
+                continue;
+            }
+            let (cadres, _) = self.cadres_sur_la_planche(layout, k);
+            let mut premier = true;
+            for q in &cadres {
+                let pts: Vec<Pos2> = q.iter().map(|p| xf.to_screen(*p)).collect();
+                clip.add(egui::Shape::closed_line(pts.clone(), Stroke::new(if premier { 1.5_f32 } else { 1.0 }, accent.gamma_multiply(if premier { 0.9 } else { 0.6 }))));
+                premier = false;
+                if self.cam_possible(place) {
+                    for c in &pts {
+                        clip.add(egui::Shape::circle_filled(*c, 4.0, Color32::WHITE));
+                        clip.add(egui::Shape::circle_stroke(*c, 4.0, Stroke::new(1.3_f32, accent)));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Le lâcher d'un appui tombé sur une barre (partie 113, décision 11) : s'il n'a pas bougé, c'est un clic : le point de trait qu'il a
+    /// pu laisser est retiré (aucune étape ne reste) et la barre bascule (coupe, réunit, ou fait la case de continuité). Un appui qui
+    /// a bougé est un trait, et la barre n'a rien fait. Vrai si le film a changé.
+    fn barre_au_lacher(&mut self, layout: &BoardLayout, latest: Option<Pos2>, any_down: bool) -> bool {
+        let Some(a) = self.vignettes.barre_attente else { return false };
+        if latest.is_some_and(|p| p.distance(a.origine) > MOVE_THRESHOLD) {
+            self.vignettes.barre_attente = None;
+            return false;
+        }
+        if any_down {
+            return false;
+        }
+        self.vignettes.barre_attente = None;
+        if a.dessine {
+            self.end_stroke();
+            // (Le point de trait n'a pas à être réparti ni à rester peint.)
+            self.vignettes.fini = None;
+            self.vignettes.suivi = None;
+            self.vignettes.debord_garde = None;
+            self.vignettes.debord_tenu = None;
+            let mut nav = Nav { panel: self.cur_panel, layer: self.cur_layer };
+            while self.history.undo_len() > a.base_len && self.history.undo_and_forget(&mut self.doc, &mut nav) {}
+            self.cur_panel = nav.panel.min(self.doc.panels.len().saturating_sub(1));
+            self.cur_layer = nav.layer;
+            self.revalider_rangs();
+            self.cur_frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
+            self.renderer.invalidate_all();
+            self.thumbs.prune(&self.doc);
+        }
+        self.vignettes.press = Press::Bar;
+        self.board_toggle_cut(layout, a.after)
     }
 
     /// Choisir des plans (comme sur l'ancien titre) : Ctrl ajoute ou retire celui de la vignette `k`, Maj prend l'intervalle.
@@ -1059,7 +1234,14 @@ impl App {
         self.follow_frame = true;
         self.board_sel = vec![self.doc.panels[self.cur_panel].id];
         self.vignettes.created = Some(Created { base_len: self.history.undo_len() });
-        self.status = if joins && e == 0 { "Nouvelle image du plan : dessine-la.".into() } else { "Nouveau plan : dessine-le.".into() };
+        // (Les cases pâles sautées sont devenues des plans vides : la ligne d'état le dit, partie 113.)
+        let vides = if joins && e == 0 { 0 } else { made - 1 };
+        self.status = match (joins && e == 0, vides) {
+            (true, _) => "Nouvelle image du plan : dessine-la.".into(),
+            (false, 0) => "Nouveau plan : dessine-le.".into(),
+            (false, 1) => "Nouveau plan : dessine-le (et un plan vide avant lui, pour garder sa place).".into(),
+            (false, n) => format!("Nouveau plan : dessine-le (et {n} plans vides avant lui, pour garder sa place)."),
+        };
         true
     }
 
@@ -1283,10 +1465,16 @@ impl App {
         self.vignettes.xf = xf;
         // Le trait qui déborde est recalculé par la vignette courante, à chaque image où un geste dure.
         self.vignettes.debord = None;
-        // Maj tenue sur le cadre d'une vignette : elle se prend (curseur « main », pas de cercle de pinceau).
-        let tol_frame = FRAME_TOUCH / xf.zoom.max(1e-3);
+        // Maj tenue sur une case : elle se prend (curseur « main », pas de cercle de pinceau), sauf à un coin, où c'est la caméra
+        // (partie 113, proposition A).
+        let maj_seule = !pan_mode && !self.modal_open() && !writing && mods.shift && !mods.ctrl && !mods.command;
         self.vignettes.frame_hot = self.vignettes.moving.is_some()
-            || (!pan_mode && !self.modal_open() && mods.shift && !mods.ctrl && !mods.command && over.is_some_and(|p| board::frame_hit(&layout, xf.to_board(p), tol_frame).is_some()));
+            || (maj_seule && over.is_some_and(|p| layout.card_near(xf.to_board(p), self.marge_camera()).is_some_and(|k| !self.maj_prend_la_camera(&layout, xf, k, xf.to_board(p)))));
+        // Ce que Maj permet, dit une fois par séance, la première fois qu'on la tient sur la planche.
+        if maj_seule && over.is_some() && !any_down && !self.vignettes.maj_dit {
+            self.vignettes.maj_dit = true;
+            self.status = "Maj tenue : glisser une case déplace le plan, un clic le choisit, un coin tire la caméra, un clic sur une barre coupe ou réunit.".into();
+        }
 
         let texts = self.text_rects(&painter, &layout);
         let tol = 5.0 / xf.zoom;
@@ -1354,7 +1542,9 @@ impl App {
 
         // Le papier est blanc partout (rien autour des cases) ; les barres, les cases pâles qui montrent où dessiner, les vignettes.
         let hovered = over.map(|p| board::hit(&layout, xf.to_board(p), BAR_TOUCH / xf.zoom.max(1e-3)));
-        self.paint_bars(ui, &painter, view, xf, &layout, hovered);
+        // (Maj tenue, sans appui en cours : la planche montre ses barres en entier, et plus loin les poignées des cases ; rien pendant un trait.)
+        let peau_maj = maj_seule && !any_down && self.vignettes.cam.is_none();
+        self.paint_bars(ui, &painter, view, xf, &layout, hovered, peau_maj);
         let ghost_hot = if pan_mode { None } else if let Some(Hit::Empty(e)) = hovered { Some(e) } else { None };
         for (e, slot) in layout.empty.iter().enumerate() {
             let r = xf.rect(*slot);
@@ -1369,8 +1559,8 @@ impl App {
             let icon = match hovered {
                 _ if pan_mode => CursorIcon::Grab,
                 Some(Hit::Bar(_)) => CursorIcon::PointingHand,
-                // La ligne Notes s'écrit d'un clic (sans Maj ni Ctrl) : le curseur de texte.
-                Some(Hit::Note(k)) if over.is_some_and(|p| self.ligne_notes(&layout.cards[k]).is_some_and(|r| r.contains(xf.to_board(p)))) => CursorIcon::Text,
+                // Une ligne de texte (action, dialogue, notes) s'écrit d'un clic (sans Maj ni Ctrl) : le curseur de texte.
+                Some(Hit::Note(k)) if over.is_some_and(|p| self.champ_sous(&layout.cards[k], xf.to_board(p)).is_some()) => CursorIcon::Text,
                 Some(Hit::Empty(_)) if drawing => CursorIcon::Crosshair,
                 Some(Hit::Thumb(_) | Hit::Note(_)) if drawing || self.tool == Tool::Eraser => CursorIcon::Crosshair,
                 _ if self.tool == Tool::Text => CursorIcon::Text,
@@ -1475,6 +1665,10 @@ impl App {
         if self.tool == Tool::Camera && !pan_mode {
             self.paint_cadres_camera(&painter, view, xf, &layout, over);
         }
+        // Maj tenue : la peau de la planche, ses poignées (partie 113, proposition A).
+        if peau_maj {
+            self.peindre_peau_maj(&painter, view, xf, &layout);
+        }
         if let (Some(p), Tool::Eraser, false) = (over, self.tool, pan_mode) {
             if matches!(hovered, Some(Hit::Nothing)) || matches!(self.board_drag, Some(BoardDrag::Erase { .. })) {
                 let r = self.note_eraser_radius(xf.zoom) * xf.zoom;
@@ -1516,6 +1710,10 @@ impl App {
             self.finish_board_drag(&layout, &texts);
         }
         self.vignettes.appui_bande = None;
+        // Un appui tombé sur une barre : au lâcher sans mouvement, la barre bascule et le point de trait est retiré (décision 11).
+        if self.barre_au_lacher(&layout, latest, any_down) {
+            ui.ctx().request_repaint();
+        }
         // Le trait qui vient de finir : sa part hors du champ de sa case est répartie (horschamp.rs), une seule étape d'annulation.
         self.horschamp_partager(&layout);
         self.finish_creation(any_down);
@@ -1542,8 +1740,11 @@ impl App {
         self.pastilles_rangee_flottante(ui.ctx(), haut_droite, haut_droite.x - gauche_libre);
     }
 
-    /// Les barres entre les images : un trait court, gris ou noir ; sous la souris, l'accent et une bulle.
-    fn paint_bars(&self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, hovered: Option<Hit>) {
+    /// Les barres entre les images : une coupe est un trait court noir ; deux cases d'un même plan ont **un point** gris dans leur écart
+    /// (partie 113, proposition B : la barre grise d'avant, 1,5 point très pâle, ne se voyait pas sur le papier) ; sous la souris, l'accent et une
+    /// bulle. `maj` : Maj tenue, chaque barre se montre en entier, plus épaisse (la planche change de peau).
+    #[allow(clippy::too_many_arguments)]
+    fn paint_bars(&self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, hovered: Option<Hit>, maj: bool) {
         for b in &layout.bars {
             let zone = xf.rect(b.zone);
             if !zone.intersects(view) {
@@ -1560,8 +1761,18 @@ impl App {
                 BAR_JOINED
             };
             let r = xf.rect(b.bar);
-            let trait_ = if layout.sens.japonais() { [pos2(r.left(), r.center().y), pos2(r.right(), r.center().y)] } else { [pos2(r.center().x, r.top()), pos2(r.center().x, r.bottom())] };
-            painter.line_segment(trait_, Stroke::new(if hot { width + 1.0 } else { width }, color));
+            if maj {
+                // La peau de Maj : la barre sur toute la hauteur de son écart, épaisse, dans la couleur de son état (gris moyen pour « même plan »).
+                let z = zone;
+                let c = if hot { crate::theme::accent() } else if b.cut { BAR_CUT } else { Color32::from_gray(170) };
+                let trait_ = if layout.sens.japonais() { [pos2(z.left() + 2.0, z.center().y), pos2(z.right() - 2.0, z.center().y)] } else { [pos2(z.center().x, z.top() + 2.0), pos2(z.center().x, z.bottom() - 2.0)] };
+                painter.line_segment(trait_, Stroke::new(width + 2.0, c));
+            } else if !b.cut && !hot {
+                painter.circle_filled(r.center(), (2.4 * xf.zoom).clamp(1.5, 3.5), BAR_POINT);
+            } else {
+                let trait_ = if layout.sens.japonais() { [pos2(r.left(), r.center().y), pos2(r.right(), r.center().y)] } else { [pos2(r.center().x, r.top()), pos2(r.center().x, r.bottom())] };
+                painter.line_segment(trait_, Stroke::new(if hot { width + 1.0 } else { width }, color));
+            }
             if hot {
                 let resp = ui.interact(board::zone_tactile(zone, layout.sens, BAR_TOUCH), ui.id().with(("planche_barre", b.after)), Sense::hover());
                 let (nom, texte) = if layout.vers_pale(b.after) {
@@ -1713,12 +1924,8 @@ impl App {
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 4.0;
                     ui.add_space(6.0);
-                    etiquette(ui, ph::ARROWS_OUT_SIMPLE, "Taille des vignettes", "");
-                    let mut size = self.layout.card_size;
-                    let resp = ui.add(egui::Slider::new(&mut size, CARD_MIN..=CARD_MAX).show_value(false));
-                    if bulle(resp, "Taille des vignettes", "", "").changed() {
-                        self.layout.card_size = size;
-                    }
+                    // (La taille des cases n'est plus ici, partie 113, décision 3 : elle faisait double emploi avec le zoom à l'écran ; elle est
+                    // dans Préférences > Vignettes, où elle change la planche et son export.)
                     let japonais = self.layout.board_sens.japonais();
                     let (nom, description) = if japonais { ("Cases par colonne", "Vignettes par colonne (6 au plus) : la colonne suivante est à droite.") } else { ("Colonnes", "Vignettes par ligne (6 au plus).") };
                     etiquette(ui, ph::COLUMNS, nom, description);
@@ -2014,7 +2221,9 @@ impl App {
         if let Some(mv) = mv {
             self.paint_empreinte(painter, view, xf, place, mv);
         }
-        if chosen_more {
+        // Un plan choisi, seul ou parmi d'autres : le même liseré d'accent (partie 113, décision 10 : le filet un peu plus foncé seul ne se
+        // voyait pas).
+        if chosen_more || (current && !self.vignettes.libre) {
             clip.rect_stroke(thumb.expand(1.5), 0.0, Stroke::new(1.5_f32, accent), StrokeKind::Outside);
         }
         self.paint_card_note(&clip, xf, place, note);
@@ -2130,10 +2339,10 @@ impl App {
         let y = strip.bottom() - 1.0;
         painter.line_segment([pos2(strip.left(), y), pos2(strip.right(), y)], Stroke::new(1.0_f32, HAIRLINE));
         let textes = self.layout.board_textes;
-        let edite = self.vignettes.note.as_ref().is_some_and(|e| e.id == place.id);
+        let edite = self.vignettes.note.as_ref().filter(|e| e.id == place.id).map(|e| e.champ);
         let width = (place.note.width() - NOTE_PAD * 2.0) * xf.zoom;
         for (i, champ) in textes.champs().into_iter().enumerate() {
-            if edite && champ == Champ::Notes {
+            if edite == Some(champ) {
                 continue;
             }
             // Chaque ligne cochée est toujours visible, même vide (Anthony, 2026-10-30) : son intitulé (« Note », « Action », « Dialogue »)
@@ -2321,7 +2530,8 @@ impl App {
             self.new_panel();
         }
         self.action_item(ui, "Nouvelle séquence à la fin du film", "sequence.nouvelle_fin");
-        ui.checkbox(&mut self.layout.board_attach, "Attacher les nouvelles notes à la vignette la plus proche");
+        // (« Attacher les nouvelles notes » et « Effacer toutes les notes » sont partis, partie 113, décision 7 : les notes libres de la planche
+        // n'ont plus d'outil dans les Vignettes ; celles d'un projet restent lisibles, et la gomme les efface.)
         ui.separator();
         // Annotations, marie-louise et export de la planche (`annotationsui.rs`).
         self.annot_menu(ui);
@@ -2333,14 +2543,6 @@ impl App {
         if ui.button(if self.layout.board_sens.japonais() { "Planche à la hauteur de la vue" } else { "Page à la largeur de la vue" }).clicked() {
             ui.close_menu();
             self.board_fit();
-        }
-        ui.separator();
-        let any = !self.doc.board.strokes.is_empty() || !self.doc.board.texts.is_empty();
-        if ui.add_enabled(any, egui::Button::new("Effacer toutes les notes")).clicked() {
-            ui.close_menu();
-            self.record_step();
-            self.doc.board = Default::default();
-            self.board_notes.clear();
         }
     }
 

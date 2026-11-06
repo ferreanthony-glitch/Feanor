@@ -292,18 +292,14 @@ fn settling_pure_functions() {
     assert_eq!(recale(&tout, 24, 24), tout);
 }
 
-// ------------------------------------------------------------------------------ Maj + Alt : la copie d'un plan
+// ------------------------------------------------------------------------------ Maj + Alt : plus de copie d'un plan (partie 113, décision 5)
 
 const MAJ_ALT: Modifiers = Modifiers { alt: true, shift: true, ..Modifiers::NONE };
 
 #[test]
-fn shift_alt_dragging_the_frame_of_a_plan_duplicates_it_and_drops_the_copy_in_reading_order_in_one_step() {
+fn shift_alt_dragging_a_plan_no_longer_duplicates_it_but_moves_it_like_shift_alone() {
     let mut b = ouvert(crate::vignettes_tests::quatre_plans(), 4);
     let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
-    // Du dessin dans le plan 2 (index 1) pour voir qu'il est copié.
-    let c3 = vignette(&b, 3).center();
-    glisser(&mut b, &vague(c3 - vec2(20.0, 0.0), c3 + vec2(20.0, 0.0), 8));
-    assert!(encre(&b.app.doc, 1));
     let n = pas_d_annulation(&b);
     let case = vignette(&b, 3);
     let cadre = pos2(case.left() + 2.0, case.center().y);
@@ -313,20 +309,10 @@ fn shift_alt_dragging_the_frame_of_a_plan_duplicates_it_and_drops_the_copy_in_re
     let cible = b.app.vignettes.xf.to_screen(pos2(slot.x, (slot.top + slot.bottom) * 0.5));
     glisser_avec(&mut b, MAJ_ALT, cadre, &pas(cadre, cible - cadre, 8), cible, true);
     b.chauffer(2);
-    assert_eq!(b.app.doc.panels.len(), 5, "un plan de plus : {}", b.app.status);
-    assert_eq!(&b.app.doc.panels.iter().map(|p| p.id).collect::<Vec<_>>()[..2], &ids[..2], "l'original reste en place");
-    assert_eq!(b.app.doc.panels[2].id, ids[2]);
-    assert_eq!(b.app.doc.panels[4].id, ids[3]);
-    // La copie est devant le plan 4, après le plan 3, et porte le dessin.
-    let copie = b.app.doc.panels.iter().position(|p| !ids.contains(&p.id)).expect("la copie");
-    assert_eq!(copie, 3, "{:?}", b.app.doc.panels.iter().map(|p| p.id).collect::<Vec<_>>());
-    assert!(encre(&b.app.doc, copie), "la copie porte le dessin");
-    assert!(encre(&b.app.doc, 1), "l'original aussi");
+    assert_eq!(b.app.doc.panels.len(), 4, "aucun plan de plus : {}", b.app.status);
+    assert_eq!(b.app.doc.panels.iter().map(|p| p.id).collect::<Vec<_>>(), vec![ids[0], ids[2], ids[1], ids[3]], "le plan 2 est déplacé devant le plan 4, comme avec Maj seule");
     assert_eq!(pas_d_annulation(&b), n + 1, "une seule étape d'annulation");
-    assert_eq!(dernier_nom(&b), "Dupliquer le plan");
-    b.app.run_action("edition.annuler");
-    b.chauffer(2);
-    assert_eq!(b.app.doc.panels.iter().map(|p| p.id).collect::<Vec<_>>(), ids, "annuler retire la copie");
+    assert_eq!(dernier_nom(&b), "Déplacer le plan");
 }
 
 // ------------------------------------------------------------------------------ Ctrl : le lasso ; Ctrl + Maj ou T : la caméra
@@ -418,14 +404,15 @@ fn t_held_is_the_camera_and_t_with_alt_adds_a_frame() {
     };
     tirer(&mut b, Modifiers::NONE, case.center(), vec2(w, 0.0));
     assert_eq!(b.app.doc.panels[1].camera.len(), 2, "T + glisser : B");
+    // (Partie 113, décision 5 : Alt n'ajoute plus de cadre ; T + Alt et Ctrl + Maj + Alt déplacent le cadre pris, comme sans Alt.
+    // « Ajouter un cadre » est au clic droit de la case.)
     let c = centre(cadre_ecran(&b, 1));
     tirer(&mut b, Modifiers::ALT, c, vec2(w, 0.0));
-    assert_eq!(b.app.doc.panels[1].camera.len(), 3, "T + Alt + glisser : C : {}", b.app.status);
-    // Ctrl + Maj + Alt : le cadre de plus aussi.
-    let c = centre(cadre_ecran(&b, 2));
+    assert_eq!(b.app.doc.panels[1].camera.len(), 2, "T + Alt + glisser : B déplacé, pas de C : {}", b.app.status);
+    let c = centre(cadre_ecran(&b, 1));
     let m = Modifiers { ctrl: true, shift: true, alt: true, command: true, ..Modifiers::NONE };
     glisser_avec(&mut b, m, c, &pas(c, vec2(w, 0.0), 6), c + vec2(w, 0.0), true);
-    assert_eq!(b.app.doc.panels[1].camera.len(), 4, "Ctrl + Maj + Alt + glisser : D");
+    assert_eq!(b.app.doc.panels[1].camera.len(), 2, "Ctrl + Maj + Alt + glisser : pas de D");
 }
 
 // ------------------------------------------------------------------------------ l'affichage des tuiles

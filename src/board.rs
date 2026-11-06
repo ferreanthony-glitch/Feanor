@@ -1089,6 +1089,8 @@ pub fn hit(layout: &BoardLayout, p: Pos2, bar_min_w: f32) -> Hit {
 // ---------------------------------------------------------------- déplacer un plan (Maj + cadre)
 
 /// Distance d'un point au filet d'un rectangle : dedans, jusqu'au bord le plus proche ; dehors, jusqu'au rectangle.
+/// (Depuis la partie 113, Maj prend une case n'importe où dedans : `frame_hit` ne sert plus qu'aux essais.)
+#[cfg_attr(not(test), allow(dead_code))]
 fn edge_distance(r: Rect, p: Pos2) -> f32 {
     let (dx, dy) = ((r.left() - p.x).max(p.x - r.right()).max(0.0), (r.top() - p.y).max(p.y - r.bottom()).max(0.0));
     if dx > 0.0 || dy > 0.0 {
@@ -1101,6 +1103,7 @@ fn edge_distance(r: Rect, p: Pos2) -> f32 {
 /// La vignette dont le **cadre** (le filet de l'image, à `tol` près de chaque côté) est sous le point `p`
 /// (planche), s'il y en a une : la plus proche si deux cadres voisins se touchent. Dedans, la bande ne mange
 /// jamais plus d'un quart de la plus petite côte : le centre reste à l'intérieur (la sélection).
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn frame_hit(layout: &BoardLayout, p: Pos2, tol: f32) -> Option<usize> {
     let mut best: Option<(usize, f32)> = None;
     for (k, c) in layout.cards.iter().enumerate() {

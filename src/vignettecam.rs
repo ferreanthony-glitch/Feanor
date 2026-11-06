@@ -117,6 +117,7 @@ pub fn dans_polygone(poly: &[Pos2], p: Pos2) -> bool {
 }
 
 /// La distance d'un point au bord d'un polygone (jamais négative, même dedans).
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn distance_bord(poly: &[Pos2], p: Pos2) -> f32 {
     (0..poly.len()).map(|i| distance_segment(poly[i], poly[(i + 1) % poly.len()], p)).fold(f32::MAX, f32::min)
 }
@@ -682,7 +683,7 @@ fn distance_quad(q: &[Pos2; 4], p: Pos2) -> f32 {
     }
 }
 
-fn distance_segment(a: Pos2, b: Pos2, p: Pos2) -> f32 {
+pub(crate) fn distance_segment(a: Pos2, b: Pos2, p: Pos2) -> f32 {
     let ab = b - a;
     let t = if ab.length_sq() > 0.0 { ((p - a).dot(ab) / ab.length_sq()).clamp(0.0, 1.0) } else { 0.0 };
     (a + ab * t).distance(p)
