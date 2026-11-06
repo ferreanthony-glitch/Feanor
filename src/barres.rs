@@ -326,7 +326,7 @@ pub(crate) const TIMELINE: &[Cmd] = &[
         "camera.cle_adoucir",
         ph::WAVE_SINE,
         "Adoucir",
-        "La caméra arrive à cette clé et en repart en douceur ; réglage fin en images dans les réglages de l'outil Caméra.",
+        "Pose un lissage de chaque côté de la clé : deux petits ronds creux apparaissent sur la piste de caméra, à tirer pour régler où il commence et où il finit. Un second clic le retire.",
         false,
         3,
     ),
@@ -773,7 +773,7 @@ impl App {
             }
             "camera.cle_adoucir" => {
                 v.actif = self.camera_key_here().is_some();
-                v.etat = Some(self.camera_key_here().is_some_and(|k| k.smooth));
+                v.etat = Some(self.camera_key_here().is_some_and(crate::lissage::est_adoucie));
                 if !v.actif {
                     v.description = "Pas de clé de caméra à cette image.".to_string();
                 }

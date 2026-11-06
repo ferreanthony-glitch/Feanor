@@ -7819,3 +7819,63 @@ reste une étape d'annulation au plus, et aucun ne touche un dessin hors de son 
 10. Sur un long projet, « Cadrer tout » (barre du bas, à droite) : toute la planche dans la vue (jusqu'à 20 %) ; « Page à la largeur de la vue »
     (clic droit sur le fond) : la largeur seule, comme avant.
 11. Rien n'a bougé : un trait, Ctrl+Z, un trait entre deux cases, enregistrer, rouvrir : comme avant ; au repos, rien ne se repeint.
+
+
+## 116. Le lissage de la caméra se règle sur la piste : des poignées (2026-11-06, branche `lissage-camera`)
+
+Demande d'Anthony : « Je voudrais pouvoir mieux contrôler le lissage de caméra. Quand un lissage se crée, une autre clé apparaît sur la
+timeline de la caméra et contrôle le moment où le lissage commence ou se termine. » Le modèle existait : chaque clé de caméra a un adouci
+d'entrée (`ease_in`) et de sortie (`ease_out`), en images. Il fallait les montrer et les rendre tirables. **Rien ne change dans le projet** (pas de
+nouveau champ, pas de nouveau format) ; les anciens projets (`smooth`) s'ouvrent comme avant.
+Fichiers : `lissage.rs` (tout le geste et les règles), `camera.rs` (`shared_eases`, `interval_eases`), `timeline.rs` et `montagerows.rs` /
+`storyboard.rs` (la piste de caméra, dessin et prise), `camtools.rs` (le bouton et les deux champs), `handles.rs` (annuler, `dragging`).
+Essais : `src/lissage_camera_tests.rs` (25, dont les gestes sur la vraie fenêtre sans écran ; et `lissage_capture`, ignoré, trois captures).
+Champ ajouté à `App` : `ease_drag: Option<lissage::EaseDrag>` (aussi dans la liste par onglet de `onglets.rs`, comme `cam_keys_drag`).
+
+### Ce que l'on voit et ce que l'on fait
+
+1. **Deux poignées par clé adoucie**, dans la timeline et dans le montage : de petits ronds creux (plus petits qu'un losange), reliés à leur clé par
+   un trait fin. À droite, à `image + sortie` : là où la caméra a fini d'accélérer en repartant de la clé. À gauche, à `image − entrée` : là où elle
+   commence à ralentir avant la clé. Une poignée n'existe que s'il y a un mouvement de ce côté et un adouci plus grand que 0 : rien à gauche de la
+   première clé, rien à droite de la dernière, rien pour un plan à une seule clé.
+2. **Tirer une poignée** règle l'adouci, à l'image près. Le mouvement se voit en direct sur le canevas (les clés changent à chaque image du geste,
+   comme pour un glissé de clé). **Une étape d'annulation** par geste, « Régler le lissage de la caméra ». La ligne d'état dit la durée :
+   « Lissage de sortie de la clé (image 13) : 7 images. », et « (limite : la clé voisine ou l'autre poignée) » quand la souris va plus loin que
+   ce qui tient. Échap abandonne le geste, tout revient. Le pointeur devient une double flèche sur une poignée.
+3. **Limites.** Une poignée ne passe ni la clé voisine ni la poignée d'en face : `sortie de A + entrée de B ≤ intervalle`. Elle est donc toujours
+   là où la caméra change vraiment de vitesse, sans le partage proportionnel silencieux de `camera::ease`.
+4. **Ramener une poignée sur sa clé** met ce côté à 0 : la poignée disparaît, ce côté va à vitesse constante.
+5. **« Adoucir »** (`camera.cle_adoucir`, le bouton de la barre) : sur une clé sans lissage, pose de vraies valeurs de chaque côté où la caméra bouge,
+   en demi-intervalle (comme l'ancien réglage : le mouvement est le même), sans prendre la place de la poignée d'en face ; les poignées apparaissent.
+   Sur une clé déjà adoucie, retire tout. Il ne pose plus jamais `smooth`. Une clé seule dans son plan : la ligne d'état dit qu'il n'y a rien à adoucir.
+6. **Les champs « Adoucir l'entrée / la sortie »** (réglages de l'outil Caméra) montrent les valeurs qui agissent (celles des poignées) et suivent les
+   mêmes règles : un chiffre trop grand est ramené à ce qui tient. Avant, taper un côté d'une ancienne clé adoucie remettait l'autre à 0.
+
+### Anciens projets (`smooth`)
+
+Une clé `smooth == true` montre ses poignées aux valeurs effectives (`CameraKey::eases` : un demi-intervalle de chaque côté). Le premier réglage
+(poignée, champ) **convertit les deux côtés** en valeurs explicites et remet `smooth` à faux, sans changer le mouvement du côté non touché
+(`lissage::convertir`, essayé image par image avec `camera_at`, avec et sans voisines adoucies). Le bouton « Adoucir » sur une telle clé la retire.
+
+### Mon choix : une clé déplacée, un intervalle trop court
+
+Une clé qu'on déplace emmène ses poignées avec leurs durées conservées (les valeurs sont dans la clé). Si l'intervalle devient trop court pour les
+deux durées, **la poignée affichée dit la vérité** : la valeur effective, après le partage de `ease`, et **les données ne sont pas touchées**. Si on
+rallonge l'intervalle, la poignée reprend sa durée. Seul un réglage à la main de l'intervalle touché réécrit la poignée d'en face en valeur effective.
+Retirer une clé laisse aux voisines leurs valeurs (elles s'appliquent alors à l'intervalle plus long). Copier, coller (Ctrl+V et Maj+Ctrl+V)
+emportent les adoucis avec la clé (inchangé : la clé est copiée en entier). Il n'y a pas de duplication à Alt pour les clés de caméra.
+
+### Une poignée n'est pas une clé
+
+Elle n'entre ni dans le choix de clés, ni dans clé suivante / précédente, ni dans les exports, ni dans le menu des clés, ni dans le rectangle de
+choix. Quand une clé et une poignée se recouvrent (faible zoom), **l'appui prend la clé** ; une poignée séparée de sa clé s'attrape au stylet
+(prise de 7 points de chaque côté, pour un rond de 3 points de rayon). Un clic sur une poignée ne fait rien (il ne lâche pas le choix des clés et ne
+déplace pas la tête). **Rien de neuf ne dépend du clic droit.**
+
+### À essayer avec le stylet (non vérifié avec un vrai stylet)
+
+1. Place-toi sur une clé de caméra au milieu d'un mouvement, appuie sur « Adoucir » : deux petits ronds creux apparaissent de chaque côté.
+2. Tire le rond de droite : la caméra change de vitesse en direct dans le canevas ; la ligne d'état dit le nombre d'images. Lâche, Ctrl+Z : tout revient en une étape.
+3. Tire-le jusqu'à la clé suivante : il s'arrête avant elle (ou avant le rond d'en face). Ramène-le sur sa clé : il disparaît.
+4. À faible zoom de la timeline, où le rond est collé à sa clé : appuyer dessus prend la clé ; zoome un peu, le rond se prend au stylet.
+5. Même chose dans le montage.

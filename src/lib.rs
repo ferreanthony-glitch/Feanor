@@ -415,6 +415,9 @@ mod camfxui;
 mod camkeys;
 #[cfg(test)]
 mod camkeys_tests;
+mod lissage;
+#[cfg(test)]
+mod lissage_camera_tests;
 mod clescommun;
 #[cfg(test)]
 mod clescommun_tests;

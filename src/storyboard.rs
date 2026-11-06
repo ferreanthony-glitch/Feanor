@@ -427,6 +427,7 @@ impl App {
     /// Abandonne un glissé en cours dans la bande de montage (la durée revient à l'original).
     pub(crate) fn cancel_montage_drag(&mut self) {
         self.cancel_cam_keys_drag();
+        self.cancel_ease_drag();
         self.cancel_handle_drag();
         self.trans_cancel_drag();
         match self.montage_drag.take() {
@@ -1026,7 +1027,7 @@ impl App {
         let hover_op_key = resp.hover_pos().and_then(|p| self.montage_op_key_at(p, r.top(), &blocks, ppf, rows));
         let lit = match &self.handle_drag {
             Some(d) => Some((self.cur_panel, d.handle, true)),
-            None if self.montage_drag.is_none() && self.cam_keys_drag.is_none() && self.keys_drag.is_none() && self.fx_keys_drag.is_none() && self.pos_ui.drag.is_none() && self.op_ui.drag.is_none() => resp
+            None if self.montage_drag.is_none() && self.cam_keys_drag.is_none() && self.ease_drag.is_none() && self.keys_drag.is_none() && self.fx_keys_drag.is_none() && self.pos_ui.drag.is_none() && self.op_ui.drag.is_none() => resp
                 .hover_pos()
                 .filter(|p| hover_pos_key.is_none() && hover_op_key.is_none() && self.montage_fx_key_at(*p, r.top(), &blocks, ppf, rows).is_none())
                 .and_then(|p| self.montage_layer_handle_at(p, r.top(), &blocks, ppf, rows))
@@ -1168,10 +1169,17 @@ impl App {
             let cam_hit = self.montage_camera_key_at(origin, r.top(), &blocks, ppf, rows).and_then(|(i, k)| Some((i, self.doc.panels[i].camera.get(k)?.frame)));
             // (Un geste qui part de la piste Caméra, hors d'un losange, trace un rectangle de choix.)
             let cam_row = (r.top() + rows.camera_top()..=r.top() + rows.camera_top() + crate::montagerows::CAM_H).contains(&origin.y);
+            // (Une poignée de lissage de la caméra passe après le losange, avant le reste : lissage.rs.)
+            let ease_hit = if cam_hit.is_none() { self.montage_ease_at(origin, r.top(), &blocks, ppf, rows) } else { None };
             if cam_hit.is_none() && !cam_row {
                 self.clear_cam_keys();
             }
-            if let Some((i, f)) = cam_hit {
+            if let Some((i, k, cote)) = ease_hit {
+                self.sel_clip = None;
+                if let Some(f) = self.doc.panels[i].camera.get(k).map(|k| k.frame) {
+                    self.begin_ease_drag(i, f, cote);
+                }
+            } else if let Some((i, f)) = cam_hit {
                 // Une clé de caméra : elle emmène toutes les clés de caméra choisies (`camkeys.rs`).
                 self.sel_clip = None;
                 let grab = free_frame_at(origin.x);
@@ -1266,6 +1274,21 @@ impl App {
             }
         }
 
+        if self.ease_drag.is_some() {
+            ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
+            let key_x = self.ease_drag_target().and_then(|(id, f)| {
+                let i = self.doc.panels.iter().position(|p| p.id == id)?;
+                Some(blocks.get(i)?.left() - 1.0 + f as f32 * ppf + ppf * 0.5)
+            });
+            if let (true, Some(p), Some(kx)) = (resp.dragged(), resp.interact_pointer_pos(), key_x) {
+                self.drag_ease(p.x, kx, ppf);
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.end_ease_drag();
+            }
+        } else if resp.hover_pos().is_some_and(|p| self.montage_ease_at(p, r.top(), &blocks, ppf, rows).is_some()) {
+            ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
+        }
         if self.cam_keys_drag.is_some() {
             ui.ctx().set_cursor_icon(CursorIcon::Grabbing);
             if let (true, Some(p)) = (resp.dragged(), resp.interact_pointer_pos()) {
@@ -1367,7 +1390,7 @@ impl App {
                 self.end_op_drag();
             }
         }
-        if resp.dragged() && !comment_ptr.busy && self.cam_keys_drag.is_none() && self.handle_drag.is_none() && self.keys_drag.is_none() && self.fx_keys_drag.is_none() && self.pos_ui.drag.is_none() && self.op_ui.drag.is_none() && self.key_rect.is_none() {
+        if resp.dragged() && !comment_ptr.busy && self.cam_keys_drag.is_none() && self.ease_drag.is_none() && self.handle_drag.is_none() && self.keys_drag.is_none() && self.fx_keys_drag.is_none() && self.pos_ui.drag.is_none() && self.op_ui.drag.is_none() && self.key_rect.is_none() {
             if let Some(p) = resp.interact_pointer_pos() {
                 match &mut self.montage_drag {
                     Some(MontageDrag::Scrub) => {
@@ -1430,10 +1453,14 @@ impl App {
                     self.op_ui.sel.clear();
                 }
                 let cam_hit = self.montage_camera_key_at(p, r.top(), &blocks, ppf, rows).and_then(|(i, k)| Some((i, self.doc.panels[i].camera.get(k)?.frame)));
-                if cam_hit.is_none() {
+                // (Un clic sur une poignée de lissage de la caméra ne fait rien : seul son glisser règle.)
+                let ease_hit = cam_hit.is_none() && self.montage_ease_at(p, r.top(), &blocks, ppf, rows).is_some();
+                if cam_hit.is_none() && !ease_hit {
                     self.clear_cam_keys();
                 }
-                if let Some((i, f)) = cam_hit {
+                if ease_hit {
+                    self.sel_clip = None;
+                } else if let Some((i, f)) = cam_hit {
                     // Un losange de clé de caméra : choisi (Ctrl : ajouté ou retiré ; Maj : ceux
                     // d'entre), la tête de lecture va dessus (`camkeys.rs`).
                     self.sel_clip = None;
@@ -1760,6 +1787,7 @@ impl App {
         let occupe = self.montage_drag.is_some()
             || self.handle_drag.is_some()
             || self.cam_keys_drag.is_some()
+            || self.ease_drag.is_some()
             || self.keys_drag.is_some()
             || self.fx_keys_drag.is_some()
             || self.pos_ui.drag.is_some()

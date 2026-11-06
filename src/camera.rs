@@ -325,10 +325,31 @@ impl CameraKey {
     }
 
     /// Adoucis effectifs : en images, l'ancien « adoucir » valant un demi-intervalle.
-    fn eases(&self, span: f32) -> (f32, f32) {
+    pub(crate) fn eases(&self, span: f32) -> (f32, f32) {
         let pick = |v: f32| if v > 0.0 { v } else if self.smooth { span * 0.5 } else { 0.0 };
         (pick(self.ease_in), pick(self.ease_out))
     }
+}
+
+/// Les deux adoucis d'un mouvement de `span` images, tels que `ease` les applique : s'ils sont
+/// plus longs que le mouvement, ils se le partagent en proportion.
+pub fn shared_eases(span: f32, out: f32, inn: f32) -> (f32, f32) {
+    let span = span.max(1e-3);
+    let (out, inn) = (out.clamp(0.0, span), inn.clamp(0.0, span));
+    if out + inn <= span {
+        // Rien à partager : les valeurs réglées, telles quelles.
+        return (out, inn);
+    }
+    let s = out + inn;
+    (out / s * span, inn / s * span)
+}
+
+/// Ce que fait vraiment le mouvement de la clé `a` à la clé `b` (la suivante) : (sortie de `a`,
+/// entrée de `b`), en images, après le partage éventuel (`shared_eases`). C'est ce que montrent
+/// les poignées de lissage de la piste de caméra.
+pub fn interval_eases(a: &CameraKey, b: &CameraKey) -> (f32, f32) {
+    let span = (b.frame.saturating_sub(a.frame)).max(1) as f32;
+    shared_eases(span, a.eases(span).1, b.eases(span).0)
 }
 
 /// Avancement (0 à 1) au temps `t` (0 à 1) d'un mouvement de `span` images, qui accélère sur

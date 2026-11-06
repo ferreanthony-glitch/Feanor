@@ -210,17 +210,10 @@ impl App {
 
     // (Les clés de caméra se choisissent, se glissent, se copient… dans `camkeys.rs`.)
 
-    /// Adoucit (ou non) le mouvement à la clé de l'image courante.
+    /// Adoucit (ou non) le mouvement à la clé de l'image courante : pose des adoucis réels de chaque côté
+    /// où la caméra bouge (les poignées de lissage apparaissent sur la piste), ou les retire (lissage.rs).
     pub(crate) fn toggle_camera_key_smooth(&mut self) {
-        let frame = self.cur_frame;
-        if self.camera_key_here().is_none() {
-            self.status = "Place-toi sur une clé de caméra pour l'adoucir.".into();
-            return;
-        }
-        self.record_step();
-        if let Some(k) = self.doc.panels[self.cur_panel].camera.iter_mut().find(|k| k.frame == frame) {
-            k.smooth = !k.smooth;
-        }
+        self.adoucir_cle_ici();
     }
 
     pub(crate) fn reset_camera(&mut self) {
@@ -483,7 +476,11 @@ impl App {
         // Images clés : poser, aller de l'une à l'autre, retirer ; adoucis de la clé courante.
         let mut action = None;
         let mut goto = None;
-        let mut eases: Option<(f32, f32)> = None;
+        let mut eases: Option<(usize, f32)> = None;
+        let here_values = {
+            let keys = &self.doc.panels[self.cur_panel].camera;
+            keys.iter().position(|k| k.frame == self.cur_frame).map(|i| crate::lissage::valeurs(keys, i))
+        };
         section(ui, "Clés de caméra", &mut |ui| {
             ui.horizontal_wrapped(|ui| {
                 action = self.camera_key_buttons(ui, here.is_some());
@@ -500,8 +497,9 @@ impl App {
                 }
             });
             ui.add_enabled_ui(here.is_some(), |ui| {
-                let mut values = here.map_or([0.0, 0.0], |k| [k.ease_in, k.ease_out]);
-                let mut changed = false;
+                // Les valeurs qui agissent (celles des poignées de la piste), pas celles gardées.
+                let mut values = here_values.map_or([0.0, 0.0], |(e, o)| [e.round(), o.round()]);
+                let mut changed = None;
                 egui::Grid::new("adoucis_camera").num_columns(3).show(ui, |ui| {
                     let rows = [
                         ("Adoucir l'entrée", "La caméra ralentit en arrivant sur cette clé, sur ce nombre d'images."),
@@ -512,24 +510,28 @@ impl App {
                         let r = ui.add(egui::DragValue::new(&mut values[k]).range(0.0..=10_000.0).speed(0.2).max_decimals(0).suffix(" i"));
                         let r = crate::bulles::bulle(r, label, hint, "");
                         ui.label(RichText::new(crate::storyboard::timecode(values[k].round() as usize, fps)).small().weak());
-                        changed |= self.edited(&r);
+                        if self.edited(&r) {
+                            changed = Some(k);
+                        }
                         ui.end_row();
                     }
                 });
-                if changed {
-                    eases = Some((values[0], values[1]));
+                if let Some(k) = changed {
+                    eases = Some((k, values[k]));
                 }
             });
             if here.is_none() {
                 ui.label(RichText::new("Place-toi sur une clé de caméra pour régler ses adoucis.").small().weak());
             }
         });
-        if let Some((ein, eout)) = eases {
+        if let Some((side, value)) = eases {
             let frame = self.cur_frame;
-            if let Some(k) = self.doc.panels[self.cur_panel].camera.iter_mut().find(|k| k.frame == frame) {
-                (k.ease_in, k.ease_out) = (ein.max(0.0), eout.max(0.0));
-                // Les nouveaux adoucis remplacent l'ancien « adoucir ».
-                k.smooth = false;
+            let keys = &mut self.doc.panels[self.cur_panel].camera;
+            if let Some(i) = keys.iter().position(|k| k.frame == frame) {
+                // Même règle que les poignées de la piste : jamais plus que la place qui reste, et
+                // l'ancien « adoucir » converti en valeurs réelles.
+                let cote = if side == 0 { crate::lissage::Cote::Entree } else { crate::lissage::Cote::Sortie };
+                crate::lissage::regler(keys, i, cote, value);
             }
         }
         if let Some(a) = action {
