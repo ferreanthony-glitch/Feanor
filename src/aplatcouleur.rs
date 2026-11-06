@@ -94,7 +94,7 @@ impl App {
     /// La ligne « Couleur de l'aplat » et le choix de la portée, dans les réglages de l'aplat du calque `li`.
     pub(crate) fn aplat_couleur_ui(&mut self, ui: &mut egui::Ui, li: usize, couleur: [u8; 3]) {
         let Some(id) = self.layers().get(li).map(|l| l.id) else { return };
-        // Un calque de personnage : sa couleur vient du panneau Personnages (`aplatperso.rs`), elle ne se modifie pas ici.
+        // Un calque de personnage : sa couleur vient du panneau Brosses dédiées (`aplatperso.rs`), elle ne se modifie pas ici.
         if self.aplat_vient_du_personnage(li) {
             self.aplat_couleur_du_personnage_ui(ui, li);
             return;
@@ -165,7 +165,7 @@ impl App {
         for &pi in &panels {
             let layers = &self.doc.panels[pi].layers;
             for (k, l) in layers.iter().enumerate() {
-                // Un calque de personnage ne change de couleur que dans le panneau Personnages (`aplatperso.rs`) : ni sa couleur ni sa peinture.
+                // Un calque de personnage ne change de couleur que dans le panneau Brosses dédiées (`aplatperso.rs`) : ni sa couleur ni sa peinture.
                 if l.personnage.is_some_and(|id| self.doc.personnages.iter().any(|p| p.id == id)) {
                     continue;
                 }

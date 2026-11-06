@@ -1,9 +1,9 @@
-//! Brosses perso, côté interface (`personnages.rs`, `persofond.rs`) : les pastilles de la barre du haut, le panneau « Brosses perso », la
+//! Brosses dédiées, côté interface (`personnages.rs`, `persofond.rs`) : les pastilles de la barre du haut, le panneau « Brosses dédiées », la
 //! fenêtre « Modifier », et ce que fait le choix d'une brosse.
 //!
-//! # Une seule sorte de chose : la brosse perso (Anthony, 2026-10-29, §70 de `docs/INTERFACE.md`)
+//! # Une seule sorte de chose : la brosse dédiée (Anthony, 2026-10-29, §70 de `docs/INTERFACE.md`)
 //!
-//! Une brosse perso a un nom, un **type** (`personnages::Type`), une couleur de trait et une couleur d'aplat (ou pas d'aplat). Trois types :
+//! Une brosse dédiée a un nom, un **type** (`personnages::Type`), une couleur de trait et une couleur d'aplat (ou pas d'aplat). Trois types :
 //!
 //! - **Personnage** (du projet, annulable) : son premier trait crée un calque vectoriel à son nom, avec son aplat (`calquespastilles.rs`) ;
 //! - **Classique** (du poste, `Settings::brosses_classiques`) : elle dessine dans le calque courant, sans rien créer ; sa couleur d'aplat
@@ -22,7 +22,7 @@
 //! celle de la brosse et l'aplat sous le trait s'allume avec le sien (un nouveau trait gagne son aplat tout de suite, `persofond.rs`) ; un
 //! clic sur la brosse choisie la lâche. Clic droit : modifier, dupliquer, supprimer, monter, descendre. La barre se montre ou se cache par
 //! espace de travail (`Layout::character_bar`, `Espace::barre_personnages_par_defaut`). Les bulles disent le type et ce que fait la brosse.
-//! - **Le panneau « Brosses perso »** : trois sections (Personnages, Classiques, Décors), chacune avec son « + », ses lignes (nom, couleur
+//! - **Le panneau « Brosses dédiées »** : trois sections (Personnages, Classiques, Décors), chacune avec son « + », ses lignes (nom, couleur
 //!   du trait, aplat oui ou non, couleur d'aplat, et pour un Décor le pinceau et la taille, supprimer ; la poignée range dans la section)
 //!   et son « ↺ » (les valeurs d'origine de ce type).
 //! - **Choisir à la main une autre couleur** (panneau Couleur, pipette, nuancier, échange des deux couleurs) lâche la brosse : la barre
@@ -34,7 +34,6 @@ use eframe::egui::{self, pos2, vec2, Color32, Id, Rect, Response, RichText, Sens
 use egui_phosphor::regular as ph;
 
 use crate::app::{App, Tool};
-use crate::decor::Genre;
 use crate::dock::Pane;
 use crate::document::{CelId, Strate};
 use crate::history::Edit;
@@ -54,13 +53,13 @@ const COLONNE_BORD: f32 = 6.0;
 /// Une case de la rangée des pastilles.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Case {
-    /// Une brosse perso : un personnage, une classique ou un décor.
+    /// Une brosse dédiée : un personnage, une classique ou un décor.
     Choix(Choix),
     /// « + » : le menu des trois types.
     Plus,
     /// Une ligne du menu du « + » (visible quand il est ouvert).
     Ajouter(Type),
-    /// L'icône du panneau Brosses perso.
+    /// L'icône du panneau Brosses dédiées.
     Panneau,
 }
 
@@ -77,7 +76,7 @@ fn trait_de_colonne(ui: &mut egui::Ui) {
     }
 }
 
-/// Ce qui est choisi dans la barre : une brosse perso. Personnage : son numéro dans le projet ; Classique et Décor : leur rang dans leur
+/// Ce qui est choisi dans la barre : une brosse dédiée. Personnage : son numéro dans le projet ; Classique et Décor : leur rang dans leur
 /// liste du poste.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Choix {
@@ -96,10 +95,10 @@ impl Choix {
     }
 }
 
-/// L'état des brosses perso d'un projet (rangé avec l'onglet).
+/// L'état des brosses dédiées d'un projet (rangé avec l'onglet).
 #[derive(Default)]
 pub(crate) struct Etat {
-    /// La brosse perso qui dessine ; rien : la couleur est libre.
+    /// La brosse dédiée qui dessine ; rien : la couleur est libre.
     pub actif: Option<Choix>,
     /// La couleur de trait posée quand on l'a choisie : si la couleur courante en diffère, quelqu'un a choisi une
     /// autre couleur à la main et la brosse est lâchée.
@@ -110,10 +109,14 @@ pub(crate) struct Etat {
     pub(crate) fil: Option<Fil>,
     /// Où sont les cases de la rangée des pastilles à l'écran, à la dernière image (les essais y cliquent).
     pub(crate) cases: Vec<(Rect, Case)>,
-    /// Ce que le choix d'une brosse Décor a pris à l'utilisateur et lui rendra quand il la lâche : outil, pinceau, crayon, couleur, calque.
+    /// Ce que le choix d'une brosse Décor a pris à l'utilisateur et lui rendra quand il la lâche : outil, couleur, calque.
     pub(crate) decor_avant: Option<crate::decorui::Avant>,
-    /// La couleur, la taille et le pinceau posés par le dernier choix (ou suivi) de la brosse Décor, pour voir quand le panneau les change.
+    /// La couleur de trait posée par le dernier choix (ou suivi) de la brosse Décor, pour voir quand le panneau la change.
     pub(crate) decor_posee: Option<crate::decorui::Posee>,
+    /// Le pinceau, le crayon et l'outil de l'utilisateur, mis de côté tant qu'une brosse **spécifique** est choisie (`brossesdediees.rs`).
+    pub(crate) pris: Option<crate::brossesdediees::Pris>,
+    /// Ce que la brosse spécifique choisie a posé (outil, réglage), pour voir quand l'éditeur ou l'utilisateur le change.
+    pub(crate) pose: Option<crate::brossesdediees::Pose>,
     /// Le changement de couleur d'aplat d'un personnage, en attente ou en route sur ses calques (`aplatperso.rs`).
     pub(crate) aplat: crate::aplatperso::Etat,
     /// Le dernier calque utilisé (dessiné ou choisi) de chaque personnage dans chaque plan : (numéro du plan, numéro du personnage) vers
@@ -136,16 +139,17 @@ pub(crate) fn tuiles_de(edit: Option<&Edit>) -> Option<Vec<(usize, Option<Tile>)
 
 /// Une pastille : l'anneau est la couleur du trait, l'intérieur celle de l'aplat (rayé s'il n'y en a pas) ; un halo
 /// de la couleur d'accent quand elle est choisie.
-fn pastille(ui: &mut egui::Ui, ligne: [u8; 3], fond: Option<[u8; 3]>, choisie: bool) -> Response {
-    pastille_taille(ui, ligne, fond, choisie, PASTILLE)
+fn pastille(ui: &mut egui::Ui, ligne: [u8; 3], fond: Option<[u8; 3]>, choisie: bool, specifique: Option<bool>) -> Response {
+    pastille_taille(ui, ligne, fond, choisie, PASTILLE, specifique)
 }
 
 /// Diamètre d'une brosse Classique dans la barre (Anthony, 2026-10-28 : il prenait les couleurs neutres d'un projet neuf pour des
 /// personnages et attendait leur calque) : nettement plus petite qu'un personnage, pour qu'on ne les confonde plus.
 const PASTILLE_CLASSIQUE: f32 = 12.0;
 
-/// Une pastille de diamètre `d`, dans une case de la hauteur d'une pastille de personnage (la rangée reste alignée).
-fn pastille_taille(ui: &mut egui::Ui, ligne: [u8; 3], fond: Option<[u8; 3]>, choisie: bool, d: f32) -> Response {
+/// Une pastille de diamètre `d`, dans une case de la hauteur d'une pastille de personnage (la rangée reste alignée). `specifique` : la brosse a
+/// sa propre brosse (§107), et un petit signe au coin le dit (un trait fin : le crayon, un trait épais : le pinceau) ; rien : elle suit le pinceau.
+fn pastille_taille(ui: &mut egui::Ui, ligne: [u8; 3], fond: Option<[u8; 3]>, choisie: bool, d: f32, specifique: Option<bool>) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(d + 6.0, PASTILLE + 6.0), Sense::click());
     if ui.is_rect_visible(rect) {
         let c = rect.center();
@@ -169,13 +173,22 @@ fn pastille_taille(ui: &mut egui::Ui, ligne: [u8; 3], fond: Option<[u8; 3]>, cho
             }
         }
         p.circle_stroke(c, r, Stroke::new(1.0_f32, Color32::from_black_alpha(90)));
+        if let Some(crayon) = specifique {
+            // Le signe de la brosse spécifique, au coin bas droit : un petit rond sur le fond de la barre, avec un trait (fin : crayon, épais : pinceau).
+            let k = if d < PASTILLE { 3.5 } else { 4.5 };
+            let coin = c + vec2(r * 0.8, r * 0.8);
+            p.circle_filled(coin, k + 1.0, crate::theme::entete());
+            p.circle_stroke(coin, k + 1.0, Stroke::new(1.0_f32, crate::theme::bord()));
+            let a = k * 0.55;
+            p.line_segment([coin + vec2(-a, a), coin + vec2(a, -a)], Stroke::new(if crayon { 1.0_f32 } else { 2.2_f32 }, crate::theme::texte()));
+        }
     }
     resp
 }
 
-/// Une pastille de brosse Décor : un carré arrondi (l'anneau est la couleur du trait, l'intérieur celle de l'aplat), avec le signe de son
-/// pinceau tracé de la couleur du trait. Des carrés, pas des ronds, pour qu'on ne les prenne pas pour des personnages.
-fn pastille_carree(ui: &mut egui::Ui, ligne: [u8; 3], fond: Option<[u8; 3]>, choisie: bool, genre: Genre) -> Response {
+/// Une pastille de brosse Décor : un carré arrondi (l'anneau est la couleur du trait, l'intérieur celle de l'aplat), avec, si elle a sa propre
+/// brosse (§107), le signe de son outil tracé de la couleur du trait (un trait fin : le crayon, un trait épais : le pinceau). Des carrés, pas des ronds, pour qu'on ne les prenne pas pour des personnages.
+fn pastille_carree(ui: &mut egui::Ui, ligne: [u8; 3], fond: Option<[u8; 3]>, choisie: bool, specifique: Option<bool>) -> Response {
     let (rect, resp) = ui.allocate_exact_size(vec2(PASTILLE + 6.0, PASTILLE + 6.0), Sense::click());
     if ui.is_rect_visible(rect) {
         let carre = Rect::from_center_size(rect.center(), vec2(PASTILLE, PASTILLE));
@@ -190,16 +203,15 @@ fn pastille_carree(ui: &mut egui::Ui, ligne: [u8; 3], fond: Option<[u8; 3]>, cho
         let dedans = carre.shrink(3.5);
         p.rect_filled(dedans, 3.5, fond.map_or_else(crate::theme::entete, to_color));
         let (a, b) = (dedans.left_bottom() + vec2(2.5, -2.5), dedans.right_top() + vec2(-2.5, 2.5));
-        match genre {
-            Genre::Crayon => {
+        // (Le signe n'est tracé que pour une brosse spécifique : une brosse qui suit le pinceau n'a pas de pinceau à elle à montrer.)
+        match specifique {
+            Some(true) => {
                 p.line_segment([a, b], Stroke::new(1.5_f32, encre));
             }
-            Genre::Feutre => {
+            Some(false) => {
                 p.line_segment([a, b], Stroke::new(4.0_f32, encre));
             }
-            Genre::Aplat => {
-                p.rect_filled(dedans.shrink(2.5), 1.5, encre);
-            }
+            None => {}
         }
         p.rect_stroke(carre, 6.0, Stroke::new(1.0_f32, Color32::from_black_alpha(90)), StrokeKind::Inside);
     }
@@ -207,12 +219,13 @@ fn pastille_carree(ui: &mut egui::Ui, ligne: [u8; 3], fond: Option<[u8; 3]>, cho
 }
 
 /// Le texte de la bulle d'une pastille : le type, ce que fait la brosse, ses couleurs, puis ce que font le clic et le clic droit.
-pub(crate) fn description(t: Type, ligne: [u8; 3], fond: Option<[u8; 3]>, choisie: bool, decor: Option<(Genre, f32)>) -> String {
+/// `pinceau` : ce qui dessine, en mots (« Suit le pinceau » ou le nom de la brosse spécifique ; `App::dediee_etiquette`).
+pub(crate) fn description(t: Type, ligne: [u8; 3], fond: Option<[u8; 3]>, choisie: bool, pinceau: &str) -> String {
     let fond = match fond {
         Some(f) => format!("aplat {}", crate::couleur::hex(f)),
         None => "sans aplat".to_string(),
     };
-    let pinceau = decor.map(|(g, taille)| format!(" Pinceau : {}, {}, {taille:.0} px.", g.nom().to_lowercase(), g.description())).unwrap_or_default();
+    let pinceau = format!(" Dessine avec : {pinceau}.");
     let clic = if choisie { "Clic : lâcher la brosse (retour à la couleur libre, dans le calque courant)" } else { "Clic : dessiner avec" };
     format!("Brosse {} : {}. Trait {} · {fond}.{pinceau} {clic} ; clic droit : modifier, dupliquer, supprimer, monter, descendre.", t.nom().to_lowercase(), t.effet(), crate::couleur::hex(ligne))
 }
@@ -293,7 +306,7 @@ impl App {
         tous
     }
 
-    /// Choisit une brosse perso : la couleur du trait devient la sienne, et ses traits auront son aplat. Un outil qui ne dessine pas cède
+    /// Choisit une brosse dédiée : la couleur du trait devient la sienne, et ses traits auront son aplat. Un outil qui ne dessine pas cède
     /// la place au pinceau. Une brosse Décor prend en plus l'outil, le pinceau et la taille qu'il lui faut (`decorui.rs`).
     pub(crate) fn perso_choisir(&mut self, c: Choix) {
         let Some((ligne, fond)) = self.perso_couleurs(c) else { return };
@@ -318,6 +331,8 @@ impl App {
         if let Choix::Personnage(id) = c {
             self.perso_rendre_son_calque(id);
         }
+        // Une brosse spécifique prend son pinceau (ou son crayon) ; une brosse qui suit le pinceau rend celui de l'utilisateur, s'il était de côté.
+        self.dediee_suivre(true);
         let nom = self.perso_nom(c).unwrap_or_default();
         self.status = match (c, fond) {
             // (Le calque du personnage naît au premier trait, pas au clic : choix d'Anthony, 2026-10-28.)
@@ -331,19 +346,21 @@ impl App {
     pub(crate) fn perso_lacher(&mut self) {
         if self.decor_actif().is_some() {
             self.decor_lacher(true);
-            self.status = "Couleur libre : plus de brosse perso choisie.".into();
+            self.status = "Couleur libre : plus de brosse dédiée choisie.".into();
             return;
         }
         if self.perso.actif.take().is_some() {
-            self.status = "Couleur libre : plus de brosse perso choisie.".into();
+            self.status = "Couleur libre : plus de brosse dédiée choisie.".into();
         }
+        // (Une brosse spécifique lâchée rend le pinceau de l'utilisateur tel qu'il était.)
+        self.dediee_rendre();
     }
 
     /// La brosse suivante (ou précédente) de la barre, en tournant.
     fn perso_voisin(&mut self, delta: isize) {
         let tous = self.perso_tous();
         if tous.is_empty() {
-            self.status = "Aucune brosse perso : ajoutes-en une (+ dans la barre des pastilles).".into();
+            self.status = "Aucune brosse dédiée : ajoutes-en une (+ dans la barre des pastilles).".into();
             return;
         }
         let rang = self.perso.actif.and_then(|a| tous.iter().position(|c| *c == a));
@@ -358,7 +375,7 @@ impl App {
     // -------------------------------------------------------------------------- les changements
 
     /// Enregistre l'étape d'annulation d'un changement de personnage (à appeler AVANT le changement).
-    fn perso_etape(&mut self, nom: &str) {
+    pub(crate) fn perso_etape(&mut self, nom: &str) {
         let avant = self.history.context.replace(nom.to_string());
         self.record_step();
         self.history.context = avant;
@@ -366,7 +383,7 @@ impl App {
 
     /// Suit un champ ou un sélecteur de couleur d'un personnage (`App::edited`, une étape par geste, nommée) ; une
     /// classique ou un décor, eux, sont un réglage de l'application, sans annulation.
-    fn perso_edited(&mut self, resp: &Response, c: Choix) -> bool {
+    pub(crate) fn perso_edited(&mut self, resp: &Response, c: Choix) -> bool {
         match c {
             Choix::Personnage(_) => {
                 let avant = self.history.context.replace("Modifier le personnage".to_string());
@@ -383,14 +400,6 @@ impl App {
         let nom = self.perso_nom(c)?;
         let (ligne, fond) = self.perso_couleurs(c)?;
         Some((nom, ligne, fond))
-    }
-
-    /// Le pinceau et la taille d'une brosse Décor.
-    fn perso_lire_decor(&self, c: Choix) -> Option<(Genre, f32)> {
-        match c {
-            Choix::Decor(i) => self.settings.brosses_decor.get(i).map(|b| (b.genre(), b.taille_decor())),
-            _ => None,
-        }
     }
 
     /// Pose ces valeurs sur ce personnage (le projet change) ou cette brosse du poste (les réglages changent).
@@ -424,16 +433,6 @@ impl App {
         }
     }
 
-    /// Pose le pinceau et la taille d'une brosse Décor (réglage de l'application). La brosse, si elle est choisie, les prend à l'image
-    /// suivante (`decor_tick`).
-    pub(crate) fn perso_ecrire_decor(&mut self, i: usize, genre: Genre, taille: f32) {
-        if let Some(b) = self.settings.brosses_decor.get_mut(i) {
-            b.pinceau = Some(genre);
-            b.taille = taille.clamp(0.5, 400.0);
-            self.settings_a_ecrire = true;
-        }
-    }
-
     /// Un personnage de plus (une étape d'annulation) ; rend son numéro. Il est choisi tout de suite.
     pub(crate) fn perso_ajouter(&mut self) -> Option<u64> {
         if self.content_refuses() {
@@ -447,7 +446,7 @@ impl App {
         let (line, fill) = personnages::couleurs_neuves(self.doc.personnages.len());
         let id = self.doc.alloc();
         let name = personnages::nom_neuf(&self.doc.personnages);
-        self.doc.personnages.push(Personnage { id, name, line, fill: Some(fill) });
+        self.doc.personnages.push(Personnage { id, name, line, fill: Some(fill), brosse: None });
         self.perso_choisir(Choix::Personnage(id));
         Some(id)
     }
@@ -467,7 +466,7 @@ impl App {
         }
         let name = personnages::nom_neuf_poste(liste, t);
         let brosse = match t {
-            Type::Decor => Brosse::decor(&name, [0x80, 0x80, 0x80], Some([0xD0, 0xD0, 0xD0]), Genre::Feutre, Genre::Feutre.taille_defaut()),
+            Type::Decor => Brosse::decor(&name, [0x80, 0x80, 0x80], Some([0xD0, 0xD0, 0xD0])),
             _ => Brosse::classique(&name, [0x50, 0x50, 0x50], Some([0xC0, 0xC0, 0xC0])),
         };
         let liste = self.liste_poste_mut(t)?;
@@ -526,7 +525,7 @@ impl App {
                 Some(id) => self.perso_ecrire(Choix::Personnage(id), nom.into(), line, Some(fill)),
                 None => {
                     let id = self.doc.alloc();
-                    self.doc.personnages.push(Personnage { id, name: nom.into(), line, fill: Some(fill) });
+                    self.doc.personnages.push(Personnage { id, name: nom.into(), line, fill: Some(fill), brosse: None });
                     self.modified = true;
                 }
             }
@@ -660,26 +659,26 @@ impl App {
         self.layout.character_bar.unwrap_or_else(|| self.espace.barre_personnages_par_defaut())
     }
 
-    /// Les commandes des brosses perso ; vrai si `action` en était une.
+    /// Les commandes des brosses dédiées ; vrai si `action` en était une.
     pub(crate) fn perso_action(&mut self, action: &str) -> bool {
         match action {
             "perso.barre" => {
                 self.layout.character_bar = Some(!self.barre_perso_visible());
-                self.status = if self.barre_perso_visible() { "Pastilles des brosses perso montrées dans cet espace de travail." } else { "Pastilles des brosses perso cachées dans cet espace de travail." }.into();
+                self.status = if self.barre_perso_visible() { "Pastilles des brosses dédiées montrées dans cet espace de travail." } else { "Pastilles des brosses dédiées cachées dans cet espace de travail." }.into();
             }
             "perso.ajouter" => {
                 // La brosse arrive tout de suite dans la barre, sans fenêtre « Modifier » (Anthony, 2026-10-28) : son nom et
-                // ses couleurs se changent dans le panneau Brosses perso ou au clic droit sur sa pastille.
+                // ses couleurs se changent dans le panneau Brosses dédiées ou au clic droit sur sa pastille.
                 if let Some(id) = self.perso_ajouter() {
                     let nom = self.perso_nom(Choix::Personnage(id)).unwrap_or_default();
-                    self.status = format!("« {nom} » ajouté (brosse Personnage). Clic droit sur sa pastille ou panneau Brosses perso : son nom et ses couleurs.");
+                    self.status = format!("« {nom} » ajouté (brosse Personnage). Clic droit sur sa pastille ou panneau Brosses dédiées : son nom et ses couleurs.");
                 }
             }
             "perso.ajouter_classique" | "perso.ajouter_decor" => {
                 let t = if action == "perso.ajouter_decor" { Type::Decor } else { Type::Classique };
                 if let Some(i) = self.perso_ajouter_poste(t) {
                     let nom = self.liste_poste(t).and_then(|l| l.get(i)).map(|b| b.name.clone()).unwrap_or_default();
-                    self.status = format!("« {nom} » ajoutée (brosse {}). Clic droit sur sa pastille ou panneau Brosses perso : son nom et ses couleurs.", t.nom());
+                    self.status = format!("« {nom} » ajoutée (brosse {}). Clic droit sur sa pastille ou panneau Brosses dédiées : son nom et ses couleurs.", t.nom());
                 }
             }
             "perso.suivant" => self.perso_voisin(1),
@@ -693,6 +692,12 @@ impl App {
     /// À chaque image d'écran : les fonds de trait arrivés sont posés, et la brosse choisie suit sa couleur (ou
     /// est lâchée si quelqu'un a pris une autre couleur à la main, ou si elle n'existe plus). Au repos, rien.
     pub(crate) fn tick_personnages(&mut self) {
+        self.tick_personnages_corps();
+        // Le pinceau : posé, gardé ou rendu selon la brosse qui reste choisie après tout cela (`brossesdediees.rs`).
+        self.dediee_suivre(false);
+    }
+
+    fn tick_personnages_corps(&mut self) {
         self.decor_tick();
         self.tick_aplat_perso();
         if let Some(fil) = self.perso.fil.as_mut() {
@@ -735,6 +740,7 @@ impl App {
                 self.decor_lacher_avec(true, false);
             } else {
                 self.perso.actif = None;
+                self.dediee_rendre();
             }
             return;
         }
@@ -778,7 +784,7 @@ impl App {
     /// traits de la pastille.
     ///
     /// **Jamais pour un calque de personnage** (Anthony, 2026-10-29 : « sur les calques personnages, l'aplat ne change de couleur que si
-    /// on modifie les paramètres de couleur de l'aplat dans le panneau Personnages ») : un trait fait là avec une autre pastille ne change
+    /// on modifie les paramètres de couleur de l'aplat dans le panneau Brosses dédiées ») : un trait fait là avec une autre pastille ne change
     /// pas sa couleur d'aplat ; au plus, elle est remise à celle de son propre personnage si elle en avait une autre (`aplatperso.rs`).
     pub(crate) fn perso_aligner_couleur_aplat(&mut self) {
         if matches!(self.tool, Tool::Eraser | Tool::Mixer) || self.aplat_en_cible() || self.griffonne_ici() {
@@ -937,7 +943,7 @@ impl App {
     /// Les pastilles (Anthony, 2026-10-21 : une colonne ronde et discrète à droite du dessin ; 2026-10-24 : une rangée dans la barre
     /// du haut, voir plus bas).
     ///
-    /// Dans l'ordre : les Personnages, les Classiques, les Décors, « + » (le menu des trois types) et l'icône du panneau Brosses perso. Dans
+    /// Dans l'ordre : les Personnages, les Classiques, les Décors, « + » (le menu des trois types) et l'icône du panneau Brosses dédiées. Dans
     /// la barre, ce sont de vrais éléments de la barre : cliquer une pastille ne trace rien. Rien n'est calculé de lourd : une dizaine de cercles.
     ///
     /// **Depuis le 2026-10-24 (Anthony, d'après une copie d'écran) : une rangée, plus une colonne.** Les mêmes pastilles, dans le même
@@ -1051,7 +1057,7 @@ impl App {
         let ouvert = self.pane_shown(Pane::Personnages);
         let key = self.raccourci("vue.personnages");
         let r = ui.add(egui::Button::new(crate::bulles::symbole_etat(ph::USERS_THREE, ouvert)).selected(ouvert).frame(ouvert).min_size(vec2(COLONNE_L - 4.0, 0.0)));
-        if crate::bulles::bulle(r.clone(), "Panneau Brosses perso", "Les trois sortes de brosses perso (Personnages, Classiques, Décors) : noms, couleurs de trait et d'aplat, pinceau des Décors, ordre. Un clic l'ouvre ou le ferme.", &key).clicked() {
+        if crate::bulles::bulle(r.clone(), "Panneau Brosses dédiées", "Les trois sortes de brosses dédiées (Personnages, Classiques, Décors) : noms, couleurs de trait et d'aplat, avec quoi chacune dessine (ton pinceau, ou sa propre brosse), ordre. Un clic l'ouvre ou le ferme.", &key).clicked() {
             self.run_action("vue.personnages");
         }
         cases.push((r.rect, Case::Panneau));
@@ -1060,7 +1066,7 @@ impl App {
     /// Le « + » : un petit menu « Brosse personnage / classique / décor ». Choisir une ligne ajoute la brosse tout de suite (elle est
     /// choisie), sans fenêtre « Modifier ».
     fn bouton_plus(&mut self, ui: &mut egui::Ui, cases: &mut Vec<(Rect, Case)>) -> Response {
-        let reponse = crate::bulles::icone(ui, ph::PLUS, "Nouvelle brosse perso", "Ajouter une brosse perso : personnage, classique ou décor. Son nom et ses couleurs se règlent dans le panneau Brosses perso.", &self.raccourci("perso.ajouter"));
+        let reponse = crate::bulles::icone(ui, ph::PLUS, "Nouvelle brosse dédiée", "Ajouter une brosse dédiée : à un personnage, à un décor, ou classique. Son nom et ses couleurs se règlent dans le panneau Brosses dédiées ; d'origine, elle dessine avec ton pinceau.", &self.raccourci("perso.ajouter"));
         let id = Id::new("perso_plus_menu");
         if reponse.clicked() {
             ui.memory_mut(|m| m.toggle_popup(id));
@@ -1086,13 +1092,13 @@ impl App {
     /// classique, un carré arrondi pour un décor.
     fn pastille_de_colonne(&mut self, ui: &mut egui::Ui, c: Choix, nom: &str, ligne: [u8; 3], fond: Option<[u8; 3]>) -> Response {
         let choisie = self.perso.actif == Some(c);
-        let decor = self.perso_lire_decor(c);
+        let specifique = self.dediee_outil(c);
         let resp = match c {
-            Choix::Personnage(_) => pastille_taille(ui, ligne, fond, choisie, PASTILLE),
-            Choix::Classique(_) => pastille_taille(ui, ligne, fond, choisie, PASTILLE_CLASSIQUE),
-            Choix::Decor(_) => pastille_carree(ui, ligne, fond, choisie, decor.map_or(Genre::Feutre, |(g, _)| g)),
+            Choix::Personnage(_) => pastille_taille(ui, ligne, fond, choisie, PASTILLE, specifique),
+            Choix::Classique(_) => pastille_taille(ui, ligne, fond, choisie, PASTILLE_CLASSIQUE, specifique),
+            Choix::Decor(_) => pastille_carree(ui, ligne, fond, choisie, specifique),
         };
-        let resp = crate::bulles::bulle(resp, if nom.is_empty() { "Sans nom" } else { nom }, &description(c.type_(), ligne, fond, choisie, decor), "");
+        let resp = crate::bulles::bulle(resp, if nom.is_empty() { "Sans nom" } else { nom }, &description(c.type_(), ligne, fond, choisie, &self.dediee_etiquette(c)), "");
         if resp.clicked() {
             if choisie {
                 self.perso_lacher();
@@ -1138,8 +1144,8 @@ impl App {
 
     // ------------------------------------------------------------------- édition et panneau
 
-    /// Une ligne de réglages : le nom, la couleur du trait, l'aplat (ou non) et sa couleur ; pour une brosse Décor, de plus son pinceau et
-    /// sa taille.
+    /// Une ligne de réglages : le nom, la couleur du trait, l'aplat (ou non) et sa couleur, puis avec quoi elle dessine (« Suit le pinceau » ou
+    /// « Brosse spécifique » et ses réglages).
     fn perso_ligne(&mut self, ui: &mut egui::Ui, c: Choix) {
         let Some((mut nom, mut ligne, mut fond)) = self.perso_lire(c) else { return };
         let mut change = false;
@@ -1168,25 +1174,11 @@ impl App {
         if change {
             self.perso_ecrire(c, nom, ligne, fond);
         }
-        // Un Décor : son pinceau et sa taille (avant le 2026-10-29, Préférences > Vignettes).
-        if let (Choix::Decor(i), Some((mut genre, mut taille))) = (c, self.perso_lire_decor(c)) {
-            let avant = (genre, taille);
-            egui::ComboBox::from_id_salt(("decor_pinceau", i)).width(96.0).selected_text(genre.nom()).show_ui(ui, |ui| {
-                for g in Genre::ALL {
-                    ui.selectable_value(&mut genre, g, g.nom()).on_hover_text(g.description());
-                }
-            })
-            .response
-            .on_hover_text("Le pinceau de la brosse Décor : un crayon fin, un feutre large et translucide, ou un pinceau plein pour les masses.");
-            let resp = ui.add(egui::DragValue::new(&mut taille).range(0.5..=400.0).speed(0.3).max_decimals(0).suffix(" px"));
-            crate::bulles::bulle(resp, "Taille", "La taille de la brosse Décor, en pixels du dessin.", "");
-            if (genre, taille) != avant {
-                self.perso_ecrire_decor(i, genre, taille);
-            }
-        }
+        // Avec quoi elle dessine : le pinceau courant (d'origine) ou sa propre brosse (§107, rossesdediees.rs).
+        self.dediee_reglages(ui, c);
     }
 
-    /// La fenêtre « Modifier » d'une brosse perso (clic droit sur sa pastille).
+    /// La fenêtre « Modifier » d'une brosse dédiée (clic droit sur sa pastille).
     pub(crate) fn personnages_fenetre(&mut self, ctx: &egui::Context) {
         let Some(c) = self.perso.edition else { return };
         if self.perso_couleurs(c).is_none() {
@@ -1208,11 +1200,11 @@ impl App {
         }
     }
 
-    /// Le panneau « Brosses perso » : trois sections, Personnages (du projet), Classiques et Décors (de l'application) ; dans chacune son « + »,
+    /// Le panneau « Brosses dédiées » : trois sections, Personnages (du projet), Classiques et Décors (de l'application) ; dans chacune son « + »,
     /// ses lignes (qu'on range en glissant la poignée) et son « ↺ ».
     pub(crate) fn personnages_panel(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            if self.bouton_si(ui, self.perso.actif.is_some(), ph::X_CIRCLE, "Couleur libre", "Lâcher la brosse perso : le trait garde sa couleur, mais elle n'est plus celle d'une brosse. Un clic sur la brosse choisie, dans la barre, fait pareil.", "perso.aucun").clicked() {
+            if self.bouton_si(ui, self.perso.actif.is_some(), ph::X_CIRCLE, "Couleur libre", "Lâcher la brosse dédiée : le trait garde sa couleur, mais elle n'est plus celle d'une brosse. Un clic sur la brosse choisie, dans la barre, fait pareil.", "perso.aucun").clicked() {
                 self.perso_lacher();
             }
         });
@@ -1231,7 +1223,7 @@ impl App {
             let (nom_plus, aide_plus) = match t {
                 Type::Personnage => ("Nouveau personnage", "Ajouter une brosse Personnage : son nom, sa couleur de trait et sa couleur d'aplat. Son calque naît au premier trait."),
                 Type::Classique => ("Nouvelle brosse classique", "Ajouter une brosse Classique : un trait, avec ou sans aplat, dans le calque courant."),
-                Type::Decor => ("Nouvelle brosse décor", "Ajouter une brosse Décor : un trait et un aplat, un pinceau et une taille, dans le calque Décor du plan."),
+                Type::Decor => ("Nouvelle brosse décor", "Ajouter une brosse Décor : un trait et un aplat, dans le calque Décor du plan. D'origine, elle dessine avec ton pinceau."),
             };
             if crate::bulles::icone(ui, ph::PLUS, nom_plus, aide_plus, "").clicked() {
                 self.run_action(action_ajouter(t));
@@ -1239,7 +1231,7 @@ impl App {
             let aide_origine = match t {
                 Type::Personnage => "Perso 1, Perso 2 et Perso 3 retrouvent leurs couleurs d'origine (ceux qu'on a retirés reviennent au bout de la liste). Les autres personnages ne changent pas. Une seule étape d'annulation.",
                 Type::Classique => "Remettre les trois gris d'origine (le trait plus foncé que l'aplat, de plus en plus clairs).",
-                Type::Decor => "Remettre les trois brosses Décor d'origine : trois niveaux de gris plus clairs que les classiques, crayon, feutre et pinceau plein.",
+                Type::Decor => "Remettre les trois brosses Décor d'origine : trois niveaux de gris plus clairs que les classiques, qui suivent ton pinceau.",
             };
             if crate::bulles::icone(ui, ph::ARROW_COUNTER_CLOCKWISE, &format!("{} d'origine", t.titre()), aide_origine, "").clicked() {
                 self.perso_d_origine(t);
@@ -1248,9 +1240,9 @@ impl App {
             ui.label(RichText::new(format!("{n} brosse{}", if n > 1 { "s" } else { "" })).small().weak());
         });
         let phrase = match t {
-            Type::Personnage => "Du projet. Son premier trait crée un calque vectoriel à son nom, avec son aplat.",
-            Type::Classique => "Pour tous les projets. Dessine dans le calque courant, sans rien créer.",
-            Type::Decor => "Pour tous les projets. Dessine dans le calque Décor du plan, créé au premier trait.",
+            Type::Personnage => "Du projet. Son premier trait crée un calque vectoriel à son nom, avec son aplat. Dessine avec ton pinceau, ou avec sa propre brosse.",
+            Type::Classique => "Pour tous les projets. Dessine dans le calque courant, sans rien créer. Dessine avec ton pinceau, ou avec sa propre brosse.",
+            Type::Decor => "Pour tous les projets. Dessine dans le calque Décor du plan, créé au premier trait. Dessine avec ton pinceau, ou avec sa propre brosse.",
         };
         ui.label(RichText::new(phrase).small().weak());
         if ids.is_empty() {
@@ -1260,7 +1252,7 @@ impl App {
         let mut supprimee = None;
         for (i, c) in ids.iter().copied().enumerate() {
             let (ligne, fond) = self.perso_couleurs(c).unwrap_or(([0; 3], None));
-            let decor = self.perso_lire_decor(c);
+            let specifique = self.dediee_outil(c);
             let (zone, depose) = ui.dnd_drop_zone::<(Type, usize), _>(egui::Frame::NONE, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing.x = 3.0;
@@ -1268,8 +1260,8 @@ impl App {
                     crate::bulles::bulle(poignee, "Ranger", "Glisser pour changer la place de la brosse dans la barre (dans sa section).", "");
                     let choisie = self.perso.actif == Some(c);
                     let r = match c {
-                        Choix::Decor(_) => pastille_carree(ui, ligne, fond, choisie, decor.map_or(Genre::Feutre, |(g, _)| g)),
-                        _ => pastille(ui, ligne, fond, choisie),
+                        Choix::Decor(_) => pastille_carree(ui, ligne, fond, choisie, specifique),
+                        _ => pastille(ui, ligne, fond, choisie, specifique),
                     };
                     if r.clicked() {
                         if choisie {

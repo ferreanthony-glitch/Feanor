@@ -1,5 +1,5 @@
-//! Brosses perso (§70, Anthony 2026-10-29) : une seule sorte de chose, de trois types (Personnage, Classique, Décor), dans la barre, dans le
-//! panneau « Brosses perso », dans les réglages et dans le projet. Les essais d'avant les concernent aussi (`personnages_tests`,
+//! Brosses dédiées (§70, Anthony 2026-10-29) : une seule sorte de chose, de trois types (Personnage, Classique, Décor), dans la barre, dans le
+//! panneau « Brosses dédiées », dans les réglages et dans le projet. Les essais d'avant les concernent aussi (`personnages_tests`,
 //! `calques_pastilles_tests`, `decor_tests`, `pastilles_storyboard_tests`, `aplatperso_tests`, `aplattrous_tests`) : ils ont été adaptés
 //! avec un commentaire qui dit pourquoi.
 
@@ -80,25 +80,25 @@ fn a_decor_brush_makes_the_vector_decor_layer_with_its_own_aplat_in_one_step_and
 }
 
 #[test]
-fn a_decor_brush_follows_its_pinceau_and_size_and_is_let_go_when_deleted() {
+fn a_decor_brush_follows_the_pinceau_the_user_set_and_is_let_go_when_deleted() {
+    // (Adapté au §107 : une brosse Décor d'origine ne prend plus ni outil ni taille, elle suit le pinceau de l'utilisateur.)
     let mut b = banc();
-    let (outil0, pinceau0) = (b.app.tool, b.app.brush);
+    b.app.set_tool(crate::app::Tool::Brush);
+    let (outil0, pinceau0, crayon0) = (b.app.tool, b.app.brush, b.app.pencil);
     clic_case(&mut b, Case::Choix(Choix::Decor(0)));
-    assert_eq!((b.app.tool, b.app.pencil.size), (crate::app::Tool::Pencil, Genre::Crayon.taille_defaut()), "Décor 1 : un crayon de 5 px");
-    // Le panneau change son pinceau et sa taille : la brosse choisie les prend à l'image suivante.
-    b.app.perso_ecrire_decor(0, Genre::Aplat, 60.0);
+    assert_eq!((b.app.tool, b.app.brush, b.app.pencil), (outil0, pinceau0, crayon0), "Décor 1 suit le pinceau : rien ne change au choix");
+    // L'utilisateur change de taille : la brosse choisie dessine avec la nouvelle (c'est son pinceau).
+    b.app.brush.size = 33.0;
     b.chauffer(3);
-    assert_eq!(b.app.tool, crate::app::Tool::Brush);
-    assert_eq!(b.app.brush.size, 60.0);
-    assert!((b.app.brush.hardness - 1.0).abs() < 1e-6, "un pinceau plein");
-    // Une autre couleur de trait : elle aussi.
+    assert_eq!(b.app.brush.size, 33.0, "la taille de l'utilisateur n'est pas reprise par la brosse");
+    // Une autre couleur de trait : elle suit tout de suite.
     b.app.perso_ecrire(Choix::Decor(0), "Décor 1".into(), [10, 20, 30], Some([200, 210, 220]));
     b.chauffer(3);
     assert_eq!(b.app.color, [10, 20, 30]);
-    // La supprimer la lâche : l'outil et le pinceau d'avant reviennent.
+    // La supprimer la lâche : le pinceau de l'utilisateur est celui qu'il a réglé.
     b.app.perso_supprimer(Choix::Decor(0));
     assert_eq!(b.app.perso.actif, None);
-    assert_eq!((b.app.tool, b.app.brush), (outil0, pinceau0));
+    assert_eq!((b.app.tool, b.app.brush.size), (outil0, 33.0));
     assert_eq!(b.app.settings.brosses_decor.len(), 2);
     // Les rangs des suivantes bougent avec la liste : la brosse choisie les suit.
     clic_case(&mut b, Case::Choix(Choix::Decor(1)));
@@ -222,11 +222,12 @@ fn the_personnage_reset_restores_perso_1_to_3_in_one_undo_step_and_leaves_the_ot
 
 #[test]
 fn the_bubbles_say_the_type_and_what_the_brush_does() {
-    let d = crate::personnagesui::description(Type::Decor, [0x6E; 3], Some([0xC8; 3]), false, Some((Genre::Crayon, 5.0)));
-    assert!(d.contains("Brosse décor") && d.contains("calque Décor") && d.contains("crayon") && d.contains("5 px"), "{d}");
-    let c = crate::personnagesui::description(Type::Classique, [0x1E; 3], None, true, None);
+    let d = crate::personnagesui::description(Type::Decor, [0x6E; 3], Some([0xC8; 3]), false, "Crayon, 5 px, crayon");
+    assert!(d.contains("Brosse décor") && d.contains("calque Décor") && d.contains("Dessine avec : Crayon, 5 px, crayon"), "{d}");
+    let c = crate::personnagesui::description(Type::Classique, [0x1E; 3], None, true, "Suit le pinceau");
+    assert!(c.contains("Suit le pinceau"), "{c}");
     assert!(c.contains("Brosse classique") && c.contains("calque courant") && c.contains("sans aplat") && c.contains("lâcher"), "{c}");
-    let p = crate::personnagesui::description(Type::Personnage, [1, 2, 3], Some([4, 5, 6]), false, None);
+    let p = crate::personnagesui::description(Type::Personnage, [1, 2, 3], Some([4, 5, 6]), false, "Suit le pinceau");
     assert!(p.contains("Brosse personnage") && p.contains("calque à son nom"), "{p}");
 }
 
@@ -242,9 +243,11 @@ fn old_settings_with_neutral_colours_and_decor_sizes_are_read_without_loss() {
     assert_eq!(s.brosses_classiques[0].fill, None);
     assert_eq!(s.brosses_classiques[1].fill, Some([200, 200, 200]));
     assert!(s.brosses_classiques.iter().all(|b| b.pinceau.is_none()));
-    // Les trois Décors d'origine, avec les anciennes tailles ; l'ancienne clé n'est plus écrite.
-    let tailles: Vec<f32> = s.brosses_decor.iter().map(|b| b.taille_decor()).collect();
+    // Les trois Décors d'origine, avec les anciennes tailles : elles n'étaient pas celles d'origine, ce sont donc trois brosses spécifiques (§107) ;
+    // l'ancienne clé n'est plus écrite.
+    let tailles: Vec<f32> = s.brosses_decor.iter().map(|b| b.specifique.as_ref().expect("une brosse spécifique").settings.size).collect();
     assert_eq!(tailles, [3.0, 30.0, 120.0]);
+    assert_eq!(s.brosses_decor.iter().map(|b| b.specifique.as_ref().map(|x| x.crayon)).collect::<Vec<_>>(), [Some(true), Some(false), Some(false)], "le crayon reste un crayon");
     assert_eq!(s.brosses_decor.iter().map(|b| b.line).collect::<Vec<_>>(), personnages::decors_par_defaut().iter().map(|b| b.line).collect::<Vec<_>>());
     let texte = toml::to_string(&s).expect("écriture");
     assert!(!texte.contains("tailles_decor") && !texte.contains("couleur_decor"), "{texte}");
@@ -252,9 +255,12 @@ fn old_settings_with_neutral_colours_and_decor_sizes_are_read_without_loss() {
     // Relu : rien ne change, et les anciennes tailles ne reviennent pas écraser un réglage fait depuis.
     let mut relu = Settings::apres_lecture(toml::from_str(&texte).expect("relecture"));
     assert_eq!(relu.brosses_decor, s.brosses_decor);
+    relu.brosses_decor[0].pinceau = Some(Genre::Crayon);
     relu.brosses_decor[0].taille = 7.0;
+    relu.brosses_decor[0].specifique = None;
     let relu = Settings::apres_lecture(toml::from_str(&toml::to_string(&relu).expect("écriture")).expect("relecture"));
-    assert_eq!(relu.brosses_decor[0].taille_decor(), 7.0);
+    assert_eq!(relu.brosses_decor[0].specifique.as_ref().map(|x| x.settings.size), Some(7.0), "un ancien crayon de 7 px devient une brosse spécifique de 7 px");
+    assert!(relu.brosses_decor[0].pinceau.is_none() && relu.brosses_decor[0].taille == 0.0, "les anciens champs sont vidés");
     // Sans rien : les valeurs d'origine.
     let neuf = Settings::apres_lecture(Settings::default());
     assert_eq!(neuf.brosses_classiques, personnages::classiques_par_defaut());
@@ -313,4 +319,229 @@ fn choosing_a_character_brush_stays_in_a_copy_then_goes_to_the_last_used_layer_t
     b.app.select_layer(0);
     b.app.perso_choisir(Choix::Personnage(lou));
     assert_eq!(b.app.cur_layer, copie.max(original), "à défaut, le plus haut dans la pile");
+}
+
+// ------------------------------------------------------------------------------------------ §107 : avec quoi elles dessinent
+
+use crate::app::Tool;
+use crate::brush::BrushSettings;
+use crate::personnages::Specifique;
+
+/// Un pinceau d'utilisateur reconnaissable (ni celui d'origine, ni un réglage de brosse dédiée).
+fn pinceau_de_l_utilisateur(b: &mut crate::perf_tests::Banc) -> BrushSettings {
+    b.app.set_tool(Tool::Brush);
+    b.app.brush = BrushSettings { size: 17.0, hardness: 0.37, opacity: 0.8, grain: 0.4, ..b.app.brush };
+    b.app.pencil = BrushSettings { size: 3.0, ..b.app.pencil };
+    b.chauffer(3);
+    b.app.brush
+}
+
+fn une_de_chaque(b: &mut crate::perf_tests::Banc) -> [Choix; 3] {
+    let lou = personnage(b, "Lou", [200, 30, 30], Some([250, 200, 200]));
+    b.app.perso_lacher();
+    [Choix::Personnage(lou), Choix::Classique(0), Choix::Decor(0)]
+}
+
+fn feutre(taille: f32) -> Specifique {
+    Specifique { crayon: false, settings: BrushSettings { size: taille, hardness: 0.1, ..BrushSettings::felt() }, nom: None }
+}
+
+#[test]
+fn a_brush_of_every_type_follows_the_users_brush_and_never_touches_it() {
+    let mut b = banc();
+    let [lou, gris, decor] = une_de_chaque(&mut b);
+    let (outil, pinceau, crayon) = (b.app.tool, pinceau_de_l_utilisateur(&mut b), b.app.pencil);
+    for c in [lou, gris, decor] {
+        assert_eq!(b.app.dediee_specifique(c), None, "{c:?} : « Suit le pinceau » d'origine");
+        b.app.perso_choisir(c);
+        b.chauffer(2);
+        assert_eq!((b.app.tool, b.app.brush, b.app.pencil), (outil, pinceau, crayon), "{c:?} : choisie, le pinceau n'a pas bougé");
+        // L'utilisateur change de taille : elle suit, c'est son pinceau.
+        b.app.brush.size = 41.0;
+        b.chauffer(2);
+        assert_eq!(b.app.brush.size, 41.0, "{c:?} suit la taille de l'utilisateur");
+        assert_eq!(b.app.dediee_specifique(c), None, "rien n'est gardé pour elle");
+        b.app.brush.size = pinceau.size;
+        b.app.perso_lacher();
+        assert_eq!(b.app.brush, pinceau, "{c:?} lâchée : le pinceau est celui de l'utilisateur");
+        b.chauffer(2);
+    }
+    // Un pinceau tout autre (le feutre d'origine) : elles le suivent aussi.
+    b.app.brush = BrushSettings::felt();
+    for c in [lou, gris, decor] {
+        b.app.perso_choisir(c);
+        b.chauffer(2);
+        assert_eq!(b.app.brush, BrushSettings::felt(), "{c:?} suit le changement de pinceau");
+    }
+}
+
+#[test]
+fn a_specific_brush_takes_its_own_brush_and_gives_back_the_users_exactly_for_each_type_and_tool() {
+    let mut b = banc();
+    let [lou, gris, decor] = une_de_chaque(&mut b);
+    let pinceau = pinceau_de_l_utilisateur(&mut b);
+    let (outil, crayon) = (b.app.tool, b.app.pencil);
+    for (c, avec_crayon) in [(lou, false), (gris, true), (decor, false)] {
+        let sp = if avec_crayon { Specifique { crayon: true, settings: BrushSettings { size: 6.0, ..BrushSettings::graphite() }, nom: None } } else { feutre(40.0) };
+        b.app.dediee_ecrire(c, Some(sp.clone()));
+        b.app.perso_choisir(c);
+        b.chauffer(2);
+        if avec_crayon {
+            assert_eq!((b.app.tool, b.app.pencil), (Tool::Pencil, sp.settings), "{c:?} : le crayon à elle");
+            assert_eq!(b.app.brush, pinceau, "{c:?} : le pinceau de l'utilisateur n'a pas bougé");
+        } else {
+            assert_eq!((b.app.tool, b.app.brush), (Tool::Brush, sp.settings), "{c:?} : le pinceau à elle");
+            assert_eq!(b.app.pencil, crayon);
+        }
+        b.app.perso_lacher();
+        assert_eq!((b.app.tool, b.app.brush, b.app.pencil), (outil, pinceau, crayon), "{c:?} lâchée : tout est rendu tel quel");
+        assert!(b.app.perso.pris.is_none());
+        b.app.dediee_ecrire(c, None);
+    }
+}
+
+#[test]
+fn going_back_and_forth_between_brushes_never_changes_the_users_brush() {
+    let mut b = banc();
+    let [lou, gris, decor] = une_de_chaque(&mut b);
+    let pinceau = pinceau_de_l_utilisateur(&mut b);
+    b.app.dediee_ecrire(gris, Some(feutre(55.0)));
+    // Qui suit -> spécifique -> qui suit -> spécifique -> spécifique -> qui suit, plusieurs fois.
+    for _ in 0..3 {
+        for c in [lou, gris, decor, gris, gris, lou, decor] {
+            b.app.perso_choisir(c);
+            b.chauffer(1);
+            if b.app.dediee_specifique(c).is_none() {
+                assert_eq!(b.app.brush, pinceau, "{c:?} suit le pinceau de l'utilisateur, jamais celui d'une autre brosse");
+            } else {
+                assert_eq!(b.app.brush.size, 55.0);
+            }
+        }
+    }
+    b.app.perso_lacher();
+    assert_eq!(b.app.brush, pinceau);
+    assert_eq!(b.app.dediee_specifique(gris).map(|s| s.settings.size), Some(55.0), "la brosse spécifique garde son réglage");
+}
+
+#[test]
+fn what_the_user_sets_while_a_specific_brush_is_chosen_stays_with_it_and_not_with_the_users_brush() {
+    let mut b = banc();
+    let [_, gris, _] = une_de_chaque(&mut b);
+    let pinceau = pinceau_de_l_utilisateur(&mut b);
+    b.app.dediee_ecrire(gris, Some(feutre(40.0)));
+    b.app.perso_choisir(gris);
+    b.chauffer(2);
+    // Taille aux crochets, panneau Réglages de l'outil : c'est le réglage de la brosse spécifique.
+    b.app.brush.size = 77.0;
+    b.chauffer(2);
+    assert_eq!(b.app.dediee_specifique(gris).map(|s| s.settings.size), Some(77.0), "gardé pour la brosse spécifique");
+    // Pas de fuite vers le pinceau retenu par sorte de calque.
+    assert_ne!(b.app.pinceaux.pinceau_vecto.map(|p| p.size), Some(77.0));
+    assert_ne!(b.app.pinceaux.pinceau_bitmap.map(|p| p.size), Some(77.0));
+    b.app.perso_lacher();
+    b.chauffer(2);
+    assert_eq!(b.app.brush, pinceau, "le pinceau de l'utilisateur est revenu, sans le 77");
+    // Et dans l'autre sens : un changement fait au pinceau de l'utilisateur ne passe pas dans la brosse spécifique.
+    b.app.brush.size = 9.0;
+    b.chauffer(2);
+    assert_eq!(b.app.dediee_specifique(gris).map(|s| s.settings.size), Some(77.0));
+    b.app.perso_choisir(gris);
+    b.chauffer(2);
+    assert_eq!(b.app.brush.size, 77.0, "la brosse spécifique retrouve son réglage à elle");
+    b.app.perso_lacher();
+    assert_eq!(b.app.brush.size, 9.0, "et l'utilisateur son pinceau, tel qu'il l'avait changé entre-temps");
+}
+
+#[test]
+fn editing_the_specific_brush_while_it_is_chosen_changes_the_drawing_and_leaves_the_users_brush_aside() {
+    let mut b = banc();
+    let [_, _, decor] = une_de_chaque(&mut b);
+    let pinceau = pinceau_de_l_utilisateur(&mut b);
+    b.app.dediee_ecrire(decor, Some(feutre(40.0)));
+    b.app.perso_choisir(decor);
+    b.chauffer(2);
+    // L'éditeur passe la brosse du feutre au crayon : le pinceau qu'elle tenait est rendu, le crayon est pris.
+    b.app.dediee_ecrire(decor, Some(Specifique { crayon: true, settings: BrushSettings { size: 5.0, ..BrushSettings::graphite() }, nom: Some("Crayon".into()) }));
+    b.chauffer(2);
+    assert_eq!(b.app.tool, Tool::Pencil);
+    assert_eq!(b.app.brush, pinceau, "le pinceau de l'utilisateur est rendu dès que la brosse change d'outil");
+    assert_eq!(b.app.pencil.size, 5.0);
+    // Revenir à « Suit le pinceau » : tout est rendu.
+    b.app.dediee_ecrire(decor, None);
+    b.chauffer(2);
+    assert_eq!((b.app.brush, b.app.pencil.size), (pinceau, 3.0));
+    assert!(b.app.perso.pris.is_none());
+    assert_eq!(b.app.tool, Tool::Brush, "l'outil d'avant");
+}
+
+#[test]
+fn a_character_specific_brush_is_saved_with_the_project_and_undone_and_an_old_file_reads_as_following() {
+    let mut b = banc();
+    let lou = personnage(&mut b, "Lou", [200, 30, 30], Some([250, 200, 200]));
+    b.app.perso_lacher();
+    let avant = b.app.history.undo_len();
+    b.app.perso_etape("Modifier la brosse du personnage");
+    b.app.dediee_ecrire(Choix::Personnage(lou), Some(feutre(33.0)));
+    assert_eq!(b.app.history.undo_len(), avant + 1);
+    // Enregistré avec les personnages, relu à l'identique (le format ne change pas).
+    let octets = personnages::to_bytes(&b.app.doc).expect("écriture").expect("des personnages");
+    let relus = personnages::parse(std::str::from_utf8(&octets).expect("du texte")).expect("relecture");
+    assert_eq!(relus.iter().find(|p| p.id == lou).and_then(|p| p.brosse.clone()), Some(feutre(33.0)));
+    // Annulé : le personnage suit de nouveau le pinceau.
+    b.app.undo();
+    assert_eq!(b.app.dediee_specifique(Choix::Personnage(lou)), None);
+    // Un fichier d'avant : pas de champ « brosse » : il suit le pinceau.
+    let ancien = r#"{"format":"shot-personnages","version":1,"personnages":[{"id":7,"nom":"Lou","trait":[200,30,30],"fond":[250,200,200]}]}"#;
+    assert_eq!(personnages::parse(ancien).expect("ancien fichier")[0].brosse, None);
+    assert!(crate::project::VERSION >= 42, "le format du projet ne change pas pour cela");
+    // Un personnage qui suit le pinceau n'écrit rien de plus dans son fichier.
+    assert!(!String::from_utf8(personnages::to_bytes(&b.app.doc).expect("écriture").expect("des personnages")).expect("du texte").contains("brosse"));
+}
+
+#[test]
+fn old_decor_settings_follow_the_pinceau_when_untouched_and_become_specific_when_set_by_hand() {
+    // Trois Décors d'avant le §107 : Décor 1 resté au crayon de 5 px, Décor 2 réglé à la main (feutre de 40 px), « Mon décor » : pinceau plein de 90 px.
+    let ancien = "brosses_decor = [\
+        { nom = \"Décor 1\", trait = [110, 110, 110], fond = [200, 200, 200], pinceau = \"Crayon\", taille = 5.0 },\
+        { nom = \"Décor 2\", trait = [142, 142, 142], fond = [216, 216, 216], pinceau = \"Feutre\", taille = 40.0 },\
+        { nom = \"Mon décor\", trait = [1, 2, 3], pinceau = \"Aplat\", taille = 90.0 }]\n";
+    let s = Settings::apres_lecture(toml::from_str(ancien).expect("d'anciens réglages"));
+    let d = &s.brosses_decor;
+    assert_eq!(d.len(), 3, "rien ne se perd");
+    assert!(d[0].specifique.is_none(), "resté à celui d'origine : il suit le pinceau");
+    assert!(d[2].specifique.is_none(), "le pinceau plein de 90 px est celui d'origine : il suit le pinceau");
+    let sp = d[1].specifique.as_ref().expect("réglé à la main : brosse spécifique");
+    assert_eq!((sp.crayon, sp.settings.size), (false, 40.0), "il garde son pinceau et sa taille");
+    assert!(d.iter().all(|b| b.pinceau.is_none() && b.taille == 0.0), "les anciens champs sont vidés");
+    assert_eq!(d[2].name, "Mon décor");
+    // Écrit puis relu : la même chose, et la forme nouvelle (le champ « brosse »).
+    let texte = toml::to_string(&s).expect("écriture");
+    assert!(texte.contains("brosse") && !texte.contains("pinceau = \""), "{texte}");
+    let relu = Settings::apres_lecture(toml::from_str(&texte).expect("relecture"));
+    assert_eq!(relu.brosses_decor, s.brosses_decor);
+    // Les classiques portent aussi une brosse spécifique, écrite et relue.
+    let mut s = s;
+    s.brosses_classiques[0].specifique = Some(feutre(12.0));
+    let relu = Settings::apres_lecture(toml::from_str(&toml::to_string(&s).expect("écriture")).expect("relecture"));
+    assert_eq!(relu.brosses_classiques[0].specifique, Some(feutre(12.0)));
+    assert_eq!(relu.brosses_classiques[1].specifique, None);
+}
+
+#[test]
+fn the_bubble_and_the_panel_say_what_draws() {
+    let mut b = banc_taille(Document::new(400, 300, 24), false, 1600, 2400);
+    b.app.set_tool(Tool::Brush);
+    b.garder_textes = true;
+    b.app.show_pane(crate::dock::Pane::Personnages);
+    b.chauffer(4);
+    assert_eq!(b.app.dediee_etiquette(Choix::Classique(0)), "Suit le pinceau");
+    assert!(b.textes.iter().any(|x| x.contains("Suit le pinceau")), "le panneau le dit : {:?}", b.textes.iter().take(60).collect::<Vec<_>>());
+    assert!(b.textes.iter().any(|x| x.contains("Brosses dédiées")), "le panneau a son nouveau nom");
+    b.app.dediee_ecrire(Choix::Classique(0), Some(Specifique { nom: Some("Feutre noir".into()), ..feutre(20.0) }));
+    assert_eq!(b.app.dediee_etiquette(Choix::Classique(0)), "Feutre noir, 20 px, pinceau");
+    assert_eq!(b.app.dediee_outil(Choix::Classique(0)), Some(false));
+    assert_eq!(b.app.dediee_outil(Choix::Classique(1)), None);
+    b.chauffer(3);
+    assert!(b.textes.iter().any(|x| x.contains("Brosse spécifique")), "le panneau le dit : {:?}", b.textes.iter().take(60).collect::<Vec<_>>());
+    assert_eq!(crate::dock::Pane::Personnages.name(), "Brosses dédiées");
 }

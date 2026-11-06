@@ -1,4 +1,4 @@
-//! Les brosses perso créent leurs calques (Anthony, 2026-10-28, repris au §70 le 2026-10-29) : une brosse Personnage dessine dans « son » calque, une
+//! Les brosses dédiées créent leurs calques (Anthony, 2026-10-28, repris au §70 le 2026-10-29) : une brosse Personnage dessine dans « son » calque, une
 //! brosse Décor dans le calque Décor du plan, une brosse Classique dans le calque courant (il n'y a plus de pastille « classique » ⊘).
 //!
 //! **2026-10-29 : le choix du calque d'un personnage.** La copie d'un calque de personnage (« Dupliquer le calque » comme le copier-coller) reste

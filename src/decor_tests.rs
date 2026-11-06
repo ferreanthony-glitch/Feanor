@@ -3,7 +3,6 @@
 
 use eframe::egui::{self, epaint::Shape, vec2, Color32, Event, Modifiers, Pos2, Rect};
 
-use crate::app::Tool;
 use crate::decor::Genre;
 use crate::document::{Behaviour, CelId, Document, LayerKind};
 use crate::perf_tests::{se_reposer, Banc};
@@ -372,7 +371,7 @@ fn encre_ailleurs(b: &Banc, i: usize) -> bool {
 }
 
 #[test]
-fn the_decor_pastilles_sit_after_a_separator_in_the_column_and_choosing_one_takes_its_tool_colour_and_size() {
+fn the_decor_pastilles_sit_after_a_separator_in_the_column_and_choosing_one_takes_its_colour_and_follows_the_pinceau() {
     let mut b = ouvert(quatre_plans(), 4);
     // Toute la rangée est à portée du pointeur, jusqu'à l'icône du panneau (l'`Area` a grandi avec ses pastilles).
     let colonne = b.ctx.memory(|m| m.area_rect(egui::Id::new("pastilles_rangee_planche"))).expect("l'aire de la rangée");
@@ -390,16 +389,14 @@ fn the_decor_pastilles_sit_after_a_separator_in_the_column_and_choosing_one_take
     assert!(r.width() > 20.0 && (r.width() - r.height()).abs() < 1.0);
     let n = pas_d_annulation(&b);
     let (brosse0, crayon0, couleur0, outil0) = (b.app.brush, b.app.pencil, b.app.color, b.app.tool);
-    for (g, outil) in [(Genre::Crayon, Tool::Pencil), (Genre::Feutre, Tool::Brush), (Genre::Aplat, Tool::Brush)] {
+    // (§107 : les brosses Décor d'origine suivent le pinceau de l'utilisateur : ni l'outil ni les réglages ne changent, quelle que soit la brosse.)
+    for g in [Genre::Crayon, Genre::Feutre, Genre::Aplat] {
         choisir(&mut b, g);
         assert_eq!(b.app.decor_actif(), Some(crate::decor_tests::rang(g)), "{g:?}");
-        assert_eq!(b.app.tool, outil);
+        assert_eq!((b.app.tool, b.app.brush, b.app.pencil), (outil0, brosse0, crayon0), "{g:?} : elle suit le pinceau, rien ne change");
         assert_eq!(b.app.color, crate::personnages::decors_par_defaut()[rang(g)].line, "la couleur de trait de la brosse Décor");
-        let taille = if g == Genre::Crayon { b.app.pencil.size } else { b.app.brush.size };
-        assert_eq!(taille, g.taille_defaut());
-        assert_eq!(b.app.perso.actif, Some(Choix::Decor(rang(g))), "la brosse Décor est la brosse perso choisie");
+        assert_eq!(b.app.perso.actif, Some(Choix::Decor(rang(g))), "la brosse Décor est la brosse dédiée choisie");
     }
-    assert!((b.app.brush.hardness - 1.0).abs() < 1e-6, "l'aplat est plein");
     assert_eq!(pas_d_annulation(&b), n, "choisir une brosse n'est pas une étape d'annulation");
     // Un clic sur la pastille choisie la lâche : tout revient.
     choisir(&mut b, Genre::Aplat);
@@ -413,7 +410,7 @@ fn the_decor_pastilles_sit_after_a_separator_in_the_column_and_choosing_one_take
     assert!(b.app.perso.actif.is_some());
     choisir(&mut b, Genre::Feutre);
     assert_eq!(b.app.perso.actif, Some(Choix::Decor(rang(Genre::Feutre))), "le décor remplace le personnage");
-    // (Plus de pastille ⊘ : « couleur libre » lâche la brosse perso, la brosse Décor comprise.)
+    // (Plus de pastille ⊘ : « couleur libre » lâche la brosse dédiée, la brosse Décor comprise.)
     b.app.perso_lacher();
     assert_eq!(b.app.decor_actif(), None);
 }

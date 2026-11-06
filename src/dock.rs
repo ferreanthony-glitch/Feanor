@@ -183,7 +183,7 @@ impl Pane {
             Pane::Bruitages => "Bruitages",
             Pane::SuggestionsSonores => "Suggestions sonores",
             Pane::References => "Références",
-            Pane::Personnages => "Brosses perso",
+            Pane::Personnages => "Brosses dédiées",
             Pane::Vignettes => "Planche",
             Pane::MonPanneau => "Mon panneau",
             Pane::Scenario => "Scénario",

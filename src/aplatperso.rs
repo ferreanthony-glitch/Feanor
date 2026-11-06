@@ -1,5 +1,5 @@
-//! La couleur d'aplat d'un calque de personnage vient du panneau Personnages (Anthony, 2026-10-29 : « Sur les calques personnages, l'aplat
-//! ne change de couleur que si on modifie les paramètres de couleur de l'aplat dans le panneau Personnages »).
+//! La couleur d'aplat d'un calque de personnage vient du panneau Brosses dédiées (Anthony, 2026-10-29 : « Sur les calques personnages, l'aplat
+//! ne change de couleur que si on modifie les paramètres de couleur de l'aplat dans le panneau Brosses dédiées »).
 //!
 //! # La règle
 //!
@@ -9,7 +9,7 @@
 //!   « Le plan » ou « Tout le storyboard » à partir d'un autre calque. `perso_aligner_couleur_aplat` ne fait que lui remettre la couleur de
 //!   son personnage s'il en avait une autre ; un trait fait sur ce calque peint son aplat (`perso_poser`) de la couleur d'aplat de son
 //!   personnage, quelle que soit la pastille. Dans Réglages (sous-ligne Aplat), la ligne « Couleur de l'aplat » montre la couleur sans la
-//!   laisser modifier ; son renvoi (« Couleur de « Nom » : se change dans le panneau Personnages ») ouvre le panneau Personnages.
+//!   laisser modifier ; son renvoi (« Couleur de « Nom » : se change dans le panneau Brosses dédiées ») ouvre le panneau Brosses dédiées.
 //! - Un calque dont le personnage n'existe plus (supprimé) est un calque ordinaire : sa couleur se change comme celle de n'importe quel
 //!   aplat.
 //! - Un calque **ordinaire** garde la règle des pastilles de `personnagesui.rs` (§33) : la couleur d'aplat du pinceau devient celle du
@@ -17,7 +17,7 @@
 //!
 //! # Changer la couleur d'aplat d'un personnage
 //!
-//! Le changement (case de couleur du panneau Personnages, de la fenêtre « Modifier » ou du clic droit d'une pastille, pipette comprise : tout
+//! Le changement (case de couleur du panneau Brosses dédiées, de la fenêtre « Modifier » ou du clic droit d'une pastille, pipette comprise : tout
 //! passe par `perso_ecrire`) met à jour **tous les calques liés à ce personnage**, dans tous les plans du film **et dans toutes les
 //! versions de plan** rangées (`planvers.rs`, et les plans du garage des versions de séquence, `variantes.rs`) :
 //!
@@ -127,7 +127,7 @@ struct Lot(Vec<Rendu>);
 #[derive(Default)]
 pub(crate) struct Etat {
     attente: Option<Demande>,
-    /// Un clic sur le renvoi des réglages d'un calque de personnage : le panneau Personnages s'ouvre à l'image d'après.
+    /// Un clic sur le renvoi des réglages d'un calque de personnage : le panneau Brosses dédiées s'ouvre à l'image d'après.
     pub(crate) montrer_le_panneau: bool,
     canal: Option<(Sender<Lot>, Receiver<Lot>)>,
     /// Calculs en route.
@@ -406,10 +406,10 @@ impl App {
             let (rect, resp) = ui.allocate_exact_size(egui::vec2(34.0, 16.0), egui::Sense::hover());
             ui.painter().rect_filled(rect, 3.0, egui::Color32::from_rgb(couleur[0], couleur[1], couleur[2]));
             ui.painter().rect_stroke(rect, 3.0, egui::Stroke::new(1.0_f32, crate::theme::bord()), egui::StrokeKind::Inside);
-            crate::bulles::bulle(resp, "Couleur de l'aplat", "Elle vient du personnage de ce calque : on la change dans le panneau Personnages, et tous ses calques, dans tous les plans, la suivent.", "");
+            crate::bulles::bulle(resp, "Couleur de l'aplat", "Elle vient du personnage de ce calque : on la change dans le panneau Brosses dédiées, et tous ses calques, dans tous les plans, la suivent.", "");
         });
         let nom = crate::calquespastilles::nom_du_calque(&nom);
-        let renvoi = egui::RichText::new(format!("Couleur de « {nom} » : se change dans le panneau Personnages")).small().underline();
+        let renvoi = egui::RichText::new(format!("Couleur de « {nom} » : se change dans le panneau Brosses dédiées")).small().underline();
         // (Un bouton sans cadre : un lien. Un `Label` cliquable ne recevait pas l'appui.)
         // (Sans bulle : une bulle sur ce bouton mangeait l'appui, essai à l'appui ; le texte dit déjà ce qu'il fait.)
         let resp = ui.add(egui::Button::new(renvoi).frame(false)).on_hover_cursor(egui::CursorIcon::PointingHand);
@@ -428,6 +428,6 @@ impl App {
             });
         })
         .response
-        .on_disabled_hover_text("Le changement se fait dans le panneau Personnages et touche tous les calques du personnage, dans tous les plans et toutes les versions de plan.");
+        .on_disabled_hover_text("Le changement se fait dans le panneau Brosses dédiées et touche tous les calques du personnage, dans tous les plans et toutes les versions de plan.");
     }
 }

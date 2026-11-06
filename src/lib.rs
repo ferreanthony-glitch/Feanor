@@ -318,6 +318,7 @@ mod decor;
 #[cfg(test)]
 mod decor_tests;
 mod decorui;
+mod brossesdediees;
 mod calquespastilles;
 #[cfg(test)]
 mod calques_pastilles_tests;
