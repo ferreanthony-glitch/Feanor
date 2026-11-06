@@ -21,7 +21,7 @@
 use std::sync::Arc;
 
 use eframe::egui::{self, epaint::Vertex, vec2, Color32, Mesh, Painter, Pos2, Rect, Shape, Vec2};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serializer};
 
 use crate::references::{Kind, Reference, View};
 

@@ -31,7 +31,6 @@ pub(crate) enum Refaire {
 /// La question en cours.
 pub(crate) struct CoupeEnAttente {
     pub plan: u64,
-    pub at: usize,
     /// Le nombre de versions rangées du plan.
     pub n: usize,
     /// Le plan courant et l'image courante quand on a demandé : s'ils changent, la question tombe.
@@ -54,7 +53,7 @@ impl App {
     pub(crate) fn coupe_versions_ouvrir(&mut self, plan: u64, at: usize, refaire: Refaire) -> bool {
         let n = self.doc.coupe_a_demander(plan, at).unwrap_or(0);
         let courant = self.doc.panels.get(self.cur_panel).map_or(0, |p| p.id);
-        self.coupe_versions = Some(CoupeEnAttente { plan, at, n, courant, frame: self.cur_frame, epoch: self.doc_epoch, refaire });
+        self.coupe_versions = Some(CoupeEnAttente { plan, n, courant, frame: self.cur_frame, epoch: self.doc_epoch, refaire });
         self.status = "Ce plan a des versions rangées : choisis la partie avec laquelle elles restent.".into();
         match self.coupe_versions_auto {
             Some(cote) => self.coupe_versions_repondre(cote),

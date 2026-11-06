@@ -73,7 +73,8 @@ pub fn plan_nom(doc: &Document, plans: &[usize], format: AudioFormat, clips: &[M
     Ok(v)
 }
 
-/// Comme `plan_avec`, avec le mixage du projet (sans attendre les effets : sert à savoir quels plans ont du son).
+/// Comme `plan_avec`, avec le mixage du projet (sans attendre les effets). Les essais seulement : l'application passe par `plan_nom` et `compter`.
+#[cfg(test)]
 pub fn plan(doc: &Document, plans: &[usize], format: AudioFormat) -> Vec<SonDePlan> {
     plan_avec(doc, plans, format, &audio::mix_clips(doc))
 }
