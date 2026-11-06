@@ -1239,8 +1239,9 @@ impl App {
         self.status = match (joins && e == 0, vides) {
             (true, _) => "Nouvelle image du plan : dessine-la.".into(),
             (false, 0) => "Nouveau plan : dessine-le.".into(),
-            (false, 1) => "Nouveau plan : dessine-le (et un plan vide avant lui, pour garder sa place).".into(),
-            (false, n) => format!("Nouveau plan : dessine-le (et {n} plans vides avant lui, pour garder sa place)."),
+            // (Pas de parenthèse ni de point avant le compte : la barre d'état le montre en entier.)
+            (false, 1) => "Nouveau plan et un plan vide avant lui, pour garder sa place : dessine-le.".into(),
+            (false, n) => format!("Nouveau plan et {n} plans vides avant lui, pour garder sa place : dessine-le."),
         };
         true
     }
