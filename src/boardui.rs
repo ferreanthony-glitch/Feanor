@@ -48,7 +48,7 @@ const PAPER: Color32 = Color32::WHITE;
 const INK: Color32 = Color32::from_gray(30);
 /// Filet d'une image (gris moyen, comme la maquette), de l'image courante, d'une case pâle.
 const BORDER: Color32 = Color32::from_gray(154);
-const BORDER_CURRENT: Color32 = Color32::from_gray(80);
+pub(crate) const BORDER_CURRENT: Color32 = Color32::from_gray(80);
 const GHOST: Color32 = Color32::from_gray(228);
 const GHOST_HOT: Color32 = Color32::from_gray(150);
 /// Barre de continuité (même plan : un trait très pâle) et de coupe (noire).
@@ -246,6 +246,13 @@ pub(crate) struct Vignettes {
     pub seq_glisse: Option<u64>,
     /// Les textures du dessin hors des cases, à la carte graphique (`horschamptex.rs`).
     pub hc_tex: std::cell::RefCell<crate::horschamptex::Textures>,
+    /// Aucun plan n'est choisi sur la planche (Anthony, 2026-11-05) : pas de cadre noir de sélection, et le dessin n'est lié à aucun plan, il
+    /// part d'où l'on veut et se répartit au lâcher (horschamp.rs). Vrai à l'ouverture, après un trait, par Échap et par un clic sur le
+    /// papier ; faux seulement après un geste voulu : Maj ou Ctrl + clic, le lasso, un clic avec l'outil Caméra. Le plan courant, lui,
+    /// reste valide pour les panneaux (Calques…).
+    pub libre: bool,
+    /// Le plan dont la caméra est choisie (l'outil Caméra des Vignettes : un clic sur une case) ; ses cadres restent soulignés.
+    pub camera_choisie: Option<u64>,
 }
 
 impl Vignettes {
@@ -292,6 +299,8 @@ impl Default for Vignettes {
             titre_edit: None,
             seq_glisse: None,
             hc_tex: Default::default(),
+            libre: true,
+            camera_choisie: None,
         }
     }
 }
@@ -639,7 +648,7 @@ impl App {
     // ------------------------------------------------------------------ appuis sur la planche
 
     /// Les outils qui font un plan quand on dessine dans une case vide.
-    fn tool_draws_in_empty(&self) -> bool {
+    pub(crate) fn tool_draws_in_empty(&self) -> bool {
         matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Line | Tool::Rect | Tool::Ellipse)
     }
 
@@ -707,6 +716,14 @@ impl App {
         }
         // Tout appui ailleurs que dans la bande en cours d'écriture la pose (la bande n'est écrite que par son éditeur, au-dessus de la planche).
         self.commit_card_note();
+        // Aucun plan n'est choisi d'office : dessiner n'en choisit pas (le plan sous le trait n'est courant que pour les panneaux). Seul l'outil
+        // Caméra, Maj ou Ctrl + clic et le lasso en choisissent un, volontairement.
+        let outil_camera = self.tool == Tool::Camera;
+        // (Maj + clic garde le choix d'avant : sans choix il prend la case cliquée, avec un choix il l'étend à cette case.)
+        if !outil_camera && !m.shift {
+            self.vignettes.libre = true;
+            self.vignettes.camera_choisie = None;
+        }
         // Maj + appui sur le CADRE d'une vignette (son filet, à quelques points près) : on prend son plan pour le
         // déplacer ; Maj + Alt : on prend sa copie (le plan se duplique, la copie se pose où l'on lâche). Maj + appui dedans garde son
         // sens : choisir des plans.
@@ -720,11 +737,24 @@ impl App {
         // Ctrl + Maj, ou T tenue : un appui sur une case, son empreinte ou sa marge est TOUJOURS un geste de caméra (jamais un
         // plan qu'on déplace, ni le dessin, ni le lasso). Un appui qui rate un cadre en prend quand même un (`vignettecam::choisit`).
         // (Ctrl seul est le lasso, comme partout : plus bas.)
-        let cam_mode = ((m.command || m.ctrl) && m.shift) || self.vignettes.camera_tenue;
+        let cam_mode = ((m.command || m.ctrl) && m.shift) || self.vignettes.camera_tenue || outil_camera;
         if cam_mode {
             if let Some(k) = layout.card_near(p, self.marge_camera()) {
                 self.commit_note_text(layout);
                 let ajoute = m.alt;
+                // L'outil Caméra : un clic choisit la caméra de la case et rend son plan courant, sans autre appui ; un glissé qui part du
+                // premier appui déplace le cadre (le geste de caméra ordinaire, une étape d'annulation).
+                if outil_camera {
+                    let c = layout.cards[k];
+                    self.board_sel = vec![c.plan];
+                    self.board_notes.clear();
+                    self.vignettes.libre = false;
+                    self.vignettes.camera_choisie = Some(c.plan);
+                    let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
+                    if !(c.panel == self.cur_panel && (c.frame..c.end).contains(&f)) {
+                        self.select_board(c.panel, c.frame);
+                    }
+                }
                 if self.cam_press(layout, xf, k, pos, ajoute) {
                     self.vignettes.press = Press::Select;
                 } else {
@@ -824,6 +854,12 @@ impl App {
     /// Choisir des plans (comme sur l'ancien titre) : Ctrl ajoute ou retire celui de la vignette `k`, Maj prend l'intervalle.
     pub(crate) fn board_select_click(&mut self, layout: &BoardLayout, k: usize, m: Modifiers) {
         let c = layout.cards[k];
+        // Rien n'était choisi : le plan cliqué l'est maintenant (il devient le plan courant, seul), les clics suivants en ajoutent.
+        if std::mem::replace(&mut self.vignettes.libre, false) {
+            self.board_sel = vec![c.plan];
+            self.select_board(c.panel, c.frame);
+            return;
+        }
         let current = c.panel == self.cur_panel;
         if m.command || m.ctrl {
             if let Some(at) = self.board_sel.iter().position(|s| *s == c.plan) {
@@ -1195,7 +1231,14 @@ impl App {
         if escape && !writing && self.vignettes.moving.is_none() {
             match self.board_drag {
                 Some(BoardDrag::Rubber { .. }) => self.board_drag = None,
-                _ => self.board_notes.clear(),
+                _ => {
+                    self.board_notes.clear();
+                    // Échap retire aussi le plan choisi (rien d'autre n'est en cours ici).
+                    if self.vignettes.cam.is_none() {
+                        self.vignettes.libre = true;
+                        self.vignettes.camera_choisie = None;
+                    }
+                }
             }
         }
         let latest = ui.input(|i| i.pointer.latest_pos());
@@ -1312,6 +1355,10 @@ impl App {
         self.depot_survol(ui.ctx(), &painter, xf, &layout, over);
         self.paint_plan_move(ui.ctx(), &painter, view, xf, &layout);
         self.paint_board_drag(&painter, xf);
+        // L'outil Caméra : le cadre sous le pointeur se signale, celui de la caméra choisie reste souligné (ignettecamui.rs).
+        if self.tool == Tool::Camera && !pan_mode {
+            self.paint_cadres_camera(&painter, view, xf, &layout, over);
+        }
         if let (Some(p), Tool::Eraser, false) = (over, self.tool, pan_mode) {
             if matches!(hovered, Some(Hit::Nothing)) || matches!(self.board_drag, Some(BoardDrag::Erase { .. })) {
                 let r = self.note_eraser_radius(xf.zoom) * xf.zoom;
@@ -1335,7 +1382,7 @@ impl App {
         // Le curseur d'un cadre pris ou à prendre passe avant celui du dessin de la vignette courante (peint plus tôt).
         if self.vignettes.frame_hot {
             ui.ctx().set_cursor_icon(if self.vignettes.moving.as_ref().is_some_and(|m| m.active) { CursorIcon::Grabbing } else { CursorIcon::Grab });
-        } else if let (Some(p), true) = (over, ((mods.ctrl || mods.command) && mods.shift) || self.vignettes.camera_tenue) {
+        } else if let (Some(p), true) = (over, ((mods.ctrl || mods.command) && mods.shift) || self.vignettes.camera_tenue || self.tool == Tool::Camera) {
             // Ctrl + Maj (ou T) tenue sur une case : un cadre de caméra à prendre (une petite caméra suit le pointeur).
             if !pan_mode && self.vignettes.cam.is_none() {
                 self.cam_curseur(ui.ctx(), &layout, xf, p, mods.alt);
@@ -1436,6 +1483,8 @@ impl App {
                 None if !add => {
                     self.board_notes.clear();
                     self.board_sel.clear();
+                    self.vignettes.libre = true;
+                    self.vignettes.camera_choisie = None;
                 }
                 None => {}
             },
@@ -1444,6 +1493,9 @@ impl App {
                 if !add {
                     self.board_sel.clear();
                     self.board_notes.clear();
+                    // Un clic sur le papier retire le choix : plus de cadre de sélection, plus de caméra choisie.
+                    self.vignettes.libre = true;
+                    self.vignettes.camera_choisie = None;
                 }
             }
         }
@@ -1617,6 +1669,10 @@ impl App {
         if let Some(BoardDrag::Rubber { start, now, add }) = self.board_drag.take() {
             let r = Rect::from_two_pos(start, now);
             let found: Vec<u64> = board::cards_in(layout, r).into_iter().map(|i| self.doc.panels[i].id).collect();
+            // (Un lasso qui prend des plans est un choix voulu : le cadre de sélection revient.)
+            if !found.is_empty() {
+                self.vignettes.libre = false;
+            }
             let mut notes = self.doc.board.strokes_in(layout, r);
             notes.extend((0..texts.len()).filter(|&i| texts[i].is_some_and(|t| t.intersects(r))).map(NoteRef::Text));
             if add {
@@ -1651,7 +1707,7 @@ impl App {
     /// son rectangle déborde de l'enveloppe, les cases qui s'y trouvent passent par-dessus.
     #[allow(clippy::too_many_arguments)]
     fn board_tuile(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant, plans: usize) {
-        let Some(mv) = layout.move_of(k).filter(|_| self.tool != Tool::Camera) else { return };
+        let Some(mv) = layout.move_of(k) else { return };
         let place = &layout.cards[k];
         let r = xf.rect(mv.tuile.rect);
         if !r.intersects(view) {
@@ -1737,7 +1793,7 @@ impl App {
     #[allow(clippy::too_many_arguments)]
     fn board_card(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant, numeros: &crate::numerotation::Numeros, plans: usize) {
         let place = &layout.cards[k];
-        let mv = layout.move_of(k).filter(|_| self.tool != Tool::Camera);
+        let mv = layout.move_of(k);
         let card = xf.rect(place.card);
         let thumb = xf.rect(place.thumb);
         let note = xf.rect(place.note);
@@ -1773,7 +1829,7 @@ impl App {
                 if live {
                     // La vue caméra laisse une marge autour du cadre : on l'agrandit d'autant (et on coupe
                     // à la vignette) pour que l'image remplisse la vignette. Pour recadrer, toute la feuille.
-                    let area = if self.tool == Tool::Camera { thumb } else { Rect::from_center_size(thumb.center(), thumb.size() / 0.96) };
+                    let area = Rect::from_center_size(thumb.center(), thumb.size() / 0.96);
                     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(area).id_salt("planche_vive"));
                     child.set_clip_rect(thumb.intersect(view));
                     self.card_canvas(&mut child, thumb, place.id);
@@ -1806,10 +1862,10 @@ impl App {
         // (Épaisseur et couleur du filet : Préférences > Vignettes ; la case courante est plus foncée.)
         let filet = match self.settings.vignettes.couleur_filet {
             Some([r, g, b]) => Color32::from_rgb(r, g, b),
-            None if current => BORDER_CURRENT,
+            None if current && !self.vignettes.libre => BORDER_CURRENT,
             None => BORDER,
         };
-        let filet = if current && self.settings.vignettes.couleur_filet.is_some() { filet.gamma_multiply(0.7) } else { filet };
+        let filet = if current && !self.vignettes.libre && self.settings.vignettes.couleur_filet.is_some() { filet.gamma_multiply(0.7) } else { filet };
         clip.rect_stroke(thumb, 0.0, Stroke::new(self.settings.vignettes.epaisseur_cadre, filet), StrokeKind::Outside);
         // Les cadres du mouvement de caméra (A, B, C…), le voile hors de A et ce qui les relie, fins, par-dessus.
         if let Some(mv) = mv {
@@ -1921,7 +1977,8 @@ impl App {
     /// dessin en grand est remise telle quelle ensuite.
     fn card_canvas(&mut self, ui: &mut egui::Ui, thumb: Rect, carte: u64) {
         let (view, camera_view, canvas_rect) = (self.view, self.camera_view, self.canvas_rect);
-        let reframe = self.tool == Tool::Camera;
+        // (L'outil Caméra des Vignettes tire les cadres A, B, C… sur la planche, il ne recadre plus la feuille dans la case : oard_press.)
+        let reframe = false;
         // (Une grande case de mouvement de caméra montre la feuille, pas la vue à travers la caméra : `vignettes.zone`.)
         self.camera_view = !reframe && self.vignettes.zone.is_none();
         if reframe {

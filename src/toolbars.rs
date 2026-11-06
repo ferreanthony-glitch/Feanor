@@ -25,7 +25,8 @@ pub(crate) const TOOL_GROUPS: &[&[&[Tool]]] = &[
 /// La colonne d'outils de l'espace Vignettes (« rien de distraction, que du dessin ») : le pinceau, le crayon et la
 /// gomme. Les autres outils restent à leurs raccourcis (Alt + lettre) et dans la palette (Ctrl+K). Une case de plus
 /// (le stylo d'annotation de la planche) vient se poser ici.
-pub(crate) const TOOL_GROUPS_VIGNETTES: &[&[&[Tool]]] = &[&[&[Tool::Brush], &[Tool::Pencil], &[Tool::Eraser]]];
+/// (Le pinceau, le crayon, la gomme ; puis, à part, la caméra : un clic sur une case en choisit la caméra, un glissé déplace son cadre.)
+pub(crate) const TOOL_GROUPS_VIGNETTES: &[&[&[Tool]]] = &[&[&[Tool::Brush], &[Tool::Pencil], &[Tool::Eraser]], &[&[Tool::Camera]]];
 
 /// Clic maintenu si longtemps (secondes) sur une case à plusieurs outils : ils s'affichent.
 pub const FLYOUT_HOLD: f64 = 0.35;
@@ -115,6 +116,10 @@ impl App {
         let icon = RichText::new(self.tool_icon(shown)).size(crate::barres::ICONE);
         let resp = ui.add_sized(crate::barres::CASE, egui::SelectableLabel::new(slot.contains(&self.tool), icon));
         let mut description = shown.description().to_string();
+        // Sur la planche des Vignettes, la caméra se règle case par case (cadres A, B, C…), pas par la feuille d'un plan.
+        if shown == Tool::Camera && self.espace == crate::workspace::Espace::Vignettes {
+            description = "Un clic sur une case en choisit la caméra ; glisser un cadre le déplace, un coin le redimensionne. Échap ou un clic sur le papier la lâche.".to_string();
+        }
         if slot.len() > 1 {
             let r = resp.rect;
             let c = r.right_bottom() - vec2(4.0, 4.0);

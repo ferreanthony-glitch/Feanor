@@ -562,6 +562,8 @@ fn shift_click_chooses_plans_instead_of_drawing_and_ctrl_click_no_longer_does() 
     b.app.set_tool(crate::app::Tool::Brush);
     b.app.select_panel(0);
     b.app.board_sel = vec![ids[0]];
+    // (Un plan est choisi : le premier plan. Sans choix, un Maj + clic ne choisit que la case cliquée, partie 101.)
+    b.app.vignettes.libre = false;
     b.app.vignettes.press = crate::boardui::Press::None;
     { let p = vignette(&b, 3).center(); clic_avec(&mut b, p, Modifiers::SHIFT); }
     assert_eq!(b.app.board_selection(), vec![ids[0], ids[1]], "Maj + clic prend de la dernière vignette courante à celle-ci");
