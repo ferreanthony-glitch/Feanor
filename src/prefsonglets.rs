@@ -4,7 +4,7 @@
 //! mots pour la recherche. `prefsui.rs` dessine un onglet en parcourant cette table, la recherche la lit, et un
 //! essai (`prefsui_tests.rs`) vérifie que chaque réglage se trouve dans un seul onglet, étiquette lisible.
 //!
-//! Dix onglets, dans une liste verticale à gauche (icône et nom) : une rangée de dix noms ne tiendrait pas dans
+//! Onze onglets (« Anneau » : 2026-11-06), dans une liste verticale à gauche (icône et nom) : une rangée de tant de noms ne tiendrait pas dans
 //! une fenêtre de largeur raisonnable, et une liste à gauche laisse toute la hauteur au contenu. (« Vignettes » : 2026-10-22,
 //! tout ce qui se règle de la planche, avec le décor.)
 
@@ -19,6 +19,8 @@ pub enum Onglet {
     General,
     Apparence,
     Dessin,
+    /// L'anneau sous le stylet (`anneau.rs`, `anneauui.rs`) : un onglet à lui, demandé par Anthony le 2026-11-06.
+    Anneau,
     Montage,
     Vignettes,
     Raccourcis,
@@ -30,10 +32,11 @@ pub enum Onglet {
 
 impl Onglet {
     /// Dans l'ordre de la liste.
-    pub const TOUS: [Onglet; 10] = [
+    pub const TOUS: [Onglet; 11] = [
         Onglet::General,
         Onglet::Apparence,
         Onglet::Dessin,
+        Onglet::Anneau,
         Onglet::Montage,
         Onglet::Vignettes,
         Onglet::Raccourcis,
@@ -52,6 +55,7 @@ impl Onglet {
             Onglet::General => "Général",
             Onglet::Apparence => "Apparence",
             Onglet::Dessin => "Dessin",
+            Onglet::Anneau => "Anneau",
             Onglet::Montage => "Montage",
             Onglet::Vignettes => "Vignettes",
             Onglet::Raccourcis => "Raccourcis",
@@ -67,6 +71,7 @@ impl Onglet {
             Onglet::General => ph::GEAR_SIX,
             Onglet::Apparence => ph::PALETTE,
             Onglet::Dessin => ph::PENCIL_SIMPLE,
+            Onglet::Anneau => ph::COMPASS,
             Onglet::Montage => ph::FILM_STRIP,
             Onglet::Vignettes => ph::SQUARES_FOUR,
             Onglet::Raccourcis => ph::KEYBOARD,
@@ -83,6 +88,7 @@ impl Onglet {
             Onglet::General => "Ouvrir et rouvrir les projets, copies de secours, collage entre projets, conseils et visite, fonctions expérimentales.",
             Onglet::Apparence => "Le thème et ses couleurs, la taille de l'interface, la hauteur des panneaux, les images de l'accueil.",
             Onglet::Dessin => "Le curseur du stylet, sa pression, le point fixe des poignées, le passe-partout autour de la caméra et le tremblement du trait par défaut.",
+            Onglet::Anneau => "L'anneau sous le stylet : huit commandes autour de la pointe, un second anneau pour les pastilles, et le délai avant qu'il se dessine.",
             Onglet::Montage => "Les pistes du montage et leur repliage, la durée d'un nouveau plan.",
             Onglet::Vignettes => "La planche : cases pâles, débord du trait, cadres de caméra, et le décor partagé entre les cases d'un plan.",
             Onglet::Raccourcis => "Les raccourcis du clavier et leur fichier.",
@@ -141,6 +147,10 @@ pub enum Groupe {
     StyletMain,
     /// Les poignées des boîtes de la Sélection et du Transformer : point fixe et centre des rotations (`selbox.rs`).
     Poignees,
+    /// L'anneau sous le stylet : en service ou non, et le délai avant qu'il se dessine (`anneauui.rs`).
+    AnneauGeste,
+    /// L'anneau sous le stylet : la commande de chacune de ses huit directions.
+    AnneauCommandes,
 }
 
 impl Groupe {
@@ -175,6 +185,8 @@ impl Groupe {
             Groupe::Experimental => "Fonctions expérimentales",
             Groupe::StyletMain => "Stylet à ma main",
             Groupe::Poignees => "Poignées de la Sélection et du Transformer",
+            Groupe::AnneauGeste => "Le geste",
+            Groupe::AnneauCommandes => "Les huit commandes",
         }
     }
 }
@@ -246,6 +258,11 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Dessin, G::Tremblement, "dessin.tremblement_epaisseur", "Épaisseur du tremblement par défaut", "trait varie pour cent bord"),
     r(O::Dessin, G::Tremblement, "dessin.tremblement_graine", "Graine du tremblement par défaut", "hasard autre tremblement numéro"),
     r(O::Dessin, G::Tremblement, "dessin.tremblement_repos", "Animer à l'arrêt (tremblement par défaut)", "image fixe immobile bouge repos aperçu"),
+    // ---- Anneau
+    r(O::Anneau, G::AnneauGeste, "anneau.actif", "Anneau sous le stylet", "bouton du stylet clic droit menu circulaire rond gestes glisser allumer éteindre"),
+    r(O::Anneau, G::AnneauGeste, "anneau.delai", "Délai avant d'afficher l'anneau", "millisecondes attente maintenir apparaître temps"),
+    r(O::Anneau, G::AnneauCommandes, "anneau.commandes", "Commande de chaque direction", "huit directions haut bas gauche droite outil crayon gomme plan pastilles choisir"),
+    r(O::Anneau, G::AnneauCommandes, "anneau.origine", "Rétablir les commandes d'origine", "défaut remettre départ"),
     // ---- Montage
     r(O::Montage, G::Pistes, "montage.repliage", "Calques non actifs", "replier cacher calques actif bande autres"),
     r(O::Montage, G::Pistes, "montage.deplier", "Déplier le calque courant tout seul", "piste automatique"),

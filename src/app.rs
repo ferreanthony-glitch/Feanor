@@ -799,6 +799,8 @@ pub struct App {
     pub(crate) about_window: bool,
     /// Clic droit dans le dessin : la fenêtre flottante des réglages de l'outil, quand elle est ouverte (`reglagesdroit.rs`).
     pub(crate) reglages_droit: Option<crate::reglagesdroit::ReglagesDroit>,
+    /// L'anneau sous le stylet : le geste en cours et ce qu'il montre (`anneauui.rs`).
+    pub(crate) anneau: crate::anneauui::Etat,
     /// Le thème dont les couleurs sont posées dans egui : quand le réglage change, tout est
     /// reposé une fois (`theme.rs`).
     pub(crate) theme_applied: crate::theme::ReglageTheme,
@@ -1357,6 +1359,7 @@ impl App {
             equipe_ui: Default::default(),
             about_window: false,
             reglages_droit: None,
+            anneau: Default::default(),
             theme_applied,
             theme_unsaved: false,
             welcome: true,
@@ -5203,6 +5206,8 @@ impl App {
         }
         // Échap ferme la fenêtre des réglages du clic droit et ne fait rien d'autre (`reglagesdroit.rs`).
         self.reglages_droit_echap(ctx);
+        // De même pour un geste de l'anneau sous le stylet (`anneauui.rs`).
+        self.anneau_echap(ctx);
         self.handle_shortcuts(ctx);
         self.sync_scene_layers();
         // Calques de couleur : leurs images suivent celles du trait (`calquecouleur.rs`).
@@ -5348,6 +5353,8 @@ impl App {
             self.variantes_fenetres(ctx);
             // Le nom d'une séquence qu'on renomme depuis le montage ou la liste du panneau Planche (`planchesequencesui.rs`).
             self.sequence_fenetre(ctx);
+            // L'anneau sous le stylet (`anneauui.rs`) : avant la fenêtre des réglages, que son clic bref ouvre dans la même image.
+            self.anneau_fenetre(ctx);
             // Clic droit dans le dessin : les réglages de l'outil sous le curseur, par-dessus tout (`reglagesdroit.rs`).
             self.reglages_droit_fenetre(ctx);
         }

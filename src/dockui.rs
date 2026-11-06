@@ -203,6 +203,8 @@ impl App {
         self.refs.pane_rect = None;
         // Mon panneau (essai du Labo) : ouvert ou non, et les ajouts demandés par un clic droit (`monpanneauui.rs`).
         self.mon_panneau_suivre(ctx);
+        // L'anneau sous le stylet : ses huit commandes dites aux menus du clic droit, et celle qu'un menu y envoie (`anneauui.rs`).
+        self.anneau_suivre(ctx);
         let mut state = self.dock.take().unwrap_or_else(|| dock::to_state(&self.layout.dock_layout()));
         // La bande suit l'image courante ; ce que l'on fait pendant l'affichage se suit à l'image
         // d'écran d'après.

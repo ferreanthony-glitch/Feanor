@@ -186,6 +186,8 @@ const PARTAGES: &[&str] = &[
     "fusion_noms_auto", "coupe_versions_auto", "quitter_prevenu", "sortie_confirmee", "confort", "collage", "onglets", "actif", "prochain_onglet", "secours_actif", "session_a_ecrire", "fermetures_d_onglets", "session_prete", "session_file", "session_affichee", "groupe",
     // Mon panneau (essai du Labo) : un réglage du poste, le même dans tous les onglets.
     "mon_panneau",
+    // L'anneau sous le stylet : un geste de l'instant, sur le dessin affiché.
+    "anneau",
     // Le panneau Scénario : hauteurs gardées par scénario et largeur, plan montré : rien qui ne vaille que pour un projet.
     "scenario_ui",
     // Le panneau Bibliothèque de fichiers : un réglage du poste et un explorateur, les mêmes dans tous les onglets.

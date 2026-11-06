@@ -1087,6 +1087,11 @@ impl App {
         self.planche_barre_basse(ui, barre);
         self.vignettes.etiquettes.clear();
         let bg = ui.allocate_rect(view, Sense::click_and_drag());
+        // L'anneau sous le stylet joue aussi sur la planche (`anneauui.rs`) : glisser lance une commande, maintenir le montre. Le clic
+        // bref reste celui d'avant : le menu de la case, de la barre ou de la planche.
+        if self.anneau_en_service() && !self.modal_open() {
+            self.anneau_noter_le_dessin(&bg, view, false);
+        }
         let painter = ui.painter_at(view);
         painter.rect_filled(view, 0.0, PAPER);
         self.board_sel.retain(|id| self.doc.panels.iter().any(|p| p.id == *id));
@@ -1182,6 +1187,11 @@ impl App {
                 }
                 let Event::PointerButton { pos, button, pressed: true, modifiers } = e else { continue };
                 if !view.contains(*pos) || ui.ctx().layer_id_at(*pos) != Some(bg.layer_id) {
+                    continue;
+                }
+                // Un geste de l'anneau sous le stylet est en cours (`anneauui.rs`) : la pointe posée pendant que le bouton du stylet
+                // est tenu ne dessine ni ne choisit rien sur la planche.
+                if *button == PointerButton::Primary && self.anneau.geste.is_some() {
                     continue;
                 }
                 if *button == PointerButton::Primary {
