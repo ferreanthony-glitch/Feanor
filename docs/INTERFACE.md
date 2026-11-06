@@ -7665,3 +7665,68 @@ Coût d'une image, 30 plans dessinés, souris qui se promène : construction 0,7
 7. Ctrl+Z défait tout le trait d'un coup, Ctrl+Y le rend ; enregistre, rouvre : même image.
 8. Export PNG et PDF de la planche, avec et sans passe-partout.
 9. Vignette de la barre, storyboard, animatique, film : seulement le cadre de la caméra.
+
+---------------------------------------------------------------------------------------------------
+
+## 112. Mes habitudes et les notes de friction (2026-11-06, branche `usage-frictions`)
+
+Anthony : « Mesurer ce que tu utilises vraiment. Un compteur local des commandes, qui ne sort jamais de ta machine. » et « Noter une friction
+sans quitter le dessin. Une touche qui garde une capture, tes dernières actions et une ligne de texte, rangées dans tes notes. »
+Code : `src/usage.rs` et `src/friction.rs` (sans interface), `src/usageui.rs` et `src/frictionui.rs`, essais `src/usage_tests.rs` (10) et
+`src/friction_tests.rs` (5).
+
+### Mes habitudes : le compteur d'usage
+
+- **Ce qui est compté** : chaque commande lancée, avec le chemin par lequel elle est partie : **clavier**, **icône**, **menu**, **anneau**,
+  **palette**, ou **autre** (un bouton d'un panneau, une commande lancée par une autre). Une touche tenue qui se répète ne compte qu'une fois.
+  Un clic sur une icône et la commande qu'il lance ne font qu'un.
+- **Rien ne quitte le poste.** Le compte est un petit fichier à côté des réglages, `%APPDATA%\SHOT\usage.json`. Il ne contient que des
+  identifiants de commandes, des nombres et le dernier jour d'usage : aucun nom de projet, aucun texte, aucun dessin. FEANOR ne l'envoie nulle
+  part. Un fichier abîmé donne un compte neuf, sans rien casser.
+- **Sans latence** : compter, c'est un nombre de plus en mémoire. Le fichier s'écrit au plus une fois par minute, jamais pendant qu'un bouton ou
+  la pointe est appuyé, et à la fermeture.
+- **La fenêtre** : Aide > Mes habitudes… (`aide.habitudes`, Ctrl+K, sans touche).
+  - En tête : combien de commandes comptées, depuis quand ; la case **« Compter mes commandes »** (allumée d'origine ; réglage
+    `compter_les_commandes`) et **« Remettre à zéro… »** (avec confirmation).
+  - **Les plus utilisées** (15) : icône et nom, total, détail par chemin (« clavier 12 · anneau 3 »), « sans raccourci » quand elle part surtout
+    d'un menu, d'une icône ou de la palette et n'a pas de touche, et « dans l'anneau » quand elle y est. **Clic droit sur une ligne** : lui
+    donner une touche, ou l'envoyer dans l'anneau (le menu des icônes, partie 111 ; ce clic n'est pas compté comme un usage).
+  - **Jamais utilisées** : parmi les outils et les boutons des barres, ceux qui n'ont pas servi depuis le début du comptage : bons candidats à
+    cacher. Rangées par endroit (Outils, Barre des commandes, Barre du montage, Barre de la timeline), chaque groupe repliable avec son
+    compte (« Outils : 12 sur 21 ») ; les outils sont ouverts d'office. Avant sept jours de comptage, la fenêtre dit qu'il est trop tôt
+    pour conclure.
+- **Ce que le compteur ne voit pas** : les gestes qui ne sont pas des commandes (un trait, un glissé de poignée) et les boutons qui ne passent
+  ni par une commande ni par une icône de commande (un curseur, une case à cocher d'un panneau).
+
+### Noter une friction : F9
+
+Le geste : **F9**, une ligne si on veut, **Entrée**. On reste dans le dessin.
+
+1. À la touche, FEANOR fige l'instant (heure du poste, nom du fichier du projet, espace de travail, outil, plan, les douze dernières commandes
+   avec leur chemin et leur ancienneté) et demande une **capture de la fenêtre**. Rien ne se montre encore : la capture est l'écran tel qu'il
+   était.
+2. La capture arrivée (ou 0,6 s plus tard, sans elle), un champ paraît en haut de la fenêtre, avec la main : « Qu'est-ce qui t'a freiné ? ».
+   Les lettres vont dans le champ, pas aux raccourcis.
+3. **Entrée** (ou « Noter ») : la note part, même vide. **Échap** (ou « Abandonner ») : rien n'est gardé.
+
+- **Où** : `Documents\SHOT\Frictions`. Un fichier `frictions.md` où chaque note s'ajoute à la fin (la plus récente en bas), et une image
+  `friction-AAAA-MM-JJ-HHMMSS.png` par note à côté. Aide > Mes frictions notées… (`aide.ouvrir_frictions`) ouvre le dossier.
+- **Une note** : un titre (l'heure et le texte), une ligne « Projet · Espace · Outil · Plan », la ligne « Juste avant » (de la plus récente à
+  la plus ancienne, « Gomme (anneau, il y a 2 s) »), la capture, la version de FEANOR.
+- **Sans latence** : la capture est encodée et la note écrite sur un fil de fond. La barre d'état dit où quand c'est fait, ou pourquoi ça n'a
+  pas marché. Une capture impossible n'empêche pas la note.
+- Rien n'est écrit dans le projet, aucune étape d'annulation. Rien n'est envoyé nulle part.
+- **F9** est une proposition (`keymap.toml`, libre) : clic droit sur l'entrée du menu pour en changer. La commande peut aussi aller dans
+  l'anneau sous le stylet.
+
+### À regarder à l'écran
+
+1. Travailler quelques minutes, puis Aide > Mes habitudes… : les commandes utilisées sont là, avec le bon chemin (clavier, icône, anneau).
+2. Tenir Ctrl+Z : l'annulation ne monte que d'un par appui.
+3. Clic droit sur une ligne : « Assigner un raccourci… » et « Envoyer dans l'anneau ».
+4. Décocher « Compter mes commandes », lancer des commandes : les nombres ne bougent plus. Recocher.
+5. Fermer et rouvrir FEANOR : le compte est toujours là.
+6. En plein dessin, F9 : le champ paraît en haut. Taper une ligne, Entrée : la barre d'état donne le fichier.
+7. Aide > Mes frictions notées… : le fichier et l'image. L'image ne montre pas le champ de saisie. La ligne « Juste avant » est juste.
+8. F9 puis Échap : rien de plus dans le dossier.
+9. F9 puis Entrée sans rien taper : une note « (sans texte) », avec sa capture.

@@ -145,6 +145,10 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("aide.conseils", "Revoir les conseils", true, false),
     act("aide.visite", "Visite rapide « Premier jour » : créer un projet, dessiner, mettre une durée, écouter, exporter", true, false),
     act("aide.regler_stylet", "Régler le stylet à ma main", true, false),
+    // Ce qui freine et ce qui sert (2026-11-06, `frictionui.rs`, `usageui.rs`).
+    act("aide.noter_friction", "Noter une friction : ce qui vient de me freiner, avec une capture de la fenêtre et mes dernières commandes", true, false),
+    act("aide.ouvrir_frictions", "Mes frictions notées : ouvrir leur dossier", true, false),
+    act("aide.habitudes", "Mes habitudes : les commandes que j'utilise le plus et celles qui ne servent jamais (compteur du poste)", true, false),
     act("outil.pinceau", "Outil pinceau", true, false),
     act("outil.crayon", "Outil crayon", true, false),
     act("outil.gomme", "Outil gomme", true, false),

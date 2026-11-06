@@ -288,6 +288,10 @@ pub struct Settings {
     /// commande de chacune de ses huit directions. Un réglage du poste. Absent : l'anneau d'origine.
     #[serde(default, rename = "anneau", skip_serializing_if = "crate::anneau::Reglages::est_d_origine")]
     pub anneau: crate::anneau::Reglages,
+    /// Le compteur d'usage du poste est allumé (`usage.rs`, Aide > Mes habitudes) : chaque commande lancée est comptée dans
+    /// un fichier à côté des réglages, qui ne quitte jamais le poste. Allumé d'origine.
+    #[serde(default = "yes", rename = "compter_les_commandes", skip_serializing_if = "is_true")]
+    pub usage_actif: bool,
 }
 
 fn is_true(b: &bool) -> bool {
@@ -403,6 +407,7 @@ impl Default for Settings {
             numbering_locked_new: true,
             track_height: Default::default(),
             anneau: Default::default(),
+            usage_actif: true,
         }
     }
 }

@@ -322,6 +322,8 @@ impl App {
             return;
         }
         let texte = self.anneau.parts[part].nom.clone();
+        // (Le compteur d'usage : partie de l'anneau, `usageui.rs`.)
+        self.usage.source = Some(crate::usage::Source::Anneau);
         self.run_action(&action);
         self.anneau.echo = Some(Echo { texte, ou, fin: instant + ECHO });
     }

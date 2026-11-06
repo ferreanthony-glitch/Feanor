@@ -188,6 +188,8 @@ const PARTAGES: &[&str] = &[
     "mon_panneau",
     // L'anneau sous le stylet : un geste de l'instant, sur le dessin affiché.
     "anneau",
+    // Le compteur d'usage du poste et la note de friction en cours : les mêmes quel que soit l'onglet.
+    "usage", "friction",
     // Le panneau Scénario : hauteurs gardées par scénario et largeur, plan montré : rien qui ne vaille que pour un projet.
     "scenario_ui",
     // Le panneau Bibliothèque de fichiers : un réglage du poste et un explorateur, les mêmes dans tous les onglets.

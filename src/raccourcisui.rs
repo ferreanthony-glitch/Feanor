@@ -24,8 +24,17 @@ pub(crate) fn ask_assign(ctx: &egui::Context, action: &str) {
     ctx.data_mut(|d| d.insert_temp(Id::new(ASK), action.to_string()));
 }
 
-/// Menu du clic droit d'une commande liée à `action` : son raccourci, et l'assigner.
+/// Menu du clic droit d'une commande liée à `action` : son raccourci, et l'assigner. C'est par ici que passent les boutons
+/// des commandes (barres, panneaux, outils) : un clic sur l'un d'eux est aussi noté par le compteur d'usage (`usageui.rs`).
 pub(crate) fn shortcut_menu(resp: &Response, action: &str, current: &str) {
+    if resp.clicked() {
+        crate::usageui::clic(&resp.ctx, action);
+    }
+    menu_de_commande(resp, action, current);
+}
+
+/// Le même menu, sans compter le clic comme un usage de la commande (une ligne d'une liste, par exemple).
+pub(crate) fn menu_de_commande(resp: &Response, action: &str, current: &str) {
     if action.is_empty() {
         return;
     }

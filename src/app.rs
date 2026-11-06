@@ -801,6 +801,10 @@ pub struct App {
     pub(crate) reglages_droit: Option<crate::reglagesdroit::ReglagesDroit>,
     /// L'anneau sous le stylet : le geste en cours et ce qu'il montre (`anneauui.rs`).
     pub(crate) anneau: crate::anneauui::Etat,
+    /// Le compteur d'usage : le compte des commandes de ce poste et le journal des dernières (`usageui.rs`).
+    pub(crate) usage: crate::usageui::Etat,
+    /// Noter une friction sans quitter le dessin : la note en cours (`frictionui.rs`).
+    pub(crate) friction: crate::frictionui::Etat,
     /// Le thème dont les couleurs sont posées dans egui : quand le réglage change, tout est
     /// reposé une fois (`theme.rs`).
     pub(crate) theme_applied: crate::theme::ReglageTheme,
@@ -1360,6 +1364,8 @@ impl App {
             about_window: false,
             reglages_droit: None,
             anneau: Default::default(),
+            usage: crate::usageui::Etat::avec(Self::usage_lire()),
+            friction: Default::default(),
             theme_applied,
             theme_unsaved: false,
             welcome: true,
@@ -3903,6 +3909,9 @@ impl App {
             }
             // La touche d'un outil : tenue, elle le prend le temps de la tenir (`springtools`).
             let before = self.tool;
+            // Le compteur d'usage (`usageui.rs`) : partie du clavier ; une touche tenue qui se répète ne compte qu'une fois.
+            self.usage.source = Some(crate::usage::Source::Clavier);
+            self.usage.muet = repeat;
             self.run_action(&action);
             if !repeat && action.starts_with("outil.") {
                 let now = ctx.input(|i| i.time);
@@ -3921,6 +3930,8 @@ impl App {
         }
         // (Le rapport d'une erreur dit quelle commande venait d'être lancée, `plantage.rs`.)
         crate::plantage::noter_action(action);
+        // Le compteur d'usage du poste et le journal des dernières commandes (`usageui.rs`).
+        self.usage_noter(action);
         let name = crate::keymap::ACTIONS.iter().find(|a| a.id == action).map(|a| crate::historyui::step_name(a.label));
         let before = self.history.context.clone();
         if name.is_some() {
@@ -4100,6 +4111,10 @@ impl App {
             "fichier.corbeille" => self.ouvrir_la_corbeille(),
             "aide.a_propos" => self.about_window = true,
             "aide.diagnostic" => self.open_diagnostic(),
+            // Le compteur d'usage et les notes de friction (`usageui.rs`, `frictionui.rs`).
+            "aide.habitudes" => self.usage.fenetre = !self.usage.fenetre,
+            "aide.noter_friction" => self.friction_commencer(),
+            "aide.ouvrir_frictions" => self.friction_ouvrir_le_dossier(),
             // Le collage pose déjà les éléments et les zones à leur place d'origine.
             "edition.coller_sur_place" => self.run_action("edition.coller"),
             // Les propriétés du plan : la fiche (action, dialogue, notes, durée…).
@@ -5208,6 +5223,10 @@ impl App {
         self.reglages_droit_echap(ctx);
         // De même pour un geste de l'anneau sous le stylet (`anneauui.rs`).
         self.anneau_echap(ctx);
+        // Et pour une note de friction en cours (`frictionui.rs`).
+        self.friction_echap(ctx);
+        // Le compteur d'usage : l'heure de cette image, les clics d'icônes de la précédente, l'écriture au repos (`usageui.rs`).
+        self.usage_suivre(ctx);
         self.handle_shortcuts(ctx);
         self.sync_scene_layers();
         // Calques de couleur : leurs images suivent celles du trait (`calquecouleur.rs`).
@@ -5353,6 +5372,9 @@ impl App {
             self.variantes_fenetres(ctx);
             // Le nom d'une séquence qu'on renomme depuis le montage ou la liste du panneau Planche (`planchesequencesui.rs`).
             self.sequence_fenetre(ctx);
+            // « Mes habitudes » et la note de friction en cours (`usageui.rs`, `frictionui.rs`).
+            self.habitudes_fenetre(ctx);
+            self.friction_fenetre(ctx);
             // L'anneau sous le stylet (`anneauui.rs`) : avant la fenêtre des réglages, que son clic bref ouvre dans la même image.
             self.anneau_fenetre(ctx);
             // Clic droit dans le dessin : les réglages de l'outil sous le curseur, par-dessus tout (`reglagesdroit.rs`).
@@ -5434,6 +5456,8 @@ impl App {
         let current = self.current_layout();
         self.settings.set_layout_of(self.espace, current);
         let _ = self.settings.save();
+        // Le compte des commandes du poste (`usageui.rs`).
+        self.usage_ecrire();
         // Le serveur de génération sonore que SHOT a lancé s'arrête avec lui (un serveur lancé à la main reste).
         self.sug.serveur.arreter();
     }

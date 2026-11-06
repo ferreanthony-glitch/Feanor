@@ -52,6 +52,9 @@ pub(crate) fn action_sans_projet(action: &str) -> bool {
             | "aide.conseils"
             | "aide.visite"
             | "aide.regler_stylet"
+            | "aide.habitudes"
+            | "aide.noter_friction"
+            | "aide.ouvrir_frictions"
             | "vue.plein_ecran"
             | "vue.performance"
             // (Le mode concentration dit lui-même qu'il attend un projet : `confort.rs`.)

@@ -72,6 +72,8 @@ impl App {
         let resp = ui.add_enabled(!self.action_bloquee(action), egui::Button::new(text).shortcut_text(&shortcut));
         if resp.clicked() {
             ui.close_menu();
+            // (Le compteur d'usage : partie d'un menu, `usageui.rs`.)
+            self.usage.source = Some(crate::usage::Source::Menu);
             self.run_action(action);
         } else if resp.secondary_clicked() {
             ui.close_menu();
@@ -292,6 +294,11 @@ impl App {
                 self.action_item(ui, "Visite rapide « Premier jour »…", "aide.visite");
                 self.action_item(ui, "Revoir les conseils", "aide.conseils");
                 self.action_item(ui, "Régler FEANOR pour cette machine…", "aide.diagnostic");
+                ui.separator();
+                // Ce qui freine et ce qui sert (`frictionui.rs`, `usageui.rs`).
+                self.action_item(ui, "Noter une friction", crate::frictionui::ACTION);
+                self.action_item(ui, "Mes frictions notées…", crate::frictionui::ACTION_DOSSIER);
+                self.action_item(ui, "Mes habitudes…", "aide.habitudes");
                 ui.separator();
                 self.action_item(ui, "À propos de FEANOR…", "aide.a_propos");
             });

@@ -5,6 +5,9 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-06
 
+- Mes habitudes et notes de friction (INTERFACE partie 112, branche `usage-frictions`, pas fusionnée) : un compteur local des commandes par
+  chemin (clavier, icône, menu, anneau, palette), la fenêtre Aide > Mes habitudes, et F9 pour noter une friction avec une capture et les
+  dernières commandes, dans `Documents\SHOT\Frictions`. Vérificateur : 3985 réussis, aucun avertissement. Reste son essai, puis la fusion.
 - L'anneau sous le stylet est fusionné dans main à la demande d'Anthony (ef983ac) : `feanor.exe` reconstruit, ouvert sans erreur sur une
   copie de TEST PELURE_effets. Le contenu est celui que le vérificateur a passé sur la branche (3954 réussis, aucun avertissement).
   Reste son essai à la tablette ; le dossier de chantier `vignettes-passepartout` (2,4 Go) peut partir avec son accord.

@@ -438,6 +438,15 @@ mod anneau;
 #[cfg(test)]
 mod anneau_tests;
 mod anneauui;
+// Ce qui sert et ce qui freine : le compteur d'usage du poste, et la note de friction prise sans quitter le dessin.
+mod usage;
+#[cfg(test)]
+mod usage_tests;
+mod usageui;
+mod friction;
+#[cfg(test)]
+mod friction_tests;
+mod frictionui;
 mod crayonnesheritage;
 #[cfg(test)]
 mod color_tests;
