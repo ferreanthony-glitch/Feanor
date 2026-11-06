@@ -277,9 +277,8 @@ fn builtin_workspaces_keep_their_meaning() {
     let all = workspace::builtin();
     let dessin = all[1].2.dock_layout();
     assert!(!dessin.contains(Pane::Sheet) && !dessin.contains(Pane::Layers) && dessin.contains(Pane::ToolOptions));
-    let ensemble = all[3].2.dock_layout();
-    assert!(Group::Left.panes().iter().all(|p| !ensemble.contains(*p)));
-    assert!(ensemble.contains(Pane::Canvas) && ensemble.contains(Pane::Montage));
+    // (« Vue d'ensemble » n'existe plus : la planche, c'est l'espace Vignettes, partie 113.)
+    assert_eq!(all.len(), 3);
     // Timeline : bande plus haute que dans Standard.
     let part = |l: &DockLayout| match &l.principal {
         DockNode::Column { part, .. } => *part,

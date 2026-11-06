@@ -348,13 +348,22 @@ impl App {
         });
     }
 
-    /// Le bouton « Retour au storyboard » de la barre du haut, en animation : l'espace Storyboard, sur le même plan.
+    /// Le bouton de retour de la barre du haut, en animation : l'espace Storyboard, sur le même plan ; ou les Vignettes, si c'est
+    /// d'elles qu'on est entré dans le plan (« Retour aux Vignettes », partie 113 : le bouton fait ce que Tab faisait déjà, le pont
+    /// ramène là d'où l'on vient).
     pub(crate) fn bouton_retour_storyboard(&mut self, ui: &mut egui::Ui) -> egui::Response {
+        use crate::workspace::Espace;
         use egui_phosphor::regular as ph;
-        let resp = ui.button(RichText::new(format!("{} Retour au storyboard", ph::ARROW_BEND_UP_LEFT)).strong());
-        let resp = self.aide(resp, "Retour au storyboard", "Quitter l'animation et revenir au storyboard, sur ce plan.", "mode.basculer");
+        let vignettes = self.settings.storyboard_space == Espace::Vignettes;
+        let (nom, description) = if vignettes {
+            ("Retour aux Vignettes", "Quitter l'animation et revenir à la planche des Vignettes, sur ce plan.")
+        } else {
+            ("Retour au storyboard", "Quitter l'animation et revenir au storyboard, sur ce plan.")
+        };
+        let resp = ui.button(RichText::new(format!("{} {nom}", ph::ARROW_BEND_UP_LEFT)).strong());
+        let resp = self.aide(resp, nom, description, "mode.basculer");
         if resp.clicked() {
-            self.set_espace(crate::workspace::Espace::Storyboard);
+            self.set_espace(if vignettes { Espace::Vignettes } else { Espace::Storyboard });
         }
         resp
     }
@@ -587,6 +596,12 @@ impl App {
                          Les dessins ne sont pas modifiés : on peut annuler la transformation à tout moment.",
                     );
                 });
+            }
+            // Sur la planche des Vignettes, l'outil Caméra ne règle que les cadres A, B, C… : rien du panneau complet (clés, adoucis,
+            // focale…), qui reste au Storyboard (partie 113, décision 9).
+            Tool::Camera if self.espace == crate::workspace::Espace::Vignettes => {
+                ui.label("Sur la planche : survole une case, ses cadres se montrent.");
+                note(ui, "Glisser un cadre le déplace ; un coin le redimensionne (le zoom). Clic droit sur la case : ajouter ou retirer un cadre. Les réglages fins de la caméra (clés, adoucis, focale) sont dans le Storyboard.");
             }
             Tool::Camera => self.camera_panel(ui),
         }

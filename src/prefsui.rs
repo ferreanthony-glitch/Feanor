@@ -226,6 +226,17 @@ impl App {
                 self.layout.board_columns = n.clamp(1, crate::board::MAX_COLUMNS);
             }
         });
+        // La taille des cases (partie 113, décision 3) : elle était en haut de la planche, où elle faisait double emploi avec le zoom ; ici elle
+        // dit ce qu'elle change, la planche et son export.
+        ui.horizontal(|ui| {
+            ui.label("Taille des cases");
+            let mut taille = self.layout.card_size;
+            let resp = ui.add(egui::Slider::new(&mut taille, crate::board::CARD_MIN..=crate::board::CARD_MAX).suffix(" pt").fixed_decimals(0));
+            let resp = crate::bulles::bulle(resp, "Taille des cases", "La largeur d'une case sur la planche (240 d'origine), dans l'export de la planche aussi. Pour voir plus grand à l'écran, le zoom de la barre du bas suffit.", "");
+            if resp.changed() {
+                self.layout.card_size = taille.clamp(crate::board::CARD_MIN, crate::board::CARD_MAX);
+            }
+        });
         ui.horizontal(|ui| {
             ui.label("Débord du trait hors des cases");
             let mut v = self.settings.vignettes.debord;
@@ -540,6 +551,19 @@ impl App {
                     ui.label(RichText::new(onglet.resume()).small().weak());
                     ui.add_space(6.0);
                     for (i, g) in table::groupes_de(onglet).into_iter().enumerate() {
+                        // « Plus de réglages » des Vignettes : replié d'origine (partie 113, décision 4) ; un clic sur son titre le déplie.
+                        if g == Groupe::VignettesPlus {
+                            ui.add_space(14.0);
+                            let ouvert = self.prefs_plus_vignettes;
+                            let titre = RichText::new(g.titre()).strong().size(14.0).color(theme::texte_fort());
+                            let h = egui::CollapsingHeader::new(titre).id_salt("prefs_vignettes_plus").open(Some(ouvert)).show(ui, |ui| {
+                                self.groupe_ui(ui, g, sortie);
+                            });
+                            if h.header_response.clicked() {
+                                self.prefs_plus_vignettes = !ouvert;
+                            }
+                            continue;
+                        }
                         titre_groupe(ui, g, i == 0);
                         self.groupe_ui(ui, g, sortie);
                     }
@@ -669,11 +693,23 @@ impl App {
                 self.numerotation_neufs_pref_ui(ui);
             }
             Groupe::Vignettes => self.vignettes_prefs_ui(ui),
-            Groupe::CadresCamera => self.cadres_camera_prefs_ui(ui),
             Groupe::NumerosTextes => self.numeros_textes_prefs_ui(ui),
             Groupe::AspectCases => self.aspect_cases_prefs_ui(ui),
             Groupe::OuvertureCases => self.ouverture_cases_prefs_ui(ui),
-            Groupe::Decor => self.decor_prefs_ui(ui),
+            Groupe::VignettesPlus => {
+                let sous_titre = |ui: &mut egui::Ui, t: &str| {
+                    ui.add_space(6.0);
+                    ui.label(RichText::new(t).small().weak());
+                };
+                sous_titre(ui, "Numéros et textes");
+                self.numeros_textes_plus_prefs_ui(ui);
+                sous_titre(ui, "Aspect des cases");
+                self.aspect_cases_plus_prefs_ui(ui);
+                sous_titre(ui, "Cadres de caméra");
+                self.cadres_camera_prefs_ui(ui);
+                sous_titre(ui, "Décor");
+                self.decor_prefs_ui(ui);
+            }
             Groupe::Raccourcis => {
                 ui.horizontal_wrapped(|ui| {
                     let b = ui.button("Voir et changer les raccourcis…");

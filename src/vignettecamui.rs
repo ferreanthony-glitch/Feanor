@@ -110,6 +110,25 @@ impl App {
         place.frame == 0 || self.doc.panels.get(place.panel).is_some_and(|p| p.camera.len() < 2)
     }
 
+    /// Maj seule tenue (partie 113, proposition A) : l'appui en `p` (planche) sur la case `k` prend-il la caméra plutôt que le plan ? Oui à
+    /// un coin de la case ou d'un cadre (le zoom), et sur le bord d'un cadre B, C… (le déplacer) ; non partout ailleurs (le plan).
+    pub(crate) fn maj_prend_la_camera(&self, layout: &BoardLayout, xf: Xf, k: usize, p: Pos2) -> bool {
+        let place = layout.cards[k];
+        if !self.cam_possible(&place) {
+            return false;
+        }
+        let (cadres, simple) = self.cadres_sur_la_planche(layout, k);
+        let tol = self.tol_coin(xf, &place);
+        if cadres.iter().any(|q| q.iter().any(|c| c.distance(p) <= tol)) {
+            return true;
+        }
+        if simple {
+            return false;
+        }
+        let bord = (PRISE / xf.zoom.max(1e-3)).min(tol);
+        cadres.iter().skip(1).any(|q| (0..4).any(|i| vignettecam::distance_segment(q[i], q[(i + 1) % 4], p) <= bord))
+    }
+
     /// La tolérance, sur la planche, à laquelle un coin se saisit.
     fn tol_coin(&self, xf: Xf, place: &CardPlace) -> f32 {
         (PRISE / xf.zoom.max(1e-3)).min(place.thumb.width().min(place.thumb.height()) * 0.3)

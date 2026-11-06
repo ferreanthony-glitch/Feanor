@@ -419,16 +419,25 @@ impl App {
         let debord = self.settings.vignettes.debord_fraction();
         let recoit = vec![true; champs.len()];
         let pts = self.points_du_trait(fini);
-        let mut dernier: Option<usize> = None;
+        // Un bout de trait ne crée que **la case suivante** (la première case pâle de sa séquence), jamais une case plus loin : un bout
+        // tombé dans la marge d'une case pâle lointaine faisait naître plusieurs plans vides devant elle (partie 113, décision 8). Un bout
+        // plus loin reste sur la planche, visible, dans « Hors cadres ». Dessiner **dans** une case pâle lointaine garde sa place, comme avant.
+        let mut premieres: Vec<usize> = layout.groupes.iter().filter(|g| g.vides.start < g.vides.end).map(|g| g.vides.start).collect();
+        if premieres.is_empty() {
+            premieres.push(0);
+        }
+        let mut touchee: Option<usize> = None;
         for p in &pts {
             if proprietaire(champs, &recoit, origine, *p).is_some() {
                 continue;
             }
             if let Some(e) = layout.empty.iter().position(|r| r.expand(debord * r.width()).contains(*p)) {
-                dernier = Some(dernier.map_or(e, |d| d.max(e)));
+                if premieres.contains(&e) {
+                    touchee = Some(e);
+                }
             }
         }
-        let e = dernier?;
+        let e = touchee?;
         let (cur_id, cur_frame, cur_layer) = (self.doc.panels[self.cur_panel].id, self.cur_frame, self.cur_layer);
         let (created, joins) = (self.vignettes.created, std::mem::take(&mut self.vignettes.empty_joins));
         let ok = self.board_create_from_empty(e);

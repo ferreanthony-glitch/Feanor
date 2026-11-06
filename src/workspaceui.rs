@@ -36,7 +36,8 @@ impl App {
         }
         .sanitized();
         self.top_view = layout.top_view;
-        self.board_view = if layout.vignettes { BoardView::Panels } else { BoardView::Scene };
+        // (La planche n'existe que dans l'espace Vignettes depuis la partie 113 : une disposition qui la demanderait ailleurs montre le dessin.)
+        self.board_view = if layout.vignettes && self.espace == Espace::Vignettes { BoardView::Panels } else { BoardView::Scene };
         self.exposition_masquee = None;
         self.set_dock_layout(layout.dock_layout());
         self.layout = layout;
@@ -87,8 +88,8 @@ impl App {
         let mut layout = layout.avec_les_reglages_de(&self.layout);
         let dock = layout.dock_layout().avec_fenetres_detachees(&self.detached);
         layout.panneaux = Some(dock);
-        self.apply_layout(layout);
         self.espace = espace;
+        self.apply_layout(layout);
         if espace != Espace::Animation && self.settings.storyboard_space != espace {
             self.settings.storyboard_space = espace;
             self.settings_a_ecrire = true;

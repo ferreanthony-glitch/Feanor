@@ -21,6 +21,8 @@ fn banc() -> Banc {
 
 fn ouvrir(b: &mut Banc, onglet: Onglet) {
     b.app.settings.prefs_onglet = onglet;
+    // (« Plus de réglages » des Vignettes est replié d'origine, partie 113 : déplié ici pour lire tous les libellés.)
+    b.app.prefs_plus_vignettes = true;
     b.app.run_action("fichier.preferences");
     b.chauffer(6);
 }
