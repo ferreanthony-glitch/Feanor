@@ -66,8 +66,14 @@ impl App {
         // Sélection et la Pipette, qui gardent le menu des commandes courantes (`reglagesdroit.rs`). Pas dans une
         // vignette de la planche, qui a son propre menu.
         if !self.in_card && !self.modal_open() {
+            // L'anneau sous le stylet (`anneauui.rs`) : il lit lui-même le bouton du stylet sur ce dessin. Son clic bref fait ce
+            // que le clic droit faisait (les réglages) ; glisser lance une commande, maintenir le montre.
+            let anneau = self.anneau_en_service();
+            if anneau {
+                self.anneau_noter_le_dessin(&response, rect, true);
+            }
             if self.reglages_droit_permis() {
-                if response.secondary_clicked() {
+                if !anneau && response.secondary_clicked() {
                     self.clic_droit_dans_le_dessin(response.interact_pointer_pos());
                 }
             } else {
@@ -418,6 +424,11 @@ impl App {
                 } => {
                     let pen = std::mem::take(&mut self.pen_touch);
                     if modal || panning || shifting || !on_canvas(*pos) {
+                        continue;
+                    }
+                    // Un geste de l'anneau sous le stylet est en cours (`anneauui.rs`) : la pointe posée pendant que le bouton du
+                    // stylet est tenu ne trace rien.
+                    if self.anneau.geste.is_some() {
                         continue;
                     }
                     // Dans une vignette de la planche (`boardui.rs`), seul l'appui que la planche a donné au dessin dessine :

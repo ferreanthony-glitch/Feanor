@@ -41,6 +41,8 @@ pub(crate) fn shortcut_menu(resp: &Response, action: &str, current: &str) {
             crate::monpanneauui::demander_ajout(ui.ctx(), action);
             ui.close_menu();
         }
+        // L'anneau sous le stylet : envoyer la commande dans une de ses huit directions (`anneauui.rs`).
+        crate::anneauui::menu_envoyer(ui, action);
     });
 }
 

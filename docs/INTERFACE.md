@@ -7503,3 +7503,117 @@ Décision du réalisateur : « ce qui sort du film reste récupérable, même ap
 10. Enregistrer, quitter, rouvrir le projet : la corbeille est là, l'ouverture n'est pas plus lente (les dessins de la corbeille ne sont pas lus), Restaurer fonctionne après la réouverture ; « Enregistrer sous » et la copie de secours emportent la corbeille.
 11. Un calque dont le plan est dans la corbeille : Restaurer dit pourquoi il ne peut pas revenir ; restaurer le plan d'abord, puis le calque.
 12. Préférences > Raccourcis : « Montage : lire en avant » etc. portent la mention « (montage) ».
+
+---------------------------------------------------------------------------------------------------
+
+## 111. L'anneau sous le stylet (2026-11-06, branche `anneau-stylet`)
+
+Anthony, après l'essai d'une maquette au stylet : « Les huit commandes doivent pouvoir se paramétrer depuis la fenêtre paramètre dans un onglet
+spécifique. Un clic droit sur un outil permet également de proposer de l'envoyer dans une des huit commandes de l'anneau. Pour les pastilles,
+j'imagine plutôt un autre anneau autour du premier comme sur le croquis. Le déclencheur fonctionne très bien. Le délai doit pouvoir se
+paramétrer aussi. » La maquette : <https://claude.ai/artifact/ANCUyYpPRgsDAAoLVTNnPE>. Code : `src/anneau.rs` (le geste, sans interface),
+`src/anneauui.rs` (les entrées, le dessin, les Préférences), essais `src/anneau_tests.rs` (27, dont le vrai clic droit sur un outil et l'onglet des
+Préférences). Captures du rendu (hors de la suite) : `FEANOR_CAPTURE_DIR=… cargo test --release --offline --target-dir target\msvc anneau_captures
+-- --ignored --nocapture`.
+
+### Ce que ça fait
+
+Le bouton du stylet (le **clic droit**) sur le dessin, en Storyboard, en Animation et sur la planche des Vignettes :
+
+- **Clic bref, sans bouger** : ce que le clic droit faisait déjà. Les réglages de l'outil s'ouvrent sous le curseur (partie 66) ; la Sélection et
+  la Pipette gardent leur menu. Rien ne change pour qui ne veut pas de l'anneau.
+- **Appuyer, glisser, relâcher** : la commande de la direction part tout de suite, comme par sa touche (`run_action` : mêmes garde-fous, même
+  étape d'annulation). Rien ne s'affiche, sauf un trait de l'appui à la pointe pendant le geste, puis le nom de la commande près de la pointe
+  pendant 0,7 s.
+- **Maintenir** : l'anneau se dessine après un délai (180 ms d'origine, réglable). Huit parts en rose des vents, l'icône de chaque commande
+  dedans, son nom dehors. Relâcher sur une part lance sa commande ; relâcher au centre ouvre les réglages de l'outil (le rond central porte leur
+  icône) ; **Échap** abandonne.
+
+Seule la **direction** compte, jamais la distance : au-delà de 20 points du point d'appui, un trait court ou très long vers le haut est « haut ».
+Les directions sont **fixes** : rien n'est jamais rangé par ordre d'usage, c'est la main qui les retient.
+
+**D'origine** : haut, Crayon ; haut droite, Pinceau ; droite, Plan suivant ; bas droite, Nouveau plan ; bas, Gomme ; bas gauche, Annuler ;
+gauche, Plan précédent ; haut gauche, Pastilles. Le temps est à l'horizontale, les outils en haut, la correction en bas.
+
+### Le second anneau : les pastilles
+
+La part « Pastilles » ne lance rien : quand la pointe y entre, un **second anneau se déploie autour du premier**, en arc centré sur cette part. Il
+porte les pastilles de la barre, dans le même ordre (personnages du projet, brosses classiques, décors là où le décor est proposé), une tous les
+24° (moins quand elles sont nombreuses : l'arc ne fait jamais plus que presque le tour, et les pastilles rapetissent au lieu de se chevaucher).
+
+- Continuer **au-delà du premier anneau** (100 points) : c'est l'angle qui choisit la pastille, et glisser le long de l'arc en change, même
+  au-dessus d'une autre part. Relâcher la choisit, comme un clic dans la barre des pastilles (`perso_choisir` : couleur du trait, aplat, calque du
+  personnage). La pastille qui dessine déjà le reste (pas de bascule).
+- Le second anneau **n'attend pas le délai** : des couleurs se choisissent en les voyant. Les noms des parts qu'il recouvrirait s'effacent le
+  temps du choix ; les noms des pastilles se montrent tous tant qu'ils tiennent (sinon celui de la pastille visée).
+- Revenir dans une autre part le **replie**. Un trait tout droit vers le haut ou vers la gauche, même très long, ne l'ouvre jamais : il faut
+  passer par la part des pastilles.
+- **Relâcher sur la part elle-même** le laisse ouvert : un appui (pointe, souris) sur une pastille la choisit ; un appui ailleurs le referme et ne
+  fait **rien d'autre** (un voile transparent prend cet appui, comme pour la fenêtre des réglages : ni trait, ni bouton).
+- Sans aucune pastille, la part le dit dans la barre d'état.
+
+### Préférences > Anneau (un onglet à lui)
+
+- **Le geste** : « Anneau sous le stylet » (décoché : le clic droit d'avant, rien de plus) et « Délai avant d'afficher l'anneau » (0 à 1000 ms,
+  par pas de 10 ; « Rétablir » : 180 ms). À 0, l'anneau est là dès l'appui.
+- **Les huit commandes** : l'**aperçu** de l'anneau tel qu'il se dessine (la direction dont la liste est survolée s'allume ; celle des pastilles
+  déploie le second anneau), puis « Commande de chaque direction » : huit listes rangées en rose des vents, le centre au milieu. Chaque liste
+  propose les pastilles, les outils et les commandes courantes (annuler, rétablir, plans, images, clés, lecture, miroir, ajuster, table
+  lumineuse, concentration, storyboard / animation) et les commandes déjà dans l'anneau. Choisir une commande **déjà dans l'anneau échange** les
+  deux places : jamais de doublon, aucune commande perdue. « Rétablir les commandes d'origine ».
+- Retenu dans les réglages du poste (`reglages.toml`, section `[anneau]` : `actif`, `delai_ms`, `commandes`), jamais dans le projet ; l'anneau
+  d'origine n'y écrit rien. Une section abîmée (liste trop courte, valeur qui n'est pas un texte, commande inconnue ou en double) ne fait pas
+  échouer la lecture des autres réglages : chaque part fautive reprend une commande d'origine encore libre.
+
+### Clic droit sur un outil : « Envoyer dans l'anneau »
+
+Le menu du clic droit de **toute icône de commande** (les outils de la barre d'outils, les barres, les panneaux : `raccourcisui::shortcut_menu`, là
+où se trouve déjà « Assigner un raccourci… ») a une entrée de plus, « Envoyer dans l'anneau », qui ouvre les huit directions, chacune avec la
+commande qu'elle porte (une coche devant celle où la commande est déjà). Un clic : la commande prend cette place ; si elle était ailleurs dans
+l'anneau, les deux échangent. La barre d'état dit ce qui a bougé. L'entrée n'existe pas quand l'anneau est éteint.
+
+### Où il joue, où il ne joue pas
+
+| Endroit | Clic droit |
+|---|---|
+| Dessin du Storyboard et de l'Animation, tous les outils | L'anneau (clic bref : les réglages ; Sélection et Pipette : leur menu) |
+| La planche des Vignettes (une case, une barre, le fond) | L'anneau aussi : glisser lance la commande, maintenir le montre. Le **clic bref est inchangé** : le menu de la case, de la barre ou de la planche (partie 66), jamais la fenêtre des réglages. Comme avant, l'appui du clic droit sur une case la rend courante |
+| Espace 3D | **Inchangé** : le clic droit tourne la caméra |
+| Pendant un trait | Rien, comme avant |
+| Fenêtre des réglages ouverte | Le clic droit la ferme et ne fait rien d'autre, comme avant |
+
+Pendant que le bouton du stylet est tenu, la pointe posée sur la tablette **ne trace rien**. Si le relâché n'arrive jamais (le pointeur quitte la
+fenêtre), le geste est abandonné sans rien lancer.
+
+**Sans latence.** À l'appui, les icônes, les noms et les pastilles sont relevés une fois ; pendant le geste, chaque image compare un angle et peint
+quelques formes. Aucun rejeu du moteur, aucun dessin touché. L'anneau affiché ne demande **aucune repeinture** : un seul réveil est programmé,
+celui du délai (puis celui qui efface le nom de la commande).
+
+### Limites connues
+
+- **Le bouton du stylet doit arriver comme un clic droit de souris**, avec le déplacement pendant qu'il est tenu (réglage du pilote de la tablette :
+  bouton = « clic droit »). C'est déjà la condition de la fenêtre des réglages. Non vérifié sur la tablette d'Anthony : la maquette a marché dans
+  son navigateur, FEANOR lit le stylet par un autre chemin (winit ne transmet pas le bouton latéral d'un stylet en mode Windows Ink).
+- Près d'un bord de l'écran, les noms sont ramenés dans l'écran, mais le second anneau peut sortir de la vue (le geste reste juste : il est
+  relatif au point d'appui).
+- Plus d'une trentaine de pastilles : elles deviennent très petites. Le geste reste exact, la lecture moins.
+- Pas de touche du clavier pour ouvrir l'anneau (la maquette avait « ² ») : Anthony a validé le bouton du stylet. À ajouter s'il la demande.
+- Les icônes des commandes qu'aucune barre ne montre : une petite table dans `anneauui::icone_propre` ; les autres ont l'éclair par défaut.
+
+### À regarder à l'écran
+
+1. Bouton du stylet, clic bref sur le dessin : la fenêtre des réglages de l'outil, comme avant. Avec la Sélection : son menu.
+2. Bouton tenu, glisser vers le bas, relâcher, d'un geste vif : la Gomme, sans que l'anneau se montre ; « Gomme » s'affiche un instant près
+   de la pointe. Vers le haut : le Crayon. À droite, à gauche : plan suivant, plan précédent.
+3. Bouton tenu sans bouger : l'anneau apparaît après le délai, les huit noms autour. Relâcher au centre : les réglages. Échap : rien.
+4. Par la part des pastilles (haut gauche) puis plus loin : le second anneau, la pastille visée cerclée ; relâcher : sa couleur de trait, son
+   aplat, son calque. Glisser le long de l'arc avant de relâcher : une autre pastille.
+5. Relâcher sur la part des pastilles : le second anneau reste. Toucher une pastille : choisie. Recommencer et toucher ailleurs : il se
+   referme, aucun trait.
+6. Poser la pointe pendant que le bouton est tenu : aucun trait.
+7. Préférences > Anneau : survoler les listes (l'aperçu s'allume), changer une commande, en choisir une déjà présente (échange), rétablir.
+   Régler le délai à 0 puis à 1000 ms et sentir la différence. Décocher « Anneau sous le stylet » : le clic droit d'avant.
+8. Clic droit sur un outil de la barre d'outils > Envoyer dans l'anneau > Haut : l'outil y est, la barre d'état le dit, le geste suit.
+9. Fermer et rouvrir FEANOR : l'anneau réglé est retenu.
+10. Dans une case des Vignettes : le clic droit bref ouvre toujours le menu de la case ; un glissé du bouton du stylet y lance la commande, sans
+    menu ni trait.

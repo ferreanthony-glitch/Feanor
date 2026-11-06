@@ -637,6 +637,9 @@ impl App {
                 ui.label(RichText::new("Le toucher du stylet se règle en bas des réglages du pinceau.").small().weak());
             }
             Groupe::Camera => self.passe_partout_pref_ui(ui),
+            // L'anneau sous le stylet (`anneauui.rs`).
+            Groupe::AnneauGeste => self.anneau_geste_prefs_ui(ui),
+            Groupe::AnneauCommandes => self.anneau_commandes_prefs_ui(ui),
             Groupe::Tremblement => self.tremblement_defaut_pref_ui(ui),
             Groupe::Poignees => {
                 use crate::selbox::{CentreRotation, PointFixe};

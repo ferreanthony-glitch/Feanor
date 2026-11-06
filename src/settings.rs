@@ -284,6 +284,10 @@ pub struct Settings {
     /// petite / moyenne / grande.
     #[serde(default, rename = "pistes_hauteur", skip_serializing_if = "crate::montagehauteur::Reglage::est_defaut")]
     pub track_height: crate::montagehauteur::Reglage,
+    /// L'anneau sous le stylet (`anneau.rs`, Préférences > Anneau) : en service ou non, le délai avant qu'il se dessine, la
+    /// commande de chacune de ses huit directions. Un réglage du poste. Absent : l'anneau d'origine.
+    #[serde(default, rename = "anneau", skip_serializing_if = "crate::anneau::Reglages::est_d_origine")]
+    pub anneau: crate::anneau::Reglages,
 }
 
 fn is_true(b: &bool) -> bool {
@@ -398,6 +402,7 @@ impl Default for Settings {
             references_fenetre: Default::default(),
             numbering_locked_new: true,
             track_height: Default::default(),
+            anneau: Default::default(),
         }
     }
 }
@@ -467,6 +472,8 @@ impl Settings {
         s.new_plan_secs = crate::dureeplans::secondes_valides(s.new_plan_secs);
         // Mon panneau : une commande qui n'existe plus (réglages d'une autre version) est ignorée, sans rien casser.
         s.mon_panneau = std::mem::take(&mut s.mon_panneau).nettoye(crate::monpanneau::commande_connue);
+        // L'anneau sous le stylet : huit commandes qui existent, toutes différentes, un délai dans ses bornes.
+        s.anneau = std::mem::take(&mut s.anneau).nettoyes(crate::monpanneau::commande_connue);
         s.poser_le_panneau_vignettes();
         s
     }

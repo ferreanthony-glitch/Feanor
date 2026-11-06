@@ -279,6 +279,7 @@ fn every_tab_name_has_a_stable_key() {
         (Onglet::General, "general"),
         (Onglet::Apparence, "apparence"),
         (Onglet::Dessin, "dessin"),
+        (Onglet::Anneau, "anneau"),
         (Onglet::Montage, "montage"),
         (Onglet::Vignettes, "vignettes"),
         (Onglet::Raccourcis, "raccourcis"),

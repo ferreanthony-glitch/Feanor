@@ -433,6 +433,11 @@ mod canvas;
 mod reglagesdroit;
 #[cfg(test)]
 mod reglagesdroit_tests;
+// L'anneau sous le stylet : huit commandes autour de la pointe, un second anneau pour les pastilles.
+mod anneau;
+#[cfg(test)]
+mod anneau_tests;
+mod anneauui;
 mod crayonnesheritage;
 #[cfg(test)]
 mod color_tests;

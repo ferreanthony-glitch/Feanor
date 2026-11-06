@@ -252,7 +252,7 @@ impl App {
     }
 
     /// Le nom de ce qui est choisi.
-    fn perso_nom(&self, c: Choix) -> Option<String> {
+    pub(crate) fn perso_nom(&self, c: Choix) -> Option<String> {
         match c {
             Choix::Personnage(id) => self.doc.personnages.iter().find(|p| p.id == id).map(|p| p.name.clone()),
             Choix::Classique(i) => self.settings.brosses_classiques.get(i).map(|n| n.name.clone()),
@@ -297,7 +297,8 @@ impl App {
     }
 
     /// Tous les choix de la barre, dans l'ordre : les personnages, les classiques, puis les décors (là où le décor est proposé).
-    fn perso_tous(&self) -> Vec<Choix> {
+    /// (Aussi les pastilles du second anneau, `anneauui.rs`.)
+    pub(crate) fn perso_tous(&self) -> Vec<Choix> {
         let mut tous = self.perso_du_type(Type::Personnage);
         tous.extend(self.perso_du_type(Type::Classique));
         if self.decor_offert() {
