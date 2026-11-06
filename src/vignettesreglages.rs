@@ -51,6 +51,9 @@ pub struct ReglagesVignettes {
     /// Un fond clair derrière les numéros de plan (lisibles sur n'importe quel dessin qui déborde).
     #[serde(rename = "fond_numeros")]
     pub fond_numeros: bool,
+    /// Les numéros de plan se montrent sur la planche et dans son export (la touche ignettes.numeros) : oui d'origine, retenu d'une séance à l'autre.
+    #[serde(rename = "numeros_visibles")]
+    pub numeros_visibles: bool,
     /// L'étiquette de version (« V2 ») se montre, à côté du numéro du plan, pour un plan qui a plusieurs versions.
     #[serde(rename = "pastille_version")]
     pub pastille_version: bool,
@@ -105,6 +108,7 @@ impl Default for ReglagesVignettes {
             decor_bitmap: false,
             taille_numeros: 100,
             fond_numeros: true,
+            numeros_visibles: true,
             pastille_version: true,
             afficher_duree: false,
             textes_defaut: crate::boardsens::Textes { action: false, dialogue: false, notes: false },

@@ -679,6 +679,8 @@ mod prereglagesui_tests;
 mod effetsperf_tests;
 #[cfg(test)]
 mod passe_partout_tests;
+#[cfg(test)]
+mod passe_partout_balayage_tests;
 mod tremblement;
 #[cfg(test)]
 mod tremblement_tests;
@@ -976,6 +978,7 @@ mod shapes_tests;
 mod shapetools;
 mod soundtrack;
 // Numérotation des plans : suivie ou verrouillée (12, 12A, 13), renuméroter.
+mod numerosmarge;
 mod numerotation;
 #[cfg(test)]
 mod numerotation_tests;

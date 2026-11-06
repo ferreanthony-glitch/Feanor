@@ -157,6 +157,12 @@ impl App {
                 self.settings.vignettes.taille_numeros = v;
                 self.settings_a_ecrire = true;
             }
+            // (Sur la même ligne : la page de l'onglet garde sa hauteur.)
+            let mut numeros = self.settings.vignettes.numeros_visibles;
+            let resp = ui.checkbox(&mut numeros, "Montrer les numéros");
+            if bulle(resp, "Montrer les numéros de plan", "Les numéros dans la marge au-dessus des cases, sur la planche et dans son export. La touche N les cache ou les montre.", "vignettes.numeros").changed() {
+                self.vignettes_basculer_numeros();
+            }
         });
         ui.horizontal_wrapped(|ui| {
         let mut fond = self.settings.vignettes.fond_numeros;

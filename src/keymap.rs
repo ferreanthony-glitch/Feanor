@@ -481,6 +481,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("vue.vignettes_panneau", "Panneau Planche (ouvrir / fermer)", true, false),
     act("vignettes.sens_lignes", "Vignettes : lire en lignes (de gauche à droite, le texte sous les cases)", true, false),
     act("vignettes.sens_japonais", "Vignettes : lire à la japonaise (en colonnes, le texte à droite des cases)", true, false),
+    act("vignettes.numeros", "Vignettes : montrer ou cacher les numéros de plan", true, false),
     act("vignettes.texte_action", "Vignettes : montrer l'action à côté des cases (oui / non)", true, false),
     act("vignettes.texte_dialogue", "Vignettes : montrer le dialogue à côté des cases (oui / non)", true, false),
     act("vignettes.texte_notes", "Vignettes : montrer les notes à côté des cases (oui / non)", true, false),

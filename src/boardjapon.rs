@@ -267,7 +267,7 @@ pub fn layout(doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options
             let tuile = TuileBoard { rect: e.tuile.rect.translate(au), zone: e.tuile.zone, masque: e.tuile.masque.clone() };
             foot = foot.union(tuile.rect);
             mv = Some(out.moves.len());
-            out.moves.push(MoveBoard { cadres, enveloppe: e.enveloppe.iter().map(|q| *q + au).collect(), tuile });
+            out.moves.push(MoveBoard { cadres, enveloppe: e.enveloppe.iter().map(|q| *q + au).collect(), tuile, balayage: e.balayage.iter().map(|p| p.iter().map(|q| *q + au).collect()).collect() });
         }
         let card = Rect::from_min_max(pos2(x, top - LABEL_H), pos2(x + card_w, top + thumb_h));
         let reach = colonne_x + droite_col[c];

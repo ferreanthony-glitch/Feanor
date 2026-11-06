@@ -485,14 +485,22 @@ impl App {
                 Lien::Bord(de, vers) => {
                     clip.line_segment([s(de), s(vers)], fin);
                 }
-                Lien::FlecheDessus { de, vers } | Lien::FlecheVerticale { de, vers } => {
+                Lien::Fleche { de, vers } => {
+                    // Une fine flèche, de la teinte des cadres, sans plein ni grosse pointe : un petit chevron au bout. Un liseré blanc très
+                    // léger dessous la garde lisible sur le gris de la planche comme sur le blanc des cases.
                     let (a, b) = (s(de), s(vers));
-                    clip.line_segment([a, b], Stroke::new(1.0_f32, alpha(235)));
                     let d = b - a;
-                    if d.length() > 2.0 {
-                        let u = d.normalized();
-                        let perp = vec2(-u.y, u.x);
-                        clip.add(Shape::convex_polygon(vec![b, b - u * 7.0 + perp * 3.5, b - u * 7.0 - perp * 3.5], alpha(235), Stroke::NONE));
+                    let long = d.length();
+                    if long > 3.0 {
+                        let u = d / long;
+                        let chevron = (long * 0.25).clamp(3.0, 5.5);
+                        let [h1, h2] = vignettecam::chevron(b, u, chevron);
+                        let (halo_f, trait_f) = (Stroke::new(2.4_f32, Color32::from_white_alpha(70)), Stroke::new(1.0_f32, alpha(vignettecam::FLECHE_ALPHA)));
+                        for st in [halo_f, trait_f] {
+                            clip.line_segment([a, b], st);
+                            clip.line_segment([b, h1], st);
+                            clip.line_segment([b, h2], st);
+                        }
                     }
                 }
             }

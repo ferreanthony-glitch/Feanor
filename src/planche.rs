@@ -286,7 +286,8 @@ pub fn construire(doc: &Document, plans: &[usize], s: &BoardSettings, opt: &Opti
             let plan_reel = plans[c.panel];
             let champs = notes.get(&c.id).cloned().unwrap_or_default();
             let etiquette = (c.starts_plan() && opt.numeros).then(|| doc.scene_label(c.scene));
-            let mouvement = if opt.cadres { layout.move_of(k).cloned() } else { None };
+            // (Avec le passe-partout, l'ouverture d'un plan à mouvement se sait même sans les cadres.)
+            let mouvement = if opt.cadres || opt.marie { layout.move_of(k).cloned() } else { None };
             Carte { place: *c, plan_reel, etiquette, champs, mouvement, legende: legendes.as_ref().and_then(|l| l.get(&c.id).cloned()) }
         })
         .collect();
@@ -452,7 +453,21 @@ pub(crate) fn trait_rond_a(pix: &mut Pixmap, pts: &[(f32, f32, f32)], c: [u8; 3]
 
 /// La planche dessinée : `vignettes[k]` est l'image de la vignette `k` (n'importe quelle taille : elle est ramenée à celle de sa case).
 /// Rend l'image RVB, à l'échelle `s`.
+#[cfg(test)]
 pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> Result<RgbImage, String> {
+    composer_avec_tuiles(p, vignettes, &[], opt, s)
+}
+
+/// Le dessin d'un plan à mouvement de caméra sur toute son enveloppe (sa « tuile », comme à l'écran) : pixels RVBA prémultipliés, `taille`
+/// pixels, posés sur le rectangle de la tuile.
+#[derive(Clone, Debug)]
+pub struct TuileImage {
+    pub taille: [u32; 2],
+    pub rvba: Vec<u8>,
+}
+
+/// Comme `composer`, avec `tuiles[k]`, l'image de la tuile de la vignette `k` (rien : la vignette seule, A, sur le papier).
+pub fn composer_avec_tuiles(p: &Planche, vignettes: &[RgbImage], tuiles: &[Option<TuileImage>], opt: &Options, s: f32) -> Result<RgbImage, String> {
     let (w, h) = ((p.cadre.width() * s).ceil().max(1.0) as u32, (p.cadre.height() * s).ceil().max(1.0) as u32);
     let mut pix = Pixmap::new(w, h).ok_or("image trop grande pour la mémoire")?;
     pix.fill(Color::from_rgba8(TABLE[0], TABLE[1], TABLE[2], 255));
@@ -511,6 +526,13 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
         trait_rond_a(&mut pix, &px, t.color, t.alpha);
     }
     for (k, c) in p.cartes.iter().enumerate() {
+        // Le dessin sur toute l'enveloppe d'un plan à mouvement, sous les cadres et sous la vignette de A (qui en est la même part).
+        if let (Some(m), Some(Some(t))) = (c.mouvement.as_ref(), tuiles.get(k)) {
+            let q = rect_px(m.tuile.rect, p.cadre, s);
+            if let Some(cell) = tiny_skia::IntSize::from_wh(t.taille[0], t.taille[1]).and_then(|sz| Pixmap::from_vec(t.rvba.clone(), sz)) {
+                pix.draw_pixmap(q[0], q[1], cell.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
+            }
+        }
         let r = rect_px(c.place.thumb, p.cadre, s);
         let (tw, th) = ((r[2] - r[0]).max(1) as u32, (r[3] - r[1]).max(1) as u32);
         if let Some(img) = vignettes.get(k) {
@@ -549,14 +571,20 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
             for lien in crate::vignettecam::liens(&mv.quads(), c.place.thumb) {
                 match lien {
                     crate::vignettecam::Lien::Bord(a, b) => fin(&mut pix, a, b),
-                    crate::vignettecam::Lien::FlecheDessus { de, vers } | crate::vignettecam::Lien::FlecheVerticale { de, vers } => {
-                        fin(&mut pix, de, vers);
+                    crate::vignettecam::Lien::Fleche { de, vers } => {
+                        // La même fine flèche qu'à l'écran : un petit chevron, moins opaque que les cadres.
                         let d = vers - de;
                         if d.length() > 1.0 {
                             let u = d.normalized();
-                            let perp = vec2(-u.y, u.x);
-                            fin(&mut pix, vers, vers - u * 7.0 + perp * 3.5);
-                            fin(&mut pix, vers, vers - u * 7.0 - perp * 3.5);
+                            let [h1, h2] = crate::vignettecam::chevron(vers, u, (d.length() * 0.25).clamp(3.0, 5.5));
+                            for (a, b) in [(de, vers), (vers, h1), (vers, h2)] {
+                                let mut pb = PathBuilder::new();
+                                pb.move_to((a.x - p.cadre.left()) * s, (a.y - p.cadre.top()) * s);
+                                pb.line_to((b.x - p.cadre.left()) * s, (b.y - p.cadre.top()) * s);
+                                if let Some(path) = pb.finish() {
+                                    pix.stroke_path(&path, &peinture(opt.couleur_cadre, crate::vignettecam::FLECHE_ALPHA), &Stroke { width: epais.max(1.0), line_cap: LineCap::Round, ..Default::default() }, Transform::identity(), None);
+                                }
+                            }
                         }
                     }
                 }
@@ -619,11 +647,43 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
             let q = rect_px(r, p.cadre, s);
             Rect::from_min_max(pos2(q[0] as f32, q[1] as f32), pos2(q[2] as f32, q[3] as f32))
         };
-        let trous: Vec<Rect> = p.cartes.iter().flat_map(|c| std::iter::once(en_pixels(c.place.thumb)).chain(c.mouvement.iter().flat_map(|m| std::iter::once(en_pixels(m.tuile.rect))).collect::<Vec<_>>())).collect();
+        let trous: Vec<Rect> = p.cartes.iter().map(|c| en_pixels(c.place.thumb)).collect();
         // (L'opacité est celle du passe-partout de l'écran : avec moins de 100 %, ce qui déborde se voit à travers.)
         let alpha = (f32::from(opt.marie_opacite.min(100)) * 2.55).round() as u8;
+        // Un plan à mouvement s'ouvre sur tout ce que sa caméra balaie, pas sur sa seule case A (comme à l'écran : `marie_peindre`).
+        let mut ouverture = tiny_skia::Mask::new(w, h).filter(|_| p.cartes.iter().any(|c| c.mouvement.as_ref().is_some_and(|m| !m.balayage.is_empty())));
+        if let Some(mask) = ouverture.as_mut() {
+            for poly in p.cartes.iter().filter_map(|c| c.mouvement.as_ref()).flat_map(|m| m.balayage.iter()).filter(|q| q.len() >= 3) {
+                let pts: Vec<(f32, f32)> = poly.iter().map(|q| ((q.x - p.cadre.left()) * s, (q.y - p.cadre.top()) * s)).collect();
+                // (Tous dans le même sens : la règle de l'enroulement en fait l'union.)
+                let aire: f32 = (0..pts.len()).map(|i| pts[i].0 * pts[(i + 1) % pts.len()].1 - pts[(i + 1) % pts.len()].0 * pts[i].1).sum();
+                let mut pb = PathBuilder::new();
+                let ordre: Vec<(f32, f32)> = if aire >= 0.0 { pts } else { pts.into_iter().rev().collect() };
+                pb.move_to(ordre[0].0, ordre[0].1);
+                for q in &ordre[1..] {
+                    pb.line_to(q.0, q.1);
+                }
+                pb.close();
+                if let Some(path) = pb.finish() {
+                    mask.fill_path(&path, FillRule::Winding, true, Transform::identity());
+                }
+            }
+            mask.invert();
+        }
         for r in crate::marie::hors_des_cases(Rect::from_min_size(Pos2::ZERO, vec2(w as f32, h as f32)), &trous) {
-            remplir_a(&mut pix, [r.left().round() as i32, r.top().round() as i32, r.right().round() as i32, r.bottom().round() as i32], opt.marie_couleur, alpha);
+            let q = [r.left().round() as i32, r.top().round() as i32, r.right().round() as i32, r.bottom().round() as i32];
+            match ouverture.as_ref() {
+                None => remplir_a(&mut pix, q, opt.marie_couleur, alpha),
+                Some(mask) => {
+                    if q[2] > q[0] && q[3] > q[1] && alpha > 0 {
+                        if let Some(rect) = tiny_skia::Rect::from_xywh(q[0] as f32, q[1] as f32, (q[2] - q[0]) as f32, (q[3] - q[1]) as f32) {
+                            let mut paint = peinture(opt.marie_couleur, alpha);
+                            paint.anti_alias = false;
+                            pix.fill_rect(rect, &paint, Transform::identity(), Some(mask));
+                        }
+                    }
+                }
+            }
         }
         // (Le filet de chaque vignette reste : il est dans la vignette.)
         for c in &p.cartes {

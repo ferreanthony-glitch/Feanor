@@ -52,6 +52,15 @@ impl App {
         self.status = format!("Vignettes : lecture {}.", sens.nom().to_lowercase());
     }
 
+    /// Montre ou cache les numéros de plan (la touche `vignettes.numeros`) : sur la planche, et dans son export comme les textes. Un
+    /// affichage : rien n'est écrit dans le projet ; retenu dans les réglages de l'application.
+    pub(crate) fn vignettes_basculer_numeros(&mut self) {
+        let on = !self.settings.vignettes.numeros_visibles;
+        self.settings.vignettes.numeros_visibles = on;
+        self.settings_a_ecrire = true;
+        self.status = if on { "Vignettes : numéros de plan montrés.".into() } else { "Vignettes : numéros de plan cachés.".into() };
+    }
+
     /// Montre ou cache un champ de texte à côté des cases.
     pub(crate) fn vignettes_basculer_texte(&mut self, champ: Champ) {
         let on = !self.layout.board_textes.montre(champ);
@@ -268,6 +277,12 @@ impl App {
             if self.aide(resp, champ.nom(), &description, action).changed() {
                 self.vignettes_basculer_texte(champ);
             }
+        }
+        // Les numéros de plan : montrés d'origine ; la touche N les cache ou les montre (planche et export).
+        let mut numeros = self.settings.vignettes.numeros_visibles;
+        let resp = ui.checkbox(&mut numeros, "Numéros de plan");
+        if self.aide(resp, "Numéros de plan", "Montrer le numéro de chaque plan dans la marge, au-dessus de sa première case (et dans l'export de la planche). Un affichage : rien n'est changé dans le projet.", "vignettes.numeros").changed() {
+            self.vignettes_basculer_numeros();
         }
     }
 }

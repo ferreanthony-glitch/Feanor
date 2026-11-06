@@ -32,7 +32,7 @@
 //!
 //! Rien n'est enregistré dans le projet pour cela : tout se déduit des clés (en supprimer au montage fait rétrécir l'empreinte).
 
-use eframe::egui::{pos2, vec2, Pos2, Rect, Vec2};
+use eframe::egui::{vec2, Pos2, Rect, Vec2};
 
 use crate::camera::{Camera, CameraKey};
 use crate::document::Document;
@@ -256,6 +256,8 @@ pub struct Empreinte {
     /// L'enveloppe convexe de la case A et de tous les cadres : la zone de dessin.
     pub enveloppe: Vec<Pos2>,
     pub tuile: Tuile,
+    /// Ce que la caméra balaie, en polygones convexes (relatifs à A comme `cadres`) : l'ouverture du passe-partout (`balayage`).
+    pub balayage: Vec<Vec<Pos2>>,
     /// L'étendue, relative au coin haut-gauche de A : la boîte de l'enveloppe (x_min ≤ 0 ≤ largeur de la case ≤ x_max…).
     pub x_min: f32,
     pub x_max: f32,
@@ -315,7 +317,15 @@ pub fn empreinte(doc: &Document, panel: usize, p: &Place) -> Option<Empreinte> {
     let limite = |e0: f32, e1: f32, max: f32| if e1 <= max + 1e-3 { 1.0 } else if e1 - e0 > 1e-6 { ((max - e0) / (e1 - e0)).clamp(0.0, 1.0) } else { 0.0 };
     let g = limite(e0.width(), e1.width(), p.row_w).min(limite(e0.height(), e1.height(), p.max_h));
     let quads = construit(g);
+    // Ce que la caméra balaie entre deux clés (une rotation, un zoom, un mouvement penché sortent de l'enveloppe des deux cadres).
+    let pose = |coins: [Pos2; 4], f: f32| -> [Pos2; 4] {
+        let centre = boite(&coins).center();
+        let d = (centre - ra.center()) * echelle * g;
+        coins.map(|c| centre_thumb + d + (c - centre) * echelle * f)
+    };
+    let (balayage, supplement) = balayage(doc, &cads, &sources.iter().map(|s| s.f).collect::<Vec<_>>(), &quads, pose);
     let mut points: Vec<Pos2> = quads.iter().flat_map(|q| q.iter().copied()).collect();
+    points.extend(supplement);
     points.extend(coins_de(thumb));
     let enveloppe = enveloppe_convexe(&points);
     let boite_e = boite(&enveloppe);
@@ -328,6 +338,7 @@ pub fn empreinte(doc: &Document, panel: usize, p: &Place) -> Option<Empreinte> {
         cadres: cadres_aff,
         enveloppe,
         tuile: Tuile { rect: boite_e, zone, masque },
+        balayage,
         x_min: boite_e.left(),
         x_max: boite_e.right(),
         y_min: boite_e.top(),
@@ -335,41 +346,91 @@ pub fn empreinte(doc: &Document, panel: usize, p: &Place) -> Option<Empreinte> {
     })
 }
 
+/// Combien de cadres intermédiaires on pose entre deux clés qui ne se contentent pas de glisser (rotation, mouvement penché).
+const ECHANTILLONS: usize = 12;
+
+/// Deux caméras ne diffèrent-elles que par leur place et leur zoom (le balayage est alors celui des deux cadres) ?
+fn glisse_seulement(a: &Camera, b: &Camera) -> bool {
+    [(a.angle, b.angle), (a.dolly, b.dolly), (a.tilt, b.tilt), (a.pan, b.pan)].iter().all(|(p, q)| (p - q).abs() < 1e-4)
+}
+
+/// L'enveloppe convexe de plusieurs cadres.
+fn coque_de(quads: &[[Pos2; 4]]) -> Vec<Pos2> {
+    enveloppe_convexe(&quads.iter().flat_map(|q| q.iter().copied()).collect::<Vec<_>>())
+}
+
+/// Ce que balaie le cadre de la caméra de clé en clé, en polygones convexes (relatifs à A, comme `quads`) : une seule pièce entre deux clés
+/// qui se contentent de glisser et de zoomer (l'enveloppe des deux cadres est exactement ce qui est balayé quand la taille ne change pas) ;
+/// sinon `ECHANTILLONS` cadres intermédiaires, par groupes de trois (la rotation ou le penchement ne s'arrondit pas dans l'enveloppe des
+/// deux cadres). Rend aussi les coins des cadres intermédiaires qui sortent de l'enveloppe des clés (pour agrandir l'enveloppe). Rien de tout
+/// cela ne dépend du temps : le calcul se refait quand la caméra change.
+fn balayage(doc: &Document, cads: &[Cadre], facteurs: &[f32], quads: &[[Pos2; 4]], pose: impl Fn([Pos2; 4], f32) -> [Pos2; 4]) -> (Vec<Vec<Pos2>>, Vec<Pos2>) {
+    let (mut pieces, mut supplement) = (Vec::new(), Vec::new());
+    for i in 0..quads.len().saturating_sub(1) {
+        let (a, b) = (&cads[i], &cads[i + 1]);
+        if glisse_seulement(&a.cam, &b.cam) || rect_feuille(a).is_none() || rect_feuille(b).is_none() {
+            pieces.push(coque_de(&[quads[i], quads[i + 1]]));
+            continue;
+        }
+        let mut suite = vec![quads[i]];
+        for j in 1..ECHANTILLONS {
+            let t = j as f32 / ECHANTILLONS as f32;
+            let coins = Camera::lerp(&a.cam, &b.cam, t).corners(doc.frame);
+            if !coins_finis(&coins) {
+                continue;
+            }
+            let q = pose(coins, facteurs[i] + (facteurs[i + 1] - facteurs[i]) * t);
+            supplement.extend(q);
+            suite.push(q);
+        }
+        suite.push(quads[i + 1]);
+        let mut debut = 0;
+        while debut + 1 < suite.len() {
+            let fin = (debut + 2).min(suite.len() - 1);
+            pieces.push(coque_de(&suite[debut..=fin]));
+            debut = fin;
+        }
+    }
+    (pieces.into_iter().filter(|p| p.len() >= 3).collect(), supplement)
+}
+
 /// Comment relier deux cadres qui se suivent (en bleu, fin).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Lien {
-    /// Une flèche au-dessus de la rangée, de gauche à droite ou l'inverse (un travelling).
-    FlecheDessus { de: Pos2, vers: Pos2 },
-    /// Une flèche vers le bas ou vers le haut, d'un cadre à celui d'une autre rangée (un panoramique vertical).
-    FlecheVerticale { de: Pos2, vers: Pos2 },
+    /// Une flèche fine du centre d'un cadre à celui du suivant (A vers B, B vers C…) : elle suit le mouvement, droite et discrète.
+    Fleche { de: Pos2, vers: Pos2 },
     /// Un côté de l'enveloppe qui relie deux cadres différents : un bout de la silhouette.
     Bord(Pos2, Pos2),
 }
 
+/// L'opacité (0 à 255) du trait d'une flèche de mouvement : discrète.
+pub const FLECHE_ALPHA: u8 = 170;
+
+/// Les deux bouts du petit chevron d'une flèche qui arrive en `vers` en allant dans la direction `u` (unitaire), de `taille` de long.
+pub fn chevron(vers: Pos2, u: Vec2, taille: f32) -> [Pos2; 2] {
+    let tourne = |a: f32| vec2(u.x * a.cos() - u.y * a.sin(), u.x * a.sin() + u.y * a.cos());
+    [vers - tourne(0.45) * taille, vers - tourne(-0.45) * taille]
+}
+
 /// Les liens entre les cadres (`quads` : leurs quatre coins, tous dans le même repère ; `thumb` : la case A, qui fait partie de
 /// l'enveloppe). Les côtés de l'enveloppe qui relient deux cadres différents (Anthony, 2026-10-22 : pas de ligne qui traverse
-/// l'intérieur : la silhouette seule), plus une flèche pour un travelling pur (même taille, de côté ou de haut en bas, sans
-/// recouvrement vertical).
+/// l'intérieur : la silhouette seule), plus une flèche fine d'un cadre au suivant (2026-11-06 : A vers B, B vers C, quel que soit le
+/// mouvement : un travelling, une diagonale, un zoom qui se déplace).
 pub fn liens(quads: &[[Pos2; 4]], thumb: Rect) -> Vec<Lien> {
     let mut out = Vec::new();
-    let rects: Vec<Rect> = quads.iter().map(|q| boite(q)).collect();
-    for w in rects.windows(2) {
-        let (a, b) = (w[0], w[1]);
-        let zoome = (b.width() / a.width().max(1e-3) - 1.0).abs() > 0.06;
-        if zoome {
+    // Entre deux centres, raccourcie à chaque bout pour ne pas s'appuyer sur la lettre ni sur le trait des cadres. Un cadre qui en
+    // confond un autre, ou un zoom sur place (rien à suivre), n'a pas de flèche.
+    let distincts = cadres_distincts(quads);
+    let centres: Vec<Pos2> = quads.iter().zip(&distincts).filter(|(_, d)| **d).map(|(q, _)| boite(q).center()).collect();
+    for w in centres.windows(2) {
+        let d = w[1] - w[0];
+        let long = d.length();
+        if long < 6.0 {
             continue;
         }
-        let d = b.center() - a.center();
-        if d.y.abs() < 4.0 && d.x.abs() > 4.0 {
-            let y = a.top().min(b.top()) - 5.0;
-            out.push(Lien::FlecheDessus { de: pos2(a.center().x, y), vers: pos2(b.center().x, y) });
-        } else if d.x.abs() < 0.15 * thumb.width() {
-            if b.top() >= a.bottom() {
-                out.push(Lien::FlecheVerticale { de: pos2(a.center().x, a.bottom()), vers: pos2(b.center().x, b.top()) });
-            } else if b.bottom() <= a.top() {
-                out.push(Lien::FlecheVerticale { de: pos2(a.center().x, a.top()), vers: pos2(b.center().x, b.bottom()) });
-            }
-        }
+        let u = d / long;
+        let rogne = (long * 0.12).clamp(2.0, 9.0);
+        out.push(Lien::Fleche { de: w[0] + u * rogne, vers: w[1] - u * rogne });
     }
     // L'enveloppe de tous les coins (la case A comprise, elle est le cadre A) : chaque côté dont les deux bouts n'appartiennent pas
     // à un même cadre relie deux cadres.

@@ -132,9 +132,11 @@ fn a_rotated_camera_is_a_rotated_frame_and_the_envelope_holds_its_corners() {
     // Les liens suivent les coins tournés : des côtés de l'enveloppe entre A et B, jamais dans l'intérieur.
     let v = liens(&quads(&e), la_case());
     assert!(v.iter().any(|l| matches!(l, Lien::Bord(..))));
+    // (La silhouette relie les cadres des clés : ses côtés sont ceux de leur enveloppe, que la rotation entre eux dépasse un peu.)
+    let cles = enveloppe_convexe(&quads(&e).iter().flatten().copied().collect::<Vec<_>>());
     for l in &v {
         if let Lien::Bord(p, q) = l {
-            assert!(distance_bord(&e.enveloppe, p.lerp(*q, 0.5)) < 1e-2, "{p:?} {q:?}");
+            assert!(distance_bord(&cles, p.lerp(*q, 0.5)) < 1e-2, "{p:?} {q:?}");
         }
     }
 }
@@ -186,18 +188,138 @@ fn the_links_are_exactly_the_hull_edges_between_two_frames_and_never_an_inner_li
     assert!(!b.is_empty());
 }
 
-#[test]
-fn a_pure_travelling_and_a_vertical_pan_keep_their_arrow() {
-    let v = |keys: &[(usize, f32, f32, f32)]| liens(&quads(&empreinte_de(keys)), la_case());
-    let t = v(&[(0, 80.0, 45.0, 1.0), (24, 240.0, 45.0, 1.0)]);
-    assert!(t.iter().any(|l| matches!(l, Lien::FlecheDessus { de, vers } if de.x < vers.x && de.y < 0.0)), "{t:?}");
-    let p = v(&[(0, 80.0, 45.0, 1.0), (24, 80.0, 165.0, 1.0)]);
-    assert!(p.iter().any(|l| matches!(l, Lien::FlecheVerticale { de, vers } if de.y < vers.y)), "{p:?}");
-    // Une diagonale ou un zoom : pas de flèche.
-    assert!(!v(&[(0, 80.0, 45.0, 1.0), (24, 240.0, 135.0, 1.0)]).iter().any(|l| !matches!(l, Lien::Bord(..))));
-    assert!(!v(&[(0, 80.0, 45.0, 1.0), (24, 80.0, 45.0, 0.9)]).iter().any(|l| !matches!(l, Lien::Bord(..))));
+fn fleches(keys: &[(usize, f32, f32, f32)]) -> (Empreinte, Vec<(Pos2, Pos2)>) {
+    let e = empreinte_de(keys);
+    let f = liens(&quads(&e), la_case()).into_iter().filter_map(|l| if let Lien::Fleche { de, vers } = l { Some((de, vers)) } else { None }).collect();
+    (e, f)
 }
 
+#[test]
+fn a_thin_arrow_follows_the_movement_from_a_to_b_then_b_to_c() {
+    // Un travelling : une flèche de A vers B, entre les deux centres, raccourcie à chaque bout.
+    let (e, t) = fleches(&[(0, 80.0, 45.0, 1.0), (24, 240.0, 45.0, 1.0)]);
+    assert_eq!(t.len(), 1, "{t:?}");
+    let (a, b) = (e.cadres[0].rect, e.cadres[1].rect);
+    assert!(t[0].0.x < t[0].1.x && a.contains(t[0].0) && b.contains(t[0].1), "de A vers B : {t:?}");
+    assert!((t[0].0.y - a.center().y).abs() < 1e-3 && (t[0].1.y - b.center().y).abs() < 1e-3);
+    assert!(t[0].0.distance(t[0].1) < a.center().distance(b.center()), "raccourcie");
+    // Un panoramique vertical, une diagonale, un zoom qui se déplace : la flèche suit le mouvement, dans le bon sens.
+    let (_, p) = fleches(&[(0, 80.0, 45.0, 1.0), (24, 80.0, 165.0, 1.0)]);
+    assert!(p.len() == 1 && p[0].0.y < p[0].1.y && (p[0].0.x - p[0].1.x).abs() < 1e-3, "{p:?}");
+    let (_, d) = fleches(&[(0, 80.0, 45.0, 1.0), (24, 240.0, 135.0, 1.0)]);
+    assert!(d.len() == 1 && d[0].0.x < d[0].1.x && d[0].0.y < d[0].1.y, "{d:?}");
+    let (_, z) = fleches(&[(0, 240.0, 135.0, 1.0), (24, 80.0, 45.0, 2.0)]);
+    assert!(z.len() == 1 && z[0].0.x > z[0].1.x, "{z:?}");
+    // A vers B puis B vers C : deux flèches bout à bout, la deuxième part de B.
+    let (e, c) = fleches(&[(0, 80.0, 45.0, 1.0), (12, 240.0, 45.0, 1.0), (24, 240.0, 165.0, 1.0)]);
+    assert_eq!(c.len(), 2, "{c:?}");
+    assert!(e.cadres[1].rect.contains(c[0].1) && e.cadres[1].rect.contains(c[1].0), "B est le bout de l'une et le départ de l'autre");
+    assert!(c[1].0.y < c[1].1.y, "B vers C descend");
+    // Rien à suivre : un zoom sur place, des cadres qui se confondent.
+    assert!(fleches(&[(0, 80.0, 45.0, 1.0), (24, 80.0, 45.0, 0.9)]).1.is_empty());
+    assert!(fleches(&[(0, 80.0, 45.0, 1.0), (24, 80.0, 45.0, 1.0)]).1.is_empty());
+    // Discrète : une fine ligne et un petit chevron, jamais de pointe pleine.
+    let u = vec2(1.0, 0.0);
+    let [h1, h2] = chevron(pos2(100.0, 50.0), u, 5.0);
+    assert!(h1.x < 100.0 && h2.x < 100.0 && h1.y != h2.y && (h1 - pos2(100.0, 50.0)).length() <= 5.001, "{h1:?} {h2:?}");
+    assert!(FLECHE_ALPHA < 200, "pas d'opacité forte");
+}
+
+// ------------------------------------------------------------------------------------ ce que la caméra balaie
+
+/// Les cadres que la caméra montre vraiment, à très petits pas entre deux clés, posés sur la planche comme `empreinte` le fait (sans
+/// resserrement, cadres de taille normale : `g` et `f` valent 1 dans ces essais) : leurs polygones.
+fn cadres_reels(doc: &Document, e: &Empreinte) -> Vec<Vec<Pos2>> {
+    let a = &cadres(doc, 0)[0];
+    let echelle = place().card_w / taille_cadre(doc, &a.cam).x;
+    let (ra, centre_thumb) = (boite(&a.coins).center(), la_case().center());
+    let keys = &doc.panels[0].camera;
+    let mut out = Vec::new();
+    for w in keys.windows(2) {
+        for k in 0..=600 {
+            let cam = Camera::lerp(&w[0].cam, &w[1].cam, k as f32 / 600.0);
+            out.push(cam.corners(doc.frame).map(|c| centre_thumb + (c - ra) * echelle).to_vec());
+        }
+    }
+    assert!(e.cadres.iter().all(|c| !c.reduit), "essai sans cadre réduit");
+    out
+}
+
+fn grille(r: Rect, pas: f32) -> impl Iterator<Item = Pos2> {
+    let (nx, ny) = ((r.width() / pas) as usize + 1, (r.height() / pas) as usize + 1);
+    (0..ny).flat_map(move |j| (0..nx).map(move |i| pos2(r.left() + i as f32 * pas, r.top() + j as f32 * pas)))
+}
+
+fn dans_balayage(e: &Empreinte, p: Pos2) -> bool {
+    e.balayage.iter().any(|q| dans_polygone(q, p)) || la_case().contains(p)
+}
+
+#[test]
+fn the_swept_zone_holds_every_frame_the_camera_really_shows_with_a_rotation_and_a_zoom() {
+    let mut doc = doc_avec(&[(0, 80.0, 45.0, 1.0)]);
+    let b = Camera { x: 260.0, y: 100.0, zoom: 1.5, angle: 70.0, ..Camera::centered(160, 90) };
+    crate::camera::set_key(&mut doc.panels[0].camera, 24, b);
+    let e = empreinte(&doc, 0, &place()).expect("une empreinte");
+    let reels = cadres_reels(&doc, &e);
+    // L'enveloppe de deux cadres ne contient pas tout ce que balaie la rotation (elle sort de l'enveloppe des clés) : le balayage, si.
+    let hull_cles = enveloppe_convexe(&quads(&e).iter().flatten().copied().collect::<Vec<_>>());
+    let dehors = reels.iter().flatten().filter(|p| !dans_polygone(&hull_cles, **p)).count();
+    assert!(dehors > 0, "la rotation sort de l'enveloppe des deux cadres");
+    // Pixel par pixel (pas d'un point de la planche) : tout point d'un vrai cadre est dans l'ouverture, à un point près du bord.
+    let (mut vrais, mut manques, mut trop) = (0, 0, 0);
+    for p in grille(e.tuile.rect, 1.0) {
+        let vrai = reels.iter().any(|q| dans_polygone(q, p));
+        let ouvert = dans_balayage(&e, p);
+        vrais += vrai as usize;
+        if vrai && !ouvert && e.balayage.iter().map(|q| distance_bord(q, p)).fold(f32::MAX, f32::min) > 1.0 {
+            manques += 1;
+        }
+        // Hors de l'enveloppe : jamais ouvert.
+        if ouvert && !dans_polygone(&e.enveloppe, p) && !la_case().contains(p) {
+            trop += 1;
+        }
+    }
+    assert!(vrais > 2000, "{vrais}");
+    assert_eq!(manques, 0, "des points vus par la caméra sont masqués");
+    assert_eq!(trop, 0, "l'ouverture sort de l'enveloppe");
+    // Et elle n'est pas gloutonne : elle ne dépasse pas de beaucoup ce que la caméra voit.
+    let ouvert = grille(e.tuile.rect, 1.0).filter(|p| dans_balayage(&e, *p)).count();
+    assert!((ouvert as f32) < vrais as f32 * 1.25, "ouverture {ouvert} points pour {vrais} points vus");
+    // Les cadres A et B (les clés) sont ouverts en entier, au centre.
+    for c in &e.cadres {
+        assert!(dans_balayage(&e, c.rect.center()), "le cadre {} est ouvert", c.rang);
+    }
+}
+
+#[test]
+fn a_travelling_opens_exactly_the_hull_of_its_two_frames_in_one_piece() {
+    let e = empreinte_de(&[(0, 80.0, 45.0, 1.0), (24, 240.0, 135.0, 1.0)]);
+    assert_eq!(e.balayage.len(), 1, "une seule pièce entre deux clés qui glissent");
+    let coque = enveloppe_convexe(&quads(&e).iter().flatten().copied().collect::<Vec<_>>());
+    assert!((tour(&e.balayage[0]).abs() - tour(&coque).abs()).abs() < 1e-2, "la pièce est l'enveloppe des deux cadres");
+    // Et pas le creux : hors de la silhouette A–B, rien.
+    assert!(!dans_balayage(&e, pos2(200.0, 10.0)) && dans_balayage(&e, pos2(100.0, 90.0)));
+}
+
+#[test]
+fn a_path_through_several_keys_does_not_open_the_corner_it_never_shows() {
+    // A, puis B à droite, puis C en dessous de B : le coin bas-gauche entre A et C n'est jamais filmé.
+    let e = empreinte_de(&[(0, 80.0, 45.0, 1.0), (12, 400.0, 45.0, 1.0), (24, 400.0, 245.0, 1.0)]);
+    assert_eq!(e.balayage.len(), 2, "une pièce par intervalle de clés");
+    let coin = pos2(150.0, 100.0);
+    assert!(dans_polygone(&e.enveloppe, coin), "dans l'enveloppe convexe de tous les cadres");
+    assert!(!dans_balayage(&e, coin), "mais pas dans ce que la caméra balaie");
+    // Chaque cadre et l'entre-deux d'un tronçon sont ouverts.
+    for c in &e.cadres {
+        assert!(dans_balayage(&e, c.rect.center()));
+    }
+    assert!(dans_balayage(&e, pos2(240.0, 33.0)) && dans_balayage(&e, pos2(300.0, 100.0)));
+}
+
+#[test]
+fn a_plan_without_movement_has_nothing_swept() {
+    assert!(empreinte(&doc_avec(&[(0, 80.0, 45.0, 1.0)]), 0, &place()).is_none());
+}
 #[test]
 fn the_zone_of_the_tile_maps_the_sheet_onto_the_board_at_the_scale_of_the_cases() {
     let e = empreinte_de(&[(0, 80.0, 45.0, 1.0), (24, 240.0, 45.0, 1.0)]);
