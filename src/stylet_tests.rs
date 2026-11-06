@@ -193,6 +193,88 @@ fn the_bench_is_in_the_help_menu_and_works_without_a_project() {
     assert!(crate::sansprojet::action_sans_projet(crate::styletui::ACTION));
 }
 
+/// L'écoute sur une vraie fenêtre de Windows (une fenêtre à messages, sans écran, créée par l'essai) : elle se pose, rend
+/// chaque message tel quel à la procédure d'origine, refuse une seconde fenêtre, et s'efface quand la fenêtre s'en va.
+/// (Aucun message de stylet ni de souris n'est envoyé : le relevé commun reste à l'autre essai.)
+#[cfg(all(windows, target_pointer_width = "64"))]
+#[test]
+fn the_listener_sits_on_a_real_window_forwards_every_message_and_leaves_with_it() {
+    use std::sync::atomic::{AtomicIsize, AtomicU32, AtomicUsize, Ordering::Relaxed};
+
+    #[repr(C)]
+    struct ClasseFenetre {
+        style: u32,
+        procedure: *const (),
+        cls_extra: i32,
+        wnd_extra: i32,
+        instance: isize,
+        icone: isize,
+        curseur: isize,
+        fond: isize,
+        menu: *const u16,
+        nom: *const u16,
+    }
+    #[link(name = "user32")]
+    extern "system" {
+        fn RegisterClassW(classe: *const ClasseFenetre) -> u16;
+        fn CreateWindowExW(ex: u32, classe: *const u16, nom: *const u16, style: u32, x: i32, y: i32, w: i32, h: i32, parent: isize, menu: isize, instance: isize, param: *const ()) -> isize;
+        fn DestroyWindow(fenetre: isize) -> i32;
+        fn SendMessageW(fenetre: isize, message: u32, w: usize, l: isize) -> isize;
+        fn DefWindowProcW(fenetre: isize, message: u32, w: usize, l: isize) -> isize;
+    }
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetModuleHandleW(nom: *const u16) -> isize;
+    }
+    // La procédure d'origine : elle note le dernier message reçu.
+    static DERNIER: AtomicU32 = AtomicU32::new(0);
+    static DERNIER_W: AtomicUsize = AtomicUsize::new(0);
+    static DERNIER_L: AtomicIsize = AtomicIsize::new(0);
+    static VUS: AtomicU32 = AtomicU32::new(0);
+    extern "system" fn origine(fenetre: isize, message: u32, w: usize, l: isize) -> isize {
+        DERNIER.store(message, Relaxed);
+        DERNIER_W.store(w, Relaxed);
+        DERNIER_L.store(l, Relaxed);
+        VUS.fetch_add(1, Relaxed);
+        // SAFETY : les valeurs viennent de Windows, pour cette fenêtre.
+        unsafe { DefWindowProcW(fenetre, message, w, l) }
+    }
+    const WM_USER: u32 = 0x0400;
+    const WM_NCDESTROY: u32 = 0x0082;
+    const WM_POINTERUPDATE: u32 = 0x0245;
+    const HWND_MESSAGE: isize = -3;
+    let nom: Vec<u16> = "FeanorEssaiStylet\0".encode_utf16().collect();
+    // SAFETY : une classe et une fenêtre à messages de ce fil, détruite à la fin ; les structures sont celles de Windows.
+    let fenetre = unsafe {
+        let instance = GetModuleHandleW(std::ptr::null());
+        let classe = ClasseFenetre { style: 0, procedure: origine as *const (), cls_extra: 0, wnd_extra: 0, instance, icone: 0, curseur: 0, fond: 0, menu: std::ptr::null(), nom: nom.as_ptr() };
+        // (Déjà enregistrée par un passage précédent du même essai : l'enregistrement échoue, la classe existe.)
+        RegisterClassW(&classe);
+        CreateWindowExW(0, nom.as_ptr(), nom.as_ptr(), 0, 0, 0, 0, 0, HWND_MESSAGE, 0, instance, std::ptr::null())
+    };
+    assert_ne!(fenetre, 0, "Windows crée la fenêtre à messages");
+    assert_eq!(stylet::ecoutee(), 0);
+    assert!(stylet::ecouter(fenetre), "l'écoute se pose");
+    assert!(stylet::ecouter(fenetre), "la redemander ne change rien");
+    assert!(!stylet::ecouter(fenetre + 2), "une seule fenêtre écoutée à la fois");
+    assert_eq!(stylet::ecoutee(), fenetre);
+    // Un message quelconque traverse l'écoute et arrive tel quel à la procédure d'origine.
+    let avant = VUS.load(Relaxed);
+    // SAFETY : la fenêtre est à ce fil ; `SendMessageW` attend que la procédure ait répondu.
+    unsafe { SendMessageW(fenetre, WM_USER + 1, 7, 9) };
+    assert_eq!((DERNIER.load(Relaxed), DERNIER_W.load(Relaxed), DERNIER_L.load(Relaxed)), (WM_USER + 1, 7, 9));
+    assert_eq!(VUS.load(Relaxed), avant + 1);
+    // Un message de pointeur dont Windows ne connaît pas le pointeur : rien n'est noté, le message passe quand même.
+    let messages = stylet::lire().messages;
+    unsafe { SendMessageW(fenetre, WM_POINTERUPDATE, 0xFFFF, 0) };
+    assert_eq!(DERNIER.load(Relaxed), WM_POINTERUPDATE);
+    assert_eq!(stylet::lire().messages, messages);
+    // La fenêtre s'en va : la procédure d'origine reçoit son dernier message, et l'écoute s'efface.
+    unsafe { DestroyWindow(fenetre) };
+    assert_eq!(DERNIER.load(Relaxed), WM_NCDESTROY);
+    assert_eq!(stylet::ecoutee(), 0, "plus de fenêtre écoutée");
+}
+
 /// Capture pour voir le banc (hors de la suite) :
 /// `FEANOR_CAPTURE_DIR=… cargo test --release --offline --target-dir target\msvc stylet_captures -- --ignored --nocapture`
 #[test]

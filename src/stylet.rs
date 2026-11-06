@@ -347,6 +347,12 @@ pub fn ecouter(fenetre: isize) -> bool {
     systeme::ecouter(fenetre)
 }
 
+/// La fenêtre écoutée (0 : aucune).
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn ecoutee() -> isize {
+    systeme::ecoutee()
+}
+
 #[cfg(all(windows, target_pointer_width = "64"))]
 mod systeme {
     use std::sync::atomic::{AtomicIsize, Ordering::Relaxed};
@@ -431,6 +437,10 @@ mod systeme {
     /// La fenêtre écoutée (0 : aucune) et sa procédure d'origine, celle de winit.
     static FENETRE: AtomicIsize = AtomicIsize::new(0);
     static ORIGINE: AtomicIsize = AtomicIsize::new(0);
+
+    pub fn ecoutee() -> isize {
+        FENETRE.load(Relaxed)
+    }
 
     pub fn ecouter(fenetre: isize) -> bool {
         if fenetre == 0 {
@@ -518,5 +528,9 @@ mod systeme {
 mod systeme {
     pub fn ecouter(_fenetre: isize) -> bool {
         false
+    }
+
+    pub fn ecoutee() -> isize {
+        0
     }
 }

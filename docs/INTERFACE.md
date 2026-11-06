@@ -7736,7 +7736,7 @@ Le geste : **F9**, une ligne si on veut, **Entrée**. On reste dans le dessin.
 Anthony : « Le stylet en entier. Aujourd'hui Feanor ne reçoit que la pression. Lire le stylet directement auprès de Windows donnerait la gomme
 au dos du stylet, l'inclinaison, et le bouton pendant que la pointe touche. C'est le chantier le plus risqué, à faire avec toi devant la
 tablette. »
-Code : `src/stylet.rs` (la lecture, les jalons, l'écoute chez Windows), `src/styletui.rs` (la fenêtre), essais `src/stylet_tests.rs` (6, et une
+Code : `src/stylet.rs` (la lecture, les jalons, l'écoute chez Windows), `src/styletui.rs` (la fenêtre), essais `src/stylet_tests.rs` (7, et une
 capture hors de la suite).
 
 **Premier pas : écouter, rien d'autre.** Avant de brancher la gomme, l'inclinaison ou le bouton, il faut savoir ce que la tablette d'Anthony
@@ -7789,8 +7789,8 @@ la rotation. egui ne reçoit donc qu'un toucher avec sa force, et un bouton prin
   d'un trait.
 - La fenêtre principale seulement.
 - Windows 64 bits. Ailleurs, le banc s'ouvre et dit que l'écoute est refusée.
-- L'écoute elle-même n'est pas essayée par la suite (il faut une vraie fenêtre et un vrai stylet) : la lecture, les jalons, le relevé et la
-  fenêtre le sont, l'écoute se vérifie devant la tablette.
+- La mécanique de l'écoute est essayée sur une vraie fenêtre de Windows créée par l'essai (elle se pose, rend chaque message tel quel,
+  refuse une seconde fenêtre, s'efface avec la fenêtre) ; la lecture du stylet lui-même ne se vérifie que devant la tablette.
 
 ### À regarder à l'écran, devant la tablette
 
