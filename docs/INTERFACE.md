@@ -7617,3 +7617,75 @@ celui du délai (puis celui qui efface le nom de la commande).
 9. Fermer et rouvrir FEANOR : l'anneau réglé est retenu.
 10. Dans une case des Vignettes : le clic droit bref ouvre toujours le menu de la case ; un glissé du bouton du stylet y lance la commande, sans
     menu ni trait.
+
+---------------------------------------------------------------------------------------------------
+
+## 113. Les Vignettes plus simples : le pont sans piège, le plan courant qui se voit, ce qui ne fait rien le dit (2026-11-06, branche `vignettes-simplicite`)
+
+Demande d'Anthony : « analyser le fonctionnement de Vignettes et l'améliorer pour le rendre plus simple, plus intuitif et ergonomique ;
+rendre cette partie et le pont avec le storyboard le plus simple, sans bugs et sans pertes ». L'analyse complète, en français simple, avec le
+classement, les décisions à prendre et les propositions : `suivi/ANALYSE-VIGNETTES.md`. Ici, seulement ce qui change dans le logiciel.
+Fichiers : `app.rs` (`vue.planches`, `set_espace`, `vignettes_apres_la_commande`, `vignettes_montrer_le_plan_courant`), `panels.rs`
+(`bouton_retour_storyboard`), `boardui.rs` (`Vignettes::montrer_courante` et `cadrer_tout`, le défilement, `planche_cadrer_tout`,
+`dire_l_outil_sans_effet`), `vignettesprefs.rs` (le bouton « Cadrer tout »). Essais : `src/vignettes_simplicite_tests.rs` (5, chacun rouge
+avant sa correction ; et `vignettes_simplicite_captures`, ignoré, qui écrit quatorze captures). **Rien ne change dans le projet** (format 47), ni dans `keymap.toml`, ni dans l'annulation : aucun de ces changements ne touche un
+dessin ni une étape.
+
+### Ce qui change
+
+1. **Maj+Tab depuis les Vignettes va au dessin du Storyboard.** Avant, `vue.planches` (« vue dessin / vue vignettes ») basculait la vue dans
+   l'espace où l'on était : dans l'espace Vignettes, la planche cédait la place au dessin seul sous l'onglet Vignettes, l'onglet déjà allumé ne
+   faisait rien (un espace qu'on redemande ne repose pas sa disposition), et la disposition retenue rouvrait les Vignettes sur le dessin à la
+   séance suivante. Maintenant : Maj+Tab dans les Vignettes = l'espace Storyboard, sur son dessin ; et **l'onglet Vignettes, c'est toujours la
+   planche** (`set_espace` l'impose, quelle que soit la disposition retenue : un ancien `reglages.toml` qui dirait « pas la planche » s'ouvre
+   quand même dessus). Dans le Storyboard, Maj+Tab fait ce qu'il faisait (décision 1 de l'analyse : lui donner le pont dans l'autre sens).
+2. **« Retour aux Vignettes ».** Entré dans l'animation depuis les Vignettes (« Animer cette image », l'anneau, Tab), le bouton du haut dit
+   « Retour aux Vignettes » et y ramène, sur le même plan : ce que Tab faisait déjà (`set_mode` suit `Settings::storyboard_space`), le bouton,
+   lui, allait toujours au Storyboard. Entré depuis le Storyboard ou le Montage : « Retour au storyboard », inchangé (les essais de
+   `sansonglet_tests.rs` restent verts).
+3. **Une commande qui choisit un plan le montre.** « Plan suivant », « Plan précédent » (dans l'anneau d'origine, à droite et à gauche), « Nouveau
+   plan », « Dupliquer le plan », « Nouveau plan avant » (touches, palette, anneau, clic droit) : le plan devient **choisi** (cadre noir, comme
+   après un Maj + clic) et **la planche défile jusqu'à sa case** si elle n'est pas dans la vue (le moins possible, douze points de marge ;
+   `Vignettes::montrer_courante`, lu une fois à l'image suivante). Avant, le plan courant changeait sans rien montrer : un plan neuf naissait
+   « après le plan courant » qu'on ne voyait pas, et à 300 plans « Plan suivant » ne faisait rien de visible. Dessiner, Échap ou un clic sur le
+   papier libèrent le choix, comme toujours ; aucune étape d'annulation ajoutée.
+4. **Un outil hors de la colonne le dit.** Dans les Vignettes, une touche d'outil qui prend autre chose que le pinceau, le crayon, la gomme ou
+   la caméra (remplissage, sélection, texte, formes…) le prend toujours (les raccourcis ne changent pas), et la ligne d'état dit : « Outil
+   Remplissage : pas dans la colonne des Vignettes (pinceau, crayon, gomme, caméra), il agit quand même dans les cases. » suivi de la touche du
+   pinceau (« B : le pinceau. ») si elle en a une. La vraie limite (refuser) est la décision 2 de l'analyse.
+5. **Le pot de peinture et le cutter sur le papier** (hors de toute case, ou dans une case pâle) ne faisaient rien, en silence : la ligne
+   d'état dit maintenant où ils agissent (« Le pot de peinture remplit une zone dans une case : clique dans une case. » ; dans une case pâle :
+   « … dessine d'abord dans cette case »). Rien n'est créé, aucune étape.
+6. **« Cadrer tout » cadre tout.** Le bouton de la barre du bas ne mettait la page qu'à la largeur de la vue (`board_fit`), et sa bulle disait
+   « Toute la page dans la vue » : sur 300 plans, il montrait les sept premières rangées, exactement comme à l'ouverture (capture 13 de
+   l'analyse). Maintenant `planche_cadrer_tout` met la planche entière dans la vue, en largeur et en hauteur, sans descendre sous le zoom le
+   plus petit (20 %) ; la bulle le dit. « Page à la largeur de la vue » (menu du fond), le changement de sens de lecture et « Ajuster à la
+   fenêtre » gardent la page à la largeur, comme avant.
+
+### Ce que j'ai vu dans `horschamp.rs` sans y toucher (branche `vignettes-traits-continus`)
+
+- Une part de trait qu'une case refuse (calque verrouillé, masqué, d'une autre sorte ; case d'une autre caméra ; case d'un mouvement de caméra ;
+  case d'une autre taille) va sur la planche sans perte, mais **aucune ligne d'état ne le dit** (la partie 101 annonce « signalés » : je n'ai pas
+  trouvé le message), et le hors-cadres est peint **sous** les cases : cette part disparaît sous la case blanche. À l'écran, le trait semble perdu.
+- `cases_qui_recoivent` demande la même largeur et la même hauteur de case à 0,01 près, et exclut toute case à mouvement : un trait qui passe
+  d'une case ordinaire dans la tuile d'un plan à mouvement voisin reste sur la planche, sous la tuile.
+- **Non corrigé, en décision** (fait reproduit par ce chantier) : un appui du stylet dans l'écart entre deux cases, à la hauteur de la barre,
+  réunit ou coupe les plans à l'appui, sans dessiner (`board::hit` rend la barre, zone élargie à 14 points ; `board_toggle_cut` agit avant
+  tout mouvement). Le correctif sûr (la barre répond au lâcher d'un clic sans mouvement, un appui qui bouge devient un trait dès son premier
+  point) demande de garder les points reçus avant le seuil : décision 11 de l'analyse.
+- La fusion de `main` (c11f743, les traits continus) n'est pas faite ici : elle touche `boardui.rs` et `horschamp.rs` ; à faire à la fusion de
+  cette branche, les essais des deux chantiers relancés ensemble.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Vignettes : Maj+Tab → le dessin du Storyboard, même plan ; onglet Vignettes → la planche. Quitte et relance FEANOR dans les Vignettes : la planche.
+2. Vignettes : clic droit sur une case > « Animer cette image » : en haut, « Retour aux Vignettes » ; un clic ramène à la planche, sur ce plan ;
+   Tab fait pareil. Depuis le Storyboard (double-clic sur un plan) : « Retour au storyboard », comme avant.
+3. Vignettes, après un trait (aucun cadre) : « Plan suivant » par l'anneau (à droite) : le cadre noir passe sur la case suivante ; sur un projet
+   de 300 plans, enchaîne « Plan suivant » : la planche suit. Clic droit > « Nouveau plan après » : le plan neuf est cadré, on le voit naître.
+   Dessine : le cadre s'en va.
+4. Vignettes : Alt+F (ou la touche du remplissage) : la ligne d'état le dit ; clique sur le papier hors des cases : la ligne d'état dit où il agit ;
+   B remet le pinceau, sans remarque.
+5. Sur un long projet, « Cadrer tout » (barre du bas, à droite) : toute la planche dans la vue (jusqu'à 20 %) ; « Page à la largeur de la vue »
+   (clic droit sur le fond) : la largeur seule, comme avant.
+6. Rien n'a bougé : un trait, Ctrl+Z, un trait entre deux cases, enregistrer, rouvrir : comme avant.

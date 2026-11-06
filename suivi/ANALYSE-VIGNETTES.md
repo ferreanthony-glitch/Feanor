@@ -100,6 +100,14 @@ verts) et à l'écran (capture 02 : un trait du papier à travers une case jusqu
   de continuité avec la copie du dessin. Bulles claires au survol (« Même plan », « Coupe », « Prochaine case : nouveau plan »). Bon.
 - **Caché** : rien ne dit, avant de survoler, qu'une barre se clique. À 100 %, la barre grise fait 1,5 point sur 230 de gris : on ne la voit
   pas sur le papier blanc (capture 01 : il faut savoir qu'elle est là). **M**, proposition B.
+- **Un appui du stylet dans l'écart, à la hauteur de la barre, réunit ou coupe les plans sans dessiner** (fait reproduit par le chantier des
+  traits continus ; dans le code : `board::hit` rend la barre dès que l'appui tombe dans sa zone, élargie à 14 points, et `board_toggle_cut`
+  agit **à l'appui**, avant tout mouvement). Un trait qui part de l'écart entre deux cases, là où tout le reste du papier se dessine, change
+  donc le film au lieu de tracer : c'est le contraire du dessin libre. Une étape d'annulation le rend, mais la coupe pose parfois la question
+  des versions, et la réunion copie des dessins. **G**. Pas de correctif sûr tout de suite : la barre doit répondre **au lâcher, sans
+  mouvement** (un clic), et un appui qui bouge doit devenir un trait **dès son premier point** (règle « sans latence », rien de perdu) ; cela
+  demande de garder les points reçus entre l'appui et le seuil de mouvement et de les donner au trait quand il part, un mécanisme qui
+  n'existe pas encore sur la planche. Décision 11.
 - **Couper un plan à versions** pose une question (« avec quelle partie ? ») ; **réunir** demande parfois le nom des calques
   (`fusionnoms.rs`). Deux fenêtres qui surgissent au milieu d'un geste de planche : nécessaires, mais elles arrivent sans qu'on s'y attende.
   **P** (déjà décidé par Anthony pour la coupe).
@@ -192,6 +200,7 @@ verts) et à l'écran (capture 02 : un trait du papier à travers une case jusqu
 | G | Le bouton de retour de l'animation ramenait au Storyboard quand on venait des Vignettes (Tab, lui, aux Vignettes) | On retrouve sa place | Corrigé (113) |
 | G | « Plan suivant », « Nouveau plan », « Dupliquer » changeaient le plan courant sans rien montrer ; à 300 plans, rien ne défilait | On voit où l'on est, et le plan neuf | Corrigé (113) |
 | G | « Cadrer tout » ne cadrait que la largeur : sur 300 plans, sept rangées, et la bulle disait « toute la page » | Le bouton fait ce qu'il dit | Corrigé (113) |
+| G | Un appui du stylet dans l'écart, à la hauteur de la barre, réunit ou coupe les plans au lieu de dessiner | Dessiner partout, pour de bon | Décision 11 |
 | M | Un trait qui frôle une case pâle lointaine fait naître plusieurs plans vides, la ligne d'état en annonce un | Pas de plans fantômes | Décision 8 |
 | M | Le cadre du plan choisi (gris 80, un point) se distingue à peine du filet (gris 154) | Voir d'un coup d'œil le plan choisi | Décision 10 |
 | M | L'outil Caméra ouvre tout le panneau caméra du Storyboard dans les Vignettes | Rien que le cadre A, B, C | Décision 9 |
@@ -251,6 +260,14 @@ verts) et à l'écran (capture 02 : un trait du papier à travers une case jusqu
 10. **Le cadre du plan choisi.** Aujourd'hui un filet d'un point en gris 80, contre gris 154 pour les autres : on le cherche (captures 03 et 04).
     Plusieurs plans choisis ont déjà un liseré d'accent de 1,5 point. **Je recommande** le même liseré d'accent pour un plan choisi seul :
     une seule façon de dire « choisi », visible de loin.
+11. **La barre qui répond à l'appui.** Un appui dans l'écart, à la hauteur de la barre, coupe ou réunit sans dessiner (voir 4). Choix :
+    (a) **la barre répond au lâcher d'un clic sans mouvement** ; un appui qui bouge devient un trait dès son premier point (les points reçus
+    avant le seuil sont gardés et donnés au trait : rien n'est perdu, rien ne traîne) ; (b) la barre ne répond qu'avec **Maj** (proposition A :
+    Maj tenue, la planche montre ses barres, ses poignées, ses filets ; sans Maj, tout est du papier) ; (c) rétrécir la zone de la barre à sa
+    largeur réelle (elle est élargie à 14 points) : moins de faux appuis, mais pas zéro. **Je recommande (a) tout de suite** (un clic reste
+    un clic, un trait reste un trait, comme un bouton qui réagit au relâché), et (b) avec la proposition A si elle est retenue. Le correctif
+    (a) n'est pas fait ici : il touche la façon dont la case vive reçoit l'appui (`card_canvas`, `appui_bande`), le terrain de la branche
+    `vignettes-traits-continus`, et il doit garder les premiers points du trait.
 
 ---
 
