@@ -251,7 +251,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("sequence.nouvelle_fin", "Nouvelle séquence à la fin du film (depuis les vignettes)", true, false),
     act("sequence.nouvelle_avec_cases", "Nouvelle séquence avec les cases choisies (vignettes)", true, false),
     act("sequence.couper_ici", "Couper la séquence ici (la case courante commence une séquence)", true, false),
-    act("sequence.renommer", "Renommer la séquence (son titre sur la planche)", true, false),
+    act("sequence.renommer", "Renommer la séquence (son titre sur la planche, ou une petite fenêtre)", true, false),
     act("sequence.afficher_toutes", "Planche : montrer toutes les séquences", true, false),
     act("sequence.afficher_courante", "Planche : seulement la séquence courante", true, false),
     act("sequence.afficher_aucune_autre", "Planche : aucune autre séquence que la courante", true, false),

@@ -7188,3 +7188,45 @@ Aplat puis changement de version de séquence (copie, retour à la version rang�
 5. Tracer un trait avec une pastille et, tout de suite, couper le plan (ou « Nouvelle version de séquence », ou Ctrl+S) : l'aplat du dernier trait est dans les deux plans, dans la version rangée, dans le fichier rouvert.
 6. Aplat + version de séquence : créer une version, dessiner dans l'une, revenir à l'autre, enregistrer, rouvrir : les deux gardent leur aplat.
 7. Fusionner le calque aplat vers le bas, annuler, rétablir : image identique.
+
+## 106. Les textes sous les cases qui revenaient décochés, renommer les séquences, séquences nommées d'après le scénario (2026-11-05, branche `vignettes-textes-sequences`)
+
+Demande du réalisateur : « 1. (Re)nommer les séquences ; celles déduites d'un scénario reprennent les numéros et les titres de son format (INT. JOUR. LIEUX). 2. Les textes sous les cases (Dialogues, Notes) ne s'affichent pas. » Fichiers : `workspaceui.rs`, `vignettespanneau.rs`, `boardsens.rs`, `onglets.rs`, `storyboard.rs` (point 2) ; `planchesequencesui.rs`, `boardui.rs`, `planche.rs`, `scenario.rs`, `scenariofdx.rs`, `scenarioplans.rs` (point 1). Essais : `sequencesnoms_tests.rs` (7), `boardtextes_tests.rs` (2 de plus), `scenario_tests.rs` (5 de plus ; les noms attendus passent au nouveau format).
+
+### Point 2. Pourquoi Dialogue et Note n'apparaissaient pas
+
+- **Ce qui marche** (essai `dialogue_and_notes_are_painted_under_every_kind_of_case`) : Dialogue et Note cochés sont peints sous la case, pour un plan simple, un plan à mouvement de caméra et un projet à séquences, dans les deux sens de lecture ; une ligne cochée est visible même vide. Le dessin des textes n'était donc pas en cause.
+- **La cause** : les lignes cochées (`Layout::board_textes`) sont retenues avec la **disposition de chaque espace** dans `reglages.toml`, et `same_layout` (`workspaceui.rs`) ne regardait que les panneaux : en quittant les Vignettes pour le Montage, la disposition du Montage restait écrite avec ses anciennes lignes (**aucune, `Textes::aucun`, depuis le 2026-10-30**), car elle ne différait « pas » de ce qui est à l'écran. Au lancement suivant, l'application reprend la disposition du dernier espace du côté storyboard : lignes décochées, rien sous les cases, même si l'on avait coché Dialogue et Notes la veille (essai `the_checked_lines_come_back_at_the_next_launch_whichever_space_was_left_last`, rouge avant la correction). Un second chemin les remettait à zéro : les dispositions d'origine du menu Espaces de travail (`workspace_action`).
+- **Corrigé** : `same_layout` compare aussi tous les réglages de la planche (lignes de texte, sens, colonnes, taille des cases, cadres de composition…) ; la disposition d'un espace est réécrite dès qu'ils changent ; les dispositions d'origine ne touchent plus à ces réglages (`avec_les_reglages_de`).
+- **Un texte déjà saisi se voit** (choix le plus simple) : **la ligne se coche toute seule** quand un projet qui a du texte s'ouvre (action, dialogue ou notes, sur un plan ou une image), et quand on tape un premier texte dans un champ vide de la fiche du plan. La barre d'état le dit (« la ligne … est cochée »). Décocher la cache ensuite : rien ne la recoche avant une nouvelle saisie. Un projet sans texte ne change rien au choix fait ; un projet neuf lit toujours Préférences > Vignettes (aucune ligne d'origine).
+- **Fichier déjà abîmé** : si ton `reglages.toml` garde des lignes décochées dans la disposition du Montage, coche-les une fois dans le panneau Planche : cette fois elles suivent.
+
+### Point 1. Renommer une séquence
+
+Le double-clic sur le titre existait mais rien ne le disait, et une séquence seule dans le film n'a pas de titre sur la planche. Maintenant, partout, **une seule étape d'annulation « Renommer la séquence »**, Entrée valide, Échap abandonne, enregistré et relu avec le projet :
+
+- **Planche** : double-clic sur le titre (inchangé), **clic droit sur le titre > « Renommer la séquence… »** (suivi du menu du fond), et une **bulle** sur le titre (le nom entier, comment le renommer).
+- **Liste « Séquences » du panneau Planche** : double-clic sur le nom, ou clic droit > « Renommer la séquence… » ; bulle mise à jour.
+- **Montage** (barre des séquences) : double-clic sur la barre, ou clic droit > « Renommer la séquence… ».
+- **Commande** `sequence.renommer` (Ctrl+K, clic droit sur une case > Plus > Séquence, sans touche) et le champ « Séquence » de la fiche : comme avant, plus la fenêtre ci-dessous.
+- **Petite fenêtre « Renommer la séquence »** : s'ouvre quand le titre n'est pas montré (séquence seule dans le film, séquence cachée de la planche, planche pas à l'écran) et depuis le montage et la liste du panneau. Nom vide : retour au numéro automatique (indication dans le champ).
+- **Titre trop long** : sur la planche, coupé net par « … » dans la largeur de la séquence (le nombre de plans garde sa place), nom entier dans la bulle et dans l'éditeur ; même coupe dans l'export de la planche. Longueur permise : 200 signes (avant 60 : un intitulé de scénario long tient) ; rouvrir un nom et valider sans le changer ne le raccourcit pas.
+
+### Séquences déduites d'un scénario
+
+« Créer les plans depuis le scénario… » (panneau Scénario, partie 75, et la fenêtre de la partie 10) nomme chaque séquence **« numéro. intitulé »**, comme le fichier l'écrit : `12. INT. JOUR - CUISINE`.
+
+- **Numéro** : celui de la scène dans le fichier (Fountain `#12#`, `12.` ou `12A` en tête, ou « 12 » après des espaces ; Final Draft : attribut `Number` ; texte brut : en tête), sinon **le rang** de la scène (1, 2, 3 des intitulés). « Ouverture » (action avant le premier intitulé) garde son nom. Final Draft et Word sans numéro : le rang.
+- **Intitulé** : mots, tirets et accents du fichier (`INT. JOUR - CUISINE`, pas `–`), sans numéro de scène ni marques de mise en forme. Le panneau Scénario et la note « Décor : … » gardent leur écriture d'avant (tirets longs).
+- **Rien d'autre ne bouge** : les séquences et plans qui existent, leur numérotation verrouillée (`Sequence::number` n'est pas touché), les projets déjà importés. Un scénario gardé avant cette partie n'a pas l'écriture d'origine : il donne le rang et le nom aux tirets longs (`1. INT. CUISINE – NUIT`).
+- **Format du projet** : `project::VERSION` ne change pas. `scenario.json` gagne deux champs facultatifs par intitulé (`numero`, `ecriture`), jamais écrits quand ils sont vides ; une version plus ancienne les ignore, un ancien fichier se relit.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Coche Dialogue et Notes (panneau Planche), travaille en Montage, quitte, relance : les lignes sont encore sous les cases. Ouvre un projet qui a des dialogues : la ligne Dialogue est cochée et le texte se voit sous la case.
+2. Tape un premier texte dans le champ Dialogue de la fiche d'un plan : la ligne se coche, le texte est sous la case (Vignettes).
+3. Plusieurs séquences : survole un titre 1 s (bulle), double-clic, clic droit > Renommer la séquence… ; Entrée, Ctrl+Z, Ctrl+Y.
+4. Une seule séquence dans le film : Ctrl+K « Renommer la séquence » ouvre la petite fenêtre. Même chose depuis la liste du panneau Planche (double-clic, clic droit) et la barre des séquences du Montage (double-clic, clic droit).
+5. Un nom très long : coupé par « … » sur la planche, entier dans la bulle ; l'export PNG de la planche le coupe aussi.
+6. Importe un `.fountain` (ou `.fdx`) puis « Créer les plans depuis le scénario… » : séquences `12. INT. JOUR - CUISINE`, rang quand la scène n'a pas de numéro. Recrée des plans : les séquences d'avant gardent leur nom.
+7. Enregistre, ferme, rouvre : les noms sont là, accents compris.

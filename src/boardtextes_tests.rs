@@ -160,3 +160,66 @@ fn the_export_has_one_line_per_field_and_no_text_zone_without_the_option() {
         assert!(sans.cadre.size().x * sans.cadre.size().y < p.cadre.size().x * p.cadre.size().y, "{sens:?} : la planche se resserre");
     }
 }
+
+// ------------------------------------------------------------------------------------------- partie 106 : les textes qui ne s'affichaient pas
+
+fn plan_textes(doc: &mut crate::document::Document, plan: usize) {
+    doc.panels[plan].action = "Il court".into();
+    doc.panels[plan].dialogue = "Où vas-tu ?".into();
+    doc.panels[plan].notes = "La clé".into();
+}
+
+#[test]
+fn dialogue_and_notes_are_painted_under_every_kind_of_case() {
+    // Un plan simple, un plan à mouvement de caméra, des séquences : Dialogue et Note cochés, le texte saisi se voit sous la case.
+    let fabriques: [(&str, fn() -> crate::document::Document); 3] = [
+        ("plan simple", || {
+            let mut d = plan_avec_textes();
+            plan_textes(&mut d, 1);
+            d
+        }),
+        ("mouvement de caméra", || {
+            let mut d = plan_avec_textes();
+            deux_cadres(&mut d, 1, 160.0, 55.0);
+            plan_textes(&mut d, 1);
+            d
+        }),
+        ("séquences", || {
+            let mut d = crate::vignettes_tests::deux_sequences();
+            plan_textes(&mut d, 1);
+            plan_textes(&mut d, 3);
+            d
+        }),
+    ];
+    for (nom, fabrique) in fabriques {
+        for sens in Sens::TOUS {
+            let mut b = banc_vignettes(fabrique(), sens, 4);
+            b.app.layout.board_textes = textes(false, true, true);
+            b.chauffer(4);
+            for morceau in ["Dialogue  Où vas-tu ?", "Note  La clé"] {
+                assert!(b.textes.iter().any(|t| t.contains(morceau)), "{nom} ({sens:?}) : « {morceau} » est peint sous la case : {:?}", b.textes);
+            }
+        }
+    }
+}
+#[test]
+fn the_checked_lines_come_back_at_the_next_launch_whichever_space_was_left_last() {
+    use crate::workspace::Espace;
+    let mut b = banc_vignettes(plan_avec_textes(), Sens::Lignes, 4);
+    b.app.layout.board_textes = Textes::aucun();
+    // Les dispositions des autres espaces sont déjà dans le fichier des réglages, d'une séance d'avant, sans ligne de texte.
+    for e in [Espace::Storyboard, Espace::Montage, Espace::Vignettes] {
+        let l = b.app.current_layout();
+        b.app.settings.set_layout_of(e, l);
+    }
+    b.app.run_action("vignettes.texte_dialogue");
+    b.app.run_action("vignettes.texte_notes");
+    b.chauffer(3);
+    // On finit la séance dans le Montage (le dernier espace du côté storyboard).
+    b.app.set_espace(Espace::Montage);
+    b.chauffer(40);
+    assert_eq!(b.app.layout.board_textes, textes(false, true, true));
+    // Au lancement suivant, l'application reprend la disposition de cet espace : ses lignes de texte doivent y être.
+    let retenue = b.app.settings.layout_of(Espace::Montage).cloned().expect("la disposition retenue");
+    assert_eq!(retenue.board_textes, textes(false, true, true), "les lignes cochées sont retenues avec la disposition où l'on quitte");
+}
