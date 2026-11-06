@@ -58,6 +58,7 @@ pub fn commandes_de_l_onglet(espace: Espace) -> &'static [(&'static str, &'stati
             ("vignettes.annotation_lasso", "Lasso d'annotation"),
             ("vignettes.annotations_afficher", "Montrer ou cacher les annotations"),
             ("vignettes.marie_louise", "Marie-louise"),
+            ("vignettes.numeros", "Montrer ou cacher les numéros de plan"),
             ("vue.zoom_avant", "Zoom avant"),
             ("vue.zoom_arriere", "Zoom arrière"),
         ],

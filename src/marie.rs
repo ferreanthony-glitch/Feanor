@@ -6,7 +6,7 @@
 //! Le calcul est un découpage en bandes : `hors_des_cases` rend des rectangles qui ne se recouvrent pas et dont la
 //! réunion est exactement le cadre moins les cases.
 
-use eframe::egui::{pos2, Rect};
+use eframe::egui::{pos2, Pos2, Rect};
 
 /// Noir d'origine.
 pub const COULEUR_PAR_DEFAUT: [u8; 3] = [0, 0, 0];
@@ -46,6 +46,31 @@ pub fn hors_des_cases(cadre: Rect, trous: &[Rect]) -> Vec<Rect> {
         }
     }
     out
+}
+
+/// Ce qui couvre `cadre` sauf l'intérieur des `trous` (rectangles : les cases) et des `ouvertures` (polygones convexes qui peuvent se
+/// recouvrir : ce que balaie la caméra d'un plan à mouvement, `vignettecam::balayage`), en polygones convexes qui ne se recouvrent pas.
+/// Sans ouverture, ce sont les rectangles de `hors_des_cases`.
+pub fn couverture(cadre: Rect, trous: &[Rect], ouvertures: &[Vec<Pos2>]) -> Vec<Vec<Pos2>> {
+    let boite = |p: &[Pos2]| p.iter().fold(Rect::NOTHING, |r, q| r.union(Rect::from_min_max(*q, *q)));
+    let mut pieces: Vec<Vec<Pos2>> = hors_des_cases(cadre, trous).into_iter().map(|r| vec![r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom()]).collect();
+    for o in ouvertures.iter().filter(|o| o.len() >= 3) {
+        let bo = boite(o);
+        if !bo.intersects(cadre) {
+            continue;
+        }
+        let mut suite = Vec::with_capacity(pieces.len() + 4);
+        for p in pieces {
+            if !boite(&p).intersects(bo) {
+                suite.push(p);
+            } else {
+                suite.extend(crate::viewbar::difference_convexe(&p, o));
+            }
+        }
+        pieces = suite;
+    }
+    pieces.retain(|p| p.len() >= 3);
+    pieces
 }
 
 #[cfg(test)]

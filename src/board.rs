@@ -287,6 +287,8 @@ pub struct MoveBoard {
     /// La zone de dessin : l'enveloppe convexe de la case A et de tous les cadres.
     pub enveloppe: Vec<Pos2>,
     pub tuile: TuileBoard,
+    /// Ce que le cadre de la caméra balaie, de clé en clé (des polygones convexes qui se recouvrent) : l'ouverture du passe-partout.
+    pub balayage: Vec<Vec<Pos2>>,
 }
 
 impl MoveBoard {
@@ -1004,7 +1006,7 @@ pub fn layout_indices(doc: &Document, s: &BoardSettings, last_joins: bool, opt: 
                 note = n.translate(vec2(x, top));
             }
             mv = Some(out.moves.len());
-            out.moves.push(MoveBoard { cadres, enveloppe: e.enveloppe.iter().map(|q| *q + au).collect(), tuile });
+            out.moves.push(MoveBoard { cadres, enveloppe: e.enveloppe.iter().map(|q| *q + au).collect(), tuile, balayage: e.balayage.iter().map(|p| p.iter().map(|q| *q + au).collect()).collect() });
         }
         // (Le numéro reste au-dessus de A.)
         let card = Rect::from_min_max(pos2(x, top - LABEL_H), pos2(x + card_w, bottom));

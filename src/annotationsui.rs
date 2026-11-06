@@ -893,8 +893,15 @@ impl App {
         let [r, g, b] = self.vignettes.annot.marie_couleur;
         let alpha = (f32::from(self.settings.vignettes.passe_partout_cases_opacite.min(100)) * 2.55).round() as u8;
         let color = Color32::from_rgba_unmultiplied(r, g, b, alpha);
-        for r in crate::marie::hors_des_cases(view, &holes) {
-            painter.rect_filled(r, 0.0, color);
+        // Un plan à mouvement de caméra s'ouvre sur tout ce que sa caméra balaie (A, B, C…, et l'espace entre eux), dans son vrai dessin :
+        // pas seulement sur la case A (Anthony, 2026-11-06).
+        let ouvertures: Vec<Vec<Pos2>> = layout.moves.iter().flat_map(|m| m.balayage.iter()).map(|p| p.iter().map(|q| xf.to_screen(*q)).collect()).collect();
+        if ouvertures.is_empty() {
+            for r in crate::marie::hors_des_cases(view, &holes) {
+                painter.rect_filled(r, 0.0, color);
+            }
+        } else {
+            painter.add(crate::viewbar::mesh_of_pieces(&crate::marie::couverture(view, &holes, &ouvertures), color));
         }
     }
 

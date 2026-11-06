@@ -4101,6 +4101,7 @@ impl App {
             // Le panneau « Vignettes » : sens de lecture et textes à côté des cases (`vignettespanneau.rs`).
             "vignettes.sens_lignes" => self.vignettes_regler_sens(crate::boardsens::Sens::Lignes),
             "vignettes.sens_japonais" => self.vignettes_regler_sens(crate::boardsens::Sens::Japonais),
+            "vignettes.numeros" => self.vignettes_basculer_numeros(),
             "vignettes.texte_action" => self.vignettes_basculer_texte(crate::boardsens::Champ::Action),
             "vignettes.texte_dialogue" => self.vignettes_basculer_texte(crate::boardsens::Champ::Dialogue),
             "vignettes.texte_notes" => self.vignettes_basculer_texte(crate::boardsens::Champ::Notes),

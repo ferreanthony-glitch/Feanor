@@ -1313,12 +1313,14 @@ impl App {
         }
         // (Les numéros des plans, trouvés une fois pour toutes les cases : un par case refaisait l'ordre du film.)
         let numeros = crate::numerotation::Numeros::pour_l_ecran(&self.doc);
+        // (Où se posent les numéros : la marge au-dessus de chaque A, ou une place libre : `numerosmarge.rs`.)
+        let mut marges = crate::numerosmarge::Marges::pour(&layout, xf, view);
         for k in (0..layout.cards.len()).take_while(|_| tient) {
             if !self.case_tient(&layout, plans, k) {
                 tient = false;
                 break;
             }
-            self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, deadline, &numeros, plans);
+            self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, deadline, &numeros, &mut marges, plans);
         }
         if !tient || !self.case_tient(&layout, plans, layout.cards.len().saturating_sub(1)) {
             ui.ctx().request_repaint();
@@ -1811,7 +1813,7 @@ impl App {
     /// Une vignette (une image de storyboard) : son numéro de plan s'il commence, l'image (le dessin lui-même
     /// pour l'image courante), son filet, sa bande de note. Les gestes sont pris plus haut (`board_press`).
     #[allow(clippy::too_many_arguments)]
-    fn board_card(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant, numeros: &crate::numerotation::Numeros, plans: usize) {
+    fn board_card(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant, numeros: &crate::numerotation::Numeros, marges: &mut crate::numerosmarge::Marges, plans: usize) {
         let place = &layout.cards[k];
         let mv = layout.move_of(k);
         let card = xf.rect(place.card);
@@ -1896,44 +1898,82 @@ impl App {
         }
         self.paint_card_note(&clip, xf, place, note);
         self.paint_note_icone(ui, painter, view, place);
-        // Le numéro du plan, au-dessus de sa première image, peint après l'image : la marge du dessin de la case courante ne le recouvre pas (2026-10-30). : rien d'autre (pas de pastille d'envoi ni de version : elles sont au montage).
-        if place.starts_plan() && card.height() > thumb.height() + 6.0 {
+        // Le numéro du plan, dans la marge au-dessus de sa première image, peint après l'image : la marge du dessin de la case courante ne le
+        // recouvre pas (2026-10-30). Sa place est fixe (le coin haut-gauche de A) tant qu'elle est libre ; sinon `numerosmarge.rs` en trouve une
+        // qui ne recouvre ni image, ni cadre, ni zone balayée, ni texte (2026-11-06). Pas de pastille d'envoi : elles sont au montage.
+        if place.starts_plan() && card.height() > thumb.height() + 3.0 {
             // Le numéro suit le zoom de la planche mais reste lisible de très loin comme de très près (Anthony, 2026-10-30) : la taille à
             // l'écran est la taille d'origine (`LABEL_H` × `NUMERO_FRACTION`) multipliée par le zoom, bornée entre 15 et 72 points d'écran
             // (avant : 9 minimum, illisible à six cases par rangée), le tout multiplié par le réglage « Taille des numéros »
-            // (Préférences > Vignettes). Un fond clair derrière (réglable) le garde lisible sur n'importe quel dessin qui déborde.
+            // (Préférences > Vignettes). Un fond clair derrière (réglable) le garde lisible sur n'importe quel dessin qui déborde. Quand la
+            // marge est trop étroite pour cette taille (petit zoom), il s'amincit plutôt que de passer sur une image.
             let reglages = &self.settings.vignettes;
             let echelle = reglages.numeros_echelle();
-            let font = crate::vignettesprefs::taille_numero(xf.zoom, echelle);
+            let font0 = crate::vignettesprefs::taille_numero(xf.zoom, echelle);
             let ink = Color32::from_gray(15);
             let clip = painter.with_clip_rect(view);
-            let galley = clip.layout_no_wrap(numeros.scene_label(&self.doc, place.scene), FontId::proportional(font), ink);
-            let marge = (font * 0.18).max(2.0);
-            let pastille = Rect::from_min_size(pos2(thumb.left(), thumb.top() - galley.size().y - marge * 2.0 - 2.0), galley.size() + vec2(marge * 2.0, marge * 2.0));
-            if reglages.fond_numeros {
-                clip.rect_filled(pastille, marge, Color32::from_white_alpha(235));
-                clip.rect_stroke(pastille, marge, Stroke::new(1.0_f32, Color32::from_gray(190)), StrokeKind::Inside);
-            }
-            let at = pastille.min + vec2(marge, marge);
-            let gras = (font * 0.035).max(0.4);
-            for d in [vec2(0.0, 0.0), vec2(gras, 0.0), vec2(0.0, gras)] {
-                clip.galley(at + d, galley.clone(), ink);
-            }
-            let mut droite = pastille.right() + 4.0;
-            // La durée du plan, à côté du numéro (réglage), en petit.
-            if reglages.afficher_duree {
+            let afficher = reglages.numeros_visibles;
+            let galley0 = clip.layout_no_wrap(numeros.scene_label(&self.doc, place.scene), FontId::proportional(font0), ink);
+            let marge0 = (font0 * 0.18).max(2.0);
+            // La durée du plan (réglage), la pastille des notes à traiter et l'étiquette de version suivent le numéro : leur place compte aussi.
+            let duree = reglages.afficher_duree.then(|| {
                 let n = self.doc.panels.get(i).map_or(0, |p| p.frame_count());
                 let fps = self.doc.fps.max(1) as usize;
                 let texte = format!("{}+{:02}", n / fps, n % fps);
-                let g = clip.layout_no_wrap(texte, FontId::proportional((font * 0.6).max(10.0)), Color32::from_gray(90));
-                clip.galley(pos2(droite, pastille.center().y - g.size().y * 0.5), g.clone(), Color32::from_gray(90));
-                droite += g.size().x + 6.0;
-            }
-            // Des notes encore à traiter sur ce plan : la même petite pastille qu'au montage, hors du cadre, entre la durée et la
-            // version (`fildecisionui.rs`). Rien sans note à traiter.
-            if !self.doc.comments.is_empty() {
-                if let Some(m) = self.doc.plan_mark(place.plan).filter(|m| m.counts.open() > 0) {
-                    let r = (font * 0.42).clamp(7.0, 12.0);
+                let g = clip.layout_no_wrap(texte.clone(), FontId::proportional((font0 * 0.6).max(10.0)), Color32::from_gray(90));
+                (texte, g.size().x, (font0 * 0.6).max(10.0))
+            });
+            let marque = if self.doc.comments.is_empty() { None } else { self.doc.plan_mark(place.plan).filter(|m| m.counts.open() > 0) };
+            let avec_version = reglages.pastille_version && crate::pilevers::etiquette_visible(self.doc.nombre_de_versions(place.plan));
+            let fond_numeros = reglages.fond_numeros;
+            let rayon = |sc: f32| (font0 * 0.42).clamp(7.0, 12.0) * sc;
+            // (Taille de tout ce qui se pose à la suite, à l'échelle `sc` ; rien sous le plus petit corps lisible.)
+            let mesure = |sc: f32| -> Vec2 {
+                if font0 * sc < crate::numerosmarge::CORPS_MIN {
+                    return Vec2::ZERO;
+                }
+                let haut = galley0.size().y * sc + marge0 * sc * 2.0;
+                let mut large = if afficher { galley0.size().x * sc + marge0 * sc * 2.0 + 4.0 } else { 0.0 };
+                if let Some((_, w, df)) = &duree {
+                    large += w * ((font0 * sc * 0.6).max(10.0 * sc) / df) + 6.0;
+                }
+                if marque.is_some() {
+                    large += rayon(sc) * 2.0 + 6.0;
+                }
+                if avec_version {
+                    large += 30.0;
+                }
+                if !afficher && duree.is_none() && marque.is_none() && !avec_version { Vec2::ZERO } else { vec2(large, haut) }
+            };
+            // (La zone du plan : celle de son mouvement de caméra, qui peut monter au-dessus de A.)
+            let haut_zone = layout.move_of(k).map_or(thumb.top(), |m| m.enveloppe.iter().map(|q| xf.to_screen(*q).y).fold(thumb.top(), f32::min));
+            if let Some((libre, sc)) = marges.choisir(thumb, haut_zone, mesure) {
+                let font = font0 * sc;
+                let marge = marge0 * sc;
+                let galley = clip.layout_no_wrap(numeros.scene_label(&self.doc, place.scene), FontId::proportional(font), ink);
+                let pastille = Rect::from_min_size(libre.min, if afficher { galley.size() + vec2(marge * 2.0, marge * 2.0) } else { vec2(0.0, galley.size().y + marge * 2.0) });
+                if afficher {
+                    if fond_numeros {
+                        clip.rect_filled(pastille, marge, Color32::from_white_alpha(235));
+                        clip.rect_stroke(pastille, marge, Stroke::new(1.0_f32, Color32::from_gray(190)), StrokeKind::Inside);
+                    }
+                    let at = pastille.min + vec2(marge, marge);
+                    let gras = (font * 0.035).max(0.4);
+                    for d in [vec2(0.0, 0.0), vec2(gras, 0.0), vec2(0.0, gras)] {
+                        clip.galley(at + d, galley.clone(), ink);
+                    }
+                }
+                let mut droite = if afficher { pastille.right() + 4.0 } else { pastille.left() };
+                // La durée du plan, à côté du numéro (réglage), en petit.
+                if let Some((texte, _, _)) = &duree {
+                    let g = clip.layout_no_wrap(texte.clone(), FontId::proportional((font * 0.6).max(10.0 * sc)), Color32::from_gray(90));
+                    clip.galley(pos2(droite, pastille.center().y - g.size().y * 0.5), g.clone(), Color32::from_gray(90));
+                    droite += g.size().x + 6.0;
+                }
+                // Des notes encore à traiter sur ce plan : la même petite pastille qu'au montage, hors du cadre, entre la durée et la
+                // version (`fildecisionui.rs`). Rien sans note à traiter.
+                if let Some(m) = marque {
+                    let r = rayon(sc);
                     let centre = pos2(droite + r + 1.0, pastille.center().y);
                     crate::fildecisionui::peindre_marque(&clip, centre, &m, r);
                     if ui.rect_contains_pointer(Rect::from_center_size(centre, vec2(r * 2.0 + 2.0, r * 2.0 + 2.0)).intersect(view)) {
@@ -1943,13 +1983,13 @@ impl App {
                     }
                     droite += r * 2.0 + 6.0;
                 }
-            }
-            // L'étiquette de version (« V2 »), **hors du cadre**, juste à droite du numéro : jamais sur l'image. Rien pour un plan à une
-            // seule version, ni si le réglage est éteint.
-            if reglages.pastille_version {
-                let haut = (font * 0.75).clamp(14.0, 28.0);
-                if let Some(e) = self.peindre_etiquette_hors_cadre(&clip, pos2(droite, pastille.center().y), haut, i) {
-                    self.vignettes.etiquettes.push(e);
+                // L'étiquette de version (« V2 »), **hors du cadre**, juste à droite du numéro : jamais sur l'image. Rien pour un plan à une
+                // seule version, ni si le réglage est éteint.
+                if avec_version {
+                    let haut = (font0 * 0.75).clamp(14.0, 28.0);
+                    if let Some(e) = self.peindre_etiquette_hors_cadre(&clip, pos2(droite, pastille.center().y), haut, i) {
+                        self.vignettes.etiquettes.push(e);
+                    }
                 }
             }
         }

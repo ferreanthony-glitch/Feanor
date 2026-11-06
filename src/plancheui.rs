@@ -94,7 +94,7 @@ impl App {
     /// Les options de l'export posées sur celles de l'écran : le sens de lecture et les textes montrés, et l'opacité du passe-partout (celle de
     /// la barre du bas de la planche). Que le passe-partout soit allumé à l'écran n'y change rien : c'est la case de la fenêtre qui décide.
     pub(crate) fn planche_options(&self, opt: &Options) -> Options {
-        Options { sens: self.layout.board_sens, textes: self.layout.board_textes, marie_opacite: self.settings.vignettes.passe_partout_cases_opacite.min(100), ..opt.clone() }
+        Options { sens: self.layout.board_sens, textes: self.layout.board_textes, numeros: opt.numeros && self.settings.vignettes.numeros_visibles, marie_opacite: self.settings.vignettes.passe_partout_cases_opacite.min(100), ..opt.clone() }
     }
 
     /// Les options et l'étendue du bouton « Exporter » : celles de la fenêtre, avec les deux cases retenues dans les réglages de l'application
@@ -141,6 +141,8 @@ impl App {
         let frame = self.doc.frame;
         // (Les cadres de caméra ont la couleur choisie dans Préférences > Vignettes, comme à l'écran.)
         let (opt2, titre) = (Options { couleur_cadre: self.settings.vignettes.couleur_cadre, ..opt.clone() }, self.base_name_or("Planche"));
+        // Le dessin sur toute l'enveloppe des plans à mouvement de caméra : préparé ici (un cliché léger), rendu sur le fil de l'export.
+        let travaux = self.planche_tuiles_a_rendre(&p, s);
         let (chemin, p2) = (out.to_path_buf(), Arc::new(p));
         let message = planche::message_de_fin(opt.sortie, n, dims, reduit.as_deref(), out);
         let job = ExportJob::collect_with(
@@ -150,7 +152,8 @@ impl App {
             frames,
             move |k, px| rgb_sur_blanc(px, frame, tailles[k]),
             move |imgs: Vec<image::RgbImage>| {
-                let img = planche::composer(&p2, &imgs, &opt2, s)?;
+                let tuiles: Vec<Option<planche::TuileImage>> = travaux.into_iter().map(|t| t.and_then(TuileATravailler::rendre)).collect();
+                let img = planche::composer_avec_tuiles(&p2, &imgs, &tuiles, &opt2, s)?;
                 drop(imgs);
                 let bytes = planche::encoder_avec(&p2, &img, opt2.sortie, &titre, s, opt2.bloc_titre.then_some(&opt2.entete))?;
                 crate::export::write_atomic(&chemin, &bytes)
@@ -160,6 +163,28 @@ impl App {
         // (« Avec les annotations » : les calques d'annotation de la planche — dessinés par `composer` — et ceux des plans, posés par-dessus
         // chaque vignette — `panel_plan_at_avec`.)
         Ok(job.pour_planche(message).avec_annotations(opt.annotations))
+    }
+
+    /// Pour chaque case dont la caméra bouge (les cadres ou le passe-partout sont demandés) : de quoi rendre sa tuile, le dessin sur toute
+    /// l'enveloppe (`TuileATravailler::rendre`). Un cliché léger du plan : le dessin n'est pas copié.
+    fn planche_tuiles_a_rendre(&self, p: &planche::Planche, s: f32) -> Vec<Option<TuileATravailler>> {
+        p.cartes
+            .iter()
+            .map(|c| {
+                let m = c.mouvement.as_ref()?;
+                let z = &m.tuile.zone;
+                let r = m.tuile.rect;
+                let taille = [((r.width() * s).round() as usize).clamp(1, 16_000), ((r.height() * s).round() as usize).clamp(1, 16_000)];
+                let cadre = [z.taille.x.round().clamp(1.0, 16384.0) as usize, z.taille.y.round().clamp(1.0, 16384.0) as usize];
+                let plan = crate::render::panel_plan_at(&self.doc, c.plan_reel, c.place.frame, Some(self.doc.paper));
+                let mut doc = crate::thumbs::snapshot(&self.doc, &plan);
+                doc.frame = cadre;
+                let moitie = vec2(cadre[0] as f32, cadre[1] as f32) * 0.5;
+                let masque = m.tuile.masque.iter().map(|q| ((*q - z.centre) + moitie).to_pos2()).collect();
+                let cam = crate::camera::Camera { x: z.centre.x, y: z.centre.y, zoom: 1.0, angle: 0.0, dolly: 0.0, tilt: 0.0, pan: 0.0 };
+                Some(TuileATravailler { doc, plan, cam, taille, masque })
+            })
+            .collect()
     }
 
     /// Les plans de l'étendue choisie.
@@ -355,5 +380,24 @@ impl App {
         });
         self.vignettes.planche = e;
         lancer
+    }
+}
+
+/// Ce qu'il faut pour rendre la tuile d'un plan à mouvement de caméra dans l'export de la planche.
+struct TuileATravailler {
+    doc: crate::document::Document,
+    plan: crate::render::Plan,
+    cam: crate::camera::Camera,
+    taille: [usize; 2],
+    masque: Vec<eframe::egui::Pos2>,
+}
+
+impl TuileATravailler {
+    /// Le dessin sur toute l'enveloppe (le papier dedans, le trait qui déborde dehors), en pixels prémultipliés.
+    fn rendre(self) -> Option<planche::TuileImage> {
+        let (img, _) = crate::fx::differe(|| crate::fxcache::soft_scope(|| crate::render::thumbnail_marge_until(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], 0, Some(&self.masque), &|| false)));
+        let img = img?;
+        let rvba = img.pixels.iter().flat_map(|c| c.to_array()).collect();
+        Some(planche::TuileImage { taille: [img.size[0] as u32, img.size[1] as u32], rvba })
     }
 }

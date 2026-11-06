@@ -3001,6 +3001,11 @@ touches = []
 source = "FEANOR (sans touche)"
 
 [[raccourci]]
+action = "vignettes.numeros"
+touches = ["N"]
+source = "proposition (N comme numéros : montre ou cache les numéros de plan sur la planche et dans son export)"
+
+[[raccourci]]
 action = "vignettes.texte_action"
 touches = []
 source = "FEANOR (sans touche)"

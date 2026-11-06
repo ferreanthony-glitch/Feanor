@@ -202,6 +202,7 @@ pub fn layout_sequences(doc: &Document, s: &BoardSettings, last_joins: bool, opt
                 cadres: m.cadres.iter().map(|c| board::CadreBoard { rang: c.rang, rect: dep(c.rect, v), coins: c.coins.map(|q| dep_pos(q, v)), reduit: c.reduit }).collect(),
                 enveloppe: m.enveloppe.iter().map(|q| dep_pos(*q, v)).collect(),
                 tuile: board::TuileBoard { rect: dep(m.tuile.rect, v), zone: m.tuile.zone, masque: m.tuile.masque.clone() },
+                balayage: m.balayage.iter().map(|p| p.iter().map(|q| dep_pos(*q, v)).collect()).collect(),
             });
         }
         for b in &l.bars {

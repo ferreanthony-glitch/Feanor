@@ -259,6 +259,7 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Vignettes, G::OuvertureCases, "vignettes.ouverture", "Zoom d'ouverture", "cases par rangée rangées visibles six deux ouvrir projet cadrer"),
     r(O::Vignettes, G::NumerosTextes, "vignettes.taille_numeros", "Taille des numéros de plan", "numéro lisible gros petit pour cent zoom fond"),
     r(O::Vignettes, G::NumerosTextes, "vignettes.pastille_version", "Pastille de version", "V2 étiquette versions numéro hors cadre"),
+    r(O::Vignettes, G::NumerosTextes, "vignettes.numeros", "Montrer les numéros", "numéro cacher afficher masquer touche N"),
     r(O::Vignettes, G::NumerosTextes, "vignettes.duree", "Afficher la durée du plan", "secondes images numéro"),
     r(O::Vignettes, G::NumerosTextes, "vignettes.textes_defaut", "Lignes de texte d'un projet neuf", "notes action dialogue cocher défaut ligne intitulé"),
     r(O::Vignettes, G::NumerosTextes, "vignettes.couleurs_textes", "Couleur des lignes de texte", "note action dialogue couleur intitulé"),
