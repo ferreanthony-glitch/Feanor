@@ -7315,3 +7315,53 @@ Demandes du réalisateur : « La planche de références est un canevas blanc et
 4. Gomme sur des traits qui croisent images et post-it ; Ctrl+Z / Ctrl+Y.
 5. Sélection : cliquer un trait, le déplacer, changer son encre, le supprimer ; Échap, une fois, rend la sélection.
 6. Enregistrer, fermer, rouvrir : traits identiques ; ouvrir un ancien projet : rien de changé.
+
+## 105. Images à la clé et son par plan (2026-11-05, branche `exports-cle-son`)
+
+Deux sorties de la partie 84 qui manquaient pour la V1, dans Fichier > Exporter. Le format de projet ne change pas ; les choix de ces fenêtres sont retenus par poste de travail, comme les autres exports (`ExportPrefs`). Aucun export ne modifie le projet : tout se calcule sur une copie, sur d'autres fils, et le projet reste libre.
+
+**Images à la clé** (famille Images & PDF, action `fichier.exporter_images_cles`, icône losange). C'est la fenêtre « Images par plan » avec le mode `StillsPer::Cle` (« Une par clé »), ouverte directement sur lui ; « Images par plan » s'ouvre sur « Une par plan » même si le dernier choix retenu était « par clé ».
+- **Une clé = un dessin à l'image où il commence** (`src/exportcles.rs`). Un dessin tenu sur 6 images donne une seule image ; le même dessin qui revient après un vide recommence une clé ; la boucle ou le maintien d'un calque (pré / post-comportement) ne font pas de clé.
+- **Quels calques font des clés** : ceux que l'export des calques séparés écrirait (`render::separable_layers`) et qui ont des dessins. Pas de clé pour les calques cachés (eux ou leur dossier), les dossiers, les calques d'effet, les calques vidéo (sans dessin à eux : leur image est dans l'image composée, elle ne fait pas naître de clé) ni les calques d'annotation, sauf si « Avec les annotations » est coché. Un plan sans aucune clé n'écrit rien ; la fenêtre le dit.
+- **Numéro** : `K01`, `K02`… = rang, dans le plan, de l'image où au moins un calque commence un dessin. Le nombre de chiffres est le même pour tout l'export (au moins deux, trois dès 100 clés dans un plan). Nom : le modèle de noms du projet (partie 87) puis `_K01` : `SQ01_PL012A_K03`. L'ordre alphabétique est plan, puis clé.
+- **Sans l'option par calque** : l'image composée (ce que la caméra filme) à chaque image où une clé commence. PNG ou JPEG, fond transparent si on le veut, taille au choix : comme les autres images par plan.
+- **Avec l'option par calque** (case « Une image par calque ») : pour chaque clé, un fichier par calque qui y commence un dessin, le calque seul, fond transparent, PNG, caméra appliquée, taille au choix : `SQ01_PL012A_K03_Personnage.png`. Un seul dossier (un suffixe, pas un dossier par calque : le tri donne plan, clé, calque). Le numéro est celui de la clé du plan, pas du calque : le calque seul `K03` et l'image composée `K03` sont de la même image ; un calque qui ne change pas à `K03` n'a pas de fichier `K03`. Si le modèle de noms a `{calque}`, c'est lui qui place le nom du calque. Deux noms jamais identiques (suffixe `_2`). Le choix JPEG est grisé dans ce mode.
+- **Étendue** : celle de la fenêtre (film, séquence, plan courant, plans choisis).
+
+**Son par plan** (famille Son, action `fichier.exporter_son_par_plan`, icône notes de musique, `src/exportsonplan.rs`). Un fichier par plan de l'étendue, le mixage de ce qui s'entend pendant ce plan.
+- Format : WAV ou AIFF, 16 ou 24 bits, 48 kHz stéréo, écrits par le même code que « Son par piste ».
+- **Bornes exactes** : début et durée du plan en échantillons par `export::sample_span`, la règle du son du film. Les fichiers de plans qui se suivent se touchent sans trou ni recouvrement, et mis bout à bout redonnent le son du film échantillon pour échantillon (vérifié à 24 et à 29 images par seconde, où une image ne tombe pas sur un nombre entier d'échantillons).
+- **Ce qu'on entend** : volumes, fondus, clés de volume, égaliseur, écho ; pistes muettes retirées, solo respecté. Un son qui passe une coupe est coupé au bord du plan : chaque fichier en garde sa part.
+- **Transitions** : ici elles ne déplacent aucun plan et ne touchent pas au son (partie `transitions.rs` : la durée du film ne change pas). L'export ne fait donc ni poignée, ni débordement sur le plan voisin, ni fondu sonore ; la fenêtre le rappelle quand le montage a des transitions.
+- **Un plan où rien ne s'entend n'est pas écrit** (comme une piste sans extrait dans « Son par piste »). La fenêtre compte les plans avec du son.
+- **Noms** : ceux des images par plan : `SQ01_PL012A.wav`. **Étendue** : celle de la fenêtre, y compris « Plans choisis » (proposé ici puisque chaque plan a son fichier).
+
+**Tâche de fond.** Les images à la clé passent par la tâche des images par plan (composées) ou par une tâche à calcul propre, comme les calques séparés (par calque) ; le son par plan par `ExportJob::task`. Annuler (« Arrêter ») efface ce qui a été écrit, sans reste `.part` ; un échec laisse un message qui reste affiché, sans fichier trompeur.
+
+**Essais** : `src/exports_cle_son_tests.rs` relit les fichiers écrits (nombre, noms, tri, taille, pixels comparés à l'image du film et au calque seul, transparence, durées au dernier échantillon, en-têtes WAV et AIFF, annulation, échec, projet intact). Adaptés : `exports_v1_calques_tests` (le menu a 23 entrées), `exports_v1_exemples_tests`.
+
+À vérifier à l'écran :
+1. Fichier > Exporter… : « Images à la clé » sous « Images par plan » (icône losange), « Son par plan » sous « Son par piste » ; bulle au bout d'une seconde sur chacune.
+2. Images à la clé sur un plan animé avec des dessins tenus : le compte annoncé (« N clés dans M plans ») est celui des dessins qui commencent, pas des images ; fais l'export et regarde les fichiers `…_K01`, `…_K02`.
+3. Coche « Une image par calque » : le compte d'images de calque, le choix JPEG grisé, les fichiers `…_K03_Calque.png` ouverts dans un logiciel d'image : fond transparent, le calque seul.
+4. Cache un calque, ajoute une annotation, un calque d'effet : aucune clé ne vient d'eux ; coche « Avec les annotations » : celles de l'annotation arrivent.
+5. « Plans choisis » avec deux plans : seulement ces plans.
+6. Son par plan : le compte « N plans avec du son sur M » ; WAV puis AIFF 24 bits ; ouvre deux fichiers voisins dans un éditeur son et pose-les bout à bout : pas de coupure ni de recouvrement à la coupe ; coupe le son d'une piste (muet) : le compte change.
+7. « Arrêter » en route : le dossier ne garde aucun fichier ; la fenêtre de fin reste lisible huit secondes (réussite) ou jusqu'au clic (échec).
+
+### Nomenclature des fichiers (ajout, `src/nomenclature.rs`)
+
+Demande du réalisateur : pouvoir changer la nomenclature des fichiers sous plusieurs formes. Un choix **Nomenclature** apparaît dans les fenêtres **Images par plan / par case / à la clé** et **Son par plan** (les calques séparés et les vidéos par plan gardent le modèle du projet).
+- **Même système que « Noms et production »** : la nomenclature assemble des modèles de `nommage.rs` ; rien n'est réécrit. Seul ajout : le jeton `{cle}` (rang de la clé dans le plan, `Jeton::TOUS_EXPORT`), permis ici et pas dans le modèle du projet.
+- **Formes prêtes** : `SQ01_PL012A_K03` (d'origine : le modèle du projet suivi de `_K03`), `sq01_pl012a_k03`, `S01-P012A-K03`, `EP01_SQ01_PL012A_K03`, `012A_03`. **Personnalisée** : un modèle à jetons (projet, épisode, séquence, plan, clé, calque, version, case, date ; séparateurs libres ; `{plan:03}` complète de zéros).
+- **Réglages** : chiffres de la séquence, du plan, de la clé (0 : d'après le modèle ; la clé : automatique, deux chiffres ou plus selon le plus grand nombre de clés d'un plan) ; casse (telle quelle, MAJUSCULES, minuscules) ; place du nom de calque, à la fin ou au début (un modèle avec `{calque}` le place lui-même).
+- **Aperçu en direct** : les quatre premiers noms du vrai projet, avec leur extension, et le dernier.
+- **Sûreté** : un modèle illisible, ou sans `{cle}` pour des clés, ou qui donnerait deux fois le même nom (sans tenir compte des majuscules) est signalé dans la fenêtre avec les deux noms, le bouton « Exporter… » est fermé, et l'export refuse de partir si on le lance quand même (message dans la barre d'état) : rien n'est écrit, jamais un fichier par-dessus un autre du même export. Les formes du projet gardent le suffixe `_2` des plans de même nom, comme avant. Windows : caractères interdits du modèle remplacés par « _ » (avertissement dans la fenêtre) ; accents, espaces et points comme dans tous les noms de fichiers des exports (`editorial::file_safe` : accent ramené à sa lettre, espace et point en « _ »). Les fichiers d'un export déjà présents dans le dossier ne sont pas testés (relancer un export dans le même dossier les remplace, comme les autres exports).
+- **Retenue** : avec les autres choix d'export du poste de travail (`ExportPrefs`), là où vivent déjà la taille, le format et les cases des fenêtres ; pas dans le projet, donc pas de changement du format de projet ni de son numéro. Un réglage d'avant, sans ce champ, donne la forme d'origine.
+- **Aucun changement par défaut** : la forme d'origine sans réglage passe par les fonctions d'avant ; un essai vérifie que le nouveau chemin, réglé pour retomber sur la même chose, donne exactement les mêmes noms (clés composées, par calque, par plan, par case).
+- **Essais** : `src/nomenclature_tests.rs` (formes et exemples, tri, chiffres, casse, calque, modèles refusés, caractères interdits, retenue, fichiers PNG et WAV réellement écrits et relus).
+
+À vérifier à l'écran (nomenclature) :
+8. Dans « Images à la clé » : la liste des formes, l'aperçu qui change en cliquant chaque forme ; « Personnalisée » : écrire `{plan:03}_{cle}_{calque}`, puis enlever `{cle}` : le message rouge apparaît et « Exporter… » se grise.
+9. Les chiffres (clé 3), la casse (MAJUSCULES), la case « nom du calque au début » (en mode par calque) : l'aperçu suit.
+10. Ferme et rouvre la fenêtre, puis FEANOR : le dernier choix est retenu. Dans « Images par plan » et « Son par plan », la même section est là.

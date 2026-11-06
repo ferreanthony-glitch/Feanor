@@ -23,6 +23,8 @@ pub enum StillsPer {
     Plan,
     /// Le début du plan et chacune de ses marques d'image.
     Case,
+    /// Chaque dessin clé, à l'image où il commence (`exportcles.rs`).
+    Cle,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default, Serialize, Deserialize)]
@@ -52,11 +54,13 @@ pub struct StillsSettings {
     pub size: VideoSize,
     /// Qualité du JPEG, de 50 à 100.
     pub quality: u8,
+    /// À la clé seulement : chaque calque seul (PNG, fond transparent) au lieu de l'image composée (`exportcles.rs`).
+    pub par_calque: bool,
 }
 
 impl Default for StillsSettings {
     fn default() -> Self {
-        StillsSettings { per: StillsPer::Plan, format: StillFormat::Png, transparent: false, size: VideoSize::Project, quality: 92 }
+        StillsSettings { per: StillsPer::Plan, format: StillFormat::Png, transparent: false, size: VideoSize::Project, quality: 92, par_calque: false }
     }
 }
 
@@ -70,6 +74,14 @@ pub struct Still {
 /// Les images des plans `plans` : le nom de chacune est celui de l'export pour le montage (« SQ01_PL012A », avec « _V2 » pour un plan à
 /// plusieurs versions), plus « _C02 », « _C03 »… pour les cases d'après la première ; deux noms jamais identiques.
 pub fn items(doc: &Document, plans: &[usize], per: StillsPer) -> Vec<Still> {
+    items_avec(doc, plans, per, false)
+}
+
+/// Comme `items` ; `annotations` : les calques d'annotation comptent pour les clés (`StillsPer::Cle`, `exportcles.rs`).
+pub fn items_avec(doc: &Document, plans: &[usize], per: StillsPer, annotations: bool) -> Vec<Still> {
+    if per == StillsPer::Cle {
+        return crate::exportcles::items(doc, plans, annotations);
+    }
     let mut out: Vec<Still> = Vec::new();
     for &p in plans {
         if p >= doc.panels.len() {
@@ -90,6 +102,29 @@ pub fn items(doc: &Document, plans: &[usize], per: StillsPer) -> Vec<Still> {
         }
     }
     out
+}
+
+/// Comme `items_avec`, avec la nomenclature choisie (`nomenclature.rs`) : la forme d'origine sans réglage rend exactement `items_avec`. Erreur :
+/// le modèle ne se lit pas ou deux fichiers auraient le même nom.
+pub fn items_nom(doc: &Document, plans: &[usize], per: StillsPer, annotations: bool, nom: &crate::nomenclature::Nomenclature) -> Result<Vec<Still>, String> {
+    if per == StillsPer::Cle {
+        return crate::exportcles::items_nom(doc, plans, annotations, nom);
+    }
+    if nom.est_defaut() {
+        return Ok(items_avec(doc, plans, per, annotations));
+    }
+    let mut entrees = Vec::new();
+    let mut cadres = Vec::new();
+    for &p in plans.iter().filter(|&&p| p < doc.panels.len()) {
+        let spans = crate::board::plan_boards(doc, p);
+        let wanted = if per == StillsPer::Plan { 1 } else { spans.len() };
+        for (k, (_, start, _)) in spans.into_iter().take(wanted).enumerate() {
+            entrees.push(crate::nomenclature::Entree { plan: p, cle: None, case: (per == StillsPer::Case).then_some(k + 1), calque: None });
+            cadres.push((p, start));
+        }
+    }
+    let noms = nom.noms(doc, &entrees, 2)?;
+    Ok(cadres.into_iter().zip(noms).map(|(frame, name)| Still { frame, name }).collect())
 }
 
 /// La taille d'une image : celle du cadre tel quel pour « Taille du projet » (pas de rognage à une taille paire, ce n'est pas une vidéo).

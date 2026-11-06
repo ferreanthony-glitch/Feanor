@@ -24,7 +24,7 @@ use crate::document::Document;
 use crate::exportrender::{self, Image, Papier, Pipeline, Pose, Rendu, SnapshotBuilder};
 use crate::exportcamera::CameraSettings;
 use crate::exportlayers::LayersSettings;
-use crate::exportstems::StemsSettings;
+use crate::exportstems::{AudioFormat, StemsSettings};
 use crate::exportstills::StillsSettings;
 use crate::exportvideo::{self, BurnSettings, VideoRate, VideoSize, VideoSpec};
 use crate::pdf;
@@ -53,6 +53,8 @@ pub enum Format {
     Stills,
     /// Un fichier son par piste audible (`exportstems.rs`).
     Stems,
+    /// Un fichier son par plan, le mixage de ce qui s'entend pendant le plan (`exportsonplan.rs`).
+    SonPlans,
     /// Les calques séparés : un dossier par plan, une suite d'images transparentes par calque (`exportlayers.rs`).
     Layers,
     /// Les clés de caméra de chaque plan, en JSON et en CSV (`exportcamera.rs`).
@@ -70,7 +72,7 @@ impl Format {
             Format::Gif => "gif",
             Format::Camera => "json",
             // Un dossier, pas un fichier.
-            Format::Stills | Format::Stems | Format::Layers => "",
+            Format::Stills | Format::Stems | Format::SonPlans | Format::Layers => "",
         }
     }
 
@@ -85,7 +87,7 @@ impl Format {
 
     /// L'export montre des images du film (pas du son, pas des données).
     pub fn has_images(self) -> bool {
-        !matches!(self, Format::Wav | Format::Stems | Format::Camera)
+        !matches!(self, Format::Wav | Format::Stems | Format::SonPlans | Format::Camera)
     }
 
     /// Le film garde la transparence du fond.
@@ -240,6 +242,10 @@ pub struct ExportSettings {
     pub stills: StillsSettings,
     /// Le son par piste (`exportstems.rs`).
     pub stems: StemsSettings,
+    /// Le format du son par plan (`exportsonplan.rs`).
+    pub plan_sound: AudioFormat,
+    /// La nomenclature des fichiers des exports par plan (`nomenclature.rs`).
+    pub nomenclature: crate::nomenclature::Nomenclature,
     /// Les calques séparés (`exportlayers.rs`).
     pub layers: LayersSettings,
     /// Les clés de caméra (`exportcamera.rs`).
@@ -266,6 +272,8 @@ impl Default for ExportSettings {
             pdf: PdfLayout::default(),
             stills: StillsSettings::default(),
             stems: StemsSettings::default(),
+            plan_sound: AudioFormat::default(),
+            nomenclature: Default::default(),
             layers: LayersSettings::default(),
             camera: CameraSettings::default(),
         }
@@ -283,13 +291,15 @@ pub struct ExportPrefs {
     pub pdf: PdfLayout,
     pub stills: StillsSettings,
     pub stems: StemsSettings,
+    pub plan_sound: AudioFormat,
+    pub nomenclature: crate::nomenclature::Nomenclature,
     pub layers: LayersSettings,
     pub camera: CameraSettings,
 }
 
 impl ExportPrefs {
     pub fn of(s: &ExportSettings) -> ExportPrefs {
-        ExportPrefs { size: s.size, rate: s.rate, mxf: s.mxf, burn: s.burn, pdf: s.pdf, stills: s.stills, stems: s.stems, layers: s.layers, camera: s.camera }
+        ExportPrefs { size: s.size, rate: s.rate, mxf: s.mxf, burn: s.burn, pdf: s.pdf, stills: s.stills, stems: s.stems, plan_sound: s.plan_sound, nomenclature: s.nomenclature.clone(), layers: s.layers, camera: s.camera }
     }
 
     pub fn apply(&self, s: &mut ExportSettings) {
@@ -300,6 +310,8 @@ impl ExportPrefs {
         s.pdf = self.pdf;
         s.stills = self.stills;
         s.stems = self.stems;
+        s.plan_sound = self.plan_sound;
+        s.nomenclature = self.nomenclature.clone();
         s.layers = self.layers;
         s.camera = self.camera;
     }

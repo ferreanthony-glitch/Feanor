@@ -3406,6 +3406,16 @@ touches = []
 source = "FEANOR (sans touche)"
 
 [[raccourci]]
+action = "fichier.exporter_images_cles"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "fichier.exporter_son_par_plan"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
 action = "fichier.exporter_calques"
 touches = []
 source = "FEANOR (sans touche)"

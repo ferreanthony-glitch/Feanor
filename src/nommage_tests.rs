@@ -16,6 +16,7 @@ fn cx() -> Contexte {
         plan_num: Some(Num::parse("12A").unwrap()),
         version: 2,
         case: Some(4),
+        cle: None,
         calque: Some("Fond/Ciel".into()),
         date: "20261030".into(),
     }

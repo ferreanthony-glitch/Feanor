@@ -75,6 +75,7 @@ pub(crate) const FAMILLES: [(&str, &[Export]); 4] = [
             (ph::IMAGES, "Images", "Une image PNG par image du film, pour une suite d'images ou un autre logiciel.", "fichier.exporter_images"),
             (ph::IMAGE, "Image courante", "Seulement l'image affichée, en PNG.", "fichier.exporter_image_courante"),
             (ph::IMAGES_SQUARE, "Images par plan", "Une image par plan ou par case, nommée comme le plan (SQ01_PL012A), en PNG ou en JPEG, sur fond transparent si tu veux.", "fichier.exporter_images_par_plan"),
+            (ph::DIAMOND, "Images à la clé", "Une image par dessin clé, numérotée (SQ01_PL012A_K01) : le dessin à l'image où il commence, pas chaque image de son exposition. Un calque seul sur fond transparent si tu veux.", "fichier.exporter_images_cles"),
             (ph::FILE_PDF, "Storyboard PDF", "Les plans en planches à imprimer ou à envoyer, avec leurs textes ; format de page et nombre de cases au choix.", "fichier.exporter_pdf"),
             (ph::SQUARES_FOUR, "Planche des vignettes", "Toute la planche des Vignettes en une grande image ou en PDF : numéros, notes, barres, cadres de caméra, annotations, marie-louise.", "fichier.exporter_planche"),
             (ph::PALETTE, "Color script", "Une petite image par plan, rangées par séquence sur un fond uni : la couleur du film d'un coup d'œil.", "fichier.exporter_colorscript"),
@@ -87,6 +88,7 @@ pub(crate) const FAMILLES: [(&str, &[Export]); 4] = [
         &[
             (ph::SPEAKER_HIGH, "Son mixé", "Les pistes son mélangées en un seul fichier WAV.", "fichier.exporter_son"),
             (ph::WAVEFORM, "Son par piste", "Un fichier son par piste (muet et solo respectés), en WAV 16 ou 24 bits ou en AIFF, pour le mixage ou le montage son.", "fichier.exporter_son_par_piste"),
+            (ph::MUSIC_NOTES, "Son par plan", "Un fichier son par plan, le mixage de ce qu'on entend pendant ce plan, de sa première à sa dernière image, en WAV 16 ou 24 bits ou en AIFF.", "fichier.exporter_son_par_plan"),
         ],
     ),
     (

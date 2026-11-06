@@ -85,6 +85,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("fichier.exporter_calques", "Exporter les calques séparés (un dossier par plan, une suite d'images transparentes par calque)", true, false),
     act("fichier.exporter_camera", "Exporter les clés de caméra (JSON et CSV, pour un script de compositing)", true, false),
     act("fichier.exporter_son_par_piste", "Exporter le son par piste (un fichier WAV ou AIFF par piste audible, avec ou sans le mixage)", true, false),
+    act("fichier.exporter_images_cles", "Exporter des images à la clé (une image par dessin clé, numérotée, composée ou par calque)", true, false),
+    act("fichier.exporter_son_par_plan", "Exporter le son par plan (un fichier WAV ou AIFF par plan, le mixage de ce qu'on y entend)", true, false),
     act("fichier.exporter_images_par_plan", "Exporter des images par plan (une image par plan ou par case, en PNG ou en JPEG)", true, false),
     act("vignettes.camera", "Vignettes : tenir pour tirer les cadres de caméra (maintenir ; comme Ctrl + Maj)", true, false),
     act("vignettes.annotation_stylo", "Vignettes : stylo d'annotation (par-dessus la planche)", true, false),
