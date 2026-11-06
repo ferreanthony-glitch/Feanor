@@ -88,7 +88,7 @@ pub(crate) fn block_size(kind: Kind) -> [u32; 2] {
         Kind::Text => [340, 96],
         Kind::Title => [560, 110],
         Kind::Frame => [640, 420],
-        Kind::Image => [360, 360],
+        Kind::Image | Kind::Stroke => [360, 360],
     }
 }
 
@@ -184,6 +184,7 @@ pub(crate) fn kind_name(kind: Kind) -> &'static str {
         Kind::Text => "texte",
         Kind::Title => "titre",
         Kind::Frame => "cadre",
+        Kind::Stroke => "trait",
     }
 }
 
@@ -338,7 +339,7 @@ impl Document {
                 return self.arrange_frame(*id);
             }
         }
-        let items: Vec<(u64, Rect)> = ids.iter().filter_map(|id| self.reference(*id)).filter(|r| r.kind != Kind::Frame).map(|r| (r.id, r.bounds())).collect();
+        let items: Vec<(u64, Rect)> = ids.iter().filter_map(|id| self.reference(*id)).filter(|r| r.kind != Kind::Frame && r.kind != Kind::Stroke).map(|r| (r.id, r.bounds())).collect();
         if items.len() < 2 {
             return false;
         }
@@ -359,7 +360,7 @@ impl Document {
     /// taille s'ajuste, avec une marge et le bandeau de titre). Le cadre perd sa rotation.
     pub(crate) fn arrange_frame(&mut self, frame: u64) -> bool {
         let inside = self.frame_contents(frame);
-        let items: Vec<(u64, Rect)> = inside.iter().filter_map(|id| self.reference(*id)).map(|r| (r.id, r.bounds())).collect();
+        let items: Vec<(u64, Rect)> = inside.iter().filter_map(|id| self.reference(*id)).filter(|r| r.kind != Kind::Stroke).map(|r| (r.id, r.bounds())).collect();
         let Some(f) = self.reference(frame).cloned() else { return false };
         if items.is_empty() {
             return false;

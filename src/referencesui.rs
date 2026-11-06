@@ -28,6 +28,8 @@
 
 #[path = "planchrefui.rs"]
 pub(crate) mod planchrefui;
+#[path = "planchdessinui.rs"]
+pub(crate) mod planchdessinui;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
@@ -198,6 +200,8 @@ pub(crate) struct RefUi {
     pub text_focus: Option<u64>,
     /// Le texte qu'on écrit sur place, dans le bloc (`planchrefui.rs`).
     pub(crate) edit: Option<planchrefui::EnPlace>,
+    /// L'outil de la planche (sélection, crayon, gomme), l'encre, la taille et le trait en cours (`planchdessinui.rs`).
+    pub(crate) pen: planchdessinui::Crayon,
     /// Échap ou Ctrl+Entrée ont été tapés pendant l'écriture (retirés des touches avant egui) : le texte est posé.
     pub(crate) edit_end: bool,
     /// Où le dernier clic droit a eu lieu sur le tableau (pour poser un post-it ou un cadre là).
@@ -256,6 +260,7 @@ impl RefUi {
         self.text_focus = None;
         self.edit = None;
         self.board_import = None;
+        self.pen.abandon();
     }
 
     /// Demande l'image `path` à la définition `level` ; rend la meilleure qui soit déjà en mémoire
@@ -498,7 +503,7 @@ impl App {
                 self.refs.layout = Layout::Board;
                 self.refs.view = None;
             }
-            _ => return self.planchref_action(action),
+            _ => return self.planchref_action(action) || self.planchdessin_action(action),
         }
         true
     }
@@ -704,8 +709,16 @@ impl App {
         // Fenêtre transparente : la barre d'outils garde un fond, pour rester lisible.
         let backdrop = (detached && self.settings.references_fenetre.transparent).then(|| ui.painter().add(Shape::Noop));
         let top = ui.max_rect().top();
-        self.refs_toolbar(ui, detached);
-        self.refs_selection_bar(ui, &ctx);
+        if detached {
+            // (La fenêtre à part n'a pas de marge : le canevas blanc va jusqu'aux bords, la barre d'outils garde la sienne.)
+            egui::Frame::NONE.inner_margin(egui::Margin::symmetric(8, 6)).show(ui, |ui| {
+                self.refs_toolbar(ui, true);
+                self.refs_selection_bar(ui, &ctx);
+            });
+        } else {
+            self.refs_toolbar(ui, detached);
+            self.refs_selection_bar(ui, &ctx);
+        }
         if let Some(i) = backdrop {
             let bar = Rect::from_min_max(pos2(ui.max_rect().left(), top), pos2(ui.max_rect().right(), ui.cursor().top() + 2.0));
             ui.painter().set(i, Shape::rect_filled(bar, 0.0, theme::fond()));
@@ -779,6 +792,8 @@ impl App {
             ui.separator();
             self.refs_add_icons(ui);
             ui.separator();
+            self.refs_pen_icons(ui);
+            ui.separator();
             let mut layout = self.refs.layout;
             bulles::choix(ui, &mut layout, Layout::Board, ph::FRAME_CORNERS, "Tableau", "Les références disposées librement : on les déplace, on les agrandit, on les tourne.", "");
             bulles::choix(ui, &mut layout, Layout::Grid, ph::SQUARES_FOUR, "Grille", "Toutes les références côte à côte, à la même taille.", "");
@@ -810,7 +825,9 @@ impl App {
             }
             self.refs_board_icons(ui);
             self.refs_window_icons(ui, detached);
-            let (shown, all) = (self.refs_filtered().len(), self.doc.references.len());
+            // (Les traits de crayon ne se comptent pas : ce sont des dessins sur la planche, pas des références.)
+            let shown = self.refs_filtered().iter().filter(|r| !r.kind.is_stroke()).count();
+            let all = self.doc.references.iter().filter(|r| !r.kind.is_stroke()).count();
             let (used, budget) = (self.refs.cache_bytes() >> 20, budget_bytes(self.settings.perf.cache_carte_mo) >> 20);
             ui.label(RichText::new(if shown == all { format!("{all}") } else { format!("{shown} / {all}") }).small().weak())
                 .on_hover_text(format!("Références montrées / en tout. Images gardées en mémoire graphique : {used} Mo sur {budget} Mo (une part du réglage « cache de la carte graphique » du diagnostic des performances)."));
@@ -963,7 +980,9 @@ impl App {
         };
         let initial_view = view;
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 0.0, theme::fond().gamma_multiply(win_alpha));
+        // Le canevas est blanc dans tous les thèmes (fenêtre à part et plein écran compris) ; l'interface autour ne change pas.
+        painter.rect_filled(rect, 0.0, crate::planchdessin::CANVAS.gamma_multiply(win_alpha));
+        self.refs_pen_events(ctx);
 
         // Fichiers lâchés sur la fenêtre à part, et leur repère.
         if ctx.viewport_id() != egui::ViewportId::ROOT {
@@ -1002,7 +1021,10 @@ impl App {
             // (Un appui sur le bloc qu'on écrit est pour son texte.)
             if let Some(p) = hover.filter(|p| !edit_rect.is_some_and(|r| r.contains(*p))) {
                 self.refs.focus = true;
-                if mods.alt {
+                if self.refs.pen.outil != planchdessinui::Outil::Selection {
+                    // Crayon ou gomme : l'appui trace ou gomme (la sélection, la pipette et les poignées dorment).
+                    self.refs_pen_press(&view, rect, p, space);
+                } else if mods.alt {
                     self.refs.picking = true;
                 } else {
                     self.refs_press(&items, &view, rect, p, mods, space);
@@ -1024,6 +1046,12 @@ impl App {
         // Échap ou Entrée ferment le recadrage.
         if self.refs.drag.is_none() && self.refs.crop_mode.is_some() && (escape || (self.refs.focus && ctx.input(|i| i.key_pressed(Key::Enter)) && !ctx.wants_keyboard_input())) {
             self.refs.crop_mode = None;
+        }
+        // Le crayon ou la gomme : le geste suit la souris ; Échap abandonne le trait, ou, sans rien d'autre à finir, rend la sélection.
+        if self.refs.pen.busy() {
+            self.refs_pen_update(&view, rect, down, latest, escape);
+        } else if escape && self.refs.pen.outil != planchdessinui::Outil::Selection && self.refs.focus && self.refs.drag.is_none() && self.refs.edit.is_none() && self.refs.crop_mode.is_none() && !ctx.wants_keyboard_input() {
+            self.refs_set_tool(planchdessinui::Outil::Selection);
         }
         // Le geste en cours.
         if let Some(mut d) = self.refs.drag.take() {
@@ -1053,14 +1081,14 @@ impl App {
 
         // Les éléments : les cadres au fond, le reste dans l'ordre de la pile.
         let now = ctx.input(|i| i.time);
-        let hovered_id = hover.and_then(|p| references::hit_test(items.iter(), view.to_board(rect, p)));
+        let hovered_id = hover.and_then(|p| references::hit_test_near(items.iter(), view.to_board(rect, p), 6.0 / view.zoom.max(1e-3)));
         let crop_id = self.refs.crop_mode.filter(|id| self.refs.sel == [*id]);
         if crop_id.is_none() {
             self.refs.crop_mode = None;
         }
         for pass in 0..2 {
             for r in &items {
-                if (r.kind == Kind::Frame) != (pass == 0) {
+                if (r.kind == Kind::Frame) != (pass == 0) || r.kind == Kind::Stroke {
                     continue;
                 }
                 let corners = r.corners().map(|c| view.to_screen(rect, c));
@@ -1104,15 +1132,23 @@ impl App {
                 }
             }
         }
+        // Les traits de crayon, par-dessus tout, puis celui qu'on trace en ce moment.
+        for r in items.iter().filter(|r| r.kind == Kind::Stroke) {
+            let corners = r.corners().map(|c| view.to_screen(rect, c));
+            if screen_bounds(&corners).expand(r.width * r.scale * view.zoom).intersects(rect) {
+                crate::planchdessin::paint_stroke(&painter, r, &view, rect, (r.opacity * win_alpha).clamp(0.0, 1.0));
+            }
+        }
+        self.refs_pen_paint(ctx, &painter, &view, rect, hover, win_alpha);
         // La sélection et ses poignées.
         let selected = self.refs_selected();
         for id in &selected {
             if let Some(r) = items.iter().find(|r| r.id == *id) {
                 let corners = r.corners().map(|c| view.to_screen(rect, c));
-                painter.add(Shape::closed_line(corners.to_vec(), Stroke::new(2.0_f32, theme::contour())));
+                painter.add(Shape::closed_line(corners.to_vec(), Stroke::new(2.0_f32, crate::planchdessin::SELECTION)));
             }
         }
-        if let (&[id], true) = (selected.as_slice(), editing.is_none() && self.refs.drag.as_ref().is_none_or(|d| matches!(d.grab, Grab::Scale { .. } | Grab::Rotate { .. } | Grab::FrameSize { .. } | Grab::Crop { .. } | Grab::Move(..)))) {
+        if let (&[id], true) = (selected.as_slice(), editing.is_none() && self.refs.pen.outil == planchdessinui::Outil::Selection && self.refs.drag.as_ref().is_none_or(|d| matches!(d.grab, Grab::Scale { .. } | Grab::Rotate { .. } | Grab::FrameSize { .. } | Grab::Crop { .. } | Grab::Move(..)))) {
             if let Some(r) = items.iter().find(|r| r.id == id) {
                 let moving = self.refs.drag.as_ref().is_some_and(|d| matches!(d.grab, Grab::Move(..)));
                 if !moving {
@@ -1132,11 +1168,11 @@ impl App {
                         }
                         let sq = Rect::from_center_size(h.pos, vec2(9.0, 9.0));
                         if matches!(h.kind, Handle::Rotate) {
-                            painter.circle_filled(h.pos, 5.5, theme::contour());
-                            painter.circle_stroke(h.pos, 5.5, Stroke::new(1.0_f32, theme::fond()));
+                            painter.circle_filled(h.pos, 5.5, crate::planchdessin::SELECTION);
+                            painter.circle_stroke(h.pos, 5.5, Stroke::new(1.5_f32, Color32::WHITE));
                         } else {
-                            painter.rect_filled(sq, 1.5, theme::contour());
-                            painter.rect_stroke(sq, 1.5, Stroke::new(1.0_f32, theme::fond()), StrokeKind::Inside);
+                            painter.rect_filled(sq, 1.5, crate::planchdessin::SELECTION);
+                            painter.rect_stroke(sq, 1.5, Stroke::new(1.5_f32, Color32::WHITE), StrokeKind::Inside);
                         }
                     }
                 }
@@ -1149,8 +1185,8 @@ impl App {
         // Le rectangle de sélection.
         if let (Some(Drag { grab: Grab::Marquee { .. }, press, moved: true, .. }), Some(cur)) = (self.refs.drag.as_ref(), latest) {
             let area = Rect::from_two_pos(*press, cur);
-            painter.rect_filled(area, 0.0, theme::accent().gamma_multiply(0.14));
-            painter.rect_stroke(area, 0.0, Stroke::new(1.0_f32, theme::accent()), StrokeKind::Inside);
+            painter.rect_filled(area, 0.0, crate::planchdessin::SELECTION.gamma_multiply(0.14));
+            painter.rect_stroke(area, 0.0, Stroke::new(1.0_f32, crate::planchdessin::SELECTION), StrokeKind::Inside);
         }
         // Le texte d'accueil, ou celui d'un filtre qui ne laisse rien.
         if items.is_empty() {
@@ -1159,17 +1195,18 @@ impl App {
             } else {
                 "Aucune référence ne correspond au filtre."
             };
-            painter.text(rect.center(), Align2::CENTER_CENTER, text, FontId::proportional(13.0), theme::texte_doux());
+            painter.text(rect.center(), Align2::CENTER_CENTER, text, FontId::proportional(13.0), crate::planchdessin::CANVAS_TEXT_SOFT);
         }
         // La pipette : une pastille de la couleur prise près de la souris.
         if let (true, Some(p)) = (self.refs.picking, latest) {
             let c = self.color;
             painter.circle_filled(p + vec2(16.0, -16.0), 11.0, Color32::from_rgb(c[0], c[1], c[2]));
             painter.circle_stroke(p + vec2(16.0, -16.0), 11.0, Stroke::new(1.5_f32, Color32::WHITE));
+            painter.circle_stroke(p + vec2(16.0, -16.0), 12.2, Stroke::new(1.0_f32, Color32::from_black_alpha(170)));
         }
         if dropping {
             painter.rect_stroke(rect.shrink(3.0), 6.0, Stroke::new(2.5_f32, theme::accent()), StrokeKind::Inside);
-            painter.text(rect.center_top() + vec2(0.0, 18.0), Align2::CENTER_CENTER, "Déposer pour ajouter aux références", FontId::proportional(14.0), theme::accent_texte());
+            painter.text(rect.center_top() + vec2(0.0, 18.0), Align2::CENTER_CENTER, "Déposer pour ajouter aux références", FontId::proportional(14.0), crate::planchdessin::SELECTION);
         }
         self.refs.shown_view = Some(view);
         if !(auto_view && view == initial_view) {
@@ -1177,7 +1214,7 @@ impl App {
         }
 
         // Double-clic : sur un texte, l'écrire sur place ; sur une image, la cadrer ; sur le fond, tout voir.
-        if resp.double_clicked() && !edit_rect.zip(hover).is_some_and(|(r, p)| r.contains(p)) {
+        if resp.double_clicked() && self.refs.pen.outil == planchdessinui::Outil::Selection && !edit_rect.zip(hover).is_some_and(|(r, p)| r.contains(p)) {
             match hovered_id {
                 Some(id) if self.doc.reference(id).is_some_and(|r| r.kind.has_text()) => self.refs.text_focus = Some(id),
                 Some(id) => self.refs_zoom_to(id, false, ppp),
@@ -1196,7 +1233,7 @@ impl App {
         }
         resp.context_menu(|ui| self.refs_menu(ui, ppp));
         // La bulle d'une référence : son nom, ses étiquettes, ses plans.
-        if let (Some(id), None, None) = (hovered_id, self.refs.drag.as_ref(), editing) {
+        if let (Some(id), None, None, true) = (hovered_id, self.refs.drag.as_ref(), editing, self.refs.pen.outil == planchdessinui::Outil::Selection) {
             if let Some(r) = self.doc.reference(id) {
                 let tip = reference_tip(r);
                 let title = r.title();
@@ -1234,7 +1271,7 @@ impl App {
         // (Un appui ailleurs referme le recadrage.)
         self.refs.crop_mode = None;
         let board_p = view.to_board(rect, p);
-        match references::hit_test(items.iter(), board_p) {
+        match references::hit_test_near(items.iter(), board_p, 6.0 / view.zoom.max(1e-3)) {
             Some(id) => {
                 if shift {
                     if let Some(i) = self.refs.sel.iter().position(|x| *x == id) {
@@ -1374,6 +1411,11 @@ impl App {
         }
         let board_p = view.to_board(rect, p);
         let Some(r) = references::hit_test(items.iter(), board_p).and_then(|id| items.iter().find(|r| r.id == id)) else { return };
+        if r.kind == Kind::Stroke {
+            self.color = r.ink;
+            self.status = format!("Couleur prise dans un trait : #{:02X}{:02X}{:02X}", r.ink[0], r.ink[1], r.ink[2]);
+            return;
+        }
         let now = ctx.input(|i| i.time);
         let frame = self.refs_shown_frame(r, now);
         let shown_px = r.size[0].max(r.size[1]) as f32 * r.scale * view.zoom * ctx.pixels_per_point();
@@ -1427,7 +1469,7 @@ impl App {
     }
 
     fn refs_grid(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        let items = self.refs_filtered();
+        let items: Vec<Reference> = self.refs_filtered().into_iter().filter(|r| !r.kind.is_stroke()).collect();
         if items.is_empty() {
             ui.label(RichText::new(if self.doc.references.is_empty() { "Aucune référence." } else { "Aucune référence ne correspond au filtre." }).weak());
             return;
@@ -1482,7 +1524,7 @@ impl App {
     }
 
     fn refs_list(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        let items = self.refs_filtered();
+        let items: Vec<Reference> = self.refs_filtered().into_iter().filter(|r| !r.kind.is_stroke()).collect();
         if items.is_empty() {
             ui.label(RichText::new(if self.doc.references.is_empty() { "Aucune référence." } else { "Aucune référence ne correspond au filtre." }).weak());
             return;
@@ -1644,7 +1686,9 @@ fn paint_block(painter: &egui::Painter, r: &Reference, corners: &[Pos2; 4], zoom
             painter.add(Shape::convex_polygon(corners.to_vec(), paint(tint, 1.0), Stroke::NONE));
         }
         Kind::Frame => {
-            painter.add(Shape::convex_polygon(corners.to_vec(), paint(tint, 0.09), Stroke::new(1.5_f32, paint(tint, 0.75))));
+            // (Le trait du cadre est la teinte assombrie : la teinte pleine est trop pâle sur le blanc.)
+            let edge = crate::planchdessin::ink_on_canvas(tint).map(|v| (v as f32 * 1.55).min(255.0) as u8);
+            painter.add(Shape::convex_polygon(corners.to_vec(), paint(tint, 0.09), Stroke::new(1.5_f32, paint(edge, 0.9))));
             let h = crate::planchref::FRAME_STRIP * s;
             let strip = [corners[0], corners[1], corners[1] + v * h, corners[0] + v * h];
             painter.add(Shape::convex_polygon(strip.to_vec(), paint(tint, 0.85), Stroke::NONE));
@@ -1674,12 +1718,14 @@ fn paint_block(painter: &egui::Painter, r: &Reference, corners: &[Pos2; 4], zoom
 pub(crate) fn block_text_look(r: &Reference, a: f32) -> (Color32, &'static str) {
     let ink = |c: Color32| c.gamma_multiply(a);
     let tint = r.tint();
-    let own = || Color32::from_rgba_unmultiplied(tint[0], tint[1], tint[2], (a * 255.0).round() as u8);
+    // (Un texte coloré se lit sur le blanc du canevas : la teinte du post-it, assombrie.)
+    let dark = crate::planchdessin::ink_on_canvas(tint);
+    let own_dark = || Color32::from_rgba_unmultiplied(dark[0], dark[1], dark[2], (a * 255.0).round() as u8);
     match r.kind {
         Kind::Note => (ink(Color32::from_rgb(38, 34, 26)), "Double-clic pour écrire"),
         Kind::Frame => (ink(Color32::from_rgb(38, 34, 26)), "Cadre"),
-        Kind::Title => (if r.color == 0 { ink(theme::texte()) } else { own() }, "Titre"),
-        _ => (if r.color == 0 { ink(theme::texte()) } else { own() }, "Texte"),
+        Kind::Title => (if r.color == 0 { ink(crate::planchdessin::CANVAS_TEXT) } else { own_dark() }, "Titre"),
+        _ => (if r.color == 0 { ink(crate::planchdessin::CANVAS_TEXT) } else { own_dark() }, "Texte"),
     }
 }
 

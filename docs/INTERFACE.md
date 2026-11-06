@@ -7292,3 +7292,26 @@ Dans la ligne de chaque brosse du panneau et dans la fenêtre « Modifier » du 
 ### Essais
 
 `brosses_perso_tests.rs` (8 de plus, 19 en tout) : chaque type suit le pinceau de l'utilisateur et ne le touche jamais (changement de taille et de pinceau suivis) ; chaque type en mode spécifique, pinceau et crayon, prend son réglage et rend celui de l'utilisateur à l'identique ; allers-retours entre brosses (qui suit, spécifique, spécifique, qui suit) sans changer le pinceau de l'utilisateur ; ce que l'utilisateur règle pendant qu'une spécifique est choisie reste pour elle, sans fuite dans un sens ni dans l'autre (ni dans le pinceau retenu par sorte de calque) ; l'éditeur change l'outil ou revient à « suit » pendant le choix ; un personnage spécifique, enregistré avec le projet, annulé, et un ancien fichier lu comme « suit » ; anciens réglages de décor (resté d'origine : suit ; réglé à la main : spécifique ; écrit puis relu à l'identique) ; la bulle, le panneau et le nom du panneau. **Adaptés** (avec un commentaire) : `decor_tests`, `pastilles_storyboard_tests`, `brosses_perso_tests` (anciens réglages, bulles, suppression).
+
+
+## 108. Planche de références : canevas blanc et crayon (2026-11-06, branche `references-dessin`)
+
+Demandes du réalisateur : « La planche de références est un canevas blanc et non gris » et « Ajouter un outil de dessin dans la planche de références ».
+
+- **Canevas blanc.** Le fond de la planche est blanc dans tous les thèmes, dans le panneau, en fenêtre détachée et en plein écran (`planchdessin::CANVAS`). En fenêtre détachée, le canevas va jusqu'aux bords (la barre d'outils garde sa marge) ; transparente, le blanc prend l'opacité choisie. L'interface autour ne change pas. Sur le blanc : texte et titre normaux en gris sombre (et non la couleur du thème), texte coloré = teinte du post-it assombrie, trait des cadres assombri, contour de sélection, poignées, rectangle de sélection et aide en bleu / gris lisibles. Les post-it (texte sombre sur teinte) n'ont pas changé.
+- **Crayon et gomme.** Deux icônes avec bulles dans la barre de la planche (`references.crayon`, `references.gomme`, sans touche, dans la palette Ctrl+K). Avec le crayon : huit encres, un sélecteur libre, la taille (0,5 à 120 pt de la planche, qui donne aussi celle de la gomme). Pression du stylet (événements tactiles de la fenêtre qui reçoit le geste) ; la souris donne la pression pleine. Les traits sont des points vectoriels en unités du tableau : ils suivent le zoom, sont peints par-dessus tout et pris les premiers. Espace tenu, bouton du milieu et molette déplacent et zooment la vue comme avant.
+- **Sélection inchangée.** Avec l'outil de sélection rien ne trace jamais ; quitter le crayon (l'icône de nouveau, ou Échap quand rien d'autre n'en a besoin : trait en cours, texte écrit, recadrage) rend tous les gestes d'avant. En plein écran avec le crayon, le premier Échap rend la sélection, le suivant sort du plein écran.
+- **Trait = élément de la planche** (`Kind::Stroke`) : on le choisit, le déplace, l'agrandit, le tourne, change son encre, le supprime ; un cadre emporte les traits dont le centre est dedans ; « Ranger », la grille, la liste, le compteur et les filtres l'ignorent. La gomme enlève le trait entier que touche son cercle.
+- **Annulation** : une étape par trait (« Trait de crayon »), une par passage de gomme (« Gommer des traits »), avec celle de la planche.
+- **Fichier** : le même `references.json`, trois champs en plus (`points` en une chaîne d'entiers, `encre`, `epaisseur`), tous absents des autres éléments et lus avec des valeurs par défaut ; format 2 comme pour un post-it, **format du fichier et `project::VERSION` inchangés**. Un fichier sans trait reste en format 1. Valeurs absurdes ramenées à des valeurs sûres, trait sans point retiré à la lecture.
+- **Jamais ailleurs** : ni dans les plans, ni dans le film, ni dans un export ; ce ne sont pas les annotations de la planche des Vignettes.
+- **Sans latence** : le trait en cours est peint à part (rien n'est écrit dans le document pendant le geste) ; les points sont partagés (`Arc`), la planche copie ses éléments sans les recopier ; un trait hors écran n'est pas peint ; un trait peint saute les points plus proches que 0,75 point d'écran.
+- **Essais** : `src/planchdessin_tests.rs` (16) : trait, annulation et rétablissement, sélection qui ne trace pas, Échap, stylet, zoom, gomme, choisir / déplacer / supprimer, enregistrement et réouverture à l'identique, ancien fichier, fichier abîmé, fenêtre à part, blanc dans six thèmes, lisibilité, 400 traits de 90 points (mesures affichées par le test).
+
+À vérifier à l'écran :
+1. Planche dans chaque thème, détachée, en plein écran et transparente : fond blanc, barre d'outils intacte.
+2. Post-it, texte et titre colorés, cadres, poignées et contour de sélection lisibles sur le blanc.
+3. Crayon à la souris puis au stylet (la pression amincit) ; encre, taille ; zoom à la molette, Espace pour déplacer la vue, en panneau et en fenêtre détachée.
+4. Gomme sur des traits qui croisent images et post-it ; Ctrl+Z / Ctrl+Y.
+5. Sélection : cliquer un trait, le déplacer, changer son encre, le supprimer ; Échap, une fois, rend la sélection.
+6. Enregistrer, fermer, rouvrir : traits identiques ; ouvrir un ancien projet : rien de changé.

@@ -65,7 +65,7 @@ impl App {
 
     /// Les commandes de la planche (celles de `referencesui.rs` sont traitées avant) ; vrai si `action` en était une.
     pub(crate) fn planchref_action(&mut self, action: &str) -> bool {
-        let needs_board = matches!(action, "references.postit" | "references.texte" | "references.titre" | "references.cadre" | "references.ranger" | "references.tout_selectionner" | "references.importer_planche");
+        let needs_board = matches!(action, "references.crayon" | "references.gomme" | "references.postit" | "references.texte" | "references.titre" | "references.cadre" | "references.ranger" | "references.tout_selectionner" | "references.importer_planche");
         if needs_board {
             self.show_pane(Pane::References);
         }
@@ -220,7 +220,7 @@ impl App {
             Kind::Text => "Ajouter un texte",
             Kind::Title => "Ajouter un titre",
             Kind::Frame => "Ajouter un cadre",
-            Kind::Image => "Ajouter une référence",
+            Kind::Image | Kind::Stroke => "Ajouter une référence",
         });
         self.doc.add_reference(r);
         self.refs.sel = vec![id];
@@ -239,7 +239,7 @@ impl App {
         let mut ids = self.refs_selected();
         let all = ids.is_empty();
         if all {
-            ids = self.refs_filtered().iter().filter(|r| r.kind != Kind::Frame).map(|r| r.id).collect();
+            ids = self.refs_filtered().iter().filter(|r| r.kind != Kind::Frame && r.kind != Kind::Stroke).map(|r| r.id).collect();
         }
         if ids.len() < 2 && !ids.iter().any(|i| self.doc.reference(*i).is_some_and(|r| r.kind == Kind::Frame)) {
             self.status = "Rien à ranger : choisis au moins deux éléments, ou un cadre.".into();
@@ -396,7 +396,8 @@ impl App {
         let (f11, esc) = ctx.input(|i| (i.key_pressed(Key::F11), i.key_pressed(Key::Escape)));
         if f11 {
             self.run_action("references.plein_ecran");
-        } else if esc && self.refs_window().fullscreen && self.refs.drag.is_none() && self.refs.crop_mode.is_none() && !ctx.wants_keyboard_input() {
+        } else if esc && self.refs_window().fullscreen && self.refs.drag.is_none() && self.refs.crop_mode.is_none() && self.refs.pen.outil == super::planchdessinui::Outil::Selection && !ctx.wants_keyboard_input() {
+            // (Avec le crayon ou la gomme, le premier Échap rend la sélection ; le suivant sort du plein écran.)
             self.refs_leave_fullscreen();
         }
     }
@@ -509,6 +510,7 @@ impl App {
         let plan = self.refs_plan_id();
         let linked = plan.is_some_and(|p| ids.iter().all(|i| self.doc.reference(*i).is_some_and(|x| x.plans.contains(&p))));
         let is_image = r.kind == Kind::Image;
+        let is_stroke = r.kind == Kind::Stroke;
         let arrangeable = ids.len() > 1 || r.kind == Kind::Frame;
         ui.separator();
         ui.horizontal_wrapped(|ui| {
@@ -540,13 +542,13 @@ impl App {
             if arrangeable && self.bouton(ui, ph::STACK, "Ranger", "Empile serré les éléments choisis, en gardant leurs tailles. Sur un cadre : range ce qu'il contient et le referme dessus.", "references.ranger").clicked() {
                 self.run_action("references.ranger");
             }
-            if self.bouton(ui, ph::ARROW_FAT_LINES_UP, "Mettre devant", "Passe l'élément devant les autres (un cadre reste derrière ce qu'il contient).", "references.devant").clicked() {
+            if !is_stroke && self.bouton(ui, ph::ARROW_FAT_LINES_UP, "Mettre devant", "Passe l'élément devant les autres (un cadre reste derrière ce qu'il contient).", "references.devant").clicked() {
                 self.run_action("references.devant");
             }
-            if self.bouton(ui, ph::ARROW_FAT_LINES_DOWN, "Mettre derrière", "Passe l'élément derrière les autres.", "references.derriere").clicked() {
+            if !is_stroke && self.bouton(ui, ph::ARROW_FAT_LINES_DOWN, "Mettre derrière", "Passe l'élément derrière les autres.", "references.derriere").clicked() {
                 self.run_action("references.derriere");
             }
-            if self.bouton_etat(ui, linked, ph::PUSH_PIN, "Lier au plan courant", "L'élément suit ce plan : le filtre « références du plan courant » ne montre qu'eux. Un autre clic le délie.", "references.lier_plan").clicked() {
+            if !is_stroke && self.bouton_etat(ui, linked, ph::PUSH_PIN, "Lier au plan courant", "L'élément suit ce plan : le filtre « références du plan courant » ne montre qu'eux. Un autre clic le délie.", "references.lier_plan").clicked() {
                 self.run_action("references.lier_plan");
             }
             if self.bouton(ui, ph::TRASH, "Supprimer", "Retire l'élément de la planche (Ctrl+Z le rétablit).", "references.supprimer").clicked() {
@@ -625,6 +627,30 @@ impl App {
                     }
                 }
             });
+        }
+        // L'encre d'un trait de crayon (celle du crayon ne change pas) ; un trait n'a ni étiquette ni plan.
+        if is_stroke {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(ph::PALETTE).size(bulles::TAILLE).color(theme::texte_doux()));
+                for (i, ink) in crate::planchdessin::INKS.iter().enumerate() {
+                    let (rect, resp) = ui.allocate_exact_size(vec2(17.0, 17.0), Sense::click());
+                    ui.painter().rect_filled(rect, 3.0, Color32::from_rgb(ink[0], ink[1], ink[2]));
+                    if r.ink == *ink {
+                        ui.painter().rect_stroke(rect.expand(1.5), 3.0, Stroke::new(2.0_f32, theme::contour()), StrokeKind::Outside);
+                    }
+                    bulles::bulle(resp.clone(), crate::planchdessin::INK_NAMES[i], "Change l'encre du trait choisi.", "");
+                    if resp.clicked() {
+                        let ink = *ink;
+                        self.refs_apply("Encre du trait", |x| {
+                            if x.kind == Kind::Stroke {
+                                x.ink = ink
+                            }
+                        });
+                    }
+                }
+            });
+            ui.separator();
+            return;
         }
         // Étiquettes : validées en quittant le champ.
         ui.horizontal(|ui| {

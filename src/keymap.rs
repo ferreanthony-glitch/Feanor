@@ -459,6 +459,8 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("references.tout_selectionner", "Références : tout sélectionner", true, false),
     act("references.importer_planche", "Références : importer la planche d'un autre projet…", true, false),
     act("references.rectangle", "Références : tirer sur le fond dessine un rectangle de sélection (oui / non)", true, false),
+    act("references.crayon", "Références : crayon de la planche (oui / non)", true, false),
+    act("references.gomme", "Références : gomme de la planche (oui / non)", true, false),
     act("references.detacher", "Références : détacher la planche dans sa fenêtre", true, false),
     act("references.plein_ecran", "Références : plein écran de la fenêtre à part (oui / non)", true, false),
     act("references.ecran_2", "Références : plein écran sur l'écran 2", true, false),

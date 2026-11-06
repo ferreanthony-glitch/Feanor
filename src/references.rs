@@ -94,6 +94,9 @@ pub enum Kind {
     Title,
     #[serde(rename = "cadre")]
     Frame,
+    /// Un trait de crayon posé sur la planche (`planchdessin.rs`) : des points, une encre, une épaisseur.
+    #[serde(rename = "trait")]
+    Stroke,
 }
 
 impl Kind {
@@ -104,6 +107,11 @@ impl Kind {
     /// Un élément fait de texte : post-it, texte, titre.
     pub fn has_text(&self) -> bool {
         matches!(self, Kind::Note | Kind::Text | Kind::Title | Kind::Frame)
+    }
+
+    /// Un trait de crayon (et non un bloc ni une image).
+    pub fn is_stroke(&self) -> bool {
+        *self == Kind::Stroke
     }
 }
 
@@ -172,6 +180,16 @@ pub struct Reference {
     /// par ces identifiants, jamais par `id`, qui n'est unique que dans un projet).
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub uid: String,
+    /// Les points d'un trait de crayon : `[x, y, pression]`, `x` et `y` par rapport au centre de l'élément (unités du tableau,
+    /// avant `scale`), la pression de 0 à 1. Vide pour tout le reste (`planchdessin.rs`). Partagé (`Arc`) : la planche copie
+    /// ses éléments à chaque image, ce qui ne doit rien coûter de plus par trait.
+    #[serde(rename = "points", default, skip_serializing_if = "crate::planchdessin::points_empty", with = "crate::planchdessin::points_serde")]
+    pub points: std::sync::Arc<Vec<[f32; 3]>>,
+    /// L'encre d'un trait (rouge, vert, bleu) et son épaisseur de base, en unités du tableau (0 : pas un trait).
+    #[serde(rename = "encre", default, skip_serializing_if = "crate::planchdessin::ink_is_default")]
+    pub ink: [u8; 3],
+    #[serde(rename = "epaisseur", default, skip_serializing_if = "crate::planchdessin::width_is_zero")]
+    pub width: f32,
     /// Qui l'a posé, et quand (secondes depuis 1970) ; `modified` : la dernière modification.
     #[serde(rename = "auteur", default, skip_serializing_if = "String::is_empty")]
     pub author: String,
@@ -304,6 +322,9 @@ impl Reference {
             crop: None,
             text_fit: 1.0,
             uid: String::new(),
+            points: Default::default(),
+            ink: crate::planchdessin::INK_DEFAULT,
+            width: 0.0,
             author: String::new(),
             created: 0,
             modified: 0,
@@ -395,8 +416,17 @@ impl Reference {
 
     /// Le point du tableau est-il sur ce qu'on peut attraper de l'élément ? Une image, un post-it, un texte :
     /// toute sa surface. Un cadre : son bandeau de titre et son bord seulement (le reste laisse passer le clic,
-    /// pour se déplacer ou choisir ce qu'il contient).
+    /// pour se déplacer ou choisir ce qu'il contient). Un trait : le trait lui-même, à quelques unités près.
     pub fn hit(&self, p: Pos2) -> bool {
+        self.hit_near(p, crate::planchdessin::HIT_SLACK)
+    }
+
+    /// Comme `hit`, avec la marge `slack` (unités du tableau) autour d'un trait : la planche la fait suivre le zoom, pour qu'un
+    /// trait fin se prenne aussi à petite échelle.
+    pub fn hit_near(&self, p: Pos2, slack: f32) -> bool {
+        if self.kind == Kind::Stroke {
+            return self.stroke_hit(p, slack);
+        }
         if self.kind != Kind::Frame {
             return self.contains(p);
         }
@@ -500,7 +530,7 @@ pub(crate) fn luma([r, g, b]: [u8; 3]) -> u8 {
 pub(crate) fn free_spot(existing: &[Reference], want: Pos2) -> Pos2 {
     let mut p = want;
     for _ in 0..400 {
-        if existing.iter().any(|r| (r.center() - p).length() < 24.0) {
+        if existing.iter().any(|r| r.kind != Kind::Stroke && (r.center() - p).length() < 24.0) {
             p += vec2(36.0, 30.0);
         } else {
             break;
@@ -597,8 +627,15 @@ pub(crate) fn bounds_of<'a>(refs: impl IntoIterator<Item = &'a Reference>) -> Op
 /// L'élément le plus haut sous le point du tableau : ceux qui ne sont pas des cadres d'abord (le dernier de
 /// la liste est le plus haut), puis les cadres (leur bandeau et leur bord).
 pub(crate) fn hit_test<'a>(refs: impl DoubleEndedIterator<Item = &'a Reference> + Clone, p: Pos2) -> Option<u64> {
-    let found = refs.clone().rev().find(|r| r.kind != Kind::Frame && r.hit(p));
-    found.or_else(|| refs.rev().find(|r| r.kind == Kind::Frame && r.hit(p))).map(|r| r.id)
+    hit_test_near(refs, p, crate::planchdessin::HIT_SLACK)
+}
+
+/// `hit_test` avec la marge d'un trait (`Reference::hit_near`). Les traits de crayon sont dessinés par-dessus tout : ils sont
+/// attrapés les premiers.
+pub(crate) fn hit_test_near<'a>(refs: impl DoubleEndedIterator<Item = &'a Reference> + Clone, p: Pos2, slack: f32) -> Option<u64> {
+    let stroke = refs.clone().rev().find(|r| r.kind == Kind::Stroke && r.hit_near(p, slack));
+    let found = || refs.clone().rev().find(|r| r.kind != Kind::Frame && r.kind != Kind::Stroke && r.hit(p));
+    stroke.or_else(found).or_else(|| refs.rev().find(|r| r.kind == Kind::Frame && r.hit(p))).map(|r| r.id)
 }
 
 /// Une grille de cellules carrées de `cell` points dans `width` points : le rectangle de la cellule
@@ -643,6 +680,10 @@ pub struct Filter {
 impl Filter {
     /// La référence passe-t-elle ? `plan` : le plan courant.
     pub fn matches(&self, r: &Reference, plan: Option<u64>) -> bool {
+        // Un trait de crayon n'a ni nom, ni étiquette, ni plan : le filtre ne le cache jamais (il disparaîtrait de la planche).
+        if r.kind == Kind::Stroke {
+            return true;
+        }
         if self.current_plan && !plan.is_some_and(|p| r.plans.contains(&p)) {
             return false;
         }
@@ -827,6 +868,8 @@ pub(crate) fn parse(text: &str) -> Result<Vec<Reference>, String> {
         sanitize(&mut r);
         out.push(r);
     }
+    // (Un trait sans aucun point ne se voit pas et ne se prend pas : il ne reste pas.)
+    out.retain(|r| r.kind != Kind::Stroke || !r.points.is_empty());
     Ok(out)
 }
 
@@ -850,6 +893,7 @@ fn sanitize(r: &mut Reference) {
         (c[2] - c[0] >= 0.01 && c[3] - c[1] >= 0.01 && c != [0.0, 0.0, 1.0, 1.0]).then_some(c)
     });
     r.color = r.color.min(crate::planchref::NOTE_COLORS.len() as u8 - 1);
+    crate::planchdessin::sanitize_stroke(r);
     r.text_fit = if r.text_fit.is_finite() { r.text_fit.clamp(crate::planchref::FIT_MIN, 1.0) } else { 1.0 };
     if r.text.chars().count() > crate::planchref::TEXT_MAX {
         r.text = r.text.chars().take(crate::planchref::TEXT_MAX).collect();
