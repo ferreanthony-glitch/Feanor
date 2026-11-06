@@ -165,6 +165,51 @@ pub fn items_calques(doc: &Document, plans: &[usize], annotations: bool) -> Vec<
     out
 }
 
+/// Comme `items`, avec la nomenclature choisie (`nomenclature.rs`) ; la forme d'origine sans réglage rend exactement `items`.
+pub fn items_nom(doc: &Document, plans: &[usize], annotations: bool, nom: &crate::nomenclature::Nomenclature) -> Result<Vec<Still>, String> {
+    if nom.est_defaut() {
+        return Ok(items(doc, plans, annotations));
+    }
+    let (entrees, cadres, largeur) = entrees(doc, plans, annotations, false);
+    let noms = nom.noms(doc, &entrees, largeur)?;
+    Ok(cadres.into_iter().zip(noms).map(|(frame, name)| Still { frame, name }).collect())
+}
+
+/// Comme `items_calques`, avec la nomenclature choisie.
+pub fn items_calques_nom(doc: &Document, plans: &[usize], annotations: bool, nom: &crate::nomenclature::Nomenclature) -> Result<Vec<CleCalque>, String> {
+    if nom.est_defaut() {
+        return Ok(items_calques(doc, plans, annotations));
+    }
+    let (entrees, cadres, largeur) = entrees(doc, plans, annotations, true);
+    let noms = nom.noms(doc, &entrees, largeur)?;
+    let calques: Vec<usize> = plans.iter().flat_map(|&p| cles_du_plan(doc, p, annotations).into_iter().flat_map(|c| c.layers)).collect();
+    Ok(cadres.into_iter().zip(noms).zip(calques).map(|((frame, name), layer)| CleCalque { frame, layer, name }).collect())
+}
+
+/// Les noms à fabriquer pour les clés des plans `plans` (un par clé, ou un par calque et par clé), l'image de chacun et le nombre de chiffres
+/// du numéro de clé.
+pub fn entrees(doc: &Document, plans: &[usize], annotations: bool, par_calque: bool) -> (Vec<crate::nomenclature::Entree>, Vec<(usize, usize)>, usize) {
+    use crate::nomenclature::Entree;
+    let tous: Vec<Vec<Cle>> = plans.iter().map(|&p| cles_du_plan(doc, p, annotations)).collect();
+    let largeur = largeur(tous.iter().map(Vec::len).max().unwrap_or(0));
+    let mut e: Vec<Entree> = Vec::new();
+    let mut cadres: Vec<(usize, usize)> = Vec::new();
+    for (&p, cles) in plans.iter().zip(&tous) {
+        for c in cles {
+            if par_calque {
+                for &li in &c.layers {
+                    e.push(Entree { plan: p, cle: Some(c.numero), case: None, calque: Some(doc.panels[p].layers[li].name.clone()) });
+                    cadres.push((p, c.frame));
+                }
+            } else {
+                e.push(Entree { plan: p, cle: Some(c.numero), case: None, calque: None });
+                cadres.push((p, c.frame));
+            }
+        }
+    }
+    (e, cadres, largeur)
+}
+
 /// La tâche d'export des images composées des clés : celle des images par plan, avec les noms des clés.
 pub fn job(dir: &Path, items: &[Still], frame: [usize; 2], s: &StillsSettings, annotations: bool) -> ExportJob {
     let mut job = crate::exportstills::job(dir, items, frame, &StillsSettings { per: StillsPer::Cle, ..*s }, annotations);

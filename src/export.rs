@@ -244,6 +244,8 @@ pub struct ExportSettings {
     pub stems: StemsSettings,
     /// Le format du son par plan (`exportsonplan.rs`).
     pub plan_sound: AudioFormat,
+    /// La nomenclature des fichiers des exports par plan (`nomenclature.rs`).
+    pub nomenclature: crate::nomenclature::Nomenclature,
     /// Les calques séparés (`exportlayers.rs`).
     pub layers: LayersSettings,
     /// Les clés de caméra (`exportcamera.rs`).
@@ -271,6 +273,7 @@ impl Default for ExportSettings {
             stills: StillsSettings::default(),
             stems: StemsSettings::default(),
             plan_sound: AudioFormat::default(),
+            nomenclature: Default::default(),
             layers: LayersSettings::default(),
             camera: CameraSettings::default(),
         }
@@ -289,13 +292,14 @@ pub struct ExportPrefs {
     pub stills: StillsSettings,
     pub stems: StemsSettings,
     pub plan_sound: AudioFormat,
+    pub nomenclature: crate::nomenclature::Nomenclature,
     pub layers: LayersSettings,
     pub camera: CameraSettings,
 }
 
 impl ExportPrefs {
     pub fn of(s: &ExportSettings) -> ExportPrefs {
-        ExportPrefs { size: s.size, rate: s.rate, mxf: s.mxf, burn: s.burn, pdf: s.pdf, stills: s.stills, stems: s.stems, plan_sound: s.plan_sound, layers: s.layers, camera: s.camera }
+        ExportPrefs { size: s.size, rate: s.rate, mxf: s.mxf, burn: s.burn, pdf: s.pdf, stills: s.stills, stems: s.stems, plan_sound: s.plan_sound, nomenclature: s.nomenclature.clone(), layers: s.layers, camera: s.camera }
     }
 
     pub fn apply(&self, s: &mut ExportSettings) {
@@ -307,6 +311,7 @@ impl ExportPrefs {
         s.stills = self.stills;
         s.stems = self.stems;
         s.plan_sound = self.plan_sound;
+        s.nomenclature = self.nomenclature.clone();
         s.layers = self.layers;
         s.camera = self.camera;
     }

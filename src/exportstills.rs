@@ -104,6 +104,29 @@ pub fn items_avec(doc: &Document, plans: &[usize], per: StillsPer, annotations: 
     out
 }
 
+/// Comme `items_avec`, avec la nomenclature choisie (`nomenclature.rs`) : la forme d'origine sans réglage rend exactement `items_avec`. Erreur :
+/// le modèle ne se lit pas ou deux fichiers auraient le même nom.
+pub fn items_nom(doc: &Document, plans: &[usize], per: StillsPer, annotations: bool, nom: &crate::nomenclature::Nomenclature) -> Result<Vec<Still>, String> {
+    if per == StillsPer::Cle {
+        return crate::exportcles::items_nom(doc, plans, annotations, nom);
+    }
+    if nom.est_defaut() {
+        return Ok(items_avec(doc, plans, per, annotations));
+    }
+    let mut entrees = Vec::new();
+    let mut cadres = Vec::new();
+    for &p in plans.iter().filter(|&&p| p < doc.panels.len()) {
+        let spans = crate::board::plan_boards(doc, p);
+        let wanted = if per == StillsPer::Plan { 1 } else { spans.len() };
+        for (k, (_, start, _)) in spans.into_iter().take(wanted).enumerate() {
+            entrees.push(crate::nomenclature::Entree { plan: p, cle: None, case: (per == StillsPer::Case).then_some(k + 1), calque: None });
+            cadres.push((p, start));
+        }
+    }
+    let noms = nom.noms(doc, &entrees, 2)?;
+    Ok(cadres.into_iter().zip(noms).map(|(frame, name)| Still { frame, name }).collect())
+}
+
 /// La taille d'une image : celle du cadre tel quel pour « Taille du projet » (pas de rognage à une taille paire, ce n'est pas une vidéo).
 pub fn still_size(size: VideoSize, frame: [usize; 2]) -> [usize; 2] {
     if size == VideoSize::Project {

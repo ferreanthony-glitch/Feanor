@@ -7139,3 +7139,20 @@ Deux sorties de la partie 84 qui manquaient pour la V1, dans Fichier > Exporter.
 5. « Plans choisis » avec deux plans : seulement ces plans.
 6. Son par plan : le compte « N plans avec du son sur M » ; WAV puis AIFF 24 bits ; ouvre deux fichiers voisins dans un éditeur son et pose-les bout à bout : pas de coupure ni de recouvrement à la coupe ; coupe le son d'une piste (muet) : le compte change.
 7. « Arrêter » en route : le dossier ne garde aucun fichier ; la fenêtre de fin reste lisible huit secondes (réussite) ou jusqu'au clic (échec).
+
+### Nomenclature des fichiers (ajout, `src/nomenclature.rs`)
+
+Demande du réalisateur : pouvoir changer la nomenclature des fichiers sous plusieurs formes. Un choix **Nomenclature** apparaît dans les fenêtres **Images par plan / par case / à la clé** et **Son par plan** (les calques séparés et les vidéos par plan gardent le modèle du projet).
+- **Même système que « Noms et production »** : la nomenclature assemble des modèles de `nommage.rs` ; rien n'est réécrit. Seul ajout : le jeton `{cle}` (rang de la clé dans le plan, `Jeton::TOUS_EXPORT`), permis ici et pas dans le modèle du projet.
+- **Formes prêtes** : `SQ01_PL012A_K03` (d'origine : le modèle du projet suivi de `_K03`), `sq01_pl012a_k03`, `S01-P012A-K03`, `EP01_SQ01_PL012A_K03`, `012A_03`. **Personnalisée** : un modèle à jetons (projet, épisode, séquence, plan, clé, calque, version, case, date ; séparateurs libres ; `{plan:03}` complète de zéros).
+- **Réglages** : chiffres de la séquence, du plan, de la clé (0 : d'après le modèle ; la clé : automatique, deux chiffres ou plus selon le plus grand nombre de clés d'un plan) ; casse (telle quelle, MAJUSCULES, minuscules) ; place du nom de calque, à la fin ou au début (un modèle avec `{calque}` le place lui-même).
+- **Aperçu en direct** : les quatre premiers noms du vrai projet, avec leur extension, et le dernier.
+- **Sûreté** : un modèle illisible, ou sans `{cle}` pour des clés, ou qui donnerait deux fois le même nom (sans tenir compte des majuscules) est signalé dans la fenêtre avec les deux noms, le bouton « Exporter… » est fermé, et l'export refuse de partir si on le lance quand même (message dans la barre d'état) : rien n'est écrit, jamais un fichier par-dessus un autre du même export. Les formes du projet gardent le suffixe `_2` des plans de même nom, comme avant. Windows : caractères interdits du modèle remplacés par « _ » (avertissement dans la fenêtre) ; accents, espaces et points comme dans tous les noms de fichiers des exports (`editorial::file_safe` : accent ramené à sa lettre, espace et point en « _ »). Les fichiers d'un export déjà présents dans le dossier ne sont pas testés (relancer un export dans le même dossier les remplace, comme les autres exports).
+- **Retenue** : avec les autres choix d'export du poste de travail (`ExportPrefs`), là où vivent déjà la taille, le format et les cases des fenêtres ; pas dans le projet, donc pas de changement du format de projet ni de son numéro. Un réglage d'avant, sans ce champ, donne la forme d'origine.
+- **Aucun changement par défaut** : la forme d'origine sans réglage passe par les fonctions d'avant ; un essai vérifie que le nouveau chemin, réglé pour retomber sur la même chose, donne exactement les mêmes noms (clés composées, par calque, par plan, par case).
+- **Essais** : `src/nomenclature_tests.rs` (formes et exemples, tri, chiffres, casse, calque, modèles refusés, caractères interdits, retenue, fichiers PNG et WAV réellement écrits et relus).
+
+À vérifier à l'écran (nomenclature) :
+8. Dans « Images à la clé » : la liste des formes, l'aperçu qui change en cliquant chaque forme ; « Personnalisée » : écrire `{plan:03}_{cle}_{calque}`, puis enlever `{cle}` : le message rouge apparaît et « Exporter… » se grise.
+9. Les chiffres (clé 3), la casse (MAJUSCULES), la case « nom du calque au début » (en mode par calque) : l'aperçu suit.
+10. Ferme et rouvre la fenêtre, puis FEANOR : le dernier choix est retenu. Dans « Images par plan » et « Son par plan », la même section est là.

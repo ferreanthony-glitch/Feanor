@@ -130,6 +130,25 @@ impl App {
         let sound_here = export::has_sound(&audio::mix_clips(&self.doc), start, len);
         let ffmpeg = if s.format.uses_ffmpeg() { self.ffmpeg_info().cloned() } else { None };
         let has_transitions = !self.doc.transitions.is_empty();
+        // Les noms que la nomenclature choisie donnerait (aperçu en direct) ; une erreur ferme le bouton « Exporter… ».
+        let apercu: Option<Result<Vec<String>, String>> = match s.format {
+            Format::Stills => {
+                let plans = export::panels_of(&frames);
+                let r = if s.stills.per == StillsPer::Cle && s.stills.par_calque {
+                    exportcles::items_calques_nom(&self.doc, &plans, s.annotations, &s.nomenclature).map(|v| v.into_iter().map(|i| format!("{}.png", i.name)).collect::<Vec<_>>())
+                } else {
+                    let ext = if s.stills.per == StillsPer::Cle && s.stills.par_calque { "png" } else { s.stills.format.extension() };
+                    exportstills::items_nom(&self.doc, &plans, s.stills.per, s.annotations, &s.nomenclature).map(|v| v.into_iter().map(|i| format!("{}.{ext}", i.name)).collect::<Vec<_>>())
+                };
+                Some(r)
+            }
+            Format::SonPlans => {
+                let plans = export::panels_of(&frames);
+                Some(exportsonplan::plan_nom(&self.doc, &plans, s.plan_sound, &audio::mix_clips(&self.doc), &s.nomenclature).map(|v| v.into_iter().map(|f| f.file).collect::<Vec<_>>()))
+            }
+            _ => None,
+        };
+        let nom_erreur = matches!(apercu, Some(Err(_)));
 
         let mut go = false;
         let mut close = false;
@@ -444,8 +463,8 @@ impl App {
                         }
                     });
                     ui.end_row();
-                    ui.label("Noms");
-                    ui.label(RichText::new("Comme les images par plan : SQ01_PL012A.wav (le modèle de noms du projet).").small().weak());
+                    ui.label("Nomenclature");
+                    ui.vertical(|ui| nomenclature_ui(ui, &mut s.nomenclature, apercu.as_ref(), false));
                     ui.end_row();
                 }
                 // Une image par plan, par case ou par clé.
@@ -519,12 +538,9 @@ impl App {
                         });
                     });
                     ui.end_row();
-                    ui.label("Noms");
-                    ui.label(RichText::new(if s.stills.per == StillsPer::Cle {
-                        "Le nom du plan et le numéro de clé : SQ01_PL012A_K01, _K02… Un calque seul : SQ01_PL012A_K03_Personnage."
-                    } else {
-                        "Comme l'export pour le montage : SQ01_PL012A (et _C02, _C03… pour les cases d'après)."
-                    }).small().weak());
+                    ui.label("Nomenclature");
+                    let calques = s.stills.per == StillsPer::Cle && s.stills.par_calque;
+                    ui.vertical(|ui| nomenclature_ui(ui, &mut s.nomenclature, apercu.as_ref(), calques));
                     ui.end_row();
                 }
                 // Les commentaires de la timeline, écrits sous l'image où ils tombent (`export::storyboard_of_with`).
@@ -590,7 +606,7 @@ impl App {
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                go = ui.button("Exporter…").clicked();
+                go = ui.add_enabled(!nom_erreur, egui::Button::new("Exporter…")).on_disabled_hover_text("La nomenclature des fichiers est à corriger (voir plus haut).").clicked();
                 close = ui.button("Annuler").clicked();
             });
             ui.add_space(4.0);
@@ -655,7 +671,13 @@ impl App {
                 let Some(dir) = self.dialogue_dossier("images_par_plan", "Dossier où exporter les images par plan", None) else { return };
                 let plans = export::panels_of(&frames);
                 if s.stills.per == StillsPer::Cle && s.stills.par_calque {
-                    let items = exportcles::items_calques(&self.doc, &plans, s.annotations);
+                    let items = match exportcles::items_calques_nom(&self.doc, &plans, s.annotations, &s.nomenclature) {
+                        Ok(i) => i,
+                        Err(e) => {
+                            self.status = format!("Export impossible : {e}.");
+                            return;
+                        }
+                    };
                     if items.is_empty() {
                         self.status = "Aucune clé dans cette étendue : aucun dessin sur un calque visible.".into();
                         return;
@@ -663,7 +685,13 @@ impl App {
                     self.start_job(exportcles::job_calques(&dir, items, self.doc.frame, &s.stills, s.annotations));
                     return;
                 }
-                let items = exportstills::items_avec(&self.doc, &plans, s.stills.per, s.annotations);
+                let items = match exportstills::items_nom(&self.doc, &plans, s.stills.per, s.annotations, &s.nomenclature) {
+                    Ok(i) => i,
+                    Err(e) => {
+                        self.status = format!("Export impossible : {e}.");
+                        return;
+                    }
+                };
                 if items.is_empty() {
                     self.status = if s.stills.per == StillsPer::Cle { "Aucune clé dans cette étendue : aucun dessin sur un calque visible." } else { "Aucun plan dans cette étendue." }.into();
                     return;
@@ -733,7 +761,13 @@ impl App {
                 self.start_job(ExportJob::task("Export du son par piste".into(), &dir, message, move |snap, cancel| exportstems::write_all(snap, &d, &files, start, len, format, cancel).map(|_| ())));
             }
             Format::SonPlans => {
-                let files = exportsonplan::plan(&self.doc, &export::panels_of(&frames), s.plan_sound);
+                let files = match exportsonplan::plan_nom(&self.doc, &export::panels_of(&frames), s.plan_sound, &audio::mix_clips(&self.doc), &s.nomenclature) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        self.status = format!("Export impossible : {e}.");
+                        return;
+                    }
+                };
                 if files.is_empty() {
                     self.status = "Rien ne s'entend dans cette étendue : aucun fichier à écrire.".into();
                     return;
@@ -883,6 +917,59 @@ impl App {
             }
             self.export_projet = None;
         }
+    }
+}
+
+/// Le choix de nomenclature des fichiers (`nomenclature.rs`) : formes prêtes ou modèle à jetons, chiffres, casse, place du nom de calque, aperçu
+/// en direct des noms du vrai projet ; une erreur (modèle illisible, sans champ clé, deux fichiers de même nom) est dite ici et ferme « Exporter… ».
+fn nomenclature_ui(ui: &mut egui::Ui, n: &mut crate::nomenclature::Nomenclature, apercu: Option<&Result<Vec<String>, String>>, calques: bool) {
+    use crate::nomenclature::{Casse, Forme};
+    for f in Forme::TOUS {
+        let texte = match f {
+            Forme::Defaut => format!("{}  (d'origine : le modèle du projet)", f.exemple()),
+            _ => f.exemple().to_string(),
+        };
+        ui.radio_value(&mut n.forme, f, texte);
+    }
+    if n.forme == Forme::Perso {
+        ui.add(egui::TextEdit::singleline(&mut n.modele).desired_width(380.0).font(egui::TextStyle::Monospace));
+        ui.label(RichText::new("Champs : {projet} {episode} {sequence} {plan} {cle} {calque} {version} {case} {date} ; une largeur complète de zéros : {plan:03}. Le reste (tirets, soulignés, lettres) est écrit tel quel.").small().weak());
+        for a in n.avertissements() {
+            crate::theme::avertir_petit(ui, a);
+        }
+    }
+    ui.horizontal(|ui| {
+        ui.label("Chiffres");
+        for (nom, v) in [("séquence", &mut n.chiffres_sequence), ("plan", &mut n.chiffres_plan), ("clé", &mut n.chiffres_cle)] {
+            ui.label(RichText::new(nom).small());
+            ui.add(egui::DragValue::new(v).range(0..=6).speed(0.1));
+        }
+        ui.label(RichText::new("0 : d'après le modèle").small().weak());
+    });
+    ui.horizontal(|ui| {
+        ui.label("Casse");
+        ui.radio_value(&mut n.casse, Casse::Inchangee, "Telle quelle");
+        ui.radio_value(&mut n.casse, Casse::Majuscules, "MAJUSCULES");
+        ui.radio_value(&mut n.casse, Casse::Minuscules, "minuscules");
+    });
+    if calques {
+        ui.checkbox(&mut n.calque_au_debut, "Nom du calque au début (sinon à la fin ; un modèle avec {calque} le place lui-même)");
+    }
+    match apercu {
+        Some(Ok(v)) if v.is_empty() => {}
+        Some(Ok(v)) => {
+            ui.label(RichText::new("Aperçu").small().strong());
+            for nom in v.iter().take(4) {
+                ui.label(RichText::new(nom).monospace().small());
+            }
+            if v.len() > 4 {
+                ui.label(RichText::new(format!("… et {} autres, du dernier : {}", v.len() - 4, v[v.len() - 1])).small().weak());
+            }
+        }
+        Some(Err(e)) => {
+            crate::theme::avertir(ui, e);
+        }
+        None => {}
     }
 }
 

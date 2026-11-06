@@ -49,10 +49,14 @@ pub enum Jeton {
     Case,
     Date,
     Calque,
+    /// Le rang de la clé dans le plan : seulement dans la nomenclature des exports à la clé (`nomenclature.rs`), pas dans le modèle du projet.
+    Cle,
 }
 
 impl Jeton {
     pub const TOUS: [Jeton; 8] = [Jeton::Projet, Jeton::Episode, Jeton::Sequence, Jeton::Plan, Jeton::Version, Jeton::Case, Jeton::Date, Jeton::Calque];
+    /// Les jetons permis dans une nomenclature d'export : ceux du modèle du projet et la clé.
+    pub const TOUS_EXPORT: [Jeton; 9] = [Jeton::Projet, Jeton::Episode, Jeton::Sequence, Jeton::Plan, Jeton::Version, Jeton::Case, Jeton::Date, Jeton::Calque, Jeton::Cle];
 
     pub fn nom(self) -> &'static str {
         match self {
@@ -64,6 +68,7 @@ impl Jeton {
             Jeton::Case => "case",
             Jeton::Date => "date",
             Jeton::Calque => "calque",
+            Jeton::Cle => "cle",
         }
     }
 
@@ -78,11 +83,12 @@ impl Jeton {
             Jeton::Case => "Le rang de la case dans le plan (images par case). Vide pour un export par plan.",
             Jeton::Date => "Le jour de l'export, AAAAMMJJ.",
             Jeton::Calque => "Le nom du calque (calques séparés). Vide ailleurs.",
+            Jeton::Cle => "Le rang de la clé dans le plan (images à la clé) ; {cle:03} le complète de zéros. Vide ailleurs.",
         }
     }
 
-    fn depuis(nom: &str) -> Option<Jeton> {
-        Jeton::TOUS.into_iter().find(|j| j.nom() == nom)
+    fn depuis(nom: &str, permis: &[Jeton]) -> Option<Jeton> {
+        permis.iter().copied().find(|j| j.nom() == nom)
     }
 }
 
@@ -95,6 +101,11 @@ pub enum Piece {
 
 /// Le modèle lu. Erreur : ce qui ne va pas, en une phrase.
 pub fn analyser(modele: &str) -> Result<Vec<Piece>, String> {
+    analyser_avec(modele, &Jeton::TOUS)
+}
+
+/// Comme `analyser`, avec les jetons `permis` (la nomenclature des exports à la clé permet aussi `{cle}`).
+pub fn analyser_avec(modele: &str, permis: &[Jeton]) -> Result<Vec<Piece>, String> {
     let mut pieces: Vec<Piece> = Vec::new();
     let mut texte = String::new();
     let mut it = modele.chars().peekable();
@@ -131,8 +142,8 @@ pub fn analyser(modele: &str) -> Result<Vec<Piece>, String> {
                     }
                     None => (dedans.trim(), 0),
                 };
-                let Some(jeton) = Jeton::depuis(&nom.to_lowercase()) else {
-                    return Err(format!("jeton inconnu « {{{nom}}} » (permis : {})", Jeton::TOUS.iter().map(|j| format!("{{{}}}", j.nom())).collect::<Vec<_>>().join(", ")));
+                let Some(jeton) = Jeton::depuis(&nom.to_lowercase(), permis) else {
+                    return Err(format!("jeton inconnu « {{{nom}}} » (permis : {})", permis.iter().map(|j| format!("{{{}}}", j.nom())).collect::<Vec<_>>().join(", ")));
                 };
                 if !texte.is_empty() {
                     pieces.push(Piece::Texte(std::mem::take(&mut texte)));
@@ -177,6 +188,8 @@ pub struct Contexte {
     pub plan_num: Option<Num>,
     pub version: u32,
     pub case: Option<usize>,
+    /// Le rang de la clé dans le plan (images à la clé, `exportcles.rs`) ; seulement pour les modèles des exports à la clé.
+    pub cle: Option<usize>,
     pub calque: Option<String>,
     pub date: String,
 }
@@ -206,6 +219,7 @@ pub fn remplir(pieces: &[Piece], cx: &Contexte) -> String {
                     Jeton::Plan => numero(&cx.plan_num, w),
                     Jeton::Version => format!("{:0w$}", cx.version.max(1)),
                     Jeton::Case => cx.case.map(|k| format!("{k:0w$}")).unwrap_or_default(),
+                    Jeton::Cle => cx.cle.map(|k| format!("{k:0w$}")).unwrap_or_default(),
                     Jeton::Date => cx.date.clone(),
                     Jeton::Calque => nettoyer(cx.calque.as_deref().unwrap_or("")),
                 };
@@ -249,6 +263,7 @@ impl Document {
             plan_num: Some(self.plan_num(self.panels[p].scene)),
             version: self.numero_de_version(id),
             case: None,
+            cle: None,
             calque: None,
             date: date_du_jour(),
         }
@@ -301,6 +316,7 @@ impl Document {
                     plan_num: Some(plan_num),
                     version: self.numero_de_version(self.panels[p].id),
                     case: None,
+                    cle: None,
                     calque: None,
                     date: date.clone(),
                 };
@@ -309,7 +325,7 @@ impl Document {
             .collect()
     }
 
-    fn nom_avec_contexte(&self, pieces: &[Piece], p: usize, cx: Contexte) -> String {
+    pub(crate) fn nom_avec_contexte(&self, pieces: &[Piece], p: usize, cx: Contexte) -> String {
         let (case, mut nom) = (cx.case, remplir(pieces, &cx));
         if !contient(pieces, Jeton::Version) && self.nombre_de_versions(self.panels[p].id) > 1 {
             nom = format!("{nom}_{}", crate::planvers::etiquette(cx.version));

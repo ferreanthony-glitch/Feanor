@@ -50,7 +50,7 @@ fn calque(nom: &str, frames: Vec<Option<u64>>) -> Layer {
 /// Deux plans. Plan 1 (10 images) : « Perso » a un dessin sur les images 0-3 et un autre sur 4-9 ; « Fond » un dessin à l'image 2 seule, qui
 /// revient à l'image 7 (même dessin après un vide : une nouvelle clé). Clés attendues : images 0, 2, 4, 7. Plan 2 (5 images) : un dessin tenu
 /// sur les 5 images, une seule clé. Autour : un calque caché, une annotation, un calque d'effet et un calque vidéo, qui ne font aucune clé.
-fn projet_cles() -> Document {
+pub(crate) fn projet_cles() -> Document {
     let mut doc = Document::with_frame(64, 36, 12);
     doc.add_scene_after(0);
     let (p1, p2) = (dessin(&mut doc, Color32::from_rgb(200, 40, 40)), dessin(&mut doc, Color32::from_rgb(40, 40, 200)));
@@ -75,7 +75,7 @@ fn projet_cles() -> Document {
     doc
 }
 
-fn fichiers(dir: &Path) -> Vec<String> {
+pub(crate) fn fichiers(dir: &Path) -> Vec<String> {
     let mut v: Vec<String> = std::fs::read_dir(dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
     v.sort();
     v

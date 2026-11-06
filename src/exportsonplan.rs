@@ -59,6 +59,20 @@ pub fn plan_avec(doc: &Document, plans: &[usize], format: AudioFormat, clips: &[
     out
 }
 
+/// Comme `plan_avec`, avec les noms de la nomenclature choisie (`nomenclature.rs`) ; la forme d'origine sans réglage rend exactement `plan_avec`.
+pub fn plan_nom(doc: &Document, plans: &[usize], format: AudioFormat, clips: &[MixClip], nom: &crate::nomenclature::Nomenclature) -> Result<Vec<SonDePlan>, String> {
+    let mut v = plan_avec(doc, plans, format, clips);
+    if nom.est_defaut() {
+        return Ok(v);
+    }
+    let entrees: Vec<crate::nomenclature::Entree> = v.iter().map(|s| crate::nomenclature::Entree { plan: s.plan, cle: None, case: None, calque: None }).collect();
+    let noms = nom.noms(doc, &entrees, 2)?;
+    for (s, n) in v.iter_mut().zip(noms) {
+        s.file = format!("{n}.{}", format.container.extension());
+    }
+    Ok(v)
+}
+
 /// Comme `plan_avec`, avec le mixage du projet (sans attendre les effets : sert à savoir quels plans ont du son).
 pub fn plan(doc: &Document, plans: &[usize], format: AudioFormat) -> Vec<SonDePlan> {
     plan_avec(doc, plans, format, &audio::mix_clips(doc))
