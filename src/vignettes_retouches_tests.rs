@@ -128,10 +128,11 @@ fn the_stroke_overflows_its_box_while_drawing_and_the_box_clips_it_after_but_the
     // Et rien n'est peint dehors qui recouvre la case elle-même (le dedans est exact, il n'est pas redoublé).
     assert!(lignes_magenta(&b).iter().all(|(clip, _)| !clip.contains_rect(case.shrink(2.0))), "aucune forme du débord ne couvre l'intérieur de la case");
 
-    // Au lâcher : la case n'affiche plus que son cadre, plus rien dehors…
+    // Au lâcher : le trait tracé reste peint le temps que ses parts soient rendues en fond (partie 111), puis plus rien du débord.
     b.image(vec![appui(fin, false, Modifiers::NONE)], 1.0 / 60.0);
     b.image(Vec::new(), 1.0 / 60.0);
-    assert!(debord(&b, case).is_empty(), "après le lâcher, rien ne déborde plus à l'écran");
+    crate::perf_tests::se_reposer(&mut b, 2000);
+    assert!(debord(&b, case).is_empty(), "une fois les parts rendues, le débord ne peint plus rien");
     // … mais les données gardent tout le trait (toile infinie).
     assert!(encre(&b.app.doc, 0));
     // (Depuis le 2026-10-30, ce qui est hors du champ de la case n'est plus dans son dessin : la part dans la case voisine est dans le plan voisin, le reste sur la planche, `horschamp_tests.rs`.)
@@ -157,6 +158,7 @@ fn a_shape_preview_also_overflows_while_dragged() {
     assert!(dehors.iter().any(|(_, pts)| pts.iter().any(|p| (p.x - fin.x).abs() < 3.0)), "la ligne tirée se voit jusqu'au bout, dehors : {dehors:?}");
     b.image(vec![appui(fin, false, Modifiers::NONE)], 1.0 / 60.0);
     b.image(Vec::new(), 1.0 / 60.0);
+    crate::perf_tests::se_reposer(&mut b, 2000);
     assert!(debord(&b, case).is_empty());
 }
 

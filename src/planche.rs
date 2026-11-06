@@ -102,6 +102,9 @@ pub struct Options {
     pub bloc_titre: bool,
     /// Ce que dit le bloc de titre : posé par `App::planche_job` d'après le projet.
     pub entete: crate::entetepdf::Entete,
+    /// La marge d'une case, en part de sa largeur (Préférences > Vignettes) : ce qui y dépasse du cadre sort sur le papier, comme à l'écran,
+    /// sauf avec le passe-partout. Posée par `App::planche_options`.
+    pub debord: f32,
 }
 
 impl Default for Options {
@@ -123,6 +126,7 @@ impl Default for Options {
             legendes: false,
             bloc_titre: false,
             entete: Default::default(),
+            debord: board::RING_FRACTION,
         }
     }
 }
@@ -306,6 +310,22 @@ pub fn construire(doc: &Document, plans: &[usize], s: &BoardSettings, opt: &Opti
             cadre = cadre.union(e.expand(4.0).intersect(cadre.expand(cadre.width().max(cadre.height()) * 0.5)));
         }
     }
+    // Ce qui dépasse d'une case en bordure de page sort aussi (partie 111) : seulement là où le plan a du dessin, jamais plus loin que sa marge.
+    if !opt.marie {
+        for (k, c) in layout.cards.iter().enumerate() {
+            if layout.move_of(k).is_some() {
+                continue;
+            }
+            let plan_reel = plans[c.panel];
+            let Some(aff) = crate::horschamp::aff_de_camera(&doc.panel_camera(plan_reel, c.frame), doc.frame, c.thumb) else { continue };
+            let aire = crate::render::plan_bounds(doc, &crate::render::panel_plan_at(doc, plan_reel, c.frame, None));
+            let encre = Rect::from_two_pos(aff.applique(eframe::egui::pos2(aire.x0 as f32, aire.y0 as f32)), aff.applique(eframe::egui::pos2(aire.x1 as f32, aire.y1 as f32)));
+            let r = encre.intersect(c.thumb.expand(opt.debord * c.thumb.width()));
+            if r.is_positive() {
+                cadre = cadre.union(r);
+            }
+        }
+    }
     Planche { layout, cartes, titres, annotations, cadre }
 }
 
@@ -458,15 +478,17 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
     composer_avec_tuiles(p, vignettes, &[], opt, s)
 }
 
-/// Le dessin d'un plan à mouvement de caméra sur toute son enveloppe (sa « tuile », comme à l'écran) : pixels RVBA prémultipliés, `taille`
-/// pixels, posés sur le rectangle de la tuile.
+/// Le dessin d'une case hors de son image : pour un plan à mouvement de caméra, sur toute son enveloppe (sa « tuile », comme à l'écran) ;
+/// sinon, sa marge seule. Pixels RVBA prémultipliés, `taille` pixels, dont `marge` tout autour du rectangle de la tuile ou de la case.
 #[derive(Clone, Debug)]
 pub struct TuileImage {
     pub taille: [u32; 2],
+    pub marge: u32,
     pub rvba: Vec<u8>,
 }
 
-/// Comme `composer`, avec `tuiles[k]`, l'image de la tuile de la vignette `k` (rien : la vignette seule, A, sur le papier).
+/// Comme `composer`, avec `tuiles[k]`, le dessin de la vignette `k` hors de son image : posé sur le papier, sous **toutes** les images (rien :
+/// la vignette seule).
 pub fn composer_avec_tuiles(p: &Planche, vignettes: &[RgbImage], tuiles: &[Option<TuileImage>], opt: &Options, s: f32) -> Result<RgbImage, String> {
     let (w, h) = ((p.cadre.width() * s).ceil().max(1.0) as u32, (p.cadre.height() * s).ceil().max(1.0) as u32);
     let mut pix = Pixmap::new(w, h).ok_or("image trop grande pour la mémoire")?;
@@ -525,14 +547,20 @@ pub fn composer_avec_tuiles(p: &Planche, vignettes: &[RgbImage], tuiles: &[Optio
         let px: Vec<(f32, f32, f32)> = pts.iter().map(|q| ((q.x - p.cadre.left()) * s, (q.y - p.cadre.top()) * s, q.r * s)).collect();
         trait_rond_a(&mut pix, &px, t.color, t.alpha);
     }
-    for (k, c) in p.cartes.iter().enumerate() {
-        // Le dessin sur toute l'enveloppe d'un plan à mouvement, sous les cadres et sous la vignette de A (qui en est la même part).
-        if let (Some(m), Some(Some(t))) = (c.mouvement.as_ref(), tuiles.get(k)) {
-            let q = rect_px(m.tuile.rect, p.cadre, s);
+    // Les marges des cases, puis le dessin sur toute l'enveloppe des plans à mouvement : sur le papier, sous toutes les images, comme à l'écran.
+    for mouvements in [false, true] {
+        for (k, c) in p.cartes.iter().enumerate() {
+            if c.mouvement.is_some() != mouvements {
+                continue;
+            }
+            let Some(Some(t)) = tuiles.get(k) else { continue };
+            let q = rect_px(c.mouvement.as_ref().map_or(c.place.thumb, |m| m.tuile.rect), p.cadre, s);
             if let Some(cell) = tiny_skia::IntSize::from_wh(t.taille[0], t.taille[1]).and_then(|sz| Pixmap::from_vec(t.rvba.clone(), sz)) {
-                pix.draw_pixmap(q[0], q[1], cell.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
+                pix.draw_pixmap(q[0] - t.marge as i32, q[1] - t.marge as i32, cell.as_ref(), &PixmapPaint::default(), Transform::identity(), None);
             }
         }
+    }
+    for (k, c) in p.cartes.iter().enumerate() {
         let r = rect_px(c.place.thumb, p.cadre, s);
         let (tw, th) = ((r[2] - r[0]).max(1) as u32, (r[3] - r[1]).max(1) as u32);
         if let Some(img) = vignettes.get(k) {

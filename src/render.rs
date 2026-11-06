@@ -907,45 +907,115 @@ pub fn thumbnail_marge_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usiz
     // (Les dessins affichés se cherchent une fois, pas à chaque échantillon : 80 000 par vignette.)
     let layers = resolve(doc, plan);
     let paper = paper_color(plan);
+    // Une case de la planche (avec sa marge) se lit comme le dessin vivant de la case courante (`gpu.rs`, `fs_display`) : plus de lectures quand on
+    // réduit fort, moyennées en lumière linéaire. (En 4 lectures moyennées en gamma, un trait fin était deux fois plus foncé ici que dans
+    // la case qu'on dessine : le dernier trait tracé y paraissait pâle à côté des autres, partie 111.)
+    let comme_le_vivant = marge > 0;
+    let n: usize = if comme_le_vivant { ((sx.max(sy) / 2.5).ceil() as usize).clamp(2, 4) } else { 2 };
+    let hauteurs: Vec<f32> = (0..n).map(|k| (k as f32 + 0.5) / n as f32).collect();
+    let mut lus: Vec<Color32> = Vec::with_capacity(n * n);
     for y in 0..oh {
         if cancelled() {
             return None;
         }
-        // (Le masque : à chacune des deux hauteurs d'échantillon, l'intervalle en x où le papier se voit.)
-        let bandes = |oy: f32| masque.map(|poly| crate::vignettecam::intervalle_a(poly, (y as f32 - m + oy) * sy));
-        let (bande_haut, bande_bas) = (bandes(0.25), bandes(0.75));
+        // (Le masque : à chaque hauteur d'échantillon, l'intervalle en x où le papier se voit.)
+        let bandes: Vec<_> = hauteurs.iter().map(|oy| masque.map(|poly| crate::vignettecam::intervalle_a(poly, (y as f32 - m + oy) * sy))).collect();
         for x in 0..ow {
-            let mut acc = [0u32; 4];
-            for (ox, oy) in [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
-                // (Dans la marge, le papier ne se voit pas : seulement ce qui est dessiné.)
-                let (fx, fy) = ((x as f32 - m + ox) * sx, (y as f32 - m + oy) * sy);
-                let dans_masque = match if oy < 0.5 { bande_haut } else { bande_bas } {
-                    None => true,
-                    Some(None) => false,
-                    Some(Some((lo, hi))) => fx >= lo && fx <= hi,
-                };
-                let base = if dans_masque && fx >= 0.0 && fy >= 0.0 && fx < fw as f32 && fy < fh as f32 { paper } else { Color32::TRANSPARENT };
-                // (Toile infinie : le cadre peut filmer hors de la feuille.)
-                let c = match map.at(fx, fy) {
-                    Some(p) if p.x.abs() < WORLD as f32 && p.y.abs() < WORLD as f32 => pixel_of(&layers, base, p.x.floor() as i64, p.y.floor() as i64),
-                    _ => Color32::TRANSPARENT,
-                };
-                for (a, v) in acc.iter_mut().zip(c.to_array()) {
-                    *a += v as u32;
+            lus.clear();
+            for (j, oy) in hauteurs.iter().enumerate() {
+                for ox in &hauteurs {
+                    // (Dans la marge, le papier ne se voit pas : seulement ce qui est dessiné.)
+                    let (fx, fy) = ((x as f32 - m + ox) * sx, (y as f32 - m + oy) * sy);
+                    let dans_masque = match bandes[j] {
+                        None => true,
+                        Some(None) => false,
+                        Some(Some((lo, hi))) => fx >= lo && fx <= hi,
+                    };
+                    let base = if dans_masque && fx >= 0.0 && fy >= 0.0 && fx < fw as f32 && fy < fh as f32 { paper } else { Color32::TRANSPARENT };
+                    // (Toile infinie : le cadre peut filmer hors de la feuille.)
+                    lus.push(match map.at(fx, fy) {
+                        Some(p) if p.x.abs() < WORLD as f32 && p.y.abs() < WORLD as f32 => pixel_of(&layers, base, p.x.floor() as i64, p.y.floor() as i64),
+                        _ => Color32::TRANSPARENT,
+                    });
                 }
             }
-            pixels.push(Color32::from_rgba_premultiplied(
-                (acc[0] / 4) as u8,
-                (acc[1] / 4) as u8,
-                (acc[2] / 4) as u8,
-                (acc[3] / 4) as u8,
-            ));
+            pixels.push(if comme_le_vivant { moyenne_sur_le_papier(&lus) } else { moyenne_gamma(&lus) });
         }
     }
     Some(ColorImage {
         size: [ow, oh],
         pixels,
     })
+}
+
+/// La moyenne de pixels prémultipliés, en gamma.
+fn moyenne_gamma(lus: &[Color32]) -> Color32 {
+    let mut acc = [0u32; 4];
+    for c in lus {
+        for (a, v) in acc.iter_mut().zip(c.to_array()) {
+            *a += v as u32;
+        }
+    }
+    let n = lus.len().max(1) as u32;
+    Color32::from_rgba_premultiplied((acc[0] / n) as u8, (acc[1] / n) as u8, (acc[2] / n) as u8, (acc[3] / n) as u8)
+}
+
+fn lineaire_de(v: u8) -> f32 {
+    static TABLE: std::sync::OnceLock<[f32; 256]> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| std::array::from_fn(|i| egui::ecolor::linear_f32_from_gamma_u8(i as u8)))[v as usize]
+}
+
+/// La moyenne de pixels prémultipliés telle qu'elle se voit **posée sur le papier blanc de la planche**, en lumière linéaire, comme le dessin
+/// vivant. Ce qui n'est pas opaque (la marge d'une case) est rendu en couleur et opacité telles que, posé sur le papier par egui (qui mêle en
+/// gamma), il donne exactement cette couleur : même trait dedans et dehors.
+pub(crate) fn moyenne_sur_le_papier(lus: &[Color32]) -> Color32 {
+    let Some(premier) = lus.first().copied() else { return Color32::TRANSPARENT };
+    // (Le plus souvent : du papier, ou rien.)
+    if matches!(premier.a(), 0 | 255) && lus.iter().all(|c| *c == premier) {
+        return premier;
+    }
+    let (mut l, mut a) = ([0.0_f32; 3], 0u32);
+    for c in lus {
+        let reste = 255 - c.a();
+        for (s, v) in l.iter_mut().zip([c.r(), c.g(), c.b()]) {
+            *s += lineaire_de(v.saturating_add(reste));
+        }
+        a += u32::from(c.a());
+    }
+    let n = lus.len() as f32;
+    let t = l.map(|v| egui::ecolor::gamma_u8_from_linear_f32(v / n));
+    if a == 255 * lus.len() as u32 {
+        return Color32::from_rgb(t[0], t[1], t[2]);
+    }
+    let bas = t[0].min(t[1]).min(t[2]);
+    Color32::from_rgba_premultiplied(t[0] - bas, t[1] - bas, t[2] - bas, 255 - bas)
+}
+
+/// La marge seule d'une case de `tw` × `th` pixels : `marge` pixels tout autour, où se voit ce qui est dessiné (pas le papier) ; le dedans reste
+/// transparent et ne coûte rien. L'export de la planche (les images, elles, viennent du rendu de l'export).
+pub fn marge_seule(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize, marge: usize) -> ColorImage {
+    let resolved = crate::calqueffet::resolve_auto(doc, plan);
+    let plan = &*resolved;
+    let [fw, fh] = doc.frame;
+    let (sx, sy) = (fw as f32 / tw.max(1) as f32, fh as f32 / th.max(1) as f32);
+    let map = cam.frame_map(doc.frame);
+    let (ow, oh) = (tw + 2 * marge, th + 2 * marge);
+    let m = marge as f32;
+    let mut pixels = vec![Color32::TRANSPARENT; ow * oh];
+    let layers = resolve(doc, plan);
+    for y in 0..oh {
+        for x in 0..ow {
+            if (marge..marge + tw).contains(&x) && (marge..marge + th).contains(&y) {
+                continue;
+            }
+            let lus = [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)].map(|(ox, oy)| match map.at((x as f32 - m + ox) * sx, (y as f32 - m + oy) * sy) {
+                Some(p) if p.x.abs() < WORLD as f32 && p.y.abs() < WORLD as f32 => pixel_of(&layers, Color32::TRANSPARENT, p.x.floor() as i64, p.y.floor() as i64),
+                _ => Color32::TRANSPARENT,
+            });
+            pixels[y * ow + x] = moyenne_gamma(&lus);
+        }
+    }
+    ColorImage { size: [ow, oh], pixels }
 }
 
 /// Le dessin entier réduit à `max_w` pixels de large au plus (moyenne de 4 échantillons par

@@ -4,15 +4,17 @@
 //! # Ce que c'est
 //!
 //! - **Le champ d'une case** : son image plus le débord réglé dans Préférences > Vignettes (12 % de sa largeur d'origine) ; pour la case d'un
-//!   mouvement de caméra, la tuile de son empreinte. Ce qui y tombe appartient au plan de la case, comme avant.
+//!   mouvement de caméra, la tuile de son empreinte. Ce qui y tombe appartient au plan de la case, comme avant. **L'intérieur du cadre d'une
+//!   case a toujours priorité sur la marge d'une autre** (partie 111) ; la marge d'une case se voit sur le papier de la planche, sous les
+//!   images des autres cases (`App::board_marges`).
 //! - **Un trait peut partir de n'importe où** (entre les cases, autour, sous une barre) : s'il part hors de tout champ, il se trace dans le
 //!   dessin de la case la plus proche (la même mécanique que le trait qui part de la bande de note, `Vignettes::appui_bande`) ; l'aperçu du
-//!   geste est celui d'avant (le trait déborde, pâle, `debord.rs`).
+//!   geste est celui d'avant (le trait déborde, `debord.rs`).
 //! - **Au lâcher** (jamais pendant le geste : aucune latence ajoutée), le trait est **réparti** (`App::horschamp_partager`) :
 //!   - la partie dans le champ de la case où il a été tracé reste dans son dessin ;
 //!   - la partie dans le champ d'une autre case (deux cases voisines) va dans le dessin de cette case, sur le calque de même sorte (sinon
-//!     la partie reste sur la planche, voir plus bas) ; quand deux champs se recouvrent (leurs marges), le point va à la case où le trait a
-//!     commencé, sinon à la première dans l'ordre de lecture : jamais deux fois ;
+//!     la partie reste sur la planche, voir plus bas) ; quand deux **marges** se recouvrent, le point va à la case où le trait a commencé, sinon
+//!     à la première dans l'ordre de lecture : jamais deux fois ;
 //!   - **le reste est sur la planche, dans le calque « Hors cadres »** (`Annotations::calque_hors_cadres`, un calque d'annotation de la
 //!     planche marqué `planche`) : visible, enregistré, relu, dans l'export de la planche, et dans aucun plan, ni l'animatique, ni le film, ni le
 //!     storyboard en PDF. Un trait de ce calque garde la recette de son pinceau (`horschamptex.rs`) : il a la texture du pinceau, comme dans
@@ -131,6 +133,49 @@ pub(crate) fn proprietaire(champs: &[Rect], recoit: &[bool], origine: usize, p: 
         return Some(origine);
     }
     champs.iter().enumerate().find(|(k, r)| *k != origine && recoit.get(*k).copied().unwrap_or(false) && r.contains(p)).map(|(k, _)| k)
+}
+
+/// Le point `p` de la planche est-il dans l'image de la case `k` (son cadre ; l'enveloppe de ses cadres pour un mouvement de caméra) ?
+pub(crate) fn dans_image(layout: &BoardLayout, k: usize, p: Pos2) -> bool {
+    let Some(c) = layout.cards.get(k) else { return false };
+    c.thumb.contains(p) || layout.move_of(k).is_some_and(|m| crate::vignettecam::dans_polygone(&m.enveloppe, p))
+}
+
+/// La case à qui revient le point `p` : **l'intérieur du cadre d'une case a toujours priorité sur la marge d'une autre** (Anthony, 2026-11-06 :
+/// un débord de 12 % dépasse l'écart entre deux rangées, le haut d'une case tombait dans la marge de celle du dessus et ne se voyait plus).
+/// Les règles d'ordre de `proprietaire` ne jouent qu'entre deux marges.
+pub(crate) fn proprietaire_cadre(layout: &BoardLayout, champs: &[Rect], recoit: &[bool], origine: usize, p: Pos2) -> Option<usize> {
+    if dans_image(layout, origine, p) {
+        return Some(origine);
+    }
+    if let Some(k) = (0..layout.cards.len()).find(|k| *k != origine && recoit.get(*k).copied().unwrap_or(false) && dans_image(layout, *k, p)) {
+        return Some(k);
+    }
+    proprietaire(champs, recoit, origine, p)
+}
+
+/// Comment le dessin de la case `k` se pose sur la planche : rien si sa caméra n'est pas droite (bascule, panoramique, roulis).
+pub(crate) fn aff_de_la_case(doc: &crate::document::Document, layout: &BoardLayout, k: usize) -> Option<Aff> {
+    let c = layout.cards.get(k)?;
+    if let Some(m) = layout.move_of(k) {
+        let (z, r) = (&m.tuile.zone, m.tuile.rect);
+        return Some(Aff { a: z.echelle, b: 0.0, c: 0.0, d: z.echelle, tx: r.center().x - z.centre.x * z.echelle, ty: r.center().y - z.centre.y * z.echelle });
+    }
+    aff_de_camera(&doc.panel_camera(c.panel, c.frame), doc.frame, c.thumb)
+}
+
+/// Comment la feuille se pose sur la planche quand la caméra `cam`, de cadre `frame`, remplit le rectangle `thumb` : rien si elle n'est pas droite.
+pub(crate) fn aff_de_camera(cam: &crate::camera::Camera, frame: [usize; 2], thumb: Rect) -> Option<Aff> {
+    if !cam.is_level() || cam.angle != 0.0 {
+        return None;
+    }
+    let (s0, s1) = (cam.to_stage(frame, 0.0, 0.0), cam.to_stage(frame, frame[0] as f32, 0.0));
+    let par_px = (s1.x - s0.x) / frame[0].max(1) as f32;
+    if !par_px.is_finite() || par_px <= 1e-6 {
+        return None;
+    }
+    let e = thumb.width() / frame[0].max(1) as f32 / par_px;
+    Some(Aff { a: e, b: 0.0, c: 0.0, d: e, tx: thumb.min.x - s0.x * e, ty: thumb.min.y - s0.y * e })
 }
 
 /// Un point d'un tracé : son point de dessin, sa place sur la planche, son appui, son instant.
@@ -326,7 +371,9 @@ impl App {
             }
             self.modified = true;
             self.renderer.invalidate_all();
-            self.vignettes.debord_garde = None;
+            // Le trait tel qu'il a été tracé reste peint jusqu'à ce que les dessins et les vignettes qui le reçoivent soient prêts, en fond : rien
+            // ne change au lâcher (`boardui.rs`, `Vignettes::debord_tenu`).
+            self.vignettes.debord_tenu = self.vignettes.debord_garde.take().map(|d| crate::debord::Tenu { debord: d, xf: self.vignettes.xf, etapes: self.history.undo_len(), debut: std::time::Instant::now() });
             self.ctx.request_repaint();
         } else {
             self.vignettes.debord_garde = None;
@@ -405,10 +452,9 @@ impl App {
         Some(neuve)
     }
 
-    /// Les cases qui peuvent recevoir une partie du trait tracé dans la case `origine` : même caméra à leur image, même largeur de case, un
-    /// calque de même sorte que celui où l'on dessine, ni verrouillé ni masqué.
-    fn cases_qui_recoivent(&self, layout: &BoardLayout, origine: usize, genre: LayerKind) -> Vec<Option<usize>> {
-        let o = &layout.cards[origine];
+    /// Les cases qui peuvent recevoir une partie du trait tracé dans la case `origine`, un plan à mouvement de caméra compris : un dessin posé
+    /// sur la planche à la même échelle (`a`, une caméra droite), un calque de même sorte que celui où l'on dessine, ni verrouillé ni masqué.
+    fn cases_qui_recoivent(&self, layout: &BoardLayout, origine: usize, genre: LayerKind, a: f32) -> Vec<Option<usize>> {
         layout
             .cards
             .iter()
@@ -417,9 +463,8 @@ impl App {
                 if k == origine {
                     return Some(self.cur_layer);
                 }
-                let meme_camera = self.doc.panel_camera(o.panel, o.frame) == self.doc.panel_camera(c.panel, c.frame);
-                let meme_taille = (c.thumb.width() - o.thumb.width()).abs() < 0.01 && (c.thumb.height() - o.thumb.height()).abs() < 0.01;
-                if !(meme_camera && meme_taille) || layout.move_of(k).is_some() {
+                let e = aff_de_la_case(&self.doc, layout, k)?.echelle()?;
+                if (e - a).abs() > a * 0.005 {
                     return None;
                 }
                 let calques = &self.doc.panels.get(c.panel)?.layers;
@@ -471,13 +516,9 @@ impl App {
             .enumerate()
             .map(|(i, p)| Pt { layer: *p, board: aff.applique(p.pos()), pressure: if aligne { trace.pressure[i] } else { 1.0 }, time: if aligne { trace.time[i] } else { 0.0 } })
             .collect();
-        let cibles = self.cases_qui_recoivent(layout, origine, LayerKind::Vector);
+        let cibles = self.cases_qui_recoivent(layout, origine, LayerKind::Vector, a);
         let recoit: Vec<bool> = cibles.iter().map(Option::is_some).collect();
-        let owner = |p: Pos2| proprietaire(champs, &recoit, origine, p);
-        // Tout dans le champ de la case, rayon compris : rien à répartir.
-        if pts.iter().all(|p| champs[origine].shrink(p.layer.r * a).contains(p.board)) {
-            return false;
-        }
+        let owner = |p: Pos2| proprietaire_cadre(layout, champs, &recoit, origine, p);
         let runs = trancher(&pts, &owner);
         if runs.iter().all(|(o, _)| *o == Some(origine)) {
             return false;
@@ -497,7 +538,6 @@ impl App {
                 VTrace::default()
             },
         };
-        let o = layout.cards[origine];
         let mut sur_la_planche: Vec<Course> = Vec::new();
         let mut chez_les_autres: Vec<(usize, Vec<Element>)> = Vec::new();
         let mut chez_elle: Vec<Element> = Vec::new();
@@ -505,8 +545,9 @@ impl App {
             match qui {
                 Some(k) if *k == origine => chez_elle.push(element(run, Vec2::ZERO)),
                 Some(k) => {
-                    let s = layout.cards[*k].thumb.min - o.thumb.min;
-                    let el = element(run, vec2(-s.x / a, -s.y / a));
+                    // (Le dessin de la case voisine se pose ailleurs sur la planche : le même point de la planche, dans son dessin à elle.)
+                    let Some(cible) = aff_de_la_case(&self.doc, layout, *k) else { continue };
+                    let el = element(run, vec2((aff.tx - cible.tx) / a, (aff.ty - cible.ty) / a));
                     match chez_les_autres.iter_mut().find(|(c, _)| c == k) {
                         Some((_, v)) => v.push(el),
                         None => chez_les_autres.push((*k, vec![el])),
@@ -527,7 +568,7 @@ impl App {
             d.elements.pop();
             d.elements.extend(chez_elle);
         }
-        let mut a_rejouer = vec![cel];
+        let mut regions: Vec<(CelId, Rect)> = Vec::new();
         for (k, els) in chez_les_autres {
             let Some(rang) = cibles[k] else { continue };
             let Some(cible) = self.cel_de_la_case(layout, k, rang) else { continue };
@@ -538,13 +579,20 @@ impl App {
             if let Some(d) = self.drawing_mut(cible) {
                 d.elements.extend(els);
             }
-            self.refresh_cel_region(cible, region_k.expand(2.0));
-            a_rejouer.push(cible);
+            regions.push((cible, region_k));
         }
-        self.refresh_cel_region(cel, region.expand(2.0));
-        if brush.is_some() {
-            for c in a_rejouer {
+        regions.push((cel, region));
+        // Aucun rejeu du moteur sur le fil de l'interface : un trait au pinceau se refait en arrière-plan (`rejeu.rs`). En attendant, le dessin
+        // d'origine garde ses pixels et la planche garde le trait tel qu'il a été tracé (`Vignettes::debord_tenu`). (Avant : chaque tronçon,
+        // sans cache, était rejoué ici, au lâcher.)
+        for (c, r) in regions {
+            if brush.is_some() {
+                if let Some(d) = self.doc.cels.get_mut(&c) {
+                    d.version += 1;
+                }
                 self.rejeu_cel(c);
+            } else {
+                self.refresh_cel_region(c, r.expand(2.0));
             }
         }
         for (cel, drawing) in avant {
@@ -575,7 +623,7 @@ impl App {
     fn partager_bitmap(&mut self, layout: &BoardLayout, fini: &Fini, origine: usize, a: f32, champs: &[Rect]) -> bool {
         let Matiere::Bitmap { avant, path, couleur, alpha, recette, appui, instants } = &fini.matiere else { return false };
         let aff = fini.suivi.aff;
-        let cibles = self.cases_qui_recoivent(layout, origine, LayerKind::Bitmap);
+        let cibles = self.cases_qui_recoivent(layout, origine, LayerKind::Bitmap, a);
         let recoit: Vec<bool> = cibles.iter().map(Option::is_some).collect();
         let suit = appui.len() == path.len() && instants.len() == path.len();
         let pts: Vec<Pt> = path
@@ -583,12 +631,12 @@ impl App {
             .enumerate()
             .map(|(i, p)| Pt { layer: *p, board: aff.applique(p.pos()), pressure: if suit { appui[i] } else { 1.0 }, time: if suit { instants[i] } else { 0.0 } })
             .collect();
-        // Tout le trait dans le champ, rayon compris : rien à répartir.
-        if pts.iter().all(|p| champs[origine].shrink((p.layer.r + 1.5) * a).contains(p.board)) {
+        let owner = |p: Pos2| proprietaire_cadre(layout, champs, &recoit, origine, p);
+        // Tout le trait à la case, rayon compris (son cadre, ou sa marge là où aucun autre cadre n'est) : rien à répartir.
+        let sur = |p: &Pt| [vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, 1.0)].iter().all(|d| owner(p.board + *d * ((p.layer.r + 1.5) * a)) == Some(origine));
+        if pts.iter().all(sur) {
             return false;
         }
-        let champ_o = champs[origine];
-        let o = layout.cards[origine];
         // 1. Le dessin d'origine : ce qui sort du champ est rendu tel qu'il était ; ce qui tombe dans le champ d'une autre case est gardé pour elle.
         let cel = fini.cel;
         let mut passes: Vec<(usize, Vec<(i64, i64, eframe::egui::Color32)>)> = Vec::new();
@@ -603,19 +651,21 @@ impl App {
                 for j in 0..crate::raster::TILE {
                     for i in 0..crate::raster::TILE {
                         let (x, y) = (ox + i as i64, oy + j as i64);
-                        let bord = aff.applique(pos2(x as f32 + 0.5, y as f32 + 0.5));
-                        if champ_o.contains(bord) {
-                            continue;
-                        }
                         let k = j * crate::raster::TILE + i;
                         let apres_px = apres[k];
                         let avant_px = avant_tuile.as_ref().map_or(eframe::egui::Color32::TRANSPARENT, |t| t[k]);
+                        // (Seuls les pixels que le trait a changés coûtent le calcul de leur propriétaire.)
                         if apres_px == avant_px {
+                            continue;
+                        }
+                        let bord = aff.applique(pos2(x as f32 + 0.5, y as f32 + 0.5));
+                        let qui = owner(bord);
+                        if qui == Some(origine) {
                             continue;
                         }
                         // Un pixel neuf (rien dessous) peut passer à la case voisine ; un pixel qui recouvrait du dessin ne passe nulle part.
                         if avant_px.a() == 0 && apres_px.a() > 0 {
-                            if let Some(q) = proprietaire(champs, &recoit, origine, bord).filter(|q| *q != origine) {
+                            if let Some(q) = qui {
                                 match passes.iter_mut().find(|(c, _)| *c == q) {
                                     Some((_, v)) => v.push((x, y, apres_px)),
                                     None => passes.push((q, vec![(x, y, apres_px)])),
@@ -640,8 +690,8 @@ impl App {
         for (q, pixels) in passes {
             let Some(rang) = cibles[q] else { continue };
             let Some(cible) = self.cel_de_la_case(layout, q, rang) else { continue };
-            let s = layout.cards[q].thumb.min - o.thumb.min;
-            let (dx, dy) = ((-s.x / a).round() as i64, (-s.y / a).round() as i64);
+            let Some(aff_q) = aff_de_la_case(&self.doc, layout, q) else { continue };
+            let (dx, dy) = (((aff.tx - aff_q.tx) / a).round() as i64, ((aff.ty - aff_q.ty) / a).round() as i64);
             let Some(c) = self.doc.cels.get_mut(&cible) else { continue };
             let mut vieux: Vec<(usize, Option<Tile>)> = Vec::new();
             for (x, y, px) in pixels {
@@ -662,7 +712,7 @@ impl App {
             self.history.push(e);
         }
         // 3. Ce qui est hors de tout champ : sur la planche (le tracé, rayon et couleur du trait).
-        let runs = trancher(&pts, &|p| proprietaire(champs, &recoit, origine, p));
+        let runs = trancher(&pts, &owner);
         let traces: Vec<Course> = runs.into_iter().filter(|(q, _)| q.is_none()).map(|(_, run)| Course::de(&run, a, suit)).collect();
         self.poser_hors_cadres(layout, traces, *couleur, (alpha.clamp(0.0, 1.0) * 255.0).round() as u8, *recette, a);
         self.history.push(snap);

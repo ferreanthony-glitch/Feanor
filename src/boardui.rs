@@ -238,6 +238,7 @@ pub(crate) struct Vignettes {
     pub suivi: Option<crate::horschamp::Suivi>,
     pub fini: Option<crate::horschamp::Fini>,
     pub debord_garde: Option<crate::debord::Debord>,
+    pub debord_tenu: Option<crate::debord::Tenu>,
     /// Le cadrage d'ouverture : la taille de la vue pour laquelle il a été calculé, son zoom, son décalage (une fois rangé), et s'il vient d'être
     /// calculé. Vide dès que le zoom ou le défilement ont bougé.
     pub ouverture_suivi: Option<(Vec2, f32, Vec2, bool)>,
@@ -296,6 +297,7 @@ impl Default for Vignettes {
             suivi: None,
             fini: None,
             debord_garde: None,
+            debord_tenu: None,
             ouverture_suivi: None,
             ouverture_images: 0,
             titre_edit: None,
@@ -1330,12 +1332,14 @@ impl App {
         // tuile d'un plan à mouvement d'après lui plantait de même, `case_tient`).
         let plans = self.doc.panels.len();
         let mut tient = true;
+        // Les marges de toutes les cases d'abord, sur le papier : ce qui dépasse d'un cadre se voit, jamais par-dessus l'image d'une autre case.
+        let cases_tex = self.board_marges(ui, &painter, view, xf, &layout, pan_mode, deadline, plans);
         for k in 0..layout.cards.len() {
             if !self.case_tient(&layout, plans, k) {
                 tient = false;
                 break;
             }
-            self.board_tuile(ui, &painter, view, xf, &layout, k, pan_mode, deadline, plans);
+            self.board_tuile(ui, &painter, view, xf, &layout, k, pan_mode, cases_tex[k], plans);
         }
         // (Les numéros des plans, trouvés une fois pour toutes les cases : un par case refaisait l'ordre du film.)
         let numeros = crate::numerotation::Numeros::pour_l_ecran(&self.doc);
@@ -1346,7 +1350,7 @@ impl App {
                 tient = false;
                 break;
             }
-            self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, deadline, &numeros, &mut marges, plans);
+            self.board_card(ui, &painter, view, xf, &layout, k, pan_mode, cases_tex[k], &numeros, &mut marges, plans);
         }
         if !tient || !self.case_tient(&layout, plans, layout.cards.len().saturating_sub(1)) {
             ui.ctx().request_repaint();
@@ -1391,6 +1395,16 @@ impl App {
         if let Some(d) = debord {
             crate::debord::paint(&painter, view, &d);
             self.vignettes.debord_garde = Some(d);
+        }
+        // Le trait qu'on vient de répartir : tenu tant que ses parts ne sont pas rendues (les demandes de cette image sont déjà en file).
+        if let Some(t) = &self.vignettes.debord_tenu {
+            let pret = self.thumbs.outstanding() == 0 && !self.thumbs.pending && !self.rejeu.has_pending();
+            if pret || t.xf != xf || t.etapes != self.history.undo_len() || t.debut.elapsed() > crate::debord::TENU_MAX {
+                self.vignettes.debord_tenu = None;
+            } else {
+                crate::debord::paint(&painter, view, &t.debord);
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(50));
+            }
         }
         // Les annotations, par-dessus tout ; puis la marie-louise, si elle est allumée, qui masque ce qui déborde (`annotationsui.rs`).
         self.annot_peindre(&painter, view, xf, &layout, over);
@@ -1754,7 +1768,7 @@ impl App {
     /// tuile, composée sur un fil de fond. Hors de l'enveloppe, la tuile ne garde que le trait qui déborde. Peinte avant les cases :
     /// son rectangle déborde de l'enveloppe, les cases qui s'y trouvent passent par-dessus.
     #[allow(clippy::too_many_arguments)]
-    fn board_tuile(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant, plans: usize) {
+    fn board_tuile(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, case: Option<crate::thumbs::CaseTex>, plans: usize) {
         let Some(mv) = layout.move_of(k) else { return };
         let place = &layout.cards[k];
         let r = xf.rect(mv.tuile.rect);
@@ -1767,18 +1781,12 @@ impl App {
             (place.frame..place.end).contains(&f)
         };
         let live = current && !pan_mode;
-        let ppp = ui.ctx().pixels_per_point();
         let hull: Vec<Pos2> = mv.enveloppe.iter().map(|p| xf.to_screen(*p)).collect();
-        let width = crate::thumbs::width_for(r.width() * ppp);
-        // (La marge de la tuile est 12 % de la largeur d'une case, comme celle des autres cases, pas 12 % de la tuile entière.)
-        let part_case = place.thumb.width() / mv.tuile.rect.width().max(1e-3);
-        let case = self.thumbs.texture_case(ui.ctx(), &self.doc, i, place.frame, place.id, width, Some((&mv.tuile.zone, &mv.tuile.masque, part_case)), deadline);
         // La texture est-elle celle de la géométrie d'aujourd'hui (même zone, même enveloppe) ? Pendant un geste de caméra et juste après,
         // elle est celle d'avant (la tuile se recompose sur un fil de fond, jamais sur celui de l'interface) : posée telle quelle, ses
         // bords de coupe et son papier seraient ceux d'avant le geste.
         let a_jour = case.as_ref().is_some_and(|c| c.geom == Some(crate::thumbs::Geom::de(&mv.tuile.zone, &mv.tuile.masque)));
         let pts_par_feuille = mv.tuile.zone.echelle * xf.zoom;
-        let toute = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
         if live {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r).id_salt("planche_vive_tuile"));
             child.set_clip_rect(r.intersect(view));
@@ -1812,34 +1820,77 @@ impl App {
                     }
                 }
                 clip.add(egui::Shape::mesh(mesh));
-                paint_ring(painter, r, c);
             }
         } else {
             painter.add(egui::Shape::convex_polygon(hull.clone(), Color32::WHITE, Stroke::NONE));
             if let Some(c) = &case {
                 // Posée là où est la feuille qu'elle montre, même si les cadres ont bougé depuis qu'elle a été composée.
+                // Le dessin dans l'enveloppe, par-dessus les marges des autres ; sa propre marge est déjà sur le papier (`board_marges`).
                 let full = c.rect_tuile(r, &mv.tuile.zone, pts_par_feuille);
-                if self.marge_ouverte(i) {
-                    painter.image(c.id, full, toute, Color32::WHITE);
-                } else {
-                    // Un plan qu'on ne dessine pas : l'enveloppe et quelques points, rien de plus (la marge de 12 % ne s'ouvre que
-                    // pour le plan où l'on dessine). La même texture, coupée : aucune recomposition.
-                    let serre = crate::vignettecam::elargi(&hull, MARGE_SERREE);
-                    peint_texture_dans(painter, c.id, full, &serre);
-                }
+                peint_texture_dans(painter, c.id, full, &hull);
             }
         }
     }
 
-    /// La marge de 12 % autour d'une case (et d'une tuile) n'est ouverte que pour le plan où l'on dessine (le plan courant, ou un trait en
-    /// cours) ; les autres plans sont coupés net autour de leurs cadres, à quelques points près (`MARGE_SERREE`).
-    pub(crate) fn marge_ouverte(&self, panel: usize) -> bool {
-        panel == self.cur_panel
+    /// Les marges de toutes les cases et de toutes les tuiles, sur le papier, avant toute image (Anthony, 2026-11-06 : « des lignes qui se coupent
+    /// entre les plans ») : la part d'un plan qui dépasse de son cadre se voit, quel que soit le plan courant, et passe sous l'image des autres
+    /// cases. Rend la vignette de chaque case à l'écran (une seule demande par image : les cases s'en servent ensuite). La même texture que la
+    /// case, aucune recomposition. Le passe-partout, peint plus tard, les cache comme tout ce que la caméra ne montre pas.
+    #[allow(clippy::too_many_arguments)]
+    fn board_marges(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, pan_mode: bool, deadline: Instant, plans: usize) -> Vec<Option<crate::thumbs::CaseTex>> {
+        let ppp = ui.ctx().pixels_per_point();
+        let debord = self.settings.vignettes.debord_fraction();
+        let cur = self.cur_frame.min(self.frame_count().saturating_sub(1));
+        let toute = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+        let mut cases = vec![None; layout.cards.len()];
+        for k in 0..layout.cards.len() {
+            if !self.case_tient(layout, plans, k) {
+                break;
+            }
+            let place = &layout.cards[k];
+            let i = place.panel;
+            let thumb = xf.rect(place.thumb);
+            let courante = i == self.cur_panel && (place.frame..place.end).contains(&cur) && !pan_mode;
+            if let Some(mv) = layout.move_of(k) {
+                let r = xf.rect(mv.tuile.rect);
+                if !r.expand(debord * thumb.width() + 1.0).intersects(view) {
+                    continue;
+                }
+                let width = crate::thumbs::width_for(r.width() * ppp);
+                // (La marge de la tuile est 12 % de la largeur d'une case, comme celle des autres cases, pas 12 % de la tuile entière.)
+                let part_case = place.thumb.width() / mv.tuile.rect.width().max(1e-3);
+                let case = self.thumbs.texture_case(ui.ctx(), &self.doc, i, place.frame, place.id, width, Some((&mv.tuile.zone, &mv.tuile.masque, part_case)), deadline);
+                if let Some(c) = &case {
+                    let a_jour = c.geom == Some(crate::thumbs::Geom::de(&mv.tuile.zone, &mv.tuile.masque));
+                    if courante {
+                        // (Le dessin vivant remplit la tuile : seule sa bordure reste à peindre, et pas d'une texture d'avant le geste.)
+                        if a_jour {
+                            paint_ring(painter, r, c);
+                        }
+                    } else {
+                        painter.image(c.id, c.rect_tuile(r, &mv.tuile.zone, mv.tuile.zone.echelle * xf.zoom), toute, Color32::WHITE);
+                    }
+                }
+                cases[k] = case;
+            } else {
+                if !thumb.expand(debord * thumb.width() + 1.0).intersects(view) {
+                    continue;
+                }
+                let width = crate::thumbs::width_for(thumb.width() * ppp);
+                let case = self.thumbs.texture_case(ui.ctx(), &self.doc, i, place.frame, place.id, width, None, deadline);
+                if let Some(c) = &case {
+                    paint_ring(painter, thumb, c);
+                }
+                cases[k] = case;
+            }
+        }
+        cases
     }
+
     /// Une vignette (une image de storyboard) : son numéro de plan s'il commence, l'image (le dessin lui-même
     /// pour l'image courante), son filet, sa bande de note. Les gestes sont pris plus haut (`board_press`).
     #[allow(clippy::too_many_arguments)]
-    fn board_card(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, deadline: Instant, numeros: &crate::numerotation::Numeros, marges: &mut crate::numerosmarge::Marges, plans: usize) {
+    fn board_card(&mut self, ui: &mut egui::Ui, painter: &egui::Painter, view: Rect, xf: Xf, layout: &BoardLayout, k: usize, pan_mode: bool, case: Option<crate::thumbs::CaseTex>, numeros: &crate::numerotation::Numeros, marges: &mut crate::numerosmarge::Marges, plans: usize) {
         let place = &layout.cards[k];
         let mv = layout.move_of(k);
         let card = xf.rect(place.card);
@@ -1863,17 +1914,13 @@ impl App {
         // Le panneau courant : le dessin lui-même ; les autres : leur vignette.
         let live = current && !pan_mode;
         let clip = painter.with_clip_rect(view);
-        let ppp = ui.ctx().pixels_per_point();
         match mv {
             // La case d'un plan dont la caméra bouge (deux clés au moins) montre ses cadres à l'échelle des autres cases : une tuile
             // par rangée de l'empreinte, qui montre la feuille et ce qu'on a dessiné autour d'elle (`vignettecam.rs`) ; l'outil Caméra,
             // lui, recadre à l'ancienne (une seule image).
             Some(_) => {}
             None => {
-                // La vignette de la case, avec sa petite marge autour du cadre où le trait qui déborde reste visible (comme la maquette) :
-                // l'image courante la tient à jour en arrière-plan ; sa marge est peinte par-dessus le dessin vivant.
-                let width = crate::thumbs::width_for(thumb.width() * ppp);
-                let case = self.thumbs.texture_case(ui.ctx(), &self.doc, i, place.frame, place.id, width, None, deadline);
+                // (La marge de la case est déjà sur le papier : `board_marges`. Ici, son image seule.)
                 if live {
                     // La vue caméra laisse une marge autour du cadre : on l'agrandit d'autant (et on coupe
                     // à la vignette) pour que l'image remplisse la vignette. Pour recadrer, toute la feuille.
@@ -1888,20 +1935,10 @@ impl App {
                         ui.ctx().request_repaint();
                         return;
                     }
-                    // (Sa vignette se tient à jour en arrière-plan : quand une autre image prend la main, elle montre déjà le dernier trait.)
-                    if let Some(c) = &case {
-                        paint_ring(painter, thumb, c);
-                    }
                 } else {
                     painter.rect_filled(thumb, 0.0, Color32::WHITE);
                     if let Some(c) = &case {
-                        if self.marge_ouverte(i) {
-                            painter.image(c.id, c.rect(thumb), Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
-                        } else {
-                            // Un plan qu'on ne dessine pas : la case et quelques points, pas la marge de 12 % (la même texture, coupée).
-                            let t = thumb.expand(MARGE_SERREE);
-                            peint_texture_dans(painter, c.id, c.rect(thumb), &[t.left_top(), t.right_top(), t.right_bottom(), t.left_bottom()]);
-                        }
+                        peint_texture_dans(painter, c.id, c.rect(thumb), &[thumb.left_top(), thumb.right_top(), thumb.right_bottom(), thumb.left_bottom()]);
                     }
                 }
             }
@@ -2254,8 +2291,6 @@ impl App {
     }
 }
 
-/// Ce qu'une case ou une tuile garde du trait qui déborde quand on n'y dessine pas : quelques points d'écran autour de ses cadres.
-pub(crate) const MARGE_SERREE: f32 = 4.0;
 
 /// La texture `id` (de rectangle `full` à l'écran) peinte seulement dans le polygone convexe `poly` : un maillage dont les coordonnées
 /// de texture suivent l'écran. Le même cliché, coupé net : aucune recomposition.

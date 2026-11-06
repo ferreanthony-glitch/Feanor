@@ -2,8 +2,9 @@
 //!
 //! Dans la vue Vignettes, on dessine directement dans la case. Le geste ne s'arrête pas au bord : tant que la
 //! main est en bas, on voit **tout le trait**, même par-dessus l'écart, les barres, les bandes de note et les
-//! cases voisines. Au lâcher, la case ne montre plus que son cadre (et sa petite marge, comme avant) ; la toile
-//! infinie, elle, a gardé tout le trait (`Raster::outer`).
+//! cases voisines. Au lâcher, il est réparti (`horschamp.rs`) et reste visuellement le même : chaque case montre
+//! sa part, sa marge se voit sur le papier (partie 111) ; le trait tracé reste peint tant que ces parts ne sont
+//! pas rendues (`Tenu`).
 //!
 //! Comment, sans rien coûter de plus : la vignette courante est le dessin lui-même, peint dans sa case et coupé
 //! à son bord. Ici, on ne repeint que **ce qui est dehors**, d'après le tracé que le moteur de dessin garde de
@@ -33,6 +34,19 @@ pub(crate) struct Debord {
     pub shapes: Vec<(Rect, Shape)>,
 }
 
+/// Le trait qui vient d'être réparti, gardé à l'écran le temps que ses parts soient rendues en fond. Il part dès qu'elles sont prêtes, ou si la
+/// planche bouge, ou si l'historique change.
+#[derive(Clone, Debug)]
+pub(crate) struct Tenu {
+    pub debord: Debord,
+    pub xf: crate::boardui::Xf,
+    pub etapes: usize,
+    pub debut: std::time::Instant,
+}
+
+/// Le plus longtemps qu'un trait réparti reste tenu (un rendu qui n'arrive pas ne le laisse pas à l'écran pour de bon).
+pub(crate) const TENU_MAX: std::time::Duration = std::time::Duration::from_secs(4);
+
 // (Le trait qui déborde avait la couleur pâle d'un fantôme tant que la main était en bas ; depuis le 2026-11-05 (« le trait doit garder la
 // même couleur partout ») il garde sa couleur et son opacité, dedans comme dehors.)
 /// Épaisseur (points d'écran) en deçà de laquelle deux tronçons voisins gardent le même trait.
@@ -53,10 +67,11 @@ impl App {
             if let Some((rgb, alpha)) = s.tip_paint() {
                 let zoom = self.layer_zoom();
                 let color = Color32::from_rgba_unmultiplied(rgb[0], rgb[1], rgb[2], (alpha.clamp(0.0, 1.0) * 255.0).round() as u8);
+
                 let mut points: Vec<(Pos2, f32)> = Vec::with_capacity(s.path.len() + 2);
-                points.extend(s.path.iter().map(|p| (self.layer_to_screen(p.pos()), (p.r * zoom).max(0.5))));
+                points.extend(s.path.iter().map(|p| (self.layer_to_screen(p.pos()), p.r * zoom)));
                 if let Some((last, raw, r)) = s.tip() {
-                    let w = (r * zoom).max(0.5);
+                    let w = r * zoom;
                     points.push((self.layer_to_screen(last), w));
                     points.push((self.layer_to_screen(raw), w));
                 }
@@ -85,6 +100,8 @@ fn outside_runs(points: &[(Pos2, f32)], dedans: &dyn Fn(Pos2) -> bool, color: Co
     let mut run_w = 0.0_f32;
     let flush = |run: &mut Vec<Pos2>, w: f32, out: &mut Vec<(Rect, Shape)>| {
         if run.len() >= 2 {
+            // Plus fin qu'un pixel d'écran : un pixel de large, aussi léger que le montrent la case et sa marge (au lâcher, rien ne change).
+            let (w, color) = if w < 0.5 { (0.5, color.gamma_multiply(1.0 - egui::ecolor::gamma_from_linear(1.0 - w * 2.0))) } else { (w, color) };
             let bounds = bounds_of(run).expand(w);
             // Bouts arrondis : un disque à chaque bout du tronçon (la ligne d'egui est coupée net).
             for end in [run[0], run[run.len() - 1]] {
