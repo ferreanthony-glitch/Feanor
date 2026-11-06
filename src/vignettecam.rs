@@ -199,12 +199,6 @@ fn enveloppe_marquee(points: &[(Pos2, u64)]) -> Vec<(Pos2, u64)> {
     hull
 }
 
-/// Le polygone convexe `poly` élargi de `marge` de chaque côté (la somme de Minkowski avec un carré : ses coins sont ceux des quatre
-/// copies décalées de chaque sommet). Le serré d'un plan qu'on ne dessine pas : l'enveloppe plus quelques points.
-pub fn elargi(poly: &[Pos2], marge: f32) -> Vec<Pos2> {
-    let pts: Vec<Pos2> = poly.iter().flat_map(|p| [vec2(-marge, -marge), vec2(marge, -marge), vec2(marge, marge), vec2(-marge, marge)].map(|d| *p + d)).collect();
-    enveloppe_convexe(&pts)
-}
 
 /// L'enveloppe convexe de points.
 pub fn enveloppe_convexe(points: &[Pos2]) -> Vec<Pos2> {

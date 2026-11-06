@@ -491,7 +491,7 @@ fn after_a_camera_drag_the_tile_matches_the_new_geometry_and_a_stale_one_is_neve
 }
 
 #[test]
-fn the_current_plan_has_its_margin_open_and_the_others_are_clipped_tight_around_their_frames() {
+fn every_plan_shows_its_margin_on_the_paper_whether_it_is_current_or_not() {
     let mut doc = plan_court();
     deux_cadres_et_un_autre(&mut doc);
     let mut b = ouvert(doc, 6);
@@ -501,11 +501,11 @@ fn the_current_plan_has_its_margin_open_and_the_others_are_clipped_tight_around_
     let l = b.app.board_layout();
     let tuile = b.app.vignettes.xf.rect(l.move_of(K).unwrap().tuile.rect);
     let hull = vignette_bbox(&b, K);
-    // Un autre plan que le courant : l'image de sa tuile est coupée à l'enveloppe, à quelques points près.
+    // Un autre plan que le courant : sa marge se voit (partie 111 : c'est ce qui laissait un trou entre deux plans).
     let serre = images_dans(&b, tuile.expand(200.0)).into_iter().filter(|r| r.width() > 20.0 && r.height() > 20.0).collect::<Vec<_>>();
     assert!(!serre.is_empty(), "la tuile est peinte");
-    let limite = hull.expand(crate::boardui::MARGE_SERREE + 0.6);
-    assert!(serre.iter().any(|r| limite.contains_rect(*r)), "plan non courant : coupé net autour des cadres ({hull:?} ± {}) : {serre:?}", crate::boardui::MARGE_SERREE);
+    let limite = hull.expand(4.6);
+    assert!(serre.iter().any(|r| !limite.contains_rect(*r)), "plan non courant : la marge est ouverte aussi : {serre:?}");
     // Le plan courant : la marge de 12 % est ouverte, l'image dépasse l'enveloppe de bien plus.
     b.app.select_panel(1);
     attendre(&mut b);
@@ -525,11 +525,3 @@ fn vignette_bbox(b: &Banc, k: usize) -> Rect {
     b.app.vignettes.xf.rect(crate::vignettecam::boite(&l.move_of(k).unwrap().enveloppe))
 }
 
-#[test]
-fn widening_a_convex_polygon_by_a_few_points_keeps_it_convex_and_around() {
-    let carre = [pos2(0.0, 0.0), pos2(10.0, 0.0), pos2(10.0, 10.0), pos2(0.0, 10.0)];
-    let e = crate::vignettecam::elargi(&carre, 2.0);
-    let r = crate::vignettecam::boite(&e);
-    assert!((r.min - pos2(-2.0, -2.0)).length() < 1e-4 && (r.max - pos2(12.0, 12.0)).length() < 1e-4);
-    assert!(e.len() >= 4);
-}
