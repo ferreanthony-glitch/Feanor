@@ -151,8 +151,13 @@ fn the_shortcut_reaches_the_vignettes_and_tab_leaves_them_for_the_storyboard() {
     let m = Modifiers { alt: true, shift: true, ..Modifiers::NONE };
     touche(&mut b, Key::V, m);
     assert_eq!((b.app.espace, b.app.mode), (Espace::Vignettes, Mode::Storyboard), "Alt+Maj+V");
+    // (Partie 113, décision 1 : Tab entre dans le plan ; Maj+Tab est le pont vers le Storyboard.)
     touche(&mut b, Key::Tab, Modifiers::NONE);
-    assert_eq!((b.app.espace, b.app.mode), (Espace::Storyboard, Mode::Storyboard), "Tab revient au storyboard");
+    assert_eq!((b.app.espace, b.app.mode), (Espace::Animation, Mode::Animation), "Tab entre dans le plan");
+    touche(&mut b, Key::Tab, Modifiers::NONE);
+    assert_eq!((b.app.espace, b.app.mode), (Espace::Vignettes, Mode::Storyboard), "Tab en revient");
+    touche(&mut b, Key::Tab, Modifiers::SHIFT);
+    assert_eq!((b.app.espace, b.app.mode), (Espace::Storyboard, Mode::Storyboard), "Maj+Tab : le Storyboard");
     touche(&mut b, Key::Tab, Modifiers::NONE);
     assert_eq!(b.app.mode, Mode::Animation);
     // « Animer cette image » depuis les Vignettes, puis Tab : on revient aux Vignettes.
@@ -796,25 +801,18 @@ fn a_corner_of_any_frame_zooms_that_key_and_never_creates_one() {
 }
 
 #[test]
-fn ctrl_alt_drag_adds_the_next_frame_from_the_last_one() {
+fn ctrl_alt_drag_no_longer_adds_a_frame_it_moves_the_one_under_the_pointer() {
+    // (Partie 113, décision 5 : Ctrl + Alt, « un cadre de plus », est retiré ; « Ajouter un cadre » est au clic droit de la case.)
     let mut b = avec_b_a_droite();
     let w = largeur_cadre_ecran(&b);
-    let n = b.app.doc.panels[1].frame_count();
     let m = Modifiers { ctrl: true, shift: true, alt: true, command: true, ..Modifiers::NONE };
     let c = centre(cadre_ecran(&b, 1));
+    let avant = clefs(&b);
     glisser_avec(&mut b, m, c, &pas(c, vec2(w, 0.0), 6), c + vec2(w, 0.0), true);
     let k = clefs(&b);
-    assert_eq!(k.len(), 3, "C est née : {k:?}");
-    assert_eq!(k.iter().map(|c| c.0).collect::<Vec<_>>(), vec![0, (n - 1) / 2, n - 1], "réparties sur le plan");
-    assert!((k[2].1 - (k[1].1 + 160.0)).abs() < 2.0, "C est une largeur de cadre après B : {k:?}");
-    assert_eq!(dernier_nom(&b), "Cadre C");
-    // Avec Alt, même un appui dans A (loin du dernier cadre) fait un cadre de plus, il ne déplace pas A.
-    let qa = cadre_ecran(&b, 0);
-    let p = pos2(qa[0].x + (qa[2].x - qa[0].x) * 0.3, centre(qa).y);
-    glisser_avec(&mut b, m, p, &pas(p, vec2(0.0, 0.3 * w), 4), p + vec2(0.0, 0.3 * w), true);
-    assert_eq!(b.app.doc.panels[1].camera.len(), 4);
-    assert_eq!(dernier_nom(&b), "Cadre D");
-    assert_eq!(clefs(&b)[0].2, k[0].2, "A n'a pas bougé");
+    assert_eq!(k.len(), 2, "pas de C : {k:?}");
+    assert!((k[1].1 - (avant[1].1 + 160.0)).abs() < 2.0, "B a été déplacé d'une largeur de cadre : {k:?}");
+    assert_eq!(dernier_nom(&b), "Cadre B");
 }
 
 #[test]
@@ -1061,7 +1059,9 @@ fn the_camera_key_with_alt_adds_a_frame_and_the_key_is_free_in_every_keymap() {
     b.touches = Modifiers::NONE;
     b.image(vec![t(false, Modifiers::NONE)], 1.0 / 60.0);
     b.image(Vec::new(), 1.0 / 60.0);
-    assert_eq!(b.app.doc.panels[1].camera.len(), 3, "T + Alt : un cadre de plus : {}", b.app.status);
+    // (Partie 113, décision 5 : Alt n'ajoute plus de cadre ; T + Alt déplace le cadre pris, comme T seule.)
+    assert_eq!(b.app.doc.panels[1].camera.len(), 2, "T + Alt : pas de cadre de plus : {}", b.app.status);
+    assert_eq!(dernier_nom(&b), "Cadre B");
     // T n'est prise par aucune autre action, dans les deux modes.
     for mode in [Mode::Storyboard, Mode::Animation] {
         assert_eq!(b.app.keymap.find(Key::T, Some(Key::T), Modifiers::NONE, mode), Some("vignettes.camera"));

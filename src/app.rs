@@ -130,6 +130,12 @@ impl Tool {
         Tool::Pull,
     ];
 
+    /// Les outils des Vignettes (partie 113, décision 2) : le pinceau, le crayon, la gomme, la caméra de la planche, et la main. Les
+    /// autres restent au Storyboard ; sur la planche, choisir se fait avec Ctrl + glisser (le lasso), sans changer d'outil.
+    pub fn permis_dans_les_vignettes(self) -> bool {
+        matches!(self, Tool::Brush | Tool::Pencil | Tool::Eraser | Tool::Camera | Tool::Pan)
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Tool::Brush => "Pinceau",
@@ -774,6 +780,8 @@ pub struct App {
     /// Fenêtres Exporter… et Préférences… ouvertes (`prefsui.rs`).
     pub(crate) export_hub: bool,
     pub(crate) prefs_window: bool,
+    /// Préférences > Vignettes : « Plus de réglages » est déplié (partie 113, décision 4).
+    pub(crate) prefs_plus_vignettes: bool,
     /// Confirmation « Renuméroter les plans » ouverte (`numerotationui.rs`).
     pub(crate) renumber_confirm: bool,
     /// Fenêtre « Exporter pour le montage » (EDL, XML, OTIO : `editorialui.rs`).
@@ -1345,6 +1353,7 @@ impl App {
             palette: None,
             export_hub: false,
             prefs_window: false,
+            prefs_plus_vignettes: false,
             renumber_confirm: false,
             editorial: None,
             fiche: None,
@@ -1936,9 +1945,17 @@ impl App {
         }
         self.aller_a_l_espace(espace);
         // L'onglet Vignettes, c'est toujours la planche (partie 113) : une disposition retenue qui dirait le dessin (un ancien réglage,
-        // ou l'espace qu'on rouvre alors qu'on y est déjà) n'y change rien.
+        // ou l'espace qu'on rouvre alors qu'on y est déjà) n'y change rien. Et l'outil en main y est l'un des siens (décision 2) : un autre
+        // laisse la place au pinceau.
         if espace == Espace::Vignettes {
             self.board_view = BoardView::Panels;
+            if !Tool::permis_dans_les_vignettes(self.tool) {
+                let avant = self.tool.label();
+                self.set_tool(Tool::Brush);
+                self.status = format!("Vignettes : le pinceau remplace {avant} (pinceau, crayon, gomme et caméra seulement).");
+                self.masquer_exposition();
+                return;
+            }
         }
         // Le lecteur de l'espace Montage montre le film tel que la caméra le filme ; en sortir remet
         // la vue du plateau, si c'est lui qui l'avait changée (un réglage de vue : rien dans le projet).
@@ -3931,30 +3948,42 @@ impl App {
         if name.is_some() {
             self.history.context = name;
         }
+        // Dans les Vignettes, les outils sont le pinceau, le crayon, la gomme et la caméra (décision 2 de l'analyse) : une touche d'un autre
+        // outil ne change rien et le dit. Le lasso de Ctrl (`prendre_le_lasso`) et la main (Espace, l'outil Main) ne passent pas par ici.
+        if let Some(refuse) = self.outil_refuse_dans_les_vignettes(action) {
+            self.status = format!("Dans les Vignettes : pinceau, crayon, gomme et caméra ({} reste au Storyboard, Maj+Tab). Choisir : Ctrl + glisser.", refuse.label());
+            self.history.context = before;
+            return;
+        }
         self.run_action_now(action);
         self.history.context = before;
         self.vignettes_apres_la_commande(action);
     }
 
+    /// L'outil que `action` prendrait et que les Vignettes refusent (partie 113, décision 2) : tout sauf le pinceau, le crayon, la gomme,
+    /// la caméra et la main. Les formes (ligne, rectangle, ellipse, polyligne) sont refusées aussi : la planche est faite pour le croquis
+    /// à main levée, et une forme posée sur une case pâle y faisait naître un plan sans trait.
+    fn outil_refuse_dans_les_vignettes(&self, action: &str) -> Option<Tool> {
+        if self.espace != crate::workspace::Espace::Vignettes {
+            return None;
+        }
+        let outil = match action {
+            "outil.formes" => Some(self.shape.last),
+            "outil.ligne_droite" | "outil.ligne_courbe" | "outil.ligne_s" => Some(Tool::Line),
+            "deformer.enveloppe" | "deformer.perspective" => Some(Tool::Perspective),
+            a => Tool::ALL.into_iter().find(|t| t.action() == a),
+        }?;
+        (!Tool::permis_dans_les_vignettes(outil)).then_some(outil)
+    }
+
     /// Sur la planche des Vignettes, après une commande (partie 113) : une commande qui choisit un plan (plan suivant, précédent, nouveau,
-    /// dupliqué) le montre, cadre noir et planche défilée jusqu'à sa case : sans cela le plan courant changeait sans qu'on le voie. Un
-    /// outil pris par sa touche alors que la colonne des Vignettes ne le montre pas (pinceau, crayon, gomme, caméra) est pris quand même,
-    /// et la ligne d'état le dit.
+    /// dupliqué) le montre, cadre et planche défilée jusqu'à sa case : sans cela le plan courant changeait sans qu'on le voie.
     fn vignettes_apres_la_commande(&mut self, action: &str) {
         if !self.board_shown() {
             return;
         }
         if matches!(action, "panneau.suivant" | "panneau.precedent" | "scene.suivante" | "scene.precedente" | "panneau.nouveau" | "scene.nouvelle" | "panneau.dupliquer" | "scene.dupliquer" | "plan.nouveau_avant") {
             self.vignettes_montrer_le_plan_courant();
-        }
-        if action.starts_with("outil.") && self.espace == crate::workspace::Espace::Vignettes {
-            let dans_la_colonne = crate::toolbars::TOOL_GROUPS_VIGNETTES.iter().flat_map(|g| g.iter()).any(|s| s.contains(&self.tool));
-            if !dans_la_colonne {
-                let pinceau = self.raccourci("outil.pinceau");
-                let retour = if pinceau.is_empty() { String::new() } else { format!(" {pinceau} : le pinceau.") };
-                // (La barre d'état montre le message jusqu'au premier point ; le reste est dans sa bulle.)
-                self.status = format!("Outil {}, hors de la colonne des Vignettes : il agit dans les cases. La colonne garde le pinceau, le crayon, la gomme et la caméra.{retour}", self.tool.label());
-            }
         }
     }
 
@@ -4420,25 +4449,15 @@ impl App {
                 self.set_espace(crate::workspace::Espace::Storyboard);
                 self.board_view = BoardView::Scene;
             }
-            "vue.planches" => {
-                if board_shown {
-                    self.board_view = match self.board_view {
-                        BoardView::Scene => BoardView::Panels,
-                        BoardView::Panels => BoardView::Scene,
-                    };
-                } else {
-                    self.set_mode(Mode::Storyboard);
-                    self.board_view = BoardView::Panels;
-                }
-            }
-            // Tab : du storyboard à l'animation et retour. Du Montage, il revient au storyboard (le
-            // montage n'est pas un côté de la bascule : « Animer ce plan », dans sa barre, entre dans le plan).
-            // (Pareil depuis les Vignettes : une disposition du storyboard, pas un côté de la bascule. « Animer cette image »,
-            // au clic droit d'une case, entre en animation, et Tab ramène alors aux Vignettes.)
-            "mode.basculer" if matches!(self.espace, crate::workspace::Espace::Montage | crate::workspace::Espace::Vignettes) => {
-                self.set_espace(crate::workspace::Espace::Storyboard)
-            }
-            "mode.basculer" => self.set_mode(if board_shown { Mode::Animation } else { Mode::Storyboard }),
+            // Et depuis partout ailleurs, Maj+Tab mène aux Vignettes (décision 1 de l'analyse) : le pont dans les deux sens. L'ancienne
+            // « vue vignettes » de la disposition du Storyboard (la planche au milieu des panneaux du Storyboard) n'existe plus : la
+            // planche, c'est l'espace Vignettes.
+            "vue.planches" => self.set_espace(crate::workspace::Espace::Vignettes),
+            // Tab : entrer dans le plan pour l'animer, et en sortir (décision 1). Du Montage, il revient au storyboard (le montage
+            // n'est pas un côté de la bascule : « Animer ce plan », dans sa barre, entre dans le plan). Des Vignettes, il entre dans le
+            // plan courant ; de l'animation, il revient d'où l'on est entré (`set_mode` suit `Settings::storyboard_space`).
+            "mode.basculer" if self.espace == crate::workspace::Espace::Montage => self.set_espace(crate::workspace::Espace::Storyboard),
+            "mode.basculer" => self.set_mode(if self.mode == Mode::Storyboard { Mode::Animation } else { Mode::Storyboard }),
             "aide.raccourcis" => self.show_help = !self.show_help,
             "outil.pinceau" => self.set_tool(Tool::Brush),
             "outil.crayon" => self.set_tool(Tool::Pencil),

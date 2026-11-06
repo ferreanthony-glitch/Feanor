@@ -148,7 +148,6 @@ const SANS_EFFET_SUR_LE_PROJET: &[&str] = &[
     "espace.standard",
     "espace.dessin",
     "espace.timeline",
-    "espace.ensemble",
     "mode.basculer",
     "lecture.basculer",
     "lecture.boucle",

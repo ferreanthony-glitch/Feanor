@@ -62,7 +62,7 @@ action = "fichier.quitter"
 touches = ["Ctrl+Q"]
 
 # Onglets de projets (`onglets.rs`) : comme un navigateur. Ctrl+W (« fichier.fermer ») ferme l'onglet affiché.
-# Tab et Maj+Tab restent le passage storyboard / animation et la planche : Ctrl+Tab est libre.
+# Tab (le plan, pour l'animer) et Maj+Tab (Vignettes et Storyboard) restent ce qu'ils sont : Ctrl+Tab est libre.
 [[raccourci]]
 action = "onglet.nouveau"
 touches = ["Ctrl+T"]
@@ -1931,19 +1931,15 @@ action = "espace.timeline"
 touches = []
 
 [[raccourci]]
-action = "espace.ensemble"
-touches = []
-
-[[raccourci]]
 action = "espace.enregistrer"
 touches = []
 source = "FEANOR (sans touche)"
 
 # Les trois espaces de travail (INTERFACE.md, 6.1, 11 et 14), un onglet chacun en haut à droite :
 # Vignettes, Storyboard et Montage retiennent chacun leur disposition. L'animation n'est plus un onglet (double-clic
-# sur un plan pour y entrer, bouton « Retour au storyboard » pour en sortir). Tab passe encore du storyboard
-# à l'animation et retour (du Montage et des Vignettes, il revient au storyboard) ; le Montage a Alt+M, les
-# Vignettes Alt+Maj+V (Alt+V est le miroir vertical de la sélection).
+# sur un plan pour y entrer, bouton de retour pour en sortir). Tab entre dans le plan et en revient (du Storyboard
+# comme des Vignettes ; du Montage, il revient au storyboard) ; Maj+Tab est le pont entre les Vignettes et le
+# Storyboard, dans les deux sens ; le Montage a Alt+M, les Vignettes Alt+Maj+V (Alt+V est le miroir vertical).
 [[raccourci]]
 action = "espace.vignettes"
 touches = ["Alt+Maj+V"]

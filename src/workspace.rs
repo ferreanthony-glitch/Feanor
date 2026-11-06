@@ -366,18 +366,10 @@ pub fn builtin() -> Vec<(&'static str, &'static str, Layout)> {
             Layout {
                 montage_height: 440.0,
                 timeline_height: 380.0,
-                ..standard.clone()
-            },
-        ),
-        (
-            "espace.ensemble",
-            "Vue d'ensemble",
-            Layout {
-                tools: false,
-                vignettes: true,
                 ..standard
             },
         ),
+        // (« Vue d'ensemble », la planche au milieu des panneaux du Storyboard, n'existe plus : la planche, c'est l'espace Vignettes, partie 113.)
     ]
 }
 

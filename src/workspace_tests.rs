@@ -27,12 +27,13 @@ fn has(app: &App, pane: Pane) -> bool {
 fn builtin_layouts() {
     let all = workspace::builtin();
     let names: Vec<&str> = all.iter().map(|w| w.1).collect();
-    assert_eq!(names, vec!["Standard", "Dessin", "Timeline", "Vue d'ensemble"]);
+    // (« Vue d'ensemble », la planche au milieu des panneaux du Storyboard, n'existe plus : la planche, c'est l'espace Vignettes, partie 113.)
+    assert_eq!(names, vec!["Standard", "Dessin", "Timeline"]);
     assert_eq!(all[0].2, Layout::default());
     let dessin = &all[1].2;
     assert!(dessin.tools && !dessin.sheet, "Dessin : plus de place pour dessiner");
     assert!(all[2].2.montage_height > Layout::default().montage_height, "Timeline : bande plus haute");
-    assert!(all[3].2.vignettes && !all[3].2.tools, "Vue d'ensemble : vignettes");
+    assert!(all.iter().all(|w| !w.2.vignettes), "aucune disposition du Storyboard ne montre la planche");
     // Chaque disposition a son action dans le fichier de raccourcis.
     let map = crate::keymap::Keymap::from_texts(crate::keymap::DEFAULT_KEYMAP, None);
     for (action, _, _) in &all {
