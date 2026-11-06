@@ -32,7 +32,7 @@ impl App {
         let plan = layout.cards[k].plan;
         let chosen = self.board_sel.len() > 1 && self.board_sel.contains(&plan);
         let ids: Vec<u64> = if chosen { self.doc.panels.iter().map(|p| p.id).filter(|id| self.board_sel.contains(id)).collect() } else { vec![plan] };
-        self.vignettes.moving = Some(PlanMove { ids, grab: pos, now: pos, active: false, cancelled: false, target: None, copie });
+        self.vignettes.moving = Some(PlanMove { ids, grab: pos, now: pos, active: false, cancelled: false, target: None, copie, clic: None });
         self.vignettes.press = Press::Move;
     }
 
@@ -70,7 +70,21 @@ impl App {
             return;
         }
         let Some(mv) = self.vignettes.moving.take() else { return };
-        if mv.cancelled || !mv.active {
+        if mv.cancelled {
+            return;
+        }
+        if !mv.active {
+            // Maj + un clic sans mouvement sur une case (partie 113, proposition A) : choisir le plan, comme Maj + clic l'a toujours fait.
+            if let Some((k, m)) = mv.clic {
+                let layout = self.board_layout();
+                if k < layout.cards.len() {
+                    self.board_select_click(&layout, k, m);
+                    self.vignettes.press = Press::Select;
+                    self.panel_focus = true;
+                    self.images_focus = false;
+                    self.key_focus = false;
+                }
+            }
             return;
         }
         match mv.target {

@@ -138,8 +138,8 @@ impl App {
             self.vignettes.ouverture_a_faire = true;
         }
         let r = ui.button(ph::ARROWS_OUT.to_string());
-        if bulle(r, "Cadrer tout", "Toute la page dans la vue.", "").clicked() {
-            self.board_fit();
+        if bulle(r, "Cadrer tout", "Toute la planche dans la vue, en largeur et en hauteur (jusqu'au zoom le plus petit, 20 %).", "").clicked() {
+            self.planche_cadrer_tout();
         }
     }
 
@@ -164,26 +164,6 @@ impl App {
                 self.vignettes_basculer_numeros();
             }
         });
-        ui.horizontal_wrapped(|ui| {
-        let mut fond = self.settings.vignettes.fond_numeros;
-        let resp = ui.checkbox(&mut fond, "Fond clair derrière les numéros");
-        if bulle(resp, "Fond clair derrière les numéros", "Une pastille claire derrière le numéro de plan : il se lit sur n'importe quel dessin qui déborde.", "").changed() {
-            self.settings.vignettes.fond_numeros = fond;
-            self.settings_a_ecrire = true;
-        }
-        let mut version = self.settings.vignettes.pastille_version;
-        let resp = ui.checkbox(&mut version, "Pastille de version à côté du numéro");
-        if bulle(resp, "Pastille de version", "« V2 » à côté du numéro de plan, hors du cadre, pour un plan qui a plusieurs versions. Survolée, elle ouvre la pile des versions.", "").changed() {
-            self.settings.vignettes.pastille_version = version;
-            self.settings_a_ecrire = true;
-        }
-        let mut duree = self.settings.vignettes.afficher_duree;
-        let resp = ui.checkbox(&mut duree, "Afficher la durée du plan");
-        if bulle(resp, "Afficher la durée du plan", "La durée (secondes + images) à côté du numéro de plan.", "").changed() {
-            self.settings.vignettes.afficher_duree = duree;
-            self.settings_a_ecrire = true;
-        }
-        });
         ui.horizontal(|ui| {
             ui.label("Lignes de texte d'un projet neuf");
             let mut t = self.settings.vignettes.textes_defaut;
@@ -201,6 +181,32 @@ impl App {
                 self.settings_a_ecrire = true;
             }
         });
+    }
+
+    /// Vignettes > Plus de réglages (partie 113, décision 4) : le fond et la pastille des numéros, la durée, la couleur des lignes de texte.
+    pub(crate) fn numeros_textes_plus_prefs_ui(&mut self, ui: &mut egui::Ui) {
+        use crate::boardsens::Champ;
+        use crate::bulles::bulle;
+        ui.horizontal_wrapped(|ui| {
+            let mut fond = self.settings.vignettes.fond_numeros;
+            let resp = ui.checkbox(&mut fond, "Fond clair derrière les numéros");
+            if bulle(resp, "Fond clair derrière les numéros", "Une pastille claire derrière le numéro de plan : il se lit sur n'importe quel dessin qui déborde.", "").changed() {
+                self.settings.vignettes.fond_numeros = fond;
+                self.settings_a_ecrire = true;
+            }
+            let mut version = self.settings.vignettes.pastille_version;
+            let resp = ui.checkbox(&mut version, "Pastille de version à côté du numéro");
+            if bulle(resp, "Pastille de version", "« V2 » à côté du numéro de plan, hors du cadre, pour un plan qui a plusieurs versions. Survolée, elle ouvre la pile des versions.", "").changed() {
+                self.settings.vignettes.pastille_version = version;
+                self.settings_a_ecrire = true;
+            }
+            let mut duree = self.settings.vignettes.afficher_duree;
+            let resp = ui.checkbox(&mut duree, "Afficher la durée du plan");
+            if bulle(resp, "Afficher la durée du plan", "La durée (secondes + images) à côté du numéro de plan.", "").changed() {
+                self.settings.vignettes.afficher_duree = duree;
+                self.settings_a_ecrire = true;
+            }
+        });
         ui.horizontal(|ui| {
             ui.label("Couleur des lignes de texte");
             for (k, c) in Champ::TOUS.into_iter().enumerate() {
@@ -215,8 +221,28 @@ impl App {
         });
     }
 
-    /// Vignettes > Aspect des cases : le filet (épaisseur et couleur), l'opacité du dessin hors des cases et le passe-partout des cases.
+    /// Vignettes > Passe-partout des cases (le reste de l'aspect des cases est sous « Plus de réglages », partie 113).
     pub(crate) fn aspect_cases_prefs_ui(&mut self, ui: &mut egui::Ui) {
+        use crate::bulles::bulle;
+        ui.horizontal(|ui| {
+            let mut on = self.settings.vignettes.passe_partout_cases;
+            let resp = ui.checkbox(&mut on, "Passe-partout des cases");
+            if bulle(resp, "Passe-partout des cases", "Un voile qui cache tout ce qui est hors des cases : on les voit comme des images finies. Un affichage, sans effet sur le dessin ni sur les exports. Aussi dans la barre du bas de la planche.", "").changed() {
+                self.settings.vignettes.passe_partout_cases = on;
+                self.vignettes.annot.marie = on;
+                self.settings_a_ecrire = true;
+            }
+            let mut v = self.settings.vignettes.passe_partout_cases_opacite;
+            let resp = ui.add(egui::Slider::new(&mut v, 0..=100).suffix(" %"));
+            if bulle(resp, "Opacité du passe-partout des cases", "100 % : opaque ; 0 % : rien n'est couvert.", "").changed() {
+                self.settings.vignettes.passe_partout_cases_opacite = v;
+                self.settings_a_ecrire = true;
+            }
+        });
+    }
+
+    /// Vignettes > Plus de réglages : le filet (épaisseur et couleur) et l'opacité du dessin hors des cases.
+    pub(crate) fn aspect_cases_plus_prefs_ui(&mut self, ui: &mut egui::Ui) {
         use crate::bulles::bulle;
         ui.horizontal(|ui| {
             ui.label("Épaisseur du filet");
@@ -247,21 +273,6 @@ impl App {
             let resp = ui.add(egui::Slider::new(&mut v, 0..=100).suffix(" %"));
             if bulle(resp, "Dessin hors des cases", "L'opacité de ce qui est dessiné sur la planche en dehors des cases (il n'appartient à aucun plan). Un affichage : rien ne change dans le dessin.", "").changed() {
                 self.settings.vignettes.opacite_hors_champ = v;
-                self.settings_a_ecrire = true;
-            }
-        });
-        ui.horizontal(|ui| {
-            let mut on = self.settings.vignettes.passe_partout_cases;
-            let resp = ui.checkbox(&mut on, "Passe-partout des cases");
-            if bulle(resp, "Passe-partout des cases", "Un voile qui cache tout ce qui est hors des cases : on les voit comme des images finies. Un affichage, sans effet sur le dessin ni sur les exports. Aussi dans la barre du bas de la planche.", "").changed() {
-                self.settings.vignettes.passe_partout_cases = on;
-                self.vignettes.annot.marie = on;
-                self.settings_a_ecrire = true;
-            }
-            let mut v = self.settings.vignettes.passe_partout_cases_opacite;
-            let resp = ui.add(egui::Slider::new(&mut v, 0..=100).suffix(" %"));
-            if bulle(resp, "Opacité du passe-partout des cases", "100 % : opaque ; 0 % : rien n'est couvert.", "").changed() {
-                self.settings.vignettes.passe_partout_cases_opacite = v;
                 self.settings_a_ecrire = true;
             }
         });

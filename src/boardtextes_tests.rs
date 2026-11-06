@@ -100,18 +100,20 @@ fn on_screen_a_field_is_one_clipped_line_with_a_label_only_when_two_or_more_are_
 }
 
 #[test]
-fn a_click_on_the_notes_line_writes_the_note_like_the_icon_and_the_other_lines_do_not() {
+fn a_click_on_the_notes_line_writes_the_note_like_the_icon_and_the_other_lines_write_their_field() {
     for (sens, t) in [(Sens::Lignes, textes(true, false, true)), (Sens::Lignes, textes(true, true, true)), (Sens::Lignes, textes(false, false, true)), (Sens::Japonais, textes(true, false, true))] {
         let mut b = banc_vignettes(plan_avec_textes(), sens, 4);
         b.app.layout.board_textes = t;
         b.chauffer(4);
         let c = b.app.board_layout().cards[3];
-        // Une ligne qui n'est pas Notes : un appui dessine dans la case, comme avant (il n'écrit pas la note).
+        // Une ligne qui n'est pas Notes : un clic l'écrit en place, elle aussi (partie 113, proposition C), son champ et pas la note.
         let autre = t.champs().into_iter().position(|x| x != Champ::Notes);
         if let Some(i) = autre {
             let p: Pos2 = ecran(&b, c.ligne_de_texte(i)).center();
             clic(&mut b, p);
-            assert!(b.app.vignettes.note.is_none(), "{sens:?} {t:?} : la ligne {i} (pas Notes) n'écrit pas la note");
+            let champ = t.champs()[i];
+            assert_eq!(b.app.vignettes.note.as_ref().map(|e| (e.id, e.champ)), Some((c.id, champ)), "{sens:?} {t:?} : la ligne {i} écrit son champ");
+            b.app.vignettes.note = None;
         }
         // La ligne Notes : un clic l'écrit, la note de la case, avec son texte dans le tampon.
         let i = t.ligne_du(Champ::Notes).expect("Notes est cochée");
