@@ -165,6 +165,8 @@ impl App {
         }
         if let Some(id) = run {
             keep = false;
+            // (Le compteur d'usage : partie de la palette, `usageui.rs`.)
+            self.usage.source = Some(crate::usage::Source::Palette);
             self.run_action(id);
         }
         if keep {

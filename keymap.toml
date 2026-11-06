@@ -296,6 +296,28 @@ action = "aide.regler_stylet"
 touches = []
 source = "FEANOR (sans touche ; aussi Préférences > Dessin)"
 
+# Le banc du stylet (2026-11-06, `styletui.rs`) : il écoute Windows, il ne change rien au dessin.
+[[raccourci]]
+action = "aide.stylet_transmet"
+touches = []
+source = "FEANOR (sans touche ; menu Aide)"
+
+# Ce qui freine et ce qui sert (2026-11-06, `frictionui.rs`, `usageui.rs`).
+[[raccourci]]
+action = "aide.noter_friction"
+touches = ["F9"]
+source = "proposition (F9 : libre ; une seule touche, pour noter sans quitter le dessin)"
+
+[[raccourci]]
+action = "aide.ouvrir_frictions"
+touches = []
+source = "FEANOR (sans touche ; menu Aide)"
+
+[[raccourci]]
+action = "aide.habitudes"
+touches = []
+source = "FEANOR (sans touche ; menu Aide)"
+
 [[raccourci]]
 action = "aide.raccourcis"
 touches = ["F1"]

@@ -5,6 +5,14 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-06
 
+- Le banc du stylet (INTERFACE partie 114, branche `stylet-entier`, posée sur `usage-frictions`, pas fusionnée) : Aide > Ce que le stylet
+  transmet… écoute le stylet auprès de Windows (bouton, stylet retourné, gomme, inclinaison, rotation) sans rien changer au dessin, et le
+  montre à côté de ce que FEANOR reçoit aujourd'hui. L'écoute n'est posée qu'à l'ouverture du banc. Reste l'essai d'Anthony à la tablette :
+  son relevé (`%LOCALAPPDATA%\SHOT\stylet-releve.txt`) décide de ce qu'on branche (gomme au dos, inclinaison, bouton tenu).
+- « Tout au stylet » : page de propositions publiée (trois règles, 23 gestes, six décisions à prendre). Rien de codé avant ses réponses.
+- Mes habitudes et notes de friction (INTERFACE partie 112, branche `usage-frictions`, pas fusionnée) : un compteur local des commandes par
+  chemin (clavier, icône, menu, anneau, palette), la fenêtre Aide > Mes habitudes, et F9 pour noter une friction avec une capture et les
+  dernières commandes, dans `Documents\SHOT\Frictions`. Vérificateur : 3985 réussis, aucun avertissement. Reste son essai, puis la fusion.
 - Traits continus (partie 111, c11f743) et Vignettes simplifiées par Fable (analyse `suivi/ANALYSE-VIGNETTES.md`, partie 113) fusionnés (f5caddd).
   Vérification complète : 3981 réussis, 0 échec, deux passages, aucun avertissement. Ouvert sans plantage sur une copie. Version FEANOR-portable-2026-11-06c.
   Reste : décision 6, plan annulé, essai au stylet.

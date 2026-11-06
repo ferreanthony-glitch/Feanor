@@ -7668,6 +7668,69 @@ Coût d'une image, 30 plans dessinés, souris qui se promène : construction 0,7
 
 ---------------------------------------------------------------------------------------------------
 
+## 112. Mes habitudes et les notes de friction (2026-11-06, branche `usage-frictions`)
+
+Anthony : « Mesurer ce que tu utilises vraiment. Un compteur local des commandes, qui ne sort jamais de ta machine. » et « Noter une friction
+sans quitter le dessin. Une touche qui garde une capture, tes dernières actions et une ligne de texte, rangées dans tes notes. »
+Code : `src/usage.rs` et `src/friction.rs` (sans interface), `src/usageui.rs` et `src/frictionui.rs`, essais `src/usage_tests.rs` (10) et
+`src/friction_tests.rs` (5).
+
+### Mes habitudes : le compteur d'usage
+
+- **Ce qui est compté** : chaque commande lancée, avec le chemin par lequel elle est partie : **clavier**, **icône**, **menu**, **anneau**,
+  **palette**, ou **autre** (un bouton d'un panneau, une commande lancée par une autre). Une touche tenue qui se répète ne compte qu'une fois.
+  Un clic sur une icône et la commande qu'il lance ne font qu'un.
+- **Rien ne quitte le poste.** Le compte est un petit fichier à côté des réglages, `%APPDATA%\SHOT\usage.json`. Il ne contient que des
+  identifiants de commandes, des nombres et le dernier jour d'usage : aucun nom de projet, aucun texte, aucun dessin. FEANOR ne l'envoie nulle
+  part. Un fichier abîmé donne un compte neuf, sans rien casser.
+- **Sans latence** : compter, c'est un nombre de plus en mémoire. Le fichier s'écrit au plus une fois par minute, jamais pendant qu'un bouton ou
+  la pointe est appuyé, et à la fermeture.
+- **La fenêtre** : Aide > Mes habitudes… (`aide.habitudes`, Ctrl+K, sans touche).
+  - En tête : combien de commandes comptées, depuis quand ; la case **« Compter mes commandes »** (allumée d'origine ; réglage
+    `compter_les_commandes`) et **« Remettre à zéro… »** (avec confirmation).
+  - **Les plus utilisées** (15) : icône et nom, total, détail par chemin (« clavier 12 · anneau 3 »), « sans raccourci » quand elle part surtout
+    d'un menu, d'une icône ou de la palette et n'a pas de touche, et « dans l'anneau » quand elle y est. **Clic droit sur une ligne** : lui
+    donner une touche, ou l'envoyer dans l'anneau (le menu des icônes, partie 111 ; ce clic n'est pas compté comme un usage).
+  - **Jamais utilisées** : parmi les outils et les boutons des barres, ceux qui n'ont pas servi depuis le début du comptage : bons candidats à
+    cacher. Rangées par endroit (Outils, Barre des commandes, Barre du montage, Barre de la timeline), chaque groupe repliable avec son
+    compte (« Outils : 12 sur 21 ») ; les outils sont ouverts d'office. Avant sept jours de comptage, la fenêtre dit qu'il est trop tôt
+    pour conclure.
+- **Ce que le compteur ne voit pas** : les gestes qui ne sont pas des commandes (un trait, un glissé de poignée) et les boutons qui ne passent
+  ni par une commande ni par une icône de commande (un curseur, une case à cocher d'un panneau).
+
+### Noter une friction : F9
+
+Le geste : **F9**, une ligne si on veut, **Entrée**. On reste dans le dessin.
+
+1. À la touche, FEANOR fige l'instant (heure du poste, nom du fichier du projet, espace de travail, outil, plan, les douze dernières commandes
+   avec leur chemin et leur ancienneté) et demande une **capture de la fenêtre**. Rien ne se montre encore : la capture est l'écran tel qu'il
+   était.
+2. La capture arrivée (ou 0,6 s plus tard, sans elle), un champ paraît en haut de la fenêtre, avec la main : « Qu'est-ce qui t'a freiné ? ».
+   Les lettres vont dans le champ, pas aux raccourcis.
+3. **Entrée** (ou « Noter ») : la note part, même vide. **Échap** (ou « Abandonner ») : rien n'est gardé.
+
+- **Où** : `Documents\SHOT\Frictions`. Un fichier `frictions.md` où chaque note s'ajoute à la fin (la plus récente en bas), et une image
+  `friction-AAAA-MM-JJ-HHMMSS.png` par note à côté. Aide > Mes frictions notées… (`aide.ouvrir_frictions`) ouvre le dossier.
+- **Une note** : un titre (l'heure et le texte), une ligne « Projet · Espace · Outil · Plan », la ligne « Juste avant » (de la plus récente à
+  la plus ancienne, « Gomme (anneau, il y a 2 s) »), la capture, la version de FEANOR.
+- **Sans latence** : la capture est encodée et la note écrite sur un fil de fond. La barre d'état dit où quand c'est fait, ou pourquoi ça n'a
+  pas marché. Une capture impossible n'empêche pas la note.
+- Rien n'est écrit dans le projet, aucune étape d'annulation. Rien n'est envoyé nulle part.
+- **F9** est une proposition (`keymap.toml`, libre) : clic droit sur l'entrée du menu pour en changer. La commande peut aussi aller dans
+  l'anneau sous le stylet.
+
+### À regarder à l'écran
+
+1. Travailler quelques minutes, puis Aide > Mes habitudes… : les commandes utilisées sont là, avec le bon chemin (clavier, icône, anneau).
+2. Tenir Ctrl+Z : l'annulation ne monte que d'un par appui.
+3. Clic droit sur une ligne : « Assigner un raccourci… » et « Envoyer dans l'anneau ».
+4. Décocher « Compter mes commandes », lancer des commandes : les nombres ne bougent plus. Recocher.
+5. Fermer et rouvrir FEANOR : le compte est toujours là.
+6. En plein dessin, F9 : le champ paraît en haut. Taper une ligne, Entrée : la barre d'état donne le fichier.
+7. Aide > Mes frictions notées… : le fichier et l'image. L'image ne montre pas le champ de saisie. La ligne « Juste avant » est juste.
+8. F9 puis Échap : rien de plus dans le dossier.
+9. F9 puis Entrée sans rien taper : une note « (sans texte) », avec sa capture.
+
 ## 113. Les Vignettes plus simples : le pont sans piège, le plan courant qui se voit, ce qui ne fait rien le dit (2026-11-06, branche `vignettes-simplicite`)
 
 Demande d'Anthony : « analyser le fonctionnement de Vignettes et l'améliorer pour le rendre plus simple, plus intuitif et ergonomique ;
@@ -7819,3 +7882,72 @@ reste une étape d'annulation au plus, et aucun ne touche un dessin hors de son 
 10. Sur un long projet, « Cadrer tout » (barre du bas, à droite) : toute la planche dans la vue (jusqu'à 20 %) ; « Page à la largeur de la vue »
     (clic droit sur le fond) : la largeur seule, comme avant.
 11. Rien n'a bougé : un trait, Ctrl+Z, un trait entre deux cases, enregistrer, rouvrir : comme avant ; au repos, rien ne se repeint.
+
+## 114. Le banc du stylet : « Ce que le stylet transmet » (2026-11-06, branche `stylet-entier`)
+
+Anthony : « Le stylet en entier. Aujourd'hui Feanor ne reçoit que la pression. Lire le stylet directement auprès de Windows donnerait la gomme
+au dos du stylet, l'inclinaison, et le bouton pendant que la pointe touche. C'est le chantier le plus risqué, à faire avec toi devant la
+tablette. »
+Code : `src/stylet.rs` (la lecture, les jalons, l'écoute chez Windows), `src/styletui.rs` (la fenêtre), essais `src/stylet_tests.rs` (7, et une
+capture hors de la suite).
+
+**Premier pas : écouter, rien d'autre.** Avant de brancher la gomme, l'inclinaison ou le bouton, il faut savoir ce que la tablette d'Anthony
+envoie vraiment. Ce chantier ne change RIEN au dessin : il lit et il montre.
+
+### Pourquoi FEANOR ne reçoit que l'appui
+
+winit traite lui-même les messages `WM_POINTER*` de Windows. Il lit `GetPointerPenInfo`, garde `pressure`, et jette le reste : le bouton du
+fût (`PEN_FLAG_BARREL`), le stylet retourné (`PEN_FLAG_INVERTED`), la gomme qui touche (`PEN_FLAG_ERASER`), l'inclinaison (`tiltX`, `tiltY`) et
+la rotation. egui ne reçoit donc qu'un toucher avec sa force, et un bouton principal ou secondaire.
+
+### L'écoute
+
+- À la **première ouverture du banc**, FEANOR remplace la procédure de sa fenêtre par la sienne (`SetWindowLongPtrW`, `GWLP_WNDPROC`). Elle lit le
+  stylet pendant le message (le seul moment où Windows le donne), range la lecture dans des atomiques, puis rend le message **tel quel** à la
+  procédure d'origine, celle de winit (`CallWindowProcW`). Aucun message n'est retenu ni modifié.
+- **Une séance où l'on n'ouvre pas le banc est la même qu'avant** : rien n'est posé sur la fenêtre au démarrage (seule son adresse est lue).
+- L'écoute n'est posée que si la fenêtre existe et appartient au fil de l'interface ; sinon le banc dit que Windows a refusé. À la fin de la
+  fenêtre (`WM_NCDESTROY`), la procédure d'origine reprend sa place.
+- Elle ne peut pas paniquer : des atomiques et des appels à Windows. Les deux structures de Windows sont recopiées à la main (pas de nouvelle
+  dépendance) et leur taille est vérifiée à la compilation.
+- Elle note aussi les **clics de souris** arrivés à la fenêtre, et si Windows les marque comme venant d'un stylet (`GetMessageExtraInfo`) : c'est
+  ce qui dira par quel chemin le bouton du stylet devient aujourd'hui un clic droit.
+
+### La fenêtre : Aide > Ce que le stylet transmet… (`aide.stylet_transmet`, sans touche)
+
+- **Un cadre** où faire les gestes sans rien dessiner dans le projet. Un rond suit le stylet : creux en l'air, plein et plus gros quand on
+  appuie ; un trait part du côté où le stylet est couché ; un cercle l'entoure quand le bouton est enfoncé ; la teinte change pour la gomme.
+- **En direct** : pointe posée, en l'air ou hors de portée (ou gomme), appui, bouton, les deux inclinaisons, la rotation.
+- **À essayer** : huit gestes, chacun se coche dès qu'il est vu : approcher sans toucher ; appuyer ; coucher le stylet ; bouton, pointe en
+  l'air ; **bouton, pointe posée** ; retourner le stylet ; poser la gomme ; tourner le stylet sur lui-même.
+- **Ce que FEANOR reçoit aujourd'hui** : les événements de stylet et leur appui, les boutons principal, secondaire et du milieu arrivés à egui ;
+  et les clics de souris vus par Windows, avec ceux venus du stylet.
+- **« Enregistrer le relevé »** : le résultat en clair dans `%LOCALAPPDATA%\SHOT\stylet-releve.txt` et dans le presse-papiers.
+  **« Recommencer »** décoche tout.
+- Si aucun message de stylet n'arrive, la fenêtre dit que le pilote n'envoie peut-être pas le stylet par Windows Ink.
+
+### Ce que le relevé décidera
+
+| Ce que le relevé montre | Ce qu'on pourra brancher |
+|---|---|
+| « stylet retourné » et « gomme posée » vus | gommer en retournant le stylet, sans changer d'outil |
+| « inclinaison » vue, avec son maximum | l'entrée « inclinaison » des pinceaux (`brush.rs`, prévue de longue date) |
+| « bouton, pointe posée » vu | des gestes « bouton tenu » : pipette, déplacer la vue, taille du pinceau |
+| clic droit « venu du stylet » | le chemin actuel de l'anneau ; à garder quand le bouton sera lu directement |
+
+### Limites de ce premier pas
+
+- Une lecture par message. winit, lui, lit tout l'historique d'une trame : il faudra en faire autant pour donner l'inclinaison à chaque point
+  d'un trait.
+- La fenêtre principale seulement.
+- Windows 64 bits. Ailleurs, le banc s'ouvre et dit que l'écoute est refusée.
+- La mécanique de l'écoute est essayée sur une vraie fenêtre de Windows créée par l'essai (elle se pose, rend chaque message tel quel,
+  refuse une seconde fenêtre, s'efface avec la fenêtre) ; la lecture du stylet lui-même ne se vérifie que devant la tablette.
+
+### À regarder à l'écran, devant la tablette
+
+1. Aide > Ce que le stylet transmet… : la fenêtre s'ouvre, sans la phrase « Windows n'a pas laissé FEANOR écouter ».
+2. Approcher le stylet du cadre : la première ligne se coche, le rond creux suit le stylet.
+3. Faire les sept autres gestes de la liste, dans le cadre. Peu importe que certains ne se cochent pas : c'est la réponse qu'on cherche.
+4. « Enregistrer le relevé ».
+5. Fermer le banc et dessiner comme d'habitude quelques minutes : le trait, l'appui, le clic droit et l'anneau sont comme avant.
