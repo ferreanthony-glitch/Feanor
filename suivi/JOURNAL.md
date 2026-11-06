@@ -3,6 +3,12 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-07
+
+- Fusion dans main (547b51f) à la demande d'Anthony : Mes habitudes et notes de friction (partie 112), banc du stylet (partie 114), après
+  fusion de main dans la branche. Vérificateur sur le résultat : 4003 réussis, 0 échec, aucun avertissement. `feanor.exe` reconstruit et ouvert
+  sans erreur sur une copie de TEST PELURE_effets. Reste son essai : F9, Aide > Mes habitudes, et le relevé du stylet à la tablette.
+
 ## 2026-11-06
 
 - Le banc du stylet (INTERFACE partie 114, branche `stylet-entier`, posée sur `usage-frictions`, pas fusionnée) : Aide > Ce que le stylet
