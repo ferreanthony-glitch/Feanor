@@ -298,14 +298,27 @@ impl App {
         if self.stroke.is_none() && self.shape_drag.is_none() && self.shape_edit.is_none() {
             self.vignettes.suivi = None;
         }
-        let Some(fini) = self.vignettes.fini.take() else { return false };
+        let Some(mut fini) = self.vignettes.fini.take() else { return false };
         let Some(origine) = layout.cards.iter().position(|c| c.id == fini.suivi.carte) else { return false };
         let Some(a) = fini.suivi.aff.echelle() else { return false };
         let champs = champs(layout, self.settings.vignettes.debord_fraction());
+        // Une part dans le champ d'une case vide : son plan se crée d'abord (comme dessiner dedans), puis la répartition se fait sur la planche
+        // d'après, où cette case est une vraie case.
+        let nouvelle = self.horschamp_creer_cases(layout, &mut fini, origine, &champs);
+        let cree = nouvelle.is_some();
+        let (layout, origine) = match &nouvelle {
+            Some(l) => match l.cards.iter().position(|c| c.id == fini.suivi.carte) {
+                Some(o) => (l, o),
+                None => return true,
+            },
+            None => (layout, origine),
+        };
+        let champs = if cree { self::champs(layout, self.settings.vignettes.debord_fraction()) } else { champs };
         let fait = match &fini.matiere {
             Matiere::Vecteur => self.partager_vecteur(layout, &fini, origine, a, &champs),
             Matiere::Bitmap { .. } => self.partager_bitmap(layout, &fini, origine, a, &champs),
         };
+        let fait = fait || cree;
         if fait {
             let n = self.history.undo_len().saturating_sub(fini.suivi.base_len);
             if n >= 2 {
@@ -319,6 +332,77 @@ impl App {
             self.vignettes.debord_garde = None;
         }
         fait
+    }
+
+    /// Les points du trait fini sur la planche (rien s'il n'y a rien à répartir : trait « sous les autres », dessin disparu).
+    fn points_du_trait(&self, fini: &Fini) -> Vec<Pos2> {
+        let aff = fini.suivi.aff;
+        match &fini.matiere {
+            Matiere::Vecteur => {
+                let Some(d) = self.drawing(fini.cel) else { return Vec::new() };
+                if d.elements.len() <= fini.suivi.elements_avant || self.paint_behind {
+                    return Vec::new();
+                }
+                match d.elements.last() {
+                    Some(Element::Stroke { points, .. }) => points.iter().map(|p| aff.applique(p.pos())).collect(),
+                    _ => Vec::new(),
+                }
+            }
+            Matiere::Bitmap { path, .. } => path.iter().map(|p| aff.applique(p.pos())).collect(),
+        }
+    }
+
+    /// Crée les plans des cases vides dont le champ reçoit une part du trait (Anthony, 2026-11-05 : « une partie qui tombe dans le champ
+    /// d'une case vide crée le plan de cette case »), comme le fait un trait tracé dans une case vide. Les cases vides d'avant celle-ci
+    /// deviennent des plans vides, comme toujours. Le plan courant, le calque et l'image courants sont rendus tels qu'ils étaient ; la
+    /// création rejoint l'étape d'annulation du trait. Rend la planche d'après si des plans sont nés.
+    fn horschamp_creer_cases(&mut self, layout: &BoardLayout, fini: &mut Fini, origine: usize, champs: &[Rect]) -> Option<BoardLayout> {
+        if layout.empty.is_empty() || !self.tool_draws_in_empty() || self.storyboard_refuses() {
+            return None;
+        }
+        let o = layout.cards[origine];
+        // (Un plan neuf n'a qu'un calque vectoriel : un trait bitmap n'y entrerait pas, il ne crée pas de plan vide.)
+        if !matches!(&fini.matiere, Matiere::Vecteur) {
+            return None;
+        }
+        // (Un plan neuf a la caméra d'origine : une autre caméra, la part resterait sur la planche.)
+        if self.doc.panel_camera(o.panel, o.frame) != self.doc.default_camera() || layout.move_of(origine).is_some() {
+            return None;
+        }
+        let debord = self.settings.vignettes.debord_fraction();
+        let recoit = vec![true; champs.len()];
+        let pts = self.points_du_trait(fini);
+        let mut dernier: Option<usize> = None;
+        for p in &pts {
+            if proprietaire(champs, &recoit, origine, *p).is_some() {
+                continue;
+            }
+            if let Some(e) = layout.empty.iter().position(|r| r.expand(debord * r.width()).contains(*p)) {
+                dernier = Some(dernier.map_or(e, |d| d.max(e)));
+            }
+        }
+        let e = dernier?;
+        let (cur_id, cur_frame, cur_layer) = (self.doc.panels[self.cur_panel].id, self.cur_frame, self.cur_layer);
+        let (created, joins) = (self.vignettes.created, std::mem::take(&mut self.vignettes.empty_joins));
+        let ok = self.board_create_from_empty(e);
+        self.vignettes.created = created;
+        self.vignettes.empty_joins = joins;
+        if !ok {
+            return None;
+        }
+        if let Some(i) = self.doc.panels.iter().position(|p| p.id == cur_id) {
+            self.cur_panel = i;
+            self.cur_frame = cur_frame.min(self.frame_count().saturating_sub(1));
+            self.cur_layer = cur_layer.min(self.layers().len().saturating_sub(1));
+            self.board_sel = vec![cur_id];
+        }
+        let neuve = self.board_layout();
+        // Les cases d'après ont pu glisser : le dessin suit la case où il a été tracé.
+        let apres = neuve.cards.iter().find(|c| c.id == fini.suivi.carte)?;
+        let d = apres.thumb.min - o.thumb.min;
+        fini.suivi.aff.tx += d.x;
+        fini.suivi.aff.ty += d.y;
+        Some(neuve)
     }
 
     /// Les cases qui peuvent recevoir une partie du trait tracé dans la case `origine` : même caméra à leur image, même largeur de case, un

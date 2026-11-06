@@ -429,6 +429,35 @@ impl App {
         painter.text(at, Align2::LEFT_TOP, texte, FontId::proportional(15.0), self.cadre_couleur());
     }
 
+    /// L'outil Caméra des Vignettes (Anthony, 2026-11-05 : « signaler que l'on peut interagir avec la caméra, la sélectionner, la déplacer ») :
+    /// les cadres de la case sous le pointeur se tracent plus francs, avec une poignée à chaque coin ; ceux de la caméra choisie restent
+    /// soulignés (plus épais, avec leur lettre). Rien n'est lu dans le document ailleurs que pour ces deux cases.
+    pub(crate) fn paint_cadres_camera(&self, painter: &Painter, view: Rect, xf: Xf, layout: &BoardLayout, over: Option<Pos2>) {
+        let survol = over.and_then(|p| layout.card_near(xf.to_board(p), self.marge_camera())).filter(|&k| self.cam_possible(&layout.cards[k]));
+        let bleu = self.cadre_couleur();
+        let halo = Stroke::new(4.0_f32, Color32::from_white_alpha(150));
+        for (k, place) in layout.cards.iter().enumerate() {
+            let choisie = self.vignettes.camera_choisie == Some(place.plan) && place.frame == 0;
+            if !choisie && survol != Some(k) {
+                continue;
+            }
+            let (cadres, _) = self.cadres_sur_la_planche(layout, k);
+            let clip = painter.with_clip_rect(xf.rect(place.foot).expand(40.0).intersect(view));
+            for (i, q) in cadres.iter().enumerate() {
+                let pts: Vec<Pos2> = q.iter().map(|p| xf.to_screen(*p)).collect();
+                clip.add(Shape::closed_line(pts.clone(), halo));
+                clip.add(Shape::closed_line(pts.clone(), Stroke::new(if choisie { 2.4_f32 } else { 1.8_f32 }, bleu)));
+                if survol == Some(k) || choisie {
+                    for c in &pts {
+                        clip.add(Shape::circle_filled(*c, 3.5, Color32::WHITE));
+                        clip.add(Shape::circle_stroke(*c, 3.5, Stroke::new(1.2_f32, bleu)));
+                    }
+                }
+                clip.text(pts[0] + vec2(3.0, 1.0), Align2::LEFT_TOP, vignettecam::lettre(i).to_string(), FontId::proportional(11.0), bleu);
+            }
+        }
+    }
+
     /// Ce qui se dessine par-dessus la tuile d'une empreinte : les cadres fins en bleu avec leur lettre (tournés si la caméra l'est),
     /// et ce qui les relie : les côtés de l'enveloppe entre deux cadres (la silhouette), jamais une ligne qui traverse l'intérieur, et la
     /// flèche d'un travelling. Le dessin reste net partout dans l'enveloppe (Anthony, 2026-10-22 : plus de voile sur les traits).

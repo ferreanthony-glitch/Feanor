@@ -73,6 +73,10 @@ impl App {
         if self.content_refuses() {
             return false;
         }
+        // Un glisser du montage en cours tient une copie du document d'avant : il s'abandonne d'abord (comme Ctrl+Z).
+        if self.dragging() {
+            self.cancel_drags();
+        }
         self.end_stroke();
         self.poser_les_selections();
         let snap = self.snapshot();

@@ -208,7 +208,7 @@ fn the_character_bar_is_shown_in_the_vignettes_and_hidden_in_the_montage() {
 fn the_tool_column_of_the_vignettes_is_minimal() {
     use crate::toolbars::{TOOL_GROUPS, TOOL_GROUPS_VIGNETTES};
     let outils: Vec<Tool> = TOOL_GROUPS_VIGNETTES.iter().flat_map(|g| g.iter().flat_map(|s| s.iter().copied())).collect();
-    assert_eq!(outils, vec![Tool::Brush, Tool::Pencil, Tool::Eraser]);
+    assert_eq!(outils, vec![Tool::Brush, Tool::Pencil, Tool::Eraser, Tool::Camera], "le pinceau, le crayon, la gomme, puis la caméra (partie 101)");
     assert!(TOOL_GROUPS.iter().flat_map(|g| g.iter().flat_map(|s| s.iter())).count() > outils.len());
     // Elle se dessine sans broncher dans les deux espaces.
     let mut b = banc();

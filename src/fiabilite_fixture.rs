@@ -562,7 +562,7 @@ pub(crate) fn projet_complet(travail: &Path) -> Fixture {
     // Personnages de la brosse par personnage (`personnages.json`) : un avec aplat, un sans.
     for (nom, trait_, aplat) in [("Lou", [200, 30, 30], Some([250, 200, 200])), ("Fantôme", [30, 40, 200], None)] {
         let id = doc.alloc();
-        doc.personnages.push(crate::personnages::Personnage { id, name: nom.into(), line: trait_, fill: aplat });
+        doc.personnages.push(crate::personnages::Personnage { id, name: nom.into(), line: trait_, fill: aplat, brosse: None });
     }
     // Annotations de la vue Vignettes (`annotations.json`) : un trait dans une case, un autre dans une case vide
     // (trois cases après la première vignette). Des valeurs que le fichier garde exactement.

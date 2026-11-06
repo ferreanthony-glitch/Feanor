@@ -91,16 +91,20 @@ pub fn etiquette(numero: u32) -> String {
 
 /// Échange le contenu de deux plans : tout, sauf leur numéro et leur scène.
 pub(crate) fn echanger(a: &mut Panel, b: &mut Panel) {
-    std::mem::swap(&mut a.layers, &mut b.layers);
-    std::mem::swap(&mut a.length, &mut b.length);
-    std::mem::swap(&mut a.action, &mut b.action);
-    std::mem::swap(&mut a.dialogue, &mut b.dialogue);
-    std::mem::swap(&mut a.notes, &mut b.notes);
-    std::mem::swap(&mut a.camera, &mut b.camera);
-    std::mem::swap(&mut a.saccade, &mut b.saccade);
-    std::mem::swap(&mut a.marks, &mut b.marks);
-    std::mem::swap(&mut a.cues, &mut b.cues);
-    std::mem::swap(&mut a.color, &mut b.color);
+    // (Exhaustif exprès : un champ ajouté au plan ne compile plus ici tant qu'on n'a pas dit s'il est du plan ou de la version.
+    // Les commentaires et le contenu rogné ne sont pas dans `Panel` : ils restent au plan, à toute version.)
+    let Panel { id: _, scene: _, length: la, layers: ya, action: aa, dialogue: da, notes: na, camera: ca, saccade: sa, marks: ma, cues: cua, color: coa } = a;
+    let Panel { id: _, scene: _, length: lb, layers: yb, action: ab, dialogue: db, notes: nb, camera: cb, saccade: sb, marks: mb, cues: cub, color: cob } = b;
+    std::mem::swap(ya, yb);
+    std::mem::swap(la, lb);
+    std::mem::swap(aa, ab);
+    std::mem::swap(da, db);
+    std::mem::swap(na, nb);
+    std::mem::swap(ca, cb);
+    std::mem::swap(sa, sb);
+    std::mem::swap(ma, mb);
+    std::mem::swap(cua, cub);
+    std::mem::swap(coa, cob);
 }
 
 impl Document {

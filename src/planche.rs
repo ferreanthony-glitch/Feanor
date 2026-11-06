@@ -308,6 +308,23 @@ pub fn construire(doc: &Document, plans: &[usize], s: &BoardSettings, opt: &Opti
     Planche { layout, cartes, titres, annotations, cadre }
 }
 
+/// Le titre d'une séquence coupé par « … » pour tenir dans `largeur` pixels (tel quel s'il tient).
+pub(crate) fn coupe_au_titre(nom: &str, taille: f32, largeur: f32) -> String {
+    let mesure = |t: &str| crate::text::layout(t, crate::text::FALLBACK, taille).bounds.width();
+    if mesure(nom) <= largeur {
+        return nom.to_string();
+    }
+    let mut cars: Vec<char> = nom.chars().collect();
+    while cars.len() > 1 {
+        cars.pop();
+        let essai = format!("{}…", cars.iter().collect::<String>().trim_end());
+        if mesure(&essai) <= largeur {
+            return essai;
+        }
+    }
+    "…".to_string()
+}
+
 /// L'échelle (pixels par unité de la planche), la taille de l'image, et ce qui a été réduit pour rester dans les bornes.
 pub fn dimensions(cadre: Rect, res: Resolution) -> (f32, [u32; 2], Option<String>) {
     let (w, h) = (cadre.width().max(1.0), cadre.height().max(1.0));
@@ -468,6 +485,8 @@ pub fn composer(p: &Planche, vignettes: &[RgbImage], opt: &Options, s: f32) -> R
     for (t, nom) in &p.titres {
         let r = rect_px(*t, p.cadre, s);
         let taille = (22.0 * s).max(8.0);
+        // (Un titre plus long que la séquence est coupé net par « … », comme à l'écran, `docs/INTERFACE.md` partie 106.)
+        let nom = &coupe_au_titre(nom, taille, (r[2] - r[0]) as f32);
         let lay = crate::text::layout(nom, crate::text::FALLBACK, taille);
         let y = r[3] as f32 - lay.bounds.height() - 2.0 * s;
         for dx in [0.0, (taille * 0.035).max(0.6)] {

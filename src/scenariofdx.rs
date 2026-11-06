@@ -16,7 +16,7 @@
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::{Reader, XmlVersion};
 
-use crate::scenario::{self, clean_heading, parse_cue, Element, Format, Kind, Script, Speech, TextOptions};
+use crate::scenario::{self, en_tete_depuis, parse_cue, Element, Format, Kind, Script, Speech, TextOptions};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Flavor {
@@ -34,6 +34,8 @@ struct RawPara {
     dual: bool,
     /// Dans la page de titre (Final Draft).
     title_page: bool,
+    /// Le numéro de scène que Final Draft écrit dans l'attribut `Number` d'un intitulé (vide : aucun).
+    number: String,
 }
 
 /// Le nom d'une balise sans son préfixe d'espace de noms (`w:p` donne `p`).
@@ -124,7 +126,7 @@ impl Walk {
                 self.note_depth += 1;
             }
             (Flavor::Fdx, "Paragraph") if self.note_depth == 0 => {
-                self.cur = Some(RawPara { style: attr(e, "Type").unwrap_or_default(), title_page: self.in_title, ..RawPara::default() });
+                self.cur = Some(RawPara { style: attr(e, "Type").unwrap_or_default(), title_page: self.in_title, number: attr(e, "Number").unwrap_or_default(), ..RawPara::default() });
                 if empty {
                     self.end_para();
                 }
@@ -289,19 +291,19 @@ fn build_typed(paras: &[RawPara]) -> Vec<Element> {
                     Some(c) => Speech { name: c.name, tags: c.tags, dual: p.dual || c.dual, ..Speech::default() },
                     None => Speech { name: one_line, dual: p.dual, ..Speech::default() },
                 };
-                speech = Some(Element { kind: Kind::Dialogue(sp), notes: p.notes.clone() });
+                speech = Some(Element { notes: p.notes.clone(), ..Element::new(Kind::Dialogue(sp)) });
             }
             ParaKind::Parenthetical | ParaKind::Dialogue => {
                 let one_line = text.replace('\n', " ");
                 if speech.is_none() {
                     if kind == ParaKind::Parenthetical {
                         // Une parenthèse hors réplique : de l'action.
-                        out.push(Element { kind: Kind::Action(one_line), notes: p.notes.clone() });
+                        out.push(Element { notes: p.notes.clone(), ..Element::new(Kind::Action(one_line)) });
                         continue;
                     }
                     speech = Some(Element::new(Kind::Dialogue(Speech::default())));
                 }
-                if let Some(Element { kind: Kind::Dialogue(s), notes }) = speech.as_mut() {
+                if let Some(Element { kind: Kind::Dialogue(s), notes, .. }) = speech.as_mut() {
                     if kind == ParaKind::Parenthetical {
                         let wrapped = if one_line.starts_with('(') { one_line } else { format!("({one_line})") };
                         s.asides.push(wrapped);
@@ -316,20 +318,20 @@ fn build_typed(paras: &[RawPara]) -> Vec<Element> {
             }
             ParaKind::Heading => {
                 flush(&mut speech, &mut out);
-                out.push(Element { kind: Kind::Heading(clean_heading(&text.replace('\n', " "))), notes: p.notes.clone() });
+                out.push(en_tete_depuis(&text.replace('\n', " "), p.number.clone()).element(p.notes.clone()));
             }
             ParaKind::Transition => {
                 flush(&mut speech, &mut out);
-                out.push(Element { kind: Kind::Transition(text.replace('\n', " ")), notes: p.notes.clone() });
+                out.push(Element { notes: p.notes.clone(), ..Element::new(Kind::Transition(text.replace('\n', " "))) });
             }
             ParaKind::Section => {
                 flush(&mut speech, &mut out);
-                out.push(Element { kind: Kind::Section(text.replace('\n', " ")), notes: p.notes.clone() });
+                out.push(Element { notes: p.notes.clone(), ..Element::new(Kind::Section(text.replace('\n', " "))) });
             }
             ParaKind::Skip => {}
             ParaKind::Action => {
                 flush(&mut speech, &mut out);
-                out.push(Element { kind: Kind::Action(text), notes: p.notes.clone() });
+                out.push(Element { notes: p.notes.clone(), ..Element::new(Kind::Action(text)) });
             }
         }
     }

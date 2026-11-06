@@ -272,7 +272,8 @@ impl App {
             let transparent = refs_window.as_ref().is_some_and(|rf| rf.transparent);
             let pane = d.panneau;
             let (closed, rect) = ctx.show_viewport_immediate(id, builder, |ctx, _class| {
-                let panel = if transparent { egui::CentralPanel::default().frame(egui::Frame::NONE) } else { egui::CentralPanel::default() };
+                // (La planche de références prend toute la fenêtre à part, sans marge de l'interface autour de son canevas blanc ; sa barre d'outils garde sa marge, `references_panel`.)
+                let panel = if transparent || pane == Pane::References { egui::CentralPanel::default().frame(if transparent { egui::Frame::NONE } else { egui::Frame::central_panel(&ctx.style()).inner_margin(0.0) }) } else { egui::CentralPanel::default() };
                 panel.show(ctx, |ui| {
                     if matches!(
                         pane,

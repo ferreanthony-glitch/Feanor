@@ -263,7 +263,7 @@ impl App {
                     self.action_item(ui, "Lignes de référence", "guide.lignes_reference");
                 });
                 ui.separator();
-                let barre = if self.barre_perso_visible() { "Cacher les pastilles des brosses perso" } else { "Montrer les pastilles des brosses perso" };
+                let barre = if self.barre_perso_visible() { "Cacher les pastilles des brosses dédiées" } else { "Montrer les pastilles des brosses dédiées" };
                 self.action_item(ui, barre, "perso.barre");
                 self.workspace_menu(ui);
                 self.action_item(ui, "Mode concentration (le dessin seul)", "vue.concentration");
@@ -892,6 +892,7 @@ impl App {
         self.plans_duration_dialog_ui(ctx);
         self.fusion_noms_ui(ctx);
         self.corbeille_fenetre_ui(ctx);
+        self.coupe_versions_ui(ctx);
         self.palette_window(ctx);
         // Nouveau projet (`nouveauui.rs`).
         self.new_project_window(ctx);

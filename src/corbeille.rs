@@ -35,6 +35,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::commentaires::Comment;
 use crate::document::{Cel, CelId, Document, Layer, Panel};
+use crate::planvers::{Rangee, VersionsDuPlan};
 use crate::project::Tete;
 use crate::rognage::{Piece, Reserve};
 
@@ -54,8 +55,8 @@ pub enum Sorte {
 /// de fichier, pour une entrée relue (ses dessins sont dans `dessins/`, relus à la restauration).
 #[derive(Clone)]
 pub enum Contenu {
-    Vif { panel: Panel, reserve: Option<Reserve>, commentaires: Vec<Comment> },
-    Fichier { plan: serde_json::Value, reserve: Option<serde_json::Value>, commentaires: Vec<Comment> },
+    Vif { panel: Panel, reserve: Option<Reserve>, commentaires: Vec<Comment>, versions: Option<VersionsDuPlan> },
+    Fichier { plan: serde_json::Value, reserve: Option<serde_json::Value>, commentaires: Vec<Comment>, versions: Option<serde_json::Value> },
 }
 
 #[derive(Clone)]
@@ -76,6 +77,8 @@ pub struct Entree {
     pub plan: u64,
     /// Le plan qui précédait, dans la même séquence : le plan revient derrière lui s'il existe encore.
     pub apres: Option<u64>,
+    /// Le plan qui suivait, dans la même séquence : s'il n'y avait rien devant, le plan revient devant lui.
+    pub suivant: Option<u64>,
     /// Rang d'origine de chaque calque (pour `Calques`).
     pub rangs: Vec<usize>,
     /// Les dessins de l'entrée, pour les garder dans `dessins/`.
@@ -124,8 +127,16 @@ fn premier_dessin(p: &Panel) -> Option<CelId> {
 }
 
 fn dessins_de(p: &Panel, reserve: Option<&Reserve>) -> Vec<CelId> {
+    dessins_avec(p, reserve, None)
+}
+
+/// Les dessins d'un plan, de son contenu rogné et de ses versions rangées.
+fn dessins_avec(p: &Panel, reserve: Option<&Reserve>, versions: Option<&VersionsDuPlan>) -> Vec<CelId> {
     let mut out = std::collections::HashSet::new();
     crate::elagage::dessins_du_plan_retenus(p, &mut out);
+    for r in versions.into_iter().flat_map(|v| &v.autres) {
+        crate::elagage::dessins_du_plan_retenus(&r.panel, &mut out);
+    }
     if let Some(r) = reserve {
         out.extend(r.cels());
     }
@@ -148,8 +159,9 @@ impl Document {
         e.date = maintenant();
         let mut ids = vec![e.id];
         match &e.contenu {
-            Contenu::Vif { panel, reserve, commentaires } => {
+            Contenu::Vif { panel, reserve, commentaires, versions } => {
                 ids.push(panel.id);
+                ids.extend(versions.iter().flat_map(|v| &v.autres).flat_map(|r| r.panel.marks.iter().map(|m| m.id).chain(std::iter::once(r.panel.id))));
                 ids.extend(panel.marks.iter().map(|m| m.id));
                 ids.extend(commentaires.iter().map(|c| c.id));
                 if let Some(r) = reserve {
@@ -177,9 +189,12 @@ impl Document {
         }
         let sequence = self.sequence_of(index);
         let apres = (0..index).rev().find(|&i| !exclus.contains(&self.panels[i].id)).filter(|&i| self.sequence_of(i) == sequence).map(|i| self.panels[i].id);
+        let suivant = (index + 1..self.panels.len()).find(|&i| !exclus.contains(&self.panels[i].id)).filter(|&i| self.sequence_of(i) == sequence).map(|i| self.panels[i].id);
         let reserve = self.reserves.get(&id).cloned();
         let commentaires: Vec<Comment> = self.comments.iter().filter(|c| c.panel == id).cloned().collect();
         let panel = p.clone();
+        // Les versions rangées du plan partent avec lui (et reviennent avec lui).
+        let versions = self.versions.remove(&id);
         let e = Entree {
             id: 0,
             date: 0,
@@ -190,12 +205,13 @@ impl Document {
             sequence_nom: self.nom_de_sequence(sequence),
             plan: id,
             apres,
+            suivant,
             rangs: Vec::new(),
-            cels: dessins_de(&panel, reserve.as_ref()),
+            cels: dessins_avec(&panel, reserve.as_ref(), versions.as_ref()),
             vignette: premier_dessin(&panel),
             id_max: 0,
             tete: Tete::de(self),
-            contenu: Contenu::Vif { panel, reserve, commentaires },
+            contenu: Contenu::Vif { panel, reserve, commentaires, versions },
         };
         self.ranger_dans_la_corbeille(e);
         true
@@ -224,12 +240,13 @@ impl Document {
             sequence_nom: self.nom_de_sequence(sequence),
             plan,
             apres: None,
+            suivant: None,
             rangs,
             cels: dessins_de(&panel, None),
             vignette: premier_dessin(&panel),
             id_max: 0,
             tete: Tete::de(self),
-            contenu: Contenu::Vif { panel, reserve: None, commentaires: Vec::new() },
+            contenu: Contenu::Vif { panel, reserve: None, commentaires: Vec::new(), versions: None },
         };
         self.ranger_dans_la_corbeille(e);
         true
@@ -286,12 +303,13 @@ impl Document {
             sequence_nom: self.nom_de_sequence(sequence),
             plan: panel.id,
             apres: Some(apres),
+            suivant: None,
             rangs: Vec::new(),
             cels: dessins_de(&panel, None),
             vignette: premier_dessin(&panel),
             id_max: 0,
             tete: Tete::de(self),
-            contenu: Contenu::Vif { panel, reserve: None, commentaires: Vec::new() },
+            contenu: Contenu::Vif { panel, reserve: None, commentaires: Vec::new(), versions: None },
         };
         self.ranger_dans_la_corbeille(e);
         true
@@ -310,7 +328,7 @@ impl Document {
     /// d'annulation (l'appelant la prend), qui rend aussi l'entrée à la corbeille.
     pub(crate) fn restaurer_entree(&mut self, id: u64, charge: Charge, sequence_courante: u64) -> Result<(String, usize), String> {
         let Some(e) = self.corbeille.trouver(id).cloned() else { return Err("Cette entrée n'est plus dans la corbeille.".into()) };
-        let Charge { mut panel, cels, reserve, commentaires } = charge;
+        let Charge { mut panel, cels, reserve, commentaires, versions } = charge;
         match e.sorte {
             Sorte::Calques => {
                 let Some(index) = self.panels.iter().position(|p| p.id == e.plan) else {
@@ -341,6 +359,7 @@ impl Document {
                 // Où : derrière le plan d'avant, sinon à la fin de la séquence, sinon à la fin de la séquence courante.
                 let (at, place) = match e.apres.and_then(|a| self.panels.iter().position(|p| p.id == a)) {
                     Some(i) => (i + 1, "à sa place"),
+                    None if e.suivant.is_some_and(|s| self.panels.iter().any(|p| p.id == s)) => (self.panels.iter().position(|p| Some(p.id) == e.suivant).unwrap_or(0), "à sa place"),
                     None => match (0..self.panels.len()).rev().find(|&i| self.sequence_of(i) == e.sequence).filter(|_| e.sequence != 0) {
                         Some(i) => (i + 1, "à la fin de sa séquence"),
                         None => {
@@ -354,6 +373,10 @@ impl Document {
                 let nouveau = panel.id;
                 if let Some(r) = reserve {
                     self.reserves.insert(nouveau, r);
+                }
+                // Ses versions rangées reviennent avec lui.
+                if let Some(v) = versions {
+                    self.versions.insert(nouveau, v);
                 }
                 for mut c in commentaires {
                     c.panel = nouveau;
@@ -375,6 +398,8 @@ pub(crate) struct Charge {
     pub cels: HashMap<CelId, Cel>,
     pub reserve: Option<Reserve>,
     pub commentaires: Vec<Comment>,
+    /// Les versions rangées du plan (`planvers.rs`).
+    pub versions: Option<VersionsDuPlan>,
 }
 
 /// Lit le contenu de `e`. Une entrée de la séance l'a déjà ; une entrée relue demande le dossier du projet (`dir`) : ses dessins s'y
@@ -382,7 +407,7 @@ pub(crate) struct Charge {
 /// faut dire des dessins qui manquaient.
 pub(crate) fn charger(e: &Entree, dir: Option<&Path>, deja: &dyn Fn(CelId) -> bool) -> Result<(Charge, Option<String>), String> {
     match &e.contenu {
-        Contenu::Vif { panel, reserve, commentaires } => {
+        Contenu::Vif { panel, reserve, commentaires, versions } => {
             let mut cels = HashMap::new();
             // (Un dessin de la séance que l'élagage aurait lâché ne peut pas arriver : la corbeille le retient. Par prudence, relu.)
             if let Some(dir) = dir {
@@ -392,9 +417,9 @@ pub(crate) fn charger(e: &Entree, dir: Option<&Path>, deja: &dyn Fn(CelId) -> bo
                     }
                 }
             }
-            Ok((Charge { panel: panel.clone(), cels, reserve: reserve.clone(), commentaires: commentaires.clone() }, None))
+            Ok((Charge { panel: panel.clone(), cels, reserve: reserve.clone(), commentaires: commentaires.clone(), versions: versions.clone() }, None))
         }
-        Contenu::Fichier { plan, reserve, commentaires } => {
+        Contenu::Fichier { plan, reserve, commentaires, versions } => {
             let dir = dir.ok_or("Le projet n'est pas enregistré : ses dessins de la corbeille ne peuvent pas être relus.")?;
             let loaded = crate::project::charger_plans(dir, &e.tete, 1, vec![plan.clone()], false)?;
             let Some(panel) = loaded.doc.panels.first().cloned() else { return Err("Plan illisible dans la corbeille.".into()) };
@@ -406,8 +431,20 @@ pub(crate) fn charger(e: &Entree, dir: Option<&Path>, deja: &dyn Fn(CelId) -> bo
                 None => None,
             };
             let avertissement = (!loaded.manquants.is_empty()).then(|| format!("{} dessin(s) manquaient dans le dossier du projet : ils reviennent vides.", loaded.manquants.len()));
-            let cels: HashMap<CelId, Cel> = loaded.doc.cels.into_iter().filter(|(id, _)| !deja(*id)).collect();
-            Ok((Charge { panel, cels, reserve, commentaires: commentaires.clone() }, avertissement))
+            let mut cels: HashMap<CelId, Cel> = loaded.doc.cels.into_iter().filter(|(id, _)| !deja(*id)).collect();
+            // Les versions rangées : leurs plans se relisent comme celui-ci, leurs dessins avec.
+            let versions = match versions {
+                Some(v) => {
+                    let pf: crate::planvers::PlanFichier = serde_json::from_value(v.clone()).map_err(|er| format!("versions illisibles : {er}"))?;
+                    let entrees: Vec<serde_json::Value> = pf.autres.iter().map(|a| a.entree.clone()).collect();
+                    let l = crate::project::charger_plans(dir, &e.tete, 1, entrees, false)?;
+                    cels.extend(l.doc.cels.into_iter().filter(|(id, _)| !deja(*id)));
+                    let autres = pf.autres.iter().zip(l.doc.panels.iter()).map(|(a, p)| Rangee { numero: a.numero, date: a.date, panel: p.clone() }).collect();
+                    Some(VersionsDuPlan { actuelle: pf.actuelle, date_actuelle: pf.date_actuelle, prochaine: pf.prochaine, autres })
+                }
+                None => None,
+            };
+            Ok((Charge { panel, cels, reserve, commentaires: commentaires.clone(), versions }, avertissement))
         }
     }
 }
@@ -433,6 +470,8 @@ struct EntreeFichier {
     #[serde(default)]
     apres: Option<u64>,
     #[serde(default)]
+    suivant: Option<u64>,
+    #[serde(default)]
     rangs: Vec<usize>,
     #[serde(default)]
     dessins: Vec<CelId>,
@@ -446,6 +485,8 @@ struct EntreeFichier {
     rognage: Option<serde_json::Value>,
     #[serde(default)]
     commentaires: Vec<Comment>,
+    #[serde(default)]
+    versions: Option<serde_json::Value>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -463,16 +504,20 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
     }
     let mut entrees = Vec::with_capacity(doc.corbeille.len());
     for e in &doc.corbeille.entrees {
-        let (contenu, rognage, commentaires) = match &e.contenu {
-            Contenu::Vif { panel, reserve, commentaires } => (
+        let (contenu, rognage, commentaires, versions) = match &e.contenu {
+            Contenu::Vif { panel, reserve, commentaires, versions } => (
                 crate::project::snapshot_value(panel, &|c| c)?,
                 match reserve {
                     Some(r) if !r.is_empty() => Some(crate::rognage::plan_value(panel, r)?),
                     _ => None,
                 },
                 commentaires.clone(),
+                match versions {
+                    Some(v) => Some(serde_json::to_value(crate::planvers::plan_fichier(panel.id, v)?).map_err(|er| er.to_string())?),
+                    None => None,
+                },
             ),
-            Contenu::Fichier { plan, reserve, commentaires } => (plan.clone(), reserve.clone(), commentaires.clone()),
+            Contenu::Fichier { plan, reserve, commentaires, versions } => (plan.clone(), reserve.clone(), commentaires.clone(), versions.clone()),
         };
         entrees.push(EntreeFichier {
             id: e.id,
@@ -487,6 +532,7 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
             sequence_nom: e.sequence_nom.clone(),
             plan: e.plan,
             apres: e.apres,
+            suivant: e.suivant,
             rangs: e.rangs.clone(),
             dessins: e.cels.clone(),
             vignette: e.vignette,
@@ -495,6 +541,7 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
             contenu,
             rognage,
             commentaires,
+            versions,
         });
     }
     serde_json::to_vec_pretty(&Fichier { format: FORMAT.into(), version: VERSION, entrees }).map(Some).map_err(|e| e.to_string())
@@ -525,12 +572,13 @@ pub(crate) fn parse(text: &str) -> Result<Corbeille, String> {
                 sequence_nom: e.sequence_nom,
                 plan: e.plan,
                 apres: e.apres,
+                suivant: e.suivant,
                 rangs: e.rangs,
                 cels: e.dessins,
                 vignette: e.vignette,
                 id_max: e.id_max.max(e.id),
                 tete: e.tete,
-                contenu: Contenu::Fichier { plan: e.contenu, reserve: e.rognage, commentaires: e.commentaires },
+                contenu: Contenu::Fichier { plan: e.contenu, reserve: e.rognage, commentaires: e.commentaires, versions: e.versions },
             })
         })
         .collect();

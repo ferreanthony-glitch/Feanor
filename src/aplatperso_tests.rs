@@ -1,4 +1,4 @@
-//! La couleur d'aplat d'un calque de personnage vient du panneau Personnages (`aplatperso.rs`).
+//! La couleur d'aplat d'un calque de personnage vient du panneau Brosses dédiées (`aplatperso.rs`).
 
 use eframe::egui::{self, pos2, vec2, Color32, Event, Modifiers, PointerButton, Pos2};
 
@@ -252,13 +252,13 @@ fn the_aplat_colour_line_of_a_character_layer_cannot_be_edited_and_points_to_the
     b.chauffer(4);
     assert!(!b.app.pane_shown(crate::dock::Pane::Personnages));
     let textes = a_l_ecran(&b);
-    let renvoi = textes.iter().find(|(s, _)| s.contains("se change dans le panneau Personnages")).unwrap_or_else(|| panic!("le renvoi n'est pas à l'écran : {:?}", textes.iter().map(|t| &t.0).collect::<Vec<_>>()));
-    assert_eq!(renvoi.0, "Couleur de « Lou » : se change dans le panneau Personnages");
+    let renvoi = textes.iter().find(|(s, _)| s.contains("se change dans le panneau Brosses dédiées")).unwrap_or_else(|| panic!("le renvoi n'est pas à l'écran : {:?}", textes.iter().map(|t| &t.0).collect::<Vec<_>>()));
+    assert_eq!(renvoi.0, "Couleur de « Lou » : se change dans le panneau Brosses dédiées");
     assert!(b.app.couleur_attente().is_none(), "rien à modifier ici");
     assert!(textes.iter().any(|(s, _)| s.contains("Changer la couleur de l'aplat sur")), "la portée est montrée, grisée");
-    // Un clic sur le renvoi ouvre (ou montre) le panneau Personnages.
+    // Un clic sur le renvoi ouvre (ou montre) le panneau Brosses dédiées.
     clic(&mut b, renvoi.1);
-    assert!(b.app.pane_shown(crate::dock::Pane::Personnages), "le clic sur le renvoi montre le panneau Personnages");
+    assert!(b.app.pane_shown(crate::dock::Pane::Personnages), "le clic sur le renvoi montre le panneau Brosses dédiées");
     // Un calque ordinaire, lui, a sa case de couleur.
     let ordinaire = b.app.layers().iter().position(|l| l.personnage.is_none()).expect("un calque ordinaire");
     b.app.layers_mut()[ordinaire].fond = Some(FondReglages::default());
@@ -267,7 +267,7 @@ fn the_aplat_colour_line_of_a_character_layer_cannot_be_edited_and_points_to_the
     b.app.aplat_cible = Some(b.app.layers()[ordinaire].id);
     b.chauffer(4);
     let textes = a_l_ecran(&b);
-    assert!(!textes.iter().any(|(s, _)| s.contains("se change dans le panneau Personnages")), "un calque ordinaire n'a pas le renvoi");
+    assert!(!textes.iter().any(|(s, _)| s.contains("se change dans le panneau Brosses dédiées")), "un calque ordinaire n'a pas le renvoi");
     assert!(textes.iter().any(|(s, _)| s == "Couleur de l'aplat"), "il a sa ligne « Couleur de l'aplat » comme avant");
 }
 

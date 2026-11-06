@@ -223,6 +223,9 @@ pub(crate) enum Geste {
     /// « Changer la durée des plans choisis… » : tous les plans choisis (ou tous les plans du film si `tous`) prennent la durée que dit
     /// `DUREES_TAPEES[quoi]` (`dureeplans.rs`).
     DureePlans { quoi: u8, tous: bool },
+    /// Supprimer un plan (le `case`-ième, parmi les plans du film), puis, si `restaurer`, le reprendre dans la corbeille : le film retrouve le
+    /// même contenu, dessin par dessin (empreinte), à la même place (partie 104).
+    SupprimerRestaurer { case: u16, restaurer: bool },
     /// Annuler `n` fois.
     Annuler(u8),
     /// Rétablir `n` fois.
@@ -247,7 +250,8 @@ pub(crate) enum Geste {
     /// Les versions de séquence qui partagent leurs plans (`variantes.rs`, partie 59) : `quoi` % 9, 0 à 2 une nouvelle version de
     /// séquence (en gardant les plans, en les copiant, vide), 3 et 4 passer à l'une des autres (la `k`-ième), 5 une nouvelle version
     /// du plan courant, 6 mettre le plan courant à jour dans les autres versions de séquence qui le montrent, 7 supprimer la
-    /// `k`-ième version de séquence, 8 passer le plan courant à sa version suivante.
+    /// `k`-ième version de séquence, 8 passer le plan courant à sa version suivante (quand `k` est multiple de 4 : le plan courant
+    /// forme une séquence neuve ; quand `k % 4 == 1` : il est supprimé).
     Versions { quoi: u8, k: u8 },
 }
 
@@ -326,7 +330,9 @@ impl Geste {
             79 => DeplacerPlan { de: case, vers: h.sous(64) as u16, alt: h.pile(4) },
             // (Les deux rangs pris à `DeplacerPlan` : les autres gestes gardent leurs rangs, donc leurs suites de graines.)
             80..=81 => FusionnerPlans { de: case, vers: h.sous(64) as u16, zone: h.sous(3) as u8 },
-            82..=87 => Annuler(1 + h.sous(3) as u8),
+            82..=86 => Annuler(1 + h.sous(3) as u8),
+            // (Le dernier rang d'`Annuler` : les autres gestes gardent leurs rangs, donc leurs suites de graines.)
+            87 => SupprimerRestaurer { case, restaurer: h.pile(4) },
             88..=91 => Retablir(1 + h.sous(2) as u8),
             92..=93 => Lecture(2 + h.sous(10) as u8),
             94..=95 => Onglet { nouveau: h.pile(2) },
@@ -625,10 +631,7 @@ fn photo_enregistrable(doc: &mut Document) -> String {
 impl Essai {
     pub(crate) fn new(doc: Document, nom: &str) -> Essai {
         let mut b = banc_taille(doc, false, 1600, 900);
-        // Adapté (2026-10-29) : les brosses Décor ont maintenant un aplat, que le fil de fond pose après coup, hors de l'étape du trait quand
-        // autre chose s'est passé entre-temps (`persofond.rs`, limite documentée). Ce hasard compare le projet avant/après chaque annulation :
-        // il dessine donc avec des brosses Décor sans aplat, comme avant. L'aplat des brosses est couvert par `brosses_perso_tests`.
-        b.app.settings.brosses_decor.iter_mut().for_each(|d| d.fill = None);
+        // (Les brosses Décor gardent leur aplat : le fil de fond le pose dans l'étape de son trait, `persofond.rs`, partie 103.)
         b.app.board_view = BoardView::Panels;
         b.app.layout.board_columns = 4;
         b.app.layout.board_rows = 0;
@@ -930,6 +933,27 @@ impl Essai {
                 };
                 self.glisser(Modifiers::NONE, PointerButton::Primary, &Self::trajet(p, q, 8));
             }
+            SupprimerRestaurer { case, restaurer } => {
+                let app = &mut self.b.app;
+                let n = app.doc.panels.len();
+                if n < 2 || app.doc.storyboard_locked {
+                    return;
+                }
+                let avant = crate::montage_sans_casse_tests::film_en_empreintes(&app.doc);
+                let id = app.doc.panels[case as usize % n].id;
+                let entrees = app.doc.corbeille.len();
+                app.delete_panels(&[id]);
+                if app.doc.panels.len() != n - 1 || app.doc.corbeille.len() != entrees + 1 {
+                    // (Refusé, ou gardé au garage d'une autre version de séquence : rien à reprendre ici.)
+                    return;
+                }
+                if restaurer {
+                    let e = app.doc.corbeille.entrees.last().map(|e| e.id).expect("l'entrée jetée");
+                    app.corbeille_restaurer(e);
+                    assert_eq!(app.doc.corbeille.len(), entrees, "restaurer vide l'entrée");
+                    assert_eq!(crate::montage_sans_casse_tests::film_en_empreintes(&app.doc), avant, "le plan restauré revient à sa place avec le même contenu");
+                }
+            }
             Annuler(n) => {
                 for _ in 0..n {
                     self.b.app.run_action("edition.annuler");
@@ -1057,7 +1081,14 @@ impl Essai {
                     2 => app.nouvelle_variante_de_sequence(seq, Nouvelle::Vide),
                     3 | 4 => {
                         if !autres.is_empty() {
-                            app.passer_a_la_variante(seq, autres[k as usize % autres.len()]);
+                            let cible = autres[k as usize % autres.len()];
+                            let attendus = app.doc.variantes_de(seq).and_then(|v| v.rangee(cible)).map_or(0, |r| r.contenu.slots.len());
+                            app.passer_a_la_variante(seq, cible);
+                            // Passer à une version de séquence ne lui retire aucun plan (un plan sorti de la séquence y reste : partie 102).
+                            if app.doc.numero_de_variante(seq) == cible {
+                                let montres = app.doc.plans_de_sequence(seq).len();
+                                assert_eq!(montres, attendus, "la version de séquence {cible} avait {attendus} plans, le film en montre {montres}");
+                            }
                         }
                     }
                     5 => app.nouvelle_version_du_plan(cur),
@@ -1072,6 +1103,13 @@ impl Essai {
                         if numeros.len() > 1 {
                             app.supprimer_la_variante(seq, numeros[k as usize % numeros.len()]);
                         }
+                    }
+                    // (Les gestes qui font quitter son plan à une séquence qui a des versions, partie 102 : le plan courant forme une séquence
+                    // neuve, ou est supprimé ; l'invariant des versions de séquence est vérifié après chacun.)
+                    _ if k % 4 == 0 => app.new_sequence_from_cases(),
+                    _ if k % 4 == 1 => {
+                        let plan = app.doc.panels[cur].id;
+                        app.delete_panels(&[plan]);
                     }
                     _ => app.run_action("version.suivante"),
                 }
@@ -1298,6 +1336,10 @@ impl Essai {
         let s0_net = self.b.app.bsel.as_ref().is_none_or(|s| s.lifted.is_none()) && self.b.app.multi.sel.is_none();
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             self.jouer(g);
+            // Le fond d'un trait de personnage (brosses Décor comprises) se calcule en arrière-plan : on attend qu'il soit posé, pour que
+            // l'état d'après le geste soit celui que garde l'étape (un fond qui arrive tard rejoint bien l'étape de son trait, mais il
+            // changerait le projet entre deux vérifications : `aplatfiable_tests.rs` couvre l'arrivée tardive).
+            self.b.app.perso_attendre();
             // Un déplacement de sélection lâché attend son rendu exact : la prochaine action de la main le termine (le dessin
             // prend alors la géométrie de ses pixels, au pixel près, `flush_flottante_on_input`). On la devance, pour que l'état
             // d'après soit celui que garde l'étape.

@@ -1,4 +1,4 @@
-﻿//! Essais des « petits livrables » (`docs/INTERFACE.md` partie 91) : budget de durée, rapport de numérotation, PDF de studio (en-tête, plans modifiés, notes de
+//! Essais des « petits livrables » (`docs/INTERFACE.md` partie 91) : budget de durée, rapport de numérotation, PDF de studio (en-tête, plans modifiés, notes de
 //! révision), planche des vignettes avec titre et légendes, fenêtres de fichiers dans le projet, nom de bobine de l'EDL.
 
 use std::collections::HashMap;
@@ -416,7 +416,7 @@ fn the_report_command_writes_both_files_and_says_what_changed() {
     let envoi = envoi_de(&doc, "v1", true);
     doc.envois.list.push(envoi.clone());
     doc.remove_panel(2).unwrap();
-    let (_ctx, mut app, dir) = app_de(doc, "rapport-commande");
+    let (_ctx, app, dir) = app_de(doc, "rapport-commande");
     // Sans envoi : la commande dit quoi faire (et n'ouvre aucune fenêtre de fichier).
     let (_c2, mut sans, d2) = app_de(film(24), "rapport-sans-envoi");
     sans.run_action("fichier.exporter_renumerotation");

@@ -154,6 +154,18 @@ impl Textes {
     }
 }
 
+/// Les champs qui ont un texte quelque part dans le film : le plan ou l'une de ses images (marques).
+pub fn champs_remplis(doc: &Document) -> Textes {
+    let plein = |s: &str| !s.trim().is_empty();
+    let mut t = Textes::aucun();
+    for p in &doc.panels {
+        t.action |= plein(&p.action) || p.marks.iter().any(|m| plein(&m.action));
+        t.dialogue |= plein(&p.dialogue) || p.marks.iter().any(|m| plein(&m.dialogue));
+        t.notes |= plein(&p.notes) || p.marks.iter().any(|m| plein(&m.notes));
+    }
+    t
+}
+
 /// Le texte du champ `champ` de la case `id` du plan `panel` (son plan pour sa première case, sa marque d'image sinon).
 pub fn texte_du_champ(doc: &Document, panel: usize, id: u64, frame: usize, champ: Champ) -> &str {
     let Some(p) = doc.panels.get(panel) else { return "" };

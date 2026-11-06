@@ -5,7 +5,6 @@ use egui_dock::{Node, NodeIndex};
 
 use crate::app::App;
 use crate::document::Document;
-use crate::dock::Pane;
 use crate::montagehauteur::{self, Taille};
 use crate::workspace::Espace;
 

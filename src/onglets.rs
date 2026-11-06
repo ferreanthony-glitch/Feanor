@@ -209,6 +209,7 @@ etat_projet! {
     duree_plans: Option<crate::dureeplans::DureePlans> = None,
     fusion_noms: Option<crate::fusionnoms::FusionNoms> = None,
     corbeille_ui: Option<crate::corbeilleui::Fenetre> = None,
+    coupe_versions: Option<crate::coupeversions::CoupeEnAttente> = None,
     trim_menu: Option<(u64, usize)> = None,
     goto_plan: Option<String> = None,
     renumber_confirm: bool = false,
@@ -676,6 +677,8 @@ impl App {
             return false;
         }
         self.load_doc(doc);
+        // (Un projet qui a des textes d'action, de dialogue ou de notes : leurs lignes se cochent, pour qu'ils se voient sous les cases.)
+        self.vignettes_montrer_les_textes_saisis();
         // (Un projet est là, même sans nom et sans changement : plus d'accueil, `sansprojet.rs`.)
         self.welcome = false;
         self.session_a_ecrire = true;

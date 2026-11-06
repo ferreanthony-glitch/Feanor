@@ -1,21 +1,22 @@
-//! Les brosses perso de type **Décor**, côté interface (`decor.rs` pour le calque et le partage entre les cases ; `personnagesui.rs` pour la
-//! barre et le panneau où elles vivent avec les autres brosses perso).
+//! Les brosses dédiées de type **Décor**, côté interface (`decor.rs` pour le calque et le partage entre les cases ; `personnagesui.rs` pour la
+//! barre et le panneau où elles vivent avec les autres brosses dédiées).
 //!
 //! # Ce que c'est (2026-10-29, §70 de `docs/INTERFACE.md`)
 //!
 //! Avant, trois pinceaux de décor fixes (crayon, feutre gris, aplat) d'une seule couleur, réglés dans Préférences > Vignettes. Maintenant, ce
-//! sont des **brosses perso** comme les autres (`personnages::Brosse`, un réglage de l'application) : chacune a son nom, sa couleur de trait,
-//! sa couleur d'aplat (ou pas), et, parce que ce sont des pinceaux de décor, **un pinceau** (crayon, feutre ou pinceau plein) et **une
-//! taille**. Trois brosses Décor d'origine, en niveaux de gris, reprennent les trois anciens pinceaux (Décor 1 : crayon 5 px, Décor 2 :
-//! feutre 24 px, Décor 3 : pinceau plein 90 px). Dans la barre, ce sont de petits carrés arrondis (`personnagesui.rs`), aux couleurs de leur
+//! sont des **brosses dédiées** comme les autres (`personnages::Brosse`, un réglage de l'application) : chacune a son nom, sa couleur de trait,
+//! sa couleur d'aplat (ou pas). Trois brosses Décor d'origine, en niveaux de gris. **Depuis le §107 (2026-11-05), elles suivent toutes le pinceau
+//! courant de l'utilisateur** (avant : Décor 1 crayon 5 px, Décor 2 feutre 24 px, Décor 3 pinceau plein 90 px) ; une brosse Décor peut avoir sa propre
+//! brosse (« Brosse spécifique », `brossesdediees.rs`). Dans la barre, ce sont de petits carrés arrondis (`personnagesui.rs`), aux couleurs de leur
 //! brosse. Elles sont proposées dans tout le côté storyboard (`Mode::Storyboard`, `decor_offert`), pas dans l'animation (le décor y est un
 //! calque par plan, et un plan du storyboard est ce que montrent ses cases).
 //!
 //! # Ce que fait le choix
 //!
-//! Choisir une brosse Décor prend l'outil qu'il faut (Crayon pour le crayon, Pinceau pour le feutre et le pinceau plein), le réglage à la taille
-//! de la brosse et sa couleur de trait ; l'outil, les deux pinceaux, la couleur et le calque courant d'avant sont mis de côté (`Avant`) et
-//! reviennent quand on lâche la brosse (clic sur elle, ou le choix d'un personnage ou d'une classique). Tant qu'elle est choisie, **chaque
+//! Choisir une brosse Décor prend sa couleur de trait ; la couleur et le calque courant d'avant sont mis de côté (`Avant`) et reviennent quand
+//! on lâche la brosse. Le **pinceau** n'est pas touché : la brosse suit celui de l'utilisateur, ou, si elle est spécifique, prend le sien et rend
+//! l'autre tel qu'il était (`brossesdediees.rs`, pas ici). La brosse se lâche
+//! (clic sur elle, ou le choix d'une brosse qui suit le pinceau ou d'une autre sorte) (clic sur elle, ou le choix d'un personnage ou d'une classique). Tant qu'elle est choisie, **chaque
 //! trait part dans le calque Décor du plan où il commence** (`decor_avant_trait`, à l'appui sur une case ou sur le dessin) : le calque est créé
 //! à ce premier trait, tout en bas du plan, et le trait et la création ne font qu'une étape d'annulation (`Vignettes::created`, la même
 //! mécanique que pour un plan fait en dessinant dans une case vide). Choisir à la main un autre calque, ou une autre couleur, lâche la brosse.
@@ -23,13 +24,11 @@
 //! déjà un garde sa sorte (`Document::assurer_decor`). La couleur d'aplat de la brosse suit la règle des brosses sans calque à leur nom
 //! (partie 33) : elle devient celle de l'aplat du calque Décor. Les personnages ont leur calque aussi : `calquespastilles.rs`.
 //!
-//! Changer la couleur, le pinceau ou la taille d'une brosse Décor choisie la fait suivre tout de suite (`decor_tick`).
+//! Changer la couleur d'une brosse Décor choisie la fait suivre tout de suite (`decor_tick`) ; son pinceau, `dediee_suivre`.
 
 use eframe::egui::Color32;
 
 use crate::app::{App, Tool};
-use crate::brush::BrushSettings;
-use crate::decor::Genre;
 use crate::personnagesui::Choix;
 use crate::vignettesreglages::en_couleur;
 
@@ -37,15 +36,13 @@ use crate::vignettesreglages::en_couleur;
 #[derive(Clone, Debug)]
 pub(crate) struct Avant {
     pub tool: Tool,
-    pub brush: BrushSettings,
-    pub pencil: BrushSettings,
     pub color: [u8; 3],
     /// Le calque courant (son numéro) quand le décor a été choisi.
     pub layer: Option<u64>,
 }
 
-/// Ce que la brosse Décor `i` a posé : couleur du trait, taille, pinceau (pour voir quand le panneau les change).
-pub(crate) type Posee = ([u8; 3], f32, Genre);
+/// Ce que la brosse Décor `i` a posé : la couleur du trait (pour voir quand le panneau la change).
+pub(crate) type Posee = [u8; 3];
 
 impl App {
     /// La couleur des cadres de caméra (Préférences > Vignettes).
@@ -61,9 +58,9 @@ impl App {
         }
     }
 
-    /// Ce que pose la brosse Décor `i` : (couleur du trait, taille, pinceau).
+    /// Ce que pose la brosse Décor `i` : sa couleur de trait.
     fn decor_voulu(&self, i: usize) -> Option<Posee> {
-        self.settings.brosses_decor.get(i).map(|b| (b.line, b.taille_decor(), b.genre()))
+        self.settings.brosses_decor.get(i).map(|b| b.line)
     }
 
     /// Choisit la brosse Décor `i`.
@@ -71,32 +68,30 @@ impl App {
         let Some(nom) = self.settings.brosses_decor.get(i).map(|b| b.name.clone()) else { return };
         self.end_stroke();
         if self.decor_actif().is_none() {
-            self.perso.decor_avant = Some(Avant { tool: self.tool, brush: self.brush, pencil: self.pencil, color: self.color, layer: self.layers().get(self.cur_layer).map(|l| l.id) });
+            self.perso.decor_avant = Some(Avant { tool: self.tool, color: self.color, layer: self.layers().get(self.cur_layer).map(|l| l.id) });
         }
         // Le décor remplace le personnage ou la classique choisis (et leur aplat).
         self.aplat_cible = None;
         self.perso.actif = Some(Choix::Decor(i));
         self.decor_poser(i);
+        // Une brosse spécifique prend son pinceau ; une brosse qui suit le pinceau rend celui de l'utilisateur s'il était de côté.
+        self.dediee_suivre(true);
         self.status = format!("« {nom} » : une brosse Décor, ses traits vont dans le calque Décor du plan (créé au premier trait s'il n'existe pas encore).");
     }
 
-    /// Prend l'outil, le réglage et la couleur de la brosse Décor `i`.
+    /// Prend la couleur de la brosse Décor `i` ; l'outil doit être un outil qui dessine (le pinceau si l'outil courant n'en est pas un). Le
+    /// pinceau, lui, n'est pas touché ici (`brossesdediees.rs`).
     fn decor_poser(&mut self, i: usize) {
-        let Some((couleur, taille, genre)) = self.decor_voulu(i) else { return };
-        let reglage = genre.reglage(taille);
-        if genre.est_crayon() {
-            self.pencil = reglage;
-            self.set_tool(Tool::Pencil);
-        } else {
-            self.brush = reglage;
+        let Some(couleur) = self.decor_voulu(i) else { return };
+        if !matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Fill | Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline | Tool::Text) {
             self.set_tool(Tool::Brush);
         }
         self.set_front(couleur);
         self.perso.posee = couleur;
-        self.perso.decor_posee = Some((couleur, taille, genre));
+        self.perso.decor_posee = Some(couleur);
     }
 
-    /// Lâche la brosse Décor : l'outil, les pinceaux et la couleur d'avant reviennent ; `calque` : le calque courant aussi (sinon on
+    /// Lâche la brosse Décor : l'outil et la couleur d'avant reviennent, et le pinceau de l'utilisateur si la brosse en avait pris un ; `calque` : le calque courant aussi (sinon on
     /// vient de choisir un calque soi-même).
     pub(crate) fn decor_lacher(&mut self, calque: bool) {
         self.decor_lacher_avec(calque, true);
@@ -109,9 +104,9 @@ impl App {
         self.end_stroke();
         self.perso.actif = None;
         self.perso.decor_posee = None;
+        // (Une brosse spécifique rend d'abord le pinceau de l'utilisateur tel qu'il était.)
+        self.dediee_rendre();
         let Some(a) = self.perso.decor_avant.take() else { return };
-        self.brush = a.brush;
-        self.pencil = a.pencil;
         self.set_tool(a.tool);
         if couleur {
             self.set_front(a.color);
@@ -143,7 +138,7 @@ impl App {
         self.mode == crate::app::Mode::Storyboard && !(self.espace3d.on && !self.camera_view)
     }
 
-    /// À chaque image : la brosse Décor suit son réglage (couleur, taille, pinceau), se lâche quand on quitte le côté storyboard (l'animation),
+    /// À chaque image : la brosse Décor suit sa couleur (son pinceau : `dediee_suivre`), se lâche quand on quitte le côté storyboard (l'animation),
     /// quand elle est supprimée, ou quand une autre couleur est prise à la main (elle reste).
     pub(crate) fn decor_tick(&mut self) {
         let Some(i) = self.decor_actif() else { return };

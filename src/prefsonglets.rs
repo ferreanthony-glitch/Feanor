@@ -120,7 +120,7 @@ pub enum Groupe {
     AspectCases,
     /// Le zoom d'ouverture de la planche (cases par rangée, rangées visibles).
     OuvertureCases,
-    /// Le décor partagé entre les cases d'un plan (`decor.rs`) : le report et la sorte du calque (les brosses Décor, elles, sont dans le panneau Brosses perso).
+    /// Le décor partagé entre les cases d'un plan (`decor.rs`) : le report et la sorte du calque (les brosses Décor, elles, sont dans le panneau Brosses dédiées).
     Decor,
     Raccourcis,
     Programmes,
@@ -269,7 +269,7 @@ pub const REGLAGES: &[Reglage] = &[
     r(O::Vignettes, G::CadresCamera, "vignettes.couleur_cadre", "Couleur des cadres de caméra", "bleu lettres flèche empreinte export"),
     r(O::Vignettes, G::Decor, "vignettes.report_decor", "Report du décor", "continuité coupe plan suivant case réunir décor partagé"),
     r(O::Vignettes, G::Decor, "vignettes.calque_decor", "Calque Décor", "vectoriel bitmap pixels sorte créer brosses du décor pastilles"),
-    r(O::Vignettes, G::Decor, "vignettes.brosses_decor", "Brosses Décor", "couleur trait aplat taille crayon feutre pinceau plein pixels panneau brosses perso pastilles"),
+    r(O::Vignettes, G::Decor, "vignettes.brosses_decor", "Brosses Décor", "couleur trait aplat taille crayon feutre pinceau plein pixels panneau brosses dédiées pastilles"),
     // ---- Raccourcis
     r(O::Raccourcis, G::Raccourcis, "raccourcis.liste", "Voir et changer les raccourcis", "assigner touche"),
     r(O::Raccourcis, G::Raccourcis, "raccourcis.fichier", "Modifier le fichier à la main", "toml perso"),

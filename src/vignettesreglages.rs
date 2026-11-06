@@ -34,7 +34,7 @@ pub struct ReglagesVignettes {
     /// En réunissant deux plans, le décor du premier se tient sur la suite.
     #[serde(rename = "report_decor")]
     pub report_decor: bool,
-    /// Ancienne couleur des brosses du décor : **lue, jamais écrite** (2026-10-29 : chaque brosse perso Décor a ses couleurs, voir
+    /// Ancienne couleur des brosses du décor : **lue, jamais écrite** (2026-10-29 : chaque brosse dédiée Décor a ses couleurs, voir
     /// `Settings::brosses_decor` et `Settings::reprendre_les_anciens_pinceaux_de_decor`).
     #[serde(rename = "couleur_decor", skip_serializing)]
     pub couleur_decor: [u8; 3],

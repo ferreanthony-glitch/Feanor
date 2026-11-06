@@ -116,11 +116,19 @@ pub struct Element {
     pub kind: Kind,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub notes: Vec<String>,
+    /// (Intitulé de scène seulement.) Le numéro de scène que le fichier écrit (« 12 », « 12A »), vide s'il n'en a pas. Jamais écrit s'il est vide :
+    /// un scénario gardé avant ce champ se relit comme avant.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub numero: String,
+    /// (Intitulé de scène seulement.) L'intitulé tel que le fichier l'écrit, sans numéro ni marques de mise en forme (« INT. JOUR - CUISINE ») ;
+    /// vide pour un scénario gardé avant ce champ (le nom aux tirets longs sert alors).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub ecriture: String,
 }
 
 impl Element {
     pub fn new(kind: Kind) -> Element {
-        Element { kind, notes: Vec::new() }
+        Element { kind, notes: Vec::new(), numero: String::new(), ecriture: String::new() }
     }
 }
 
@@ -346,13 +354,35 @@ pub fn strip_emphasis(s: &str) -> String {
 /// (« Est-ce que… » ou « Ext » ne font pas un intitulé).
 const HEADING_PREFIXES: [&str; 8] = ["INT./EXT", "INT/EXT", "EXT./INT", "EXT/INT", "I/E", "INT", "EXT", "EST"];
 
+/// Un intitulé de scène lu : son numéro de scène tel que le fichier l'écrit (vide s'il n'en a pas), l'intitulé tel qu'il est écrit
+/// (« INT. JOUR - CUISINE » : mêmes mots, mêmes tirets, sans numéro de scène ni marques de mise en forme) et son nom, aux tirets longs.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EnTete {
+    pub numero: String,
+    pub ecriture: String,
+    pub nom: String,
+}
+
+impl EnTete {
+    /// L'élément du scénario qui le garde.
+    pub fn element(self, notes: Vec<String>) -> Element {
+        Element { kind: Kind::Heading(self.nom), notes, numero: self.numero, ecriture: self.ecriture }
+    }
+}
+
 /// Le texte d'un intitulé de scène (sans numéro de scène ni point forcé) si la ligne en est un.
 pub fn heading_of(line: &str) -> Option<String> {
+    en_tete_of(line).map(|h| h.nom)
+}
+
+/// L'intitulé de scène d'une ligne, avec son numéro de scène et son écriture d'origine, si la ligne en est un.
+pub fn en_tete_of(line: &str) -> Option<EnTete> {
     let mut t = line.trim();
     if t.is_empty() || t.chars().count() > 200 {
         return None;
     }
     let forced = t.starts_with('.') && !t.starts_with("..");
+    let mut numero = String::new();
     if forced {
         t = t[1..].trim();
     } else {
@@ -360,12 +390,15 @@ pub fn heading_of(line: &str) -> Option<String> {
         let digits = t.chars().take_while(|c| c.is_ascii_digit()).count();
         if digits > 0 {
             let mut rest = &t[digits..];
+            let mut fin = digits;
             // Une lettre de bis : « 12A ».
             if rest.chars().next().is_some_and(|c| c.is_ascii_uppercase()) && rest[1..].starts_with(['.', ' ', '\t']) {
                 rest = &rest[1..];
+                fin += 1;
             }
             let rest = rest.trim_start_matches(['.', ' ', '\t']);
             if rest.len() < t.len() && is_heading_start(rest) {
+                numero = t[..fin].to_string();
                 t = rest;
             }
         }
@@ -376,16 +409,21 @@ pub fn heading_of(line: &str) -> Option<String> {
     if t.is_empty() {
         return None;
     }
-    let name = clean_heading(t);
-    (!name.is_empty()).then_some(name)
+    let h = en_tete_depuis(t, numero);
+    (!h.nom.is_empty()).then_some(h)
 }
 
-/// Le nom d'une séquence tiré d'un intitulé : sans numéro de scène (`#12#`, ou « 12 » après
-/// plusieurs espaces), sans marques de mise en forme, avec des tirets longs (« – »).
-pub fn clean_heading(t: &str) -> String {
+/// Un intitulé de scène dont `numero` est le numéro déjà lu en tête de ligne (ou l'attribut du fichier), vide s'il n'y en a pas : le
+/// numéro de fin de ligne (`#12#`, ou « 12 » après plusieurs espaces) le remplace alors, s'il y en a un.
+pub fn en_tete_depuis(t: &str, numero: String) -> EnTete {
     let mut name = t.trim().to_string();
+    let mut en_fin = String::new();
     if name.ends_with('#') {
         if let Some(open) = name[..name.len() - 1].rfind('#') {
+            let marque = name[open + 1..name.len() - 1].trim();
+            if !marque.is_empty() && marque.chars().count() <= 10 && !marque.contains(char::is_whitespace) {
+                en_fin = marque.to_string();
+            }
             name.truncate(open);
         }
     }
@@ -394,13 +432,17 @@ pub fn clean_heading(t: &str) -> String {
         let last = &trimmed[sp + 1..];
         let gap = trimmed[..sp].ends_with([' ', '\t']);
         if gap && !last.is_empty() && last.len() <= 4 && last.chars().next().is_some_and(|c| c.is_ascii_digit()) && last.chars().all(|c| c.is_ascii_alphanumeric()) {
+            if en_fin.is_empty() {
+                en_fin = last.to_string();
+            }
             name = trimmed[..sp].to_string();
         }
     }
-    let name = collapse_spaces(&strip_emphasis(&name));
-    name.replace(" -- ", " – ").replace(" - ", " – ").replace(" — ", " – ")
+    let ecriture = collapse_spaces(&strip_emphasis(&name));
+    let nom = ecriture.replace(" -- ", " – ").replace(" - ", " – ").replace(" — ", " – ");
+    let numero = if numero.trim().is_empty() { en_fin } else { numero.trim().to_string() };
+    EnTete { numero, ecriture, nom }
 }
-
 fn is_heading_start(t: &str) -> bool {
     let up = t.to_uppercase();
     for p in HEADING_PREFIXES {
@@ -766,9 +808,9 @@ fn fountain_paragraph(lines: &[String], out: &mut Vec<Element>) {
             continue;
         }
         if at_start {
-            if let Some(h) = heading_of(line) {
+            if let Some(h) = en_tete_of(line) {
                 flush(&mut action, out);
-                out.push(Element::new(Kind::Heading(h)));
+                out.push(h.element(Vec::new()));
                 k += 1;
                 continue;
             }
@@ -910,9 +952,9 @@ pub fn parse_text(text: &str, opts: TextOptions, progress: &dyn Fn(f32)) -> Scri
             continue;
         }
         let indent = indent_of(line);
-        if let Some(h) = heading_of(t) {
+        if let Some(h) = en_tete_of(t) {
             leave(&mut state, &mut out);
-            out.push(Element::new(Kind::Heading(h)));
+            out.push(h.element(Vec::new()));
             continue;
         }
         if !matches!(state, State::Speech(..)) && is_transition(t) {

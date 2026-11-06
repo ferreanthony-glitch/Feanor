@@ -488,7 +488,7 @@ pub fn build_document(v: &Values, title: &str) -> Document {
     // Trois personnages d'origine : un projet neuf a des pastilles de personnages (avec leur calque) dès le premier trait.
     for (name, line, fill) in crate::personnages::personnages_d_origine() {
         let id = doc.alloc();
-        doc.personnages.push(crate::personnages::Personnage { id, name: name.into(), line, fill: Some(fill) });
+        doc.personnages.push(crate::personnages::Personnage { id, name: name.into(), line, fill: Some(fill), brosse: None });
     }
     doc
 }

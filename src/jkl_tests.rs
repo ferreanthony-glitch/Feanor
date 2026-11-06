@@ -49,7 +49,7 @@ fn avancer(app: &mut App, ctx: &egui::Context, secondes: f64) {
     let mut t = app.last_time.unwrap_or(100.0) + pas;
     let n = (secondes / pas).round() as usize;
     for _ in 0..=n {
-        ctx.run(RawInput { time: Some(t), ..Default::default() }, |c| app.tick_playback(c));
+        let _ = ctx.run(RawInput { time: Some(t), ..Default::default() }, |c| app.tick_playback(c));
         t += pas;
     }
 }
@@ -204,7 +204,7 @@ fn k_held_with_l_or_j_steps_one_frame_at_a_time() {
         events: vec![egui::Event::Key { key: Key::K, physical_key: Some(Key::K), pressed: true, repeat: false, modifiers: NONE }],
         ..Default::default()
     };
-    ctx.run(k_enfoncee, |_| {});
+    let _ = ctx.run(k_enfoncee, |_| {});
     app.run_action("montage.lecture_avant");
     assert!(!app.playing, "K tenue : pas de lecture");
     assert_eq!(app.global_frame(), 13);
@@ -217,7 +217,7 @@ fn k_held_with_l_or_j_steps_one_frame_at_a_time() {
         events: vec![egui::Event::Key { key: Key::K, physical_key: Some(Key::K), pressed: false, repeat: false, modifiers: NONE }],
         ..Default::default()
     };
-    ctx.run(k_relachee, |_| {});
+    let _ = ctx.run(k_relachee, |_| {});
     app.run_action("montage.lecture_avant");
     assert!(app.playing);
 }

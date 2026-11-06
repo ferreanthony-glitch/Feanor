@@ -656,7 +656,7 @@ pub(crate) fn film_lourd(plans: usize, seed: u64) -> (Document, Stats) {
     // Pastilles (personnages).
     for (nom, trait_c, aplat) in PERSONNAGES {
         let id = doc.alloc();
-        doc.personnages.push(crate::personnages::Personnage { id, name: nom.into(), line: trait_c, fill: Some(aplat) });
+        doc.personnages.push(crate::personnages::Personnage { id, name: nom.into(), line: trait_c, fill: Some(aplat), brosse: None });
     }
     // Notes de la planche : textes et traits attachés à des cases.
     for i in (0..plans).step_by(11) {

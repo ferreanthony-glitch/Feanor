@@ -293,7 +293,7 @@ fn several_chosen_layers_are_copied_and_pasted_together_in_order_in_one_step() {
 #[test]
 fn a_character_layer_keeps_its_link_inside_the_same_project_and_becomes_ordinary_in_another() {
     let mut app = deux_plans("personnage");
-    app.doc.personnages.push(crate::personnages::Personnage { id: 77, name: "Perso".into(), line: [0, 0, 0], fill: None });
+    app.doc.personnages.push(crate::personnages::Personnage { id: 77, name: "Perso".into(), line: [0, 0, 0], fill: None, brosse: None });
     app.layers_mut()[0].personnage = Some(77);
     app.layers_pane_focus = true;
     app.run_action("edition.copier");

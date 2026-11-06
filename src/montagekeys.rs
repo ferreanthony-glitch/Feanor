@@ -99,6 +99,9 @@ pub(crate) struct ClipKey {
     pub kind: LayerKind,
     pub name: String,
     pub rank: usize,
+    /// Les dessins de couleur que les calques de couleur du calque de la clé donnent à ce dessin (dessin, griffonnages), dans l'ordre
+    /// de ces calques : une clé collée garde sa couleur (partie 103). Vide pour une clé venue d'une autre feuille (non adaptée).
+    pub couleurs: Vec<(Cel, Option<Cel>)>,
 }
 
 /// Plusieurs clés prises à la fois dans le montage : chaque calque touché tel qu'il était, l'image
@@ -658,6 +661,21 @@ impl App {
         out
     }
 
+    /// Les dessins de couleur (et leurs griffonnages) que les calques de couleur du calque `li` donnent au dessin de la clé en `s`.
+    fn couleurs_du_dessin(&self, pi: usize, li: usize, s: usize) -> Vec<(Cel, Option<Cel>)> {
+        let layers = &self.doc.panels[pi].layers;
+        let Some(trait_cel) = self.key_cel(pi, li, s) else { return Vec::new() };
+        let mut out = Vec::new();
+        for ci in crate::calquecouleur::couleurs_de(layers, li) {
+            let Some(c) = layers[ci].couleur.as_ref() else { continue };
+            let Some(couleur_id) = c.dessins.get(&trait_cel) else { continue };
+            let Some(cel) = self.doc.cels.get(couleur_id).cloned() else { continue };
+            let gribouillis = c.griffonnages.get(couleur_id).and_then(|g| self.doc.cels.get(g)).cloned();
+            out.push((cel, gribouillis));
+        }
+        out
+    }
+
     /// Le dessin d'une clé.
     fn key_cel(&self, pi: usize, li: usize, s: usize) -> Option<CelId> {
         self.doc.panels[pi].layers[li].frames.get(s).copied().flatten()
@@ -665,6 +683,8 @@ impl App {
 
     /// Copie les clés visées (Ctrl+C après un clic sur une piste).
     pub(crate) fn copy_keys(&mut self) {
+        self.end_stroke();
+        self.attendre_fonds_de_traits();
         let targets = self.target_keys();
         let Some(&(p0, _, s0, _)) = targets.iter().min_by_key(|&&(pi, _, s, _)| self.doc.panel_start(pi) + s) else { return };
         let g0 = self.doc.panel_start(p0) + s0;
@@ -673,7 +693,8 @@ impl App {
             let Some(cel) = self.key_cel(pi, li, s).and_then(|id| self.doc.cels.get(&id)).cloned() else { continue };
             let layers = &self.doc.panels[pi].layers;
             let (kind, name, rank) = (layers[li].kind, layers[li].name.clone(), layers.len() - 1 - li);
-            keys.push(ClipKey { offset: self.doc.panel_start(pi) + s - g0, len: e - s, cel, kind, name, rank });
+            let couleurs = self.couleurs_du_dessin(pi, li, s);
+            keys.push(ClipKey { offset: self.doc.panel_start(pi) + s - g0, len: e - s, cel, kind, name, rank, couleurs });
         }
         keys.sort_by_key(|k| k.offset);
         let n = keys.len();
@@ -729,11 +750,11 @@ impl App {
         let cur_rank = stack.saturating_sub(1 + cur);
         let min_rank = adaptee.keys.iter().map(|k| k.rank).min().unwrap_or(0);
         // (image, durée, dessin, sorte, nom du calque d'origine, rang visé) des clés qui tiennent dans le plan.
-        let wanted: Vec<(usize, usize, Cel, LayerKind, String, usize)> = adaptee
+        let wanted: Vec<(usize, usize, Cel, LayerKind, String, usize, Vec<(Cel, Option<Cel>)>)> = adaptee
             .keys
             .iter()
             .filter(|k| f0 + k.offset < plan)
-            .map(|k| (f0 + k.offset, k.len.min(plan - f0 - k.offset).max(1), k.cel.clone(), k.kind, k.name.clone(), target_rank(cur_rank, min_rank, k.rank)))
+            .map(|k| (f0 + k.offset, k.len.min(plan - f0 - k.offset).max(1), k.cel.clone(), k.kind, k.name.clone(), target_rank(cur_rank, min_rank, k.rank), k.couleurs.clone()))
             .collect();
         let total = adaptee.keys.len();
         if wanted.is_empty() {
@@ -759,6 +780,7 @@ impl App {
         }
         self.end_stroke();
         let snap = self.snapshot();
+        let calques_avant = self.doc.panels[pi].layers.clone();
         // Les calques qui manquent sous la pile sont créés (`ensure_layers_below`).
         let specs: Vec<(usize, String, LayerKind)> = wanted.iter().map(|w| (w.5, w.4.clone(), w.3)).collect();
         let cur_id = self.doc.panels[pi].layers.get(cur).map(|l| l.id);
@@ -768,12 +790,25 @@ impl App {
         let mut pasted = Vec::new();
         let mut layers_used: Vec<u64> = Vec::new();
         let mut opened: Vec<u64> = Vec::new();
-        for (f, n, cel, kind, _, rank) in wanted {
+        for (f, n, cel, kind, _, rank, couleurs) in wanted {
             let Some(li) = stack.checked_sub(1 + rank) else { continue };
             if self.doc.panels[pi].layers[li].kind != kind || self.doc.panels[pi].layers[li].folder {
                 continue;
             }
             let id = self.doc.add_cel(cel);
+            // La clé collée garde sa couleur : chaque calque de couleur du calque d'arrivée reçoit le dessin de couleur copié, dans
+            // le même ordre (partie 103 ; comme `calquecouleur::noter_copie` pour un dessin copié sur place).
+            let calques = crate::calquecouleur::couleurs_de(&self.doc.panels[pi].layers, li);
+            for ((couleur, gribouillis), ci) in couleurs.into_iter().zip(calques) {
+                let cid = self.doc.add_cel(couleur);
+                let gid = gribouillis.map(|g| self.doc.add_cel(g));
+                if let Some(c) = self.doc.panels[pi].layers[ci].couleur.as_mut() {
+                    c.dessins.insert(id, cid);
+                    if let Some(g) = gid {
+                        c.griffonnages.insert(cid, g);
+                    }
+                }
+            }
             let l = &mut self.doc.panels[pi].layers[li];
             // Insertion : la place du bloc s'ouvre une fois par calque, avant sa première clé.
             if insert && !opened.contains(&l.id) {
@@ -801,6 +836,15 @@ impl App {
         if self.doc.panels[pi].frame_count() < plan {
             self.doc.panels[pi].length = plan;
         }
+        // Ce qui sort du film reste récupérable : les dessins que le collage recouvre (ou que l'insertion pousse hors du plan) vont à la corbeille.
+        let mut envoyes = 0usize;
+        for avant in &calques_avant {
+            let Some(li) = self.doc.panels[pi].layers.iter().position(|l| l.id == avant.id) else { continue };
+            if let Some(sorti) = dessins_sortis(avant, &self.doc.panels[pi].layers[li]) {
+                envoyes += sorti.frames.iter().flatten().collect::<std::collections::BTreeSet<_>>().len();
+                self.doc.jeter_calques(panel, vec![(li, sorti)], "Dessins recouverts par un collage de clés");
+            }
+        }
         self.commit_as(snap, if insert { "Insérer des clés" } else { "Coller les clés à la tête de lecture" });
         let skipped = total - n;
         let mut msg = format!("{n} clé{} {} sur {m} calque{}", s(n), if insert { format!("insérée{}", s(n)) } else { format!("collée{}", s(n)) }, s(m));
@@ -809,6 +853,9 @@ impl App {
         }
         if skipped > 0 {
             msg += &format!(" ; {skipped} non (calque d'une autre sorte, ou après la fin du plan)");
+        }
+        if envoyes > 0 {
+            msg += &format!(" ; {} recouvert{} envoyé{} à la corbeille", crate::rognage::dessins_texte(envoyes), if envoyes > 1 { "s" } else { "" }, if envoyes > 1 { "s" } else { "" });
         }
         self.status = msg + ".";
     }

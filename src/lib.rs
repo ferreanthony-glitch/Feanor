@@ -122,7 +122,13 @@ mod variantes;
 mod variantes_tests;
 #[cfg(test)]
 mod versions_sequence_tests;
+#[cfg(test)]
+mod versions_fiables_tests;
 mod variantesui;
+// Couper un plan qui a des versions rangées : la question « avec quelle partie ? » (`coupeversions`).
+mod coupeversions;
+#[cfg(test)]
+mod coupeversions_tests;
 // La pile des versions au survol de « V2 » sur le bloc d'un plan : la logique sans interface (`pilevers`) et son
 // dessin (`pileversui`).
 mod pilevers;
@@ -312,6 +318,7 @@ mod decor;
 #[cfg(test)]
 mod decor_tests;
 mod decorui;
+mod brossesdediees;
 mod calquespastilles;
 #[cfg(test)]
 mod calques_pastilles_tests;
@@ -543,6 +550,9 @@ mod exportcamera;
 mod exportlayers;
 mod exportstems;
 mod exportstills;
+mod exportcles;
+mod nomenclature;
+mod exportsonplan;
 mod exportvideo;
 #[cfg(test)]
 mod exports_v1_tests;
@@ -552,6 +562,10 @@ mod exports_v1_montage_tests;
 mod exports_v1_calques_tests;
 #[cfg(test)]
 mod exports_v1_exemples_tests;
+#[cfg(test)]
+mod exports_cle_son_tests;
+#[cfg(test)]
+mod nomenclature_tests;
 #[cfg(test)]
 mod export_tests;
 mod exportui;
@@ -602,6 +616,8 @@ mod planchesequences;
 mod planchesequencesui;
 #[cfg(test)]
 mod planchesequences_tests;
+#[cfg(test)]
+mod sequencesnoms_tests;
 // Nouvelle séquence avec les plans choisis.
 mod sequenceplans;
 #[cfg(test)]
@@ -753,8 +769,12 @@ mod montagekeys;
 mod references;
 // La planche de références (post-it, textes, cadres, ranger, recadrer, fenêtre à part) : voir `planchref.rs`.
 mod planchref;
+// Le crayon de la planche de références (traits vectoriels, canevas blanc) : voir `planchdessin.rs`.
+mod planchdessin;
 #[cfg(test)]
 mod planchref_tests;
+#[cfg(test)]
+mod planchdessin_tests;
 #[cfg(test)]
 mod references_tests;
 mod referencesui;
@@ -884,6 +904,8 @@ mod personnages;
 mod personnages_tests;
 #[cfg(test)]
 mod aplattrous_tests;
+#[cfg(test)]
+mod aplatfiable_tests;
 mod personnagesui;
 mod persp;
 #[cfg(test)]
@@ -1068,6 +1090,8 @@ mod workspace;
 mod workspace_tests;
 #[cfg(test)]
 mod horschamp_tests;
+#[cfg(test)]
+mod canevas_libre_tests;
 #[cfg(test)]
 mod horschamptex_tests;
 mod workspaceui;

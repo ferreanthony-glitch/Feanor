@@ -110,7 +110,8 @@ impl App {
     /// Actions des espaces de travail ; vrai si `action` en était une.
     pub(crate) fn workspace_action(&mut self, action: &str) -> bool {
         if let Some((_, name, layout)) = workspace::builtin().into_iter().find(|w| w.0 == action) {
-            self.apply_layout(layout);
+            // (Les réglages de la planche restent ceux de l'utilisateur : une disposition d'origine ne les remet pas à zéro.)
+            self.apply_layout(layout.avec_les_reglages_de(&self.layout));
             self.status = format!("Espace de travail « {name} ».");
             return true;
         }
@@ -281,7 +282,21 @@ impl App {
 
 /// Deux dispositions identiques, aux parts près (elles bougent d'un rien d'une image à l'autre).
 fn same_layout(a: &Layout, b: &Layout) -> bool {
-    a.vignettes == b.vignettes
+    // (Les réglages de la planche des Vignettes comptent : ils suivent l'utilisateur d'un espace à l'autre, et la disposition retenue en
+    // quittant l'application doit les porter, sinon le lancement suivant reprend ceux d'une disposition restée en arrière :
+    // lignes de texte décochées, `docs/INTERFACE.md` partie 106.)
+    a.board_textes == b.board_textes
+        && a.board_sens == b.board_sens
+        && a.board_columns == b.board_columns
+        && a.board_rows == b.board_rows
+        && a.board_min_rows == b.board_min_rows
+        && a.board_scene_breaks == b.board_scene_breaks
+        && a.board_attach == b.board_attach
+        && a.card_size == b.card_size
+        && a.board_spacing == b.board_spacing
+        && a.safe_frames == b.safe_frames
+        && a.frame_format == b.frame_format
+        && a.vignettes == b.vignettes
         && a.top_view == b.top_view
         && a.command_bar == b.command_bar
         && a.tool_bar == b.tool_bar

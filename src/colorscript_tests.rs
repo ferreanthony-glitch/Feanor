@@ -7,11 +7,11 @@ use super::*;
 use crate::perf_tests::Banc;
 use crate::vignettes_tests::{deux_sequences, ouvert, quatre_plans};
 
-fn tout(doc: &Document) -> Vec<usize> {
+pub(super) fn tout(doc: &Document) -> Vec<usize> {
     (0..doc.panels.len()).collect()
 }
 
-fn dossier(nom: &str) -> std::path::PathBuf {
+pub(super) fn dossier(nom: &str) -> std::path::PathBuf {
     let dir = std::env::temp_dir().join(format!("shot-test-colorscript-{nom}-{}-{:?}", std::process::id(), std::thread::current().id()));
     std::fs::remove_dir_all(&dir).ok();
     std::fs::create_dir_all(&dir).expect("dossier d'essai");
@@ -19,7 +19,7 @@ fn dossier(nom: &str) -> std::path::PathBuf {
 }
 
 /// Un projet de `n` plans dans une séquence ; `deux_sequences` en a deux.
-fn plans(n: usize) -> Document {
+pub(super) fn plans(n: usize) -> Document {
     let mut doc = Document::with_frame(160, 90, 24);
     for _ in 1..n {
         let last = doc.panels.len() - 1;
@@ -199,13 +199,14 @@ fn the_files_are_valid() {
     let doc = deux_sequences();
     let spec = construire(&doc, &tout(&doc), &Options::default());
     let img = composer(&spec, &cellules(&spec, &[[120, 60, 200]])).unwrap();
-    let png = encoder(&img, Sortie::Png, "T").unwrap();
+    let meta = Meta { titre: "T".into(), episode: String::new(), version: String::new(), date: "2026-11-05".into(), papier: Papier::A4 };
+    let png = encoder(&img, Sortie::Png, &meta).unwrap();
     assert_eq!(image::load_from_memory(&png).unwrap().to_rgb8(), img);
-    let pdf = String::from_utf8_lossy(&encoder(&img, Sortie::Pdf, "T").unwrap()).to_string();
+    let pdf = String::from_utf8_lossy(&encoder(&img, Sortie::Pdf, &meta).unwrap()).to_string();
     assert!(pdf.starts_with("%PDF") && pdf.contains("/Count 1") && pdf.contains("/DCTDecode"));
 }
 
-fn lancer(b: &mut Banc, job: crate::export::ExportJob) {
+pub(super) fn lancer(b: &mut Banc, job: crate::export::ExportJob) {
     b.app.start_job(job);
     let debut = std::time::Instant::now();
     while b.app.export_job.as_ref().is_some_and(|j| j.outcome.is_none()) && debut.elapsed() < std::time::Duration::from_secs(60) {
@@ -252,4 +253,30 @@ fn the_job_writes_the_script_in_the_background_and_cancel_cleans_up() {
     lancer(&mut b, job);
     assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF"));
     std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_first_key_of_a_part_is_the_one_the_key_images_export_counts() {
+    // Une clé veut dire la même chose ici et dans « Images à la clé » (`exportcles::cles_du_plan`).
+    let mut doc = plans(1);
+    doc.panels[0].set_length(30);
+    let (a, b, c) = (doc.new_cel(crate::document::LayerKind::Bitmap), doc.new_cel(crate::document::LayerKind::Bitmap), doc.new_cel(crate::document::LayerKind::Bitmap));
+    for f in 4..12 {
+        doc.panels[0].layers[0].set(f, Some(a));
+    }
+    for f in 12..20 {
+        doc.panels[0].layers[0].set(f, Some(b));
+    }
+    for f in 20..30 {
+        doc.panels[0].layers[0].set(f, Some(c));
+    }
+    let cles: Vec<usize> = crate::exportcles::cles_du_plan(&doc, 0, false).into_iter().map(|k| k.frame).collect();
+    assert_eq!(cles, vec![4, 12, 20]);
+    assert_eq!(premiere_cle(&doc, 0, 0, 30), cles[0], "la première clé du plan");
+    assert_eq!(premiere_cle(&doc, 0, 5, 30), 12, "la première clé qui commence dans la partie");
+    assert_eq!(premiere_cle(&doc, 0, 13, 19), 13, "aucune clé dans la partie : son début");
+    // Un calque caché ne fait pas de clé, dans l'export comme ici.
+    doc.panels[0].layers[0].visible = false;
+    let sans: Vec<usize> = crate::exportcles::cles_du_plan(&doc, 0, false).into_iter().map(|k| k.frame).collect();
+    assert_eq!(premiere_cle(&doc, 0, 0, 30), sans.first().copied().unwrap_or(0));
 }

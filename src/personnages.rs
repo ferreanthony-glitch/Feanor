@@ -10,15 +10,16 @@
 //!   absent, il n'y a pas de personnage ; un fichier illisible ou d'une version plus récente n'empêche pas
 //!   d'ouvrir le projet et n'est jamais effacé, `project::write_sidecar`). Un projet partagé les écrit avec la
 //!   structure : les équipiers ont les mêmes personnages.
-//! - **Depuis le 2026-10-29 (§70 de `docs/INTERFACE.md`) tout est une « brosse perso »**, de trois types (`Type`) : *Personnage* (celles
+//! - **Depuis le 2026-10-29 (§70 de `docs/INTERFACE.md`) tout est une « brosse dédiée »**, de trois types (`Type`) : *Personnage* (celles
 //!   du projet, ci-dessus), *Classique* (l'ancienne « couleur neutre ») et *Décor* (les anciens pinceaux de décor, avec un pinceau et une
 //!   taille). Les Classiques et les Décors sont des réglages de l'*application* (`reglages.toml`, `Settings::brosses_classiques` et
 //!   `Settings::brosses_decor`, tous deux des listes de `Brosse`) : ils servent dans tous les projets, sans numéro ni place dans le projet.
 //! - Choisir une brosse règle la couleur du trait et allume l'aplat sous le trait : voir `personnagesui.rs` (la barre et le
-//!   panneau « Brosses perso ») et `persofond.rs` (comment l'aplat d'un trait prend la couleur de la brosse qui l'a dessiné).
+//!   panneau « Brosses dédiées ») et `persofond.rs` (comment l'aplat d'un trait prend la couleur de la brosse qui l'a dessiné).
 
 use serde::{Deserialize, Serialize};
 
+use crate::brush::BrushSettings;
 use crate::decor::Genre;
 use crate::document::Document;
 
@@ -34,7 +35,7 @@ pub const MAX_DECORS: usize = 8;
 pub const NOM_MAX: usize = 40;
 
 /// Un personnage du projet.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Personnage {
     /// Numéro unique dans le projet (comme les commentaires et les transitions).
     pub id: u64,
@@ -46,9 +47,47 @@ pub struct Personnage {
     /// Couleur du fond sous le trait ; rien : le personnage n'a pas de fond.
     #[serde(rename = "fond", default, skip_serializing_if = "Option::is_none")]
     pub fill: Option<[u8; 3]>,
+    /// Sa brosse spécifique (§107) ; rien : elle suit le pinceau de l'utilisateur. Absent d'un ancien fichier : elle suit.
+    #[serde(rename = "brosse", default, skip_serializing_if = "Option::is_none")]
+    pub brosse: Option<Specifique>,
 }
 
-/// Le type d'une brosse perso (Anthony, 2026-10-29 : « on peut créer des brosses personnage, décor ou classique »).
+/// Le réglage propre à une brosse dédiée (« Brosse spécifique », §107) : l'outil (pinceau ou crayon) et le réglage complet de ce pinceau
+/// (forme, taille, texture, opacité…, le même `BrushSettings` que tout pinceau ou toute brosse enregistrée). Il est **à elle** : choisie, la
+/// brosse le prend à la place du pinceau courant, lâchée elle le rend tel qu'il était, et rien ne passe de l'un à l'autre.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Specifique {
+    /// Vrai : l'outil Crayon ; faux : l'outil Pinceau.
+    #[serde(rename = "crayon", default)]
+    pub crayon: bool,
+    #[serde(rename = "reglage", default)]
+    pub settings: BrushSettings,
+    /// Le nom de la brosse enregistrée dont elle est partie (pour le dire à l'écran) ; rien : elle est partie du pinceau de l'utilisateur.
+    #[serde(rename = "nom", default, skip_serializing_if = "Option::is_none")]
+    pub nom: Option<String>,
+}
+
+impl Specifique {
+    /// Le réglage d'un des trois anciens pinceaux de décor (crayon, feutre, pinceau plein), à la taille `taille`.
+    pub fn depuis_genre(genre: Genre, taille: f32) -> Specifique {
+        Specifique { crayon: genre.est_crayon(), settings: genre.reglage(taille), nom: Some(genre.nom().to_string()) }
+    }
+
+    /// Ce qui dessine, en deux mots : le nom de la brosse dont elle est partie (« modifiée » si le réglage a bougé depuis, d'après la bibliothèque) ;
+    /// sans nom, celui de la brosse de la bibliothèque qui a exactement ces valeurs, sinon « Réglage propre ».
+    pub fn libelle(&self, presets: &[crate::brushtex::Preset]) -> String {
+        let brosses = || presets.iter().filter(|p| p.target == crate::brushtex::Target::Brush);
+        match &self.nom {
+            Some(n) => match brosses().find(|p| &p.name == n) {
+                Some(p) if p.settings != self.settings => format!("{n} (modifiée)"),
+                _ => n.clone(),
+            },
+            None => brosses().find(|p| p.settings == self.settings).map_or_else(|| "Réglage propre".to_string(), |p| p.name.clone()),
+        }
+    }
+}
+
+/// Le type d'une brosse dédiée (Anthony, 2026-10-29 : « on peut créer des brosses personnage, décor ou classique »).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     /// Dessine dans le calque de son personnage, créé au premier trait.
@@ -90,7 +129,7 @@ impl Type {
     }
 }
 
-/// Une brosse perso de **poste** (Classique ou Décor) : un réglage de l'application (`reglages.toml`), commun à tous les projets. Les
+/// Une brosse dédiée de **poste** (Classique ou Décor) : un réglage de l'application (`reglages.toml`), commun à tous les projets. Les
 /// brosses Personnage sont celles du projet (`Personnage`). Avant le 2026-10-29, les Classiques s'appelaient les « couleurs neutres ».
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Brosse {
@@ -100,10 +139,13 @@ pub struct Brosse {
     pub line: [u8; 3],
     #[serde(rename = "fond", default, skip_serializing_if = "Option::is_none")]
     pub fill: Option<[u8; 3]>,
-    /// Le pinceau d'une brosse Décor (crayon, feutre ou aplat) ; rien pour une Classique.
+    /// Sa brosse spécifique (§107) ; rien : elle suit le pinceau de l'utilisateur (le cas d'origine, pour les trois types).
+    #[serde(rename = "brosse", default, skip_serializing_if = "Option::is_none")]
+    pub specifique: Option<Specifique>,
+    /// **Ancien** pinceau d'une brosse Décor (avant le §107) : lu, jamais écrit (`reprendre_ancien_pinceau`).
     #[serde(rename = "pinceau", default, skip_serializing_if = "Option::is_none")]
     pub pinceau: Option<Genre>,
-    /// Sa taille, en pixels du dessin (Décor) ; 0 : celle d'origine du pinceau.
+    /// **Ancienne** taille d'une brosse Décor : lue, jamais écrite.
     #[serde(rename = "taille", default, skip_serializing_if = "taille_absente")]
     pub taille: f32,
 }
@@ -113,27 +155,29 @@ fn taille_absente(t: &f32) -> bool {
 }
 
 impl Brosse {
-    /// Une brosse Classique.
+    /// Une brosse Classique (elle suit le pinceau).
     pub fn classique(name: &str, line: [u8; 3], fill: Option<[u8; 3]>) -> Brosse {
-        Brosse { name: name.into(), line, fill, pinceau: None, taille: 0.0 }
+        Brosse { name: name.into(), line, fill, specifique: None, pinceau: None, taille: 0.0 }
     }
 
-    /// Une brosse Décor.
-    pub fn decor(name: &str, line: [u8; 3], fill: Option<[u8; 3]>, pinceau: Genre, taille: f32) -> Brosse {
-        Brosse { name: name.into(), line, fill, pinceau: Some(pinceau), taille }
+    /// Une brosse Décor (elle suit le pinceau).
+    pub fn decor(name: &str, line: [u8; 3], fill: Option<[u8; 3]>) -> Brosse {
+        Brosse::classique(name, line, fill)
     }
 
-    /// Le pinceau d'une brosse Décor (le feutre si le fichier n'en dit rien).
-    pub fn genre(&self) -> Genre {
-        self.pinceau.unwrap_or(Genre::Feutre)
-    }
-
-    /// La taille d'une brosse Décor, en pixels du dessin.
-    pub fn taille_decor(&self) -> f32 {
-        if self.taille.is_finite() && self.taille > 0.0 {
-            self.taille.clamp(0.5, 400.0)
-        } else {
-            self.genre().taille_defaut()
+    /// Ancien fichier de réglages (avant le §107) : une brosse Décor avait toujours un pinceau (crayon, feutre ou pinceau plein) et une
+    /// taille. Une brosse restée à ceux d'origine du pinceau (crayon 5, feutre 24, pinceau plein 90) **suit maintenant le pinceau** ; une
+    /// brosse que l'utilisateur avait réglée à la main devient une **brosse spécifique** qui garde ce pinceau et cette taille. Les anciens
+    /// champs sont vidés : le fichier ne s'écrit plus que dans la forme nouvelle, et rappeler cette fonction ne change plus rien.
+    pub fn reprendre_ancien_pinceau(&mut self) {
+        let (ancien, taille) = (self.pinceau.take(), std::mem::take(&mut self.taille));
+        let Some(genre) = ancien else { return };
+        if self.specifique.is_some() {
+            return;
+        }
+        let taille = if taille.is_finite() && taille > 0.0 { taille.clamp(0.5, 400.0) } else { genre.taille_defaut() };
+        if (taille - genre.taille_defaut()).abs() > 1e-3 {
+            self.specifique = Some(Specifique::depuis_genre(genre, taille));
         }
     }
 }
@@ -150,12 +194,12 @@ pub fn classiques_par_defaut() -> Vec<Brosse> {
 }
 
 /// Les brosses Décor d'un SHOT neuf (Anthony, 2026-10-29) : trois niveaux de gris, plus clairs que les Classiques, le trait toujours plus
-/// foncé que l'aplat. Chacune garde le pinceau et la taille d'un des trois anciens pinceaux de décor (crayon 5, feutre 24, aplat 90).
+/// foncé que l'aplat. **Depuis le §107, elles suivent toutes le pinceau de l'utilisateur** (avant : crayon 5 px, feutre 24 px, pinceau plein 90 px).
 pub fn decors_par_defaut() -> Vec<Brosse> {
     vec![
-        Brosse::decor("Décor 1", [0x6E, 0x6E, 0x6E], Some([0xC8, 0xC8, 0xC8]), Genre::Crayon, Genre::Crayon.taille_defaut()),
-        Brosse::decor("Décor 2", [0x8E, 0x8E, 0x8E], Some([0xD8, 0xD8, 0xD8]), Genre::Feutre, Genre::Feutre.taille_defaut()),
-        Brosse::decor("Décor 3", [0xAB, 0xAB, 0xAB], Some([0xE6, 0xE6, 0xE6]), Genre::Aplat, Genre::Aplat.taille_defaut()),
+        Brosse::decor("Décor 1", [0x6E, 0x6E, 0x6E], Some([0xC8, 0xC8, 0xC8])),
+        Brosse::decor("Décor 2", [0x8E, 0x8E, 0x8E], Some([0xD8, 0xD8, 0xD8])),
+        Brosse::decor("Décor 3", [0xAB, 0xAB, 0xAB], Some([0xE6, 0xE6, 0xE6])),
     ]
 }
 /// Les personnages d'un projet neuf (Anthony, 2026-10-28) : « Perso 1 », « Perso 2 », « Perso 3 », avec le trait et l'aplat qu'il avait
@@ -178,6 +222,11 @@ pub fn brosses_nettoyees(list: Vec<Brosse>, max: usize) -> Vec<Brosse> {
             n.name = nom_net(&n.name);
             if !n.taille.is_finite() || n.taille < 0.0 {
                 n.taille = 0.0;
+            }
+            // L'ancien pinceau d'un Décor devient « suit le pinceau » ou « brosse spécifique » (§107).
+            n.reprendre_ancien_pinceau();
+            if let Some(s) = n.specifique.as_mut() {
+                s.settings.size = if s.settings.size.is_finite() { s.settings.size.clamp(0.5, 400.0) } else { BrushSettings::default().size };
             }
             n
         })
@@ -302,6 +351,9 @@ pub(crate) fn parse(text: &str) -> Result<Vec<Personnage>, String> {
             seen.insert(p.id);
         }
         p.name = nom_net(&p.name);
+        if let Some(s) = p.brosse.as_mut() {
+            s.settings.size = if s.settings.size.is_finite() { s.settings.size.clamp(0.5, 400.0) } else { BrushSettings::default().size };
+        }
         out.push(p);
     }
     Ok(out)

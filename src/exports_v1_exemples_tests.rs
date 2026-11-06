@@ -88,7 +88,7 @@ fn ecrire_des_exemples_de_chaque_export() {
         let dir = sortie.join(nom);
         std::fs::create_dir_all(&dir).unwrap();
         let items = exportstills::items(&doc, &plans, per);
-        let s = StillsSettings { per, format, transparent, size: VideoSize::Hd720, quality: 92 };
+        let s = StillsSettings { per, format, transparent, size: VideoSize::Hd720, quality: 92, par_calque: false };
         let mut job = exportstills::job(&dir, &items, doc.frame, &s, false);
         court(&mut job, &doc);
         dire(nom, &dir, &job.outcome);

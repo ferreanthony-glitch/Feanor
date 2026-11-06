@@ -60,6 +60,28 @@ impl App {
         self.status = format!("Vignettes : {} {}.", champ.nom().to_lowercase(), if on { "montré à côté des cases" } else { "caché" });
     }
 
+    /// Un texte vient d'être saisi dans le champ `champ` (fiche du plan, projet qui s'ouvre) : sa ligne est cochée si elle ne l'était pas, pour
+    /// que le texte se voie sous sa case (partie 106). Décocher ensuite la cache : rien ne la recoche avant une nouvelle saisie.
+    pub(crate) fn vignettes_montrer_champ(&mut self, champ: Champ) {
+        if self.layout.board_textes.montre(champ) {
+            return;
+        }
+        self.layout.board_textes.regler(champ, true);
+        self.settings_a_ecrire = true;
+        self.status = format!("Vignettes : la ligne « {} » est cochée, pour montrer le texte sous les cases (panneau Planche pour la décocher).", champ.nom());
+    }
+
+    /// À l'ouverture d'un projet : les lignes de texte qui ont un texte quelque part dans le film (plan ou image) sont cochées si elles ne
+    /// l'étaient pas. Aucune n'est décochée, et un projet sans texte ne change rien au choix fait.
+    pub(crate) fn vignettes_montrer_les_textes_saisis(&mut self) {
+        let remplis = crate::boardsens::champs_remplis(&self.doc);
+        for champ in Champ::TOUS {
+            if remplis.montre(champ) {
+                self.vignettes_montrer_champ(champ);
+            }
+        }
+    }
+
     /// Le bloc « Calques » du panneau : les calques d'annotation de la planche (le dernier est au-dessus), puis « Dessin » (le dessin de la
     /// case) tout en bas. Un clic vise un calque : le stylo, la gomme et le lasso d'annotation y agissent ; « Dessin » range ces outils, les
     /// outils de dessin agissent de nouveau sur la case. L'œil montre ou cache le calque ; double-clic : renommer ; clic droit : monter,

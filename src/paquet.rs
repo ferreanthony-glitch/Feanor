@@ -58,6 +58,8 @@ pub struct Reglages {
     pub liste_json: bool,
     /// Le journal des différences entre deux envois (PDF et page HTML, `journal.rs`) : décoché d'origine.
     pub journal: bool,
+    /// Le color script (colorscript.rs) : l'image d'ensemble en PNG et les couleurs de chaque plan en CSV. Décoché d'origine.
+    pub color_script: bool,
     /// Les vidéos par plan en ProRes (sinon H.264, plus léger).
     pub prores: bool,
     pub modele_chemin: String,
@@ -70,13 +72,13 @@ pub struct Reglages {
 
 impl Default for Reglages {
     fn default() -> Self {
-        Reglages { videos: true, vignettes: true, pdf: true, animatique: true, liste_csv: true, liste_json: false, journal: false, prores: false, modele_chemin: CHEMIN_DEFAUT.into(), remplacer: false, film_entier: true, dossier: None }
+        Reglages { videos: true, vignettes: true, pdf: true, animatique: true, liste_csv: true, liste_json: false, journal: false, color_script: false, prores: false, modele_chemin: CHEMIN_DEFAUT.into(), remplacer: false, film_entier: true, dossier: None }
     }
 }
 
 impl Reglages {
     pub fn vide(&self) -> bool {
-        !(self.videos || self.vignettes || self.pdf || self.animatique || self.liste_csv || self.liste_json || self.journal)
+        !(self.videos || self.vignettes || self.pdf || self.animatique || self.liste_csv || self.liste_json || self.journal || self.color_script)
     }
 
     pub fn a_besoin_de_ffmpeg(&self) -> bool {
@@ -102,6 +104,7 @@ pub enum Sorte {
     Animatique,
     Liste,
     Journal,
+    ColorScript,
 }
 
 /// Un fichier produit dans le dossier de travail, et le nom qu'il aura.
@@ -434,6 +437,8 @@ struct Preparation {
     base: String,
     /// Le journal des différences, préparé par l'appelant (`PaquetJob::avec_journal`).
     journal: Option<crate::journaljob::Demande>,
+    /// Le color script : ses images à écrire (une), ce que dit le PDF, le nom de base des fichiers.
+    colorscript: Option<(Vec<crate::colorscript::Spec>, crate::colorscript::Meta)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -443,6 +448,7 @@ enum Etape {
     Pdf,
     Animatique,
     Listes,
+    ColorScript,
     Journal,
 }
 
@@ -454,6 +460,7 @@ impl Etape {
             Etape::Pdf => "PDF du storyboard",
             Etape::Animatique => "animatique",
             Etape::Listes => "liste des plans",
+            Etape::ColorScript => "color script",
             Etape::Journal => "journal des différences",
         }
     }
@@ -518,7 +525,7 @@ impl PaquetJob {
             t => t.to_string(),
         };
         let mut etapes = VecDeque::new();
-        let mut prep = Preparation { plan_videos: None, vignettes: Vec::new(), frame: doc.frame, pdf: None, pdf_layout: Default::default(), animatique: None, fps: doc.fps, listes: Vec::new(), base: base.clone(), journal: None };
+        let mut prep = Preparation { plan_videos: None, vignettes: Vec::new(), frame: doc.frame, pdf: None, pdf_layout: Default::default(), animatique: None, fps: doc.fps, listes: Vec::new(), base: base.clone(), journal: None, colorscript: None };
         if r.videos {
             let (ff, enc) = ffmpeg.as_ref().ok_or("ffmpeg manquant")?;
             let _ = ff;
@@ -557,6 +564,12 @@ impl PaquetJob {
                 prep.listes.push((format!("{base}_plans.json"), listeplans::json(doc, &lignes, lr.profil, lr.depart)));
             }
             etapes.push_back(Etape::Listes);
+        }
+        if r.color_script {
+            // (L'image d'ensemble, ses numéros de plan et sa bande de couleurs, et le CSV des couleurs de chaque plan.)
+            let opt = crate::colorscript::Options { numeros: true, bande: true, donnees: crate::colorscript::Donnees::Csv, ..Default::default() };
+            prep.colorscript = Some((crate::colorscript::specs(doc, &plans, &opt), crate::colorscript::Meta::pour(doc, &opt)));
+            etapes.push_back(Etape::ColorScript);
         }
         if r.journal {
             etapes.push_back(Etape::Journal);
@@ -818,6 +831,14 @@ impl PaquetJob {
                 }
                 Ok(None)
             }
+            Etape::ColorScript => {
+                let (specs, meta) = self.prep.colorscript.take().ok_or("color script déjà fait")?;
+                let dir = self.staging.join("colorscript");
+                fs::create_dir_all(&dir).map_err(|e| format!("{} : {e}", dir.display()))?;
+                let (png, csv) = (dir.join(format!("{}_colorscript.png", self.prep.base)), dir.join(format!("{}_colorscript.csv", self.prep.base)));
+                let j = crate::colorscript::job(self.prep.frame, specs, meta, vec![png], Some(csv), String::new())?;
+                Ok(Some(Courant::Export(self.avec_cliche(j), e)))
+            }
             Etape::Journal => {
                 let mut demande = self.prep.journal.take().ok_or("Le journal des différences n'a pas pu être préparé (il faut au moins un envoi).")?;
                 let dir = self.staging.join("journal");
@@ -852,6 +873,12 @@ impl PaquetJob {
             (Courant::Export(..), Etape::Pdf) => {
                 let nom = format!("{}_storyboard.pdf", self.prep.base);
                 self.prevus.push(Prevu { sorte: Sorte::Pdf, panel: None, source: self.staging.join("pdf").join(&nom), nom });
+            }
+            (Courant::Export(..), Etape::ColorScript) => {
+                for ext in ["png", "csv"] {
+                    let nom = format!("{}_colorscript.{ext}", self.prep.base);
+                    self.prevus.push(Prevu { sorte: Sorte::ColorScript, panel: None, source: self.staging.join("colorscript").join(&nom), nom });
+                }
             }
             (Courant::Export(..), Etape::Animatique) => {
                 let nom = format!("{}_animatique.mp4", self.prep.base);

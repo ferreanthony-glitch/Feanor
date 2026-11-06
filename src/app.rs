@@ -887,6 +887,10 @@ pub struct App {
     pub(crate) fusion_noms: Option<crate::fusionnoms::FusionNoms>,
     /// La fenêtre de la corbeille du projet (`corbeilleui.rs`).
     pub(crate) corbeille_ui: Option<crate::corbeilleui::Fenetre>,
+    /// La question posée avant de couper un plan qui a des versions rangées (`coupeversions.rs`), et sa réponse d'avance (les essais et
+    /// le hasard : sans elle, chaque coupe attendrait un clic ; `None` : la fenêtre se montre, comme pour l'utilisateur).
+    pub(crate) coupe_versions: Option<crate::coupeversions::CoupeEnAttente>,
+    pub(crate) coupe_versions_auto: Option<crate::variantes::Cote>,
     /// Réponse d'avance à cette question (les essais et le hasard : sans elle, chaque jonction attendrait un clic).
     /// `None` : la fenêtre se montre, comme pour l'utilisateur.
     pub(crate) fusion_noms_auto: Option<crate::fusionnoms::Reponse>,
@@ -1393,6 +1397,9 @@ impl App {
             duree_plans: None,
             fusion_noms: None,
             corbeille_ui: None,
+            coupe_versions: None,
+            // (Les essais coupent d'un geste, les versions avec la première partie ; ceux de `coupeversions` retirent cette réponse.)
+            coupe_versions_auto: if cfg!(test) { Some(crate::variantes::Cote::Premiere) } else { None },
             // (Les essais répondent d'avance « Fusionner » : leurs jonctions se font d'un seul geste, comme avant la question.)
             fusion_noms_auto: if cfg!(test) { Some(crate::fusionnoms::Reponse::Fusionner) } else { None },
             trim_menu: None,
@@ -1615,6 +1622,7 @@ impl App {
             || self.kitsu.rendering()
             || self.vignettes.annot.confirmer
             || self.collage_occupe()
+            || self.coupe_versions.is_some()
     }
 
     /// Les réglages de la brosse de l'outil courant. Le Mélangeur prend ceux du pinceau, en « Lisser »
@@ -1915,6 +1923,11 @@ impl App {
         self.poser_la_creation();
         self.end_stroke();
         self.playing = false;
+        // Les Vignettes s'ouvrent sans plan choisi.
+        if espace == Espace::Vignettes {
+            self.vignettes.libre = true;
+            self.vignettes.camera_choisie = None;
+        }
         self.aller_a_l_espace(espace);
         // Le lecteur de l'espace Montage montre le film tel que la caméra le filme ; en sortir remet
         // la vue du plateau, si c'est lui qui l'avait changée (un réglage de vue : rien dans le projet).
@@ -2415,10 +2428,9 @@ impl App {
                     None => None,
                 };
                 self.renderer.invalidate_tiles(&dirty);
-                if self.perso.actif.is_some() {
-                    trait_de_personnage = crate::personnagesui::tuiles_de(edit.as_ref()).map(|t| (cel, t));
-                    trait_de_pastille = true;
-                }
+                // (Sans pastille, le trait suit tout de même la teinte de la clé de son dessin, s'il en a une : `persofond::teinte_de_la_cle`.)
+                trait_de_personnage = crate::personnagesui::tuiles_de(edit.as_ref()).map(|t| (cel, t));
+                trait_de_pastille = self.perso.actif.is_some();
                 match self.vstroke.take() {
                     Some(vs) => {
                         // Les pixels d'avant l'aperçu servent à poser le trait définitif sans tout redessiner.
@@ -2944,6 +2956,8 @@ impl App {
             return;
         }
         self.end_stroke();
+        // (Une copie du dessin part avec le fond que son dernier trait vient de gagner : `attendre_fonds_de_traits`.)
+        self.attendre_fonds_de_traits();
         self.playing = false;
         let (li, f) = (self.cur_layer, self.cur_frame);
         let current = self.cel_here();
@@ -3108,6 +3122,7 @@ impl App {
             return;
         }
         self.end_stroke();
+        self.attendre_fonds_de_traits();
         let snap = self.snapshot();
         self.cur_layer = crate::layerops::duplicate_layer(&mut self.doc, self.cur_panel, self.cur_layer);
         self.layer_sel.clear();
@@ -3190,6 +3205,8 @@ impl App {
     /// aurait perdu son trait, et ses images ne suivaient plus rien) : c'est le trait qui est copié, avec tous ses calques de couleur.
     /// Un calque dont le dossier est aussi choisi part avec le dossier.
     pub(crate) fn copy_layer(&mut self) {
+        self.end_stroke();
+        self.attendre_fonds_de_traits();
         let choisis = self.chosen_layers();
         let mut tops: Vec<usize> = choisis.iter().map(|&li| crate::calquecouleur::trait_de(self.layers(), li).unwrap_or(li)).collect();
         if choisis.len() > 1 {
@@ -4120,8 +4137,21 @@ impl App {
             "vignettes.texte_notes" => self.vignettes_basculer_texte(crate::boardsens::Champ::Notes),
             "fichier.exporter_planche" => self.open_planche(),
             "fichier.exporter_colorscript" => self.open_colorscript(),
-            "fichier.exporter_images_par_plan" => self.open_export(crate::export::Format::Stills),
+            "fichier.exporter_images_par_plan" => {
+                self.open_export(crate::export::Format::Stills);
+                // (Cette entrée est « par plan » : un choix « par clé » retenu d'une séance à l'autre ne s'y invite pas.)
+                if let Some(d) = self.export_dialog.as_mut().filter(|d| d.stills.per == crate::exportstills::StillsPer::Cle) {
+                    d.stills.per = crate::exportstills::StillsPer::Plan;
+                }
+            }
+            "fichier.exporter_images_cles" => {
+                self.open_export(crate::export::Format::Stills);
+                if let Some(d) = self.export_dialog.as_mut() {
+                    d.stills.per = crate::exportstills::StillsPer::Cle;
+                }
+            }
             "fichier.exporter_son_par_piste" => self.open_export(crate::export::Format::Stems),
+            "fichier.exporter_son_par_plan" => self.open_export(crate::export::Format::SonPlans),
             "fichier.exporter_calques" => self.open_export(crate::export::Format::Layers),
             "fichier.exporter_camera" => self.open_export(crate::export::Format::Camera),
             "edition.annuler" => self.undo(),
@@ -4836,6 +4866,11 @@ impl App {
             self.persp = None;
             self.envelope = None;
             self.end_stroke();
+            // Quitter l'outil Caméra des Vignettes pour un autre : plus de caméra choisie, et plus de plan choisi (dessiner est libre).
+            if self.tool == Tool::Camera && tool != Tool::Camera {
+                self.vignettes.camera_choisie = None;
+                self.vignettes.libre = true;
+            }
             self.tool = tool;
             if tool.is_shape() {
                 self.shape.last = tool;
@@ -5307,6 +5342,8 @@ impl App {
             self.comparer_fenetre(ctx);
             self.purge_versions_fenetre(ctx);
             self.variantes_fenetres(ctx);
+            // Le nom d'une séquence qu'on renomme depuis le montage ou la liste du panneau Planche (`planchesequencesui.rs`).
+            self.sequence_fenetre(ctx);
             // Clic droit dans le dessin : les réglages de l'outil sous le curseur, par-dessus tout (`reglagesdroit.rs`).
             self.reglages_droit_fenetre(ctx);
         }
@@ -5328,6 +5365,7 @@ impl App {
         self.personnages_fenetre(ctx);
         self.scrub_audio();
         self.drop_stale_drags(ctx.input(|i| i.pointer.any_down()));
+        self.dire_le_refus_des_versions();
         self.suivre_sorte_pinceau();
         self.watch_plan_length();
         if self.thumbs.pending {

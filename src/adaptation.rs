@@ -751,6 +751,8 @@ pub fn adapte_cles_copiees(clip: &KeyClip, ad: &Adaptation, progression: &Progre
             kind: k.kind,
             name: k.name.clone(),
             rank: k.rank,
+            // (Les dessins de couleur ne passent pas d'une feuille à l'autre : voir `montagekeys.rs`, partie 103.)
+            couleurs: Vec::new(),
         })
         .collect();
     KeyClip { keys, origine: ad.dst }

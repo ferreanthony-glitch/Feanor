@@ -83,8 +83,9 @@ fn restoring_elsewhere_when_the_place_is_gone() {
     let mut app = appli("ailleurs");
     let ids = ids_plans(&app);
     // Le plan 2 part, puis le plan qui le précédait : il n'a plus de « derrière qui revenir ».
+    // (Le plan d'après aussi : sans plan devant lequel ou derrière lequel revenir, il va à la fin de sa séquence.)
     app.delete_panels(&[ids[1]]);
-    app.delete_panels(&[ids[0]]);
+    app.delete_panels(&[ids[0], ids[2]]);
     let e = app.doc.corbeille.entrees.iter().find(|e| e.plan == ids[1]).unwrap().id;
     app.corbeille_restaurer(e);
     assert_eq!(app.doc.panels.last().unwrap().id, ids[1], "à la fin de sa séquence");
@@ -283,4 +284,110 @@ fn a_bin_file_this_version_cannot_read_is_kept_and_the_project_still_opens() {
     assert!(l.doc.corbeille.is_empty());
     assert!(l.warnings.iter().any(|w| w.contains("corbeille")), "{:?}", l.warnings);
     assert_eq!(std::fs::read_to_string(&f).unwrap(), texte, "le fichier reste là, intact");
+}
+
+fn empreintes_du_plan(doc: &Document, p: &crate::document::Panel) -> Vec<Vec<Option<u64>>> {
+    p.layers.iter().map(|l| l.frames.iter().map(|f| f.as_ref().and_then(|id| doc.cels.get(id)).map(|c| crate::empreinte::Donnees::de(c).empreinte())).collect()).collect()
+}
+
+#[test]
+fn a_deleted_plan_takes_its_stored_versions_to_the_bin_and_they_come_back_with_it() {
+    let d = dossier("versions");
+    let m = manifeste(&d);
+    let mut app = appli("versions");
+    let id = app.doc.panels[1].id;
+    app.doc.nouvelle_version(1, 1_000).expect("une nouvelle version");
+    assert_eq!(app.doc.nombre_de_versions(id), 2);
+    let avant: Vec<_> = app.doc.versions[&id].autres.iter().map(|r| (r.numero, empreintes_du_plan(&app.doc, &r.panel))).collect();
+    let actuelle = app.doc.versions[&id].actuelle;
+    let film = film_en_empreintes(&app.doc);
+    app.delete_panels(&[id]);
+    assert!(!app.doc.versions.contains_key(&id), "les versions partent avec le plan");
+    assert!(app.doc.corbeille.entrees[0].cels.len() > 5, "les dessins des versions sont gardés avec le plan");
+    // Restaurer dans la séance.
+    let e = app.doc.corbeille.entrees[0].id;
+    app.corbeille_restaurer(e);
+    assert_eq!(app.doc.nombre_de_versions(id), 2, "les versions reviennent avec lui");
+    assert_eq!(film_en_empreintes(&app.doc), film);
+    // Puis enregistrer, rouvrir, restaurer : les versions se relisent du dossier.
+    annuler(&mut app);
+    enregistrer(&app.doc, &m);
+    let loaded = project::load(&m).unwrap();
+    let mut app2 = appli("versions-rouvert");
+    app2.doc = loaded.doc;
+    app2.path = Some(m.clone());
+    let e = app2.doc.corbeille.entrees[0].id;
+    app2.corbeille_restaurer(e);
+    let v = &app2.doc.versions[&id];
+    assert_eq!(v.actuelle, actuelle);
+    let apres: Vec<_> = v.autres.iter().map(|r| (r.numero, empreintes_du_plan(&app2.doc, &r.panel))).collect();
+    assert_eq!(apres, avant, "la version rangée est la même, dessin par dessin");
+    assert_eq!(film_en_empreintes(&app2.doc), film);
+}
+
+#[test]
+fn a_key_paste_that_covers_drawings_sends_them_to_the_bin() {
+    use crate::montagekeys::KeyRef;
+    let mut app = appli("coller");
+    let (panel, layer) = (app.doc.panels[0].id, app.doc.panels[0].layers[0].id);
+    let avant = film_en_empreintes(&app.doc);
+    app.key_sel = vec![KeyRef { panel, layer, start: 0 }];
+    app.copy_keys();
+    app.cur_frame = 3;
+    app.cur_layer = 0;
+    let n = app.history.undo_len();
+    app.paste_keys_at_head();
+    assert_eq!(app.history.undo_len(), n + 1, "une seule étape");
+    assert_eq!(app.doc.corbeille.len(), 1, "le dessin recouvert est à la corbeille");
+    assert!(app.status.contains("corbeille"), "{}", app.status);
+    annuler(&mut app);
+    assert_eq!(film_en_empreintes(&app.doc), avant);
+    assert_eq!(app.doc.corbeille.len(), 0, "annuler : pas de double");
+}
+
+#[test]
+fn the_rescue_copy_and_the_recovery_after_a_crash_keep_the_bin() {
+    // Un projet enregistré dont la corbeille n'est pas en mémoire (plan supprimé avant), puis un second plan supprimé dans la séance :
+    // la copie de secours porte les deux, dessins compris ; après un plantage (dossier de séance resté), la copie s'ouvre avec les deux.
+    let d = dossier("secours");
+    let racine = dossier("secours-racine");
+    let m = manifeste(&d);
+    let mut app = appli("secours");
+    let avant = film_en_empreintes(&app.doc);
+    let ids = ids_plans(&app);
+    app.delete_panels(&[ids[1]]);
+    enregistrer(&app.doc, &m);
+    let loaded = project::load(&m).unwrap();
+    let mut app2 = appli("secours-ouvert");
+    app2.doc = loaded.doc;
+    app2.path = Some(m.clone());
+    let ecrit = loaded.written;
+    app2.delete_panels(&[ids[2]]);
+    assert_eq!(app2.doc.corbeille.len(), 2);
+    let rec = crate::recovery::Recovery::start(&racine).expect("séance de secours");
+    let snap = crate::recovery::Snapshot { doc: &app2.doc, serial: 1, modified: true, title: "Essai".into(), project: Some(m.clone()), project_written: &ecrit };
+    rec.copie_finale(snap);
+    // (Plantage : le dossier de la séance reste, son verrou est rendu.)
+    let orphelins = crate::recovery::orphans(&racine, None);
+    assert_eq!(orphelins.len(), 1, "{orphelins:?}");
+    let copie = &orphelins[0].manifest;
+    let l = project::load(copie).expect("la copie de secours s'ouvre");
+    assert_eq!(l.doc.corbeille.len(), 2, "la corbeille est dans la copie");
+    assert_eq!(l.doc.panels.len(), 2);
+    let dessins = copie.parent().unwrap().join("dessins");
+    for id in l.doc.corbeille.cels() {
+        assert!(dessins.join(format!("{id}.png")).is_file() || dessins.join(format!("{id}.json")).is_file(), "dessin {id} dans la copie");
+    }
+    let mut app3 = appli("secours-recupere");
+    app3.doc = l.doc;
+    app3.path = Some(copie.clone());
+    while let Some(e) = app3.doc.corbeille.entrees.first().map(|e| e.id) {
+        app3.corbeille_restaurer(e);
+    }
+    assert_eq!(app3.doc.panels.len(), 4);
+    let mut a: Vec<_> = film_en_empreintes(&app3.doc);
+    let mut b: Vec<_> = avant;
+    a.sort();
+    b.sort();
+    assert_eq!(a, b, "les quatre plans, avec leurs dessins, après la récupération");
 }

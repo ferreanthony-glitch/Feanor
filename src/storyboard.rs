@@ -112,6 +112,8 @@ impl App {
             return false;
         }
         self.end_stroke();
+        // (Couper, réunir, dupliquer, ranger une version : les dessins copiés partent avec le fond de leur dernier trait.)
+        self.attendre_fonds_de_traits();
         if poser {
             self.poser_les_selections();
         }
@@ -273,6 +275,12 @@ impl App {
             return;
         }
         let at = self.cur_frame;
+        // Un plan qui a des versions rangées : la question « avec quelle partie ? » d'abord (`coupeversions.rs`).
+        let plan = self.panel().id;
+        if self.coupe_versions_necessaire(plan, at) {
+            self.coupe_versions_ouvrir(plan, at, crate::coupeversions::Refaire::Courant);
+            return;
+        }
         if self.structure_op_dessins(|d, i| d.split_plan(i, at)) {
             self.status = format!("Plan coupé : la suite est le {}.", panel_title(&self.doc, self.cur_panel).to_lowercase());
         } else {
@@ -1522,6 +1530,12 @@ impl App {
                     // Sur une transition : le double-clic n'entre pas dans le plan dessous.
                 } else if let Some(i) = in_blocks(p).then(|| panel_at(p.x)).flatten() {
                     self.enter_animation(i);
+                } else if let Some(&(_, start)) = runs.iter().find(|(rect, _)| rect.contains(p)) {
+                    // Double-clic sur la barre d'une séquence : son nom s'écrit (une petite fenêtre : `planchesequencesui.rs`).
+                    self.board_sel.clear();
+                    self.select_panel(start);
+                    let seq = self.doc.sequence_of(self.cur_panel);
+                    self.titre_ouvrir_fenetre(seq);
                 } else if self.montage_fx_key_at(p, r.top(), &blocks, ppf, rows).is_some() {
                     // Sur un losange de clé d'effet : le double-clic ne pose pas de clé de dessin.
                 } else if self.montage_pos_key_at(p, r.top(), &blocks, ppf, rows).is_some() {
@@ -1710,6 +1724,12 @@ impl App {
                 MenuTarget::PosKey => self.pos_key_menu(ui),
                 MenuTarget::OpKey => self.op_key_menu(ui),
                 MenuTarget::Sequence => {
+                    if ui.button("Renommer la séquence…").clicked() {
+                        ui.close_menu();
+                        let seq = self.doc.sequence_of(self.cur_panel);
+                        self.titre_ouvrir_fenetre(seq);
+                    }
+                    ui.separator();
                     self.action_item(ui, "Nouvelle séquence", "sequence.nouvelle");
                     self.action_item(ui, "Nouveau plan", "panneau.nouveau");
                     self.action_item(ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
@@ -1881,12 +1901,18 @@ impl App {
                 None => [&p.action, &p.dialogue, &p.notes][field].clone(),
             };
             ui.label(label);
+            let etait_vide = text.trim().is_empty();
             let resp = ui.add(
                 egui::TextEdit::multiline(&mut text)
                     .desired_rows(rows)
                     .desired_width(f32::INFINITY),
             );
             if self.edited(&resp) {
+                // Un premier texte dans ce champ : sa ligne se coche sous les cases des Vignettes, pour qu'il s'y voie (partie 106).
+                if etait_vide && !text.trim().is_empty() {
+                    use crate::boardsens::Champ;
+                    self.vignettes_montrer_champ([Champ::Action, Champ::Dialogue, Champ::Notes][field]);
+                }
                 let p = &mut self.doc.panels[i];
                 match p.marks.iter_mut().find(|m| Some(m.id) == mark) {
                     Some(m) => *[&mut m.action, &mut m.dialogue, &mut m.notes][field] = text,

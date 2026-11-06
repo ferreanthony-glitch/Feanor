@@ -2937,6 +2937,16 @@ touches = []
 source = "FEANOR (sans touche)"
 
 [[raccourci]]
+action = "references.crayon"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "references.gomme"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
 action = "references.detacher"
 touches = []
 source = "FEANOR (sans touche)"
@@ -3420,6 +3430,16 @@ source = "FEANOR (sans touche)"
 
 [[raccourci]]
 action = "fichier.exporter_son_par_piste"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "fichier.exporter_images_cles"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "fichier.exporter_son_par_plan"
 touches = []
 source = "FEANOR (sans touche)"
 

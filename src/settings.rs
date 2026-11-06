@@ -217,11 +217,11 @@ pub struct Settings {
     /// prise sans nouvelles, la prise automatique, les notifications.
     #[serde(default, rename = "equipe")]
     pub equipe: crate::equipe::ReglageEquipe,
-    /// Les brosses perso **Classique** de la barre (`personnages.rs`, `personnagesui.rs`) : un réglage de l'application, commun à tous les
+    /// Les brosses dédiées **Classique** de la barre (`personnages.rs`, `personnagesui.rs`) : un réglage de l'application, commun à tous les
     /// projets (les brosses Personnage, elles, sont celles du projet). Avant le 2026-10-29 : les « couleurs neutres » (même clé du fichier).
     #[serde(default = "crate::personnages::classiques_par_defaut", rename = "couleurs_neutres")]
     pub brosses_classiques: Vec<crate::personnages::Brosse>,
-    /// Les brosses perso **Décor** de la barre : un réglage de l'application. Remplacent les trois pinceaux de décor (crayon, feutre gris,
+    /// Les brosses dédiées **Décor** de la barre : un réglage de l'application. Remplacent les trois pinceaux de décor (crayon, feutre gris,
     /// aplat) de Préférences > Vignettes. Absentes d'un ancien fichier : les trois d'origine (avec les anciennes tailles, `Settings::load`).
     #[serde(default = "crate::personnages::decors_par_defaut", rename = "brosses_decor")]
     pub brosses_decor: Vec<crate::personnages::Brosse>,
@@ -471,14 +471,18 @@ impl Settings {
         s
     }
 
-    /// Brosses perso Décor (2026-10-29) : les anciens réglages (Préférences > Vignettes, tailles du crayon, du feutre et de l'aplat du décor) sont
+    /// Brosses dédiées Décor (2026-10-29) : les anciens réglages (Préférences > Vignettes, tailles du crayon, du feutre et de l'aplat du décor) sont
     /// repris par les trois brosses Décor d'origine, tant qu'elles n'ont pas été touchées ; la couleur unique du décor, elle, est abandonnée
     /// (chaque brosse Décor a la sienne). Les anciennes clés sont lues, plus jamais écrites.
     pub fn reprendre_les_anciens_pinceaux_de_decor(&mut self) {
         let d = crate::vignettesreglages::ReglagesVignettes::default();
+        // (§107 : les brosses Décor suivent maintenant le pinceau ; une taille d'avant qui n'était pas celle d'origine fait une brosse
+        // spécifique, comme une brosse réglée à la main : `Brosse::reprendre_ancien_pinceau`.)
         if self.brosses_decor == crate::personnages::decors_par_defaut() && self.vignettes.tailles_decor != d.tailles_decor {
-            for (b, t) in self.brosses_decor.iter_mut().zip(self.vignettes.tailles_decor) {
-                b.taille = t;
+            for ((b, t), genre) in self.brosses_decor.iter_mut().zip(self.vignettes.tailles_decor).zip(crate::decor::Genre::ALL) {
+                if t.is_finite() && (t - genre.taille_defaut()).abs() > 1e-3 {
+                    b.specifique = Some(crate::personnages::Specifique::depuis_genre(genre, t));
+                }
             }
         }
         self.vignettes.tailles_decor = d.tailles_decor;
