@@ -169,6 +169,8 @@ impl App {
         self.attendre_aplat_multi();
         // (Et la couleur d'aplat d'un personnage sur ses calques, `aplatperso.rs`.)
         self.attendre_aplat_perso();
+        // (Et le fond que le dernier trait d'un personnage vient de gagner, `persofond.rs` : le fichier doit l'avoir.)
+        self.attendre_fonds_de_traits();
         // Film partagé enregistré à sa place : seulement ce qu'on tient (`projet_partage.rs`). Ailleurs (« Enregistrer sous »), c'est
         // une copie à plat, comme un projet ordinaire.
         let partage_ici = self.partage.is_some() && self.path.as_ref() == Some(&manifest);

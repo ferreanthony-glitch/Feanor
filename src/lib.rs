@@ -881,6 +881,8 @@ mod personnages;
 mod personnages_tests;
 #[cfg(test)]
 mod aplattrous_tests;
+#[cfg(test)]
+mod aplatfiable_tests;
 mod personnagesui;
 mod persp;
 #[cfg(test)]

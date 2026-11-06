@@ -156,6 +156,15 @@ pub struct History {
     /// Le nom de chaque étape, à côté de `undo` et `redo` (panneau Historique, `historyui.rs`).
     undo_names: Vec<String>,
     redo_names: Vec<String>,
+    /// Le numéro propre de chaque étape (à côté de undo_names et redo_names) : il ne change ni en annulant, ni en rétablissant,
+    /// ni en prolongeant l'étape. Un calcul qui arrive tard (le fond d'un trait de personnage, persofond.rs) retrouve ainsi l'étape
+    /// de son trait, où qu'elle soit.
+    undo_ids: Vec<u64>,
+    redo_ids: Vec<u64>,
+    next_id: u64,
+    /// (ancien numéro, numéro de l'étape qui l'a regroupé) : `merge_last` fait une seule étape de plusieurs, et le numéro du trait
+    /// qu'attend un calcul tardif doit encore la retrouver.
+    regroupes: Vec<(u64, u64)>,
     /// Le nom des étapes enregistrées maintenant : la commande lancée, sinon le panneau ou l'outil
     /// en cours (posé par l'application) ; à défaut, la sorte de modification.
     pub context: Option<String>,
@@ -179,12 +188,16 @@ impl History {
         crate::plantage::noter_action(&name);
         self.undo.push(edit);
         self.undo_names.push(name);
+        self.next_id += 1;
+        self.undo_ids.push(self.next_id);
         self.redo.clear();
         self.redo_names.clear();
+        self.redo_ids.clear();
         self.serial += 1;
         if self.undo.len() > LIMIT {
             self.undo.remove(0);
             self.undo_names.remove(0);
+            self.undo_ids.remove(0);
         }
     }
 
@@ -204,7 +217,60 @@ impl History {
         self.undo.push(Edit::Group(edits));
         self.redo.clear();
         self.redo_names.clear();
+        self.redo_ids.clear();
         self.serial += 1;
+    }
+
+    /// Le numéro de la dernière étape à annuler (0 : aucune).
+    pub fn last_id(&self) -> u64 {
+        self.undo_ids.last().copied().unwrap_or(0)
+    }
+
+    /// Ajoute edit à l'étape numéro id, où qu'elle soit : parmi celles à annuler, ou parmi celles à rétablir (l'edit est alors
+    /// celui qui rétablit : l'état d'après). Les autres étapes, le numéro de l'historique et ce qu'il y a à rétablir ne bougent pas.
+    /// Rend faux si l'étape n'existe plus (trop ancienne, regroupée).
+    pub fn extend_step(&mut self, id: u64, edit: Edit) -> bool {
+        let id = self.numero_actuel(id);
+        let (steps, ids) = if let Some(i) = self.undo_ids.iter().position(|&x| x == id) {
+            (&mut self.undo, i)
+        } else if let Some(i) = self.redo_ids.iter().position(|&x| x == id) {
+            (&mut self.redo, i)
+        } else {
+            return false;
+        };
+        let last = std::mem::replace(&mut steps[ids], Edit::Group(Vec::new()));
+        let mut edits = match last {
+            Edit::Group(edits) => edits,
+            single => vec![single],
+        };
+        edits.push(edit);
+        steps[ids] = Edit::Group(edits);
+        // (Le projet a changé : le numéro de l'historique avance, comme pour toute modification.)
+        self.serial += 1;
+        true
+    }
+
+    /// Le numéro que porte maintenant l'étape qui avait le numéro `id` (regroupée avec d'autres par `merge_last`).
+    fn numero_actuel(&self, mut id: u64) -> u64 {
+        for _ in 0..8 {
+            match self.regroupes.iter().find(|(ancien, _)| *ancien == id) {
+                Some((_, nouveau)) => id = *nouveau,
+                None => break,
+            }
+        }
+        id
+    }
+
+    /// L'étape numéro id est-elle encore à annuler (Some(true)), ou à rétablir (Some(false)) ? None : elle n'existe plus.
+    pub fn etat_de_l_etape(&self, id: u64) -> Option<bool> {
+        let id = self.numero_actuel(id);
+        if self.undo_ids.contains(&id) {
+            Some(true)
+        } else if self.redo_ids.contains(&id) {
+            Some(false)
+        } else {
+            None
+        }
     }
 
     /// Le nombre d'étapes à annuler.
@@ -222,8 +288,19 @@ impl History {
         let name = self.undo_names[len - n].clone();
         let tail = self.undo.split_off(len - n);
         self.undo_names.truncate(len - n);
+        let anciens = self.undo_ids.split_off(len - n);
         self.undo.push(Edit::Group(tail));
         self.undo_names.push(name);
+        self.next_id += 1;
+        self.undo_ids.push(self.next_id);
+        let nid = self.next_id;
+        for (_, nouveau) in self.regroupes.iter_mut().filter(|(_, nouveau)| anciens.contains(nouveau)) {
+            *nouveau = nid;
+        }
+        self.regroupes.extend(anciens.into_iter().map(|a| (a, nid)));
+        if self.regroupes.len() > 64 {
+            self.regroupes.drain(..self.regroupes.len() - 64);
+        }
         self.serial += 1;
     }
 
@@ -234,6 +311,7 @@ impl History {
         }
         self.redo.pop();
         self.redo_names.pop();
+        self.redo_ids.pop();
         true
     }
 
@@ -243,6 +321,7 @@ impl History {
         };
         self.redo.push(edit.apply(doc, nav));
         self.redo_names.push(self.undo_names.pop().unwrap_or_default());
+        self.redo_ids.push(self.undo_ids.pop().unwrap_or(0));
         self.serial += 1;
         true
     }
@@ -253,6 +332,7 @@ impl History {
         };
         self.undo.push(edit.apply(doc, nav));
         self.undo_names.push(self.redo_names.pop().unwrap_or_default());
+        self.undo_ids.push(self.redo_ids.pop().unwrap_or(0));
         self.serial += 1;
         true
     }
@@ -262,6 +342,9 @@ impl History {
         self.redo.clear();
         self.undo_names.clear();
         self.redo_names.clear();
+        self.undo_ids.clear();
+        self.redo_ids.clear();
+        self.regroupes.clear();
         self.serial += 1;
     }
 
