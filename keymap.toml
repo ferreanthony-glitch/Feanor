@@ -2909,6 +2909,16 @@ touches = []
 source = "FEANOR (sans touche)"
 
 [[raccourci]]
+action = "references.crayon"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
+action = "references.gomme"
+touches = []
+source = "FEANOR (sans touche)"
+
+[[raccourci]]
 action = "references.detacher"
 touches = []
 source = "FEANOR (sans touche)"

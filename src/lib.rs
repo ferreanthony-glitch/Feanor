@@ -753,8 +753,12 @@ mod montagekeys;
 mod references;
 // La planche de références (post-it, textes, cadres, ranger, recadrer, fenêtre à part) : voir `planchref.rs`.
 mod planchref;
+// Le crayon de la planche de références (traits vectoriels, canevas blanc) : voir `planchdessin.rs`.
+mod planchdessin;
 #[cfg(test)]
 mod planchref_tests;
+#[cfg(test)]
+mod planchdessin_tests;
 #[cfg(test)]
 mod references_tests;
 mod referencesui;
