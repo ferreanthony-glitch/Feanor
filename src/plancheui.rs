@@ -94,7 +94,7 @@ impl App {
     /// Les options de l'export posées sur celles de l'écran : le sens de lecture et les textes montrés, et l'opacité du passe-partout (celle de
     /// la barre du bas de la planche). Que le passe-partout soit allumé à l'écran n'y change rien : c'est la case de la fenêtre qui décide.
     pub(crate) fn planche_options(&self, opt: &Options) -> Options {
-        Options { sens: self.layout.board_sens, textes: self.layout.board_textes, numeros: opt.numeros && self.settings.vignettes.numeros_visibles, marie_opacite: self.settings.vignettes.passe_partout_cases_opacite.min(100), ..opt.clone() }
+        Options { sens: self.layout.board_sens, textes: self.layout.board_textes, numeros: opt.numeros && self.settings.vignettes.numeros_visibles, marie_opacite: self.settings.vignettes.passe_partout_cases_opacite.min(100), debord: self.settings.vignettes.debord_fraction(), ..opt.clone() }
     }
 
     /// Les options et l'étendue du bouton « Exporter » : celles de la fenêtre, avec les deux cases retenues dans les réglages de l'application
@@ -142,7 +142,7 @@ impl App {
         // (Les cadres de caméra ont la couleur choisie dans Préférences > Vignettes, comme à l'écran.)
         let (opt2, titre) = (Options { couleur_cadre: self.settings.vignettes.couleur_cadre, ..opt.clone() }, self.base_name_or("Planche"));
         // Le dessin sur toute l'enveloppe des plans à mouvement de caméra : préparé ici (un cliché léger), rendu sur le fil de l'export.
-        let travaux = self.planche_tuiles_a_rendre(&p, s);
+        let travaux = self.planche_tuiles_a_rendre(&p, s, opt);
         let (chemin, p2) = (out.to_path_buf(), Arc::new(p));
         let message = planche::message_de_fin(opt.sortie, n, dims, reduit.as_deref(), out);
         let job = ExportJob::collect_with(
@@ -165,13 +165,26 @@ impl App {
         Ok(job.pour_planche(message).avec_annotations(opt.annotations))
     }
 
-    /// Pour chaque case dont la caméra bouge (les cadres ou le passe-partout sont demandés) : de quoi rendre sa tuile, le dessin sur toute
-    /// l'enveloppe (`TuileATravailler::rendre`). Un cliché léger du plan : le dessin n'est pas copié.
-    fn planche_tuiles_a_rendre(&self, p: &planche::Planche, s: f32) -> Vec<Option<TuileATravailler>> {
+    /// Pour chaque case : de quoi rendre ce qu'elle montre hors de son image (`TuileATravailler::rendre`) : sa tuile si sa caméra bouge (les
+    /// cadres ou le passe-partout sont demandés), le dessin sur toute l'enveloppe ; sinon sa marge. Le passe-partout cache les marges : rien à
+    /// en rendre. Un cliché léger du plan : le dessin n'est pas copié.
+    fn planche_tuiles_a_rendre(&self, p: &planche::Planche, s: f32, opt: &Options) -> Vec<Option<TuileATravailler>> {
+        let marge_de = |c: &planche::Carte| if opt.marie { 0 } else { (opt.debord * c.place.thumb.width() * s).round() as usize };
         p.cartes
             .iter()
-            .map(|c| {
-                let m = c.mouvement.as_ref()?;
+            .enumerate()
+            .map(|(k, c)| {
+                let Some(m) = c.mouvement.as_ref() else {
+                    let marge = marge_de(c);
+                    if marge == 0 {
+                        return None;
+                    }
+                    let plan = crate::render::panel_plan_at(&self.doc, c.plan_reel, c.place.frame, Some(self.doc.paper));
+                    let doc = crate::thumbs::snapshot(&self.doc, &plan);
+                    let t = planche::taille_vignette(p, k, s);
+                    let cam = self.doc.panel_camera(c.plan_reel, c.place.frame);
+                    return Some(TuileATravailler { doc, plan, cam, taille: [t[0] as usize, t[1] as usize], masque: None, marge });
+                };
                 let z = &m.tuile.zone;
                 let r = m.tuile.rect;
                 let taille = [((r.width() * s).round() as usize).clamp(1, 16_000), ((r.height() * s).round() as usize).clamp(1, 16_000)];
@@ -180,9 +193,9 @@ impl App {
                 let mut doc = crate::thumbs::snapshot(&self.doc, &plan);
                 doc.frame = cadre;
                 let moitie = vec2(cadre[0] as f32, cadre[1] as f32) * 0.5;
-                let masque = m.tuile.masque.iter().map(|q| ((*q - z.centre) + moitie).to_pos2()).collect();
+                let masque = Some(m.tuile.masque.iter().map(|q| ((*q - z.centre) + moitie).to_pos2()).collect());
                 let cam = crate::camera::Camera { x: z.centre.x, y: z.centre.y, zoom: 1.0, angle: 0.0, dolly: 0.0, tilt: 0.0, pan: 0.0 };
-                Some(TuileATravailler { doc, plan, cam, taille, masque })
+                Some(TuileATravailler { doc, plan, cam, taille, masque, marge: marge_de(c) })
             })
             .collect()
     }
@@ -383,21 +396,27 @@ impl App {
     }
 }
 
-/// Ce qu'il faut pour rendre la tuile d'un plan à mouvement de caméra dans l'export de la planche.
+/// Ce qu'il faut pour rendre, dans l'export de la planche, la tuile d'un plan à mouvement de caméra (`masque` : son enveloppe) ou la marge d'une case.
 struct TuileATravailler {
     doc: crate::document::Document,
     plan: crate::render::Plan,
     cam: crate::camera::Camera,
     taille: [usize; 2],
-    masque: Vec<eframe::egui::Pos2>,
+    masque: Option<Vec<eframe::egui::Pos2>>,
+    marge: usize,
 }
 
 impl TuileATravailler {
-    /// Le dessin sur toute l'enveloppe (le papier dedans, le trait qui déborde dehors), en pixels prémultipliés.
+    /// La tuile (le papier dans l'enveloppe, le trait qui déborde dehors) ou la marge seule, en pixels prémultipliés.
     fn rendre(self) -> Option<planche::TuileImage> {
-        let (img, _) = crate::fx::differe(|| crate::fxcache::soft_scope(|| crate::render::thumbnail_marge_until(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], 0, Some(&self.masque), &|| false)));
+        let (img, _) = crate::fx::differe(|| {
+            crate::fxcache::soft_scope(|| match &self.masque {
+                Some(masque) => crate::render::thumbnail_marge_until(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], self.marge, Some(masque), &|| false),
+                None => Some(crate::render::marge_seule(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], self.marge)),
+            })
+        });
         let img = img?;
         let rvba = img.pixels.iter().flat_map(|c| c.to_array()).collect();
-        Some(planche::TuileImage { taille: [img.size[0] as u32, img.size[1] as u32], rvba })
+        Some(planche::TuileImage { taille: [img.size[0] as u32, img.size[1] as u32], marge: self.marge as u32, rvba })
     }
 }

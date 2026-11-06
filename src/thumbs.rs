@@ -232,10 +232,11 @@ const CASE_BIT: u64 = 1 << 61;
 const TUILE_SHIFT: u32 = 55;
 const TUILE_MASK: u64 = 0b11111 << TUILE_SHIFT;
 
-/// Largeur de vignette pour `pixels` points physiques à l'écran : par paliers de 128 (on ne la
-/// refait pas à chaque cran de zoom), entre 128 et 1024.
+/// Largeur de vignette pour `pixels` points physiques à l'écran : par paliers de 64 (on ne la refait pas à chaque cran de zoom), entre 128
+/// et 1024. (Par paliers de 128, une case de 143 points montrait une vignette de 256 pixels : réduite de près de moitié par une lecture
+/// bilinéaire, un trait fin y était plus foncé et irrégulier, partie 111.)
 pub fn width_for(pixels: f32) -> usize {
-    ((pixels / 128.0).ceil().max(1.0) as usize * 128).min(1024)
+    ((pixels / 64.0).ceil().max(2.0) as usize * 64).min(1024)
 }
 
 impl Thumbs {

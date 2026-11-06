@@ -7618,6 +7618,54 @@ celui du délai (puis celui qui efface le nom de la commande).
 10. Dans une case des Vignettes : le clic droit bref ouvre toujours le menu de la case ; un glissé du bouton du stylet y lance la commande, sans
     menu ni trait.
 
+## 111. Un trait tracé à travers les cases reste continu au repos (2026-11-06, branche `vignettes-traits-continus`)
+
+Le réalisateur, pour la troisième fois : « Toujours ce souci de petits bugs d'affichage et des lignes qui se coupent entre les plans », puis « certains traits sont coupés dans le cadre du plan, sous la partie haute ». La partie 101 n'avait vérifié que les données. Cette fois, le défaut est reproduit **en pixels de la planche rendue** (`traits_continus_tests.rs` : la planche peinte sur la carte graphique, lue après le lâcher et le repos, le trait suivi pixel par pixel). Fichiers : `boardui.rs`, `horschamp.rs`, `debord.rs`, `render.rs`, `thumbs.rs`, `planche.rs`, `plancheui.rs`. Le format de projet ne change pas (47).
+
+### Les causes, et leur preuve
+
+1. **La marge n'était pas montrée.** La part d'un trait dans la marge d'une case (12 % de sa largeur) va bien dans le dessin du plan, mais seul le plan courant ouvrait sa marge ; les autres étaient coupés à 4 points de leur cadre (`marge_ouverte`, `MARGE_SERREE`, partie du 2026-10-23). Sur le code d'avant : **un trou de 24 pixels** entre deux cases d'une rangée, **42 pixels** sur une diagonale, **23 pixels** entre deux rangées, en vectoriel.
+2. **Un trait coupé dans le haut d'une case.** La marge vient de la largeur de la case, l'écart des rangées est fixe : avec de grandes cases vues de loin (la capture), la marge de la case du dessus recouvre le haut de l'image du dessous. La règle « deux champs se recouvrent : le point va à la case d'où part le trait » y envoyait le trait dans la marge de l'autre plan, cachée par l'image. Essai à 12, 25 et 40 % de débord (l'essai vérifie que la marge dépasse bien l'écart).
+3. **Le trait pâle dans la case qu'on dessine.** La case courante est le dessin vivant (`gpu.rs`, moyenne en lumière linéaire) ; les autres, des vignettes (4 lectures moyennées en gamma, puis 256 pixels réduits à 143 points sans filtre). Pour le même trait de 4 pixels : encre **3475 dans la case vive, 5019 en vignette**. C'est peut-être le « M » de la case 27, la dernière dessinée : le mécanisme est reproduit, la capture ne permet pas de l'affirmer.
+4. **Un pixel plein pendant le geste, plus léger au repos.** Le trait hors de la case était peint d'au moins un pixel opaque, même très fin.
+5. **Au lâcher, d'après le code.** Chaque tronçon était rejoué par le moteur sur le fil de l'interface (`refresh_cel_region` sans cache), et le trait hors de la case quittait l'écran avant que les vignettes voisines n'aient leur part. Non mesuré sur le code d'avant ; les essais mesurent le code d'après (ci-dessous).
+6. **L'export** n'avait que les images : trou aux mêmes endroits.
+
+### Ce qui change
+
+- **La marge se voit, pour tous les plans** : `App::board_marges` peint les marges de toutes les cases **sur le papier, avant toute image** (une demande de vignette par case et par image, comme avant). Elles passent sous l'image des autres cases, ne la recouvrent jamais. Le passe-partout, peint après, les cache. **Cela remplace « la marge ne s'ouvre que pour le plan où l'on dessine »** : c'est ce choix-là qui laissait les trous.
+- **L'intérieur du cadre d'une case a toujours priorité sur la marge d'une autre** (`proprietaire_cadre`), en vectoriel et en bitmap ; les règles d'ordre ne jouent qu'entre deux marges. Jamais deux fois : chaque point a un seul propriétaire.
+- **Un plan à mouvement de caméra reçoit sa part** (`aff_de_la_case`), à la même échelle, à l'endroit de sa feuille.
+- **La vignette d'une case se lit comme le dessin vivant** (`render::moyenne_sur_le_papier`) : lumière linéaire, jusqu'à 16 lectures quand on réduit fort, largeurs par paliers de 64 au lieu de 128. Sa marge est calculée pour donner la même couleur une fois posée sur le papier blanc. Après : **encre 3475 vive, 3371 en vignette**.
+- **Aucun rejeu au lâcher** : un trait au pinceau se refait en fond ; `Vignettes::debord_tenu` garde le trait tracé à l'écran tant que ses parts ne sont pas rendues (4 secondes au plus ; il part si la planche bouge ou si l'historique change).
+- **Le trait plus fin qu'un pixel** garde pendant le geste la légèreté qu'il aura au repos (`debord.rs`).
+- **Export** : même règle (`marge_seule`, `TuileImage::marge`) : marges sur le papier, sous toutes les images, cadre élargi seulement là où il y a du dessin ; rien avec le passe-partout. La vignette de la barre, le storyboard, l'animatique et le film n'ont toujours que le cadre de la caméra (essai sur la vignette de plan).
+
+### Mesures (`traits_continus_tests.rs`)
+
+Sur le code d'après : aucun trou de plus de 2 pixels, rangée, diagonale, colonne, à la japonaise, case vide (plan neuf), départ du papier, mouvement de caméra, bitmap et vectoriel, deux zooms, débord jusqu'à 40 %, brosse douce, translucide, stylet léger ; à **chaque image d'écran** du lâcher au repos ; à l'export. Encre en travers du trait, à un écart près de 40 % au plus : la marge reste un peu plus soutenue que l'image sur un trait d'un pixel (egui mêle la transparence en gamma ; rangée : 98 à 114 centièmes de pixel, colonne : 128 à 153). Annuler et rétablir rendent l'image d'avant et d'après à 8 pixels près ; enregistrer et rouvrir donnent le même relevé. `vector::replay_count` : zéro rejeu sur le fil de l'interface.
+
+Coût d'une image, 30 plans dessinés, souris qui se promène : construction 0,71 ms, découpage 0,31 ms, carte 0,45 ms, 15 774 sommets ; sans les marges et avec les anciennes vignettes : 0,67, 0,29, 0,43 ms, 15 318 sommets. Au repos, aucune image demandée. Le prix est sur les fils de fond : une vignette de case prend 19 ms contre 8 ms avant (mesures de `thirty_drawn_plans…`, sur la même machine).
+
+### Ce qui reste
+
+- **Pas reproduit** : les morceaux pâles des cases 15 et 16, qui ne sont pas des cases vives. Un trait léger au stylet est une explication possible, pas une preuve.
+- **Une case dont la caméra a un autre zoom, un roulis, une bascule ou un panoramique, un calque verrouillé ou masqué** ne reçoit toujours pas sa part : le trait y reste caché sous l'image.
+- **Remarqué, non corrigé** : un trait commencé dans l'écart de deux cases, à la hauteur de leur barre, fait « réunir les plans » et ne dessine rien (un appui sur la zone de la barre).
+- Le filet d'une case reste peint par-dessus le trait (un pixel).
+
+### À vérifier à l'écran
+
+1. Trace de grands traits à travers plusieurs cases, comme sur ta capture : au lâcher, rien ne change, ni trou, ni coupure au cadre, ni saut.
+2. Un trait d'une rangée vers le haut de la rangée du dessous : il entre dans l'image du dessous, et le plan du dessous l'a (ouvre-le en Storyboard).
+3. Le dernier plan dessiné et ses voisins : même noirceur. Change de plan courant : rien ne bouge. Dis-moi si certains traits te paraissent encore pâles, et lesquels.
+4. Préférences > Vignettes > débord à 40 %, plusieurs zooms (28 %, 50 %, 100 %) : même chose.
+5. Allume le passe-partout : les marges disparaissent. Éteins : elles reviennent.
+6. Un plan à mouvement de caméra : un trait venu de la case voisine entre dans son enveloppe. Ta consigne d'avant (autres plans coupés net à leurs cadres) est remplacée : dis-moi si un plan à mouvement te paraît trop chargé.
+7. Ctrl+Z défait tout le trait d'un coup, Ctrl+Y le rend ; enregistre, rouvre : même image.
+8. Export PNG et PDF de la planche, avec et sans passe-partout.
+9. Vignette de la barre, storyboard, animatique, film : seulement le cadre de la caméra.
+
 ---------------------------------------------------------------------------------------------------
 
 ## 113. Les Vignettes plus simples : le pont sans piège, le plan courant qui se voit, ce qui ne fait rien le dit (2026-11-06, branche `vignettes-simplicite`)
