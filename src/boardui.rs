@@ -163,6 +163,8 @@ pub(crate) enum MenuTarget {
     /// le rang du plan à un autre (« Animer cette image » animait le plan voisin, Anthony 2026-10-22). `cadre` : le cadre de
     /// caméra sous le clic droit, s'il y en a un (« Retirer ce cadre »).
     Card { plan: u64, case: u64, cadre: Option<usize> },
+    /// La case d'un plan annulé (« Rétablir ce plan »).
+    Annule(u64),
     /// Le titre de la séquence `0` (« Renommer la séquence… »).
     Titre(u64),
     Background,
@@ -202,6 +204,12 @@ pub(crate) struct Vignettes {
     pub moving: Option<PlanMove>,
     /// Maj tenue, le pointeur est sur le cadre d'une vignette : on peut la prendre (curseur « main »).
     pub frame_hot: bool,
+    /// Le numéro de chaque plan à l'écran, à l'image d'avant : un clic dessus annule ou rétablit le plan (`planannuleui.rs`).
+    pub numeros_zones: Vec<(Rect, u64)>,
+    /// Un appui sur un numéro, en attente de son lâcher.
+    pub numero_attente: Option<crate::planannuleui::NumeroAttente>,
+    /// Maj tenue, sans appui : la peau de la planche (les numéros cachés se montrent, on peut cliquer dessus).
+    pub peau_maj: bool,
     /// Le trait qui déborde de la vignette courante, tant que le geste dure (`debord.rs`).
     pub debord: Option<crate::debord::Debord>,
     /// Ctrl + Maj + glisser un cadre (ou T tenue) : le mouvement de caméra en cours (`vignettecamui.rs`).
@@ -305,6 +313,9 @@ impl Default for Vignettes {
             view: Rect::NOTHING,
             moving: None,
             frame_hot: false,
+            numeros_zones: Vec::new(),
+            numero_attente: None,
+            peau_maj: false,
             debord: None,
             cam: None,
             zone: None,
@@ -393,8 +404,9 @@ impl App {
     /// Après une opération qui a retiré des panneaux : les notes qui leur étaient attachées
     /// restent où elles étaient (`before` : la planche d'avant), libres.
     pub(crate) fn release_removed_notes(&mut self, before: &BoardLayout) {
+        // (Un plan annulé n'est pas parti : ses notes l'attendent, `planannule.rs`.)
         let gone: Vec<u64> =
-            before.cards.iter().map(|c| c.id).filter(|id| !self.doc.panels.iter().any(|p| p.id == *id)).collect();
+            before.cards.iter().map(|c| c.id).filter(|id| !self.doc.panels.iter().any(|p| p.id == *id) && !self.doc.annules.plans.iter().any(|g| g.panel.id == *id)).collect();
         if !gone.is_empty() {
             self.doc.board.release(before, &gone);
         }
@@ -761,7 +773,7 @@ impl App {
 
     /// Le dessin a la main (copier, coller, supprimer visent le dessin, pas les plans) et un outil pris par une touche
     /// tenue sert : ce que fait `canvas_panel` quand l'appui lui vient de l'interface, ici l'appui est vu plus tôt.
-    fn draw_has_focus(&mut self) {
+    pub(crate) fn draw_has_focus(&mut self) {
         self.panel_focus = false;
         self.images_focus = false;
         self.key_focus = false;
@@ -774,6 +786,10 @@ impl App {
         let p = xf.to_board(pos);
         let hit = board::hit(layout, p, BAR_TOUCH / xf.zoom.max(1e-3));
         if button == PointerButton::Secondary {
+            if let Some(g) = layout.annulee_en(p).and_then(|k| layout.annulees.get(k)) {
+                self.vignettes.menu = Some(MenuTarget::Annule(g.plan));
+                return false;
+            }
             self.vignettes.menu = Some(match hit {
                 Hit::Thumb(k) => {
                     let c = layout.cards[k];
@@ -804,6 +820,10 @@ impl App {
             self.commit_card_note();
             self.pile_epingler(plan);
             self.vignettes.press = Press::Version;
+            return false;
+        }
+        // Le numéro d'un plan (annuler, rétablir : au lâcher d'un clic), et une case annulée (on n'y dessine pas) : `planannuleui.rs`.
+        if self.plan_annule_appui(layout, pos, p, m) {
             return false;
         }
         // L'icône d'écriture, au bout de la bande de note d'une case : seul un appui dessus ouvre la note (Anthony, 2026-10-22 : « les notes ne
@@ -1065,20 +1085,7 @@ impl App {
         }
         self.vignettes.barre_attente = None;
         if a.dessine {
-            self.end_stroke();
-            // (Le point de trait n'a pas à être réparti ni à rester peint.)
-            self.vignettes.fini = None;
-            self.vignettes.suivi = None;
-            self.vignettes.debord_garde = None;
-            self.vignettes.debord_tenu = None;
-            let mut nav = Nav { panel: self.cur_panel, layer: self.cur_layer };
-            while self.history.undo_len() > a.base_len && self.history.undo_and_forget(&mut self.doc, &mut nav) {}
-            self.cur_panel = nav.panel.min(self.doc.panels.len().saturating_sub(1));
-            self.cur_layer = nav.layer;
-            self.revalider_rangs();
-            self.cur_frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
-            self.renderer.invalidate_all();
-            self.thumbs.prune(&self.doc);
+            self.retirer_le_point_de_trait(a.base_len);
         }
         self.vignettes.press = Press::Bar;
         self.board_toggle_cut(layout, a.after)
@@ -1124,6 +1131,11 @@ impl App {
     /// La dernière barre, devant la première case vide, dit ce que fera cette case : un plan ou une image.
     /// Une seule étape d'annulation, nommée. Vrai si le document a changé.
     pub(crate) fn board_toggle_cut(&mut self, layout: &BoardLayout, after: usize) -> bool {
+        // (La barre devant une case annulée ne coupe ni ne réunit : `planannule.rs`.)
+        if layout.barres_mortes.contains(&after) {
+            self.status = "La case suivante est annulée, cette barre ne réunit rien : un clic sur son numéro la rétablit".into();
+            return false;
+        }
         let Some(a) = layout.cards.get(after).copied() else { return false };
         let Some(b) = layout.cards.get(after + 1).copied().filter(|_| !layout.vers_pale(after)) else {
             // Devant la première case vide (de la séquence) : un clic fait tout de suite la case de continuité (une image de plus du dernier
@@ -1545,6 +1557,7 @@ impl App {
         let hovered = over.map(|p| board::hit(&layout, xf.to_board(p), BAR_TOUCH / xf.zoom.max(1e-3)));
         // (Maj tenue, sans appui en cours : la planche montre ses barres en entier, et plus loin les poignées des cases ; rien pendant un trait.)
         let peau_maj = maj_seule && !any_down && self.vignettes.cam.is_none();
+        self.vignettes.peau_maj = peau_maj;
         self.paint_bars(ui, &painter, view, xf, &layout, hovered, peau_maj);
         let ghost_hot = if pan_mode { None } else if let Some(Hit::Empty(e)) = hovered { Some(e) } else { None };
         for (e, slot) in layout.empty.iter().enumerate() {
@@ -1571,9 +1584,11 @@ impl App {
             // (La vignette courante, peinte après, remplace ce curseur par celui de son outil quand elle l'a sous la souris.)
             ui.ctx().set_cursor_icon(icon);
         }
+        let deadline = Instant::now() + crate::thumbs::THUMB_TIME;
+        // Les cases annulées, sous le dessin hors des cases : un trait qui les traverse reste visible (`planannuleui.rs`).
+        self.peindre_cases_annulees(ui, &painter, view, xf, &layout, deadline);
         // Le dessin hors des cases, sous les cases (ce qui déborde dans une case ne la recouvre pas) : sur la planche, enregistré, dans aucun plan.
         self.hors_cadres_peindre(&painter, view, xf, &layout);
-        let deadline = Instant::now() + crate::thumbs::THUMB_TIME;
         // Les tuiles des empreintes d'abord (leur rectangle déborde de leur enveloppe : les cases qui s'y trouvent se peignent par-dessus).
         // Le menu du clic droit de la case courante se montre pendant qu'on peint les tuiles et les cases : « Réunir avec le plan
         // précédent », « Supprimer »… y changent le film, et la mise en page de cette image ne vaut plus. On s'arrête là, l'image
@@ -1594,6 +1609,7 @@ impl App {
         let numeros = crate::numerotation::Numeros::pour_l_ecran(&self.doc);
         // (Où se posent les numéros : la marge au-dessus de chaque A, ou une place libre : `numerosmarge.rs`.)
         let mut marges = crate::numerosmarge::Marges::pour(&layout, xf, view);
+        self.vignettes.numeros_zones.clear();
         for k in (0..layout.cards.len()).take_while(|_| tient) {
             if !self.case_tient(&layout, plans, k) {
                 tient = false;
@@ -1606,6 +1622,7 @@ impl App {
             return;
         }
 
+        self.peindre_numeros_annules(&painter, view, xf, &layout, &numeros, &mut marges);
         // Les titres des séquences, au-dessus de leur première rangée.
         self.titres_peindre(&painter, view, xf, &layout);
         // Notes libres par-dessus, puis ce qui est choisi, puis les repères du geste.
@@ -1685,6 +1702,7 @@ impl App {
                     ui.close_menu();
                 }
             },
+            Some(MenuTarget::Annule(plan)) => self.annule_menu(ui, plan),
             Some(MenuTarget::Titre(seq)) => {
                 self.titre_menu(ui, seq);
                 self.board_menu(ui, &layout, &texts);
@@ -1713,6 +1731,9 @@ impl App {
         self.vignettes.appui_bande = None;
         // Un appui tombé sur une barre : au lâcher sans mouvement, la barre bascule et le point de trait est retiré (décision 11).
         if self.barre_au_lacher(&layout, latest, any_down) {
+            ui.ctx().request_repaint();
+        }
+        if self.numero_au_lacher(latest, any_down) {
             ui.ctx().request_repaint();
         }
         // Le trait qui vient de finir : sa part hors du champ de sa case est répartie (horschamp.rs), une seule étape d'annulation.
@@ -2243,7 +2264,8 @@ impl App {
             let font0 = crate::vignettesprefs::taille_numero(xf.zoom, echelle);
             let ink = Color32::from_gray(15);
             let clip = painter.with_clip_rect(view);
-            let afficher = reglages.numeros_visibles;
+            // (Maj tenue montre les numéros cachés : on peut cliquer dessus pour annuler ou rétablir, `planannuleui.rs`.)
+            let afficher = reglages.numeros_visibles || self.vignettes.peau_maj;
             let galley0 = clip.layout_no_wrap(numeros.scene_label(&self.doc, place.scene), FontId::proportional(font0), ink);
             let marge0 = (font0 * 0.18).max(2.0);
             // La durée du plan (réglage), la pastille des notes à traiter et l'étiquette de version suivent le numéro : leur place compte aussi.
@@ -2293,6 +2315,9 @@ impl App {
                     for d in [vec2(0.0, 0.0), vec2(gras, 0.0), vec2(0.0, gras)] {
                         clip.galley(at + d, galley.clone(), ink);
                     }
+                }
+                if afficher {
+                    self.vignettes.numeros_zones.push((pastille.expand(2.0), place.plan));
                 }
                 let mut droite = if afficher { pastille.right() + 4.0 } else { pastille.left() };
                 // La durée du plan, à côté du numéro (réglage), en petit.
@@ -2439,6 +2464,13 @@ impl App {
         // premier niveau, simplification des barres, 2026-10-21).
         self.version_menu(ui, i, true);
         ui.menu_button("Plus", |ui| {
+            // (Le geste de tous les jours est le clic sur le numéro, ou Maj + clic ; ceci est le chemin de secours : `planannuleui.rs`.)
+            if let Some(plan) = self.doc.panels.get(i).map(|p| p.id) {
+                if ui.button("Annuler ce plan").clicked() {
+                    ui.close_menu();
+                    self.plan_annuler_ou_retablir(plan);
+                }
+            }
             // Les séquences (`planchesequencesui.rs`) : une neuve, avec les cases choisies, couper ici, renommer.
             ui.menu_button("Séquence", |ui| self.sequence_menu_items(ui));
             self.plan_color_menu(ui);

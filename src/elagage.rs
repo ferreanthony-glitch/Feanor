@@ -62,6 +62,14 @@ impl Structure {
         }
         // La corbeille (`corbeille.rs`) garde ses dessins : annuler une suppression, ou la restaurer, les remet.
         out.extend(self.corbeille.cels());
+        // Les plans annulés (`planannule.rs`) gardent les leurs : rétablir, ou annuler une annulation, les remet.
+        for g in &self.annules.plans {
+            dessins_du_plan_retenus(&g.panel, out);
+            for r in g.versions.iter().flat_map(|v| &v.autres) {
+                dessins_du_plan_retenus(&r.panel, out);
+            }
+            out.extend(g.reserve.iter().flat_map(|r| r.cels()));
+        }
         for v in self.versions.values() {
             for r in &v.autres {
                 dessins_du_plan_retenus(&r.panel, out);

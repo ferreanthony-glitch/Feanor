@@ -1239,6 +1239,13 @@ impl Document {
         self.variantes_mut().get_mut(&sequence).expect("séquence lue juste avant").garage.insert(plan, parque);
     }
 
+    /// Le plan `plan` revient dans le film (un plan annulé qu'on rétablit, `planannule.rs`) : s'il est au garage, il en sort, avec ses versions, son contenu rogné, ses commentaires.
+    pub(crate) fn reprendre_du_garage(&mut self, plan: u64) -> Option<(Panel, Option<VersionsDuPlan>, Option<Reserve>, Vec<Comment>)> {
+        let sequence = self.variantes.iter().find(|(_, v)| v.garage.contains_key(&plan)).map(|(s, _)| *s)?;
+        let p = self.variantes_mut().get_mut(&sequence)?.garage.remove(&plan)?;
+        Some((p.panel, p.versions, p.reserve, p.comments))
+    }
+
     /// Comme `ranger_plan_partage`, pour plusieurs plans.
     pub(crate) fn ranger_plans_partages(&mut self, plans: &[u64], copier: bool) {
         if self.variantes.is_empty() {

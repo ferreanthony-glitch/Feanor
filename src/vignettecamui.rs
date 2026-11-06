@@ -7,7 +7,7 @@
 //!   le resserre ou l'élargit) ; au lâcher, deux clés de caméra sont posées (A à la première image du plan, B à la dernière) ;
 //! - case avec des cadres : le dedans d'un cadre **le déplace** (le plus petit qui contient le point : B dans A, dedans B on déplace B),
 //!   un de ses coins change sa taille (le zoom de la clé). Rien ne naît d'un glissé simple ;
-//! - **Ctrl + Maj + Alt + glisser** (ou T + Alt) : un cadre de plus (C, D…), qui part du dernier ; **« Ajouter un cadre »** au clic droit
+//! - **« Ajouter un cadre »** au clic droit : un cadre de plus (C, D…), qui part du dernier ; le geste avec Alt est retiré depuis la partie 113 ;
 //!   de la case en pose un à côté du dernier ; **« Retirer ce cadre »** au clic droit sur un cadre.
 //!
 //! L'empreinte de la case suit en direct (les cadres à l'échelle des cases, les autres cases se rangent : la largeur réservée ne

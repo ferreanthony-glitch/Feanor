@@ -87,8 +87,11 @@ impl Numeros {
         for s in &doc.scenes {
             scenes.entry(s.id).or_insert(s);
         }
+        for g in &doc.annules.plans {
+            scenes.entry(g.panel.scene).or_insert(&g.scene);
+        }
         let mut plans = HashMap::with_capacity(doc.scenes.len());
-        for (k, id) in doc.scene_order().into_iter().enumerate() {
+        for (k, id) in doc.scene_order_planche().into_iter().enumerate() {
             let scene = scenes.get(&id).copied();
             let num = scene.filter(|_| doc.numbering_locked).and_then(|s| Num::parse(&s.number)).unwrap_or_else(|| Num::new(k as i64 + 1));
             let label = match scene {
@@ -101,8 +104,11 @@ impl Numeros {
         for s in &doc.sequences {
             seqs.entry(s.id).or_insert(s);
         }
+        for g in &doc.annules.plans {
+            seqs.entry(g.sequence.id).or_insert(&g.sequence);
+        }
         let mut sequences = HashMap::with_capacity(doc.sequences.len());
-        for (k, id) in doc.sequence_order().into_iter().enumerate() {
+        for (k, id) in doc.sequence_order_planche().into_iter().enumerate() {
             let seq = seqs.get(&id).copied();
             let code = seq.filter(|_| doc.numbering_locked).and_then(|s| Num::parse(&s.number)).unwrap_or_else(|| Num::new(k as i64 + 1)).text();
             let label = match seq {
@@ -298,8 +304,8 @@ fn midpoint(a: &[u8], b: Option<&[u8]>) -> String {
 
 /// Donne un numéro à chaque entrée vide de `nums` (dans l'ordre du film), entre ses voisines, sans
 /// jamais en répéter un.
-fn fill(nums: &mut [Option<Num>]) {
-    let mut used: HashSet<Num> = nums.iter().flatten().cloned().collect();
+fn fill(nums: &mut [Option<Num>], reserves: &[Num]) {
+    let mut used: HashSet<Num> = nums.iter().flatten().cloned().chain(reserves.iter().cloned()).collect();
     for i in 0..nums.len() {
         if nums[i].is_some() {
             continue;
@@ -319,7 +325,7 @@ impl Document {
     /// Le numéro du plan : le sien en numérotation verrouillée, sinon son rang dans le film.
     pub fn plan_num(&self, scene: u64) -> Num {
         if self.numbering_locked {
-            if let Some(n) = self.scene(scene).and_then(|s| Num::parse(&s.number)) {
+            if let Some(n) = self.scene_ou_annulee(scene).and_then(|s| Num::parse(&s.number)) {
                 return n;
             }
         }
@@ -329,7 +335,7 @@ impl Document {
     /// Le numéro de la séquence (même règle).
     pub fn sequence_num(&self, sequence: u64) -> Num {
         if self.numbering_locked {
-            if let Some(n) = self.sequences.iter().find(|s| s.id == sequence).and_then(|s| Num::parse(&s.number)) {
+            if let Some(n) = self.sequence_ou_annulee(sequence).and_then(|s| Num::parse(&s.number)) {
                 return n;
             }
         }
@@ -370,7 +376,9 @@ impl Document {
         let scenes = self.scene_order();
         let mut nums: Vec<Option<Num>> = scenes.iter().map(|&id| self.scene(id).and_then(|s| Num::parse(&s.number))).collect();
         if nums.iter().any(Option::is_none) {
-            fill(&mut nums);
+            // (Le numéro d'un plan annulé n'est pas redonné : il reviendra avec lui.)
+            let pris: Vec<Num> = self.annules.plans.iter().filter_map(|g| Num::parse(&g.scene.number)).collect();
+            fill(&mut nums, &pris);
             for (id, n) in scenes.iter().zip(nums) {
                 if let (Some(s), Some(n)) = (self.scene_mut(*id), n) {
                     if Num::parse(&s.number).is_none() {
@@ -382,7 +390,8 @@ impl Document {
         let seqs = self.sequence_order();
         let mut nums: Vec<Option<Num>> = seqs.iter().map(|&id| self.sequences.iter().find(|s| s.id == id).and_then(|s| Num::parse(&s.number))).collect();
         if nums.iter().any(Option::is_none) {
-            fill(&mut nums);
+            let pris: Vec<Num> = self.annules.plans.iter().filter_map(|g| Num::parse(&g.sequence.number)).collect();
+            fill(&mut nums, &pris);
             for (id, n) in seqs.iter().zip(nums) {
                 if let (Some(s), Some(n)) = (self.sequence_mut(*id), n) {
                     if Num::parse(&s.number).is_none() {
@@ -419,20 +428,29 @@ impl Document {
         if !self.numbering_locked {
             return 0;
         }
-        let before: Vec<(u64, String)> = self.scene_order().iter().map(|&id| (id, self.plan_code(id))).collect();
+        let before: Vec<(u64, String)> = self.scene_order_planche().iter().map(|&id| (id, self.plan_code(id))).collect();
         self.write_clean_numbers();
         before.iter().filter(|(id, old)| self.plan_code(*id) != *old).count()
     }
 
     fn write_clean_numbers(&mut self) {
-        for (k, id) in self.scene_order().into_iter().enumerate() {
+        // (Dans l'ordre de la planche : un plan annulé garde sa place et son numéro.)
+        for (k, id) in self.scene_order_planche().into_iter().enumerate() {
+            let n = Num::new(k as i64 + 1).text();
             if let Some(s) = self.scene_mut(id) {
-                s.number = Num::new(k as i64 + 1).text();
+                s.number = n.clone();
+            }
+            for g in self.annules.plans.iter_mut().filter(|g| g.panel.scene == id) {
+                std::sync::Arc::make_mut(g).scene.number = n.clone();
             }
         }
-        for (k, id) in self.sequence_order().into_iter().enumerate() {
+        for (k, id) in self.sequence_order_planche().into_iter().enumerate() {
+            let n = Num::new(k as i64 + 1).text();
             if let Some(s) = self.sequence_mut(id) {
-                s.number = Num::new(k as i64 + 1).text();
+                s.number = n.clone();
+            }
+            for g in self.annules.plans.iter_mut().filter(|g| g.sequence.id == id) {
+                std::sync::Arc::make_mut(g).sequence.number = n.clone();
             }
         }
     }

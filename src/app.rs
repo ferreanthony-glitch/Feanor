@@ -4000,6 +4000,11 @@ impl App {
     fn run_action_now(&mut self, action: &str) {
         // « Durée d'un nouveau plan » (Préférences > Montage) : lue par les plans que la commande crée (`dureeplans.rs`).
         self.doc.duree_plan_neuf = self.settings.new_plan_secs;
+        // Tout le film est annulé : aucun export, aucun envoi (`planannule.rs`), un seul point pour toutes les sorties.
+        if (action.starts_with("fichier.exporter") || action == "fichier.kitsu_publier") && self.doc.film_vide() {
+            self.status = crate::planannuleui::REFUS_EXPORT.into();
+            return;
+        }
         // Un texte en cours de saisie est posé avant toute commande (annuler, changer d'image…).
         self.finish_text_edit();
         // Une autre copie (dessin, plans, images, clés…) prend la place des effets copiés pour Ctrl+V

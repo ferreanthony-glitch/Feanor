@@ -287,8 +287,8 @@ impl Document {
     /// (le carré du nombre de plans), ce qui se sent quand on nomme tout le film d'un coup (envoi, rapport de numérotation).
     pub fn noms_de_tous_les_plans(&self) -> Vec<String> {
         let pieces = self.modele_de_noms();
-        let scene_rang: std::collections::HashMap<u64, usize> = self.scene_order().into_iter().enumerate().map(|(k, s)| (s, k + 1)).collect();
-        let seq_rang: std::collections::HashMap<u64, usize> = self.sequence_order().into_iter().enumerate().map(|(k, s)| (s, k + 1)).collect();
+        let scene_rang: std::collections::HashMap<u64, usize> = self.scene_order_planche().into_iter().enumerate().map(|(k, s)| (s, k + 1)).collect();
+        let seq_rang: std::collections::HashMap<u64, usize> = self.sequence_order_planche().into_iter().enumerate().map(|(k, s)| (s, k + 1)).collect();
         let mut scenes: std::collections::HashMap<u64, &crate::document::Scene> = std::collections::HashMap::new();
         for s in &self.scenes {
             scenes.entry(s.id).or_insert(s);

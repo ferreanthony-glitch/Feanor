@@ -32,6 +32,11 @@ impl App {
                 return;
             }
         }
+        // Tout le film est annulé : un état vide clair, rien à dessiner (`planannule.rs`).
+        if !self.in_card && self.doc.film_vide() {
+            self.etat_film_vide(ui, rect);
+            return;
+        }
         let response = ui.allocate_rect(rect, Sense::click_and_drag());
         // Un clic dans le dessin reprend la main au montage : l'édition vise de nouveau le dessin.
         if response.is_pointer_button_down_on() {

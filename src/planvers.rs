@@ -132,7 +132,7 @@ impl Document {
     /// Les plans rangés des versions des plans qui existent encore, et les plans des variantes rangées des séquences
     /// (`variantes.rs`) avec les versions de leurs plans : tout ce qui est dans le projet sans être dans le film.
     pub fn plans_ranges(&self) -> impl Iterator<Item = &Panel> {
-        self.versions_vivantes().flat_map(|(_, v)| v.autres.iter().map(|r| &r.panel)).chain(self.plans_de_variantes())
+        self.versions_vivantes().flat_map(|(_, v)| v.autres.iter().map(|r| &r.panel)).chain(self.plans_de_variantes()).chain(self.plans_des_annules())
     }
 
     /// Une copie de `source` avec ses propres dessins, numéros de plan, de marques et de calques neufs.

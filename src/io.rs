@@ -206,6 +206,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         versions: Default::default(),
         variantes: Default::default(),
         corbeille: Default::default(),
+        annules: Default::default(),
 
         annotations: Default::default(),
         scenario: None,

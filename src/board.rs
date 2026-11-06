@@ -364,6 +364,11 @@ pub struct BoardLayout {
     /// Les vignettes (plans et marques d'image) des séquences que la planche ne montre pas : leurs annotations attendent, elles ne passent
     /// pas à une voisine (`Annotations::rattacher_manquantes`).
     pub masquees: Vec<u64>,
+    /// Les cases des plans annulés (`planannule.rs`), à leur place : ce ne sont pas des cases du film. `CardPlace::panel` y est le rang dans
+    /// `Document::annules.plans`.
+    pub annulees: Vec<CardPlace>,
+    /// Les rangs (dans `cards`) des cases dont la barre mène à une case annulée : elle ne coupe ni ne réunit rien.
+    pub barres_mortes: Vec<usize>,
 }
 
 impl BoardLayout {
@@ -390,6 +395,11 @@ impl BoardLayout {
     /// Le titre de séquence sous le point `p` (planche) : le rang de la séquence dans `groupes`.
     pub fn titre_en(&self, p: Pos2) -> Option<usize> {
         self.groupes.iter().position(|g| g.titre.is_some_and(|t| t.contains(p)))
+    }
+
+    /// La case annulée sous le point `p` : son rang dans `annulees`.
+    pub fn annulee_en(&self, p: Pos2) -> Option<usize> {
+        self.annulees.iter().position(|c| c.thumb.contains(p) || c.mv.and_then(|m| self.moves.get(m)).is_some_and(|m| m.contient(p)))
     }
 
     pub fn card_of(&self, id: u64) -> Option<&CardPlace> {
@@ -684,6 +694,9 @@ struct Cle {
     /// La planche par séquences : ce qu'elle montre, et la séquence de chaque plan (rien : une seule séquence, la planche d'avant).
     vue: Option<VueSequences>,
     sequences: Vec<u64>,
+    /// Les plans annulés qui se montrent (partagés : le même `Arc`, rien n'a changé) et le plan vide qui tient le film.
+    annules: Vec<std::sync::Arc<crate::planannule::PlanAnnule>>,
+    support: Option<u64>,
 }
 
 struct ClePlan {
@@ -717,12 +730,17 @@ impl Cle {
             .iter()
             .map(|p| ClePlan { id: p.id, scene: p.scene, n: p.frame_count(), marks: p.marks.iter().map(|m| (m.id, m.frame)).collect(), camera: p.camera.iter().map(bits_cam).collect() })
             .collect();
-        Cle { frame: doc.frame, plans, s: bits_reglages(s), last_joins, pale_rows: opt.pale_rows, hold: bits_hold(opt), sens: opt.sens, textes: opt.textes.bits(), vue: vue.cloned(), sequences: if vue.is_some() { doc.sequence_ids() } else { Vec::new() } }
+        Cle { frame: doc.frame, plans, s: bits_reglages(s), last_joins, pale_rows: opt.pale_rows, hold: bits_hold(opt), sens: opt.sens, textes: opt.textes.bits(), vue: vue.cloned(), sequences: if vue.is_some() { doc.sequence_ids() } else { Vec::new() }, annules: doc.annules_visibles().into_iter().map(|k| doc.annules.plans[k].clone()).collect(), support: doc.annules.support }
     }
 
     /// La disposition de ces arguments serait-elle celle de cette clé ? (Un passage sur les plans, sans rien allouer.)
     fn tient(&self, doc: &Document, s: &BoardSettings, last_joins: bool, opt: &Options, vue: Option<&VueSequences>) -> bool {
         self.frame == doc.frame
+            && self.support == doc.annules.support
+            && {
+                let visibles = doc.annules_visibles();
+                self.annules.len() == visibles.len() && self.annules.iter().zip(&visibles).all(|(a, &k)| std::sync::Arc::ptr_eq(a, &doc.annules.plans[k]))
+            }
             && self.vue.as_ref() == vue
             && (vue.is_none() || self.sequences == doc.sequence_ids())
             && self.s == bits_reglages(s)
@@ -760,14 +778,69 @@ pub struct VueSequences {
 /// `layout_cache`, pour la planche par séquences quand `vue` est donnée (`layout_sequences`) ; sans elle, la planche d'une seule séquence.
 pub fn layout_cache_sequences(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options, vue: Option<&VueSequences>, cache: &mut CacheDisposition) -> BoardLayout {
     if !cache.cle.as_ref().is_some_and(|k| k.tient(doc, s, last_joins, opt, vue)) {
-        cache.layout = match vue {
-            Some(v) => crate::planchesequences::layout_sequences(doc, s, last_joins, opt, v),
-            None => layout_with(doc, s, lines, last_joins, opt),
-        };
+        cache.layout = layout_ecran(doc, s, lines, last_joins, opt, vue);
         cache.cle = Some(Cle::de(doc, s, last_joins, opt, vue));
         cache.calculs += 1;
     }
     cache.layout.clone()
+}
+
+/// La planche à l'écran : le film, et les plans annulés à leur place (`planannule.rs`). Les cases de ces derniers sortent de `cards` et vont dans
+/// `annulees` ; tout le reste de la disposition est celle d'une planche ordinaire, en lignes, à la japonaise ou par séquences. Les exports, eux,
+/// appellent `layout_with` ou `layout_export` : ils ne voient jamais de plan annulé.
+pub fn layout_ecran(doc: &Document, s: &BoardSettings, lines: &HashMap<u64, usize>, last_joins: bool, opt: &Options, vue: Option<&VueSequences>) -> BoardLayout {
+    let dispose = |d: &Document| match vue {
+        Some(v) => crate::planchesequences::layout_sequences(d, s, last_joins, opt, v),
+        None => layout_with(d, s, lines, last_joins, opt),
+    };
+    if doc.annules.is_empty() {
+        return dispose(doc);
+    }
+    let (mini, ordre) = crate::planannule::document_de_la_planche(doc);
+    retirer_les_annulees(dispose(&mini), &ordre, doc)
+}
+
+/// Sépare les cases annulées des autres : `ordre` donne le vrai rang de chaque plan de la disposition.
+fn retirer_les_annulees(l: BoardLayout, ordre: &[crate::planannule::Rang], doc: &Document) -> BoardLayout {
+    use crate::planannule::Rang;
+    let mut out = BoardLayout { cards: Vec::with_capacity(l.cards.len()), bars: Vec::with_capacity(l.bars.len()), ..l.clone() };
+    let mut rang_neuf: Vec<usize> = Vec::with_capacity(l.cards.len() + 1);
+    for (k, c) in l.cards.iter().enumerate() {
+        rang_neuf.push(out.cards.len());
+        match ordre.get(c.panel) {
+            Some(&Rang::Film(i)) => {
+                let mut c = *c;
+                c.panel = i;
+                if let Some(b) = l.bars.get(k) {
+                    let mut b = *b;
+                    b.after = out.cards.len();
+                    out.bars.push(b);
+                }
+                // La barre de cette case mène-t-elle à une case annulée ?
+                if l.cards.get(k + 1).is_some_and(|n| matches!(ordre.get(n.panel), Some(Rang::Annule(_)))) {
+                    out.barres_mortes.push(out.cards.len());
+                }
+                out.cards.push(c);
+            }
+            Some(&Rang::Annule(g)) => {
+                let mut c = *c;
+                c.panel = g;
+                out.annulees.push(c);
+            }
+            None => {}
+        }
+    }
+    rang_neuf.push(out.cards.len());
+    let film_avant = |i: usize| ordre[..=i.min(ordre.len().saturating_sub(1))].iter().rev().find_map(|r| if let Rang::Film(f) = *r { Some(f) } else { None });
+    let film_apres = |i: usize| ordre.get(i + 1..).into_iter().flatten().find_map(|r| if let Rang::Film(f) = *r { Some(f) } else { None });
+    for g in &mut out.groupes {
+        g.cartes = rang_neuf.get(g.cartes.start).copied().unwrap_or(0)..rang_neuf.get(g.cartes.end).copied().unwrap_or(0);
+        let derniere = g.dernier_plan;
+        g.plan_suivant = film_apres(derniere).and_then(|f| doc.panels.get(f)).map(|p| p.id);
+        g.dernier_plan = film_avant(derniere).unwrap_or(0);
+    }
+    out.masquees.extend(doc.annules.plans.iter().flat_map(|g| std::iter::once(g.panel.id).chain(g.panel.marks.iter().map(|m| m.id))));
+    out
 }
 
 /// Comme `layout`. `_lines` : le nombre de lignes de note de chaque vignette, **ignoré depuis le 2026-10-24** (chaque champ coché fait
@@ -1338,7 +1411,7 @@ pub fn touches(points: &[VPoint], p: Pos2, radius: f32) -> bool {
 fn frame_of(layout: &BoardLayout, anchor: Option<u64>) -> Option<(Pos2, f32)> {
     match anchor {
         None => Some((Pos2::ZERO, 1.0)),
-        Some(id) => layout.card_of(id).map(|c| (c.card.min, c.card.width())),
+        Some(id) => layout.card_of(id).or_else(|| layout.annulees.iter().find(|c| c.id == id)).map(|c| (c.card.min, c.card.width())),
     }
 }
 

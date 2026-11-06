@@ -888,7 +888,7 @@ impl App {
         if !self.vignettes.annot.marie {
             return;
         }
-        let holes: Vec<Rect> = layout.cards.iter().map(|c| xf.rect(c.thumb)).collect();
+        let holes: Vec<Rect> = layout.cards.iter().chain(&layout.annulees).map(|c| xf.rect(c.thumb)).collect();
         // L'opacité du passe-partout des cases (barre du bas de la planche, Préférences > Vignettes) : 100 %, opaque (Anthony, 2026-10-30).
         let [r, g, b] = self.vignettes.annot.marie_couleur;
         let alpha = (f32::from(self.settings.vignettes.passe_partout_cases_opacite.min(100)) * 2.55).round() as u8;

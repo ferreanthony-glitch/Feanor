@@ -798,6 +798,10 @@ mod rognage_tests;
 mod rognageui;
 mod corbeille;
 mod corbeilleui;
+mod planannule;
+mod planannuleui;
+#[cfg(test)]
+mod planannule_tests;
 mod jkl;
 #[cfg(test)]
 mod jkl_tests;

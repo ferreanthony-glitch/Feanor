@@ -851,6 +851,9 @@ impl App {
             self.status = "Le partage est déjà en cours.".into();
             return;
         }
+        if self.partage_refuse_annules() {
+            return;
+        }
         self.end_stroke();
         // (La boîte montre un projet `.shot`, comme partout ; la structure du film partagé garde pourtant le nom `.pelure`
         // dans son dossier : des équipiers peuvent avoir une version de SHOT d'avant `.shot`, `target_for_partage`.)
