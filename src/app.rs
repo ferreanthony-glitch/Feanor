@@ -1909,6 +1909,11 @@ impl App {
         self.poser_la_creation();
         self.end_stroke();
         self.playing = false;
+        // Les Vignettes s'ouvrent sans plan choisi.
+        if espace == Espace::Vignettes {
+            self.vignettes.libre = true;
+            self.vignettes.camera_choisie = None;
+        }
         self.aller_a_l_espace(espace);
         // Le lecteur de l'espace Montage montre le film tel que la caméra le filme ; en sortir remet
         // la vue du plateau, si c'est lui qui l'avait changée (un réglage de vue : rien dans le projet).
@@ -4802,6 +4807,11 @@ impl App {
             self.persp = None;
             self.envelope = None;
             self.end_stroke();
+            // Quitter l'outil Caméra des Vignettes pour un autre : plus de caméra choisie, et plus de plan choisi (dessiner est libre).
+            if self.tool == Tool::Camera && tool != Tool::Camera {
+                self.vignettes.camera_choisie = None;
+                self.vignettes.libre = true;
+            }
             self.tool = tool;
             if tool.is_shape() {
                 self.shape.last = tool;
