@@ -1935,6 +1935,11 @@ impl App {
             self.vignettes.camera_choisie = None;
         }
         self.aller_a_l_espace(espace);
+        // L'onglet Vignettes, c'est toujours la planche (partie 113) : une disposition retenue qui dirait le dessin (un ancien réglage,
+        // ou l'espace qu'on rouvre alors qu'on y est déjà) n'y change rien.
+        if espace == Espace::Vignettes {
+            self.board_view = BoardView::Panels;
+        }
         // Le lecteur de l'espace Montage montre le film tel que la caméra le filme ; en sortir remet
         // la vue du plateau, si c'est lui qui l'avait changée (un réglage de vue : rien dans le projet).
         if espace == Espace::Montage && avant != Espace::Montage && !self.camera_view {
@@ -3928,6 +3933,39 @@ impl App {
         }
         self.run_action_now(action);
         self.history.context = before;
+        self.vignettes_apres_la_commande(action);
+    }
+
+    /// Sur la planche des Vignettes, après une commande (partie 113) : une commande qui choisit un plan (plan suivant, précédent, nouveau,
+    /// dupliqué) le montre, cadre noir et planche défilée jusqu'à sa case : sans cela le plan courant changeait sans qu'on le voie. Un
+    /// outil pris par sa touche alors que la colonne des Vignettes ne le montre pas (pinceau, crayon, gomme, caméra) est pris quand même,
+    /// et la ligne d'état le dit.
+    fn vignettes_apres_la_commande(&mut self, action: &str) {
+        if !self.board_shown() {
+            return;
+        }
+        if matches!(action, "panneau.suivant" | "panneau.precedent" | "scene.suivante" | "scene.precedente" | "panneau.nouveau" | "scene.nouvelle" | "panneau.dupliquer" | "scene.dupliquer" | "plan.nouveau_avant") {
+            self.vignettes_montrer_le_plan_courant();
+        }
+        if action.starts_with("outil.") && self.espace == crate::workspace::Espace::Vignettes {
+            let dans_la_colonne = crate::toolbars::TOOL_GROUPS_VIGNETTES.iter().flat_map(|g| g.iter()).any(|s| s.contains(&self.tool));
+            if !dans_la_colonne {
+                let pinceau = self.raccourci("outil.pinceau");
+                let retour = if pinceau.is_empty() { String::new() } else { format!(" {pinceau} : le pinceau.") };
+                // (La barre d'état montre le message jusqu'au premier point ; le reste est dans sa bulle.)
+                self.status = format!("Outil {}, hors de la colonne des Vignettes : il agit dans les cases. La colonne garde le pinceau, le crayon, la gomme et la caméra.{retour}", self.tool.label());
+            }
+        }
+    }
+
+    /// Le plan courant est choisi et se voit sur la planche : cadre noir, et la planche défile jusqu'à sa case à l'image suivante.
+    pub(crate) fn vignettes_montrer_le_plan_courant(&mut self) {
+        if let Some(p) = self.doc.panels.get(self.cur_panel) {
+            self.board_sel = vec![p.id];
+        }
+        self.vignettes.libre = false;
+        self.vignettes.camera_choisie = None;
+        self.vignettes.montrer_courante = true;
     }
 
     fn run_action_now(&mut self, action: &str) {
@@ -4375,6 +4413,13 @@ impl App {
             "vue.ajuster" => self.fit_pending = true,
             "vue.pelure" => self.onion.enabled = !self.onion.enabled,
             "vue.miroir" => self.flip_view(),
+            // Maj+Tab depuis l'espace Vignettes : le dessin du Storyboard (partie 113). Avant, la planche cédait la place au dessin seul
+            // sous l'onglet Vignettes, d'où rien ne la ramenait (l'onglet, déjà allumé, ne faisait rien), et la disposition retenue
+            // rouvrait les Vignettes sur le dessin à la séance suivante.
+            "vue.planches" if self.espace == crate::workspace::Espace::Vignettes => {
+                self.set_espace(crate::workspace::Espace::Storyboard);
+                self.board_view = BoardView::Scene;
+            }
             "vue.planches" => {
                 if board_shown {
                     self.board_view = match self.board_view {

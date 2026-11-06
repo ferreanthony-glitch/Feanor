@@ -255,6 +255,11 @@ pub(crate) struct Vignettes {
     pub libre: bool,
     /// Le plan dont la caméra est choisie (l'outil Caméra des Vignettes : un clic sur une case) ; ses cadres restent soulignés.
     pub camera_choisie: Option<u64>,
+    /// Une commande vient de choisir le plan courant (plan suivant, nouveau plan… ; partie 113) : à l'image suivante, la planche défile
+    /// jusqu'à sa case si elle n'est pas dans la vue.
+    pub montrer_courante: bool,
+    /// « Cadrer tout » vient d'être demandé (partie 113) : le prochain zoom nul met toute la planche dans la vue, en hauteur aussi.
+    pub cadrer_tout: bool,
 }
 
 impl Vignettes {
@@ -303,6 +308,8 @@ impl Default for Vignettes {
             hc_tex: Default::default(),
             libre: true,
             camera_choisie: None,
+            montrer_courante: false,
+            cadrer_tout: false,
         }
     }
 }
@@ -375,6 +382,14 @@ impl App {
     pub(crate) fn board_fit(&mut self) {
         self.board_zoom = 0.0;
         self.board_pan = Vec2::ZERO;
+    }
+
+    /// « Cadrer tout » (barre du bas) : toute la planche dans la vue, en largeur **et** en hauteur (partie 113). Avant, le bouton ne
+    /// mettait la page qu'à la largeur de la vue : sur 300 plans, il montrait les sept premières rangées en disant « Toute la page dans la
+    /// vue ». Le zoom ne descend pas sous `ZOOM_MIN` : au-delà, la planche reste à cadrer à la main.
+    pub(crate) fn planche_cadrer_tout(&mut self) {
+        self.board_fit();
+        self.vignettes.cadrer_tout = true;
     }
 
     /// Zoom par cran (raccourcis), autour du coin haut gauche de la vue.
@@ -840,6 +855,9 @@ impl App {
                     true
                 } else {
                     self.vignettes.press = Press::Dead;
+                    if !cam_mode && !lasso {
+                        self.dire_l_outil_sans_effet(true);
+                    }
                     false
                 }
             }
@@ -866,10 +884,27 @@ impl App {
                 }
                 if matches!(self.tool, Tool::Brush | Tool::Pencil | Tool::Line | Tool::Rect | Tool::Ellipse | Tool::Polyline | Tool::Fill | Tool::Cutter) {
                     self.vignettes.press = Press::Dead;
+                    self.dire_l_outil_sans_effet(false);
                 }
                 false
             }
         }
+    }
+
+    /// Un appui qui ne fait rien le dit (partie 113) : le pot de peinture et le cutter n'agissent que dans une case dessinée ; `vide` :
+    /// l'appui est tombé dans une case pâle (un outil qui ne fait pas de plan).
+    fn dire_l_outil_sans_effet(&mut self, vide: bool) {
+        let outil = match self.tool {
+            Tool::Fill => "Le pot de peinture",
+            Tool::Cutter => "Le cutter",
+            _ => return,
+        };
+        let fait = if self.tool == Tool::Fill { "remplit une zone" } else { "coupe un trait" };
+        self.status = if vide {
+            format!("{outil} {fait} dans une case déjà dessinée : dessine d'abord dans cette case (pinceau ou crayon).")
+        } else {
+            format!("{outil} {fait} dans une case : clique dans une case.")
+        };
     }
 
     /// Choisir des plans (comme sur l'ancien titre) : Ctrl ajoute ou retire celui de la vignette `k`, Maj prend l'intervalle.
@@ -1110,7 +1145,16 @@ impl App {
                 // courant s'il est plus loin (Anthony, 2026-10-30).
                 self.ouverture_cadrer(&layout, view);
             } else {
-                let tient = if layout.sens.japonais() { view.height() / layout.size.y.max(1.0) } else { view.width() / layout.size.x.max(1.0) };
+                let largeur = view.width() / layout.size.x.max(1.0);
+                let hauteur = view.height() / layout.size.y.max(1.0);
+                // « Cadrer tout » : la planche entière, dans les deux sens (partie 113) ; sinon, à la largeur (en lignes) ou à la hauteur (à la japonaise).
+                let tient = if std::mem::take(&mut self.vignettes.cadrer_tout) {
+                    largeur.min(hauteur)
+                } else if layout.sens.japonais() {
+                    hauteur
+                } else {
+                    largeur
+                };
                 self.board_zoom = tient.clamp(ZOOM_MIN, 1.5);
                 self.board_pan = Vec2::ZERO;
                 self.vignettes.ouverture_suivi = None;
@@ -1165,6 +1209,20 @@ impl App {
         }
         if bg.dragged_by(PointerButton::Middle) || (pan_mode && bg.dragged_by(PointerButton::Primary)) {
             self.board_pan += bg.drag_delta();
+        }
+        // Une commande vient de choisir le plan courant : sa case entre dans la vue (le moins de défilement possible), partie 113.
+        if std::mem::take(&mut self.vignettes.montrer_courante) && self.board_zoom > 0.0 {
+            let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
+            if let Some(c) = layout.cards.iter().find(|c| c.panel == self.cur_panel && (c.frame..c.end).contains(&f)) {
+                let xf = Xf { origin: view.min + self.board_pan, zoom: self.board_zoom };
+                let r = xf.rect(c.card.union(c.note)).expand(12.0);
+                let glisse = |bas: f32, haut: f32, min: f32, max: f32| if bas < min { min - bas } else if haut > max { (max - haut).max(min - bas) } else { 0.0 };
+                let d = vec2(glisse(r.left(), r.right(), view.left(), view.right()), glisse(r.top(), r.bottom(), view.top(), view.bottom()));
+                if d != Vec2::ZERO {
+                    self.board_pan += d;
+                    self.vignettes.ouverture_suivi = None;
+                }
+            }
         }
         self.clamp_board_pan(view, layout.size);
         if let Some(s) = self.vignettes.ouverture_suivi.as_mut().filter(|s| s.3) {
@@ -2114,8 +2172,14 @@ impl App {
         if self.partage.is_some() {
             ui.menu_button("Équipe", |ui| self.equipe_menu_items(ui, i));
         }
-        item(self, ui, "Nouveau plan après", &|a| a.new_panel());
-        item(self, ui, "Dupliquer le plan", &|a| a.duplicate_panel());
+        item(self, ui, "Nouveau plan après", &|a| {
+            a.new_panel();
+            a.vignettes_montrer_le_plan_courant();
+        });
+        item(self, ui, "Dupliquer le plan", &|a| {
+            a.duplicate_panel();
+            a.vignettes_montrer_le_plan_courant();
+        });
         ui.separator();
         self.panel_clipboard_items(ui);
         ui.separator();

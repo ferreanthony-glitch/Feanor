@@ -1101,6 +1101,8 @@ mod horschamp_tests;
 #[cfg(test)]
 mod canevas_libre_tests;
 #[cfg(test)]
+mod vignettes_simplicite_tests;
+#[cfg(test)]
 mod horschamptex_tests;
 mod workspaceui;
 mod xsheet;

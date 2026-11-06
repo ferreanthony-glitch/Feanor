@@ -138,8 +138,8 @@ impl App {
             self.vignettes.ouverture_a_faire = true;
         }
         let r = ui.button(ph::ARROWS_OUT.to_string());
-        if bulle(r, "Cadrer tout", "Toute la page dans la vue.", "").clicked() {
-            self.board_fit();
+        if bulle(r, "Cadrer tout", "Toute la planche dans la vue, en largeur et en hauteur (jusqu'au zoom le plus petit, 20 %).", "").clicked() {
+            self.planche_cadrer_tout();
         }
     }
 
