@@ -7731,7 +7731,7 @@ Le geste : **F9**, une ligne si on veut, **Entrée**. On reste dans le dessin.
 8. F9 puis Échap : rien de plus dans le dossier.
 9. F9 puis Entrée sans rien taper : une note « (sans texte) », avec sa capture.
 
-## 113. Le banc du stylet : « Ce que le stylet transmet » (2026-11-06, branche `stylet-entier`)
+## 114. Le banc du stylet : « Ce que le stylet transmet » (2026-11-06, branche `stylet-entier`)
 
 Anthony : « Le stylet en entier. Aujourd'hui Feanor ne reçoit que la pression. Lire le stylet directement auprès de Windows donnerait la gomme
 au dos du stylet, l'inclinaison, et le bouton pendant que la pointe touche. C'est le chantier le plus risqué, à faire avec toi devant la
