@@ -25,7 +25,7 @@ fn couleur(k: usize) -> Color32 {
 
 /// Quatre plans de 12 images dans une seule séquence ; chacun a deux calques (« Dessin » : un dessin pour trois images, « Fond » :
 /// un seul dessin) ; chaque dessin a un contenu à lui (une couleur de pixel qui dépend de son rang).
-fn film() -> Document {
+pub(crate) fn film() -> Document {
     let mut doc = Document::with_frame(64, 48, 24);
     for i in 0..3 {
         doc.add_scene_after(i);
@@ -56,7 +56,7 @@ fn film() -> Document {
     doc
 }
 
-fn appli(nom: &str) -> App {
+pub(crate) fn appli(nom: &str) -> App {
     let dir = std::env::temp_dir().join(format!("shot-montage-sans-casse-{nom}-{}-{:?}", std::process::id(), std::thread::current().id()));
     let _ = std::fs::create_dir_all(&dir);
     crate::donnees::bac_a_sable(&dir);
@@ -70,7 +70,7 @@ fn appli(nom: &str) -> App {
 }
 
 /// L'empreinte de chaque dessin que montre le film ou que garde une réserve de rognage.
-fn inventaire(doc: &Document) -> BTreeSet<u64> {
+pub(crate) fn inventaire(doc: &Document) -> BTreeSet<u64> {
     let mut ids = doc.used_cels();
     for r in doc.reserves.values() {
         ids.extend(Reserve::cels(r));
@@ -79,16 +79,16 @@ fn inventaire(doc: &Document) -> BTreeSet<u64> {
 }
 
 /// Ce que montre chaque image de chaque calque de chaque plan, par empreinte (dans l'ordre du film).
-fn film_en_empreintes(doc: &Document) -> Vec<Vec<Vec<Option<u64>>>> {
+pub(crate) fn film_en_empreintes(doc: &Document) -> Vec<Vec<Vec<Option<u64>>>> {
     let h = |id: &u64| doc.cels.get(id).map(|c| Donnees::de(c).empreinte());
     doc.panels.iter().map(|p| p.layers.iter().map(|l| l.frames.iter().map(|f| f.as_ref().and_then(h)).collect()).collect()).collect()
 }
 
-fn annuler(app: &mut App) {
+pub(crate) fn annuler(app: &mut App) {
     app.run_action("edition.annuler");
 }
 
-const NOM: &str = "Essai";
+pub(crate) const NOM: &str = "Essai";
 
 #[test]
 fn trimming_a_plan_keeps_every_drawing_and_lengthening_gives_the_frames_back() {
@@ -215,7 +215,7 @@ fn joining_plans_whose_trimmed_frames_would_end_up_inside_says_what_it_forgets()
     assert!(app.jonction_faire(Jonction::Suivant { a, precedent: false }, &JoinOpts::default()));
     assert_eq!(app.history.undo_len(), n + 1, "une seule étape");
     assert_eq!(app.doc.panels[0].frame_count(), 9 + 10, "la durée des deux plans, comme l'écran la montrait");
-    assert!(app.status.contains("5 images rognées") && app.status.contains("Ctrl+Z"), "{}", app.status);
+    assert!(app.status.contains("5 images rognées") && app.status.contains("corbeille"), "{}", app.status);
     assert!(inventaire(&app.doc).len() < inv0.len(), "le dessin des images cachées au milieu est sorti");
     annuler(&mut app);
     assert_eq!(film_en_empreintes(&app.doc), avant, "annulé : les deux plans, leurs réserves");
@@ -260,7 +260,7 @@ fn deleting_plans_tells_what_goes_and_one_undo_gives_it_back() {
     assert_eq!(app.history.undo_len(), n + 1, "une seule étape");
     assert!(inventaire(&app.doc).len() < inv0.len(), "des dessins quittent le film");
     // La perte se voit : la barre d'état dit combien de dessins partent et comment les reprendre.
-    assert!(app.status.contains("10 dessins") && app.status.contains("Ctrl+Z"), "{}", app.status);
+    assert!(app.status.contains("10 dessins") && app.status.contains("corbeille"), "{}", app.status);
     annuler(&mut app);
     assert_eq!(film_en_empreintes(&app.doc), avant, "annulé : exactement les mêmes plans");
     assert_eq!(inventaire(&app.doc), inv0);
@@ -276,7 +276,7 @@ fn deleting_a_layer_tells_what_goes_and_one_undo_gives_it_back() {
     assert_eq!(app.doc.panels[0].layers.len(), 1);
     assert_eq!(app.history.undo_len(), n + 1);
     assert!(inventaire(&app.doc).len() < inv0.len());
-    assert!(app.status.contains("4 dessins") && app.status.contains("Ctrl+Z"), "{}", app.status);
+    assert!(app.status.contains("4 dessins") && app.status.contains("corbeille"), "{}", app.status);
     annuler(&mut app);
     assert_eq!(film_en_empreintes(&app.doc), avant);
 }
@@ -296,7 +296,7 @@ fn an_alt_drag_that_lands_on_a_drawing_says_so_and_one_undo_gives_it_back() {
     app.end_keys_drag();
     assert_eq!(app.history.undo_len(), n + 1, "une seule étape");
     assert!(inventaire(&app.doc).len() < inv0.len(), "le dessin d'en dessous est sorti du calque");
-    assert!(app.status.contains("Attention") && app.status.contains("1 dessin") && app.status.contains("Ctrl+Z"), "{}", app.status);
+    assert!(app.status.contains("1 dessin") && app.status.contains("corbeille"), "{}", app.status);
     annuler(&mut app);
     assert_eq!(film_en_empreintes(&app.doc), avant);
 }

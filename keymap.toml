@@ -663,6 +663,12 @@ contexte = "storyboard"
 # Montage (contexte = "montage") et y passent avant les autres raccourcis ; dans les autres espaces ces touches gardent leur sens
 # (L est la sélection dans le fichier personnel d'Anthony : elle le reste partout sauf dans le Montage). Aucune de ces trois
 # touches n'était prise dans ce fichier.
+# La corbeille du projet (partie 104 de docs/INTERFACE.md) : sans touche, par le menu Fichier.
+[[raccourci]]
+action = "fichier.corbeille"
+touches = []
+source = "FEANOR (sans touche)"
+
 [[raccourci]]
 action = "montage.lecture_arriere"
 touches = ["J"]

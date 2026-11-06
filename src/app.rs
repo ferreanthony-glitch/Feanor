@@ -885,6 +885,8 @@ pub struct App {
     pub(crate) duree_plans: Option<crate::dureeplans::DureePlans>,
     /// La question posée avant de réunir deux plans qui ont un calque de même nom (`fusionnoms.rs`).
     pub(crate) fusion_noms: Option<crate::fusionnoms::FusionNoms>,
+    /// La fenêtre de la corbeille du projet (`corbeilleui.rs`).
+    pub(crate) corbeille_ui: Option<crate::corbeilleui::Fenetre>,
     /// Réponse d'avance à cette question (les essais et le hasard : sans elle, chaque jonction attendrait un clic).
     /// `None` : la fenêtre se montre, comme pour l'utilisateur.
     pub(crate) fusion_noms_auto: Option<crate::fusionnoms::Reponse>,
@@ -1390,6 +1392,7 @@ impl App {
             duration_dialog: None,
             duree_plans: None,
             fusion_noms: None,
+            corbeille_ui: None,
             // (Les essais répondent d'avance « Fusionner » : leurs jonctions se font d'un seul geste, comme avant la question.)
             fusion_noms_auto: if cfg!(test) { Some(crate::fusionnoms::Reponse::Fusionner) } else { None },
             trim_menu: None,
@@ -4071,6 +4074,7 @@ impl App {
             "aide.palette" => self.palette = Some(Default::default()),
             "fichier.exporter" => self.export_hub = true,
             "fichier.preferences" => self.prefs_window = true,
+            "fichier.corbeille" => self.ouvrir_la_corbeille(),
             "aide.a_propos" => self.about_window = true,
             "aide.diagnostic" => self.open_diagnostic(),
             // Le collage pose déjà les éléments et les zones à leur place d'origine.

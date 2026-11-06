@@ -816,6 +816,8 @@ impl SaveJob {
             plans_versions: None,
             variantes: None,
             variantes_gardees: false,
+            corbeille: None,
+            froids_a_copier: None,
             keep_drawings: false,
             snapshots: Vec::new(),
             snapshot_reuse: HashMap::new(),

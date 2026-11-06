@@ -208,6 +208,7 @@ etat_projet! {
     duration_dialog: Option<crate::rognageui::DurationDialog> = None,
     duree_plans: Option<crate::dureeplans::DureePlans> = None,
     fusion_noms: Option<crate::fusionnoms::FusionNoms> = None,
+    corbeille_ui: Option<crate::corbeilleui::Fenetre> = None,
     trim_menu: Option<(u64, usize)> = None,
     goto_plan: Option<String> = None,
     renumber_confirm: bool = false,

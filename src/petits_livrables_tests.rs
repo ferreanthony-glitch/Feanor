@@ -1,4 +1,4 @@
-//! Essais des « petits livrables » (`docs/INTERFACE.md` partie 91) : budget de durée, rapport de numérotation, PDF de studio (en-tête, plans modifiés, notes de
+﻿//! Essais des « petits livrables » (`docs/INTERFACE.md` partie 91) : budget de durée, rapport de numérotation, PDF de studio (en-tête, plans modifiés, notes de
 //! révision), planche des vignettes avec titre et légendes, fenêtres de fichiers dans le projet, nom de bobine de l'EDL.
 
 use std::collections::HashMap;
@@ -139,7 +139,7 @@ fn the_budget_is_saved_only_when_set_and_old_projects_open_the_same() {
     crate::project::save(&doc, &manifeste, &mut written).unwrap();
     let texte = std::fs::read_to_string(&manifeste).unwrap();
     assert!(!texte.contains("budget"), "sans cible, rien n'est écrit : {texte}");
-    assert_eq!(crate::project::VERSION, 46);
+    assert_eq!(crate::project::VERSION, 47);
     // Un projet de version 45 s'ouvre sans budget.
     let ancien = texte.replace(&format!("\"version\": {}", crate::project::VERSION), "\"version\": 45");
     assert_ne!(ancien, texte);

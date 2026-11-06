@@ -679,6 +679,12 @@ impl Document {
     /// Oublie la réserve du plan `pi` (le rognage devient définitif). Renvoie les images oubliées.
     pub fn forget_reserve(&mut self, pi: usize) -> (usize, usize) {
         let Some(id) = self.panels.get(pi).map(|p| p.id) else { return (0, 0) };
+        // Ce qui sort du film reste récupérable : les images oubliées vont à la corbeille (`corbeille.rs`).
+        if let Some(r) = self.reserves.get(&id).cloned() {
+            let p = self.panels[pi].clone();
+            self.jeter_images(&p, id, &r.head, "Contenu rogné oublié");
+            self.jeter_images(&p, id, &r.tail, "Contenu rogné oublié");
+        }
         self.reserves.remove(&id).map_or((0, 0), |r| (r.head.len, r.tail.len))
     }
 
@@ -696,9 +702,19 @@ impl Document {
     /// milieu du plan réuni, où rien ne les tient (la réserve n'a qu'un début et une fin) : ils sont oubliés, et leur nombre
     /// d'images est compté pour que le geste le dise (`images_oubliees`). Le début rogné de `a` et la fin rognée de `b` (qui
     /// deviennent ceux du plan réuni : `move_tail_reserve`) restent.
-    pub(crate) fn forget_joint_reserves(&mut self, a: u64, b: u64) {
-        let perdu = self.reserves.get(&a).map_or(0, |r| r.tail.len) + self.reserves.get(&b).map_or(0, |r| r.head.len);
+    pub(crate) fn forget_joint_reserves(&mut self, a: u64, b: &Panel) {
+        let a = a;
+        let b_id = b.id;
+        let perdu = self.reserves.get(&a).map_or(0, |r| r.tail.len) + self.reserves.get(&b_id).map_or(0, |r| r.head.len);
         OUBLIEES.with(|c| c.set(c.get() + perdu));
+        // Ce qui sort du film reste récupérable : ces images vont à la corbeille (`corbeille.rs`).
+        if let (Some(pa), Some(r)) = (self.panels.iter().find(|p| p.id == a).cloned(), self.reserves.get(&a).map(|r| r.tail.clone())) {
+            self.jeter_images(&pa, a, &r, "Images rognées au bord d'une jonction de plans");
+        }
+        if let Some(r) = self.reserves.get(&b_id).map(|r| r.head.clone()) {
+            self.jeter_images(b, a, &r, "Images rognées au bord d'une jonction de plans");
+        }
+        let b = b_id;
         self.forget_tail_reserve(a);
         if let Some(r) = self.reserves.get_mut(&b) {
             r.head = Piece::default();

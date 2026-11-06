@@ -48,6 +48,29 @@ use crate::document::{Cel, CelId, Document, Layer, LayerKind};
 use crate::handles::{apply_key_move, clamp_key_delta, duplicate_run, key_move_for, key_preview, overwrite_run, remove_run, runs, Handle, KeyMove};
 use crate::montagerows::layer_in_row;
 
+/// Les dessins que `avant` montrait et que `apres` ne montre plus (recouverts, ou poussés hors du plan) : un calque « Dessins remplacés »
+/// qui les garde aux images d'origine, pour la corbeille (`corbeille.rs`). Rien s'il n'en manque aucun.
+pub(crate) fn dessins_sortis(avant: &Layer, apres: &Layer) -> Option<Layer> {
+    let encore: std::collections::BTreeSet<CelId> = apres.frames.iter().flatten().copied().collect();
+    let perdus: std::collections::BTreeSet<CelId> = avant.frames.iter().flatten().copied().filter(|c| !encore.contains(c)).collect();
+    if perdus.is_empty() {
+        return None;
+    }
+    let mut l = avant.clone();
+    l.frames = avant.frames.iter().map(|f| f.filter(|c| perdus.contains(c))).collect();
+    l.name = "Dessins remplacés".into();
+    l.id = crate::document::fresh_layer_id();
+    l.roles.clear();
+    l.fx.clear();
+    l.pos_keys.clear();
+    l.opacity_keys.clear();
+    l.couleur = None;
+    l.folder = false;
+    l.parent = None;
+    l.locked = false;
+    Some(l)
+}
+
 /// Une clé : plan (id), calque (id), image où commence son exposition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct KeyRef {
@@ -469,7 +492,7 @@ impl App {
         let several = d.layers.iter().map(|l| l.starts.len()).sum::<usize>() > 1;
         // Les dessins qu'un geste de clés fait sortir de leur calque (posés par-dessus, ou poussés hors du plan) : dits dans la barre
         // d'état, car seule l'annulation les rend (règle du montage : rien ne se perd sans qu'on le voie).
-        let mut remplaces = 0usize;
+        let mut sortis: Vec<(u64, usize, Layer)> = Vec::new();
         for dl in d.layers {
             let Some(pi) = self.doc.panels.iter().position(|p| p.id == dl.panel) else { continue };
             let Some(li) = self.doc.panels[pi].layers.iter().position(|x| x.id == dl.layer) else { continue };
@@ -482,10 +505,8 @@ impl App {
                 apply_key_move(&mut self.doc.panels[pi].layers[li], &dl.starts, d.delta, d.mode, dl.plan_len)
             };
             changed |= self.doc.panels[pi].layers[li].frames != dl.before.frames;
-            {
-                let apres: std::collections::BTreeSet<CelId> = self.doc.panels[pi].layers[li].frames.iter().flatten().copied().collect();
-                let avant: std::collections::BTreeSet<CelId> = dl.before.frames.iter().flatten().copied().collect();
-                remplaces += avant.difference(&apres).count();
+            if let Some(l) = dessins_sortis(&dl.before, &self.doc.panels[pi].layers[li]) {
+                sortis.push((dl.panel, li, l));
             }
             let p = &mut self.doc.panels[pi];
             // La durée du plan reste celle d'avant le geste.
@@ -504,9 +525,14 @@ impl App {
             self.key_sel = sel;
         }
         if changed {
+            let remplaces: usize = sortis.iter().map(|(_, _, l)| l.frames.iter().flatten().collect::<std::collections::BTreeSet<_>>().len()).sum();
+            // Ce qui sort du film reste récupérable : ces dessins vont à la corbeille (`corbeille.rs`), dans la même étape d'annulation.
+            for (plan, rang, l) in sortis {
+                self.doc.jeter_calques(plan, vec![(rang, l)], "Dessins remplacés par un geste de clés");
+            }
             self.commit_as(d.snap, key_move_name(d.mode, several));
             if remplaces > 0 {
-                let m = format!("Attention : {} sorti{} du calque, Ctrl+Z {} rend.", crate::rognage::dessins_texte(remplaces), if remplaces > 1 { "s" } else { "" }, if remplaces > 1 { "les" } else { "le" });
+                let m = format!("{} sorti{} du calque : envoyé{} à la corbeille.", crate::rognage::dessins_texte(remplaces), if remplaces > 1 { "s" } else { "" }, if remplaces > 1 { "s" } else { "" });
                 if d.mode == KeyMove::Copy {
                     self.status = format!("{} {m}", self.status);
                 } else {
@@ -800,10 +826,25 @@ impl App {
         let snap = self.snapshot();
         // De la dernière à la première : une clé remplacée par sa voisine choisie, puis cette
         // voisine supprimée à son tour, laisse la place à celle d'avant elles deux.
+        let mut avant: Vec<(usize, usize, Layer)> = Vec::new();
+        for &(pi, li, _, _) in &targets {
+            if !avant.iter().any(|(p, l, _)| (*p, *l) == (pi, li)) {
+                avant.push((pi, li, self.doc.panels[pi].layers[li].clone()));
+            }
+        }
         for &(pi, li, s, _) in targets.iter().rev() {
             remove_run(&mut self.doc.panels[pi].layers[li], s, gap);
         }
         let n = targets.len();
+        // Ce qui sort du film reste récupérable : le dessin d'une clé supprimée va à la corbeille (`corbeille.rs`).
+        let mut envoyes = 0usize;
+        for (pi, li, l) in avant {
+            if let Some(sorti) = dessins_sortis(&l, &self.doc.panels[pi].layers[li]) {
+                envoyes += sorti.frames.iter().flatten().collect::<std::collections::BTreeSet<_>>().len();
+                let plan = self.doc.panels[pi].id;
+                self.doc.jeter_calques(plan, vec![(li, sorti)], "Dessin d'une clé supprimée");
+            }
+        }
         self.key_sel.clear();
         self.vsel = None;
         self.commit_structure(snap);
@@ -811,6 +852,9 @@ impl App {
             true => format!("{n} clé{} supprimée{} : leurs images restent vides.", s(n), s(n)),
             false => format!("{n} clé{} supprimée{} : les voisines les remplacent.", s(n), s(n)),
         };
+        if envoyes > 0 {
+            self.status += &format!(" {} envoyé{} à la corbeille.", crate::rognage::dessins_texte(envoyes), if envoyes > 1 { "s" } else { "" });
+        }
     }
 
     /// Duplique sur place les clés visées (Ctrl+D après un clic sur une piste) : la copie prend

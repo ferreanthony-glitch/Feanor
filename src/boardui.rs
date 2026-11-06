@@ -429,6 +429,7 @@ impl App {
             }
             vus.len()
         };
+        let en_corbeille = self.doc.corbeille.len();
         match self.doc.remove_panels(ids) {
             Some(i) => {
                 self.release_removed_notes(&before);
@@ -439,12 +440,15 @@ impl App {
                 self.commit_structure(snap);
                 self.board_sel.clear();
                 self.thumbs.prune(&self.doc);
-                // (Des plans supprimés ne se retrouvent que par Ctrl+Z : la phrase le dit, avec ce qui part.)
-                self.status = match (ids.len(), dessins) {
-                    (1, 0) => "Plan supprimé.".into(),
-                    (n, 0) => format!("{n} plans supprimés."),
-                    (1, d) => format!("Plan supprimé ({}). Ctrl+Z le rend.", crate::rognage::dessins_texte(d)),
-                    (n, d) => format!("{n} plans supprimés ({}). Ctrl+Z les rend.", crate::rognage::dessins_texte(d)),
+                // Les plans supprimés vont à la corbeille (`corbeille.rs`) : la phrase le dit, avec ce qui part.
+                let envoyes = self.doc.corbeille.len().saturating_sub(en_corbeille);
+                let (n, d) = (ids.len(), dessins);
+                let avec = if d == 0 { String::new() } else { format!(" ({})", crate::rognage::dessins_texte(d)) };
+                self.status = match (n, envoyes > 0) {
+                    (1, true) => format!("Plan envoyé à la corbeille{avec}."),
+                    (n, true) => format!("{n} plans envoyés à la corbeille{avec}."),
+                    (1, false) => "Plan supprimé.".into(),
+                    (n, false) => format!("{n} plans supprimés."),
                 };
             }
             None => self.status = "Il faut garder au moins un plan.".into(),

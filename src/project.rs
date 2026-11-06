@@ -30,6 +30,7 @@
 //!                         sans les fondus
 //!   effets_son.json       réglages d'effets des extraits et des pistes son (`audiofx.rs`), de même
 //!   sons_proposes.json    sons proposés par la lecture du storyboard (`indications.rs`), de même sans
+ 
 //!                         changer `VERSION` ; les sons générés, eux, restent dans le cache de SHOT
 //!                         jusqu'à leur acceptation (copiés alors dans sons/)
 //!   crayonnes.json        (ancien) la planche de crayonnés, supprimée en 2026-10-21 : SHOT ne le lit plus
@@ -222,7 +223,11 @@ pub const FORMAT: &str = "pelure-projet";
 /// 46 (2026-10-30, `docs/INTERFACE.md` partie 91) : **budget de durée** — `budget_ms` (la cible du film) et `budgets_sequences` (la cible de chaque
 /// séquence) dans `proprietes` (`budget.rs`). Une version précédente qui ouvrirait le projet perdrait les cibles à l'enregistrement : elle le refuse
 /// donc. Un projet de version 45 ou moins s'ouvre tel quel, à l'identique (aucune cible).
-pub const VERSION: u32 = 46;
+/// 47 (2026-11-06, `docs/INTERFACE.md` partie 104) : **corbeille du projet** — `corbeille.json` à côté du manifeste (`corbeille.rs`) : les plans, les
+/// calques, les dessins recouverts et les images rognées que les gestes du montage retirent du film, avec leurs dessins gardés dans `dessins/`.
+/// Une version précédente qui ouvrirait le projet effacerait ces dessins à l'enregistrement (rien ne les cite plus dans le manifeste) : elle le
+/// refuse donc. Un projet de version 46 ou moins s'ouvre tel quel, sans rien perdre, corbeille vide.
+pub const VERSION: u32 = 47;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -1446,6 +1451,10 @@ pub struct SaveJob {
     variantes: Option<Vec<u8>>,
     /// Projet partagé dont des dessins de variantes manquaient à la lecture : le fichier n'est pas réécrit.
     variantes_gardees: bool,
+    /// Le fichier de la corbeille (`corbeille.json`) ; rien : elle est vide, le fichier part.
+    corbeille: Option<Vec<u8>>,
+    /// Dessins de la corbeille hors mémoire à recopier d'un autre dossier : (dossier d'où, numéros).
+    froids_a_copier: Option<(PathBuf, BTreeSet<CelId>)>,
     /// Un `plans_versions.json` que cette version ne sait pas lire est là : ses dessins sont dans `dessins/`
     /// et rien ne les cite, l'enregistrement n'en efface aucun.
     keep_drawings: bool,
@@ -1597,6 +1606,10 @@ struct Differe {
     hors_variantes: BTreeSet<CelId>,
     /// Le dossier `versions/` d'un autre dossier du projet (« Enregistrer sous »), à reprendre s'il existe.
     versions_from: Option<PathBuf>,
+    /// Les dessins de la corbeille que la séance n'a pas en mémoire (relus à la demande) : leurs fichiers restent, et sont
+    /// recopiés d'où ils étaient quand le dossier change (« Enregistrer sous », copie de secours).
+    froids: BTreeSet<CelId>,
+    froids_depuis: Option<PathBuf>,
 }
 
 /// Le cliché des dessins `used` : rien que la mémoire pour ceux qui sont déjà écrits à leur version, et le contenu des
@@ -1660,7 +1673,11 @@ pub fn prepare_save(
     reuse: Option<Reuse>,
 ) -> Result<SaveJob, String> {
     let dir = manifest_path.parent().ok_or("chemin de projet invalide")?;
-    let used = doc.used_cels();
+    let mut used = doc.used_cels();
+    // La corbeille garde ses dessins : ceux qui sont en mémoire s'écrivent, les autres ont déjà leur fichier (`froids`).
+    let froids: BTreeSet<CelId> = doc.corbeille.cels().filter(|id| !doc.cels.contains_key(id)).collect();
+    used.extend(doc.corbeille.cels().filter(|id| doc.cels.contains_key(id)));
+    let froids_depuis = if froids.is_empty() { None } else { doc.envois.dossier.as_ref().filter(|d| d.as_path() != dir).map(|d| d.join(DRAWINGS)) };
     // (Les textures citées par les traits : le mémo de chaque dessin les connaît ; écrites si elles manquent.)
     let (dessins, mut used_textures, used_images) = cliche_dessins(doc, &used, written, reuse.as_ref());
     // (Et celles des pinceaux du dessin hors des cases, dans les annotations de la planche : `horschamptex.rs`.)
@@ -1684,7 +1701,7 @@ pub fn prepare_save(
     job.snapshot_reuse = crate::envois::dessins_reutilisables(&job.snapshots, written, &|id| Some(drawing_path(dir, id, false)));
     let versions_from = if reuse.is_none() { doc.envois.dossier.as_ref().filter(|d| d.as_path() != dir).map(|d| d.join(crate::envois::DIR)) } else { None };
     let hors_variantes = if doc.variantes.is_empty() { BTreeSet::new() } else { hors_of(doc, &doc.cels_des_variantes()) };
-    job.differe = Some(Box::new(Differe { doc: doc.copie_sans_dessins(), used, dessins, hors_variantes, versions_from }));
+    job.differe = Some(Box::new(Differe { doc: doc.copie_sans_dessins(), used, dessins, hors_variantes, versions_from, froids, froids_depuis }));
     Ok(job)
 }
 
@@ -1694,7 +1711,7 @@ impl SaveJob {
     /// fil de l'interface ; un dessin que `written` disait écrit et dont un fichier manque est noté dans `manquants`.
     fn resoudre(&mut self) -> Result<(), String> {
         let Some(differe) = self.differe.take() else { return Ok(()) };
-        let Differe { doc, used, dessins, hors_variantes, versions_from } = *differe;
+        let Differe { doc, used, dessins, hors_variantes, versions_from, froids, froids_depuis } = *differe;
         let dir = self.manifest_path.parent().ok_or("chemin de projet invalide")?.to_path_buf();
         let dir = dir.as_path();
         // Les fichiers déjà là, d'une seule lecture du dossier (un `exists` par dessin coûtait 0,15 ms chacun).
@@ -1775,11 +1792,16 @@ impl SaveJob {
         self.manifest = serde_json::to_vec_pretty(&manifest_de(&doc, true, &used, &hors)).map_err(|e| e.to_string())?;
         let unreadable = unreadable_in(dir);
         self.keep_drawings = crate::planvers::illisible(dir) || crate::variantes::illisible(dir);
+        // Les dessins de la corbeille hors mémoire sont traités comme les illisibles : leurs fichiers (et leurs textures, leurs images
+        // collées) ne sont jamais effacés ; recopiés d'ailleurs si le dossier a changé.
+        let unreadable: BTreeSet<CelId> = unreadable.union(&froids).copied().collect();
         self.has_unreadable = !unreadable.is_empty() || self.keep_drawings;
         self.kept = kept_files_in(dir);
         self.used = used.union(&unreadable).copied().collect();
         self.fonds = fonds.union(&unreadable).copied().collect();
         self.hors = hors.union(&unreadable).copied().collect();
+        self.froids_a_copier = froids_depuis.map(|d| (d, froids.clone())).filter(|(_, f)| !f.is_empty());
+        self.corbeille = crate::corbeille::to_bytes(&doc)?;
         self.comments = crate::commentaires::to_bytes(&doc)?;
         self.reserves = crate::rognage::to_bytes(&doc)?;
         self.transitions = crate::transitions::to_bytes(&doc)?;
@@ -2158,6 +2180,11 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::planvers::FILE), self.plans_versions.as_deref(), |t| crate::planvers::parse(t).is_ok())?;
         // Les variantes rangées des séquences, de même (`variantes.rs`).
         write_sidecar(&dir.join(crate::variantes::FILE), self.variantes.as_deref(), |t| crate::variantes::parse(t).is_ok())?;
+        // La corbeille : ses dessins hors mémoire d'abord (recopiés d'un autre dossier s'il a changé), puis son fichier.
+        if let Some((depuis, ids)) = &self.froids_a_copier {
+            count += copier_dessins_de(depuis, &dir.join(DRAWINGS), ids);
+        }
+        write_sidecar(&dir.join(crate::corbeille::FILE), self.corbeille.as_deref(), |t| crate::corbeille::parse(t).is_ok())?;
         // Le manifeste en dernier ; s'il a déjà ces octets-là (une copie de secours où rien n'a changé), il reste tel quel.
         if toujours_ecrire() || fs::read(&self.manifest_path).ok().as_deref() != Some(self.manifest.as_slice()) {
             write_atomic_synced(&self.manifest_path, &self.manifest)?;
@@ -2197,6 +2224,49 @@ fn remove_unused_sounds(dir: &Path, used: &BTreeSet<u64>, kept: &BTreeSet<PathBu
         }
     }
     removed
+}
+
+/// Le numéro de dessin d'un fichier de `dessins/` (« <nombre>.png », « <nombre>_fond.png », « <nombre>_hors.json »…).
+fn numero_de_fichier(path: &Path) -> Option<CelId> {
+    let stem = path.file_stem().and_then(|s| s.to_str())?;
+    let stem = stem.strip_suffix("_hors").or_else(|| stem.strip_suffix("_fond")).or_else(|| stem.strip_suffix("_coupe")).unwrap_or(stem);
+    stem.parse::<CelId>().ok()
+}
+
+/// Recopie de `depuis` (un dossier `dessins/`) vers `vers` les fichiers des dessins `ids` qui n'y sont pas encore (la corbeille d'un
+/// projet enregistré ailleurs, ou une copie de secours : ses dessins ne sont pas en mémoire). Rend le nombre de fichiers copiés.
+fn copier_dessins_de(depuis: &Path, vers: &Path, ids: &BTreeSet<CelId>) -> usize {
+    let Ok(entries) = fs::read_dir(depuis) else { return 0 };
+    let _ = fs::create_dir_all(vers);
+    let mut n = 0;
+    for e in entries.flatten() {
+        let path = e.path();
+        let Some(id) = numero_de_fichier(&path).filter(|id| ids.contains(id)) else { continue };
+        let _ = id;
+        let to = vers.join(e.file_name());
+        if !to.exists() && fs::copy(&path, &to).is_ok() {
+            n += 1;
+        }
+    }
+    n
+}
+
+/// La place que prennent sur le disque les fichiers des dessins `ids` dans `dir/dessins/` (la fenêtre de la corbeille la dit).
+pub(crate) fn taille_des_dessins(dir: &Path, ids: &BTreeSet<CelId>) -> u64 {
+    let Ok(entries) = fs::read_dir(dir.join(DRAWINGS)) else { return 0 };
+    entries.flatten().filter(|e| numero_de_fichier(&e.path()).is_some_and(|id| ids.contains(&id))).filter_map(|e| e.metadata().ok()).map(|m| m.len()).sum()
+}
+
+/// Relit un seul dessin de `dir/dessins/` (la corbeille ne charge rien à l'ouverture : elle relit à la demande). `rapide` : rendu
+/// approché des traits (une vignette).
+pub(crate) fn charger_un_dessin_avec(dir: &Path, id: CelId, w: usize, h: usize, rapide: bool) -> Result<Cel, String> {
+    let hors = hors_json_path(dir, id).exists();
+    load_drawing(dir, id, w, h, rapide, hors).map(|(c, _, _)| c)
+}
+
+/// Relit un seul dessin pour le remettre dans le film (rendu exact).
+pub(crate) fn charger_un_dessin(dir: &Path, id: CelId, w: usize, h: usize) -> Result<Cel, String> {
+    charger_un_dessin_avec(dir, id, w, h, false)
 }
 
 /// Efface les dessins du dossier qui ne servent plus (seulement les fichiers « <nombre>.png/json »),
@@ -3014,6 +3084,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         versions: Default::default(),
         // Les variantes rangées des séquences : `variantes.json`, `variantes::installer`.
         variantes: Default::default(),
+        corbeille: Default::default(),
+
         // Les annotations de la vue Vignettes : `annotations.json`, `load_annotations`.
         annotations: Default::default(),
         // Le scénario gardé : `scenario.json`, `scenariogarde::load`.
@@ -3281,6 +3353,13 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         crate::crayonnesheritage::signaler(dir, &mut warnings);
         // Les envois (`envois.json`, absent : aucun) ; leurs instantanés ne se lisent qu'à la demande.
         doc.envois = crate::envois::load(dir, &mut warnings);
+    }
+    // La corbeille (`corbeille.json`) : ses entrées seulement ; ses dessins restent dans `dessins/`, relus à la demande. Ses numéros
+    // sont pris (aucun numéro neuf ne tombe sur un fichier qu'elle garde).
+    if !annexes.plans_seuls && !annexes.fournies {
+        doc.corbeille = crate::corbeille::lire(dir, &mut warnings);
+        let haut = doc.corbeille.entrees.iter().map(|e| e.id_max).max().unwrap_or(0);
+        doc.reserve_id(haut);
     }
     // Les autres versions des plans.
     if let (Some(f), Some((_, _, cles))) = (versions, a_ranger) {

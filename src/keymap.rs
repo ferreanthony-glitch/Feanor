@@ -100,6 +100,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("numerotation.renumeroter", "Renuméroter les plans (1, 2, 3… dans l'ordre du film)", true, false),
     act("fichier.exporter_image_courante", "Exporter l'image courante (PNG)", true, false),
     act("fichier.exporter", "Exporter (choisir le format : film, images, PDF, son…)", true, false),
+    act("fichier.corbeille", "Corbeille du projet (restaurer ce qui est sorti du film, vider)", true, false),
     act("fichier.preferences", "Préférences de FEANOR (copie de secours, curseur, panneaux, raccourcis)", true, false),
     act("edition.annuler", "Annuler", true, true),
     act("edition.retablir", "Rétablir", true, true),
