@@ -258,3 +258,31 @@ fn typing_in_a_text_field_never_plays() {
     assert!(i < j, "la garde de saisie précède la recherche des raccourcis");
     assert!(src[i..j].contains("if saisie || self.modal_open()"));
 }
+
+/// La vraie garde : une touche L pressée pendant qu'un champ de texte a le clavier passe par `handle_shortcuts` et ne lance rien ; la même
+/// touche, sans champ de texte, lit.
+#[test]
+fn a_text_field_with_the_keyboard_keeps_j_k_and_l_from_playing_for_real() {
+    let l_pressee = || RawInput {
+        events: vec![egui::Event::Key { key: Key::L, physical_key: Some(Key::L), pressed: true, repeat: false, modifiers: NONE }],
+        ..Default::default()
+    };
+    let (mut app, ctx) = fixture("saisie");
+    let mut texte = String::new();
+    // Une image où le champ prend le clavier, puis la touche pendant qu''il l''a.
+    let _ = ctx.run(Default::default(), |c| {
+        egui::CentralPanel::default().show(c, |ui| ui.text_edit_singleline(&mut texte).request_focus());
+    });
+    let _ = ctx.run(l_pressee(), |c| {
+        egui::CentralPanel::default().show(c, |ui| {
+            let r = ui.text_edit_singleline(&mut texte);
+            assert!(r.has_focus(), "le champ a le clavier");
+        });
+        app.handle_shortcuts(c);
+    });
+    assert!(!app.playing, "L tapée dans un champ de texte ne lit pas");
+    // Sans champ : la même touche lit.
+    let (mut app, ctx) = fixture("sans-saisie");
+    let _ = ctx.run(l_pressee(), |c| app.handle_shortcuts(c));
+    assert!(app.playing, "L, hors saisie, lit");
+}

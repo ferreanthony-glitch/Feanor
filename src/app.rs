@@ -887,6 +887,8 @@ pub struct App {
     pub(crate) fusion_noms: Option<crate::fusionnoms::FusionNoms>,
     /// La fenêtre de la corbeille du projet (`corbeilleui.rs`).
     pub(crate) corbeille_ui: Option<crate::corbeilleui::Fenetre>,
+    /// Une restauration de la corbeille dont les dessins se relisent sur un autre fil (`corbeilleui.rs`).
+    pub(crate) corbeille_charge: Option<crate::corbeilleui::Chargement>,
     /// La question posée avant de couper un plan qui a des versions rangées (`coupeversions.rs`), et sa réponse d'avance (les essais et
     /// le hasard : sans elle, chaque coupe attendrait un clic ; `None` : la fenêtre se montre, comme pour l'utilisateur).
     pub(crate) coupe_versions: Option<crate::coupeversions::CoupeEnAttente>,
@@ -1397,6 +1399,7 @@ impl App {
             duree_plans: None,
             fusion_noms: None,
             corbeille_ui: None,
+            corbeille_charge: None,
             coupe_versions: None,
             // (Les essais coupent d'un geste, les versions avec la première partie ; ceux de `coupeversions` retirent cette réponse.)
             coupe_versions_auto: if cfg!(test) { Some(crate::variantes::Cote::Premiere) } else { None },
@@ -3786,7 +3789,7 @@ impl App {
 
     // ------------------------------------------------------------------ clavier
 
-    fn handle_shortcuts(&mut self, ctx: &egui::Context) {
+    pub(crate) fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         // Un bouton cliqué garde le focus clavier : Entrée ou Espace le « recliqueraient ».
         if !ctx.wants_keyboard_input() {
             if let Some(id) = ctx.memory(|m| m.focused()) {

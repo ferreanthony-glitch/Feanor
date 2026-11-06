@@ -1791,7 +1791,7 @@ impl SaveJob {
         self.images = images_a_ecrire(dir, &self.used_images);
         self.manifest = serde_json::to_vec_pretty(&manifest_de(&doc, true, &used, &hors)).map_err(|e| e.to_string())?;
         let unreadable = unreadable_in(dir);
-        self.keep_drawings = crate::planvers::illisible(dir) || crate::variantes::illisible(dir);
+        self.keep_drawings = crate::planvers::illisible(dir) || crate::variantes::illisible(dir) || crate::corbeille::illisible(dir);
         // Les dessins de la corbeille hors mémoire sont traités comme les illisibles : leurs fichiers (et leurs textures, leurs images
         // collées) ne sont jamais effacés ; recopiés d'ailleurs si le dossier a changé.
         let unreadable: BTreeSet<CelId> = unreadable.union(&froids).copied().collect();
@@ -1860,7 +1860,7 @@ pub(crate) fn prepare_save_avant(doc: &Document, manifest_path: &Path, written: 
         let drawn = doc.used_cels();
         job.manifest = serde_json::to_vec_pretty(&manifest_de(doc, true, &drawn, &hors_of(doc, &drawn))).map_err(|e| e.to_string())?;
         let unreadable = unreadable_in(dir);
-        job.keep_drawings = crate::planvers::illisible(dir) || crate::variantes::illisible(dir);
+        job.keep_drawings = crate::planvers::illisible(dir) || crate::variantes::illisible(dir) || crate::corbeille::illisible(dir);
         job.has_unreadable = !unreadable.is_empty() || job.keep_drawings;
         job.kept = kept_files_in(dir);
         job.drawings = drawings;
@@ -2183,6 +2183,12 @@ impl SaveJob {
         // La corbeille : ses dessins hors mémoire d'abord (recopiés d'un autre dossier s'il a changé), puis son fichier.
         if let Some((depuis, ids)) = &self.froids_a_copier {
             count += copier_dessins_de(depuis, &dir.join(DRAWINGS), ids);
+            // Leurs textures et leurs images collées (que les dessins hors mémoire citent sans que la séance les connaisse) suivent : ce
+            // qui manque dans le nouveau dossier est recopié, rien d'écrasé.
+            if let Some(source) = depuis.parent() {
+                count += copier_manquants(&source.join(TEXTURES), &dir.join(TEXTURES));
+                count += copier_manquants(&source.join(crate::imagevec::DOSSIER), &dir.join(crate::imagevec::DOSSIER));
+            }
         }
         write_sidecar(&dir.join(crate::corbeille::FILE), self.corbeille.as_deref(), |t| crate::corbeille::parse(t).is_ok())?;
         // Le manifeste en dernier ; s'il a déjà ces octets-là (une copie de secours où rien n'a changé), il reste tel quel.
@@ -2246,6 +2252,26 @@ fn copier_dessins_de(depuis: &Path, vers: &Path, ids: &BTreeSet<CelId>) -> usize
         let to = vers.join(e.file_name());
         if !to.exists() && fs::copy(&path, &to).is_ok() {
             n += 1;
+        }
+    }
+    n
+}
+
+/// Recopie de `depuis` vers `vers` les fichiers qui n'y sont pas encore (un dossier à plat : `textures/`, `images/`). Rend le nombre copié.
+fn copier_manquants(depuis: &Path, vers: &Path) -> usize {
+    let Ok(entries) = fs::read_dir(depuis) else { return 0 };
+    let mut n = 0;
+    for e in entries.flatten() {
+        let from = e.path();
+        if !from.is_file() {
+            continue;
+        }
+        let to = vers.join(e.file_name());
+        if !to.exists() {
+            let _ = fs::create_dir_all(vers);
+            if fs::copy(&from, &to).is_ok() {
+                n += 1;
+            }
         }
     }
     n

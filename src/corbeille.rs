@@ -77,6 +77,9 @@ pub struct Entree {
     pub plan: u64,
     /// Le plan qui précédait, dans la même séquence : le plan revient derrière lui s'il existe encore.
     pub apres: Option<u64>,
+    /// Le plan qui précédait *tout de suite*, même s'il est parti avec lui (plusieurs plans supprimés d'un coup reviennent ainsi dans l'ordre du film,
+    /// quel que soit l'ordre où on les restaure) ; essayé avant pres.
+    pub precedent: Option<u64>,
     /// Le plan qui suivait, dans la même séquence : s'il n'y avait rien devant, le plan revient devant lui.
     pub suivant: Option<u64>,
     /// Rang d'origine de chaque calque (pour `Calques`).
@@ -189,6 +192,7 @@ impl Document {
         }
         let sequence = self.sequence_of(index);
         let apres = (0..index).rev().find(|&i| !exclus.contains(&self.panels[i].id)).filter(|&i| self.sequence_of(i) == sequence).map(|i| self.panels[i].id);
+        let precedent = (index > 0).then(|| self.panels[index - 1].id).filter(|_| self.sequence_of(index - 1) == sequence);
         let suivant = (index + 1..self.panels.len()).find(|&i| !exclus.contains(&self.panels[i].id)).filter(|&i| self.sequence_of(i) == sequence).map(|i| self.panels[i].id);
         let reserve = self.reserves.get(&id).cloned();
         let commentaires: Vec<Comment> = self.comments.iter().filter(|c| c.panel == id).cloned().collect();
@@ -205,6 +209,7 @@ impl Document {
             sequence_nom: self.nom_de_sequence(sequence),
             plan: id,
             apres,
+            precedent,
             suivant,
             rangs: Vec::new(),
             cels: dessins_avec(&panel, reserve.as_ref(), versions.as_ref()),
@@ -240,6 +245,7 @@ impl Document {
             sequence_nom: self.nom_de_sequence(sequence),
             plan,
             apres: None,
+            precedent: None,
             suivant: None,
             rangs,
             cels: dessins_de(&panel, None),
@@ -303,6 +309,7 @@ impl Document {
             sequence_nom: self.nom_de_sequence(sequence),
             plan: panel.id,
             apres: Some(apres),
+            precedent: None,
             suivant: None,
             rangs: Vec::new(),
             cels: dessins_de(&panel, None),
@@ -357,7 +364,7 @@ impl Document {
                     panel.id = self.alloc();
                 }
                 // Où : derrière le plan d'avant, sinon à la fin de la séquence, sinon à la fin de la séquence courante.
-                let (at, place) = match e.apres.and_then(|a| self.panels.iter().position(|p| p.id == a)) {
+                let (at, place) = match e.precedent.and_then(|a| self.panels.iter().position(|p| p.id == a)).or_else(|| e.apres.and_then(|a| self.panels.iter().position(|p| p.id == a))) {
                     Some(i) => (i + 1, "à sa place"),
                     None if e.suivant.is_some_and(|s| self.panels.iter().any(|p| p.id == s)) => (self.panels.iter().position(|p| Some(p.id) == e.suivant).unwrap_or(0), "à sa place"),
                     None => match (0..self.panels.len()).rev().find(|&i| self.sequence_of(i) == e.sequence).filter(|_| e.sequence != 0) {
@@ -472,6 +479,8 @@ struct EntreeFichier {
     #[serde(default)]
     suivant: Option<u64>,
     #[serde(default)]
+    precedent: Option<u64>,
+    #[serde(default)]
     rangs: Vec<usize>,
     #[serde(default)]
     dessins: Vec<CelId>,
@@ -533,6 +542,7 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
             plan: e.plan,
             apres: e.apres,
             suivant: e.suivant,
+            precedent: e.precedent,
             rangs: e.rangs.clone(),
             dessins: e.cels.clone(),
             vignette: e.vignette,
@@ -573,6 +583,7 @@ pub(crate) fn parse(text: &str) -> Result<Corbeille, String> {
                 plan: e.plan,
                 apres: e.apres,
                 suivant: e.suivant,
+                precedent: e.precedent,
                 rangs: e.rangs,
                 cels: e.dessins,
                 vignette: e.vignette,
@@ -583,6 +594,15 @@ pub(crate) fn parse(text: &str) -> Result<Corbeille, String> {
         })
         .collect();
     Ok(Corbeille { entrees })
+}
+
+/// Le fichier existe mais cette version ne sait pas le lire : l'enregistrement n'efface alors aucun dessin de `dessins/` (ceux de la corbeille
+/// qu'il décrit y sont encore), comme pour `plans_versions.json` et `variantes.json`.
+pub(crate) fn illisible(dir: &Path) -> bool {
+    match std::fs::read(dir.join(FILE)) {
+        Ok(bytes) => String::from_utf8(bytes).map_err(|_| ()).and_then(|t| parse(&t).map(|_| ()).map_err(|_| ())).is_err(),
+        Err(e) => e.kind() != std::io::ErrorKind::NotFound,
+    }
 }
 
 /// L'ouverture : la corbeille du dossier (absente : vide). Un fichier illisible ou d'une version plus récente n'empêche pas d'ouvrir
