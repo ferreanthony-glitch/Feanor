@@ -5,6 +5,9 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-06
 
+- Traits continus (partie 111, c11f743) et Vignettes simplifiées par Fable (analyse `suivi/ANALYSE-VIGNETTES.md`, partie 113) fusionnés (f5caddd).
+  Vérification complète : 3981 réussis, 0 échec, deux passages, aucun avertissement. Ouvert sans plantage sur une copie. Version FEANOR-portable-2026-11-06c.
+  Reste : décision 6, plan annulé, essai au stylet.
 - L'anneau sous le stylet est fusionné dans main à la demande d'Anthony (ef983ac) : `feanor.exe` reconstruit, ouvert sans erreur sur une
   copie de TEST PELURE_effets. Le contenu est celui que le vérificateur a passé sur la branche (3954 réussis, aucun avertissement).
   Reste son essai à la tablette ; le dossier de chantier `vignettes-passepartout` (2,4 Go) peut partir avec son accord.
