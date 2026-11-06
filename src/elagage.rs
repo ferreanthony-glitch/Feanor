@@ -35,7 +35,7 @@ fn de_la_couleur(p: &Panel, out: &mut HashSet<CelId>) {
 }
 
 /// Tous les dessins qu'un plan cite (images, griffonnages, dessins de couleur).
-fn dessins_du_plan_retenus(p: &Panel, out: &mut HashSet<CelId>) {
+pub(crate) fn dessins_du_plan_retenus(p: &Panel, out: &mut HashSet<CelId>) {
     out.extend(crate::empreinte::dessins_du_plan(p));
     de_la_couleur(p, out);
 }
@@ -60,6 +60,8 @@ impl Structure {
         for r in self.reserves.values() {
             out.extend(r.cels());
         }
+        // La corbeille (`corbeille.rs`) garde ses dessins : annuler une suppression, ou la restaurer, les remet.
+        out.extend(self.corbeille.cels());
         for v in self.versions.values() {
             for r in &v.autres {
                 dessins_du_plan_retenus(&r.panel, out);
@@ -102,6 +104,7 @@ fn de_l_etape(e: &Edit, out: &mut HashSet<CelId>) {
 /// Les dessins du document vivant que rien ne cite.
 fn retenus_du_document(doc: &Document) -> BTreeSet<CelId> {
     let mut out = doc.used_cels();
+    out.extend(doc.corbeille.cels());
     let mut en_plus = HashSet::new();
     for p in doc.panels.iter().chain(doc.plans_ranges()) {
         for l in &p.layers {

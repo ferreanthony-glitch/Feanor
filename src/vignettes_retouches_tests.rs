@@ -6,7 +6,6 @@ use eframe::egui::{epaint::ColorMode, pos2, vec2, CursorIcon, Event, Key, Modifi
 use crate::app::Tool;
 use crate::board::{self, Hit};
 use crate::boardui::Press;
-use crate::document::Document;
 use crate::perf_tests::{se_reposer, Banc};
 use crate::vignettes_tests::{appui, barre, dernier_nom, encre, ouvert, pas_d_annulation, quatre_plans, vignette};
 
@@ -39,16 +38,6 @@ fn lignes_magenta(b: &Banc) -> Vec<(Rect, Vec<Pos2>)> {
 fn debord(b: &Banc, case: Rect) -> Vec<(Rect, Vec<Pos2>)> {
     let dedans = case.shrink(1.5);
     lignes_magenta(b).into_iter().filter(|(clip, _)| !clip.intersects(dedans)).collect()
-}
-
-/// Le plan `i` a un trait vectoriel dont un point est hors de la feuille (à droite).
-fn trait_hors_feuille(doc: &Document, i: usize) -> bool {
-    let w = doc.width as f32;
-    doc.panels[i].layers.iter().flat_map(|l| l.frames.iter().flatten()).any(|id| {
-        doc.cels.get(id).and_then(|c| c.vector.as_ref()).is_some_and(|v| {
-            v.elements.iter().any(|e| matches!(e, crate::vector::Element::Stroke { points, .. } if points.iter().any(|p| p.x > w + 4.0)))
-        })
-    })
 }
 
 fn echap(pressed: bool) -> Event {

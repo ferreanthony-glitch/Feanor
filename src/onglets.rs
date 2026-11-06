@@ -102,6 +102,7 @@ etat_projet! {
     playing: bool = false,
     play_montage: bool = false,
     play_accum: f64 = 0.0,
+    play_speed: f32 = 1.0,
     last_time: Option<f64> = None,
     // --- vue
     view: View = View::default(),
@@ -207,6 +208,8 @@ etat_projet! {
     duration_dialog: Option<crate::rognageui::DurationDialog> = None,
     duree_plans: Option<crate::dureeplans::DureePlans> = None,
     fusion_noms: Option<crate::fusionnoms::FusionNoms> = None,
+    corbeille_ui: Option<crate::corbeilleui::Fenetre> = None,
+    corbeille_charge: Option<crate::corbeilleui::Chargement> = None,
     coupe_versions: Option<crate::coupeversions::CoupeEnAttente> = None,
     trim_menu: Option<(u64, usize)> = None,
     goto_plan: Option<String> = None,

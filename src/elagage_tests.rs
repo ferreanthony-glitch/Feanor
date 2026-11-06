@@ -78,6 +78,11 @@ fn a_removed_plan_stays_while_undo_can_bring_it_back_and_goes_when_nothing_holds
     b.app.redo();
     assert!(b.app.doc.panels.iter().all(|p| p.id != cible));
     b.app.history.clear();
+    // La corbeille (`corbeille.rs`) retient le plan supprimé tant qu'elle le garde : son dessin ne part pas.
+    assert_eq!(passes(&mut b), 0, "la corbeille retient le dessin");
+    assert!(b.app.doc.cels.contains_key(&ids[2]));
+    // Vidée, plus rien ne le retient.
+    b.app.doc.corbeille.entrees.clear();
     assert_eq!(passe(&mut b), 0, "premier passage : le dessin est noté sans attache");
     assert_eq!(passe(&mut b), 1, "second passage : il part");
     assert!(!b.app.doc.cels.contains_key(&ids[2]));
@@ -154,6 +159,8 @@ fn no_pruning_while_something_is_going_on() {
         assert_eq!(b.app.gel.elaguer(&mut b.app.doc, &b.app.history, false), 0, "geste ou lecture en cours");
     }
     assert!(b.app.doc.cels.contains_key(&ids[1]));
+    // (La corbeille vidée : sans elle, plus rien ne retient le plan supprimé.)
+    b.app.doc.corbeille.entrees.clear();
     assert_eq!(passes(&mut b), 1, "au calme, il part");
 }
 

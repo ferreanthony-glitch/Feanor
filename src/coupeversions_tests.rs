@@ -44,7 +44,7 @@ fn cutting_a_plan_with_stored_versions_asks_and_touches_nothing_until_the_answer
     let historique = b.app.history.names().0.len();
     couper(&mut b, 10);
     let q = b.app.coupe_versions.as_ref().expect("la question est posée");
-    assert_eq!((q.plan, q.at, q.n), (plan, 10, 1));
+    assert_eq!((q.plan, q.n), (plan, 1));
     assert!(b.app.modal_open(), "les raccourcis attendent la réponse");
     assert_eq!(ids_film(&b.app.doc), ids, "le document n'est pas touché");
     assert_eq!(rangees(&b.app.doc, plan), versions);

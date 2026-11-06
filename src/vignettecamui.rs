@@ -446,7 +446,7 @@ impl App {
             for (i, q) in cadres.iter().enumerate() {
                 let pts: Vec<Pos2> = q.iter().map(|p| xf.to_screen(*p)).collect();
                 clip.add(Shape::closed_line(pts.clone(), halo));
-                clip.add(Shape::closed_line(pts.clone(), Stroke::new(if choisie { 2.4 } else { 1.8 }, bleu)));
+                clip.add(Shape::closed_line(pts.clone(), Stroke::new(if choisie { 2.4_f32 } else { 1.8_f32 }, bleu)));
                 if survol == Some(k) || choisie {
                     for c in &pts {
                         clip.add(Shape::circle_filled(*c, 3.5, Color32::WHITE));

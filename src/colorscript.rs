@@ -247,6 +247,7 @@ pub struct Echantillon {
 
 impl Spec {
     /// Les images qui représentent chaque entrée : (plan, image du plan), dans l'ordre du rangement.
+    #[cfg(test)]
     pub fn images(&self) -> Vec<(usize, usize)> {
         self.blocs.iter().flat_map(|b| b.entrees.iter().map(|e| (e.plan, e.frame))).collect()
     }
@@ -291,19 +292,10 @@ pub fn temps_court(frame: usize, fps: u32) -> String {
     }
 }
 
-/// La première image de `[a, b)` du plan `p` où un dessin commence sur un calque visible ; `a` s'il n'y en a pas.
-/// (Locale à ce fichier : à rapprocher de la notion de clé des « Images à la clé » à la fusion.)
+/// La première image de `[a, b)` du plan `p` où commence une clé, au sens des « Images à la clé » (`exportcles::cles_du_plan` : un dessin qui
+/// commence sur un calque que l'export des calques sépare) ; `a` s'il n'y en a pas. Une clé veut dire la même chose ici et dans l'export.
 pub fn premiere_cle(doc: &Document, p: usize, a: usize, b: usize) -> usize {
-    let Some(panel) = doc.panels.get(p) else { return a };
-    (a..b)
-        .find(|&f| {
-            panel.layers.iter().any(|l| {
-                let cur = l.frames.get(f).copied().flatten();
-                let prev = if f == 0 { None } else { l.frames.get(f - 1).copied().flatten() };
-                l.visible && cur.is_some() && cur != prev
-            })
-        })
-        .unwrap_or(a)
+    crate::exportcles::cles_du_plan(doc, p, false).into_iter().map(|c| c.frame).find(|f| (a..b).contains(f)).unwrap_or(a)
 }
 
 /// Les images qui représentent la partie `[a, b)` du plan `p` : l'image montrée, et celles de la moyenne.

@@ -102,6 +102,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("numerotation.renumeroter", "Renuméroter les plans (1, 2, 3… dans l'ordre du film)", true, false),
     act("fichier.exporter_image_courante", "Exporter l'image courante (PNG)", true, false),
     act("fichier.exporter", "Exporter (choisir le format : film, images, PDF, son…)", true, false),
+    act("fichier.corbeille", "Corbeille du projet (restaurer ce qui est sorti du film, vider)", true, false),
     act("fichier.preferences", "Préférences de FEANOR (copie de secours, curseur, panneaux, raccourcis)", true, false),
     act("edition.annuler", "Annuler", true, true),
     act("edition.retablir", "Rétablir", true, true),
@@ -234,6 +235,9 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("image.derniere", "Dernière image du plan", true, false),
     act("montage.debut", "Début du montage", true, false),
     act("montage.fin", "Fin du montage", true, false),
+    act("montage.lecture_avant", "Montage : lire en avant (un nouvel appui accélère)", true, false),
+    act("montage.lecture_arriere", "Montage : lire en arrière (un nouvel appui accélère)", true, false),
+    act("montage.lecture_arret", "Montage : arrêter la lecture (avec J ou L : image par image)", true, false),
     act("bande.zoom_avant", "Zoom avant de la bande (le montage, ou la timeline en animation)", true, true),
     act("bande.zoom_arriere", "Zoom arrière de la bande (le montage, ou la timeline en animation)", true, true),
     act("bande.tout_voir", "Bande : tout voir (le film en storyboard, le plan en animation)", true, false),
@@ -1084,6 +1088,8 @@ pub struct Binding {
     pub keys: Vec<String>,
     pub combos: Vec<Combo>,
     pub context: Option<Mode>,
+    /// contexte = "montage" : le raccourci ne joue que dans l'espace Montage (J, K, L du montage : ailleurs la touche garde son sens).
+    pub montage: bool,
     pub active: bool,
     /// Marqué « non implémenté » dans le fichier.
     pub reserved: bool,
@@ -1125,8 +1131,9 @@ fn parse_file(text: &str, warnings: &mut Vec<String>) -> Result<Vec<Binding>, St
             warnings.push(format!("action inconnue « {} » (ignorée)", e.action));
             continue;
         }
+        let montage = e.contexte.as_deref().is_some_and(|c| c.eq_ignore_ascii_case("montage"));
         let context = match e.contexte.as_deref().map(str::to_lowercase).as_deref() {
-            None | Some("") | Some("partout") => None,
+            None | Some("") | Some("partout") | Some("montage") => None,
             Some("storyboard") => Some(Mode::Storyboard),
             Some("animation") => Some(Mode::Animation),
             Some(other) => {
@@ -1155,6 +1162,7 @@ fn parse_file(text: &str, warnings: &mut Vec<String>) -> Result<Vec<Binding>, St
             keys: e.touches,
             combos,
             context,
+            montage,
             active: implemented && !reserved && !disabled,
             reserved: reserved || !implemented,
             source: e.source,
@@ -1209,7 +1217,7 @@ impl Keymap {
                 Ok(mut user_bindings) => {
                     // Une action dont tous les blocs sont ceux du fichier par défaut, mot pour mot (la
                     // source, un simple commentaire, n'y compte pas), n'est pas un choix de l'utilisateur.
-                    let is_copy = |b: &Binding| defaults.iter().any(|d| d.action == b.action && d.keys == b.keys && d.context == b.context);
+                    let is_copy = |b: &Binding| defaults.iter().any(|d| d.action == b.action && d.keys == b.keys && d.context == b.context && d.montage == b.montage);
                     let copies: Vec<String> = user_bindings
                         .iter()
                         .filter(|b| user_bindings.iter().filter(|o| o.action == b.action).all(is_copy))
@@ -1267,7 +1275,7 @@ impl Keymap {
         let active: Vec<&Binding> = self.bindings.iter().filter(|b| b.active).collect();
         for (i, a) in active.iter().enumerate() {
             for b in &active[i + 1..] {
-                if a.action == b.action || !contexts_overlap(a.context, b.context) {
+                if a.action == b.action || a.montage != b.montage || !contexts_overlap(a.context, b.context) {
                     continue;
                 }
                 if let Some(c) = a.combos.iter().find(|c| b.combos.contains(c)) {
@@ -1284,11 +1292,16 @@ impl Keymap {
 
     /// Action déclenchée par cette touche dans ce mode.
     pub fn find(&self, key: Key, physical: Option<Key>, m: Modifiers, mode: Mode) -> Option<&str> {
-        self.bindings
-            .iter()
-            .filter(|b| b.active && b.context.is_none_or(|c| c == mode))
-            .find(|b| b.combos.iter().any(|c| c.matches(key, physical, m)))
-            .map(|b| b.action.as_str())
+        self.find_in(key, physical, m, mode, false)
+    }
+
+    /// Comme `find`, en sachant si l'espace Montage est celui qui a la main : les raccourcis `contexte = "montage"` ne
+    /// jouent que là, et y passent avant les autres (J, K, L y sont la lecture ; ailleurs ils gardent leur sens).
+    pub fn find_in(&self, key: Key, physical: Option<Key>, m: Modifiers, mode: Mode, montage: bool) -> Option<&str> {
+        let hit = |b: &&Binding| b.combos.iter().any(|c| c.matches(key, physical, m));
+        let usable = |b: &&Binding| b.active && b.context.is_none_or(|c| c == mode);
+        let own = montage.then(|| self.bindings.iter().filter(|b| b.montage).filter(usable).find(hit)).flatten();
+        own.or_else(|| self.bindings.iter().filter(|b| !b.montage).filter(usable).find(hit)).map(|b| b.action.as_str())
     }
 
     /// Raccourci à afficher dans les menus (le premier défini pour l'action).
@@ -1348,14 +1361,20 @@ impl Keymap {
         self.bindings.iter().find(|b| b.action == action).and_then(|b| b.context)
     }
 
+    /// Le raccourci de l'action ne joue que dans l'espace Montage.
+    pub fn montage_only(&self, action: &str) -> bool {
+        self.bindings.iter().find(|b| b.action == action).is_some_and(|b| b.montage)
+    }
+
     /// Les autres actions actives que le raccourci `text` déclenche déjà là où joue `action`.
     pub fn conflicts(&self, text: &str, action: &str) -> Vec<String> {
         let Ok(combos) = parse_combo(text) else { return Vec::new() };
         let context = self.context_of(action);
+        let montage = self.montage_only(action);
         let mut out: Vec<String> = self
             .bindings
             .iter()
-            .filter(|b| b.active && b.action != action && contexts_overlap(b.context, context))
+            .filter(|b| b.active && b.action != action && b.montage == montage && contexts_overlap(b.context, context))
             .filter(|b| b.combos.iter().any(|c| combos.contains(c)))
             .map(|b| b.action.clone())
             .collect();
@@ -1380,6 +1399,7 @@ impl Keymap {
                 Some(Mode::Animation) => Some("animation".to_string()),
                 None => None,
             };
+            let contexte = if self.montage_only(action) { Some("montage".to_string()) } else { contexte };
             entries.retain(|e| &e.action != action);
             if let Some(keys) = keys {
                 entries.push(Entry {

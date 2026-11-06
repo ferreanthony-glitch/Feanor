@@ -139,7 +139,7 @@ fn the_budget_is_saved_only_when_set_and_old_projects_open_the_same() {
     crate::project::save(&doc, &manifeste, &mut written).unwrap();
     let texte = std::fs::read_to_string(&manifeste).unwrap();
     assert!(!texte.contains("budget"), "sans cible, rien n'est écrit : {texte}");
-    assert_eq!(crate::project::VERSION, 46);
+    assert_eq!(crate::project::VERSION, 47);
     // Un projet de version 45 s'ouvre sans budget.
     let ancien = texte.replace(&format!("\"version\": {}", crate::project::VERSION), "\"version\": 45");
     assert_ne!(ancien, texte);
@@ -416,7 +416,7 @@ fn the_report_command_writes_both_files_and_says_what_changed() {
     let envoi = envoi_de(&doc, "v1", true);
     doc.envois.list.push(envoi.clone());
     doc.remove_panel(2).unwrap();
-    let (_ctx, mut app, dir) = app_de(doc, "rapport-commande");
+    let (_ctx, app, dir) = app_de(doc, "rapport-commande");
     // Sans envoi : la commande dit quoi faire (et n'ouvre aucune fenêtre de fichier).
     let (_c2, mut sans, d2) = app_de(film(24), "rapport-sans-envoi");
     sans.run_action("fichier.exporter_renumerotation");

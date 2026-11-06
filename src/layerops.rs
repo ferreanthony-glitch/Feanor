@@ -283,9 +283,21 @@ impl App {
         }
         let snap = self.snapshot();
         let cur = self.cur_layer;
+        // Les dessins que la suppression emporte (dits dans la barre d'état ; seul Ctrl+Z les rend).
+        let dessins = {
+            let layers = self.layers();
+            let mut vus = std::collections::BTreeSet::new();
+            for &li in lis {
+                vus.extend(layers[li].frames.iter().flatten().copied());
+            }
+            vus.len()
+        };
+        let (plan_id, calques): (u64, Vec<(usize, crate::document::Layer)>) = (self.panel().id, lis.iter().map(|&li| (li, self.layers()[li].clone())).collect());
         for &li in lis.iter().rev() {
             self.layers_mut().remove(li);
         }
+        // Ce qui sort du film reste récupérable : les calques vont à la corbeille (`corbeille.rs`), dans la même étape d'annulation.
+        let envoyes = self.doc.jeter_calques(plan_id, calques, "Calque supprimé");
         // Le courant devient le calque resté juste en dessous de l'ancien courant (sinon le plus bas).
         let below = cur - lis.iter().filter(|&&l| l <= cur).count().min(cur);
         self.cur_layer = below.min(self.layers().len() - 1);
@@ -293,7 +305,13 @@ impl App {
         self.vsel = None;
         self.commit_structure(snap);
         let n = lis.len();
-        self.status = if n == 1 { "Calque supprimé.".into() } else { format!("{n} calques supprimés.") };
+        let perte = if dessins == 0 { String::new() } else { format!(" ({})", crate::rognage::dessins_texte(dessins)) };
+        self.status = match (n, envoyes) {
+            (1, true) => format!("Calque envoyé à la corbeille{perte}."),
+            (n, true) => format!("{n} calques envoyés à la corbeille{perte}."),
+            (1, false) => "Calque supprimé.".into(),
+            (n, false) => format!("{n} calques supprimés."),
+        };
     }
 
     /// Supprime les calques choisis (Q).

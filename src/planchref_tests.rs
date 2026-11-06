@@ -549,9 +549,9 @@ fn importing_another_projects_board_copies_items_and_images_beside_the_existing_
     let mut im = Reference::image(other.new_reference_id(), "Source", "900401.png", [20, 10], pos2(0.0, 0.0));
     im.home = Some(home.clone());
     im.plans = vec![99];
-    let im_id = im.id;
+    let _im_id = im.id;
     other.add_reference(im);
-    let nid = block(&mut other, Kind::Note, pos2(400.0, 0.0), "idée d'ailleurs");
+    let _nid = block(&mut other, Kind::Note, pos2(400.0, 0.0), "idée d'ailleurs");
     let old_uids: Vec<String> = other.references.iter().map(|r| r.uid.clone()).collect();
     let other_manifest = work.join("Autre").join("Autre.pelure");
     project::save(&other, &other_manifest, &mut Default::default()).unwrap();
@@ -855,7 +855,7 @@ fn generate_a_board_demo_project_for_the_screen() {
     gradient("1002.png", 480, 320, [30, 50, 70], [10, 20, 30], Some([220, 220, 240]));
     gradient("1003.png", 360, 480, [200, 120, 90], [90, 40, 60], Some([250, 210, 120]));
     gradient("1004.png", 520, 300, [90, 140, 90], [30, 70, 40], None);
-    let mut add_img = |doc: &mut Document, name: &str, file: &str, size: [u32; 2], at: egui::Pos2, scale: f32| -> u64 {
+    let add_img = |doc: &mut Document, name: &str, file: &str, size: [u32; 2], at: egui::Pos2, scale: f32| -> u64 {
         let id = doc.new_reference_id();
         let mut r = Reference::image(id, name, file, size, at);
         r.scale = scale;
@@ -867,7 +867,7 @@ fn generate_a_board_demo_project_for_the_screen() {
     let title = block(doc, Kind::Title, pos2(0.0, -420.0), "Séquence de la forêt");
     doc.reference_mut(title).unwrap().size = [900, 110];
     let f1 = block(doc, Kind::Frame, pos2(-380.0, 0.0), "Décor forêt");
-    let a = add_img(doc, "Clairière", "1001.png", [640, 360], pos2(-560.0, -40.0), 0.5);
+    let _a = add_img(doc, "Clairière", "1001.png", [640, 360], pos2(-560.0, -40.0), 0.5);
     let b = add_img(doc, "Sous-bois", "1004.png", [520, 300], pos2(-250.0, 60.0), 0.4);
     doc.reference_mut(b).unwrap().set_crop(Some([0.15, 0.1, 0.85, 0.95]));
     let n1 = block(doc, Kind::Note, pos2(-400.0, 190.0), "Lumière rasante,\nbrume au sol");

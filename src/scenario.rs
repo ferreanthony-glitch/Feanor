@@ -413,12 +413,6 @@ pub fn en_tete_of(line: &str) -> Option<EnTete> {
     (!h.nom.is_empty()).then_some(h)
 }
 
-/// Le nom d'une séquence tiré d'un intitulé : sans numéro de scène (`#12#`, ou « 12 » après
-/// plusieurs espaces), sans marques de mise en forme, avec des tirets longs (« – »).
-pub fn clean_heading(t: &str) -> String {
-    en_tete_depuis(t, String::new()).nom
-}
-
 /// Un intitulé de scène dont `numero` est le numéro déjà lu en tête de ligne (ou l'attribut du fichier), vide s'il n'y en a pas : le
 /// numéro de fin de ligne (`#12#`, ou « 12 » après plusieurs espaces) le remplace alors, s'il y en a un.
 pub fn en_tete_depuis(t: &str, numero: String) -> EnTete {

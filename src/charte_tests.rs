@@ -560,9 +560,9 @@ fn charte_etats() {
                         }
                         ui.add_space(10.0);
                         ui.horizontal(|ui| {
-                            ui.selectable_label(true, "Ligne choisie");
-                            ui.selectable_label(false, "Ligne non choisie");
-                            ui.button("Bouton");
+                            let _ = ui.selectable_label(true, "Ligne choisie");
+                            let _ = ui.selectable_label(false, "Ligne non choisie");
+                            let _ = ui.button("Bouton");
                             ui.add(egui::Button::new(RichText::new(format!("{} Supprimer définitivement", ph::TRASH)).color(theme::erreur())).stroke(egui::Stroke::new(1.0_f32, theme::erreur())));
                         });
                         ui.add_space(10.0);

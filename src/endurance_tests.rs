@@ -1256,8 +1256,8 @@ fn endurance_memoire() {
     // Expérience : le tas de Windows garde-t-il de la mémoire rendue (fragmentation) ? On lui demande de se compacter, on remesure.
     {
         extern "system" {
-            fn GetProcessHeap() -> isize;
-            fn HeapCompact(heap: isize, flags: u32) -> usize;
+            fn GetProcessHeap() -> *const u32;
+            fn HeapCompact(heap: *const u32, flags: u32) -> usize;
         }
         std::thread::sleep(Duration::from_secs(3));
         mem_ligne("avant le compactage du tas");

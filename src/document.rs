@@ -1158,6 +1158,8 @@ pub struct Structure {
     /// Les variantes rangées des séquences (`variantes.rs`) : changer de variante, en créer ou en supprimer s'annulent
     /// avec le reste. Partagées (`Arc`) : une étape d'annulation ne les recopie pas.
     pub variantes: crate::variantes::Variantes,
+    /// La corbeille (corbeille.rs) : jeter et restaurer s'annulent avec le reste, sans double.
+    pub corbeille: crate::corbeille::Corbeille,
     /// Annotations de la vue Vignettes (`annotations.rs`) : tracer, effacer, tout effacer s'annulent avec le reste.
     pub annotations: crate::annotations::Annotations,
     /// Le scénario gardé dans le projet (`scenariogarde.rs`) : importer et créer les plans depuis lui s'annulent avec le reste.
@@ -1299,6 +1301,8 @@ pub struct Document {
     /// manifeste, dans `variantes.json`, leurs dessins dans `dessins/`. Le jeu de plans de la séquence
     /// (`scenes`, `panels`) est toujours la variante choisie.
     pub variantes: crate::variantes::Variantes,
+    /// La corbeille du projet (corbeille.rs) : ce que les gestes du montage retirent du film, récupérable.
+    pub corbeille: crate::corbeille::Corbeille,
     /// Des dessins de variantes rangées manquaient à l'ouverture (projet partagé dont les fichiers n'étaient pas tous
     /// arrivés) : le fichier des variantes n'est pas réécrit, et on n'en change pas. Hors de l'annulation.
     pub variantes_partielles: bool,
@@ -1377,6 +1381,7 @@ impl Document {
             envois: Default::default(),
             versions: Default::default(),
             variantes: Default::default(),
+            corbeille: Default::default(),
             variantes_partielles: false,
             annotations: Default::default(),
             scenario: None,
@@ -1449,6 +1454,7 @@ impl Document {
             envois: Default::default(),
             versions: structure.versions,
             variantes: structure.variantes,
+            corbeille: structure.corbeille,
             variantes_partielles: false,
             annotations: structure.annotations,
             scenario: structure.scenario,
@@ -1498,6 +1504,7 @@ impl Document {
             envois: crate::envois::Envois { list: self.envois.list.clone(), pending: self.envois.pending.clone(), dossier: self.envois.dossier.clone() },
             versions: self.versions.clone(),
             variantes: self.variantes.clone(),
+            corbeille: self.corbeille.clone(),
             variantes_partielles: self.variantes_partielles,
             annotations: self.annotations.clone(),
             scenario: self.scenario.clone(),
@@ -1707,6 +1714,7 @@ impl Document {
             personnages: self.personnages.clone(),
             versions: self.versions.clone(),
             variantes: self.variantes.clone(),
+            corbeille: self.corbeille.clone(),
             annotations: self.annotations.clone(),
             scenario: self.scenario.clone(),
             frames_rangees: None,
@@ -1749,6 +1757,7 @@ impl Document {
             personnages: std::mem::replace(&mut self.personnages, s.personnages),
             versions: std::mem::replace(&mut self.versions, s.versions),
             variantes: std::mem::replace(&mut self.variantes, s.variantes),
+            corbeille: std::mem::replace(&mut self.corbeille, s.corbeille),
             annotations: std::mem::replace(&mut self.annotations, s.annotations),
             scenario: std::mem::replace(&mut self.scenario, s.scenario),
             frames_rangees: None,
@@ -2121,6 +2130,8 @@ impl Document {
         }
         // (Un plan qu'une autre version de sa séquence montre est gardé : `variantes.rs`.)
         self.ranger_plan_partage(self.panels[index].id, false);
+        // Ce qui sort du film reste récupérable : le plan va à la corbeille (`corbeille.rs`).
+        self.jeter_plan(index, &[], "Plan supprimé");
         self.panels.remove(index);
         let next = self.panels[index.min(self.panels.len() - 1)].id;
         Some(self.normalize_keeping(next))
@@ -2137,6 +2148,9 @@ impl Document {
             return None;
         }
         self.ranger_plans_partages(&retires, false);
+        for i in start..end {
+            self.jeter_plan(i, &retires, "Scène supprimée");
+        }
         self.panels.drain(start..end);
         let next = self.panels[start.min(self.panels.len() - 1)].id;
         Some(self.normalize_keeping(next))
@@ -2236,13 +2250,19 @@ impl Document {
         // Tous visés : le premier panneau du film reste.
         let spared = self.panels.iter().all(|p| ids.contains(&p.id)).then(|| self.panels[0].id);
         let before = self.panels.len();
+        let retires: Vec<u64> = self.panels.iter().filter(|p| ids.contains(&p.id) && Some(p.id) != spared).map(|p| p.id).collect();
         if !self.variantes.is_empty() {
-            let retires: Vec<u64> = self.panels.iter().filter(|p| ids.contains(&p.id) && Some(p.id) != spared).map(|p| p.id).collect();
             let partent: std::collections::HashSet<u64> = retires.iter().copied().collect();
             if self.refuser_si_sequence_videe(|p| partent.contains(&p)) {
                 return None;
             }
             self.ranger_plans_partages(&retires, false);
+        }
+        // Ce qui sort du film reste récupérable : chaque plan va à la corbeille (`corbeille.rs`), dans l'ordre du film.
+        for i in 0..self.panels.len() {
+            if retires.contains(&self.panels[i].id) {
+                self.jeter_plan(i, &retires, "Plan supprimé");
+            }
         }
         self.panels.retain(|p| !ids.contains(&p.id) || Some(p.id) == spared);
         if self.panels.len() == before {
@@ -2314,8 +2334,10 @@ impl Document {
             cues: Cues { bookmarks: source.cues.bookmarks.iter().filter(|&&b| b >= at).map(|b| b - at).collect(), ..Cues::default() },
             color: source.color,
         };
-        // Le contenu rogné à la fin du plan ne se rattache plus à rien (le second a ses copies).
-        self.forget_tail_reserve(source.id);
+        // Le contenu rogné à la fin du plan est celui de la fin du second (qui finit où le plan finissait) : il lui passe, avec
+        // les numéros de ses calques. Rien n'est oublié.
+        let rename: HashMap<u64, u64> = old_ids.iter().copied().zip(second.layers.iter().map(|l| l.id)).collect();
+        self.move_tail_reserve(source.id, second.id, &rename);
         let first = &mut self.panels[index];
         for l in &mut first.layers {
             l.frames.truncate(at);
@@ -2354,7 +2376,7 @@ impl Document {
         let next = self.panels.remove(index + 1);
         let versions_suivant = self.versions.remove(&next.id);
         self.absorber_versions(self.panels[index].id, versions_suivant);
-        self.forget_joint_reserves(self.panels[index].id, next.id);
+        self.forget_joint_reserves(self.panels[index].id, &next);
         let next_len = next.frame_count();
         let a_len = self.panels[index].frame_count();
         // Les commentaires du suivant suivent ses images.
@@ -2365,8 +2387,10 @@ impl Document {
         // Les calques de toute la scène sont déjà dans le premier : seuls les autres se suivent,
         // rang pour rang parmi les calques propres au panneau.
         let own: Vec<usize> = (0..a.layers.len()).filter(|&k| a.layers[k].scene_wide.is_none()).collect();
+        let mut renum: HashMap<u64, u64> = HashMap::new();
         for (i, lb) in next.layers.into_iter().filter(|l| l.scene_wide.is_none()).enumerate() {
             if let Some(&k) = own.get(i).filter(|&&k| a.layers[k].kind == lb.kind) {
+                renum.insert(lb.id, a.layers[k].id);
                 let la = &mut a.layers[k];
                 // Deux calques de couleur qui se suivent : les couleurs du second gardent leur trait.
                 if let (Some(ca), Some(cb)) = (la.couleur.as_mut(), lb.couleur.as_ref()) {
@@ -2399,6 +2423,8 @@ impl Document {
             }
         }
         let id = a.id;
+        // La fin rognée du second est celle du panneau réuni.
+        self.move_tail_reserve(next.id, id, &renum);
         Some(self.normalize_keeping(id))
     }
 
@@ -2472,7 +2498,7 @@ impl Document {
         id
     }
 
-    fn insert_and_normalize(&mut self, at: usize, panels: Vec<Panel>) -> usize {
+    pub(crate) fn insert_and_normalize(&mut self, at: usize, panels: Vec<Panel>) -> usize {
         let first = panels[0].id;
         let at = at.min(self.panels.len());
         self.panels.splice(at..at, panels);
@@ -2737,7 +2763,7 @@ impl Document {
     /// Renvoie un avertissement si quelque chose de `b` n'a pas pu être gardé (plus rien aujourd'hui : l'ancien repère 3D du plan a disparu).
     fn append_plan(&mut self, index: usize, mut b: Panel, cams_a: (Camera, Camera), cams_b: (Camera, Camera), opts: &JoinOpts) -> Option<String> {
         let mark_id = self.alloc();
-        self.forget_joint_reserves(self.panels[index].id, b.id);
+        self.forget_joint_reserves(self.panels[index].id, &b);
         let a_len = self.panels[index].frame_count();
         let b_len = b.frame_count();
         // Les commentaires de `b` suivent ses images, au bout du plan.
@@ -2855,7 +2881,10 @@ impl Document {
         a.marks.push(ImageMark { id: mark_id, frame: a_len, color: 0, action: b.action, dialogue: b.dialogue, notes: b.notes });
         a.marks.extend(b.marks.into_iter().map(|m| ImageMark { frame: m.frame + a_len, ..m }));
         a.length = a_len + b_len;
+        let a_id = a.id;
         self.reanchor_notes(b.id, mark_id);
+        // La fin rognée de `b` est celle du plan réuni (ses calques ont changé de numéro en se joignant à ceux de `a`).
+        self.move_tail_reserve(b.id, a_id, &vers);
         None
     }
 

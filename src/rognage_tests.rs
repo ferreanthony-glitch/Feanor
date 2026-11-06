@@ -552,13 +552,15 @@ fn splitting_and_joining_do_not_leave_a_reserve_that_no_longer_fits() {
     doc.rogner(0, Rogner::Head(4)).unwrap();
     doc.rogner(0, Rogner::Tail(-4)).unwrap();
     assert_eq!(doc.hidden(0), (4, 4));
-    // Couper : le début caché reste au premier plan, la fin cachée est oubliée.
+    // Couper : le début caché reste au premier plan, la fin cachée passe à la seconde moitié, qui finit où le plan finissait
+    // (partie 104 : rien n'est oublié à la coupe).
     let second = doc.split_plan(0, 8).unwrap();
     assert_eq!(doc.hidden(0), (4, 0));
-    assert_eq!(doc.hidden(second), (0, 0));
-    // Réunir : seul le début caché du premier reste.
+    assert_eq!(doc.hidden(second), (0, 4));
+    // Réunir : le début caché du premier et la fin cachée du second sont ceux du plan réuni.
     doc.join_next_plan_without_mark(0).unwrap();
-    assert_eq!(doc.hidden(0), (4, 0));
+    assert_eq!(doc.hidden(0), (4, 4));
     assert_eq!(doc.rogner(0, Rogner::Head(-4)), Ok(-4));
+    assert_eq!(doc.rogner(0, Rogner::Tail(4)), Ok(4));
     assert!(doc.reserves.is_empty());
 }

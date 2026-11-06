@@ -272,7 +272,14 @@ impl App {
             Jonction::Glisse { .. } => "Fusionner deux plans",
             Jonction::Case { .. } => "Réunir deux vignettes en un plan",
         };
-        self.avec_etape(nom, |s| s.jonction_faire_nue(quoi, opts))
+        crate::rognage::images_oubliees();
+        let fait = self.avec_etape(nom, |s| s.jonction_faire_nue(quoi, opts));
+        // Des images rognées au bord de la jonction ne tiennent plus à rien : la barre d'état le dit (seul Ctrl+Z les rend).
+        let n = crate::rognage::images_oubliees();
+        if fait && n > 0 {
+            self.status = format!("{} Attention : {n} image{} rognée{} au bord de la jonction ne {} plus gardée{} dans le plan : envoyée{} à la corbeille.", self.status, if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" }, if n > 1 { "sont" } else { "est" }, if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" });
+        }
+        fait
     }
 
     fn jonction_faire_nue(&mut self, quoi: Jonction, opts: &JoinOpts) -> bool {

@@ -223,6 +223,9 @@ pub(crate) enum Geste {
     /// « Changer la durée des plans choisis… » : tous les plans choisis (ou tous les plans du film si `tous`) prennent la durée que dit
     /// `DUREES_TAPEES[quoi]` (`dureeplans.rs`).
     DureePlans { quoi: u8, tous: bool },
+    /// Supprimer un plan (le `case`-ième, parmi les plans du film), puis, si `restaurer`, le reprendre dans la corbeille : le film retrouve le
+    /// même contenu, dessin par dessin (empreinte), à la même place (partie 104).
+    SupprimerRestaurer { case: u16, restaurer: bool },
     /// Annuler `n` fois.
     Annuler(u8),
     /// Rétablir `n` fois.
@@ -327,7 +330,9 @@ impl Geste {
             79 => DeplacerPlan { de: case, vers: h.sous(64) as u16, alt: h.pile(4) },
             // (Les deux rangs pris à `DeplacerPlan` : les autres gestes gardent leurs rangs, donc leurs suites de graines.)
             80..=81 => FusionnerPlans { de: case, vers: h.sous(64) as u16, zone: h.sous(3) as u8 },
-            82..=87 => Annuler(1 + h.sous(3) as u8),
+            82..=86 => Annuler(1 + h.sous(3) as u8),
+            // (Le dernier rang d'`Annuler` : les autres gestes gardent leurs rangs, donc leurs suites de graines.)
+            87 => SupprimerRestaurer { case, restaurer: h.pile(4) },
             88..=91 => Retablir(1 + h.sous(2) as u8),
             92..=93 => Lecture(2 + h.sous(10) as u8),
             94..=95 => Onglet { nouveau: h.pile(2) },
@@ -927,6 +932,27 @@ impl Essai {
                     _ => pos2(c.right() - c.width() * 0.1, c.center().y),
                 };
                 self.glisser(Modifiers::NONE, PointerButton::Primary, &Self::trajet(p, q, 8));
+            }
+            SupprimerRestaurer { case, restaurer } => {
+                let app = &mut self.b.app;
+                let n = app.doc.panels.len();
+                if n < 2 || app.doc.storyboard_locked {
+                    return;
+                }
+                let avant = crate::montage_sans_casse_tests::film_en_empreintes(&app.doc);
+                let id = app.doc.panels[case as usize % n].id;
+                let entrees = app.doc.corbeille.len();
+                app.delete_panels(&[id]);
+                if app.doc.panels.len() != n - 1 || app.doc.corbeille.len() != entrees + 1 {
+                    // (Refusé, ou gardé au garage d'une autre version de séquence : rien à reprendre ici.)
+                    return;
+                }
+                if restaurer {
+                    let e = app.doc.corbeille.entrees.last().map(|e| e.id).expect("l'entrée jetée");
+                    app.corbeille_restaurer(e);
+                    assert_eq!(app.doc.corbeille.len(), entrees, "restaurer vide l'entrée");
+                    assert_eq!(crate::montage_sans_casse_tests::film_en_empreintes(&app.doc), avant, "le plan restauré revient à sa place avec le même contenu");
+                }
             }
             Annuler(n) => {
                 for _ in 0..n {

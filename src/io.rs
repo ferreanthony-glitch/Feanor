@@ -30,6 +30,7 @@ struct LegacyManifest {
     paper: [u8; 3],
     /// Format 1 : un seul plan, ses calques directement ici.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+ 
     layers: Vec<LegacyLayer>,
     /// Format 2 : les plans, chacun avec ses calques.
     #[serde(default)]
@@ -204,6 +205,8 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
         personnages: Vec::new(),
         versions: Default::default(),
         variantes: Default::default(),
+        corbeille: Default::default(),
+
         annotations: Default::default(),
         scenario: None,
         frames_rangees: None,

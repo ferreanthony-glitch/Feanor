@@ -362,6 +362,19 @@ impl History {
         (self.undo_names.iter().map(String::as_str).collect(), self.redo_names.iter().rev().map(String::as_str).collect())
     }
 
+    /// Retire de chaque étape d'annulation et de rétablissement l'entrée de corbeille `ids` (supprimée pour de bon : `corbeille.rs`) : aucun
+    /// Ctrl+Z ne peut la faire revenir sans ses dessins, que l'enregistrement suivant efface.
+    pub fn retirer_de_la_corbeille(&mut self, ids: &std::collections::BTreeSet<u64>) {
+        fn dans(e: &mut Edit, ids: &std::collections::BTreeSet<u64>) {
+            match e {
+                Edit::Structure { structure, .. } => structure.corbeille.entrees.retain(|x| !ids.contains(&x.id)),
+                Edit::Group(g) => g.iter_mut().for_each(|e| dans(e, ids)),
+                _ => {}
+            }
+        }
+        self.undo.iter_mut().chain(self.redo.iter_mut()).for_each(|e| dans(e, ids));
+    }
+
     pub fn serial(&self) -> u64 {
         self.serial
     }

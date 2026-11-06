@@ -142,6 +142,7 @@ impl App {
                 self.action_item(ui, "Exporter…", "fichier.exporter");
                 ui.separator();
                 self.action_item(ui, "Réglages du projet…", "projet.proprietes");
+                self.action_item(ui, "Corbeille…", "fichier.corbeille");
                 // Travailler à plusieurs (`cooperationui.rs`).
                 if self.partage.is_some() {
                     self.action_item(ui, "Équipe…", "equipe.fenetre");
@@ -890,6 +891,7 @@ impl App {
         // Changer la durée des plans choisis (`dureeplans.rs`) ; réunir deux plans qui ont un calque de même nom (`fusionnoms.rs`).
         self.plans_duration_dialog_ui(ctx);
         self.fusion_noms_ui(ctx);
+        self.corbeille_fenetre_ui(ctx);
         self.coupe_versions_ui(ctx);
         self.palette_window(ctx);
         // Nouveau projet (`nouveauui.rs`).

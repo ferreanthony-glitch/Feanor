@@ -254,3 +254,29 @@ fn the_job_writes_the_script_in_the_background_and_cancel_cleans_up() {
     assert!(std::fs::read(&pdf).unwrap().starts_with(b"%PDF"));
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn the_first_key_of_a_part_is_the_one_the_key_images_export_counts() {
+    // Une clé veut dire la même chose ici et dans « Images à la clé » (`exportcles::cles_du_plan`).
+    let mut doc = plans(1);
+    doc.panels[0].set_length(30);
+    let (a, b, c) = (doc.new_cel(crate::document::LayerKind::Bitmap), doc.new_cel(crate::document::LayerKind::Bitmap), doc.new_cel(crate::document::LayerKind::Bitmap));
+    for f in 4..12 {
+        doc.panels[0].layers[0].set(f, Some(a));
+    }
+    for f in 12..20 {
+        doc.panels[0].layers[0].set(f, Some(b));
+    }
+    for f in 20..30 {
+        doc.panels[0].layers[0].set(f, Some(c));
+    }
+    let cles: Vec<usize> = crate::exportcles::cles_du_plan(&doc, 0, false).into_iter().map(|k| k.frame).collect();
+    assert_eq!(cles, vec![4, 12, 20]);
+    assert_eq!(premiere_cle(&doc, 0, 0, 30), cles[0], "la première clé du plan");
+    assert_eq!(premiere_cle(&doc, 0, 5, 30), 12, "la première clé qui commence dans la partie");
+    assert_eq!(premiere_cle(&doc, 0, 13, 19), 13, "aucune clé dans la partie : son début");
+    // Un calque caché ne fait pas de clé, dans l'export comme ici.
+    doc.panels[0].layers[0].visible = false;
+    let sans: Vec<usize> = crate::exportcles::cles_du_plan(&doc, 0, false).into_iter().map(|k| k.frame).collect();
+    assert_eq!(premiere_cle(&doc, 0, 0, 30), sans.first().copied().unwrap_or(0));
+}
