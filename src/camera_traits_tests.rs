@@ -314,6 +314,95 @@ fn the_film_frame_shows_what_frame_b_sees() {
     }
 }
 
+/// Le trait d'une scène, avec ou sans un flou posé sur le calque.
+fn scene_floue(flou: bool) -> Option<Scene> {
+    let mut s = scene(false, false, 1.17, 0.5)?;
+    if flou {
+        let mut e = crate::fx::Effect::new(crate::fx::EffectKind::GaussianBlur);
+        e.values = vec![14.0];
+        for l in s.b.app.doc.panels[PLAN].layers.iter_mut() {
+            l.fx.push(e.clone());
+        }
+    }
+    Some(s)
+}
+
+/// À `decale` pixels du milieu du trait, dans le cadre B et au-delà de la feuille : combien de points portent de l'encre, sur combien de points lus.
+fn halo_du_film(s: &Scene, decale: f32) -> (usize, usize) {
+    let doc = &s.b.app.doc;
+    let f = doc.panels[PLAN].frame_count() - 1;
+    let c0 = doc.panel_camera(PLAN, f).corners(doc.frame)[0];
+    let snap = crate::exportrender::snapshot_of(doc, &[PLAN]);
+    // (Le film ne connaît pas l'écran : aucun résultat du cache commun, aucun repli.)
+    let rendu = crate::exportrender::Rendu::new(snap, crate::exportrender::Papier::Feuille, false, Vec::new(), Default::default());
+    let img = rendu.image(PLAN, f).expect("l'image");
+    let [w, h] = doc.frame;
+    let d = (s.feuille.1 - s.feuille.0).normalized();
+    let n = vec2(-d.y, d.x);
+    let (mut vus, mut encre) = (0, 0);
+    for k in 0..(s.feuille.1 - s.feuille.0).length() as i32 {
+        let m = s.feuille.0 + d * k as f32;
+        if m.x <= doc.width as f32 + 40.0 || m.x >= s.feuille.1.x - 40.0 {
+            continue;
+        }
+        let p = m + n * decale - c0.to_vec2();
+        if p.x < 4.0 || p.y < 4.0 || p.x > w as f32 - 4.0 || p.y > h as f32 - 4.0 {
+            continue;
+        }
+        vus += 1;
+        let c = img[p.y as usize * w + p.x as usize];
+        encre += usize::from(c.r() as i32 - c.g() as i32 > 6);
+    }
+    (encre, vus)
+}
+
+/// Le film montre l'effet complet d'un dessin qui passe le bord, au-delà de la feuille : pas le repli sans effet de l'écran.
+#[test]
+fn the_film_shows_the_full_effect_beyond_the_sheet() {
+    let Some(net) = scene_floue(false) else { return println!("pas de carte graphique") };
+    let Some(flou) = scene_floue(true) else { return };
+    let (a, va) = halo_du_film(&net, 14.0);
+    let (b, vb) = halo_du_film(&flou, 14.0);
+    println!("FILM à quatorze pixels du trait, au-delà de la feuille : net {a} sur {va}, flou {b} sur {vb}");
+    assert!(vb > 200 && b * 100 >= vb * 90, "le film montre le flou : {b} sur {vb}");
+    assert!(a * 100 <= va * 5, "sans flou, rien à cette distance : {a} sur {va}");
+}
+
+/// La planche exportée, de même : le flou au-delà de la feuille.
+#[test]
+fn the_board_export_shows_the_full_effect_beyond_the_sheet() {
+    let Some(Scene { mut b, de, a, feuille }) = scene_floue(true) else { return println!("pas de carte graphique") };
+    let xf = b.app.vignettes.xf;
+    let (bd, ba) = (xf.to_board(de), xf.to_board(a));
+    // Points de la planche par pixel de la feuille.
+    let case = (ba - bd).length() / (feuille.1 - feuille.0).length();
+    let opt = crate::planche::Options::default();
+    let img = crate::traits_continus_tests::exporter(&mut b, &opt, "effet-debord");
+    let opt = b.app.planche_options(&opt);
+    let plans: Vec<usize> = (0..b.app.doc.panels.len()).collect();
+    let p = crate::planche::construire(&b.app.doc, &plans, &b.app.layout.board_settings(), &opt, &b.app.doc.annotations);
+    let (s, ..) = crate::planche::dimensions(p.cadre, opt.resolution);
+    let vers = |q: Pos2| pos2((q.x - p.cadre.left()) * s, (q.y - p.cadre.top()) * s);
+    let (i0, i1) = (vers(bd), vers(ba));
+    let d = (i1 - i0).normalized();
+    let n = vec2(-d.y, d.x);
+    let long = (i1 - i0).length() as i32;
+    // Dans la dernière moitié du trait (au-delà de la feuille, dans le cadre B), à quatorze pixels de la feuille : seul le flou y arrive.
+    let decale = 14.0 * case * s;
+    let (mut vus, mut encre) = (0, 0);
+    for k in long / 2..long - (8.0 * s) as i32 {
+        let c = i0 + d * k as f32 + n * decale;
+        if c.x < 0.0 || c.y < 0.0 || c.x as u32 >= img.width() || c.y as u32 >= img.height() {
+            continue;
+        }
+        vus += 1;
+        let v = img.get_pixel(c.x as u32, c.y as u32);
+        encre += usize::from(v[0] as i32 - v[1] as i32 > 2);
+    }
+    println!("PLANCHE à côté du trait, dernière moitié : {encre} sur {vus}, {case} points de la planche par pixel de la feuille, échelle {s}");
+    assert!(vus > 20 && encre * 100 >= vus * 50, "la planche montre le flou : {encre} sur {vus}");
+}
+
 /// La planche exportée : au-delà de la verticale où la feuille finit, le trait est là.
 #[test]
 fn the_board_export_keeps_the_stroke_beyond_the_sheet() {
@@ -382,8 +471,9 @@ fn every_effect_keeps_what_is_beyond_the_sheet_and_leaves_the_sheet_as_it_was() 
         let out = crate::fx::apply(&r, &steps);
         let seule = crate::fx::apply(&feuille_seule, &steps);
         assert!(out.has_beyond(), "{kind:?} : rien ne reste hors de la feuille");
-        // (La plus grande portée des réglages d'origine est d'environ trois tuiles : au-delà, la feuille n'a rien à lire de ce qui dépasse.)
-        let loin = w - 3 * crate::raster::TILE - 16;
+        // (Un effet qui lit ses voisins : la plus grande portée des réglages d'origine est d'environ trois tuiles, au-delà la feuille n'a rien à lire de ce qui dépasse.
+        // Un effet pixel à pixel n'a rien à lire : la feuille entière est la même.)
+        let loin = if kind.lit_ses_voisins() { w - 3 * crate::raster::TILE - 16 } else { w };
         for (k, (a, b)) in out.tiles.iter().zip(&seule.tiles).enumerate() {
             let (ox, oy, tw, th) = out.tile_bounds(k);
             for y in 0..th {
@@ -766,7 +856,6 @@ fn on_screen_a_wave_does_not_break_the_stroke_at_the_edge_of_the_sheet() {
     let mut plan = crate::render::panel_plan_at(&b.app.doc, PLAN, frame, Some(b.app.doc.paper));
     plan.items.retain(|i| !i.fx.is_empty());
     assert!(!plan.items.is_empty(), "le calque porte l'onde");
-    assert!(!crate::gpu::gpu_fx_item(&b.app.doc, &plan.items[0]), "un calque qui déborde, avec une onde : le calcul de fond");
     // Le fil de fond répond, le hors-feuille se refait, l'écran montre le résultat.
     while !(crate::fx::effets_prets(&b.app.doc, &plan.items[0]) && !b.app.monde.busy()) {
         assert!(debut.elapsed() < std::time::Duration::from_secs(30), "l'effet arrive du fil de fond");
@@ -777,6 +866,9 @@ fn on_screen_a_wave_does_not_break_the_stroke_at_the_edge_of_the_sheet() {
         b.image(Vec::new(), 1.0 / 60.0);
         std::thread::sleep(std::time::Duration::from_millis(15));
     }
+    // (Un autre essai peut avoir vidé la réserve commune entre-temps : la règle ne se juge qu'avec le résultat là.)
+    let pret = crate::fx::resultat_pret(&b.app.doc, &plan.items[0]).is_some();
+    assert!(!pret || !crate::gpu::gpu_fx_item(&b.app.doc, &plan.items[0]), "un calque qui déborde, avec une onde, le résultat prêt : le calcul de fond");
     let img = b.capturer().unwrap();
     sauver(&img, "ecran-onde");
     let ((a, ea), (q, eq)) = (centre(&img, x - 2, cy), centre(&img, x + 2, cy));

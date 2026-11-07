@@ -1072,6 +1072,7 @@ fn worker_loop() {
         if job.world == world() {
             let dropped = insert(&mut lock(), job.id, job.version, cel, Some(job.origin));
             drop(dropped);
+            crate::fx::recours_note_calcul(job.id, job.version);
         }
         GENERATION.fetch_add(1, Ordering::Relaxed);
         if let Some(ctx) = REPAINT.get() {

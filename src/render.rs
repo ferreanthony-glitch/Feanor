@@ -386,11 +386,24 @@ pub fn plan_world_tiles(doc: &Document, plan: &Plan, area: Area) -> Vec<(i32, i3
                 // (L'aplat sous le trait déborde du trait de son débord : les tuiles voisines comptent aussi.)
                 let around = if item.fond.is_some() { 1 } else { 0 };
                 // Les effets d'un dessin qui passe le bord posent aussi autour de ses tuiles : déjà calculés, on lit leurs tuiles ; sinon, on les devine d'après leur portée.
-                let pret = (!item.fx.is_empty() && cel.raster.deborde_vite()).then(|| crate::fx::resultat_pret(doc, item)).flatten();
+                let pret = (!item.fx.is_empty() && crate::fx::cel_deborde(cel)).then(|| crate::fx::resultat_pret(doc, item)).flatten();
                 let around = match &pret {
                     Some(_) => around,
-                    None => (around as i64).max(crate::fxmonde::en_tuiles(crate::fx::portee_hors_feuille(item, cel)).min(16) as i64),
+                    None => (around as i64).max(crate::fxmonde::en_tuiles(crate::fx::portee_hors_feuille(item, cel)) as i64),
                 };
+                // (Une très grande portée : toute la zone autour de l'encre, bornée par ce que la vue compose, plutôt qu'un carré autour de chaque tuile.)
+                if around > 16 {
+                    let (ax0, ay0) = ((tx0 as i64 - around).max(area.x0.div_euclid(t)), (ty0 as i64 - around).max(area.y0.div_euclid(t)));
+                    let (ax1, ay1) = ((tx1 as i64 + around).min((area.x1 - 1).div_euclid(t)), (ty1 as i64 + around).min((area.y1 - 1).div_euclid(t)));
+                    for ty in ay0..=ay1 {
+                        for tx in ax0..=ax1 {
+                            if wanted(tx, ty) {
+                                set.insert((tx as i32, ty as i32));
+                            }
+                        }
+                    }
+                    continue;
+                }
                 let raster = pret.as_ref().map_or(&cel.raster, |c| &c.raster);
                 for id in raster.drawn_ids() {
                     let (tx, ty) = raster.key_of(id);

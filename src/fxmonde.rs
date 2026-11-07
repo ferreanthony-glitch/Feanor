@@ -46,10 +46,6 @@ impl Pave {
         self.x0 < o.x1 && o.x0 < self.x1 && self.y0 < o.y1 && o.y0 < self.y1
     }
 
-    /// La plus grande distance d'un de ses coins au point (`ox`, `oy`).
-    fn loin_de(self, ox: f32, oy: f32) -> f32 {
-        self.coins().iter().map(|&(x, y)| (x - ox).hypot(y - oy)).fold(0.0, f32::max)
-    }
 }
 
 /// Les tuiles de la feuille à moins de `r` tuiles de ce qui la dépasse.
@@ -103,7 +99,6 @@ pub(crate) fn en_tuiles(px: f32) -> i32 {
 /// Jusqu'où l'effet peut aller lire ou porter un pixel de `encre` (pixels du monde).
 fn portee(s: &FxStep, encre: Pave, feuille: (usize, usize)) -> f32 {
     let at = |k: usize| s.values.get(k).copied().unwrap_or(0.0);
-    let (w, h) = (feuille.0 as f32, feuille.1 as f32);
     let cercle = |rayon: f32, cx: f32, cy: f32| {
         let (ox, oy, half) = crate::fxwarp::centre_de(feuille, cx, cy);
         let r = (half * rayon / 100.0).max(1.0);
@@ -134,19 +129,16 @@ fn portee(s: &FxStep, encre: Pave, feuille: (usize, usize)) -> f32 {
             let m = crate::fxcine::Secousse::de(feuille, &s.values);
             encre.coins().iter().map(|&p| m.deplacement(p)).fold(0.0, f32::max) + 2.0
         }
-        EffectKind::Aberration => {
-            let k = aberration_k(feuille, at(0));
-            let (ox, oy) = (w * at(1) / 100.0, h * at(2) / 100.0);
-            encre.loin_de(ox, oy) * k / (1.0 - k) + 2.0
-        }
+        EffectKind::Aberration => portee_de_l_aberration(at(0), feuille),
         _ => 0.0,
     }
 }
 
-/// La force relative de l'aberration (bornée : un pixel ne va jamais lire à l'infini).
-fn aberration_k(feuille: (usize, usize), amount: f32) -> f32 {
+/// L'écart des couleurs de l'aberration, au plus (`fxcine::aberration_pixel`) : deux fois sa force, pour tout point du monde.
+fn portee_de_l_aberration(amount: f32, feuille: (usize, usize)) -> f32 {
     let (w, h) = (feuille.0 as f32, feuille.1 as f32);
-    (amount.abs() / ((w * w + h * h).sqrt() / 2.0).max(1.0)).min(0.9)
+    let diagonale = (w * w + h * h).sqrt();
+    amount.abs() * diagonale / (diagonale / 2.0).max(1.0) + 2.0
 }
 
 /// Le rectangle d'encre de `base`, en pixels du monde.
@@ -228,8 +220,29 @@ fn un_pas(src: &Raster, s: &FxStep, feuille: (usize, usize), voisines: &Voisines
 
 // ---------------------------------------------------------------------- par zones
 
-/// `f` sans lancer de fils : une zone à la fois sur chaque fil, pas de fils dans les fils. (La limite d'avant est remise : avec une seule zone, ce fil est celui de l'appelant.)
+/// Les zones en cours de calcul, pour tout le processus : le fil de fond et chaque fil d'export se partagent `ZONES_A_LA_FOIS`, ils ne les multiplient pas.
+static ZONES_EN_COURS: (std::sync::Mutex<usize>, std::sync::Condvar) = (std::sync::Mutex::new(0), std::sync::Condvar::new());
+
+/// Rend sa place à la zone suivante, même si l'effet plante.
+struct PlaceDeZone;
+
+impl Drop for PlaceDeZone {
+    fn drop(&mut self) {
+        *ZONES_EN_COURS.0.lock().unwrap_or_else(|e| e.into_inner()) -= 1;
+        ZONES_EN_COURS.1.notify_one();
+    }
+}
+
+/// Une zone : `f` sans lancer de fils (une zone à la fois sur chaque fil, pas de fils dans les fils), quand une place est libre. La limite d'avant est remise : avec une seule zone, ce fil est celui de l'appelant.
 pub(crate) fn sans_fils<R>(f: impl FnOnce() -> R) -> R {
+    let _place = {
+        let mut n = ZONES_EN_COURS.0.lock().unwrap_or_else(|e| e.into_inner());
+        while *n >= ZONES_A_LA_FOIS {
+            n = ZONES_EN_COURS.1.wait(n).unwrap_or_else(|e| e.into_inner());
+        }
+        *n += 1;
+        PlaceDeZone
+    };
     let avant = crate::render::thread_cap();
     crate::render::set_thread_cap(1);
     let r = f();
@@ -434,11 +447,9 @@ fn deformation(src: &Raster, s: &FxStep, feuille: (usize, usize)) -> Raster {
             }
         }
         _ => {
-            let k = aberration_k(feuille, at(0));
-            let (ox, oy) = (feuille.0 as f32 * at(1) / 100.0, feuille.1 as f32 * at(2) / 100.0);
+            let portee = portee_de_l_aberration(at(0), feuille);
             for &(tx, ty) in &tuiles {
-                let p = Pave::de_tuile(tx, ty);
-                ajouter(&mut cibles, p.grossi(p.loin_de(ox, oy) * k / (1.0 - k) + 2.0));
+                ajouter(&mut cibles, Pave::de_tuile(tx, ty).grossi(portee));
             }
         }
     }

@@ -529,6 +529,8 @@ struct FxJob {
 struct BordureGardee {
     source: CelId,
     version: u64,
+    /// L'adresse des tuiles du dessin : un même numéro et une même version peuvent être ceux d'un autre projet.
+    tuiles: usize,
     m: i32,
     /// La préparation d'écran qui s'en est servie la dernière.
     vue: u64,
@@ -539,22 +541,37 @@ struct BordureGardee {
 /// Bordures gardées, au plus : les plus anciennes partent (une bordure se refait en une milliseconde, et tout un épisode de dessins qui débordent ne doit rien tenir en mémoire vidéo).
 const BORDURES_MAX: usize = 32;
 
-/// La bordure du dessin `cel` pour la texture de résultat `out`, sur `m` pixels : celle qu'on a, ou une nouvelle si le dessin a changé.
+impl BordureGardee {
+    /// Mémoire de la carte qu'elle tient (octets) : rien pour un dessin sans encre autour de la feuille.
+    fn bytes(&self) -> u64 {
+        self.faite.as_ref().map_or(0, |(b, ..)| b.w as u64 * b.h as u64 * 4)
+    }
+}
+
+/// La bordure du dessin `cel` pour la texture de résultat `out`, sur `m` pixels : celle qu'on a, ou une nouvelle si le dessin a changé. `bytes` : le poids du cache, tenu à jour.
 #[allow(clippy::too_many_arguments)]
-fn bordure_de(rs: &RenderState, res: &mut CanvasResources, out: CelId, src: CelId, cel: &crate::document::Cel, m: i32, tick: u64) -> Option<(crate::gpufx::Bordure, wgpu::TextureView, u64)> {
-    // (À chaque image, pour chaque calque qui tremble : d'abord ce qu'on sait déjà de cette version du dessin.)
+fn bordure_de(rs: &RenderState, res: &mut CanvasResources, out: CelId, src: CelId, cel: &crate::document::Cel, m: i32, tick: u64, bytes: &mut u64) -> Option<(crate::gpufx::Bordure, wgpu::TextureView, u64)> {
+    let tuiles = cel.raster.tiles.as_ptr() as usize;
+    // (À chaque image, pour chaque calque qui tremble : d'abord ce qu'on sait déjà de cette version du dessin, avec ou sans encre autour.)
     if let Some(g) = res.bordures.get_mut(&out) {
-        if g.source == src && g.version == cel.version && g.m == m {
+        if g.source == src && g.version == cel.version && g.tuiles == tuiles && g.m == m {
             g.vue = tick;
             return g.faite.clone();
         }
     }
-    if res.bordures.len() >= BORDURES_MAX && !res.bordures.contains_key(&out) {
+    if let Some(g) = res.bordures.remove(&out) {
+        *bytes = bytes.saturating_sub(g.bytes());
+    }
+    if res.bordures.len() >= BORDURES_MAX {
         if let Some(k) = res.bordures.iter().min_by_key(|(_, g)| g.vue).map(|(&k, _)| k) {
-            res.bordures.remove(&k);
+            if let Some(g) = res.bordures.remove(&k) {
+                *bytes = bytes.saturating_sub(g.bytes());
+            }
         }
     }
-    let bordure = if cel.raster.deborde_vite() { crate::gpufx::Bordure::de(&cel.raster, m) } else { None };
+    let bordure = if crate::fx::cel_deborde(cel) { crate::gpufx::Bordure::de(&cel.raster, m) } else { None };
+    #[cfg(test)]
+    BORDURES_FAITES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let faite = bordure.map(|(b, px)| {
         let texture = rs.device.create_texture(&wgpu::TextureDescriptor {
             label: Some("effets : bordure d'encre"),
@@ -576,9 +593,15 @@ fn bordure_de(rs: &RenderState, res: &mut CanvasResources, out: CelId, src: CelI
         std::hash::Hash::hash(&px, &mut h);
         (b, texture.create_view(&Default::default()), std::hash::Hasher::finish(&h))
     });
-    res.bordures.insert(out, BordureGardee { source: src, version: cel.version, m, vue: tick, faite: faite.clone() });
+    let gardee = BordureGardee { source: src, version: cel.version, tuiles, m, vue: tick, faite: faite.clone() };
+    *bytes += gardee.bytes();
+    res.bordures.insert(out, gardee);
     faite
 }
+
+/// (Essais.) Combien de bordures ont été refaites depuis le début.
+#[cfg(test)]
+pub(crate) static BORDURES_FAITES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 /// Les textures de dessin d'un projet qui n'est pas affiché (un onglet inactif, `onglets.rs`).
 pub(crate) struct TexturesDeProjet(HashMap<CelId, CelTexture>);
@@ -839,10 +862,17 @@ impl GpuCanvas {
                 // (Les textures de résultat n'ont plus lieu d'être ; l'image composée gardée non plus.)
                 res.textures.retain(|_, t| t.fx.is_none());
                 res.fx_jobs.clear();
+                res.bordures.clear();
                 res.frame = None;
                 res.frame2 = None;
             }
         }
+    }
+
+    /// (Essais.) Les bordures d'encre gardées.
+    #[cfg(test)]
+    pub fn bordures(&self) -> usize {
+        self.render_state.renderer.read().callback_resources.get::<CanvasResources>().map_or(0, |r| r.bordures.len())
     }
 
     /// Essais et mesures : mémoire vidéo prise par les effets sur la carte graphique, textures de travail
@@ -926,6 +956,8 @@ impl GpuCanvas {
         let mut renderer = self.render_state.renderer.write();
         let Some(res) = renderer.callback_resources.get_mut::<CanvasResources>() else { return TexturesDeProjet(HashMap::new()) };
         res.fx_jobs.clear();
+        // (Les bordures se refont en une milliseconde : elles ne partent pas avec l'onglet, elles sont libérées.)
+        res.bordures.clear();
         if let Some(f) = res.frame.as_mut() {
             f.composed = None;
         }
@@ -954,6 +986,7 @@ impl GpuCanvas {
         let Some(res) = renderer.callback_resources.get_mut::<CanvasResources>() else { return };
         res.textures = textures.0;
         res.fx_jobs.clear();
+        res.bordures.clear();
         if let Some(f) = res.frame.as_mut() {
             f.composed = None;
         }
@@ -992,7 +1025,7 @@ impl GpuCanvas {
         let size = (doc.width as u32, doc.height as u32);
         let mut up = Uploads { tick, data: std::mem::take(&mut res.staging), ..Default::default() };
         // Poids des textures gardées (mis à jour à chaque création, recyclage et départ).
-        let mut bytes: u64 = res.textures.values().map(CelTexture::bytes).sum();
+        let mut bytes: u64 = res.textures.values().map(CelTexture::bytes).sum::<u64>() + res.bordures.values().map(BordureGardee::bytes).sum::<u64>();
         // Une nouvelle lecture du budget de mémoire vidéo (toutes les 1,5 s, sur un autre fil) : le plafond du cache est
         // refait avec le poids du cache de maintenant, puis tenu jusqu'à la lecture suivante.
         res.follow_vram(crate::memoirevideo::lecture(), bytes);
@@ -1014,6 +1047,10 @@ impl GpuCanvas {
             .zip(&on_gpu)
             .enumerate()
             .map(|(i, (item, &gpu))| {
+                // (Sur la carte en attendant le calcul de fond d'un dessin qui déborde : il part ici, son résultat prend la place à son arrivée.)
+                if gpu {
+                    crate::fx::demander_si_debord(doc, item);
+                }
                 if let Some((line, _)) = &hybrid[i] {
                     crate::fx::display(doc, line, level)
                 } else if gpu {
@@ -1817,8 +1854,11 @@ pub(crate) fn gpu_fx_item(doc: &Document, item: &crate::render::PlanItem) -> boo
         && item.fond.is_none()
         && item.pre.is_none()
         && (crate::gpufx::steps_supported(&item.fx) || crate::fx::hybrid_split(item).is_some())
-        // (Un dessin qui passe le bord de la feuille, avec un effet qui va lire ses voisins : la carte ne voit pas ce qui arrive de l'autre côté, le calcul de fond si : partie 119.)
-        && doc.cels.get(&item.cel).is_some_and(|c| c.raster.width == doc.width && c.raster.height == doc.height && (crate::fx::pile_juste_au_bord(&item.fx) || !c.raster.deborde_vite()))
+        // Un dessin qui passe le bord de la feuille, avec un effet qui va lire ses voisins : la carte ne voit pas ce qui arrive de l'autre côté, le calcul de fond si (partie 119).
+        // Mais tant que ce calcul n'a pas répondu, c'est la carte qui dessine : l'effet suit le trait sans délai, seule la bande près du bord n'a pas encore tout lu.
+        && doc.cels.get(&item.cel).is_some_and(|c| {
+            c.raster.width == doc.width && c.raster.height == doc.height && (crate::fx::pile_juste_au_bord(&item.fx) || !crate::fx::cel_deborde(c) || crate::fx::resultat_pret(doc, item).is_none())
+        })
 }
 
 /// La texture résultat des effets de l'élément `item` (dessin d'origine déjà envoyé sous son numéro) :
@@ -1832,7 +1872,7 @@ fn place_fx(rs: &RenderState, res: &mut CanvasResources, item: &crate::render::P
     let out = crate::gpufx::out_id(src, nth, &item.fx);
     // L'encre autour de la feuille, pour un tremblement en tête de pile.
     let bord = match (crate::gpufx::Bordure::largeur_voulue(&item.fx), lu) {
-        (Some(m), Some(cel)) => bordure_de(rs, res, out, src, cel, m, tick),
+        (Some(m), Some(cel)) => bordure_de(rs, res, out, src, cel, m, tick, bytes),
         _ => None,
     };
     let chain = crate::gpufx::plan_chain_bord(&item.fx, crate::gpufx::Geo::from_rect(rect), sheet, bord.as_ref().map(|b| b.0))?;

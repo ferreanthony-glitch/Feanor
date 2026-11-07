@@ -512,27 +512,28 @@ impl Raster {
 
     /// Y a-t-il quelque chose de dessiné hors de la feuille ?
     pub fn has_beyond(&self) -> bool {
+        self.deborde_vite()
+    }
+
+    /// De l'encre au-delà de la feuille : une tuile de `outer` vidée à la gomme ne compte pas. Ne lit que ce qui dépasse, jamais une tuile de bord entière ;
+    /// à chaque image, passer par `fx::cel_deborde`, qui retient la réponse pour la version du dessin.
+    pub fn deborde_vite(&self) -> bool {
         if self.outer.values().any(|t| t.iter().any(|c| c.a() != 0)) {
             return true;
         }
-        self.tiles.iter().enumerate().any(|(idx, slot)| {
-            let Some(tile) = slot else { return false };
-            let (tx, ty) = (idx % self.tiles_x, idx / self.tiles_x);
-            self.straddles(tx, ty) && (0..TILE_PIXELS).any(|i| self.beyond(tx, ty, i % TILE, i / TILE) && tile[i].a() != 0)
-        })
-    }
-
-    /// Le test d'à chaque image : des tuiles hors de la feuille, ou de l'encre au-delà d'elle dans une tuile de bord. (Les tuiles hors de la feuille
-    /// ne sont pas rouvertes pour le savoir : une tuile sans encre y dit oui, ce qui ne coûte qu'un calcul pour rien.)
-    pub fn deborde_vite(&self) -> bool {
-        if !self.outer.is_empty() {
+        let (rows, cols) = (self.tiles_y(), self.tiles_x);
+        if self.height % TILE != 0 && rows > 0 && (0..cols).any(|tx| self.bord_a_de_l_encre(tx, rows - 1)) {
             return true;
         }
-        self.tiles.iter().enumerate().any(|(idx, slot)| {
-            let Some(tile) = slot else { return false };
-            let (tx, ty) = (idx % self.tiles_x, idx / self.tiles_x);
-            self.straddles(tx, ty) && (0..TILE_PIXELS).any(|i| self.beyond(tx, ty, i % TILE, i / TILE) && tile[i].a() != 0)
-        })
+        self.width % TILE != 0 && cols > 0 && (0..rows).any(|ty| self.bord_a_de_l_encre(cols - 1, ty))
+    }
+
+    /// La tuile (`tx`, `ty`) de la fenêtre a de l'encre au-delà de la feuille.
+    fn bord_a_de_l_encre(&self, tx: usize, ty: usize) -> bool {
+        let Some(tile) = self.tiles[ty * self.tiles_x + tx].as_ref() else { return false };
+        let (xb, yb) = (self.width.saturating_sub(tx * TILE).min(TILE), self.height.saturating_sub(ty * TILE).min(TILE));
+        let px: &[Color32; TILE_PIXELS] = tile;
+        px[yb * TILE..].iter().any(|c| c.a() != 0) || (xb < TILE && (0..yb).any(|y| px[y * TILE + xb..(y + 1) * TILE].iter().any(|c| c.a() != 0)))
     }
 
     /// La tuile (`tx`, `ty`) de la fenêtre est à cheval sur le bord de la feuille (voir `straddles`).

@@ -559,26 +559,484 @@ fn computing_by_zones_gives_the_same_pixels_as_the_whole_drawing() {
         (EffectKind::MotionBlur, vec![30.0, 20.0]),
         (EffectKind::Sharpen, vec![100.0, 2.0]),
         (EffectKind::Mosaic, vec![10.0]),
+        // (Un seuil que le rouge passe.)
+        (EffectKind::Bloom, vec![30.0, 100.0, 40.0]),
+        (EffectKind::Bloom, vec![90.0, 100.0, 40.0]),
+        (EffectKind::Outline, Effect::new(EffectKind::Outline).values.clone()),
+        (EffectKind::Bleed, Effect::new(EffectKind::Bleed).values.clone()),
+        (EffectKind::Dry, Effect::new(EffectKind::Dry).values.clone()),
+        (EffectKind::Boil, tremblement_de(3.0)),
     ] {
         let steps = [FxStep { kind, values: valeurs.clone() }];
         let (a, b) = (crate::fx::apply(&debord, &steps), crate::fx::apply(&tout, &steps));
-        // (Hors de la feuille et au-delà de la portée de l'effet depuis le bord : là où la feuille n'a pas son calcul à elle.)
-        let (mut n, mut pire, mut encre) = (0, 0, 0);
-        for y in 180..1380i64 {
-            for x in 700..2380i64 {
-                let (p, q) = (a.get_i(x, y).to_array(), b.get_i(x, y).to_array());
-                let d = (0..4).map(|i| (p[i] as i32 - q[i] as i32).abs()).max().unwrap_or(0);
-                encre += usize::from(q[3] > 0);
-                if d > 0 {
-                    n += 1;
-                    pire = pire.max(d);
+        // Hors de la feuille et au-delà de la portée de l'effet depuis le bord, là où la feuille n'a pas son calcul à elle ; puis la couture, là où le trait passe le bord.
+        let hors = compter_les_ecarts(&a, &b, 700..2380, 180..1380);
+        let couture = compter_les_ecarts(&a, &b, 600..700, 270..340);
+        println!("ZONES {kind:?} {valeurs:?} : {} pixels différents sur {}, {} au plus ; à la couture {} sur {}, {} au plus", hors.0, hors.2, hors.1, couture.0, couture.2, couture.1);
+        assert!(hors.2 > 10_000, "{kind:?}");
+        // (Le tremblement : un niveau d'arrondi sur quelques pixels, sans cause trouvée, invisible. Tout autre écart est une zone qui se voit.)
+        let permis = if kind == EffectKind::Boil { (hors.2 / 2000, 1) } else { (0, 0) };
+        assert!(hors.0 <= permis.0 && hors.1 <= permis.1, "{kind:?} {valeurs:?} : les zones se voient ({} pixels, jusqu'à {})", hors.0, hors.1);
+        assert_eq!(couture.0, 0, "{kind:?} {valeurs:?} : la couture des zones et de la feuille se voit ({} pixels, jusqu'à {})", couture.0, couture.1);
+    }
+}
+
+/// (Pixels différents, le plus grand écart, pixels d'encre de la référence.)
+fn compter_les_ecarts(a: &Raster, reference: &Raster, xs: std::ops::Range<i64>, ys: std::ops::Range<i64>) -> (usize, i32, usize) {
+    let (mut n, mut pire, mut encre) = (0, 0, 0);
+    for y in ys {
+        for x in xs.clone() {
+            let (p, q) = (a.get_i(x, y).to_array(), reference.get_i(x, y).to_array());
+            let d = (0..4).map(|i| (p[i] as i32 - q[i] as i32).abs()).max().unwrap_or(0);
+            encre += usize::from(q[3] > 0);
+            if d > 0 {
+                if n < 3 {
+                    println!("  ECART en ({x}, {y}) : {p:?} pour {q:?}");
+                }
+                n += 1;
+                pire = pire.max(d);
+            }
+        }
+    }
+    (n, pire, encre)
+}
+
+fn tremblement_de(intensite: f32) -> Vec<f32> {
+    let mut v = crate::tremblement::Defaut { actif: true, intensite, ..Default::default() }.values();
+    v.push(0.0);
+    v
+}
+
+/// Une pile de plusieurs effets, avec débord : comme une feuille assez grande pour tout tenir, hors de la feuille et à la couture.
+#[test]
+fn a_chain_of_effects_continues_across_the_edge() {
+    let (w, h) = (640usize, 320usize);
+    let mut debord = Raster::new(w, h);
+    let mut tout = Raster::new(2400, 1400);
+    for k in 0..1500i64 {
+        let (x, y) = (500 + k, 200 + k * 7 / 10);
+        pave(&mut debord, x, x + 2, y, y + 14, ROUGE);
+        pave(&mut tout, x, x + 2, y, y + 14, ROUGE);
+    }
+    let etape = |kind, values: Vec<f32>| FxStep { kind, values };
+    let piles = [
+        vec![etape(EffectKind::Boil, tremblement_de(3.0)), etape(EffectKind::GaussianBlur, vec![8.0]), etape(EffectKind::DropShadow, vec![10.0, 10.0, 6.0, 60.0]), etape(EffectKind::BlackWhite, vec![100.0])],
+        vec![etape(EffectKind::Mosaic, vec![12.0]), etape(EffectKind::Noise, vec![20.0]), etape(EffectKind::Glow, vec![12.0, 100.0])],
+    ];
+    for pile in piles {
+        let noms: Vec<EffectKind> = pile.iter().map(|s| s.kind).collect();
+        let (a, b) = (crate::fx::apply(&debord, &pile), crate::fx::apply(&tout, &pile));
+        let hors = compter_les_ecarts(&a, &b, 720..2380, 180..1380);
+        let couture = compter_les_ecarts(&a, &b, 620..700, 280..340);
+        println!("PILE {noms:?} : {} pixels différents sur {}, {} au plus ; à la couture {} sur {}, {} au plus", hors.0, hors.2, hors.1, couture.0, couture.2, couture.1);
+        assert!(hors.2 > 10_000);
+        // (Le tremblement en tête de pile : un niveau d'arrondi sur quelques pixels, voir plus haut.)
+        assert!(hors.0 <= hors.2 / 2000 && hors.1 <= 1 && couture.0 == 0, "{noms:?} : hors de la feuille {hors:?}, à la couture {couture:?}");
+    }
+}
+
+// ------------------------------------------------------------------------------ la relecture : le confort du trait
+
+/// Un plan d'un seul calque bitmap portant `effets`, à l'encre donnée. Chaque appel a ses numéros de dessin.
+fn plan_d_un_calque(effets: &[(EffectKind, Vec<f32>)], encre: impl FnOnce(&mut Raster, i64, i64)) -> crate::document::Document {
+    let mut doc = crate::traits_continus_tests::des_plans(1, true);
+    static NUMEROS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(100_000);
+    for _ in 0..NUMEROS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % 4096 + 2048 {
+        doc.new_cel(crate::document::LayerKind::Bitmap);
+    }
+    let id = doc.new_cel(crate::document::LayerKind::Bitmap);
+    let (w, h) = (doc.width as i64, doc.height as i64);
+    let c = doc.cels.get_mut(&id).unwrap();
+    encre(&mut c.raster, w, h);
+    c.version += 1;
+    let f = doc.panels[0].frame_count().max(1);
+    let l = &mut doc.panels[0].layers[0];
+    l.frames.resize(f, None);
+    l.frames[0] = Some(id);
+    for (kind, values) in effets {
+        let mut e = Effect::new(*kind);
+        e.values = values.clone();
+        l.fx.push(e);
+    }
+    doc
+}
+
+fn plan_item(doc: &crate::document::Document) -> crate::render::PlanItem {
+    let plan = crate::render::panel_plan_at(doc, 0, 0, Some(doc.paper));
+    plan.items.into_iter().find(|i| !i.fx.is_empty()).expect("le calque à effets")
+}
+
+/// Le Storyboard, assez loin pour voir `echelle` feuilles.
+fn au_storyboard(b: &mut crate::perf_tests::Banc, echelle: f32) {
+    b.app.set_espace(crate::workspace::Espace::Storyboard);
+    b.app.board_view = crate::app::BoardView::Scene;
+    b.app.settings.passe_partout_actif = false;
+    b.app.select_panel(0);
+    b.chauffer(4);
+    let r = b.app.canvas_rect;
+    let [w, h] = [b.app.doc.width as f32, b.app.doc.height as f32];
+    b.app.view.fit(r, eframe::egui::vec2(w, h) * echelle);
+    b.chauffer(4);
+}
+
+/// L'application revient au repos : plus aucun calcul de fond, plus aucun hors-feuille refait, pendant une demi-seconde d'images. Rend le temps qu'il a fallu ; `None` si elle n'y arrive pas.
+fn revient_au_repos(b: &mut crate::perf_tests::Banc, patience: std::time::Duration) -> Option<std::time::Duration> {
+    let debut = std::time::Instant::now();
+    let mut calme = std::time::Instant::now();
+    let (mut g, mut r) = (crate::fxcache::generation(), b.app.monde.rebuilds());
+    while debut.elapsed() < patience {
+        b.image(Vec::new(), 1.0 / 60.0);
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        let (g2, r2) = (crate::fxcache::generation(), b.app.monde.rebuilds());
+        if g2 != g || r2 != r || b.app.monde.busy() || crate::fxcache::pending() > 0 {
+            (g, r) = (g2, r2);
+            calme = std::time::Instant::now();
+        }
+        if calme.elapsed() > std::time::Duration::from_millis(500) {
+            return Some(debut.elapsed() - std::time::Duration::from_millis(500));
+        }
+    }
+    None
+}
+
+/// Point 1, scénario B : une tuile hors de la feuille vidée à la gomme ne compte plus, le calque revient sur la carte.
+#[test]
+fn an_erased_overflow_is_no_overflow_and_the_layer_returns_to_the_card() {
+    let mut doc = plan_d_un_calque(&[(EffectKind::GaussianBlur, vec![8.0])], |r, w, _| {
+        pave(r, 100, 200, 100, 110, ROUGE);
+        pave(r, w + 10, w + 30, 100, 110, ROUGE);
+    });
+    let id = plan_item(&doc).cel;
+    assert!(doc.cels[&id].raster.deborde_vite(), "de l'encre au-delà de la feuille");
+    let (w, _) = (doc.width as i64, 0);
+    let c = doc.cels.get_mut(&id).unwrap();
+    pave(&mut c.raster, w + 10, w + 30, 100, 110, Color32::TRANSPARENT);
+    c.version += 1;
+    assert!(!c.raster.outer.is_empty(), "la tuile reste, vide");
+    assert!(!c.raster.deborde_vite(), "une tuile gommée n'est pas un débord");
+    assert!(crate::gpu::gpu_fx_item(&doc, &plan_item(&doc)), "le calque est revenu sur la carte");
+}
+
+/// Point 1, scénario A : quelques pixels dans la bande de la dernière rangée de tuiles ne font pas attendre le calque : tant que le calcul de fond n'a pas répondu, la carte montre l'effet.
+#[test]
+fn a_small_overflow_keeps_the_instant_effect_of_the_card() {
+    let doc = plan_d_un_calque(&[(EffectKind::GaussianBlur, vec![8.0])], |r, _, h| {
+        pave(r, 100, 400, 100, 110, ROUGE);
+        pave(r, 300, 304, h + 1, h + 3, ROUGE);
+    });
+    let item = plan_item(&doc);
+    assert!(doc.cels[&item.cel].raster.deborde_vite(), "quelques pixels au-delà de la feuille");
+    assert!(crate::gpu::gpu_fx_item(&doc, &item), "pas de résultat prêt : la carte dessine l'effet, sans délai");
+}
+
+/// Le temps et les images entre le lever du stylet et le halo du flou à l'écran.
+fn delai_du_trait(debord: bool) -> Option<(u128, usize)> {
+    let doc = plan_d_un_calque(&[(EffectKind::GaussianBlur, vec![12.0])], |r, w, h| {
+        pave(r, w / 2 - 800, w / 2 - 500, h / 2 - 300, h / 2 - 280, ROUGE);
+        if debord {
+            pave(r, w - 300, w + 200, h / 2 - 300, h / 2 - 280, ROUGE);
+        }
+    });
+    let mut b = crate::perf_tests::banc(doc, true);
+    b.capturer()?;
+    au_storyboard(&mut b, 1.0);
+    b.app.view.zoom = 1.0;
+    let [w, h] = [b.app.doc.width as f32, b.app.doc.height as f32];
+    b.app.view.pan = eframe::egui::vec2(0.0, 0.0);
+    let centre = b.app.view.to_screen(b.app.canvas_rect, b.app.canvas_size(), eframe::egui::pos2(w / 2.0, h / 2.0));
+    b.app.view.pan = b.app.canvas_rect.center() - centre;
+    b.app.set_tool(crate::app::Tool::Brush);
+    b.app.color = [200, 30, 40];
+    b.app.brush.size = 14.0;
+    b.app.brush.opacity = 1.0;
+    b.chauffer(4);
+    let _ = revient_au_repos(&mut b, std::time::Duration::from_secs(20));
+    let c = b.app.canvas_rect.center();
+    crate::traits_continus_tests::tracer(&mut b, c - eframe::egui::vec2(150.0, 0.0), c + eframe::egui::vec2(150.0, 0.0));
+    let t = std::time::Instant::now();
+    for images in 1..600 {
+        let img = b.capturer()?;
+        // À dix pixels du milieu du trait, là où seul le halo arrive.
+        let v = crate::traits_continus_tests::px(&img, c.x as i32, c.y as i32 + 10);
+        if v[0] - v[1] > 6 {
+            return Some((t.elapsed().as_millis(), images));
+        }
+        b.image(Vec::new(), 1.0 / 60.0);
+    }
+    panic!("le halo du flou n'arrive pas (débord : {debord})");
+}
+
+/// Point 1 : le délai ressenti entre le trait et son effet, sans et avec un débord sur le même calque.
+#[test]
+fn the_effect_of_a_stroke_shows_as_fast_on_a_layer_with_an_overflow() {
+    crate::fxcache::monde::ecrire();
+    let Some(sans) = delai_du_trait(false) else { return println!("pas de carte graphique") };
+    let Some(avec) = delai_du_trait(true) else { return };
+    println!("DELAI du trait à son effet : sans débord {} ms, {} images ; avec débord {} ms, {} images", sans.0, sans.1, avec.0, avec.1);
+    assert!(avec.1 <= sans.1 + 2, "le débord fait attendre l'effet : {} images contre {}", avec.1, sans.1);
+}
+
+/// (Mesure.) Le coût par image de savoir si dix calques à effets débordent, sur une feuille 4K dont la dernière rangée de tuiles est encrée sans rien au-delà.
+#[test]
+#[ignore]
+fn mesure_le_cout_du_test_de_debord() {
+    let mut doc = crate::traits_continus_tests::des_plans(1, true);
+    let (w, h) = (doc.width as i64, doc.height as i64);
+    println!("COUT feuille {w} × {h}");
+    let modele = doc.panels[0].layers[0].clone();
+    doc.panels[0].layers.clear();
+    let f = doc.panels[0].frame_count().max(1);
+    for k in 0..10 {
+        let id = doc.new_cel(crate::document::LayerKind::Bitmap);
+        let c = doc.cels.get_mut(&id).unwrap();
+        pave(&mut c.raster, 0, w, h - 4, h, ROUGE);
+        c.version += 1;
+        let mut l = modele.clone();
+        l.id = crate::document::fresh_layer_id();
+        l.frames = vec![None; f];
+        l.frames[0] = Some(id);
+        l.fx.push(Effect::new(if k % 2 == 0 { EffectKind::GaussianBlur } else { EffectKind::Glow }));
+        doc.panels[0].layers.push(l);
+    }
+    let plan = crate::render::panel_plan_at(&doc, 0, 0, Some(doc.paper));
+    assert_eq!(plan.items.iter().filter(|i| !i.fx.is_empty()).count(), 10);
+    let n = 200;
+    // L'ancienne façon de le savoir, sur le même dessin : les 4 096 pixels de chaque tuile à cheval sur le bord, à chaque question ; trois questions par calque et par image.
+    let ancienne = |r: &Raster| {
+        r.tiles.iter().enumerate().any(|(idx, slot)| {
+            let Some(tile) = slot else { return false };
+            let (tx, ty) = (idx % r.tiles_x, idx / r.tiles_x);
+            let a_cheval = (tx + 1) * TILE > r.width || (ty + 1) * TILE > r.height;
+            a_cheval && (0..crate::raster::TILE_PIXELS).any(|i| (tx * TILE + i % TILE >= r.width || ty * TILE + i / TILE >= r.height) && tile[i].a() != 0)
+        })
+    };
+    let t = std::time::Instant::now();
+    for _ in 0..20 {
+        for i in plan.items.iter().filter(|i| !i.fx.is_empty()) {
+            for _ in 0..3 {
+                std::hint::black_box(ancienne(&doc.cels[&i.cel].raster));
+            }
+        }
+    }
+    println!("COUT par image, l'ancienne façon : {:.0} µs", t.elapsed().as_secs_f64() * 1e6 / 20.0);
+    let t = std::time::Instant::now();
+    let mut oui = 0;
+    for _ in 0..n {
+        oui += plan.items.iter().filter(|i| crate::gpu::gpu_fx_item(&doc, i)).count();
+    }
+    let carte = t.elapsed().as_secs_f64() * 1e6 / n as f64;
+    let t = std::time::Instant::now();
+    for _ in 0..n {
+        std::hint::black_box(crate::render::plan_bounds(&doc, &plan));
+    }
+    let bornes = t.elapsed().as_secs_f64() * 1e6 / n as f64;
+    println!("COUT par image, dix calques à effets en 4K : gpu_fx_item {carte:.0} µs, plan_bounds {bornes:.0} µs ({oui} réponses oui)");
+}
+
+/// Point 3 : à la lecture d'un dessin qui déborde avec un flou, le hors-feuille ne montre jamais une image sans son effet après l'avoir montrée avec : ni clignotement, ni trait nu.
+#[test]
+fn playing_a_drawing_with_an_overflow_does_not_flicker_outside_the_sheet() {
+    crate::fxcache::monde::ecrire();
+    let images = 8usize;
+    let mut doc = crate::traits_continus_tests::des_plans(1, true);
+    doc.set_duration(0, images);
+    for _ in 0..3000 {
+        doc.new_cel(crate::document::LayerKind::Bitmap);
+    }
+    let (w, h) = (doc.width as i64, doc.height as i64);
+    let y_de = |f: usize| h / 8 + f as i64 * 40;
+    let mut cels = Vec::new();
+    for f in 0..images {
+        let id = doc.new_cel(crate::document::LayerKind::Bitmap);
+        let c = doc.cels.get_mut(&id).unwrap();
+        pave(&mut c.raster, w - 900, w + 900, y_de(f), y_de(f) + 14, ROUGE);
+        // (De quoi demander un peu de temps au fil de fond.)
+        pave(&mut c.raster, 100, w / 2, 100 + f as i64, h - 100, Color32::from_rgb(40, 90, 200));
+        c.version += 1;
+        cels.push(id);
+    }
+    let l = &mut doc.panels[0].layers[0];
+    l.frames = cels.iter().map(|&c| Some(c)).collect();
+    let mut e = Effect::new(EffectKind::GaussianBlur);
+    e.values = vec![16.0];
+    l.fx.push(e);
+    let mut b = crate::perf_tests::banc(doc, true);
+    if b.capturer().is_none() {
+        return println!("pas de carte graphique");
+    }
+    au_storyboard(&mut b, 3.0);
+    assert!(revient_au_repos(&mut b, std::time::Duration::from_secs(30)).is_some(), "le repos, avant de lire");
+    // Une lecture : ce que montre le hors-feuille, image d'écran après image d'écran. (`images` : le trait de quelle image du dessin est là, avec ou sans son flou.)
+    let lire = |b: &mut crate::perf_tests::Banc| {
+        let (mut nu, mut avec, mut vues) = (0, 0, std::collections::BTreeSet::new());
+        b.app.playing = true;
+        for _ in 0..120 {
+            b.image(Vec::new(), 1.0 / 24.0);
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            let x = w + 300;
+            let rouge = |c: Option<Color32>| c.map_or(0, |c| c.r() as i32 - c.g() as i32);
+            // Sur le trait de chaque image du dessin et à huit pixels au-dessus de lui, où seul le flou arrive.
+            for f in 0..images {
+                if rouge(b.app.monde.pixel(x, y_de(f) + 7)) > 60 {
+                    vues.insert(f);
+                    if rouge(b.app.monde.pixel(x, y_de(f) - 8)) > 6 {
+                        avec += 1;
+                    } else {
+                        nu += 1;
+                    }
                 }
             }
         }
-        println!("ZONES {kind:?} {valeurs:?} : {n} pixels différents sur {encre}, {pire} au plus");
-        assert!(encre > 10_000, "{kind:?}");
-        assert_eq!(n, 0, "{kind:?} {valeurs:?} : les zones se voient ({n} pixels, jusqu'à {pire})");
+        b.app.playing = false;
+        (nu, avec, vues.len())
+    };
+    let (nu, avec, vues) = lire(&mut b);
+    // Puis sans garder l'image d'avant (le défaut de la relecture) : l'essai voit-il bien le trait nu ? (D'autres résultats à calculer : la réserve est vidée.)
+    crate::fx::forget_all();
+    crate::monde::GARDER_L_IMAGE_POUR_ESSAI.store(false, std::sync::atomic::Ordering::Relaxed);
+    let sans = lire(&mut b);
+    crate::monde::GARDER_L_IMAGE_POUR_ESSAI.store(true, std::sync::atomic::Ordering::Relaxed);
+    println!("LECTURE : sans garder l'image, {} images nues, {} avec l'effet ; en la gardant, {nu} nues, {avec} avec l'effet, {vues} images du dessin vues", sans.0, sans.1);
+    assert!(sans.0 > 0, "sans garder l'image, l'essai voit le clignotement : {sans:?}");
+    assert!(vues >= 2, "la lecture avance : {vues} images du dessin vues");
+    assert_eq!(nu, 0, "le hors-feuille a montré {nu} images sans l'effet, {avec} avec");
+}
+
+/// Point 4 : une réserve bien plus petite que ce qu'il faut à l'image : le calcul se termine, l'application revient au repos, le trait reste montré.
+#[test]
+fn a_reserve_too_small_does_not_compute_without_end() {
+    crate::fxcache::monde::ecrire();
+    struct Rend(usize);
+    impl Drop for Rend {
+        fn drop(&mut self) {
+            crate::fxcache::set_limit(self.0);
+        }
     }
+    let _rend = Rend(crate::fxcache::limit());
+    crate::fxcache::set_limit(1 << 20);
+    let mut doc = crate::traits_continus_tests::des_plans(1, true);
+    for _ in 0..7000 {
+        doc.new_cel(crate::document::LayerKind::Bitmap);
+    }
+    let (w, h) = (doc.width as i64, doc.height as i64);
+    let modele = doc.panels[0].layers[0].clone();
+    doc.panels[0].layers.clear();
+    let f = doc.panels[0].frame_count().max(1);
+    for k in 0..6i64 {
+        let id = doc.new_cel(crate::document::LayerKind::Bitmap);
+        let c = doc.cels.get_mut(&id).unwrap();
+        // Chaque résultat pèse bien plus que la réserve.
+        pave(&mut c.raster, w - 3000, w + 3000, h / 8 + k * 300, h / 8 + k * 300 + 200, ROUGE);
+        c.version += 1;
+        let mut l = modele.clone();
+        l.id = crate::document::fresh_layer_id();
+        l.frames = vec![None; f];
+        l.frames[0] = Some(id);
+        let mut e = Effect::new(EffectKind::GaussianBlur);
+        e.values = vec![8.0];
+        l.fx.push(e);
+        doc.panels[0].layers.push(l);
+    }
+    let mut b = crate::perf_tests::banc(doc, true);
+    if b.capturer().is_none() {
+        return println!("pas de carte graphique");
+    }
+    let g0 = crate::fxcache::generation();
+    au_storyboard(&mut b, 3.0);
+    let repos = revient_au_repos(&mut b, std::time::Duration::from_secs(25));
+    let calculs = crate::fxcache::generation() - g0;
+    println!("RESERVE d'un mégaoctet, six calques de plusieurs mégaoctets : repos après {repos:?}, {calculs} calculs");
+    assert!(repos.is_some(), "le calcul ne se termine pas : {calculs} calculs en 25 secondes");
+    // Le trait est montré, avec son effet ou en repli.
+    let montre = b.app.monde.pixel(w + 500, h / 8 + 100).is_some_and(|c| c.r() as i32 - c.g() as i32 > 60);
+    assert!(montre, "le trait reste montré hors de la feuille");
+}
+
+/// Point 5 : les bordures d'encre ne se refont pas à chaque image, même sans encre autour de la feuille, et partent avec l'onglet.
+#[test]
+fn the_ink_borders_are_kept_once_and_leave_with_the_tab() {
+    crate::fxcache::monde::ecrire();
+    for encre_au_bord in [true, false] {
+        let mut doc = plan_d_un_calque(&[(EffectKind::Boil, tremblement_de(3.0))], |r, w, _| {
+            pave(r, w - 200, w - 100, 100, 112, ROUGE);
+            if encre_au_bord {
+                pave(r, w - 100, w + 100, 100, 112, ROUGE);
+            } else {
+                // (Un débord loin du bord de la feuille : la bordure, elle, est vide.)
+                pave(r, w + 400, w + 500, 100, 112, ROUGE);
+            }
+        });
+        // (Le tremblement ne vit que sur un calque vectoriel.)
+        doc.panels[0].layers[0].kind = crate::document::LayerKind::Vector;
+        let mut b = crate::perf_tests::banc(doc, true);
+        if b.capturer().is_none() {
+            return println!("pas de carte graphique");
+        }
+        au_storyboard(&mut b, 3.0);
+        b.chauffer(4);
+        let compte = |g: &crate::gpu::GpuCanvas| g.bordures();
+        let n = b.app.gpu.as_ref().map_or(0, compte);
+        assert_eq!(n, 1, "une entrée pour ce calque (encre au bord : {encre_au_bord})");
+        let faites = crate::gpu::BORDURES_FAITES.load(std::sync::atomic::Ordering::Relaxed);
+        b.chauffer(30);
+        assert_eq!(crate::gpu::BORDURES_FAITES.load(std::sync::atomic::Ordering::Relaxed), faites, "rien ne se refait tant que le dessin ne change pas (encre au bord : {encre_au_bord})");
+        let textures = b.app.gpu.as_ref().map(|g| g.prendre_textures()).expect("la carte");
+        assert_eq!(b.app.gpu.as_ref().map_or(1, compte), 0, "elles partent avec l'onglet");
+        b.app.gpu.as_ref().expect("la carte").poser_textures(textures);
+    }
+}
+
+/// Point 6 : l'aberration ne fait pas exploser ce qu'il faut visiter pour un point très loin, et le point reste montré.
+#[test]
+fn the_aberration_of_a_point_far_away_stays_bounded() {
+    let mut r = Raster::new(W, H);
+    pave(&mut r, 100, 200, 100, 110, ROUGE);
+    pave(&mut r, 30_000, 30_012, 30_000, 30_012, ROUGE);
+    let t = std::time::Instant::now();
+    let out = crate::fx::apply(&r, &[FxStep { kind: EffectKind::Aberration, values: vec![60.0, 50.0, 50.0] }]);
+    let (ms, encre) = (t.elapsed().as_millis(), out.outer.values().map(|t| t.iter().filter(|c| c.a() != 0).count()).sum::<usize>());
+    println!("ABERRATION force 60, point à 30 000 : {ms} ms, {} tuiles hors de la feuille, {encre} pixels d'encre", out.outer.len());
+    assert!(encre >= 12 * 12, "le point reste montré : {encre} pixels");
+    assert!(out.outer.len() < 64, "{} tuiles pour un point", out.outer.len());
+    // (3 376 ms avant la borne, sur la même machine : des dizaines de milliers de tuiles visitées pour rien.)
+    assert!(ms < 1500, "{ms} ms pour un point très loin");
+}
+
+/// Point 7 : avant que l'effet soit calculé, ce qu'il faut composer autour de l'encre suit sa portée même au-delà de 1 024 pixels.
+#[test]
+fn the_tiles_to_compose_follow_an_effect_reaching_far() {
+    let doc = plan_d_un_calque(&[(EffectKind::Twirl, vec![90.0, 200.0, 100.0, 50.0])], |r, w, h| {
+        pave(r, w + 20, w + 60, h / 2, h / 2 + 10, ROUGE);
+    });
+    let (w, h) = (doc.width as i64, doc.height as i64);
+    let plan = crate::render::panel_plan_at(&doc, 0, 0, Some(doc.paper));
+    let area = crate::render::plan_bounds(&doc, &plan);
+    let tuiles = crate::render::plan_world_tiles(&doc, &plan, area);
+    // Le tourbillon, de rayon égal à la hauteur de la feuille, centré sur le bord : à 1 500 pixels de l'encre, il peut y poser quelque chose.
+    let t = crate::raster::TILE as i64;
+    let loin = ((w + 1500) / t, h / 2 / t);
+    println!("PORTEE tourbillon : {} tuiles à composer, zone {area:?}", tuiles.len());
+    assert!(tuiles.contains(&(loin.0 as i32, loin.1 as i32)), "la tuile {loin:?}, dans le tourbillon, n'est pas composée");
+}
+
+/// (Mesure.) Un export parallèle de calques à effets : pic mémoire de huit fils qui passent chacun un dessin dense qui déborde par un grand flou.
+#[test]
+#[ignore]
+fn mesure_export_parallele_de_zones() {
+    let mut r = Raster::new(3840, 2160);
+    pave(&mut r, 3000, 7000, 200, 2000, ROUGE);
+    let steps = [FxStep { kind: EffectKind::GaussianBlur, values: vec![100.0] }];
+    let depart = crate::lourd_tests::memoire_pic();
+    let t = std::time::Instant::now();
+    std::thread::scope(|s| {
+        for _ in 0..8 {
+            s.spawn(|| {
+                crate::render::set_thread_cap(16);
+                crate::fxcache::avec_privee(256 << 20, || std::hint::black_box(crate::fx::apply(&r, &steps)).outer.len());
+            });
+        }
+    });
+    println!("EXPORT huit fils, flou 100 sur un dessin dense : {} ms, pic du processus {:.0} puis {:.0} Mo", t.elapsed().as_millis(), depart, crate::lourd_tests::memoire_pic());
 }
 
 // ------------------------------------------------------------------------------ le fil de l'interface
@@ -617,6 +1075,25 @@ fn freezing_the_world_on_the_ui_thread_does_not_compute_the_effect() {
     let (ms, couches) = crate::monde::mesure_de_l_instantane(&doc, &plan);
     println!("INSTANTANE gros dessin : {ms:.1} ms sur le fil de l'interface, {couches} couches");
     assert!(ms < 50.0, "{ms} ms sur le fil de l'interface");
+    // Le résultat finit par arriver à l'écran, et l'application revient au repos.
+    crate::fxcache::monde::ecrire();
+    let mut b = crate::perf_tests::banc(plan_lourd(EffectKind::GaussianBlur), true);
+    if b.capturer().is_none() {
+        return println!("pas de carte graphique");
+    }
+    au_storyboard(&mut b, 3.0);
+    let repos = revient_au_repos(&mut b, std::time::Duration::from_secs(60));
+    println!("INSTANTANE repos après {repos:?}");
+    assert!(repos.is_some(), "l'application revient au repos");
+    let plan = crate::render::panel_plan_at(&b.app.doc, 0, 0, Some(b.app.doc.paper));
+    let item = plan.items.iter().find(|i| !i.fx.is_empty()).expect("le calque à effets");
+    assert!(crate::fx::resultat_pret(&b.app.doc, item).is_some(), "le résultat est arrivé");
+    let (w, h) = (b.app.doc.width as i64, b.app.doc.height as i64);
+    // Le flou se voit hors de la feuille : entre deux traits de 18 pixels espacés d'une quarantaine de pixels, à quatre pixels du trait.
+    let y = h / 48 * 4 - 4;
+    let a = b.app.monde.pixel(w + 200, y).map(|c| c.r() as i32 - c.g() as i32);
+    println!("INSTANTANE hors de la feuille, à {y}, halo {a:?}");
+    assert!(a.is_some_and(|v| v > 3), "le flou n'est pas à l'écran hors de la feuille : {a:?}");
 }
 
 /// (À regarder : `FEANOR_CAPTURE_DIR`.) La couture de chaque effet, grossie deux fois sur papier blanc : un trait oblique qui passe le bord, la verticale du bord marquée en haut et en bas.

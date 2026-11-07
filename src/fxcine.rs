@@ -451,7 +451,15 @@ pub(crate) fn aberration_pixel(feuille: (usize, usize), amount: f32, cx: f32, cy
     let (ox, oy) = (w * cx / 100.0, h * cy / 100.0);
     let reach = ((w * w + h * h).sqrt() / 2.0).max(1.0);
     let k = amount / reach;
-    let (dx, dy) = (px - ox, py - oy);
+    let (mut dx, mut dy) = (px - ox, py - oy);
+    // Au-delà de la diagonale de la feuille (où aucun point de la feuille n'arrive), l'écart des couleurs cesse de grandir : il vaudrait des milliers de pixels pour un point perdu très loin.
+    // Il reste au plus deux fois la force, et le trait reste entier.
+    let (d2, loin2) = (dx * dx + dy * dy, w * w + h * h);
+    if d2 > loin2 {
+        let m = (loin2 / d2).sqrt();
+        dx *= m;
+        dy *= m;
+    }
     // (Le rouge qu'on voit ici vient d'un point plus proche du centre : son image est plus loin.)
     let r = lire(px - dx * k, py - dy * k);
     let g = lire(px, py);

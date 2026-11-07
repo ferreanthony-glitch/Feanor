@@ -8334,13 +8334,35 @@ Le shader du tremblement lit maintenant la **bordure d'encre** autour de la feui
 
 Un dessin sans encre autour de la feuille ne lit pas cette texture : le shader fait ce qu'il faisait.
 
-**Les autres piles sur la carte** : un dessin qui passe le bord, avec un effet qui lit ses voisins (flou, onde, secousse…) ou un tremblement qui n'est pas en tête de pile, passe par le calcul de fond (`fx::pile_juste_au_bord`), qui voit des deux côtés. Coût : ce calque n'est plus dessiné à chaque image par la carte, son effet arrive un instant après chaque changement. Un dessin qui reste dans la feuille n'est pas concerné. Les réglages de couleur, le vignettage, le flash et les autres effets qui ne lisent que leur propre pixel restent sur la carte.
+**Les autres piles sur la carte** : un dessin qui passe le bord, avec un effet qui lit ses voisins (flou, onde, secousse…) ou un tremblement qui n'est pas en tête de pile, reste dessiné par la carte tant que le calcul de fond n'a pas répondu : l'effet suit le trait sans délai. Le résultat du calcul de fond (`fx::pile_juste_au_bord`, `fx::demander_si_debord`), qui voit des deux côtés, prend ensuite sa place. Seule la bande près du bord change alors. Pendant un geste ou la lecture, ce calcul n'est pas demandé pour la feuille. Les réglages de couleur, le vignettage, le flash et les autres effets qui ne lisent que leur propre pixel restent sur la carte.
+
+**Seule l'encre compte** : une tuile hors de la feuille vidée à la gomme n'est plus un débord (`Raster::deborde_vite`), le calque revient entièrement sur la carte. La réponse est gardée pour la version du dessin (`fx::cel_deborde`).
+
+| Mesure | Avant la relecture | Après |
+|---|---|---|
+| Du trait à son effet, flou, sans débord | 10 ms, 1 image | 3 à 9 ms, 1 image |
+| Du trait à son effet, flou, calque qui déborde | 101 ms, 8 images | 3 à 13 ms, 1 image |
+| Savoir si dix calques à effets débordent, par image, en 4K | 5 027 µs | 10 µs |
+
+Les bordures d'encre comptent dans le poids du cache de la carte, 32 au plus, et sont libérées quand l'onglet s'en va. Une entrée sans encre ne se refait pas à chaque image.
 
 ### Le fil de l'interface
 
-`Instantane::of` et la composition d'une tuile du hors-feuille (`Monde::compose`) ne calculent plus aucun effet : le dessin se montre sans son effet, le fil de fond calcule, et le hors-feuille se refait quand le résultat arrive (`attend_les_effets`). Gros dessin (une feuille 4K d'encre et une feuille de plus, flou) : **158,5 ms puis 0,2 ms** sur le fil de l'interface.
+`Instantane::of` et la composition d'une tuile du hors-feuille (`Monde::compose`) ne calculent plus aucun effet : le fil de fond calcule, et le hors-feuille se refait quand le résultat arrive (`attend_les_effets`). Gros dessin (une feuille 4K d'encre et une feuille de plus, flou) : **158,5 ms puis 0,2 ms** sur le fil de l'interface.
 
-Ce qu'un effet pose autour de son encre hors de la feuille (le halo d'un flou, le déplacement d'une secousse) se compose aussi à l'écran (`render::plan_bounds`, `plan_world_tiles`).
+**Lecture sans clignotement** : une autre image dont les effets ne sont pas prêts ne remplace pas celle qui est à l'écran. Le hors-feuille garde l'image d'avant jusqu'à leur arrivée (`Monde::reunir`). Sur 120 images d'écran d'un dessin de 8 images, sans cette règle : 7 à 33 images nues selon le passage ; avec : 0. Le hors-feuille peut donc être en retard sur la feuille pendant la lecture.
+
+**Réserve trop petite** : avec six calques de plusieurs mégaoctets et une réserve d'un mégaoctet, le calcul tournait sans fin (897 calculs en 25 s, jamais de repos). Maintenant : 14 calculs, repos en 0,2 s. `Monde` tient les résultats reçus jusqu'à ce qu'ils y soient tous, et un même résultat ne se calcule pas plus de 3 fois en 10 s (`fx::recours_note_calcul`). Au-delà, la carte ou le dessin sans effet reste à l'écran, jusqu'à ce qu'une image redemande le calcul après ces 10 s.
+
+Ce qu'un effet pose autour de son encre hors de la feuille (le halo d'un flou, le déplacement d'une secousse) se compose aussi à l'écran (`render::plan_bounds`, `plan_world_tiles`), jusqu'à la portée entière de l'effet.
+
+### L'export
+
+Le film et la planche calculent l'effet complet, jamais le repli de l'écran. Film, flou de 14 pixels, à 14 pixels du trait au-delà de la feuille : 974 points d'encre sur 974 (0 sur 974 sans flou). Planche, à côté du trait, dans sa dernière moitié : 215 sur 244.
+
+**Plusieurs fils d'export** : les zones en cours sont limitées à 8 pour tout le processus (`fxmonde::sans_fils`). Huit fils, flou de 100 sur un dessin dense : pic de 354 Mo avant, 360 Mo après. Sur ce dessin, le pic vient donc d'ailleurs que des zones : la limite n'a rien gagné de mesurable, elle protège seulement d'un cas pire.
+
+**Aberration** : au-delà de la diagonale de la feuille, l'écart des couleurs cesse de grandir, il reste à deux fois la force au plus. La feuille ne change pas (empreintes). Point à 30 000 pixels, force 60, sur une petite feuille : 3 376 ms avant, 3 à 81 ms après.
 
 ### Limites
 
@@ -8349,7 +8371,8 @@ Ce qu'un effet pose autour de son encre hors de la feuille (le halo d'un flou, l
 - **Plume** (effet du trait) : passe par le même chemin, mais n'a pas été mesurée (elle a besoin d'un pinceau enregistré).
 - **Aperçu réduit** : la feuille en aperçu pendant la lecture ou le défilement de loin reste sans ce qui lit au-delà d'elle ; la pleine résolution reprend au repos.
 - **Le calque qu'on édite** se montre sans ses effets du trait (règle d'avant) : pour les voir au bord, sélectionne un autre calque.
-- **Portée devinée** : tant qu'un effet n'est pas calculé, les tuiles à composer autour de l'encre se devinent, à 16 tuiles au plus ; une secousse très forte, très loin, peut attendre le résultat pour se montrer entière.
+- **Tremblement, un niveau d'arrondi** : comparé à une feuille plus grande, 1 à 2 pixels sur plus de 20 000 s'écartent d'un niveau sur 255 hors de la feuille. Invisible, cause non trouvée ; la couture elle-même ne s'écarte pas.
+- **Bande près du bord** : pendant un geste, ou le temps que le calcul de fond réponde, la carte ne lit pas ce qui arrive de l'autre côté du bord pour un flou ou une onde. La cassure peut s'y voir un instant, puis disparaît au repos.
 
 ### À vérifier à l'écran
 
@@ -8359,5 +8382,7 @@ Ce qu'un effet pose autour de son encre hors de la feuille (le halo d'un flou, l
 4. Mosaïque en grande taille : les carrés se suivent sans décalage à travers le bord.
 5. Un trait d'une feuille plus loin à droite et en bas, avec Flou ou Lueur : l'effet s'y voit, et le logiciel reste fluide.
 6. Ton tremblement à 0,5 et 3, sans autre effet, en zoomant fort sur le bord : plus de colonne plus claire.
-7. Tire le curseur d'un flou sur un calque qui dépasse : l'interface ne doit pas accrocher ; l'effet hors de la feuille arrive juste après. Dis-moi si ce délai te gêne.
-8. Dessine, enregistre, rouvre, exporte (film, images, planche) : même trait.
+7. Tire le curseur d'un flou sur un calque qui dépasse : l'interface ne doit pas accrocher ; l'effet hors de la feuille arrive juste après. Dis-moi si ce délai te gêne. Dessine sur ce calque : le flou de la feuille doit suivre le trait sans attendre.
+8. Gomme tout ce qui dépasse, puis dessine : même confort que sur un calque qui n'a jamais débordé.
+9. Lis un plan animé dont les dessins dépassent, avec un flou : hors de la feuille, pas de clignotement entre le trait nu et le trait flou. Dis-moi si le retard sur la feuille se voit.
+10. Dessine, enregistre, rouvre, exporte (film, images, planche) : même trait, effet complet.
