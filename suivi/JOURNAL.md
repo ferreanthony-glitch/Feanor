@@ -5,9 +5,13 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-07
 
+- Fusion dans main (3a6cfc0) à la demande d'Anthony, après deux essais (« ça marche très bien ») : l'outil Trajectoire (partie 119,
+  format de projet 49) et les poignées de lissage de la caméra au repos (partie 120). Suite complète sur la branche : 4133 réussis sur
+  4134, un essai de temps différent à chaque passage, réussi seul. `feanor.exe` reconstruit. Le chantier `trajectoire` peut partir avec
+  son accord.
 - Les poignées de lissage de la caméra attendent à côté de chaque clé dès qu'un mouvement existe, au repos (à 0), et se tirent ; ramenées
   près de la clé, elles reviennent au repos (partie 120, branche `trajectoire`). Rien ne change dans le projet.
-- L'outil Trajectoire (partie 119, branche `trajectoire`, pas fusionnée), l'idée d'Anthony : un trait trace le chemin du calque, de petits
+- L'outil Trajectoire (partie 119, branche `trajectoire`), l'idée d'Anthony : un trait trace le chemin du calque, de petits
   traits en travers posent les marques d'espacement comme sur une feuille de timing, et les clés de position se posent toutes seules, une par
   image, le long de la courbe. Marques glissées ou arrachées, chemin déplacé ou retracé, silhouettes pâles aux jalons, pas des marques (durée
   du plan partagée), détachement quand on retouche une clé à la main. Format de projet 49. Puis, à sa demande : la clé de départ démarre
