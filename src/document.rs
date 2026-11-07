@@ -2045,6 +2045,8 @@ impl Document {
         self.prune_comments();
         // Une transition dont un plan a disparu part avec lui (`transitions.rs`).
         self.prune_transitions();
+        // Celles d'un plan écarté reviennent dès que leur coupe existe de nouveau (`planannule.rs`).
+        self.annules_reposer_transitions();
         // Les références liées à un plan retiré ne le sont plus (elles restent sur le tableau).
         self.prune_references();
         // Les variantes rangées d'une séquence qui n'existe plus partent avec elle (`variantes.rs`).

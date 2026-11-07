@@ -7822,64 +7822,79 @@ reste une étape d'annulation au plus, et aucun ne touche un dessin hors de son 
 
 ---------------------------------------------------------------------------------------------------
 
-## 114. Le plan annulé : barré dans les Vignettes, absent partout ailleurs (2026-11-06, branche `plan-annule`)
+## 114. Le plan écarté : barré dans les Vignettes, absent partout ailleurs (2026-11-06, branche `plan-annule`)
 
-Demande du réalisateur : « Un plan annulé disparait partout, y compris dans storyboard ». Geste voulu : clic sur le numéro du plan dans les Vignettes = croix rouge dans le cadre. Précision : il préfère éviter le clic droit ; numéros cachés, Maj tenue les montre et permet de cliquer dessus. Fichiers : `planannule.rs` (le modèle, le fichier), `planannuleui.rs` (le geste, la peinture, l'état vide), `board.rs` (`layout_ecran`, `BoardLayout::annulees`), `boardui.rs` (quelques lignes), `project.rs` (format 48), `numerotation.rs`, `document.rs`, `elagage.rs`. Essais : `planannule_tests.rs`.
+Demande du réalisateur : « Un plan annulé disparait partout, y compris dans storyboard » ; il a ensuite choisi de dire **Écarter** et **Reprendre** dans toute l'interface, pour ne pas confondre avec Ctrl+Z (le code garde le mot « annulé » : `annuler_plan`, `Document::annules`). Geste voulu : clic sur le numéro du plan dans les Vignettes = croix rouge dans le cadre. Précision : il préfère éviter le clic droit ; numéros cachés, Maj tenue les montre et permet de cliquer dessus. Fichiers : `planannule.rs` (le modèle, le fichier), `planannuleui.rs` (le geste, la peinture, l'état vide), `board.rs` (`layout_ecran`, `BoardLayout::annulees`), `boardui.rs` (quelques lignes), `project.rs` (format 48), `numerotation.rs`, `document.rs`, `elagage.rs`. Essais : `planannule_tests.rs`.
 
 ### Le geste
 
-- **Un clic sur le numéro** d'un plan l'annule : il sort du film, sa case reste à sa place, pâlie et barrée d'une croix rouge, son numéro en rouge. Un nouveau clic sur le numéro le rétablit, à sa place, tel qu'il était. Une étape d'annulation par geste (« Annuler le plan », « Rétablir le plan ») : Ctrl+Z rend l'état d'avant.
-- **Numéros cachés (touche N)** : Maj tenue les montre, ceux des plans annulés aussi. **Maj + clic sur le numéro annule ou rétablit** : il prime sur « Maj + clic choisit le plan » ; ailleurs dans la case, Maj + clic choisit toujours. Maj + glisser depuis le numéro déplace le plan, comme depuis la case.
-- **Au clic droit**, en second chemin : « Annuler ce plan » dans le menu de la case, sous « Plus » (le menu garde dix entrées au plus), « Rétablir ce plan » sur une case annulée.
+- **Un clic sur le numéro** d'un plan l'écarte : il sort du film, sa case reste à sa place, pâlie et barrée d'une croix rouge, son numéro en rouge. Un nouveau clic sur le numéro le reprend, à sa place, tel qu'il était. Une étape d'annulation par geste (« Écarter le plan », « Reprendre le plan ») : Ctrl+Z rend l'état d'avant.
+- **Numéros cachés (touche N)** : Maj tenue les montre, ceux des plans écartés aussi. **Maj + clic sur le numéro écarte ou reprend** : il prime sur « Maj + clic choisit le plan » ; ailleurs dans la case, Maj + clic choisit toujours. Maj + glisser depuis le numéro déplace le plan, comme depuis la case.
+- **Au clic droit**, en second chemin : « Écarter ce plan » dans le menu de la case, sous « Plus » (le menu garde dix entrées au plus), « Reprendre ce plan » sur une case écartée.
 - **Un clic ne coupe jamais un trait** (comme la barre, partie 113) : le numéro ne répond qu'au lâcher d'un appui qui n'a pas bougé de plus de 5 points. Un appui qui bouge est un trait, parti dès son premier point dans la case la plus proche, comme depuis le papier ; au lâcher d'un clic, ce point de trait est retiré sans laisser d'étape. Ctrl garde le lasso et la caméra : pas de numéro avec Ctrl, Alt ou T.
 - Le numéro se clique là où `numerosmarge.rs` l'a posé, dans la marge ou plus haut (`Vignettes::numeros_zones`, les rectangles de l'image d'avant, élargis de 2 points). Aux petits zooms où aucun numéro ne tient : pas de numéro, donc pas de clic ; Maj n'y change rien ; le clic droit reste.
 
 ### La conception : `Document::panels` est le film
 
-Un plan annulé **sort de `panels`** et va dans `Document::annules` (dans `Structure` : l'annulation le suit, partagé par `Arc`), avec ce qui tient à lui : contenu rogné, versions rangées, commentaires, transitions, liens de références, nom et numéro de sa scène et de sa séquence. Aucune retouche dans les quelque 2 000 lectures de `panels` : tout ce qui lit le film ne le voit plus. C'est le choix le moins risqué (la corbeille a déjà la même règle) : un drapeau `annule` sur `Panel` aurait demandé un filtre partout, et un seul oubli aurait fait sortir un plan annulé.
+Un plan écarté **sort de `panels`** et va dans `Document::annules` (dans `Structure` : l'annulation le suit, partagé par `Arc`), avec ce qui tient à lui : contenu rogné, versions rangées, commentaires, transitions, liens de références, nom et numéro de sa scène et de sa séquence. Aucune retouche dans les quelque 2 000 lectures de `panels` : tout ce qui lit le film ne le voit plus. C'est le choix le moins risqué (la corbeille a déjà la même règle) : un drapeau `annule` sur `Panel` aurait demandé un filtre partout, et un seul oubli aurait fait sortir un plan écarté.
 
-Seules trois choses connaissent les plans annulés :
+Seules trois choses connaissent les plans écartés :
 1. **La planche à l'écran** (`board::layout_ecran`) : un petit document où ils sont à leur place est mis en page par le code d'avant, en lignes, à la japonaise, par séquences ; `retirer_les_annulees` en sort leurs cases (`BoardLayout::annulees`). `BoardLayout::cards` ne contient donc que des plans du film : toute la planche (rangs, gestes, trait réparti) reste juste. Les exports de la planche passent par `layout_with` et `layout_export`, jamais par elle. La disposition reste gardée en cache (`Cle::annules` : les `Arc` comparés).
-2. **Les numéros** (`scene_order_planche`, `sequence_order_planche`) : ils comptent les plans annulés, sinon le 4 deviendrait le 3. Numérotation suivie comme verrouillée : rien ne bouge, et un numéro de plan annulé n'est pas redonné. « Renuméroter » et « Verrouiller » gardent sa place. `nommage.rs` suit, donc les noms de fichiers.
+2. **Les numéros** (`scene_order_planche`, `sequence_order_planche`) : ils comptent les plans écartés, sinon le 4 deviendrait le 3. Numérotation suivie comme verrouillée : rien ne bouge, et un numéro de plan écarté n'est pas redonné. « Renuméroter » et « Verrouiller » gardent sa place. `nommage.rs` suit, donc les noms de fichiers.
 3. **Ce qui garde les dessins** : `plans_ranges`, `used_cels`, `elagage`, recoloration des personnages, changement de feuille (`enlarge_stage`, `scale_stage`).
 
 **Sa place.** `apres` (ce qui le précède sur la planche), sinon `suivant`, sinon la fin du film (`Document::ordre_planche`) ; toujours fini, même sur un fichier abîmé.
 
 ### Partout ailleurs, il est absent
 
-Storyboard, timeline, montage, lecture, durée, budget, tous les exports (vidéo, GIF, images, par plan, à la clé, son, son par piste et par plan, PDF, planche, color script, calques, caméra, montage, fiche, liste des plans, relecture, paquet) et Kitsu lisent `panels`. Kitsu : on ne l'envoie pas et rien n'est effacé sur le serveur (le pont n'a aucun appel d'effacement ; l'essai le vérifie dans le source). « Passer au Storyboard » depuis un plan annulé : le plan courant est toujours un plan du film, le voisin a pris sa place.
+Storyboard, timeline, montage, lecture, durée, budget, tous les exports (vidéo, GIF, images, par plan, à la clé, son, son par piste et par plan, PDF, planche, color script, calques, caméra, montage, fiche, liste des plans, relecture, paquet) et Kitsu lisent `panels`. Kitsu : on ne l'envoie pas et rien n'est effacé sur le serveur (le pont n'a aucun appel d'effacement ; l'essai le vérifie dans le source). « Passer au Storyboard » depuis un plan écarté : le plan courant est toujours un plan du film, le voisin a pris sa place.
 
 ### Les cas qui piègent
 
 | Cas | Ce qui arrive |
 |---|---|
-| Le plan courant est annulé | Le voisin devient courant (le suivant, le précédent s'il était le dernier) |
-| Tous les plans sont annulés | `panels` ne peut pas être vide : un plan vide, le **support** (`Annules::support`), tient le film. Il n'a pas de case. Le Storyboard dit « Tous les plans sont annulés. », avec un bouton vers les Vignettes ; rien ne s'y dessine. Tous les exports et Kitsu refusent (`App::run_action_now`, un seul point : `fichier.exporter*`, `fichier.kitsu_publier`) |
+| Le plan courant est écarté | Le voisin devient courant (le suivant, le précédent s'il était le dernier) |
+| Tous les plans sont écartés | `panels` ne peut pas être vide : un plan vide, le **support** (`Annules::support`), tient le film. Il n'a pas de case. Le Storyboard dit « Tous les plans sont écartés. », avec un bouton vers les Vignettes ; rien ne s'y dessine. Tous les exports et Kitsu refusent (`App::run_action_now`, un seul point : `fichier.exporter*`, `fichier.kitsu_publier`) |
 | Le film n'a qu'un plan | Pareil ; Ctrl+Z le rend |
-| Tout annulé, puis un plan neuf, un collage, un trait dans une case pâle, un rétablissement | Le support part de lui-même (`normalize`). S'il a reçu quelque chose (une clé collée au montage, un texte), il reste, comme un plan ordinaire, rien ne se perd |
-| Dessiner dans une case annulée | **Refusé**, la ligne d'état le dit. Rien n'est tracé, aucune étape |
-| Un trait qui traverse une case annulée | Il ne se coupe pas : la part qui la touche va sur la planche (le dessin hors des cases), peint **au-dessus** de la case annulée. Le plan annulé ne reçoit rien |
-| Barre devant une case annulée | Morte (`barres_mortes`) : elle ne réunit rien, le dit au clic |
-| Couper le plan d'avant | Le plan annulé reste derrière la suite |
-| Réunir le plan d'avant et sa suite ; réunir au montage les deux voisins d'un plan annulé | Il reste derrière le plan réuni ; rien ne se perd |
+| Tout écarté, puis un plan neuf, un collage, un trait dans une case pâle, un retour | Le support part de lui-même (`normalize`). S'il a reçu quelque chose (une clé collée au montage, un texte), il reste, comme un plan ordinaire, rien ne se perd |
+| Dessiner dans une case écartée | **Refusé**, la ligne d'état le dit. Rien n'est tracé, aucune étape |
+| Un trait qui traverse une case écartée | Il ne se coupe pas : la part qui la touche va sur la planche (le dessin hors des cases), peint **au-dessus** de la case écartée. Le plan écarté ne reçoit rien |
+| Barre devant une case écartée | Morte (`barres_mortes`) : elle ne réunit rien, le dit au clic |
+| Couper le plan d'avant | Le plan écarté reste derrière la suite |
+| Réunir le plan d'avant et sa suite ; réunir au montage les deux voisins d'un plan écarté | Il reste derrière le plan réuni ; rien ne se perd |
 | Déplacer le plan d'avant | Il le suit |
-| Dupliquer le plan d'avant | La copie se pose derrière le plan annulé |
+| Dupliquer le plan d'avant | La copie se pose derrière le plan écarté |
 | Supprimer le plan d'avant | Il reste devant celui qui le suivait ; plus aucun voisin connu : à la fin |
-| Corbeille | Annuler n'y envoie rien, et elle ne le connaît pas |
-| Séquence entièrement annulée | Elle quitte le film, reste sur la planche avec son titre, revient avec son nom et son numéro |
-| **Versions de séquence** | L'annulation vaut pour la version où l'on est, comme la suppression. Un plan qu'une autre version montre va aussi au garage : cette version le montre, sans croix ; ce qu'on y retouche revient au rétablissement. Annuler le dernier plan d'une séquence qui a d'autres versions est refusé (le message de `refuser_si_sequence_videe`) ; annuler un plan déjà annulé dans une autre version aussi |
-| Transitions | Elles partent avec le plan et reviennent si leur coupe existe encore telle quelle |
-| Notes de la planche et annotations attachées à sa case | Elles restent attachées à la case annulée, elles ne passent pas à une voisine |
+| Corbeille | Écarter n'y envoie rien, et elle ne le connaît pas |
+| Séquence entièrement écartée | Elle quitte le film, reste sur la planche avec son titre, revient avec son nom et son numéro |
+| **Versions de séquence** | L'écart vaut pour la version où l'on est, comme la suppression. Un plan qu'une autre version montre va aussi au garage : cette version le montre, sans croix ; ce qu'on y retouche revient au retour. Écarter le dernier plan d'une séquence qui a d'autres versions est refusé (le message de `refuser_si_sequence_videe`) ; écarter un plan déjà écarté dans une autre version aussi |
+| Transitions | Elles partent avec le plan et **ne sont jamais jetées** : elles attendent (`Annules::transitions`, enregistrées) et reviennent dès que leurs deux plans sont de nouveau voisins, quel que soit l'ordre des retours (`normalize`) |
+| Notes de la planche et annotations attachées à sa case | Elles restent attachées à la case écartée, elles ne passent pas à une voisine |
 
 ### Le son
 
-**Il ne bouge pas.** Les pistes sont en temps du montage et ne suivent aucun plan (`Document::audio_tracks`) : c'est déjà la règle quand on supprime un plan. Annuler raccourcit donc les images, et ce qui suit le plan annulé remonte de sa durée par rapport au son : le son n'est ni détruit ni déplacé, et rétablir retrouve l'accord exact. La ligne d'état le dit quand un extrait est concerné : « … le son reste à sa place ».
+**Il ne bouge pas.** Les pistes sont en temps du montage et ne suivent aucun plan (`Document::audio_tracks`) : c'est déjà la règle quand on supprime un plan. Écarter raccourcit donc les images, et ce qui suit le plan écarté remonte de sa durée par rapport au son : le son n'est ni détruit ni déplacé, et reprendre retrouve l'accord exact. La ligne d'état le dit quand un extrait est concerné : « … le son reste à sa place ».
 
 ### Le fichier
 
 Format **48** (47 → 48, rien d'autre). `plans_annules.json` à côté du manifeste (aucun : pas de fichier). Les plans y sont au format du manifeste et passent à l'ouverture par la lecture ordinaire, dans une séquence cachée (`project::cacher_annules`, numéros provisoires le temps de `unique_ids`), comme ceux du garage : leurs dessins se chargent avec les autres, hors-feuille compris. Un projet 47 ou moins s'ouvre sans rien perdre ; une version précédente refuse un projet 48, qui effacerait sinon ces dessins à l'enregistrement. Un fichier illisible ou plus récent : on le dit, le projet s'ouvre, le fichier reste, l'enregistrement ne nettoie pas `dessins/`. Enregistrer, enregistrer sous et copie de secours passent par le même chemin.
 
-**Film partagé** : le geste est refusé (« Dans un film partagé, un plan ne s'annule pas »), et partager un film qui a des plans annulés aussi (`partage_refuse_annules`). Faire circuler l'annulation entre les postes (qui tient le plan, qui le rétablit) reste à concevoir avec le travail à plusieurs par serveur.
+**Film partagé** : le geste est refusé (« Dans un film partagé, un plan ne s'écarte pas »), et partager un film qui a des plans écartés aussi (`partage_refuse_annules`). Faire circuler un plan écarté entre les postes (qui tient le plan, qui le reprend) reste à concevoir avec le travail à plusieurs par serveur.
+
+### Après relecture (mêmes jour et branche)
+
+Une relecture indépendante a trouvé ces cas ; chacun a son essai, rouge avant la correction.
+
+- **Transitions** : voir le tableau, jamais jetées.
+- **Lien avec le scénario** : `scenariogarde::to_bytes` compte les plans écartés ; le lien survit à l'enregistrement.
+- **Versions de séquence** : supprimer une version nettoyait le garage, et ce qui tenait au plan écarté (versions, rognage, commentaires) partait avec. Le plan écarté le reprend au garage d'abord (`annules_apres_une_version_supprimee`). Supprimer la version où il était écarté alors qu'une autre le montre : il n'est plus écarté nulle part, sa case barrée disparaît. Un plan qui est dans le film n'a jamais de case barrée (`annule_visible`).
+- **Scène** : un plan dont la scène a encore d'autres panneaux y revient, aucun numéro ne bouge.
+- **Fichier abîmé** : une entrée dont une part ne se lit pas (le plan, une version, le rognage) ne se montre pas, le message le dit, elle est **réécrite telle quelle** à chaque enregistrement (`Annules::illisibles`), et tant qu'il y en a une, `dessins/` n'est pas nettoyé. Plus de décalage entre versions.
+- **Menu ou numéro périmé** : le menu fait ce qu'il dit, et rien si c'est déjà fait ; le numéro retient ce qu'il montrait à l'appui (`plan_ecarter_ou_reprendre`).
+- **Plan courant** : écarter ou reprendre un autre plan ne change ni le plan courant ni l'image. Le clic sur un numéro rend ce que le point de trait avait choisi.
+- **Notes de la planche** : celles des cases de continuité d'un plan écarté restent attachées. Au passage, une case de continuité d'un plan du film ne perd plus les siennes à chaque changement de structure (`release_removed_notes`).
+- **Liste des séquences de la planche** : même ordre que `Affichage::liste`.
+- **Tout écarté** : ni la timeline ni le montage ne montrent le plan vide, ils disent « Tous les plans sont écartés. » (`bande_film_vide`). Leurs commandes ne s'y affichent pas : on revient par l'onglet Vignettes, ou par le bouton du Storyboard.
 
 ### En passant
 
@@ -7887,15 +7902,15 @@ Deux commentaires périmés corrigés (`vignettecam.rs`, `vignettecamui.rs`) : l
 
 ### Essais
 
-`planannule_tests.rs`, par `Banc`, les vrais gestes : le clic et le second clic (places, numéros, contenu, étapes) ; Ctrl+Z ; numéros cachés et Maj ; Maj + glisser ; trait depuis le numéro, en pixels ; clic droit ; dessin refusé ; trait à travers une case annulée, en pixels ; plan courant, tout annulé, un seul plan, case pâle ; voisins coupés, réunis, déplacés, dupliqués, supprimés ; transitions, rognage, versions, références ; versions de séquence ; séquence entièrement annulée, par séquences et à la japonaise ; le son ; aller-retour sur le disque, tout annulé compris ; projet 47, plus récent, fichier illisible ; partage ; numéros verrouillés ; une famille d'export à la fois (vidéo et suite d'images, par plan et à la clé, son par plan, color script, planche, calques, caméra, montage, fiche, liste des plans, Kitsu, paquet). `plan_annule_captures`, ignoré : cinq captures (`FEANOR_CAPTURE_DIR`).
+`planannule_tests.rs`, par `Banc`, les vrais gestes : le clic et le second clic (places, numéros, contenu, étapes) ; Ctrl+Z ; numéros cachés et Maj ; Maj + glisser ; trait depuis le numéro, en pixels ; clic droit ; dessin refusé ; trait à travers une case écartée, en pixels ; plan courant, tout écarté, un seul plan, case pâle ; voisins coupés, réunis, déplacés, dupliqués, supprimés ; transitions, rognage, versions, références ; versions de séquence ; séquence entièrement écartée, par séquences et à la japonaise ; le son ; aller-retour sur le disque, tout écarté compris ; projet 47, plus récent, fichier illisible ; partage ; numéros verrouillés ; une famille d'export à la fois (vidéo et suite d'images, par plan et à la clé, son par plan, color script, planche, calques, caméra, montage, fiche, liste des plans, Kitsu, paquet). `plan_annule_captures`, ignoré : cinq captures (`FEANOR_CAPTURE_DIR`).
 
 ### À vérifier à l'écran (par Anthony)
 
 1. Clique sur le numéro d'un plan : croix rouge, case à sa place, numéros inchangés. Passe au Storyboard, au Montage : il n'y est plus ; lis le film : il saute. Recliquer : tout revient.
-2. **Au stylet** : pose la pointe sur le numéro et trace : un trait, rien n'est annulé. Une pose nette : annulé, sans point de trait. Dis-moi si cinq points de tolérance suffisent (une pointe qui glisse d'un rien sur le numéro fait un trait).
-3. Touche N, puis Maj tenue : les numéros reviennent ; Maj + clic : annulé ; Maj relâchée : plus rien. Maj + clic ailleurs dans la case : le plan est choisi.
-4. Trace un trait qui traverse une case annulée, d'une case à l'autre : continu, à l'écran ; rétablis : le plan n'a rien reçu de lui, le trait reste sur le papier, **sous** la case rétablie. Dis-moi si c'est ce que tu veux.
-5. Annule un plan au milieu d'une piste de son : l'image saute, le son continue où il est. C'est mon choix, dis-moi s'il faut autre chose.
-6. Annule tout : le Storyboard le dit, Fichier > Exporter refuse ; un trait dans une case pâle fait un plan.
-7. Enregistre, rouvre : les croix sont là ; rétablis : dessins, versions, caméra, textes.
-8. Un plan à mouvement de caméra annulé : la case montre A et les cadres en gris, pas la grande tuile. Les textes sous une case annulée ne sont pas peints (ils sont gardés) : dis-moi s'ils te manquent.
+2. **Au stylet** : pose la pointe sur le numéro et trace : un trait, rien n'est écarté. Une pose nette : écarté, sans point de trait. Dis-moi si cinq points de tolérance suffisent (une pointe qui glisse d'un rien sur le numéro fait un trait).
+3. Touche N, puis Maj tenue : les numéros reviennent ; Maj + clic : écarté ; Maj relâchée : plus rien. Maj + clic ailleurs dans la case : le plan est choisi.
+4. Trace un trait qui traverse une case écartée, d'une case à l'autre : continu, à l'écran ; reprends : le plan n'a rien reçu de lui, le trait reste sur le papier, **sous** la case reprise. Dis-moi si c'est ce que tu veux.
+5. Écarte un plan au milieu d'une piste de son : l'image saute, le son continue où il est (choix validé par le réalisateur).
+6. Écarte tout : le Storyboard le dit, Fichier > Exporter refuse ; un trait dans une case pâle fait un plan.
+7. Enregistre, rouvre : les croix sont là ; reprends : dessins, versions, caméra, textes.
+8. Un plan à mouvement de caméra écarté : la case montre A et les cadres en gris, pas la grande tuile. Les textes sous une case écartée ne sont pas peints (ils sont gardés) : dis-moi s'ils te manquent.

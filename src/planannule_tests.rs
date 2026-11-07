@@ -47,7 +47,7 @@ fn dans_les_vignettes(doc: Document) -> Banc {
 
 /// Le numéro du plan `plan` à l'écran (celui de l'image d'avant) : son centre.
 fn numero(b: &Banc, plan: u64) -> Pos2 {
-    b.app.vignettes.numeros_zones.iter().find(|(_, p)| *p == plan).unwrap_or_else(|| panic!("le numéro du plan {plan} n'est pas à l'écran : {:?}", b.app.vignettes.numeros_zones)).0.center()
+    b.app.vignettes.numeros_zones.iter().find(|(_, p, _)| *p == plan).unwrap_or_else(|| panic!("le numéro du plan {plan} n'est pas à l'écran : {:?}", b.app.vignettes.numeros_zones)).0.center()
 }
 
 /// Une image de plus, pour que les zones des numéros soient à jour.
@@ -104,7 +104,7 @@ fn a_click_on_the_number_cancels_the_plan_in_place_and_a_second_click_restores_i
     assert!(!b.app.doc.panels.iter().any(|p| p.id == cible));
     assert_eq!(b.app.doc.total_frames(), duree - LONGUEUR, "la durée du film");
     assert_eq!(pas_d_annulation(&b), etapes + 1, "une seule étape");
-    assert_eq!(dernier_nom(&b), "Annuler le plan");
+    assert_eq!(dernier_nom(&b), "Écarter le plan");
     // La case reste à sa place, les autres ne bougent pas.
     let apres = b.app.board_layout();
     assert_eq!(apres.cards.len(), 3);
@@ -123,7 +123,7 @@ fn a_click_on_the_number_cancels_the_plan_in_place_and_a_second_click_restores_i
     assert_eq!(b.app.doc.panels.iter().map(|p| p.id).collect::<Vec<_>>(), ids, "à sa place");
     assert_eq!(contenu(&b.app.doc, &b.app.doc.panels[1]), avant_contenu, "tout y est");
     assert_eq!(pas_d_annulation(&b), etapes + 2);
-    assert_eq!(dernier_nom(&b), "Rétablir le plan");
+    assert_eq!(dernier_nom(&b), "Reprendre le plan");
     assert!(b.app.doc.annules.is_empty());
     let revenue = b.app.board_layout();
     assert_eq!(revenue.cards[1].thumb, cible_th);
@@ -288,12 +288,12 @@ fn the_right_click_menu_is_the_second_way() {
     let plus = entree(&b, "Plus").expect("« Plus » au clic droit de la case");
     clic_avec(&mut b, plus, Modifiers::NONE);
     b.chauffer(3);
-    let p = entree(&b, "Annuler ce plan").expect("« Annuler ce plan » est au clic droit de la case");
+    let p = entree(&b, crate::planannuleui::MENU_ECARTER).expect("« Écarter ce plan » est au clic droit de la case");
     clic_avec(&mut b, p, Modifiers::NONE);
     b.chauffer(3);
     assert_eq!(b.app.doc.panels.len(), 3, "{}", b.app.status);
     assert_eq!(b.app.doc.annules.plans[0].panel.id, ids[1]);
-    // Sur la case annulée : « Rétablir ce plan ».
+    // Sur la case écartée : « Reprendre ce plan ».
     let c = b.app.board_layout().annulees[0].thumb;
     let v = b.app.vignettes.xf.rect(c).center();
     b.image(vec![Event::PointerMoved(v)], 1.0 / 60.0);
@@ -301,10 +301,10 @@ fn the_right_click_menu_is_the_second_way() {
     b.image(vec![droit(v, false)], 1.0 / 60.0);
     b.chauffer(2);
     let entree = b.formes.iter().find_map(|s| match &s.shape {
-        eframe::egui::epaint::Shape::Text(t) if t.galley.job.text == "Rétablir ce plan" => Some(t.pos + t.galley.size() / 2.0),
+        eframe::egui::epaint::Shape::Text(t) if t.galley.job.text == crate::planannuleui::MENU_REPRENDRE => Some(t.pos + t.galley.size() / 2.0),
         _ => None,
     });
-    clic_avec(&mut b, entree.expect("« Rétablir ce plan » sur la case annulée"), Modifiers::NONE);
+    clic_avec(&mut b, entree.expect("« Reprendre ce plan » sur la case écartée"), Modifiers::NONE);
     b.chauffer(3);
     assert_eq!(b.app.doc.panels.len(), 4);
 }
@@ -324,7 +324,7 @@ fn drawing_in_a_cancelled_case_is_refused_and_says_so() {
     glisser(&mut b, &[c.center(), c.center() + eframe::egui::vec2(12.0, 6.0), c.center() + eframe::egui::vec2(24.0, 0.0)]);
     b.chauffer(2);
     assert_eq!(pas_d_annulation(&b), etapes, "aucun trait, aucune étape");
-    assert!(b.app.status.contains("annulé"), "{}", b.app.status);
+    assert!(b.app.status.contains("écarté"), "{}", b.app.status);
     assert_eq!(contenu(&b.app.doc, &plan_de(&b.app.doc, ids[1])), avant);
     assert_eq!(ids.iter().map(|&i| contenu(&b.app.doc, &plan_de(&b.app.doc, i))).collect::<Vec<_>>(), dessins, "aucun autre plan n'a reçu le trait");
 }
@@ -792,6 +792,353 @@ fn everything_survives_saving_and_reopening_and_nothing_is_written_when_no_plan_
     std::fs::remove_dir_all(&dir).ok();
 }
 
+// ------------------------------------------------------------------------------ la relecture indépendante : chaque point a son essai
+
+fn lien(plan: u64) -> crate::scenariogarde::Lien {
+    crate::scenariogarde::Lien { plan, de: 0, a: 1 }
+}
+
+#[test]
+fn a_transition_is_never_lost_when_its_two_plans_are_set_aside_and_taken_back_in_any_order() {
+    crate::fxcache::monde::lire();
+    use crate::transitions::Kind;
+    let mut doc = film();
+    let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
+    doc.set_transition(1, Kind::Dissolve).expect("une transition entre les plans 1 et 2");
+    let t = doc.transitions[0].clone();
+    assert_eq!((t.out, t.inn), (Some(ids[0]), Some(ids[1])));
+    doc.annuler_plan(ids[1]).unwrap();
+    doc.annuler_plan(ids[0]).unwrap();
+    doc.retablir_plan(ids[1]).unwrap();
+    doc.retablir_plan(ids[0]).unwrap();
+    assert_eq!(doc.transitions.iter().map(|x| (x.id, x.out, x.inn)).collect::<Vec<_>>(), vec![(t.id, t.out, t.inn)], "la transition revient");
+    // Un plan posé entre les deux : elle attend, et revient quand ils sont de nouveau voisins, jamais jetée.
+    let mut doc = film();
+    let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
+    doc.set_transition(1, Kind::Dissolve).unwrap();
+    let t = doc.transitions[0].id;
+    doc.annuler_plan(ids[0]).unwrap();
+    // (Le plan 1 écarté reste en tête ; le plan neuf se pose devant le plan 2 : entre les deux.)
+    let neuf = doc.add_scene_before(0);
+    let neuf = doc.panels[neuf].id;
+    doc.retablir_plan(ids[0]).unwrap();
+    assert_eq!(doc.panels.iter().map(|p| p.id).take(3).collect::<Vec<_>>(), vec![ids[0], neuf, ids[1]]);
+    assert!(doc.transitions.is_empty(), "le plan neuf est entre les deux : pas de transition dans le film");
+    assert!(doc.annules.transitions.iter().any(|x| x.id == t), "elle attend");
+    // Enregistrée avec le reste.
+    let (dir, manifest) = enregistrer(&doc, "transition");
+    let mut lu = project::load(&manifest).expect("réouverture");
+    assert!(lu.doc.annules.transitions.iter().any(|x| x.id == t), "elle attend aussi après réouverture");
+    let i = lu.doc.panels.iter().position(|p| p.id == neuf).unwrap();
+    lu.doc.remove_panel(i).unwrap();
+    assert!(lu.doc.transitions.iter().any(|x| x.id == t), "de nouveau voisins : elle revient");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn the_link_to_the_screenplay_survives_saving_while_the_plan_is_set_aside() {
+    crate::fxcache::monde::lire();
+    let mut doc = film();
+    let id = doc.panels[1].id;
+    doc.scenario = Some(std::sync::Arc::new(crate::scenariogarde::Gardee::new("scénario", crate::scenario::parse_fountain("INT. TOIT - NUIT\n\nLéa court.\n", &|_| {}), vec![lien(id)])));
+    doc.annuler_plan(id).unwrap();
+    let (dir, manifest) = enregistrer(&doc, "scenario");
+    let mut lu = project::load(&manifest).expect("réouverture");
+    lu.doc.retablir_plan(id).unwrap();
+    assert!(lu.doc.scenario.as_ref().expect("le scénario").liens.iter().any(|l| l.plan == id), "le lien plan et scénario est toujours là");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn deleting_the_other_sequence_version_loses_nothing_of_a_plan_set_aside() {
+    crate::fxcache::monde::lire();
+    use crate::variantes::Nouvelle;
+    let mut app = crate::montage_sans_casse_tests::appli("annule-variante");
+    let ids: Vec<u64> = app.doc.panels.iter().map(|p| p.id).collect();
+    app.rogner_plan(1, crate::rognage::Rogner::Tail(-3), "Rogner");
+    let doc = &mut app.doc;
+    doc.nouvelle_version(1, 1_000).expect("une version du plan");
+    let rogne = doc.reserves.get(&ids[1]).map(|r| r.cels().count());
+    let versions = doc.versions.get(&ids[1]).map(|v| v.autres.len());
+    assert!(rogne.is_some() && versions.is_some());
+    let q = doc.sequence_of(0);
+    // La version A est courante après coup : B est rangée, et montre le plan.
+    let b_num = doc.nouvelle_variante(q, Nouvelle::Partager, 1_000).expect("B");
+    assert!(doc.changer_de_variante(q, 1));
+    doc.panels[1].action = "DANS A".into();
+    let plan = contenu(doc, &doc.panels[1]);
+    doc.annuler_plan(ids[1]).unwrap();
+    // Supprimer B : le plan écarté garde tout.
+    doc.supprimer_variante(q, b_num).expect("B supprimée");
+    assert!(doc.annules.plans[0].versions.as_ref().is_some_and(|v| Some(v.autres.len()) == versions), "ses versions");
+    assert_eq!(doc.annules.plans[0].reserve.as_ref().map(|r| r.cels().count()), rogne, "son rognage");
+    let retenus = doc.used_cels();
+    assert!(doc.annules.plans[0].panel.layers.iter().flat_map(|l| l.frames.iter().flatten()).all(|c| retenus.contains(c)));
+    doc.retablir_plan(ids[1]).unwrap();
+    let i = doc.panels.iter().position(|p| p.id == ids[1]).unwrap();
+    assert_eq!(contenu(doc, &doc.panels[i]), plan, "tout y est");
+    assert_eq!(doc.versions.get(&ids[1]).map(|v| v.autres.len()), versions);
+    assert_eq!(doc.reserves.get(&ids[1]).map(|r| r.cels().count()), rogne);
+}
+
+#[test]
+fn deleting_the_version_where_a_plan_was_set_aside_never_makes_a_double() {
+    crate::fxcache::monde::lire();
+    use crate::variantes::Nouvelle;
+    let mut doc = film();
+    let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
+    let q = doc.sequence_of(0);
+    let b_num = doc.nouvelle_variante(q, Nouvelle::Partager, 1_000).expect("B");
+    assert!(doc.changer_de_variante(q, 1));
+    doc.annuler_plan(ids[1]).unwrap();
+    assert!(doc.changer_de_variante(q, b_num), "B montre le plan");
+    assert!(doc.panels.iter().any(|p| p.id == ids[1]));
+    doc.supprimer_variante(q, 1).expect("A supprimée");
+    assert!(doc.annules.plans.is_empty() || doc.annules_visibles().is_empty(), "pas de case écartée pour un plan qui est dans le film");
+    assert_eq!(ordre(&doc).iter().filter(|i| **i == ids[1]).count(), 1, "une seule fois");
+    assert!(doc.retablir_plan(ids[1]).is_none(), "rien à reprendre");
+    assert_eq!(doc.panels.iter().filter(|p| p.id == ids[1]).count(), 1);
+    assert_eq!(doc.panels.len(), 4);
+}
+
+#[test]
+fn a_panel_of_a_scene_that_still_has_others_comes_back_in_its_scene_and_nothing_shifts() {
+    crate::fxcache::monde::lire();
+    let mut doc = Document::with_frame(160, 90, 24);
+    doc.add_panel_after(0);
+    let s = doc.add_scene_after(1);
+    doc.add_scene_after(s);
+    assert_eq!(doc.scene_order().len(), 3);
+    let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
+    let scene = doc.panels[1].scene;
+    assert_eq!(doc.panels[0].scene, scene, "deux panneaux dans une scène");
+    let numeros: Vec<String> = doc.panels.iter().map(|p| doc.scene_label(p.scene)).collect();
+    doc.annuler_plan(ids[1]).unwrap();
+    assert_eq!(ids[2..].iter().map(|&i| doc.scene_label(plan_de(&doc, i).scene)).collect::<Vec<_>>(), numeros[2..].to_vec());
+    doc.retablir_plan(ids[1]).unwrap();
+    assert_eq!(doc.panels.iter().map(|p| p.id).collect::<Vec<_>>(), ids, "à sa place");
+    assert_eq!(doc.panels[1].scene, scene, "dans sa scène");
+    assert_eq!(doc.panels.iter().map(|p| doc.scene_label(p.scene)).collect::<Vec<_>>(), numeros, "aucun numéro ne bouge");
+}
+
+/// Abîme le plan `k` du fichier des plans écartés.
+fn abimer(dir: &std::path::Path, f: impl FnOnce(&mut serde_json::Value)) {
+    let p = dir.join(crate::planannule::FILE);
+    let mut v: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&p).unwrap()).unwrap();
+    f(&mut v);
+    std::fs::write(&p, serde_json::to_vec_pretty(&v).unwrap()).unwrap();
+}
+
+#[test]
+fn a_damaged_entry_in_the_file_loses_no_drawing_and_stays_in_the_file() {
+    crate::fxcache::monde::lire();
+    let mut doc = film();
+    let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
+    let garde: Vec<u64> = doc.panels[1].layers.iter().flat_map(|l| l.frames.iter().flatten().copied()).collect();
+    doc.annuler_plan(ids[1]).unwrap();
+    doc.annuler_plan(ids[2]).unwrap();
+    let (dir, manifest) = enregistrer(&doc, "entree");
+    abimer(&dir, |v| v["plans"][0]["entree"] = serde_json::json!({ "id": "pas un numéro" }));
+    let brut = serde_json::from_str::<serde_json::Value>(&std::fs::read_to_string(dir.join(crate::planannule::FILE)).unwrap()).unwrap()["plans"][0].clone();
+    let lu = project::load(&manifest).expect("le projet s'ouvre");
+    assert!(lu.warnings.iter().any(|w| w.contains("écarté")), "on le dit : {:?}", lu.warnings);
+    assert_eq!(lu.doc.annules.plans.len(), 1, "l'autre plan écarté est là");
+    project::save(&lu.doc, &manifest, &mut lu.written.clone()).unwrap();
+    let relu: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(dir.join(crate::planannule::FILE)).unwrap()).unwrap();
+    assert!(relu["plans"].as_array().unwrap().contains(&brut), "l'entrée abîmée reste telle quelle dans le fichier");
+    let noms: Vec<String> = std::fs::read_dir(dir.join("dessins")).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
+    assert!(garde.iter().all(|c| noms.iter().any(|n| n.starts_with(&c.to_string()))), "ses dessins restent : {noms:?}");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_damaged_version_of_a_plan_set_aside_does_not_give_its_drawing_to_another_version() {
+    crate::fxcache::monde::lire();
+    let mut doc = film();
+    let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
+    doc.nouvelle_version(1, 1_000).expect("V2");
+    doc.nouvelle_version(1, 2_000).expect("V3");
+    doc.annuler_plan(ids[1]).unwrap();
+    let numeros: Vec<u32> = doc.annules.plans[0].versions.as_ref().unwrap().autres.iter().map(|r| r.numero).collect();
+    assert_eq!(numeros.len(), 2);
+    let (dir, manifest) = enregistrer(&doc, "version");
+    abimer(&dir, |v| v["plans"][0]["versions"]["autres"][0]["entree"] = serde_json::json!({ "id": "pas un numéro" }));
+    let lu = project::load(&manifest).expect("le projet s'ouvre");
+    // L'entrée entière attend, plutôt qu'une version sous le numéro d'une autre (le décalage de `zip`).
+    assert!(lu.warnings.iter().any(|w| w.contains("écarté")), "{:?}", lu.warnings);
+    for g in &lu.doc.annules.plans {
+        let autres = &g.versions.as_ref().unwrap().autres;
+        assert!(autres.len() == numeros.len(), "aucune version décalée : {:?}", autres.iter().map(|r| r.numero).collect::<Vec<_>>());
+    }
+    project::save(&lu.doc, &manifest, &mut lu.written.clone()).unwrap();
+    assert!(std::fs::read_to_string(dir.join(crate::planannule::FILE)).unwrap().contains("pas un numéro"), "l'entrée abîmée n'est pas perdue");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn a_stale_menu_or_number_does_what_it_says_and_nothing_if_it_is_already_done() {
+    crate::fxcache::monde::lire();
+    let mut b = dans_les_vignettes(film());
+    let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
+    b.garder_formes = true;
+    clic_numero(&mut b, ids[1]);
+    assert_eq!(b.app.doc.annules.plans.len(), 1);
+    // Le menu ouvert sur la case écartée, Ctrl+Z, puis « Reprendre ce plan » : déjà fait, le plan n'est pas écarté de nouveau.
+    let c = b.app.vignettes.xf.rect(b.app.board_layout().annulees[0].thumb).center();
+    let droit = |pos: Pos2, down: bool| Event::PointerButton { pos, button: PointerButton::Secondary, pressed: down, modifiers: Modifiers::NONE };
+    b.image(vec![Event::PointerMoved(c)], 1.0 / 60.0);
+    b.image(vec![droit(c, true)], 1.0 / 60.0);
+    b.image(vec![droit(c, false)], 1.0 / 60.0);
+    b.chauffer(2);
+    let entree = b.formes.iter().find_map(|s| match &s.shape {
+        eframe::egui::epaint::Shape::Text(t) if t.galley.job.text == crate::planannuleui::MENU_REPRENDRE => Some(t.pos + t.galley.size() / 2.0),
+        _ => None,
+    });
+    let entree = entree.expect("le menu de la case écartée");
+    b.app.run_action("edition.annuler");
+    assert!(b.app.doc.annules.plans.is_empty());
+    let etapes = pas_d_annulation(&b);
+    clic_avec(&mut b, entree, Modifiers::NONE);
+    b.chauffer(2);
+    assert!(b.app.doc.annules.plans.is_empty(), "« Reprendre » ne doit jamais écarter : {}", b.app.status);
+    assert_eq!(pas_d_annulation(&b), etapes, "aucune étape");
+    // Le numéro : appui sur le numéro d'un plan écarté, Ctrl+Z qui change son état avant le lâcher. (La gomme : aucun point de trait à défaire d'abord.)
+    b.app.set_tool(Tool::Eraser);
+    b.app.vignettes.menu = None;
+    b.chauffer(3);
+    clic_numero(&mut b, ids[2]);
+    b.chauffer(2);
+    let p = numero(&b, ids[2]);
+    b.image(vec![Event::PointerMoved(p)], 1.0 / 60.0);
+    b.image(vec![appui(p, true, Modifiers::NONE)], 1.0 / 60.0);
+    b.app.run_action("edition.annuler");
+    assert!(b.app.doc.annules.plans.is_empty());
+    b.image(vec![appui(p, false, Modifiers::NONE)], 1.0 / 60.0);
+    b.chauffer(2);
+    assert!(b.app.doc.annules.plans.is_empty(), "le numéro montrait un plan écarté : le clic le reprend, il ne l'écarte pas");
+}
+
+#[test]
+fn the_board_list_of_sequences_counts_a_sequence_that_is_all_set_aside() {
+    crate::fxcache::monde::lire();
+    let mut b = dans_les_vignettes(crate::vignettes_tests::deux_sequences());
+    let dernier = b.app.doc.panels.last().unwrap().id;
+    let q = b.app.doc.sequence_of(b.app.doc.panels.len() - 1);
+    b.app.doc.annuler_plan(dernier).unwrap();
+    b.chauffer(2);
+    b.app.affichage_toutes();
+    assert!(b.app.doc.annotations.affichage.ordre.is_empty(), "toutes, dans l'ordre : rien à retenir ({:?})", b.app.doc.annotations.affichage.ordre);
+    b.app.affichage_ordre_du_film();
+    assert!(b.app.doc.annotations.affichage.ordre.is_empty(), "{:?}", b.app.doc.annotations.affichage.ordre);
+    assert!(b.app.doc.annotations.affichage.liste(&b.app.doc).iter().any(|e| e.0 == q));
+}
+
+#[test]
+fn setting_aside_another_plan_keeps_the_current_plan_and_image() {
+    crate::fxcache::monde::lire();
+    let mut b = dans_les_vignettes(film());
+    let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
+    b.app.select_panel(3);
+    b.app.cur_frame = 5;
+    b.chauffer(2);
+    clic_numero(&mut b, ids[0]);
+    assert_eq!(b.app.doc.panels[b.app.cur_panel].id, ids[3], "le plan courant ne change pas");
+    assert_eq!(b.app.cur_frame, 5, "l'image courante non plus");
+    clic_numero(&mut b, ids[0]);
+    assert_eq!(b.app.doc.panels[b.app.cur_panel].id, ids[3], "ni en reprenant un autre plan");
+    assert_eq!(b.app.cur_frame, 5);
+}
+
+#[test]
+fn notes_attached_to_a_case_of_a_plan_set_aside_come_back_attached() {
+    crate::fxcache::monde::lire();
+    let mut b = dans_les_vignettes(crate::vignettes_tests::quatre_plans());
+    let plan = b.app.doc.panels[0].id;
+    let mark = b.app.doc.panels[0].marks[0].id;
+    let l = b.app.board_layout();
+    let pt = |c: Pos2| crate::vector::VPoint { x: c.x, y: c.y, r: 2.0 };
+    let (c0, c1) = (l.card_of(plan).unwrap().thumb.center(), l.card_of(mark).unwrap().thumb.center());
+    b.app.doc.board.add_stroke(&l, vec![pt(c0)], [0, 0, 0], Some(plan));
+    b.app.doc.board.add_stroke(&l, vec![pt(c1)], [0, 0, 0], Some(mark));
+    clic_numero(&mut b, plan);
+    assert_eq!(b.app.doc.board.strokes.iter().map(|s| s.anchor).collect::<Vec<_>>(), vec![Some(plan), Some(mark)], "elles attendent, attachées");
+    clic_numero(&mut b, plan);
+    assert_eq!(b.app.doc.board.strokes.iter().map(|s| s.anchor).collect::<Vec<_>>(), vec![Some(plan), Some(mark)], "attachées au retour");
+}
+
+#[test]
+fn neither_the_timeline_nor_the_montage_show_the_placeholder_when_all_is_set_aside() {
+    crate::fxcache::monde::lire();
+    let mut b = dans_les_vignettes(film());
+    let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
+    for &i in &ids {
+        clic_numero(&mut b, i);
+    }
+    assert!(b.app.doc.film_vide());
+    b.garder_textes = true;
+    for e in [Espace::Storyboard, Espace::Montage] {
+        b.app.set_espace(e);
+        b.chauffer(5);
+        assert!(!b.textes.iter().any(|t| t.starts_with("Plan 5")), "{e:?} : le plan vide de support ne se voit pas : {:?}", b.textes.iter().filter(|t| t.contains("Plan")).collect::<Vec<_>>());
+    }
+    b.app.enter_animation(0);
+    b.chauffer(5);
+    assert!(!b.textes.iter().any(|t| t.starts_with("Plan 5")), "ni dans l'animation");
+    b.app.set_espace(Espace::Vignettes);
+    b.chauffer(3);
+    clic_numero(&mut b, ids[0]);
+    b.app.set_espace(Espace::Montage);
+    b.chauffer(5);
+    assert!(b.textes.iter().any(|t| t.contains("Plan 1")), "le film revient au montage : {:?}", b.textes.iter().filter(|t| t.contains("Plan")).collect::<Vec<_>>());
+}
+
+#[test]
+fn a_shared_film_refuses_the_gesture_on_the_number() {
+    let (mut b, _h, _dir) = crate::variantes_tests::app_partagee("annule-partage", &film());
+    b.app.set_espace(Espace::Vignettes);
+    b.chauffer(4);
+    let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
+    let etapes = pas_d_annulation(&b);
+    b.app.set_tool(Tool::Eraser);
+    let p = numero(&b, ids[1]);
+    clic_avec(&mut b, p, Modifiers::NONE);
+    b.chauffer(2);
+    assert_eq!(b.app.doc.panels.len(), 4, "le plan reste dans le film");
+    assert!(b.app.doc.annules.plans.is_empty());
+    assert_eq!(pas_d_annulation(&b), etapes);
+    assert!(b.app.status.contains("film partagé"), "{}", b.app.status);
+}
+
+/// Combien coûte un numéro de plan quand des plans sont écartés (affiché : `--nocapture`).
+#[test]
+#[ignore = "mesure"]
+fn cost_of_the_numbers_on_a_long_film() {
+    crate::fxcache::monde::lire();
+    for n in [600usize, 2000] {
+        let mut doc = Document::with_frame(160, 90, 24);
+        for i in 0..n - 1 {
+            doc.add_scene_after(i);
+        }
+        let mesure = |doc: &Document| {
+            let scene = doc.panels[doc.panels.len() / 2].scene;
+            let t = std::time::Instant::now();
+            for _ in 0..200 {
+                std::hint::black_box(doc.plan_code(scene));
+            }
+            t.elapsed().as_secs_f64() * 1e6 / 200.0
+        };
+        let avant = mesure(&doc);
+        let ids: Vec<u64> = doc.panels.iter().step_by(30).map(|p| p.id).collect();
+        for &i in &ids {
+            doc.annuler_plan(i);
+        }
+        let apres = mesure(&doc);
+        let t = std::time::Instant::now();
+        std::hint::black_box(crate::numerotation::Numeros::of(&doc));
+        eprintln!("{n} plans, {} écartés : un numéro {avant:.0} µs sans, {apres:.0} µs avec ; Numeros::of (l'écran) {:.0} µs", ids.len(), t.elapsed().as_secs_f64() * 1e6);
+    }
+}
+
 /// Sur un vrai projet : `FEANOR_ESSAI_PROJET` est le manifeste d'une **copie** ; il est réécrit.
 #[test]
 #[ignore = "demande une copie d'un vrai projet : FEANOR_ESSAI_PROJET"]
@@ -885,7 +1232,7 @@ fn the_bar_before_a_cancelled_case_joins_nothing() {
     b.chauffer(2);
     assert_eq!(b.app.doc.panels.len(), 3);
     assert_eq!(pas_d_annulation(&b), etapes, "rien de réuni");
-    assert!(b.app.status.contains("annulée"), "{}", b.app.status);
+    assert!(b.app.status.contains("écartée"), "{}", b.app.status);
 }
 
 #[test]
@@ -956,7 +1303,7 @@ fn a_shared_film_refuses_the_gesture_and_a_film_with_cancelled_plans_refuses_to_
     let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
     clic_numero(&mut b, ids[1]);
     assert!(b.app.partage_refuse_annules(), "un film qui a des plans annulés ne se partage pas");
-    assert!(b.app.status.contains("rétablis"), "{}", b.app.status);
+    assert!(b.app.status.contains("reprends"), "{}", b.app.status);
     clic_numero(&mut b, ids[1]);
     assert!(!b.app.partage_refuse_annules());
 }

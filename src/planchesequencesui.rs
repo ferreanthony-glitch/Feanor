@@ -31,7 +31,7 @@ impl App {
 
     /// L'affichage enregistré, remis dans sa forme la plus courte : « toutes, dans l'ordre du film » ne s'écrit pas.
     fn affichage_ecrire(&mut self, liste: Vec<(u64, bool)>) {
-        let film = self.doc.sequence_order();
+        let film = self.doc.sequence_order_planche();
         let par_defaut: Vec<(u64, bool)> = film.iter().map(|&q| (q, true)).collect();
         let nouveau = if liste == par_defaut { Vec::new() } else { liste };
         if self.doc.annotations.affichage.ordre != nouveau {
@@ -91,7 +91,7 @@ impl App {
 
     /// Remet les séquences dans l'ordre du film (toutes montrées ou non comme avant).
     pub(crate) fn affichage_ordre_du_film(&mut self) {
-        let film = self.doc.sequence_order();
+        let film = self.doc.sequence_order_planche();
         let avant = self.doc.annotations.affichage.liste(&self.doc);
         let liste: Vec<(u64, bool)> = film.iter().map(|&q| (q, avant.iter().find(|e| e.0 == q).is_none_or(|e| e.1))).collect();
         self.affichage_ecrire(liste);

@@ -1,4 +1,4 @@
-//! Le plan annulé (partie 114 de `docs/INTERFACE.md`, format 48). Demande du réalisateur : « Un plan annulé disparait partout, y compris
+//! Le plan annulé (partie 114 de `docs/INTERFACE.md`, format 48) ; à l'écran, le plan **écarté** : « Écarter », « Reprendre » (le mot « annuler » est à Ctrl+Z). Demande du réalisateur : « Un plan annulé disparait partout, y compris
 //! dans storyboard » ; clic sur le numéro du plan dans les Vignettes = croix rouge dans le cadre.
 //!
 //! **Le seul point de filtrage : `Document::panels` est le film.** Un plan annulé **sort** de `panels` et va dans `Document::annules`, avec tout
@@ -55,7 +55,6 @@ pub struct PlanAnnule {
     pub reserve: Option<Reserve>,
     pub commentaires: Vec<Comment>,
     pub versions: Option<VersionsDuPlan>,
-    pub transitions: Vec<Transition>,
     /// Les références (`references.rs`) liées à ce plan.
     pub references: Vec<u64>,
     /// Secondes depuis 1970.
@@ -68,11 +67,20 @@ pub struct Annules {
     pub plans: Vec<Arc<PlanAnnule>>,
     /// Le plan vide qui tient `panels` quand tout le film est annulé (voir le début du fichier).
     pub support: Option<u64>,
+    /// Les transitions qui attendent que leurs deux plans soient de nouveau voisins dans le film : jamais jetées.
+    pub transitions: Vec<Transition>,
+    /// Les entrées abîmées du fichier, telles quelles : réécrites à chaque enregistrement, et tant qu'il y en a, `dessins/` n'est pas nettoyé.
+    pub illisibles: Vec<serde_json::Value>,
 }
 
 impl Annules {
     pub fn is_empty(&self) -> bool {
         self.plans.is_empty() && self.support.is_none()
+    }
+
+    /// Rien à écrire dans `plans_annules.json` : le fichier part.
+    pub fn rien_a_ecrire(&self) -> bool {
+        self.is_empty() && self.transitions.is_empty() && self.illisibles.is_empty()
     }
 }
 
@@ -90,9 +98,82 @@ fn maintenant() -> u64 {
 impl Document {
     /// Ce plan annulé se montre-t-il ? Oui dans la version de séquence où il l'a été (ou si cette version n'existe plus).
     pub(crate) fn annule_visible(&self, g: &PlanAnnule) -> bool {
+        // (Un plan qui est dans le film n'est pas aussi écarté : jamais de double.)
+        if self.panels.iter().any(|p| p.id == g.panel.id) {
+            return false;
+        }
         match self.variantes.get(&g.sequence.id) {
             None => true,
             Some(v) => g.variante == v.actuelle || !v.autres.iter().any(|r| r.numero == g.variante),
+        }
+    }
+
+    /// Les transitions qui attendent reviennent dans le film dès que leurs deux plans y sont voisins (`normalize`).
+    pub(crate) fn annules_reposer_transitions(&mut self) {
+        if self.annules.transitions.is_empty() {
+            return;
+        }
+        let rang: HashMap<u64, usize> = self.panels.iter().enumerate().map(|(i, p)| (p.id, i)).collect();
+        let n = self.panels.len();
+        for t in std::mem::take(&mut self.annules.transitions) {
+            let tient = match (t.out, t.inn) {
+                (Some(a), Some(b)) => matches!((rang.get(&a), rang.get(&b)), (Some(x), Some(y)) if x + 1 == *y),
+                (Some(a), None) => rang.get(&a).is_some_and(|x| x + 1 == n),
+                (None, Some(b)) => rang.get(&b) == Some(&0),
+                (None, None) => false,
+            };
+            if tient && !self.transitions.iter().any(|x| x.out == t.out && x.inn == t.inn) {
+                self.transitions.push(t);
+            } else {
+                self.annules.transitions.push(t);
+            }
+        }
+    }
+
+    /// La version `numero` de la séquence `sequence` vient de disparaître (`supprimer_variante`), le garage n'est pas encore nettoyé. Un plan écarté dans
+    /// cette version qu'une autre montre encore n'est plus écarté nulle part : il n'a plus de case barrée. Un plan écarté que plus aucune version ne
+    /// montre reprend au garage tout ce qui tient à lui (ses versions, son contenu rogné, ses commentaires), qui sinon y disparaîtrait.
+    pub(crate) fn annules_apres_une_version_supprimee(&mut self, sequence: u64, numero: u32) {
+        let Some(v) = self.variantes.get(&sequence) else { return };
+        let actuelle = v.actuelle;
+        let montres: HashSet<u64> = v.autres.iter().flat_map(|r| r.contenu.slots.iter().map(|s| s.plan)).chain(self.panels.iter().map(|p| p.id)).collect();
+        for k in (0..self.annules.plans.len()).rev() {
+            let g = &self.annules.plans[k];
+            if g.sequence.id != sequence {
+                continue;
+            }
+            let (id, de_cette_version) = (g.panel.id, g.variante == numero);
+            if montres.contains(&id) {
+                if de_cette_version {
+                    self.annules.plans.remove(k);
+                }
+                continue;
+            }
+            self.annules_rapatrier(k);
+            if de_cette_version {
+                Arc::make_mut(&mut self.annules.plans[k]).variante = actuelle;
+            }
+        }
+    }
+
+    /// Le plan écarté `k` reprend au garage ce qui tient à lui, s'il y est.
+    fn annules_rapatrier(&mut self, k: usize) {
+        let id = self.annules.plans[k].panel.id;
+        let Some((mut panel, versions, reserve, commentaires)) = self.reprendre_du_garage(id) else { return };
+        let g = Arc::make_mut(&mut self.annules.plans[k]);
+        crate::variantes::poser_scene(&mut panel, g.panel.scene);
+        g.panel = panel;
+        g.versions = versions;
+        g.reserve = reserve;
+        g.commentaires = commentaires;
+    }
+
+    /// Les versions de la séquence `sequence` vont disparaître avec elle (`elaguer_variantes`) : ses plans écartés reprennent au garage ce qui tient à eux.
+    pub(crate) fn annules_rapatrier_la_sequence(&mut self, sequence: u64) {
+        for k in 0..self.annules.plans.len() {
+            if self.annules.plans[k].sequence.id == sequence {
+                self.annules_rapatrier(k);
+            }
         }
     }
 
@@ -328,7 +409,7 @@ impl Document {
             return None;
         }
         if self.annules.plans.iter().any(|g| g.panel.id == id) {
-            crate::variantes::noter_refus("Ce plan est déjà annulé dans une autre version de la séquence : rétablis-le d'abord là-bas.".into());
+            crate::variantes::noter_refus("Ce plan est déjà écarté dans une autre version de la séquence : reprends-le d'abord là-bas.".into());
             return None;
         }
         // (Le dernier plan d'une séquence qui a d'autres versions : elles disparaîtraient avec elle.)
@@ -359,6 +440,7 @@ impl Document {
         self.comments = gardes;
         let (transitions, gardees): (Vec<Transition>, Vec<Transition>) = std::mem::take(&mut self.transitions).into_iter().partition(|t| t.out == Some(id) || t.inn == Some(id));
         self.transitions = gardees;
+        self.annules.transitions.extend(transitions);
         let references: Vec<u64> = self.references.iter().filter(|r| r.plans.contains(&id)).map(|r| r.id).collect();
         // Le dernier plan du film : un plan vide tient la place, dans sa séquence.
         if self.panels.len() == 1 {
@@ -367,7 +449,7 @@ impl Document {
             self.annules.support = Some(p.id);
             self.panels.push(p);
         }
-        self.annules.plans.push(Arc::new(PlanAnnule { panel, scene, sequence, variante, apres, suivant, reserve, commentaires, versions, transitions, references, date: maintenant() }));
+        self.annules.plans.push(Arc::new(PlanAnnule { panel, scene, sequence, variante, apres, suivant, reserve, commentaires, versions, references, date: maintenant() }));
         self.panels.remove(index);
         let next = self.panels[index.min(self.panels.len() - 1)].id;
         Some(self.normalize_keeping(next))
@@ -393,7 +475,7 @@ impl Document {
             .unwrap_or(0);
         let g = self.annules.plans.remove(k);
         let g = Arc::try_unwrap(g).unwrap_or_else(|a| (*a).clone());
-        let PlanAnnule { mut panel, mut scene, sequence, transitions, references, reserve, commentaires, versions, .. } = g;
+        let PlanAnnule { mut panel, mut scene, sequence, references, reserve, commentaires, versions, .. } = g;
         // Une autre version de la séquence le montrait : il est au garage, peut-être retouché depuis. C'est lui qui revient.
         let (reserve, commentaires, versions) = match self.reprendre_du_garage(id) {
             Some((p, v, r, c)) => {
@@ -407,23 +489,23 @@ impl Document {
             panel.id = self.alloc();
         }
         let nouveau = panel.id;
-        // Sa séquence et sa scène, si elles ont disparu avec lui ; sa scène garde son nom et son numéro.
-        if !self.sequences.iter().any(|s| s.id == sequence.id) {
-            let mut s = sequence.clone();
-            if self.numbering_locked && self.sequences.iter().any(|q| q.number == s.number) {
-                s.number.clear();
+        // Sa scène, si elle a encore d'autres panneaux : il y revient, rien ne bouge. Sinon sa séquence et sa scène reviennent avec lui, avec leurs noms et
+        // leurs numéros.
+        if !self.scenes.iter().any(|s| s.id == scene.id) {
+            if !self.sequences.iter().any(|s| s.id == sequence.id) {
+                let mut s = sequence.clone();
+                if self.numbering_locked && self.sequences.iter().any(|q| q.number == s.number) {
+                    s.number.clear();
+                }
+                self.sequences.push(s);
             }
-            self.sequences.push(s);
-        }
-        if self.numbering_locked && self.scenes.iter().any(|s| !s.number.is_empty() && s.number == scene.number) {
-            scene.number.clear();
-        }
-        scene.sequence = sequence.id;
-        if self.panels.iter().any(|p| p.scene == scene.id) || self.scenes.iter().any(|s| s.id == scene.id) {
-            scene.id = self.alloc();
+            if self.numbering_locked && self.scenes.iter().any(|s| !s.number.is_empty() && s.number == scene.number) {
+                scene.number.clear();
+            }
+            scene.sequence = sequence.id;
+            self.scenes.push(scene.clone());
         }
         crate::variantes::poser_scene(&mut panel, scene.id);
-        self.scenes.push(scene);
         if let Some(r) = reserve {
             self.reserves.insert(nouveau, r);
         }
@@ -434,23 +516,12 @@ impl Document {
             c.panel = nouveau;
             self.comments.push(c);
         }
-        let index = self.insert_and_normalize(at, vec![panel]);
-        // Ses transitions, si leur coupe existe encore telle quelle ; ses références.
-        for mut t in transitions {
+        // (Ses transitions attendent dans `annules.transitions` : `normalize` les repose si leur coupe existe de nouveau.)
+        for t in &mut self.annules.transitions {
             t.out = t.out.map(|o| if o == id { nouveau } else { o });
             t.inn = t.inn.map(|i| if i == id { nouveau } else { i });
-            let rang = |x: u64| self.panels.iter().position(|p| p.id == x);
-            let tient = match (t.out, t.inn) {
-                (Some(a), Some(b)) => matches!((rang(a), rang(b)), (Some(x), Some(y)) if x + 1 == y),
-                (Some(a), None) => rang(a).is_some_and(|x| x + 1 == self.panels.len()),
-                (None, Some(b)) => rang(b) == Some(0),
-                (None, None) => false,
-            };
-            let libre = !self.transitions.iter().any(|x| x.out == t.out && x.inn == t.inn);
-            if tient && libre {
-                self.transitions.push(t);
-            }
         }
+        let index = self.insert_and_normalize(at, vec![panel]);
         for r in &mut self.references {
             if references.contains(&r.id) && !r.plans.contains(&nouveau) {
                 r.plans.push(nouveau);
@@ -562,8 +633,6 @@ pub(crate) struct PlanAnnuleFichier {
     #[serde(default)]
     commentaires: Vec<Comment>,
     #[serde(default)]
-    transitions: Vec<Transition>,
-    #[serde(default)]
     references: Vec<u64>,
     #[serde(default)]
     date: u64,
@@ -581,16 +650,28 @@ pub(crate) struct Fichier {
     pub plans: Vec<PlanAnnuleFichier>,
     #[serde(default)]
     support: Option<u64>,
+    #[serde(default)]
+    transitions: Vec<Transition>,
+}
+
+/// Ce qui s'écrit : les plans lus et, telles quelles, les entrées abîmées.
+#[derive(Serialize)]
+struct FichierEcrit {
+    format: String,
+    version: u32,
+    plans: Vec<serde_json::Value>,
+    support: Option<u64>,
+    transitions: Vec<Transition>,
 }
 
 /// Le contenu de `plans_annules.json` ; rien : aucun plan annulé, le fichier part.
 pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
-    if doc.annules.is_empty() {
+    if doc.annules.rien_a_ecrire() {
         return Ok(None);
     }
     let mut plans = Vec::with_capacity(doc.annules.plans.len());
     for g in &doc.annules.plans {
-        plans.push(PlanAnnuleFichier {
+        let plan = PlanAnnuleFichier {
             entree: crate::project::snapshot_value(&g.panel, &|c| c)?,
             scene: NomFichier { id: g.scene.id, nom: g.scene.name.clone(), numero: g.scene.number.clone() },
             sequence: NomFichier { id: g.sequence.id, nom: g.sequence.name.clone(), numero: g.sequence.number.clone() },
@@ -606,18 +687,19 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
                 None => None,
             },
             commentaires: g.commentaires.clone(),
-            transitions: g.transitions.clone(),
             references: g.references.clone(),
             date: g.date,
-        });
+        };
+        plans.push(serde_json::to_value(&plan).map_err(|e| e.to_string())?);
     }
-    serde_json::to_vec_pretty(&Fichier { format: FORMAT.into(), version: VERSION, plans, support: doc.annules.support }).map(Some).map_err(|e| e.to_string())
+    plans.extend(doc.annules.illisibles.iter().cloned());
+    serde_json::to_vec_pretty(&FichierEcrit { format: FORMAT.into(), version: VERSION, plans, support: doc.annules.support, transitions: doc.annules.transitions.clone() }).map(Some).map_err(|e| e.to_string())
 }
 
 pub(crate) fn parse(text: &str) -> Result<Fichier, String> {
     let f: Fichier = serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("illisible ({e})"))?;
     if f.format != FORMAT {
-        return Err("ce n'est pas un fichier de plans annulés".into());
+        return Err("ce n'est pas un fichier de plans écartés".into());
     }
     if f.version > VERSION {
         return Err(format!("écrit par une version plus récente (format {})", f.version));
@@ -640,7 +722,7 @@ pub(crate) fn lire(dir: &Path, warnings: &mut Vec<String>) -> Option<Fichier> {
         Ok(bytes) => match String::from_utf8(bytes).map_err(|_| "le fichier n'est pas du texte (UTF-8)".to_string()).and_then(|t| parse(&t)) {
             Ok(f) => Some(f),
             Err(e) => {
-                warnings.push(format!("{FILE} : {e} ; les plans annulés ne sont pas chargés, le fichier reste là."));
+                warnings.push(format!("{FILE} : {e} ; les plans écartés ne sont pas chargés, le fichier reste là."));
                 None
             }
         },
@@ -652,15 +734,22 @@ pub(crate) fn lire(dir: &Path, warnings: &mut Vec<String>) -> Option<Fichier> {
     }
 }
 
-/// Met en place les plans annulés lus : `panels[i]` est le plan `i` du fichier (rien : illisible), `rangees[i]` ses versions rangées, dans
-/// l'ordre du fichier, `rognages[i]` son contenu rogné lu. `missing` : dessins illisibles.
-pub(crate) fn installer(doc: &mut Document, f: Fichier, mut panels: Vec<Option<Panel>>, mut rangees: Vec<Vec<Panel>>, mut rognages: Vec<Option<crate::rognage::Loaded>>, missing: &BTreeSet<CelId>, warnings: &mut Vec<String>) {
+/// Met en place les plans annulés lus : `panels[i]` est le plan `i` du fichier (rien : son entrée est abîmée, elle est dans `illisibles`), `rangees[i]`
+/// ses versions rangées, toutes, dans l'ordre du fichier, `rognages[i]` son contenu rogné lu. `missing` : dessins illisibles.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn installer(doc: &mut Document, f: Fichier, mut panels: Vec<Option<Panel>>, mut rangees: Vec<Vec<Panel>>, mut rognages: Vec<Option<crate::rognage::Loaded>>, illisibles: Vec<serde_json::Value>, missing: &BTreeSet<CelId>) {
     let mut plans = Vec::with_capacity(f.plans.len());
+    // (Les numéros d'une entrée abîmée restent pris, autant qu'on les lit.)
+    for v in &illisibles {
+        for id in [v["entree"]["id"].as_u64(), v["scene"]["id"].as_u64(), v["sequence"]["id"].as_u64()].into_iter().flatten() {
+            doc.reserve_id(id);
+        }
+    }
+    for t in &f.transitions {
+        doc.reserve_id(t.id);
+    }
     for (i, pf) in f.plans.into_iter().enumerate() {
-        let Some(mut panel) = panels.get_mut(i).and_then(Option::take) else {
-            warnings.push("Un plan annulé est illisible : il est ignoré, le fichier des plans annulés sera réécrit sans lui.".into());
-            continue;
-        };
+        let Some(mut panel) = panels.get_mut(i).and_then(Option::take) else { continue };
         crate::variantes::poser_scene(&mut panel, pf.scene.id);
         let reserve = rognages.get_mut(i).and_then(Option::take).and_then(|l| l.pour_plans(&[&panel], missing).into_iter().next().map(|(_, r)| r));
         let versions = pf.versions.map(|vf| {
@@ -679,7 +768,6 @@ pub(crate) fn installer(doc: &mut Document, f: Fichier, mut panels: Vec<Option<P
         let mut ids: Vec<u64> = vec![panel.id, pf.scene.id, pf.sequence.id];
         ids.extend(panel.marks.iter().map(|m| m.id));
         ids.extend(pf.commentaires.iter().map(|c| c.id));
-        ids.extend(pf.transitions.iter().map(|t| t.id));
         for v in versions.iter().flat_map(|v| &v.autres) {
             ids.push(v.panel.id);
             ids.extend(v.panel.marks.iter().map(|m| m.id));
@@ -697,7 +785,8 @@ pub(crate) fn installer(doc: &mut Document, f: Fichier, mut panels: Vec<Option<P
         let sequence = Sequence { id: pf.sequence.id, name: pf.sequence.nom, number: pf.sequence.numero };
         let (id, _) = (panel.id, ());
         let commentaires: Vec<Comment> = pf.commentaires.into_iter().filter(|c| c.panel == id).collect();
-        plans.push(Arc::new(PlanAnnule { panel, scene, sequence, variante: pf.variante.max(1), apres: pf.apres, suivant: pf.suivant, reserve, commentaires, versions, transitions: pf.transitions, references: pf.references, date: pf.date }));
+        plans.push(Arc::new(PlanAnnule { panel, scene, sequence, variante: pf.variante.max(1), apres: pf.apres, suivant: pf.suivant, reserve, commentaires, versions, references: pf.references, date: pf.date }));
     }
-    doc.annules = Annules { plans, support: f.support.filter(|s| doc.panels.iter().any(|p| p.id == *s)) };
+    doc.annules = Annules { plans, support: f.support.filter(|s| doc.panels.iter().any(|p| p.id == *s)), transitions: f.transitions, illisibles };
+    doc.annules_reposer_transitions();
 }

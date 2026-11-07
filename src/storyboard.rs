@@ -439,6 +439,9 @@ impl App {
     // ------------------------------------------------------------------ panneau du montage
 
     pub(crate) fn montage_panel(&mut self, ui: &mut egui::Ui) {
+        if self.bande_film_vide(ui) {
+            return;
+        }
         ui.add_space(2.0);
         // Une seule ligne, comme la barre de la timeline (12c), qui ne défile pas : les commandes de
         // `barres.rs`, le reste sous « Plus… ».

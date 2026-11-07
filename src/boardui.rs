@@ -163,7 +163,7 @@ pub(crate) enum MenuTarget {
     /// le rang du plan à un autre (« Animer cette image » animait le plan voisin, Anthony 2026-10-22). `cadre` : le cadre de
     /// caméra sous le clic droit, s'il y en a un (« Retirer ce cadre »).
     Card { plan: u64, case: u64, cadre: Option<usize> },
-    /// La case d'un plan annulé (« Rétablir ce plan »).
+    /// La case d'un plan écarté (« Reprendre ce plan »).
     Annule(u64),
     /// Le titre de la séquence `0` (« Renommer la séquence… »).
     Titre(u64),
@@ -204,8 +204,8 @@ pub(crate) struct Vignettes {
     pub moving: Option<PlanMove>,
     /// Maj tenue, le pointeur est sur le cadre d'une vignette : on peut la prendre (curseur « main »).
     pub frame_hot: bool,
-    /// Le numéro de chaque plan à l'écran, à l'image d'avant : un clic dessus annule ou rétablit le plan (`planannuleui.rs`).
-    pub numeros_zones: Vec<(Rect, u64)>,
+    /// Le numéro de chaque plan à l'écran, à l'image d'avant (sa zone, le plan, s'il est écarté) : un clic dessus l'écarte ou le reprend (`planannuleui.rs`).
+    pub numeros_zones: Vec<(Rect, u64, bool)>,
     /// Un appui sur un numéro, en attente de son lâcher.
     pub numero_attente: Option<crate::planannuleui::NumeroAttente>,
     /// Maj tenue, sans appui : la peau de la planche (les numéros cachés se montrent, on peut cliquer dessus).
@@ -404,9 +404,10 @@ impl App {
     /// Après une opération qui a retiré des panneaux : les notes qui leur étaient attachées
     /// restent où elles étaient (`before` : la planche d'avant), libres.
     pub(crate) fn release_removed_notes(&mut self, before: &BoardLayout) {
-        // (Un plan annulé n'est pas parti : ses notes l'attendent, `planannule.rs`.)
-        let gone: Vec<u64> =
-            before.cards.iter().map(|c| c.id).filter(|id| !self.doc.panels.iter().any(|p| p.id == *id) && !self.doc.annules.plans.iter().any(|g| g.panel.id == *id)).collect();
+        // (Un plan écarté n'est pas parti : ses notes l'attendent, celles de ses cases de continuité aussi, `planannule.rs`. Et une case d'un plan du
+        // film qui est toujours là ne perd pas les siennes.)
+        let vivants: std::collections::HashSet<u64> = self.doc.panels.iter().chain(self.doc.annules.plans.iter().map(|g| &g.panel)).flat_map(|p| std::iter::once(p.id).chain(p.marks.iter().map(|m| m.id))).collect();
+        let gone: Vec<u64> = before.cards.iter().map(|c| c.id).filter(|id| !vivants.contains(id)).collect();
         if !gone.is_empty() {
             self.doc.board.release(before, &gone);
         }
@@ -1133,7 +1134,7 @@ impl App {
     pub(crate) fn board_toggle_cut(&mut self, layout: &BoardLayout, after: usize) -> bool {
         // (La barre devant une case annulée ne coupe ni ne réunit : `planannule.rs`.)
         if layout.barres_mortes.contains(&after) {
-            self.status = "La case suivante est annulée, cette barre ne réunit rien : un clic sur son numéro la rétablit".into();
+            self.status = "La case suivante est écartée, cette barre ne réunit rien : un clic sur son numéro la reprend".into();
             return false;
         }
         let Some(a) = layout.cards.get(after).copied() else { return false };
@@ -2317,7 +2318,7 @@ impl App {
                     }
                 }
                 if afficher {
-                    self.vignettes.numeros_zones.push((pastille.expand(2.0), place.plan));
+                    self.vignettes.numeros_zones.push((pastille.expand(2.0), place.plan, false));
                 }
                 let mut droite = if afficher { pastille.right() + 4.0 } else { pastille.left() };
                 // La durée du plan, à côté du numéro (réglage), en petit.
@@ -2466,9 +2467,9 @@ impl App {
         ui.menu_button("Plus", |ui| {
             // (Le geste de tous les jours est le clic sur le numéro, ou Maj + clic ; ceci est le chemin de secours : `planannuleui.rs`.)
             if let Some(plan) = self.doc.panels.get(i).map(|p| p.id) {
-                if ui.button("Annuler ce plan").clicked() {
+                if ui.button(crate::planannuleui::MENU_ECARTER).clicked() {
                     ui.close_menu();
-                    self.plan_annuler_ou_retablir(plan);
+                    self.plan_ecarter_ou_reprendre(plan, true);
                 }
             }
             // Les séquences (`planchesequencesui.rs`) : une neuve, avec les cases choisies, couper ici, renommer.

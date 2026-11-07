@@ -1,5 +1,5 @@
-//! Le geste du plan annulé sur la planche (partie 114, le modèle est dans `planannule.rs`) : un clic sur le numéro du plan l'annule ou le
-//! rétablit ; Maj tenue montre les numéros cachés (touche N) et Maj + clic sur le numéro prime sur « Maj + clic choisit le plan » ; le clic
+//! Le geste du plan écarté sur la planche (partie 114, le modèle est dans `planannule.rs` ; le code garde le mot « annulé », l'interface dit
+//! « Écarter » et « Reprendre », pour ne pas se confondre avec Ctrl+Z) : un clic sur le numéro du plan l'écarte ou le reprend ; Maj tenue montre les numéros cachés (touche N) et Maj + clic sur le numéro prime sur « Maj + clic choisit le plan » ; le clic
 //! droit de la case reste, en chemin secondaire. Comme la barre entre les cases (partie 113), **le numéro ne répond qu'au lâcher d'un appui qui n'a
 //! pas bougé** : un appui qui bouge est un trait (sans Maj) ou un plan qu'on déplace (avec Maj), et n'annule rien.
 
@@ -16,24 +16,33 @@ use crate::history::Nav;
 pub(crate) const CROIX: Color32 = Color32::from_rgb(214, 32, 32);
 
 /// Un appui sur un numéro de plan, en attente de son lâcher.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct NumeroAttente {
     pub plan: u64,
+    /// Le plan était écarté quand on a appuyé : c'est ce que le numéro montrait.
+    pub annule: bool,
     pub origine: Pos2,
     pub base_len: usize,
     /// L'appui a lancé un trait (sans Maj, un outil de dessin) : au lâcher d'un clic, ce point de trait est retiré.
     pub dessine: bool,
+    /// Le plan courant (son numéro), son image, son calque et le choix d'avant l'appui : le trait qui part choisit la case la plus proche, un clic les
+    /// rend.
+    pub avant: (u64, usize, usize, Vec<u64>, bool),
 }
 
 impl App {
-    /// Annule le plan `plan`, ou le rétablit s'il l'est déjà : une seule étape d'annulation, qui rend tout. Vrai si le film a changé.
-    pub(crate) fn plan_annuler_ou_retablir(&mut self, plan: u64) -> bool {
-        if self.partage.is_some() {
-            self.status = "Dans un film partagé, un plan ne s'annule pas, les autres postes ne le sauraient pas : supprime-le, ou reviens à une copie à toi".into();
+    /// Écarte le plan `plan` (`ecarter`) ou le reprend : une seule étape d'annulation, qui rend tout. **Il fait ce qu'on lui demande, et rien si c'est déjà
+    /// fait** (un menu resté ouvert pendant un Ctrl+Z). Le plan courant et son image ne changent que si c'est lui qui est écarté. Vrai si le film a changé.
+    pub(crate) fn plan_ecarter_ou_reprendre(&mut self, plan: u64, ecarter: bool) -> bool {
+        let annule = self.doc.annules.plans.iter().any(|g| g.panel.id == plan);
+        if annule == ecarter {
             return false;
         }
-        let annule = self.doc.annules.plans.iter().any(|g| g.panel.id == plan);
-        let nom = if annule { "Rétablir le plan" } else { "Annuler le plan" };
+        if self.partage.is_some() {
+            self.status = "Dans un film partagé, un plan ne s'écarte pas, les autres postes ne le sauraient pas : supprime-le, ou reviens à une copie à toi".into();
+            return false;
+        }
+        let nom = if annule { "Reprendre le plan" } else { "Écarter le plan" };
         let titre = crate::numerotation::Numeros::of(&self.doc);
         let scene = self.doc.annules.plans.iter().find(|g| g.panel.id == plan).map(|g| g.panel.scene).or_else(|| self.doc.panels.iter().find(|p| p.id == plan).map(|p| p.scene));
         let numero = scene.map_or_else(String::new, |s| titre.scene_label(&self.doc, s));
@@ -41,7 +50,13 @@ impl App {
         let debut = self.doc.panels.iter().position(|p| p.id == plan).map(|i| self.doc.panel_start(i));
         let son_apres = debut.is_some_and(|d| self.doc.audio_tracks.iter().flat_map(|t| &t.clips).any(|c| c.end() > d));
         crate::variantes::prendre_refus();
-        let ok = self.avec_etape(nom, |a| if annule { a.structure_op_dessins(|d, _| d.retablir_plan(plan)) } else { a.structure_op_dessins(|d, _| d.annuler_plan(plan)) });
+        let courant = self.panel().id;
+        let ok = self.avec_etape(nom, |a| {
+            a.structure_op_dessins(|d, _| {
+                let voisin = if annule { d.retablir_plan(plan) } else { d.annuler_plan(plan) }?;
+                Some(d.panels.iter().position(|p| p.id == courant).unwrap_or(voisin))
+            })
+        });
         if !ok {
             if let Some(refus) = crate::variantes::prendre_refus() {
                 self.status = refus;
@@ -51,30 +66,31 @@ impl App {
         self.board_sel.retain(|id| *id != plan);
         self.thumbs.prune(&self.doc);
         self.status = if annule {
-            format!("Plan {numero} rétabli à sa place, tout y est")
+            format!("Plan {numero} repris à sa place, tout y est")
         } else if self.doc.film_vide() {
-            format!("Plan {numero} annulé, tous les plans le sont et plus rien ne sort : un clic sur un numéro en rétablit un")
+            format!("Plan {numero} écarté, tous les plans le sont et plus rien ne sort : un clic sur un numéro en reprend un")
         } else if son_apres {
-            format!("Plan {numero} annulé, rien n'est effacé et le son reste à sa place : un clic sur son numéro le rétablit")
+            format!("Plan {numero} écarté, rien n'est effacé et le son reste à sa place : un clic sur son numéro le reprend")
         } else {
-            format!("Plan {numero} annulé, rien n'est effacé : un clic sur son numéro le rétablit")
+            format!("Plan {numero} écarté, rien n'est effacé : un clic sur son numéro le reprend")
         };
         true
     }
 
     /// Le plan dont le numéro est sous le point `pos` (écran), à l'image d'avant. Ctrl garde le lasso et la caméra.
-    fn numero_sous(&self, pos: Pos2, m: Modifiers) -> Option<u64> {
+    fn numero_sous(&self, pos: Pos2, m: Modifiers) -> Option<(u64, bool)> {
         if m.ctrl || m.command || m.alt || self.vignettes.camera_tenue {
             return None;
         }
-        self.vignettes.numeros_zones.iter().rev().find(|(z, _)| z.contains(pos)).map(|(_, p)| *p)
+        self.vignettes.numeros_zones.iter().rev().find(|(z, _, _)| z.contains(pos)).map(|(_, p, a)| (*p, *a))
     }
 
     /// Un appui sur le numéro d'un plan ou dans une case annulée (`boardui::board_press`). Vrai si l'appui est pris ici.
     pub(crate) fn plan_annule_appui(&mut self, layout: &BoardLayout, pos: Pos2, p: Pos2, m: Modifiers) -> bool {
-        if let Some(plan) = self.numero_sous(pos, m) {
+        if let Some((plan, annule)) = self.numero_sous(pos, m) {
             self.commit_note_text(layout);
             self.commit_card_note();
+            let avant = (self.panel().id, self.cur_frame, self.cur_layer, self.board_sel.clone(), self.vignettes.libre);
             let mut dessine = false;
             let maj = m.shift;
             if maj {
@@ -89,7 +105,7 @@ impl App {
             } else {
                 self.vignettes.press = Press::Dead;
             }
-            self.vignettes.numero_attente = Some(NumeroAttente { plan, origine: pos, base_len: self.history.undo_len(), dessine });
+            self.vignettes.numero_attente = Some(NumeroAttente { plan, annule, origine: pos, base_len: self.history.undo_len(), dessine, avant });
             return true;
         }
         // Dessiner dans une case annulée : refusé, et dit (rien ne s'y perd, rien ne s'y mélange). Le numéro la rétablit.
@@ -97,7 +113,7 @@ impl App {
             self.commit_note_text(layout);
             self.commit_card_note();
             self.vignettes.press = Press::Dead;
-            self.status = "Ce plan est annulé, rien ne s'y dessine : un clic sur son numéro le rétablit".into();
+            self.status = "Ce plan est écarté, rien ne s'y dessine : un clic sur son numéro le reprend".into();
             return true;
         }
         false
@@ -127,7 +143,7 @@ impl App {
     /// Le lâcher d'un appui tombé sur un numéro : sans mouvement, c'est un clic, le plan s'annule ou se rétablit, et le point de trait qu'il a pu
     /// laisser est retiré. Vrai si le film a changé.
     pub(crate) fn numero_au_lacher(&mut self, latest: Option<Pos2>, any_down: bool) -> bool {
-        let Some(a) = self.vignettes.numero_attente else { return false };
+        let Some(a) = self.vignettes.numero_attente.clone() else { return false };
         if latest.is_some_and(|p| p.distance(a.origine) > MOVE_THRESHOLD) {
             self.vignettes.numero_attente = None;
             return false;
@@ -142,7 +158,19 @@ impl App {
         // (Maj : le plan pris ne se déplace plus, et le clic ne le choisit pas : le numéro prime.)
         self.vignettes.moving = None;
         self.vignettes.press = Press::Dead;
-        self.plan_annuler_ou_retablir(a.plan)
+        // (Le trait d'un clic a choisi la case la plus proche : on rend ce qui était courant.)
+        let (courant, image, calque, choix, libre) = a.avant;
+        if let Some(i) = self.doc.panels.iter().position(|p| p.id == courant) {
+            self.cur_panel = i;
+            self.cur_frame = image;
+            self.cur_layer = calque;
+            self.revalider_rangs();
+            self.cur_frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
+        }
+        self.board_sel = choix;
+        self.vignettes.libre = libre;
+        // (Ce que montrait le numéro à l'appui : si un Ctrl+Z l'a déjà changé, rien à faire.)
+        self.plan_ecarter_ou_reprendre(a.plan, !a.annule)
     }
 
     /// Le point de trait d'un clic est retiré : les étapes reviennent à ce qu'elles étaient, rien à répartir.
@@ -219,16 +247,26 @@ impl App {
                     clip.rect_stroke(libre, marge0 * sc, Stroke::new(1.0_f32, CROIX), StrokeKind::Inside);
                 }
                 clip.galley(libre.min + vec2(marge0, marge0) * sc, g, CROIX);
-                self.vignettes.numeros_zones.push((libre.expand(2.0), c.plan));
+                self.vignettes.numeros_zones.push((libre.expand(2.0), c.plan, true));
             }
         }
     }
 
+    /// Le montage et la timeline, quand tout est écarté : ils ne montrent pas le plan vide qui tient le film. Vrai s'ils n'ont rien d'autre à peindre.
+    pub(crate) fn bande_film_vide(&mut self, ui: &mut egui::Ui) -> bool {
+        if !self.doc.film_vide() {
+            return false;
+        }
+        ui.add_space(12.0);
+        ui.vertical_centered(|ui| ui.weak(TEXTE_FILM_VIDE));
+        true
+    }
+
     /// Le menu du clic droit d'une case annulée.
     pub(crate) fn annule_menu(&mut self, ui: &mut egui::Ui, plan: u64) {
-        if ui.button("Rétablir ce plan").clicked() {
+        if ui.button(MENU_REPRENDRE).clicked() {
             ui.close_menu();
-            self.plan_annuler_ou_retablir(plan);
+            self.plan_ecarter_ou_reprendre(plan, false);
         }
     }
 
@@ -237,7 +275,7 @@ impl App {
         if self.doc.annules.plans.is_empty() {
             return false;
         }
-        self.status = "Ce film a des plans annulés, un film partagé ne les connaît pas : rétablis-les d'abord".into();
+        self.status = "Ce film a des plans écartés, un film partagé ne les connaît pas : reprends-les d'abord".into();
         true
     }
 
@@ -249,7 +287,7 @@ impl App {
         painter.rect_filled(rect, 0.0, Color32::from_gray(52));
         let c = rect.center();
         painter.text(c - vec2(0.0, 26.0), egui::Align2::CENTER_CENTER, TEXTE_FILM_VIDE, FontId::proportional(18.0), Color32::from_gray(230));
-        painter.text(c, egui::Align2::CENTER_CENTER, "Rétablis un plan dans les Vignettes : un clic sur son numéro.", FontId::proportional(14.0), Color32::from_gray(190));
+        painter.text(c, egui::Align2::CENTER_CENTER, "Reprends un plan dans les Vignettes : un clic sur son numéro.", FontId::proportional(14.0), Color32::from_gray(190));
         let bouton = Rect::from_center_size(c + vec2(0.0, 36.0), vec2(180.0, 28.0));
         if ui.put(bouton, egui::Button::new("Aller aux Vignettes")).clicked() {
             self.set_espace(crate::workspace::Espace::Vignettes);
@@ -259,6 +297,9 @@ impl App {
 }
 
 /// Le titre de l'état vide du Storyboard.
-pub(crate) const TEXTE_FILM_VIDE: &str = "Tous les plans sont annulés.";
+pub(crate) const TEXTE_FILM_VIDE: &str = "Tous les plans sont écartés.";
+/// Les entrées du clic droit.
+pub(crate) const MENU_ECARTER: &str = "Écarter ce plan";
+pub(crate) const MENU_REPRENDRE: &str = "Reprendre ce plan";
 /// Ce qu'un export répond alors.
-pub(crate) const REFUS_EXPORT: &str = "Tous les plans sont annulés, rien à exporter ni à envoyer : rétablis un plan dans les Vignettes, un clic sur son numéro";
+pub(crate) const REFUS_EXPORT: &str = "Tous les plans sont écartés, rien à exporter ni à envoyer : reprends un plan dans les Vignettes, un clic sur son numéro";
