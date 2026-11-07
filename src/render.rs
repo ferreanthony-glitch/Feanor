@@ -319,7 +319,9 @@ pub fn plan_bounds(doc: &Document, plan: &Plan) -> Area {
     for item in &plan.items {
         let Some(cel) = doc.cels.get(&item.cel) else { continue };
         let Some((tx0, ty0, tx1, ty1)) = cel.raster.drawn_tile_range() else { continue };
-        let (x0, y0, x1, y1) = ((tx0 as i64 * t) as f32, (ty0 as i64 * t) as f32, ((tx1 as i64 + 1) * t) as f32, ((ty1 as i64 + 1) * t) as f32);
+        // (Ce que ses effets portent autour de l'encre, pour un dessin qui passe le bord : le halo d'un flou, le déplacement d'une secousse.)
+        let m = crate::fx::portee_hors_feuille(item, cel);
+        let (x0, y0, x1, y1) = ((tx0 as i64 * t) as f32 - m, (ty0 as i64 * t) as f32 - m, ((tx1 as i64 + 1) * t) as f32 + m, ((ty1 as i64 + 1) * t) as f32 + m);
         let r = match item.affine(pivot) {
             Some(a) => {
                 let pts = [egui::pos2(x0, y0), egui::pos2(x1, y0), egui::pos2(x1, y1), egui::pos2(x0, y1)].map(|p| a.apply(p));
@@ -362,7 +364,8 @@ pub fn plan_world_tiles(doc: &Document, plan: &Plan, area: Area) -> Vec<(i32, i3
         let Some((tx0, ty0, tx1, ty1)) = cel.raster.drawn_tile_range() else { continue };
         match item.affine(pivot) {
             Some(a) => {
-                let (x0, y0, x1, y1) = ((tx0 as i64 * t) as f32, (ty0 as i64 * t) as f32, ((tx1 as i64 + 1) * t) as f32, ((ty1 as i64 + 1) * t) as f32);
+                let m = crate::fx::portee_hors_feuille(item, cel);
+                let (x0, y0, x1, y1) = ((tx0 as i64 * t) as f32 - m, (ty0 as i64 * t) as f32 - m, ((tx1 as i64 + 1) * t) as f32 + m, ((ty1 as i64 + 1) * t) as f32 + m);
                 let pts = [egui::pos2(x0, y0), egui::pos2(x1, y0), egui::pos2(x1, y1), egui::pos2(x0, y1)].map(|p| a.apply(p));
                 let lo = pts.iter().fold((f32::MAX, f32::MAX), |(x, y), p| (x.min(p.x), y.min(p.y)));
                 let hi = pts.iter().fold((f32::MIN, f32::MIN), |(x, y), p| (x.max(p.x), y.max(p.y)));
@@ -382,8 +385,28 @@ pub fn plan_world_tiles(doc: &Document, plan: &Plan, area: Area) -> Vec<(i32, i3
             None => {
                 // (L'aplat sous le trait déborde du trait de son débord : les tuiles voisines comptent aussi.)
                 let around = if item.fond.is_some() { 1 } else { 0 };
-                for id in cel.raster.drawn_ids() {
-                    let (tx, ty) = cel.raster.key_of(id);
+                // Les effets d'un dessin qui passe le bord posent aussi autour de ses tuiles : déjà calculés, on lit leurs tuiles ; sinon, on les devine d'après leur portée.
+                let pret = (!item.fx.is_empty() && crate::fx::cel_deborde(cel)).then(|| crate::fx::resultat_pret(doc, item)).flatten();
+                let around = match &pret {
+                    Some(_) => around,
+                    None => (around as i64).max(crate::fxmonde::en_tuiles(crate::fx::portee_hors_feuille(item, cel)) as i64),
+                };
+                // (Une très grande portée : toute la zone autour de l'encre, bornée par ce que la vue compose, plutôt qu'un carré autour de chaque tuile.)
+                if around > 16 {
+                    let (ax0, ay0) = ((tx0 as i64 - around).max(area.x0.div_euclid(t)), (ty0 as i64 - around).max(area.y0.div_euclid(t)));
+                    let (ax1, ay1) = ((tx1 as i64 + around).min((area.x1 - 1).div_euclid(t)), (ty1 as i64 + around).min((area.y1 - 1).div_euclid(t)));
+                    for ty in ay0..=ay1 {
+                        for tx in ax0..=ax1 {
+                            if wanted(tx, ty) {
+                                set.insert((tx as i32, ty as i32));
+                            }
+                        }
+                    }
+                    continue;
+                }
+                let raster = pret.as_ref().map_or(&cel.raster, |c| &c.raster);
+                for id in raster.drawn_ids() {
+                    let (tx, ty) = raster.key_of(id);
                     for (dx, dy) in (-around..=around).flat_map(|dy| (-around..=around).map(move |dx| (dx, dy))) {
                         let (nx, ny) = (tx as i64 + dx, ty as i64 + dy);
                         if wanted(nx, ny) {

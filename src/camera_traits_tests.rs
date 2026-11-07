@@ -314,6 +314,95 @@ fn the_film_frame_shows_what_frame_b_sees() {
     }
 }
 
+/// Le trait d'une scène, avec ou sans un flou posé sur le calque.
+fn scene_floue(flou: bool) -> Option<Scene> {
+    let mut s = scene(false, false, 1.17, 0.5)?;
+    if flou {
+        let mut e = crate::fx::Effect::new(crate::fx::EffectKind::GaussianBlur);
+        e.values = vec![14.0];
+        for l in s.b.app.doc.panels[PLAN].layers.iter_mut() {
+            l.fx.push(e.clone());
+        }
+    }
+    Some(s)
+}
+
+/// À `decale` pixels du milieu du trait, dans le cadre B et au-delà de la feuille : combien de points portent de l'encre, sur combien de points lus.
+fn halo_du_film(s: &Scene, decale: f32) -> (usize, usize) {
+    let doc = &s.b.app.doc;
+    let f = doc.panels[PLAN].frame_count() - 1;
+    let c0 = doc.panel_camera(PLAN, f).corners(doc.frame)[0];
+    let snap = crate::exportrender::snapshot_of(doc, &[PLAN]);
+    // (Le film ne connaît pas l'écran : aucun résultat du cache commun, aucun repli.)
+    let rendu = crate::exportrender::Rendu::new(snap, crate::exportrender::Papier::Feuille, false, Vec::new(), Default::default());
+    let img = rendu.image(PLAN, f).expect("l'image");
+    let [w, h] = doc.frame;
+    let d = (s.feuille.1 - s.feuille.0).normalized();
+    let n = vec2(-d.y, d.x);
+    let (mut vus, mut encre) = (0, 0);
+    for k in 0..(s.feuille.1 - s.feuille.0).length() as i32 {
+        let m = s.feuille.0 + d * k as f32;
+        if m.x <= doc.width as f32 + 40.0 || m.x >= s.feuille.1.x - 40.0 {
+            continue;
+        }
+        let p = m + n * decale - c0.to_vec2();
+        if p.x < 4.0 || p.y < 4.0 || p.x > w as f32 - 4.0 || p.y > h as f32 - 4.0 {
+            continue;
+        }
+        vus += 1;
+        let c = img[p.y as usize * w + p.x as usize];
+        encre += usize::from(c.r() as i32 - c.g() as i32 > 6);
+    }
+    (encre, vus)
+}
+
+/// Le film montre l'effet complet d'un dessin qui passe le bord, au-delà de la feuille : pas le repli sans effet de l'écran.
+#[test]
+fn the_film_shows_the_full_effect_beyond_the_sheet() {
+    let Some(net) = scene_floue(false) else { return println!("pas de carte graphique") };
+    let Some(flou) = scene_floue(true) else { return };
+    let (a, va) = halo_du_film(&net, 14.0);
+    let (b, vb) = halo_du_film(&flou, 14.0);
+    println!("FILM à quatorze pixels du trait, au-delà de la feuille : net {a} sur {va}, flou {b} sur {vb}");
+    assert!(vb > 200 && b * 100 >= vb * 90, "le film montre le flou : {b} sur {vb}");
+    assert!(a * 100 <= va * 5, "sans flou, rien à cette distance : {a} sur {va}");
+}
+
+/// La planche exportée, de même : le flou au-delà de la feuille.
+#[test]
+fn the_board_export_shows_the_full_effect_beyond_the_sheet() {
+    let Some(Scene { mut b, de, a, feuille }) = scene_floue(true) else { return println!("pas de carte graphique") };
+    let xf = b.app.vignettes.xf;
+    let (bd, ba) = (xf.to_board(de), xf.to_board(a));
+    // Points de la planche par pixel de la feuille.
+    let case = (ba - bd).length() / (feuille.1 - feuille.0).length();
+    let opt = crate::planche::Options::default();
+    let img = crate::traits_continus_tests::exporter(&mut b, &opt, "effet-debord");
+    let opt = b.app.planche_options(&opt);
+    let plans: Vec<usize> = (0..b.app.doc.panels.len()).collect();
+    let p = crate::planche::construire(&b.app.doc, &plans, &b.app.layout.board_settings(), &opt, &b.app.doc.annotations);
+    let (s, ..) = crate::planche::dimensions(p.cadre, opt.resolution);
+    let vers = |q: Pos2| pos2((q.x - p.cadre.left()) * s, (q.y - p.cadre.top()) * s);
+    let (i0, i1) = (vers(bd), vers(ba));
+    let d = (i1 - i0).normalized();
+    let n = vec2(-d.y, d.x);
+    let long = (i1 - i0).length() as i32;
+    // Dans la dernière moitié du trait (au-delà de la feuille, dans le cadre B), à quatorze pixels de la feuille : seul le flou y arrive.
+    let decale = 14.0 * case * s;
+    let (mut vus, mut encre) = (0, 0);
+    for k in long / 2..long - (8.0 * s) as i32 {
+        let c = i0 + d * k as f32 + n * decale;
+        if c.x < 0.0 || c.y < 0.0 || c.x as u32 >= img.width() || c.y as u32 >= img.height() {
+            continue;
+        }
+        vus += 1;
+        let v = img.get_pixel(c.x as u32, c.y as u32);
+        encre += usize::from(v[0] as i32 - v[1] as i32 > 2);
+    }
+    println!("PLANCHE à côté du trait, dernière moitié : {encre} sur {vus}, {case} points de la planche par pixel de la feuille, échelle {s}");
+    assert!(vus > 20 && encre * 100 >= vus * 50, "la planche montre le flou : {encre} sur {vus}");
+}
+
 /// La planche exportée : au-delà de la verticale où la feuille finit, le trait est là.
 #[test]
 fn the_board_export_keeps_the_stroke_beyond_the_sheet() {
@@ -366,6 +455,7 @@ fn bande(w: usize, h: usize) -> crate::raster::Raster {
     r
 }
 
+/// Chaque effet garde ce qui dépasse. Loin de ce qui dépasse, la feuille ne bouge pas ; près de lui, elle voit des deux côtés (partie 119).
 #[test]
 fn every_effect_keeps_what_is_beyond_the_sheet_and_leaves_the_sheet_as_it_was() {
     let (w, h) = (640, 320);
@@ -381,10 +471,16 @@ fn every_effect_keeps_what_is_beyond_the_sheet_and_leaves_the_sheet_as_it_was() 
         let out = crate::fx::apply(&r, &steps);
         let seule = crate::fx::apply(&feuille_seule, &steps);
         assert!(out.has_beyond(), "{kind:?} : rien ne reste hors de la feuille");
+        // (Un effet qui lit ses voisins : la plus grande portée des réglages d'origine est d'environ trois tuiles, au-delà la feuille n'a rien à lire de ce qui dépasse.
+        // Un effet pixel à pixel n'a rien à lire : la feuille entière est la même.)
+        let loin = if kind.lit_ses_voisins() { w - 3 * crate::raster::TILE - 16 } else { w };
         for (k, (a, b)) in out.tiles.iter().zip(&seule.tiles).enumerate() {
             let (ox, oy, tw, th) = out.tile_bounds(k);
             for y in 0..th {
                 for x in 0..tw {
+                    if ox + x >= loin {
+                        continue;
+                    }
                     let (pa, pb) = (a.as_ref().map_or(Color32::TRANSPARENT, |t| t[y * crate::raster::TILE + x]), b.as_ref().map_or(Color32::TRANSPARENT, |t| t[y * crate::raster::TILE + x]));
                     assert_eq!(pa, pb, "{kind:?} : la feuille change en ({}, {})", ox + x, oy + y);
                 }
@@ -611,6 +707,47 @@ fn mesure_encoche_a_l_ecran() {
     }
 }
 
+/// Sur la carte graphique, le trait qui passe le bord de la feuille n'a plus de colonne plus claire : le shader du tremblement lit la bordure d'encre (`gpufx::Bordure`).
+/// Et la carte montre les mêmes pixels que le calcul de fond, à l'arrondi près. (La colonne faisait 4,5 % de moins à l'intensité 0,5, 24 % à l'intensité 3.)
+#[test]
+fn the_tremble_on_the_graphics_card_has_no_lighter_column_at_the_edge() {
+    for intensite in [0.5f32, 3.0] {
+        let mut par_voie = Vec::new();
+        for sur_la_carte in [true, false] {
+            let Some(Scene { mut b, feuille, .. }) = scene(false, true, 2.2, 0.1) else { return println!("pas de carte graphique") };
+            b.app.settings.tremblement_defaut.intensite = intensite;
+            au_storyboard(&mut b, PLAN);
+            let Some(g) = &b.app.gpu else { return };
+            if !g.effects_supported() {
+                return println!("pas d'effets sur la carte");
+            }
+            g.set_effects_gpu(sur_la_carte);
+            let w = b.app.doc.width as f32;
+            let t = (w - feuille.0.x) / (feuille.1.x - feuille.0.x);
+            let bord = feuille.0 + (feuille.1 - feuille.0) * t;
+            b.app.view.zoom = 4.0;
+            b.app.view.pan = vec2(0.0, 0.0);
+            let s = ecran_du_storyboard(&b, bord);
+            b.app.view.pan = b.app.canvas_rect.center() - s;
+            b.chauffer(4);
+            for _ in 0..120 {
+                b.image(Vec::new(), 1.0 / 60.0);
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            let img = b.capturer().unwrap();
+            sauver(&img, &format!("bord-{intensite}-{sur_la_carte}"));
+            let c = b.app.canvas_rect.center();
+            let colonne = |x: i32| (-30..=30).map(|y| crate::traits_continus_tests::px(&img, x, c.y as i32 + y)).map(|v| (v[0] - v[1]).max(0)).sum::<i32>();
+            let valeurs: Vec<i32> = (-24..=24).step_by(2).map(|d| colonne(c.x as i32 + d)).collect();
+            println!("COLONNE intensité {intensite} carte {sur_la_carte} : {valeurs:?}");
+            par_voie.push(valeurs);
+        }
+        let ecart = par_voie[0].iter().zip(&par_voie[1]).map(|(a, b)| (a - b).abs() as f32 / (*b).max(1) as f32).fold(0.0, f32::max);
+        println!("COLONNE intensité {intensite} : écart carte / calcul de fond {:.2} %", ecart * 100.0);
+        assert!(ecart < 0.02, "intensité {intensite} : la carte s'écarte de {:.1} % du calcul de fond", ecart * 100.0);
+    }
+}
+
 // ------------------------------------------------------------------------------ le coût
 
 /// Un trait perdu très loin : temps et mémoire de chaque effet. (Mesure.)
@@ -680,6 +817,131 @@ fn captures_la_sequence_du_stylet() {
     let img = b.capturer().unwrap();
     sauver(&img, "seq-3-repos-apres");
     println!("SEQ repos après : trou {}", relever(&img, de, a).trou);
+}
+
+/// À l'écran, l'onde (la pile va alors au calcul de fond) : le trait ne saute pas à la verticale où la feuille finit, une fois l'effet arrivé du fil de fond.
+#[test]
+fn on_screen_a_wave_does_not_break_the_stroke_at_the_edge_of_the_sheet() {
+    use crate::fx::{Effect, EffectKind as K};
+    let Some(Scene { mut b, feuille, .. }) = scene(false, false, 1.17, 0.5) else { return println!("pas de carte graphique") };
+    let mut e = Effect::new(K::Wave);
+    e.values = vec![10.0, 120.0, 30.0];
+    for l in b.app.doc.panels[PLAN].layers.iter_mut() {
+        l.fx.push(e.clone());
+    }
+    au_storyboard(&mut b, PLAN);
+    let w = b.app.doc.width as f32;
+    let t = (w - feuille.0.x) / (feuille.1.x - feuille.0.x);
+    let bord = feuille.0 + (feuille.1 - feuille.0) * t;
+    b.app.view.zoom = 1.0;
+    b.app.view.pan = vec2(0.0, 0.0);
+    let s = ecran_du_storyboard(&b, bord);
+    b.app.view.pan = b.app.canvas_rect.center() - s;
+    b.chauffer(4);
+    let centre = |img: &[u8], x: i32, cy: i32| {
+        let (mut somme, mut pond) = (0.0f32, 0.0f32);
+        for y in cy - 90..=cy + 90 {
+            let v = crate::traits_continus_tests::px(img, x, y);
+            let a = (v[0] - v[1]).max(0) as f32;
+            somme += a;
+            pond += a * y as f32;
+        }
+        (pond / somme.max(1.0), somme)
+    };
+    let debut = std::time::Instant::now();
+    let c = ecran_du_storyboard(&b, bord);
+    let (x, cy) = (c.x.round() as i32, c.y.round() as i32);
+    // (Le saut d'une colonne à l'autre de chaque côté du bord, le trait étant en pente : au plus quelques pixels, d'ici que l'effet arrive du fil de fond.)
+    let frame = b.app.cur_frame;
+    let mut plan = crate::render::panel_plan_at(&b.app.doc, PLAN, frame, Some(b.app.doc.paper));
+    plan.items.retain(|i| !i.fx.is_empty());
+    assert!(!plan.items.is_empty(), "le calque porte l'onde");
+    // Le fil de fond répond, le hors-feuille se refait, l'écran montre le résultat.
+    while !(crate::fx::effets_prets(&b.app.doc, &plan.items[0]) && !b.app.monde.busy()) {
+        assert!(debut.elapsed() < std::time::Duration::from_secs(30), "l'effet arrive du fil de fond");
+        b.image(Vec::new(), 1.0 / 60.0);
+        std::thread::sleep(std::time::Duration::from_millis(15));
+    }
+    for _ in 0..30 {
+        b.image(Vec::new(), 1.0 / 60.0);
+        std::thread::sleep(std::time::Duration::from_millis(15));
+    }
+    // (Un autre essai peut avoir vidé la réserve commune entre-temps : la règle ne se juge qu'avec le résultat là.)
+    let pret = crate::fx::resultat_pret(&b.app.doc, &plan.items[0]).is_some();
+    assert!(!pret || !crate::gpu::gpu_fx_item(&b.app.doc, &plan.items[0]), "un calque qui déborde, avec une onde, le résultat prêt : le calcul de fond");
+    let img = b.capturer().unwrap();
+    sauver(&img, "ecran-onde");
+    let ((a, ea), (q, eq)) = (centre(&img, x - 2, cy), centre(&img, x + 2, cy));
+    assert!(ea > 0.0 && eq > 0.0, "le trait est visible de chaque côté du bord");
+    let saut = (a - q).abs();
+    // Au-delà de la feuille, ce qu'on voit est bien l'onde : le trait à l'écran suit le dessin dérivé, pas le dessin sans effet.
+    let derive = crate::fx::shown(&b.app.doc, &plan.items[0]).expect("le dessin dérivé");
+    let cel = b.app.doc.cels.get(&plan.items[0].cel).expect("le dessin");
+    let centre_de = |r: &crate::raster::Raster, wx: i64, wy: i64| {
+        let (mut somme, mut pond) = (0.0f32, 0.0f32);
+        for y in wy - 90..=wy + 90 {
+            let c = r.get_i(wx, y);
+            somme += c.a() as f32;
+            pond += c.a() as f32 * y as f32;
+        }
+        pond / somme.max(1.0)
+    };
+    let (mut ecart_au_derive, mut ecart_au_dessin) = (0.0f32, 0.0f32);
+    for d in [20i32, 60, 100, 140] {
+        let (wx, wy) = (bord.x as i64 + d as i64, bord.y as i64);
+        let vu = centre(&img, x + d, cy) .0 - cy as f32 + wy as f32;
+        ecart_au_derive = ecart_au_derive.max((vu - centre_de(&derive.raster, wx, wy)).abs());
+        ecart_au_dessin = ecart_au_dessin.max((centre_de(&cel.raster, wx, wy) - centre_de(&derive.raster, wx, wy)).abs());
+    }
+    println!("ONDE À L'ÉCRAN : saut de {saut:.2} pixels au bord de la feuille ; au-delà, {ecart_au_derive:.2} pixels du dessin dérivé, qui s'écarte de {ecart_au_dessin:.2} du dessin sans effet");
+    assert!(saut <= 3.0, "le trait saute de {saut} pixels au bord de la feuille");
+    assert!(ecart_au_dessin > 3.0, "l'onde se voit au-delà de la feuille");
+    assert!(ecart_au_derive <= 2.0, "à l'écran, le trait au-delà de la feuille est celui de l'onde ({ecart_au_derive} pixels d'écart)");
+}
+
+/// Le trait à travers le bord de la feuille, vu de près, avec chaque effet qui s'y cassait (partie 119).
+#[test]
+#[ignore]
+fn captures_effets_au_bord() {
+    use crate::fx::{Effect, EffectKind as K};
+    let effets: [(&str, K, Option<Vec<f32>>); 12] = [
+        ("onde", K::Wave, Some(vec![10.0, 120.0, 30.0])),
+        ("ondulation", K::Ripple, Some(vec![8.0, 60.0, 100.0, 0.0])),
+        ("tourbillon", K::Twirl, Some(vec![90.0, 150.0, 100.0, 50.0])),
+        ("secousse", K::Shake, Some(vec![30.0, 14.0, 2.0, 110.0, 0.0])),
+        ("vignettage", K::Vignette, None),
+        ("aberration", K::Aberration, Some(vec![30.0, 100.0, 0.0])),
+        ("flou", K::GaussianBlur, None),
+        ("mosaique", K::Mosaic, Some(vec![24.0])),
+        ("pointilles", K::Dashes, None),
+        ("ecriture", K::Write, Some(vec![70.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0])),
+        ("poussiere", K::Dust, None),
+        ("onde-du-trait", K::StrokeWave, None),
+    ];
+    for (nom, kind, valeurs) in effets {
+        let Some(Scene { mut b, feuille, .. }) = scene(false, false, 1.17, 0.5) else { return };
+        let mut e = Effect::new(kind);
+        if let Some(v) = valeurs {
+            e.values = v;
+        }
+        for l in b.app.doc.panels[PLAN].layers.iter_mut() {
+            l.fx.push(e.clone());
+        }
+        au_storyboard(&mut b, PLAN);
+        let w = b.app.doc.width as f32;
+        let t = (w - feuille.0.x) / (feuille.1.x - feuille.0.x);
+        let bord = feuille.0 + (feuille.1 - feuille.0) * t;
+        b.app.view.zoom = 1.0;
+        b.app.view.pan = vec2(0.0, 0.0);
+        let s = ecran_du_storyboard(&b, bord);
+        b.app.view.pan = b.app.canvas_rect.center() - s;
+        b.chauffer(4);
+        for _ in 0..150 {
+            b.image(Vec::new(), 1.0 / 60.0);
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        sauver(&b.capturer().unwrap(), &format!("effet-{nom}"));
+    }
 }
 
 #[test]

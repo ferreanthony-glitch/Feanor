@@ -144,18 +144,31 @@ struct Instantane {
 
 impl Instantane {
     /// Figé sur le fil de l'interface : les éléments de la clé, chacun avec le dessin qu'il montre maintenant (effets
-    /// compris, `fx::shown`), comme `composite_world_tile` les prend ; ceux qu'il ne pose que sur la feuille sont laissés.
-    fn of(doc: &Document, key: &WorldKey) -> Instantane {
-        let mut couches = Vec::new();
-        for item in &key.items {
-            let inv = crate::render::inverse_of(doc, item);
-            let Some(cel) = crate::fx::shown(doc, item) else { continue };
-            if inv.is_none() && (cel.raster.width != doc.width || cel.raster.height != doc.height) {
-                continue;
+    /// compris), comme `composite_world_tile` les prend ; ceux qu'il ne pose que sur la feuille sont laissés. **Rien ne se calcule ici** (`fxcache::soft_scope`) :
+    /// un effet qui n'est pas prêt est demandé au fil de fond, le dessin se montre en attendant sans lui. Le second résultat dit si tout était prêt.
+    /// `reunis` : les résultats déjà reçus, qu'une petite réserve a pu lâcher depuis.
+    fn of(doc: &Document, key: &WorldKey, reunis: &[Reuni]) -> (Instantane, bool) {
+        crate::fxcache::soft_scope(|| {
+            let mut couches = Vec::new();
+            for item in &key.items {
+                let inv = crate::render::inverse_of(doc, item);
+                let tenu = reunis.iter().find(|r| r.id == crate::fx::shown_id(item) && r.version == crate::fx::version_du_resultat(doc, item));
+                let montre;
+                let raster = match tenu {
+                    Some(r) => &r.cel.raster,
+                    None => {
+                        let Some(cel) = crate::fx::shown(doc, item) else { continue };
+                        montre = cel;
+                        &montre.raster
+                    }
+                };
+                if inv.is_none() && (raster.width != doc.width || raster.height != doc.height) {
+                    continue;
+                }
+                couches.push(Couche { raster: raster.clone(), inv, opacity: item.opacity, tint: item.tint, blend: item.blend });
             }
-            couches.push(Couche { raster: cel.raster.clone(), inv, opacity: item.opacity, tint: item.tint, blend: item.blend });
-        }
-        Instantane { sheet: (doc.width, doc.height), paper: crate::render::paper_of(key.paper), couches }
+            Instantane { sheet: (doc.width, doc.height), paper: crate::render::paper_of(key.paper), couches }
+        })
     }
 
     /// La tuile du monde `key`, entière (le papier, puis les couches).
@@ -168,6 +181,19 @@ impl Instantane {
         }
         scratch
     }
+}
+
+/// (Essais.) Éteint : le hors-feuille n'attend pas les effets d'une autre image, il la montre tout de suite sans eux (ce que l'essai de la lecture doit voir clignoter).
+#[cfg(test)]
+pub(crate) static GARDER_L_IMAGE_POUR_ESSAI: AtomicBool = AtomicBool::new(true);
+
+/// (Essais.) Le temps que `Instantane::of` prend sur le fil appelant, et le nombre de couches figées.
+#[cfg(test)]
+pub(crate) fn mesure_de_l_instantane(doc: &Document, plan: &Plan) -> (f64, usize) {
+    let key = world_key(doc, plan);
+    let t = Instant::now();
+    let (snap, _) = Instantane::of(doc, &key, &[]);
+    (t.elapsed().as_secs_f64() * 1000.0, snap.couches.len())
 }
 
 /// La tuile du monde `key` composée (`scratch`, entière) telle que la texture la montre : sa part dans la feuille
@@ -227,6 +253,13 @@ impl Drop for Job {
     }
 }
 
+/// Un résultat d'effets reçu du fil de fond.
+struct Reuni {
+    id: crate::document::CelId,
+    version: u64,
+    cel: Arc<crate::document::Cel>,
+}
+
 /// La texture du monde hors de la feuille, et ce qu'il reste à y composer.
 #[derive(Default)]
 pub struct Monde {
@@ -254,6 +287,10 @@ pub struct Monde {
     job: Option<Job>,
     job_outdated: bool,
     since_job: Vec<usize>,
+    /// Ce qui est montré attend des effets que le fil de fond calcule (le dessin sans effet en attendant) : tout se refait à leur arrivée.
+    attend_les_effets: bool,
+    /// Les résultats reçus pour ce qu'il faut montrer : tenus ici jusqu'à ce qu'ils y soient tous, pour qu'une réserve trop petite ne les perde pas l'un après l'autre sans fin.
+    reunis: Vec<Reuni>,
     /// Tuiles composées depuis le début (mesures).
     composed: u64,
     /// Hors-feuilles refaits sur un autre fil depuis le début (mesures, essais).
@@ -387,10 +424,22 @@ impl Monde {
         let fresh = intersect(Area { x0: px0, y0: py0, x1: px1, y1: py1 }, bounds.tile_aligned());
         let fresh_scale = scale_for(fresh);
         let key = world_key(doc, plan);
+        // Des effets attendus sont arrivés : le hors-feuille se refait avec eux, sur l'autre fil.
+        if self.attend_les_effets && self.reunir(doc, &key) {
+            self.attend_les_effets = false;
+            self.job_outdated = true;
+        }
         // La texture couvre-t-elle encore la vue, assez finement ? Sinon : autre zone, tout est à composer (ici, par
         // petits morceaux, comme toujours).
         let geometry_ok = self.texture.is_some() && self.sheet == (doc.width, doc.height) && self.area.is_some_and(|a| inside(a, want)) && fresh_scale >= self.scale;
-        if !geometry_ok {
+        #[cfg(test)]
+        let garder = GARDER_L_IMAGE_POUR_ESSAI.load(Ordering::Relaxed);
+        #[cfg(not(test))]
+        let garder = true;
+        // (Une autre zone pour une image dont les effets ne sont pas là : le dessin d'une autre image de la lecture sort de l'ancienne zone. L'image d'avant reste jusqu'à leur arrivée.)
+        if !geometry_ok && garder && self.sheet == (doc.width, doc.height) && self.texture.is_some() && self.key.as_ref() != Some(&key) && !self.reunir(doc, &key) {
+            self.job_outdated = true;
+        } else if !geometry_ok {
             self.reset_geometry(ctx, fresh, fresh_scale, (doc.width, doc.height));
             self.key = Some(key);
             // Les plus près du centre de la vue d'abord (la dernière sort la première).
@@ -408,14 +457,43 @@ impl Monde {
             self.since_job.extend_from_slice(ids);
         } else if all || stale || self.job_outdated || self.key.as_ref() != Some(&key) {
             // Le contenu a changé (autre plan, réglage d'un calque qui dépasse, tout) : refait sur un autre fil, l'image
-            // d'avant reste à l'écran en attendant.
-            self.start_job(ctx, doc, plan, key);
+            // d'avant reste à l'écran en attendant. Une autre image dont les effets ne sont pas encore là : on garde celle d'avant jusqu'à leur arrivée, plutôt que de
+            // montrer le trait nu puis l'effet, image après image, à la lecture.
+            if !garder || self.reunir(doc, &key) {
+                self.start_job(ctx, doc, plan, key);
+            } else {
+                // (À revoir à la prochaine image : le fil de fond réveille l'écran quand il a fini.)
+                self.job_outdated = true;
+            }
         } else if !ids.is_empty() {
             self.queue_ids(ids);
         }
         self.work(ctx, doc, plan);
+        // (Rien n'attend plus ces résultats : la réserve seule les garde, ou les lâche.)
+        if !self.job_outdated && !self.attend_les_effets && self.pending.is_empty() {
+            self.reunis.clear();
+        }
         let texture = self.texture.as_ref()?;
         Some(Shown { id: texture.id(), area: self.area? })
+    }
+
+    /// Reçoit ce que le fil de fond a fini pour les éléments de `key`, et demande le reste. Vrai si tout y est (ou si la réserve ne peut pas tout tenir et que le repli est tout ce qu'on aura).
+    fn reunir(&mut self, doc: &Document, key: &WorldKey) -> bool {
+        // (Ce qui ne sert plus à cette image est lâché tout de suite.)
+        self.reunis.retain(|r| key.items.iter().any(|i| crate::fx::shown_id(i) == r.id && crate::fx::version_du_resultat(doc, i) == r.version));
+        let mut complet = true;
+        for item in &key.items {
+            let (id, version) = (crate::fx::shown_id(item), crate::fx::version_du_resultat(doc, item));
+            if self.reunis.iter().any(|r| r.id == id && r.version == version) {
+                continue;
+            }
+            match crate::fx::etat_des_effets(doc, item) {
+                crate::fx::EtatDesEffets::Prets(rid, cel) => self.reunis.push(Reuni { id: rid, version, cel }),
+                crate::fx::EtatDesEffets::EnCours => complet = false,
+                crate::fx::EtatDesEffets::SansObjet | crate::fx::EtatDesEffets::Abandonnes => {}
+            }
+        }
+        complet
     }
 
     /// Les tuiles touchées `ids` qui sont hors de la feuille et dans la zone : à composer d'abord.
@@ -478,7 +556,11 @@ impl Monde {
     fn start_job(&mut self, ctx: &egui::Context, doc: &Document, plan: &Plan, key: WorldKey) {
         let Some(area) = self.area else { return };
         let tiles = plan_world_tiles(doc, plan, area);
-        let snap = Instantane::of(doc, &key);
+        let (snap, tout_pret) = Instantane::of(doc, &key, &self.reunis);
+        // (Pas d'attente pour un résultat abandonné : elle se referait sans fin, pour rien.)
+        self.attend_les_effets = !tout_pret && !self.reunir(doc, &key);
+        // (L'instantané tient leurs tuiles : les résultats eux-mêmes partent.)
+        self.reunis.clear();
         let cancel = Arc::new(AtomicBool::new(false));
         let (tx, rx) = channel();
         let (k, n) = (self.scale, tiles.len());
@@ -632,7 +714,9 @@ impl Monde {
         let t = TILE as i64;
         let (ox, oy) = (key.0 as i64 * t, key.1 as i64 * t);
         let mut scratch = vec![Color32::TRANSPARENT; TILE_PIXELS];
-        composite_world_tile(doc, plan, key.0, key.1, &mut scratch, TILE, (ox, oy));
+        // (Sur le fil de l'interface : aucun effet ne s'y calcule, ils se demandent au fil de fond.)
+        let (_, tout_pret) = crate::fxcache::soft_scope(|| composite_world_tile(doc, plan, key.0, key.1, &mut scratch, TILE, (ox, oy)));
+        self.attend_les_effets |= !tout_pret;
         self.composed += 1;
         let px = finish(scratch, key, (doc.width, doc.height), self.scale);
         self.put(key, &px);

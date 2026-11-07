@@ -111,7 +111,7 @@ pub fn threshold(raster: &Raster, level: f32) -> Raster {
 
 /// Le hasard (−1 à 1) du pixel (x, y) de la feuille : le même à chaque fois (le résultat du bruit
 /// ne change pas d'un affichage à l'autre).
-fn noise_at(x: usize, y: usize) -> f32 {
+fn noise_at(x: i64, y: i64) -> f32 {
     let mut h = (x as u32).wrapping_mul(0x9E37_79B1) ^ (y as u32).wrapping_mul(0x85EB_CA77);
     h ^= h >> 15;
     h = h.wrapping_mul(0x2C1B_3C6D);
@@ -123,17 +123,23 @@ fn noise_at(x: usize, y: usize) -> f32 {
 /// 100 %). Sur un dessin réduit `1 << level` fois (aperçu, `fxproxy.rs`) : chaque pixel prend la
 /// moyenne du hasard des pixels de la feuille qu'il couvre, comme l'affichage réduit ferait du
 /// bruit en pleine taille. `level` 0 : le bruit lui-même.
+#[cfg(test)]
 pub fn noise_scaled(raster: &Raster, amount: f32, level: u8) -> Raster {
+    noise_depuis(raster, amount, level, (0, 0))
+}
+
+/// Le bruit d'une image dont le pixel (0, 0) est le point `origine` du monde : le hasard est celui de ce point du monde.
+pub(crate) fn noise_depuis(raster: &Raster, amount: f32, level: u8, origine: (i64, i64)) -> Raster {
     let k = amount / 100.0 * 0.5;
     let f = 1usize << level;
     map_colors(raster, |c, x, y| {
         let n = if f == 1 {
-            noise_at(x, y)
+            noise_at(x as i64 + origine.0, y as i64 + origine.1)
         } else {
             let mut sum = 0.0;
             for j in 0..f {
                 for i in 0..f {
-                    sum += noise_at(x * f + i, y * f + j);
+                    sum += noise_at((x * f + i) as i64, (y * f + j) as i64);
                 }
             }
             sum / (f * f) as f32
@@ -174,17 +180,24 @@ pub fn sharpen(raster: &Raster, gain: f32, radius: f32) -> Raster {
 
 /// Mosaïque : des carrés de `size` pixels (alignés sur la feuille), chacun de la couleur
 /// moyenne de ce qu'il couvre.
+#[cfg(test)]
 pub fn mosaic(raster: &Raster, size: f32) -> Raster {
+    mosaic_depuis(raster, size, (0, 0))
+}
+
+/// La mosaïque d'une image dont le pixel (0, 0) est le point `origine` du monde : les carrés tombent sur la grille du monde, celle de la feuille.
+pub(crate) fn mosaic_depuis(raster: &Raster, size: f32, origine: (i64, i64)) -> Raster {
     let s = size.round().max(1.0) as usize;
     let Some(mut r) = region_of(raster, s) else { return Raster::new(raster.width, raster.height) };
-    // Les carrés tombent sur la grille de la feuille, pas de la zone.
-    let (bx0, by0) = (r.x0 / s * s, r.y0 / s * s);
+    // Les carrés tombent sur la grille de la feuille, pas de la zone (en reculant, au besoin, avant le bord de l'image).
+    let cale = |lo: usize, o: i64| lo as i64 - (lo as i64 + o).rem_euclid(s as i64);
+    let (bx0, by0) = (cale(r.x0, origine.0), cale(r.y0, origine.1));
     let mut by = by0;
-    while by < r.y0 + r.h {
+    while by < (r.y0 + r.h) as i64 {
         let mut bx = bx0;
-        while bx < r.x0 + r.w {
-            let (x0, y0) = (bx.max(r.x0), by.max(r.y0));
-            let (x1, y1) = ((bx + s).min(r.x0 + r.w), (by + s).min(r.y0 + r.h));
+        while bx < (r.x0 + r.w) as i64 {
+            let (x0, y0) = (bx.max(r.x0 as i64) as usize, by.max(r.y0 as i64) as usize);
+            let (x1, y1) = (((bx + s as i64) as usize).min(r.x0 + r.w), ((by + s as i64) as usize).min(r.y0 + r.h));
             let mut acc = [0u32; 4];
             let n = ((x1 - x0) * (y1 - y0)) as u32;
             for y in y0..y1 {
@@ -204,9 +217,9 @@ pub fn mosaic(raster: &Raster, size: f32) -> Raster {
                     }
                 }
             }
-            bx += s;
+            bx += s as i64;
         }
-        by += s;
+        by += s as i64;
     }
     into_raster(&r, raster)
 }

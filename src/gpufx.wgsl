@@ -70,6 +70,49 @@ fn bil_a(x: f32, y: f32) -> vec4<f32> {
     return (top + (bottom - top) * ty) * 255.0;
 }
 
+// Le pixel `sp` de la feuille, ou de la bordure d'encre qui l'entoure, large de m = p.n.y pixels (`gpufx::Bordure`). La texture B range la bordure en quatre rangées de m
+// pixels de haut : le dessus, le dessous, puis la gauche et la droite couchées.
+fn ld_bord(sp: vec2<i32>) -> vec4<f32> {
+    let m = p.n.y;
+    let w = p.s.x;
+    let h = p.s.y;
+    if (sp.x >= 0 && sp.y >= 0 && sp.x < w && sp.y < h) {
+        return lda(sp);
+    }
+    if (sp.x < -m || sp.y < -m || sp.x >= w + m || sp.y >= h + m) {
+        return vec4<f32>(0.0);
+    }
+    var q: vec2<i32>;
+    if (sp.y < 0) {
+        q = vec2<i32>(sp.x + m, sp.y + m);
+    } else if (sp.y >= h) {
+        q = vec2<i32>(sp.x + m, sp.y - h + m);
+    } else if (sp.x < 0) {
+        q = vec2<i32>(sp.y, sp.x + m + 2 * m);
+    } else {
+        q = vec2<i32>(sp.y, sp.x - w + 3 * m);
+    }
+    return textureLoad(tb, q, 0);
+}
+
+// Comme `bil_a`, en lisant aussi la bordure.
+fn bil_bord(x: f32, y: f32) -> vec4<f32> {
+    let fx = x - 0.5;
+    let fy = y - 0.5;
+    let ix = floor(fx);
+    let iy = floor(fy);
+    let tx = fx - ix;
+    let ty = fy - iy;
+    let i = vec2<i32>(i32(ix), i32(iy));
+    let c00 = ld_bord(i);
+    let c10 = ld_bord(i + vec2<i32>(1, 0));
+    let c01 = ld_bord(i + vec2<i32>(0, 1));
+    let c11 = ld_bord(i + vec2<i32>(1, 1));
+    let top = c00 + (c10 - c00) * tx;
+    let bottom = c01 + (c11 - c01) * tx;
+    return (top + (bottom - top) * ty) * 255.0;
+}
+
 fn bil_b(x: f32, y: f32) -> vec4<f32> {
     let fx = x - 0.5;
     let fy = y - 0.5;
@@ -599,7 +642,12 @@ fn fs_boil(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
     let sx = tx * tx * (3.0 - 2.0 * tx);
     let sy = ty * ty * (3.0 - 2.0 * ty);
     let fld = bnode(i, j, seed) * ((1.0 - sx) * (1.0 - sy)) + bnode(i + 1, j, seed) * (sx * (1.0 - sy)) + bnode(i, j + 1, seed) * ((1.0 - sx) * sy) + bnode(i + 1, j + 1, seed) * (sx * sy);
-    var c = bil_a(x + fld.x * amp, y + fld.y * amp);
+    var c: vec4<f32>;
+    if (p.n.y > 0) {
+        c = bil_bord(x + fld.x * amp, y + fld.y * amp);
+    } else {
+        c = bil_a(x + fld.x * amp, y + fld.y * amp);
+    }
     let thick = p.f[0].z;
     if (thick > 0.0 && c.a >= 1.0 && c.a < 254.5) {
         let a = c.a / 255.0;
