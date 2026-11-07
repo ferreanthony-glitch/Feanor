@@ -465,3 +465,19 @@ bornées par une durée ou un nombre). Faute de coupable prouvé, deux garde-fou
 moitié), **nomme les essais que libtest signale longs sans qu'ils aient fini**, arrête le processus d'essai (cargo et son arbre) et compte le
 passage comme échoué : plus de processus oublié, et le nom du coupable dans le résumé (le fichier de sortie est copié dans le dossier
 temporaire sous `shot-verifier-bloque-…`).
+
+## 20. Les essais qui échouent sous charge (2026-11-07, branche `reunion-effets`)
+
+**L'export de la planche pouvait sortir sans l'effet : vrai défaut.** Les tuiles et les marges de l'export se rendaient en mode doux (`soft_scope`), comme les vignettes de l'écran : un effet absent à cet instant de la réserve commune partait sans effet dans le fichier (`the_board_export_shows_the_full_effect_beyond_the_sheet` : 1 point d'encre sur 244). Elles se calculent maintenant sur le fil de l'export, dans une réserve privée (`plancheui::rendre_les_tuiles`). Essai sans aucune attente : `the_tiles_of_the_board_export_are_exact_whatever_the_shared_cache_holds`. Sur l'ancien code, 5 échecs sur 5.
+
+**Le cliché des vignettes perdait les traits.** Un élément à effets du trait se calculait sans ses traits, et ce résultat était rangé sous le numéro que l'écran lit aussi (`thumbs::snapshot`, `a_result_asked_by_a_thumbnail_has_the_stroke_effects_like_the_screen`).
+
+**La cause des essais de repos intermittents, sur `main` aussi.** Un réveil de 13,33 ms se lit 30 ms moins une image (egui retire la durée prévue d'une image). Il vient du gel (`app.rs`) : après un passage sur les caches qui a trouvé quelque chose, le gel demandait une image toutes les 30 ms jusqu'au passage suivant. Deux effets :
+- dans le logiciel, une seconde et demie d'écran refait pour rien à chaque passage fructueux, et **sans fin depuis un onglet caché**, qui ne fait plus de passage, jusqu'au retour dans cet onglet. Corrigé : `Gel::reveil`, une image à l'heure du passage ; un onglet caché n'en attend aucun ;
+- dans les essais, ces caches sont communs au processus : le passage d'une application trouvait le travail des autres essais et la réveillait. Un essai ne fait donc de passage que s'il le demande (`gel::passes_communes_dans_cet_essai`).
+
+**Méthode pour un essai qui attend un fil de fond.** Pas de nombre de tours : `for _ in perf_tests::attente()`, jusqu'à 120 s de temps réel. Un fil qui ne finit pas fait toujours échouer l'essai, seulement plus tard. `se_reposer` et `jusqu_au_repos` ne comptent pas les images où un fil travaille : leur limite parle de ce que l'application demande quand plus rien ne se calcule. Un temps mesuré sur un calcul toujours identique se lit sur le meilleur tour, avec la même borne.
+
+**Mesurer sans biais.** `scripts\verifier.ps1` efface ses journaux : pour comparer deux commits, alterner `cargo test --lib` dans deux worktrees, garder les sorties, noter les processus présents. Attention : `RUSTC_BOOTSTRAP=1` (pour `--report-time`) fait tout recompiler sous cargo ; le passer à l'exécutable d'essai directement.
+
+Les bancs d'essai n'ouvrent plus OpenGL (deux passages entiers tombés dans `nvoglv64.dll`, 0xC0000005 ; le lien avec l'ouverture d'OpenGL est supposé, pas démontré).
