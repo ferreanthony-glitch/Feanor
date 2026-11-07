@@ -665,3 +665,183 @@ fn one_step_of_the_gesture_is_list_work_even_on_a_very_big_plan() {
     println!("DUREE-CLES un pas du geste sur 3 000 images, 12 calques : {pire:?} (le pire de six)");
     assert!(pire < std::time::Duration::from_millis(60), "un pas du geste ne doit pas peser sur le fil de l'interface : {pire:?}");
 }
+
+// ------------------------------------------------------------------------------------ anciens projets : marqueur par réserve
+
+/// Retire d'un JSON tous les champs que l'ancien code n'écrivait pas (clés de position et d'opacité de la réserve, marqueur).
+fn comme_avant(v: &mut serde_json::Value) {
+    match v {
+        serde_json::Value::Object(m) => {
+            for k in ["cles_position", "bord_position", "cles_opacite", "bord_opacite", "cles_v2"] {
+                m.remove(k);
+            }
+            m.values_mut().for_each(comme_avant);
+        }
+        serde_json::Value::Array(a) => a.iter_mut().for_each(comme_avant),
+        _ => {}
+    }
+}
+
+fn dossier_d_essai(nom: &str) -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!("shot-duree-cles-{nom}-{}-{:?}", std::process::id(), std::thread::current().id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}
+
+/// Un projet « d'avant » : début rogné de 12 images, calque animé en position et en opacité, clés vivantes **pas décalées** (l'ancien
+/// rognage ne les touchait pas), `rognages.json` sans les champs d'aujourd'hui. Rouvert par `project::load`.
+fn ancien_projet(nom: &str) -> (Document, std::path::PathBuf) {
+    let mut doc = film();
+    assert_eq!(doc.rogner(0, Rogner::Head(12)), Ok(12));
+    let l = &mut doc.panels[0].layers[0];
+    l.pos_keys = vec![PosKey::new(6, LayerTransform { x: 10.0, ..LayerTransform::default() }), PosKey::new(30, LayerTransform { x: 40.0, ..LayerTransform::default() })];
+    l.opacity_keys = vec![OpKey::new(6, 0.2), OpKey::new(42, 0.9)];
+    let dir = dossier_d_essai(nom);
+    let manifeste = dir.join("A.shot");
+    crate::project::save(&doc, &manifeste, &mut Default::default()).unwrap();
+    let chemin = dir.join(crate::rognage::FILE);
+    let mut v: serde_json::Value = serde_json::from_slice(&std::fs::read(&chemin).unwrap()).unwrap();
+    comme_avant(&mut v);
+    std::fs::write(&chemin, serde_json::to_vec_pretty(&v).unwrap()).unwrap();
+    assert!(!std::fs::read_to_string(&chemin).unwrap().contains("cles_v2"), "le fichier fabriqué est bien un ancien fichier");
+    let relu = crate::project::load(&manifeste).unwrap();
+    assert_eq!(relu.doc.hidden(0), (12, 0));
+    (relu.doc, manifeste)
+}
+
+fn pos_op(doc: &Document) -> (Vec<usize>, Vec<usize>) {
+    let l = &doc.panels[0].layers[0];
+    (l.pos_keys.iter().map(|k| k.frame).collect(), l.opacity_keys.iter().map(|k| k.frame).collect())
+}
+
+#[test]
+fn an_old_reserve_gives_the_position_and_opacity_keys_back_where_they_were_whatever_brings_it_back() {
+    let origine = (vec![6, 30], vec![6, 42]);
+    for (nom, rendre) in [
+        ("allonger le début", Box::new(|d: &mut Document| { d.rogner(0, Rogner::Head(-12)).unwrap(); }) as Box<dyn Fn(&mut Document)>),
+        ("Ctrl sur la fin", Box::new(|d: &mut Document| { d.slide_plan_end(0, 48); })),
+        ("rétablir le contenu rogné", Box::new(|d: &mut Document| { d.rogner(0, Rogner::RestoreAll).unwrap(); })),
+    ] {
+        let (mut doc, _) = ancien_projet("ancien");
+        assert_eq!(pos_op(&doc), origine, "{nom} : rien n'a bougé à la réouverture");
+        rendre(&mut doc);
+        assert_eq!(doc.panels[0].frame_count(), 48, "{nom}");
+        assert_eq!(pos_op(&doc), origine, "{nom} : les clés ne sont pas décalées à tort");
+    }
+}
+
+#[test]
+fn a_new_trim_on_an_old_reserve_shifts_nothing_wrongly_and_the_new_reserve_is_marked() {
+    let (mut doc, manifeste) = ancien_projet("ancien-nouveau");
+    // Rogner encore 6 images sur une réserve ancienne : tout se range sous le nouveau code (marqueur écrit), les clés décalées de 18.
+    assert_eq!(doc.rogner(0, Rogner::Head(6)), Ok(6));
+    assert_eq!(doc.hidden(0), (18, 0));
+    assert_eq!(pos_op(&doc), (vec![0, 12], vec![0, 24]), "clé de bord à 0, clés de 30 et 42 reculées de 18");
+    // Aller-retour enregistrer / rouvrir : le marqueur survit, la restitution est exacte.
+    crate::project::save(&doc, &manifeste, &mut Default::default()).unwrap();
+    assert!(std::fs::read_to_string(manifeste.parent().unwrap().join(crate::rognage::FILE)).unwrap().contains("cles_v2"));
+    let mut doc = crate::project::load(&manifeste).unwrap().doc;
+    assert_eq!(pos_op(&doc), (vec![0, 12], vec![0, 24]));
+    assert_eq!(doc.rogner(0, Rogner::RestoreAll), Ok(18));
+    assert_eq!(pos_op(&doc), (vec![6, 30], vec![6, 42]), "tout revient exactement");
+}
+
+#[test]
+fn an_old_project_reopened_and_saved_again_stays_old_and_stays_right() {
+    let (doc, manifeste) = ancien_projet("ancien-resauve");
+    crate::project::save(&doc, &manifeste, &mut Default::default()).unwrap();
+    let fichier = std::fs::read_to_string(manifeste.parent().unwrap().join(crate::rognage::FILE)).unwrap();
+    assert!(!fichier.contains("cles_v2"), "la réserve ancienne n'est pas faussement marquée au réenregistrement");
+    let mut doc = crate::project::load(&manifeste).unwrap().doc;
+    assert_eq!(doc.rogner(0, Rogner::Head(-12)), Ok(-12));
+    assert_eq!(pos_op(&doc), (vec![6, 30], vec![6, 42]));
+}
+
+// ------------------------------------------------------------------------------------ plusieurs allers-retours Ctrl
+
+#[test]
+fn many_ctrl_round_trips_with_a_head_reserve_accumulate_no_key_and_keep_the_camera_and_its_smoothing() {
+    let mut doc = film();
+    // Une réserve du début qui porte une clé de bord de caméra, d'effet, de position et d'opacité (début rogné au milieu d'un mouvement).
+    assert_eq!(doc.rogner(0, Rogner::Head(8)), Ok(8));
+    let ref0 = (cles(&doc, 0), etat(&doc), doc.panels[0].camera.iter().map(|k| (k.frame, k.cam.x.to_bits(), k.smooth, k.ease_in.to_bits(), k.ease_out.to_bits())).collect::<Vec<_>>());
+    for tour in 0..6 {
+        for d in [5usize, 17, 31] {
+            let n = doc.panels[0].frame_count();
+            doc.slide_plan_end(0, n + d);
+            doc.slide_plan_end(0, n);
+            let now = (cles(&doc, 0), etat(&doc), doc.panels[0].camera.iter().map(|k| (k.frame, k.cam.x.to_bits(), k.smooth, k.ease_in.to_bits(), k.ease_out.to_bits())).collect::<Vec<_>>());
+            assert_eq!(now.0, ref0.0, "tour {tour}, d = {d} : mêmes clés");
+            assert_eq!(now.2, ref0.2, "tour {tour}, d = {d} : même caméra et même lissage");
+        }
+        // Raccourcir de plus que la réserve ne couvre, puis rallonger autant.
+        let n = doc.panels[0].frame_count();
+        doc.slide_plan_end(0, n - 10);
+        doc.slide_plan_end(0, n);
+        assert_eq!(cles(&doc, 0), ref0.0, "tour {tour} : aller-retour par la réserve");
+        assert_eq!(doc.panels[0].camera.iter().map(|k| (k.frame, k.cam.x.to_bits(), k.smooth)).collect::<Vec<_>>(), ref0.2.iter().map(|k| (k.0, k.1, k.2)).collect::<Vec<_>>());
+    }
+    // Le plan est revenu où il était : ce qui avait été rogné au début revient en entier.
+    // (Rallonger au-delà de la réserve puis raccourcir range des images vides dans la réserve : elle peut revenir plus longue que les 8 images
+    // d'origine, les clés avec leur décalage ; ce qui compte ici, c'est qu'aucune clé ne se soit ajoutée.)
+    doc.rogner(0, Rogner::RestoreAll).unwrap();
+    let c = cles(&doc, 0);
+    assert_eq!((c.camera.len(), c.position.len(), c.opacite.len(), c.effet.len(), c.dessin.len()), (4, 2, 2, 2, 4), "aucune clé de plus, aucune de moins");
+    assert_eq!(c.lissage.iter().filter(|l| l.0).count(), 1, "le lissage de la caméra est intact");
+}
+
+// ------------------------------------------------------------------------------------ l'écran pendant le geste Ctrl
+
+/// Combien de pixels de l'image composée par le processeur sont de cette couleur.
+fn compter(buf: &[eframe::egui::Color32], c: [u8; 3]) -> usize {
+    buf.iter().filter(|p| p.r().abs_diff(c[0]) <= 4 && p.g().abs_diff(c[1]) <= 4 && p.b().abs_diff(c[2]) <= 4).count()
+}
+
+#[test]
+fn the_canvas_shows_the_right_drawing_during_a_ctrl_gesture_not_only_after_the_release() {
+    const ROUGE: [u8; 3] = [220, 30, 30];
+    const BLEU: [u8; 3] = [30, 40, 220];
+    let mut doc = film_de(256, 256);
+    // (Ni caméra, ni effet, ni position, ni opacité : le dessin plein la feuille est ce que l'écran montre.)
+    let p = &mut doc.panels[0];
+    p.camera.clear();
+    p.layers[0].fx.clear();
+    p.layers[0].pos_keys.clear();
+    p.layers[0].opacity_keys.clear();
+    p.layers.remove(1);
+    // Le premier dessin du calque est tout rouge, le deuxième tout bleu, les autres verts : l'image 0 montre du rouge.
+    let ids: Vec<CelId> = runs(&doc.panels[0].layers[0]).into_iter().filter_map(|r| r.2).collect();
+    for (k, id) in ids.iter().enumerate() {
+        let c = [ROUGE, BLEU, [30, 200, 40], [200, 200, 30]][k % 4];
+        let cel = doc.cels.get_mut(id).unwrap();
+        for t in 0..16 {
+            cel.raster.tile_mut(t).fill(eframe::egui::Color32::from_rgb(c[0], c[1], c[2]));
+        }
+    }
+    let mut b = banc_taille(doc, false, 1920, 1080);
+    b.app.set_espace(Espace::Animation);
+    (b.app.cur_panel, b.app.cur_layer, b.app.cur_frame) = (0, 0, 0);
+    b.chauffer(10);
+    let (rouge0, bleu0) = (compter(b.app.renderer.composee(), ROUGE), compter(b.app.renderer.composee(), BLEU));
+    assert!(rouge0 > 60_000 && bleu0 == 0, "l'image 0 montre le dessin rouge : {rouge0} rouges, {bleu0} bleus");
+    // Ctrl, bord tiré de 24 images : les 24 premières images sont vides, ni rouge ni bleu à l'image 0, pendant le geste.
+    let t = tenir_timeline(&mut b, 24.0, ctrl());
+    b.chauffer(4);
+    let c = b.app.renderer.composee();
+    assert!(compter(c, ROUGE) == 0 && compter(c, BLEU) == 0, "pendant le geste (Ctrl, plus long) l'image 0 est vide");
+    lacher(&mut b, &t);
+    assert_eq!(compter(b.app.renderer.composee(), ROUGE), 0, "au lâcher aussi");
+    annuler(&mut b);
+    b.chauffer(4);
+    assert_eq!(compter(b.app.renderer.composee(), ROUGE), rouge0, "annulé : le rouge est revenu");
+    // Ctrl, plus court de 12 images : le premier dessin sort, l'image 0 montre le bleu, pendant le geste comme après.
+    let t = tenir_timeline(&mut b, -12.0, ctrl());
+    b.chauffer(4);
+    let c = b.app.renderer.composee();
+    assert!(compter(c, BLEU) > 60_000 && compter(c, ROUGE) == 0, "pendant le geste (Ctrl, plus court) l'image 0 montre le bleu");
+    lacher(&mut b, &t);
+    let c = b.app.renderer.composee();
+    assert!(compter(c, BLEU) > 60_000 && compter(c, ROUGE) == 0);
+    println!("DUREE-CLES écran pendant le geste : {rouge0} pixels rouges avant ; pendant et après conformes");
+}

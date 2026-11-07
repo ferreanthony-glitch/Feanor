@@ -1122,6 +1122,12 @@ impl Renderer {
 
     /// Des pixels ont pu changer partout (dessins, structure du plan) : tout se renvoie à la carte graphique et le
     /// hors-feuille se refait.
+    /// L'image que le processeur a composée à la dernière mise à jour (pour les essais : ce que l'écran montre sans carte graphique).
+    #[cfg(test)]
+    pub(crate) fn composee(&self) -> &[Color32] {
+        &self.buffer
+    }
+
     pub fn invalidate_all(&mut self) {
         self.dirty_all = true;
         self.gpu_all = true;

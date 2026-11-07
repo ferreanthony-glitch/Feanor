@@ -111,6 +111,10 @@ pub struct Piece {
     pub out_point: Option<usize>,
     /// Commentaires sortis (leur plan est celui de la réserve).
     pub comments: Vec<Comment>,
+    /// Cette partie a été rangée par un code qui décale aussi les clés de position et d'opacité du calque (`cut_head`) : à sa
+    /// restitution, les clés vivantes avancent de `len`. Une partie lue d'un ancien `rognages.json` (faux) garde l'ancienne règle :
+    /// ces clés n'avaient pas été décalées au rangement, elles ne le sont pas non plus au retour.
+    pub keys_v2: bool,
 }
 
 /// Le contenu d'un plan qui est hors de lui, au début et à la fin.
@@ -241,7 +245,10 @@ fn op_cut_head(keys: &[OpKey], c: usize, base: f32) -> (Vec<OpKey>, Vec<OpKey>, 
 
 /// Remet les clés de position et d'opacité sorties par le début : la clé du bord s'en va si personne n'y a touché, les clés
 /// restantes avancent de `len` images, les clés sorties reprennent leur place devant.
-fn keys_absorb_head(l: &mut crate::document::Layer, lp: Option<&LayerPiece>, len: usize) {
+fn keys_absorb_head(l: &mut crate::document::Layer, lp: Option<&LayerPiece>, len: usize, v2: bool) {
+    if !v2 {
+        return;
+    }
     if let Some(e) = lp.and_then(|lp| lp.pos_edge) {
         if l.pos_keys.first() == Some(&e) {
             l.pos_keys.remove(0);
@@ -302,7 +309,7 @@ fn fx_absorb_tail(e: &mut Effect, piece: Option<&FxPiece>, n: usize) {
 /// Le plan doit être complet (sa réserve du début reprise avant).
 fn cut_head(p: &mut Panel, comments: &mut Vec<Comment>, c: usize, default: Camera) -> Piece {
     let n = p.frame_count();
-    let mut piece = Piece { len: c, ..Default::default() };
+    let mut piece = Piece { len: c, keys_v2: true, ..Default::default() };
     for l in &mut p.layers {
         if let Some(v) = l.video.as_mut() {
             v.start -= c as i64;
@@ -424,6 +431,7 @@ fn absorb_head(p: &mut Panel, comments: &mut Vec<Comment>, piece: Piece) {
     if len == 0 {
         return;
     }
+    let keys_v2 = piece.keys_v2;
     let n = p.frame_count();
     for l in &mut p.layers {
         if let Some(v) = l.video.as_mut() {
@@ -452,7 +460,7 @@ fn absorb_head(p: &mut Panel, comments: &mut Vec<Comment>, piece: Piece) {
         for (i, e) in l.fx.iter_mut().enumerate() {
             fx_absorb_head(e, lp.and_then(|lp| lp.fx.get(i)), len);
         }
-        keys_absorb_head(l, lp, len);
+        keys_absorb_head(l, lp, len, keys_v2);
         l.trim();
     }
     let mut live = std::mem::take(&mut p.camera);
@@ -1047,6 +1055,10 @@ mod file {
         pub sortie: Option<usize>,
         #[serde(default)]
         pub commentaires: Vec<Comment>,
+        /// Marqueur : la partie a été écrite par un code qui range aussi les clés de position et d'opacité (absent des anciens
+        /// fichiers : faux, ancienne règle).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        pub cles_v2: bool,
     }
 
     #[derive(Serialize, Deserialize, Default)]
@@ -1138,6 +1150,7 @@ fn piece_file(piece: &Piece, panel: &Panel) -> file::PieceFile {
         entree: piece.in_point,
         sortie: piece.out_point,
         commentaires: piece.comments.clone(),
+        cles_v2: piece.keys_v2,
     }
 }
 
@@ -1260,6 +1273,7 @@ fn piece_of(f: file::PieceFile, panel: &Panel, missing: &std::collections::BTree
         in_point: f.entree,
         out_point: f.sortie,
         comments: f.commentaires.into_iter().map(|c| Comment { panel: panel.id, ..c }).collect(),
+        keys_v2: f.cles_v2,
     }
 }
 
