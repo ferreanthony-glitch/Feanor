@@ -8386,7 +8386,6 @@ Le film et la planche calculent l'effet complet, jamais le repli de l'écran. Fi
 8. Gomme tout ce qui dépasse, puis dessine : même confort que sur un calque qui n'a jamais débordé.
 9. Lis un plan animé dont les dessins dépassent, avec un flou : hors de la feuille, pas de clignotement entre le trait nu et le trait flou. Dis-moi si le retard sur la feuille se voit.
 10. Dessine, enregistre, rouvre, exporte (film, images, planche) : même trait, effet complet.
----------------------------------------------------------------------------------------------------
 
 ## 120. Le trait qui traverse une case qui ne pouvait pas le recevoir (2026-11-07, branche `traits-caches`)
 
