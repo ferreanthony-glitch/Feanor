@@ -5,6 +5,8 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-07
 
+- Fusion dans main (9819707) à la demande d'Anthony : le bouton du stylet est le clic droit, le stylet retourné prend la Gomme (partie 114,
+  branche `stylet-branche`). `feanor.exe` reconstruit. Reste son essai à la tablette ; l'inclinaison attend.
 - Le stylet branché (partie 114, branche `stylet-branche`) : d'après son relevé (bouton vu pointe posée, gomme vue, et « clic droit : 0 »
   côté FEANOR, winit jetant le bouton), le bouton du stylet devient le clic droit (réglages de l'outil, anneau) et le stylet retourné prend
   la Gomme. Réglage dans Préférences > Dessin. L'inclinaison attend.
