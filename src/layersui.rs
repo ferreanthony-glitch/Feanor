@@ -200,6 +200,10 @@ impl App {
 
     pub(crate) fn layers_panel(&mut self, ui: &mut egui::Ui) {
         use egui_phosphor::regular as ph;
+        // Tout le film est écarté : le plan vide qui le tient n'a pas de calque à montrer (`planannule.rs`).
+        if self.panneau_film_vide(ui) {
+            return;
+        }
         // Un clic dans le panneau lui donne la main : après une copie d'effets, Ctrl+V les colle sur le
         // calque cliqué (`fxcopie.rs`).
         if ui.input(|i| i.pointer.any_pressed()) && ui.rect_contains_pointer(ui.clip_rect()) {

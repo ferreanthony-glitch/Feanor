@@ -248,6 +248,8 @@ pub(crate) struct Vignettes {
     /// le trait soit réparti (pas de trou d'une image d'écran au lâcher).
     pub suivi: Option<crate::horschamp::Suivi>,
     pub fini: Option<crate::horschamp::Fini>,
+    /// La case dont le refus vient d'être dit pendant le trait en cours (`horschamp_prevenir`) : une fois par case.
+    pub refus_dit: Option<u64>,
     pub debord_garde: Option<crate::debord::Debord>,
     pub debord_tenu: Option<crate::debord::Tenu>,
     /// Le cadrage d'ouverture : la taille de la vue pour laquelle il a été calculé, son zoom, son décalage (une fois rangé), et s'il vient d'être
@@ -335,6 +337,7 @@ impl Default for Vignettes {
             barre_basse: Rect::NOTHING,
             suivi: None,
             fini: None,
+            refus_dit: None,
             debord_garde: None,
             debord_tenu: None,
             ouverture_suivi: None,
@@ -828,6 +831,14 @@ impl App {
             self.commit_card_note();
             self.pile_epingler(plan);
             self.vignettes.press = Press::Version;
+            return false;
+        }
+        // La gomme sur une part de trait restée par-dessus une case (partie 120) : elle l'efface, elle n'agit pas dans la case, le dessin du plan n'y est pour rien.
+        if self.tool == Tool::Eraser && !m.shift && !m.ctrl && !m.command && self.doc.annotations.touche_dessus(layout, p, self.note_eraser_radius(xf.zoom)) {
+            self.commit_note_text(layout);
+            self.commit_card_note();
+            self.board_drag = Some(BoardDrag::Erase { recorded: false });
+            self.vignettes.press = Press::Dead;
             return false;
         }
         // Le numéro d'un plan (annuler, rétablir : au lâcher d'un clic), et une case annulée (on n'y dessine pas) : `planannuleui.rs`.
@@ -1605,7 +1616,7 @@ impl App {
         // Les cases annulées, sous le dessin hors des cases : un trait qui les traverse reste visible (`planannuleui.rs`).
         self.peindre_cases_annulees(ui, &painter, view, xf, &layout, deadline);
         // Le dessin hors des cases, sous les cases (ce qui déborde dans une case ne la recouvre pas) : sur la planche, enregistré, dans aucun plan.
-        self.hors_cadres_peindre(&painter, view, xf, &layout);
+        self.hors_cadres_peindre(&painter, view, xf, &layout, false);
         // Les tuiles des empreintes d'abord (leur rectangle déborde de leur enveloppe : les cases qui s'y trouvent se peignent par-dessus).
         // Le menu du clic droit de la case courante se montre pendant qu'on peint les tuiles et les cases : « Réunir avec le plan
         // précédent », « Supprimer »… y changent le film, et la mise en page de cette image ne vaut plus. On s'arrête là, l'image
@@ -1639,6 +1650,9 @@ impl App {
             return;
         }
 
+        // Ce qui recouvre une case qui ne pouvait pas le recevoir : par-dessus les images (partie 120).
+        self.hors_cadres_peindre(&painter, view, xf, &layout, true);
+        self.horschamp_prevenir(&layout);
         self.peindre_numeros_annules(&painter, view, xf, &layout, &numeros, &mut marges);
         // Les titres des séquences, au-dessus de leur première rangée.
         self.titres_peindre(&painter, view, xf, &layout);

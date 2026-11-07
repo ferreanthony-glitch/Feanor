@@ -119,6 +119,11 @@ impl App {
     /// Refuse (avec un message) ce qui changerait les dessins, les expositions ou les calques
     /// des plans quand le storyboard est verrouillé.
     pub(crate) fn content_refuses(&mut self) -> bool {
+        // Tout le film est écarté : le plan vide qui le tient ne reçoit aucun dessin, aucune image, aucun calque (`planannule.rs`, partie 120).
+        if self.doc.film_vide() {
+            self.status = crate::planannuleui::REFUS_DESSIN.into();
+            return true;
+        }
         if self.doc.storyboard_locked {
             self.status = CONTENT_LOCKED.into();
             return true;
