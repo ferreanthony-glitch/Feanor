@@ -359,6 +359,14 @@ impl EffectKind {
         )
     }
 
+    /// L'effet ne touche que les tuiles dessinées : son coût ne dépend pas du rectangle qui les contient.
+    fn par_tuile(self) -> bool {
+        matches!(
+            self,
+            EffectKind::Boil | EffectKind::BrightnessContrast | EffectKind::Levels | EffectKind::HueSaturation | EffectKind::BlackWhite | EffectKind::Invert | EffectKind::Posterize | EffectKind::Threshold
+        )
+    }
+
     /// L'effet n'a de sens que sur un calque vectoriel (le tremblement du trait et les effets du trait qui
     /// lisent les traits). Le liseré, l'encre qui bave et le trait sec marchent aussi sur un bitmap.
     pub fn vector_only(self) -> bool {
@@ -1096,8 +1104,9 @@ pub fn apply_with(raster: &Raster, vector: Option<&crate::vector::VectorDrawing>
 
 /// Marge autour de ce qui est dessiné hors de la feuille, et bande de la feuille lue le long de son bord (en tuiles) : ce qu'un effet peut étaler ou aller lire.
 const MARGE_MONDE: i32 = 4;
-/// Au-delà de ces pixels, le dessin hors de la feuille est gardé sans ses effets : rien n'est jamais retiré.
-const MONDE_MAX_PIXELS: usize = 1 << 27;
+/// Au-delà de ces pixels, le dessin hors de la feuille est gardé sans les effets qui lisent tout leur rectangle (flou, lueur…) : un point perdu loin de la feuille
+/// leur coûtait 4 à 5 octets par pixel (507 Mo et 363 ms à 11 000 pixels de là). Rien n'est jamais retiré. Le tremblement et les réglages de couleur vont tuile par tuile : aucune borne.
+const MONDE_DENSE_PIXELS: usize = 1 << 25;
 
 /// Les effets ne connaissent que la feuille (`Raster::tiles`) : **ce qui est dessiné au-delà disparaissait de l'image dérivée**, et un calque à effets
 /// (le tremblement par défaut, sur tout calque vectoriel) se voyait coupé net au bord de la feuille, au repos, partout où l'image dérivée sert : case,
@@ -1120,15 +1129,21 @@ fn effets_hors_de_la_feuille(out: &mut Raster, base: &Raster, steps: &[&FxStep])
             image.tiles[(ty - oy) as usize * nx + (tx - ox) as usize] = base.slot(id).cloned();
         }
     }
-    let dans_la_toile: Vec<&&FxStep> = steps.iter().filter(|s| s.kind.suit_la_toile()).collect();
-    if image.width.saturating_mul(image.height) <= MONDE_MAX_PIXELS {
-        for s in dans_la_toile {
-            image = un_effet(&image, s, 0, origine);
-        }
+    let assez_petite = image.width.saturating_mul(image.height) <= MONDE_DENSE_PIXELS;
+    for s in steps.iter().filter(|s| s.kind.suit_la_toile() && (assez_petite || s.kind.par_tuile())) {
+        image = un_effet(&image, s, 0, origine);
     }
+    // Le tremblement seul de la feuille ne lit pas au-delà d'elle : à son bord, le trait aurait une encoche. Les tuiles du bord viennent donc d'ici, qui
+    // voit des deux côtés, avec le même champ (le reste de la feuille lui est identique). Seulement pour un dessin qui déborde.
+    let tremble_seul = matches!(steps, [s] if s.kind == EffectKind::Boil);
+    let au_bord = |tx: i32, ty: i32| tx == 0 || ty == 0 || tx == cols - 1 || ty == rows - 1;
     for (k, tile) in image.tiles.into_iter().enumerate() {
-        let Some(tile) = tile else { continue };
         let (tx, ty) = (ox + (k % nx) as i32, oy + (k / nx) as i32);
+        if tremble_seul && out.in_window(tx, ty) && au_bord(tx, ty) {
+            out.replace_slot(out.id_of(tx, ty), tile);
+            continue;
+        }
+        let Some(tile) = tile else { continue };
         // (Dans la feuille, le calcul de la feuille reste : seul ce qui dépasse d'une tuile de bord est pris.)
         out.absorb_beyond(tx, ty, tile);
     }
@@ -1370,8 +1385,10 @@ pub(crate) fn display_with<'a>(doc: &'a Document, item: &crate::render::PlanItem
     // ferait disparaître le trait qu'on vient de poser ; il montre alors le dessin tel quel.
     // L'autre variante du même dessin, elle, est un bon remplaçant.)
     let boil = item.fx.iter().any(|s| s.kind.vector_only() || s.kind.vector_stage());
+    // (Un aperçu réduit n'a rien hors de la feuille : il ne remplace pas un dessin qui en a, le trait y serait coupé, partie 118.)
+    let sans_debord = |c: &Cel| c.raster.width != src.raster.width && !src.raster.outer.is_empty();
     Some(match crate::fxcache::fallback(item.cel) {
-        Some((last, cel)) if !boil || cel.version == src.version => Display { cel: Shown::Fx(cel), id: last, ready: false },
+        Some((last, cel)) if (!boil || cel.version == src.version) && !sans_debord(&cel) => Display { cel: Shown::Fx(cel), id: last, ready: false },
         // Un remplissage qui n'a jamais été calculé ne montre rien (surtout pas ses griffonnages, des taches de couleur).
         _ if item.ctg.is_some() => Display { cel: Shown::Fx(cel_vide(src.raster.width, src.raster.height)), id: display_id(item, level), ready: false },
         _ => Display { cel: Shown::Plain(src), id: item.cel, ready: false },

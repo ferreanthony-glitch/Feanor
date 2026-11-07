@@ -392,9 +392,9 @@ pub(crate) fn octets_en_memoire() -> (usize, usize, usize, usize) {
     (vus.len(), octets, sources, oct_sources)
 }
 
-/// Octets de pixels d'un dessin (les tuiles dessinées seulement).
+/// Octets de pixels d'un dessin (les tuiles dessinées seulement, hors de la feuille comprises : un dérivé garde ce qui la dépasse, partie 118).
 pub(crate) fn cel_bytes(c: &Cel) -> usize {
-    c.raster.tiles.iter().flatten().count() * TILE_PIXELS * 4
+    (c.raster.tiles.iter().flatten().count() + c.raster.outer.len()) * TILE_PIXELS * 4
 }
 
 /// À chaque image d'écran : fait avancer l'horloge des demandes, et garde de quoi redessiner
