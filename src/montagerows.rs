@@ -360,6 +360,8 @@ impl App {
         let cam = lane(rows.camera_top(), CAM_H);
         painter.rect_filled(cam, 0.0, theme::rangee_sombre());
         let cam_vues = self.cle_vue(crate::legendecles::Sorte::Camera);
+        // La poignée de lissage survolée : (plan, (rang de la clé, côté)).
+        let hover = painter.ctx().input(|i| i.pointer.hover_pos()).and_then(|p| self.montage_ease_at(p, top, blocks, ppf, rows)).map(|(pi, k, c)| (pi, (k, c)));
         for (i, b) in blocks.iter().enumerate() {
             // (Cachées par le filtre de la légende : la piste reste, sans losanges.)
             let keys: &[crate::camera::CameraKey] = if cam_vues { &self.doc.panels[i].camera } else { &[] };
@@ -374,6 +376,13 @@ impl App {
                     painter.rect_filled(bar, 1.0, cam_color().gamma_multiply(0.5));
                 }
             }
+            // Les poignées de lissage (lissage.rs), sous les losanges.
+            let hot = match self.ease_drag.as_ref() {
+                Some(d) if d.panel == self.doc.panels[i].id => keys.iter().position(|k| k.frame == d.frame).map(|k| (k, d.cote)),
+                Some(_) => None,
+                None => hover.filter(|(p, _)| *p == i).map(|(_, h)| h),
+            };
+            crate::lissage::peindre(painter, keys, y, &|f| x0 + f as f32 * ppf + ppf * 0.5, ppf, cam_color(), theme::rangee_sombre(), hot);
             for key in keys.iter() {
                 let c = pos2(x0 + key.frame as f32 * ppf + ppf * 0.5, y);
                 if c.x < painter.clip_rect().left() - 8.0 || c.x > painter.clip_rect().right() + 8.0 {
@@ -480,6 +489,19 @@ impl App {
 
     /// Clé de caméra sous le point `p` dans la piste Caméra : (panneau, clé). `top` : haut de la
     /// bande ; `blocks` : les panneaux à l'écran.
+    /// La poignée de lissage de la caméra sous p : (plan, rang de la clé, côté). La clé passe avant.
+    pub(crate) fn montage_ease_at(&self, p: Pos2, top: f32, blocks: &[Rect], ppf: f32, rows: &Rows) -> Option<(usize, usize, crate::lissage::Cote)> {
+        let y = p.y - top;
+        if !self.cle_vue(crate::legendecles::Sorte::Camera) || y < rows.camera_top() || y > rows.camera_top() + CAM_H {
+            return None;
+        }
+        let tol = (ppf * 0.5).max(5.0);
+        blocks.iter().enumerate().find_map(|(i, b)| {
+            let x0 = b.left() - 1.0;
+            crate::lissage::sous_pointeur(&self.doc.panels[i].camera, p.x, &|f| x0 + f as f32 * ppf + ppf * 0.5, ppf, tol).map(|(k, c)| (i, k, c))
+        })
+    }
+
     pub(crate) fn montage_camera_key_at(&self, p: Pos2, top: f32, blocks: &[Rect], ppf: f32, rows: &Rows) -> Option<(usize, usize)> {
         let y = p.y - top;
         // (Cachées par le filtre de la légende, `legendecles.rs` : ni dessinées ni saisies.)

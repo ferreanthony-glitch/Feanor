@@ -179,6 +179,7 @@ etat_projet! {
     key_drag_delta: isize = 0,
     key_drag_mode: crate::handles::KeyMove = crate::handles::KeyMove::Ripple,
     cam_keys_drag: Option<crate::camkeys::CamKeysDrag> = None,
+    ease_drag: Option<crate::lissage::EaseDrag> = None,
     cam_rect: Option<crate::camkeys::CamRect> = None,
     fx_keys_drag: Option<crate::fxkeys::FxKeysDrag> = None,
     ctrl_lasso: Option<crate::springtools::CtrlLasso> = None,

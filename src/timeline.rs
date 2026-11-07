@@ -258,6 +258,12 @@ impl App {
                     Stroke::new(2.0_f32, cam_key().gamma_multiply(0.45)),
                 );
             }
+            // Les poignées de lissage (lissage.rs) : petits ronds creux, sous les losanges.
+            let ease_hot = match self.ease_drag.as_ref() {
+                Some(d) => keys.iter().position(|k| k.frame == d.frame).map(|i| (i, d.cote)),
+                None => resp.hover_pos().filter(|p| row.contains(*p)).and_then(|p| crate::lissage::sous_pointeur(keys, p.x, &cx, cell, cell * 0.5 + 2.0)),
+            };
+            crate::lissage::peindre(&painter, keys, row.center().y, &cx, cell, cam_key(), theme::rangee_sombre(), ease_hot);
             for k in keys.iter() {
                 let c = pos2(cx(k.frame), row.center().y);
                 if c.x < painter.clip_rect().left() - 8.0 || c.x > painter.clip_rect().right() + 8.0 {
@@ -266,12 +272,7 @@ impl App {
                 // Une clé choisie (ou que l'on fait glisser) : plus grande, cerclée du contour du thème.
                 let chosen = self.cam_key_chosen(self.cur_panel, k.frame);
                 let plain = Stroke::new(1.0_f32, Color32::from_black_alpha(140));
-                if k.smooth {
-                    let outline = if chosen { Stroke::new(2.0_f32, theme::contour()) } else { plain };
-                    painter.circle(c, if chosen { 6.0 } else { 4.5 }, cam_key(), outline);
-                } else {
-                    self.paint_cam_diamond(&painter, c, chosen, cam_key(), 5.0, plain);
-                }
+                self.paint_cam_diamond(&painter, c, chosen, cam_key(), 5.0, plain);
             }
         }
 
@@ -653,6 +654,10 @@ impl App {
             (cam_row.contains(p) && app.cle_vue(crate::legendecles::Sorte::Camera)).then(|| crate::camtools::camera_key_at(&app.panel().camera, p.x, key_x, cell * 0.5 + 2.0)).flatten()
         };
         let cam_frame_under = |app: &App, p: Pos2| key_under(app, p).and_then(|k| app.panel().camera.get(k).map(|k| k.frame));
+        // La poignée de lissage sous le point p (la clé passe avant) : (rang de la clé, côté).
+        let ease_under = |app: &App, p: Pos2| {
+            (cam_row.contains(p) && app.cle_vue(crate::legendecles::Sorte::Camera)).then(|| crate::lissage::sous_pointeur(&app.panel().camera, p.x, &key_x, cell, cell * 0.5 + 2.0)).flatten()
+        };
 
         // Clic droit sur une case de calque : elle est visée (sauf dans le choix), puis le menu
         // des rôles et des images. Ailleurs (passe interface) : la règle, une clé d'effet, la
@@ -859,13 +864,19 @@ impl App {
             let hit = origin.and_then(|p| cam_frame_under(self, p));
             // Un geste qui part d'un espace vide de la rangée Caméra (hors poignée : la fin du
             // plan) trace un rectangle de choix ; ailleurs, il lâche le choix des clés.
+            let ease_hit = origin.filter(|_| hit.is_none() && !in_notes && !comment_busy).and_then(|p| ease_under(self, p));
             let rect_from = origin
-                .filter(|p| hit.is_none() && cam_row.contains(*p) && !in_notes && !comment_busy)
+                .filter(|p| hit.is_none() && ease_hit.is_none() && cam_row.contains(*p) && !in_notes && !comment_busy)
                 .filter(|p| self.timeline_handle_at(*p, r, cell, &rows, grid_top).is_none());
-            if hit.is_none() && rect_from.is_none() {
+            if hit.is_none() && rect_from.is_none() && ease_hit.is_none() {
                 self.clear_cam_keys();
             }
-            if let (Some(f), Some(p)) = (hit, origin) {
+            if let Some((i, cote)) = ease_hit {
+                // Une poignée de lissage (lissage.rs) : elle règle l'adouci de sa clé, sans toucher au choix.
+                if let Some(f) = self.panel().camera.get(i).map(|k| k.frame) {
+                    self.begin_ease_drag(self.cur_panel, f, cote);
+                }
+            } else if let (Some(f), Some(p)) = (hit, origin) {
                 let grab = self.doc.panel_start(self.cur_panel) + ((p.x - r.left()) / cell).floor().max(0.0) as usize;
                 self.begin_cam_keys_drag(self.cur_panel, f, grab);
             } else if let Some(p) = rect_from {
@@ -891,8 +902,17 @@ impl App {
             }
         }
         // Tant qu'on tient une clé, la tête de lecture ne bouge pas.
-        let holding_key = self.cam_keys_drag.is_some();
-        if holding_key {
+        let holding_ease = self.ease_drag.is_some();
+        let holding_key = self.cam_keys_drag.is_some() || holding_ease;
+        if holding_ease {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+            if let (Some(p), Some((_, f))) = (resp.interact_pointer_pos().filter(|_| resp.dragged()), self.ease_drag_target()) {
+                self.drag_ease(p.x, key_x(f), cell);
+            }
+            if resp.drag_stopped() || !ui.input(|i| i.pointer.any_down()) {
+                self.end_ease_drag();
+            }
+        } else if holding_key {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
             if let Some(p) = resp.interact_pointer_pos().filter(|_| resp.dragged()) {
                 let at = self.doc.panel_start(self.cur_panel) + ((p.x - r.left()) / cell).floor().max(0.0) as usize;
@@ -903,6 +923,8 @@ impl App {
             }
         } else if resp.hover_pos().is_some_and(|p| key_under(self, p).is_some()) {
             ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+        } else if resp.hover_pos().is_some_and(|p| ease_under(self, p).is_some()) {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
         }
 
         // Poignées (passe interface, `handles.rs`) : marques, signets, entrée et sortie dans la
@@ -1134,6 +1156,8 @@ impl App {
                         self.click_cam_key(self.cur_panel, f, m.command, m.shift);
                         cam_clicked = true;
                     }
+                    // (Un clic sur une poignée de lissage ne fait rien : seul son glisser règle.)
+                    None if ease_under(self, p).is_some() => cam_clicked = true,
                     None => self.clear_cam_keys(),
                 }
             }
