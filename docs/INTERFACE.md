@@ -8247,3 +8247,85 @@ La feuille fait deux fois le cadre : A étant centré, son bord droit est à 1,5
 4. Enregistre, rouvre : même image. Les anciens traits coupés sont revenus d'eux-mêmes.
 5. Export vidéo, images, planche : le cadre B montre le trait.
 6. Dis-moi si le tremblement te paraît continu à la verticale où finit la feuille. Le stylet réel n'a pas été essayé.
+
+## 119. L'outil Trajectoire : le chemin et ses marques posent les clés de mouvement (2026-11-07, branche `trajectoire`)
+
+Anthony : « Lié à un calque, un outil spécial permet de dessiner une trajectoire et un timing qui ensuite pose des clés de mouvement. La
+ligne principale est la trajectoire, les traits qui la découpent sont les clés de spacing, comme en animation. Ce trait dessiné disparaît quand
+on sélectionne un autre outil, mais réapparaît quand on le reprend. Il est ajustable en direct et singe les mêmes comportements qu'un crayon
+classique, avec possibilité de sélection par le lasso, étirement, déplacement… » Son croquis : une ligne, des marques serrées au départ, espacées
+au milieu, serrées à l'arrivée, une flèche au bout. Code : `trajectoire.rs` (le modèle, sans écran), `trajectoireui.rs` (l'outil, la peinture,
+les réglages) ; essais `trajectoire_tests.rs` (8) et `trajectoireui_tests.rs` (8). **Format de projet 49** : `trajectoire` d'un calque.
+
+### Ce que ça fait
+
+- **L'outil Trajectoire** (barre de gauche, sa case après Transformer ; action `outil.trajectoire`, sans touche d'origine ; icône de flèche qui
+  serpente). Il agit sur le **calque courant**, dans le Storyboard et l'Animation (pas dans les Vignettes, qui gardent leurs quatre outils).
+- **Un trait sur la feuille trace le chemin.** Le calque suit ce chemin **sur la durée du plan**, en partant de **là où il est** : le déplacement
+  est relatif au départ du trait (on part le trait du personnage, il ne saute pas). Une clé de position par image est posée (`Layer::pos_keys`,
+  partie des clés de position de l'outil Transformer) : entre deux marques le calque va à vitesse constante **le long de la courbe**, pas de
+  la corde. La pose du calque à l'image 0 (échelle, rotation…) est gardée sur tout le chemin.
+- **Un petit trait en travers du chemin pose une marque** (court devant le chemin — moins de la moitié de sa longueur — et qui le croise, ou le
+  frôle à moins de 6 pixels de la feuille). Les marques partagent le temps en parts égales, comme sur une feuille de timing : **serrées, le
+  calque va lentement ; espacées, il va vite**. Les bouts du chemin sont deux jalons de plus. Avec son croquis : départ lent, milieu vite,
+  arrivée lente.
+- **Le temps entre deux marques** (panneau Réglages, fenêtre du clic droit) : d'origine, **la durée du plan partagée** entre les marques
+  (huit marques sur 3 secondes : une clé toutes les 9 images) ; ou **un nombre d'images par marque** (1 à 48), pour travailler comme en
+  animation : le chemin dure alors `intervalles × N` images, puis le calque reste au bout. Le choix fait sur une trajectoire est proposé à la
+  suivante.
+- **Retoucher** : glisser une **marque** le long du chemin la déplace (bornée entre ses voisines) ; la tirer **loin du chemin** (40 pixels d'écran)
+  l'**arrache** : elle est retirée au lâcher. Glisser le **chemin** (hors d'une marque) le déplace en bloc : le déplacement étant relatif, les
+  clés ne changent pas. Un **trait long** retrace le chemin : les marques restent, à leurs fractions. Les clés suivent **pendant le geste**, à
+  chaque image d'écran, sans rejeu d'aucun dessin (seuls les paramètres du plan à composer changent) ; **Échap** abandonne le geste et remet
+  tout. **Une étape d'annulation par geste**, nommée : « Trajectoire », « Marque de trajectoire », « Glisser une marque », « Retirer une marque »,
+  « Déplacer la trajectoire », « Retracer la trajectoire », « Pas des marques », « Retirer les marques », « Détacher la trajectoire », « Effacer la
+  trajectoire ».
+- **Ce qu'on voit, avec l'outil seulement** : le chemin dans la teinte des poignées du calque, une barre au départ, une pointe de flèche à
+  l'arrivée, les marques en travers (la marque survolée ou tenue en blanc), au-dessus de chaque jalon **le numéro de l'image** où le calque y
+  passe, un point là où le calque est à l'image courante ; et, posée dans l'image comme une pelure d'oignon, **une silhouette pâle du calque
+  à chaque jalon** (sauf l'image courante) : l'espacement se lit sur le vrai dessin. Un autre outil : plus rien ne se voit ; le chemin est
+  **enregistré avec le calque** (format 49) et revient avec l'outil. Le curseur : la main sur une marque, la croix fléchée sur le chemin, la
+  croix ailleurs. La ligne sous le dessin dit les gestes ; la carte F1 aussi.
+- **Dans la timeline et le montage**, un calque à trajectoire ne montre que les losanges de ses **jalons**, reliés d'un trait, pas sa clé par
+  image.
+- **Détacher.** Retoucher une clé **à la main** (poser, supprimer, lisser, glisser une clé dans la timeline ou le montage ; déplacer un calque
+  animé avec Transformer) détache la trajectoire : les clés restent telles quelles, le chemin s'en va, la ligne d'état le dit. Les boutons du
+  panneau : **Détacher** (garder les clés), **Effacer** (le chemin et ses clés s'en vont, le calque garde sa pose du départ), **Retirer les
+  marques**.
+- **Couper un plan, réunir deux plans** : chaque partie garde ses clés (comme avant, `poskeys::split_keys` / `join_keys`), aucune ne garde le
+  chemin. Dupliquer un plan, copier un calque : le chemin suit. Changer la taille de la feuille (`adaptation.rs`) : le chemin suit, à
+  l'échelle. Retourner un calque ou des plans (`flip.rs`) : le chemin se retourne autour de son départ. Insérer ou retirer des images : les clés
+  suivent comme avant ; le chemin, lu à la prochaine retouche, se repose alors sur la nouvelle durée. Un calque de couleur lié suit les clés de
+  son trait (comme avant) ; la trajectoire se trace sur le trait.
+
+### Comment (le modèle, `trajectoire.rs`)
+
+Le chemin : les points du trait, lissés (deux passages d'une moyenne à trois points, les bouts gardés) et repris tous les 2 pixels de la
+feuille (4 000 points au plus). Les marques : des fractions de la longueur du chemin, strictement entre 0 et 1, à 1 % au moins l'une de
+l'autre. `cles(duree, base)` : pour chaque image, la fraction atteinte (le temps partagé en parts égales entre jalons, la fraction linéaire
+entre deux jalons), le point du chemin à cette fraction, et la clé `base + (point − départ)`. Une trajectoire relue d'un fichier abîmé est
+assainie (points non finis, doublons, marques hors bornes ou en désordre). Le modèle ne connaît ni l'écran ni l'application : ses essais sont
+des nombres.
+
+### Limites et à décider
+
+- La **rotation** du calque ne suit pas la courbe (position seulement) : en option plus tard.
+- **Pas de lasso ni de boîte d'étirement** sur le chemin dans ce premier pas : glisser le chemin le déplace en bloc, un trait long le retrace.
+  Étirer par une boîte (comme la sélection) viendra si le retracé ne suffit pas.
+- Un plan d'**une image** : le chemin se trace, aucune clé (le calque ne bouge pas) ; la ligne d'état le dit.
+- Un calque **verrouillé**, de position verrouillée, un dossier, un calque de couleur lié : refusés, avec la raison.
+- La feuille de timing « une marque = N images » compte depuis l'image 0 du plan ; partir de l'image courante n'est pas proposé.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Un plan de 2 ou 3 secondes, un personnage sur un calque. Outil Trajectoire : trace un chemin depuis le personnage. Lecture : il suit le
+   chemin sur toute la durée du plan, en partant de sa place. Ctrl+Z : plus de chemin, plus de clés.
+2. Trois petits traits en travers du chemin, serrés au départ, un loin au milieu, serrés à l'arrivée : lecture, lent, vite, lent. Les
+   silhouettes pâles montrent où il est à chaque marque ; les numéros d'image au-dessus.
+3. Glisse une marque le long du chemin : les silhouettes bougent en direct. Tire-la loin du chemin : elle part. Glisse le chemin : il bouge
+   en bloc, le personnage ne saute pas. Échap au milieu d'un geste : tout revient.
+4. Un trait long ailleurs : le chemin est retracé, les marques restent.
+5. Réglages : « un nombre d'images » par marque, 4 : le chemin dure 4 images par intervalle, puis le personnage reste au bout.
+6. Prends le Pinceau : plus de chemin ; reprends la Trajectoire : il est là. Enregistre, rouvre : il est là.
+7. Timeline : seuls les jalons se voient, reliés. Glisse une clé à la main : la trajectoire se détache, le message le dit, les clés restent.
+8. Vignettes : l'outil est refusé, comme les autres outils hors des quatre.

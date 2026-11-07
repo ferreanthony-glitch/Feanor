@@ -584,6 +584,10 @@ pub fn adapte_calque(l: &mut Layer, ad: &Adaptation) {
         k.t.x *= s;
         k.t.y *= s;
     }
+    // Le chemin de la trajectoire est en pixels de la feuille : il suit.
+    if let Some(t) = &mut l.trajectoire {
+        t.transformer(|p| [p[0] * s, p[1] * s]);
+    }
     for e in &mut l.fx {
         adapte_effet(e, ad);
     }

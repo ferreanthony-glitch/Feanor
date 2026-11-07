@@ -126,7 +126,7 @@ pub fn commandes_de_l_outil(tool: Tool) -> Vec<(&'static str, &'static str)> {
         Tool::Camera => &[("camera.cle_ici", "Clé de caméra ici"), ("camera.reinitialiser", "Réinitialiser la caméra")],
         Tool::Transform => &[("calque.reinit_transformation", "Annuler la transformation")],
         Tool::Grab | Tool::Pull => &[("outil.taille_plus", "Rayon plus grand"), ("outil.taille_moins", "Rayon plus petit")],
-        Tool::Cutter | Tool::Picker | Tool::Pan | Tool::Text | Tool::Perspective => &[],
+        Tool::Cutter | Tool::Picker | Tool::Pan | Tool::Text | Tool::Perspective | Tool::Trajectoire => &[],
     };
     v.extend_from_slice(suite);
     v
@@ -138,6 +138,13 @@ pub fn gestes_de_l_outil(tool: Tool) -> &'static [(&'static str, &'static str)] 
         Tool::Brush | Tool::Mixer | Tool::Pencil | Tool::Eraser => &[("Pipette", "Alt + clic")],
         Tool::Text => &[("Valider le texte", "Ctrl + Entrée")],
         Tool::SelectColor => &[("Ajouter à la sélection", "Maj + clic")],
+        Tool::Trajectoire => &[
+            ("Tracer le chemin du calque", "un trait"),
+            ("Poser une marque", "un petit trait en travers du chemin"),
+            ("Déplacer une marque, ou la retirer", "la glisser le long du chemin, ou loin de lui"),
+            ("Déplacer le chemin", "le glisser"),
+            ("Abandonner le geste", "Échap"),
+        ],
         _ => &[],
     }
 }

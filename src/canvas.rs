@@ -252,6 +252,7 @@ impl App {
             self.paint_frame_overlays(&painter, rect);
         }
         self.paint_layer_transform(&painter);
+        self.paint_trajectoire(&painter);
         let shift = ui.input(|i| i.modifiers.shift);
         self.paint_guides(&painter, rect, self.hover_canvas);
         self.paint_vector_overlay(&painter, rect, shift);
@@ -500,6 +501,8 @@ impl App {
                         Tool::Cutter => self.cutter_press(p),
                         // Grab et Pull (`sculptapp.rs`).
                         Tool::Grab | Tool::Pull => self.sculpt_press(p, pen),
+                        // Trajectoire (`trajectoireui.rs`) : sur la feuille.
+                        Tool::Trajectoire => self.trajectoire_presser(stage),
                         Tool::Camera => self.camera_press(stage, *pos),
                         Tool::Transform => {
                             // Une zone bitmap choisie : sa boîte la transforme ; ailleurs, c'est le calque.
@@ -547,6 +550,7 @@ impl App {
                         self.camera_drag(stage, mods.shift);
                     } else if self.layer_drag.is_some() {
                         self.transform_drag(stage, mods.shift, mods.command || mods.ctrl);
+                    } else if self.trajectoire_glisser(stage) {
                     } else if self.picking {
                         self.pick_color(stage);
                     }
@@ -709,6 +713,10 @@ impl App {
         // Grab et Pull : le cercle du pinceau.
         if matches!(self.tool, Tool::Grab | Tool::Pull) {
             self.sculpt_cursor(ctx, painter, p);
+            return;
+        }
+        if self.tool == Tool::Trajectoire {
+            ctx.set_cursor_icon(self.trajectoire_curseur(p));
             return;
         }
         // La zone bitmap choisie reste transformable avec l'outil Transformer.

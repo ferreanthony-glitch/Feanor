@@ -63,6 +63,7 @@ pub(crate) fn dessins_sortis(avant: &Layer, apres: &Layer) -> Option<Layer> {
     l.roles.clear();
     l.fx.clear();
     l.pos_keys.clear();
+    l.trajectoire = None;
     l.opacity_keys.clear();
     l.couleur = None;
     l.folder = false;

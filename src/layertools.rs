@@ -459,6 +459,11 @@ impl App {
     pub(crate) fn finish_layer_drag(&mut self) {
         let Some(d) = self.layer_drag.take() else { return };
         if d.changed {
+            // Un calque animé déplacé à la main : sa trajectoire (`trajectoireui.rs`) ne commande plus ses clés.
+            if d.many.is_none() && self.layer().is_animated() {
+                let li = self.cur_layer;
+                self.trajectoire_detacher(li, "clé posée avec Transformer");
+            }
             // Plusieurs calques : une seule étape, au nom du geste.
             let name = match d.handle {
                 BoxHandle::Move => "Déplacer",

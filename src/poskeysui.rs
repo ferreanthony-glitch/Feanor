@@ -99,18 +99,21 @@ impl App {
         self.end_stroke();
         let f = self.cur_frame;
         self.named_step("Poser une clé de position", |app| app.record_step());
+        let mut detachee = false;
         for &li in &targets {
             let l = &mut self.layers_mut()[li];
             let t = l.pose(f);
             poskeys::set_key(&mut l.pos_keys, f, t);
+            detachee |= self.trajectoire_detacher(li, "clé posée à la main");
         }
         let n = targets.len();
         self.modified = true;
         self.status = format!(
-            "Clé de position posée à l'image {} sur {} calque{} : change d'image et déplace le calque pour l'animer.",
+            "Clé de position posée à l'image {} sur {} calque{} : change d'image et déplace le calque pour l'animer.{}",
             self.frame_label(f),
             n,
-            s(n)
+            s(n),
+            if detachee { crate::trajectoireui::DETACHEE } else { "" }
         );
     }
 
@@ -145,8 +148,10 @@ impl App {
         }
         self.end_stroke();
         self.named_step("Supprimer des clés de position", |app| app.record_step());
+        let mut detachee = false;
         for &(id, fr) in &list {
-            let Some(l) = self.layers_mut().iter_mut().find(|l| l.id == id) else { continue };
+            let Some(li) = self.layers().iter().position(|l| l.id == id) else { continue };
+            let l = &mut self.layers_mut()[li];
             let here = l.pose(f);
             poskeys::remove_key(&mut l.pos_keys, fr);
             // La dernière clé partie, le calque garde la pose qu'il avait à cette image.
@@ -154,12 +159,13 @@ impl App {
                 l.transform = here;
                 l.fold_dz();
             }
+            detachee |= self.trajectoire_detacher(li, "clé supprimée");
         }
         self.pos_ui.sel.clear();
         self.renderer.invalidate_all();
         self.modified = true;
         let n = list.len();
-        self.status = format!("{n} clé{} de position supprimée{}.", s(n), s(n));
+        self.status = format!("{n} clé{} de position supprimée{}.{}", s(n), s(n), if detachee { crate::trajectoireui::DETACHEE } else { "" });
     }
 
     /// Lisse (ou ne lisse plus) la clé de position de l'image courante : elle arrive et repart lentement.
@@ -178,12 +184,18 @@ impl App {
         // Une clé déjà adoucie (lissée ou réglée) ne l'est plus ; sinon elle est lissée.
         let eased = targets.iter().any(|&li| self.layers()[li].pos_keys.iter().any(|k| k.frame == f && k.is_eased()));
         self.named_step(if eased { "Ne plus lisser une clé de position" } else { "Lisser une clé de position" }, |app| app.record_step());
+        let mut detachee = false;
         for &li in &targets {
             poskeys::set_eases(&mut self.layers_mut()[li].pos_keys, f, !eased, 0.0, 0.0);
+            detachee |= self.trajectoire_detacher(li, "clé lissée à la main");
         }
         self.renderer.invalidate_all();
         self.modified = true;
-        self.status = if eased { "Clé de position : vitesse constante.".into() } else { "Clé de position lissée : le calque y arrive et en repart lentement.".into() };
+        self.status = format!(
+            "{}{}",
+            if eased { "Clé de position : vitesse constante." } else { "Clé de position lissée : le calque y arrive et en repart lentement." },
+            if detachee { crate::trajectoireui::DETACHEE } else { "" }
+        );
     }
 
     /// Supprime toutes les clés de position des calques visés : chacun garde la pose qu'il a à l'image
@@ -205,6 +217,7 @@ impl App {
             l.transform = l.pose(f);
             l.pos_keys.clear();
             l.fold_dz();
+            l.trajectoire = None;
         }
         self.pos_ui.sel.clear();
         self.renderer.invalidate_all();
@@ -287,9 +300,18 @@ impl App {
         if !self.cle_vue(crate::legendecles::Sorte::Position) {
             return;
         }
+        // Une trajectoire (`trajectoire.rs`) pose une clé par image : seuls ses jalons (le départ, les marques, l'arrivée) se
+        // montrent, reliés d'un trait.
+        let jalons: Option<Vec<usize>> = layer.trajectoire.as_ref().map(|t| t.images_des_jalons(max));
+        if let Some((&a, &b)) = jalons.as_ref().and_then(|j| j.first().zip(j.last())) {
+            let (xa, xb) = (x_of(a).max(visible.0 - 8.0), x_of(b).min(visible.1 + 8.0));
+            if xa < xb {
+                painter.line_segment([pos2(xa, y), pos2(xb, y)], egui::Stroke::new(1.5_f32, crate::trajectoireui::COULEUR.gamma_multiply(0.7)));
+            }
+        }
         for k in &layer.pos_keys {
             let x = x_of(k.frame);
-            if k.frame >= max || x < visible.0 - 8.0 || x > visible.1 + 8.0 {
+            if k.frame >= max || x < visible.0 - 8.0 || x > visible.1 + 8.0 || jalons.as_ref().is_some_and(|j| !j.contains(&k.frame)) {
                 continue;
             }
             // Cerclé : choisi dans la timeline, ou posé sous la tête de lecture (la clé « d'ici » des commandes).
@@ -489,6 +511,9 @@ impl App {
         }
         self.pos_ui.sel.retain(|(l, _)| *l != d.layer);
         self.pos_ui.sel.extend(d.frames.iter().map(|&f| (d.layer, (f as isize + d.delta).max(0) as usize)));
+        if let Some(li) = self.layers().iter().position(|l| l.id == d.layer) {
+            self.trajectoire_detacher(li, "clés déplacées à la main");
+        }
         self.modified = true;
         self.commit_named(d.snap, "Déplacer des clés de position");
     }
