@@ -142,7 +142,8 @@ struct Fichier {
 /// Le texte de `scenario.json` pour `doc` ; rien s'il n'y a pas de scénario. Un lien dont le plan n'existe plus n'est pas écrit.
 pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
     let Some(g) = &doc.scenario else { return Ok(None) };
-    let existe: std::collections::HashSet<u64> = doc.panels.iter().map(|p| p.id).collect();
+    // (Un plan écarté existe toujours : son lien l'attend, `planannule.rs`.)
+    let existe: std::collections::HashSet<u64> = doc.panels.iter().map(|p| p.id).chain(doc.annules.plans.iter().map(|g| g.panel.id)).collect();
     let liens: Vec<Lien> = g.liens.iter().filter(|l| existe.contains(&l.plan)).copied().collect();
     let f = Fichier { format: FORMAT.into(), version: VERSION, id: g.id, nom: g.nom.clone(), scenario: g.script.clone(), liens };
     serde_json::to_vec(&f).map(Some).map_err(|e| e.to_string())

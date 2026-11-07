@@ -76,7 +76,7 @@ impl App {
             return;
         }
         // Combien de numéros changeraient : on compare le numéro actuel à celui du rang.
-        let changes = self.doc.scene_order().iter().enumerate().filter(|(k, id)| self.doc.plan_code(**id) != (*k + 1).to_string()).count();
+        let changes = self.doc.scene_order_planche().iter().enumerate().filter(|(k, id)| self.doc.plan_code(**id) != (*k + 1).to_string()).count();
         let mut yes = false;
         let mut no = false;
         let modal = egui::Modal::new(egui::Id::new("renumeroter_plans")).show(ctx, |ui| {

@@ -817,6 +817,7 @@ impl SaveJob {
             variantes: None,
             variantes_gardees: false,
             corbeille: None,
+            annules: None,
             froids_a_copier: None,
             keep_drawings: false,
             snapshots: Vec::new(),

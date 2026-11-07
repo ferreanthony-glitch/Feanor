@@ -1081,6 +1081,9 @@ impl Document {
         }
         let v = self.variantes_mut().get_mut(&sequence)?;
         v.autres.retain(|r| r.numero != numero);
+        // (Ce qui tient à un plan écarté ne part pas avec le garage, `planannule.rs`.)
+        self.annules_apres_une_version_supprimee(sequence, numero);
+        let v = self.variantes_mut().get_mut(&sequence)?;
         v.nettoyer_garage();
         let reste = v.actuelle;
         if v.autres.is_empty() {
@@ -1124,6 +1127,10 @@ impl Document {
         }
         let seqs: HashSet<u64> = self.sequences.iter().map(|s| s.id).collect();
         if self.variantes.keys().any(|s| !seqs.contains(s)) {
+            let parties: Vec<u64> = self.variantes.keys().copied().filter(|s| !seqs.contains(s)).collect();
+            for s in parties {
+                self.annules_rapatrier_la_sequence(s);
+            }
             self.variantes_mut().retain(|s, _| seqs.contains(s));
         }
     }
@@ -1237,6 +1244,13 @@ impl Document {
         }
         let parque = Parque { panel, versions, reserve, comments };
         self.variantes_mut().get_mut(&sequence).expect("séquence lue juste avant").garage.insert(plan, parque);
+    }
+
+    /// Le plan `plan` revient dans le film (un plan annulé qu'on rétablit, `planannule.rs`) : s'il est au garage, il en sort, avec ses versions, son contenu rogné, ses commentaires.
+    pub(crate) fn reprendre_du_garage(&mut self, plan: u64) -> Option<(Panel, Option<VersionsDuPlan>, Option<Reserve>, Vec<Comment>)> {
+        let sequence = self.variantes.iter().find(|(_, v)| v.garage.contains_key(&plan)).map(|(s, _)| *s)?;
+        let p = self.variantes_mut().get_mut(&sequence)?.garage.remove(&plan)?;
+        Some((p.panel, p.versions, p.reserve, p.comments))
     }
 
     /// Comme `ranger_plan_partage`, pour plusieurs plans.

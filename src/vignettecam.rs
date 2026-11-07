@@ -10,7 +10,7 @@
 //! - sur une case sans mouvement, le glissé crée B (déplacé, ou zoomé quand il part d'un coin) ;
 //! - sur une case avec des cadres, le glissé **ne crée jamais rien** : dedans un cadre il le déplace (le plus petit qui contient
 //!   le point l'emporte : B dans A, dedans B on déplace B, dans A hors de B on déplace A), à un coin il change son zoom ;
-//! - un cadre de plus (C, D…) se demande : Ctrl + Maj + Alt + glisser (il part du dernier cadre) ou « Ajouter un cadre » au clic droit ;
+//! - un cadre de plus (C, D…) se demande par « Ajouter un cadre » au clic droit (il part du dernier cadre) ;
 //!   « Retirer ce cadre » au clic droit sur un cadre.
 //!
 //! **L'empreinte** (`empreinte`) : une case qui a un mouvement montre ses cadres à **la même échelle** que les autres cases, sans

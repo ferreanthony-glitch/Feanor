@@ -59,7 +59,7 @@ impl Affichage {
     /// La liste complète pour ce film : les séquences connues et encore là, dans l'ordre choisi, puis celles qui manquent à leur place du film
     /// (juste après leur précédente), montrées.
     pub fn liste(&self, doc: &Document) -> Vec<(u64, bool)> {
-        liste_de(&self.ordre, &doc.sequence_order())
+        liste_de(&self.ordre, &doc.sequence_order_planche())
     }
 
     /// Les séquences montrées, dans l'ordre de la planche. Toujours au moins une : si aucune n'était montrée, toutes le sont.
@@ -99,7 +99,8 @@ pub fn liste_de(ordre: &[(u64, bool)], film: &[u64]) -> Vec<(u64, bool)> {
 /// Ce que montre la planche de ce film : rien (une seule séquence : la planche d'avant, sans titre), ou les séquences montrées dans l'ordre
 /// choisi, chacune avec son titre.
 pub fn vue(doc: &Document) -> Option<VueSequences> {
-    if doc.sequences.len() <= 1 || doc.sequence_order().len() <= 1 {
+    // (Une séquence dont tous les plans sont annulés reste sur la planche, `planannule.rs`.)
+    if doc.sequence_order_planche().len() <= 1 {
         return None;
     }
     Some(VueSequences { sequences: doc.annotations.affichage.montrees(doc), titres: true })

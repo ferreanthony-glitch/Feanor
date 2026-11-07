@@ -67,6 +67,9 @@ impl App {
     }
 
     pub(crate) fn timeline_panel(&mut self, ui: &mut egui::Ui) {
+        if self.bande_film_vide(ui) {
+            return;
+        }
         ui.add_space(2.0);
         self.timeline_toolbar(ui);
         ui.separator();

@@ -416,6 +416,14 @@ impl Thumbs {
         self.texture_of(ctx, doc, panel.id, plan, cam, width, doc.frame, deadline)
     }
 
+    /// Vignette de l'image `frame` d'un plan annulé (`planannule.rs`), sa case sur la planche : `id` est la case.
+    #[allow(clippy::too_many_arguments)]
+    pub fn texture_rangee_a(&mut self, ctx: &egui::Context, doc: &Document, panel: &crate::document::Panel, frame: usize, id: u64, width: usize, deadline: Instant) -> Option<TextureId> {
+        let plan = render::stored_panel_plan(doc, panel, frame, Some(doc.paper));
+        let cam = doc.camera_du_plan_range(panel, frame);
+        self.texture_of(ctx, doc, id, plan, cam, width, doc.frame, deadline)
+    }
+
     /// Vignette d'une **case de la planche** (`boardui.rs`) : l'image `frame` du plan `panel` (ou la zone d'une grande case
     /// de mouvement de caméra), avec une petite marge tout autour du cadre où seul le trait qui déborde est peint (le reste est
     /// transparent) : la case montre un peu du dessin au-delà de son cadre, comme la maquette. Rangée à part de la vignette
@@ -512,7 +520,7 @@ impl Thumbs {
         // tous les plans, à chaque image d'écran, coûtait le carré du nombre de plans.)
         // (Et les plans rangés des versions : les cartes de la pile les demandent.)
         let ids: std::collections::HashSet<u64> =
-            doc.panels.iter().flat_map(|p| std::iter::once(p.id).chain(p.marks.iter().map(|m| m.id))).chain(doc.plans_ranges().map(|p| p.id)).collect();
+            doc.panels.iter().flat_map(|p| std::iter::once(p.id).chain(p.marks.iter().map(|m| m.id))).chain(doc.plans_ranges().map(|p| p.id)).chain(doc.annules.plans.iter().flat_map(|g| g.panel.marks.iter().map(|m| m.id))).collect();
         self.entries.retain(|(id, _), _| ids.contains(&(id & !(ZONE_BIT | CASE_BIT | TUILE_MASK))));
     }
 

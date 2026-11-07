@@ -162,6 +162,13 @@ impl Document {
                 }
             }
         }
+        for g in &mut self.annules.plans {
+            let g = Arc::make_mut(g);
+            out.push(&mut g.panel);
+            if let Some(v) = g.versions.as_mut() {
+                out.extend(v.autres.iter_mut().map(|r| &mut r.panel));
+            }
+        }
         out
     }
 

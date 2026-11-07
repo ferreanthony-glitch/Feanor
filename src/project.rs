@@ -227,7 +227,10 @@ pub const FORMAT: &str = "pelure-projet";
 /// calques, les dessins recouverts et les images rognées que les gestes du montage retirent du film, avec leurs dessins gardés dans `dessins/`.
 /// Une version précédente qui ouvrirait le projet effacerait ces dessins à l'enregistrement (rien ne les cite plus dans le manifeste) : elle le
 /// refuse donc. Un projet de version 46 ou moins s'ouvre tel quel, sans rien perdre, corbeille vide.
-pub const VERSION: u32 = 47;
+/// 48 (2026-11-06, `docs/INTERFACE.md` partie 114) : **plans annulés** — `plans_annules.json` à côté du manifeste (`planannule.rs`) : des plans sortis du
+/// film, gardés tels quels, avec leurs dessins dans `dessins/`. Une version précédente qui ouvrirait le projet effacerait ces dessins à l'enregistrement
+/// (rien d'autre ne les cite) : elle le refuse donc. Un projet de version 47 ou moins s'ouvre tel quel, sans rien perdre, aucun plan annulé.
+pub const VERSION: u32 = 48;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -1453,6 +1456,8 @@ pub struct SaveJob {
     variantes_gardees: bool,
     /// Le fichier de la corbeille (`corbeille.json`) ; rien : elle est vide, le fichier part.
     corbeille: Option<Vec<u8>>,
+    /// Le fichier des plans annulés (`plans_annules.json`) ; rien : aucun, le fichier part.
+    annules: Option<Vec<u8>>,
     /// Dessins de la corbeille hors mémoire à recopier d'un autre dossier : (dossier d'où, numéros).
     froids_a_copier: Option<(PathBuf, BTreeSet<CelId>)>,
     /// Un `plans_versions.json` que cette version ne sait pas lire est là : ses dessins sont dans `dessins/`
@@ -1791,7 +1796,7 @@ impl SaveJob {
         self.images = images_a_ecrire(dir, &self.used_images);
         self.manifest = serde_json::to_vec_pretty(&manifest_de(&doc, true, &used, &hors)).map_err(|e| e.to_string())?;
         let unreadable = unreadable_in(dir);
-        self.keep_drawings = crate::planvers::illisible(dir) || crate::variantes::illisible(dir) || crate::corbeille::illisible(dir);
+        self.keep_drawings = crate::planvers::illisible(dir) || crate::variantes::illisible(dir) || crate::corbeille::illisible(dir) || crate::planannule::illisible(dir) || !doc.annules.illisibles.is_empty();
         // Les dessins de la corbeille hors mémoire sont traités comme les illisibles : leurs fichiers (et leurs textures, leurs images
         // collées) ne sont jamais effacés ; recopiés d'ailleurs si le dossier a changé.
         let unreadable: BTreeSet<CelId> = unreadable.union(&froids).copied().collect();
@@ -1802,6 +1807,7 @@ impl SaveJob {
         self.hors = hors.union(&unreadable).copied().collect();
         self.froids_a_copier = froids_depuis.map(|d| (d, froids.clone())).filter(|(_, f)| !f.is_empty());
         self.corbeille = crate::corbeille::to_bytes(&doc)?;
+        self.annules = crate::planannule::to_bytes(&doc)?;
         self.comments = crate::commentaires::to_bytes(&doc)?;
         self.reserves = crate::rognage::to_bytes(&doc)?;
         self.transitions = crate::transitions::to_bytes(&doc)?;
@@ -1860,7 +1866,7 @@ pub(crate) fn prepare_save_avant(doc: &Document, manifest_path: &Path, written: 
         let drawn = doc.used_cels();
         job.manifest = serde_json::to_vec_pretty(&manifest_de(doc, true, &drawn, &hors_of(doc, &drawn))).map_err(|e| e.to_string())?;
         let unreadable = unreadable_in(dir);
-        job.keep_drawings = crate::planvers::illisible(dir) || crate::variantes::illisible(dir) || crate::corbeille::illisible(dir);
+        job.keep_drawings = crate::planvers::illisible(dir) || crate::variantes::illisible(dir) || crate::corbeille::illisible(dir) || crate::planannule::illisible(dir) || !doc.annules.illisibles.is_empty();
         job.has_unreadable = !unreadable.is_empty() || job.keep_drawings;
         job.kept = kept_files_in(dir);
         job.drawings = drawings;
@@ -2191,6 +2197,7 @@ impl SaveJob {
             }
         }
         write_sidecar(&dir.join(crate::corbeille::FILE), self.corbeille.as_deref(), |t| crate::corbeille::parse(t).is_ok())?;
+        write_sidecar(&dir.join(crate::planannule::FILE), self.annules.as_deref(), |t| crate::planannule::parse(t).is_ok())?;
         // Le manifeste en dernier ; s'il a déjà ces octets-là (une copie de secours où rien n'a changé), il reste tel quel.
         if toujours_ecrire() || fs::read(&self.manifest_path).ok().as_deref() != Some(self.manifest.as_slice()) {
             write_atomic_synced(&self.manifest_path, &self.manifest)?;
@@ -2911,6 +2918,12 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
     let mut variantes = if annexes.plans_seuls { None } else { crate::variantes::lire(dir, &mut warnings) };
     let mut rognages_variantes: HashMap<crate::variantes::Cle, crate::rognage::Loaded> = HashMap::new();
     let cachees = variantes.as_mut().and_then(|f| cacher_variantes(&mut manifest, f, &mut warnings, &mut rognages_variantes));
+    // Les plans annulés (`plans_annules.json`) passent par la même lecture, dans une séquence cachée qu'on retire ensuite du film.
+    let mut annules_lus = if annexes.plans_seuls || annexes.fournies { None } else { crate::planannule::lire(dir, &mut warnings) };
+    let (annules_cachees, mut rognages_annules, annules_illisibles) = match annules_lus.as_mut() {
+        Some(f) => cacher_annules(&mut manifest, f, &mut warnings),
+        None => (None, Vec::new(), Vec::new()),
+    };
     // Les dessins que les variantes citent : s'il en manque, la lecture les retire des plans, et il faut s'en souvenir.
     let cels_variantes: BTreeSet<CelId> = cachees
         .as_ref()
@@ -2946,6 +2959,9 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         referenced.extend(r.cels());
     }
     for r in rognages_variantes.values() {
+        referenced.extend(r.cels());
+    }
+    for r in rognages_annules.iter().flatten() {
         referenced.extend(r.cels());
     }
     let mut approx = Vec::new();
@@ -3111,6 +3127,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         // Les variantes rangées des séquences : `variantes.json`, `variantes::installer`.
         variantes: Default::default(),
         corbeille: Default::default(),
+        // Les plans annulés : `plans_annules.json`, `planannule::installer`.
+        annules: Default::default(),
 
         // Les annotations de la vue Vignettes : `annotations.json`, `load_annotations`.
         annotations: Default::default(),
@@ -3343,6 +3361,30 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         structure.scenes.retain(|s| !c.scenes.contains_key(&s.id));
         structure.sequences.retain(|s| s.id != c.sequence);
     }
+    // De même les plans annulés.
+    let mut panneaux_annules: Vec<Option<Panel>> = Vec::new();
+    let mut versions_annules: Vec<Vec<Panel>> = Vec::new();
+    if let Some(c) = &annules_cachees {
+        panneaux_annules = (0..c.plans).map(|_| None).collect();
+        versions_annules = (0..c.plans).map(|_| Vec::new()).collect();
+        let (gardes, extra): (Vec<Panel>, Vec<Panel>) = std::mem::take(&mut structure.panels).into_iter().partition(|p| !c.scenes.contains_key(&p.scene));
+        structure.panels = gardes;
+        for mut p in extra {
+            p.id = c.numeros.get(&p.id).copied().unwrap_or(p.id);
+            for m in &mut p.marks {
+                m.id = c.numeros.get(&m.id).copied().unwrap_or(m.id);
+            }
+            if let Some(&(i, version)) = c.scenes.get(&p.scene) {
+                if version {
+                    versions_annules[i].push(p);
+                } else {
+                    panneaux_annules[i] = Some(p);
+                }
+            }
+        }
+        structure.scenes.retain(|s| !c.scenes.contains_key(&s.id));
+        structure.sequences.retain(|s| s.id != c.sequence);
+    }
     if structure.panels.is_empty() {
         return Err("le projet ne contient aucun plan".into());
     }
@@ -3386,6 +3428,10 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         doc.corbeille = crate::corbeille::lire(dir, &mut warnings);
         let haut = doc.corbeille.entrees.iter().map(|e| e.id_max).max().unwrap_or(0);
         doc.reserve_id(haut);
+    }
+    // Les plans annulés : hors du film, à leur place sur la planche.
+    if let Some(f) = annules_lus {
+        crate::planannule::installer(&mut doc, f, panneaux_annules, versions_annules, std::mem::take(&mut rognages_annules), annules_illisibles, &missing);
     }
     // Les autres versions des plans.
     if let (Some(f), Some((_, _, cles))) = (versions, a_ranger) {
@@ -3453,6 +3499,74 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         session: None,
         erreur_equipe: None,
     })
+}
+
+/// Les plans annulés, cachés dans le manifeste le temps de la lecture (`cacher_annules`).
+struct AnnulesCaches {
+    sequence: u64,
+    /// Le nombre de plans du fichier.
+    plans: usize,
+    /// Pour chaque scène cachée, le rang du plan dans le fichier et si c'est une de ses versions rangées.
+    scenes: HashMap<u64, (usize, bool)>,
+    /// Le vrai numéro de chaque plan et de chaque marque : le temps de la lecture ils en ont un neuf (le même plan peut être aussi au garage d'une
+    /// autre version de séquence, `unique_ids` le renumérotait).
+    numeros: HashMap<u64, u64>,
+}
+
+/// Fait entrer les plans annulés de `f` (et leurs versions rangées) dans `manifest`, un par scène d'une séquence cachée : la lecture ordinaire charge
+/// leurs dessins, hors-feuille compris. Rend aussi le contenu rogné lu de chaque plan, et les entrées abîmées, telles quelles : **une entrée dont une part
+/// ne se lit pas (le plan, une de ses versions, son contenu rogné) attend entière** dans le fichier, plutôt que de revenir incomplète ou décalée.
+#[allow(clippy::type_complexity)]
+fn cacher_annules(manifest: &mut Manifest, f: &mut crate::planannule::Fichier, warnings: &mut Vec<String>) -> (Option<AnnulesCaches>, Vec<Option<crate::rognage::Loaded>>, Vec<serde_json::Value>) {
+    let top = top_id(manifest);
+    let sequence = top + 1;
+    let mut suivant = top + 2;
+    let mut scenes: Vec<SceneEntry> = Vec::new();
+    let mut cles: HashMap<u64, (usize, bool)> = HashMap::new();
+    let mut numeros: HashMap<u64, u64> = HashMap::new();
+    let mut rognages = Vec::with_capacity(f.plans.len());
+    let mut illisibles = Vec::new();
+    for (i, p) in f.plans.iter_mut().enumerate() {
+        let brut = serde_json::to_value(&*p).unwrap_or(serde_json::Value::Null);
+        // Tout se lit d'abord : une part abîmée, et l'entrée entière attend.
+        let mut valeurs = vec![(std::mem::take(&mut p.entree), false)];
+        if let Some(v) = p.versions.as_mut() {
+            valeurs.extend(v.autres.iter_mut().map(|a| (std::mem::take(&mut a.entree), true)));
+        }
+        let lues: Result<Vec<(PanelEntry, bool)>, String> = valeurs.into_iter().map(|(v, version)| serde_json::from_value::<PanelEntry>(v).map(|e| (e, version)).map_err(|e| e.to_string())).collect();
+        let rognage: Result<Option<crate::rognage::Loaded>, String> = match p.rognage.take() {
+            Some(v) => crate::rognage::parse(&v.to_string()).map(Some),
+            None => Ok(None),
+        };
+        match (lues, rognage) {
+            (Ok(lues), Ok(rognage)) => {
+                for (mut e, version) in lues {
+                    let scene = suivant;
+                    suivant += 1;
+                    for id in std::iter::once(&mut e.id).chain(e.marques.iter_mut().map(|m| &mut m.id)) {
+                        numeros.insert(suivant, *id);
+                        *id = suivant;
+                        suivant += 1;
+                    }
+                    scenes.push(SceneEntry { id: scene, nom: String::new(), numero: String::new(), panneaux: vec![e] });
+                    cles.insert(scene, (i, version));
+                }
+                rognages.push(rognage);
+            }
+            (lues, rognage) => {
+                let e = lues.err().or(rognage.err()).unwrap_or_default();
+                warnings.push(format!("Un plan écarté est illisible ({e}) : il ne se montre pas, il reste dans le fichier et ses dessins sont gardés."));
+                illisibles.push(brut);
+                rognages.push(None);
+            }
+        }
+    }
+    if scenes.is_empty() {
+        return (None, rognages, illisibles);
+    }
+    let plans = f.plans.len();
+    manifest.sequences.push(SequenceEntry { id: sequence, nom: String::new(), numero: String::new(), scenes });
+    (Some(AnnulesCaches { sequence, plans, scenes: cles, numeros }), rognages, illisibles)
 }
 
 /// Les plans des variantes rangées, cachés dans le manifeste le temps de la lecture (`cacher_variantes`).

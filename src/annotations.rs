@@ -178,7 +178,10 @@ pub fn cases(layout: &BoardLayout) -> Vec<Rect> {
 
 /// L'image de la case désignée par `a` (son rang et son rectangle). Une case au-delà de la planche est la dernière.
 pub fn case_de(layout: &BoardLayout, a: &Ancre) -> Option<(usize, Rect)> {
-    let k = layout.cards.iter().position(|c| c.id == a.card)?;
+    // (Un trait attaché à une case annulée reste où il est : il ne se coupe pas, `planannule.rs`.)
+    let Some(k) = layout.cards.iter().position(|c| c.id == a.card) else {
+        return layout.annulees.iter().find(|c| c.id == a.card).map(|c| (usize::MAX, c.thumb));
+    };
     let all = cases(layout);
     let at = (k + a.after as usize).min(all.len().checked_sub(1)?);
     Some((at, all[at]))
@@ -631,7 +634,8 @@ impl Annotations {
     pub fn noter_rangs(&mut self, layout: &BoardLayout) -> bool {
         let mut changed = false;
         for t in &mut self.traces {
-            if let Some((rank, _)) = case_de(layout, &t.anchor) {
+            // (Une case annulée n'a pas de rang.)
+            if let Some((rank, _)) = case_de(layout, &t.anchor).filter(|(r, _)| *r != usize::MAX) {
                 if t.anchor.rank as usize != rank {
                     t.anchor.rank = rank as u32;
                     changed = true;

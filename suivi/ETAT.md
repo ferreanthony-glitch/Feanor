@@ -1,5 +1,9 @@
 # FEANOR (ex-SHOT) — état réel du projet (relevé du 2026-10-30, mise à jour du 2026-11-05 ci-dessous)
 
+## Mise à jour du 2026-11-06, branche `plan-annule` (pas fusionnée)
+- Format de projet : **48** (`plans_annules.json`). Partie 114 d'INTERFACE : un clic sur le numéro écarte le plan (« Écarter », « Reprendre »), sa case reste barrée dans les Vignettes, il est absent partout ailleurs. À tester par Anthony.
+- Essais de repos intermittents dans les passages complets (`vignettes_tests`, `aidetouches_tests`, `montageonglet_tests`, `concentration_tests`, `griffonnage_tests`) : verts seuls, vus aussi sans les essais de cette branche ; cause non trouvée.
+
 ## Mise à jour du 2026-11-06 au soir (main f5caddd) — elle prime sur la suite
 - Format de projet : **47** (corbeille). Essais : **3981 réussis, 0 échec**, deux passages. Parties 101 à 113 d'INTERFACE en attente du test d'Anthony.
 - Traits coupés : reproduits en pixels et corrigés (partie 111). Morceaux pâles des cases 15 et 16 : non reproduits, à confirmer à l'écran.

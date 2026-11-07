@@ -112,6 +112,18 @@ pub struct Reserve {
 }
 
 impl Reserve {
+    /// Applique `f` aux caméras de ce contenu rogné (un changement de feuille).
+    pub(crate) fn map_cameras(&mut self, f: impl Fn(&Camera) -> Camera) {
+        for piece in [&mut self.head, &mut self.tail] {
+            for k in &mut piece.camera {
+                k.cam = f(&k.cam);
+            }
+            if let Some(c) = piece.cam_edge.as_mut() {
+                *c = f(c);
+            }
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.head.len == 0 && self.tail.len == 0
     }
@@ -747,14 +759,7 @@ impl Document {
     /// Change la caméra de chaque clé rangée en réserve (la feuille change de taille).
     pub(crate) fn map_reserve_cameras(&mut self, f: impl Fn(&Camera) -> Camera) {
         for r in self.reserves.values_mut() {
-            for piece in [&mut r.head, &mut r.tail] {
-                for k in &mut piece.camera {
-                    k.cam = f(&k.cam);
-                }
-                if let Some(c) = piece.cam_edge.as_mut() {
-                    *c = f(c);
-                }
-            }
+            r.map_cameras(&f);
         }
     }
 

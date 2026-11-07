@@ -1160,6 +1160,8 @@ pub struct Structure {
     pub variantes: crate::variantes::Variantes,
     /// La corbeille (corbeille.rs) : jeter et restaurer s'annulent avec le reste, sans double.
     pub corbeille: crate::corbeille::Corbeille,
+    /// Les plans annulés (`planannule.rs`) : annuler et rétablir s'annulent avec le reste.
+    pub annules: crate::planannule::Annules,
     /// Annotations de la vue Vignettes (`annotations.rs`) : tracer, effacer, tout effacer s'annulent avec le reste.
     pub annotations: crate::annotations::Annotations,
     /// Le scénario gardé dans le projet (`scenariogarde.rs`) : importer et créer les plans depuis lui s'annulent avec le reste.
@@ -1303,6 +1305,8 @@ pub struct Document {
     pub variantes: crate::variantes::Variantes,
     /// La corbeille du projet (corbeille.rs) : ce que les gestes du montage retirent du film, récupérable.
     pub corbeille: crate::corbeille::Corbeille,
+    /// Les plans annulés (`planannule.rs`) : sortis du film, montrés barrés sur la planche, rétablis tels quels.
+    pub annules: crate::planannule::Annules,
     /// Des dessins de variantes rangées manquaient à l'ouverture (projet partagé dont les fichiers n'étaient pas tous
     /// arrivés) : le fichier des variantes n'est pas réécrit, et on n'en change pas. Hors de l'annulation.
     pub variantes_partielles: bool,
@@ -1382,6 +1386,7 @@ impl Document {
             versions: Default::default(),
             variantes: Default::default(),
             corbeille: Default::default(),
+            annules: Default::default(),
             variantes_partielles: false,
             annotations: Default::default(),
             scenario: None,
@@ -1455,6 +1460,7 @@ impl Document {
             versions: structure.versions,
             variantes: structure.variantes,
             corbeille: structure.corbeille,
+            annules: structure.annules,
             variantes_partielles: false,
             annotations: structure.annotations,
             scenario: structure.scenario,
@@ -1505,6 +1511,7 @@ impl Document {
             versions: self.versions.clone(),
             variantes: self.variantes.clone(),
             corbeille: self.corbeille.clone(),
+            annules: self.annules.clone(),
             variantes_partielles: self.variantes_partielles,
             annotations: self.annotations.clone(),
             scenario: self.scenario.clone(),
@@ -1561,6 +1568,14 @@ impl Document {
                 k.cam = k.cam.shifted(dx as f32, dy as f32);
             }
         }
+        self.map_annules(|p, r| {
+            for k in &mut p.camera {
+                k.cam = k.cam.shifted(dx as f32, dy as f32);
+            }
+            if let Some(r) = r {
+                r.map_cameras(|c| c.shifted(dx as f32, dy as f32));
+            }
+        });
         self.map_reserve_cameras(|c| c.shifted(dx as f32, dy as f32));
         self.width = width;
         self.height = height;
@@ -1618,6 +1633,17 @@ impl Document {
             }
         }
         self.map_reserve_cameras(|c| crate::adaptation::adapte_camera(c, &a));
+        self.map_annules(|p, r| {
+            for k in &mut p.camera {
+                *k = crate::adaptation::adapte_cle_camera(k, &a);
+            }
+            for l in &mut p.layers {
+                crate::adaptation::adapte_calque(l, &a);
+            }
+            if let Some(r) = r {
+                r.map_cameras(|c| crate::adaptation::adapte_camera(c, &a));
+            }
+        });
         self.width = nw;
         self.height = nh;
     }
@@ -1715,6 +1741,7 @@ impl Document {
             versions: self.versions.clone(),
             variantes: self.variantes.clone(),
             corbeille: self.corbeille.clone(),
+            annules: self.annules.clone(),
             annotations: self.annotations.clone(),
             scenario: self.scenario.clone(),
             frames_rangees: None,
@@ -1758,6 +1785,7 @@ impl Document {
             versions: std::mem::replace(&mut self.versions, s.versions),
             variantes: std::mem::replace(&mut self.variantes, s.variantes),
             corbeille: std::mem::replace(&mut self.corbeille, s.corbeille),
+            annules: std::mem::replace(&mut self.annules, s.annules),
             annotations: std::mem::replace(&mut self.annotations, s.annotations),
             scenario: std::mem::replace(&mut self.scenario, s.scenario),
             frames_rangees: None,
@@ -1923,23 +1951,24 @@ impl Document {
 
     /// Numéro automatique de la scène (1, 2, 3… dans l'ordre du film, toutes séquences confondues).
     pub fn scene_number(&self, scene: u64) -> usize {
-        self.scene_order().iter().position(|&s| s == scene).map_or(0, |i| i + 1)
+        // (Les plans annulés gardent leur numéro : ils comptent, `planannule.rs`.)
+        self.scene_order_planche().iter().position(|&s| s == scene).map_or(0, |i| i + 1)
     }
 
     pub fn sequence_number(&self, sequence: u64) -> usize {
-        self.sequence_order().iter().position(|&s| s == sequence).map_or(0, |i| i + 1)
+        self.sequence_order_planche().iter().position(|&s| s == sequence).map_or(0, |i| i + 1)
     }
 
     /// Nom affiché de la scène : son nom s'il en a un, sinon son numéro.
     pub fn scene_label(&self, scene: u64) -> String {
-        match self.scene(scene) {
+        match self.scene_ou_annulee(scene) {
             Some(s) if !s.name.trim().is_empty() => s.name.trim().to_string(),
             _ => self.plan_code(scene),
         }
     }
 
     pub fn sequence_label(&self, sequence: u64) -> String {
-        match self.sequences.iter().find(|s| s.id == sequence) {
+        match self.sequence_ou_annulee(sequence) {
             Some(s) if !s.name.trim().is_empty() => s.name.trim().to_string(),
             _ => self.sequence_code(sequence),
         }
@@ -1956,6 +1985,8 @@ impl Document {
     /// vides disparaissent.
     pub fn normalize(&mut self) {
         use std::collections::{HashMap, HashSet};
+        // Tout le film était annulé et un plan vient d'entrer : le plan vide qui tenait la place part (`planannule.rs`).
+        self.annules_menage();
         // (Des tables, pas des recherches dans les listes : l'ordre des plans se remettait en un temps de l'ordre du
         // nombre de plans à la puissance 4 — 100 s pour construire un film de 2 000 plans, une demi-seconde par
         // opération de montage à ce nombre. Passe de fiabilité du 2026-10-24.)
@@ -2014,6 +2045,8 @@ impl Document {
         self.prune_comments();
         // Une transition dont un plan a disparu part avec lui (`transitions.rs`).
         self.prune_transitions();
+        // Celles d'un plan écarté reviennent dès que leur coupe existe de nouveau (`planannule.rs`).
+        self.annules_reposer_transitions();
         // Les références liées à un plan retiré ne le sont plus (elles restent sur le tableau).
         self.prune_references();
         // Les variantes rangées d'une séquence qui n'existe plus partent avec elle (`variantes.rs`).
@@ -2068,6 +2101,8 @@ impl Document {
         s.audio_tracks.clear();
         // (Les variantes rangées des autres séquences restent dans le film d'origine.)
         s.variantes = Default::default();
+        // (Ni les plans annulés : ils restent dans le film d'origine.)
+        s.annules = Default::default();
         let cards: HashSet<u64> = s.panels.iter().flat_map(|p| std::iter::once(p.id).chain(p.marks.iter().map(|m| m.id))).collect();
         let kept = |anchor: Option<u64>| anchor.is_some_and(|a| cards.contains(&a));
         s.board.strokes.retain(|n| kept(n.anchor));
@@ -2355,6 +2390,7 @@ impl Document {
         // Les commentaires d'après la coupe passent au nouveau plan.
         let (first_id, second_id) = (first.id, second.id);
         self.split_comments(first_id, second_id, at);
+        self.annules_suivre_coupe(first_id, second_id);
         Some(self.insert_and_normalize(index + 1, vec![second]))
     }
 
@@ -2382,6 +2418,7 @@ impl Document {
         // Les commentaires du suivant suivent ses images.
         self.rehome_comments(next.id, self.panels[index].id, next_len, a_len);
         self.rehome_references(next.id, self.panels[index].id);
+        self.annules_suivre_jonction(next.id, self.panels[index].id);
         let a = &mut self.panels[index];
         a.camera = camera::join_keys(&a.camera, a_len, cam_a, &next.camera, next_len, cam_b);
         // Les calques de toute la scène sont déjà dans le premier : seuls les autres se suivent,
@@ -2769,6 +2806,7 @@ impl Document {
         // Les commentaires de `b` suivent ses images, au bout du plan.
         self.rehome_comments(b.id, self.panels[index].id, b_len, a_len);
         self.rehome_references(b.id, self.panels[index].id);
+        self.annules_suivre_jonction(b.id, self.panels[index].id);
         let a = &mut self.panels[index];
 
         // Caméra : chaque partie tient sa caméra jusqu'à ses bords.
@@ -3360,7 +3398,7 @@ impl Document {
             used.extend(r.cels());
         }
         // Et celui des variantes rangées (`variantes.rs`).
-        for r in self.reserves_de_variantes() {
+        for r in self.reserves_de_variantes().chain(self.reserves_des_annules()) {
             used.extend(r.cels());
         }
         // Les autres versions des plans aussi (`planvers.rs`).

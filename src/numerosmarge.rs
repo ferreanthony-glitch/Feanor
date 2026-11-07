@@ -89,7 +89,8 @@ impl Marges {
     pub fn pour(layout: &BoardLayout, xf: Xf, view: Rect) -> Marges {
         let zone = view.expand(200.0);
         let mut obstacles = Vec::with_capacity(layout.cards.len() * 2 + layout.moves.len());
-        for c in &layout.cards {
+        // (Les cases annulées, barrées, sont des cases comme les autres : aucun numéro dessus, `planannule.rs`.)
+        for c in layout.cards.iter().chain(&layout.annulees) {
             for r in [Some(c.thumb), c.a_du_texte().then_some(c.note)].into_iter().flatten() {
                 let r = xf.rect(r);
                 if r.intersects(zone) {
