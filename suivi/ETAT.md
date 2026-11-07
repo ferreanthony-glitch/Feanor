@@ -1,6 +1,13 @@
 # FEANOR (ex-SHOT) — état réel du projet (relevé du 2026-10-30, mise à jour du 2026-11-05 ci-dessous)
 
-## Mise à jour du 2026-11-07 (main 6a06b1c) — elle prime sur la suite
+## Mise à jour du 2026-11-07 au soir (main 760cba4) — elle prime sur la suite
+- Format de projet : **49** (trajectoire). Essais : **4226 réussis, 0 échec**, deux passages, machine calme (`verifier.ps1`), sur le dernier commit de la branche avant fusion.
+- Fusionnés, en attente du test d'Anthony : parties 121 (effets de part et d'autre du bord de la feuille), 122 (trait qui traverse une case qui ne peut pas le recevoir ; calque verrouillé : la part reste sur la planche, choix A), 123 (durée d'un plan : poignée seule = durée, Ctrl = clés décalées du même nombre d'images ; clés de dessin en alternance de teinte), planche exportée en tuiles exactes, Annuler sans gel pour cet export.
+- Limites connues : saccade de caméra dont le rythme ne suit pas un décalage Ctrl ; insérer des images (hors rognage) ne décale pas la trajectoire ; les autres exports attendent encore leur fin à l'annulation (non mesuré) ; Annuler n'a pas été cliqué dans le vrai exe.
+- Non expliqués, à garder si ça revient : `cases_tests::uniting_two_plans_...` (un échec sous forte charge, 0 sur 1 220 lancers), `scrubbing_far_away_never_cuts_the_stroke_again` (un écart de 44 px vu une fois).
+- Le montage restant (entrée/sortie, liens image et son, vitesse, titres) attend le test d'Anthony.
+
+## Mise à jour du 2026-11-07 (main 6a06b1c)
 - Format de projet : **48** (`plans_annules.json`). Essais : **4109 réussis, 0 échec**, deux passages.
 - Fusionnés, en attente du test d'Anthony : parties 115 (plan écarté : un clic sur le numéro, « Écarter », « Reprendre », case barrée dans les Vignettes, absent partout ailleurs), 116 (« + » de Maj), 117 (poignées de lissage), 118 (traits coupés).
 - Essais de repos et de temps intermittents dans certains passages complets : verts seuls, vus aussi sur main sans ces chantiers (2 passages sur 5, machine occupée) ; cause non trouvée.

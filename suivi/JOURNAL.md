@@ -5,6 +5,7 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-07
 
+- Fusion dans main (760cba4) de `duree-cles` : effets au-delà de la feuille (partie 121), traits cachés (122), durée d'un plan et clés alternées (123), planche en tuiles exactes, Annuler sans gel (15 s → 0,2 s sur un gros cas, en essais automatiques), réparation de plusieurs causes d'essais instables. Relectures : gel à l'annulation, décalage à tort sur les anciens projets (marqueur `cles_v2`, essai sur un vrai fichier ancien) et trajectoire qui ne suivait pas Ctrl : réels, corrigés. Vérification finale 4226 réussis, deux passages. Portable `FEANOR-portable-2026-11-07-soir.zip`, ouvert sur une copie de projet. Incident sans perte : un script de renumérotation (alias `Ren` de PowerShell) a vidé 13 fichiers du worktree, restaurés depuis l'index avant commit.
 - Fusion dans main (3a6cfc0) à la demande d'Anthony, après deux essais (« ça marche très bien ») : l'outil Trajectoire (partie 119,
   format de projet 49) et les poignées de lissage de la caméra au repos (partie 120). Suite complète sur la branche : 4133 réussis sur
   4134, un essai de temps différent à chaque passage, réussi seul. `feanor.exe` reconstruit. Le chantier `trajectoire` peut partir avec
