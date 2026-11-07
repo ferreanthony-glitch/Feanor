@@ -40,6 +40,10 @@ pub struct Etat {
     pub recu: Recu,
     /// La phrase sous les boutons, après « Enregistrer le relevé ».
     pub message: Option<String>,
+    /// Ce qui se poursuit d'une image à l'autre pour le bouton et la gomme (`styletlien.rs`).
+    pub lien: crate::styletlien::Lien,
+    /// Essais : le relevé imposé à la place de l'écoute, qui est commune à tout le processus.
+    pub force: Option<Releve>,
 }
 
 /// Compte ce qu'un événement d'egui apporte : un toucher (stylet ou doigt) et son appui, un bouton du pointeur.

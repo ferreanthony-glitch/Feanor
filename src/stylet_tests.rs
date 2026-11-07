@@ -71,6 +71,7 @@ fn the_report_says_what_was_seen_and_what_was_not() {
         messages: 312,
         doigts: 0,
         clics: stylet::Clics { gauche: 0, gauche_du_stylet: 0, droit: 2, droit_du_stylet: 2 },
+        bouton_au_contact: true,
     };
     let recu = Recu { touchers: 300, appui_max: 0.78, principal: 4, secondaire: 2, milieu: 0 };
     let t = r.texte(&recu, Some(true), "06/11/2026 à 15:00");
@@ -86,6 +87,7 @@ fn the_report_says_what_was_seen_and_what_was_not() {
         "- inclinaison la plus forte : 41°",
         "appui oui, inclinaison oui, rotation non",
         "- droit : 2 (dont 2 venus du stylet)",
+        "- bouton enfoncé au dernier contact : oui",
         "- événements de stylet : 300 (appui le plus fort : 78 %)",
         "clic droit : 2",
     ] {
@@ -144,6 +146,7 @@ fn the_bench_opens_from_help_shows_what_windows_says_and_writes_its_report() {
     }
     // Ce que l'écoute aurait lu : la pointe posée à mi-appui, couchée, le bouton enfoncé.
     stylet::noter(A_PORTEE | EN_CONTACT, BOUTON, MESURE_APPUI | MESURE_PENCHE_X | MESURE_PENCHE_Y, 512, 0, [35, -10]);
+    stylet::noter_le_contact(true);
     // Et ce que FEANOR reçoit aujourd'hui du même geste : un toucher avec son appui, puis un clic droit.
     let p = pos2(1200.0, 700.0);
     b.image(vec![Event::Touch { device_id: TouchDeviceId(0), id: TouchId(0), phase: TouchPhase::Start, pos: p, force: Some(0.5) }, Event::PointerMoved(p), Event::PointerButton { pos: p, button: PointerButton::Secondary, pressed: true, modifiers: Modifiers::NONE }], DT);
@@ -159,10 +162,11 @@ fn the_bench_opens_from_help_shows_what_windows_says_and_writes_its_report() {
     let r = stylet::lire();
     assert!(r.vu(Jalon::BoutonPose) && r.vu(Jalon::Appui) && r.vu(Jalon::Penche) && !r.vu(Jalon::Retourne) && !r.vu(Jalon::Survol));
     assert_eq!(r.messages, 1);
-    // Le stylet s'en va : ni à portée ni en contact, mais ce qui a été vu reste coché.
+    assert!(r.bouton_au_contact);
+    // Le stylet s'en va : ni à portée ni en contact, ni bouton ni gomme, mais ce qui a été vu reste coché.
     stylet::noter_le_depart();
     let r = stylet::lire();
-    assert!(!r.lecture.portee && !r.lecture.contact && r.lecture.appui == 0.0 && r.vu(Jalon::BoutonPose));
+    assert!(!r.lecture.portee && !r.lecture.contact && !r.lecture.bouton && !r.lecture.dos() && r.lecture.appui == 0.0 && r.vu(Jalon::BoutonPose));
     // Les clics de souris arrivés à la fenêtre.
     stylet::noter_un_clic(true, true);
     stylet::noter_un_clic(false, false);

@@ -200,6 +200,8 @@ pub struct Releve {
     pub messages: u32,
     pub doigts: u32,
     pub clics: Clics,
+    /// Le bouton du stylet était enfoncé au dernier contact de la pointe (`noter_le_contact`).
+    pub bouton_au_contact: bool,
 }
 
 impl Releve {
@@ -222,6 +224,7 @@ impl Releve {
             t += &format!("- {} : {}\n", j.nom(), if self.vu(j) { "vu" } else { "pas vu" });
         }
         t += &format!("- appui le plus fort : {:.0} %\n- inclinaison la plus forte : {}°\n", self.appui_max * 100.0, self.penche_max);
+        t += &format!("- bouton enfoncé au dernier contact : {}\n", oui(self.bouton_au_contact));
         let m = self.lecture.mesures;
         t += &format!(
             "- le stylet dit mesurer : appui {}, inclinaison {}, rotation {}\n\n",
@@ -254,6 +257,7 @@ static PENCHE_MAX: AtomicU32 = AtomicU32::new(0);
 static MESSAGES: AtomicU32 = AtomicU32::new(0);
 static DOIGTS: AtomicU32 = AtomicU32::new(0);
 static CLICS: [AtomicU32; 4] = [AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0), AtomicU32::new(0)];
+static BOUTON_AU_CONTACT: AtomicU32 = AtomicU32::new(0);
 
 /// Range une lecture brute du stylet. Appelée pendant un message de Windows : rien que des atomiques, aucune attente,
 /// rien qui puisse échouer.
@@ -274,10 +278,18 @@ pub fn noter(pointeur: u32, stylet: u32, mesures: u32, appui: u32, rotation: u32
     MESSAGES.fetch_add(1, Relaxed);
 }
 
-/// Le stylet a quitté la tablette : la dernière lecture n'est plus ni à portée ni en contact.
+/// Le stylet a quitté la tablette : la dernière lecture n'est plus ni à portée ni en contact, ni retournée, ni bouton
+/// enfoncé (un stylet parti à l'envers ne laisse pas la Gomme en place, `styletlien.rs`).
 pub fn noter_le_depart() {
     POINTEUR.fetch_and(!(A_PORTEE | EN_CONTACT), Relaxed);
+    STYLET.store(0, Relaxed);
     APPUI.store(0, Relaxed);
+}
+
+/// La pointe vient de toucher (`WM_POINTERDOWN`) : le bouton du stylet était-il enfoncé à cet instant ? C'est ce qui fait
+/// d'un appui un clic droit (`styletlien.rs`), pas l'état d'après.
+pub fn noter_le_contact(bouton: bool) {
+    BOUTON_AU_CONTACT.store(bouton as u32, Relaxed);
 }
 
 /// Un message de doigt est passé (écran tactile).
@@ -305,12 +317,13 @@ pub fn lire() -> Releve {
         messages: MESSAGES.load(Relaxed),
         doigts: DOIGTS.load(Relaxed),
         clics: Clics { gauche: CLICS[0].load(Relaxed), gauche_du_stylet: CLICS[1].load(Relaxed), droit: CLICS[2].load(Relaxed), droit_du_stylet: CLICS[3].load(Relaxed) },
+        bouton_au_contact: BOUTON_AU_CONTACT.load(Relaxed) != 0,
     }
 }
 
 /// Remet le relevé à zéro (« Recommencer »). L'écoute, elle, reste posée.
 pub fn effacer() {
-    for a in [&POINTEUR, &STYLET, &MESURES, &APPUI, &ROTATION, &JALONS, &APPUI_MAX, &PENCHE_MAX, &MESSAGES, &DOIGTS] {
+    for a in [&POINTEUR, &STYLET, &MESURES, &APPUI, &ROTATION, &JALONS, &APPUI_MAX, &PENCHE_MAX, &MESSAGES, &DOIGTS, &BOUTON_AU_CONTACT] {
         a.store(0, Relaxed);
     }
     PENCHE_X.store(0, Relaxed);
@@ -518,6 +531,9 @@ mod systeme {
             info
         };
         super::noter(info.info.pointer_flags, info.pen_flags, info.pen_mask, info.pressure, info.rotation, [info.tilt_x, info.tilt_y]);
+        if message == WM_POINTERDOWN {
+            super::noter_le_contact(info.pen_flags & super::BOUTON != 0);
+        }
         if message == WM_POINTERLEAVE {
             super::noter_le_depart();
         }

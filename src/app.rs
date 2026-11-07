@@ -1026,9 +1026,12 @@ impl App {
             });
         }
         let mut app = Self::construire(&cc.egui_ctx, cc.wgpu_render_state.as_ref(), true);
-        // La fenêtre de Windows, pour le banc du stylet (`stylet.rs`). Rien n'y est posé ici : l'écoute ne l'est qu'à
-        // la première ouverture du banc.
+        // La fenêtre de Windows, et l'écoute du stylet posée dessus (`stylet.rs`) : le bouton du stylet et la gomme au dos
+        // en viennent (`styletlien.rs`). Le réglage peut l'éteindre ; le banc (`styletui.rs`) la pose alors lui-même.
         app.stylet.hwnd = crate::stylet::fenetre_de(cc);
+        if app.settings.stylet_windows {
+            app.stylet.ecoute = Some(crate::stylet::ecouter(app.stylet.hwnd));
+        }
         app
     }
 
@@ -5150,6 +5153,8 @@ impl eframe::App for App {
     /// egui se sert de Tab pour passer d'un champ à l'autre ; hors d'un champ texte, on le lui
     /// retire pour en faire un raccourci comme les autres.
     fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        // Le stylet lu auprès de Windows, avant tout : son bouton devient le clic droit, retourné il prend la Gomme (`styletlien.rs`).
+        self.stylet_brancher(raw_input);
         // Pipette d'un champ de couleur armée : les clics et Échap sont pour elle seule (`champcouleur.rs`).
         crate::champcouleur::filtrer_entree(ctx, raw_input);
         // Texte écrit sur la planche : Échap et Ctrl+Entrée le posent, et ne vont à rien d'autre (egui ôterait le curseur

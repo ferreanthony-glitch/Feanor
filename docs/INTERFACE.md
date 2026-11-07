@@ -7951,3 +7951,34 @@ la rotation. egui ne reçoit donc qu'un toucher avec sa force, et un bouton prin
 3. Faire les sept autres gestes de la liste, dans le cadre. Peu importe que certains ne se cochent pas : c'est la réponse qu'on cherche.
 4. « Enregistrer le relevé ».
 5. Fermer le banc et dessiner comme d'habitude quelques minutes : le trait, l'appui, le clic droit et l'anneau sont comme avant.
+
+### Branché le 2026-11-07 : le bouton du stylet et la gomme au dos (branche `stylet-branche`)
+
+Le relevé d'Anthony (28 513 messages) : appui jusqu'à 96 %, inclinaison jusqu'à 60°, **bouton pointe posée vu**, stylet retourné et
+gomme posée vus ; bouton pointe en l'air **pas vu** (son pilote ne signale le bouton qu'à la pointe posée, mode « Click & Tap ») ; et côté
+FEANOR, **clic droit : 0** : winit garde l'appui et jette le bouton, sans laisser Windows fabriquer le clic droit de souris. Aucun clic
+droit du stylet n'arrivait donc à FEANOR : ni les réglages de l'outil sous le curseur (partie 66), ni l'anneau (partie 111).
+Code : `src/styletlien.rs`, essais `src/styletlien_tests.rs` (4).
+
+- **L'écoute est posée dès le démarrage** (plus seulement à l'ouverture du banc). Réglage Préférences > Dessin > Stylet à ma main >
+  **« Bouton et gomme du stylet lus auprès de Windows »** (`stylet_lu_aupres_de_windows`, allumé d'origine) : éteint, FEANOR ne reçoit du
+  stylet que l'appui, comme avant ; le banc, lui, lit toujours.
+- **Le bouton du stylet est le clic droit.** Dans `App::raw_input_hook`, avant qu'egui ne lise l'image : l'appui de la pointe (l'événement
+  tactile puis le bouton principal, comme egui-winit les donne) pendant que le bouton du stylet est enfoncé devient un appui du **bouton
+  secondaire**, sans l'événement tactile ; le relâchement qui suit aussi, même si le bouton a été lâché entre-temps. Le bouton compte à
+  l'instant du contact (`Releve::bouton_au_contact`, noté à `WM_POINTERDOWN`) : pressé en cours de trait, il ne change rien. La souris
+  n'est jamais touchée. Le geste : **bouton tenu, poser la pointe** ; bref = les réglages de l'outil ; tenu puis parti dans une direction =
+  l'anneau.
+- **Le stylet retourné prend la Gomme.** Tant que Windows voit le stylet à l'envers (en l'air ou posé), l'outil est la Gomme ; remis à
+  l'endroit, l'outil d'avant revient, s'il n'a pas été changé entre-temps. Déjà sur la Gomme : rien ne change. Parti de la tablette à
+  l'envers, l'écoute oublie le dos (`noter_le_depart`) : l'outil revient. Le changement passe par `set_tool` : un trait en cours est posé.
+- L'inclinaison n'est pas branchée (à faire avec un réglage par brosse, et une lecture de tout l'historique d'une trame).
+
+#### À regarder à l'écran, devant la tablette
+
+1. Bouton du stylet tenu, pointe posée brièvement sur le dessin : la fenêtre des réglages de l'outil. Rien n'est tracé.
+2. Bouton tenu, pointe posée, partir vers le bas sans lever : la Gomme (l'anneau) ; tenir sans bouger : l'anneau se dessine.
+3. Retourner le stylet : l'outil passe à la Gomme (la barre d'outils le montre) ; gommer ; remettre à l'endroit : le pinceau revient.
+4. Prendre la Gomme soi-même, retourner, remettre : toujours la Gomme.
+5. Préférences > Dessin, décocher « Bouton et gomme du stylet… » : plus rien ne change au stylet ; recocher : tout revient, sans relancer.
+6. La souris : clic gauche, clic droit, comme avant.

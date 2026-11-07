@@ -243,6 +243,7 @@ pub const REGLAGES: &[Reglage] = &[
     // ---- Dessin
     r(O::Dessin, G::Stylet, "dessin.croix", "Croix du système sur le pinceau", "curseur stylet retard pointe"),
     r(O::Dessin, G::StyletMain, "dessin.regler_stylet", "Régler le stylet à ma main", "pression courbe appui tablette léger moyen fort toucher"),
+    r(O::Dessin, G::StyletMain, "dessin.stylet_windows", "Bouton et gomme du stylet lus auprès de Windows", "clic droit bouton stylet gomme retourné inverser windows ink tablette anneau"),
     r(O::Dessin, G::Poignees, "dessin.point_fixe", "Point fixe des poignées", "ancre poignée opposée centre échelle incliner coin côté transformer sélection boîte ctrl"),
     r(O::Dessin, G::Poignees, "dessin.rotation_autour", "Rotation autour de", "pivot coin opposé tourner rotation transformer sélection boîte"),
     r(O::Dessin, G::Camera, "dessin.passe_partout_couleur", "Couleur du passe-partout", "noir hors-champ voile cadre caméra"),
