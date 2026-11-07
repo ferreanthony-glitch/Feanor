@@ -1086,6 +1086,15 @@ impl App {
             if edge_at(p).is_some() || clip_edge || resizing {
                 ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
             }
+            // La bulle de la poignée d'un plan : sa durée, et Ctrl (les clés suivent la poignée).
+            if let (Some((_, side)), None) = (edge_at(p), &self.montage_drag) {
+                let (name, tip) = if side == crate::rognageui::Side::Head {
+                    ("Début du plan", crate::handles::BULLE_DEBUT_AIDE)
+                } else {
+                    (crate::handles::BULLE_DUREE_NOM, crate::handles::BULLE_DUREE_AIDE)
+                };
+                resp.clone().on_hover_ui_at_pointer(|ui| crate::bulles::contenu(ui, name, tip, ""));
+            }
             // Une transition : ses bords s'étirent, sa bulle dit sa sorte et sa durée.
             if let Some((i, hit)) = crate::transitionsui::badge_hit(&badges, p) {
                 if hit != crate::transitionsui::BadgeHit::Body {

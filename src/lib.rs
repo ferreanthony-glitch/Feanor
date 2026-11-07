@@ -749,6 +749,9 @@ mod gpufxperf_tests;
 mod groups;
 mod groupsui;
 mod handles;
+mod cles_alternees;
+#[cfg(test)]
+mod duree_cles_tests;
 #[cfg(test)]
 mod handles_tests;
 mod guides;

@@ -106,7 +106,19 @@ pub(crate) struct HandleDrag {
     /// Le plan, sa réserve et ses commentaires d'avant le geste (le rognage de la fin les change).
     backup: crate::rognageui::PlanBackup,
     snap: Edit,
+    /// Ctrl était tenue à la dernière image du geste (fin du plan) : les clés ont suivi la poignée (`slide_plan_end`).
+    glisse: bool,
 }
+
+/// Ctrl (ou Commande) est tenue : sur la fin d'un plan, les clés suivent la poignée au lieu de rester où elles sont.
+pub(crate) fn keys_follow(m: &egui::Modifiers) -> bool {
+    m.command || m.ctrl
+}
+
+/// Ce que dit la poignée de durée d'un plan : sa bulle (nom, explication) pour la timeline et le montage.
+pub(crate) const BULLE_DUREE_NOM: &str = "Durée du plan";
+pub(crate) const BULLE_DEBUT_AIDE: &str = "Glisser pour raccourcir ou allonger le début du plan (ce qui est rogné reste en réserve) : les clés gardent leur distance à la fin du plan. Ctrl tenue pendant le geste : elles gardent leur place depuis le début du plan, c'est la fin qui change. Alt : déplacer la coupe. Échap : abandonner.";
+pub(crate) const BULLE_DUREE_AIDE: &str = "Glisser pour allonger ou raccourcir le plan : les clés restent où elles sont. Ctrl tenue pendant le geste : toutes les clés (dessins, caméra, position, opacité, effets) suivent la poignée du même nombre d'images, le rythme ne change pas. Échap : abandonner.";
 
 /// `f` gardé entre les voisins `prev` et `next` (exclus) : l'ordre ne change pas.
 pub fn between(f: usize, prev: Option<usize>, next: Option<usize>) -> usize {
@@ -714,7 +726,7 @@ impl App {
         let snap = self.snapshot();
         let backup = crate::rognageui::PlanBackup::capture(&self.doc, self.cur_panel);
         let before = backup.panel.clone();
-        self.handle_drag = Some(HandleDrag { handle, panel: before.id, before, backup, snap });
+        self.handle_drag = Some(HandleDrag { handle, panel: before.id, before, backup, snap, glisse: false });
         true
     }
 
@@ -859,14 +871,35 @@ impl App {
                 let Some(backup) = self.handle_drag.as_ref().map(|d| d.backup.clone()) else { return };
                 let (old, n) = (backup.panel.frame_count(), edge.max(1));
                 backup.restore(&mut self.doc);
-                self.doc.set_duration(pi, n);
+                // Ctrl tenue (lue à chaque image d'écran : on peut la presser ou la lâcher en cours de geste) : toutes les clés
+                // suivent la poignée du même nombre d'images (`slide_plan_end`) ; sinon seule la durée change.
+                let glisse = keys_follow(&self.ctx.input(|i| i.modifiers));
+                if glisse {
+                    self.doc.slide_plan_end(pi, n);
+                } else {
+                    self.doc.set_duration(pi, n);
+                }
+                if let Some(d) = self.handle_drag.as_mut() {
+                    d.glisse = glisse;
+                }
                 // (Rogner ou rallonger la fin range des images dans la réserve du plan ou les en sort : aucun dessin n'est créé
                 // ni modifié, seul change ce que l'image courante montre, qui est dans le plan à composer.)
                 self.renderer.invalidate_params();
+                let n = self.doc.panels[pi].frame_count();
                 let base = format!("Durée du plan : {}", crate::storyboard::duration_label(n, self.doc.fps));
+                let how = if glisse {
+                    let (h, _) = self.doc.hidden(pi);
+                    if h > 0 {
+                        format!(" (Ctrl tenue : les clés suivent la poignée ; {h} i cachées au début, en réserve)")
+                    } else {
+                        " (Ctrl tenue : les clés suivent la poignée, le rythme ne change pas)".to_string()
+                    }
+                } else {
+                    " (Ctrl pendant le geste : les clés suivent la poignée)".to_string()
+                };
                 match sound_shift_note(&self.doc, pi, old, n) {
-                    Some(note) => format!("{base}. {note}"),
-                    None => format!("{base}."),
+                    Some(note) => format!("{base}{how}. {note}"),
+                    None => format!("{base}{how}."),
                 }
             }
         };
@@ -991,12 +1024,11 @@ impl App {
                 self.commit_as(d.snap, crate::montagekeys::key_move_name(move_mode, false));
             } else {
                 // La poignée de fin du plan : « Allonger la fin » ou « Raccourcir la fin ».
-                let name = (d.handle == Handle::PlanEnd).then(|| {
-                    if plan_now > d.before.frame_count() {
-                        crate::rognage::noms::FIN_LONGUE
-                    } else {
-                        crate::rognage::noms::FIN_COURTE
-                    }
+                let name = (d.handle == Handle::PlanEnd).then(|| match (d.glisse, plan_now > d.before.frame_count()) {
+                    (true, true) => crate::rognage::noms::DUREE_CLES_LONGUE,
+                    (true, false) => crate::rognage::noms::DUREE_CLES_COURTE,
+                    (false, true) => crate::rognage::noms::FIN_LONGUE,
+                    (false, false) => crate::rognage::noms::FIN_COURTE,
                 });
                 let ctx = name.map(|n| self.history.context.replace(n.to_string()));
                 self.history.push(d.snap);
@@ -1007,6 +1039,10 @@ impl App {
             self.modified = true;
             // La note du son reste lisible après le geste ; la durée vue est à jour.
             self.plan_len_seen = Some((d.panel, plan_now));
+            // Les clés ont changé d'image : ce qui visait des images du plan (choix de clés, d'images) ne vise plus rien de sûr.
+            if d.glisse && d.handle == Handle::PlanEnd {
+                self.after_rognage();
+            }
         } else if d.handle == Handle::PlanEnd {
             // Rien n'a changé : le plan, sa réserve et ses commentaires reprennent leur état.
             d.backup.restore(&mut self.doc);

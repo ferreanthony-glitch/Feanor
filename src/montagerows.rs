@@ -714,9 +714,12 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, stack: &[Layer
         (false, true) => theme::couleur_du_calque(layer).gamma_multiply(0.7),
         (false, false) => theme::fond_du_calque(layer),
     };
+    let base_fill = fill;
     let fill = if layer.visible { fill } else { fill.gamma_multiply(0.35) };
     let x0 = cell.left() - 1.0;
     let mut f = 0;
+    // Une clé sur deux un peu plus claire (rang depuis le début du plan, `cles_alternees.rs`) : on voit où chacune commence et s'arrête.
+    let mut rang = 0;
     while f < layer.frames.len() {
         let (s, e) = layer.run_bounds(f);
         if layer.frames[f].is_some() {
@@ -724,8 +727,10 @@ fn paint_layer_cell(painter: &Painter, cell: Rect, layer: &Layer, stack: &[Layer
                 pos2((x0 + s as f32 * ppf).max(cell.left()), cell.top() + pad),
                 pos2((x0 + e as f32 * ppf - 1.0).min(cell.right()), cell.bottom() - seg_off),
             );
+            let tint = crate::cles_alternees::alternee(base_fill, rang);
+            rang += 1;
             if seg.width() > 0.0 {
-                painter.rect_filled(seg, 1.0, fill);
+                painter.rect_filled(seg, 1.0, if layer.visible { tint } else { tint.gamma_multiply(0.35) });
                 // Une clé choisie : cerclée de la couleur du choix ; survolée (on la prend par son
                 // milieu pour la déplacer) : de blanc.
                 if chosen.contains(&s) {

@@ -8473,3 +8473,75 @@ Un plan dont le cadre A n'est pas exactement la case (tourné, réduit) montre d
 6. Écarte tous les plans : Calques, Réglages, Effets, Fiche disent « Tous les plans sont écartés. » Essaie de dessiner au Storyboard et sur les cases barrées : rien. Change la résolution du projet : ça marche. Trace dans une case pâle : un plan naît.
 7. Ctrl+Z défait tout le trait d'un coup ; enregistre, rouvre : même image. Export PNG et PDF de la planche.
 8. Le stylet réel n'a pas été essayé.
+
+## 121. Durée d'un plan : Ctrl fait suivre les clés ; les clés de dessin alternent de couleur (2026-11-07, branche `duree-cles`)
+
+Demande d'Anthony : dans le Montage et la timeline, la poignée latérale d'un plan change sa durée. **Sans touche**, seule la durée change et les clés restent où elles sont. **Ctrl tenue pendant le geste**, toutes les clés se décalent du même nombre d'images que la poignée, le rythme interne ne change pas (pas de mise à l'échelle). Et, sur une piste de calque, chaque clé de dessin alterne entre la couleur du calque et une teinte un peu plus claire pour qu'on voie où elle commence et s'arrête. Fichiers : `rognage.rs` (`Document::slide_plan_end`, clés de position et d'opacité dans la réserve), `rognageui.rs` (bords du montage), `handles.rs` (poignée de fin du plan, bulles), `cles_alternees.rs` (couleurs), `timeline.rs`, `montagerows.rs`, `storyboard.rs`. Essais : `duree_cles_tests.rs`. **Le format de projet reste 48.**
+
+### Ce que faisait le logiciel avant
+
+Sans touche, le bord droit d'un plan (la prise au bout de la règle de la timeline, le bord droit du bloc dans le Montage) changeait déjà seule la durée : les clés restaient à leur image, un plan raccourci rangeait ce qui sortait dans la **réserve de la fin** (rien de détruit), un plan rallongé la reprenait puis tenait le dernier dessin. Le bord gauche (Montage seulement) faisait l'inverse, sur le début : les clés restaient attachées à leur dessin, donc elles glissaient par rapport au début du plan. **Ce comportement sans touche n'a pas changé.**
+
+### La règle : Ctrl, c'est « les clés suivent la poignée que je tiens »
+
+Une seule phrase pour les deux bords : sans Ctrl, les clés gardent leur distance au bord qu'on ne touche pas ; avec Ctrl, elles gardent leur distance à la poignée tenue.
+
+| Geste | Sans touche | Ctrl tenue |
+|---|---|---|
+| Bord droit, plus long de *d* images | Les clés ne bougent, le dernier dessin est tenu | **Toutes les clés avancent de *d*** ; les *d* premières images sont vides (la première clé de dessin glisse vraiment : plan de 4 s, clés à 0, 1, 2, 3 s, bord tiré jusqu'à 8 s : clés à 4, 5, 6, 7 s) |
+| Bord droit, plus court de *d* | Les clés après la nouvelle fin partent en réserve (la fin) | **Toutes les clés reculent de *d*** ; ce qui passerait avant la première image part dans la **réserve du début** |
+| Bord gauche, plus court de *c* | Le début part en réserve, les clés reculent de *c* (comme avant) | Les clés **ne bougent pas** depuis le début ; c'est la fin qui perd *c* images (réserve de la fin) |
+| Bord gauche, plus long | Le début revient de la réserve puis le premier dessin est tenu | Les clés ne bougent pas ; la fin se prolonge |
+
+Au fond, Ctrl change **de quel côté** du plan la durée est prise : au début (bord droit) ou à la fin (bord gauche). La durée totale est la même dans les deux cas, donc les plans suivants se décalent pareil.
+
+### Ce qui se décale avec Ctrl (bord droit)
+
+Tout ce qui tient aux images du plan : clés de dessin de **tous** les calques (y compris le décor et les calques de couleur), clés de caméra avec leurs poignées de lissage (adoucis, « doux » : ils sont portés par chaque clé), clés d'effets, clés de position et d'opacité des calques, rôles, marques d'image, signets, points d'entrée et de sortie, notes dessinées, commentaires. **Le film rend la même chose** : l'image *f* du plan d'avant s'affiche à l'image *f* + *d*, au pixel (essai).
+
+### Les cas limites, un par un
+
+- **Raccourcir avec Ctrl** : aucune clé n'est perdue ni aucun dessin supprimé. Ce qui sort par le début (dessins, clés de caméra, d'effet, de position, d'opacité, rôles, marques…) va dans la réserve du début du plan ; une clé est posée au nouveau bord (la courbe de la caméra, des effets, de la position et de l'opacité continue sans saut). Un plan garde au moins une image.
+- **Les clés de position et d'opacité étaient oubliées par la réserve du début** (un défaut d'avant : rogner le début d'un plan ne les décalait pas). Elles y sont maintenant, avec leur clé de bord, et s'écrivent dans `rognages.json` (champs en plus, absents quand il n'y a rien : un projet d'avant garde son fichier, une version d'avant ignore les champs). Par la fin, ces clés restent sur le calque au-delà de la dernière image, comme avant.
+- **Rallonger avec Ctrl un plan qui a une réserve du début** : ce qui avait été rogné au début revient d'abord (c'est ce que le bord gauche ferait), puis les nouvelles images sont vides. À valider (voir plus bas).
+- **Revenir à l'origine pendant le geste** : chaque valeur repart du plan d'avant le geste, donc la poignée revenue à son origine rend l'état de départ **exactement**, sans étape d'annulation. De même, presser ou lâcher Ctrl pendant le geste change le résultat à l'image d'écran suivante.
+- **Annuler / rétablir** : une seule étape par geste, nommée « Allonger le plan, clés décalées » ou « Raccourcir le plan, clés décalées » (sans Ctrl : « Allonger la fin », « Raccourcir la fin », « Raccourcir le début »…).
+- **Le son** n'est pas lié au plan : il reste en place, et la ligne d'état dit, comme avant, « Les plans suivants se décalent de ±n images par rapport au son, qui reste en place ».
+- **Refus** : les mêmes que les gestes de durée d'avant, parce que les gestes commencent par les mêmes contrôles : storyboard verrouillé (le geste est refusé, la phrase le dit), film partagé (un plan que l'on ne tient pas refuse la prise du bord), plans à versions de séquence (inchangé). Rien de plus, rien de moins.
+- **Roll (Alt) et glisser le contenu (Alt)** ne sont pas touchés : Ctrl n'y change rien. Ctrl n'était pas pris sur ces poignées (le bord n'avait que Alt) ; Ctrl + clic dans les pistes de calques garde son sens ailleurs, la poignée de plan n'est pas dans les pistes.
+
+### Se découvre au geste
+
+La ligne d'état pendant le geste dit « Ctrl pendant le geste : les clés suivent la poignée » (ou, Ctrl tenue : « les clés suivent la poignée, le rythme ne change pas »). La poignée n'avait pas de bulle : elle en a une (nom, explication, Ctrl) dans la timeline (prise au bout de la règle) et dans le Montage (bords des plans, début et fin). Comme les autres bulles, elle prend le temps de la bulle.
+
+### Des clés de dessin qu'on distingue
+
+Chaque segment de dessin d'une piste de calque alterne : couleur du calque (rang pair), puis une teinte plus claire (rang impair), dans la timeline comme dans le Montage (piste dépliée et repliée). **Le rang est celui de la clé depuis le début du plan** (les dessins seulement : une plage vide n'a pas de rang), donc l'alternance ne change ni au défilement ni au zoom. Elle change quand on ajoute ou retire une clé avant : c'est le rang.
+
+L'éclaircissement se mesure en luminosité perceptuelle (OKLab) : **+0,075** de luminosité pour toutes les couleurs, pas du blanc ajouté, pour qu'un jade sombre et un orange vif gagnent le même écart. Une couleur déjà très claire (au-dessus de 0,86) ne peut pas s'éclaircir : elle s'assombrit du même écart. L'essai passe sur les six thèmes, avec les couleurs de calque de chacun et le noir, le blanc, un vert très sombre, un blanc cassé. Le calque sélectionné (cadre), la clé choisie (contour), la clé survolée et les poignées se peignent par-dessus et ne changent pas. Un calque masqué garde son atténuation.
+
+### Mesures et coût
+
+Tout le travail du geste est du réarrangement de listes de clés et de dessins (références, jamais de pixels) : ni rejeu de trait, ni envoi de dessin à la carte graphique pendant le geste, `invalidate_params` seulement (comme les gestes de durée d'avant). Les couleurs se calculent par segment visible, une fois par image d'écran (quelques cubes et racines cubiques par segment). L'essai de la timeline et du Montage tient à la fois sur les vrais gestes du pointeur du `Banc` (Ctrl comprise).
+
+### Liste à vérifier à l'écran
+
+1. Montage, plan de 4 s avec des clés à 0, 1, 2, 3 s : tirer le bord droit jusqu'à 8 s **sans touche** : les clés restent à 0, 1, 2, 3 s.
+2. Même geste en **tenant Ctrl** : les clés sont à 4, 5, 6, 7 s ; les 4 premières secondes sont vides ; la ligne d'état dit que les clés suivent la poignée.
+3. Pendant le geste, lâcher puis reprendre Ctrl : les clés vont et viennent à l'image d'écran suivante. Ramener la poignée à son point de départ : tout est comme avant, et rien n'est enregistré dans l'historique.
+4. Avec Ctrl, raccourcir : les premières clés disparaissent du plan (réserve du début, « N images cachées au début » dans la ligne d'état) ; rallonger de nouveau avec Ctrl les ramène.
+5. Ctrl+Z après le geste : une seule étape ; le plan est exactement celui d'avant (dessins, caméra, effets, opacité, position). Ctrl+Y : de nouveau l'après.
+6. Les clés de position et d'opacité (losanges vert et gris clair) suivent aussi ; la courbe de la caméra ne fait pas de saut au bord.
+7. Bord gauche, sans touche : comme avant. Avec Ctrl : les clés ne bougent pas, la fin du plan change.
+8. Timeline : la prise au bout de la règle, mêmes gestes ; la bulle de la prise mentionne Ctrl.
+9. Un plan suivant et ses clés ne bougent pas (sauf d'être décalés dans le film) ; le son ne bouge pas, la ligne d'état prévient.
+10. Storyboard verrouillé : les deux gestes sont refusés.
+11. Enregistrer, fermer, rouvrir un plan raccourci avec Ctrl : le rallonger avec Ctrl rend les clés où elles étaient.
+12. Pistes de calques jade (Atelier, Papier), bleu, rose, sombres et claires, sur les trois thèmes : chaque clé se distingue de sa voisine sans crier ; défiler la timeline ne change pas l'alternance ; le calque sélectionné, une clé choisie et la poignée du bord restent lisibles.
+
+### Points à faire valider par Anthony
+
+- Le **bord gauche** : j'ai choisi que Ctrl y fasse « les clés gardent leur place depuis le début, la fin change » (la règle « les clés suivent la poignée tenue » appliquée à l'autre bord). Le comportement sans touche du bord gauche (inchangé) fait glisser les clés avec leur dessin.
+- Rallonger avec Ctrl un plan dont le début a été rogné : la réserve du début **revient d'abord**, puis le vide. L'autre choix serait du vide tout de suite (la réserve resterait cachée) ; il garde mieux le sens de « les clés suivent la poignée » mais ne rend plus le rognage d'un geste.
+- Les images ajoutées devant par Ctrl sont **vides** (comme dans l'exemple 0 à 4 s) : le calque n'y montre rien, sauf pré-comportement « maintenir ».
+- L'éclaircissement : +0,075 de luminosité (OKLab). On peut le monter ou le baisser (`PAS` dans `cles_alternees.rs`) après un coup d'œil sur son écran.

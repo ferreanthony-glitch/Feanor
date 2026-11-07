@@ -28,6 +28,12 @@ const BAR_H: f32 = 4.0;
 /// Prise de la fin du plan, au bout de la règle (chantier 4).
 const PLAN_END_W: f32 = 9.0;
 
+// La prise de la fin du plan que la timeline a peinte à sa dernière image (pour les essais, `duree_cles_tests.rs`).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static PRISE_FIN_DU_PLAN: std::cell::Cell<Option<Rect>> = const { std::cell::Cell::new(None) };
+}
+
 /// Bas des dessins d'une ligne qui commence en `y` (la barre du calque est dessous).
 fn body_bottom(y: f32, h: f32) -> f32 {
     y + h - BAR_H - 3.0
@@ -466,6 +472,8 @@ impl App {
             }
             // Depuis l'exposition qui couvre la première colonne visible, jusqu'à la dernière.
             let mut f = if c0 < layer.frames.len() { layer.run_bounds(c0).0 } else { layer.frames.len() };
+            // Le rang de la clé depuis le début du plan (pas depuis la première colonne vue) : l'alternance des couleurs ne bouge pas quand on défile.
+            let mut rang = crate::cles_alternees::rang_de(layer, f);
             while f < layer.frames.len().min(c1 + 1) {
                 let (start, end) = layer.run_bounds(f);
                 // Instance vide entre deux dessins (13d) : une croix, si on le veut.
@@ -490,6 +498,9 @@ impl App {
                         && layer.couleur.as_ref().and_then(|c| c.griffonnages.get(&id)).and_then(|g| self.doc.cels.get(g)).is_none_or(|c| c.is_empty());
                     // (Un calque d'effet n'a que des dessins vides : ses images sont cyan.)
                     let mut fill = if empty && layer.effet.is_none() { theme::dessin_vide() } else { theme::couleur_du_calque(layer) };
+                    // Une clé sur deux un peu plus claire : on voit où chacune commence et s'arrête (`cles_alternees.rs`).
+                    fill = crate::cles_alternees::alternee(fill, rang);
+                    rang += 1;
                     if !layer.visible {
                         fill = fill.gamma_multiply(0.5);
                     }
@@ -786,6 +797,9 @@ impl App {
         // La prise de la fin du plan, au bout de la règle (chantier 4) : on la tire pour changer
         // la durée du plan.
         let tab = Rect::from_min_size(pos2(end_x, r.top() + 2.0), vec2(PLAN_END_W - 2.0, HEADER_H - 4.0));
+        // (Les essais retrouvent la prise de la fin du plan à l'écran par ce rectangle.)
+        #[cfg(test)]
+        PRISE_FIN_DU_PLAN.with(|c| c.set(Some(tab)));
         painter.rect_filled(tab, 2.0, if end_lit { theme::contour() } else { theme::texte_doux() });
         for dy in [-3.0, 0.0, 3.0] {
             painter.line_segment(
@@ -1037,6 +1051,10 @@ impl App {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
             } else if let Some(h) = resp.hover_pos().filter(|p| !on_playhead(*p)).and_then(|p| self.timeline_handle_at(p, r, cell, &rows, grid_top)) {
                 ui.ctx().set_cursor_icon(cursor_for(h, false));
+                // La bulle de la poignée de durée : Ctrl (les clés suivent la poignée).
+                if h == Handle::PlanEnd {
+                    resp.clone().on_hover_ui_at_pointer(|ui| crate::bulles::contenu(ui, crate::handles::BULLE_DUREE_NOM, crate::handles::BULLE_DUREE_AIDE, ""));
+                }
             }
         }
         let holding_key = holding_key || marquee || self.handle_drag.is_some() || self.fx_keys_drag.is_some() || self.pos_ui.drag.is_some() || self.op_ui.drag.is_some() || comment_busy;

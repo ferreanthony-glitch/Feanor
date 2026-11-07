@@ -106,9 +106,11 @@ pub(crate) struct EdgeDrag {
     snaps: Vec<usize>,
     /// L'étape d'annulation de tout le geste.
     snap: Edit,
-    /// Dernier décalage demandé, et ce qui en a été fait.
-    asked: Option<isize>,
+    /// Dernier décalage demandé (et si Ctrl était tenue), et ce qui en a été fait. Ctrl tenue sur le début ou la fin : les clés
+    /// suivent la poignée tenue (`duree-cles`) ; la durée change à l'autre bout du plan.
+    asked: Option<(isize, bool)>,
     pub applied: isize,
+    pub glisse: bool,
     /// Ce que dit le geste (barre d'état et étiquette près du bord).
     pub text: String,
     /// L'image du film (dans le film d'avant le geste) où se fait la coupe, pour le repère.
@@ -210,6 +212,7 @@ impl App {
             snap: self.snapshot(),
             asked: None,
             applied: 0,
+            glisse: false,
             text: String::new(),
             ghost: None,
         }))
@@ -220,27 +223,49 @@ impl App {
         let ppf = self.montage_zoom.max(0.01);
         let Some(MontageDrag::Edge(mut d)) = self.montage_drag.take() else { return };
         let delta = drag_delta(d.kind, d.edge0, (x - d.origin_x) / ppf, &d.snaps, SNAP_PX / ppf);
-        if d.asked != Some(delta) {
-            d.asked = Some(delta);
+        // Ctrl se lit à chaque image d'écran : on peut la presser ou la lâcher en cours de geste (tout repart du plan d'avant).
+        let glisse = matches!(d.kind, EdgeKind::Head | EdgeKind::Tail) && crate::handles::keys_follow(&self.ctx.input(|i| i.modifiers));
+        if d.asked != Some((delta, glisse)) {
+            d.asked = Some((delta, glisse));
+            d.glisse = glisse;
             for b in &d.backups {
                 b.restore(&mut self.doc);
             }
             let first = d.backups[0].panel.id;
             if let Some(pi) = self.doc.panels.iter().position(|p| p.id == first) {
                 let old_len = d.backups[0].panel.frame_count();
-                let op = match d.kind {
-                    EdgeKind::Head => Rogner::Head(delta),
-                    EdgeKind::Tail => Rogner::Tail(delta),
-                    EdgeKind::Roll => Rogner::Roll(delta),
-                    EdgeKind::Slip => Rogner::Slip(delta),
+                // Ctrl : la durée change à l'autre bout (la fin pour le début, le début pour la fin) ; les clés suivent donc la
+                // poignée tenue. La même durée, dans l'autre sens : l'effet d'un bord sur l'autre est un signe changé.
+                let op = match (d.kind, glisse) {
+                    (EdgeKind::Head, false) => Rogner::Head(delta),
+                    (EdgeKind::Tail, false) => Rogner::Tail(delta),
+                    (EdgeKind::Head, true) => Rogner::Tail(-delta),
+                    (EdgeKind::Tail, true) => Rogner::Head(-delta),
+                    (EdgeKind::Roll, _) => Rogner::Roll(delta),
+                    (EdgeKind::Slip, _) => Rogner::Slip(delta),
                 };
-                d.applied = self.doc.rogner(pi, op).unwrap_or(0);
+                let done = if glisse && d.kind == EdgeKind::Tail {
+                    // La fin tirée de `delta` images : le plan passe de `old_len` à `old_len + delta`, clés décalées.
+                    let n = (old_len as isize + delta).max(1) as usize;
+                    self.doc.slide_plan_end(pi, n) as isize - old_len as isize
+                } else {
+                    self.doc.rogner(pi, op).unwrap_or(0)
+                };
+                // `applied` garde le sens du bord tiré : début, positif = raccourci ; fin, positif = allongée.
+                d.applied = if glisse && d.kind == EdgeKind::Head { -done } else { done };
                 d.ghost = match d.kind {
                     EdgeKind::Slip => None,
                     _ => Some((d.edge0 as isize + d.applied).max(0) as usize),
                 };
                 d.text = self.edge_text(d.kind, pi, d.applied, old_len);
-                self.status = d.text.clone();
+                let hint = match (d.kind, glisse) {
+                    (EdgeKind::Tail, false) => " Ctrl pendant le geste : les clés suivent la poignée.",
+                    (EdgeKind::Tail, true) => " Ctrl tenue : les clés suivent la poignée, le rythme ne change pas.",
+                    (EdgeKind::Head, false) => " Ctrl pendant le geste : les clés gardent leur place depuis le début, la fin change.",
+                    (EdgeKind::Head, true) => " Ctrl tenue : les clés gardent leur place depuis le début, la fin change.",
+                    _ => "",
+                };
+                self.status = format!("{}{hint}", d.text);
                 self.renderer.invalidate_all();
             }
         }
@@ -298,7 +323,16 @@ impl App {
             self.renderer.invalidate_all();
             return;
         }
+        // (Ctrl tenue à la dernière image : le geste porte le nom de la durée, clés décalées.)
+        let longer = (d.kind == EdgeKind::Tail) == (d.applied > 0);
         let name = match d.kind {
+            EdgeKind::Head | EdgeKind::Tail if d.glisse => {
+                if longer {
+                    noms::DUREE_CLES_LONGUE
+                } else {
+                    noms::DUREE_CLES_COURTE
+                }
+            }
             EdgeKind::Head if d.applied > 0 => noms::DEBUT_COURT,
             EdgeKind::Head => noms::DEBUT_LONG,
             EdgeKind::Tail if d.applied > 0 => noms::FIN_LONGUE,
