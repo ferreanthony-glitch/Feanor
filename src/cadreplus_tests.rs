@@ -1,4 +1,4 @@
-//! Essais du « + » de la peau de Maj (partie 115) : un cadre de caméra de plus, sans clic droit, par de vrais gestes sur le banc.
+//! Essais du « + » de la peau de Maj (partie 116) : un cadre de caméra de plus, sans clic droit, par de vrais gestes sur le banc.
 
 use eframe::egui::{pos2, vec2, Event, Key, Modifiers, Pos2, Rect};
 

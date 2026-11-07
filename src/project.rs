@@ -227,7 +227,7 @@ pub const FORMAT: &str = "pelure-projet";
 /// calques, les dessins recouverts et les images rognées que les gestes du montage retirent du film, avec leurs dessins gardés dans `dessins/`.
 /// Une version précédente qui ouvrirait le projet effacerait ces dessins à l'enregistrement (rien ne les cite plus dans le manifeste) : elle le
 /// refuse donc. Un projet de version 46 ou moins s'ouvre tel quel, sans rien perdre, corbeille vide.
-/// 48 (2026-11-06, `docs/INTERFACE.md` partie 114) : **plans annulés** — `plans_annules.json` à côté du manifeste (`planannule.rs`) : des plans sortis du
+/// 48 (2026-11-06, `docs/INTERFACE.md` partie 115) : **plans annulés** — `plans_annules.json` à côté du manifeste (`planannule.rs`) : des plans sortis du
 /// film, gardés tels quels, avec leurs dessins dans `dessins/`. Une version précédente qui ouvrirait le projet effacerait ces dessins à l'enregistrement
 /// (rien d'autre ne les cite) : elle le refuse donc. Un projet de version 47 ou moins s'ouvre tel quel, sans rien perdre, aucun plan annulé.
 pub const VERSION: u32 = 48;

@@ -1,4 +1,4 @@
-//! Les traits d'un plan à mouvement de caméra (partie 117), **vus en pixels** : plan 6 d'une planche, cadre B posé par le geste des Vignettes,
+//! Les traits d'un plan à mouvement de caméra (partie 118), **vus en pixels** : plan 6 d'une planche, cadre B posé par le geste des Vignettes,
 //! de longs traits à travers A et B ; ce que montrent la case au repos et le canevas du Storyboard. La cause : les effets du calque (le tremblement par
 //! défaut, sur tout calque vectoriel) ne rendaient que la feuille, ce qui la dépassait disparaissait de l'image dérivée (`fx::effets_hors_de_la_feuille`).
 

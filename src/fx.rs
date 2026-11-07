@@ -1101,7 +1101,7 @@ const MONDE_MAX_PIXELS: usize = 1 << 27;
 
 /// Les effets ne connaissent que la feuille (`Raster::tiles`) : **ce qui est dessiné au-delà disparaissait de l'image dérivée**, et un calque à effets
 /// (le tremblement par défaut, sur tout calque vectoriel) se voyait coupé net au bord de la feuille, au repos, partout où l'image dérivée sert : case,
-/// Storyboard, export (partie 117). La feuille reste calculée comme toujours, au pixel près ; ce qui la dépasse l'est ici, sur une image à part, faite
+/// Storyboard, export (partie 118). La feuille reste calculée comme toujours, au pixel près ; ce qui la dépasse l'est ici, sur une image à part, faite
 /// de ce hors-feuille et de la bande de la feuille qui le touche, le tremblement gardant son champ de la feuille (le trait ne saute pas au bord). Les
 /// effets réglés par rapport à la feuille (centre, pourcentages) ne s'y appliquent pas : ce qu'ils auraient déplacé reste à sa place, tel quel.
 fn effets_hors_de_la_feuille(out: &mut Raster, base: &Raster, steps: &[&FxStep]) {

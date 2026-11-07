@@ -7984,7 +7984,7 @@ Code : `src/styletlien.rs`, essais `src/styletlien_tests.rs` (4).
 6. La souris : clic gauche, clic droit, comme avant.
 ---------------------------------------------------------------------------------------------------
 
-## 114. Le plan écarté : barré dans les Vignettes, absent partout ailleurs (2026-11-06, branche `plan-annule`)
+## 115. Le plan écarté : barré dans les Vignettes, absent partout ailleurs (2026-11-06, branche `plan-annule`)
 
 Demande du réalisateur : « Un plan annulé disparait partout, y compris dans storyboard » ; il a ensuite choisi de dire **Écarter** et **Reprendre** dans toute l'interface, pour ne pas confondre avec Ctrl+Z (le code garde le mot « annulé » : `annuler_plan`, `Document::annules`). Geste voulu : clic sur le numéro du plan dans les Vignettes = croix rouge dans le cadre. Précision : il préfère éviter le clic droit ; numéros cachés, Maj tenue les montre et permet de cliquer dessus. Fichiers : `planannule.rs` (le modèle, le fichier), `planannuleui.rs` (le geste, la peinture, l'état vide), `board.rs` (`layout_ecran`, `BoardLayout::annulees`), `boardui.rs` (quelques lignes), `project.rs` (format 48), `numerotation.rs`, `document.rs`, `elagage.rs`. Essais : `planannule_tests.rs`.
 
@@ -8076,7 +8076,7 @@ Deux commentaires périmés corrigés (`vignettecam.rs`, `vignettecamui.rs`) : l
 6. Écarte tout : le Storyboard le dit, Fichier > Exporter refuse ; un trait dans une case pâle fait un plan.
 7. Enregistre, rouvre : les croix sont là ; reprends : dessins, versions, caméra, textes.
 8. Un plan à mouvement de caméra écarté : la case montre A et les cadres en gris, pas la grande tuile. Les textes sous une case écartée ne sont pas peints (ils sont gardés) : dis-moi s'ils te manquent.
-## 115. Un cadre de plus sans le clic droit : le « + » de la peau de Maj (2026-11-06, branche `cadre-plus`)
+## 116. Un cadre de plus sans le clic droit : le « + » de la peau de Maj (2026-11-06, branche `cadre-plus`)
 
 Demande du réalisateur : créer un cadre C (ou D, ou B) en Vignettes avec Maj, le plus simplement possible, sans le clic droit. Fichiers :
 `src/cadreplus.rs` (tout le geste), `boardui.rs` (sept appels courts, voir plus bas), `vignettecamui.rs` (un message). Essais :
@@ -8135,7 +8135,7 @@ Aucun champ ajouté à `App` (rien pour `onglets_tests`).
 4. Au stylet, la cible de 24 points est-elle assez large ? Sur une planche serrée, la place dessous ou dessus te convient-elle ?
 5. Rien d'autre ne change : glisser dans B déplace B, Maj + glisser une case déplace le plan, Maj + clic sur une barre coupe.
 
-## 116. Le lissage de la caméra se règle sur la piste : des poignées (2026-11-06, branche `lissage-camera`)
+## 117. Le lissage de la caméra se règle sur la piste : des poignées (2026-11-06, branche `lissage-camera`)
 
 Demande d'Anthony : « Je voudrais pouvoir mieux contrôler le lissage de caméra. Quand un lissage se crée, une autre clé apparaît sur la
 timeline de la caméra et contrôle le moment où le lissage commence ou se termine. » Le modèle existait : chaque clé de caméra a un adouci
@@ -8193,7 +8193,7 @@ déplace pas la tête). **Rien de neuf ne dépend du clic droit.**
 3. Tire-le jusqu'à la clé suivante : il s'arrête avant elle (ou avant le rond d'en face). Ramène-le sur sa clé : il disparaît.
 4. À faible zoom de la timeline, où le rond est collé à sa clé : appuyer dessus prend la clé ; zoome un peu, le rond se prend au stylet.
 5. Même chose dans le montage.
-## 117. Les traits coupés au bord de la feuille dans un plan à mouvement de caméra (2026-11-07, branche `camera-traits`)
+## 118. Les traits coupés au bord de la feuille dans un plan à mouvement de caméra (2026-11-07, branche `camera-traits`)
 
 Le réalisateur : « toujours des bugs d'affichage avec les mouvements de caméra depuis les vignettes », puis : « quand je dessine dans la zone les traits coupés réapparaissent, puis redisparaissent une fois le stylet levé ». Fichiers : `fx.rs` (`apply_with`, `un_effet`, `effets_hors_de_la_feuille`, `suit_la_toile`), `tremblement.rs` (`boil_depuis`). Essais : `camera_traits_tests.rs`. **Le format de projet ne change pas** (47).
 

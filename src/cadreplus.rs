@@ -1,4 +1,4 @@
-//! Le « + » de la peau de Maj (partie 115) : un cadre de caméra de plus en Vignettes, sans clic droit.
+//! Le « + » de la peau de Maj (partie 116) : un cadre de caméra de plus en Vignettes, sans clic droit.
 //!
 //! Maj tenue (ou T tenue, ou l'outil Caméra en main), un petit « + » bleu, de la couleur des poignées, se pose juste à côté du **dernier cadre**
 //! du plan survolé (ou, pointeur loin des cases, du plan choisi). Sans Maj ni caméra : rien, la planche reste du papier.

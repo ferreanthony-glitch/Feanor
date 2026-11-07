@@ -1,4 +1,4 @@
-//! Essais du plan annulé (partie 114) : par les vrais gestes de la planche (`Banc`), et un essai par famille d'export.
+//! Essais du plan annulé (partie 115) : par les vrais gestes de la planche (`Banc`), et un essai par famille d'export.
 //!
 //! La règle : un plan annulé est absent de tout, sauf de la planche où il reste barré ; rien n'est renuméroté, rien n'est effacé ; une étape
 //! par geste ; aucun index périmé (toutes les images d'écran tournent sur le film changé, dans les trois espaces).

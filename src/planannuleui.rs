@@ -1,4 +1,4 @@
-//! Le geste du plan écarté sur la planche (partie 114, le modèle est dans `planannule.rs` ; le code garde le mot « annulé », l'interface dit
+//! Le geste du plan écarté sur la planche (partie 115, le modèle est dans `planannule.rs` ; le code garde le mot « annulé », l'interface dit
 //! « Écarter » et « Reprendre », pour ne pas se confondre avec Ctrl+Z) : un clic sur le numéro du plan l'écarte ou le reprend ; Maj tenue montre les numéros cachés (touche N) et Maj + clic sur le numéro prime sur « Maj + clic choisit le plan » ; le clic
 //! droit de la case reste, en chemin secondaire. Comme la barre entre les cases (partie 113), **le numéro ne répond qu'au lâcher d'un appui qui n'a
 //! pas bougé** : un appui qui bouge est un trait (sans Maj) ou un plan qu'on déplace (avec Maj), et n'annule rien.

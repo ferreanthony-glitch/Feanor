@@ -277,7 +277,7 @@ pub(crate) struct Vignettes {
     pub barre_attente: Option<BarreAttente>,
     /// Ce que Maj permet sur la planche a été dit une fois dans la ligne d'état (partie 113, proposition A).
     pub maj_dit: bool,
-    /// Le « + » de la peau de Maj : un cadre de caméra de plus (partie 115, `cadreplus.rs`).
+    /// Le « + » de la peau de Maj : un cadre de caméra de plus (partie 116, `cadreplus.rs`).
     pub plus: crate::cadreplus::Etat,
 }
 
@@ -817,7 +817,7 @@ impl App {
         if button != PointerButton::Primary {
             return false;
         }
-        // Le « + » de Maj (partie 115) passe avant tout : il n'est là que tenu par Maj, T ou l'outil Caméra, et jamais pendant un appui.
+        // Le « + » de Maj (partie 116) passe avant tout : il n'est là que tenu par Maj, T ou l'outil Caméra, et jamais pendant un appui.
         if self.plus_appui(layout, pos) {
             return false;
         }
@@ -1496,7 +1496,7 @@ impl App {
             self.vignettes.maj_dit = true;
             self.status = "Maj tenue : glisser une case déplace le plan, un clic le choisit, un coin tire la caméra, un clic sur une barre coupe ou réunit, le + ajoute un cadre.".into();
         }
-        // Le « + » d'un cadre de plus : Maj, T ou l'outil Caméra, pas pendant un appui ni un geste (partie 115).
+        // Le « + » d'un cadre de plus : Maj, T ou l'outil Caméra, pas pendant un appui ni un geste (partie 116).
         let plus_voulu = (maj_seule || (!pan_mode && !self.modal_open() && !writing && !mods.ctrl && !mods.command && (self.vignettes.camera_tenue || self.tool == Tool::Camera)))
             && !any_down
             && self.vignettes.cam.is_none()

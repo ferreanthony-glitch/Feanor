@@ -1,4 +1,4 @@
-//! Le plan annulé (partie 114 de `docs/INTERFACE.md`, format 48) ; à l'écran, le plan **écarté** : « Écarter », « Reprendre » (le mot « annuler » est à Ctrl+Z). Demande du réalisateur : « Un plan annulé disparait partout, y compris
+//! Le plan annulé (partie 115 de `docs/INTERFACE.md`, format 48) ; à l'écran, le plan **écarté** : « Écarter », « Reprendre » (le mot « annuler » est à Ctrl+Z). Demande du réalisateur : « Un plan annulé disparait partout, y compris
 //! dans storyboard » ; clic sur le numéro du plan dans les Vignettes = croix rouge dans le cadre.
 //!
 //! **Le seul point de filtrage : `Document::panels` est le film.** Un plan annulé **sort** de `panels` et va dans `Document::annules`, avec tout
