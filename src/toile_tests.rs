@@ -396,7 +396,7 @@ fn a_vector_stroke_drawn_outside_the_sheet_is_kept_undone_and_saved() {
     let cel = app.layers()[0].frames[0].expect("dessin");
     // Le rendu exact d'un trait au réglage complet vient d'un fil de travail : on le laisse arriver.
     let ctx = egui::Context::default();
-    for _ in 0..200 {
+    for _ in crate::perf_tests::attente() {
         app.poll_rejeu(&ctx);
         if !app.rejeu.has_pending() && app.rejeu_deferred.is_empty() {
             break;
@@ -433,7 +433,7 @@ use crate::render::Area;
 fn settle(monde: &mut Monde, ctx: &egui::Context, app: &mut App, plan: &render::Plan, view: Area) -> Option<crate::monde::Shown> {
     let (all, ids) = app.renderer.take_world_dirty();
     let mut shown = monde.update(ctx, &app.doc, plan, view, all, &ids);
-    for _ in 0..4000 {
+    for _ in crate::perf_tests::attente() {
         if monde.pending() == 0 {
             break;
         }

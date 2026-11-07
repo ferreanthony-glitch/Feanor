@@ -595,7 +595,7 @@ fn marking_an_envoi_in_the_application_notes_the_variants_and_the_changed_plans_
     b.app.nouvelle_variante_de_sequence(seq, Nouvelle::Copier);
     let ctx = b.ctx.clone();
     b.app.envois_marquer(&ctx, "v1 au réal", 1_760_000_000);
-    for _ in 0..400 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), 0.05);
         if !b.app.doc.envois.list.is_empty() {
             break;
@@ -614,7 +614,7 @@ fn marking_an_envoi_in_the_application_notes_the_variants_and_the_changed_plans_
     // Retouche d'un plan : seul celui-là est signalé.
     retoucher(&mut b.app.doc, 1, 180);
     b.app.modified = true;
-    for _ in 0..200 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), 0.05);
         if !b.app.plans_modifies().is_empty() {
             break;
@@ -640,7 +640,7 @@ fn compare_offers_the_plan_of_the_same_rank_in_each_other_variant() {
     // Le film n'a qu'un plan : il n'y en a pas de rang 1 à comparer ailleurs que dans A et B.
     b.app.comparer_ouvrir(0, Some(Source::Variante(1)), Some(Source::Actuelle));
     assert!(b.app.comparaison.is_some());
-    for _ in 0..200 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), 0.05);
         if b.app.comparaison.as_ref().is_some_and(|c| c.difference().is_some()) {
             break;
@@ -717,7 +717,7 @@ pub(crate) fn image(b: &mut Banc) {
 }
 
 pub(crate) fn pomper_enregistrement(b: &mut Banc) {
-    for _ in 0..600 {
+    for _ in crate::perf_tests::attente() {
         if !b.app.save_en_cours() {
             return;
         }

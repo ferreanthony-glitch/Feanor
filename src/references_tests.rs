@@ -730,7 +730,7 @@ fn headless(name: &str) -> (egui::Context, App) {
 
 /// Fait tourner l'application jusqu'à ce que `done` soit vrai (les imports se font sur d'autres fils).
 fn wait(app: &mut App, ctx: &egui::Context, what: &str, done: impl Fn(&App) -> bool) {
-    for _ in 0..600 {
+    for _ in crate::perf_tests::attente() {
         app.tick_references(ctx);
         if done(app) {
             return;

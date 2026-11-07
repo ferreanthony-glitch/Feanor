@@ -47,7 +47,7 @@ fn sans_titre() -> Banc {
 }
 
 fn pomper(b: &mut Banc) {
-    for _ in 0..1200 {
+    for _ in crate::perf_tests::attente() {
         if !b.app.save_en_cours() {
             b.image(Vec::new(), 0.016);
             return;

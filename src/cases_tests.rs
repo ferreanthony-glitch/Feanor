@@ -219,7 +219,7 @@ fn the_live_case_after_a_travelling_shows_what_lies_beyond_the_sheet_where_camer
     // La case qui suit le travelling devient la case vivante.
     b.app.select_board(0, 12);
     b.chauffer(4);
-    for _ in 0..200 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), 1.0 / 60.0);
         if b.app.monde.pending() == 0 && b.app.monde.pixel(340, 55).is_some() {
             break;

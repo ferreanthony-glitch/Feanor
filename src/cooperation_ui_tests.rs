@@ -38,7 +38,7 @@ fn image(b: &mut Banc) {
 }
 
 fn pomper_enregistrement(b: &mut Banc) {
-    for _ in 0..600 {
+    for _ in crate::perf_tests::attente() {
         if !b.app.save_en_cours() {
             return;
         }
@@ -204,7 +204,7 @@ fn closing_the_project_gives_back_what_one_held() {
     assert!(matches!(lea.etat(0), crate::verrous::EtatPrise::Autre(_)));
     b.app.lacher_la_session();
     // (La fermeture se fait sur un fil.)
-    for _ in 0..200 {
+    for _ in crate::perf_tests::attente() {
         std::thread::sleep(Duration::from_millis(10));
         lea.tour();
         if matches!(lea.etat(0), crate::verrous::EtatPrise::Libre) {
@@ -280,7 +280,7 @@ fn sharing_an_open_project_writes_it_on_a_thread_then_opens_it_in_a_new_tab() {
     let manifeste = racine.join("Film").join("Film.pelure");
     b.app.demarrer_le_partage(manifeste.clone());
     assert!(b.app.equipe_ui.partage.is_some());
-    for _ in 0..800 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), 0.016);
         std::thread::sleep(Duration::from_millis(5));
         if b.app.partage.is_some() && b.app.open_job.is_none() {

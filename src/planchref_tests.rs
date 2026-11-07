@@ -564,7 +564,7 @@ fn importing_another_projects_board_copies_items_and_images_beside_the_existing_
     let mine = img(&mut app.doc, "Existante", [100, 100], pos2(0.0, 0.0), 1.0);
     let mine_box = app.doc.reference(mine).unwrap().bounds();
     app.refs_import_board(other_manifest.clone());
-    for _ in 0..600 {
+    for _ in crate::perf_tests::attente() {
         app.tick_references(&ctx);
         if app.doc.references.len() > 1 {
             break;

@@ -62,7 +62,7 @@ fn contenu_sans_manifeste(racine: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
 }
 
 fn pomper_enregistrement(b: &mut Banc) {
-    for _ in 0..600 {
+    for _ in crate::perf_tests::attente() {
         if !b.app.save_en_cours() {
             return;
         }

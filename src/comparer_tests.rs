@@ -233,7 +233,7 @@ fn banc_projet(nom: &str, n: usize) -> (Banc, PathBuf) {
 fn marquer(b: &mut Banc, nom: &str) {
     let ctx = b.ctx.clone();
     b.app.envois_marquer(&ctx, nom, envois::lire_date("20/10/2026").unwrap());
-    for _ in 0..800 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), 0.25);
         if b.app.envois_ui.au_repos() && !b.app.save_en_cours() {
             return;
@@ -245,7 +245,7 @@ fn marquer(b: &mut Banc, nom: &str) {
 
 /// Des images jusqu'à ce que la fenêtre montre ses images.
 fn attendre_fenetre(b: &mut Banc) {
-    for _ in 0..1500 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), 0.1);
         if b.app.comparaison.as_ref().is_some_and(|c| c.vue_frame().is_some()) {
             return;

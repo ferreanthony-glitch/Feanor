@@ -404,7 +404,7 @@ fn the_envoi_remembers_which_version_of_the_plan_went_out() {
     b.app.run_action("version.nouvelle");
     let ctx = b.ctx.clone();
     b.app.envois_marquer(&ctx, "v1 au réal", 1_760_000_000);
-    for _ in 0..800 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), 0.25);
         if b.app.envois_ui.au_repos() {
             break;

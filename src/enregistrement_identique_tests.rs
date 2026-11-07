@@ -114,7 +114,7 @@ fn a_recovery_copy_of_an_unchanged_project_writes_no_file() {
 }
 
 fn pomper(b: &mut Banc) {
-    for _ in 0..600 {
+    for _ in crate::perf_tests::attente() {
         if !b.app.save_en_cours() {
             return;
         }

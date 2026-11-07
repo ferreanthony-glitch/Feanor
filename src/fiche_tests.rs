@@ -880,7 +880,7 @@ fn column_letters_and_png_sizes() {
 // ------------------------------------------------------------------------------------ la tâche
 
 fn pomper(job: &mut FicheJob, doc: &Document) {
-    for _ in 0..4000 {
+    for _ in crate::perf_tests::attente() {
         job.step(doc, Duration::from_millis(40));
         if !job.running() {
             return;
@@ -1213,7 +1213,7 @@ fn the_window_exports_in_the_background_and_remembers_the_choices() {
     assert!(app.fiche.as_ref().is_some_and(|w| w.rendering()) && app.modal_open(), "les images vont se calculer : le projet ne bouge plus");
     // La fenêtre fait avancer l'export image après image.
     let mut fini = false;
-    for _ in 0..3000 {
+    for _ in crate::perf_tests::attente() {
         image(&ctx, &mut app);
         if app.fiche.as_ref().is_some_and(|w| !w.busy()) {
             fini = true;
@@ -1321,7 +1321,7 @@ fn the_modified_scope_and_columns_follow_the_envoi_chosen_in_the_window() {
     let ctx = b.ctx.clone();
     b.app.envois_marquer(&ctx, "v1 au réal", crate::envois::lire_date("20/10/2026").unwrap());
     let calme = |b: &mut crate::perf_tests::Banc| {
-        for _ in 0..800 {
+        for _ in crate::perf_tests::attente() {
             b.image(Vec::new(), 0.25);
             if b.app.envois_ui.au_repos() && !b.app.save_en_cours() {
                 return;
