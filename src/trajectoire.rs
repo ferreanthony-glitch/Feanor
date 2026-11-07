@@ -26,6 +26,25 @@ pub const MARQUE_FRACTION_MAX: f32 = 0.5;
 /// … et s'il croise le chemin, ou passe à moins de tant de pixels de la feuille.
 pub const MARQUE_DISTANCE_MAX: f32 = 6.0;
 
+/// Les clés que pose la trajectoire (Anthony, 2026-11-07, « deux choix ») : **interpolées**, une par image, le calque glisse le
+/// long du chemin ; ou **par images**, une à chaque jalon (le départ, chaque marque, l'arrivée), tenue jusqu'à la suivante : le calque
+/// saute de marque en marque, sans interpolation, comme des poses tenues.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Cles {
+    #[default]
+    Interpolation,
+    Images,
+}
+
+impl Cles {
+    pub fn label(self) -> &'static str {
+        match self {
+            Cles::Interpolation => "Clés d'interpolation",
+            Cles::Images => "Clés d'images",
+        }
+    }
+}
+
 /// La trajectoire d'un calque, telle qu'elle s'écrit dans le projet (`trajectoire` d'un calque).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Trajectoire {
@@ -34,16 +53,31 @@ pub struct Trajectoire {
     /// Les marques, en fraction de la longueur du chemin (0 : le départ, 1 : l'arrivée), strictement entre les deux, triées.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub marques: Vec<f32>,
-    /// « Une marque = N images » ; rien : la durée du plan partagée en parts égales entre les marques.
+    /// « Une marque = N images » ; rien : le temps du plan après le départ, partagé en parts égales entre les marques.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub images_par_marque: Option<usize>,
+    /// L'image du plan où le chemin commence : la tête de lecture au moment du tracé (Anthony : « la clé de départ démarre sur la
+    /// tête de lecture »). Avant, le calque ne bouge pas.
+    #[serde(default, skip_serializing_if = "est_zero_usize")]
+    pub depart: usize,
+    /// Les clés posées : interpolées (d'origine) ou par images.
+    #[serde(default, skip_serializing_if = "est_interpolation")]
+    pub cles: Cles,
+}
+
+fn est_zero_usize(v: &usize) -> bool {
+    *v == 0
+}
+fn est_interpolation(c: &Cles) -> bool {
+    *c == Cles::Interpolation
 }
 
 impl Trajectoire {
     /// Un chemin fait des points d'un trait (feuille) : lissé, rééchantillonné. Rien si le trait est trop court.
     pub fn nouvelle(brut: &[[f32; 2]]) -> Option<Trajectoire> {
         let points = echantillonner(&lisser(brut));
-        (points.len() >= 2 && longueur_de(&points) >= LONGUEUR_MIN).then_some(Trajectoire { points, marques: Vec::new(), images_par_marque: None })
+        (points.len() >= 2 && longueur_de(&points) >= LONGUEUR_MIN)
+            .then_some(Trajectoire { points, marques: Vec::new(), images_par_marque: None, depart: 0, cles: Cles::Interpolation })
     }
 
     /// Une trajectoire relue d'un fichier : ses points filtrés (abîmés, doublons), ses marques remises en ordre et dans leurs
@@ -139,25 +173,27 @@ impl Trajectoire {
         j
     }
 
-    /// Les images que durent les intervalles entre jalons, pour un plan de `duree` images : la dernière image atteinte par
-    /// le chemin (celle du plan, ou `intervalles × N` avec « une marque = N images »), ou rien si le plan est trop court.
+    /// La dernière image que le chemin atteint dans un plan de `duree` images : la dernière du plan, ou `départ + intervalles × N`
+    /// avec « une marque = N images » (au-delà du plan, les clés s'arrêtent à sa dernière image : voir `cles`). Rien si le plan n'a
+    /// pas au moins une image après le départ.
     fn derniere_image(&self, duree: usize) -> Option<usize> {
-        if duree < 2 {
+        if duree < self.depart + 2 {
             return None;
         }
         let intervalles = self.marques.len() + 1;
         Some(match self.images_par_marque {
-            Some(n) if n > 0 => intervalles * n,
+            Some(n) if n > 0 => self.depart + intervalles * n,
             _ => duree - 1,
         })
     }
 
-    /// Les images (d'un plan de `duree` images) où tombent les jalons : le départ, chaque marque, l'arrivée ; arrondies à l'image.
-    /// Rien si le plan n'a qu'une image.
+    /// Les images (d'un plan de `duree` images) où tombent les jalons : le départ, chaque marque, l'arrivée ; arrondies à l'image,
+    /// celles au-delà du plan omises. Rien si le plan n'a pas au moins une image après le départ.
     pub fn images_des_jalons(&self, duree: usize) -> Vec<usize> {
         let Some(fin) = self.derniere_image(duree) else { return Vec::new() };
         let n = self.marques.len() + 1;
-        (0..=n).map(|k| ((k * fin) as f32 / n as f32).round() as usize).filter(|f| *f < duree).collect()
+        let portee = (fin - self.depart) as f32;
+        (0..=n).map(|k| self.depart + (k as f32 * portee / n as f32).round() as usize).filter(|f| *f < duree).collect()
     }
 
     /// Le chemin retourné de gauche à droite (`horizontal`) ou de haut en bas, autour de son départ : le calque, retourné de même,
@@ -167,31 +203,47 @@ impl Trajectoire {
         self.transformer(|p| if horizontal { [2.0 * d[0] - p[0], p[1]] } else { [p[0], 2.0 * d[1] - p[1]] });
     }
 
-    /// La fraction du chemin atteinte à l'image `f` d'un plan de `duree` images, ou rien si le chemin ne la couvre pas.
+    /// La fraction du chemin atteinte à l'image `f` d'un plan de `duree` images (le temps linéaire entre deux jalons), ou rien si le
+    /// chemin ne couvre pas cette image (avant le départ, après l'arrivée).
     pub fn fraction_a_l_image(&self, f: usize, duree: usize) -> Option<f32> {
         let fin = self.derniere_image(duree)?;
-        if f > fin {
+        if f < self.depart || f > fin {
             return None;
         }
         let jalons = self.jalons();
         let n = jalons.len() - 1;
-        let u = f as f32 / fin as f32 * n as f32;
+        let u = (f - self.depart) as f32 / (fin - self.depart) as f32 * n as f32;
         let i = (u.floor() as usize).min(n - 1);
         let w = (u - i as f32).clamp(0.0, 1.0);
         Some(jalons[i] + (jalons[i + 1] - jalons[i]) * w)
     }
 
-    /// Les clés de position qu'elle pose sur un calque de pose `base` dans un plan de `duree` images : une clé par image
-    /// que le chemin couvre, le déplacement relatif au départ du chemin. Aucune pour un plan d'une image.
+    /// Les clés de position qu'elle pose sur un calque de pose `base` dans un plan de `duree` images, le déplacement relatif au
+    /// départ du chemin : **interpolées**, une clé par image que le chemin couvre ; **par images**, une clé tenue à chaque jalon.
+    /// Aucune si le plan n'a pas au moins une image après le départ.
     pub fn cles(&self, duree: usize, base: LayerTransform) -> Vec<PosKey> {
         let Some(fin) = self.derniere_image(duree) else { return Vec::new() };
-        let depart = self.points[0];
-        (0..=fin.min(duree - 1))
-            .filter_map(|f| {
-                let p = self.point_a(self.fraction_a_l_image(f, duree)?);
-                Some(PosKey::new(f, LayerTransform { x: base.x + p[0] - depart[0], y: base.y + p[1] - depart[1], ..base }))
-            })
-            .collect()
+        let origine = self.points[0];
+        let cle = |f: usize, fraction: f32, tenue: bool| {
+            let p = self.point_a(fraction);
+            PosKey { tenue, ..PosKey::new(f, LayerTransform { x: base.x + p[0] - origine[0], y: base.y + p[1] - origine[1], ..base }) }
+        };
+        let mut out = Vec::new();
+        match self.cles {
+            Cles::Interpolation => {
+                for f in self.depart..=fin.min(duree - 1) {
+                    if let Some(fraction) = self.fraction_a_l_image(f, duree) {
+                        out.push(cle(f, fraction, false));
+                    }
+                }
+            }
+            Cles::Images => {
+                for (&fraction, f) in self.jalons().iter().zip(self.images_des_jalons(duree)) {
+                    crate::poskeys::put_key(&mut out, cle(f, fraction, true));
+                }
+            }
+        }
+        out
     }
 
     /// Ce trait est-il une marque ? Il l'est s'il est court devant le chemin et le croise (ou le frôle) : la fraction du

@@ -839,10 +839,10 @@ fn position_keys_are_saved_in_the_project_and_an_old_project_opens_without_keys(
     assert!(crate::project::load(&manifest).unwrap().doc.panels[0].layers[0].pos_keys.is_empty());
     // Des clés abîmées (pas un nombre, deux sur la même image) se lisent sans planter.
     let clean = poskeys::from_entries(vec![
-        poskeys::Entree { image: 3, x: f32::NAN, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, inclinaison_x: 0.0, inclinaison_y: 0.0, ecart_profondeur: 0.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0 },
-        poskeys::Entree { image: 5, x: 1.0, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, inclinaison_x: 0.0, inclinaison_y: 0.0, ecart_profondeur: 0.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0 },
-        poskeys::Entree { image: 5, x: 2.0, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, inclinaison_x: 0.0, inclinaison_y: 0.0, ecart_profondeur: 0.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0 },
-        poskeys::Entree { image: 1, x: 0.0, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, inclinaison_x: 0.0, inclinaison_y: 0.0, ecart_profondeur: 0.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0 },
+        poskeys::Entree { image: 3, x: f32::NAN, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, inclinaison_x: 0.0, inclinaison_y: 0.0, ecart_profondeur: 0.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0, tenue: false },
+        poskeys::Entree { image: 5, x: 1.0, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, inclinaison_x: 0.0, inclinaison_y: 0.0, ecart_profondeur: 0.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0, tenue: false },
+        poskeys::Entree { image: 5, x: 2.0, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, inclinaison_x: 0.0, inclinaison_y: 0.0, ecart_profondeur: 0.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0, tenue: false },
+        poskeys::Entree { image: 1, x: 0.0, y: 0.0, echelle: 1.0, rotation: 0.0, etirement_x: 1.0, etirement_y: 1.0, inclinaison_x: 0.0, inclinaison_y: 0.0, ecart_profondeur: 0.0, lisse: false, adoucir_entree: 0.0, adoucir_sortie: 0.0, tenue: false },
     ]);
     assert_eq!(clean.iter().map(|k| (k.frame, k.t.x)).collect::<Vec<_>>(), vec![(1, 0.0), (5, 2.0)]);
     std::fs::remove_dir_all(&dir).ok();

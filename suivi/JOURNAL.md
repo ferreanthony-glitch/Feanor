@@ -8,8 +8,9 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 - L'outil Trajectoire (partie 119, branche `trajectoire`, pas fusionnée), l'idée d'Anthony : un trait trace le chemin du calque, de petits
   traits en travers posent les marques d'espacement comme sur une feuille de timing, et les clés de position se posent toutes seules, une par
   image, le long de la courbe. Marques glissées ou arrachées, chemin déplacé ou retracé, silhouettes pâles aux jalons, pas des marques (durée
-  du plan partagée, ou N images par marque), détachement quand on retouche une clé à la main. Format de projet 49. 16 essais. Reste le
-  vérificateur complet, l'exe, et son essai à la tablette. Pas de lasso ni de boîte d'étirement dans ce premier pas.
+  du plan partagée, ou N images par marque), détachement quand on retouche une clé à la main. Format de projet 49. Puis, à sa demande :
+  la clé de départ démarre sur la tête de lecture, et deux sortes de clés (interpolées, ou par images : une clé tenue à chaque marque, sans
+  interpolation ; `PosKey::tenue`). 19 essais. Reste son essai à la tablette. Pas de lasso ni de boîte d'étirement dans ce premier pas.
 - Idées retenues par Anthony dans les vingt proposées : 1 + 8 (dessiner pendant la lecture, la page de relecture existant déjà), 3, 4, 7, 11,
   14, 15, 16, 18, 20 ; sa trajectoire remplace 13 ; 2, 5, 6, 9, 10 écartées. Rien d'autre n'est codé.
 - Fusion dans main (6a06b1c) : plan écarté (partie 115, format 48), « + » de la peau de Maj pour un cadre de plus (116), poignées de lissage

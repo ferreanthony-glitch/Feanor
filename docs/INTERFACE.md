@@ -8261,18 +8261,24 @@ les réglages) ; essais `trajectoire_tests.rs` (8) et `trajectoireui_tests.rs` (
 
 - **L'outil Trajectoire** (barre de gauche, sa case après Transformer ; action `outil.trajectoire`, sans touche d'origine ; icône de flèche qui
   serpente). Il agit sur le **calque courant**, dans le Storyboard et l'Animation (pas dans les Vignettes, qui gardent leurs quatre outils).
-- **Un trait sur la feuille trace le chemin.** Le calque suit ce chemin **sur la durée du plan**, en partant de **là où il est** : le déplacement
-  est relatif au départ du trait (on part le trait du personnage, il ne saute pas). Une clé de position par image est posée (`Layer::pos_keys`,
-  partie des clés de position de l'outil Transformer) : entre deux marques le calque va à vitesse constante **le long de la courbe**, pas de
-  la corde. La pose du calque à l'image 0 (échelle, rotation…) est gardée sur tout le chemin.
+- **Un trait sur la feuille trace le chemin.** Le calque suit ce chemin **de la tête de lecture à la fin du plan** (Anthony : « la clé de
+  départ démarre sur la tête de lecture » ; avant, il ne bouge pas), en partant de **là où il est** : le déplacement est relatif au départ du
+  trait (on part le trait du personnage, il ne saute pas). Les clés de position sont posées sur le calque (`Layer::pos_keys`, celles de
+  l'outil Transformer) ; la pose du calque à l'image du départ (échelle, rotation…) est gardée sur tout le chemin. Le départ est gardé avec le
+  chemin ; « Partir de la tête de lecture » (réglages) le change.
+- **Deux sortes de clés** (réglages, Anthony : « Clés d'interpolation ou Clés d'images ») : **Clés d'interpolation**, d'origine, une clé par
+  image, le calque glisse **le long de la courbe**, pas de la corde, à vitesse constante entre deux marques ; **Clés d'images**, une clé
+  **tenue** à chaque jalon (le départ, chaque marque, l'arrivée), le calque y reste jusqu'à la suivante **sans interpolation**, comme des
+  poses tenues. Une clé tenue est une clé de position comme les autres (`PosKey::tenue`, `cles_position[].tenue`, format 49) : `pose_at`
+  garde sa pose jusqu'à la clé suivante ; détachée, elle reste tenue, à la main.
 - **Un petit trait en travers du chemin pose une marque** (court devant le chemin — moins de la moitié de sa longueur — et qui le croise, ou le
   frôle à moins de 6 pixels de la feuille). Les marques partagent le temps en parts égales, comme sur une feuille de timing : **serrées, le
   calque va lentement ; espacées, il va vite**. Les bouts du chemin sont deux jalons de plus. Avec son croquis : départ lent, milieu vite,
   arrivée lente.
-- **Le temps entre deux marques** (panneau Réglages, fenêtre du clic droit) : d'origine, **la durée du plan partagée** entre les marques
-  (huit marques sur 3 secondes : une clé toutes les 9 images) ; ou **un nombre d'images par marque** (1 à 48), pour travailler comme en
-  animation : le chemin dure alors `intervalles × N` images, puis le calque reste au bout. Le choix fait sur une trajectoire est proposé à la
-  suivante.
+- **Le temps entre deux marques** (panneau Réglages, fenêtre du clic droit) : d'origine, **le temps jusqu'à la fin du plan, partagé** entre
+  les marques (huit marques sur 3 secondes depuis le début : une clé toutes les 9 images) ; ou **un nombre d'images par marque** (1 à 48),
+  pour travailler comme en animation : le chemin dure alors `intervalles × N` images depuis le départ, puis le calque reste au bout. Les
+  choix faits sur une trajectoire (sorte des clés, pas) sont proposés à la suivante.
 - **Retoucher** : glisser une **marque** le long du chemin la déplace (bornée entre ses voisines) ; la tirer **loin du chemin** (40 pixels d'écran)
   l'**arrache** : elle est retirée au lâcher. Glisser le **chemin** (hors d'une marque) le déplace en bloc : le déplacement étant relatif, les
   clés ne changent pas. Un **trait long** retrace le chemin : les marques restent, à leurs fractions. Les clés suivent **pendant le geste**, à
@@ -8302,26 +8308,29 @@ les réglages) ; essais `trajectoire_tests.rs` (8) et `trajectoireui_tests.rs` (
 
 Le chemin : les points du trait, lissés (deux passages d'une moyenne à trois points, les bouts gardés) et repris tous les 2 pixels de la
 feuille (4 000 points au plus). Les marques : des fractions de la longueur du chemin, strictement entre 0 et 1, à 1 % au moins l'une de
-l'autre. `cles(duree, base)` : pour chaque image, la fraction atteinte (le temps partagé en parts égales entre jalons, la fraction linéaire
-entre deux jalons), le point du chemin à cette fraction, et la clé `base + (point − départ)`. Une trajectoire relue d'un fichier abîmé est
-assainie (points non finis, doublons, marques hors bornes ou en désordre). Le modèle ne connaît ni l'écran ni l'application : ses essais sont
-des nombres.
+l'autre. `depart` : l'image du plan où le chemin commence ; `cles` : interpolées ou par images. `cles(duree, base)` : le temps du départ à
+l'arrivée partagé en parts égales entre jalons ; en clés d'interpolation, pour chaque image couverte, la fraction atteinte (linéaire entre
+deux jalons), le point du chemin à cette fraction, et la clé `base + (point − départ)` ; en clés d'images, une clé tenue à l'image de chaque
+jalon. Une trajectoire relue d'un fichier abîmé est assainie (points non finis, doublons, marques hors bornes ou en désordre). Le modèle ne
+connaît ni l'écran ni l'application : ses essais sont des nombres.
 
 ### Limites et à décider
 
 - La **rotation** du calque ne suit pas la courbe (position seulement) : en option plus tard.
 - **Pas de lasso ni de boîte d'étirement** sur le chemin dans ce premier pas : glisser le chemin le déplace en bloc, un trait long le retrace.
   Étirer par une boîte (comme la sélection) viendra si le retracé ne suffit pas.
-- Un plan d'**une image** : le chemin se trace, aucune clé (le calque ne bouge pas) ; la ligne d'état le dit.
+- Un plan qui s'arrête au départ (ou d'une image) : le chemin se trace, aucune clé (le calque ne bouge pas) ; la ligne d'état le dit.
 - Un calque **verrouillé**, de position verrouillée, un dossier, un calque de couleur lié : refusés, avec la raison.
-- La feuille de timing « une marque = N images » compte depuis l'image 0 du plan ; partir de l'image courante n'est pas proposé.
 
 ### À vérifier à l'écran (par Anthony)
 
-1. Un plan de 2 ou 3 secondes, un personnage sur un calque. Outil Trajectoire : trace un chemin depuis le personnage. Lecture : il suit le
-   chemin sur toute la durée du plan, en partant de sa place. Ctrl+Z : plus de chemin, plus de clés.
+1. Un plan de 2 ou 3 secondes, un personnage sur un calque, la tête de lecture à la seconde image. Outil Trajectoire : trace un chemin
+   depuis le personnage. Lecture : il ne bouge pas avant la tête de lecture, puis suit le chemin jusqu'à la fin du plan, en partant de sa
+   place. Ctrl+Z : plus de chemin, plus de clés.
 2. Trois petits traits en travers du chemin, serrés au départ, un loin au milieu, serrés à l'arrivée : lecture, lent, vite, lent. Les
    silhouettes pâles montrent où il est à chaque marque ; les numéros d'image au-dessus.
+2b. Réglages : « Clés d'images ». Lecture : il saute de marque en marque, sans glisser ; la timeline montre une clé par marque. « Clés
+   d'interpolation » : il glisse de nouveau. « Partir de la tête de lecture » après avoir déplacé la tête : le chemin commence là.
 3. Glisse une marque le long du chemin : les silhouettes bougent en direct. Tire-la loin du chemin : elle part. Glisse le chemin : il bouge
    en bloc, le personnage ne saute pas. Échap au milieu d'un geste : tout revient.
 4. Un trait long ailleurs : le chemin est retracé, les marques restent.

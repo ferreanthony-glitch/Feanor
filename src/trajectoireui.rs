@@ -19,7 +19,7 @@ use eframe::egui::{self, pos2, vec2, Align2, Color32, CursorIcon, FontId, Key, P
 use crate::app::{App, Tool};
 use crate::history::Edit;
 use crate::poskeys::PosKey;
-use crate::trajectoire::{distance, Trajectoire};
+use crate::trajectoire::{distance, Cles, Trajectoire};
 
 /// La teinte du chemin, de ses marques et des silhouettes : celle des poignées du calque.
 pub(crate) const COULEUR: Color32 = crate::theme::POIGNEE_CALQUE;
@@ -52,6 +52,8 @@ pub(crate) struct Etat {
     pub(crate) geste: Option<Geste>,
     /// « Une marque = N images », proposé à la prochaine trajectoire tracée (rien : la durée du plan partagée entre les marques).
     pub(crate) pas_propose: Option<usize>,
+    /// La sorte de clés proposée à la prochaine trajectoire tracée.
+    pub(crate) cles_propose: Cles,
 }
 
 fn pluriel(n: usize) -> &'static str {
@@ -200,8 +202,15 @@ impl App {
                     Some(e) => {
                         t.marques = e.marques;
                         t.images_par_marque = e.images_par_marque;
+                        t.depart = e.depart;
+                        t.cles = e.cles;
                     }
-                    None => t.images_par_marque = self.traj.pas_propose,
+                    None => {
+                        // La clé de départ démarre sur la tête de lecture.
+                        t.depart = self.cur_frame;
+                        t.images_par_marque = self.traj.pas_propose;
+                        t.cles = self.traj.cles_propose;
+                    }
                 }
                 self.layers_mut()[li].trajectoire = Some(t);
                 self.trajectoire_recalculer(li);
@@ -216,17 +225,33 @@ impl App {
     }
 
     /// Les clés de position du calque `li` reposées d'après sa trajectoire (rien s'il n'en a pas). La pose au départ reste
-    /// celle que le calque a à l'image 0 ; un chemin qui ne couvre aucune image (plan d'une image) laisse le calque fixe.
+    /// celle que le calque a à l'image du départ ; un chemin qui ne couvre aucune image (plan trop court) laisse le calque fixe.
     pub(crate) fn trajectoire_recalculer(&mut self, li: usize) {
         let duree = self.frame_count();
         let Some(l) = self.layers_mut().get_mut(li) else { return };
         let Some(t) = &l.trajectoire else { return };
-        let base = crate::poskeys::pose_at(&l.pos_keys, 0, l.transform);
+        let base = crate::poskeys::pose_at(&l.pos_keys, t.depart, l.transform);
         l.pos_keys = t.cles(duree, base);
         if l.pos_keys.is_empty() {
             l.transform = base;
             l.fold_dz();
         }
+    }
+
+    /// Le départ de la trajectoire du calque courant passe à la tête de lecture (bouton des réglages) ; une étape.
+    pub(crate) fn trajectoire_depart_ici(&mut self) {
+        let li = self.cur_layer;
+        let f = self.cur_frame;
+        if self.layers().get(li).and_then(|l| l.trajectoire.as_ref()).is_none_or(|t| t.depart == f) {
+            return;
+        }
+        let snap = self.snapshot();
+        if let Some(t) = self.layers_mut()[li].trajectoire.as_mut() {
+            t.depart = f;
+        }
+        self.trajectoire_recalculer(li);
+        self.trajectoire_valider(snap, "Départ de la trajectoire");
+        self.status = self.trajectoire_resume(li, "Départ à la tête de lecture");
     }
 
     /// Une étape d'annulation au nom `nom`, depuis l'état `snap` d'avant le geste.
@@ -368,13 +393,17 @@ impl App {
         let Some(t) = self.layers().get(li).and_then(|l| l.trajectoire.clone()) else {
             ui.label(
                 RichText::new(
-                    "Trace le chemin du calque d'un trait : le calque le suit sur la durée du plan, en partant de là où il est. Puis de petits \
-                     traits en travers du chemin : les marques. Le temps est le même entre deux marques ; serrées, le calque va lentement ; \
-                     espacées, il va vite.",
+                    "Trace le chemin du calque d'un trait : le calque le suit depuis la tête de lecture jusqu'à la fin du plan, en partant \
+                     de là où il est. Puis de petits traits en travers du chemin : les marques. Le temps est le même entre deux marques ; \
+                     serrées, le calque va lentement ; espacées, il va vite.",
                 )
                 .small()
                 .weak(),
             );
+            let mut cles = self.traj.cles_propose;
+            if cles_ui(ui, &mut cles) {
+                self.traj.cles_propose = cles;
+            }
             let mut pas = self.traj.pas_propose;
             if pas_ui(ui, &mut pas) {
                 self.traj.pas_propose = pas;
@@ -385,8 +414,24 @@ impl App {
         let images = t.images_des_jalons(duree);
         ui.label(match (images.first(), images.last()) {
             (Some(a), Some(b)) => format!("{n} marque{} · le chemin dure de l'image {} à l'image {} · {} clés de position.", pluriel(n), a + 1, b + 1, self.layers()[li].pos_keys.len()),
-            _ => format!("{n} marque{} · le plan n'a qu'une image : le calque ne bouge pas encore.", pluriel(n)),
+            _ => format!("{n} marque{} · le plan s'arrête avant l'image {} du départ : le calque ne bouge pas encore.", pluriel(n), t.depart + 1),
         });
+        ui.horizontal(|ui| {
+            ui.label(format!("Départ : image {}.", t.depart + 1));
+            if t.depart != self.cur_frame && ui.button("Partir de la tête de lecture").on_hover_text("La clé de départ passe à l'image courante ; le chemin dure de là à la fin du plan.").clicked() {
+                self.trajectoire_depart_ici();
+            }
+        });
+        let mut cles = t.cles;
+        if cles_ui(ui, &mut cles) {
+            let snap = self.snapshot();
+            if let Some(tr) = self.layers_mut()[li].trajectoire.as_mut() {
+                tr.cles = cles;
+            }
+            self.traj.cles_propose = cles;
+            self.trajectoire_recalculer(li);
+            self.trajectoire_valider(snap, "Sorte des clés de la trajectoire");
+        }
         let mut pas = t.images_par_marque;
         if pas_ui(ui, &mut pas) {
             self.named_step("Pas des marques", |app| app.note_change(egui::Id::new("trajectoire.pas")));
@@ -434,13 +479,24 @@ impl App {
     }
 }
 
+/// Les deux sortes de clés : interpolées (le calque glisse le long du chemin) ou par images (une pose tenue à chaque marque) ; vrai si
+/// le choix a changé.
+fn cles_ui(ui: &mut egui::Ui, cles: &mut Cles) -> bool {
+    let avant = *cles;
+    ui.horizontal(|ui| {
+        ui.radio_value(cles, Cles::Interpolation, Cles::Interpolation.label()).on_hover_text("Une clé par image : le calque glisse le long du chemin, à la vitesse que donnent les marques.");
+        ui.radio_value(cles, Cles::Images, Cles::Images.label()).on_hover_text("Une clé tenue à chaque marque : le calque y reste jusqu'à la suivante, sans interpolation, comme des poses tenues.");
+    });
+    *cles != avant
+}
+
 /// « Le temps entre deux marques » : la durée du plan partagée, ou un nombre d'images ; vrai si le choix a changé.
 fn pas_ui(ui: &mut egui::Ui, pas: &mut Option<usize>) -> bool {
     let avant = *pas;
     ui.label("Le temps entre deux marques :");
     let mut fixe = pas.is_some();
     ui.horizontal(|ui| {
-        if ui.radio(!fixe, "la durée du plan, partagée").clicked() {
+        if ui.radio(!fixe, "la fin du plan, partagée").clicked() {
             fixe = false;
         }
         if ui.radio(fixe, "un nombre d'images").clicked() {

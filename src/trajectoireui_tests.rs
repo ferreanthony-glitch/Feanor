@@ -228,6 +228,52 @@ fn the_path_is_saved_with_the_layer_and_comes_back_and_cutting_the_plan_detaches
 }
 
 #[test]
+fn the_path_starts_at_the_playhead_and_image_keys_hold_between_marks() {
+    let mut b = banc();
+    b.app.cur_frame = 6;
+    b.chauffer(2);
+    tracer_le_chemin(&mut b);
+    let t = b.app.layers()[0].trajectoire.clone().expect("un chemin");
+    assert_eq!(t.depart, 6, "la clé de départ démarre sur la tête de lecture");
+    let c = cles(&b);
+    assert_eq!(c.first().map(|k| k.0), Some(6), "aucune clé avant la tête de lecture");
+    assert_eq!(c.last().map(|k| k.0), Some(23));
+    assert_eq!(c.len(), 18);
+    assert!((c.last().unwrap().1 - 300.0).abs() < 2.0);
+    // Une marque, puis « Clés d'images » : une clé tenue à chaque jalon, et la pose ne bouge pas entre deux.
+    glisser(&mut b, &[(200.0, 135.0), (200.0, 165.0)]);
+    let snap = b.app.snapshot();
+    b.app.layers_mut()[0].trajectoire.as_mut().unwrap().cles = crate::trajectoire::Cles::Images;
+    b.app.trajectoire_recalculer(0);
+    b.app.commit_named(snap, "Sorte des clés de la trajectoire");
+    let keys = b.app.layers()[0].pos_keys.clone();
+    // (Le milieu du temps, de 6 à 23, tombe à 14,5 : arrondi à l'image 15.)
+    assert_eq!(keys.iter().map(|k| (k.frame, k.tenue)).collect::<Vec<_>>(), [(6, true), (15, true), (23, true)], "{keys:?}");
+    let l = &b.app.layers()[0];
+    assert_eq!(l.pose(10).x, l.pose(6).x, "tenue jusqu'à la marque");
+    assert!((l.pose(15).x - 150.0).abs() < 3.0 && l.pose(20).x == l.pose(15).x, "tenue à la marque jusqu'à l'arrivée");
+    // Le départ passe à la tête de lecture, sur demande.
+    b.app.cur_frame = 2;
+    b.app.trajectoire_depart_ici();
+    assert_eq!(b.app.layers()[0].trajectoire.as_ref().unwrap().depart, 2);
+    assert_eq!(b.app.layers()[0].pos_keys.first().map(|k| k.frame), Some(2));
+    assert_eq!(derniere_etape(&b), "Départ de la trajectoire");
+    b.app.undo();
+    assert_eq!(b.app.layers()[0].trajectoire.as_ref().unwrap().depart, 6);
+    // Enregistré, relu : le départ et la sorte des clés reviennent.
+    let dir = std::env::temp_dir().join(format!("feanor-trajectoire-depart-{}-{:?}", std::process::id(), std::thread::current().id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifest = dir.join("T.shot");
+    crate::project::save(&b.app.doc, &manifest, &mut Default::default()).unwrap();
+    let back = crate::project::load(&manifest).unwrap().doc;
+    let t = back.panels[0].layers[0].trajectoire.as_ref().unwrap();
+    assert_eq!((t.depart, t.cles), (6, crate::trajectoire::Cles::Images));
+    assert!(back.panels[0].layers[0].pos_keys.iter().all(|k| k.tenue), "les clés tenues le restent");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn the_tool_is_refused_in_the_vignettes_and_has_its_action_its_slot_and_its_hint() {
     assert!(!Tool::Trajectoire.permis_dans_les_vignettes());
     assert_eq!(Tool::Trajectoire.action(), "outil.trajectoire");

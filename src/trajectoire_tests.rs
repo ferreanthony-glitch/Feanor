@@ -1,7 +1,8 @@
 //! La trajectoire d'un calque (`trajectoire.rs`, Anthony, 2026-11-07) : le modèle, sans écran.
 
 use crate::document::LayerTransform;
-use crate::trajectoire::{distance, Trajectoire, ECART_MIN, LONGUEUR_MIN, MARQUE_DISTANCE_MAX};
+use crate::poskeys::pose_at;
+use crate::trajectoire::{distance, Cles, Trajectoire, ECART_MIN, LONGUEUR_MIN, MARQUE_DISTANCE_MAX};
 
 /// Un chemin droit de (0, 0) à (100, 0).
 fn droite() -> Trajectoire {
@@ -170,11 +171,74 @@ fn the_file_form_round_trips_and_a_damaged_one_is_cleaned() {
     let texte = serde_json::to_string(&simple).unwrap();
     assert!(!texte.contains("marques") && !texte.contains("images_par_marque"));
     assert_eq!(serde_json::from_str::<Trajectoire>(&texte).unwrap(), simple);
+    // Le départ et la sorte des clés s'écrivent quand ils ne sont pas ceux d'origine, et reviennent.
+    let mut t = droite();
+    t.depart = 7;
+    t.cles = Cles::Images;
+    let texte = serde_json::to_string(&t).unwrap();
+    assert!(texte.contains("\"depart\":7") && texte.contains("\"cles\":\"Images\""), "{texte}");
+    assert_eq!(serde_json::from_str::<Trajectoire>(&texte).unwrap(), t);
     // Abîmée : marques hors bornes ou en désordre, doublon de points, zéro image par marque.
-    let abimee = Trajectoire { points: vec![[0.0, 0.0], [0.0, 0.0], [100.0, 0.0]], marques: vec![0.9, 1.5, 0.2, 0.9], images_par_marque: Some(0) };
+    let abimee = Trajectoire { points: vec![[0.0, 0.0], [0.0, 0.0], [100.0, 0.0]], marques: vec![0.9, 1.5, 0.2, 0.9], images_par_marque: Some(0), depart: 0, cles: Cles::Interpolation };
     let propre = abimee.assainie().expect("tient debout");
     assert_eq!(propre.points.len(), 2);
     assert_eq!(propre.marques, [0.2, 0.9]);
     assert_eq!(propre.images_par_marque, None);
-    assert!(Trajectoire { points: vec![[0.0, 0.0]], marques: vec![], images_par_marque: None }.assainie().is_none());
+    assert!(Trajectoire { points: vec![[0.0, 0.0]], marques: vec![], images_par_marque: None, depart: 0, cles: Cles::Interpolation }.assainie().is_none());
+}
+
+#[test]
+fn the_path_starts_at_its_start_image_and_nothing_moves_before_it() {
+    let mut t = droite();
+    t.ajouter_marque(0.5);
+    t.depart = 5;
+    // Un plan de 24 images : le chemin va de l'image 5 à l'image 23, la marque au milieu du temps, à l'image 14.
+    assert_eq!(t.images_des_jalons(24), [5, 14, 23]);
+    assert_eq!(t.fraction_a_l_image(3, 24), None, "avant le départ, rien");
+    assert_eq!(t.fraction_a_l_image(5, 24), Some(0.0));
+    assert!((t.fraction_a_l_image(14, 24).unwrap() - 0.5).abs() < 1e-3);
+    assert_eq!(t.fraction_a_l_image(23, 24), Some(1.0));
+    let cles = x_des_cles(&t, 24);
+    assert_eq!(cles.len(), 19, "une clé par image, de 5 à 23");
+    assert_eq!(cles[0], (5, 0.0));
+    assert!((cles[18].1 - 100.0).abs() < 1e-3);
+    // Avant la première clé, la pose est celle de la première clé : le calque attend au départ.
+    let keys = t.cles(24, LayerTransform::default());
+    assert_eq!(pose_at(&keys, 2, LayerTransform::default()).x, 0.0);
+    // Un plan qui s'arrête au départ, ou juste avant : aucune clé.
+    assert!(t.cles(6, LayerTransform::default()).is_empty());
+    assert!(t.cles(5, LayerTransform::default()).is_empty());
+    assert!(!t.cles(7, LayerTransform::default()).is_empty());
+    // « Une marque = 4 images » depuis le départ : de l'image 5 à l'image 13.
+    t.images_par_marque = Some(4);
+    assert_eq!(t.images_des_jalons(24), [5, 9, 13]);
+}
+
+#[test]
+fn image_keys_are_held_at_each_mark_without_interpolation() {
+    let mut t = droite();
+    t.ajouter_marque(0.3);
+    t.ajouter_marque(0.6);
+    t.cles = Cles::Images;
+    let base = LayerTransform { x: 10.0, ..Default::default() };
+    let keys = t.cles(31, base);
+    // Une clé tenue à chaque jalon : 0, 10, 20, 30.
+    assert_eq!(keys.iter().map(|k| (k.frame, k.tenue)).collect::<Vec<_>>(), [(0, true), (10, true), (20, true), (30, true)]);
+    assert!((keys[1].t.x - 40.0).abs() < 1e-3 && (keys[2].t.x - 70.0).abs() < 1e-3 && (keys[3].t.x - 110.0).abs() < 1e-3);
+    // Entre deux jalons, la pose est tenue : pas d'interpolation.
+    assert_eq!(pose_at(&keys, 5, base).x, 10.0);
+    assert_eq!(pose_at(&keys, 19, base).x, 40.0);
+    assert_eq!(pose_at(&keys, 25, base).x, 70.0);
+    assert_eq!(pose_at(&keys, 30, base).x, 110.0);
+    // En clés d'interpolation, la même trajectoire glisse.
+    t.cles = Cles::Interpolation;
+    let keys = t.cles(31, base);
+    assert_eq!(keys.len(), 31);
+    assert!(keys.iter().all(|k| !k.tenue));
+    assert!((pose_at(&keys, 5, base).x - 25.0).abs() < 1e-3);
+    // Un plan trop court pour tous les jalons : les clés s'arrêtent à sa dernière image.
+    t.cles = Cles::Images;
+    t.images_par_marque = Some(10);
+    let keys = t.cles(15, base);
+    assert_eq!(keys.iter().map(|k| k.frame).collect::<Vec<_>>(), [0, 10]);
 }
