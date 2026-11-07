@@ -46,6 +46,18 @@ pub(crate) fn marker_near(frames: impl Iterator<Item = usize>, px: f32, x_of: im
     frames.map(|f| (f, (x_of(f) - px).abs())).filter(|&(_, d)| d <= tol).min_by(|a, b| a.1.total_cmp(&b.1)).map(|(f, _)| f)
 }
 
+/// Les images des clés de position d'un calque qui se montrent et se prennent : toutes ; pour un calque à trajectoire
+/// (`trajectoire.rs`, une clé par image), ses seuls jalons (le départ, les marques, la fin). `max` : la durée du plan.
+pub(crate) fn pos_frames_visibles(layer: &crate::document::Layer, max: usize) -> Vec<usize> {
+    match layer.trajectoire.as_ref() {
+        Some(t) => {
+            let jalons = t.images_des_jalons(max);
+            layer.pos_keys.iter().map(|k| k.frame).filter(|f| jalons.contains(f)).collect()
+        }
+        None => layer.pos_keys.iter().map(|k| k.frame).collect(),
+    }
+}
+
 /// Des clés prises à la souris : les clés du calque telles qu'elles étaient, celles qui bougent, le point
 /// pris, le décalage en cours, l'étape d'annulation de tout le geste.
 pub(crate) struct PosDrag {
@@ -55,6 +67,8 @@ pub(crate) struct PosDrag {
     grab: usize,
     delta: isize,
     max: usize,
+    /// La clé prise est un jalon de la trajectoire du calque : la trajectoire d'avant le geste, que le glisser recale.
+    trajectoire: Option<crate::trajectoire::Trajectoire>,
     snap: Edit,
 }
 
@@ -90,10 +104,17 @@ impl App {
         if self.content_refuses() {
             return;
         }
-        let targets = self.pos_targets();
+        let mut targets = self.pos_targets();
         if targets.is_empty() {
             // (Le message dit pourquoi : verrouillé, position verrouillée, dossier…)
             self.layer_editable();
+            return;
+        }
+        // Un calque à trajectoire (`trajectoireui.rs`) : c'est elle qui pose les clés ; rien à la main.
+        let avec = targets.len();
+        targets.retain(|&li| self.layers()[li].trajectoire.is_none());
+        if targets.is_empty() {
+            self.status = crate::trajectoireui::CLES_PAR_LA_TRAJECTOIRE.into();
             return;
         }
         self.end_stroke();
@@ -107,10 +128,11 @@ impl App {
         let n = targets.len();
         self.modified = true;
         self.status = format!(
-            "Clé de position posée à l'image {} sur {} calque{} : change d'image et déplace le calque pour l'animer.",
+            "Clé de position posée à l'image {} sur {} calque{} : change d'image et déplace le calque pour l'animer.{}",
             self.frame_label(f),
             n,
-            s(n)
+            s(n),
+            if avec > n { " (Pas sur un calque à trajectoire : elle pose ses clés elle-même.)" } else { "" }
         );
     }
 
@@ -145,8 +167,16 @@ impl App {
         }
         self.end_stroke();
         self.named_step("Supprimer des clés de position", |app| app.record_step());
+        let mut jalons = 0;
+        let mut supprimees = 0;
         for &(id, fr) in &list {
-            let Some(l) = self.layers_mut().iter_mut().find(|l| l.id == id) else { continue };
+            let Some(li) = self.layers().iter().position(|l| l.id == id) else { continue };
+            // Un jalon de trajectoire (`trajectoireui.rs`) : la marque s'en va (ou le message dit que le départ et la fin restent).
+            if self.trajectoire_supprimer_jalon(li, fr) {
+                jalons += 1;
+                continue;
+            }
+            let l = &mut self.layers_mut()[li];
             let here = l.pose(f);
             poskeys::remove_key(&mut l.pos_keys, fr);
             // La dernière clé partie, le calque garde la pose qu'il avait à cette image.
@@ -154,12 +184,17 @@ impl App {
                 l.transform = here;
                 l.fold_dz();
             }
+            supprimees += 1;
         }
         self.pos_ui.sel.clear();
         self.renderer.invalidate_all();
         self.modified = true;
-        let n = list.len();
-        self.status = format!("{n} clé{} de position supprimée{}.", s(n), s(n));
+        if supprimees > 0 {
+            let n = supprimees;
+            self.status = format!("{n} clé{} de position supprimée{}.", s(n), s(n));
+        } else if jalons == 0 {
+            self.status = "Pas de clé de position ici : rien n'est supprimé.".into();
+        }
     }
 
     /// Lisse (ou ne lisse plus) la clé de position de l'image courante : elle arrive et repart lentement.
@@ -170,8 +205,11 @@ impl App {
         let f = self.cur_frame;
         let mut targets: Vec<usize> = self.pos_targets();
         targets.retain(|&li| poskeys::key_at(&self.layers()[li].pos_keys, f).is_some());
+        // Un calque à trajectoire (`trajectoireui.rs`) : la vitesse vient des marques, pas d'un lissage à la main.
+        let avec = targets.len();
+        targets.retain(|&li| self.layers()[li].trajectoire.is_none());
         if targets.is_empty() {
-            self.status = "Pas de clé de position à cette image : pose-en une d'abord.".into();
+            self.status = if avec > 0 { crate::trajectoireui::CLES_PAR_LA_TRAJECTOIRE.into() } else { "Pas de clé de position à cette image : pose-en une d'abord.".into() };
             return;
         }
         self.end_stroke();
@@ -205,6 +243,7 @@ impl App {
             l.transform = l.pose(f);
             l.pos_keys.clear();
             l.fold_dz();
+            l.trajectoire = None;
         }
         self.pos_ui.sel.clear();
         self.renderer.invalidate_all();
@@ -287,9 +326,18 @@ impl App {
         if !self.cle_vue(crate::legendecles::Sorte::Position) {
             return;
         }
+        // Une trajectoire (`trajectoire.rs`) pose une clé par image : seuls ses jalons (le départ, les marques, l'arrivée) se
+        // montrent, reliés d'un trait.
+        let jalons: Option<Vec<usize>> = layer.trajectoire.as_ref().map(|t| t.images_des_jalons(max));
+        if let Some((&a, &b)) = jalons.as_ref().and_then(|j| j.first().zip(j.last())) {
+            let (xa, xb) = (x_of(a).max(visible.0 - 8.0), x_of(b).min(visible.1 + 8.0));
+            if xa < xb {
+                painter.line_segment([pos2(xa, y), pos2(xb, y)], egui::Stroke::new(1.5_f32, crate::trajectoireui::COULEUR.gamma_multiply(0.7)));
+            }
+        }
         for k in &layer.pos_keys {
             let x = x_of(k.frame);
-            if k.frame >= max || x < visible.0 - 8.0 || x > visible.1 + 8.0 {
+            if k.frame >= max || x < visible.0 - 8.0 || x > visible.1 + 8.0 || jalons.as_ref().is_some_and(|j| !j.contains(&k.frame)) {
                 continue;
             }
             // Cerclé : choisi dans la timeline, ou posé sous la tête de lecture (la clé « d'ici » des commandes).
@@ -311,7 +359,7 @@ impl App {
             return None;
         }
         let tol = (cell * 0.5).max(5.0);
-        marker_near(layer.pos_keys.iter().map(|k| k.frame), p.x, |f| r.left() + (f as f32 + 0.5) * cell, tol).map(|f| (row.li, f))
+        marker_near(pos_frames_visibles(layer, self.frame_count()).into_iter(), p.x, |f| r.left() + (f as f32 + 0.5) * cell, tol).map(|f| (row.li, f))
     }
 
     /// Clic sur le losange de l'image `frame` du calque `li` : il est choisi (`toggle` : ajouté ou
@@ -427,12 +475,15 @@ impl App {
         self.begin_pos_drag(li, frame, grab)
     }
 
-    /// Échap pendant le geste : les clés du calque reviennent comme avant, rien n'est enregistré.
+    /// Échap pendant le geste : les clés du calque (et sa trajectoire) reviennent comme avant, rien n'est enregistré.
     pub(crate) fn cancel_pos_drag(&mut self) {
         let Some(d) = self.pos_ui.drag.take() else { return };
         for p in &mut self.doc.panels {
             if let Some(l) = p.layers.iter_mut().find(|l| l.id == d.layer) {
                 l.pos_keys = d.before.clone();
+                if d.trajectoire.is_some() {
+                    l.trajectoire = d.trajectoire.clone();
+                }
             }
         }
         self.renderer.invalidate_all();
@@ -459,35 +510,59 @@ impl App {
         let before = self.layers()[li].pos_keys.clone();
         let snap = self.snapshot();
         let max = self.frame_count().saturating_sub(1);
-        self.pos_ui.drag = Some(PosDrag { layer: id, before, frames, grab, delta: 0, max, snap });
+        // Une seule clé prise, jalon d'une trajectoire (`trajectoireui.rs`) : le glisser la recale dans le temps, la trajectoire reste.
+        // Plusieurs clés d'un calque à trajectoire : un jalon à la fois.
+        let duree = self.frame_count();
+        let trajectoire = self.layers()[li].trajectoire.clone().filter(|t| frames.len() == 1 && t.images_des_jalons(duree).contains(&frames[0]));
+        if self.layers()[li].trajectoire.is_some() && trajectoire.is_none() {
+            self.status = "Calque à trajectoire : glisse un jalon à la fois (le départ, une marque, la fin) pour le recaler.".into();
+            return false;
+        }
+        self.pos_ui.drag = Some(PosDrag { layer: id, before, frames, grab, delta: 0, max, snap, trajectoire });
         true
     }
 
-    /// Les clés prises suivent la souris, à l'image `at` : le calque repart de ses clés d'avant le geste.
+    /// Les clés prises suivent la souris, à l'image `at` : le calque repart de ses clés d'avant le geste. Un jalon de trajectoire :
+    /// la trajectoire est recalée depuis celle d'avant le geste, et ses clés reposées.
     pub(crate) fn drag_pos_keys(&mut self, at: usize) {
         let Some(mut d) = self.pos_ui.drag.take() else { return };
         let delta = poskeys::clamp_delta(&d.frames, at as isize - d.grab as isize, d.max);
         if delta != d.delta {
             d.delta = delta;
-            if let Some(l) = self.layers_mut().iter_mut().find(|l| l.id == d.layer) {
+            if let Some(t0) = d.trajectoire.clone() {
+                let de = d.frames[0];
+                let vers = (de as isize + delta).clamp(0, d.max as isize) as usize;
+                if let Some(li) = self.layers().iter().position(|l| l.id == d.layer) {
+                    let l = &mut self.layers_mut()[li];
+                    l.trajectoire = Some(t0);
+                    l.pos_keys = d.before.clone();
+                    self.trajectoire_recaler(li, de, vers);
+                }
+                self.status = format!("Trajectoire : le jalon de l'image {} passe à l'image {} ; les clés d'entre sont recalées.", de + 1, vers + 1);
+            } else if let Some(l) = self.layers_mut().iter_mut().find(|l| l.id == d.layer) {
                 l.pos_keys = poskeys::moved(&d.before, &d.frames, delta, d.max);
+                let n = d.frames.len();
+                self.status = format!("{n} clé{} de position : {delta:+} image{}.", s(n), if delta.abs() > 1 { "s" } else { "" });
             }
             // (La position du calque est dans le plan à composer : aucun pixel n'est renvoyé à la carte graphique.)
             self.renderer.invalidate_params();
-            let n = d.frames.len();
-            self.status = format!("{n} clé{} de position : {delta:+} image{}.", s(n), if delta.abs() > 1 { "s" } else { "" });
         }
         self.pos_ui.drag = Some(d);
     }
 
     /// Lâche les clés : une étape d'annulation, « Déplacer des clés de position », si quelque chose a
-    /// bougé. Les clés déplacées restent choisies.
+    /// bougé. Les clés déplacées restent choisies. Un jalon de trajectoire recalé : « Recaler la trajectoire ».
     pub(crate) fn end_pos_drag(&mut self) {
         let Some(d) = self.pos_ui.drag.take() else { return };
         if d.delta == 0 {
             return;
         }
         self.pos_ui.sel.retain(|(l, _)| *l != d.layer);
+        if d.trajectoire.is_some() {
+            self.modified = true;
+            self.commit_named(d.snap, "Recaler la trajectoire");
+            return;
+        }
         self.pos_ui.sel.extend(d.frames.iter().map(|&f| (d.layer, (f as isize + d.delta).max(0) as usize)));
         self.modified = true;
         self.commit_named(d.snap, "Déplacer des clés de position");

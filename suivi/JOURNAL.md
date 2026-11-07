@@ -5,6 +5,21 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-07
 
+- Les poignées de lissage de la caméra attendent à côté de chaque clé dès qu'un mouvement existe, au repos (à 0), et se tirent ; ramenées
+  près de la clé, elles reviennent au repos (partie 120, branche `trajectoire`). Rien ne change dans le projet.
+- L'outil Trajectoire (partie 119, branche `trajectoire`, pas fusionnée), l'idée d'Anthony : un trait trace le chemin du calque, de petits
+  traits en travers posent les marques d'espacement comme sur une feuille de timing, et les clés de position se posent toutes seules, une par
+  image, le long de la courbe. Marques glissées ou arrachées, chemin déplacé ou retracé, silhouettes pâles aux jalons, pas des marques (durée
+  du plan partagée), détachement quand on retouche une clé à la main. Format de projet 49. Puis, à sa demande : la clé de départ démarre
+  sur la tête de lecture, deux sortes de clés (interpolées, ou par images). Après son essai : les « clés d'images » sont de vrais dessins,
+  un à chaque marque, copie du dessin du départ déplacée sur le chemin (la timeline se scinde) ; glisser une clé sur la timeline recale la
+  trajectoire (fin, départ, temps d'une marque) au lieu de la détacher ; une fin explicite ; tirer sur le chemin le tord comme une corde
+  (Maj : en bloc). Puis, « ça marche très bien » : les clés d'images deviennent le réglage d'origine, et « ce qui suit le chemin » se
+  choisit (là où part le trait, le bas du dessin, le centre, le haut, un bord, ou un point cliqué). Et la trajectoire ne s'en va plus
+  d'elle-même (une clé supprimée la détachait) : Suppr retire une marque, poser ou lisser une clé à la main est refusé, Transformer
+  déplace le calque et son chemin ensemble. 25 essais. Reste son essai.
+- Idées retenues par Anthony dans les vingt proposées : 1 + 8 (dessiner pendant la lecture, la page de relecture existant déjà), 3, 4, 7, 11,
+  14, 15, 16, 18, 20 ; sa trajectoire remplace 13 ; 2, 5, 6, 9, 10 écartées. Rien d'autre n'est codé.
 - Fusion dans main (6a06b1c) : plan écarté (partie 115, format 48), « + » de la peau de Maj pour un cadre de plus (116), poignées de lissage
   sur la piste caméra (117), traits coupés au bord de la feuille (118 : les effets, dont le tremblement par défaut, ne rendaient que la feuille).
   Relectures indépendantes : 8 défauts corrigés sur le plan écarté, 3 points corrigés sur les traits. Vérificateur : 4109 réussis, 0 échec, deux passages.

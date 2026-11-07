@@ -5,10 +5,13 @@
 //! Le modèle existait déjà : chaque clé de caméra a un adouci d'entrée (`ease_in`) et de sortie
 //! (`ease_out`), en images. Rien ne change dans le projet : on les montre, et on les tire.
 //!
-//! - Une clé adoucie montre, sur la piste de caméra, deux **poignées de lissage** : petits ronds creux,
+//! - Une clé montre, sur la piste de caméra, deux **poignées de lissage** : petits ronds creux,
 //!   reliés à leur clé par un trait fin. À droite, à `image + sortie` : là où la caméra a fini
 //!   d'accélérer en repartant. À gauche, à `image − entrée` : là où elle commence à ralentir. Une
-//!   poignée n'existe que s'il y a un mouvement de ce côté, et que l'adouci y est plus grand que 0.
+//!   poignée existe de chaque côté où il y a un mouvement (une clé voisine), **même à 0** (Anthony,
+//!   2026-11-07 : « un mouvement crée immédiatement des clés de lissage visibles sur la timeline, il
+//!   suffit de les étirer ensuite ») : elle attend alors au repos, juste à côté de sa clé (`repos`),
+//!   plus petite et plus pâle, hors de la prise de la clé, pour être tirée.
 //! - Tirer une poignée change l'adouci, à l'image près, sans jamais passer la clé voisine ni la
 //!   poignée d'en face : ce qu'on voit est toujours ce qui se passe (`camera::interval_eases` donne
 //!   les valeurs après le partage éventuel, `camera::ease` ne partage plus en silence ce qu'on a
@@ -38,12 +41,25 @@ pub(crate) enum Cote {
 /// de rayon), pour le stylet.
 pub(crate) const PRISE: f32 = 7.0;
 
-/// Rayon d'une poignée dessinée, et quand elle est éclairée.
+/// Rayon d'une poignée dessinée, au repos (adouci nul), et quand elle est éclairée.
 const RAYON: f32 = 3.0;
+pub(crate) const RAYON_REPOS: f32 = 2.5;
 const RAYON_CLAIR: f32 = 4.5;
 
-/// Moins que cela, un adouci est nul (pas de poignée).
+/// Moins que cela, un adouci est nul (la poignée est au repos).
 const NUL: f32 = 1e-3;
+
+/// La zone de prise d'une clé de caméra, de chaque côté de son losange, la plus large des deux pistes (timeline :
+/// `cell / 2 + 2` ; montage : `cell / 2`, 5 au moins).
+pub(crate) fn tol_cle(cell: f32) -> f32 {
+    (cell * 0.5 + 2.0).max(5.0)
+}
+
+/// Où attend une poignée au repos (adouci nul), en points de sa clé : juste hors de la prise de la clé, sa propre prise
+/// comprise, pour qu'un appui dessus ne prenne jamais la clé.
+pub(crate) fn repos(cell: f32) -> f32 {
+    tol_cle(cell) + PRISE
+}
 
 // ---------------------------------------------------------------------- valeurs
 
@@ -60,22 +76,18 @@ pub(crate) fn valeurs(keys: &[CameraKey], i: usize) -> (f32, f32) {
     (entree, sortie)
 }
 
-/// Les poignées à montrer : (rang de la clé, côté, images), seulement là où il y a un mouvement et un
-/// adouci non nul.
+/// Les poignées à montrer : (rang de la clé, côté, images), de chaque côté où il y a un mouvement (une clé
+/// voisine) ; 0 : la poignée est au repos, à côté de sa clé.
 pub(crate) fn poignees(keys: &[CameraKey]) -> Vec<(usize, Cote, f32)> {
     let mut out = Vec::new();
     for i in 0..keys.len() {
         if i > 0 {
             let v = camera::interval_eases(&keys[i - 1], &keys[i]).1;
-            if v > NUL {
-                out.push((i, Cote::Entree, v));
-            }
+            out.push((i, Cote::Entree, if v > NUL { v } else { 0.0 }));
         }
         if i + 1 < keys.len() {
             let v = camera::interval_eases(&keys[i], &keys[i + 1]).0;
-            if v > NUL {
-                out.push((i, Cote::Sortie, v));
-            }
+            out.push((i, Cote::Sortie, if v > NUL { v } else { 0.0 }));
         }
     }
     out
@@ -179,11 +191,13 @@ pub(crate) fn adoucir(keys: &mut [CameraKey], i: usize) -> Adouci {
 
 // ---------------------------------------------------------------------- à l'écran
 
-/// L'abscisse de la poignée (`v` images de sa clé, qui est à `x_cle`).
+/// L'abscisse de la poignée (`v` images de sa clé, qui est à `x_cle`) ; jamais plus près de la clé que le repos
+/// (`repos`) : une poignée nulle, ou trop courte pour sortir de la prise de la clé à ce zoom, attend là.
 pub(crate) fn x_poignee(x_cle: f32, cote: Cote, v: f32, cell: f32) -> f32 {
+    let d = (v * cell).max(repos(cell));
     match cote {
-        Cote::Sortie => x_cle + v * cell,
-        Cote::Entree => x_cle - v * cell,
+        Cote::Sortie => x_cle + d,
+        Cote::Entree => x_cle - d,
     }
 }
 
@@ -213,8 +227,8 @@ pub(crate) fn images_voulues(x: f32, x_cle: f32, cote: Cote, cell: f32) -> f32 {
 }
 
 /// Peint les poignées de lissage de `keys` sur la ligne `y` : un trait fin de la clé à la poignée, puis un
-/// petit rond creux. `chaude` : celle qu'on survole ou qu'on tient. À peindre avant les losanges, qui
-/// passent par-dessus.
+/// petit rond creux ; au repos (adouci nul), un rond plus petit et plus pâle, sans trait. `chaude` : celle
+/// qu'on survole ou qu'on tient. À peindre avant les losanges, qui passent par-dessus.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn peindre(painter: &egui::Painter, keys: &[CameraKey], y: f32, x_of: &dyn Fn(usize) -> f32, cell: f32, couleur: Color32, fond: Color32, chaude: Option<(usize, Cote)>) {
     let clip = painter.clip_rect();
@@ -225,8 +239,17 @@ pub(crate) fn peindre(painter: &egui::Painter, keys: &[CameraKey], y: f32, x_of:
             continue;
         }
         let clair = chaude == Some((i, cote));
-        painter.line_segment([Pos2::new(x_cle, y), Pos2::new(x, y)], Stroke::new(1.0_f32, couleur.gamma_multiply(0.7)));
-        let (r, trait_) = if clair { (RAYON_CLAIR, Stroke::new(2.0_f32, crate::theme::contour())) } else { (RAYON, Stroke::new(1.5_f32, couleur)) };
+        let au_repos = v <= NUL;
+        if !au_repos {
+            painter.line_segment([Pos2::new(x_cle, y), Pos2::new(x, y)], Stroke::new(1.0_f32, couleur.gamma_multiply(0.7)));
+        }
+        let (r, trait_) = if clair {
+            (RAYON_CLAIR, Stroke::new(2.0_f32, crate::theme::contour()))
+        } else if au_repos {
+            (RAYON_REPOS, Stroke::new(1.0_f32, couleur.gamma_multiply(0.55)))
+        } else {
+            (RAYON, Stroke::new(1.5_f32, couleur))
+        };
         painter.circle(Pos2::new(x, y), r, fond, trait_);
     }
 }

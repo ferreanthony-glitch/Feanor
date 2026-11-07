@@ -49,6 +49,10 @@ pub struct Entree {
     pub adoucir_entree: f32,
     #[serde(default, skip_serializing_if = "est_zero")]
     pub adoucir_sortie: f32,
+    /// Clé tenue (format 49, l'outil Trajectoire en « clés d'images ») : la pose reste celle de cette clé jusqu'à la suivante, sans
+    /// interpolation.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub tenue: bool,
 }
 
 fn un() -> f32 {
@@ -77,6 +81,7 @@ impl From<&PosKey> for Entree {
             lisse: k.smooth,
             adoucir_entree: k.ease_in,
             adoucir_sortie: k.ease_out,
+            tenue: k.tenue,
         }
     }
 }
@@ -116,6 +121,7 @@ impl Entree {
             smooth: self.lisse,
             ease_in: self.adoucir_entree.max(0.0),
             ease_out: self.adoucir_sortie.max(0.0),
+            tenue: self.tenue,
         })
     }
 }
@@ -139,11 +145,13 @@ pub struct PosKey {
     /// Adoucis d'entrée (avant la clé) et de sortie (après), en images ; 0 : vitesse constante.
     pub ease_in: f32,
     pub ease_out: f32,
+    /// Tenue : la pose reste celle de cette clé jusqu'à la suivante, sans interpolation (l'outil Trajectoire en « clés d'images »).
+    pub tenue: bool,
 }
 
 impl PosKey {
     pub fn new(frame: usize, t: LayerTransform) -> PosKey {
-        PosKey { frame, t, smooth: false, ease_in: 0.0, ease_out: 0.0 }
+        PosKey { frame, t, smooth: false, ease_in: 0.0, ease_out: 0.0, tenue: false }
     }
 
     /// Adoucis effectifs sur un intervalle de `span` images : ceux qu'on a réglés, sinon (clé lissée)
@@ -190,6 +198,10 @@ pub fn pose_at(keys: &[PosKey], f: usize, base: LayerTransform) -> LayerTransfor
             Some(0) => keys[0].t,
             Some(i) => {
                 let (a, b) = (&keys[i - 1], &keys[i]);
+                // Une clé tenue : sa pose jusqu'à la suivante, sans interpolation.
+                if a.tenue {
+                    return a.t;
+                }
                 let span = (b.frame - a.frame).max(1) as f32;
                 let t = (f - a.frame) as f32 / span;
                 let (_, out) = a.eases(span);

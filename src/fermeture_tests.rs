@@ -128,6 +128,7 @@ const SANS_EFFET_SUR_LE_PROJET: &[&str] = &[
     "outil.perspective",
     "outil.grab",
     "outil.pull",
+    "outil.trajectoire",
     "outil.main",
     "outil.camera",
     "outil.transformer",

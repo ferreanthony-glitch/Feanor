@@ -230,7 +230,10 @@ pub const FORMAT: &str = "pelure-projet";
 /// 48 (2026-11-06, `docs/INTERFACE.md` partie 115) : **plans annulés** — `plans_annules.json` à côté du manifeste (`planannule.rs`) : des plans sortis du
 /// film, gardés tels quels, avec leurs dessins dans `dessins/`. Une version précédente qui ouvrirait le projet effacerait ces dessins à l'enregistrement
 /// (rien d'autre ne les cite) : elle le refuse donc. Un projet de version 47 ou moins s'ouvre tel quel, sans rien perdre, aucun plan annulé.
-pub const VERSION: u32 = 48;
+/// 49 (2026-11-07, `docs/INTERFACE.md` partie 119) : **trajectoire d'un calque** — `trajectoire` d'un calque (`trajectoire.rs`) : le chemin dessiné
+/// (points en pixels de la feuille), ses marques et son pas, qui posent les clés de position du calque. Une version précédente qui ouvrirait le
+/// projet garderait les clés mais perdrait le chemin à l'enregistrement : elle le refuse donc. Un projet de version 48 ou moins s'ouvre tel quel.
+pub const VERSION: u32 = 49;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -653,6 +656,10 @@ struct LayerEntry {
     /// l'animent ; absentes : le calque a sa pose fixe (`transformation`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     cles_position: Vec<crate::poskeys::Entree>,
+    /// Trajectoire (format 49, `trajectoire.rs`) : le chemin dessiné et ses marques, qui posent les clés de position ; absente : les clés
+    /// sont à la main.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    trajectoire: Option<crate::trajectoire::Trajectoire>,
     /// Clés d'opacité (format 43, `opacitecles.rs`) : l'opacité du calque à certaines images du plan ; absentes : `opacite` fixe.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     cles_opacite: Vec<crate::opacitecles::Entree>,
@@ -2373,6 +2380,7 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                     inclinaison_y: l.transform.tilt_y,
                 }),
                 cles_position: l.pos_keys.iter().map(crate::poskeys::Entree::from).collect(),
+                trajectoire: l.trajectoire.clone(),
                 cles_opacite: l.opacity_keys.iter().map(crate::opacitecles::Entree::from).collect(),
                 couleur_unie: l.unie,
                 // (Un calque fixe n'a pas d'écart de profondeur : s'il en reste un, il est écrit dans la profondeur.)
@@ -3193,6 +3201,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                             })
                             .unwrap_or_default(),
                         pos_keys: crate::poskeys::from_entries(l.cles_position),
+                        trajectoire: l.trajectoire.and_then(crate::trajectoire::Trajectoire::assainie),
                         opacity_keys: crate::opacitecles::from_entries(l.cles_opacite),
                         unie: l.couleur_unie,
                         depth: if l.profondeur.is_finite() {
