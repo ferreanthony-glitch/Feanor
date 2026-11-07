@@ -759,6 +759,15 @@ impl App {
                 ui.label(RichText::new("Fonctions à l'essai : elles peuvent encore changer. Rien n'est supprimé quand la case est décochée.").small().weak());
             }
             Groupe::StyletMain => {
+                // Le bouton et la gomme du stylet (`styletlien.rs`) : rallumer pose l'écoute si elle ne l'était pas encore.
+                let resp = ui.checkbox(&mut self.settings.stylet_windows, "Bouton et gomme du stylet lus auprès de Windows");
+                let resp = crate::bulles::bulle(resp, "Bouton et gomme du stylet", "Le bouton du stylet fait le clic droit (réglages de l'outil, anneau) et le stylet retourné prend la Gomme. À éteindre seulement si ta tablette s'en trouve mal : FEANOR ne reçoit alors du stylet que l'appui.", "");
+                if resp.changed() {
+                    if self.settings.stylet_windows && self.stylet.ecoute.is_none() {
+                        self.stylet.ecoute = Some(crate::stylet::ecouter(self.stylet.hwnd));
+                    }
+                    let _ = self.settings.save();
+                }
                 let b = ui.button("Régler le stylet à ma main…");
                 if crate::bulles::bulle(b, "Régler le stylet à ma main", "Trace trois traits (léger, moyen, appuyé) : FEANOR règle la courbe de pression du stylet sur ta main, après un aperçu et ta confirmation. Avec la souris, l'appui est toujours de 100 %.", &self.raccourci("aide.regler_stylet")).clicked() {
                     sortie.action = Some("aide.regler_stylet");

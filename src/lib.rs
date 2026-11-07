@@ -452,6 +452,10 @@ mod stylet;
 #[cfg(test)]
 mod stylet_tests;
 mod styletui;
+// Le stylet branché : son bouton est le clic droit, retourné il prend la Gomme.
+mod styletlien;
+#[cfg(test)]
+mod styletlien_tests;
 mod crayonnesheritage;
 #[cfg(test)]
 mod color_tests;

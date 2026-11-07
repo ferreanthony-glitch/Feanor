@@ -292,6 +292,10 @@ pub struct Settings {
     /// un fichier à côté des réglages, qui ne quitte jamais le poste. Allumé d'origine.
     #[serde(default = "yes", rename = "compter_les_commandes", skip_serializing_if = "is_true")]
     pub usage_actif: bool,
+    /// Le bouton et la gomme du stylet lus auprès de Windows (`stylet.rs`, `styletlien.rs`) : le bouton du stylet est le
+    /// clic droit, le stylet retourné prend la Gomme. Allumé d'origine ; à éteindre si une tablette s'en trouve mal.
+    #[serde(default = "yes", rename = "stylet_lu_aupres_de_windows", skip_serializing_if = "is_true")]
+    pub stylet_windows: bool,
 }
 
 fn is_true(b: &bool) -> bool {
@@ -408,6 +412,7 @@ impl Default for Settings {
             track_height: Default::default(),
             anneau: Default::default(),
             usage_actif: true,
+            stylet_windows: true,
         }
     }
 }
