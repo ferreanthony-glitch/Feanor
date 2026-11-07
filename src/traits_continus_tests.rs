@@ -630,7 +630,7 @@ fn only_the_board_shows_the_margin_the_film_and_the_storyboard_show_the_camera_f
 
 // ------------------------------------------------------------------------------ l'export de la planche
 
-fn exporter(b: &mut Banc, opt: &crate::planche::Options, nom: &str) -> image::RgbImage {
+pub(crate) fn exporter(b: &mut Banc, opt: &crate::planche::Options, nom: &str) -> image::RgbImage {
     let dir = std::env::temp_dir().join(format!("shot-test-traits-{nom}-{}-{:?}", std::process::id(), std::thread::current().id()));
     std::fs::remove_dir_all(&dir).ok();
     std::fs::create_dir_all(&dir).expect("dossier");

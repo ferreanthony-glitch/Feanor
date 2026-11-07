@@ -351,6 +351,14 @@ impl EffectKind {
         )
     }
 
+    /// L'effet se calcule hors de la feuille comme dedans : ses réglages ne dépendent ni du centre ni de la taille de la feuille (`effets_hors_de_la_feuille`).
+    fn suit_la_toile(self) -> bool {
+        !matches!(
+            self,
+            EffectKind::Wave | EffectKind::Ripple | EffectKind::Twirl | EffectKind::Pinch | EffectKind::Clouds | EffectKind::Lighting | EffectKind::Gradient | EffectKind::Flash | EffectKind::Impact | EffectKind::Shake | EffectKind::Vignette | EffectKind::Aberration
+        )
+    }
+
     /// L'effet n'a de sens que sur un calque vectoriel (le tremblement du trait et les effets du trait qui
     /// lisent les traits). Le liseré, l'encre qui bave et le trait sec marchent aussi sur un bitmap.
     pub fn vector_only(self) -> bool {
@@ -1064,15 +1072,75 @@ pub fn apply_with(raster: &Raster, vector: Option<&crate::vector::VectorDrawing>
             cur = Some(crate::fxtrait::render(v, raster.width, raster.height, &line));
         }
     }
+    // Ce que les effets sur les pixels lisent hors de la feuille : les traits du dessin passés par les effets du trait, s'ils y ont laissé quelque chose
+    // (`fxtrait::render` pose sur la feuille ce qu'il transforme) ; sinon le dessin, sauf si un effet du trait a voulu cacher des traits.
+    let cache_des_traits = steps.iter().any(|s| matches!(s.kind, EffectKind::Write | EffectKind::Dust));
+    let source_monde: Option<Raster> = match &cur {
+        Some(c) if !c.outer.is_empty() || cache_des_traits => Some(c.clone()),
+        _ => None,
+    };
     // (Sans dessin vectoriel, les effets qui ne vivent que sur les traits sont laissés ; le trait sec, lui,
     // agit sur les pixels.)
-    for s in steps.iter().filter(|s| !(s.kind.vector_stage() && (on_vector || s.kind.vector_only()))) {
-        use crate::fxfilters as f;
+    let sur_les_pixels: Vec<&FxStep> = steps.iter().filter(|s| !(s.kind.vector_stage() && (on_vector || s.kind.vector_only()))).collect();
+    for s in &sur_les_pixels {
         // (Le premier effet lit le dessin lui-même : pas de copie d'avance.)
-        let src = cur.as_ref().unwrap_or(raster);
+        let next = un_effet(cur.as_ref().unwrap_or(raster), s, level, (0, 0));
+        cur = Some(next);
+    }
+    let mut out = cur.unwrap_or_else(|| raster.clone());
+    if level == 0 {
+        effets_hors_de_la_feuille(&mut out, source_monde.as_ref().unwrap_or(raster), &sur_les_pixels);
+    }
+    out
+}
+
+/// Marge autour de ce qui est dessiné hors de la feuille, et bande de la feuille lue le long de son bord (en tuiles) : ce qu'un effet peut étaler ou aller lire.
+const MARGE_MONDE: i32 = 4;
+/// Au-delà de ces pixels, le dessin hors de la feuille est gardé sans ses effets : rien n'est jamais retiré.
+const MONDE_MAX_PIXELS: usize = 1 << 27;
+
+/// Les effets ne connaissent que la feuille (`Raster::tiles`) : **ce qui est dessiné au-delà disparaissait de l'image dérivée**, et un calque à effets
+/// (le tremblement par défaut, sur tout calque vectoriel) se voyait coupé net au bord de la feuille, au repos, partout où l'image dérivée sert : case,
+/// Storyboard, export (partie 117). La feuille reste calculée comme toujours, au pixel près ; ce qui la dépasse l'est ici, sur une image à part, faite
+/// de ce hors-feuille et de la bande de la feuille qui le touche, le tremblement gardant son champ de la feuille (le trait ne saute pas au bord). Les
+/// effets réglés par rapport à la feuille (centre, pourcentages) ne s'y appliquent pas : ce qu'ils auraient déplacé reste à sa place, tel quel.
+fn effets_hors_de_la_feuille(out: &mut Raster, base: &Raster, steps: &[&FxStep]) {
+    if !base.has_beyond() {
+        return;
+    }
+    let Some((tx0, ty0, tx1, ty1)) = base.drawn_tile_range() else { return };
+    let (ox, oy) = (tx0 - MARGE_MONDE, ty0 - MARGE_MONDE);
+    let (nx, ny) = ((tx1 - tx0 + 1 + 2 * MARGE_MONDE) as usize, (ty1 - ty0 + 1 + 2 * MARGE_MONDE) as usize);
+    let (mut image, origine) = (Raster::new(nx * TILE, ny * TILE), (ox as i64 * TILE as i64, oy as i64 * TILE as i64));
+    let (cols, rows) = (base.tiles_x as i32, base.tiles_y() as i32);
+    let pres_du_bord = |tx: i32, ty: i32| tx < MARGE_MONDE || ty < MARGE_MONDE || tx >= cols - MARGE_MONDE || ty >= rows - MARGE_MONDE;
+    for id in base.drawn_ids() {
+        let (tx, ty) = base.key_of(id);
+        if !base.in_window(tx, ty) || pres_du_bord(tx, ty) {
+            image.tiles[(ty - oy) as usize * nx + (tx - ox) as usize] = base.slot(id).cloned();
+        }
+    }
+    let dans_la_toile: Vec<&&FxStep> = steps.iter().filter(|s| s.kind.suit_la_toile()).collect();
+    if image.width.saturating_mul(image.height) <= MONDE_MAX_PIXELS {
+        for s in dans_la_toile {
+            image = un_effet(&image, s, 0, origine);
+        }
+    }
+    for (k, tile) in image.tiles.into_iter().enumerate() {
+        let Some(tile) = tile else { continue };
+        let (tx, ty) = (ox + (k % nx) as i32, oy + (k / nx) as i32);
+        // (Dans la feuille, le calcul de la feuille reste : seul ce qui dépasse d'une tuile de bord est pris.)
+        out.absorb_beyond(tx, ty, tile);
+    }
+}
+
+/// Un effet sur les pixels de `src`. `origine` : la place dans le monde du pixel (0, 0) de `src`, quand ce n'est pas la feuille (`effets_hors_de_la_feuille`).
+fn un_effet(src: &Raster, s: &FxStep, level: u8, origine: (i64, i64)) -> Raster {
+    use crate::fxfilters as f;
+    {
         let values = crate::fxproxy::scaled_values(s.kind, &s.values, level);
         let v = &values;
-        let next = match s.kind {
+        match s.kind {
             EffectKind::GaussianBlur => gaussian(src, v[0]),
             EffectKind::MotionBlur => motion(src, v[0], v[1]),
             EffectKind::BrightnessContrast => f::brightness_contrast(src, v[0], v[1]),
@@ -1094,7 +1162,7 @@ pub fn apply_with(raster: &Raster, vector: Option<&crate::vector::VectorDrawing>
             EffectKind::Clouds => crate::fxwarp::clouds(src, v[0], v[1], v[2]),
             EffectKind::Lighting => crate::fxwarp::lighting(src, v[0], v[1], v[2], v[3]),
             EffectKind::Gradient => crate::fxwarp::gradient(src, v[0], v[1]),
-            EffectKind::Boil => crate::tremblement::boil(src, v, level),
+            EffectKind::Boil => crate::tremblement::boil_depuis(src, v, level, origine),
             EffectKind::Flash => crate::fxcine::flash(src, v[0], [v[1], v[2], v[3]], v[4] >= 0.5),
             EffectKind::Impact => crate::fxcine::impact(src, v),
             EffectKind::Bloom => crate::fxcine::bloom(src, v[0], v[1], v[2]),
@@ -1108,10 +1176,8 @@ pub fn apply_with(raster: &Raster, vector: Option<&crate::vector::VectorDrawing>
             EffectKind::Dry => crate::fxmatiere::dry_pixels(src, v),
             // (Les effets du trait sont passés plus haut.)
             EffectKind::Write | EffectKind::Sketch | EffectKind::Breath | EffectKind::StrokeWave | EffectKind::Dashes | EffectKind::Dust | EffectKind::StrokeGradient | EffectKind::Nib => unreachable!("effet du trait"),
-        };
-        cur = Some(next);
+        }
     }
-    cur.unwrap_or_else(|| raster.clone())
 }
 
 // ---------------------------------------------------------------------- cache des dessins dérivés
