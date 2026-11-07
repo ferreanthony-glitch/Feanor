@@ -845,3 +845,109 @@ fn the_canvas_shows_the_right_drawing_during_a_ctrl_gesture_not_only_after_the_r
     assert!(compter(c, BLEU) > 60_000 && compter(c, ROUGE) == 0);
     println!("DUREE-CLES écran pendant le geste : {rouge0} pixels rouges avant ; pendant et après conformes");
 }
+// ------------------------------------------------------------------------------------ la trajectoire d'un calque suit le décalage
+
+/// Ce que dit un calque à trajectoire : (départ, fin, images des jalons, images des clés de position, début de chaque dessin).
+type EtatTraj = (usize, Option<usize>, Vec<usize>, Vec<usize>, Vec<usize>);
+
+fn etat_traj(b: &Banc) -> EtatTraj {
+    let l = &b.app.layers()[0];
+    let t = l.trajectoire.as_ref().expect("une trajectoire");
+    (t.depart, t.fin, t.images_des_jalons(b.app.frame_count()), l.pos_keys.iter().map(|k| k.frame).collect(), runs(l).into_iter().filter(|r| r.2.is_some()).map(|r| r.0).collect())
+}
+
+/// Un plan de 24 images, un calque à trajectoire (chemin, une marque, départ à l'image 6, fin explicite à l'image 18), en clés d'images
+/// ou d'interpolation, le Montage ouvert.
+fn banc_trajectoire(images: bool) -> Banc {
+    use crate::trajectoire::Cles;
+    let mut b = crate::trajectoireui_tests::banc();
+    if images {
+        b.app.traj.cles_propose = Cles::Images;
+    }
+    crate::trajectoireui_tests::dessiner_le_depart(&mut b);
+    crate::trajectoireui_tests::tracer_le_chemin(&mut b);
+    crate::trajectoireui_tests::marquer_le_milieu(&mut b);
+    {
+        let t = b.app.layers_mut()[0].trajectoire.as_mut().expect("un chemin");
+        t.depart = 6;
+        t.fin = Some(18);
+    }
+    b.app.trajectoire_recalculer(0);
+    b.app.set_espace(Espace::Montage);
+    b.app.montage_zoom = PPF;
+    b.chauffer(8);
+    b
+}
+
+#[test]
+fn the_trajectory_follows_a_ctrl_gesture_in_both_modes_and_recomputing_lays_the_keys_where_they_are() {
+    for images in [false, true] {
+        let mode = if images { "clés d'images" } else { "clés d'interpolation" };
+        let mut b = banc_trajectoire(images);
+        let avant = etat_traj(&b);
+        assert_eq!((avant.0, avant.1), (6, Some(18)), "{mode}");
+        assert_eq!(avant.2.first(), Some(&6), "{mode} : le premier jalon est le départ");
+        glisser_montage(&mut b, 0, true, 12.0, ctrl());
+        assert_eq!(b.app.frame_count(), 36, "{mode}");
+        let apres = etat_traj(&b);
+        let plus = |v: &[usize]| v.iter().map(|f| f + 12).collect::<Vec<_>>();
+        assert_eq!((apres.0, apres.1), (18, Some(30)), "{mode} : départ et fin suivent le décalage de 12 images");
+        assert_eq!(apres.2, plus(&avant.2), "{mode} : les jalons suivent");
+        assert_eq!(apres.3, plus(&avant.3), "{mode} : les clés de position suivent");
+        // Les dessins de jalons : un dessin au départ, à sa place (clés d'images) ; les images de tête sont vides.
+        if images {
+            assert_eq!(apres.4, plus(&avant.4), "{mode} : les dessins de jalons suivent");
+        }
+        // Recalculer d'après la trajectoire pose les clés et les dessins là où ils sont déjà.
+        b.app.trajectoire_recalculer(0);
+        assert_eq!(etat_traj(&b), apres, "{mode} : recalculer ne bouge rien");
+        // Annuler rend l'état exactement, rétablir aussi.
+        annuler(&mut b);
+        assert_eq!(etat_traj(&b), avant, "{mode} : annulé");
+        retablir(&mut b);
+        assert_eq!(etat_traj(&b), apres, "{mode} : rétabli");
+    }
+}
+
+#[test]
+fn a_cut_that_passes_the_start_of_the_trajectory_loses_nothing_and_gives_it_back_exactly() {
+    for images in [false, true] {
+        let mode = if images { "clés d'images" } else { "clés d'interpolation" };
+        let mut b = banc_trajectoire(images);
+        let (avant, des0) = (etat_traj(&b), dessins(&b.app.doc));
+        // Ctrl, plus court de 9 images : le départ (image 6) passe sous la coupe, la fin (18) devient 9.
+        glisser_montage(&mut b, 0, true, -9.0, ctrl());
+        let coupe = etat_traj(&b);
+        assert_eq!(coupe.0, 0, "{mode} : le départ est ramené au début du plan");
+        assert_eq!(coupe.1, Some(9), "{mode}");
+        assert_eq!(dessins(&b.app.doc), des0, "{mode} : aucun dessin perdu");
+        // Recalculer sur le plan raccourci ne plante pas et ne fait perdre aucun dessin du film ni de la réserve.
+        b.app.trajectoire_recalculer(0);
+        assert!(des0.is_subset(&dessins(&b.app.doc)), "{mode} : aucun dessin perdu après recalcul");
+        annuler(&mut b);
+        assert_eq!(etat_traj(&b), avant, "{mode} : annulé");
+        // Aller-retour par la réserve (Ctrl plus court puis plus long, sans recalcul entre) : le départ et la fin redeviennent exacts.
+        retablir(&mut b);
+        assert_eq!(etat_traj(&b).0, 0);
+        let n = b.app.frame_count();
+        b.app.doc.slide_plan_end(0, n + 9);
+        let (t, _) = (b.app.layers()[0].trajectoire.as_ref().unwrap(), ());
+        assert_eq!((t.depart, t.fin), (6, Some(18)), "{mode} : l'aller-retour rend le départ et la fin exacts");
+    }
+}
+
+#[test]
+fn the_trajectory_survives_saving_and_reopening_after_a_ctrl_gesture_and_a_cut() {
+    let mut b = banc_trajectoire(false);
+    glisser_montage(&mut b, 0, true, -9.0, ctrl());
+    let dir = dossier_d_essai("traj");
+    let manifeste = dir.join("T.shot");
+    crate::project::save(&b.app.doc, &manifeste, &mut Default::default()).unwrap();
+    let mut doc = crate::project::load(&manifeste).unwrap().doc;
+    let t = doc.panels[0].layers[0].trajectoire.clone().expect("la trajectoire est relue");
+    assert_eq!((t.depart, t.fin), (0, Some(9)));
+    let n = doc.panels[0].frame_count();
+    doc.slide_plan_end(0, n + 9);
+    let t = doc.panels[0].layers[0].trajectoire.clone().unwrap();
+    assert_eq!((t.depart, t.fin), (6, Some(18)), "le départ et la fin d'origine sont revenus de la réserve, après la réouverture");
+}

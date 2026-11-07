@@ -94,6 +94,10 @@ pub struct LayerPiece {
     pub pos_edge: Option<PosKey>,
     pub op: Vec<OpKey>,
     pub op_edge: Option<OpKey>,
+    /// Départ et fin de la trajectoire du calque avant la coupure du début, et ce qu'ils sont devenus (ramenés au bord du plan si la
+    /// coupure les passe) : si personne n'y touche, la restitution rend exactement les premiers.
+    pub traj_avant: Option<(usize, Option<usize>)>,
+    pub traj_apres: Option<(usize, Option<usize>)>,
 }
 
 /// Une partie du plan hors champ : `len` images, comptées depuis 0 (au début, l'image `len - 1` est
@@ -275,6 +279,18 @@ fn keys_absorb_head(l: &mut crate::document::Layer, lp: Option<&LayerPiece>, len
         keys.append(&mut l.opacity_keys);
         l.opacity_keys = keys;
     }
+    // La trajectoire (départ et fin, en images du plan) suit les clés. Si personne n'y a touché depuis la coupure, elle reprend
+    // exactement son départ et sa fin d'avant ; sinon elle avance de `len` comme tout le reste.
+    if let Some(t) = l.trajectoire.as_mut() {
+        let maintenant = (t.depart, t.fin);
+        match lp.and_then(|lp| lp.traj_apres.zip(lp.traj_avant)) {
+            Some((apres, avant)) if apres == maintenant => (t.depart, t.fin) = avant,
+            _ => {
+                t.depart += len;
+                t.fin = t.fin.map(|f| f + len);
+            }
+        }
+    }
 }
 
 fn fx_absorb_head(e: &mut Effect, piece: Option<&FxPiece>, len: usize) {
@@ -332,6 +348,12 @@ fn cut_head(p: &mut Panel, comments: &mut Vec<Comment>, c: usize, default: Camer
         lp.fx = l.fx.iter_mut().map(|e| fx_cut_head(e, c)).collect();
         (lp.pos, l.pos_keys, lp.pos_edge) = pos_cut_head(&l.pos_keys, c, l.transform);
         (lp.op, l.opacity_keys, lp.op_edge) = op_cut_head(&l.opacity_keys, c, l.opacity);
+        if let Some(t) = l.trajectoire.as_mut() {
+            lp.traj_avant = Some((t.depart, t.fin));
+            t.depart = t.depart.saturating_sub(c);
+            t.fin = t.fin.map(|f| f.saturating_sub(c)).filter(|&f| f > t.depart);
+            lp.traj_apres = Some((t.depart, t.fin));
+        }
         l.trim();
         piece.layers.push(lp);
     }
@@ -547,6 +569,11 @@ fn pad_head(p: &mut Panel, comments: &mut [Comment], k: usize, hold: bool) {
         }
         let first = if hold { l.frames.first().copied().flatten() } else { None };
         l.insert(0, first, k);
+        // La trajectoire (départ et fin, en images du plan) suit les dessins et les clés.
+        if let Some(t) = l.trajectoire.as_mut() {
+            t.depart += k;
+            t.fin = t.fin.map(|f| f + k);
+        }
         l.trim();
     }
     for key in &mut p.camera {
@@ -1019,6 +1046,11 @@ mod file {
         pub cles_opacite: Vec<crate::opacitecles::Entree>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pub bord_opacite: Option<crate::opacitecles::Entree>,
+        /// Départ et fin de la trajectoire du calque avant la coupure du début, et après (rien : pas de trajectoire).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub trajectoire_avant: Option<(usize, Option<usize>)>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub trajectoire_apres: Option<(usize, Option<usize>)>,
     }
 
     #[derive(Serialize, Deserialize, Default)]
@@ -1136,6 +1168,8 @@ fn piece_file(piece: &Piece, panel: &Panel) -> file::PieceFile {
                     bord_position: lp.pos_edge.as_ref().map(Into::into),
                     cles_opacite: lp.op.iter().map(Into::into).collect(),
                     bord_opacite: lp.op_edge.as_ref().map(Into::into),
+                    trajectoire_avant: lp.traj_avant,
+                    trajectoire_apres: lp.traj_apres,
                 })
             })
             .collect(),
@@ -1251,6 +1285,8 @@ fn piece_of(f: file::PieceFile, panel: &Panel, missing: &std::collections::BTree
                 pos_edge: l.bord_position.and_then(crate::poskeys::Entree::into_model),
                 op: crate::opacitecles::from_entries(l.cles_opacite),
                 op_edge: l.bord_opacite.and_then(crate::opacitecles::Entree::into_model),
+                traj_avant: l.trajectoire_avant,
+                traj_apres: l.trajectoire_apres,
             })
         })
         .collect();
