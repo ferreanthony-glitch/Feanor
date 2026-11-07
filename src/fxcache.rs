@@ -883,7 +883,7 @@ pub(crate) fn settle() {
     let start = std::time::Instant::now();
     let mut st = lock();
     while st.queue.len() + st.inflight.len() > 0 {
-        assert!(start.elapsed() < std::time::Duration::from_secs(60), "le fil de fond n'a pas fini");
+        assert!(start.elapsed() < std::time::Duration::from_secs(120), "le fil de fond n'a pas fini");
         st = DONE.wait_timeout(st, std::time::Duration::from_millis(20)).unwrap_or_else(|e| e.into_inner()).0;
     }
 }

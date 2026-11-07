@@ -10,6 +10,27 @@ use crate::document::{CelId, Document, Layer, LayerKind};
 use crate::gel::Gel;
 use crate::raster::{Tile, TILE_PIXELS};
 
+/// Un passage a trouvé quelque chose, et les caches sont vides maintenant : le passage dû ne part pas (rien à examiner), aucune réponse ne viendra. Le gel n'attend plus rien :
+/// il se réveillait toutes les secondes et demie, sans fin.
+#[test]
+fn with_nothing_left_to_examine_the_gel_stops_asking_for_images() {
+    crate::gel::rien_a_examiner_dans_cet_essai();
+    let (mut doc, _) = doc_de_plans(2);
+    let mut g = Gel::default();
+    g.activer(true);
+    g.caches_communs = true;
+    g.comme_apres_un_passage_fructueux();
+    assert!(g.reveil().is_some(), "le passage suivant est attendu");
+    g.passage_du();
+    for _ in crate::perf_tests::attente() {
+        g.tenir(&mut doc, 0, None);
+        if !g.au_travail() {
+            break;
+        }
+    }
+    assert_eq!(g.reveil(), None, "aucun passage ne partira : rien à attendre");
+}
+
 fn pixel(i: usize) -> Color32 {
     if i % 64 == 17 || i / 64 == 40 {
         Color32::from_rgba_premultiplied(30, (i % 200) as u8, 90, 255)

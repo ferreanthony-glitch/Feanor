@@ -1139,6 +1139,8 @@ pub(crate) mod fxmonde;
 #[cfg(test)]
 mod camera_traits_tests;
 #[cfg(test)]
+mod planche_arret_tests;
+#[cfg(test)]
 mod effets_debord_tests;
 #[cfg(test)]
 mod traits_caches_tests;

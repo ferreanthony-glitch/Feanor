@@ -34,13 +34,20 @@ fn block_on<F: Future>(f: F) -> F::Output {
     }
 }
 
+/// La carte graphique des essais : Vulkan ou DX12, et OpenGL seulement si la machine n'a rien d'autre (les essais sur la carte y tournent, au lieu de sortir sans rien dire).
+pub(crate) fn adaptateur_d_essai() -> Option<wgpu::Adapter> {
+    let essai = |backends| block_on(wgpu::Instance::new(&wgpu::InstanceDescriptor { backends, ..Default::default() }).request_adapter(&wgpu::RequestAdapterOptions::default()));
+    match wgpu::Backends::from_env() {
+        Some(backends) => essai(backends),
+        None => essai(wgpu::Backends::PRIMARY).or_else(|| essai(wgpu::Backends::all())),
+    }
+}
+
 /// Un périphérique wgpu sans fenêtre, ou `None` (aucune carte graphique).
 pub(crate) fn headless() -> Option<RenderState> {
     // (`WGPU_BACKEND` = vulkan | dx12 et `ESSAI_MEMOIRE_CARTE` = usage choisissent l'API et les conseils de mémoire : mesures de mémoire seulement.)
     // (Sans OpenGL : aucun essai ne s'en sert, mais l'ouvrir charge le pilote OpenGL à chaque banc, sur tous les fils à la fois, et deux passages sont tombés d'un coup dans `nvoglv64.dll`, 0xC0000005, le 2026-11-06 et le 2026-11-07.)
-    let backends = wgpu::Backends::from_env().unwrap_or(wgpu::Backends::PRIMARY);
-    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor { backends, ..Default::default() });
-    let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
+    let adapter = adaptateur_d_essai()?;
     let hints = if std::env::var("ESSAI_MEMOIRE_CARTE").is_ok_and(|v| v == "usage") { wgpu::MemoryHints::MemoryUsage } else { wgpu::MemoryHints::Performance };
     if std::env::var_os("ESSAI_MEMOIRE_CARTE").is_some() || std::env::var_os("WGPU_BACKEND").is_some() {
         println!("     carte graphique des essais : {:?}, {}", adapter.get_info().backend, adapter.get_info().name);
