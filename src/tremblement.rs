@@ -397,7 +397,13 @@ impl Lattice {
 /// loin de l'encre ne sont jamais visités ; le travail est réparti sur les cœurs par rangées de
 /// tuiles.
 pub fn boil(raster: &Raster, values: &[f32], level: u8) -> Raster {
+    boil_depuis(raster, values, level, (0, 0))
+}
+
+/// Comme `boil`, sur une image dont le pixel (0, 0) est le point `origine` du monde : le champ est celui de la feuille, le trait ne saute pas à son bord.
+pub fn boil_depuis(raster: &Raster, values: &[f32], level: u8, origine: (i64, i64)) -> Raster {
     let s = Settings::of(values);
+    let (mx, my) = (origine.0 as f32, origine.1 as f32);
     if !s.changes() || raster.tiles.iter().all(Option::is_none) {
         return raster.clone();
     }
@@ -416,7 +422,7 @@ pub fn boil(raster: &Raster, values: &[f32], level: u8) -> Raster {
             if !ink_near(raster, ox, oy, tw, th, reach) {
                 continue;
             }
-            let lattice = Lattice::covering(&field, ox as f32 * k, (ox + tw) as f32 * k, oy as f32 * k, (oy + th) as f32 * k);
+            let lattice = Lattice::covering(&field, mx + ox as f32 * k, mx + (ox + tw) as f32 * k, my + oy as f32 * k, my + (oy + th) as f32 * k);
             let mut tile = empty_tile();
             // (Le tableau, pris une fois : écrire par la tuile passerait chaque fois par `make_mut`.)
             let pixels: &mut [Color32; crate::raster::TILE_PIXELS] = &mut tile;
@@ -424,7 +430,7 @@ pub fn boil(raster: &Raster, values: &[f32], level: u8) -> Raster {
             for y in 0..th {
                 for x in 0..tw {
                     let (px, py) = ((ox + x) as f32 + 0.5, (oy + y) as f32 + 0.5);
-                    let [dx, dy, n] = lattice.at(&field, px * k, py * k);
+                    let [dx, dy, n] = lattice.at(&field, mx + px * k, my + py * k);
                     let mut c = crate::fxwarp::sample(raster, px + dx / k, py + dy / k);
                     if thick > 0.0 && c[3] >= 1.0 && c[3] < 254.5 {
                         c = thickened(c, thick, n);

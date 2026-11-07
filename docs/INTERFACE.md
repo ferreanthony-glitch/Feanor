@@ -7819,3 +7819,50 @@ reste une étape d'annulation au plus, et aucun ne touche un dessin hors de son 
 10. Sur un long projet, « Cadrer tout » (barre du bas, à droite) : toute la planche dans la vue (jusqu'à 20 %) ; « Page à la largeur de la vue »
     (clic droit sur le fond) : la largeur seule, comme avant.
 11. Rien n'a bougé : un trait, Ctrl+Z, un trait entre deux cases, enregistrer, rouvrir : comme avant ; au repos, rien ne se repeint.
+
+## 117. Les traits coupés au bord de la feuille dans un plan à mouvement de caméra (2026-11-07, branche `camera-traits`)
+
+Le réalisateur : « toujours des bugs d'affichage avec les mouvements de caméra depuis les vignettes », puis : « quand je dessine dans la zone les traits coupés réapparaissent, puis redisparaissent une fois le stylet levé ». Fichiers : `fx.rs` (`apply_with`, `un_effet`, `effets_hors_de_la_feuille`, `suit_la_toile`), `tremblement.rs` (`boil_depuis`). Essais : `camera_traits_tests.rs`. **Le format de projet ne change pas** (47).
+
+### Rien n'était perdu
+
+Les points du trait et ses pixels (`Raster::outer`) vont jusqu'au bout, en vectoriel comme en bitmap, avant comme après enregistrement et réouverture. Seule l'**image dérivée** des effets perdait la part hors de la feuille.
+
+### La cause
+
+La feuille fait deux fois le cadre : A étant centré, son bord droit est à 1,5 largeur de cadre du bord gauche de A. C'est la verticale de la capture. Tous les effets ne lisent et n'écrivent que `Raster::tiles`, la feuille ; `Raster::outer` disparaissait de leur résultat. Or le **tremblement du trait par défaut** (Préférences > Dessin, allumé dans les réglages du réalisateur) est un effet posé sur tout calque vectoriel. Donc tout ce qui dépasse de la feuille était coupé partout où l'image dérivée sert : tuile de la case, hors-feuille du Storyboard (`monde.rs`), film, images, export de la planche. Pendant un geste, l'image dérivée attend et le dessin se montre sans effet (`fx::display_with`), d'où le trait entier stylet baissé, et encore juste après le lâcher (`debord_tenu`). Le calque bitmap n'était pas touché par le tremblement, qui n'existe qu'en vectoriel ; il l'était par les autres effets.
+
+### Ce qui change
+
+`apply_with` calcule la feuille comme avant, pixel pour pixel (essai sur chaque effet : la feuille ne change pas), puis ce qui la dépasse sur une image à part, faite du hors-feuille et d'une bande de 4 tuiles de la feuille. Le tremblement y garde le champ de la feuille : le trait ne saute pas à son bord (essai : mêmes pixels qu'une feuille plus grande). Le calcul reste sur le fil de fond, comme tout effet ; un calque sans rien hors de la feuille ne paie qu'un test.
+
+### Mesures (le plus long trou sur le trait, en pixels d'écran, sans puis avec la correction)
+
+| Cadre B | Vignettes, vectoriel | Storyboard, vectoriel |
+|---|---|---|
+| à droite (1,17 ; 0,5) | 83 puis 7 | 99 puis 1 |
+| loin à droite (2,2 ; 0,1) | 255 puis 3 | 300 puis 1 |
+| en haut (0,3 ; -1,1) | 150 puis 5 | 174 puis 0 |
+
+À gauche, Storyboard : 96 puis 1 (les Vignettes de la mesure d'avant passaient hors du panneau : non comparable). Film, cadre B : 1008 pixels manquants puis 0. Planche exportée : 277 puis 4. La suite du stylet, sans correction : 85 au repos, 6 stylet baissé, 6 juste levé, 85 au repos d'après ; avec : 6 partout. Les trous restants sont les filets bleus des cadres, peints par-dessus le trait (ils y sont aussi sans effet, en bitmap).
+
+### Limites
+
+- Les effets réglés par rapport à la feuille (onde, ondulation, tourbillon, pincement, nuages, éclairage, dégradé, flash, impact, secousse, vignettage, aberration) ne s'appliquent pas au-delà d'elle : le trait y reste tel quel, entier.
+- Un effet du trait qui transforme chaque trait (ondulation du trait, pointillés…) ne se calcule que sur la feuille : au-delà, le trait reste sans cet effet. Avec Écriture ou Poussière, il n'est pas montré au-delà de la feuille.
+- Au-delà de 134 millions de pixels de hors-feuille, le dessin reste sans ses effets.
+- **Autre cause, non traitée ici** : une part de trait reste cachée sous l'image d'une case dont la caméra a un autre zoom, un roulis, une bascule, un panoramique, ou dont le calque est verrouillé (`cases_qui_recoivent` les refuse, partie 111).
+
+### Le badge 12 et le petit carré
+
+- **Le badge 12 minuscule** : ce n'est pas une erreur de calcul. Le cadre B du plan 6 descend presque jusqu'à la rangée du dessous : il reste environ 13 points au-dessus de la case 12, alors le numéro s'amincit pour tenir (`numerosmarge.rs`, partie 110). Non modifié : c'est au réalisateur de dire s'il préfère autre chose.
+- **Le petit carré du Storyboard** : le curseur du pinceau (croix de ±4 points, gris 230, et cercle), là où était le pointeur à la capture. Rien dans le dessin.
+
+### À vérifier à l'écran
+
+1. Plan à mouvement, B poussé loin à droite, longs traits à travers A et B, jusqu'au bout de B : au repos, rien n'est coupé, dans les Vignettes et au Storyboard.
+2. Trace un nouveau trait dans la zone, lève le stylet : rien ne disparaît, ni pendant ni après.
+3. Pareil avec B à gauche, en haut, en bas, et avec un cadre C.
+4. Enregistre, rouvre : même image. Les anciens traits coupés sont revenus d'eux-mêmes.
+5. Export vidéo, images, planche : le cadre B montre le trait.
+6. Dis-moi si le tremblement te paraît continu à la verticale où finit la feuille. Le stylet réel n'a pas été essayé.

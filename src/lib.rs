@@ -1105,6 +1105,8 @@ mod vignettes_simplicite_tests;
 #[cfg(test)]
 mod traits_continus_tests;
 #[cfg(test)]
+mod camera_traits_tests;
+#[cfg(test)]
 mod horschamptex_tests;
 mod workspaceui;
 mod xsheet;
