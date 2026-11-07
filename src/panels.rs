@@ -453,6 +453,10 @@ impl App {
 
     /// Panneau des réglages de l'outil courant.
     pub(crate) fn tool_options_panel(&mut self, ui: &mut egui::Ui) {
+        // Tout le film est écarté : rien à régler sur le plan vide qui le tient (`planannule.rs`).
+        if self.panneau_film_vide(ui) {
+            return;
+        }
         // L'Espace 3D a ses propres réglages (`espace3dui.rs`).
         if self.espace3d.on && !self.camera_view {
             self.espace3d_options_panel(ui);

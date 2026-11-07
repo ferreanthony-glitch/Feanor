@@ -112,11 +112,14 @@ pub struct Trace {
     /// La recette du pinceau d'un trait du dessin hors des cases (`horschamptex.rs`) : avec elle, le trait a la texture du pinceau, comme dans
     /// une case ; sans elle (annotations, fichiers d'avant), c'est une ligne vectorielle.
     pub brosse: Option<Arc<Brosse>>,
+    /// Un trait du dessin hors des cases posé **par-dessus l'image d'une case** qui ne pouvait pas le recevoir (calque verrouillé, plan écarté :
+    /// `horschamp.rs`, partie 120) : il se peint après les images, sinon il serait caché. Les autres passent sous les images.
+    pub dessus: bool,
 }
 
 impl Trace {
     pub fn new(calque: u64, anchor: Ancre, color: [u8; 3], points: Vec<VPoint>) -> Trace {
-        Trace { id: PROCHAIN_TRAIT.fetch_add(1, Ordering::Relaxed), calque, anchor, color, alpha: 255, points, brosse: None }
+        Trace { id: PROCHAIN_TRAIT.fetch_add(1, Ordering::Relaxed), calque, anchor, color, alpha: 255, points, brosse: None, dessus: false }
     }
 
     /// Le même trait, à l'opacité `alpha`.
@@ -134,7 +137,7 @@ impl Trace {
 
 impl PartialEq for Trace {
     fn eq(&self, o: &Trace) -> bool {
-        self.calque == o.calque && self.anchor == o.anchor && self.color == o.color && self.alpha == o.alpha && self.points == o.points && self.brosse == o.brosse
+        self.calque == o.calque && self.anchor == o.anchor && self.color == o.color && self.alpha == o.alpha && self.points == o.points && self.brosse == o.brosse && self.dessus == o.dessus
     }
 }
 
@@ -293,12 +296,23 @@ impl Annotations {
     /// s'ils ne correspondent pas aux points, l'échelle de la case d'origine : unités de la planche par pixel du dessin). Le trait a alors la
     /// texture du pinceau, comme dans une case (`horschamptex.rs`).
     pub fn ajouter_hors_cadres_brosse(&mut self, layout: &BoardLayout, points: &[VPoint], color: [u8; 3], alpha: u8, brosse: Option<(Recette, Vec<f32>, Vec<f64>, f32)>) -> bool {
-        if points.is_empty() || self.traces.len() >= MAX_TRACES || points.iter().any(|p| !(p.x.is_finite() && p.y.is_finite() && p.r.is_finite())) {
-            return false;
-        }
         let Some(c) = centre(points) else { return false };
         let Some((rank, r)) = case_proche(layout, c) else { return false };
         let Some(anchor) = ancre_du_rang(layout, rank) else { return false };
+        self.poser_hors_cadres(anchor, r, false, points, color, alpha, brosse)
+    }
+
+    /// Comme `ajouter_hors_cadres_brosse`, pour la part d'un trait qui tombe **dans l'image d'une case qui ne peut pas la recevoir** (partie 120) : elle
+    /// reste attachée à cette case (`c`, dans le film ou écartée) et se peint par-dessus son image.
+    pub fn ajouter_sur_la_case(&mut self, c: &board::CardPlace, rang: usize, points: &[VPoint], color: [u8; 3], alpha: u8, brosse: Option<(Recette, Vec<f32>, Vec<f64>, f32)>) -> bool {
+        self.poser_hors_cadres(Ancre { card: c.id, after: 0, rank: rang.min(u32::MAX as usize) as u32 }, c.thumb, true, points, color, alpha, brosse)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn poser_hors_cadres(&mut self, anchor: Ancre, r: Rect, dessus: bool, points: &[VPoint], color: [u8; 3], alpha: u8, brosse: Option<(Recette, Vec<f32>, Vec<f64>, f32)>) -> bool {
+        if points.is_empty() || self.traces.len() >= MAX_TRACES || points.iter().any(|p| !(p.x.is_finite() && p.y.is_finite() && p.r.is_finite())) {
+            return false;
+        }
         // (Un trait trop long est réduit : l'appui et l'instant de chaque point suivent les mêmes indices.)
         let gardes = crate::horschamptex::indices_reduits(points.len(), MAX_POINTS);
         let relatifs: Vec<VPoint> = gardes.iter().map(|&i| relatif(&points[i], r)).collect();
@@ -312,8 +326,30 @@ impl Annotations {
             Brosse::nouvelle(recette, appui, instants, r.width() / a)
         });
         let calque = self.calque_hors_cadres();
-        self.traces.push(Trace::new(calque, anchor, color, relatifs).avec_alpha(alpha).avec_brosse(brosse));
+        let mut t = Trace::new(calque, anchor, color, relatifs).avec_alpha(alpha).avec_brosse(brosse);
+        t.dessus = dessus;
+        self.traces.push(t);
         true
+    }
+
+    /// Une part de trait posée par-dessus une image de case est-elle sous le cercle ? (La gomme l'efface alors, plutôt que d'agir dans la case.)
+    pub fn touche_dessus(&self, layout: &BoardLayout, p: Pos2, radius: f32) -> bool {
+        !self.dessus_sous_le_cercle(layout, p, radius).is_empty()
+    }
+
+    /// Le calque « Hors cadres », s'il est montré : ce qu'il cache ne se gomme pas.
+    pub fn hors_cadres_montre(&self) -> Option<u64> {
+        self.calques.iter().find(|c| c.planche && c.visible).map(|c| c.id)
+    }
+
+    fn dessus_sous_le_cercle(&self, layout: &BoardLayout, p: Pos2, radius: f32) -> Vec<usize> {
+        let Some(c) = self.hors_cadres_montre() else { return Vec::new() };
+        self.touches(layout, Some(c), p, radius).into_iter().filter(|&i| self.traces[i].dessus).collect()
+    }
+
+    /// Gomme sur une part posée par-dessus une case : retire ces parts-là, rien d'autre (ni le reste du trait sur le papier, ni les notes). Rend combien.
+    pub fn effacer_dessus(&mut self, layout: &BoardLayout, p: Pos2, radius: f32) -> usize {
+        self.retirer(self.dessus_sous_le_cercle(layout, p, radius))
     }
 
     /// Les textures (pointe, papier) que citent les pinceaux des traits : à écrire avec le projet, comme celles des traits des plans.
@@ -709,6 +745,9 @@ struct TraceFichier {
     /// La recette du pinceau d'un trait du dessin hors des cases (absente : une ligne vectorielle, comme les fichiers d'avant).
     #[serde(default, rename = "pinceau", skip_serializing_if = "Option::is_none")]
     pinceau: Option<PinceauFichier>,
+    /// Peint par-dessus l'image de sa case (absent : sous les images, comme les fichiers d'avant ; une version d'avant l'ignore et ne perd rien).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    dessus: bool,
 }
 
 /// La recette d'un trait au pinceau (`horschamptex::Brosse`) : le réglage complet (pointe et papier par clé de contenu, comme un trait
@@ -863,6 +902,7 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
                             p.trace.time.truncate(n);
                             p
                         }),
+                        dessus: t.dessus,
                     }
                 })
                 .collect();
@@ -881,7 +921,12 @@ fn trace_lue(t: TraceFichier, calque: u64) -> Option<Trace> {
     let points: Vec<VPoint> = t.points.into_iter().take(MAX_POINTS).filter(|p| p.iter().all(|v| v.is_finite())).map(|[x, y, r]| VPoint { x, y, r: r.clamp(1e-5, 50.0) }).collect();
     // (Un point écarté défait l'alignement des appuis : la recette reste, sans appuis, ils se retrouvent d'après les rayons.)
     let brosse = t.pinceau.and_then(|p| brosse_lue(p, if points.len() == lus { points.len() } else { usize::MAX }));
-    (!points.is_empty()).then(|| Trace::new(calque, t.ancre, t.couleur, points).avec_alpha(t.alpha).avec_brosse(brosse))
+    let dessus = t.dessus;
+    (!points.is_empty()).then(|| {
+        let mut l = Trace::new(calque, t.ancre, t.couleur, points).avec_alpha(t.alpha).avec_brosse(brosse);
+        l.dessus = dessus;
+        l
+    })
 }
 
 /// Les annotations lues dans le texte de `annotations.json` (version 1 : un seul calque, « Annotations » ; version 2 : ses calques). Les

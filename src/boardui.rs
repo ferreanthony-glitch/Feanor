@@ -74,6 +74,8 @@ const ZOOM_MAX: f32 = 6.0;
 pub(crate) enum BoardDrag {
     /// Gomme sur les notes ; `recorded` : l'étape d'annulation est prise.
     Erase { recorded: bool },
+    /// Gomme partie d'une part de trait posée par-dessus une case (partie 120) : elle n'efface que ces parts-là.
+    EraseDessus { recorded: bool },
     /// Rectangle de choix ; `add` : ajouter à ce qui est déjà choisi.
     Rubber { start: Pos2, now: Pos2, add: bool },
     /// Notes choisies glissées ; `last` : le pointeur à l'image précédente (planche).
@@ -248,6 +250,10 @@ pub(crate) struct Vignettes {
     /// le trait soit réparti (pas de trou d'une image d'écran au lâcher).
     pub suivi: Option<crate::horschamp::Suivi>,
     pub fini: Option<crate::horschamp::Fini>,
+    /// Les cases dont le refus a été dit pendant le trait en cours (`horschamp_prevenir`) : une fois par case.
+    pub refus_dits: Vec<u64>,
+    /// La dernière phrase dite pendant le trait : elle part s'il s'arrête sans rien poser (`refus_oublier`).
+    pub refus_phrase: Option<String>,
     pub debord_garde: Option<crate::debord::Debord>,
     pub debord_tenu: Option<crate::debord::Tenu>,
     /// Le cadrage d'ouverture : la taille de la vue pour laquelle il a été calculé, son zoom, son décalage (une fois rangé), et s'il vient d'être
@@ -335,6 +341,8 @@ impl Default for Vignettes {
             barre_basse: Rect::NOTHING,
             suivi: None,
             fini: None,
+            refus_dits: Vec::new(),
+            refus_phrase: None,
             debord_garde: None,
             debord_tenu: None,
             ouverture_suivi: None,
@@ -649,7 +657,7 @@ impl App {
 
     /// Ouvre la ligne du champ `champ` de l'image `place` pour l'écrire en place (partie 113, proposition C).
     fn open_card_champ(&mut self, place: &CardPlace, champ: Champ) {
-        if self.content_refuses() {
+        if self.contenu_verrouille() {
             return;
         }
         let buffer = self.texte_de_la_case(place, champ).to_string();
@@ -683,7 +691,7 @@ impl App {
         if now == text || (now.trim().is_empty() && text.trim().is_empty()) {
             return;
         }
-        if self.content_refuses() {
+        if self.contenu_verrouille() {
             return;
         }
         let nom = match champ {
@@ -828,6 +836,15 @@ impl App {
             self.commit_card_note();
             self.pile_epingler(plan);
             self.vignettes.press = Press::Version;
+            return false;
+        }
+        // La gomme sur une part de trait restée par-dessus une case (partie 120) : ce geste n'efface que ces parts-là, ce qu'on voit au-dessus ; le geste suivant, au
+        // même endroit, efface le dessin du plan.
+        if self.tool == Tool::Eraser && !m.shift && !m.ctrl && !m.command && self.doc.annotations.touche_dessus(layout, p, self.note_eraser_radius(xf.zoom)) {
+            self.commit_note_text(layout);
+            self.commit_card_note();
+            self.board_drag = Some(BoardDrag::EraseDessus { recorded: false });
+            self.vignettes.press = Press::Dead;
             return false;
         }
         // Le numéro d'un plan (annuler, rétablir : au lâcher d'un clic), et une case annulée (on n'y dessine pas) : `planannuleui.rs`.
@@ -1605,7 +1622,7 @@ impl App {
         // Les cases annulées, sous le dessin hors des cases : un trait qui les traverse reste visible (`planannuleui.rs`).
         self.peindre_cases_annulees(ui, &painter, view, xf, &layout, deadline);
         // Le dessin hors des cases, sous les cases (ce qui déborde dans une case ne la recouvre pas) : sur la planche, enregistré, dans aucun plan.
-        self.hors_cadres_peindre(&painter, view, xf, &layout);
+        self.hors_cadres_peindre(&painter, view, xf, &layout, false);
         // Les tuiles des empreintes d'abord (leur rectangle déborde de leur enveloppe : les cases qui s'y trouvent se peignent par-dessus).
         // Le menu du clic droit de la case courante se montre pendant qu'on peint les tuiles et les cases : « Réunir avec le plan
         // précédent », « Supprimer »… y changent le film, et la mise en page de cette image ne vaut plus. On s'arrête là, l'image
@@ -1639,6 +1656,9 @@ impl App {
             return;
         }
 
+        // Ce qui recouvre une case qui ne pouvait pas le recevoir : par-dessus les images (partie 120).
+        self.hors_cadres_peindre(&painter, view, xf, &layout, true);
+        self.horschamp_prevenir(&layout);
         self.peindre_numeros_annules(&painter, view, xf, &layout, &numeros, &mut marges);
         // Les titres des séquences, au-dessus de leur première rangée.
         self.titres_peindre(&painter, view, xf, &layout);
@@ -1706,7 +1726,7 @@ impl App {
         }
         self.plus_peindre(&painter, over);
         if let (Some(p), Tool::Eraser, false) = (over, self.tool, pan_mode) {
-            if matches!(hovered, Some(Hit::Nothing)) || matches!(self.board_drag, Some(BoardDrag::Erase { .. })) {
+            if matches!(hovered, Some(Hit::Nothing)) || matches!(self.board_drag, Some(BoardDrag::Erase { .. } | BoardDrag::EraseDessus { .. })) {
                 let r = self.note_eraser_radius(xf.zoom) * xf.zoom;
                 painter.circle_stroke(p, r, Stroke::new(1.0_f32, INK));
             }
@@ -2011,8 +2031,18 @@ impl App {
                 self.board_notes.clear();
             }
         }
-        // Hors de toute case, la gomme efface aussi les traits du dessin hors des cases (le trait entier que touche le cercle).
-        if let (true, Some(id)) = (matches!(self.board_drag, Some(BoardDrag::Erase { .. })), self.doc.annotations.id_hors_cadres()) {
+        if let Some(BoardDrag::EraseDessus { recorded }) = self.board_drag {
+            if self.doc.annotations.touche_dessus(layout, p, radius) {
+                if !recorded {
+                    self.record_step();
+                    self.board_drag = Some(BoardDrag::EraseDessus { recorded: true });
+                }
+                self.doc.annotations.effacer_dessus(layout, p, radius);
+                self.modified = true;
+            }
+        }
+        // Hors de toute case, la gomme efface aussi les traits du dessin hors des cases (le trait entier que touche le cercle), s'ils sont montrés.
+        if let (true, Some(id)) = (matches!(self.board_drag, Some(BoardDrag::Erase { .. })), self.doc.annotations.hors_cadres_montre()) {
             if self.doc.annotations.touche_calque(layout, id, p, radius) {
                 if !matches!(self.board_drag, Some(BoardDrag::Erase { recorded: true })) {
                     self.record_step();

@@ -3422,6 +3422,9 @@ impl App {
         // Une durée rendue par l'annulation n'est pas signalée.
         self.plan_len_seen = None;
         self.end_stroke();
+        // (Le trait qu'on annule en plein geste n'est pas à répartir : `horschamp.rs`.)
+        self.vignettes.fini = None;
+        self.vignettes.debord_garde = None;
         // Une zone bitmap déplacée est d'abord reposée : l'annulation défait alors ce déplacement.
         self.drop_bitmap_selection();
         self.multi_before_history();

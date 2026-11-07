@@ -119,6 +119,17 @@ impl App {
     /// Refuse (avec un message) ce qui changerait les dessins, les expositions ou les calques
     /// des plans quand le storyboard est verrouillé.
     pub(crate) fn content_refuses(&mut self) -> bool {
+        // Tout le film est écarté : tous ces gestes écriraient dans le plan vide qui le tient (`planannule.rs`, partie 120). Ce qui ne le touche pas (la taille du
+        // projet, les personnages) passe par `contenu_verrouille`.
+        if self.doc.film_vide() {
+            self.status = crate::planannuleui::REFUS_SUPPORT.into();
+            return true;
+        }
+        self.contenu_verrouille()
+    }
+
+    /// Le verrou du storyboard et le film partagé, pour ce qui change le projet sans écrire dans le plan courant.
+    pub(crate) fn contenu_verrouille(&mut self) -> bool {
         if self.doc.storyboard_locked {
             self.status = CONTENT_LOCKED.into();
             return true;
@@ -295,7 +306,7 @@ impl App {
             }
         }
         if [e.w, e.h] != self.doc.frame {
-            if self.content_refuses() {
+            if self.contenu_verrouille() {
                 return;
             }
             self.end_stroke();

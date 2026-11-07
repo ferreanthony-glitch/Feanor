@@ -1848,6 +1848,10 @@ impl App {
     // ------------------------------------------------------------------ fiche du plan
 
     pub(crate) fn panel_inspector(&mut self, ui: &mut egui::Ui) {
+        // Tout le film est écarté : la Fiche ne montre ni n'écrit le plan vide qui le tient (s'il avait du texte, le film ne serait pas vide : `film_vide`).
+        if self.panneau_film_vide(ui) {
+            return;
+        }
         let i = self.cur_panel;
         let fps = self.doc.fps;
         // Image de storyboard sous la tête de lecture (13a) : le début du plan ou une marque d'image.
