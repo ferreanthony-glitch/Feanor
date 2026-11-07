@@ -541,7 +541,7 @@ fn the_vignettes_view_is_idle_after_a_stroke_that_overflowed_and_after_a_move() 
     let (prise, cible) = (cadre(&b, 4), devant(&b, 3));
     maj_glisser!(b, prise, [vignette(&b, 3).center()], cible, true);
     let n = se_reposer(&mut b, 120);
-    assert!(n < 120, "la vue Vignettes se repose ({n} images)");
+    assert!(n < 120, "la vue Vignettes se repose ({n} images){}", b.raison_du_reveil());
     let m = b.image(Vec::new(), 0.5);
     assert!(m.reveil >= std::time::Duration::from_secs(1), "{:?}", m.reveil);
 }

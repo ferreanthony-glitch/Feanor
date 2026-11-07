@@ -37,7 +37,8 @@ fn block_on<F: Future>(f: F) -> F::Output {
 /// Un périphérique wgpu sans fenêtre, ou `None` (aucune carte graphique).
 pub(crate) fn headless() -> Option<RenderState> {
     // (`WGPU_BACKEND` = vulkan | dx12 et `ESSAI_MEMOIRE_CARTE` = usage choisissent l'API et les conseils de mémoire : mesures de mémoire seulement.)
-    let backends = wgpu::Backends::from_env().unwrap_or_default();
+    // (Sans OpenGL : aucun essai ne s'en sert, mais l'ouvrir charge le pilote OpenGL à chaque banc, sur tous les fils à la fois, et deux passages sont tombés d'un coup dans `nvoglv64.dll`, 0xC0000005, le 2026-11-06 et le 2026-11-07.)
+    let backends = wgpu::Backends::from_env().unwrap_or(wgpu::Backends::PRIMARY);
     let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor { backends, ..Default::default() });
     let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
     let hints = if std::env::var("ESSAI_MEMOIRE_CARTE").is_ok_and(|v| v == "usage") { wgpu::MemoryHints::MemoryUsage } else { wgpu::MemoryHints::Performance };
@@ -522,7 +523,8 @@ pub(crate) fn scenario(titre: &str, b: &mut Banc, n: usize, dt: f64, mut avant: 
 /// Renvoie le nombre d'images et le temps total (ms).
 pub(crate) fn jusqu_au_repos(b: &mut Banc, max: usize) -> (usize, f64) {
     let t = Instant::now();
-    for k in 0..max {
+    let mut k = 0;
+    while k < max {
         let m = b.image(Vec::new(), 1.0 / 60.0);
         // (Le rafraîchissement de la superposition, 500 ms, ne compte pas. Les vignettes qui se font sur
         // les fils de fond réveillent l'écran à leur fin : on les attend.)
@@ -532,8 +534,29 @@ pub(crate) fn jusqu_au_repos(b: &mut Banc, max: usize) -> (usize, f64) {
         if b.app.vignettes_en_cours() {
             std::thread::sleep(Duration::from_micros(500));
         }
+        if !travail_de_fond(b, t) {
+            k += 1;
+        }
     }
     (max, t.elapsed().as_secs_f64() * 1e3)
+}
+
+/// L'attente la plus longue d'un fil de fond dans un essai, en temps réel : ce qu'il mettra sous n'importe quelle charge. Elle ne peut pas faire réussir un essai à tort : un fil qui ne finit jamais
+/// la dépasse et l'essai échoue, seulement plus tard.
+const ATTENTE_MAX: Duration = Duration::from_secs(120);
+
+/// Les tours d'une boucle qui attend un fil de fond : `for _ in attente() { une image ; si c'est fini, sortir }`, jusqu'à `ATTENTE_MAX`. Un nombre de tours fixe était un délai sans le dire :
+/// 600 tours de 5 ms, trois secondes, assez sur une machine libre et pas sous dix compilations (« l'enregistrement ne se termine pas », 2026-11-07).
+pub(crate) fn attente() -> impl Iterator<Item = ()> {
+    let debut = Instant::now();
+    std::iter::from_fn(move || (debut.elapsed() < ATTENTE_MAX).then_some(()))
+}
+
+/// Un fil de fond travaille-t-il encore (depuis `debut` : pas plus longtemps que `ATTENTE_MAX`) ? Une image qui l'attend ne compte pas dans les images qu'un essai de repos accorde à l'application : cette
+/// limite parle de ce que l'application demande quand plus rien ne se calcule, pas de la vitesse de la machine. (Les fils de fond ont une priorité basse : sous charge, ils passent après tout le monde.)
+fn travail_de_fond(b: &Banc, debut: Instant) -> bool {
+    debut.elapsed() < ATTENTE_MAX
+        && (b.app.vignettes_en_cours() || b.app.gel.au_travail() || b.app.rejeu.has_pending() || crate::fxcache::pending() > 0 || crate::fx::fond_pending() || b.app.save_en_cours() || !b.app.envois_ui.au_repos())
 }
 
 /// Quatre déplacements de souris par image dans la zone `r` (de quoi garder l'interface éveillée,
@@ -573,8 +596,9 @@ pub(crate) fn trait_souris(k: usize, n: usize, par_image: usize, r: Rect) -> Vec
 /// avant une seconde ; leur nombre, ou `max` si le repos n'arrive pas. Un petit sommeil quand
 /// quelque chose travaille encore en arrière-plan (vignettes, rejeux) : on lui laisse le processeur.
 pub(crate) fn se_reposer(b: &mut Banc, max: usize) -> usize {
-    let mut calmes = 0;
-    for k in 0..max {
+    let debut = Instant::now();
+    let (mut k, mut calmes) = (0, 0);
+    while k < max {
         let m = b.image(Vec::new(), 0.5);
         if m.reveil >= Duration::from_secs(1) && !b.app.vignettes_en_cours() {
             calmes += 1;
@@ -584,6 +608,9 @@ pub(crate) fn se_reposer(b: &mut Banc, max: usize) -> usize {
         } else {
             calmes = 0;
             std::thread::sleep(Duration::from_millis(2));
+        }
+        if !travail_de_fond(b, debut) {
+            k += 1;
         }
     }
     max

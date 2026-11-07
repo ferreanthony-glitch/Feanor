@@ -487,6 +487,43 @@ fn the_recovery_copy_of_a_project_with_ranged_drawings_is_complete() {
     let _ = std::fs::remove_dir_all(&travail);
 }
 
+/// En attendant le passage suivant sur les caches communs, le gel ne demande aucune image avant son heure (il en demandait une toutes les 30 ms : une seconde et demie d'écran refait pour rien
+/// à chaque passage qui avait trouvé quelque chose, le processeur occupé au repos) ; un onglet caché, qui ne fait pas de passage, n'en attend aucun.
+#[test]
+fn between_two_passes_on_the_common_caches_the_gel_asks_for_no_image() {
+    let mut g = Gel::default();
+    g.activer(true);
+    assert_eq!(g.reveil(), None, "rien en route");
+    g.comme_apres_un_passage_fructueux();
+    let d = g.reveil().expect("le passage suivant");
+    assert!(d > Duration::from_secs(1) && d <= Duration::from_millis(1500), "à l'heure du passage suivant : {d:?}");
+    g.caches_communs = false;
+    assert_eq!(g.reveil(), None, "un onglet caché n'attend aucun passage");
+    // Il l'oublie : revenu à l'écran, il ne se croit pas en retard d'un passage.
+    let (mut doc, _) = doc_de_plans(2);
+    for _ in crate::perf_tests::attente() {
+        g.tenir(&mut doc, 0, None);
+        if !g.au_travail() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    g.caches_communs = true;
+    assert_eq!(g.reveil(), None, "plus aucun passage attendu");
+}
+
+/// Dans l'application : à ce moment-là, l'image d'écran suivante est loin (trente images par seconde, avant ; `perf_tests::an_idle_application_does_not_repaint` ne fait aucun passage).
+#[test]
+fn the_application_does_not_repaint_while_waiting_for_the_next_pass() {
+    crate::fxcache::monde::ecrire();
+    let mut b = crate::perf_tests::banc(crate::perf_tests::projet_long(3, 2, 6, 2), false);
+    assert!(crate::perf_tests::se_reposer(&mut b, 3000) < 3000);
+    crate::gel::passes_communes_dans_cet_essai();
+    b.app.gel.comme_apres_un_passage_fructueux();
+    let m = b.image(Vec::new(), 1.0 / 60.0);
+    assert!(m.reveil >= Duration::from_millis(300), "aucune image avant le passage suivant : {:?}{}", m.reveil, b.raison_du_reveil());
+}
+
 #[test]
 fn only_the_gel_of_the_shown_project_asks_for_a_pass_on_the_common_caches() {
     crate::fxcache::monde::ecrire();

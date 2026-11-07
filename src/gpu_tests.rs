@@ -32,7 +32,8 @@ fn block_on<F: Future>(f: F) -> F::Output {
 
 /// Un périphérique sans fenêtre, ou `None` (aucune carte graphique).
 pub(crate) fn headless() -> Option<RenderState> {
-    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
+    // (Sans OpenGL : voir `perf_tests::headless`.)
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor { backends: wgpu::Backends::PRIMARY, ..Default::default() });
     let adapter = block_on(instance.request_adapter(&wgpu::RequestAdapterOptions::default()))?;
     let (device, queue) = block_on(adapter.request_device(
         &wgpu::DeviceDescriptor { label: Some("essai"), required_features: wgpu::Features::empty(), required_limits: adapter.limits(), memory_hints: wgpu::MemoryHints::Performance },

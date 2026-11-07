@@ -258,7 +258,7 @@ fn the_board_is_idle_after_drawing_and_erasing() {
     glisser(&mut b, &vague(c - vec2(40.0, 0.0), c + vec2(40.0, 0.0), 30));
     b.app.run_action("vignettes.annotation_gomme");
     glisser(&mut b, &[c - vec2(50.0, 0.0), c, c + vec2(50.0, 0.0)]);
-    assert!(se_reposer(&mut b, 60) < 60, "l'écran se repose");
+    assert!(se_reposer(&mut b, 60) < 60, "l'écran se repose{}", b.raison_du_reveil());
 }
 
 #[test]
