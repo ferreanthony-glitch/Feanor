@@ -403,6 +403,37 @@ fn the_board_export_shows_the_full_effect_beyond_the_sheet() {
     assert!(vus > 20 && encre * 100 >= vus * 50, "la planche montre le flou : {encre} sur {vus}");
 }
 
+/// Le défaut trouvé le 2026-11-07 (`docs/FIABILITE.md`, section 20) : les tuiles de l'export de la planche se rendaient en mode doux, comme les vignettes de l'écran. Un effet que la réserve
+/// commune n'avait pas encore (jamais montré, lâché, le fil de fond en retard) partait **sans effet dans le fichier**. Ici, rien entre le geste et l'export : ni image d'écran,
+/// ni fil de fond qui aurait eu le temps ; l'ancien code rendait la tuile du flou identique à celle du trait net, à chaque fois.
+#[test]
+fn the_tiles_of_the_board_export_are_exact_whatever_the_shared_cache_holds() {
+    let tuile = |s: &Scene| {
+        let opt = s.b.app.planche_options(&crate::planche::Options::default());
+        let plans: Vec<usize> = (0..s.b.app.doc.panels.len()).collect();
+        let p = crate::planche::construire(&s.b.app.doc, &plans, &s.b.app.layout.board_settings(), &opt, &s.b.app.doc.annotations);
+        let (e, ..) = crate::planche::dimensions(p.cadre, opt.resolution);
+        let k = p.cartes.iter().position(|c| c.mouvement.is_some() && c.plan_reel == PLAN).expect("la case à cadres");
+        s.b.app.planche_tuiles_pour_essai(&p, e, &opt).swap_remove(k).expect("sa tuile")
+    };
+    // (Les pixels où l'encre du trait, rouge, se voit, si peu que ce soit.)
+    let encre = |t: &crate::planche::TuileImage| t.rvba.chunks_exact(4).filter(|c| c[3] != 0 && c[0] as i32 - c[1] as i32 > 2).count();
+    let Some(net) = scene_floue(false) else { return println!("pas de carte graphique") };
+    let Some(flou) = scene_floue(true) else { return };
+    crate::fx::forget_all();
+    let (a, b) = (tuile(&net), tuile(&flou));
+    println!("TUILE encre : net {}, flou {}", encre(&a), encre(&b));
+    // (Mesuré : 1 448 pixels nets, 2 539 avec le flou ; l'ancien code rendait les mêmes pixels dans les deux cas.)
+    assert!(encre(&b) * 2 > encre(&a) * 3, "la tuile de la planche montre le flou, pas le trait net : net {}, flou {}", encre(&a), encre(&b));
+    // L'écran l'a calculé ou non : le fichier ne change pas d'un octet.
+    let mut flou = flou;
+    let c = tuile(&flou);
+    flou.b.chauffer(4);
+    repos(&mut flou.b);
+    let d = tuile(&flou);
+    assert!(b.rvba == c.rvba && b.rvba == d.rvba, "le même fichier, quoi que la réserve commune tienne");
+}
+
 /// La planche exportée : au-delà de la verticale où la feuille finit, le trait est là.
 #[test]
 fn the_board_export_keeps_the_stroke_beyond_the_sheet() {

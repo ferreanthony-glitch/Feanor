@@ -993,6 +993,26 @@ fn a_mixed_stack_gives_the_cpu_pixels_with_the_card_drawing_the_card_effects() {
     assert!(gpu.effects_passes() > 0, "le flou et le tremblement sont dessinés par la carte");
 }
 
+/// Une vignette demande au fil de fond les effets d'un dessin vectoriel, sur son cliché : le résultat, que l'écran retrouve sous le même numéro, a ses effets du trait.
+#[test]
+fn a_result_asked_by_a_thumbnail_has_the_stroke_effects_like_the_screen() {
+    crate::fxcache::monde::ecrire();
+    let doc = drawing_doc(six_lines(), Vec::new(), 1);
+    let id = doc.panels[0].layers[0].frames[0].unwrap();
+    let item = PlanItem { cel: id, opacity: 255, tint: None, transform: None, blend: Default::default(), fx: write_steps(45.0, &[(t::WRITE_SOFT, 4.0)]), ctg: None, fond: None, pre: None };
+    let plan = render::Plan { paper: None, items: vec![item.clone()] };
+    let mini = crate::thumbs::snapshot(&doc, &plan);
+    let _ = crate::fxcache::soft_scope(|| crate::fx::shown(&mini, &item).is_some());
+    crate::fxcache::settle();
+    let (_, garde) = fx::ready(&doc, &item, 0).expect("le résultat est gardé");
+    let src = &doc.cels[&id];
+    let exact = fx::apply_with(&src.raster, src.vector.as_ref(), &item.fx, 0);
+    let ecarts = |a: &crate::raster::Raster, b: &crate::raster::Raster| (0..a.height).flat_map(|y| (0..a.width).map(move |x| (x, y))).filter(|&(x, y)| a.get(x, y) != b.get(x, y)).count();
+    assert!(ecarts(&exact, &src.raster) > 100, "l'effet du trait change l'image");
+    assert_eq!(ecarts(&garde.raster, &exact), 0, "le résultat gardé est celui de l'écran");
+    crate::fxcache::clear();
+}
+
 /// Un petit dessin à regarder : un visage, des cheveux, un soleil, un sol, de quelques épaisseurs.
 fn sample_drawing() -> VectorDrawing {
     let arc = |cx: f32, cy: f32, rx: f32, ry: f32, a0: f32, a1: f32, r: f32| {

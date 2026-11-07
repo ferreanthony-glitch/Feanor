@@ -152,7 +152,9 @@ impl App {
             frames,
             move |k, px| rgb_sur_blanc(px, frame, tailles[k]),
             move |imgs: Vec<image::RgbImage>| {
-                let tuiles: Vec<Option<planche::TuileImage>> = travaux.into_iter().map(|t| t.and_then(TuileATravailler::rendre)).collect();
+                // (Le calcul des effets des tuiles se fait ici : l'interface garde la main, comme avec les fils de rendu.)
+                crate::parallele::baisser_la_priorite_ici();
+                let tuiles = rendre_les_tuiles(travaux);
                 let img = planche::composer_avec_tuiles(&p2, &imgs, &tuiles, &opt2, s)?;
                 drop(imgs);
                 let bytes = planche::encoder_avec(&p2, &img, opt2.sortie, &titre, s, opt2.bloc_titre.then_some(&opt2.entete))?;
@@ -198,6 +200,12 @@ impl App {
                 Some(TuileATravailler { doc, plan, cam, taille, masque, marge: marge_de(c) })
             })
             .collect()
+    }
+
+    /// (Essais.) Les tuiles et les marges que l'export de la planche poserait, rendues ici.
+    #[cfg(test)]
+    pub(crate) fn planche_tuiles_pour_essai(&self, p: &planche::Planche, s: f32, opt: &Options) -> Vec<Option<planche::TuileImage>> {
+        rendre_les_tuiles(self.planche_tuiles_a_rendre(p, s, opt))
     }
 
     /// Les plans de l'étendue choisie.
@@ -396,6 +404,20 @@ impl App {
     }
 }
 
+/// Les tuiles et les marges d'un export de la planche, sur le fil de l'export, **exactes** : effets, remplissages et fonds se calculent ici, comme les images des cases, dans une
+/// réserve privée (`fxcache::avec_privee`), sans rien demander au fil de fond de l'écran ni lui prendre. Un fichier ne montre jamais le repli de l'écran.
+fn rendre_les_tuiles(travaux: Vec<Option<TuileATravailler>>) -> Vec<Option<planche::TuileImage>> {
+    crate::fxcache::avec_privee(crate::fxcache::limite_octets().max(96 << 20), || {
+        travaux
+            .into_iter()
+            .map(|t| {
+                crate::fxcache::privee_nouvelle_image();
+                t.and_then(TuileATravailler::rendre)
+            })
+            .collect()
+    })
+}
+
 /// Ce qu'il faut pour rendre, dans l'export de la planche, la tuile d'un plan à mouvement de caméra (`masque` : son enveloppe) ou la marge d'une case.
 struct TuileATravailler {
     doc: crate::document::Document,
@@ -409,13 +431,10 @@ struct TuileATravailler {
 impl TuileATravailler {
     /// La tuile (le papier dans l'enveloppe, le trait qui déborde dehors) ou la marge seule, en pixels prémultipliés.
     fn rendre(self) -> Option<planche::TuileImage> {
-        let (img, _) = crate::fx::differe(|| {
-            crate::fxcache::soft_scope(|| match &self.masque {
-                Some(masque) => crate::render::thumbnail_marge_until(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], self.marge, Some(masque), &|| false),
-                None => Some(crate::render::marge_seule(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], self.marge)),
-            })
-        });
-        let img = img?;
+        let img = match &self.masque {
+            Some(masque) => crate::render::thumbnail_marge_until(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], self.marge, Some(masque), &|| false),
+            None => Some(crate::render::marge_seule(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], self.marge)),
+        }?;
         let rvba = img.pixels.iter().flat_map(|c| c.to_array()).collect();
         Some(planche::TuileImage { taille: [img.size[0] as u32, img.size[1] as u32], marge: self.marge as u32, rvba })
     }
