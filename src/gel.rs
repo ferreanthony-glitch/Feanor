@@ -81,6 +81,27 @@ pub(crate) fn passes_communes_dans_cet_essai() {
     PASSES_COMMUNES.with(|p| p.set(true));
 }
 
+#[cfg(test)]
+thread_local! {
+    /// (Essais.) Les caches sont communs à tout le processus : un essai peut dire qu'il n'y a rien à y examiner, quoi que fassent ses voisins.
+    static RIEN_A_EXAMINER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// (Essais.) Sur ce fil, les caches communs n'ont rien à examiner.
+#[cfg(test)]
+pub(crate) fn rien_a_examiner_dans_cet_essai() {
+    RIEN_A_EXAMINER.with(|r| r.set(true));
+}
+
+/// Un passage sur les caches communs a-t-il quelque chose à examiner ?
+fn caches_a_examiner() -> bool {
+    #[cfg(test)]
+    if RIEN_A_EXAMINER.with(std::cell::Cell::get) {
+        return false;
+    }
+    crate::vector::cache_total_bytes() > 0 || crate::fxcache::a_examiner()
+}
+
 /// Ce gel, celui du projet affiché, passe-t-il sur les caches communs ?
 pub(crate) fn passes_communes() -> bool {
     #[cfg(test)]
@@ -194,6 +215,12 @@ impl Gel {
     pub fn comme_apres_un_passage_fructueux(&mut self) {
         self.caches_a_trouve = true;
         self.caches_le = Some(Instant::now());
+    }
+
+    /// Essais : le passage suivant sur les caches est dû.
+    #[cfg(test)]
+    pub fn passage_du(&mut self) {
+        self.caches_le = Instant::now().checked_sub(CACHES_TOUTES_LES);
     }
 
     fn fil(&mut self) -> &Sender<Lot> {
@@ -415,7 +442,7 @@ impl Gel {
         // Les caches de traits (531 Mo pour un épisode de 200 plans) : un passage du fil de fond de temps en temps.
         if self.caches_communs && !self.caches_en_route && self.caches_le.is_none_or(|t| t.elapsed() >= CACHES_TOUTES_LES) {
             self.caches_le = Some(Instant::now());
-            if crate::vector::cache_total_bytes() > 0 || crate::fxcache::a_examiner() {
+            if caches_a_examiner() {
                 let envoi = self.fil().send(Lot { dessins: Vec::new(), caches: true });
                 if envoi.is_ok() {
                     self.caches_en_route = true;
@@ -423,6 +450,9 @@ impl Gel {
                     self.envoi = None;
                     self.retour = None;
                 }
+            } else {
+                // (Aucun passage ne part, donc aucune réponse ne remettrait ce drapeau à faux : le gel demanderait une image toutes les secondes et demie, sans fin.)
+                self.caches_a_trouve = false;
             }
         }
         if let Some(t) = self.repos_jusqu {

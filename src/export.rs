@@ -663,6 +663,98 @@ pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
+
+/// L'arrêt d'un export dont la fin peut durer (les tuiles exactes de la planche) : `finish` le consulte, et le fil qui finit n'est pas attendu au-delà
+/// de `ATTENTE_DE_L_ARRET` (un seul effet ne s'interrompt pas en route, et Annuler ou fermer FEANOR ne gèle pas l'interface pour lui).
+pub struct Arret {
+    stop: Arc<AtomicBool>,
+    /// Tenue pendant le renommage final et pendant la demande d'arrêt : une fois l'arrêt demandé, aucun fichier ne remplace plus la cible.
+    porte: Mutex<()>,
+    /// (Essais.) Les tuiles finies, et le fil qui finit a-t-il rendu la main ?
+    #[cfg(test)]
+    tuiles: std::sync::atomic::AtomicUsize,
+    #[cfg(test)]
+    fini: AtomicBool,
+}
+
+impl Arret {
+    fn new(stop: Arc<AtomicBool>) -> Arret {
+        Arret {
+            stop,
+            porte: Mutex::new(()),
+            #[cfg(test)]
+            tuiles: Default::default(),
+            #[cfg(test)]
+            fini: AtomicBool::new(false),
+        }
+    }
+
+    /// Un arrêt qui ne sera jamais demandé (les essais qui rendent les tuiles sans export).
+    #[cfg(test)]
+    pub(crate) fn jamais() -> Arret {
+        Arret::new(Arc::default())
+    }
+
+    pub(crate) fn demande(&self) -> bool {
+        self.stop.load(Ordering::Relaxed)
+    }
+
+    /// `Err` si l'arrêt est demandé.
+    pub(crate) fn controle(&self) -> Result<(), String> {
+        if self.demande() {
+            Err("annulé".into())
+        } else {
+            Ok(())
+        }
+    }
+
+    fn demander(&self) {
+        let _porte = self.porte.lock().unwrap_or_else(|e| e.into_inner());
+        self.stop.store(true, Ordering::Relaxed);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn tuile_faite(&self) {
+        self.tuiles.fetch_add(1, Ordering::Relaxed);
+    }
+
+    #[cfg(test)]
+    pub(crate) fn tuiles_faites(&self) -> usize {
+        self.tuiles.load(Ordering::Relaxed)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn fil_fini(&self) -> bool {
+        self.fini.load(Ordering::Relaxed)
+    }
+}
+
+/// Ce qu'Annuler ou la fermeture attendent, au plus, le fil qui finit un export arrêtable.
+const ATTENTE_DE_L_ARRET: Duration = Duration::from_millis(200);
+
+/// Comme `write_atomic`, pour un export arrêtable : par morceaux, avec un coup d'œil à l'arrêt entre deux. Arrêté, il ne laisse pas de `.part` et ne touche pas à la cible. (Le contrôle d'abord :
+/// un fil arrêté depuis longtemps ne vide pas le `.part` d'un nouvel export vers le même fichier.)
+pub(crate) fn write_atomic_sauf_arret(path: &Path, bytes: &[u8], arret: &Arret) -> Result<(), String> {
+    const MORCEAU: usize = 4 << 20;
+    arret.controle()?;
+    let part = part_of(path);
+    let ecrit = (|| {
+        let mut fichier = std::fs::File::create(&part).map_err(|e| format!("{} : {e}", part.display()))?;
+        for morceau in bytes.chunks(MORCEAU) {
+            arret.controle()?;
+            fichier.write_all(morceau).map_err(|e| format!("{} : {e}", part.display()))?;
+        }
+        drop(fichier);
+        let _porte = arret.porte.lock().unwrap_or_else(|e| e.into_inner());
+        arret.controle()?;
+        std::fs::rename(&part, path).map_err(|e| format!("{} : {e}", path.display()))
+    })();
+    if ecrit.is_err() {
+        let _ = std::fs::remove_file(&part);
+    }
+    ecrit
+}
+
 /// `<nom>.pdf` -> `<nom>.pdf.part`.
 pub(crate) fn part_of(path: &Path) -> PathBuf {
     let mut s = path.as_os_str().to_os_string();
@@ -741,7 +833,8 @@ enum Sink {
     },
     /// Fils qui réduisent chaque image (JPEG du PDF ou de la page de relecture, PNG de la page HTML…), puis un fil qui écrit le fichier
     /// quand elles sont toutes arrivées.
-    Collect { finisher: Option<JoinHandle<Result<(), String>>>, stop: Arc<AtomicBool> },
+    /// `arret` : un export dont le fil qui finit sait s'arrêter (`Arret`).
+    Collect { finisher: Option<JoinHandle<Result<(), String>>>, stop: Arc<AtomicBool>, arret: Option<Arc<Arret>> },
     /// Rien n'écrit (pas encore lancé, ou le son seul).
     Rien,
 }
@@ -822,9 +915,22 @@ impl Sink {
                     let _ = std::fs::remove_file(w);
                 }
             }
-            Sink::Collect { finisher, stop } => {
-                stop.store(true, Ordering::Relaxed);
-                if let Some(w) = finisher.take() {
+            Sink::Collect { finisher, stop, arret } => {
+                match arret {
+                    Some(a) => a.demander(),
+                    None => stop.store(true, Ordering::Relaxed),
+                }
+                let Some(w) = finisher.take() else { return };
+                if arret.is_some() {
+                    // (Pas d'attente au-delà : le fil voit l'arrêt à sa prochaine étape, n'écrit plus rien, et s'en va seul. À la fermeture, il s'en va avec le processus.)
+                    let debut = Instant::now();
+                    while !w.is_finished() && debut.elapsed() < ATTENTE_DE_L_ARRET {
+                        std::thread::sleep(Duration::from_millis(1));
+                    }
+                    if w.is_finished() {
+                        let _ = w.join();
+                    }
+                } else {
                     let _ = w.join();
                 }
             }
@@ -1207,7 +1313,7 @@ impl ExportJob {
     /// Un export qui garde chaque image calculée sous une autre forme et écrit le tout à la fin
     /// (un PDF, une page de relecture) : `encode(rang, pixels)` s'exécute sur quelques fils à part, image
     /// après image, `finish(toutes)` une fois qu'elles sont toutes arrivées. Annuler ou fermer SHOT
-    /// arrête les fils et efface `out` (`finish` ne s'exécute pas).
+    /// arrête les fils, efface le `.part` et attend `finish` s'il a commencé (un `finish` long : `collect_arretable`).
     pub fn collect<T, E, F>(title: String, unit: &'static str, out: &Path, frames: Vec<(usize, usize)>, encode: E, finish: F) -> ExportJob
     where
         T: Send + 'static,
@@ -1226,9 +1332,42 @@ impl ExportJob {
         F: FnOnce(Vec<T>) -> Result<(), String> + Send + 'static,
         C: FnOnce() + Send + 'static,
     {
+        ExportJob::collect_interne(title, unit, out, frames, encode, move |all, _| finish(all), cleanup, false)
+    }
+
+    /// Comme `collect`, pour un `finish` qui peut durer (les tuiles exactes de la planche) et qui consulte `Arret` : Annuler et la fermeture n'attendent pas sa fin, et, une fois arrêté,
+    /// il n'écrit plus rien (`write_atomic_sauf_arret`).
+    pub fn collect_arretable<T, E, F>(title: String, unit: &'static str, out: &Path, frames: Vec<(usize, usize)>, encode: E, finish: F) -> ExportJob
+    where
+        T: Send + 'static,
+        E: Fn(usize, &[Color32]) -> Result<T, String> + Send + Sync + 'static,
+        F: FnOnce(Vec<T>, &Arret) -> Result<(), String> + Send + 'static,
+    {
+        ExportJob::collect_interne(title, unit, out, frames, encode, finish, || {}, true)
+    }
+
+    /// (Essais.) L'arrêt d'un export arrêtable.
+    #[cfg(test)]
+    pub(crate) fn arret_pour_essai(&self) -> Option<Arc<Arret>> {
+        match &self.sink {
+            Sink::Collect { arret, .. } => arret.clone(),
+            _ => None,
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn collect_interne<T, E, F, C>(title: String, unit: &'static str, out: &Path, frames: Vec<(usize, usize)>, encode: E, finish: F, cleanup: C, arretable: bool) -> ExportJob
+    where
+        T: Send + 'static,
+        E: Fn(usize, &[Color32]) -> Result<T, String> + Send + Sync + 'static,
+        F: FnOnce(Vec<T>, &Arret) -> Result<(), String> + Send + 'static,
+        C: FnOnce() + Send + 'static,
+    {
         let (tx, rx) = sync_channel::<(usize, Image)>(QUEUE);
         let rx = Arc::new(Mutex::new(rx));
         let stop = Arc::new(AtomicBool::new(false));
+        let arret = Arc::new(Arret::new(stop.clone()));
+        let arret_du_fil = arret.clone();
         let fail: Fail = Arc::default();
         let n = frames.len();
         let slots: Arc<Mutex<Vec<Option<T>>>> = Arc::new(Mutex::new((0..n).map(|_| None).collect()));
@@ -1284,14 +1423,17 @@ impl ExportJob {
                     return Err("annulé".into());
                 }
                 let all: Vec<T> = std::mem::take(&mut *slots.lock().unwrap_or_else(|e| e.into_inner())).into_iter().collect::<Option<_>>().ok_or("image manquante")?;
-                finish(all)
+                finish(all, &arret_du_fil)
             })();
             if result.is_err() {
                 cleanup();
             }
+            #[cfg(test)]
+            arret_du_fil.fini.store(true, Ordering::Relaxed);
             result
         });
-        let mut job = ExportJob::new(title, out.to_path_buf(), frames, true, Sink::Collect { finisher: Some(finisher), stop }, Tx::Collect(tx), fail);
+        let arret = arretable.then_some(arret);
+        let mut job = ExportJob::new(title, out.to_path_buf(), frames, true, Sink::Collect { finisher: Some(finisher), stop, arret }, Tx::Collect(tx), fail);
         job.unit = unit;
         job
     }

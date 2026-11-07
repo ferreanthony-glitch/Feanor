@@ -1015,8 +1015,8 @@ pub(crate) fn moyenne_sur_le_papier(lus: &[Color32]) -> Color32 {
 }
 
 /// La marge seule d'une case de `tw` × `th` pixels : `marge` pixels tout autour, où se voit ce qui est dessiné (pas le papier) ; le dedans reste
-/// transparent et ne coûte rien. L'export de la planche (les images, elles, viennent du rendu de l'export).
-pub fn marge_seule(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize, marge: usize) -> ColorImage {
+/// transparent et ne coûte rien. L'export de la planche (les images, elles, viennent du rendu de l'export). `cancelled` est demandé entre deux lignes : vrai, le calcul s'arrête et rend `None`.
+pub fn marge_seule_until(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usize, marge: usize, cancelled: &dyn Fn() -> bool) -> Option<ColorImage> {
     let resolved = crate::calqueffet::resolve_auto(doc, plan);
     let plan = &*resolved;
     let [fw, fh] = doc.frame;
@@ -1027,6 +1027,9 @@ pub fn marge_seule(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usi
     let mut pixels = vec![Color32::TRANSPARENT; ow * oh];
     let layers = resolve(doc, plan);
     for y in 0..oh {
+        if cancelled() {
+            return None;
+        }
         for x in 0..ow {
             if (marge..marge + tw).contains(&x) && (marge..marge + th).contains(&y) {
                 continue;
@@ -1038,7 +1041,7 @@ pub fn marge_seule(doc: &Document, plan: &Plan, cam: &Camera, tw: usize, th: usi
             pixels[y * ow + x] = moyenne_gamma(&lus);
         }
     }
-    ColorImage { size: [ow, oh], pixels }
+    Some(ColorImage { size: [ow, oh], pixels })
 }
 
 /// Le dessin entier réduit à `max_w` pixels de large au plus (moyenne de 4 échantillons par

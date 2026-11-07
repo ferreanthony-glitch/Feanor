@@ -145,22 +145,22 @@ impl App {
         let travaux = self.planche_tuiles_a_rendre(&p, s, opt);
         let (chemin, p2) = (out.to_path_buf(), Arc::new(p));
         let message = planche::message_de_fin(opt.sortie, n, dims, reduit.as_deref(), out);
-        let job = ExportJob::collect_with(
+        let job = ExportJob::collect_arretable(
             format!("Planche des vignettes ({n} vignette{})", if n > 1 { "s" } else { "" }),
             "Vignette",
             out,
             frames,
             move |k, px| rgb_sur_blanc(px, frame, tailles[k]),
-            move |imgs: Vec<image::RgbImage>| {
+            move |imgs: Vec<image::RgbImage>, arret: &crate::export::Arret| {
                 // (Le calcul des effets des tuiles se fait ici : l'interface garde la main, comme avec les fils de rendu.)
                 crate::parallele::baisser_la_priorite_ici();
-                let tuiles = rendre_les_tuiles(travaux);
+                let tuiles = rendre_les_tuiles(travaux, arret)?;
                 let img = planche::composer_avec_tuiles(&p2, &imgs, &tuiles, &opt2, s)?;
                 drop(imgs);
+                arret.controle()?;
                 let bytes = planche::encoder_avec(&p2, &img, opt2.sortie, &titre, s, opt2.bloc_titre.then_some(&opt2.entete))?;
-                crate::export::write_atomic(&chemin, &bytes)
+                crate::export::write_atomic_sauf_arret(&chemin, &bytes, arret)
             },
-            || {},
         );
         // (« Avec les annotations » : les calques d'annotation de la planche — dessinés par `composer` — et ceux des plans, posés par-dessus
         // chaque vignette — `panel_plan_at_avec`.)
@@ -170,7 +170,7 @@ impl App {
     /// Pour chaque case : de quoi rendre ce qu'elle montre hors de son image (`TuileATravailler::rendre`) : sa tuile si sa caméra bouge (les
     /// cadres ou le passe-partout sont demandés), le dessin sur toute l'enveloppe ; sinon sa marge. Le passe-partout cache les marges : rien à
     /// en rendre. Un cliché léger du plan : le dessin n'est pas copié.
-    fn planche_tuiles_a_rendre(&self, p: &planche::Planche, s: f32, opt: &Options) -> Vec<Option<TuileATravailler>> {
+    pub(crate) fn planche_tuiles_a_rendre(&self, p: &planche::Planche, s: f32, opt: &Options) -> Vec<Option<TuileATravailler>> {
         let marge_de = |c: &planche::Carte| if opt.marie { 0 } else { (opt.debord * c.place.thumb.width() * s).round() as usize };
         p.cartes
             .iter()
@@ -205,7 +205,7 @@ impl App {
     /// (Essais.) Les tuiles et les marges que l'export de la planche poserait, rendues ici.
     #[cfg(test)]
     pub(crate) fn planche_tuiles_pour_essai(&self, p: &planche::Planche, s: f32, opt: &Options) -> Vec<Option<planche::TuileImage>> {
-        rendre_les_tuiles(self.planche_tuiles_a_rendre(p, s, opt))
+        rendre_les_tuiles(self.planche_tuiles_a_rendre(p, s, opt), &crate::export::Arret::jamais()).expect("rien ne l'arrête")
     }
 
     /// Les plans de l'étendue choisie.
@@ -406,20 +406,24 @@ impl App {
 
 /// Les tuiles et les marges d'un export de la planche, sur le fil de l'export, **exactes** : effets, remplissages et fonds se calculent ici, comme les images des cases, dans une
 /// réserve privée (`fxcache::avec_privee`), sans rien demander au fil de fond de l'écran ni lui prendre. Un fichier ne montre jamais le repli de l'écran.
-fn rendre_les_tuiles(travaux: Vec<Option<TuileATravailler>>) -> Vec<Option<planche::TuileImage>> {
+/// `Err` dès que l'arrêt est demandé : entre deux tuiles et entre deux lignes d'une tuile. (Le calcul d'un effet, lui, ne s'interrompt pas : `Sink::abort` ne l'attend pas.)
+fn rendre_les_tuiles(travaux: Vec<Option<TuileATravailler>>, arret: &crate::export::Arret) -> Result<Vec<Option<planche::TuileImage>>, String> {
     crate::fxcache::avec_privee(crate::fxcache::limite_octets().max(96 << 20), || {
-        travaux
-            .into_iter()
-            .map(|t| {
-                crate::fxcache::privee_nouvelle_image();
-                t.and_then(TuileATravailler::rendre)
-            })
-            .collect()
+        let mut tuiles = Vec::with_capacity(travaux.len());
+        for t in travaux {
+            crate::fxcache::privee_nouvelle_image();
+            let t = t.map(|t| t.rendre(&|| arret.demande()));
+            arret.controle()?;
+            #[cfg(test)]
+            arret.tuile_faite();
+            tuiles.push(t.flatten());
+        }
+        Ok(tuiles)
     })
 }
 
 /// Ce qu'il faut pour rendre, dans l'export de la planche, la tuile d'un plan à mouvement de caméra (`masque` : son enveloppe) ou la marge d'une case.
-struct TuileATravailler {
+pub(crate) struct TuileATravailler {
     doc: crate::document::Document,
     plan: crate::render::Plan,
     cam: crate::camera::Camera,
@@ -429,11 +433,11 @@ struct TuileATravailler {
 }
 
 impl TuileATravailler {
-    /// La tuile (le papier dans l'enveloppe, le trait qui déborde dehors) ou la marge seule, en pixels prémultipliés.
-    fn rendre(self) -> Option<planche::TuileImage> {
+    /// La tuile (le papier dans l'enveloppe, le trait qui déborde dehors) ou la marge seule, en pixels prémultipliés ; `None` si `arrete` le demande en route.
+    fn rendre(self, arrete: &dyn Fn() -> bool) -> Option<planche::TuileImage> {
         let img = match &self.masque {
-            Some(masque) => crate::render::thumbnail_marge_until(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], self.marge, Some(masque), &|| false),
-            None => Some(crate::render::marge_seule(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], self.marge)),
+            Some(masque) => crate::render::thumbnail_marge_until(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], self.marge, Some(masque), arrete),
+            None => crate::render::marge_seule_until(&self.doc, &self.plan, &self.cam, self.taille[0], self.taille[1], self.marge, arrete),
         }?;
         let rvba = img.pixels.iter().flat_map(|c| c.to_array()).collect();
         Some(planche::TuileImage { taille: [img.size[0] as u32, img.size[1] as u32], marge: self.marge as u32, rvba })
