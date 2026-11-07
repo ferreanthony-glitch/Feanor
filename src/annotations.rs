@@ -304,8 +304,8 @@ impl Annotations {
 
     /// Comme `ajouter_hors_cadres_brosse`, pour la part d'un trait qui tombe **dans l'image d'une case qui ne peut pas la recevoir** (partie 120) : elle
     /// reste attachée à cette case (`c`, dans le film ou écartée) et se peint par-dessus son image.
-    pub fn ajouter_sur_la_case(&mut self, c: &board::CardPlace, points: &[VPoint], color: [u8; 3], alpha: u8, brosse: Option<(Recette, Vec<f32>, Vec<f64>, f32)>) -> bool {
-        self.poser_hors_cadres(Ancre { card: c.id, after: 0, rank: 0 }, c.thumb, true, points, color, alpha, brosse)
+    pub fn ajouter_sur_la_case(&mut self, c: &board::CardPlace, rang: usize, points: &[VPoint], color: [u8; 3], alpha: u8, brosse: Option<(Recette, Vec<f32>, Vec<f64>, f32)>) -> bool {
+        self.poser_hors_cadres(Ancre { card: c.id, after: 0, rank: rang.min(u32::MAX as usize) as u32 }, c.thumb, true, points, color, alpha, brosse)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -334,7 +334,22 @@ impl Annotations {
 
     /// Une part de trait posée par-dessus une image de case est-elle sous le cercle ? (La gomme l'efface alors, plutôt que d'agir dans la case.)
     pub fn touche_dessus(&self, layout: &BoardLayout, p: Pos2, radius: f32) -> bool {
-        self.id_hors_cadres().is_some_and(|c| self.touches(layout, Some(c), p, radius).iter().any(|&i| self.traces[i].dessus))
+        !self.dessus_sous_le_cercle(layout, p, radius).is_empty()
+    }
+
+    /// Le calque « Hors cadres », s'il est montré : ce qu'il cache ne se gomme pas.
+    pub fn hors_cadres_montre(&self) -> Option<u64> {
+        self.calques.iter().find(|c| c.planche && c.visible).map(|c| c.id)
+    }
+
+    fn dessus_sous_le_cercle(&self, layout: &BoardLayout, p: Pos2, radius: f32) -> Vec<usize> {
+        let Some(c) = self.hors_cadres_montre() else { return Vec::new() };
+        self.touches(layout, Some(c), p, radius).into_iter().filter(|&i| self.traces[i].dessus).collect()
+    }
+
+    /// Gomme sur une part posée par-dessus une case : retire ces parts-là, rien d'autre (ni le reste du trait sur le papier, ni les notes). Rend combien.
+    pub fn effacer_dessus(&mut self, layout: &BoardLayout, p: Pos2, radius: f32) -> usize {
+        self.retirer(self.dessus_sous_le_cercle(layout, p, radius))
     }
 
     /// Les textures (pointe, papier) que citent les pinceaux des traits : à écrire avec le projet, comme celles des traits des plans.

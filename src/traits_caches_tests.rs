@@ -6,7 +6,7 @@ use eframe::egui::{pos2, Color32, Event, Modifiers, Pos2, Rect};
 
 use crate::document::LayerKind;
 use crate::perf_tests::Banc;
-use crate::traits_continus_tests::{des_plans, exporter, planche, relever, relever_a, repos, sauver, tracer};
+use crate::traits_continus_tests::{des_plans, exporter, planche, relever, repos, sauver, tracer};
 use crate::vignettes_tests::appui;
 
 const PLAN: usize = 1;
@@ -117,18 +117,8 @@ fn case_ecran(b: &Banc, id: u64) -> Rect {
     b.app.vignettes.xf.rect(c.thumb)
 }
 
-/// Le seuil d'encre (rouge moins vert) : un trait d'un pixel à cheval sur deux rangées de la tuile d'un plan à cadres tournés est plus pâle, comme tout ce que montre
-/// cette tuile, le trait d'avant compris (partie 120, ce qui reste).
-fn seuil(v: Variante) -> i32 {
-    if v == Variante::CadresRoulis {
-        12
-    } else {
-        40
-    }
-}
-
 /// Le trou le plus long sur le trait de `bd` à `ba` (planche) dans l'image exportée.
-fn trou_a_l_export(b: &Banc, img: &image::RgbImage, opt: &crate::planche::Options, bd: Pos2, ba: Pos2, seuil: i32) -> (usize, f32) {
+fn trou_a_l_export(b: &Banc, img: &image::RgbImage, opt: &crate::planche::Options, bd: Pos2, ba: Pos2) -> (usize, f32) {
     let opt = b.app.planche_options(opt);
     let plans: Vec<usize> = (0..b.app.doc.panels.len()).collect();
     let p = crate::planche::construire(&b.app.doc, &plans, &b.app.layout.board_settings(), &opt, &b.app.doc.annotations);
@@ -143,7 +133,7 @@ fn trou_a_l_export(b: &Banc, img: &image::RgbImage, opt: &crate::planche::Option
             let (x, y) = (c.x as i32, c.y as i32 + (w as f32 * s.max(1.0)) as i32);
             x >= 0 && y >= 0 && (x as u32) < img.width() && (y as u32) < img.height() && {
                 let v = img.get_pixel(x as u32, y as u32);
-                v[0] as i32 - v[1] as i32 >= seuil
+                v[0] as i32 - v[1] as i32 >= 40
             }
         });
         courant = if encre { 0 } else { courant + 1 };
@@ -197,7 +187,14 @@ fn constater(v: Variante, bitmap: bool, depuis_la_case: bool) -> Option<Constat>
     repos(&mut b);
     let (depart, arrivee) = if depuis_la_case { (ids[PLAN], ids[PLAN + 2]) } else { (ids[PLAN - 1], ids[PLAN + 1]) };
     let (rd, ra) = (case_ecran(&b, depart), case_ecran(&b, arrivee));
-    let y = rd.top() + rd.height() * 0.35;
+    // (Cadres tournés : un trait de plus de deux pixels et une hauteur où leurs filets le croisent de face. Un trait d'un pixel, dans leur tuile, est pâle : « Ce qui reste ».)
+    let hauteur = if v == Variante::CadresRoulis {
+        b.app.brush.size = 28.0;
+        0.62
+    } else {
+        0.35
+    };
+    let y = rd.top() + rd.height() * hauteur;
     let (de, a) = (pos2(rd.center().x, y), pos2(ra.center().x, y));
     let (bd, ba) = (b.app.vignettes.xf.to_board(de), b.app.vignettes.xf.to_board(a));
     let etapes_avant = b.app.history.undo_len();
@@ -214,14 +211,14 @@ fn constater(v: Variante, bitmap: bool, depuis_la_case: bool) -> Option<Constat>
     let geste_img = b.capturer()?;
     let nom = format!("{v:?}-{}-{}", if bitmap { "bitmap" } else { "vecteur" }, if depuis_la_case { "depuis" } else { "travers" });
     sauver(&geste_img, &format!("{nom}-1-geste"));
-    let geste = relever_a(&geste_img, de, a, seuil(v)).trou;
+    let geste = relever(&geste_img, de, a).trou;
     let statut_geste = b.app.status.clone();
     b.image(vec![appui(*chemin.last().unwrap(), false, Modifiers::NONE)], 1.0 / 60.0);
     b.image(Vec::new(), 1.0 / 60.0);
     repos(&mut b);
     let img = b.capturer()?;
     sauver(&img, &format!("{nom}-2-repos"));
-    let repos_r = relever_a(&img, de, a, seuil(v));
+    let repos_r = relever(&img, de, a);
     let etapes = b.app.history.undo_len() - etapes_avant;
     let rejeux = crate::vector::replay_count() - rejeux;
     let apres_plan = encre_du_plan(&b.app.doc, ids[PLAN]);
@@ -267,7 +264,7 @@ fn constater(v: Variante, bitmap: bool, depuis_la_case: bool) -> Option<Constat>
         repos(&mut c);
         let img = c.capturer()?;
         sauver(&img, &format!("{nom}-3-rouvert"));
-        relever_a(&img, de, a, seuil(v)).trou
+        relever(&img, de, a).trou
     };
     std::fs::remove_dir_all(&dossier).ok();
     // L'export de la planche (un plan écarté n'y est pas : le trait n'y a plus de sens de bout en bout).
@@ -279,7 +276,7 @@ fn constater(v: Variante, bitmap: bool, depuis_la_case: bool) -> Option<Constat>
         if let Some(d) = std::env::var_os("FEANOR_CAPTURE_DIR") {
             let _ = img.save(std::path::PathBuf::from(d).join(format!("{nom}-4-export.png")));
         }
-        Some(trou_a_l_export(&b, &img, &opt, bd, ba, seuil(v)).0)
+        Some(trou_a_l_export(&b, &img, &opt, bd, ba).0)
     };
     // Annuler rend les données d'avant.
     b.app.run_action("edition.annuler");
@@ -320,12 +317,10 @@ fn verifier_recu(v: Variante, bitmap: bool, depuis: bool) {
     let Some(c) = constater(v, bitmap, depuis) else { return println!("pas de carte graphique") };
     let nom = format!("{v:?} {} {}", sorte(bitmap), if depuis { "depuis la case" } else { "à travers" });
     println!("TRAIT {nom} : {c:?}");
-    // (Les cadres tournés croisent le trait presque à plat : leur filet et son halo le recouvrent sur une vingtaine de pixels, ils y sont aussi sans lui.)
-    let permis = if v == Variante::CadresRoulis { 26 } else { TROU_PERMIS };
-    assert!(c.geste <= permis, "{nom} : pendant le geste : {c:?}");
-    assert!(c.repos <= permis, "{nom} : au repos : {c:?}");
-    assert!(c.rouvert <= permis, "{nom} : après réouverture : {c:?}");
-    assert!(c.export.is_some_and(|t| t <= permis + 4), "{nom} : à l'export : {c:?}");
+    assert!(c.geste <= TROU_PERMIS, "{nom} : pendant le geste : {c:?}");
+    assert!(c.repos <= TROU_PERMIS, "{nom} : au repos : {c:?}");
+    assert!(c.rouvert <= TROU_PERMIS, "{nom} : après réouverture : {c:?}");
+    assert!(c.export.is_some_and(|t| t <= TROU_PERMIS), "{nom} : à l'export : {c:?}");
     assert!(c.dans_le_plan, "{nom} : la part est dans le plan : {c:?}");
     assert_eq!(c.hors_cadres, 0, "{nom} : rien ne reste sur la planche : {c:?}");
     assert_eq!(c.etapes, 1, "{nom} : une seule étape : {c:?}");
@@ -416,7 +411,7 @@ fn the_film_frame_of_the_plan_shows_the_part_where_the_case_shows_it() {
                 }));
             }
             println!("TRAIT film {v:?} {} : encre {encre} sur {vus}", sorte(bitmap));
-            assert!(encre * 100 >= vus * 97, "{v:?} {} : le film montre le trait d'un bord à l'autre : {encre} sur {vus}", sorte(bitmap));
+            assert_eq!(encre, vus, "{v:?} {} : le film montre le trait d'un bord à l'autre", sorte(bitmap));
         }
     }
 }
@@ -431,7 +426,7 @@ fn verifier_refus(v: Variante, bitmap: bool, mots: &str) {
     assert!(c.repos <= TROU_PERMIS, "{nom} : au repos, rien n'a disparu : {c:?}");
     assert!(c.rouvert <= TROU_PERMIS, "{nom} : après réouverture : {c:?}");
     if let Some(t) = c.export {
-        assert!(t <= 12, "{nom} : à l'export : {c:?}");
+        assert!(t <= TROU_PERMIS, "{nom} : à l'export : {c:?}");
     }
     assert!(!c.dans_le_plan, "{nom} : rien n'est écrit dans ce plan : {c:?}");
     assert!(c.hors_cadres >= 1, "{nom} : la part reste sur la planche : {c:?}");
@@ -675,7 +670,498 @@ fn sur_une_copie_d_un_vrai_projet() {
     println!("VRAI PROJET : {} plans, relevé {:?}, étapes {}, message {:?}", b.app.doc.panels.len(), relever(&img, de, a), b.app.history.undo_len() - n, b.app.status);
 }
 
+// ------------------------------------------------------------------------------ relecture : aucun dessin perdu, aucun message faux
+
+/// Une planche de 18 plans, plan `PLAN` dans la variante `v`, et le trait (écran) de la case d'avant à celle d'après.
+fn scene_refus(v: Variante, bitmap: bool) -> Option<(Banc, Pos2, Pos2)> {
+    let mut doc = des_plans(18, bitmap);
+    for p in 0..doc.panels.len() {
+        doc.set_duration(p, 24);
+    }
+    let mut b = planche(doc, 6, 1.0)?;
+    appliquer(&mut b, v, bitmap);
+    b.chauffer(4);
+    b.attendre_vignettes();
+    repos(&mut b);
+    let (rd, ra) = (case_ecran(&b, b.app.doc.panels[PLAN - 1].id), case_ecran(&b, b.app.doc.panels[PLAN + 1].id));
+    let y = rd.top() + rd.height() * 0.35;
+    Some((b, pos2(rd.center().x, y), pos2(ra.center().x, y)))
+}
+
+fn main_baissee(b: &mut Banc, de: Pos2, a: Pos2) {
+    let n = ((a - de).length() / 6.0).ceil().max(2.0) as usize;
+    b.image(vec![Event::PointerMoved(de)], 1.0 / 60.0);
+    b.image(vec![appui(de, true, Modifiers::NONE)], 1.0 / 60.0);
+    for k in 1..=n {
+        b.image(vec![Event::PointerMoved(de + (a - de) * (k as f32 / n as f32))], 1.0 / 120.0);
+    }
+}
+
+fn dessus(b: &Banc) -> usize {
+    b.app.doc.annotations.traces.iter().filter(|t| t.dessus).count()
+}
+
+/// Un très faible zoom dans la case d'arrivée (sa feuille y est 66 fois plus petite qu'à l'origine) : la tuile d'arrivée dépasserait 2048 pixels. Aucun pixel n'est perdu, le trait reste entier au repos, et il est quelque part.
+#[test]
+fn a_part_that_would_need_a_huge_tile_is_never_lost() {
+    let Some(mut b) = planche(des_plans(18, true), 6, 1.0) else { return println!("pas de carte graphique") };
+    let cam = b.app.doc.default_camera();
+    crate::camera::set_key(&mut b.app.doc.panels[PLAN].camera, 0, crate::camera::Camera { zoom: 0.015, ..cam });
+    b.chauffer(4);
+    b.attendre_vignettes();
+    let (rd, ra) = (case_ecran(&b, b.app.doc.panels[PLAN - 1].id), case_ecran(&b, b.app.doc.panels[PLAN + 1].id));
+    let y = rd.top() + rd.height() * 0.35;
+    let (de, a) = (pos2(rd.center().x, y), pos2(ra.center().x, y));
+    let n = b.app.history.undo_len();
+    tracer(&mut b, de, a);
+    repos(&mut b);
+    let img = b.capturer().unwrap();
+    sauver(&img, "tuile-enorme");
+    let r = relever(&img, de, a);
+    println!("TRAIT tuile énorme : {r:?}, part sur la case {}, encre du plan {:?}, message {:?}", dessus(&b), encre_du_plan(&b.app.doc, b.app.doc.panels[PLAN].id), b.app.status);
+    assert!(r.trou <= TROU_PERMIS, "rien n'est perdu : {r:?}");
+    assert_eq!(b.app.history.undo_len(), n + 1);
+}
+
+/// Le coût du lever sur le fil de l'interface, à fort rapport de zoom. (Mesure.)
+#[test]
+#[ignore]
+fn mesure_le_cout_du_lever_a_fort_zoom() {
+    for taille in [14.0, 60.0] {
+        for zoom in [0.6_f32, 0.25, 0.125, 0.0625, 0.04, 0.03, 0.015] {
+            let Some(mut b) = planche(des_plans(18, true), 6, 1.0) else { return };
+            b.app.brush.size = taille;
+            let cam = b.app.doc.default_camera();
+            crate::camera::set_key(&mut b.app.doc.panels[PLAN].camera, 0, crate::camera::Camera { zoom, ..cam });
+            b.chauffer(4);
+            let (rd, ra) = (case_ecran(&b, b.app.doc.panels[PLAN - 1].id), case_ecran(&b, b.app.doc.panels[PLAN + 1].id));
+            let (de, a) = (rd.center() - eframe::egui::vec2(0.0, 12.0), ra.center() + eframe::egui::vec2(0.0, 12.0));
+            main_baissee(&mut b, de, a);
+            let mut pire = 0.0_f64;
+            let m = b.image(vec![appui(a, false, Modifiers::NONE)], 1.0 / 60.0);
+            pire = pire.max(m.construction);
+            for _ in 0..3 {
+                pire = pire.max(b.image(Vec::new(), 1.0 / 60.0).construction);
+            }
+            println!("COUT lever pinceau {taille} rapport {:.0} : pire image {pire:.1} ms, part sur la case {}, encre du plan {:?}", 1.0 / zoom, dessus(&b), encre_du_plan(&b.app.doc, b.app.doc.panels[PLAN].id));
+        }
+    }
+}
+
+/// La planche a atteint `MAX_TRACES` : la part ne peut pas y être posée, elle reste où elle était (le dessin d'origine), et le message dit la vérité.
+#[test]
+fn when_the_board_is_full_the_part_stays_in_the_plan_it_came_from_and_the_message_says_so() {
+    for bitmap in [false, true] {
+        let Some((mut b, de, a)) = scene_refus(Variante::Verrou, bitmap) else { return println!("pas de carte graphique") };
+        let l = b.app.board_layout();
+        let carte = l.cards[0].id;
+        let calque = b.app.doc.annotations.calque_hors_cadres();
+        for _ in 0..crate::annotations::MAX_TRACES {
+            b.app.doc.annotations.traces.push(crate::annotations::Trace::new(calque, crate::annotations::Ancre { card: carte, after: 0, rank: 0 }, [0, 0, 0], vec![crate::vector::VPoint { x: 0.0, y: 3.0, r: 0.001 }]));
+        }
+        let (x, y) = (b.app.vignettes.xf, case_ecran(&b, b.app.doc.panels[PLAN].id));
+        let milieu = x.to_board(pos2(y.center().x, de.y));
+        let aff = crate::horschamp::aff_de_la_case(&b.app.doc, &l, 0).expect("caméra droite");
+        let sur_la_feuille = pos2((milieu.x - aff.tx) / aff.a, (milieu.y - aff.ty) / aff.a);
+        tracer(&mut b, de, a);
+        repos(&mut b);
+        assert_eq!(b.app.doc.annotations.traces.len(), crate::annotations::MAX_TRACES, "{}", sorte(bitmap));
+        println!("MESSAGE planche pleine : {}", b.app.status);
+        assert!(!b.app.status.contains("reste sur la planche"), "{} : le message ment : {}", sorte(bitmap), b.app.status);
+        assert!(b.app.status.contains("limite"), "{} : {}", sorte(bitmap), b.app.status);
+        let cel = b.app.doc.panels[0].layers[0].cel_at(0).expect("le dessin d'origine");
+        let c = b.app.doc.cels.get(&cel).expect("le dessin");
+        let garde = if bitmap {
+            (-20..=20).any(|j| c.raster.get_i(sur_la_feuille.x as i64, sur_la_feuille.y as i64 + j).a() > 0)
+        } else {
+            c.vector.as_ref().is_some_and(|v| v.elements.iter().any(|e| e.bounds().expand(20.0).contains(sur_la_feuille)))
+        };
+        assert!(garde, "{} : la part est restée dans le dessin d'origine", sorte(bitmap));
+    }
+}
+
+/// Le calque « Hors cadres » caché : une part neuve le remontre (sinon elle disparaîtrait au lever), le message le dit, annuler le recache.
+#[test]
+fn a_hidden_off_frame_layer_comes_back_when_a_part_lands_on_it() {
+    for bitmap in [false, true] {
+        let Some((mut b, de, a)) = scene_refus(Variante::Verrou, bitmap) else { return println!("pas de carte graphique") };
+        let id = b.app.doc.annotations.calque_hors_cadres();
+        b.app.doc.annotations.regler_visible(id, false);
+        tracer(&mut b, de, a);
+        repos(&mut b);
+        let img = b.capturer().unwrap();
+        let r = relever(&img, de, a);
+        assert!(r.trou <= TROU_PERMIS, "{} : la part ne disparaît pas : {r:?}", sorte(bitmap));
+        assert!(b.app.status.contains("Hors cadres"), "{} : {}", sorte(bitmap), b.app.status);
+        b.app.run_action("edition.annuler");
+        b.chauffer(2);
+        assert!(!b.app.doc.annotations.calque(id).expect("le calque").visible, "annuler le recache");
+    }
+}
+
+/// La gomme ne trouve pas ce qu'on ne voit pas : une part d'un calque « Hors cadres » caché ne s'efface pas, ni sur une case, ni sur le papier.
+#[test]
+fn the_eraser_does_not_remove_what_a_hidden_off_frame_layer_hides() {
+    let Some((mut b, de, a)) = scene_refus(Variante::Verrou, false) else { return println!("pas de carte graphique") };
+    tracer(&mut b, de, a);
+    repos(&mut b);
+    let avant = traits_hors_cadres(&b.app.doc);
+    assert!(avant >= 2);
+    let id = b.app.doc.annotations.id_hors_cadres().expect("le calque");
+    b.app.doc.annotations.regler_visible(id, false);
+    b.app.set_tool(crate::app::Tool::Eraser);
+    b.chauffer(1);
+    let case = case_ecran(&b, b.app.doc.panels[PLAN].id);
+    tracer(&mut b, pos2(case.center().x, de.y), pos2(case.center().x + 12.0, de.y));
+    let ecart = pos2(case.left() - 8.0, de.y);
+    tracer(&mut b, ecart, ecart + eframe::egui::vec2(3.0, 1.0));
+    b.chauffer(2);
+    assert_eq!(traits_hors_cadres(&b.app.doc), avant, "ce qui est caché reste");
+}
+
+/// La gomme posée sur une part refusée n'efface que les parts refusées qu'elle touche : ni le reste du trait sur le papier, ni le dessin. Annuler et rétablir.
+#[test]
+fn the_eraser_on_a_refused_part_erases_only_refused_parts_and_undo_redo_follow() {
+    for bitmap in [false, true] {
+        let Some((mut b, de, a)) = scene_refus(Variante::Verrou, bitmap) else { return println!("pas de carte graphique") };
+        tracer(&mut b, de, a);
+        repos(&mut b);
+        let avant = traits_hors_cadres(&b.app.doc);
+        assert_eq!((dessus(&b), avant), (1, 3), "{}", sorte(bitmap));
+        let etapes = b.app.history.undo_len();
+        b.app.set_tool(crate::app::Tool::Eraser);
+        b.chauffer(1);
+        // De l'intérieur de la case jusqu'au papier, à côté : le geste balaie aussi la part sur le papier.
+        let case = case_ecran(&b, b.app.doc.panels[PLAN].id);
+        tracer(&mut b, pos2(case.center().x, de.y), pos2(case.left() - 8.0, de.y));
+        b.chauffer(2);
+        assert_eq!(dessus(&b), 0, "{} : la part sur la case est partie", sorte(bitmap));
+        assert_eq!(traits_hors_cadres(&b.app.doc), avant - 1, "{} : le reste du trait est là", sorte(bitmap));
+        assert_eq!(b.app.history.undo_len(), etapes + 1, "{} : une étape", sorte(bitmap));
+        b.app.run_action("edition.annuler");
+        b.chauffer(2);
+        assert_eq!((dessus(&b), traits_hors_cadres(&b.app.doc)), (1, avant), "{}", sorte(bitmap));
+        b.app.run_action("edition.retablir");
+        b.chauffer(2);
+        assert_eq!((dessus(&b), traits_hors_cadres(&b.app.doc)), (0, avant - 1), "{} : rétablir", sorte(bitmap));
+    }
+}
+
+/// Annuler puis rétablir le trait : la part refusée revient par-dessus la case, le plan n'a toujours rien reçu.
+#[test]
+fn undo_then_redo_of_a_stroke_brings_the_refused_part_back() {
+    for bitmap in [false, true] {
+        let Some((mut b, de, a)) = scene_refus(Variante::Verrou, bitmap) else { return println!("pas de carte graphique") };
+        let id = b.app.doc.panels[PLAN].id;
+        let plan = encre_du_plan(&b.app.doc, id);
+        tracer(&mut b, de, a);
+        repos(&mut b);
+        b.app.run_action("edition.annuler");
+        repos(&mut b);
+        assert_eq!((dessus(&b), traits_hors_cadres(&b.app.doc)), (0, 0), "{}", sorte(bitmap));
+        b.app.run_action("edition.retablir");
+        repos(&mut b);
+        assert_eq!(dessus(&b), 1, "{}", sorte(bitmap));
+        assert_eq!(encre_du_plan(&b.app.doc, id), plan, "{}", sorte(bitmap));
+        let r = relever(&b.capturer().unwrap(), de, a);
+        assert!(r.trou <= TROU_PERMIS, "{} : {r:?}", sorte(bitmap));
+    }
+}
+
+/// Le chemin A, B, A : chaque case n'est annoncée qu'une fois pendant le geste.
+#[test]
+fn a_case_is_announced_only_once_during_a_gesture() {
+    let Some(mut b) = planche(des_plans(18, false), 6, 1.0) else { return println!("pas de carte graphique") };
+    b.app.doc.panels[1].layers[0].locked = true;
+    b.app.doc.panels[2].layers[0].locked = true;
+    b.chauffer(2);
+    let cases: Vec<Rect> = (0..3).map(|k| case_ecran(&b, b.app.doc.panels[k].id)).collect();
+    let y = cases[0].top() + cases[0].height() * 0.35;
+    let etapes = [cases[0].center().x, cases[1].center().x, cases[2].center().x, cases[1].center().x];
+    b.image(vec![Event::PointerMoved(pos2(etapes[0], y))], 1.0 / 60.0);
+    b.image(vec![appui(pos2(etapes[0], y), true, Modifiers::NONE)], 1.0 / 60.0);
+    b.app.status.clear();
+    let mut dits: Vec<String> = Vec::new();
+    for s in etapes.windows(2) {
+        for k in 1..=30 {
+            b.image(vec![Event::PointerMoved(pos2(s[0] + (s[1] - s[0]) * (k as f32 / 30.0), y))], 1.0 / 120.0);
+            if !b.app.status.is_empty() && dits.last() != Some(&b.app.status) {
+                dits.push(b.app.status.clone());
+            }
+        }
+    }
+    println!("MESSAGES {dits:?}");
+    assert_eq!(dits.len(), 2, "une fois par case : {dits:?}");
+}
+
+/// Annuler en plein geste : le trait part, rien n'est posé, et la ligne d'état ne dit plus qu'il reste sur la planche.
+#[test]
+fn undo_during_the_gesture_leaves_nothing_and_no_stale_message() {
+    for bitmap in [false, true] {
+        let Some((mut b, de, a)) = scene_refus(Variante::Verrou, bitmap) else { return println!("pas de carte graphique") };
+        let id = b.app.doc.panels[PLAN].id;
+        let plan = encre_du_plan(&b.app.doc, id);
+        main_baissee(&mut b, de, a);
+        assert!(b.app.status.contains("reste sur la planche"), "{}", b.app.status);
+        b.app.run_action("edition.annuler");
+        b.chauffer(1);
+        b.image(vec![appui(a, false, Modifiers::NONE)], 1.0 / 60.0);
+        b.chauffer(3);
+        println!("MESSAGE après annulation : {:?}", b.app.status);
+        assert!(!b.app.status.contains("reste sur la planche"), "{} : message périmé : {}", sorte(bitmap), b.app.status);
+        assert_eq!(traits_hors_cadres(&b.app.doc), 0, "{} : rien n'est posé", sorte(bitmap));
+        assert_eq!(encre_du_plan(&b.app.doc, id), plan);
+    }
+}
+
+/// Échap ne défait pas un trait du pinceau : la part est posée, une étape, et le message reste vrai.
+#[test]
+fn escape_during_the_gesture_keeps_the_stroke_and_the_message_stays_true() {
+    let Some((mut b, de, a)) = scene_refus(Variante::Verrou, false) else { return println!("pas de carte graphique") };
+    let n = b.app.history.undo_len();
+    main_baissee(&mut b, de, a);
+    b.image(vec![Event::Key { key: eframe::egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE }], 1.0 / 60.0);
+    // (Échap pose le trait tel qu'il est, comme tout changement d'outil : il ne l'abandonne pas. Le reste du geste ne dessine plus.)
+    println!("ÉCHAP : trait en cours {}", b.app.stroke.is_some());
+    b.image(vec![appui(a, false, Modifiers::NONE)], 1.0 / 60.0);
+    repos(&mut b);
+    assert_eq!(b.app.history.undo_len(), n + 1);
+    assert_eq!(dessus(&b), 1);
+    assert!(b.app.status.contains("reste sur la planche"), "{}", b.app.status);
+}
+
+/// Changer de plan en plein geste : pas de plantage, le calque verrouillé reste intact, et tout s'annule.
+#[test]
+fn changing_the_plan_during_the_gesture_loses_nothing_and_writes_nothing_in_a_locked_layer() {
+    for bitmap in [false, true] {
+        let Some((mut b, de, a)) = scene_refus(Variante::Verrou, bitmap) else { return println!("pas de carte graphique") };
+        let id = b.app.doc.panels[PLAN].id;
+        let plan = encre_du_plan(&b.app.doc, id);
+        let etapes = b.app.history.undo_len();
+        main_baissee(&mut b, de, a);
+        b.app.run_action("panneau.suivant");
+        b.chauffer(2);
+        b.image(vec![appui(a, false, Modifiers::NONE)], 1.0 / 60.0);
+        repos(&mut b);
+        assert_eq!(encre_du_plan(&b.app.doc, id), plan, "{}", sorte(bitmap));
+        let encre_ailleurs = encre_du_plan(&b.app.doc, b.app.doc.panels[0].id) != (0, 0);
+        assert!(encre_ailleurs, "{} : le trait est dans son dessin d'origine", sorte(bitmap));
+        while b.app.history.undo_len() > etapes {
+            b.app.run_action("edition.annuler");
+            b.chauffer(1);
+        }
+        assert_eq!(traits_hors_cadres(&b.app.doc), 0, "{}", sorte(bitmap));
+        assert_eq!(encre_du_plan(&b.app.doc, b.app.doc.panels[0].id), (0, 0), "{} : tout s'annule", sorte(bitmap));
+    }
+}
+
+/// Ouvrir un autre onglet en plein geste : la répartition d'un trait du projet d'avant n'écrit rien dans le projet ouvert.
+#[test]
+fn opening_another_tab_during_the_gesture_writes_nothing_in_it() {
+    for bitmap in [false, true] {
+        let Some((mut b, de, a)) = scene_refus(Variante::Verrou, bitmap) else { return println!("pas de carte graphique") };
+        main_baissee(&mut b, de, a);
+        assert!(b.app.nouvel_onglet(), "{}", b.app.status);
+        assert!(b.app.charger_projet(des_plans(18, bitmap)));
+        b.app.welcome = false;
+        b.chauffer(3);
+        b.image(vec![appui(a, false, Modifiers::NONE)], 1.0 / 60.0);
+        b.chauffer(3);
+        assert!(!b.app.status.contains("reste sur la planche"), "{} : le message du projet d'avant : {}", sorte(bitmap), b.app.status);
+        assert_eq!(b.app.doc.annotations.traces.len(), 0, "{} : rien sur la planche de l'autre projet", sorte(bitmap));
+        for p in &b.app.doc.panels {
+            assert_eq!(encre_du_plan(&b.app.doc, p.id), (0, 0), "{} : rien dans ses plans", sorte(bitmap));
+        }
+    }
+}
+
+/// Film partagé : on n'écrit jamais dans le plan d'un autre ; la part reste visible, le message le dit.
+#[test]
+fn in_a_shared_film_a_stroke_never_writes_in_a_plan_held_by_someone_else() {
+    use crate::cooperation_tests::confirmer;
+    let (mut b, mut lea, h, _) = crate::cooperation_ui_tests::app_partagee("traits-caches", 4);
+    lea.prendre_plan(1).expect("libre");
+    confirmer(&h);
+    lea.tour();
+    b.app.partage.as_ref().expect("session").pomper();
+    b.image(Vec::new(), 0.05);
+    b.app.cur_panel = 0;
+    b.app.run_action("equipe.prendre_plan");
+    assert!(!b.app.content_refuses(), "le plan 0 est à moi : {}", b.app.status);
+    b.app.set_espace(crate::workspace::Espace::Vignettes);
+    b.app.board_view = crate::app::BoardView::Panels;
+    b.app.layout.board_columns = 4;
+    b.app.layout.board_rows = 0;
+    b.app.board_zoom = 0.0;
+    b.app.vignettes.ouverture_a_faire = false;
+    b.chauffer(4);
+    b.app.set_tool(crate::app::Tool::Brush);
+    let ids: Vec<u64> = b.app.doc.panels.iter().map(|p| p.id).collect();
+    let tenu = encre_du_plan(&b.app.doc, ids[1]);
+    let (rd, ra) = (case_ecran(&b, ids[0]), case_ecran(&b, ids[1]));
+    let editable = b.app.layer_editable();
+    println!("PARTAGE cases {rd:?} {ra:?}, vue {:?}, éditable {editable}", b.app.vignettes.view);
+    // Du plan 0, le mien, jusqu'au milieu du plan 1, celui de Léa.
+    tracer(&mut b, rd.center(), ra.center());
+    b.chauffer(3);
+    println!("PARTAGE : encre du plan 0 {:?}, plan courant {}, traits sur la planche {}, sur une case {}, message {:?}", encre_du_plan(&b.app.doc, ids[0]), b.app.cur_panel, traits_hors_cadres(&b.app.doc), dessus(&b), b.app.status);
+    assert_eq!(encre_du_plan(&b.app.doc, ids[1]), tenu, "rien dans le plan de Léa");
+    assert!(dessus(&b) >= 1, "la part est visible : {:?}", b.app.status);
+    assert!(b.app.status.contains("Plan 2 n'est pas à toi"), "{}", b.app.status);
+}
+
+/// La part sur une case garde le rang de sa case (le secours de `rattacher_manquantes` reste juste).
+#[test]
+fn a_part_on_a_case_remembers_the_rank_of_its_case() {
+    let Some((mut b, de, a)) = scene_refus(Variante::Verrou, false) else { return println!("pas de carte graphique") };
+    let etapes = b.app.history.undo_len();
+    main_baissee(&mut b, de, a);
+    b.image(vec![appui(a, false, Modifiers::NONE)], 1.0 / 60.0);
+    assert_eq!(b.app.history.undo_len(), etapes + 1, "réparti dès l'image du lâcher");
+    let t = b.app.doc.annotations.traces.iter().find(|t| t.dessus).expect("la part");
+    assert_eq!(t.anchor.rank as usize, PLAN);
+}
+
+/// L'encre de l'écran et celle de l'export, case par case : la part de l'une qu'on retrouve dans l'autre (à 3 pixels d'export près), dans les deux sens.
+fn accord_ecran_export(b: &mut Banc, nom: &str) -> (f32, f32) {
+    let img = b.capturer().unwrap();
+    sauver(&img, &format!("accord-{nom}-ecran"));
+    let opt = crate::planche::Options::default();
+    let export = exporter(b, &opt, &format!("accord-{nom}"));
+    if let Some(d) = std::env::var_os("FEANOR_CAPTURE_DIR") {
+        let _ = export.save(std::path::PathBuf::from(d).join(format!("accord-{nom}-export.png")));
+    }
+    let opt = b.app.planche_options(&opt);
+    let plans: Vec<usize> = (0..b.app.doc.panels.len()).collect();
+    let p = crate::planche::construire(&b.app.doc, &plans, &b.app.layout.board_settings(), &opt, &b.app.doc.annotations);
+    let (s, ..) = crate::planche::dimensions(p.cadre, opt.resolution);
+    let xf = b.app.vignettes.xf;
+    let vue = b.app.vignettes.view;
+    let encre_e = |x: i32, y: i32| {
+        let v = crate::traits_continus_tests::px(&img, x, y);
+        v[0] - v[1] >= 40 && v[0] - v[2] >= 40
+    };
+    let encre_x = |q: Pos2| {
+        (-3..=3).any(|j| (-3..=3).any(|i| {
+            let (x, y) = (q.x as i32 + i, q.y as i32 + j);
+            x >= 0 && y >= 0 && (x as u32) < export.width() && (y as u32) < export.height() && {
+                let v = export.get_pixel(x as u32, y as u32);
+                v[0] as i32 - v[1] as i32 >= 40 && v[0] as i32 - v[2] as i32 >= 40
+            }
+        }))
+    };
+    let vers_export = |q: Pos2| pos2((q.x - p.cadre.left()) * s, (q.y - p.cadre.top()) * s);
+    let (mut vus_e, mut retrouves_e) = (0, 0);
+    let l = b.app.board_layout();
+    for c in &l.cards {
+        let r = xf.rect(c.thumb).shrink(3.0).intersect(vue);
+        for y in r.top() as i32..r.bottom() as i32 {
+            for x in r.left() as i32..r.right() as i32 {
+                if encre_e(x, y) {
+                    vus_e += 1;
+                    retrouves_e += usize::from(encre_x(vers_export(xf.to_board(pos2(x as f32, y as f32)))));
+                }
+            }
+        }
+    }
+    // Dans l'autre sens : l'encre de l'export dans ces cases, à sa place à l'écran.
+    let (mut vus_x, mut retrouves_x) = (0, 0);
+    for c in &l.cards {
+        let r = xf.rect(c.thumb).shrink(3.0).intersect(vue);
+        let (a, z) = (vers_export(xf.to_board(r.min)), vers_export(xf.to_board(r.max)));
+        for y in a.y as i32..z.y as i32 {
+            for x in a.x as i32..z.x as i32 {
+                if x < 0 || y < 0 || x as u32 >= export.width() || y as u32 >= export.height() {
+                    continue;
+                }
+                let v = export.get_pixel(x as u32, y as u32);
+                if v[0] as i32 - v[1] as i32 >= 40 && v[0] as i32 - v[2] as i32 >= 40 {
+                    vus_x += 1;
+                    let e = xf.to_screen(pos2(x as f32 / s + p.cadre.left(), y as f32 / s + p.cadre.top()));
+                    retrouves_x += usize::from((-3..=3).any(|j| (-3..=3).any(|i| encre_e(e.x as i32 + i, e.y as i32 + j))));
+                }
+            }
+        }
+    }
+    println!("ACCORD {nom} : écran {retrouves_e} sur {vus_e}, export {retrouves_x} sur {vus_x}");
+    (retrouves_e as f32 / vus_e.max(1) as f32, retrouves_x as f32 / vus_x.max(1) as f32)
+}
+
+/// L'export d'un plan à cadres montre ce que montre l'écran : cadres droits (rien n'y change) et cadres tournés (la case montre la feuille).
+#[test]
+fn the_export_of_a_plan_with_frames_shows_what_the_screen_shows() {
+    for v in [Variante::Temoin, Variante::Cadres, Variante::CadresZoom, Variante::CadresRoulis] {
+        let mut doc = des_plans(18, false);
+        for p in 0..doc.panels.len() {
+            doc.set_duration(p, 24);
+        }
+        let Some(mut b) = planche(doc, 6, 1.0) else { return println!("pas de carte graphique") };
+        b.app.brush.size = 28.0;
+        // Un dessin qui reste dans la case, sans trait qui traverse.
+        let r = case_ecran(&b, b.app.doc.panels[PLAN].id);
+        tracer(&mut b, r.left_top() + r.size() * 0.3, r.left_top() + r.size() * 0.7);
+        appliquer(&mut b, v, false);
+        b.chauffer(4);
+        b.attendre_vignettes();
+        b.app.select_panel(0);
+        repos(&mut b);
+        let (e, x) = accord_ecran_export(&mut b, &format!("{v:?}"));
+        assert!(e >= 0.98 && x >= 0.98, "{v:?} : écran {e}, export {x}");
+    }
+}
+
+/// Une copie d'un vrai projet (`FEANOR_PROJET_ESSAI`) : l'export et l'écran s'accordent, et quels plans passent par la feuille. (Mesure.)
+#[test]
+#[ignore]
+fn mesure_l_accord_ecran_export_sur_une_copie_d_un_vrai_projet() {
+    let Some(chemin) = std::env::var_os("FEANOR_PROJET_ESSAI") else { return };
+    let relu = crate::project::load(std::path::Path::new(&chemin)).expect("le projet s'ouvre");
+    let Some(mut b) = planche(relu.doc, 6, 1.0) else { return };
+    b.attendre_vignettes();
+    repos(&mut b);
+    let l = b.app.board_layout();
+    for (k, c) in l.cards.iter().enumerate() {
+        println!("CASE {k} plan {} : mouvement {}", c.panel, l.move_of(k).is_some());
+    }
+    let (e, x) = accord_ecran_export(&mut b, "vrai-projet");
+    println!("VRAI PROJET accord : écran {e}, export {x}");
+}
+
 // ------------------------------------------------------------------------------ tous les plans écartés
+
+/// Tout écarté : ce qui n'écrit pas dans le plan support reste possible.
+#[test]
+fn when_everything_is_cancelled_the_project_resolution_and_the_characters_still_work() {
+    let Some(mut b) = tout_ecarte(false) else { return println!("pas de carte graphique") };
+    let e = crate::projetui::ResolutionEdit { w: 1280, h: 720, fps: b.app.doc.fps, linked: true, scale: false, keep_seconds: true, interpolate: false };
+    b.app.apply_resolution(e);
+    assert_eq!(b.app.doc.frame, [1280, 720], "la résolution du projet change : {}", b.app.status);
+    assert!(b.app.perso_ajouter().is_some(), "un personnage de plus : {}", b.app.status);
+    assert!(b.app.doc.film_vide());
+    // Ce qui écrirait dans le support est refusé, et le message le dit sans parler de dessin.
+    let n = b.app.doc.panels[0].layers.len();
+    b.app.status.clear();
+    b.app.add_layer(crate::document::LayerKind::Bitmap);
+    assert_eq!(b.app.doc.panels[0].layers.len(), n);
+    println!("MESSAGE calque : {}", b.app.status);
+    assert!(b.app.status.contains("Tous les plans sont écartés") && !b.app.status.contains("rien ne se dessine"), "{}", b.app.status);
+}
+
+/// La Fiche ne montre ni n'écrit le plan support.
+#[test]
+fn when_everything_is_cancelled_the_sheet_says_so_too() {
+    let Some(mut b) = tout_ecarte(false) else { return println!("pas de carte graphique") };
+    let ctx = eframe::egui::Context::default();
+    let mut vu: Vec<String> = Vec::new();
+    for _ in 0..2 {
+        let out = ctx.run(eframe::egui::RawInput::default(), |c| {
+            eframe::egui::CentralPanel::default().show(c, |ui| b.app.panel_inspector(ui));
+        });
+        vu = out.shapes.iter().filter_map(|s| if let eframe::egui::epaint::Shape::Text(t) = &s.shape { Some(t.galley.job.text.clone()) } else { None }).collect();
+    }
+    assert!(vu.iter().any(|t| t.contains(crate::planannuleui::TEXTE_FILM_VIDE)), "{vu:?}");
+    assert!(!vu.iter().any(|t| t == "Dialogue"), "{vu:?}");
+}
 
 fn tout_ecarte(bitmap: bool) -> Option<Banc> {
     let mut b = planche(des_plans(3, bitmap), 3, 1.0)?;
@@ -739,7 +1225,7 @@ fn when_everything_is_cancelled_no_gesture_draws_in_the_placeholder() {
         // Une commande qui dessine dit pourquoi elle ne fait rien.
         b.app.status.clear();
         assert!(!b.app.layer_editable());
-        assert_eq!(b.app.status, crate::planannuleui::REFUS_DESSIN);
+        assert_eq!(b.app.status, crate::planannuleui::REFUS_SUPPORT);
         // Au Storyboard, et en animation.
         for mode in [crate::app::Mode::Storyboard, crate::app::Mode::Animation] {
             b.app.set_espace(crate::workspace::Espace::Storyboard);

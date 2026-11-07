@@ -15,7 +15,7 @@ use crate::project::{self, Loaded};
 use crate::verrous::Cible;
 
 /// Une application qui a ouvert un film partagé comme Anthony, et un poste d'essai pour Léa.
-fn app_partagee(nom: &str, n: usize) -> (Banc, Poste, Horloge, PathBuf) {
+pub(crate) fn app_partagee(nom: &str, n: usize) -> (Banc, Poste, Horloge, PathBuf) {
     let racine = fx::dossier(&format!("coop-ui-{nom}"));
     let manifeste = partager(&film(n), &racine);
     let h = Horloge::reglable(1_760_000_000_000);

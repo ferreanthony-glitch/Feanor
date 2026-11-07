@@ -8270,33 +8270,59 @@ Le plus long trou sur le trait, en pixels, avant puis après la correction, en v
 | Panoramique 11° | 141 ; 245 parti de la case | 266 ; 471 | 0 | 1 | **Reçoit** |
 | Cadres A et B, même zoom | 3 | 3 | 3 | 3 | Recevait déjà, inchangé |
 | Cadres A et B, autre zoom | 161 | 301 | 2 | 3 | **Reçoit** |
-| Cadres A et B tournés | 25 ; 2 parti de la case | 78 ; 73 | 21 ; 2 | 7 ; 2 | Recevait déjà. L'export ne montre plus l'image de A tournée dans la case. Les 21 pixels : le filet des cadres et son halo, qui croisent le trait presque à plat |
-| Calque verrouillé | 141 | 266 | 0 | 1 | **Refusé, visible** : rien n'est écrit, la part reste sur la planche, par-dessus la case. Le message le dit |
+| Cadres A et B tournés | 25 ; 2 parti de la case | 78 ; 73 | 2 | 2 | Recevait déjà. L'export ne montre plus l'image de A tournée dans la case. Mesure d'après : un trait de 28, à une hauteur où les filets des cadres le croisent de face (un trait fin, là où ils le croisent presque à plat : 21 pixels, filet et halo) |
+| Calque verrouillé | 141 | 266 | 0 | 1 | **Refusé, visible** : rien n'est écrit, la part reste sur la planche, par-dessus la case, hors du plan (choix d'Anthony, confirmé). Le message le dit |
 | Calque masqué | 169 | 323 | 0 | 1 | **Refusé, visible** (avant : écrite dans le calque masqué, sans qu'on la voie) |
 | Pas de calque de cette sorte | 141 | 266 | 0 | 1 | **Refusé, visible** |
 | Calque transformé | 141 | 266 | 0 | 1 | **Refusé, visible** |
 | Plan écarté | 0 | sans objet | 0 | absente de l'export | **Refusé, visible**, et elle reste visible si le plan est repris |
-| Film partagé, plan tenu par un autre | | | | | **Refusé, visible** : plus d'écriture dans un plan qu'on ne tient pas (d'après le code, pas d'essai) |
+| Film partagé, plan tenu par un autre | | | | | **Refusé, visible** : plus d'écriture dans un plan qu'on ne tient pas, ni dans un plan libre qu'on n'a pas pris (essai sur les données, pas de mesure en pixels) |
+| Caméra qui cadre très large, bitmap (plus de 1,5 million de lectures au lever) | 169 (part perdue) | | 0 | | **Refusé, visible** : la part reste sur la planche, le message le dit |
 
 Partout : une seule étape d'annulation, aucun rejeu sur le fil de l'interface (`replay_count` à zéro, du geste au repos), ce qui était déjà dessiné dans la case ne bouge pas d'un pixel, annuler rend les données d'avant. L'image du film montre la part d'un bord à l'autre de la case, à travers la caméra (essai).
 
 ### Comment
 
 - **`Pose`** : comment un dessin se pose sur la planche, quelle que soit la caméra, par une homographie et son inverse. Chaque point d'un trait vectoriel va à la même place de la planche, dans le dessin de la case qui le reçoit. La taille du pinceau suit son échelle, comme quand on transforme un trait. En perspective, le rejeu reprend l'appui d'après le rayon de chaque point.
-- **Bitmap** : les pixels du trait sont rééchantillonnés dans le dessin de la case (échantillonnage inverse, seul le trait est lu, jamais son dessin à elle). Même échelle et caméras droites : le décalage au pixel d'avant, rien ne change.
+- **Bitmap** : les pixels du trait sont rééchantillonnés dans le dessin de la case (échantillonnage inverse, seul le trait est lu, jamais son dessin à elle). Même échelle et caméras droites : le décalage au pixel d'avant, rien ne change. **Le dessin d'origine ne perd ses pixels qu'une fois sûr qu'ils ont une place ailleurs** : tout se calcule d'abord sans rien écrire. Si une case ne peut pas prendre sa part dans le budget du lever (`LECTURES_MAX`), elle passe aux refus et la part reste sur la planche.
 - **Parti d'une vue en perspective** : hors de la case, le trait du geste garde son épaisseur, alors que la feuille s'étire. Il la garde au lever (`Suivi::a`). En bitmap, ses pixels seraient trop minces : la part de la case voisine est un **trait lisse** (sans le moteur, donc sans le grain du pinceau).
 - **`Trace::dessus`** : la part refusée est attachée à sa case et peinte **après** les images, à l'écran comme à l'export, pleine (l'opacité « hors champ » ne la concerne pas). L'image d'une case refusée passe aussi avant la marge de sa voisine, comme toute image (partie 111).
-- **Le message** : la ligne d'état le dit dès que le trait entre dans la case (`horschamp_prevenir`, une fois par case), et encore au lever. Par exemple : « Plan 2 : le calque « Dessin » est verrouillé, ce bout du trait reste sur la planche, par-dessus la case, hors du plan ».
-- **Retirer une part refusée** : Ctrl+Z tout de suite ; plus tard, la **gomme** posée dessus l'efface d'un geste (le trait entier, comme sur la planche), sans agir dans la case et sans clic droit. Déverrouiller un calque ne fait pas entrer dans le plan une part déjà posée : retrace-la.
+- **Le message** : la ligne d'état le dit dès que le trait entre dans la case (`horschamp_prevenir`, une fois par case même si le trait y revient), et encore au lever. Par exemple : « Plan 2 : le calque « Dessin » est verrouillé, ce bout du trait reste sur la planche, par-dessus la case, hors du plan ». Si le trait est annulé en plein geste (Ctrl+Z), le message part. Échap, lui, n'annule pas un trait : il le pose tel quel, le message reste vrai.
+- **La planche pleine** (`MAX_TRACES`, 5000 traits) : on vérifie la place avant de toucher au dessin. Sans place, les parts restent dans le dessin du plan d'origine, hors de sa case, et le message le dit : « La planche a atteint sa limite de 5000 traits… ».
+- **Le calque « Hors cadres » caché** : une part neuve le remontre, sinon elle disparaîtrait au lever (le message le dit, annuler le recache). Une part cachée ne se gomme pas : la gomme ne trouve que ce qu'on voit.
+- **Retirer une part refusée** : Ctrl+Z tout de suite ; plus tard, la **gomme** posée dessus. **Ce geste n'efface que les parts posées par-dessus les cases qu'il touche** (chacune entière), ni le reste du trait sur le papier, ni les notes, ni le dessin du plan ; le geste suivant, au même endroit, efface le dessin du plan. Déverrouiller un calque ne fait pas entrer dans le plan une part déjà posée : retrace-la.
+
+### Le coût du lever
+
+Bitmap, trait à travers trois cases (pire image, sur le fil de l'interface, machine chargée par un autre chantier ; « rapport » : pixels du dessin d'arrivée par pixel du dessin d'origine).
+
+| Pinceau, rapport | Avant | Après |
+|---|---|---|
+| 14, rapport 2 | 89 ms | 22 ms |
+| 14, rapport 4 | 508 ms | 95 ms |
+| 14, rapport 8 | 2 368 ms | 6 ms, part sur la planche |
+| 14, rapport 16 | 13 543 ms | 6 ms, part sur la planche |
+| 14, rapport 25 | 62 057 ms | 7 ms, part sur la planche |
+| 14, rapport 33 et plus | 8 ms, **part perdue** | 7 ms, part sur la planche |
+| 60, rapport 2 | 325 ms | 68 ms |
+| 60, rapport 4 | 2 347 ms | 21 ms, part sur la planche |
+| 60, rapport 8 | 18 286 ms | 21 ms, part sur la planche |
+
+Un trait vectoriel n'a pas ce coût : ses points seuls changent, le rendu se fait en fond.
 
 ### Tous les plans écartés
 
-Le panneau Calques, les Réglages et les Effets disent « Tous les plans sont écartés. », comme la timeline. Tout ce qui changerait les dessins ou les calques est refusé avec un message (`content_refuses`, donc aussi `layer_editable`) : le plan support ne reçoit rien, ni par un trait sur la planche ou au Storyboard, ni par une commande. Un trait dans une case pâle crée toujours un vrai plan. La Fiche, elle, montre encore le texte du support (partie 115 : il peut en recevoir un).
+Le panneau Calques, les Réglages, les Effets et la Fiche disent « Tous les plans sont écartés. », comme la timeline. Ce qui écrirait dans le plan support est refusé (`content_refuses`, donc aussi `layer_editable`), avec un seul message, juste pour un dessin comme pour un calque : « Tous les plans sont écartés, il n'y a aucun plan où faire cela : reprends un plan dans les Vignettes, un clic sur son numéro ». Ce qui ne le touche pas passe par `contenu_verrouille` et reste possible : la résolution du projet, les personnages. Les notes de case aussi, mais sans objet ici : il n'y a plus de case dans le film. Un trait dans une case pâle crée toujours un vrai plan.
+
+### L'export des plans à cadres
+
+Un plan dont le cadre A n'est pas exactement la case (tourné, réduit) montre désormais à l'export la feuille, comme l'écran, et non l'image de A tournée dans la case. Cela change l'export de ces plans **même sans trait qui traverse** : voulu, l'export montre ce que montre l'écran. Un plan dont A est la case passe par le même code qu'avant. Mesure, encre de couleur des cases, à 3 pixels près : 100 % d'accord dans les deux sens pour sans cadres, cadres droits, autre zoom, cadres tournés, et sur une copie de `TEST PELURE_effets`.
 
 ### Ce qui reste
 
 - **Bitmap vers un autre zoom ou une autre caméra** : rééchantillonné, le trait est un peu plus doux que s'il avait été tracé là. **Bitmap parti d'une caméra en perspective** : trait lisse dans les cases voisines, sans le grain du pinceau.
-- **Dans la tuile d'un plan à cadres tournés**, tout trait fin est plus pâle (à cheval sur deux rangées de pixels), le trait d'avant compris. Remarqué, non corrigé : l'essai de cette variante lit le trait à un seuil plus bas.
+- **Dans la tuile d'un plan à cadres tournés**, un trait d'un pixel est plus pâle (à cheval sur deux rangées de pixels), le trait d'avant compris. Remarqué, non corrigé : l'essai de cette variante trace plus épais (28), au seuil d'encre normal et au même trou permis que les autres.
+- **Dans un film partagé**, un plan libre qu'on n'a pas pris refuse aussi la part (pas de prise automatique pendant la répartition).
 - **Export sans les cadres** d'un plan à cadres tournés : la case montre encore l'image de A, tournée, donc le trait y tourne avec elle. Non corrigé.
 - **Remarqué, non touché** : en bitmap, un pixel du trait qui recouvrait du dessin hors de la case d'origine ne passe pas à la case voisine (règle d'avant, `partager_bitmap`). Les formes d'un calque bitmap ne sont toujours pas réparties, et le message pendant le geste ne vaut que pour le pinceau et le crayon (au lever pour les formes vectorielles).
 
@@ -8304,9 +8330,9 @@ Le panneau Calques, les Réglages et les Effets disent « Tous les plans sont é
 
 1. Donne à un plan un zoom, puis un roulis, puis une bascule, puis un panoramique. Trace un long trait à travers sa case, puis un autre parti d'elle : au lever, rien ne saute ni ne disparaît. Ouvre le plan au Storyboard : le trait y est.
 2. Pareil en bitmap : le trait te paraît-il assez net dans la case à l'autre zoom ?
-3. Verrouille le calque d'un plan et trace à travers sa case : le trait reste, la ligne d'état dit pourquoi dès qu'il entre dans la case. Rien dans le plan au Storyboard. Pose la gomme sur le morceau : il part. Dis-moi si « par-dessus la case, hors du plan » te convient, ou si tu préfères qu'il prenne un autre calque du plan.
+3. Verrouille le calque d'un plan et trace à travers sa case : le trait reste, la ligne d'état dit pourquoi dès qu'il entre dans la case. Rien dans le plan au Storyboard. Pose la gomme sur le morceau : il part, et lui seul.
 4. Calque masqué, plan sans calque de la bonne sorte, calque transformé : pareil.
 5. Écarte un plan, trace à travers sa case, reprends le plan : le trait reste visible par-dessus. À l'export, il n'y est pas tant que le plan est écarté.
-6. Écarte tous les plans : Calques, Réglages, Effets disent « Tous les plans sont écartés. » Essaie de dessiner au Storyboard et sur les cases barrées : rien. Trace dans une case pâle : un plan naît.
+6. Écarte tous les plans : Calques, Réglages, Effets, Fiche disent « Tous les plans sont écartés. » Essaie de dessiner au Storyboard et sur les cases barrées : rien. Change la résolution du projet : ça marche. Trace dans une case pâle : un plan naît.
 7. Ctrl+Z défait tout le trait d'un coup ; enregistre, rouvre : même image. Export PNG et PDF de la planche.
 8. Le stylet réel n'a pas été essayé.

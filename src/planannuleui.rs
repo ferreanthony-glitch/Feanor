@@ -312,7 +312,7 @@ pub(crate) const TEXTE_FILM_VIDE: &str = "Tous les plans sont écartés.";
 /// Les entrées du clic droit.
 pub(crate) const MENU_ECARTER: &str = "Écarter ce plan";
 pub(crate) const MENU_REPRENDRE: &str = "Reprendre ce plan";
-/// Ce que répond une commande qui dessinerait dans le plan vide qui tient le film.
-pub(crate) const REFUS_DESSIN: &str = "Tous les plans sont écartés, rien ne se dessine : reprends un plan dans les Vignettes, un clic sur son numéro";
+/// Ce que répond une commande qui écrirait dans le plan vide qui tient le film (un dessin, un calque, une image, un effet).
+pub(crate) const REFUS_SUPPORT: &str = "Tous les plans sont écartés, il n'y a aucun plan où faire cela : reprends un plan dans les Vignettes, un clic sur son numéro";
 /// Ce qu'un export répond alors.
 pub(crate) const REFUS_EXPORT: &str = "Tous les plans sont écartés, rien à exporter ni à envoyer : reprends un plan dans les Vignettes, un clic sur son numéro";
