@@ -63,7 +63,8 @@ fn ce_qui_est_montre_est_ce_que_fait_ease() {
 #[test]
 fn une_poignee_n_existe_que_la_ou_il_y_a_un_mouvement_et_un_adouci() {
     let mut k = cles(&[0, 10, 30]);
-    assert!(lissage::poignees(&k).is_empty(), "sans adouci, aucune poignée");
+    // Sans adouci, les poignées sont là quand même, au repos (à 0), de chaque côté où la caméra bouge (Anthony, 2026-11-07).
+    assert_eq!(lissage::poignees(&k), [(0, Cote::Sortie, 0.0), (1, Cote::Entree, 0.0), (1, Cote::Sortie, 0.0), (2, Cote::Entree, 0.0)]);
     k[1].ease_in = 4.0;
     k[1].ease_out = 6.0;
     assert_eq!(poignee(&k, 1, Cote::Entree), Some(4.0));
@@ -79,9 +80,9 @@ fn une_poignee_n_existe_que_la_ou_il_y_a_un_mouvement_et_un_adouci() {
     seule[0].ease_out = 3.0;
     seule[0].smooth = true;
     assert!(lissage::poignees(&seule).is_empty());
-    // Ramener à 0 : la poignée disparaît.
+    // Ramener à 0 : la poignée reste, au repos.
     k[1].ease_out = 0.0;
-    assert_eq!(poignee(&k, 1, Cote::Sortie), None);
+    assert_eq!(poignee(&k, 1, Cote::Sortie), Some(0.0));
 }
 
 #[test]
@@ -97,7 +98,7 @@ fn adoucir_pose_des_valeurs_reelles_en_demi_intervalle_puis_retire_tout() {
     // Sur une clé déjà adoucie : tout part.
     assert_eq!(lissage::adoucir(&mut k, 1), Adouci::Retire);
     assert_eq!((k[1].ease_in, k[1].ease_out, k[1].smooth), (0.0, 0.0, false));
-    assert!(lissage::poignees(&k).is_empty());
+    assert!(lissage::poignees(&k).iter().all(|p| p.2 == 0.0), "toutes au repos");
     // Un côté seulement sur la première et la dernière clé.
     assert_eq!(lissage::adoucir(&mut k, 0), Adouci::Cree(0.0, 6.0));
     assert_eq!(lissage::adoucir(&mut k, 2), Adouci::Cree(9.0, 0.0));
@@ -135,7 +136,7 @@ fn une_poignee_ne_depasse_ni_la_cle_voisine_ni_la_poignee_d_en_face() {
     // Arrondi à l'image, jamais négatif.
     assert_eq!(lissage::regler(&mut k, 0, Cote::Sortie, 3.4), 3.0);
     assert_eq!(lissage::regler(&mut k, 0, Cote::Sortie, -5.0), 0.0);
-    assert_eq!(poignee(&k, 0, Cote::Sortie), None, "ramenée sur sa clé : la poignée disparaît");
+    assert_eq!(poignee(&k, 0, Cote::Sortie), Some(0.0), "ramenée sur sa clé : la poignée revient au repos");
 }
 
 #[test]
@@ -148,8 +149,8 @@ fn ramener_une_poignee_sur_sa_cle_rend_ce_cote_a_vitesse_constante() {
     for f in 10..=20 {
         assert!((t[f] - (100.0 + 10.0 * (f - 10) as f32)).abs() < 1e-3, "image {f} : {}", t[f]);
     }
-    assert_eq!(poignee(&k, 1, Cote::Sortie), None);
-    assert!(poignee(&k, 1, Cote::Entree).is_some(), "l'autre côté garde son lissage");
+    assert_eq!(poignee(&k, 1, Cote::Sortie), Some(0.0), "au repos");
+    assert!(poignee(&k, 1, Cote::Entree).is_some_and(|v| v > 0.0), "l'autre côté garde son lissage");
 }
 
 #[test]
@@ -284,7 +285,23 @@ fn la_priorite_est_a_la_cle_et_la_poignee_a_une_prise_plus_large_que_son_dessin(
     let xp2 = lissage::x_poignee(x_of(10), Cote::Sortie, 4.0, cell);
     assert_eq!(lissage::sous_pointeur(&k2, xp2, &x_of, cell, tol), Some((1, Cote::Sortie)));
     assert_eq!(lissage::sous_pointeur(&k2, xp2 + 6.0, &x_of, cell, tol), Some((1, Cote::Sortie)), "prise de 7 points, dessin de 3");
-    assert_eq!(lissage::sous_pointeur(&k2, xp2 + 9.0, &x_of, cell, tol), None);
+    // Plus loin : plus cette poignée ; là, c'est la poignée au repos de la clé suivante (à `repos` à gauche de la clé 20).
+    assert_eq!(lissage::sous_pointeur(&k2, xp2 + 9.0, &x_of, cell, tol), Some((2, Cote::Entree)));
+    assert!((lissage::x_poignee(x_of(20), Cote::Entree, 0.0, cell) - (x_of(20) - lissage::repos(cell))).abs() < 1e-6);
+    // Une poignée au repos se prend sans jamais prendre la clé : son repos est hors de la prise de la clé, sa propre prise comprise.
+    let k3 = cles(&[0, 10, 20]);
+    for cell in [4.0, 8.0, 12.0, 24.0] {
+        let x_of = |f: usize| 100.0 + (f as f32 + 0.5) * cell;
+        let tol = lissage::tol_cle(cell);
+        let xr = lissage::x_poignee(x_of(10), Cote::Sortie, 0.0, cell);
+        assert_eq!(lissage::sous_pointeur(&k3, xr, &x_of, cell, tol), Some((1, Cote::Sortie)), "cell {cell}");
+        assert_eq!(lissage::sous_pointeur(&k3, xr - lissage::PRISE + 0.5, &x_of, cell, tol), Some((1, Cote::Sortie)), "cell {cell} : le bord de la prise");
+        assert_eq!(lissage::sous_pointeur(&k3, x_of(10) + tol, &x_of, cell, tol), None, "cell {cell} : la clé passe avant");
+        // Tirée d'une image depuis le repos : une image, puis deux.
+        assert_eq!(lissage::images_voulues(x_of(10) + 1.0 * cell, x_of(10), Cote::Sortie, cell), 1.0);
+        assert_eq!(lissage::images_voulues(x_of(10) + 2.0 * cell, x_of(10), Cote::Sortie, cell), 2.0);
+        assert_eq!(lissage::images_voulues(x_of(10) + 1.0, x_of(10), Cote::Sortie, cell), 0.0, "ramenée près de la clé : 0");
+    }
 }
 
 #[test]
@@ -409,12 +426,64 @@ fn a_une_etape_nommee(b: &Banc, nom: &str) -> bool {
     b.app.history.names().0.iter().any(|n| *n == nom)
 }
 
+/// Les centres des poignées au repos (adouci nul : un rond plus petit, `RAYON_REPOS`) peintes par la dernière image, de gauche à droite.
+fn au_repos(b: &Banc) -> Vec<Pos2> {
+    fn chercher_repos(shape: &Shape, out: &mut Vec<Pos2>, fond: Color32) {
+        match shape {
+            Shape::Circle(c) if c.fill == fond && (c.radius - lissage::RAYON_REPOS).abs() < 0.01 => out.push(c.center),
+            Shape::Vec(v) => v.iter().for_each(|s| chercher_repos(s, out, fond)),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    for s in &b.formes {
+        chercher_repos(&s.shape, &mut out, crate::theme::rangee_sombre());
+    }
+    out.sort_by(|a, b| a.x.total_cmp(&b.x));
+    out
+}
+
+#[test]
+fn sans_lissage_les_poignees_attendent_au_repos_a_cote_des_cles_et_se_tirent() {
+    let mut b = banc_timeline();
+    let (cles, poignees) = vu(&b);
+    assert!(poignees.is_empty(), "aucune poignée réglée : {poignees:?}");
+    let repos = au_repos(&b);
+    let cell = 24.0;
+    let r = lissage::repos(cell);
+    // Quatre poignées au repos : à droite de la première clé, des deux côtés de la seconde, à gauche de la dernière.
+    assert_eq!(repos.len(), 4, "{repos:?}");
+    assert!((repos[0].x - (cles[0].x + r)).abs() < 0.6 && (repos[1].x - (cles[1].x - r)).abs() < 0.6);
+    assert!((repos[2].x - (cles[1].x + r)).abs() < 0.6 && (repos[3].x - (cles[2].x - r)).abs() < 0.6);
+    assert!(repos.iter().all(|p| (p.y - cles[1].y).abs() < 0.6), "sur la piste de caméra");
+    // Tirer celle de droite de la clé 12 jusqu'à 5 images : le lissage de sortie est posé, en une étape, et la poignée est réglée.
+    let etapes = b.app.history.undo_len();
+    glisser(&mut b, repos[2], pos2(cles[1].x + 5.0 * cell, cles[1].y));
+    let k = cles_du_plan(&b);
+    assert_eq!((k[1].ease_in, k[1].ease_out, k[1].smooth), (0.0, 5.0, false));
+    assert_eq!(b.app.history.undo_len(), etapes + 1);
+    assert!(a_une_etape_nommee(&b, "Régler le lissage de la caméra"));
+    assert!(b.app.cam_keys_drag.is_none() && b.app.cam_key_sel.is_empty(), "la clé n'a pas été prise");
+    let (cles, poignees) = vu(&b);
+    assert_eq!(poignees.len(), 1, "{poignees:?}");
+    assert!((poignees[0].x - (cles[1].x + 5.0 * cell)).abs() < 0.6);
+    assert_eq!(au_repos(&b).len(), 3, "les trois autres attendent toujours");
+    // Ramenée sur sa clé : elle revient au repos.
+    glisser(&mut b, poignees[0], pos2(cles[1].x + 2.0, cles[1].y));
+    assert_eq!(cles_du_plan(&b)[1].ease_out, 0.0);
+    assert!(vu(&b).1.is_empty() && au_repos(&b).len() == 4);
+    // Un plan à une seule clé : aucune poignée, même au repos.
+    b.app.doc.panels[0].camera = cles_seules();
+    b.chauffer(3);
+    assert!(vu(&b).1.is_empty() && au_repos(&b).is_empty());
+}
+
 #[test]
 fn le_bouton_adoucir_fait_apparaitre_les_poignees_et_les_retire() {
     let mut b = banc_timeline();
     let (cles0, poignees0) = vu(&b);
     assert_eq!(cles0.len(), 3, "trois losanges : {cles0:?}");
-    assert!(poignees0.is_empty(), "sans lissage, pas de poignée : {poignees0:?}");
+    assert!(poignees0.is_empty(), "sans lissage, pas de poignée réglée : {poignees0:?}");
     let cell = (cles0[1].x - cles0[0].x) / 12.0;
     assert!((cell - 24.0).abs() < 0.6, "24 points par image : {cell}");
     let etapes = b.app.history.undo_len();

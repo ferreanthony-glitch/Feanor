@@ -8338,3 +8338,25 @@ connaît ni l'écran ni l'application : ses essais sont des nombres.
 6. Prends le Pinceau : plus de chemin ; reprends la Trajectoire : il est là. Enregistre, rouvre : il est là.
 7. Timeline : seuls les jalons se voient, reliés. Glisse une clé à la main : la trajectoire se détache, le message le dit, les clés restent.
 8. Vignettes : l'outil est refusé, comme les autres outils hors des quatre.
+
+## 120. Les poignées de lissage de la caméra attendent à côté de chaque clé (2026-11-07, branche `trajectoire`)
+
+Anthony : « Concernant la caméra. Un mouvement crée immédiatement des clés de lissage visibles sur la timeline, il suffit de les étirer ensuite
+pour leur donner de l'effet. » Jusqu'ici (partie 117), une poignée n'existait que pour un adouci plus grand que 0 : il fallait passer par
+le bouton « Adoucir » avant de pouvoir tirer quoi que ce soit. Code : `lissage.rs` (`poignees`, `repos`, `tol_cle`, `x_poignee`, `peindre`),
+`timeline.rs` (la prise, par `tol_cle`). Essais : `lissage_camera_tests.rs` (deux essais de plus, deux retouchés). **Rien ne change dans le
+projet.**
+
+- **Dès qu'un mouvement existe** (deux clés de caméra au moins), chaque clé montre ses poignées de chaque côté où la caméra bouge, **même à
+  0** : la poignée **au repos** est un rond plus petit et plus pâle, sans trait, posé juste à côté de sa clé, hors de la prise de la clé. La
+  première clé n'en a qu'à droite, la dernière qu'à gauche ; une clé seule n'en a pas.
+- **La tirer** règle l'adouci comme avant (à l'image près, en direct, une étape « Régler le lissage de la caméra ») : la poignée part du repos et
+  se pose là où l'adouci finit, avec son trait. **La ramener près de la clé** remet ce côté à 0 : elle revient au repos (elle ne disparaît plus).
+  La timeline et le montage sont pareils.
+- **Le repos** est à `prise de la clé + 7 points` de la clé (`repos`) : un appui dessus ne prend jamais la clé, et un appui sur la clé prend la
+  clé. Un adouci trop court pour sortir de la prise de la clé à ce zoom (une image à faible zoom) se dessine au repos lui aussi ; la ligne d'état
+  dit sa vraie durée, et zoomer la montre à sa place.
+- Le bouton « Adoucir » garde son sens (pose des demi-intervalles, ou retire tout) ; les champs des réglages aussi.
+
+À vérifier à l'écran : un plan à deux clés de caméra, sans lissage : deux petits ronds pâles attendent à côté des clés ; tire celui de droite
+de la première clé, la caméra ralentit au départ ; ramène-le, il revient au repos. Même chose dans le montage.
