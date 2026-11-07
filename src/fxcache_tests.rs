@@ -45,6 +45,39 @@ fn the_reserve_is_limited_in_bytes_and_lets_the_oldest_go() {
     assert!(big.cache.contains_key(&9));
 }
 
+/// Un dessin dont `dehors` tuiles sont hors de la feuille (le dérivé d'un calque qui déborde, partie 118).
+fn cel_hors_feuille(dehors: usize) -> Arc<Cel> {
+    let mut c = Cel::new(64 * 8, 64, LayerKind::Bitmap);
+    c.raster.tile_mut(0)[0] = Color32::BLACK;
+    for k in 0..dehors {
+        c.raster.tile_mut(crate::raster::outer_id(100 + k as i32, 0))[0] = Color32::BLACK;
+    }
+    Arc::new(c)
+}
+
+#[test]
+fn what_is_beyond_the_sheet_counts_in_the_reserve_at_insertion_replacement_and_eviction() {
+    assert_eq!(cel_bytes(&cel_hors_feuille(3)), 4 * TILE_BYTES, "les tuiles hors de la feuille pèsent comme les autres");
+    let mut st = State::new();
+    let limit = 10 * TILE_BYTES;
+    insert_within(&mut st, 1, 0, cel_hors_feuille(3), None, limit);
+    insert_within(&mut st, 2, 0, cel_hors_feuille(3), None, limit);
+    assert_eq!((st.cache.len(), st.bytes), (2, 8 * TILE_BYTES));
+    // Le remplacement rend le poids de l'ancien.
+    insert_within(&mut st, 2, 1, cel_hors_feuille(1), None, limit);
+    assert_eq!((st.cache.len(), st.bytes), (2, 6 * TILE_BYTES));
+    // La réserve dépassée : le plus ancien part, et son poids avec lui.
+    insert_within(&mut st, 3, 0, cel_hors_feuille(7), None, limit);
+    assert!(!st.cache.contains_key(&1), "le plus ancien part");
+    assert_eq!(st.bytes, 10 * TILE_BYTES, "les octets suivent");
+    assert_eq!(st.bytes, st.cache.values().map(|e| cel_bytes(&e.cel)).sum::<usize>());
+    // La réserve d'un fil d'export : pareil.
+    let mut p = Privee { cache: BTreeMap::new(), bytes: 0, limit, image_from: u64::MAX };
+    p.insert(1, 0, cel_hors_feuille(7));
+    p.insert(2, 0, cel_hors_feuille(7));
+    assert_eq!((p.cache.len(), p.bytes), (1, 8 * TILE_BYTES));
+}
+
 #[test]
 fn a_drawing_used_again_is_kept_over_an_older_one() {
     let mut st = State::new();

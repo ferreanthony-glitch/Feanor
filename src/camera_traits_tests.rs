@@ -1,4 +1,4 @@
-//! Les traits d'un plan à mouvement de caméra (partie 117), **vus en pixels** : plan 6 d'une planche, cadre B posé par le geste des Vignettes,
+//! Les traits d'un plan à mouvement de caméra (partie 118), **vus en pixels** : plan 6 d'une planche, cadre B posé par le geste des Vignettes,
 //! de longs traits à travers A et B ; ce que montrent la case au repos et le canevas du Storyboard. La cause : les effets du calque (le tremblement par
 //! défaut, sur tout calque vectoriel) ne rendaient que la feuille, ce qui la dépassait disparaissait de l'image dérivée (`fx::effets_hors_de_la_feuille`).
 
@@ -435,6 +435,216 @@ fn a_stroke_effect_on_a_drawing_beyond_the_sheet_does_not_cut_it() {
     let out = crate::fx::apply_with(&raster, Some(&v), &[crate::fx::FxStep { kind: crate::fx::EffectKind::StrokeWave, values: e.values.clone() }], 0);
     let encre = (140..160).any(|y| out.get_i(900, y).a() > 0);
     assert!(encre, "le trait au-delà de la feuille reste");
+}
+
+/// Un effet de couleur traite aussi ce qui dépasse : pas de tuile brute (le rouge du dessin) hors de la feuille.
+#[test]
+fn a_colour_effect_treats_what_is_beyond_the_sheet_too() {
+    let r = bande(640, 320);
+    let e = crate::fx::Effect::new(crate::fx::EffectKind::BlackWhite);
+    let out = crate::fx::apply(&r, &[crate::fx::FxStep { kind: crate::fx::EffectKind::BlackWhite, values: e.values.clone() }]);
+    let c = out.get_i(760, 105);
+    assert!(c.a() > 0 && (c.r() as i32 - c.g() as i32).abs() < 8, "gris, et non le rouge d'origine : {c:?}");
+}
+
+// ------------------------------------------------------------------------------ l'aperçu réduit
+
+/// Défiler au Storyboard, vu de loin : l'aperçu réduit (`fx::draft_level`) ne recoupe le trait à aucune image, effets sur la carte graphique ou non.
+#[test]
+fn scrubbing_far_away_never_cuts_the_stroke_again() {
+    for sur_la_carte in [true, false] {
+        let Some(Scene { mut b, feuille, .. }) = scene(false, true, 1.17, 0.5) else { return println!("pas de carte graphique") };
+        au_storyboard(&mut b, PLAN);
+        if let Some(g) = &b.app.gpu {
+            g.set_effects_gpu(sur_la_carte);
+        }
+        let (e0, e1) = (ecran_du_storyboard(&b, feuille.0), ecran_du_storyboard(&b, feuille.1));
+        assert!(crate::fxproxy::level_for_zoom(b.app.view.zoom) > 0, "vu de loin : l'aperçu est réduit");
+        entier(&mut b, e0, e1, "avant de defiler");
+        let mut pire = 0;
+        for k in 0..60 {
+            b.app.cur_frame = k % b.app.frame_count();
+            b.image(Vec::new(), 1.0 / 60.0);
+            let r = relever(&b.capturer().unwrap(), e0, e1);
+            if r.trou > pire {
+                pire = r.trou;
+                sauver(&b.capturer().unwrap(), &format!("defile-{sur_la_carte}"));
+            }
+        }
+        println!("TRAIT défilement, effets sur la carte {sur_la_carte} : pire trou {pire}");
+        assert!(pire <= TROU_PERMIS, "effets sur la carte {sur_la_carte} : un trou de {pire} pixels en défilant");
+    }
+}
+
+/// La tuile qui se refait pendant que l'aperçu réduit du même dessin existe : elle ne le prend pas pour remplaçant, il n'a rien hors de la feuille.
+#[test]
+fn a_thumbnail_waiting_for_its_effect_does_not_use_a_reduced_preview_without_the_overflow() {
+    let Some(Scene { b, feuille, .. }) = scene(false, true, 1.17, 0.5) else { return println!("pas de carte graphique") };
+    let doc = &b.app.doc;
+    let f = doc.panels[PLAN].frame_count() - 1;
+    // Une autre variante pour le dérivé réduit et pour la vignette : seul le remplaçant est en jeu.
+    let plan = crate::render::panel_plan_at(doc, PLAN, f, Some(doc.paper));
+    let item = plan.items.iter().find(|i| !i.fx.is_empty()).expect("le tremblement");
+    let debut = std::time::Instant::now();
+    while !crate::fx::display(doc, item, 1).is_some_and(|d| d.ready && d.cel.raster.width < doc.width) {
+        assert!(debut.elapsed() < std::time::Duration::from_secs(20), "l'aperçu réduit arrive");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let autre = crate::render::panel_plan_at(doc, PLAN, 3, Some(doc.paper));
+    let cam = doc.panel_camera(PLAN, f);
+    let (img, _) = crate::fxcache::soft_scope(|| crate::render::thumbnail(doc, &autre, &cam, 960, 540));
+    let c0 = cam.corners(doc.frame)[0];
+    // Le bout du trait, dans le cadre B, au-delà du bord de la feuille.
+    let d = (feuille.1 - feuille.0).normalized();
+    let (mut vus, mut encre) = (0, 0);
+    for k in 0..((feuille.1 - feuille.0).length() as i32) {
+        let p = feuille.0 + d * k as f32;
+        if p.x <= doc.width as f32 + 30.0 {
+            continue;
+        }
+        let q = (p - c0.to_vec2()) * 0.5;
+        if q.x < 8.0 || q.y < 8.0 || q.x > 950.0 || q.y > 530.0 {
+            continue;
+        }
+        vus += 1;
+        encre += usize::from((-8..=8).any(|j| {
+            let c = img.pixels[(q.y as i32 + j) as usize * 960 + q.x as usize];
+            c.r() as i32 - c.g() as i32 > 30
+        }));
+    }
+    println!("TRAIT vignette en attente : {encre} sur {vus}");
+    assert!(vus > 200 && encre * 100 >= vus * 98, "le trait au-delà de la feuille : {encre} pixels d'encre sur {vus}");
+}
+
+// ------------------------------------------------------------------------------ l'encoche au bord de la feuille
+
+/// (colonnes de la feuille, le long du bord, où la bande perd de l'encre ; la plus grande perte de couverture, sur 255).
+fn encoche(out: &crate::raster::Raster, w: i64, attendu: &crate::raster::Raster) -> (usize, i32) {
+    let (mut colonnes, mut pire) = (0, 0);
+    for x in (w - 8)..w {
+        let somme = |r: &crate::raster::Raster| (70..142).map(|y| r.get_i(x, y).a() as i32).sum::<i32>();
+        let perte = somme(attendu) - somme(out);
+        colonnes += usize::from(perte > 255);
+        pire = pire.max(perte);
+    }
+    (colonnes, pire)
+}
+
+fn grande_bande(w: usize) -> crate::raster::Raster {
+    let mut grande = crate::raster::Raster::new(w * 2, 320);
+    for x in (w - 300)..(w + 200) {
+        for y in 100..112usize {
+            let t = grande.tile_index_of(x, y);
+            grande.tile_mut(t)[(y % crate::raster::TILE) * crate::raster::TILE + x % crate::raster::TILE] = Color32::from_rgb(200, 30, 40);
+        }
+    }
+    grande
+}
+
+/// Le tremblement seul : côté feuille non plus, le trait n'a pas d'encoche à son bord, et un dessin qui reste dans la feuille ne change pas d'un pixel.
+#[test]
+fn the_tremble_leaves_no_notch_on_the_sheet_side() {
+    let (w, h) = (640, 320);
+    for intensite in [0.5f32, 3.0, crate::tremblement::MAX_INTENSITY] {
+        // (Plusieurs graines : le champ ne pousse pas vers le bord partout.)
+        let (mut colonnes, mut pire, mut avant) = (0, 0, 0);
+        for graine in 1..=24 {
+            let mut valeurs = crate::tremblement::Defaut { actif: true, intensite, graine, ..Default::default() }.values();
+            valeurs.push(0.0);
+            let steps = [crate::fx::FxStep { kind: crate::fx::EffectKind::Boil, values: valeurs.clone() }];
+            let out = crate::fx::apply(&bande(w, h), &steps);
+            let attendu = crate::tremblement::boil(&grande_bande(w), &valeurs, 0);
+            let (c, p) = encoche(&out, w as i64, &attendu);
+            colonnes = colonnes.max(c);
+            pire = pire.max(p);
+            avant = avant.max(encoche(&crate::tremblement::boil(&bande(w, h), &valeurs, 0), w as i64, &attendu).1);
+            // Sans débord : la feuille seule, comme toujours.
+            let mut seule = bande(w, h);
+            seule.outer.clear();
+            let (avec, ancien) = (crate::fx::apply(&seule, &steps), crate::tremblement::boil(&seule, &valeurs, 0));
+            assert!(avec.tiles.iter().zip(&ancien.tiles).all(|(a, b)| match (a, b) {
+                (Some(a), Some(b)) => a[..] == b[..],
+                (None, None) => true,
+                _ => false,
+            }));
+        }
+        println!("ENCOCHE intensité {intensite} : perte de couverture sans la bande du bord {avant}, avec {pire} (une colonne pleine : 12 x 255 = 3060), {colonnes} colonnes");
+        // (Quelques unités : l'arrondi du champ calculé depuis une autre origine.)
+        assert!(colonnes == 0 && pire <= 8, "intensité {intensite} : {colonnes} colonnes, perte {pire}");
+        assert!(avant > 20 * pire.max(1), "l'essai voit bien l'encoche du calcul de la feuille seule : {avant}");
+    }
+}
+
+/// À l'écran, effets sur la carte graphique ou non : ce qui reste d'encre, colonne par colonne, autour du bord de la feuille, vu de près. (Mesure.)
+#[test]
+#[ignore]
+fn mesure_encoche_a_l_ecran() {
+    for intensite in [0.0f32, 0.5, 3.0] {
+        for sur_la_carte in [true, false] {
+            let Some(Scene { mut b, feuille, .. }) = scene(false, intensite > 0.0, 2.2, 0.1) else { return };
+            b.app.settings.tremblement_defaut.intensite = intensite;
+            au_storyboard(&mut b, PLAN);
+            if let Some(g) = &b.app.gpu {
+                g.set_effects_gpu(sur_la_carte);
+                println!("ENCOCHE effets possibles sur la carte : {}", g.effects_supported());
+            }
+            // Le point où le trait passe le bord de la feuille, au milieu du canevas, grossi 4 fois.
+            let w = b.app.doc.width as f32;
+            let t = (w - feuille.0.x) / (feuille.1.x - feuille.0.x);
+            let bord = feuille.0 + (feuille.1 - feuille.0) * t;
+            b.app.view.zoom = 4.0;
+            b.app.view.pan = vec2(0.0, 0.0);
+            let s = ecran_du_storyboard(&b, bord);
+            b.app.view.pan = b.app.canvas_rect.center() - s;
+            b.chauffer(4);
+            for _ in 0..120 {
+                b.image(Vec::new(), 1.0 / 60.0);
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            let img = b.capturer().unwrap();
+            sauver(&img, &format!("encoche-{intensite}-{sur_la_carte}"));
+            let c = b.app.canvas_rect.center();
+            let colonne = |x: i32| (-30..=30).map(|y| crate::traits_continus_tests::px(&img, x, c.y as i32 + y)).map(|v| (v[0] - v[1]).max(0)).sum::<i32>();
+            let valeurs: Vec<i32> = (-24..=24).step_by(2).map(|d| colonne(c.x as i32 + d)).collect();
+            println!("ENCOCHE ÉCRAN intensité {intensite} carte {sur_la_carte} : {valeurs:?}");
+        }
+    }
+}
+
+// ------------------------------------------------------------------------------ le coût
+
+/// Un trait perdu très loin : temps et mémoire de chaque effet. (Mesure.)
+#[test]
+#[ignore]
+fn mesure_le_cout_d_un_trait_perdu_tres_loin() {
+    let (w, h) = (3840, 2160);
+    let sur_la_feuille = {
+        let mut s = bande(w, h);
+        s.outer.clear();
+        s
+    };
+    let tile = crate::raster::TILE as i32;
+    // Un point perdu : le rectangle du hors-feuille va de la feuille jusqu'à lui.
+    for loin in [8_000, 10_800, 30_000] {
+        let mut r = bande(w, h);
+        r.tile_mut(crate::raster::outer_id(loin / tile, loin / tile))[0] = Color32::from_rgb(200, 30, 40);
+        for kind in [crate::fx::EffectKind::Boil, crate::fx::EffectKind::GaussianBlur, crate::fx::EffectKind::Glow, crate::fx::EffectKind::BlackWhite] {
+            let e = crate::fx::Effect::new(kind);
+            let mut values = e.values.clone();
+            if kind == crate::fx::EffectKind::Boil {
+                values[0] = 0.5;
+                values.push(0.0);
+            }
+            let steps = [crate::fx::FxStep { kind, values }];
+            let t = std::time::Instant::now();
+            let _ = crate::fx::apply(&sur_la_feuille, &steps);
+            let feuille_ms = t.elapsed().as_millis();
+            let avant = crate::lourd_tests::memoire_pic();
+            let t = std::time::Instant::now();
+            let out = crate::fx::apply(&r, &steps);
+            println!("COUT point à {loin} {kind:?} : feuille seule {feuille_ms} ms ; avec le point {} ms ; pic du processus {avant:.0} puis {:.0} Mo ; tuiles hors feuille {}", t.elapsed().as_millis(), crate::lourd_tests::memoire_pic(), out.outer.len());
+        }
+    }
 }
 
 // ------------------------------------------------------------------------------ à regarder (FEANOR_CAPTURE_DIR)

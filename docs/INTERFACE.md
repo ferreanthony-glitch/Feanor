@@ -7820,7 +7820,7 @@ reste une étape d'annulation au plus, et aucun ne touche un dessin hors de son 
     (clic droit sur le fond) : la largeur seule, comme avant.
 11. Rien n'a bougé : un trait, Ctrl+Z, un trait entre deux cases, enregistrer, rouvrir : comme avant ; au repos, rien ne se repeint.
 
-## 117. Les traits coupés au bord de la feuille dans un plan à mouvement de caméra (2026-11-07, branche `camera-traits`)
+## 118. Les traits coupés au bord de la feuille dans un plan à mouvement de caméra (2026-11-07, branche `camera-traits`)
 
 Le réalisateur : « toujours des bugs d'affichage avec les mouvements de caméra depuis les vignettes », puis : « quand je dessine dans la zone les traits coupés réapparaissent, puis redisparaissent une fois le stylet levé ». Fichiers : `fx.rs` (`apply_with`, `un_effet`, `effets_hors_de_la_feuille`, `suit_la_toile`), `tremblement.rs` (`boil_depuis`). Essais : `camera_traits_tests.rs`. **Le format de projet ne change pas** (47).
 
@@ -7846,11 +7846,18 @@ La feuille fait deux fois le cadre : A étant centré, son bord droit est à 1,5
 
 À gauche, Storyboard : 96 puis 1 (les Vignettes de la mesure d'avant passaient hors du panneau : non comparable). Film, cadre B : 1008 pixels manquants puis 0. Planche exportée : 277 puis 4. La suite du stylet, sans correction : 85 au repos, 6 stylet baissé, 6 juste levé, 85 au repos d'après ; avec : 6 partout. Les trous restants sont les filets bleus des cadres, peints par-dessus le trait (ils y sont aussi sans effet, en bitmap).
 
+### Mémoire et aperçus
+
+- **Le cache des effets compte ce qui dépasse de la feuille** (`fxcache::cel_bytes`). Avant, ces tuiles ne pesaient rien : le cache pouvait dépasser sa réserve sans rien lâcher, puisque le dérivé garde maintenant le débord.
+- **Une vignette en attente ne prend plus un aperçu réduit pour remplaçant** quand le dessin déborde (`fx::display_with`) : l'aperçu n'a rien hors de la feuille, le trait y était coupé (0 pixel d'encre sur 1027, puis 1027 sur 1027). Elle montre le dessin sans effet le temps du calcul. Le Storyboard n'est pas concerné : son hors-feuille se compose toujours en pleine résolution (`monde.rs`).
+
 ### Limites
 
 - Les effets réglés par rapport à la feuille (onde, ondulation, tourbillon, pincement, nuages, éclairage, dégradé, flash, impact, secousse, vignettage, aberration) ne s'appliquent pas au-delà d'elle : le trait y reste tel quel, entier.
 - Un effet du trait qui transforme chaque trait (ondulation du trait, pointillés…) ne se calcule que sur la feuille : au-delà, le trait reste sans cet effet. Avec Écriture ou Poussière, il n'est pas montré au-delà de la feuille.
-- Au-delà de 134 millions de pixels de hors-feuille, le dessin reste sans ses effets.
+- **Une cassure reste au bord de la feuille** avec Secousse, Onde, Vignettage et les autres effets réglés par rapport à elle, et avec les effets du trait : d'un côté l'effet, de l'autre le trait sans effet. C'est voulu : mieux vaut cela qu'un trait coupé.
+- Le flou, la lueur et les autres effets qui lisent tout leur rectangle ne s'appliquent plus hors de la feuille au-delà de 33 millions de pixels (un point perdu très loin), et le trait y reste entier, sans eux. Le tremblement et les réglages de couleur n'ont pas cette borne. Mesures du calcul à part, sans cette borne, avec un point perdu : flou à 8 000 pixels 170 ms, à 10 800 pixels 363 ms et 507 Mo de plus au pic.
+- **Encoche côté feuille.** Le tremblement seul, calculé sur processeur, n'en a plus (les tuiles du bord viennent du calcul à part ; un dessin sans débord ne change pas d'un pixel). **Sur la carte graphique, elle reste** : le shader ne lit que la feuille. Une seule colonne de pixels de la feuille, plus claire de 4,5 % à l'intensité 0,5 (son réglage) et de 24 % à l'intensité 3. Non corrigé : il faudrait passer ces calques par le calcul de fond (plus de mémoire, plus de calcul à chaque variante).
 - **Autre cause, non traitée ici** : une part de trait reste cachée sous l'image d'une case dont la caméra a un autre zoom, un roulis, une bascule, un panoramique, ou dont le calque est verrouillé (`cases_qui_recoivent` les refuse, partie 111).
 
 ### Le badge 12 et le petit carré
