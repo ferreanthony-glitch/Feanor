@@ -431,7 +431,9 @@ pub fn boil_depuis(raster: &Raster, values: &[f32], level: u8, origine: (i64, i6
                 for x in 0..tw {
                     let (px, py) = ((ox + x) as f32 + 0.5, (oy + y) as f32 + 0.5);
                     let [dx, dy, n] = lattice.at(&field, mx + px * k, my + py * k);
-                    let mut c = crate::fxwarp::sample(raster, px + dx / k, py + dy / k);
+                    // (Le point lu est arrondi dans le monde, puis ramené dans l'image : un calcul d'une autre origine lit exactement le même point.)
+                    let (sx, sy) = if level == 0 { (mx + px + dx - mx, my + py + dy - my) } else { (px + dx / k, py + dy / k) };
+                    let mut c = crate::fxwarp::sample(raster, sx, sy);
                     if thick > 0.0 && c[3] >= 1.0 && c[3] < 254.5 {
                         c = thickened(c, thick, n);
                     }

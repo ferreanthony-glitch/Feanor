@@ -479,6 +479,8 @@ struct CanvasResources {
     fx_enabled: bool,
     /// Les chaînes de passes à exécuter à la prochaine composition (`sync` les pose).
     fx_jobs: Vec<FxJob>,
+    /// L'encre autour de la feuille lue par le tremblement (`gpufx::Bordure`), par texture de résultat.
+    bordures: HashMap<CelId, BordureGardee>,
     /// Passes d'effets dessinées, pour les mesures.
     fx_passes: u64,
 }
@@ -520,6 +522,62 @@ struct FxJob {
     out: CelId,
     chain: std::sync::Arc<crate::gpufx::Chain>,
     sig: u64,
+    bordure: Option<wgpu::TextureView>,
+}
+
+/// Une bordure d'encre envoyée à la carte, pour tel dessin à telle version : refaite seulement quand il change.
+struct BordureGardee {
+    source: CelId,
+    version: u64,
+    m: i32,
+    /// La préparation d'écran qui s'en est servie la dernière.
+    vue: u64,
+    /// La bordure et sa texture, et l'empreinte de ses pixels ; rien : pas d'encre autour de la feuille.
+    faite: Option<(crate::gpufx::Bordure, wgpu::TextureView, u64)>,
+}
+
+/// Bordures gardées, au plus : les plus anciennes partent (une bordure se refait en une milliseconde, et tout un épisode de dessins qui débordent ne doit rien tenir en mémoire vidéo).
+const BORDURES_MAX: usize = 32;
+
+/// La bordure du dessin `cel` pour la texture de résultat `out`, sur `m` pixels : celle qu'on a, ou une nouvelle si le dessin a changé.
+#[allow(clippy::too_many_arguments)]
+fn bordure_de(rs: &RenderState, res: &mut CanvasResources, out: CelId, src: CelId, cel: &crate::document::Cel, m: i32, tick: u64) -> Option<(crate::gpufx::Bordure, wgpu::TextureView, u64)> {
+    // (À chaque image, pour chaque calque qui tremble : d'abord ce qu'on sait déjà de cette version du dessin.)
+    if let Some(g) = res.bordures.get_mut(&out) {
+        if g.source == src && g.version == cel.version && g.m == m {
+            g.vue = tick;
+            return g.faite.clone();
+        }
+    }
+    if res.bordures.len() >= BORDURES_MAX && !res.bordures.contains_key(&out) {
+        if let Some(k) = res.bordures.iter().min_by_key(|(_, g)| g.vue).map(|(&k, _)| k) {
+            res.bordures.remove(&k);
+        }
+    }
+    let bordure = if cel.raster.deborde_vite() { crate::gpufx::Bordure::de(&cel.raster, m) } else { None };
+    let faite = bordure.map(|(b, px)| {
+        let texture = rs.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("effets : bordure d'encre"),
+            size: wgpu::Extent3d { width: b.w as u32, height: b.h as u32, depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: crate::gpufx::FORMAT,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        rs.queue.write_texture(
+            texture.as_image_copy(),
+            &px,
+            wgpu::TexelCopyBufferLayout { offset: 0, bytes_per_row: Some(b.w as u32 * 4), rows_per_image: Some(b.h as u32) },
+            wgpu::Extent3d { width: b.w as u32, height: b.h as u32, depth_or_array_layers: 1 },
+        );
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        std::hash::Hash::hash(&px, &mut h);
+        (b, texture.create_view(&Default::default()), std::hash::Hasher::finish(&h))
+    });
+    res.bordures.insert(out, BordureGardee { source: src, version: cel.version, m, vue: tick, faite: faite.clone() });
+    faite
 }
 
 /// Les textures de dessin d'un projet qui n'est pas affiché (un onglet inactif, `onglets.rs`).
@@ -742,6 +800,7 @@ impl GpuCanvas {
             gpufx: crate::gpufx::GpuFx::try_new(device, &rs.queue),
             fx_enabled: true,
             fx_jobs: Vec::new(),
+            bordures: HashMap::new(),
             fx_passes: 0,
         });
         // Le budget de mémoire vidéo du système, lu sur un autre fil (`memoirevideo.rs`).
@@ -1042,7 +1101,9 @@ impl GpuCanvas {
             };
             let nth = seen.iter().filter(|&&c| c == item.cel).count();
             seen.push(item.cel);
-            if let Some(out) = place_fx(rs, res, item, nth, sheet, tick, &mut bytes) {
+            // (Ce que le tremblement lit autour de la feuille : le dessin qui part à la carte.)
+            let lu = displays[i].as_ref().map(|d| &*d.cel);
+            if let Some(out) = place_fx(rs, res, item, lu, nth, sheet, tick, &mut bytes) {
                 resolved[i] = Some(out);
             }
         }
@@ -1455,7 +1516,7 @@ fn compose_span(
             let Some(chain) = crate::gpufx::plan_chain(steps, input, sheet) else { continue };
             drop(pass);
             let source = frame.texture.create_view(&Default::default());
-            leased = fx.run(device, queue, encoder, &chain, &source, None);
+            leased = fx.run(device, queue, encoder, &chain, &source, None, None);
             passes += chain.passes.len() as u64;
             pass = compose_pass(encoder, &frame.target, false);
             let Some(l) = leased else { continue };
@@ -1530,7 +1591,7 @@ impl CallbackTrait for CanvasPaint {
             for job in std::mem::take(&mut res.fx_jobs) {
                 let (Some(src), Some(out)) = (res.textures.get(&job.src), res.textures.get(&job.out)) else { continue };
                 let (src_view, out_view) = (src.texture.create_view(&Default::default()), out.texture.create_view(&Default::default()));
-                fx.run(device, queue, encoder, &job.chain, &src_view, Some(&out_view));
+                fx.run(device, queue, encoder, &job.chain, &src_view, Some(&out_view), job.bordure.as_ref());
                 res.fx_passes += job.chain.passes.len() as u64;
                 if let Some(state) = res.textures.get_mut(&job.out).and_then(|t| t.fx.as_mut()) {
                     state.done = job.sig;
@@ -1756,19 +1817,27 @@ pub(crate) fn gpu_fx_item(doc: &Document, item: &crate::render::PlanItem) -> boo
         && item.fond.is_none()
         && item.pre.is_none()
         && (crate::gpufx::steps_supported(&item.fx) || crate::fx::hybrid_split(item).is_some())
-        && doc.cels.get(&item.cel).is_some_and(|c| c.raster.width == doc.width && c.raster.height == doc.height)
+        // (Un dessin qui passe le bord de la feuille, avec un effet qui va lire ses voisins : la carte ne voit pas ce qui arrive de l'autre côté, le calcul de fond si : partie 119.)
+        && doc.cels.get(&item.cel).is_some_and(|c| c.raster.width == doc.width && c.raster.height == doc.height && (crate::fx::pile_juste_au_bord(&item.fx) || !c.raster.deborde_vite()))
 }
 
 /// La texture résultat des effets de l'élément `item` (dessin d'origine déjà envoyé sous son numéro) :
 /// créée ou reprise, à la taille de ce que les effets touchent ; la chaîne qui la remplit est mise dans
 /// les travaux de la prochaine composition si elle n'est pas à jour. Rend son numéro, ou rien (pile sans
 /// passe : le dessin d'origine est montré tel quel).
-fn place_fx(rs: &RenderState, res: &mut CanvasResources, item: &crate::render::PlanItem, nth: usize, sheet: (u32, u32), tick: u64, bytes: &mut u64) -> Option<CelId> {
+#[allow(clippy::too_many_arguments)]
+fn place_fx(rs: &RenderState, res: &mut CanvasResources, item: &crate::render::PlanItem, lu: Option<&crate::document::Cel>, nth: usize, sheet: (u32, u32), tick: u64, bytes: &mut u64) -> Option<CelId> {
     let src = item.cel;
     let (rect, generation) = res.textures.get(&src).filter(|t| t.dims == sheet).map(|t| (t.rect, t.generation))?;
-    let chain = crate::gpufx::plan_chain(&item.fx, crate::gpufx::Geo::from_rect(rect), sheet)?;
     let out = crate::gpufx::out_id(src, nth, &item.fx);
-    let sig = crate::gpufx::signature(&item.fx, rect, generation, sheet);
+    // L'encre autour de la feuille, pour un tremblement en tête de pile.
+    let bord = match (crate::gpufx::Bordure::largeur_voulue(&item.fx), lu) {
+        (Some(m), Some(cel)) => bordure_de(rs, res, out, src, cel, m, tick),
+        _ => None,
+    };
+    let chain = crate::gpufx::plan_chain_bord(&item.fx, crate::gpufx::Geo::from_rect(rect), sheet, bord.as_ref().map(|b| b.0))?;
+    // (Une encre qui ne passe que hors de la feuille ne change pas la texture du dessin : son empreinte compte à part.)
+    let sig = crate::gpufx::signature(&item.fx, rect, generation, sheet) ^ bord.as_ref().map_or(0, |b| b.2 << 1);
     let want = chain.out.rect();
     if !res.textures.get(&out).is_some_and(|t| t.fx.is_some() && t.rect == want) {
         if let Some(old) = res.textures.remove(&out) {
@@ -1802,7 +1871,7 @@ fn place_fx(rs: &RenderState, res: &mut CanvasResources, item: &crate::render::P
     }
     if entry.fx.is_some_and(|s| s.done != sig) {
         res.fx_jobs.retain(|j| j.out != out);
-        res.fx_jobs.push(FxJob { src, out, chain: std::sync::Arc::new(chain), sig });
+        res.fx_jobs.push(FxJob { src, out, chain: std::sync::Arc::new(chain), sig, bordure: bord.map(|b| b.1) });
     }
     Some(out)
 }

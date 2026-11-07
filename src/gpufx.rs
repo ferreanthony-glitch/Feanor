@@ -120,6 +120,58 @@ pub enum Tex {
     Input,
     /// Une texture de travail.
     Temp(usize),
+    /// La bordure d'encre autour de la feuille (`Bordure`).
+    Bordure,
+}
+
+/// L'encre qui entoure la feuille, pour le tremblement (`fs_boil`). La carte ne lit que la feuille : un pixel du bord qui va lire de l'autre côté n'y trouvait rien, et le trait
+/// s'éclaircissait sur une colonne (4,5 % à l'intensité 0,5, 24 % à l'intensité 3 : partie 118). La texture ne garde que les `m` pixels autour de la feuille, en quatre
+/// rangées (voir `gpufx.wgsl`) : moins de 200 Ko pour une feuille 4K à l'intensité 0,5. Un dessin sans encre là n'en a pas : le shader lit comme avant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct Bordure {
+    /// Largeur, en pixels, autour de la feuille.
+    pub m: i32,
+    pub w: i32,
+    pub h: i32,
+    /// De l'encre à gauche, en haut, à droite, en bas.
+    pub cotes: [bool; 4],
+}
+
+impl Bordure {
+    /// La largeur de bordure que `steps` demande : le tremblement en tête de pile (il lit alors le dessin lui-même).
+    pub fn largeur_voulue(steps: &[FxStep]) -> Option<i32> {
+        let s = steps.first().filter(|s| s.kind == EffectKind::Boil)?;
+        let set = crate::tremblement::Settings::of(&s.values);
+        Some(crate::tremblement::Field::new(&set).amp.ceil() as i32 + 2)
+    }
+
+    /// La bordure de `raster` sur `m` pixels et ses pixels, en RGBA prémultiplié ; rien s'il n'y a pas d'encre là.
+    pub fn de(raster: &crate::raster::Raster, m: i32) -> Option<(Bordure, Vec<u8>)> {
+        let (w, h) = (raster.width as i32, raster.height as i32);
+        let (aw, ah) = ((w + 2 * m).max(h).max(1), (4 * m).max(1));
+        let mut px = vec![0u8; aw as usize * ah as usize * 4];
+        let mut cotes = [false; 4];
+        let mut copier = |qx: i32, qy: i32, x: i32, y: i32, cote: usize| {
+            let c = raster.get_i(x as i64, y as i64);
+            if c.a() != 0 {
+                cotes[cote] = true;
+                let at = (qy as usize * aw as usize + qx as usize) * 4;
+                px[at..at + 4].copy_from_slice(&c.to_array());
+            }
+        };
+        for y in 0..m {
+            for x in -m..w + m {
+                // (Le coin touche deux côtés : `cotes` retient celui de sa rangée, le rectangle de sortie va jusqu'au bord de ce côté.)
+                copier(x + m, y, x, y - m, 1);
+                copier(x + m, y + m, x, h + y, 3);
+            }
+            for x in 0..h {
+                copier(x, y + 2 * m, y - m, x, 0);
+                copier(x, y + 3 * m, w + y, x, 2);
+            }
+        }
+        cotes.iter().any(|&c| c).then_some((Bordure { m, w: aw, h: ah, cotes }, px))
+    }
 }
 
 /// Une passe de dessin : un point d'entrée du shader, ses textures, ses réglages.
@@ -181,6 +233,7 @@ struct Builder {
     passes: Vec<Pass>,
     temps: Vec<Geo>,
     sheet: (i32, i32),
+    bordure: Option<Bordure>,
 }
 
 type Cur = (Tex, Geo);
@@ -365,8 +418,21 @@ impl Builder {
                 f[0] = [field.amp, field.cell, set.thickness / 100.0, 0.0];
                 n[0] = field.seed() as i32;
                 let m = field.amp.ceil() as i32 + 2;
-                let g = bucket(cur.1.x - m, cur.1.y - m, cur.1.right() + m, cur.1.bottom() + m, self.sheet);
-                self.into("fs_boil", cur, g, n, f)
+                let (mut x0, mut y0, mut x1, mut y1) = (cur.1.x - m, cur.1.y - m, cur.1.right() + m, cur.1.bottom() + m);
+                // Le dessin lui-même, et de l'encre autour de la feuille : le shader la lit, et son résultat va jusqu'au bord de ce côté.
+                let bord = self.bordure.filter(|b| cur.0 == Tex::Input && b.m >= m);
+                if let Some(b) = bord {
+                    n[1] = b.m;
+                    x0 = if b.cotes[0] { 0 } else { x0 };
+                    y0 = if b.cotes[1] { 0 } else { y0 };
+                    x1 = if b.cotes[2] { self.sheet.0 } else { x1 };
+                    y1 = if b.cotes[3] { self.sheet.1 } else { y1 };
+                }
+                let g = bucket(x0, y0, x1, y1, self.sheet);
+                let dst = self.temp(g);
+                let b = bord.map(|b| (Tex::Bordure, Geo { x: 0, y: 0, w: b.w, h: b.h }));
+                self.pass("fs_boil", cur, b, dst, self.sheet, n, f);
+                dst
             }
             EffectKind::Wave => {
                 let (sn, cs) = at(2).to_radians().sin_cos();
@@ -439,8 +505,13 @@ impl Builder {
 /// La chaîne de passes qui applique `steps` à une texture qui montre `input` d'une feuille de `sheet`
 /// pixels. Rien si un effet n'a pas de passe, ou si la pile ne change rien.
 pub fn plan_chain(steps: &[FxStep], input: Geo, sheet: (u32, u32)) -> Option<Chain> {
+    plan_chain_bord(steps, input, sheet, None)
+}
+
+/// Comme `plan_chain`, avec l'encre qui entoure la feuille (`Bordure`).
+pub fn plan_chain_bord(steps: &[FxStep], input: Geo, sheet: (u32, u32), bordure: Option<Bordure>) -> Option<Chain> {
     let sheet = (sheet.0 as i32, sheet.1 as i32);
-    let mut b = Builder { passes: Vec::new(), temps: Vec::new(), sheet };
+    let mut b = Builder { passes: Vec::new(), temps: Vec::new(), sheet, bordure };
     let mut cur: Cur = (Tex::Input, input);
     for s in steps {
         cur = b.effect(s, cur)?;
@@ -790,8 +861,9 @@ impl GpuFx {
 
     /// Exécute `chain` : `input` est la texture que montre `chain`'s première passe, `output` reçoit le
     /// résultat (`None` : une texture de travail est prise, que l'appelant rend avec `release`, et son
-    /// rang est renvoyé).
-    pub fn run(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, chain: &Chain, input: &wgpu::TextureView, output: Option<&wgpu::TextureView>) -> Option<usize> {
+    /// rang est renvoyé). `bordure` : l'encre autour de la feuille (`Bordure`).
+    #[allow(clippy::too_many_arguments)]
+    pub fn run(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, encoder: &mut wgpu::CommandEncoder, chain: &Chain, input: &wgpu::TextureView, output: Option<&wgpu::TextureView>, bordure: Option<&wgpu::TextureView>) -> Option<usize> {
         // La dernière lecture de chaque texture de travail.
         let mut last = vec![0usize; chain.temps.len()];
         for (i, p) in chain.passes.iter().enumerate() {
@@ -819,6 +891,7 @@ impl GpuFx {
             let view_of = |s: &GpuFx, t: Tex| -> wgpu::TextureView {
                 match t {
                     Tex::Input => input.clone(),
+                    Tex::Bordure => bordure.map_or_else(|| s.empty.clone(), Clone::clone),
                     Tex::Temp(k) => match held[k] {
                         Some(j) => s.pool[j].view.clone(),
                         None => s.empty.clone(),

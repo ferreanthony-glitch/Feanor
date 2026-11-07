@@ -8227,11 +8227,9 @@ La feuille fait deux fois le cadre : A étant centré, son bord droit est à 1,5
 
 ### Limites
 
-- Les effets réglés par rapport à la feuille (onde, ondulation, tourbillon, pincement, nuages, éclairage, dégradé, flash, impact, secousse, vignettage, aberration) ne s'appliquent pas au-delà d'elle : le trait y reste tel quel, entier.
-- Un effet du trait qui transforme chaque trait (ondulation du trait, pointillés…) ne se calcule que sur la feuille : au-delà, le trait reste sans cet effet. Avec Écriture ou Poussière, il n'est pas montré au-delà de la feuille.
-- **Une cassure reste au bord de la feuille** avec Secousse, Onde, Vignettage et les autres effets réglés par rapport à elle, et avec les effets du trait : d'un côté l'effet, de l'autre le trait sans effet. C'est voulu : mieux vaut cela qu'un trait coupé.
-- Le flou, la lueur et les autres effets qui lisent tout leur rectangle ne s'appliquent plus hors de la feuille au-delà de 33 millions de pixels (un point perdu très loin), et le trait y reste entier, sans eux. Le tremblement et les réglages de couleur n'ont pas cette borne. Mesures du calcul à part, sans cette borne, avec un point perdu : flou à 8 000 pixels 170 ms, à 10 800 pixels 363 ms et 507 Mo de plus au pic.
-- **Encoche côté feuille.** Le tremblement seul, calculé sur processeur, n'en a plus (les tuiles du bord viennent du calcul à part ; un dessin sans débord ne change pas d'un pixel). **Sur la carte graphique, elle reste** : le shader ne lit que la feuille. Une seule colonne de pixels de la feuille, plus claire de 4,5 % à l'intensité 0,5 (son réglage) et de 24 % à l'intensité 3. Non corrigé : il faudrait passer ces calques par le calcul de fond (plus de mémoire, plus de calcul à chaque variante).
+*(Partie 119 : les effets réglés par rapport à la feuille, les effets du trait, Écriture et Poussière continuent maintenant de part et d'autre de son bord ; la borne des 33 millions de pixels et la colonne plus claire sur la carte graphique n'existent plus.)*
+
+- Le calcul à part décrit ci-dessus, avec sa bande de 4 tuiles, est remplacé par `fxmonde.rs` (partie 119). Mesures de cette ancienne méthode sans sa borne, avec un point perdu : flou à 8 000 pixels 170 ms, à 10 800 pixels 363 ms et 507 Mo de plus au pic.
 - **Autre cause, non traitée ici** : une part de trait reste cachée sous l'image d'une case dont la caméra a un autre zoom, un roulis, une bascule, un panoramique, ou dont le calque est verrouillé (`cases_qui_recoivent` les refuse, partie 111).
 
 ### Le badge 12 et le petit carré
@@ -8247,3 +8245,119 @@ La feuille fait deux fois le cadre : A étant centré, son bord droit est à 1,5
 4. Enregistre, rouvre : même image. Les anciens traits coupés sont revenus d'eux-mêmes.
 5. Export vidéo, images, planche : le cadre B montre le trait.
 6. Dis-moi si le tremblement te paraît continu à la verticale où finit la feuille. Le stylet réel n'a pas été essayé.
+
+## 119. Les effets continuent de part et d'autre du bord de la feuille (2026-11-07, branche `effets-debord`)
+
+Suite de la partie 118 : le trait n'était plus coupé, mais il se cassait au bord de la feuille dès qu'un effet réglé d'après elle ou un effet du trait était posé. Fichiers : `fxmonde.rs` (nouveau), `fx.rs` (`apply_with`, `un_effet`, `Repere`), `fxtrait.rs` (`hors_de_la_feuille`), `fxwarp.rs`, `fxcine.rs`, `fxfilters.rs`, `fxmatiere.rs`, `gpufx.rs`, `gpufx.wgsl` (`fs_boil`), `gpu.rs`, `monde.rs`, `render.rs`. Essais : `effets_debord_tests.rs`, `camera_traits_tests.rs`. **Le format de projet ne change pas** (48).
+
+### L'idée
+
+La feuille se calcule comme toujours. Ce qui la dépasse se calcule **dans les coordonnées du monde** : les réglages qui parlent de la feuille (centre, pourcentages) restent ceux de la vraie feuille, et une formule vaut des deux côtés. Une onde continue son onde, le centre d'un tourbillon ne bouge pas, le vignettage garde sa pente jusqu'à son noir.
+
+- **Dans la feuille**, seules les tuiles assez près de ce qui dépasse pour le lire prennent ce résultat, qui voit des deux côtés. Le reste de la feuille ne bouge pas. Un dessin qui ne dépasse pas ne passe pas par là : essai sur 106 images, empreintes relevées sur `main` avant ce chantier.
+- **Rien de plein** : le calcul ne tient jamais le rectangle du dessin en mémoire. Les effets qui lisent leurs voisins (flou, lueur, ombre, mosaïque…) passent par zones de 512 pixels, plus leur portée, là où il y a de l'encre. Ceux qui déplacent le dessin (onde, secousse, tourbillon…) passent par tuiles, seulement celles où de l'encre peut arriver. Les zones se raccordent au pixel près (essai : 0 pixel différent d'un seul calcul d'ensemble).
+- **Effets du trait** : même principe, zone par zone, le long de chaque trait. L'abscisse, l'axe et le hasard sont ceux du trait entier.
+
+### Ce qu'il fait là où un effet n'a pas de sens hors de la feuille
+
+- **Flash, Image d'impact** : ils couvrent la feuille, qui reste seule remplie (il n'y a pas d'image à remplir au-delà). Le trait, lui, prend la même couleur des deux côtés.
+- **Vignettage** : l'ellipse continue, le trait s'assombrit jusqu'au noir réglé, puis y reste.
+- **Aberration, Secousse** : ce sont des transformations du monde. Plus on s'éloigne du centre, plus le déplacement grandit, comme le voudrait une feuille plus grande.
+
+### Mesures de la cassure, effet par effet (avant, puis après)
+
+Une bande droite qui passe le bord, à droite, en bas et à gauche ; le pire des trois. On lit la dernière colonne de la feuille et la première au-delà : le saut du centre de l'encre en pixels, l'écart de quantité d'encre, l'écart de couleur sur 255. Essai : `no_effect_breaks_a_stroke_at_the_edge_of_the_sheet`.
+
+| Effet | Saut (px) | Encre (%) | Couleur |
+|---|---|---|---|
+| Pincement | 52,6 puis 0 | 9,1 puis 0 | 0,1 puis 0 |
+| Secousse | 18,2 puis 0,03 | 39,2 puis 0 | 0,1 puis 0,1 |
+| Tourbillon | 11,0 puis 0,3 | 100 puis 1,9 | 200 puis 0,1 |
+| Ondulation | 5,7 puis 0 | 35,9 puis 0 | 0,2 puis 0 |
+| Ombre portée | 3,7 puis 0 | 33,1 puis 0 | 66,2 puis 0 |
+| Onde | 2,5 puis 0,4 | 100 puis 0,9 | 200 puis 0 |
+| Aberration | 1,1 puis 0 | 59,3 puis 0 | 114,8 puis 0 |
+| Flou gaussien | 0 | 57,3 puis 0 | 1,2 puis 0 |
+| Flou de mouvement | 0 | 48,2 puis 0 | 1,0 puis 0 |
+| Lueur | 0 | 12,4 puis 0 | 0,4 puis 0 |
+| Lueur diffuse | 0 | 7,8 puis 0 | 12,5 puis 0 |
+| Encre qui bave | 0,4 puis 0,02 | 5,1 puis 0,7 | 0,3 puis 0,2 |
+| Image d'impact | 0 | 0 | 195 puis 0 |
+| Flash | 0 | 0 | 113 puis 0 |
+| Vignettage | 0 | 0 | 100 puis 0 |
+| Dégradé | 0 | 0 | 100 puis 0 |
+| Éclairage | 0 | 0 | 80 puis 0 |
+| Nuages | 0 | 0 | 20,7 puis 0,1 |
+
+Les réglages de couleur, le liseré et la netteté n'avaient pas de cassure mesurable et n'en ont pas. Le tremblement donne 0,4 pixel et 7,7 %, avant comme après : c'est sa pente naturelle, identique à celle d'une feuille plus grande (essai). Le bruit et le grain varient d'un pixel à l'autre par nature ; leur mesure est la ligne suivante.
+
+**Motif à la couture**, en pixels différents d'une feuille plus grande : Mosaïque 4 180 puis 0 ; Bruit et Grain 0 sur tout ce qui a été lu après. (L'essai s'arrête au premier effet en défaut : sur `main`, Mosaïque l'a arrêté, le chiffre « avant » du bruit et du grain n'a pas été relevé.)
+
+**Effets du trait** : pixels différents d'une feuille plus grande autour du bord, et encre au-delà de la feuille pour celle attendue. Essai : `stroke_effects_continue_across_the_edge`.
+
+| Effet | Pixels différents | Encre au-delà (avant) | Encre au-delà (après, et attendue) |
+|---|---|---|---|
+| Écriture | 318 puis 0 | 0 | 706 |
+| Poussière | 284 puis 0 | 0 | 2 659 |
+| Dégradé du trait | 316 puis 0 | 2 967 | 2 967 |
+| Ondulation du trait | 259 puis 0 | 2 967 | 3 195 |
+| Trait sec | 233 puis 0 | 2 967 | 2 855 |
+| Respiration | 202 puis 0 | 2 967 | 4 461 |
+| Pointillés | 152 puis 0 | 2 967 | 1 782 |
+| Crayonné | 126 puis 0 | 2 967 | 3 729 |
+
+Écriture : à 70 %, 0 pixel au-delà de la feuille avant, 1 264 après ; elle arrive à son tour, à 100 % le trait est entier.
+
+### Le grand débord
+
+Un trait d'une feuille 4K, de son coin jusqu'à une feuille plus loin à droite et en bas : son rectangle dépassait 33 millions de pixels. Temps sur tout le dessin, puis pic du processus depuis son début (le pic vient surtout du calcul de la feuille elle-même).
+
+| Effet | Avant | Après |
+|---|---|---|
+| Flou | 60 ms, 119 Mo, **pas d'effet hors de la feuille** | 54 ms, 115 Mo, effet appliqué |
+| Lueur | 58 ms, 120 Mo, **pas d'effet** | 57 ms, 116 Mo, effet appliqué |
+| Ombre portée | 81 ms, 157 Mo, **pas d'effet** | 75 ms, 148 Mo, effet appliqué |
+| Tremblement | 17 ms, 22 Mo | 25 ms, 22 Mo |
+| Onde | 52 ms, **pas d'effet** | 90 ms, effet appliqué |
+| Secousse | 45 ms, **pas d'effet** | 52 ms, effet appliqué |
+
+Le résultat pèse 4 Mo dans le cache, avant comme après. Un point perdu à 8 000, 10 800 ou 30 000 pixels : flou 40 ms au plus, pic à 13 Mo (l'ancienne méthode sans borne : 363 ms et 507 Mo de plus à 10 800 pixels). Ces chiffres viennent d'un seul passage, sur une machine où d'autres compilations tournaient ; ils donnent un ordre de grandeur. La longue séance d'Anthony (2,6 à 3 Go de trop) n'a pas été rejouée : ce chantier n'ajoute pas de mémoire tenue, il n'en retire pas non plus.
+
+### La colonne plus claire sur la carte graphique
+
+Le shader du tremblement lit maintenant la **bordure d'encre** autour de la feuille (`gpufx::Bordure`) : une petite texture de `m` pixels de large (`m` : intensité arrondie, plus 2), soit moins de 200 Ko pour une feuille 4K à l'intensité 0,5, créée seulement s'il y a de l'encre là, refaite seulement quand le dessin change. Ces calques restent sur la carte. Encre lue sur la colonne du bord :
+
+| Intensité | Avant | Après | Calcul de fond, pour référence |
+|---|---|---|---|
+| 0,5 | 8 591 (4,5 % de moins que ses voisines) | 8 991 | 8 991 |
+| 3 | 6 268 (24 % de moins) | 8 196 | 8 196 |
+
+Un dessin sans encre autour de la feuille ne lit pas cette texture : le shader fait ce qu'il faisait.
+
+**Les autres piles sur la carte** : un dessin qui passe le bord, avec un effet qui lit ses voisins (flou, onde, secousse…) ou un tremblement qui n'est pas en tête de pile, passe par le calcul de fond (`fx::pile_juste_au_bord`), qui voit des deux côtés. Coût : ce calque n'est plus dessiné à chaque image par la carte, son effet arrive un instant après chaque changement. Un dessin qui reste dans la feuille n'est pas concerné. Les réglages de couleur, le vignettage, le flash et les autres effets qui ne lisent que leur propre pixel restent sur la carte.
+
+### Le fil de l'interface
+
+`Instantane::of` et la composition d'une tuile du hors-feuille (`Monde::compose`) ne calculent plus aucun effet : le dessin se montre sans son effet, le fil de fond calcule, et le hors-feuille se refait quand le résultat arrive (`attend_les_effets`). Gros dessin (une feuille 4K d'encre et une feuille de plus, flou) : **158,5 ms puis 0,2 ms** sur le fil de l'interface.
+
+Ce qu'un effet pose autour de son encre hors de la feuille (le halo d'un flou, le déplacement d'une secousse) se compose aussi à l'écran (`render::plan_bounds`, `plan_world_tiles`).
+
+### Limites
+
+- **Calque d'ajustement** : il reste à la feuille, car il travaille sur l'image composée, qui n'existe que là. Le trait passe donc de « ajusté » à « non ajusté » à son bord. Le continuer demanderait de composer tout le hors-feuille calque par calque à chaque image : non fait.
+- **Flash ou impact suivi d'un flou**, sur un dessin qui dépasse : le fond rempli de la feuille déborde de la portée du flou au-delà d'elle. Cas rare, non corrigé.
+- **Plume** (effet du trait) : passe par le même chemin, mais n'a pas été mesurée (elle a besoin d'un pinceau enregistré).
+- **Aperçu réduit** : la feuille en aperçu pendant la lecture ou le défilement de loin reste sans ce qui lit au-delà d'elle ; la pleine résolution reprend au repos.
+- **Le calque qu'on édite** se montre sans ses effets du trait (règle d'avant) : pour les voir au bord, sélectionne un autre calque.
+- **Portée devinée** : tant qu'un effet n'est pas calculé, les tuiles à composer autour de l'encre se devinent, à 16 tuiles au plus ; une secousse très forte, très loin, peut attendre le résultat pour se montrer entière.
+
+### À vérifier à l'écran
+
+1. Un plan avec de longs traits qui passent le bord de la feuille. Pose Onde, puis Secousse, Tourbillon, Pincement, Ondulation, Vignettage, Aberration : sélectionne un autre calque, puis regarde le trait à la verticale où la feuille finit. Il ne doit ni sauter ni changer de couleur.
+2. Même chose avec Pointillés, Crayonné, Respiration, Ondulation du trait.
+3. Écriture à 70 %, puis à 100 % : le trait s'écrit jusqu'au bout, au-delà de la feuille aussi. Poussière : les grains partent des deux côtés.
+4. Mosaïque en grande taille : les carrés se suivent sans décalage à travers le bord.
+5. Un trait d'une feuille plus loin à droite et en bas, avec Flou ou Lueur : l'effet s'y voit, et le logiciel reste fluide.
+6. Ton tremblement à 0,5 et 3, sans autre effet, en zoomant fort sur le bord : plus de colonne plus claire.
+7. Tire le curseur d'un flou sur un calque qui dépasse : l'interface ne doit pas accrocher ; l'effet hors de la feuille arrive juste après. Dis-moi si ce délai te gêne.
+8. Dessine, enregistre, rouvre, exporte (film, images, planche) : même trait.

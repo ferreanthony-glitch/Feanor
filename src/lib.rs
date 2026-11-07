@@ -1132,8 +1132,11 @@ mod canevas_libre_tests;
 mod vignettes_simplicite_tests;
 #[cfg(test)]
 mod traits_continus_tests;
+pub(crate) mod fxmonde;
 #[cfg(test)]
 mod camera_traits_tests;
+#[cfg(test)]
+mod effets_debord_tests;
 #[cfg(test)]
 mod horschamptex_tests;
 mod workspaceui;

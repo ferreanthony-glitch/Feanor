@@ -522,6 +522,57 @@ impl Raster {
         })
     }
 
+    /// Le test d'à chaque image : des tuiles hors de la feuille, ou de l'encre au-delà d'elle dans une tuile de bord. (Les tuiles hors de la feuille
+    /// ne sont pas rouvertes pour le savoir : une tuile sans encre y dit oui, ce qui ne coûte qu'un calcul pour rien.)
+    pub fn deborde_vite(&self) -> bool {
+        if !self.outer.is_empty() {
+            return true;
+        }
+        self.tiles.iter().enumerate().any(|(idx, slot)| {
+            let Some(tile) = slot else { return false };
+            let (tx, ty) = (idx % self.tiles_x, idx / self.tiles_x);
+            self.straddles(tx, ty) && (0..TILE_PIXELS).any(|i| self.beyond(tx, ty, i % TILE, i / TILE) && tile[i].a() != 0)
+        })
+    }
+
+    /// La tuile (`tx`, `ty`) de la fenêtre est à cheval sur le bord de la feuille (voir `straddles`).
+    pub fn a_cheval(&self, tx: i32, ty: i32) -> bool {
+        self.in_window(tx, ty) && self.straddles(tx as usize, ty as usize)
+    }
+
+    /// Les tuiles où de l'encre dépasse de la feuille : hors de la fenêtre, et les tuiles de bord dont la part au-delà de la feuille a de l'encre.
+    pub fn tuiles_du_debord(&self) -> Vec<(i32, i32)> {
+        let mut out: Vec<(i32, i32)> = self.outer.iter().filter(|(_, t)| t.iter().any(|c| c.a() != 0)).map(|(&k, _)| k).collect();
+        for (idx, slot) in self.tiles.iter().enumerate() {
+            let Some(tile) = slot else { continue };
+            let (tx, ty) = (idx % self.tiles_x, idx / self.tiles_x);
+            if self.straddles(tx, ty) && (0..TILE_PIXELS).any(|i| self.beyond(tx, ty, i % TILE, i / TILE) && tile[i].a() != 0) {
+                out.push((tx as i32, ty as i32));
+            }
+        }
+        out
+    }
+
+    /// Oublie ce qui dépasse de la feuille : les tuiles hors de la fenêtre, et la part au-delà de la feuille des tuiles de bord.
+    pub fn oublier_le_debord(&mut self) {
+        self.outer.clear();
+        for idx in 0..self.tiles.len() {
+            let (tx, ty) = (idx % self.tiles_x, idx / self.tiles_x);
+            if !self.straddles(tx, ty) {
+                continue;
+            }
+            let Some(tile) = self.tiles[idx].as_ref() else { continue };
+            let a_effacer: Vec<usize> = (0..TILE_PIXELS).filter(|&i| self.beyond(tx, ty, i % TILE, i / TILE) && tile[i].a() != 0).collect();
+            if a_effacer.is_empty() {
+                continue;
+            }
+            let t = self.tile_mut(idx);
+            for i in a_effacer {
+                t[i] = Color32::TRANSPARENT;
+            }
+        }
+    }
+
     /// Remet une tuile lue de l'enregistrement (`beyond_sheet_tiles`) : hors de la fenêtre, elle va
     /// dans `outer` ; sur une tuile de bord, ses pixels hors de la feuille sont posés dans la tuile
     /// de la fenêtre.

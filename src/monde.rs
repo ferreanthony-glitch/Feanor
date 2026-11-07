@@ -144,18 +144,21 @@ struct Instantane {
 
 impl Instantane {
     /// Figé sur le fil de l'interface : les éléments de la clé, chacun avec le dessin qu'il montre maintenant (effets
-    /// compris, `fx::shown`), comme `composite_world_tile` les prend ; ceux qu'il ne pose que sur la feuille sont laissés.
-    fn of(doc: &Document, key: &WorldKey) -> Instantane {
-        let mut couches = Vec::new();
-        for item in &key.items {
-            let inv = crate::render::inverse_of(doc, item);
-            let Some(cel) = crate::fx::shown(doc, item) else { continue };
-            if inv.is_none() && (cel.raster.width != doc.width || cel.raster.height != doc.height) {
-                continue;
+    /// compris), comme `composite_world_tile` les prend ; ceux qu'il ne pose que sur la feuille sont laissés. **Rien ne se calcule ici** (`fxcache::soft_scope`) :
+    /// un effet qui n'est pas prêt est demandé au fil de fond, le dessin se montre en attendant sans lui. Le second résultat dit si tout était prêt.
+    fn of(doc: &Document, key: &WorldKey) -> (Instantane, bool) {
+        crate::fxcache::soft_scope(|| {
+            let mut couches = Vec::new();
+            for item in &key.items {
+                let inv = crate::render::inverse_of(doc, item);
+                let Some(cel) = crate::fx::shown(doc, item) else { continue };
+                if inv.is_none() && (cel.raster.width != doc.width || cel.raster.height != doc.height) {
+                    continue;
+                }
+                couches.push(Couche { raster: cel.raster.clone(), inv, opacity: item.opacity, tint: item.tint, blend: item.blend });
             }
-            couches.push(Couche { raster: cel.raster.clone(), inv, opacity: item.opacity, tint: item.tint, blend: item.blend });
-        }
-        Instantane { sheet: (doc.width, doc.height), paper: crate::render::paper_of(key.paper), couches }
+            Instantane { sheet: (doc.width, doc.height), paper: crate::render::paper_of(key.paper), couches }
+        })
     }
 
     /// La tuile du monde `key`, entière (le papier, puis les couches).
@@ -168,6 +171,15 @@ impl Instantane {
         }
         scratch
     }
+}
+
+/// (Essais.) Le temps que `Instantane::of` prend sur le fil appelant, et le nombre de couches figées.
+#[cfg(test)]
+pub(crate) fn mesure_de_l_instantane(doc: &Document, plan: &Plan) -> (f64, usize) {
+    let key = world_key(doc, plan);
+    let t = Instant::now();
+    let (snap, _) = Instantane::of(doc, &key);
+    (t.elapsed().as_secs_f64() * 1000.0, snap.couches.len())
 }
 
 /// La tuile du monde `key` composée (`scratch`, entière) telle que la texture la montre : sa part dans la feuille
@@ -254,6 +266,8 @@ pub struct Monde {
     job: Option<Job>,
     job_outdated: bool,
     since_job: Vec<usize>,
+    /// Ce qui est montré attend des effets que le fil de fond calcule (le dessin sans effet en attendant) : tout se refait à leur arrivée.
+    attend_les_effets: bool,
     /// Tuiles composées depuis le début (mesures).
     composed: u64,
     /// Hors-feuilles refaits sur un autre fil depuis le début (mesures, essais).
@@ -379,6 +393,11 @@ impl Monde {
         }
         // Un hors-feuille refait sur l'autre fil est arrivé : il prend la place de l'ancien.
         self.poll();
+        // Des effets attendus sont arrivés : le hors-feuille se refait avec eux, sur l'autre fil.
+        if self.attend_les_effets && world_key(doc, plan).items.iter().all(|i| crate::fx::effets_prets(doc, i)) {
+            self.attend_les_effets = false;
+            self.job_outdated = true;
+        }
         let stale = std::mem::take(&mut self.stale);
         let want = want.tile_aligned();
         let page = |lo: i64, hi: i64| (lo.div_euclid(PAGE) * PAGE, (hi + PAGE - 1).div_euclid(PAGE) * PAGE);
@@ -478,7 +497,8 @@ impl Monde {
     fn start_job(&mut self, ctx: &egui::Context, doc: &Document, plan: &Plan, key: WorldKey) {
         let Some(area) = self.area else { return };
         let tiles = plan_world_tiles(doc, plan, area);
-        let snap = Instantane::of(doc, &key);
+        let (snap, tout_pret) = Instantane::of(doc, &key);
+        self.attend_les_effets |= !tout_pret;
         let cancel = Arc::new(AtomicBool::new(false));
         let (tx, rx) = channel();
         let (k, n) = (self.scale, tiles.len());
@@ -632,7 +652,9 @@ impl Monde {
         let t = TILE as i64;
         let (ox, oy) = (key.0 as i64 * t, key.1 as i64 * t);
         let mut scratch = vec![Color32::TRANSPARENT; TILE_PIXELS];
-        composite_world_tile(doc, plan, key.0, key.1, &mut scratch, TILE, (ox, oy));
+        // (Sur le fil de l'interface : aucun effet ne s'y calcule, ils se demandent au fil de fond.)
+        let (_, tout_pret) = crate::fxcache::soft_scope(|| composite_world_tile(doc, plan, key.0, key.1, &mut scratch, TILE, (ox, oy)));
+        self.attend_les_effets |= !tout_pret;
         self.composed += 1;
         let px = finish(scratch, key, (doc.width, doc.height), self.scale);
         self.put(key, &px);

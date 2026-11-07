@@ -67,14 +67,14 @@ fn render_effects_light_and_shade_without_changing_coverage() {
     let grey = Color32::from_gray(128);
     let r = sheet(&[(20, 50, grey), (180, 50, grey)]);
     // Dégradé vers la droite : la droite fonce, la gauche à peine.
-    let g = w::gradient(&r, 0.0, 100.0);
+    let g = w::gradient(&r, 0.0, 100.0, crate::fx::Repere::de(&r));
     assert!(g.get(180, 50).r() < 20 && g.get(20, 50).r() > 110);
     assert_eq!(g.get(180, 50).a(), 255, "la couverture reste");
     // Éclairage centré à gauche : la gauche s'éclaire, la droite s'assombrit.
-    let l = w::lighting(&r, 10.0, 50.0, 60.0, 50.0);
+    let l = w::lighting(&r, 10.0, 50.0, 60.0, 50.0, crate::fx::Repere::de(&r));
     assert!(l.get(20, 50).r() > 128 && l.get(180, 50).r() < 128);
     // Nuages : des tons différents d'un point à l'autre, le vide reste vide.
-    let c = w::clouds(&sheet(&(0..200).map(|x| (x, 50, grey)).collect::<Vec<_>>()), 20.0, 100.0, 1.0);
+    let c = w::clouds(&sheet(&(0..200).map(|x| (x, 50, grey)).collect::<Vec<_>>()), 20.0, 100.0, 1.0, (0, 0));
     let tones: std::collections::BTreeSet<u8> = (0..200).map(|x| c.get(x, 50).r()).collect();
     assert!(tones.len() > 10);
     assert_eq!(c.get(5, 5), Color32::TRANSPARENT);

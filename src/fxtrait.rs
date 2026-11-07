@@ -679,6 +679,49 @@ impl Dense {
         Some(d)
     }
 
+    /// La boîte exacte de l'encre de `r` dans la zone (x0, y0, x1, y1) du monde, feuille et hors-feuille.
+    fn de_la_zone(r: &Raster, zone: (i32, i32, i32, i32)) -> Option<Dense> {
+        let t = TILE as i32;
+        let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+        let visiter = |f: &mut dyn FnMut(i32, i32, &[Color32])| {
+            for ty in zone.1.div_euclid(t)..=(zone.3 - 1).div_euclid(t) {
+                for tx in zone.0.div_euclid(t)..=(zone.2 - 1).div_euclid(t) {
+                    let Some(tile) = r.tile_at(tx, ty) else { continue };
+                    for y in zone.1.max(ty * t)..zone.3.min((ty + 1) * t) {
+                        let (a, b) = (zone.0.max(tx * t), zone.2.min((tx + 1) * t));
+                        let at = (y - ty * t) as usize * TILE;
+                        f(a, y, &tile[at + (a - tx * t) as usize..at + (b - tx * t) as usize]);
+                    }
+                }
+            }
+        };
+        visiter(&mut |x, y, row| {
+            if let Some(a) = row.iter().position(|c| c.a() != 0) {
+                let b = row.iter().rposition(|c| c.a() != 0).unwrap_or(a);
+                x0 = x0.min(x + a as i32);
+                x1 = x1.max(x + b as i32 + 1);
+                y0 = y0.min(y);
+                y1 = y1.max(y + 1);
+            }
+        });
+        if x0 == i32::MAX {
+            return None;
+        }
+        let mut d = Dense::blank(x0, y0, (x1 - x0) as usize, (y1 - y0) as usize);
+        visiter(&mut |x, y, row| {
+            if y < y0 || y >= y1 {
+                return;
+            }
+            let (a, b) = (x.max(x0), (x + row.len() as i32).min(x1));
+            if a >= b {
+                return;
+            }
+            let at = (y - y0) as usize * d.w + (a - x0) as usize;
+            d.px[at..at + (b - a) as usize].copy_from_slice(&row[(a - x) as usize..(b - x) as usize]);
+        });
+        Some(d)
+    }
+
     fn bounds(&self) -> (i32, i32, i32, i32) {
         (self.x0, self.y0, self.x0 + self.w as i32, self.y0 + self.h as i32)
     }
@@ -1025,19 +1068,10 @@ impl Geo {
 
 type Region = (i32, i32, i32, i32);
 
-fn grown(r: Region, by: f32, sheet: (usize, usize)) -> Region {
+/// `r` agrandi de `by` pixels, sans sortir de `zone` (la feuille, ou la zone du monde qu'on calcule).
+fn grown(r: Region, by: f32, zone: Region) -> Region {
     let g = by.ceil() as i32;
-    (r.0 - g, r.1 - g, r.2 + g, r.3 + g).clamp_to(sheet)
-}
-
-trait ClampTo {
-    fn clamp_to(self, sheet: (usize, usize)) -> Self;
-}
-
-impl ClampTo for Region {
-    fn clamp_to(self, sheet: (usize, usize)) -> Region {
-        (self.0.max(0), self.1.max(0), self.2.min(sheet.0 as i32), self.3.min(sheet.1 as i32))
-    }
+    ((r.0 - g).max(zone.0), (r.1 - g).max(zone.1), (r.2 + g).min(zone.2), (r.3 + g).min(zone.3))
 }
 
 /// Chaque pixel de `region` qui a un point de l'axe à portée va chercher sa couleur dans `src` au
@@ -1149,6 +1183,54 @@ pub fn render(vector: &VectorDrawing, w: usize, h: usize, steps: &[FxStep]) -> R
         }
         return out;
     }
+    let (timing, jobs) = travaux(vector, &stack);
+    let max = match crate::render::thread_cap() {
+        0 => 16,
+        cap => cap,
+    };
+    // Quand un effet transforme chaque trait, tout se pose par bandes de tuiles réparties sur les cœurs
+    // (les éléments tels quels sont alors rendus seuls, eux aussi) ; sinon (l'écriture seule : presque
+    // tout est posé tel quel depuis le cache) les éléments se posent l'un après l'autre.
+    let banded = stack.transforms();
+    let strokes = vector.elements.iter().filter(|e| matches!(e, Element::Stroke { .. })).count();
+    let ctx = Ctx { stack, timing, w, h, banded, nib, strokes };
+    // Des morceaux de 96 éléments au plus, et d'au plus `CHUNK_PIXELS` pixels de couches en vol (une boîte de
+    // trait par couche) : de longs traits en diagonale ne remplissent pas la mémoire.
+    let passes = 1 + ctx.stack.sketch.map_or(0, |s| s.passes);
+    let cost = |job: &Job| match job {
+        Job::Stroke(e, _) => {
+            let b = e.bounds();
+            ((b.width().max(1.0) * b.height().max(1.0)) as usize).min(w * h) * passes
+        }
+        _ => 1,
+    };
+    let mut start = 0;
+    while start < jobs.len() {
+        let (mut end, mut pixels) = (start, 0usize);
+        while end < jobs.len() && end - start < 96 && (pixels < CHUNK_PIXELS || end == start) {
+            pixels += cost(&jobs[end]);
+            end += 1;
+        }
+        let chunk = &jobs[start..end];
+        start = end;
+        let layers: Vec<Layer> = crate::parallele::par_map(chunk, max, |_, job| run(job, &ctx)).into_iter().flatten().collect();
+        if banded {
+            compose_banded(&mut out, &layers);
+            continue;
+        }
+        for layer in layers {
+            match layer {
+                Layer::Plain(e) => render_element(&mut out, e),
+                Layer::Sheet(s, opacity) => over_sheet(&mut out, &s, opacity),
+                Layer::Dense(d, opacity) => over_dense(&mut out, &d, opacity),
+            }
+        }
+    }
+    out
+}
+
+/// Le rythme de l'écriture, et le travail de chaque élément du dessin, dans l'ordre.
+fn travaux<'a>(vector: &'a VectorDrawing, stack: &Stack) -> (Option<Timing>, Vec<Job<'a>>) {
     let lengths: Vec<f32> = vector
         .elements
         .iter()
@@ -1193,48 +1275,7 @@ pub fn render(vector: &VectorDrawing, w: usize, h: usize, steps: &[FxStep]) -> R
             _ => jobs.push(Job::Faded(e, fill_opacity)),
         }
     }
-    let max = match crate::render::thread_cap() {
-        0 => 16,
-        cap => cap,
-    };
-    // Quand un effet transforme chaque trait, tout se pose par bandes de tuiles réparties sur les cœurs
-    // (les éléments tels quels sont alors rendus seuls, eux aussi) ; sinon (l'écriture seule : presque
-    // tout est posé tel quel depuis le cache) les éléments se posent l'un après l'autre.
-    let banded = stack.transforms();
-    let ctx = Ctx { stack, timing, w, h, banded, nib, strokes: lengths.len() };
-    // Des morceaux de 96 éléments au plus, et d'au plus `CHUNK_PIXELS` pixels de couches en vol (une boîte de
-    // trait par couche) : de longs traits en diagonale ne remplissent pas la mémoire.
-    let passes = 1 + ctx.stack.sketch.map_or(0, |s| s.passes);
-    let cost = |job: &Job| match job {
-        Job::Stroke(e, _) => {
-            let b = e.bounds();
-            ((b.width().max(1.0) * b.height().max(1.0)) as usize).min(w * h) * passes
-        }
-        _ => 1,
-    };
-    let mut start = 0;
-    while start < jobs.len() {
-        let (mut end, mut pixels) = (start, 0usize);
-        while end < jobs.len() && end - start < 96 && (pixels < CHUNK_PIXELS || end == start) {
-            pixels += cost(&jobs[end]);
-            end += 1;
-        }
-        let chunk = &jobs[start..end];
-        start = end;
-        let layers: Vec<Layer> = crate::parallele::par_map(chunk, max, |_, job| run(job, &ctx)).into_iter().flatten().collect();
-        if banded {
-            compose_banded(&mut out, &layers);
-            continue;
-        }
-        for layer in layers {
-            match layer {
-                Layer::Plain(e) => render_element(&mut out, e),
-                Layer::Sheet(s, opacity) => over_sheet(&mut out, &s, opacity),
-                Layer::Dense(d, opacity) => over_dense(&mut out, &d, opacity),
-            }
-        }
-    }
-    out
+    (timing, jobs)
 }
 
 /// Pixels de couches (`Dense`) qu'un morceau d'éléments a le droit de tenir à la fois : 48 millions, 192 Mo.
@@ -1293,6 +1334,16 @@ fn stroke<'a>(e: &'a Element, rank: usize, ctx: &Ctx) -> Vec<Layer<'a>> {
     }
     let Some(src) = Dense::from_raster(&sheet) else { return Vec::new() };
     drop(sheet);
+    let encre = src.bounds();
+    transformer(points, rank, ctx, write, src, encre, (0, 0, w as i32, h as i32), false)
+}
+
+/// Les couches d'un trait passé par les effets : `src`, ses pixels dans `zone` (la feuille, ou une zone du monde), `encre`, le rectangle de toute son encre.
+/// `monde` : ce qu'il pose reste dans `zone`, sous forme de `Layer::Dense`.
+#[allow(clippy::too_many_arguments)]
+fn transformer<'a>(points: &[VPoint], rank: usize, ctx: &Ctx, write: Option<&Timing>, src: Dense, encre: Region, sheet_size: Region, monde: bool) -> Vec<Layer<'a>> {
+    let (w, h) = (ctx.w, ctx.h);
+    let st = &ctx.stack;
     // Le sens du trait, de son premier point au dernier.
     let dir = match (points.first(), points.last()) {
         (Some(a), Some(b)) if (b.x - a.x).hypot(b.y - a.y) > 1e-3 => {
@@ -1301,15 +1352,12 @@ fn stroke<'a>(e: &'a Element, rank: usize, ctx: &Ctx) -> Vec<Layer<'a>> {
         }
         _ => (1.0, 0.0),
     };
-    let sheet_size = (w, h);
 
     // L'axe, sa carte, et jusqu'où chaque effet pousse l'encre.
     let needs_path = write.is_some() || st.breath.is_some() || st.wave.is_some() || st.dash.is_some() || st.dry.is_some() || st.gradient.is_some() || st.dust.is_some_and(|d| d.sense > 0.0);
     let geo = needs_path.then(|| {
         let path = PathIndex::build(points);
-        let pb = path.bounds();
-        let (sx0, sy0, sx1, sy1) = src.bounds();
-        let margin = (pb.0 - sx0 as f32).max(sx1 as f32 - pb.2).max(pb.1 - sy0 as f32).max(sy1 as f32 - pb.3).max(1.0) + 1.0;
+        let margin = marge_de_l_encre(&path, encre);
         let breath_grow = st.breath.map_or(0.0, |b| (b.widest() - 1.0).max(0.0) * margin * 1.5);
         let wave_grow = st.wave.map_or(0.0, |wv| wv.amplitude + 1.0);
         let radius = margin * 1.5 + breath_grow + wave_grow + 1.0;
@@ -1360,14 +1408,21 @@ fn stroke<'a>(e: &'a Element, rank: usize, ctx: &Ctx) -> Vec<Layer<'a>> {
     }
     let mut layers = Vec::new();
     let mut dust_sheet = None;
+    let mut dust_zone = None;
     if let Some(d) = st.dust {
-        dust_sheet = Some(dust(&cur, geo.as_ref().map(|g| &g.0), &d, rank, w, h));
+        let g = geo.as_ref().map(|g| &g.0);
+        if monde {
+            dust_zone = Some(dust_dans(&cur, g, &d, rank, sheet_size));
+        } else {
+            dust_sheet = Some(dust(&cur, g, &d, rank, w, h));
+        }
     }
     // Le crayonné redouble ce que les autres effets ont fait.
     if let Some(sk) = st.sketch {
-        let base = match &dust_sheet {
-            Some(sheet) => Dense::from_raster(sheet),
-            None => Some(cur.clone()),
+        let base = match (&dust_sheet, &dust_zone) {
+            (Some(sheet), _) => Dense::from_raster(sheet),
+            (_, Some(z)) => Some(z.clone()),
+            _ => Some(cur.clone()),
         };
         if let Some(base) = base {
             let opacity = (sk.opacity * 255.0).round() as u8;
@@ -1376,11 +1431,212 @@ fn stroke<'a>(e: &'a Element, rank: usize, ctx: &Ctx) -> Vec<Layer<'a>> {
             }
         }
     }
-    match dust_sheet {
-        Some(sheet) => layers.push(Layer::Sheet(sheet, 255)),
-        None => layers.push(Layer::Dense(cur, 255)),
+    match (dust_sheet, dust_zone) {
+        (Some(sheet), _) => layers.push(Layer::Sheet(sheet, 255)),
+        (_, Some(z)) => layers.push(Layer::Dense(z, 255)),
+        _ => layers.push(Layer::Dense(cur, 255)),
     }
     layers
+}
+
+/// Le plus grand écart entre l'axe du trait et son encre (au moins un pixel), plus un pixel : le demi-trait.
+fn marge_de_l_encre(path: &PathIndex, encre: Region) -> f32 {
+    let pb = path.bounds();
+    let (sx0, sy0, sx1, sy1) = encre;
+    (pb.0 - sx0 as f32).max(sx1 as f32 - pb.2).max(pb.1 - sy0 as f32).max(sy1 as f32 - pb.3).max(1.0) + 1.0
+}
+
+/// Jusqu'où les effets de `st` peuvent porter l'encre d'un trait de demi-largeur `demi`.
+fn portee_du_trait(st: &Stack, demi: f32) -> f32 {
+    let vague = st.wave.map_or(0.0, |w| w.amplitude + 1.0);
+    let souffle = st.breath.map_or(0.0, |b| (b.widest() - 1.0).max(0.0) * demi * 1.5);
+    let passes = st.sketch.map_or(0.0, |s| s.offset + 2.0);
+    // (Un grain s'éparpille jusqu'à 1,35 fois la dispersion : `dust_points`.)
+    let poussiere = st.dust.map_or(0.0, |d| d.spread * 1.35 + d.drift + 2.0);
+    vague + souffle + passes + poussiere + 2.0
+}
+
+/// Ce que les effets du trait de `steps` peuvent porter au-delà de l'encre du dessin (`fx::portee_hors_feuille`).
+pub(crate) fn portee_des_effets(vector: &VectorDrawing, steps: &[FxStep]) -> f32 {
+    let st = Stack::of(steps);
+    if st.is_empty() {
+        return 0.0;
+    }
+    portee_du_trait(&st, demi_largeur(vector))
+}
+
+/// La plus grande demi-largeur des traits du dessin, avec ce qu'une brosse peut mettre autour.
+fn demi_largeur(vector: &VectorDrawing) -> f32 {
+    let r = vector.elements.iter().filter_map(|e| if let Element::Stroke { points, .. } = e { Some(points.iter().map(|p| p.r).fold(0.0, f32::max)) } else { None }).fold(0.0, f32::max);
+    r * 1.5 + 4.0
+}
+
+/// La feuille `out` (rendue par `render`) reçoit ce que les effets du trait mettent au-delà d'elle, **dans le monde** : l'abscisse du trait, son axe, son hasard sont les
+/// mêmes de part et d'autre du bord, le trait ne s'y casse pas, et ce qu'Écriture ou Poussière cachent ou éparpillent l'est aussi au-delà (partie 119). Les tuiles de la
+/// feuille assez près de ce qui dépasse pour le lire viennent aussi d'ici ; le reste de la feuille ne bouge pas, et un dessin qui ne dépasse pas ne passe pas par ici.
+pub(crate) fn hors_de_la_feuille(out: &mut Raster, raster: &Raster, vector: &VectorDrawing, steps: &[FxStep]) {
+    let debord = raster.tuiles_du_debord();
+    if debord.is_empty() {
+        return;
+    }
+    let (w, h) = (raster.width, raster.height);
+    let mut stack = Stack::of(steps);
+    let nib = stack.nib.and_then(|n| crate::fxmatiere::NibCtx::resolve(&n));
+    if nib.is_none() {
+        stack.nib = None;
+    }
+    // (Rien à transformer : `render` a posé les éléments tels quels, au-delà de la feuille aussi.)
+    if stack.is_empty() {
+        return;
+    }
+    let (timing, jobs) = travaux(vector, &stack);
+    let portee = portee_du_trait(&stack, demi_largeur(vector));
+    let voisines = crate::fxmonde::Voisines::autour(raster, &debord, crate::fxmonde::en_tuiles(portee));
+    let voulue = |tx: i32, ty: i32| !raster.in_window(tx, ty) || voisines.a(tx, ty) || raster.a_cheval(tx, ty);
+    let (strokes, banded) = (vector.elements.iter().filter(|e| matches!(e, Element::Stroke { .. })).count(), stack.transforms());
+    let ctx = Ctx { stack, timing, w, h, banded, nib, strokes };
+    let t = TILE as i32;
+    // L'élément peut-il poser quelque chose sur une tuile qu'on calcule ici ?
+    let touche = |e: &Element| {
+        let b = e.bounds();
+        let (x0, y0) = (((b.min.x - portee).floor() as i32).div_euclid(t), ((b.min.y - portee).floor() as i32).div_euclid(t));
+        let (x1, y1) = (((b.max.x + portee).ceil() as i32).div_euclid(t), ((b.max.y + portee).ceil() as i32).div_euclid(t));
+        (y0..=y1).any(|ty| (x0..=x1).any(|tx| voulue(tx, ty)))
+    };
+    let mut monde = Raster::new(w, h);
+    for job in &jobs {
+        match job {
+            Job::Plain(e) if touche(e) => render_element(&mut monde, e),
+            Job::Faded(e, opacity) if touche(e) => {
+                let mut seul = Raster::new(w, h);
+                render_element(&mut seul, e);
+                poser_raster(&mut monde, &seul, *opacity);
+            }
+            Job::Stroke(e, rank) if touche(e) => trait_dans_le_monde(&mut monde, e, *rank, &ctx, &voulue),
+            _ => {}
+        }
+    }
+    crate::fxmonde::fondre(out, &monde, &voisines);
+}
+
+/// Un trait passé par les effets, zone par zone (`fxmonde::BLOC` tuiles de côté, là où il a de l'encre et où le résultat est voulu), posé sur `monde`. Chaque zone voit
+/// autour d'elle jusqu'où ses effets portent : un long trait ne tient jamais son rectangle en mémoire.
+fn trait_dans_le_monde(monde: &mut Raster, e: &Element, rank: usize, ctx: &Ctx, voulue: &(dyn Fn(i32, i32) -> bool + Sync)) {
+    let Element::Stroke { points, .. } = e else { return };
+    let mut seul = Raster::new(ctx.w, ctx.h);
+    let nibbed = ctx.nib.as_ref().and_then(|n| n.restyle(e));
+    render_element(&mut seul, nibbed.as_deref().unwrap_or(e));
+    let write = ctx.timing.as_ref().filter(|t| !t.whole(rank));
+    if write.is_none() && !ctx.stack.transforms() {
+        render_element(monde, e);
+        return;
+    }
+    let Some(encre) = bornes_de_l_encre(&seul) else { return };
+    let demi = marge_de_l_encre(&PathIndex::build(points), encre);
+    let marge = crate::fxmonde::en_tuiles(portee_du_trait(&ctx.stack, demi));
+    let bloc = crate::fxmonde::BLOC;
+    let mut zones = std::collections::BTreeSet::new();
+    for id in seul.drawn_ids() {
+        let (tx, ty) = seul.key_of(id);
+        for by in (ty - marge).div_euclid(bloc)..=(ty + marge).div_euclid(bloc) {
+            for bx in (tx - marge).div_euclid(bloc)..=(tx + marge).div_euclid(bloc) {
+                zones.insert((bx, by));
+            }
+        }
+    }
+    let zones: Vec<(i32, i32)> = zones.into_iter().filter(|&(bx, by)| (0..bloc).any(|j| (0..bloc).any(|i| voulue(bx * bloc + i, by * bloc + j)))).collect();
+    let t = TILE as i32;
+    let max = match crate::render::thread_cap() {
+        0 => 8,
+        cap => cap.min(8),
+    };
+    // (Peu à la fois : chaque zone tient ses couches jusqu'à ce qu'elle soit posée.)
+    for lot in zones.chunks(max.max(1) * 2) {
+        let faites: Vec<Vec<Layer>> = crate::parallele::par_map(lot, max, |_, &(bx, by)| {
+            crate::fxmonde::sans_fils(|| {
+                let zone = ((bx * bloc - marge) * t, (by * bloc - marge) * t, ((bx + 1) * bloc + marge) * t, ((by + 1) * bloc + marge) * t);
+                match Dense::de_la_zone(&seul, zone) {
+                    Some(src) => transformer(points, rank, ctx, write, src, encre, zone, true),
+                    None => Vec::new(),
+                }
+            })
+        });
+        for (&(bx, by), couches) in lot.iter().zip(faites) {
+            let centre = (bx * bloc * t, by * bloc * t, (bx + 1) * bloc * t, (by + 1) * bloc * t);
+            for couche in couches {
+                if let Layer::Dense(d, opacity) = couche {
+                    poser_dans_le_monde(monde, &d, opacity, centre);
+                }
+            }
+        }
+    }
+}
+
+/// Le rectangle exact de l'encre de `r`, feuille et hors-feuille.
+fn bornes_de_l_encre(r: &Raster) -> Option<Region> {
+    let mut b: Option<Region> = None;
+    let t = TILE as i32;
+    for id in r.drawn_ids() {
+        let (tx, ty) = r.key_of(id);
+        let Some(tile) = r.slot(id) else { continue };
+        for y in 0..TILE {
+            let row = &tile[y * TILE..(y + 1) * TILE];
+            let Some(a) = row.iter().position(|c| c.a() != 0) else { continue };
+            let z = row.iter().rposition(|c| c.a() != 0).unwrap_or(a);
+            let (x0, x1, yy) = (tx * t + a as i32, tx * t + z as i32 + 1, ty * t + y as i32);
+            b = Some(match b {
+                None => (x0, yy, x1, yy + 1),
+                Some((p, q, u, v)) => (p.min(x0), q.min(yy), u.max(x1), v.max(yy + 1)),
+            });
+        }
+    }
+    b
+}
+
+/// `d`, limité à `centre`, posé sur `monde` à l'opacité `opacity`.
+fn poser_dans_le_monde(monde: &mut Raster, d: &Dense, opacity: u8, centre: Region) {
+    let t = TILE as i32;
+    let (b0, b1, b2, b3) = d.bounds();
+    let (x0, y0, x1, y1) = (b0.max(centre.0), b1.max(centre.1), b2.min(centre.2), b3.min(centre.3));
+    if x0 >= x1 || y0 >= y1 {
+        return;
+    }
+    for ty in y0.div_euclid(t)..=(y1 - 1).div_euclid(t) {
+        for tx in x0.div_euclid(t)..=(x1 - 1).div_euclid(t) {
+            let (cx0, cy0, cx1, cy1) = (x0.max(tx * t), y0.max(ty * t), x1.min((tx + 1) * t), y1.min((ty + 1) * t));
+            let encre = (cy0..cy1).any(|y| {
+                let row = (y - d.y0) as usize * d.w;
+                d.px[row + (cx0 - d.x0) as usize..row + (cx1 - d.x0) as usize].iter().any(|c| c.a() != 0)
+            });
+            if !encre {
+                continue;
+            }
+            let id = monde.id_of(tx, ty);
+            let tile = monde.tile_mut(id);
+            for y in cy0..cy1 {
+                for x in cx0..cx1 {
+                    let s = d.px[(y - d.y0) as usize * d.w + (x - d.x0) as usize];
+                    if s.a() != 0 {
+                        let at = (y - ty * t) as usize * TILE + (x - tx * t) as usize;
+                        tile[at] = crate::render::over(tile[at], s, opacity, None);
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// `src` posé sur `monde` à l'opacité `opacity`, fenêtre et hors-feuille.
+fn poser_raster(monde: &mut Raster, src: &Raster, opacity: u8) {
+    for id in src.drawn_ids() {
+        let Some(tile) = src.slot(id) else { continue };
+        let dst = monde.tile_mut(id);
+        for (d, &s) in dst.iter_mut().zip(tile.iter()) {
+            if s.a() != 0 {
+                *d = crate::render::over(*d, s, opacity, None);
+            }
+        }
+    }
 }
 
 /// Multiplie chaque pixel de `d` par `f(pixel, abscisse)`.
@@ -1400,7 +1656,7 @@ fn mask(d: &mut Dense, geo: &Geo, f: impl Fn((i32, i32), f32) -> f32) {
 
 /// Les passes du crayonné : le trait `d` relu à travers un champ de déplacement doux, propre au
 /// trait, à la passe et à la variante (une translation de l'ensemble, plus un tremblement lent).
-fn sketch_passes(d: &Dense, dir: (f32, f32), rank: usize, s: &SketchS, sheet: (usize, usize)) -> Vec<Dense> {
+fn sketch_passes(d: &Dense, dir: (f32, f32), rank: usize, s: &SketchS, sheet: Region) -> Vec<Dense> {
     use crate::tremblement::{Field, Lattice};
     let region = grown(d.bounds(), s.offset + 2.0, sheet);
     let (w, h) = ((region.2 - region.0).max(0) as usize, (region.3 - region.1).max(0) as usize);
@@ -1496,6 +1752,34 @@ fn occupancy(d: &Dense, region: Region, reach: f32) -> Occupancy {
 /// s'efface en fin de course.
 fn dust(d: &Dense, geo: Option<&Geo>, s: &DustS, rank: usize, w: usize, h: usize) -> Raster {
     let mut out = Raster::new(w, h);
+    dust_points(d, geo, s, rank, |tx, ty, c| {
+        if tx < 0 || ty < 0 || tx >= w as i32 || ty >= h as i32 {
+            return;
+        }
+        let idx = out.tile_index_of(tx as usize, ty as usize);
+        let tile = out.tile_mut(idx);
+        let at = (ty as usize % TILE) * TILE + tx as usize % TILE;
+        tile[at] = crate::render::over(tile[at], c, 255, None);
+    });
+    out
+}
+
+/// Comme `dust`, sur la seule `zone` du monde.
+fn dust_dans(d: &Dense, geo: Option<&Geo>, s: &DustS, rank: usize, zone: Region) -> Dense {
+    let (w, h) = ((zone.2 - zone.0).max(0) as usize, (zone.3 - zone.1).max(0) as usize);
+    let mut out = Dense::blank(zone.0, zone.1, w, h);
+    dust_points(d, geo, s, rank, |tx, ty, c| {
+        if tx < zone.0 || ty < zone.1 || tx >= zone.2 || ty >= zone.3 {
+            return;
+        }
+        let at = (ty - zone.1) as usize * w + (tx - zone.0) as usize;
+        out.px[at] = crate::render::over(out.px[at], c, 255, None);
+    });
+    out
+}
+
+/// Chaque pixel de `d`, là où la désagrégation le pose : `poser` (x, y, couleur).
+fn dust_points(d: &Dense, geo: Option<&Geo>, s: &DustS, rank: usize, mut poser: impl FnMut(i32, i32, Color32)) {
     let total = geo.map_or(1.0, |g| g.path.total.max(1.0));
     let drift = (s.angle.cos() * s.drift, s.angle.sin() * s.drift);
     for y in 0..d.h {
@@ -1526,14 +1810,10 @@ fn dust(d: &Dense, geo: Option<&Geo>, s: &DustS, rank: usize, w: usize, h: usize
                 ty = (iy as f32 + heading.sin() * dist + drift.1 * u * u).round() as i32;
                 keep = 1.0 - smooth((u - 0.55) / 0.45);
             }
-            if keep <= 0.004 || tx < 0 || ty < 0 || tx >= w as i32 || ty >= h as i32 {
+            if keep <= 0.004 {
                 continue;
             }
-            let idx = out.tile_index_of(tx as usize, ty as usize);
-            let tile = out.tile_mut(idx);
-            let at = (ty as usize % TILE) * TILE + tx as usize % TILE;
-            tile[at] = crate::render::over(tile[at], scaled(c, keep), 255, None);
+            poser(tx, ty, scaled(c, keep));
         }
     }
-    out
 }
