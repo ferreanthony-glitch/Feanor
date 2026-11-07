@@ -31,9 +31,10 @@ pub const MARQUE_DISTANCE_MAX: f32 = 6.0;
 /// saute de marque en marque, sans interpolation, comme des poses tenues.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Cles {
+    /// D'origine (Anthony, 2026-11-07 : « garde clés d'images comme option initiale »).
     #[default]
-    Interpolation,
     Images,
+    Interpolation,
 }
 
 impl Cles {
@@ -41,6 +42,57 @@ impl Cles {
         match self {
             Cles::Interpolation => "Clés d'interpolation",
             Cles::Images => "Clés d'images",
+        }
+    }
+}
+
+/// Le point du dessin qui suit le chemin (Anthony, 2026-11-07 : « une option qui aligne le point d'ancrage du calque sur la
+/// trajectoire, qui aligne le pixel le plus bas ou autres options pertinentes »).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub enum Ancre {
+    /// Là où part le trait : le calque garde sa place au départ et suit la forme du chemin (déplacement relatif).
+    #[default]
+    Depart,
+    /// Le bas du dessin (le milieu de son bord bas) : les pieds sur le chemin.
+    Bas,
+    /// Le centre du dessin.
+    Centre,
+    /// Le haut du dessin (le milieu de son bord haut).
+    Haut,
+    /// Le bord gauche du dessin (à mi-hauteur).
+    Gauche,
+    /// Le bord droit du dessin (à mi-hauteur).
+    Droite,
+    /// Un point du dessin choisi d'un clic, en coordonnées du dessin du calque.
+    Point { x: f32, y: f32 },
+}
+
+impl Ancre {
+    /// Les ancrages tout faits, dans l'ordre des réglages (le point cliqué se choisit à part).
+    pub const CHOIX: [Ancre; 6] = [Ancre::Depart, Ancre::Bas, Ancre::Centre, Ancre::Haut, Ancre::Gauche, Ancre::Droite];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Ancre::Depart => "Là où part le trait",
+            Ancre::Bas => "Le bas du dessin",
+            Ancre::Centre => "Le centre du dessin",
+            Ancre::Haut => "Le haut du dessin",
+            Ancre::Gauche => "Le bord gauche",
+            Ancre::Droite => "Le bord droit",
+            Ancre::Point { .. } => "Un point choisi d'un clic",
+        }
+    }
+
+    /// Le point d'ancrage dans la boîte `(min, max)` du dessin (coordonnées du dessin) ; rien pour « là où part le trait » et le point choisi.
+    pub fn dans_la_boite(self, min: [f32; 2], max: [f32; 2]) -> Option<[f32; 2]> {
+        let milieu = [(min[0] + max[0]) * 0.5, (min[1] + max[1]) * 0.5];
+        match self {
+            Ancre::Bas => Some([milieu[0], max[1]]),
+            Ancre::Centre => Some(milieu),
+            Ancre::Haut => Some([milieu[0], min[1]]),
+            Ancre::Gauche => Some([min[0], milieu[1]]),
+            Ancre::Droite => Some([max[0], milieu[1]]),
+            Ancre::Depart | Ancre::Point { .. } => None,
         }
     }
 }
@@ -75,10 +127,21 @@ pub struct Trajectoire {
     /// recalée à la main sur la timeline.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub temps: Option<Vec<f32>>,
-    /// Les clés posées : interpolées (d'origine) ou par images.
-    #[serde(default, skip_serializing_if = "est_interpolation")]
+    /// Les clés posées : par images (d'origine) ou interpolées.
+    #[serde(default, skip_serializing_if = "est_images")]
     pub cles: Cles,
-    /// En « clés d'images » : les dessins posés aux jalons, un par marque puis l'arrivée (le départ garde le dessin d'origine).
+    /// Le point du dessin qui suit le chemin.
+    #[serde(default, skip_serializing_if = "est_depart")]
+    pub ancre: Ancre,
+    /// Le déplacement que le dernier calcul a donné au calque à l'image du départ (clés d'interpolation : la clé du départ vaut la pose
+    /// propre du calque plus ce déplacement) : ce qu'il faut retirer pour retrouver la pose propre au calcul suivant.
+    #[serde(default, skip_serializing_if = "est_zero_2")]
+    pub decalage_depart: [f32; 2],
+    /// En « clés d'images » : le dessin d'origine du départ (celui que la trajectoire copie à chaque jalon), noté au premier calcul.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<u64>,
+    /// En « clés d'images » : les dessins posés aux jalons, un par jalon (le départ compris : le dessin d'origine lui-même quand il ne
+    /// bouge pas).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dessins: Vec<DessinJalon>,
 }
@@ -86,16 +149,32 @@ pub struct Trajectoire {
 fn est_zero_usize(v: &usize) -> bool {
     *v == 0
 }
-fn est_interpolation(c: &Cles) -> bool {
-    *c == Cles::Interpolation
+fn est_images(c: &Cles) -> bool {
+    *c == Cles::Images
+}
+fn est_depart(a: &Ancre) -> bool {
+    *a == Ancre::Depart
+}
+fn est_zero_2(v: &[f32; 2]) -> bool {
+    v[0] == 0.0 && v[1] == 0.0
 }
 
 impl Trajectoire {
     /// Un chemin fait des points d'un trait (feuille) : lissé, rééchantillonné. Rien si le trait est trop court.
     pub fn nouvelle(brut: &[[f32; 2]]) -> Option<Trajectoire> {
         let points = echantillonner(&lisser(brut));
-        (points.len() >= 2 && longueur_de(&points) >= LONGUEUR_MIN)
-            .then_some(Trajectoire { points, marques: Vec::new(), depart: 0, fin: None, temps: None, cles: Cles::Interpolation, dessins: Vec::new() })
+        (points.len() >= 2 && longueur_de(&points) >= LONGUEUR_MIN).then_some(Trajectoire {
+            points,
+            marques: Vec::new(),
+            depart: 0,
+            fin: None,
+            temps: None,
+            cles: Cles::default(),
+            ancre: Ancre::Depart,
+            decalage_depart: [0.0, 0.0],
+            source: None,
+            dessins: Vec::new(),
+        })
     }
 
     /// Une trajectoire relue d'un fichier : ses points filtrés (abîmés, doublons), ses marques remises en ordre et dans leurs
@@ -124,6 +203,14 @@ impl Trajectoire {
             self.fin = None;
         }
         self.dessins.retain(|d| d.dx.is_finite() && d.dy.is_finite());
+        if !self.decalage_depart[0].is_finite() || !self.decalage_depart[1].is_finite() {
+            self.decalage_depart = [0.0, 0.0];
+        }
+        if let Ancre::Point { x, y } = self.ancre {
+            if !x.is_finite() || !y.is_finite() {
+                self.ancre = Ancre::Depart;
+            }
+        }
         Some(self)
     }
 
@@ -268,10 +355,9 @@ impl Trajectoire {
         self.temps = None;
     }
 
-    /// Le déplacement du calque à chaque jalon, par rapport au départ du chemin (pixels de la feuille).
-    pub fn decalages(&self) -> Vec<[f32; 2]> {
-        let o = self.points[0];
-        self.jalons().iter().map(|&f| { let p = self.point_a(f); [p[0] - o[0], p[1] - o[1]] }).collect()
+    /// Le déplacement du calque à chaque jalon, pour que le point d'ancrage `ancre` (pixels de la feuille) soit sur le chemin.
+    pub fn decalages(&self, ancre: [f32; 2]) -> Vec<[f32; 2]> {
+        self.jalons().iter().map(|&f| { let p = self.point_a(f); [p[0] - ancre[0], p[1] - ancre[1]] }).collect()
     }
 
     /// Le chemin retourné de gauche à droite (`horizontal`) ou de haut en bas, autour de son départ : le calque, retourné de même,
@@ -295,19 +381,19 @@ impl Trajectoire {
         Some(jalons[i] + (jalons[i + 1] - jalons[i]) * w)
     }
 
-    /// Les clés de position qu'elle pose sur un calque de pose `base` dans un plan de `duree` images (**clés d'interpolation** : une
-    /// clé par image que le chemin couvre, le déplacement relatif au départ du chemin). Aucune en **clés d'images** (ce sont des
-    /// dessins, posés par l'application : `trajectoireui.rs`), ni si le plan n'a pas au moins une image après le départ.
-    pub fn cles(&self, duree: usize, base: LayerTransform) -> Vec<PosKey> {
+    /// Les clés de position qu'elle pose sur un calque de pose propre `base` dans un plan de `duree` images (**clés
+    /// d'interpolation** : une clé par image que le chemin couvre, le déplacement qui met le point d'ancrage `ancre`, en pixels de la
+    /// feuille sous la pose `base`, sur le chemin). Aucune en **clés d'images** (ce sont des dessins, posés par l'application :
+    /// `trajectoireui.rs`), ni si le plan n'a pas au moins une image après le départ.
+    pub fn cles(&self, duree: usize, base: LayerTransform, ancre: [f32; 2]) -> Vec<PosKey> {
         let Some(fin) = self.derniere_image(duree) else { return Vec::new() };
         if self.cles == Cles::Images {
             return Vec::new();
         }
-        let origine = self.points[0];
         (self.depart..=fin)
             .filter_map(|f| {
                 let p = self.point_a(self.fraction_a_l_image(f, duree)?);
-                Some(PosKey::new(f, LayerTransform { x: base.x + p[0] - origine[0], y: base.y + p[1] - origine[1], ..base }))
+                Some(PosKey::new(f, LayerTransform { x: base.x + p[0] - ancre[0], y: base.y + p[1] - ancre[1], ..base }))
             })
             .collect()
     }

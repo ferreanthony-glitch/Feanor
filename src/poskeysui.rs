@@ -104,21 +104,26 @@ impl App {
         if self.content_refuses() {
             return;
         }
-        let targets = self.pos_targets();
+        let mut targets = self.pos_targets();
         if targets.is_empty() {
             // (Le message dit pourquoi : verrouillé, position verrouillée, dossier…)
             self.layer_editable();
             return;
         }
+        // Un calque à trajectoire (`trajectoireui.rs`) : c'est elle qui pose les clés ; rien à la main.
+        let avec = targets.len();
+        targets.retain(|&li| self.layers()[li].trajectoire.is_none());
+        if targets.is_empty() {
+            self.status = crate::trajectoireui::CLES_PAR_LA_TRAJECTOIRE.into();
+            return;
+        }
         self.end_stroke();
         let f = self.cur_frame;
         self.named_step("Poser une clé de position", |app| app.record_step());
-        let mut detachee = false;
         for &li in &targets {
             let l = &mut self.layers_mut()[li];
             let t = l.pose(f);
             poskeys::set_key(&mut l.pos_keys, f, t);
-            detachee |= self.trajectoire_detacher(li, "clé posée à la main");
         }
         let n = targets.len();
         self.modified = true;
@@ -127,7 +132,7 @@ impl App {
             self.frame_label(f),
             n,
             s(n),
-            if detachee { crate::trajectoireui::DETACHEE } else { "" }
+            if avec > n { " (Pas sur un calque à trajectoire : elle pose ses clés elle-même.)" } else { "" }
         );
     }
 
@@ -162,9 +167,15 @@ impl App {
         }
         self.end_stroke();
         self.named_step("Supprimer des clés de position", |app| app.record_step());
-        let mut detachee = false;
+        let mut jalons = 0;
+        let mut supprimees = 0;
         for &(id, fr) in &list {
             let Some(li) = self.layers().iter().position(|l| l.id == id) else { continue };
+            // Un jalon de trajectoire (`trajectoireui.rs`) : la marque s'en va (ou le message dit que le départ et la fin restent).
+            if self.trajectoire_supprimer_jalon(li, fr) {
+                jalons += 1;
+                continue;
+            }
             let l = &mut self.layers_mut()[li];
             let here = l.pose(f);
             poskeys::remove_key(&mut l.pos_keys, fr);
@@ -173,13 +184,17 @@ impl App {
                 l.transform = here;
                 l.fold_dz();
             }
-            detachee |= self.trajectoire_detacher(li, "clé supprimée");
+            supprimees += 1;
         }
         self.pos_ui.sel.clear();
         self.renderer.invalidate_all();
         self.modified = true;
-        let n = list.len();
-        self.status = format!("{n} clé{} de position supprimée{}.{}", s(n), s(n), if detachee { crate::trajectoireui::DETACHEE } else { "" });
+        if supprimees > 0 {
+            let n = supprimees;
+            self.status = format!("{n} clé{} de position supprimée{}.", s(n), s(n));
+        } else if jalons == 0 {
+            self.status = "Pas de clé de position ici : rien n'est supprimé.".into();
+        }
     }
 
     /// Lisse (ou ne lisse plus) la clé de position de l'image courante : elle arrive et repart lentement.
@@ -190,26 +205,23 @@ impl App {
         let f = self.cur_frame;
         let mut targets: Vec<usize> = self.pos_targets();
         targets.retain(|&li| poskeys::key_at(&self.layers()[li].pos_keys, f).is_some());
+        // Un calque à trajectoire (`trajectoireui.rs`) : la vitesse vient des marques, pas d'un lissage à la main.
+        let avec = targets.len();
+        targets.retain(|&li| self.layers()[li].trajectoire.is_none());
         if targets.is_empty() {
-            self.status = "Pas de clé de position à cette image : pose-en une d'abord.".into();
+            self.status = if avec > 0 { crate::trajectoireui::CLES_PAR_LA_TRAJECTOIRE.into() } else { "Pas de clé de position à cette image : pose-en une d'abord.".into() };
             return;
         }
         self.end_stroke();
         // Une clé déjà adoucie (lissée ou réglée) ne l'est plus ; sinon elle est lissée.
         let eased = targets.iter().any(|&li| self.layers()[li].pos_keys.iter().any(|k| k.frame == f && k.is_eased()));
         self.named_step(if eased { "Ne plus lisser une clé de position" } else { "Lisser une clé de position" }, |app| app.record_step());
-        let mut detachee = false;
         for &li in &targets {
             poskeys::set_eases(&mut self.layers_mut()[li].pos_keys, f, !eased, 0.0, 0.0);
-            detachee |= self.trajectoire_detacher(li, "clé lissée à la main");
         }
         self.renderer.invalidate_all();
         self.modified = true;
-        self.status = format!(
-            "{}{}",
-            if eased { "Clé de position : vitesse constante." } else { "Clé de position lissée : le calque y arrive et en repart lentement." },
-            if detachee { crate::trajectoireui::DETACHEE } else { "" }
-        );
+        self.status = if eased { "Clé de position : vitesse constante.".into() } else { "Clé de position lissée : le calque y arrive et en repart lentement.".into() };
     }
 
     /// Supprime toutes les clés de position des calques visés : chacun garde la pose qu'il a à l'image
@@ -499,8 +511,13 @@ impl App {
         let snap = self.snapshot();
         let max = self.frame_count().saturating_sub(1);
         // Une seule clé prise, jalon d'une trajectoire (`trajectoireui.rs`) : le glisser la recale dans le temps, la trajectoire reste.
+        // Plusieurs clés d'un calque à trajectoire : un jalon à la fois.
         let duree = self.frame_count();
         let trajectoire = self.layers()[li].trajectoire.clone().filter(|t| frames.len() == 1 && t.images_des_jalons(duree).contains(&frames[0]));
+        if self.layers()[li].trajectoire.is_some() && trajectoire.is_none() {
+            self.status = "Calque à trajectoire : glisse un jalon à la fois (le départ, une marque, la fin) pour le recaler.".into();
+            return false;
+        }
         self.pos_ui.drag = Some(PosDrag { layer: id, before, frames, grab, delta: 0, max, snap, trajectoire });
         true
     }
@@ -547,9 +564,6 @@ impl App {
             return;
         }
         self.pos_ui.sel.extend(d.frames.iter().map(|&f| (d.layer, (f as isize + d.delta).max(0) as usize)));
-        if let Some(li) = self.layers().iter().position(|l| l.id == d.layer) {
-            self.trajectoire_detacher(li, "clés déplacées à la main");
-        }
         self.modified = true;
         self.commit_named(d.snap, "Déplacer des clés de position");
     }

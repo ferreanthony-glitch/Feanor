@@ -8266,12 +8266,21 @@ les réglages) ; essais `trajectoire_tests.rs` (8) et `trajectoireui_tests.rs` (
   trait (on part le trait du personnage, il ne saute pas). Les clés de position sont posées sur le calque (`Layer::pos_keys`, celles de
   l'outil Transformer) ; la pose du calque à l'image du départ (échelle, rotation…) est gardée sur tout le chemin. Le départ est gardé avec le
   chemin ; « Partir de la tête de lecture » (réglages) le change.
-- **Deux sortes de clés** (réglages, Anthony : « Clés d'interpolation ou Clés d'images ») : **Clés d'interpolation**, d'origine, une clé de
-  position par image, le calque glisse **le long de la courbe**, pas de la corde, à vitesse constante entre deux marques ; **Clés
+- **Ce qui suit le chemin** (réglages ; Anthony : « une option qui aligne le point d'ancrage du calque sur la trajectoire, qui aligne le
+  pixel le plus bas ou autres options pertinentes ») : d'origine, **là où part le trait** (le calque garde sa place au départ et suit la
+  forme du chemin) ; ou un point du dessin du départ mis **sur** le chemin dès la première image : **le bas du dessin** (le milieu de son
+  bord bas : les pieds sur le chemin), **le centre**, **le haut**, **le bord gauche**, **le bord droit** (la boîte exacte des traits ou des
+  pixels dessinés), ou **un point choisi d'un clic** sur le dessin (bouton « Un point du dessin : cliquer », puis le clic ; le bout d'un
+  pied, une main). Le point d'ancrage se voit sur le chemin à l'image courante, cerclé quand ce n'est pas le départ du trait. Les
+  calculs suivants ne font pas dériver la pose propre du calque (`decalage_depart`).
+- **Deux sortes de clés** (réglages, Anthony : « Clés d'interpolation ou Clés d'images » ; puis « garde clés d'images comme option initiale
+  et clés d'interpolation en option secondaire ») : **Clés d'images**, d'origine (voir plus bas) ; **Clés d'interpolation**, une clé de
+  position par image, le calque glisse **le long de la courbe**, pas de la corde, à vitesse constante entre deux marques. **Clés
   d'images** (Anthony, après son essai : « j'imaginais que les clés d'images scinderaient la timeline comme toutes les clés d'images ») :
   **un dessin à chaque jalon** (chaque marque, l'arrivée), copie du dessin du départ déplacée à sa place sur le chemin, exposé jusqu'au
-  jalon suivant (le dernier jusqu'à la fin du plan), le départ gardant son dessin : la timeline se scinde comme pour toute clé de dessin,
-  aucune clé de position, et chaque pose se redessine. Un dessin posé par la trajectoire est **déplacé, pas refait**, quand la marque
+  jalon suivant (le dernier jusqu'à la fin du plan), le départ gardant son dessin d'origine (ou une copie déplacée, si le point
+  d'ancrage n'est pas le départ du trait) : la timeline se scinde comme pour toute clé de dessin, aucune clé de position, et chaque pose
+  se redessine. Sans dessin au départ, rien n'est posé et la ligne d'état dit de dessiner d'abord. Un dessin posé par la trajectoire est **déplacé, pas refait**, quand la marque
   glisse (ce qu'on y a dessiné suit) ; les dessins sont refaits au lâcher d'un geste, pas pendant. Vectoriel : les traits sont translatés,
   le rendu exact revient du fil de travail ; bitmap : les pixels, décalés à l'entier, toile infinie comprise (`Raster::decalee`) ; l'aplat
   suit. Pas de dessin au départ : rien n'est posé, la ligne d'état le dit. (`PosKey::tenue`, la clé tenue sans interpolation, reste dans
@@ -8309,10 +8318,14 @@ les réglages) ; essais `trajectoire_tests.rs` (8) et `trajectoireui_tests.rs` (
   croix ailleurs. La ligne sous le dessin dit les gestes ; la carte F1 aussi.
 - **Dans la timeline et le montage**, un calque à trajectoire ne montre que les losanges de ses **jalons**, reliés d'un trait, pas sa clé par
   image.
-- **Détacher.** Poser, supprimer ou lisser une clé **à la main**, glisser plusieurs clés à la fois, déplacer un calque animé avec Transformer :
-  la trajectoire se détache, les clés restent telles quelles, le chemin s'en va, la ligne d'état le dit. (Glisser une seule clé qui est un
-  jalon recale, voir plus haut.) Les boutons du panneau : **Détacher** (garder ce qui est posé), **Effacer** (le chemin et ce qu'il a posé,
-  clés ou dessins, s'en vont ; le calque garde sa pose du départ), **Retirer les marques**.
+- **La trajectoire ne s'en va jamais d'elle-même** (Anthony, après son essai : « j'aimerais garder la trajectoire visible et toujours
+  éditable », une clé supprimée l'avait détachée). **Suppr** sur une marque (sa clé choisie, ou la tête de lecture dessus) retire la
+  marque ; sur le départ ou la fin, rien, la ligne d'état dit comment enlever la trajectoire. **Poser** ou **lisser** une clé à la main sur
+  un calque à trajectoire est refusé, avec la raison (c'est la trajectoire qui pose ses clés). Glisser **plusieurs** clés d'un tel calque
+  est refusé aussi : un jalon à la fois. **Transformer** déplace **le calque et son chemin ensemble** (agrandir ou tourner change la pose
+  propre du calque, le chemin reste), les clés sont reposées, une étape. Seuls les boutons **Détacher** (garder ce qui est posé, clés ou
+  dessins) et **Effacer** (le chemin et ce qu'il a posé s'en vont ; le calque garde sa pose du départ), « Supprimer toutes les clés du
+  calque », couper ou réunir le plan enlèvent la trajectoire. **Retirer les marques** garde le chemin.
 - **Couper un plan, réunir deux plans** : chaque partie garde ses clés (comme avant, `poskeys::split_keys` / `join_keys`), aucune ne garde le
   chemin. Dupliquer un plan, copier un calque : le chemin suit. Changer la taille de la feuille (`adaptation.rs`) : le chemin suit, à
   l'échelle. Retourner un calque ou des plans (`flip.rs`) : le chemin se retourne autour de son départ. Insérer ou retirer des images : les clés
@@ -8346,9 +8359,12 @@ départ). Le modèle ne connaît ni l'écran ni l'application : ses essais sont 
    place. Ctrl+Z : plus de chemin, plus de clés.
 2. Trois petits traits en travers du chemin, serrés au départ, un loin au milieu, serrés à l'arrivée : lecture, lent, vite, lent. Les
    silhouettes pâles montrent où il est à chaque marque ; les numéros d'image au-dessus.
-2b. Réglages : « Clés d'images ». La timeline se scinde : un dessin à chaque marque et à l'arrivée, le personnage à sa place sur le chemin ;
-   dessine sur l'un d'eux, glisse sa marque le long du chemin : ton dessin suit. « Clés d'interpolation » : les dessins posés s'en vont,
-   il glisse de nouveau.
+2b. D'origine, « Clés d'images » : la timeline se scinde, un dessin à chaque marque et à l'arrivée, le personnage à sa place sur le
+   chemin ; dessine sur l'un d'eux, glisse sa marque le long du chemin : ton dessin suit. « Clés d'interpolation » : les dessins posés
+   s'en vont, il glisse de nouveau.
+2d. « Ce qui suit le chemin » : « Le bas du dessin » : les pieds du personnage sont sur le chemin dès le départ, le point cerclé le montre.
+   « Le centre ». « Un point du dessin : cliquer », puis clique le bout d'un pied : c'est lui qui suit. « Là où part le trait » : comme
+   avant.
 2c. Timeline : glisse la dernière clé vers la gauche : la fin recule et toutes les clés d'entre se recalent, la trajectoire reste. Glisse
    une marque : elle change de temps. Glisse la première : le départ bouge. En clés d'images, pareil avec les clés de dessin (Maj tenue).
    « Finir à la tête de lecture », « Partir de la tête de lecture », « Temps égaux entre les marques » dans les réglages.
@@ -8357,8 +8373,9 @@ départ). Le modèle ne connaît ni l'écran ni l'application : ses essais sont 
 4. Un trait long ailleurs : le chemin est retracé, les marques restent.
 5. Réglages : « un nombre d'images » par marque, 4 : le chemin dure 4 images par intervalle, puis le personnage reste au bout.
 6. Prends le Pinceau : plus de chemin ; reprends la Trajectoire : il est là. Enregistre, rouvre : il est là.
-7. Timeline : seuls les jalons se voient, reliés. Pose une clé à la main (Transformer, « Clé de position ici ») : la trajectoire se détache,
-   le message le dit, les clés restent.
+7. Timeline : seuls les jalons se voient, reliés. Suppr sur une marque : elle part, le chemin reste ; sur le départ : rien, le message le
+   dit. « Clé de position ici » : refusé, le message le dit. Transformer : le personnage et son chemin bougent ensemble, Ctrl+Z rend les deux.
+   Prends d'autres outils, reviens : le chemin est toujours là.
 8. Vignettes : l'outil est refusé, comme les autres outils hors des quatre.
 
 ## 120. Les poignées de lissage de la caméra attendent à côté de chaque clé (2026-11-07, branche `trajectoire`)

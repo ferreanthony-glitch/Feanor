@@ -2,15 +2,22 @@
 
 use crate::document::LayerTransform;
 use crate::poskeys::pose_at;
-use crate::trajectoire::{distance, Cles, DessinJalon, Trajectoire, ECART_MIN, LONGUEUR_MIN, MARQUE_DISTANCE_MAX};
+use crate::trajectoire::{distance, Ancre, Cles, DessinJalon, Trajectoire, ECART_MIN, LONGUEUR_MIN, MARQUE_DISTANCE_MAX};
 
-/// Un chemin droit de (0, 0) à (100, 0).
+/// Un chemin droit de (0, 0) à (100, 0), en clés d'interpolation (le modèle ne pose pas les dessins des clés d'images).
 fn droite() -> Trajectoire {
-    Trajectoire::nouvelle(&[[0.0, 0.0], [100.0, 0.0]]).expect("un chemin")
+    let mut t = Trajectoire::nouvelle(&[[0.0, 0.0], [100.0, 0.0]]).expect("un chemin");
+    t.cles = Cles::Interpolation;
+    t
+}
+
+/// Les clés, le point d'ancrage étant le départ du trait (le déplacement relatif).
+fn cles_de(t: &Trajectoire, duree: usize, base: LayerTransform) -> Vec<crate::poskeys::PosKey> {
+    t.cles(duree, base, t.points[0])
 }
 
 fn x_des_cles(t: &Trajectoire, duree: usize) -> Vec<(usize, f32)> {
-    t.cles(duree, LayerTransform::default()).iter().map(|k| (k.frame, k.t.x)).collect()
+    cles_de(t, duree, LayerTransform::default()).iter().map(|k| (k.frame, k.t.x)).collect()
 }
 
 #[test]
@@ -23,12 +30,30 @@ fn a_path_without_marks_moves_the_layer_at_constant_speed_over_the_whole_plan() 
     }
     // Le déplacement est relatif : la pose du calque au départ est gardée.
     let base = LayerTransform { x: 50.0, y: -20.0, scale: 2.0, angle: 30.0, ..Default::default() };
-    let cles = t.cles(11, base);
+    let cles = cles_de(&t, 11, base);
     assert_eq!(cles[0].t, base);
     assert_eq!(cles[10].t, LayerTransform { x: 150.0, ..base });
     // Un plan d'une image : aucune clé.
-    assert!(t.cles(1, base).is_empty());
-    assert!(t.cles(0, base).is_empty());
+    assert!(cles_de(&t, 1, base).is_empty());
+    assert!(cles_de(&t, 0, base).is_empty());
+    // Un autre point d'ancrage (le bas du dessin, à (10, 30) sur la feuille) : c'est lui qui est mis sur le chemin, dès le départ.
+    let cles = t.cles(11, base, [10.0, 30.0]);
+    assert_eq!(cles[0].t, LayerTransform { x: 40.0, y: -50.0, ..base });
+    assert_eq!(cles[10].t, LayerTransform { x: 140.0, y: -50.0, ..base });
+    let d = t.decalages([10.0, 30.0]);
+    assert_eq!(d, [[-10.0, -30.0], [90.0, -30.0]]);
+    // Les ancrages tout faits dans une boîte.
+    let (min, max) = ([10.0, 20.0], [50.0, 60.0]);
+    assert_eq!(Ancre::Bas.dans_la_boite(min, max), Some([30.0, 60.0]));
+    assert_eq!(Ancre::Centre.dans_la_boite(min, max), Some([30.0, 40.0]));
+    assert_eq!(Ancre::Haut.dans_la_boite(min, max), Some([30.0, 20.0]));
+    assert_eq!(Ancre::Gauche.dans_la_boite(min, max), Some([10.0, 40.0]));
+    assert_eq!(Ancre::Droite.dans_la_boite(min, max), Some([50.0, 40.0]));
+    assert_eq!(Ancre::Depart.dans_la_boite(min, max), None);
+    assert_eq!(Ancre::Point { x: 1.0, y: 2.0 }.dans_la_boite(min, max), None);
+    // D'origine : les clés d'images, l'ancrage là où part le trait.
+    let neuve = Trajectoire::nouvelle(&[[0.0, 0.0], [100.0, 0.0]]).unwrap();
+    assert_eq!((neuve.cles, neuve.ancre), (Cles::Images, Ancre::Depart));
 }
 
 #[test]
@@ -64,7 +89,7 @@ fn the_end_can_be_set_and_the_start_the_end_and_the_marks_can_be_retimed() {
     let cles = x_des_cles(&t, 31);
     assert_eq!(cles.len(), 11);
     assert!((cles[5].1 - 50.0).abs() < 1e-3 && (cles[10].1 - 100.0).abs() < 1e-3);
-    assert_eq!(pose_at(&t.cles(31, LayerTransform::default()), 25, LayerTransform::default()).x, 100.0, "après la fin, au bout");
+    assert_eq!(pose_at(&cles_de(&t, 31, LayerTransform::default()), 25, LayerTransform::default()).x, 100.0, "après la fin, au bout");
     // Une fin au-delà du plan est bornée à sa dernière image.
     t.fin = Some(80);
     assert_eq!(t.images_des_jalons(31), [0, 15, 30]);
@@ -190,7 +215,7 @@ fn moving_and_stretching_the_path_keep_the_marks_at_their_fractions() {
     assert!((f - 0.25).abs() < 1e-3);
     assert!((d - 5.0).abs() < 1e-3);
     // Les déplacements aux jalons, relatifs au départ.
-    assert_eq!(t.decalages(), [[0.0, 0.0], [100.0, 0.0], [200.0, 0.0]]);
+    assert_eq!(t.decalages(t.points[0]), [[0.0, 0.0], [100.0, 0.0], [200.0, 0.0]]);
 }
 
 #[test]
@@ -225,23 +250,35 @@ fn the_file_form_round_trips_and_a_damaged_one_is_cleaned() {
     assert!(texte.contains("\"marques\""));
     let relue: Trajectoire = serde_json::from_str(&texte).unwrap();
     assert_eq!(relue, t);
-    // Sans marques, départ à 0, fin du plan, temps égaux, clés d'interpolation : rien d'écrit de plus que les points.
-    let simple = droite();
+    // Sans marques, départ à 0, fin du plan, temps égaux, clés d'images, ancrage au départ du trait : rien d'écrit de plus que les points.
+    let simple = Trajectoire::nouvelle(&[[0.0, 0.0], [100.0, 0.0]]).unwrap();
     let texte = serde_json::to_string(&simple).unwrap();
-    assert!(!texte.contains("marques") && !texte.contains("depart") && !texte.contains("fin") && !texte.contains("temps") && !texte.contains("cles") && !texte.contains("dessins"), "{texte}");
+    assert!(
+        !texte.contains("marques") && !texte.contains("depart") && !texte.contains("fin") && !texte.contains("temps") && !texte.contains("cles") && !texte.contains("dessins") && !texte.contains("ancre") && !texte.contains("decalage") && !texte.contains("source"),
+        "{texte}"
+    );
     assert_eq!(serde_json::from_str::<Trajectoire>(&texte).unwrap(), simple);
-    // Le départ, la fin, les temps, la sorte des clés et les dessins posés s'écrivent et reviennent.
+    // Le départ, la fin, les temps, la sorte des clés, l'ancrage, le décalage du départ, la source et les dessins posés s'écrivent et reviennent.
     let mut t = droite();
     t.ajouter_marque(0.5);
     t.depart = 7;
     t.fin = Some(40);
     t.temps = Some(vec![0.3]);
-    t.cles = Cles::Images;
-    t.dessins = vec![DessinJalon { dessin: 12, dx: 50.0, dy: 0.0 }, DessinJalon { dessin: 13, dx: 100.0, dy: 0.0 }];
+    t.ancre = Ancre::Point { x: 3.0, y: 4.0 };
+    t.decalage_depart = [1.0, -2.0];
+    t.source = Some(11);
+    t.dessins = vec![DessinJalon { dessin: 11, dx: 0.0, dy: 0.0 }, DessinJalon { dessin: 12, dx: 50.0, dy: 0.0 }, DessinJalon { dessin: 13, dx: 100.0, dy: 0.0 }];
     let texte = serde_json::to_string(&t).unwrap();
-    assert!(texte.contains("\"depart\":7") && texte.contains("\"fin\":40") && texte.contains("\"temps\":[0.3]") && texte.contains("\"cles\":\"Images\"") && texte.contains("\"dessins\""), "{texte}");
+    assert!(
+        texte.contains("\"depart\":7") && texte.contains("\"fin\":40") && texte.contains("\"temps\":[0.3]") && texte.contains("\"cles\":\"Interpolation\"") && texte.contains("\"ancre\":{\"Point\"") && texte.contains("\"source\":11") && texte.contains("\"dessins\""),
+        "{texte}"
+    );
     assert_eq!(serde_json::from_str::<Trajectoire>(&texte).unwrap(), t);
-    // Abîmée : marques hors bornes ou en désordre, doublon de points, temps faux (pas un par marque), fin avant le départ.
+    let mut bas = droite();
+    bas.ancre = Ancre::Bas;
+    assert!(serde_json::to_string(&bas).unwrap().contains("\"ancre\":\"Bas\""));
+    // Abîmée : marques hors bornes ou en désordre, doublon de points, temps faux (pas un par marque), fin avant le départ, point d'ancrage
+    // et décalage pas des nombres.
     let abimee = Trajectoire {
         points: vec![[0.0, 0.0], [0.0, 0.0], [100.0, 0.0]],
         marques: vec![0.9, 1.5, 0.2, 0.9],
@@ -249,12 +286,16 @@ fn the_file_form_round_trips_and_a_damaged_one_is_cleaned() {
         fin: Some(3),
         temps: Some(vec![0.5, 0.4, 0.3]),
         cles: Cles::Interpolation,
+        ancre: Ancre::Point { x: f32::NAN, y: 0.0 },
+        decalage_depart: [f32::INFINITY, 0.0],
+        source: None,
         dessins: vec![DessinJalon { dessin: 1, dx: f32::NAN, dy: 0.0 }],
     };
     let propre = abimee.assainie().expect("tient debout");
     assert_eq!(propre.points.len(), 2);
     assert_eq!(propre.marques, [0.2, 0.9]);
     assert_eq!((propre.fin, propre.temps.clone(), propre.dessins.len()), (None, None, 0));
+    assert_eq!((propre.ancre, propre.decalage_depart), (Ancre::Depart, [0.0, 0.0]));
     // Des temps bons sont gardés.
     let bonne = Trajectoire { marques: vec![0.2, 0.9], temps: Some(vec![0.1, 0.8]), ..droite() };
     assert_eq!(bonne.assainie().unwrap().temps, Some(vec![0.1, 0.8]));
@@ -277,12 +318,12 @@ fn the_path_starts_at_its_start_image_and_nothing_moves_before_it() {
     assert_eq!(cles[0], (5, 0.0));
     assert!((cles[18].1 - 100.0).abs() < 1e-3);
     // Avant la première clé, la pose est celle de la première clé : le calque attend au départ.
-    let keys = t.cles(24, LayerTransform::default());
+    let keys = cles_de(&t, 24, LayerTransform::default());
     assert_eq!(pose_at(&keys, 2, LayerTransform::default()).x, 0.0);
     // Un plan qui s'arrête au départ, ou juste avant : aucune clé.
-    assert!(t.cles(6, LayerTransform::default()).is_empty());
-    assert!(t.cles(5, LayerTransform::default()).is_empty());
-    assert!(!t.cles(7, LayerTransform::default()).is_empty());
+    assert!(cles_de(&t, 6, LayerTransform::default()).is_empty());
+    assert!(cles_de(&t, 5, LayerTransform::default()).is_empty());
+    assert!(!cles_de(&t, 7, LayerTransform::default()).is_empty());
 }
 
 #[test]
@@ -290,11 +331,11 @@ fn image_keys_pose_no_position_key_the_drawings_do_the_work() {
     let mut t = droite();
     t.ajouter_marque(0.3);
     t.cles = Cles::Images;
-    assert!(t.cles(31, LayerTransform::default()).is_empty(), "en clés d'images, ce sont des dessins, posés par l'application");
+    assert!(cles_de(&t, 31, LayerTransform::default()).is_empty(), "en clés d'images, ce sont des dessins, posés par l'application");
     assert_eq!(t.images_des_jalons(31), [0, 15, 30]);
-    let d = t.decalages();
+    let d = t.decalages(t.points[0]);
     assert_eq!(d.len(), 3);
     assert!((d[1][0] - 30.0).abs() < 1e-3 && d[1][1].abs() < 1e-3 && (d[2][0] - 100.0).abs() < 1e-3, "{d:?}");
     t.cles = Cles::Interpolation;
-    assert_eq!(t.cles(31, LayerTransform::default()).len(), 31);
+    assert_eq!(cles_de(&t, 31, LayerTransform::default()).len(), 31);
 }

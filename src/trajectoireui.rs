@@ -17,9 +17,10 @@
 //!   dessiné suit.
 //!
 //! **Recaler dans le temps** : glisser sur la timeline (ou au montage) une clé qui est un jalon de la trajectoire — la première,
-//! la dernière, ou une marque — recale ce jalon (`Trajectoire::recaler`) et repose les clés entre le départ et la fin ; la
-//! trajectoire reste. Poser, supprimer ou lisser une clé à la main, ou déplacer un calque animé avec Transformer, la **détache**
-//! (`App::trajectoire_detacher`) : les clés restent, le chemin s'en va, la ligne d'état le dit.
+//! la dernière, ou une marque — recale ce jalon (`Trajectoire::recaler`) et repose les clés entre le départ et la fin. **La
+//! trajectoire ne s'en va jamais d'elle-même** (Anthony : « garder la trajectoire visible et toujours éditable ») : Suppr sur une
+//! marque la retire, le départ et la fin restent ; poser ou lisser une clé à la main est refusé avec la raison ; Transformer déplace
+//! le calque et son chemin ensemble. Seuls « Détacher », « Effacer », « Supprimer toutes les clés », couper ou réunir un plan l'enlèvent.
 
 use eframe::egui::{self, pos2, vec2, Align2, Color32, CursorIcon, FontId, Key, Pos2, RichText, Shape, Stroke, Vec2};
 
@@ -27,7 +28,8 @@ use crate::app::{App, Tool};
 use crate::document::CelId;
 use crate::history::Edit;
 use crate::poskeys::PosKey;
-use crate::trajectoire::{distance, Cles, DessinJalon, Trajectoire};
+use crate::document::LayerTransform;
+use crate::trajectoire::{distance, Ancre, Cles, DessinJalon, Trajectoire};
 use crate::vector::Affine;
 
 /// La teinte du chemin, de ses marques et des silhouettes : celle des poignées du calque.
@@ -42,8 +44,8 @@ pub(crate) const TOL_ECRAN: f32 = 10.0;
 pub(crate) const ARRACHE_ECRAN: f32 = 40.0;
 /// La demi-longueur d'une marque à l'écran.
 const DEMI_MARQUE: f32 = 7.0;
-/// Ce qu'une commande des clés ajoute à sa ligne d'état quand elle a détaché une trajectoire.
-pub(crate) const DETACHEE: &str = " La trajectoire du calque est détachée : le chemin s'en va, les clés restent.";
+/// Ce que disent les commandes des clés de position sur un calque à trajectoire : elles n'y touchent pas.
+pub(crate) const CLES_PAR_LA_TRAJECTOIRE: &str = "Ce calque a une trajectoire : c'est elle qui pose ses clés. Tire le chemin, glisse une marque, ou « Détacher » dans les réglages de l'outil Trajectoire pour les reprendre à la main.";
 
 /// Un geste de l'outil en cours.
 pub(crate) enum Geste {
@@ -59,8 +61,10 @@ pub(crate) enum Geste {
 #[derive(Default)]
 pub(crate) struct Etat {
     pub(crate) geste: Option<Geste>,
-    /// La sorte de clés proposée à la prochaine trajectoire tracée.
+    /// La sorte de clés proposée à la prochaine trajectoire tracée (d'origine : clés d'images).
     pub(crate) cles_propose: Cles,
+    /// Le prochain appui sur le dessin choisit le point d'ancrage (bouton « Un point du dessin : cliquer »).
+    pub(crate) choisir_ancre: bool,
 }
 
 fn pluriel(n: usize) -> &'static str {
@@ -101,6 +105,21 @@ impl App {
             return;
         }
         let p = [stage.x, stage.y];
+        // Le point d'ancrage se choisit d'un clic sur le dessin (bouton des réglages).
+        if std::mem::take(&mut self.traj.choisir_ancre) {
+            let li = self.cur_layer;
+            if self.layer().trajectoire.is_some() {
+                let q = self.to_layer(stage);
+                let snap = self.snapshot();
+                if let Some(t) = self.layers_mut()[li].trajectoire.as_mut() {
+                    t.ancre = Ancre::Point { x: q.x, y: q.y };
+                }
+                self.trajectoire_recalculer(li);
+                self.trajectoire_valider(snap, "Point d'ancrage de la trajectoire");
+                self.status = "Point d'ancrage posé : c'est lui qui suit le chemin.".into();
+            }
+            return;
+        }
         let (marque, chemin) = self.trajectoire_sous(stage);
         let l = self.layer();
         if let (Some(avant), true) = (l.trajectoire.clone(), chemin) {
@@ -228,6 +247,9 @@ impl App {
                         t.fin = e.fin;
                         t.temps = e.temps;
                         t.cles = e.cles;
+                        t.ancre = e.ancre;
+                        t.decalage_depart = e.decalage_depart;
+                        t.source = e.source;
                         t.dessins = e.dessins;
                     }
                     None => {
@@ -257,31 +279,96 @@ impl App {
     }
 
     /// Les clés du calque `li` du plan `pi` reposées d'après sa trajectoire : en clés d'interpolation, une clé de position par
-    /// image (la pose au départ reste celle du calque à l'image du départ) ; en clés d'images, aucune clé de position, un dessin
-    /// à chaque jalon. Un chemin qui ne couvre aucune image (plan trop court) laisse le calque fixe.
+    /// image (la pose propre du calque, celle qu'il a à l'image du départ moins ce que le dernier calcul y avait ajouté, reste la
+    /// base) ; en clés d'images, aucune clé de position, un dessin à chaque jalon. Le point d'ancrage choisi (`Ancre`) est ce qui
+    /// suit le chemin. Un chemin qui ne couvre aucune image (plan trop court) laisse le calque fixe.
     pub(crate) fn trajectoire_recalculer_dans(&mut self, pi: usize, li: usize) {
         let Some(p) = self.doc.panels.get(pi) else { return };
         let duree = p.frame_count();
         let Some(t) = p.layers.get(li).and_then(|l| l.trajectoire.clone()) else { return };
+        let l = &self.doc.panels[pi].layers[li];
+        let posee = crate::poskeys::pose_at(&l.pos_keys, t.depart, l.transform);
+        let base = LayerTransform { x: posee.x - t.decalage_depart[0], y: posee.y - t.decalage_depart[1], ..posee };
+        let ancre = self.trajectoire_point_d_ancrage(pi, li, &t, base);
         let l = &mut self.doc.panels[pi].layers[li];
-        let base = crate::poskeys::pose_at(&l.pos_keys, t.depart, l.transform);
         match t.cles {
             Cles::Interpolation => {
-                l.pos_keys = t.cles(duree, base);
+                l.pos_keys = t.cles(duree, base, ancre);
+                let premiere = l.pos_keys.first().map(|k| [k.t.x - base.x, k.t.y - base.y]).unwrap_or([0.0, 0.0]);
                 if l.pos_keys.is_empty() {
                     l.transform = base;
                     l.fold_dz();
+                }
+                if let Some(tr) = l.trajectoire.as_mut() {
+                    tr.decalage_depart = premiere;
                 }
                 if !t.dessins.is_empty() {
                     self.trajectoire_defaire_les_dessins(pi, li);
                 }
             }
             Cles::Images => {
-                // Les clés de position s'en vont : le calque garde sa pose du départ, les dessins font le mouvement.
+                // Les clés de position s'en vont : le calque garde sa pose propre, les dessins font le mouvement.
                 l.pos_keys.clear();
                 l.transform = base;
                 l.fold_dz();
-                self.trajectoire_poser_les_dessins(pi, li);
+                if let Some(tr) = l.trajectoire.as_mut() {
+                    tr.decalage_depart = [0.0, 0.0];
+                }
+                self.trajectoire_poser_les_dessins(pi, li, ancre);
+            }
+        }
+    }
+
+    /// La boîte exacte du dessin `cel` (coordonnées du dessin) : les traits d'un dessin vectoriel, les pixels dessinés d'un bitmap
+    /// (feuille et hors-feuille). Rien pour un dessin vide.
+    fn boite_du_dessin(&self, cel: CelId) -> Option<([f32; 2], [f32; 2])> {
+        let c = self.doc.cels.get(&cel)?;
+        if let Some(v) = &c.vector {
+            let r = v.elements.iter().fold(egui::Rect::NOTHING, |r, e| r.union(e.bounds()));
+            return (r.is_finite() && r.width() >= 0.0).then_some(([r.min.x, r.min.y], [r.max.x, r.max.y]));
+        }
+        let (mut min, mut max) = ([f32::INFINITY; 2], [f32::NEG_INFINITY; 2]);
+        let r = &c.raster;
+        let mut voir = |ox: i64, oy: i64, t: &crate::raster::Tile| {
+            for (i, px) in t.iter().enumerate() {
+                if px.a() != 0 {
+                    let (x, y) = ((ox + (i % crate::raster::TILE) as i64) as f32, (oy + (i / crate::raster::TILE) as i64) as f32);
+                    min = [min[0].min(x), min[1].min(y)];
+                    max = [max[0].max(x + 1.0), max[1].max(y + 1.0)];
+                }
+            }
+        };
+        for (idx, t) in r.tiles.iter().enumerate() {
+            if let Some(t) = t {
+                let (ox, oy) = r.tile_origin(idx);
+                voir(ox, oy, t);
+            }
+        }
+        for (&(tx, ty), t) in &r.outer {
+            voir(tx as i64 * crate::raster::TILE as i64, ty as i64 * crate::raster::TILE as i64, t);
+        }
+        (min[0].is_finite() && max[0].is_finite()).then_some((min, max))
+    }
+
+    /// Le point de la feuille qui suit le chemin, pour la trajectoire `t` du calque `li` du plan `pi` sous la pose propre `base` : le
+    /// départ du trait, ou un point du dessin du départ (son bas, son centre…, ou le point cliqué) mis sur la feuille par la pose.
+    fn trajectoire_point_d_ancrage(&self, pi: usize, li: usize, t: &Trajectoire, base: LayerTransform) -> [f32; 2] {
+        let depart = t.points[0];
+        let affine = base.affine(self.doc.stage_center());
+        let sur_la_feuille = |p: [f32; 2]| {
+            let q = affine.apply(pos2(p[0], p[1]));
+            [q.x, q.y]
+        };
+        match t.ancre {
+            Ancre::Depart => depart,
+            Ancre::Point { x, y } => sur_la_feuille([x, y]),
+            a => {
+                let Some(l) = self.doc.panels.get(pi).and_then(|p| p.layers.get(li)) else { return depart };
+                let Some(cel) = t.source.filter(|c| self.doc.cels.contains_key(c)).or_else(|| l.cel_at(t.depart)) else { return depart };
+                match self.boite_du_dessin(cel).and_then(|(min, max)| a.dans_la_boite(min, max)) {
+                    Some(p) => sur_la_feuille(p),
+                    None => depart,
+                }
             }
         }
     }
@@ -313,30 +400,31 @@ impl App {
         nouveau
     }
 
-    /// Clés d'images : un dessin à chaque jalon (une marque, l'arrivée), exposé jusqu'au jalon suivant (le dernier, jusqu'à la fin
-    /// du plan) ; le départ garde le dessin d'origine. Un dessin déjà posé par la trajectoire est déplacé de ce qu'il faut (ce
-    /// qu'on y a dessiné suit) ; un jalon neuf reçoit une copie du dessin du départ. Faux, avec la raison dans la ligne d'état,
-    /// s'il n'y a pas de dessin au départ.
-    fn trajectoire_poser_les_dessins(&mut self, pi: usize, li: usize) -> bool {
+    /// Clés d'images : un dessin à chaque jalon (le départ, chaque marque, l'arrivée), exposé jusqu'au jalon suivant (le dernier,
+    /// jusqu'à la fin du plan). Le dessin d'origine (celui du départ, noté dans `source`) sert tel quel quand il n'a pas à bouger
+    /// (ancrage « là où part le trait »), sinon chaque jalon reçoit une copie déplacée pour que le point d'ancrage `ancre` soit sur
+    /// le chemin. Un dessin déjà posé par la trajectoire est déplacé de ce qu'il faut (ce qu'on y a dessiné suit). Faux, avec la
+    /// raison dans la ligne d'état, s'il n'y a pas de dessin au départ.
+    fn trajectoire_poser_les_dessins(&mut self, pi: usize, li: usize, ancre: [f32; 2]) -> bool {
         let duree = self.doc.panels[pi].frame_count();
         let Some(t) = self.doc.panels[pi].layers[li].trajectoire.clone() else { return false };
         let images = t.images_des_jalons(duree);
         if images.len() < 2 {
             return false;
         }
-        let Some(source) = self.doc.panels[pi].layers[li].cel_at(t.depart) else {
+        let Some(source) = t.source.filter(|c| self.doc.cels.contains_key(c)).or_else(|| self.doc.panels[pi].layers[li].cel_at(t.depart)) else {
             self.status = format!("Clés d'images : dessine d'abord à l'image {} du départ, la trajectoire en fera une copie à chaque marque.", t.depart + 1);
             return false;
         };
-        let decalages = t.decalages();
-        let mut dessins = Vec::with_capacity(images.len() - 1);
-        for k in 1..images.len() {
-            let d = decalages[k];
-            let ancien = t.dessins.get(k - 1).filter(|a| self.doc.cels.contains_key(&a.dessin)).copied();
+        let decalages = t.decalages(ancre);
+        let mut dessins = Vec::with_capacity(images.len());
+        for (k, &d) in decalages.iter().enumerate().take(images.len()) {
+            let ancien = t.dessins.get(k).filter(|a| self.doc.cels.contains_key(&a.dessin)).copied();
             let dessin = match ancien {
                 Some(a) if (a.dx - d[0]).abs() < 0.5 && (a.dy - d[1]).abs() < 0.5 => a.dessin,
-                Some(a) => self.trajectoire_copie_decalee(a.dessin, [d[0] - a.dx, d[1] - a.dy]),
-                None => self.trajectoire_copie_decalee(source, d),
+                Some(a) if a.dessin != source => self.trajectoire_copie_decalee(a.dessin, [d[0] - a.dx, d[1] - a.dy]),
+                _ if d[0].abs() < 0.5 && d[1].abs() < 0.5 => source,
+                _ => self.trajectoire_copie_decalee(source, d),
             };
             dessins.push(DessinJalon { dessin, dx: d[0], dy: d[1] });
         }
@@ -345,25 +433,27 @@ impl App {
             l.frames.resize(duree, None);
         }
         for k in 0..images.len() {
-            let cel = if k == 0 { source } else { dessins[k - 1].dessin };
             let fin = if k + 1 < images.len() { images[k + 1] } else { duree };
             for f in images[k]..fin.min(duree) {
-                l.frames[f] = Some(cel);
+                l.frames[f] = Some(dessins[k].dessin);
             }
         }
         if let Some(t) = l.trajectoire.as_mut() {
+            t.source = Some(source);
             t.dessins = dessins;
         }
         true
     }
 
-    /// Les dessins posés par la trajectoire en clés d'images quittent le calque : leurs images reprennent le dessin du départ.
+    /// Les dessins posés par la trajectoire en clés d'images quittent le calque : leurs images reprennent le dessin d'origine.
     fn trajectoire_defaire_les_dessins(&mut self, pi: usize, li: usize) {
         let l = &mut self.doc.panels[pi].layers[li];
-        let Some(t) = l.trajectoire.as_mut() else { return };
-        let depart = t.depart;
-        let poses: Vec<CelId> = t.dessins.drain(..).map(|d| d.dessin).collect();
-        let source = l.cel_at(depart);
+        let (depart, source_notee, poses) = match l.trajectoire.as_mut() {
+            Some(t) => (t.depart, t.source.take(), t.dessins.drain(..).map(|d| d.dessin).collect::<Vec<CelId>>()),
+            None => return,
+        };
+        let source = source_notee.filter(|c| self.doc.cels.contains_key(c)).or_else(|| l.cel_at(depart));
+        let poses: Vec<CelId> = poses.into_iter().filter(|c| Some(*c) != source).collect();
         for f in l.frames.iter_mut() {
             if f.is_some_and(|c| poses.contains(&c)) {
                 *f = source;
@@ -400,15 +490,67 @@ impl App {
         self.commit_named(snap, nom);
     }
 
-    /// « Marque posée : 3 marques, le chemin dure de l'image 1 à 36. »
+    /// « Marque posée : 3 marques, le chemin dure de l'image 1 à 36. » En clés d'images sans dessin au départ, le dit.
     fn trajectoire_resume(&self, li: usize, debut: &str) -> String {
         let Some(t) = self.layers().get(li).and_then(|l| l.trajectoire.as_ref()) else { return debut.to_string() };
         let images = t.images_des_jalons(self.frame_count());
         let n = t.marques.len();
-        match (images.first(), images.last()) {
+        let mut texte = match (images.first(), images.last()) {
             (Some(a), Some(b)) => format!("{debut} : {n} marque{}, le chemin dure de l'image {} à l'image {}.", pluriel(n), a + 1, b + 1),
             _ => format!("{debut} : {n} marque{} ; le plan s'arrête avant l'image {} du départ, le calque ne bouge pas encore.", pluriel(n), t.depart + 1),
+        };
+        if t.cles == Cles::Images && t.dessins.is_empty() && images.len() >= 2 {
+            texte.push_str(&format!(" Il manque un dessin au départ : dessine d'abord à l'image {}, la trajectoire en fera une copie à chaque marque.", t.depart + 1));
         }
+        texte
+    }
+
+    /// La clé de l'image `frame` du calque `li`, un jalon de sa trajectoire, qu'on supprime (Suppr, le menu) : une marque s'en va
+    /// (les clés sont reposées) ; le départ et la fin ne se suppriment pas, la ligne d'état dit comment enlever la trajectoire. Vrai
+    /// si c'était un jalon (la clé n'est alors pas supprimée à la main).
+    pub(crate) fn trajectoire_supprimer_jalon(&mut self, li: usize, frame: usize) -> bool {
+        let duree = self.frame_count();
+        let Some(t) = self.layers().get(li).and_then(|l| l.trajectoire.as_ref()) else { return false };
+        let images = t.images_des_jalons(duree);
+        let Some(k) = images.iter().position(|&f| f == frame) else { return false };
+        if k == 0 || k + 1 == images.len() {
+            self.status = "Le départ et la fin de la trajectoire ne se suppriment pas : « Effacer » dans les réglages de l'outil Trajectoire enlève tout.".into();
+            return true;
+        }
+        if let Some(t) = self.layers_mut()[li].trajectoire.as_mut() {
+            t.retirer_marque(k - 1);
+        }
+        self.trajectoire_recalculer(li);
+        self.status = self.trajectoire_resume(li, "Marque retirée");
+        true
+    }
+
+    /// Le calque `li`, à trajectoire, vient d'être déplacé (agrandi, tourné) avec l'outil Transformer, de la pose `avant` à sa pose
+    /// courante à l'image courante : le calque et sa trajectoire bougent ensemble (le chemin suit le déplacement, la pose propre du
+    /// calque prend le reste), et les clés sont reposées. Vrai si le calque a une trajectoire.
+    pub(crate) fn trajectoire_apres_transformer(&mut self, li: usize, avant: LayerTransform) -> bool {
+        let f = self.cur_frame;
+        let Some(t) = self.layers().get(li).and_then(|l| l.trajectoire.clone()) else { return false };
+        let apres = self.layers()[li].pose(f);
+        let delta = [apres.x - avant.x, apres.y - avant.y];
+        let l = &mut self.layers_mut()[li];
+        // La pose propre : celle du départ, moins ce que la trajectoire y ajoutait. Le geste s'y applique, sauf s'il a changé la pose du
+        // départ lui-même (la clé du départ, ou la pose fixe) : elle le porte déjà.
+        let posee = crate::poskeys::pose_at(&l.pos_keys, t.depart, l.transform);
+        let mut base = LayerTransform { x: posee.x - t.decalage_depart[0], y: posee.y - t.decalage_depart[1], ..posee };
+        if !l.pos_keys.is_empty() && f != t.depart {
+            base = composer(base, avant, apres);
+        }
+        l.pos_keys.clear();
+        l.transform = base;
+        l.fold_dz();
+        if let Some(tr) = l.trajectoire.as_mut() {
+            tr.decalage_depart = [0.0, 0.0];
+            tr.deplacer(delta[0], delta[1]);
+        }
+        self.trajectoire_recalculer(li);
+        self.status = "Le calque et sa trajectoire ont bougé ensemble.".into();
+        true
     }
 
     /// Échap pendant un geste de l'outil : tout revient comme avant le geste ; vrai si la touche a servi.
@@ -426,17 +568,6 @@ impl App {
             self.renderer.invalidate_params();
         }
         self.status = "Geste de trajectoire abandonné.".into();
-        true
-    }
-
-    /// Les clés du calque `li` viennent d'être retouchées à la main (`pourquoi`) : sa trajectoire ne les commande plus, elle s'en va.
-    /// Vrai si une trajectoire a été détachée (la ligne d'état le dit ; un appelant qui écrit la sienne ensuite y ajoute `DETACHEE`).
-    pub(crate) fn trajectoire_detacher(&mut self, li: usize, pourquoi: &str) -> bool {
-        let Some(l) = self.layers_mut().get_mut(li) else { return false };
-        if l.trajectoire.take().is_none() {
-            return false;
-        }
-        self.status = format!("Trajectoire détachée ({pourquoi}) : les clés de position restent, à ta main.");
         true
     }
 
@@ -545,10 +676,23 @@ impl App {
                 painter.text(c + cote * (DEMI_MARQUE + 4.0), Align2::CENTER_CENTER, format!("{}", img + 1), FontId::proportional(10.0), COULEUR);
             }
         }
-        // Où en est le calque à l'image courante.
-        if let Some(f) = t.fraction_a_l_image(self.cur_frame, duree) {
-            let c = ecran(t.point_a(f));
+        // Où en est le point d'ancrage à l'image courante : sur le chemin quand le chemin couvre l'image ; en clés d'images, avant
+        // le départ, le dessin n'a pas bougé, le point d'ancrage est sur lui.
+        let point = match t.fraction_a_l_image(self.cur_frame, duree) {
+            Some(f) => Some(t.point_a(f)),
+            None if t.cles == Cles::Images && self.cur_frame < t.depart => {
+                let posee = l.pose(t.depart);
+                let base = LayerTransform { x: posee.x - t.decalage_depart[0], y: posee.y - t.decalage_depart[1], ..posee };
+                Some(self.trajectoire_point_d_ancrage(self.cur_panel, self.cur_layer, t, base))
+            }
+            None => None,
+        };
+        if let Some(p) = point {
+            let c = ecran(p);
             painter.circle(c, 4.0, COULEUR, Stroke::new(1.5_f32, Color32::from_black_alpha(140)));
+            if t.ancre != Ancre::Depart {
+                painter.circle_stroke(c, 8.0, Stroke::new(1.0_f32, COULEUR.gamma_multiply(0.8)));
+            }
         }
     }
 
@@ -618,6 +762,33 @@ impl App {
             self.trajectoire_recalculer(li);
             self.trajectoire_valider(snap, "Sorte des clés de la trajectoire");
         }
+        // Ce qui suit le chemin : là où part le trait, le bas du dessin, son centre…, ou un point cliqué.
+        ui.horizontal_wrapped(|ui| {
+            ui.label("Ce qui suit le chemin :");
+            let mut ancre = t.ancre;
+            let actuel = ancre.label();
+            egui::ComboBox::from_id_salt("trajectoire.ancre").selected_text(actuel).show_ui(ui, |ui| {
+                for a in Ancre::CHOIX {
+                    ui.selectable_value(&mut ancre, a, a.label());
+                }
+            });
+            if ancre != t.ancre {
+                let snap = self.snapshot();
+                if let Some(tr) = self.layers_mut()[li].trajectoire.as_mut() {
+                    tr.ancre = ancre;
+                }
+                self.trajectoire_recalculer(li);
+                self.trajectoire_valider(snap, "Ancrage de la trajectoire");
+            }
+            let on = self.traj.choisir_ancre;
+            let bouton = egui::Button::new(crate::bulles::encre_etat(RichText::new("Un point du dessin : cliquer"), on)).selected(on);
+            if ui.add(bouton).on_hover_text("Puis clique le point du dessin qui doit suivre le chemin (le bout d'un pied, une main…).").clicked() {
+                self.traj.choisir_ancre = !self.traj.choisir_ancre;
+                if self.traj.choisir_ancre {
+                    self.status = "Clique le point du dessin qui doit suivre le chemin.".into();
+                }
+            }
+        });
         ui.horizontal_wrapped(|ui| {
             if n > 0 && ui.button("Retirer les marques").on_hover_text("Le chemin reste, à vitesse constante.").clicked() {
                 let snap = self.snapshot();
@@ -651,12 +822,29 @@ impl App {
             RichText::new(
                 "Tirer sur le chemin le tord là où on le prend, comme une corde (Maj : le déplacer en bloc). Glisser une marque le long du \
                  chemin la déplace ; la tirer loin du chemin la retire. Un trait long retrace le chemin, les marques restent. Sur la \
-                 timeline, glisser la première clé, la dernière ou une marque les recale dans le temps. Poser, supprimer ou lisser une clé \
-                 à la main détache la trajectoire.",
+                 timeline, glisser la première clé, la dernière ou une marque les recale dans le temps ; Suppr sur une marque la retire. \
+                 Transformer déplace le calque et son chemin ensemble.",
             )
             .small()
             .weak(),
         );
+    }
+}
+
+/// La pose `base` à laquelle on applique ce qu'un geste a changé entre `avant` et `apres` : déplacement, rotation, inclinaison et
+/// écart de profondeur s'ajoutent ; échelle et étirements se multiplient.
+fn composer(base: LayerTransform, avant: LayerTransform, apres: LayerTransform) -> LayerTransform {
+    let ratio = |a: f32, b: f32| if a.abs() > 1e-6 { b / a } else { 1.0 };
+    LayerTransform {
+        x: base.x + (apres.x - avant.x),
+        y: base.y + (apres.y - avant.y),
+        scale: (base.scale * ratio(avant.scale, apres.scale)).clamp(0.01, 100.0),
+        angle: base.angle + (apres.angle - avant.angle),
+        stretch_x: LayerTransform::clamp_stretch(base.stretch_x * ratio(avant.stretch_x, apres.stretch_x)),
+        stretch_y: LayerTransform::clamp_stretch(base.stretch_y * ratio(avant.stretch_y, apres.stretch_y)),
+        tilt_x: LayerTransform::clamp_tilt(base.tilt_x + (apres.tilt_x - avant.tilt_x)),
+        tilt_y: LayerTransform::clamp_tilt(base.tilt_y + (apres.tilt_y - avant.tilt_y)),
+        dz: base.dz + (apres.dz - avant.dz),
     }
 }
 
@@ -665,8 +853,8 @@ impl App {
 fn cles_ui(ui: &mut egui::Ui, cles: &mut Cles) -> bool {
     let avant = *cles;
     ui.horizontal(|ui| {
+        ui.radio_value(cles, Cles::Images, Cles::Images.label()).on_hover_text("Un dessin à chaque marque, copie du dessin du départ déplacé sur le chemin, exposé jusqu'à la marque suivante : la timeline se scinde, chaque pose se redessine. D'origine.");
         ui.radio_value(cles, Cles::Interpolation, Cles::Interpolation.label()).on_hover_text("Une clé de position par image : le calque glisse le long du chemin, à la vitesse que donnent les marques.");
-        ui.radio_value(cles, Cles::Images, Cles::Images.label()).on_hover_text("Un dessin à chaque marque, copie du dessin du départ déplacé sur le chemin, exposé jusqu'à la marque suivante : la timeline se scinde, chaque pose se redessine.");
     });
     *cles != avant
 }
