@@ -5,6 +5,14 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-07
 
+- Fusion dans main (6a06b1c) : plan écarté (partie 115, format 48), « + » de la peau de Maj pour un cadre de plus (116), poignées de lissage
+  sur la piste caméra (117), traits coupés au bord de la feuille (118 : les effets, dont le tremblement par défaut, ne rendaient que la feuille).
+  Relectures indépendantes : 8 défauts corrigés sur le plan écarté, 3 points corrigés sur les traits. Vérificateur : 4109 réussis, 0 échec, deux passages.
+  `feanor.exe` reconstruit, ouvert sur une copie de projet. Rien d'essayé au stylet. Limites : secousse, onde, vignettage et effets du trait
+  s'arrêtent au bord de la feuille ; colonne un peu plus claire au raccord sur carte graphique (4,5 % à l'intensité 0,5).
+- Incident : un agent a écrit `camera_traits_tests.rs` dans Work\BRAWLSTAR\BRAWLIDAYS\3D par un chemin relatif. Signalé à Anthony, suppression à sa décision.
+- Mac : reporté par Anthony tant que la version PC n'est pas peaufinée. Rien n'est envoyé sur GitHub.
+
 - Fusion dans main (9819707) à la demande d'Anthony : le bouton du stylet est le clic droit, le stylet retourné prend la Gomme (partie 114,
   branche `stylet-branche`). `feanor.exe` reconstruit. Reste son essai à la tablette ; l'inclinaison attend.
 - Le stylet branché (partie 114, branche `stylet-branche`) : d'après son relevé (bouton vu pointe posée, gomme vue, et « clic droit : 0 »
