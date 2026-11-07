@@ -531,7 +531,7 @@ pub fn composer_avec_tuiles(p: &Planche, vignettes: &[RgbImage], tuiles: &[Optio
         }
         remplir(&mut pix, [r[0], r[3] + (2.0 * s) as i32, r[2], r[3] + (2.0 * s) as i32 + epais as i32], [200, 200, 200]);
     }
-    // Le dessin hors des cases, sous les cases (comme sur l'écran) ; `dessus` : la part posée par-dessus l'image d'une case (partie 120), après les images.
+    // Le dessin hors des cases, sous les cases (comme sur l'écran) ; `dessus` : la part posée par-dessus l'image d'une case (partie 122), après les images.
     let hors_cadres = |pix: &mut Pixmap, dessus: bool| {
         for i in p.annotations.ordre_de_peinture() {
             let t = &p.annotations.traces[i];
@@ -567,7 +567,7 @@ pub fn composer_avec_tuiles(p: &Planche, vignettes: &[RgbImage], tuiles: &[Optio
         let r = rect_px(c.place.thumb, p.cadre, s);
         let (tw, th) = ((r[2] - r[0]).max(1) as u32, (r[3] - r[1]).max(1) as u32);
         // Un plan à cadres dont le cadre A n'est pas exactement la case (tourné, réduit) : comme à l'écran, la case montre la feuille (sa tuile, déjà posée), pas
-        // l'image de A, qui y serait tournée et romprait le trait à ses bords (partie 120).
+        // l'image de A, qui y serait tournée et romprait le trait à ses bords (partie 122).
         let feuille_posee = c.mouvement.as_ref().is_some_and(|m| m.quads().first().is_some_and(|q| !crate::vignettecam::coins_de(c.place.thumb).iter().zip(q).all(|(a, b)| a.distance(*b) < 0.5))) && tuiles.get(k).is_some_and(Option::is_some);
         if feuille_posee {
             // (Rien à poser : la tuile est dessous.)

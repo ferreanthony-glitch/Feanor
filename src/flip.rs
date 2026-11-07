@@ -59,6 +59,9 @@ impl App {
         for k in &mut l.pos_keys {
             k.t = flipped_in_place(k.t, pivot, center, horizontal);
         }
+        if let Some(t) = &mut l.trajectoire {
+            t.retourner(horizontal);
+        }
         self.renderer.invalidate_all();
         self.status = format!("Calque retourné {} (ses dessins ne changent pas ; Ctrl+R annule la transformation).", if horizontal { "de gauche à droite" } else { "de haut en bas" });
     }
@@ -90,6 +93,9 @@ impl App {
                 l.transform = mirror_transform_x(l.transform, pivot, axis);
                 for k in &mut l.pos_keys {
                     k.t = mirror_transform_x(k.t, pivot, axis);
+                }
+                if let Some(t) = &mut l.trajectoire {
+                    t.retourner(true);
                 }
             }
             for k in &mut p.camera {

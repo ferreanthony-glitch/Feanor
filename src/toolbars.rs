@@ -18,7 +18,8 @@ pub(crate) const TOOL_GROUPS: &[&[&[Tool]]] = &[
     &[&[Tool::Rect, Tool::Line, Tool::Ellipse, Tool::Polyline], &[Tool::Text]],
     // Transformer et Perspective dans une seule case (Anthony, 2026-10-18).
     // Grab et Pull (`sculpt.rs`) dans une case à eux, juste après.
-    &[&[Tool::Transform, Tool::Perspective], &[Tool::Grab, Tool::Pull], &[Tool::Picker]],
+    // La Trajectoire (`trajectoireui.rs`) dans sa case, après Grab et Pull : elle pose les clés que Transformer pose à la main.
+    &[&[Tool::Transform, Tool::Perspective], &[Tool::Grab, Tool::Pull], &[Tool::Trajectoire], &[Tool::Picker]],
     &[&[Tool::Pan], &[Tool::Camera]],
 ];
 

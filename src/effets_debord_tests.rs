@@ -1,4 +1,4 @@
-//! Les effets et ce qui dépasse de la feuille (partie 119), **vus en pixels** : le trait qui passe le bord de la feuille ne doit se casser avec aucun effet.
+//! Les effets et ce qui dépasse de la feuille (partie 121), **vus en pixels** : le trait qui passe le bord de la feuille ne doit se casser avec aucun effet.
 //!
 //! La mesure de la cassure (`couture`) : deux colonnes voisines, la dernière de la feuille et la première au-delà. On y relève le centre de l'encre, sa quantité et sa couleur.
 //! Un trait droit, passé par un effet continu, ne saute pas d'une colonne à la suivante. Pour les effets du trait, on compare à la même image sur une feuille assez grande.

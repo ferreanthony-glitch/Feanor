@@ -1,4 +1,4 @@
-//! Les effets au-delà de la feuille (partie 119). La feuille se calcule comme toujours (`fx::apply_with`), au pixel près. Ce qui la dépasse se calcule ici, **dans les
+//! Les effets au-delà de la feuille (partie 121). La feuille se calcule comme toujours (`fx::apply_with`), au pixel près. Ce qui la dépasse se calcule ici, **dans les
 //! coordonnées du monde** : un point du monde reçoit de chaque effet ce qu'il recevrait d'une feuille assez grande pour le contenir, et les réglages qui parlent de la
 //! feuille (centre, pourcentages) restent ceux de la vraie feuille. Le trait ne se casse donc pas à son bord.
 //!

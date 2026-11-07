@@ -258,6 +258,7 @@ pub(crate) fn merge_down_ctl(doc: &mut Document, index: usize, layer: usize, ctl
         opacity_keys: Vec::new(),
         transform: LayerTransform::default(),
         pos_keys: Vec::new(),
+        trajectoire: None,
         frames,
         // Les effets, l'aplat et les images avant / après sont cuits dans les dessins.
         fx: Vec::new(),

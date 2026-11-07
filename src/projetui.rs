@@ -119,7 +119,7 @@ impl App {
     /// Refuse (avec un message) ce qui changerait les dessins, les expositions ou les calques
     /// des plans quand le storyboard est verrouillé.
     pub(crate) fn content_refuses(&mut self) -> bool {
-        // Tout le film est écarté : tous ces gestes écriraient dans le plan vide qui le tient (`planannule.rs`, partie 120). Ce qui ne le touche pas (la taille du
+        // Tout le film est écarté : tous ces gestes écriraient dans le plan vide qui le tient (`planannule.rs`, partie 122). Ce qui ne le touche pas (la taille du
         // projet, les personnages) passe par `contenu_verrouille`.
         if self.doc.film_vide() {
             self.status = crate::planannuleui::REFUS_SUPPORT.into();

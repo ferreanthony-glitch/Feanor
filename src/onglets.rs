@@ -196,6 +196,7 @@ etat_projet! {
     text_edit: Option<crate::texttools::TextEditState> = None,
     cut_gesture: Option<Vec<Pos2>> = None,
     sculpt_geste: Option<crate::sculptapp::Geste> = None,
+    traj: crate::trajectoireui::Etat = Default::default(),
     degrade_geste: Option<crate::degradeui::Geste> = None,
     envelope: Option<crate::envelopetools::EnvelopeEdit> = None,
     persp: Option<crate::perstools::PerspEdit> = None,

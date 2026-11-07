@@ -429,6 +429,11 @@ touches = []
 source = "sans touche par défaut : outil demandé le 2026-10-24 (Pull de Grease Pencil)"
 
 [[raccourci]]
+action = "outil.trajectoire"
+touches = []
+source = "sans touche par défaut : outil demandé le 2026-11-07 (la trajectoire et ses marques, comme une feuille de timing)"
+
+[[raccourci]]
 action = "outil.main"
 touches = ["H"]
 source = "proposition"

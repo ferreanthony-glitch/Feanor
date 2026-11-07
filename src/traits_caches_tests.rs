@@ -1,4 +1,4 @@
-//! Le trait qui traverse une case qui ne pouvait pas le recevoir (partie 120), **vu en pixels** comme la partie 111 : un autre zoom, un roulis, une
+//! Le trait qui traverse une case qui ne pouvait pas le recevoir (partie 122), **vu en pixels** comme la partie 111 : un autre zoom, un roulis, une
 //! bascule, un panoramique, des cadres A et B, un calque verrouillé, masqué ou d'une autre sorte, un plan écarté. Au vrai geste, en vectoriel et en
 //! bitmap : pendant le geste, au repos, après réouverture, à l'export ; où sont les données ; une seule étape ; rien de ce qui était dessiné ne bouge.
 
@@ -285,7 +285,7 @@ fn constater(v: Variante, bitmap: bool, depuis_la_case: bool) -> Option<Constat>
     Some(Constat { geste, repos: repos_r.trou, rouvert, export, dans_le_plan, hors_cadres, etapes, rejeux, statut, deja_intact, annule_ok })
 }
 
-/// Le tableau de la partie 120 : les mesures seules, sans jugement. `cargo test … mesure_les_variantes -- --ignored --nocapture --test-threads=1`
+/// Le tableau de la partie 122 : les mesures seules, sans jugement. `cargo test … mesure_les_variantes -- --ignored --nocapture --test-threads=1`
 #[test]
 #[ignore]
 fn mesure_les_variantes() {

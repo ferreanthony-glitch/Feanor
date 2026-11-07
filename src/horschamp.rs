@@ -31,7 +31,7 @@
 //!   qu'elle touche (le trait entier, comme la gomme d'annotation). **Pot de peinture** : seulement dans une case (une zone fermée de la feuille).
 //!   **Sélection, lasso, texte** : inchangés (les notes de la planche et le lasso d'annotation).
 //!
-//! # La case qui ne peut pas recevoir sa part (partie 120)
+//! # La case qui ne peut pas recevoir sa part (partie 122)
 //!
 //! - **Toute caméra reçoit** : un autre zoom, un roulis, une bascule, un panoramique, un plan à cadres. La part du trait va dans le dessin du plan, à
 //!   l'endroit de sa feuille que la case montre là (`Pose`) : le même trait à la même place de la planche. Rien de ce qui y était dessiné ne bouge. Un
@@ -252,7 +252,7 @@ pub(crate) fn dans_image(layout: &BoardLayout, k: usize, p: Pos2) -> bool {
 /// La case à qui revient le point `p` : **l'intérieur du cadre d'une case a toujours priorité sur la marge d'une autre** (Anthony, 2026-11-06 :
 /// un débord de 12 % dépasse l'écart entre deux rangées, le haut d'une case tombait dans la marge de celle du dessus et ne se voyait plus).
 /// Les règles d'ordre de `proprietaire` ne jouent qu'entre deux marges. Dans l'image d'une case qui ne peut pas recevoir la part, ou d'une case écartée :
-/// le code `DESSUS` de cette case, la part reste sur la planche, par-dessus elle (partie 120).
+/// le code `DESSUS` de cette case, la part reste sur la planche, par-dessus elle (partie 122).
 pub(crate) fn proprietaire_cadre(layout: &BoardLayout, champs: &[Rect], recoit: &[bool], origine: usize, p: Pos2) -> Option<usize> {
     if dans_image(layout, origine, p) {
         return Some(origine);
@@ -478,7 +478,7 @@ fn trait_lisse(run: &[Pt], a: f32, cible: &Pose, couleur: [u8; 3], alpha: f32, d
 
 impl App {
     /// Le dessin hors des cases, peint sous les cases : calque « Hors cadres » (s'il est montré), à l'opacité du réglage. `dessus` : la seconde passe,
-    /// après les images, pour les parts posées par-dessus l'image d'une case (partie 120), pleines : elles sont dans une case, pas hors champ.
+    /// après les images, pour les parts posées par-dessus l'image d'une case (partie 122), pleines : elles sont dans une case, pas hors champ.
     pub(crate) fn hors_cadres_peindre(&self, painter: &eframe::egui::Painter, view: Rect, xf: crate::boardui::Xf, layout: &BoardLayout, dessus: bool) {
         let a = &self.doc.annotations;
         let mut textures = self.vignettes.hc_tex.borrow_mut();
@@ -807,7 +807,7 @@ impl App {
     }
 
     /// La case `k` peut-elle recevoir une part du trait, et sur quel calque : le calque de même sorte que celui où l'on dessine, ni verrouillé, ni
-    /// masqué, ni transformé, quelle que soit la caméra de la case (partie 120). Sinon, ce qui l'en empêche.
+    /// masqué, ni transformé, quelle que soit la caméra de la case (partie 122). Sinon, ce qui l'en empêche.
     fn case_recoit(&self, layout: &BoardLayout, k: usize, genre: LayerKind) -> Result<usize, Refus> {
         let c = layout.cards.get(k).ok_or(Refus::Camera)?;
         if pose_de_la_case(&self.doc, layout, k).is_none() {

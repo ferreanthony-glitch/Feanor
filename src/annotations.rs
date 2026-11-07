@@ -113,7 +113,7 @@ pub struct Trace {
     /// une case ; sans elle (annotations, fichiers d'avant), c'est une ligne vectorielle.
     pub brosse: Option<Arc<Brosse>>,
     /// Un trait du dessin hors des cases posé **par-dessus l'image d'une case** qui ne pouvait pas le recevoir (calque verrouillé, plan écarté :
-    /// `horschamp.rs`, partie 120) : il se peint après les images, sinon il serait caché. Les autres passent sous les images.
+    /// `horschamp.rs`, partie 122) : il se peint après les images, sinon il serait caché. Les autres passent sous les images.
     pub dessus: bool,
 }
 
@@ -302,7 +302,7 @@ impl Annotations {
         self.poser_hors_cadres(anchor, r, false, points, color, alpha, brosse)
     }
 
-    /// Comme `ajouter_hors_cadres_brosse`, pour la part d'un trait qui tombe **dans l'image d'une case qui ne peut pas la recevoir** (partie 120) : elle
+    /// Comme `ajouter_hors_cadres_brosse`, pour la part d'un trait qui tombe **dans l'image d'une case qui ne peut pas la recevoir** (partie 122) : elle
     /// reste attachée à cette case (`c`, dans le film ou écartée) et se peint par-dessus son image.
     pub fn ajouter_sur_la_case(&mut self, c: &board::CardPlace, rang: usize, points: &[VPoint], color: [u8; 3], alpha: u8, brosse: Option<(Recette, Vec<f32>, Vec<f64>, f32)>) -> bool {
         self.poser_hors_cadres(Ancre { card: c.id, after: 0, rank: rang.min(u32::MAX as usize) as u32 }, c.thumb, true, points, color, alpha, brosse)

@@ -1086,7 +1086,7 @@ pub fn apply_with(raster: &Raster, vector: Option<&crate::vector::VectorDrawing>
         let line: Vec<FxStep> = steps.iter().filter(|s| s.kind.vector_stage()).cloned().collect();
         if !line.is_empty() {
             let mut image = crate::fxtrait::render(v, raster.width, raster.height, &line);
-            // (La feuille d'abord, au pixel près ; ce qui la dépasse ensuite, dans le monde : partie 119.)
+            // (La feuille d'abord, au pixel près ; ce qui la dépasse ensuite, dans le monde : partie 121.)
             crate::fxtrait::hors_de_la_feuille(&mut image, raster, v, &line);
             cur = Some(image);
         }

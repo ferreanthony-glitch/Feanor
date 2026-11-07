@@ -1472,7 +1472,7 @@ fn demi_largeur(vector: &VectorDrawing) -> f32 {
 }
 
 /// La feuille `out` (rendue par `render`) reçoit ce que les effets du trait mettent au-delà d'elle, **dans le monde** : l'abscisse du trait, son axe, son hasard sont les
-/// mêmes de part et d'autre du bord, le trait ne s'y casse pas, et ce qu'Écriture ou Poussière cachent ou éparpillent l'est aussi au-delà (partie 119). Les tuiles de la
+/// mêmes de part et d'autre du bord, le trait ne s'y casse pas, et ce qu'Écriture ou Poussière cachent ou éparpillent l'est aussi au-delà (partie 121). Les tuiles de la
 /// feuille assez près de ce qui dépasse pour le lire viennent aussi d'ici ; le reste de la feuille ne bouge pas, et un dessin qui ne dépasse pas ne passe pas par ici.
 pub(crate) fn hors_de_la_feuille(out: &mut Raster, raster: &Raster, vector: &VectorDrawing, steps: &[FxStep]) {
     let debord = raster.tuiles_du_debord();

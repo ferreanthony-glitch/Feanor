@@ -459,6 +459,11 @@ impl App {
     pub(crate) fn finish_layer_drag(&mut self) {
         let Some(d) = self.layer_drag.take() else { return };
         if d.changed {
+            // Un calque à trajectoire (`trajectoireui.rs`) : le calque et son chemin bougent ensemble, les clés sont reposées.
+            if d.many.is_none() {
+                let li = self.cur_layer;
+                self.trajectoire_apres_transformer(li, d.t0);
+            }
             // Plusieurs calques : une seule étape, au nom du geste.
             let name = match d.handle {
                 BoxHandle::Move => "Déplacer",

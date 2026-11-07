@@ -7650,7 +7650,7 @@ Coût d'une image, 30 plans dessinés, souris qui se promène : construction 0,7
 ### Ce qui reste
 
 - **Pas reproduit** : les morceaux pâles des cases 15 et 16, qui ne sont pas des cases vives. Un trait léger au stylet est une explication possible, pas une preuve.
-- **Une case dont la caméra a un autre zoom, un roulis, une bascule ou un panoramique, un calque verrouillé ou masqué** ne reçoit toujours pas sa part : le trait y reste caché sous l'image. (Réglé en partie 120.)
+- **Une case dont la caméra a un autre zoom, un roulis, une bascule ou un panoramique, un calque verrouillé ou masqué** ne reçoit toujours pas sa part : le trait y reste caché sous l'image. (Réglé en partie 122.)
 - **Remarqué, non corrigé** : un trait commencé dans l'écart de deux cases, à la hauteur de leur barre, fait « réunir les plans » et ne dessine rien (un appui sur la zone de la barre).
 - Le filet d'une case reste peint par-dessus le trait (un pixel).
 
@@ -8227,10 +8227,10 @@ La feuille fait deux fois le cadre : A étant centré, son bord droit est à 1,5
 
 ### Limites
 
-*(Partie 119 : les effets réglés par rapport à la feuille, les effets du trait, Écriture et Poussière continuent maintenant de part et d'autre de son bord ; la borne des 33 millions de pixels et la colonne plus claire sur la carte graphique n'existent plus.)*
+*(Partie 121 : les effets réglés par rapport à la feuille, les effets du trait, Écriture et Poussière continuent maintenant de part et d'autre de son bord ; la borne des 33 millions de pixels et la colonne plus claire sur la carte graphique n'existent plus.)*
 
-- Le calcul à part décrit ci-dessus, avec sa bande de 4 tuiles, est remplacé par `fxmonde.rs` (partie 119). Mesures de cette ancienne méthode sans sa borne, avec un point perdu : flou à 8 000 pixels 170 ms, à 10 800 pixels 363 ms et 507 Mo de plus au pic.
-- **Autre cause, non traitée ici** : une part de trait reste cachée sous l'image d'une case dont la caméra a un autre zoom, un roulis, une bascule, un panoramique, ou dont le calque est verrouillé (`cases_qui_recoivent` les refuse, partie 111). (Réglé en partie 120.)
+- Le calcul à part décrit ci-dessus, avec sa bande de 4 tuiles, est remplacé par `fxmonde.rs` (partie 121). Mesures de cette ancienne méthode sans sa borne, avec un point perdu : flou à 8 000 pixels 170 ms, à 10 800 pixels 363 ms et 507 Mo de plus au pic.
+- **Autre cause, non traitée ici** : une part de trait reste cachée sous l'image d'une case dont la caméra a un autre zoom, un roulis, une bascule, un panoramique, ou dont le calque est verrouillé (`cases_qui_recoivent` les refuse, partie 111). (Réglé en partie 122.)
 
 ### Le badge 12 et le petit carré
 
@@ -8246,7 +8246,159 @@ La feuille fait deux fois le cadre : A étant centré, son bord droit est à 1,5
 5. Export vidéo, images, planche : le cadre B montre le trait.
 6. Dis-moi si le tremblement te paraît continu à la verticale où finit la feuille. Le stylet réel n'a pas été essayé.
 
-## 119. Les effets continuent de part et d'autre du bord de la feuille (2026-11-07, branche `effets-debord`)
+## 119. L'outil Trajectoire : le chemin et ses marques posent les clés de mouvement (2026-11-07, branche `trajectoire`)
+
+Anthony : « Lié à un calque, un outil spécial permet de dessiner une trajectoire et un timing qui ensuite pose des clés de mouvement. La
+ligne principale est la trajectoire, les traits qui la découpent sont les clés de spacing, comme en animation. Ce trait dessiné disparaît quand
+on sélectionne un autre outil, mais réapparaît quand on le reprend. Il est ajustable en direct et singe les mêmes comportements qu'un crayon
+classique, avec possibilité de sélection par le lasso, étirement, déplacement… » Son croquis : une ligne, des marques serrées au départ, espacées
+au milieu, serrées à l'arrivée, une flèche au bout. Code : `trajectoire.rs` (le modèle, sans écran), `trajectoireui.rs` (l'outil, la peinture,
+les réglages) ; essais `trajectoire_tests.rs` (8) et `trajectoireui_tests.rs` (8). **Format de projet 49** : `trajectoire` d'un calque.
+
+### Ce que ça fait
+
+- **L'outil Trajectoire** (barre de gauche, sa case après Transformer ; action `outil.trajectoire`, sans touche d'origine ; icône de flèche qui
+  serpente). Il agit sur le **calque courant**, dans le Storyboard et l'Animation (pas dans les Vignettes, qui gardent leurs quatre outils).
+- **Un trait sur la feuille trace le chemin.** Le calque suit ce chemin **de la tête de lecture à la fin du plan** (Anthony : « la clé de
+  départ démarre sur la tête de lecture » ; avant, il ne bouge pas), en partant de **là où il est** : le déplacement est relatif au départ du
+  trait (on part le trait du personnage, il ne saute pas). Les clés de position sont posées sur le calque (`Layer::pos_keys`, celles de
+  l'outil Transformer) ; la pose du calque à l'image du départ (échelle, rotation…) est gardée sur tout le chemin. Le départ est gardé avec le
+  chemin ; « Partir de la tête de lecture » (réglages) le change.
+- **Ce qui suit le chemin** (réglages ; Anthony : « une option qui aligne le point d'ancrage du calque sur la trajectoire, qui aligne le
+  pixel le plus bas ou autres options pertinentes ») : d'origine, **là où part le trait** (le calque garde sa place au départ et suit la
+  forme du chemin) ; ou un point du dessin du départ mis **sur** le chemin dès la première image : **le bas du dessin** (le milieu de son
+  bord bas : les pieds sur le chemin), **le centre**, **le haut**, **le bord gauche**, **le bord droit** (la boîte exacte des traits ou des
+  pixels dessinés), ou **un point choisi d'un clic** sur le dessin (bouton « Un point du dessin : cliquer », puis le clic ; le bout d'un
+  pied, une main). Le point d'ancrage se voit sur le chemin à l'image courante, cerclé quand ce n'est pas le départ du trait. Les
+  calculs suivants ne font pas dériver la pose propre du calque (`decalage_depart`).
+- **Deux sortes de clés** (réglages, Anthony : « Clés d'interpolation ou Clés d'images » ; puis « garde clés d'images comme option initiale
+  et clés d'interpolation en option secondaire ») : **Clés d'images**, d'origine (voir plus bas) ; **Clés d'interpolation**, une clé de
+  position par image, le calque glisse **le long de la courbe**, pas de la corde, à vitesse constante entre deux marques. **Clés
+  d'images** (Anthony, après son essai : « j'imaginais que les clés d'images scinderaient la timeline comme toutes les clés d'images ») :
+  **un dessin à chaque jalon** (chaque marque, l'arrivée), copie du dessin du départ déplacée à sa place sur le chemin, exposé jusqu'au
+  jalon suivant (le dernier jusqu'à la fin du plan), le départ gardant son dessin d'origine (ou une copie déplacée, si le point
+  d'ancrage n'est pas le départ du trait) : la timeline se scinde comme pour toute clé de dessin, aucune clé de position, et chaque pose
+  se redessine. Sans dessin au départ, rien n'est posé et la ligne d'état dit de dessiner d'abord. Un dessin posé par la trajectoire est **déplacé, pas refait**, quand la marque
+  glisse (ce qu'on y a dessiné suit) ; les dessins sont refaits au lâcher d'un geste, pas pendant. Vectoriel : les traits sont translatés,
+  le rendu exact revient du fil de travail ; bitmap : les pixels, décalés à l'entier, toile infinie comprise (`Raster::decalee`) ; l'aplat
+  suit. Pas de dessin au départ : rien n'est posé, la ligne d'état le dit. (`PosKey::tenue`, la clé tenue sans interpolation, reste dans
+  le modèle des clés de position, format 49, sans emploi ici.)
+- **La fin, et le temps des marques recalés sur la timeline** (Anthony : « il faut pouvoir bouger la dernière clé et que ça recale toutes les
+  autres clés entre la première et la dernière » ; « quand j'ai voulu bouger une clé sur la timeline la trajectoire a disparu »). Le chemin
+  dure du départ (la tête de lecture au tracé) à la **fin**, d'origine la dernière image du plan. Dans la timeline et au montage, un calque à
+  trajectoire ne montre que ses **jalons** (le départ, les marques, la fin) ; **glisser l'un d'eux le recale** : la dernière clé règle la
+  fin, la première le départ, une marque son temps (bornée à une image de ses voisines ; le temps des marques devient alors explicite, le
+  bouton « Temps égaux entre les marques » l'oublie), et les clés d'entre sont reposées, la trajectoire reste (« Recaler la trajectoire »,
+  une étape ; Échap remet tout). En clés d'images, c'est la clé de dessin du jalon qu'on glisse (Maj : seule), même recalage. Les boutons
+  « Partir de la tête de lecture » et « Finir à la tête de lecture » font pareil depuis la tête de lecture.
+- **Un petit trait en travers du chemin pose une marque** (court devant le chemin — moins de la moitié de sa longueur — et qui le croise, ou le
+  frôle à moins de 6 pixels de la feuille). Les marques partagent le temps en parts égales, comme sur une feuille de timing : **serrées, le
+  calque va lentement ; espacées, il va vite**. Les bouts du chemin sont deux jalons de plus. Avec son croquis : départ lent, milieu vite,
+  arrivée lente.
+- **Le temps entre deux marques** : le temps du départ à la fin, **partagé en parts égales** entre les jalons (huit marques sur 3 secondes :
+  une clé toutes les 9 images), tant qu'aucune marque n'a été recalée à la main sur la timeline. La sorte des clés choisie sur une
+  trajectoire est proposée à la suivante.
+- **Retoucher** (Anthony : « que la trajectoire soit éditable facilement ») : **tirer sur le chemin le tord** là où on le prend, comme une
+  corde : le point pris suit le pointeur, ses voisins le long du chemin d'autant moins qu'ils sont loin (en cloche, sur un bon tiers du
+  chemin, 30 pixels au moins : `Trajectoire::tirer`), le reste ne bouge pas ; un bout se tire comme le reste. **Maj + glisser** le chemin le
+  déplace en bloc (le déplacement étant relatif, les clés ne changent pas). Glisser une **marque** le long du chemin la déplace (bornée
+  entre ses voisines) ; la tirer **loin du chemin** (40 pixels d'écran) l'**arrache** : elle est retirée au lâcher. Un **trait long** retrace le
+  chemin : les marques restent, à leurs fractions. Les clés suivent **pendant le geste**, à
+  chaque image d'écran, sans rejeu d'aucun dessin (seuls les paramètres du plan à composer changent) ; **Échap** abandonne le geste et remet
+  tout. **Une étape d'annulation par geste**, nommée : « Trajectoire », « Marque de trajectoire », « Glisser une marque », « Retirer une marque »,
+  « Déplacer la trajectoire », « Retracer la trajectoire », « Pas des marques », « Retirer les marques », « Détacher la trajectoire », « Effacer la
+  trajectoire ».
+- **Ce qu'on voit, avec l'outil seulement** : le chemin dans la teinte des poignées du calque, une barre au départ, une pointe de flèche à
+  l'arrivée, les marques en travers (la marque survolée ou tenue en blanc), au-dessus de chaque jalon **le numéro de l'image** où le calque y
+  passe, un point là où le calque est à l'image courante ; et, posée dans l'image comme une pelure d'oignon, **une silhouette pâle du calque
+  à chaque jalon** (sauf l'image courante) : l'espacement se lit sur le vrai dessin. Un autre outil : plus rien ne se voit ; le chemin est
+  **enregistré avec le calque** (format 49) et revient avec l'outil. Le curseur : la main sur une marque, la croix fléchée sur le chemin, la
+  croix ailleurs. La ligne sous le dessin dit les gestes ; la carte F1 aussi.
+- **Dans la timeline et le montage**, un calque à trajectoire ne montre que les losanges de ses **jalons**, reliés d'un trait, pas sa clé par
+  image.
+- **La trajectoire ne s'en va jamais d'elle-même** (Anthony, après son essai : « j'aimerais garder la trajectoire visible et toujours
+  éditable », une clé supprimée l'avait détachée). **Suppr** sur une marque (sa clé choisie, ou la tête de lecture dessus) retire la
+  marque ; sur le départ ou la fin, rien, la ligne d'état dit comment enlever la trajectoire. **Poser** ou **lisser** une clé à la main sur
+  un calque à trajectoire est refusé, avec la raison (c'est la trajectoire qui pose ses clés). Glisser **plusieurs** clés d'un tel calque
+  est refusé aussi : un jalon à la fois. **Transformer** déplace **le calque et son chemin ensemble** (agrandir ou tourner change la pose
+  propre du calque, le chemin reste), les clés sont reposées, une étape. Seuls les boutons **Détacher** (garder ce qui est posé, clés ou
+  dessins) et **Effacer** (le chemin et ce qu'il a posé s'en vont ; le calque garde sa pose du départ), « Supprimer toutes les clés du
+  calque », couper ou réunir le plan enlèvent la trajectoire. **Retirer les marques** garde le chemin.
+- **Couper un plan, réunir deux plans** : chaque partie garde ses clés (comme avant, `poskeys::split_keys` / `join_keys`), aucune ne garde le
+  chemin. Dupliquer un plan, copier un calque : le chemin suit. Changer la taille de la feuille (`adaptation.rs`) : le chemin suit, à
+  l'échelle. Retourner un calque ou des plans (`flip.rs`) : le chemin se retourne autour de son départ. Insérer ou retirer des images : les clés
+  suivent comme avant ; le chemin, lu à la prochaine retouche, se repose alors sur la nouvelle durée. Un calque de couleur lié suit les clés de
+  son trait (comme avant) ; la trajectoire se trace sur le trait.
+
+### Comment (le modèle, `trajectoire.rs`)
+
+Le chemin : les points du trait, lissés (deux passages d'une moyenne à trois points, les bouts gardés) et repris tous les 2 pixels de la
+feuille (4 000 points au plus). Les marques : des fractions de la longueur du chemin, strictement entre 0 et 1, à 1 % au moins l'une de
+l'autre. `depart` et `fin` : les images du plan où le chemin commence et finit (`fin` absente : la dernière du plan) ; `temps` : le temps de
+chaque marque, en fraction du temps entre départ et fin (absent : parts égales) ; `cles` : interpolées ou par images ; `dessins` : en clés
+d'images, les dessins posés (numéro, déplacement). `recaler(k, image, duree)` : le jalon `k` à l'image voulue, borné. `cles(duree, base)` :
+en clés d'interpolation, pour chaque image couverte, la fraction atteinte (linéaire entre deux jalons, selon leurs temps), le point du
+chemin à cette fraction, et la clé `base + (point − départ)` ; en clés d'images, aucune (`trajectoireui.rs` pose les dessins). Une
+trajectoire relue d'un fichier abîmé est assainie (points non finis, doublons, marques hors bornes ou en désordre, temps faux, fin avant le
+départ). Le modèle ne connaît ni l'écran ni l'application : ses essais sont des nombres.
+
+### Limites et à décider
+
+- La **rotation** du calque ne suit pas la courbe (position seulement) : en option plus tard.
+- **Pas de lasso ni de boîte d'étirement** sur le chemin : on le tire (il se tord), on le déplace (Maj), on le retrace d'un trait long.
+  Étirer par une boîte (comme la sélection) viendra si cela ne suffit pas.
+- Un plan qui s'arrête au départ (ou d'une image) : le chemin se trace, aucune clé (le calque ne bouge pas) ; la ligne d'état le dit.
+- Un calque **verrouillé**, de position verrouillée, un dossier, un calque de couleur lié : refusés, avec la raison.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Un plan de 2 ou 3 secondes, un personnage sur un calque, la tête de lecture à la seconde image. Outil Trajectoire : trace un chemin
+   depuis le personnage. Lecture : il ne bouge pas avant la tête de lecture, puis suit le chemin jusqu'à la fin du plan, en partant de sa
+   place. Ctrl+Z : plus de chemin, plus de clés.
+2. Trois petits traits en travers du chemin, serrés au départ, un loin au milieu, serrés à l'arrivée : lecture, lent, vite, lent. Les
+   silhouettes pâles montrent où il est à chaque marque ; les numéros d'image au-dessus.
+2b. D'origine, « Clés d'images » : la timeline se scinde, un dessin à chaque marque et à l'arrivée, le personnage à sa place sur le
+   chemin ; dessine sur l'un d'eux, glisse sa marque le long du chemin : ton dessin suit. « Clés d'interpolation » : les dessins posés
+   s'en vont, il glisse de nouveau.
+2d. « Ce qui suit le chemin » : « Le bas du dessin » : les pieds du personnage sont sur le chemin dès le départ, le point cerclé le montre.
+   « Le centre ». « Un point du dessin : cliquer », puis clique le bout d'un pied : c'est lui qui suit. « Là où part le trait » : comme
+   avant.
+2c. Timeline : glisse la dernière clé vers la gauche : la fin recule et toutes les clés d'entre se recalent, la trajectoire reste. Glisse
+   une marque : elle change de temps. Glisse la première : le départ bouge. En clés d'images, pareil avec les clés de dessin (Maj tenue).
+   « Finir à la tête de lecture », « Partir de la tête de lecture », « Temps égaux entre les marques » dans les réglages.
+3. Glisse une marque le long du chemin : les silhouettes bougent en direct. Tire-la loin du chemin : elle part. Tire sur le chemin : il se
+   tord là, comme une corde ; Maj + glisser : il bouge en bloc, le personnage ne saute pas. Échap au milieu d'un geste : tout revient.
+4. Un trait long ailleurs : le chemin est retracé, les marques restent.
+5. Réglages : « un nombre d'images » par marque, 4 : le chemin dure 4 images par intervalle, puis le personnage reste au bout.
+6. Prends le Pinceau : plus de chemin ; reprends la Trajectoire : il est là. Enregistre, rouvre : il est là.
+7. Timeline : seuls les jalons se voient, reliés. Suppr sur une marque : elle part, le chemin reste ; sur le départ : rien, le message le
+   dit. « Clé de position ici » : refusé, le message le dit. Transformer : le personnage et son chemin bougent ensemble, Ctrl+Z rend les deux.
+   Prends d'autres outils, reviens : le chemin est toujours là.
+8. Vignettes : l'outil est refusé, comme les autres outils hors des quatre.
+
+## 120. Les poignées de lissage de la caméra attendent à côté de chaque clé (2026-11-07, branche `trajectoire`)
+
+Anthony : « Concernant la caméra. Un mouvement crée immédiatement des clés de lissage visibles sur la timeline, il suffit de les étirer ensuite
+pour leur donner de l'effet. » Jusqu'ici (partie 117), une poignée n'existait que pour un adouci plus grand que 0 : il fallait passer par
+le bouton « Adoucir » avant de pouvoir tirer quoi que ce soit. Code : `lissage.rs` (`poignees`, `repos`, `tol_cle`, `x_poignee`, `peindre`),
+`timeline.rs` (la prise, par `tol_cle`). Essais : `lissage_camera_tests.rs` (deux essais de plus, deux retouchés). **Rien ne change dans le
+projet.**
+
+- **Dès qu'un mouvement existe** (deux clés de caméra au moins), chaque clé montre ses poignées de chaque côté où la caméra bouge, **même à
+  0** : la poignée **au repos** est un rond plus petit et plus pâle, sans trait, posé juste à côté de sa clé, hors de la prise de la clé. La
+  première clé n'en a qu'à droite, la dernière qu'à gauche ; une clé seule n'en a pas.
+- **La tirer** règle l'adouci comme avant (à l'image près, en direct, une étape « Régler le lissage de la caméra ») : la poignée part du repos et
+  se pose là où l'adouci finit, avec son trait. **La ramener près de la clé** remet ce côté à 0 : elle revient au repos (elle ne disparaît plus).
+  La timeline et le montage sont pareils.
+- **Le repos** est à `prise de la clé + 7 points` de la clé (`repos`) : un appui dessus ne prend jamais la clé, et un appui sur la clé prend la
+  clé. Un adouci trop court pour sortir de la prise de la clé à ce zoom (une image à faible zoom) se dessine au repos lui aussi ; la ligne d'état
+  dit sa vraie durée, et zoomer la montre à sa place.
+- Le bouton « Adoucir » garde son sens (pose des demi-intervalles, ou retire tout) ; les champs des réglages aussi.
+
+À vérifier à l'écran : un plan à deux clés de caméra, sans lissage : deux petits ronds pâles attendent à côté des clés ; tire celui de droite
+de la première clé, la caméra ralentit au départ ; ramène-le, il revient au repos. Même chose dans le montage.
+
+## 121. Les effets continuent de part et d'autre du bord de la feuille (2026-11-07, branche `effets-debord`)
 
 Suite de la partie 118 : le trait n'était plus coupé, mais il se cassait au bord de la feuille dès qu'un effet réglé d'après elle ou un effet du trait était posé. Fichiers : `fxmonde.rs` (nouveau), `fx.rs` (`apply_with`, `un_effet`, `Repere`), `fxtrait.rs` (`hors_de_la_feuille`), `fxwarp.rs`, `fxcine.rs`, `fxfilters.rs`, `fxmatiere.rs`, `gpufx.rs`, `gpufx.wgsl` (`fs_boil`), `gpu.rs`, `monde.rs`, `render.rs`. Essais : `effets_debord_tests.rs`, `camera_traits_tests.rs`. **Le format de projet ne change pas** (48).
 
@@ -8387,7 +8539,7 @@ Le film et la planche calculent l'effet complet, jamais le repli de l'écran. Fi
 9. Lis un plan animé dont les dessins dépassent, avec un flou : hors de la feuille, pas de clignotement entre le trait nu et le trait flou. Dis-moi si le retard sur la feuille se voit.
 10. Dessine, enregistre, rouvre, exporte (film, images, planche) : même trait, effet complet.
 
-## 120. Le trait qui traverse une case qui ne pouvait pas le recevoir (2026-11-07, branche `traits-caches`)
+## 122. Le trait qui traverse une case qui ne pouvait pas le recevoir (2026-11-07, branche `traits-caches`)
 
 Suite des parties 111 et 118 : la part d'un trait tombée sur une case dont la caméra diffère, ou dont le calque est verrouillé, disparaissait au lever. Fichiers : `horschamp.rs` (`Pose`, `case_recoit`, `Refus`, `DESSUS`, `reechantillonner`, `trait_lisse`, `horschamp_prevenir`), `annotations.rs` (`Trace::dessus`), `boardui.rs`, `planche.rs`, `planannuleui.rs` (`panneau_film_vide`), `projetui.rs`. Essais : `traits_caches_tests.rs`. **Le format de projet ne change pas** (48) : `dessus` est un champ de plus dans `annotations.json`, absent la plupart du temps ; une version d'avant l'ignore et ne perd rien.
 
@@ -8474,7 +8626,7 @@ Un plan dont le cadre A n'est pas exactement la case (tourné, réduit) montre d
 7. Ctrl+Z défait tout le trait d'un coup ; enregistre, rouvre : même image. Export PNG et PDF de la planche.
 8. Le stylet réel n'a pas été essayé.
 
-## 121. Durée d'un plan : Ctrl fait suivre les clés ; les clés de dessin alternent de couleur (2026-11-07, branche `duree-cles`)
+## 123. Durée d'un plan : Ctrl fait suivre les clés ; les clés de dessin alternent de couleur (2026-11-07, branche `duree-cles`)
 
 Demande d'Anthony : dans le Montage et la timeline, la poignée latérale d'un plan change sa durée. **Sans touche**, seule la durée change et les clés restent où elles sont. **Ctrl tenue pendant le geste**, toutes les clés se décalent du même nombre d'images que la poignée, le rythme interne ne change pas (pas de mise à l'échelle). Et, sur une piste de calque, chaque clé de dessin alterne entre la couleur du calque et une teinte un peu plus claire pour qu'on voie où elle commence et s'arrête. Fichiers : `rognage.rs` (`Document::slide_plan_end`, clés de position et d'opacité dans la réserve), `rognageui.rs` (bords du montage), `handles.rs` (poignée de fin du plan, bulles), `cles_alternees.rs` (couleurs), `timeline.rs`, `montagerows.rs`, `storyboard.rs`. Essais : `duree_cles_tests.rs`. **Le format de projet reste 48.**
 

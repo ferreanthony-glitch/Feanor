@@ -1,4 +1,4 @@
-//! Durée d'un plan et clés (Anthony, 2026-11-07, partie 121 de `docs/INTERFACE.md`) : la poignée latérale d'un plan change sa
+//! Durée d'un plan et clés (Anthony, 2026-11-07, partie 123 de `docs/INTERFACE.md`) : la poignée latérale d'un plan change sa
 //! durée ; sans touche seule la durée change, avec Ctrl tenue pendant le geste toutes les clés suivent la poignée du même nombre
 //! d'images. Et les clés de dessin d'une piste de calque alternent de couleur (`cles_alternees.rs`).
 //!

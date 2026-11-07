@@ -459,6 +459,14 @@ mod styletui;
 mod styletlien;
 #[cfg(test)]
 mod styletlien_tests;
+// La trajectoire d'un calque (Anthony, 2026-11-07) : le chemin, ses marques et les clés qu'ils posent (`trajectoire`), l'outil à
+// l'écran (`trajectoireui`).
+pub mod trajectoire;
+#[cfg(test)]
+mod trajectoire_tests;
+mod trajectoireui;
+#[cfg(test)]
+mod trajectoireui_tests;
 mod crayonnesheritage;
 #[cfg(test)]
 mod color_tests;

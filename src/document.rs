@@ -352,6 +352,9 @@ pub struct Layer {
     /// Clés de position (`poskeys.rs`, Anthony 2026-10-20) : la pose du calque à certaines images du plan,
     /// triées par image ; entre deux clés elle va de l'une à l'autre. Vide : le calque a sa pose fixe.
     pub pos_keys: Vec<crate::poskeys::PosKey>,
+    /// Trajectoire (`trajectoire.rs`, Anthony 2026-11-07) : le chemin dessiné et ses marques, qui posent les clés de position du
+    /// calque ; rien : les clés sont à la main (ou il n'y en a pas). Elle ne se voit qu'avec l'outil Trajectoire.
+    pub trajectoire: Option<crate::trajectoire::Trajectoire>,
     /// Clés d'opacité (`opacitecles.rs`, Anthony 2026-10-29) : l'opacité du calque à certaines images du plan, triées par image ; entre
     /// deux clés elle va de l'une à l'autre. Vide : le calque a son opacité fixe (`opacity`).
     pub opacity_keys: Vec<crate::opacitecles::OpKey>,
@@ -478,6 +481,7 @@ impl Layer {
             locked: false,
             transform: LayerTransform::default(),
             pos_keys: Vec::new(),
+            trajectoire: None,
             opacity_keys: Vec::new(),
             unie: None,
             depth: 0.0,
@@ -2343,6 +2347,8 @@ impl Document {
                 fx: crate::fx::keys_from(&layer.fx, at),
                 // Les clés de position d'après la coupe passent au second (`poskeys::split_keys`).
                 pos_keys: crate::poskeys::split_keys(&layer.pos_keys, at, layer.transform).1,
+                // (Une trajectoire couvre un plan entier : chaque moitié garde ses clés, à la main.)
+                trajectoire: None,
                 opacity_keys: crate::opacitecles::split_keys(&layer.opacity_keys, at, layer.opacity).1,
                 ..layer.clone()
             };
@@ -2381,6 +2387,7 @@ impl Document {
                 e.keys.retain(|k| k.frame < at);
             }
             l.pos_keys = crate::poskeys::split_keys(&l.pos_keys, at, l.transform).0;
+            l.trajectoire = None;
             l.opacity_keys = crate::opacitecles::split_keys(&l.opacity_keys, at, l.opacity).0;
             l.trim();
         }
@@ -2437,6 +2444,8 @@ impl Document {
                 }
                 la.append_at(a_len, lb.frames, &lb.roles);
                 la.join_pos_keys(a_len, &lb.pos_keys, lb.transform, next_len);
+                // (Les clés réunies ne suivent plus un seul chemin : elles restent à la main.)
+                la.trajectoire = None;
                 la.join_opacity_keys(a_len, &lb.opacity_keys, lb.opacity, next_len);
                 la.trim();
             } else {

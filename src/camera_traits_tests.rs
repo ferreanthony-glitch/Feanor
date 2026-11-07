@@ -486,7 +486,7 @@ fn bande(w: usize, h: usize) -> crate::raster::Raster {
     r
 }
 
-/// Chaque effet garde ce qui dépasse. Loin de ce qui dépasse, la feuille ne bouge pas ; près de lui, elle voit des deux côtés (partie 119).
+/// Chaque effet garde ce qui dépasse. Loin de ce qui dépasse, la feuille ne bouge pas ; près de lui, elle voit des deux côtés (partie 121).
 #[test]
 fn every_effect_keeps_what_is_beyond_the_sheet_and_leaves_the_sheet_as_it_was() {
     let (w, h) = (640, 320);
@@ -930,7 +930,7 @@ fn on_screen_a_wave_does_not_break_the_stroke_at_the_edge_of_the_sheet() {
     assert!(ecart_au_derive <= 2.0, "à l'écran, le trait au-delà de la feuille est celui de l'onde ({ecart_au_derive} pixels d'écart)");
 }
 
-/// Le trait à travers le bord de la feuille, vu de près, avec chaque effet qui s'y cassait (partie 119).
+/// Le trait à travers le bord de la feuille, vu de près, avec chaque effet qui s'y cassait (partie 121).
 #[test]
 #[ignore]
 fn captures_effets_au_bord() {

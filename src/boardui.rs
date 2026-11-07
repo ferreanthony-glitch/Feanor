@@ -74,7 +74,7 @@ const ZOOM_MAX: f32 = 6.0;
 pub(crate) enum BoardDrag {
     /// Gomme sur les notes ; `recorded` : l'étape d'annulation est prise.
     Erase { recorded: bool },
-    /// Gomme partie d'une part de trait posée par-dessus une case (partie 120) : elle n'efface que ces parts-là.
+    /// Gomme partie d'une part de trait posée par-dessus une case (partie 122) : elle n'efface que ces parts-là.
     EraseDessus { recorded: bool },
     /// Rectangle de choix ; `add` : ajouter à ce qui est déjà choisi.
     Rubber { start: Pos2, now: Pos2, add: bool },
@@ -838,7 +838,7 @@ impl App {
             self.vignettes.press = Press::Version;
             return false;
         }
-        // La gomme sur une part de trait restée par-dessus une case (partie 120) : ce geste n'efface que ces parts-là, ce qu'on voit au-dessus ; le geste suivant, au
+        // La gomme sur une part de trait restée par-dessus une case (partie 122) : ce geste n'efface que ces parts-là, ce qu'on voit au-dessus ; le geste suivant, au
         // même endroit, efface le dessin du plan.
         if self.tool == Tool::Eraser && !m.shift && !m.ctrl && !m.command && self.doc.annotations.touche_dessus(layout, p, self.note_eraser_radius(xf.zoom)) {
             self.commit_note_text(layout);
@@ -1656,7 +1656,7 @@ impl App {
             return;
         }
 
-        // Ce qui recouvre une case qui ne pouvait pas le recevoir : par-dessus les images (partie 120).
+        // Ce qui recouvre une case qui ne pouvait pas le recevoir : par-dessus les images (partie 122).
         self.hors_cadres_peindre(&painter, view, xf, &layout, true);
         self.horschamp_prevenir(&layout);
         self.peindre_numeros_annules(&painter, view, xf, &layout, &numeros, &mut marges);

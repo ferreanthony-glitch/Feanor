@@ -103,10 +103,13 @@ pub enum Tool {
     Grab,
     /// Pull : étirer le trait avec le pinceau, comme un doigt (`sculpt.rs`, `sculptapp.rs`).
     Pull,
+    /// Trajectoire (`trajectoire.rs`, `trajectoireui.rs`) : dessiner le chemin du calque et ses marques d'espacement, qui posent
+    /// ses clés de position.
+    Trajectoire,
 }
 
 impl Tool {
-    pub const ALL: [Tool; 21] = [
+    pub const ALL: [Tool; 22] = [
         Tool::Brush,
         Tool::Mixer,
         Tool::Pencil,
@@ -128,6 +131,7 @@ impl Tool {
         Tool::Perspective,
         Tool::Grab,
         Tool::Pull,
+        Tool::Trajectoire,
     ];
 
     /// Les outils des Vignettes (partie 113, décision 2) : le pinceau, le crayon, la gomme, la caméra de la planche, et la main. Les
@@ -159,6 +163,7 @@ impl Tool {
             Tool::Perspective => "Déformer",
             Tool::Grab => "Grab",
             Tool::Pull => "Pull",
+            Tool::Trajectoire => "Trajectoire",
         }
     }
 
@@ -186,6 +191,7 @@ impl Tool {
             Tool::Perspective => "Déformer le dessin, la sélection ou la zone choisie : en enveloppe de Bézier (coins et poignées pour courber les côtés) ou en perspective (les quatre coins). Le mode se choisit dans Réglages.",
             Tool::Grab => "Saisir les points du dessin sous le cercle du pinceau et les tirer d'un coup : chaque point suit le curseur, plus ou moins selon sa distance au centre (atténuation, force et rayon dans Réglages). Plusieurs clés choisies : la même déformation sur chacune.",
             Tool::Pull => "Étirer le dessin en glissant, comme un doigt : à chaque instant, les points sous le cercle du pinceau suivent le mouvement (atténuation, force et rayon dans Réglages). Plusieurs clés choisies : la même déformation sur chacune.",
+            Tool::Trajectoire => "Dessiner le chemin du calque d'un trait, puis de petits traits en travers : les marques d'espacement, comme en animation (serrées : lent ; espacées : vite). Les clés de position du calque se posent toutes seules. Le chemin ne se voit qu'avec cet outil et se retouche : glisser une marque, déplacer le chemin, le retracer.",
         }
     }
 
@@ -214,6 +220,7 @@ impl Tool {
             Tool::Perspective => ph::PERSPECTIVE,
             Tool::Grab => ph::HAND_GRABBING,
             Tool::Pull => ph::HAND_POINTING,
+            Tool::Trajectoire => ph::FLOW_ARROW,
         }
     }
 
@@ -241,6 +248,7 @@ impl Tool {
             Tool::Perspective => "outil.perspective",
             Tool::Grab => "outil.grab",
             Tool::Pull => "outil.pull",
+            Tool::Trajectoire => "outil.trajectoire",
         }
     }
 
@@ -864,6 +872,8 @@ pub struct App {
     pub(crate) cut_gesture: Option<Vec<Pos2>>,
     /// Geste de Grab ou de Pull en cours (`sculptapp.rs`).
     pub(crate) sculpt_geste: Option<crate::sculptapp::Geste>,
+    /// L'outil Trajectoire : son geste en cours et le pas proposé (`trajectoireui.rs`).
+    pub(crate) traj: crate::trajectoireui::Etat,
     /// Enveloppe de Bézier en cours (outil Déformer, mode Enveloppe).
     pub(crate) envelope: Option<crate::envelopetools::EnvelopeEdit>,
     /// Déformation en perspective en cours (5f).
@@ -1360,6 +1370,7 @@ impl App {
             tool_flyout: None,
             cut_gesture: None,
             sculpt_geste: None,
+            traj: Default::default(),
             paste_event: false,
             maximized_once: 0,
             goto_plan: None,
@@ -1821,6 +1832,26 @@ impl App {
                             ctg: None,
                             fond: None,
                             pre: card_pre.clone(),
+                        });
+                    }
+                }
+            }
+            // Trajectoire (`trajectoireui.rs`) : avec l'outil, une silhouette pâle du calque courant à chaque jalon de son chemin
+            // (le départ, chaque marque, l'arrivée), là où il sera : l'espacement se lit sur le vrai dessin.
+            if onion && !self.playing && li == cur && self.tool == Tool::Trajectoire {
+                if let Some(t) = layer.trajectoire.as_ref().filter(|t| t.cles == crate::trajectoire::Cles::Interpolation) {
+                    for f in t.images_des_jalons(self.frame_count()).into_iter().filter(|&f| f != frame) {
+                        let (Some(cel), Some(pl)) = (layer.cel_at(f), crate::espace3d::place(&world, layer, f, &camera)) else { continue };
+                        onion_items.push(PlanItem {
+                            cel,
+                            opacity: crate::trajectoireui::FANTOME_OPACITE,
+                            tint: Some(crate::trajectoireui::FANTOME),
+                            transform: pl.transform,
+                            blend: Default::default(),
+                            fx: Vec::new(),
+                            ctg: None,
+                            fond: None,
+                            pre: pl.pre,
                         });
                     }
                 }
@@ -2528,6 +2559,8 @@ impl App {
         }
         self.finish_camera_drag();
         self.finish_layer_drag();
+        // La trajectoire (`trajectoireui.rs`) : le trait, la marque ou le chemin en cours est posé.
+        self.trajectoire_lacher();
         self.guides.stroke = None;
         self.shape_drag = None;
         // (Le dégradé se pose au lâcher, `degrade_release`, avant ceci : ce qui reste est un tracé abandonné ; une retouche en cours
@@ -4520,6 +4553,7 @@ impl App {
             "outil.perspective" => self.set_tool(Tool::Perspective),
             "outil.grab" => self.set_tool(Tool::Grab),
             "outil.pull" => self.set_tool(Tool::Pull),
+            "outil.trajectoire" => self.set_tool(Tool::Trajectoire),
             "deformer.enveloppe" => {
                 self.set_deform_mode(crate::envelopetools::DeformMode::Envelope);
                 self.set_tool(Tool::Perspective);
@@ -4960,7 +4994,7 @@ impl App {
 
     /// Touche pour l'outil en cours (voir `handle_shortcuts`) ; vrai si elle a servi.
     fn tool_key(&mut self, key: Key) -> bool {
-        self.shape_key(key) || self.persp_key(key) || self.envelope_key(key) || self.keys_escape(key)
+        self.shape_key(key) || self.persp_key(key) || self.envelope_key(key) || self.keys_escape(key) || self.trajectoire_touche(key)
     }
 
     /// Change d'outil : la forme en cours (courbe, polyligne) est posée avant.

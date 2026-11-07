@@ -1854,7 +1854,7 @@ pub(crate) fn gpu_fx_item(doc: &Document, item: &crate::render::PlanItem) -> boo
         && item.fond.is_none()
         && item.pre.is_none()
         && (crate::gpufx::steps_supported(&item.fx) || crate::fx::hybrid_split(item).is_some())
-        // Un dessin qui passe le bord de la feuille, avec un effet qui va lire ses voisins : la carte ne voit pas ce qui arrive de l'autre côté, le calcul de fond si (partie 119).
+        // Un dessin qui passe le bord de la feuille, avec un effet qui va lire ses voisins : la carte ne voit pas ce qui arrive de l'autre côté, le calcul de fond si (partie 121).
         // Mais tant que ce calcul n'a pas répondu, c'est la carte qui dessine : l'effet suit le trait sans délai, seule la bande près du bord n'a pas encore tout lu.
         && doc.cels.get(&item.cel).is_some_and(|c| {
             c.raster.width == doc.width && c.raster.height == doc.height && (crate::fx::pile_juste_au_bord(&item.fx) || !crate::fx::cel_deborde(c) || crate::fx::resultat_pret(doc, item).is_none())

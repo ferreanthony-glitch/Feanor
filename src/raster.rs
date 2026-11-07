@@ -677,6 +677,37 @@ impl Raster {
         }
     }
 
+    /// Même image, même feuille, chaque pixel dessiné décalé de (`dx`, `dy`) pixels du monde (hors de la feuille compris, dans
+    /// les deux sens : la toile infinie). L'outil Trajectoire en « clés d'images » (`trajectoireui.rs`) pose ainsi un dessin à
+    /// chaque marque.
+    pub fn decalee(&self, dx: i64, dy: i64) -> Raster {
+        let mut out = Raster::new(self.width, self.height);
+        let mut poser = |ox: i64, oy: i64, tile: &Tile| {
+            for (i, &c) in tile.iter().enumerate() {
+                if c.a() == 0 {
+                    continue;
+                }
+                let (nx, ny) = (ox + (i % TILE) as i64 + dx, oy + (i / TILE) as i64 + dy);
+                let (tx, ty) = (nx.div_euclid(TILE as i64), ny.div_euclid(TILE as i64));
+                if tx.abs() > WORLD / TILE as i64 || ty.abs() > WORLD / TILE as i64 {
+                    continue;
+                }
+                let id = out.id_of(tx as i32, ty as i32);
+                out.tile_mut(id)[ny.rem_euclid(TILE as i64) as usize * TILE + nx.rem_euclid(TILE as i64) as usize] = c;
+            }
+        };
+        for (idx, tile) in self.tiles.iter().enumerate() {
+            if let Some(t) = tile {
+                let (ox, oy) = self.tile_origin(idx);
+                poser(ox, oy, t);
+            }
+        }
+        for (&(tx, ty), t) in &self.outer {
+            poser(tx as i64 * TILE as i64, ty as i64 * TILE as i64, t);
+        }
+        out
+    }
+
     /// Même image dans une feuille `width`×`height`, décalée de (`dx`, `dy`) pixels.
     pub fn placed_in(&self, width: usize, height: usize, dx: usize, dy: usize) -> Raster {
         let mut out = Raster::new(width, height);

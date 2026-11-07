@@ -564,9 +564,9 @@ impl App {
         blocks.iter().enumerate().filter(|(_, b)| p.x >= b.left() - 1.0 - tol && p.x <= b.right() + 1.0 + tol).find_map(|(i, b)| {
             let panel = &self.doc.panels[i];
             let k = layer_in_row(&panel.layers, row)?;
-            let keys = &panel.layers[k].pos_keys;
             let x0 = b.left() - 1.0;
-            let shown = keys.iter().map(|key| key.frame).filter(|&f| f < panel.frame_count());
+            // (Un calque à trajectoire ne montre que ses jalons : seuls eux se prennent, `poskeysui::pos_frames_visibles`.)
+            let shown = crate::poskeysui::pos_frames_visibles(&panel.layers[k], panel.frame_count()).into_iter().filter(|&f| f < panel.frame_count());
             crate::poskeysui::marker_near(shown, p.x, |f| x0 + f as f32 * ppf + ppf * 0.5, tol).map(|f| (i, k, f))
         })
     }

@@ -480,6 +480,8 @@ impl App {
         // sa brosse suivent, ce sont eux qui travaillent l'aplat.
         self.aplat_section_ui(ui);
         match self.tool {
+            // Trajectoire (`trajectoireui.rs`) : le pas des marques, les commandes du chemin du calque courant.
+            Tool::Trajectoire => self.trajectoire_options_ui(ui),
             // Pinceau, crayon, gomme : la taille, l'opacité et le nom de la brosse en haut ; sous l'aperçu du trait,
             // « Peint sur l'aplat » et l'aplat du calque (pinceau et crayon), puis « Plus de réglages » (replié
             // d'office) : les catégories de la brosse et le mode d'emploi. Le mode « Griffonner » d'un calque de couleur

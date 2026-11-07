@@ -267,7 +267,7 @@ impl App {
             // Les poignées de lissage (lissage.rs) : petits ronds creux, sous les losanges.
             let ease_hot = match self.ease_drag.as_ref() {
                 Some(d) => keys.iter().position(|k| k.frame == d.frame).map(|i| (i, d.cote)),
-                None => resp.hover_pos().filter(|p| row.contains(*p)).and_then(|p| crate::lissage::sous_pointeur(keys, p.x, &cx, cell, cell * 0.5 + 2.0)),
+                None => resp.hover_pos().filter(|p| row.contains(*p)).and_then(|p| crate::lissage::sous_pointeur(keys, p.x, &cx, cell, crate::lissage::tol_cle(cell))),
             };
             crate::lissage::peindre(&painter, keys, row.center().y, &cx, cell, cam_key(), theme::rangee_sombre(), ease_hot);
             for k in keys.iter() {
@@ -667,7 +667,7 @@ impl App {
         let cam_frame_under = |app: &App, p: Pos2| key_under(app, p).and_then(|k| app.panel().camera.get(k).map(|k| k.frame));
         // La poignée de lissage sous le point p (la clé passe avant) : (rang de la clé, côté).
         let ease_under = |app: &App, p: Pos2| {
-            (cam_row.contains(p) && app.cle_vue(crate::legendecles::Sorte::Camera)).then(|| crate::lissage::sous_pointeur(&app.panel().camera, p.x, &key_x, cell, cell * 0.5 + 2.0)).flatten()
+            (cam_row.contains(p) && app.cle_vue(crate::legendecles::Sorte::Camera)).then(|| crate::lissage::sous_pointeur(&app.panel().camera, p.x, &key_x, cell, crate::lissage::tol_cle(cell))).flatten()
         };
 
         // Clic droit sur une case de calque : elle est visée (sauf dans le choix), puis le menu
