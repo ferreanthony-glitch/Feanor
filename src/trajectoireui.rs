@@ -1,29 +1,38 @@
 //! L'outil Trajectoire à l'écran (Anthony, 2026-11-07 ; le modèle : `trajectoire.rs`).
 //!
 //! Avec l'outil, sur le calque courant :
-//! * un trait sur la feuille **trace le chemin** du calque (un second trait long le retrace, les marques restent) ;
+//! * un trait sur la feuille **trace le chemin** du calque, depuis la tête de lecture (un second trait long le retrace, les
+//!   marques restent) ;
 //! * un petit trait **en travers du chemin pose une marque** ;
 //! * un appui sur une marque la **glisse** le long du chemin ; tirée loin du chemin, elle est **arrachée** (retirée au lâcher) ;
-//! * un appui sur le chemin le **déplace** en bloc ; Échap abandonne le geste en cours.
+//! * un appui sur le chemin le **tire** : il se tord là où on le prend, comme une corde (Anthony : « que la trajectoire soit éditable
+//!   facilement ») ; Maj tenue, il se **déplace** en bloc ; Échap abandonne le geste en cours.
 //!
-//! À chaque changement, les clés de position du calque sont reposées d'après le chemin (`Trajectoire::cles`) : pendant un
-//! glisser, à chaque image d'écran, sans rejeu d'aucun dessin (seuls les paramètres du plan à composer changent). Une étape
-//! d'annulation par geste. Le chemin ne se voit qu'avec l'outil ; il est enregistré avec le calque et revient avec l'outil.
-//! Les silhouettes pâles du calque à chaque jalon sont posées dans le plan à composer (`App::build_plan_avec`).
+//! Deux sortes de clés (réglages) :
+//! * **clés d'interpolation** : une clé de position par image (`Layer::pos_keys`), le calque glisse le long de la courbe ; pendant
+//!   un glisser, les clés sont reposées à chaque image d'écran, sans rejeu d'aucun dessin ;
+//! * **clés d'images** : à chaque marque et à l'arrivée, **un dessin** (copie du dessin du départ, déplacé à sa place sur le
+//!   chemin), exposé jusqu'au jalon suivant : la timeline se scinde comme pour toute clé de dessin, et chaque pose se redessine.
+//!   Les dessins sont refaits au lâcher d'un geste (pas pendant) ; un dessin déjà posé est déplacé, pas refait : ce qu'on y a
+//!   dessiné suit.
 //!
-//! Retoucher les clés à la main (timeline, montage, outil Transformer) **détache** la trajectoire : les clés restent, le
-//! chemin s'en va, et la ligne d'état le dit (`App::trajectoire_detacher`).
+//! **Recaler dans le temps** : glisser sur la timeline (ou au montage) une clé qui est un jalon de la trajectoire — la première,
+//! la dernière, ou une marque — recale ce jalon (`Trajectoire::recaler`) et repose les clés entre le départ et la fin ; la
+//! trajectoire reste. Poser, supprimer ou lisser une clé à la main, ou déplacer un calque animé avec Transformer, la **détache**
+//! (`App::trajectoire_detacher`) : les clés restent, le chemin s'en va, la ligne d'état le dit.
 
 use eframe::egui::{self, pos2, vec2, Align2, Color32, CursorIcon, FontId, Key, Pos2, RichText, Shape, Stroke, Vec2};
 
 use crate::app::{App, Tool};
+use crate::document::CelId;
 use crate::history::Edit;
 use crate::poskeys::PosKey;
-use crate::trajectoire::{distance, Cles, Trajectoire};
+use crate::trajectoire::{distance, Cles, DessinJalon, Trajectoire};
+use crate::vector::Affine;
 
 /// La teinte du chemin, de ses marques et des silhouettes : celle des poignées du calque.
 pub(crate) const COULEUR: Color32 = crate::theme::POIGNEE_CALQUE;
-/// La teinte des silhouettes du calque aux jalons (dans le plan à composer).
+/// La teinte des silhouettes du calque aux jalons (dans le plan à composer, clés d'interpolation).
 pub(crate) const FANTOME: [u8; 3] = [120, 220, 140];
 /// L'opacité des silhouettes.
 pub(crate) const FANTOME_OPACITE: u8 = 70;
@@ -42,16 +51,14 @@ pub(crate) enum Geste {
     Trait { points: Vec<[f32; 2]> },
     /// La marque `i` prise : glissée le long du chemin, ou arrachée.
     Marque { i: usize, avant: Trajectoire, cles_avant: Vec<PosKey>, snap: Edit, bouge: bool, arrachee: bool },
-    /// Le chemin pris : déplacé en bloc.
-    Chemin { depart: [f32; 2], avant: Trajectoire, cles_avant: Vec<PosKey>, snap: Edit, bouge: bool },
+    /// Le chemin pris en `fraction` : tiré là (tordu, comme une corde), ou, Maj tenue, déplacé en bloc.
+    Chemin { depart: [f32; 2], fraction: f32, bloc: bool, avant: Trajectoire, cles_avant: Vec<PosKey>, snap: Edit, bouge: bool },
 }
 
 /// L'état de l'outil pour un projet.
 #[derive(Default)]
 pub(crate) struct Etat {
     pub(crate) geste: Option<Geste>,
-    /// « Une marque = N images », proposé à la prochaine trajectoire tracée (rien : la durée du plan partagée entre les marques).
-    pub(crate) pas_propose: Option<usize>,
     /// La sorte de clés proposée à la prochaine trajectoire tracée.
     pub(crate) cles_propose: Cles,
 }
@@ -78,8 +85,8 @@ impl App {
         }
     }
 
-    /// Appui avec l'outil : une marque, le chemin, ou le début d'un trait.
-    pub(crate) fn trajectoire_presser(&mut self, stage: Pos2) {
+    /// Appui avec l'outil : une marque, le chemin (`maj` : pour le déplacer en bloc ; sinon pour le tirer), ou le début d'un trait.
+    pub(crate) fn trajectoire_presser(&mut self, stage: Pos2, maj: bool) {
         self.end_stroke();
         self.playing = false;
         if self.content_refuses() {
@@ -98,17 +105,19 @@ impl App {
         let l = self.layer();
         if let (Some(avant), true) = (l.trajectoire.clone(), chemin) {
             let cles_avant = l.pos_keys.clone();
+            let fraction = avant.plus_proche(p).0;
             let snap = self.snapshot();
             self.traj.geste = Some(match marque {
                 Some(i) => Geste::Marque { i, avant, cles_avant, snap, bouge: false, arrachee: false },
-                None => Geste::Chemin { depart: p, avant, cles_avant, snap, bouge: false },
+                None => Geste::Chemin { depart: p, fraction, bloc: maj, avant, cles_avant, snap, bouge: false },
             });
             return;
         }
         self.traj.geste = Some(Geste::Trait { points: vec![p] });
     }
 
-    /// Le pointeur bouge pendant un geste de l'outil ; vrai si un geste est en cours.
+    /// Le pointeur bouge pendant un geste de l'outil ; vrai si un geste est en cours. En clés d'interpolation, les clés suivent à
+    /// chaque image d'écran ; en clés d'images, les dessins attendent le lâcher (le chemin, lui, suit).
     pub(crate) fn trajectoire_glisser(&mut self, stage: Pos2) -> bool {
         let Some(mut g) = self.traj.geste.take() else { return false };
         let p = [stage.x, stage.y];
@@ -130,26 +139,37 @@ impl App {
                 }
                 *arrachee = loin;
                 *bouge = true;
-                if let Some(l) = self.layers_mut().get_mut(li) {
-                    l.trajectoire = Some(t);
-                }
-                self.trajectoire_recalculer(li);
-                self.renderer.invalidate_params();
+                self.trajectoire_poser_en_direct(li, t);
                 self.status = if loin { "Marque arrachée : lâcher la retire.".into() } else { format!("Marque à {} % du chemin.", (f * 100.0).round()) };
             }
-            Geste::Chemin { depart, avant, bouge, .. } => {
+            Geste::Chemin { depart, fraction, bloc, avant, bouge, .. } => {
                 let mut t = avant.clone();
-                t.deplacer(p[0] - depart[0], p[1] - depart[1]);
-                *bouge = true;
-                if let Some(l) = self.layers_mut().get_mut(li) {
-                    l.trajectoire = Some(t);
+                let (dx, dy) = (p[0] - depart[0], p[1] - depart[1]);
+                if *bloc {
+                    t.deplacer(dx, dy);
+                } else {
+                    let rayon = t.rayon_de_tirage();
+                    t.tirer(*fraction, dx, dy, rayon);
                 }
-                self.trajectoire_recalculer(li);
-                self.renderer.invalidate_params();
+                *bouge = true;
+                self.trajectoire_poser_en_direct(li, t);
+                self.status = if *bloc { "Chemin déplacé en bloc (Maj).".into() } else { "Chemin tiré : relâche Maj pour le tordre, Maj pour le déplacer en bloc.".into() };
             }
         }
         self.traj.geste = Some(g);
         true
+    }
+
+    /// Pendant un geste : la trajectoire `t` posée sur le calque `li` ; en clés d'interpolation, ses clés aussi.
+    fn trajectoire_poser_en_direct(&mut self, li: usize, t: Trajectoire) {
+        let interpolation = t.cles == Cles::Interpolation;
+        if let Some(l) = self.layers_mut().get_mut(li) {
+            l.trajectoire = Some(t);
+        }
+        if interpolation {
+            self.trajectoire_recalculer(li);
+            self.renderer.invalidate_params();
+        }
     }
 
     /// Lâcher : le trait devient marque ou chemin ; une marque glissée, arrachée, un chemin déplacé sont gardés, en une étape.
@@ -163,15 +183,18 @@ impl App {
             Geste::Trait { points } => self.trajectoire_poser_le_trait(li, &points),
             Geste::Marque { snap, bouge, arrachee, .. } => {
                 if arrachee {
+                    self.trajectoire_recalculer(li);
                     self.trajectoire_valider(snap, "Retirer une marque");
                     self.status = self.trajectoire_resume(li, "Marque retirée");
                 } else if bouge {
+                    self.trajectoire_recalculer(li);
                     self.trajectoire_valider(snap, "Glisser une marque");
                 }
             }
-            Geste::Chemin { snap, bouge, .. } => {
+            Geste::Chemin { snap, bouge, bloc, .. } => {
                 if bouge {
-                    self.trajectoire_valider(snap, "Déplacer la trajectoire");
+                    self.trajectoire_recalculer(li);
+                    self.trajectoire_valider(snap, if bloc { "Déplacer la trajectoire" } else { "Tirer la trajectoire" });
                 }
             }
         }
@@ -201,14 +224,15 @@ impl App {
                 match existante {
                     Some(e) => {
                         t.marques = e.marques;
-                        t.images_par_marque = e.images_par_marque;
                         t.depart = e.depart;
+                        t.fin = e.fin;
+                        t.temps = e.temps;
                         t.cles = e.cles;
+                        t.dessins = e.dessins;
                     }
                     None => {
                         // La clé de départ démarre sur la tête de lecture.
                         t.depart = self.cur_frame;
-                        t.images_par_marque = self.traj.pas_propose;
                         t.cles = self.traj.cles_propose;
                     }
                 }
@@ -224,34 +248,150 @@ impl App {
         }
     }
 
-    /// Les clés de position du calque `li` reposées d'après sa trajectoire (rien s'il n'en a pas). La pose au départ reste
-    /// celle que le calque a à l'image du départ ; un chemin qui ne couvre aucune image (plan trop court) laisse le calque fixe.
+    // ------------------------------------------------------------------ les clés et les dessins
+
+    /// Les clés du calque `li` du plan courant reposées d'après sa trajectoire (rien s'il n'en a pas).
     pub(crate) fn trajectoire_recalculer(&mut self, li: usize) {
-        let duree = self.frame_count();
-        let Some(l) = self.layers_mut().get_mut(li) else { return };
-        let Some(t) = &l.trajectoire else { return };
+        let pi = self.cur_panel;
+        self.trajectoire_recalculer_dans(pi, li);
+    }
+
+    /// Les clés du calque `li` du plan `pi` reposées d'après sa trajectoire : en clés d'interpolation, une clé de position par
+    /// image (la pose au départ reste celle du calque à l'image du départ) ; en clés d'images, aucune clé de position, un dessin
+    /// à chaque jalon. Un chemin qui ne couvre aucune image (plan trop court) laisse le calque fixe.
+    pub(crate) fn trajectoire_recalculer_dans(&mut self, pi: usize, li: usize) {
+        let Some(p) = self.doc.panels.get(pi) else { return };
+        let duree = p.frame_count();
+        let Some(t) = p.layers.get(li).and_then(|l| l.trajectoire.clone()) else { return };
+        let l = &mut self.doc.panels[pi].layers[li];
         let base = crate::poskeys::pose_at(&l.pos_keys, t.depart, l.transform);
-        l.pos_keys = t.cles(duree, base);
-        if l.pos_keys.is_empty() {
-            l.transform = base;
-            l.fold_dz();
+        match t.cles {
+            Cles::Interpolation => {
+                l.pos_keys = t.cles(duree, base);
+                if l.pos_keys.is_empty() {
+                    l.transform = base;
+                    l.fold_dz();
+                }
+                if !t.dessins.is_empty() {
+                    self.trajectoire_defaire_les_dessins(pi, li);
+                }
+            }
+            Cles::Images => {
+                // Les clés de position s'en vont : le calque garde sa pose du départ, les dessins font le mouvement.
+                l.pos_keys.clear();
+                l.transform = base;
+                l.fold_dz();
+                self.trajectoire_poser_les_dessins(pi, li);
+            }
         }
     }
 
-    /// Le départ de la trajectoire du calque courant passe à la tête de lecture (bouton des réglages) ; une étape.
-    pub(crate) fn trajectoire_depart_ici(&mut self) {
-        let li = self.cur_layer;
-        let f = self.cur_frame;
-        if self.layers().get(li).and_then(|l| l.trajectoire.as_ref()).is_none_or(|t| t.depart == f) {
-            return;
+    /// Le dessin `cel` copié et déplacé de `d` (pixels de la feuille) : un nouveau dessin. Vectoriel : chaque élément est
+    /// translaté et le rendu exact est demandé au fil de travail (l'image en cache, décalée, le montre en attendant) ; bitmap : les
+    /// pixels, décalés à l'entier ; l'aplat (strate Fond) suit.
+    fn trajectoire_copie_decalee(&mut self, cel: CelId, d: [f32; 2]) -> CelId {
+        let nouveau = self.doc.duplicate_cel(cel);
+        let (dx, dy) = (d[0].round() as i64, d[1].round() as i64);
+        let mut vectoriel = false;
+        if let Some(c) = self.doc.cels.get_mut(&nouveau) {
+            if let Some(v) = c.vector.as_mut() {
+                let a = Affine::translate(vec2(d[0], d[1]));
+                v.elements = v.elements.iter().map(|e| e.transformed(&a)).collect();
+                vectoriel = true;
+            }
+            c.raster = c.raster.decalee(dx, dy);
+            if let Some(f) = c.fond.as_mut() {
+                f.peinture.raster = f.peinture.raster.decalee(dx, dy);
+                f.coupe = f.coupe.decalee(dx, dy);
+                f.peinture.version += 1;
+            }
+            c.version += 1;
         }
-        let snap = self.snapshot();
-        if let Some(t) = self.layers_mut()[li].trajectoire.as_mut() {
-            t.depart = f;
+        if vectoriel {
+            self.rejeu_cel(nouveau);
         }
-        self.trajectoire_recalculer(li);
-        self.trajectoire_valider(snap, "Départ de la trajectoire");
-        self.status = self.trajectoire_resume(li, "Départ à la tête de lecture");
+        nouveau
+    }
+
+    /// Clés d'images : un dessin à chaque jalon (une marque, l'arrivée), exposé jusqu'au jalon suivant (le dernier, jusqu'à la fin
+    /// du plan) ; le départ garde le dessin d'origine. Un dessin déjà posé par la trajectoire est déplacé de ce qu'il faut (ce
+    /// qu'on y a dessiné suit) ; un jalon neuf reçoit une copie du dessin du départ. Faux, avec la raison dans la ligne d'état,
+    /// s'il n'y a pas de dessin au départ.
+    fn trajectoire_poser_les_dessins(&mut self, pi: usize, li: usize) -> bool {
+        let duree = self.doc.panels[pi].frame_count();
+        let Some(t) = self.doc.panels[pi].layers[li].trajectoire.clone() else { return false };
+        let images = t.images_des_jalons(duree);
+        if images.len() < 2 {
+            return false;
+        }
+        let Some(source) = self.doc.panels[pi].layers[li].cel_at(t.depart) else {
+            self.status = format!("Clés d'images : dessine d'abord à l'image {} du départ, la trajectoire en fera une copie à chaque marque.", t.depart + 1);
+            return false;
+        };
+        let decalages = t.decalages();
+        let mut dessins = Vec::with_capacity(images.len() - 1);
+        for k in 1..images.len() {
+            let d = decalages[k];
+            let ancien = t.dessins.get(k - 1).filter(|a| self.doc.cels.contains_key(&a.dessin)).copied();
+            let dessin = match ancien {
+                Some(a) if (a.dx - d[0]).abs() < 0.5 && (a.dy - d[1]).abs() < 0.5 => a.dessin,
+                Some(a) => self.trajectoire_copie_decalee(a.dessin, [d[0] - a.dx, d[1] - a.dy]),
+                None => self.trajectoire_copie_decalee(source, d),
+            };
+            dessins.push(DessinJalon { dessin, dx: d[0], dy: d[1] });
+        }
+        let l = &mut self.doc.panels[pi].layers[li];
+        if l.frames.len() < duree {
+            l.frames.resize(duree, None);
+        }
+        for k in 0..images.len() {
+            let cel = if k == 0 { source } else { dessins[k - 1].dessin };
+            let fin = if k + 1 < images.len() { images[k + 1] } else { duree };
+            for f in images[k]..fin.min(duree) {
+                l.frames[f] = Some(cel);
+            }
+        }
+        if let Some(t) = l.trajectoire.as_mut() {
+            t.dessins = dessins;
+        }
+        true
+    }
+
+    /// Les dessins posés par la trajectoire en clés d'images quittent le calque : leurs images reprennent le dessin du départ.
+    fn trajectoire_defaire_les_dessins(&mut self, pi: usize, li: usize) {
+        let l = &mut self.doc.panels[pi].layers[li];
+        let Some(t) = l.trajectoire.as_mut() else { return };
+        let depart = t.depart;
+        let poses: Vec<CelId> = t.dessins.drain(..).map(|d| d.dessin).collect();
+        let source = l.cel_at(depart);
+        for f in l.frames.iter_mut() {
+            if f.is_some_and(|c| poses.contains(&c)) {
+                *f = source;
+            }
+        }
+        l.trim();
+    }
+
+    /// La clé de l'image `de` du calque `li` du plan `pi`, un jalon de sa trajectoire (le départ, une marque, la fin), glissée à
+    /// l'image `vers` : le jalon est recalé (`Trajectoire::recaler`) et les clés reposées entre le départ et la fin. Faux si la
+    /// clé n'est pas un jalon (ou pas de trajectoire).
+    pub(crate) fn trajectoire_recaler_dans(&mut self, pi: usize, li: usize, de: usize, vers: usize) -> bool {
+        let Some(p) = self.doc.panels.get(pi) else { return false };
+        let duree = p.frame_count();
+        let Some(t) = p.layers.get(li).and_then(|l| l.trajectoire.as_ref()) else { return false };
+        let Some(k) = t.images_des_jalons(duree).iter().position(|&f| f == de) else { return false };
+        let recale = self.doc.panels[pi].layers[li].trajectoire.as_mut().and_then(|t| t.recaler(k, vers, duree));
+        if recale.is_none() {
+            return false;
+        }
+        self.trajectoire_recalculer_dans(pi, li);
+        true
+    }
+
+    /// `trajectoire_recaler_dans`, sur le plan courant.
+    pub(crate) fn trajectoire_recaler(&mut self, li: usize, de: usize, vers: usize) -> bool {
+        let pi = self.cur_panel;
+        self.trajectoire_recaler_dans(pi, li, de, vers)
     }
 
     /// Une étape d'annulation au nom `nom`, depuis l'état `snap` d'avant le geste.
@@ -267,7 +407,7 @@ impl App {
         let n = t.marques.len();
         match (images.first(), images.last()) {
             (Some(a), Some(b)) => format!("{debut} : {n} marque{}, le chemin dure de l'image {} à l'image {}.", pluriel(n), a + 1, b + 1),
-            _ => format!("{debut} : {n} marque{} ; le plan n'a qu'une image, le calque ne bouge pas encore.", pluriel(n)),
+            _ => format!("{debut} : {n} marque{} ; le plan s'arrête avant l'image {} du départ, le calque ne bouge pas encore.", pluriel(n), t.depart + 1),
         }
     }
 
@@ -300,6 +440,35 @@ impl App {
         true
     }
 
+    /// Le départ de la trajectoire du calque courant passe à la tête de lecture (bouton des réglages) ; une étape.
+    pub(crate) fn trajectoire_depart_ici(&mut self) {
+        self.trajectoire_borne_ici(true);
+    }
+
+    /// La fin de la trajectoire du calque courant passe à la tête de lecture (bouton des réglages) ; une étape.
+    pub(crate) fn trajectoire_fin_ici(&mut self) {
+        self.trajectoire_borne_ici(false);
+    }
+
+    fn trajectoire_borne_ici(&mut self, depart: bool) {
+        let (pi, li, f) = (self.cur_panel, self.cur_layer, self.cur_frame);
+        let duree = self.frame_count();
+        let Some(t) = self.layers().get(li).and_then(|l| l.trajectoire.as_ref()) else { return };
+        let images = t.images_des_jalons(duree);
+        let k = if depart { 0 } else { images.len().saturating_sub(1) };
+        if images.get(k) == Some(&f) {
+            return;
+        }
+        let snap = self.snapshot();
+        if self.doc.panels[pi].layers[li].trajectoire.as_mut().and_then(|t| t.recaler(k, f, duree)).is_none() {
+            self.status = "Le plan est trop court pour recaler la trajectoire ici.".into();
+            return;
+        }
+        self.trajectoire_recalculer(li);
+        self.trajectoire_valider(snap, if depart { "Départ de la trajectoire" } else { "Fin de la trajectoire" });
+        self.status = self.trajectoire_resume(li, if depart { "Départ à la tête de lecture" } else { "Fin à la tête de lecture" });
+    }
+
     /// Le curseur de l'outil au point `p` de l'écran : la main sur une marque ou le chemin, la croix ailleurs.
     pub(crate) fn trajectoire_curseur(&self, p: Pos2) -> CursorIcon {
         match &self.traj.geste {
@@ -310,7 +479,7 @@ impl App {
         let stage = self.view.to_canvas(self.canvas_rect, self.canvas_size(), p);
         match self.trajectoire_sous(stage) {
             (Some(_), _) => CursorIcon::Grab,
-            (None, true) => CursorIcon::Move,
+            (None, true) => CursorIcon::PointingHand,
             _ => CursorIcon::Crosshair,
         }
     }
@@ -385,8 +554,8 @@ impl App {
 
     // ------------------------------------------------------------------ réglages
 
-    /// Réglages de l'outil (panneau Réglages, fenêtre du clic droit) : le temps entre deux marques, les commandes de la trajectoire du
-    /// calque courant.
+    /// Réglages de l'outil (panneau Réglages, fenêtre du clic droit) : la sorte des clés, le départ et la fin, les commandes de la
+    /// trajectoire du calque courant.
     pub(crate) fn trajectoire_options_ui(&mut self, ui: &mut egui::Ui) {
         let li = self.cur_layer;
         let duree = self.frame_count();
@@ -395,7 +564,8 @@ impl App {
                 RichText::new(
                     "Trace le chemin du calque d'un trait : le calque le suit depuis la tête de lecture jusqu'à la fin du plan, en partant \
                      de là où il est. Puis de petits traits en travers du chemin : les marques. Le temps est le même entre deux marques ; \
-                     serrées, le calque va lentement ; espacées, il va vite.",
+                     serrées, le calque va lentement ; espacées, il va vite. Sur la timeline, glisser la première clé, la dernière ou une \
+                     marque les recale dans le temps.",
                 )
                 .small()
                 .weak(),
@@ -404,22 +574,38 @@ impl App {
             if cles_ui(ui, &mut cles) {
                 self.traj.cles_propose = cles;
             }
-            let mut pas = self.traj.pas_propose;
-            if pas_ui(ui, &mut pas) {
-                self.traj.pas_propose = pas;
-            }
             return;
         };
         let n = t.marques.len();
         let images = t.images_des_jalons(duree);
         ui.label(match (images.first(), images.last()) {
-            (Some(a), Some(b)) => format!("{n} marque{} · le chemin dure de l'image {} à l'image {} · {} clés de position.", pluriel(n), a + 1, b + 1, self.layers()[li].pos_keys.len()),
+            (Some(a), Some(b)) => format!(
+                "{n} marque{} · le chemin dure de l'image {} à l'image {} · {}.",
+                pluriel(n),
+                a + 1,
+                b + 1,
+                match t.cles {
+                    Cles::Interpolation => format!("{} clés de position", self.layers()[li].pos_keys.len()),
+                    Cles::Images => format!("{} dessin{} posé{}", t.dessins.len(), pluriel(t.dessins.len()), pluriel(t.dessins.len())),
+                }
+            ),
             _ => format!("{n} marque{} · le plan s'arrête avant l'image {} du départ : le calque ne bouge pas encore.", pluriel(n), t.depart + 1),
         });
-        ui.horizontal(|ui| {
-            ui.label(format!("Départ : image {}.", t.depart + 1));
-            if t.depart != self.cur_frame && ui.button("Partir de la tête de lecture").on_hover_text("La clé de départ passe à l'image courante ; le chemin dure de là à la fin du plan.").clicked() {
+        ui.horizontal_wrapped(|ui| {
+            let f = self.cur_frame;
+            if images.first().is_some_and(|&a| a != f) && ui.button("Partir de la tête de lecture").on_hover_text("La clé de départ passe à l'image courante ; les clés d'entre sont recalées.").clicked() {
                 self.trajectoire_depart_ici();
+            }
+            if images.last().is_some_and(|&b| b != f) && ui.button("Finir à la tête de lecture").on_hover_text("La clé de fin passe à l'image courante ; les clés d'entre sont recalées.").clicked() {
+                self.trajectoire_fin_ici();
+            }
+            if t.temps.is_some() && ui.button("Temps égaux entre les marques").on_hover_text("Oublie les marques recalées à la main : le temps est de nouveau partagé en parts égales.").clicked() {
+                let snap = self.snapshot();
+                if let Some(tr) = self.layers_mut()[li].trajectoire.as_mut() {
+                    tr.temps_egaux();
+                }
+                self.trajectoire_recalculer(li);
+                self.trajectoire_valider(snap, "Temps égaux entre les marques");
             }
         });
         let mut cles = t.cles;
@@ -432,35 +618,28 @@ impl App {
             self.trajectoire_recalculer(li);
             self.trajectoire_valider(snap, "Sorte des clés de la trajectoire");
         }
-        let mut pas = t.images_par_marque;
-        if pas_ui(ui, &mut pas) {
-            self.named_step("Pas des marques", |app| app.note_change(egui::Id::new("trajectoire.pas")));
-            if let Some(tr) = self.layers_mut()[li].trajectoire.as_mut() {
-                tr.images_par_marque = pas;
-            }
-            self.traj.pas_propose = pas;
-            self.trajectoire_recalculer(li);
-            self.renderer.invalidate_all();
-        }
         ui.horizontal_wrapped(|ui| {
             if n > 0 && ui.button("Retirer les marques").on_hover_text("Le chemin reste, à vitesse constante.").clicked() {
                 let snap = self.snapshot();
                 if let Some(tr) = self.layers_mut()[li].trajectoire.as_mut() {
                     tr.marques.clear();
+                    tr.temps = None;
                 }
                 self.trajectoire_recalculer(li);
                 self.trajectoire_valider(snap, "Retirer les marques");
             }
-            if ui.button("Détacher").on_hover_text("Les clés de position restent telles quelles, le chemin s'en va : tu les retouches à la main.").clicked() {
+            if ui.button("Détacher").on_hover_text("Les clés (ou les dessins) restent tels quels, le chemin s'en va : tu les retouches à la main.").clicked() {
                 let snap = self.snapshot();
                 self.layers_mut()[li].trajectoire = None;
                 self.trajectoire_valider(snap, "Détacher la trajectoire");
-                self.status = "Trajectoire détachée : les clés de position restent, à ta main.".into();
+                self.status = "Trajectoire détachée : ce qu'elle a posé reste, à ta main.".into();
             }
-            if ui.button("Effacer").on_hover_text("Le chemin et ses clés s'en vont ; le calque garde la pose qu'il a au départ.").clicked() {
+            if ui.button("Effacer").on_hover_text("Le chemin et ce qu'il a posé (clés, dessins) s'en vont ; le calque garde la pose du départ.").clicked() {
                 let snap = self.snapshot();
+                let pi = self.cur_panel;
+                self.trajectoire_defaire_les_dessins(pi, li);
                 let l = &mut self.layers_mut()[li];
-                l.transform = crate::poskeys::pose_at(&l.pos_keys, 0, l.transform);
+                l.transform = crate::poskeys::pose_at(&l.pos_keys, t.depart, l.transform);
                 l.pos_keys.clear();
                 l.fold_dz();
                 l.trajectoire = None;
@@ -470,8 +649,10 @@ impl App {
         });
         ui.label(
             RichText::new(
-                "Glisser une marque le long du chemin la déplace ; la tirer loin du chemin la retire. Glisser le chemin le déplace en bloc. \
-                 Un trait long retrace le chemin, les marques restent. Retoucher une clé à la main (timeline, Transformer) détache la trajectoire.",
+                "Tirer sur le chemin le tord là où on le prend, comme une corde (Maj : le déplacer en bloc). Glisser une marque le long du \
+                 chemin la déplace ; la tirer loin du chemin la retire. Un trait long retrace le chemin, les marques restent. Sur la \
+                 timeline, glisser la première clé, la dernière ou une marque les recale dans le temps. Poser, supprimer ou lisser une clé \
+                 à la main détache la trajectoire.",
             )
             .small()
             .weak(),
@@ -479,36 +660,13 @@ impl App {
     }
 }
 
-/// Les deux sortes de clés : interpolées (le calque glisse le long du chemin) ou par images (une pose tenue à chaque marque) ; vrai si
+/// Les deux sortes de clés : interpolées (le calque glisse le long du chemin) ou par images (un dessin à chaque marque) ; vrai si
 /// le choix a changé.
 fn cles_ui(ui: &mut egui::Ui, cles: &mut Cles) -> bool {
     let avant = *cles;
     ui.horizontal(|ui| {
-        ui.radio_value(cles, Cles::Interpolation, Cles::Interpolation.label()).on_hover_text("Une clé par image : le calque glisse le long du chemin, à la vitesse que donnent les marques.");
-        ui.radio_value(cles, Cles::Images, Cles::Images.label()).on_hover_text("Une clé tenue à chaque marque : le calque y reste jusqu'à la suivante, sans interpolation, comme des poses tenues.");
+        ui.radio_value(cles, Cles::Interpolation, Cles::Interpolation.label()).on_hover_text("Une clé de position par image : le calque glisse le long du chemin, à la vitesse que donnent les marques.");
+        ui.radio_value(cles, Cles::Images, Cles::Images.label()).on_hover_text("Un dessin à chaque marque, copie du dessin du départ déplacé sur le chemin, exposé jusqu'à la marque suivante : la timeline se scinde, chaque pose se redessine.");
     });
     *cles != avant
-}
-
-/// « Le temps entre deux marques » : la durée du plan partagée, ou un nombre d'images ; vrai si le choix a changé.
-fn pas_ui(ui: &mut egui::Ui, pas: &mut Option<usize>) -> bool {
-    let avant = *pas;
-    ui.label("Le temps entre deux marques :");
-    let mut fixe = pas.is_some();
-    ui.horizontal(|ui| {
-        if ui.radio(!fixe, "la fin du plan, partagée").clicked() {
-            fixe = false;
-        }
-        if ui.radio(fixe, "un nombre d'images").clicked() {
-            fixe = true;
-        }
-    });
-    if fixe {
-        let mut n = pas.unwrap_or(4).max(1);
-        ui.add(egui::Slider::new(&mut n, 1..=48).text("images par marque"));
-        *pas = Some(n);
-    } else {
-        *pas = None;
-    }
-    *pas != avant
 }

@@ -506,7 +506,14 @@ impl App {
                 // Dupliquer : les originales restent, les copies (nouveaux dessins) deviennent le choix.
                 copy_keys_by(&mut self.doc, pi, li, &dl.starts, d.delta, dl.plan_len)
             } else {
-                apply_key_move(&mut self.doc.panels[pi].layers[li], &dl.starts, d.delta, d.mode, dl.plan_len)
+                let new = apply_key_move(&mut self.doc.panels[pi].layers[li], &dl.starts, d.delta, d.mode, dl.plan_len);
+                // Un calque à trajectoire en clés d'images (`trajectoireui.rs`) : une seule clé de dessin glissée, jalon de la
+                // trajectoire, la recale dans le temps ; les dessins des jalons se reposent d'après elle.
+                if dl.starts.len() == 1 {
+                    let vers = (dl.starts[0] as isize + d.delta).max(0) as usize;
+                    self.trajectoire_recaler_dans(pi, li, dl.starts[0], vers);
+                }
+                new
             };
             changed |= self.doc.panels[pi].layers[li].frames != dl.before.frames;
             if let Some(l) = dessins_sortis(&dl.before, &self.doc.panels[pi].layers[li]) {

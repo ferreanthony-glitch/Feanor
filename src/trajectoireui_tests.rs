@@ -1,11 +1,12 @@
 //! L'outil Trajectoire dans l'application (`trajectoireui.rs`, Anthony, 2026-11-07) : tracer, marquer, glisser, arracher,
-//! déplacer, annuler, détacher, enregistrer.
+//! déplacer, annuler, recaler sur la timeline, clés d'images, détacher, enregistrer.
 
 use eframe::egui::{pos2, Event, Key, Modifiers, PointerButton, Pos2};
 
 use crate::app::{Mode, Tool};
 use crate::document::{Document, Layer, LayerKind};
 use crate::perf_tests::{banc_taille, Banc};
+use crate::trajectoire::Cles;
 
 const DT: f64 = 1.0 / 60.0;
 
@@ -28,21 +29,32 @@ fn ecran(b: &Banc, x: f32, y: f32) -> Pos2 {
 }
 
 fn bouton(pos: Pos2, pressed: bool) -> Event {
-    Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE }
+    bouton_avec(pos, pressed, Modifiers::NONE)
+}
+
+fn bouton_avec(pos: Pos2, pressed: bool, modifiers: Modifiers) -> Event {
+    Event::PointerButton { pos, button: PointerButton::Primary, pressed, modifiers }
 }
 
 /// Un glisser sur les points `pts` de la feuille, une image d'écran par point.
 fn glisser(b: &mut Banc, pts: &[(f32, f32)]) {
+    glisser_avec(b, pts, Modifiers::NONE);
+}
+
+/// Comme `glisser`, ces touches tenues pendant tout le geste.
+fn glisser_avec(b: &mut Banc, pts: &[(f32, f32)], touches: Modifiers) {
+    b.touches = touches;
     let p0 = ecran(b, pts[0].0, pts[0].1);
     b.image(vec![Event::PointerMoved(p0)], DT);
-    b.image(vec![bouton(p0, true)], DT);
+    b.image(vec![bouton_avec(p0, true, touches)], DT);
     for &(x, y) in &pts[1..] {
         let p = ecran(b, x, y);
         b.image(vec![Event::PointerMoved(p)], DT);
     }
     let (x, y) = pts[pts.len() - 1];
     let fin = ecran(b, x, y);
-    b.image(vec![bouton(fin, false)], DT);
+    b.image(vec![bouton_avec(fin, false, touches)], DT);
+    b.touches = Modifiers::NONE;
     b.image(Vec::new(), DT);
 }
 
@@ -51,12 +63,21 @@ fn tracer_le_chemin(b: &mut Banc) {
     glisser(b, &[(50.0, 150.0), (110.0, 150.0), (170.0, 150.0), (230.0, 150.0), (290.0, 150.0), (350.0, 150.0)]);
 }
 
+/// Une marque au milieu du chemin.
+fn marquer_le_milieu(b: &mut Banc) {
+    glisser(b, &[(200.0, 135.0), (200.0, 150.0), (200.0, 165.0)]);
+}
+
 fn derniere_etape(b: &Banc) -> String {
     b.app.history.names().0.last().map(|s| s.to_string()).unwrap_or_default()
 }
 
 fn cles(b: &Banc) -> Vec<(usize, f32, f32)> {
     b.app.layers()[0].pos_keys.iter().map(|k| (k.frame, k.t.x, k.t.y)).collect()
+}
+
+fn jalons(b: &Banc) -> Vec<usize> {
+    b.app.layers()[0].trajectoire.as_ref().map(|t| t.images_des_jalons(b.app.frame_count())).unwrap_or_default()
 }
 
 #[test]
@@ -91,7 +112,7 @@ fn a_stroke_draws_the_path_and_lays_one_key_per_image_relative_to_the_start() {
 fn a_short_stroke_across_the_path_is_a_mark_and_the_keys_follow_its_spacing() {
     let mut b = banc();
     tracer_le_chemin(&mut b);
-    glisser(&mut b, &[(200.0, 135.0), (200.0, 150.0), (200.0, 165.0)]);
+    marquer_le_milieu(&mut b);
     let t = b.app.layers()[0].trajectoire.clone().expect("un chemin");
     assert_eq!(t.marques.len(), 1, "une marque");
     assert!((t.marques[0] - 0.5).abs() < 0.02, "au milieu : {}", t.marques[0]);
@@ -140,29 +161,38 @@ fn a_mark_slides_along_the_path_and_is_torn_off_when_pulled_away() {
 }
 
 #[test]
-fn the_path_moves_as_a_whole_and_escape_gives_the_gesture_up() {
+fn pulling_the_path_bends_it_shift_moves_it_as_a_whole_and_escape_gives_the_gesture_up() {
     let mut b = banc();
     tracer_le_chemin(&mut b);
-    // Prendre le chemin (loin de toute marque) et le descendre de 50.
-    glisser(&mut b, &[(120.0, 150.0), (120.0, 175.0), (120.0, 200.0)]);
+    // Tirer le chemin (loin de toute marque) vers le bas, de 50 : il se tord là, les bouts restent.
+    glisser(&mut b, &[(150.0, 150.0), (150.0, 175.0), (150.0, 200.0)]);
     let t = b.app.layers()[0].trajectoire.clone().unwrap();
-    assert!((t.point_a(0.0)[1] - 200.0).abs() < 1.0, "descendu de 50 : {:?}", t.point_a(0.0));
-    assert!((t.point_a(0.0)[0] - 50.0).abs() < 1.0);
-    assert_eq!(derniere_etape(&b), "Déplacer la trajectoire");
-    // Le déplacement est relatif : les clés ne changent pas.
+    let pris = t.plus_proche([150.0, 200.0]);
+    assert!(pris.1 < 3.0, "le point pris a suivi le pointeur : {pris:?}");
+    assert!((t.point_a(1.0)[0] - 350.0).abs() < 1.0 && (t.point_a(1.0)[1] - 150.0).abs() < 1.0, "l'arrivée n'a pas bougé : {:?}", t.point_a(1.0));
+    assert!((t.point_a(0.0)[1] - 150.0).abs() < 12.0, "le départ, à un tiers du chemin, à peine : {:?}", t.point_a(0.0));
+    assert_eq!(derniere_etape(&b), "Tirer la trajectoire");
+    // Les clés ont suivi la nouvelle forme : au milieu du temps, le calque est descendu.
     let c = cles(&b);
-    assert_eq!(c[0], (0, 0.0, 0.0));
-    assert!((c[23].1 - 300.0).abs() < 2.0 && c[23].2.abs() < 1.0);
+    assert!(c.iter().find(|k| k.0 == 8).is_some_and(|k| k.2 > 20.0), "{:?}", c.iter().find(|k| k.0 == 8));
+    // Maj tenue : le chemin se déplace en bloc.
+    glisser_avec(&mut b, &[(300.0, 150.0), (300.0, 175.0), (300.0, 200.0)], Modifiers::SHIFT);
+    let t = b.app.layers()[0].trajectoire.clone().unwrap();
+    assert!((t.point_a(1.0)[1] - 200.0).abs() < 1.0 && (t.point_a(1.0)[0] - 350.0).abs() < 1.0, "descendu de 50 en bloc : {:?}", t.point_a(1.0));
+    assert_eq!(derniere_etape(&b), "Déplacer la trajectoire");
+    // Le déplacement en bloc est relatif : la clé du départ ne change pas.
+    assert_eq!(cles(&b)[0], (0, 0.0, 0.0));
     // Échap au milieu d'un glisser : tout revient, aucune étape.
     let etapes = b.app.history.names().0.len();
-    let p0 = ecran(&b, 120.0, 200.0);
+    let avant = t.clone();
+    let p0 = ecran(&b, 350.0, 200.0);
     b.image(vec![Event::PointerMoved(p0)], DT);
     b.image(vec![bouton(p0, true)], DT);
-    let p1 = ecran(&b, 120.0, 260.0);
+    let p1 = ecran(&b, 350.0, 260.0);
     b.image(vec![Event::PointerMoved(p1)], DT);
-    assert!((b.app.layers()[0].trajectoire.as_ref().unwrap().point_a(0.0)[1] - 260.0).abs() < 1.0, "il suit pendant le geste");
+    assert!((b.app.layers()[0].trajectoire.as_ref().unwrap().point_a(1.0)[1] - 260.0).abs() < 1.0, "il suit pendant le geste");
     assert!(b.app.trajectoire_touche(Key::Escape));
-    assert!((b.app.layers()[0].trajectoire.as_ref().unwrap().point_a(0.0)[1] - 200.0).abs() < 1.0, "Échap : comme avant");
+    assert_eq!(b.app.layers()[0].trajectoire.as_ref(), Some(&avant), "Échap : comme avant");
     b.image(vec![bouton(p1, false)], DT);
     b.image(Vec::new(), DT);
     assert_eq!(b.app.history.names().0.len(), etapes, "aucune étape");
@@ -183,6 +213,156 @@ fn a_long_stroke_retraces_the_path_and_keeps_the_marks() {
 }
 
 #[test]
+fn dragging_a_key_on_the_timeline_retimes_the_trajectory_instead_of_detaching_it() {
+    let mut b = banc();
+    tracer_le_chemin(&mut b);
+    marquer_le_milieu(&mut b);
+    assert_eq!(jalons(&b), [0, 12, 23]);
+    // Seuls les jalons se prennent : la clé de l'image 5 (une clé par image) n'est pas visible.
+    assert_eq!(crate::poskeysui::pos_frames_visibles(&b.app.layers()[0], 24), [0, 12, 23]);
+    // La dernière clé, glissée de 23 à 17 : la fin recule, la marque suit au milieu du temps, la trajectoire reste.
+    let etapes = b.app.history.names().0.len();
+    assert!(b.app.begin_pos_drag(0, 23, 23));
+    b.app.drag_pos_keys(17);
+    assert_eq!(jalons(&b), [0, 9, 17], "pendant le geste déjà");
+    b.app.end_pos_drag();
+    let t = b.app.layers()[0].trajectoire.clone().expect("la trajectoire reste");
+    assert_eq!((t.fin, jalons(&b)), (Some(17), vec![0, 9, 17]));
+    let c = cles(&b);
+    assert_eq!(c.last().map(|k| k.0), Some(17));
+    assert!((c.last().unwrap().1 - 300.0).abs() < 2.0, "au bout du chemin à la fin");
+    assert_eq!(derniere_etape(&b), "Recaler la trajectoire");
+    assert_eq!(b.app.history.names().0.len(), etapes + 1);
+    // La marque, glissée de 9 à 5 : son temps devient explicite ; le départ et la fin ne bougent pas.
+    assert!(b.app.begin_pos_drag(0, 9, 9));
+    b.app.drag_pos_keys(5);
+    b.app.end_pos_drag();
+    assert_eq!(jalons(&b), [0, 5, 17]);
+    assert!(b.app.layers()[0].trajectoire.as_ref().unwrap().temps.is_some());
+    // La première clé, glissée de 0 à 3 : le départ avance.
+    assert!(b.app.begin_pos_drag(0, 0, 0));
+    b.app.drag_pos_keys(3);
+    b.app.end_pos_drag();
+    assert_eq!(jalons(&b)[0], 3);
+    assert_eq!(cles(&b).first().map(|k| k.0), Some(3));
+    // Échap au milieu d'un glisser : tout revient.
+    assert!(b.app.begin_pos_drag(0, 17, 17));
+    b.app.drag_pos_keys(12);
+    assert_eq!(jalons(&b).last(), Some(&12));
+    b.app.cancel_pos_drag();
+    assert_eq!(jalons(&b).last(), Some(&17));
+    // Trois étapes : Ctrl+Z trois fois rend les jalons d'origine, la trajectoire toujours là.
+    b.app.undo();
+    b.app.undo();
+    b.app.undo();
+    assert_eq!(jalons(&b), [0, 12, 23]);
+    assert!(b.app.layers()[0].trajectoire.is_some());
+    // Les boutons des réglages : finir et partir à la tête de lecture.
+    b.app.cur_frame = 20;
+    b.app.trajectoire_fin_ici();
+    assert_eq!((jalons(&b), derniere_etape(&b)), (vec![0, 10, 20], "Fin de la trajectoire".to_string()));
+    b.app.cur_frame = 4;
+    b.app.trajectoire_depart_ici();
+    assert_eq!((jalons(&b), derniere_etape(&b)), (vec![4, 12, 20], "Départ de la trajectoire".to_string()));
+}
+
+#[test]
+fn image_keys_put_a_drawing_at_each_mark_that_splits_the_timeline_and_moves_with_the_path() {
+    let mut b = banc();
+    // Un trait de pinceau à l'image 0 : le dessin du départ.
+    b.app.set_tool(Tool::Brush);
+    b.app.color = [0, 0, 0];
+    b.app.brush.size = 6.0;
+    glisser(&mut b, &[(60.0, 150.0), (80.0, 150.0), (100.0, 150.0)]);
+    let source = b.app.layers()[0].cel_at(0).expect("un dessin à l'image 0");
+    let centre = |b: &Banc, cel: u64| b.app.doc.cels[&cel].vector.as_ref().unwrap().elements[0].bounds().center();
+    let c0 = centre(&b, source);
+    b.app.set_tool(Tool::Trajectoire);
+    tracer_le_chemin(&mut b);
+    marquer_le_milieu(&mut b);
+    // Passer en clés d'images.
+    let snap = b.app.snapshot();
+    b.app.layers_mut()[0].trajectoire.as_mut().unwrap().cles = Cles::Images;
+    b.app.trajectoire_recalculer(0);
+    b.app.commit_named(snap, "Sorte des clés de la trajectoire");
+    let l = &b.app.layers()[0];
+    assert!(l.pos_keys.is_empty(), "plus de clé de position : les dessins font le mouvement");
+    let t = l.trajectoire.clone().unwrap();
+    assert_eq!(t.dessins.len(), 2, "un dessin à la marque, un à l'arrivée");
+    assert_eq!(jalons(&b), [0, 12, 23]);
+    assert_eq!(l.cel_at(0), Some(source));
+    assert_eq!(l.cel_at(11), Some(source), "le départ tenu jusqu'à la marque");
+    let (milieu, bout) = (t.dessins[0].dessin, t.dessins[1].dessin);
+    assert_eq!((l.cel_at(12), l.cel_at(22), l.cel_at(23)), (Some(milieu), Some(milieu), Some(bout)), "la timeline se scinde aux jalons");
+    assert_ne!(milieu, source);
+    assert_ne!(bout, milieu);
+    // Les copies sont déplacées sur le chemin : à la marque, 150 px plus loin ; au bout, 300.
+    let (cm, cb) = (centre(&b, milieu), centre(&b, bout));
+    assert!((cm.x - c0.x - 150.0).abs() < 4.0 && (cm.y - c0.y).abs() < 1.0, "{cm:?} contre {c0:?}");
+    assert!((cb.x - c0.x - 300.0).abs() < 4.0, "{cb:?} contre {c0:?}");
+    // Glisser la marque le long du chemin : le dessin de la marque est déplacé (pas refait), ce qu'on y a dessiné suit.
+    glisser(&mut b, &[(200.0, 150.0), (230.0, 151.0), (260.0, 150.0)]);
+    let t = b.app.layers()[0].trajectoire.clone().unwrap();
+    assert!((t.marques[0] - 0.7).abs() < 0.02);
+    let milieu2 = t.dessins[0].dessin;
+    let cm2 = centre(&b, milieu2);
+    assert!((cm2.x - c0.x - 210.0).abs() < 4.0, "à 70 % du chemin : {cm2:?}");
+    assert_eq!(b.app.layers()[0].cel_at(12), Some(milieu2));
+    // La clé de dessin de l'arrivée, glissée sur la timeline (montage des clés) de 23 à 18 : la fin recule.
+    let (plan, calque) = (b.app.doc.panels[0].id, b.app.layers()[0].id);
+    b.app.key_sel = vec![crate::montagekeys::KeyRef { panel: plan, layer: calque, start: 23 }];
+    assert!(b.app.begin_keys_drag(23));
+    b.app.drag_keys_mode(18, crate::handles::KeyMove::Single);
+    b.app.end_keys_drag();
+    let t = b.app.layers()[0].trajectoire.clone().unwrap();
+    // (La marque est à 70 % du chemin, mais au milieu du temps : à l'image 9 sur 18.)
+    assert_eq!((t.fin, jalons(&b)), (Some(18), vec![0, 9, 18]));
+    assert_eq!(b.app.layers()[0].cel_at(18), Some(t.dessins[1].dessin));
+    assert_eq!(b.app.layers()[0].cel_at(9), Some(t.dessins[0].dessin));
+    assert_eq!(b.app.layers()[0].cel_at(8), Some(source));
+    // Retour aux clés d'interpolation : les dessins posés s'en vont, le dessin du départ tient, les clés reviennent.
+    let snap = b.app.snapshot();
+    b.app.layers_mut()[0].trajectoire.as_mut().unwrap().cles = Cles::Interpolation;
+    b.app.trajectoire_recalculer(0);
+    b.app.commit_named(snap, "Sorte des clés de la trajectoire");
+    let l = &b.app.layers()[0];
+    assert!(l.trajectoire.as_ref().unwrap().dessins.is_empty());
+    assert!((0..19).all(|f| l.cel_at(f) == Some(source)), "le départ tenu partout");
+    assert_eq!(l.pos_keys.len(), 19);
+    // Sans dessin au départ, les clés d'images ne peuvent rien poser : la ligne d'état le dit.
+    b.app.layers_mut()[0].frames = vec![None; 24];
+    let snap = b.app.snapshot();
+    b.app.layers_mut()[0].trajectoire.as_mut().unwrap().cles = Cles::Images;
+    b.app.trajectoire_recalculer(0);
+    b.app.commit_named(snap, "Sorte des clés de la trajectoire");
+    assert!(b.app.status.contains("dessine d'abord"), "{}", b.app.status);
+}
+
+#[test]
+fn the_path_starts_at_the_playhead() {
+    let mut b = banc();
+    b.app.cur_frame = 6;
+    b.chauffer(2);
+    tracer_le_chemin(&mut b);
+    let t = b.app.layers()[0].trajectoire.clone().expect("un chemin");
+    assert_eq!(t.depart, 6, "la clé de départ démarre sur la tête de lecture");
+    let c = cles(&b);
+    assert_eq!(c.first().map(|k| k.0), Some(6), "aucune clé avant la tête de lecture");
+    assert_eq!(c.last().map(|k| k.0), Some(23));
+    assert_eq!(c.len(), 18);
+    assert!((c.last().unwrap().1 - 300.0).abs() < 2.0);
+    // Enregistré, relu : le départ revient.
+    let dir = std::env::temp_dir().join(format!("feanor-trajectoire-depart-{}-{:?}", std::process::id(), std::thread::current().id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifest = dir.join("T.shot");
+    crate::project::save(&b.app.doc, &manifest, &mut Default::default()).unwrap();
+    let back = crate::project::load(&manifest).unwrap().doc;
+    assert_eq!(back.panels[0].layers[0].trajectoire.as_ref().map(|t| t.depart), Some(6));
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
 fn editing_a_key_by_hand_detaches_the_path_and_keeps_the_keys() {
     let mut b = banc();
     tracer_le_chemin(&mut b);
@@ -193,7 +373,6 @@ fn editing_a_key_by_hand_detaches_the_path_and_keeps_the_keys() {
     assert!(b.app.status.contains("détachée"), "{}", b.app.status);
     b.app.undo();
     assert!(b.app.layers()[0].trajectoire.is_some(), "une seule étape, qui rend le chemin");
-    // Les commandes du panneau : détacher, effacer.
     b.app.undo();
     assert!(b.app.layers()[0].trajectoire.is_none() && b.app.layers()[0].pos_keys.is_empty());
 }
@@ -225,52 +404,6 @@ fn the_path_is_saved_with_the_layer_and_comes_back_and_cutting_the_plan_detaches
     doc.split_panel(0, 12).expect("coupé");
     assert!(doc.panels[0].layers[0].trajectoire.is_none() && doc.panels[1].layers[0].trajectoire.is_none());
     assert!(!doc.panels[0].layers[0].pos_keys.is_empty() && !doc.panels[1].layers[0].pos_keys.is_empty());
-}
-
-#[test]
-fn the_path_starts_at_the_playhead_and_image_keys_hold_between_marks() {
-    let mut b = banc();
-    b.app.cur_frame = 6;
-    b.chauffer(2);
-    tracer_le_chemin(&mut b);
-    let t = b.app.layers()[0].trajectoire.clone().expect("un chemin");
-    assert_eq!(t.depart, 6, "la clé de départ démarre sur la tête de lecture");
-    let c = cles(&b);
-    assert_eq!(c.first().map(|k| k.0), Some(6), "aucune clé avant la tête de lecture");
-    assert_eq!(c.last().map(|k| k.0), Some(23));
-    assert_eq!(c.len(), 18);
-    assert!((c.last().unwrap().1 - 300.0).abs() < 2.0);
-    // Une marque, puis « Clés d'images » : une clé tenue à chaque jalon, et la pose ne bouge pas entre deux.
-    glisser(&mut b, &[(200.0, 135.0), (200.0, 165.0)]);
-    let snap = b.app.snapshot();
-    b.app.layers_mut()[0].trajectoire.as_mut().unwrap().cles = crate::trajectoire::Cles::Images;
-    b.app.trajectoire_recalculer(0);
-    b.app.commit_named(snap, "Sorte des clés de la trajectoire");
-    let keys = b.app.layers()[0].pos_keys.clone();
-    // (Le milieu du temps, de 6 à 23, tombe à 14,5 : arrondi à l'image 15.)
-    assert_eq!(keys.iter().map(|k| (k.frame, k.tenue)).collect::<Vec<_>>(), [(6, true), (15, true), (23, true)], "{keys:?}");
-    let l = &b.app.layers()[0];
-    assert_eq!(l.pose(10).x, l.pose(6).x, "tenue jusqu'à la marque");
-    assert!((l.pose(15).x - 150.0).abs() < 3.0 && l.pose(20).x == l.pose(15).x, "tenue à la marque jusqu'à l'arrivée");
-    // Le départ passe à la tête de lecture, sur demande.
-    b.app.cur_frame = 2;
-    b.app.trajectoire_depart_ici();
-    assert_eq!(b.app.layers()[0].trajectoire.as_ref().unwrap().depart, 2);
-    assert_eq!(b.app.layers()[0].pos_keys.first().map(|k| k.frame), Some(2));
-    assert_eq!(derniere_etape(&b), "Départ de la trajectoire");
-    b.app.undo();
-    assert_eq!(b.app.layers()[0].trajectoire.as_ref().unwrap().depart, 6);
-    // Enregistré, relu : le départ et la sorte des clés reviennent.
-    let dir = std::env::temp_dir().join(format!("feanor-trajectoire-depart-{}-{:?}", std::process::id(), std::thread::current().id()));
-    std::fs::remove_dir_all(&dir).ok();
-    std::fs::create_dir_all(&dir).unwrap();
-    let manifest = dir.join("T.shot");
-    crate::project::save(&b.app.doc, &manifest, &mut Default::default()).unwrap();
-    let back = crate::project::load(&manifest).unwrap().doc;
-    let t = back.panels[0].layers[0].trajectoire.as_ref().unwrap();
-    assert_eq!((t.depart, t.cles), (6, crate::trajectoire::Cles::Images));
-    assert!(back.panels[0].layers[0].pos_keys.iter().all(|k| k.tenue), "les clés tenues le restent");
-    std::fs::remove_dir_all(&dir).ok();
 }
 
 #[test]

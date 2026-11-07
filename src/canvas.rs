@@ -502,7 +502,7 @@ impl App {
                         // Grab et Pull (`sculptapp.rs`).
                         Tool::Grab | Tool::Pull => self.sculpt_press(p, pen),
                         // Trajectoire (`trajectoireui.rs`) : sur la feuille.
-                        Tool::Trajectoire => self.trajectoire_presser(stage),
+                        Tool::Trajectoire => self.trajectoire_presser(stage, modifiers.shift),
                         Tool::Camera => self.camera_press(stage, *pos),
                         Tool::Transform => {
                             // Une zone bitmap choisie : sa boîte la transforme ; ailleurs, c'est le calque.

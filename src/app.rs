@@ -1839,7 +1839,7 @@ impl App {
             // Trajectoire (`trajectoireui.rs`) : avec l'outil, une silhouette pâle du calque courant à chaque jalon de son chemin
             // (le départ, chaque marque, l'arrivée), là où il sera : l'espacement se lit sur le vrai dessin.
             if onion && !self.playing && li == cur && self.tool == Tool::Trajectoire {
-                if let Some(t) = &layer.trajectoire {
+                if let Some(t) = layer.trajectoire.as_ref().filter(|t| t.cles == crate::trajectoire::Cles::Interpolation) {
                     for f in t.images_des_jalons(self.frame_count()).into_iter().filter(|&f| f != frame) {
                         let (Some(cel), Some(pl)) = (layer.cel_at(f), crate::espace3d::place(&world, layer, f, &camera)) else { continue };
                         onion_items.push(PlanItem {

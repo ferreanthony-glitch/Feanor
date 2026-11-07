@@ -30,7 +30,7 @@ pub(crate) fn tool_hint(tool: crate::app::Tool) -> &'static str {
         Tool::Perspective => "Enveloppe ou perspective (Réglages) · tirer un coin ou une poignée ronde · l'intérieur : déplacer · Entrée : terminer",
         Tool::Grab => "Appui : prendre les points du cercle · glisser : les tirer (plus ou moins selon la distance au centre) · rayon, force, atténuation : Réglages",
         Tool::Pull => "Glisser : les points sous le cercle suivent le mouvement, comme un doigt · rayon, force, atténuation : Réglages",
-        Tool::Trajectoire => "Un trait : le chemin du calque · un petit trait en travers : une marque · glisser une marque : la déplacer (loin du chemin : la retirer) · glisser le chemin : le déplacer · Échap : abandonner",
+        Tool::Trajectoire => "Un trait : le chemin du calque · un petit trait en travers : une marque · tirer le chemin : le tordre (Maj : le déplacer) · glisser une marque : la déplacer (loin du chemin : la retirer) · Échap : abandonner",
         Tool::Picker => "Clic : prendre la couleur",
         Tool::Pan => "Glisser : déplacer la vue",
         Tool::Camera => "Glisser : déplacer (Maj : à l'horizontale ou à la verticale) · coin : zoomer · rond : tourner (Maj : 15°)",

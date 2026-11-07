@@ -45,6 +45,15 @@ impl Cles {
     }
 }
 
+/// Un dessin posé par la trajectoire en « clés d'images » : à un jalon (une marque, ou l'arrivée), le numéro du dessin et le
+/// déplacement (pixels de la feuille) qu'il porte par rapport au dessin du départ.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct DessinJalon {
+    pub dessin: u64,
+    pub dx: f32,
+    pub dy: f32,
+}
+
 /// La trajectoire d'un calque, telle qu'elle s'écrit dans le projet (`trajectoire` d'un calque).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Trajectoire {
@@ -53,16 +62,25 @@ pub struct Trajectoire {
     /// Les marques, en fraction de la longueur du chemin (0 : le départ, 1 : l'arrivée), strictement entre les deux, triées.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub marques: Vec<f32>,
-    /// « Une marque = N images » ; rien : le temps du plan après le départ, partagé en parts égales entre les marques.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub images_par_marque: Option<usize>,
     /// L'image du plan où le chemin commence : la tête de lecture au moment du tracé (Anthony : « la clé de départ démarre sur la
     /// tête de lecture »). Avant, le calque ne bouge pas.
     #[serde(default, skip_serializing_if = "est_zero_usize")]
     pub depart: usize,
+    /// L'image du plan où le chemin finit ; rien : la dernière image du plan (Anthony : « il faut pouvoir bouger la dernière clé et
+    /// que ça recale toutes les autres clés entre la première et la dernière »). Après, le calque reste au bout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fin: Option<usize>,
+    /// Le temps de chaque marque, en fraction du temps entre le départ et la fin (strictement entre 0 et 1, croissant, une valeur
+    /// par marque) ; rien : le temps est partagé en parts égales entre les jalons (la feuille de timing). Posé dès qu'une clé est
+    /// recalée à la main sur la timeline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub temps: Option<Vec<f32>>,
     /// Les clés posées : interpolées (d'origine) ou par images.
     #[serde(default, skip_serializing_if = "est_interpolation")]
     pub cles: Cles,
+    /// En « clés d'images » : les dessins posés aux jalons, un par marque puis l'arrivée (le départ garde le dessin d'origine).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dessins: Vec<DessinJalon>,
 }
 
 fn est_zero_usize(v: &usize) -> bool {
@@ -77,11 +95,11 @@ impl Trajectoire {
     pub fn nouvelle(brut: &[[f32; 2]]) -> Option<Trajectoire> {
         let points = echantillonner(&lisser(brut));
         (points.len() >= 2 && longueur_de(&points) >= LONGUEUR_MIN)
-            .then_some(Trajectoire { points, marques: Vec::new(), images_par_marque: None, depart: 0, cles: Cles::Interpolation })
+            .then_some(Trajectoire { points, marques: Vec::new(), depart: 0, fin: None, temps: None, cles: Cles::Interpolation, dessins: Vec::new() })
     }
 
     /// Une trajectoire relue d'un fichier : ses points filtrés (abîmés, doublons), ses marques remises en ordre et dans leurs
-    /// bornes. Rien si le chemin ne tient pas debout.
+    /// bornes, ses temps dans les leurs. Rien si le chemin ne tient pas debout.
     pub fn assainie(mut self) -> Option<Trajectoire> {
         self.points.retain(|p| p[0].is_finite() && p[1].is_finite());
         self.points.dedup_by(|a, b| distance(*a, *b) < 1e-3);
@@ -89,14 +107,23 @@ impl Trajectoire {
             return None;
         }
         let marques = std::mem::take(&mut self.marques);
+        let temps = self.temps.take();
         for m in marques {
             if m.is_finite() {
                 self.ajouter_marque(m);
             }
         }
-        if self.images_par_marque == Some(0) {
-            self.images_par_marque = None;
+        // Les temps : un par marque, finis, strictement croissants entre 0 et 1 ; sinon, parts égales.
+        if let Some(t) = temps {
+            let bons = t.len() == self.marques.len() && t.iter().all(|v| v.is_finite()) && t.windows(2).all(|w| w[0] < w[1]) && t.first().is_none_or(|v| *v > 0.0) && t.last().is_none_or(|v| *v < 1.0);
+            if bons {
+                self.temps = Some(t);
+            }
         }
+        if self.fin.is_some_and(|f| f <= self.depart) {
+            self.fin = None;
+        }
+        self.dessins.retain(|d| d.dx.is_finite() && d.dy.is_finite());
         Some(self)
     }
 
@@ -164,7 +191,7 @@ impl Trajectoire {
         meilleur
     }
 
-    /// Les jalons du temps : le départ, les marques, l'arrivée.
+    /// Les jalons du chemin : le départ, les marques, l'arrivée (fractions de la longueur).
     pub fn jalons(&self) -> Vec<f32> {
         let mut j = Vec::with_capacity(self.marques.len() + 2);
         j.push(0.0);
@@ -173,27 +200,78 @@ impl Trajectoire {
         j
     }
 
-    /// La dernière image que le chemin atteint dans un plan de `duree` images : la dernière du plan, ou `départ + intervalles × N`
-    /// avec « une marque = N images » (au-delà du plan, les clés s'arrêtent à sa dernière image : voir `cles`). Rien si le plan n'a
-    /// pas au moins une image après le départ.
+    /// Les jalons du temps : le départ (0), chaque marque, l'arrivée (1), en fraction du temps entre le départ et la fin ; parts
+    /// égales si aucun temps n'a été posé à la main.
+    pub fn temps_des_jalons(&self) -> Vec<f32> {
+        let n = self.marques.len() + 1;
+        let mut t = Vec::with_capacity(n + 1);
+        t.push(0.0);
+        match &self.temps {
+            Some(v) if v.len() == self.marques.len() => t.extend_from_slice(v),
+            _ => t.extend((1..n).map(|k| k as f32 / n as f32)),
+        }
+        t.push(1.0);
+        t
+    }
+
+    /// La dernière image que le chemin atteint dans un plan de `duree` images : la fin posée, bornée à la dernière image du plan,
+    /// sinon la dernière image du plan. Rien si le plan n'a pas au moins une image après le départ.
     fn derniere_image(&self, duree: usize) -> Option<usize> {
         if duree < self.depart + 2 {
             return None;
         }
-        let intervalles = self.marques.len() + 1;
-        Some(match self.images_par_marque {
-            Some(n) if n > 0 => self.depart + intervalles * n,
-            _ => duree - 1,
-        })
+        Some(self.fin.map_or(duree - 1, |f| f.clamp(self.depart + 1, duree - 1)))
     }
 
-    /// Les images (d'un plan de `duree` images) où tombent les jalons : le départ, chaque marque, l'arrivée ; arrondies à l'image,
-    /// celles au-delà du plan omises. Rien si le plan n'a pas au moins une image après le départ.
+    /// Les images (d'un plan de `duree` images) où tombent les jalons : le départ, chaque marque, l'arrivée ; arrondies à l'image.
+    /// Rien si le plan n'a pas au moins une image après le départ.
     pub fn images_des_jalons(&self, duree: usize) -> Vec<usize> {
         let Some(fin) = self.derniere_image(duree) else { return Vec::new() };
-        let n = self.marques.len() + 1;
         let portee = (fin - self.depart) as f32;
-        (0..=n).map(|k| self.depart + (k as f32 * portee / n as f32).round() as usize).filter(|f| *f < duree).collect()
+        self.temps_des_jalons().iter().map(|t| self.depart + (t * portee).round() as usize).collect()
+    }
+
+    /// Le jalon `k` (0 : le départ, puis les marques, puis l'arrivée) recalé à l'image `image` d'un plan de `duree` images : le
+    /// départ et la fin bougent (bornés l'un par l'autre et par le plan), une marque change de temps (bornée par ses voisines : les
+    /// temps deviennent explicites). Rend l'image retenue, ou rien si le jalon n'existe pas ou que le plan est trop court.
+    pub fn recaler(&mut self, k: usize, image: usize, duree: usize) -> Option<usize> {
+        let fin = self.derniere_image(duree)?;
+        let dernier = self.marques.len() + 1;
+        if k > dernier {
+            return None;
+        }
+        if k == 0 {
+            let v = image.min(fin - 1);
+            // La fin posée reste là où elle est ; le temps des marques est une fraction, il suit.
+            self.depart = v;
+            return Some(v);
+        }
+        if k == dernier {
+            let v = image.clamp(self.depart + 1, duree - 1);
+            self.fin = Some(v);
+            return Some(v);
+        }
+        let mut temps = self.temps_des_jalons();
+        let portee = (fin - self.depart) as f32;
+        let (bas, haut) = (temps[k - 1] + 1.0 / portee, temps[k + 1] - 1.0 / portee);
+        if bas > haut {
+            return None;
+        }
+        let t = (((image as f32 - self.depart as f32) / portee).clamp(bas, haut) * portee).round() / portee;
+        temps[k] = t.clamp(bas, haut);
+        self.temps = Some(temps[1..dernier].to_vec());
+        Some(self.depart + (temps[k] * portee).round() as usize)
+    }
+
+    /// Le temps repart en parts égales entre les jalons.
+    pub fn temps_egaux(&mut self) {
+        self.temps = None;
+    }
+
+    /// Le déplacement du calque à chaque jalon, par rapport au départ du chemin (pixels de la feuille).
+    pub fn decalages(&self) -> Vec<[f32; 2]> {
+        let o = self.points[0];
+        self.jalons().iter().map(|&f| { let p = self.point_a(f); [p[0] - o[0], p[1] - o[1]] }).collect()
     }
 
     /// Le chemin retourné de gauche à droite (`horizontal`) ou de haut en bas, autour de son départ : le calque, retourné de même,
@@ -204,46 +282,34 @@ impl Trajectoire {
     }
 
     /// La fraction du chemin atteinte à l'image `f` d'un plan de `duree` images (le temps linéaire entre deux jalons), ou rien si le
-    /// chemin ne couvre pas cette image (avant le départ, après l'arrivée).
+    /// chemin ne couvre pas cette image (avant le départ, après la fin).
     pub fn fraction_a_l_image(&self, f: usize, duree: usize) -> Option<f32> {
         let fin = self.derniere_image(duree)?;
         if f < self.depart || f > fin {
             return None;
         }
-        let jalons = self.jalons();
-        let n = jalons.len() - 1;
-        let u = (f - self.depart) as f32 / (fin - self.depart) as f32 * n as f32;
-        let i = (u.floor() as usize).min(n - 1);
-        let w = (u - i as f32).clamp(0.0, 1.0);
+        let (jalons, temps) = (self.jalons(), self.temps_des_jalons());
+        let u = (f - self.depart) as f32 / (fin - self.depart) as f32;
+        let i = temps.windows(2).position(|w| u <= w[1]).unwrap_or(jalons.len() - 2);
+        let w = ((u - temps[i]) / (temps[i + 1] - temps[i]).max(1e-6)).clamp(0.0, 1.0);
         Some(jalons[i] + (jalons[i + 1] - jalons[i]) * w)
     }
 
-    /// Les clés de position qu'elle pose sur un calque de pose `base` dans un plan de `duree` images, le déplacement relatif au
-    /// départ du chemin : **interpolées**, une clé par image que le chemin couvre ; **par images**, une clé tenue à chaque jalon.
-    /// Aucune si le plan n'a pas au moins une image après le départ.
+    /// Les clés de position qu'elle pose sur un calque de pose `base` dans un plan de `duree` images (**clés d'interpolation** : une
+    /// clé par image que le chemin couvre, le déplacement relatif au départ du chemin). Aucune en **clés d'images** (ce sont des
+    /// dessins, posés par l'application : `trajectoireui.rs`), ni si le plan n'a pas au moins une image après le départ.
     pub fn cles(&self, duree: usize, base: LayerTransform) -> Vec<PosKey> {
         let Some(fin) = self.derniere_image(duree) else { return Vec::new() };
-        let origine = self.points[0];
-        let cle = |f: usize, fraction: f32, tenue: bool| {
-            let p = self.point_a(fraction);
-            PosKey { tenue, ..PosKey::new(f, LayerTransform { x: base.x + p[0] - origine[0], y: base.y + p[1] - origine[1], ..base }) }
-        };
-        let mut out = Vec::new();
-        match self.cles {
-            Cles::Interpolation => {
-                for f in self.depart..=fin.min(duree - 1) {
-                    if let Some(fraction) = self.fraction_a_l_image(f, duree) {
-                        out.push(cle(f, fraction, false));
-                    }
-                }
-            }
-            Cles::Images => {
-                for (&fraction, f) in self.jalons().iter().zip(self.images_des_jalons(duree)) {
-                    crate::poskeys::put_key(&mut out, cle(f, fraction, true));
-                }
-            }
+        if self.cles == Cles::Images {
+            return Vec::new();
         }
-        out
+        let origine = self.points[0];
+        (self.depart..=fin)
+            .filter_map(|f| {
+                let p = self.point_a(self.fraction_a_l_image(f, duree)?);
+                Some(PosKey::new(f, LayerTransform { x: base.x + p[0] - origine[0], y: base.y + p[1] - origine[1], ..base }))
+            })
+            .collect()
     }
 
     /// Ce trait est-il une marque ? Il l'est s'il est court devant le chemin et le croise (ou le frôle) : la fraction du
@@ -269,12 +335,19 @@ impl Trajectoire {
         coup.iter().map(|&p| self.plus_proche(p)).filter(|(_, d)| *d <= MARQUE_DISTANCE_MAX).min_by(|a, b| a.1.total_cmp(&b.1)).map(|(f, _)| f)
     }
 
-    /// Pose une marque à la fraction `f` : son rang, ou rien si elle tombe sur un bout ou sur une marque (à `ECART_MIN` près).
+    /// Pose une marque à la fraction `f` : son rang, ou rien si elle tombe sur un bout ou sur une marque (à `ECART_MIN` près). Des
+    /// temps posés à la main : la marque prend le milieu du temps de son intervalle.
     pub fn ajouter_marque(&mut self, f: f32) -> Option<usize> {
         if !(ECART_MIN..=1.0 - ECART_MIN).contains(&f) || self.marques.iter().any(|m| (m - f).abs() < ECART_MIN) {
             return None;
         }
         let i = self.marques.iter().position(|m| *m > f).unwrap_or(self.marques.len());
+        if let Some(t) = self.temps.as_mut().filter(|t| t.len() == self.marques.len()) {
+            let (avant, apres) = (if i == 0 { 0.0 } else { t[i - 1] }, if i < t.len() { t[i] } else { 1.0 });
+            t.insert(i, (avant + apres) * 0.5);
+        } else {
+            self.temps = None;
+        }
         self.marques.insert(i, f);
         Some(i)
     }
@@ -293,6 +366,12 @@ impl Trajectoire {
     pub fn retirer_marque(&mut self, i: usize) {
         if i < self.marques.len() {
             self.marques.remove(i);
+            match self.temps.as_mut() {
+                Some(t) if i < t.len() => {
+                    t.remove(i);
+                }
+                _ => self.temps = None,
+            }
         }
     }
 
@@ -308,6 +387,36 @@ impl Trajectoire {
     /// Tout le chemin déplacé de (`dx`, `dy`).
     pub fn deplacer(&mut self, dx: f32, dy: f32) {
         self.transformer(|p| [p[0] + dx, p[1] + dy]);
+    }
+
+    /// Le rayon (pixels de la feuille, le long du chemin) sur lequel tirer le chemin le tord : un bon tiers du chemin, 30 au moins.
+    pub fn rayon_de_tirage(&self) -> f32 {
+        (self.longueur() * 0.3).max(30.0)
+    }
+
+    /// Le chemin tiré en `fraction` de (`dx`, `dy`) : comme une corde, le point pris suit le pointeur, ses voisins le long du chemin
+    /// d'autant moins qu'ils sont loin (jusqu'à `rayon` de chemin, en cloche) ; le reste ne bouge pas. Les marques, des fractions,
+    /// restent où elles sont le long du chemin. Les points sont ensuite repris au pas.
+    pub fn tirer(&mut self, fraction: f32, dx: f32, dy: f32, rayon: f32) {
+        let total = self.longueur();
+        let s0 = fraction.clamp(0.0, 1.0) * total;
+        let rayon = rayon.max(1e-3);
+        let mut parcouru = 0.0;
+        let mut points = self.points.clone();
+        for i in 0..points.len() {
+            if i > 0 {
+                parcouru += distance(self.points[i - 1], self.points[i]);
+            }
+            let d = (parcouru - s0).abs();
+            if d < rayon {
+                let w = 0.5 * (1.0 + (std::f32::consts::PI * d / rayon).cos());
+                points[i] = [points[i][0] + dx * w, points[i][1] + dy * w];
+            }
+        }
+        let repris = echantillonner(&points);
+        if repris.len() >= 2 && longueur_de(&repris) >= LONGUEUR_MIN {
+            self.points = repris;
+        }
     }
 
     /// Chaque point du chemin passé par `f` (étirer, tourner…) ; les marques, des fractions, suivent d'elles-mêmes.
@@ -404,11 +513,10 @@ pub fn echantillonner(p: &[[f32; 2]]) -> Vec<[f32; 2]> {
         }
         parcouru += l;
     }
+    // Le dernier point, tel quel (un tout dernier pas plus court, jamais plus long).
     let dernier = p[p.len() - 1];
-    if out.last().is_none_or(|l| distance(*l, dernier) > pas * 0.25) {
+    if out.last().is_none_or(|l| distance(*l, dernier) > 1e-3) {
         out.push(dernier);
-    } else {
-        *out.last_mut().unwrap() = dernier;
     }
     out
 }

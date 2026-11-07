@@ -8266,22 +8266,37 @@ les réglages) ; essais `trajectoire_tests.rs` (8) et `trajectoireui_tests.rs` (
   trait (on part le trait du personnage, il ne saute pas). Les clés de position sont posées sur le calque (`Layer::pos_keys`, celles de
   l'outil Transformer) ; la pose du calque à l'image du départ (échelle, rotation…) est gardée sur tout le chemin. Le départ est gardé avec le
   chemin ; « Partir de la tête de lecture » (réglages) le change.
-- **Deux sortes de clés** (réglages, Anthony : « Clés d'interpolation ou Clés d'images ») : **Clés d'interpolation**, d'origine, une clé par
-  image, le calque glisse **le long de la courbe**, pas de la corde, à vitesse constante entre deux marques ; **Clés d'images**, une clé
-  **tenue** à chaque jalon (le départ, chaque marque, l'arrivée), le calque y reste jusqu'à la suivante **sans interpolation**, comme des
-  poses tenues. Une clé tenue est une clé de position comme les autres (`PosKey::tenue`, `cles_position[].tenue`, format 49) : `pose_at`
-  garde sa pose jusqu'à la clé suivante ; détachée, elle reste tenue, à la main.
+- **Deux sortes de clés** (réglages, Anthony : « Clés d'interpolation ou Clés d'images ») : **Clés d'interpolation**, d'origine, une clé de
+  position par image, le calque glisse **le long de la courbe**, pas de la corde, à vitesse constante entre deux marques ; **Clés
+  d'images** (Anthony, après son essai : « j'imaginais que les clés d'images scinderaient la timeline comme toutes les clés d'images ») :
+  **un dessin à chaque jalon** (chaque marque, l'arrivée), copie du dessin du départ déplacée à sa place sur le chemin, exposé jusqu'au
+  jalon suivant (le dernier jusqu'à la fin du plan), le départ gardant son dessin : la timeline se scinde comme pour toute clé de dessin,
+  aucune clé de position, et chaque pose se redessine. Un dessin posé par la trajectoire est **déplacé, pas refait**, quand la marque
+  glisse (ce qu'on y a dessiné suit) ; les dessins sont refaits au lâcher d'un geste, pas pendant. Vectoriel : les traits sont translatés,
+  le rendu exact revient du fil de travail ; bitmap : les pixels, décalés à l'entier, toile infinie comprise (`Raster::decalee`) ; l'aplat
+  suit. Pas de dessin au départ : rien n'est posé, la ligne d'état le dit. (`PosKey::tenue`, la clé tenue sans interpolation, reste dans
+  le modèle des clés de position, format 49, sans emploi ici.)
+- **La fin, et le temps des marques recalés sur la timeline** (Anthony : « il faut pouvoir bouger la dernière clé et que ça recale toutes les
+  autres clés entre la première et la dernière » ; « quand j'ai voulu bouger une clé sur la timeline la trajectoire a disparu »). Le chemin
+  dure du départ (la tête de lecture au tracé) à la **fin**, d'origine la dernière image du plan. Dans la timeline et au montage, un calque à
+  trajectoire ne montre que ses **jalons** (le départ, les marques, la fin) ; **glisser l'un d'eux le recale** : la dernière clé règle la
+  fin, la première le départ, une marque son temps (bornée à une image de ses voisines ; le temps des marques devient alors explicite, le
+  bouton « Temps égaux entre les marques » l'oublie), et les clés d'entre sont reposées, la trajectoire reste (« Recaler la trajectoire »,
+  une étape ; Échap remet tout). En clés d'images, c'est la clé de dessin du jalon qu'on glisse (Maj : seule), même recalage. Les boutons
+  « Partir de la tête de lecture » et « Finir à la tête de lecture » font pareil depuis la tête de lecture.
 - **Un petit trait en travers du chemin pose une marque** (court devant le chemin — moins de la moitié de sa longueur — et qui le croise, ou le
   frôle à moins de 6 pixels de la feuille). Les marques partagent le temps en parts égales, comme sur une feuille de timing : **serrées, le
   calque va lentement ; espacées, il va vite**. Les bouts du chemin sont deux jalons de plus. Avec son croquis : départ lent, milieu vite,
   arrivée lente.
-- **Le temps entre deux marques** (panneau Réglages, fenêtre du clic droit) : d'origine, **le temps jusqu'à la fin du plan, partagé** entre
-  les marques (huit marques sur 3 secondes depuis le début : une clé toutes les 9 images) ; ou **un nombre d'images par marque** (1 à 48),
-  pour travailler comme en animation : le chemin dure alors `intervalles × N` images depuis le départ, puis le calque reste au bout. Les
-  choix faits sur une trajectoire (sorte des clés, pas) sont proposés à la suivante.
-- **Retoucher** : glisser une **marque** le long du chemin la déplace (bornée entre ses voisines) ; la tirer **loin du chemin** (40 pixels d'écran)
-  l'**arrache** : elle est retirée au lâcher. Glisser le **chemin** (hors d'une marque) le déplace en bloc : le déplacement étant relatif, les
-  clés ne changent pas. Un **trait long** retrace le chemin : les marques restent, à leurs fractions. Les clés suivent **pendant le geste**, à
+- **Le temps entre deux marques** : le temps du départ à la fin, **partagé en parts égales** entre les jalons (huit marques sur 3 secondes :
+  une clé toutes les 9 images), tant qu'aucune marque n'a été recalée à la main sur la timeline. La sorte des clés choisie sur une
+  trajectoire est proposée à la suivante.
+- **Retoucher** (Anthony : « que la trajectoire soit éditable facilement ») : **tirer sur le chemin le tord** là où on le prend, comme une
+  corde : le point pris suit le pointeur, ses voisins le long du chemin d'autant moins qu'ils sont loin (en cloche, sur un bon tiers du
+  chemin, 30 pixels au moins : `Trajectoire::tirer`), le reste ne bouge pas ; un bout se tire comme le reste. **Maj + glisser** le chemin le
+  déplace en bloc (le déplacement étant relatif, les clés ne changent pas). Glisser une **marque** le long du chemin la déplace (bornée
+  entre ses voisines) ; la tirer **loin du chemin** (40 pixels d'écran) l'**arrache** : elle est retirée au lâcher. Un **trait long** retrace le
+  chemin : les marques restent, à leurs fractions. Les clés suivent **pendant le geste**, à
   chaque image d'écran, sans rejeu d'aucun dessin (seuls les paramètres du plan à composer changent) ; **Échap** abandonne le geste et remet
   tout. **Une étape d'annulation par geste**, nommée : « Trajectoire », « Marque de trajectoire », « Glisser une marque », « Retirer une marque »,
   « Déplacer la trajectoire », « Retracer la trajectoire », « Pas des marques », « Retirer les marques », « Détacher la trajectoire », « Effacer la
@@ -8294,10 +8309,10 @@ les réglages) ; essais `trajectoire_tests.rs` (8) et `trajectoireui_tests.rs` (
   croix ailleurs. La ligne sous le dessin dit les gestes ; la carte F1 aussi.
 - **Dans la timeline et le montage**, un calque à trajectoire ne montre que les losanges de ses **jalons**, reliés d'un trait, pas sa clé par
   image.
-- **Détacher.** Retoucher une clé **à la main** (poser, supprimer, lisser, glisser une clé dans la timeline ou le montage ; déplacer un calque
-  animé avec Transformer) détache la trajectoire : les clés restent telles quelles, le chemin s'en va, la ligne d'état le dit. Les boutons du
-  panneau : **Détacher** (garder les clés), **Effacer** (le chemin et ses clés s'en vont, le calque garde sa pose du départ), **Retirer les
-  marques**.
+- **Détacher.** Poser, supprimer ou lisser une clé **à la main**, glisser plusieurs clés à la fois, déplacer un calque animé avec Transformer :
+  la trajectoire se détache, les clés restent telles quelles, le chemin s'en va, la ligne d'état le dit. (Glisser une seule clé qui est un
+  jalon recale, voir plus haut.) Les boutons du panneau : **Détacher** (garder ce qui est posé), **Effacer** (le chemin et ce qu'il a posé,
+  clés ou dessins, s'en vont ; le calque garde sa pose du départ), **Retirer les marques**.
 - **Couper un plan, réunir deux plans** : chaque partie garde ses clés (comme avant, `poskeys::split_keys` / `join_keys`), aucune ne garde le
   chemin. Dupliquer un plan, copier un calque : le chemin suit. Changer la taille de la feuille (`adaptation.rs`) : le chemin suit, à
   l'échelle. Retourner un calque ou des plans (`flip.rs`) : le chemin se retourne autour de son départ. Insérer ou retirer des images : les clés
@@ -8308,17 +8323,19 @@ les réglages) ; essais `trajectoire_tests.rs` (8) et `trajectoireui_tests.rs` (
 
 Le chemin : les points du trait, lissés (deux passages d'une moyenne à trois points, les bouts gardés) et repris tous les 2 pixels de la
 feuille (4 000 points au plus). Les marques : des fractions de la longueur du chemin, strictement entre 0 et 1, à 1 % au moins l'une de
-l'autre. `depart` : l'image du plan où le chemin commence ; `cles` : interpolées ou par images. `cles(duree, base)` : le temps du départ à
-l'arrivée partagé en parts égales entre jalons ; en clés d'interpolation, pour chaque image couverte, la fraction atteinte (linéaire entre
-deux jalons), le point du chemin à cette fraction, et la clé `base + (point − départ)` ; en clés d'images, une clé tenue à l'image de chaque
-jalon. Une trajectoire relue d'un fichier abîmé est assainie (points non finis, doublons, marques hors bornes ou en désordre). Le modèle ne
-connaît ni l'écran ni l'application : ses essais sont des nombres.
+l'autre. `depart` et `fin` : les images du plan où le chemin commence et finit (`fin` absente : la dernière du plan) ; `temps` : le temps de
+chaque marque, en fraction du temps entre départ et fin (absent : parts égales) ; `cles` : interpolées ou par images ; `dessins` : en clés
+d'images, les dessins posés (numéro, déplacement). `recaler(k, image, duree)` : le jalon `k` à l'image voulue, borné. `cles(duree, base)` :
+en clés d'interpolation, pour chaque image couverte, la fraction atteinte (linéaire entre deux jalons, selon leurs temps), le point du
+chemin à cette fraction, et la clé `base + (point − départ)` ; en clés d'images, aucune (`trajectoireui.rs` pose les dessins). Une
+trajectoire relue d'un fichier abîmé est assainie (points non finis, doublons, marques hors bornes ou en désordre, temps faux, fin avant le
+départ). Le modèle ne connaît ni l'écran ni l'application : ses essais sont des nombres.
 
 ### Limites et à décider
 
 - La **rotation** du calque ne suit pas la courbe (position seulement) : en option plus tard.
-- **Pas de lasso ni de boîte d'étirement** sur le chemin dans ce premier pas : glisser le chemin le déplace en bloc, un trait long le retrace.
-  Étirer par une boîte (comme la sélection) viendra si le retracé ne suffit pas.
+- **Pas de lasso ni de boîte d'étirement** sur le chemin : on le tire (il se tord), on le déplace (Maj), on le retrace d'un trait long.
+  Étirer par une boîte (comme la sélection) viendra si cela ne suffit pas.
 - Un plan qui s'arrête au départ (ou d'une image) : le chemin se trace, aucune clé (le calque ne bouge pas) ; la ligne d'état le dit.
 - Un calque **verrouillé**, de position verrouillée, un dossier, un calque de couleur lié : refusés, avec la raison.
 
@@ -8329,14 +8346,19 @@ connaît ni l'écran ni l'application : ses essais sont des nombres.
    place. Ctrl+Z : plus de chemin, plus de clés.
 2. Trois petits traits en travers du chemin, serrés au départ, un loin au milieu, serrés à l'arrivée : lecture, lent, vite, lent. Les
    silhouettes pâles montrent où il est à chaque marque ; les numéros d'image au-dessus.
-2b. Réglages : « Clés d'images ». Lecture : il saute de marque en marque, sans glisser ; la timeline montre une clé par marque. « Clés
-   d'interpolation » : il glisse de nouveau. « Partir de la tête de lecture » après avoir déplacé la tête : le chemin commence là.
-3. Glisse une marque le long du chemin : les silhouettes bougent en direct. Tire-la loin du chemin : elle part. Glisse le chemin : il bouge
-   en bloc, le personnage ne saute pas. Échap au milieu d'un geste : tout revient.
+2b. Réglages : « Clés d'images ». La timeline se scinde : un dessin à chaque marque et à l'arrivée, le personnage à sa place sur le chemin ;
+   dessine sur l'un d'eux, glisse sa marque le long du chemin : ton dessin suit. « Clés d'interpolation » : les dessins posés s'en vont,
+   il glisse de nouveau.
+2c. Timeline : glisse la dernière clé vers la gauche : la fin recule et toutes les clés d'entre se recalent, la trajectoire reste. Glisse
+   une marque : elle change de temps. Glisse la première : le départ bouge. En clés d'images, pareil avec les clés de dessin (Maj tenue).
+   « Finir à la tête de lecture », « Partir de la tête de lecture », « Temps égaux entre les marques » dans les réglages.
+3. Glisse une marque le long du chemin : les silhouettes bougent en direct. Tire-la loin du chemin : elle part. Tire sur le chemin : il se
+   tord là, comme une corde ; Maj + glisser : il bouge en bloc, le personnage ne saute pas. Échap au milieu d'un geste : tout revient.
 4. Un trait long ailleurs : le chemin est retracé, les marques restent.
 5. Réglages : « un nombre d'images » par marque, 4 : le chemin dure 4 images par intervalle, puis le personnage reste au bout.
 6. Prends le Pinceau : plus de chemin ; reprends la Trajectoire : il est là. Enregistre, rouvre : il est là.
-7. Timeline : seuls les jalons se voient, reliés. Glisse une clé à la main : la trajectoire se détache, le message le dit, les clés restent.
+7. Timeline : seuls les jalons se voient, reliés. Pose une clé à la main (Transformer, « Clé de position ici ») : la trajectoire se détache,
+   le message le dit, les clés restent.
 8. Vignettes : l'outil est refusé, comme les autres outils hors des quatre.
 
 ## 120. Les poignées de lissage de la caméra attendent à côté de chaque clé (2026-11-07, branche `trajectoire`)
