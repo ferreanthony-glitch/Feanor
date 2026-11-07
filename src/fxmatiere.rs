@@ -723,6 +723,17 @@ fn px_f(c: Color32) -> [f32; 4] {
 
 // ---------------------------------------------------------------------- liseré
 
+/// Jusqu'où le liseré lit autour d'un pixel (`fxmonde.rs`).
+pub(crate) fn portee_du_lisere(v: &[f32]) -> f32 {
+    let s = OutlineS::of(v);
+    s.width + s.soft.max(1.0) * 0.5 + 4.0
+}
+
+/// Jusqu'où l'encre qui bave lit autour d'un pixel (`fxmonde.rs`).
+pub(crate) fn portee_de_la_bavure(v: &[f32]) -> f32 {
+    BleedS::of(v).reach() + 5.0
+}
+
 /// Le liseré de `src` (calque vectoriel ou bitmap : il ne lit que les pixels). Rien d'encré : `src`.
 pub fn outline(src: &Raster, v: &[f32]) -> Raster {
     let s = OutlineS::of(v);
@@ -765,7 +776,7 @@ pub fn outline(src: &Raster, v: &[f32]) -> Raster {
 
 /// L'encre qui bave de `src` : un halo irrégulier autour de l'encre (de sa couleur, plus pâle), le bord de
 /// l'encre plus foncé et un peu effrité. Le cœur du trait reste lisible.
-pub fn bleed(src: &Raster, v: &[f32]) -> Raster {
+pub fn bleed(src: &Raster, v: &[f32], origine: (i64, i64)) -> Raster {
     let s = BleedS::of(v);
     if !s.changes() {
         return src.clone();
@@ -777,7 +788,8 @@ pub fn bleed(src: &Raster, v: &[f32]) -> Raster {
     // Le bord intérieur : distance de l'encre à ce qui n'en est pas.
     let inner = (s.dark > 0.005 || s.irreg > 0.0).then(|| distance(w, h, &site.iter().map(|b| !b).collect::<Vec<bool>>()));
     let src_px = r.px.clone();
-    let (x0, y0) = (r.x0 as i32, r.y0 as i32);
+    // (Le bruit de l'effritement se lit au point du monde : il continue à travers le bord de la feuille.)
+    let (x0, y0) = ((r.x0 as i64 + origine.0) as i32, (r.y0 as i64 + origine.1) as i32);
     let (outer, inner, src_px) = (&outer, &inner, &src_px);
     let seed = hash(s.seed, 0, 0, 0xB1);
     crate::render::par_chunks(&mut r.px, w * 16, |ci, chunk| {
@@ -837,14 +849,14 @@ pub fn bleed(src: &Raster, v: &[f32]) -> Raster {
 
 /// Le trait sec d'un calque **bitmap** (forme simplifiée) : des plages creuses d'un bruit à basse
 /// fréquence, et le bord de l'encre qui s'effrite. Sur un calque vectoriel, c'est `dry_stroke`.
-pub fn dry_pixels(src: &Raster, v: &[f32]) -> Raster {
+pub fn dry_pixels(src: &Raster, v: &[f32], origine: (i64, i64)) -> Raster {
     let s = DryS::of(v);
     if !s.changes() {
         return src.clone();
     }
     let Some(mut r) = region(src, 2) else { return src.clone() };
     let (w, h) = (r.w, r.h);
-    let (x0, y0) = (r.x0 as i32, r.y0 as i32);
+    let (x0, y0) = ((r.x0 as i64 + origine.0) as i32, (r.y0 as i64 + origine.1) as i32);
     let seed = hash(s.seed, 0, s.variant as u32 + 1, 0xD2);
     let inner = (s.rough > 0.005).then(|| distance(w, h, &r.px.iter().map(|c| c.a() < SITE_ALPHA).collect::<Vec<bool>>()));
     let inner = &inner;

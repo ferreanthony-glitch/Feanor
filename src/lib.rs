@@ -757,6 +757,9 @@ mod gpufxperf_tests;
 mod groups;
 mod groupsui;
 mod handles;
+mod cles_alternees;
+#[cfg(test)]
+mod duree_cles_tests;
 #[cfg(test)]
 mod handles_tests;
 mod guides;
@@ -1140,8 +1143,15 @@ mod canevas_libre_tests;
 mod vignettes_simplicite_tests;
 #[cfg(test)]
 mod traits_continus_tests;
+pub(crate) mod fxmonde;
 #[cfg(test)]
 mod camera_traits_tests;
+#[cfg(test)]
+mod planche_arret_tests;
+#[cfg(test)]
+mod effets_debord_tests;
+#[cfg(test)]
+mod traits_caches_tests;
 #[cfg(test)]
 mod horschamptex_tests;
 mod workspaceui;

@@ -1,4 +1,4 @@
-﻿//! Journal des différences (`journal.rs`, `journaljob.rs`, `journalui.rs`) : ce qui a changé, ce qui est ajouté, retiré, déplacé, la part
+//! Journal des différences (`journal.rs`, `journaljob.rs`, `journalui.rs`) : ce qui a changé, ce qui est ajouté, retiré, déplacé, la part
 //! de pixels, les notes traitées entre deux envois, la page HTML et le PDF écrits, l'arrêt et l'échec qui ne laissent aucun fichier, la
 //! fenêtre dans l'application, le paquet de livraison.
 
@@ -446,7 +446,7 @@ fn banc_projet(nom: &str, n: usize) -> Banc {
 }
 
 fn pomper(b: &mut Banc) {
-    for _ in 0..800 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), 0.25);
         if b.app.envois_ui.au_repos() && !b.app.save_en_cours() {
             return;

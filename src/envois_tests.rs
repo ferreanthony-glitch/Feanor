@@ -545,7 +545,7 @@ fn banc_projet(nom: &str, n: usize) -> (Banc, PathBuf) {
 
 /// Des images jusqu'à ce que les fils de fond de l'envoi aient fini (et l'écriture).
 fn pomper(b: &mut Banc) {
-    for _ in 0..800 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), 0.25);
         if b.app.envois_ui.au_repos() && !b.app.save_en_cours() {
             return;
@@ -769,7 +769,7 @@ fn the_per_frame_stamp_and_the_marking_copy_stay_cheap_on_a_big_film() {
     let ctx = b.ctx.clone();
     b.app.envois_marquer(&ctx, "v1", 1_760_000_000);
     // La copie des dessins se fait par morceaux, image d'écran après image d'écran.
-    for _ in 0..400 {
+    for _ in crate::perf_tests::attente() {
         if b.app.envois_ui.derniere_copie.is_some() {
             break;
         }
@@ -779,7 +779,7 @@ fn the_per_frame_stamp_and_the_marking_copy_stay_cheap_on_a_big_film() {
     eprintln!("envois : relevé par image d'écran {par_image:?} ; copie d'un marquage (600 plans, 1 200 dessins) {copie:?}");
     assert!(copie < Duration::from_millis(400), "la copie d'un marquage coûte {copie:?}");
     // On laisse les fils finir avant la fin de l'essai.
-    for _ in 0..800 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), 0.25);
         if b.app.envois_ui.au_repos() {
             break;

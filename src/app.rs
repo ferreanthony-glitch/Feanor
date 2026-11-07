@@ -2794,14 +2794,14 @@ impl App {
         if let Some(p) = self.doc.panels.get(self.cur_panel) {
             self.gel.visite(p.id);
         }
-        self.gel.caches_communs = true;
+        self.gel.caches_communs = crate::gel::passes_communes();
         let lecture = self.playing.then_some(self.doc.fps);
         self.gel.tenir(&mut self.doc, self.cur_panel, lecture);
         self.gel.tenir_l_historique(&mut self.history);
         // (Pas pendant un geste ni une lecture : le pointeur est relâché, rien ne joue, aucun trait ne se rejoue.)
         let calme = !self.playing && !ctx.input(|i| i.pointer.any_down()) && self.rejeu_again.is_empty();
         self.gel.elaguer(&mut self.doc, &self.history, calme);
-        let mut occupe = self.gel.occupe();
+        let mut reveil = self.gel.reveil();
         // Les projets des autres onglets : leurs dessins se rangent aussi (le plan qu'on y regardait en dernier reste ouvert).
         for o in &mut self.onglets {
             if let Some(e) = o.etat.as_mut() {
@@ -2809,11 +2809,11 @@ impl App {
                 e.gel.caches_communs = false;
                 e.gel.tenir(&mut e.doc, e.cur_panel, None);
                 e.gel.tenir_l_historique(&mut e.history);
-                occupe |= e.gel.occupe();
+                reveil = [reveil, e.gel.reveil()].into_iter().flatten().min();
             }
         }
-        if occupe {
-            ctx.request_repaint_after(std::time::Duration::from_millis(30));
+        if let Some(d) = reveil {
+            ctx.request_repaint_after(d);
         }
     }
 
@@ -3455,6 +3455,9 @@ impl App {
         // Une durée rendue par l'annulation n'est pas signalée.
         self.plan_len_seen = None;
         self.end_stroke();
+        // (Le trait qu'on annule en plein geste n'est pas à répartir : `horschamp.rs`.)
+        self.vignettes.fini = None;
+        self.vignettes.debord_garde = None;
         // Une zone bitmap déplacée est d'abord reposée : l'annulation défait alors ce déplacement.
         self.drop_bitmap_selection();
         self.multi_before_history();

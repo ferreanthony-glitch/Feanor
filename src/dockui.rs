@@ -168,7 +168,10 @@ impl App {
             },
             Pane::XSheet => self.xsheet_panel(ui),
             Pane::Effects => {
-                self.fx_panel(ui);
+                // (Tout le film écarté : les effets du calque du plan vide qui le tient n'ont rien à montrer.)
+                if !self.panneau_film_vide(ui) {
+                    self.fx_panel(ui);
+                }
                 // Quand il a la main (Ctrl+C / Ctrl+V visent ses effets), un cadre discret.
                 self.focus_mark(ui, self.fx_pane_focus, false);
             }

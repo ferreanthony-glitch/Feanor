@@ -65,6 +65,50 @@ const FX_AU_REPOS: u64 = 30;
 const CACHES_PAR_PASSE: usize = 512;
 /// Le fil de fond passe sur les caches de traits au plus toutes ces secondes.
 const CACHES_TOUTES_LES: Duration = Duration::from_millis(1500);
+/// L'image d'écran qui suit, quand du travail est en route.
+const BIENTOT: Duration = Duration::from_millis(30);
+
+#[cfg(test)]
+thread_local! {
+    /// (Essais.) Les caches de traits et les dessins dérivés sont communs à tout le processus d'essai : le passage d'une application n'y trouvait que le travail des autres essais, et cette
+    /// application-là, qui attendait son repos, se faisait réveiller. Un essai ne fait donc de passage que s'il le demande (`passes_communes_dans_cet_essai`).
+    static PASSES_COMMUNES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// (Essais.) Cet essai veut les passages sur les caches communs, comme l'application.
+#[cfg(test)]
+pub(crate) fn passes_communes_dans_cet_essai() {
+    PASSES_COMMUNES.with(|p| p.set(true));
+}
+
+#[cfg(test)]
+thread_local! {
+    /// (Essais.) Les caches sont communs à tout le processus : un essai peut dire qu'il n'y a rien à y examiner, quoi que fassent ses voisins.
+    static RIEN_A_EXAMINER: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// (Essais.) Sur ce fil, les caches communs n'ont rien à examiner.
+#[cfg(test)]
+pub(crate) fn rien_a_examiner_dans_cet_essai() {
+    RIEN_A_EXAMINER.with(|r| r.set(true));
+}
+
+/// Un passage sur les caches communs a-t-il quelque chose à examiner ?
+fn caches_a_examiner() -> bool {
+    #[cfg(test)]
+    if RIEN_A_EXAMINER.with(std::cell::Cell::get) {
+        return false;
+    }
+    crate::vector::cache_total_bytes() > 0 || crate::fxcache::a_examiner()
+}
+
+/// Ce gel, celui du projet affiché, passe-t-il sur les caches communs ?
+pub(crate) fn passes_communes() -> bool {
+    #[cfg(test)]
+    return PASSES_COMMUNES.with(std::cell::Cell::get);
+    #[cfg(not(test))]
+    true
+}
 
 /// L'état de la tenue des dessins d'un projet (un par application).
 pub struct Gel {
@@ -143,9 +187,40 @@ impl Gel {
         self.actif = oui;
     }
 
-    /// Reste-t-il du travail en route (le caller redemande une image d'écran bientôt) ?
-    pub fn occupe(&self) -> bool {
-        self.actif && (!self.en_route.is_empty() || self.caches_en_route || self.caches_a_trouve || self.historique_a_trouve || self.balayage.is_some() || (self.repos_jusqu.is_none() && (self.curseur < self.ids.len() || self.a_trouve)))
+    /// Dans combien de temps ce gel a-t-il besoin d'une image d'écran (`None` : il n'attend rien) ? Bientôt, s'il y a du travail en route ; le passage suivant sur les caches communs
+    /// n'est dû qu'à son heure, et pas d'image d'ici là. (Il demandait une image toutes les 30 ms en attendant : au repos, l'écran se refaisait pendant une seconde et demie à chaque
+    /// passage qui avait trouvé quelque chose, et sans fin dans un onglet caché, qui ne fait plus de passage : `tenir` oublie alors `caches_a_trouve`.)
+    pub fn reveil(&self) -> Option<Duration> {
+        if !self.actif {
+            return None;
+        }
+        if !self.en_route.is_empty() || self.caches_en_route || self.historique_a_trouve || self.balayage.is_some() || (self.repos_jusqu.is_none() && (self.curseur < self.ids.len() || self.a_trouve)) {
+            return Some(BIENTOT);
+        }
+        if self.caches_a_trouve && self.caches_communs {
+            let reste = self.caches_le.map_or(Duration::ZERO, |t| CACHES_TOUTES_LES.saturating_sub(t.elapsed()));
+            return Some(reste.max(BIENTOT));
+        }
+        None
+    }
+
+    /// Essais : du travail est-il vraiment en route (un fil de fond, un tour du projet), autre que l'attente du prochain passage sur les caches ?
+    #[cfg(test)]
+    pub fn au_travail(&self) -> bool {
+        self.reveil() == Some(BIENTOT)
+    }
+
+    /// Essais : comme après un passage sur les caches qui a trouvé quelque chose, à l'instant.
+    #[cfg(test)]
+    pub fn comme_apres_un_passage_fructueux(&mut self) {
+        self.caches_a_trouve = true;
+        self.caches_le = Some(Instant::now());
+    }
+
+    /// Essais : le passage suivant sur les caches est dû.
+    #[cfg(test)]
+    pub fn passage_du(&mut self) {
+        self.caches_le = Instant::now().checked_sub(CACHES_TOUTES_LES);
     }
 
     fn fil(&mut self) -> &Sender<Lot> {
@@ -362,10 +437,12 @@ impl Gel {
                 }
             }
         }
+        // (Un onglet caché ne passe pas sur les caches communs : il n'attend aucun passage.)
+        self.caches_a_trouve &= self.caches_communs;
         // Les caches de traits (531 Mo pour un épisode de 200 plans) : un passage du fil de fond de temps en temps.
         if self.caches_communs && !self.caches_en_route && self.caches_le.is_none_or(|t| t.elapsed() >= CACHES_TOUTES_LES) {
             self.caches_le = Some(Instant::now());
-            if crate::vector::cache_total_bytes() > 0 || crate::fxcache::a_examiner() {
+            if caches_a_examiner() {
                 let envoi = self.fil().send(Lot { dessins: Vec::new(), caches: true });
                 if envoi.is_ok() {
                     self.caches_en_route = true;
@@ -373,6 +450,9 @@ impl Gel {
                     self.envoi = None;
                     self.retour = None;
                 }
+            } else {
+                // (Aucun passage ne part, donc aucune réponse ne remettrait ce drapeau à faux : le gel demanderait une image toutes les secondes et demie, sans fin.)
+                self.caches_a_trouve = false;
             }
         }
         if let Some(t) = self.repos_jusqu {

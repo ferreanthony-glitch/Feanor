@@ -674,7 +674,7 @@ fn the_vignettes_view_is_idle_when_nothing_happens() {
     let mut b = ouvert(quatre_plans(), 4);
     b.app.doc.panels[1].notes = "Une note, une seule.".into();
     let n = se_reposer(&mut b, 80);
-    assert!(n < 80, "la vue Vignettes se repose ({n} images)");
+    assert!(n < 80, "la vue Vignettes se repose ({n} images){}", b.raison_du_reveil());
     let m = b.image(Vec::new(), 0.5);
     assert!(m.reveil >= std::time::Duration::from_secs(1), "aucune image demandée avant une seconde : {:?}{}", m.reveil, b.raison_du_reveil());
 }

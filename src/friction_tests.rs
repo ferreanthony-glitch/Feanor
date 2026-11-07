@@ -120,7 +120,7 @@ fn textes(b: &Banc) -> Vec<String> {
 
 /// Laisse le fil d'écriture finir et l'application le dire dans la barre d'état.
 fn attendre_la_note(b: &mut Banc) -> String {
-    for _ in 0..400 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), DT);
         if b.app.status.starts_with("Friction notée dans") || b.app.status.starts_with("La friction n'a pas pu") {
             break;

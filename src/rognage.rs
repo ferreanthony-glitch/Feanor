@@ -27,6 +27,8 @@ use crate::camera::{self, Camera, CameraKey};
 use crate::commentaires::Comment;
 use crate::document::{CelId, Document, ImageMark, Panel};
 use crate::fx::{Effect, FxKey};
+use crate::opacitecles::OpKey;
+use crate::poskeys::PosKey;
 use crate::roles::Roles;
 
 thread_local! {
@@ -85,6 +87,17 @@ pub struct LayerPiece {
     pub roles: Roles,
     /// Un par effet du calque, dans l'ordre de sa pile.
     pub fx: Vec<FxPiece>,
+    /// Clés de position et d'opacité sorties **par le début** (en images de la partie), et la clé posée au bord du plan à la
+    /// coupure pour garder la courbe (`duree-cles`, 2026-11-07 : décaler les clés d'un plan ne doit en perdre aucune). Par la
+    /// fin, ces clés restent sur le calque, au-delà de la dernière image : elles reprennent leur sens quand le plan se prolonge.
+    pub pos: Vec<PosKey>,
+    pub pos_edge: Option<PosKey>,
+    pub op: Vec<OpKey>,
+    pub op_edge: Option<OpKey>,
+    /// Départ et fin de la trajectoire du calque avant la coupure du début, et ce qu'ils sont devenus (ramenés au bord du plan si la
+    /// coupure les passe) : si personne n'y touche, la restitution rend exactement les premiers.
+    pub traj_avant: Option<(usize, Option<usize>)>,
+    pub traj_apres: Option<(usize, Option<usize>)>,
 }
 
 /// Une partie du plan hors champ : `len` images, comptées depuis 0 (au début, l'image `len - 1` est
@@ -102,6 +115,10 @@ pub struct Piece {
     pub out_point: Option<usize>,
     /// Commentaires sortis (leur plan est celui de la réserve).
     pub comments: Vec<Comment>,
+    /// Cette partie a été rangée par un code qui décale aussi les clés de position et d'opacité du calque (`cut_head`) : à sa
+    /// restitution, les clés vivantes avancent de `len`. Une partie lue d'un ancien `rognages.json` (faux) garde l'ancienne règle :
+    /// ces clés n'avaient pas été décalées au rangement, elles ne le sont pas non plus au retour.
+    pub keys_v2: bool,
 }
 
 /// Le contenu d'un plan qui est hors de lui, au début et à la fin.
@@ -202,6 +219,80 @@ fn fx_cut_tail(e: &mut Effect, c: usize) -> FxPiece {
     FxPiece { keys, edge }
 }
 
+// ------------------------------------------------------------------------ clés de position et d'opacité
+
+/// Coupe les clés de position au début, à l'image `c` : (sorties, gardées ramenées à 0, clé posée au bord).
+fn pos_cut_head(keys: &[PosKey], c: usize, base: crate::document::LayerTransform) -> (Vec<PosKey>, Vec<PosKey>, Option<PosKey>) {
+    let out: Vec<PosKey> = keys.iter().filter(|k| k.frame < c).copied().collect();
+    let mut kept: Vec<PosKey> = keys.iter().filter(|k| k.frame >= c).map(|k| PosKey { frame: k.frame - c, ..*k }).collect();
+    let mut edge = None;
+    if !out.is_empty() && kept.first().is_none_or(|k| k.frame > 0) {
+        let key = PosKey::new(0, crate::poskeys::pose_at(keys, c, base));
+        kept.insert(0, key);
+        edge = Some(key);
+    }
+    (out, kept, edge)
+}
+
+/// Comme `pos_cut_head`, pour les clés d'opacité.
+fn op_cut_head(keys: &[OpKey], c: usize, base: f32) -> (Vec<OpKey>, Vec<OpKey>, Option<OpKey>) {
+    let out: Vec<OpKey> = keys.iter().filter(|k| k.frame < c).copied().collect();
+    let mut kept: Vec<OpKey> = keys.iter().filter(|k| k.frame >= c).map(|k| OpKey { frame: k.frame - c, ..*k }).collect();
+    let mut edge = None;
+    if !out.is_empty() && kept.first().is_none_or(|k| k.frame > 0) {
+        let key = OpKey::new(0, crate::opacitecles::value_at(keys, c, base));
+        kept.insert(0, key);
+        edge = Some(key);
+    }
+    (out, kept, edge)
+}
+
+/// Remet les clés de position et d'opacité sorties par le début : la clé du bord s'en va si personne n'y a touché, les clés
+/// restantes avancent de `len` images, les clés sorties reprennent leur place devant.
+fn keys_absorb_head(l: &mut crate::document::Layer, lp: Option<&LayerPiece>, len: usize, v2: bool) {
+    if !v2 {
+        return;
+    }
+    if let Some(e) = lp.and_then(|lp| lp.pos_edge) {
+        if l.pos_keys.first() == Some(&e) {
+            l.pos_keys.remove(0);
+        }
+    }
+    for k in &mut l.pos_keys {
+        k.frame += len;
+    }
+    if let Some(lp) = lp {
+        let mut keys = lp.pos.clone();
+        keys.append(&mut l.pos_keys);
+        l.pos_keys = keys;
+    }
+    if let Some(e) = lp.and_then(|lp| lp.op_edge) {
+        if l.opacity_keys.first() == Some(&e) {
+            l.opacity_keys.remove(0);
+        }
+    }
+    for k in &mut l.opacity_keys {
+        k.frame += len;
+    }
+    if let Some(lp) = lp {
+        let mut keys = lp.op.clone();
+        keys.append(&mut l.opacity_keys);
+        l.opacity_keys = keys;
+    }
+    // La trajectoire (départ et fin, en images du plan) suit les clés. Si personne n'y a touché depuis la coupure, elle reprend
+    // exactement son départ et sa fin d'avant ; sinon elle avance de `len` comme tout le reste.
+    if let Some(t) = l.trajectoire.as_mut() {
+        let maintenant = (t.depart, t.fin);
+        match lp.and_then(|lp| lp.traj_apres.zip(lp.traj_avant)) {
+            Some((apres, avant)) if apres == maintenant => (t.depart, t.fin) = avant,
+            _ => {
+                t.depart += len;
+                t.fin = t.fin.map(|f| f + len);
+            }
+        }
+    }
+}
+
 fn fx_absorb_head(e: &mut Effect, piece: Option<&FxPiece>, len: usize) {
     if let Some(edge) = piece.and_then(|p| p.edge.as_ref()) {
         if e.keys.first().is_some_and(|k| k.frame == 0 && &k.values == edge) {
@@ -234,7 +325,7 @@ fn fx_absorb_tail(e: &mut Effect, piece: Option<&FxPiece>, n: usize) {
 /// Le plan doit être complet (sa réserve du début reprise avant).
 fn cut_head(p: &mut Panel, comments: &mut Vec<Comment>, c: usize, default: Camera) -> Piece {
     let n = p.frame_count();
-    let mut piece = Piece { len: c, ..Default::default() };
+    let mut piece = Piece { len: c, keys_v2: true, ..Default::default() };
     for l in &mut p.layers {
         if let Some(v) = l.video.as_mut() {
             v.start -= c as i64;
@@ -255,6 +346,14 @@ fn cut_head(p: &mut Panel, comments: &mut Vec<Comment>, c: usize, default: Camer
         lp.roles = l.roles.range(..c).map(|(f, r)| (*f, *r)).collect();
         l.roles = l.roles.range(c..).map(|(f, r)| (f - c, *r)).collect();
         lp.fx = l.fx.iter_mut().map(|e| fx_cut_head(e, c)).collect();
+        (lp.pos, l.pos_keys, lp.pos_edge) = pos_cut_head(&l.pos_keys, c, l.transform);
+        (lp.op, l.opacity_keys, lp.op_edge) = op_cut_head(&l.opacity_keys, c, l.opacity);
+        if let Some(t) = l.trajectoire.as_mut() {
+            lp.traj_avant = Some((t.depart, t.fin));
+            t.depart = t.depart.saturating_sub(c);
+            t.fin = t.fin.map(|f| f.saturating_sub(c)).filter(|&f| f > t.depart);
+            lp.traj_apres = Some((t.depart, t.fin));
+        }
         l.trim();
         piece.layers.push(lp);
     }
@@ -354,6 +453,7 @@ fn absorb_head(p: &mut Panel, comments: &mut Vec<Comment>, piece: Piece) {
     if len == 0 {
         return;
     }
+    let keys_v2 = piece.keys_v2;
     let n = p.frame_count();
     for l in &mut p.layers {
         if let Some(v) = l.video.as_mut() {
@@ -382,6 +482,7 @@ fn absorb_head(p: &mut Panel, comments: &mut Vec<Comment>, piece: Piece) {
         for (i, e) in l.fx.iter_mut().enumerate() {
             fx_absorb_head(e, lp.and_then(|lp| lp.fx.get(i)), len);
         }
+        keys_absorb_head(l, lp, len, keys_v2);
         l.trim();
     }
     let mut live = std::mem::take(&mut p.camera);
@@ -455,9 +556,9 @@ fn absorb_tail(p: &mut Panel, comments: &mut Vec<Comment>, piece: Piece) {
     p.length = n + len;
 }
 
-/// Allonge le plan de `k` images au début, en tenant le premier dessin de chaque calque : tout
-/// ce qui tient aux images (clés, marques, signets, commentaires) suit le contenu.
-fn pad_head(p: &mut Panel, comments: &mut [Comment], k: usize) {
+/// Allonge le plan de `k` images au début, en tenant le premier dessin de chaque calque (`hold`) ou en laissant ces images vides :
+/// tout ce qui tient aux images (clés, marques, signets, commentaires) suit le contenu.
+fn pad_head(p: &mut Panel, comments: &mut [Comment], k: usize, hold: bool) {
     let n = p.frame_count();
     for l in &mut p.layers {
         if let Some(v) = l.video.as_mut() {
@@ -466,8 +567,13 @@ fn pad_head(p: &mut Panel, comments: &mut [Comment], k: usize) {
         if l.folder || l.scene_wide.is_some() {
             continue;
         }
-        let first = l.frames.first().copied().flatten();
+        let first = if hold { l.frames.first().copied().flatten() } else { None };
         l.insert(0, first, k);
+        // La trajectoire (départ et fin, en images du plan) suit les dessins et les clés.
+        if let Some(t) = l.trajectoire.as_mut() {
+            t.depart += k;
+            t.fin = t.fin.map(|f| f + k);
+        }
         l.trim();
     }
     for key in &mut p.camera {
@@ -559,7 +665,7 @@ impl Document {
                     set_hidden_head(p, comments, r, default, h - back);
                 }
                 if k > back {
-                    pad_head(p, comments, k - back);
+                    pad_head(p, comments, k - back, true);
                 }
                 -(k as isize)
             }
@@ -602,6 +708,34 @@ impl Document {
         let Some(old) = self.panels.get(pi).map(Panel::frame_count) else { return 0 };
         let n = n.clamp(1, MAX_PLAN);
         self.trim_tail(pi, n as isize - old as isize);
+        self.panels[pi].frame_count()
+    }
+
+    /// Donne au plan `pi` la durée `n` **en gardant les clés à la même distance de la fin** (Ctrl sur la poignée de fin,
+    /// Anthony, 2026-11-07) : toutes les clés du plan (dessins, caméra et leurs poignées de lissage, position, opacité, effets,
+    /// marques, signets) se décalent du même nombre d'images que la poignée, le rythme ne change pas. C'est le début du
+    /// plan qui change au lieu de la fin : plus long, ce qui avait été rogné au début revient d'abord, puis les nouvelles
+    /// images sont **vides** (la première clé de dessin glisse donc vraiment, de 0 à 4 s dans l'exemple d'Anthony : clés à
+    /// 4, 5, 6, 7 s) ; plus court, ce qui passerait avant la première image part dans la réserve du début et revient en
+    /// rallongeant, rien n'est perdu. Renvoie la durée faite.
+    pub fn slide_plan_end(&mut self, pi: usize, n: usize) -> usize {
+        let Some(old) = self.panels.get(pi).map(Panel::frame_count) else { return 0 };
+        let n = n.clamp(1, MAX_PLAN);
+        if n < old {
+            self.trim_head(pi, (old - n) as isize);
+        } else if n > old {
+            self.with_reserve(pi, |p, comments, r, default| {
+                let k = (n - old).min(MAX_PLAN.saturating_sub(old));
+                let h = r.head.len;
+                let back = k.min(h);
+                if back > 0 {
+                    set_hidden_head(p, comments, r, default, h - back);
+                }
+                if k > back {
+                    pad_head(p, comments, k - back, false);
+                }
+            });
+        }
         self.panels[pi].frame_count()
     }
 
@@ -902,6 +1036,21 @@ mod file {
         pub roles: Roles,
         #[serde(default)]
         pub effets: Vec<FxFile>,
+        /// Clés de position et d'opacité sorties par le début, et la clé du bord (rien d'écrit quand il n'y en a pas : les projets
+        /// d'avant gardent leur fichier tel quel).
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        pub cles_position: Vec<crate::poskeys::Entree>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub bord_position: Option<crate::poskeys::Entree>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        pub cles_opacite: Vec<crate::opacitecles::Entree>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub bord_opacite: Option<crate::opacitecles::Entree>,
+        /// Départ et fin de la trajectoire du calque avant la coupure du début, et après (rien : pas de trajectoire).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub trajectoire_avant: Option<(usize, Option<usize>)>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pub trajectoire_apres: Option<(usize, Option<usize>)>,
     }
 
     #[derive(Serialize, Deserialize, Default)]
@@ -938,6 +1087,10 @@ mod file {
         pub sortie: Option<usize>,
         #[serde(default)]
         pub commentaires: Vec<Comment>,
+        /// Marqueur : la partie a été écrite par un code qui range aussi les clés de position et d'opacité (absent des anciens
+        /// fichiers : faux, ancienne règle).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        pub cles_v2: bool,
     }
 
     #[derive(Serialize, Deserialize, Default)]
@@ -1011,6 +1164,12 @@ fn piece_file(piece: &Piece, panel: &Panel) -> file::PieceFile {
                     expositions: exposures(&lp.frames),
                     roles: lp.roles.clone(),
                     effets: lp.fx.iter().map(|f| file::FxFile { cles: f.keys.clone(), bord: f.edge.clone() }).collect(),
+                    cles_position: lp.pos.iter().map(Into::into).collect(),
+                    bord_position: lp.pos_edge.as_ref().map(Into::into),
+                    cles_opacite: lp.op.iter().map(Into::into).collect(),
+                    bord_opacite: lp.op_edge.as_ref().map(Into::into),
+                    trajectoire_avant: lp.traj_avant,
+                    trajectoire_apres: lp.traj_apres,
                 })
             })
             .collect(),
@@ -1025,6 +1184,7 @@ fn piece_file(piece: &Piece, panel: &Panel) -> file::PieceFile {
         entree: piece.in_point,
         sortie: piece.out_point,
         commentaires: piece.comments.clone(),
+        cles_v2: piece.keys_v2,
     }
 }
 
@@ -1121,6 +1281,12 @@ fn piece_of(f: file::PieceFile, panel: &Panel, missing: &std::collections::BTree
                 frames,
                 roles: l.roles.into_iter().filter(|(f, _)| *f < len).collect(),
                 fx: l.effets.into_iter().map(|e| FxPiece { keys: e.cles, edge: e.bord }).collect(),
+                pos: crate::poskeys::from_entries(l.cles_position),
+                pos_edge: l.bord_position.and_then(crate::poskeys::Entree::into_model),
+                op: crate::opacitecles::from_entries(l.cles_opacite),
+                op_edge: l.bord_opacite.and_then(crate::opacitecles::Entree::into_model),
+                traj_avant: l.trajectoire_avant,
+                traj_apres: l.trajectoire_apres,
             })
         })
         .collect();
@@ -1143,6 +1309,7 @@ fn piece_of(f: file::PieceFile, panel: &Panel, missing: &std::collections::BTree
         in_point: f.entree,
         out_point: f.sortie,
         comments: f.commentaires.into_iter().map(|c| Comment { panel: panel.id, ..c }).collect(),
+        keys_v2: f.cles_v2,
     }
 }
 
@@ -1167,6 +1334,8 @@ pub mod noms {
     pub const COUPE: &str = "Déplacer la coupe";
     pub const GLISSER: &str = "Glisser le contenu";
     pub const DUREE: &str = "Durée du plan";
+    pub const DUREE_CLES_LONGUE: &str = "Allonger le plan, clés décalées";
+    pub const DUREE_CLES_COURTE: &str = "Raccourcir le plan, clés décalées";
     pub const RETABLIR: &str = "Rétablir le contenu rogné";
     pub const OUBLIER: &str = "Oublier le contenu rogné";
 }

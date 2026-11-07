@@ -60,7 +60,7 @@ fn geste(app: &mut App, pts: &[(f32, f32)]) {
 /// Le rendu exact d'un trait vectoriel vient d'un fil de travail : on le laisse arriver.
 fn attendre_rejeu(app: &mut App) {
     let ctx = egui::Context::default();
-    for _ in 0..400 {
+    for _ in crate::perf_tests::attente() {
         app.poll_rejeu(&ctx);
         if !app.rejeu.has_pending() && app.rejeu_deferred.is_empty() {
             break;

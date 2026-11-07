@@ -1086,6 +1086,15 @@ impl App {
             if edge_at(p).is_some() || clip_edge || resizing {
                 ui.ctx().set_cursor_icon(CursorIcon::ResizeHorizontal);
             }
+            // La bulle de la poignée d'un plan : sa durée, et Ctrl (les clés suivent la poignée).
+            if let (Some((_, side)), None) = (edge_at(p), &self.montage_drag) {
+                let (name, tip) = if side == crate::rognageui::Side::Head {
+                    ("Début du plan", crate::handles::BULLE_DEBUT_AIDE)
+                } else {
+                    (crate::handles::BULLE_DUREE_NOM, crate::handles::BULLE_DUREE_AIDE)
+                };
+                resp.clone().on_hover_ui_at_pointer(|ui| crate::bulles::contenu(ui, name, tip, ""));
+            }
             // Une transition : ses bords s'étirent, sa bulle dit sa sorte et sa durée.
             if let Some((i, hit)) = crate::transitionsui::badge_hit(&badges, p) {
                 if hit != crate::transitionsui::BadgeHit::Body {
@@ -1848,6 +1857,10 @@ impl App {
     // ------------------------------------------------------------------ fiche du plan
 
     pub(crate) fn panel_inspector(&mut self, ui: &mut egui::Ui) {
+        // Tout le film est écarté : la Fiche ne montre ni n'écrit le plan vide qui le tient (s'il avait du texte, le film ne serait pas vide : `film_vide`).
+        if self.panneau_film_vide(ui) {
+            return;
+        }
         let i = self.cur_panel;
         let fps = self.doc.fps;
         // Image de storyboard sous la tête de lecture (13a) : le début du plan ou une marque d'image.

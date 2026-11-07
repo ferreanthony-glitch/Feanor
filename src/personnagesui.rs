@@ -436,7 +436,7 @@ impl App {
 
     /// Un personnage de plus (une étape d'annulation) ; rend son numéro. Il est choisi tout de suite.
     pub(crate) fn perso_ajouter(&mut self) -> Option<u64> {
-        if self.content_refuses() {
+        if self.contenu_verrouille() {
             return None;
         }
         if self.doc.personnages.len() >= personnages::MAX_PERSONNAGES {
@@ -506,7 +506,7 @@ impl App {
     }
 
     fn perso_personnages_d_origine(&mut self) {
-        if self.content_refuses() {
+        if self.contenu_verrouille() {
             return;
         }
         let origine = personnages::personnages_d_origine();
@@ -553,7 +553,7 @@ impl App {
         match c {
             Choix::Personnage(id) => {
                 let Some(i) = self.doc.personnages.iter().position(|p| p.id == id) else { return };
-                if self.content_refuses() || self.doc.personnages.len() >= personnages::MAX_PERSONNAGES {
+                if self.contenu_verrouille() || self.doc.personnages.len() >= personnages::MAX_PERSONNAGES {
                     return;
                 }
                 self.perso_etape("Dupliquer le personnage");
@@ -583,7 +583,7 @@ impl App {
     pub(crate) fn perso_supprimer(&mut self, c: Choix) {
         match c {
             Choix::Personnage(id) => {
-                if self.content_refuses() || !self.doc.personnages.iter().any(|p| p.id == id) {
+                if self.contenu_verrouille() || !self.doc.personnages.iter().any(|p| p.id == id) {
                     return;
                 }
                 self.perso_etape("Supprimer le personnage");
@@ -618,7 +618,7 @@ impl App {
         match c {
             Choix::Personnage(id) => {
                 let Some(i) = self.doc.personnages.iter().position(|p| p.id == id) else { return };
-                if self.content_refuses() || personnages::deplacer(&mut self.doc.personnages.clone(), i, delta).is_none() {
+                if self.contenu_verrouille() || personnages::deplacer(&mut self.doc.personnages.clone(), i, delta).is_none() {
                     return;
                 }
                 self.perso_etape("Ranger les personnages");

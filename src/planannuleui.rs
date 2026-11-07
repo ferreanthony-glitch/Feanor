@@ -262,6 +262,17 @@ impl App {
         true
     }
 
+    /// Le panneau Calques, les Réglages et les Effets, quand tout est écarté : ils ne montrent pas le calque du plan vide qui tient le film. Vrai s'ils n'ont
+    /// rien d'autre à peindre.
+    pub(crate) fn panneau_film_vide(&mut self, ui: &mut egui::Ui) -> bool {
+        if !self.doc.film_vide() {
+            return false;
+        }
+        ui.add_space(12.0);
+        ui.vertical_centered(|ui| ui.weak(TEXTE_FILM_VIDE));
+        true
+    }
+
     /// Le menu du clic droit d'une case annulée.
     pub(crate) fn annule_menu(&mut self, ui: &mut egui::Ui, plan: u64) {
         if ui.button(MENU_REPRENDRE).clicked() {
@@ -301,5 +312,7 @@ pub(crate) const TEXTE_FILM_VIDE: &str = "Tous les plans sont écartés.";
 /// Les entrées du clic droit.
 pub(crate) const MENU_ECARTER: &str = "Écarter ce plan";
 pub(crate) const MENU_REPRENDRE: &str = "Reprendre ce plan";
+/// Ce que répond une commande qui écrirait dans le plan vide qui tient le film (un dessin, un calque, une image, un effet).
+pub(crate) const REFUS_SUPPORT: &str = "Tous les plans sont écartés, il n'y a aucun plan où faire cela : reprends un plan dans les Vignettes, un clic sur son numéro";
 /// Ce qu'un export répond alors.
 pub(crate) const REFUS_EXPORT: &str = "Tous les plans sont écartés, rien à exporter ni à envoyer : reprends un plan dans les Vignettes, un clic sur son numéro";

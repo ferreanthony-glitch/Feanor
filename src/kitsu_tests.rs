@@ -740,7 +740,7 @@ fn the_window_publishes_with_real_thumbnails_then_reads_back_in_one_undo_step() 
     app.run_action("fichier.kitsu_publier");
     assert!(app.kitsu.ouvert);
     // Les empreintes se calculent (fenêtre ouverte), pas de réseau avant le clic.
-    for _ in 0..400 {
+    for _ in crate::perf_tests::attente() {
         image(&mut app);
         if app.envois_empreintes_a_jour() {
             break;

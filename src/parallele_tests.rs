@@ -209,7 +209,7 @@ fn opening_a_project_does_not_block_the_interface() {
     assert!(b.app.open_job.is_some(), "l'ouverture doit se faire sur un autre fil");
     assert_eq!(b.app.doc.panels.len(), 1);
     assert!(b.app.modal_open());
-    for _ in 0..600 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), 1.0 / 60.0);
         if b.app.open_job.is_none() {
             break;
@@ -223,7 +223,7 @@ fn opening_a_project_does_not_block_the_interface() {
     assert_eq!(tous_les_pixels(&b.app.doc).len(), tous_les_pixels(&doc).len());
     // Un projet qui n'existe pas : un message, pas de plantage.
     b.app.open_path(dir.join("absent").join("Rien.pelure"));
-    for _ in 0..600 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), 1.0 / 60.0);
         if b.app.open_job.is_none() {
             break;
@@ -252,7 +252,7 @@ fn parallel_save_and_open_keep_the_comments_and_forget_the_effects() {
     let mut b = crate::perf_tests::banc(Document::with_frame(160, 90, 24), false);
     let epoque = crate::fxcache::epoch();
     b.app.open_path(manifeste.clone());
-    for _ in 0..600 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), 1.0 / 60.0);
         if b.app.open_job.is_none() {
             break;

@@ -136,7 +136,7 @@ fn a_big_image_is_prepared_in_the_background_then_dropped_on_the_layer_where_it_
     // L'utilisateur change de calque : l'image va là où le collage a été demandé.
     app.select_layer(1);
     let ctx = eframe::egui::Context::default();
-    for _ in 0..400 {
+    for _ in crate::perf_tests::attente() {
         app.tick_collage(&ctx);
         if app.collage.images.is_none() {
             break;

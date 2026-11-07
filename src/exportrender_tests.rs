@@ -33,7 +33,8 @@ use crate::render;
 fn ancienne_image(doc: &Document, p: usize, f: usize, paper: Option<[u8; 3]>, graver: bool) -> Vec<Color32> {
     let plan = render::panel_plan_at(doc, p, f, paper);
     let cam = doc.panel_camera(p, f);
-    let img: Image = Arc::new(render::camera_image(doc, &plan, &cam));
+    // (Une réserve à elle : la réserve commune se range par numéro de dessin et par version, et un autre essai qui tourne en même temps a les mêmes, avec d'autres pixels.)
+    let img: Image = Arc::new(crate::fxcache::avec_privee(256 << 20, || render::camera_image(doc, &plan, &cam)));
     if graver {
         (*export::burned(doc, p, f, img)).clone()
     } else {
@@ -1021,7 +1022,7 @@ mod application {
         // Une fois fini et fermé, l'application revient au repos : aucune image de plus n'est demandée.
         b.app.export_job = None;
         b.app.export_projet = None;
-        assert!(se_reposer(&mut b, 120) < 120, "l'application revient au repos après l'export");
+        assert!(se_reposer(&mut b, 120) < 120, "l'application revient au repos après l'export{}", b.raison_du_reveil());
         std::fs::remove_dir_all(&dir).ok();
     }
 

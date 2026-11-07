@@ -7650,7 +7650,7 @@ Coût d'une image, 30 plans dessinés, souris qui se promène : construction 0,7
 ### Ce qui reste
 
 - **Pas reproduit** : les morceaux pâles des cases 15 et 16, qui ne sont pas des cases vives. Un trait léger au stylet est une explication possible, pas une preuve.
-- **Une case dont la caméra a un autre zoom, un roulis, une bascule ou un panoramique, un calque verrouillé ou masqué** ne reçoit toujours pas sa part : le trait y reste caché sous l'image.
+- **Une case dont la caméra a un autre zoom, un roulis, une bascule ou un panoramique, un calque verrouillé ou masqué** ne reçoit toujours pas sa part : le trait y reste caché sous l'image. (Réglé en partie 122.)
 - **Remarqué, non corrigé** : un trait commencé dans l'écart de deux cases, à la hauteur de leur barre, fait « réunir les plans » et ne dessine rien (un appui sur la zone de la barre).
 - Le filet d'une case reste peint par-dessus le trait (un pixel).
 
@@ -8227,12 +8227,10 @@ La feuille fait deux fois le cadre : A étant centré, son bord droit est à 1,5
 
 ### Limites
 
-- Les effets réglés par rapport à la feuille (onde, ondulation, tourbillon, pincement, nuages, éclairage, dégradé, flash, impact, secousse, vignettage, aberration) ne s'appliquent pas au-delà d'elle : le trait y reste tel quel, entier.
-- Un effet du trait qui transforme chaque trait (ondulation du trait, pointillés…) ne se calcule que sur la feuille : au-delà, le trait reste sans cet effet. Avec Écriture ou Poussière, il n'est pas montré au-delà de la feuille.
-- **Une cassure reste au bord de la feuille** avec Secousse, Onde, Vignettage et les autres effets réglés par rapport à elle, et avec les effets du trait : d'un côté l'effet, de l'autre le trait sans effet. C'est voulu : mieux vaut cela qu'un trait coupé.
-- Le flou, la lueur et les autres effets qui lisent tout leur rectangle ne s'appliquent plus hors de la feuille au-delà de 33 millions de pixels (un point perdu très loin), et le trait y reste entier, sans eux. Le tremblement et les réglages de couleur n'ont pas cette borne. Mesures du calcul à part, sans cette borne, avec un point perdu : flou à 8 000 pixels 170 ms, à 10 800 pixels 363 ms et 507 Mo de plus au pic.
-- **Encoche côté feuille.** Le tremblement seul, calculé sur processeur, n'en a plus (les tuiles du bord viennent du calcul à part ; un dessin sans débord ne change pas d'un pixel). **Sur la carte graphique, elle reste** : le shader ne lit que la feuille. Une seule colonne de pixels de la feuille, plus claire de 4,5 % à l'intensité 0,5 (son réglage) et de 24 % à l'intensité 3. Non corrigé : il faudrait passer ces calques par le calcul de fond (plus de mémoire, plus de calcul à chaque variante).
-- **Autre cause, non traitée ici** : une part de trait reste cachée sous l'image d'une case dont la caméra a un autre zoom, un roulis, une bascule, un panoramique, ou dont le calque est verrouillé (`cases_qui_recoivent` les refuse, partie 111).
+*(Partie 121 : les effets réglés par rapport à la feuille, les effets du trait, Écriture et Poussière continuent maintenant de part et d'autre de son bord ; la borne des 33 millions de pixels et la colonne plus claire sur la carte graphique n'existent plus.)*
+
+- Le calcul à part décrit ci-dessus, avec sa bande de 4 tuiles, est remplacé par `fxmonde.rs` (partie 121). Mesures de cette ancienne méthode sans sa borne, avec un point perdu : flou à 8 000 pixels 170 ms, à 10 800 pixels 363 ms et 507 Mo de plus au pic.
+- **Autre cause, non traitée ici** : une part de trait reste cachée sous l'image d'une case dont la caméra a un autre zoom, un roulis, une bascule, un panoramique, ou dont le calque est verrouillé (`cases_qui_recoivent` les refuse, partie 111). (Réglé en partie 122.)
 
 ### Le badge 12 et le petit carré
 
@@ -8399,3 +8397,307 @@ projet.**
 
 À vérifier à l'écran : un plan à deux clés de caméra, sans lissage : deux petits ronds pâles attendent à côté des clés ; tire celui de droite
 de la première clé, la caméra ralentit au départ ; ramène-le, il revient au repos. Même chose dans le montage.
+
+## 121. Les effets continuent de part et d'autre du bord de la feuille (2026-11-07, branche `effets-debord`)
+
+Suite de la partie 118 : le trait n'était plus coupé, mais il se cassait au bord de la feuille dès qu'un effet réglé d'après elle ou un effet du trait était posé. Fichiers : `fxmonde.rs` (nouveau), `fx.rs` (`apply_with`, `un_effet`, `Repere`), `fxtrait.rs` (`hors_de_la_feuille`), `fxwarp.rs`, `fxcine.rs`, `fxfilters.rs`, `fxmatiere.rs`, `gpufx.rs`, `gpufx.wgsl` (`fs_boil`), `gpu.rs`, `monde.rs`, `render.rs`. Essais : `effets_debord_tests.rs`, `camera_traits_tests.rs`. **Le format de projet ne change pas** (48).
+
+### L'idée
+
+La feuille se calcule comme toujours. Ce qui la dépasse se calcule **dans les coordonnées du monde** : les réglages qui parlent de la feuille (centre, pourcentages) restent ceux de la vraie feuille, et une formule vaut des deux côtés. Une onde continue son onde, le centre d'un tourbillon ne bouge pas, le vignettage garde sa pente jusqu'à son noir.
+
+- **Dans la feuille**, seules les tuiles assez près de ce qui dépasse pour le lire prennent ce résultat, qui voit des deux côtés. Le reste de la feuille ne bouge pas. Un dessin qui ne dépasse pas ne passe pas par là : essai sur 106 images, empreintes relevées sur `main` avant ce chantier.
+- **Rien de plein** : le calcul ne tient jamais le rectangle du dessin en mémoire. Les effets qui lisent leurs voisins (flou, lueur, ombre, mosaïque…) passent par zones de 512 pixels, plus leur portée, là où il y a de l'encre. Ceux qui déplacent le dessin (onde, secousse, tourbillon…) passent par tuiles, seulement celles où de l'encre peut arriver. Les zones se raccordent au pixel près (essai : 0 pixel différent d'un seul calcul d'ensemble).
+- **Effets du trait** : même principe, zone par zone, le long de chaque trait. L'abscisse, l'axe et le hasard sont ceux du trait entier.
+
+### Ce qu'il fait là où un effet n'a pas de sens hors de la feuille
+
+- **Flash, Image d'impact** : ils couvrent la feuille, qui reste seule remplie (il n'y a pas d'image à remplir au-delà). Le trait, lui, prend la même couleur des deux côtés.
+- **Vignettage** : l'ellipse continue, le trait s'assombrit jusqu'au noir réglé, puis y reste.
+- **Aberration, Secousse** : ce sont des transformations du monde. Plus on s'éloigne du centre, plus le déplacement grandit, comme le voudrait une feuille plus grande.
+
+### Mesures de la cassure, effet par effet (avant, puis après)
+
+Une bande droite qui passe le bord, à droite, en bas et à gauche ; le pire des trois. On lit la dernière colonne de la feuille et la première au-delà : le saut du centre de l'encre en pixels, l'écart de quantité d'encre, l'écart de couleur sur 255. Essai : `no_effect_breaks_a_stroke_at_the_edge_of_the_sheet`.
+
+| Effet | Saut (px) | Encre (%) | Couleur |
+|---|---|---|---|
+| Pincement | 52,6 puis 0 | 9,1 puis 0 | 0,1 puis 0 |
+| Secousse | 18,2 puis 0,03 | 39,2 puis 0 | 0,1 puis 0,1 |
+| Tourbillon | 11,0 puis 0,3 | 100 puis 1,9 | 200 puis 0,1 |
+| Ondulation | 5,7 puis 0 | 35,9 puis 0 | 0,2 puis 0 |
+| Ombre portée | 3,7 puis 0 | 33,1 puis 0 | 66,2 puis 0 |
+| Onde | 2,5 puis 0,4 | 100 puis 0,9 | 200 puis 0 |
+| Aberration | 1,1 puis 0 | 59,3 puis 0 | 114,8 puis 0 |
+| Flou gaussien | 0 | 57,3 puis 0 | 1,2 puis 0 |
+| Flou de mouvement | 0 | 48,2 puis 0 | 1,0 puis 0 |
+| Lueur | 0 | 12,4 puis 0 | 0,4 puis 0 |
+| Lueur diffuse | 0 | 7,8 puis 0 | 12,5 puis 0 |
+| Encre qui bave | 0,4 puis 0,02 | 5,1 puis 0,7 | 0,3 puis 0,2 |
+| Image d'impact | 0 | 0 | 195 puis 0 |
+| Flash | 0 | 0 | 113 puis 0 |
+| Vignettage | 0 | 0 | 100 puis 0 |
+| Dégradé | 0 | 0 | 100 puis 0 |
+| Éclairage | 0 | 0 | 80 puis 0 |
+| Nuages | 0 | 0 | 20,7 puis 0,1 |
+
+Les réglages de couleur, le liseré et la netteté n'avaient pas de cassure mesurable et n'en ont pas. Le tremblement donne 0,4 pixel et 7,7 %, avant comme après : c'est sa pente naturelle, identique à celle d'une feuille plus grande (essai). Le bruit et le grain varient d'un pixel à l'autre par nature ; leur mesure est la ligne suivante.
+
+**Motif à la couture**, en pixels différents d'une feuille plus grande : Mosaïque 4 180 puis 0 ; Bruit et Grain 0 sur tout ce qui a été lu après. (L'essai s'arrête au premier effet en défaut : sur `main`, Mosaïque l'a arrêté, le chiffre « avant » du bruit et du grain n'a pas été relevé.)
+
+**Effets du trait** : pixels différents d'une feuille plus grande autour du bord, et encre au-delà de la feuille pour celle attendue. Essai : `stroke_effects_continue_across_the_edge`.
+
+| Effet | Pixels différents | Encre au-delà (avant) | Encre au-delà (après, et attendue) |
+|---|---|---|---|
+| Écriture | 318 puis 0 | 0 | 706 |
+| Poussière | 284 puis 0 | 0 | 2 659 |
+| Dégradé du trait | 316 puis 0 | 2 967 | 2 967 |
+| Ondulation du trait | 259 puis 0 | 2 967 | 3 195 |
+| Trait sec | 233 puis 0 | 2 967 | 2 855 |
+| Respiration | 202 puis 0 | 2 967 | 4 461 |
+| Pointillés | 152 puis 0 | 2 967 | 1 782 |
+| Crayonné | 126 puis 0 | 2 967 | 3 729 |
+
+Écriture : à 70 %, 0 pixel au-delà de la feuille avant, 1 264 après ; elle arrive à son tour, à 100 % le trait est entier.
+
+### Le grand débord
+
+Un trait d'une feuille 4K, de son coin jusqu'à une feuille plus loin à droite et en bas : son rectangle dépassait 33 millions de pixels. Temps sur tout le dessin, puis pic du processus depuis son début (le pic vient surtout du calcul de la feuille elle-même).
+
+| Effet | Avant | Après |
+|---|---|---|
+| Flou | 60 ms, 119 Mo, **pas d'effet hors de la feuille** | 54 ms, 115 Mo, effet appliqué |
+| Lueur | 58 ms, 120 Mo, **pas d'effet** | 57 ms, 116 Mo, effet appliqué |
+| Ombre portée | 81 ms, 157 Mo, **pas d'effet** | 75 ms, 148 Mo, effet appliqué |
+| Tremblement | 17 ms, 22 Mo | 25 ms, 22 Mo |
+| Onde | 52 ms, **pas d'effet** | 90 ms, effet appliqué |
+| Secousse | 45 ms, **pas d'effet** | 52 ms, effet appliqué |
+
+Le résultat pèse 4 Mo dans le cache, avant comme après. Un point perdu à 8 000, 10 800 ou 30 000 pixels : flou 40 ms au plus, pic à 13 Mo (l'ancienne méthode sans borne : 363 ms et 507 Mo de plus à 10 800 pixels). Ces chiffres viennent d'un seul passage, sur une machine où d'autres compilations tournaient ; ils donnent un ordre de grandeur. La longue séance d'Anthony (2,6 à 3 Go de trop) n'a pas été rejouée : ce chantier n'ajoute pas de mémoire tenue, il n'en retire pas non plus.
+
+### La colonne plus claire sur la carte graphique
+
+Le shader du tremblement lit maintenant la **bordure d'encre** autour de la feuille (`gpufx::Bordure`) : une petite texture de `m` pixels de large (`m` : intensité arrondie, plus 2), soit moins de 200 Ko pour une feuille 4K à l'intensité 0,5, créée seulement s'il y a de l'encre là, refaite seulement quand le dessin change. Ces calques restent sur la carte. Encre lue sur la colonne du bord :
+
+| Intensité | Avant | Après | Calcul de fond, pour référence |
+|---|---|---|---|
+| 0,5 | 8 591 (4,5 % de moins que ses voisines) | 8 991 | 8 991 |
+| 3 | 6 268 (24 % de moins) | 8 196 | 8 196 |
+
+Un dessin sans encre autour de la feuille ne lit pas cette texture : le shader fait ce qu'il faisait.
+
+**Les autres piles sur la carte** : un dessin qui passe le bord, avec un effet qui lit ses voisins (flou, onde, secousse…) ou un tremblement qui n'est pas en tête de pile, reste dessiné par la carte tant que le calcul de fond n'a pas répondu : l'effet suit le trait sans délai. Le résultat du calcul de fond (`fx::pile_juste_au_bord`, `fx::demander_si_debord`), qui voit des deux côtés, prend ensuite sa place. Seule la bande près du bord change alors. Pendant un geste ou la lecture, ce calcul n'est pas demandé pour la feuille. Les réglages de couleur, le vignettage, le flash et les autres effets qui ne lisent que leur propre pixel restent sur la carte.
+
+**Seule l'encre compte** : une tuile hors de la feuille vidée à la gomme n'est plus un débord (`Raster::deborde_vite`), le calque revient entièrement sur la carte. La réponse est gardée pour la version du dessin (`fx::cel_deborde`).
+
+| Mesure | Avant la relecture | Après |
+|---|---|---|
+| Du trait à son effet, flou, sans débord | 10 ms, 1 image | 3 à 9 ms, 1 image |
+| Du trait à son effet, flou, calque qui déborde | 101 ms, 8 images | 3 à 13 ms, 1 image |
+| Savoir si dix calques à effets débordent, par image, en 4K | 5 027 µs | 10 µs |
+
+Les bordures d'encre comptent dans le poids du cache de la carte, 32 au plus, et sont libérées quand l'onglet s'en va. Une entrée sans encre ne se refait pas à chaque image.
+
+### Le fil de l'interface
+
+`Instantane::of` et la composition d'une tuile du hors-feuille (`Monde::compose`) ne calculent plus aucun effet : le fil de fond calcule, et le hors-feuille se refait quand le résultat arrive (`attend_les_effets`). Gros dessin (une feuille 4K d'encre et une feuille de plus, flou) : **158,5 ms puis 0,2 ms** sur le fil de l'interface.
+
+**Lecture sans clignotement** : une autre image dont les effets ne sont pas prêts ne remplace pas celle qui est à l'écran. Le hors-feuille garde l'image d'avant jusqu'à leur arrivée (`Monde::reunir`). Sur 120 images d'écran d'un dessin de 8 images, sans cette règle : 7 à 33 images nues selon le passage ; avec : 0. Le hors-feuille peut donc être en retard sur la feuille pendant la lecture.
+
+**Réserve trop petite** : avec six calques de plusieurs mégaoctets et une réserve d'un mégaoctet, le calcul tournait sans fin (897 calculs en 25 s, jamais de repos). Maintenant : 14 calculs, repos en 0,2 s. `Monde` tient les résultats reçus jusqu'à ce qu'ils y soient tous, et un même résultat ne se calcule pas plus de 3 fois en 10 s (`fx::recours_note_calcul`). Au-delà, la carte ou le dessin sans effet reste à l'écran, jusqu'à ce qu'une image redemande le calcul après ces 10 s.
+
+Ce qu'un effet pose autour de son encre hors de la feuille (le halo d'un flou, le déplacement d'une secousse) se compose aussi à l'écran (`render::plan_bounds`, `plan_world_tiles`), jusqu'à la portée entière de l'effet.
+
+### L'export
+
+Le film et la planche calculent l'effet complet, jamais le repli de l'écran. Film, flou de 14 pixels, à 14 pixels du trait au-delà de la feuille : 974 points d'encre sur 974 (0 sur 974 sans flou). Planche, à côté du trait, dans sa dernière moitié : 215 sur 244.
+
+**Plusieurs fils d'export** : les zones en cours sont limitées à 8 pour tout le processus (`fxmonde::sans_fils`). Huit fils, flou de 100 sur un dessin dense : pic de 354 Mo avant, 360 Mo après. Sur ce dessin, le pic vient donc d'ailleurs que des zones : la limite n'a rien gagné de mesurable, elle protège seulement d'un cas pire.
+
+**Aberration** : au-delà de la diagonale de la feuille, l'écart des couleurs cesse de grandir, il reste à deux fois la force au plus. La feuille ne change pas (empreintes). Point à 30 000 pixels, force 60, sur une petite feuille : 3 376 ms avant, 3 à 81 ms après.
+
+### Limites
+
+- **Calque d'ajustement** : il reste à la feuille, car il travaille sur l'image composée, qui n'existe que là. Le trait passe donc de « ajusté » à « non ajusté » à son bord. Le continuer demanderait de composer tout le hors-feuille calque par calque à chaque image : non fait.
+- **Flash ou impact suivi d'un flou**, sur un dessin qui dépasse : le fond rempli de la feuille déborde de la portée du flou au-delà d'elle. Cas rare, non corrigé.
+- **Plume** (effet du trait) : passe par le même chemin, mais n'a pas été mesurée (elle a besoin d'un pinceau enregistré).
+- **Aperçu réduit** : la feuille en aperçu pendant la lecture ou le défilement de loin reste sans ce qui lit au-delà d'elle ; la pleine résolution reprend au repos.
+- **Le calque qu'on édite** se montre sans ses effets du trait (règle d'avant) : pour les voir au bord, sélectionne un autre calque.
+- **Tremblement, un niveau d'arrondi** : comparé à une feuille plus grande, 1 à 2 pixels sur plus de 20 000 s'écartent d'un niveau sur 255 hors de la feuille. Invisible, cause non trouvée ; la couture elle-même ne s'écarte pas.
+- **Bande près du bord** : pendant un geste, ou le temps que le calcul de fond réponde, la carte ne lit pas ce qui arrive de l'autre côté du bord pour un flou ou une onde. La cassure peut s'y voir un instant, puis disparaît au repos.
+
+### À vérifier à l'écran
+
+1. Un plan avec de longs traits qui passent le bord de la feuille. Pose Onde, puis Secousse, Tourbillon, Pincement, Ondulation, Vignettage, Aberration : sélectionne un autre calque, puis regarde le trait à la verticale où la feuille finit. Il ne doit ni sauter ni changer de couleur.
+2. Même chose avec Pointillés, Crayonné, Respiration, Ondulation du trait.
+3. Écriture à 70 %, puis à 100 % : le trait s'écrit jusqu'au bout, au-delà de la feuille aussi. Poussière : les grains partent des deux côtés.
+4. Mosaïque en grande taille : les carrés se suivent sans décalage à travers le bord.
+5. Un trait d'une feuille plus loin à droite et en bas, avec Flou ou Lueur : l'effet s'y voit, et le logiciel reste fluide.
+6. Ton tremblement à 0,5 et 3, sans autre effet, en zoomant fort sur le bord : plus de colonne plus claire.
+7. Tire le curseur d'un flou sur un calque qui dépasse : l'interface ne doit pas accrocher ; l'effet hors de la feuille arrive juste après. Dis-moi si ce délai te gêne. Dessine sur ce calque : le flou de la feuille doit suivre le trait sans attendre.
+8. Gomme tout ce qui dépasse, puis dessine : même confort que sur un calque qui n'a jamais débordé.
+9. Lis un plan animé dont les dessins dépassent, avec un flou : hors de la feuille, pas de clignotement entre le trait nu et le trait flou. Dis-moi si le retard sur la feuille se voit.
+10. Dessine, enregistre, rouvre, exporte (film, images, planche) : même trait, effet complet.
+
+## 122. Le trait qui traverse une case qui ne pouvait pas le recevoir (2026-11-07, branche `traits-caches`)
+
+Suite des parties 111 et 118 : la part d'un trait tombée sur une case dont la caméra diffère, ou dont le calque est verrouillé, disparaissait au lever. Fichiers : `horschamp.rs` (`Pose`, `case_recoit`, `Refus`, `DESSUS`, `reechantillonner`, `trait_lisse`, `horschamp_prevenir`), `annotations.rs` (`Trace::dessus`), `boardui.rs`, `planche.rs`, `planannuleui.rs` (`panneau_film_vide`), `projetui.rs`. Essais : `traits_caches_tests.rs`. **Le format de projet ne change pas** (48) : `dessus` est un champ de plus dans `annotations.json`, absent la plupart du temps ; une version d'avant l'ignore et ne perd rien.
+
+### Ce qui se passait : rien de perdu, tout caché
+
+Les parts sans case qui les reçoive allaient bien sur la planche (calque « Hors cadres », enregistré), mais ce calque se peint **sous** les images : la part disparaissait au lever sous l'image de la case. Seuls cas différents : une case **d'origine** à roulis, bascule ou panoramique, où rien n'était réparti (toute la part restait dans sa propre feuille, invisible au-delà de sa marge) ; un calque **masqué**, qui recevait la part sans la montrer.
+
+### Le comportement retenu, variante par variante
+
+Le plus long trou sur le trait, en pixels, avant puis après la correction, en vectoriel comme en bitmap (mêmes valeurs à la réouverture). Partir **de** la case concernée donne le même résultat, sauf où c'est noté.
+
+| Variante | Avant, au repos | Avant, à l'export | Après, au repos | Après, à l'export | Ce qui est retenu |
+|---|---|---|---|---|---|
+| Un autre zoom (1,6 et 0,7) | 141 | 266 | 0 | 1 | **Reçoit** : la part est dans le plan, épaisseur à son échelle |
+| Roulis 17° | 141 ; 245 parti de la case | 266 ; 471 | 0 | 1 | **Reçoit** |
+| Bascule 11° | 141 ; 245 parti de la case | 266 ; 471 | 0 | 1 | **Reçoit**, déformée par la perspective, comme tout ce que voit cette caméra |
+| Panoramique 11° | 141 ; 245 parti de la case | 266 ; 471 | 0 | 1 | **Reçoit** |
+| Cadres A et B, même zoom | 3 | 3 | 3 | 3 | Recevait déjà, inchangé |
+| Cadres A et B, autre zoom | 161 | 301 | 2 | 3 | **Reçoit** |
+| Cadres A et B tournés | 25 ; 2 parti de la case | 78 ; 73 | 2 | 2 | Recevait déjà. L'export ne montre plus l'image de A tournée dans la case. Mesure d'après : un trait de 28, à une hauteur où les filets des cadres le croisent de face (un trait fin, là où ils le croisent presque à plat : 21 pixels, filet et halo) |
+| Calque verrouillé | 141 | 266 | 0 | 1 | **Refusé, visible** : rien n'est écrit, la part reste sur la planche, par-dessus la case, hors du plan (choix d'Anthony, confirmé). Le message le dit |
+| Calque masqué | 169 | 323 | 0 | 1 | **Refusé, visible** (avant : écrite dans le calque masqué, sans qu'on la voie) |
+| Pas de calque de cette sorte | 141 | 266 | 0 | 1 | **Refusé, visible** |
+| Calque transformé | 141 | 266 | 0 | 1 | **Refusé, visible** |
+| Plan écarté | 0 | sans objet | 0 | absente de l'export | **Refusé, visible**, et elle reste visible si le plan est repris |
+| Film partagé, plan tenu par un autre | | | | | **Refusé, visible** : plus d'écriture dans un plan qu'on ne tient pas, ni dans un plan libre qu'on n'a pas pris (essai sur les données, pas de mesure en pixels) |
+| Caméra qui cadre très large, bitmap (plus de 1,5 million de lectures au lever) | 169 (part perdue) | | 0 | | **Refusé, visible** : la part reste sur la planche, le message le dit |
+
+Partout : une seule étape d'annulation, aucun rejeu sur le fil de l'interface (`replay_count` à zéro, du geste au repos), ce qui était déjà dessiné dans la case ne bouge pas d'un pixel, annuler rend les données d'avant. L'image du film montre la part d'un bord à l'autre de la case, à travers la caméra (essai).
+
+### Comment
+
+- **`Pose`** : comment un dessin se pose sur la planche, quelle que soit la caméra, par une homographie et son inverse. Chaque point d'un trait vectoriel va à la même place de la planche, dans le dessin de la case qui le reçoit. La taille du pinceau suit son échelle, comme quand on transforme un trait. En perspective, le rejeu reprend l'appui d'après le rayon de chaque point.
+- **Bitmap** : les pixels du trait sont rééchantillonnés dans le dessin de la case (échantillonnage inverse, seul le trait est lu, jamais son dessin à elle). Même échelle et caméras droites : le décalage au pixel d'avant, rien ne change. **Le dessin d'origine ne perd ses pixels qu'une fois sûr qu'ils ont une place ailleurs** : tout se calcule d'abord sans rien écrire. Si une case ne peut pas prendre sa part dans le budget du lever (`LECTURES_MAX`), elle passe aux refus et la part reste sur la planche.
+- **Parti d'une vue en perspective** : hors de la case, le trait du geste garde son épaisseur, alors que la feuille s'étire. Il la garde au lever (`Suivi::a`). En bitmap, ses pixels seraient trop minces : la part de la case voisine est un **trait lisse** (sans le moteur, donc sans le grain du pinceau).
+- **`Trace::dessus`** : la part refusée est attachée à sa case et peinte **après** les images, à l'écran comme à l'export, pleine (l'opacité « hors champ » ne la concerne pas). L'image d'une case refusée passe aussi avant la marge de sa voisine, comme toute image (partie 111).
+- **Le message** : la ligne d'état le dit dès que le trait entre dans la case (`horschamp_prevenir`, une fois par case même si le trait y revient), et encore au lever. Par exemple : « Plan 2 : le calque « Dessin » est verrouillé, ce bout du trait reste sur la planche, par-dessus la case, hors du plan ». Si le trait est annulé en plein geste (Ctrl+Z), le message part. Échap, lui, n'annule pas un trait : il le pose tel quel, le message reste vrai.
+- **La planche pleine** (`MAX_TRACES`, 5000 traits) : on vérifie la place avant de toucher au dessin. Sans place, les parts restent dans le dessin du plan d'origine, hors de sa case, et le message le dit : « La planche a atteint sa limite de 5000 traits… ».
+- **Le calque « Hors cadres » caché** : une part neuve le remontre, sinon elle disparaîtrait au lever (le message le dit, annuler le recache). Une part cachée ne se gomme pas : la gomme ne trouve que ce qu'on voit.
+- **Retirer une part refusée** : Ctrl+Z tout de suite ; plus tard, la **gomme** posée dessus. **Ce geste n'efface que les parts posées par-dessus les cases qu'il touche** (chacune entière), ni le reste du trait sur le papier, ni les notes, ni le dessin du plan ; le geste suivant, au même endroit, efface le dessin du plan. Déverrouiller un calque ne fait pas entrer dans le plan une part déjà posée : retrace-la.
+
+### Le coût du lever
+
+Bitmap, trait à travers trois cases (pire image, sur le fil de l'interface, machine chargée par un autre chantier ; « rapport » : pixels du dessin d'arrivée par pixel du dessin d'origine).
+
+| Pinceau, rapport | Avant | Après |
+|---|---|---|
+| 14, rapport 2 | 89 ms | 22 ms |
+| 14, rapport 4 | 508 ms | 95 ms |
+| 14, rapport 8 | 2 368 ms | 6 ms, part sur la planche |
+| 14, rapport 16 | 13 543 ms | 6 ms, part sur la planche |
+| 14, rapport 25 | 62 057 ms | 7 ms, part sur la planche |
+| 14, rapport 33 et plus | 8 ms, **part perdue** | 7 ms, part sur la planche |
+| 60, rapport 2 | 325 ms | 68 ms |
+| 60, rapport 4 | 2 347 ms | 21 ms, part sur la planche |
+| 60, rapport 8 | 18 286 ms | 21 ms, part sur la planche |
+
+Un trait vectoriel n'a pas ce coût : ses points seuls changent, le rendu se fait en fond.
+
+### Tous les plans écartés
+
+Le panneau Calques, les Réglages, les Effets et la Fiche disent « Tous les plans sont écartés. », comme la timeline. Ce qui écrirait dans le plan support est refusé (`content_refuses`, donc aussi `layer_editable`), avec un seul message, juste pour un dessin comme pour un calque : « Tous les plans sont écartés, il n'y a aucun plan où faire cela : reprends un plan dans les Vignettes, un clic sur son numéro ». Ce qui ne le touche pas passe par `contenu_verrouille` et reste possible : la résolution du projet, les personnages. Les notes de case aussi, mais sans objet ici : il n'y a plus de case dans le film. Un trait dans une case pâle crée toujours un vrai plan.
+
+### L'export des plans à cadres
+
+Un plan dont le cadre A n'est pas exactement la case (tourné, réduit) montre désormais à l'export la feuille, comme l'écran, et non l'image de A tournée dans la case. Cela change l'export de ces plans **même sans trait qui traverse** : voulu, l'export montre ce que montre l'écran. Un plan dont A est la case passe par le même code qu'avant. Mesure, encre de couleur des cases, à 3 pixels près : 100 % d'accord dans les deux sens pour sans cadres, cadres droits, autre zoom, cadres tournés, et sur une copie de `TEST PELURE_effets`.
+
+### Ce qui reste
+
+- **Bitmap vers un autre zoom ou une autre caméra** : rééchantillonné, le trait est un peu plus doux que s'il avait été tracé là. **Bitmap parti d'une caméra en perspective** : trait lisse dans les cases voisines, sans le grain du pinceau.
+- **Dans la tuile d'un plan à cadres tournés**, un trait d'un pixel est plus pâle (à cheval sur deux rangées de pixels), le trait d'avant compris. Remarqué, non corrigé : l'essai de cette variante trace plus épais (28), au seuil d'encre normal et au même trou permis que les autres.
+- **Dans un film partagé**, un plan libre qu'on n'a pas pris refuse aussi la part (pas de prise automatique pendant la répartition).
+- **Export sans les cadres** d'un plan à cadres tournés : la case montre encore l'image de A, tournée, donc le trait y tourne avec elle. Non corrigé.
+- **Remarqué, non touché** : en bitmap, un pixel du trait qui recouvrait du dessin hors de la case d'origine ne passe pas à la case voisine (règle d'avant, `partager_bitmap`). Les formes d'un calque bitmap ne sont toujours pas réparties, et le message pendant le geste ne vaut que pour le pinceau et le crayon (au lever pour les formes vectorielles).
+
+### À vérifier à l'écran
+
+1. Donne à un plan un zoom, puis un roulis, puis une bascule, puis un panoramique. Trace un long trait à travers sa case, puis un autre parti d'elle : au lever, rien ne saute ni ne disparaît. Ouvre le plan au Storyboard : le trait y est.
+2. Pareil en bitmap : le trait te paraît-il assez net dans la case à l'autre zoom ?
+3. Verrouille le calque d'un plan et trace à travers sa case : le trait reste, la ligne d'état dit pourquoi dès qu'il entre dans la case. Rien dans le plan au Storyboard. Pose la gomme sur le morceau : il part, et lui seul.
+4. Calque masqué, plan sans calque de la bonne sorte, calque transformé : pareil.
+5. Écarte un plan, trace à travers sa case, reprends le plan : le trait reste visible par-dessus. À l'export, il n'y est pas tant que le plan est écarté.
+6. Écarte tous les plans : Calques, Réglages, Effets, Fiche disent « Tous les plans sont écartés. » Essaie de dessiner au Storyboard et sur les cases barrées : rien. Change la résolution du projet : ça marche. Trace dans une case pâle : un plan naît.
+7. Ctrl+Z défait tout le trait d'un coup ; enregistre, rouvre : même image. Export PNG et PDF de la planche.
+8. Le stylet réel n'a pas été essayé.
+
+## 123. Durée d'un plan : Ctrl fait suivre les clés ; les clés de dessin alternent de couleur (2026-11-07, branche `duree-cles`)
+
+Demande d'Anthony : dans le Montage et la timeline, la poignée latérale d'un plan change sa durée. **Sans touche**, seule la durée change et les clés restent où elles sont. **Ctrl tenue pendant le geste**, toutes les clés se décalent du même nombre d'images que la poignée, le rythme interne ne change pas (pas de mise à l'échelle). Et, sur une piste de calque, chaque clé de dessin alterne entre la couleur du calque et une teinte un peu plus claire pour qu'on voie où elle commence et s'arrête. Fichiers : `rognage.rs` (`Document::slide_plan_end`, clés de position et d'opacité dans la réserve), `rognageui.rs` (bords du montage), `handles.rs` (poignée de fin du plan, bulles), `cles_alternees.rs` (couleurs), `timeline.rs`, `montagerows.rs`, `storyboard.rs`. Essais : `duree_cles_tests.rs`. **Le format de projet ne change pas (49 depuis la trajectoire).**
+
+### Ce que faisait le logiciel avant
+
+Sans touche, le bord droit d'un plan (la prise au bout de la règle de la timeline, le bord droit du bloc dans le Montage) changeait déjà seule la durée : les clés restaient à leur image, un plan raccourci rangeait ce qui sortait dans la **réserve de la fin** (rien de détruit), un plan rallongé la reprenait puis tenait le dernier dessin. Le bord gauche (Montage seulement) faisait l'inverse, sur le début : les clés restaient attachées à leur dessin, donc elles glissaient par rapport au début du plan. **Ce comportement sans touche n'a pas changé.**
+
+### La règle : Ctrl, c'est « les clés suivent la poignée que je tiens »
+
+Une seule phrase pour les deux bords : sans Ctrl, les clés gardent leur distance au bord qu'on ne touche pas ; avec Ctrl, elles gardent leur distance à la poignée tenue.
+
+| Geste | Sans touche | Ctrl tenue |
+|---|---|---|
+| Bord droit, plus long de *d* images | Les clés ne bougent, le dernier dessin est tenu | **Toutes les clés avancent de *d*** ; les *d* premières images sont vides (la première clé de dessin glisse vraiment : plan de 4 s, clés à 0, 1, 2, 3 s, bord tiré jusqu'à 8 s : clés à 4, 5, 6, 7 s) |
+| Bord droit, plus court de *d* | Les clés après la nouvelle fin partent en réserve (la fin) | **Toutes les clés reculent de *d*** ; ce qui passerait avant la première image part dans la **réserve du début** |
+| Bord gauche, plus court de *c* | Le début part en réserve, les clés reculent de *c* (comme avant) | Les clés **ne bougent pas** depuis le début ; c'est la fin qui perd *c* images (réserve de la fin) |
+| Bord gauche, plus long | Le début revient de la réserve puis le premier dessin est tenu | Les clés ne bougent pas ; la fin se prolonge |
+
+Au fond, Ctrl change **de quel côté** du plan la durée est prise : au début (bord droit) ou à la fin (bord gauche). La durée totale est la même dans les deux cas, donc les plans suivants se décalent pareil.
+
+### Ce qui se décale avec Ctrl (bord droit)
+
+Tout ce qui tient aux images du plan : clés de dessin de **tous** les calques (y compris le décor et les calques de couleur), clés de caméra avec leurs poignées de lissage (adoucis, « doux » : ils sont portés par chaque clé), clés d'effets, clés de position et d'opacité des calques, rôles, marques d'image, signets, points d'entrée et de sortie, notes dessinées, commentaires. **Le film rend la même chose** : l'image *f* du plan d'avant s'affiche à l'image *f* + *d*, au pixel (essai).
+
+### Les cas limites, un par un
+
+- **Raccourcir avec Ctrl** : aucune clé n'est perdue ni aucun dessin supprimé. Ce qui sort par le début (dessins, clés de caméra, d'effet, de position, d'opacité, rôles, marques…) va dans la réserve du début du plan ; une clé est posée au nouveau bord (la courbe de la caméra, des effets, de la position et de l'opacité continue sans saut). Un plan garde au moins une image.
+- **Les clés de position et d'opacité étaient oubliées par la réserve du début** (un défaut d'avant : rogner le début d'un plan ne les décalait pas). Elles y sont maintenant, avec leur clé de bord, et s'écrivent dans `rognages.json` (champs en plus, absents quand il n'y a rien : un projet d'avant garde son fichier, une version d'avant ignore les champs). Par la fin, ces clés restent sur le calque au-delà de la dernière image, comme avant.
+- **Anciens projets (marqueur par réserve).** Un ancien `rognages.json` ne porte ni les clés de position et d'opacité sorties ni de marqueur : l'ancien rognage ne décalait pas ces clés vivantes. Chaque partie de réserve du début porte maintenant un marqueur `cles_v2` (écrit seulement quand il est vrai, optionnel : le format ne change pas). **Sans marqueur, ancienne règle : à la restitution (allonger le début, Ctrl sur la fin, « Rétablir le contenu rogné ») les clés de position et d'opacité ne sont pas décalées** ; avec marqueur, elles avancent de la longueur de la partie. Le marqueur survit à enregistrer / rouvrir ; un ancien projet rouvert puis réenregistré reste sans marqueur (donc juste) ; un nouveau rognage sur une réserve ancienne la restitue d'abord sous l'ancienne règle, puis range le tout sous la nouvelle (marqueur écrit). Le défaut était réel (essai fabriqué avec un vrai JSON sans les champs : clés à 18 et 42 au lieu de 6 et 30 avant la correction).
+- **La trajectoire d'un calque (partie 119) suit le décalage.** Son départ et sa fin (`Layer::trajectoire`, en images du plan) étaient oubliés : après un Ctrl, les clés et les dessins étaient décalés mais le chemin restait à ses anciennes images, et son calcul suivant aurait posé clés et dessins de jalons au mauvais endroit (essai rouge sur le Banc : départ 6, fin 18 restaient après un Ctrl de +12 images). Maintenant : rallonger le début (Ctrl sur la fin, bord gauche sans touche, rétablir) fait avancer `depart` et `fin` du même nombre d'images ; raccourcir le début les fait reculer. Une coupe qui passe le départ le ramène à 0 (la fin à son tour, ou aucune fin si elle passe aussi : le chemin court alors jusqu'à la fin du plan) **sans perdre aucune clé ni aucun dessin** (ils sont dans la réserve). Le départ et la fin d'avant la coupe sont rangés dans la réserve (avec leur valeur d'après) : si personne n'a touché à la trajectoire entre-temps, la restitution les rend **exacts** ; sinon ils avancent de la longueur rendue, comme les clés. Une réserve ancienne (sans marqueur `cles_v2`) ne décale pas la trajectoire, comme elle ne décale pas les clés. Deux champs optionnels de plus dans `rognages.json` (`trajectoire_avant`, `trajectoire_apres`, écrits seulement avec une trajectoire) : le format de projet reste 49. Ctrl sur le bord gauche ou raccourcir par la fin ne bouge pas la trajectoire (les images ne bougent pas). Non traité, non touché : insérer des images (`Layer::insert` hors rognage) ne décale pas la trajectoire.
+- **Plusieurs allers-retours Ctrl avec une réserve du début** (clé de bord de caméra, d'effet, de position et d'opacité) : aucune clé ne s'accumule, caméra et lissage identiques (essai, 6 tours de 4 allers-retours). Le « résidu » signalé au premier rapport n'est pas réel. Rallonger au-delà de la réserve puis raccourcir range des images vides dans la réserve (elle peut revenir plus longue), mais sans clé en plus.
+- **Écran pendant le geste.** Les caches du hors-feuille (`WorldKey`), de la carte graphique (`ItemKey`) et des vignettes (`Key::Plan`) sont tous calculés d'après le plan à composer : un dessin qui change d'image y change l'exposition, sans qu'aucun pixel n'ait changé. Essai sur l'image composée par le processeur pendant le geste, plus long comme plus court : l'image 0 montre le bon dessin avant le lâcher. Les caches de la carte graphique, du hors-feuille et des vignettes ne sont pas essayés pendant le geste : lus dans le code, ils se règlent sur le plan (pas de correction nécessaire).
+- **Rallonger avec Ctrl un plan qui a une réserve du début** : ce qui avait été rogné au début revient d'abord (c'est ce que le bord gauche ferait), puis les nouvelles images sont vides. À valider (voir plus bas).
+- **Revenir à l'origine pendant le geste** : chaque valeur repart du plan d'avant le geste, donc la poignée revenue à son origine rend l'état de départ **exactement**, sans étape d'annulation. De même, presser ou lâcher Ctrl pendant le geste change le résultat à l'image d'écran suivante.
+- **Annuler / rétablir** : une seule étape par geste, nommée « Allonger le plan, clés décalées » ou « Raccourcir le plan, clés décalées » (sans Ctrl : « Allonger la fin », « Raccourcir la fin », « Raccourcir le début »…).
+- **Le son** n'est pas lié au plan : il reste en place, et la ligne d'état dit, comme avant, « Les plans suivants se décalent de ±n images par rapport au son, qui reste en place ».
+- **Refus** : les mêmes que les gestes de durée d'avant, parce que les gestes commencent par les mêmes contrôles : storyboard verrouillé (le geste est refusé, la phrase le dit), film partagé (un plan que l'on ne tient pas refuse la prise du bord), plans à versions de séquence (inchangé). Rien de plus, rien de moins.
+- **Roll (Alt) et glisser le contenu (Alt)** ne sont pas touchés : Ctrl n'y change rien. Ctrl n'était pas pris sur ces poignées (le bord n'avait que Alt) ; Ctrl + clic dans les pistes de calques garde son sens ailleurs, la poignée de plan n'est pas dans les pistes.
+
+### Se découvre au geste
+
+La ligne d'état pendant le geste dit « Ctrl pendant le geste : les clés suivent la poignée » (ou, Ctrl tenue : « les clés suivent la poignée, le rythme ne change pas »). La poignée n'avait pas de bulle : elle en a une (nom, explication, Ctrl) dans la timeline (prise au bout de la règle) et dans le Montage (bords des plans, début et fin). Comme les autres bulles, elle prend le temps de la bulle.
+
+### Des clés de dessin qu'on distingue
+
+Chaque segment de dessin d'une piste de calque alterne : couleur du calque (rang pair), puis une teinte plus claire (rang impair), dans la timeline comme dans le Montage (piste dépliée et repliée). **Le rang est celui de la clé depuis le début du plan** (les dessins seulement : une plage vide n'a pas de rang), donc l'alternance ne change ni au défilement ni au zoom. Elle change quand on ajoute ou retire une clé avant : c'est le rang.
+
+L'éclaircissement se mesure en luminosité perceptuelle (OKLab) : **+0,075** de luminosité pour toutes les couleurs, pas du blanc ajouté, pour qu'un jade sombre et un orange vif gagnent le même écart. Une couleur déjà très claire (au-dessus de 0,86) ne peut pas s'éclaircir : elle s'assombrit du même écart. L'essai passe sur les six thèmes, avec les couleurs de calque de chacun et le noir, le blanc, un vert très sombre, un blanc cassé. Le calque sélectionné (cadre), la clé choisie (contour), la clé survolée et les poignées se peignent par-dessus et ne changent pas. Un calque masqué garde son atténuation.
+
+### Mesures et coût
+
+Tout le travail du geste est du réarrangement de listes de clés et de dessins (références, jamais de pixels) : ni rejeu de trait, ni envoi de dessin à la carte graphique pendant le geste, `invalidate_params` seulement (comme les gestes de durée d'avant). Les couleurs se calculent par segment visible, une fois par image d'écran (quelques cubes et racines cubiques par segment). L'essai de la timeline et du Montage tient à la fois sur les vrais gestes du pointeur du `Banc` (Ctrl comprise).
+
+### Liste à vérifier à l'écran
+
+1. Montage, plan de 4 s avec des clés à 0, 1, 2, 3 s : tirer le bord droit jusqu'à 8 s **sans touche** : les clés restent à 0, 1, 2, 3 s.
+2. Même geste en **tenant Ctrl** : les clés sont à 4, 5, 6, 7 s ; les 4 premières secondes sont vides ; la ligne d'état dit que les clés suivent la poignée.
+3. Pendant le geste, lâcher puis reprendre Ctrl : les clés vont et viennent à l'image d'écran suivante. Ramener la poignée à son point de départ : tout est comme avant, et rien n'est enregistré dans l'historique.
+4. Avec Ctrl, raccourcir : les premières clés disparaissent du plan (réserve du début, « N images cachées au début » dans la ligne d'état) ; rallonger de nouveau avec Ctrl les ramène.
+5. Ctrl+Z après le geste : une seule étape ; le plan est exactement celui d'avant (dessins, caméra, effets, opacité, position). Ctrl+Y : de nouveau l'après.
+6. Les clés de position et d'opacité (losanges vert et gris clair) suivent aussi ; la courbe de la caméra ne fait pas de saut au bord.
+7. Bord gauche, sans touche : comme avant. Avec Ctrl : les clés ne bougent pas, la fin du plan change.
+8. Timeline : la prise au bout de la règle, mêmes gestes ; la bulle de la prise mentionne Ctrl.
+9. Un plan suivant et ses clés ne bougent pas (sauf d'être décalés dans le film) ; le son ne bouge pas, la ligne d'état prévient.
+10. Storyboard verrouillé : les deux gestes sont refusés.
+11. Enregistrer, fermer, rouvrir un plan raccourci avec Ctrl : le rallonger avec Ctrl rend les clés où elles étaient.
+12. Pistes de calques jade (Atelier, Papier), bleu, rose, sombres et claires, sur les trois thèmes : chaque clé se distingue de sa voisine sans crier ; défiler la timeline ne change pas l'alternance ; le calque sélectionné, une clé choisie et la poignée du bord restent lisibles.
+
+### Points à faire valider par Anthony
+
+- Le **bord gauche** : j'ai choisi que Ctrl y fasse « les clés gardent leur place depuis le début, la fin change » (la règle « les clés suivent la poignée tenue » appliquée à l'autre bord). Le comportement sans touche du bord gauche (inchangé) fait glisser les clés avec leur dessin.
+- Rallonger avec Ctrl un plan dont le début a été rogné : la réserve du début **revient d'abord**, puis le vide. L'autre choix serait du vide tout de suite (la réserve resterait cachée) ; il garde mieux le sens de « les clés suivent la poignée » mais ne rend plus le rognage d'un geste.
+- Les images ajoutées devant par Ctrl sont **vides** (comme dans l'exemple 0 à 4 s) : le calque n'y montre rien, sauf pré-comportement « maintenir ».
+- L'éclaircissement : +0,075 de luminosité (OKLab). On peut le monter ou le baisser (`PAS` dans `cles_alternees.rs`) après un coup d'œil sur son écran.

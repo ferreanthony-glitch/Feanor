@@ -12,7 +12,7 @@ const DT: f64 = 1.0 / 60.0;
 
 /// Un plan 400 × 300 de 24 images, un calque vectoriel, l'outil Trajectoire en main, à l'écran (1280 × 720). Les essais des clés
 /// de position demandent les clés d'interpolation (d'origine, ce sont les clés d'images).
-fn banc() -> Banc {
+pub(crate) fn banc() -> Banc {
     let mut doc = Document::new(400, 300, 24);
     doc.panels[0].layers = vec![Layer::new("Perso", LayerKind::Vector)];
     doc.panels[0].length = 24;
@@ -29,7 +29,7 @@ fn banc() -> Banc {
 
 /// Un trait de pinceau en L, de (60, 130) à (60, 170) puis (100, 170), à l'image 0 : le dessin du départ, dont la boîte fait 40 × 40
 /// autour de (80, 150). Rend son numéro.
-fn dessiner_le_depart(b: &mut Banc) -> u64 {
+pub(crate) fn dessiner_le_depart(b: &mut Banc) -> u64 {
     b.app.set_tool(Tool::Brush);
     b.app.color = [0, 0, 0];
     b.app.brush.size = 6.0;
@@ -77,12 +77,12 @@ fn glisser_avec(b: &mut Banc, pts: &[(f32, f32)], touches: Modifiers) {
 }
 
 /// Un chemin droit de (50, 150) à (350, 150), en six points.
-fn tracer_le_chemin(b: &mut Banc) {
+pub(crate) fn tracer_le_chemin(b: &mut Banc) {
     glisser(b, &[(50.0, 150.0), (110.0, 150.0), (170.0, 150.0), (230.0, 150.0), (290.0, 150.0), (350.0, 150.0)]);
 }
 
 /// Une marque au milieu du chemin.
-fn marquer_le_milieu(b: &mut Banc) {
+pub(crate) fn marquer_le_milieu(b: &mut Banc) {
     glisser(b, &[(200.0, 135.0), (200.0, 150.0), (200.0, 165.0)]);
 }
 

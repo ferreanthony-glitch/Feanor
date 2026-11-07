@@ -135,7 +135,7 @@ fn a_drawing_deleted_beside_shot_is_written_again_by_the_next_save() {
 }
 
 fn pomper(b: &mut Banc) {
-    for _ in 0..600 {
+    for _ in crate::perf_tests::attente() {
         if !b.app.save_en_cours() {
             return;
         }

@@ -351,19 +351,27 @@ impl EffectKind {
         )
     }
 
-    /// L'effet se calcule hors de la feuille comme dedans : ses réglages ne dépendent ni du centre ni de la taille de la feuille (`effets_hors_de_la_feuille`).
-    fn suit_la_toile(self) -> bool {
-        !matches!(
-            self,
-            EffectKind::Wave | EffectKind::Ripple | EffectKind::Twirl | EffectKind::Pinch | EffectKind::Clouds | EffectKind::Lighting | EffectKind::Gradient | EffectKind::Flash | EffectKind::Impact | EffectKind::Shake | EffectKind::Vignette | EffectKind::Aberration
-        )
-    }
-
-    /// L'effet ne touche que les tuiles dessinées : son coût ne dépend pas du rectangle qui les contient.
-    fn par_tuile(self) -> bool {
+    /// Un pixel du résultat dépend d'autres pixels du dessin que lui-même : la feuille seule ne sait pas ce qui arrive de l'autre côté de son bord.
+    pub(crate) fn lit_ses_voisins(self) -> bool {
         matches!(
             self,
-            EffectKind::Boil | EffectKind::BrightnessContrast | EffectKind::Levels | EffectKind::HueSaturation | EffectKind::BlackWhite | EffectKind::Invert | EffectKind::Posterize | EffectKind::Threshold
+            EffectKind::GaussianBlur
+                | EffectKind::MotionBlur
+                | EffectKind::Sharpen
+                | EffectKind::Mosaic
+                | EffectKind::DropShadow
+                | EffectKind::Glow
+                | EffectKind::Bloom
+                | EffectKind::Boil
+                | EffectKind::Wave
+                | EffectKind::Ripple
+                | EffectKind::Twirl
+                | EffectKind::Pinch
+                | EffectKind::Shake
+                | EffectKind::Aberration
+                | EffectKind::Outline
+                | EffectKind::Bleed
+                | EffectKind::Dry
         )
     }
 
@@ -1077,81 +1085,53 @@ pub fn apply_with(raster: &Raster, vector: Option<&crate::vector::VectorDrawing>
     if let (Some(v), 0) = (vector, level) {
         let line: Vec<FxStep> = steps.iter().filter(|s| s.kind.vector_stage()).cloned().collect();
         if !line.is_empty() {
-            cur = Some(crate::fxtrait::render(v, raster.width, raster.height, &line));
+            let mut image = crate::fxtrait::render(v, raster.width, raster.height, &line);
+            // (La feuille d'abord, au pixel près ; ce qui la dépasse ensuite, dans le monde : partie 121.)
+            crate::fxtrait::hors_de_la_feuille(&mut image, raster, v, &line);
+            cur = Some(image);
         }
     }
-    // Ce que les effets sur les pixels lisent hors de la feuille : les traits du dessin passés par les effets du trait, s'ils y ont laissé quelque chose
-    // (`fxtrait::render` pose sur la feuille ce qu'il transforme) ; sinon le dessin, sauf si un effet du trait a voulu cacher des traits.
-    let cache_des_traits = steps.iter().any(|s| matches!(s.kind, EffectKind::Write | EffectKind::Dust));
-    let source_monde: Option<Raster> = match &cur {
-        Some(c) if !c.outer.is_empty() || cache_des_traits => Some(c.clone()),
-        _ => None,
-    };
+    // Ce que les effets sur les pixels lisent hors de la feuille : les traits du dessin passés par les effets du trait, sinon le dessin.
+    let source_monde: Option<Raster> = cur.clone();
     // (Sans dessin vectoriel, les effets qui ne vivent que sur les traits sont laissés ; le trait sec, lui,
     // agit sur les pixels.)
     let sur_les_pixels: Vec<&FxStep> = steps.iter().filter(|s| !(s.kind.vector_stage() && (on_vector || s.kind.vector_only()))).collect();
     for s in &sur_les_pixels {
         // (Le premier effet lit le dessin lui-même : pas de copie d'avance.)
-        let next = un_effet(cur.as_ref().unwrap_or(raster), s, level, (0, 0));
+        let source = cur.as_ref().unwrap_or(raster);
+        let next = un_effet(source, s, level, Repere::de(source));
         cur = Some(next);
     }
     let mut out = cur.unwrap_or_else(|| raster.clone());
-    if level == 0 {
-        effets_hors_de_la_feuille(&mut out, source_monde.as_ref().unwrap_or(raster), &sur_les_pixels);
+    if level == 0 && !sur_les_pixels.is_empty() {
+        crate::fxmonde::effets_hors_de_la_feuille(&mut out, source_monde.as_ref().unwrap_or(raster), &sur_les_pixels);
     }
     out
 }
 
-/// Marge autour de ce qui est dessiné hors de la feuille, et bande de la feuille lue le long de son bord (en tuiles) : ce qu'un effet peut étaler ou aller lire.
-const MARGE_MONDE: i32 = 4;
-/// Au-delà de ces pixels, le dessin hors de la feuille est gardé sans les effets qui lisent tout leur rectangle (flou, lueur…) : un point perdu loin de la feuille
-/// leur coûtait 4 à 5 octets par pixel (507 Mo et 363 ms à 11 000 pixels de là). Rien n'est jamais retiré. Le tremblement et les réglages de couleur vont tuile par tuile : aucune borne.
-const MONDE_DENSE_PIXELS: usize = 1 << 25;
+/// Où se trouve une image dans le monde : la place de son pixel (0, 0), et la feuille d'après laquelle se règlent les effets (centres, pourcentages).
+/// Une image qui est la feuille : `Repere::de`, et les effets calculent ce qu'ils ont toujours calculé.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Repere {
+    pub origine: (i64, i64),
+    pub feuille: (usize, usize),
+}
 
-/// Les effets ne connaissent que la feuille (`Raster::tiles`) : **ce qui est dessiné au-delà disparaissait de l'image dérivée**, et un calque à effets
-/// (le tremblement par défaut, sur tout calque vectoriel) se voyait coupé net au bord de la feuille, au repos, partout où l'image dérivée sert : case,
-/// Storyboard, export (partie 118). La feuille reste calculée comme toujours, au pixel près ; ce qui la dépasse l'est ici, sur une image à part, faite
-/// de ce hors-feuille et de la bande de la feuille qui le touche, le tremblement gardant son champ de la feuille (le trait ne saute pas au bord). Les
-/// effets réglés par rapport à la feuille (centre, pourcentages) ne s'y appliquent pas : ce qu'ils auraient déplacé reste à sa place, tel quel.
-fn effets_hors_de_la_feuille(out: &mut Raster, base: &Raster, steps: &[&FxStep]) {
-    if !base.has_beyond() {
-        return;
+impl Repere {
+    pub(crate) fn de(image: &Raster) -> Repere {
+        Repere { origine: (0, 0), feuille: (image.width, image.height) }
     }
-    let Some((tx0, ty0, tx1, ty1)) = base.drawn_tile_range() else { return };
-    let (ox, oy) = (tx0 - MARGE_MONDE, ty0 - MARGE_MONDE);
-    let (nx, ny) = ((tx1 - tx0 + 1 + 2 * MARGE_MONDE) as usize, (ty1 - ty0 + 1 + 2 * MARGE_MONDE) as usize);
-    let (mut image, origine) = (Raster::new(nx * TILE, ny * TILE), (ox as i64 * TILE as i64, oy as i64 * TILE as i64));
-    let (cols, rows) = (base.tiles_x as i32, base.tiles_y() as i32);
-    let pres_du_bord = |tx: i32, ty: i32| tx < MARGE_MONDE || ty < MARGE_MONDE || tx >= cols - MARGE_MONDE || ty >= rows - MARGE_MONDE;
-    for id in base.drawn_ids() {
-        let (tx, ty) = base.key_of(id);
-        if !base.in_window(tx, ty) || pres_du_bord(tx, ty) {
-            image.tiles[(ty - oy) as usize * nx + (tx - ox) as usize] = base.slot(id).cloned();
-        }
-    }
-    let assez_petite = image.width.saturating_mul(image.height) <= MONDE_DENSE_PIXELS;
-    for s in steps.iter().filter(|s| s.kind.suit_la_toile() && (assez_petite || s.kind.par_tuile())) {
-        image = un_effet(&image, s, 0, origine);
-    }
-    // Le tremblement seul de la feuille ne lit pas au-delà d'elle : à son bord, le trait aurait une encoche. Les tuiles du bord viennent donc d'ici, qui
-    // voit des deux côtés, avec le même champ (le reste de la feuille lui est identique). Seulement pour un dessin qui déborde.
-    let tremble_seul = matches!(steps, [s] if s.kind == EffectKind::Boil);
-    let au_bord = |tx: i32, ty: i32| tx == 0 || ty == 0 || tx == cols - 1 || ty == rows - 1;
-    for (k, tile) in image.tiles.into_iter().enumerate() {
-        let (tx, ty) = (ox + (k % nx) as i32, oy + (k / nx) as i32);
-        if tremble_seul && out.in_window(tx, ty) && au_bord(tx, ty) {
-            out.replace_slot(out.id_of(tx, ty), tile);
-            continue;
-        }
-        let Some(tile) = tile else { continue };
-        // (Dans la feuille, le calcul de la feuille reste : seul ce qui dépasse d'une tuile de bord est pris.)
-        out.absorb_beyond(tx, ty, tile);
+
+    /// Le point du monde (`x`, `y`) est dans la feuille.
+    pub(crate) fn dedans(&self, x: i64, y: i64) -> bool {
+        x >= 0 && y >= 0 && x < self.feuille.0 as i64 && y < self.feuille.1 as i64
     }
 }
 
-/// Un effet sur les pixels de `src`. `origine` : la place dans le monde du pixel (0, 0) de `src`, quand ce n'est pas la feuille (`effets_hors_de_la_feuille`).
-fn un_effet(src: &Raster, s: &FxStep, level: u8, origine: (i64, i64)) -> Raster {
+/// Un effet sur les pixels de `src`, situé dans le monde par `rep`.
+pub(crate) fn un_effet(src: &Raster, s: &FxStep, level: u8, rep: Repere) -> Raster {
     use crate::fxfilters as f;
+    let origine = rep.origine;
     {
         let values = crate::fxproxy::scaled_values(s.kind, &s.values, level);
         let v = &values;
@@ -1166,29 +1146,29 @@ fn un_effet(src: &Raster, s: &FxStep, level: u8, origine: (i64, i64)) -> Raster 
             EffectKind::Posterize => f::posterize(src, v[0]),
             EffectKind::Threshold => f::threshold(src, v[0]),
             EffectKind::Sharpen => f::sharpen(src, v[0], v[1]),
-            EffectKind::Noise => f::noise_scaled(src, v[0], level),
-            EffectKind::Mosaic => f::mosaic(src, v[0]),
+            EffectKind::Noise => f::noise_depuis(src, v[0], level, origine),
+            EffectKind::Mosaic => f::mosaic_depuis(src, v[0], origine),
             EffectKind::DropShadow => f::drop_shadow(src, v[0], v[1], v[2], v[3]),
             EffectKind::Glow => f::glow(src, v[0], v[1]),
             EffectKind::Wave => crate::fxwarp::wave(src, v[0], v[1], v[2]),
             EffectKind::Ripple => crate::fxwarp::ripple(src, v[0], v[1], v[2], v[3]),
             EffectKind::Twirl => crate::fxwarp::twirl(src, v[0], v[1], v[2], v[3]),
             EffectKind::Pinch => crate::fxwarp::pinch(src, v[0], v[1], v[2], v[3]),
-            EffectKind::Clouds => crate::fxwarp::clouds(src, v[0], v[1], v[2]),
-            EffectKind::Lighting => crate::fxwarp::lighting(src, v[0], v[1], v[2], v[3]),
-            EffectKind::Gradient => crate::fxwarp::gradient(src, v[0], v[1]),
+            EffectKind::Clouds => crate::fxwarp::clouds(src, v[0], v[1], v[2], origine),
+            EffectKind::Lighting => crate::fxwarp::lighting(src, v[0], v[1], v[2], v[3], rep),
+            EffectKind::Gradient => crate::fxwarp::gradient(src, v[0], v[1], rep),
             EffectKind::Boil => crate::tremblement::boil_depuis(src, v, level, origine),
-            EffectKind::Flash => crate::fxcine::flash(src, v[0], [v[1], v[2], v[3]], v[4] >= 0.5),
-            EffectKind::Impact => crate::fxcine::impact(src, v),
+            EffectKind::Flash => crate::fxcine::flash(src, v[0], [v[1], v[2], v[3]], v[4] >= 0.5, rep),
+            EffectKind::Impact => crate::fxcine::impact(src, v, rep),
             EffectKind::Bloom => crate::fxcine::bloom(src, v[0], v[1], v[2]),
             EffectKind::Shake => crate::fxcine::shake(src, v[0], v[1], v[2], v[3], v[4]),
-            EffectKind::Vignette => crate::fxcine::vignette(src, v[0], v[1], v[2], v[3], v[4], v[5], v[6]),
-            EffectKind::Grain => crate::fxcine::grain(src, v[0], v[1], v[2], v.get(3).copied().unwrap_or(0.0), level),
+            EffectKind::Vignette => crate::fxcine::vignette(src, [v[0], v[1], v[2], v[3], v[4], v[5], v[6]], rep),
+            EffectKind::Grain => crate::fxcine::grain(src, v[0], v[1], v[2], v.get(3).copied().unwrap_or(0.0), level, origine),
             EffectKind::Aberration => crate::fxcine::aberration(src, v[0], v[1], v[2]),
             // Effets de matière sur les pixels (`fxmatiere.rs`).
             EffectKind::Outline => crate::fxmatiere::outline(src, v),
-            EffectKind::Bleed => crate::fxmatiere::bleed(src, v),
-            EffectKind::Dry => crate::fxmatiere::dry_pixels(src, v),
+            EffectKind::Bleed => crate::fxmatiere::bleed(src, v, origine),
+            EffectKind::Dry => crate::fxmatiere::dry_pixels(src, v, origine),
             // (Les effets du trait sont passés plus haut.)
             EffectKind::Write | EffectKind::Sketch | EffectKind::Breath | EffectKind::StrokeWave | EffectKind::Dashes | EffectKind::Dust | EffectKind::StrokeGradient | EffectKind::Nib => unreachable!("effet du trait"),
         }
@@ -1369,8 +1349,8 @@ pub(crate) fn display_with<'a>(doc: &'a Document, item: &crate::render::PlanItem
         return Some(Display { cel: Shown::Fx(cel), id, ready: true });
     }
     // (Pendant un geste ou la lecture, les vignettes attendent : le calcul de fond sert l'image
-    // affichée ; elles se refont à la fin du geste, `draft_level`.)
-    if prio < THUMB_PRIO || !draft_active() {
+    // affichée ; elles se refont à la fin du geste, `draft_level`. Un résultat que la réserve ne tient pas : pas de nouvelle demande sans fin, le repli reste.)
+    if (prio < THUMB_PRIO || !draft_active()) && !recours_abandonne(display_id(item, level), version_of(doc, item, src)) {
         let (id, version) = (display_id(item, level), version_of(doc, item, src));
         // (Un remplissage déjà demandé n'est pas redemandé — ses sources ne sont pas recopiées à chaque image d'écran —,
         // mais sa demande est renouvelée : sans cela elle vieillirait et serait abandonnée.)
@@ -1440,6 +1420,146 @@ fn griffon_version(doc: &Document, version: u64, input: &crate::griffonnage::Gri
     h.finish()
 }
 
+/// Jusqu'où (pixels) les effets de `item` peuvent porter ce qui est dessiné dans `cel`, pour un dessin qui passe le bord de la feuille : ce qu'il faut composer autour
+/// de ses tuiles hors de la feuille (`render::plan_bounds`, `render::plan_world_tiles`). 0 pour un dessin qui reste dans la feuille : il ne compose rien au-delà d'elle.
+pub(crate) fn portee_hors_feuille(item: &crate::render::PlanItem, cel: &Cel) -> f32 {
+    if item.fx.is_empty() || !cel_deborde(cel) {
+        return 0.0;
+    }
+    let Some((tx0, ty0, tx1, ty1)) = cel.raster.drawn_tile_range() else { return 0.0 };
+    let t = TILE as f32;
+    let encre = (tx0 as f32 * t, ty0 as f32 * t, (tx1 + 1) as f32 * t, (ty1 + 1) as f32 * t);
+    let (ligne, pixels): (Vec<&FxStep>, Vec<&FxStep>) = item.fx.iter().partition(|s| s.kind.vector_stage());
+    let du_trait = match &cel.vector {
+        Some(v) if !ligne.is_empty() => crate::fxtrait::portee_des_effets(v, &ligne.iter().map(|s| (*s).clone()).collect::<Vec<_>>()),
+        _ => 0.0,
+    };
+    du_trait + crate::fxmonde::portee_de_la_pile(encre, (cel.raster.width, cel.raster.height), &pixels)
+}
+
+/// La pile sur la carte graphique est-elle juste au bord d'un dessin qui passe le bord de la feuille ? La carte ne lit que la feuille : un effet qui va lire ses voisins
+/// n'y voit pas ce qui arrive de l'autre côté. Seul le tremblement a la bordure d'encre voisine (`gpufx::Bordure`), et seulement s'il est le premier : il lit alors le dessin
+/// lui-même. Sinon, la pile passe par le calcul de fond (`fxmonde.rs`), qui voit des deux côtés.
+pub(crate) fn pile_juste_au_bord(steps: &[FxStep]) -> bool {
+    let mut pixels = steps.iter().filter(|s| !s.kind.vector_stage());
+    let premier = pixels.next();
+    premier.is_none_or(|s| s.kind == EffectKind::Boil || !s.kind.lit_ses_voisins()) && pixels.all(|s| !s.kind.lit_ses_voisins())
+}
+
+/// Le dessin de `item` s'il est déjà calculé, sans rien demander (`render::plan_world_tiles` lit ses tuiles plutôt que de les deviner).
+pub(crate) fn resultat_pret(doc: &Document, item: &crate::render::PlanItem) -> Option<Arc<Cel>> {
+    let (src, _) = wanted(doc, item, 0)?;
+    lookup(doc, item, src, 0).map(|(_, c)| c)
+}
+
+thread_local! {
+    /// Ce qu'on sait de chaque dessin : (adresse de ses tuiles, version) → déborde-t-il ? (Par fil : l'interface est la seule à le demander à chaque image.)
+    static DEBORDS: std::cell::RefCell<std::collections::HashMap<(usize, u64), bool>> = std::cell::RefCell::new(Default::default());
+}
+/// Au plus ce nombre de réponses gardées (une cinquantaine de kilo-octets) : au-delà, on repart de rien.
+const DEBORDS_MAX: usize = 2048;
+
+/// Ce dessin a-t-il de l'encre au-delà de la feuille ? La réponse est gardée pour sa version : à chaque image et pour chaque calque à effets, la question ne coûte plus que de la retrouver.
+pub(crate) fn cel_deborde(cel: &Cel) -> bool {
+    let cle = (cel.raster.tiles.as_ptr() as usize, cel.version);
+    DEBORDS.with(|d| {
+        let mut d = d.borrow_mut();
+        if let Some(&oui) = d.get(&cle) {
+            return oui;
+        }
+        if d.len() >= DEBORDS_MAX {
+            d.clear();
+        }
+        let oui = cel.raster.deborde_vite();
+        d.insert(cle, oui);
+        oui
+    })
+}
+
+/// L'élément va sur la carte tant que le calcul de fond n'a pas répondu, et sa pile a besoin de ce calcul parce que le dessin déborde : le demander, hors des gestes et de la lecture
+/// (où seule la carte sert : l'effet doit suivre sans délai). Le résultat prend sa place à son arrivée.
+pub(crate) fn demander_si_debord(doc: &Document, item: &crate::render::PlanItem) {
+    if pile_juste_au_bord(&item.fx) || draft_active() {
+        return;
+    }
+    if doc.cels.get(&item.cel).is_some_and(cel_deborde) {
+        let _ = display_with(doc, item, 0, 0);
+    }
+}
+
+/// Où en sont les effets d'un élément.
+pub(crate) enum EtatDesEffets {
+    /// Rien à calculer : l'élément se montre tel quel.
+    SansObjet,
+    Prets(CelId, Arc<Cel>),
+    /// Le fil de fond y travaille, ou va s'y mettre.
+    EnCours,
+    /// La réserve est trop petite pour tenir ce résultat et les autres : on ne le redemande plus pour l'instant, le repli reste à l'écran.
+    Abandonnes,
+}
+
+/// Où en sont les effets de `item` ? S'ils ne sont pas prêts, le calcul est demandé au fil de fond (`monde.rs` attend ce moment pour se refaire).
+pub(crate) fn etat_des_effets(doc: &Document, item: &crate::render::PlanItem) -> EtatDesEffets {
+    let Some((src, _)) = wanted(doc, item, 0) else { return EtatDesEffets::SansObjet };
+    if let Some((id, cel)) = lookup(doc, item, src, 0) {
+        return EtatDesEffets::Prets(id, cel);
+    }
+    let _ = display_with(doc, item, 0, 0);
+    if recours_abandonne(display_id(item, 0), version_of(doc, item, src)) {
+        EtatDesEffets::Abandonnes
+    } else {
+        EtatDesEffets::EnCours
+    }
+}
+
+/// Les effets de `item` sont-ils calculés (ou sans objet) ? Sinon, le calcul est demandé au fil de fond.
+#[cfg(test)]
+pub(crate) fn effets_prets(doc: &Document, item: &crate::render::PlanItem) -> bool {
+    matches!(etat_des_effets(doc, item), EtatDesEffets::SansObjet | EtatDesEffets::Prets(..))
+}
+
+/// La version du résultat de `item` (`monde.rs` retient ce qu'il a reçu pour cette version).
+pub(crate) fn version_du_resultat(doc: &Document, item: &crate::render::PlanItem) -> u64 {
+    doc.cels.get(&item.cel).map_or(0, |src| version_of(doc, item, src))
+}
+
+// ---------------------------------------------------------------------- une réserve trop petite
+
+/// Combien de fois un même résultat peut être calculé dans `RECOURS_FENETRE_MS` avant qu'on cesse de le redemander. Un résultat ne se calcule qu'une fois par version, sauf si la réserve l'a
+/// lâché : sans cette borne, une image qui demande plus que la réserve calculerait sans fin, chaque résultat chassant le précédent, qui se redemande et chasse le suivant. La fenêtre passée,
+/// une image d'écran peut réessayer ; aucune ne vient d'elle-même, puisque seul un calcul fini réveille l'écran.
+const RECOURS_CALCULS: u32 = 3;
+const RECOURS_FENETRE_MS: u64 = 10_000;
+const RECOURS_MAX: usize = 4096;
+
+struct Recours {
+    version: u64,
+    calculs: u32,
+    depuis: u64,
+}
+
+static RECOURS: Mutex<BTreeMap<CelId, Recours>> = Mutex::new(BTreeMap::new());
+
+/// Le fil de fond vient de finir le résultat `id` de cette version.
+pub(crate) fn recours_note_calcul(id: CelId, version: u64) {
+    let mut m = RECOURS.lock().unwrap_or_else(|e| e.into_inner());
+    if m.len() >= RECOURS_MAX {
+        m.clear();
+    }
+    let now = now_ms();
+    let e = m.entry(id).or_insert(Recours { version, calculs: 0, depuis: now });
+    if e.version != version || now.saturating_sub(e.depuis) > RECOURS_FENETRE_MS {
+        *e = Recours { version, calculs: 0, depuis: now };
+    }
+    e.calculs += 1;
+}
+
+/// Le résultat `id` de cette version a-t-il été calculé trop souvent ces derniers temps ?
+fn recours_abandonne(id: CelId, version: u64) -> bool {
+    let now = now_ms();
+    RECOURS.lock().unwrap_or_else(|e| e.into_inner()).get(&id).is_some_and(|e| e.version == version && e.calculs >= RECOURS_CALCULS && now.saturating_sub(e.depuis) <= RECOURS_FENETRE_MS)
+}
+
 /// La version du dessin dérivé de `item` : celle de son dessin d'origine `src`, ou, pour un remplissage au griffonnage,
 /// celle qui compte aussi ses sources.
 fn version_of(doc: &Document, item: &crate::render::PlanItem, src: &Cel) -> u64 {
@@ -1488,6 +1608,7 @@ fn job_for(doc: &Document, item: &crate::render::PlanItem, src: &Cel, id: CelId,
 /// mêmes numéros et les mêmes versions que ceux du nouveau).
 pub fn forget_all() {
     crate::fxcache::forget_all();
+    RECOURS.lock().unwrap_or_else(|e| e.into_inner()).clear();
     COVERS.lock().unwrap_or_else(|e| e.into_inner()).clear();
 }
 
@@ -1504,7 +1625,7 @@ pub(crate) fn forget_all_rendre() -> crate::fxcache::Reserve {
 pub fn prefetch(doc: &Document, items: &[crate::render::PlanItem], prio: u32, level: u8) {
     for item in items {
         let Some((src, level)) = wanted(doc, item, level) else { continue };
-        if lookup(doc, item, src, level).is_some() {
+        if lookup(doc, item, src, level).is_some() || recours_abandonne(display_id(item, level), version_of(doc, item, src)) {
             continue;
         }
         crate::fxcache::request(job_for(doc, item, src, display_id(item, level), level, prio));

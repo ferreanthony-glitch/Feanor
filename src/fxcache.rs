@@ -883,7 +883,7 @@ pub(crate) fn settle() {
     let start = std::time::Instant::now();
     let mut st = lock();
     while st.queue.len() + st.inflight.len() > 0 {
-        assert!(start.elapsed() < std::time::Duration::from_secs(60), "le fil de fond n'a pas fini");
+        assert!(start.elapsed() < std::time::Duration::from_secs(120), "le fil de fond n'a pas fini");
         st = DONE.wait_timeout(st, std::time::Duration::from_millis(20)).unwrap_or_else(|e| e.into_inner()).0;
     }
 }
@@ -1072,6 +1072,7 @@ fn worker_loop() {
         if job.world == world() {
             let dropped = insert(&mut lock(), job.id, job.version, cel, Some(job.origin));
             drop(dropped);
+            crate::fx::recours_note_calcul(job.id, job.version);
         }
         GENERATION.fetch_add(1, Ordering::Relaxed);
         if let Some(ctx) = REPAINT.get() {

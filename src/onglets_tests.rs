@@ -99,7 +99,7 @@ fn enregistrer_a(b: &mut Banc, dir: &Path, nom: &str) -> PathBuf {
 
 /// Des images jusqu'à la fin de toutes les écritures, dans tous les onglets.
 fn pomper(b: &mut Banc) {
-    for _ in 0..800 {
+    for _ in crate::perf_tests::attente() {
         if !b.app.infos_onglets().iter().any(|i| i.ecriture) {
             return;
         }
@@ -1493,6 +1493,20 @@ fn three_open_tabs_at_rest_ask_for_no_repaint() {
     assert!(au_calme(&mut b) < 3000, "SHOT se repose après des changements d'onglet");
     let repos: Vec<Duration> = (0..6).map(|_| b.image(Vec::new(), 0.5).reveil).collect();
     assert!(repos.iter().min().copied().unwrap_or(Duration::MAX) >= Duration::from_secs(1));
+}
+
+/// On quitte un onglet juste après un passage sur les caches qui a trouvé quelque chose : caché, il ne fait plus de passage, et il attendait le suivant pour toujours : FEANOR repeignait trente fois par
+/// seconde, sans rien à montrer, jusqu'au retour dans cet onglet (défaut trouvé le 2026-11-07).
+#[test]
+fn a_hidden_tab_does_not_keep_the_screen_awake_for_a_pass_it_will_never_make() {
+    crate::fxcache::monde::ecrire();
+    let mut b = banc(crate::perf_tests::projet_long(6, 2, 12, 3), false);
+    b.app.gel.comme_apres_un_passage_fructueux();
+    onglet_avec(&mut b, crate::perf_tests::projet_long(6, 2, 12, 3));
+    assert_eq!(b.app.onglets.len(), 2);
+    assert!(au_calme(&mut b) < 3000, "FEANOR se repose, un onglet caché ou non");
+    let pire = (0..6).map(|_| b.image(Vec::new(), 0.5).reveil).min().unwrap_or(Duration::MAX);
+    assert!(pire >= Duration::from_secs(1), "un onglet caché ne réveille pas l'écran : {pire:?}{}", b.raison_du_reveil());
 }
 
 #[test]

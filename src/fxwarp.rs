@@ -56,29 +56,32 @@ fn warp(raster: &Raster, from: impl Fn(f32, f32) -> (f32, f32) + Sync) -> Raster
 }
 
 /// Centre (en pixels) et demi-côté de la feuille, d'après des pour cent.
-fn center(raster: &Raster, cx: f32, cy: f32) -> (f32, f32, f32) {
-    let (w, h) = (raster.width as f32, raster.height as f32);
+pub(crate) fn centre_de(feuille: (usize, usize), cx: f32, cy: f32) -> (f32, f32, f32) {
+    let (w, h) = (feuille.0 as f32, feuille.1 as f32);
     (w * cx / 100.0, h * cy / 100.0, w.min(h) / 2.0)
+}
+
+/// Le point que l'onde fait lire au point (x, y) : ces formules valent dans le monde entier, dans la feuille comme au-delà.
+pub(crate) fn wave_map(amplitude: f32, wavelength: f32, angle: f32) -> impl Fn(f32, f32) -> (f32, f32) + Sync {
+    let (s, c) = angle.to_radians().sin_cos();
+    let k = std::f32::consts::TAU / wavelength.max(1.0);
+    move |x, y| {
+        let d = amplitude * ((x * c + y * s) * k).sin();
+        (x - s * d, y + c * d)
+    }
 }
 
 /// Onde : le dessin ondule, de `amplitude` pixels, avec des vagues de `wavelength` pixels qui
 /// avancent dans la direction `angle` (0° : vagues verticales qui déplacent le dessin de haut en
 /// bas, comme un drapeau).
 pub fn wave(raster: &Raster, amplitude: f32, wavelength: f32, angle: f32) -> Raster {
-    let (s, c) = angle.to_radians().sin_cos();
-    let k = std::f32::consts::TAU / wavelength.max(1.0);
-    warp(raster, |x, y| {
-        let d = amplitude * ((x * c + y * s) * k).sin();
-        (x - s * d, y + c * d)
-    })
+    warp(raster, wave_map(amplitude, wavelength, angle))
 }
 
-/// Ondulation : des cercles autour du centre (`cx`, `cy` en % de la feuille), de `amplitude`
-/// pixels et de `wavelength` pixels, comme une pierre dans l'eau.
-pub fn ripple(raster: &Raster, amplitude: f32, wavelength: f32, cx: f32, cy: f32) -> Raster {
-    let (ox, oy, _) = center(raster, cx, cy);
+pub(crate) fn ripple_map(feuille: (usize, usize), amplitude: f32, wavelength: f32, cx: f32, cy: f32) -> impl Fn(f32, f32) -> (f32, f32) + Sync {
+    let (ox, oy, _) = centre_de(feuille, cx, cy);
     let k = std::f32::consts::TAU / wavelength.max(1.0);
-    warp(raster, |x, y| {
+    move |x, y| {
         let (dx, dy) = (x - ox, y - oy);
         let d = (dx * dx + dy * dy).sqrt();
         if d < 1e-3 {
@@ -86,16 +89,20 @@ pub fn ripple(raster: &Raster, amplitude: f32, wavelength: f32, cx: f32, cy: f32
         }
         let m = amplitude * (d * k).sin() / d;
         (x + dx * m, y + dy * m)
-    })
+    }
 }
 
-/// Tourbillon : le dessin tourne de `angle` degrés au centre, de moins en moins jusqu'au bord du
-/// cercle de rayon `radius` (% du demi-côté de la feuille).
-pub fn twirl(raster: &Raster, angle: f32, radius: f32, cx: f32, cy: f32) -> Raster {
-    let (ox, oy, half) = center(raster, cx, cy);
+/// Ondulation : des cercles autour du centre (`cx`, `cy` en % de la feuille), de `amplitude`
+/// pixels et de `wavelength` pixels, comme une pierre dans l'eau.
+pub fn ripple(raster: &Raster, amplitude: f32, wavelength: f32, cx: f32, cy: f32) -> Raster {
+    warp(raster, ripple_map((raster.width, raster.height), amplitude, wavelength, cx, cy))
+}
+
+pub(crate) fn twirl_map(feuille: (usize, usize), angle: f32, radius: f32, cx: f32, cy: f32) -> impl Fn(f32, f32) -> (f32, f32) + Sync {
+    let (ox, oy, half) = centre_de(feuille, cx, cy);
     let r = (half * radius / 100.0).max(1.0);
     let a = angle.to_radians();
-    warp(raster, |x, y| {
+    move |x, y| {
         let (dx, dy) = (x - ox, y - oy);
         let d = (dx * dx + dy * dy).sqrt();
         if d >= r {
@@ -104,16 +111,20 @@ pub fn twirl(raster: &Raster, angle: f32, radius: f32, cx: f32, cy: f32) -> Rast
         let t = -a * (1.0 - d / r).powi(2);
         let (s, c) = t.sin_cos();
         (ox + dx * c - dy * s, oy + dx * s + dy * c)
-    })
+    }
 }
 
-/// Pincement : dans le cercle de rayon `radius` (% du demi-côté), le dessin rentre vers le
-/// centre (`amount` > 0, jusqu'à 100) ou bombe comme une sphère (`amount` < 0).
-pub fn pinch(raster: &Raster, amount: f32, radius: f32, cx: f32, cy: f32) -> Raster {
-    let (ox, oy, half) = center(raster, cx, cy);
+/// Tourbillon : le dessin tourne de `angle` degrés au centre, de moins en moins jusqu'au bord du
+/// cercle de rayon `radius` (% du demi-côté de la feuille).
+pub fn twirl(raster: &Raster, angle: f32, radius: f32, cx: f32, cy: f32) -> Raster {
+    warp(raster, twirl_map((raster.width, raster.height), angle, radius, cx, cy))
+}
+
+pub(crate) fn pinch_map(feuille: (usize, usize), amount: f32, radius: f32, cx: f32, cy: f32) -> impl Fn(f32, f32) -> (f32, f32) + Sync {
+    let (ox, oy, half) = centre_de(feuille, cx, cy);
     let r = (half * radius / 100.0).max(1.0);
     let e = 1.0 - (amount / 100.0).clamp(-1.0, 1.0) * 0.9;
-    warp(raster, |x, y| {
+    move |x, y| {
         let (dx, dy) = (x - ox, y - oy);
         let d = (dx * dx + dy * dy).sqrt();
         if d >= r || d < 1e-3 {
@@ -121,11 +132,18 @@ pub fn pinch(raster: &Raster, amount: f32, radius: f32, cx: f32, cy: f32) -> Ras
         }
         let f = (d / r).powf(e) * r / d;
         (ox + dx * f, oy + dy * f)
-    })
+    }
 }
 
-/// La couleur de chaque pixel dessiné multipliée par `factor(x, y)` (la couverture reste).
-fn shade(raster: &Raster, factor: impl Fn(f32, f32) -> f32 + Sync) -> Raster {
+/// Pincement : dans le cercle de rayon `radius` (% du demi-côté), le dessin rentre vers le
+/// centre (`amount` > 0, jusqu'à 100) ou bombe comme une sphère (`amount` < 0).
+pub fn pinch(raster: &Raster, amount: f32, radius: f32, cx: f32, cy: f32) -> Raster {
+    warp(raster, pinch_map((raster.width, raster.height), amount, radius, cx, cy))
+}
+
+/// La couleur de chaque pixel dessiné multipliée par `factor(x, y)` (la couverture reste). `origine` : le point du monde du pixel (0, 0).
+fn shade(raster: &Raster, origine: (i64, i64), factor: impl Fn(f32, f32) -> f32 + Sync) -> Raster {
+    let (mx, my) = (origine.0 as f32, origine.1 as f32);
     let mut out = raster.clone();
     let (width, height) = (out.width, out.height);
     let tiles_x = out.tiles_x.max(1);
@@ -141,7 +159,7 @@ fn shade(raster: &Raster, factor: impl Fn(f32, f32) -> f32 + Sync) -> Raster {
                     if p.a() == 0 {
                         continue;
                     }
-                    let k = factor((ox + x) as f32 + 0.5, (oy + y) as f32 + 0.5).max(0.0);
+                    let k = factor(mx + (ox + x) as f32 + 0.5, my + (oy + y) as f32 + 0.5).max(0.0);
                     let ch = |v: u8| (v as f32 * k).round().clamp(0.0, p.a() as f32) as u8;
                     tile[i] = Color32::from_rgba_premultiplied(ch(p.r()), ch(p.g()), ch(p.b()), p.a());
                 }
@@ -171,11 +189,11 @@ fn value_noise(x: f32, y: f32, seed: u32) -> f32 {
 
 /// Nuages : le dessin assombri ou éclairci par une texture de nuages de `scale` pixels, de
 /// `amount` (0 à 100 %) ; `seed` change les nuages.
-pub fn clouds(raster: &Raster, scale: f32, amount: f32, seed: f32) -> Raster {
+pub fn clouds(raster: &Raster, scale: f32, amount: f32, seed: f32, origine: (i64, i64)) -> Raster {
     let s = scale.max(2.0);
     let q = (amount / 100.0).clamp(0.0, 1.0);
     let seed = seed.round() as u32;
-    shade(raster, |x, y| {
+    shade(raster, origine, |x, y| {
         // Quatre octaves, chacune deux fois plus fine et moitié moins forte.
         let (mut n, mut w, mut f, mut total) = (0.0, 1.0, 1.0 / s, 0.0);
         for o in 0..4 {
@@ -191,11 +209,11 @@ pub fn clouds(raster: &Raster, scale: f32, amount: f32, seed: f32) -> Raster {
 /// Éclairage : un spot de lumière au centre (`cx`, `cy` en %), de rayon `radius` (% du
 /// demi-côté) ; le dessin s'éclaire au centre et s'assombrit au-delà, de `intensity` (0 à
 /// 100 %).
-pub fn lighting(raster: &Raster, cx: f32, cy: f32, radius: f32, intensity: f32) -> Raster {
-    let (ox, oy, half) = center(raster, cx, cy);
+pub(crate) fn lighting(raster: &Raster, cx: f32, cy: f32, radius: f32, intensity: f32, rep: crate::fx::Repere) -> Raster {
+    let (ox, oy, half) = centre_de(rep.feuille, cx, cy);
     let r = (half * radius / 100.0).max(1.0);
     let i = (intensity / 100.0).clamp(0.0, 1.0);
-    shade(raster, |x, y| {
+    shade(raster, rep.origine, |x, y| {
         let d = ((x - ox).powi(2) + (y - oy).powi(2)).sqrt() / r;
         let fall = (1.0 - d).clamp(0.0, 1.0);
         let fall = fall * fall * (3.0 - 2.0 * fall);
@@ -205,12 +223,12 @@ pub fn lighting(raster: &Raster, cx: f32, cy: f32, radius: f32, intensity: f32) 
 
 /// Dégradé : le dessin fonce vers un côté de la feuille (direction `angle`, 0° : vers la
 /// droite), jusqu'à `strength` (0 à 100 %) au bord.
-pub fn gradient(raster: &Raster, angle: f32, strength: f32) -> Raster {
-    let (w, h) = (raster.width as f32, raster.height as f32);
+pub(crate) fn gradient(raster: &Raster, angle: f32, strength: f32, rep: crate::fx::Repere) -> Raster {
+    let (w, h) = (rep.feuille.0 as f32, rep.feuille.1 as f32);
     let (s, c) = angle.to_radians().sin_cos();
     let extent = (w * c.abs() + h * s.abs()).max(1.0) / 2.0;
     let k = (strength / 100.0).clamp(0.0, 1.0);
-    shade(raster, |x, y| {
+    shade(raster, rep.origine, |x, y| {
         let t = (((x - w / 2.0) * c + (y - h / 2.0) * s) / extent + 1.0) / 2.0;
         let t = t.clamp(0.0, 1.0);
         1.0 - k * t * t * (3.0 - 2.0 * t)

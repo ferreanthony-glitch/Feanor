@@ -531,22 +531,25 @@ pub fn composer_avec_tuiles(p: &Planche, vignettes: &[RgbImage], tuiles: &[Optio
         }
         remplir(&mut pix, [r[0], r[3] + (2.0 * s) as i32, r[2], r[3] + (2.0 * s) as i32 + epais as i32], [200, 200, 200]);
     }
-    // Le dessin hors des cases, sous les cases (comme sur l'écran).
-    for i in p.annotations.ordre_de_peinture() {
-        let t = &p.annotations.traces[i];
-        if !p.annotations.calque(t.calque).is_some_and(|c| c.planche) {
-            continue;
-        }
-        // Un trait au pinceau : ses pixels, rendus par le moteur comme dans une case (la texture du pinceau) ; sinon la ligne vectorielle.
-        if let (Some(b), Some((_, case))) = (&t.brosse, crate::annotations::case_de(&p.layout, &t.anchor)) {
-            if b.peindre_pixmap(&mut pix, &t.points, t.color, case, p.cadre, s) {
+    // Le dessin hors des cases, sous les cases (comme sur l'écran) ; `dessus` : la part posée par-dessus l'image d'une case (partie 122), après les images.
+    let hors_cadres = |pix: &mut Pixmap, dessus: bool| {
+        for i in p.annotations.ordre_de_peinture() {
+            let t = &p.annotations.traces[i];
+            if t.dessus != dessus || !p.annotations.calque(t.calque).is_some_and(|c| c.planche) {
                 continue;
             }
+            // Un trait au pinceau : ses pixels, rendus par le moteur comme dans une case (la texture du pinceau) ; sinon la ligne vectorielle.
+            if let (Some(b), Some((_, case))) = (&t.brosse, crate::annotations::case_de(&p.layout, &t.anchor)) {
+                if b.peindre_pixmap(pix, &t.points, t.color, case, p.cadre, s) {
+                    continue;
+                }
+            }
+            let Some(pts) = p.annotations.points_planche(&p.layout, i) else { continue };
+            let px: Vec<(f32, f32, f32)> = pts.iter().map(|q| ((q.x - p.cadre.left()) * s, (q.y - p.cadre.top()) * s, q.r * s)).collect();
+            trait_rond_a(pix, &px, t.color, t.alpha);
         }
-        let Some(pts) = p.annotations.points_planche(&p.layout, i) else { continue };
-        let px: Vec<(f32, f32, f32)> = pts.iter().map(|q| ((q.x - p.cadre.left()) * s, (q.y - p.cadre.top()) * s, q.r * s)).collect();
-        trait_rond_a(&mut pix, &px, t.color, t.alpha);
-    }
+    };
+    hors_cadres(&mut pix, false);
     // Les marges des cases, puis le dessin sur toute l'enveloppe des plans à mouvement : sur le papier, sous toutes les images, comme à l'écran.
     for mouvements in [false, true] {
         for (k, c) in p.cartes.iter().enumerate() {
@@ -563,7 +566,12 @@ pub fn composer_avec_tuiles(p: &Planche, vignettes: &[RgbImage], tuiles: &[Optio
     for (k, c) in p.cartes.iter().enumerate() {
         let r = rect_px(c.place.thumb, p.cadre, s);
         let (tw, th) = ((r[2] - r[0]).max(1) as u32, (r[3] - r[1]).max(1) as u32);
-        if let Some(img) = vignettes.get(k) {
+        // Un plan à cadres dont le cadre A n'est pas exactement la case (tourné, réduit) : comme à l'écran, la case montre la feuille (sa tuile, déjà posée), pas
+        // l'image de A, qui y serait tournée et romprait le trait à ses bords (partie 122).
+        let feuille_posee = c.mouvement.as_ref().is_some_and(|m| m.quads().first().is_some_and(|q| !crate::vignettecam::coins_de(c.place.thumb).iter().zip(q).all(|(a, b)| a.distance(*b) < 0.5))) && tuiles.get(k).is_some_and(Option::is_some);
+        if feuille_posee {
+            // (Rien à poser : la tuile est dessous.)
+        } else if let Some(img) = vignettes.get(k) {
             let img = if img.dimensions() != (tw, th) { image::imageops::resize(img, tw, th, image::imageops::FilterType::Triangle) } else { img.clone() };
             let mut rgba = Vec::with_capacity((tw * th * 4) as usize);
             for px in img.pixels() {
@@ -657,6 +665,7 @@ pub fn composer_avec_tuiles(p: &Planche, vignettes: &[RgbImage], tuiles: &[Optio
             }
         }
     }
+    hors_cadres(&mut pix, true);
     // Les annotations, par-dessus tout : calque par calque, du plus bas au plus haut (un calque caché n'y est pas).
     if opt.annotations {
         for i in p.annotations.ordre_de_peinture() {

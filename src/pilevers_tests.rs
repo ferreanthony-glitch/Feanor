@@ -392,7 +392,7 @@ fn the_envois_are_not_touched_by_deleting_the_unshown_versions() {
     b.app.run_action("version.nouvelle");
     let ctx = b.ctx.clone();
     b.app.envois_marquer(&ctx, "v1 au réal", 1_760_000_000);
-    for _ in 0..800 {
+    for _ in crate::perf_tests::attente() {
         b.image(Vec::new(), 0.25);
         if b.app.envois_ui.au_repos() {
             break;
@@ -415,7 +415,7 @@ fn switching_to_a_version_that_differs_marks_the_plan_modified_since_the_last_en
     let plan = b.app.doc.panels[0].id;
     let ctx = b.ctx.clone();
     let attendre = |b: &mut Banc| {
-        for _ in 0..1200 {
+        for _ in crate::perf_tests::attente() {
             b.image(Vec::new(), 0.25);
             if b.app.envois_ui.au_repos() {
                 break;

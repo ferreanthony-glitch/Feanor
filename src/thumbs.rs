@@ -601,11 +601,13 @@ impl Drop for Thumbs {
 /// de la feuille et du cadre, et les dessins du plan (bitmap, strate Fond, griffonnages et traits d'un remplissage).
 /// Les tuiles sont partagées (`Arc`) : prendre le cliché ne copie aucun pixel, et si l'utilisateur
 /// dessine pendant que la vignette se compose, seule la tuile touchée est copiée (copie à la
-/// première écriture). Le dessin vectoriel n'est pas copié : la composition ne lit que ses pixels.
+/// première écriture). Le dessin vectoriel n'est pas copié, la composition ne lit que ses pixels, sauf pour un élément à effets du trait : eux le lisent. (Sans lui, le fil de fond
+/// calculait pour la vignette le dessin sans ses effets du trait, et l'écran retrouvait ce résultat, gardé sous le même numéro et la même version.)
 pub(crate) fn snapshot(doc: &Document, plan: &Plan) -> Document {
     let mut mini = Document::new(doc.width, doc.height, doc.fps);
     mini.frame = doc.frame;
     mini.paper = doc.paper;
+    let lit_le_trait = |id: crate::document::CelId| plan.items.iter().any(|i| i.cel == id && i.fx.iter().any(|s| s.kind.vector_stage()));
     for item in &plan.items {
         for id in std::iter::once(item.cel).chain(item.ctg.iter().flat_map(|c| c.sources.iter().copied())) {
             if mini.cels.contains_key(&id) {
@@ -614,7 +616,7 @@ pub(crate) fn snapshot(doc: &Document, plan: &Plan) -> Document {
             // (Pas un dessin du projet : un dessin dérivé d'un calque d'effet, ou une image de calque
             // vidéo, que la composition trouve toute seule.)
             if let Some(c) = doc.cels.get(&id) {
-                mini.cels.insert(id, Cel { raster: c.raster.clone(), vector: None, version: c.version, fond: c.fond.clone() });
+                mini.cels.insert(id, Cel { raster: c.raster.clone(), vector: if lit_le_trait(id) { c.vector.clone() } else { None }, version: c.version, fond: c.fond.clone() });
             }
         }
     }
