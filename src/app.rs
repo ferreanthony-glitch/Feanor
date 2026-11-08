@@ -2517,7 +2517,9 @@ impl App {
                             _ => None,
                         };
                         self.commit_vector_stroke(vs, std::mem::take(&mut stroke.path), std::mem::take(&mut stroke.path_pressure), std::mem::take(&mut stroke.path_time), preview);
-                        self.horschamp_noter_vecteur(cel)
+                        // (Peindre derrière : le trait est le premier élément du dessin, `commit_vector_stroke`.)
+                        let derriere = self.paint_behind && self.tool != Tool::Eraser;
+                        self.horschamp_noter_vecteur(cel, derriere)
                     }
                     None => {
                         if let Some(c) = self.doc.cels.get_mut(&cel) {

@@ -183,7 +183,7 @@ impl App {
                 d.elements.push(element);
                 self.refresh_cel(cel);
                 self.push_vector(cel, before, prefix);
-                self.horschamp_noter_vecteur(cel);
+                self.horschamp_noter_vecteur(cel, false);
             }
             LayerKind::Bitmap => {
                 let Some(c) = self.doc.cels.get_mut(&cel) else { return };
