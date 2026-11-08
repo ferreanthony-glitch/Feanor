@@ -8930,3 +8930,67 @@ Vérifié en lisant le code : le numéro est gardé par la gomme vectorielle, le
 7. Un plan au calque verrouillé : déplace un trait vers sa case ; la part reste par-dessus, la ligne d'état le dit.
 8. Un ancien projet : ses traits déjà coupés restent des morceaux (dis-moi si tu veux la commande « Relier les morceaux »).
 9. Un calque bitmap : la sélection reste celle de la case, comme avant.
+
+## 128. La case qui naît prend le papier (2026-11-08, branche `cases-prennent`)
+
+Anthony, deux captures de la planche : « ça marche mais il reste toujours un problème : les caméras non activées au début cachent le trait quand
+elles s'activent au contact d'un nouveau trait. Il faut que les caméras prennent également ce qui a été dessiné avant. La caméra ne doit que
+rarement interférer dans le processus de dessin. Elles doivent être perçues comme des cases dans lesquelles on dessine et non pas des objets. »
+Sa réponse sur l'architecture : **pas** de « la planche est le dessin, la case est une caméra » (un plan ne doit montrer que ce qui a été dessiné
+dans le champ de sa caméra et sa zone d'influence sur la planche, jamais toute la planche en baladant la caméra), et **le Décor reste tel quel**.
+Code : `caseprend.rs`, deux appels dans `boardui.rs`, une ligne dans `app.rs` (`clamp_nav`) ; essais `caseprend_tests.rs` (4, dont 3 en pixels).
+(Les parties 125 et 127 sont celles de l'autre session.)
+
+### Ce que ça fait
+
+- **La cause.** Un trait tracé sur la planche est réparti au lâcher (partie 111) : la part dans le champ d'une case va dans le dessin de son
+  plan, le reste va sur le papier, dans le calque « Hors cadres », peint **sous** les cases. Une case pâle n'a pas de plan, rien ne lui est
+  donné. Quand elle devient un plan plus tard, son fond recouvrait les traits du papier qui passaient là : rien n'était perdu, tout était
+  caché.
+- **La correction.** **Une case qui naît prend les traits du papier qui passent dans son champ** (son cadre plus le débord des Préférences) :
+  la part dans le champ entre dans le dessin du plan, à sa place exacte, le reste reste sur le papier, comme pour un trait qu'on vient de
+  tracer. Deux naissances : **dessiner dans une case pâle** (la case dessinée, et les plans vides faits devant elle pour garder sa place) et
+  **la barre de continuité** (une image de plus du dernier plan). Un trait du papier qui passe par deux cases nées est partagé entre elles, par
+  champ, jamais deux fois. **Une seule étape d'annulation** avec la création : Ctrl+Z défait la case, son trait et rend le papier.
+- **La règle des cases, lue dans l'autre sens** : elles ne coupent jamais le dessin (partie 125), elles ne le cachent jamais non plus.
+- **Comment, sans rien ajouter de neuf à la mécanique** : les traits du papier dont une part tombe dans le champ de la case née sont pris
+  comme par le lasso de la planche (`App::selp_dans_le_lasso`, le champ en guise de lasso ; seuls les traits qui ont une part sur le papier),
+  puis **reposés à l'identique** par la repose de la sélection (`App::selp_reporter`, affinité identité) : tout ou rien, calculé avant de rien
+  retirer ; l'ordre de peinture gardé ; les refus de la partie 122 (une case qui ne peut pas recevoir : la part reste sur le papier,
+  par-dessus elle, la ligne d'état le dit) ; les numéros de lien gardés quand le trait est repris entier. Les fichiers de la partie 125 ne
+  changent pas (`horschamp.rs`, `annotations.rs`, `vignettesel.rs`).
+- **Ce qui ne change pas** : le Décor et son report en continuité (`decor.rs`) ; un trait qui reste sur le papier hors de tout champ ; la
+  sélection de la planche.
+- **Un détail vu dans l'essai de la continuité** : la case neuve d'une continuité se colle à la précédente (la rangée se resserre), et un
+  trait du papier suit la case à laquelle il est attaché (`annotations.rs`) ; la case née prend donc la part du papier **là où le papier est
+  après ce resserrement**, qui est aussi ce que l'écran montre. Rien à changer : c'est la règle du papier.
+
+### Trouvé en passant, corrigé ici
+
+- **Après Ctrl+Z d'une continuité, l'image courante restait au-delà de la fin du plan** (la continuité l'avait mise sur l'image neuve) : un
+  trait dans la case des Vignettes allait alors dans une **image neuve au bout du plan**, qui s'allongeait d'une image, et la vignette de la
+  bande de montage restait vide (l'appui dans une case ne ramène l'image courante que si elle est hors de la case, et il la comparait déjà
+  bornée). Corrigé à la source : l'image courante est ramenée dans le plan chaque fois que les rangs sont revalidés après l'historique ou un
+  changement de structure (`App::clamp_nav`). Essai `caseprend_tests::after_undoing_a_continuity_a_stroke_in_the_case_goes_into_its_image`.
+
+### Suites (notées, pas faites)
+
+- **Les pixels bitmap du papier** : la couche bitmap de la planche (chantier `vignettes-bitmap`, partie 127) n'existe pas encore ici ; quand
+  elle sera fusionnée, la case qui naît devra aussi prendre ses pixels.
+- **Une case née par le bout d'un trait** (partie 113 : un trait dont le bout tombe dans la case pâle suivante la fait naître,
+  `horschamp_creer_cases`) reçoit ce trait, mais ne reprend pas encore les traits d'avant : l'appel à `cases_nees_prennent_le_papier` y
+  manque, dans un fichier de l'autre session ; convenu : celui des deux qui fusionne en second l'ajoute.
+- **Un plan bitmap qui naît** ne reprend rien : la repose demande un calque vectoriel courant.
+- **Un cadre de caméra qui se pose** sur du dessin du papier (un mouvement de caméra créé) : le dessin reste sur le papier, sous le cadre ;
+  à faire suivre la même règle si Anthony le voit à l'usage.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Refais tes captures : des grands traits à travers les cases et les cases pâles, puis un trait dans une case pâle traversée : la case naît
+   et le grand trait y est, entier, sans morceau caché. Ctrl+Z : la case part, le trait est de nouveau sur le papier, entier.
+2. La barre devant la première case pâle (continuité) quand un trait du papier passe dessus : pareil.
+3. Un trait du papier qui passe par deux cases pâles, un trait dans la plus lointaine : la case née le prend dans son champ, les plans vides
+   faits devant elle aussi, le reste reste sur le papier.
+4. Un trait qui part d'une case et dont le bout fait naître la case suivante : elle reçoit ce trait ; les traits d'avant au-dessus d'elle
+   attendent la suite notée (fichier de l'autre session).
+5. Une continuité, Ctrl+Z, puis un trait dans la case : le trait est dans la case, le plan garde sa durée, la vignette du montage le montre.

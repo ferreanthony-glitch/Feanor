@@ -5,6 +5,16 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-08
 
+- La case qui naît prend le papier (partie 128, branche `cases-prennent`, chantier `Chantiers\cases-prennent`) : réponse à ses deux captures
+  (« les caméras non activées au début cachent le trait quand elles s'activent »). Une case pâle qui devient un plan (un trait dedans, la barre
+  de continuité) prend les traits du papier (« Hors cadres ») qui passent dans son champ : la part dans le champ entre dans le dessin du plan,
+  le reste reste sur le papier, par la repose de la sélection de la planche à l'identique (`caseprend.rs`, sans toucher aux fichiers de l'autre
+  session) ; une seule étape d'annulation avec la création. Suites : les pixels bitmap du papier (après `vignettes-bitmap`), la case née par le
+  bout d'un trait (`horschamp_creer_cases`, fichier de l'autre session), un plan bitmap qui naît. Sa réponse sur l'architecture : pas de « planche
+  = dessin, case = caméra » (un plan ne doit montrer que ce qui a été dessiné dans son champ, pas toute la planche en baladant la caméra), et le
+  Décor reste tel quel. Trouvé en passant et corrigé (`app.rs`, `clamp_nav`) : après Ctrl+Z d'une continuité, l'image courante restait au-delà
+  de la fin du plan, et un trait dans la case des Vignettes partait dans une image neuve au bout du plan (qui s'allongeait), la vignette du
+  montage restant vide. Quatre essais (`caseprend_tests.rs`). Non fusionné : attend son essai.
 - Fusion dans main (aa03f7f) de `planche-mere`, à la demande d'Anthony (« Oui, fusionne »), après la fusion de `vignettes-selection` par l'autre
   session (6bcade3) : la planche-mère (partie 126, format de projet 51), sans sa partie Vignettes, qui vient dans un chantier suivant. Essai
   ajouté à la demande de l'autre session : un trait d'un dessin partagé montré par deux cases est pris une seule fois, le déplacer le déplace dans
