@@ -169,6 +169,28 @@ fn an_old_project_opens_unchanged_and_writes_no_folder() {
     std::fs::remove_dir_all(&dossier).ok();
 }
 
+/// Une copie d'un vrai projet (`FEANOR_PROJET_ESSAI`) : il s'ouvre, s'enregistre et se rouvre sans rien de changé, sans dossier `planche_bitmap/`.
+#[test]
+#[ignore]
+fn a_copy_of_a_real_project_opens_and_saves_unchanged() {
+    let Some(chemin) = std::env::var_os("FEANOR_PROJET_ESSAI") else { return };
+    let relu = crate::project::load(std::path::Path::new(&chemin)).expect("le projet s'ouvre");
+    println!("{} plans, avertissements {:?}", relu.doc.panels.len(), relu.warnings);
+    assert!(relu.doc.annotations.bitmap.est_vide());
+    let Some(mut b) = planche(relu.doc, 6, 1.0) else { return };
+    repos(&mut b);
+    let dossier = std::path::Path::new(&chemin).parent().expect("dossier").join("reenregistre");
+    std::fs::remove_dir_all(&dossier).ok();
+    std::fs::create_dir_all(&dossier).unwrap();
+    let manifeste = dossier.join("P.shot");
+    crate::project::save(&b.app.doc, &manifeste, &mut Default::default()).expect("enregistrement");
+    assert!(!dossier.join(crate::planchebitmap::DOSSIER).exists(), "aucun dossier de plus");
+    let deux = crate::project::load(&manifeste).expect("réouverture");
+    assert_eq!(deux.doc.annotations, b.app.doc.annotations);
+    assert_eq!(deux.doc.panels.len(), b.app.doc.panels.len());
+    std::fs::remove_dir_all(&dossier).ok();
+}
+
 #[test]
 fn a_case_that_cannot_receive_keeps_the_part_visible_over_it() {
     // Partie 122 : le calque de la case 3 est verrouillé ; la part du trait sur sa case reste par-dessus elle, sur la planche, et rien n'est écrit dans son plan.

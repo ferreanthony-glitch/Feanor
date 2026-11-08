@@ -8935,6 +8935,8 @@ Au vrai geste (Ctrl + lasso, Ctrl + glisser, la gomme), la planche peinte sur la
 9. **Ancien projet** : rien sur la planche, aucun dossier écrit, les annotations relues identiques.
 10. **La limite** : juste en dessous, juste au-dessus, et au vrai geste sur 30 cases pleines.
 11. `planchebitmap_tests.rs` : le dossier écrit puis relu donne exactement les mêmes pixels ; vidé, il part ; un index d'une version plus récente n'est ni réécrit ni effacé.
+12. **Une copie de `TEST PELURE_effets`** (`a_copy_of_a_real_project_…`, ignoré d'office, `FEANOR_PROJET_ESSAI`) : elle s'ouvre (le seul avertissement est celui, d'avant, des crayonnés), s'enregistre sans dossier `planche_bitmap/` et se rouvre avec les mêmes annotations. Ce projet est vectoriel : le dessin bitmap n'y a pas été essayé.
+13. **La suite complète** : 4 265 essais, aucun échec.
 
 | Essai rouge | Sur 6bcade3 (avant) | Après |
 |---|---|---|
