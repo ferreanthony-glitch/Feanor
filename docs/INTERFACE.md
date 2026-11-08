@@ -8994,3 +8994,44 @@ Code : `caseprend.rs`, deux appels dans `boardui.rs`, une ligne dans `app.rs` (`
 4. Un trait qui part d'une case et dont le bout fait naître la case suivante : elle reçoit ce trait ; les traits d'avant au-dessus d'elle
    attendent la suite notée (fichier de l'autre session).
 5. Une continuité, Ctrl+Z, puis un trait dans la case : le trait est dans la case, le plan garde sa durée, la vignette du montage le montre.
+
+
+## 130. Menus plus courts : exports en quatre sous-menus, Aide et Affichage allégés, Transformer compact (2026-11-08, branche `menus-exports`)
+
+Demande d'Anthony (captures 111, 112, 113, 116). Rien n'est supprimé : tout reste dans la palette (Ctrl+K).
+
+### Aide et Affichage
+
+- **Aide** perd « Raccourcis clavier… », « Régler le stylet à ma main… » et « Ce que le stylet transmet… ». Ils sont dans les Préférences : Raccourcis (déjà là : « Voir et changer les raccourcis… ») et Dessin > « Stylet à ma main » (le réglage du stylet y était ; le banc « Ce que le stylet transmet… » y est ajouté, avec une entrée de recherche). F1 ouvre toujours les raccourcis.
+- **Affichage** perd « Performance (temps de l'interface) ». L'entrée est dans le menu Labo (Préférences > Général > « Afficher les fonctions expérimentales ») et dans la palette. Le code est intact.
+
+### Fichier > exports (`exportmenu.rs`)
+
+Quatre sous-menus ; chaque entrée ouvre tout de suite sa boîte de réglages (ou le dialogue d'enregistrement quand l'export n'a rien à régler : image courante, rapport de numérotation). Les actions et leurs raccourcis sont ceux d'avant.
+
+| Sous-menu | Entrées |
+|---|---|
+| Exporter en vidéo | Film (MP4, ProRes, DNxHR) ; GIF animé |
+| Exporter en image | Image courante ; une image par image du film ; une image par plan ; une image par dessin clé ; — Storyboard en PDF ; Planche des vignettes ; Color script |
+| Exporter le son | Son mixé ; un son par piste ; un son par plan |
+| Exporter pour la production | Pour le montage (EDL, XML, FCPXML, OpenTimelineIO) ; Calques séparés ; Caméra ; — Fiche technique ; Liste des plans ; Rapport de numérotation ; — Relecture ; Journal des différences ; Paquet de livraison ; Kitsu ; — Noms des plans, série et épisode |
+
+Choix faits pour les cas douteux (à valider) :
+- **Storyboard PDF, Planche des vignettes, Color script : image.** Ce sont des pages et des planches qu'on regarde ou qu'on imprime, sans système de production derrière.
+- **Relecture et Journal des différences : production.** Ils partent chez le réalisateur et reviennent (envois, notes) : c'est l'échange de production, pas une image à garder.
+- **Calques séparés et Caméra : production.** Ils servent à un logiciel de compositing ou de 3D, pas à regarder.
+- **Rapport de numérotation : production** (pour le monteur). **Noms des plans, série et épisode** n'est pas un export mais le réglage dont tous les exports se servent : il ferme le sous-menu production.
+- Pas d'AAF : il n'existe pas dans FEANOR (le montage sort en EDL, XML, FCPXML et OpenTimelineIO).
+
+La grande fenêtre « Exporter » n'a plus d'entrée dans le menu Fichier. Elle n'est pas supprimée : quatre choses y mènent encore (la commande « Exporter » de la palette, le bouton de Préférences > Export, l'étape « Exporter » de la visite « Premier jour », et ses essais). À retirer plus tard si Anthony le veut, avec ces quatre renvois.
+
+### Panneau Réglages > Transformer (calque vectoriel ou bitmap : c'est le même panneau)
+
+- x, y, largeur, hauteur, angle et le bouton « Annuler la transformation » tiennent sur une seule ligne sous le titre (elle passe à la ligne si le panneau est étroit).
+- « Point fixe » et « Rotation » (le pivot) restent où ils étaient, sous cette ligne (première lecture erronée corrigée : ils n'ont pas été rangés dans « Plus de réglages »).
+- Les clés de position (poser, lisser, supprimer, adoucis) sont toujours visibles : le panneau Transformer n'a plus de « Plus de réglages ».
+- La longue explication du bas est partie dans les bulles des poignées (coin, milieu d'un côté, poignée ronde, hors d'un coin), une seconde après que le pointeur s'est arrêté dessus. L'intérieur de la boîte n'a pas de bulle (elle gênerait le dessin) ; l'astuce « Maj : à l'horizontale ou à la verticale » pour le déplacement n'est donc plus écrite nulle part dans le panneau (la barre d'état du bas garde les gestes des coins et de la rotation).
+
+### Essais
+
+`exportmenu_tests.rs` : le menu reprend toutes les actions de la fenêtre, une seule fois ; les cas douteux sont là où dit ci-dessus ; chaque entrée ouvre sa boîte sans la grande fenêtre ; Aide, Affichage, Labo, palette et F1 ; les Préférences. `selbox_pointfixe_tests.rs` : le panneau Transformer court. Captures à regarder : essai ignoré `menus_exports_captures` (`FEANOR_CAPTURE_DIR`).

@@ -640,9 +640,7 @@ fn the_transform_tool_keeps_its_fields_first_and_folds_the_position_keys() {
     let mut ecran = Ecran::new();
     let mut ui_outil = |a: &mut App, ui: &mut egui::Ui| a.tool_options_panel(ui);
     let textes = ecran.chauffer(&mut app, 4, &mut ui_outil);
-    assert!(contient(&textes, "largeur") || contient(&textes, "Plus de réglages"), "{textes:?}");
-    assert!(contient(&textes, "Plus de réglages") && !contient(&textes, "Clés de position"), "les clés sont pliées : {textes:?}");
-    app.pinceaux.regler_plus(crate::app::Tool::Transform.action(), true);
-    let textes = ecran.chauffer(&mut app, 4, &mut ui_outil);
-    assert!(contient(&textes, "Clés de position"), "dépliées : {textes:?}");
+    assert!(contient(&textes, "largeur"), "{textes:?}");
+    // (2026-11-08 : plus de « Plus de réglages » pour le Transformer ; les clés de position sont toujours visibles.)
+    assert!(contient(&textes, "Clés de position") && !contient(&textes, "Plus de réglages"), "les clés sont toujours visibles : {textes:?}");
 }
