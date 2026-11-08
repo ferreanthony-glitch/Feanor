@@ -26,7 +26,8 @@
 //!
 //! - **Pinceau, crayon, ligne, rectangle, ellipse, courbe, polyligne** : partout. Un calque vectoriel est coupé en tronçons (chacun garde sa
 //!   pression et ses instants) ; un calque bitmap est coupé au pixel (ce qui sort de la case est rendu au dessin tel qu'il était, passé à la case
-//!   voisine ou à la planche). Les formes d'un calque bitmap ne sont pas réparties (elles restent dans la case, comme avant).
+//!   voisine ou à la planche : **ses pixels mêmes, sur la couche bitmap de la planche**, `planchebitmap.rs`, partie 127 ; parti d'une vue en
+//!   perspective, un trait vectoriel au pinceau, comme avant). Les formes d'un calque bitmap ne sont pas réparties (elles restent dans la case, comme avant).
 //! - **Gomme** : dans une case, elle agit sur le plan, dans son champ. Partie hors de toute case, elle efface les traits du calque « Hors cadres »
 //!   qu'elle touche (le trait entier, comme la gomme d'annotation). **Pot de peinture** : seulement dans une case (une zone fermée de la feuille).
 //!   **Sélection, lasso, texte** : inchangés (les notes de la planche et le lasso d'annotation).
@@ -130,6 +131,17 @@ impl Pose {
         h[6].abs() + h[7].abs() > h[8].abs() * 1e-6
     }
 
+    /// Du dessin à la planche, si c'est une affinité (pas une perspective), en double précision (`planchebitmap::A64`).
+    pub fn affine64(&self) -> Option<crate::planchebitmap::A64> {
+        if self.en_perspective() {
+            return None;
+        }
+        let h = self.vers_planche.map(f64::from);
+        let w = h[8];
+        let a = crate::planchebitmap::A64 { a: h[0] / w, b: h[1] / w, tx: h[2] / w, c: h[3] / w, d: h[4] / w, ty: h[5] / w };
+        (a.fini() && a.inverse().is_some()).then_some(a)
+    }
+
     /// La même pose, la case ayant glissé de `d` sur la planche.
     fn decalee(&self, d: Vec2) -> Pose {
         let t: Homography = [1.0, 0.0, d.x, 0.0, 1.0, d.y, 0.0, 0.0, 1.0];
@@ -167,7 +179,8 @@ pub(crate) enum Matiere {
     /// Un calque bitmap : les tuiles d'avant le trait, et son tracé (ligne médiane, rayon), sa couleur, son opacité ; la recette du pinceau
     /// (son réglage, et l'appui et l'instant de chaque point du tracé, vides s'ils ne le suivent pas) pour que la part qui sort de la case
     /// garde la texture du pinceau sur la planche (`horschamptex.rs`).
-    Bitmap { avant: Vec<(usize, Option<Tile>)>, path: Vec<VPoint>, couleur: [u8; 3], alpha: f32, recette: Option<Recette>, appui: Vec<f32>, instants: Vec<f64> },
+    /// `derriere` : peint derrière (« Peindre derrière ») : sa part dans une autre case passe sous son dessin, son morceau de planche sous les autres.
+    Bitmap { avant: Vec<(usize, Option<Tile>)>, path: Vec<VPoint>, couleur: [u8; 3], alpha: f32, recette: Option<Recette>, appui: Vec<f32>, instants: Vec<f64>, derriere: bool },
 }
 
 #[derive(Debug)]
@@ -501,12 +514,26 @@ impl App {
             if textures.nombre() > 0 {
                 *textures = Default::default();
             }
+            let mut pb = self.vignettes.pb_tex.borrow_mut();
+            if pb.nombre() > 0 {
+                *pb = Default::default();
+            }
             return;
         }
         let opacite = if dessus { 1.0 } else { f32::from(self.settings.vignettes.opacite_hors_champ.min(100)) / 100.0 };
         let teinte = Color32::from_white_alpha((opacite * 255.0).round() as u8);
         if !dessus {
             textures.debut();
+        }
+        // La couche bitmap de la planche (partie 127) : ses pixels, sous les traits vectoriels hors des cases.
+        {
+            let mut pb = self.vignettes.pb_tex.borrow_mut();
+            if !dessus {
+                pb.debut();
+            }
+            if a.hors_cadres_montre().is_some() && !a.bitmap.morceaux.is_empty() && !pb.peindre(painter, view, xf, layout, &a.bitmap, dessus, opacite) {
+                painter.ctx().request_repaint();
+            }
         }
         for i in a.ordre_de_peinture() {
             let t = &a.traces[i];
@@ -617,7 +644,12 @@ impl App {
             format!("Plan {t}")
         });
         // (La planche pleine : le geste ne promet pas ce que le lever ne pourra pas tenir.)
-        let suite = if self.doc.annotations.traces.len() >= crate::annotations::MAX_TRACES { "et la planche est à sa limite : ce bout du trait restera dans le dessin où il a commencé" } else { "ce bout du trait reste sur la planche, par-dessus la case, hors du plan" };
+        let pleine = if self.layers().get(self.cur_layer).is_some_and(|l| l.kind == LayerKind::Bitmap) {
+            self.doc.annotations.bitmap.morceaux.len() + 2 > crate::planchebitmap::MAX_MORCEAUX
+        } else {
+            self.doc.annotations.traces.len() >= crate::annotations::MAX_TRACES
+        };
+        let suite = if pleine { "et la planche est à sa limite : ce bout du trait restera dans le dessin où il a commencé" } else { "ce bout du trait reste sur la planche, par-dessus la case, hors du plan" };
         match refus {
             None => format!("Ce plan est écarté : {suite}"),
             Some(Refus::Verrouille(n)) => format!("{plan} : le calque « {n} » est verrouillé, {suite}"),
@@ -650,7 +682,8 @@ impl App {
         // (Les appuis et les instants ne valent que s'ils suivent le tracé point par point.)
         let suit = appui.len() == path.len() && instants.len() == path.len();
         let (appui, instants) = if suit { (appui, instants) } else { (Vec::new(), Vec::new()) };
-        self.vignettes.fini = Some(Fini { suivi, cel, matiere: Matiere::Bitmap { avant: tiles.clone(), path, couleur, alpha, recette, appui, instants } });
+        let derriere = self.paint_behind;
+        self.vignettes.fini = Some(Fini { suivi, cel, matiere: Matiere::Bitmap { avant: tiles.clone(), path, couleur, alpha, recette, appui, instants, derriere } });
     }
 
     /// La recette du pinceau d'un trait bitmap qui finit, avec l'appui et l'instant de chaque point de son tracé : rien hors de la planche
@@ -926,7 +959,9 @@ impl App {
 
     /// La planche ne peut pas recevoir ces parts : elles restent dans le dessin d'origine, et la ligne d'état le dit.
     fn dire_planche_pleine(&mut self) {
-        self.status = format!("La planche a atteint sa limite de {} traits : ce bout du trait n'y est pas posé, il reste dans le dessin du plan où il a commencé, hors de sa case", crate::annotations::MAX_TRACES);
+        let bitmap = self.layers().get(self.cur_layer).is_some_and(|l| l.kind == LayerKind::Bitmap);
+        let limite = if bitmap { format!("{} morceaux bitmap", crate::planchebitmap::MAX_MORCEAUX) } else { format!("{} traits", crate::annotations::MAX_TRACES) };
+        self.status = format!("La planche a atteint sa limite de {limite} : ce bout du trait n'y est pas posé, il reste dans le dessin du plan où il a commencé, hors de sa case");
     }
 
     /// Le dessin de la case `k` sur son calque `rang`, créé au besoin (comme `ensure_plain_cel`).
@@ -1151,8 +1186,14 @@ impl App {
     }
 
     fn partager_bitmap(&mut self, layout: &BoardLayout, fini: &Fini, origine: usize, champs: &[Rect]) -> bool {
-        let Matiere::Bitmap { avant, path, couleur, alpha, recette, appui, instants } = &fini.matiere else { return false };
+        let Matiere::Bitmap { avant, path, couleur, alpha, recette, appui, instants, derriere } = &fini.matiere else { return false };
+        let derriere = *derriere;
         let pose = fini.suivi.pose;
+        // Partie 127 : hors de toute case qui puisse le recevoir, le trait garde ses pixels, sur la couche bitmap de la planche (`planchebitmap.rs`). Seul
+        // le trait parti d'une vue en perspective garde l'ancienne règle (un trait vectoriel au pinceau sur la planche) : ses pixels hors de la case sont
+        // étirés comme la feuille.
+        let pixels_planche = pose.affine64();
+        let lien = nouveau_lien();
         let mut cibles = self.cases_qui_recoivent(layout, origine, LayerKind::Bitmap);
         let suit = appui.len() == path.len() && instants.len() == path.len();
         let pts: Vec<Pt> = path
@@ -1169,11 +1210,21 @@ impl App {
         // Le plan, sans rien changer : ce qui va où. **Le dessin d'origine ne perd ses pixels qu'une fois sûr qu'ils ont une place ailleurs** : une case qui ne peut
         // pas prendre sa part (trop grossie) passe aux refus, et on recommence.
         type Pixels = Vec<(i64, i64, Color32)>;
-        let (neuves, poses, runs, pleine): (Vec<(usize, Tile)>, Vec<(usize, usize, Pixels)>, Vec<(Option<usize>, Vec<Pt>)>, bool) = loop {
+        #[allow(clippy::type_complexity)]
+        let (neuves, poses, runs, pleine, planche, reste): (Vec<(usize, Tile)>, Vec<(usize, usize, Pixels)>, Vec<(Option<usize>, Vec<Pt>)>, bool, Vec<(Option<usize>, Pixels)>, crate::planchebitmap::Masque) = loop {
             let recoit: Vec<bool> = cibles.iter().map(Result::is_ok).collect();
             let brut = |p: Pos2| proprietaire_cadre(layout, champs, &recoit, origine, p);
-            // La planche ne peut pas tout recevoir : rien n'y va, ces parts restent où elles étaient, dans le dessin d'origine.
-            let pleine = trancher(&pts, &brut).iter().filter(|(q, _)| q.is_none_or(|q| q >= DESSUS)).count() > place;
+            // La planche ne peut pas tout recevoir : rien n'y va, ces parts restent où elles étaient, dans le dessin d'origine. (Couche bitmap : un morceau
+            // pour le papier, un par case qui refuse ; vectoriel : un trait par tronçon.)
+            let pleine = if pixels_planche.is_some() {
+                let mut codes: Vec<Option<usize>> = trancher(&pts, &brut).into_iter().map(|(q, _)| q).filter(|q| q.is_none_or(|q| q >= DESSUS)).collect();
+                codes.sort_unstable();
+                codes.dedup();
+                // (Le papier compte toujours : un bout du rayon peut y tomber sans que le tracé y passe.)
+                self.doc.annotations.bitmap.morceaux.len() + codes.len().max(1) + 1 > crate::planchebitmap::MAX_MORCEAUX
+            } else {
+                trancher(&pts, &brut).iter().filter(|(q, _)| q.is_none_or(|q| q >= DESSUS)).count() > place
+            };
             let owner = |p: Pos2| match brut(p) {
                 Some(q) if q < DESSUS => Some(q),
                 _ if pleine => Some(origine),
@@ -1190,6 +1241,9 @@ impl App {
             // 1. Le dessin d'origine : ce qui sort du champ est rendu tel qu'il était ; ce qui tombe dans le champ d'une autre case est gardé pour elle.
             let mut passes: Vec<(usize, Pixels)> = Vec::new();
             let mut neuves: Vec<(usize, Tile)> = Vec::new();
+            // (Partie 127 : les pixels qui vont sur la planche, par case qu'ils recouvrent ; et où le trait reste dans le dessin d'origine.)
+            let mut planche: Vec<(Option<usize>, Pixels)> = Vec::new();
+            let mut reste = crate::planchebitmap::Masque::default();
             let Some(c) = self.doc.cels.get(&cel) else { return false };
             for (id, avant_tuile) in avant {
                 let Some(apres) = c.raster.slot(*id).cloned() else { continue };
@@ -1209,10 +1263,27 @@ impl App {
                         let bord = pose.planche(pos2(x as f32 + 0.5, y as f32 + 0.5));
                         let qui = owner(bord);
                         if qui == Some(origine) {
+                            reste.poser(x, y);
                             continue;
                         }
-                        // Un pixel neuf (rien dessous) peut passer à la case voisine ; un pixel qui recouvrait du dessin ne passe nulle part.
-                        if avant_px.a() == 0 && apres_px.a() > 0 {
+                        if pixels_planche.is_some() {
+                            // Partie 127 : le pixel tel que le trait l'a laissé, rien de perdu. Dans le champ d'une autre case : à elle ; hors de toute case qui
+                            // puisse le recevoir : sur la planche. (Un pixel qui recouvrait un dessin caché hors du champ en garde le mélange.)
+                            if apres_px.a() > 0 {
+                                match qui.filter(|q| *q < DESSUS) {
+                                    Some(q) => match passes.iter_mut().find(|(c, _)| *c == q) {
+                                        Some((_, v)) => v.push((x, y, apres_px)),
+                                        None => passes.push((q, vec![(x, y, apres_px)])),
+                                    },
+                                    None => match planche.iter_mut().find(|(c, _)| *c == qui) {
+                                        Some((_, v)) => v.push((x, y, apres_px)),
+                                        None => planche.push((qui, vec![(x, y, apres_px)])),
+                                    },
+                                }
+                            }
+                        } else if avant_px.a() == 0 && apres_px.a() > 0 {
+                            // (Parti d'une vue en perspective, la règle d'avant : un pixel neuf passe à la case voisine, un pixel qui recouvrait du dessin
+                            // ne passe nulle part ; la part de la planche est un trait vectoriel au pinceau.)
                             if let Some(q) = qui.filter(|q| *q < DESSUS) {
                                 match passes.iter_mut().find(|(c, _)| *c == q) {
                                     Some((_, v)) => v.push((x, y, apres_px)),
@@ -1274,7 +1345,7 @@ impl App {
                 cibles[q] = Err(Refus::TropGrand);
                 continue;
             }
-            break (neuves, poses, runs, pleine);
+            break (neuves, poses, runs, pleine, planche, reste);
         };
         // Tout a sa place : maintenant seulement, on écrit.
         let mut change: Vec<usize> = Vec::new();
@@ -1289,9 +1360,15 @@ impl App {
         self.renderer.invalidate_tiles(&change);
         let snap = self.snapshot();
         let mut etapes: Vec<Edit> = Vec::new();
+        let mut empreintes: Vec<(CelId, crate::planchebitmap::Masque)> = vec![(cel, reste)];
         for (q, rang, pixels) in poses {
             let Some(cible) = self.cel_de_la_case(layout, q, rang) else { continue };
             let Some(c) = self.doc.cels.get_mut(&cible) else { continue };
+            let mut masque = crate::planchebitmap::Masque::default();
+            for &(x, y, _) in &pixels {
+                masque.poser(x, y);
+            }
+            empreintes.push((cible, masque));
             let mut vieux: Vec<(usize, Option<Tile>)> = Vec::new();
             // (Par suites de pixels d'une même tuile : une recherche par pixel se sentait dès un trait un peu long.)
             let t_i = TILE as i64;
@@ -1305,7 +1382,8 @@ impl App {
                 let t = c.raster.tile_mut(id);
                 while let Some(&(x, y, px)) = pixels.get(i).filter(|p| p.0.div_euclid(t_i) == tx && p.1.div_euclid(t_i) == ty) {
                     let k = (y - ty * t_i) as usize * TILE + (x - tx * t_i) as usize;
-                    t[k] = crate::render::over(t[k], px, 255, None);
+                    // (Peint derrière : sous le dessin de cette case aussi.)
+                    t[k] = if derriere { crate::render::over(px, t[k], 255, None) } else { crate::render::over(t[k], px, 255, None) };
                     i += 1;
                 }
             }
@@ -1315,10 +1393,41 @@ impl App {
         for e in etapes {
             self.history.push(e);
         }
-        // 3. Ce qui est hors de tout champ : sur la planche (le tracé, rayon et couleur du trait).
-        let refus_vus: Vec<usize> = runs.iter().filter_map(|(q, _)| q.filter(|q| *q >= DESSUS)).collect();
-        let traces: Vec<Course> = runs.into_iter().filter(|(q, _)| q.is_none_or(|q| q >= DESSUS)).map(|(q, run)| Course { sur: q.and_then(|q| case_du_code(layout, q)).copied(), ..Course::de(&run, a_trait, suit) }).collect();
-        let remontre = self.poser_hors_cadres(layout, traces, *couleur, (alpha.clamp(0.0, 1.0) * 255.0).round() as u8, *recette, None);
+        // 3. Ce qui est hors de tout champ : sur la planche. Partie 127 : ses pixels, sur la couche bitmap (un morceau pour le papier, un par case qui refuse,
+        // par-dessus elle) ; parti d'une vue en perspective : le tracé, rayon et couleur du trait (un trait vectoriel au pinceau).
+        let mut refus_vus: Vec<usize> = runs.iter().filter_map(|(q, _)| q.filter(|q| *q >= DESSUS)).collect();
+        let remontre = match pixels_planche {
+            Some(vers_planche) => {
+                let mut pose_un = false;
+                for (code, pixels) in planche {
+                    let mut r = crate::planchebitmap::pixels_vides();
+                    for (x, y, px) in pixels {
+                        crate::planchebitmap::poser_pixel(&mut r, x, y, px, false);
+                    }
+                    let sur = code.and_then(|q| case_du_code(layout, q).map(|c| (c, layout.cards.iter().position(|k| k.id == c.id).unwrap_or(0))));
+                    if let Some(q) = code {
+                        refus_vus.push(q);
+                    }
+                    let fait = self.doc.annotations.bitmap.ajouter(layout, r, vers_planche, sur, Some(lien), derriere).is_some();
+                    debug_assert!(fait, "la place a été vérifiée avant de retirer les pixels de leur dessin");
+                    pose_un |= fait;
+                }
+                if pose_un {
+                    self.doc.annotations.calque_hors_cadres();
+                }
+                pose_un && self.doc.annotations.id_hors_cadres().is_some_and(|id| self.doc.annotations.regler_visible(id, true))
+            }
+            None => {
+                let traces: Vec<Course> = runs.into_iter().filter(|(q, _)| q.is_none_or(|q| q >= DESSUS)).map(|(q, run)| Course { sur: q.and_then(|q| case_du_code(layout, q)).copied(), ..Course::de(&run, a_trait, suit) }).collect();
+                self.poser_hors_cadres(layout, traces, *couleur, (alpha.clamp(0.0, 1.0) * 255.0).round() as u8, *recette, None)
+            }
+        };
+        // Les empreintes du geste : où ses pixels sont dans chaque dessin (la sélection retrouve ainsi le trait entier, `vignetteselbmp.rs`).
+        if pixels_planche.is_some() {
+            for (c, m) in empreintes {
+                self.doc.annotations.bitmap.noter_empreinte(lien, c, m);
+            }
+        }
         self.history.push(snap);
         if pleine {
             self.dire_planche_pleine();

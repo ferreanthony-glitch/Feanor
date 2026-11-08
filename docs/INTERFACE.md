@@ -8859,4 +8859,108 @@ Vérifié en lisant le code : le numéro est gardé par la gomme vectorielle, le
 6. Ctrl+C, Suppr, Ctrl+V : le trait revient à sa place, réparti. Ctrl+X.
 7. Un plan au calque verrouillé : déplace un trait vers sa case ; la part reste par-dessus, la ligne d'état le dit.
 8. Un ancien projet : ses traits déjà coupés restent des morceaux (dis-moi si tu veux la commande « Relier les morceaux »).
-9. Un calque bitmap : la sélection reste celle de la case, comme avant.
+9. Un calque bitmap : la sélection reste celle de la case, comme avant. (Remplacé par la partie 127.)
+
+## 127. Le bitmap aussi : la couche bitmap de la planche, et la sélection qui prend le trait entier (2026-11-08, branche `vignettes-bitmap`)
+
+Suite de la partie 125, pour les calques **bitmap**. La règle d'Anthony : « les caméras doivent être le moins intrusives et destructives possibles dans le dessin ». Une caméra ne change le dessin que quand on la déplace avec son dessin, ou quand on crée un mouvement pour lui laisser la place (non touchés ici). Fichiers : `planchebitmap.rs` (nouveau : la couche, ses textures, son export, son dossier), `vignetteselbmp.rs` (nouveau : la sélection), `horschamp.rs` (`partager_bitmap`, `Pose::affine64`), `annotations.rs` (le champ `bitmap`, la gomme, le rattachement, l'étendue), `planche.rs` (l'export), `boardui.rs`, `app.rs` (Suppr, Ctrl+C, Ctrl+X, Ctrl+V), `raster.rs` (`Tile::avec_les_pixels`), `project.rs` et `projet_partage.rs` (lire et écrire le dossier). Essais : `vignettes_bitmap_tests.rs` (10 au vrai geste sur le `Banc`, vus en pixels, et la mesure de la limite, à lancer seule : `--ignored measure_the_memory --test-threads=1`), `planchebitmap_tests.rs` (3) ; mis à jour pour le bitmap : `horschamp_tests.rs`, `horschamptex_tests.rs`, `traits_caches_tests.rs` (ils comptent maintenant les morceaux de la couche bitmap).
+
+### Ce qui se passait
+
+- **Hors des cases, le trait bitmap n'était plus le même trait.** Au lever, les pixels hors de tout champ étaient retirés du dessin et remplacés sur la planche par un trait **vectoriel** rejoué au pinceau (`horschamptex.rs`) : proche, pas identique. Et un pixel qui recouvrait un dessin hors du champ de la case d'origine ne passait nulle part.
+- **La sélection coupait au bord de la case.** Ctrl + lasso sur un calque bitmap était la sélection de la case : seule la part dans son dessin bougeait. **Essai rouge**, lancé tel quel sur le code d'avant (6bcade3, `moving_a_bitmap_stroke_selected_in_one_case_moves_the_whole_stroke`) : un trait bitmap du papier au-dessus de la case 1 au papier sous la case 3, Ctrl + lasso dans la case 2, Ctrl + glisser de 40 pixels : voir « Preuves » plus bas.
+
+### Ce qui change
+
+1. **La couche bitmap de la planche** (`PlancheBitmap`, dans les annotations). Les pixels d'un trait bitmap qui tombent hors de toute case qui puisse les recevoir y restent, **exactement ceux du pinceau** (rien n'est rejoué ni rééchantillonné), dans la grille de pixels du dessin d'où ils viennent. Un **morceau** = des tuiles creuses de 64 pixels (seules les tuiles touchées existent) et une pose relative à une case (comme les traits « Hors cadres ») : quand les cases bougent, il suit ; si sa case disparaît, il passe à la voisine, à la même place. Un morceau ne change jamais (le déplacer ou le couper en fait un neuf) : annuler ne coûte que des pointeurs.
+2. **Sous les cases**, comme le vectoriel hors des cases, à l'opacité « hors champ » du réglage ; montrée et cachée avec le calque « Hors cadres ». **Partie 122** : la part qui tombe sur l'image d'une case qui ne peut pas la recevoir (calque verrouillé, masqué, transformé, d'une autre sorte, plan écarté ou tenu par un autre poste, case trop grossie) est un morceau **par-dessus** cette case, plein ; la ligne d'état dit pourquoi, comme avant ; la gomme posée dessus l'enlève, elle seule. **Peindre derrière** : la part passe sous le dessin de la case voisine, et son morceau sous les autres morceaux. La gomme hors des cases enlève les morceaux qu'elle touche, chacun entier (comme les traits « Hors cadres »).
+3. **L'export de la planche** la contient (sous les cases, et par-dessus pour la partie 122), au niveau de réduction qui convient à la résolution.
+4. **Une case voisine reçoit tous les pixels** du trait qui tombent dans son champ, aussi ceux qui recouvraient un dessin caché hors du champ d'origine (avant : perdus). Un tel pixel garde le mélange que le pinceau a fait (le dessin caché dessous s'y devine si le pinceau est transparent).
+5. **Le numéro du geste et ses empreintes.** Toutes les parts d'un même trait réparti portent le même numéro (`lien`) : ses morceaux, et une **empreinte** par dessin de case (un bit par pixel : où ses pixels sont tombés). La sélection retrouve ainsi le trait entier.
+6. **La sélection de la planche sur un calque bitmap** (`vignetteselbmp.rs`) : Ctrl + glisser trace un lasso n'importe où (dans une case, sur le papier, à cheval), Ctrl + clic prend le trait réparti sous le pointeur. La boîte et ses poignées sont celles du vectoriel : déplacer, mettre à l'échelle, tourner, incliner. **Pendant le geste rien ne change dans le projet** : les pixels pris sont peints à leur nouvelle place, par blocs de texture déjà faits (aucun rejeu ; l'envoi des textures est borné par image d'écran). **Au lâcher**, tout est calculé avant de rien écrire (tout ou rien) ; puis les pixels quittent leurs dessins et se reposent : dans le dessin de la case qui les reçoit (même échelle et sans rotation : recopiés tels quels, au pixel le plus proche, comme d'une case à l'autre au lever d'un trait ; sinon rééchantillonnés par `Raster::transformee`), et sur la planche hors de toute case qui puisse les recevoir (par-dessus l'image d'une case qui refuse). **Une seule étape d'annulation**, au nom du geste, même historique plein. Le choix suit les pixels à leur nouvelle place ; ce qui a bougé reste peint jusqu'à ce que les vignettes soient refaites.
+7. **Suppr, Ctrl+C, Ctrl+X, Ctrl+V** : sur le choix entier, quand le dessin a la main. Ctrl+V (après un Ctrl+C de la planche) **repose les pixels à leur place, répartis** comme un trait qu'on vient de tracer, et le choix devient ce qui est collé. Rien ne va dans le presse-papiers du système. Une autre copie (Storyboard, plans, clés…) reprend la main pour Ctrl+V.
+8. **Le vectoriel** (partie 125) ne change pas.
+
+### Les choix faits à ta place, à valider
+
+- **Ce que veut dire « le trait entier » pour un lasso de pixels.** Ce que le lasso entoure est pris, **au pixel**, dans le dessin de chaque case qu'il couvre (là où la case se voit : son image, ou sa marge hors de l'image d'une autre case) et sur la couche de la planche. **Un trait réparti d'un même geste est pris entier dès que le lasso en prend un pixel** : ses pixels dans les autres cases et sur la planche, même hors du lasso, même dans sa propre case hors du lasso. Le bord d'une case ne coupe donc jamais un trait ; le lasso, lui, coupe ce qui n'est pas un trait réparti (un dessin resté dans sa case), comme toujours en bitmap. C'est la règle du vectoriel (un trait touché est pris entier). **L'autre possibilité** : ne suivre le trait que s'il sort du lasso **par le bord d'une case** (le lasso coupe là où il passe, jamais le bord). Dis-moi si un trait réparti pris entier pour un pixel touché te surprend.
+- **Un autre trait peint par-dessus une part** depuis : le bout de cet autre trait sous la part la suit (en bitmap, les pixels sont mêlés ; l'empreinte dit où était le trait, pas ce qui l'a recouvert). Rien ne se perd : tout bouge ensemble, en une étape.
+- **Le trait déplacé est posé dessus** dans la case d'arrivée (les pixels n'ont pas de rang ; en vectoriel, le trait gardait le sien).
+- **Une case en perspective** (bascule, panoramique) ne se choisit pas au lasso de la planche et ne reçoit pas de pixels déplacés : ce qui y tombe se pose par-dessus elle, sur la planche (visible, rien de perdu). **Un trait parti d'une vue en perspective** garde la règle d'avant hors des cases (un trait vectoriel au pinceau sur la planche) : ses pixels hors de la case sont étirés comme la feuille, plus minces que le trait du geste.
+- **« Effacer les annotations »** n'efface pas la couche bitmap (seulement les traits, comme avant) : rien du dessin ne part par ce bouton.
+
+### Le format : il ne change pas (50)
+
+La couche s'écrit dans un **dossier à part**, `planche_bitmap/` à côté du manifeste : `index.json` (morceaux : ancre, pose, tuiles ; empreintes) et une image par morceau (`m<numéro>.png`) et par empreinte (`e<geste>-<dessin>.png`), en atlas de tuiles comme ce qu'un dessin a hors de sa feuille. Seules les images qui manquent s'écrivent (un morceau ne change jamais) ; celles que l'index ne cite plus partent. **Pourquoi pas dans `annotations.json`** : une version d'avant qui enregistre réécrit ce fichier sans ce qu'elle ne connaît pas, l'index aurait été perdu. **Pourquoi pas le format 51** : une autre session prépare le format 51 pour la « planche-mère » ; un dossier optionnel n'a pas besoin de changer le format, il n'y a donc pas de conflit de numéro. Ce qu'il faut savoir :
+- **Un ancien projet** s'ouvre sans changement (essai) ; il n'écrit aucun dossier tant qu'aucun trait bitmap ne sort des cases ; ses traits « Hors cadres » d'avant restent ce qu'ils sont.
+- **Une version d'avant** ouvre un projet d'après **sans ce dossier** : elle montre les traits bitmap sans leur part hors des cases, ne le lit pas, ne l'écrit pas, **ne l'efface pas** ; la version d'après le retrouve à la réouverture. (Si on y supprime des plans, les morceaux se rattachent au rang de leur case, à la réouverture ici.)
+- **Un index illisible ou d'une version plus récente** : rien n'est chargé, la ligne d'avertissement le dit, et rien n'est réécrit ni effacé dans le dossier.
+- **Un film partagé** écrit le dossier avec le montage (quand on tient le jeton), comme `annotations.json`.
+- **Conflit possible avec `planche-mere`** : pas de numéro de format en jeu ; seulement des lignes voisines dans `project.rs` (lecture des annotations, champs de `SaveJob`) et `projet_partage.rs`.
+
+### La limite : 7 680 tuiles prises, soit 31,5 millions de pixels
+
+Mesure (`measure_the_memory_of_a_huge_selection`, lancée seule ; 30 plans bitmap pleins de 1920 × 1080, toutes les tuiles différentes : le pire cas), un lasso autour des 30 cases, limite levée le temps de l'essai :
+
+| | Sélection de 30 cases (26 880 tuiles, 110 Mpx) |
+|---|---|
+| Choisir (au lâcher du lasso) | 0,6 s |
+| Déplacer de 40 pixels (recopie au pixel) | 7,5 s, sur le fil de l'interface |
+| Tourner de 10° (rééchantillonné) | 11,5 s |
+| Pic de mémoire du processus | + 1 035 Mo (777 → 1 812 Mo) |
+| Gardé ensuite (dessins et annulation) | + 590 Mo |
+
+(Première version, avant d'optimiser : choisir 12,7 s, déplacer 107 s, pic + 3,4 Go. Les pièces gardent la feuille de leur dessin, chaque case ne reçoit que les tuiles qui peuvent tomber dans son champ, et les pixels arrivent en tuiles, pas en liste.)
+
+Soit environ **9,4 Mo de pic et 70 ms (déplacer) à 105 ms (tourner) par million de pixels pris**. **Limite retenue : 7 680 tuiles de 64 × 64 (une tuile entamée compte entière), 31,5 millions de pixels, 126 Mo de pixels pris** : au plus ≈ 300 Mo de pic, ≈ 2,2 s pour déplacer et ≈ 3,3 s pour tourner au lâcher. La mémoire tient largement sur une machine de 16 Go qui fait autre chose ; **c'est le temps du lâcher qui borne** (le chiffre de la partie 125, 32 millions, était juste pour la mémoire). À toi de dire si 3 secondes d'attente au lâcher d'une très grande sélection sont trop : la limite se baisse d'un chiffre.
+
+**Au-delà de la limite** : rien n'est coupé en silence. La sélection reste **celle de la case où le lasso commence** (ses pixels dans le lasso, sans suivre les traits hors d'elle), et la ligne d'état le dit : « Sélection trop grande pour suivre tout le trait : seule la part de cette case est prise. » Déplacée, elle se répartit comme le reste : rien ne se perd. Essais juste en dessous (pris entier) et juste au-dessus (refusé, une tuile de plus), et au vrai geste sur les 30 cases pleines.
+
+### La mémoire de la couche elle-même
+
+Rien que des tuiles creuses, **rangées** dès leur pose (`tuilepack` : un dixième de leur taille pour du trait) ; l'écran, l'export et l'enregistrement les relisent sans les garder ouvertes (`Tile::avec_les_pixels`). Les textures de l'écran : seuls les blocs visibles, au niveau du zoom, rendus quand on ne les voit plus (192 Mo au plus) ; rien n'est gardé en double sur le processeur. Les empreintes : un bit par pixel, par tuile touchée. Mesure (`outside_the_cases_…`), un trait de 14 pixels à travers trois cases et le papier : un morceau de 15 tuiles, **10 Ko** une fois rangé (245 Ko de pixels bruts), et 4 empreintes, **65 Ko** : **75 Ko par trait réparti**, soit ≈ 75 Mo pour mille traits bitmap qui sortent des cases. Ce sont les empreintes qui pèsent le plus ; elles pourraient se ranger aussi (non fait). L'annulation ne garde que des pointeurs (les morceaux ne changent jamais).
+
+### Preuves (`vignettes_bitmap_tests.rs`)
+
+Au vrai geste (Ctrl + lasso, Ctrl + glisser, la gomme), la planche peinte sur la carte graphique, le trait suivi pixel par pixel :
+
+1. **L'essai rouge, puis vert** (`moving_a_bitmap_stroke_…`) : voir le tableau ci-dessous. Vert : à la nouvelle place, plus grand trou 1 pixel ; à l'ancienne, plus rien ; une étape ; **zéro rejeu** du moteur du geste au lâcher ; annuler rend l'image d'avant, rétablir l'après ; enregistrer et rouvrir : même image, et le lasso reprend encore le trait entier (déplacé de nouveau : sans trou, rien à l'ancienne place).
+2. **Hors des cases** : les pixels sont sur la couche bitmap (un morceau, plus aucun trait vectoriel), un même numéro pour toutes les parts, le trait continu à l'écran.
+3. **Mettre à l'échelle, tourner** : le trait entier suit exactement l'affinité du geste, sans trou, une étape, aucun rejeu.
+4. **Copier, supprimer, coller, couper** : toutes les parts partent (plus rien sur la planche), une étape ; collé, il revient à sa place, réparti ; coupé puis annulé, il revient.
+5. **Historique plein** : un seul Ctrl+Z rend tout.
+6. **Export de la planche** : l'encre du bout de trait sur le papier y est.
+7. **Partie 122** : calque verrouillé, la part reste par-dessus la case, la ligne d'état dit « verrouillé », rien dans le plan ; la gomme posée dessus l'enlève, elle seule.
+8. **Peindre derrière** : le morceau du trait peint derrière passe sous l'autre ; au croisement, le trait d'avant reste dessus.
+9. **Ancien projet** : rien sur la planche, aucun dossier écrit, les annotations relues identiques.
+10. **La limite** : juste en dessous, juste au-dessus, et au vrai geste sur 30 cases pleines.
+11. `planchebitmap_tests.rs` : le dossier écrit puis relu donne exactement les mêmes pixels ; vidé, il part ; un index d'une version plus récente n'est ni réécrit ni effacé.
+
+| Essai rouge | Sur 6bcade3 (avant) | Après |
+|---|---|---|
+| Le lasso | « Zone choisie » : la sélection de la case | 4 dessins et la planche, un trait entier |
+| À la nouvelle place, plus grand trou | **135 pixels sur 373** (seule la part de la case 2 a bougé) | 1 pixel |
+| À l'ancienne place | le trait est encore là (trou 37 : la seule part partie) | plus rien (le filet des cases seulement) |
+
+### Ce qui reste
+
+- **Le lâcher d'une très grande sélection** se calcule sur le fil de l'interface (jusqu'à ≈ 3 s à la limite). Pas de barre d'avancement.
+- **L'aperçu du geste** montre les pixels à leur nouvelle place ; l'ancienne place reste visible dessous jusqu'au lâcher (comme en vectoriel).
+- **Une empreinte vieillit mal si le dessin bouge autrement** : une sélection faite au Storyboard qui déplace des pixels d'un trait réparti laisse son empreinte à l'ancienne place ; la sélection des Vignettes prendrait alors ce qui est là. Rien ne se perd (tout bouge ensemble, une étape), mais ce n'est plus le trait. Non corrigé.
+- **Les flèches du clavier** ne déplacent pas le choix de la planche.
+- **Des milliers de morceaux visibles à la fois** (planche très dézoomée) : chacun est un dessin de plus par image d'écran. Avec 5 000 morceaux minuscules dans la vue, les vignettes ne finissaient pas de se refaire (essai de la planche pleine, morceaux mis hors de la vue depuis) ; un morceau plus petit qu'un demi-point n'est plus peint. Non mesuré sur un vrai projet.
+- **Non essayé** : le stylet réel, un projet réel avec beaucoup de traits bitmap hors des cases, une caméra tournée comme case d'arrivée d'un déplacement (le chemin est celui de `Raster::transformee`), un film partagé à plusieurs postes.
+
+### À vérifier à l'écran
+
+1. Sur un calque bitmap, trace un grand trait du papier à travers trois cases : au lâcher, rien ne saute, rien ne disparaît ; la part sur le papier a le même grain que dans les cases.
+2. Ctrl + lasso autour du trait **dans une case** : la boîte entoure le trait entier. Ctrl + glisser dans la boîte : tout suit. Lâche : aucun trou au bord d'une case, rien à l'ancienne place. Ctrl+Z d'un coup ; Ctrl+Y.
+3. Un coin de la boîte (échelle), juste hors d'un coin (rotation) : le trait entier, un peu plus doux (rééchantillonné).
+4. Ctrl + lasso sur le papier, autour du bout de trait hors des cases ; puis Ctrl + clic sur le trait : le trait entier.
+5. Suppr : tout part. Ctrl+C, Suppr, Ctrl+V : il revient à sa place. Ctrl+X.
+6. Un lasso qui prend un petit dessin dans une case et touche un trait réparti : le trait part entier avec lui. Est-ce ce que tu veux ?
+7. Verrouille le calque d'un plan, trace à travers sa case : la part reste par-dessus, la ligne d'état dit pourquoi ; la gomme posée dessus l'enlève.
+8. Peindre derrière, à travers deux cases : le trait passe sous le dessin de la case voisine.
+9. Enregistre, rouvre ; ouvre aussi le projet dans une version d'avant (une copie !) : les traits y sont sans leur part hors des cases, et la version d'après la retrouve.
+10. Export PNG et PDF de la planche : la part sur le papier y est.
+11. Une très grande sélection (beaucoup de cases pleines) : la ligne d'état dit que seule la part de la case est prise. L'attente au lâcher te va-t-elle ?

@@ -771,6 +771,7 @@ pub(crate) fn preparer(doc: &Document, manifest_path: &Path, written: &mut HashM
         job.sound_fx = crate::audiofx::to_bytes(doc)?;
         job.personnages = crate::personnages::to_bytes(doc)?;
         job.annotations = crate::annotations::to_bytes(doc)?;
+        job.planche_bitmap = Some(doc.annotations.bitmap.clone());
         job.scenario = crate::scenariogarde::to_bytes(doc)?;
         job.sons_proposes = crate::indications::to_bytes(doc)?;
         job.variantes = if variantes { variantes_octets(doc)? } else { None };
@@ -809,6 +810,7 @@ impl SaveJob {
             sound_fx: None,
             personnages: None,
             annotations: None,
+            planche_bitmap: None,
             scenario: None,
             sons_proposes: None,
             references: Default::default(),
@@ -918,7 +920,12 @@ impl SaveJob {
         }
         // Le montage, si je tiens le jeton.
         if let (Some(manifest), Some(revision_lue)) = (travail.structure.as_mut(), travail.ctx.jeton) {
-            let mut change = false;
+            // (La couche bitmap de la planche, à côté des annotations : `planchebitmap.rs`.)
+            let bitmap_ecrit = match self.planche_bitmap.as_ref() {
+                Some(b) => crate::planchebitmap::ecrire(&dir, b)? > 0,
+                None => false,
+            };
+            let mut change = bitmap_ecrit;
             let mut ecrire = |path: PathBuf, bytes: Option<&[u8]>, lisible: &dyn Fn(&str) -> bool| -> Result<(), String> {
                 let identique = match (bytes, fs::read(&path)) {
                     (Some(b), Ok(actuel)) => actuel == b,

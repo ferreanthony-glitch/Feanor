@@ -302,9 +302,9 @@ pub fn construire(doc: &Document, plans: &[usize], s: &BoardSettings, opt: &Opti
     } else {
         let planche: Vec<_> = annotations.calques.iter().filter(|c| c.planche).cloned().collect();
         let traces = annotations.traces.iter().filter(|t| planche.iter().any(|c| c.id == t.calque)).cloned().collect();
-        Annotations { calques: planche, traces, ..Default::default() }
+        Annotations { calques: planche, traces, bitmap: annotations.bitmap.clone(), ..Default::default() }
     };
-    if (opt.annotations || !annotations.traces.is_empty()) && !opt.marie {
+    if (opt.annotations || !annotations.traces.is_empty() || !annotations.bitmap.morceaux.is_empty()) && !opt.marie {
         if let Some(e) = annotations.etendue(&layout) {
             // (Ce qui déborde des pages se voit, dans une limite raisonnable.)
             cadre = cadre.union(e.expand(4.0).intersect(cadre.expand(cadre.width().max(cadre.height()) * 0.5)));
@@ -533,6 +533,10 @@ pub fn composer_avec_tuiles(p: &Planche, vignettes: &[RgbImage], tuiles: &[Optio
     }
     // Le dessin hors des cases, sous les cases (comme sur l'écran) ; `dessus` : la part posée par-dessus l'image d'une case (partie 122), après les images.
     let hors_cadres = |pix: &mut Pixmap, dessus: bool| {
+        // La couche bitmap de la planche d'abord (ses pixels, `planchebitmap.rs`), si « Hors cadres » est montré.
+        if p.annotations.hors_cadres_montre().is_some() {
+            crate::planchebitmap::peindre_pixmap(pix, &p.layout, &p.annotations.bitmap, dessus, p.cadre, s);
+        }
         for i in p.annotations.ordre_de_peinture() {
             let t = &p.annotations.traces[i];
             if t.dessus != dessus || !p.annotations.calque(t.calque).is_some_and(|c| c.planche) {

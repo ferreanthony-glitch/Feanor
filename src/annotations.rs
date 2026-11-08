@@ -172,6 +172,9 @@ pub struct Annotations {
     pub traces: Vec<Trace>,
     /// Les séquences que la planche montre, et dans quel ordre (`planchesequences.rs`) : enregistré ici, dans la clé `sequences` du fichier.
     pub affichage: crate::planchesequences::Affichage,
+    /// La couche bitmap de la planche (`planchebitmap.rs`, partie 127) : les pixels d'un trait bitmap hors des cases, montrés avec « Hors cadres ».
+    /// Enregistrée à part, dans `planche_bitmap/` (pas dans `annotations.json`).
+    pub bitmap: crate::planchebitmap::PlancheBitmap,
 }
 
 // ------------------------------------------------------------------------------------ les cases
@@ -336,7 +339,15 @@ impl Annotations {
 
     /// Une part de trait posée par-dessus une image de case est-elle sous le cercle ? (La gomme l'efface alors, plutôt que d'agir dans la case.)
     pub fn touche_dessus(&self, layout: &BoardLayout, p: Pos2, radius: f32) -> bool {
-        !self.dessus_sous_le_cercle(layout, p, radius).is_empty()
+        !self.dessus_sous_le_cercle(layout, p, radius).is_empty() || !self.morceaux_sous_le_cercle(layout, p, radius, true).is_empty()
+    }
+
+    /// Les morceaux bitmap de la planche sous le cercle (montrés avec « Hors cadres ») : ceux par-dessus une case, ou ceux du papier.
+    fn morceaux_sous_le_cercle(&self, layout: &BoardLayout, p: Pos2, radius: f32, dessus: bool) -> Vec<usize> {
+        if self.hors_cadres_montre().is_none() {
+            return Vec::new();
+        }
+        self.bitmap.touches(layout, p, radius, dessus)
     }
 
     /// Le calque « Hors cadres », s'il est montré : ce qu'il cache ne se gomme pas.
@@ -351,7 +362,8 @@ impl Annotations {
 
     /// Gomme sur une part posée par-dessus une case : retire ces parts-là, rien d'autre (ni le reste du trait sur le papier, ni les notes). Rend combien.
     pub fn effacer_dessus(&mut self, layout: &BoardLayout, p: Pos2, radius: f32) -> usize {
-        self.retirer(self.dessus_sous_le_cercle(layout, p, radius))
+        let m = self.morceaux_sous_le_cercle(layout, p, radius, true);
+        self.bitmap.retirer(&m) + self.retirer(self.dessus_sous_le_cercle(layout, p, radius))
     }
 
     /// Les textures (pointe, papier) que citent les pinceaux des traits : à écrire avec le projet, comme celles des traits des plans.
@@ -539,7 +551,9 @@ impl Annotations {
 
     /// Gomme d'un calque : comme `effacer_en`, mais les traits des autres calques restent.
     pub fn effacer_en_calque(&mut self, layout: &BoardLayout, calque: u64, p: Pos2, radius: f32) -> usize {
-        self.retirer(self.touches(layout, Some(calque), p, radius))
+        // (Le calque « Hors cadres » : ses morceaux bitmap du papier aussi, chacun entier.)
+        let m = if self.calque(calque).is_some_and(|c| c.planche) { self.morceaux_sous_le_cercle(layout, p, radius, false) } else { Vec::new() };
+        self.bitmap.retirer(&m) + self.retirer(self.touches(layout, Some(calque), p, radius))
     }
 
     fn retirer(&mut self, hit: Vec<usize>) -> usize {
@@ -556,7 +570,7 @@ impl Annotations {
 
     /// Un trait du calque `calque` est-il sous le cercle ?
     pub fn touche_calque(&self, layout: &BoardLayout, calque: u64, p: Pos2, radius: f32) -> bool {
-        !self.touches(layout, Some(calque), p, radius).is_empty()
+        !self.touches(layout, Some(calque), p, radius).is_empty() || (self.calque(calque).is_some_and(|c| c.planche) && !self.morceaux_sous_le_cercle(layout, p, radius, false).is_empty())
     }
 
     // ------------------------------------------------------------------ le lasso
@@ -664,7 +678,7 @@ impl Annotations {
             }
             changes += 1;
         }
-        changes
+        changes + self.bitmap.rattacher_manquantes(avant, apres)
     }
 
     /// Le rang des cases est mis à jour (pour que le secours de `rattacher_manquantes` reste proche de la réalité).
@@ -680,12 +694,12 @@ impl Annotations {
                 }
             }
         }
-        changed
+        self.bitmap.noter_rangs(layout) || changed
     }
 
-    /// Ce que couvre l'ensemble des traits montrés sur la planche (pour cadrer l'export ; un calque caché n'y est pas).
+    /// Ce que couvre l'ensemble des traits montrés sur la planche (pour cadrer l'export ; un calque caché n'y est pas), morceaux bitmap compris.
     pub fn etendue(&self, layout: &BoardLayout) -> Option<Rect> {
-        let mut out: Option<Rect> = None;
+        let mut out: Option<Rect> = if self.hors_cadres_montre().is_some() { self.bitmap.etendue(layout) } else { None };
         for i in self.ordre_de_peinture() {
             if let Some(pts) = self.points_planche(layout, i) {
                 let b = board::points_bounds(&pts);

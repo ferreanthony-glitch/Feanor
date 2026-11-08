@@ -29,7 +29,8 @@ fn en_bitmap(doc: &mut Document) {
 
 fn hors_cadres(b: &Banc) -> usize {
     let a = &b.app.doc.annotations;
-    a.traces.iter().filter(|t| a.calque(t.calque).is_some_and(|c| c.planche)).count()
+    // (Partie 127 : un trait bitmap laisse ses pixels sur la couche bitmap de la planche.)
+    a.traces.iter().filter(|t| a.calque(t.calque).is_some_and(|c| c.planche)).count() + a.bitmap.morceaux.len()
 }
 
 /// Les cadres noirs de sélection peints à la dernière image.

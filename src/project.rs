@@ -1449,6 +1449,8 @@ pub struct SaveJob {
     personnages: Option<Vec<u8>>,
     /// Le fichier des annotations de la vue Vignettes (`annotations.json`) ; rien : il n'y en a plus, le fichier part.
     annotations: Option<Vec<u8>>,
+    /// La couche bitmap de la planche (`planchebitmap.rs`), écrite dans `planche_bitmap/` ; rien : non écrite (pas d'annexes dans ce travail).
+    planche_bitmap: Option<crate::planchebitmap::PlancheBitmap>,
     /// Le fichier du scénario gardé (`scenario.json`) ; rien : il n'y en a plus (un scénario lisible n'est jamais effacé : il passe à côté).
     scenario: Option<Vec<u8>>,
     /// Le fichier des sons proposés (`sons_proposes.json`) ; rien : il n'y en a plus, le fichier part.
@@ -1824,6 +1826,7 @@ impl SaveJob {
         self.sound_fx = crate::audiofx::to_bytes(&doc)?;
         self.personnages = crate::personnages::to_bytes(&doc)?;
         self.annotations = crate::annotations::to_bytes(&doc)?;
+        self.planche_bitmap = Some(doc.annotations.bitmap.clone());
         self.scenario = crate::scenariogarde::to_bytes(&doc)?;
         self.sons_proposes = crate::indications::to_bytes(&doc)?;
         self.references = crate::references::plan_save(&doc, dir)?;
@@ -1892,6 +1895,7 @@ pub(crate) fn prepare_save_avant(doc: &Document, manifest_path: &Path, written: 
         job.sound_fx = crate::audiofx::to_bytes(doc)?;
         job.personnages = crate::personnages::to_bytes(doc)?;
         job.annotations = crate::annotations::to_bytes(doc)?;
+        job.planche_bitmap = Some(doc.annotations.bitmap.clone());
         job.scenario = crate::scenariogarde::to_bytes(doc)?;
         job.sons_proposes = crate::indications::to_bytes(doc)?;
         job.references = crate::references::plan_save(doc, dir)?;
@@ -2182,6 +2186,10 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::personnages::FILE), self.personnages.as_deref(), |t| crate::personnages::parse(t).is_ok())?;
         // Les annotations de la vue Vignettes, de même.
         write_sidecar(&dir.join(crate::annotations::FILE), self.annotations.as_deref(), |t| crate::annotations::parse(t).is_ok())?;
+        // La couche bitmap de la planche, dans son dossier (`planchebitmap.rs`) : les images qui manquent, l'index, puis ce que rien ne cite part.
+        if let Some(b) = self.planche_bitmap.as_ref() {
+            count += crate::planchebitmap::ecrire(dir, b)?;
+        }
         // Le scénario gardé : l'ancien (d'un autre scénario) passe à côté, jamais effacé.
         crate::scenariogarde::mettre_de_cote(&dir.join(crate::scenariogarde::FILE), self.scenario.as_deref());
         write_sidecar(&dir.join(crate::scenariogarde::FILE), self.scenario.as_deref(), |t| crate::scenariogarde::parse(t).is_ok())?;
@@ -3411,6 +3419,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         structure.personnages = load_personnages(dir, &mut warnings);
         // Les annotations de la vue Vignettes (`annotations.json`, absent : aucune).
         structure.annotations = load_annotations(dir, &mut warnings);
+        // Et la couche bitmap de la planche (`planche_bitmap/`, absente : vide).
+        structure.annotations.bitmap = crate::planchebitmap::lire(dir, &mut warnings);
         // Le scénario gardé dans le projet (`scenario.json`, absent : aucun).
         structure.scenario = crate::scenariogarde::load(dir, &mut warnings);
     }
