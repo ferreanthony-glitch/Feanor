@@ -5,6 +5,21 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-08
 
+- Fusion dans main (aa03f7f) de `planche-mere`, à la demande d'Anthony (« Oui, fusionne »), après la fusion de `vignettes-selection` par l'autre
+  session (6bcade3) : la planche-mère (partie 126, format de projet 51), sans sa partie Vignettes, qui vient dans un chantier suivant. Essai
+  ajouté à la demande de l'autre session : un trait d'un dessin partagé montré par deux cases est pris une seule fois, le déplacer le déplace dans
+  les deux cases, rien n'est dupliqué (limite : le lasso ne le trouve que dans la première case). Vérificateur sur la branche à jour de main :
+  4259 réussis sur 4259, aucun avertissement. `feanor.exe` de main reconstruit ; le FEANOR d'Anthony, ouvert à 17:53, a été fermé sans
+  enregistrer pour cela (sa règle). L'autre session fabrique le zip portable sur cet exe.
+- La planche-mère (idée 4 d'Anthony ; branche `planche-mere`, chantier `Chantiers\planche-mere`, partie 126 ; conception validée par ses trois
+  réponses : tout le plan, Storyboard d'abord, « Réutiliser » dans les commandes et rien de plus dans Aide) : un calque porte une clé de
+  partage, ses exemplaires dans plusieurs plans montrent les mêmes dessins, chacun sous la caméra de son plan (`partage.rs`,
+  `sync_partages` à chaque image comme les calques de toute la scène) ; « Réutiliser dans… » (plan suivant, précédent, séquence, plans
+  choisis) et « Détacher » dans le menu d'un calque, maillon dans sa ligne ; « Réutiliser le plan » (un plan lié dans une scène neuve, même
+  dessin, à cadrer) et « Détacher le plan » dans le menu Storyboard > Plans (les menus du montage restent à leur dizaine d'entrées). Couper
+  garde le lien, réunir détache le second, dupliquer et coller ne lient pas. Format de projet 51. Fusion dans main après celle de
+  `vignettes-selection` (6bcade3), à la demande d'Anthony (« Oui, fusionne »), sans la partie Vignettes (maillon sur les cases, trait entier au
+  dessin partagé), qui vient dans un chantier suivant, à coordonner avec l'autre session (ses fichiers).
 - Fusion dans main (7c7df04) de `finitions`, à la demande d'Anthony (« Fusionne finitions ») après son essai de la Trajectoire (« parfait ») :
   la trajectoire suit les images insérées ou retirées et peut faire tourner le dessin (partie 119, format 50), la licence de ffmpeg dans
   À propos et les trois touches (partie 124). Vérificateur sur la branche : 4235 réussis sur 4235, aucun avertissement. `feanor.exe` de main

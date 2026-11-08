@@ -37,6 +37,11 @@ mod reglagestylet_tests;
 mod aproposui;
 #[cfg(test)]
 mod aproposui_tests;
+// La planche-mère (2026-11-08) : un calque partagé entre des plans choisis, chacun sous sa caméra (partie 126).
+pub mod partage;
+mod partageui;
+#[cfg(test)]
+mod partage_tests;
 mod diagbanc;
 mod diagnostic;
 #[cfg(test)]

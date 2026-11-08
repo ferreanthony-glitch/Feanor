@@ -252,6 +252,9 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("panneau.suivant", "Plan suivant", true, true),
     act("panneau.nouveau", "Nouveau plan", true, false),
     act("panneau.dupliquer", "Dupliquer le plan", true, false),
+    // La planche-mère (partie 126, `partage.rs`) : un plan lié au sien, des calques partagés entre plans.
+    act("plan.reutiliser", "Réutiliser le plan : un plan lié au sien, même dessin, à cadrer autrement (planche-mère)", true, false),
+    act("plan.detacher", "Détacher le plan de la planche-mère (ses calques gardent des copies)", true, false),
     // Les actions `scene.*` sont des doubles de `panneau.*` (voir `ALIASES`) : elles servent à poser
     // une seconde touche, et la palette Ctrl+K ne les montre pas.
     act("scene.nouvelle", "Nouveau plan (second raccourci)", true, false),
@@ -302,6 +305,11 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("calque.dessous", "Calque du dessous", true, true),
     act("calque.nouveau", "Nouveau calque… (nom, sorte, groupe, mode, place)", true, false),
     act("calque.dupliquer", "Dupliquer les calques choisis", true, false),
+    act("calque.reutiliser_suivant", "Réutiliser le calque dans le plan suivant (planche-mère)", true, false),
+    act("calque.reutiliser_precedent", "Réutiliser le calque dans le plan précédent (planche-mère)", true, false),
+    act("calque.reutiliser_sequence", "Réutiliser le calque dans tous les plans de la séquence (planche-mère)", true, false),
+    act("calque.reutiliser_choisir", "Réutiliser le calque dans des plans choisis… (planche-mère)", true, false),
+    act("calque.detacher_partage", "Détacher le calque de la planche-mère (il garde une copie)", true, false),
     act("calque.supprimer_vides", "Supprimer les calques vides", true, false),
     act("calque.supprimer_caches", "Supprimer les calques cachés", true, false),
     act("calque.fusionner_choisis", "Fusionner les calques choisis", true, false),

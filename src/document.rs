@@ -370,6 +370,9 @@ pub struct Layer {
     pub frames: Vec<Option<CelId>>,
     /// Calque de toute la scène (6f) ; aucun : calque du seul panneau.
     pub scene_wide: Option<SceneWide>,
+    /// La planche-mère (`partage.rs`, Anthony 2026-11-08) : la clé que partagent les exemplaires d'un même calque dans plusieurs plans
+    /// (mêmes dessins, chacun sous la caméra de son plan) ; aucune : calque du seul plan.
+    pub partage: Option<u64>,
     /// Mode de fusion avec ce qui est dessous (8).
     pub blend: crate::blend::BlendMode,
     /// Pelure d'oignon du calque (13b) : quand la pelure d'oignon est allumée, ses images
@@ -487,6 +490,7 @@ impl Layer {
             depth: 0.0,
             frames: Vec::new(),
             scene_wide: None,
+            partage: None,
             blend: Default::default(),
             onion: false,
             keep_alpha: false,
@@ -1045,11 +1049,11 @@ pub(crate) fn layer_targets(a: &[Layer], b: &[Layer], apart: &std::collections::
     target
 }
 
-/// Images d'un panneau sans compter ses calques de toute la scène (qui suivent sa durée).
-fn own_frame_count(p: &Panel) -> usize {
+/// Images d'un panneau sans compter ses calques de toute la scène ni ses calques partagés (`partage.rs`), qui suivent sa durée.
+pub(crate) fn own_frame_count(p: &Panel) -> usize {
     p.layers
         .iter()
-        .filter(|l| l.scene_wide.is_none())
+        .filter(|l| l.scene_wide.is_none() && l.partage.is_none())
         .map(|l| l.frames.len())
         .max()
         .unwrap_or(0)
@@ -2330,8 +2334,9 @@ impl Document {
             let mut frames = Vec::with_capacity(layer.frames.len().saturating_sub(at));
             for f in layer.frames.iter().skip(at) {
                 frames.push(match *f {
-                    // Un calque de toute la scène garde le dessin de la scène.
-                    Some(c) if layer.scene_wide.is_some() => Some(c),
+                    // Un calque de toute la scène garde le dessin de la scène ; un calque partagé (`partage.rs`) garde le dessin
+                    // partagé : les deux parties restent liées.
+                    Some(c) if layer.scene_wide.is_some() || layer.partage.is_some() => Some(c),
                     Some(c) => Some(match copies.get(&c) {
                         Some(&d) => d,
                         None => {
@@ -2420,6 +2425,9 @@ impl Document {
         let (cam_a, cam_b) = (self.panel_camera(index, 0), self.panel_camera(index + 1, 0));
         // (Le plan réuni, qu'une autre version de sa séquence montre, en garde une copie : `variantes.rs`.)
         self.ranger_plan_partage(self.panels[index + 1].id, true);
+        // Les calques partagés du second (`partage.rs`) se détachent d'abord : ses dessins, copiés, suivent dans le plan réuni sans
+        // emporter le lien.
+        self.detacher_plan(index + 1);
         let next = self.panels.remove(index + 1);
         let versions_suivant = self.versions.remove(&next.id);
         self.absorber_versions(self.panels[index].id, versions_suivant);
@@ -2613,6 +2621,8 @@ impl Document {
         let mut copies: HashMap<CelId, CelId> = HashMap::new();
         for layer in &mut panel.layers {
             layer.id = fresh_layer_id();
+            // (Une copie ne reprend pas le lien d'une planche-mère : lier se demande, `partage.rs`.)
+            layer.partage = None;
             if layer.scene_wide.is_some() {
                 continue;
             }
@@ -2717,6 +2727,8 @@ impl Document {
             let old_ids: Vec<u64> = panel.layers.iter().map(|l| l.id).collect();
             for layer in &mut panel.layers {
                 layer.id = fresh_layer_id();
+                // (Un plan collé ne reprend pas le lien d'une planche-mère, `partage.rs`.)
+                layer.partage = None;
                 if layer.scene_wide.is_some() {
                     continue;
                 }
