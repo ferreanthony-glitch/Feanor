@@ -699,11 +699,11 @@ impl App {
             e
         }));
         self.refresh_cel(cel);
-        let base = self.history.undo_len();
+        let marque = self.history.marque();
         self.push_vector(cel, before, prefix);
         // Dans les Vignettes : ce qui est collé se répartit comme un trait qu'on vient de tracer et devient le choix de la planche (l'outil ne change pas).
         if self.board_shown() {
-            self.selp_apres_le_collage(cel, start..start + n, base);
+            self.selp_apres_le_collage(cel, start..start + n, marque);
             return;
         }
         self.vsel = Some(VSelection {

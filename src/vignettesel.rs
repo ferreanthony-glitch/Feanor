@@ -5,29 +5,36 @@
 //! # Ce que c'est
 //!
 //! - **La sélection de la planche** : dans les Vignettes, sur un calque vectoriel, **Ctrl + glisser** trace un lasso **n'importe où** : dans une case,
-//!   sur le papier autour et entre les cases, ou à cheval. **Ctrl + clic** prend le trait sous le pointeur. Le lasso est sur la planche, pas dans le
-//!   dessin d'une case : il ne s'arrête à aucun bord.
+//!   sur le papier autour et entre les cases, ou à cheval. **Ctrl + clic** prend ce qui est sous le pointeur. Le lasso est sur la planche, pas dans le
+//!   dessin d'une case : il ne s'arrête à aucun bord. (L'outil Caméra et T tenue gardent Ctrl pour la caméra.)
 //! - **Le trait entier** : un trait tracé à travers les cases est réparti au lâcher (`horschamp.rs`) ; chaque part (dans le dessin d'une case, sur la
 //!   planche) porte le même numéro (`vector::Trace::lien`, `annotations::Trace::lien`). Prendre une part prend toutes celles qui la prolongent : celles
-//!   du même numéro dont un bout touche le sien (`entier_de`). Un projet d'avant n'a pas ce numéro : ses traits déjà coupés restent des morceaux.
+//!   du même numéro dont un bout touche le sien (`entier_de`). Un projet d'avant n'a pas ce numéro : ses traits déjà coupés restent des morceaux. Une
+//!   copie (dessin dupliqué, plan dupliqué, collage) prend des numéros neufs.
+//! - **Les autres éléments d'une case** (formes remplies, textes, images) sont pris aussi, comme avant : ils restent dans leur case et ne sont pas
+//!   répartis ; le geste les transforme sur place, dans le même pas que les traits.
 //! - **Les gestes** : la boîte du choix est sur la planche (`selbox.rs`, les mêmes poignées). Ctrl + glisser dedans : déplacer ; un coin : l'échelle ;
 //!   hors d'un coin : tourner ; un bord : incliner. Pendant le geste, rien ne change dans le projet : les traits sont peints à leur nouvelle place,
-//!   par-dessus (des lignes de leur couleur, sans le grain du pinceau ; règle « sans latence »). **Au lâcher**, chaque trait est rassemblé, transformé,
-//!   puis réparti à nouveau comme un trait qu'on vient de dessiner (`App::horschamp_repartir_element`) : chaque case reçoit sa part, le reste va sur
-//!   la planche, une seule étape d'annulation.
-//! - **Suppr, Ctrl+C, Ctrl+X, Ctrl+V, recolorer** agissent sur les traits entiers. Ctrl+V dans les Vignettes répartit ce qui est collé.
+//!   par-dessus (des lignes de leur couleur ; règle « sans latence »). **Au lâcher**, tout est d'abord calculé sans rien écrire (`selp_preparer`) : si une
+//!   part n'a nulle part où aller (planche pleine), le geste est refusé tel quel et la ligne d'état le dit. Sinon chaque trait est rassemblé, transformé,
+//!   puis réparti comme un trait qu'on vient de tracer (`App::horschamp_repartir_element`) : il garde son rang dans le dessin d'où il vient ; dans une
+//!   case d'arrivée il est posé dessus, ou dessous s'il était peint derrière. Une seule étape d'annulation, même historique plein.
+//! - **Suppr, Ctrl+C, Ctrl+X, Ctrl+V, recolorer** agissent sur le choix entier, quand le dessin a la main (pas la timeline, le montage ni un panneau).
 //! - **Les refus de la partie 122 restent** : une case dont le calque est verrouillé, masqué, transformé… ne reçoit rien (la part reste sur la planche,
-//!   par-dessus elle) ; une part posée dans un tel calque n'est pas prise (on n'écrit pas dans un calque verrouillé).
-//! - **Ce qui ne change pas** : la vue Storyboard et la vue Animation (un seul plan), le calque bitmap (sa sélection reste celle de la case, voir la
-//!   partie 125), les formes remplies et le texte d'une case (ils ne se répartissent pas), et les deux gestes de caméra qui déplacent le dessin.
+//!   par-dessus elle, `ajouter_sur_la_case`) ; une part posée dans un tel calque n'est pas prise.
+//! - **Ce qui ne change pas** : la vue Storyboard et la vue Animation (un seul plan), le calque bitmap (sa sélection reste celle de la case), et les
+//!   deux gestes de caméra qui déplacent le dessin.
 
-use eframe::egui::{self, Color32, Modifiers, Pos2, Rect, Stroke};
+use std::cell::RefCell;
 
-use crate::app::App;
+use eframe::egui::{self, pos2, Color32, Modifiers, Pos2, Rect, Stroke};
+
+use crate::app::{App, Tool};
 use crate::board::BoardLayout;
 use crate::boardui::Xf;
 use crate::document::{CelId, LayerKind};
 use crate::history::Edit;
+use crate::horschamp::{Pose, Pt};
 use crate::horschamptex::Recette;
 use crate::selbox::{self, Grabs, Handle, Mods, SelFrame};
 use crate::vector::{Affine, Element, Trace as VTrace, VPoint, VectorDrawing};
@@ -41,7 +48,7 @@ const PRISE_PX: f32 = 6.0;
 const PIVOT_SNAP: f32 = 6.0;
 const LASSO_MAX: usize = 4000;
 
-/// Où est une part d'un trait.
+/// Où est une part.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum PartRef {
     /// L'élément `rang` du dessin `cel`, montré par la case `case` (`CardPlace::id`).
@@ -50,10 +57,11 @@ pub(crate) enum PartRef {
     Planche { id: u64 },
 }
 
-/// Un trait entier : ses parts dans l'ordre du tracé.
+/// Un trait entier (ses parts dans l'ordre du tracé), ou un autre élément d'une case (`objet` : une forme, un texte, une image ; il reste dans sa case).
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct TraitEntier {
     pub parts: Vec<PartRef>,
+    pub objet: bool,
 }
 
 /// Le geste de la boîte en cours.
@@ -66,6 +74,25 @@ pub(crate) struct GesteSel {
     pub change: bool,
 }
 
+/// Ce que le choix montre sur la planche, calculé une fois tant que rien ne change (`selp_vue`).
+#[derive(Clone, Debug)]
+pub(crate) struct Vue {
+    cle: (u64, usize, usize, [u32; 2]),
+    /// Chaque part d'un trait, sur la planche (rayon compris).
+    parts: Vec<Vec<VPoint>>,
+    /// Chaque trait entier, rassemblé, et sa couleur (l'aperçu du geste).
+    entiers: Vec<(Vec<VPoint>, Color32)>,
+    /// Les coins de chaque autre élément pris.
+    objets: Vec<[Pos2; 4]>,
+    bornes: Rect,
+}
+
+impl Default for Vue {
+    fn default() -> Self {
+        Vue { cle: (0, 0, 0, [0, 0]), parts: Vec::new(), entiers: Vec::new(), objets: Vec::new(), bornes: Rect::NOTHING }
+    }
+}
+
 /// La sélection de la planche.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct SelPlanche {
@@ -73,9 +100,9 @@ pub(crate) struct SelPlanche {
     /// L'historique au moment du choix : s'il a changé sans nous, les rangs ne valent plus, le choix est levé.
     pub serial: u64,
     pub lasso: Option<Vec<Pos2>>,
-    pub ajout: bool,
     pub geste: Option<GesteSel>,
     pub pivot: Option<Pos2>,
+    vue: RefCell<Option<Vue>>,
 }
 
 /// Une part sur la planche : ses points (rayon compris, en unités de la planche), l'appui et l'instant de chacun (vides s'ils ne suivent pas).
@@ -112,6 +139,24 @@ pub(crate) struct Rassemble {
     pub allure: Allure,
 }
 
+/// Où un trait déplacé sera reposé, calculé avant de rien changer.
+enum Repose {
+    /// Dans le dessin de la case `k` (calque `rang`), ses points dans ce dessin ; puis réparti.
+    Case { k: usize, rang: usize, points: Vec<VPoint>, echelle: f32 },
+    /// Hors de toute case qui puisse le recevoir : sur la planche, par tronçons (la case qu'un tronçon recouvre, s'il en recouvre une ; ses points).
+    Planche { troncons: Vec<(Option<crate::board::CardPlace>, Ligne)> },
+}
+
+/// Un trait prêt à être reposé.
+struct APoser {
+    trait_: Rassemble,
+    repose: Repose,
+    lien: u64,
+    /// La place qu'avaient ses parts dans les dessins d'où elles viennent (rang une fois les parts retirées) : il la garde.
+    places: Vec<(CelId, usize)>,
+    derriere: bool,
+}
+
 /// Les lignes `parts`, bout à bout : le point de jonction n'est gardé qu'une fois. L'appui suit si toutes le suivent.
 pub(crate) fn joindre(parts: &[Ligne]) -> Ligne {
     let aligne = parts.iter().all(Ligne::aligne);
@@ -146,6 +191,9 @@ fn transformee(l: &Ligne, aff: &Affine) -> Ligne {
 
 /// La distance du point `p` à la ligne brisée `pts`, moins le rayon.
 fn distance_au_trait(pts: &[VPoint], p: Pos2) -> f32 {
+    if pts.len() == 1 {
+        return (pts[0].pos() - p).length() - pts[0].r;
+    }
     let mut best = f32::INFINITY;
     for w in pts.windows(2) {
         let (a, b) = (w[0].pos(), w[1].pos());
@@ -154,10 +202,18 @@ fn distance_au_trait(pts: &[VPoint], p: Pos2) -> f32 {
         let r = w[0].r + (w[1].r - w[0].r) * t;
         best = best.min(((a + ab * t) - p).length() - r);
     }
-    if pts.len() == 1 {
-        best = (pts[0].pos() - p).length() - pts[0].r;
-    }
     best
+}
+
+/// L'affinité qui fait, dans un dessin posé par `de`, ce que `aff` fait sur la planche, puis le pose par `vers` (autour du point `o` du dessin : exacte
+/// pour une caméra droite, l'approximation locale sinon).
+fn affinite_locale(de: &Pose, aff: &Affine, vers: &Pose, o: Pos2) -> Option<Affine> {
+    let u = 50.0;
+    let f = |p: Pos2| vers.dessin_sur(aff.apply(de.planche(p)));
+    let (oo, x, y) = (f(o)?, f(o + egui::vec2(u, 0.0))?, f(o + egui::vec2(0.0, u))?);
+    let (a, c, b, d) = ((x.x - oo.x) / u, (x.y - oo.y) / u, (y.x - oo.x) / u, (y.y - oo.y) / u);
+    let r = Affine { a, b, c, d, tx: oo.x - a * o.x - b * o.y, ty: oo.y - c * o.x - d * o.y };
+    [r.a, r.b, r.c, r.d, r.tx, r.ty].iter().all(|v| v.is_finite()).then_some(r)
 }
 
 impl App {
@@ -166,9 +222,15 @@ impl App {
         self.board_shown() && self.layers().get(self.cur_layer).is_some_and(|l| l.kind == LayerKind::Vector)
     }
 
-    /// Des traits sont-ils choisis sur la planche (et le choix vaut-il encore) ?
+    /// Des éléments sont-ils choisis sur la planche, et le choix vaut-il encore (même historique, calque vectoriel) ?
     pub(crate) fn selp_active(&self) -> bool {
-        self.vignettes.selp.as_ref().is_some_and(|s| !s.traits.is_empty() && s.serial == self.history.serial())
+        self.selp_possible() && self.vignettes.selp.as_ref().is_some_and(|s| !s.traits.is_empty() && s.serial == self.history.serial())
+    }
+
+    /// Les touches d'édition (Suppr, Ctrl+C, Ctrl+X) vont-elles au choix de la planche : il vaut, et le dessin a la main (pas les plans, les images de la
+    /// timeline ni les clés).
+    pub(crate) fn selp_a_la_main(&self) -> bool {
+        self.selp_active() && !self.panels_have_focus() && !self.images_focus && !self.key_focus
     }
 
     /// Lève le choix.
@@ -197,7 +259,7 @@ impl App {
         out
     }
 
-    /// La part `r` sur la planche, et son allure. Rien si elle n'existe plus.
+    /// La part `r` (un trait) sur la planche, et son allure. Rien si elle n'existe plus ou n'est pas un trait.
     pub(crate) fn part_planche(&self, layout: &BoardLayout, r: &PartRef) -> Option<(Ligne, Allure)> {
         match *r {
             PartRef::Dessin { cel, case, rang } => {
@@ -240,10 +302,19 @@ impl App {
         }
     }
 
+    /// Les coins, sur la planche, de l'élément `r` d'une case (une forme, un texte, une image).
+    fn objet_coins(&self, layout: &BoardLayout, r: &PartRef) -> Option<[Pos2; 4]> {
+        let PartRef::Dessin { cel, case, rang } = *r else { return None };
+        let k = layout.cards.iter().position(|c| c.id == case)?;
+        let pose = crate::horschamp::pose_de_la_case(&self.doc, layout, k)?;
+        let b = self.drawing(cel)?.elements.get(rang)?.bounds();
+        b.is_finite().then(|| [b.left_top(), b.right_top(), b.right_bottom(), b.left_bottom()].map(|p| pose.planche(p)))
+    }
+
     /// Toutes les parts du numéro `lien` qu'on peut prendre : dans le dessin des cases (calque où l'on choisit), et sur la planche.
-    fn parts_du_lien(&self, layout: &BoardLayout, lien: u64) -> Vec<PartRef> {
+    fn parts_du_lien(&self, layout: &BoardLayout, dessins: &[(usize, CelId)], lien: u64) -> Vec<PartRef> {
         let mut out = Vec::new();
-        for (k, cel) in self.dessins_des_cases(layout) {
+        for &(k, cel) in dessins {
             let Some(d) = self.drawing(cel) else { continue };
             for (rang, e) in d.elements.iter().enumerate() {
                 if let Element::Stroke { trace, .. } = e {
@@ -259,13 +330,14 @@ impl App {
         out
     }
 
-    /// Le trait entier dont `depart` est une part : les parts du même numéro qui le prolongent, bout à bout, dans l'ordre du tracé.
-    pub(crate) fn entier_de(&self, layout: &BoardLayout, depart: PartRef) -> TraitEntier {
-        let seul = TraitEntier { parts: vec![depart] };
+    /// Le trait entier dont `depart` est une part : les parts du même numéro qui le prolongent, bout à bout, dans l'ordre du tracé (`dessins` : les dessins
+    /// des cases, `dessins_des_cases`).
+    fn entier_de_avec(&self, layout: &BoardLayout, dessins: &[(usize, CelId)], depart: PartRef) -> TraitEntier {
+        let seul = TraitEntier { parts: vec![depart], objet: false };
         let Some((l0, a0)) = self.part_planche(layout, &depart) else { return seul };
         let Some(lien) = a0.lien else { return seul };
         let mut restes: Vec<(PartRef, Pos2, Pos2)> = self
-            .parts_du_lien(layout, lien)
+            .parts_du_lien(layout, dessins, lien)
             .into_iter()
             .filter(|r| *r != depart)
             .filter_map(|r| {
@@ -291,11 +363,14 @@ impl App {
             }
             break;
         }
-        TraitEntier { parts: chaine.into_iter().collect() }
+        TraitEntier { parts: chaine.into_iter().collect(), objet: false }
     }
 
     /// Le trait entier `t`, rassemblé sur la planche : ses parts bout à bout, l'allure de sa première part posée dans un dessin (ou de la première).
     pub(crate) fn rassembler(&self, layout: &BoardLayout, t: &TraitEntier) -> Option<Rassemble> {
+        if t.objet {
+            return None;
+        }
         let vus: Vec<(Ligne, Allure, bool)> = t.parts.iter().filter_map(|r| self.part_planche(layout, r).map(|(l, a)| (l, a, matches!(r, PartRef::Dessin { .. })))).collect();
         if vus.is_empty() {
             return None;
@@ -305,39 +380,53 @@ impl App {
         Some(Rassemble { ligne: joindre(&lignes), allure })
     }
 
-    /// Ce que prend le lasso `poly` (planche) : les traits des dessins des cases et de la planche qui ont un point dedans, chacun avec toutes ses parts.
+    /// Ce que prend le lasso `poly` (planche) : les traits des dessins des cases et de la planche qui ont un point dedans, chacun avec toutes ses parts ;
+    /// et les autres éléments des cases qu'il touche (comme le lasso d'une case).
     pub(crate) fn selp_dans_le_lasso(&self, layout: &BoardLayout, poly: &[Pos2]) -> Vec<TraitEntier> {
         let boite = Rect::from_points(poly);
+        let dessins = self.dessins_des_cases(layout);
         let champs = crate::horschamp::champs(layout, self.settings.vignettes.debord_fraction());
-        let mut prises: Vec<PartRef> = Vec::new();
-        for (k, cel) in self.dessins_des_cases(layout) {
-            if !champs.get(k).is_some_and(|c| c.intersects(boite)) {
-                continue;
-            }
+        let mut prises: Vec<(PartRef, bool)> = Vec::new();
+        for &(k, cel) in &dessins {
+            // (Seul ce que la case montre compte : un trait d'avant la partie 111 qui dépasse de son champ n'est pas pris par ce qu'on n'y voit pas.)
+            let Some(champ) = champs.get(k).copied().filter(|c| c.intersects(boite)) else { continue };
             let Some(pose) = crate::horschamp::pose_de_la_case(&self.doc, layout, k) else { continue };
             let Some(d) = self.drawing(cel) else { continue };
+            // (Le lasso dans le dessin de la case, pour les éléments qui ne sont pas des traits : s'il a une place dans ce dessin.)
+            let poly_dessin: Option<Vec<Pos2>> = poly.iter().map(|p| pose.dessin_sur(*p)).collect();
             for (rang, e) in d.elements.iter().enumerate() {
-                if let Element::Stroke { points, .. } = e {
-                    if points.iter().any(|p| {
-                        let b = pose.planche(p.pos());
-                        boite.contains(b) && crate::vector::point_in_polygon(b, poly)
-                    }) {
-                        prises.push(PartRef::Dessin { cel, case: layout.cards[k].id, rang });
+                let r = PartRef::Dessin { cel, case: layout.cards[k].id, rang };
+                match e {
+                    Element::Stroke { points, .. } => {
+                        if points.iter().any(|p| {
+                            let b = pose.planche(p.pos());
+                            champ.contains(b) && boite.contains(b) && crate::vector::point_in_polygon(b, poly)
+                        }) {
+                            prises.push((r, false));
+                        }
+                    }
+                    _ => {
+                        if poly_dessin.as_ref().is_some_and(|q| e.touches(q)) {
+                            prises.push((r, true));
+                        }
                     }
                 }
             }
         }
         if let Some(calque) = self.doc.annotations.hors_cadres_montre() {
-            prises.extend(self.doc.annotations.dans_le_lasso(layout, calque, poly).into_iter().map(|id| PartRef::Planche { id }));
+            prises.extend(self.doc.annotations.dans_le_lasso(layout, calque, poly).into_iter().map(|id| (PartRef::Planche { id }, false)));
         }
-        self.en_traits_entiers(layout, prises)
+        self.en_traits_entiers(layout, &dessins, prises)
     }
 
-    /// Le trait sous le point `p` (planche), à `tol` près : le plus haut d'une case, sinon de la planche.
+    /// Ce qui est sous le point `p` (planche), à `tol` près : le trait le plus proche d'une case ou de la planche ; sinon l'élément d'une case sous le point.
     pub(crate) fn selp_sous_le_point(&self, layout: &BoardLayout, p: Pos2, tol: f32) -> Vec<TraitEntier> {
+        let dessins = self.dessins_des_cases(layout);
         let mut meilleur: Option<(f32, PartRef)> = None;
-        for (k, cel) in self.dessins_des_cases(layout) {
+        let mut objet: Option<PartRef> = None;
+        for &(k, cel) in &dessins {
             let Some(d) = self.drawing(cel) else { continue };
+            let Some(pose) = crate::horschamp::pose_de_la_case(&self.doc, layout, k) else { continue };
             for rang in 0..d.elements.len() {
                 let r = PartRef::Dessin { cel, case: layout.cards[k].id, rang };
                 if !matches!(d.elements[rang], Element::Stroke { .. }) {
@@ -347,6 +436,14 @@ impl App {
                 let dist = distance_au_trait(&l.points, p);
                 if dist <= tol && meilleur.is_none_or(|(m, _)| dist <= m) {
                     meilleur = Some((dist, r));
+                }
+            }
+            if objet.is_none() && crate::horschamp::dans_image(layout, k, p) {
+                if let Some(q) = pose.dessin_sur(p) {
+                    let tol_d = tol / pose.echelle_en(q).max(1e-6);
+                    if let Some(i) = d.hit_test(q, tol_d).filter(|i| !matches!(d.elements[*i], Element::Stroke { .. })) {
+                        objet = Some(PartRef::Dessin { cel, case: layout.cards[k].id, rang: i });
+                    }
                 }
             }
         }
@@ -360,35 +457,75 @@ impl App {
                 }
             }
         }
-        self.en_traits_entiers(layout, meilleur.map(|(_, r)| r).into_iter().collect())
+        let prises = match (meilleur, objet) {
+            (Some((_, r)), _) => vec![(r, false)],
+            (None, Some(r)) => vec![(r, true)],
+            _ => Vec::new(),
+        };
+        self.en_traits_entiers(layout, &dessins, prises)
     }
 
-    /// Les parts `prises`, chacune complétée en son trait entier ; une part déjà prise par un autre trait ne compte qu'une fois.
-    fn en_traits_entiers(&self, layout: &BoardLayout, prises: Vec<PartRef>) -> Vec<TraitEntier> {
+    /// Les parts `prises`, chacune complétée en son trait entier (un autre élément reste seul) ; une part déjà prise ne compte qu'une fois.
+    fn en_traits_entiers(&self, layout: &BoardLayout, dessins: &[(usize, CelId)], prises: Vec<(PartRef, bool)>) -> Vec<TraitEntier> {
         let mut out: Vec<TraitEntier> = Vec::new();
-        for r in prises {
-            if out.iter().any(|t| t.parts.contains(&r)) {
+        let mut vues: std::collections::HashSet<(u8, u64, usize)> = std::collections::HashSet::new();
+        let cle = |r: &PartRef| match *r {
+            PartRef::Dessin { cel, rang, .. } => (0u8, cel, rang),
+            PartRef::Planche { id } => (1u8, id, 0),
+        };
+        for (r, objet) in prises {
+            if vues.contains(&cle(&r)) {
                 continue;
             }
-            out.push(self.entier_de(layout, r));
+            let t = if objet { TraitEntier { parts: vec![r], objet: true } } else { self.entier_de_avec(layout, dessins, r) };
+            for p in &t.parts {
+                vues.insert(cle(p));
+            }
+            out.push(t);
         }
         out
     }
 
-    /// La boîte du choix (planche), droite, avec un peu d'air.
-    pub(crate) fn selp_cadre(&self, layout: &BoardLayout, zoom: f32) -> Option<SelFrame> {
+    /// Ce que le choix montre sur la planche : calculé une fois tant que l'historique, la planche et le choix ne changent pas.
+    fn selp_vue(&self, layout: &BoardLayout) -> Option<Vue> {
         let s = self.vignettes.selp.as_ref()?;
-        let mut b = Rect::NOTHING;
+        let cle = (self.history.serial(), s.traits.len(), layout.cards.len(), [layout.size.x.to_bits(), layout.size.y.to_bits()]);
+        if let Some(v) = s.vue.borrow().as_ref().filter(|v| v.cle == cle) {
+            return Some(v.clone());
+        }
+        let mut v = Vue { cle, bornes: Rect::NOTHING, ..Vue::default() };
         for t in &s.traits {
+            if t.objet {
+                if let Some(q) = t.parts.first().and_then(|r| self.objet_coins(layout, r)) {
+                    for p in q {
+                        v.bornes = v.bornes.union(Rect::from_min_max(p, p));
+                    }
+                    v.objets.push(q);
+                }
+                continue;
+            }
             for r in &t.parts {
                 if let Some((l, _)) = self.part_planche(layout, r) {
                     for p in &l.points {
-                        b = b.union(Rect::from_center_size(p.pos(), egui::Vec2::splat(p.r * 2.0)));
+                        v.bornes = v.bornes.union(Rect::from_center_size(p.pos(), egui::Vec2::splat(p.r * 2.0)));
                     }
+                    v.parts.push(l.points);
                 }
             }
+            if let Some(r) = self.rassembler(layout, t) {
+                let a = r.allure;
+                v.entiers.push((r.ligne.points, Color32::from_rgba_unmultiplied(a.color[0], a.color[1], a.color[2], (a.opacity.clamp(0.0, 1.0) * 255.0).round() as u8)));
+            }
         }
-        (b.is_finite() && b.width() >= 0.0).then(|| SelFrame { rect0: b.expand(2.0 / zoom.max(0.05)), m: Affine::IDENTITY, pivot: s.pivot })
+        *s.vue.borrow_mut() = Some(v.clone());
+        Some(v)
+    }
+
+    /// La boîte du choix (planche), droite, avec un peu d'air.
+    pub(crate) fn selp_cadre(&self, layout: &BoardLayout, zoom: f32) -> Option<SelFrame> {
+        let v = self.selp_vue(layout)?;
+        let s = self.vignettes.selp.as_ref()?;
+        (v.bornes.is_finite() && v.bornes.width() >= 0.0).then(|| SelFrame { rect0: v.bornes.expand(2.0 / zoom.max(0.05)), m: Affine::IDENTITY, pivot: s.pivot })
     }
 
     fn selp_cadre_vu(&self, layout: &BoardLayout, zoom: f32) -> Option<SelFrame> {
@@ -398,11 +535,11 @@ impl App {
         }
     }
 
-    /// Un appui sur la planche (`pos`, écran) : Ctrl seul (calque vectoriel) prend l'appui pour la sélection de la planche. Sur la boîte du choix : son geste ;
-    /// ailleurs : un lasso. Tout autre appui lève le choix. Vrai si l'appui est pris.
+    /// Un appui sur la planche (`pos`, écran) : Ctrl seul (calque vectoriel) prend l'appui pour la sélection de la planche. Sur la boîte du choix : son
+    /// geste ; ailleurs : un lasso. Tout autre appui lève le choix. L'outil Caméra et T tenue gardent Ctrl pour la caméra. Vrai si l'appui est pris.
     pub(crate) fn selp_appui(&mut self, layout: &BoardLayout, xf: Xf, pos: Pos2, m: Modifiers) -> bool {
         let ctrl = (m.ctrl || m.command) && !m.shift && !m.alt;
-        if !ctrl || !self.selp_possible() {
+        if !ctrl || !self.selp_possible() || self.tool == Tool::Camera || self.vignettes.camera_tenue {
             self.selp_lever();
             return false;
         }
@@ -419,21 +556,22 @@ impl App {
                 }
             }
         }
-        let garde = self.selp_active();
         let s = self.vignettes.selp.get_or_insert_with(SelPlanche::default);
-        if !garde {
-            s.traits.clear();
-        }
+        s.traits.clear();
         s.lasso = Some(vec![board]);
-        s.ajout = false;
         s.geste = None;
-        // (Un trait commencé ailleurs ne se mêle pas au lasso : `vsel`, la sélection d'une case, est levée.)
+        // (La sélection d'une case n'a plus cours : la planche a le choix.)
         self.vsel = None;
         true
     }
 
-    /// Le geste à cette image d'écran : le lasso grandit, ou la boîte suit le pointeur ; au lâcher, il est posé. Échap abandonne.
-    pub(crate) fn selp_geste(&mut self, layout: &BoardLayout, xf: Xf, latest: Option<Pos2>, down: bool, escape: bool) {
+    /// Le geste à cette image d'écran : le lasso grandit, ou la boîte suit le pointeur ; au lâcher, il est posé. Échap abandonne. Un appui hors de la
+    /// planche (`dehors`), ou un calque qui n'est plus vectoriel, lève le choix.
+    pub(crate) fn selp_geste(&mut self, layout: &BoardLayout, xf: Xf, latest: Option<Pos2>, down: bool, escape: bool, dehors: bool) {
+        if self.vignettes.selp.is_some() && (dehors || !self.selp_possible()) {
+            self.selp_lever();
+            return;
+        }
         let Some(s) = self.vignettes.selp.as_mut() else { return };
         if escape {
             if s.lasso.is_some() || s.geste.is_some() {
@@ -484,20 +622,22 @@ impl App {
                 s.traits = trouves;
                 s.serial = serial;
                 s.pivot = None;
-                let n = s.traits.len();
-                let parts: usize = s.traits.iter().map(|t| t.parts.len()).sum();
-                self.status = match n {
-                    0 => "Rien dans le lasso.".into(),
-                    1 if parts > 1 => format!("1 trait choisi, entier ({parts} parts) : Ctrl + glisser dans la boîte le déplace, un coin l'agrandit ou le tourne ; Suppr l'efface."),
-                    1 => "1 trait choisi : Ctrl + glisser dans la boîte le déplace, un coin l'agrandit ou le tourne ; Suppr l'efface.".into(),
-                    n => format!("{n} traits choisis, entiers : Ctrl + glisser dans la boîte les déplace, un coin les agrandit ou les tourne ; Suppr les efface."),
+                *s.vue.borrow_mut() = None;
+                let n = s.traits.iter().filter(|t| !t.objet).count();
+                let o = s.traits.len() - n;
+                let parts: usize = s.traits.iter().filter(|t| !t.objet).map(|t| t.parts.len()).sum();
+                let objets = if o > 0 { format!(" et {o} élément{} de case", if o > 1 { "s" } else { "" }) } else { String::new() };
+                self.status = match (n, o) {
+                    (0, 0) => "Rien dans le lasso.".into(),
+                    (1, _) if parts > 1 => format!("1 trait choisi, entier ({parts} parts){objets} : Ctrl + glisser dans la boîte le déplace, un coin l'agrandit ou le tourne ; Suppr l'efface."),
+                    _ => format!("{n} trait{} choisi{}, entier{}{objets} : Ctrl + glisser dans la boîte pour déplacer, un coin pour agrandir ou tourner ; Suppr pour effacer.", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" }),
                 };
             }
         }
     }
 
-    /// Retire du projet les parts de `traits` (aucune étape posée ici) : rend l'état d'avant de chaque dessin touché, et s'il a fallu toucher la planche.
-    fn selp_retirer(&mut self, traits: &[TraitEntier]) -> (Vec<(CelId, VectorDrawing)>, bool) {
+    /// Retire du projet les parts de `traits` (aucune étape posée ici) : rend l'état d'avant de chaque dessin touché.
+    fn selp_retirer(&mut self, traits: &[TraitEntier]) -> Vec<(CelId, VectorDrawing)> {
         let mut par_dessin: Vec<(CelId, Vec<usize>)> = Vec::new();
         let mut planche: Vec<u64> = Vec::new();
         for r in traits.iter().flat_map(|t| t.parts.iter()) {
@@ -521,8 +661,10 @@ impl App {
                 }
             }
         }
-        let touche = !planche.is_empty() && self.doc.annotations.supprimer_traces(&planche) > 0;
-        (avant, touche)
+        if !planche.is_empty() {
+            self.doc.annotations.supprimer_traces(&planche);
+        }
+        avant
     }
 
     /// Le dessin `cel` a changé : son image se refait en fond.
@@ -533,122 +675,232 @@ impl App {
         self.rejeu_cel(cel);
     }
 
-    /// Le trait rassemblé `t` posé de nouveau sur la planche, comme un trait qu'on vient de tracer : dans le dessin de la case où il commence (le premier de
-    /// ses points dans une case qui peut le recevoir), puis réparti ; entièrement hors des cases : sur la planche. Les dessins touchés sont notés dans `avant`
-    /// **avant** d'être changés. Rend son numéro.
-    fn selp_poser(&mut self, layout: &BoardLayout, t: &Rassemble, avant: &mut Vec<(CelId, VectorDrawing)>) -> u64 {
-        let lien = t.allure.lien.unwrap_or_else(crate::horschamp::nouveau_lien);
+    /// Où reposer le trait rassemblé `t`, **sans rien changer** : dans le dessin de la première case qui peut le recevoir là où il passe (son image, puis sa
+    /// marge), si ce dessin a une place pour tous ses points ; sinon sur la planche, par tronçons (par-dessus l'image des cases qu'il recouvre).
+    fn selp_preparer(&self, layout: &BoardLayout, t: &Rassemble) -> Repose {
         let champs = crate::horschamp::champs(layout, self.settings.vignettes.debord_fraction());
-        let images = |p: Pos2| (0..layout.cards.len()).find(|k| crate::horschamp::dans_image(layout, *k, p));
-        let marges = |p: Pos2| champs.iter().position(|c| c.contains(p));
-        // (La case où le trait commence : son image d'abord, sinon sa marge ; une case qui ne peut pas le recevoir n'en est pas une.)
-        let mut origine: Option<(usize, usize, CelId)> = None;
-        'pts: for p in &t.ligne.points {
-            for k in [images(p.pos()), marges(p.pos())].into_iter().flatten() {
-                if let Ok(rang) = self.case_recoit(layout, k, LayerKind::Vector) {
-                    if let Some(cel) = self.cel_de_la_case(layout, k, rang) {
-                        origine = Some((k, rang, cel));
-                        break 'pts;
-                    }
+        let mut essayees: Vec<usize> = Vec::new();
+        for p in &t.ligne.points {
+            let images = (0..layout.cards.len()).filter(|k| crate::horschamp::dans_image(layout, *k, p.pos()));
+            let marges = champs.iter().enumerate().filter(|(_, c)| c.contains(p.pos())).map(|(k, _)| k);
+            for k in images.chain(marges) {
+                if essayees.contains(&k) {
+                    continue;
+                }
+                essayees.push(k);
+                let Ok(rang) = self.case_recoit(layout, k, LayerKind::Vector) else { continue };
+                let Some(pose) = crate::horschamp::pose_de_la_case(&self.doc, layout, k) else { continue };
+                let pts: Option<Vec<VPoint>> = t.ligne.points.iter().map(|p| pose.dessin_sur(p.pos()).map(|q| VPoint { x: q.x, y: q.y, r: (p.r / pose.echelle_en(q).max(1e-6)).clamp(0.05, 400.0) })).collect();
+                if let Some(points) = pts.filter(|v| !v.is_empty()) {
+                    let echelle = pose.echelle_en(points[0].pos()).max(1e-6);
+                    return Repose::Case { k, rang, points, echelle };
                 }
             }
         }
-        let Some((k, rang, cel)) = origine else {
-            // Hors de toute case : le trait va sur la planche, avec la recette de son pinceau.
-            let recette = Recette { reglage: t.allure.brush, opacite: t.allure.opacity, durete: t.allure.hardness, toucher: t.allure.feel, couleur_b: t.allure.secondary };
-            let (appui, instants) = if t.ligne.aligne() { (t.ligne.appui.clone(), t.ligne.instants.clone()) } else { (Vec::new(), Vec::new()) };
-            let alpha = (t.allure.opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
-            let n = self.doc.annotations.traces.len();
-            if self.doc.annotations.ajouter_hors_cadres_brosse(layout, &t.ligne.points, t.allure.color, alpha, Some((recette, appui, instants, t.allure.echelle))) {
-                if let Some(tr) = self.doc.annotations.traces.get_mut(n) {
-                    tr.lien = Some(lien);
+        // Aucune case ne peut le recevoir : sur la planche, par-dessus l'image des cases qu'il traverse (partie 122), sous elles ailleurs.
+        let pts: Vec<Pt> = t.ligne.points.iter().enumerate().map(|(i, p)| Pt {
+            layer: *p,
+            board: p.pos(),
+            pressure: t.ligne.appui.get(i).copied().unwrap_or(1.0),
+            time: t.ligne.instants.get(i).copied().unwrap_or(0.0),
+        }).collect();
+        let n = layout.cards.len();
+        let owner = |p: Pos2| (0..n).find(|k| crate::horschamp::dans_image(layout, *k, p)).or_else(|| layout.annulee_en(p).map(|i| n + i));
+        let suit = t.ligne.aligne();
+        let troncons = crate::horschamp::trancher(&pts, &owner)
+            .into_iter()
+            .map(|(q, run)| {
+                let c = q.and_then(|q| layout.cards.get(q).or_else(|| layout.annulees.get(q - n))).copied();
+                let l = Ligne { points: run.iter().map(|p| p.layer).collect(), appui: if suit { run.iter().map(|p| p.pressure).collect() } else { Vec::new() }, instants: if suit { run.iter().map(|p| p.time).collect() } else { Vec::new() } };
+                (c, l)
+            })
+            .collect();
+        Repose::Planche { troncons }
+    }
+
+    /// Pose le trait préparé `p` (rien ne peut plus échouer : la place a été vérifiée). Les dessins touchés sont notés dans `avant` **avant** d'être changés
+    /// (leur état d'avant entre dans l'étape).
+    fn selp_poser(&mut self, layout: &BoardLayout, p: &APoser, avant: &mut Vec<(CelId, VectorDrawing)>) {
+        let t = &p.trait_;
+        match &p.repose {
+            Repose::Planche { troncons } => {
+                let recette = Recette { reglage: t.allure.brush, opacite: t.allure.opacity, durete: t.allure.hardness, toucher: t.allure.feel, couleur_b: t.allure.secondary };
+                let alpha = (t.allure.opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
+                for (sur, l) in troncons {
+                    let brosse = Some((recette, l.appui.clone(), l.instants.clone(), t.allure.echelle));
+                    let n = self.doc.annotations.traces.len();
+                    let pose = match sur {
+                        Some(c) => {
+                            let rang = layout.cards.iter().position(|k| k.id == c.id).unwrap_or(0);
+                            self.doc.annotations.ajouter_sur_la_case(c, rang, &l.points, t.allure.color, alpha, brosse)
+                        }
+                        None => self.doc.annotations.ajouter_hors_cadres_brosse(layout, &l.points, t.allure.color, alpha, brosse),
+                    };
+                    debug_assert!(pose, "la place a été vérifiée avant de rien retirer");
+                    if let Some(tr) = self.doc.annotations.traces.get_mut(n).filter(|_| pose) {
+                        tr.lien = Some(p.lien);
+                    }
                 }
                 if let Some(id) = self.doc.annotations.id_hors_cadres() {
                     self.doc.annotations.regler_visible(id, true);
                 }
             }
-            return lien;
-        };
-        let Some(pose) = crate::horschamp::pose_de_la_case(&self.doc, layout, k) else { return lien };
-        let mut pts = Vec::with_capacity(t.ligne.points.len());
-        for p in &t.ligne.points {
-            let Some(q) = pose.dessin_sur(p.pos()) else { return lien };
-            pts.push(VPoint { x: q.x, y: q.y, r: (p.r / pose.echelle_en(q).max(1e-6)).clamp(0.05, 400.0) });
+            Repose::Case { k, rang, points, echelle } => {
+                let (k, rang) = (*k, *rang);
+                let Some(cel) = self.cel_de_la_case(layout, k, rang) else { return };
+                let rapport = t.allure.echelle / *echelle;
+                let suit = t.ligne.aligne();
+                let el = Element::Stroke {
+                    points: points.clone(),
+                    color: t.allure.color,
+                    opacity: t.allure.opacity,
+                    hardness: t.allure.hardness,
+                    brush: t.allure.brush.map(|b| Box::new(crate::brush::BrushSettings { size: b.size * rapport, ..b })),
+                    trace: VTrace { pressure: if suit { t.ligne.appui.clone() } else { Vec::new() }, time: if suit { t.ligne.instants.clone() } else { Vec::new() }, feel: t.allure.feel, secondary: t.allure.secondary, lien: Some(p.lien), cache: Default::default() },
+                };
+                if !avant.iter().any(|(c, _)| *c == cel) {
+                    let d = self.drawing(cel).cloned().unwrap_or_default();
+                    self.history.push(Edit::Vector { cel, drawing: d.clone() });
+                    avant.push((cel, d));
+                }
+                let Some(d) = self.drawing_mut(cel) else { return };
+                // Le dessin d'où il vient : il y garde son rang. Une case d'arrivée : dessus, ou dessous s'il était peint derrière.
+                let i = match p.places.iter().find(|(c, _)| *c == cel) {
+                    Some(&(_, i)) => i.min(d.elements.len()),
+                    None if p.derriere => 0,
+                    None => d.elements.len(),
+                };
+                d.elements.insert(i, el);
+                // (La répartition se fait depuis le plan de la case, sur son calque : on y passe le temps de répartir.)
+                let (cp, cf, cl) = (self.cur_panel, self.cur_frame, self.cur_layer);
+                let c = layout.cards[k];
+                self.cur_panel = c.panel;
+                self.cur_frame = c.frame;
+                self.cur_layer = rang;
+                let fait = self.horschamp_repartir_element(layout, k, cel, i, p.derriere, &p.places);
+                self.cur_panel = cp.min(self.doc.panels.len().saturating_sub(1));
+                self.cur_frame = cf;
+                self.cur_layer = cl;
+                if !fait {
+                    self.selp_refaire(cel);
+                }
+            }
         }
-        let cible = pose.echelle_en(pts[0].pos()).max(1e-6);
-        let rapport = t.allure.echelle / cible;
-        let suit = t.ligne.aligne();
-        let el = Element::Stroke {
-            points: pts,
-            color: t.allure.color,
-            opacity: t.allure.opacity,
-            hardness: t.allure.hardness,
-            brush: t.allure.brush.map(|b| Box::new(crate::brush::BrushSettings { size: b.size * rapport, ..b })),
-            trace: VTrace { pressure: if suit { t.ligne.appui.clone() } else { Vec::new() }, time: if suit { t.ligne.instants.clone() } else { Vec::new() }, feel: t.allure.feel, secondary: t.allure.secondary, lien: Some(lien), cache: Default::default() },
-        };
-        if !avant.iter().any(|(c, _)| *c == cel) {
-            let d = self.drawing(cel).cloned().unwrap_or_default();
-            self.history.push(Edit::Vector { cel, drawing: d.clone() });
-            avant.push((cel, d));
-        }
-        let Some(d) = self.drawing_mut(cel) else { return lien };
-        d.elements.push(el);
-        let i = d.elements.len() - 1;
-        // (La répartition se fait depuis le plan de la case d'origine, sur son calque : on y passe le temps de répartir.)
-        let (cp, cf, cl) = (self.cur_panel, self.cur_frame, self.cur_layer);
-        let c = layout.cards[k];
-        self.cur_panel = c.panel;
-        self.cur_frame = c.frame;
-        self.cur_layer = rang;
-        let fait = self.horschamp_repartir_element(layout, k, cel, i);
-        self.cur_panel = cp.min(self.doc.panels.len().saturating_sub(1));
-        self.cur_frame = cf;
-        self.cur_layer = cl;
-        if !fait {
-            self.selp_refaire(cel);
-        }
-        lien
     }
 
-    /// Les traits choisis reçoivent `aff` (planche) : chacun est rassemblé, transformé, puis réparti à nouveau. Une seule étape d'annulation, nommée `nom`.
+    /// Le choix reçoit `aff` (planche) : chaque trait est rassemblé, transformé, puis réparti à nouveau ; les autres éléments sont transformés sur place.
+    /// **Tout ou rien** : tout est calculé avant de changer quoi que ce soit ; si une part n'a nulle part où aller, rien ne bouge et la ligne d'état le dit.
+    /// Une seule étape d'annulation, nommée `nom`.
     pub(crate) fn selp_reporter(&mut self, layout: &BoardLayout, aff: &Affine, nom: &str) {
         let Some(traits) = self.vignettes.selp.as_ref().filter(|_| self.selp_active()).map(|s| s.traits.clone()) else { return };
         if self.storyboard_refuses() {
             return;
         }
-        let rassembles: Vec<Rassemble> = traits.iter().filter_map(|t| self.rassembler(layout, t)).map(|r| Rassemble { ligne: transformee(&r.ligne, aff), allure: r.allure }).collect();
-        // Ce que le geste montrait, tenu à l'écran tant que les parts ne sont pas rendues.
-        let tenu = self.selp_apercu_formes(layout, Some(aff));
-        let base = self.history.undo_len();
-        let before = self.history.context.replace(nom.to_string());
-        let snap = self.snapshot();
-        let (mut avant, _) = self.selp_retirer(&traits);
-        // (L'état d'avant, rangé d'abord : il est rendu en dernier à l'annulation.)
-        self.history.push(snap);
-        for (cel, d) in &avant {
-            self.history.push(Edit::Vector { cel: *cel, drawing: d.clone() });
+        let dessins = self.dessins_des_cases(layout);
+        // 1. Le plan, sans rien écrire.
+        let mut retires: Vec<(CelId, usize)> = Vec::new();
+        for r in traits.iter().filter(|t| !t.objet).flat_map(|t| t.parts.iter()) {
+            if let PartRef::Dessin { cel, rang, .. } = *r {
+                retires.push((cel, rang));
+            }
         }
-        let touches: Vec<CelId> = avant.iter().map(|(c, _)| *c).collect();
+        let mut a_poser: Vec<APoser> = Vec::new();
+        for t in traits.iter().filter(|t| !t.objet) {
+            let Some(r) = self.rassembler(layout, t) else { continue };
+            let r = Rassemble { ligne: transformee(&r.ligne, aff), allure: r.allure };
+            // Son numéro : le même si le trait repris est complet ; sinon un neuf (d'autres parts du même numéro restent ailleurs).
+            let complet = r.allure.lien.is_some_and(|l| self.parts_du_lien(layout, &dessins, l).iter().all(|q| t.parts.contains(q)));
+            let lien = match r.allure.lien {
+                Some(l) if complet => l,
+                _ => crate::horschamp::nouveau_lien(),
+            };
+            let mut places: Vec<(CelId, usize)> = Vec::new();
+            let mut derriere = false;
+            for q in &t.parts {
+                if let PartRef::Dessin { cel, rang, .. } = *q {
+                    let avant = retires.iter().filter(|(c, i)| *c == cel && *i < rang).count();
+                    let i = rang - avant;
+                    match places.iter_mut().find(|(c, _)| *c == cel) {
+                        Some((_, j)) => *j = (*j).min(i),
+                        None => places.push((cel, i)),
+                    }
+                    derriere |= rang == 0 && self.drawing(cel).is_some_and(|d| d.elements.len() > 1);
+                }
+            }
+            let repose = self.selp_preparer(layout, &r);
+            a_poser.push(APoser { trait_: r, repose, lien, places, derriere });
+        }
+        // La place sur la planche : celle que libèrent les parts retirées, contre celle que demandent les tronçons hors des cases.
+        let liberees = traits.iter().filter(|t| !t.objet).flat_map(|t| t.parts.iter()).filter(|r| matches!(r, PartRef::Planche { .. })).count();
+        let demandees: usize = a_poser.iter().map(|p| if let Repose::Planche { troncons } = &p.repose { troncons.len() } else { 0 }).sum();
+        if demandees > 0 && (self.doc.annotations.traces.len() - liberees.min(self.doc.annotations.traces.len()) + demandees > crate::annotations::MAX_TRACES || layout.cards.is_empty()) {
+            self.status = format!("La planche a atteint sa limite de {} traits : ce geste mènerait des traits hors des cases, il est refusé, rien n'a bougé.", crate::annotations::MAX_TRACES);
+            return;
+        }
+        // Les autres éléments : leur transformation dans leur dessin (une case à la caméra qui ne voit pas leur nouvelle place : le geste est refusé).
+        let mut objets: Vec<(CelId, usize, Element)> = Vec::new();
+        for t in traits.iter().filter(|t| t.objet) {
+            let Some(PartRef::Dessin { cel, case, rang }) = t.parts.first().copied() else { continue };
+            let Some(k) = layout.cards.iter().position(|c| c.id == case) else { continue };
+            let Some(pose) = crate::horschamp::pose_de_la_case(&self.doc, layout, k) else { continue };
+            let Some(e) = self.drawing(cel).and_then(|d| d.elements.get(rang)).cloned() else { continue };
+            let Some(local) = affinite_locale(&pose, aff, &pose, e.bounds().center()) else {
+                self.status = "Ce geste mène un élément là où la caméra de sa case ne le voit plus : il est refusé, rien n'a bougé.".into();
+                return;
+            };
+            objets.push((cel, rang, e.transformed(&local)));
+        }
+        // 2. Maintenant seulement, on écrit.
+        let tenu = self.selp_apercu_formes(layout, Some(aff));
+        let marque = self.history.marque();
+        let before = self.history.context.replace(nom.to_string());
+        self.history.push(self.snapshot());
+        // (L'état d'avant de chaque dessin touché, rangé d'abord : il est rendu en dernier à l'annulation.)
+        let mut avant: Vec<(CelId, VectorDrawing)> = Vec::new();
+        let mut touches: Vec<CelId> = Vec::new();
+        for c in retires.iter().map(|(c, _)| *c).chain(objets.iter().map(|(c, _, _)| *c)) {
+            if !avant.iter().any(|(a, _)| *a == c) {
+                if let Some(d) = self.drawing(c).cloned() {
+                    self.history.push(Edit::Vector { cel: c, drawing: d.clone() });
+                    avant.push((c, d));
+                    touches.push(c);
+                }
+            }
+        }
+        for (cel, rang, e) in &objets {
+            if let Some(slot) = self.drawing_mut(*cel).and_then(|d| d.elements.get_mut(*rang)) {
+                *slot = e.clone();
+            }
+        }
+        self.selp_retirer(&traits.iter().filter(|t| !t.objet).cloned().collect::<Vec<_>>());
+        // (Les places les plus hautes d'abord : un trait posé ne décale pas la place d'un autre plus bas dans le même dessin.)
+        a_poser.sort_by_key(|p| std::cmp::Reverse(p.places.iter().map(|(_, i)| *i).max().unwrap_or(usize::MAX)));
         let mut liens = Vec::new();
-        for r in &rassembles {
-            liens.push(self.selp_poser(layout, r, &mut avant));
+        for p in &a_poser {
+            self.selp_poser(layout, p, &mut avant);
+            liens.push(p.lien);
         }
         for c in touches {
             self.selp_refaire(c);
         }
-        let n = self.history.undo_len().saturating_sub(base);
-        if n >= 2 {
-            self.history.merge_last(n);
-        }
+        self.history.regrouper_depuis(marque);
         self.history.context = before;
         self.modified = true;
         self.renderer.invalidate_all();
-        // Le choix suit les traits à leur nouvelle place.
+        // Le choix suit à sa nouvelle place.
         let layout = self.board_layout();
+        let dessins = self.dessins_des_cases(&layout);
         let mut nouveaux: Vec<TraitEntier> = Vec::new();
         for lien in liens {
-            if let Some(r) = self.parts_du_lien(&layout, lien).into_iter().find(|r| !nouveaux.iter().any(|t| t.parts.contains(r))) {
-                nouveaux.push(self.entier_de(&layout, r));
+            if let Some(r) = self.parts_du_lien(&layout, &dessins, lien).into_iter().find(|r| !nouveaux.iter().any(|t| t.parts.contains(r))) {
+                nouveaux.push(self.entier_de_avec(&layout, &dessins, r));
+            }
+        }
+        for (cel, _, e) in &objets {
+            if let Some(i) = self.drawing(*cel).and_then(|d| d.elements.iter().position(|x| x == e)) {
+                if let Some(&(k, _)) = dessins.iter().find(|(_, c)| c == cel) {
+                    nouveaux.push(TraitEntier { parts: vec![PartRef::Dessin { cel: *cel, case: layout.cards[k].id, rang: i }], objet: true });
+                }
             }
         }
         let serial = self.history.serial();
@@ -656,6 +908,7 @@ impl App {
             s.traits = nouveaux;
             s.serial = serial;
             s.pivot = None;
+            *s.vue.borrow_mut() = None;
         }
         if !tenu.is_empty() {
             self.vignettes.debord_tenu = Some(crate::debord::Tenu {
@@ -668,16 +921,16 @@ impl App {
         self.ctx.request_repaint();
     }
 
-    /// Suppr : les traits choisis partent, toutes leurs parts, en une étape.
+    /// Suppr : le choix part, toutes les parts des traits, en une étape.
     pub(crate) fn selp_supprimer(&mut self) {
         let Some(traits) = self.vignettes.selp.as_ref().filter(|_| self.selp_active()).map(|s| s.traits.clone()) else { return };
         if self.storyboard_refuses() {
             return;
         }
-        let base = self.history.undo_len();
+        let marque = self.history.marque();
         let before = self.history.context.replace("Effacer".to_string());
         let snap = self.snapshot();
-        let (avant, _) = self.selp_retirer(&traits);
+        let avant = self.selp_retirer(&traits);
         self.history.push(snap);
         for (cel, d) in &avant {
             self.history.push(Edit::Vector { cel: *cel, drawing: d.clone() });
@@ -685,26 +938,34 @@ impl App {
         for (c, _) in &avant {
             self.selp_refaire(*c);
         }
-        let n = self.history.undo_len().saturating_sub(base);
-        if n >= 2 {
-            self.history.merge_last(n);
-        }
+        self.history.regrouper_depuis(marque);
         self.history.context = before;
         self.modified = true;
         self.renderer.invalidate_all();
         self.vignettes.selp = None;
-        self.status = format!("{} trait{} effacé{}, entier{}.", traits.len(), if traits.len() > 1 { "s" } else { "" }, if traits.len() > 1 { "s" } else { "" }, if traits.len() > 1 { "s" } else { "" });
+        let n = traits.len();
+        self.status = format!("{n} élément{} effacé{}, entier{}.", if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" }, if n > 1 { "s" } else { "" });
     }
 
-    /// Ctrl+C : les traits choisis, entiers, dans le presse-papiers des éléments, à leur place dans le dessin de la case courante. Vrai si copié.
+    /// Ctrl+C : le choix, entier, dans le presse-papiers des éléments, à sa place dans le dessin de la case courante. Vrai si copié.
     pub(crate) fn selp_copier(&mut self) -> bool {
         let Some(traits) = self.vignettes.selp.as_ref().filter(|_| self.selp_active()).map(|s| s.traits.clone()) else { return false };
         let layout = self.board_layout();
         let cur = self.cur_frame.min(self.frame_count().saturating_sub(1));
-        let Some(k) = layout.cards.iter().position(|c| c.panel == self.cur_panel && (c.frame..c.end).contains(&cur)) else { return false };
-        let Some(pose) = crate::horschamp::pose_de_la_case(&self.doc, &layout, k) else { return false };
+        let Some(kc) = layout.cards.iter().position(|c| c.panel == self.cur_panel && (c.frame..c.end).contains(&cur)) else { return false };
+        let Some(pose) = crate::horschamp::pose_de_la_case(&self.doc, &layout, kc) else { return false };
         let mut items = Vec::new();
         for t in &traits {
+            if t.objet {
+                let Some(PartRef::Dessin { cel, case, rang }) = t.parts.first().copied() else { continue };
+                let Some(k) = layout.cards.iter().position(|c| c.id == case) else { continue };
+                let Some(pk) = crate::horschamp::pose_de_la_case(&self.doc, &layout, k) else { continue };
+                let Some(e) = self.drawing(cel).and_then(|d| d.elements.get(rang)).cloned() else { continue };
+                if let Some(local) = affinite_locale(&pk, &Affine::IDENTITY, &pose, e.bounds().center()) {
+                    items.push(e.transformed(&local));
+                }
+                continue;
+            }
             let Some(r) = self.rassembler(&layout, t) else { continue };
             let Some(pts) = r.ligne.points.iter().map(|p| pose.dessin_sur(p.pos()).map(|q| VPoint { x: q.x, y: q.y, r: p.r / pose.echelle_en(q).max(1e-6) })).collect::<Option<Vec<_>>>() else { continue };
             let Some(p0) = pts.first().map(|p| p.pos()) else { continue };
@@ -723,7 +984,7 @@ impl App {
         if items.is_empty() {
             return false;
         }
-        self.status = format!("{} trait(s) copié(s), entiers.", items.len());
+        self.status = format!("{} élément(s) copié(s), entiers.", items.len());
         self.ctx.copy_text(format!("{}{} élément(s) vectoriel(s)", crate::pasteimage::MARK, items.len()));
         self.clipboard = items;
         self.collage.origines.elements = Some(crate::adaptation::Origine::de(&self.doc));
@@ -731,11 +992,12 @@ impl App {
         true
     }
 
-    /// Recolorer : toutes les parts prennent la couleur courante, en une étape.
+    /// Recolorer : toutes les parts (et les autres éléments) prennent la couleur courante, en une étape. Une part de la planche au pinceau refait son rendu
+    /// (sa couleur est dans ses pixels).
     pub(crate) fn selp_recolorer(&mut self) {
         let Some(traits) = self.vignettes.selp.as_ref().filter(|_| self.selp_active()).map(|s| s.traits.clone()) else { return };
         let color = self.color;
-        let base = self.history.undo_len();
+        let marque = self.history.marque();
         let before = self.history.context.replace("Recolorer".to_string());
         self.history.push(self.snapshot());
         let mut touches: Vec<CelId> = Vec::new();
@@ -755,6 +1017,7 @@ impl App {
                 PartRef::Planche { id } => {
                     if let Some(t) = self.doc.annotations.traces.iter_mut().find(|t| t.id == id) {
                         t.color = color;
+                        t.brosse = t.brosse.as_ref().map(|b| std::sync::Arc::new(b.refaite()));
                     }
                 }
             }
@@ -762,45 +1025,53 @@ impl App {
         for c in touches {
             self.selp_refaire(c);
         }
-        let n = self.history.undo_len().saturating_sub(base);
-        if n >= 2 {
-            self.history.merge_last(n);
-        }
+        self.history.regrouper_depuis(marque);
         self.history.context = before;
         self.modified = true;
         self.renderer.invalidate_all();
         let serial = self.history.serial();
         if let Some(s) = self.vignettes.selp.as_mut() {
             s.serial = serial;
+            *s.vue.borrow_mut() = None;
         }
     }
 
     /// Ctrl+V dans les Vignettes : les éléments collés dans le dessin `cel` (rangs `rangs`) sont répartis comme des traits qu'on vient de tracer, et
-    /// deviennent le choix de la planche. L'étape du collage les rejoint.
-    pub(crate) fn selp_apres_le_collage(&mut self, cel: CelId, rangs: std::ops::Range<usize>, base: usize) {
+    /// deviennent le choix de la planche. L'étape du collage (d'après `marque`) les rejoint.
+    pub(crate) fn selp_apres_le_collage(&mut self, cel: CelId, rangs: std::ops::Range<usize>, marque: u64) {
         let layout = self.board_layout();
         let cur = self.cur_frame.min(self.frame_count().saturating_sub(1));
         let Some(k) = layout.cards.iter().position(|c| c.panel == self.cur_panel && (c.frame..c.end).contains(&cur)) else { return };
         let mut liens = Vec::new();
+        let mut objets = Vec::new();
         for i in rangs.rev() {
             let lien = crate::horschamp::nouveau_lien();
             match self.drawing_mut(cel).and_then(|d| d.elements.get_mut(i)) {
                 Some(Element::Stroke { trace, .. }) => trace.lien = Some(lien),
-                _ => continue,
+                Some(e) => {
+                    objets.push(e.clone());
+                    continue;
+                }
+                None => continue,
             }
             liens.push(lien);
-            self.horschamp_repartir_element(&layout, k, cel, i);
+            self.horschamp_repartir_element(&layout, k, cel, i, false, &[]);
         }
-        let n = self.history.undo_len().saturating_sub(base);
-        if n >= 2 {
-            self.history.merge_last(n);
-        }
+        self.history.regrouper_depuis(marque);
         self.vsel = None;
         let layout = self.board_layout();
+        let dessins = self.dessins_des_cases(&layout);
         let mut traits: Vec<TraitEntier> = Vec::new();
         for lien in liens {
-            if let Some(r) = self.parts_du_lien(&layout, lien).into_iter().next() {
-                traits.push(self.entier_de(&layout, r));
+            if let Some(r) = self.parts_du_lien(&layout, &dessins, lien).into_iter().next() {
+                traits.push(self.entier_de_avec(&layout, &dessins, r));
+            }
+        }
+        if let Some(d) = self.drawing(cel) {
+            for e in &objets {
+                if let Some(i) = d.elements.iter().position(|x| x == e) {
+                    traits.push(TraitEntier { parts: vec![PartRef::Dessin { cel, case: layout.cards[k].id, rang: i }], objet: true });
+                }
             }
         }
         let serial = self.history.serial();
@@ -809,32 +1080,31 @@ impl App {
 
     /// Les formes du choix à l'écran, à la place où le geste `aff` le mène (rien : à sa place) : des lignes de sa couleur, par-dessus tout.
     fn selp_apercu_formes(&self, layout: &BoardLayout, aff: Option<&Affine>) -> Vec<(Rect, egui::Shape)> {
-        let Some(s) = self.vignettes.selp.as_ref() else { return Vec::new() };
+        let Some(v) = self.selp_vue(layout) else { return Vec::new() };
         let xf = self.vignettes.xf;
         let mut out = Vec::new();
-        for t in &s.traits {
-            let Some(r) = self.rassembler(layout, t) else { continue };
+        for (pts, couleur) in &v.entiers {
+            let l = Ligne { points: pts.clone(), ..Ligne::default() };
             let l = match aff {
-                Some(a) => transformee(&r.ligne, a),
-                None => r.ligne,
+                Some(a) => transformee(&l, a),
+                None => l,
             };
-            let couleur = Color32::from_rgba_unmultiplied(r.allure.color[0], r.allure.color[1], r.allure.color[2], (r.allure.opacity.clamp(0.0, 1.0) * 255.0).round() as u8);
-            let pts: Vec<Pos2> = l.points.iter().map(|p| xf.to_screen(p.pos())).collect();
-            if pts.len() < 2 {
+            let ecran: Vec<Pos2> = l.points.iter().map(|p| xf.to_screen(p.pos())).collect();
+            if ecran.len() < 2 {
                 continue;
             }
             let w = (l.points.iter().map(|p| p.r).sum::<f32>() / l.points.len() as f32 * xf.zoom * 2.0).max(1.0);
-            let b = Rect::from_points(&pts).expand(w);
-            out.push((b, egui::Shape::line(pts.clone(), Stroke::new(w, couleur))));
-            for e in [pts[0], pts[pts.len() - 1]] {
-                out.push((Rect::from_center_size(e, egui::Vec2::splat(w)), egui::Shape::circle_filled(e, w * 0.5, couleur)));
+            let b = Rect::from_points(&ecran).expand(w);
+            out.push((b, egui::Shape::line(ecran.clone(), Stroke::new(w, *couleur))));
+            for e in [ecran[0], ecran[ecran.len() - 1]] {
+                out.push((Rect::from_center_size(e, egui::Vec2::splat(w)), egui::Shape::circle_filled(e, w * 0.5, *couleur)));
             }
         }
         out
     }
 
-    /// Le choix de la planche à l'écran : chaque trait entier souligné, le lasso en cours, la boîte et ses poignées ; pendant un geste, les traits à leur
-    /// nouvelle place.
+    /// Le choix de la planche à l'écran : chaque trait entier souligné, chaque autre élément encadré, le lasso en cours, la boîte et ses poignées ; pendant
+    /// un geste, à leur nouvelle place. (Calculé une fois tant que rien ne change : `selp_vue`.)
     pub(crate) fn selp_peindre(&self, painter: &egui::Painter, view: Rect, layout: &BoardLayout, survol: Option<Pos2>) {
         use crate::theme::{SELECTION_BOITE as ACCENT, SELECTION_POIGNEE_FOND};
         let Some(s) = self.vignettes.selp.as_ref() else { return };
@@ -849,25 +1119,22 @@ impl App {
         if !self.selp_active() {
             return;
         }
+        let Some(v) = self.selp_vue(layout) else { return };
         let geste = s.geste.as_ref().filter(|g| g.change && g.handle != Handle::Pivot).map(|g| g.aff);
+        let vers = |p: Pos2| xf.to_screen(geste.map_or(p, |a| a.apply(p)));
         if let Some(aff) = geste {
             for (_, sh) in self.selp_apercu_formes(layout, Some(&aff)) {
                 clip.add(sh);
             }
         }
-        // Le trait entier souligné, toutes ses parts (celles des cases voisines et de la planche comprises).
-        for t in &s.traits {
-            for r in &t.parts {
-                let Some((l, _)) = self.part_planche(layout, r) else { continue };
-                let l = match geste {
-                    Some(a) => transformee(&l, &a),
-                    None => l,
-                };
-                let pts: Vec<Pos2> = l.points.iter().map(|p| xf.to_screen(p.pos())).collect();
-                if pts.len() >= 2 {
-                    clip.add(egui::Shape::line(pts, Stroke::new(1.5_f32, ACCENT)));
-                }
+        for pts in &v.parts {
+            let e: Vec<Pos2> = pts.iter().map(|p| vers(p.pos())).collect();
+            if e.len() >= 2 && Rect::from_points(&e).intersects(view) {
+                clip.add(egui::Shape::line(e, Stroke::new(1.5_f32, ACCENT)));
             }
+        }
+        for q in &v.objets {
+            clip.add(egui::Shape::closed_line(q.iter().map(|p| vers(*p)).collect(), Stroke::new(1.0_f32, ACCENT)));
         }
         let Some(frame) = self.selp_cadre_vu(layout, xf.zoom) else { return };
         let quad = frame.corners().map(|q| xf.to_screen(q));
@@ -892,5 +1159,6 @@ impl App {
             poignee(quad[k] + (quad[(k + 1) % 4] - quad[k]) * 0.5, hover == Some(Handle::Edge(k)));
         }
         clip.circle_stroke(pivot, selbox::PIVOT_RADIUS, Stroke::new(1.0_f32, ACCENT));
+        let _ = pos2;
     }
 }

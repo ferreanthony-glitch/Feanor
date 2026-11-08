@@ -50,7 +50,7 @@ pub(crate) fn glisser_droit(b: &mut Banc, de: Pos2, d: Vec2) {
 }
 
 /// Le point du segment `de`–`a` à l'abscisse `x`.
-fn sur_le_trait(de: Pos2, a: Pos2, x: f32) -> Pos2 {
+pub(crate) fn sur_le_trait(de: Pos2, a: Pos2, x: f32) -> Pos2 {
     let t = (x - de.x) / (a.x - de.x);
     de + (a - de) * t
 }
@@ -71,14 +71,14 @@ pub(crate) fn trait_a_travers(bitmap: bool) -> Option<(Banc, Pos2, Pos2, Rect, R
 }
 
 /// Les parts du trait : (éléments vectoriels des dessins, traits de la planche).
-fn parts(b: &Banc) -> (usize, usize) {
+pub(crate) fn parts(b: &Banc) -> (usize, usize) {
     let doc = &b.app.doc;
     let el = doc.cels.values().filter_map(|c| c.vector.as_ref()).map(|v| v.elements.len()).sum();
     (el, doc.annotations.traces.len())
 }
 
 /// Où sont les parts (pour lire un échec).
-fn decrire(b: &Banc) {
+pub(crate) fn decrire(b: &Banc) {
     for (i, p) in b.app.doc.panels.iter().enumerate() {
         for l in &p.layers {
             for c in l.frames.iter().flatten().collect::<std::collections::BTreeSet<_>>() {
@@ -99,14 +99,14 @@ fn decrire(b: &Banc) {
 }
 
 /// Combien de parts sont choisies sur la planche.
-fn choisies(b: &Banc) -> usize {
+pub(crate) fn choisies(b: &Banc) -> usize {
     if !b.app.selp_active() {
         return 0;
     }
     b.app.vignettes.selp.as_ref().map_or(0, |s| s.traits.iter().map(|t| t.parts.len()).sum())
 }
 
-fn voir(b: &mut Banc, nom: &str, de: Pos2, a: Pos2) -> Releve {
+pub(crate) fn voir(b: &mut Banc, nom: &str, de: Pos2, a: Pos2) -> Releve {
     repos(b);
     // (Le choix souligne le trait d'un filet orange : on le lève le temps de la capture, pour ne voir que le dessin.)
     let choix = b.app.vignettes.selp.take();
@@ -121,18 +121,18 @@ fn voir(b: &mut Banc, nom: &str, de: Pos2, a: Pos2) -> Releve {
 }
 
 /// Le trait est là, continu.
-fn present(r: &Releve, quoi: &str) {
+pub(crate) fn present(r: &Releve, quoi: &str) {
     assert!(r.trou <= 2, "{quoi} : le trait est continu, sans trou : {r:?}");
 }
 
 /// Plus rien du trait ici (pas de doublon) : le relevé ne voit presque que du papier.
-fn absent(r: &Releve, quoi: &str) {
+pub(crate) fn absent(r: &Releve, quoi: &str) {
     // (Aucun pixel d'encre le long du trait : `largeur` vide. Les filets et une bulle qui passent dessus ne comptent ni pour l'encre ni pour le trou.)
     assert!(r.largeur == (0, 0) || r.trou * 10 >= r.longueur * 8, "{quoi} : plus rien du trait ici : {r:?}");
 }
 
 /// La boîte du choix à l'écran : ses quatre coins.
-fn boite(b: &Banc) -> [Pos2; 4] {
+pub(crate) fn boite(b: &Banc) -> [Pos2; 4] {
     let l = b.app.board_layout();
     let xf = b.app.vignettes.xf;
     b.app.selp_cadre(&l, xf.zoom).expect("une boîte").corners().map(|q| xf.to_screen(q))

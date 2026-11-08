@@ -4406,16 +4406,6 @@ impl App {
             "edition.tout_selectionner" if self.cam_keys_have_focus() => self.choose_all_cam_keys(),
             "edition.tout_selectionner" if self.fx_keys_have_focus() => self.choose_all_fx_keys(),
             "edition.tout_selectionner" if self.key_focus => self.choose_all_keys(),
-            // Des traits choisis sur la planche des Vignettes (partie 125) : entiers, toutes leurs parts.
-            "edition.copier" if self.board_shown() && self.selp_active() => {
-                self.selp_copier();
-            }
-            "edition.couper" if self.board_shown() && self.selp_active() => {
-                if self.selp_copier() {
-                    self.selp_supprimer();
-                }
-            }
-            "edition.supprimer" if self.board_shown() && self.selp_active() => self.selp_supprimer(),
             // Après un clic dans le montage (ou la planche), l'édition vise les panneaux choisis (12e).
             "edition.couper" if self.panels_have_focus() => self.cut_panels(),
             "edition.copier" if self.panels_have_focus() => self.copy_panels(),
@@ -4430,6 +4420,16 @@ impl App {
             // Après un clic dans la grille, sans images choisies : Suppr supprime l'image courante
             // des calques choisis (audit A3) ; le dessin se vide après un clic dans le dessin.
             "edition.supprimer" if self.images_focus && !self.panels_have_focus() => self.delete_images(false),
+            // Des traits choisis sur la planche des Vignettes (partie 125) : entiers, toutes leurs parts ; seulement quand le dessin a la main (après les plans, les images, les clés).
+            "edition.copier" if self.selp_a_la_main() => {
+                self.selp_copier();
+            }
+            "edition.couper" if self.selp_a_la_main() => {
+                if self.selp_copier() {
+                    self.selp_supprimer();
+                }
+            }
+            "edition.supprimer" if self.selp_a_la_main() => self.selp_supprimer(),
             // Une sélection sur plusieurs calques copie, coupe et colle calque par calque.
             "edition.couper" if self.multi.sel.is_some() => self.multi_cut(),
             "edition.copier" if self.multi.sel.is_some() => {

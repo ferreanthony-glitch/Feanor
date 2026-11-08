@@ -532,6 +532,12 @@ impl App {
             crate::collage::Preparation::Pret(crate::collage::Colle::Multi(c)) => c,
             _ => return,
         };
+        // (Une copie n'est pas une part du trait d'origine : numéros neufs, partie 125.)
+        for item in &mut clip.items {
+            if let crate::multisel::ClipWhat::Vector(els) = &mut item.1 {
+                crate::vector::renumeroter(els);
+            }
+        }
         self.end_stroke();
         self.multi_flush();
         self.drop_multi();

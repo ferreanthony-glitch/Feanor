@@ -149,6 +149,8 @@ pub(crate) struct Suivi {
     pub a: f32,
     /// Le nombre d'étapes d'annulation avant le geste.
     pub base_len: usize,
+    /// La marque de l'historique avant le geste (`History::marque`) : les étapes du trait se regroupent depuis elle, même historique plein.
+    pub marque: u64,
     /// Le nombre d'éléments du dessin courant avant le geste (calque vectoriel).
     pub elements_avant: usize,
 }
@@ -160,7 +162,8 @@ pub(crate) enum Matiere {
     /// éléments (`commit_vector_stroke`). Il se répartit comme un autre : sans cela, il restait entier dans le plan d'origine, coupé au bord de son champ.
     /// `rang` : un élément déjà posé, à cette place du dessin, à répartir de nouveau (la sélection des Vignettes qui a bougé, partie 125) ; rien : le
     /// trait qui vient d'être tracé.
-    Vecteur { derriere: bool, rang: Option<usize> },
+    /// `places` : où ses parts se posent dans les dessins d'où elles venaient (le trait déplacé y garde son rang) ; ailleurs, dessus, ou dessous s'il est peint derrière.
+    Vecteur { derriere: bool, rang: Option<usize>, places: Vec<(CelId, usize)> },
     /// Un calque bitmap : les tuiles d'avant le trait, et son tracé (ligne médiane, rayon), sa couleur, son opacité ; la recette du pinceau
     /// (son réglage, et l'appui et l'instant de chaque point du tracé, vides s'ils ne le suivent pas) pour que la part qui sort de la case
     /// garde la texture du pinceau sur la planche (`horschamptex.rs`).
@@ -540,9 +543,9 @@ impl App {
         let (p0, p1, p2) = (xf.to_board(self.layer_to_screen(pos2(0.0, 0.0))), xf.to_board(self.layer_to_screen(pos2(1.0, 0.0))), xf.to_board(self.layer_to_screen(pos2(0.0, 1.0))));
         let aff = Aff { a: p1.x - p0.x, b: p1.y - p0.y, c: p2.x - p0.x, d: p2.y - p0.y, tx: p0.x, ty: p0.y };
         let deja = self.vignettes.suivi.as_ref().filter(|s| s.carte == carte);
-        let (base_len, elements_avant, pose_deja) = match deja {
-            Some(s) => (s.base_len, s.elements_avant, Some(s.pose)),
-            None => (self.history.undo_len(), self.cel_here().and_then(|c| self.drawing(c)).map_or(0, |d| d.elements.len()), None),
+        let (base_len, marque, elements_avant, pose_deja) = match deja {
+            Some(s) => (s.base_len, s.marque, s.elements_avant, Some(s.pose)),
+            None => (self.history.undo_len(), self.history.marque(), self.cel_here().and_then(|c| self.drawing(c)).map_or(0, |d| d.elements.len()), None),
         };
         if deja.is_none() {
             self.vignettes.refus_dits.clear();
@@ -555,7 +558,7 @@ impl App {
             return;
         };
         let a = if self.view.persp.is_some() { self.layer_zoom() / xf.zoom.max(1e-6) } else { pose.echelle_en(Pos2::ZERO) };
-        self.vignettes.suivi = Some(Suivi { carte, aff, pose, a, base_len, elements_avant });
+        self.vignettes.suivi = Some(Suivi { carte, aff, pose, a, base_len, marque, elements_avant });
     }
 
     /// La pose du dessin du calque courant, d'après les quatre coins de la feuille vus par la vue courante (une homographie les porte tous).
@@ -671,7 +674,7 @@ impl App {
         if !self.board_shown() {
             return;
         }
-        self.vignettes.fini = Some(Fini { suivi, cel, matiere: Matiere::Vecteur { derriere, rang: None } });
+        self.vignettes.fini = Some(Fini { suivi, cel, matiere: Matiere::Vecteur { derriere, rang: None, places: Vec::new() } });
     }
 
     /// Répartit le trait qui vient de finir : sa partie dans le champ de sa case reste, celle dans le champ d'une autre case va à son plan, le
@@ -718,10 +721,8 @@ impl App {
         }
         let fait = fait || cree;
         if fait {
-            let n = self.history.undo_len().saturating_sub(fini.suivi.base_len);
-            if n >= 2 {
-                self.history.merge_last(n);
-            }
+            // (Regroupées depuis la marque : un historique plein, qui oublie sa plus vieille étape à chaque ajout, ne fausse pas le compte.)
+            self.history.regrouper_depuis(fini.suivi.marque);
             self.modified = true;
             self.renderer.invalidate_all();
             // Le trait tel qu'il a été tracé reste peint jusqu'à ce que les dessins et les vignettes qui le reçoivent soient prêts, en fond : rien
@@ -737,7 +738,7 @@ impl App {
     /// L'élément `rang` du dessin `cel`, montré par la case `k`, réparti comme un trait qui vient d'être tracé (partie 125 : la sélection des Vignettes qui a
     /// bougé) : sa part dans le champ de la case reste, le reste va aux autres cases et à la planche, avec les mêmes règles et les mêmes refus. L'appelant
     /// regroupe les étapes d'annulation. Vrai si quelque chose a bougé.
-    pub(crate) fn horschamp_repartir_element(&mut self, layout: &BoardLayout, k: usize, cel: CelId, rang: usize) -> bool {
+    pub(crate) fn horschamp_repartir_element(&mut self, layout: &BoardLayout, k: usize, cel: CelId, rang: usize, derriere: bool, places: &[(CelId, usize)]) -> bool {
         let Some(c) = layout.cards.get(k) else { return false };
         let Some(pose) = pose_de_la_case(&self.doc, layout, k) else { return false };
         // (Une caméra qui n'est pas droite n'a pas d'affinité : la répartition passe alors par la pose, comme d'une case à une autre.)
@@ -747,7 +748,7 @@ impl App {
             _ => return false,
         };
         let a = pose.echelle_en(p0);
-        let fini = Fini { suivi: Suivi { carte: c.id, aff, pose, a, base_len: self.history.undo_len(), elements_avant: 0 }, cel, matiere: Matiere::Vecteur { derriere: false, rang: Some(rang) } };
+        let fini = Fini { suivi: Suivi { carte: c.id, aff, pose, a, base_len: self.history.undo_len(), marque: self.history.marque(), elements_avant: 0 }, cel, matiere: Matiere::Vecteur { derriere, rang: Some(rang), places: places.to_vec() } };
         let champs = champs(layout, self.settings.vignettes.debord_fraction());
         self.partager_vecteur(layout, &fini, k, &champs)
     }
@@ -755,7 +756,7 @@ impl App {
     /// Le rang, dans son dessin, du trait vectoriel qui vient de finir : le dernier élément, ou le premier s'il a été peint derrière. Rien s'il n'y a rien à
     /// répartir (dessin disparu, rien de neuf, pas un trait).
     fn rang_du_trait(&self, fini: &Fini) -> Option<usize> {
-        let Matiere::Vecteur { derriere, rang } = fini.matiere else { return None };
+        let Matiere::Vecteur { derriere, rang, .. } = fini.matiere else { return None };
         let d = self.drawing(fini.cel)?;
         if let Some(i) = rang {
             return matches!(d.elements.get(i), Some(Element::Stroke { .. })).then_some(i);
@@ -1074,12 +1075,22 @@ impl App {
                 avant.push((cible, d.clone()));
             }
             let region_k = els.iter().fold(Rect::NOTHING, |r, e| r.union(e.bounds()));
+            let place = match &fini.matiere {
+                Matiere::Vecteur { places, .. } => places.iter().find(|(c, _)| *c == cible).map(|(_, i)| *i),
+                _ => None,
+            };
             if let Some(d) = self.drawing_mut(cible) {
-                // (Peint derrière : derrière le dessin de cette case aussi.)
-                if derriere {
-                    d.elements.splice(0..0, els);
-                } else {
-                    d.elements.extend(els);
+                match place {
+                    // (Le dessin d'où venait une part du trait déplacé : il y reprend son rang.)
+                    Some(i) => {
+                        let i = i.min(d.elements.len());
+                        d.elements.splice(i..i, els);
+                    }
+                    // (Peint derrière : derrière le dessin de cette case aussi.)
+                    None if derriere => {
+                        d.elements.splice(0..0, els);
+                    }
+                    None => d.elements.extend(els),
                 }
             }
             regions.push((cible, region_k));

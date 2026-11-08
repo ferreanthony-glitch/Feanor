@@ -8721,15 +8721,18 @@ Un trait tracé à travers les cases est réparti au lâcher (parties 101, 111, 
 ### Les cas décidés
 
 - **Une case qui ne peut pas recevoir sa part** (calque verrouillé, masqué, transformé, d'une autre sorte, plan écarté ou tenu par un autre poste) : **la règle de la partie 122 est gardée.** Au lâcher, rien n'est écrit dans son dessin, la part reste sur la planche par-dessus la case, la ligne d'état le dit. Une part déjà posée dans un tel calque **n'est pas prise** par la sélection (on n'écrit pas dans un calque verrouillé) : elle reste où elle est. Une autre caméra (zoom, roulis, bascule, panoramique, cadres) reçoit, comme en partie 122.
-- **Peindre derrière** (a06d4c5) : un trait peint derrière, déplacé, est réparti comme un trait neuf **posé dessus** dans les dessins qui le reçoivent. Choix à valider : on pourrait le garder derrière.
+- **L'ordre de peinture** (relecture) : le trait déplacé **garde son rang** dans chaque dessin d'où viennent ses parts (il reste sous ce qui était dessus). Dans une case d'arrivée, la règle du trait neuf : dessus, ou **dessous s'il était peint derrière** (« Peindre derrière » est gardé ; un trait compte comme peint derrière si une de ses parts était la première d'un dessin qui en a d'autres).
 - **Bitmap** : voir plus bas. La sélection d'un calque bitmap reste celle de la case, comme avant (Ctrl + lasso dans la case).
 - **Storyboard et Animation** (un seul plan) : **rien ne change**, sauf deux détails sans effet visible : un trait collé n'emporte plus le numéro de la part copiée, et la trace d'un trait peut porter ce numéro.
 - **Les deux gestes de caméra** qui déplacent le dessin (une caméra avec son dessin, un mouvement de caméra) : non touchés.
 - **Les traits déjà coupés** (projets d'avant) : sans numéro, ils restent des morceaux ; le lasso ne prend que ceux qu'il touche, comme avant (essai). **Proposition, non faite** : une commande « Relier les morceaux » qui donnerait un numéro aux parts dont les bouts se touchent à un millième de segment près, de même couleur, opacité et pinceau, à cheval sur le champ d'une case. C'est sûr pour les traits répartis par FEANOR (la coupe pose deux points presque confondus), moins pour deux traits tracés bout à bout à la main : à valider avant de le faire.
-- **Un plan dupliqué** garde les numéros de ses parts ; ses parts ne se mêlent pas à celles de l'original : une part n'est prise que si un de ses bouts touche celui d'une autre, à la même place de la planche.
-- **Les formes remplies et le texte** d'une case ne sont pas pris par le lasso de la planche (ils ne se répartissent pas) : ils se choisissent au Storyboard.
+- **Un plan dupliqué ou collé, des éléments collés** (Ctrl+V, collage sur plusieurs calques) : les traits de la copie prennent des **numéros neufs** (`vector::renumeroter`, `Document::renumeroter_les_copies`). Une copie n'est pas prise avec le trait d'où elle vient. **Pas pour la copie d'un dessin tenu** (une nouvelle clé, la coupe d'une exposition) : c'est le même dessin, et le renuméroter défaisait les caches de son affichage (un trou pendant le trait suivant, essai `camera_traits_tests`) ; là, une part n'est reprise que si un de ses bouts touche celui d'une autre à la même place de la planche, ce qu'une copie ailleurs ne fait pas. Au lâcher, un trait repris en entier garde son numéro ; repris en partie (d'autres parts du même numéro restent ailleurs, par exemple dans un calque verrouillé), il en prend un neuf.
+- **Les formes remplies, les textes et les images** d'une case sont pris par le lasso, comme avant : ils restent dans leur case, ne sont pas répartis, et le geste les transforme sur place, dans la même étape que les traits. Suppr, Ctrl+C, recolorer les prennent aussi.
 - **Ctrl tenu pendant le geste** ne change pas le point fixe des poignées (Ctrl est la touche du lasso dans les Vignettes) ; le réglage « Point fixe des poignées » s'applique.
 - **Pendant le geste**, l'ancienne place reste visible sous l'aperçu jusqu'au lâcher (rien n'est retiré du projet avant le lâcher : aucune perte possible si le logiciel s'arrête en plein geste).
+- **Tout ou rien** (relecture) : au lâcher, la place de chaque part est calculée avant de rien retirer. Une case dont la caméra ne voit pas tout le trait n'est pas choisie pour le recevoir (la suivante l'est, ou la planche) ; hors de toute case qui puisse le recevoir, les tronçons qui passent sur l'image d'une case se posent **par-dessus** elle (`ajouter_sur_la_case`, partie 122), les autres sur le papier. Si la planche n'a plus la place (5000 traits), le geste est refusé tel quel : « La planche a atteint sa limite de 5000 traits : ce geste mènerait des traits hors des cases, il est refusé, rien n'a bougé. »
+- **Le focus** (relecture) : Suppr, Ctrl+C et Ctrl+X ne vont au choix de la planche que si le dessin a la main (pas après un clic dans le montage, la timeline, les clés) ; le choix est levé par un appui hors de la planche et quand le calque courant n'est plus vectoriel. **L'outil Caméra et T tenue** gardent Ctrl pour la caméra.
+- **Un trait d'avant la partie 111 qui dépasse le champ de sa case** : seuls les points que la case montre (son champ) comptent pour le lasso ; ce qui est caché au-delà n'est pas pris par un lasso posé sur le papier.
 
 ### Le bitmap : pas fait, pourquoi, et ce que je propose
 
@@ -8747,6 +8750,25 @@ Toutes au vrai geste (Ctrl + lasso, Ctrl + glisser sur le `Banc`), la planche pe
 6. **Projet d'avant** (parts sans numéro) : seule la part touchée est prise, les autres restent telles quelles.
 7. **Un appui sans mouvement** ne fait rien ; dessiner lève le choix ; le trait d'avant n'a pas bougé.
 
+### Relecture (même jour) : ce qui était faux, et les essais
+
+Dix essais de plus, `vignettes_selection_relecture_tests.rs`, au vrai geste sur le `Banc`. « Rouge » : lancé sur 66c533d avant la correction.
+
+| Point relevé | Réel ? | Rouge sur 66c533d | Après |
+|---|---|---|---|
+| Un trait déplacé passait devant tout | Oui | rangs `[1]` sur 2 (passé dessus) | garde son rang `[0]` ; peint derrière, dessous dans la case d'arrivée (`[0]`) |
+| Part par-dessus une case qui refuse reposée dessous | Oui (lu dans le code) | essai d'abord mal posé (le geste tombait sur un bord : une inclinaison) | trou 0 : 5 parts sur la planche, par-dessus les images |
+| Planche pleine : parts retirées, puis perdues | Oui | parts `(0, 5000)` : **le trait était perdu** | refusé tel quel, parts `(1, 5000)`, trait à sa place, phrase dans la ligne d'état |
+| Caméra qui ne voit pas le trait : rien posé | Par construction ; non reproduit sur le Banc (la caméra basculée à 80 et 85° voyait encore le bout) | sans perte, mais non concluant | la case est écartée si sa caméra ne voit pas tout ; aucune perte |
+| Recolorer : la part au pinceau de la planche gardait sa couleur | Oui | 0 pixel bleu, 25 rouges | 28 bleus, 0 rouge (le rendu de la part est refait) |
+| Suppr avec le montage qui a la main | Oui | le trait était effacé | Suppr va au montage ; calque bitmap : choix levé, rien d'effacé |
+| Ctrl + glisser avec l'outil Caméra | Oui | le lasso de la planche s'ouvrait | la caméra garde Ctrl (T tenue aussi) |
+| Le lasso ne prenait plus formes, textes, images | Oui (lu dans le code) | non lancé séparément | la forme suit le geste à 0,06 pixel près, dans la même étape que le trait |
+| Plan dupliqué rattaché au trait d'origine | Oui (le mécanisme) | essai d'abord mal posé (la copie n'avait pas de part dans la case) | 1 part prise : la copie seule |
+| Historique plein : plusieurs étapes | Oui | un Ctrl+Z ne rendait pas le trait | un Ctrl+Z rend tout ; aussi pour le trait tracé (`horschamp_partager`) |
+| Coût (60 cases, 2 000 traits numérotés) | Non sensible | lâcher du lasso 16,6 ms ; image +0,74 ms | lâcher 7,4 ms ; image +0,71 ms (vue calculée une fois, `selp_vue`) |
+
+Vérifié en lisant le code : le numéro est gardé par la gomme vectorielle, le sculpt, l'enveloppe, l'interpolation (ils passent par `Trace::with_samples` ou `without_samples`). Même défaut de compte d'étapes, non corrigé (hors du chantier) : `finish_creation` (`boardui.rs`), qui regroupe la création d'un plan par un trait dans une case vide.
 ### Ce qui reste
 
 - Le bitmap (plus haut).

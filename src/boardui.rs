@@ -1609,7 +1609,9 @@ impl App {
         // Le geste du stylo ou de la gomme d'annotation, point après point (`annotationsui.rs`).
         self.annot_geste(&layout, xf, &events, latest, any_down, touch.is_some(), escape, mods);
         // Le lasso ou le geste de la sélection de la planche (`vignettesel.rs`).
-        self.selp_geste(&layout, xf, latest, any_down, escape);
+        // (Un appui hors de la planche, dans un panneau, le montage, la timeline : le choix est levé.)
+        let dehors = ui.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !view.contains(p)));
+        self.selp_geste(&layout, xf, latest, any_down, escape, dehors);
 
         // Le papier est blanc partout (rien autour des cases) ; les barres, les cases pâles qui montrent où dessiner, les vignettes.
         let hovered = over.map(|p| board::hit(&layout, xf.to_board(p), BAR_TOUCH / xf.zoom.max(1e-3)));

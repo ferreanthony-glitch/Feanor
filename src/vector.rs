@@ -130,6 +130,26 @@ fn de_time<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<f64>, D::Error> {
         .collect())
 }
 
+/// Les traits de `elements` prennent des numéros neufs (une copie, partie 125) : les parts d'un même numéro en gardent un commun, sans lien avec l'original.
+pub fn renumeroter(elements: &mut [Element]) {
+    let mut neufs: Vec<(u64, u64)> = Vec::new();
+    for e in elements {
+        if let Element::Stroke { trace, .. } = e {
+            if let Some(l) = trace.lien {
+                let n = match neufs.iter().find(|(a, _)| *a == l) {
+                    Some(&(_, n)) => n,
+                    None => {
+                        let n = crate::horschamp::nouveau_lien();
+                        neufs.push((l, n));
+                        n
+                    }
+                };
+                trace.lien = Some(n);
+            }
+        }
+    }
+}
+
 impl Trace {
     /// Rien à enregistrer (les formes, les vieux traits).
     pub fn is_empty(&self) -> bool {
