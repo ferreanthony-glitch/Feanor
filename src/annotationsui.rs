@@ -439,7 +439,7 @@ impl App {
 
     /// Après une opération qui a retiré des vignettes : leurs annotations passent à leur voisine (`before` : la planche d'avant).
     pub(crate) fn annot_rattacher_apres(&mut self, before: &BoardLayout) {
-        if self.doc.annotations.is_empty() {
+        if self.doc.annotations.is_empty() && self.doc.annotations.bitmap.morceaux.is_empty() {
             return;
         }
         let now = self.board_layout();
@@ -470,7 +470,7 @@ impl App {
         }
         let previous = a.derniere.take();
         let cards_changed = previous.as_ref().is_none_or(|p| ids(p) != ids(layout));
-        if cards_changed && !self.doc.annotations.is_empty() {
+        if cards_changed && !(self.doc.annotations.is_empty() && self.doc.annotations.bitmap.morceaux.is_empty()) {
             let moved = self.doc.annotations.rattacher_manquantes(previous.as_ref(), layout);
             self.doc.annotations.noter_rangs(layout);
             if moved > 0 {

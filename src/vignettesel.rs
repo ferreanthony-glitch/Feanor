@@ -22,8 +22,8 @@
 //! - **Suppr, Ctrl+C, Ctrl+X, Ctrl+V, recolorer** agissent sur le choix entier, quand le dessin a la main (pas la timeline, le montage ni un panneau).
 //! - **Les refus de la partie 122 restent** : une case dont le calque est verrouillé, masqué, transformé… ne reçoit rien (la part reste sur la planche,
 //!   par-dessus elle, `ajouter_sur_la_case`) ; une part posée dans un tel calque n'est pas prise.
-//! - **Ce qui ne change pas** : la vue Storyboard et la vue Animation (un seul plan), le calque bitmap (sa sélection reste celle de la case), et les
-//!   deux gestes de caméra qui déplacent le dessin.
+//! - **Ce qui ne change pas** : la vue Storyboard et la vue Animation (un seul plan), et les deux gestes de caméra qui déplacent le dessin. Le calque
+//!   bitmap a sa propre sélection de la planche (partie 127, `vignetteselbmp.rs`).
 
 use std::cell::RefCell;
 

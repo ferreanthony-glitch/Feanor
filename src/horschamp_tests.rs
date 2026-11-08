@@ -130,7 +130,8 @@ fn a_path_is_cut_where_it_leaves_a_field_and_no_point_is_lost() {
 
 fn hors_cadres(b: &Banc) -> usize {
     let a = &b.app.doc.annotations;
-    a.traces.iter().filter(|t| a.calque(t.calque).is_some_and(|c| c.planche)).count()
+    // (Partie 127 : un trait bitmap laisse ses pixels sur la couche bitmap de la planche.)
+    a.traces.iter().filter(|t| a.calque(t.calque).is_some_and(|c| c.planche)).count() + a.bitmap.morceaux.len()
 }
 
 fn points_de_depart_hors_champ(b: &Banc) -> (Pos2, Pos2) {
@@ -156,6 +157,19 @@ fn a_stroke_outside_every_field_stays_on_the_board_in_no_plan_in_one_undo_step_a
         assert_eq!(hors_cadres(&b), 1, "bitmap {bitmap} : le trait est sur la planche");
         assert_eq!(b.app.doc.panels.len(), 4);
         assert_eq!(pas_d_annulation(&b), n + 1, "bitmap {bitmap} : une seule étape");
+        if bitmap {
+            // Partie 127 : ses pixels sur la couche bitmap de la planche (relue : `planchebitmap_tests`, `vignettes_bitmap_tests`), et dans l'export.
+            assert!(b.app.doc.annotations.traces.is_empty());
+            let opt = crate::planche::Options::default();
+            let tous: Vec<usize> = (0..b.app.doc.panels.len()).collect();
+            let p = crate::planche::construire(&b.app.doc, &tous, &b.app.layout.board_settings(), &opt, &b.app.doc.annotations);
+            assert_eq!(p.annotations.bitmap.morceaux.len(), 1);
+            b.app.run_action("edition.annuler");
+            b.chauffer(2);
+            assert_eq!(hors_cadres(&b), 0);
+            assert!(rien_dans_les_plans(&b));
+            continue;
+        }
         // Enregistré et relu : mêmes traits, même calque.
         let octets = crate::annotations::to_bytes(&b.app.doc).expect("écrit").expect("un fichier");
         let relu = crate::annotations::parse(std::str::from_utf8(&octets).unwrap()).expect("relu");
@@ -200,6 +214,14 @@ fn a_stroke_across_the_edge_of_a_case_splits_there_plan_part_stays_the_rest_goes
                     assert!(!champ.shrink(1.0).contains(p.pos()), "bitmap {bitmap} : {p:?} est dans le champ {champ:?}");
                 }
             }
+        }
+        // (Et aucun pixel de la couche bitmap de la planche.)
+        for m in &a.bitmap.morceaux {
+            let v = m.vers_planche(&layout).expect("sa case");
+            crate::planchebitmap::chaque_pixel(&m.pixels, |x, y, _| {
+                let p = v.point(pos2(x as f32 + 0.5, y as f32 + 0.5));
+                assert!(!champ.shrink(1.0).contains(p), "bitmap : le pixel {p:?} est dans le champ {champ:?}");
+            });
         }
         b.app.run_action("edition.annuler");
         b.chauffer(2);

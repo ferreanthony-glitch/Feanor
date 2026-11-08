@@ -289,6 +289,14 @@ pub(crate) struct Vignettes {
     pub plus: crate::cadreplus::Etat,
     /// La sélection de la planche : des traits entiers, choisis au lasso de Ctrl, dans les cases comme sur le papier (partie 125, `vignettesel.rs`).
     pub selp: Option<crate::vignettesel::SelPlanche>,
+    /// Les textures de la couche bitmap de la planche (`planchebitmap.rs`, partie 127).
+    pub pb_tex: std::cell::RefCell<crate::planchebitmap::Textures>,
+    /// La sélection de la planche sur un calque bitmap (partie 127, `vignetteselbmp.rs`).
+    pub selb: Option<crate::vignetteselbmp::SelBitmap>,
+    /// Les textures de son aperçu.
+    pub selb_tex: std::cell::RefCell<crate::planchebitmap::Textures>,
+    /// Ce que Ctrl+C a pris de la sélection bitmap de la planche (`vignetteselbmp.rs`) : Ctrl+V le repose à sa place, réparti.
+    pub selb_presse: Option<Vec<crate::vignetteselbmp::Piece>>,
 }
 
 /// Un appui sur une barre, en attente de son lâcher (partie 113, décision 11).
@@ -355,6 +363,10 @@ impl Default for Vignettes {
             titre_edit: None,
             seq_glisse: None,
             hc_tex: Default::default(),
+            pb_tex: Default::default(),
+            selb: None,
+            selb_tex: Default::default(),
+            selb_presse: None,
             libre: true,
             camera_choisie: None,
             montrer_courante: false,
@@ -1505,7 +1517,15 @@ impl App {
                         continue;
                     }
                     // Ctrl seul sur un calque vectoriel : la sélection de la planche, dans une case comme sur le papier (partie 125). Tout autre appui la lève.
-                    if self.selp_appui(&layout, xf, *pos, *modifiers) {
+                    // (Un calque bitmap : la sélection de ses pixels, partie 127, `vignetteselbmp.rs`.)
+                    let pris = if self.selb_possible() {
+                        self.selp_lever();
+                        self.selb_appui(xf, *pos, *modifiers)
+                    } else {
+                        self.vignettes.selb = None;
+                        self.selp_appui(&layout, xf, *pos, *modifiers)
+                    };
+                    if pris {
                         self.commit_note_text(&layout);
                         self.commit_card_note();
                         self.vignettes.press = Press::SelPlanche;
@@ -1620,6 +1640,7 @@ impl App {
         // (Un appui hors de la planche, dans un panneau, le montage, la timeline : le choix est levé.)
         let dehors = ui.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !view.contains(p)));
         self.selp_geste(&layout, xf, latest, any_down, escape, dehors);
+        self.selb_geste(&layout, xf, latest, any_down, escape, dehors);
 
         // Le papier est blanc partout (rien autour des cases) ; les barres, les cases pâles qui montrent où dessiner, les vignettes.
         let hovered = over.map(|p| board::hit(&layout, xf.to_board(p), BAR_TOUCH / xf.zoom.max(1e-3)));
@@ -1657,6 +1678,9 @@ impl App {
         self.peindre_cases_annulees(ui, &painter, view, xf, &layout, deadline);
         // Le dessin hors des cases, sous les cases (ce qui déborde dans une case ne la recouvre pas) : sur la planche, enregistré, dans aucun plan.
         self.hors_cadres_peindre(&painter, view, xf, &layout, false);
+        // (Le temps des demandes de vignettes se compte d'ici, pour les marges et les cases : peindre le dessin hors des cases ne le prend plus. Avant, des
+        // milliers de morceaux de la couche bitmap dans la vue usaient ces 2 ms à chaque image, et les vignettes ne se refaisaient plus : partie 127.)
+        let deadline = Instant::now() + crate::thumbs::THUMB_TIME;
         // Les tuiles des empreintes d'abord (leur rectangle déborde de leur enveloppe : les cases qui s'y trouvent se peignent par-dessus).
         // Le menu du clic droit de la case courante se montre pendant qu'on peint les tuiles et les cases : « Réunir avec le plan
         // précédent », « Supprimer »… y changent le film, et la mise en page de cette image ne vaut plus. On s'arrête là, l'image
@@ -1746,6 +1770,7 @@ impl App {
         // Les annotations, par-dessus tout ; puis la marie-louise, si elle est allumée, qui masque ce qui déborde (`annotationsui.rs`).
         self.annot_peindre(&painter, view, xf, &layout, over);
         self.selp_peindre(&painter, view, &layout, over);
+        self.selb_peindre(&painter, view, over);
         self.marie_peindre(&painter, view, xf, &layout);
         // Des images qu'on glisse vers la planche : la case visée, et le lâcher des références (`deposer.rs`).
         self.depot_survol(ui.ctx(), &painter, xf, &layout, over);

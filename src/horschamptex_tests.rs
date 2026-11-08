@@ -93,6 +93,25 @@ fn an_outside_stroke_keeps_its_brush_and_a_texture_not_a_plain_line() {
         let (de, a) = coin(&b);
         let n = pas_d_annulation(&b);
         glisser(&mut b, &vague(de, a, 14));
+        if bitmap {
+            // Partie 127 : un trait bitmap garde hors des cases **ses pixels mêmes** (couche bitmap de la planche), pas une recette rejouée : le grain du
+            // papier y est tel que le pinceau l'a posé.
+            assert!(hors_cadres(&b).is_empty(), "plus de trait vectoriel pour un trait bitmap");
+            let m = b.app.doc.annotations.bitmap.morceaux.first().expect("un morceau sur la planche");
+            let mut tons = std::collections::BTreeSet::new();
+            crate::planchebitmap::chaque_pixel(&m.pixels, |_, _, c| {
+                tons.insert(c.a());
+            });
+            assert!(tons.len() >= 8, "le trait a la texture du papier ({} tons)", tons.len());
+            assert_eq!(pas_d_annulation(&b), n + 1);
+            b.app.run_action("edition.annuler");
+            b.chauffer(2);
+            assert!(b.app.doc.annotations.bitmap.morceaux.is_empty(), "Ctrl+Z enlève tout le trait d'un coup");
+            b.app.run_action("edition.retablir");
+            b.chauffer(2);
+            assert_eq!(b.app.doc.annotations.bitmap.morceaux.len(), 1, "rétablir le rend");
+            continue;
+        }
         let tous = hors_cadres(&b);
         assert_eq!(tous.len(), 1, "bitmap {bitmap}");
         let t = &b.app.doc.annotations.traces[tous[0]];
@@ -136,6 +155,12 @@ fn a_stroke_across_a_case_edge_has_the_same_brush_on_both_sides() {
         let v = vignette(&b, 0);
         let loin = pos2(b.app.vignettes.view.left() + 4.0, v.center().y);
         glisser(&mut b, &vague(v.center(), loin, 18));
+        if bitmap {
+            // Partie 127 : des deux côtés, les pixels du même pinceau (dans le plan, et sur la couche bitmap de la planche).
+            assert!(crate::vignettes_tests::encre(&b.app.doc, 0), "la part dans le champ reste dans le plan");
+            assert!(!b.app.doc.annotations.bitmap.morceaux.is_empty(), "une part sur la planche, en pixels");
+            continue;
+        }
         let tous = hors_cadres(&b);
         assert!(!tous.is_empty(), "bitmap {bitmap} : une part sur la planche");
         let t = &b.app.doc.annotations.traces[tous[0]];

@@ -107,7 +107,8 @@ fn encre_du_plan(doc: &crate::document::Document, id: u64) -> (usize, usize) {
 
 fn traits_hors_cadres(doc: &crate::document::Document) -> usize {
     let a = &doc.annotations;
-    a.traces.iter().filter(|t| a.calque(t.calque).is_some_and(|c| c.planche)).count()
+    // (Partie 127 : un trait bitmap laisse ses pixels sur la couche bitmap de la planche, un morceau par case qui refuse et un pour le papier.)
+    a.traces.iter().filter(|t| a.calque(t.calque).is_some_and(|c| c.planche)).count() + a.bitmap.morceaux.len()
 }
 
 /// Les rectangles à l'écran de l'image du plan `id`.
@@ -564,7 +565,6 @@ fn the_eraser_removes_a_part_left_on_top_of_a_case_and_nothing_else() {
         let y = rd.top() + rd.height() * 0.35;
         tracer(&mut b, pos2(rd.center().x, y), pos2(ra.center().x, y));
         repos(&mut b);
-        let dessus = |b: &Banc| b.app.doc.annotations.traces.iter().filter(|t| t.dessus).count();
         assert_eq!(dessus(&b), 1, "{}", sorte(bitmap));
         let plan = encre_du_plan(&b.app.doc, id);
         let etapes = b.app.history.undo_len();
@@ -698,7 +698,7 @@ fn main_baissee(b: &mut Banc, de: Pos2, a: Pos2) {
 }
 
 fn dessus(b: &Banc) -> usize {
-    b.app.doc.annotations.traces.iter().filter(|t| t.dessus).count()
+    b.app.doc.annotations.traces.iter().filter(|t| t.dessus).count() + b.app.doc.annotations.bitmap.morceaux.iter().filter(|m| m.dessus).count()
 }
 
 /// Un très faible zoom dans la case d'arrivée (sa feuille y est 66 fois plus petite qu'à l'origine) : la tuile d'arrivée dépasserait 2048 pixels. Aucun pixel n'est perdu, le trait reste entier au repos, et il est quelque part.
@@ -756,8 +756,26 @@ fn when_the_board_is_full_the_part_stays_in_the_plan_it_came_from_and_the_messag
         let l = b.app.board_layout();
         let carte = l.cards[0].id;
         let calque = b.app.doc.annotations.calque_hors_cadres();
-        for _ in 0..crate::annotations::MAX_TRACES {
-            b.app.doc.annotations.traces.push(crate::annotations::Trace::new(calque, crate::annotations::Ancre { card: carte, after: 0, rank: 0 }, [0, 0, 0], vec![crate::vector::VPoint { x: 0.0, y: 3.0, r: 0.001 }]));
+        if bitmap {
+            // (Partie 127 : la planche d'un trait bitmap est sa couche bitmap ; pleine, elle a `MAX_MORCEAUX` morceaux.)
+            let mut r = crate::planchebitmap::pixels_vides();
+            crate::planchebitmap::poser_pixel(&mut r, 0, 0, eframe::egui::Color32::BLACK, false);
+            let r = std::sync::Arc::new(r);
+            for i in 0..crate::planchebitmap::MAX_MORCEAUX {
+                b.app.doc.annotations.bitmap.morceaux.push(crate::planchebitmap::Morceau {
+                    id: i as u64 + 1,
+                    anchor: crate::annotations::Ancre { card: carte, after: 0, rank: 0 },
+                    dessus: false,
+                    lien: None,
+                    // (Dans la vue, sous la première rangée : 5 000 morceaux à peindre à chaque image ; les vignettes doivent se refaire quand même.)
+                    pose: crate::planchebitmap::A64::echelle_decalage(0.0001, 0.0, 3.0),
+                    pixels: r.clone(),
+                });
+            }
+        } else {
+            for _ in 0..crate::annotations::MAX_TRACES {
+                b.app.doc.annotations.traces.push(crate::annotations::Trace::new(calque, crate::annotations::Ancre { card: carte, after: 0, rank: 0 }, [0, 0, 0], vec![crate::vector::VPoint { x: 0.0, y: 3.0, r: 0.001 }]));
+            }
         }
         let (x, y) = (b.app.vignettes.xf, case_ecran(&b, b.app.doc.panels[PLAN].id));
         let milieu = x.to_board(pos2(y.center().x, de.y));
@@ -765,7 +783,11 @@ fn when_the_board_is_full_the_part_stays_in_the_plan_it_came_from_and_the_messag
         let sur_la_feuille = pos2((milieu.x - aff.tx) / aff.a, (milieu.y - aff.ty) / aff.a);
         tracer(&mut b, de, a);
         repos(&mut b);
-        assert_eq!(b.app.doc.annotations.traces.len(), crate::annotations::MAX_TRACES, "{}", sorte(bitmap));
+        if bitmap {
+            assert_eq!(b.app.doc.annotations.bitmap.morceaux.len(), crate::planchebitmap::MAX_MORCEAUX, "{}", sorte(bitmap));
+        } else {
+            assert_eq!(b.app.doc.annotations.traces.len(), crate::annotations::MAX_TRACES, "{}", sorte(bitmap));
+        }
         println!("MESSAGE planche pleine : {}", b.app.status);
         assert!(!b.app.status.contains("reste sur la planche"), "{} : le message ment : {}", sorte(bitmap), b.app.status);
         assert!(b.app.status.contains("limite"), "{} : {}", sorte(bitmap), b.app.status);
@@ -827,7 +849,8 @@ fn the_eraser_on_a_refused_part_erases_only_refused_parts_and_undo_redo_follow()
         tracer(&mut b, de, a);
         repos(&mut b);
         let avant = traits_hors_cadres(&b.app.doc);
-        assert_eq!((dessus(&b), avant), (1, 3), "{}", sorte(bitmap));
+        // (Vectoriel : trois tronçons, le papier de chaque côté et la case ; bitmap, partie 127 : un morceau pour le papier, un par-dessus la case.)
+        assert_eq!((dessus(&b), avant), (1, if bitmap { 2 } else { 3 }), "{}", sorte(bitmap));
         let etapes = b.app.history.undo_len();
         b.app.set_tool(crate::app::Tool::Eraser);
         b.chauffer(1);
@@ -1006,8 +1029,16 @@ fn in_a_shared_film_a_stroke_never_writes_in_a_plan_held_by_someone_else() {
     b.chauffer(3);
     println!("PARTAGE : encre du plan 0 {:?}, plan courant {}, traits sur la planche {}, sur une case {}, message {:?}", encre_du_plan(&b.app.doc, ids[0]), b.app.cur_panel, traits_hors_cadres(&b.app.doc), dessus(&b), b.app.status);
     assert_eq!(encre_du_plan(&b.app.doc, ids[1]), tenu, "rien dans le plan de Léa");
-    assert!(dessus(&b) >= 1, "la part est visible : {:?}", b.app.status);
-    assert!(b.app.status.contains("Plan 2 n'est pas à toi"), "{}", b.app.status);
+    let bitmap = b.app.layers().get(b.app.cur_layer).is_some_and(|l| l.kind == crate::document::LayerKind::Bitmap);
+    if bitmap {
+        // (Partie 127, contre-relecture : sans le jeton du montage, la couche bitmap de la planche ne serait pas enregistrée ; elle ne reçoit rien, le
+        // bout reste dans le dessin du plan 0, hors de sa case.)
+        assert_eq!(traits_hors_cadres(&b.app.doc), 0, "rien sur la planche sans le jeton");
+        assert!(b.app.status.contains("montage n'est pas à toi"), "{}", b.app.status);
+    } else {
+        assert!(dessus(&b) >= 1, "la part est visible : {:?}", b.app.status);
+        assert!(b.app.status.contains("Plan 2 n'est pas à toi"), "{}", b.app.status);
+    }
 }
 
 /// La part sur une case garde le rang de sa case (le secours de `rattacher_manquantes` reste juste).

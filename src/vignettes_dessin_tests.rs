@@ -21,7 +21,9 @@ fn trait_derriere(bitmap: bool, k: usize, d: eframe::egui::Vec2, nom: &str) {
     let rgba = b.capturer().unwrap();
     let nom = format!("derriere-{nom}-{}", if bitmap { "bitmap" } else { "vecteur" });
     sauver(&rgba, &nom);
-    assert!(!b.app.doc.annotations.traces.is_empty(), "{nom} : la part hors de tout champ va sur la planche ({})", b.app.status);
+    // (Partie 127 : en bitmap, ses pixels sur la couche bitmap de la planche.)
+    let sur_la_planche = !b.app.doc.annotations.traces.is_empty() || !b.app.doc.annotations.bitmap.morceaux.is_empty();
+    assert!(sur_la_planche, "{nom} : la part hors de tout champ va sur la planche ({})", b.app.status);
     continu(&rgba, de, a, &nom);
 }
 

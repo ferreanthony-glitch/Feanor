@@ -4080,6 +4080,8 @@ impl App {
         if matches!(action, "edition.copier" | "edition.couper") {
             self.fx_pile_recent = false;
             self.layer_clip_recent = false;
+            // (Et celle des pixels de la planche : Ctrl+C de la sélection bitmap des Vignettes la redonne, plus bas.)
+            self.vignettes.selb_presse = None;
         }
         // Le panneau Références a la main : Ctrl+V y colle l'image du presse-papiers.
         if self.refs.focus && matches!(action, "edition.coller" | "edition.coller_a_la_tete" | "edition.coller_sur_place") {
@@ -4436,6 +4438,19 @@ impl App {
                 }
             }
             "edition.supprimer" if self.selp_a_la_main() => self.selp_supprimer(),
+            // Des pixels choisis sur la planche, calque bitmap (partie 127) : entiers, partout où ils sont ; Ctrl+V les repose à leur place, répartis.
+            "edition.copier" if self.selb_a_la_main() => {
+                self.selb_copier();
+            }
+            "edition.couper" if self.selb_a_la_main() => {
+                if self.selb_copier() {
+                    self.selb_supprimer();
+                }
+            }
+            "edition.supprimer" if self.selb_a_la_main() => self.selb_supprimer(),
+            "edition.coller" if self.selb_possible() && self.vignettes.selb_presse.is_some() && !self.panels_have_focus() && !self.images_focus && !self.key_focus => {
+                self.selb_coller();
+            }
             // Une sélection sur plusieurs calques copie, coupe et colle calque par calque.
             "edition.couper" if self.multi.sel.is_some() => self.multi_cut(),
             "edition.copier" if self.multi.sel.is_some() => {

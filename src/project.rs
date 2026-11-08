@@ -1273,6 +1273,10 @@ thread_local! {
 
 #[cfg(test)]
 thread_local! {
+    /// Essais : l'enregistrement s'arrête juste après le premier passage de la couche bitmap de la planche, avant les dessins (une coupure là).
+    pub(crate) static COUPER_APRES_LA_COUCHE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+thread_local! {
     /// Essais : l'écriture s'arrête juste après le nouveau manifeste, avant l'effacement de l'ancien (un plantage là).
     pub(crate) static PLANTER_AVANT_RETRAIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
@@ -1487,6 +1491,8 @@ pub struct SaveJob {
     personnages: Option<Vec<u8>>,
     /// Le fichier des annotations de la vue Vignettes (`annotations.json`) ; rien : il n'y en a plus, le fichier part.
     annotations: Option<Vec<u8>>,
+    /// La couche bitmap de la planche (`planchebitmap.rs`), écrite dans `planche_bitmap/` ; rien : non écrite (pas d'annexes dans ce travail).
+    planche_bitmap: Option<crate::planchebitmap::PlancheBitmap>,
     /// Le fichier du scénario gardé (`scenario.json`) ; rien : il n'y en a plus (un scénario lisible n'est jamais effacé : il passe à côté).
     scenario: Option<Vec<u8>>,
     /// Le fichier des sons proposés (`sons_proposes.json`) ; rien : il n'y en a plus, le fichier part.
@@ -1862,6 +1868,7 @@ impl SaveJob {
         self.sound_fx = crate::audiofx::to_bytes(&doc)?;
         self.personnages = crate::personnages::to_bytes(&doc)?;
         self.annotations = crate::annotations::to_bytes(&doc)?;
+        self.planche_bitmap = Some(doc.annotations.bitmap.clone());
         self.scenario = crate::scenariogarde::to_bytes(&doc)?;
         self.sons_proposes = crate::indications::to_bytes(&doc)?;
         self.references = crate::references::plan_save(&doc, dir)?;
@@ -1930,6 +1937,7 @@ pub(crate) fn prepare_save_avant(doc: &Document, manifest_path: &Path, written: 
         job.sound_fx = crate::audiofx::to_bytes(doc)?;
         job.personnages = crate::personnages::to_bytes(doc)?;
         job.annotations = crate::annotations::to_bytes(doc)?;
+        job.planche_bitmap = Some(doc.annotations.bitmap.clone());
         job.scenario = crate::scenariogarde::to_bytes(doc)?;
         job.sons_proposes = crate::indications::to_bytes(doc)?;
         job.references = crate::references::plan_save(doc, dir)?;
@@ -2157,6 +2165,15 @@ impl SaveJob {
         let dir = self.manifest_path.parent().ok_or("chemin de projet invalide")?;
         fs::create_dir_all(dir.join(DRAWINGS)).map_err(|e| format!("{} : {e}", dir.display()))?;
         let mut count = 0;
+        // La couche bitmap de la planche d'abord (`planchebitmap.rs`) : ses images et son index sont sur le disque avant les dessins d'où des pixels ont pu
+        // partir vers elle ; une coupure entre les deux laisse au pire un pixel à deux endroits, jamais nulle part. Ce qu'elle ne cite plus part à la fin.
+        if let Some(b) = self.planche_bitmap.as_ref() {
+            count += crate::planchebitmap::ecrire(dir, b, false)?;
+        }
+        #[cfg(test)]
+        if COUPER_APRES_LA_COUCHE.with(|c| c.get()) {
+            return Err("coupure simulée entre la couche bitmap de la planche et les dessins".into());
+        }
         if let Some(p) = progress {
             p.total.store(self.drawings.len(), std::sync::atomic::Ordering::Relaxed);
         }
@@ -2249,6 +2266,10 @@ impl SaveJob {
         // Le manifeste en dernier ; s'il a déjà ces octets-là (une copie de secours où rien n'a changé), il reste tel quel.
         if toujours_ecrire() || fs::read(&self.manifest_path).ok().as_deref() != Some(self.manifest.as_slice()) {
             write_atomic_synced(&self.manifest_path, &self.manifest)?;
+        }
+        // La couche bitmap de la planche : ce que son index ne cite plus part maintenant, quand les dessins et le manifeste sont écrits.
+        if let Some(b) = self.planche_bitmap.as_ref() {
+            count += crate::planchebitmap::ecrire(dir, b, true)?;
         }
         // Le nouveau manifeste est sur le disque : l'ancien nom du projet (`.pelure`) peut partir. Un plantage avant laisse
         // les deux fichiers, et l'ouverture prend le plus récent (`manifeste_a_ouvrir`).
@@ -3478,6 +3499,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
         structure.personnages = load_personnages(dir, &mut warnings);
         // Les annotations de la vue Vignettes (`annotations.json`, absent : aucune).
         structure.annotations = load_annotations(dir, &mut warnings);
+        // Et la couche bitmap de la planche (`planche_bitmap/`, absente : vide).
+        structure.annotations.bitmap = crate::planchebitmap::lire(dir, &mut warnings);
         // Le scénario gardé dans le projet (`scenario.json`, absent : aucun).
         structure.scenario = crate::scenariogarde::load(dir, &mut warnings);
     }

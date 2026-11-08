@@ -771,6 +771,7 @@ pub(crate) fn preparer(doc: &Document, manifest_path: &Path, written: &mut HashM
         job.sound_fx = crate::audiofx::to_bytes(doc)?;
         job.personnages = crate::personnages::to_bytes(doc)?;
         job.annotations = crate::annotations::to_bytes(doc)?;
+        job.planche_bitmap = Some(doc.annotations.bitmap.clone());
         job.scenario = crate::scenariogarde::to_bytes(doc)?;
         job.sons_proposes = crate::indications::to_bytes(doc)?;
         job.variantes = if variantes { variantes_octets(doc)? } else { None };
@@ -809,6 +810,7 @@ impl SaveJob {
             sound_fx: None,
             personnages: None,
             annotations: None,
+            planche_bitmap: None,
             scenario: None,
             sons_proposes: None,
             references: Default::default(),
@@ -839,6 +841,14 @@ impl SaveJob {
         let mut resultat = ResultatPartage::default();
         let mut count = 0;
         fs::create_dir_all(dir.join(DRAWINGS)).map_err(|e| format!("{} : {e}", dir.display()))?;
+        // La couche bitmap de la planche (avec le montage, donc avec le jeton) : premier passage avant les dessins, comme pour un projet seul (rien ne se
+        // perd si l'enregistrement est coupé) ; le dernier passage, qui retire ce que rien ne cite, avec les annexes du montage.
+        let mut bitmap_ecrit = false;
+        if travail.ctx.jeton.is_some() && travail.structure.is_some() {
+            if let Some(b) = self.planche_bitmap.as_ref() {
+                bitmap_ecrit = crate::planchebitmap::ecrire(&dir, b, false)? > 0;
+            }
+        }
         if let Some(p) = progress {
             p.total.store(self.drawings.len(), std::sync::atomic::Ordering::Relaxed);
         }
@@ -918,7 +928,14 @@ impl SaveJob {
         }
         // Le montage, si je tiens le jeton.
         if let (Some(manifest), Some(revision_lue)) = (travail.structure.as_mut(), travail.ctx.jeton) {
-            let mut change = false;
+            // (La couche bitmap de la planche, à côté des annotations : `planchebitmap.rs`.)
+            // (Toujours le dernier passage, même si le premier a déjà écrit.)
+            let dernier = match self.planche_bitmap.as_ref() {
+                Some(b) => crate::planchebitmap::ecrire(&dir, b, true)? > 0,
+                None => false,
+            };
+            let bitmap_ecrit = bitmap_ecrit || dernier;
+            let mut change = bitmap_ecrit;
             let mut ecrire = |path: PathBuf, bytes: Option<&[u8]>, lisible: &dyn Fn(&str) -> bool| -> Result<(), String> {
                 let identique = match (bytes, fs::read(&path)) {
                     (Some(b), Ok(actuel)) => actuel == b,

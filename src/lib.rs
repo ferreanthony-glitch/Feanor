@@ -1177,6 +1177,10 @@ mod vignettes_selection_relecture_tests;
 #[cfg(test)]
 mod horschamptex_tests;
 mod vignettesel;
+mod vignetteselbmp;
+mod planchebitmap;
+#[cfg(test)]
+mod vignettes_bitmap_tests;
 mod workspaceui;
 mod xsheet;
 #[cfg(test)]
