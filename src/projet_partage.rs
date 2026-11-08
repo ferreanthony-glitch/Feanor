@@ -922,7 +922,7 @@ impl SaveJob {
         if let (Some(manifest), Some(revision_lue)) = (travail.structure.as_mut(), travail.ctx.jeton) {
             // (La couche bitmap de la planche, à côté des annotations : `planchebitmap.rs`.)
             let bitmap_ecrit = match self.planche_bitmap.as_ref() {
-                Some(b) => crate::planchebitmap::ecrire(&dir, b)? > 0,
+                Some(b) => crate::planchebitmap::ecrire(&dir, b, true)? > 0,
                 None => false,
             };
             let mut change = bitmap_ecrit;

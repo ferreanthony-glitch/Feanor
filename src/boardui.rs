@@ -1670,6 +1670,9 @@ impl App {
         self.peindre_cases_annulees(ui, &painter, view, xf, &layout, deadline);
         // Le dessin hors des cases, sous les cases (ce qui déborde dans une case ne la recouvre pas) : sur la planche, enregistré, dans aucun plan.
         self.hors_cadres_peindre(&painter, view, xf, &layout, false);
+        // (Le temps des demandes de vignettes se compte d'ici, pour les marges et les cases : peindre le dessin hors des cases ne le prend plus. Avant, des
+        // milliers de morceaux de la couche bitmap dans la vue usaient ces 2 ms à chaque image, et les vignettes ne se refaisaient plus : partie 127.)
+        let deadline = Instant::now() + crate::thumbs::THUMB_TIME;
         // Les tuiles des empreintes d'abord (leur rectangle déborde de leur enveloppe : les cases qui s'y trouvent se peignent par-dessus).
         // Le menu du clic droit de la case courante se montre pendant qu'on peint les tuiles et les cases : « Réunir avec le plan
         // précédent », « Supprimer »… y changent le film, et la mise en page de cette image ne vaut plus. On s'arrête là, l'image

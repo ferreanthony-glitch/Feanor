@@ -110,6 +110,8 @@ fn outside_the_cases_a_bitmap_stroke_keeps_its_pixels_on_the_board() {
     let bm = &b.app.doc.annotations.bitmap;
     let (px, masques): (usize, usize) = (bm.morceaux.iter().map(|m| m.octets()).sum(), bm.empreintes.iter().map(|e| e.masque.octets()).sum());
     println!("rangée : pixels {px} octets, empreintes {masques} octets");
+    let t = bm.empreintes.iter().map(|e| crate::planchebitmap::tailles_d_un_masque(&e.masque)).fold((0, 0, 0, 0), |a, b| (a.0 + b.0, a.1 + b.1, a.2 + b.2, a.3 + b.3));
+    println!("MASQUES : 1 bit par pixel {} octets, par plages {} octets ; sur le disque : PNG RVBA {} octets, PNG gris {} octets", t.0, t.1, t.2, t.3);
     assert!(px < 64 << 10, "les tuiles du morceau restent rangées après l'affichage ({px} octets)");
     // Les pixels du papier sont exactement ceux du pinceau : sous le bout du trait au-dessus de la case 1, l'encre est pleine (pas une ligne refaite).
     assert!(pixels_planche(&b) > 200, "des pixels sur la planche ({})", pixels_planche(&b));
@@ -324,6 +326,136 @@ fn a_full_history_still_undoes_the_gesture_in_one_step() {
     absent(&relever(&b.capturer().unwrap(), de + d, a + d), "et rien ne reste à la place d'après");
 }
 
+// ------------------------------------------------------------------------------ une empreinte que le dessin a dépassée
+
+/// Chacun des pixels verts `verts` est encore là, vert, à sa place, dans le dessin `cel` (ceux que le lasso a pris peuvent s'ajouter ailleurs).
+fn restes(b: &Banc, cel: crate::document::CelId, verts: &[(i64, i64)], quoi: &str) {
+    let r = &b.app.doc.cels[&cel].raster;
+    let partis = verts.iter().filter(|&&(x, y)| {
+        let c = r.get_i(x, y);
+        !(c.g() > 150 && c.r() < 80)
+    }).count();
+    assert_eq!(partis, 0, "{quoi} : {partis} pixels verts sur {} ne sont plus là", verts.len());
+}
+/// Les pixels verts du dessin `cel` hors du carré d'écran `zone` (leur place, en pixels du dessin).
+fn verts_hors(b: &Banc, cel: crate::document::CelId, k: usize, zone: eframe::egui::Rect) -> Vec<(i64, i64)> {
+    let l = b.app.board_layout();
+    let pose = crate::horschamp::pose_de_la_case(&b.app.doc, &l, k).expect("la case");
+    let xf = b.app.vignettes.xf;
+    let mut v = Vec::new();
+    crate::planchebitmap::chaque_pixel(&b.app.doc.cels[&cel].raster, |x, y, c| {
+        if c.g() > 150 && c.r() < 80 && !zone.contains(xf.to_screen(pose.planche(pos2(x as f32 + 0.5, y as f32 + 0.5)))) {
+            v.push((x, y));
+        }
+    });
+    v
+}
+
+#[test]
+fn a_stroke_moved_in_the_storyboard_is_no_longer_followed_and_no_other_pixel_leaves() {
+    let Some((mut b, de, a, _, t2)) = trait_a_travers(true) else { return println!("pas de carte graphique") };
+    let l = b.app.board_layout();
+    let c2 = l.cards[2];
+    let cel = b.app.doc.panels[c2.panel].layers[0].cel_at(c2.frame).expect("le dessin de la case 2");
+    let e = b.app.doc.annotations.bitmap.empreintes.iter().find(|e| e.cel == cel).cloned().expect("l'empreinte du trait dans la case 2");
+    // Au Storyboard, les pixels du trait de ce plan sont déplacés (400 pixels plus bas), puis un autre trait, vert, est peint là où il était.
+    {
+        let d = b.app.doc.cels.get_mut(&cel).unwrap();
+        d.raster = d.raster.decalee(0, 400);
+        let vert = eframe::egui::Color32::from_rgba_premultiplied(20, 200, 40, 255);
+        e.masque.chaque(|x, y| crate::planchebitmap::poser_pixel(&mut d.raster, x, y, vert, false));
+        d.version += 1;
+    }
+    b.app.renderer.invalidate_all();
+    repos(&mut b);
+    let m = sur_le_trait(de, a, t2.center().x);
+    let zone = eframe::egui::Rect::from_center_size(m, vec2(60.0, 60.0));
+    let verts = verts_hors(&b, cel, 2, zone);
+    assert!(verts.len() > 50, "un autre trait hors du lasso, là où était le premier ({})", verts.len());
+    // Ce que faisait le code d'avant (l'empreinte crue sur parole) : l'autre trait part, hors du lasso.
+    let i = b.app.doc.annotations.bitmap.empreintes.iter().position(|x| x.cel == cel).unwrap();
+    let vraie = b.app.doc.annotations.bitmap.empreintes[i].signature;
+    b.app.doc.annotations.bitmap.empreintes[i].signature = crate::planchebitmap::signature(&b.app.doc.cels[&cel].raster, &e.masque);
+    lasso(&mut b, m, 30.0);
+    glisser_droit(&mut b, prise(m, a), vec2(40.0, 0.0));
+    let partis = verts.len() - verts_hors(&b, cel, 2, zone).len();
+    println!("ROUGE (empreinte crue) : {partis} pixels verts hors du lasso sont partis ; {}", b.app.status);
+    assert!(partis > 0, "l'essai montre bien le défaut quand l'empreinte n'est pas vérifiée");
+    b.app.undo();
+    b.app.doc.annotations.bitmap.empreintes[i].signature = vraie;
+    repos(&mut b);
+    restes(&b, cel, &verts, "annulé");
+    // Avec la vérification : le trait n'est plus suivi, la sélection reste celle de la case, et la ligne d'état le dit.
+    lasso(&mut b, m, 30.0);
+    println!("VERT : {}", b.app.status);
+    assert!(b.app.status.contains("a changé"), "{}", b.app.status);
+    let s = b.app.vignettes.selb.as_ref().expect("un choix");
+    let sources: Vec<String> = s.pieces.iter().map(|p| format!("{:?}", p.source)).collect();
+    println!("VERT : sources {sources:?} ; dessin de la case 2 : {cel}");
+    assert!(s.pieces.iter().all(|p| matches!(p.source, crate::vignetteselbmp::Source::Dessin { cel: c, .. } if c == cel)), "seule la case 2 : {sources:?}");
+    glisser_droit(&mut b, prise(m, a), vec2(40.0, 0.0));
+    restes(&b, cel, &verts, "aucun pixel de l'autre trait hors du lasso n'est parti");
+}
+
+// ------------------------------------------------------------------------------ beaucoup de morceaux dans la vue
+
+/// `n` morceaux d'un trait court (une tuile d'encre chacun), répartis en grille sur toute la planche visible, sous les cases et sur le papier.
+fn semer_des_morceaux(b: &mut Banc, n: usize) {
+    let l = b.app.board_layout();
+    let carte = l.cards[0];
+    let mut r = crate::planchebitmap::pixels_vides();
+    for i in 0..64 {
+        for e in 0..3 {
+            crate::planchebitmap::poser_pixel(&mut r, i, (i + e).min(63), eframe::egui::Color32::from_rgba_premultiplied(30, 30, 200, 255), false);
+        }
+    }
+    let view = b.app.vignettes.view;
+    let xf = b.app.vignettes.xf;
+    let (a, z) = (xf.to_board(view.left_top()), xf.to_board(view.right_bottom()));
+    let cote = (n as f32).sqrt().ceil() as usize;
+    let k = carte.thumb.width();
+    b.app.doc.annotations.calque_hors_cadres();
+    for i in 0..n {
+        let (u, v) = ((i % cote) as f32 / cote as f32, (i / cote) as f32 / cote as f32);
+        let p = pos2(a.x + (z.x - a.x) * u, a.y + (z.y - a.y) * v);
+        // (Un pixel du morceau = 0,1 unité de la planche : quelques points d'écran pour la tuile.)
+        let s = 0.1 / k;
+        let pose = crate::planchebitmap::A64::echelle_decalage(s as f64, ((p.x - carte.thumb.left()) / k) as f64, ((p.y - carte.thumb.top()) / k) as f64);
+        b.app.doc.annotations.bitmap.morceaux.push(crate::planchebitmap::Morceau { id: 1 + i as u64, anchor: crate::annotations::Ancre { card: carte.id, after: 0, rank: 0 }, dessus: false, lien: None, pose, pixels: std::sync::Arc::new(r.clone()) });
+    }
+}
+
+/// Le temps de construction moyen d'une image d'écran de la planche, la souris qui bouge (ms).
+fn cout_par_image(b: &mut Banc) -> f64 {
+    let c = b.app.vignettes.view.center();
+    let mut t = 0.0;
+    for k in 0..30 {
+        t += b.image(vec![eframe::egui::Event::PointerMoved(c + vec2((k % 7) as f32, 0.0))], 1.0 / 60.0).construction;
+    }
+    t / 30.0
+}
+
+#[test]
+fn thousands_of_visible_pieces_do_not_stop_the_thumbnails() {
+    let Some(mut b) = planche(des_plans(18, true), 6, 1.0) else { return println!("pas de carte graphique") };
+    repos(&mut b);
+    let sans = cout_par_image(&mut b);
+    semer_des_morceaux(&mut b, 5000);
+    b.chauffer(40);
+    let avec = cout_par_image(&mut b);
+    println!("COUT image de la planche : sans morceaux {sans:.2} ms, avec 5 000 morceaux visibles {avec:.2} ms");
+    // Un trait à travers les cases : ses vignettes se refont, la planche revient au repos.
+    let l = b.app.board_layout();
+    let xf = b.app.vignettes.xf;
+    let (t1, t2) = (xf.rect(l.cards[1].thumb), xf.rect(l.cards[2].thumb));
+    let (de, a) = (t1.center(), t2.center() + vec2(0.0, 30.0));
+    tracer(&mut b, de, a);
+    repos(&mut b);
+    let r = relever(&b.capturer().unwrap(), de, a);
+    println!("trait : {r:?}");
+    assert!(r.trou <= 6, "le trait est là, ses vignettes refaites (les morceaux bleus le croisent) : {r:?}");
+}
+
 // ------------------------------------------------------------------------------ la limite
 
 /// Un projet de 30 plans bitmap dont chaque dessin est plein d'encre (1920 × 1080), et un trait réparti à travers les cases 1 à 3.
@@ -367,6 +499,10 @@ fn measure_the_memory_of_a_huge_selection() {
     let l = b.app.board_layout();
     let xf = b.app.vignettes.xf;
     let poly: Vec<Pos2> = poly.iter().map(|p| xf.to_board(*p)).collect();
+    // Le lasso tel qu'au vrai geste, avec la limite : refusé dès qu'elle est passée.
+    let debut = std::time::Instant::now();
+    let refuse = b.app.selb_lasso_refuse_pour_essai(&l, &poly);
+    println!("MESURE lasso sur 30 cases, avec la limite : refusé {refuse} en {:.0} ms", debut.elapsed().as_secs_f64() * 1000.0);
     let debut = std::time::Instant::now();
     let pieces = b.app.selb_prendre_sans_limite(&l, &poly);
     let t_choix = debut.elapsed();
@@ -414,7 +550,7 @@ fn just_below_and_just_above_the_limit() {
         for i in 0..n as i64 {
             m.poser(-20_000 + (i % 300) * 64, -20_000 + (i / 300) * 64);
         }
-        c.noter_empreinte(lien, cel, m);
+        c.noter_empreinte(lien, cel, m, &b.app.doc.cels[&cel].raster, |_| true);
         let garde = std::mem::replace(&mut b.app.doc.annotations.bitmap, c);
         let pris = b.app.selb_du_lien_pour_essai(&l, lien);
         b.app.doc.annotations.bitmap = garde;
@@ -436,4 +572,140 @@ fn just_below_and_just_above_the_limit() {
         _ => None,
     }).collect();
     assert_eq!(cases.len(), 1, "seule la part d'une case est prise");
+}
+
+// ------------------------------------------------------------------------------ relecture : la place de chaque pixel, la couche illisible, les empreintes
+
+/// La somme des opacités de tous les pixels des dessins et de la couche bitmap de la planche.
+fn encre_totale(b: &Banc) -> u64 {
+    let mut n = 0u64;
+    let mut vus = std::collections::BTreeSet::new();
+    for p in &b.app.doc.panels {
+        for l in &p.layers {
+            for c in l.frames.iter().flatten() {
+                if vus.insert(*c) {
+                    if let Some(d) = b.app.doc.cels.get(c) {
+                        crate::planchebitmap::chaque_pixel(&d.raster, |_, _, px| n += u64::from(px.a()));
+                    }
+                }
+            }
+        }
+    }
+    for m in &b.app.doc.annotations.bitmap.morceaux {
+        crate::planchebitmap::chaque_pixel(&m.pixels, |_, _, px| n += u64::from(px.a()));
+    }
+    n
+}
+
+#[test]
+fn a_fractional_move_across_case_edges_keeps_every_pixel_once() {
+    let Some((mut b, de, a, _, t2)) = trait_a_travers(true) else { return println!("pas de carte graphique") };
+    let avant = encre_totale(&b);
+    let m = sur_le_trait(de, a, t2.center().x);
+    lasso(&mut b, m, 30.0);
+    let d = vec2(37.3, 11.7);
+    glisser_droit(&mut b, prise(m, a), d);
+    let apres = encre_totale(&b);
+    let r = voir(&mut b, "bmp-fractionnaire", de + d, a + d);
+    println!("encre avant {avant}, après {apres} ; {r:?}");
+    assert_eq!(apres, avant, "chaque pixel va à une seule place : ni perdu, ni doublé");
+    assert!(r.trou <= 1, "le trait déplacé est continu : {r:?}");
+}
+
+#[test]
+fn an_unreadable_layer_keeps_the_stroke_in_its_case_and_refuses_the_board_selection() {
+    let Some(mut b) = planche(des_plans(12, true), 6, 1.0) else { return println!("pas de carte graphique") };
+    b.app.doc.annotations.bitmap.illisible = true;
+    let l = b.app.board_layout();
+    let xf = b.app.vignettes.xf;
+    let t1 = xf.rect(l.cards[1].thumb);
+    let (de, a) = (t1.center(), pos2(t1.center().x, t1.top() - 40.0));
+    tracer(&mut b, de, a);
+    repos(&mut b);
+    println!("{}", b.app.status);
+    assert!(b.app.doc.annotations.bitmap.morceaux.is_empty(), "rien n'est posé sur une couche qu'on ne pourrait pas enregistrer");
+    assert!(b.app.status.contains("n'a pas pu être lue"), "{}", b.app.status);
+    // Le trait reste entier dans le dessin d'où il part (au-delà de la case, caché, mais là).
+    let cel = b.app.doc.panels[l.cards[1].panel].layers[0].cel_at(l.cards[1].frame).expect("le dessin");
+    let pose = crate::horschamp::pose_de_la_case(&b.app.doc, &l, 1).unwrap();
+    let haut = pose.dessin(xf.to_board(pos2(a.x, a.y + 6.0)));
+    assert!((-3..=3).any(|j| b.app.doc.cels[&cel].raster.get_i(haut.x as i64, haut.y as i64 + j).a() > 0), "le bout hors de la case est resté dans son dessin");
+    // La sélection de la planche est coupée, et le dit.
+    // (Ctrl + lasso retombe alors sur la sélection de la case, celle d'avant : elle ne sort pas du dessin.)
+    lasso(&mut b, t1.center(), 20.0);
+    assert!(b.app.vignettes.selb.is_none(), "pas de sélection de la planche : {}", b.app.status);
+}
+
+#[test]
+fn an_eraser_then_another_stroke_or_a_fill_makes_the_stroke_no_longer_followed() {
+    for outil in ["gomme", "remplir"] {
+        let Some((mut b, de, a, _, t2)) = trait_a_travers(true) else { return println!("pas de carte graphique") };
+        let m = sur_le_trait(de, a, t2.center().x);
+        let l = b.app.board_layout();
+        let c2 = l.cards[2];
+        let cel = b.app.doc.panels[c2.panel].layers[0].cel_at(c2.frame).unwrap();
+        let ecart = (a - m).normalized() * 45.0;
+        if outil == "gomme" {
+            // La gomme sur le trait dans la case 2, hors du lasso à venir, puis un autre trait au même endroit.
+            b.app.set_tool(crate::app::Tool::Eraser);
+            tracer(&mut b, m + ecart - vec2(0.0, 6.0), m + ecart + vec2(0.0, 6.0));
+            b.app.set_tool(crate::app::Tool::Brush);
+            b.app.color = [20, 200, 40];
+            tracer(&mut b, m + ecart - vec2(0.0, 8.0), m + ecart + vec2(0.0, 8.0));
+        } else {
+            b.app.set_tool(crate::app::Tool::Fill);
+            b.app.color = [20, 200, 40];
+            crate::vignettes_tests::clic_avec(&mut b, m + ecart + vec2(0.0, 1.0), Modifiers::NONE);
+            b.app.set_tool(crate::app::Tool::Brush);
+        }
+        repos(&mut b);
+        let zone = eframe::egui::Rect::from_center_size(m, vec2(60.0, 60.0));
+        let verts = verts_hors(&b, cel, 2, zone);
+        lasso(&mut b, m, 30.0);
+        println!("{outil} : {} ; {} pixels verts hors du lasso", b.app.status, verts.len());
+        assert!(b.app.status.contains("a changé"), "{outil} : {}", b.app.status);
+        // Rien n'est pris hors du lasso : chaque pixel choisi y est (la sélection de la case seule, pas l'empreinte périmée).
+        let xf = b.app.vignettes.xf;
+        let s = b.app.vignettes.selb.as_ref().expect("un choix");
+        let mut hors = 0;
+        for p in &s.pieces {
+            crate::planchebitmap::chaque_pixel(&p.pixels, |x, y, _| {
+                if !zone.expand(2.0).contains(xf.to_screen(p.vers_planche.point(pos2(x as f32 + 0.5, y as f32 + 0.5)))) {
+                    hors += 1;
+                }
+            });
+        }
+        assert_eq!(hors, 0, "{outil} : aucun pixel hors du lasso n'est pris");
+        glisser_droit(&mut b, prise(m, a), vec2(40.0, 0.0));
+        assert_eq!(b.app.vignettes.selb.as_ref().map(|s| s.pieces.is_empty()), Some(false), "{outil} : le geste s'est fait");
+    }
+}
+
+#[test]
+fn copying_puts_the_feanor_mark_in_the_clipboard() {
+    let Some((mut b, de, a, _, t2)) = trait_a_travers(true) else { return println!("pas de carte graphique") };
+    lasso(&mut b, sur_le_trait(de, a, t2.center().x), 30.0);
+    b.app.run_action("edition.copier");
+    let copie = b.app.ctx.output(|o| o.commands.iter().find_map(|c| if let eframe::egui::OutputCommand::CopyText(t) = c { Some(t.clone()) } else { None }));
+    println!("presse-papiers (simulé) : {copie:?}");
+    assert!(copie.is_some_and(|t| crate::pasteimage::est_copie_interne(&t)), "le marqueur de FEANOR : une image d'avant ne passera pas devant");
+}
+
+#[test]
+fn a_scale_too_large_to_lay_down_is_refused_and_nothing_moves() {
+    let Some((mut b, de, a, _, t2)) = trait_a_travers(true) else { return println!("pas de carte graphique") };
+    let m = sur_le_trait(de, a, t2.center().x);
+    lasso(&mut b, m, 30.0);
+    let avant = encre_totale(&b);
+    let pas = b.app.history.undo_len();
+    let l = b.app.board_layout();
+    let s = b.app.vignettes.selb.as_ref().unwrap();
+    let pieces = s.pieces.clone();
+    let c = s.bornes.center();
+    // ×400 autour du centre de la boîte : bien au-delà de la limite et de la toile des dessins.
+    let g = crate::planchebitmap::A64::echelle_decalage(400.0, c.x as f64 * -399.0, c.y as f64 * -399.0);
+    b.app.selb_mesurer_un_lacher(&l, pieces, &g);
+    println!("{}", b.app.status);
+    assert_eq!((b.app.history.undo_len(), encre_totale(&b)), (pas, avant), "refusé : rien n'a bougé");
+    assert!(b.app.status.contains("refusé"), "{}", b.app.status);
 }

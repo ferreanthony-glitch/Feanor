@@ -29,7 +29,7 @@ use crate::board::BoardLayout;
 use crate::boardui::Xf;
 use crate::document::{CelId, LayerKind};
 use crate::history::Edit;
-use crate::planchebitmap::{pixels_vides, Masque, A64};
+use crate::planchebitmap::{Masque, A64};
 use crate::raster::{Raster, Tile, TILE, TILE_PIXELS};
 use crate::selbox::{self, Grabs, Handle, Mods, SelFrame};
 use crate::vector::Affine;
@@ -42,6 +42,15 @@ const CLIC_PX: f32 = 4.0;
 const PRISE_PX: f32 = 6.0;
 const PIVOT_SNAP: f32 = 6.0;
 const LASSO_MAX: usize = 4000;
+
+/// Pourquoi une sélection ne suit pas le trait entier.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Echec {
+    /// Au-delà de `LIMITE_TUILES`.
+    Limite,
+    /// Une empreinte du trait ne dit plus où il est : son dessin a changé sous elle depuis qu'il a été réparti.
+    Perime,
+}
 
 /// D'où viennent des pixels pris.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -82,12 +91,30 @@ pub(crate) struct SelBitmap {
     /// Après un lâcher : les pixels peints à leur nouvelle place tant que les vignettes ne sont pas refaites (étapes, début).
     pub tenu: Option<(Vec<Piece>, usize, std::time::Instant)>,
     pub limite_atteinte: bool,
+    /// La disposition de la planche au moment du choix (`cle_planche`) : si elle change, le choix est levé.
+    pub planche: u64,
 }
 
 impl Default for SelBitmap {
     fn default() -> Self {
-        SelBitmap { pieces: Vec::new(), liens: Vec::new(), serial: 0, lasso: None, geste: None, pivot: None, bornes: Rect::NOTHING, tenu: None, limite_atteinte: false }
+        SelBitmap { pieces: Vec::new(), liens: Vec::new(), serial: 0, lasso: None, geste: None, pivot: None, bornes: Rect::NOTHING, tenu: None, limite_atteinte: false, planche: 0 }
     }
+}
+
+/// La disposition de la planche : les cases (et les cases écartées), leurs places.
+pub(crate) fn cle_planche(layout: &BoardLayout) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut manger = |v: u64| {
+        h ^= v;
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    };
+    for c in layout.cards.iter().chain(layout.annulees.iter()) {
+        manger(c.id);
+        for v in [c.thumb.min.x, c.thumb.min.y, c.thumb.max.x, c.thumb.max.y] {
+            manger(u64::from(v.to_bits()));
+        }
+    }
+    h
 }
 
 /// Ce que prendra un lâcher, calculé sans rien écrire.
@@ -103,21 +130,26 @@ fn la_piece(source: &Raster, pris: &Masque) -> Raster {
     let mut out = Raster::new(source.width, source.height);
     for (&(tx, ty), bits) in &pris.tuiles {
         let Some(t) = source.tile_at(tx, ty) else { continue };
-        let px: &[Color32; TILE_PIXELS] = t;
-        let entiere = px.iter().enumerate().all(|(k, c)| c.a() == 0 || bits[k / TILE] >> (k % TILE) & 1 == 1);
         let id = out.id_of(tx, ty);
+        // (Lue sans garder ouverte une tuile rangée.)
+        let (entiere, neuve, une) = t.avec_les_pixels(|px| {
+            let entiere = px.iter().enumerate().all(|(k, c)| c.a() == 0 || bits[k / TILE] >> (k % TILE) & 1 == 1);
+            let mut neuve = [Color32::TRANSPARENT; TILE_PIXELS];
+            let mut une = false;
+            if !entiere {
+                for (k, c) in px.iter().enumerate() {
+                    if c.a() != 0 && bits[k / TILE] >> (k % TILE) & 1 == 1 {
+                        neuve[k] = *c;
+                        une = true;
+                    }
+                }
+            }
+            (entiere, neuve, une)
+        });
         if entiere {
             // (Toute l'encre de la tuile est prise : la même mémoire, rien de recopié.)
             out.replace_slot(id, Some(t.clone()));
             continue;
-        }
-        let mut neuve = [Color32::TRANSPARENT; TILE_PIXELS];
-        let mut une = false;
-        for (k, c) in px.iter().enumerate() {
-            if c.a() != 0 && bits[k / TILE] >> (k % TILE) & 1 == 1 {
-                neuve[k] = *c;
-                une = true;
-            }
         }
         if une {
             out.replace_slot(id, Some(Tile::new(neuve)));
@@ -172,7 +204,7 @@ impl App {
 
     /// Ce que prend le lasso `poly` (planche) ; `seule` : seulement dans la case `seule`, sans suivre les traits (la limite). Rend les pièces et les gestes
     /// pris entiers, ou rien si la limite est dépassée.
-    fn selb_prendre(&self, layout: &BoardLayout, poly: &[Pos2], seule: Option<usize>, clic: Option<(Pos2, f32)>) -> Option<(Vec<Piece>, Vec<u64>)> {
+    fn selb_prendre(&self, layout: &BoardLayout, poly: &[Pos2], seule: Option<usize>, clic: Option<(Pos2, f32)>) -> Result<(Vec<Piece>, Vec<u64>), Echec> {
         self.selb_prendre_jusqu_a(layout, poly, seule, clic, LIMITE_TUILES)
     }
 
@@ -186,17 +218,22 @@ impl App {
     #[cfg(test)]
     pub(crate) fn selb_mesurer_un_lacher(&mut self, layout: &BoardLayout, pieces: Vec<Piece>, g: &A64) {
         let serial = self.history.serial();
-        self.vignettes.selb = Some(SelBitmap { pieces, serial, ..SelBitmap::default() });
+        self.vignettes.selb = Some(SelBitmap { pieces, serial, planche: cle_planche(layout), ..SelBitmap::default() });
         self.selb_reporter(layout, g, "Déplacer", true);
     }
 
+    /// Essais : le lasso `poly` avec la limite (rend vrai s'il est refusé pour la limite).
+    #[cfg(test)]
+    pub(crate) fn selb_lasso_refuse_pour_essai(&self, layout: &BoardLayout, poly: &[Pos2]) -> bool {
+        matches!(self.selb_prendre(layout, poly, None, None), Err(Echec::Limite))
+    }
     /// Essais : le geste `lien` se prend-il entier (sous la limite) ?
     #[cfg(test)]
     pub(crate) fn selb_du_lien_pour_essai(&self, layout: &BoardLayout, lien: u64) -> bool {
-        self.selb_prendre_liens(layout, &[lien]).is_some()
+        self.selb_prendre_liens(layout, &[lien]).is_ok()
     }
 
-    fn selb_prendre_jusqu_a(&self, layout: &BoardLayout, poly: &[Pos2], seule: Option<usize>, clic: Option<(Pos2, f32)>, limite: usize) -> Option<(Vec<Piece>, Vec<u64>)> {
+    fn selb_prendre_jusqu_a(&self, layout: &BoardLayout, poly: &[Pos2], seule: Option<usize>, clic: Option<(Pos2, f32)>, limite: usize) -> Result<(Vec<Piece>, Vec<u64>), Echec> {
         let champs = crate::horschamp::champs(layout, self.settings.vignettes.debord_fraction());
         let cases = self.selb_cases(layout);
         let boite = if poly.len() >= 3 { Rect::from_points(poly) } else { Rect::NOTHING };
@@ -254,7 +291,9 @@ impl App {
             let poly_px: Vec<Pos2> = poly.iter().map(|p| inv.point(*p)).collect();
             // (Seulement là où la case se voit : son champ, en pixels de son dessin.)
             let champ_px = Rect::from_points(&[champ.left_top(), champ.right_top(), champ.right_bottom(), champ.left_bottom()].map(|p| inv.point(p)));
-            let b = Rect::from_points(&poly_px).intersect(champ_px);
+            // (Et seulement là où le dessin a des tuiles.)
+            let Some((dx0, dy0, dx1, dy1)) = crate::planchebitmap::boite_px(&d.raster) else { continue };
+            let b = Rect::from_points(&poly_px).intersect(champ_px).intersect(Rect::from_min_max(pos2(dx0 as f32, dy0 as f32), pos2(dx1 as f32, dy1 as f32)));
             if !b.is_positive() {
                 continue;
             }
@@ -288,15 +327,17 @@ impl App {
                         let tx = x.div_euclid(tl);
                         let fin = ((tx + 1) * tl).min(x1);
                         if let Some(tuile) = d.raster.tile_at(tx as i32, y.div_euclid(tl) as i32) {
-                            let px: &[Color32; TILE_PIXELS] = tuile;
                             let ligne = (y.rem_euclid(tl) * tl) as usize;
-                            let mut bits = 0u64;
-                            for xx in x..fin {
-                                let k2 = (xx - tx * tl) as usize;
-                                if px[ligne + k2].a() != 0 && vu(xx, y) {
-                                    bits |= 1u64 << k2;
+                            let bits = tuile.avec_les_pixels(|px| {
+                                let mut bits = 0u64;
+                                for xx in x..fin {
+                                    let k2 = (xx - tx * tl) as usize;
+                                    if px[ligne + k2].a() != 0 && vu(xx, y) {
+                                        bits |= 1u64 << k2;
+                                    }
                                 }
-                            }
+                                bits
+                            });
                             if bits != 0 {
                                 *pris[i].1.mot(tx as i32, y.div_euclid(tl) as i32, y.rem_euclid(tl) as usize) |= bits;
                             }
@@ -304,6 +345,10 @@ impl App {
                         x = fin;
                     }
                 }
+            }
+            // La limite, au fur et à mesure : une sélection trop grande s'arrête là, sans avoir tout parcouru.
+            if pris.iter().map(|(_, m)| m.tuiles.len()).sum::<usize>() > limite {
+                return Err(Echec::Limite);
             }
         }
         // 2. La couche bitmap de la planche (montrée), là où elle se voit : par-dessus une case, ou sur le papier hors des images.
@@ -329,7 +374,7 @@ impl App {
                 for y in b.top().floor() as i64..=b.bottom().ceil() as i64 {
                     for (x0, x1) in spans(&poly_px, y) {
                         for x in x0..x1 {
-                            if m.pixels.get_i(x, y).a() == 0 {
+                            if crate::planchebitmap::alpha_sans_garder(&m.pixels, x, y) == 0 {
                                 continue;
                             }
                             if visible(v.point(pos2(x as f32 + 0.5, y as f32 + 0.5))) {
@@ -349,8 +394,8 @@ impl App {
                             if liens.contains(&e.lien) {
                                 continue;
                             }
-                            let mut touche = false;
-                            m.chaque(|x, y| touche |= e.masque.contient(x, y));
+                            // (Mot par mot : deux masques se touchent-ils ?)
+                            let touche = m.tuiles.iter().any(|(k, a)| e.masque.tuiles.get(k).is_some_and(|b| a.iter().zip(b.iter()).any(|(x, y)| x & y != 0)));
                             if touche {
                                 liens.push(e.lien);
                             }
@@ -362,6 +407,11 @@ impl App {
                         }
                     }
                 }
+            }
+            // Une empreinte que le dessin a dépassée (des pixels déplacés au Storyboard, un trait peint par-dessus…) ne dit plus où est le trait : on ne la
+            // suit pas, la sélection reste celle de la case (l'appelant le dit).
+            if !self.selb_liens_fiables(&liens) {
+                return Err(Echec::Perime);
             }
             for &lien in &liens {
                 for e in bm.empreintes.iter().filter(|e| e.lien == lien) {
@@ -385,7 +435,7 @@ impl App {
         // La limite : avant de recopier le moindre pixel.
         let tuiles: usize = pris.iter().map(|(_, m)| m.tuiles.len()).sum();
         if tuiles > limite {
-            return None;
+            return Err(Echec::Limite);
         }
         let mut pieces = Vec::new();
         for (s, m) in pris {
@@ -407,7 +457,12 @@ impl App {
                 pieces.push(Piece { source: s, pixels: Arc::new(px), vers_planche: v, cle: crate::horschamp::nouveau_lien() });
             }
         }
-        Some((pieces, liens))
+        Ok((pieces, liens))
+    }
+
+    /// Les empreintes des gestes `liens` disent-elles encore où sont leurs pixels (chaque dessin inchangé sous son empreinte) ?
+    fn selb_liens_fiables(&self, liens: &[u64]) -> bool {
+        self.doc.annotations.bitmap.empreintes.iter().filter(|e| liens.contains(&e.lien)).all(|e| self.doc.cels.get(&e.cel).is_none_or(|d| e.fiable(&d.raster)))
     }
 
     /// La boîte des pièces sur la planche.
@@ -439,6 +494,12 @@ impl App {
             self.vignettes.selb = None;
             return false;
         }
+        // (Une couche qu'on n'a pas pu lire ne pourrait pas s'enregistrer : on n'y mène rien. La sélection d'une case, d'avant, reste possible.)
+        if self.doc.annotations.bitmap.illisible {
+            self.vignettes.selb = None;
+            self.status = "La couche bitmap de la planche n'a pas pu être lue à l'ouverture : la sélection de la planche est coupée (rien n'est perdu) ; Ctrl + lasso choisit dans la case.".into();
+            return false;
+        }
         let board = xf.to_board(pos);
         if self.selb_active() {
             if let Some(frame) = self.selb_cadre(xf.zoom) {
@@ -462,6 +523,13 @@ impl App {
     pub(crate) fn selb_geste(&mut self, layout: &BoardLayout, xf: Xf, latest: Option<Pos2>, down: bool, escape: bool, dehors: bool) {
         if self.vignettes.selb.is_some() && (dehors || !self.selb_possible()) {
             self.vignettes.selb = None;
+            return;
+        }
+        // La planche a changé de disposition depuis le choix (fenêtre, séquences montrées, cases) : ses places ne valent plus, le choix est levé.
+        let cle = cle_planche(layout);
+        if self.vignettes.selb.as_ref().is_some_and(|s| !s.pieces.is_empty() && s.planche != cle) {
+            self.vignettes.selb = None;
+            self.status = "La planche a changé : le choix est levé.".into();
             return;
         }
         let Some(s) = self.vignettes.selb.as_mut() else { return };
@@ -508,27 +576,36 @@ impl App {
                 let zoom = xf.zoom.max(0.05);
                 let etendue = Rect::from_points(&l).size().max_elem() * zoom;
                 let clic = l.len() < 3 || etendue < CLIC_PX;
-                let mut limite = false;
+                let mut echec: Option<Echec> = None;
                 let trouve = if clic {
-                    self.selb_prendre(layout, &[], None, Some((l[0], PRISE_PX / zoom))).and_then(|(_, liens)| {
-                        // (Un clic : les traits répartis sous le pointeur, entiers.)
-                        if liens.is_empty() {
-                            return Some((Vec::new(), liens));
+                    // (Un clic : les traits répartis sous le pointeur, entiers ; rien si l'un d'eux ne peut plus l'être.)
+                    match self.selb_prendre(layout, &[], None, Some((l[0], PRISE_PX / zoom))) {
+                        Ok((_, liens)) if liens.is_empty() => Some((Vec::new(), liens)),
+                        Ok((_, liens)) => match self.selb_du_lien(layout, &liens) {
+                            Ok(t) => Some(t),
+                            Err(e) => {
+                                echec = Some(e);
+                                None
+                            }
+                        },
+                        Err(e) => {
+                            echec = Some(e);
+                            None
                         }
-                        self.selb_du_lien(layout, &liens)
-                    })
+                    }
                 } else {
                     match self.selb_prendre(layout, &l, None, None) {
-                        Some(t) => Some(t),
-                        None => {
-                            // Au-delà de la limite : la sélection reste celle de la case où le lasso commence.
-                            limite = true;
+                        Ok(t) => Some(t),
+                        Err(e) => {
+                            // Au-delà de la limite, ou un trait qu'on ne sait plus suivre : la sélection reste celle de la case où le lasso commence.
+                            echec = Some(e);
                             let d = |r: Rect, p: Pos2| ((r.left() - p.x).max(p.x - r.right()).max(0.0)).hypot((r.top() - p.y).max(p.y - r.bottom()).max(0.0));
                             let k = layout.card_at(l[0]).or_else(|| (0..layout.cards.len()).min_by(|a, b| d(layout.cards[*a].thumb, l[0]).total_cmp(&d(layout.cards[*b].thumb, l[0]))));
-                            k.and_then(|k| self.selb_prendre(layout, &l, Some(k), None))
+                            k.and_then(|k| self.selb_prendre(layout, &l, Some(k), None).ok())
                         }
                     }
                 };
+                let limite = echec.is_some();
                 let (pieces, liens) = trouve.unwrap_or_default();
                 let serial = self.history.serial();
                 let bornes = Self::bornes_des(&pieces);
@@ -539,14 +616,19 @@ impl App {
                 s.serial = serial;
                 s.pivot = None;
                 s.bornes = bornes;
+        s.planche = cle_planche(&layout);
                 s.limite_atteinte = limite;
                 let cases = s.pieces.iter().filter(|p| matches!(p.source, Source::Dessin { .. })).count();
                 let planche = s.pieces.len() - cases;
                 let entiers = s.liens.len();
+                let pourquoi = match echec {
+                    Some(Echec::Limite) => "Sélection trop grande pour suivre tout le trait",
+                    _ => "Ce trait a changé depuis qu'il a été réparti (pixels déplacés ou repeints ailleurs) : on ne sait plus le suivre",
+                };
                 self.status = if s.pieces.is_empty() {
-                    if limite { "Sélection trop grande pour suivre tout le trait, et rien dans cette case.".into() } else { "Rien dans le lasso.".into() }
+                    if limite { format!("{pourquoi}, et rien n'est pris.") } else { "Rien dans le lasso.".into() }
                 } else if limite {
-                    "Sélection trop grande pour suivre tout le trait : seule la part de cette case est prise.".into()
+                    format!("{pourquoi} : seule la part de cette case est prise.")
                 } else {
                     let ent = match entiers {
                         0 => String::new(),
@@ -561,11 +643,14 @@ impl App {
     }
 
     /// Les gestes `liens`, entiers (leurs empreintes et leurs morceaux). Rien au-delà de la limite.
-    fn selb_du_lien(&self, layout: &BoardLayout, liens: &[u64]) -> Option<(Vec<Piece>, Vec<u64>)> {
+    fn selb_du_lien(&self, layout: &BoardLayout, liens: &[u64]) -> Result<(Vec<Piece>, Vec<u64>), Echec> {
         self.selb_prendre_liens(layout, liens)
     }
 
-    fn selb_prendre_liens(&self, layout: &BoardLayout, liens: &[u64]) -> Option<(Vec<Piece>, Vec<u64>)> {
+    fn selb_prendre_liens(&self, layout: &BoardLayout, liens: &[u64]) -> Result<(Vec<Piece>, Vec<u64>), Echec> {
+        if !self.selb_liens_fiables(liens) {
+            return Err(Echec::Perime);
+        }
         let cases = self.selb_cases(layout);
         let bm = &self.doc.annotations.bitmap;
         let mut pieces = Vec::new();
@@ -605,17 +690,21 @@ impl App {
                 None => fondues.push(p),
             }
         }
-        (tuiles <= LIMITE_TUILES).then_some((fondues, liens.to_vec()))
+        if tuiles > LIMITE_TUILES { Err(Echec::Limite) } else { Ok((fondues, liens.to_vec())) }
     }
 
-    /// Où iront les pixels des pièces `pieces` menées par `g` (planche), **sans rien écrire**. Rien : le geste mène hors de toute place (planche pleine).
-    fn selb_preparer(&self, layout: &BoardLayout, pieces: &[Piece], g: &A64, liberes: usize) -> Option<Plan> {
+    /// Où iront les pixels des pièces `pieces` menées par `g` (planche), **sans rien écrire**. **La place de chaque pixel est décidée une seule fois**, d'après
+    /// le centre du pixel source mené par le geste (comme au lever d'un trait, `partager_bitmap`) : il va tout entier à une case, ou tout entier à la planche,
+    /// jamais aux deux ni à aucune. `liberes` : les morceaux que le geste vide entièrement. Une erreur (la phrase de la ligne d'état) : rien ne bougera.
+    fn selb_preparer(&self, layout: &BoardLayout, pieces: &[Piece], g: &A64, liberes: usize) -> Result<Plan, String> {
         let champs = crate::horschamp::champs(layout, self.settings.vignettes.debord_fraction());
         let cases = self.selb_cases(layout);
         let recoit: Vec<bool> = cases.iter().map(Option::is_some).collect();
         let n = layout.cards.len();
+        let monde = crate::raster::WORLD as f32 - TILE as f32;
         let mut dessins: Vec<(usize, usize, Raster)> = Vec::new();
-        let mut morceaux: BTreeMap<Option<usize>, Vec<(Raster, A64)>> = BTreeMap::new();
+        let mut a_poser: Vec<(Option<usize>, Raster, A64)> = Vec::new();
+        let mut tuiles_arrivee = 0usize;
         for p in pieces {
             let origine = match p.source {
                 Source::Dessin { case, .. } => layout.cards.iter().position(|c| c.id == case).unwrap_or(usize::MAX),
@@ -624,12 +713,12 @@ impl App {
             let m = p.vers_planche.puis(g);
             let bornes = Self::bornes_des(std::slice::from_ref(&Piece { vers_planche: m, ..p.clone() }));
             if !bornes.is_finite() || !m.fini() {
-                continue;
+                return Err("Ce geste mène des pixels hors de toute place : il est refusé, rien n'a bougé.".into());
             }
             let candidats: Vec<usize> = (0..n).filter(|&k| champs[k].intersects(bornes.expand(2.0)) || layout.cards[k].thumb.intersects(bornes.expand(2.0)) || layout.move_of(k).is_some()).collect();
             let owner = |b: Pos2| -> Option<usize> {
                 if origine < n && crate::horschamp::dans_image(layout, origine, b) {
-                    return Some(origine);
+                    return Some(if recoit[origine] { origine } else { crate::horschamp::DESSUS + origine });
                 }
                 if let Some(&k) = candidats.iter().find(|&&k| k != origine && crate::horschamp::dans_image(layout, k, b)) {
                     return Some(if recoit[k] { k } else { crate::horschamp::DESSUS + k });
@@ -642,91 +731,99 @@ impl App {
                 }
                 candidats.iter().copied().find(|&k| recoit[k] && champs[k].contains(b))
             };
-            // Les cases qui reçoivent : les pixels transformés dans leur dessin, gardés là où elles en sont propriétaires.
-            for &k in &candidats {
+            // 1. Chaque pixel source à son propriétaire, une fois (une tuile toute à un seul : la même mémoire).
+            let mut par_case: BTreeMap<usize, Raster> = BTreeMap::new();
+            let mut parts: BTreeMap<Option<usize>, Raster> = BTreeMap::new();
+            for id in p.pixels.drawn_ids() {
+                let Some(tuile) = p.pixels.slot(id) else { continue };
+                let (ox, oy) = p.pixels.tile_origin(id);
+                let (tx, ty) = p.pixels.key_of(id);
+                // (Lue sans garder ouverte une tuile rangée d'un morceau.)
+                let proprietaires: Vec<(usize, Option<usize>)> = tuile.avec_les_pixels(|px| {
+                    px.iter().enumerate().filter(|(_, c)| c.a() != 0).map(|(i, _)| (i, owner(m.point(pos2((ox + (i % TILE) as i64) as f32 + 0.5, (oy + (i / TILE) as i64) as f32 + 0.5))))).collect()
+                });
+                let Some(&(_, premier)) = proprietaires.first() else { continue };
+                let seul = proprietaires.iter().all(|(_, o)| *o == premier);
+                let mut poser = |o: Option<usize>, quoi: Option<&[usize]>| {
+                    let dest: &mut Raster = match o {
+                        Some(k) if k < crate::horschamp::DESSUS => par_case.entry(k).or_insert_with(|| Raster::new(p.pixels.width, p.pixels.height)),
+                        _ => parts.entry(o.map(|q| q - crate::horschamp::DESSUS)).or_insert_with(|| Raster::new(p.pixels.width, p.pixels.height)),
+                    };
+                    let did = dest.id_of(tx, ty);
+                    match quoi {
+                        None => {
+                            dest.replace_slot(did, Some(tuile.clone()));
+                        }
+                        Some(rangs) => {
+                            let neuve = tuile.avec_les_pixels(|px| {
+                                let mut t = [Color32::TRANSPARENT; TILE_PIXELS];
+                                for &i in rangs {
+                                    t[i] = px[i];
+                                }
+                                t
+                            });
+                            dest.replace_slot(did, Some(Tile::new(neuve)));
+                        }
+                    }
+                };
+                if seul {
+                    poser(premier, None);
+                } else {
+                    let mut groupes: BTreeMap<Option<usize>, Vec<usize>> = BTreeMap::new();
+                    for (i, o) in &proprietaires {
+                        groupes.entry(*o).or_default().push(*i);
+                    }
+                    for (o, rangs) in groupes {
+                        poser(o, Some(&rangs));
+                    }
+                }
+            }
+            // 2. Les cases qui reçoivent : leurs pixels dans leur dessin. Même échelle et sans rotation : recopiés tels quels, au pixel le plus proche
+            // (comme d'une case à l'autre au lever d'un trait) ; sinon rééchantillonnés (`Raster::transformee`).
+            for (k, sous) in par_case {
                 let Some((rang, a)) = cases[k] else { continue };
                 let Some(vers_dessin) = a.inverse() else { continue };
                 let t = m.puis(&vers_dessin);
-                // (Seules les tuiles de la pièce qui peuvent tomber dans le champ de cette case : les autres n'y ont rien à faire.)
-                let zone = champs[k].union(layout.cards[k].thumb).union(layout.move_of(k).map_or(Rect::NOTHING, |mv| mv.tuile.rect)).expand(2.0);
-                let mut sous = Raster::new(p.pixels.width, p.pixels.height);
-                let tl = TILE as f32;
-                for id in p.pixels.drawn_ids() {
-                    let (ox, oy) = p.pixels.tile_origin(id);
-                    let coins = [(0.0, 0.0), (tl, 0.0), (tl, tl), (0.0, tl)].map(|(u, v)| m.point(pos2(ox as f32 + u, oy as f32 + v)));
-                    if Rect::from_points(&coins).intersects(zone) {
-                        sous.replace_slot(id, p.pixels.slot(id).cloned());
-                    }
+                // (Ce que l'arrivée couvrira, avant de la faire : dans la toile du dessin, et dans la limite.)
+                let (mut x0, mut y0, mut x1, mut y1) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
+                for id in sous.drawn_ids() {
+                    let (ox, oy) = sous.tile_origin(id);
+                    let tl = TILE as f32;
+                    let coins = [(0.0, 0.0), (tl, 0.0), (tl, tl), (0.0, tl)].map(|(u, v)| t.point(pos2(ox as f32 + u, oy as f32 + v)));
+                    let r = Rect::from_points(&coins);
+                    (x0, y0, x1, y1) = (x0.min(r.left()), y0.min(r.top()), x1.max(r.right()), y1.max(r.bottom()));
+                    tuiles_arrivee += ((r.width() * r.height()) / (TILE * TILE) as f32).ceil().max(1.0) as usize;
                 }
-                if sous.is_blank() {
-                    continue;
+                if ![x0, y0, x1, y1].iter().all(|v| v.is_finite() && v.abs() < monde) {
+                    return Err("Ce geste mène des pixels trop loin de la feuille de leur plan : il est refusé, rien n'a bougé.".into());
                 }
-                // Même échelle et sans rotation : les pixels recopiés tels quels, au pixel le plus proche (comme d'une case à l'autre au lever d'un trait) ;
-                // sinon rééchantillonnés (`Raster::transformee`).
+                if tuiles_arrivee > LIMITE_TUILES {
+                    return Err("Ce geste agrandit trop la sélection pour la reposer : il est refusé, rien n'a bougé.".into());
+                }
                 let meme = (t.a - 1.0).abs() < 0.005 && (t.d - 1.0).abs() < 0.005 && t.b.abs() < 1e-4 && t.c.abs() < 1e-4;
-                let mut arrivee: Raster = if meme { sous.decalee(t.tx.round() as i64, t.ty.round() as i64) } else { sous.transformee(&t.affine()) };
-                drop(sous);
-                // Gardés là où cette case en est propriétaire ; le reste est effacé de l'arrivée.
-                let ids = arrivee.drawn_ids();
-                for id in ids {
-                    let (ox, oy) = arrivee.tile_origin(id);
-                    let a_soi = {
-                        let Some(tuile) = arrivee.slot(id) else { continue };
-                        let px: &[Color32; TILE_PIXELS] = tuile;
-                        let mut garde = [false; TILE_PIXELS];
-                        let mut tout = true;
-                        let mut rien = true;
-                        for (i, c) in px.iter().enumerate() {
-                            if c.a() == 0 {
-                                continue;
-                            }
-                            let o = owner(a.point(pos2((ox + (i % TILE) as i64) as f32 + 0.5, (oy + (i / TILE) as i64) as f32 + 0.5))) == Some(k);
-                            garde[i] = o;
-                            tout &= o;
-                            rien &= !o;
-                        }
-                        (garde, tout, rien)
-                    };
-                    match a_soi {
-                        (_, _, true) => {
-                            arrivee.replace_slot(id, None);
-                        }
-                        (_, true, _) => {}
-                        (garde, _, _) => {
-                            let d = arrivee.tile_mut(id);
-                            for (i, g) in garde.iter().enumerate() {
-                                if !g {
-                                    d[i] = Color32::TRANSPARENT;
-                                }
-                            }
-                        }
-                    }
+                let ouverte = if matches!(p.source, Source::Morceau { .. }) { crate::planchebitmap::copie_ouverte(&sous) } else { sous };
+                let arrivee: Raster = if meme { ouverte.decalee(t.tx.round() as i64, t.ty.round() as i64) } else { ouverte.transformee(&t.affine()) };
+                if !arrivee.is_blank() {
+                    dessins.push((k, rang, arrivee));
                 }
-                if arrivee.is_blank() {
-                    continue;
-                }
-                dessins.push((k, rang, arrivee));
             }
-            // Ce qu'aucune case ne reçoit : sur la planche, dans la grille de la pièce (aucun rééchantillonnage), par-dessus la case qui refuse s'il y en a une.
-            let mut parts: BTreeMap<Option<usize>, Raster> = BTreeMap::new();
-            crate::planchebitmap::chaque_pixel(&p.pixels, |x, y, c| {
-                let o = owner(m.point(pos2(x as f32 + 0.5, y as f32 + 0.5)));
-                if o.is_none_or(|q| q >= crate::horschamp::DESSUS) {
-                    let code = o.map(|q| q - crate::horschamp::DESSUS);
-                    crate::planchebitmap::poser_pixel(parts.entry(code).or_insert_with(pixels_vides), x, y, c, false);
-                }
-            });
+            // 3. Ce qu'aucune case ne reçoit : sur la planche, dans la grille de la pièce (aucun rééchantillonnage), par-dessus la case qui refuse s'il y en a une.
             for (code, r) in parts {
-                morceaux.entry(code).or_default().push((r, m));
+                a_poser.push((code, r, m));
             }
         }
-        let a_poser: Vec<(Option<usize>, Raster, A64)> = morceaux.into_iter().flat_map(|(code, v)| v.into_iter().map(move |(r, m)| (code, r, m))).collect();
-        if self.doc.annotations.bitmap.morceaux.len().saturating_sub(liberes) + a_poser.len() > crate::planchebitmap::MAX_MORCEAUX {
-            return None;
+        if !a_poser.is_empty() && layout.cards.is_empty() {
+            return Err("Il n'y a aucune case où attacher ces pixels sur la planche : le geste est refusé, rien n'a bougé.".into());
         }
-        Some(Plan { dessins, morceaux: a_poser })
+        let b = &self.doc.annotations.bitmap;
+        if b.illisible {
+            return Err("La couche bitmap de la planche n'a pas pu être lue à l'ouverture : ce geste y mènerait des pixels, il est refusé, rien n'a bougé.".into());
+        }
+        if !a_poser.is_empty() && b.morceaux.len().saturating_sub(liberes) + a_poser.len() > crate::planchebitmap::MAX_MORCEAUX {
+            return Err(format!("La planche a atteint sa limite de {} morceaux : ce geste mènerait des pixels hors des cases, il est refusé, rien n'a bougé.", crate::planchebitmap::MAX_MORCEAUX));
+        }
+        Ok(Plan { dessins, morceaux: a_poser })
     }
-
     /// Le choix reçoit `g` (planche) : tout est calculé, puis les pixels quittent leurs dessins et se reposent, répartis. `retirer` : faux pour un collage (les
     /// pièces viennent du presse-papiers). Une seule étape d'annulation, nommée `nom`.
     pub(crate) fn selb_reporter(&mut self, layout: &BoardLayout, g: &A64, nom: &str, retirer: bool) {
@@ -745,11 +842,30 @@ impl App {
             return;
         }
         let liens_pris: Vec<u64> = if retirer { self.vignettes.selb.as_ref().map(|s| s.liens.clone()).unwrap_or_default() } else { Vec::new() };
-        let liberes = if retirer { pieces.iter().filter(|p| matches!(p.source, Source::Morceau { .. })).count() } else { 0 };
+        // (Ne libère une place que le morceau que le geste vide entièrement ; pris en partie, il reste, en un morceau neuf.)
+        let compter = |r: &Raster| {
+            let mut n = 0usize;
+            crate::planchebitmap::chaque_pixel(r, |_, _, _| n += 1);
+            n
+        };
+        let liberes = if retirer {
+            pieces
+                .iter()
+                .filter(|p| match p.source {
+                    Source::Morceau { id } => self.doc.annotations.bitmap.morceaux.iter().find(|m| m.id == id).is_some_and(|m| compter(&m.pixels) == compter(&p.pixels)),
+                    _ => false,
+                })
+                .count()
+        } else {
+            0
+        };
         // 1. Le plan, sans rien écrire.
-        let Some(plan) = self.selb_preparer(layout, &pieces, g, liberes) else {
-            self.status = format!("La planche a atteint sa limite de {} morceaux : ce geste mènerait des pixels hors des cases, il est refusé, rien n'a bougé.", crate::planchebitmap::MAX_MORCEAUX);
-            return;
+        let plan = match self.selb_preparer(layout, &pieces, g, liberes) {
+            Ok(p) => p,
+            Err(phrase) => {
+                self.status = phrase;
+                return;
+            }
         };
         // 2. Maintenant seulement, on écrit.
         let marque = self.history.marque();
@@ -793,7 +909,7 @@ impl App {
                         let mut reste = (*b.morceaux[i].pixels).clone();
                         let mut pris_tout = true;
                         crate::planchebitmap::chaque_pixel(&b.morceaux[i].pixels, |x, y, _| {
-                            if p.pixels.get_i(x, y).a() != 0 {
+                            if crate::planchebitmap::alpha_sans_garder(&p.pixels, x, y) != 0 {
                                 let t = TILE as i64;
                                 let id = reste.id_of(x.div_euclid(t) as i32, y.div_euclid(t) as i32);
                                 reste.tile_mut(id)[(y.rem_euclid(t) * t + x.rem_euclid(t)) as usize] = Color32::TRANSPARENT;
@@ -852,8 +968,17 @@ impl App {
                 self.doc.annotations.regler_visible(id, true);
             }
         }
-        for (cel, m) in empreintes {
-            self.doc.annotations.bitmap.noter_empreinte(lien, cel, m);
+        let mut sans_empreinte = false;
+        {
+            let doc = &mut self.doc;
+            for (cel, m) in empreintes {
+                let Some(d) = doc.cels.get(&cel) else { continue };
+                let cels = &doc.cels;
+                sans_empreinte |= !doc.annotations.bitmap.noter_empreinte(lien, cel, m, &d.raster, |e| cels.get(&e.cel).is_some_and(|x| e.fiable(&x.raster)));
+            }
+        }
+        if sans_empreinte {
+            self.status = "Trop de traits répartis sur la planche : ces pixels ne pourront plus être choisis entiers, seulement case par case.".into();
         }
         for (cel, tiles) in vieux {
             self.history.push(Edit::Tiles { cel, tiles });
@@ -875,6 +1000,7 @@ impl App {
         s.serial = serial;
         s.pivot = None;
         s.bornes = bornes;
+        s.planche = cle_planche(&layout);
         s.tenu = Some((tenu, etapes, std::time::Instant::now()));
         self.ctx.request_repaint();
     }
@@ -921,7 +1047,7 @@ impl App {
                     let mut reste = (*b.morceaux[i].pixels).clone();
                     let mut pris_tout = true;
                     crate::planchebitmap::chaque_pixel(&b.morceaux[i].pixels, |x, y, _| {
-                        if p.pixels.get_i(x, y).a() != 0 {
+                        if crate::planchebitmap::alpha_sans_garder(&p.pixels, x, y) != 0 {
                             let t = TILE as i64;
                             let id = reste.id_of(x.div_euclid(t) as i32, y.div_euclid(t) as i32);
                             reste.tile_mut(id)[(y.rem_euclid(t) * t + x.rem_euclid(t)) as usize] = Color32::TRANSPARENT;
@@ -957,6 +1083,8 @@ impl App {
         let Some(pieces) = self.vignettes.selb.as_ref().filter(|_| self.selb_active()).map(|s| s.pieces.clone()) else { return false };
         // (Une copie n'est plus une part du geste d'origine : ses pièces n'ont pas de source à retirer.)
         self.vignettes.selb_presse = Some(pieces.into_iter().map(|p| Piece { cle: crate::horschamp::nouveau_lien(), ..p }).collect());
+        // (Le marqueur de FEANOR dans le presse-papiers du système, comme les autres copies : une image restée là d'avant ne passe plus devant au Ctrl+V.)
+        self.ctx.copy_text(format!("{}pixels de la planche", crate::pasteimage::MARK));
         self.status = "Pixels copiés : Ctrl+V les repose à leur place, répartis.".into();
         true
     }

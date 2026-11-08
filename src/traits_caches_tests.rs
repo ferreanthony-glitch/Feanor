@@ -767,8 +767,8 @@ fn when_the_board_is_full_the_part_stays_in_the_plan_it_came_from_and_the_messag
                     anchor: crate::annotations::Ancre { card: carte, after: 0, rank: 0 },
                     dessus: false,
                     lien: None,
-                    // (Loin sous la planche, hors de la vue, comme les traits de la planche pleine en vectoriel.)
-                    pose: crate::planchebitmap::A64::echelle_decalage(0.0001, 0.0, 300.0),
+                    // (Dans la vue, sous la première rangée : 5 000 morceaux à peindre à chaque image ; les vignettes doivent se refaire quand même.)
+                    pose: crate::planchebitmap::A64::echelle_decalage(0.0001, 0.0, 3.0),
                     pixels: r.clone(),
                 });
             }

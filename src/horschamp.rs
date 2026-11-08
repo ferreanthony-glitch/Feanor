@@ -960,6 +960,10 @@ impl App {
     /// La planche ne peut pas recevoir ces parts : elles restent dans le dessin d'origine, et la ligne d'état le dit.
     fn dire_planche_pleine(&mut self) {
         let bitmap = self.layers().get(self.cur_layer).is_some_and(|l| l.kind == LayerKind::Bitmap);
+        if bitmap && self.doc.annotations.bitmap.illisible {
+            self.status = "La couche bitmap de la planche n'a pas pu être lue à l'ouverture : rien n'y est posé, ce bout du trait reste dans le dessin du plan où il a commencé, hors de sa case".into();
+            return;
+        }
         let limite = if bitmap { format!("{} morceaux bitmap", crate::planchebitmap::MAX_MORCEAUX) } else { format!("{} traits", crate::annotations::MAX_TRACES) };
         self.status = format!("La planche a atteint sa limite de {limite} : ce bout du trait n'y est pas posé, il reste dans le dessin du plan où il a commencé, hors de sa case");
     }
@@ -1207,6 +1211,9 @@ impl App {
         let aff = fini.suivi.aff;
         let durete = recette.as_ref().map_or(1.0, |r| r.durete);
         let place = crate::annotations::MAX_TRACES.saturating_sub(self.doc.annotations.traces.len());
+        // (Couche bitmap : la place se compte d'après les pixels, une fois classés ; s'il n'y en a pas assez, ou si la couche n'a pas pu être lue à
+        // l'ouverture — on ne pourrait pas l'enregistrer —, on recommence avec la planche « pleine » : tout reste dans le dessin d'origine.)
+        let mut forcer_pleine = pixels_planche.is_some() && !self.doc.annotations.bitmap.peut_poser(0);
         // Le plan, sans rien changer : ce qui va où. **Le dessin d'origine ne perd ses pixels qu'une fois sûr qu'ils ont une place ailleurs** : une case qui ne peut
         // pas prendre sa part (trop grossie) passe aux refus, et on recommence.
         type Pixels = Vec<(i64, i64, Color32)>;
@@ -1217,11 +1224,7 @@ impl App {
             // La planche ne peut pas tout recevoir : rien n'y va, ces parts restent où elles étaient, dans le dessin d'origine. (Couche bitmap : un morceau
             // pour le papier, un par case qui refuse ; vectoriel : un trait par tronçon.)
             let pleine = if pixels_planche.is_some() {
-                let mut codes: Vec<Option<usize>> = trancher(&pts, &brut).into_iter().map(|(q, _)| q).filter(|q| q.is_none_or(|q| q >= DESSUS)).collect();
-                codes.sort_unstable();
-                codes.dedup();
-                // (Le papier compte toujours : un bout du rayon peut y tomber sans que le tracé y passe.)
-                self.doc.annotations.bitmap.morceaux.len() + codes.len().max(1) + 1 > crate::planchebitmap::MAX_MORCEAUX
+                forcer_pleine
             } else {
                 trancher(&pts, &brut).iter().filter(|(q, _)| q.is_none_or(|q| q >= DESSUS)).count() > place
             };
@@ -1233,7 +1236,8 @@ impl App {
             // Tout le trait à la case, rayon compris (son cadre, ou sa marge là où aucun autre cadre n'est) : rien à répartir.
             let sur = |p: &Pt| [vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, 1.0)].iter().all(|d| owner(p.board + *d * ((p.layer.r + 1.5) * a_trait)) == Some(origine));
             if pts.iter().all(sur) {
-                if pleine {
+                // (Seulement si le trait sortait vraiment de sa case : un trait resté dedans n'a rien à dire.)
+                if pleine && pts.iter().any(|p| brut(p.board).is_none_or(|q| q >= DESSUS)) {
                     self.dire_planche_pleine();
                 }
                 return false;
@@ -1345,6 +1349,11 @@ impl App {
                 cibles[q] = Err(Refus::TropGrand);
                 continue;
             }
+            // (Autant de morceaux neufs que de groupes de pixels pour la planche : pas la place, ou une couche qu'on ne pourrait pas enregistrer : tout reste.)
+            if pixels_planche.is_some() && !pleine && !planche.is_empty() && !self.doc.annotations.bitmap.peut_poser(planche.len()) {
+                forcer_pleine = true;
+                continue;
+            }
             break (neuves, poses, runs, pleine, planche, reste);
         };
         // Tout a sa place : maintenant seulement, on écrit.
@@ -1423,9 +1432,15 @@ impl App {
             }
         };
         // Les empreintes du geste : où ses pixels sont dans chaque dessin (la sélection retrouve ainsi le trait entier, `vignetteselbmp.rs`).
+        let mut sans_empreinte = false;
         if pixels_planche.is_some() {
+            let doc = &mut self.doc;
             for (c, m) in empreintes {
-                self.doc.annotations.bitmap.noter_empreinte(lien, c, m);
+                // (Signée sur ses pixels de maintenant : si le dessin change sous l'empreinte, par n'importe quel outil, elle ne vaut plus. Deux cases qui
+                // montrent le même dessin : une seule empreinte, les deux masques réunis.)
+                let Some(d) = doc.cels.get(&c) else { continue };
+                let cels = &doc.cels;
+                sans_empreinte |= !doc.annotations.bitmap.noter_empreinte(lien, c, m, &d.raster, |e| cels.get(&e.cel).is_some_and(|x| e.fiable(&x.raster)));
             }
         }
         self.history.push(snap);
@@ -1433,6 +1448,9 @@ impl App {
             self.dire_planche_pleine();
         } else {
             self.dire_les_refus(layout, &cibles, &refus_vus, remontre);
+        }
+        if sans_empreinte {
+            self.status = format!("{} (Trop de traits répartis sur la planche : celui-ci ne pourra pas être choisi entier, seulement case par case.)", self.status).trim().to_string();
         }
         true
     }

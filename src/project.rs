@@ -2131,6 +2131,11 @@ impl SaveJob {
         let dir = self.manifest_path.parent().ok_or("chemin de projet invalide")?;
         fs::create_dir_all(dir.join(DRAWINGS)).map_err(|e| format!("{} : {e}", dir.display()))?;
         let mut count = 0;
+        // La couche bitmap de la planche d'abord (`planchebitmap.rs`) : ses images et son index sont sur le disque avant les dessins d'où des pixels ont pu
+        // partir vers elle ; une coupure entre les deux laisse au pire un pixel à deux endroits, jamais nulle part. Ce qu'elle ne cite plus part à la fin.
+        if let Some(b) = self.planche_bitmap.as_ref() {
+            count += crate::planchebitmap::ecrire(dir, b, false)?;
+        }
         if let Some(p) = progress {
             p.total.store(self.drawings.len(), std::sync::atomic::Ordering::Relaxed);
         }
@@ -2194,10 +2199,6 @@ impl SaveJob {
         write_sidecar(&dir.join(crate::personnages::FILE), self.personnages.as_deref(), |t| crate::personnages::parse(t).is_ok())?;
         // Les annotations de la vue Vignettes, de même.
         write_sidecar(&dir.join(crate::annotations::FILE), self.annotations.as_deref(), |t| crate::annotations::parse(t).is_ok())?;
-        // La couche bitmap de la planche, dans son dossier (`planchebitmap.rs`) : les images qui manquent, l'index, puis ce que rien ne cite part.
-        if let Some(b) = self.planche_bitmap.as_ref() {
-            count += crate::planchebitmap::ecrire(dir, b)?;
-        }
         // Le scénario gardé : l'ancien (d'un autre scénario) passe à côté, jamais effacé.
         crate::scenariogarde::mettre_de_cote(&dir.join(crate::scenariogarde::FILE), self.scenario.as_deref());
         write_sidecar(&dir.join(crate::scenariogarde::FILE), self.scenario.as_deref(), |t| crate::scenariogarde::parse(t).is_ok())?;
@@ -2227,6 +2228,10 @@ impl SaveJob {
         // Le manifeste en dernier ; s'il a déjà ces octets-là (une copie de secours où rien n'a changé), il reste tel quel.
         if toujours_ecrire() || fs::read(&self.manifest_path).ok().as_deref() != Some(self.manifest.as_slice()) {
             write_atomic_synced(&self.manifest_path, &self.manifest)?;
+        }
+        // La couche bitmap de la planche : ce que son index ne cite plus part maintenant, quand les dessins et le manifeste sont écrits.
+        if let Some(b) = self.planche_bitmap.as_ref() {
+            count += crate::planchebitmap::ecrire(dir, b, true)?;
         }
         // Le nouveau manifeste est sur le disque : l'ancien nom du projet (`.pelure`) peut partir. Un plantage avant laisse
         // les deux fichiers, et l'ouverture prend le plus récent (`manifeste_a_ouvrir`).

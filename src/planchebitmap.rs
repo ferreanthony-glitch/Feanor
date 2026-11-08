@@ -169,11 +169,14 @@ pub fn chaque_pixel(r: &Raster, mut f: impl FnMut(i64, i64, Color32)) {
     for id in r.drawn_ids() {
         let Some(tuile) = r.slot(id) else { continue };
         let (ox, oy) = r.tile_origin(id);
-        for (k, c) in tuile.iter().enumerate() {
-            if c.a() != 0 {
-                f(ox + (k % TILE) as i64, oy + (k / TILE) as i64, *c);
+        // (Sans garder ouverte une tuile rangée.)
+        tuile.avec_les_pixels(|px| {
+            for (k, c) in px.iter().enumerate() {
+                if c.a() != 0 {
+                    f(ox + (k % TILE) as i64, oy + (k / TILE) as i64, *c);
+                }
             }
-        }
+        });
     }
 }
 
@@ -257,12 +260,55 @@ impl Masque {
     }
 }
 
-/// Où les pixels du geste `lien` sont tombés dans le dessin `cel`.
+/// Où les pixels du geste `lien` sont tombés dans le dessin `cel`, et ce qu'ils étaient alors (`signature`) : si le dessin a changé là depuis (des pixels
+/// déplacés au Storyboard, un trait peint par-dessus, la gomme), l'empreinte ne dit plus où est le trait, et la sélection ne la suit pas.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Empreinte {
     pub lien: u64,
     pub cel: CelId,
     pub masque: Arc<Masque>,
+    /// `signature(dessin, masque)` au moment où le geste a été posé ; 0 : inconnue (jamais fiable).
+    pub signature: u64,
+}
+
+/// La signature des pixels de `r` sous le masque `m` (leurs places et leurs couleurs, dans l'ordre du masque). Jamais 0.
+pub fn signature(r: &Raster, m: &Masque) -> u64 {
+    let t = TILE as i64;
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut manger = |v: u64| {
+        for b in v.to_le_bytes() {
+            h ^= u64::from(b);
+            h = h.wrapping_mul(0x0100_0000_01b3);
+        }
+    };
+    for (&(tx, ty), bits) in &m.tuiles {
+        manger(((tx as u32 as u64) << 32) | ty as u32 as u64);
+        let tuile = r.tile_at(tx, ty);
+        let mut lire = |px: Option<&[Color32; TILE_PIXELS]>| {
+            for (j, l) in bits.iter().enumerate() {
+                manger(*l);
+                let mut l = *l;
+                while l != 0 {
+                    let i = l.trailing_zeros() as usize;
+                    l &= l - 1;
+                    manger(u64::from(u32::from_le_bytes(px.map_or([0; 4], |p| p[j * TILE + i].to_array()))));
+                }
+            }
+        };
+        match tuile {
+            Some(tl) => tl.avec_les_pixels(|p| lire(Some(p))),
+            None => lire(None),
+        }
+    }
+    let _ = t;
+    h.max(1)
+}
+
+impl Empreinte {
+    /// L'empreinte dit-elle encore où est le trait (le dessin n'a pas changé sous elle) ?
+    pub fn fiable(&self, r: &Raster) -> bool {
+        self.signature != 0 && signature(r, &self.masque) == self.signature
+    }
 }
 
 // ------------------------------------------------------------------------------------ les morceaux
@@ -340,24 +386,47 @@ impl Morceau {
 }
 
 /// La couche bitmap de la planche : ses morceaux (du plus bas au plus haut) et les empreintes des gestes.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Default)]
 pub struct PlancheBitmap {
     pub morceaux: Vec<Morceau>,
     pub empreintes: Vec<Empreinte>,
-    /// L'index du projet n'a pas pu être lu : rien n'est réécrit ni effacé à l'enregistrement.
+    /// L'index du projet n'a pas pu être lu (abîmé, d'une version plus récente, démesuré) : rien n'y est réécrit ni effacé, rien n'est posé sur la
+    /// couche (un trait reste dans sa case), et « Enregistrer sous » recopie le dossier tel quel.
     pub illisible: bool,
+    /// Les morceaux de l'index dont l'image manque ou ne se lit pas (un dossier synchronisé où l'index arrive avant les images) : gardés tels quels dans
+    /// l'index, leur fichier n'est jamais effacé, et recopié par « Enregistrer sous ». Ils reviennent à la réouverture si l'image est là.
+    fantomes: Vec<MorceauFichier>,
+    /// Le dossier du projet d'où la couche a été lue (« Enregistrer sous » y reprend ce qu'elle n'a pas en mémoire). Hors de la comparaison.
+    pub dossier_lu: Option<std::path::PathBuf>,
+}
+
+impl std::fmt::Debug for PlancheBitmap {
+    /// (Sans le dossier d'où la couche a été lue : ce n'est pas le projet, la photo d'un projet relu doit être la même.)
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PlancheBitmap").field("morceaux", &self.morceaux).field("empreintes", &self.empreintes).field("illisible", &self.illisible).field("fantomes", &self.fantomes.iter().map(|m| m.id).collect::<Vec<_>>()).finish()
+    }
+}
+impl PartialEq for PlancheBitmap {
+    fn eq(&self, o: &PlancheBitmap) -> bool {
+        self.morceaux == o.morceaux && self.empreintes == o.empreintes && self.illisible == o.illisible && self.fantomes.len() == o.fantomes.len() && self.fantomes.iter().zip(&o.fantomes).all(|(a, b)| a.id == b.id)
+    }
 }
 
 impl PlancheBitmap {
     pub fn est_vide(&self) -> bool {
-        self.morceaux.is_empty() && self.empreintes.is_empty()
+        self.morceaux.is_empty() && self.empreintes.is_empty() && self.fantomes.is_empty()
+    }
+
+    /// Des morceaux peuvent-ils être posés : la couche a été lue (sinon ils ne pourraient pas être enregistrés), et il reste `n` places.
+    pub fn peut_poser(&self, n: usize) -> bool {
+        !self.illisible && self.morceaux.len() + self.fantomes.len() + n <= MAX_MORCEAUX
     }
 
     /// Pose les pixels `pixels` (posés sur la planche par `vers_planche`) : attachés à `sur` (une case qui ne pouvait pas les recevoir : par-dessus
     /// elle), ou à la case la plus proche de leur centre. `derriere` : sous les autres morceaux. Rend le numéro du morceau.
     pub fn ajouter(&mut self, layout: &BoardLayout, pixels: Raster, vers_planche: A64, sur: Option<(&crate::board::CardPlace, usize)>, lien: Option<u64>, derriere: bool) -> Option<u64> {
-        // (La place, `MAX_MORCEAUX`, est vérifiée par l'appelant avant de rien retirer d'un dessin : ici, on pose.)
-        if pixels.is_blank() || !vers_planche.fini() {
+        // (L'appelant a vérifié la place, `peut_poser`, avant de rien retirer d'un dessin ; ce refus n'est qu'un garde-fou.)
+        if pixels.is_blank() || !vers_planche.fini() || !self.peut_poser(1) {
             return None;
         }
         let (x0, y0, x1, y1) = boite_px(&pixels)?;
@@ -382,11 +451,34 @@ impl PlancheBitmap {
         Some(id)
     }
 
-    pub fn noter_empreinte(&mut self, lien: u64, cel: CelId, masque: Masque) {
-        if masque.est_vide() || self.empreintes.len() >= MAX_EMPREINTES {
-            return;
+    /// Note l'empreinte du geste `lien` dans le dessin `cel` (`raster` : ses pixels maintenant, d'où sa signature). Deux parts du même geste dans le même
+    /// dessin (deux cases qui le montrent) font une seule empreinte. Pleines, les empreintes mortes partent d'abord (leur dessin n'existe plus ou a changé sous
+    /// elles : `vivante`). Faux si elle n'a pas pu être notée : le geste ne se suivra pas entier, rien d'autre ne change.
+    pub fn noter_empreinte(&mut self, lien: u64, cel: CelId, masque: Masque, raster: &Raster, vivante: impl Fn(&Empreinte) -> bool) -> bool {
+        if masque.est_vide() {
+            return true;
         }
-        self.empreintes.push(Empreinte { lien, cel, masque: Arc::new(masque) });
+        if let Some(e) = self.empreintes.iter_mut().find(|e| e.lien == lien && e.cel == cel) {
+            let mut m = (*e.masque).clone();
+            for (k, bits) in masque.tuiles {
+                let w = m.tuiles.entry(k).or_insert_with(|| Box::new([0u64; TILE]));
+                for (a, b) in w.iter_mut().zip(bits.iter()) {
+                    *a |= *b;
+                }
+            }
+            e.signature = signature(raster, &m);
+            e.masque = Arc::new(m);
+            return true;
+        }
+        if self.empreintes.len() >= MAX_EMPREINTES {
+            self.empreintes.retain(|e| vivante(e));
+        }
+        if self.empreintes.len() >= MAX_EMPREINTES {
+            return false;
+        }
+        let signature = signature(raster, &masque);
+        self.empreintes.push(Empreinte { lien, cel, masque: Arc::new(masque), signature });
+        true
     }
 
     /// Les morceaux sous le cercle (`p`, `rayon`) : seulement ceux par-dessus une case (`dessus`) ou seulement ceux du papier.
@@ -462,19 +554,18 @@ impl PlancheBitmap {
         self.morceaux.iter().map(Morceau::octets).sum::<usize>() + self.empreintes.iter().map(|e| e.masque.octets()).sum::<usize>()
     }
 
-    /// Range les tuiles des morceaux (un dixième de leur taille pour du trait) et lâche leurs pixels : ils se rouvrent à la première lecture.
-    pub fn ranger(&mut self) {
-        if !crate::tuilepack::actif() {
-            return;
-        }
-        for m in &mut self.morceaux {
-            if let Some(p) = Arc::get_mut(&mut m.pixels) {
-                p.geler();
-            } else {
-                m.pixels.ranger_les_tuiles();
-            }
+}
+
+/// Une copie à soi des pixels de `r`, ouverts (des tuiles neuves) : la lire ne rouvre aucune tuile rangée de `r`, que d'autres tiennent (un morceau, l'annulation).
+pub fn copie_ouverte(r: &Raster) -> Raster {
+    let mut out = Raster::new(r.width, r.height);
+    for id in r.drawn_ids() {
+        if let Some(t) = r.slot(id) {
+            let neuve = t.avec_les_pixels(|p| Tile::new(*p));
+            out.replace_slot(id, Some(neuve));
         }
     }
+    out
 }
 
 fn distance(r: Rect, p: Pos2) -> f32 {
@@ -514,13 +605,30 @@ fn blocs_de(r: &Raster, f: i64) -> Vec<(i64, i64)> {
 
 /// Les pixels du bloc (`bx`, `by`) au niveau `f` : chacun la moyenne prémultipliée de `f` × `f` pixels. Rien s'il est vide.
 fn pixels_du_bloc(r: &Raster, f: i64, bx: i64, by: i64) -> Option<Bloc> {
-    let n = BLOC as usize;
-    let mut somme = vec![[0u32; 4]; n * n];
     let (x0, y0) = (bx * BLOC * f, by * BLOC * f);
     let t = TILE as i64;
-    let mut vu = false;
+    // (Seulement le rectangle que couvrent les tuiles dessinées du bloc : un trait fin n'alloue pas un bloc entier de sommes.)
+    let mut tuiles: Vec<(i64, i64)> = Vec::new();
     for ty in y0.div_euclid(t)..=(y0 + BLOC * f - 1).div_euclid(t) {
         for tx in x0.div_euclid(t)..=(x0 + BLOC * f - 1).div_euclid(t) {
+            if r.tile_at(tx as i32, ty as i32).is_some() {
+                tuiles.push((tx, ty));
+            }
+        }
+    }
+    if tuiles.is_empty() {
+        return None;
+    }
+    let niv = |v: i64, o: i64| ((v - o).div_euclid(f)).clamp(0, BLOC);
+    let lx0 = tuiles.iter().map(|&(tx, _)| niv(tx * t, x0)).min().unwrap_or(0);
+    let ly0 = tuiles.iter().map(|&(_, ty)| niv(ty * t, y0)).min().unwrap_or(0);
+    let lx1 = tuiles.iter().map(|&(tx, _)| niv((tx + 1) * t + f - 1, x0)).max().unwrap_or(0);
+    let ly1 = tuiles.iter().map(|&(_, ty)| niv((ty + 1) * t + f - 1, y0)).max().unwrap_or(0);
+    let (sw, sh) = ((lx1 - lx0).max(1) as usize, (ly1 - ly0).max(1) as usize);
+    let mut somme = vec![[0u32; 4]; sw * sh];
+    let mut vu = false;
+    for &(tx, ty) in &tuiles {
+        {
             let Some(tuile) = r.tile_at(tx as i32, ty as i32) else { continue };
             tuile.avec_les_pixels(|tuile| {
                 for (k, c) in tuile.iter().enumerate() {
@@ -531,7 +639,11 @@ fn pixels_du_bloc(r: &Raster, f: i64, bx: i64, by: i64) -> Option<Bloc> {
                     if x < 0 || y < 0 || x >= BLOC * f || y >= BLOC * f {
                         continue;
                     }
-                    let s = &mut somme[(y / f) as usize * n + (x / f) as usize];
+                    let (sx, sy) = (x / f - lx0, y / f - ly0);
+                    if sx < 0 || sy < 0 || sx as usize >= sw || sy as usize >= sh {
+                        continue;
+                    }
+                    let s = &mut somme[sy as usize * sw + sx as usize];
                     s[0] += u32::from(c.r());
                     s[1] += u32::from(c.g());
                     s[2] += u32::from(c.b());
@@ -544,12 +656,15 @@ fn pixels_du_bloc(r: &Raster, f: i64, bx: i64, by: i64) -> Option<Bloc> {
     if !vu {
         return None;
     }
-    // Rogné à l'encre, avec un pixel transparent autour (l'échantillonnage lisse ne mord pas sur le bord) : un trait fin ne coûte que son encre.
+    // Rogné à l'encre, avec un pixel transparent autour (l'échantillonnage lisse ne mord pas sur le bord) : un trait fin ne coûte que son encre. (Les
+    // coordonnées sont celles du bloc entier.)
+    let n = BLOC as usize;
     let (mut bx0, mut by0, mut bx1, mut by1) = (n, n, 0, 0);
-    for j in 0..n {
-        for i in 0..n {
-            if somme[j * n + i][3] != 0 {
-                (bx0, by0, bx1, by1) = (bx0.min(i), by0.min(j), bx1.max(i + 1), by1.max(j + 1));
+    for j in 0..sh {
+        for i in 0..sw {
+            if somme[j * sw + i][3] != 0 {
+                let (gi, gj) = (i + lx0 as usize, j + ly0 as usize);
+                (bx0, by0, bx1, by1) = (bx0.min(gi), by0.min(gj), bx1.max(gi + 1), by1.max(gj + 1));
             }
         }
     }
@@ -557,7 +672,9 @@ fn pixels_du_bloc(r: &Raster, f: i64, bx: i64, by: i64) -> Option<Bloc> {
     let q = (f * f) as u32;
     let mut px = Vec::with_capacity((bx1 - bx0) * (by1 - by0));
     for j in by0..by1 {
-        for s in &somme[j * n + bx0..j * n + bx1] {
+        for i in bx0..bx1 {
+            let (si, sj) = (i as i64 - lx0, j as i64 - ly0);
+            let s = if si >= 0 && sj >= 0 && (si as usize) < sw && (sj as usize) < sh { somme[sj as usize * sw + si as usize] } else { [0; 4] };
             px.push(Color32::from_rgba_premultiplied(((s[0] + q / 2) / q) as u8, ((s[1] + q / 2) / q) as u8, ((s[2] + q / 2) / q) as u8, ((s[3] + q / 2) / q) as u8));
         }
     }
@@ -596,6 +713,8 @@ pub struct Textures {
     /// (pixels, niveau, bloc) → la texture, l'image d'écran où elle a servi, ses octets, ses coins (pixels du niveau, depuis le coin du bloc).
     #[allow(clippy::type_complexity)]
     blocs: HashMap<(u64, usize, i64, i64), (TextureHandle, u64, usize, [Pos2; 4])>,
+    /// Les blocs de chaque pixels, par niveau.
+    listes: HashMap<(u64, usize), Arc<Vec<(i64, i64)>>>,
     image: u64,
     envoyes: usize,
     pub total_envoye: usize,
@@ -631,9 +750,14 @@ impl Textures {
     pub fn peindre(&mut self, painter: &egui::Painter, view: Rect, xf: crate::boardui::Xf, layout: &BoardLayout, b: &PlancheBitmap, dessus: bool, opacite: f32) -> bool {
         let teinte = Color32::from_white_alpha((opacite.clamp(0.0, 1.0) * 255.0).round() as u8);
         let mut complet = true;
+        // (Les cases d'un coup : une recherche par morceau, sans refaire la liste des cases pour chacun.)
+        let index: HashMap<u64, Rect> = layout.cards.iter().chain(layout.annulees.iter()).map(|c| (c.id, c.thumb)).collect();
         for m in b.morceaux.iter().filter(|m| m.dessus == dessus) {
-            let Some(v) = m.vers_planche(layout) else { continue };
-            let Some(bornes) = m.bornes(layout) else { continue };
+            let r = if m.anchor.after == 0 { index.get(&m.anchor.card).copied() } else { None }.or_else(|| annotations::case_de(layout, &m.anchor).map(|(_, r)| r));
+            let Some(r) = r else { continue };
+            let v = m.pose.puis(&depuis_relatif(r));
+            let Some((x0, y0, x1, y1)) = boite_px(&m.pixels) else { continue };
+            let bornes = Rect::from_points(&[(x0, y0), (x1, y0), (x1, y1), (x0, y1)].map(|(x, y)| v.point(pos2(x as f32, y as f32))));
             let ecran = xf.rect(bornes);
             // (Hors de la vue, ou plus petit qu'un demi-point d'écran : rien à peindre.)
             if !ecran.expand(2.0).intersects(view) || (ecran.width() < 0.5 && ecran.height() < 0.5) {
@@ -653,7 +777,12 @@ impl Textures {
         let niveau = niveau_pour(vers_ecran.echelle());
         let f = 1i64 << niveau;
         let mut complet = true;
-        for (bx, by) in blocs_de(pixels, f) {
+        // (La liste des blocs d'un morceau ne change jamais sous son numéro : faite une fois par niveau.)
+        if self.listes.len() > 50_000 {
+            self.listes.clear();
+        }
+        let liste = self.listes.entry((cle_px, niveau)).or_insert_with(|| Arc::new(blocs_de(pixels, f))).clone();
+        for &(bx, by) in liste.iter() {
             let a = bloc_vers_pixels(f, bx, by).puis(&vers_ecran);
             let n = BLOC as f32;
             let coins = [pos2(0.0, 0.0), pos2(n, 0.0), pos2(n, n), pos2(0.0, n)].map(|p| a.point(p));
@@ -693,7 +822,12 @@ impl Textures {
 /// Peint les morceaux `dessus` (ou ceux du papier) dans `pix` (l'export de la planche : `cadre` est ce que l'image montre, `s` pixels par unité).
 pub fn peindre_pixmap(pix: &mut Pixmap, layout: &BoardLayout, b: &PlancheBitmap, dessus: bool, cadre: Rect, s: f32) {
     let vers_image = A64::echelle_decalage(s as f64, -(cadre.left() as f64) * s as f64, -(cadre.top() as f64) * s as f64);
+    let image = Rect::from_min_size(Pos2::ZERO, egui::vec2(pix.width() as f32, pix.height() as f32));
     for m in b.morceaux.iter().filter(|m| m.dessus == dessus) {
+        // (Seulement ce que l'image exportée montre.)
+        if !m.bornes(layout).is_some_and(|r| r.intersects(cadre)) {
+            continue;
+        }
         let Some(v) = m.vers_planche(layout) else { continue };
         let vi = v.puis(&vers_image);
         let niveau = niveau_pour(vi.echelle());
@@ -701,6 +835,11 @@ pub fn peindre_pixmap(pix: &mut Pixmap, layout: &BoardLayout, b: &PlancheBitmap,
         let mut paint = PixmapPaint::default();
         paint.quality = FilterQuality::Bilinear;
         for (bx, by) in blocs_de(&m.pixels, f) {
+            let n = BLOC as f32;
+            let coins = [pos2(0.0, 0.0), pos2(n, 0.0), pos2(n, n), pos2(0.0, n)].map(|p| bloc_vers_pixels(f, bx, by).puis(&vi).point(p));
+            if !Rect::from_points(&coins).intersects(image) {
+                continue;
+            }
             let Some(b) = pixels_du_bloc(&m.pixels, f, bx, by) else { continue };
             let mut octets = Vec::with_capacity(b.px.len() * 4);
             for c in &b.px {
@@ -718,7 +857,7 @@ pub fn peindre_pixmap(pix: &mut Pixmap, layout: &BoardLayout, b: &PlancheBitmap,
 
 // ------------------------------------------------------------------------------------ le fichier
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 struct MorceauFichier {
     id: u64,
     ancre: Ancre,
@@ -737,6 +876,9 @@ struct EmpreinteFichier {
     dessin: CelId,
     colonnes: usize,
     tuiles: Vec<[i32; 2]>,
+    /// La signature des pixels sous le masque (absente : 0, jamais fiable). En texte : un `u64` ne tient pas dans un nombre JSON lu en `f64`.
+    #[serde(default)]
+    signature: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -810,32 +952,48 @@ fn lire_atlas(chemin: &Path, colonnes: usize, tuiles: &[[i32; 2]]) -> Result<Vec
     Ok(tuiles.iter().enumerate().filter_map(|(i, [x, y])| a.tiles.get((i / colonnes) * a.tiles_x + i % colonnes).cloned().flatten().map(|t| ((*x, *y), t))).collect())
 }
 
-/// La couche bitmap de la planche du projet `dir` (absente : vide). Un index illisible : vide, marquée `illisible` (rien ne sera réécrit ni effacé),
-/// et un avertissement. Un morceau dont l'image manque est écarté, avec un avertissement (son fichier, s'il est là, reste).
+/// Au-delà, un index est tenu pour abîmé : il n'est pas chargé, et rien n'est réécrit ni effacé (`illisible`).
+const MAX_LUS: usize = 100_000;
+
+/// La couche bitmap de la planche du projet `dir` (absente : vide). Un index illisible, d'une version plus récente ou démesuré : vide, marquée `illisible`
+/// (rien n'y sera posé, réécrit ni effacé), et un avertissement. Un morceau dont l'image manque ou ne se lit pas est gardé tel quel dans l'index
+/// (`fantomes`) : il n'est pas montré, son fichier n'est jamais effacé, il revient à la réouverture si l'image arrive (un dossier synchronisé).
 pub fn lire(dir: &Path, avertissements: &mut Vec<String>) -> PlancheBitmap {
     let d = dir.join(DOSSIER);
+    let illisible = PlancheBitmap { illisible: true, dossier_lu: Some(dir.to_path_buf()), ..Default::default() };
     let texte = match std::fs::read_to_string(d.join(INDEX)) {
         Ok(t) => t,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return PlancheBitmap::default(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            // (Pas d'index, mais des images : un dossier en cours de synchronisation ; on n'y touche pas.)
+            let images = std::fs::read_dir(&d).map(|r| r.flatten().any(|e| e.file_name().to_string_lossy().ends_with(".png"))).unwrap_or(false);
+            if images {
+                avertissements.push(format!("{DOSSIER} : des images sans leur index ; le dessin bitmap hors des cases n'est pas chargé (le dossier reste en place)."));
+                return illisible;
+            }
+            return PlancheBitmap { dossier_lu: Some(dir.to_path_buf()), ..Default::default() };
+        }
         Err(e) => {
             avertissements.push(format!("{DOSSIER}/{INDEX} : {e} ; le dessin bitmap hors des cases n'est pas chargé (le dossier reste en place)."));
-            return PlancheBitmap { illisible: true, ..Default::default() };
+            return illisible;
         }
     };
     let f: Fichier = match serde_json::from_str(texte.trim_start_matches('\u{feff}')) {
         Ok(f) => f,
         Err(e) => {
             avertissements.push(format!("{DOSSIER}/{INDEX} : illisible ({e}) ; le dessin bitmap hors des cases n'est pas chargé (le dossier reste en place)."));
-            return PlancheBitmap { illisible: true, ..Default::default() };
+            return illisible;
         }
     };
     if f.format != FORMAT || f.version > VERSION {
         avertissements.push(format!("{DOSSIER}/{INDEX} : écrit par une version plus récente ; le dessin bitmap hors des cases n'est pas chargé (le dossier reste en place)."));
-        return PlancheBitmap { illisible: true, ..Default::default() };
+        return illisible;
     }
-    let mut out = PlancheBitmap::default();
-    let mut manquants = 0;
-    for m in f.morceaux.into_iter().take(MAX_MORCEAUX) {
+    if f.morceaux.len() > MAX_LUS || f.empreintes.len() > MAX_LUS {
+        avertissements.push(format!("{DOSSIER}/{INDEX} : démesuré ; le dessin bitmap hors des cases n'est pas chargé (le dossier reste en place)."));
+        return illisible;
+    }
+    let mut out = PlancheBitmap { dossier_lu: Some(dir.to_path_buf()), ..Default::default() };
+    for m in f.morceaux {
         let pose = A64::du_tableau(m.pose);
         match lire_atlas(&d.join(nom_morceau(m.id)), m.colonnes, &m.tuiles) {
             Ok(tuiles) if pose.fini() && pose.inverse().is_some() => {
@@ -846,10 +1004,10 @@ pub fn lire(dir: &Path, avertissements: &mut Vec<String>) -> PlancheBitmap {
                 r.geler();
                 out.morceaux.push(Morceau { id: m.id, anchor: m.ancre, dessus: m.dessus, lien: m.lien, pose, pixels: Arc::new(r) });
             }
-            _ => manquants += 1,
+            _ => out.fantomes.push(m),
         }
     }
-    for e in f.empreintes.into_iter().take(MAX_EMPREINTES) {
+    for e in f.empreintes {
         let Ok(tuiles) = lire_atlas(&d.join(nom_empreinte(e.lien, e.dessin)), e.colonnes, &e.tuiles) else { continue };
         let mut masque = Masque::default();
         for ((tx, ty), t) in tuiles {
@@ -863,28 +1021,55 @@ pub fn lire(dir: &Path, avertissements: &mut Vec<String>) -> PlancheBitmap {
                 masque.tuiles.insert((tx, ty), Box::new(bits));
             }
         }
-        out.noter_empreinte(e.lien, e.dessin, masque);
+        if !masque.est_vide() && !out.empreintes.iter().any(|x| x.lien == e.lien && x.cel == e.dessin) {
+            out.empreintes.push(Empreinte { lien: e.lien, cel: e.dessin, masque: Arc::new(masque), signature: u64::from_str_radix(&e.signature, 16).unwrap_or(0) });
+        }
     }
-    if manquants > 0 {
-        avertissements.push(format!("{DOSSIER} : {manquants} morceau(x) de dessin hors des cases illisible(s), écarté(s) ; leurs fichiers restent en place."));
-        // (Des fichiers sont là sans être lus : on n'efface rien au prochain enregistrement.)
-        out.illisible = true;
+    if !out.fantomes.is_empty() {
+        avertissements.push(format!(
+            "{DOSSIER} : {} morceau(x) de dessin hors des cases sans image lisible, pas montré(s) ; gardé(s) dans l'index, leurs fichiers ne sont jamais effacés.",
+            out.fantomes.len()
+        ));
     }
     out
 }
 
-/// Écrit la couche dans `dir/planche_bitmap/` : les images qui manquent (un morceau ne change jamais : son image écrite reste juste), l'index, puis
-/// retire les images que rien ne cite. Rien à écrire : le dossier se vide. Une couche lue `illisible` : rien n'est touché. Rend le nombre de fichiers écrits.
-pub fn ecrire(dir: &Path, b: &PlancheBitmap) -> Result<usize, String> {
-    if b.illisible {
-        return Ok(0);
+/// Recopie de `de` vers `vers` les fichiers qui n'y sont pas (rien n'est écrasé). Rend leur nombre.
+fn recopier_manquants(de: &Path, vers: &Path, seulement: Option<&[String]>) -> Result<usize, String> {
+    let Ok(entrees) = std::fs::read_dir(de) else { return Ok(0) };
+    std::fs::create_dir_all(vers).map_err(|e| format!("{} : {e}", vers.display()))?;
+    let mut n = 0;
+    for e in entrees.flatten() {
+        let nom = e.file_name().to_string_lossy().to_string();
+        if seulement.is_some_and(|s| !s.contains(&nom)) || !e.path().is_file() || vers.join(&nom).exists() {
+            continue;
+        }
+        std::fs::copy(e.path(), vers.join(&nom)).map_err(|x| format!("{} : {x}", e.path().display()))?;
+        n += 1;
     }
+    Ok(n)
+}
+
+/// Écrit la couche dans `dir/planche_bitmap/` : les images qui manquent (un morceau ne change jamais : son image écrite reste juste), l'index, puis
+/// retire les images que rien ne cite. Rien à écrire : le dossier se vide. Une couche lue `illisible` : rien n'est touché dans son dossier ; dans un autre
+/// dossier (« Enregistrer sous »), le sien y est recopié tel quel. `nettoyer_aussi` : faux au premier passage (avant les dessins : une coupure ne perd rien,
+/// au pire un pixel est à deux endroits), vrai au dernier (après le manifeste). Rend le nombre de fichiers écrits, recopiés ou retirés, plus un si l'index a changé.
+pub fn ecrire(dir: &Path, b: &PlancheBitmap, nettoyer_aussi: bool) -> Result<usize, String> {
     let d = dir.join(DOSSIER);
+    // (Le dossier d'où la couche a été lue, s'il n'est pas celui-ci : « Enregistrer sous ».)
+    let ailleurs = b.dossier_lu.as_ref().filter(|s| s.as_path() != dir).map(|s| s.join(DOSSIER)).filter(|s| s.is_dir());
+    if b.illisible {
+        return match ailleurs {
+            Some(src) => recopier_manquants(&src, &d, None),
+            None => Ok(0),
+        };
+    }
     if b.est_vide() {
-        if d.join(INDEX).exists() {
+        if nettoyer_aussi && d.join(INDEX).exists() {
             crate::project::write_sidecar(&d.join(INDEX), None, |t| serde_json::from_str::<Fichier>(t).is_ok_and(|f| f.format == FORMAT && f.version <= VERSION))?;
-            nettoyer(&d, &[]);
+            let n = nettoyer(&d, &[]);
             let _ = std::fs::remove_dir(&d);
+            return Ok(n + 1);
         }
         return Ok(0);
     }
@@ -903,35 +1088,90 @@ pub fn ecrire(dir: &Path, b: &PlancheBitmap) -> Result<usize, String> {
         gardes.push(nom);
         fichier.morceaux.push(MorceauFichier { id: m.id, ancre: m.anchor, dessus: m.dessus, lien: m.lien, pose: m.pose.tableau(), colonnes, tuiles: tuiles.iter().map(|((x, y), _)| [*x, *y]).collect() });
     }
+    // Les morceaux sans image lisible : tels quels dans l'index, leur fichier gardé (et recopié d'où la couche a été lue, s'il y est).
+    let noms_fantomes: Vec<String> = b.fantomes.iter().map(|m| nom_morceau(m.id)).collect();
+    if let Some(src) = &ailleurs {
+        n += recopier_manquants(src, &d, Some(&noms_fantomes))?;
+    }
+    gardes.extend(noms_fantomes);
+    fichier.morceaux.extend(b.fantomes.iter().cloned());
     for e in &b.empreintes {
-        let tuiles = tuiles_du_masque(&e.masque);
-        let colonnes = (tuiles.len() as f64).sqrt().ceil().max(1.0) as usize;
+        // (Les clés des tuiles du masque, sans fabriquer ses pixels : l'image ne se fait que si elle manque.)
+        let cles: Vec<[i32; 2]> = e.masque.tuiles.keys().map(|&(x, y)| [x, y]).collect();
+        let colonnes = (cles.len() as f64).sqrt().ceil().max(1.0) as usize;
         let nom = nom_empreinte(e.lien, e.cel);
         if !d.join(&nom).exists() {
-            crate::project::write_atomic(&d.join(&nom), &atlas_png(&tuiles)?.0)?;
+            crate::project::write_atomic(&d.join(&nom), &atlas_png(&tuiles_du_masque(&e.masque))?.0)?;
             n += 1;
         }
         gardes.push(nom);
-        fichier.empreintes.push(EmpreinteFichier { lien: e.lien, dessin: e.cel, colonnes, tuiles: tuiles.iter().map(|((x, y), _)| [*x, *y]).collect() });
+        fichier.empreintes.push(EmpreinteFichier { lien: e.lien, dessin: e.cel, colonnes, tuiles: cles, signature: format!("{:x}", e.signature) });
     }
     let octets = serde_json::to_vec_pretty(&fichier).map_err(|e| e.to_string())?;
+    // (Un index qui change compte : une suppression seule doit faire avancer la révision d'un film partagé.)
+    if std::fs::read(d.join(INDEX)).ok().as_deref() != Some(octets.as_slice()) {
+        n += 1;
+    }
     crate::project::write_sidecar(&d.join(INDEX), Some(&octets), |t| serde_json::from_str::<Fichier>(t).is_ok_and(|f| f.format == FORMAT && f.version <= VERSION))?;
-    nettoyer(&d, &gardes);
+    if nettoyer_aussi {
+        n += nettoyer(&d, &gardes);
+    }
     Ok(n)
 }
-
 /// Retire de `d` les images de morceaux et d'empreintes que l'index ne cite plus (rien d'autre).
-fn nettoyer(d: &Path, gardes: &[String]) {
-    let Ok(entrees) = std::fs::read_dir(d) else { return };
+fn nettoyer(d: &Path, gardes: &[String]) -> usize {
+    let Ok(entrees) = std::fs::read_dir(d) else { return 0 };
+    let mut n = 0;
     for e in entrees.flatten() {
         let nom = e.file_name().to_string_lossy().to_string();
         let a_nous = (nom.starts_with('m') || nom.starts_with('e')) && nom.ends_with(".png") && nom[1..nom.len() - 4].chars().all(|c| c.is_ascii_digit() || c == '-');
-        if a_nous && !gardes.contains(&nom) {
-            let _ = std::fs::remove_file(e.path());
+        if a_nous && !gardes.contains(&nom) && std::fs::remove_file(e.path()).is_ok() {
+            n += 1;
         }
     }
+    n
 }
 
+/// Essais : ce que pèserait le masque `m` autrement (la compression des empreintes, partie 127) : (en mémoire, 1 bit par pixel ; par plages, deux octets
+/// par plage et un par rangée ; son image PNG d'aujourd'hui ; une PNG en niveaux de gris).
+#[cfg(test)]
+pub(crate) fn tailles_d_un_masque(m: &Masque) -> (usize, usize, usize, usize) {
+    let brut = m.tuiles.len() * TILE * 8;
+    let mut plages = 0;
+    for bits in m.tuiles.values() {
+        for l in bits.iter() {
+            plages += 1;
+            let mut prec = false;
+            for i in 0..TILE {
+                let b = l >> i & 1 == 1;
+                if b && !prec {
+                    plages += 2;
+                }
+                prec = b;
+            }
+        }
+    }
+    let png = atlas_png(&tuiles_du_masque(m)).map_or(0, |p| p.0.len());
+    let cles: Vec<_> = m.tuiles.keys().collect();
+    let cols = (cles.len() as f64).sqrt().ceil().max(1.0) as usize;
+    let rows = cles.len().div_ceil(cols).max(1);
+    let (w, h) = (cols * TILE, rows * TILE);
+    let mut gris = vec![0u8; w * h];
+    for (i, bits) in m.tuiles.values().enumerate() {
+        let (ox, oy) = ((i % cols) * TILE, (i / cols) * TILE);
+        for (j, l) in bits.iter().enumerate() {
+            for k in 0..TILE {
+                if l >> k & 1 == 1 {
+                    gris[(oy + j) * w + ox + k] = 255;
+                }
+            }
+        }
+    }
+    use image::ImageEncoder;
+    let mut sortie = Vec::new();
+    let _ = image::codecs::png::PngEncoder::new(&mut sortie).write_image(&gris, w as u32, h as u32, image::ExtendedColorType::L8);
+    (brut, plages, png, sortie.len())
+}
 #[cfg(test)]
 #[path = "planchebitmap_tests.rs"]
 mod tests;
