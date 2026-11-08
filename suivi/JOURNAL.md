@@ -3,6 +3,10 @@
 Ce que Claude a fait ou proposé, par session, le plus récent en haut. Une session = une date.
 Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une partie numérotée par chantier).
 
+## 2026-11-08
+
+- Vignettes : traits coupés autour des cases (capture d'Anthony). Cause : « Peindre derrière » allumé dans ses réglages ; depuis 6d89a00 (2026-10-30) un trait peint derrière n'était pas réparti et restait dans le champ de sa case (formes aussi). Pas une correction perdue en fusion (six fusions vérifiées fichier par fichier). Corrigé (a06d4c5, fusion 90f4db4), essai `vignettes_dessin_tests` rouge puis vert, vérificateur 4228 réussis deux passages. Portable `FEANOR-portable-2026-11-08.zip`.
+
 ## 2026-11-07
 
 - Fusion dans main (760cba4) de `duree-cles` : effets au-delà de la feuille (partie 121), traits cachés (122), durée d'un plan et clés alternées (123), planche en tuiles exactes, Annuler sans gel (15 s → 0,2 s sur un gros cas, en essais automatiques), réparation de plusieurs causes d'essais instables. Relectures : gel à l'annulation, décalage à tort sur les anciens projets (marqueur `cles_v2`, essai sur un vrai fichier ancien) et trajectoire qui ne suivait pas Ctrl : réels, corrigés. Vérification finale 4226 réussis, deux passages. Portable `FEANOR-portable-2026-11-07-soir.zip`, ouvert sur une copie de projet. Incident sans perte : un script de renumérotation (alias `Ren` de PowerShell) a vidé 13 fichiers du worktree, restaurés depuis l'index avant commit.
