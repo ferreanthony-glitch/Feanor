@@ -3,7 +3,7 @@
 //! premier niveau, en groupes séparés.
 //!
 //! ```text
-//!   Nouveau calque ▸   Dupliquer   Renommer…   Supprimer
+//!   Nouveau calque ▸   Dupliquer   Réutiliser dans… ▸   Renommer…   Supprimer
 //!   ───────────────
 //!   Fusionner vers le bas        Fusionner les calques choisis
 //!   ───────────────
@@ -106,7 +106,7 @@ impl App {
     }
 
     /// Une entrée qui lance `action` sur le calque visé (et les calques choisis).
-    fn entree_action(&mut self, ui: &mut egui::Ui, li: usize, icone: &str, texte: &str, action: &str) {
+    pub(crate) fn entree_action(&mut self, ui: &mut egui::Ui, li: usize, icone: &str, texte: &str, action: &str) {
         if self.entree(ui, icone, texte, action, None, "") {
             self.viser_calque(li);
             self.run_action(action);
@@ -126,6 +126,8 @@ impl App {
         // ---- Les gestes de tous les jours.
         ui.menu_button(format!("{}  Nouveau calque", ph::PLUS), |ui| self.layer_new_menu(ui));
         self.entree_action(ui, li, ph::COPY_SIMPLE, &plusieurs("Dupliquer", "Dupliquer les calques choisis"), "calque.dupliquer");
+        // La planche-mère (`partageui.rs`) : le même dessin dans d'autres plans, chacun sous sa caméra.
+        self.reutiliser_menu(ui, li);
         self.rename_item(ui, li, origine == Origine::Timeline, origine == Origine::Montage);
         self.entree_action(ui, li, ph::TRASH, &plusieurs("Supprimer", "Supprimer les calques choisis"), "calque.supprimer");
         ui.separator();

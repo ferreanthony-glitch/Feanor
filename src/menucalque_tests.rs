@@ -138,7 +138,8 @@ fn the_groups_come_in_this_order_with_separators() {
     let mut app = app_layers("ordre", &[LayerKind::Bitmap, LayerKind::Vector]);
     let mut ecran = Ecran::new();
     let textes = menu(&mut app, &mut ecran, Origine::Panneau, 1);
-    let ordre = ["Nouveau calque", "Dupliquer", "Renommer", "Supprimer", "Fusionner vers le bas", "Fusionner les", "Organiser", "Apparence", "Effets", "Ajouter un aplat", "Plus"];
+    // (« Réutiliser dans… », la planche-mère, partie 126, est dans le groupe des gestes, après Dupliquer.)
+    let ordre = ["Nouveau calque", "Dupliquer", "Réutiliser dans", "Renommer", "Supprimer", "Fusionner vers le bas", "Fusionner les", "Organiser", "Apparence", "Effets", "Ajouter un aplat", "Plus"];
     let mut dernier = f32::NEG_INFINITY;
     let mut ys = Vec::new();
     for mot in ordre {
@@ -150,8 +151,8 @@ fn the_groups_come_in_this_order_with_separators() {
     // Les séparateurs : un espace plus grand entre les groupes (gestes | fusion | organisation | reste).
     let ecart = |a: usize, b: usize| ys[b] - ys[a];
     let pas = ecart(0, 1);
-    assert!(ecart(3, 4) > pas + 2.0 && ecart(5, 6) > pas + 2.0 && ecart(9, 10) > pas + 2.0, "des séparateurs entre les groupes : {ys:?}");
-    assert!((ecart(0, 1) - ecart(1, 2)).abs() < 3.0, "pas de séparateur dans le groupe des gestes : {ys:?}");
+    assert!(ecart(4, 5) > pas + 2.0 && ecart(6, 7) > pas + 2.0 && ecart(10, 11) > pas + 2.0, "des séparateurs entre les groupes : {ys:?}");
+    assert!((ecart(0, 1) - ecart(1, 2)).abs() < 3.0 && (ecart(2, 3) - pas).abs() < 3.0, "pas de séparateur dans le groupe des gestes : {ys:?}");
 }
 
 #[test]

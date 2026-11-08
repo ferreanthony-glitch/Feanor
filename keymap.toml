@@ -783,6 +783,17 @@ action = "panneau.dupliquer"
 touches = ["Ctrl+Maj+D"]
 source = "proposition (2026-11-08, Anthony : une touche pour dupliquer un plan ; Ctrl+D duplique un dessin, Ctrl+Maj+D le plan)"
 
+# La planche-mère (partie 126) : un plan lié au sien, même dessin, à cadrer autrement.
+[[raccourci]]
+action = "plan.reutiliser"
+touches = []
+source = "FEANOR (planche-mère, 2026-11-08 ; sans touche)"
+
+[[raccourci]]
+action = "plan.detacher"
+touches = []
+source = "FEANOR (planche-mère, 2026-11-08 ; sans touche)"
+
 [[raccourci]]
 action = "scene.nouvelle"
 touches = ["Maj+P"]
@@ -1001,6 +1012,32 @@ source = "réglage perso d'origine : nouveau calque d'animation = Ctrl+N, déjà
 action = "calque.dupliquer"
 touches = []
 source = "sans touche à l'origine"
+
+# La planche-mère (partie 126) : le même dessin dans d'autres plans, chacun sous sa caméra.
+[[raccourci]]
+action = "calque.reutiliser_suivant"
+touches = []
+source = "FEANOR (planche-mère, 2026-11-08 ; sans touche)"
+
+[[raccourci]]
+action = "calque.reutiliser_precedent"
+touches = []
+source = "FEANOR (planche-mère, 2026-11-08 ; sans touche)"
+
+[[raccourci]]
+action = "calque.reutiliser_sequence"
+touches = []
+source = "FEANOR (planche-mère, 2026-11-08 ; sans touche)"
+
+[[raccourci]]
+action = "calque.reutiliser_choisir"
+touches = []
+source = "FEANOR (planche-mère, 2026-11-08 ; sans touche)"
+
+[[raccourci]]
+action = "calque.detacher_partage"
+touches = []
+source = "FEANOR (planche-mère, 2026-11-08 ; sans touche)"
 
 [[raccourci]]
 action = "calque.supprimer_vides"

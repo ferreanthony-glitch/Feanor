@@ -236,7 +236,11 @@ pub const FORMAT: &str = "pelure-projet";
 /// 50 (2026-11-08, `docs/INTERFACE.md` partie 119) : **le dessin tourne avec le chemin** — `tourne` de la trajectoire d'un calque et `angle` de
 /// chacun de ses dessins posés (`dessins[]`). Une version précédente qui ouvrirait le projet perdrait la rotation à l'enregistrement (le dessin
 /// repartirait droit au prochain calcul) : elle le refuse donc. Un projet de version 49 ou moins s'ouvre tel quel.
-pub const VERSION: u32 = 50;
+/// 51 (2026-11-08, `docs/INTERFACE.md` partie 126) : **la planche-mère** — `partage` d'un calque (`partage.rs`) : la clé que portent les
+/// exemplaires d'un même calque partagé entre plusieurs plans (mêmes dessins, chacun sous sa caméra). Une version précédente qui ouvrirait le
+/// projet en ferait des calques séparés qui partagent les mêmes dessins, et perdrait le lien à l'enregistrement : elle le refuse donc. Un
+/// projet de version 50 ou moins s'ouvre tel quel.
+pub const VERSION: u32 = 51;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -676,6 +680,10 @@ struct LayerEntry {
     /// panneau de la scène, portent le même numéro.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     toute_la_scene: Option<u64>,
+    /// La planche-mère (format 51, `partage.rs` ; absent : calque du seul plan) : les exemplaires d'un même calque partagé entre
+    /// plusieurs plans portent le même numéro.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    partage: Option<u64>,
     /// Mode de fusion (format 9 ; absent : normal).
     #[serde(default, skip_serializing_if = "is_normal")]
     fusion: crate::blend::BlendMode,
@@ -2389,6 +2397,7 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
                 // (Un calque fixe n'a pas d'écart de profondeur : s'il en reste un, il est écrit dans la profondeur.)
                 profondeur: if l.pos_keys.is_empty() { l.depth + l.transform.dz } else { l.depth },
                 toute_la_scene: l.scene_wide.map(|w| w.key),
+                partage: l.partage,
                 fusion: l.blend,
                 pelure: l.onion,
                 transparence: l.keep_alpha,
@@ -2496,6 +2505,7 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
             l.marques_couleur.clear();
             l.roles.clear();
             l.toute_la_scene = l.toute_la_scene.map(|_| 1);
+            l.partage = l.partage.map(|_| 1);
         }
     }
     entry
@@ -3149,6 +3159,8 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
     };
     // Les calques CTG des projets d'avant : convertis en calques de couleur quand le document existe (`migrer_ctg`).
     let mut anciens_ctg: Vec<crate::griffonnage::AncienCtg> = Vec::new();
+    // Numéros des partages (la planche-mère, `partage.rs`) : neufs pour la session, les mêmes pour tous les exemplaires d'une clé.
+    let mut partages: HashMap<u64, u64> = HashMap::new();
     for seq in manifest.sequences {
         structure.sequences.push(Sequence {
             id: seq.id,
@@ -3177,6 +3189,7 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                             key: *keys.entry(k).or_insert_with(fresh_layer_id),
                             scene: scene.id,
                         }),
+                        partage: l.partage.map(|k| *partages.entry(k).or_insert_with(fresh_layer_id)),
                         id: fresh_layer_id(),
                         name: l.nom,
                         kind: if l.kind == "bitmap" {

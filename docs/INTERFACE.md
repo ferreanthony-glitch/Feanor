@@ -7023,6 +7023,72 @@ Enregistrer, Enregistrer sous, la copie de secours, les exports (vidéo, PDF, vi
 - **Les dessins que plus rien ne retient** quittent la mémoire : un plan supprimé dont tu ne peux plus annuler la suppression, une version effacée, un dessin d'une étape défaite que tu as remplacée. Avant, ils restaient jusqu'à la fermeture du projet (40 % des dessins après une longue séance). Tant que Ctrl+Z ou Ctrl+Maj+Z peut les rendre, ou qu'une version, une variante ou le contenu rogné d'un plan les garde, ils restent. Ça se fait quand tu fais une pause de deux ou trois secondes, jamais pendant que tu dessines ou que la lecture tourne.
 - **Les résultats d'effets** (aplats, flous, grains) qu'on ne regarde plus se rangent quand c'est possible (les aplats unis oui, le flou ou le grain à peine).
 
+## 126. La planche-mère : un calque partagé entre des plans, chacun sous sa caméra (2026-11-08, branche `planche-mere`)
+
+Idée 4 d'Anthony (7 novembre) : « un grand dessin, plusieurs cadres caméra, donc plusieurs plans partageant ce dessin ; un plan se détache à
+la demande ». Ses réponses du 8 novembre : une **option de plan** (un plan réutilisé) ou **de calque** (un décor réutilisé) ; « Réutiliser ce
+plan » lie **tout le plan** ; la planche-mère se dessine d'abord dans le **Storyboard** ; **« Réutiliser »** dans les commandes, le mot
+« planche-mère » seulement dans les bulles et la ligne d'état (rien de plus dans le menu Aide). Conception : `suivi/PLANCHE-MERE.md`. Code :
+`partage.rs` (le modèle), `partageui.rs` (les commandes, la fenêtre des plans à cocher, le maillon), essais `partage_tests.rs` (6).
+**Format de projet 51** : `partage` d'un calque. (La partie 125 est celle de l'autre session, `vignettes-selection`.)
+
+### Ce que ça fait
+
+- **Un calque partagé** porte une clé ; tous les calques du film qui portent la même clé sont les **exemplaires** d'un même calque : ils
+  montrent **les mêmes dessins** (retoucher l'un, c'est retoucher tous) et portent les mêmes réglages (nom, sorte, opacité, mode de fusion,
+  effets, aplat…), chacun **dans son plan, sous la caméra de son plan** : un dessin plus grand que la feuille (la toile infinie) est cadré
+  autrement par chaque plan. **Ce qui reste à chaque plan** : la pose du calque (Transformer, clés de position, trajectoire), ses clés
+  d'opacité, sa profondeur, son dossier, sa ligne réduite ; la caméra, la durée, les cases, les textes du plan.
+- **Dans le menu d'un calque** (clic droit, « … », ☰, le même partout) : **« Réutiliser dans… »** → **le plan suivant**, **le plan
+  précédent**, **tous les plans de la séquence**, **des plans choisis…** (une petite fenêtre : un plan coché a un exemplaire, décocher
+  détache). Un calque partagé porte un **maillon** dans sa ligne, avec le nombre d'autres plans et leurs noms en bulle ; son sous-menu dit
+  avec qui il est partagé et propose **« Détacher (garder une copie) »**. Seul un **calque de dessin** se partage : ni dossier, ni calque
+  de couleur (il suit son trait), ni vidéo, ni calque d'effet, ni calque de toute la scène (le sous-menu le dit).
+- **Dans le menu Storyboard > Plans** (et la palette Ctrl+K ; le menu « Plans » de la barre du montage et le clic droit d'un plan sont
+  déjà à leur dizaine d'entrées) : **« Réutiliser le plan »** fait un **nouveau plan juste après**, dans une scène neuve de la même séquence, dont **tous** les calques de dessin sont liés à ceux du plan d'origine, avec sa
+  caméra (celle de l'origine, au départ : on la déplace ensuite), sa durée, ses cases, ses textes vides. On le fait trois fois, on bouge trois
+  caméras : quatre plans sur une seule planche-mère. **« Détacher le plan »** (quand il partage quelque chose) détache tous ses calques :
+  des copies, un plan ordinaire.
+- **Détacher** : l'exemplaire garde une **copie** de ses dessins et perd la clé ; les autres ne changent pas. Quand il ne reste qu'un
+  exemplaire, sa clé disparaît d'elle-même.
+- **Ce qui s'accorde, et quand** : à chaque image d'écran, comme les calques de toute la scène (`Document::sync_partages`, appelé avec
+  `sync_scene_layers`) : le **modèle** est l'exemplaire du plan courant (celui qu'on retouche), sinon le premier du film ; ses dessins vont
+  dans les autres exemplaires, **coupés à la durée de chaque plan, le dernier tenu** (la planche-mère est un dessin tenu) ; un calque
+  partagé ne compte donc jamais dans la durée de son plan. Dessiner dans un plan lié se voit tout de suite dans les autres (c'est le même
+  dessin) ; un nouveau dessin posé sur le calque (nouvelle clé, cassure automatique) suit à l'image d'écran suivante.
+- **Couper** un plan garde le lien des deux parties (mêmes dessins). **Réunir** deux plans détache d'abord le second (ses dessins, copiés,
+  suivent dans le plan réuni ; le premier garde son lien). **Dupliquer** ou **coller** un plan donne des copies **sans lien** : lier se
+  demande, jamais en silence. La **corbeille**, les **versions** et les plans **écartés** gardent la clé avec le calque : restaurer rend le
+  lien si d'autres exemplaires l'ont encore. **Une étape d'annulation** par commande : « Réutiliser le calque », « Détacher le calque »,
+  « Détacher le plan » ; « Réutiliser le plan » passe par les opérations de structure (annulable comme un plan dupliqué).
+- **Le fichier** : `partage` du calque (format 51). Une version d'avant ouvrirait des calques séparés qui partagent les mêmes dessins et
+  perdrait le lien à l'enregistrement : elle refuse. Les numéros de partage sont neufs à chaque séance, les mêmes pour tous les exemplaires
+  d'une clé ; l'empreinte d'un plan (envois) ne retient que leur présence.
+- **Les commandes** (palette Ctrl+K, sans touche d'origine ; clic droit pour en assigner) : `plan.reutiliser`, `plan.detacher`,
+  `calque.reutiliser_suivant`, `calque.reutiliser_precedent`, `calque.reutiliser_sequence`, `calque.reutiliser_choisir`,
+  `calque.detacher_partage`.
+
+### Ce qui vient après (pas dans cette branche)
+
+- **Les Vignettes** (après la fusion de `vignettes-selection`, dont les fichiers sont tenus par l'autre session) : le maillon sur les cases
+  des plans liés ; un trait dans une case d'un plan lié va **entièrement** au dessin partagé (pas réparti aux cases voisines : « les cases
+  ne coupent jamais le dessin », Anthony) ; le passe-partout laisse voir ce qui déborde ; plus tard, « Faire un plan par cadre » sur une case
+  de mouvement de caméra.
+- La **Fiche du plan** ne dit pas encore qu'un plan est lié (le maillon est sur ses calques).
+
+### À vérifier à l'écran (par Anthony)
+
+1. Un plan, un grand décor dessiné en débordant de la feuille (caméra reculée). Storyboard > Plans > **Réutiliser le plan** : un plan de
+   plus juste après, même dessin ; déplace sa caméra sur une autre partie du décor ; recommence : trois cadres sur la même planche-mère.
+   Dessine un détail dans l'un des plans : il est dans les autres.
+2. Panneau Calques : le maillon sur le calque partagé, sa bulle nomme les autres plans. Clic droit > Réutiliser dans… : « Le plan suivant »,
+   « Tous les plans de la séquence », « Des plans choisis… » (coche, décoche, Appliquer).
+3. **Détacher** un calque dans un plan : il garde une copie, dessiner dedans ne touche plus les autres. **Détacher le plan** : tout le plan
+   redevient ordinaire. Ctrl+Z à chaque fois.
+4. Transformer sur un exemplaire : il bouge dans ce plan seulement. Durée du plan changée : le dessin partagé tient jusqu'au bout.
+5. Couper un plan lié : les deux parties restent liées. Réunir : le second se détache. Dupliquer le plan : la copie n'est pas liée.
+6. Enregistre, rouvre : les liens sont là. Un dossier, un calque de couleur : « Réutiliser dans… » dit pourquoi non.
+
 | Séance de 2 000 gestes puis une pause | Avant | Maintenant |
 |---|---|---|
 | 300 plans (451 à la fin), mémoire privée | 6,5 Go | 5,6 à 5,8 Go |

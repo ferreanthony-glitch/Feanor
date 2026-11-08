@@ -189,7 +189,9 @@ impl App {
     /// calque courant reste le même.
     pub(crate) fn sync_scene_layers(&mut self) {
         let id = self.layers().get(self.cur_layer).map(|l| l.id);
-        if self.doc.sync_scene_layers(self.cur_panel, self.cur_frame) {
+        // (Les calques partagés entre plans, la planche-mère, s'accordent de même : `partage.rs`.)
+        let partages = self.doc.sync_partages(self.cur_panel);
+        if self.doc.sync_scene_layers(self.cur_panel, self.cur_frame) || partages {
             if let Some(i) = id.and_then(|id| self.layers().iter().position(|l| l.id == id)) {
                 self.cur_layer = i;
             }
@@ -511,6 +513,8 @@ impl App {
                                     ui.label(RichText::new(format!("{} {colours}", ph::PALETTE)).small().weak())
                                         .on_hover_text("Ce calque de trait porte des calques de couleur, rangés juste dessous.");
                                 }
+                                // Planche-mère (`partageui.rs`) : le maillon et les plans qui partagent ce dessin.
+                                self.maillon_partage(ui, li);
                                 // Plusieurs calques choisis : une marque pour chacun, et une autre
                                 // pour le courant (c'est lui que les réglages montrent).
                                 if several && current {
