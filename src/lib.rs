@@ -1153,6 +1153,8 @@ mod effets_debord_tests;
 #[cfg(test)]
 mod traits_caches_tests;
 #[cfg(test)]
+mod vignettes_dessin_tests;
+#[cfg(test)]
 mod horschamptex_tests;
 mod workspaceui;
 mod xsheet;

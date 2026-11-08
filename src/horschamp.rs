@@ -156,8 +156,9 @@ pub(crate) struct Suivi {
 /// Ce que le geste a laissé, noté à son lâcher pour être réparti à la fin de l'image d'écran.
 #[derive(Debug)]
 pub(crate) enum Matiere {
-    /// Un calque vectoriel : le dernier élément du dessin.
-    Vecteur,
+    /// Un calque vectoriel : le dernier élément du dessin ; `derriere` : le premier, un trait peint derrière (« Peindre derrière ») est posé sous les autres
+    /// éléments (`commit_vector_stroke`). Il se répartit comme un autre : sans cela, il restait entier dans le plan d'origine, coupé au bord de son champ.
+    Vecteur { derriere: bool },
     /// Un calque bitmap : les tuiles d'avant le trait, et son tracé (ligne médiane, rayon), sa couleur, son opacité ; la recette du pinceau
     /// (son réglage, et l'appui et l'instant de chaque point du tracé, vides s'ils ne le suivent pas) pour que la part qui sort de la case
     /// garde la texture du pinceau sur la planche (`horschamptex.rs`).
@@ -652,13 +653,14 @@ impl App {
         (Some(recette), stroke.path_pressure.clone(), stroke.path_time.clone())
     }
 
-    /// Le trait ou la forme vectoriels qui viennent d'être posés dans le dessin `cel` : à répartir à la fin de l'image d'écran.
-    pub(crate) fn horschamp_noter_vecteur(&mut self, cel: CelId) {
+    /// Le trait ou la forme vectoriels qui viennent d'être posés dans le dessin `cel` : à répartir à la fin de l'image d'écran. `derriere` : posé sous les
+    /// autres éléments, en premier (« Peindre derrière »), pas en dernier.
+    pub(crate) fn horschamp_noter_vecteur(&mut self, cel: CelId, derriere: bool) {
         let Some(suivi) = self.vignettes.suivi.clone() else { return };
         if !self.board_shown() {
             return;
         }
-        self.vignettes.fini = Some(Fini { suivi, cel, matiere: Matiere::Vecteur });
+        self.vignettes.fini = Some(Fini { suivi, cel, matiere: Matiere::Vecteur { derriere } });
     }
 
     /// Répartit le trait qui vient de finir : sa partie dans le champ de sa case reste, celle dans le champ d'une autre case va à son plan, le
@@ -693,7 +695,7 @@ impl App {
         };
         let champs = if cree { self::champs(layout, self.settings.vignettes.debord_fraction()) } else { champs };
         let fait = match &fini.matiere {
-            Matiere::Vecteur => self.partager_vecteur(layout, &fini, origine, &champs),
+            Matiere::Vecteur { .. } => self.partager_vecteur(layout, &fini, origine, &champs),
             Matiere::Bitmap { .. } => self.partager_bitmap(layout, &fini, origine, &champs),
         };
         // (Rien de réparti : ce que le geste annonçait n'a pas eu lieu. Réparti : `dire_les_refus` a dit la vérité.)
@@ -721,16 +723,25 @@ impl App {
         fait
     }
 
-    /// Les points du trait fini sur la planche (rien s'il n'y a rien à répartir : trait « sous les autres », dessin disparu).
+    /// Le rang, dans son dessin, du trait vectoriel qui vient de finir : le dernier élément, ou le premier s'il a été peint derrière. Rien s'il n'y a rien à
+    /// répartir (dessin disparu, rien de neuf, pas un trait).
+    fn rang_du_trait(&self, fini: &Fini) -> Option<usize> {
+        let Matiere::Vecteur { derriere } = fini.matiere else { return None };
+        let d = self.drawing(fini.cel)?;
+        if d.elements.len() <= fini.suivi.elements_avant {
+            return None;
+        }
+        let i = if derriere { 0 } else { d.elements.len() - 1 };
+        matches!(d.elements.get(i), Some(Element::Stroke { .. })).then_some(i)
+    }
+
+    /// Les points du trait fini sur la planche (rien s'il n'y a rien à répartir : dessin disparu).
     fn points_du_trait(&self, fini: &Fini) -> Vec<Pos2> {
         let pose = fini.suivi.pose;
         match &fini.matiere {
-            Matiere::Vecteur => {
-                let Some(d) = self.drawing(fini.cel) else { return Vec::new() };
-                if d.elements.len() <= fini.suivi.elements_avant || self.paint_behind {
-                    return Vec::new();
-                }
-                match d.elements.last() {
+            Matiere::Vecteur { .. } => {
+                let Some(i) = self.rang_du_trait(fini) else { return Vec::new() };
+                match self.drawing(fini.cel).and_then(|d| d.elements.get(i)) {
                     Some(Element::Stroke { points, .. }) => points.iter().map(|p| pose.planche(p.pos())).collect(),
                     _ => Vec::new(),
                 }
@@ -749,7 +760,7 @@ impl App {
         }
         let o = layout.cards[origine];
         // (Un plan neuf n'a qu'un calque vectoriel : un trait bitmap n'y entrerait pas, il ne crée pas de plan vide.)
-        if !matches!(&fini.matiere, Matiere::Vecteur) {
+        if !matches!(&fini.matiere, Matiere::Vecteur { .. }) {
             return None;
         }
         // (Un plan neuf a la caméra d'origine : une autre caméra, la part resterait sur la planche.)
@@ -905,12 +916,10 @@ impl App {
 
     fn partager_vecteur(&mut self, layout: &BoardLayout, fini: &Fini, origine: usize, champs: &[Rect]) -> bool {
         let cel = fini.cel;
-        let Some(d) = self.drawing(cel) else { return false };
-        // (Un trait posé sous les autres, « Peint sur l'aplat », n'est pas le dernier élément : il reste où il est.)
-        if d.elements.len() <= fini.suivi.elements_avant || self.paint_behind {
-            return false;
-        }
-        let Some(Element::Stroke { points, color, opacity, hardness, brush, trace }) = d.elements.last().cloned() else { return false };
+        // (Un trait peint derrière est le premier élément de son dessin, pas le dernier : il se répartit de même, et ses parts restent derrière.)
+        let derriere = matches!(fini.matiere, Matiere::Vecteur { derriere: true });
+        let Some(rang) = self.rang_du_trait(fini) else { return false };
+        let Some(Element::Stroke { points, color, opacity, hardness, brush, trace }) = self.drawing(cel).and_then(|d| d.elements.get(rang)).cloned() else { return false };
         if points.is_empty() {
             return false;
         }
@@ -1020,8 +1029,8 @@ impl App {
             r
         };
         if let Some(d) = self.drawing_mut(cel) {
-            d.elements.pop();
-            d.elements.extend(chez_elle);
+            d.elements.remove(rang);
+            d.elements.splice(rang..rang, chez_elle);
         }
         let mut regions: Vec<(CelId, Rect)> = Vec::new();
         for (k, els) in chez_les_autres {
@@ -1032,7 +1041,12 @@ impl App {
             }
             let region_k = els.iter().fold(Rect::NOTHING, |r, e| r.union(e.bounds()));
             if let Some(d) = self.drawing_mut(cible) {
-                d.elements.extend(els);
+                // (Peint derrière : derrière le dessin de cette case aussi.)
+                if derriere {
+                    d.elements.splice(0..0, els);
+                } else {
+                    d.elements.extend(els);
+                }
             }
             regions.push((cible, region_k));
         }
