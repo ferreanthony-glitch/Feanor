@@ -171,7 +171,7 @@ impl App {
             return;
         }
         let trace = if replayed {
-            vector::Trace { pressure, time, feel: Some(vs.feel), secondary: Some(vs.secondary), cache: Default::default() }
+            vector::Trace { pressure, time, feel: Some(vs.feel), secondary: Some(vs.secondary), lien: None, cache: Default::default() }
         } else {
             vector::Trace::default()
         };
@@ -562,6 +562,11 @@ impl App {
     }
 
     pub(crate) fn recolor_selection(&mut self) {
+        // (Des traits choisis sur la planche des Vignettes : toutes leurs parts, partie 125.)
+        if self.board_shown() && self.selp_active() {
+            self.selp_recolorer();
+            return;
+        }
         let color = self.color;
         self.edit_selection(|d, items| {
             for &i in items.iter() {
@@ -686,9 +691,21 @@ impl App {
         let before = d.clone();
         let start = d.elements.len();
         let n = items.len();
-        d.elements.extend(items);
+        // (Une copie n'est pas une part du trait d'où elle vient : sans numéro, partie 125.)
+        d.elements.extend(items.into_iter().map(|mut e| {
+            if let Element::Stroke { trace, .. } = &mut e {
+                trace.lien = None;
+            }
+            e
+        }));
         self.refresh_cel(cel);
+        let base = self.history.undo_len();
         self.push_vector(cel, before, prefix);
+        // Dans les Vignettes : ce qui est collé se répartit comme un trait qu'on vient de tracer et devient le choix de la planche (l'outil ne change pas).
+        if self.board_shown() {
+            self.selp_apres_le_collage(cel, start..start + n, base);
+            return;
+        }
         self.vsel = Some(VSelection {
             cel,
             items: (start..start + n).collect(),

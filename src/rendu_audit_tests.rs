@@ -178,7 +178,7 @@ fn trace_vector(raster: &mut Raster, s: &BrushSettings, lib: &BrushLibrary, path
         if path.0.is_empty() {
             continue;
         }
-        let trace = vector::Trace { pressure: path.1.clone(), time: path.2.clone(), feel: Some(Toucher::default()), secondary: None, cache: Default::default() };
+        let trace = vector::Trace { pressure: path.1.clone(), time: path.2.clone(), feel: Some(Toucher::default()), secondary: None, lien: None, cache: Default::default() };
         let e = Element::Stroke { points: path.0.clone(), color: t.color, opacity: s.opacity, hardness, brush: brush.clone(), trace };
         vector::render_element(raster, &e);
     }

@@ -4406,6 +4406,16 @@ impl App {
             "edition.tout_selectionner" if self.cam_keys_have_focus() => self.choose_all_cam_keys(),
             "edition.tout_selectionner" if self.fx_keys_have_focus() => self.choose_all_fx_keys(),
             "edition.tout_selectionner" if self.key_focus => self.choose_all_keys(),
+            // Des traits choisis sur la planche des Vignettes (partie 125) : entiers, toutes leurs parts.
+            "edition.copier" if self.board_shown() && self.selp_active() => {
+                self.selp_copier();
+            }
+            "edition.couper" if self.board_shown() && self.selp_active() => {
+                if self.selp_copier() {
+                    self.selp_supprimer();
+                }
+            }
+            "edition.supprimer" if self.board_shown() && self.selp_active() => self.selp_supprimer(),
             // Après un clic dans le montage (ou la planche), l'édition vise les panneaux choisis (12e).
             "edition.couper" if self.panels_have_focus() => self.cut_panels(),
             "edition.copier" if self.panels_have_focus() => self.copy_panels(),
