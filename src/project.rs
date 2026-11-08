@@ -233,7 +233,10 @@ pub const FORMAT: &str = "pelure-projet";
 /// 49 (2026-11-07, `docs/INTERFACE.md` partie 119) : **trajectoire d'un calque** — `trajectoire` d'un calque (`trajectoire.rs`) : le chemin dessiné
 /// (points en pixels de la feuille), ses marques et son pas, qui posent les clés de position du calque. Une version précédente qui ouvrirait le
 /// projet garderait les clés mais perdrait le chemin à l'enregistrement : elle le refuse donc. Un projet de version 48 ou moins s'ouvre tel quel.
-pub const VERSION: u32 = 49;
+/// 50 (2026-11-08, `docs/INTERFACE.md` partie 119) : **le dessin tourne avec le chemin** — `tourne` de la trajectoire d'un calque et `angle` de
+/// chacun de ses dessins posés (`dessins[]`). Une version précédente qui ouvrirait le projet perdrait la rotation à l'enregistrement (le dessin
+/// repartirait droit au prochain calcul) : elle le refuse donc. Un projet de version 49 ou moins s'ouvre tel quel.
+pub const VERSION: u32 = 50;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se

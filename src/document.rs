@@ -708,12 +708,16 @@ impl Layer {
     }
 
     /// `n` images insérées à l'image `at` (`removed` : retirées de `at` à `at + n`) : les rôles
-    /// (13g-2) et les clés d'effets (13i) des images d'après suivent.
+    /// (13g-2), les clés d'effets (13i), les clés de position et d'opacité des images d'après suivent, et la
+    /// trajectoire (partie 119 : son départ, sa fin et ses marques restent sur leurs images) aussi.
     pub fn shift_frames(&mut self, at: usize, n: usize, removed: bool) {
         crate::roles::shift(&mut self.roles, at, n, removed);
         crate::fx::shift_keys(&mut self.fx, at, n, removed);
         crate::poskeys::shift_keys(&mut self.pos_keys, at, n, removed);
         crate::opacitecles::shift_keys(&mut self.opacity_keys, at, n, removed);
+        if let Some(t) = self.trajectoire.as_mut() {
+            t.decaler_images(at, n, removed);
+        }
     }
 
     /// L'opacité du calque à l'image `frame` du plan : celle que donnent ses clés d'opacité, sinon son opacité fixe.

@@ -11,9 +11,12 @@ fn droite() -> Trajectoire {
     t
 }
 
+/// Le centre de la feuille des essais du modèle (autour duquel un calque tourne).
+const PIVOT: [f32; 2] = [200.0, 150.0];
+
 /// Les clés, le point d'ancrage étant le départ du trait (le déplacement relatif).
 fn cles_de(t: &Trajectoire, duree: usize, base: LayerTransform) -> Vec<crate::poskeys::PosKey> {
-    t.cles(duree, base, t.points[0])
+    t.cles(duree, base, t.points[0], PIVOT)
 }
 
 fn x_des_cles(t: &Trajectoire, duree: usize) -> Vec<(usize, f32)> {
@@ -37,7 +40,7 @@ fn a_path_without_marks_moves_the_layer_at_constant_speed_over_the_whole_plan() 
     assert!(cles_de(&t, 1, base).is_empty());
     assert!(cles_de(&t, 0, base).is_empty());
     // Un autre point d'ancrage (le bas du dessin, à (10, 30) sur la feuille) : c'est lui qui est mis sur le chemin, dès le départ.
-    let cles = t.cles(11, base, [10.0, 30.0]);
+    let cles = t.cles(11, base, [10.0, 30.0], PIVOT);
     assert_eq!(cles[0].t, LayerTransform { x: 40.0, y: -50.0, ..base });
     assert_eq!(cles[10].t, LayerTransform { x: 140.0, y: -50.0, ..base });
     let d = t.decalages([10.0, 30.0]);
@@ -254,7 +257,7 @@ fn the_file_form_round_trips_and_a_damaged_one_is_cleaned() {
     let simple = Trajectoire::nouvelle(&[[0.0, 0.0], [100.0, 0.0]]).unwrap();
     let texte = serde_json::to_string(&simple).unwrap();
     assert!(
-        !texte.contains("marques") && !texte.contains("depart") && !texte.contains("fin") && !texte.contains("temps") && !texte.contains("cles") && !texte.contains("dessins") && !texte.contains("ancre") && !texte.contains("decalage") && !texte.contains("source"),
+        !texte.contains("marques") && !texte.contains("depart") && !texte.contains("fin") && !texte.contains("temps") && !texte.contains("cles") && !texte.contains("dessins") && !texte.contains("ancre") && !texte.contains("decalage") && !texte.contains("source") && !texte.contains("tourne"),
         "{texte}"
     );
     assert_eq!(serde_json::from_str::<Trajectoire>(&texte).unwrap(), simple);
@@ -267,12 +270,14 @@ fn the_file_form_round_trips_and_a_damaged_one_is_cleaned() {
     t.ancre = Ancre::Point { x: 3.0, y: 4.0 };
     t.decalage_depart = [1.0, -2.0];
     t.source = Some(11);
-    t.dessins = vec![DessinJalon { dessin: 11, dx: 0.0, dy: 0.0 }, DessinJalon { dessin: 12, dx: 50.0, dy: 0.0 }, DessinJalon { dessin: 13, dx: 100.0, dy: 0.0 }];
+    t.dessins = vec![DessinJalon { dessin: 11, dx: 0.0, dy: 0.0, angle: 0.0 }, DessinJalon { dessin: 12, dx: 50.0, dy: 0.0, angle: 30.0 }, DessinJalon { dessin: 13, dx: 100.0, dy: 0.0, angle: 0.0 }];
+    t.tourne = true;
     let texte = serde_json::to_string(&t).unwrap();
     assert!(
-        texte.contains("\"depart\":7") && texte.contains("\"fin\":40") && texte.contains("\"temps\":[0.3]") && texte.contains("\"cles\":\"Interpolation\"") && texte.contains("\"ancre\":{\"Point\"") && texte.contains("\"source\":11") && texte.contains("\"dessins\""),
+        texte.contains("\"depart\":7") && texte.contains("\"fin\":40") && texte.contains("\"temps\":[0.3]") && texte.contains("\"cles\":\"Interpolation\"") && texte.contains("\"ancre\":{\"Point\"") && texte.contains("\"source\":11") && texte.contains("\"dessins\"") && texte.contains("\"tourne\":true") && texte.contains("\"angle\":30.0"),
         "{texte}"
     );
+    assert_eq!(texte.matches("\"angle\"").count(), 1, "un angle nul ne s'écrit pas : {texte}");
     assert_eq!(serde_json::from_str::<Trajectoire>(&texte).unwrap(), t);
     let mut bas = droite();
     bas.ancre = Ancre::Bas;
@@ -289,7 +294,8 @@ fn the_file_form_round_trips_and_a_damaged_one_is_cleaned() {
         ancre: Ancre::Point { x: f32::NAN, y: 0.0 },
         decalage_depart: [f32::INFINITY, 0.0],
         source: None,
-        dessins: vec![DessinJalon { dessin: 1, dx: f32::NAN, dy: 0.0 }],
+        dessins: vec![DessinJalon { dessin: 1, dx: f32::NAN, dy: 0.0, angle: 0.0 }, DessinJalon { dessin: 2, dx: 0.0, dy: 0.0, angle: f32::NAN }],
+        tourne: false,
     };
     let propre = abimee.assainie().expect("tient debout");
     assert_eq!(propre.points.len(), 2);
@@ -324,6 +330,102 @@ fn the_path_starts_at_its_start_image_and_nothing_moves_before_it() {
     assert!(cles_de(&t, 6, LayerTransform::default()).is_empty());
     assert!(cles_de(&t, 5, LayerTransform::default()).is_empty());
     assert!(!cles_de(&t, 7, LayerTransform::default()).is_empty());
+}
+
+#[test]
+fn inserting_or_removing_images_keeps_the_start_the_end_and_each_mark_on_its_image() {
+    // Un chemin de l'image 4 à l'image 20, une marque au milieu du temps (image 12).
+    let mut t = droite();
+    t.ajouter_marque(0.5);
+    t.depart = 4;
+    t.fin = Some(20);
+    assert_eq!(t.images_des_jalons(40), [4, 12, 20]);
+    // Trois images insérées avant le départ : tout avance de trois, le temps reste en parts égales.
+    t.decaler_images(2, 3, false);
+    assert_eq!((t.depart, t.fin, t.temps.clone()), (7, Some(23), None));
+    assert_eq!(t.images_des_jalons(40), [7, 15, 23]);
+    // Trois images insérées à l'image du départ : pareil (ce qui est à l'image ou après suit).
+    t.decaler_images(7, 3, false);
+    assert_eq!((t.depart, t.fin), (10, Some(26)));
+    // Quatre images insérées au milieu, entre la marque (18) et la fin : la marque reste à 18, la fin passe à 30 ; le temps de la marque
+    // devient explicite pour cela.
+    t.decaler_images(20, 4, false);
+    assert_eq!((t.depart, t.fin), (10, Some(30)));
+    assert_eq!(t.images_des_jalons(40), [10, 18, 30]);
+    assert!(t.temps.as_ref().is_some_and(|v| (v[0] - 8.0 / 20.0).abs() < 1e-5), "{:?}", t.temps);
+    // Des images insérées après la fin : rien ne bouge.
+    t.decaler_images(31, 5, false);
+    assert_eq!((t.depart, t.fin, t.images_des_jalons(40)), (10, Some(30), vec![10, 18, 30]));
+    // Deux images retirées avant le départ : tout recule de deux.
+    t.decaler_images(0, 2, true);
+    assert_eq!((t.depart, t.fin, t.images_des_jalons(40)), (8, Some(28), vec![8, 16, 28]));
+    // Quatre images retirées entre le départ et la marque (10 à 14) : la marque passe à 12, la fin à 24, le départ reste.
+    t.decaler_images(10, 4, true);
+    assert_eq!((t.depart, t.fin, t.images_des_jalons(40)), (8, Some(24), vec![8, 12, 24]));
+    // Des images retirées à cheval sur le départ (6 à 10) : le départ se ramène à 6, la marque et la fin reculent de quatre.
+    t.decaler_images(6, 4, true);
+    assert_eq!((t.depart, t.fin, t.images_des_jalons(40)), (6, Some(20), vec![6, 8, 20]));
+    // Rien à décaler : rien ne change.
+    let avant = t.clone();
+    t.decaler_images(3, 0, false);
+    assert_eq!(t, avant);
+    // Sans fin posée (anciens projets), seul le départ suit : la fin reste la dernière image du plan.
+    let mut ancienne = droite();
+    ancienne.depart = 4;
+    ancienne.decaler_images(2, 3, false);
+    assert_eq!((ancienne.depart, ancienne.fin), (7, None));
+    ancienne.decaler_images(10, 3, false);
+    assert_eq!((ancienne.depart, ancienne.fin), (7, None));
+}
+
+#[test]
+fn the_drawing_can_turn_with_the_path_around_its_anchor_and_keeps_its_start_orientation() {
+    // Un quart de cercle de rayon 100, de (0, 100) vers la droite puis vers le bas jusqu'à (100, 200) : la direction tourne de 90°.
+    let brut: Vec<[f32; 2]> = (0..=60).map(|i| { let a = -std::f32::consts::FRAC_PI_2 + i as f32 / 60.0 * std::f32::consts::FRAC_PI_2; [100.0 * a.cos(), 200.0 + 100.0 * a.sin()] }).collect();
+    let mut t = Trajectoire::nouvelle(&brut).expect("un chemin");
+    t.cles = Cles::Interpolation;
+    assert!((t.point_a(0.0)[0]).abs() < 1e-3 && (t.point_a(0.0)[1] - 100.0).abs() < 1e-3, "{:?}", t.point_a(0.0));
+    assert!(t.angle_a(0.0).abs() < 1e-3, "0 au départ");
+    let a1 = t.angle_a(1.0);
+    assert!((a1 - 90.0).abs() < 6.0, "un quart de tour à l'arrivée (y vers le bas : le sens des aiguilles) : {a1}");
+    let a_mi = t.angle_a(0.5);
+    assert!((a_mi - 45.0).abs() < 6.0, "la moitié à mi-chemin : {a_mi}");
+    // Sans « tourne », les clés gardent l'angle de la pose propre.
+    let base = LayerTransform { x: 10.0, y: 20.0, angle: 15.0, ..Default::default() };
+    let cles = t.cles(31, base, t.points[0], PIVOT);
+    assert!(cles.iter().all(|k| k.t.angle == 15.0));
+    // Avec : l'angle suit le chemin, et le point d'ancrage reste sur le chemin malgré la rotation autour du centre de la feuille.
+    t.tourne = true;
+    let cles = t.cles(31, base, t.points[0], PIVOT);
+    assert_eq!(cles.len(), 31);
+    assert_eq!(cles[0].t, base, "au départ, la pose propre telle quelle");
+    assert!((cles[30].t.angle - (15.0 + a1)).abs() < 1e-3, "{}", cles[30].t.angle);
+    let pivot = eframe::egui::pos2(PIVOT[0], PIVOT[1]);
+    // Le point d'ancrage (le départ du trait, en coordonnées du dessin sous `base`) : là où la pose `base` l'envoie, c'est (0, 100).
+    let ancre_dessin = base.affine(pivot).inverse().unwrap().apply(eframe::egui::pos2(0.0, 100.0));
+    for k in [0, 10, 20, 30] {
+        let sur_la_feuille = cles[k].t.affine(pivot).apply(ancre_dessin);
+        let attendu = t.point_a(t.fraction_a_l_image(k, 31).unwrap());
+        assert!((sur_la_feuille.x - attendu[0]).abs() < 0.05 && (sur_la_feuille.y - attendu[1]).abs() < 0.05, "image {k} : {sur_la_feuille:?} pour {attendu:?}");
+    }
+    // D'une image à l'autre, l'angle ne saute jamais d'un tour.
+    assert!(cles.windows(2).all(|w| (w[1].t.angle - w[0].t.angle).abs() < 20.0));
+    // Les poses des jalons : déplacement et angle ; sans « tourne », l'angle est nul.
+    t.ajouter_marque(0.5);
+    let poses = t.poses(t.points[0]);
+    assert_eq!(poses.len(), 3);
+    assert!(poses[0].1.abs() < 1e-3 && (poses[1].1 - 45.0).abs() < 6.0 && (poses[2].1 - 90.0).abs() < 6.0, "{poses:?}");
+    assert!((poses[2].0[0] - 100.0).abs() < 1e-3 && (poses[2].0[1] - 100.0).abs() < 1e-3, "{:?}", poses[2].0);
+    t.tourne = false;
+    assert!(t.poses(t.points[0]).iter().all(|p| p.1 == 0.0));
+    // Un demi-tour et plus : l'angle continue au-delà de 180° au lieu de repartir de −180°.
+    let brut: Vec<[f32; 2]> = (0..=120).map(|i| { let a = -std::f32::consts::FRAC_PI_2 + i as f32 / 120.0 * (1.5 * std::f32::consts::PI); [100.0 * a.cos(), 200.0 + 100.0 * a.sin()] }).collect();
+    let mut rond = Trajectoire::nouvelle(&brut).expect("un chemin");
+    rond.cles = Cles::Interpolation;
+    rond.tourne = true;
+    let cles = rond.cles(61, LayerTransform::default(), rond.points[0], PIVOT);
+    assert!((cles[60].t.angle - 270.0).abs() < 8.0, "trois quarts de tour : {}", cles[60].t.angle);
+    assert!(cles.windows(2).all(|w| (w[1].t.angle - w[0].t.angle).abs() < 20.0));
 }
 
 #[test]

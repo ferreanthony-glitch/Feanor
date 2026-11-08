@@ -540,6 +540,174 @@ fn the_path_is_saved_with_the_layer_and_comes_back_and_cutting_the_plan_detaches
     assert!(!doc.panels[0].layers[0].pos_keys.is_empty() && !doc.panels[1].layers[0].pos_keys.is_empty());
 }
 
+/// Un trait de pinceau horizontal, de (60, 150) à (120, 150), à l'image 0 : un dessin plus large que haut, dont on voit la rotation.
+fn dessiner_un_trait_couche(b: &mut Banc) -> u64 {
+    b.app.set_tool(Tool::Brush);
+    b.app.color = [0, 0, 0];
+    b.app.brush.size = 6.0;
+    glisser(b, &[(60.0, 150.0), (80.0, 150.0), (100.0, 150.0), (120.0, 150.0)]);
+    b.app.set_tool(Tool::Trajectoire);
+    b.app.layers()[0].cel_at(0).expect("un dessin à l'image 0")
+}
+
+/// Un chemin en équerre : vers la droite de (50, 150) à (150, 150), puis vers le bas jusqu'à (150, 220).
+fn tracer_une_equerre(b: &mut Banc) {
+    glisser(b, &[(50.0, 150.0), (75.0, 150.0), (100.0, 150.0), (125.0, 150.0), (150.0, 150.0), (150.0, 175.0), (150.0, 200.0), (150.0, 220.0)]);
+}
+
+#[test]
+fn inserting_or_removing_images_moves_the_trajectory_with_the_keys_and_the_drawings() {
+    // Clés d'interpolation : la fin est posée dès le tracé (dernière image du plan), chaque jalon reste sur son image.
+    let mut b = banc();
+    tracer_le_chemin(&mut b);
+    marquer_le_milieu(&mut b);
+    assert_eq!(b.app.layers()[0].trajectoire.as_ref().unwrap().fin, Some(23), "la fin est posée sur la dernière image du plan");
+    assert_eq!(jalons(&b), [0, 12, 23]);
+    // Six images insérées avant l'image 15, sur tout le plan : le plan dure 30, la marque reste à 12, la fin passe à 29.
+    b.app.cur_frame = 15;
+    b.app.frame_sel = None;
+    b.app.insert_images(true, 6, true);
+    assert_eq!(b.app.frame_count(), 30);
+    assert_eq!(jalons(&b), [0, 12, 29], "la marque reste à son image, la fin suit");
+    let c = cles(&b);
+    assert_eq!(c.last().map(|k| k.0), Some(29));
+    assert!((c.last().unwrap().1 - 300.0).abs() < 2.0, "au bout du chemin à la fin");
+    assert!(b.app.layers()[0].trajectoire.is_some(), "la trajectoire reste");
+    // Recalculer d'après la trajectoire ne bouge rien.
+    b.app.trajectoire_recalculer(0);
+    assert_eq!(jalons(&b), [0, 12, 29]);
+    assert_eq!(cles(&b).len(), 30);
+    // Quatre images retirées avant le départ ne se peut pas (il est à 0) ; quatre retirées entre la marque et la fin (20 à 24), la
+    // suite reculant : la fin passe à 25, la marque reste.
+    b.app.hole = crate::images::Hole::FromRight;
+    b.app.frame_sel = Some((20, 24));
+    b.app.delete_images(true);
+    assert_eq!(b.app.frame_count(), 26);
+    assert_eq!(jalons(&b), [0, 12, 25]);
+    // Ctrl+Z deux fois : tout revient.
+    b.app.undo();
+    b.app.undo();
+    assert_eq!((b.app.frame_count(), jalons(&b)), (24, vec![0, 12, 23]));
+    // Clés d'images : les dessins posés suivent avec leurs images, le modèle dit la même chose qu'eux.
+    let mut b = banc();
+    b.app.traj.cles_propose = Cles::Images;
+    let source = dessiner_le_depart(&mut b);
+    tracer_le_chemin(&mut b);
+    marquer_le_milieu(&mut b);
+    let t = b.app.layers()[0].trajectoire.clone().unwrap();
+    let (milieu, bout) = (t.dessins[1].dessin, t.dessins[2].dessin);
+    assert_eq!(jalons(&b), [0, 12, 23]);
+    b.app.cur_frame = 6;
+    b.app.frame_sel = None;
+    b.app.insert_images(true, 6, true);
+    assert_eq!(jalons(&b), [0, 18, 29], "la marque et la fin ont suivi les images");
+    let l = &b.app.layers()[0];
+    assert_eq!((l.cel_at(0), l.cel_at(18), l.cel_at(29)), (Some(source), Some(milieu), Some(bout)), "les dessins sont là où le modèle les dit");
+    assert_eq!(l.cel_at(8), None, "les images insérées sont vides, comme demandé");
+    assert_eq!(l.trajectoire.as_ref().unwrap().dessins.len(), 3);
+    // Recalculer repose les mêmes dessins aux mêmes images (et comble le vide inséré par le dessin du départ).
+    b.app.trajectoire_recalculer(0);
+    let l = &b.app.layers()[0];
+    assert_eq!((l.cel_at(0), l.cel_at(8), l.cel_at(18), l.cel_at(29)), (Some(source), Some(source), Some(milieu), Some(bout)));
+    assert_eq!(l.trajectoire.as_ref().unwrap().dessins.iter().map(|d| d.dessin).collect::<Vec<_>>(), vec![source, milieu, bout]);
+}
+
+#[test]
+fn with_the_option_the_drawing_turns_with_the_path_copies_are_rotated_and_keys_carry_the_angle() {
+    let mut b = banc();
+    b.app.traj.cles_propose = Cles::Images;
+    b.app.traj.tourne_propose = true;
+    let source = dessiner_un_trait_couche(&mut b);
+    let boite = b.app.doc.cels[&source].vector.as_ref().unwrap().elements[0].bounds();
+    assert!(boite.width() > 55.0 && boite.height() < 12.0, "un trait couché : {boite:?}");
+    tracer_une_equerre(&mut b);
+    let t = b.app.layers()[0].trajectoire.clone().expect("un chemin");
+    assert!(t.tourne, "le réglage proposé est pris");
+    assert_eq!(t.dessins.len(), 2, "le départ et l'arrivée");
+    assert_eq!(t.dessins[0].dessin, source, "au départ, le dessin d'origine, droit");
+    assert!((t.dessins[1].angle - 90.0).abs() < 8.0, "à l'arrivée, le chemin descend : un quart de tour, {}", t.dessins[1].angle);
+    // La copie de l'arrivée est debout : tournée autour du départ du trait (50, 150) puis portée au bout du chemin (150, 220), ses
+    // points vont de (150, 230) à (150, 290) à peu près.
+    let copie = t.dessins[1].dessin;
+    assert_ne!(copie, source);
+    let bc = b.app.doc.cels[&copie].vector.as_ref().unwrap().elements[0].bounds();
+    assert!(bc.height() > 55.0 && bc.width() < 20.0, "debout maintenant : {bc:?}");
+    assert!((bc.center().x - 150.0).abs() < 8.0 && (bc.center().y - 260.0).abs() < 8.0, "{bc:?}");
+    assert_eq!(b.app.layers()[0].cel_at(23), Some(copie));
+    assert_eq!(derniere_etape(&b), "Trajectoire");
+    // Enregistré, relu : la rotation revient (format 50).
+    let dir = std::env::temp_dir().join(format!("feanor-trajectoire-tourne-{}-{:?}", std::process::id(), std::thread::current().id()));
+    std::fs::remove_dir_all(&dir).ok();
+    std::fs::create_dir_all(&dir).unwrap();
+    let manifest = dir.join("T.shot");
+    crate::project::save(&b.app.doc, &manifest, &mut Default::default()).unwrap();
+    let texte = std::fs::read_to_string(&manifest).unwrap();
+    assert!(texte.contains("\"tourne\": true") || texte.contains("\"tourne\":true"), "{}", texte.lines().filter(|l| l.contains("tourne")).collect::<Vec<_>>().join(" / "));
+    let back = crate::project::load(&manifest).unwrap().doc;
+    let tr = back.panels[0].layers[0].trajectoire.as_ref().unwrap();
+    assert!(tr.tourne && (tr.dessins[1].angle - t.dessins[1].angle).abs() < 1e-3);
+    std::fs::remove_dir_all(&dir).ok();
+    // Clés d'interpolation : chaque clé porte l'angle du chemin, le point d'ancrage reste sur le chemin.
+    let snap = b.app.snapshot();
+    b.app.layers_mut()[0].trajectoire.as_mut().unwrap().cles = Cles::Interpolation;
+    b.app.trajectoire_recalculer(0);
+    b.app.commit_named(snap, "Sorte des clés de la trajectoire");
+    let l = &b.app.layers()[0];
+    assert_eq!(l.pos_keys.len(), 24);
+    assert_eq!(l.pos_keys[0].t.angle, 0.0, "droit au départ");
+    assert!((l.pos_keys[23].t.angle - 90.0).abs() < 8.0, "{}", l.pos_keys[23].t.angle);
+    let centre = b.app.doc.stage_center();
+    let au_bout = l.pose(23).affine(centre).apply(pos2(50.0, 150.0));
+    assert!((au_bout.x - 150.0).abs() < 0.5 && (au_bout.y - 220.0).abs() < 0.5, "le départ du trait, tourné, est au bout du chemin : {au_bout:?}");
+    // Le chemin tourne d'un coup dans le coin : l'angle y change vite (c'est voulu), mais toujours dans le même sens, jamais d'un tour.
+    assert!(l.pos_keys.windows(2).all(|w| { let d = w[1].t.angle - w[0].t.angle; (-2.0..95.0).contains(&d) }), "l'angle tourne dans un seul sens, sans faire le tour : {:?}", l.pos_keys.iter().map(|k| k.t.angle.round()).collect::<Vec<_>>());
+    assert!((0..24).all(|f| l.cel_at(f) == Some(source)), "les copies sont parties");
+    // Sans l'option : les clés ne tournent plus.
+    let snap = b.app.snapshot();
+    b.app.layers_mut()[0].trajectoire.as_mut().unwrap().tourne = false;
+    b.app.trajectoire_recalculer(0);
+    b.app.commit_named(snap, "Le dessin ne tourne plus avec le chemin");
+    assert!(b.app.layers()[0].pos_keys.iter().all(|k| k.t.angle == 0.0));
+    assert_eq!(derniere_etape(&b), "Le dessin ne tourne plus avec le chemin");
+    assert!(crate::trajectoireui::TOURNE.contains("tourne"));
+}
+
+#[test]
+fn a_bitmap_is_resampled_where_the_affinity_sends_it_and_a_plain_shift_is_a_shift() {
+    use crate::raster::{Raster, TILE};
+    use crate::vector::Affine;
+    use eframe::egui::{vec2, Color32};
+    // Une barre couchée de 60 × 6 pixels, de (50, 100) à (110, 106), noire.
+    let mut r = Raster::new(400, 300);
+    for y in 100..106 {
+        for x in 50..110 {
+            let idx = r.tile_index_of(x, y);
+            r.tile_mut(idx)[(y % TILE) * TILE + x % TILE] = Color32::BLACK;
+        }
+    }
+    // Un quart de tour (sens des aiguilles, y vers le bas) autour de (50, 100) : la barre est debout, de (44, 100) à (50, 160).
+    let a = Affine::rotate_about(pos2(50.0, 100.0), std::f32::consts::FRAC_PI_2);
+    let debout = r.transformee(&a);
+    assert!(debout.get_i(47, 130).a() > 200, "au milieu de la barre debout : {:?}", debout.get_i(47, 130));
+    assert!(debout.get_i(47, 158).a() > 100, "près du bout : {:?}", debout.get_i(47, 158));
+    assert_eq!(debout.get_i(80, 103).a(), 0, "plus rien à l'ancienne place");
+    assert_eq!(debout.get_i(47, 170).a(), 0, "rien au-delà du bout");
+    assert_eq!(debout.get_i(60, 130).a(), 0, "rien à côté");
+    // Un demi-pixel de décalage se voit dans les bords adoucis, jamais au-delà d'un pixel.
+    assert!(debout.get_i(42, 130).a() == 0 && debout.get_i(52, 130).a() == 0);
+    // Une translation entière : exactement `decalee`.
+    let d = r.transformee(&Affine::translate(vec2(30.0, -20.0)));
+    let e = r.decalee(30, -20);
+    for (x, y) in [(80, 80), (139, 85), (79, 80), (140, 80), (100, 79), (100, 86)] {
+        assert_eq!(d.get_i(x, y), e.get_i(x, y), "({x}, {y})");
+    }
+    // Hors de la feuille aussi (la toile infinie) : poussée à gauche de la feuille, la barre est là.
+    let dehors = r.transformee(&Affine::translate(vec2(-100.0, 0.0)));
+    assert!(dehors.get_i(-30, 103).a() > 200);
+    // Une affinité écrasée : rien.
+    assert!(r.transformee(&Affine { a: 0.0, b: 0.0, c: 0.0, d: 0.0, tx: 0.0, ty: 0.0 }).is_blank());
+}
+
 #[test]
 fn the_tool_is_refused_in_the_vignettes_and_has_its_action_its_slot_and_its_hint() {
     assert!(!Tool::Trajectoire.permis_dans_les_vignettes());

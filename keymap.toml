@@ -780,7 +780,8 @@ source = "proposition (second raccourci)"
 
 [[raccourci]]
 action = "panneau.dupliquer"
-touches = []
+touches = ["Ctrl+Maj+D"]
+source = "proposition (2026-11-08, Anthony : une touche pour dupliquer un plan ; Ctrl+D duplique un dessin, Ctrl+Maj+D le plan)"
 
 [[raccourci]]
 action = "scene.nouvelle"
@@ -1750,9 +1751,11 @@ source = "sans touche à l'origine"
 
 # ------------------------------------------------------------------------------------ Caméra
 
+# Maj+C : C comme caméra (C seul tourne la vue ; T, la caméra des Vignettes, reste à part).
 [[raccourci]]
 action = "outil.camera"
-touches = []
+touches = ["Maj+C"]
+source = "proposition (2026-11-08, Anthony : une touche pour l'outil Caméra)"
 
 [[raccourci]]
 action = "outil.transformer"
@@ -1774,9 +1777,11 @@ touches = []
 action = "camera.cle_debut"
 touches = []
 
+# Maj+K : K comme clé (K seul arrête la lecture au montage ; F5 pose une clé de dessin).
 [[raccourci]]
 action = "camera.cle_ici"
-touches = []
+touches = ["Maj+K"]
+source = "proposition (2026-11-08, Anthony : une touche pour la clé de caméra à la tête de lecture)"
 
 [[raccourci]]
 action = "camera.cle_fin"
