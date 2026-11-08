@@ -5,6 +5,12 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-08
 
+- Fusion dans main (aa03f7f) de `planche-mere`, à la demande d'Anthony (« Oui, fusionne »), après la fusion de `vignettes-selection` par l'autre
+  session (6bcade3) : la planche-mère (partie 126, format de projet 51), sans sa partie Vignettes, qui vient dans un chantier suivant. Essai
+  ajouté à la demande de l'autre session : un trait d'un dessin partagé montré par deux cases est pris une seule fois, le déplacer le déplace dans
+  les deux cases, rien n'est dupliqué (limite : le lasso ne le trouve que dans la première case). Vérificateur sur la branche à jour de main :
+  4259 réussis sur 4259, aucun avertissement. `feanor.exe` de main reconstruit ; le FEANOR d'Anthony, ouvert à 17:53, a été fermé sans
+  enregistrer pour cela (sa règle). L'autre session fabrique le zip portable sur cet exe.
 - La planche-mère (idée 4 d'Anthony ; branche `planche-mere`, chantier `Chantiers\planche-mere`, partie 126 ; conception validée par ses trois
   réponses : tout le plan, Storyboard d'abord, « Réutiliser » dans les commandes et rien de plus dans Aide) : un calque porte une clé de
   partage, ses exemplaires dans plusieurs plans montrent les mêmes dessins, chacun sous la caméra de son plan (`partage.rs`,
