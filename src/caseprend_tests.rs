@@ -137,3 +137,34 @@ fn the_continuity_bar_also_takes_the_paper() {
     assert_eq!(parts_montrees(&b), (el, papier), "le papier a repris son bout, les dessins sont comme avant");
     assert_eq!(b.app.doc.panels[1].marks.len(), 0);
 }
+
+/// Une case née **par le bout d'un trait** (partie 113, `horschamp_creer_cases`) reprend elle aussi les traits du papier qui passaient là (partie 127,
+/// suite de la partie 128) : le bout d'un trait d'avant entre dans son plan, dans l'étape du trait qui la fait naître.
+#[test]
+fn a_case_born_by_the_tip_of_a_stroke_takes_the_paper_too() {
+    let Some(mut b) = planche(des_plans(2, false), 6, 1.0) else { return println!("pas de carte graphique") };
+    let l = b.app.board_layout();
+    let xf = b.app.vignettes.xf;
+    let (c1, p1) = (xf.rect(l.cards[1].thumb), xf.rect(l.empty[1]));
+    // Comme plus haut : le bout au-dessus de la deuxième case pâle reste sur le papier.
+    tracer(&mut b, c1.center(), p1.center());
+    repos(&mut b);
+    let (_, papier) = parts(&b);
+    assert!(papier >= 1, "un bout sur le papier : {:?}", parts(&b));
+    let etapes = b.app.history.undo_len();
+    // Un trait du plan né jusque dans la case pâle qui est sous ce bout : son bout la fait naître.
+    let l2 = b.app.board_layout();
+    let (c2, p) = (xf.rect(l2.cards[2].thumb), xf.rect(l2.empty[0]));
+    let de = c2.center() + vec2(0.0, 25.0);
+    let a = p.center() + vec2(-p.width() * 0.2, 25.0);
+    tracer(&mut b, de, a);
+    repos(&mut b);
+    println!("plans {} ; parts {:?} ; {}", b.app.doc.panels.len(), parts_montrees(&b), b.app.status);
+    assert_eq!(b.app.doc.panels.len(), 4, "le bout du trait a fait naître la case");
+    assert_eq!(parts_montrees(&b).1, 0, "la case née par le bout d'un trait a repris le bout du papier");
+    assert!(elements(&b, 3) >= 2, "son plan porte le bout repris et le bout du trait neuf ({})", elements(&b, 3));
+    assert_eq!(b.app.history.undo_len(), etapes + 1, "une seule étape : {:?}", b.app.history.names().0);
+    b.app.undo();
+    repos(&mut b);
+    assert_eq!((b.app.doc.panels.len(), parts(&b).1), (3, papier), "annuler rend le papier");
+}

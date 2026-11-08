@@ -43,6 +43,21 @@ const PRISE_PX: f32 = 6.0;
 const PIVOT_SNAP: f32 = 6.0;
 const LASSO_MAX: usize = 4000;
 
+#[cfg(test)]
+thread_local! {
+    /// Essais : la mesure de la limite lève aussi la borne d'arrivée.
+    pub(crate) static SANS_LIMITE_D_ARRIVEE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Le plus de tuiles qu'un geste peut poser à l'arrivée.
+fn limite_arrivee() -> usize {
+    #[cfg(test)]
+    if SANS_LIMITE_D_ARRIVEE.with(|c| c.get()) {
+        return usize::MAX;
+    }
+    2 * LIMITE_TUILES
+}
+
 /// Pourquoi une sélection ne suit pas le trait entier.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) enum Echec {
@@ -797,7 +812,8 @@ impl App {
                 if ![x0, y0, x1, y1].iter().all(|v| v.is_finite() && v.abs() < monde) {
                     return Err("Ce geste mène des pixels trop loin de la feuille de leur plan : il est refusé, rien n'a bougé.".into());
                 }
-                if tuiles_arrivee > LIMITE_TUILES {
+                // (Deux fois la limite : une sélection permise, tournée ou un peu agrandie, se repose ; une mise à l'échelle démesurée, non.)
+                if tuiles_arrivee > limite_arrivee() {
                     return Err("Ce geste agrandit trop la sélection pour la reposer : il est refusé, rien n'a bougé.".into());
                 }
                 let meme = (t.a - 1.0).abs() < 0.005 && (t.d - 1.0).abs() < 0.005 && t.b.abs() < 1e-4 && t.c.abs() < 1e-4;

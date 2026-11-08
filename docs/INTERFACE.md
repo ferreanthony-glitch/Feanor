@@ -9006,7 +9006,7 @@ Au vrai geste (Ctrl + lasso, Ctrl + glisser, la gomme), la planche peinte sur la
 10. **La limite** : juste en dessous, juste au-dessus, et au vrai geste sur 30 cases pleines.
 11. `planchebitmap_tests.rs` : le dossier écrit puis relu donne exactement les mêmes pixels ; vidé, il part ; un index d'une version plus récente n'est ni réécrit ni effacé.
 12. **Une copie de `TEST PELURE_effets`** (`a_copy_of_a_real_project_…`, ignoré d'office, `FEANOR_PROJET_ESSAI`) : elle s'ouvre (le seul avertissement est celui, d'avant, des crayonnés), s'enregistre sans dossier `planche_bitmap/` et se rouvre avec les mêmes annotations. Ce projet est vectoriel : le dessin bitmap n'y a pas été essayé.
-13. **La suite complète** : 4 265 essais, aucun échec.
+13. **La suite complète** : 4 265 essais, aucun échec ; après la relecture et la fusion de main : **4 295 essais, aucun échec** (`retours_aplat_tests::a_fill_stays_on_screen…`, sans rapport avec ce chantier, a échoué une fois lancé seul et passe dans la suite : à surveiller).
 
 | Essai rouge | Sur 6bcade3 (avant) | Après |
 |---|---|---|
@@ -9016,7 +9016,7 @@ Au vrai geste (Ctrl + lasso, Ctrl + glisser, la gomme), la planche peinte sur la
 
 ### Relecture (même jour) : ce qui était faux, et les essais
 
-Une relecture indépendante de 2ca9a86, puis la fusion de main (planche-mère, **format 51** ; la couche bitmap n'y change rien, son dossier reste à part). Chaque point a son essai ; « rouge » : le défaut montré par l'essai.
+Une relecture indépendante de 2ca9a86, puis la fusion de main (bcd4ff7 : planche-mère, **format 51**, cases-prennent, menus-exports ; la couche bitmap ne change pas le format, son dossier reste à part). Chaque point a son essai ; « rouge » : le défaut montré par l'essai.
 
 | Point | Réel ? | Ce qui est fait | Essai |
 |---|---|---|---|
@@ -9035,7 +9035,9 @@ Une relecture indépendante de 2ca9a86, puis la fusion de main (planche-mère, *
 | Export : tous les morceaux, un bloc de 1 Mo par bloc | Oui | Seuls ceux du cadre exporté et leurs blocs dans l'image ; les sommes d'un bloc à la taille de ses tuiles | (export de la planche) |
 | Une coupure pendant l'enregistrement (dessins écrits, index pas encore) | **Oui, possible** pour un déplacement d'une case vers la planche | La couche s'écrit **avant** les dessins, ses images inutiles partent **après** le manifeste : au pire un pixel est à deux endroits, jamais nulle part | (lu dans le code) |
 | La planche change de disposition pendant un choix actif | Oui | Le choix est levé (« La planche a changé : le choix est levé. ») | (lu dans le code) |
+| Une case née par le bout d'un trait (partie 113) reprend-elle le papier (partie 128) ? | Non, c'était déjà le cas | `horschamp_creer_cases` passe par `board_create_from_empty`, qui appelle `cases_nees_prennent_le_papier` dans l'étape du trait ; commenté là | `caseprend_tests::a_case_born_by_the_tip_of_a_stroke_takes_the_paper_too` : le bout d'un trait d'avant entre dans le plan né, une étape, Ctrl+Z rend le papier. **Le bitmap : non fait** (un trait bitmap ne fait pas naître de case ; la reprise passe par la sélection vectorielle) : suite à faire, reprendre les morceaux de la couche bitmap par la sélection bitmap |
 
+**Mesures d'après la relecture** (`measure_the_memory_…`, 30 cases pleines, même machine, chargée par d'autres chantiers) : le lasso tel qu'au vrai geste, **refusé pour la limite en 303 ms** (avant : tout parcouru, 597 ms, puis refusé) ; limite levée : choisir 0,9 s, déplacer 9,2 s, tourner 16,3 s, pic + 1 023 Mo. La place décidée pixel par pixel coûte un peu plus qu'avant ; à la limite (31,5 Mpx), ≈ 2,6 s pour déplacer et ≈ 4,7 s pour tourner. La limite est gardée ; c'est le temps qui borne, à toi de dire s'il faut la baisser. La borne d'arrivée est de deux fois la limite (une sélection permise, tournée ou un peu agrandie, se repose).
 **La compression des empreintes**, mesurée (`outside_the_cases_…`, un trait à travers trois cases) : 1 bit par pixel 59 Ko en mémoire, **par plages 13 Ko** ; sur le disque, PNG RVBA d'aujourd'hui 26 Ko, **PNG en niveaux de gris 14 Ko**. Non fait : les plages demandent de réécrire `Masque` et toutes ses lectures ; à proposer comme un petit chantier à part (gain ≈ 4,5 fois en mémoire). La PNG en gris est simple et sûre (gain ≈ 1,8 fois sur le disque), mais change le format des images d'empreinte : laissée pour ne pas multiplier les formats avant la fusion.
 
 ### Ce qui reste

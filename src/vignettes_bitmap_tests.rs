@@ -491,6 +491,7 @@ fn trente_pleines() -> Option<(Banc, Pos2, Pos2, eframe::egui::Rect)> {
 fn measure_the_memory_of_a_huge_selection() {
     // Ce n'est pas un essai de réussite : la mesure de la limite (partie 127). Lancée seule : `--test-threads=1`, pour que le pic soit le sien.
     let Some((mut b, _, _, tout)) = trente_pleines() else { return println!("pas de carte graphique") };
+    crate::vignetteselbmp::SANS_LIMITE_D_ARRIVEE.with(|c| c.set(true));
     let (ws0, prive0) = crate::lourd_tests::memoire();
     let pic0 = crate::lourd_tests::memoire_pic();
     // Un lasso qui entoure les 30 cases : bien au-delà de la limite. Pour mesurer ce que coûterait une sélection de cette taille, la limite est levée le
@@ -512,6 +513,7 @@ fn measure_the_memory_of_a_huge_selection() {
     let debut = std::time::Instant::now();
     b.app.selb_mesurer_un_lacher(&l, pieces.clone(), &crate::planchebitmap::A64::echelle_decalage(1.0, 40.0 / xf.zoom as f64, 0.0));
     let t_lacher = debut.elapsed();
+    assert!(!b.app.status.contains("refusé"), "la mesure doit être celle d'un vrai lâcher : {}", b.app.status);
     let (ws2, prive2) = crate::lourd_tests::memoire();
     let pic = crate::lourd_tests::memoire_pic();
     println!(
@@ -530,6 +532,7 @@ fn measure_the_memory_of_a_huge_selection() {
     let debut = std::time::Instant::now();
     b.app.selb_mesurer_un_lacher(&l, pieces, &rot);
     let t_rot = debut.elapsed();
+    assert!(!b.app.status.contains("refusé"), "{}", b.app.status);
     let (ws4, _) = crate::lourd_tests::memoire();
     println!("MESURE tourner de 10° : lâcher {:.0} ms ; ensemble de travail {ws3:.0} -> {ws4:.0} Mo, pic {:.0} Mo", t_rot.as_secs_f64() * 1000.0, crate::lourd_tests::memoire_pic());
 }

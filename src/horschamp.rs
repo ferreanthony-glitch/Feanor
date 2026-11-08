@@ -861,6 +861,8 @@ impl App {
         }
         let (cur_id, cur_frame, cur_layer) = (self.doc.panels[self.cur_panel].id, self.cur_frame, self.cur_layer);
         let (created, joins) = (self.vignettes.created, std::mem::take(&mut self.vignettes.empty_joins));
+        // (La case née reprend ici les traits du papier qui passaient dans son champ : `board_create_from_empty` appelle
+        // `cases_nees_prennent_le_papier`, partie 128, dans l'étape du trait ; essai `caseprend_tests::a_case_born_by_the_tip_of_a_stroke_…`.)
         let ok = self.board_create_from_empty(e);
         self.vignettes.created = created;
         self.vignettes.empty_joins = joins;
