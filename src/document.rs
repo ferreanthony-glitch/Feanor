@@ -2629,7 +2629,19 @@ impl Document {
         }
         self.copier_griffonnages(&self.panels[index].layers.clone(), &mut copies);
         relink_copies(&mut panel.layers, &old_ids, &copies);
+        self.renumeroter_les_copies(copies.values().copied());
         panel
+    }
+
+    /// Les dessins copiés `cels` (un plan dupliqué ou collé) : leurs traits prennent des numéros neufs (partie 125). Une copie n'est pas une part du trait
+    /// d'origine. (Pas dans `duplicate_cel` : la copie d'un dessin tenu, coupée à une image, est le même dessin à la même place, et ses caches suivent son
+    /// contenu.)
+    pub(crate) fn renumeroter_les_copies(&mut self, cels: impl Iterator<Item = CelId>) {
+        for c in cels {
+            if let Some(v) = self.cels.get_mut(&c).and_then(|c| c.vector.as_mut()) {
+                crate::vector::renumeroter(&mut v.elements);
+            }
+        }
     }
 
     /// Avant `relink_copies` : les calques de couleur de `layers` (les calques d'origine) dont un dessin de peinture a été
@@ -2721,6 +2733,7 @@ impl Document {
             }
             self.copier_griffonnages_avec(&panel.layers.clone(), &mut copies, |d, g| clip.cels.get(&g).map(|c| d.add_cel(c.clone())));
             relink_copies(&mut panel.layers, &old_ids, &copies);
+            self.renumeroter_les_copies(copies.values().copied());
             pasted.push(panel);
         }
         Some(self.insert_and_normalize(index + 1, pasted))

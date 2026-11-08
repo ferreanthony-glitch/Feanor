@@ -187,7 +187,7 @@ fn reglage(lib: &BrushLibrary, nom: &str, taille: f32) -> BrushSettings {
 /// Un trait vectoriel texturé (comme un lâcher du pinceau le pose), le long de `path`.
 fn element(lib: &BrushLibrary, s: &BrushSettings, color: [u8; 3], path: &[Pt]) -> Element {
     let points = path.iter().map(|(p, pr, _)| VPoint { x: p.x, y: p.y, r: (s.size * 0.5 * if s.pressure_size { pr.max(0.2) } else { 1.0 }).max(0.5) }).collect();
-    let trace = Trace { pressure: path.iter().map(|p| p.1).collect(), time: path.iter().map(|p| p.2).collect(), feel: Some(Toucher::default()), secondary: None, cache: Default::default() };
+    let trace = Trace { pressure: path.iter().map(|p| p.1).collect(), time: path.iter().map(|p| p.2).collect(), feel: Some(Toucher::default()), secondary: None, lien: None, cache: Default::default() };
     Element::Stroke { points, color, opacity: s.opacity, hardness: s.hardness, brush: lib.for_vector(s).map(Box::new), trace }
 }
 

@@ -363,6 +363,6 @@ pub fn trait_texture(w: usize, h: usize) -> crate::vector::Element {
         st.add_point_at(&mut raster, p, pr, t, &mut dirty);
     }
     st.finish(&mut raster, &mut dirty);
-    let trace = Trace { pressure: st.path_pressure.clone(), time: st.path_time.clone(), feel: Some(Toucher::default()), secondary: None, cache: Default::default() };
+    let trace = Trace { pressure: st.path_pressure.clone(), time: st.path_time.clone(), feel: Some(Toucher::default()), secondary: None, lien: None, cache: Default::default() };
     Element::Stroke { points: st.path.clone(), color: [200, 30, 30], opacity: s.opacity, hardness: s.hardness, brush: lib.for_vector(&s).map(Box::new), trace }
 }

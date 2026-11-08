@@ -149,6 +149,8 @@ pub(crate) struct Suivi {
     pub a: f32,
     /// Le nombre d'étapes d'annulation avant le geste.
     pub base_len: usize,
+    /// La marque de l'historique avant le geste (`History::marque`) : les étapes du trait se regroupent depuis elle, même historique plein.
+    pub marque: u64,
     /// Le nombre d'éléments du dessin courant avant le geste (calque vectoriel).
     pub elements_avant: usize,
 }
@@ -158,7 +160,10 @@ pub(crate) struct Suivi {
 pub(crate) enum Matiere {
     /// Un calque vectoriel : le dernier élément du dessin ; `derriere` : le premier, un trait peint derrière (« Peindre derrière ») est posé sous les autres
     /// éléments (`commit_vector_stroke`). Il se répartit comme un autre : sans cela, il restait entier dans le plan d'origine, coupé au bord de son champ.
-    Vecteur { derriere: bool },
+    /// `rang` : un élément déjà posé, à cette place du dessin, à répartir de nouveau (la sélection des Vignettes qui a bougé, partie 125) ; rien : le
+    /// trait qui vient d'être tracé.
+    /// `places` : où ses parts se posent dans les dessins d'où elles venaient (le trait déplacé y garde son rang) ; ailleurs, dessus, ou dessous s'il est peint derrière.
+    Vecteur { derriere: bool, rang: Option<usize>, places: Vec<(CelId, usize)> },
     /// Un calque bitmap : les tuiles d'avant le trait, et son tracé (ligne médiane, rayon), sa couleur, son opacité ; la recette du pinceau
     /// (son réglage, et l'appui et l'instant de chaque point du tracé, vides s'ils ne le suivent pas) pour que la part qui sort de la case
     /// garde la texture du pinceau sur la planche (`horschamptex.rs`).
@@ -215,6 +220,15 @@ pub(crate) enum Refus {
 /// Le code d'une part qui tombe dans l'image d'une case qui ne peut pas la recevoir : `DESSUS + k` pour la case `k`, `DESSUS + nombre de cases + i`
 /// pour la case écartée `i` (`proprietaire_cadre`).
 pub(crate) const DESSUS: usize = 1 << 30;
+
+/// Un numéro neuf pour les parts d'un trait (partie 125) : unique dans le projet en pratique (l'heure en nanosecondes mêlée à un compteur), enregistré.
+pub(crate) fn nouveau_lien() -> u64 {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COMPTEUR: AtomicU64 = AtomicU64::new(1);
+    let n = COMPTEUR.fetch_add(1, Ordering::Relaxed);
+    let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_nanos() as u64);
+    (t ^ n.wrapping_mul(0x9E37_79B9_7F4A_7C15)).max(1)
+}
 
 /// La case du code `q` (`DESSUS`…).
 pub(crate) fn case_du_code(layout: &BoardLayout, q: usize) -> Option<&CardPlace> {
@@ -529,9 +543,9 @@ impl App {
         let (p0, p1, p2) = (xf.to_board(self.layer_to_screen(pos2(0.0, 0.0))), xf.to_board(self.layer_to_screen(pos2(1.0, 0.0))), xf.to_board(self.layer_to_screen(pos2(0.0, 1.0))));
         let aff = Aff { a: p1.x - p0.x, b: p1.y - p0.y, c: p2.x - p0.x, d: p2.y - p0.y, tx: p0.x, ty: p0.y };
         let deja = self.vignettes.suivi.as_ref().filter(|s| s.carte == carte);
-        let (base_len, elements_avant, pose_deja) = match deja {
-            Some(s) => (s.base_len, s.elements_avant, Some(s.pose)),
-            None => (self.history.undo_len(), self.cel_here().and_then(|c| self.drawing(c)).map_or(0, |d| d.elements.len()), None),
+        let (base_len, marque, elements_avant, pose_deja) = match deja {
+            Some(s) => (s.base_len, s.marque, s.elements_avant, Some(s.pose)),
+            None => (self.history.undo_len(), self.history.marque(), self.cel_here().and_then(|c| self.drawing(c)).map_or(0, |d| d.elements.len()), None),
         };
         if deja.is_none() {
             self.vignettes.refus_dits.clear();
@@ -544,7 +558,7 @@ impl App {
             return;
         };
         let a = if self.view.persp.is_some() { self.layer_zoom() / xf.zoom.max(1e-6) } else { pose.echelle_en(Pos2::ZERO) };
-        self.vignettes.suivi = Some(Suivi { carte, aff, pose, a, base_len, elements_avant });
+        self.vignettes.suivi = Some(Suivi { carte, aff, pose, a, base_len, marque, elements_avant });
     }
 
     /// La pose du dessin du calque courant, d'après les quatre coins de la feuille vus par la vue courante (une homographie les porte tous).
@@ -660,7 +674,7 @@ impl App {
         if !self.board_shown() {
             return;
         }
-        self.vignettes.fini = Some(Fini { suivi, cel, matiere: Matiere::Vecteur { derriere } });
+        self.vignettes.fini = Some(Fini { suivi, cel, matiere: Matiere::Vecteur { derriere, rang: None, places: Vec::new() } });
     }
 
     /// Répartit le trait qui vient de finir : sa partie dans le champ de sa case reste, celle dans le champ d'une autre case va à son plan, le
@@ -707,10 +721,8 @@ impl App {
         }
         let fait = fait || cree;
         if fait {
-            let n = self.history.undo_len().saturating_sub(fini.suivi.base_len);
-            if n >= 2 {
-                self.history.merge_last(n);
-            }
+            // (Regroupées depuis la marque : un historique plein, qui oublie sa plus vieille étape à chaque ajout, ne fausse pas le compte.)
+            self.history.regrouper_depuis(fini.suivi.marque);
             self.modified = true;
             self.renderer.invalidate_all();
             // Le trait tel qu'il a été tracé reste peint jusqu'à ce que les dessins et les vignettes qui le reçoivent soient prêts, en fond : rien
@@ -723,11 +735,32 @@ impl App {
         fait
     }
 
+    /// L'élément `rang` du dessin `cel`, montré par la case `k`, réparti comme un trait qui vient d'être tracé (partie 125 : la sélection des Vignettes qui a
+    /// bougé) : sa part dans le champ de la case reste, le reste va aux autres cases et à la planche, avec les mêmes règles et les mêmes refus. L'appelant
+    /// regroupe les étapes d'annulation. Vrai si quelque chose a bougé.
+    pub(crate) fn horschamp_repartir_element(&mut self, layout: &BoardLayout, k: usize, cel: CelId, rang: usize, derriere: bool, places: &[(CelId, usize)]) -> bool {
+        let Some(c) = layout.cards.get(k) else { return false };
+        let Some(pose) = pose_de_la_case(&self.doc, layout, k) else { return false };
+        // (Une caméra qui n'est pas droite n'a pas d'affinité : la répartition passe alors par la pose, comme d'une case à une autre.)
+        let aff = aff_de_la_case(&self.doc, layout, k).unwrap_or(Aff { a: 0.0, b: 0.0, c: 0.0, d: 0.0, tx: 0.0, ty: 0.0 });
+        let p0 = match self.drawing(cel).and_then(|d| d.elements.get(rang)) {
+            Some(Element::Stroke { points, .. }) => points.first().map_or(Pos2::ZERO, |p| p.pos()),
+            _ => return false,
+        };
+        let a = pose.echelle_en(p0);
+        let fini = Fini { suivi: Suivi { carte: c.id, aff, pose, a, base_len: self.history.undo_len(), marque: self.history.marque(), elements_avant: 0 }, cel, matiere: Matiere::Vecteur { derriere, rang: Some(rang), places: places.to_vec() } };
+        let champs = champs(layout, self.settings.vignettes.debord_fraction());
+        self.partager_vecteur(layout, &fini, k, &champs)
+    }
+
     /// Le rang, dans son dessin, du trait vectoriel qui vient de finir : le dernier élément, ou le premier s'il a été peint derrière. Rien s'il n'y a rien à
     /// répartir (dessin disparu, rien de neuf, pas un trait).
     fn rang_du_trait(&self, fini: &Fini) -> Option<usize> {
-        let Matiere::Vecteur { derriere } = fini.matiere else { return None };
+        let Matiere::Vecteur { derriere, rang, .. } = fini.matiere else { return None };
         let d = self.drawing(fini.cel)?;
+        if let Some(i) = rang {
+            return matches!(d.elements.get(i), Some(Element::Stroke { .. })).then_some(i);
+        }
         if d.elements.len() <= fini.suivi.elements_avant {
             return None;
         }
@@ -819,7 +852,7 @@ impl App {
 
     /// La case `k` peut-elle recevoir une part du trait, et sur quel calque : le calque de même sorte que celui où l'on dessine, ni verrouillé, ni
     /// masqué, ni transformé, quelle que soit la caméra de la case (partie 122). Sinon, ce qui l'en empêche.
-    fn case_recoit(&self, layout: &BoardLayout, k: usize, genre: LayerKind) -> Result<usize, Refus> {
+    pub(crate) fn case_recoit(&self, layout: &BoardLayout, k: usize, genre: LayerKind) -> Result<usize, Refus> {
         let c = layout.cards.get(k).ok_or(Refus::Camera)?;
         if pose_de_la_case(&self.doc, layout, k).is_none() {
             return Err(Refus::Camera);
@@ -897,7 +930,7 @@ impl App {
     }
 
     /// Le dessin de la case `k` sur son calque `rang`, créé au besoin (comme `ensure_plain_cel`).
-    fn cel_de_la_case(&mut self, layout: &BoardLayout, k: usize, rang: usize) -> Option<CelId> {
+    pub(crate) fn cel_de_la_case(&mut self, layout: &BoardLayout, k: usize, rang: usize) -> Option<CelId> {
         let c = layout.cards[k];
         let layer = self.doc.panels.get(c.panel)?.layers.get(rang)?;
         if let Some(id) = layer.cel_at(c.frame) {
@@ -917,12 +950,14 @@ impl App {
     fn partager_vecteur(&mut self, layout: &BoardLayout, fini: &Fini, origine: usize, champs: &[Rect]) -> bool {
         let cel = fini.cel;
         // (Un trait peint derrière est le premier élément de son dessin, pas le dernier : il se répartit de même, et ses parts restent derrière.)
-        let derriere = matches!(fini.matiere, Matiere::Vecteur { derriere: true });
+        let derriere = matches!(fini.matiere, Matiere::Vecteur { derriere: true, .. });
         let Some(rang) = self.rang_du_trait(fini) else { return false };
         let Some(Element::Stroke { points, color, opacity, hardness, brush, trace }) = self.drawing(cel).and_then(|d| d.elements.get(rang)).cloned() else { return false };
         if points.is_empty() {
             return false;
         }
+        // Toutes les parts portent le même numéro (partie 125) : la sélection reprend le trait entier. Un trait déjà réparti garde le sien.
+        let lien = trace.lien.unwrap_or_else(nouveau_lien);
         let aligne = trace.pressure.len() == points.len() && trace.time.len() == points.len();
         let pose = fini.suivi.pose;
         let pts: Vec<Pt> = points
@@ -947,9 +982,9 @@ impl App {
             hardness,
             brush: brush.clone(),
             trace: if aligne {
-                VTrace { pressure: run.iter().map(|p| p.pressure).collect(), time: run.iter().map(|p| p.time).collect(), feel: trace.feel, secondary: trace.secondary, cache: Default::default() }
+                VTrace { pressure: run.iter().map(|p| p.pressure).collect(), time: run.iter().map(|p| p.time).collect(), feel: trace.feel, secondary: trace.secondary, lien: Some(lien), cache: Default::default() }
             } else {
-                VTrace::default()
+                VTrace { lien: Some(lien), ..VTrace::default() }
             },
         };
         // La part d'un dessin posé autrement sur la planche (un autre zoom, une autre caméra) : chaque point à la même place de la planche, l'épaisseur à
@@ -973,7 +1008,7 @@ impl App {
                 opacity,
                 hardness,
                 brush: brush.as_ref().map(|b| Box::new(crate::brush::BrushSettings { size: b.size * moyenne, ..**b })),
-                trace: VTrace { pressure: if suit { run.iter().map(|p| p.pressure).collect() } else { Vec::new() }, time: if aligne { run.iter().map(|p| p.time).collect() } else { Vec::new() }, feel: trace.feel, secondary: trace.secondary, cache: Default::default() },
+                trace: VTrace { pressure: if suit { run.iter().map(|p| p.pressure).collect() } else { Vec::new() }, time: if aligne { run.iter().map(|p| p.time).collect() } else { Vec::new() }, feel: trace.feel, secondary: trace.secondary, lien: Some(lien), cache: Default::default() },
             })
         };
         let plat = fini.suivi.aff.echelle();
@@ -1040,12 +1075,22 @@ impl App {
                 avant.push((cible, d.clone()));
             }
             let region_k = els.iter().fold(Rect::NOTHING, |r, e| r.union(e.bounds()));
+            let place = match &fini.matiere {
+                Matiere::Vecteur { places, .. } => places.iter().find(|(c, _)| *c == cible).map(|(_, i)| *i),
+                _ => None,
+            };
             if let Some(d) = self.drawing_mut(cible) {
-                // (Peint derrière : derrière le dessin de cette case aussi.)
-                if derriere {
-                    d.elements.splice(0..0, els);
-                } else {
-                    d.elements.extend(els);
+                match place {
+                    // (Le dessin d'où venait une part du trait déplacé : il y reprend son rang.)
+                    Some(i) => {
+                        let i = i.min(d.elements.len());
+                        d.elements.splice(i..i, els);
+                    }
+                    // (Peint derrière : derrière le dessin de cette case aussi.)
+                    None if derriere => {
+                        d.elements.splice(0..0, els);
+                    }
+                    None => d.elements.extend(els),
                 }
             }
             regions.push((cible, region_k));
@@ -1069,7 +1114,7 @@ impl App {
         }
         // (La part sur la planche garde la recette du pinceau : même réglage, même opacité, mêmes appuis que dans la case.)
         let recette = Recette { reglage: brush.as_deref().copied(), opacite: opacity, durete: hardness, toucher: trace.feel, couleur_b: trace.secondary };
-        let remontre = self.poser_hors_cadres(layout, sur_la_planche, color, (opacity.clamp(0.0, 1.0) * 255.0).round() as u8, Some(recette));
+        let remontre = self.poser_hors_cadres(layout, sur_la_planche, color, (opacity.clamp(0.0, 1.0) * 255.0).round() as u8, Some(recette), Some(lien));
         // La structure (calques créés, images de dessin, planche) : l'état d'avant, rangé dans l'étape du trait.
         self.history.push(snap);
         if pleine {
@@ -1083,11 +1128,12 @@ impl App {
     /// Pose sur la planche, dans le calque « Hors cadres », les tracés `traces` (points de la planche, rayon compris), par-dessus l'image de la case qu'ils
     /// recouvrent s'ils en ont une. `recette` : le pinceau du trait, qui donne sa texture à la part posée sur la planche. **L'appelant a vérifié la place
     /// libre avant de rien changer.** Le calque caché se remontre : une part neuve ne disparaît pas au lever (annuler le recache). Vrai s'il était caché.
-    fn poser_hors_cadres(&mut self, layout: &BoardLayout, traces: Vec<Course>, couleur: [u8; 3], alpha: u8, recette: Option<Recette>) -> bool {
+    fn poser_hors_cadres(&mut self, layout: &BoardLayout, traces: Vec<Course>, couleur: [u8; 3], alpha: u8, recette: Option<Recette>, lien: Option<u64>) -> bool {
         if traces.is_empty() {
             return false;
         }
         for t in traces {
+            let avant = self.doc.annotations.traces.len();
             let brosse = recette.map(|r| (r, t.appui, t.instants, t.a));
             let pose = match &t.sur {
                 Some(c) => {
@@ -1097,6 +1143,9 @@ impl App {
                 None => self.doc.annotations.ajouter_hors_cadres_brosse(layout, &t.points, couleur, alpha, brosse),
             };
             debug_assert!(pose, "la place a été vérifiée avant de retirer le trait de son dessin");
+            if let Some(t) = self.doc.annotations.traces.get_mut(avant).filter(|_| pose) {
+                t.lien = lien;
+            }
         }
         self.doc.annotations.id_hors_cadres().is_some_and(|id| self.doc.annotations.regler_visible(id, true))
     }
@@ -1269,7 +1318,7 @@ impl App {
         // 3. Ce qui est hors de tout champ : sur la planche (le tracé, rayon et couleur du trait).
         let refus_vus: Vec<usize> = runs.iter().filter_map(|(q, _)| q.filter(|q| *q >= DESSUS)).collect();
         let traces: Vec<Course> = runs.into_iter().filter(|(q, _)| q.is_none_or(|q| q >= DESSUS)).map(|(q, run)| Course { sur: q.and_then(|q| case_du_code(layout, q)).copied(), ..Course::de(&run, a_trait, suit) }).collect();
-        let remontre = self.poser_hors_cadres(layout, traces, *couleur, (alpha.clamp(0.0, 1.0) * 255.0).round() as u8, *recette);
+        let remontre = self.poser_hors_cadres(layout, traces, *couleur, (alpha.clamp(0.0, 1.0) * 255.0).round() as u8, *recette, None);
         self.history.push(snap);
         if pleine {
             self.dire_planche_pleine();

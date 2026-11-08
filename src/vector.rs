@@ -55,6 +55,11 @@ pub struct Trace {
     /// La couleur B (connexion « couleur »).
     #[serde(rename = "couleur_b", skip_serializing_if = "Option::is_none")]
     pub secondary: Option<[u8; 3]>,
+    /// Le trait dont celui-ci est une part (partie 125) : un trait tracé à travers les cases des Vignettes est réparti au lâcher, chaque part
+    /// (dans les dessins des plans, et sur la planche, `annotations::Trace::lien`) porte le même numéro. La sélection prend alors le trait entier.
+    /// Absent : un trait entier, ou d'avant la partie 125 (une version d'avant ignore le champ, sans rien perdre).
+    #[serde(rename = "lien", skip_serializing_if = "Option::is_none")]
+    pub lien: Option<u64>,
     /// Les pixels du trait rendu seul, et la transformation appliquée depuis (jamais enregistrés).
     #[serde(skip)]
     pub cache: StrokeCache,
@@ -125,10 +130,30 @@ fn de_time<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<f64>, D::Error> {
         .collect())
 }
 
+/// Les traits de `elements` prennent des numéros neufs (une copie, partie 125) : les parts d'un même numéro en gardent un commun, sans lien avec l'original.
+pub fn renumeroter(elements: &mut [Element]) {
+    let mut neufs: Vec<(u64, u64)> = Vec::new();
+    for e in elements {
+        if let Element::Stroke { trace, .. } = e {
+            if let Some(l) = trace.lien {
+                let n = match neufs.iter().find(|(a, _)| *a == l) {
+                    Some(&(_, n)) => n,
+                    None => {
+                        let n = crate::horschamp::nouveau_lien();
+                        neufs.push((l, n));
+                        n
+                    }
+                };
+                trace.lien = Some(n);
+            }
+        }
+    }
+}
+
 impl Trace {
     /// Rien à enregistrer (les formes, les vieux traits).
     pub fn is_empty(&self) -> bool {
-        self.pressure.is_empty() && self.time.is_empty() && self.feel.is_none() && self.secondary.is_none()
+        self.pressure.is_empty() && self.time.is_empty() && self.feel.is_none() && self.secondary.is_none() && self.lien.is_none()
     }
 
     /// Les appuis (et les instants) correspondent aux `n` points du chemin.
@@ -161,6 +186,7 @@ impl Trace {
             time: samples.iter().map(|s| s.1).collect(),
             feel: self.feel,
             secondary: self.secondary,
+            lien: self.lien,
             cache: StrokeCache::default(),
         }
     }
@@ -168,7 +194,7 @@ impl Trace {
     /// La trace d'un trait dont les points ont été refaits sans pouvoir suivre les appuis : le
     /// toucher et la couleur B restent, l'appui se retrouvera d'après les rayons.
     pub fn without_samples(&self) -> Trace {
-        Trace { pressure: Vec::new(), time: Vec::new(), feel: self.feel, secondary: self.secondary, cache: StrokeCache::default() }
+        Trace { pressure: Vec::new(), time: Vec::new(), feel: self.feel, secondary: self.secondary, lien: self.lien, cache: StrokeCache::default() }
     }
 
     /// La même trace, dont les pixels sont à refaire (points déplacés, rayons changés).

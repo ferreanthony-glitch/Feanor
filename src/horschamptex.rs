@@ -408,7 +408,7 @@ fn calculer(t: &Travail) -> Option<Pyramide> {
         r.size *= b.taille;
         r
     });
-    let trace = VTrace { pressure: b.appui.clone(), time: b.instants.clone(), feel: b.recette.toucher, secondary: b.recette.couleur_b, cache: Default::default() };
+    let trace = VTrace { pressure: b.appui.clone(), time: b.instants.clone(), feel: b.recette.toucher, secondary: b.recette.couleur_b, lien: None, cache: Default::default() };
     let (sheet, origine) = vector::render_isole(&t.pts, t.couleur, b.recette.opacite, b.recette.durete, reglage.as_ref(), &trace)?;
     Some(Pyramide::depuis(&sheet, origine, t.cle))
 }

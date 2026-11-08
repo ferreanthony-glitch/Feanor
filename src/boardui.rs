@@ -114,6 +114,8 @@ pub(crate) enum Press {
     Annot,
     /// Un appui sur l'étiquette de version (« V2 », en haut à droite d'une case) : il épingle la pile des versions, rien à dessiner.
     Version,
+    /// Ctrl + appui, calque vectoriel : la sélection de la planche (lasso ou geste de sa boîte, partie 125) ; le dessin de la case ne reçoit rien.
+    SelPlanche,
 }
 
 /// Un plan (ou plusieurs plans choisis) pris par le cadre d'une de ses vignettes (Maj + appui), qu'on glisse ailleurs.
@@ -285,6 +287,8 @@ pub(crate) struct Vignettes {
     pub maj_dit: bool,
     /// Le « + » de la peau de Maj : un cadre de caméra de plus (partie 116, `cadreplus.rs`).
     pub plus: crate::cadreplus::Etat,
+    /// La sélection de la planche : des traits entiers, choisis au lasso de Ctrl, dans les cases comme sur le papier (partie 125, `vignettesel.rs`).
+    pub selp: Option<crate::vignettesel::SelPlanche>,
 }
 
 /// Un appui sur une barre, en attente de son lâcher (partie 113, décision 11).
@@ -345,6 +349,7 @@ impl Default for Vignettes {
             refus_phrase: None,
             debord_garde: None,
             debord_tenu: None,
+            selp: None,
             ouverture_suivi: None,
             ouverture_images: 0,
             titre_edit: None,
@@ -1491,6 +1496,23 @@ impl App {
                         self.annot_appui(*pos);
                         continue;
                     }
+                    // Ctrl seul sur un calque vectoriel : la sélection de la planche, dans une case comme sur le papier (partie 125). Tout autre appui la lève.
+                    if self.selp_appui(&layout, xf, *pos, *modifiers) {
+                        self.commit_note_text(&layout);
+                        self.commit_card_note();
+                        self.vignettes.press = Press::SelPlanche;
+                        // (Ctrl + appui dans une case la rend courante, comme avant : le lasso y était pris dans son dessin.)
+                        if let Some(c) = layout.cards.iter().find(|c| c.thumb.contains(xf.to_board(*pos))).copied() {
+                            self.board_sel = vec![c.plan];
+                            self.board_notes.clear();
+                            self.vignettes.libre = false;
+                            let f = self.cur_frame.min(self.frame_count().saturating_sub(1));
+                            if !(c.panel == self.cur_panel && (c.frame..c.end).contains(&f)) {
+                                self.select_board(c.panel, c.frame);
+                            }
+                        }
+                        continue;
+                    }
                 }
                 if self.board_press(&layout, xf, *pos, *modifiers, *button) {
                     layout = self.board_layout();
@@ -1586,6 +1608,10 @@ impl App {
         self.cam_garder_la_place(&layout);
         // Le geste du stylo ou de la gomme d'annotation, point après point (`annotationsui.rs`).
         self.annot_geste(&layout, xf, &events, latest, any_down, touch.is_some(), escape, mods);
+        // Le lasso ou le geste de la sélection de la planche (`vignettesel.rs`).
+        // (Un appui hors de la planche, dans un panneau, le montage, la timeline : le choix est levé.)
+        let dehors = ui.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| !view.contains(p)));
+        self.selp_geste(&layout, xf, latest, any_down, escape, dehors);
 
         // Le papier est blanc partout (rien autour des cases) ; les barres, les cases pâles qui montrent où dessiner, les vignettes.
         let hovered = over.map(|p| board::hit(&layout, xf.to_board(p), BAR_TOUCH / xf.zoom.max(1e-3)));
@@ -1711,6 +1737,7 @@ impl App {
         }
         // Les annotations, par-dessus tout ; puis la marie-louise, si elle est allumée, qui masque ce qui déborde (`annotationsui.rs`).
         self.annot_peindre(&painter, view, xf, &layout, over);
+        self.selp_peindre(&painter, view, &layout, over);
         self.marie_peindre(&painter, view, xf, &layout);
         // Des images qu'on glisse vers la planche : la case visée, et le lâcher des références (`deposer.rs`).
         self.depot_survol(ui.ctx(), &painter, xf, &layout, over);

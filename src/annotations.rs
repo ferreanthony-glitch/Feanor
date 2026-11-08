@@ -115,11 +115,13 @@ pub struct Trace {
     /// Un trait du dessin hors des cases posé **par-dessus l'image d'une case** qui ne pouvait pas le recevoir (calque verrouillé, plan écarté :
     /// `horschamp.rs`, partie 122) : il se peint après les images, sinon il serait caché. Les autres passent sous les images.
     pub dessus: bool,
+    /// Le trait dont c'est une part (partie 125, `vector::Trace::lien`) : les parts d'un même trait réparti portent le même numéro.
+    pub lien: Option<u64>,
 }
 
 impl Trace {
     pub fn new(calque: u64, anchor: Ancre, color: [u8; 3], points: Vec<VPoint>) -> Trace {
-        Trace { id: PROCHAIN_TRAIT.fetch_add(1, Ordering::Relaxed), calque, anchor, color, alpha: 255, points, brosse: None, dessus: false }
+        Trace { id: PROCHAIN_TRAIT.fetch_add(1, Ordering::Relaxed), calque, anchor, color, alpha: 255, points, brosse: None, dessus: false, lien: None }
     }
 
     /// Le même trait, à l'opacité `alpha`.
@@ -137,7 +139,7 @@ impl Trace {
 
 impl PartialEq for Trace {
     fn eq(&self, o: &Trace) -> bool {
-        self.calque == o.calque && self.anchor == o.anchor && self.color == o.color && self.alpha == o.alpha && self.points == o.points && self.brosse == o.brosse && self.dessus == o.dessus
+        self.calque == o.calque && self.anchor == o.anchor && self.color == o.color && self.alpha == o.alpha && self.points == o.points && self.brosse == o.brosse && self.dessus == o.dessus && self.lien == o.lien
     }
 }
 
@@ -748,6 +750,9 @@ struct TraceFichier {
     /// Peint par-dessus l'image de sa case (absent : sous les images, comme les fichiers d'avant ; une version d'avant l'ignore et ne perd rien).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     dessus: bool,
+    /// Le trait dont c'est une part (partie 125 ; absent : un trait entier, ou d'avant ; une version d'avant l'ignore).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    lien: Option<u64>,
 }
 
 /// La recette d'un trait au pinceau (`horschamptex::Brosse`) : le réglage complet (pointe et papier par clé de contenu, comme un trait
@@ -789,6 +794,7 @@ fn pinceau_fichier(b: &Brosse, n: usize) -> PinceauFichier {
             time: if aligne { b.instants.clone() } else { Vec::new() },
             feel: b.recette.toucher,
             secondary: b.recette.couleur_b,
+            lien: None,
             cache: Default::default(),
         },
         largeur_px: b.largeur_px,
@@ -903,6 +909,7 @@ pub(crate) fn to_bytes(doc: &Document) -> Result<Option<Vec<u8>>, String> {
                             p
                         }),
                         dessus: t.dessus,
+                        lien: t.lien,
                     }
                 })
                 .collect();
@@ -921,10 +928,11 @@ fn trace_lue(t: TraceFichier, calque: u64) -> Option<Trace> {
     let points: Vec<VPoint> = t.points.into_iter().take(MAX_POINTS).filter(|p| p.iter().all(|v| v.is_finite())).map(|[x, y, r]| VPoint { x, y, r: r.clamp(1e-5, 50.0) }).collect();
     // (Un point écarté défait l'alignement des appuis : la recette reste, sans appuis, ils se retrouvent d'après les rayons.)
     let brosse = t.pinceau.and_then(|p| brosse_lue(p, if points.len() == lus { points.len() } else { usize::MAX }));
-    let dessus = t.dessus;
+    let (dessus, lien) = (t.dessus, t.lien);
     (!points.is_empty()).then(|| {
         let mut l = Trace::new(calque, t.ancre, t.couleur, points).avec_alpha(t.alpha).avec_brosse(brosse);
         l.dessus = dessus;
+        l.lien = lien;
         l
     })
 }

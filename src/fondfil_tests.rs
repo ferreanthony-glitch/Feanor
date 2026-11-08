@@ -230,7 +230,7 @@ pub(crate) fn trait_de(s: &BrushSettings, lib: &BrushLibrary, pts: &[(Pos2, f32,
         st.add_point_at(&mut raster, p, pr, t, &mut dirty);
     }
     st.finish(&mut raster, &mut dirty);
-    let trace = Trace { pressure: st.path_pressure.clone(), time: st.path_time.clone(), feel: Some(Toucher::default()), secondary: None, cache: Default::default() };
+    let trace = Trace { pressure: st.path_pressure.clone(), time: st.path_time.clone(), feel: Some(Toucher::default()), secondary: None, lien: None, cache: Default::default() };
     Element::Stroke { points: st.path.clone(), color: [20, 20, 20], opacity: s.opacity, hardness: s.hardness, brush: lib.for_vector(s).map(Box::new), trace }
 }
 
