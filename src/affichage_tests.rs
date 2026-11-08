@@ -52,7 +52,7 @@ pub(crate) fn trait_rouge(s: &BrushSettings, lib: &BrushLibrary, w: usize, h: us
         st.add_point_at(&mut raster, p, pr, t, &mut dirty);
     }
     st.finish(&mut raster, &mut dirty);
-    let trace = Trace { pressure: st.path_pressure.clone(), time: st.path_time.clone(), feel: Some(Toucher::default()), secondary: None, cache: Default::default() };
+    let trace = Trace { pressure: st.path_pressure.clone(), time: st.path_time.clone(), feel: Some(Toucher::default()), secondary: None, lien: None, cache: Default::default() };
     Element::Stroke { points: st.path.clone(), color: [200, 30, 30], opacity: s.opacity, hardness: s.hardness, brush: lib.for_vector(s).map(Box::new), trace }
 }
 
@@ -924,7 +924,7 @@ fn vector_stroke_begin_and_commit_cost() {
             opacity: s.opacity,
             hardness: s.hardness,
             brush: lib.for_vector(&s).map(Box::new),
-            trace: crate::vector::Trace { pressure, time, feel: Some(Toucher::default()), secondary: Some([255, 255, 255]), cache: Default::default() },
+            trace: crate::vector::Trace { pressure, time, feel: Some(Toucher::default()), secondary: Some([255, 255, 255]), lien: None, cache: Default::default() },
         };
         cel.vector.as_mut().unwrap().elements.push(element.clone());
         let Some(crate::history::Edit::Tiles { tiles, .. }) = edit else { panic!("tuiles") };

@@ -1160,7 +1160,12 @@ mod traits_caches_tests;
 #[cfg(test)]
 mod vignettes_dessin_tests;
 #[cfg(test)]
+mod vignettes_selection_tests;
+#[cfg(test)]
+mod vignettes_selection_relecture_tests;
+#[cfg(test)]
 mod horschamptex_tests;
+mod vignettesel;
 mod workspaceui;
 mod xsheet;
 #[cfg(test)]

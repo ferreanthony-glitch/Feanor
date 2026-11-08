@@ -5,7 +5,7 @@ use crate::document::{CelId, Document, Structure};
 use crate::raster::Tile;
 use crate::vector::VectorDrawing;
 
-const LIMIT: usize = 200;
+pub(crate) const LIMIT: usize = 200;
 
 /// Plan et calque courants, rétablis avec la structure.
 #[derive(Clone, Copy)]
@@ -276,6 +276,18 @@ impl History {
     /// Le nombre d'étapes à annuler.
     pub fn undo_len(&self) -> usize {
         self.undo.len()
+    }
+
+    /// Une marque de l'historique à cet instant : `regrouper_depuis` regroupera tout ce qui est posé après elle (partie 125).
+    pub fn marque(&self) -> u64 {
+        self.next_id
+    }
+
+    /// Regroupe en une seule étape tout ce qui a été posé depuis `marque`. Contrairement à un compte d'étapes (`undo_len` avant et après), cela reste
+    /// juste quand l'historique est plein et oublie sa plus vieille étape à chaque ajout.
+    pub fn regrouper_depuis(&mut self, marque: u64) {
+        let n = self.undo_ids.iter().rev().take_while(|id| **id > marque).count();
+        self.merge_last(n);
     }
 
     /// Regroupe les `n` dernières étapes à annuler (deux au moins) en une seule, qui garde le nom de la plus

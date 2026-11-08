@@ -332,8 +332,10 @@ fn ctrl_alone_dragging_on_a_case_is_the_lasso_and_never_the_camera() {
     for q in pas(de, a - de, 6) {
         b.image(vec![Event::PointerMoved(q)], 1.0 / 60.0);
     }
-    assert_eq!(b.app.tool, Tool::Select, "Ctrl + appui sur une case : le lasso");
-    assert!(b.app.vdrag.is_some() || b.app.bdrag.is_some(), "un lasso est en cours");
+    // (Depuis la partie 125, sur un calque vectoriel, le lasso de Ctrl est celui de la planche : il prend les traits entiers, sans changer d'outil.)
+    let planche = b.app.vignettes.selp.as_ref().is_some_and(|s| s.lasso.is_some());
+    assert!(planche || b.app.tool == Tool::Select, "Ctrl + appui sur une case : le lasso");
+    assert!(planche || b.app.vdrag.is_some() || b.app.bdrag.is_some(), "un lasso est en cours");
     assert!(b.app.vignettes.cam.is_none() && b.app.vignettes.moving.is_none(), "ni caméra ni plan déplacé");
     b.image(vec![appui(a, false, CTRL_SEUL)], 1.0 / 60.0);
     b.touches = Modifiers::NONE;

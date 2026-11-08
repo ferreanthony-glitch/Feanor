@@ -8839,3 +8839,90 @@ Caméra et la clé de caméra. » (Les deux restes de la Trajectoire sont dans l
   elle-même** (11,7 Mo) : la LGPL demande les sources ou une offre écrite ; `CONFIGURATION.txt` dit « l'archive ci-jointe » alors
   qu'elle ne l'est pas. À régler dans le script de la version portable (joindre `ffmpeg-8.1.3.tar.xz`, ou écrire l'offre et l'adresse
   exacte), et à relire par le conseil (le brevet des codecs H.264 et HEVC reste un autre sujet).
+
+## 125. Les bords des cases ne coupent jamais le dessin : la sélection prend le trait entier (2026-11-08, branche `vignettes-selection`)
+
+Anthony : « quand je sélectionne des traits dans un cadre et que je les déplace ou les transforme, seule la partie dans le champ du cadre est prise, le reste est coupé. […] pour moi les caméras doivent être le moins intrusives et destructives possibles dans le dessin. » Puis : la sélection doit aussi se faire hors des cadres, sur la planche, autour des cases et entre elles. Fichiers : `vignettesel.rs` (nouveau), `horschamp.rs` (`horschamp_repartir_element`, `nouveau_lien`, le numéro posé sur chaque part), `vector.rs` (`Trace::lien`), `annotations.rs` (`Trace::lien`), `boardui.rs` (l'appui, le geste, la peinture), `app.rs` (Suppr, Ctrl+C, Ctrl+X), `vtools.rs` (Ctrl+V, recolorer). Essais : `vignettes_selection_tests.rs` (7, au vrai geste, vus en pixels).
+
+### Ce qui se passait
+
+Un trait tracé à travers les cases est réparti au lâcher (parties 101, 111, 122) : chaque case reçoit sa part dans son dessin, le reste va sur la planche (« Hors cadres »). **Rien ne reliait ces parts.** Le lasso de Ctrl, pris dans le dessin de la case, ne voyait que la part de cette case ; la déplacer laissait les autres en place, et la part déplacée restait coupée au bord de son champ. Essai rouge, sur le code d'avant (un trait du papier au-dessus de la case 1 au papier sous la case 3, lasso dans la case 2, déplacé de 40 pixels) : à la nouvelle place, **un trou de 242 pixels sur 373** ; à l'ancienne, le trait était encore là, continu (les parts des cases 1 et 3 et de la planche n'avaient pas bougé). C'est le mécanisme des deux flèches de sa capture : la flèche du bas (case 14, le trait interrompu au bord) et très probablement la flèche du haut (case 7, un trou au bord après un geste semblable ; la capture ne permet pas de l'affirmer).
+
+### Ce qui change
+
+1. **Un numéro par trait.** À la répartition, toutes les parts d'un trait (dans les dessins des cases et sur la planche) portent le même numéro (`lien`, un champ optionnel de la trace du trait et du trait de la planche ; absent la plupart du temps). **Le format du projet ne change pas** (49) : une version d'avant ignore le champ et ne perd rien.
+2. **La sélection de la planche.** Dans les Vignettes, sur un calque vectoriel, **Ctrl + glisser** trace un lasso **sur la planche** : dans une case, sur le papier autour et entre les cases, ou à cheval. **Ctrl + clic** prend le trait sous le pointeur (6 points d'écran de prise). Chaque trait touché est pris **entier** : toutes les parts de même numéro qui le prolongent bout à bout. Le choix se voit : chaque part soulignée d'un filet d'accent, et la boîte de la sélection autour du trait entier, sur la planche (les mêmes poignées que l'outil Sélection : elles sont toutes à portée, même hors des cases). Choisir ne fait aucune étape. Ctrl + appui dans une case la rend courante, comme avant.
+3. **Les gestes** : Ctrl + glisser dans la boîte déplace, un coin met à l'échelle, juste hors d'un coin tourne, un bord incline, le pivot se tire. **Pendant le geste rien ne change dans le projet** : les traits sont peints à leur nouvelle place, par-dessus la planche, en lignes de leur couleur (sans le grain du pinceau, aucun rejeu : règle « sans latence »). **Au lâcher**, chaque trait est rassemblé (ses parts bout à bout, appuis et instants compris), transformé, et **réparti de nouveau comme un trait qu'on vient de tracer** : il est posé dans le dessin de la case où il commence, puis chaque case reçoit sa part selon la nouvelle place, le reste va sur la planche. Entièrement hors des cases : sur la planche. **Une seule étape d'annulation**, au nom du geste (« Déplacer », « Mettre à l'échelle »…). Le choix suit le trait à sa nouvelle place. Le trait tracé reste peint tant que ses parts ne sont pas rendues (`debord_tenu`, comme au lever d'un trait).
+4. **Suppr, Ctrl+C, Ctrl+X, Ctrl+V, recolorer** agissent sur le trait entier : Suppr efface toutes les parts (une étape) ; Ctrl+C copie le trait d'un seul tenant (sans numéro : une copie n'est pas une part de l'original) ; Ctrl+V dans les Vignettes colle dans la case courante, puis **répartit** ce qui est collé, et le choix devient ce qui vient d'être collé (une étape). Une copie faite au Storyboard d'une part n'emporte pas son numéro non plus.
+5. **Échap** abandonne le geste en cours (rien n'a bougé), puis lève le choix. Un appui sans Ctrl (dessiner, gommer) lève le choix.
+
+### Les cas décidés
+
+- **Une case qui ne peut pas recevoir sa part** (calque verrouillé, masqué, transformé, d'une autre sorte, plan écarté ou tenu par un autre poste) : **la règle de la partie 122 est gardée.** Au lâcher, rien n'est écrit dans son dessin, la part reste sur la planche par-dessus la case, la ligne d'état le dit. Une part déjà posée dans un tel calque **n'est pas prise** par la sélection (on n'écrit pas dans un calque verrouillé) : elle reste où elle est. Une autre caméra (zoom, roulis, bascule, panoramique, cadres) reçoit, comme en partie 122.
+- **L'ordre de peinture** (relecture) : le trait déplacé **garde son rang** dans chaque dessin d'où viennent ses parts (il reste sous ce qui était dessus). Dans une case d'arrivée, la règle du trait neuf : dessus, ou **dessous s'il était peint derrière** (« Peindre derrière » est gardé ; un trait compte comme peint derrière si une de ses parts était la première d'un dessin qui en a d'autres).
+- **Bitmap** : voir plus bas. La sélection d'un calque bitmap reste celle de la case, comme avant (Ctrl + lasso dans la case).
+- **Storyboard et Animation** (un seul plan) : **rien ne change**, sauf deux détails sans effet visible : un trait collé n'emporte plus le numéro de la part copiée, et la trace d'un trait peut porter ce numéro.
+- **Les deux gestes de caméra** qui déplacent le dessin (une caméra avec son dessin, un mouvement de caméra) : non touchés.
+- **Les traits déjà coupés** (projets d'avant) : sans numéro, ils restent des morceaux ; le lasso ne prend que ceux qu'il touche, comme avant (essai). **Proposition, non faite** : une commande « Relier les morceaux » qui donnerait un numéro aux parts dont les bouts se touchent à un millième de segment près, de même couleur, opacité et pinceau, à cheval sur le champ d'une case. C'est sûr pour les traits répartis par FEANOR (la coupe pose deux points presque confondus), moins pour deux traits tracés bout à bout à la main : à valider avant de le faire.
+- **Un plan dupliqué ou collé, des éléments collés** (Ctrl+V, collage sur plusieurs calques) : les traits de la copie prennent des **numéros neufs** (`vector::renumeroter`, `Document::renumeroter_les_copies`). Une copie n'est pas prise avec le trait d'où elle vient. **Pas pour la copie d'un dessin tenu** (une nouvelle clé, la coupe d'une exposition) : c'est le même dessin, et le renuméroter défaisait les caches de son affichage (un trou pendant le trait suivant, essai `camera_traits_tests`) ; là, une part n'est reprise que si un de ses bouts touche celui d'une autre à la même place de la planche, ce qu'une copie ailleurs ne fait pas. Au lâcher, un trait repris en entier garde son numéro ; repris en partie (d'autres parts du même numéro restent ailleurs, par exemple dans un calque verrouillé), il en prend un neuf.
+- **Les formes remplies, les textes et les images** d'une case sont pris par le lasso, comme avant : ils restent dans leur case, ne sont pas répartis, et le geste les transforme sur place, dans la même étape que les traits. Suppr, Ctrl+C, recolorer les prennent aussi.
+- **Ctrl tenu pendant le geste** ne change pas le point fixe des poignées (Ctrl est la touche du lasso dans les Vignettes) ; le réglage « Point fixe des poignées » s'applique.
+- **Pendant le geste**, l'ancienne place reste visible sous l'aperçu jusqu'au lâcher (rien n'est retiré du projet avant le lâcher : aucune perte possible si le logiciel s'arrête en plein geste).
+- **Tout ou rien** (relecture) : au lâcher, la place de chaque part est calculée avant de rien retirer. Une case dont la caméra ne voit pas tout le trait n'est pas choisie pour le recevoir (la suivante l'est, ou la planche) ; hors de toute case qui puisse le recevoir, les tronçons qui passent sur l'image d'une case se posent **par-dessus** elle (`ajouter_sur_la_case`, partie 122), les autres sur le papier. Si la planche n'a plus la place (5000 traits), le geste est refusé tel quel : « La planche a atteint sa limite de 5000 traits : ce geste mènerait des traits hors des cases, il est refusé, rien n'a bougé. »
+- **Le focus** (relecture) : Suppr, Ctrl+C et Ctrl+X ne vont au choix de la planche que si le dessin a la main (pas après un clic dans le montage, la timeline, les clés) ; le choix est levé par un appui hors de la planche et quand le calque courant n'est plus vectoriel. **L'outil Caméra et T tenue** gardent Ctrl pour la caméra.
+- **Un trait d'avant la partie 111 qui dépasse le champ de sa case** : seuls les points que la case montre (son champ) comptent pour le lasso ; ce qui est caché au-delà n'est pas pris par un lasso posé sur le papier.
+
+### Le bitmap : pas fait, pourquoi, et ce que je propose
+
+Les parts d'un trait bitmap dans les cases voisines sont des pixels mêlés au reste du dessin : aucun objet à relier. Prendre « le trait entier » voudrait dire suivre l'encre de proche en proche d'une case à l'autre (un remplissage), soulever ces pixels, et au lâcher les reposer. Le blocage : **la planche ne sait garder que des traits vectoriels** (« Hors cadres »). Des pixels déplacés hors de tout champ n'auraient aucune place où rester visibles : il faudrait un calque bitmap de la planche (tuiles attachées aux cases, enregistrées, exportées, annulables). C'est un chantier à part ; le faire à moitié perdrait du dessin. La demande d'une limite chiffrée et d'un essai au passage de la limite n'est donc **pas faite** dans cette branche. **Ordre de grandeur, calculé et non mesuré** : un dessin plein de 1920 × 1080 pèse 8,3 Mo de pixels ; un remplissage qui traverserait 30 cases pleines en soulèverait 250 Mo, le double avec l'état d'avant gardé pour l'annulation. Une limite de 32 millions de pixels pour l'ensemble des morceaux pris (128 Mo, 256 Mo avec l'annulation) tiendrait sur une machine de 16 Go qui fait autre chose ; au-delà, la sélection resterait celle de la case, avec la phrase « Sélection trop grande pour suivre tout le trait : seule la part de cette case est prise ». Ces chiffres sont à mesurer quand le calque bitmap de la planche existera.
+
+### Mesures et preuves (`vignettes_selection_tests.rs`)
+
+Toutes au vrai geste (Ctrl + lasso, Ctrl + glisser sur le `Banc`), la planche peinte sur la carte graphique, le trait suivi pixel par pixel (le filet du choix est levé le temps de la capture) :
+
+1. **Déplacer** (l'essai rouge de la capture, vert) : à la nouvelle place, plus grand trou 1 pixel ; à l'ancienne, aucun pixel d'encre ; une étape ; **zéro rejeu** du moteur sur le fil de l'interface du geste au lâcher ; annuler rend l'image et les parts d'avant, rétablir l'après ; enregistrer et rouvrir : même image, et le lasso reprend encore le trait entier.
+2. **Mettre à l'échelle, tourner** : le trait entier suit exactement l'affinité du geste (bouts calculés par `selbox::gesture`), sans trou, une étape.
+3. **Copier, supprimer, coller, couper** : toutes les parts partent, une étape ; collé, le trait revient à sa place réparti en autant de parts qu'avant ; coupé puis annulé, il revient.
+4. **Lasso sur le papier** (la part de la planche) et **lasso à cheval** sur le bord d'une case : le trait entier est pris, déplacé sans trou, rien à l'ancienne place.
+5. **Un trait d'une seule case** déplacé dans la case voisine : il passe au plan de la case d'arrivée, la case de départ n'a plus rien ; Ctrl + clic le prend.
+6. **Projet d'avant** (parts sans numéro) : seule la part touchée est prise, les autres restent telles quelles.
+7. **Un appui sans mouvement** ne fait rien ; dessiner lève le choix ; le trait d'avant n'a pas bougé.
+
+### Relecture (même jour) : ce qui était faux, et les essais
+
+Dix essais de plus, `vignettes_selection_relecture_tests.rs`, au vrai geste sur le `Banc`. « Rouge » : lancé sur 66c533d avant la correction.
+
+| Point relevé | Réel ? | Rouge sur 66c533d | Après |
+|---|---|---|---|
+| Un trait déplacé passait devant tout | Oui | rangs `[1]` sur 2 (passé dessus) | garde son rang `[0]` ; peint derrière, dessous dans la case d'arrivée (`[0]`) |
+| Part par-dessus une case qui refuse reposée dessous | Oui (lu dans le code) | essai d'abord mal posé (le geste tombait sur un bord : une inclinaison) | trou 0 : 5 parts sur la planche, par-dessus les images |
+| Planche pleine : parts retirées, puis perdues | Oui | parts `(0, 5000)` : **le trait était perdu** | refusé tel quel, parts `(1, 5000)`, trait à sa place, phrase dans la ligne d'état |
+| Caméra qui ne voit pas le trait : rien posé | Par construction ; non reproduit sur le Banc (la caméra basculée à 80 et 85° voyait encore le bout) | sans perte, mais non concluant | la case est écartée si sa caméra ne voit pas tout ; aucune perte |
+| Recolorer : la part au pinceau de la planche gardait sa couleur | Oui | 0 pixel bleu, 25 rouges | 28 bleus, 0 rouge (le rendu de la part est refait) |
+| Suppr avec le montage qui a la main | Oui | le trait était effacé | Suppr va au montage ; calque bitmap : choix levé, rien d'effacé |
+| Ctrl + glisser avec l'outil Caméra | Oui | le lasso de la planche s'ouvrait | la caméra garde Ctrl (T tenue aussi) |
+| Le lasso ne prenait plus formes, textes, images | Oui (lu dans le code) | non lancé séparément | la forme suit le geste à 0,06 pixel près, dans la même étape que le trait |
+| Plan dupliqué rattaché au trait d'origine | Oui (le mécanisme) | essai d'abord mal posé (la copie n'avait pas de part dans la case) | 1 part prise : la copie seule |
+| Historique plein : plusieurs étapes | Oui | un Ctrl+Z ne rendait pas le trait | un Ctrl+Z rend tout ; aussi pour le trait tracé (`horschamp_partager`) |
+| Coût (60 cases, 2 000 traits numérotés) | Non sensible | lâcher du lasso 16,6 ms ; image +0,74 ms | lâcher 7,4 ms ; image +0,71 ms (vue calculée une fois, `selp_vue`) |
+
+Vérifié en lisant le code : le numéro est gardé par la gomme vectorielle, le sculpt, l'enveloppe, l'interpolation (ils passent par `Trace::with_samples` ou `without_samples`). Même défaut de compte d'étapes, non corrigé (hors du chantier) : `finish_creation` (`boardui.rs`), qui regroupe la création d'un plan par un trait dans une case vide.
+### Ce qui reste
+
+- Le bitmap (plus haut).
+- L'aperçu du geste est une ligne de la couleur du trait, sans le grain du pinceau ; l'ancienne place reste visible pendant le geste.
+- Les flèches du clavier ne déplacent pas encore le choix de la planche (elles déplacent la sélection d'une case, qui n'existe plus pour un calque vectoriel dans les Vignettes).
+- Le choix est levé dès que l'historique change par un autre geste (annuler compris) : il faut le refaire.
+- Non essayé : le stylet réel, une caméra tournée ou en perspective comme case d'arrivée d'un trait déplacé (le chemin est celui de la partie 122, essayé là), un projet réel.
+
+### À vérifier à l'écran
+
+1. Trace un grand trait du papier à travers trois cases. Ctrl + lasso autour de lui **dans une case** : tout le trait est souligné, la boîte l'entoure entier.
+2. Ctrl + glisser dans la boîte : tout le trait suit. Lâche : rien ne manque, aucun trou au bord d'une case, rien ne reste à l'ancienne place. Ctrl+Z : il revient d'un coup ; Ctrl+Y.
+3. Un coin de la boîte (échelle), juste hors d'un coin (rotation) : le trait entier.
+4. Ctrl + lasso **sur le papier**, autour du bout de trait hors des cases ; puis à cheval sur le bord d'une case : le trait entier.
+5. Ctrl + clic sur un trait : il est pris. Suppr : tout part. Ctrl+Z.
+6. Ctrl+C, Suppr, Ctrl+V : le trait revient à sa place, réparti. Ctrl+X.
+7. Un plan au calque verrouillé : déplace un trait vers sa case ; la part reste par-dessus, la ligne d'état le dit.
+8. Un ancien projet : ses traits déjà coupés restent des morceaux (dis-moi si tu veux la commande « Relier les morceaux »).
+9. Un calque bitmap : la sélection reste celle de la case, comme avant.
