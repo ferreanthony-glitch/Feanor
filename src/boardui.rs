@@ -1203,6 +1203,8 @@ impl App {
             return false;
         }
         let mut frame_of_image = 0;
+        let cartes_avant: Vec<u64> = self.board_layout().cards.iter().map(|c| c.id).collect();
+        let marque = self.history.marque();
         let ok = self.avec_etape("Continuité avec le plan précédent", |s| {
             s.structure_op(|d, _| {
                 let last = plan.and_then(|id| d.panels.iter().position(|p| p.id == id)).unwrap_or(d.panels.len() - 1);
@@ -1223,6 +1225,8 @@ impl App {
         self.cur_frame = frame_of_image;
         self.follow_frame = true;
         self.board_sel = vec![self.doc.panels[self.cur_panel].id];
+        // La case née prend les traits du papier qui passaient là (partie 128, `caseprend.rs`), dans la même étape.
+        self.cases_nees_prennent_le_papier(&cartes_avant, marque);
         self.status = "Continuité : la case montre déjà le dessin de la précédente.".into();
         true
     }
@@ -1237,13 +1241,14 @@ impl App {
         let joins = self.vignettes.empty_joins;
         // La case pâle de quelle séquence ? Le plan se fait juste après le dernier plan de sa séquence, dans la séquence ; `e` compte depuis la
         // première case pâle de cette séquence (celles qui la précèdent deviennent des plans vides).
-        let (apres, e) = {
+        let (apres, e, cartes_avant) = {
             let layout = self.board_layout();
             let (rang, e) = layout.vide_de(e, self.doc.panels.len());
-            (self.doc.panels.get(rang).map(|p| p.id), e)
+            (self.doc.panels.get(rang).map(|p| p.id), e, layout.cards.iter().map(|c| c.id).collect::<Vec<u64>>())
         };
         let made = e + 1;
         let mut frame_of_image = 0;
+        let marque = self.history.marque();
         let ok = self.avec_etape(if joins && e == 0 { "Nouvelle image dessinée" } else { "Nouveau plan dessiné" }, |s| {
             s.structure_op(|d, _| {
                 let mut last = apres.and_then(|id| d.panels.iter().position(|p| p.id == id)).unwrap_or(d.panels.len() - 1);
@@ -1275,6 +1280,9 @@ impl App {
         self.cur_frame = if joins && e == 0 { frame_of_image } else { 0 };
         self.follow_frame = true;
         self.board_sel = vec![self.doc.panels[self.cur_panel].id];
+        // Les cases nées (celle qu'on dessine, les plans vides devant elle) prennent les traits du papier qui passaient là (partie 128,
+        // `caseprend.rs`), dans la même étape que la création.
+        self.cases_nees_prennent_le_papier(&cartes_avant, marque);
         self.vignettes.created = Some(Created { base_len: self.history.undo_len() });
         // (Les cases pâles sautées sont devenues des plans vides : la ligne d'état le dit, partie 113.)
         let vides = if joins && e == 0 { 0 } else { made - 1 };

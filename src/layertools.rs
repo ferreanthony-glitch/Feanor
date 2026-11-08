@@ -572,6 +572,34 @@ impl App {
         }
     }
 
+    /// Le mode d'emploi d'une poignée du Transformer, sous forme de bulle au pointeur (nom, phrase) : il était en note longue dans le
+    /// panneau Réglages (2026-11-08 : le panneau doit être court). Rien n'est dit sans projet, ni pendant un geste.
+    pub(crate) fn texte_poignee(poignee: BoxHandle) -> (&'static str, &'static str) {
+        match poignee {
+            BoxHandle::Move => ("Déplacer le calque", "Glisser : déplacer le calque (Maj : à l'horizontale ou à la verticale). Les dessins ne sont pas modifiés : on peut annuler la transformation à tout moment."),
+            BoxHandle::Corner(_) => ("Agrandir ou réduire", "Glisser : le coin opposé reste en place (Maj : en gardant les proportions ; Ctrl : l'autre point fixe, réglé par « Point fixe » dans Plus de réglages)."),
+            BoxHandle::Edge(_) => ("Étirer dans un seul sens", "Glisser le milieu d'un côté : étirer le calque dans un seul sens."),
+            BoxHandle::Rotate => ("Tourner", "Glisser la poignée ronde : tourner autour du centre (Maj : par 15°)."),
+            BoxHandle::RotateCorner(_) => ("Tourner", "Glisser juste hors d'un coin : tourner autour du centre ou du coin opposé, selon « Rotation » dans Plus de réglages (Maj : par 15°)."),
+        }
+    }
+
+    /// Montre la bulle de la poignée sous le pointeur, une seconde après qu'il s'est arrêté (le délai des autres bulles).
+    pub(crate) fn bulle_poignee(ctx: &egui::Context, poignee: BoxHandle) {
+        let (arret, appui) = ctx.input(|i| (i.pointer.time_since_last_movement(), i.pointer.any_down()));
+        if appui {
+            return;
+        }
+        if arret < crate::bulles::DELAI {
+            ctx.request_repaint_after(std::time::Duration::from_secs_f32((crate::bulles::DELAI - arret).max(0.05)));
+            return;
+        }
+        let (nom, phrase) = Self::texte_poignee(poignee);
+        egui::show_tooltip_at_pointer(ctx, egui::LayerId::new(egui::Order::Tooltip, egui::Id::new("bulle_poignee_layer")), egui::Id::new("bulle_poignee"), |ui| {
+            crate::bulles::contenu(ui, nom, phrase, "");
+        });
+    }
+
     /// Valeurs de la transformation du calque courant (outil Transformer).
     pub(crate) fn transform_fields(&mut self, ui: &mut egui::Ui) {
         if self.layer().locked {
@@ -587,7 +615,10 @@ impl App {
         // En valeur absolue : un calque retourné garde son signe (`flip.rs`).
         let (mut width, mut height) = ((t.scale * t.stretch_x * 100.0).abs(), (t.scale * t.stretch_y * 100.0).abs());
         let mut next = None;
-        ui.horizontal(|ui| {
+        // Une seule ligne compacte (elle passe à la ligne si le panneau est étroit) : x, y, largeur, hauteur, angle, et
+        // l'annulation de la transformation (Anthony, 2026-11-08).
+        let mut annuler = false;
+        ui.horizontal_wrapped(|ui| {
             let r = ui.add(egui::DragValue::new(&mut x).speed(2.0).prefix("x ").suffix(" px"));
             if self.edited(&r) {
                 next = Some(LayerTransform { x, ..t });
@@ -596,8 +627,6 @@ impl App {
             if self.edited(&r) {
                 next = Some(LayerTransform { y, ..t });
             }
-        });
-        ui.horizontal(|ui| {
             // Largeur et hauteur : l'échelle du calque fois son étirement dans chaque sens.
             let r = ui.add(egui::DragValue::new(&mut width).speed(1.0).range(1.0..=10000.0).prefix("largeur ").suffix(" %"));
             if self.edited(&r) {
@@ -607,22 +636,21 @@ impl App {
             if self.edited(&r) {
                 next = Some(LayerTransform { stretch_y: (height / 100.0 / t.scale).clamp(0.01, 100.0).copysign(t.stretch_y), ..t });
             }
-        });
-        ui.horizontal(|ui| {
             let r = ui.add(egui::DragValue::new(&mut angle).speed(0.5).suffix("°"));
             if self.edited(&r) {
                 next = Some(LayerTransform { angle, ..t });
             }
+            let resp = self.bouton_si(
+                ui,
+                !t.is_identity(),
+                egui_phosphor::regular::ARROW_COUNTER_CLOCKWISE,
+                "Annuler la transformation",
+                "Le calque revient à sa place, à sa taille, sans rotation ; ses dessins n'ont jamais changé.",
+                "calque.reinit_transformation",
+            );
+            annuler = resp.clicked();
         });
-        let resp = self.bouton_si(
-            ui,
-            !t.is_identity(),
-            egui_phosphor::regular::ARROW_COUNTER_CLOCKWISE,
-            "Annuler la transformation",
-            "Le calque revient à sa place, à sa taille, sans rotation ; ses dessins n'ont jamais changé.",
-            "calque.reinit_transformation",
-        );
-        if resp.clicked() {
+        if annuler {
             self.reset_layer_transform();
         }
         if let Some(t) = next {
