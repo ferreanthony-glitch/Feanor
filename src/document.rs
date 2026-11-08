@@ -824,6 +824,9 @@ pub struct Panel {
     pub camera: Vec<CameraKey>,
     /// Postérisation temporelle de la caméra (« saccade ») : rien dans les clés, tout à l'évaluation.
     pub saccade: camera::Saccade,
+    /// Effet de caméra vivant (tremblement, explosion, zoom…), calculé à l'évaluation de la caméra, sans clé
+    /// (`camfx::Vivant`, partie 129) ; « Convertir en clés » le cuit dans `camera`.
+    pub effet_camera: Option<crate::camfx::Vivant>,
     /// Marques d'image (13a), triées par image, toutes après la première image du plan.
     pub marks: Vec<ImageMark>,
     /// Signets, points d'entrée et de sortie (13d).
@@ -1677,40 +1680,71 @@ impl Document {
     /// que toutes les N images ; tout ce qui montre ou exporte l'image passe par ici. Ce qui règle les clés
     /// (outil Caméra, pose d'une clé, réunion) lit la caméra douce : `panel_camera_douce`.
     pub fn panel_camera(&self, index: usize, frame: usize) -> Camera {
-        self.panel_camera_selon(index, frame, true)
+        self.panel_camera_selon(index, frame, true, true)
     }
 
     /// La caméra du plan `index` à l'image `frame`, interpolée en douceur entre les clés, sans la
-    /// postérisation temporelle : celle des clés, que l'édition règle.
+    /// postérisation temporelle ni l'effet vivant : celle des clés, que l'édition règle.
     pub fn panel_camera_douce(&self, index: usize, frame: usize) -> Camera {
-        self.panel_camera_selon(index, frame, false)
+        self.panel_camera_selon(index, frame, false, false)
     }
 
-    fn panel_camera_selon(&self, index: usize, frame: usize, montree: bool) -> Camera {
+    /// La caméra douce (sans les paliers), avec l'effet de caméra vivant du plan (partie 129) : ce que montre l'outil
+    /// Caméra arrêté, pour que l'effet se voie pendant qu'on le règle.
+    pub fn panel_camera_vivante(&self, index: usize, frame: usize) -> Camera {
+        self.panel_camera_selon(index, frame, false, true)
+    }
+
+    /// Les clés de caméra du plan `index` telles qu'elles se montrent : les siennes, et son effet vivant cuit dedans
+    /// (`camfx::cuire`), comme le ferait « Convertir en clés ». Sans effet : ses clés, sans copie.
+    pub fn cles_montrees(&self, index: usize) -> std::borrow::Cow<'_, [camera::CameraKey]> {
+        use std::borrow::Cow;
+        let Some(p) = self.panels.get(index) else { return Cow::Borrowed(&[]) };
+        let Some(v) = p.effet_camera else { return Cow::Borrowed(&p.camera) };
+        let base = |f: usize| self.panel_camera_douce(index, f);
+        match crate::camfx::cuire_vite(&v, self.fps, self.frame, p.frame_count(), &p.camera, &base) {
+            Some(k) => Cow::Owned(k),
+            None => Cow::Borrowed(&p.camera),
+        }
+    }
+
+    fn panel_camera_selon(&self, index: usize, frame: usize, paliers: bool, effet: bool) -> Camera {
         let default = self.default_camera();
         let Some(p) = self.panels.get(index) else { return default };
-        let au = |q: &Panel, f: usize| camera::camera_at(&q.camera, if montree { q.saccade.image_montree(&q.camera, f) } else { f }, default);
-        if !p.camera.is_empty() {
-            return au(p, frame);
+        let cles = |i: usize| if effet { self.cles_montrees(i) } else { std::borrow::Cow::Borrowed(self.panels[i].camera.as_slice()) };
+        let au = |q: &Panel, keys: &[camera::CameraKey], f: usize| camera::camera_at(keys, if paliers { q.saccade.image_montree(keys, f) } else { f }, default);
+        let mine = cles(index);
+        if !mine.is_empty() {
+            return au(p, &mine, frame);
         }
         let (start, end) = self.scene_run(index);
-        if let Some(q) = self.panels[start..index].iter().rev().find(|q| !q.camera.is_empty()) {
-            return au(q, q.frame_count().saturating_sub(1));
+        for i in (start..index).rev() {
+            let k = cles(i);
+            if !k.is_empty() {
+                let q = &self.panels[i];
+                return au(q, &k, q.frame_count().saturating_sub(1));
+            }
         }
-        if let Some(q) = self.panels[index + 1..end].iter().find(|q| !q.camera.is_empty()) {
-            return au(q, 0);
+        for i in index + 1..end {
+            let k = cles(i);
+            if !k.is_empty() {
+                return au(&self.panels[i], &k, 0);
+            }
         }
         default
     }
 
     /// Caméra d'un plan rangé (une version qui n'est pas dans `panels`) à son image `frame` : ses propres clés,
-    /// sinon la caméra par défaut (avec la postérisation temporelle du plan, s'il en a une).
+    /// sinon la caméra par défaut (avec la postérisation temporelle du plan, s'il en a une, et son effet vivant).
     pub fn camera_du_plan_range(&self, p: &Panel, frame: usize) -> Camera {
         let default = self.default_camera();
-        if p.camera.is_empty() {
+        let base = |f: usize| camera::camera_at(&p.camera, f, default);
+        let vivantes = p.effet_camera.and_then(|v| crate::camfx::cuire_vite(&v, self.fps, self.frame, p.frame_count(), &p.camera, &base));
+        let keys = vivantes.as_deref().unwrap_or(&p.camera);
+        if keys.is_empty() {
             default
         } else {
-            camera::camera_at(&p.camera, p.saccade.image_montree(&p.camera, frame), default)
+            camera::camera_at(keys, p.saccade.image_montree(keys, frame), default)
         }
     }
 
@@ -2378,6 +2412,8 @@ impl Document {
             notes: String::new(),
             camera: keys_after,
             saccade: source.saccade,
+            // Un effet vivant qui commence après la coupe passe au second plan ; sinon il reste au premier.
+            effet_camera: source.effet_camera.filter(|v| v.start >= at).map(|v| crate::camfx::Vivant { start: v.start - at, ..v }),
             marks: Vec::new(),
             // Les signets d'après la coupe passent au nouveau plan ; les points d'entrée et de
             // sortie restent au premier.
@@ -2402,6 +2438,7 @@ impl Document {
         }
         first.length = at;
         first.camera = keys_before;
+        first.effet_camera = first.effet_camera.filter(|v| v.start < at);
         first.cues.bookmarks.retain(|&b| b < at);
         // Les commentaires d'après la coupe passent au nouveau plan.
         let (first_id, second_id) = (first.id, second.id);
@@ -2581,6 +2618,7 @@ impl Document {
             notes: String::new(),
             camera: Vec::new(),
             saccade: camera::Saccade::default(),
+            effet_camera: None,
             marks: Vec::new(),
             cues: Cues::default(),
             color: None,

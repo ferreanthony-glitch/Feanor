@@ -359,6 +359,10 @@ fn cut_head(p: &mut Panel, comments: &mut Vec<Comment>, c: usize, default: Camer
     }
     let (out, kept, edge) = cam_cut_head(&p.camera, c, default);
     (piece.camera, p.camera, piece.cam_edge) = (out, kept, edge);
+    // L'effet de caméra vivant suit les images, comme les clés (partie 129) ; commencé dans la partie coupée, il part du début.
+    if let Some(v) = p.effet_camera.as_mut() {
+        v.start = v.start.saturating_sub(c);
+    }
     // Une marque posée sur la première image gardée serait l'image de départ du plan : elle sort.
     let (hidden, shown): (Vec<ImageMark>, Vec<ImageMark>) = std::mem::take(&mut p.marks).into_iter().partition(|m| m.frame <= c);
     piece.marks = hidden;
@@ -493,6 +497,9 @@ fn absorb_head(p: &mut Panel, comments: &mut Vec<Comment>, piece: Piece) {
     }
     p.camera = piece.camera;
     p.camera.extend(live.into_iter().map(|k| CameraKey { frame: k.frame + len, ..k }));
+    if let Some(v) = p.effet_camera.as_mut() {
+        v.start += len;
+    }
     let mut marks = piece.marks;
     marks.extend(std::mem::take(&mut p.marks).into_iter().map(|m| ImageMark { frame: m.frame + len, ..m }));
     p.marks = marks;
@@ -574,6 +581,9 @@ fn pad_head(p: &mut Panel, comments: &mut [Comment], k: usize, hold: bool) {
     }
     for key in &mut p.camera {
         key.frame += k;
+    }
+    if let Some(v) = p.effet_camera.as_mut() {
+        v.start += k;
     }
     for m in &mut p.marks {
         m.frame += k;

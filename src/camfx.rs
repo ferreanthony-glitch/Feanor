@@ -60,6 +60,25 @@ impl Preset {
         }
     }
 
+    /// Le nom rangé dans le projet (format 52) : stable, sans accent, indépendant du libellé.
+    pub fn nom(self) -> &'static str {
+        match self {
+            Preset::Shoulder => "epaule",
+            Preset::LightShake => "tremblement",
+            Preset::Explosion => "explosion",
+            Preset::Jolt => "secousse",
+            Preset::ZoomIn => "zoom_avant",
+            Preset::ZoomOut => "zoom_arriere",
+            Preset::CrashZoom => "zoom_choc",
+            Preset::Vertigo => "vertigo",
+        }
+    }
+
+    /// Le préréglage de ce nom (`nom`) ; rien pour un nom inconnu.
+    pub fn du_nom(nom: &str) -> Option<Preset> {
+        Preset::ALL.into_iter().find(|p| p.nom() == nom)
+    }
+
     /// Ce que fait le préréglage, en une phrase (bulle).
     pub fn note(self) -> &'static str {
         match self {
@@ -535,6 +554,88 @@ pub fn plan(g: &Generator, frame: [usize; 2], start: usize, plan_len: usize, ext
         out.home = Some((0, base(0)));
     }
     out
+}
+
+// ---------------------------------------------------------------------- l'effet vivant
+
+/// Un effet de caméra **vivant** (Anthony, 2026-11-08 : « les effets de caméra doivent être appliqués et visibles
+/// immédiatement sans création de clés ») : un réglage du plan, rangé dans le projet, calculé quand la caméra est
+/// évaluée (`Document::panel_camera`). Aucune clé n'est écrite ; « Convertir en clés » les pose (`cuire`).
+///
+/// La règle qui garantit « la cuisson donne la même image » : l'effet vivant **est** la cuisson, faite à la volée. La
+/// caméra montrée est celle qu'auraient les clés cuites (`cuire`), interpolées et postérisées comme des clés
+/// ordinaires ; convertir ne fait qu'écrire ces clés-là.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Vivant {
+    /// Préréglage, intensité, durée (en images), fréquence, graine, facteur de zoom, coup de zoom.
+    pub params: Params,
+    /// Image du plan où l'effet commence.
+    pub start: usize,
+}
+
+impl Vivant {
+    /// Les réglages ramenés dans leurs bornes.
+    pub fn sanitized(&self, fps: u32) -> Vivant {
+        Vivant { params: self.params.sanitized(fps), start: self.start }
+    }
+
+    /// Dernière image touchée par l'effet dans un plan de `plan_len` images (coupée par la fin du plan).
+    pub fn last_frame(&self, plan_len: usize) -> usize {
+        (self.start + self.params.duration).min(plan_len.saturating_sub(1))
+    }
+}
+
+/// Les clés de caméra d'un plan une fois l'effet `v` cuit dedans : `keys` (ses clés), `base` (la caméra du plan sans
+/// l'effet, continuité comprise). Le même calcul sert à l'affichage (effet vivant) et à « Convertir en clés ». Rend
+/// aussi ce que l'effet a posé (`Plan`), rien si l'effet commence après la fin du plan.
+pub fn cuire(v: &Vivant, fps: u32, frame: [usize; 2], plan_len: usize, keys: &[CameraKey], base: &dyn Fn(usize) -> Camera) -> Option<(Vec<CameraKey>, Plan)> {
+    let g = Generator::new(&v.params, fps);
+    let extra: Vec<usize> = keys.iter().map(|k| k.frame).collect();
+    let plan = plan(&g, frame, v.start, plan_len, &extra, !keys.is_empty(), base);
+    plan.last_frame()?;
+    let mut out = keys.to_vec();
+    write(&mut out, &plan);
+    Some((out, plan))
+}
+
+/// Comme `cuire`, sans le `Plan`, et gardé en mémoire : la caméra est évaluée bien des fois par image d'écran (cadre,
+/// vignettes, montage, lecture), le calcul ne se refait que si quelque chose a changé. La clé de la mémoire porte tout
+/// ce dont dépend le résultat : l'effet, la cadence, le cadre, la durée du plan, ses clés, et (plan sans clé) la caméra
+/// de continuité, qui est alors la même à toutes les images.
+pub fn cuire_vite(v: &Vivant, fps: u32, frame: [usize; 2], plan_len: usize, keys: &[CameraKey], base: &dyn Fn(usize) -> Camera) -> Option<Vec<CameraKey>> {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    let cam = |h: &mut std::collections::hash_map::DefaultHasher, c: &Camera| {
+        for x in [c.x, c.y, c.zoom, c.angle, c.dolly, c.tilt, c.pan] {
+            x.to_bits().hash(h);
+        }
+    };
+    let p = &v.params;
+    (p.preset as u8, p.intensity.to_bits(), p.duration, p.freq.to_bits(), p.seed, p.zoom_factor.to_bits(), p.punch, v.start).hash(&mut h);
+    (fps, frame, plan_len, keys.len()).hash(&mut h);
+    for k in keys {
+        (k.frame, k.smooth, k.ease_in.to_bits(), k.ease_out.to_bits()).hash(&mut h);
+        cam(&mut h, &k.cam);
+    }
+    if keys.is_empty() {
+        cam(&mut h, &base(0));
+    }
+    let id = h.finish();
+    thread_local! {
+        static MEMOIRE: std::cell::RefCell<Vec<(u64, Option<std::rc::Rc<Vec<CameraKey>>>)>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+    if let Some(hit) = MEMOIRE.with(|m| m.borrow().iter().find(|(k, _)| *k == id).map(|(_, r)| r.clone())) {
+        return hit.map(|r| (*r).clone());
+    }
+    let out = cuire(v, fps, frame, plan_len, keys, base).map(|(k, _)| std::rc::Rc::new(k));
+    MEMOIRE.with(|m| {
+        let mut m = m.borrow_mut();
+        if m.len() >= 64 {
+            m.remove(0);
+        }
+        m.push((id, out.clone()));
+    });
+    out.map(|r| (*r).clone())
 }
 
 /// Écrit `plan` dans les clés d'un plan : les clés posées remplacent celles de la même image (en

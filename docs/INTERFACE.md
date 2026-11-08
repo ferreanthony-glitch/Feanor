@@ -8930,3 +8930,74 @@ Vérifié en lisant le code : le numéro est gardé par la gomme vectorielle, le
 7. Un plan au calque verrouillé : déplace un trait vers sa case ; la part reste par-dessus, la ligne d'état le dit.
 8. Un ancien projet : ses traits déjà coupés restent des morceaux (dis-moi si tu veux la commande « Relier les morceaux »).
 9. Un calque bitmap : la sélection reste celle de la case, comme avant.
+
+## 129. La clé de caméra qu'on ne poussait pas ; les effets de caméra vivants, sans clé (2026-11-08, branche `camera-retours`)
+
+Deux retours d'Anthony sur la caméra, avec des captures (114 et 115). Fichiers : `camkeys.rs` (glisser les clés), `camfx.rs` (effet vivant, cuisson), `camfxui.rs` (panneau), `document.rs` (évaluation de la caméra), `project.rs` (format 52), `camtools.rs` (section « Durées » retirée, l'outil Caméra montre l'effet), `rognage.rs` (l'effet suit les images), `keymap.rs` (libellé). Essais : `camera_retours_tests.rs` (vrais gestes sur le `Banc` et dans le panneau), `camkeys_tests.rs` mis à jour.
+
+### 1. « Je ne peux pas pousser la clé de caméra vers la droite »
+
+**La cause, trouvée au vrai geste (essai rouge d'abord).** Glisser un losange sans touche, c'est « les clés d'après suivent » (sa demande du 19 octobre). Le bloc entier (la clé prise et toutes celles d'après) s'arrêtait dès que **sa dernière clé** touchait la fin du plan. Or sur la capture, le plan a une clé **sur sa dernière image** : c'est ce que laissent un Ctrl sur la durée (partie 123, la clé de bord), la Trajectoire (partie 119) ou un effet de caméra coupé par la fin du plan. Cette clé ne pouvait pas avancer, donc rien ne bougeait : décalage 0, sans un mot. Avec Maj (la clé seule), elle s'arrêtait à l'image d'avant la clé suivante. Ce n'étaient ni les poignées de lissage au repos (partie 120 : la clé passe avant la poignée, essai déjà en place), ni la Trajectoire elle-même : la borne était voulue, mais trop serrée.
+
+Avant la correction, sur le `Banc` (plan de 40 images, clés 0, 3, 6, 27, 39) : la clé 27 tirée de 5 images restait à 27 dans la timeline comme dans le Montage ; avec Maj, la 6 tirée jusqu'à 30 s'arrêtait en 26 ; un plan aux clés 0, 10, 30, 35 tiré de 25 images s'arrêtait à +4.
+
+**La règle maintenant :**
+
+| Geste | Avant | Maintenant |
+|---|---|---|
+| Glisser une clé (les clés d'après suivent) vers la droite | Tout s'arrête quand la dernière clé du plan touche la fin | Les clés d'après **se tassent contre la fin du plan**, une image chacune, dans leur ordre ; la clé prise va où on la tire, jusqu'à laisser une image à chacune. Aucune ne disparaît ni n'en écrase une autre. |
+| Le même, vers la gauche | La première s'arrête juste après la clé d'avant | Inchangé |
+| Maj + glisser (la clé seule) | Elle s'arrête avant la clé voisine | Elle **passe par-dessus** les autres clés, jusqu'au début ou à la fin du plan. Elle ne se pose jamais sur une autre clé : tant que la souris est sur une image prise, elle attend à côté (le plus près de la souris ; à égalité, le moins loin). |
+| Tirée au-delà de la fin | Rien ne bougeait, sans message | Elle s'arrête à la dernière image libre, et la ligne d'état dit pourquoi : « la fin du plan l'arrête (les clés d'après sont tassées contre elle, une image chacune) », « une autre clé est sur cette image, elle attend à côté », « la clé d'avant l'arrête (Maj tenue : seule cette clé bouge, et passe par-dessus) ». |
+
+Chaque clé garde sa caméra et ses adoucis ; une étape d'annulation par geste, Échap l'abandonne, comme avant. Le plan ne s'allonge jamais (la durée reste la poignée du plan, partie 123).
+
+### 2. Les effets de caméra se voient tout de suite, sans clé
+
+Avant : choisir « Tremblement léger » et régler l'intensité ne faisait rien ; « Appliquer » posait d'un coup des dizaines de clés (73 sur la capture). Maintenant :
+
+- **Choisir un effet dans la liste le montre aussitôt**, sur le plan courant, en direct : l'écran (outil Caméra compris), la lecture, les exports, les Vignettes et le Montage. Aucune clé n'est posée. La liste commence par « Aucun effet », qui le retire.
+- **Chaque réglage se voit à l'image suivante** (intensité, durée, fréquence, graine, zoom, coup de zoom). **Une étape d'annulation par réglage** : un glisser dans un champ, ou un clic sur le dé, est une seule étape (« Régler l'effet de caméra : … »).
+- L'effet commence à la tête de lecture au moment du choix, ou couvre les images choisies dans la timeline (sa durée devient alors celle du choix). Le bouton **« Placer »** le recale ensuite sur la tête de lecture ou sur le choix. La ligne sous les réglages dit où il est : « Vivant, sans clé : des images 1 à 37 ».
+- **« Appliquer » devient « Convertir en clés »** : il pose les clés de caméra ordinaires de l'effet, puis l'effet vivant s'en va. Ces clés donnent **exactement** la même image que l'effet vivant : l'effet vivant *est* la cuisson, faite à la volée (`camfx::cuire` sert aux deux ; la caméra montrée est celle qu'auraient ces clés, interpolées et mises en paliers comme des clés). Essai sur les huit préréglages, avec et sans clés déjà posées, avec et sans « Par paliers » : la même caméra à chaque image, au bit près, et les mêmes pixels d'export. Une étape d'annulation, qui rend l'effet vivant.
+- Le raccourci `camera.effet_appliquer` (sans touche d'origine) garde son identifiant : sur un plan sans effet vivant, il pose comme avant les clés de l'effet proposé.
+- Un effet vivant suit les images du plan comme les clés : couper le plan en deux le laisse au morceau où il commence ; rogner ou rallonger le début le décale (un effet commencé dans le début coupé repart de l'image 0).
+- La section **« Durées »** (séquence, plan) du panneau est partie : Anthony l'a barrée ; les durées se lisent dans la timeline.
+
+**Ce qu'est l'effet pour la caméra.** Trois caméras sont lues dans le code : la caméra **douce** (les clés seules : c'est elle que règlent l'outil Caméra, la pose d'une clé, la base de l'effet), la caméra **vivante** (les clés et l'effet, sans les paliers : ce que montre l'outil Caméra arrêté) et la caméra **montrée** (clés, effet et paliers : tout ce qui montre ou exporte une image). Un plan sans clé qui suit son voisin (continuité) prend la caméra où l'effet du voisin la laisse, et la même après la conversion (essai).
+
+**Calcul.** La cuisson se refait seulement quand quelque chose change : elle est gardée en mémoire (64 résultats par fil), sous une clé qui porte l'effet, la cadence, le cadre, la durée du plan, ses clés et, pour un plan sans clé, la caméra de continuité. Pour un tremblement de 3 s : 37 clés calculées une fois.
+
+### Format 52
+
+`effet_camera` d'un plan dans le manifeste (champ optionnel : préréglage par un nom stable, `epaule`, `tremblement`, `explosion`, `secousse`, `zoom_avant`, `zoom_arriere`, `zoom_choc`, `vertigo` ; début, durée, intensité, fréquence, graine, zoom, coup de zoom). Un projet de format 51 ou moins s'ouvre tel quel : ses effets déjà posés sont des clés et le restent (essai sur un vrai manifeste réécrit en 51, sans le champ). Une version précédente refuse un projet 52 (elle perdrait l'effet à l'enregistrement). Un préréglage inconnu (version plus récente) est laissé de côté à l'ouverture.
+
+**À coordonner :** la branche `vignettes-bitmap` peut aussi monter le format. J'ai pris **52**, le numéro qui suit `main` (51). Si `vignettes-bitmap` est fusionnée avant, l'une des deux passe à 53 : le numéro est dans `project.rs` (`VERSION` et son commentaire) et dans cinq essais (`assert_eq!(…VERSION, 52)`), plus le texte « format 52 » de cette partie et de `camera_retours_tests.rs`.
+
+### Mes choix, à faire valider par Anthony
+
+- La clé tirée sans touche **pousse** les clés d'après et les **tasse** contre la fin, plutôt que de s'arrêter ou de laisser la clé de fin derrière elle.
+- Avec Maj, une clé **passe par-dessus** les autres et attend à côté d'une image prise (jamais d'écrasement).
+- L'effet vivant est **un par plan**. Choisir un autre préréglage le remplace à la même place.
+- « Convertir en clés » retire l'effet vivant (sinon il s'ajouterait aux clés qu'il vient de poser).
+- L'outil Caméra arrêté montre l'effet (c'est là qu'on le règle) ; ses poignées restent celles de la caméra douce, la secousse les déborde un peu.
+
+### Pas vérifié
+
+- À l'écran, à la main (les essais tiennent sur le `Banc`, dans le panneau peint sans fenêtre et sur les images de l'export) : à voir avec sa tablette.
+- Aucune marque de l'effet vivant sur la piste Caméra de la timeline ou du Montage : seule la ligne du panneau dit où il est.
+- Deux plans **sans clé**, côte à côte dans la même scène, **chacun avec un effet** : convertir le premier peut changer la base du second (le second prend la caméra de continuité du premier, qui devient des clés). Cas rare, non essayé.
+
+### Liste à vérifier à l'écran
+
+1. Un plan avec une clé sur sa dernière image (Ctrl sur la durée, ou la Trajectoire) : tirer la clé d'avant vers la droite. Elle avance ; la clé de fin reste au bout.
+2. Plusieurs clés après elle : tirer loin. Elles se tassent contre la fin, une image chacune ; la ligne d'état dit que la fin du plan l'arrête.
+3. Maj + tirer une clé par-dessus une autre : elle passe, et ne s'arrête jamais dessus.
+4. Ctrl+Z après chaque geste : tout revient.
+5. Outil Caméra, « Effets de caméra » : choisir « Tremblement léger ». La caméra tremble tout de suite (lecture, vue caméra), la piste Caméra n'a aucun losange de plus.
+6. Glisser l'intensité, la fréquence : le tremblement change pendant le glisser. Ctrl+Z annule le réglage seul.
+7. « Placer » avec des images choisies dans la timeline : l'effet les couvre.
+8. « Convertir en clés » : les losanges apparaissent, l'image ne change pas d'un pixel. Ctrl+Z : l'effet vivant revient, sans clé.
+9. Exporter une vidéo, regarder les Vignettes et le Montage : l'effet y est.
+10. Enregistrer, fermer, rouvrir : l'effet est là. Ouvrir un ancien projet avec des clés de tremblement : elles sont toujours là.
+11. La section « Durées » n'est plus dans le panneau.

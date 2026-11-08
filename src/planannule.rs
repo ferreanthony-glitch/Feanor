@@ -580,6 +580,7 @@ pub(crate) fn document_de_la_planche(doc: &Document) -> (Document, Vec<Rang>) {
                 notes: String::new(),
                 camera: p.camera.clone(),
                 saccade: p.saccade,
+                effet_camera: p.effet_camera,
                 marks: p.marks.clone(),
                 cues: Default::default(),
                 color: None,

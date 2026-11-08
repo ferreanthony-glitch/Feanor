@@ -145,10 +145,11 @@ impl App {
 
     /// La caméra que **l'écran montre** (vue caméra, cadre, aides au cadrage) à l'image courante : celle des paliers de la
     /// postérisation temporelle du plan (`Panel::saccade`), comme les exports et la lecture. Seul l'outil Caméra arrêté lit
-    /// la caméra douce : il règle les clés, et ses poignées doivent suivre ce que la souris tire.
+    /// la caméra douce : il règle les clés, et ses poignées doivent suivre ce que la souris tire. L'effet de caméra vivant du
+    /// plan (partie 129), lui, se voit aussi avec l'outil Caméra : c'est là qu'on le règle.
     pub(crate) fn camera_montree(&self) -> Camera {
         if self.tool == crate::app::Tool::Camera && !self.playing {
-            self.current_camera()
+            self.doc.panel_camera_vivante(self.cur_panel, self.cur_frame)
         } else {
             self.doc.panel_camera(self.cur_panel, self.cur_frame)
         }
@@ -639,7 +640,7 @@ impl App {
         // Postérisation temporelle : le mouvement montré par paliers (aucune clé n'est touchée).
         section(ui, "Mouvement par paliers", &mut |ui| self.camera_saccade_ui(ui));
 
-        // Effets de caméra : des préréglages qui posent des clés (`camfxui.rs`).
+        // Effets de caméra : des préréglages vivants, sans clé, que « Convertir en clés » fige (`camfxui.rs`).
         section(ui, "Effets de caméra", &mut |ui| self.camera_effects_ui(ui));
 
         // Vue et durées.
@@ -655,13 +656,8 @@ impl App {
                 }
             });
         });
-        // (Les aides au cadrage sont dans le menu « Cadrage » de la barre au-dessus du dessin.)
-        let (s, e) = self.doc.sequence_run(self.cur_panel);
-        let sequence_len: usize = self.doc.panels[s..e].iter().map(|p| p.frame_count()).sum();
-        section(ui, "Durées", &mut |ui| {
-            ui.label(format!("Séquence : {}", crate::storyboard::duration_label(sequence_len, fps)));
-            ui.label(format!("Plan : {}", crate::storyboard::duration_label(self.frame_count(), fps)));
-        });
+        // (Les aides au cadrage sont dans le menu « Cadrage » de la barre au-dessus du dessin. La section « Durées »,
+        // séquence et plan, est partie le 8 novembre 2026 : Anthony l'a barrée, les durées se lisent dans la timeline.)
         ui.label(
             RichText::new(
                 "Glisser dans le cadre : déplacer (Maj : à l'horizontale ou à la verticale). Coin : zoomer. \

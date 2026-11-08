@@ -420,6 +420,9 @@ mod camfxui;
 mod camkeys;
 #[cfg(test)]
 mod camkeys_tests;
+// Retours d'Anthony du 8 novembre sur la caméra : la clé qui ne se poussait pas, les effets vivants (partie 129).
+#[cfg(test)]
+mod camera_retours_tests;
 mod lissage;
 #[cfg(test)]
 mod lissage_camera_tests;
