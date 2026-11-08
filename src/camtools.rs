@@ -89,6 +89,9 @@ pub(crate) struct CamDrag {
     handle: CamHandle,
     start: Pos2,
     cam0: Camera,
+    /// Centre du cadre **tel qu'il est peint** à l'appui (effet de caméra vivant compris) : le zoom et la rotation tournent
+    /// autour de lui, là où on le voit.
+    centre: Pos2,
     snap: Edit,
     changed: bool,
 }
@@ -240,7 +243,8 @@ impl App {
 
     /// Partie du cadre caméra sous le pointeur (position écran).
     pub(crate) fn camera_handle_at(&self, screen: Pos2) -> Option<CamHandle> {
-        let corners = self.current_camera().corners(self.doc.frame);
+        // Le cadre tel qu'il est peint (`paint_camera`, effet de caméra vivant compris, partie 129) : on attrape ce qu'on voit.
+        let corners = self.camera_montree().corners(self.doc.frame);
         if self.rotate_handle(&corners).distance(screen) <= GRAB {
             return Some(CamHandle::Rotate);
         }
@@ -260,10 +264,13 @@ impl App {
                 .into();
             return;
         };
+        let [fw, fh] = self.doc.frame;
+        let centre = self.camera_montree().to_stage(self.doc.frame, fw as f32 / 2.0, fh as f32 / 2.0);
         self.cam_drag = Some(CamDrag {
             handle,
             start: p,
             cam0: self.current_camera(),
+            centre,
             snap: self.snapshot(),
             changed: false,
         });
@@ -272,9 +279,9 @@ impl App {
     pub(crate) fn camera_drag(&mut self, p: Pos2, shift: bool) {
         let Some(d) = &mut self.cam_drag else { return };
         let (cam0, start) = (d.cam0, d.start);
-        // Centre du cadre filmé (caméra tournée : le point visé, pas l'aplomb de l'œil).
-        let [fw, fh] = self.doc.frame;
-        let c = cam0.to_stage(self.doc.frame, fw as f32 / 2.0, fh as f32 / 2.0);
+        // Centre du cadre filmé (caméra tournée : le point visé, pas l'aplomb de l'œil), tel qu'il était peint à l'appui : sans
+        // effet vivant, celui de `cam0` comme avant ; avec, le geste part de ce qu'on voit, l'effet garde son décalage par-dessus.
+        let c = d.centre;
         let cam = match d.handle {
             CamHandle::Move => {
                 let mut delta = p - start;

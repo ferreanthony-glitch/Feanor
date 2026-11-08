@@ -431,3 +431,220 @@ fn l_effet_vivant_s_enregistre_et_les_anciens_projets_gardent_leurs_cles() {
     assert_eq!(vieux.panels[1].camera, doc.panels[1].camera, "les clés de l'ancien effet sont là, intactes");
     std::fs::remove_dir_all(&dir).ok();
 }
+// ------------------------------------------------------------------------------ 3. les gestes de montage et de durée gardent l'image
+
+/// Chaque image de chaque plan du film, composée par le processeur avec la caméra montrée.
+fn film(doc: &Document) -> Vec<Vec<Color32>> {
+    let mut out = Vec::new();
+    for pi in 0..doc.panels.len() {
+        for f in 0..doc.panels[pi].frame_count() {
+            let plan = render::panel_plan_at(doc, pi, f, doc.render_paper());
+            out.push(render::camera_image(doc, &plan, &doc.panel_camera(pi, f)));
+        }
+    }
+    out
+}
+
+fn cameras_du_film(doc: &Document) -> Vec<Camera> {
+    (0..doc.panels.len()).flat_map(|pi| (0..doc.panels[pi].frame_count()).map(move |f| doc.panel_camera(pi, f))).collect()
+}
+
+fn images_du_plan(doc: &Document, pi: usize) -> Vec<Vec<Color32>> {
+    (0..doc.panels[pi].frame_count()).map(|f| render::camera_image(doc, &render::panel_plan_at(doc, pi, f, doc.render_paper()), &doc.panel_camera(pi, f))).collect()
+}
+
+fn effet(preset: Preset, start: usize, duration: usize) -> Option<Vivant> {
+    Some(Vivant { params: Params { duration, intensity: 3.0, ..Params::new(preset, 12) }, start }.sanitized(12))
+}
+
+fn pareilles(a: &[Vec<Color32>], b: &[Vec<Color32>], ctx: &str) {
+    assert_eq!(a.len(), b.len(), "{ctx} : nombre d'images");
+    let diff: Vec<usize> = (0..a.len()).filter(|&i| a[i] != b[i]).collect();
+    assert!(diff.is_empty(), "{ctx} : images changées {diff:?}");
+}
+
+#[test]
+fn rogner_le_debut_avec_ctrl_puis_rallonger_rend_les_memes_images() {
+    // (Les tremblements et secousses : une clé par image. Un zoom a deux clés adoucies : couper au milieu de leur intervalle
+    // pose une clé de bord, comme pour toute clé adoucie, et l'adouci ne se coupe pas exactement ; voir la partie 129.)
+    for preset in [Preset::LightShake, Preset::Explosion, Preset::Jolt] {
+        let mut doc = crate::export_tests::doc_with_drawing(1, 60);
+        doc.panels[0].effet_camera = effet(preset, 20, 30);
+        let avant = images_du_plan(&doc, 0);
+        let ctx = preset.label();
+        // Ctrl sur la fin, 30 images de moins : le début part en réserve ; ce qu'on voit est la fin d'avant, image pour image.
+        doc.slide_plan_end(0, 30);
+        let court = images_du_plan(&doc, 0);
+        pareilles(&court, &avant[30..], &format!("{ctx}, raccourci"));
+        // Et de nouveau 60 : exactement le plan d'avant.
+        doc.slide_plan_end(0, 60);
+        pareilles(&images_du_plan(&doc, 0), &avant, &format!("{ctx}, aller-retour"));
+        // Le bord droit sans touche, plus court puis plus long : pareil.
+        let mut doc = crate::export_tests::doc_with_drawing(1, 60);
+        doc.panels[0].effet_camera = effet(preset, 20, 30);
+        doc.trim_tail(0, -25);
+        pareilles(&images_du_plan(&doc, 0), &avant[..35], &format!("{ctx}, fin rognée"));
+        doc.trim_tail(0, 25);
+        pareilles(&images_du_plan(&doc, 0), &avant, &format!("{ctx}, fin rendue"));
+    }
+}
+
+#[test]
+fn un_rognage_est_une_seule_annulation_qui_rend_l_effet_vivant() {
+    let mut app = app_dessin("rognage-annuler");
+    app.doc.panels[0].effet_camera = effet(Preset::LightShake, 10, 20);
+    let vivant = app.doc.panels[0].effet_camera;
+    let snap = app.snapshot();
+    app.doc.slide_plan_end(0, 30);
+    app.commit_as(snap, "Raccourcir le plan, clés décalées");
+    app.undo();
+    assert_eq!(app.doc.panels[0].effet_camera, vivant, "l'effet vivant revient d'une annulation");
+    assert!(app.doc.panels[0].camera.is_empty());
+}
+
+#[test]
+fn couper_un_plan_a_effet_garde_chaque_image_des_deux_plans() {
+    for preset in [Preset::LightShake, Preset::Explosion, Preset::Jolt, Preset::Shoulder] {
+        for coupe in [3, 20, 40] {
+            let mut doc = crate::export_tests::doc_with_drawing(1, 48);
+            doc.panels[0].effet_camera = effet(preset, 5, 30);
+            let avant = film(&doc);
+            doc.split_panel(0, coupe).expect("coupé");
+            assert_eq!(doc.panels.len(), 2);
+            pareilles(&film(&doc), &avant, &format!("{} coupé à {coupe}", preset.label()));
+        }
+    }
+}
+
+#[test]
+fn reunir_deux_plans_a_effet_garde_chaque_image() {
+    for (pa, pb) in [(Preset::ZoomIn, Preset::LightShake), (Preset::Explosion, Preset::Vertigo), (Preset::Shoulder, Preset::CrashZoom)] {
+        let make = || {
+            let mut doc = crate::export_tests::doc_with_drawing(2, 24);
+            // L'effet du premier est coupé par sa fin ; le second en a un aussi.
+            doc.panels[0].effet_camera = effet(pa, 10, 30);
+            doc.panels[1].effet_camera = effet(pb, 2, 12);
+            doc
+        };
+        let mut doc = make();
+        let avant = film(&doc);
+        let cams_avant = cameras_du_film(&doc);
+        doc.merge_with_next(0).expect("réunis");
+        assert_eq!(doc.panels.len(), 1);
+        assert!(doc.panels[0].effet_camera.is_none(), "les deux effets sont devenus des clés");
+        // La caméra de chaque image, au bit près. (Les pixels : « Réunir » range les calques du second plan par rang, et
+        // sur ce dessin d'essai il les dessine déjà autrement sans aucun effet ; c'est « Joindre » qui garde l'écran.)
+        assert_eq!(cameras_du_film(&doc), cams_avant, "réunir {} + {} : les caméras", pa.label(), pb.label());
+        // Et les images qui changent sont exactement celles qui changent sans effet : l'effet n'en ajoute aucune.
+        let changees = |a: &[Vec<Color32>], b: &[Vec<Color32>]| (0..a.len()).filter(|&i| a[i] != b[i]).collect::<Vec<_>>();
+        let mut temoin = crate::export_tests::doc_with_drawing(2, 24);
+        let temoin_avant = film(&temoin);
+        temoin.merge_with_next(0).unwrap();
+        assert_eq!(changees(&film(&doc), &avant), changees(&film(&temoin), &temoin_avant), "réunir {} + {} : pas une image de plus", pa.label(), pb.label());
+        let mut doc = make();
+        doc.append_next_with(0, &Default::default());
+        pareilles(&film(&doc), &avant, &format!("joindre {} + {}", pa.label(), pb.label()));
+    }
+}
+
+#[test]
+fn convertir_un_voisin_ne_change_pas_les_plans_qui_le_suivent() {
+    let make = || {
+        let mut doc = crate::export_tests::doc_with_drawing(3, 24);
+        let c = doc.default_camera();
+        // A a des clés et un effet ; B n'a pas de clé mais un effet ; C n'a rien : il suit B.
+        doc.panels[0].camera = vec![CameraKey::new(0, Camera { x: c.x - 20.0, ..c }), CameraKey::new(23, Camera { x: c.x + 20.0, zoom: 1.2, ..c })];
+        doc.panels[0].effet_camera = effet(Preset::ZoomIn, 6, 30);
+        doc.panels[1].effet_camera = effet(Preset::LightShake, 0, 18);
+        doc
+    };
+    let doc = make();
+    let avant = film(&doc);
+    let bc_avant: Vec<_> = (1..3).map(|pi| images_du_plan(&doc, pi)).collect();
+    // B commence où l'effet de A laisse la caméra (zoom compris), à l'écran comme pour sa caméra douce.
+    assert_eq!(doc.panel_camera_douce(1, 0).zoom, doc.panel_camera(0, 23).zoom);
+    let mut a = make();
+    convertir(&mut a, 0);
+    for pi in 1..3 {
+        pareilles(&images_du_plan(&a, pi), &bc_avant[pi - 1], &format!("plan {pi} après la conversion de A"));
+    }
+    pareilles(&film(&a), &avant, "tout le film après A");
+    let mut b = make();
+    convertir(&mut b, 1);
+    pareilles(&film(&b), &avant, "tout le film après B");
+}
+
+#[test]
+fn inserer_ou_supprimer_des_images_fait_suivre_l_effet_comme_les_cles() {
+    let mut app = app_dessin("inserer");
+    app.doc.panels[0].effet_camera = effet(Preset::LightShake, 4, 30);
+    let avant = images_du_plan(&app.doc, 0);
+    app.cur_frame = 12;
+    app.frame_sel = None;
+    let etapes = app.history.undo_len();
+    app.insert_images(true, 6, true);
+    assert_eq!(app.history.undo_len(), etapes + 1);
+    let apres = images_du_plan(&app.doc, 0);
+    pareilles(&apres[..12], &avant[..12], "avant l'insertion");
+    pareilles(&apres[18..], &avant[12..], "après l'insertion, décalées de 6");
+    app.undo();
+    assert!(app.doc.panels[0].effet_camera.is_some() && app.doc.panels[0].camera.is_empty(), "une annulation rend l'effet vivant");
+    // Supprimer 5 images au milieu de l'effet : la suite recule avec sa secousse, sans repartir du début de l'effet.
+    app.cur_frame = 10;
+    app.frame_sel = Some((10, 15));
+    app.hole = crate::images::Hole::FromRight;
+    app.delete_images(true);
+    let apres = images_du_plan(&app.doc, 0);
+    pareilles(&apres[..10], &avant[..10], "avant la suppression");
+    pareilles(&apres[10..], &avant[15..], "après la suppression, reculées de 5");
+}
+
+#[test]
+fn l_outil_camera_attrape_le_cadre_la_ou_il_est_peint() {
+    let mut doc = crate::export_tests::doc_with_drawing(1, 48);
+    doc.panels[0].effet_camera = Some(Vivant { params: Params { intensity: 8.0, ..Params::new(Preset::Explosion, 12) }, start: 0 }.sanitized(12));
+    let mut b = banc_taille(doc, false, 1920, 1080);
+    b.app.set_mode(crate::app::Mode::Animation);
+    b.app.tool = Tool::Camera;
+    b.app.cur_frame = 1;
+    b.chauffer(6);
+    let ecran = |b: &Banc, p: Pos2| b.app.view.to_screen(b.app.canvas_rect, b.app.canvas_size(), p);
+    let peint = b.app.camera_montree().corners(b.app.doc.frame);
+    let doux = b.app.current_camera().corners(b.app.doc.frame);
+    let ecart = ecran(&b, peint[2]).distance(ecran(&b, doux[2]));
+    assert!(ecart > 15.0, "l'effet décale bien le cadre peint : {ecart} points");
+    let coin = ecran(&b, peint[2]);
+    assert_eq!(b.app.camera_handle_at(coin), Some(crate::camtools::CamHandle::Zoom), "le coin peint s'attrape");
+}
+
+#[test]
+fn une_planche_de_cent_plans_a_effet_ne_recalcule_pas_a_chaque_image() {
+    let mut doc = Document::with_frame(64, 48, 24);
+    for _ in 1..100 {
+        let n = doc.panels.len() - 1;
+        doc.add_scene_after(n);
+    }
+    for (i, p) in doc.panels.iter_mut().enumerate() {
+        p.set_length(48);
+        p.effet_camera = Some(Vivant { params: Params { seed: i as u32, ..Params::new(Preset::LightShake, 24) }, start: 0 }.sanitized(24));
+    }
+    let lire = |doc: &Document| (0..doc.panels.len()).map(|pi| doc.panel_camera(pi, 10).x).sum::<f32>();
+    // La première lecture cuit les cent effets ; les suivantes (une par image d'écran) doivent venir de la mémoire.
+    let t = std::time::Instant::now();
+    let premiere = lire(&doc);
+    let froide = t.elapsed().as_secs_f64() * 1e3;
+    let t = std::time::Instant::now();
+    for _ in 0..20 {
+        assert_eq!(lire(&doc), premiere);
+    }
+    let par_image = t.elapsed().as_secs_f64() * 1e3 / 20.0;
+    println!("CAMERA-RETOURS cent plans à effet : {froide:.3} ms à froid, {par_image:.3} ms par image ensuite");
+    assert!(par_image * 5.0 < froide, "les lectures suivantes ne recalculent pas : {par_image:.3} ms contre {froide:.3} ms à froid");
+}
+
+/// Convertit l'effet vivant du plan `pi` en clés, comme « Convertir en clés » : les clés que l'effet montrait.
+fn convertir(doc: &mut Document, pi: usize) {
+    let k = doc.cles_montrees(pi).into_owned();
+    doc.panels[pi].camera = k;
+    doc.panels[pi].effet_camera = None;
+}

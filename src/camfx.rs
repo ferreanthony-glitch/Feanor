@@ -621,22 +621,28 @@ pub fn cuire_vite(v: &Vivant, fps: u32, frame: [usize; 2], plan_len: usize, keys
         cam(&mut h, &base(0));
     }
     let id = h.finish();
+    // (Une table par fil, jusqu'à `MEMOIRE_MAX` cuissons : une planche de centaines de plans à effet ne recalcule pas en
+    // boucle. Pleine, elle repart de zéro : les plans affichés se recalculent une fois.)
+    type Table = std::collections::HashMap<u64, Option<std::rc::Rc<Vec<CameraKey>>>>;
     thread_local! {
-        static MEMOIRE: std::cell::RefCell<Vec<(u64, Option<std::rc::Rc<Vec<CameraKey>>>)>> = const { std::cell::RefCell::new(Vec::new()) };
+        static MEMOIRE: std::cell::RefCell<Table> = std::cell::RefCell::new(Table::new());
     }
-    if let Some(hit) = MEMOIRE.with(|m| m.borrow().iter().find(|(k, _)| *k == id).map(|(_, r)| r.clone())) {
+    if let Some(hit) = MEMOIRE.with(|m| m.borrow().get(&id).cloned()) {
         return hit.map(|r| (*r).clone());
     }
     let out = cuire(v, fps, frame, plan_len, keys, base).map(|(k, _)| std::rc::Rc::new(k));
     MEMOIRE.with(|m| {
         let mut m = m.borrow_mut();
-        if m.len() >= 64 {
-            m.remove(0);
+        if m.len() >= MEMOIRE_MAX {
+            m.clear();
         }
-        m.push((id, out.clone()));
+        m.insert(id, out.clone());
     });
     out.map(|r| (*r).clone())
 }
+
+/// Nombre de cuissons gardées par fil (`cuire_vite`).
+pub const MEMOIRE_MAX: usize = 4096;
 
 /// Écrit `plan` dans les clés d'un plan : les clés posées remplacent celles de la même image (en
 /// gardant leurs adoucis, sauf ceux que l'effet pose), les autres restent.

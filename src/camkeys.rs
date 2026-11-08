@@ -354,7 +354,7 @@ fn add_homes(doc: &mut Document, targets: &[(usize, usize, CameraKey)]) {
         firsts.entry(t.0).and_modify(|f| *f = (*f).min(t.1)).or_insert(t.1);
     }
     let homes: Vec<(usize, camera::Camera)> =
-        firsts.into_iter().filter(|&(pi, f)| doc.panels[pi].camera.is_empty() && f > 0).map(|(pi, _)| (pi, doc.panel_camera(pi, 0))).collect();
+        firsts.into_iter().filter(|&(pi, f)| doc.panels[pi].camera.is_empty() && f > 0).map(|(pi, _)| (pi, doc.panel_camera_douce(pi, 0))).collect();
     for (pi, cam) in homes {
         doc.panels[pi].camera.push(CameraKey::new(0, cam));
     }

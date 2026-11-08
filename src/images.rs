@@ -515,6 +515,10 @@ impl App {
         let lis = if all { self.all_image_layers() } else { self.image_layers() };
         let hole = self.hole;
         let snap = self.snapshot();
+        if all && hole == Hole::FromRight {
+            // L'effet de caméra vivant devient ses clés, sans changer l'image, pour suivre les images comme elles (partie 129).
+            self.doc.cuire_effet_vivant(self.cur_panel);
+        }
         for li in lis {
             let layer = &mut self.layers_mut()[li];
             delete_frames(&mut layer.frames, a, b, hole);
@@ -546,6 +550,10 @@ impl App {
         let at = if before { a } else { b };
         let lis = if all { self.all_image_layers() } else { self.image_layers() };
         let snap = self.snapshot();
+        if all {
+            // L'effet de caméra vivant devient ses clés, sans changer l'image, pour suivre les images comme elles (partie 129).
+            self.doc.cuire_effet_vivant(self.cur_panel);
+        }
         let row = vec![None; n];
         for li in lis {
             let layer = &mut self.layers_mut()[li];

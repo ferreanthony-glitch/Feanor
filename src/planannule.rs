@@ -353,6 +353,7 @@ impl Document {
             || !p.notes.is_empty()
             || !p.marks.is_empty()
             || !p.camera.is_empty()
+            || p.effet_camera.is_some()
             || p.layers.len() > 1
             || p.layers.iter().any(|l| l.frames.iter().flatten().any(|c| self.cel_a_du_trait(*c)))
     }

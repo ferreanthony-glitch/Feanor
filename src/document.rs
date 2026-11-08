@@ -1708,10 +1708,45 @@ impl Document {
         }
     }
 
+    /// Écrit l'effet vivant du plan `index` dans ses clés et le retire, **sans changer aucune image** : les clés écrites
+    /// sont celles que l'effet montrait (`cles_montrees`). Les gestes qui coupent, réunissent, rognent ou décalent les
+    /// images d'un plan le font d'abord (partie 129) : ils savent garder l'image avec des clés, pas avec un effet vivant.
+    /// Vrai s'il y avait un effet.
+    pub fn cuire_effet_vivant(&mut self, index: usize) -> bool {
+        self.cuire_effets_vivants(&[index])
+    }
+
+    /// Comme `cuire_effet_vivant`, pour plusieurs plans **d'un coup** : toutes les clés sont lues avant d'en écrire une,
+    /// pour que deux plans voisins sans clé, chacun avec son effet, gardent chacun son image (la base de l'un ne bouge pas
+    /// quand l'autre devient des clés).
+    pub fn cuire_effets_vivants(&mut self, indices: &[usize]) -> bool {
+        let cuites: Vec<(usize, Vec<camera::CameraKey>)> = indices
+            .iter()
+            .copied()
+            .filter(|&i| self.panels.get(i).is_some_and(|p| p.effet_camera.is_some()))
+            .map(|i| (i, self.cles_montrees(i).into_owned()))
+            .collect();
+        for (i, keys) in &cuites {
+            let p = &mut self.panels[*i];
+            p.camera = keys.clone();
+            p.effet_camera = None;
+        }
+        !cuites.is_empty()
+    }
+
     fn panel_camera_selon(&self, index: usize, frame: usize, paliers: bool, effet: bool) -> Camera {
         let default = self.default_camera();
         let Some(p) = self.panels.get(index) else { return default };
-        let cles = |i: usize| if effet { self.cles_montrees(i) } else { std::borrow::Cow::Borrowed(self.panels[i].camera.as_slice()) };
+        // La continuité (un plan sans clé prend la caméra de son voisin) se lit **avec l'effet du voisin**, partout : à
+        // l'écran comme pour la caméra douce, base de l'effet d'un plan. Ainsi convertir l'effet du voisin en clés ne change
+        // rien chez lui (partie 129). Une seule exception, pour ne pas tourner en rond : la base de l'effet d'un plan sans
+        // clé ne lit pas l'effet d'un voisin lui aussi sans clé.
+        let base_d_un_effet_sans_cle = !effet && p.camera.is_empty() && p.effet_camera.is_some();
+        let cles = |i: usize| {
+            let q = &self.panels[i];
+            let lire_effet = if i == index { effet } else { !(base_d_un_effet_sans_cle && q.camera.is_empty()) };
+            if lire_effet { self.cles_montrees(i) } else { std::borrow::Cow::Borrowed(q.camera.as_slice()) }
+        };
         let au = |q: &Panel, keys: &[camera::CameraKey], f: usize| camera::camera_at(keys, if paliers { q.saccade.image_montree(keys, f) } else { f }, default);
         let mine = cles(index);
         if !mine.is_empty() {
@@ -2361,6 +2396,9 @@ impl Document {
         if at == 0 || at >= n {
             return None;
         }
+        // Un effet de caméra vivant devient d'abord ses clés, sans changer l'image : la coupe des clés (`split_keys`) garde
+        // alors chaque image des deux plans (partie 129).
+        self.cuire_effet_vivant(index);
         let source = self.panels[index].clone();
         let mut copies: HashMap<CelId, CelId> = HashMap::new();
         let mut layers = Vec::with_capacity(source.layers.len());
@@ -2412,8 +2450,8 @@ impl Document {
             notes: String::new(),
             camera: keys_after,
             saccade: source.saccade,
-            // Un effet vivant qui commence après la coupe passe au second plan ; sinon il reste au premier.
-            effet_camera: source.effet_camera.filter(|v| v.start >= at).map(|v| crate::camfx::Vivant { start: v.start - at, ..v }),
+            // (L'effet vivant a été cuit en clés avant la coupe.)
+            effet_camera: None,
             marks: Vec::new(),
             // Les signets d'après la coupe passent au nouveau plan ; les points d'entrée et de
             // sortie restent au premier.
@@ -2438,7 +2476,6 @@ impl Document {
         }
         first.length = at;
         first.camera = keys_before;
-        first.effet_camera = first.effet_camera.filter(|v| v.start < at);
         first.cues.bookmarks.retain(|&b| b < at);
         // Les commentaires d'après la coupe passent au nouveau plan.
         let (first_id, second_id) = (first.id, second.id);
@@ -2458,8 +2495,11 @@ impl Document {
         if self.refuser_si_trop_de_versions(&[self.panels[index].id, self.panels[index + 1].id]) {
             return None;
         }
-        // Caméras qu'ils montraient (un panneau sans clé hérite de ses voisins) : gardées.
-        let (cam_a, cam_b) = (self.panel_camera(index, 0), self.panel_camera(index + 1, 0));
+        // Deux effets de caméra vivants ne tiennent pas dans un plan : ils deviennent d'abord leurs clés, sans changer l'image
+        // (partie 129). Puis les caméras qu'ils montraient (un panneau sans clé hérite de ses voisins) sont gardées ; les
+        // caméras douces, celles des clés (comme `append_next_with`).
+        self.cuire_effets_vivants(&[index, index + 1]);
+        let (cam_a, cam_b) = (self.panel_camera_douce(index, 0), self.panel_camera_douce(index + 1, 0));
         // (Le plan réuni, qu'une autre version de sa séquence montre, en garde une copie : `variantes.rs`.)
         self.ranger_plan_partage(self.panels[index + 1].id, true);
         // Les calques partagés du second (`partage.rs`) se détachent d'abord : ses dessins, copiés, suivent dans le plan réuni sans
@@ -2850,6 +2890,8 @@ impl Document {
     /// Comme `append_next`, avec ce qu'on a répondu à la question des calques de même nom (`JoinOpts`).
     pub(crate) fn append_next_with(&mut self, index: usize, opts: &JoinOpts) -> Option<String> {
         let last = |d: &Document, i: usize| d.panels[i].frame_count() - 1;
+        // Les effets de caméra vivants des deux plans deviennent d'abord leurs clés, sans changer l'image (partie 129).
+        self.cuire_effets_vivants(&[index, index + 1]);
         // (Les caméras douces, celles des clés : la postérisation temporelle n'est pas une pose.)
         let cams_a = (self.panel_camera_douce(index, 0), self.panel_camera_douce(index, last(self, index)));
         let cams_b = (self.panel_camera_douce(index + 1, 0), self.panel_camera_douce(index + 1, last(self, index + 1)));

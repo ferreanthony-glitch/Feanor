@@ -359,10 +359,6 @@ fn cut_head(p: &mut Panel, comments: &mut Vec<Comment>, c: usize, default: Camer
     }
     let (out, kept, edge) = cam_cut_head(&p.camera, c, default);
     (piece.camera, p.camera, piece.cam_edge) = (out, kept, edge);
-    // L'effet de caméra vivant suit les images, comme les clés (partie 129) ; commencé dans la partie coupée, il part du début.
-    if let Some(v) = p.effet_camera.as_mut() {
-        v.start = v.start.saturating_sub(c);
-    }
     // Une marque posée sur la première image gardée serait l'image de départ du plan : elle sort.
     let (hidden, shown): (Vec<ImageMark>, Vec<ImageMark>) = std::mem::take(&mut p.marks).into_iter().partition(|m| m.frame <= c);
     piece.marks = hidden;
@@ -497,9 +493,6 @@ fn absorb_head(p: &mut Panel, comments: &mut Vec<Comment>, piece: Piece) {
     }
     p.camera = piece.camera;
     p.camera.extend(live.into_iter().map(|k| CameraKey { frame: k.frame + len, ..k }));
-    if let Some(v) = p.effet_camera.as_mut() {
-        v.start += len;
-    }
     let mut marks = piece.marks;
     marks.extend(std::mem::take(&mut p.marks).into_iter().map(|m| ImageMark { frame: m.frame + len, ..m }));
     p.marks = marks;
@@ -582,9 +575,6 @@ fn pad_head(p: &mut Panel, comments: &mut [Comment], k: usize, hold: bool) {
     for key in &mut p.camera {
         key.frame += k;
     }
-    if let Some(v) = p.effet_camera.as_mut() {
-        v.start += k;
-    }
     for m in &mut p.marks {
         m.frame += k;
     }
@@ -638,6 +628,9 @@ impl Document {
 
     /// Le plan `pi` et sa réserve, prêts à être changés ensemble.
     fn with_reserve<R>(&mut self, pi: usize, f: impl FnOnce(&mut Panel, &mut Vec<Comment>, &mut Reserve, Camera) -> R) -> R {
+        // Un effet de caméra vivant devient d'abord ses clés, sans changer l'image : la réserve et les clés de bord savent
+        // alors garder chaque image et rendre l'aller-retour exact (partie 129). Tous les gestes de durée passent par ici.
+        self.cuire_effet_vivant(pi);
         let default = self.default_camera();
         let id = self.panels[pi].id;
         let mut r = self.reserves.remove(&id).unwrap_or_default();
@@ -759,6 +752,8 @@ impl Document {
         if d == 0 {
             return 0;
         }
+        // (Les deux effets vivants d'un coup : chacun garde son image, partie 129.)
+        self.cuire_effets_vivants(&[pi, pi + 1]);
         self.trim_tail(pi, d);
         self.trim_head(pi + 1, d);
         d
