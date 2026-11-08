@@ -89,7 +89,9 @@ fn the_card_lists_the_tool_the_tab_and_what_works_everywhere_with_their_keys() {
         assert!(!s[0].lignes[0].touches.is_empty(), "{t:?}");
     }
     let camera = sections(&map, Tool::Camera, Espace::Storyboard);
-    assert_eq!(camera[0].lignes[0].touches, "pas de touche", "la caméra n'a pas de touche par défaut");
+    assert_eq!(camera[0].lignes[0].touches, "Maj+C", "la caméra a sa touche depuis le 2026-11-08 (partie 124)");
+    let transformer = sections(&map, Tool::Transform, Espace::Storyboard);
+    assert_eq!(transformer[0].lignes[0].touches, "pas de touche", "Transformer n'a pas de touche par défaut : la colonne le dit");
 }
 
 #[test]

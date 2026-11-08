@@ -5,6 +5,17 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-08
 
+- Finitions (branche `finitions`, chantier `Chantiers\finitions`, à la demande d'Anthony) : la Trajectoire d'abord (partie 119) — **insérer ou
+  retirer des images décale la trajectoire** (tout ce qui passe par `Layer::shift_frames` : le départ, la fin et chaque marque restent sur
+  leur image, comme les clés et les dessins ; la fin est posée dès le tracé sur la dernière image du plan) et **« Le dessin tourne avec le
+  chemin »** (case des réglages : il pivote autour du point d'ancrage en gardant son orientation du départ ; clés d'interpolation : l'angle
+  sur chaque clé ; clés d'images : chaque copie tournée, bitmap rééchantillonné par `Raster::transformee`). Format de projet 50. Puis le
+  petit lot V1 (partie 124) : la **licence de ffmpeg dans À propos** (ligne LGPL, dépliant avec le texte de la licence, la configuration
+  exacte, le ffmpeg du poste, le dossier `ffmpeg-licence` de la version portable, les sources) ; **trois touches** proposées : Ctrl+Maj+D
+  duplique le plan, Maj+C l'outil Caméra, Maj+K la clé de caméra ; les versions rangées d'une séquence vidée étaient déjà protégées
+  (refus avec la raison, chantier `versions-fiables` du 5 novembre, partie 102) : rien à refaire. Remarque : la version portable du
+  8 novembre ne joint pas l'archive des sources de ffmpeg que son `CONFIGURATION.txt` annonce. Non fusionné : attend son essai et son
+  « Fusionne ».
 - Vignettes : traits coupés autour des cases (capture d'Anthony). Cause : « Peindre derrière » allumé dans ses réglages ; depuis 6d89a00 (2026-10-30) un trait peint derrière n'était pas réparti et restait dans le champ de sa case (formes aussi). Pas une correction perdue en fusion (six fusions vérifiées fichier par fichier). Corrigé (a06d4c5, fusion 90f4db4), essai `vignettes_dessin_tests` rouge puis vert, vérificateur 4228 réussis deux passages. Portable `FEANOR-portable-2026-11-08.zip`.
 
 ## 2026-11-07

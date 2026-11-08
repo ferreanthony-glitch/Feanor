@@ -568,12 +568,8 @@ fn pad_head(p: &mut Panel, comments: &mut [Comment], k: usize, hold: bool) {
             continue;
         }
         let first = if hold { l.frames.first().copied().flatten() } else { None };
+        // (La trajectoire — départ et fin, en images du plan — suit les dessins et les clés par `Layer::shift_frames`.)
         l.insert(0, first, k);
-        // La trajectoire (départ et fin, en images du plan) suit les dessins et les clés.
-        if let Some(t) = l.trajectoire.as_mut() {
-            t.depart += k;
-            t.fin = t.fin.map(|f| f + k);
-        }
         l.trim();
     }
     for key in &mut p.camera {
