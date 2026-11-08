@@ -14,7 +14,8 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   = dessin, case = caméra » (un plan ne doit montrer que ce qui a été dessiné dans son champ, pas toute la planche en baladant la caméra), et le
   Décor reste tel quel. Trouvé en passant et corrigé (`app.rs`, `clamp_nav`) : après Ctrl+Z d'une continuité, l'image courante restait au-delà
   de la fin du plan, et un trait dans la case des Vignettes partait dans une image neuve au bout du plan (qui s'allongeait), la vignette du
-  montage restant vide. Quatre essais (`caseprend_tests.rs`). Non fusionné : attend son essai.
+  montage restant vide. Quatre essais (`caseprend_tests.rs`). Fusionné dans main (b334410) sur son « Oui, fusionne » après son essai de l'exe
+  de branche ; l'exe de main est reconstruit (son FEANOR ouvert arrêté sans enregistrer, comme convenu).
 - Fusion dans main (aa03f7f) de `planche-mere`, à la demande d'Anthony (« Oui, fusionne »), après la fusion de `vignettes-selection` par l'autre
   session (6bcade3) : la planche-mère (partie 126, format de projet 51), sans sa partie Vignettes, qui vient dans un chantier suivant. Essai
   ajouté à la demande de l'autre session : un trait d'un dessin partagé montré par deux cases est pris une seule fois, le déplacer le déplace dans
