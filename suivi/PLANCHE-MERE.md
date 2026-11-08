@@ -79,11 +79,9 @@ Un plan réutilisé porte le maillon à côté de son numéro (Storyboard, Vigne
    `boardui.rs`, `horschamp.rs`, `annotations.rs` tenus par l'autre session jusque-là).
 4. Plus tard : « Faire un plan par cadre » sur une case de mouvement.
 
-## Questions pour Anthony
+## Les réponses d'Anthony (2026-11-08)
 
-1. Le **calque Décor** des Vignettes doit-il être proposé d'office en « réutilisé » quand on fait « Réutiliser ce plan », ou tout le plan (décor,
-   personnages, traits) ? Je pars sur **tout le plan** : c'est plus simple à comprendre, on détache ensuite ce qu'on veut.
-2. Où dessines-tu la planche-mère d'abord : dans le **Storyboard** (toile infinie, caméra reculée) ou dans les **Vignettes** (case mère) ? Je pars
-   sur le Storyboard, les Vignettes venant à l'étape 3.
-3. Le nom à l'écran : **« Réutiliser »** (plan réutilisé, décor réutilisé) comme tu l'as dit, ou **« Planche-mère »** pour nommer la chose
-   partagée ? Je pars sur « Réutiliser » dans les commandes et « planche-mère » dans l'aide.
+1. « Réutiliser ce plan » lie **tout le plan** (décor, personnages, traits) ; on détache ensuite ce qu'on veut.
+2. La planche-mère se dessine d'abord dans le **Storyboard** (toile infinie, caméra reculée) ; les Vignettes viennent à l'étape 3.
+3. **« Réutiliser »** dans les commandes. Le mot « planche-mère » ne sert que dans les bulles des commandes et la ligne d'état, pour nommer
+   la chose partagée : **rien de nouveau dans le menu Aide**, déjà bien rempli (Anthony).
