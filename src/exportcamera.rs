@@ -101,8 +101,13 @@ pub fn build(doc: &Document, plans: &[usize], title: &str, s: &CameraSettings) -
         plan.insert("titre".into(), json!(long));
         plan.insert("image_debut".into(), json!(start));
         plan.insert("images".into(), json!(len));
-        let mut keys = panel.camera.clone();
+        // Un effet de caméra vivant (partie 129) s'exporte comme il se voit : ses clés cuites (celles que donnerait « Convertir
+        // en clés »), et les valeurs image par image même si elles ne sont pas demandées. Le nom de l'effet est dit.
+        let mut keys = doc.cles_montrees(p).into_owned();
         keys.sort_by_key(|k| k.frame);
+        if let Some(v) = panel.effet_camera {
+            plan.insert("effet_vivant".into(), json!(v.params.preset.label()));
+        }
         for k in &keys {
             let v = key_json(k);
             keys_csv.push_str(&format!(
@@ -123,7 +128,7 @@ pub fn build(doc: &Document, plans: &[usize], title: &str, s: &CameraSettings) -
             ));
         }
         plan.insert("cles".into(), Value::Array(keys.iter().map(key_json).collect()));
-        if s.per_frame {
+        if s.per_frame || panel.effet_camera.is_some() {
             let mut frames = Vec::with_capacity(len);
             for f in 0..len {
                 let c = doc.panel_camera(p, f);

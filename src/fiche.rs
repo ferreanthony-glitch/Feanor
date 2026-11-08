@@ -527,7 +527,9 @@ fn ligne_du_plan(doc: &Document, e: &Entree, i: usize, (k, a, b): (usize, usize,
             None => (String::new(), String::new(), String::new()),
         }
     };
-    let cameras: Vec<Camera> = echantillons(panel.camera.iter().map(|c| c.frame), a, b).into_iter().map(|f| doc.panel_camera(i, f)).collect();
+    // (Les clés telles qu'elles se montrent : un effet de caméra vivant compte comme ses clés cuites, partie 129.)
+    let montrees = doc.cles_montrees(i);
+    let cameras: Vec<Camera> = echantillons(montrees.iter().map(|c| c.frame), a, b).into_iter().map(|f| doc.panel_camera(i, f)).collect();
     let mut cellules = Vec::with_capacity(e.colonnes.len());
     let mut vignette = None;
     for &c in e.colonnes {

@@ -240,7 +240,11 @@ pub const FORMAT: &str = "pelure-projet";
 /// exemplaires d'un même calque partagé entre plusieurs plans (mêmes dessins, chacun sous sa caméra). Une version précédente qui ouvrirait le
 /// projet en ferait des calques séparés qui partagent les mêmes dessins, et perdrait le lien à l'enregistrement : elle le refuse donc. Un
 /// projet de version 50 ou moins s'ouvre tel quel.
-pub const VERSION: u32 = 51;
+/// 52 (2026-11-08, `docs/INTERFACE.md` partie 129) : **effet de caméra vivant** — `effet_camera` d'un plan (`camfx::Vivant`) : le
+/// préréglage (tremblement, explosion, zoom…), ses réglages et son image de départ, calculés à l'évaluation de la caméra, sans clé.
+/// Une version précédente qui ouvrirait le projet ne montrerait pas l'effet et le perdrait à l'enregistrement : elle le refuse
+/// donc. Un projet de version 51 ou moins s'ouvre tel quel : ses effets déjà posés sont des clés, et le restent.
+pub const VERSION: u32 = 52;
 /// 34 (2026-10-20, `docs/COOPERATION.md`) : **projet partagé** — le manifeste ne porte que la structure (séquences, ordre
 /// des plans, pistes son, propriétés…) et un bloc `partage` ; chaque plan est dans `plans/<n°>.json`. Seul un projet
 /// partagé porte un numéro à part : `max(VERSION_PARTAGE, VERSION)` (`version_partage_ecrite`) ; les autres s'écrivent et se
@@ -529,6 +533,9 @@ pub(crate) struct PanelEntry {
     /// Postérisation temporelle de la caméra (format 37 ; absente : éteinte, cadence 2).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     saccade: Option<SaccadeEntry>,
+    /// Effet de caméra vivant du plan (format 52, partie 129 ; absent : aucun). Un effet déjà converti est dans `camera`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    effet_camera: Option<EffetCameraEntry>,
     /// Marques d'image du plan (format 12 ; absent : aucune).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     marques: Vec<MarkEntry>,
@@ -553,6 +560,29 @@ struct SaccadeEntry {
     #[serde(default)]
     actif: bool,
     cadence: usize,
+}
+
+/// Un effet de caméra vivant (format 52) : le préréglage par son nom (`camfx::Preset::nom`), ses réglages, l'image du
+/// plan où il commence.
+#[derive(Serialize, Deserialize)]
+struct EffetCameraEntry {
+    preset: String,
+    debut: usize,
+    duree: usize,
+    #[serde(default = "un")]
+    intensite: f32,
+    #[serde(default)]
+    frequence: f32,
+    #[serde(default)]
+    graine: u32,
+    #[serde(default = "un")]
+    zoom: f32,
+    #[serde(default)]
+    coup_de_zoom: bool,
+}
+
+fn un() -> f32 {
+    1.0
 }
 
 /// Une note dessinée (format 17) : couleur (0 bleu, 1 rouge, 2 noir), épaisseur, points
@@ -2464,6 +2494,16 @@ fn panel_entry(panel: &Panel, key: &dyn Fn(CelId) -> CelId, garde: &dyn Fn(CelId
             })
             .collect(),
         saccade: (panel.saccade != crate::camera::Saccade::default()).then(|| SaccadeEntry { actif: panel.saccade.actif, cadence: panel.saccade.cadence }),
+        effet_camera: panel.effet_camera.map(|v| EffetCameraEntry {
+            preset: v.params.preset.nom().into(),
+            debut: v.start,
+            duree: v.params.duration,
+            intensite: v.params.intensity,
+            frequence: v.params.freq,
+            graine: v.params.seed,
+            zoom: v.params.zoom_factor,
+            coup_de_zoom: v.params.punch,
+        }),
         marques: panel
             .marks
             .iter()
@@ -3338,6 +3378,20 @@ fn load_manifest_avec(mut manifest: Manifest, dir: &Path, quick: bool, progress:
                     notes: p.notes,
                     camera,
                     saccade: p.saccade.map_or_else(crate::camera::Saccade::default, |s| crate::camera::Saccade { actif: s.actif, cadence: s.cadence }.normalise()),
+                    // (Un préréglage inconnu, d'une version plus récente, est laissé de côté.)
+                    effet_camera: p.effet_camera.and_then(|e| {
+                        let preset = crate::camfx::Preset::du_nom(&e.preset)?;
+                        let params = crate::camfx::Params {
+                            preset,
+                            intensity: e.intensite,
+                            duration: e.duree,
+                            freq: e.frequence,
+                            seed: e.graine,
+                            zoom_factor: e.zoom,
+                            punch: e.coup_de_zoom,
+                        };
+                        Some(crate::camfx::Vivant { params, start: e.debut }.sanitized(manifest.cadence.max(1)))
+                    }),
                     marks: marks_of(p.marques),
                     cues: crate::document::Cues {
                         bookmarks: {

@@ -609,7 +609,7 @@ pub const ACTIONS: &[ActionInfo] = &[
     act("camera.cles_coller", "Coller les clés de caméra (insérées après la clé de la tête de lecture)", true, false),
     act("camera.cles_supprimer", "Supprimer les clés de caméra choisies (rien sans clé choisie)", true, false),
     act("camera.cles_tout_choisir", "Choisir toutes les clés de caméra du plan", true, false),
-    act("camera.effet_appliquer", "Appliquer l'effet de caméra choisi (tremblement, explosion, zoom…)", true, false),
+    act("camera.effet_appliquer", "Convertir l'effet de caméra en clés (tremblement, explosion, zoom…)", true, false),
     act("effet.impact", "Préréglage d'effet : image d'impact (impact frame)", true, false),
     act("effet.lueur", "Préréglage d'effet : lueur (glow)", true, false),
     act("effet.flash_blanc", "Préréglage d'effet : flash blanc", true, false),
