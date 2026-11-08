@@ -15,10 +15,13 @@
 //!   suivent ; avec Maj, seule l'image clé se déplace ») : par défaut, la clé prise (ou la
 //!   première des clés choisies) et TOUTES les clés d'après, dans son plan, glissent du même
 //!   nombre d'images (« Décaler les clés de caméra ») ; les clés d'avant ne bougent pas, et la
-//!   première ne passe pas par-dessus la clé d'avant (`clamp_ripple`). Maj tenue (même en cours
-//!   de geste) : seules les clés choisies bougent, sans passer par-dessus une clé qui n'est pas
-//!   choisie (`clamp_delta`, « Déplacer une clé de caméra »). Dans les deux cas, ni avant
-//!   l'image 0 ni après la fin du plan ; une étape d'annulation par geste, Échap l'abandonne. Un
+//!   première ne passe pas par-dessus la clé d'avant (`clamp_ripple`) ; vers la droite, les clés
+//!   d'après qui toucheraient la fin du plan s'y tassent, une image chacune (`moves`, partie 129 :
+//!   une clé sur la dernière image ne bloque plus celles d'avant). Maj tenue (même en cours de
+//!   geste) : seules les clés choisies bougent, et passent par-dessus les autres sans jamais se
+//!   poser sur l'une d'elles (`clamp_free`, « Déplacer une clé de caméra »). Dans les deux cas, ni
+//!   avant l'image 0 ni après la fin du plan, et la ligne d'état dit ce qui arrête la clé ; une
+//!   étape d'annulation par geste, Échap l'abandonne. Un
 //!   Maj + clic sans mouvement reste le choix d'une plage : c'est egui qui sépare le clic du
 //!   glisser (seuil d'environ 6 points) ;
 //! - Ctrl+C copie les clés choisies. Ctrl+V les INSÈRE juste après la clé sur laquelle est la tête
@@ -37,7 +40,7 @@
 //! - le clic droit (piste Caméra) a les mêmes commandes ; chaque modification est une étape
 //!   d'annulation nommée.
 //!
-//! La logique est ici en fonctions pures (`choose`, `clamp_delta`, `clamp_ripple`, `shift`, `copy`,
+//! La logique est ici en fonctions pures (`choose`, `clamp_free`, `clamp_ripple`, `moves`, `shift`, `copy`,
 //! `paste`, `paste_insert`, `delete`), testées dans `camkeys_tests.rs` ; `impl App` ne fait que la brancher sur la souris,
 //! le clavier et l'historique.
 
@@ -178,27 +181,6 @@ pub(crate) struct Group {
     pub len: usize,
 }
 
-/// Le décalage `want` ramené dans ce que permettent les clés : aucune ne passe avant l'image 0,
-/// après la dernière image de son plan, ni par-dessus une clé du plan qui n'est pas choisie.
-pub(crate) fn clamp_delta(groups: &[Group], want: isize) -> isize {
-    let (mut lo, mut hi) = (isize::MIN, isize::MAX);
-    for g in groups {
-        for &f in &g.chosen {
-            let below = g.all.iter().filter(|a| **a < f && !g.chosen.contains(a)).max().map_or(0, |a| *a as isize + 1);
-            let above = g.all.iter().filter(|a| **a > f && !g.chosen.contains(a)).min().map_or(g.len.saturating_sub(1) as isize, |a| *a as isize - 1);
-            lo = lo.max(below - f as isize);
-            hi = hi.min(above.max(f as isize) - f as isize);
-        }
-    }
-    if lo > hi {
-        return 0;
-    }
-    if lo == isize::MIN || hi == isize::MAX {
-        return 0;
-    }
-    want.clamp(lo, hi)
-}
-
 /// Les images qui suivent le geste « décaler » : la première image choisie et toutes les images
 /// clés d'après (choisies ou non), dans l'ordre.
 pub(crate) fn ripple_frames(all: &[usize], chosen: &[usize]) -> Vec<usize> {
@@ -208,16 +190,90 @@ pub(crate) fn ripple_frames(all: &[usize], chosen: &[usize]) -> Vec<usize> {
     out
 }
 
-/// Comme `clamp_delta`, pour le geste « décaler » : toutes les clés d'après la première choisie
-/// glissent ensemble, donc la première s'arrête avant la clé d'avant (qui ne bouge pas) et la
-/// dernière du plan à son avant-dernière image.
+/// Le décalage permis au geste « décaler » : toutes les clés d'après la première choisie glissent ensemble. Vers la
+/// gauche, la première s'arrête juste après la clé d'avant (qui ne bouge pas) et à l'image 0. Vers la droite, les clés
+/// d'après **se tassent contre la fin du plan** (`moves`) : la clé prise peut aller jusqu'à laisser une image à chacune.
+///
+/// (Avant le 8 novembre 2026, le bloc entier s'arrêtait dès que sa dernière clé touchait la fin du plan : une clé posée
+/// sur la dernière image, comme en laissent un Ctrl sur la durée ou la Trajectoire, bloquait toutes celles d'avant.
+/// Anthony : « je ne peux pas pousser la clé de caméra vers la droite ».)
 pub(crate) fn clamp_ripple(groups: &[Group], want: isize) -> isize {
-    let moved: Vec<Group> = groups.iter().map(|g| Group { chosen: ripple_frames(&g.all, &g.chosen), all: g.all.clone(), len: g.len }).collect();
-    clamp_delta(&moved, want)
+    let (mut lo, mut hi) = (isize::MIN, isize::MAX);
+    for g in groups {
+        let moving = ripple_frames(&g.all, &g.chosen);
+        let Some(&first) = moving.first() else { continue };
+        let below = g.all.iter().filter(|a| **a < first).max().map_or(0, |a| *a as isize + 1);
+        lo = lo.max(below - first as isize);
+        hi = hi.min(g.len as isize - moving.len() as isize - first as isize);
+    }
+    if lo == isize::MIN || hi == isize::MAX || lo > hi {
+        return 0;
+    }
+    want.clamp(lo, hi)
+}
+
+/// Le décalage permis quand seules les clés choisies bougent (Maj) : aucune ne sort du plan, et une clé **peut passer
+/// par-dessus** une clé qui n'est pas choisie, sans jamais tomber sur elle (elle s'arrête à côté tant que la souris est
+/// dessus). Le décalage rendu est le plus proche de `want` qui ne pose aucune clé sur une autre ; à égalité, le plus
+/// court.
+pub(crate) fn clamp_free(groups: &[Group], want: isize) -> isize {
+    let (mut lo, mut hi) = (isize::MIN, isize::MAX);
+    for g in groups {
+        for &f in &g.chosen {
+            lo = lo.max(-(f as isize));
+            hi = hi.min(g.len.saturating_sub(1) as isize - f as isize);
+        }
+    }
+    if lo == isize::MIN || hi == isize::MAX || lo > hi {
+        return 0;
+    }
+    let w = want.clamp(lo, hi);
+    let libre = |d: isize| {
+        groups.iter().all(|g| g.chosen.iter().all(|&f| {
+            let t = f as isize + d;
+            !g.all.iter().any(|&a| a as isize == t && !g.chosen.contains(&a))
+        }))
+    };
+    let vers_zero = -w.signum();
+    for k in 0..=(hi - lo) {
+        for d in [w + vers_zero * k, w - vers_zero * k] {
+            if (lo..=hi).contains(&d) && libre(d) {
+                return d;
+            }
+        }
+    }
+    0
+}
+
+/// Les clés d'un plan qui bougent de `delta` images, et où elles arrivent : (image d'avant, image d'après), dans l'ordre.
+/// Maj (`ripple` faux) : les clés choisies, du même décalage (ramené par `clamp_free`). Sinon : la première choisie et
+/// toutes celles d'après ; celles qui passeraient la fin du plan s'y arrêtent, tassées à une image l'une de l'autre,
+/// dans leur ordre : aucune ne disparaît ni n'en écrase une autre.
+pub(crate) fn moves(g: &Group, delta: isize, ripple: bool) -> Vec<(usize, usize)> {
+    let last = g.len.saturating_sub(1) as isize;
+    let frames = if ripple { ripple_frames(&g.all, &g.chosen) } else { g.chosen.clone() };
+    let mut out: Vec<(usize, usize)> = frames.iter().map(|&f| (f, (f as isize + delta).clamp(0, last) as usize)).collect();
+    if ripple {
+        let mut limit = last;
+        for m in out.iter_mut().rev() {
+            let t = (m.1 as isize).min(limit).max(0);
+            m.1 = t as usize;
+            limit = t - 1;
+        }
+    }
+    out
+}
+
+/// Les clés `before` une fois les déplacements `mv` faits (`moves`), triées.
+pub(crate) fn apply_moves(before: &[CameraKey], mv: &[(usize, usize)]) -> Vec<CameraKey> {
+    let mut keys: Vec<CameraKey> = before.iter().map(|k| CameraKey { frame: mv.iter().find(|m| m.0 == k.frame).map_or(k.frame, |m| m.1), ..*k }).collect();
+    keys.sort_by_key(|k| k.frame);
+    keys
 }
 
 /// Les clés de `keys` aux images `frames` déplacées de `delta` images (le décalage doit être
 /// ramené dans les bornes par `clamp_delta`). Renvoie leurs images maintenant.
+#[cfg(test)]
 pub(crate) fn shift(keys: &mut [CameraKey], frames: &[usize], delta: isize) -> Vec<usize> {
     let mut out = Vec::new();
     for k in keys.iter_mut().filter(|k| frames.contains(&k.frame)) {
@@ -298,7 +354,7 @@ fn add_homes(doc: &mut Document, targets: &[(usize, usize, CameraKey)]) {
         firsts.entry(t.0).and_modify(|f| *f = (*f).min(t.1)).or_insert(t.1);
     }
     let homes: Vec<(usize, camera::Camera)> =
-        firsts.into_iter().filter(|&(pi, f)| doc.panels[pi].camera.is_empty() && f > 0).map(|(pi, _)| (pi, doc.panel_camera(pi, 0))).collect();
+        firsts.into_iter().filter(|&(pi, f)| doc.panels[pi].camera.is_empty() && f > 0).map(|(pi, _)| (pi, doc.panel_camera_douce(pi, 0))).collect();
     for (pi, cam) in homes {
         doc.panels[pi].camera.push(CameraKey::new(0, cam));
     }
@@ -401,6 +457,8 @@ pub(crate) struct CamKeysDrag {
     panels: Vec<DragPanel>,
     grab: usize,
     delta: isize,
+    /// Le décalage que demande la souris (avant les bornes) : de quoi dire pourquoi la clé s'arrête.
+    want: isize,
     /// Les clés d'après suivent (par défaut) ; faux : Maj tenue, seules les clés choisies bougent.
     ripple: bool,
     snap: Edit,
@@ -411,6 +469,8 @@ struct DragPanel {
     before: Vec<CameraKey>,
     chosen: Vec<usize>,
     len: usize,
+    /// Où sont allées les clés au dernier pas du geste : (image d'avant, image d'après) (`moves`).
+    moved: Vec<(usize, usize)>,
 }
 
 fn s(n: usize) -> &'static str {
@@ -608,12 +668,12 @@ impl App {
                 continue;
             }
             let Some(p) = self.doc.panels.iter().find(|p| p.id == k.panel) else { continue };
-            panels.push(DragPanel { panel: k.panel, before: p.camera.clone(), chosen: vec![k.frame], len: p.frame_count() });
+            panels.push(DragPanel { panel: k.panel, before: p.camera.clone(), chosen: vec![k.frame], len: p.frame_count(), moved: Vec::new() });
         }
         self.end_stroke();
         self.playing = false;
         let snap = self.snapshot();
-        self.cam_keys_drag = Some(CamKeysDrag { panels, grab, delta: 0, ripple: true, snap });
+        self.cam_keys_drag = Some(CamKeysDrag { panels, grab, delta: 0, want: 0, ripple: true, snap });
         true
     }
 
@@ -630,20 +690,40 @@ impl App {
         let groups: Vec<Group> =
             d.panels.iter().map(|p| Group { chosen: p.chosen.clone(), all: p.before.iter().map(|k| k.frame).collect(), len: p.len }).collect();
         let want = at as isize - d.grab as isize;
-        let delta = if ripple { clamp_ripple(&groups, want) } else { clamp_delta(&groups, want) };
-        if delta != d.delta || ripple != d.ripple {
+        let delta = if ripple { clamp_ripple(&groups, want) } else { clamp_free(&groups, want) };
+        if delta != d.delta || ripple != d.ripple || want != d.want {
             d.delta = delta;
             d.ripple = ripple;
-            for (dp, g) in d.panels.iter().zip(&groups) {
+            d.want = want;
+            let (mut tassees, mut au_bout, mut au_debut) = (false, false, false);
+            for (dp, g) in d.panels.iter_mut().zip(&groups) {
                 let Some(pi) = panel_index(&self.doc, dp.panel) else { continue };
-                let mut keys = dp.before.clone();
-                let moving = if ripple { ripple_frames(&g.all, &g.chosen) } else { dp.chosen.clone() };
-                shift(&mut keys, &moving, delta);
-                self.doc.panels[pi].camera = keys;
+                let mv = moves(g, delta, ripple);
+                tassees |= mv.iter().any(|&(a, b)| (b as isize) < a as isize + delta);
+                au_bout |= mv.iter().any(|&(a, b)| b + 1 >= g.len && dp.chosen.contains(&a)) || (ripple && mv.last().is_some_and(|m| m.1 + 1 >= g.len));
+                au_debut |= mv.iter().any(|&(_, b)| b == 0);
+                self.doc.panels[pi].camera = apply_moves(&dp.before, &mv);
+                dp.moved = mv;
             }
             let n: usize = d.panels.iter().map(|p| p.chosen.len()).sum();
             let who = if ripple { "et les clés d'après".to_string() } else { "seule, Maj tenue".to_string() };
-            self.status = format!("{n} clé{} de caméra {who} : {delta:+} image{}.", s(n), if delta.abs() > 1 { "s" } else { "" });
+            // Pourquoi elle s'arrête, quand elle s'arrête (Anthony ne voyait pas pourquoi la clé ne venait pas).
+            let pourquoi = if want > delta && ripple {
+                " : la fin du plan l'arrête (les clés d'après sont tassées contre elle, une image chacune)"
+            } else if tassees {
+                " ; les clés d'après se tassent contre la fin du plan"
+            } else if want > delta && au_bout {
+                " : la fin du plan l'arrête"
+            } else if want < delta && ripple {
+                " : la clé d'avant l'arrête (Maj tenue : seule cette clé bouge, et passe par-dessus)"
+            } else if want < delta && au_debut {
+                " : le début du plan l'arrête"
+            } else if want != delta {
+                " : une autre clé est sur cette image, elle attend à côté"
+            } else {
+                ""
+            };
+            self.status = format!("{n} clé{} de caméra {who} : {delta:+} image{}{pourquoi}.", s(n), if delta.abs() > 1 { "s" } else { "" });
         }
         self.cam_keys_drag = Some(d);
     }
@@ -657,7 +737,7 @@ impl App {
         }
         let mut sel = Vec::new();
         for dp in &d.panels {
-            sel.extend(dp.chosen.iter().map(|&f| CamKeyRef { panel: dp.panel, frame: (f as isize + d.delta).max(0) as usize }));
+            sel.extend(dp.chosen.iter().map(|&f| CamKeyRef { panel: dp.panel, frame: dp.moved.iter().find(|m| m.0 == f).map_or(f, |m| m.1) }));
         }
         let several = sel.len() > 1;
         self.cam_key_anchor = sel.first().copied();

@@ -217,20 +217,20 @@ fn the_bin_survives_saving_and_reopening_without_reading_a_drawing() {
 
 #[test]
 fn an_older_project_opens_with_an_empty_bin_and_a_newer_one_is_refused() {
-    assert_eq!(project::VERSION, 51);
+    assert_eq!(project::VERSION, 52);
     let d = dossier("version");
     let m = manifeste(&d);
     let app = appli("version");
     enregistrer(&app.doc, &m);
     assert!(!m.parent().unwrap().join("corbeille.json").exists(), "corbeille vide : pas de fichier");
     let texte = std::fs::read_to_string(&m).unwrap();
-    assert!(texte.contains("\"version\": 51"));
-    let ancien = texte.replace("\"version\": 51", "\"version\": 46");
+    assert!(texte.contains("\"version\": 52"));
+    let ancien = texte.replace("\"version\": 52", "\"version\": 46");
     std::fs::write(&m, ancien).unwrap();
     let l = project::load(&m).expect("un projet 46 s'ouvre");
     assert!(l.doc.corbeille.is_empty());
     assert_eq!(l.doc.panels.len(), 4, "rien de perdu");
-    let futur = texte.replace("\"version\": 51", "\"version\": 52");
+    let futur = texte.replace("\"version\": 52", "\"version\": 53");
     std::fs::write(&m, futur).unwrap();
     assert!(project::load(&m).is_err(), "un projet plus récent est refusé");
 }

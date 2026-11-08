@@ -5,6 +5,12 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-08
 
+- Dépôt GitHub de sauvegarde, à la demande d'Anthony (« afin de ne rien perdre ») : il a créé le dépôt privé
+  https://github.com/ferreanthony-glitch/Feanor lui-même ; `origin` est branché dessus dans `Logiciel\Source`, et tout l'historique est
+  poussé (main, les 118 branches, le tag `archive/memoire-dessins`). Son premier commit fait en ligne (un README de deux lignes) est repris
+  dans l'historique, le README détaillé du dépôt est gardé. La connexion passe par le gestionnaire d'identifiants de Windows, validée par lui
+  dans le navigateur ; `gh` (l'outil GitHub en ligne de commande) est installé mais pas connecté. Avant de pousser : aucun secret dans les
+  fichiers suivis (`clessecretes.rs` range les clés dans Windows, jamais dans un fichier).
 - La case qui naît prend le papier (partie 128, branche `cases-prennent`, chantier `Chantiers\cases-prennent`) : réponse à ses deux captures
   (« les caméras non activées au début cachent le trait quand elles s'activent »). Une case pâle qui devient un plan (un trait dedans, la barre
   de continuité) prend les traits du papier (« Hors cadres ») qui passent dans son champ : la part dans le champ entre dans le dessin du plan,

@@ -353,6 +353,7 @@ impl Document {
             || !p.notes.is_empty()
             || !p.marks.is_empty()
             || !p.camera.is_empty()
+            || p.effet_camera.is_some()
             || p.layers.len() > 1
             || p.layers.iter().any(|l| l.frames.iter().flatten().any(|c| self.cel_a_du_trait(*c)))
     }
@@ -580,6 +581,7 @@ pub(crate) fn document_de_la_planche(doc: &Document) -> (Document, Vec<Rang>) {
                 notes: String::new(),
                 camera: p.camera.clone(),
                 saccade: p.saccade,
+                effet_camera: p.effet_camera,
                 marks: p.marks.clone(),
                 cues: Default::default(),
                 color: None,

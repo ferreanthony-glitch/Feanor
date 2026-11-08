@@ -242,6 +242,7 @@ pub fn load_legacy(path: &Path) -> Result<Document, String> {
             notes: s.notes,
             camera: Vec::new(),
             saccade: Default::default(),
+            effet_camera: None,
             marks: Vec::new(),
             cues: Default::default(),
             color: None,

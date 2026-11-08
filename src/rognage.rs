@@ -628,6 +628,9 @@ impl Document {
 
     /// Le plan `pi` et sa réserve, prêts à être changés ensemble.
     fn with_reserve<R>(&mut self, pi: usize, f: impl FnOnce(&mut Panel, &mut Vec<Comment>, &mut Reserve, Camera) -> R) -> R {
+        // Un effet de caméra vivant devient d'abord ses clés, sans changer l'image : la réserve et les clés de bord savent
+        // alors garder chaque image et rendre l'aller-retour exact (partie 129). Tous les gestes de durée passent par ici.
+        self.cuire_effet_vivant(pi);
         let default = self.default_camera();
         let id = self.panels[pi].id;
         let mut r = self.reserves.remove(&id).unwrap_or_default();
@@ -749,6 +752,8 @@ impl Document {
         if d == 0 {
             return 0;
         }
+        // (Les deux effets vivants d'un coup : chacun garde son image, partie 129.)
+        self.cuire_effets_vivants(&[pi, pi + 1]);
         self.trim_tail(pi, d);
         self.trim_head(pi + 1, d);
         d
