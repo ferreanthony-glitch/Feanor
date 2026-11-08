@@ -725,7 +725,13 @@ impl App {
         }
         if self.tool == Tool::Transform {
             use crate::layertools::BoxHandle;
-            ctx.set_cursor_icon(match self.transform_handle_at(p) {
+            let poignee = self.transform_handle_at(p);
+            // Le mode d'emploi de la poignée sous le pointeur, en bulle (il n'est plus dans le panneau Réglages).
+            // (Pas pour l'intérieur de la boîte : une bulle y gênerait le dessin.)
+            if let Some(h) = poignee.filter(|h| *h != BoxHandle::Move) {
+                Self::bulle_poignee(ctx, h);
+            }
+            ctx.set_cursor_icon(match poignee {
                 Some(BoxHandle::Move) => CursorIcon::Move,
                 Some(BoxHandle::Corner(0 | 2)) => CursorIcon::ResizeNwSe,
                 Some(BoxHandle::Corner(_)) => CursorIcon::ResizeNeSw,

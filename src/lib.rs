@@ -333,6 +333,10 @@ mod vignettesreglages;
 mod vignettesprefs;
 mod horschamp;
 mod horschamptex;
+// La case qui naît prend le papier (partie 128, 2026-11-08).
+mod caseprend;
+#[cfg(test)]
+mod caseprend_tests;
 #[cfg(test)]
 mod vignettes_tests;
 #[cfg(test)]
@@ -542,6 +546,10 @@ mod palette;
 #[cfg(test)]
 mod palette_tests;
 mod prefsonglets;
+// Fichier > Exporter en vidéo / en image / le son / pour la production (partie 130).
+mod exportmenu;
+#[cfg(test)]
+mod exportmenu_tests;
 mod prefsui;
 #[cfg(test)]
 mod prefsui_tests;

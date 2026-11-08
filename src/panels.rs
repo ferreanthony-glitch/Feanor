@@ -146,7 +146,9 @@ impl App {
                     self.action_item(ui, "Un scénario, à garder dans le projet (Fountain, .fdx, .docx, texte)…", "fichier.importer_scenario");
                     self.action_item(ui, "Des notes de relecture (.json)…", "fichier.importer_notes");
                 });
-                self.action_item(ui, "Exporter…", "fichier.exporter");
+                // Quatre sous-menus d'export : chaque entrée ouvre tout de suite sa boîte de réglages (`exportmenu.rs`).
+                // (La grande fenêtre Exporter n'a plus d'entrée de menu ; « fichier.exporter » reste dans la palette.)
+                self.export_menus(ui);
                 ui.separator();
                 self.action_item(ui, "Réglages du projet…", "projet.proprietes");
                 self.action_item(ui, "Corbeille…", "fichier.corbeille");
@@ -275,7 +277,7 @@ impl App {
                 self.workspace_menu(ui);
                 self.action_item(ui, "Mode concentration (le dessin seul)", "vue.concentration");
                 self.action_item(ui, "Plein écran", "vue.plein_ecran");
-                self.action_item(ui, "Performance (temps de l'interface)", "vue.performance");
+                // (« Performance (temps de l'interface) » : retirée d'ici le 2026-11-08, elle est dans Labo et dans la palette.)
             }); }
             // Les fonctions à l'essai, rangées ensemble (Anthony, 2026-10-20), cachées d'origine (premier contact, 2026-10-30) : le menu
             // Labo ne paraît qu'avec Préférences > Général > « Afficher les fonctions expérimentales ». Ce qui était mûr (la propagation
@@ -291,12 +293,13 @@ impl App {
                 ui.separator();
                 let rec = if self.record_strokes.is_some() { "Arrêter d'enregistrer mes traits" } else { "Enregistrer mes traits (banc d'essai du moteur)" };
                 self.action_item(ui, rec, "pinceau.enregistrer_traits");
+                ui.separator();
+                self.action_item(ui, "Performance (temps de l'interface)", "vue.performance");
             }); }
             ui.menu_button("Aide", |ui| {
                 self.action_item(ui, "Palette de commandes…", "aide.palette");
-                self.action_item(ui, "Raccourcis clavier…", "aide.raccourcis");
-                self.action_item(ui, "Régler le stylet à ma main…", "aide.regler_stylet");
-                self.action_item(ui, "Ce que le stylet transmet…", crate::styletui::ACTION);
+                // (Raccourcis clavier, Régler le stylet à ma main et Ce que le stylet transmet sont dans les Préférences,
+                // onglets Raccourcis et Dessin, depuis le 2026-11-08 ; F1 et la palette les ouvrent toujours.)
                 self.action_item(ui, "Visite rapide « Premier jour »…", "aide.visite");
                 self.action_item(ui, "Revoir les conseils", "aide.conseils");
                 self.action_item(ui, "Régler FEANOR pour cette machine…", "aide.diagnostic");
@@ -591,22 +594,12 @@ impl App {
                     ui.label(RichText::new(format!("{peers} calques choisis : ils se déplacent, tournent et grandissent ensemble.")).strong());
                     note(ui, "Un coin agrandit tous les calques en gardant les proportions ; l'étirement par un côté se fait sur un seul calque. Ctrl+R remet tous les calques choisis en place. Les calques cachés ou verrouillés restent où ils sont.");
                 }
-                // Position, taille et angle en haut ; les clés de position (animer le calque) et le mode d'emploi dans
-                // « Plus de réglages ».
+                // x, y, largeur, hauteur et angle sur une seule ligne, sous le titre ; puis le point fixe et la rotation (où
+                // ils étaient) ; puis les clés de position (animer le calque), toujours visibles : plus de « Plus de réglages »
+                // ici (Anthony, 2026-11-08). Le mode d'emploi des poignées est dans leurs bulles (`layertools::bulle_poignee`).
                 self.transform_fields(ui);
-                self.plus_de_reglages(ui, |app, ui| {
-                    app.pos_keys_ui(ui);
-                    note(
-                        ui,
-                        "Glisser dans la boîte : déplacer le calque (Maj : à l'horizontale ou à la \
-                         verticale). Coin : agrandir ou réduire, le coin opposé restant en place (Maj : en \
-                         gardant les proportions ; Ctrl : l'autre point fixe, réglé par « Point fixe »). Milieu \
-                         d'un côté : étirer dans un seul sens. Poignée ronde : tourner autour du centre ; juste \
-                         hors d'un coin : tourner autour du centre ou du coin opposé (« Rotation ») ; Maj : par 15°. \
-                         Pour courber le dessin, l'outil Déformer a son mode Enveloppe. \
-                         Les dessins ne sont pas modifiés : on peut annuler la transformation à tout moment.",
-                    );
-                });
+                self.point_fixe_ui(ui);
+                self.pos_keys_ui(ui);
             }
             // Sur la planche des Vignettes, l'outil Caméra ne règle que les cadres A, B, C… : rien du panneau complet (clés, adoucis,
             // focale…), qui reste au Storyboard (partie 113, décision 9).

@@ -1698,6 +1698,9 @@ impl App {
     pub(crate) fn clamp_nav(&mut self) {
         self.cur_panel = self.cur_panel.min(self.doc.panels.len() - 1);
         self.cur_layer = self.cur_layer.min(self.layers().len() - 1);
+        // (Et l'image courante, dans le plan : après Ctrl+Z d'une continuité, elle restait au-delà de la fin du plan ; un trait dans la case
+        // des Vignettes allait alors dans une image neuve au bout du plan, qui s'allongeait d'une image. Partie 128, trouvé en passant.)
+        self.cur_frame = self.cur_frame.min(self.frame_count().saturating_sub(1));
     }
 
     /// Les plans et les calques choisis qui n'existent plus (une annulation, deux plans réunis, une copie annulée) ne restent

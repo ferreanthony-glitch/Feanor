@@ -772,6 +772,11 @@ impl App {
                 if crate::bulles::bulle(b, "Régler le stylet à ma main", "Trace trois traits (léger, moyen, appuyé) : FEANOR règle la courbe de pression du stylet sur ta main, après un aperçu et ta confirmation. Avec la souris, l'appui est toujours de 100 %.", &self.raccourci("aide.regler_stylet")).clicked() {
                     sortie.action = Some("aide.regler_stylet");
                 }
+                // Le banc du stylet (`styletui.rs`) : ce que Windows transmet (appui, inclinaison, bouton, gomme). Il était dans le menu Aide.
+                let b = ui.button("Ce que le stylet transmet…");
+                if crate::bulles::bulle(b, "Ce que le stylet transmet", "Une fenêtre qui montre en direct ce que Windows dit du stylet : appui, inclinaison, bouton et gomme. Elle ne change rien au dessin.", &self.raccourci(crate::styletui::ACTION)).clicked() {
+                    sortie.action = Some(crate::styletui::ACTION);
+                }
             }
         }
     }
