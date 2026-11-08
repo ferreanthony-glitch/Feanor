@@ -477,7 +477,7 @@ impl App {
 
     /// Les empreintes des gestes `liens` disent-elles encore où sont leurs pixels (chaque dessin inchangé sous son empreinte) ?
     fn selb_liens_fiables(&self, liens: &[u64]) -> bool {
-        self.doc.annotations.bitmap.empreintes.iter().filter(|e| liens.contains(&e.lien)).all(|e| self.doc.cels.get(&e.cel).is_none_or(|d| e.fiable(&d.raster)))
+        self.doc.annotations.bitmap.empreintes.iter().filter(|e| liens.contains(&e.lien)).all(|e| self.doc.cels.get(&e.cel).is_none_or(|d| e.fiable_a(&d.raster, d.version)))
     }
 
     /// La boîte des pièces sur la planche.
@@ -835,7 +835,11 @@ impl App {
         if b.illisible {
             return Err("La couche bitmap de la planche n'a pas pu être lue à l'ouverture : ce geste y mènerait des pixels, il est refusé, rien n'a bougé.".into());
         }
-        if !a_poser.is_empty() && b.morceaux.len().saturating_sub(liberes) + a_poser.len() > crate::planchebitmap::MAX_MORCEAUX {
+        if !a_poser.is_empty() && !self.planche_bitmap_ecrivable() {
+            return Err("Dans ce film partagé, le montage n'est pas à toi : la planche ne peut pas recevoir ces pixels, le geste est refusé, rien n'a bougé.".into());
+        }
+        // (Les morceaux sans image comptent, comme pour `ajouter` ; ne libère une place que le morceau que le geste vide entièrement.)
+        if !a_poser.is_empty() && !b.peut_poser_apres(liberes, a_poser.len()) {
             return Err(format!("La planche a atteint sa limite de {} morceaux : ce geste mènerait des pixels hors des cases, il est refusé, rien n'a bougé.", crate::planchebitmap::MAX_MORCEAUX));
         }
         Ok(Plan { dessins, morceaux: a_poser })
@@ -903,7 +907,7 @@ impl App {
                         for id in p.pixels.drawn_ids() {
                             let (tx, ty) = p.pixels.key_of(id);
                             let Some(t) = p.pixels.slot(id) else { continue };
-                            let t: &[Color32; TILE_PIXELS] = t;
+                            let t: [Color32; TILE_PIXELS] = t.avec_les_pixels(|p| *p);
                             let cid = c.raster.id_of(tx, ty);
                             if c.raster.slot(cid).is_none() {
                                 continue;
@@ -959,7 +963,7 @@ impl App {
             for id in pixels.drawn_ids() {
                 let (tx, ty) = pixels.key_of(id);
                 let Some(src) = pixels.slot(id) else { continue };
-                let src: &[Color32; TILE_PIXELS] = src;
+                let src: [Color32; TILE_PIXELS] = src.avec_les_pixels(|p| *p);
                 let cid = c.raster.id_of(tx, ty);
                 garder(&mut vieux, cel, &c.raster, cid);
                 let d = c.raster.tile_mut(cid);
@@ -974,9 +978,24 @@ impl App {
             empreintes.push((cel, masque));
         }
         let mut pose_un = false;
+        let mut echec = false;
         for (code, r, m) in plan.morceaux {
             let sur = code.and_then(|q| crate::horschamp::case_du_code(layout, crate::horschamp::DESSUS + q).map(|c| (c, layout.cards.iter().position(|j| j.id == c.id).unwrap_or(0))));
-            pose_un |= self.doc.annotations.bitmap.ajouter(layout, r, m, sur, Some(lien), false).is_some();
+            let vide = r.is_blank();
+            let fait = self.doc.annotations.bitmap.ajouter(layout, r, m, sur, Some(lien), false).is_some();
+            echec |= !fait && !vide;
+            pose_un |= fait;
+        }
+        if echec {
+            // (Tout a été vérifié avant ; si la planche refuse quand même, tout le geste est défait : rien n'a bougé, rien n'est perdu.)
+            for (cel, tiles) in vieux {
+                self.history.push(Edit::Tiles { cel, tiles });
+            }
+            self.history.regrouper_depuis(marque);
+            self.history.context = before;
+            self.undo();
+            self.status = "La planche n'a pas pu recevoir ces pixels : le geste est défait, rien n'a bougé.".into();
+            return;
         }
         if pose_un {
             self.doc.annotations.calque_hors_cadres();
@@ -990,7 +1009,7 @@ impl App {
             for (cel, m) in empreintes {
                 let Some(d) = doc.cels.get(&cel) else { continue };
                 let cels = &doc.cels;
-                sans_empreinte |= !doc.annotations.bitmap.noter_empreinte(lien, cel, m, &d.raster, |e| cels.get(&e.cel).is_some_and(|x| e.fiable(&x.raster)));
+                sans_empreinte |= !doc.annotations.bitmap.noter_empreinte(lien, cel, m, &d.raster, |e| cels.get(&e.cel).is_none_or(|x| e.fiable_a(&x.raster, x.version)));
             }
         }
         if sans_empreinte {
@@ -1039,7 +1058,7 @@ impl App {
                     for id in p.pixels.drawn_ids() {
                         let (tx, ty) = p.pixels.key_of(id);
                         let Some(t) = p.pixels.slot(id) else { continue };
-                        let t: &[Color32; TILE_PIXELS] = t;
+                        let t: [Color32; TILE_PIXELS] = t.avec_les_pixels(|p| *p);
                         let cid = c.raster.id_of(tx, ty);
                         if c.raster.slot(cid).is_none() {
                             continue;

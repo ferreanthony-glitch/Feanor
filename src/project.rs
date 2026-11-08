@@ -1243,6 +1243,10 @@ thread_local! {
 
 #[cfg(test)]
 thread_local! {
+    /// Essais : l'enregistrement s'arrête juste après le premier passage de la couche bitmap de la planche, avant les dessins (une coupure là).
+    pub(crate) static COUPER_APRES_LA_COUCHE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+thread_local! {
     /// Essais : l'écriture s'arrête juste après le nouveau manifeste, avant l'effacement de l'ancien (un plantage là).
     pub(crate) static PLANTER_AVANT_RETRAIT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
@@ -2135,6 +2139,10 @@ impl SaveJob {
         // partir vers elle ; une coupure entre les deux laisse au pire un pixel à deux endroits, jamais nulle part. Ce qu'elle ne cite plus part à la fin.
         if let Some(b) = self.planche_bitmap.as_ref() {
             count += crate::planchebitmap::ecrire(dir, b, false)?;
+        }
+        #[cfg(test)]
+        if COUPER_APRES_LA_COUCHE.with(|c| c.get()) {
+            return Err("coupure simulée entre la couche bitmap de la planche et les dessins".into());
         }
         if let Some(p) = progress {
             p.total.store(self.drawings.len(), std::sync::atomic::Ordering::Relaxed);

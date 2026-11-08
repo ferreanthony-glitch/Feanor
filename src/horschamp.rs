@@ -645,7 +645,7 @@ impl App {
         });
         // (La planche pleine : le geste ne promet pas ce que le lever ne pourra pas tenir.)
         let pleine = if self.layers().get(self.cur_layer).is_some_and(|l| l.kind == LayerKind::Bitmap) {
-            self.doc.annotations.bitmap.morceaux.len() + 2 > crate::planchebitmap::MAX_MORCEAUX
+            !self.doc.annotations.bitmap.peut_poser(2) || !self.planche_bitmap_ecrivable()
         } else {
             self.doc.annotations.traces.len() >= crate::annotations::MAX_TRACES
         };
@@ -960,8 +960,18 @@ impl App {
     }
 
     /// La planche ne peut pas recevoir ces parts : elles restent dans le dessin d'origine, et la ligne d'état le dit.
+    /// La couche bitmap de la planche peut-elle recevoir des pixels : elle a été lue, et, dans un film partagé, je tiens le jeton du montage (elle ne
+    /// s'enregistre qu'avec lui : sans lui, ces pixels ne seraient écrits nulle part).
+    pub(crate) fn planche_bitmap_ecrivable(&self) -> bool {
+        !self.doc.annotations.bitmap.illisible && self.partage.as_ref().is_none_or(|s| s.tiens(crate::verrous::Cible::Montage))
+    }
+
     fn dire_planche_pleine(&mut self) {
         let bitmap = self.layers().get(self.cur_layer).is_some_and(|l| l.kind == LayerKind::Bitmap);
+        if bitmap && !self.planche_bitmap_ecrivable() && !self.doc.annotations.bitmap.illisible {
+            self.status = "Dans ce film partagé, le montage n'est pas à toi : la planche ne reçoit pas ce bout du trait, il reste dans le dessin du plan où il a commencé, hors de sa case".into();
+            return;
+        }
         if bitmap && self.doc.annotations.bitmap.illisible {
             self.status = "La couche bitmap de la planche n'a pas pu être lue à l'ouverture : rien n'y est posé, ce bout du trait reste dans le dessin du plan où il a commencé, hors de sa case".into();
             return;
@@ -1215,7 +1225,7 @@ impl App {
         let place = crate::annotations::MAX_TRACES.saturating_sub(self.doc.annotations.traces.len());
         // (Couche bitmap : la place se compte d'après les pixels, une fois classés ; s'il n'y en a pas assez, ou si la couche n'a pas pu être lue à
         // l'ouverture — on ne pourrait pas l'enregistrer —, on recommence avec la planche « pleine » : tout reste dans le dessin d'origine.)
-        let mut forcer_pleine = pixels_planche.is_some() && !self.doc.annotations.bitmap.peut_poser(0);
+        let mut forcer_pleine = pixels_planche.is_some() && (!self.doc.annotations.bitmap.peut_poser(0) || !self.planche_bitmap_ecrivable());
         // Le plan, sans rien changer : ce qui va où. **Le dessin d'origine ne perd ses pixels qu'une fois sûr qu'ils ont une place ailleurs** : une case qui ne peut
         // pas prendre sa part (trop grossie) passe aux refus, et on recommence.
         type Pixels = Vec<(i64, i64, Color32)>;
@@ -1352,7 +1362,7 @@ impl App {
                 continue;
             }
             // (Autant de morceaux neufs que de groupes de pixels pour la planche : pas la place, ou une couche qu'on ne pourrait pas enregistrer : tout reste.)
-            if pixels_planche.is_some() && !pleine && !planche.is_empty() && !self.doc.annotations.bitmap.peut_poser(planche.len()) {
+            if pixels_planche.is_some() && !pleine && !planche.is_empty() && (!self.doc.annotations.bitmap.peut_poser(planche.len()) || !self.planche_bitmap_ecrivable() || layout.cards.is_empty()) {
                 forcer_pleine = true;
                 continue;
             }
@@ -1407,12 +1417,14 @@ impl App {
         // 3. Ce qui est hors de tout champ : sur la planche. Partie 127 : ses pixels, sur la couche bitmap (un morceau pour le papier, un par case qui refuse,
         // par-dessus elle) ; parti d'une vue en perspective : le tracé, rayon et couleur du trait (un trait vectoriel au pinceau).
         let mut refus_vus: Vec<usize> = runs.iter().filter_map(|(q, _)| q.filter(|q| *q >= DESSUS)).collect();
+        let mut rendus_planche = false;
         let remontre = match pixels_planche {
             Some(vers_planche) => {
                 let mut pose_un = false;
+                let mut rendus = false;
                 for (code, pixels) in planche {
                     let mut r = crate::planchebitmap::pixels_vides();
-                    for (x, y, px) in pixels {
+                    for &(x, y, px) in &pixels {
                         crate::planchebitmap::poser_pixel(&mut r, x, y, px, false);
                     }
                     let sur = code.and_then(|q| case_du_code(layout, q).map(|c| (c, layout.cards.iter().position(|k| k.id == c.id).unwrap_or(0))));
@@ -1420,8 +1432,24 @@ impl App {
                         refus_vus.push(q);
                     }
                     let fait = self.doc.annotations.bitmap.ajouter(layout, r, vers_planche, sur, Some(lien), derriere).is_some();
-                    debug_assert!(fait, "la place a été vérifiée avant de retirer les pixels de leur dessin");
+                    if !fait {
+                        // (La place a été vérifiée avant ; si la planche refuse quand même, les pixels reviennent dans le dessin d'où ils partaient, tels
+                        // quels : jamais nulle part. Leurs tuiles sont dans l'étape du trait.)
+                        if let Some(c) = self.doc.cels.get_mut(&cel) {
+                            let t = TILE as i64;
+                            for (x, y, px) in pixels {
+                                let id = c.raster.id_of(x.div_euclid(t) as i32, y.div_euclid(t) as i32);
+                                c.raster.tile_mut(id)[(y.rem_euclid(t) * t + x.rem_euclid(t)) as usize] = px;
+                            }
+                            c.version += 1;
+                        }
+                        rendus = true;
+                    }
                     pose_un |= fait;
+                }
+                if rendus {
+                    self.renderer.invalidate_all();
+                    rendus_planche = true;
                 }
                 if pose_un {
                     self.doc.annotations.calque_hors_cadres();
@@ -1442,7 +1470,8 @@ impl App {
                 // montrent le même dessin : une seule empreinte, les deux masques réunis.)
                 let Some(d) = doc.cels.get(&c) else { continue };
                 let cels = &doc.cels;
-                sans_empreinte |= !doc.annotations.bitmap.noter_empreinte(lien, c, m, &d.raster, |e| cels.get(&e.cel).is_some_and(|x| e.fiable(&x.raster)));
+                // (Une seule règle : un dessin absent, hors mémoire ou à la corbeille, garde son empreinte ; un dessin changé sous elle la perd.)
+                sans_empreinte |= !doc.annotations.bitmap.noter_empreinte(lien, c, m, &d.raster, |e| cels.get(&e.cel).is_none_or(|x| e.fiable_a(&x.raster, x.version)));
             }
         }
         self.history.push(snap);
@@ -1450,6 +1479,9 @@ impl App {
             self.dire_planche_pleine();
         } else {
             self.dire_les_refus(layout, &cibles, &refus_vus, remontre);
+        }
+        if rendus_planche {
+            self.status = "La planche n'a pas pu recevoir une part du trait : elle reste dans le dessin du plan où il a commencé, hors de sa case.".into();
         }
         if sans_empreinte {
             self.status = format!("{} (Trop de traits répartis sur la planche : celui-ci ne pourra pas être choisi entier, seulement case par case.)", self.status).trim().to_string();

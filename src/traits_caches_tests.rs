@@ -1029,8 +1029,16 @@ fn in_a_shared_film_a_stroke_never_writes_in_a_plan_held_by_someone_else() {
     b.chauffer(3);
     println!("PARTAGE : encre du plan 0 {:?}, plan courant {}, traits sur la planche {}, sur une case {}, message {:?}", encre_du_plan(&b.app.doc, ids[0]), b.app.cur_panel, traits_hors_cadres(&b.app.doc), dessus(&b), b.app.status);
     assert_eq!(encre_du_plan(&b.app.doc, ids[1]), tenu, "rien dans le plan de Léa");
-    assert!(dessus(&b) >= 1, "la part est visible : {:?}", b.app.status);
-    assert!(b.app.status.contains("Plan 2 n'est pas à toi"), "{}", b.app.status);
+    let bitmap = b.app.layers().get(b.app.cur_layer).is_some_and(|l| l.kind == crate::document::LayerKind::Bitmap);
+    if bitmap {
+        // (Partie 127, contre-relecture : sans le jeton du montage, la couche bitmap de la planche ne serait pas enregistrée ; elle ne reçoit rien, le
+        // bout reste dans le dessin du plan 0, hors de sa case.)
+        assert_eq!(traits_hors_cadres(&b.app.doc), 0, "rien sur la planche sans le jeton");
+        assert!(b.app.status.contains("montage n'est pas à toi"), "{}", b.app.status);
+    } else {
+        assert!(dessus(&b) >= 1, "la part est visible : {:?}", b.app.status);
+        assert!(b.app.status.contains("Plan 2 n'est pas à toi"), "{}", b.app.status);
+    }
 }
 
 /// La part sur une case garde le rang de sa case (le secours de `rattacher_manquantes` reste juste).

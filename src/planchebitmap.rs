@@ -262,13 +262,27 @@ impl Masque {
 
 /// Où les pixels du geste `lien` sont tombés dans le dessin `cel`, et ce qu'ils étaient alors (`signature`) : si le dessin a changé là depuis (des pixels
 /// déplacés au Storyboard, un trait peint par-dessus, la gomme), l'empreinte ne dit plus où est le trait, et la sélection ne la suit pas.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone)]
 pub struct Empreinte {
     pub lien: u64,
     pub cel: CelId,
     pub masque: Arc<Masque>,
     /// `signature(dessin, masque)` au moment où le geste a été posé ; 0 : inconnue (jamais fiable).
     pub signature: u64,
+    /// La dernière version du dessin où la signature a été trouvée juste (`u64::MAX` : jamais) : tant que le dessin n'a pas changé, rien n'est relu.
+    vue: Arc<std::sync::atomic::AtomicU64>,
+}
+
+impl PartialEq for Empreinte {
+    fn eq(&self, o: &Empreinte) -> bool {
+        self.lien == o.lien && self.cel == o.cel && self.masque == o.masque && self.signature == o.signature
+    }
+}
+
+impl std::fmt::Debug for Empreinte {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Empreinte").field("lien", &self.lien).field("cel", &self.cel).field("tuiles", &self.masque.tuiles.len()).field("signature", &self.signature).finish()
+    }
 }
 
 /// La signature des pixels de `r` sous le masque `m` (leurs places et leurs couleurs, dans l'ordre du masque). Jamais 0.
@@ -305,9 +319,26 @@ pub fn signature(r: &Raster, m: &Masque) -> u64 {
 }
 
 impl Empreinte {
+    pub fn neuve(lien: u64, cel: CelId, masque: Masque, signature: u64) -> Empreinte {
+        Empreinte { lien, cel, masque: Arc::new(masque), signature, vue: Arc::new(std::sync::atomic::AtomicU64::new(u64::MAX)) }
+    }
+
     /// L'empreinte dit-elle encore où est le trait (le dessin n'a pas changé sous elle) ?
     pub fn fiable(&self, r: &Raster) -> bool {
         self.signature != 0 && signature(r, &self.masque) == self.signature
+    }
+
+    /// Comme `fiable`, sans rien relire si le dessin est à la version `version` où elle l'a déjà été.
+    pub fn fiable_a(&self, r: &Raster, version: u64) -> bool {
+        use std::sync::atomic::Ordering;
+        if self.vue.load(Ordering::Relaxed) == version {
+            return true;
+        }
+        let ok = self.fiable(r);
+        if ok {
+            self.vue.store(version, Ordering::Relaxed);
+        }
+        ok
     }
 }
 
@@ -386,7 +417,7 @@ impl Morceau {
 }
 
 /// La couche bitmap de la planche : ses morceaux (du plus bas au plus haut) et les empreintes des gestes.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct PlancheBitmap {
     pub morceaux: Vec<Morceau>,
     pub empreintes: Vec<Empreinte>,
@@ -396,8 +427,19 @@ pub struct PlancheBitmap {
     /// Les morceaux de l'index dont l'image manque ou ne se lit pas (un dossier synchronisé où l'index arrive avant les images) : gardés tels quels dans
     /// l'index, leur fichier n'est jamais effacé, et recopié par « Enregistrer sous ». Ils reviennent à la réouverture si l'image est là.
     fantomes: Vec<MorceauFichier>,
+    /// Les fichiers du dossier que l'index ne citait pas à la lecture (des images arrivées avant leur index, un retrait qui n'avait pas pu se faire) :
+    /// jamais effacés, ils ne coupent pas la couche.
+    inconnus: Vec<String>,
     /// Le dossier du projet d'où la couche a été lue (« Enregistrer sous » y reprend ce qu'elle n'a pas en mémoire). Hors de la comparaison.
     pub dossier_lu: Option<std::path::PathBuf>,
+    /// Le numéro de cette couche (tiré une fois, enregistré) : un dossier `planche_bitmap/` d'un autre numéro vient d'un autre projet. Hors de la comparaison.
+    pub id_couche: u64,
+}
+
+impl Default for PlancheBitmap {
+    fn default() -> Self {
+        PlancheBitmap { morceaux: Vec::new(), empreintes: Vec::new(), illisible: false, fantomes: Vec::new(), inconnus: Vec::new(), dossier_lu: None, id_couche: crate::horschamp::nouveau_lien() }
+    }
 }
 
 impl std::fmt::Debug for PlancheBitmap {
@@ -419,7 +461,17 @@ impl PlancheBitmap {
 
     /// Des morceaux peuvent-ils être posés : la couche a été lue (sinon ils ne pourraient pas être enregistrés), et il reste `n` places.
     pub fn peut_poser(&self, n: usize) -> bool {
-        !self.illisible && self.morceaux.len() + self.fantomes.len() + n <= MAX_MORCEAUX
+        self.peut_poser_apres(0, n)
+    }
+
+    /// Essais : un morceau sans image (comme un dossier synchronisé dont l'image n'est pas encore arrivée).
+    #[cfg(test)]
+    pub(crate) fn ajouter_fantome_pour_essai(&mut self, id: u64) {
+        self.fantomes.push(MorceauFichier { id, ancre: Ancre { card: 0, after: 0, rank: 0 }, dessus: false, lien: None, pose: A64::IDENTITE.tableau(), colonnes: 1, tuiles: Vec::new() });
+    }
+    /// Comme `peut_poser`, une fois `liberes` morceaux retirés par le même geste.
+    pub fn peut_poser_apres(&self, liberes: usize, n: usize) -> bool {
+        !self.illisible && (self.morceaux.len() + self.fantomes.len()).saturating_sub(liberes) + n <= MAX_MORCEAUX
     }
 
     /// Pose les pixels `pixels` (posés sur la planche par `vers_planche`) : attachés à `sur` (une case qui ne pouvait pas les recevoir : par-dessus
@@ -477,7 +529,7 @@ impl PlancheBitmap {
             return false;
         }
         let signature = signature(raster, &masque);
-        self.empreintes.push(Empreinte { lien, cel, masque: Arc::new(masque), signature });
+        self.empreintes.push(Empreinte::neuve(lien, cel, masque, signature));
         true
     }
 
@@ -889,6 +941,9 @@ struct Fichier {
     morceaux: Vec<MorceauFichier>,
     #[serde(default)]
     empreintes: Vec<EmpreinteFichier>,
+    /// Le numéro de la couche (absent : 0, un index d'avant).
+    #[serde(default)]
+    couche: u64,
 }
 
 fn nom_morceau(id: u64) -> String {
@@ -964,13 +1019,13 @@ pub fn lire(dir: &Path, avertissements: &mut Vec<String>) -> PlancheBitmap {
     let texte = match std::fs::read_to_string(d.join(INDEX)) {
         Ok(t) => t,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            // (Pas d'index, mais des images : un dossier en cours de synchronisation ; on n'y touche pas.)
-            let images = std::fs::read_dir(&d).map(|r| r.flatten().any(|e| e.file_name().to_string_lossy().ends_with(".png"))).unwrap_or(false);
-            if images {
-                avertissements.push(format!("{DOSSIER} : des images sans leur index ; le dessin bitmap hors des cases n'est pas chargé (le dossier reste en place)."));
-                return illisible;
+            // (Pas d'index, mais des images : arrivées avant leur index, ou laissées par un retrait qui n'a pas pu se faire. Gardées, jamais effacées ; la
+            // couche reste utilisable.)
+            let inconnus = nos_images(&d);
+            if !inconnus.is_empty() {
+                avertissements.push(format!("{DOSSIER} : {} image(s) sans index, gardée(s) telles quelles.", inconnus.len()));
             }
-            return PlancheBitmap { dossier_lu: Some(dir.to_path_buf()), ..Default::default() };
+            return PlancheBitmap { dossier_lu: Some(dir.to_path_buf()), inconnus, ..Default::default() };
         }
         Err(e) => {
             avertissements.push(format!("{DOSSIER}/{INDEX} : {e} ; le dessin bitmap hors des cases n'est pas chargé (le dossier reste en place)."));
@@ -993,6 +1048,9 @@ pub fn lire(dir: &Path, avertissements: &mut Vec<String>) -> PlancheBitmap {
         return illisible;
     }
     let mut out = PlancheBitmap { dossier_lu: Some(dir.to_path_buf()), ..Default::default() };
+    if f.couche != 0 {
+        out.id_couche = f.couche;
+    }
     for m in f.morceaux {
         let pose = A64::du_tableau(m.pose);
         match lire_atlas(&d.join(nom_morceau(m.id)), m.colonnes, &m.tuiles) {
@@ -1022,9 +1080,12 @@ pub fn lire(dir: &Path, avertissements: &mut Vec<String>) -> PlancheBitmap {
             }
         }
         if !masque.est_vide() && !out.empreintes.iter().any(|x| x.lien == e.lien && x.cel == e.dessin) {
-            out.empreintes.push(Empreinte { lien: e.lien, cel: e.dessin, masque: Arc::new(masque), signature: u64::from_str_radix(&e.signature, 16).unwrap_or(0) });
+            out.empreintes.push(Empreinte::neuve(e.lien, e.dessin, masque, u64::from_str_radix(&e.signature, 16).unwrap_or(0)));
         }
     }
+    // (Les images du dossier que l'index ne cite pas : gardées, jamais effacées.)
+    let cites: Vec<String> = out.morceaux.iter().map(|m| nom_morceau(m.id)).chain(out.fantomes.iter().map(|m| nom_morceau(m.id))).chain(out.empreintes.iter().map(|e| nom_empreinte(e.lien, e.cel))).collect();
+    out.inconnus = nos_images(&d).into_iter().filter(|n| !cites.contains(n)).collect();
     if !out.fantomes.is_empty() {
         avertissements.push(format!(
             "{DOSSIER} : {} morceau(x) de dessin hors des cases sans image lisible, pas montré(s) ; gardé(s) dans l'index, leurs fichiers ne sont jamais effacés.",
@@ -1050,33 +1111,70 @@ fn recopier_manquants(de: &Path, vers: &Path, seulement: Option<&[String]>) -> R
     Ok(n)
 }
 
-/// Écrit la couche dans `dir/planche_bitmap/` : les images qui manquent (un morceau ne change jamais : son image écrite reste juste), l'index, puis
-/// retire les images que rien ne cite. Rien à écrire : le dossier se vide. Une couche lue `illisible` : rien n'est touché dans son dossier ; dans un autre
-/// dossier (« Enregistrer sous »), le sien y est recopié tel quel. `nettoyer_aussi` : faux au premier passage (avant les dessins : une coupure ne perd rien,
-/// au pire un pixel est à deux endroits), vrai au dernier (après le manifeste). Rend le nombre de fichiers écrits, recopiés ou retirés, plus un si l'index a changé.
+/// L'index sur le disque, s'il se lit et qu'il est de ce format.
+fn index_du_disque(d: &Path) -> Option<Fichier> {
+    let t = std::fs::read_to_string(d.join(INDEX)).ok()?;
+    serde_json::from_str::<Fichier>(t.trim_start_matches('\u{feff}')).ok().filter(|f| f.format == FORMAT && f.version <= VERSION)
+}
+
+/// Les fichiers de `d` qui ont un nom à nous (`m….png`, `e….png`).
+fn nos_images(d: &Path) -> Vec<String> {
+    std::fs::read_dir(d)
+        .map(|r| r.flatten().map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| (n.starts_with('m') || n.starts_with('e')) && n.ends_with(".png") && n[1..n.len() - 4].chars().all(|c| c.is_ascii_digit() || c == '-')).collect())
+        .unwrap_or_default()
+}
+
+/// Écrit la couche dans `dir/planche_bitmap/`, en deux passages (Anthony : « aucune perte de dessin », même si l'enregistrement est coupé) :
+/// - **premier passage** (`nettoyer_aussi` faux, avant les dessins) : les images qui manquent (un morceau ne change jamais : son image écrite reste
+///   juste), puis un index qui est **l'union** de la couche en mémoire et de l'index déjà sur le disque (un morceau qui vient de partir vers un dessin y
+///   reste cité tant que ce dessin n'est pas écrit) ; rien n'est retiré ;
+/// - **dernier passage** (vrai, après les dessins et le manifeste) : l'index exact, puis les images que rien ne cite partent, et l'index en dernier si la
+///   couche est vide (une image qui ne part pas, verrouillée, laisse un index vide lisible, jamais des images sans index).
+///
+/// Une coupure entre les deux laisse au pire un pixel à deux endroits, jamais nulle part. Une couche lue `illisible` : rien n'est touché dans son
+/// dossier ; dans un autre dossier (« Enregistrer sous »), le sien y est recopié tel quel. Un dossier déjà là qui vient d'un autre projet (aucun morceau
+/// en commun) est mis de côté tel quel (`planche_bitmap.autre-…`), jamais mêlé ni effacé. Rend le nombre de fichiers écrits, recopiés ou retirés, plus un
+/// si l'index a changé.
 pub fn ecrire(dir: &Path, b: &PlancheBitmap, nettoyer_aussi: bool) -> Result<usize, String> {
     let d = dir.join(DOSSIER);
     // (Le dossier d'où la couche a été lue, s'il n'est pas celui-ci : « Enregistrer sous ».)
     let ailleurs = b.dossier_lu.as_ref().filter(|s| s.as_path() != dir).map(|s| s.join(DOSSIER)).filter(|s| s.is_dir());
+    if b.dossier_lu.as_deref() != Some(dir) && d.is_dir() {
+        mettre_de_cote_s_il_est_etranger(&d, b)?;
+    }
     if b.illisible {
         return match ailleurs {
             Some(src) => recopier_manquants(&src, &d, None),
             None => Ok(0),
         };
     }
+    let gardes_inconnus: Vec<String> = b.inconnus.clone();
     if b.est_vide() {
-        if nettoyer_aussi && d.join(INDEX).exists() {
-            crate::project::write_sidecar(&d.join(INDEX), None, |t| serde_json::from_str::<Fichier>(t).is_ok_and(|f| f.format == FORMAT && f.version <= VERSION))?;
-            let n = nettoyer(&d, &[]);
-            let _ = std::fs::remove_dir(&d);
-            return Ok(n + 1);
+        if !nettoyer_aussi || !d.is_dir() {
+            // (Premier passage : l'index d'avant reste, ses morceaux avec ; ils partent au dernier passage.)
+            return Ok(0);
         }
-        return Ok(0);
+        // Les images d'abord, l'index en dernier.
+        let mut n = nettoyer(&d, &gardes_inconnus);
+        let restes = nos_images(&d).into_iter().any(|nom| !gardes_inconnus.contains(&nom));
+        if d.join(INDEX).exists() {
+            if restes {
+                // (Une image n'a pas pu partir : un index vide, lisible, plutôt que des images sans index.)
+                let vide = Fichier { format: FORMAT.into(), version: VERSION, morceaux: Vec::new(), empreintes: Vec::new(), couche: b.id_couche };
+                let octets = serde_json::to_vec_pretty(&vide).map_err(|e| e.to_string())?;
+                crate::project::write_sidecar(&d.join(INDEX), Some(&octets), |t| serde_json::from_str::<Fichier>(t).is_ok_and(|f| f.format == FORMAT && f.version <= VERSION))?;
+            } else {
+                crate::project::write_sidecar(&d.join(INDEX), None, |t| serde_json::from_str::<Fichier>(t).is_ok_and(|f| f.format == FORMAT && f.version <= VERSION))?;
+            }
+            n += 1;
+        }
+        let _ = std::fs::remove_dir(&d);
+        return Ok(n);
     }
     std::fs::create_dir_all(&d).map_err(|e| format!("{} : {e}", d.display()))?;
     let mut n = 0;
-    let mut fichier = Fichier { format: FORMAT.into(), version: VERSION, morceaux: Vec::new(), empreintes: Vec::new() };
-    let mut gardes: Vec<String> = Vec::new();
+    let mut fichier = Fichier { format: FORMAT.into(), version: VERSION, morceaux: Vec::new(), empreintes: Vec::new(), couche: b.id_couche };
+    let mut gardes: Vec<String> = gardes_inconnus;
     for m in &b.morceaux {
         let tuiles: Vec<((i32, i32), Tile)> = m.pixels.drawn_ids().into_iter().filter_map(|id| Some((m.pixels.key_of(id), m.pixels.slot(id)?.clone()))).collect();
         let colonnes = (tuiles.len() as f64).sqrt().ceil().max(1.0) as usize;
@@ -1107,7 +1205,18 @@ pub fn ecrire(dir: &Path, b: &PlancheBitmap, nettoyer_aussi: bool) -> Result<usi
         gardes.push(nom);
         fichier.empreintes.push(EmpreinteFichier { lien: e.lien, dessin: e.cel, colonnes, tuiles: cles, signature: format!("{:x}", e.signature) });
     }
-    let octets = serde_json::to_vec_pretty(&fichier).map_err(|e| e.to_string())?;
+    // Premier passage : les morceaux encore cités sur le disque, que la mémoire n'a plus (partis vers un dessin pas encore écrit), restent cités.
+    let exact_octets = serde_json::to_vec_pretty(&fichier).map_err(|e| e.to_string())?;
+    if !nettoyer_aussi {
+        if let Some(disque) = index_du_disque(&d) {
+            for m in disque.morceaux {
+                if !fichier.morceaux.iter().any(|x| x.id == m.id) && d.join(nom_morceau(m.id)).exists() {
+                    fichier.morceaux.push(m);
+                }
+            }
+        }
+    }
+    let octets = if nettoyer_aussi { exact_octets } else { serde_json::to_vec_pretty(&fichier).map_err(|e| e.to_string())? };
     // (Un index qui change compte : une suppression seule doit faire avancer la révision d'un film partagé.)
     if std::fs::read(d.join(INDEX)).ok().as_deref() != Some(octets.as_slice()) {
         n += 1;
@@ -1117,6 +1226,28 @@ pub fn ecrire(dir: &Path, b: &PlancheBitmap, nettoyer_aussi: bool) -> Result<usi
         n += nettoyer(&d, &gardes);
     }
     Ok(n)
+}
+
+/// Le dossier `d` vient-il d'un autre projet (son index cite des morceaux, aucun que cette couche connaisse ; ou des images sans index alors que la
+/// couche n'en a lu aucune) ? Alors il est renommé à côté, tel quel : rien n'est mêlé ni effacé.
+fn mettre_de_cote_s_il_est_etranger(d: &Path, b: &PlancheBitmap) -> Result<(), String> {
+    let connus = |id: u64| b.morceaux.iter().any(|m| m.id == id) || b.fantomes.iter().any(|m| m.id == id);
+    let etranger = match index_du_disque(d) {
+        Some(f) if f.couche != 0 => f.couche != b.id_couche,
+        Some(f) => !f.morceaux.is_empty() && !f.morceaux.iter().any(|m| connus(m.id)),
+        None => d.join(INDEX).exists() || nos_images(d).iter().any(|n| !b.morceaux.iter().any(|m| nom_morceau(m.id) == *n) && !b.fantomes.iter().any(|m| nom_morceau(m.id) == *n)),
+    };
+    if !etranger {
+        return Ok(());
+    }
+    let parent = d.parent().ok_or("dossier sans parent")?;
+    let mut k = 1;
+    let mut cible = parent.join(format!("{DOSSIER}.autre"));
+    while cible.exists() {
+        k += 1;
+        cible = parent.join(format!("{DOSSIER}.autre{k}"));
+    }
+    std::fs::rename(d, &cible).map_err(|e| format!("{} : {e}", d.display()))
 }
 /// Retire de `d` les images de morceaux et d'empreintes que l'index ne cite plus (rien d'autre).
 fn nettoyer(d: &Path, gardes: &[String]) -> usize {

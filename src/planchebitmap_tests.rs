@@ -75,9 +75,11 @@ fn the_folder_is_written_read_back_and_cleaned() {
     assert!(lu.empreintes[0].masque.contient(5, 5));
     assert_eq!(lu.empreintes[0].signature, sig, "la signature est relue telle quelle");
     // Plus rien : le dossier se vide (au dernier passage seulement).
-    ecrire(&dir, &PlancheBitmap::default(), false).unwrap();
+    // (La même couche, vidée : son numéro est celui du dossier. Une autre couche mettrait ce dossier de côté.)
+    let vide = PlancheBitmap { id_couche: b.id_couche, ..Default::default() };
+    ecrire(&dir, &vide, false).unwrap();
     assert!(dir.join(DOSSIER).join("m42.png").exists(), "rien n'est retiré au premier passage");
-    ecrire(&dir, &PlancheBitmap::default(), true).unwrap();
+    ecrire(&dir, &vide, true).unwrap();
     assert!(!dir.join(DOSSIER).join(INDEX).exists());
     assert!(!dir.join(DOSSIER).join("m42.png").exists());
     // Un index d'une version plus récente : rien n'est touché.
@@ -199,4 +201,88 @@ fn a_signature_changes_when_any_pixel_under_the_mask_changes() {
     assert_eq!(signature(&r, &m), s, "hors du masque : rien ne change");
     poser_pixel(&mut r, 10, 3, Color32::from_rgba_premultiplied(0, 0, 0, 255), false);
     assert_ne!(signature(&r, &m), s, "sous le masque : la signature change");
+}
+
+// ------------------------------------------------------------------------------ contre-relecture : coupures, couche vidée, dossier d'un autre projet
+
+#[test]
+fn the_first_pass_keeps_citing_a_piece_that_left_for_a_drawing() {
+    // Un morceau part vers un dessin (la mémoire ne l'a plus) : tant que le dessin n'est pas écrit, l'index du disque doit le citer encore.
+    let dir = dossier("union");
+    let r = un_trait();
+    let mut b = PlancheBitmap::default();
+    b.morceaux.push(morceau(1, &r));
+    b.morceaux.push(morceau(2, &r));
+    ecrire(&dir, &b, true).unwrap();
+    b.morceaux.retain(|m| m.id != 1);
+    ecrire(&dir, &b, false).unwrap();
+    // (Une coupure ici, avant les dessins : on rouvre.)
+    let lu = lire(&dir, &mut Vec::new());
+    let ids: Vec<u64> = lu.morceaux.iter().map(|m| m.id).collect();
+    println!("après le premier passage : {ids:?}");
+    assert!(ids.contains(&1), "le morceau parti vers un dessin pas encore écrit est toujours là : rien n'est perdu");
+    // Le dernier passage, après les dessins : l'index exact, l'image part.
+    ecrire(&dir, &b, true).unwrap();
+    let lu = lire(&dir, &mut Vec::new());
+    assert_eq!(lu.morceaux.iter().map(|m| m.id).collect::<Vec<_>>(), vec![2]);
+    assert!(!dir.join(DOSSIER).join("m1.png").exists());
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn emptying_the_layer_removes_images_first_and_a_locked_image_never_makes_it_unreadable() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let dir = dossier("vidage");
+    let r = un_trait();
+    let mut b = PlancheBitmap::default();
+    b.morceaux.push(morceau(42, &r));
+    b.morceaux.push(morceau(43, &r));
+    ecrire(&dir, &b, true).unwrap();
+    let d = dir.join(DOSSIER);
+    // Une image tenue par un autre programme (OneDrive, un antivirus) : elle ne peut pas partir.
+    let verrou = std::fs::OpenOptions::new().read(true).share_mode(0).open(d.join("m42.png")).unwrap();
+    let vide = PlancheBitmap { id_couche: b.id_couche, dossier_lu: Some(dir.clone()), ..Default::default() };
+    ecrire(&dir, &vide, true).unwrap();
+    println!("fichiers après le vidage, une image tenue : {:?}", fichiers(&d));
+    assert!(!d.join("m43.png").exists(), "l'image libre est partie");
+    drop(verrou);
+    let lu = lire(&dir, &mut Vec::new());
+    assert!(!lu.illisible, "une image qui n'a pas pu partir ne rend pas la couche illisible");
+    assert!(lu.peut_poser(1));
+    // Des images sans index (l'index perdu) : gardées, la couche reste utilisable.
+    std::fs::remove_file(d.join(INDEX)).ok();
+    let mut avert = Vec::new();
+    let lu = lire(&dir, &mut avert);
+    println!("{avert:?}");
+    assert!(!lu.illisible && lu.peut_poser(1), "des images sans index ne coupent pas la couche");
+    let mut neuve = lu.clone();
+    neuve.morceaux.push(morceau(44, &r));
+    ecrire(&dir, &neuve, true).unwrap();
+    assert!(d.join("m42.png").exists(), "une image inconnue n'est jamais effacée");
+    std::fs::remove_dir_all(&dir).ok();
+}
+
+#[test]
+fn save_as_into_a_folder_of_another_project_mixes_and_deletes_nothing() {
+    let autre = dossier("autre-projet");
+    let r = un_trait();
+    let mut b_autre = PlancheBitmap::default();
+    b_autre.morceaux.push(morceau(7, &r));
+    ecrire(&autre, &b_autre, true).unwrap();
+    let avant = fichiers(&autre.join(DOSSIER));
+    // Mon projet, lu ailleurs, enregistré sous ce dossier-là.
+    let mien = dossier("mon-projet");
+    let mut b = PlancheBitmap::default();
+    b.morceaux.push(morceau(8, &r));
+    ecrire(&mien, &b, true).unwrap();
+    let mut b = lire(&mien, &mut Vec::new());
+    b.dossier_lu = Some(mien.clone());
+    ecrire(&autre, &b, false).unwrap();
+    ecrire(&autre, &b, true).unwrap();
+    let de_cote = autre.join(format!("{DOSSIER}.autre"));
+    println!("mis de côté : {:?} ; le mien : {:?}", fichiers(&de_cote), fichiers(&autre.join(DOSSIER)));
+    assert_eq!(fichiers(&de_cote), avant, "le dossier de l'autre projet est mis de côté tel quel");
+    assert_eq!(lire(&autre, &mut Vec::new()).morceaux.iter().map(|m| m.id).collect::<Vec<_>>(), vec![8], "rien de mêlé");
+    std::fs::remove_dir_all(&autre).ok();
+    std::fs::remove_dir_all(&mien).ok();
 }

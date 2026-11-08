@@ -712,3 +712,116 @@ fn a_scale_too_large_to_lay_down_is_refused_and_nothing_moves() {
     assert_eq!((b.app.history.undo_len(), encre_totale(&b)), (pas, avant), "refusé : rien n'a bougé");
     assert!(b.app.status.contains("refusé"), "{}", b.app.status);
 }
+
+// ------------------------------------------------------------------------------ contre-relecture : coupure d'enregistrement, film partagé, fantômes
+
+#[test]
+fn a_save_cut_between_the_board_layer_and_the_drawings_loses_no_pixel_either_way() {
+    let Some((mut b, de, a, _, t2)) = trait_a_travers(true) else { return println!("pas de carte graphique") };
+    let dossier = std::env::temp_dir().join(format!("shot-test-vignettes-bitmap-coupure-{}-{:?}", std::process::id(), std::thread::current().id()));
+    std::fs::remove_dir_all(&dossier).ok();
+    std::fs::create_dir_all(&dossier).unwrap();
+    let manifeste = dossier.join("P.shot");
+    crate::project::save(&b.app.doc, &manifeste, &mut Default::default()).expect("enregistrement");
+    let avant = encre_totale(&b);
+    // Le trait entier bouge : des pixels passent de la planche aux cases et des cases à la planche.
+    let m = sur_le_trait(de, a, t2.center().x);
+    lasso(&mut b, m, 30.0);
+    glisser_droit(&mut b, prise(m, a), vec2(60.0, 45.0));
+    let apres = encre_totale(&b);
+    assert_eq!(apres, avant, "le geste garde chaque pixel");
+    // Une coupure juste après le premier passage de la couche, avant les dessins.
+    crate::project::COUPER_APRES_LA_COUCHE.with(|c| c.set(true));
+    let r = crate::project::save(&b.app.doc, &manifeste, &mut Default::default());
+    crate::project::COUPER_APRES_LA_COUCHE.with(|c| c.set(false));
+    assert!(r.is_err(), "la coupure simulée");
+    let relu = crate::project::load(&manifeste).expect("réouverture après la coupure");
+    let c = planche(relu.doc, 6, 1.0).expect("la planche");
+    let rouvert = encre_totale(&c);
+    println!("encre : avant {avant}, après le geste {apres}, rouvert après la coupure {rouvert}");
+    assert!(rouvert >= avant, "après la coupure, rien n'est perdu : l'état d'avant est entier (un double possible, jamais un trou)");
+    // L'enregistrement suivant, entier : l'état d'après exactement.
+    crate::project::save(&b.app.doc, &manifeste, &mut Default::default()).expect("enregistrement entier");
+    let relu = crate::project::load(&manifeste).expect("réouverture");
+    let c = planche(relu.doc, 6, 1.0).expect("la planche");
+    assert_eq!(encre_totale(&c), apres, "enregistré entier : exactement l'état d'après");
+    std::fs::remove_dir_all(&dossier).ok();
+}
+
+#[test]
+fn in_a_shared_film_without_the_montage_token_the_board_receives_no_pixel() {
+    use crate::cooperation::{Delais, Horloge, Session};
+    let racine = crate::fiabilite_fixture::dossier("vignettes-bitmap-partage");
+    let manifeste = crate::cooperation_tests::partager(&crate::cooperation_tests::film(12), &racine);
+    let h = Horloge::reglable(1_760_000_000_000);
+    let crate::project::Loaded { mut doc, partage, .. } = crate::project::load(&manifeste).expect("projet partagé");
+    for p in &mut doc.panels {
+        for l in &mut p.layers {
+            l.kind = crate::document::LayerKind::Bitmap;
+        }
+    }
+    let Some(mut b) = planche(doc, 6, 1.0) else { return println!("pas de carte graphique") };
+    b.app.path = Some(manifeste.clone());
+    let moi = crate::equipe::Identite { id: "anthony".into(), nom: "Anthony".into(), couleur: [220, 60, 60], machine: "poste".into(), seance: "s1".into() };
+    let depot = std::sync::Arc::new(crate::depot::DossierPartage::nouveau(&manifeste));
+    let s = Session::rejoindre(depot, moi, partage.expect("partagé"), &mut b.app.doc, Delais::default(), h.clone(), false, None).expect("session");
+    b.app.partage = Some(s);
+    let l = b.app.board_layout();
+    b.app.cur_panel = l.cards[1].panel;
+    b.app.run_action("equipe.prendre_plan");
+    h.avancer(9_000);
+    b.app.partage.as_ref().unwrap().pomper();
+    b.chauffer(2);
+    assert!(!b.app.content_refuses(), "le plan est à moi : {}", b.app.status);
+    assert!(!b.app.planche_bitmap_ecrivable(), "sans le jeton du montage, la couche de la planche ne serait pas enregistrée");
+    let xf = b.app.vignettes.xf;
+    let t1 = xf.rect(l.cards[1].thumb);
+    let (de, a) = (t1.center(), pos2(t1.center().x, t1.top() - 40.0));
+    tracer(&mut b, de, a);
+    repos(&mut b);
+    println!("{}", b.app.status);
+    assert!(b.app.doc.annotations.bitmap.morceaux.is_empty(), "rien n'est posé sur la planche sans le jeton");
+    assert!(b.app.status.contains("montage n'est pas à toi"), "{}", b.app.status);
+    let cel = b.app.doc.panels[l.cards[1].panel].layers[0].cel_at(l.cards[1].frame).expect("le dessin");
+    let pose = crate::horschamp::pose_de_la_case(&b.app.doc, &l, 1).unwrap();
+    let haut = pose.dessin(xf.to_board(pos2(a.x, a.y + 6.0)));
+    assert!((-3..=3).any(|j| b.app.doc.cels[&cel].raster.get_i(haut.x as i64, haut.y as i64 + j).a() > 0), "le bout hors de la case est resté dans son dessin");
+    // Le jeton pris : la planche reçoit.
+    b.app.run_action("equipe.prendre_montage");
+    h.avancer(9_000);
+    b.app.partage.as_ref().unwrap().pomper();
+    b.chauffer(2);
+    assert!(b.app.planche_bitmap_ecrivable(), "{}", b.app.status);
+    tracer(&mut b, de + vec2(30.0, 0.0), a + vec2(30.0, 0.0));
+    repos(&mut b);
+    assert!(!b.app.doc.annotations.bitmap.morceaux.is_empty(), "avec le jeton, la planche reçoit : {}", b.app.status);
+}
+
+#[test]
+fn ghost_pieces_count_against_the_limit_of_a_selection_gesture() {
+    let Some(mut b) = planche(des_plans(12, true), 6, 1.0) else { return println!("pas de carte graphique") };
+    let l = b.app.board_layout();
+    let xf = b.app.vignettes.xf;
+    let t1 = xf.rect(l.cards[1].thumb);
+    tracer(&mut b, t1.center() - vec2(25.0, 25.0), t1.center() + vec2(25.0, 25.0));
+    repos(&mut b);
+    assert!(b.app.doc.annotations.bitmap.morceaux.is_empty(), "un trait dans la case seule");
+    // La couche presque pleine : des morceaux loin de la vue, plus un fantôme (cité par l'index, image manquante) qui la remplit.
+    let carte = l.cards[0];
+    let mut r = crate::planchebitmap::pixels_vides();
+    crate::planchebitmap::poser_pixel(&mut r, 1, 1, eframe::egui::Color32::from_rgba_premultiplied(30, 30, 200, 255), false);
+    let bm = &mut b.app.doc.annotations.bitmap;
+    for i in 0..crate::planchebitmap::MAX_MORCEAUX - 1 {
+        let pose = crate::planchebitmap::A64::echelle_decalage(0.01, -400.0, -400.0 - i as f64 * 0.01);
+        bm.morceaux.push(crate::planchebitmap::Morceau { id: 1 + i as u64, anchor: crate::annotations::Ancre { card: carte.id, after: 0, rank: 0 }, dessus: false, lien: None, pose, pixels: std::sync::Arc::new(r.clone()) });
+    }
+    bm.ajouter_fantome_pour_essai(900_000);
+    assert!(!bm.peut_poser(1), "pleine en comptant le fantôme");
+    let avant = (encre_totale(&b), b.app.doc.annotations.bitmap.morceaux.len(), b.app.history.undo_len());
+    lasso(&mut b, t1.center(), 40.0);
+    glisser_droit(&mut b, prise(t1.center(), t1.center() + vec2(25.0, 25.0)), vec2(0.0, -(t1.height() * 0.5 + 40.0)));
+    repos(&mut b);
+    println!("{}", b.app.status);
+    assert_eq!((encre_totale(&b), b.app.doc.annotations.bitmap.morceaux.len(), b.app.history.undo_len()), avant, "refusé : rien n'a bougé");
+    assert!(b.app.status.contains("limite"), "{}", b.app.status);
+}
