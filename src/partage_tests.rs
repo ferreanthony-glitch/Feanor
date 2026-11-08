@@ -192,6 +192,48 @@ fn the_link_is_saved_comes_back_and_a_newer_project_is_refused() {
     std::fs::remove_dir_all(&dir).ok();
 }
 
+/// Vignettes, partie 125 face à la planche-mère : deux cases montrent le même dessin partagé (mêmes numéros `lien` de traits). La sélection du
+/// trait entier prend la part une seule fois, la déplacer la déplace dans les deux cases (c'est le même dessin), et la repose ne la duplique pas.
+#[test]
+fn on_the_board_a_stroke_of_a_shared_drawing_is_taken_once_and_moving_it_moves_it_in_both_cases() {
+    use crate::traits_continus_tests::{des_plans, planche, repos, tracer};
+    use crate::vignettes_selection_tests::{choisies, glisser_droit, lasso, parts};
+    use eframe::egui::vec2;
+    let mut doc = des_plans(12, false);
+    assert_eq!(doc.reutiliser_plan_apres(0), 1, "le plan 2 est le plan 1 réutilisé");
+    let Some(mut b) = planche(doc, 6, 1.0) else { return };
+    let l = b.app.board_layout();
+    let xf = b.app.vignettes.xf;
+    let (t0, t1) = (xf.rect(l.cards[0].thumb), xf.rect(l.cards[1].thumb));
+    assert_eq!((l.cards[0].panel, l.cards[1].panel), (0, 1), "les deux premières cases sont les deux plans liés");
+    // Un trait en biais au milieu de la case 1, bien dans son champ : il va dans le dessin partagé, que la case 2 montre aussi.
+    let (de, a) = (t0.center() + vec2(-30.0, -20.0), t0.center() + vec2(30.0, 20.0));
+    tracer(&mut b, de, a);
+    repos(&mut b);
+    let cel = b.app.doc.panels[0].layers[0].cel_at(0).expect("un dessin");
+    assert_eq!(b.app.doc.panels[1].layers[0].cel_at(0), Some(cel), "le même dessin dans les deux plans");
+    assert_eq!(parts(&b), (1, 0), "une part, dans le dessin, rien sur la planche");
+    let avant = b.app.doc.cels[&cel].vector.as_ref().unwrap().elements[0].bounds();
+    // Ctrl + lasso autour du trait dans la case 1 : une seule part choisie, pas deux (le dessin est montré par deux cases).
+    lasso(&mut b, t0.center(), 45.0);
+    assert_eq!(choisies(&b), 1, "{}", b.app.status);
+    // Le glisser vers le bas, pris dans la boîte du choix (pas sur une poignée) : le trait bouge dans le dessin partagé, donc dans les deux
+    // cases ; une part, toujours, nulle part ailleurs.
+    let q = crate::vignettes_selection_tests::boite(&b);
+    let prise = eframe::egui::pos2(q[0].x * 0.7 + q[2].x * 0.3, q[0].y * 0.7 + q[2].y * 0.3);
+    glisser_droit(&mut b, prise, vec2(0.0, 20.0));
+    repos(&mut b);
+    assert_eq!(parts(&b), (1, 0), "{}", b.app.status);
+    assert_eq!(b.app.doc.panels[0].layers[0].cel_at(0), Some(cel));
+    assert_eq!(b.app.doc.panels[1].layers[0].cel_at(0), Some(cel), "le lien tient");
+    let apres = b.app.doc.cels[&cel].vector.as_ref().unwrap().elements[0].bounds();
+    assert!(apres.center().y > avant.center().y + 5.0, "le trait est descendu : {avant:?} → {apres:?}");
+    assert!((apres.center().x - avant.center().x).abs() < 3.0);
+    // La case 2 n'est pas touchée autrement : elle n'a toujours qu'un calque, le partagé.
+    assert_eq!(b.app.doc.panels[1].layers.len(), b.app.doc.panels[0].layers.len());
+    let _ = t1;
+}
+
 #[test]
 fn from_the_app_the_commands_share_detach_reuse_a_plan_choose_plans_and_undo() {
     let doc = film(3);

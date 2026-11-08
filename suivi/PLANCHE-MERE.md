@@ -62,10 +62,10 @@ Un plan réutilisé porte le maillon à côté de son numéro (Storyboard, Vigne
   aux cases voisines par `horschamp`) : la règle « les cases ne coupent jamais le dessin » vaut d'autant plus que le dessin est, par construction,
   plus grand que chaque case.
 - Une case de plan lié montre le dessin **à travers sa caméra** ; le **passe-partout** laisse voir ce qui déborde, comme pour un mouvement.
-- À vérifier par un essai, après la fusion de `vignettes-selection` (demande de l'autre session) : deux cases qui montrent le même dessin
-  partagé portent les mêmes numéros `lien` de traits ; la sélection des traits entiers (`vignettesel.rs`, `parts_du_lien`, `entier_de`)
-  ne doit pas prendre deux fois une part vue dans les deux cases, déplacer un trait dans l'une ne doit pas casser l'autre, et la repose ne
-  doit pas dupliquer le trait dans le dessin partagé.
+- Vérifié par un essai (`partage_tests::on_the_board_a_stroke_of_a_shared_drawing…`, demande de l'autre session) : deux cases qui montrent le
+  même dessin partagé portent les mêmes numéros `lien` de traits ; la sélection des traits entiers (`vignettesel.rs`, `dessins_des_cases` ne
+  compte un dessin qu'une fois) prend la part une seule fois, la déplacer la déplace dans les deux cases, la repose ne la duplique pas.
+  Limite : le lasso ne trouve le trait que dans la première case qui montre le dessin.
 - Plus tard, si Anthony le veut : **dessiner la planche-mère d'un coup** dans les Vignettes (une case « mère » plus large, puis poser des cadres
   dedans qui deviennent des plans), ce que fait déjà en partie une case de mouvement de caméra (cadres A, B…) : « un cadre = un plan » serait
   une commande sur une case de mouvement : « Faire un plan par cadre ».

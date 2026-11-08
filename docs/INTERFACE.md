@@ -7029,7 +7029,7 @@ Idée 4 d'Anthony (7 novembre) : « un grand dessin, plusieurs cadres caméra, d
 la demande ». Ses réponses du 8 novembre : une **option de plan** (un plan réutilisé) ou **de calque** (un décor réutilisé) ; « Réutiliser ce
 plan » lie **tout le plan** ; la planche-mère se dessine d'abord dans le **Storyboard** ; **« Réutiliser »** dans les commandes, le mot
 « planche-mère » seulement dans les bulles et la ligne d'état (rien de plus dans le menu Aide). Conception : `suivi/PLANCHE-MERE.md`. Code :
-`partage.rs` (le modèle), `partageui.rs` (les commandes, la fenêtre des plans à cocher, le maillon), essais `partage_tests.rs` (6).
+`partage.rs` (le modèle), `partageui.rs` (les commandes, la fenêtre des plans à cocher, le maillon), essais `partage_tests.rs` (7).
 **Format de projet 51** : `partage` d'un calque. (La partie 125 est celle de l'autre session, `vignettes-selection`.)
 
 ### Ce que ça fait
@@ -7070,10 +7070,14 @@ plan » lie **tout le plan** ; la planche-mère se dessine d'abord dans le **Sto
 
 ### Ce qui vient après (pas dans cette branche)
 
-- **Les Vignettes** (après la fusion de `vignettes-selection`, dont les fichiers sont tenus par l'autre session) : le maillon sur les cases
-  des plans liés ; un trait dans une case d'un plan lié va **entièrement** au dessin partagé (pas réparti aux cases voisines : « les cases
-  ne coupent jamais le dessin », Anthony) ; le passe-partout laisse voir ce qui déborde ; plus tard, « Faire un plan par cadre » sur une case
-  de mouvement de caméra.
+- **Les Vignettes** (un chantier suivant, à coordonner avec l'autre session, qui tient `annotations.rs`, `horschamp.rs`, `vignettesel.rs`,
+  `boardui.rs`) : le maillon sur les cases des plans liés ; un trait dans une case d'un plan lié va **entièrement** au dessin partagé (pas
+  réparti aux cases voisines : « les cases ne coupent jamais le dessin », Anthony) ; le passe-partout laisse voir ce qui déborde ; plus
+  tard, « Faire un plan par cadre » sur une case de mouvement de caméra. **Ce qui marche déjà** (partie 125, essai
+  `on_the_board_a_stroke_of_a_shared_drawing…`) : un dessin montré par deux cases ne compte qu'une fois pour la sélection du trait entier
+  (`dessins_des_cases`) ; le trait pris dans la première case est pris une seule fois, le déplacer le déplace dans les deux cases (même
+  dessin), rien n'est dupliqué. **Limite** : c'est dans la **première** case qui montre le dessin que le lasso le trouve ; dans la seconde,
+  le trait se voit mais ne se prend pas encore.
 - La **Fiche du plan** ne dit pas encore qu'un plan est lié (le maillon est sur ses calques).
 
 ### À vérifier à l'écran (par Anthony)
