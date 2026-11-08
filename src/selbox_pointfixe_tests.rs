@@ -326,7 +326,7 @@ fn the_two_choices_sit_above_more_settings_for_the_selection_and_transform_tools
         app.set_tool(tool);
         let textes = textes_du_panneau(&mut app);
         let y = |t: &str| textes.iter().find(|(s, _)| s.trim() == t).map(|(_, r)| r.center().y);
-        let plus = y("Plus de réglages").unwrap_or_else(|| panic!("{tool:?} : « Plus de réglages » : {textes:?}"));
+        let plus = y("Plus de réglages").or_else(|| y("Clés de position")).unwrap_or_else(|| panic!("{tool:?} : « Plus de réglages » : {textes:?}"));
         for icone in [ph::CORNERS_OUT, ph::ARROWS_OUT_CARDINAL, ph::CROSSHAIR_SIMPLE, ph::ANCHOR_SIMPLE] {
             let at = y(icone).unwrap_or_else(|| panic!("{tool:?} : {icone:?} est dans les réglages : {textes:?}"));
             assert!(at < plus, "{tool:?} : {icone:?} est au-dessus de « Plus de réglages »");
@@ -337,4 +337,28 @@ fn the_two_choices_sit_above_more_settings_for_the_selection_and_transform_tools
     app.set_tool(Tool::Brush);
     let textes = textes_du_panneau(&mut app);
     assert!(!textes.iter().any(|(s, _)| s.trim() == ph::ANCHOR_SIMPLE));
+}
+
+#[test]
+fn the_transform_panel_is_short_with_the_values_on_one_line_under_the_title_and_the_handles_explain_themselves() {
+    for (nom, genre) in [("vectoriel", LayerKind::Vector), ("bitmap", LayerKind::Bitmap)] {
+        let mut app = appli(&format!("panneau-court-{nom}"));
+        { let (p, l) = (app.cur_panel, app.cur_layer); app.doc.panels[p].layers[l].kind = genre; }
+        app.set_tool(Tool::Transform);
+        let textes = textes_du_panneau(&mut app);
+        let trouver = |t: &str| textes.iter().find(|(s, _)| (s.trim().starts_with(t) || (t == "Transformer" && s.ends_with("Transformer")))).map(|(_, r)| *r).unwrap_or_else(|| panic!("{nom} : « {t} » : {textes:?}"));
+        let (titre, x, y, angle) = (trouver("Transformer"), trouver("x "), trouver("y "), trouver("0.0°"));
+        assert!(x.top() > titre.bottom() - 2.0, "{nom} : les valeurs sont sous le titre");
+        assert!((x.center().y - y.center().y).abs() < 2.0, "{nom} : x et y sur la même ligne");
+        assert!(x.center().y < titre.bottom() + 60.0, "{nom} : tout en haut, tout de suite sous le titre");
+        assert!(angle.center().y < trouver("Point fixe").center().y && trouver("Point fixe").center().y < trouver("Clés de position").center().y, "{nom} : l'angle, puis le point fixe, puis les clés, tous visibles");
+        assert!(!textes.iter().any(|(s, _)| s.contains("Plus de réglages")), "{nom} : plus rien à plier");
+        assert!(!textes.iter().any(|(s, _)| s.contains("Glisser dans la boîte")), "{nom} : la longue explication n'est plus dans le panneau");
+    }
+    // Elle est dans les bulles des poignées.
+    for h in [BoxHandle::Corner(0), BoxHandle::Edge(1), BoxHandle::Rotate, BoxHandle::RotateCorner(2)] {
+        let (nom, phrase) = App::texte_poignee(h);
+        assert!(!nom.is_empty() && phrase.len() > 30, "{h:?}");
+    }
+    assert!(App::texte_poignee(BoxHandle::Corner(1)).1.contains("Ctrl") && App::texte_poignee(BoxHandle::RotateCorner(1)).1.contains("Rotation"));
 }

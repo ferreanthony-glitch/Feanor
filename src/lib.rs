@@ -542,6 +542,10 @@ mod palette;
 #[cfg(test)]
 mod palette_tests;
 mod prefsonglets;
+// Fichier > Exporter en vidéo / en image / le son / pour la production (partie 130).
+mod exportmenu;
+#[cfg(test)]
+mod exportmenu_tests;
 mod prefsui;
 #[cfg(test)]
 mod prefsui_tests;
