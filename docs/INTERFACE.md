@@ -8253,7 +8253,8 @@ ligne principale est la trajectoire, les traits qui la découpent sont les clés
 on sélectionne un autre outil, mais réapparaît quand on le reprend. Il est ajustable en direct et singe les mêmes comportements qu'un crayon
 classique, avec possibilité de sélection par le lasso, étirement, déplacement… » Son croquis : une ligne, des marques serrées au départ, espacées
 au milieu, serrées à l'arrivée, une flèche au bout. Code : `trajectoire.rs` (le modèle, sans écran), `trajectoireui.rs` (l'outil, la peinture,
-les réglages) ; essais `trajectoire_tests.rs` (8) et `trajectoireui_tests.rs` (8). **Format de projet 49** : `trajectoire` d'un calque.
+les réglages) ; essais `trajectoire_tests.rs` (13) et `trajectoireui_tests.rs` (17). **Format de projet 49** : `trajectoire` d'un calque ;
+**50** (2026-11-08, branche `finitions`) : `tourne` et l'`angle` des dessins posés.
 
 ### Ce que ça fait
 
@@ -8271,6 +8272,16 @@ les réglages) ; essais `trajectoire_tests.rs` (8) et `trajectoireui_tests.rs` (
   pixels dessinés), ou **un point choisi d'un clic** sur le dessin (bouton « Un point du dessin : cliquer », puis le clic ; le bout d'un
   pied, une main). Le point d'ancrage se voit sur le chemin à l'image courante, cerclé quand ce n'est pas le départ du trait. Les
   calculs suivants ne font pas dériver la pose propre du calque (`decalage_depart`).
+- **Le dessin tourne avec le chemin** (case des réglages, 2026-11-08, Anthony : « une option pour que le dessin tourne en suivant la
+  courbe » ; d'origine : non). Le dessin pivote **autour du point d'ancrage** pour regarder où va le chemin, comme une voiture dans un
+  virage, en **gardant son orientation du départ** (l'angle est celui dont le chemin a tourné depuis sa direction au départ, lue sur une
+  petite fenêtre de 6 pixels ou 2 % du chemin pour ne pas trembler ; un demi-tour et plus continue au-delà de 180°, le dessin ne repart
+  jamais dans l'autre sens d'une image à la suivante). Clés d'interpolation : chaque clé porte l'angle, le déplacement compense la
+  rotation du calque autour du centre de la feuille pour que ce soit bien le point d'ancrage qui reste sur le chemin. Clés d'images :
+  chaque copie est **tournée** (éléments vectoriels transformés ; bitmap rééchantillonné en bilinéaire, toile infinie comprise,
+  `Raster::transformee` ; l'aplat suit), et **refaite depuis le dessin d'origine** quand son angle change (tourner une copie déjà
+  tournée l'abîmerait) : ce qu'on avait dessiné sur une copie tournée ne survit pas à un changement de forme du chemin, contrairement
+  aux copies seulement déplacées. La case se propose à la trajectoire suivante. Format de projet 50.
 - **Deux sortes de clés** (réglages, Anthony : « Clés d'interpolation ou Clés d'images » ; puis « garde clés d'images comme option initiale
   et clés d'interpolation en option secondaire ») : **Clés d'images**, d'origine (voir plus bas) ; **Clés d'interpolation**, une clé de
   position par image, le calque glisse **le long de la courbe**, pas de la corde, à vitesse constante entre deux marques. **Clés
@@ -8285,7 +8296,9 @@ les réglages) ; essais `trajectoire_tests.rs` (8) et `trajectoireui_tests.rs` (
   le modèle des clés de position, format 49, sans emploi ici.)
 - **La fin, et le temps des marques recalés sur la timeline** (Anthony : « il faut pouvoir bouger la dernière clé et que ça recale toutes les
   autres clés entre la première et la dernière » ; « quand j'ai voulu bouger une clé sur la timeline la trajectoire a disparu »). Le chemin
-  dure du départ (la tête de lecture au tracé) à la **fin**, d'origine la dernière image du plan. Dans la timeline et au montage, un calque à
+  dure du départ (la tête de lecture au tracé) à la **fin**, posée dès le tracé sur la dernière image du plan (depuis le 2026-11-08 ; avant,
+  « la dernière image du plan » sans image posée : allonger le plan étirait le chemin, maintenant le calque attend au bout, comme pour toute
+  clé ; raccourcir le plan borne la fin à sa dernière image, et la rend quand il se rallonge). Dans la timeline et au montage, un calque à
   trajectoire ne montre que ses **jalons** (le départ, les marques, la fin) ; **glisser l'un d'eux le recale** : la dernière clé règle la
   fin, la première le départ, une marque son temps (bornée à une image de ses voisines ; le temps des marques devient alors explicite, le
   bouton « Temps égaux entre les marques » l'oublie), et les clés d'entre sont reposées, la trajectoire reste (« Recaler la trajectoire »,
@@ -8326,9 +8339,16 @@ les réglages) ; essais `trajectoire_tests.rs` (8) et `trajectoireui_tests.rs` (
   calque », couper ou réunir le plan enlèvent la trajectoire. **Retirer les marques** garde le chemin.
 - **Couper un plan, réunir deux plans** : chaque partie garde ses clés (comme avant, `poskeys::split_keys` / `join_keys`), aucune ne garde le
   chemin. Dupliquer un plan, copier un calque : le chemin suit. Changer la taille de la feuille (`adaptation.rs`) : le chemin suit, à
-  l'échelle. Retourner un calque ou des plans (`flip.rs`) : le chemin se retourne autour de son départ. Insérer ou retirer des images : les clés
-  suivent comme avant ; le chemin, lu à la prochaine retouche, se repose alors sur la nouvelle durée. Un calque de couleur lié suit les clés de
-  son trait (comme avant) ; la trajectoire se trace sur le trait.
+  l'échelle. Retourner un calque ou des plans (`flip.rs`) : le chemin se retourne autour de son départ. Un calque de couleur lié suit les clés
+  de son trait (comme avant) ; la trajectoire se trace sur le trait.
+- **Insérer ou retirer des images décale la trajectoire** (2026-11-08, Anthony : « insérer des images devrait décaler la trajectoire » ;
+  avant, seules les clés suivaient et le chemin, lu à la retouche suivante, se reposait sur la nouvelle durée). Tout ce qui passe par
+  `Layer::shift_frames` (insérer ou supprimer des images, coller, images intermédiaires, déplacer le calque entier, allonger ou raccourcir
+  le plan par le début avec Ctrl, décaler des clés au montage) emmène **le départ, la fin et chaque marque, qui restent sur leur
+  image** comme les clés de position et les dessins (`Trajectoire::decaler_images`). Une insertion au milieu du chemin allonge
+  l'intervalle où elle tombe : le temps des marques devient explicite pour cela (« Temps égaux entre les marques » le rend). Un retrait
+  à cheval sur un jalon le ramène à l'image du retrait. Recalculer d'après la trajectoire repose alors les clés et les dessins là où ils
+  sont déjà. Sans fin posée (un projet du 7 novembre), seul le départ suit.
 
 ### Comment (le modèle, `trajectoire.rs`)
 
@@ -8344,7 +8364,7 @@ départ). Le modèle ne connaît ni l'écran ni l'application : ses essais sont 
 
 ### Limites et à décider
 
-- La **rotation** du calque ne suit pas la courbe (position seulement) : en option plus tard.
+- La **rotation** suit la courbe en option (« Le dessin tourne avec le chemin », 2026-11-08) ; l'échelle, non.
 - **Pas de lasso ni de boîte d'étirement** sur le chemin : on le tire (il se tord), on le déplace (Maj), on le retrace d'un trait long.
   Étirer par une boîte (comme la sélection) viendra si cela ne suffit pas.
 - Un plan qui s'arrête au départ (ou d'une image) : le chemin se trace, aucune clé (le calque ne bouge pas) ; la ligne d'état le dit.
@@ -8375,6 +8395,12 @@ départ). Le modèle ne connaît ni l'écran ni l'application : ses essais sont 
    dit. « Clé de position ici » : refusé, le message le dit. Transformer : le personnage et son chemin bougent ensemble, Ctrl+Z rend les deux.
    Prends d'autres outils, reviens : le chemin est toujours là.
 8. Vignettes : l'outil est refusé, comme les autres outils hors des quatre.
+9. (2026-11-08) Coche « Le dessin tourne avec le chemin » sur un chemin qui tourne (un virage, un demi-cercle) : en lecture, le
+   personnage pivote dans le virage, les pieds restent sur le chemin ; au départ il est droit comme tu l'as dessiné. En clés d'images,
+   chaque dessin posé est tourné ; en clés d'interpolation, il glisse en tournant. Décoche : il redevient droit partout.
+10. (2026-11-08) Timeline, tête de lecture entre deux marques : « Insérer une image avant » plusieurs fois (ou des images intermédiaires,
+   ou coller des images) : les marques et la fin d'après reculent d'autant, celles d'avant ne bougent pas, le personnage tient sa place
+   dans les images insérées. Supprime des images (la suite recule) : elles reviennent d'autant. Ctrl+Z rend tout.
 
 ## 120. Les poignées de lissage de la caméra attendent à côté de chaque clé (2026-11-07, branche `trajectoire`)
 
@@ -8701,3 +8727,49 @@ Tout le travail du geste est du réarrangement de listes de clés et de dessins 
 - Rallonger avec Ctrl un plan dont le début a été rogné : la réserve du début **revient d'abord**, puis le vide. L'autre choix serait du vide tout de suite (la réserve resterait cachée) ; il garde mieux le sens de « les clés suivent la poignée » mais ne rend plus le rognage d'un geste.
 - Les images ajoutées devant par Ctrl sont **vides** (comme dans l'exemple 0 à 4 s) : le calque n'y montre rien, sauf pré-comportement « maintenir ».
 - L'éclaircissement : +0,075 de luminosité (OKLab). On peut le monter ou le baisser (`PAS` dans `cles_alternees.rs`) après un coup d'œil sur son écran.
+
+## 124. Finitions du 8 novembre : la licence de ffmpeg dans À propos, trois touches (2026-11-08, branche `finitions`)
+
+Anthony, après la Trajectoire : « Ensuite : la mention de licence ffmpeg dans À propos, obligatoire avant de livrer ; prévenir avant
+d'effacer les versions rangées quand on supprime le dernier plan d'une séquence ; des touches pour dupliquer un plan, pour l'outil
+Caméra et la clé de caméra. » (Les deux restes de la Trajectoire sont dans la partie 119.)
+
+### Ce que ça fait
+
+- **À propos de FEANOR** (`aproposui.rs`) : sous les polices, la ligne « Vidéo et son : FFmpeg 8.1 (licence GNU LGPL v2.1 ou suivante),
+  programme séparé, construit sans composant GPL ». Un dépliant **« Licence et sources de ffmpeg »** dit ce que FEANOR fait de ffmpeg
+  (un programme à part, appelé pour lire et écrire les vidéos et les sons, jamais intégré), quel ffmpeg **ce poste** utilise (celui
+  livré à côté de FEANOR, ou un autre, trouvé par `export::find_ffmpeg`, « qui a sa propre licence » ; cherché une fois par ouverture de
+  la fenêtre), un bouton **« Ouvrir le dossier ffmpeg-licence »** quand ce dossier est à côté du programme (la version portable : il
+  porte `LICENSE-ffmpeg.txt`, `CONFIGURATION.txt` avec les empreintes et la provenance des sources, `configure-ligne.txt`), un bouton
+  **« Les sources (ffmpeg.org) »** (l'archive officielle 8.1.3, à laquelle FEANOR ne change rien), puis, dans une zone qui défile, le
+  **texte complet de la GNU LGPL v2.1** et la **ligne de configuration exacte** du ffmpeg livré. Le texte et la configuration sont
+  compilés dans le programme (`assets/licences/ffmpeg-LGPL-2.1.txt`, `ffmpeg-configure.txt`, copies de
+  `Logiciel\ffmpeg\allege\sortie\`) : la mention est là même sans le dossier. Essais : `aproposui_tests.rs`.
+- **Trois touches** (`keymap.toml`, propositions à valider, modifiables comme les autres par le clic droit « Assigner un raccourci… ») :
+  **Ctrl+Maj+D** duplique le plan (`panneau.dupliquer` ; Ctrl+D duplique un dessin), **Maj+C** prend l'outil Caméra (`outil.camera` ;
+  C seul tourne la vue, T reste la caméra des Vignettes), **Maj+K** pose la clé de caméra à la tête de lecture (`camera.cle_ici` ; K
+  seul arrête la lecture au montage, F5 pose une clé de dessin). Aucune ne partage sa touche avec une autre commande
+  (`keymap_tests::no_two_default_bindings_share_a_key_in_the_same_context`, et l'essai dédié).
+- **Les versions rangées d'une séquence qu'on vide** : rien de neuf à faire. Depuis le chantier `versions-fiables` (du 5 novembre, fusion
+  7cac5ed du 6, partie 102), supprimer, déplacer ou sortir le **dernier plan d'une séquence qui a d'autres versions de séquence est
+  refusé**, et la ligne d'état dit pourquoi (« La séquence X a d'autres versions de séquence (A, B) : lui retirer son dernier plan les
+  ferait disparaître. Supprime-les d'abord (Versions de la séquence), ou garde un plan. ») : rien ne s'efface, ni sans prévenir ni
+  autrement (`variantes::refuser_si_sequence_videe`, essais `versions_fiables_tests.rs`, section 2). Le point de la Station est donc
+  fait depuis ce chantier-là.
+
+### À vérifier à l'écran (par Anthony)
+
+1. Aide > À propos de FEANOR… : la ligne ffmpeg sous les polices ; déplie « Licence et sources de ffmpeg » : le ffmpeg de ton poste
+   (celui à côté de FEANOR), le texte de la licence défile, la configuration au bout. Dans la version portable, le bouton du dossier
+   l'ouvre dans l'Explorateur.
+2. Ctrl+Maj+D sur un plan : il est dupliqué. Maj+C : l'outil Caméra. Maj+K : une clé de caméra à la tête de lecture (le losange
+   apparaît sur la piste caméra). Si une touche te déplaît, clic droit sur l'icône > Assigner un raccourci….
+3. Une séquence d'un seul plan avec une version de séquence rangée : Suppr sur ce plan est refusé, la ligne d'état le dit.
+
+### Limites
+
+- La version portable du 8 novembre porte la licence et la provenance des sources dans `ffmpeg-licence`, mais **pas l'archive des sources
+  elle-même** (11,7 Mo) : la LGPL demande les sources ou une offre écrite ; `CONFIGURATION.txt` dit « l'archive ci-jointe » alors
+  qu'elle ne l'est pas. À régler dans le script de la version portable (joindre `ffmpeg-8.1.3.tar.xz`, ou écrire l'offre et l'adresse
+  exacte), et à relire par le conseil (le brevet des codecs H.264 et HEVC reste un autre sujet).

@@ -708,6 +708,74 @@ impl Raster {
         out
     }
 
+    /// Même image, chaque pixel dessiné passé par l'affinité `a` (tourner, déplacer, à l'échelle ; toile infinie comprise) : chaque
+    /// pixel d'arrivée va chercher sa couleur dans l'image d'origine par l'affinité inverse, entre les pixels (`echantillon`). L'outil
+    /// Trajectoire en « clés d'images » (`trajectoireui.rs`) pose ainsi un dessin tourné à chaque marque. Une affinité qui écrase
+    /// tout (non inversible) : une image vide. Le coût suit la boîte des tuiles dessinées, pas la feuille.
+    pub fn transformee(&self, a: &crate::vector::Affine) -> Raster {
+        use eframe::egui::pos2;
+        let mut out = Raster::new(self.width, self.height);
+        let Some(inv) = a.inverse() else { return out };
+        let t = TILE as i64;
+        let borne = WORLD * t;
+        // Tuile dessinée par tuile dessinée : la boîte de son image par `a` (un pixel de marge) est parcourue à l'arrivée, et chaque
+        // pixel d'arrivée dont le point d'origine tombe dans cette tuile (ou à son bord) est échantillonné. Le travail suit ainsi le
+        // nombre de tuiles dessinées, jamais l'étendue de la toile.
+        for id in self.drawn_ids() {
+            let (ox, oy) = self.tile_origin(id);
+            let coins = [(ox, oy), (ox + t, oy), (ox, oy + t), (ox + t, oy + t)].map(|(x, y)| a.apply(pos2(x as f32, y as f32)));
+            if coins.iter().any(|p| !p.x.is_finite() || !p.y.is_finite()) {
+                continue;
+            }
+            let (mut x0, mut y0, mut x1, mut y1) = (f32::INFINITY, f32::INFINITY, f32::NEG_INFINITY, f32::NEG_INFINITY);
+            for p in coins {
+                (x0, y0, x1, y1) = (x0.min(p.x), y0.min(p.y), x1.max(p.x), y1.max(p.y));
+            }
+            let (x0, y0) = ((x0.floor() as i64 - 1).max(-borne), (y0.floor() as i64 - 1).max(-borne));
+            let (x1, y1) = ((x1.ceil() as i64 + 1).min(borne), (y1.ceil() as i64 + 1).min(borne));
+            let (sx0, sy0, sx1, sy1) = (ox as f32 - 1.0, oy as f32 - 1.0, (ox + t) as f32 + 1.0, (oy + t) as f32 + 1.0);
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    let s = inv.apply(pos2(x as f32 + 0.5, y as f32 + 0.5));
+                    if s.x < sx0 || s.x >= sx1 || s.y < sy0 || s.y >= sy1 {
+                        continue;
+                    }
+                    let c = self.echantillon(s.x, s.y);
+                    if c.a() == 0 {
+                        continue;
+                    }
+                    let (tx, ty) = (x.div_euclid(t), y.div_euclid(t));
+                    let id = out.id_of(tx as i32, ty as i32);
+                    out.tile_mut(id)[y.rem_euclid(t) as usize * TILE + x.rem_euclid(t) as usize] = c;
+                }
+            }
+        }
+        out
+    }
+
+    /// La couleur au point (`x`, `y`) du monde, entre les pixels (bilinéaire, prémultipliée) ; transparente hors des tuiles dessinées.
+    pub fn echantillon(&self, x: f32, y: f32) -> Color32 {
+        let (x, y) = (x - 0.5, y - 0.5);
+        let (x0, y0) = (x.floor(), y.floor());
+        let (fx, fy) = (x - x0, y - y0);
+        let (xi, yi) = (x0 as i64, y0 as i64);
+        let lire = |dx: i64, dy: i64| -> [f32; 4] {
+            let c = self.get_i(xi + dx, yi + dy);
+            [c.r() as f32, c.g() as f32, c.b() as f32, c.a() as f32]
+        };
+        let (a, b, c, d) = (lire(0, 0), lire(1, 0), lire(0, 1), lire(1, 1));
+        if a[3] == 0.0 && b[3] == 0.0 && c[3] == 0.0 && d[3] == 0.0 {
+            return Color32::TRANSPARENT;
+        }
+        let mix = |k: usize| -> u8 {
+            let haut = a[k] + (b[k] - a[k]) * fx;
+            let bas = c[k] + (d[k] - c[k]) * fx;
+            (haut + (bas - haut) * fy).round().clamp(0.0, 255.0) as u8
+        };
+        let alpha = mix(3);
+        Color32::from_rgba_premultiplied(mix(0).min(alpha), mix(1).min(alpha), mix(2).min(alpha), alpha)
+    }
+
     /// Même image dans une feuille `width`×`height`, décalée de (`dx`, `dy`) pixels.
     pub fn placed_in(&self, width: usize, height: usize, dx: usize, dy: usize) -> Raster {
         let mut out = Raster::new(width, height);

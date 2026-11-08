@@ -16,6 +16,11 @@
 //!   Les dessins sont refaits au lâcher d'un geste (pas pendant) ; un dessin déjà posé est déplacé, pas refait : ce qu'on y a
 //!   dessiné suit.
 //!
+//! **Le dessin tourne avec le chemin** (réglage, Anthony 2026-11-08) : il pivote autour du point d'ancrage pour regarder où va le
+//! chemin, en gardant son orientation du départ ; en clés d'images, chaque copie est tournée (`Raster::transformee`, éléments
+//! vectoriels transformés) et refaite depuis le dessin d'origine quand son angle change. **Insérer ou retirer des images** décale la
+//! trajectoire avec les clés et les dessins (`Layer::shift_frames` → `Trajectoire::decaler_images`) : la fin est posée dès le tracé.
+//!
 //! **Recaler dans le temps** : glisser sur la timeline (ou au montage) une clé qui est un jalon de la trajectoire — la première,
 //! la dernière, ou une marque — recale ce jalon (`Trajectoire::recaler`) et repose les clés entre le départ et la fin. **La
 //! trajectoire ne s'en va jamais d'elle-même** (Anthony : « garder la trajectoire visible et toujours éditable ») : Suppr sur une
@@ -63,9 +68,15 @@ pub(crate) struct Etat {
     pub(crate) geste: Option<Geste>,
     /// La sorte de clés proposée à la prochaine trajectoire tracée (d'origine : clés d'images).
     pub(crate) cles_propose: Cles,
+    /// « Le dessin tourne avec le chemin », proposé à la prochaine trajectoire tracée (d'origine : non).
+    pub(crate) tourne_propose: bool,
     /// Le prochain appui sur le dessin choisit le point d'ancrage (bouton « Un point du dessin : cliquer »).
     pub(crate) choisir_ancre: bool,
 }
+
+/// Le texte du réglage « le dessin tourne avec le chemin ».
+pub(crate) const TOURNE: &str = "Le dessin tourne avec le chemin";
+const TOURNE_AIDE: &str = "Le dessin pivote, autour du point qui suit le chemin, pour regarder où va le chemin, comme une voiture dans un virage ; au départ il garde son orientation. Clés d'images : chaque copie est tournée.";
 
 fn pluriel(n: usize) -> &'static str {
     if n > 1 { "s" } else { "" }
@@ -251,11 +262,17 @@ impl App {
                         t.decalage_depart = e.decalage_depart;
                         t.source = e.source;
                         t.dessins = e.dessins;
+                        t.tourne = e.tourne;
                     }
                     None => {
-                        // La clé de départ démarre sur la tête de lecture.
+                        // La clé de départ démarre sur la tête de lecture ; la fin est posée sur la dernière image du plan (une fin
+                        // posée suit les images insérées ou retirées, comme les clés ; sans fin posée, le chemin s'étirerait jusqu'à
+                        // la nouvelle dernière image).
                         t.depart = self.cur_frame;
+                        let duree = self.frame_count();
+                        t.fin = (duree >= t.depart + 2).then(|| duree - 1);
                         t.cles = self.traj.cles_propose;
+                        t.tourne = self.traj.tourne_propose;
                     }
                 }
                 self.layers_mut()[li].trajectoire = Some(t);
@@ -290,10 +307,11 @@ impl App {
         let posee = crate::poskeys::pose_at(&l.pos_keys, t.depart, l.transform);
         let base = LayerTransform { x: posee.x - t.decalage_depart[0], y: posee.y - t.decalage_depart[1], ..posee };
         let ancre = self.trajectoire_point_d_ancrage(pi, li, &t, base);
+        let pivot = self.doc.stage_center();
         let l = &mut self.doc.panels[pi].layers[li];
         match t.cles {
             Cles::Interpolation => {
-                l.pos_keys = t.cles(duree, base, ancre);
+                l.pos_keys = t.cles(duree, base, ancre, [pivot.x, pivot.y]);
                 let premiere = l.pos_keys.first().map(|k| [k.t.x - base.x, k.t.y - base.y]).unwrap_or([0.0, 0.0]);
                 if l.pos_keys.is_empty() {
                     l.transform = base;
@@ -314,7 +332,7 @@ impl App {
                 if let Some(tr) = l.trajectoire.as_mut() {
                     tr.decalage_depart = [0.0, 0.0];
                 }
-                self.trajectoire_poser_les_dessins(pi, li, ancre);
+                self.trajectoire_poser_les_dessins(pi, li, ancre, base);
             }
         }
     }
@@ -400,12 +418,42 @@ impl App {
         nouveau
     }
 
+    /// Le dessin `cel` copié et passé par l'affinité `a` (coordonnées du dessin : tourné autour du point d'ancrage, puis déplacé) : un
+    /// nouveau dessin. Une simple translation : `trajectoire_copie_decalee`. Vectoriel : chaque élément est transformé et le rendu exact
+    /// est demandé au fil de travail ; bitmap : les pixels rééchantillonnés (`Raster::transformee`) ; l'aplat (strate Fond) suit.
+    fn trajectoire_copie_posee(&mut self, cel: CelId, a: &Affine) -> CelId {
+        if a.is_translation() {
+            return self.trajectoire_copie_decalee(cel, [a.tx, a.ty]);
+        }
+        let nouveau = self.doc.duplicate_cel(cel);
+        let mut vectoriel = false;
+        if let Some(c) = self.doc.cels.get_mut(&nouveau) {
+            if let Some(v) = c.vector.as_mut() {
+                v.elements = v.elements.iter().map(|e| e.transformed(a)).collect();
+                vectoriel = true;
+            }
+            c.raster = c.raster.transformee(a);
+            if let Some(f) = c.fond.as_mut() {
+                f.peinture.raster = f.peinture.raster.transformee(a);
+                f.coupe = f.coupe.transformee(a);
+                f.peinture.version += 1;
+            }
+            c.version += 1;
+        }
+        if vectoriel {
+            self.rejeu_cel(nouveau);
+        }
+        nouveau
+    }
+
     /// Clés d'images : un dessin à chaque jalon (le départ, chaque marque, l'arrivée), exposé jusqu'au jalon suivant (le dernier,
     /// jusqu'à la fin du plan). Le dessin d'origine (celui du départ, noté dans `source`) sert tel quel quand il n'a pas à bouger
     /// (ancrage « là où part le trait »), sinon chaque jalon reçoit une copie déplacée pour que le point d'ancrage `ancre` soit sur
-    /// le chemin. Un dessin déjà posé par la trajectoire est déplacé de ce qu'il faut (ce qu'on y a dessiné suit). Faux, avec la
-    /// raison dans la ligne d'état, s'il n'y a pas de dessin au départ.
-    fn trajectoire_poser_les_dessins(&mut self, pi: usize, li: usize, ancre: [f32; 2]) -> bool {
+    /// le chemin — et tournée autour de lui si le dessin tourne avec le chemin (`base` : la pose propre du calque, qui encadre le
+    /// calcul dans les coordonnées du dessin). Un dessin déjà posé par la trajectoire est déplacé de ce qu'il faut (ce qu'on y a
+    /// dessiné suit) ; s'il doit tourner autrement, il est refait depuis le dessin d'origine (tourner une copie déjà tournée
+    /// l'abîmerait). Faux, avec la raison dans la ligne d'état, s'il n'y a pas de dessin au départ.
+    fn trajectoire_poser_les_dessins(&mut self, pi: usize, li: usize, ancre: [f32; 2], base: LayerTransform) -> bool {
         let duree = self.doc.panels[pi].frame_count();
         let Some(t) = self.doc.panels[pi].layers[li].trajectoire.clone() else { return false };
         let images = t.images_des_jalons(duree);
@@ -416,17 +464,28 @@ impl App {
             self.status = format!("Clés d'images : dessine d'abord à l'image {} du départ, la trajectoire en fera une copie à chaque marque.", t.depart + 1);
             return false;
         };
-        let decalages = t.decalages(ancre);
+        let poses = t.poses(ancre);
+        // Une pose tournée, dans les coordonnées du dessin : sur la feuille, tourner autour du point d'ancrage puis déplacer, le tout
+        // encadré par la pose propre du calque (sous une pose sans échelle ni rotation, ce sont les mêmes coordonnées).
+        let affine_base = base.affine(self.doc.stage_center());
+        let inverse = affine_base.inverse().unwrap_or(Affine::IDENTITY);
+        let dans_le_dessin = |d: [f32; 2], angle: f32| -> Affine {
+            let feuille = Affine::rotate_about(pos2(ancre[0], ancre[1]), angle.to_radians()).then(&Affine::translate(vec2(d[0], d[1])));
+            affine_base.then(&feuille).then(&inverse)
+        };
+        let proche = |a: f32, b: f32| (a - b).abs() < 0.5;
+        let meme_angle = |a: f32, b: f32| (a - b).abs() < 0.01;
         let mut dessins = Vec::with_capacity(images.len());
-        for (k, &d) in decalages.iter().enumerate().take(images.len()) {
+        for (k, &(d, angle)) in poses.iter().enumerate().take(images.len()) {
             let ancien = t.dessins.get(k).filter(|a| self.doc.cels.contains_key(&a.dessin)).copied();
             let dessin = match ancien {
-                Some(a) if (a.dx - d[0]).abs() < 0.5 && (a.dy - d[1]).abs() < 0.5 => a.dessin,
-                Some(a) if a.dessin != source => self.trajectoire_copie_decalee(a.dessin, [d[0] - a.dx, d[1] - a.dy]),
-                _ if d[0].abs() < 0.5 && d[1].abs() < 0.5 => source,
-                _ => self.trajectoire_copie_decalee(source, d),
+                Some(a) if proche(a.dx, d[0]) && proche(a.dy, d[1]) && meme_angle(a.angle, angle) => a.dessin,
+                Some(a) if a.dessin != source && meme_angle(a.angle, angle) => self.trajectoire_copie_decalee(a.dessin, [d[0] - a.dx, d[1] - a.dy]),
+                _ if angle.abs() < 0.01 && d[0].abs() < 0.5 && d[1].abs() < 0.5 => source,
+                _ if angle.abs() < 0.01 => self.trajectoire_copie_decalee(source, d),
+                _ => self.trajectoire_copie_posee(source, &dans_le_dessin(d, angle)),
             };
-            dessins.push(DessinJalon { dessin, dx: d[0], dy: d[1] });
+            dessins.push(DessinJalon { dessin, dx: d[0], dy: d[1], angle });
         }
         let l = &mut self.doc.panels[pi].layers[li];
         if l.frames.len() < duree {
@@ -718,6 +777,7 @@ impl App {
             if cles_ui(ui, &mut cles) {
                 self.traj.cles_propose = cles;
             }
+            ui.checkbox(&mut self.traj.tourne_propose, TOURNE).on_hover_text(TOURNE_AIDE);
             return;
         };
         let n = t.marques.len();
@@ -761,6 +821,17 @@ impl App {
             self.traj.cles_propose = cles;
             self.trajectoire_recalculer(li);
             self.trajectoire_valider(snap, "Sorte des clés de la trajectoire");
+        }
+        // Le dessin tourne avec le chemin (Anthony, 2026-11-08) : il pivote autour du point d'ancrage pour suivre la direction du chemin.
+        let mut tourne = t.tourne;
+        if ui.checkbox(&mut tourne, TOURNE).on_hover_text(TOURNE_AIDE).changed() {
+            let snap = self.snapshot();
+            if let Some(tr) = self.layers_mut()[li].trajectoire.as_mut() {
+                tr.tourne = tourne;
+            }
+            self.traj.tourne_propose = tourne;
+            self.trajectoire_recalculer(li);
+            self.trajectoire_valider(snap, if tourne { "Le dessin tourne avec le chemin" } else { "Le dessin ne tourne plus avec le chemin" });
         }
         // Ce qui suit le chemin : là où part le trait, le bas du dessin, son centre…, ou un point cliqué.
         ui.horizontal_wrapped(|ui| {

@@ -174,6 +174,25 @@ fn ctrl_shift_v_pastes_at_the_playhead_and_ctrl_v_keeps_its_meaning() {
 }
 
 #[test]
+fn duplicating_a_plan_the_camera_tool_and_the_camera_key_have_a_key() {
+    // Anthony, 2026-11-08 : « des touches pour dupliquer un plan, pour l'outil Caméra et la clé de caméra ».
+    let map = default_map();
+    let ctrl_shift = Modifiers { command: true, ctrl: true, shift: true, ..Modifiers::NONE };
+    let shift = Modifiers { shift: true, ..Modifiers::NONE };
+    for mode in [Mode::Storyboard, Mode::Animation] {
+        assert_eq!(press(&map, Key::D, Key::D, ctrl_shift, mode).as_deref(), Some("panneau.dupliquer"));
+        assert_eq!(press(&map, Key::C, Key::C, shift, mode).as_deref(), Some("outil.camera"));
+        assert_eq!(press(&map, Key::K, Key::K, shift, mode).as_deref(), Some("camera.cle_ici"));
+        // Les touches voisines gardent leur sens.
+        assert_eq!(press(&map, Key::C, Key::C, NONE, mode).as_deref(), Some("vue.rotation_antihoraire"));
+    }
+    assert_eq!(map.label("panneau.dupliquer"), "Ctrl+Maj+D");
+    assert_eq!(map.label("outil.camera"), "Maj+C");
+    assert_eq!(map.label("camera.cle_ici"), "Maj+K");
+    assert!(map.warnings.is_empty(), "aucun conflit : {:#?}", map.warnings);
+}
+
+#[test]
 fn personal_shortcuts_are_kept_as_is() {
     let map = default_map();
     for (action, keys) in PERSO {

@@ -511,7 +511,11 @@ impl App {
                 // trajectoire, la recale dans le temps ; les dessins des jalons se reposent d'après elle.
                 if dl.starts.len() == 1 {
                     let vers = (dl.starts[0] as isize + d.delta).max(0) as usize;
-                    self.trajectoire_recaler_dans(pi, li, dl.starts[0], vers);
+                    // Un décalage (Ripple) a déjà emmené la trajectoire avec les images (`Layer::shift_frames`) : les dessins des
+                    // jalons sont alors seulement reposés d'après elle.
+                    if !self.trajectoire_recaler_dans(pi, li, dl.starts[0], vers) {
+                        self.trajectoire_recalculer_dans(pi, li);
+                    }
                 }
                 new
             };

@@ -7,6 +7,10 @@
 //! le calque avançant à vitesse constante entre deux marques (marques serrées : lent ; espacées : vite), le temps partagé en
 //! parts égales entre les marques — la durée du plan (d'origine), ou « une marque = N images ». Le déplacement est
 //! **relatif** : le calque garde sa pose au départ du chemin et en suit la forme (on part le trait de là où est le personnage).
+//!
+//! Deux compléments (Anthony, 2026-11-08) : **le dessin peut tourner avec le chemin** (`tourne` : il pivote pour regarder où va le
+//! chemin, en gardant son orientation du départ, autour du point d'ancrage), et **insérer ou retirer des images décale la
+//! trajectoire** (`decaler_images` : le départ, la fin et chaque marque restent sur leur image, comme les clés et les dessins).
 
 use serde::{Deserialize, Serialize};
 
@@ -25,6 +29,9 @@ pub const ECART_MIN: f32 = 0.01;
 pub const MARQUE_FRACTION_MAX: f32 = 0.5;
 /// … et s'il croise le chemin, ou passe à moins de tant de pixels de la feuille.
 pub const MARQUE_DISTANCE_MAX: f32 = 6.0;
+/// La direction du chemin se lit sur au moins tant de pixels de la feuille de part et d'autre du point (2 % du chemin au moins) : un
+/// dessin qui tourne avec le chemin ne tremble pas au gré des points du trait.
+pub const FENETRE_DIRECTION: f32 = 3.0 * PAS;
 
 /// Les clés que pose la trajectoire (Anthony, 2026-11-07, « deux choix ») : **interpolées**, une par image, le calque glisse le
 /// long du chemin ; ou **par images**, une à chaque jalon (le départ, chaque marque, l'arrivée), tenue jusqu'à la suivante : le calque
@@ -98,12 +105,15 @@ impl Ancre {
 }
 
 /// Un dessin posé par la trajectoire en « clés d'images » : à un jalon (une marque, ou l'arrivée), le numéro du dessin et le
-/// déplacement (pixels de la feuille) qu'il porte par rapport au dessin du départ.
+/// déplacement (pixels de la feuille) qu'il porte par rapport au dessin du départ, et sa rotation (degrés, autour du point
+/// d'ancrage) quand le dessin tourne avec le chemin.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DessinJalon {
     pub dessin: u64,
     pub dx: f32,
     pub dy: f32,
+    #[serde(default, skip_serializing_if = "est_zero_f32")]
+    pub angle: f32,
 }
 
 /// La trajectoire d'un calque, telle qu'elle s'écrit dans le projet (`trajectoire` d'un calque).
@@ -144,10 +154,20 @@ pub struct Trajectoire {
     /// bouge pas).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dessins: Vec<DessinJalon>,
+    /// Le dessin tourne avec le chemin (Anthony, 2026-11-08) : il pivote, autour du point d'ancrage, pour regarder où va le chemin,
+    /// en gardant son orientation du départ. Faux d'origine : il garde son orientation sur tout le chemin.
+    #[serde(default, skip_serializing_if = "est_faux")]
+    pub tourne: bool,
 }
 
 fn est_zero_usize(v: &usize) -> bool {
     *v == 0
+}
+fn est_zero_f32(v: &f32) -> bool {
+    *v == 0.0
+}
+fn est_faux(v: &bool) -> bool {
+    !*v
 }
 fn est_images(c: &Cles) -> bool {
     *c == Cles::Images
@@ -174,6 +194,7 @@ impl Trajectoire {
             decalage_depart: [0.0, 0.0],
             source: None,
             dessins: Vec::new(),
+            tourne: false,
         })
     }
 
@@ -202,7 +223,7 @@ impl Trajectoire {
         if self.fin.is_some_and(|f| f <= self.depart) {
             self.fin = None;
         }
-        self.dessins.retain(|d| d.dx.is_finite() && d.dy.is_finite());
+        self.dessins.retain(|d| d.dx.is_finite() && d.dy.is_finite() && d.angle.is_finite());
         if !self.decalage_depart[0].is_finite() || !self.decalage_depart[1].is_finite() {
             self.decalage_depart = [0.0, 0.0];
         }
@@ -244,6 +265,39 @@ impl Trajectoire {
         let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
         let n = (dx * dx + dy * dy).sqrt();
         if n > 0.0 { [dx / n, dy / n] } else { [1.0, 0.0] }
+    }
+
+    /// La direction du chemin (vecteur unité) à la fraction `f`, lue sur une petite fenêtre de part et d'autre (`FENETRE_DIRECTION`,
+    /// ou 2 % du chemin) : elle ne saute pas d'un point du trait à l'autre.
+    pub fn direction_lissee_a(&self, f: f32) -> [f32; 2] {
+        let l = self.longueur().max(1e-6);
+        let w = FENETRE_DIRECTION.max(l * 0.02) / l;
+        let (a, b) = (self.point_a((f - w).max(0.0)), self.point_a((f + w).min(1.0)));
+        let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+        let n = (dx * dx + dy * dy).sqrt();
+        if n > 1e-6 { [dx / n, dy / n] } else { self.direction_a(f) }
+    }
+
+    /// L'angle (degrés, entre −180 et 180) dont le chemin a tourné à la fraction `f` depuis sa direction au départ : ce que le dessin
+    /// tourne quand il suit le chemin (`tourne`) ; 0 au départ.
+    pub fn angle_a(&self, f: f32) -> f32 {
+        let (d, d0) = (self.direction_lissee_a(f), self.direction_lissee_a(0.0));
+        let a = (d[1].atan2(d[0]) - d0[1].atan2(d0[0])).to_degrees();
+        let a = a.rem_euclid(360.0);
+        if a > 180.0 { a - 360.0 } else { a }
+    }
+
+    /// `angle_a(f)`, choisi parmi ses équivalents à un tour près au plus proche de l'angle `precedent` : d'une image à la suivante, le
+    /// dessin ne fait jamais le tour dans l'autre sens.
+    pub fn angle_depuis(&self, f: f32, precedent: f32) -> f32 {
+        let mut a = self.angle_a(f);
+        while a - precedent > 180.0 {
+            a -= 360.0;
+        }
+        while a - precedent < -180.0 {
+            a += 360.0;
+        }
+        a
     }
 
     /// Le segment (son rang, et la position dedans) où tombe la fraction `f`.
@@ -355,9 +409,84 @@ impl Trajectoire {
         self.temps = None;
     }
 
+    /// Les images des jalons quand la fin est posée à l'image `fin` (sans regarder la durée du plan).
+    fn images_des_jalons_jusqu_a(&self, fin: usize) -> Vec<usize> {
+        let portee = fin.saturating_sub(self.depart) as f32;
+        self.temps_des_jalons().iter().map(|t| self.depart + (t * portee).round() as usize).collect()
+    }
+
+    /// `n` images insérées à l'image `at` du plan (`removed` : retirées de `at` à `at + n`) : le départ, la fin et chaque marque
+    /// restent sur leur image, comme les clés de position et les dessins du calque (`Layer::shift_frames`). Une insertion au milieu du
+    /// chemin allonge l'intervalle où elle tombe : le temps des marques devient explicite pour cela. Sans fin posée (anciens
+    /// projets : la fin est la dernière image du plan), seul le départ suit, s'il est à l'image ou après.
+    pub fn decaler_images(&mut self, at: usize, n: usize, removed: bool) {
+        if n == 0 {
+            return;
+        }
+        let bouge = |f: usize| -> usize {
+            if removed {
+                if f >= at + n {
+                    f - n
+                } else if f >= at {
+                    at
+                } else {
+                    f
+                }
+            } else if f >= at {
+                f + n
+            } else {
+                f
+            }
+        };
+        let Some(fin) = self.fin.filter(|&f| f > self.depart) else {
+            self.depart = bouge(self.depart);
+            return;
+        };
+        let dedans = if removed { at <= fin && at + n > self.depart } else { at > self.depart && at <= fin };
+        let images: Vec<usize> = self.images_des_jalons_jusqu_a(fin).into_iter().map(bouge).collect();
+        let (depart, fin) = (bouge(self.depart), bouge(fin).max(bouge(self.depart) + 1));
+        self.depart = depart;
+        self.fin = Some(fin);
+        if !dedans || images.len() < 3 {
+            return;
+        }
+        // Chaque marque garde son image : son temps en est déduit, sur la nouvelle portée.
+        let portee = (fin - depart) as f32;
+        let temps: Vec<f32> = images[1..images.len() - 1].iter().map(|&i| i.saturating_sub(depart) as f32 / portee).collect();
+        let bons = temps.windows(2).all(|w| w[0] < w[1]) && temps.first().is_some_and(|v| *v > 0.0) && temps.last().is_some_and(|v| *v < 1.0);
+        if bons {
+            self.temps = Some(temps);
+        }
+    }
+
     /// Le déplacement du calque à chaque jalon, pour que le point d'ancrage `ancre` (pixels de la feuille) soit sur le chemin.
     pub fn decalages(&self, ancre: [f32; 2]) -> Vec<[f32; 2]> {
         self.jalons().iter().map(|&f| { let p = self.point_a(f); [p[0] - ancre[0], p[1] - ancre[1]] }).collect()
+    }
+
+    /// À chaque jalon : le déplacement qui met le point d'ancrage `ancre` sur le chemin, et l'angle (degrés) dont le dessin tourne
+    /// autour de lui — 0 partout s'il ne tourne pas avec le chemin.
+    pub fn poses(&self, ancre: [f32; 2]) -> Vec<([f32; 2], f32)> {
+        let mut precedent = 0.0;
+        self.jalons()
+            .iter()
+            .map(|&f| {
+                let p = self.point_a(f);
+                let angle = if self.tourne { self.angle_depuis(f, precedent) } else { 0.0 };
+                precedent = angle;
+                ([p[0] - ancre[0], p[1] - ancre[1]], angle)
+            })
+            .collect()
+    }
+
+    /// La pose qui met le point d'ancrage `ancre` (feuille, sous la pose `base`) sur le point `p` du chemin, le dessin tourné de `theta`
+    /// degrés autour de ce point. Un calque tourne autour du centre de la feuille (`pivot`, `LayerTransform::affine`) : le déplacement
+    /// compense pour que ce soit le point d'ancrage qui reste sur le chemin.
+    fn pose_tournee(base: LayerTransform, ancre: [f32; 2], pivot: [f32; 2], p: [f32; 2], theta: f32) -> LayerTransform {
+        let (s, c) = theta.to_radians().sin_cos();
+        let v = [ancre[0] - pivot[0] - base.x, ancre[1] - pivot[1] - base.y];
+        let rv = [v[0] * c - v[1] * s, v[0] * s + v[1] * c];
+        LayerTransform { x: p[0] - pivot[0] - rv[0], y: p[1] - pivot[1] - rv[1], angle: base.angle + theta, ..base }
     }
 
     /// Le chemin retourné de gauche à droite (`horizontal`) ou de haut en bas, autour de son départ : le calque, retourné de même,
@@ -383,17 +512,25 @@ impl Trajectoire {
 
     /// Les clés de position qu'elle pose sur un calque de pose propre `base` dans un plan de `duree` images (**clés
     /// d'interpolation** : une clé par image que le chemin couvre, le déplacement qui met le point d'ancrage `ancre`, en pixels de la
-    /// feuille sous la pose `base`, sur le chemin). Aucune en **clés d'images** (ce sont des dessins, posés par l'application :
+    /// feuille sous la pose `base`, sur le chemin ; le dessin tourné d'autant que le chemin s'il tourne avec lui, `pivot` étant le centre
+    /// de la feuille autour duquel un calque tourne). Aucune en **clés d'images** (ce sont des dessins, posés par l'application :
     /// `trajectoireui.rs`), ni si le plan n'a pas au moins une image après le départ.
-    pub fn cles(&self, duree: usize, base: LayerTransform, ancre: [f32; 2]) -> Vec<PosKey> {
+    pub fn cles(&self, duree: usize, base: LayerTransform, ancre: [f32; 2], pivot: [f32; 2]) -> Vec<PosKey> {
         let Some(fin) = self.derniere_image(duree) else { return Vec::new() };
         if self.cles == Cles::Images {
             return Vec::new();
         }
+        let mut precedent = 0.0;
         (self.depart..=fin)
             .filter_map(|f| {
-                let p = self.point_a(self.fraction_a_l_image(f, duree)?);
-                Some(PosKey::new(f, LayerTransform { x: base.x + p[0] - ancre[0], y: base.y + p[1] - ancre[1], ..base }))
+                let fraction = self.fraction_a_l_image(f, duree)?;
+                let p = self.point_a(fraction);
+                if !self.tourne {
+                    return Some(PosKey::new(f, LayerTransform { x: base.x + p[0] - ancre[0], y: base.y + p[1] - ancre[1], ..base }));
+                }
+                let theta = self.angle_depuis(fraction, precedent);
+                precedent = theta;
+                Some(PosKey::new(f, Self::pose_tournee(base, ancre, pivot, p, theta)))
             })
             .collect()
     }
