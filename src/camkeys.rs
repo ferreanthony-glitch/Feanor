@@ -273,6 +273,7 @@ pub(crate) fn apply_moves(before: &[CameraKey], mv: &[(usize, usize)]) -> Vec<Ca
 
 /// Les clés de `keys` aux images `frames` déplacées de `delta` images (le décalage doit être
 /// ramené dans les bornes par `clamp_delta`). Renvoie leurs images maintenant.
+#[cfg(test)]
 pub(crate) fn shift(keys: &mut [CameraKey], frames: &[usize], delta: isize) -> Vec<usize> {
     let mut out = Vec::new();
     for k in keys.iter_mut().filter(|k| frames.contains(&k.frame)) {
