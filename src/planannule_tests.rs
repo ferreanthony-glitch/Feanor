@@ -732,7 +732,7 @@ fn everything_survives_saving_and_reopening_and_nothing_is_written_when_no_plan_
     crate::fxcache::monde::lire();
     let mut app = crate::montage_sans_casse_tests::appli("annule-fichier");
     let doc = &mut app.doc;
-    assert_eq!(project::VERSION, 50);
+    assert_eq!(project::VERSION, 51);
     let ids: Vec<u64> = doc.panels.iter().map(|p| p.id).collect();
     // Un film sans plan annulé n'écrit aucun fichier.
     let (dir, _) = enregistrer(doc, "sans");
@@ -759,7 +759,7 @@ fn everything_survives_saving_and_reopening_and_nothing_is_written_when_no_plan_
     let (dir, manifest) = enregistrer(doc, "avec");
     assert!(dir.join(crate::planannule::FILE).exists());
     let texte = std::fs::read_to_string(&manifest).unwrap();
-    assert!(texte.contains("\"version\": 50"), "le manifeste dit 50");
+    assert!(texte.contains("\"version\": 51"), "le manifeste dit 51");
 
     let mut lu = project::load(&manifest).expect("réouverture");
     assert!(lu.warnings.is_empty(), "{:?}", lu.warnings);
@@ -1265,13 +1265,13 @@ fn an_older_project_opens_as_is_and_an_unreadable_file_is_never_overwritten() {
     let doc = film();
     let (dir, manifest) = enregistrer(&doc, "ancien");
     // Un projet 47 : aucun fichier, le numéro d'avant.
-    let texte = std::fs::read_to_string(&manifest).unwrap().replace("\"version\": 50", "\"version\": 47");
+    let texte = std::fs::read_to_string(&manifest).unwrap().replace("\"version\": 51", "\"version\": 47");
     std::fs::write(&manifest, texte).unwrap();
     let lu = project::load(&manifest).expect("un projet 47 s'ouvre");
     assert!(lu.doc.annules.is_empty());
     assert_eq!(lu.doc.panels.len(), 4);
     // Un projet plus récent est refusé, comme toujours.
-    let texte = std::fs::read_to_string(&manifest).unwrap().replace("\"version\": 47", "\"version\": 51");
+    let texte = std::fs::read_to_string(&manifest).unwrap().replace("\"version\": 47", "\"version\": 52");
     std::fs::write(&manifest, texte).unwrap();
     assert!(project::load(&manifest).is_err(), "une version plus récente refuse");
     std::fs::remove_dir_all(&dir).ok();

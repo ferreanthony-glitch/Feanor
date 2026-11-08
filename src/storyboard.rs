@@ -513,6 +513,7 @@ impl App {
         };
         item(self, ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
         item(self, ui, "Dupliquer le plan", "panneau.dupliquer");
+        // (« Réutiliser le plan », la planche-mère : dans Storyboard > Plans et la palette, ce menu-ci restant à dix entrées.)
         ui.separator();
         self.panel_clipboard_items(ui);
         ui.separator();

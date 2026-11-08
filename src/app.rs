@@ -815,6 +815,8 @@ pub struct App {
     pub(crate) equipe_ui: crate::cooperationui::EquipeUi,
     /// Fenêtre « À propos de SHOT » (`aproposui.rs`).
     pub(crate) about_window: bool,
+    /// La planche-mère : la fenêtre « Réutiliser le calque dans… », quand elle est ouverte (`partageui.rs`).
+    pub(crate) reutiliser: Option<crate::partageui::Choix>,
     /// Clic droit dans le dessin : la fenêtre flottante des réglages de l'outil, quand elle est ouverte (`reglagesdroit.rs`).
     pub(crate) reglages_droit: Option<crate::reglagesdroit::ReglagesDroit>,
     /// L'anneau sous le stylet : le geste en cours et ce qu'il montre (`anneauui.rs`).
@@ -1394,6 +1396,7 @@ impl App {
             partage: None,
             equipe_ui: Default::default(),
             about_window: false,
+            reutiliser: None,
             reglages_droit: None,
             anneau: Default::default(),
             usage: crate::usageui::Etat::avec(Self::usage_lire()),
@@ -4613,6 +4616,14 @@ impl App {
             "panneau.suivant" => self.select_panel(self.cur_panel + 1),
             "panneau.nouveau" => self.new_panel(),
             "panneau.dupliquer" => self.duplicate_panel(),
+            // La planche-mère (`partageui.rs`).
+            "plan.reutiliser" => self.reutiliser_plan(),
+            "plan.detacher" => self.detacher_plan_courant(),
+            "calque.reutiliser_suivant" => self.reutiliser_calque_vers(crate::partage::Cibles::Suivant),
+            "calque.reutiliser_precedent" => self.reutiliser_calque_vers(crate::partage::Cibles::Precedent),
+            "calque.reutiliser_sequence" => self.reutiliser_calque_vers(crate::partage::Cibles::Sequence),
+            "calque.reutiliser_choisir" => self.ouvrir_choix_reutiliser(),
+            "calque.detacher_partage" => self.detacher_calque_partage(),
             "scene.nouvelle" => self.new_panel(),
             "scene.dupliquer" => self.duplicate_panel(),
             "scene.supprimer" => self.delete_chosen_panels(),

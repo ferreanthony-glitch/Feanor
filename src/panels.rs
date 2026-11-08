@@ -85,6 +85,11 @@ impl App {
     fn plans_menu(&mut self, ui: &mut egui::Ui) {
         self.action_item(ui, "Nouveau plan avant le plan courant", "plan.nouveau_avant");
         self.action_item(ui, "Dupliquer le plan", "panneau.dupliquer");
+        // La planche-mère (`partageui.rs`) : un plan lié, même dessin, autre cadre.
+        self.action_item(ui, "Réutiliser le plan (même dessin, autre cadre)", "plan.reutiliser");
+        if self.doc.plan_partage(self.cur_panel) {
+            self.action_item(ui, "Détacher le plan de la planche-mère", "plan.detacher");
+        }
         ui.separator();
         self.action_item(ui, "Copier les plans choisis", "panneau.copier");
         self.action_item(ui, "Coller les plans après le plan courant", "panneau.coller");
@@ -897,6 +902,8 @@ impl App {
         self.suggestions_windows(ctx);
         // À propos de SHOT (`aproposui.rs`).
         self.about_window_ui(ctx);
+        // La planche-mère : les plans à cocher (`partageui.rs`).
+        self.reutiliser_window(ctx);
         // Diagnostic des performances et sa proposition du premier lancement (`diagnosticui.rs`).
         self.diagnostic_window(ctx);
         self.diagnostic_offer(ctx);

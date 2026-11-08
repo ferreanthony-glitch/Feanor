@@ -473,7 +473,7 @@ fn an_old_project_is_read_identically_and_a_new_one_keeps_the_production_fields(
     let texte = std::fs::read_to_string(&manifeste).unwrap();
     assert!(!texte.contains("modele_noms") && !texte.contains("\"serie\"") && !texte.contains("\"episode\""), "{texte}");
     assert!(texte.contains(&format!("\"version\": {}", crate::project::VERSION)) || texte.contains(&format!("\"version\":{}", crate::project::VERSION)));
-    assert_eq!(crate::project::VERSION, 50);
+    assert_eq!(crate::project::VERSION, 51);
     // … et un manifeste de version 44 s'ouvre à l'identique, avec les noms d'avant.
     let ancien = texte.replace(&format!("\"version\": {}", crate::project::VERSION), "\"version\": 44");
     assert_ne!(ancien, texte, "le numéro de version a été trouvé dans le manifeste");
