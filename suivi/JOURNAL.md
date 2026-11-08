@@ -5,6 +5,10 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
 
 ## 2026-11-08
 
+- Fusion dans main (7c7df04) de `finitions`, à la demande d'Anthony (« Fusionne finitions ») après son essai de la Trajectoire (« parfait ») :
+  la trajectoire suit les images insérées ou retirées et peut faire tourner le dessin (partie 119, format 50), la licence de ffmpeg dans
+  À propos et les trois touches (partie 124). Vérificateur sur la branche : 4235 réussis sur 4235, aucun avertissement. `feanor.exe` de main
+  reconstruit. L'autre session (`vignettes-selection`) est prévenue. La planche-mère (branche `planche-mere`, partie 126) reste à part.
 - Finitions (branche `finitions`, chantier `Chantiers\finitions`, à la demande d'Anthony) : la Trajectoire d'abord (partie 119) — **insérer ou
   retirer des images décale la trajectoire** (tout ce qui passe par `Layer::shift_frames` : le départ, la fin et chaque marque restent sur
   leur image, comme les clés et les dessins ; la fin est posée dès le tracé sur la dernière image du plan) et **« Le dessin tourne avec le
