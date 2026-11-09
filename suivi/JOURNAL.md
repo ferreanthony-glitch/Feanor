@@ -22,6 +22,10 @@ Pour le détail technique, voir l'historique git et docs/INTERFACE.md (une parti
   la scène) gardent la règle d'avant, pour ne pas s'étaler autour de chaque case qui les montre ; un trait bitmap parti du papier n'emporte
   plus un double du dessin qu'il traverse ; la marge ordinaire d'une case ne disparaît plus dans un grand export. Pas fusionné : exe de
   branche à essayer par Anthony.
+- À sa demande (« fusionner sur une version portable seulement sans altérer la version principale ») : version portable d'essai
+  `Logiciel\Portable\FEANOR-portable-2026-11-09-camera-souvient` (dossier et zip), faite de l'exe de la branche (a9f3540). `main` n'avait
+  pas bougé depuis le départ de la branche (6f27220) : cet exe est déjà le FEANOR habituel plus la partie 131, sans aucune fusion. Ouverte
+  sur une copie de projet avec de faux réglages : pas de plantage. `main`, `Source` et son exe ne sont pas touchés.
 
 ## 2026-11-08
 
